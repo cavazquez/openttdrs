@@ -5,6 +5,11 @@ pub(super) fn process_monthly_economy(state: &mut GameState, tick: u64) {
         return;
     }
     apply_monthly_interest_and_bankruptcy(state);
+    // Industrias ya marcadas con prod_level = 0 el mes pasado: fuera del mapa.
+    let closed = crate::industry::remove_closed_industries(&mut state.industries, &mut state.map);
+    for at in closed {
+        crate::news::report_industry_closed(state, at);
+    }
     // Cierre mensual tras intereses: deltas por compañía + espejo global (activa).
     for i in 0..state.companies.len() {
         let company_id = state.companies[i].id;
@@ -128,6 +133,33 @@ fn apply_monthly_interest_and_bankruptcy(state: &mut GameState) {
         } else {
             state.companies[i].bankruptcy_months = 0;
         }
+    }
+}
+
+/// Una industria al azar cambia de producción cada día de calendario (modo original).
+///
+/// En mapas grandes `OpenTTD` escala el número de cambios; aquí bastará con uno por día,
+/// que es lo que tocaba en el mapa 256×256 clásico.
+pub(super) fn maybe_change_industry_production(state: &mut GameState, tick: u64) {
+    if tick == 0 || !tick.is_multiple_of(u64::from(economy::TICKS_PER_DAY)) {
+        return;
+    }
+    if state.industries.is_empty() {
+        return;
+    }
+    let idx = state
+        .cargo_rng
+        .random_range(u32::try_from(state.industries.len()).unwrap_or(1)) as usize;
+    let climate = state.climate;
+    let change = crate::industry::change_industry_production(
+        &mut state.industries[idx],
+        false,
+        climate,
+        &mut state.cargo_rng,
+    );
+    if change == crate::industry::IndustryProductionChange::Closing {
+        let at = state.industries[idx].pos;
+        crate::news::report_industry_closing(state, at);
     }
 }
 

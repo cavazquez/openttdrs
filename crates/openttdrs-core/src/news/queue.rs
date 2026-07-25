@@ -22,6 +22,8 @@ pub enum NewsType {
     Accident,
     /// Información de compañía (compra, quiebra rival).
     CompanyInfo,
+    /// Industria que anuncia cierre o acaba de cerrar (`NewsType::IndustryClose`).
+    IndustryClose,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -118,6 +120,8 @@ pub struct NewsDisplaySettings {
     pub accident: NewsDisplayMode,
     #[serde(default = "default_company_info_display")]
     pub company_info: NewsDisplayMode,
+    #[serde(default = "default_industry_close_display")]
+    pub industry_close: NewsDisplayMode,
 }
 
 const fn default_accident_display() -> NewsDisplayMode {
@@ -125,6 +129,10 @@ const fn default_accident_display() -> NewsDisplayMode {
 }
 
 const fn default_company_info_display() -> NewsDisplayMode {
+    NewsDisplayMode::Summary
+}
+
+const fn default_industry_close_display() -> NewsDisplayMode {
     NewsDisplayMode::Summary
 }
 
@@ -144,6 +152,7 @@ impl NewsDisplaySettings {
             vehicle_advice: NewsDisplayMode::Summary,
             accident: NewsDisplayMode::Full,
             company_info: NewsDisplayMode::Summary,
+            industry_close: NewsDisplayMode::Summary,
         }
     }
 
@@ -156,6 +165,7 @@ impl NewsDisplaySettings {
             NewsType::VehicleAdvice => self.vehicle_advice,
             NewsType::Accident => self.accident,
             NewsType::CompanyInfo => self.company_info,
+            NewsType::IndustryClose => self.industry_close,
         }
     }
 
@@ -167,6 +177,7 @@ impl NewsDisplaySettings {
             NewsType::VehicleAdvice => self.vehicle_advice = mode,
             NewsType::Accident => self.accident = mode,
             NewsType::CompanyInfo => self.company_info = mode,
+            NewsType::IndustryClose => self.industry_close = mode,
         }
     }
 }
@@ -243,6 +254,38 @@ pub fn push_first_vehicle_running_news(
         body,
         NewsType::FirstVehicleRunning,
         default_display_for_type(NewsType::FirstVehicleRunning),
+        state.tick,
+        NewsReference::Tile(at),
+    );
+    add_news_item(state, item);
+}
+
+/// La industria anuncia que cerrará el mes que viene.
+pub fn report_industry_closing(state: &mut crate::GameState, at: TileCoord) {
+    let id = state.news.next_id;
+    state.news.next_id = state.news.next_id.saturating_add(1);
+    let item = NewsItem::new(
+        id,
+        format!("Industria en ({}, {}) anuncia su cierre", at.x, at.y),
+        Some("Dejará de producir y desaparecerá el mes que viene.".into()),
+        NewsType::IndustryClose,
+        default_display_for_type(NewsType::IndustryClose),
+        state.tick,
+        NewsReference::Tile(at),
+    );
+    add_news_item(state, item);
+}
+
+/// La industria ya ha sido retirada del mapa.
+pub fn report_industry_closed(state: &mut crate::GameState, at: TileCoord) {
+    let id = state.news.next_id;
+    state.news.next_id = state.news.next_id.saturating_add(1);
+    let item = NewsItem::new(
+        id,
+        format!("Industria cerrada en ({}, {})", at.x, at.y),
+        None,
+        NewsType::IndustryClose,
+        default_display_for_type(NewsType::IndustryClose),
         state.tick,
         NewsReference::Tile(at),
     );

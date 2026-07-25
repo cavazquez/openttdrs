@@ -29,13 +29,14 @@ pub(crate) struct NewsSettingsModeButton {
     pub(crate) mode: NewsDisplayMode,
 }
 
-const NEWS_TYPES: [NewsType; 6] = [
+const NEWS_TYPES: [NewsType; 7] = [
     NewsType::CargoDelivered,
     NewsType::FirstCargoDelivered,
     NewsType::FirstVehicleRunning,
     NewsType::VehicleAdvice,
     NewsType::Accident,
     NewsType::CompanyInfo,
+    NewsType::IndustryClose,
 ];
 
 pub(crate) fn setup_news_settings_window(mut commands: Commands, asset_server: Res<AssetServer>) {

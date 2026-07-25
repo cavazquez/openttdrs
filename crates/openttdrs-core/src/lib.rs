@@ -210,8 +210,11 @@ pub use gs::{
     GsGoal, GsGoalKind, GsLeagueRow, GsState, GsStoryPage, league_rows, seed_gs_demo, tick_gs,
 };
 pub use industry::{
-    FACTORY_COAL_INPUT, FACTORY_WOOD_INPUT, INDUSTRY_PRODUCE_TICKS, Industry, IndustryKind,
-    IndustrySpec, industry_produce_period_ticks, transport_industry_goods,
+    FACTORY_COAL_INPUT, FACTORY_WOOD_INPUT, INDUSTRY_PRODUCE_AMOUNT, INDUSTRY_PRODUCE_TICKS,
+    Industry, IndustryKind, IndustryLifeType, IndustryProductionChange, IndustrySpec,
+    PERCENT_TRANSPORTED_60, PRODLEVEL_CLOSURE, PRODLEVEL_DEFAULT, PRODLEVEL_MAXIMUM,
+    PRODLEVEL_MINIMUM, change_industry_production, industry_produce_period_ticks,
+    remove_closed_industries, transport_industry_goods,
 };
 pub use industry_tile::{
     INVALID_INDUSTRY_TILE, IndustryTileGfxId, IndustryTileSpecDef, NEW_INDUSTRY_TILE_OFFSET,

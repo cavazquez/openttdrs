@@ -379,7 +379,9 @@ fn spawn_news_popup(
             feedback.pending_news_applause = true;
         }
         NewsType::CargoDelivered => feedback.pending_news_chime = true,
-        NewsType::VehicleAdvice | NewsType::CompanyInfo => feedback.pending_news_ticker = true,
+        NewsType::VehicleAdvice | NewsType::CompanyInfo | NewsType::IndustryClose => {
+            feedback.pending_news_ticker = true;
+        }
         NewsType::Accident => feedback.pending_news_chime = true,
     }
 }

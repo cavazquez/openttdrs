@@ -1,5 +1,6 @@
 use crate::CargoType;
 use crate::Climate;
+use crate::cargodist::parity::Randomizer;
 use crate::entity_history::IndustryHistory;
 use crate::map::TileCoord;
 use crate::station::{self, Station, StopKind};
@@ -7,7 +8,10 @@ use crate::station::{self, Station, StopKind};
 /// Ticks entre cada ciclo de producción (equivale a `INDUSTRY_PRODUCE_TICKS` del upstream).
 pub const INDUSTRY_PRODUCE_TICKS: u64 = 256;
 
-/// Unidades producidas por ciclo.
+/// Unidades de salida de una fábrica de goods por ciclo a `prod_level` por defecto.
+///
+/// Las industrias primarias ya no usan esta constante: producen
+/// `CeilDiv(production_rate * prod_level, PRODLEVEL_DEFAULT)`.
 pub const INDUSTRY_PRODUCE_AMOUNT: u32 = 8;
 
 /// Insumos por ciclo de fábrica (`CargoType::Goods`).
@@ -16,6 +20,34 @@ pub const FACTORY_COAL_INPUT: u32 = 2;
 
 /// Capacidad máxima de stock por defecto.
 pub const INDUSTRY_STOCK_CAPACITY: u32 = 500;
+
+/// Industria marcada para cierre (`PRODLEVEL_CLOSURE`, `industry.h:35`).
+pub const PRODLEVEL_CLOSURE: u8 = 0x00;
+/// Mínimo de producción antes de cerrar al bajar otra vez (`PRODLEVEL_MINIMUM`).
+pub const PRODLEVEL_MINIMUM: u8 = 0x04;
+/// Nivel de partida (`PRODLEVEL_DEFAULT`).
+pub const PRODLEVEL_DEFAULT: u8 = 0x10;
+/// Tope de producción (`PRODLEVEL_MAXIMUM`).
+pub const PRODLEVEL_MAXIMUM: u8 = 0x80;
+
+/// ≥ 60 % transportado el mes pasado (`PERCENT_TRANSPORTED_60`).
+pub const PERCENT_TRANSPORTED_60: u8 = 153;
+/// ≥ 80 % transportado (`PERCENT_TRANSPORTED_80`); solo modo smooth, reservado.
+#[allow(dead_code)]
+pub const PERCENT_TRANSPORTED_80: u8 = 204;
+
+/// Tipo de vida económica (`IndustryLifeType`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IndustryLifeType {
+    /// Mina / pozo: sube y baja con el transporte.
+    Extractive,
+    /// Bosque / granja: igual que extractive en el modo original.
+    Organic,
+    /// Procesadora: no cambia `prod_level` por transporte; cierra por abandono (P1.5+).
+    Processing,
+    /// Sumidero (central térmica…): sin cambios.
+    BlackHole,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum IndustryKind {
@@ -162,6 +194,65 @@ impl IndustrySpec {
             | Self::ToffeeQuarry => CargoType::Coal,
         }
     }
+
+    /// `production_rate[0]` del spec vanilla (`build_industry.h`).
+    ///
+    /// Las procesadoras tienen 0: no auto-producen; transforman insumos (P1.5) o,
+    /// en el caso de goods del port, el ciclo de fábrica cercano.
+    #[must_use]
+    pub const fn production_rate(self) -> u8 {
+        match self {
+            Self::CoalMine => 15,
+            Self::Forest | Self::CottonCandy | Self::BubbleGenerator => 13,
+            Self::OilWells | Self::ColaWells => 12,
+            Self::Farm | Self::IronOreMine | Self::CopperOreMine | Self::ToffeeQuarry => 10,
+            Self::GoldMine => 7,
+            Self::Bank => 6,
+            Self::BatteryFarm | Self::SugarMine => 11,
+            Self::PlasticFountain => 14,
+            Self::Factory
+            | Self::Sawmill
+            | Self::SteelMill
+            | Self::OilRefinery
+            | Self::CandyFactory
+            | Self::ToyFactory
+            | Self::FizzyDrinkFactory => 0,
+        }
+    }
+
+    /// Vida económica del spec (`IndustryLifeType` en `build_industry.h`).
+    #[must_use]
+    pub const fn life_type(self) -> IndustryLifeType {
+        match self {
+            Self::CoalMine
+            | Self::IronOreMine
+            | Self::CopperOreMine
+            | Self::GoldMine
+            | Self::OilWells
+            | Self::ColaWells
+            | Self::PlasticFountain
+            | Self::SugarMine
+            | Self::ToffeeQuarry
+            | Self::BubbleGenerator => IndustryLifeType::Extractive,
+            Self::Forest | Self::Farm | Self::CottonCandy | Self::BatteryFarm => {
+                IndustryLifeType::Organic
+            }
+            Self::Factory
+            | Self::Sawmill
+            | Self::SteelMill
+            | Self::OilRefinery
+            | Self::Bank
+            | Self::CandyFactory
+            | Self::ToyFactory
+            | Self::FizzyDrinkFactory => IndustryLifeType::Processing,
+        }
+    }
+
+    /// Pozos de petróleo temperate solo bajan (`IndustryBehaviour::DontIncrProd`).
+    #[must_use]
+    pub const fn only_decreases_production(self) -> bool {
+        matches!(self, Self::OilWells)
+    }
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -195,6 +286,16 @@ pub struct Industry {
     /// de modo que dos industrias vecinas no producen en el mismo tick.
     #[serde(default)]
     pub counter: u16,
+    /// Nivel de producción (`Industry::prod_level`). Escala el `production_rate` del spec.
+    ///
+    /// `0` = marcada para cierre (se borra el mes siguiente). Arranca en
+    /// [`PRODLEVEL_DEFAULT`].
+    #[serde(default = "default_prod_level")]
+    pub prod_level: u8,
+}
+
+const fn default_prod_level() -> u8 {
+    PRODLEVEL_DEFAULT
 }
 
 /// Máscara de la fase de producción (`GB(r, 4, 12)`).
@@ -237,6 +338,7 @@ impl Industry {
             transported_total: 0,
             history: IndustryHistory::default(),
             counter: 0,
+            prod_level: PRODLEVEL_DEFAULT,
         }
     }
 
@@ -255,6 +357,7 @@ impl Industry {
             transported_total: 0,
             history: IndustryHistory::default(),
             counter: 0,
+            prod_level: PRODLEVEL_DEFAULT,
         }
     }
 
@@ -279,6 +382,7 @@ impl Industry {
             transported_total: 0,
             history: IndustryHistory::default(),
             counter: 0,
+            prod_level: PRODLEVEL_DEFAULT,
         }
     }
 
@@ -322,16 +426,87 @@ impl Industry {
         self.pos == c || self.tiles.contains(&c)
     }
 
-    /// Produce cargo primario si el tick cae en el periodo (minas, bosques, pozos, aserradero…).
+    /// Rate base del spec o, sin spec, el del kind.
+    #[must_use]
+    pub fn production_rate(&self) -> u8 {
+        if let Some(spec) = self.spec {
+            return spec.production_rate();
+        }
+        match self.kind {
+            IndustryKind::CoalMine => 15,
+            IndustryKind::Forest => 13,
+            IndustryKind::OilWell => 12,
+            IndustryKind::Factory => 0,
+        }
+    }
+
+    #[must_use]
+    pub fn life_type(&self) -> IndustryLifeType {
+        if let Some(spec) = self.spec {
+            return spec.life_type();
+        }
+        match self.kind {
+            IndustryKind::CoalMine | IndustryKind::OilWell => IndustryLifeType::Extractive,
+            IndustryKind::Forest => IndustryLifeType::Organic,
+            IndustryKind::Factory => IndustryLifeType::Processing,
+        }
+    }
+
+    /// Unidades por ciclo de producción (`CeilDiv(rate * prod_level, PRODLEVEL_DEFAULT)`).
+    #[must_use]
+    pub fn produce_amount(&self) -> u32 {
+        if self.prod_level == PRODLEVEL_CLOSURE {
+            return 0;
+        }
+        let rate = u32::from(self.production_rate());
+        if rate == 0 {
+            return 0;
+        }
+        (rate * u32::from(self.prod_level))
+            .div_ceil(u32::from(PRODLEVEL_DEFAULT))
+            .min(255)
+    }
+
+    /// Salida de fábrica de goods escalada por `prod_level`.
+    #[must_use]
+    pub fn factory_output_amount(&self) -> u32 {
+        if self.prod_level == PRODLEVEL_CLOSURE {
+            return 0;
+        }
+        (INDUSTRY_PRODUCE_AMOUNT * u32::from(self.prod_level))
+            .div_ceil(u32::from(PRODLEVEL_DEFAULT))
+            .max(1)
+    }
+
+    #[must_use]
+    pub const fn is_closing(&self) -> bool {
+        self.prod_level == PRODLEVEL_CLOSURE
+    }
+
+    /// Porcentaje transportado el mes pasado en unidades 0–255 (`PctTransported`).
+    #[must_use]
+    pub fn last_month_pct_transported(&self) -> u8 {
+        let Some(sample) = self.history.samples.last() else {
+            return 0;
+        };
+        if sample.produced == 0 {
+            return 0;
+        }
+        let pct = (u64::from(sample.transported) * 256) / u64::from(sample.produced);
+        u8::try_from(pct.min(255)).unwrap_or(255)
+    }
+
+    /// Produce cargo primario si el tick cae en el periodo (minas, bosques, pozos…).
     pub fn produce(&mut self, tick: u64) {
-        if self.requires_station_inputs() {
+        if self.requires_station_inputs() || self.is_closing() {
+            return;
+        }
+        let amount = self.produce_amount();
+        if amount == 0 {
             return;
         }
         if self.produces_on_tick(tick) {
-            self.stock = self
-                .stock
-                .saturating_add(INDUSTRY_PRODUCE_AMOUNT)
-                .min(self.capacity);
+            self.stock = self.stock.saturating_add(amount).min(self.capacity);
         }
     }
 
@@ -339,7 +514,7 @@ impl Industry {
     ///
     /// Devuelve `true` si hubo un ciclo de procesamiento en este tick.
     pub fn produce_from_nearby_stations(&mut self, stations: &mut [Station], tick: u64) -> bool {
-        if !self.requires_station_inputs() {
+        if !self.requires_station_inputs() || self.is_closing() {
             return false;
         }
         if !self.produces_on_tick(tick) || self.stock >= self.capacity {
@@ -380,10 +555,8 @@ impl Industry {
             debug_assert_eq!(remaining, 0);
         }
 
-        self.stock = self
-            .stock
-            .saturating_add(INDUSTRY_PRODUCE_AMOUNT)
-            .min(self.capacity);
+        let output = self.factory_output_amount();
+        self.stock = self.stock.saturating_add(output).min(self.capacity);
         true
     }
 
@@ -501,6 +674,110 @@ pub fn transport_industry_goods(
     moved
 }
 
+/// Resultado de un cambio de producción (`ChangeIndustryProduction`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IndustryProductionChange {
+    None,
+    Increased,
+    Decreased,
+    Closing,
+}
+
+/// Cambia el `prod_level` o marca cierre (`ChangeIndustryProduction`, modo original).
+///
+/// Con economía original los cambios ocurren en la llamada diaria (`monthly = false`);
+/// la mensual solo sirve para borrar las ya marcadas. Las procesadoras no cambian aquí.
+pub fn change_industry_production(
+    industry: &mut Industry,
+    monthly: bool,
+    climate: Climate,
+    rng: &mut Randomizer,
+) -> IndustryProductionChange {
+    // Modo original: la evaluación es diaria. La llamada mensual no hace nada.
+    let original_economy = true;
+    if monthly == original_economy {
+        return IndustryProductionChange::None;
+    }
+    if industry.is_closing() {
+        return IndustryProductionChange::None;
+    }
+    // Sin un mes cerrado no hay `LAST_MONTH` útil: no improvisar cambios el primer mes.
+    if industry.history.samples.is_empty() {
+        return IndustryProductionChange::None;
+    }
+
+    let life = industry.life_type();
+    if !matches!(
+        life,
+        IndustryLifeType::Extractive | IndustryLifeType::Organic
+    ) {
+        return IndustryProductionChange::None;
+    }
+
+    let only_decrease = industry
+        .spec
+        .is_some_and(IndustrySpec::only_decreases_production)
+        && climate == Climate::Temperate;
+
+    // 1/3 de probabilidad de intentar un cambio (o siempre si solo baja).
+    if !only_decrease && !chance16(rng, 1, 3) {
+        return IndustryProductionChange::None;
+    }
+
+    let well_served = industry.last_month_pct_transported() > PERCENT_TRANSPORTED_60;
+    // Si transportó bien XOR Chance16(1,3) → subir; si no → bajar.
+    let increase = !only_decrease && well_served != chance16(rng, 1, 3);
+
+    if increase {
+        if industry.prod_level >= PRODLEVEL_MAXIMUM {
+            return IndustryProductionChange::None;
+        }
+        industry.prod_level = (industry.prod_level.saturating_mul(2)).min(PRODLEVEL_MAXIMUM);
+        IndustryProductionChange::Increased
+    } else if industry.prod_level == PRODLEVEL_MINIMUM {
+        industry.prod_level = PRODLEVEL_CLOSURE;
+        IndustryProductionChange::Closing
+    } else {
+        industry.prod_level = (industry.prod_level / 2).max(PRODLEVEL_MINIMUM);
+        IndustryProductionChange::Decreased
+    }
+}
+
+/// `Chance16(a, b)`: probabilidad `a/b`.
+fn chance16(rng: &mut Randomizer, a: u32, b: u32) -> bool {
+    if b == 0 {
+        return false;
+    }
+    rng.random_range(b) < a
+}
+
+/// Borra del mapa las industrias marcadas para cierre el mes pasado.
+///
+/// Devuelve las posiciones de las industrias eliminadas (para noticias).
+pub fn remove_closed_industries(
+    industries: &mut Vec<Industry>,
+    map: &mut crate::map::Map,
+) -> Vec<TileCoord> {
+    let mut closed_at = Vec::new();
+    industries.retain(|ind| {
+        if !ind.is_closing() {
+            return true;
+        }
+        closed_at.push(ind.pos);
+        for &tile in &ind.tiles {
+            let _ = map.set_kind(tile, crate::map::TileKind::Grass);
+            let _ = map.set_m1(tile, 0);
+            let _ = map.set_m2(tile, 0);
+            let _ = map.set_mapt_m5(tile, 0, 0);
+        }
+        if ind.tiles.is_empty() {
+            let _ = map.set_kind(ind.pos, crate::map::TileKind::Grass);
+        }
+        false
+    });
+    closed_at
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -523,14 +800,15 @@ mod tests {
         let mut plain = Industry::new(TileCoord::new(0, 0), IndustryKind::CoalMine);
         let mut shifted =
             Industry::new(TileCoord::new(1, 0), IndustryKind::CoalMine).with_counter(100);
+        let expected = plain.produce_amount();
 
         plain.produce(INDUSTRY_PRODUCE_TICKS);
         shifted.produce(INDUSTRY_PRODUCE_TICKS);
-        assert_eq!(plain.stock, INDUSTRY_PRODUCE_AMOUNT);
+        assert_eq!(plain.stock, expected);
         assert_eq!(shifted.stock, 0);
 
         shifted.produce(INDUSTRY_PRODUCE_TICKS - 100);
-        assert_eq!(shifted.stock, INDUSTRY_PRODUCE_AMOUNT);
+        assert_eq!(shifted.stock, expected);
     }
 
     #[test]
@@ -546,8 +824,9 @@ mod tests {
         assert_eq!(fact.stock, 0);
     }
 
+    /// El aserradero vanilla es procesadora (`production_rate = 0`): no auto-produce madera.
     #[test]
-    fn sawmill_still_auto_produces_wood() {
+    fn sawmill_does_not_auto_produce() {
         let mut saw = Industry::with_tiles_spec(
             TileCoord::new(0, 0),
             IndustryKind::Factory,
@@ -556,7 +835,60 @@ mod tests {
             0,
         );
         saw.produce(512);
-        assert_eq!(saw.stock, INDUSTRY_PRODUCE_AMOUNT);
+        assert_eq!(saw.stock, 0);
+        assert_eq!(saw.production_rate(), 0);
+        assert_eq!(saw.life_type(), IndustryLifeType::Processing);
+    }
+
+    #[test]
+    fn coal_mine_produces_fifteen_at_default_level() {
+        let mine = Industry::new(TileCoord::new(0, 0), IndustryKind::CoalMine);
+        assert_eq!(mine.prod_level, PRODLEVEL_DEFAULT);
+        assert_eq!(mine.produce_amount(), 15);
+    }
+
+    #[test]
+    fn doubling_prod_level_doubles_output() {
+        let mut mine = Industry::new(TileCoord::new(0, 0), IndustryKind::CoalMine);
+        mine.prod_level = PRODLEVEL_DEFAULT * 2;
+        assert_eq!(mine.produce_amount(), 30);
+    }
+
+    /// Sin transporte, bajar una y otra vez desde el mínimo cierra la mina.
+    #[test]
+    fn poor_service_closes_mine_from_minimum() {
+        let mut mine = Industry::new(TileCoord::new(0, 0), IndustryKind::CoalMine);
+        mine.prod_level = PRODLEVEL_MINIMUM;
+        mine.history.push_month(0, 100, 0); // 0 % transportado
+        let mut rng = Randomizer::new(1);
+        // Forzar el cambio: repetir hasta que baje (Chance16 puede saltar).
+        let mut closed = false;
+        for _ in 0..32 {
+            let change = change_industry_production(&mut mine, false, Climate::Temperate, &mut rng);
+            if change == IndustryProductionChange::Closing {
+                closed = true;
+                break;
+            }
+        }
+        assert!(
+            closed,
+            "una mina al mínimo sin transporte tiene que acabar cerrando"
+        );
+        assert_eq!(mine.prod_level, PRODLEVEL_CLOSURE);
+    }
+
+    #[test]
+    fn closed_industries_are_removed_next_month() {
+        let mut map = crate::map::Map::new_flat(8, 8, 0);
+        let pos = TileCoord::new(2, 2);
+        let _ = map.set_kind(pos, crate::map::TileKind::Industry);
+        let mut mine = Industry::new(pos, IndustryKind::CoalMine);
+        mine.prod_level = PRODLEVEL_CLOSURE;
+        let mut industries = vec![mine];
+        let closed = remove_closed_industries(&mut industries, &mut map);
+        assert_eq!(closed, vec![pos]);
+        assert!(industries.is_empty());
+        assert_eq!(map.get_kind(pos), Some(crate::map::TileKind::Grass));
     }
 
     #[test]

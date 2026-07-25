@@ -70,7 +70,7 @@ abrir el issue.
 | 3 | [P0.4](#p04--rating-inicial-de-autoridad-local---hecho) Rating de autoridad local | P0 | S | hecho | Cambia la curva de arranque y es requisito de P1.9 |
 | 4 | [P1.1](#p11--updatestationrating-completo--hecho) `UpdateStationRating` + [P0.3](#p03--rating-inicial-de-estación--hecho-con-p11) | P1 | XL | hecho | Es lo que hace que servir bien una estación importe |
 | 5 | [P1.2](#p12--reparto-de-carga-entre-estaciones-competidoras--hecho) Reparto entre estaciones | P1 | L | hecho | Cierra la mitad que le faltaba a P1.1: el rating ya reparte la producción |
-| 6 | [P1.4](#p14--prod_level-y-cierre-de-industrias) Industrias dinámicas | P1 | XL | siguiente | Sin esto el mundo económico es estático y las rutas no caducan |
+| 6 | [P1.4](#p14--prod_level-y-cierre-de-industrias--hecho) Industrias dinámicas + [P1.3](#p13--producción-industrial-por-spec--hecho) rates | P1 | XL | hecho | Sin esto el mundo económico es estático y las rutas no caducan |
 | 7 | [P3.1](#tabla-p3) `GenerateTowns` / `GenerateIndustries` | P3 | XL | | Un mapa nuevo nace vacío: bloquea comparar una partida completa |
 | 8 | [P1.6](#p16--pago-diferido-de-transferencias) Pago diferido de transferencias | P1 | L | | El cobro inmediato hace rentables cadenas que no lo son |
 | 9 | [P2.1](#tabla-p2) Relojes calendario/economía | P2 | XL | | Habilita los barridos escalonados de los que todo depende |
@@ -195,7 +195,7 @@ con la clasificación de segmentos de señal y está reclasificada a P2 (detalle
 
 ## 5. P1 — Reglas de comportamiento
 
-Veintidós entradas, **dos cerradas** (P1.1 —que además absorbió P0.3— y P1.2).
+Veintidós entradas, **cuatro cerradas** (P1.1 —con P0.3—, P1.2, y el bloque P1.3+P1.4 de industrias).
 
 ### P1.1 — `UpdateStationRating` completo · hecho
 
@@ -220,7 +220,7 @@ Veintidós entradas, **dos cerradas** (P1.1 —que además absorbió P0.3— y P
   `abandoned_station_loses_rating_over_time`.
 - **Cambio de comportamiento** — el rating por compañía deja de existir como tal: en el original
   es de la estación e igual para todos, y la competencia se resuelve al repartir la producción
-  ([P1.2](#p12--reparto-de-carga-entre-estaciones-competidoras)). `company_time_since_pickup` se
+  ([P1.2](#p12--reparto-de-carga-entre-estaciones-competidoras--hecho)). `company_time_since_pickup` se
   conserva porque ese reparto lo va a necesitar.
 - **Pendiente** — el +26 por estatua (no hay acciones de ayuntamiento todavía, va con
   [P1.10](#p110--efecto-real-de-la-publicidad), igual que `ModifyStationRatingAround`) y el número
@@ -251,28 +251,35 @@ Veintidós entradas, **dos cerradas** (P1.1 —que además absorbió P0.3— y P
   por su propio catchment. Tampoco está el consumidor exclusivo de industria
   (`exclusive_consumer`).
 
-### P1.3 — Producción industrial por spec
+### P1.3 — Producción industrial por spec · hecho
 
-- **Problema** — toda industria suma 8 unidades por ciclo, sin relación con su tipo.
+- **Problema** — toda industria sumaba 8 unidades por ciclo, sin relación con su tipo.
 - **Original** — cada spec tiene su `production_rate`, escalado por `prod_level` con
   `CeilDiv(rate * prod_level, PRODLEVEL_DEFAULT)` (`industry_cmd.cpp:1160-1230`, `2592-2600`).
-- **Port** — `INDUSTRY_PRODUCE_AMOUNT = 8` fijo (`industry.rs:293-304`).
-- **Solución** — extender la tabla de specs con `production_rate` por tipo y consumirla en el
-  ciclo de producción.
-- **Coste** — XL (va junto con P1.4 y P1.5).
+- **Hecho** — `IndustrySpec::production_rate` con los valores de `build_industry.h` (carbón 15,
+  bosque 13, pozos 12, minas 10/7, etc.; procesadoras 0). `Industry::produce_amount` aplica
+  `CeilDiv(rate * prod_level, 16)`. Las fábricas de goods siguen transformando insumos y
+  escalan su salida de 8 con el mismo `prod_level`. Hecho junto a [P1.4](#p14--prod_level-y-cierre-de-industrias--hecho).
+- **Pendiente** — segundo cargo de granja (livestock) y rates de NewGRF.
 
-### P1.4 — `prod_level` y cierre de industrias
+### P1.4 — `prod_level` y cierre de industrias · hecho
 
-- **Problema** — las industrias nunca cambian de producción ni cierran, así que el mapa económico
-  es estático y una ruta rentable lo es para siempre.
+- **Problema** — las industrias nunca cambiaban de producción ni cerraban, así que el mapa
+  económico era estático y una ruta rentable lo era para siempre.
 - **Original** — `prod_level` con `PRODLEVEL_DEFAULT = 0x10`, mínimo `0x04`, máximo `0x80` y
   cierre en `0x00` (`industry.h:35-38`); bucles diario y mensual con umbrales de transporte
   `PERCENT_TRANSPORTED_60 = 153` y `_80 = 204`, duplicando o partiendo el nivel y cerrando en el
   mínimo (`industry_cmd.cpp:2872-3148`). El bucle diario también crea industrias nuevas.
-- **Port** — ausente; solo hay historial mensual para la UI (`sim_step/economy.rs:72-77`).
-- **Solución** — añadir `prod_level` a la industria y portar `ChangeIndustryProduction` con sus
-  dos bucles y los modos original/smooth. Requiere [P0.5](#p05--todas-las-industrias-producen-en-el-mismo-tick--hecho).
-- **Coste** — XL.
+- **Hecho** — `Industry::prod_level` (default 0x10, serde para saves antiguos).
+  `change_industry_production` porta el modo **original** (extractive/organic): cada día de
+  calendario una industria al azar puede subir o bajar según el % transportado del mes pasado;
+  al bajar desde el mínimo se marca cierre. El mes siguiente `remove_closed_industries` la
+  borra del mapa y publica noticia (`NewsType::IndustryClose`). Sin historial mensual todavía
+  no hay cambios (hace falta un mes cerrado). Pozos temperate solo bajan. Tests
+  `coal_mine_produces_fifteen_at_default_level`, `doubling_prod_level_doubles_output`,
+  `poor_service_closes_mine_from_minimum`, `closed_industries_are_removed_next_month`.
+- **Pendiente** — economía smooth, creación diaria de industrias nuevas, abandono de
+  procesadoras a los 5 años, noticias de subida/bajada de producción (hoy solo cierre).
 
 ### P1.5 — Transformación de insumos
 

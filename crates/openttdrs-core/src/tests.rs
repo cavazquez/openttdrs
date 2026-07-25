@@ -328,9 +328,10 @@ fn factory_produces_half_as_often_as_mine() {
     );
     let mut coal = Industry::new(TileCoord::new(0, 0), IndustryKind::CoalMine);
     let mut fact = Industry::new(TileCoord::new(1, 0), IndustryKind::Factory);
+    let coal_amount = coal.produce_amount();
     coal.produce(256);
     fact.produce(256);
-    assert_eq!(coal.stock, INDUSTRY_PRODUCE_AMOUNT);
+    assert_eq!(coal.stock, coal_amount);
     assert_eq!(fact.stock, 0);
     fact.produce(512);
     assert_eq!(fact.stock, 0, "fábrica sin insumos en estación no produce");
@@ -947,6 +948,7 @@ fn industry_produces_on_schedule() {
     let mut s = GameState::new(8, 8);
     s.industries
         .push(Industry::new(TileCoord::new(0, 0), IndustryKind::CoalMine));
+    let per_cycle = s.industries[0].produce_amount();
 
     // Sin ticks no hay producción.
     assert_eq!(s.industries[0].stock, 0);
@@ -955,33 +957,34 @@ fn industry_produces_on_schedule() {
     for _ in 0..INDUSTRY_PRODUCE_TICKS {
         s.step();
     }
-    assert_eq!(s.industries[0].stock, INDUSTRY_PRODUCE_AMOUNT);
+    assert_eq!(s.industries[0].stock, per_cycle);
 
     // Un segundo ciclo completo.
     for _ in 0..INDUSTRY_PRODUCE_TICKS {
         s.step();
     }
-    assert_eq!(s.industries[0].stock, INDUSTRY_PRODUCE_AMOUNT * 2);
+    assert_eq!(s.industries[0].stock, per_cycle * 2);
 }
 
 #[test]
 fn industry_does_not_exceed_capacity() {
     let mut s = GameState::new(8, 8);
     let mut ind = Industry::new(TileCoord::new(0, 0), IndustryKind::Forest);
-    ind.capacity = INDUSTRY_PRODUCE_AMOUNT; // capacidad mínima: un ciclo
+    let per_cycle = ind.produce_amount();
+    ind.capacity = per_cycle; // capacidad mínima: un ciclo
     s.industries.push(ind);
 
     // Primer ciclo llena hasta capacity.
     for _ in 0..INDUSTRY_PRODUCE_TICKS {
         s.step();
     }
-    assert_eq!(s.industries[0].stock, INDUSTRY_PRODUCE_AMOUNT);
+    assert_eq!(s.industries[0].stock, per_cycle);
 
     // Segundo ciclo: stock saturado, no supera capacity.
     for _ in 0..INDUSTRY_PRODUCE_TICKS {
         s.step();
     }
-    assert_eq!(s.industries[0].stock, INDUSTRY_PRODUCE_AMOUNT);
+    assert_eq!(s.industries[0].stock, per_cycle);
 }
 
 #[test]

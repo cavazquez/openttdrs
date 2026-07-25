@@ -11,6 +11,7 @@ pub const LINKGRAPH_SPAWN_JOIN_TICK: u16 = 21;
 pub(super) fn call_landscape_tick(state: &mut GameState, t: u64) {
     on_tick_town(state, t);
     on_tick_trees(state);
+    on_tick_water(state);
     on_tick_station(state, t);
     on_tick_industry(state, t);
     on_tick_companies(state, t);
@@ -26,6 +27,11 @@ fn on_tick_town(state: &mut GameState, t: u64) {
 /// `OnTick_Trees`: ciclo de vegetación sobre las visitas del tile loop.
 fn on_tick_trees(state: &mut GameState) {
     crate::map::tree_tile_loop::tick_tree_tile_loop(state);
+}
+
+/// Inundación desde agua (`TileLoop_Water` / P3.2) sobre las visitas del tile loop.
+fn on_tick_water(state: &mut GameState) {
+    crate::map::water_flood::tick_water_flood(state);
 }
 
 /// `OnTick_Station`: rating (ciclo 185 ticks ≈ `STATION_ACCEPTANCE_TICKS` del port).

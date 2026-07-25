@@ -20,6 +20,7 @@ pub mod tile_loop;
 pub mod tree_tile_loop;
 mod types;
 pub mod water_class;
+pub mod water_flood;
 
 #[cfg(test)]
 use binary::{OTTDMAP_FLAG_HAS_M2_HI, OTTDMAP_FORMAT_VERSION_CURRENT};
@@ -87,15 +88,20 @@ pub use tile_loop::{
 };
 pub use tree_tile_loop::{
     MAX_TREE_OR_FIELD_STAGE, TILE_LOOP_FREQUENCY, TREE_GROWTH_DEAD, TREE_GROWTH_GROWING1,
-    TREE_GROWTH_GROWN, TREE_GROWTH_TICK_INTERVAL, TREE_UPDATE_FREQUENCY, apply_seasonal_snow,
-    clear_tree, landscape_tile_cycle, next_clear_update_tick, next_tree_update_tick,
-    normalize_tree_growth, plant_tree, step_tree_and_field_growth, tick_tree_tile_loop, tree_count,
-    tree_or_field_stage, with_tree_count, with_tree_or_field_stage,
+    TREE_GROWTH_GROWN, TREE_GROWTH_TICK_INTERVAL, TREE_UPDATE_FREQUENCY,
+    apply_desert_transition_from_visits, apply_seasonal_snow, clear_tree, is_tropic_desert_zone,
+    landscape_tile_cycle, next_clear_update_tick, next_tree_update_tick, normalize_tree_growth,
+    plant_tree, step_tree_and_field_growth, tick_tree_tile_loop, tile_loop_clear_desert,
+    tree_count, tree_or_field_stage, with_tree_count, with_tree_or_field_stage,
 };
 pub use types::{MapError, OTTD_TILETYPE_TUNNELBRIDGE, Tile, TileCoord, TileKind};
 pub use water_class::{
     WaterClass, is_canal_tile, is_river_tile, make_water_tile, river_tile_is_ship_navigable,
     set_water_class_m1, tile_has_water_class, water_class, water_class_from_m1,
+};
+pub use water_flood::{
+    FloodingBehaviour, do_flood_tile, flood_vehicles, get_flooding_behaviour, make_shore_tile,
+    process_water_flood_from_visits, tick_water_flood, tile_loop_water_at,
 };
 
 /// Mapa rectangular denso en memoria.

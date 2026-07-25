@@ -75,9 +75,9 @@ abrir el issue.
 | 8 | [P2.1](#tabla-p2) Relojes calendario/economía | P2 | XL | hecho | Habilita los barridos escalonados de los que todo depende |
 | 9 | Bloque 6: [P2.17](#tabla-p2)–[P2.22](#tabla-p2) órdenes/carga/linkgraph | P2 | XL | hecho | Órdenes implícitas, staging de carga y planificador linkgraph |
 
-**P1 completo** (22/22). **P3.1 hecho** (`GenerateTowns` / `GenerateIndustries` en
-`world_gen/population`). Siguiente foco P3: inundación ([P3.2](#tabla-p3)) u otras
-entradas de la tabla. El Bloque 6 de órdenes/carga/linkgraph (P2.17–P2.22) está cerrado.
+**P1 completo** (22/22). **P3.1 / P3.2 / P3.3 / P3.9 hechos** (población, TGP,
+inundación y desierto en tile loop). Siguiente foco P3: pueblo vivo ([P3.4](#tabla-p3)–[P3.8](#tabla-p3))
+u otras entradas de la tabla. El Bloque 6 de órdenes/carga/linkgraph (P2.17–P2.22) está cerrado.
 Los P0 puntuales también están cerrados (P0.7 reclasificado a P2).
 
 ---
@@ -631,6 +631,14 @@ por `next_hop`+`reserved`; `PrepareUnload`/`Stage`; `OnTick_LinkGraph` en `date_
 en `RegenerateLandscape`. MVP de colocación (calle+casas / specs por clima); falta
 paridad fina de layouts, land-proportion y probs land/water.
 
+**P3.9 · hecho** — `TileLoopClearDesert` en `map/tree_tile_loop.rs`: densidad 1/3 según
+vecinos diagonales y zona `desert_patch`; hierba↔desierto en el tile loop subtropical
+antes del crecimiento de hierba (nieve ártico intacta).
+
+**P3.2 · hecho** — `map/water_flood.rs`: `TileLoop_Water` / `DoFloodTile` / `FloodVehicles`
+sobre visitas LFSR; mar a z=0 inunda tierra clara diagonal; ahoga tren/carretera;
+ríos/canales no propagan. Enganche en `sim_step/landscape`.
+
 ---
 
 ## 7. P3 — Mundo y contenido
@@ -640,14 +648,14 @@ paridad fina de layouts, land-proportion y probs land/water.
 | ID | Tema | Problema (port) | Original | Solución | Coste |
 |----|------|-----------------|----------|----------|-------|
 | **P3.1** | Generación de pueblos e industrias · hecho | Ausente en la generación de mundo; solo fundación manual (`command/town.rs:49-121`) | `GenerateTowns` coloca `{5,11,23,46}` pueblos escalados por tamaño con layout y proporción de ciudades (`town_cmd.cpp:2432-2485`); `GenerateIndustries` reparte por probabilidad, clima y proporción tierra/agua (`industry_cmd.cpp:2488-2540`) | Portar ambas al `world_gen`; sin esto no hay escenario para comparar una partida completa | XL · **hecho** |
-| **P3.2** | Inundación | El agua nunca inunda | `TileLoop_Water` propaga en diagonal, arrasa la tesela y ahoga vehículos (`water_cmd.cpp:1074-1301`) | Portar `DoFloodTile` y `FloodVehicles` | XL |
+| **P3.2** | Inundación · hecho | El agua nunca inunda | `TileLoop_Water` propaga en diagonal, arrasa la tesela y ahoga vehículos (`water_cmd.cpp:1074-1301`) | Portar `DoFloodTile` y `FloodVehicles` | XL · **hecho** |
 | **P3.3** | Generación de terreno · hecho | Ruido por capas propio (`world_gen/mod.rs`) | TGP con Perlin y ajustes por `terrain_type`, `quantity_sea_lakes` y coberturas de nieve y desierto (`tgp.cpp`, `landscape.cpp:1606-1706`) | Portar TGP con sus parámetros de configuración | XL · **hecho** |
 | **P3.4** | Expansión física del pueblo | Radio 12, tres intentos y solo hierba plana (`town_expand.rs:9-43`) | `GrowTownAtRoad` recorre el grafo de carreteras con iteraciones según `TownLayout` y respeta rejillas y puentes (`town_cmd.cpp:1793-1950`) | Portar el recorrido y los layouts | XL |
 | **P3.5** | Elección de casa | Identificador por `seed % 110` (`town_expand.rs:228-235`) | `TryBuildTownHouse` filtra por `HouseZone`, años de validez y probabilidad ponderada, con edificios únicos (`town_cmd.cpp:2814-2935`) | Portar `_house_specs` completa al runtime | L |
 | **P3.6** | Renovación de casas | Las casas no envejecen | Pasado `minimum_life` se demuelen y se reconstruyen con probabilidad 20/256 (`town_cmd.cpp:671-705`) | Portar la edad de casa dentro de `TileLoop_Town` (P1.7) | L |
 | **P3.7** | Aceptación de carga urbana | Ausente | `AddAcceptedCargo_Town` acepta bienes, comida o agua según el spec (`town_cmd.cpp:805-851`) | Portar la aceptación por casa | L |
 | **P3.8** | Radio de zonas del pueblo | Población abstracta, sin zonas | `UpdateTownRadius` con `_town_squared_town_zone_radius_data` según número de casas (`town_cmd.cpp:1956-1997`) | Portar la tabla de radios; requisito de P3.5 | M |
-| **P3.9** | Propagación del desierto | Solo se pinta en la generación inicial | `TileLoopClearDesert` ajusta densidad según vecinos y convierte hierba en desierto (`clear_cmd.cpp:234-253`) | Portar la transición en el tile loop | M |
+| **P3.9** | Propagación del desierto · hecho | Solo se pinta en la generación inicial | `TileLoopClearDesert` ajusta densidad según vecinos y convierte hierba en desierto (`clear_cmd.cpp:234-253`) | Portar la transición en el tile loop | M · **hecho** |
 | **P3.10** | Adelantamiento en carretera | Ausente | `RoadVehCheckOvertake` con carril opuesto, aceleración 512 y `RV_OVERTAKE_TIMEOUT = 35` (`roadveh_cmd.cpp:806-857`) | Portar tras P2.14 y P2.15 | L |
 | **P3.11** | Choques en tierra | Solo está implementado el choque de aviones (`aircraft_crash.rs`) | `Vehicle::Crash` con `crashed_ctr` hasta 2220 ticks y `RoadVehCheckTrainCrash` en pasos a nivel (`roadveh_cmd.cpp:524-553`, `vehicle.cpp:291-317`) | Portar el estado `Crashed` y el chequeo en cruces | L |
 | **P3.12** | Reemplazo de cadena | Cambia `engine_id` sobre el mismo vehículo (`autoreplace.rs:61-77`) | `ReplaceChain` reconstruye el consist con articulados, dual-head y wagon removal (`autoreplace_cmd.cpp:739-816`) | Portar la reconstrucción; depende de P1.13 | XL |

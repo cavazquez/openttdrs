@@ -127,6 +127,12 @@ pub enum SimEvent {
         vehicle_id: u32,
         at: TileCoord,
     },
+    /// Vehículo ahogado por inundación (`FloodVehicle`).
+    VehicleFlooded {
+        vehicle_id: u32,
+        at: TileCoord,
+        kind: crate::vehicle::VehicleKind,
+    },
 }
 
 /// Cola de eventos del tick actual (no persistida).

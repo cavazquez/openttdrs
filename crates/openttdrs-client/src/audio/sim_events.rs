@@ -196,6 +196,12 @@ fn dispatch_sim_events(
                 }
                 fx.push_explosion(at);
             }
+            SimEvent::VehicleFlooded { at, .. } => {
+                if hud.sound_disaster || hud.sound_vehicle {
+                    sfx.write(PlayWorldSfx::new(SoundId::Explosion, at, 1.0).with_priority(125));
+                }
+                fx.push_explosion(at);
+            }
             SimEvent::TownRatingChanged { .. } => {}
             SimEvent::SubsidyCreated { station_pos, .. } => {
                 if hud.sound_confirm {

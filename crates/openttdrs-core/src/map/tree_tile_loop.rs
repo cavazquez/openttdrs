@@ -10,10 +10,11 @@
 
 use crate::GameState;
 use crate::map::tile_loop::{MAP_TILE_LOOP_STRIDE, TileLoopState, collect_tile_loop_visits};
+use crate::map::water_class::{WaterClass, tile_has_water_class, water_class_from_m1};
 use crate::map::{Map, TileCoord, TileKind, coord_to_linear_index, tile_slope_and_z};
 use crate::world_gen::{
     CLEAR_GROUND_DESERT, CLEAR_GROUND_GRASS, CLEAR_GROUND_ROCKY, CLEAR_GROUND_ROUGH,
-    CLEAR_GROUND_SNOW, Climate, DEF_SNOW_LINE_HEIGHT, clear_ground_m5,
+    CLEAR_GROUND_SNOW, Climate, DEF_SNOW_LINE_HEIGHT, clear_ground_m5, desert_patch,
 };
 
 /// OpenTTD `TILE_UPDATE_FREQUENCY`: ticks entre visitas a la misma tesela.
@@ -267,6 +268,8 @@ pub fn process_tree_and_field_growth_from_visits(
                 }
             }
             TileKind::Grass => {
+                // Releer: el desierto (P3.9) puede haber mutado la tesela antes.
+                let tile = map.get(c).unwrap_or(tile);
                 let ground = clear_ground_type(tile.m5);
                 let density = clear_density(tile.m5);
                 if ground == CLEAR_GROUND_ROUGH && density == 0 {
@@ -411,6 +414,98 @@ fn clear_dead_tree_tile(map: &mut Map, c: TileCoord, m2: u8) {
     let _ = map.set_kind(c, TileKind::Grass);
     let _ = map.set_mapt_m5(c, 0x00, clear_ground_m5(clear_ground, clear_density));
     let _ = map.set_m2(c, 0);
+}
+
+/// Zona trópica desierto (`GetTropicZone == Desert`), aproximada con `desert_patch`.
+#[must_use]
+pub fn is_tropic_desert_zone(c: TileCoord, climate: Climate, world_seed: u64) -> bool {
+    climate.uses_desert_patches() && desert_patch(c.x, c.y, world_seed)
+}
+
+/// `NeighbourIsNormal`: algún vecino diagonal no-desierto o mar.
+#[must_use]
+fn neighbour_is_normal(map: &Map, c: TileCoord, climate: Climate, world_seed: u64) -> bool {
+    for dir in 0..4u8 {
+        let (dx, dy) = crate::map::diag_dir_offset(dir);
+        let n = TileCoord::new(c.x + dx, c.y + dy);
+        let Some(tile) = map.get(n) else {
+            continue;
+        };
+        if !is_tropic_desert_zone(n, climate, world_seed) {
+            return true;
+        }
+        if tile_has_water_class(tile.kind) && water_class_from_m1(tile.m1) == WaterClass::Sea {
+            return true;
+        }
+    }
+    false
+}
+
+/// `TileLoopClearDesert`: ajusta densidad desierto según zona y vecinos.
+pub fn tile_loop_clear_desert(
+    map: &mut Map,
+    c: TileCoord,
+    climate: Climate,
+    world_seed: u64,
+) -> bool {
+    if !climate.uses_desert_patches() {
+        return false;
+    }
+    let Some(tile) = map.get(c) else {
+        return false;
+    };
+    if tile.kind != TileKind::Grass {
+        return false;
+    }
+    let ground = clear_ground_type(tile.m5);
+    let current = if matches!(ground, CLEAR_GROUND_DESERT | CLEAR_GROUND_ROCKY) {
+        clear_density(tile.m5)
+    } else {
+        0
+    };
+    let expected = if is_tropic_desert_zone(c, climate, world_seed) {
+        if neighbour_is_normal(map, c, climate, world_seed) {
+            1
+        } else {
+            3
+        }
+    } else {
+        0
+    };
+    if current == expected {
+        return false;
+    }
+    let new_m5 = if ground == CLEAR_GROUND_ROCKY {
+        clear_ground_m5(CLEAR_GROUND_ROCKY, expected)
+    } else if expected == 0 {
+        clear_ground_m5(CLEAR_GROUND_GRASS, 3)
+    } else {
+        clear_ground_m5(CLEAR_GROUND_DESERT, expected)
+    };
+    if new_m5 == tile.m5 {
+        return false;
+    }
+    let _ = map.set_mapt_m5(c, tile.mapt, new_m5);
+    true
+}
+
+/// Aplica `TileLoopClearDesert` sobre visitas del tile loop.
+pub fn apply_desert_transition_from_visits(
+    map: &mut Map,
+    climate: Climate,
+    world_seed: u64,
+    visits: &[(TileCoord, crate::map::Tile)],
+) -> Vec<TileCoord> {
+    if !climate.uses_desert_patches() {
+        return Vec::new();
+    }
+    let mut dirty = Vec::new();
+    for &(c, _) in visits {
+        if tile_loop_clear_desert(map, c, climate, world_seed) {
+            dirty.push(c);
+        }
+    }
+    dirty
 }
 
 /// Nieve ártico al estilo OpenTTD `TileLoopClearAlps`: altura vs snow line, franja tile-loop.
@@ -605,14 +700,22 @@ pub fn clear_tree(
 /// Hook combinado para `sim_step` (usa `runtime.tile_loop_visited` del tick).
 pub fn tick_tree_tile_loop(state: &mut GameState) {
     let tick = state.tick.get();
-    let visits = &state.runtime.tile_loop_visited;
-    process_tree_and_field_growth_from_visits(&mut state.map, tick, state.world_seed, visits);
+    let visits = state.runtime.tile_loop_visited.clone();
+    // OpenTTD `TileLoop_Clear`: desierto/alps antes del crecimiento de hierba.
+    let desert_dirty = apply_desert_transition_from_visits(
+        &mut state.map,
+        state.climate,
+        state.world_seed,
+        &visits,
+    );
+    process_tree_and_field_growth_from_visits(&mut state.map, tick, state.world_seed, &visits);
     let snow_dirty = apply_seasonal_snow_from_visits(
         &mut state.map,
         state.climate,
         DEF_SNOW_LINE_HEIGHT,
-        visits,
+        &visits,
     );
+    state.runtime.landscape_tile_dirty.extend(desert_dirty);
     state.runtime.landscape_tile_dirty.extend(snow_dirty);
 }
 
@@ -969,6 +1072,116 @@ mod tests {
         let tile = map.get(c).unwrap();
         apply_seasonal_snow_from_visits(&mut map, Climate::SubArctic, 10, &[(c, tile)]);
         assert_eq!(clear_density(map.get(c).unwrap().m5), 2);
+    }
+
+    fn find_desert_and_normal_coords(seed: u64) -> (TileCoord, TileCoord) {
+        let mut desert = None;
+        let mut normal = None;
+        for y in 2..30 {
+            for x in 2..30 {
+                let c = TileCoord::new(x, y);
+                if desert_patch(x, y, seed) {
+                    desert.get_or_insert(c);
+                } else {
+                    normal.get_or_insert(c);
+                }
+                if let (Some(d), Some(n)) = (desert, normal) {
+                    return (d, n);
+                }
+            }
+        }
+        panic!("no se encontraron coords desierto/normal para seed {seed}");
+    }
+
+    #[test]
+    fn clear_desert_interior_reaches_density_three() {
+        // Esquina (0,0): vecinos fuera de mapa se ignoran → NeighbourIsNormal=false
+        // si los diagonales válidos también son zona desierto. Seed 0: (0,0) es desierto.
+        let seed = 0u64;
+        assert!(desert_patch(0, 0, seed));
+        let mut map = Map::new_flat(1, 1, 0);
+        let c = TileCoord::new(0, 0);
+        map.set_kind(c, TileKind::Grass).unwrap();
+        map.set_mapt_m5(c, 0, clear_ground_m5(CLEAR_GROUND_GRASS, 3))
+            .unwrap();
+        assert!(tile_loop_clear_desert(
+            &mut map,
+            c,
+            Climate::SubTropical,
+            seed
+        ));
+        assert_eq!(
+            clear_ground_type(map.get(c).unwrap().m5),
+            CLEAR_GROUND_DESERT
+        );
+        assert_eq!(clear_density(map.get(c).unwrap().m5), 3);
+    }
+
+    #[test]
+    fn clear_desert_edge_near_normal_is_density_one() {
+        let seed = 7u64;
+        let mut edge = None;
+        'outer: for y in 3..28 {
+            for x in 3..28 {
+                if !desert_patch(x, y, seed) {
+                    continue;
+                }
+                let has_normal = [(-1, 0), (0, 1), (1, 0), (0, -1)]
+                    .iter()
+                    .any(|&(dx, dy)| !desert_patch(x + dx, y + dy, seed));
+                if has_normal {
+                    edge = Some(TileCoord::new(x, y));
+                    break 'outer;
+                }
+            }
+        }
+        let c = edge.expect("debe existir borde desierto/normal");
+        let mut map = Map::new_flat(64, 64, 0);
+        map.set_kind(c, TileKind::Grass).unwrap();
+        map.set_mapt_m5(c, 0, clear_ground_m5(CLEAR_GROUND_GRASS, 3))
+            .unwrap();
+        assert!(tile_loop_clear_desert(
+            &mut map,
+            c,
+            Climate::SubTropical,
+            seed
+        ));
+        assert_eq!(
+            clear_ground_type(map.get(c).unwrap().m5),
+            CLEAR_GROUND_DESERT
+        );
+        assert_eq!(clear_density(map.get(c).unwrap().m5), 1);
+    }
+
+    #[test]
+    fn clear_desert_outside_zone_reverts_to_grass() {
+        let seed = 3u64;
+        let (_, normal) = find_desert_and_normal_coords(seed);
+        let mut map = Map::new_flat(64, 64, 0);
+        map.set_kind(normal, TileKind::Grass).unwrap();
+        map.set_mapt_m5(normal, 0, clear_ground_m5(CLEAR_GROUND_DESERT, 3))
+            .unwrap();
+        assert!(tile_loop_clear_desert(
+            &mut map,
+            normal,
+            Climate::SubTropical,
+            seed
+        ));
+        assert_eq!(
+            clear_ground_type(map.get(normal).unwrap().m5),
+            CLEAR_GROUND_GRASS
+        );
+        assert_eq!(clear_density(map.get(normal).unwrap().m5), 3);
+    }
+
+    #[test]
+    fn clear_desert_does_not_run_on_arctic() {
+        let mut map = Map::new_flat(4, 4, 0);
+        let c = TileCoord::new(1, 1);
+        map.set_kind(c, TileKind::Grass).unwrap();
+        map.set_mapt_m5(c, 0, clear_ground_m5(CLEAR_GROUND_GRASS, 3))
+            .unwrap();
+        assert!(!tile_loop_clear_desert(&mut map, c, Climate::SubArctic, 1));
     }
 
     #[test]

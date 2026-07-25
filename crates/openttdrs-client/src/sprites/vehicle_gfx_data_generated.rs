@@ -316,3 +316,98 @@ pub const TRAIN_VEHICLE_LAYERS_TELECTRIC: [VehicleLayerGfx; 8] = [
     // NW (sprite 2972)
     VehicleLayerGfx { w: 20.0, h: 14.0, x_offs: -6.0, y_offs: -7.0, path: "assets/opengfx/tiles/vehicle_train_te_nw.png" },
 ];
+
+pub const TRAIN_WAGON_PASSENGER_LAYERS: [VehicleLayerGfx; 8] = [
+    // N (sprite 2733)
+    VehicleLayerGfx { w: 8.0, h: 21.0, x_offs: -3.0, y_offs: -11.0, path: "assets/opengfx/tiles/vehicle_wagon_passenger_n.png" },
+    // NE (sprite 2734)
+    VehicleLayerGfx { w: 20.0, h: 16.0, x_offs: -14.0, y_offs: -9.0, path: "assets/opengfx/tiles/vehicle_wagon_passenger_ne.png" },
+    // E (sprite 2735)
+    VehicleLayerGfx { w: 29.0, h: 12.0, x_offs: -16.0, y_offs: -8.0, path: "assets/opengfx/tiles/vehicle_wagon_passenger_e.png" },
+    // SE (sprite 2736)
+    VehicleLayerGfx { w: 20.0, h: 16.0, x_offs: -6.0, y_offs: -9.0, path: "assets/opengfx/tiles/vehicle_wagon_passenger_se.png" },
+    // S (sprite 2733)
+    VehicleLayerGfx { w: 8.0, h: 21.0, x_offs: -3.0, y_offs: -11.0, path: "assets/opengfx/tiles/vehicle_wagon_passenger_n.png" },
+    // SW (sprite 2734)
+    VehicleLayerGfx { w: 20.0, h: 16.0, x_offs: -14.0, y_offs: -9.0, path: "assets/opengfx/tiles/vehicle_wagon_passenger_ne.png" },
+    // W (sprite 2735)
+    VehicleLayerGfx { w: 29.0, h: 12.0, x_offs: -16.0, y_offs: -8.0, path: "assets/opengfx/tiles/vehicle_wagon_passenger_e.png" },
+    // NW (sprite 2736)
+    VehicleLayerGfx { w: 20.0, h: 16.0, x_offs: -6.0, y_offs: -9.0, path: "assets/opengfx/tiles/vehicle_wagon_passenger_se.png" },
+];
+
+pub const TRAIN_WAGON_MAIL_LAYERS: [VehicleLayerGfx; 8] = [
+    // N (sprite 2741)
+    VehicleLayerGfx { w: 8.0, h: 21.0, x_offs: -3.0, y_offs: -11.0, path: "assets/opengfx/tiles/vehicle_wagon_mail_n.png" },
+    // NE (sprite 2742)
+    VehicleLayerGfx { w: 20.0, h: 16.0, x_offs: -14.0, y_offs: -9.0, path: "assets/opengfx/tiles/vehicle_wagon_mail_ne.png" },
+    // E (sprite 2743)
+    VehicleLayerGfx { w: 29.0, h: 12.0, x_offs: -16.0, y_offs: -8.0, path: "assets/opengfx/tiles/vehicle_wagon_mail_e.png" },
+    // SE (sprite 2744)
+    VehicleLayerGfx { w: 20.0, h: 16.0, x_offs: -6.0, y_offs: -9.0, path: "assets/opengfx/tiles/vehicle_wagon_mail_se.png" },
+    // S (sprite 2741)
+    VehicleLayerGfx { w: 8.0, h: 21.0, x_offs: -3.0, y_offs: -11.0, path: "assets/opengfx/tiles/vehicle_wagon_mail_n.png" },
+    // SW (sprite 2742)
+    VehicleLayerGfx { w: 20.0, h: 16.0, x_offs: -14.0, y_offs: -9.0, path: "assets/opengfx/tiles/vehicle_wagon_mail_ne.png" },
+    // W (sprite 2743)
+    VehicleLayerGfx { w: 29.0, h: 12.0, x_offs: -16.0, y_offs: -8.0, path: "assets/opengfx/tiles/vehicle_wagon_mail_e.png" },
+    // NW (sprite 2744)
+    VehicleLayerGfx { w: 20.0, h: 16.0, x_offs: -6.0, y_offs: -9.0, path: "assets/opengfx/tiles/vehicle_wagon_mail_se.png" },
+];
+
+pub const TRAIN_WAGON_GOODS_LAYERS: [VehicleLayerGfx; 8] = [
+    // N (sprite 2753)
+    VehicleLayerGfx { w: 8.0, h: 20.0, x_offs: -3.0, y_offs: -10.0, path: "assets/opengfx/tiles/vehicle_wagon_goods_n.png" },
+    // NE (sprite 2754)
+    VehicleLayerGfx { w: 20.0, h: 16.0, x_offs: -14.0, y_offs: -9.0, path: "assets/opengfx/tiles/vehicle_wagon_goods_ne.png" },
+    // E (sprite 2755)
+    VehicleLayerGfx { w: 29.0, h: 12.0, x_offs: -16.0, y_offs: -8.0, path: "assets/opengfx/tiles/vehicle_wagon_goods_e.png" },
+    // SE (sprite 2756)
+    VehicleLayerGfx { w: 20.0, h: 16.0, x_offs: -6.0, y_offs: -9.0, path: "assets/opengfx/tiles/vehicle_wagon_goods_se.png" },
+    // S (sprite 2753)
+    VehicleLayerGfx { w: 8.0, h: 20.0, x_offs: -3.0, y_offs: -10.0, path: "assets/opengfx/tiles/vehicle_wagon_goods_n.png" },
+    // SW (sprite 2754)
+    VehicleLayerGfx { w: 20.0, h: 16.0, x_offs: -14.0, y_offs: -9.0, path: "assets/opengfx/tiles/vehicle_wagon_goods_ne.png" },
+    // W (sprite 2755)
+    VehicleLayerGfx { w: 29.0, h: 12.0, x_offs: -16.0, y_offs: -8.0, path: "assets/opengfx/tiles/vehicle_wagon_goods_e.png" },
+    // NW (sprite 2756)
+    VehicleLayerGfx { w: 20.0, h: 16.0, x_offs: -6.0, y_offs: -9.0, path: "assets/opengfx/tiles/vehicle_wagon_goods_se.png" },
+];
+
+pub const TRAIN_WAGON_COAL_LAYERS: [VehicleLayerGfx; 8] = [
+    // N (sprite 2737)
+    VehicleLayerGfx { w: 8.0, h: 20.0, x_offs: -3.0, y_offs: -10.0, path: "assets/opengfx/tiles/vehicle_wagon_coal_n.png" },
+    // NE (sprite 2738)
+    VehicleLayerGfx { w: 20.0, h: 14.0, x_offs: -14.0, y_offs: -7.0, path: "assets/opengfx/tiles/vehicle_wagon_coal_ne.png" },
+    // E (sprite 2739)
+    VehicleLayerGfx { w: 29.0, h: 11.0, x_offs: -16.0, y_offs: -7.0, path: "assets/opengfx/tiles/vehicle_wagon_coal_e.png" },
+    // SE (sprite 2740)
+    VehicleLayerGfx { w: 20.0, h: 14.0, x_offs: -6.0, y_offs: -7.0, path: "assets/opengfx/tiles/vehicle_wagon_coal_se.png" },
+    // S (sprite 2737)
+    VehicleLayerGfx { w: 8.0, h: 20.0, x_offs: -3.0, y_offs: -10.0, path: "assets/opengfx/tiles/vehicle_wagon_coal_n.png" },
+    // SW (sprite 2738)
+    VehicleLayerGfx { w: 20.0, h: 14.0, x_offs: -14.0, y_offs: -7.0, path: "assets/opengfx/tiles/vehicle_wagon_coal_ne.png" },
+    // W (sprite 2739)
+    VehicleLayerGfx { w: 29.0, h: 11.0, x_offs: -16.0, y_offs: -7.0, path: "assets/opengfx/tiles/vehicle_wagon_coal_e.png" },
+    // NW (sprite 2740)
+    VehicleLayerGfx { w: 20.0, h: 14.0, x_offs: -6.0, y_offs: -7.0, path: "assets/opengfx/tiles/vehicle_wagon_coal_se.png" },
+];
+
+pub const TRAIN_WAGON_COAL_LOADED_LAYERS: [VehicleLayerGfx; 8] = [
+    // N (sprite 2781)
+    VehicleLayerGfx { w: 8.0, h: 20.0, x_offs: -3.0, y_offs: -10.0, path: "assets/opengfx/tiles/vehicle_wagon_coal_loaded_n.png" },
+    // NE (sprite 2782)
+    VehicleLayerGfx { w: 20.0, h: 14.0, x_offs: -14.0, y_offs: -7.0, path: "assets/opengfx/tiles/vehicle_wagon_coal_loaded_ne.png" },
+    // E (sprite 2783)
+    VehicleLayerGfx { w: 29.0, h: 11.0, x_offs: -16.0, y_offs: -7.0, path: "assets/opengfx/tiles/vehicle_wagon_coal_loaded_e.png" },
+    // SE (sprite 2784)
+    VehicleLayerGfx { w: 20.0, h: 14.0, x_offs: -6.0, y_offs: -7.0, path: "assets/opengfx/tiles/vehicle_wagon_coal_loaded_se.png" },
+    // S (sprite 2781)
+    VehicleLayerGfx { w: 8.0, h: 20.0, x_offs: -3.0, y_offs: -10.0, path: "assets/opengfx/tiles/vehicle_wagon_coal_loaded_n.png" },
+    // SW (sprite 2782)
+    VehicleLayerGfx { w: 20.0, h: 14.0, x_offs: -14.0, y_offs: -7.0, path: "assets/opengfx/tiles/vehicle_wagon_coal_loaded_ne.png" },
+    // W (sprite 2783)
+    VehicleLayerGfx { w: 29.0, h: 11.0, x_offs: -16.0, y_offs: -7.0, path: "assets/opengfx/tiles/vehicle_wagon_coal_loaded_e.png" },
+    // NW (sprite 2784)
+    VehicleLayerGfx { w: 20.0, h: 14.0, x_offs: -6.0, y_offs: -7.0, path: "assets/opengfx/tiles/vehicle_wagon_coal_loaded_se.png" },
+];

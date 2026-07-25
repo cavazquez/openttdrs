@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Recorta sprites de locomotoras OpenGFX sin re-ejecutar descargar_graficos.sh.
+"""Recorta sprites ferroviarios OpenGFX sin re-ejecutar descargar_graficos.sh.
 
-Genera vehicle_train_*.png (Kirby + grupos t0/t1/td/te) en assets/opengfx/tiles/.
+Genera locomotoras y vagones vanilla en assets/opengfx/tiles/.
 Luego: python3 scripts/gen_vehicle_gfx_data.py
 
 Uso: python3 scripts/extract_train_vehicle_sprites.py
@@ -60,6 +60,29 @@ TRAIN_SPRITES: tuple[tuple[int, str], ...] = (
     (2970, "vehicle_train_te_sw.png"),
     (2971, "vehicle_train_te_w.png"),
     (2972, "vehicle_train_te_nw.png"),
+    # Vagones rail vanilla. Los image_index 33..38 sólo tienen cuatro vistas;
+    # OpenTTD reutiliza N/NE/E/SE para S/SW/W/NW.
+    (2733, "vehicle_wagon_passenger_n.png"),
+    (2734, "vehicle_wagon_passenger_ne.png"),
+    (2735, "vehicle_wagon_passenger_e.png"),
+    (2736, "vehicle_wagon_passenger_se.png"),
+    (2741, "vehicle_wagon_mail_n.png"),
+    (2742, "vehicle_wagon_mail_ne.png"),
+    (2743, "vehicle_wagon_mail_e.png"),
+    (2744, "vehicle_wagon_mail_se.png"),
+    (2753, "vehicle_wagon_goods_n.png"),
+    (2754, "vehicle_wagon_goods_ne.png"),
+    (2755, "vehicle_wagon_goods_e.png"),
+    (2756, "vehicle_wagon_goods_se.png"),
+    (2737, "vehicle_wagon_coal_n.png"),
+    (2738, "vehicle_wagon_coal_ne.png"),
+    (2739, "vehicle_wagon_coal_e.png"),
+    (2740, "vehicle_wagon_coal_se.png"),
+    # `_wagon_full_adder[34] == 44`.
+    (2781, "vehicle_wagon_coal_loaded_n.png"),
+    (2782, "vehicle_wagon_coal_loaded_ne.png"),
+    (2783, "vehicle_wagon_coal_loaded_e.png"),
+    (2784, "vehicle_wagon_coal_loaded_se.png"),
 )
 
 NFO_ROW = re.compile(
@@ -116,7 +139,7 @@ def parse_nfo(nfo_path: Path) -> dict[int, tuple[int, int, int, int, int, int, s
 
 def dematte_cc_blue(img: Image.Image) -> Image.Image:
     data = []
-    for r, g, b, a in img.getdata():
+    for r, g, b, a in img.get_flattened_data():
         if a > 0 and r == 0 and g == 0 and b == 255:
             data.append((0, 0, 0, 0))
         else:

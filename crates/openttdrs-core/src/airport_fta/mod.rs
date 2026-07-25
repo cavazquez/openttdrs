@@ -152,6 +152,7 @@ mod tests {
         let mut saw_flying = false;
         let mut saw_landing = false;
         let mut saw_term = false;
+        let mut saw_order_advance = false;
 
         for _ in 0..12_000 {
             s.step();
@@ -169,6 +170,7 @@ mod tests {
                 saw_landing = true;
             }
             let v = &s.vehicles[0];
+            saw_order_advance |= v.current_order == 1;
             if v.aircraft_phase == AircraftPhase::Flying {
                 saw_flying = true;
             }
@@ -181,7 +183,7 @@ mod tests {
             {
                 saw_term = true;
             }
-            if saw_takeoff && saw_flying && saw_landing && saw_term {
+            if saw_takeoff && saw_flying && saw_landing && saw_term && saw_order_advance {
                 break;
             }
         }
@@ -190,6 +192,10 @@ mod tests {
         assert!(saw_flying, "debe entrar en crucero Flying");
         assert!(saw_landing, "debe emitir/aterrizar Landing");
         assert!(saw_term, "debe llegar a terminal/hangar del destino");
+        assert!(
+            saw_order_advance,
+            "debe completar la escala y avanzar la orden"
+        );
     }
 
     #[test]

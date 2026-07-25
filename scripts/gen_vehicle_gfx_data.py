@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Genera vehicle_gfx_data_generated.rs desde sprites OpenGFX (bus, camión, tren).
+"""Genera vehicle_gfx_data_generated.rs desde sprites OpenGFX de vehículos.
 
 OpenTTD road vehicles: `sprite = direction + _roadveh_images[spritenum]`.
 Trenes: `GetDefaultTrainSprite(image_index, direction)` (`train_sprites.h`).
@@ -229,6 +229,71 @@ GFX_SETS: tuple[tuple[str, tuple[tuple[int, str], ...]], ...] = (
             (2970, "vehicle_train_te_sw.png"),
             (2971, "vehicle_train_te_w.png"),
             (2972, "vehicle_train_te_nw.png"),
+        ),
+    ),
+    (
+        "TRAIN_WAGON_PASSENGER_LAYERS",
+        (
+            (2733, "vehicle_wagon_passenger_n.png"),
+            (2734, "vehicle_wagon_passenger_ne.png"),
+            (2735, "vehicle_wagon_passenger_e.png"),
+            (2736, "vehicle_wagon_passenger_se.png"),
+            (2733, "vehicle_wagon_passenger_n.png"),
+            (2734, "vehicle_wagon_passenger_ne.png"),
+            (2735, "vehicle_wagon_passenger_e.png"),
+            (2736, "vehicle_wagon_passenger_se.png"),
+        ),
+    ),
+    (
+        "TRAIN_WAGON_MAIL_LAYERS",
+        (
+            (2741, "vehicle_wagon_mail_n.png"),
+            (2742, "vehicle_wagon_mail_ne.png"),
+            (2743, "vehicle_wagon_mail_e.png"),
+            (2744, "vehicle_wagon_mail_se.png"),
+            (2741, "vehicle_wagon_mail_n.png"),
+            (2742, "vehicle_wagon_mail_ne.png"),
+            (2743, "vehicle_wagon_mail_e.png"),
+            (2744, "vehicle_wagon_mail_se.png"),
+        ),
+    ),
+    (
+        "TRAIN_WAGON_GOODS_LAYERS",
+        (
+            (2753, "vehicle_wagon_goods_n.png"),
+            (2754, "vehicle_wagon_goods_ne.png"),
+            (2755, "vehicle_wagon_goods_e.png"),
+            (2756, "vehicle_wagon_goods_se.png"),
+            (2753, "vehicle_wagon_goods_n.png"),
+            (2754, "vehicle_wagon_goods_ne.png"),
+            (2755, "vehicle_wagon_goods_e.png"),
+            (2756, "vehicle_wagon_goods_se.png"),
+        ),
+    ),
+    (
+        "TRAIN_WAGON_COAL_LAYERS",
+        (
+            (2737, "vehicle_wagon_coal_n.png"),
+            (2738, "vehicle_wagon_coal_ne.png"),
+            (2739, "vehicle_wagon_coal_e.png"),
+            (2740, "vehicle_wagon_coal_se.png"),
+            (2737, "vehicle_wagon_coal_n.png"),
+            (2738, "vehicle_wagon_coal_ne.png"),
+            (2739, "vehicle_wagon_coal_e.png"),
+            (2740, "vehicle_wagon_coal_se.png"),
+        ),
+    ),
+    (
+        "TRAIN_WAGON_COAL_LOADED_LAYERS",
+        (
+            (2781, "vehicle_wagon_coal_loaded_n.png"),
+            (2782, "vehicle_wagon_coal_loaded_ne.png"),
+            (2783, "vehicle_wagon_coal_loaded_e.png"),
+            (2784, "vehicle_wagon_coal_loaded_se.png"),
+            (2781, "vehicle_wagon_coal_loaded_n.png"),
+            (2782, "vehicle_wagon_coal_loaded_ne.png"),
+            (2783, "vehicle_wagon_coal_loaded_e.png"),
+            (2784, "vehicle_wagon_coal_loaded_se.png"),
         ),
     ),
 )

@@ -534,7 +534,7 @@ fn build_vanilla_engines() -> Vec<EngineDef> {
             25,
             1920,
             RELIABILITY_STEAM,
-            2,
+            33,
             50
         ),
         train!(
@@ -550,7 +550,7 @@ fn build_vanilla_engines() -> Vec<EngineDef> {
             20,
             1920,
             RELIABILITY_STEAM,
-            2,
+            35,
             50
         ),
         train!(
@@ -566,7 +566,7 @@ fn build_vanilla_engines() -> Vec<EngineDef> {
             21, // OpenTTD RVI weight (engine 32 Goods Van)
             1920,
             RELIABILITY_STEAM,
-            2,
+            38,
             50
         ),
         train!(
@@ -582,7 +582,7 @@ fn build_vanilla_engines() -> Vec<EngineDef> {
             22,
             1920,
             RELIABILITY_STEAM,
-            2,
+            34,
             50
         ),
         // Monorail / Maglev (Fase 6; ids OpenTTD +100).

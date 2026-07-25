@@ -120,7 +120,7 @@ def parse_nfo(nfo_path: Path) -> dict[int, tuple[int, int, int, int, int, int, s
 
 def dematte_cc_blue(img: Image.Image) -> Image.Image:
     data = []
-    for r, g, b, a in img.getdata():
+    for r, g, b, a in img.get_flattened_data():
         if a > 0 and r == 0 and g == 0 and b == 255:
             data.append((0, 0, 0, 0))
         else:

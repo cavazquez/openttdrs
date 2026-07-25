@@ -91,6 +91,25 @@ pub(crate) fn demo_preserve_rects() -> Vec<PreserveRect> {
             x1: DEMO_TUNNEL_NE.x + 2,
             y1: DEMO_TUNNEL_NE.y + 2,
         },
+        // Showcase acuático, ferroviario y aéreo del mapa completo.
+        PreserveRect {
+            x0: 4,
+            y0: 20,
+            x1: 59,
+            y1: 29,
+        },
+        PreserveRect {
+            x0: 5,
+            y0: 34,
+            x1: 58,
+            y1: 43,
+        },
+        PreserveRect {
+            x0: 4,
+            y0: 46,
+            x1: 59,
+            y1: 54,
+        },
     ]
 }
 
@@ -123,8 +142,6 @@ pub(crate) fn place_clean_demo_transport(state: &mut GameState) {
             openttdrs_core::SIGTYPE_BLOCK,
         ),
     );
-    place_demo_road_vehicles(state);
-    place_demo_rail_vehicle(state);
 }
 
 /// Industria + dos paradas de camión + ruta con órdenes para un ciclo jugable al arrancar.
@@ -182,50 +199,6 @@ fn place_demo_truck_station(state: &mut GameState, pos: TileCoord) {
         state,
         &Command::PlaceStationDir(pos, DEMO_ECONOMY_STATION_ENTRANCE_DIR),
     );
-}
-
-/// Bus + camión en la carretera demo (para probar sprites sin depósito).
-fn place_demo_road_vehicles(state: &mut GameState) {
-    use openttdrs_core::prelude::*;
-    use openttdrs_core::{PathNetwork, find_path};
-
-    let start_bus = TileCoord::new(3, DEMO_ROAD_Y);
-    let start_truck = TileCoord::new(5, DEMO_ROAD_Y);
-    let end = TileCoord::new(11, DEMO_ROAD_Y);
-
-    if let Some(path) = find_path(&state.map, start_bus, end, PathNetwork::Road) {
-        let mut bus = Vehicle::new(9001, VehicleKind::Bus, start_bus, end);
-        bus.running = false;
-        bus.direction = DIR_SW;
-        bus.path = path.into();
-        state.vehicles.push(bus);
-    }
-
-    if let Some(path) = find_path(&state.map, start_truck, end, PathNetwork::Road) {
-        let mut truck = Vehicle::new(9002, VehicleKind::Truck, start_truck, end);
-        truck.running = false;
-        truck.cargo = truck.capacity / 2 + 1;
-        truck.direction = DIR_SW;
-        truck.path = path.into();
-        state.vehicles.push(truck);
-    }
-}
-
-/// Tren en la vía demo (Kirby Paul Tank, más lento que bus/camión).
-fn place_demo_rail_vehicle(state: &mut GameState) {
-    use openttdrs_core::prelude::*;
-    use openttdrs_core::{PathNetwork, find_path};
-
-    let start = TileCoord::new(4, DEMO_RAIL_Y);
-    let end = TileCoord::new(10, DEMO_RAIL_Y);
-
-    if let Some(path) = find_path(&state.map, start, end, PathNetwork::Rail) {
-        let mut train = Vehicle::new(9003, VehicleKind::Train, start, end);
-        train.running = false;
-        train.direction = DIR_SW;
-        train.path = path.into();
-        state.vehicles.push(train);
-    }
 }
 
 /// Canal de agua con orillas costeras y bermas de hierba (zona de puente legible).
@@ -329,12 +302,9 @@ mod tests {
             Some(TileKind::Grass)
         );
         assert!(tunnel_preview_path(&state.map, DEMO_TUNNEL_NE).is_some());
-        assert_eq!(state.vehicles.len(), 3);
         assert!(
-            state
-                .vehicles
-                .iter()
-                .any(|v| v.kind == openttdrs_core::VehicleKind::Train)
+            state.vehicles.is_empty(),
+            "el trazado limpio no deja vehículos apagados"
         );
     }
 

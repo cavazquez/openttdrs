@@ -23,22 +23,44 @@ use vehicle_gfx::{
     BUS_VEHICLE_LAYERS, BUS_VEHICLE_LAYERS_LOADED, SHIP_VEHICLE_LAYERS, SHIP_VEHICLE_LAYERS_COAL,
     SHIP_VEHICLE_LAYERS_FERRY, SHIP_VEHICLE_LAYERS_OIL, TRAIN_VEHICLE_LAYERS,
     TRAIN_VEHICLE_LAYERS_T0, TRAIN_VEHICLE_LAYERS_T1, TRAIN_VEHICLE_LAYERS_TDIESEL,
-    TRAIN_VEHICLE_LAYERS_TELECTRIC, TRUCK_VEHICLE_LAYERS, TRUCK_VEHICLE_LAYERS_LOADED,
+    TRAIN_VEHICLE_LAYERS_TELECTRIC, TRAIN_WAGON_COAL_LAYERS, TRAIN_WAGON_COAL_LOADED_LAYERS,
+    TRAIN_WAGON_GOODS_LAYERS, TRAIN_WAGON_MAIL_LAYERS, TRAIN_WAGON_PASSENGER_LAYERS,
+    TRUCK_VEHICLE_LAYERS, TRUCK_VEHICLE_LAYERS_LOADED,
 };
 
 pub(crate) use vehicle_gfx::VehicleLayerGfx;
 
-fn train_layers_for(v: &Vehicle) -> &'static [vehicle_gfx::VehicleLayerGfx; 8] {
+const TRAIN_GROUP_COUNT: usize = 10;
+const TRAIN_GROUP_COAL_LOADED: usize = 9;
+
+fn train_group_for_vehicle(v: &Vehicle) -> usize {
     let engine_id = v
         .engine_id
         .unwrap_or_else(|| openttdrs_core::default_engine_id(v.kind));
     let engine = openttdrs_core::engine_for_vehicle(v.kind, engine_id);
-    match openttdrs_core::train_sprite_group(engine.train_image_index) {
+    if engine_id == openttdrs_core::ENGINE_WAGON_COAL
+        && v.capacity > 0
+        && v.cargo.saturating_mul(2) >= v.capacity
+    {
+        TRAIN_GROUP_COAL_LOADED
+    } else {
+        usize::from(openttdrs_core::train_sprite_group(engine.train_image_index))
+            .min(TRAIN_GROUP_COUNT - 2)
+    }
+}
+
+fn train_layers_for(v: &Vehicle) -> &'static [vehicle_gfx::VehicleLayerGfx; 8] {
+    match train_group_for_vehicle(v) {
         0 => &TRAIN_VEHICLE_LAYERS_T0,
         1 => &TRAIN_VEHICLE_LAYERS_T1,
         2 => &TRAIN_VEHICLE_LAYERS,
         3 => &TRAIN_VEHICLE_LAYERS_TDIESEL,
-        _ => &TRAIN_VEHICLE_LAYERS_TELECTRIC,
+        4 => &TRAIN_VEHICLE_LAYERS_TELECTRIC,
+        5 => &TRAIN_WAGON_PASSENGER_LAYERS,
+        6 => &TRAIN_WAGON_MAIL_LAYERS,
+        7 => &TRAIN_WAGON_GOODS_LAYERS,
+        8 => &TRAIN_WAGON_COAL_LAYERS,
+        _ => &TRAIN_WAGON_COAL_LOADED_LAYERS,
     }
 }
 
@@ -167,7 +189,7 @@ pub(crate) struct TruckHandles {
     pub(super) aircraft: DirHandles,
     pub(super) aircraft_fokker: DirHandles,
     pub(super) aircraft_tricario: DirHandles,
-    pub(super) train_groups: [DirHandles; 5],
+    pub(super) train_groups: [DirHandles; TRAIN_GROUP_COUNT],
 }
 
 impl TruckHandles {
@@ -205,6 +227,11 @@ impl TruckHandles {
                 load_set(asset_server, &TRAIN_VEHICLE_LAYERS),
                 load_set(asset_server, &TRAIN_VEHICLE_LAYERS_TDIESEL),
                 load_set(asset_server, &TRAIN_VEHICLE_LAYERS_TELECTRIC),
+                load_set(asset_server, &TRAIN_WAGON_PASSENGER_LAYERS),
+                load_set(asset_server, &TRAIN_WAGON_MAIL_LAYERS),
+                load_set(asset_server, &TRAIN_WAGON_GOODS_LAYERS),
+                load_set(asset_server, &TRAIN_WAGON_COAL_LAYERS),
+                load_set(asset_server, &TRAIN_WAGON_COAL_LOADED_LAYERS),
             ],
         }
     }
@@ -243,7 +270,8 @@ impl TruckHandles {
     }
 
     pub(crate) fn train_preview(&self, image_index: u8, dir: usize) -> Handle<Image> {
-        let group = openttdrs_core::train_sprite_group(image_index).min(4) as usize;
+        let group =
+            usize::from(openttdrs_core::train_sprite_group(image_index)).min(TRAIN_GROUP_COUNT - 2);
         self.train_groups[group][dir.min(7)].clone()
     }
 
@@ -298,12 +326,7 @@ impl TruckHandles {
                 }
             }
             VehicleKind::Train => {
-                let engine_id = v
-                    .engine_id
-                    .unwrap_or_else(|| openttdrs_core::default_engine_id(v.kind));
-                let engine = openttdrs_core::engine_for_vehicle(v.kind, engine_id);
-                let group =
-                    openttdrs_core::train_sprite_group(engine.train_image_index).min(4) as usize;
+                let group = train_group_for_vehicle(v);
                 self.train_groups[group][i].clone()
             }
         }

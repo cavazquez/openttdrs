@@ -265,8 +265,8 @@ pub(crate) fn main_menu_interaction(
                         town_density: PopulationDensity::Normal,
                         industry_density: PopulationDensity::Normal,
                         starting_money: STARTING_MONEY_OPTIONS[1],
-                        rival_ai: true,
-                        disasters_enabled: true,
+                        rival_ai: false,
+                        disasters_enabled: false,
                         terrain_roughness: TerrainRoughness::Normal,
                         gamescript_demo: true,
                     };

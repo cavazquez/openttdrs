@@ -204,6 +204,13 @@ fn advance_fta_node(
 
     let ev = sync_phase_from_node(v, profile);
     apply_waypoint_pose(v, station, profile);
+    if airport_node_is_loading_stand(profile.kind, next) {
+        // La FTA mueve el avión antes de la fase de movimiento genérica. Fijar
+        // el destino en el stand real permite que `Vehicle::step` abra allí la
+        // ventana de carga y avance la orden en el tick siguiente.
+        v.dest = v.pos;
+        v.cur_speed = 0;
+    }
     if profile.fixedwing_takeoff_pos == Some(next)
         || (profile.kind == AirportFtaKind::Intercontinental && next == 62)
         || (matches!(
@@ -224,6 +231,19 @@ fn advance_fta_node(
         return AircraftPhaseEvent::Landing;
     }
     ev
+}
+
+fn airport_node_is_loading_stand(kind: AirportFtaKind, node: u8) -> bool {
+    match kind {
+        AirportFtaKind::Country => matches!(node, 2 | 3),
+        AirportFtaKind::Commuter => matches!(node, 3..=7),
+        AirportFtaKind::City | AirportFtaKind::Metropolitan => matches!(node, 2..=4),
+        AirportFtaKind::International => matches!(node, 4..=11),
+        AirportFtaKind::Intercontinental => matches!(node, 4..=13),
+        AirportFtaKind::Helidepot => node == 14,
+        AirportFtaKind::Heliport => node == 0,
+        AirportFtaKind::Helistation => matches!(node, 6..=8),
+    }
 }
 
 fn nudge_heading_at_node(v: &mut Vehicle, profile: &AirportFtaProfile) {

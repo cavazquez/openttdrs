@@ -224,6 +224,11 @@ impl super::model::Vehicle {
         map: &crate::map::Map,
         order: crate::vehicle::order::VehicleOrder,
     ) {
+        if self.kind == super::model::VehicleKind::Aircraft && self.awaiting_load_window {
+            // FTA: `dest` es el stand exacto, que no necesariamente coincide
+            // con el ancla de la orden ni con la primera tesela de terminal.
+            return;
+        }
         if self.kind == super::model::VehicleKind::Train
             && !self.path.is_empty()
             && let crate::vehicle::order::VehicleOrder::Station { station, .. } = order

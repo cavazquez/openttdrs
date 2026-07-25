@@ -83,7 +83,7 @@ const _: () = {
 /// Tamaño de mapa en «Nueva partida»: demo compacta o ejes independientes (OpenTTD).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum MapSizePreset {
-    /// Demo clásica 24×18 (no es potencia de 2).
+    /// Showcase plano 64×64 con todos los modos de transporte.
     #[default]
     Compact,
     /// Ancho × alto en potencias de 2 (64…4096 por eje).
@@ -112,7 +112,7 @@ impl MapSizePreset {
     #[must_use]
     pub const fn dimensions(self) -> (u32, u32) {
         match self {
-            Self::Compact => (24, 18),
+            Self::Compact => (64, 64),
             Self::Sized { width, height } => (width.tiles(), height.tiles()),
         }
     }
@@ -242,7 +242,7 @@ pub struct NewGameSettings {
     pub start_year: u32,
     pub world_gen: bool,
     pub island: bool,
-    /// Conserva carretera/vía/puente demo al generar terreno (solo mapa compacta 24×18).
+    /// Conserva las zonas del showcase (solo en el preset de demo 64×64).
     pub preserve_demo: bool,
     pub seed: u64,
     pub town_density: PopulationDensity,
@@ -270,8 +270,8 @@ impl Default for NewGameSettings {
             town_density: PopulationDensity::Normal,
             industry_density: PopulationDensity::Normal,
             starting_money: STARTING_MONEY_OPTIONS[1],
-            rival_ai: true,
-            disasters_enabled: true,
+            rival_ai: false,
+            disasters_enabled: false,
             terrain_roughness: TerrainRoughness::Normal,
             gamescript_demo: true,
         }
@@ -318,7 +318,7 @@ impl NewGameSettings {
             industry_density: PopulationDensity::Normal,
             starting_money: STARTING_MONEY_OPTIONS[1],
             rival_ai: true,
-            disasters_enabled: true,
+            disasters_enabled: false,
             terrain_roughness: TerrainRoughness::Normal,
             gamescript_demo: true,
         }
@@ -419,6 +419,7 @@ mod tests {
 
     #[test]
     fn map_size_matches_openttd_axis_limits() {
+        assert_eq!(MapSizePreset::Compact.dimensions(), (64, 64));
         assert_eq!(MapAxisSize::T64.tiles(), 64);
         assert_eq!(MapAxisSize::T4096.tiles(), 4096);
         assert_eq!(
@@ -431,6 +432,14 @@ mod tests {
         };
         assert_eq!(asym.dimensions(), (256, 512));
         assert_eq!(asym.menu_label(), "256×512");
+    }
+
+    #[test]
+    fn demo_defaults_are_deterministic() {
+        let settings = NewGameSettings::default();
+        assert!(settings.preserve_demo);
+        assert!(!settings.rival_ai);
+        assert!(!settings.disasters_enabled);
     }
 
     #[test]

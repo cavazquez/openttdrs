@@ -1206,6 +1206,31 @@ for sid, name in [
     (2972, "vehicle_train_te_nw.png"),
 ]:
     crop_by_id(sid, name)
+# Vagones vanilla: image_index 33/35/38/34 y carbón cargado (+44).
+# OpenTTD repite estas cuatro vistas para las direcciones opuestas.
+for sid, name in [
+    (2733, "vehicle_wagon_passenger_n.png"),
+    (2734, "vehicle_wagon_passenger_ne.png"),
+    (2735, "vehicle_wagon_passenger_e.png"),
+    (2736, "vehicle_wagon_passenger_se.png"),
+    (2741, "vehicle_wagon_mail_n.png"),
+    (2742, "vehicle_wagon_mail_ne.png"),
+    (2743, "vehicle_wagon_mail_e.png"),
+    (2744, "vehicle_wagon_mail_se.png"),
+    (2753, "vehicle_wagon_goods_n.png"),
+    (2754, "vehicle_wagon_goods_ne.png"),
+    (2755, "vehicle_wagon_goods_e.png"),
+    (2756, "vehicle_wagon_goods_se.png"),
+    (2737, "vehicle_wagon_coal_n.png"),
+    (2738, "vehicle_wagon_coal_ne.png"),
+    (2739, "vehicle_wagon_coal_e.png"),
+    (2740, "vehicle_wagon_coal_se.png"),
+    (2781, "vehicle_wagon_coal_loaded_n.png"),
+    (2782, "vehicle_wagon_coal_loaded_ne.png"),
+    (2783, "vehicle_wagon_coal_loaded_e.png"),
+    (2784, "vehicle_wagon_coal_loaded_se.png"),
+]:
+    crop_by_id(sid, name)
 # Barcos OpenTTD `_ship_sprites` (0x0E5D/0x0E55/0x0E65/0x0E6D + Direction).
 for sid, name in [
     (3677, "vehicle_ship_mps_n.png"),
@@ -1271,8 +1296,9 @@ for sid, name in [
 ]:
     crop_by_id(sid, name)
 # Regenerar metadatos: python3 scripts/gen_vehicle_gfx_data.py
-# Solo locomotoras (sin borrar tiles): python3 scripts/extract_train_vehicle_sprites.py
+# Solo trenes y vagones (sin borrar tiles): python3 scripts/extract_train_vehicle_sprites.py
 # Solo barcos (sin borrar tiles): python3 scripts/extract_ship_vehicle_sprites.py
+# Solo aeronaves (sin borrar tiles): python3 scripts/extract_aircraft_vehicle_sprites.py
 
 # =============================================================================
 # LEGACY (alias del cliente ← sprites NFO; evita recortes fijos con artefactos cian)

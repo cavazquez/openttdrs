@@ -33,7 +33,7 @@ pub(crate) fn summary_text(settings: NewGameSettings) -> String {
             "colinas procedural + lagos"
         }
     } else if settings.preserve_demo {
-        "demo clasica (plana)"
+        "demo completa (plana)"
     } else {
         "mapa plano"
     };

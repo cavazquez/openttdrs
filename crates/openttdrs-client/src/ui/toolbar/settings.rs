@@ -511,7 +511,9 @@ mod tests {
     #[test]
     fn breakdown_button_cycles_normal_reduced_and_off() {
         let mut world = World::new();
-        world.insert_resource(SimWorld::default());
+        let mut sim = SimWorld::default();
+        sim.state.vehicle_breakdowns = 2;
+        world.insert_resource(sim);
         for expected in [1, 0, 2] {
             let entity = world
                 .spawn((

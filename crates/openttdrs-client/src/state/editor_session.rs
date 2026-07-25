@@ -122,9 +122,8 @@ mod tests {
     }
 
     #[test]
-    fn regenerate_landscape_clears_entities() {
+    fn regenerate_landscape_clears_transport_entities() {
         let mut sim = SimWorld::from_new_game(&editor_new_game_settings());
-        let before_towns = sim.state.towns.len();
         regenerate_landscape_in_place(
             &mut sim.state,
             Climate::SubArctic,
@@ -135,9 +134,8 @@ mod tests {
         .unwrap();
         assert_eq!(sim.state.climate, Climate::SubArctic);
         assert_eq!(sim.state.world_seed, 99);
-        assert!(sim.state.towns.is_empty() || before_towns >= sim.state.towns.len());
-        assert!(sim.state.towns.is_empty());
-        assert!(sim.state.industries.is_empty());
+        // La regeneración reemplaza pueblos e industrias con otra población,
+        // pero no conserva infraestructura ni vehículos del escenario anterior.
         assert!(sim.state.stations.is_empty());
         assert!(sim.state.vehicles.is_empty());
     }

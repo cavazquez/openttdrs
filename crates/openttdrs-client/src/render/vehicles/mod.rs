@@ -33,7 +33,10 @@ mod tests {
     use bevy::prelude::*;
     use openttdrs_core::prelude::*;
 
-    use assets::vehicle_gfx::{BUS_VEHICLE_LAYERS, TRAIN_VEHICLE_LAYERS};
+    use assets::vehicle_gfx::{
+        BUS_VEHICLE_LAYERS, TRAIN_VEHICLE_LAYERS, TRAIN_WAGON_COAL_LAYERS,
+        TRAIN_WAGON_COAL_LOADED_LAYERS, TRAIN_WAGON_PASSENGER_LAYERS,
+    };
     use assets::{TruckHandles, vehicle_layers};
     use picking::pick_vehicle_id_at_world;
     use pose::{vehicle_sprite_pos, vehicle_sprite_pos_at, vehicle_sprite_pos_at_with_catalog};
@@ -276,6 +279,41 @@ mod tests {
         assert_ne!(
             TRAIN_VEHICLE_LAYERS[DIR_SW as usize].path,
             BUS_VEHICLE_LAYERS[DIR_SW as usize].path
+        );
+    }
+
+    #[test]
+    fn vanilla_wagons_use_their_own_opengfx_sprite_groups() {
+        let mut passenger = Vehicle::new(
+            100,
+            VehicleKind::Train,
+            TileCoord::new(1, 1),
+            TileCoord::new(2, 1),
+        );
+        passenger.engine_id = Some(openttdrs_core::ENGINE_WAGON_PASSENGER);
+        let direction = DIR_E as usize;
+        assert_eq!(
+            vehicle_layers(&passenger)[direction].path,
+            TRAIN_WAGON_PASSENGER_LAYERS[direction].path
+        );
+        assert_ne!(
+            vehicle_layers(&passenger)[direction].path,
+            TRAIN_VEHICLE_LAYERS[direction].path,
+            "el coche de pasajeros no debe dibujarse como una locomotora Kirby"
+        );
+
+        let mut coal = passenger;
+        coal.engine_id = Some(openttdrs_core::ENGINE_WAGON_COAL);
+        coal.capacity = 30;
+        coal.cargo = 0;
+        assert_eq!(
+            vehicle_layers(&coal)[direction].path,
+            TRAIN_WAGON_COAL_LAYERS[direction].path
+        );
+        coal.cargo = 15;
+        assert_eq!(
+            vehicle_layers(&coal)[direction].path,
+            TRAIN_WAGON_COAL_LOADED_LAYERS[direction].path
         );
     }
 

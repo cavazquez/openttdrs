@@ -104,7 +104,7 @@ pub(super) fn roughness_button(roughness: TerrainRoughness) -> impl Bundle {
 
 pub(super) fn map_size_button(btn: MainMenuMapSizeButton) -> impl Bundle {
     let label = match btn {
-        MainMenuMapSizeButton::Compact => "24×18".to_string(),
+        MainMenuMapSizeButton::Compact => "Demo 64×64".to_string(),
         MainMenuMapSizeButton::Width(axis) | MainMenuMapSizeButton::Height(axis) => {
             axis.menu_label().to_string()
         }

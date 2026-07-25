@@ -1,6 +1,6 @@
 // Generado por scripts/gen_company_palette_paths.py — NO EDITAR A MANO.
 
-pub static COMPANY_PALETTE_STATIC_PATHS: [&str; 164] = [
+pub static COMPANY_PALETTE_STATIC_PATHS: [&str; 184] = [
     "bus_stop_ne_build_a.png",
     "bus_stop_ne_build_b.png",
     "bus_stop_ne_build_c.png",
@@ -165,4 +165,24 @@ pub static COMPANY_PALETTE_STATIC_PATHS: [&str; 164] = [
     "vehicle_truck_sw_loaded.png",
     "vehicle_truck_w.png",
     "vehicle_truck_w_loaded.png",
+    "vehicle_wagon_coal_e.png",
+    "vehicle_wagon_coal_loaded_e.png",
+    "vehicle_wagon_coal_loaded_n.png",
+    "vehicle_wagon_coal_loaded_ne.png",
+    "vehicle_wagon_coal_loaded_se.png",
+    "vehicle_wagon_coal_n.png",
+    "vehicle_wagon_coal_ne.png",
+    "vehicle_wagon_coal_se.png",
+    "vehicle_wagon_goods_e.png",
+    "vehicle_wagon_goods_n.png",
+    "vehicle_wagon_goods_ne.png",
+    "vehicle_wagon_goods_se.png",
+    "vehicle_wagon_mail_e.png",
+    "vehicle_wagon_mail_n.png",
+    "vehicle_wagon_mail_ne.png",
+    "vehicle_wagon_mail_se.png",
+    "vehicle_wagon_passenger_e.png",
+    "vehicle_wagon_passenger_n.png",
+    "vehicle_wagon_passenger_ne.png",
+    "vehicle_wagon_passenger_se.png",
 ];

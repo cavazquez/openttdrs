@@ -217,7 +217,7 @@ fn spawn_root_panel(parent: &mut ChildSpawnerCommands) {
             ));
             menu.spawn(secondary_button(
                 MainMenuDemoButton,
-                "Demo clasica (mapa plano)",
+                "Demo completa (mapa plano)",
                 42.0,
             ));
             menu.spawn(secondary_button(
@@ -482,7 +482,7 @@ fn spawn_new_game_options(panel: &mut ChildSpawnerCommands) {
             if dev_mode() {
                 toggles.spawn(toggle_button(
                     MainMenuToggle::PreserveDemo,
-                    "Incluir zona demo/tutorial (24×18)",
+                    "Incluir showcase completo (64×64)",
                 ));
             }
         });

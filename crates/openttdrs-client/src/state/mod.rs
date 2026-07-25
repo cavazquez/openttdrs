@@ -22,9 +22,10 @@ use crate::state::bootstrap::{
     place_stations_from_map_tiles,
 };
 
-/// Dimensiones del mapa demo compacto (24×18).
-pub const MAP_W: u32 = 24;
-pub const MAP_H: u32 = 18;
+/// Dimensiones del showcase completo. 64×64 es el mínimo estándar de OpenTTD y
+/// deja espacio legible para los cuatro modos de transporte.
+pub const MAP_W: u32 = 64;
+pub const MAP_H: u32 = 64;
 
 /// Carga un save de `OpenTTD` (`.sav`) y aplica el bootstrap de mapas reales:
 /// industrias del chunk `INDY` (o heurística en saves sin tablas), estaciones
@@ -402,9 +403,11 @@ mod sim_world_coverage_tests {
         );
         assert_eq!(
             w.state.stations.len(),
-            8,
-            "2 camión demo + 2 bus + 2 camión showcase + 2 estación tren"
+            14,
+            "camiones, buses, trenes, muelles, boyas y aeropuertos del showcase"
         );
+        assert_eq!(w.state.map.dimensions(), (super::MAP_W, super::MAP_H));
+        assert!(!w.state.disasters_enabled);
         assert!(
             w.state.vehicles.iter().any(|v| v.id == 9102),
             "tren showcase en bootstrap procedural"

@@ -152,6 +152,10 @@ pub const fn train_sprite_group(image_index: u8) -> u8 {
         1 | 9 => 1,
         4 | 5 | 6 | 8 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 22 => 3,
         20 | 21 | 23 => 4,
+        33 => 5, // Passenger Carriage
+        35 => 6, // Mail Van
+        38 => 7, // Goods Van
+        34 => 8, // Coal Truck
         _ => 2,
     }
 }
@@ -242,6 +246,10 @@ mod tests {
     fn train_sprite_group_maps_indices() {
         assert_eq!(train_sprite_group(2), 2);
         assert_eq!(train_sprite_group(23), 4);
+        assert_eq!(train_sprite_group(33), 5);
+        assert_eq!(train_sprite_group(35), 6);
+        assert_eq!(train_sprite_group(38), 7);
+        assert_eq!(train_sprite_group(34), 8);
     }
 
     #[test]

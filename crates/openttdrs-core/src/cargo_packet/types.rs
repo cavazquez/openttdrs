@@ -24,7 +24,7 @@ pub struct CargoPacket {
     pub cargo: CargoType,
     pub count: u16,
     pub source: TileCoord,
-    /// Días de tránsito (incrementa cada `TICKS_PER_TRANSIT_DAY` a bordo).
+    /// Periodos de tránsito (incrementa cada `CARGO_AGING_TICKS` = 185 ticks, ~2,5 días).
     #[serde(default)]
     pub periods_in_transit: u16,
     /// Estación de primer embarque (feeder / `CargoDist`).
@@ -191,8 +191,8 @@ impl StationCargoList {
             .unwrap_or(0)
     }
 
-    /// Envejece packets en espera un día (rating / decay ligero).
-    pub fn age_waiting_one_day(&mut self) {
+    /// Envejece un periodo los packets en espera (rating / decay ligero).
+    pub fn age_waiting_one_period(&mut self) {
         for p in &mut self.packets {
             p.periods_in_transit = p.periods_in_transit.saturating_add(1);
         }
@@ -307,8 +307,8 @@ impl VehicleCargoList {
         out
     }
 
-    /// Envejece un día todos los packets a bordo.
-    pub fn age_one_day(&mut self) {
+    /// Envejece un periodo todos los packets a bordo.
+    pub fn age_one_period(&mut self) {
         for p in &mut self.packets {
             p.periods_in_transit = p.periods_in_transit.saturating_add(1);
         }

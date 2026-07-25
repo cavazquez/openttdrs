@@ -853,6 +853,28 @@ fn two_worlds_same_vehicles_same_position() {
     assert_eq!(a.vehicles[0].pos, b.vehicles[0].pos);
 }
 
+/// El pago decae por periodo de tránsito, y un periodo son 185 ticks (~2,5 días),
+/// no un día de calendario: con 74 la carga envejecería 2,5× más rápido.
+#[test]
+fn onboard_cargo_ages_every_185_ticks() {
+    let mut s = GameState::new(8, 8);
+    let pos = TileCoord::new(1, 1);
+    let mut truck = Vehicle::new(0, VehicleKind::Truck, pos, pos);
+    truck.cargo = 10;
+    truck.cargo_type = Some(CargoType::Coal);
+    s.vehicles.push(truck);
+
+    for _ in 0..u64::from(TICKS_PER_DAY) {
+        s.step();
+    }
+    assert_eq!(s.vehicles[0].cargo_packets.max_periods_in_transit(), 0);
+
+    while s.tick.get() < u64::from(CARGO_AGING_TICKS) {
+        s.step();
+    }
+    assert_eq!(s.vehicles[0].cargo_packets.max_periods_in_transit(), 1);
+}
+
 #[test]
 fn industry_produces_on_schedule() {
     let mut s = GameState::new(8, 8);

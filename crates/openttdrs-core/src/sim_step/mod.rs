@@ -164,7 +164,8 @@ fn phase_economy_and_world(state: &mut GameState, t: u64) {
     economy::grow_towns(state, t);
     economy::age_vehicle_cargo(state);
 
-    if t > 0 && t.is_multiple_of(u64::from(crate::economy::TICKS_PER_TRANSIT_DAY)) {
+    // `UpdateStationRating` corre en su propio ciclo de 185 ticks, no una vez por día.
+    if t > 0 && t.is_multiple_of(u64::from(crate::economy::STATION_RATING_TICKS)) {
         station::tick_station_cargo_age(&mut state.stations, state.order.selectgoods);
     }
 

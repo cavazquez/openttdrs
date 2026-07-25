@@ -34,7 +34,7 @@ pub const TILE_FRACTIONS: u16 = 256;
 mod tests {
     use super::*;
     use crate::cargo::CargoType;
-    use crate::economy::TICKS_PER_TRANSIT_DAY;
+    use crate::economy::TICKS_PER_DAY;
     use crate::map::TileCoord;
     use crate::vehicle::{Vehicle, VehicleKind};
 
@@ -106,7 +106,7 @@ mod tests {
         let ctx = action2_eval_ctx_for_unit(
             &vs,
             10,
-            crate::tick::GameTick::new(u64::from(TICKS_PER_TRANSIT_DAY) * 10),
+            crate::tick::GameTick::new(u64::from(TICKS_PER_DAY) * 10),
             &[],
             2,
         );

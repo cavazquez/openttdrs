@@ -529,8 +529,8 @@ fn requires_service_by_reliability_and_interval() {
     v.reliability = 4_000;
     assert!(v.requires_service());
     v.reliability = 9_000;
-    // 10 días × TICKS_PER_TRANSIT_DAY
-    v.sim_tick = u64::from(crate::economy::TICKS_PER_TRANSIT_DAY) * 10;
+    // 10 días × TICKS_PER_DAY
+    v.sim_tick = u64::from(crate::economy::TICKS_PER_DAY) * 10;
     assert!(v.requires_service());
     v.service_at_depot();
     assert!(!v.requires_service());

@@ -151,13 +151,13 @@ pub use disaster::{
     tick_disaster_crafts, tick_disasters, trigger_disaster_at,
 };
 pub use economy::{
-    ANNUAL_INTEREST_RATE_PCT, CargoPaymentSpec, DEFAULT_MAX_LOAN, LOAN_INTERVAL,
-    OTTD_MILLISECONDS_PER_TICK, SIM_TICKS_PER_SECOND, TICKS_PER_MONTH, TICKS_PER_TRANSIT_DAY,
-    TICKS_PER_YEAR, build_object_cost, buy_land_cost, cargo_time_factor, check_bankruptcy,
-    decrease_loan, increase_loan, inflation_income_factor, inflation_prices_factor,
-    manhattan_distance, monthly_loan_interest, terraform_cost_per_corner, ticks_to_transit_days,
-    transported_goods_income, vehicle_purchase_cost, vehicle_running_cost_per_tick,
-    vehicle_sell_refund,
+    ANNUAL_INTEREST_RATE_PCT, CARGO_AGING_TICKS, CargoPaymentSpec, DEFAULT_MAX_LOAN, LOAN_INTERVAL,
+    OTTD_MILLISECONDS_PER_TICK, SIM_TICKS_PER_SECOND, STATION_RATING_TICKS, TICKS_PER_DAY,
+    TICKS_PER_MONTH, TICKS_PER_YEAR, build_object_cost, buy_land_cost, cargo_time_factor,
+    check_bankruptcy, decrease_loan, increase_loan, inflation_income_factor,
+    inflation_prices_factor, manhattan_distance, monthly_loan_interest, terraform_cost_per_corner,
+    ticks_to_transit_periods, transported_goods_income, vehicle_purchase_cost,
+    vehicle_running_cost_per_tick, vehicle_sell_refund,
 };
 pub use economy_quarterly::{
     ECONOMY_HISTORY_QUARTERS, QuarterlyEconomyEntry, QuarterlyEconomyHistory,
@@ -411,8 +411,8 @@ pub use timetable::{TRAVEL_PRESETS, WAIT_PRESETS, cycle_travel_ticks, cycle_wait
 pub use town::{
     AUTHORITY_MIN_STATION, FUND_BUILDINGS_COST, FUND_BUILDINGS_MONTHS, MAIL_PER_HOUSE,
     PASSENGERS_PER_HOUSE, STATION_TOWN_CARGO_CAPACITY, TOWN_ADVERTISE_COST, TOWN_AUTHORITY_RADIUS,
-    TOWN_GROWTH_DESERT, TOWN_GROWTH_TICKS, TOWN_GROWTH_WINTER, TOWN_PRODUCE_TICKS, Town,
-    TownGrowthEffect, authority_allows_new_station, grow_town_if_served,
+    TOWN_GROWTH_DESERT, TOWN_GROWTH_TICKS, TOWN_GROWTH_WINTER, TOWN_PRODUCE_TICKS,
+    TOWN_RATING_INITIAL, Town, TownGrowthEffect, authority_allows_new_station, grow_town_if_served,
     process_town_monthly_growth, produce_town_cargo, town_goal_satisfied, update_town_growth_state,
 };
 pub use town_expand::{

@@ -5,7 +5,7 @@ pub const SERVICING_RELIABILITY_THRESHOLD: u16 = 5_000;
 /// Intervalo de revisión por defecto (`OpenTTD` `service_interval` ≈ 150 días).
 pub const DEFAULT_SERVICE_INTERVAL_DAYS: u16 = 150;
 /// Duración de una avería (~3 días de calendario).
-pub const BREAKDOWN_DURATION_TICKS: u32 = crate::economy::TICKS_PER_TRANSIT_DAY * 3;
+pub const BREAKDOWN_DURATION_TICKS: u32 = crate::economy::TICKS_PER_DAY * 3;
 
 pub(crate) fn initial_reliability_for_engine(
     engine_id: u16,

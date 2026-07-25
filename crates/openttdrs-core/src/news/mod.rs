@@ -139,8 +139,7 @@ mod tests {
     fn purge_old_news_items_drops_ancient_entries() {
         use crate::tick::GameTick;
         let mut state = GameState::new(4, 4);
-        let day_ticks =
-            |days: u64| GameTick::new(u64::from(crate::economy::TICKS_PER_TRANSIT_DAY) * days);
+        let day_ticks = |days: u64| GameTick::new(u64::from(crate::economy::TICKS_PER_DAY) * days);
         state.tick = day_ticks(900);
         add_news_item(
             &mut state,
@@ -184,7 +183,7 @@ mod tests {
             state
                 .tick
                 .get()
-                .saturating_add(u64::from(crate::economy::TICKS_PER_TRANSIT_DAY) * 91),
+                .saturating_add(u64::from(crate::economy::TICKS_PER_DAY) * 91),
         );
         force_disaster(&mut state, DisasterKind::BigUfo, TileCoord::new(3, 3));
         let item = state.news.items.back().expect("noticia OVNI");

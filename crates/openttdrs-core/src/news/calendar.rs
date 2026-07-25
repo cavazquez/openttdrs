@@ -1,6 +1,6 @@
 //! Funciones de calendario: conversión tick ↔ año/día, formato de fechas.
 
-use crate::economy::TICKS_PER_TRANSIT_DAY;
+use crate::economy::TICKS_PER_DAY;
 use crate::tick::GameTick;
 
 /// Año base del calendario mostrado en la barra (Y1 del sim = 1950).
@@ -15,7 +15,7 @@ pub fn tick_for_calendar_year(year: u32) -> GameTick {
 
 #[must_use]
 pub fn calendar_day_index(tick: GameTick) -> u64 {
-    tick.get() / u64::from(TICKS_PER_TRANSIT_DAY)
+    tick.get() / u64::from(TICKS_PER_DAY)
 }
 
 #[must_use]

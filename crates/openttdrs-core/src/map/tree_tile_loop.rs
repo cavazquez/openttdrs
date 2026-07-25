@@ -77,7 +77,9 @@ pub fn next_tree_update_tick(c: TileCoord, map_w: u32, after: u64) -> u64 {
     tick
 }
 
-/// Primer tick ≥ `after` en el que hierba/campos avanzan en esa tesela (`cycle & 7 == 7`).
+/// Primer tick ≥ `after` en el que los campos avanzan en esa tesela (`cycle & 7 == 7`).
+///
+/// La hierba ya no depende de este ciclo global: lleva su contador en `m5`.
 #[must_use]
 pub fn next_clear_update_tick(c: TileCoord, map_w: u32, after: u64) -> u64 {
     let stripe = u64::from(tile_index(c, map_w) % MAP_TILE_LOOP_STRIDE);
@@ -123,6 +125,18 @@ pub const fn clear_ground_type(m5: u8) -> u8 {
 #[must_use]
 pub const fn clear_density(m5: u8) -> u8 {
     m5 & 0x03
+}
+
+/// Visitas acumuladas del tile loop en `m5` bits 5–7 (`GetClearCounter`).
+#[must_use]
+pub const fn clear_counter(m5: u8) -> u8 {
+    (m5 >> 5) & 0x07
+}
+
+/// Escribe el contador de visitas conservando suelo y densidad (`SetClearCounter`).
+#[must_use]
+pub const fn with_clear_counter(m5: u8, counter: u8) -> u8 {
+    (m5 & !(0x07 << 5)) | ((counter & 0x07) << 5)
 }
 
 #[must_use]
@@ -249,22 +263,24 @@ pub fn step_tree_and_field_growth(map: &mut Map, tick: u64, world_seed: u64) {
                 }
             }
             TileKind::Grass => {
-                if cycle & 7 != 7 {
-                    return;
-                }
                 let ground = clear_ground_type(tile.m5);
                 let density = clear_density(tile.m5);
                 if ground == CLEAR_GROUND_ROUGH && density == 0 {
                     grass_updates.push((c, tile.mapt, clear_ground_m5(CLEAR_GROUND_GRASS, 3)));
                     return;
                 }
-                if ground == CLEAR_GROUND_GRASS && density < 3 {
-                    grass_updates.push((
-                        c,
-                        tile.mapt,
-                        clear_ground_m5(CLEAR_GROUND_GRASS, density + 1),
-                    ));
+                if ground != CLEAR_GROUND_GRASS || density >= 3 {
+                    return;
                 }
+                // `TileLoop_Clear`: ocho visitas de espera por escalón de densidad, contadas
+                // en la propia tesela, así que cada parcela madura en su propio momento.
+                let counter = clear_counter(tile.m5);
+                let new_m5 = if counter < 7 {
+                    with_clear_counter(tile.m5, counter + 1)
+                } else {
+                    clear_ground_m5(CLEAR_GROUND_GRASS, density + 1)
+                };
+                grass_updates.push((c, tile.mapt, new_m5));
             }
             _ => {}
         }
@@ -746,6 +762,56 @@ mod tests {
             0x03,
             "hierba completa no debe convertirse en Rough (0x04)"
         );
+    }
+
+    /// `TileLoop_Clear` gasta ocho visitas subiendo `GetClearCounter` y solo en la novena
+    /// sube la densidad, dejando el contador otra vez a cero.
+    #[test]
+    fn grass_density_needs_eight_visits_per_step() {
+        let mut map = Map::new_flat(1, 1, 0);
+        let c = TileCoord::new(0, 0);
+        map.set_kind(c, TileKind::Grass).unwrap();
+        map.set_mapt_m5(c, 0, clear_ground_m5(CLEAR_GROUND_GRASS, 0))
+            .unwrap();
+        let stride = u64::from(MAP_TILE_LOOP_STRIDE);
+        let mut tick = next_clear_update_tick(c, map_w(&map), 0);
+
+        for expected in 1..=7u8 {
+            step_tree_and_field_growth(&mut map, tick, 0);
+            let m5 = map.get(c).unwrap().m5;
+            assert_eq!(clear_counter(m5), expected);
+            assert_eq!(clear_density(m5), 0, "la densidad espera al contador");
+            tick += stride;
+        }
+
+        step_tree_and_field_growth(&mut map, tick, 0);
+        let m5 = map.get(c).unwrap().m5;
+        assert_eq!(clear_density(m5), 1);
+        assert_eq!(clear_counter(m5), 0);
+    }
+
+    /// Dos parcelas con contador distinto maduran en visitas distintas: la franja
+    /// entera ya no cambia de golpe.
+    #[test]
+    fn grass_tiles_with_different_counters_ripen_apart() {
+        let mut map = Map::new_flat(1, 2, 0);
+        let ready = TileCoord::new(0, 0);
+        let fresh = TileCoord::new(0, 1);
+        for (c, counter) in [(ready, 7u8), (fresh, 0u8)] {
+            map.set_kind(c, TileKind::Grass).unwrap();
+            map.set_mapt_m5(
+                c,
+                0,
+                with_clear_counter(clear_ground_m5(CLEAR_GROUND_GRASS, 1), counter),
+            )
+            .unwrap();
+        }
+        let stride = u64::from(MAP_TILE_LOOP_STRIDE);
+        for tick in 1..=stride {
+            step_tree_and_field_growth(&mut map, tick, 0);
+        }
+        assert_eq!(clear_density(map.get(ready).unwrap().m5), 2);
+        assert_eq!(clear_density(map.get(fresh).unwrap().m5), 1);
     }
 
     #[test]

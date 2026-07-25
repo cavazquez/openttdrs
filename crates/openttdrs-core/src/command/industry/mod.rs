@@ -30,6 +30,14 @@ pub(super) fn place_industry_kind_sandbox(
     place_industry_spec_sandbox(state, c, spec)
 }
 
+/// 12 bits deterministas para la fase de producción (`i->counter = GB(r, 4, 12)`).
+fn industry_counter_seed(state: &GameState, c: TileCoord, industry_id: u8) -> u16 {
+    let salt = u64::from(industry_id);
+    let lo = crate::map::industry_tile_rng(state.world_seed, state.tick.get(), c, salt);
+    let hi = crate::map::industry_tile_rng(state.world_seed, state.tick.get(), c, salt + 0x100);
+    ((u16::from(hi) << 8) | u16::from(lo)) & crate::industry::INDUSTRY_COUNTER_MASK
+}
+
 pub fn check_place_industry_spec(
     map: &crate::map::Map,
     c: TileCoord,
@@ -105,9 +113,11 @@ pub(super) fn place_industry_spec_sandbox(
     state
         .industries
         .retain(|industry| !industry.contains_tile(c));
+    let counter = industry_counter_seed(state, c, industry_id);
     state.industries.push(
         Industry::with_tiles_spec(c, spec.kind(), spec, footprint, random_colour)
-            .with_instance_id(industry_id),
+            .with_instance_id(industry_id)
+            .with_counter(counter),
     );
     state.economy.money -= 250;
     Ok(())

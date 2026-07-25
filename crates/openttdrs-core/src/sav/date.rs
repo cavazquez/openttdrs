@@ -81,12 +81,12 @@ pub(crate) fn game_tick_from_sav_time(time: SavGameTime) -> GameTick {
 /// `calendar_date` empaquetado como en `sav/write/meta.rs`: `year * 365 + (doy - 1)`.
 #[must_use]
 pub(crate) fn tick_from_packed_calendar_date(calendar_date: i32) -> GameTick {
-    use crate::economy::TICKS_PER_TRANSIT_DAY;
+    use crate::economy::TICKS_PER_DAY;
     use crate::news::{CALENDAR_BASE_YEAR, CALENDAR_DAYS_PER_YEAR};
     let packed = u64::try_from(calendar_date.max(0)).unwrap_or(0);
     let base = u64::from(CALENDAR_BASE_YEAR).saturating_mul(CALENDAR_DAYS_PER_YEAR);
     let day_index = packed.saturating_sub(base);
-    GameTick::new(day_index.saturating_mul(u64::from(TICKS_PER_TRANSIT_DAY)))
+    GameTick::new(day_index.saturating_mul(u64::from(TICKS_PER_DAY)))
 }
 
 #[cfg(test)]

@@ -12,8 +12,8 @@ pub use payments::{
     inflation_prices_factor, manhattan_distance, monthly_loan_interest, transported_goods_income,
 };
 pub use time::{
-    OTTD_MILLISECONDS_PER_TICK, SIM_TICKS_PER_SECOND, TICKS_PER_MONTH, TICKS_PER_TRANSIT_DAY,
-    TICKS_PER_YEAR, ticks_to_transit_days,
+    CARGO_AGING_TICKS, OTTD_MILLISECONDS_PER_TICK, SIM_TICKS_PER_SECOND, STATION_RATING_TICKS,
+    TICKS_PER_DAY, TICKS_PER_MONTH, TICKS_PER_YEAR, ticks_to_transit_periods,
 };
 pub use vehicle_costs::{
     vehicle_purchase_cost, vehicle_running_cost_per_tick, vehicle_sell_refund,
@@ -93,8 +93,18 @@ mod tests {
 
     #[test]
     fn bankruptcy_when_debt_exceeds_max_loan() {
-        assert!(!check_bankruptcy(-200_000, 300_000));
-        assert!(check_bankruptcy(-300_001, 300_000));
+        assert!(!check_bankruptcy(-200_000, 0, 300_000));
+        assert!(check_bankruptcy(-300_001, 0, 300_000));
+    }
+
+    /// `OpenTTD` resta el préstamo pendiente: con caja positiva pero deuda por encima del
+    /// techo, `CompanyCheckBankrupt` (`economy.cpp:556`) sí liquida la compañía.
+    #[test]
+    fn bankruptcy_counts_outstanding_loan() {
+        assert!(check_bankruptcy(50_000, 400_000, 300_000));
+        assert!(!check_bankruptcy(50_000, 300_000, 300_000));
+        assert!(!check_bankruptcy(0, 300_000, 300_000));
+        assert!(check_bankruptcy(-1, 300_000, 300_000));
     }
 
     #[test]

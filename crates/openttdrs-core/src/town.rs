@@ -32,6 +32,8 @@ pub const TOWN_GROWTH_WINTER_POP_THRESHOLD: u32 = 90;
 pub const TOWN_GROWTH_DESERT_POP_THRESHOLD: u32 = 60;
 /// Meses de crecimiento forzado al financiar edificios (`fund_buildings`).
 pub const FUND_BUILDINGS_MONTHS: u8 = 3;
+/// Valoración de partida de la autoridad local (`RATING_INITIAL`, `town_type.h:45`).
+pub const TOWN_RATING_INITIAL: i16 = 500;
 
 /// Ciudad (importada de saves de `OpenTTD` o creada por el juego).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -40,8 +42,8 @@ pub struct Town {
     pub pos: crate::map::TileCoord,
     pub name: String,
     pub population: u32,
-    /// Valoración de la autoridad local (-1000..=1000; 0 = neutral).
-    #[serde(default)]
+    /// Valoración de la autoridad local (-1000..=1000; arranca en `TOWN_RATING_INITIAL`).
+    #[serde(default = "default_town_rating")]
     pub local_authority_rating: i16,
     /// Pasajeros entregados cerca de la ciudad (contador de crecimiento).
     #[serde(default)]
@@ -75,6 +77,10 @@ pub struct Town {
     pub noise_reached: u16,
 }
 
+const fn default_town_rating() -> i16 {
+    TOWN_RATING_INITIAL
+}
+
 impl Default for Town {
     fn default() -> Self {
         Self {
@@ -82,7 +88,7 @@ impl Default for Town {
             pos: TileCoord::new(0, 0),
             name: String::new(),
             population: 0,
-            local_authority_rating: 0,
+            local_authority_rating: TOWN_RATING_INITIAL,
             passengers_served: 0,
             mail_served: 0,
             growth_funded: 0,
@@ -574,5 +580,21 @@ mod tests {
         };
         town.adjust_rating(50);
         assert_eq!(town.local_authority_rating, 1000);
+    }
+
+    /// `OpenTTD` arranca los pueblos en `RATING_INITIAL = 500` (`town_type.h:45`),
+    /// no en neutral, así que la autoridad empieza siendo moderadamente favorable.
+    #[test]
+    fn new_town_starts_at_initial_rating() {
+        let town = Town {
+            pos: TileCoord::new(5, 5),
+            ..Default::default()
+        };
+        assert_eq!(town.local_authority_rating, TOWN_RATING_INITIAL);
+        assert_eq!(TOWN_RATING_INITIAL, 500);
+        assert!(authority_allows_new_station(
+            std::slice::from_ref(&town),
+            TileCoord::new(6, 6)
+        ));
     }
 }

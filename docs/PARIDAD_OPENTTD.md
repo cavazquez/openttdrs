@@ -4,6 +4,7 @@ Resumen vivo de **openttdrs** vs OpenTTD. Detalle por dominio:
 
 | Tema | Documento |
 |------|-----------|
+| **Paridad de comportamiento** (bucles, economía, ciudades, órdenes) | [ROADMAP_PARIDAD_SIMULACION.md](ROADMAP_PARIDAD_SIMULACION.md) |
 | UI / NewGRF cortes | [ROADMAP_PARIDAD_UI_GLOBAL.md](ROADMAP_PARIDAD_UI_GLOBAL.md) |
 | Sim estructural (consist, PBS, economía, railtypes) | [ROADMAP_PARIDAD_ESTRUCTURAL.md](ROADMAP_PARIDAD_ESTRUCTURAL.md) |
 | Madurez road / tick | [parity/status.md](parity/status.md) |
@@ -25,7 +26,8 @@ Resumen vivo de **openttdrs** vs OpenTTD. Detalle por dominio:
 | CargoDist MCF nivel 2 | 🟡 (MVP; jobs async OOS) |
 | Ciudades (rating, crecimiento) | 🟡 |
 | Órdenes y operación de flota | 🟡 |
-| Barcos / aviones | 🔮 |
+| Aviones (FTA, compatibilidad, crash en pista corta, ruido) | 🟡 (#212 cerrado) |
+| Barcos | 🔮 |
 | NewGRF Action0–14 + Action2 runtime | 🟡 (parse + sprites in-world; paridad total OOS) |
 | Multijugador I8 | 🟡 MVP ([#21](https://github.com/cavazquez/openttdrs/issues/21) ✅, host migration #171) |
 | IA rivales (TransCargo) / GameScript-lite / editor | 🟡 (Squirrel OOS) |
@@ -42,7 +44,7 @@ Resumen vivo de **openttdrs** vs OpenTTD. Detalle por dominio:
 | 4 | Ferrocarril | PBS golden vs OTTD | 🟡 | L | MVP interno; captura externa |
 | 5 | UI | Paridad ventanas flota/estación | 🟡 | M | [ROADMAP_PARIDAD_UI_GLOBAL.md](ROADMAP_PARIDAD_UI_GLOBAL.md) |
 | 6 | Mundo | Industrias por clima / gen | 🟡 | L | T1–T3 hechos; T4 parcial |
-| 7 | Transporte | Barcos / aviones | 🔮 | L | |
+| 7 | Transporte | Barcos | 🔮 | L | Aviones cerrados (#212) |
 | 8 | Modding | NewGRF paridad total | 🟡 | XXL | Fase 7 MVP en estructural |
 | 9 | Red | Desync UI / lobby | 🟡 | XL | Core lockstep hecho |
 | 10 | IA | Pathfind construcción / multi-rival | 🟡 | M–L | TransCargo = L Manhattan |
@@ -55,4 +57,9 @@ Mapa `.ottdmap`/TNBP · road+rail+señales/PBS MVP · consist · packets/rating 
 
 ---
 
-*Última actualización: 2026-07-17 — vista corta; no duplicar tablas largas aquí.*
+**Nota de alcance:** esta vista mide **qué funciones existen**. Si el comportamiento coincide con el
+original es otro eje, auditado en [ROADMAP_PARIDAD_SIMULACION.md](ROADMAP_PARIDAD_SIMULACION.md)
+(71 entradas, 2026-07-25): un bloque puede figurar aquí como ✅ y seguir teniendo divergencias de
+simulación abiertas.
+
+*Última actualización: 2026-07-25 — vista corta; no duplicar tablas largas aquí.*

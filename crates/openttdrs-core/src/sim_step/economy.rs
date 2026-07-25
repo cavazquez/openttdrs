@@ -96,7 +96,7 @@ fn apply_monthly_interest_and_bankruptcy(state: &mut GameState) {
                     .pending_sim_events
                     .push(crate::sim_events::SimEvent::LoanInterestPaid { amount: interest });
             }
-            if economy::check_bankruptcy(money, max_loan) {
+            if economy::check_bankruptcy(money, loan, max_loan) {
                 state.bankruptcy_streak = state.bankruptcy_streak.saturating_add(1);
                 state
                     .runtime
@@ -115,7 +115,7 @@ fn apply_monthly_interest_and_bankruptcy(state: &mut GameState) {
             } else {
                 state.bankruptcy_streak = 0;
             }
-        } else if economy::check_bankruptcy(money, max_loan) {
+        } else if economy::check_bankruptcy(money, loan, max_loan) {
             state.companies[i].bankruptcy_months =
                 state.companies[i].bankruptcy_months.saturating_add(1);
             let months = state.companies[i].bankruptcy_months;
@@ -189,19 +189,19 @@ pub(super) fn grow_towns(state: &mut GameState, tick: u64) {
 }
 
 pub(super) fn age_vehicle_cargo(state: &mut GameState) {
-    let day = state.tick.get() > 0
+    let aging_tick = state.tick.get() > 0
         && state
             .tick
             .get()
-            .is_multiple_of(u64::from(economy::TICKS_PER_TRANSIT_DAY));
+            .is_multiple_of(u64::from(economy::CARGO_AGING_TICKS));
     for vehicle in &mut state.vehicles {
         vehicle.ensure_packets_from_legacy();
         if vehicle.cargo == 0 {
             continue;
         }
         vehicle.cargo_transit_ticks = vehicle.cargo_transit_ticks.saturating_add(1);
-        if day {
-            vehicle.cargo_packets.age_one_day();
+        if aging_tick {
+            vehicle.cargo_packets.age_one_period();
             vehicle.sync_cargo_from_packets();
         }
     }

@@ -34,15 +34,15 @@ impl super::model::Vehicle {
             self.cargo_type = Some(ct);
         }
         self.cargo_source = self.cargo_packets.primary_source();
-        let days = self.cargo_packets.max_periods_in_transit();
+        let periods = self.cargo_packets.max_periods_in_transit();
         self.cargo_transit_ticks =
-            u32::from(days).saturating_mul(crate::economy::TICKS_PER_TRANSIT_DAY);
+            u32::from(periods).saturating_mul(crate::economy::CARGO_AGING_TICKS);
     }
 
     /// Hidrata packets desde campos legacy si la lista está vacía.
     pub fn ensure_packets_from_legacy(&mut self) {
         if self.cargo_packets.is_empty() && self.cargo > 0 {
-            let days = crate::economy::ticks_to_transit_days(self.cargo_transit_ticks);
+            let periods = crate::economy::ticks_to_transit_periods(self.cargo_transit_ticks);
             let cargo_type = self.cargo_type.or(match self.kind {
                 super::model::VehicleKind::Bus
                 | super::model::VehicleKind::Tram
@@ -55,7 +55,7 @@ impl super::model::Vehicle {
                 self.cargo,
                 cargo_type,
                 self.cargo_source,
-                days,
+                periods,
                 self.pos,
             );
         }

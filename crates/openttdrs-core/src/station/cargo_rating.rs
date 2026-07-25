@@ -55,7 +55,7 @@ pub fn tick_station_cargo_age(stations: &mut [Station], selectgoods: bool) {
     for station in stations {
         station.ensure_packets_from_stock();
         if !station.cargo_packets.is_empty() {
-            station.cargo_packets.age_waiting_one_day();
+            station.cargo_packets.age_waiting_one_period();
         }
         for cargo in ALL_CARGO_TYPES {
             if station.cargo_stock.get(cargo) == 0 {

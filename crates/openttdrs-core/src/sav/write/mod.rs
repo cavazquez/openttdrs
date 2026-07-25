@@ -340,7 +340,6 @@ mod tests {
             pos: TileCoord::new(16, 16),
             name: "Villa Demo".into(),
             population: 1200,
-            local_authority_rating: 0,
             passengers_served: 0,
             mail_served: 0,
             growth_funded: 0,

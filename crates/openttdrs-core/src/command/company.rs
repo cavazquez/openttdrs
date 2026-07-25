@@ -21,7 +21,7 @@ pub fn company_is_bankrupt(state: &GameState, company_id: CompanyId) -> bool {
     state
         .companies
         .get(company_id.index())
-        .is_some_and(|c| check_bankruptcy(c.economy.money, c.economy.max_loan))
+        .is_some_and(|c| check_bankruptcy(c.economy.money, c.economy.loan, c.economy.max_loan))
 }
 
 /// Compra la compañía `target` (no puede ser la activa).

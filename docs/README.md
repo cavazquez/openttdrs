@@ -30,6 +30,7 @@
 | [INVENTARIO_MUTACIONES_CLIENTE.md](INVENTARIO_MUTACIONES_CLIENTE.md) | #114 |
 | [ROADMAP_PARIDAD_UI_GLOBAL.md](ROADMAP_PARIDAD_UI_GLOBAL.md) | Siguiente corte UI (detalle en archive) |
 | [ROADMAP_PARIDAD_ESTRUCTURAL.md](ROADMAP_PARIDAD_ESTRUCTURAL.md) | Consist, PBS, economía, mono/maglev |
+| [ROADMAP_PARIDAD_SIMULACION.md](ROADMAP_PARIDAD_SIMULACION.md) | Paridad de comportamiento P0–P3 (auditoría 15.3) |
 | [ROADMAP_SPRINTS.md](ROADMAP_SPRINTS.md) | Sprints S1–S6 |
 | [ROADMAP_IMPORTACION_OPENTTD.md](ROADMAP_IMPORTACION_OPENTTD.md) | Animaciones, audio, dinámicas |
 | [PARIDAD_OPENTTD.md](PARIDAD_OPENTTD.md) | Vista corta de gaps |

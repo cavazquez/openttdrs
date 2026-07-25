@@ -152,10 +152,13 @@ pub fn monthly_loan_interest(loan: i64) -> i64 {
     loan.saturating_mul(ANNUAL_INTEREST_RATE_PCT) / 100 / 12
 }
 
-/// `true` si la compañía superó el límite de deuda (`CheckForBankruptcy`).
+/// `true` si la compañía superó el límite de deuda (`CompanyCheckBankrupt`).
+///
+/// `OpenTTD` (`economy.cpp:556`) sobrevive mientras `money - current_loan >= -GetMaxLoan()`:
+/// el préstamo pendiente cuenta como deuda, así que tener caja no basta para librarse.
 #[must_use]
-pub const fn check_bankruptcy(money: i64, max_loan: i64) -> bool {
-    money < -max_loan
+pub const fn check_bankruptcy(money: i64, loan: i64, max_loan: i64) -> bool {
+    money.saturating_sub(loan) < -max_loan
 }
 
 /// Solicita más préstamo hasta `max_loan`. Devuelve el importe añadido.

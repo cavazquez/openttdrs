@@ -1,7 +1,7 @@
 //! Variables `NewGRF` Action2 para unidades de tren.
 
 use crate::cargo::CargoType;
-use crate::economy::TICKS_PER_TRANSIT_DAY;
+use crate::economy::TICKS_PER_DAY;
 use crate::engine::{EngineDef, engine_in_catalog};
 use crate::newgrf_sprites::Action2EvalCtx;
 use crate::news::{calendar_day_index, calendar_year_day};
@@ -119,7 +119,7 @@ fn fill_vehicle_action2_vars(
         u32::from(u8::try_from(build_year.saturating_sub(1920).min(255)).unwrap_or(255)),
     );
 
-    let age_days = tick.get().saturating_sub(unit.build_tick) / u64::from(TICKS_PER_TRANSIT_DAY);
+    let age_days = tick.get().saturating_sub(unit.build_tick) / u64::from(TICKS_PER_DAY);
     ctx.vars.insert(
         0xC0,
         u32::try_from(age_days.min(u64::from(u16::MAX))).unwrap_or(u32::from(u16::MAX)),

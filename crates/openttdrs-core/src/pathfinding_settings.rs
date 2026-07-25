@@ -1,6 +1,6 @@
 //! Ajustes de pathfinding / PBS (`pf.*` en `OpenTTD`).
 
-use crate::economy::TICKS_PER_TRANSIT_DAY;
+use crate::economy::TICKS_PER_DAY;
 
 /// Días de espera por defecto ante path signal sin reserva (`pf.wait_for_pbs_path`).
 pub const DEFAULT_WAIT_FOR_PBS_PATH_DAYS: u8 = 30;
@@ -39,7 +39,7 @@ impl PathfindingSettings {
         if self.wait_for_pbs_path == PBS_WAIT_FOREVER || !self.reverse_at_signals {
             return None;
         }
-        Some(u32::from(self.wait_for_pbs_path).saturating_mul(TICKS_PER_TRANSIT_DAY))
+        Some(u32::from(self.wait_for_pbs_path).saturating_mul(TICKS_PER_DAY))
     }
 
     /// `true` si este tick debe reintentar look-ahead / reserva (`path_backoff_interval`).
@@ -71,7 +71,7 @@ mod tests {
         assert!(no_reverse.pbs_reverse_timeout_ticks().is_none());
         assert_eq!(
             PathfindingSettings::default().pbs_reverse_timeout_ticks(),
-            Some(30 * TICKS_PER_TRANSIT_DAY)
+            Some(30 * TICKS_PER_DAY)
         );
     }
 

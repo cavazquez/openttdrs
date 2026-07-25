@@ -189,7 +189,16 @@ pub struct Industry {
     /// Series mensuales (stock / producido / transportado).
     #[serde(default)]
     pub history: IndustryHistory,
+    /// Fase de producción propia (`Industry::counter`, `industry_cmd.cpp:1807`).
+    ///
+    /// `OpenTTD` la siembra con 12 bits aleatorios al fundar y la decrementa cada tick,
+    /// de modo que dos industrias vecinas no producen en el mismo tick.
+    #[serde(default)]
+    pub counter: u16,
 }
+
+/// Máscara de la fase de producción (`GB(r, 4, 12)`).
+pub const INDUSTRY_COUNTER_MASK: u16 = 0x0FFF;
 
 fn default_industry_tiles() -> Vec<TileCoord> {
     Vec::new()
@@ -227,6 +236,7 @@ impl Industry {
             produced_total: 0,
             transported_total: 0,
             history: IndustryHistory::default(),
+            counter: 0,
         }
     }
 
@@ -244,6 +254,7 @@ impl Industry {
             produced_total: 0,
             transported_total: 0,
             history: IndustryHistory::default(),
+            counter: 0,
         }
     }
 
@@ -267,6 +278,7 @@ impl Industry {
             produced_total: 0,
             transported_total: 0,
             history: IndustryHistory::default(),
+            counter: 0,
         }
     }
 
@@ -284,6 +296,27 @@ impl Industry {
         self
     }
 
+    /// Siembra la fase de producción con 12 bits (`i->counter = GB(r, 4, 12)`).
+    #[must_use]
+    pub const fn with_counter(mut self, counter: u16) -> Self {
+        self.counter = counter & INDUSTRY_COUNTER_MASK;
+        self
+    }
+
+    /// ¿Este tick cae en el ciclo de producción de esta industria?
+    ///
+    /// `OpenTTD` decrementa `counter` cada tick y produce cuando es múltiplo de
+    /// `INDUSTRY_PRODUCE_TICKS`; el desfase equivalente sobre el tick global es
+    /// sumar la fase, que reparte las industrias entre ticks distintos.
+    #[must_use]
+    pub const fn produces_on_tick(&self, tick: u64) -> bool {
+        if tick == 0 {
+            return false;
+        }
+        let period = industry_produce_period_ticks(self.kind);
+        (tick + self.counter as u64).is_multiple_of(period)
+    }
+
     #[must_use]
     pub fn contains_tile(&self, c: TileCoord) -> bool {
         self.pos == c || self.tiles.contains(&c)
@@ -294,8 +327,7 @@ impl Industry {
         if self.requires_station_inputs() {
             return;
         }
-        let period = industry_produce_period_ticks(self.kind);
-        if tick > 0 && tick.is_multiple_of(period) {
+        if self.produces_on_tick(tick) {
             self.stock = self
                 .stock
                 .saturating_add(INDUSTRY_PRODUCE_AMOUNT)
@@ -310,8 +342,7 @@ impl Industry {
         if !self.requires_station_inputs() {
             return false;
         }
-        let period = industry_produce_period_ticks(self.kind);
-        if tick == 0 || !tick.is_multiple_of(period) || self.stock >= self.capacity {
+        if !self.produces_on_tick(tick) || self.stock >= self.capacity {
             return false;
         }
 
@@ -419,6 +450,29 @@ mod tests {
         assert!(IndustrySpec::FizzyDrinkFactory.available_in(Climate::Toyland));
         assert!(!IndustrySpec::FizzyDrinkFactory.available_in(Climate::Temperate));
         assert!(IndustrySpec::CoalMine.available_in(Climate::Temperate));
+    }
+
+    /// Cada industria lleva su propia fase (`i->counter`), así que dos minas
+    /// fundadas a la vez no vuelcan su producción en el mismo tick.
+    #[test]
+    fn industries_produce_on_their_own_phase() {
+        let mut plain = Industry::new(TileCoord::new(0, 0), IndustryKind::CoalMine);
+        let mut shifted =
+            Industry::new(TileCoord::new(1, 0), IndustryKind::CoalMine).with_counter(100);
+
+        plain.produce(INDUSTRY_PRODUCE_TICKS);
+        shifted.produce(INDUSTRY_PRODUCE_TICKS);
+        assert_eq!(plain.stock, INDUSTRY_PRODUCE_AMOUNT);
+        assert_eq!(shifted.stock, 0);
+
+        shifted.produce(INDUSTRY_PRODUCE_TICKS - 100);
+        assert_eq!(shifted.stock, INDUSTRY_PRODUCE_AMOUNT);
+    }
+
+    #[test]
+    fn counter_keeps_only_twelve_bits() {
+        let ind = Industry::new(TileCoord::new(0, 0), IndustryKind::CoalMine).with_counter(0xFFFF);
+        assert_eq!(ind.counter, INDUSTRY_COUNTER_MASK);
     }
 
     #[test]

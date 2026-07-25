@@ -15,7 +15,7 @@ const STATUS_WARN: Color = Color::srgb(0.95, 0.55, 0.25);
 /// Texto + color de la barra de estado bajo el viewport.
 #[must_use]
 pub(crate) fn format_vehicle_status(vehicle: &Vehicle, sim: &SimWorld) -> (String, Color) {
-    if vehicle.breakdown_ticks_remaining > 0 {
+    if vehicle.is_broken_down() {
         return ("Averiado".into(), STATUS_WARN);
     }
     if !vehicle.running {

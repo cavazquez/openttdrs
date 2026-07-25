@@ -87,13 +87,13 @@ pub(super) fn place_towns(ctx: &mut PopCtx<'_>, target: usize, town_centers: &mu
             pos: plan.town_pos,
             name,
             population,
-            local_authority_rating: 0,
             passengers_served: 0,
             mail_served: 0,
             growth_funded: 0,
             ..Default::default()
         };
         town.init_growth_goals(ctx.state.climate);
+        town.init_grow_counter();
         ctx.state.towns.push(town);
         town_centers.push(plan.town_pos);
     }

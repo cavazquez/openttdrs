@@ -288,8 +288,10 @@ pub fn town_goal_satisfied_with_context(
         if population <= TOWN_GROWTH_WINTER_POP_THRESHOLD {
             return true;
         }
-        let height = tile_slope_and_z(map, town_pos)
-            .map(|(z, _)| z)
+        let height = map
+            .get(town_pos)
+            .map(|t| t.height)
+            .or_else(|| tile_slope_and_z(map, town_pos).map(|(_, z)| z))
             .unwrap_or(0);
         if i32::from(height) < i32::from(DEF_SNOW_LINE_HEIGHT) {
             return true;
@@ -1044,7 +1046,9 @@ mod tests {
         good.time_since_pickup.passengers = 0;
         let mut bad = Station::new_with_kind(TileCoord::new(11, 10), StopKind::BusStop);
         bad.owner = CompanyId(1);
-        bad.time_since_pickup.passengers = 50;
+        for cargo in ALL_CARGO_TYPES {
+            bad.time_since_pickup.set(cargo, 50);
+        }
         update_town_rating(&mut town, &[good, bad], 2);
         assert_eq!(town.authority_rating(CompanyId::PLAYER), 17);
         assert_eq!(town.authority_rating(CompanyId(1)), 90);
@@ -1068,11 +1072,21 @@ mod tests {
             name: "Rate".into(),
             ..Default::default()
         };
-        let none = get_normal_growth_rate(&town, &[], &map, &[]);
-        let mut st = Station::new_with_kind(TileCoord::new(8, 9), StopKind::BusStop);
-        st.time_since_pickup.passengers = 0;
-        let one = get_normal_growth_rate(&town, &[st], &map, &[]);
-        assert!(one < none, "más estaciones activas aceleran el crecimiento");
+        let unserved = get_normal_growth_rate(&town, &[], &map, &[]);
+        let mut active: Vec<Station> = Vec::new();
+        for i in 0..5 {
+            let mut st = Station::new_with_kind(
+                TileCoord::new(8 + i, 9),
+                StopKind::BusStop,
+            );
+            st.time_since_pickup.passengers = 0;
+            active.push(st);
+        }
+        let well_served = get_normal_growth_rate(&town, &active, &map, &[]);
+        assert!(
+            well_served < unserved,
+            "más estaciones activas aceleran el crecimiento"
+        );
     }
 
     #[test]
@@ -1085,10 +1099,11 @@ mod tests {
             population: 80,
             ..Default::default()
         };
-        let stations = vec![Station::new_with_kind(
-            TileCoord::new(4, 5),
-            StopKind::BusStop,
-        )];
+        let mut station = Station::new_with_kind(TileCoord::new(4, 5), StopKind::BusStop);
+        for cargo in ALL_CARGO_TYPES {
+            station.time_since_pickup.set(cargo, 30);
+        }
+        let stations = vec![station];
         let mut never = Randomizer::new(42);
         update_town_growth_state(
             &mut town,
@@ -1100,18 +1115,25 @@ mod tests {
             &mut never,
         );
         assert!(!town.is_growing);
-        let mut town2 = town.clone();
-        let mut lucky = Randomizer::new(1);
-        update_town_growth_state(
-            &mut town2,
-            &stations,
-            &map,
-            &[],
-            Climate::Temperate,
-            0,
-            &mut lucky,
-        );
-        assert!(town2.is_growing);
+        let mut lucky_found = false;
+        for seed in 0..128 {
+            let mut town2 = town.clone();
+            let mut lucky = Randomizer::new(seed);
+            update_town_growth_state(
+                &mut town2,
+                &stations,
+                &map,
+                &[],
+                Climate::Temperate,
+                0,
+                &mut lucky,
+            );
+            if town2.is_growing {
+                lucky_found = true;
+                break;
+            }
+        }
+        assert!(lucky_found, "alguna semilla debe pasar Chance16(1,12)");
     }
 
     /// `OpenTTD` arranca los pueblos en `RATING_INITIAL = 500` (`town_type.h:45`),

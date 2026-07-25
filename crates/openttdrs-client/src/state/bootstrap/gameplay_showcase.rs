@@ -56,13 +56,13 @@ fn place_town_block(state: &mut GameState) {
         pos: TileCoord::new(17, 2),
         name: "Villademo".to_string(),
         population: 6 * 8,
-        local_authority_rating: 0,
         passengers_served: 0,
         mail_served: 0,
         growth_funded: 0,
         ..Default::default()
     };
     town.init_growth_goals(state.climate);
+    town.init_grow_counter();
     state.towns.push(town);
     for x in 14..=22_i32 {
         let _ = apply_command(

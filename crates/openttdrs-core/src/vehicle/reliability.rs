@@ -111,10 +111,13 @@ impl super::model::Vehicle {
         day.saturating_sub(self.last_service_day) >= interval
     }
 
-    /// ¿El vehículo está averiado y no puede moverse?
+    /// ¿El vehículo está parado por avería activa? (`breakdown_ctr == 1`).
+    ///
+    /// Con `ctr > 2` aún se mueve mientras cuenta atrás hacia la avería; con `ctr == 2`
+    /// el tick actual la dispara (`HandleBreakdown`).
     #[must_use]
     pub fn is_broken_down(&self) -> bool {
-        self.breakdown_ctr != 0 && self.kind != VehicleKind::Aircraft
+        self.breakdown_ctr == 1 && self.kind != VehicleKind::Aircraft
     }
 
     /// Edad del vehículo en días de calendario desde la compra.

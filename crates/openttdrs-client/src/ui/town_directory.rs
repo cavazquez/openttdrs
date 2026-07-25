@@ -278,6 +278,7 @@ pub(crate) fn sync_town_directory(
 
     sync_list_sort_colors(&mut sort_buttons, TownDirectorySortButton(state.sort));
 
+    let active = sim.state.active_company;
     let mut rows: Vec<_> = sim
         .state
         .towns
@@ -288,7 +289,7 @@ pub(crate) fn sync_town_directory(
                 town.id,
                 town.name.clone(),
                 town.population,
-                town.local_authority_rating,
+                town.authority_rating(active),
             )
         })
         .collect();
@@ -475,7 +476,7 @@ mod tests {
             pos: openttdrs_core::TileCoord::new(6, 7),
             name: "Norte".into(),
             population: 200,
-            local_authority_rating: 40,
+            authority_ratings: vec![40],
             ..Default::default()
         });
         let height = state

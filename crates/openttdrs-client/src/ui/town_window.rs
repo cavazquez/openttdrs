@@ -241,7 +241,7 @@ pub(crate) fn sync_town_window(
     }
     let houses = count_town_houses(&sim.state, town.id);
     if let Ok(mut body) = body_q.single_mut() {
-        let rating = town.local_authority_rating;
+        let rating = town.authority_rating(sim.state.active_company);
         let rating_hint = if rating >= 500 {
             "buena"
         } else if rating >= 0 {

@@ -594,7 +594,8 @@ fn economic_cycle_roundtrip() {
         .push(Vehicle::new(0, VehicleKind::Truck, ipos, spos));
 
     // Ciclo completo con descarga al llegar (manhattan_to_dest == 0).
-    for _ in 0..80 {
+    // Road FSM: ~16 frames/tesela; 80 ticks ya no bastan a velocidad de crucero.
+    for _ in 0..400 {
         s.step();
     }
     assert!(

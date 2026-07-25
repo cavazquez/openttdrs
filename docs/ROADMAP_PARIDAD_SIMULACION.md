@@ -564,9 +564,9 @@ tick contra OpenTTD seguirá divergiendo aunque las fórmulas individuales sean 
 | **P2.11** | Geometría del consist | Las poses de los vagones se proyectan desde el historial de la cabeza (`train_consist/pose.rs:25-78`) | Cada unidad avanza en su propio paso con `CalcNextVehicleOffset` dentro de `TrainController` (`train_cmd.cpp:1903-1966`) | Simular unidad a unidad; afecta a trenes largos en curvas y túneles | XL |
 | **P2.12** | PBS en cruces | Una señal PBS puede quedarse verde sin reserva si el bloque está vacío (`rail_signals/presignal.rs:147-220`) | Con `Split` o `MultiEnter` la señal va a rojo aunque no haya tren (`signal.cpp:410-458`) | Añadir los flags de segmento al explorador | M |
 | **P2.13** | Buffer de señales | Conjunto de teselas sin dirección y sin umbral (`rail_signals/update.rs:20-50`) | `_globset` guarda pares (tesela, `DiagDirection`) y fuerza actualización a las 64 entradas (`signal.cpp:589-610`) | Guardar la dirección de entrada para acotar el recálculo | M |
-| **P2.14** | Controlador de carretera | Movimiento por tesela y `progress`, sin `state` ni `frame` ni wormhole (`vehicle/model.rs:86-87`) | `IndividualRoadVehicleController` avanza frame a frame con `_road_drive_data` y los estados `RVSB_*` (`roadveh_cmd.cpp:1201-1576`, `roadveh.h:38-57`) | Portar la máquina de estados; las tablas de trayectoria ya están en el repo para render | XL |
-| **P2.15** | Tráfico en carretera | Los vehículos no se estorban entre sí | `RoadVehFindCloseTo` sincroniza velocidad con el de delante y `blocked_ctr > 1480` permite atravesarlo (`roadveh_cmd.cpp:627-694`) | Portar la detección de proximidad; sin ella no hay colas ni atascos | XL |
-| **P2.16** | Pasos por tick | Un solo incremento de `progress` por tick (`vehicle/movement.rs:226-251`) | Bucle `while (j >= adv_spd)` que consume varios sub-pasos en el mismo tick (`roadveh_cmd.cpp:1610-1645`) | Portar el bucle; a velocidades altas el port avanza de menos | L |
+| **P2.14** | Controlador de carretera | · hecho | `IndividualRoadVehicleController` avanza frame a frame con `_road_drive_data` y los estados `RVSB_*` (`roadveh_cmd.cpp:1201-1576`, `roadveh.h:38-57`) | FSM en `road_movement/controller.rs` + tablas `drive_data` | XL · **hecho** |
+| **P2.15** | Tráfico en carretera | · hecho | `RoadVehFindCloseTo` sincroniza velocidad con el de delante y `blocked_ctr > 1480` permite atravesarlo (`roadveh_cmd.cpp:627-694`) | `road_movement/traffic.rs` | XL · **hecho** |
+| **P2.16** | Pasos por tick | · hecho | Bucle `while (j >= adv_spd)` que consume varios sub-pasos en el mismo tick (`roadveh_cmd.cpp:1610-1645`) | `road_vehicle_tick` con remanente en `progress` | L · **hecho** |
 | **P2.17** | Órdenes implícitas | Un solo `current_order`; el índice implícito del save se descarta (`sav/array_legacy.rs:245-246`) | `OT_IMPLICIT` con `cur_implicit_order_index` y `cur_real_order_index`, insertadas al visitar estaciones (`base_consist.h:47-48`, `vehicle.cpp:2152-2275`) | Portar los dos índices y la inserción automática | XL |
 | **P2.18** | `ProcessOrders` | Avance lineal módulo longitud de lista (`order_execution.rs:65-78`) | Máquina que interrumpe por depósito, resuelve vías, avanza índices y busca depósito más cercano (`order_cmd.cpp:1949-2159`) | Portar `ProcessOrders` y `UpdateOrderDest`; depende de P2.17 | XL |
 | **P2.19** | Clasificación de carga | Decisión directa al descargar, sin fase previa ni reserva (`cargo_packet/operations.rs:31-48`) | `PrepareUnload` llama a `Stage`, que clasifica cada paquete en `TRANSFER`, `DELIVER`, `KEEP` o `LOAD` usando los flujos (`cargopacket.cpp:406-526`) | Portar el staging; es lo que hace correcto el pago diferido de P1.6 | XL |
@@ -588,6 +588,9 @@ PBS post-move → landscape. El routing PBS completo ya no precede a la carga.
 
 **P2.4 · hecho** — `call_landscape_tick`: town → trees → station → industry → companies →
 linkgraph (stub).
+
+**P2.14–P2.16 · hecho** — controlador road con `road_state`/`frame`, tablas drive, bucle
+`while j >= adv_spd` y `RoadVehFindCloseTo` (`blocked_ctr`).
 
 ---
 

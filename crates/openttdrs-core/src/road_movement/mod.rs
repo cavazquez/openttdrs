@@ -1,18 +1,26 @@
 //! Sub-tesela de vehículos en carretera/vía (`table/roadveh_movement.h`).
 
 pub mod bay;
+pub mod controller;
 mod curves;
 pub mod depot;
+pub mod drive_data;
 pub mod pose;
 mod render_pose;
+pub mod rvsb;
+pub mod traffic;
 
 // Re-exportar tipos y funciones públicas principales
 pub use bay::{BayStationTable, bay_station_table, parked_inside_bay};
+pub use controller::{
+    individual_road_vehicle_controller, road_vehicle_step_solo, road_vehicle_tick,
+};
 pub use curves::{straight_subtile, train_straight_subtile, turn_curve_points};
 pub use depot::{
     ROAD_DEPOT_ENTRY_STOP, ROAD_DEPOT_EXIT_START, ROAD_DEPOT_PROGRESS_STEP, road_depot_direction,
     road_depot_entry_direction, road_depot_exit_direction, road_depot_subtile,
 };
+pub use drive_data::{RDE_NEXT_TILE, RDE_TURNED, RoadDriveEntry, road_drive_entry};
 pub use pose::{
     VehiclePose, extrapolate_vehicle_pose, retreat_vehicle_pose, vehicle_render_progress,
 };
@@ -21,6 +29,8 @@ pub use render_pose::{
     vehicle_render_direction_at, vehicle_render_direction_at_with_map, vehicle_subtile,
     vehicle_subtile_at, vehicle_subtile_at_with_map, vehicle_subtile_with_progress,
 };
+pub use rvsb::{RVSB_IN_DEPOT, RVSB_TRACKDIR_MASK, trackdir_from_direction};
+pub use traffic::{BLOCKED_CTR_LIMIT, apply_road_veh_close_to, road_veh_find_close_to};
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]

@@ -71,6 +71,17 @@ pub(super) fn move_vehicles(state: &mut GameState) {
         if tick_road_depot_movement(state, i) {
             continue;
         }
+        if matches!(
+            state.vehicles[i].kind,
+            VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram
+        ) {
+            let map = Some(&state.map);
+            // Split borrow: tick road con flota completa para FindCloseTo.
+            let mut vehicles = std::mem::take(&mut state.vehicles);
+            crate::road_movement::road_vehicle_tick(&mut vehicles, i, map);
+            state.vehicles = vehicles;
+            continue;
+        }
         let blocked = {
             let vehicles = &state.vehicles;
             let vehicle = &vehicles[i];

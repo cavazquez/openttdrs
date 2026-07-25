@@ -141,10 +141,18 @@ pub struct Vehicle {
     pub capacity: u32,
     #[serde(default = "default_running_true")]
     pub running: bool,
-    /// Tren: remanente físico de `DoUpdateSpeed` (`Vehicle::progress` de `OpenTTD`).
-    /// Carretera/tranvía: fracción 0..=255 hacia la siguiente tesela.
+    /// Remanente físico de `DoUpdateSpeed` (`Vehicle::progress` de `OpenTTD`).
     #[serde(default)]
     pub progress: u8,
+    /// Estado de conducción road (`RVSB_*` / trackdir).
+    #[serde(default)]
+    pub road_state: u8,
+    /// Frame dentro de la tabla `_road_drive_data` actual.
+    #[serde(default)]
+    pub frame: u8,
+    /// Contador de bloqueo por tráfico (`RoadVehFindCloseTo`).
+    #[serde(default)]
+    pub blocked_ctr: u16,
     /// Tren: píxeles consumidos en la tesela actual (0..15) hacia el cruce.
     #[serde(default)]
     pub rail_pixel: u8,
@@ -419,6 +427,9 @@ impl Vehicle {
             capacity: super::VEHICLE_CAPACITY,
             running: true,
             progress: 0,
+            road_state: 0,
+            frame: 0,
+            blocked_ctr: 0,
             rail_pixel: 0,
             cached_max_te_n: 0,
             cached_air_drag: 0,

@@ -56,6 +56,19 @@ impl super::model::Vehicle {
             let units = adv.saturating_mul(16);
             return units.div_ceil(per_tick).saturating_mul(2).max(16);
         }
+        if matches!(
+            self.kind,
+            super::model::VehicleKind::Bus
+                | super::model::VehicleKind::Truck
+                | super::model::VehicleKind::Tram
+        ) {
+            // ~16 frames × `GetAdvanceDistance` / `GetAdvanceSpeed`, con margen de aceleración.
+            let adv = crate::engine::get_advance_distance(self.movement_direction()).max(1);
+            let cruise = self.effective_engine().max_speed.max(1);
+            let speed_adv = crate::engine::get_advance_speed(cruise).max(1);
+            let units = adv.saturating_mul(16);
+            return units.div_ceil(speed_adv).saturating_mul(3).max(64);
+        }
         let step = self.progress_step().max(1);
         255_u32.div_ceil(u32::from(step))
     }
@@ -181,6 +194,17 @@ impl super::model::Vehicle {
             for _ in 0..2 {
                 self.train_loco_handler(map, train_accel);
             }
+            return;
+        }
+
+        if matches!(
+            self.kind,
+            super::model::VehicleKind::Bus
+                | super::model::VehicleKind::Truck
+                | super::model::VehicleKind::Tram
+        ) {
+            // Sin vecinos: el tick de simulación usa `road_vehicle_tick` con la flota.
+            crate::road_movement::road_vehicle_step_solo(self, map);
             return;
         }
 
@@ -534,7 +558,7 @@ impl super::model::Vehicle {
         }
     }
 
-    pub(super) fn advance_one_tile(&mut self, map: Option<&Map>) {
+    pub(crate) fn advance_one_tile(&mut self, map: Option<&Map>) {
         if let Some(next) = self.path.pop_front() {
             self.update_direction_step(self.pos, next, map);
             if self.orders.is_empty() {
@@ -620,7 +644,7 @@ impl super::model::Vehicle {
     /// Cambia `direction` aplicando penalización de curva del modelo original:
     /// carretera `v->cur_speed -= v->cur_speed >> 2` (`roadveh_cmd.cpp:1481`);
     /// tren `_accel_slowdown` solo con `AM_ORIGINAL` (`train_cmd.cpp:3564-3568`).
-    pub(super) fn set_direction_with_curve_penalty(
+    pub(crate) fn set_direction_with_curve_penalty(
         &mut self,
         new_dir: super::model::VehicleDirection,
         map: Option<&Map>,
@@ -729,7 +753,7 @@ impl super::model::Vehicle {
         }
     }
 
-    fn advance_destination_after_arrival(&mut self) {
+    pub(crate) fn advance_destination_after_arrival(&mut self) {
         self.path.clear();
         self.depart_turn = 0;
         if self.orders.is_empty() {
@@ -785,7 +809,7 @@ impl super::model::Vehicle {
         }
     }
 
-    fn holding_for_timetable(&self) -> bool {
+    pub(crate) fn holding_for_timetable(&self) -> bool {
         self.timetable_active && self.timetable_wait_remaining > 0
     }
 

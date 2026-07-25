@@ -174,7 +174,7 @@ mod coherence_tests {
         }
         state.vehicles.push(truck);
 
-        for t in 1..=400 {
+        for t in 1..=2_000 {
             state.step();
             if state.stats.cargo_units_delivered > 0 && state.vehicles[0].cargo == 0 {
                 assert!(

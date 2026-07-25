@@ -247,11 +247,16 @@ pub const FUND_BUILDINGS_RATING_BOOST: i8 = 50;
 pub const STATION_BUILD_RATING_PENALTY: i8 = -15;
 
 /// Añade pasajeros/correo en paradas bus según casas dentro del radio de cobertura.
+///
+/// La cantidad generada pasa por [`station::move_goods_to_station`]: el rating decide
+/// cuánto llega al andén. El reparto entre paradas que se pisan las mismas casas
+/// exige producción por casa (P1.7 del roadmap de paridad).
 pub fn produce_town_cargo(
     map: &Map,
     industries: &[Industry],
     stations: &mut [Station],
     tick: u64,
+    selectgoods: bool,
 ) -> (u64, u64) {
     if tick == 0 || !tick.is_multiple_of(TOWN_PRODUCE_TICKS) {
         return (0, 0);
@@ -260,34 +265,43 @@ pub fn produce_town_cargo(
     let mut passengers = 0_u64;
     let mut mail = 0_u64;
 
-    for station in stations {
-        if !matches!(station.stop_kind, StopKind::BusStop | StopKind::Airport) {
+    for idx in 0..stations.len() {
+        if !matches!(
+            stations[idx].stop_kind,
+            StopKind::BusStop | StopKind::Airport
+        ) {
             continue;
         }
-        let coverage = station::station_coverage_for(map, industries, station);
+        let coverage = station::station_coverage_for(map, industries, &stations[idx]);
         if coverage.house_tiles == 0 {
             continue;
         }
-        // Gate OpenTTD-style: dueño con rating bajo deja de atraer pax/correo.
-        let owner_rating = station::station_rating_for_company_cargo(
-            station,
-            station.owner,
+
+        let pax_room =
+            STATION_TOWN_CARGO_CAPACITY.saturating_sub(stations[idx].cargo_stock.passengers);
+        let mail_room = STATION_TOWN_CARGO_CAPACITY.saturating_sub(stations[idx].cargo_stock.mail);
+        let pax_amount = (coverage.house_tiles * PASSENGERS_PER_HOUSE).min(pax_room);
+        let mail_amount = (coverage.house_tiles * MAIL_PER_HOUSE).min(mail_room);
+        let source = stations[idx].pos;
+
+        passengers += u64::from(station::move_goods_to_station(
+            stations,
+            &[idx],
             CargoType::Passengers,
-        );
-        if owner_rating < station::TOWN_CARGO_MIN_OWNER_RATING {
-            continue;
-        }
-
-        station.ensure_packets_from_stock();
-        let pax_amount = (coverage.house_tiles * PASSENGERS_PER_HOUSE)
-            .min(STATION_TOWN_CARGO_CAPACITY.saturating_sub(station.cargo_stock.passengers));
-        let mail_amount = (coverage.house_tiles * MAIL_PER_HOUSE)
-            .min(STATION_TOWN_CARGO_CAPACITY.saturating_sub(station.cargo_stock.mail));
-
-        station.add_waiting_cargo(CargoType::Passengers, pax_amount);
-        station.add_waiting_cargo(CargoType::Mail, mail_amount);
-        passengers += u64::from(pax_amount);
-        mail += u64::from(mail_amount);
+            pax_amount,
+            source,
+            selectgoods,
+            None,
+        ));
+        mail += u64::from(station::move_goods_to_station(
+            stations,
+            &[idx],
+            CargoType::Mail,
+            mail_amount,
+            source,
+            selectgoods,
+            None,
+        ));
     }
 
     (passengers, mail)
@@ -409,12 +423,16 @@ mod tests {
         map.set_kind(TileCoord::new(8, 7), TileKind::House).unwrap();
 
         let mut stations = vec![Station::new_with_kind(stop_pos, StopKind::BusStop)];
+        // La parada ya tiene servicio: si no, selectgoods no deja llegar pasajeros.
+        stations[0].goods.get_mut(CargoType::Passengers).last_speed = 1;
+        stations[0].goods.get_mut(CargoType::Mail).last_speed = 1;
 
-        let (pax, mail) = produce_town_cargo(&map, &[], &mut stations, TOWN_PRODUCE_TICKS);
-        assert_eq!(pax, u64::from(2 * PASSENGERS_PER_HOUSE));
-        assert_eq!(mail, u64::from(2 * MAIL_PER_HOUSE));
-        assert_eq!(stations[0].cargo_stock.passengers, 2 * PASSENGERS_PER_HOUSE);
-        assert_eq!(stations[0].cargo_stock.mail, 2 * MAIL_PER_HOUSE);
+        let (pax, mail) = produce_town_cargo(&map, &[], &mut stations, TOWN_PRODUCE_TICKS, true);
+        // 4 pax × (175+1) >> 8 = 2; 2 mail × 176 >> 8 = 1.
+        assert_eq!(pax, 2);
+        assert_eq!(mail, 1);
+        assert_eq!(stations[0].cargo_stock.passengers, 2);
+        assert_eq!(stations[0].cargo_stock.mail, 1);
     }
 
     #[test]
@@ -424,7 +442,7 @@ mod tests {
         map.set_kind(TileCoord::new(2, 1), TileKind::House).unwrap();
         let mut stations = vec![Station::new_with_kind(pos, StopKind::TruckStop)];
 
-        let (pax, mail) = produce_town_cargo(&map, &[], &mut stations, TOWN_PRODUCE_TICKS);
+        let (pax, mail) = produce_town_cargo(&map, &[], &mut stations, TOWN_PRODUCE_TICKS, true);
         assert_eq!(pax, 0);
         assert_eq!(mail, 0);
     }

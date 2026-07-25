@@ -167,12 +167,25 @@ pub(super) fn produce_industries(state: &mut GameState, tick: u64) {
         state.stats.industry_cargo_units_produced += produced;
         state.industries[i].produced_total =
             state.industries[i].produced_total.saturating_add(produced);
+
+        // La producción no se queda en la mina: se reparte a las estaciones de la cobertura
+        // según su rating (`TransportIndustryGoods` / `MoveGoodsToStation`).
+        let _moved = crate::industry::transport_industry_goods(
+            &mut state.industries[i],
+            &mut state.stations,
+            state.order.selectgoods,
+        );
     }
 }
 
 pub(super) fn produce_town_demand(state: &mut GameState, tick: u64) {
-    let (passengers, mail) =
-        town::produce_town_cargo(&state.map, &state.industries, &mut state.stations, tick);
+    let (passengers, mail) = town::produce_town_cargo(
+        &state.map,
+        &state.industries,
+        &mut state.stations,
+        tick,
+        state.order.selectgoods,
+    );
     state.stats.town_passengers_generated += passengers;
     state.stats.town_mail_generated += mail;
 }

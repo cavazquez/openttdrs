@@ -281,7 +281,9 @@ pub(super) fn load_vehicles(
         if unloaded_this_tick[i] {
             continue;
         }
-        if physically_at {
+        // Con `MoveGoodsToStation` la mina vuelca al andén: el camión en la tesela de la
+        // industria carga de la estación que la cubre aunque no esté físicamente en ella.
+        if physically_at || station_has_industry_waiting(state, station_idx, &state.vehicles[i]) {
             try_load_from_station_waiting_cargo(state, i, station_idx, loaded_flag);
         }
     }
@@ -480,6 +482,10 @@ fn try_load_from_station_waiting_cargo(
         return false;
     }
 
+    // Aunque no haya carga, el intento cuenta: desbloquea selectgoods / MoveGoodsToStation.
+    let visit = state.vehicles[vehicle_idx].station_visit(state.tick.get());
+    station::note_station_load_attempt(&mut state.stations[station_idx], cargo, visit);
+
     let available = stock.get(cargo);
     let company = state.vehicles[vehicle_idx].owner;
     let rating =
@@ -655,16 +661,40 @@ fn station_index_for_industry_load(state: &GameState, vehicle: &crate::Vehicle) 
         .iter()
         .enumerate()
         .filter(|(_, station)| station.can_service_vehicle(vehicle.kind))
-        .find(|(_, station)| {
+        .find(|(idx, station)| {
             state.industries.iter().any(|ind| {
-                ind.pos == vpos
-                    && ind.stock > 0
-                    && station::industry_in_station_coverage(
-                        ind,
-                        station.pos,
-                        station::station_catchment_radius(station),
-                    )
+                if ind.pos != vpos {
+                    return false;
+                }
+                if !station::industry_in_station_coverage(
+                    ind,
+                    station.pos,
+                    station::station_catchment_radius(station),
+                ) {
+                    return false;
+                }
+                // Stock aún en la industria, o ya repartido al andén de esta estación.
+                ind.stock > 0 || state.stations[*idx].cargo_stock.get(ind.output_cargo()) > 0
             })
         })
         .map(|(idx, _)| idx)
+}
+
+/// ¿La estación tiene en espera la carga que produce alguna industria de su cobertura?
+fn station_has_industry_waiting(
+    state: &GameState,
+    station_idx: usize,
+    vehicle: &crate::Vehicle,
+) -> bool {
+    let Some(station) = state.stations.get(station_idx) else {
+        return false;
+    };
+    let radius = station::station_catchment_radius(station);
+    let preferred = vehicle.cargo_type;
+    state.industries.iter().any(|ind| {
+        let output = ind.output_cargo();
+        preferred.is_none_or(|c| c == output)
+            && station.cargo_stock.get(output) > 0
+            && station::industry_in_station_coverage(ind, station.pos, radius)
+    })
 }

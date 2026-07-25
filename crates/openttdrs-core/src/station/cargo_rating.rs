@@ -244,6 +244,19 @@ pub struct StationVisit {
     pub last_age: u8,
 }
 
+/// Anota que un vehículo intentó cargar aquí, aunque el andén estuviera vacío.
+///
+/// Con `selectgoods`, `MoveGoodsToStation` no entrega a estaciones que nadie ha visitado.
+/// Sin este registro, un bus en una parada nueva nunca vería pasajeros: no hay carga → no
+/// hay recogida → no hay `last_speed` → no llega carga.
+pub fn note_station_load_attempt(station: &mut Station, cargo: CargoType, visit: StationVisit) {
+    station.last_vehicle_type = Some(visit.vehicle_kind);
+    let entry = station.goods.get_mut(cargo);
+    // `last_speed == 0` significa «nunca»; un intento real siempre deja al menos 1.
+    entry.last_speed = visit.last_speed.max(1);
+    entry.last_age = visit.last_age;
+}
+
 /// Marca recogida reciente de un tipo de carga por una compañía.
 pub fn on_station_cargo_pickup(
     station: &mut Station,
@@ -251,10 +264,7 @@ pub fn on_station_cargo_pickup(
     company: CompanyId,
     visit: StationVisit,
 ) {
-    station.last_vehicle_type = Some(visit.vehicle_kind);
-    let entry = station.goods.get_mut(cargo);
-    entry.last_speed = visit.last_speed;
-    entry.last_age = visit.last_age;
+    note_station_load_attempt(station, cargo, visit);
     station.time_since_pickup.set(cargo, 0);
     station.company_pickup_slot_mut(company).set(cargo, 0);
     // La carga que sigue en el andén no rejuvenece: su antigüedad es la que cobrará al

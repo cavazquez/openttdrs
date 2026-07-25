@@ -2,7 +2,7 @@ use crate::CargoType;
 use crate::Climate;
 use crate::entity_history::IndustryHistory;
 use crate::map::TileCoord;
-use crate::station::{self, STATION_COVERAGE_RADIUS, Station, StopKind};
+use crate::station::{self, Station, StopKind};
 
 /// Ticks entre cada ciclo de producción (equivale a `INDUSTRY_PRODUCE_TICKS` del upstream).
 pub const INDUSTRY_PRODUCE_TICKS: u64 = 256;
@@ -430,11 +430,75 @@ fn covering_freight_station_indices(industry: &Industry, stations: &[Station]) -
             ) && station::industry_in_station_coverage(
                 industry,
                 station.pos,
-                STATION_COVERAGE_RADIUS,
+                station::station_catchment_radius(station),
             )
         })
         .map(|(idx, _)| idx)
         .collect()
+}
+
+/// Estaciones en cobertura que pueden recibir la producción de esta industria.
+fn covering_output_station_indices(industry: &Industry, stations: &[Station]) -> Vec<usize> {
+    let cargo = industry.output_cargo();
+    stations
+        .iter()
+        .enumerate()
+        .filter(|(_, station)| {
+            station.accepts_cargo(cargo)
+                && station::industry_in_station_coverage(
+                    industry,
+                    station.pos,
+                    station::station_catchment_radius(station),
+                )
+        })
+        .map(|(idx, _)| idx)
+        .collect()
+}
+
+/// Mueve stock de la industria a estaciones cercanas (`TransportIndustryGoods`).
+///
+/// Toma hasta 255 unidades del stock (como el `ClampTo<uint8_t>` del original) y las
+/// reparte con [`station::move_goods_to_station`]. Lo que el rating no deja pasar se
+/// pierde: ya no vuelve al stock de la industria.
+///
+/// Si ninguna estación puede recibir todavía (p. ej. `selectgoods` y nadie ha intentado
+/// cargar), el stock se deja en la industria para la carga directa: destruirlo dejaría
+/// las minas vacías hasta la primera visita.
+///
+/// Devuelve las unidades que acabaron en andenes.
+pub fn transport_industry_goods(
+    industry: &mut Industry,
+    stations: &mut [Station],
+    selectgoods: bool,
+) -> u32 {
+    if industry.stock == 0 {
+        return 0;
+    }
+    let cargo = industry.output_cargo();
+    let nearby = covering_output_station_indices(industry, stations);
+    let eligible: Vec<usize> = nearby
+        .into_iter()
+        .filter(|&idx| station::can_move_goods_to_station(&stations[idx], cargo, selectgoods))
+        .collect();
+    if eligible.is_empty() {
+        return 0;
+    }
+    let amount = industry.stock.min(255);
+    // Se detrae todo lo intentado, no solo lo entregado: el rating decide cuánto se pierde.
+    industry.stock = industry.stock.saturating_sub(amount);
+    let moved = station::move_goods_to_station(
+        stations,
+        &eligible,
+        cargo,
+        amount,
+        industry.pos,
+        selectgoods,
+        None,
+    );
+    if moved > 0 {
+        industry.transported_total = industry.transported_total.saturating_add(u64::from(moved));
+    }
+    moved
 }
 
 #[cfg(test)]
@@ -527,5 +591,50 @@ mod tests {
         stations[0].cargo_stock.wood = FACTORY_WOOD_INPUT;
         assert!(!fact.produce_from_nearby_stations(&mut stations, 512));
         assert_eq!(fact.stock, 0);
+    }
+
+    /// Dos estaciones sobre la misma mina se reparten el carbón según el rating:
+    /// servir bien la parada ya no es cosmética, decide quién se lleva la producción.
+    #[test]
+    fn two_stations_compete_for_mine_output_by_rating() {
+        let mine_pos = TileCoord::new(4, 4);
+        let mut mine = Industry::new(mine_pos, IndustryKind::CoalMine);
+        mine.stock = 255;
+
+        let mut good = Station::new_with_kind(TileCoord::new(3, 4), StopKind::TruckStop);
+        let mut bad = Station::new_with_kind(TileCoord::new(5, 4), StopKind::TruckStop);
+        good.goods.get_mut(CargoType::Coal).last_speed = 1;
+        bad.goods.get_mut(CargoType::Coal).last_speed = 1;
+        good.goods.get_mut(CargoType::Coal).rating = 200;
+        bad.goods.get_mut(CargoType::Coal).rating = 50;
+        let mut stations = vec![good, bad];
+
+        let moved = transport_industry_goods(&mut mine, &mut stations, true);
+        assert!(moved > 0);
+        assert_eq!(
+            mine.stock, 0,
+            "el intento detrae el stock aunque el rating recorte"
+        );
+        assert!(
+            stations[0].cargo_stock.coal > stations[1].cargo_stock.coal,
+            "buena {} vs mala {}",
+            stations[0].cargo_stock.coal,
+            stations[1].cargo_stock.coal
+        );
+    }
+
+    /// Con selectgoods, una estación nunca visitada no se lleva nada: el stock se queda
+    /// en la mina para la carga directa hasta que alguien intente cargar.
+    #[test]
+    fn unvisited_station_leaves_stock_on_industry() {
+        let mut mine = Industry::new(TileCoord::new(0, 0), IndustryKind::CoalMine);
+        mine.stock = 40;
+        let mut stations = vec![Station::new_with_kind(
+            TileCoord::new(1, 0),
+            StopKind::TruckStop,
+        )];
+        assert_eq!(transport_industry_goods(&mut mine, &mut stations, true), 0);
+        assert_eq!(mine.stock, 40);
+        assert_eq!(stations[0].cargo_stock.coal, 0);
     }
 }

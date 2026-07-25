@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use openttdrs_core::Command;
 use openttdrs_core::prelude::*;
-use openttdrs_core::{IndustryKind, IndustrySpec, PathNetwork, find_path};
+use openttdrs_core::{CargoType, IndustryKind, IndustrySpec, PathNetwork, find_path};
 
 /// Carretera del barrio residencial (eje X).
 pub const SHOWCASE_TOWN_ROAD_Y: i32 = 4;
@@ -78,6 +78,14 @@ fn place_town_block(state: &mut GameState) {
         state,
         &Command::PlaceBusStop(SHOWCASE_BUS_B, STATION_ENTRANCE_SOUTH),
     );
+    // El showcase no espera a que el bus marque la primera visita: sin esto,
+    // selectgoods deja las paradas sin pasajeros hasta el segundo ciclo de pueblo.
+    for station in &mut state.stations {
+        if station.stop_kind == StopKind::BusStop {
+            station.goods.get_mut(CargoType::Passengers).last_speed = 1;
+            station.goods.get_mut(CargoType::Mail).last_speed = 1;
+        }
+    }
 }
 
 fn place_factory_chain_block(state: &mut GameState) {

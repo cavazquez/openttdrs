@@ -32,6 +32,12 @@ pub struct GoodsEntry {
     /// Media de carga en espera por destino en el barrido anterior (`max_waiting_cargo`).
     #[serde(default)]
     pub max_waiting_cargo: u32,
+    /// Parte fraccionaria al recibir producción (`amount_fract`, 8 bits bajos).
+    ///
+    /// `MoveGoodsToStation` reparte en unidades × (`rating + 1`); aquí se acumula el resto
+    /// hasta completar una unidad entera (`UpdateStationWaiting`).
+    #[serde(default)]
+    pub amount_fract: u8,
 }
 
 const fn default_rating() -> u8 {
@@ -50,6 +56,7 @@ impl Default for GoodsEntry {
             last_speed: 0,
             last_age: 255,
             max_waiting_cargo: 0,
+            amount_fract: 0,
         }
     }
 }

@@ -642,6 +642,11 @@ fn town_generates_passengers_at_bus_stop_near_houses() {
         .unwrap();
     s.stations
         .push(Station::new_with_kind(stop_pos, StopKind::BusStop));
+    // Sin un bus que haya intentado cargar, selectgoods no mueve pasajeros al andén.
+    s.stations[0]
+        .goods
+        .get_mut(CargoType::Passengers)
+        .last_speed = 1;
 
     for _ in 0..TOWN_PRODUCE_TICKS {
         s.step();
@@ -873,6 +878,39 @@ fn onboard_cargo_ages_every_185_ticks() {
         s.step();
     }
     assert_eq!(s.vehicles[0].cargo_packets.max_periods_in_transit(), 1);
+}
+
+/// Tras producir, la mina reparte el carbón a las estaciones de su cobertura: el rating
+/// decide la tajada de cada una (`TransportIndustryGoods` / `MoveGoodsToStation`).
+#[test]
+fn mine_production_splits_between_competing_stations() {
+    let mut s = GameState::new(16, 16);
+    let mine_pos = TileCoord::new(8, 8);
+    s.industries
+        .push(Industry::new(mine_pos, IndustryKind::CoalMine));
+    let mut good = Station::new(TileCoord::new(6, 8));
+    let mut bad = Station::new(TileCoord::new(10, 8));
+    good.goods.get_mut(CargoType::Coal).last_speed = 1;
+    bad.goods.get_mut(CargoType::Coal).last_speed = 1;
+    good.goods.get_mut(CargoType::Coal).rating = 220;
+    bad.goods.get_mut(CargoType::Coal).rating = 40;
+    s.stations.push(good);
+    s.stations.push(bad);
+
+    for _ in 0..=INDUSTRY_PRODUCE_TICKS {
+        s.step();
+    }
+
+    assert_eq!(
+        s.industries[0].stock, 0,
+        "la producción se mueve a las estaciones, no se queda en la mina"
+    );
+    assert!(
+        s.stations[0].cargo_stock.coal > s.stations[1].cargo_stock.coal,
+        "la estación bien servida se lleva más: {} vs {}",
+        s.stations[0].cargo_stock.coal,
+        s.stations[1].cargo_stock.coal
+    );
 }
 
 /// Una estación abandonada pierde rating barrido a barrido en la simulación completa,

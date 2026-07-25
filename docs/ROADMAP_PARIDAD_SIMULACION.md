@@ -69,8 +69,8 @@ abrir el issue.
 | 2 | [P0.2](#p02--periodo-de-tránsito-de-la-carga---hecho) Periodo de tránsito 185 | P0 | S | hecho | Recalibra todos los ingresos, que hoy caen 2,5× más rápido |
 | 3 | [P0.4](#p04--rating-inicial-de-autoridad-local---hecho) Rating de autoridad local | P0 | S | hecho | Cambia la curva de arranque y es requisito de P1.9 |
 | 4 | [P1.1](#p11--updatestationrating-completo--hecho) `UpdateStationRating` + [P0.3](#p03--rating-inicial-de-estación--hecho-con-p11) | P1 | XL | hecho | Es lo que hace que servir bien una estación importe |
-| 5 | [P1.2](#p12--reparto-de-carga-entre-estaciones-competidoras) Reparto entre estaciones | P1 | L | siguiente | Cierra la mitad que le falta a P1.1: hoy el rating no reparte nada |
-| 6 | [P1.4](#p14--prod_level-y-cierre-de-industrias) Industrias dinámicas | P1 | XL | | Sin esto el mundo económico es estático y las rutas no caducan |
+| 5 | [P1.2](#p12--reparto-de-carga-entre-estaciones-competidoras--hecho) Reparto entre estaciones | P1 | L | hecho | Cierra la mitad que le faltaba a P1.1: el rating ya reparte la producción |
+| 6 | [P1.4](#p14--prod_level-y-cierre-de-industrias) Industrias dinámicas | P1 | XL | siguiente | Sin esto el mundo económico es estático y las rutas no caducan |
 | 7 | [P3.1](#tabla-p3) `GenerateTowns` / `GenerateIndustries` | P3 | XL | | Un mapa nuevo nace vacío: bloquea comparar una partida completa |
 | 8 | [P1.6](#p16--pago-diferido-de-transferencias) Pago diferido de transferencias | P1 | L | | El cobro inmediato hace rentables cadenas que no lo son |
 | 9 | [P2.1](#tabla-p2) Relojes calendario/economía | P2 | XL | | Habilita los barridos escalonados de los que todo depende |
@@ -195,7 +195,7 @@ con la clasificación de segmentos de señal y está reclasificada a P2 (detalle
 
 ## 5. P1 — Reglas de comportamiento
 
-Veintidós entradas, **una cerrada** (P1.1, que además absorbió P0.3).
+Veintidós entradas, **dos cerradas** (P1.1 —que además absorbió P0.3— y P1.2).
 
 ### P1.1 — `UpdateStationRating` completo · hecho
 
@@ -226,18 +226,30 @@ Veintidós entradas, **una cerrada** (P1.1, que además absorbió P0.3).
   [P1.10](#p110--efecto-real-de-la-publicidad), igual que `ModifyStationRatingAround`) y el número
   real de destinos: hoy `num_dests = 1`, que equivale al reparto manual del original.
 
-### P1.2 — Reparto de carga entre estaciones competidoras
+### P1.2 — Reparto de carga entre estaciones competidoras · hecho
 
-- **Problema** — no hay competencia: cada estación recoge lo suyo sin repartir con las demás que
-  cubren la misma industria.
-- **Original** — `MoveGoodsToStation` pondera por `rating + 1` y reparte entre estaciones y
-  compañías con `amount * company_best * station_rating / best_sum / company_sum`
-  (`station_cmd.cpp:4599-4660`).
-- **Port** — ausente; la carga se limita con `load_amount_for_rating` (`cargo_rating.rs:92-97`).
-- **Solución** — implementar el reparto en la entrega de producción a estaciones cercanas. Sin
-  esto, [P1.1](#p11--updatestationrating-completo--hecho) rinde la mitad de su valor: el rating ya
-  se calcula bien, pero nadie lo usa para decidir qué estación se lleva la producción.
-- **Coste** — L.
+- **Problema** — no había competencia: cada estación recogía lo suyo sin repartir con las demás que
+  cubrían la misma industria, y la producción primaria ni siquiera pasaba por el andén.
+- **Original** — `TransportIndustryGoods` saca el stock de la industria y `MoveGoodsToStation`
+  pondera por `rating + 1` y reparte entre estaciones y compañías con
+  `amount * company_best * station_rating / best_sum / company_sum`
+  (`station_cmd.cpp:4599-4660`, disparo en `industry_cmd.cpp:541`). El rating también decide
+  cuánto llega de verdad (`UpdateStationWaiting` hace `>> 8` sobre el escalado).
+- **Hecho** — `station/move_goods.rs` porta `CanMoveGoodsToStation`, `UpdateStationWaiting`
+  (con `amount_fract` en `GoodsEntry`) y `MoveGoodsToStation`. Tras cada ciclo de producción,
+  `transport_industry_goods` mueve hasta 255 unidades del stock a las estaciones en cobertura.
+  Los pueblos generan pax/correo por el mismo camino, así que el rating también recorta lo que
+  llega al andén. Con `selectgoods`, una estación nunca visitada no recibe nada: el stock se
+  queda en la industria (o no se genera en el pueblo) hasta que un vehículo intenta cargar
+  (`note_station_load_attempt`, aunque el andén esté vacío). El camión en la tesela de la mina
+  puede cargar del andén de la estación que la cubre. Tests
+  `two_stations_compete_for_mine_output_by_rating`, `mine_production_splits_between_competing_stations`,
+  `single_station_receives_rating_fraction`, `better_rated_station_gets_more_cargo`,
+  `companies_compete_by_best_rating`, `unvisited_station_leaves_stock_on_industry`.
+- **Pendiente** — el reparto entre paradas de bus que se pisan las mismas casas exige la
+  producción por casa de [P1.7](#p17--producción-de-pasajeros-por-casa); hoy cada parada genera
+  por su propio catchment. Tampoco está el consumidor exclusivo de industria
+  (`exclusive_consumer`).
 
 ### P1.3 — Producción industrial por spec
 

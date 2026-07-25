@@ -531,7 +531,7 @@ impl Industry {
         self.processing_output_amount()
     }
 
-    /// Unidades de salida tras consumir los lotes de [`Self::processing_inputs`].
+    /// Unidades de salida tras consumir los lotes de `Self::processing_inputs`.
     #[must_use]
     pub fn processing_output_amount(&self) -> u32 {
         if self.prod_level == PRODLEVEL_CLOSURE {

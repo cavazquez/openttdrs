@@ -62,6 +62,9 @@ target
 # Cobertura local (cargo llvm-cov / ./scripts/check.sh cov)
 /lcov.info
 /htmlcov/
+/fuzz/artifacts/
+/fuzz/corpus/
+/dist/
 
 # Logs crudos de ./scripts/bench_baseline.sh (#116); se versiona latest.md
 crates/openttdrs-core/benches/baselines/raw-*/

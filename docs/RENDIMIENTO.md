@@ -110,6 +110,37 @@ Script: [`scripts/bench_openttd_flatpak.sh`](../scripts/bench_openttd_flatpak.sh
 5. CargoDist / YAPF con flota — no medido en vacío
 6. LOD / atlas a zoom muy bajo (opcional; el tope de spawn ya evita el colapso)
 
+### Señales rail — índice espacial + globset acotado (#214)
+
+La simulación construye una vez un índice ordenado de teselas con señales y lo
+mantiene desde `_globset`. Los drenados posteriores recorren ese índice y solo
+calculan estados/combos dentro del cierre de dependencias afectado: no vuelven a
+barrer la grilla completa. Los goldens PBS/señales comparan el resultado con el
+update global y Criterion cubre mapas señalizados de 1024² y 4096².
+
+| Benchmark incremental | Señales | Tiempo medio |
+|-----------------------|--------:|-------------:|
+| `dense_1024` | 128 | **~271 µs** |
+| `dense_4096` | 2.048 | **~4,37 ms** |
+
+Medición local 2026-07-25 (Ryzen 5 9600X); el barrido único de inicialización
+queda fuera de la iteración de Criterion.
+
+```bash
+cargo bench -p openttdrs-core --bench sim_tick -- signal_glob_indexed
+```
+
+### CargoDist — reconstrucción agrupada por tick (#215)
+
+Las descargas actualizan primero todas las aristas de `link_graph` y ejecutan
+Demand + MCF **una sola vez al final de la fase de descarga**, antes de cargar.
+El runtime expone `station_flow_rebuilds` como contador diagnóstico no persistido,
+y Criterion cubre una ráfaga de 128 vehículos con CargoDist asimétrico.
+
+```bash
+cargo bench -p openttdrs-core --bench sim_tick -- cargodist/unload_burst_128
+```
+
 ### Issues
 
 1. ~~[#196](https://github.com/cavazquez/openttdrs/issues/196)~~ — nieve tile-loop
@@ -145,6 +176,8 @@ Informes HTML: `target/criterion/*/report/index.html`.
 | `sim_tick/large_256_world_gen/50` | mapa 256×256 + `apply_world_gen` (seed 116) | tick sobre mapa grande sin flota |
 | `sim_tick/large_1024_world_gen/50` | mapa 1024×1024 procedural (clon plantilla) | tick mapa grande sin flota |
 | `sim_tick/large_4096_world_gen/20` | mapa 4096×4096 (estado estable, sin clon) | tick mapa máximo sin flota |
+| `sim_tick/cargodist/unload_burst_128` | 128 camiones descargan con CargoDist asimétrico | una reconstrucción Demand + MCF por tick |
+| `signal_glob_indexed/dense_{1024,4096}` | corredores señalizados + un tren por corredor | drain incremental sin barrido completo de mapa |
 | `pathfinding/road/truck_bay/cold` | `truck_bay` | `find_path` Road load→deliver |
 | `pathfinding/road/truck_bay/hot_cache` | idem + `PathCache` | hit de `find_path_cached` |
 | `pathfinding/rail/train_line/cold` | `train_line` | YAPF depósito→estación A |

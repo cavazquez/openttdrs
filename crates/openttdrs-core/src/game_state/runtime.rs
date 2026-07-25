@@ -33,6 +33,9 @@ pub struct SimulationRuntime {
     /// Cola `_globset`: teselas que invalidan señales (movimiento / construcción).
     pub signal_globset: crate::rail_signals::SignalGlobSet,
 
+    /// Índice efímero de señales; evita barridos completos por cada drenado.
+    pub signal_spatial_index: crate::rail_signals::SignalSpatialIndex,
+
     /// Teselas con reserva PBS activa cuyo `m2_hi` cambió (remap cliente).
     pub reservation_tile_dirty: Vec<TileCoord>,
 
@@ -67,6 +70,12 @@ pub struct SimulationRuntime {
     /// `FlowStat` reconstruidos desde `link_graph` (no persistidos).
     pub station_flows: crate::flow_stat::StationFlows,
 
+    /// Reconstrucciones completas de `station_flows` desde que se creó este runtime.
+    ///
+    /// Contador diagnóstico para detectar regresiones en el hot path de `CargoDist`;
+    /// no forma parte del estado autoritativo ni se persiste.
+    pub station_flow_rebuilds: u64,
+
     /// Grabador opcional: cada `apply_command` exitoso se encola (plan IA progresiva).
     pub command_recorder: Option<VecDeque<Command>>,
 }
@@ -84,6 +93,7 @@ impl SimulationRuntime {
             tile_loop_visited: Vec::new(),
             signal_tile_dirty: Vec::new(),
             signal_globset: HashSet::new(),
+            signal_spatial_index: crate::rail_signals::SignalSpatialIndex::default(),
             reservation_tile_dirty: Vec::new(),
             reservation_tiles_active: HashSet::new(),
             pending_news_events: Vec::new(),
@@ -95,6 +105,7 @@ impl SimulationRuntime {
             shore_newgrf_sprites: Vec::new(),
             catenary_newgrf_sprites: Vec::new(),
             station_flows: crate::flow_stat::StationFlows::default(),
+            station_flow_rebuilds: 0,
             command_recorder: None,
         }
     }

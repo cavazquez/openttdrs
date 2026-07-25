@@ -2,8 +2,40 @@
 
 Madurez, mapeos C++↔Rust, gaps, UI, divergencias y oráculos. Roadmaps de producto: [PLANIFICACION.md](PLANIFICACION.md). Pin JSON y capturas siguen en `docs/parity/`.
 
+## Estado canónico actual
+
+**Fecha de corte: 2026-07-25. Referencia: OpenTTD 15.3, commit
+`14ec60f248547d4d062a1160f0fc26d742319888`.** Esta tabla es la fuente de
+verdad para el estado vigente. Las tablas detalladas posteriores conservan el
+mapeo y la evidencia de auditorías anteriores; ante una contradicción prevalece
+este bloque y debe corregirse la fila antigua en el mismo cambio.
+
+Leyenda: **alta** = jugable y ampliamente probado; **media** = funcional con
+semántica parcial; **inicial** = primer corte utilizable; **ausente** = todavía
+no existe. Ningún nivel implica compatibilidad binaria o de red con OpenTTD.
+
+| Área | Estado vigente | Evidencia y límite principal |
+|---|---|---|
+| Tick y determinismo | **Alta** | Tick de 27 ms, RNG/orden autoritativo, hash canónico, replay y save/load deterministas |
+| Carretera | **Alta funcional / media exacta** | Construcción, depósitos, paradas, overtaking y tablas de movimiento; quedan RVSB/dársenas y escala |
+| Ferrocarril | **Alta funcional / media exacta** | Consists, railtypes, señales, PBS/YAPF, túneles/puentes y plataformas; los oráculos externos cubren escenarios acotados |
+| Economía y carga | **Media** | 11 cargas temperate, packets, transfer/deliver, CargoDist y ratings; faltan reglas completas por clima/NewGRF |
+| Pueblos e industrias | **Media** | Crecimiento, casas/industrias vanilla y producción; contenido de Arctic/Tropic/Toyland incompleto |
+| Órdenes y horarios | **Media-alta en core / media en UI** | Full-load all/any, no-load/no-unload, transfer, non-stop/go-via, stop-location, refit de depósito, condicionales y timetable-start; la UI no expone todo |
+| Fiabilidad y servicio | **Media en core / inicial en UI** | Averías, intervalos días/porcentaje, servicio y autoenvío a depósito; falta el editor completo de intervalos/unbunch |
+| Aviones | **Media** | Aeropuertos FTA, compra, vuelo, ruido y crashes; presentación y casos límite incompletos |
+| Barcos | **Inicial** | Depósitos, docks, boyas, locks, compra y A* acuático; movimiento y órdenes todavía simplificados |
+| Guardado propio JSON | **Alta** | Formato versionado con migraciones y determinismo mid-run |
+| Compatibilidad `.sav` | **Inicial-media** | Import/export parcial; no es round-trip completo ni garantía de compatibilidad histórica |
+| NewGRF | **Media de parseo / inicial-media de runtime** | Actions 0–14 reconocidas y varios paths Action 1/2/3/5; callbacks y semántica total incompletos |
+| Multijugador | **Inicial** | Lockstep TCP, dedicated, late join y host migration; protocolo propio sin lobby, auth, cifrado ni interoperabilidad |
+| IA / GameScript / editor | **Inicial-media** | TransCargo/RoadHaul, GS-lite y editor propios; Squirrel compatible ausente |
+| Render/UI vanilla | **Media-alta visual / media funcional** | Cobertura OpenGFX amplia; no hay oracle visual total ni internacionalización completa |
+| Plataformas y release | **Preparada** | Checks Windows/macOS + paquetes reproducibles Linux x86_64, Windows x86_64 y macOS arm64; `0.1.0-alpha.1` aún sin tag/publicación |
+
 ## Índice
 
+- [Estado canónico](#estado-canónico-actual)
 - [Tick](#tick-de-simulación)
 - [Madurez road](#madurez-road--tick)
 - [Madurez rail](#madurez-rail)
@@ -192,8 +224,10 @@ aproximadas (Fases 2–3 del roadmap estructural).
 4. ~~**Sin consist**~~ **Mitigado (Fase 1 estructural)** — cadena
    loco+vagones, longitud cacheada, ocupación multi-tesela básica; falta
    paridad fina de geometría/PBS (Fase 3).
-5. **Señales sin PBS ni semántica ENTRY/EXIT/COMBO** y **salida de depósito
-   instantánea** (OpenTTD espera ~37 ticks y usa frames de entrada/salida).
+5. ~~**Sin PBS y salida de depósito instantánea**~~ **Mitigado** — hay PBS
+   parcial con oráculos externos y espera/salida de depósito de 37 ticks. La
+   divergencia vigente es la semántica completa ENTRY/EXIT/COMBO, los costes
+   YAPF y la geometría fina fuera de los fixtures cubiertos.
 
 ### Cómo regenerar la evidencia
 
@@ -287,8 +321,8 @@ cada pieza.
 | `RailTileType` (Normal=0, Signals=1, Depot=3) en `m5[6:2]` | `rail_map.h:23-40` | `map/types.rs` (`TileKind::Rail`/`RailDepot`; `RAIL_TILE_SIGNALS` en `rail_signals.rs`) | tests de mapeo binario (`map/mod.rs`) |
 | Autorail / merges de piezas | `rail_cmd.cpp` (`CmdBuildSingleRail`) | `rail_trackbits_from_neighbors`, `merge_rail_trackbits`, `junction_merge_for_neighbor` (`command/transport/{rail,shared}.rs`) | `autorail_crossing_two_lines_yields_clean_x_y_cross` y afines |
 | Fundaciones y vía en pendiente | `rail_cmd.cpp` (`CheckRailSlope`), `slope_func.h` | `map/rail_slope.rs` (`rail_trackbits_valid_on_slope`, `rail_foundation_for_trackbits`) + autoslope (`command/terraform.rs`) | `computed_tileh_matches_openrtd_sw` y tests de `rail_slope.rs` |
-| `RailTypeInfo` (railtypes, `curve_speed`, electrificación, conversión) | `rail.h:26-525`, `CmdConvertRail` | **No implementado** (sin `RailType` en core) | — (documentado en `rail_unknown_features.md`) |
-| Ownership de tile de vía | `rail_map.h` / `tile_map.h` (`GetTileOwner` en `m1`) | **No implementado** (`m1` se fuerza a 0 en `write_normal_rail_tile`) | — |
+| `RailTypeInfo` (railtypes, `curve_speed`, electrificación, conversión) | `rail.h:26-525`, `CmdConvertRail` | `rail_type.rs` + `RailConvert`: rail/electric/monorail/maglev, compatibilidad, velocidad de curva y catenaria; NewGRF parcial | tests de `rail_type.rs`, conversión y consist |
+| Ownership de tile de vía | `rail_map.h` / `tile_map.h` (`GetTileOwner` en `m1`) | `PlaceRail`, depósito, túnel y puente escriben la compañía activa en `m1` | `place_rail_and_road_write_active_company_owner_m1`, `place_rail_tunnel_and_bridge_write_active_company_owner_m1` |
 
 ### Movimiento de trenes
 
@@ -303,7 +337,7 @@ cada pieza.
 | Subcoordenadas por pieza `_vehicle_subcoord[enterdir][track]` | `vehicle.cpp:3359-3392` | **Evaluado (Rail 3E)**: golden 3A; render usa `train_straight_subtile` (centro); divergencia en piezas diagonales | `vehicle_subcoord_matches_rust_copy`, `train_diagonal_subcoord_approximation` |
 | `TrainController` (bucle de avance del frente) | `train_cmd.cpp:3359-3656` | `Vehicle::step` + `advance_one_tile` (pasos cardinales entre teselas; curvas solo vía track bits del pathfinder) | tests de `vehicle.rs` |
 | `ReverseTrainDirection` / dar la vuelta | `train_cmd.cpp` | `apply_immediate_train_turnaround` (automática) + `command/vehicles.rs::turn_around_vehicle` (manual) | `train_reverses_immediately_when_next_tile_opposite` |
-| Consist: `Next()`, `ConsistChanged`, `cached_total_length` | `train.h:74-188`, `train_cmd.cpp:110-254` | **No implementado** (tren puntual; `.sav` descarta vagones) | `decodes_front_vehicles_and_skips_wagons` |
+| Consist: `Next()`, `ConsistChanged`, `cached_total_length` | `train.h:74-188`, `train_cmd.cpp:110-254` | `train_consist/`: cadena loco+vagones, longitud/potencia/peso cacheados, pose por unidad e import `.sav`; faltan algunas operaciones finas de composición | `train_consist::*`, `decodes_front_vehicles_and_train_wagons`, oráculo consist+PBS v2 |
 
 ### Señales y reservas
 
@@ -313,7 +347,7 @@ cada pieza.
 | `UpdateSignalsOnSegment` (propagación por segmento) | `signal.cpp:280-660` | `update_rail_signal_states` + `rail_block_ahead` (modelo de bloque simplificado «v1») | `block_ahead_stops_at_next_signal`, `sim_train_waits_until_block_ahead_clears`, `train_signal_divergences_are_absent_after_rail_3d` |
 | Semántica ENTRY/EXIT/COMBO (presignals) | `signal_type.h`, `signal.cpp` | **Decidido (Rail 3D)**: encoding en saves; ENTRY ignorado al bloquear; EXIT/COMBO sin propagación | `entry_signal_does_not_block_train`, escenario `train_signal` |
 | Señal roja detiene el tren (`cur_speed=0`, `progress=255`) | `train_cmd.cpp:3454-3456` | `sim_step.rs` (tren bloqueado → `cur_speed = 0`, no avanza) | tests de integración de `rail_signals.rs` |
-| PBS: `TryReserveRailTrack`, `FollowTrainReservation`, señales `Path` | `pbs.cpp/h` | **No implementado** (`m2_hi` se conserva sin lógica; anticolisión propia vía `train_blocked_by_traffic`) | `trains_block_head_on_without_signal` |
+| PBS: `TryReserveRailTrack`, `FollowTrainReservation`, señales `Path` | `pbs.cpp/h` | Implementación parcial en `pathfinder/yapf.rs`, reservas por track y señales path; no cubre toda la semántica/escala de OpenTTD | `pbs_openttd_oracle`, `pbs_dual_curve_oracle`, oráculo consist+PBS v2 |
 
 ### Estaciones, depósitos, túneles
 
@@ -321,17 +355,17 @@ cada pieza.
 |---|---|---|---|
 | `CmdBuildRailStation` (plataformas × longitud, layout gfx) | `station_cmd.cpp:1447` | `command/transport/station.rs` (`place_rail_station_area`, `rail_station_layout`, 1..=7) | `place_rail_station_area_*` |
 | Entrada del tren a plataforma + `GetTrainStopLocation` (OSL near/middle/far) | `train_cmd.cpp:266-305`, `order_type.h:97-102` | **Paridad (Rail 3C)**: `rail_station_stop_tile` (Middle por defecto); `resolve_order_destination` → plataforma | `showcase_train_enters_rail_station_platform`, `train_platform_stop` |
-| Frenado sub-tile en plataforma `cur_speed = max(0, (stop-x)·20 − 15)` | `station_cmd.cpp:3874-3880` | **No implementado** | — |
+| Frenado y punto de parada en plataforma | `station_cmd.cpp:3846-3881`, `GetTrainStopLocation` | Implementación simplificada por distancia, longitud del consist y `OrderStopLocation`; no reproduce aún cada píxel del controlador C++ | `station::geometry` y tests `station_approach_max_speed_*` |
 | Waypoints | `waypoint_cmd.cpp` | `place_rail_waypoint` (solo vía recta X/Y) + orden `Waypoint` sin parada completa | `train_order_through_waypoint_advances_without_full_stop` |
 | Depósito: boca, reserva `m5` bit 4, frames leave | `rail_map.h:256-272`, `rail_cmd.cpp:2975-3044` (`TicksToLeaveDepot`) | `has/set_depot_reservation` + `ticks_to_leave_depot` + stagger de units | `depot_leave::*`, `depot_reservation_bit_roundtrips` |
 | Espera en depósito (`CheckTrainStayInDepot`, ~37 ticks + PBS) | `train_cmd.cpp:2354-2427` | `tick_train_stay_in_depot` + `try_path_reserve` + reentrada/force | `train_waits_37_ticks_*`, `second_train_waits_while_depot_reserved` |
-| Túnel/puente: wormhole, ocultamiento (`_tunnel_visibility_frame` {12,8,8,12}), límite de velocidad de puente | `tunnelbridge_cmd.cpp:1956-2087`, `train_cmd.cpp:427-429` | Colocación en `command/transport/bridge.rs`; tránsito como vía normal (bits X\|Y); **sin ocultar tren ni límite de puente** | 0 tests rail de túnel/puente (hueco detectado) |
+| Túnel/puente: wormhole, ocultamiento (`_tunnel_visibility_frame` {12,8,8,12}), límite de velocidad de puente | `tunnelbridge_cmd.cpp:1956-2087`, `train_cmd.cpp:427-429` | Colocación, tránsito, ocultamiento de sprite por frame y límite de velocidad por tipo; el wormhole sigue simplificado | `tunnel_hides_train_matches_visibility_frame`, `train_on_wooden_bridge_is_speed_capped` |
 
 ### Pathfinding
 
 | Concepto OpenTTD | Referencia C++ | Equivalente Rust | Validación |
 |---|---|---|---|
-| YAPF rail (`CYapfRail`, reserva durante pathfind) | `pathfinder/yapf/yapf_rail.cpp:36-604` | `pathfinder.rs` A* propio direccional `(tile, in_side)`; sin reservas ni penalizaciones YAPF | `astar_rail_requires_matching_axis`, `astar_rail_no_turn_at_plain_crossing` |
+| YAPF rail (`CYapfRail`, reserva durante pathfind) | `pathfinder/yapf/yapf_rail.cpp:36-604` | `pathfinder/yapf.rs`: trackdir, penalizaciones y reservas parciales; desempates/costes no son todavía equivalentes en todos los mapas | `golden_yapf`, PBS externos y tests `yapf_*` |
 | `CFollowTrackRail` (seguidor de vías) | `pathfinder/follow_track.hpp:27-507` | `rail_bit_for_sides`, `rail_bits_touching_side`, `rail_traversal_bits` (`pathfinder.rs:218-270`) | tests de conectividad; falta golden piezas×lados |
 | Depósito solo por la boca | `train_cmd.cpp` + `depot_map.h` | `rail_depot_mouth` (`pathfinder.rs:274-278`) | `rail_depot_beside_x_line_connects_exit_tile` |
 | Estación no transitable salvo origen/destino | `yapf_rail.cpp` (penalización plataforma) | trenes no rutean a través de plataformas (`astar_rail_station_reaches_track_below_entrance`) | test citado |
@@ -675,7 +709,7 @@ OpenTTD: `VehicleViewWindow` (`vehicle_gui.cpp:3007-3503`). Cliente:
 | Barra de estado (`GetVehicleStatusString`): velocidad + destino + «parado» + averiado + atascado | Status corto bajo viewport (#174): Detenido / En marcha a X km/h → destino / Sin ruta / Averiado / PBS | ✔ esencial |
 | Start/stop (`StartStopVehicle`) | Icono ▶/■ + tooltip (`ToggleVehicleRunning`) | ✔ |
 | Toolbar de iconos (vista) | Fila de iconos + tooltips (#174); Horario/Detalles/Depósito/… | ✔ chrome; sprites GUI nativos OpenTTD opcionales |
-| Ir a depósito (`SendVehicleToDepot`, Ctrl = servicio) | «Depósito» (`AppendGotoNearestDepot`) | ✔ funcional; la variante «servicio» es **C** (no hay intervalos de servicio) |
+| Ir a depósito (`SendVehicleToDepot`, Ctrl = servicio) | «Depósito» (`AppendGotoNearestDepot`) | ✔ funcional; core soporta servicio por intervalo y autoenvío road, pero falta exponer el modificador/acción completa en UI |
 | Refit (`ShowVehicleRefitWindow`) | `RefitWindow` lista + coste/cap.; View y Details; parcial por unidad | ✔ (#178); `OrderRefit` sigue **B** |
 | Clonar desde la ventana | Solo desde el depósito | **A** |
 | Dar la vuelta (`ReverseTrainDirection`/`TurnRoadVehicle`) | «Dar la vuelta» (`TurnAroundVehicle`, solo tren) | ✔ tren; road es **B** |
@@ -698,7 +732,7 @@ y **una fila por unidad** (sprite lateral + texto según tab; scroll).
 | Beneficio este año / anterior | Resumen tab Totales | ✔ (campo en vehículo) |
 | Peso/potencia/esfuerzo tractor (TE) | Peso/potencia por unidad y consist | **A** para peso/potencia; TE es **B** |
 | Fiabilidad + nº de averías | Fiabilidad en fila Info; averías no | Fiabilidad ✔; averías **C** |
-| Intervalo de servicio (`ChangeServiceInterval`, dropdown días/%/min) | No existe | **C** — no hay servicio en la sim |
+| Intervalo de servicio (`ChangeServiceInterval`, dropdown días/%/min) | No hay editor UI | La sim soporta intervalo en días o porcentaje, revisión y autoenvío road; falta el comando/editor por vehículo y la opción minutos |
 | **Lista de vagones con 4 pestañas** (cargo/info/capacidad/totales por vagón) | Filas con sprite + datos por tab (#175) | ✔ |
 
 Con tren puntual, lo máximo alcanzable hoy es una ventana de detalles de
@@ -716,13 +750,13 @@ picker; no ocupa el borde derecho de forma permanente.
 | Lista de órdenes con orden activa | Sí (32 slots, resaltado, marcador `>`) | ✔ |
 | Insertar por clic en mapa (`GetOrderCmdFromTile`) | Sí: picker de destino + clic en mapa + `destination_window` | ✔ |
 | Skip / delete / reordenar (drag) | Saltar, Borrar, ↑/↓ + drag nativo (#194) | ✔ |
-| Full load (variantes any/all) | Flag «Carga compl.» (una variante) | ✔ básico; variantes **B** |
-| Unload / **transfer** / no unload | Solo «No descargar» | unload forzado y transfer son **B** (transfer necesita feeder share en core → más bien **C**) |
-| **Non-stop / go via** | No existe | **C** hoy: la sim no tiene paradas intermedias implícitas (los vehículos no paran en estaciones de paso), así que non-stop es el único comportamiento; documentado como divergencia semántica, no como botón faltante. Cambia si se implementa `ShouldStopAtStation` |
-| Acción de depósito en orden (always/service/halt/unbunch) | «Parar depós.» (equivale a halt) | ✔ halt; service/unbunch **C** (no hay servicio) |
-| **Refit en orden** (`OrderRefit`) | No existe | **B** |
+| Full load (variantes any/all) | UI alterna «Carga compl.» all; core y codec `.sav` distinguen all/any/no-load | ✔ básico; falta selector completo en UI |
+| Unload / **transfer** / no unload | UI expone «No descargar»; core implementa transfer con feeder share y no-load/no-unload | Falta exponer transfer/no-load y unload forzado en UI |
+| **Non-stop / go via** | Core y codec implementan `OrderNonStop`; no hay control UI | Semántica parcial de estaciones intermedias; falta selector y más escenarios oracle |
+| Acción de depósito en orden (always/service/halt/unbunch) | UI alterna parada; core soporta servicio si hace falta | ✔ halt/service parcial; unbunch ausente |
+| **Refit en orden** (`OrderRefit`) | Refit en orden de depósito (`refit_cargo`) y botón de ciclo | ✔ para depósito; faltan variantes/selección completa por unidad |
 | Condicionales (variable+comparador+valor) | Sí, limitado (carga >50 %, salto fijo) | **B** para más variables/comparadores (el core ya tiene `Conditional`) |
-| **Stop location de trenes (near/middle/far)** (`MOF_STOP_LOCATION`, doble clic) | No existe | **C** hasta la Fase Rail 3C: sin entrada a plataforma el punto de parada no significa nada. Portarlo junto con `GetTrainStopLocation` |
+| **Stop location de trenes (near/middle/far)** (`MOF_STOP_LOCATION`, doble clic) | Core y codec implementan near/middle/far; sin control UI | ✔ semántica simplificada; falta selector y oráculo por píxel |
 | Órdenes compartidas (lista de vehículos, stop sharing) | Crear/desvincular desde depósito; sin lista de compartidos | **A** para la lista; la mecánica ya existe |
 | Ir a depósito más cercano (dropdown GOTO) | `AppendGotoNearestDepot` desde ventana vehículo | ✔ |
 | Waypoints en órdenes | Sí (solo trenes, sin parada completa) | ✔ |
@@ -743,7 +777,7 @@ OpenTTD: `TimetableWindow` (`timetable_gui.cpp:174-863`). Cliente:
 | Reset de retraso (`SetVehicleOnTime`) | «Poner en hora» | ✔ |
 | Resumen retraso/adelanto | Sí | ✔ |
 | **Velocidad máxima por tramo** | No existe | **B** (campo por orden + clamp en `update_movement_speed`) |
-| Fecha de inicio (`SetTimetableStart`) | No existe | **B**, valor moderado con tick ~37 Hz |
+| Fecha de inicio (`SetTimetableStart`) | Core/Command implementados; no expuesto en la ventana | **A/B**: falta control UI y validación de calendario |
 | Llegada/salida esperadas por orden | No existe | **A** (derivable de los tiempos) |
 
 ### 6. Ventana de refit
@@ -799,7 +833,7 @@ Checklist OpenTTD vs openttdrs vs acción (epic UI-Layout #172).
 | Compra | matriz sprites | Filas con sprite + stats | ✔ chrome (#179); TE/ocultar motor **B** |
 | Lista flota | sprites + mass actions | Filas con sprite + start/stop (#182) | ✔ chrome; grupos/mass **A/B** |
 
-Bloqueado por sim / OOS: NewGRF params, cheats, multi-instance, servicio/averías (**C**).
+Parcial/OOS: callbacks NewGRF completos, cheats, multi-instance y UI completa de servicio/averías. El core ya modela fiabilidad, averías e intervalos.
 
 ### Resumen: qué tan cerca podemos llegar
 
@@ -807,8 +841,8 @@ Bloqueado por sim / OOS: NewGRF params, cheats, multi-instance, servicio/avería
 |---|---|---|
 | Ya en paridad funcional (✔) | start/stop, vender, vender todo, clonar, autoreemplazo, comprar, órdenes básicas + condicionales + skip + reorden, waypoints, horarios con autofill, reversa/forzar paso de tren, centrar/ir a destino, renombrar vehículo | La mecánica de comandos está prácticamente completa para vehículos puntuales |
 | Alcanzable solo con UI (A) | sprites en filas de depósito, scroll >8 vehículos, string de estado con destino, edad/peso/potencia en detalles, ventana de refit con lista, lista de órdenes compartidas, drag para reordenar órdenes, llegada/salida esperadas, más criterios de orden en compra, clonar desde ventana de vehículo | Un paquete de trabajo de cliente sin tocar core |
-| Comando chico en core (B) | refit en orden, transfer/unload forzado, variantes de full load, más condicionales, velocidad máx. por tramo de horario, renombrar depósito/grupo, TE en `EngineDef`, dar la vuelta para road, ventana de flota/grupos completa | Cambios acotados, sin riesgo de paridad de sim |
-| Bloqueado por la sim (C) | PBS/reservas finas, servicio/averías/unbunch, beneficio por vehículo, non-stop/paradas de paso avanzadas | Consist ya no bloquea; ver Fases 2–3 en `PLANIFICACION.md` § estructural |
+| Comando chico en core (B) | unload forzado, más condicionales, velocidad máx. por tramo de horario, renombrar depósito/grupo, TE en `EngineDef`, dar la vuelta para road | Cambios acotados; transfer, full-load variants, refit de depósito y timetable-start ya existen en core |
+| Requiere ampliar la sim (C) | PBS/reservas finas, unbunch y paradas intermedias avanzadas | Consist, servicio/averías y beneficio por vehículo ya no bloquean; falta profundidad y UI |
 
 **El techo actual**: Fase 1 desbloqueó consist en core y un MVP de UI
 (compra+enganche, reorden clic A→B, render de trailers, venta de cadena).
@@ -820,11 +854,11 @@ vagón) más Fases 2–3 de sim (packets, PBS).
 1. Paquete A de depósito + vehículo (sprites en filas, scroll, string de
    estado, detalles con edad/peso/potencia) — máxima paridad visible sin
    tocar core.
-2. Paquete B de órdenes (refit en orden, unload/transfer básico, variantes
-   full load) — cierra la ventana de órdenes casi por completo.
+2. Exponer en UI lo ya presente en core (full-load any/no-load, transfer,
+   non-stop, stop-location y timetable-start) y completar unload forzado.
 3. Ventana de flota + grupos (A/B) — único subsistema de gestión ausente.
-4. Stop location y lo demás de trenes: después de la Fase Rail 3C.
-5. Consist: decisión estructural previa (fuera del alcance de UI).
+4. Afinar stop-location y consist contra oráculos más largos; la estructura
+   base de ambos ya existe.
 
 ### Tests hoy y huecos
 

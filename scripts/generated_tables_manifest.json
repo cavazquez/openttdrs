@@ -13,8 +13,9 @@
       ],
       "check": "regenerate_or_hash",
       "requires_opengfx": false,
-      "output_sha256": "0126f3321dfbb1d07cd891caeec203371bc8821ffbeddcf7ac6a97d030656874",
-      "license": "GPL-2.0-only (derivado de OpenTTD table/town_land.h)"
+      "output_sha256": "b8c538bd8a748a24734c5dc9b42b6cf723c49f70a55a12a245ffd4323c1e5f6a",
+      "license": "GPL-2.0-only (derivado de OpenTTD table/town_land.h)",
+      "note": "Regenerado 2026-07-25 desde el pin OpenTTD; rustfmt_skip mantiene estable el formato emitido."
     },
     {
       "id": "house_draw_data",
@@ -26,9 +27,9 @@
       ],
       "check": "hash",
       "requires_opengfx": true,
-      "output_sha256": "259d9758fe8225572f930c13e9caf00cc4649c6d0aefb158cc4ef61a3812a844",
+      "output_sha256": "06f06a487373eb1bf46fa603e747f9080413b5cc7936e5bc99323bc3cbd3536d",
       "license": "GPL-2.0-only (OpenTTD) + offsets OpenGFX locales",
-      "note": "Regenerado 2026-07-16 con OpenGFX local (264 offsets/dims vs pin anterior). CI solo hash. rustfmt_skip para mantener filas compactas."
+      "note": "Regenerado y verificado 2026-07-25 con OpenGFX local; CI solo hash. rustfmt_skip mantiene filas compactas."
     },
     {
       "id": "vehicle_gfx_data",
@@ -48,9 +49,9 @@
       "inputs": [],
       "check": "hash",
       "requires_opengfx": true,
-      "output_sha256": "f6e4c8c051be578c97a4139cf6eada2bfec3781de46476ebd6a3e17093f74082",
+      "output_sha256": "d99b14fffa1769747604d4e1178f3ab31fbcfc0a72f7d28ffb5193c27c768166",
       "license": "layout derivado de PNG OpenGFX locales",
-      "note": "gen --check no escribe atlas PNG; CI solo hash del .rs."
+      "note": "Regenerado y verificado 2026-07-25 con OpenGFX local; CI solo hash del .rs. rustfmt_skip evita drift mecánico."
     }
   ],
   "inventory": [

@@ -6,6 +6,7 @@
 #   ./scripts/check.sh fmt    # Solo formatear
 #   ./scripts/check.sh fmt-check  # Solo verificar formato (como CI)
 #   ./scripts/check.sh lint   # Clippy estricto (como CI)
+#   ./scripts/check.sh doc    # Rustdoc del workspace con warnings como errores
 #   ./scripts/check.sh test   # Tests del workspace
 #   ./scripts/check.sh cov    # Tests + informe LCOV (requiere cargo-llvm-cov + llvm-tools-preview)
 #   ./scripts/check.sh ci     # Paridad con .github/workflows/ci.yml (sin instalar APT)
@@ -18,7 +19,6 @@
 #   ./scripts/check.sh parity-docs  # frescura docs tick/carga (#125)
 #
 # Excepciones documentadas (solo en GitHub Actions, no en `ci` local):
-#   - rustdoc (`cargo doc -D warnings`) — #103
 #   - cargo-audit / cargo-deny — #106
 #   - cobertura llvm-cov en push a main (y workflow Coverage manual)
 #   - fetch OpenTTD pin + mutación de tablas generadas (`generated-tables` con --fetch-upstream)
@@ -58,6 +58,12 @@ do_lint() {
     info "Ejecutando Clippy (workspace, -D warnings)..."
     cargo clippy --workspace --all-targets -- -D warnings
     info "Clippy OK ✓"
+}
+
+do_rustdoc() {
+    info "Validando rustdoc (workspace, -D warnings)..."
+    RUSTDOCFLAGS="-D warnings" cargo doc --workspace --all-features --no-deps
+    info "Rustdoc OK ✓"
 }
 
 do_test() {
@@ -140,7 +146,7 @@ do_coverage() {
         return 1
     fi
     info "Generando cobertura (workspace, LCOV en lcov.info)..."
-    cargo llvm-cov --workspace --all-targets --lcov --output-path lcov.info
+    cargo llvm-cov --workspace --all-targets --lcov --output-path lcov.info --fail-under-lines 68
     info "Listo: lcov.info (subilo a Codecov o abrí con un visor LCOV) ✓"
 }
 
@@ -192,6 +198,7 @@ do_ci() {
         do_lint
         do_test
     fi
+    do_rustdoc
     do_tnbp
     do_ci_python
     do_generated_tables
@@ -203,6 +210,7 @@ case "${1:-all}" in
     fmt)         do_fmt ;;
     fmt-check)   do_fmt_check ;;
     lint)        do_lint ;;
+    doc)         do_rustdoc ;;
     test)        do_test ;;
     tnbp)        do_tnbp ;;
     golden)      do_golden_parse_sav ;;
@@ -221,7 +229,7 @@ case "${1:-all}" in
     ci)          do_ci ;;
     all)         do_all ;;
     *)
-        echo "Uso: $0 {fmt|fmt-check|lint|test|tnbp|golden|py|ci-python|generated-tables|generated-tables-ci|openttd-ref|snapshot-oracle|audit|cov|build|doctor|bench|parity-docs|ci|all}"
+        echo "Uso: $0 {fmt|fmt-check|lint|doc|test|tnbp|golden|py|ci-python|generated-tables|generated-tables-ci|openttd-ref|snapshot-oracle|audit|cov|build|doctor|bench|parity-docs|ci|all}"
         exit 1
         ;;
 esac

@@ -102,7 +102,7 @@ impl super::model::Vehicle {
         self.interval_requires_service(false)
     }
 
-    /// Igual que [`requires_service`] pero con intervalo en % si la compañía lo usa.
+    /// Igual que [`Self::requires_service`] pero con intervalo en % si la compañía lo usa.
     #[must_use]
     pub fn requires_service_for_company(&self, servint_ispercent: bool) -> bool {
         self.interval_requires_service(servint_ispercent)

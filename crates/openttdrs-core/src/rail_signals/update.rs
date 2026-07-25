@@ -1,6 +1,6 @@
 //! Invalidación globset y escritura de estados verde/rojo.
 
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 
 use crate::map::{Map, TileCoord, TileKind};
 use crate::vehicle::{Vehicle, VehicleKind};
@@ -11,8 +11,8 @@ use super::encoding::{
     SIGTYPE_BLOCK, SIGTYPE_COMBO, SIGTYPE_ENTRY, rail_signal_present_mask, signal_type_for_track,
 };
 use super::presignal::{
-    compute_exit_signal_greens, explore_sig_segment, refresh_signal_tile_states,
-    stabilize_combo_presignal_greens,
+    compute_exit_signal_greens_scoped, explore_sig_segment, refresh_signal_tile_states,
+    stabilize_combo_presignal_greens_scoped,
 };
 use super::rail_tile_is_signals;
 use super::topology::rail_block_ahead_with_wormholes;
@@ -48,6 +48,70 @@ impl SignalGlobEntry {
 
 /// Cola de invalidación de señales (`_globset` de `signal.cpp`).
 pub type SignalGlobSet = HashSet<SignalGlobEntry>;
+
+/// Índice efímero y ordenado de teselas con señales.
+///
+/// La primera consulta recorre el mapa; los drenados siguientes sincronizan solo
+/// las teselas presentes en `_globset`, incluidas altas y bajas por comandos.
+#[derive(Debug, Clone, Default)]
+pub struct SignalSpatialIndex {
+    tiles: BTreeSet<TileCoord>,
+    initialized: bool,
+    full_map_scans: u64,
+}
+
+impl SignalSpatialIndex {
+    /// Cantidad de teselas de señal actualmente indexadas.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.tiles.len()
+    }
+
+    /// `true` si todavía no hay señales indexadas.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.tiles.is_empty()
+    }
+
+    /// Barridos completos usados para inicializar/reconstruir el índice.
+    #[must_use]
+    pub const fn full_map_scans(&self) -> u64 {
+        self.full_map_scans
+    }
+
+    fn ensure_initialized(&mut self, map: &Map) {
+        if self.initialized {
+            return;
+        }
+        self.tiles.clear();
+        let (w, h) = map.dimensions();
+        for y in 0..i32::try_from(h).unwrap_or(i32::MAX) {
+            for x in 0..i32::try_from(w).unwrap_or(i32::MAX) {
+                let c = TileCoord::new(x, y);
+                if map.get(c).is_some_and(is_signal_tile) {
+                    self.tiles.insert(c);
+                }
+            }
+        }
+        self.initialized = true;
+        self.full_map_scans = self.full_map_scans.saturating_add(1);
+    }
+
+    fn sync_glob_tiles(&mut self, map: &Map, seeds: &SignalGlobSet) {
+        self.ensure_initialized(map);
+        for entry in seeds {
+            if map.get(entry.tile).is_some_and(is_signal_tile) {
+                self.tiles.insert(entry.tile);
+            } else {
+                self.tiles.remove(&entry.tile);
+            }
+        }
+    }
+}
+
+fn is_signal_tile(tile: crate::map::Tile) -> bool {
+    tile.kind == TileKind::Rail && rail_tile_is_signals(tile.m5)
+}
 
 /// `true` si el globset alcanzó el umbral de flush (64).
 #[must_use]
@@ -106,62 +170,94 @@ pub fn collect_signals_affected_by_tiles_with_wormholes(
     if seeds.is_empty() {
         return HashSet::new();
     }
-    let seed_tiles: HashSet<TileCoord> = seeds.iter().map(|e| e.tile).collect();
     let (w, h) = map.dimensions();
-    let mut affected = HashSet::new();
-    let mut signal_tiles = Vec::new();
+    let mut signal_tiles = BTreeSet::new();
     for y in 0..i32::try_from(h).unwrap_or(i32::MAX) {
         for x in 0..i32::try_from(w).unwrap_or(i32::MAX) {
             let c = TileCoord::new(x, y);
-            let Some(tile) = map.get(c) else {
-                continue;
-            };
-            if tile.kind != TileKind::Rail || !rail_tile_is_signals(tile.m5) {
-                continue;
-            }
-            signal_tiles.push(c);
-            if seed_tiles.contains(&c) {
-                affected.insert(c);
-            }
-            let present = rail_signal_present_mask(tile.m3);
-            let rails = tile.m5 & 0x3F;
-            for bit in 0..4u8 {
-                if present & (1 << bit) == 0 {
-                    continue;
-                }
-                let exit_dir = signal_exit_dir(rails, bit);
-                let block = rail_block_ahead_with_wormholes(map, c, exit_dir, wormholes);
-                if block.iter().any(|t| seed_tiles.contains(t)) {
-                    affected.insert(c);
-                }
+            if map.get(c).is_some_and(is_signal_tile) {
+                signal_tiles.insert(c);
             }
         }
     }
-    // Entries/combos aguas arriba que dependen de exits afectadas.
-    for &c in &signal_tiles {
-        if affected.contains(&c) {
-            continue;
-        }
+    collect_signals_affected_from_candidates(map, seeds, &signal_tiles, wormholes)
+}
+
+/// Consulta incremental usando un índice persistente de señales.
+#[must_use]
+pub fn collect_signals_affected_by_tiles_indexed(
+    map: &Map,
+    seeds: &SignalGlobSet,
+    index: &mut SignalSpatialIndex,
+    wormholes: Option<&crate::pathfinder::TunnelWormholes>,
+) -> HashSet<TileCoord> {
+    if seeds.is_empty() {
+        return HashSet::new();
+    }
+    index.sync_glob_tiles(map, seeds);
+    collect_signals_affected_from_candidates(map, seeds, &index.tiles, wormholes)
+}
+
+fn collect_signals_affected_from_candidates(
+    map: &Map,
+    seeds: &SignalGlobSet,
+    signal_tiles: &BTreeSet<TileCoord>,
+    wormholes: Option<&crate::pathfinder::TunnelWormholes>,
+) -> HashSet<TileCoord> {
+    let seed_tiles: HashSet<_> = seeds.iter().map(|entry| entry.tile).collect();
+    let mut affected = HashSet::new();
+    for &c in signal_tiles {
         let Some(tile) = map.get(c) else {
             continue;
         };
+        if seed_tiles.contains(&c) {
+            affected.insert(c);
+        }
         let present = rail_signal_present_mask(tile.m3);
         let rails = tile.m5 & 0x3F;
         for bit in 0..4u8 {
             if present & (1 << bit) == 0 {
                 continue;
             }
-            let sig_type = signal_track_for_bit(rails, bit)
-                .map_or(SIGTYPE_BLOCK, |track| signal_type_for_track(tile.m2, track));
-            if sig_type != SIGTYPE_ENTRY && sig_type != SIGTYPE_COMBO {
-                continue;
-            }
             let exit_dir = signal_exit_dir(rails, bit);
-            let probe = explore_sig_segment(map, c, exit_dir, wormholes);
-            if probe.exits.iter().any(|(t, _)| affected.contains(t)) {
+            let block = rail_block_ahead_with_wormholes(map, c, exit_dir, wormholes);
+            if block.iter().any(|tile| seed_tiles.contains(tile)) {
                 affected.insert(c);
-                break;
             }
+        }
+    }
+
+    // Cierre de dependencias presignal en ambos sentidos. Una entry/combo
+    // afectada necesita los estados de sus exits; una exit afectada invalida
+    // entries/combos aguas arriba. Se itera sobre el índice, nunca sobre la grilla.
+    loop {
+        let count_before = affected.len();
+        for &c in signal_tiles {
+            let Some(tile) = map.get(c) else {
+                continue;
+            };
+            let present = rail_signal_present_mask(tile.m3);
+            let rails = tile.m5 & 0x3F;
+            for bit in 0..4u8 {
+                if present & (1 << bit) == 0 {
+                    continue;
+                }
+                let sig_type = signal_track_for_bit(rails, bit)
+                    .map_or(SIGTYPE_BLOCK, |track| signal_type_for_track(tile.m2, track));
+                if sig_type != SIGTYPE_ENTRY && sig_type != SIGTYPE_COMBO {
+                    continue;
+                }
+                let probe = explore_sig_segment(map, c, signal_exit_dir(rails, bit), wormholes);
+                if probe.exits.iter().any(|(exit, _)| affected.contains(exit)) {
+                    affected.insert(c);
+                }
+                if affected.contains(&c) {
+                    affected.extend(probe.exits.into_iter().map(|(exit, _)| exit));
+                }
+            }
+        }
+        if affected.len() == count_before {
+            break;
         }
     }
     affected
@@ -212,8 +308,9 @@ pub fn update_rail_signal_states_scoped(
     if scope.is_some_and(HashSet::is_empty) {
         return;
     }
-    let exit_green = compute_exit_signal_greens(map, vehicles, wormholes);
-    let signal_green = stabilize_combo_presignal_greens(map, vehicles, &exit_green, wormholes);
+    let exit_green = compute_exit_signal_greens_scoped(map, vehicles, wormholes, scope);
+    let signal_green =
+        stabilize_combo_presignal_greens_scoped(map, vehicles, &exit_green, wormholes, scope);
     let refresh_one = |map: &mut Map, c: TileCoord, dirty: &mut Vec<TileCoord>| {
         let Some(tile) = map.get(c) else {
             return;
@@ -264,6 +361,26 @@ pub fn drain_signal_globset_with_wormholes(
         return;
     }
     let affected = collect_signals_affected_by_tiles_with_wormholes(map, globset, wormholes);
+    globset.clear();
+    if affected.is_empty() {
+        return;
+    }
+    update_rail_signal_states_scoped(map, vehicles, dirty, false, Some(&affected), wormholes);
+}
+
+/// Drena `_globset` usando un índice persistente, sin barrer la grilla tras inicializarlo.
+pub fn drain_signal_globset_indexed_with_wormholes(
+    map: &mut Map,
+    vehicles: &[Vehicle],
+    dirty: &mut Vec<TileCoord>,
+    globset: &mut SignalGlobSet,
+    index: &mut SignalSpatialIndex,
+    wormholes: Option<&crate::pathfinder::TunnelWormholes>,
+) {
+    if globset.is_empty() {
+        return;
+    }
+    let affected = collect_signals_affected_by_tiles_indexed(map, globset, index, wormholes);
     globset.clear();
     if affected.is_empty() {
         return;

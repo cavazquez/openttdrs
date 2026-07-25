@@ -734,6 +734,8 @@ impl GameState {
             build_jobs_from_game, run_full_pipeline, to_station_flows_helper,
         };
 
+        self.runtime.station_flow_rebuilds = self.runtime.station_flow_rebuilds.saturating_add(1);
+
         if matches!(self.cargo_dist.distribution, DistributionType::Manual) {
             self.runtime.station_flows = StationFlows::default();
             return;

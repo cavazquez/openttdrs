@@ -8,11 +8,12 @@ pub(super) fn drain_signal_globset_now(state: &mut GameState) {
     } else {
         Some(&wormholes)
     };
-    crate::rail_signals::drain_signal_globset_with_wormholes(
+    crate::rail_signals::drain_signal_globset_indexed_with_wormholes(
         &mut state.map,
         &state.vehicles,
         &mut state.runtime.signal_tile_dirty,
         &mut state.runtime.signal_globset,
+        &mut state.runtime.signal_spatial_index,
         wh,
     );
 }

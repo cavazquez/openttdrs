@@ -210,6 +210,7 @@ def build_content(town_land: Path) -> str:
         "// `HouseSpec` runtime desde macros `MS` en `_original_house_specs`",
         "// (`table/town_land.h`). Usado por RebuildTownCaches, TryBuildTownHouse,",
         "// AddAcceptedCargo_Town y renovación urbana (P3.5–P3.7).",
+        "#![cfg_attr(rustfmt, rustfmt_skip)]",
         "",
         f"pub(crate) const HOUSE_SPEC_COUNT: usize = {n};",
         f"pub(crate) const HOUSE_MAX_YEAR: u32 = {MAX_YEAR:_};",

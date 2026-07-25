@@ -1,0 +1,37 @@
+[package]
+name = "openttdrs-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+openttdrs-core = { path = "../crates/openttdrs-core" }
+openttdrs-net = { path = "../crates/openttdrs-net" }
+
+[[bin]]
+name = "sav_load"
+path = "fuzz_targets/sav_load.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "newgrf_parse"
+path = "fuzz_targets/newgrf_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "net_message"
+path = "fuzz_targets/net_message.rs"
+test = false
+doc = false
+bench = false
+
+[workspace]
+members = ["."]

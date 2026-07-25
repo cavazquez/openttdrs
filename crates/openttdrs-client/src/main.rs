@@ -56,16 +56,105 @@ mod client_coverage_test;
 use audio::warn_missing_optional_assets;
 use network::parse_net_cli;
 use startup::check_required_assets;
+use std::path::{Path, PathBuf};
 
 mod network;
 
 fn main() {
-    let repo_root = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
-    if !check_required_assets(repo_root) {
+    let asset_root = resolve_asset_root();
+    let asset_root_text = asset_root.to_string_lossy();
+    if !check_required_assets(&asset_root_text) {
         return;
     }
-    warn_missing_optional_assets(std::path::Path::new(repo_root));
+    warn_missing_optional_assets(&asset_root);
+    if std::env::args_os().any(|arg| arg == "--check-assets") {
+        println!("Assets OK: {}", asset_root.display());
+        return;
+    }
 
     let net = parse_net_cli(std::env::args());
-    bevy_app::run(repo_root, net);
+    bevy_app::run(&asset_root_text, net);
+}
+
+fn resolve_asset_root() -> PathBuf {
+    let override_path = std::env::var_os("OPENTTDRS_ASSET_ROOT").map(PathBuf::from);
+    let executable_dir = std::env::current_exe()
+        .ok()
+        .and_then(|path| path.parent().map(Path::to_path_buf));
+    let current_dir = std::env::current_dir().ok();
+    select_asset_root(
+        override_path,
+        executable_dir,
+        current_dir,
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."),
+    )
+}
+
+fn select_asset_root(
+    override_path: Option<PathBuf>,
+    executable_dir: Option<PathBuf>,
+    current_dir: Option<PathBuf>,
+    development_root: PathBuf,
+) -> PathBuf {
+    let fallback = override_path
+        .clone()
+        .or_else(|| executable_dir.clone())
+        .or_else(|| current_dir.clone())
+        .unwrap_or_else(|| development_root.clone());
+    [
+        override_path,
+        executable_dir,
+        current_dir,
+        Some(development_root),
+    ]
+    .into_iter()
+    .flatten()
+    .find(|candidate| asset_layout_present(candidate))
+    .unwrap_or(fallback)
+}
+
+fn asset_layout_present(root: &Path) -> bool {
+    root.join("assets").is_dir() && root.join("static/fonts/DejaVuSansMono.ttf").is_file()
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod asset_root_tests {
+    use super::select_asset_root;
+    use std::fs;
+
+    fn make_asset_root(dir: &std::path::Path) {
+        fs::create_dir_all(dir.join("assets")).expect("assets");
+        fs::create_dir_all(dir.join("static/fonts")).expect("fonts");
+        fs::write(dir.join("static/fonts/DejaVuSansMono.ttf"), b"font").expect("font");
+    }
+
+    #[test]
+    fn packaged_assets_next_to_executable_beat_development_checkout() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let packaged = temp.path().join("package");
+        let development = temp.path().join("checkout");
+        make_asset_root(&packaged);
+        make_asset_root(&development);
+
+        let selected = select_asset_root(None, Some(packaged.clone()), None, development);
+        assert_eq!(selected, packaged);
+    }
+
+    #[test]
+    fn explicit_asset_root_has_highest_priority() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let explicit = temp.path().join("explicit");
+        let packaged = temp.path().join("package");
+        make_asset_root(&explicit);
+        make_asset_root(&packaged);
+
+        let selected = select_asset_root(
+            Some(explicit.clone()),
+            Some(packaged),
+            None,
+            temp.path().join("checkout"),
+        );
+        assert_eq!(selected, explicit);
+    }
 }

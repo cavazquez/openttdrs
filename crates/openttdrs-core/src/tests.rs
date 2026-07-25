@@ -530,6 +530,38 @@ fn link_graph_records_station_flow_on_unload() {
 }
 
 #[test]
+fn cargodist_coalesces_multiple_unloads_into_one_flow_rebuild() {
+    let mut s = GameState::new(16, 8);
+    let from = TileCoord::new(2, 0);
+    let dest = TileCoord::new(10, 0);
+    s.stations.push(Station::new(from));
+    s.stations.push(Station::new(dest));
+    s.cargo_dist.distribution = flow_stat::DistributionType::Asymmetric;
+
+    for id in 0..8 {
+        let mut truck = Vehicle::new(id, VehicleKind::Truck, dest, dest);
+        truck.cargo = 10;
+        truck.cargo_type = Some(CargoType::Goods);
+        truck.mark_cargo_loaded(from);
+        truck.ensure_packets_from_legacy();
+        truck.last_pickup_station = Some(from);
+        s.vehicles.push(truck);
+    }
+
+    let rebuilds_before = s.runtime.station_flow_rebuilds;
+    s.step();
+
+    assert_eq!(s.runtime.station_flow_rebuilds - rebuilds_before, 1);
+    assert!(s.vehicles.iter().all(|vehicle| vehicle.cargo == 5));
+    let key = LinkEdgeKey {
+        from,
+        to: dest,
+        cargo: CargoType::Goods,
+    };
+    assert_eq!(s.link_graph.edges[&key].units_total, 40);
+}
+
+#[test]
 fn link_graph_sets_pickup_when_loading_waiting_cargo() {
     let mut s = GameState::new(12, 8);
     let hub = TileCoord::new(4, 0);

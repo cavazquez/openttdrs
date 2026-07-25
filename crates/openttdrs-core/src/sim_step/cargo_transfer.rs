@@ -8,6 +8,7 @@ pub(super) fn unload_vehicles(
     loaded_this_tick: &[bool],
     unloaded_this_tick: &mut [bool],
 ) {
+    let mut link_graph_dirty = false;
     for (i, loaded_flag) in loaded_this_tick
         .iter()
         .enumerate()
@@ -107,7 +108,7 @@ pub(super) fn unload_vehicles(
                 capacity,
                 travel_time,
             );
-            state.rebuild_station_flows();
+            link_graph_dirty = true;
         }
         let mut payment = 0_i64;
         let mut feeder_total = 0_i64;
@@ -273,6 +274,13 @@ pub(super) fn unload_vehicles(
         } else {
             state.vehicles[i].cargo_unloading = true;
         }
+    }
+
+    // El pipeline Demand + MCF es global y costoso. Todas las descargas del tick
+    // mutan primero el link graph; después publicamos un único snapshot coherente
+    // para la fase de carga y reencaminamos paquetes una sola vez (#215).
+    if link_graph_dirty {
+        state.rebuild_station_flows();
     }
 }
 

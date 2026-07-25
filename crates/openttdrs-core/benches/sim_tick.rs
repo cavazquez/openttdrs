@@ -10,7 +10,10 @@ use criterion::{BatchSize, Criterion, Throughput, criterion_group, criterion_mai
 #[path = "common.rs"]
 mod common;
 
-use common::{large_world_gen_map, large_world_gen_map_sized, scenario, step_n};
+use common::{
+    cargodist_unload_burst, indexed_signal_map_sized, large_world_gen_map,
+    large_world_gen_map_sized, scenario, step_n,
+};
 
 fn bench_sim_tick(c: &mut Criterion) {
     let mut group = c.benchmark_group("sim_tick");
@@ -70,6 +73,46 @@ fn bench_sim_tick(c: &mut Criterion) {
         });
     });
 
+    group.throughput(Throughput::Elements(128));
+    group.bench_function("cargodist/unload_burst_128", |b| {
+        b.iter_batched(
+            || cargodist_unload_burst(128),
+            |mut state| {
+                state.step();
+                black_box(state.runtime.station_flow_rebuilds);
+            },
+            BatchSize::LargeInput,
+        );
+    });
+
+    group.finish();
+
+    let mut group = c.benchmark_group("signal_glob_indexed");
+    for side in [1_024_u32, 4_096] {
+        let mut state = indexed_signal_map_sized(side);
+        let signal_count = state.runtime.signal_spatial_index.len();
+        group.throughput(Throughput::Elements(
+            u64::try_from(signal_count).unwrap_or(u64::MAX),
+        ));
+        group.bench_function(format!("dense_{side}"), |b| {
+            b.iter(|| {
+                state.runtime.signal_tile_dirty.clear();
+                openttdrs_core::rail_signals::enqueue_trains_for_signal_update(
+                    &mut state.runtime.signal_globset,
+                    &state.vehicles,
+                );
+                openttdrs_core::rail_signals::drain_signal_globset_indexed_with_wormholes(
+                    &mut state.map,
+                    &state.vehicles,
+                    &mut state.runtime.signal_tile_dirty,
+                    &mut state.runtime.signal_globset,
+                    &mut state.runtime.signal_spatial_index,
+                    None,
+                );
+                black_box(state.runtime.signal_tile_dirty.len());
+            });
+        });
+    }
     group.finish();
 }
 

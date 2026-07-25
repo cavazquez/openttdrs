@@ -29,9 +29,13 @@ Incluí:
 
 **Fuera de alcance habitual:** bugs de jugabilidad/paridad OpenTTD, DoS trivial “mapa enorme”, issues que requieran ya comprometer la máquina del jugador.
 
-## Dependencias
+## Dependencias y entradas no confiables
 
 CI ejecuta `cargo audit` y `cargo deny check` (versiones fijadas en el workflow). Excepciones justificadas viven en `deny.toml`.
+
+El workflow semanal `fuzz.yml` ejecuta libFuzzer sobre el loader `.sav`, el
+parser de contenedores NewGRF y el framing JSON de red. Los casos que produzcan
+crash deben conservarse como corpus de regresión después de minimizarse.
 
 ## Divulgación
 

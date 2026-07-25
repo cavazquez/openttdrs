@@ -1,6 +1,6 @@
 //! Specs de casas vanilla (`HouseSpec` / `_original_house_specs`).
 //!
-//! Datos generados en [`crate::sav::house_population_generated`]; aquí viven
+//! Datos generados en el módulo privado `crate::sav::house_population_generated`; aquí viven
 //! las consultas runtime para zonas, años, pesos y aceptación (P3.5–P3.7).
 
 use crate::cargo::CargoType;

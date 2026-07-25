@@ -119,7 +119,8 @@ def build_atlas():
         "//! Metadata del texture atlas de assets/opengfx/tiles. Las páginas\n"
         "//! (assets/opengfx/atlas/tiles_atlas_{p}.png) se regeneran con el\n"
         "//! script; este archivo se commitea para que el cliente compile la\n"
-        "//! tabla de lookup sin leer los PNGs.\n\n",
+        "//! tabla de lookup sin leer los PNGs.\n"
+        "#![cfg_attr(rustfmt, rustfmt_skip)]\n\n",
         f"pub(crate) const TILE_ATLAS_PAGE_COUNT: usize = {page_count};\n\n",
         "/// Dimensiones `(ancho, alto)` de cada página del atlas.\n"
         "pub(crate) static TILE_ATLAS_PAGE_SIZES: &[(u32, u32)] = &[\n",

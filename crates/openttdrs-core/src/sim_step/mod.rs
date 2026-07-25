@@ -121,7 +121,7 @@ pub(crate) fn step(state: &mut GameState) {
     phase_post_tick(state);
 }
 
-/// Igual que [`step`], midiendo cada fase (solo para profiling / bin `sim_profile`).
+/// Igual que el tick principal interno, midiendo cada fase (solo para profiling / bin `sim_profile`).
 #[must_use]
 pub fn step_profiled(state: &mut GameState) -> TickPhaseTimings {
     let wall0 = Instant::now();

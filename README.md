@@ -6,7 +6,7 @@
 
 [![CI](https://github.com/cavazquez/openttdrs/actions/workflows/ci.yml/badge.svg)](https://github.com/cavazquez/openttdrs/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/cavazquez/openttdrs/graph/badge.svg)](https://codecov.io/gh/cavazquez/openttdrs)
-[![Licencia GPL-2.0](https://img.shields.io/badge/licencia-GPL--2.0-blue.svg)](LICENSE)
+[![Licencia GPL-2.0-only](https://img.shields.io/badge/licencia-GPL--2.0--only-blue.svg)](LICENSE)
 [![Rust MSRV](https://img.shields.io/badge/rust-1.97%2B-orange.svg)](https://doc.rust-lang.org/stable/releases.html)
 [![Bevy](https://img.shields.io/badge/Bevy-0.19.0-C659D4.svg)](https://bevyengine.org/)
 [![Inspiración OpenTTD](https://img.shields.io/badge/inspiración-OpenTTD-5a3.svg)](https://www.openttd.org/)
@@ -17,7 +17,7 @@ Simulador de transporte inspirado en [OpenTTD](https://www.openttd.org/), escrit
 
 **Gobierno:** [CONTRIBUTING.md](CONTRIBUTING.md) · [SECURITY.md](SECURITY.md) · [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [ADRs](docs/adr/)
 
-**Última actualización:** 2026-07-17
+**Última actualización:** 2026-07-25
 
 ---
 
@@ -29,7 +29,7 @@ Simulador de transporte inspirado en [OpenTTD](https://www.openttd.org/), escrit
 | **Cliente** (`openttdrs-client`) | Vista isométrica OpenGFX, menú de inicio, toolbar, listas UI, noticias; `--server` / `--client` (I8) |
 | **Red** (`openttdrs-net`) | TCP lockstep + bin `openttdrs-dedicated` ([ADR 0001](docs/adr/0001-multiplayer-v1.md)) |
 | **NewGRF** | Action0–14 parse; Action1/2/3/5 con sprites in-world (trenes, stations, roadtypes, shore, catenary); vars de tesela/vehículo en runtime |
-| **Hito 0.1** | Fundación I0–I7 hecha; solitario jugable. **I8 red** MVP ([#21](https://github.com/cavazquez/openttdrs/issues/21) ✅) + host migration ([#171](https://github.com/cavazquez/openttdrs/issues/171), [ADR 0004](docs/adr/0004-host-migration-post-v1.md)) |
+| **Hito 0.1** | `0.1.0-alpha.1` preparada; solitario jugable. **I8 red** MVP ([#21](https://github.com/cavazquez/openttdrs/issues/21) ✅) + host migration ([#171](https://github.com/cavazquez/openttdrs/issues/171), [ADR 0004](docs/adr/0004-host-migration-post-v1.md)) |
 
 **Trabajo reciente (jul 2026):** Action2 variational (trains/stations/road), procedure `7E` / `\2psto`, vars de vehículo y de tesela al dibujar. Issues de backlog: [issues abiertas](https://github.com/cavazquez/openttdrs/issues).
 
@@ -104,6 +104,14 @@ Flujo de PRs y DoD: [CONTRIBUTING.md](CONTRIBUTING.md). Capas: [docs/ARCHITECTUR
 ./scripts/check.sh cov      # cobertura → lcov.info (cargo-llvm-cov)
 cargo test --workspace
 
+# Entradas no confiables (requiere nightly + cargo-fuzz)
+cargo +nightly fuzz run sav_load
+cargo +nightly fuzz run newgrf_parse
+cargo +nightly fuzz run net_message
+
+# Verificar un paquete extraído sin abrir la ventana
+./openttdrs-client --check-assets
+
 # Validar documentación (enlaces rustdoc, code fences)
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --all-features --no-deps
 
@@ -146,12 +154,33 @@ Un job en [.github/workflows/ci.yml](.github/workflows/ci.yml) (caché Cargo + A
 | `rustdoc` | `cargo doc` con `-D warnings` (validar enlaces intra-doc) |
 | `cargo audit` | Vulnerabilidades RustSec (pinned 0.22.1) |
 | `cargo deny` | Licencias + advisories + sources + bans (pinned 0.20.2, `deny.toml`) |
-| tests | PRs: `nextest --no-build`; push a `main`: `llvm-cov` → Codecov |
+| tests | PRs: `nextest`; push a `main`: `llvm-cov nextest` → Codecov, piso 68% de líneas |
 | extras | `tnbp` + `ci-python` (#120) + `generated-tables-ci` (#119) |
+| plataformas | `cargo check` en macOS y Windows |
+| fuzz semanal | `.sav`, NewGRF y frames de red con libFuzzer |
+| release | tag SemVer exacto → Linux x86_64, Windows x86_64 y macOS arm64 + SHA-256 |
 
-`check.sh ci` replica fmt/clippy/tests/TNBP/Python/tablas (hash; regen si hay upstream). Solo en GHA: rustdoc, audit, deny, cobertura en `main`, fetch OpenTTD para regen.
+`check.sh ci` replica fmt/clippy/rustdoc/tests/TNBP/Python/tablas (hash; regen si hay upstream). Solo en GHA: audit, deny, cobertura en `main` y fetch OpenTTD para regen.
 
 Cobertura manual: [.github/workflows/coverage.yml](.github/workflows/coverage.yml) (`workflow_dispatch`) o `./scripts/check.sh cov`.
+
+### Release alpha
+
+El workflow [release.yml](.github/workflows/release.yml) se puede ejecutar manualmente
+para probar artefactos sin publicar. Un tag que coincida exactamente con la versión
+del workspace (actualmente `v0.1.0-alpha.1`) crea una prerelease con binarios,
+assets libres, servidor dedicado y checksums SHA-256. El empaquetado local equivalente:
+
+```bash
+cargo build --locked --release \
+  -p openttdrs-client --bin openttdrs-client \
+  -p openttdrs-net --bin openttdrs-dedicated
+./scripts/package_release.sh \
+  0.1.0-alpha.1 x86_64-unknown-linux-gnu linux-x86_64 tar.gz
+```
+
+Notas: [CHANGELOG.md](CHANGELOG.md) · [RELEASE_NOTES.md](RELEASE_NOTES.md) ·
+[atribuciones de assets](THIRD_PARTY_ASSETS.md).
 
 ---
 
@@ -163,14 +192,15 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ / 🔮 backlog (issues en GitHub)
 |------|--------|-------|
 | Construcción road + rail + terraform | ✅ | Waypoints, señales, `RailConvert` (tipo seleccionado) |
 | PBS / path signals | 🟡 | Reserva básica; afinado en issues |
-| Economía + 6 cargos + packets | 🟡 | CargoDist MCF nivel 2 ✅; falta tabla temperate completa |
+| Economía + 11 cargas temperate + packets | 🟡 | CargoDist MCF, transfer/deliver y ratings; climas/NewGRF incompletos |
 | Import `.sav` → mapa + flota | 🟡 | Roundtrip propio; OpenTTD oficial incompleto |
-| Export `.sav` | 🟡 | Mapa+STNN+CITY+INDY+VEHS; órdenes avanzadas pendientes |
-| Render OpenGFX vanilla | ✅ | Industrias gfx 0–174; NewGRF ≥175 MVP (#71) |
-| UI solitario (menús, listas, noticias) | ✅ | UI-0…UI-7 cortes jugables |
+| Export `.sav` | 🟡 | Mapa+STNN+CITY+INDY y subconjunto VEHS/órdenes; sin round-trip completo |
+| Render OpenGFX vanilla | 🟡 | Cobertura amplia, sin oracle visual total; industrias NewGRF ≥175 MVP (#71) |
+| UI solitario (menús, listas, noticias) | 🟡 | Jugable; varias opciones del core todavía no están expuestas |
 | Multi-compañía | 🟡 | Mínima + ownership; segunda humana OOS |
-| NewGRF Action0–14 + Action2 runtime | ✅ | Action1/3; estaciones `m5`+CB24; params `0x7F`; industrias ≥175 |
-| Barcos / aviones | 🔮 | |
+| NewGRF Action0–14 + Action2 runtime | 🟡 | Parseo amplio; Action1/2/3/5 parcial, callbacks/semántica incompletos |
+| Barcos | 🟡 | Depósitos, docks, boyas, locks y A*; movimiento/órdenes simplificados |
+| Aviones | 🟡 | Airport FTA, compra/vuelo/ruido/crash; render y casos límite incompletos |
 | Multijugador (I8) | 🟡 | MVP lockstep + dedicated + host migration; desync/UI OOS |
 | IA rivales / GameScript / editor | 🟡 | TransCargo + editor #42 ✅; GS-lite #43 ✅; Squirrel OOS |
 
@@ -232,4 +262,4 @@ reference/                 # Clon OpenTTD (gitignored)
 
 ## Licencia
 
-**GPL-2.0** (ver `LICENSE`). El código de OpenTTD usado como referencia conserva su propia licencia y copyright.
+**GPL-2.0-only** (ver `LICENSE`). El código de OpenTTD usado como referencia conserva su propia licencia y copyright.

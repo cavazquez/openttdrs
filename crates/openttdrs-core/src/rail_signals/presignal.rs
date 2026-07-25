@@ -174,35 +174,27 @@ pub(super) fn presignal_exit_targets_ahead(
 /// Pasada 1 deja combos como “solo bloque propio”; aquí aplican la regla entry
 /// leyendo exits/combos aguas abajo ya estabilizados (arregla cadenas combo).
 /// Combo bidireccional: regla `MultiExit`/`MultiGreen` de `signal.cpp` (~441–448).
-pub(super) fn stabilize_combo_presignal_greens(
+/// Estabiliza combos sin inspeccionar señales fuera de `scope` (`None` = mapa completo).
+pub(super) fn stabilize_combo_presignal_greens_scoped(
     map: &Map,
     vehicles: &[Vehicle],
     exit_green: &HashMap<(TileCoord, u8), bool>,
     wormholes: Option<&crate::pathfinder::TunnelWormholes>,
+    scope: Option<&HashSet<TileCoord>>,
 ) -> HashMap<(TileCoord, u8), bool> {
     let mut greens = exit_green.clone();
-    let (w, h) = map.dimensions();
     let mut combos = Vec::new();
-    for y in 0..i32::try_from(h).unwrap_or(i32::MAX) {
-        for x in 0..i32::try_from(w).unwrap_or(i32::MAX) {
-            let c = TileCoord::new(x, y);
-            let Some(tile) = map.get(c) else {
-                continue;
-            };
-            if tile.kind != TileKind::Rail || !rail_tile_is_signals(tile.m5) {
+    for (c, tile) in signal_tiles_in_scope(map, scope) {
+        let present = rail_signal_present_mask(tile.m3);
+        let rails = tile.m5 & 0x3F;
+        for bit in 0..4u8 {
+            if present & (1 << bit) == 0 {
                 continue;
             }
-            let present = rail_signal_present_mask(tile.m3);
-            let rails = tile.m5 & 0x3F;
-            for bit in 0..4u8 {
-                if present & (1 << bit) == 0 {
-                    continue;
-                }
-                let sig_type = signal_track_for_bit(rails, bit)
-                    .map_or(SIGTYPE_BLOCK, |track| signal_type_for_track(tile.m2, track));
-                if sig_type == SIGTYPE_COMBO {
-                    combos.push((c, bit, tile));
-                }
+            let sig_type = signal_track_for_bit(rails, bit)
+                .map_or(SIGTYPE_BLOCK, |track| signal_type_for_track(tile.m2, track));
+            if sig_type == SIGTYPE_COMBO {
+                combos.push((c, bit, tile));
             }
         }
     }
@@ -273,41 +265,69 @@ fn signal_bit_block_green(
     }
 }
 
+#[cfg(test)]
 pub(super) fn compute_exit_signal_greens(
     map: &Map,
     vehicles: &[Vehicle],
     wormholes: Option<&crate::pathfinder::TunnelWormholes>,
 ) -> HashMap<(TileCoord, u8), bool> {
-    let (w, h) = map.dimensions();
+    compute_exit_signal_greens_scoped(map, vehicles, wormholes, None)
+}
+
+/// Calcula verdes sin inspeccionar señales fuera de `scope` (`None` = mapa completo).
+pub(super) fn compute_exit_signal_greens_scoped(
+    map: &Map,
+    vehicles: &[Vehicle],
+    wormholes: Option<&crate::pathfinder::TunnelWormholes>,
+    scope: Option<&HashSet<TileCoord>>,
+) -> HashMap<(TileCoord, u8), bool> {
     let mut exit_green = HashMap::new();
-    for y in 0..i32::try_from(h).unwrap_or(i32::MAX) {
-        for x in 0..i32::try_from(w).unwrap_or(i32::MAX) {
-            let c = TileCoord::new(x, y);
-            let Some(tile) = map.get(c) else {
-                continue;
-            };
-            if tile.kind != TileKind::Rail || !rail_tile_is_signals(tile.m5) {
+    for (c, tile) in signal_tiles_in_scope(map, scope) {
+        let present = rail_signal_present_mask(tile.m3);
+        let rails = tile.m5 & 0x3F;
+        for bit in 0..4u8 {
+            if present & (1 << bit) == 0 {
                 continue;
             }
-            let present = rail_signal_present_mask(tile.m3);
-            let rails = tile.m5 & 0x3F;
-            for bit in 0..4u8 {
-                if present & (1 << bit) == 0 {
-                    continue;
-                }
-                let sig_type = signal_track_for_bit(rails, bit)
-                    .map_or(SIGTYPE_BLOCK, |track| signal_type_for_track(tile.m2, track));
-                if sig_type == SIGTYPE_ENTRY {
-                    continue;
-                }
-                exit_green.insert(
-                    (c, bit),
-                    signal_bit_block_green(map, vehicles, c, &tile, bit, sig_type, wormholes),
-                );
+            let sig_type = signal_track_for_bit(rails, bit)
+                .map_or(SIGTYPE_BLOCK, |track| signal_type_for_track(tile.m2, track));
+            if sig_type == SIGTYPE_ENTRY {
+                continue;
             }
+            exit_green.insert(
+                (c, bit),
+                signal_bit_block_green(map, vehicles, c, &tile, bit, sig_type, wormholes),
+            );
         }
     }
     exit_green
+}
+
+fn signal_tiles_in_scope(map: &Map, scope: Option<&HashSet<TileCoord>>) -> Vec<(TileCoord, Tile)> {
+    if let Some(scope) = scope {
+        let mut coords: Vec<_> = scope.iter().copied().collect();
+        coords.sort_unstable();
+        return coords
+            .into_iter()
+            .filter_map(|c| map.get(c).map(|tile| (c, tile)))
+            .filter(|(_, tile)| tile.kind == TileKind::Rail && rail_tile_is_signals(tile.m5))
+            .collect();
+    }
+
+    let (w, h) = map.dimensions();
+    let mut tiles = Vec::new();
+    for y in 0..i32::try_from(h).unwrap_or(i32::MAX) {
+        for x in 0..i32::try_from(w).unwrap_or(i32::MAX) {
+            let c = TileCoord::new(x, y);
+            if let Some(tile) = map
+                .get(c)
+                .filter(|tile| tile.kind == TileKind::Rail && rail_tile_is_signals(tile.m5))
+            {
+                tiles.push((c, tile));
+            }
+        }
+    }
+    tiles
 }
 
 pub(super) fn refresh_signal_tile_states(

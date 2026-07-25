@@ -89,7 +89,7 @@ ignore = [
 # List of explicitly allowed licenses
 # See https://spdx.org/licenses/ for list of possible licenses
 # [possible values: any SPDX 3.11 short identifier (+ optional exception)].
-# openttdrs es GPL-2.0; estas licencias son compatibles (permisivas + copyleft débil):
+# openttdrs es GPL-2.0-only; estas licencias son compatibles (permisivas + copyleft débil):
 # Ver: https://www.gnu.org/licenses/license-list.html#GPLCompatibleLicenses
 allow = [
     "MIT",
@@ -126,7 +126,7 @@ exceptions = [
 # adding a clarification entry for it allows you to manually specify the
 # licensing information
 
-# Crates del workspace: usar SPDX moderno GPL-2.0-only en lugar de GPL-2.0 (deprecated)
+# Clarificaciones históricas para los crates del workspace.
 [[licenses.clarify]]
 crate = "openttdrs-core"
 expression = "GPL-2.0-only"

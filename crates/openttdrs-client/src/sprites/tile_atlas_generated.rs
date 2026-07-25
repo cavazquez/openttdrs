@@ -4,11 +4,14 @@
 //! (assets/opengfx/atlas/tiles_atlas_{p}.png) se regeneran con el
 //! script; este archivo se commitea para que el cliente compile la
 //! tabla de lookup sin leer los PNGs.
+#![cfg_attr(rustfmt, rustfmt_skip)]
 
 pub(crate) const TILE_ATLAS_PAGE_COUNT: usize = 1;
 
 /// Dimensiones `(ancho, alto)` de cada página del atlas.
-pub(crate) static TILE_ATLAS_PAGE_SIZES: &[(u32, u32)] = &[(2048, 2299)];
+pub(crate) static TILE_ATLAS_PAGE_SIZES: &[(u32, u32)] = &[
+    (2048, 2299),
+];
 
 /// Rects únicos `(página, x, y, w, h)`, agrupados por página.
 pub(crate) static TILE_ATLAS_RECTS: &[(u16, u16, u16, u16, u16)] = &[
@@ -2714,7 +2717,9 @@ pub(crate) static TILE_ATLAS_RECTS: &[(u16, u16, u16, u16, u16)] = &[
 ];
 
 /// Rango `[inicio, fin)` de `TILE_ATLAS_RECTS` por página.
-pub(crate) static TILE_ATLAS_PAGE_RANGES: &[(u32, u32)] = &[(0, 2699)];
+pub(crate) static TILE_ATLAS_PAGE_RANGES: &[(u32, u32)] = &[
+    (0, 2699),
+];
 
 /// `(archivo, índice en TILE_ATLAS_RECTS)`, ordenado por nombre
 /// (apto para búsqueda binaria). Incluye aliases: varios nombres

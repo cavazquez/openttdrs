@@ -1,0 +1,181 @@
+name: Release alpha
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - id: version
+        name: Validar versión y tag
+        shell: bash
+        run: |
+          version="$(python3 -c 'import pathlib, tomllib; print(tomllib.loads(pathlib.Path("Cargo.toml").read_text())["workspace"]["package"]["version"])')"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_REF_TYPE" == "tag" && "$GITHUB_REF_NAME" != "v${version}" ]]; then
+            echo "El tag ${GITHUB_REF_NAME} no coincide con Cargo.toml v${version}." >&2
+            exit 1
+          fi
+          cargo metadata --locked --no-deps --format-version 1 >/dev/null
+
+  runtime-assets:
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Dependencias del pipeline OpenGFX
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y grfcodec python3-numpy python3-pil unzip
+
+      - name: Generar assets OpenGFX 8bpp redistribuibles
+        run: ./scripts/descargar_assets.sh graficos --8bpp
+
+      - name: Validar assets requeridos
+        run: |
+          test -f assets/opengfx/tiles/grass.png
+          test -f assets/opengfx/tiles/vehicle_train_e.png
+          test -f assets/opengfx/atlas/tiles_atlas_0.png
+          test -f static/fonts/DejaVuSansMono.ttf
+
+      - name: Assets compartidos
+        uses: actions/upload-artifact@v7
+        with:
+          name: runtime-assets
+          compression-level: 0
+          retention-days: 2
+          path: |
+            assets/music
+            assets/sounds
+            assets/opengfx/tiles
+            assets/opengfx/atlas
+            static
+
+  build:
+    needs: [validate, runtime-assets]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            platform: linux-x86_64
+            archive: tar.gz
+          - os: windows-2025
+            target: x86_64-pc-windows-msvc
+            platform: windows-x86_64
+            archive: zip
+          - os: macos-15
+            target: aarch64-apple-darwin
+            platform: macos-arm64
+            archive: tar.gz
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Instalar Rust fijado
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.97.1
+          targets: ${{ matrix.target }}
+
+      - name: Caché Cargo
+        uses: Swatinem/rust-cache@v2.9.1
+        with:
+          shared-key: release-${{ matrix.target }}
+
+      - name: Dependencias Linux
+        if: runner.os == 'Linux'
+        uses: ./.github/composite/linux-build-deps
+
+      - name: Descargar assets comunes
+        uses: actions/download-artifact@v7
+        with:
+          name: runtime-assets
+          path: .
+
+      - name: Compilar cliente y servidor dedicado
+        shell: bash
+        run: >-
+          cargo build --locked --release --target "${{ matrix.target }}"
+          -p openttdrs-client --bin openttdrs-client
+          -p openttdrs-net --bin openttdrs-dedicated
+
+      - name: Empaquetar y generar SHA-256
+        shell: bash
+        run: >-
+          ./scripts/package_release.sh
+          "${{ needs.validate.outputs.version }}"
+          "${{ matrix.target }}"
+          "${{ matrix.platform }}"
+          "${{ matrix.archive }}"
+
+      - name: Smoke del paquete extraído
+        shell: bash
+        run: |
+          package="dist/openttdrs-${{ needs.validate.outputs.version }}-${{ matrix.platform }}"
+          suffix=""
+          if [[ "${{ matrix.target }}" == *windows* ]]; then suffix=".exe"; fi
+          "${package}/openttdrs-client${suffix}" --check-assets
+          (cd dist && sha256sum -c "openttdrs-${{ needs.validate.outputs.version }}-${{ matrix.platform }}.${{ matrix.archive }}.sha256")
+
+      - name: Subir paquete
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-${{ matrix.platform }}
+          compression-level: 0
+          retention-days: 14
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/*.sha256
+
+  publish:
+    if: github.ref_type == 'tag'
+    needs: [validate, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Descargar paquetes
+        uses: actions/download-artifact@v7
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+
+      - name: Crear prerelease o reemplazar artefactos
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" dist/* \
+              --verify-tag \
+              --prerelease \
+              --title "openttdrs ${{ needs.validate.outputs.version }}" \
+              --notes-file RELEASE_NOTES.md
+          fi

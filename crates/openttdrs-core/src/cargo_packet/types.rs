@@ -202,6 +202,17 @@ impl StationCargoList {
     pub fn truncate_cargo(&mut self, cargo: CargoType) {
         self.packets.retain(|p| p.cargo != cargo);
     }
+
+    /// Descarta hasta `amount` unidades del tipo, empezando por lo más viejo
+    /// (`TruncateCargo` con `max_move`). Devuelve lo realmente descartado.
+    pub fn truncate_cargo_amount(&mut self, cargo: CargoType, amount: u32) -> u32 {
+        let removed: u32 = self
+            .take(cargo, amount)
+            .iter()
+            .map(|p| u32::from(p.count))
+            .sum();
+        removed
+    }
 }
 
 /// Carga a bordo del vehículo como lista de packets.

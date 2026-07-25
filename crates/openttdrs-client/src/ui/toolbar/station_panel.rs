@@ -7,7 +7,6 @@ use openttdrs_core::prelude::*;
 use openttdrs_core::{
     ALL_CARGO_TYPES, CargoType, MAX_STATION_NAME_CHARS, STATION_COVERAGE_RADIUS,
     cargo_display_name, station_coverage_at, station_rating_for_cargo,
-    station_rating_for_company_cargo,
 };
 
 use crate::iso::tile_pos;
@@ -417,15 +416,25 @@ pub(crate) fn sync_station_cargo_panel(
                 continue;
             }
             let rating = station_rating_for_cargo(station, cargo);
-            let yours = station_rating_for_company_cargo(station, station.owner, cargo);
-            let days = station.time_since_pickup.get(cargo);
-            let age = if waiting > 0 {
+            let entry = station.goods.get(cargo);
+            let since_pickup = if waiting > 0 {
+                let days = u32::from(station.time_since_pickup.get(cargo))
+                    * openttdrs_core::STATION_RATING_TICKS
+                    / openttdrs_core::TICKS_PER_DAY;
                 format!(" · sin recogida {days}d")
             } else {
                 String::new()
             };
+            let last_vehicle = if entry.has_vehicle_ever_tried_loading() {
+                format!(
+                    " · último vehículo: velocidad {}, {} años",
+                    entry.last_speed, entry.last_age
+                )
+            } else {
+                " · nunca servida".to_string()
+            };
             lines.push(format!(
-                "  {} · espera {waiting} · rating {rating}/255 · dueño {yours}/255{age}",
+                "  {} · espera {waiting} · rating {rating}/255{since_pickup}{last_vehicle}",
                 cargo_display_name(cargo)
             ));
         }

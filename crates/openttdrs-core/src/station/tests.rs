@@ -272,25 +272,40 @@ mod coherence_tests {
         );
     }
 
+    fn sweep(station: &mut Station, times: usize, selectgoods: bool) {
+        let mut rng = crate::cargodist::parity::Randomizer::new(1);
+        for _ in 0..times {
+            update_station_ratings(std::slice::from_mut(station), selectgoods, &mut rng);
+        }
+    }
+
     #[test]
     fn station_rating_decays_with_waiting_cargo() {
         let mut station = Station::new(TileCoord::new(0, 0));
         station.cargo_stock.coal = 50;
         station.ensure_packets_from_stock();
-        tick_station_cargo_age(std::slice::from_mut(&mut station), true);
+        sweep(&mut station, 1, true);
         assert_eq!(station.time_since_pickup.coal, 1);
-        for _ in 0..253 {
-            tick_station_cargo_age(std::slice::from_mut(&mut station), true);
-        }
+        assert_eq!(
+            station.rating,
+            INITIAL_STATION_RATING - 2,
+            "sin ningún vehículo que la sirva la estación ya empieza a bajar"
+        );
+
+        sweep(&mut station, 253, true);
         assert_eq!(station.time_since_pickup.coal, 254);
-        assert_eq!(station.cargo_stock.coal, 50);
-        assert!(station.rating < 255);
-        // Día 255: truncate (decay fuerte).
-        tick_station_cargo_age(std::slice::from_mut(&mut station), true);
+        assert!(
+            station.rating < INITIAL_STATION_RATING,
+            "254 barridos sin recoger tienen que hundir el rating"
+        );
+
+        // Barrido 255: la carga caduca y el tipo pierde su rating.
+        sweep(&mut station, 1, true);
         assert_eq!(station.cargo_stock.coal, 0);
         assert!(station.cargo_packets.is_empty());
         assert_eq!(station.time_since_pickup.coal, 0);
-        assert_eq!(station.rating, 255);
+        assert!(!station.goods.get(CargoType::Coal).has_rating);
+        assert_eq!(station.rating, INITIAL_STATION_RATING);
     }
 
     #[test]
@@ -298,11 +313,81 @@ mod coherence_tests {
         let mut station = Station::new(TileCoord::new(1, 1));
         station.add_waiting_cargo(CargoType::Wood, 40);
         station.time_since_pickup.set(CargoType::Wood, 254);
-        tick_station_cargo_age(std::slice::from_mut(&mut station), true);
+        sweep(&mut station, 1, true);
         assert_eq!(station.cargo_stock.wood, 0);
         station.add_waiting_cargo(CargoType::Wood, 10);
         assert_eq!(station.time_since_pickup.wood, 0);
         assert_eq!(station.cargo_stock.wood, 10);
+    }
+
+    /// Una estación recién construida no rinde como perfecta: nace en 175 y solo sube si
+    /// alguien la sirve (`INITIAL_STATION_RATING`, `station_base.h:23`).
+    #[test]
+    fn new_station_starts_at_initial_rating() {
+        let station = Station::new(TileCoord::new(2, 2));
+        assert_eq!(station.rating, INITIAL_STATION_RATING);
+        assert_eq!(
+            station_rating_for_cargo(&station, CargoType::Coal),
+            INITIAL_STATION_RATING
+        );
+        assert_eq!(INITIAL_STATION_RATING, 175);
+    }
+
+    /// Servir con material rápido y nuevo sube el objetivo, pero el rating solo se mueve de
+    /// dos en dos por barrido: hay que sostener el servicio para llegar arriba.
+    #[test]
+    fn good_service_raises_rating_two_points_per_sweep() {
+        let mut station = Station::new(TileCoord::new(3, 3));
+        let express = StationVisit {
+            vehicle_kind: crate::vehicle::VehicleKind::Train,
+            last_speed: 200,
+            last_age: 0,
+        };
+        // La industria deja carga y el tren se lleva casi toda: poca cola acumulada.
+        let serve = |station: &mut Station| {
+            station.add_waiting_cargo(CargoType::Coal, 20);
+            let _ = station.take_waiting_cargo(CargoType::Coal, 18);
+            on_station_cargo_pickup(station, CargoType::Coal, CompanyId::PLAYER, express);
+        };
+
+        serve(&mut station);
+        let before = station_rating_for_cargo(&station, CargoType::Coal);
+        assert_eq!(before, INITIAL_STATION_RATING);
+        sweep(&mut station, 1, true);
+        assert_eq!(
+            station_rating_for_cargo(&station, CargoType::Coal),
+            before + 2,
+            "convergencia de ±2 por barrido"
+        );
+
+        for _ in 0..30 {
+            serve(&mut station);
+            sweep(&mut station, 1, true);
+        }
+        let sustained = station_rating_for_cargo(&station, CargoType::Coal);
+        assert!(
+            sustained > 220,
+            "servicio sostenido con material rápido y nuevo debe acercarse al máximo, fue {sustained}"
+        );
+
+        // Al dejar de servirla, la misma estación se desinfla al mismo ritmo.
+        sweep(&mut station, 30, true);
+        assert!(station_rating_for_cargo(&station, CargoType::Coal) < sustained);
+    }
+
+    /// Sin haber movido nunca esa carga, el rating sube de uno en uno y se queda en 175.
+    #[test]
+    fn unserved_cargo_creeps_back_to_initial_rating() {
+        let mut station = Station::new(TileCoord::new(4, 4));
+        station.goods.get_mut(CargoType::Wood).rating = 100;
+        sweep(&mut station, 1, true);
+        assert_eq!(station_rating_for_cargo(&station, CargoType::Wood), 101);
+        sweep(&mut station, 200, true);
+        assert_eq!(
+            station_rating_for_cargo(&station, CargoType::Wood),
+            INITIAL_STATION_RATING,
+            "sin servicio el rating no pasa del inicial"
+        );
     }
 
     #[test]
@@ -312,29 +397,43 @@ mod coherence_tests {
         assert_eq!(load_amount_for_rating(100, 0), 0);
     }
 
+    /// El rating es de la estación, igual para todas las compañías, como en `OpenTTD`.
+    /// Lo que sí se sigue midiendo por separado es cuánto hace que cada una no recoge, que
+    /// es el dato que necesitará el reparto de producción.
     #[test]
-    fn company_rating_tracks_pickup_independently() {
+    fn rating_is_shared_but_pickup_delay_is_per_company() {
         let mut station = Station::new(TileCoord::new(0, 0));
         station.add_waiting_cargo(CargoType::Passengers, 20);
-        for _ in 0..140 {
-            tick_station_cargo_age(std::slice::from_mut(&mut station), false);
-        }
-        let owner_before =
-            station_rating_for_company_cargo(&station, CompanyId::PLAYER, CargoType::Passengers);
-        assert!(owner_before < TOWN_CARGO_MIN_OWNER_RATING);
+        sweep(&mut station, 140, false);
+        assert!(
+            station_rating_for_company_cargo(&station, CompanyId::PLAYER, CargoType::Passengers)
+                < TOWN_CARGO_MIN_OWNER_RATING,
+            "nadie sirve la estación: el rating cae para todos"
+        );
 
         let rival = CompanyId(1);
-        on_station_cargo_pickup(&mut station, CargoType::Passengers, rival);
+        on_station_cargo_pickup(
+            &mut station,
+            CargoType::Passengers,
+            rival,
+            StationVisit {
+                vehicle_kind: crate::vehicle::VehicleKind::Bus,
+                last_speed: 90,
+                last_age: 1,
+            },
+        );
+        assert_eq!(
+            station.company_pickup_days(rival, CargoType::Passengers),
+            0,
+            "el rival acaba de recoger"
+        );
+        assert!(
+            station.company_pickup_days(CompanyId::PLAYER, CargoType::Passengers) > 100,
+            "el dueño no se beneficia de la recogida rival"
+        );
         assert_eq!(
             station_rating_for_company_cargo(&station, rival, CargoType::Passengers),
-            255
-        );
-        // El dueño no se beneficia de la recogida rival.
-        let owner_after =
-            station_rating_for_company_cargo(&station, CompanyId::PLAYER, CargoType::Passengers);
-        assert!(owner_after < TOWN_CARGO_MIN_OWNER_RATING);
-        assert!(
-            station_rating_for_company_cargo(&station, rival, CargoType::Passengers) > owner_after
+            station_rating_for_company_cargo(&station, CompanyId::PLAYER, CargoType::Passengers)
         );
     }
 }

@@ -4,6 +4,30 @@ use crate::cargo::CargoType;
 use crate::map::TileCoord;
 
 impl super::model::Vehicle {
+    /// Datos que la estación recuerda de este vehículo para el rating (`economy.cpp:1745-1765`).
+    ///
+    /// Cada tipo usa su propia unidad de velocidad: trenes y barcos la máxima tal cual, los de
+    /// carretera la mitad y las aeronaves convertidas a las unidades antiguas.
+    #[must_use]
+    pub fn station_visit(&self, tick: u64) -> crate::station::StationVisit {
+        use super::model::VehicleKind;
+
+        let max_speed = u32::from(self.effective_engine().max_speed);
+        let speed = match self.kind {
+            VehicleKind::Train | VehicleKind::Ship => max_speed,
+            VehicleKind::Bus | VehicleKind::Tram | VehicleKind::Truck => max_speed / 2,
+            VehicleKind::Aircraft => max_speed * 10 / 128,
+        };
+        let age_ticks = tick.saturating_sub(self.build_tick);
+        let age_years = age_ticks / crate::economy::TICKS_PER_YEAR;
+
+        crate::station::StationVisit {
+            vehicle_kind: self.kind,
+            last_speed: u8::try_from(speed.min(255)).unwrap_or(255),
+            last_age: u8::try_from(age_years.min(255)).unwrap_or(255),
+        }
+    }
+
     pub(crate) fn mark_cargo_loaded(&mut self, at: TileCoord) {
         if self.cargo_source.is_none() {
             self.cargo_source = Some(at);

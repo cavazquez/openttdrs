@@ -166,7 +166,11 @@ fn phase_economy_and_world(state: &mut GameState, t: u64) {
 
     // `UpdateStationRating` corre en su propio ciclo de 185 ticks, no una vez por día.
     if t > 0 && t.is_multiple_of(u64::from(crate::economy::STATION_RATING_TICKS)) {
-        station::tick_station_cargo_age(&mut state.stations, state.order.selectgoods);
+        station::update_station_ratings(
+            &mut state.stations,
+            state.order.selectgoods,
+            &mut state.cargo_rng,
+        );
     }
 
     crate::subsidy::tick_subsidies(state);

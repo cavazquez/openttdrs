@@ -528,7 +528,8 @@ fn try_load_from_station_waiting_cargo(
     state.vehicles[vehicle_idx].sync_cargo_from_packets();
     state.vehicles[vehicle_idx].last_pickup_station = Some(station_pos);
     state.vehicles[vehicle_idx].last_depart_tick = Some(state.tick.get());
-    station::on_station_cargo_pickup(&mut state.stations[station_idx], cargo, company);
+    let visit = state.vehicles[vehicle_idx].station_visit(state.tick.get());
+    station::on_station_cargo_pickup(&mut state.stations[station_idx], cargo, company, visit);
     *loaded_flag = true;
     if first_pickup {
         state.stats.cargo_pickups += 1;

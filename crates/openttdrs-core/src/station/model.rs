@@ -84,12 +84,20 @@ pub struct Station {
     pub cargo_packets: StationCargoList,
     /// Contador histórico total de unidades entregadas (análogo a `income` simplificado).
     pub income: u64,
-    /// Días sin recogida por tipo de carga en espera.
+    /// Barridos de rating sin recogida por tipo de carga en espera.
     #[serde(default)]
     pub time_since_pickup: CargoTimeSincePickup,
+    /// Estado persistente por carga (`Station::goods`): rating, velocidad y edad del último
+    /// vehículo, carga en espera del barrido anterior.
+    #[serde(default)]
+    pub goods: super::goods_entry::StationGoods,
     /// Rating global simplificado (0–255; mayor = mejor servicio).
     #[serde(default = "default_station_rating")]
     pub rating: u8,
+    /// Tipo del último vehículo que cargó aquí (`st->last_vehicle_type`); los barcos esperan
+    /// cuatro veces más antes de penalizar.
+    #[serde(default)]
+    pub last_vehicle_type: Option<VehicleKind>,
     /// Días sin recogida por compañía (rating competitivo; default vacío).
     #[serde(default)]
     pub company_time_since_pickup: Vec<(CompanyId, CargoTimeSincePickup)>,
@@ -114,7 +122,7 @@ pub struct Station {
 }
 
 const fn default_station_rating() -> u8 {
-    255
+    super::goods_entry::INITIAL_STATION_RATING
 }
 
 fn seed_station_newgrf_random_bits(pos: TileCoord) -> u8 {
@@ -159,7 +167,9 @@ impl Station {
             cargo_packets: StationCargoList::default(),
             income: 0,
             time_since_pickup: CargoTimeSincePickup::default(),
+            goods: super::goods_entry::StationGoods::default(),
             rating: default_station_rating(),
+            last_vehicle_type: None,
             company_time_since_pickup: vec![(CompanyId::PLAYER, CargoTimeSincePickup::default())],
             airport_tiles: Vec::new(),
             airport_spec: crate::airport_class::AirportSpecId::Heliport,

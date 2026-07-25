@@ -31,6 +31,7 @@ pub(super) fn migrate_loaded_state(
             18 => migrate_state_v18_to_v19(&mut state),
             19 => migrate_state_v19_to_v20(&mut state),
             20 => migrate_state_v20_to_v21(&mut state),
+            21 => migrate_state_v21_to_v22(&mut state),
             _ => return Err(SaveError::UnsupportedVersion(version)),
         }
         v += 1;
@@ -44,6 +45,23 @@ pub(super) fn migrate_loaded_state(
 /// v20: modo `CargoDist` por defecto (`Manual`); `station_flows` se reconstruyen.
 fn migrate_state_v19_to_v20(state: &mut GameState) {
     state.cargo_dist = crate::flow_stat::CargoDistSettings::default();
+}
+
+/// v22: rating persistente por carga (`Station::goods`).
+///
+/// El save antiguo solo guardaba el rating agregado. Se reparte a las cargas que la estación
+/// estaba moviendo para que una línea en marcha no aparezca como recién construida.
+fn migrate_state_v21_to_v22(state: &mut GameState) {
+    for station in &mut state.stations {
+        for cargo in crate::cargo::ALL_CARGO_TYPES {
+            if station.cargo_stock.get(cargo) == 0 {
+                continue;
+            }
+            let entry = station.goods.get_mut(cargo);
+            entry.has_rating = true;
+            entry.rating = station.rating;
+        }
+    }
 }
 
 /// v21: `cargo_rng` persistido en `GameState` (campo faltante usa default seed 1).

@@ -68,11 +68,12 @@ abrir el issue.
 | 1 | [P0.1](#p01--la-quiebra-ignora-el-préstamo---hecho) Quiebra con préstamo | P0 | S | hecho | Una línea; hoy una compañía sobreendeudada es inmortal |
 | 2 | [P0.2](#p02--periodo-de-tránsito-de-la-carga---hecho) Periodo de tránsito 185 | P0 | S | hecho | Recalibra todos los ingresos, que hoy caen 2,5× más rápido |
 | 3 | [P0.4](#p04--rating-inicial-de-autoridad-local---hecho) Rating de autoridad local | P0 | S | hecho | Cambia la curva de arranque y es requisito de P1.9 |
-| 4 | [P1.1](#p11--updatestationrating-completo) `UpdateStationRating` + [P0.3](#p03--rating-inicial-de-estación---reclasificada-a-p1) | P1 | XL | siguiente | Es lo que hace que servir bien una estación importe |
-| 5 | [P1.4](#p14--prod_level-y-cierre-de-industrias) Industrias dinámicas | P1 | XL | | Sin esto el mundo económico es estático y las rutas no caducan |
-| 6 | [P3.1](#tabla-p3) `GenerateTowns` / `GenerateIndustries` | P3 | XL | | Un mapa nuevo nace vacío: bloquea comparar una partida completa |
-| 7 | [P1.6](#p16--pago-diferido-de-transferencias) Pago diferido de transferencias | P1 | L | | El cobro inmediato hace rentables cadenas que no lo son |
-| 8 | [P2.1](#tabla-p2) Relojes calendario/economía | P2 | XL | | Habilita los barridos escalonados de los que todo depende |
+| 4 | [P1.1](#p11--updatestationrating-completo--hecho) `UpdateStationRating` + [P0.3](#p03--rating-inicial-de-estación--hecho-con-p11) | P1 | XL | hecho | Es lo que hace que servir bien una estación importe |
+| 5 | [P1.2](#p12--reparto-de-carga-entre-estaciones-competidoras) Reparto entre estaciones | P1 | L | siguiente | Cierra la mitad que le falta a P1.1: hoy el rating no reparte nada |
+| 6 | [P1.4](#p14--prod_level-y-cierre-de-industrias) Industrias dinámicas | P1 | XL | | Sin esto el mundo económico es estático y las rutas no caducan |
+| 7 | [P3.1](#tabla-p3) `GenerateTowns` / `GenerateIndustries` | P3 | XL | | Un mapa nuevo nace vacío: bloquea comparar una partida completa |
+| 8 | [P1.6](#p16--pago-diferido-de-transferencias) Pago diferido de transferencias | P1 | L | | El cobro inmediato hace rentables cadenas que no lo son |
+| 9 | [P2.1](#tabla-p2) Relojes calendario/economía | P2 | XL | | Habilita los barridos escalonados de los que todo depende |
 
 P3.1 se adelanta al resto de P3 porque sin mundo generado no hay escenario de comparación.
 
@@ -83,9 +84,9 @@ Los otros dos P0 que quedaban ([P0.5](#p05--todas-las-industrias-producen-en-el-
 
 ## 4. P0 — Correcciones puntuales
 
-Siete entradas. **Cinco cerradas** (P0.1, P0.2, P0.4, P0.5, P0.6). Al implementarlas se vio que
-las otras dos no eran de coste S: P0.3 y P0.7 chocan con un modelo interno que hay que cambiar
-antes, así que quedan reclasificadas a P1 y P2 respectivamente (detalle en su ficha).
+Siete entradas. **Seis cerradas**: cinco como arreglos puntuales (P0.1, P0.2, P0.4, P0.5, P0.6) y
+P0.3 más tarde, dentro de P1.1, porque exigía el modelo de rating entero. Queda P0.7, que choca
+con la clasificación de segmentos de señal y está reclasificada a P2 (detalle en su ficha).
 
 ### P0.1 — La quiebra ignora el préstamo ✔ · hecho
 
@@ -119,23 +120,18 @@ antes, así que quedan reclasificadas a P1 y P2 respectivamente (detalle en su f
 - **Nota** — ningún test existente cubría la cadencia, así que la recalibración temida no ocurrió:
   la suite pasó sin tocar ningún valor esperado.
 
-### P0.3 — Rating inicial de estación ✔ · reclasificada a P1
+### P0.3 — Rating inicial de estación · hecho con P1.1
 
 - **Problema** — una estación recién construida rinde como perfecta desde el primer día porque el
   rating derivado arranca en 255.
 - **Original** — `INITIAL_STATION_RATING = 175` (`station_base.h:23`) y, sin carga entregada, sube
   de uno en uno hasta ese techo (`station_cmd.cpp:3988`).
-- **Port** — `recompute_station_rating` deja 255 mientras no haya carga esperando
-  (`station/cargo_rating.rs:47`).
-- **Por qué no es S** — en el original el 175 es el valor inicial de un rating **persistente por
-  cargo** (`GoodsEntry::rating`) que converge poco a poco; en el port el rating es una función pura
-  de `time_since_pickup`, recalculada en cada barrido. No hay dónde escribir un valor inicial que
-  sobreviva al siguiente tick, y distinguir "nunca servida" de "servida y vacía" exige el flag
-  `HasRating()` del original.
-- **Solución** — hacerlo junto a [P1.1](#p11--updatestationrating-completo): introducir el rating
-  persistente por cargo con su valor inicial y su convergencia, y dejar que la fórmula actual pase
-  a ser el objetivo al que converge.
-- **Coste** — M dentro de P1.1 (no S por separado).
+- **Port** — `recompute_station_rating` dejaba 255 mientras no hubiera carga esperando.
+- **Por qué no era S** — en el original el 175 es el valor inicial de un rating **persistente por
+  cargo** (`GoodsEntry::rating`), no una constante suelta: hacía falta el modelo entero.
+- **Hecho** — dentro de [P1.1](#p11--updatestationrating-completo--hecho): `GoodsEntry::rating`
+  nace en 175 y, mientras la estación nunca haya movido ese tipo de carga, sube de uno en uno sin
+  pasar de ahí. Test `new_station_starts_at_initial_rating`.
 
 ### P0.4 — Rating inicial de autoridad local ✔ · hecho
 
@@ -199,23 +195,36 @@ antes, así que quedan reclasificadas a P1 y P2 respectivamente (detalle en su f
 
 ## 5. P1 — Reglas de comportamiento
 
-### P1.1 — `UpdateStationRating` completo
+Veintidós entradas, **una cerrada** (P1.1, que además absorbió P0.3).
 
-- **Problema** — el rating es `255 − días de espera`. No influyen la velocidad del vehículo, la
-  edad del servicio, el stock acumulado ni la estatua, y no hay convergencia suave: la señal
-  económica que debería premiar servir bien una estación no existe.
+### P1.1 — `UpdateStationRating` completo · hecho
+
+- **Problema** — el rating era `255 − días de espera`. No influían la velocidad del vehículo, la
+  edad del servicio ni el stock acumulado, y no había convergencia suave: la señal económica que
+  debería premiar servir bien una estación no existía.
 - **Original** — `station_cmd.cpp:3973-4126`, cada `STATION_RATING_TICKS = 185`
   (`timer_game_tick.h:78`, disparo en `station_cmd.cpp:4335-4339`). Términos: `last_speed - 85`
   desplazado 2; escalones de espera en 21/12/6/3 (+25/+25/+45/+35); base −90; umbrales de stock
   1500/1000/600/300/100; +26 por estatua; edad del vehículo <3/<2/<1 (+10/+10/+13); convergencia
   `clamp(objetivo - actual, -2, 2)`; truncado aleatorio si el rating queda bajo con mucho stock.
-- **Port** — `station/cargo_rating.rs:18-47`. El ciclo ya corre cada 185 ticks
-  (`sim_step/mod.rs:167`, cerrado con P0.2); falta la fórmula.
-- **Solución** — portar la función entera con los campos que necesita
-  (`last_speed`, `last_age`, actualizados al cargar como en `economy.cpp:1764-1765`). Incluye
-  `ModifyStationRatingAround` (`station_cmd.cpp:4388-4398`), hoy ausente. Depende de
-  [P0.3](#p03--rating-inicial-de-estación---reclasificada-a-p1) y se apoya en el reloj de [P2.1](#tabla-p2).
-- **Coste** — XL.
+- **Hecho** — `station/goods_entry.rs` introduce `GoodsEntry` por carga (rating persistente,
+  `has_rating`, `last_speed`, `last_age`, `max_waiting_cargo`) y `station/cargo_rating.rs` porta
+  la función: objetivo con todos los términos, convergencia ±2 y los dos truncados aleatorios con
+  el RNG de partida (`cargo_rng`), más el recorte progresivo por encima de 4096 unidades. La
+  estación recuerda al último vehículo que cargó (`Vehicle::station_visit`, con las unidades de
+  velocidad de cada tipo como en `economy.cpp:1745-1765`) y el tipo de vehículo, que es lo que
+  hace que los barcos esperen cuatro veces más antes de penalizar. Save v22 con migración que
+  reparte el rating agregado antiguo a las cargas que la estación estaba moviendo. Tests
+  `new_station_starts_at_initial_rating`, `good_service_raises_rating_two_points_per_sweep`,
+  `unserved_cargo_creeps_back_to_initial_rating`, `station_rating_decays_with_waiting_cargo` y
+  `abandoned_station_loses_rating_over_time`.
+- **Cambio de comportamiento** — el rating por compañía deja de existir como tal: en el original
+  es de la estación e igual para todos, y la competencia se resuelve al repartir la producción
+  ([P1.2](#p12--reparto-de-carga-entre-estaciones-competidoras)). `company_time_since_pickup` se
+  conserva porque ese reparto lo va a necesitar.
+- **Pendiente** — el +26 por estatua (no hay acciones de ayuntamiento todavía, va con
+  [P1.10](#p110--efecto-real-de-la-publicidad), igual que `ModifyStationRatingAround`) y el número
+  real de destinos: hoy `num_dests = 1`, que equivale al reparto manual del original.
 
 ### P1.2 — Reparto de carga entre estaciones competidoras
 
@@ -226,7 +235,8 @@ antes, así que quedan reclasificadas a P1 y P2 respectivamente (detalle en su f
   (`station_cmd.cpp:4599-4660`).
 - **Port** — ausente; la carga se limita con `load_amount_for_rating` (`cargo_rating.rs:92-97`).
 - **Solución** — implementar el reparto en la entrega de producción a estaciones cercanas. Sin
-  esto, [P1.1](#p11--updatestationrating-completo) rinde la mitad de su valor.
+  esto, [P1.1](#p11--updatestationrating-completo--hecho) rinde la mitad de su valor: el rating ya
+  se calcula bien, pero nadie lo usa para decidir qué estación se lleva la producción.
 - **Coste** — L.
 
 ### P1.3 — Producción industrial por spec

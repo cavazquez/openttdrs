@@ -875,6 +875,35 @@ fn onboard_cargo_ages_every_185_ticks() {
     assert_eq!(s.vehicles[0].cargo_packets.max_periods_in_transit(), 1);
 }
 
+/// Una estación abandonada pierde rating barrido a barrido en la simulación completa,
+/// y con él la cantidad que un vehículo puede llevarse (`load_amount_for_rating`).
+#[test]
+fn abandoned_station_loses_rating_over_time() {
+    let mut s = GameState::new(8, 8);
+    let pos = TileCoord::new(2, 2);
+    let mut station = crate::station::Station::new(pos);
+    station.add_waiting_cargo(CargoType::Coal, 200);
+    s.stations.push(station);
+
+    let initial = crate::station::station_rating_for_cargo(&s.stations[0], CargoType::Coal);
+    assert_eq!(initial, crate::station::INITIAL_STATION_RATING);
+
+    let sweep = u64::from(crate::economy::STATION_RATING_TICKS);
+    while s.tick.get() < sweep * 20 {
+        s.step();
+    }
+
+    let decayed = crate::station::station_rating_for_cargo(&s.stations[0], CargoType::Coal);
+    assert!(
+        decayed < initial,
+        "sin vehículos que la sirvan la estación debe empeorar, quedó en {decayed}"
+    );
+    assert!(
+        crate::station::load_amount_for_rating(100, decayed) < 100,
+        "un rating peor limita lo que se puede cargar"
+    );
+}
+
 #[test]
 fn industry_produces_on_schedule() {
     let mut s = GameState::new(8, 8);

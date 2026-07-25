@@ -34,7 +34,8 @@ pub use io::{load, load_from_str, save};
 /// v19: intervalo de servicio por defecto en vehículos antiguos.
 /// v20: `cargo_dist` (modo Manual/Asymmetric/Symmetric; flows reconstruidos).
 /// v21: `cargo_rng` persistido en `GameState` (antes efímero en runtime).
-pub const CURRENT_SAVE_VERSION: u32 = 21;
+/// v22: rating persistente por carga (`Station::goods`) en vez de derivado del tiempo de espera.
+pub const CURRENT_SAVE_VERSION: u32 = 22;
 
 const SAVE_VERSION: u32 = CURRENT_SAVE_VERSION;
 

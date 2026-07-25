@@ -1,4 +1,7 @@
 //! Cascada de poses de unidades después del avance autoritativo de la cabeza.
+//!
+//! Cada follower se coloca con `CalcNextVehicleOffset` respecto a la unidad
+//! precedente ([`super::pose::consist_unit_poses`]).
 
 use crate::map::{Map, TileKind};
 use crate::vehicle::Vehicle;
@@ -6,11 +9,11 @@ use crate::vehicle::Vehicle;
 use super::pose::consist_unit_poses;
 use super::topology::consist_unit_ids;
 
-/// Persiste las poses proyectadas de los followers tras avanzar la cabeza.
+/// Persiste las poses unidad a unidad tras avanzar la cabeza.
 ///
 /// La cabeza conserva velocidad, `progress`, path y reservas; esta fase solo
-/// propaga la geometría física a las unidades siguientes. El controlador de
-/// track/PBS por unidad se añadirá sobre esta API.
+/// propaga la geometría física a las unidades siguientes vía offsets
+/// `CalcNextVehicleOffset`.
 pub fn propagate_consist_unit_poses(vehicles: &mut [Vehicle], head_id: u32) {
     propagate_consist_unit_poses_with_map(vehicles, head_id, None);
 }

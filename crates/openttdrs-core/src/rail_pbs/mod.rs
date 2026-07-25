@@ -22,9 +22,9 @@ mod tests;
 // Reexports públicos desde model
 pub use model::{
     MAX_TRAIN_RESERVATION_LEN, RAIL_RESERVATION_M2_HI_MASK, ReservedRailStep,
-    YAPF_RESERVATION_CROSS_PENALTY, decode_rail_reservation_m2_hi,
-    encode_rail_reservation_to_m2_hi, rail_tile_has_pbs_reservation, track_for_rail_step,
-    track_on_departure_tile,
+    YAPF_RESERVATION_CROSS_PENALTY, YAPF_TILE_CORNER_LENGTH, YAPF_TILE_LENGTH,
+    decode_rail_reservation_m2_hi, encode_rail_reservation_to_m2_hi, rail_tile_has_pbs_reservation,
+    track_for_rail_step, track_on_departure_tile,
 };
 
 // Reexports públicos desde search

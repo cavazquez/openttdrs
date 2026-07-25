@@ -22,10 +22,10 @@ pub enum YapfSignalRouting {
     DeadEnd,
 }
 
-/// Penalización YAPF por señal de bloque roja (aprox. `rail_firstred_penalty`).
-pub const YAPF_RED_SIGNAL_PENALTY: u32 = 100;
-/// Penalización YAPF por cruzar una señal path por detrás (`yapf_costrail.hpp`).
-pub const YAPF_PBS_BEHIND_PENALTY: u32 = 100;
+/// Penalización YAPF por primera señal de bloque roja (`rail_firstred_penalty` = 10×tesela).
+pub const YAPF_RED_SIGNAL_PENALTY: u32 = 1000;
+/// Penalización YAPF por cruzar una señal path por detrás (`rail_pbs_signal_back_penalty` = 15×tesela).
+pub const YAPF_PBS_BEHIND_PENALTY: u32 = 1500;
 
 /// Evalúa señales al planificar salida de `tile` en `exit_dir` (convención `OpenTTD` / `rail_signals`).
 ///

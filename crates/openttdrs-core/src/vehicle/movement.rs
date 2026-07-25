@@ -544,6 +544,9 @@ impl super::model::Vehicle {
     }
 
     /// Máximo de teselas recordadas para huella PBS / consist.
+    ///
+    /// El historial de la cabeza alimenta [`crate::train_consist::consist_unit_poses`]:
+    /// cada vagón se sitúa con `CalcNextVehicleOffset` sobre este recorrido.
     const RAIL_HISTORY_CAP: usize = 32;
 
     fn push_rail_tile_history(&mut self, left: TileCoord) {

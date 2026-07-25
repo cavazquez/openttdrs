@@ -561,9 +561,9 @@ tick contra OpenTTD seguirá divergiendo aunque las fórmulas individuales sean 
 | **P2.6** | `RunTileLoop` | · hecho | LFSR de Galois con feedback según tamaño de mapa y estado en `_cur_tileloop_tile` (`landscape.cpp:798-835`) | LFSR portado; una pasada por tick; tesela 0 especial cada 256 ticks; estado persistido | M |
 | **P2.7** | `TrainController` | · hecho | `ChooseTrainTrack` decide el ramal con YAPF y reserva de forma atómica al entrar en la tesela; los vagones siguen `_connecting_track` (`train_cmd.cpp:3289-3487`, `2727-2888`) | `choose_train_track_on_enter` + YAPF en `advance_one_tile` | XL · **hecho** |
 | **P2.8** | Liberación de reservas | · hecho | `FreeTrainTrackReservation` recorre la reserva tesela a tesela y pone en rojo las señales PBS al liberarlas (`train_cmd.cpp:2419-2477`) | `free_train_track_reservation` walk + PBS rojo en sync | L · **hecho** |
-| **P2.9** | Costes de YAPF | A* con tesela 1, señal roja 100, cruce de reserva 80; sin caché ni look-ahead (`pathfinder/yapf.rs:24-194`) | Segmentos con caché y penalizaciones calibradas: tesela 100, esquina 71, primera roja 1000, cruce de reserva 300, coste de estación y plataforma (`yapf_costrail.hpp:59-615`) | Portar la escala de costes y la segmentación; hoy las elecciones de ramal divergen en redes densas | XL |
+| **P2.9** | Costes de YAPF | · hecho | Segmentos con caché y penalizaciones calibradas: tesela 100, esquina 71, primera roja 1000, cruce de reserva 300, coste de estación y plataforma (`yapf_costrail.hpp:59-615`) | Escala OpenTTD + caché de paso por búsqueda | XL · **hecho** |
 | **P2.10** | Reversa en señal | · hecho | `wait_oneway_signal`, `wait_twoway_signal` y `reverse_at_signals` actúan durante el movimiento (`train_cmd.cpp:3375-3422`) | `tick_signal_wait_and_maybe_reverse` en el bucle de movimiento | L · **hecho** |
-| **P2.11** | Geometría del consist | Las poses de los vagones se proyectan desde el historial de la cabeza (`train_consist/pose.rs:25-78`) | Cada unidad avanza en su propio paso con `CalcNextVehicleOffset` dentro de `TrainController` (`train_cmd.cpp:1903-1966`) | Simular unidad a unidad; afecta a trenes largos en curvas y túneles | XL |
+| **P2.11** | Geometría del consist | · hecho | Cada unidad avanza en su propio paso con `CalcNextVehicleOffset` dentro de `TrainController` (`train_cmd.cpp:1903-1966`) | Poses unidad a unidad con offset centro-a-centro | XL · **hecho** |
 | **P2.12** | PBS en cruces | · hecho | Con `Split` o `MultiEnter` la señal va a rojo aunque no haya tren (`signal.cpp:410-458`) | Flags en `explore_sig_segment` → PBS rojo sin reserva | M · **hecho** |
 | **P2.13** | Buffer de señales | · hecho | `_globset` guarda pares (tesela, `DiagDirection`) y fuerza actualización a las 64 entradas (`signal.cpp:589-610`) | `SignalGlobEntry` + flush a 64 | M · **hecho** |
 | **P2.14** | Controlador de carretera | · hecho | `IndividualRoadVehicleController` avanza frame a frame con `_road_drive_data` y los estados `RVSB_*` (`roadveh_cmd.cpp:1201-1576`, `roadveh.h:38-57`) | FSM en `road_movement/controller.rs` + tablas `drive_data` | XL · **hecho** |
@@ -598,8 +598,14 @@ el `path`.
 **P2.8 · hecho** — `free_train_track_reservation` recorre `reserved_steps`, pone PBS a rojo y
 limpia `m2_hi`; `sync_reservations_to_map` también enrojece PBS al liberar teselas.
 
+**P2.9 · hecho** — Escala YAPF OpenTTD: tesela 100, esquina 71, primera roja 1000, cruce de
+reserva 300, PBS-behind 1500; heurística Manhattan×100; caché de coste de paso por búsqueda.
+
 **P2.10 · hecho** — `wait_oneway_signal` / `wait_twoway_signal` (defaults 15/41 días ×2) y
 `reverse_at_signals` en el bucle de movimiento vía `tick_signal_wait_and_maybe_reverse`.
+
+**P2.11 · hecho** — `consist_unit_poses` coloca cada vagón con `CalcNextVehicleOffset` respecto
+a la unidad precedente sobre el historial de la cabeza; el controlador propaga esas poses.
 
 **P2.12 · hecho** — `SigSegmentProbe::{split,multi_enter}` en `explore_sig_segment`; PBS sin
 reserva permanece roja con Split/MultiEnter.

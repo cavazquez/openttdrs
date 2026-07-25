@@ -12,14 +12,14 @@ use crate::vehicle::Vehicle;
 
 use super::conflicts::tile_occupied_by_other_train;
 use super::model::{
-    MAX_TRAIN_RESERVATION_LEN, ReservedRailStep, YAPF_RESERVATION_CROSS_PENALTY,
+    MAX_TRAIN_RESERVATION_LEN, ReservedRailStep, YAPF_RESERVATION_CROSS_PENALTY, YAPF_TILE_LENGTH,
     track_for_rail_step, track_on_departure_tile,
 };
 
-/// Coste base por tesela en `TryReserve` (alineado con YAPF `TILE_COST`).
-const TRY_RESERVE_TILE_COST: u32 = 1;
+/// Coste base por tesela en `TryReserve` (alineado con YAPF `YAPF_TILE_LENGTH`).
+const TRY_RESERVE_TILE_COST: u32 = YAPF_TILE_LENGTH;
 /// Sesgo si la tesela no está en el path de órdenes (prioriza YAPF sobre BFS ciego).
-const TRY_RESERVE_OFF_PATH_PENALTY: u32 = 50;
+const TRY_RESERVE_OFF_PATH_PENALTY: u32 = 50 * YAPF_TILE_LENGTH;
 
 #[derive(Clone, Eq, PartialEq)]
 pub(super) struct TryReserveNode {

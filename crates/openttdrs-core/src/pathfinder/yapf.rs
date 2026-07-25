@@ -7,9 +7,9 @@ use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap, HashSet};
 
 use crate::map::{
-    Map, RAIL_TB_X, TileCoord, TileKind, opposite_diag_dir as opposite_dir, rail_bit_for_sides,
-    rail_bits_touching_side, rail_signal_diag_dir_offset as rail_diag_dir_offset,
-    rail_traversal_bits,
+    Map, RAIL_TB_X, RAIL_TB_Y, TileCoord, TileKind, opposite_diag_dir as opposite_dir,
+    rail_bit_for_sides, rail_bits_touching_side,
+    rail_signal_diag_dir_offset as rail_diag_dir_offset, rail_traversal_bits,
 };
 use crate::rail_pbs::{YAPF_RESERVATION_CROSS_PENALTY, tile_track_reserved_by_map};
 use crate::rail_signals::{YapfSignalRouting, yapf_routing_signal};
@@ -18,13 +18,14 @@ use super::{
     TunnelWormholes, is_rail_network_tile, is_rail_station_tile, station_entrance_faces_rail,
 };
 
+/// Reexport de la escala `OpenTTD` (`pathfinder_type.h`).
+pub use crate::rail_pbs::{YAPF_TILE_CORNER_LENGTH, YAPF_TILE_LENGTH};
+
 /// Lado de entrada libre al iniciar la búsqueda.
 const ENTRY_ANY: u8 = 4;
 
-/// Coste base por tesela recta (`YAPF_TILE_LENGTH` normalizado).
-const TILE_COST: u32 = 1;
-/// Penalización por giro de 45° dentro de una tesela.
-const CURVE45_PENALTY: u32 = 1;
+/// Penalización por giro de 45° (`rail_curve45_penalty` = 1×tesela).
+const CURVE45_PENALTY: u32 = YAPF_TILE_LENGTH;
 
 /// Dirección de salida + pieza de vía (un solo bit de `m5`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -173,24 +174,64 @@ fn rail_station_entrance_links_track(map: &Map, station: TileCoord, track: TileC
     })
 }
 
+/// `IsDiagonalTrack`: X/Y son diagonales; Upper/Lower/Left/Right son esquinas.
+#[must_use]
+const fn is_diagonal_track(track: u8) -> bool {
+    matches!(track, RAIL_TB_X | RAIL_TB_Y)
+}
+
+#[must_use]
+const fn tile_base_cost(track: u8) -> u32 {
+    if is_diagonal_track(track) {
+        YAPF_TILE_LENGTH
+    } else {
+        YAPF_TILE_CORNER_LENGTH
+    }
+}
+
 #[must_use]
 fn reservation_step_penalty(map: &Map, tile: TileCoord, track: u8) -> u32 {
-    if tile_track_reserved_by_map(map, tile, track) {
-        YAPF_RESERVATION_CROSS_PENALTY
+    if !tile_track_reserved_by_map(map, tile, track) {
+        return 0;
+    }
+    let base = YAPF_RESERVATION_CROSS_PENALTY;
+    if is_diagonal_track(track) {
+        base
     } else {
-        0
+        (base * YAPF_TILE_CORNER_LENGTH) / YAPF_TILE_LENGTH
     }
 }
 
 #[must_use]
 fn signal_step_cost(map: &Map, tile: TileCoord, td: RailTrackdir) -> Option<u32> {
+    let base = tile_base_cost(td.track);
     match yapf_routing_signal(map, tile, td.exit_dir) {
         YapfSignalRouting::DeadEnd => None,
-        YapfSignalRouting::Clear => Some(TILE_COST + reservation_step_penalty(map, tile, td.track)),
+        YapfSignalRouting::Clear => Some(base + reservation_step_penalty(map, tile, td.track)),
         YapfSignalRouting::Penalty(p) => {
-            Some(TILE_COST + p + reservation_step_penalty(map, tile, td.track))
+            Some(base + p + reservation_step_penalty(map, tile, td.track))
         }
     }
+}
+
+/// Coste de paso con caché de segmento básica (por búsqueda; el mapa no muda).
+fn cached_signal_step_cost(
+    map: &Map,
+    tile: TileCoord,
+    td: RailTrackdir,
+    cache: &mut HashMap<NodeKey, Option<u32>>,
+) -> Option<u32> {
+    let key = NodeKey {
+        tile,
+        track: td.track,
+        exit_dir: td.exit_dir,
+    };
+    if let Some(&cached) = cache.get(&key) {
+        return cached;
+    }
+    let cost = signal_step_cost(map, tile, td);
+    cache.insert(key, cost);
+    cost
 }
 
 #[must_use]
@@ -204,7 +245,7 @@ fn curve_penalty(prev: RailTrackdir, next: RailTrackdir) -> u32 {
 
 #[must_use]
 fn manhattan(a: TileCoord, b: TileCoord) -> u32 {
-    a.x.abs_diff(b.x) + a.y.abs_diff(b.y)
+    (a.x.abs_diff(b.x) + a.y.abs_diff(b.y)).saturating_mul(YAPF_TILE_LENGTH)
 }
 
 #[must_use]
@@ -249,6 +290,8 @@ struct SearchCtx<'a> {
     g_score: &'a mut HashMap<NodeKey, u32>,
     parent: &'a mut HashMap<NodeKey, NodeKey>,
     heap: &'a mut BinaryHeap<AstarNode>,
+    /// Caché de coste de segmento/paso por `(tile, track, exit_dir)` dentro de la búsqueda.
+    step_cache: &'a mut HashMap<NodeKey, Option<u32>>,
 }
 
 fn tile_ok_for_required(
@@ -288,7 +331,7 @@ fn expand_neighbors(ctx: &mut SearchCtx<'_>, key: NodeKey, cur_g: u32, cur_td: R
         {
             let mouth = pathfinder_dir_to_yapf(mouth_pf);
             if entry == mouth {
-                let tentative = cur_g.saturating_add(TILE_COST);
+                let tentative = cur_g.saturating_add(YAPF_TILE_LENGTH);
                 let next_key = NodeKey {
                     tile: next_tile,
                     track: RAIL_TB_X,
@@ -315,7 +358,9 @@ fn expand_neighbors(ctx: &mut SearchCtx<'_>, key: NodeKey, cur_g: u32, cur_td: R
                 };
                 if can_enter {
                     for next_td in possible_trackdirs(next_tb, entry) {
-                        let Some(step) = signal_step_cost(map, next_tile, next_td) else {
+                        let Some(step) =
+                            cached_signal_step_cost(map, next_tile, next_td, ctx.step_cache)
+                        else {
                             continue;
                         };
                         let tentative = cur_g + step + curve_penalty(cur_td, next_td);
@@ -349,7 +394,8 @@ fn expand_neighbors(ctx: &mut SearchCtx<'_>, key: NodeKey, cur_g: u32, cur_td: R
         if ok {
             let wh_tb = yapf_traversal_bits(map, other);
             for next_td in possible_trackdirs(wh_tb, ENTRY_ANY) {
-                let Some(step) = signal_step_cost(map, other, next_td) else {
+                let Some(step) = cached_signal_step_cost(map, other, next_td, ctx.step_cache)
+                else {
                     continue;
                 };
                 let tentative = cur_g + step;
@@ -443,6 +489,7 @@ pub fn find_rail_path_yapf_for_type(
     let mut g_score: HashMap<NodeKey, u32> = HashMap::new();
     let mut parent: HashMap<NodeKey, NodeKey> = HashMap::new();
     let mut heap = BinaryHeap::new();
+    let mut step_cache: HashMap<NodeKey, Option<u32>> = HashMap::new();
     let mut ctx = SearchCtx {
         map,
         from,
@@ -452,6 +499,7 @@ pub fn find_rail_path_yapf_for_type(
         g_score: &mut g_score,
         parent: &mut parent,
         heap: &mut heap,
+        step_cache: &mut step_cache,
     };
 
     let mut closed: HashSet<NodeKey> = HashSet::new();
@@ -465,7 +513,7 @@ pub fn find_rail_path_yapf_for_type(
             track: td.track,
             exit_dir: td.exit_dir,
         };
-        let Some(cost) = signal_step_cost(map, tile, td) else {
+        let Some(cost) = cached_signal_step_cost(map, tile, td, ctx.step_cache) else {
             continue;
         };
         ctx.g_score.insert(key, cost);
@@ -689,6 +737,7 @@ mod tests {
 
     #[test]
     fn yapf_penalizes_crossing_foreign_reservation() {
+        use crate::map::RAIL_TB_UPPER;
         use crate::rail_pbs::{
             ReservedRailStep, YAPF_RESERVATION_CROSS_PENALTY, encode_rail_reservation_to_m2_hi,
         };
@@ -715,6 +764,22 @@ mod tests {
             reservation_step_penalty(&map, TileCoord::new(3, 1), RAIL_TB_X),
             0
         );
+        assert_eq!(tile_base_cost(RAIL_TB_X), YAPF_TILE_LENGTH);
+        assert_eq!(tile_base_cost(RAIL_TB_UPPER), YAPF_TILE_CORNER_LENGTH);
+        assert_eq!(
+            reservation_step_penalty(&map, mid, RAIL_TB_UPPER),
+            0,
+            "sin reserva en UPPER"
+        );
         let _ = ReservedRailStep::new(mid, RAIL_TB_X);
+    }
+
+    #[test]
+    fn yapf_cost_scale_matches_openttd_defaults() {
+        assert_eq!(YAPF_TILE_LENGTH, 100);
+        assert_eq!(YAPF_TILE_CORNER_LENGTH, 71);
+        assert_eq!(crate::rail_signals::YAPF_RED_SIGNAL_PENALTY, 1000);
+        assert_eq!(crate::rail_pbs::YAPF_RESERVATION_CROSS_PENALTY, 300);
+        assert_eq!(CURVE45_PENALTY, 100);
     }
 }

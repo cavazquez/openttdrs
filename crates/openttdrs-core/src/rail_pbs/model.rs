@@ -15,8 +15,12 @@ pub(super) const RAIL_TB_VERT: u8 = 0x30;
 /// Tope de pasos reservados por tren (paridad con límites PBS del original).
 pub const MAX_TRAIN_RESERVATION_LEN: usize = 64;
 
-/// Penalización YAPF por cruzar una pista ya reservada por otro tren.
-pub const YAPF_RESERVATION_CROSS_PENALTY: u32 = 80;
+/// Coste base por tesela diagonal YAPF (`pathfinder_type.h` `YAPF_TILE_LENGTH`).
+pub const YAPF_TILE_LENGTH: u32 = 100;
+/// Coste de tesela en esquina / vía no diagonal (`YAPF_TILE_CORNER_LENGTH`).
+pub const YAPF_TILE_CORNER_LENGTH: u32 = 71;
+/// Penalización YAPF por cruzar una pista ya reservada (`rail_pbs_cross_penalty` = 3×tesela).
+pub const YAPF_RESERVATION_CROSS_PENALTY: u32 = 300;
 
 /// Un paso de reserva: tesela + un único `TrackBit`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]

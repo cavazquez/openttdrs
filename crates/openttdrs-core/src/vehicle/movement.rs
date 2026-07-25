@@ -615,10 +615,10 @@ impl super::model::Vehicle {
             let left = self.pos;
             self.pos = next;
             self.push_rail_tile_history(left);
-            if self.pos == self.dest {
+            if self.pos == self.dest && !self.defers_connected_bay_arrival(map) {
                 self.advance_destination_after_arrival();
             }
-        } else if self.pos == self.dest {
+        } else if self.pos == self.dest && !self.defers_connected_bay_arrival(map) {
             self.advance_destination_after_arrival();
         } else {
             if matches!(
@@ -644,7 +644,10 @@ impl super::model::Vehicle {
             if self.orders.is_empty() && self.pos != previous {
                 self.origin = previous;
             }
-            if self.pos == self.dest && !self.orders.is_empty() {
+            if self.pos == self.dest
+                && !self.orders.is_empty()
+                && !self.defers_connected_bay_arrival(map)
+            {
                 self.advance_destination_after_arrival();
             }
         }
@@ -656,6 +659,17 @@ impl super::model::Vehicle {
         }
     }
 
+    /// En una parada de bahía la llegada ocurre en `_road_stop_stop_frame`,
+    /// varios frames después de cruzar el límite de la tesela.
+    fn defers_connected_bay_arrival(&self, map: Option<&Map>) -> bool {
+        matches!(
+            self.kind,
+            super::model::VehicleKind::Bus
+                | super::model::VehicleKind::Truck
+                | super::model::VehicleKind::Tram
+        ) && map.is_some_and(|map| crate::station::is_connected_bay_road_stop(map, self.pos))
+    }
+
     /// `UpdateInclination` + `AffectSpeedByZChange` (`ground_vehicle.hpp` / `train_cmd.cpp`).
     ///
     /// Usa Z en píxeles (`GetSlopePixelZ` ≈ base·8 + partial) en la sub-tesela actual.
@@ -663,7 +677,12 @@ impl super::model::Vehicle {
         if self.kind != super::model::VehicleKind::Train || !self.is_consist_head() {
             return;
         }
-        let (sub_x, sub_y) = crate::road_movement::vehicle_subtile(self);
+        // La pendiente pertenece al estado autoritativo por píxel; el remanente
+        // fraccional añadido para suavizar el render no debe adelantar eventos
+        // físicos de Z entre ticks.
+        let visual_progress = crate::engine::train_visual_progress_from_pixel(self.rail_pixel);
+        let (sub_x, sub_y) =
+            crate::road_movement::train_straight_subtile(self.direction, visual_progress);
         let new_z = slope_pixel_z(map, self.pos, sub_x, sub_y);
         let Some(old_z) = self.z_pos else {
             self.z_pos = Some(new_z);
@@ -885,7 +904,7 @@ impl super::model::Vehicle {
     /// Cierra la ventana de carga abierta en la llegada (inicio del `step`
     /// siguiente). Si las fases de carga/descarga actuaron, ya avanzaron la
     /// orden (`advance_after_loading`/`_unloading`) y aquí no queda nada.
-    pub(super) fn complete_station_load_window(&mut self) {
+    pub(crate) fn complete_station_load_window(&mut self) {
         if !self.awaiting_load_window {
             return;
         }

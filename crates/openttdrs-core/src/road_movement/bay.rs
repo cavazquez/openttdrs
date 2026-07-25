@@ -1,7 +1,12 @@
 //! Bahías de estaciones (bus/truck stops).
 
 use super::curves::sample_curve;
+use super::drive_data::{RDE_NEXT_TILE, RoadDriveEntry};
 use super::pose::{VehiclePose, movement_target_at};
+use super::rvsb::{
+    RVSB_ENTERED_STOP, RVSB_TRACKDIR_MASK, RVSB_USING_SECOND_BAY, direction_from_trackdir,
+    is_bay_road_state,
+};
 use crate::map::TileCoord;
 use crate::vehicle::{Vehicle, VehicleDirection, direction_from_tile_step, reverse_direction};
 
@@ -355,6 +360,101 @@ pub const fn bay_station_table(
     }
 }
 
+/// Tabla elegida por el `state` de `RoadVehicle`, incluidos los bits de
+/// dársena cercana y parada alcanzada. Es el índice de `_road_stop_stop_frame`
+/// y `_road_drive_data` usado por `OpenTTD`.
+#[must_use]
+pub(crate) fn bay_station_table_for_state(state: u8) -> Option<&'static BayStationTable> {
+    if !is_bay_road_state(state) {
+        return None;
+    }
+    let inbound = direction_from_trackdir(state & (RVSB_TRACKDIR_MASK & 0x09));
+    let far = state & RVSB_USING_SECOND_BAY == 0;
+    bay_station_table(inbound, far)
+}
+
+/// Frame exacto donde empieza la carga para este estado de bahía.
+#[must_use]
+pub(crate) fn bay_stop_frame(state: u8) -> Option<u8> {
+    u8::try_from(bay_station_table_for_state(state)?.stop).ok()
+}
+
+/// Entrada de la tabla `_rv_station_left_*`, incluido su marcador de salida.
+#[must_use]
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+pub(crate) fn bay_drive_entry(state: u8, frame: u8) -> Option<RoadDriveEntry> {
+    let table = bay_station_table_for_state(state)?;
+    let index = usize::from(frame);
+    if let Some(&(x, y)) = table.points.get(index) {
+        return Some(RoadDriveEntry {
+            x: x as u8,
+            y: y as u8,
+        });
+    }
+    if index != table.points.len() {
+        return None;
+    }
+    let outbound = reverse_direction(direction_from_trackdir(state & (RVSB_TRACKDIR_MASK & 0x09)));
+    let diag = match outbound {
+        DIR_NE => 0,
+        DIR_SE => 1,
+        DIR_SW => 2,
+        DIR_NW => 3,
+        _ => return None,
+    };
+    Some(RoadDriveEntry {
+        x: RDE_NEXT_TILE | diag,
+        y: 0,
+    })
+}
+
+/// Posición interpolada por frame real del controlador, no por progreso
+/// sintético 0..255. Esto mantiene simulación y dibujo sobre la misma tabla.
+#[must_use]
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss
+)]
+pub(crate) fn bay_subtile_at_frame(state: u8, frame_f: f32) -> Option<SubTile> {
+    let table = bay_station_table_for_state(state)?;
+    let max = (table.points.len().saturating_sub(1)) as f32;
+    let frame_f = frame_f.clamp(0.0, max);
+    let index = frame_f.floor() as usize;
+    let next = (index + 1).min(table.points.len() - 1);
+    let t = frame_f - index as f32;
+    let a = table.points[index];
+    let b = table.points[next];
+    Some((a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t))
+}
+
+/// Orientación del sprite derivada de los puntos contiguos de la tabla.
+#[must_use]
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+pub(crate) fn bay_direction_at_frame(state: u8, frame_f: f32) -> Option<VehicleDirection> {
+    let table = bay_station_table_for_state(state)?;
+    let index = (frame_f.floor() as usize).min(table.points.len() - 1);
+    let mut a = index.saturating_sub(1);
+    let mut b = (index + 1).min(table.points.len() - 1);
+    if table.points[a] == table.points[index] {
+        a = index;
+    }
+    if table.points[b] == table.points[index] && b + 1 < table.points.len() {
+        b += 1;
+    }
+    let p0 = table.points[a];
+    let p1 = table.points[b];
+    direction_from_subtile_delta(p1.0 - p0.0, p1.1 - p0.1)
+}
+
+/// El vehículo alcanzó el frame de servicio y conserva la dársena asignada.
+#[must_use]
+pub fn road_vehicle_stopped_in_bay(v: &Vehicle) -> bool {
+    is_bay_road_state(v.road_state)
+        && v.road_state & RVSB_ENTERED_STOP != 0
+        && bay_stop_frame(v.road_state).is_some_and(|stop| v.frame == stop)
+}
+
 /// El vehículo está detenido dentro de una bahía de sus órdenes (ancló en la
 /// tesela de la estación tras entrar por la boca). Se comprueba contra todas
 /// las órdenes porque al terminar de cargar la orden actual ya avanzó a la
@@ -444,7 +544,7 @@ pub(super) fn bay_render_direction(v: &Vehicle, pose: VehiclePose) -> Option<Veh
 /// Dirección 0–7 a partir del delta entre dos puntos sub-tesela (misma regla
 /// que `OpenTTD`, que orienta el sprite con `new_pos - old_pos`): en estas
 /// tablas el eje x crece hacia SW y el eje y hacia SE.
-fn direction_from_subtile_delta(dx: f32, dy: f32) -> Option<VehicleDirection> {
+pub(crate) fn direction_from_subtile_delta(dx: f32, dy: f32) -> Option<VehicleDirection> {
     use crate::vehicle::{DIR_E, DIR_N, DIR_S, DIR_W};
     let sx = if dx.abs() < 0.25 {
         0

@@ -1,5 +1,8 @@
 use crate::economy::rail_build_cost;
-use crate::map::{Map, TileCoord, TileKind, rail_trackbits_valid_on_slope, tile_slope_and_z};
+use crate::map::{
+    Map, TileCoord, TileKind, opposite_diag_dir, rail_bit_for_sides, rail_bits_touching_side,
+    rail_trackbits_valid_on_slope, tile_slope_and_z,
+};
 use crate::pathfinder::{station_entrance_faces_rail, station_site_tile_allows_build};
 use crate::rail_signals::{
     RAIL_REMOVE_REFUND, RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS, SIGNAL_BUILD_COST,
@@ -381,6 +384,13 @@ pub(in crate::command) fn place_rail_depot_dir(
 ) -> Result<(), CommandError> {
     let dir = dir & 0x03;
     check_rail_depot_placement(&state.map, c, dir)?;
+    let connection = rail_depot_connection(&state.map, c, dir);
+    if let Some((exit, before, after)) = connection
+        && before != after
+    {
+        require_tile_owned_by_active(state, exit)?;
+        check_rail_trackbits_on_tile(&state.map, exit, after)?;
+    }
     place_single_transport_tile(
         state,
         c,
@@ -389,34 +399,37 @@ pub(in crate::command) fn place_rail_depot_dir(
         (2 << 6) | dir,
         DEPOT_BUILD_COST,
     )?;
-    // La tesela de salida gana las piezas de empalme (curvas/recta) que
-    // conectan la boca del depósito con la vía existente, como en OpenTTD.
-    if let Some((exit, _)) = rail_depot_exit_for_dir(&state.map, c, dir)
-        && state.map.get_kind(exit) == Some(TileKind::Rail)
+    if let Some((exit, before, after)) = connection
+        && before != after
     {
-        let junction_bits = rail_trackbits_from_neighbors(&state.map, exit);
-        let _ = place_rail_bits(state, exit, junction_bits);
+        // El empalme automático afecta sólo a la salida. No debe ejecutar la
+        // propagación de autorraíl, que contaminaría líneas paralelas vecinas.
+        write_normal_rail_tile(state, exit, after)?;
+        state.economy.money -= rail_build_cost(&state.global_economy);
     }
     Ok(())
 }
 
-pub(in crate::command) fn rail_depot_exit_for_dir(
-    map: &Map,
-    depot_pos: TileCoord,
-    dir: u8,
-) -> Option<(TileCoord, u8)> {
-    let ((dx, dy), track_bit) = match dir & 0x03 {
-        0 => ((-1_i32, 0_i32), RAIL_TB_X),
-        1 => ((0_i32, 1_i32), RAIL_TB_Y),
-        2 => ((1_i32, 0_i32), RAIL_TB_X),
-        _ => ((0_i32, -1_i32), RAIL_TB_Y),
-    };
-    let c = TileCoord::new(depot_pos.x + dx, depot_pos.y + dy);
-    let (mw, mh) = map.dimensions();
-    if c.x < 0 || c.y < 0 || c.x >= mw.cast_signed() || c.y >= mh.cast_signed() {
+fn rail_depot_connection(map: &Map, depot: TileCoord, dir: u8) -> Option<(TileCoord, u8, u8)> {
+    let (dx, dy) = crate::pathfinder::diag_dir_offset(dir);
+    let exit = TileCoord::new(depot.x + dx, depot.y + dy);
+    let existing = existing_rail_trackbits(map, exit);
+    if existing == 0 {
         return None;
     }
-    Some((c, track_bit))
+
+    let depot_side = opposite_diag_dir(dir);
+    if existing & rail_bits_touching_side(depot_side) != 0 {
+        return Some((exit, existing, existing));
+    }
+
+    let mut add = 0;
+    for network_side in 0..4 {
+        if network_side != depot_side && existing & rail_bits_touching_side(network_side) != 0 {
+            add |= rail_bit_for_sides(depot_side, network_side);
+        }
+    }
+    Some((exit, existing, merge_rail_trackbits(existing, add)))
 }
 
 pub(in crate::command::transport) fn rail_axis_y_from_trackbits(tb: u8) -> bool {

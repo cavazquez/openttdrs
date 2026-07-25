@@ -24,6 +24,11 @@ pub fn road_veh_find_close_to(vehicles: &[Vehicle], v_idx: usize) -> Option<usiz
     if !is_road_vehicle_kind(v.kind) || !v.running {
         return None;
     }
+    // Dentro de una bahía la exclusión de boca y la asignación far/near son
+    // autoritativas; el orden axial por tesela no representa ese lazo.
+    if crate::road_movement::rvsb::is_bay_road_state(v.road_state) {
+        return None;
+    }
     if matches!(
         v.road_depot_phase,
         crate::vehicle::RoadDepotPhase::InDepot
@@ -43,6 +48,9 @@ pub fn road_veh_find_close_to(vehicles: &[Vehicle], v_idx: usize) -> Option<usiz
 
     for (i, other) in vehicles.iter().enumerate() {
         if i == v_idx || !is_road_vehicle_kind(other.kind) || !other.running {
+            continue;
+        }
+        if crate::road_movement::rvsb::is_bay_road_state(other.road_state) {
             continue;
         }
         if other.direction != dir {

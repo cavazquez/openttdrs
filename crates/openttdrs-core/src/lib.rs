@@ -182,8 +182,8 @@ pub use engine::{
     get_advance_speed, get_curve_speed_limit, next_free_engine_id, progress_step_for_speed,
     tile_progress_length, train_acceleration, train_default_air_drag, train_max_te_n,
     train_realistic_acceleration, train_realistic_station_max_speed, train_smoke_kind,
-    train_sprite_group, train_visual_progress_from_pixel, update_road_speed, update_train_speed,
-    vanilla_engine_catalog, vanilla_train_tractive_effort,
+    train_sprite_group, train_visual_progress_from_motion, train_visual_progress_from_pixel,
+    update_road_speed, update_train_speed, vanilla_engine_catalog, vanilla_train_tractive_effort,
 };
 pub use entity_history::{
     ENTITY_HISTORY_MONTHS, IndustryHistory, IndustryHistorySample, TownHistory, TownHistorySample,

@@ -78,7 +78,7 @@ mod tests {
     }
 
     #[test]
-    fn straight_tile_uses_movement_direction_not_cardinal_sprite() {
+    fn straight_tile_uses_real_road_frame() {
         let mut v = Vehicle::new(
             0,
             VehicleKind::Truck,
@@ -90,11 +90,13 @@ mod tests {
             TileCoord::new(2, 0),
             TileCoord::new(3, 0),
         ]);
-        v.progress = 200;
+        v.direction = DIR_SW;
+        v.road_state = 8;
+        v.frame = 11;
+        v.progress = 0;
         assert!(road_turn_entry_exit(&v).is_none());
         let (x, y) = vehicle_subtile(&v);
-        let (sx, sy) = straight_subtile(DIR_SW, 200.0);
-        assert_eq!((x, y), (sx, sy));
+        assert_eq!((x, y), (11.0, 9.0));
     }
 
     #[test]
@@ -112,7 +114,75 @@ mod tests {
     }
 
     #[test]
-    fn parked_at_station_uses_inbound_lane_end() {
+    fn train_motion_remainder_advances_between_rail_pixels() {
+        let mut v = Vehicle::new(
+            0,
+            VehicleKind::Train,
+            TileCoord::new(2, 2),
+            TileCoord::new(3, 2),
+        );
+        v.direction = DIR_SW;
+        v.rail_pixel = 8;
+        v.progress = 96;
+        let pose = VehiclePose::from_vehicle(&v);
+        assert!((pose.progress_f - 135.46875).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    #[allow(clippy::cast_precision_loss)]
+    fn train_crosses_tile_boundary_without_visual_jump() {
+        let mut map = crate::map::Map::new_flat(8, 8, 0);
+        for x in 2..=4 {
+            let c = TileCoord::new(x, 2);
+            map.set_kind(c, crate::map::TileKind::Rail).unwrap();
+            map.set_mapt_m5(c, 0, 0x01).unwrap();
+        }
+        let mut v = Vehicle::new(
+            0,
+            VehicleKind::Train,
+            TileCoord::new(2, 2),
+            TileCoord::new(4, 2),
+        );
+        v.path = VecDeque::from([TileCoord::new(3, 2), TileCoord::new(4, 2)]);
+        v.direction = DIR_SW;
+        v.running = true;
+        v.cur_speed = v.effective_engine().max_speed;
+        v.rail_pixel = 15;
+        v.progress = 191;
+
+        let before = VehiclePose::from_vehicle(&v);
+        let before_sub = vehicle_subtile_at_with_map(&v, before, Some(&map));
+        let after = extrapolate_vehicle_pose(&v, 1.0);
+        let after_sub = vehicle_subtile_at_with_map(&v, after, Some(&map));
+        let before_world_x = before.pos.x as f32 * 16.0 + before_sub.0;
+        let after_world_x = after.pos.x as f32 * 16.0 + after_sub.0;
+        assert_eq!(after.pos, TileCoord::new(3, 2));
+        assert!(
+            after_world_x >= before_world_x && after_world_x - before_world_x < 2.0,
+            "cruce continuo: {before_world_x} → {after_world_x}"
+        );
+    }
+
+    #[test]
+    fn train_render_follows_route_track_at_switch() {
+        let mut map = crate::map::Map::new_flat(8, 8, 0);
+        let junction = TileCoord::new(3, 2);
+        map.set_kind(junction, crate::map::TileKind::Rail).unwrap();
+        map.set_mapt_m5(junction, 0, 0x01 | 0x20).unwrap(); // X + RIGHT
+        let mut v = Vehicle::new(0, VehicleKind::Train, junction, TileCoord::new(3, 3));
+        v.path = VecDeque::from([TileCoord::new(3, 3)]);
+        v.rail_tile_history.push_front(TileCoord::new(2, 2));
+        v.direction = DIR_SW;
+        v.running = true;
+        let mut pose = VehiclePose::from_vehicle(&v);
+        pose.progress = 255;
+        pose.progress_f = 255.0;
+        let sub = vehicle_subtile_at_with_map(&v, pose, Some(&map));
+        assert_eq!(sub, (8.0, 16.0), "debe tomar RIGHT, no seguir por X");
+    }
+
+    #[test]
+    fn stopped_road_vehicle_keeps_its_authoritative_frame() {
         let mut v = Vehicle::new(
             0,
             VehicleKind::Bus,
@@ -120,14 +190,15 @@ mod tests {
             TileCoord::new(15, 3),
         );
         v.direction = DIR_NW;
-        v.progress = 255;
-        let parked = vehicle_subtile_with_progress(&v, 255);
-        let inbound_end = straight_subtile(DIR_NW, 255.0);
-        assert_eq!(parked, inbound_end);
+        v.road_state = 9;
+        v.frame = 15;
+        v.progress = 255; // sentinel de llegada; no es posición visual
+        let parked = vehicle_subtile(&v);
+        assert_eq!(parked, (9.0, 0.0));
     }
 
     #[test]
-    fn extrapolate_crosses_tile_between_sim_ticks() {
+    fn extrapolate_advances_real_road_frame_between_sim_ticks() {
         let mut v = Vehicle::new(
             0,
             VehicleKind::Truck,
@@ -137,13 +208,11 @@ mod tests {
         v.path = VecDeque::from([TileCoord::new(6, 6)]);
         v.set_cruise_speed();
         v.progress = 230;
+        let before = VehiclePose::from_vehicle(&v);
         let pose = extrapolate_vehicle_pose(&v, 1.0);
-        assert_eq!(
-            pose.pos,
-            TileCoord::new(6, 6),
-            "extrapolación debe cruzar la tesela como haría el siguiente tick"
-        );
-        assert!(pose.progress < v.progress_step());
+        assert_eq!(pose.pos, v.pos, "la pose no inventa un cambio de tesela");
+        assert!(pose.road_frame_f > before.road_frame_f);
+        assert_eq!(pose.depart_turn, 0);
     }
 
     /// Camión con orden en la bahía donde está parado (entró rumbo NW).
@@ -217,10 +286,31 @@ mod tests {
     #[test]
     fn turn_midpoint_differs_from_tile_center() {
         let mut v = ne_to_se_turn_vehicle();
-        v.progress = 128;
+        v.road_state = 3; // TRACKDIR_LOWER_E: NE -> SE
+        v.frame = 8;
+        v.progress = 0;
         let (x, y) = vehicle_subtile(&v);
         // Punto medio de la curva NE→SE (~(7,8)), no centro del rombo.
         assert!(x > 5.0 && x < 10.0);
         assert!(y > 6.0 && y < 11.0);
+    }
+
+    #[test]
+    fn bay_state_renders_far_and_near_stop_frames_from_controller() {
+        let bay = TileCoord::new(4, 5);
+        let mut far = Vehicle::new(1, VehicleKind::Bus, bay, bay);
+        far.direction = DIR_NW;
+        far.road_state = rvsb::RVSB_IN_ROAD_STOP | 9 | rvsb::RVSB_ENTERED_STOP;
+        far.frame = bay::bay_stop_frame(far.road_state).unwrap();
+        let mut near = far.clone();
+        near.id = 2;
+        near.road_state |= rvsb::RVSB_USING_SECOND_BAY;
+        near.frame = bay::bay_stop_frame(near.road_state).unwrap();
+
+        let far_table = bay_station_table(DIR_NW, true).unwrap();
+        let near_table = bay_station_table(DIR_NW, false).unwrap();
+        assert_eq!(vehicle_subtile(&far), far_table.points[far_table.stop]);
+        assert_eq!(vehicle_subtile(&near), near_table.points[near_table.stop]);
+        assert_ne!(vehicle_subtile(&far), vehicle_subtile(&near));
     }
 }

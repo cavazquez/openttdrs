@@ -12,26 +12,51 @@ pub struct VehiclePose {
     pub progress_f: f32,
     pub depart_turn: u8,
     pub depart_turn_f: f32,
+    /// Frame continuo de `_road_drive_data`: `Vehicle::frame` más el remanente
+    /// físico normalizado por `GetAdvanceDistance`.
+    pub road_frame_f: f32,
     /// Índice en `Vehicle::path` del siguiente paso desde `pos`.
     pub path_index: usize,
 }
 
 impl VehiclePose {
     #[must_use]
+    #[allow(clippy::cast_precision_loss)]
     pub fn from_vehicle(v: &Vehicle) -> Self {
         let progress_f = if v.kind == VehicleKind::Train {
-            crate::engine::train_visual_progress_from_pixel(v.rail_pixel)
+            crate::engine::train_visual_progress_from_motion(
+                v.rail_pixel,
+                v.progress,
+                crate::engine::get_advance_distance(v.direction),
+            )
         } else {
             f32::from(v.progress)
         };
         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
         let progress = progress_f.round() as u8;
+        let road_frame_f = if matches!(
+            v.kind,
+            VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram
+        ) {
+            let in_bay_before_stop = crate::road_movement::rvsb::is_bay_road_state(v.road_state)
+                && v.road_state & crate::road_movement::rvsb::RVSB_ENTERED_STOP == 0;
+            if v.cur_speed == 0 || v.movement_target().is_none() && !in_bay_before_stop {
+                f32::from(v.frame)
+            } else {
+                f32::from(v.frame)
+                    + f32::from(v.progress)
+                        / crate::engine::get_advance_distance(v.direction) as f32
+            }
+        } else {
+            0.0
+        };
         Self {
             pos: v.pos,
             progress,
             progress_f,
             depart_turn: v.depart_turn,
             depart_turn_f: f32::from(v.depart_turn),
+            road_frame_f,
             path_index: 0,
         }
     }
@@ -173,12 +198,49 @@ fn previous_tile_on_route(
     None
 }
 
-/// Extrapola posición sub-tesela entre ticks de sim (atraviesa límites de tesela sin saltos).
+/// Extrapola la pose entre ticks de sim. En carretera avanza el frame continuo
+/// de la tabla; los demás vehículos conservan la extrapolación por tesela.
 #[must_use]
+#[allow(clippy::cast_precision_loss)]
 pub fn extrapolate_vehicle_pose(v: &Vehicle, alpha: f32) -> VehiclePose {
     let mut pose = VehiclePose::from_vehicle(v);
     let alpha = alpha.clamp(0.0, 1.0);
     if alpha <= 0.0 || !v.running {
+        return pose;
+    }
+    if matches!(
+        v.kind,
+        VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram
+    ) {
+        let entering_bay = crate::road_movement::rvsb::is_bay_road_state(v.road_state)
+            && v.road_state & crate::road_movement::rvsb::RVSB_ENTERED_STOP == 0;
+        if v.cur_speed > 0 && (v.movement_target().is_some() || entering_bay) {
+            pose.road_frame_f += crate::engine::get_advance_speed(v.cur_speed) as f32 * alpha
+                / crate::engine::get_advance_distance(v.direction) as f32;
+        }
+        return pose;
+    }
+    if v.kind == VehicleKind::Train {
+        if v.cur_speed == 0 || movement_target_at(v, pose.pos, pose.path_index).is_none() {
+            return pose;
+        }
+        let physical_step =
+            crate::engine::get_advance_speed(v.effective_speed()).saturating_mul(2) as f32;
+        let advance_distance = crate::engine::get_advance_distance(v.movement_direction()) as f32;
+        let delta = physical_step / advance_distance.max(1.0) * (255.0 / 16.0) * alpha;
+        pose.progress_f += delta;
+        let mut path_index = pose.path_index;
+        while pose.progress_f >= 255.0 {
+            pose.progress_f -= 255.0;
+            let Some((next, next_index)) = virtual_advance_tile(v, pose.pos, path_index) else {
+                pose.progress_f = 255.0;
+                break;
+            };
+            pose.pos = next;
+            path_index = next_index;
+        }
+        pose.path_index = path_index;
+        pose.sync_discrete_fields();
         return pose;
     }
     let mut step = f32::from(v.progress_step());

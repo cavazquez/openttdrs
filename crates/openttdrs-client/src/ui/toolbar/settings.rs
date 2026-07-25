@@ -66,15 +66,13 @@ pub(crate) fn handle_settings_menu_buttons(
                 toggle_sim_run_state(&run_state, &mut next_run);
                 info!("Pausa: {}", if will_pause { "ON" } else { "OFF" });
             }
+            SaveMenuAction::SlowDown => {
+                hud.sim_speed = slower_sim_speed(hud.sim_speed);
+                info!("Velocidad simulacion: {:.2}x", hud.sim_speed);
+            }
             SaveMenuAction::SpeedUp => {
-                hud.sim_speed = if hud.sim_speed < 1.5 {
-                    2.0
-                } else if hud.sim_speed < 3.5 {
-                    4.0
-                } else {
-                    1.0
-                };
-                info!("Velocidad simulacion: {:.0}x", hud.sim_speed);
+                hud.sim_speed = faster_sim_speed(hud.sim_speed);
+                info!("Velocidad simulacion: {:.2}x", hud.sim_speed);
             }
             SaveMenuAction::Normalize => {
                 hud.sim_speed = 1.0;
@@ -130,6 +128,9 @@ pub(crate) fn handle_settings_menu_buttons(
             }
             SaveMenuAction::PathfindingSettings => {
                 pathfinding_settings.open = true;
+            }
+            SaveMenuAction::CycleVehicleBreakdowns => {
+                // Aplicado en un sistema separado para no superar SystemParam.
             }
             SaveMenuAction::CargoDistSettings => {
                 help_tools.p5().open = true;
@@ -194,6 +195,32 @@ pub(crate) fn handle_settings_menu_buttons(
     }
 }
 
+fn slower_sim_speed(current: f32) -> f32 {
+    if current > 3.0 {
+        2.0
+    } else if current > 1.5 {
+        1.0
+    } else if current > 0.75 {
+        0.5
+    } else {
+        0.25
+    }
+}
+
+fn faster_sim_speed(current: f32) -> f32 {
+    if current < 0.375 {
+        0.5
+    } else if current < 0.75 {
+        1.0
+    } else if current < 1.5 {
+        2.0
+    } else if current < 3.5 {
+        4.0
+    } else {
+        1.0
+    }
+}
+
 /// Abre la ventana de cheats desde Ajustes (separado por límite de SystemParam).
 pub(crate) fn handle_cheats_menu_button(
     mut q: Query<(&Interaction, &SaveMenuAction), (Changed<Interaction>, With<Button>)>,
@@ -202,6 +229,55 @@ pub(crate) fn handle_cheats_menu_button(
     for (interaction, action) in &mut q {
         if *interaction == Interaction::Pressed && matches!(action, SaveMenuAction::Cheats) {
             cheat_window.open = true;
+        }
+    }
+}
+
+/// Cicla la dificultad de averías mediante un comando determinista de partida.
+pub(crate) fn handle_vehicle_breakdowns_menu_button(
+    mut q: Query<(&Interaction, &SaveMenuAction), (Changed<Interaction>, With<Button>)>,
+    mut sim: ResMut<SimWorld>,
+) {
+    for (interaction, action) in &mut q {
+        if *interaction != Interaction::Pressed
+            || !matches!(action, SaveMenuAction::CycleVehicleBreakdowns)
+        {
+            continue;
+        }
+        let next = match sim.state.vehicle_breakdowns.min(2) {
+            2 => 1,
+            1 => 0,
+            _ => 2,
+        };
+        if let Err(error) = crate::network::apply_player_command(
+            &mut sim.state,
+            &openttdrs_core::Command::SetVehicleBreakdowns(next),
+        ) {
+            warn!("No se pudo cambiar el nivel de averías: {error}");
+        }
+    }
+}
+
+pub(crate) fn sync_vehicle_breakdowns_button_label(
+    sim: Res<SimWorld>,
+    buttons: Query<(&SaveMenuAction, &Children), With<Button>>,
+    mut texts: Query<&mut Text>,
+) {
+    let label = match sim.state.vehicle_breakdowns.min(2) {
+        0 => "Averías: OFF",
+        1 => "Averías: reducidas",
+        _ => "Averías: normales",
+    };
+    for (action, children) in &buttons {
+        if !matches!(action, SaveMenuAction::CycleVehicleBreakdowns) {
+            continue;
+        }
+        for child in children.iter() {
+            if let Ok(mut text) = texts.get_mut(child)
+                && text.as_str() != label
+            {
+                **text = label.to_string();
+            }
         }
     }
 }
@@ -292,7 +368,10 @@ mod tests {
     use crate::ui::save_window::{SaveWindowMode, SaveWindowState};
     use crate::ui::toolbar::{CompanyColourSwatch, SaveMenuAction};
 
-    use super::{handle_company_colour_swatches, handle_settings_menu_buttons};
+    use super::{
+        handle_company_colour_swatches, handle_settings_menu_buttons,
+        handle_vehicle_breakdowns_menu_button,
+    };
 
     #[test]
     fn save_and_load_buttons_open_save_window() {
@@ -427,6 +506,29 @@ mod tests {
             .run_system_once(handle_company_colour_swatches)
             .unwrap();
         assert_eq!(world.resource::<SimWorld>().state.company_colour, 0);
+    }
+
+    #[test]
+    fn breakdown_button_cycles_normal_reduced_and_off() {
+        let mut world = World::new();
+        world.insert_resource(SimWorld::default());
+        for expected in [1, 0, 2] {
+            let entity = world
+                .spawn((
+                    Button,
+                    SaveMenuAction::CycleVehicleBreakdowns,
+                    Interaction::Pressed,
+                ))
+                .id();
+            world
+                .run_system_once(handle_vehicle_breakdowns_menu_button)
+                .unwrap();
+            assert_eq!(
+                world.resource::<SimWorld>().state.vehicle_breakdowns,
+                expected
+            );
+            world.despawn(entity);
+        }
     }
 
     #[test]

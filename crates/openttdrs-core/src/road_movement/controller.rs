@@ -2,13 +2,15 @@
 
 use crate::engine::{ROAD_ACCEL_ORIGINAL, do_update_speed, get_advance_distance};
 use crate::map::Map;
+use crate::road_movement::bay::{bay_direction_at_frame, bay_drive_entry, bay_stop_frame};
 use crate::road_movement::drive_data::{RDE_NEXT_TILE, road_drive_entry};
 use crate::road_movement::overtake::{
     ROAD_ACCEL_OVERTAKE, drive_state_with_overtake, tick_overtaking,
 };
 use crate::road_movement::rvsb::{
-    RVC_DEFAULT_START_FRAME, RVSB_IN_DEPOT, RVSB_TRACKDIR_MASK, RVSB_WORMHOLE,
-    trackdir_from_direction,
+    RVC_DEFAULT_START_FRAME, RVSB_ENTERED_STOP, RVSB_IN_DEPOT, RVSB_IN_ROAD_STOP,
+    RVSB_TRACKDIR_MASK, RVSB_USING_SECOND_BAY, RVSB_WORMHOLE, is_bay_road_state,
+    trackdir_for_entry_exit, trackdir_from_direction,
 };
 use crate::road_movement::slope::sync_road_slope_speed;
 use crate::road_movement::traffic::{apply_road_veh_close_to, is_road_vehicle_kind};
@@ -26,7 +28,9 @@ pub fn individual_road_vehicle_controller(
 
     tick_overtaking(&mut vehicles[v_idx], map);
 
-    if apply_road_veh_close_to(vehicles, v_idx, map) {
+    if !is_bay_road_state(vehicles[v_idx].road_state)
+        && apply_road_veh_close_to(vehicles, v_idx, map)
+    {
         return false;
     }
 
@@ -42,15 +46,22 @@ pub fn individual_road_vehicle_controller(
 
     // Mantener trackdir alineado con la dirección de marcha en rectas.
     let expected = trackdir_from_direction(v.direction);
-    if matches!(v.road_state & RVSB_TRACKDIR_MASK, 0 | 1 | 8 | 9)
+    if !is_bay_road_state(v.road_state)
+        && matches!(v.road_state & RVSB_TRACKDIR_MASK, 0 | 1 | 8 | 9)
         && v.road_state & RVSB_TRACKDIR_MASK != expected
     {
         v.road_state = expected;
     }
 
-    let lookup = drive_state_with_overtake(v.road_state, v.overtaking);
+    let state = v.road_state;
+    let lookup = drive_state_with_overtake(state, v.overtaking);
     let next_frame = v.frame.saturating_add(1);
-    let Some(rd) = road_drive_entry(lookup & 0x1F, next_frame) else {
+    let rd = if is_bay_road_state(state) {
+        bay_drive_entry(state, next_frame)
+    } else {
+        road_drive_entry(lookup & 0x1F, next_frame)
+    };
+    let Some(rd) = rd else {
         // Fin de tabla sin marcador: forzar NEXT_TILE lógico.
         return enter_next_tile(vehicles, v_idx, map);
     };
@@ -80,6 +91,38 @@ pub fn individual_road_vehicle_controller(
         return true;
     }
 
+    if is_bay_road_state(state) {
+        let stop = bay_stop_frame(state).unwrap_or(u8::MAX);
+        let entered = state & RVSB_ENTERED_STOP != 0;
+        if entered
+            && vehicles[v_idx].frame == stop
+            && bay_entrance_busy(vehicles, v_idx, vehicles[v_idx].pos)
+        {
+            return false;
+        }
+
+        vehicles[v_idx].frame = next_frame;
+        if !entered && next_frame == stop {
+            let v = &mut vehicles[v_idx];
+            v.road_state |= RVSB_ENTERED_STOP;
+            v.cur_speed = 0;
+            v.subspeed = 0;
+            v.progress = 0;
+            v.advance_destination_after_arrival();
+            return true;
+        }
+        if next_frame != stop
+            && let Some(direction) = bay_direction_at_frame(state, f32::from(next_frame))
+        {
+            vehicles[v_idx].set_direction_with_curve_penalty(
+                direction,
+                map,
+                crate::engine::TrainAccelerationModel::Original,
+            );
+        }
+        return true;
+    }
+
     vehicles[v_idx].frame = next_frame;
     let _ = (rd.x, rd.y); // pose visual: frame indexa la tabla
     let _ = RDE_NEXT_TILE;
@@ -87,18 +130,96 @@ pub fn individual_road_vehicle_controller(
 }
 
 fn enter_next_tile(vehicles: &mut [Vehicle], v_idx: usize, map: Option<&Map>) -> bool {
-    let v = &mut vehicles[v_idx];
-    if v.movement_target().is_none() {
-        v.cur_speed = 0;
+    let Some(target) = vehicles[v_idx].movement_target() else {
+        vehicles[v_idx].cur_speed = 0;
         return false;
+    };
+    let was_in_bay = is_bay_road_state(vehicles[v_idx].road_state);
+    if !was_in_bay
+        && map.is_some_and(|map| {
+            target == vehicles[v_idx].dest
+                && crate::station::is_connected_bay_road_stop(map, target)
+                && crate::station::bay_entry_direction(map, target)
+                    == Some(crate::vehicle::direction_from_tile_step(
+                        vehicles[v_idx].pos,
+                        target,
+                    ))
+        })
+    {
+        let Some(far) = allocate_bay(vehicles, v_idx, target) else {
+            return false;
+        };
+        let inbound = crate::vehicle::direction_from_tile_step(vehicles[v_idx].pos, target);
+        vehicles[v_idx].advance_one_tile(map);
+        vehicles[v_idx].road_state = RVSB_IN_ROAD_STOP
+            | trackdir_from_direction(inbound)
+            | if far { 0 } else { RVSB_USING_SECOND_BAY };
+        vehicles[v_idx].frame = RVC_DEFAULT_START_FRAME;
+        vehicles[v_idx].direction = inbound;
+        vehicles[v_idx].overtaking = 0;
+        vehicles[v_idx].overtaking_ctr = 0;
+        return true;
     }
+
+    let v = &mut vehicles[v_idx];
     let prev_dir = v.direction;
     v.advance_one_tile(map);
     if v.direction != prev_dir || v.movement_target().is_some() {
-        v.road_state = trackdir_from_direction(v.direction);
+        let inbound = v.direction;
+        let outbound = v.movement_target().map_or(inbound, |next| {
+            crate::vehicle::direction_from_tile_step(v.pos, next)
+        });
+        v.road_state = trackdir_for_entry_exit(inbound, outbound);
     }
     v.frame = RVC_DEFAULT_START_FRAME;
     true
+}
+
+fn allocate_bay(
+    vehicles: &[Vehicle],
+    v_idx: usize,
+    station: crate::map::TileCoord,
+) -> Option<bool> {
+    if bay_entrance_busy(vehicles, v_idx, station) {
+        return None;
+    }
+    let mut far_used = false;
+    let mut near_used = false;
+    for (i, other) in vehicles.iter().enumerate() {
+        if i == v_idx || other.pos != station || !is_bay_road_state(other.road_state) {
+            continue;
+        }
+        if other.road_state & RVSB_USING_SECOND_BAY != 0 {
+            near_used = true;
+        } else {
+            far_used = true;
+        }
+    }
+    if !far_used {
+        Some(true)
+    } else if !near_used {
+        Some(false)
+    } else {
+        None
+    }
+}
+
+fn bay_entrance_busy(vehicles: &[Vehicle], v_idx: usize, station: crate::map::TileCoord) -> bool {
+    vehicles.iter().enumerate().any(|(i, other)| {
+        if i == v_idx || other.pos != station || !is_bay_road_state(other.road_state) {
+            return false;
+        }
+        let Some(stop) = bay_stop_frame(other.road_state) else {
+            return false;
+        };
+        let entered = other.road_state & RVSB_ENTERED_STOP != 0;
+        (!entered && other.frame < stop) || (entered && other.frame > stop)
+    })
+}
+
+fn road_vehicle_has_motion_target(v: &Vehicle) -> bool {
+    v.movement_target().is_some()
+        || is_bay_road_state(v.road_state) && v.road_state & RVSB_ENTERED_STOP == 0
 }
 
 /// Tick completo de roadveh: `UpdateSpeed` + bucle `while j >= adv_spd`.
@@ -115,7 +236,12 @@ pub fn road_vehicle_tick(vehicles: &mut [Vehicle], v_idx: usize, map: Option<&Ma
         v.cur_speed = 0;
         return;
     }
-    if v.cargo_transfer_active() || v.awaiting_load_window {
+    if v.cargo_transfer_active() {
+        v.cur_speed = 0;
+        return;
+    }
+    v.complete_station_load_window();
+    if v.awaiting_load_window {
         v.cur_speed = 0;
         return;
     }
@@ -124,7 +250,10 @@ pub fn road_vehicle_tick(vehicles: &mut [Vehicle], v_idx: usize, map: Option<&Ma
     }
 
     // Inicializar state desde dirección.
-    if v.road_state != RVSB_IN_DEPOT && v.road_state != RVSB_WORMHOLE {
+    if v.road_state != RVSB_IN_DEPOT
+        && v.road_state != RVSB_WORMHOLE
+        && !is_bay_road_state(v.road_state)
+    {
         let td = v.road_state & RVSB_TRACKDIR_MASK;
         if td > 15 {
             v.road_state = trackdir_from_direction(v.direction);
@@ -145,13 +274,21 @@ pub fn road_vehicle_tick(vehicles: &mut [Vehicle], v_idx: usize, map: Option<&Ma
         i32::from(ROAD_ACCEL_ORIGINAL)
     };
 
-    let result = if v.movement_target().is_some() {
+    if is_bay_road_state(v.road_state)
+        && v.road_state & RVSB_ENTERED_STOP != 0
+        && v.progress == u8::MAX
+        && v.movement_target().is_some()
+    {
+        v.progress = 0;
+    }
+
+    let result = if road_vehicle_has_motion_target(v) {
         do_update_speed(v.cur_speed, v.subspeed, accel, 0, max_speed, v.progress)
     } else {
         let (cur, sub) = crate::engine::decelerate_road_speed(v.cur_speed, v.subspeed);
         v.cur_speed = cur;
         v.subspeed = sub;
-        if v.cur_speed == 0 && v.pos == v.dest {
+        if v.cur_speed == 0 && v.pos == v.dest && !is_bay_road_state(v.road_state) {
             v.advance_destination_after_arrival();
         }
         return;
@@ -173,7 +310,7 @@ pub fn road_vehicle_tick(vehicles: &mut [Vehicle], v_idx: usize, map: Option<&Ma
             blocked = true;
             break;
         }
-        if vehicles[v_idx].cur_speed == 0 || vehicles[v_idx].movement_target().is_none() {
+        if vehicles[v_idx].cur_speed == 0 || !road_vehicle_has_motion_target(&vehicles[v_idx]) {
             break;
         }
         adv_spd = get_advance_distance(vehicles[v_idx].direction);
@@ -201,9 +338,35 @@ pub fn road_vehicle_step_solo(v: &mut Vehicle, map: Option<&Map>) {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use crate::map::TileCoord;
-    use crate::vehicle::{DIR_SW, VehicleKind};
+    use crate::map::{Map, TileCoord, TileKind};
+    use crate::road_movement::rvsb::{RVSB_ENTERED_STOP, RVSB_USING_SECOND_BAY};
+    use crate::vehicle::{DIR_NE, DIR_SW, VehicleKind};
     use std::collections::VecDeque;
+
+    fn bay_map() -> (Map, TileCoord, TileCoord) {
+        let mut map = Map::new_flat(8, 8, 0);
+        let stop = TileCoord::new(3, 3);
+        let approach = TileCoord::new(4, 3);
+        map.set_kind(approach, TileKind::Road).unwrap();
+        let mut tile = map.get(stop).unwrap();
+        tile.kind = TileKind::Station;
+        tile.m5 = 2; // boca hacia SW: approach = station + (1, 0)
+        tile.m6 = 3 << 3; // bus stop
+        tile.m3 = 0x02;
+        map.set_tile(stop, tile).unwrap();
+        (map, stop, approach)
+    }
+
+    fn bus_waiting_at_mouth(id: u32, stop: TileCoord, approach: TileCoord) -> Vehicle {
+        let mut v = Vehicle::new(id, VehicleKind::Bus, approach, stop);
+        v.direction = DIR_NE;
+        v.road_state = 0;
+        v.frame = 15;
+        v.path = VecDeque::from([stop]);
+        v.set_station_orders(vec![stop, TileCoord::new(6, 3)]);
+        v.path = VecDeque::from([stop]);
+        v
+    }
 
     #[test]
     fn high_speed_advances_multiple_frames_per_tick() {
@@ -243,5 +406,134 @@ mod tests {
     fn overtaking_uses_accel_512() {
         assert_eq!(ROAD_ACCEL_OVERTAKE, 512);
         assert_eq!(ROAD_ACCEL_ORIGINAL, 256);
+    }
+
+    #[test]
+    fn mps_at_56_kmh_needs_37_ticks_for_a_straight_tile() {
+        let start = TileCoord::new(0, 0);
+        let end = TileCoord::new(1, 0);
+        let mut v = Vehicle::new(1, VehicleKind::Bus, start, end);
+        v.direction = DIR_SW;
+        v.road_state = 8;
+        v.frame = 0;
+        v.cur_speed = 112;
+        v.path = VecDeque::from([end]);
+
+        for _ in 0..36 {
+            road_vehicle_step_solo(&mut v, None);
+        }
+        assert_eq!(v.pos, start);
+        road_vehicle_step_solo(&mut v, None);
+        assert_eq!(v.pos, end);
+    }
+
+    #[test]
+    fn bay_arrival_happens_at_stop_frame_not_tile_boundary() {
+        let (map, stop, approach) = bay_map();
+        let mut vehicles = vec![bus_waiting_at_mouth(1, stop, approach)];
+
+        assert!(individual_road_vehicle_controller(
+            &mut vehicles,
+            0,
+            Some(&map)
+        ));
+        assert_eq!(vehicles[0].pos, stop);
+        assert!(is_bay_road_state(vehicles[0].road_state));
+        assert_eq!(vehicles[0].frame, 0);
+        assert!(!vehicles[0].awaiting_load_window);
+
+        let stop_frame = bay_stop_frame(vehicles[0].road_state).unwrap();
+        for _ in 0..stop_frame {
+            assert!(individual_road_vehicle_controller(
+                &mut vehicles,
+                0,
+                Some(&map)
+            ));
+        }
+        assert_eq!(vehicles[0].frame, stop_frame);
+        assert_ne!(vehicles[0].road_state & RVSB_ENTERED_STOP, 0);
+        assert!(vehicles[0].awaiting_load_window);
+    }
+
+    #[test]
+    fn bay_allocates_far_then_near_and_blocks_a_third_bus() {
+        let (map, stop, approach) = bay_map();
+        let mut vehicles = vec![
+            bus_waiting_at_mouth(1, stop, approach),
+            bus_waiting_at_mouth(2, stop, approach),
+            bus_waiting_at_mouth(3, stop, approach),
+        ];
+
+        assert!(individual_road_vehicle_controller(
+            &mut vehicles,
+            0,
+            Some(&map)
+        ));
+        let first_stop = bay_stop_frame(vehicles[0].road_state).unwrap();
+        for _ in 0..first_stop {
+            assert!(individual_road_vehicle_controller(
+                &mut vehicles,
+                0,
+                Some(&map)
+            ));
+        }
+        assert_eq!(vehicles[0].road_state & RVSB_USING_SECOND_BAY, 0);
+
+        assert!(individual_road_vehicle_controller(
+            &mut vehicles,
+            1,
+            Some(&map)
+        ));
+        assert_ne!(vehicles[1].road_state & RVSB_USING_SECOND_BAY, 0);
+        let second_stop = bay_stop_frame(vehicles[1].road_state).unwrap();
+        for _ in 0..second_stop {
+            assert!(individual_road_vehicle_controller(
+                &mut vehicles,
+                1,
+                Some(&map)
+            ));
+        }
+
+        assert!(!individual_road_vehicle_controller(
+            &mut vehicles,
+            2,
+            Some(&map)
+        ));
+        assert_eq!(vehicles[2].pos, approach);
+    }
+
+    #[test]
+    fn bay_exit_uses_same_table_without_synthetic_turn() {
+        let (map, stop, approach) = bay_map();
+        let mut vehicles = vec![bus_waiting_at_mouth(1, stop, approach)];
+        assert!(individual_road_vehicle_controller(
+            &mut vehicles,
+            0,
+            Some(&map)
+        ));
+        let stop_frame = bay_stop_frame(vehicles[0].road_state).unwrap();
+        for _ in 0..stop_frame {
+            assert!(individual_road_vehicle_controller(
+                &mut vehicles,
+                0,
+                Some(&map)
+            ));
+        }
+        vehicles[0].awaiting_load_window = false;
+        vehicles[0].current_order = 1;
+        vehicles[0].dest = TileCoord::new(6, 3);
+        vehicles[0].path = VecDeque::from([approach, TileCoord::new(5, 3)]);
+        vehicles[0].progress = 0;
+
+        while vehicles[0].pos == stop {
+            assert!(individual_road_vehicle_controller(
+                &mut vehicles,
+                0,
+                Some(&map)
+            ));
+        }
+        assert_eq!(vehicles[0].pos, approach);
+        assert!(!is_bay_road_state(vehicles[0].road_state));
+        assert_eq!(vehicles[0].depart_turn, 0);
     }
 }

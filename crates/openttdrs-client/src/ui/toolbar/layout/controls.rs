@@ -119,8 +119,13 @@ pub(super) fn spawn_settings_buttons(buttons: &mut ChildSpawnerCommands) {
             SaveMenuAction::PauseResume,
         ),
         (
+            "Más lento",
+            "Reduce la simulación: 4x / 2x / 1x / 0.5x / 0.25x",
+            SaveMenuAction::SlowDown,
+        ),
+        (
             "Acelerar",
-            "Cicla velocidad: 1x / 2x / 4x",
+            "Aumenta la simulación: 0.25x / 0.5x / 1x / 2x / 4x",
             SaveMenuAction::SpeedUp,
         ),
         (
@@ -147,6 +152,11 @@ pub(super) fn spawn_settings_buttons(buttons: &mut ChildSpawnerCommands) {
         ),
     ];
     const ROW2: &[(&str, &str, SaveMenuAction)] = &[
+        (
+            "Averías: normales",
+            "Cicla averías: normales / reducidas / desactivadas",
+            SaveMenuAction::CycleVehicleBreakdowns,
+        ),
         (
             "Pathfinding / PBS...",
             "Espera path, giro en señales y look-ahead (pf.*)",

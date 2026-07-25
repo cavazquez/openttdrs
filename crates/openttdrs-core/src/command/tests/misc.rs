@@ -474,6 +474,30 @@ fn set_pathfinding_settings_clamps_and_is_idempotent() {
 }
 
 #[test]
+fn disabling_breakdowns_clears_pending_and_active_failures() {
+    let mut s = GameState::new(8, 8);
+    let mut vehicle = crate::Vehicle::new(
+        1,
+        crate::VehicleKind::Train,
+        TileCoord::new(1, 1),
+        TileCoord::new(2, 1),
+    );
+    vehicle.breakdown_ctr = 1;
+    vehicle.breakdown_delay = 200;
+    vehicle.breakdown_chance = 99;
+    s.vehicles.push(vehicle);
+
+    apply_command(&mut s, &Command::SetVehicleBreakdowns(0)).unwrap();
+    assert_eq!(s.vehicle_breakdowns, 0);
+    assert_eq!(s.vehicles[0].breakdown_ctr, 0);
+    assert_eq!(s.vehicles[0].breakdown_delay, 0);
+    assert_eq!(s.vehicles[0].breakdown_chance, 0);
+
+    apply_command(&mut s, &Command::SetVehicleBreakdowns(9)).unwrap();
+    assert_eq!(s.vehicle_breakdowns, 2);
+}
+
+#[test]
 fn set_cargo_dist_distribution_rebuilds_flows() {
     use crate::flow_stat::DistributionType;
 

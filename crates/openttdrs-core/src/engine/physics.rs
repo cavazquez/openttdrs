@@ -326,6 +326,21 @@ pub fn train_visual_progress_from_pixel(rail_pixel: u8) -> f32 {
     (f32::from(rail_pixel) / 16.0) * 255.0
 }
 
+/// Progreso visual ferroviario incluyendo el remanente físico entre píxeles.
+///
+/// El controlador conserva `progress < GetAdvanceDistance`; ignorarlo dejaba
+/// al sprite quieto entre incrementos de `rail_pixel`, aun con render a 60 FPS.
+#[must_use]
+pub fn train_visual_progress_from_motion(
+    rail_pixel: u8,
+    progress: u8,
+    advance_distance: u32,
+) -> f32 {
+    let advance_distance = u16::try_from(advance_distance.max(1)).unwrap_or(u16::MAX);
+    let fractional_pixel = f32::from(progress) / f32::from(advance_distance);
+    ((f32::from(rail_pixel.min(15)) + fractional_pixel) / 16.0) * 255.0
+}
+
 /// Longitud de unidad `OpenTTD` (`VEHICLE_LENGTH`) usada por [`get_curve_speed_limit`].
 const CURVE_VEHICLE_LENGTH: i32 = 8;
 
@@ -619,6 +634,7 @@ mod tests {
         assert!((train_visual_progress_from_pixel(8) - 127.5).abs() < f32::EPSILON);
         assert!((train_visual_progress_from_pixel(0)).abs() < f32::EPSILON);
         assert!((train_visual_progress_from_pixel(16) - 255.0).abs() < f32::EPSILON);
+        assert!((train_visual_progress_from_motion(8, 96, 192) - 135.46875).abs() < f32::EPSILON);
     }
 
     #[test]

@@ -319,6 +319,7 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
         | Command::AddNewGrfToStack { .. }
         | Command::SetNewGrfParam { .. }
         | Command::SetPathfindingSettings(..)
+        | Command::SetVehicleBreakdowns(..)
         | Command::SetCargoDistDistribution(..)
         | Command::SetCompanyColour(..)
         | Command::SetCurrentRailType(..)

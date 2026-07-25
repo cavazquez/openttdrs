@@ -1,42 +1,42 @@
 //! Funciones de rendering: dirección y posición sub-tesela para sprites.
 
-use super::bay::{bay_render_direction, bay_subtile, parked_inside_bay};
+use super::bay::{
+    bay_direction_at_frame, bay_render_direction, bay_subtile, bay_subtile_at_frame,
+    direction_from_subtile_delta, parked_inside_bay,
+};
 use super::curves::{
     depart_u_turn_curve, sample_curve, straight_subtile, train_straight_subtile, turn_curve,
 };
 use super::depot::{road_depot_direction, road_depot_subtile};
+use super::drive_data::road_drive_entry;
+use super::overtake::drive_state_with_overtake;
 use super::pose::{VehiclePose, movement_target_at};
+use super::rvsb::is_bay_road_state;
 use crate::depot::rail_depot_mouth_dir;
 use crate::map::{Map, TileKind};
 use crate::refit::vehicle_in_depot;
 use crate::train_movement::{
-    train_depot_facing, train_depot_subtile, train_render_dir_on_rail, train_subtile_on_rail,
+    diag_dir_side, train_depot_facing, train_depot_subtile, train_render_dir_on_track,
+    train_subtile_on_track,
 };
 use crate::vehicle::{Vehicle, VehicleDirection, VehicleKind, direction_from_tile_step};
 
 /// Sub-tesela `OpenTTD` para dibujo (recto, curva de giro o media vuelta en parada).
 #[must_use]
 pub fn vehicle_subtile(v: &Vehicle) -> (f32, f32) {
-    if matches!(v.kind, VehicleKind::Train) {
-        return vehicle_subtile_at(v, VehiclePose::from_vehicle(v));
-    }
-    vehicle_subtile_with_progress(v, v.progress)
+    vehicle_subtile_at(v, VehiclePose::from_vehicle(v))
 }
 
 /// Como [`vehicle_subtile`] con progreso explícito (p. ej. interpolación de render).
 #[must_use]
+#[allow(clippy::cast_precision_loss)]
 pub fn vehicle_subtile_with_progress(v: &Vehicle, progress: u8) -> (f32, f32) {
-    vehicle_subtile_at(
-        v,
-        VehiclePose {
-            pos: v.pos,
-            progress,
-            progress_f: f32::from(progress),
-            depart_turn: v.depart_turn,
-            depart_turn_f: f32::from(v.depart_turn),
-            path_index: 0,
-        },
-    )
+    let mut pose = VehiclePose::from_vehicle(v);
+    pose.progress = progress;
+    pose.progress_f = f32::from(progress);
+    pose.road_frame_f = f32::from(v.frame)
+        + f32::from(progress) / crate::engine::get_advance_distance(v.direction) as f32;
+    vehicle_subtile_at(v, pose)
 }
 
 /// Sub-tesela para una pose concreta (sim actual o extrapolada).
@@ -59,7 +59,13 @@ pub fn vehicle_subtile_at_with_map(
         return subtile;
     }
     if parked_inside_bay(v, pose.pos)
+        && !is_bay_road_state(v.road_state)
         && let Some(subtile) = bay_subtile(v, pose)
+    {
+        return subtile;
+    }
+    if is_road_kind(v.kind)
+        && let Some(subtile) = road_frame_subtile(v, pose.road_frame_f)
     {
         return subtile;
     }
@@ -99,11 +105,10 @@ pub fn train_subtile_direction(v: &Vehicle) -> VehicleDirection {
 }
 
 fn train_rail_subtile(map: &Map, v: &Vehicle, pose: VehiclePose) -> (f32, f32) {
-    let enter = train_subtile_direction(v);
+    let (enter, track) = train_route_on_tile(map, v, pose);
     let progress = pose.movement_progress_f();
-    if let Some(tile) = map.get(pose.pos)
-        && tile.kind == TileKind::Rail
-        && let Some(sub) = train_subtile_on_rail(enter, tile.m5, progress)
+    if let Some(track) = track
+        && let Some(sub) = train_subtile_on_track(enter, track, progress)
     {
         return sub;
     }
@@ -111,15 +116,71 @@ fn train_rail_subtile(map: &Map, v: &Vehicle, pose: VehiclePose) -> (f32, f32) {
 }
 
 fn train_render_direction_with_map(map: &Map, v: &Vehicle, pose: VehiclePose) -> VehicleDirection {
-    let enter = train_subtile_direction(v);
+    let (enter, track) = train_route_on_tile(map, v, pose);
     let progress = pose.movement_progress_f();
-    if let Some(tile) = map.get(pose.pos)
-        && tile.kind == TileKind::Rail
-        && let Some(dir) = train_render_dir_on_rail(enter, tile.m5, progress)
+    if let Some(track) = track
+        && let Some(dir) = train_render_dir_on_track(enter, track, progress)
     {
         return dir;
     }
     enter
+}
+
+/// Dirección de entrada y `TrackBit` exactos de la ruta para la pose dibujada.
+///
+/// La selección anterior miraba todos los bits del empalme y priorizaba una
+/// recta aunque YAPF hubiese elegido una curva. Aquí se reconstruyen los dos
+/// lados desde `anterior → actual → siguiente`; para followers, el controlador
+/// conserva esos rumbos en `direction`/`curve_prev_direction`.
+fn train_route_on_tile(
+    map: &Map,
+    v: &Vehicle,
+    pose: VehiclePose,
+) -> (VehicleDirection, Option<u8>) {
+    let previous = train_previous_tile_at(v, pose);
+    let enter = previous.map_or(v.direction, |prev| direction_from_tile_step(prev, pose.pos));
+    let outbound = movement_target_at(v, pose.pos, pose.path_index).map_or_else(
+        || {
+            if v.prev_unit.is_some() {
+                v.curve_prev_direction
+            } else {
+                enter
+            }
+        },
+        |next| direction_from_tile_step(pose.pos, next),
+    );
+
+    let Some(tile) = map.get(pose.pos).filter(|tile| tile.kind == TileKind::Rail) else {
+        return (enter, None);
+    };
+    let track_bits = tile.m5 & 0x3F;
+    let entry_side = crate::map::opposite_diag_dir(diag_dir_side(enter));
+    let exit_side = diag_dir_side(outbound);
+    let route_track = crate::map::rail_bit_for_sides(entry_side, exit_side);
+    if route_track != 0 && track_bits & route_track != 0 {
+        return (enter, Some(route_track));
+    }
+
+    if let Some(step) = v.reserved_steps.iter().find(|step| {
+        step.tile == pose.pos
+            && track_bits & step.track != 0
+            && crate::map::rail_bits_touching_side(entry_side) & step.track != 0
+    }) {
+        return (enter, Some(step.track));
+    }
+    (
+        enter,
+        crate::train_movement::track_bit_for_movement(enter, track_bits),
+    )
+}
+
+fn train_previous_tile_at(v: &Vehicle, pose: VehiclePose) -> Option<crate::map::TileCoord> {
+    match pose.path_index {
+        0 if pose.pos == v.pos => v.rail_tile_history.front().copied(),
+        0 => None,
+        1 => Some(v.pos),
+        n => v.path.get(n - 2).copied(),
+    }
 }
 
 fn train_subtile_with_map(v: &Vehicle, pose: VehiclePose, map: Option<&Map>) -> (f32, f32) {
@@ -137,18 +198,14 @@ fn train_subtile_with_map(v: &Vehicle, pose: VehiclePose, map: Option<&Map>) -> 
 
 /// Dirección de sprite con progreso de render (giros suaves entre ticks).
 #[must_use]
+#[allow(clippy::cast_precision_loss)]
 pub fn vehicle_render_direction(v: &Vehicle, progress: u8) -> VehicleDirection {
-    vehicle_render_direction_at(
-        v,
-        VehiclePose {
-            pos: v.pos,
-            progress,
-            progress_f: f32::from(progress),
-            depart_turn: v.depart_turn,
-            depart_turn_f: f32::from(v.depart_turn),
-            path_index: 0,
-        },
-    )
+    let mut pose = VehiclePose::from_vehicle(v);
+    pose.progress = progress;
+    pose.progress_f = f32::from(progress);
+    pose.road_frame_f = f32::from(v.frame)
+        + f32::from(progress) / crate::engine::get_advance_distance(v.direction) as f32;
+    vehicle_render_direction_at(v, pose)
 }
 
 /// Dirección de sprite para una pose concreta.
@@ -181,11 +238,17 @@ pub fn vehicle_render_direction_at_with_map(
         return train_subtile_direction(v);
     }
     if parked_inside_bay(v, pose.pos)
+        && !is_bay_road_state(v.road_state)
         && pose.depart_turn_f <= 0.0
         && pose.progress_f < 255.0
         && let Some(dir) = bay_render_direction(v, pose)
     {
         return dir;
+    }
+    if is_road_kind(v.kind)
+        && let Some(direction) = road_frame_direction(v, pose.road_frame_f)
+    {
+        return direction;
     }
     if pose.depart_turn_f > 0.0 {
         let outbound = movement_target_at(v, pose.pos, pose.path_index)
@@ -209,6 +272,64 @@ pub fn vehicle_render_direction_at_with_map(
         }
     }
     entry
+}
+
+#[must_use]
+const fn is_road_kind(kind: VehicleKind) -> bool {
+    matches!(
+        kind,
+        VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram
+    )
+}
+
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+fn road_frame_subtile(v: &Vehicle, frame_f: f32) -> Option<(f32, f32)> {
+    if is_bay_road_state(v.road_state) {
+        return bay_subtile_at_frame(v.road_state, frame_f);
+    }
+    let state = drive_state_with_overtake(v.road_state, v.overtaking) & 0x1F;
+    let frame_f = frame_f.max(0.0);
+    let index = frame_f.floor().min(f32::from(u8::MAX)) as u8;
+    let a = normal_road_point(state, index).or_else(|| {
+        index
+            .checked_sub(1)
+            .and_then(|i| normal_road_point(state, i))
+    })?;
+    let b = index
+        .checked_add(1)
+        .and_then(|i| normal_road_point(state, i))
+        .unwrap_or(a);
+    let t = frame_f.fract();
+    Some((a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t))
+}
+
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+fn road_frame_direction(v: &Vehicle, frame_f: f32) -> Option<VehicleDirection> {
+    if is_bay_road_state(v.road_state) {
+        return bay_direction_at_frame(v.road_state, frame_f);
+    }
+    let state = drive_state_with_overtake(v.road_state, v.overtaking) & 0x1F;
+    let index = frame_f.floor().clamp(0.0, f32::from(u8::MAX)) as u8;
+    let here = normal_road_point(state, index)?;
+    if let Some(next) = index
+        .checked_add(1)
+        .and_then(|i| normal_road_point(state, i))
+        && let Some(direction) = direction_from_subtile_delta(next.0 - here.0, next.1 - here.1)
+    {
+        return Some(direction);
+    }
+    let previous = index
+        .checked_sub(1)
+        .and_then(|i| normal_road_point(state, i))?;
+    direction_from_subtile_delta(here.0 - previous.0, here.1 - previous.1)
+}
+
+fn normal_road_point(state: u8, frame: u8) -> Option<(f32, f32)> {
+    let entry = road_drive_entry(state, frame)?;
+    if entry.is_next_tile() || entry.is_turned() {
+        return None;
+    }
+    Some((f32::from(entry.x), f32::from(entry.y)))
 }
 
 #[must_use]

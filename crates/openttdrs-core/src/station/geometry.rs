@@ -443,6 +443,12 @@ pub fn vehicle_physically_at_station(
             VehicleKind::Aircraft => map
                 .get(vpos)
                 .is_some_and(|t| crate::airport::AirportPiece::from_m5(t.m5).is_loading()),
+            VehicleKind::Truck | VehicleKind::Bus | VehicleKind::Tram
+                if is_connected_bay_road_stop(map, vpos) =>
+            {
+                !crate::road_movement::rvsb::is_bay_road_state(vehicle.road_state)
+                    || crate::road_movement::bay::road_vehicle_stopped_in_bay(vehicle)
+            }
             _ => true,
         };
     }
@@ -481,6 +487,10 @@ pub fn vehicle_physically_at_station(
 /// carretera de acceso solo cuenta como fallback si la bahía no tiene boca).
 #[must_use]
 pub fn vehicle_at_road_stop(map: &Map, vehicle: &crate::Vehicle) -> bool {
+    if is_connected_bay_road_stop(map, vehicle.pos) {
+        return !crate::road_movement::rvsb::is_bay_road_state(vehicle.road_state)
+            || crate::road_movement::bay::road_vehicle_stopped_in_bay(vehicle);
+    }
     if vehicle.manhattan_to_dest() == 0 {
         return true;
     }
@@ -490,7 +500,8 @@ pub fn vehicle_at_road_stop(map: &Map, vehicle: &crate::Vehicle) -> bool {
         return false;
     };
     if vehicle.pos == *station {
-        return true;
+        return !is_connected_bay_road_stop(map, *station)
+            || crate::road_movement::bay::road_vehicle_stopped_in_bay(vehicle);
     }
     !is_connected_bay_road_stop(map, *station)
         && road_stop_approach_tile(map, *station).is_some_and(|approach| vehicle.pos == approach)

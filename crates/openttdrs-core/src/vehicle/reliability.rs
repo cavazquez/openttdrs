@@ -23,6 +23,8 @@ const BREAKDOWN_CHANCE_TABLE: [u8; 64] = [
 
 /// Bonus de fiabilidad efectiva para barcos (`vehicle.cpp:1355`).
 const SHIP_RELIABILITY_BONUS: u32 = 0x6666;
+/// Bonus de fiabilidad efectiva con averías reducidas (`vehicle.cpp:1358`).
+const REDUCED_BREAKDOWN_RELIABILITY_BONUS: u32 = 0x6666;
 
 pub(crate) fn initial_reliability_for_engine(
     engine_id: u16,
@@ -49,16 +51,23 @@ fn decay_reliability_port(reliability: u16, spd_dec: u16) -> u16 {
     reliability.saturating_sub(u16::try_from(dec).unwrap_or(u16::MAX))
 }
 
-fn effective_reliability_for_breakdown(reliability: u16, kind: VehicleKind) -> u32 {
+fn effective_reliability_for_breakdown(
+    reliability: u16,
+    kind: VehicleKind,
+    reduced_breakdowns: bool,
+) -> u32 {
     let mut rel = scale_reliability_to_openttd(reliability);
     if kind == VehicleKind::Ship {
         rel = rel.saturating_add(SHIP_RELIABILITY_BONUS);
     }
+    if reduced_breakdowns {
+        rel = rel.saturating_add(REDUCED_BREAKDOWN_RELIABILITY_BONUS);
+    }
     rel.min(65535)
 }
 
-fn breakdown_table_index(reliability: u16, kind: VehicleKind) -> usize {
-    let rel = effective_reliability_for_breakdown(reliability, kind);
+fn breakdown_table_index(reliability: u16, kind: VehicleKind, reduced_breakdowns: bool) -> usize {
+    let rel = effective_reliability_for_breakdown(reliability, kind, reduced_breakdowns);
     usize::from((rel >> 10).min(63) as u8)
 }
 
@@ -187,12 +196,32 @@ impl super::model::Vehicle {
 
     /// Barrido diario de economía: decaimiento de fiabilidad y acumulación de avería.
     pub fn check_vehicle_breakdown(&mut self, rng: &mut Randomizer) {
+        self.check_vehicle_breakdown_with_setting(rng, 2, false);
+    }
+
+    /// Variante que respeta `difficulty.vehicle_breakdowns` de `OpenTTD`:
+    /// 0=ninguna, 1=reducidas, 2=normales.
+    pub(crate) fn check_vehicle_breakdown_with_setting(
+        &mut self,
+        rng: &mut Randomizer,
+        breakdown_level: u8,
+        no_servicing_if_no_breakdowns: bool,
+    ) {
         if !self.running {
+            return;
+        }
+        if breakdown_level == 0 && no_servicing_if_no_breakdowns {
+            return;
+        }
+        if breakdown_level == 1 && (self.awaiting_load_window || self.cargo_transfer_active()) {
             return;
         }
         self.reliability = decay_reliability_port(self.reliability, self.reliability_spd_dec);
         self.needs_servicing = self.requires_service();
 
+        if breakdown_level == 0 {
+            return;
+        }
         if self.breakdown_ctr != 0 {
             return;
         }
@@ -207,7 +236,8 @@ impl super::model::Vehicle {
         }
         self.breakdown_chance = chance.min(255) as u8;
 
-        let threshold = BREAKDOWN_CHANCE_TABLE[breakdown_table_index(self.reliability, self.kind)];
+        let threshold = BREAKDOWN_CHANCE_TABLE
+            [breakdown_table_index(self.reliability, self.kind, breakdown_level == 1)];
         if u16::from(threshold) > chance {
             return;
         }
@@ -299,11 +329,17 @@ pub(crate) fn process_vehicle_economy_day(state: &mut crate::GameState) {
     let tick = state.tick.get();
     let fract = usize::from(state.economy_timer.date_fract);
     let day_ticks = usize::from(crate::timer::DAY_TICKS);
+    let breakdown_level = state.vehicle_breakdowns.min(2);
+    let no_servicing = state.no_servicing_if_no_breakdowns;
     let mut i = fract;
     while i < state.vehicles.len() {
         state.vehicles[i].sim_tick = tick;
         if state.vehicles[i].prev_unit.is_none() {
-            state.vehicles[i].check_vehicle_breakdown(&mut state.random);
+            state.vehicles[i].check_vehicle_breakdown_with_setting(
+                &mut state.random,
+                breakdown_level,
+                no_servicing,
+            );
         }
         i = i.saturating_add(day_ticks);
     }
@@ -410,11 +446,15 @@ mod tests {
 
     #[test]
     fn breakdown_table_uses_scaled_reliability() {
-        assert_eq!(breakdown_table_index(10_000, VehicleKind::Bus), 63);
-        assert_eq!(breakdown_table_index(1_000, VehicleKind::Bus), 6);
+        assert_eq!(breakdown_table_index(10_000, VehicleKind::Bus, false), 63);
+        assert_eq!(breakdown_table_index(1_000, VehicleKind::Bus, false), 6);
         assert_eq!(
-            breakdown_table_index(1_000, VehicleKind::Ship),
-            breakdown_table_index(5_000, VehicleKind::Bus)
+            breakdown_table_index(1_000, VehicleKind::Ship, false),
+            breakdown_table_index(5_000, VehicleKind::Bus, false)
+        );
+        assert!(
+            breakdown_table_index(1_000, VehicleKind::Bus, true)
+                > breakdown_table_index(1_000, VehicleKind::Bus, false)
         );
     }
 
@@ -432,6 +472,23 @@ mod tests {
         let before = v.reliability;
         v.check_vehicle_breakdown(&mut Randomizer::new(1));
         assert!(v.reliability < before);
+    }
+
+    #[test]
+    fn disabled_breakdowns_never_accumulate_or_trigger() {
+        let mut v = Vehicle::new(
+            1,
+            VehicleKind::Train,
+            TileCoord::new(0, 0),
+            TileCoord::new(1, 0),
+        );
+        v.running = true;
+        v.cur_speed = 100;
+        v.reliability = 100;
+        v.breakdown_chance = 250;
+        v.check_vehicle_breakdown_with_setting(&mut Randomizer::new(7), 0, false);
+        assert_eq!(v.breakdown_ctr, 0);
+        assert_eq!(v.breakdown_chance, 250);
     }
 
     #[test]

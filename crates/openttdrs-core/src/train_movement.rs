@@ -109,6 +109,17 @@ pub const fn diag_dir_index(diag: u8) -> usize {
         crate::DIR_NE => 0,
         crate::DIR_SE => 1,
         crate::DIR_SW => 2,
+        _ => 3,
+    }
+}
+
+/// Índice 0..3 preservando el tipo pequeño para máscaras de lados rail.
+#[must_use]
+pub const fn diag_dir_side(diag: u8) -> u8 {
+    match diag {
+        crate::DIR_NE => 0,
+        crate::DIR_SE => 1,
+        crate::DIR_SW => 2,
         _ => 3, // NW u otras → fila NW de la tabla
     }
 }
@@ -274,28 +285,32 @@ pub const VEHICLE_SUBCOORD: [[Option<VehicleSubcoord>; 6]; 4] = [
 /// Trackbit usado al entrar en la tesela en dirección `enter_diag` (NE/SE/SW/NW).
 #[must_use]
 pub fn track_bit_for_movement(enter_diag: u8, track_bits: u8) -> Option<u8> {
+    // `enter_diag` es la dirección 0..7 del vehículo al cruzar hacia esta
+    // tesela. Su índice diagonal coincide con el lado por el que quedó detrás
+    // la tesela anterior (NE/SE/SW/NW).
+    track_bit_touching_side(diag_dir_side(enter_diag), track_bits)
+}
+
+/// Elige una pieza que toca un lado ferroviario 0..3.
+///
+/// A diferencia de [`track_bit_for_movement`], este helper recibe directamente
+/// un `DiagDirection` de la topología rail y evita mezclarlo con `Direction`
+/// 0..7 del vehículo.
+#[must_use]
+pub fn track_bit_touching_side(side: u8, track_bits: u8) -> Option<u8> {
     let tb = track_bits & 0x3F;
     if tb == 0 {
         return None;
     }
-    let side = match diag_dir_index(enter_diag) {
-        0 => 0u8,
-        1 => 1,
-        2 => 2,
-        _ => 3,
-    };
     let mask = rail_bits_touching_side(side);
     let bits = tb & mask;
     let pick = if bits.is_power_of_two() {
         bits
     } else if bits != 0 {
-        // Rectas X/Y antes que curvas cuando varias piezas son válidas (empalmes).
+        // Fallback determinista. En empalmes el controlador/render debe pasar
+        // el track exacto de la ruta; aquí solo resolvemos casos ambiguos legacy.
         const ORDER: [u8; 6] = [0x01, 0x02, 0x04, 0x08, 0x10, 0x20];
-        ORDER.into_iter().find(|b| {
-            bits & b != 0
-                && rail_track_index(*b)
-                    .is_some_and(|ti| VEHICLE_SUBCOORD[diag_dir_index(enter_diag)][ti].is_some())
-        })?
+        ORDER.into_iter().find(|b| bits & b != 0)?
     } else if tb.is_power_of_two() {
         tb
     } else {
@@ -304,30 +319,81 @@ pub fn track_bit_for_movement(enter_diag: u8, track_bits: u8) -> Option<u8> {
     Some(pick)
 }
 
-/// Sub-tesela en vía según `_vehicle_subcoord` + `_fractcoords_behind`.
+/// Par de lados que conecta un único `TrackBit`.
+#[must_use]
+pub const fn rail_track_sides(track_bit: u8) -> Option<(u8, u8)> {
+    match track_bit {
+        0x01 => Some((0, 2)), // X: NE ↔ SW
+        0x02 => Some((1, 3)), // Y: SE ↔ NW
+        0x04 => Some((0, 3)), // UPPER
+        0x08 => Some((1, 2)), // LOWER
+        0x10 => Some((2, 3)), // LEFT
+        0x20 => Some((0, 1)), // RIGHT
+        _ => None,
+    }
+}
+
+const fn rail_side_subtile(side: u8) -> (f32, f32) {
+    match side & 3 {
+        0 => (0.0, 8.0),
+        1 => (8.0, 16.0),
+        2 => (16.0, 8.0),
+        _ => (8.0, 0.0),
+    }
+}
+
+/// Sub-tesela continua sobre un track concreto.
+///
+/// `enter_diag` es el rumbo 0..7 con que el vehículo entró a la tesela. Las
+/// rectas recorren los 16 píxeles completos y las curvas usan una Bézier por el
+/// centro; así el final de una tesela coincide exactamente con el inicio de la
+/// siguiente y no hay saltos de un tile entero.
+#[must_use]
+pub fn train_subtile_on_track(enter_diag: u8, track_bit: u8, progress: f32) -> Option<(f32, f32)> {
+    let (a, b) = rail_track_sides(track_bit)?;
+    let entry_side = crate::map::opposite_diag_dir(diag_dir_side(enter_diag));
+    let exit_side = if a == entry_side {
+        b
+    } else if b == entry_side {
+        a
+    } else {
+        return None;
+    };
+    let (x0, y0) = rail_side_subtile(entry_side);
+    let (x1, y1) = rail_side_subtile(exit_side);
+    let t = (progress / 255.0).clamp(0.0, 1.0);
+    if matches!(track_bit, 0x01 | 0x02) {
+        return Some((x0 + (x1 - x0) * t, y0 + (y1 - y0) * t));
+    }
+
+    let one_minus_t = 1.0 - t;
+    let center = (8.0, 8.0);
+    Some((
+        one_minus_t * one_minus_t * x0 + 2.0 * one_minus_t * t * center.0 + t * t * x1,
+        one_minus_t * one_minus_t * y0 + 2.0 * one_minus_t * t * center.1 + t * t * y1,
+    ))
+}
+
+/// Sub-tesela continua eligiendo una pieza desde el lado de entrada.
 #[must_use]
 pub fn train_subtile_on_rail(enter_diag: u8, track_bits: u8, progress: f32) -> Option<(f32, f32)> {
     let bit = track_bit_for_movement(enter_diag, track_bits)?;
-    let ti = rail_track_index(bit)?;
-    let sub = VEHICLE_SUBCOORD[diag_dir_index(enter_diag)][ti]?;
-    let (bx, by) = FRACTCOORDS_BEHIND[diag_dir_index(enter_diag)];
-    let t = (progress / 255.0).clamp(0.0, 1.0);
-    let x0 = f32::from(sub.x);
-    let y0 = f32::from(sub.y);
-    Some((x0 + (f32::from(bx) - x0) * t, y0 + (f32::from(by) - y0) * t))
+    train_subtile_on_track(enter_diag, bit, progress)
 }
 
-/// Dirección de sprite en vía (entrada en curva vs salida recta).
+/// Dirección de sprite sobre un track concreto, derivada de la tangente.
+#[must_use]
+pub fn train_render_dir_on_track(enter_diag: u8, track_bit: u8, progress: f32) -> Option<u8> {
+    let before = train_subtile_on_track(enter_diag, track_bit, progress - 1.0)?;
+    let after = train_subtile_on_track(enter_diag, track_bit, progress + 1.0)?;
+    crate::road_movement::bay::direction_from_subtile_delta(after.0 - before.0, after.1 - before.1)
+}
+
+/// Dirección de sprite en la pieza elegida desde el lado de entrada.
 #[must_use]
 pub fn train_render_dir_on_rail(enter_diag: u8, track_bits: u8, progress: f32) -> Option<u8> {
     let bit = track_bit_for_movement(enter_diag, track_bits)?;
-    let ti = rail_track_index(bit)?;
-    let sub = VEHICLE_SUBCOORD[diag_dir_index(enter_diag)][ti]?;
-    if progress < 128.0 {
-        Some(sub.dir)
-    } else {
-        Some(enter_diag)
-    }
+    train_render_dir_on_track(enter_diag, bit, progress)
 }
 
 /// Dirección diagonal de salida/entrada según la orientación del depósito (`m5 & 3`).
@@ -370,11 +436,11 @@ mod tests {
     #[test]
     fn train_subtile_on_upper_curve_moves_diagonally() {
         use super::train_subtile_on_rail;
-        // NE + LEFT: entrada válida en `_vehicle_subcoord` (15,7) → (15,8).
+        // NE + LEFT: entra desde SW y sale por NW, recorriendo toda la curva.
         let (x0, y0) = train_subtile_on_rail(DIR_NE, 0x10, 0.0).expect("NE left");
-        let (_x1, y1) = train_subtile_on_rail(DIR_NE, 0x10, 255.0).expect("NE left end");
-        assert!((x0 - 15.0).abs() < 0.1 && (y0 - 7.0).abs() < 0.1);
-        assert!((y1 - y0).abs() > 0.5, "debe avanzar en Y por la curva");
+        let (x1, y1) = train_subtile_on_rail(DIR_NE, 0x10, 255.0).expect("NE left end");
+        assert_eq!((x0, y0), (16.0, 8.0));
+        assert_eq!((x1, y1), (8.0, 0.0));
     }
 
     #[test]
@@ -382,7 +448,16 @@ mod tests {
         use crate::DIR_SW;
         assert_eq!(track_bit_for_movement(DIR_SW, 0x29), Some(0x01));
         let sub = train_subtile_on_rail(DIR_SW, 0x29, 128.0).expect("SW on X|LOWER|RIGHT");
-        assert!((sub.0 - 0.0).abs() < 0.1);
+        assert!((sub.0 - 8.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn exact_right_track_follows_switch_instead_of_straight() {
+        use crate::DIR_SW;
+        let start = train_subtile_on_track(DIR_SW, 0x20, 0.0).unwrap();
+        let end = train_subtile_on_track(DIR_SW, 0x20, 255.0).unwrap();
+        assert_eq!(start, (0.0, 8.0));
+        assert_eq!(end, (8.0, 16.0));
     }
 
     #[test]

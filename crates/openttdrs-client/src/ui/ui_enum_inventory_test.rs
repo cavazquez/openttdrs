@@ -7,7 +7,7 @@ use super::toolbar::{BuildMenuAction, SaveMenuAction, ToolbarGroup};
 /// Debe coincidir con la tabla de `docs/PARIDAD.md`.
 const EXPECTED_FLOATING_WINDOWS: usize = 43;
 const EXPECTED_BUILD_MENU_ACTIONS: usize = 66;
-const EXPECTED_SAVE_MENU_ACTIONS: usize = 22;
+const EXPECTED_SAVE_MENU_ACTIONS: usize = 24;
 const EXPECTED_TOOLBAR_GROUPS: usize = 8;
 const EXPECTED_EDITOR_TOOLBAR_ACTIONS: usize = 19;
 

@@ -23,7 +23,8 @@ pub(crate) const RENDER_TRACE_ENV: &str = "OPENTTDRS_RENDER_TRACE";
 const CSV_HEADER: &str = "frame,tick,tick_alpha,vehicle,logical_tile_x,logical_tile_y,\
 logical_progress,logical_dir,extrap_tile_x,extrap_tile_y,extrap_progress,sprite_dir,\
 logical_subtile_x,logical_subtile_y,extrap_subtile_x,extrap_subtile_y,\
-logical_world_x,logical_world_y,extrap_world_x,extrap_world_y";
+logical_world_x,logical_world_y,extrap_world_x,extrap_world_y,\
+logical_road_frame,extrap_road_frame";
 
 #[derive(Resource, Default)]
 pub(crate) struct RenderTrace {
@@ -92,7 +93,7 @@ fn record_render_trace(
         let (extrap_sub_x, extrap_sub_y) = vehicle_subtile_at(v, pose);
         let _ = writeln!(
             writer,
-            "{},{},{:.4},{},{},{},{},{},{},{},{},{},{:.3},{:.3},{:.3},{:.3},{:.2},{:.2},{:.2},{:.2}",
+            "{},{},{:.4},{},{},{},{},{},{},{},{},{},{:.3},{:.3},{:.3},{:.3},{:.2},{:.2},{:.2},{:.2},{:.4},{:.4}",
             *frame,
             tick,
             alpha,
@@ -113,6 +114,8 @@ fn record_render_trace(
             logical_world.y,
             extrap_world.x,
             extrap_world.y,
+            logical_pose.road_frame_f,
+            pose.road_frame_f,
         );
     }
     *frame += 1;
@@ -168,11 +171,15 @@ mod tests {
         assert_eq!(lines.len(), 3, "cabecera + 2 filas: {contents}");
         assert!(lines[0].starts_with("frame,tick,tick_alpha"));
         assert!(lines[0].contains("logical_subtile_x"));
-        // Con tick_alpha=0.5 la pose extrapolada difiere de la lógica.
+        // Con tick_alpha=0.5 el frame real y la sub-tesela extrapolados difieren.
         let cols: Vec<&str> = lines[1].split(',').collect();
         assert_eq!(cols[3], "7", "id del vehículo");
-        assert_ne!(cols[6], cols[10], "progress extrapolado ≠ lógico");
+        assert_eq!(
+            cols[6], cols[10],
+            "progress es remanente físico autoritativo"
+        );
         assert_ne!(cols[12], cols[14], "subtile_x extrapolado ≠ lógico");
+        assert_ne!(cols[20], cols[21], "road frame extrapolado ≠ lógico");
         let _ = std::fs::remove_file(&dir);
     }
 }

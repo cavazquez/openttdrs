@@ -22,7 +22,7 @@ no existe. Ningún nivel implica compatibilidad binaria o de red con OpenTTD.
 | Economía y carga | **Media** | 11 cargas temperate, packets, transfer/deliver, CargoDist y ratings; faltan reglas completas por clima/NewGRF |
 | Pueblos e industrias | **Media** | Crecimiento, casas/industrias vanilla y producción; contenido de Arctic/Tropic/Toyland incompleto |
 | Órdenes y horarios | **Media-alta en core / media en UI** | Full-load all/any, no-load/no-unload, transfer, non-stop/go-via, stop-location, refit de depósito, condicionales y timetable-start; la UI no expone todo |
-| Fiabilidad y servicio | **Media en core / inicial en UI** | Averías, intervalos días/porcentaje, servicio y autoenvío a depósito; falta el editor completo de intervalos/unbunch |
+| Fiabilidad y servicio | **Media en core / inicial en UI** | Averías normales/reducidas/OFF configurables desde Ajustes, intervalos días/porcentaje, servicio y autoenvío a depósito; falta el editor completo de intervalos/unbunch |
 | Aviones | **Media** | Aeropuertos FTA, compra, vuelo, ruido y crashes; presentación y casos límite incompletos |
 | Barcos | **Inicial** | Depósitos, docks, boyas, locks, compra y A* acuático; movimiento y órdenes todavía simplificados |
 | Guardado propio JSON | **Alta** | Formato versionado con migraciones y determinismo mid-run |
@@ -190,14 +190,14 @@ aproximadas (Fases 2–3 del roadmap estructural).
 | Frenado por curva Original | `set_direction_with_curve_penalty` (`ACCEL_SLOWDOWN`); **omitido si Realistic** | `train_cmd.cpp:3147-3152`, `:3564-3568` (solo `AM_ORIGINAL`) | 3 · validado (Rail 3B) | `train_loses_speed_on_direction_change`, chequeo `train_no_curve_braking` | Bajo |
 | Pendiente → velocidad | `slope_pixel_z` + `vehicle.rs::sync_train_slope_speed` (`z_pos`, progreso y cruce) | `ground_vehicle.hpp` (`UpdateInclination`), `train_cmd.cpp:3140-3152` | 2 · probado | `slope_pixel_z_combines_tile_z_and_partial`, `train_applies_z_change_while_progressing_on_inclined_tile`, climb/descend | Medio: sin bits GoingUp/Down ni paso por píxel de mapa |
 | Paso sub-tesela rail | `progress` = remanente `DoUpdateSpeed`; `rail_pixel` 0..15; 2× loco/tick; umbral 192/256 | `ground_vehicle.hpp` `DoUpdateSpeed`, `vehicle_base.h` `GetAdvanceDistance`, `Train::Tick` | 5 · equivalente (oráculo 40 ticks) | `pbs_openttd_oracle.rs`, `axial_and_corner_advance_distances_*`, `pbs_fixture_first_tick_*` | Bajo en el fixture; carretera sigue en modelo 0–255 |
-| Posición sub-tile / render | `rail_pixel/16` → visual 0..=255 + `train_subtile_on_rail` | `vehicle.cpp:3359-3392` (`_vehicle_subcoord` por enterdir×track) | 3 · validado (Rail 3E + proyección visual) | `train_render_subtile_consistency`, `train_visual_progress_from_pixel` | Medio: piezas diagonales ≈ centro de vía |
+| Posición sub-tile / render | `(rail_pixel + progress/GetAdvanceDistance)/16` → visual 0..=255; track exacto de `anterior→actual→siguiente` | `vehicle.cpp:3359-3392` (`_vehicle_subcoord` por enterdir×track) | 4 · validado (proyección continua + empalmes) | `train_crosses_tile_boundary_without_visual_jump`, `train_render_follows_route_track_at_switch` | Bajo: curvas Bézier continuas, no secuencia discreta píxel a píxel del original |
 | Reversa | `vehicle.rs::apply_immediate_train_turnaround` (instantánea) + comando `turn_around_vehicle` | `train_cmd.cpp` (`ReverseTrainDirection`, con chequeos y coste) | 2 · probado | `train_reverses_immediately_when_next_tile_opposite`, `turn_around_vehicle_reverses_train_heading` | Medio |
 | Entrada/salida de estación | `station.rs::rail_station_stop_tile` + `resolve_order_destination` → plataforma; `vehicle_physically_at_station` en plataforma | `train_cmd.cpp:266-305` (`GetTrainStopLocation`), `station_cmd.cpp:3846-3881` (frenado sub-tile) | 3 · validado (Rail 3C) | `train_line_emits_rail_block_and_events`, `showcase_train_enters_rail_station_platform`, chequeo `train_platform_stop` | Bajo |
 | Carga/descarga | `sim_step.rs` + `cargo_packet.rs` (gradual por tick, packets) | `economy.cpp:1609` (`LoadUnloadVehicle`, gradual) | 2 · probado (Fase 2; `instant_loading` cerrado) | `train_loads_freight_from_rail_station_waiting_cargo`, golden `instant_loading=false` | Medio: velocidades MVP, no tablas NewGRF |
 | Entrada/salida de depósito | `depot_leave.rs` (37 ticks, bit `m5`, `try_path_reserve`, reentrada, stagger) + `refit` Hidden | `train_cmd.cpp:2354-2427`, `rail_cmd.cpp:2999-3044` | 4 · paridad leave | `train_waits_37_ticks_*`, `consist_followers_activate_*`, `same_depot_order_reenters_*` | Medio: activación por `TicksToLeaveDepot` aproximada con fractcoords/`rail_pixel` |
 | Órdenes (estación/waypoint/depósito/condicionales) | `vehicle.rs` (`VehicleOrder`), waypoint solo trenes | `order_*.cpp` | 2 · probado | `train_order_through_waypoint_advances_without_full_stop` | Medio |
 | Señales en movimiento / forzar paso | `sim_step.rs` (bloqueado → `cur_speed = 0`), `force_proceed` | `train_cmd.cpp:3454-3456` (señal roja: `cur_speed=0`, `progress=255`) | 2 · probado | `force_vehicle_proceed_sets_flag_on_train` | Alto (semántica de bloque simplificada) |
-| Render/interpolación | `render/vehicles.rs` + `render_trace.rs` (sub-teselas en CSV) | (no aplica: OpenTTD corre a ~33 Hz sin interpolar) | 3 · validado (Rail 3E) | `train_line_extrapolation_subtile_is_monotonic`, `sprite_selection_uses_extrapolated_pose_for_train` | Bajo en rectas X/Y |
+| Render/interpolación | `render/vehicles.rs` + `render_trace.rs`; interpola también el remanente físico entre `rail_pixel` | (no aplica: OpenTTD corre a ~33 Hz sin interpolar) | 4 · validado | `train_line_extrapolation_subtile_is_monotonic`, `train_motion_remainder_advances_between_rail_pixels`, `sprite_selection_uses_extrapolated_pose_for_train` | Bajo |
 
 ### Infraestructura de paridad ferroviaria
 
@@ -267,17 +267,17 @@ los módulos Rust, con el mecanismo de validación disponible para cada pieza.
 | `GroundVehicleBase::DoUpdateSpeed` (subspeed u8, tempmax) | `ground_vehicle.hpp` | `engine.rs::update_road_speed` (misma aritmética con truncado a u8) | tests `engine.rs` |
 | `GetAdvanceSpeed = speed * 3 / 4` | `vehicle_base.h:439-442` | `engine.rs::progress_step_for_speed` (numerador/denominador 3/4) | golden |
 | `GetAdvanceDistance` 192 diagonal / 256 cardinal | `vehicle_base.h:451-454` | `engine.rs::tile_progress_length` (`TILE_AXIAL_DISTANCE`/`TILE_CORNER_DISTANCE`) | golden |
-| `frame` dentro de la tesela (0..15 por entrada de tabla) | `roadveh.h` (`RoadVehicle::frame`) | `Vehicle::progress` 0–255 lineal (reescalado; sin tabla por frame en la sim) | — (divergencia estructural documentada) |
+| `frame` dentro de la tesela (índice de tabla) | `roadveh.h` (`RoadVehicle::frame`) | `Vehicle::frame` autoritativo; `progress` conserva solo el remanente de `GetAdvanceDistance` | tests `straight_tile_uses_real_road_frame` y traza `logical_road_frame` |
 | Penalización de giro `cur_speed -= cur_speed >> 2` | `roadveh_cmd.cpp:1481` (también `:1353`, `:1426`) | `vehicle.rs::set_direction_with_curve_penalty` (Fase 2; bus/camión, no trenes) | test `road_vehicle_loses_quarter_speed_on_turn`; chequeo `curve_speed_penalty` como regresión |
-| Tablas `_roadveh_drive_data_*` (trayectorias por tesela) | `table/roadveh_movement.h:10-1084` | `road_movement.rs` (`STRAIGHT`, `CURVE_*`, `U_TURN_*`) — solo para render | golden compara data_0/2/3 punto a punto |
+| Tablas `_roadveh_drive_data_*` (trayectorias por tesela) | `table/roadveh_movement.h:10-1084` | `road_movement/drive_data.rs`; el controlador y el render consumen el mismo `frame` | golden compara data_0/2/3 punto a punto |
 | `Direction` 0..7 (N=0 … NW=7) | `direction_type.h` | `vehicle.rs` (`DIR_N`..`DIR_NW`) | tests `vehicle.rs` |
-| Media vuelta en parada (`RVSB_IN_ROAD_STOP` + reversing) | `roadveh_cmd.cpp:1306-1330` | `Vehicle::depart_turn` + `U_TURN_*` | tests `road_movement.rs` |
+| Lazo de retorno en parada (`RVSB_IN_ROAD_STOP`) | `roadveh_cmd.cpp:1306-1330` | estado `RVSB_IN_ROAD_STOP` sobre `_rv_station_left_*`; sin giro sintético separado | test `bay_exit_uses_same_table_without_synthetic_turn` |
 
 ### Estaciones y paradas
 
 | Concepto OpenTTD | Referencia C++ | Equivalente Rust | Validación |
 |---|---|---|---|
-| Bahía (bay stop) bus/camión — el vehículo ENTRA a la tesela | `roadveh_cmd.cpp:1311-1330`, tablas `_rv_station_left_*` (`roadveh_movement.h:458-737`, punteros `:1052-1067`) | Fase 2: destino = tesela de la bahía (`station.rs::resolve_order_destination`); render con las 8 tablas exactas del lado izquierdo (`road_movement.rs::bay_station_table` + `bay_subtile`: entrada, lazo y salida). Sin portar: `_rv_station_right_*` y dársena `near` | golden `bay_station_tables_match_rust_copies` (punto a punto + stop frame); chequeo `bay_stop_position` como regresión |
+| Bahía (bay stop) bus/camión — el vehículo ENTRA a la tesela | `roadveh_cmd.cpp:1311-1330`, tablas `_rv_station_left_*` (`roadveh_movement.h:458-737`, punteros `:1052-1067`) | destino = tesela de bahía; estado `RVSB_IN_ROAD_STOP`, dársenas `far/near`, exclusión de boca y una única tabla para entrada/salida. Pendiente: `_rv_station_right_*` (conducción por la derecha) | golden punto a punto; tests de llegada, asignación 2+1 y salida |
 | Frame exacto de parada en bahía | `_road_stop_stop_frame` (`roadveh_movement.h:1087-1093`, valores 11–20) + chequeo `roadveh_cmd.cpp:1496-1502` | `BayStationTable::stop` por tabla (copiado del upstream); el vehículo se detiene y carga en ese punto | golden verifica valor y que sea el vértice del lazo |
 | `StationType` en `m6` (bits 3–6) | `station_map.h` | `station.rs::station_type_from_m6`, `stop_kind_from_m6` | tests `station.rs` |
 | Orientación de la boca de la parada (`m5 & 3`) | `station_map.h` (`GetBayRoadStopDir`) | `command/transport/station.rs::road_stop_m5` + `road_stop_approach_tile` | tests de comandos |
@@ -367,7 +367,7 @@ cada pieza.
 |---|---|---|---|
 | YAPF rail (`CYapfRail`, reserva durante pathfind) | `pathfinder/yapf/yapf_rail.cpp:36-604` | `pathfinder/yapf.rs`: trackdir, penalizaciones y reservas parciales; desempates/costes no son todavía equivalentes en todos los mapas | `golden_yapf`, PBS externos y tests `yapf_*` |
 | `CFollowTrackRail` (seguidor de vías) | `pathfinder/follow_track.hpp:27-507` | `rail_bit_for_sides`, `rail_bits_touching_side`, `rail_traversal_bits` (`pathfinder.rs:218-270`) | tests de conectividad; falta golden piezas×lados |
-| Depósito solo por la boca | `train_cmd.cpp` + `depot_map.h` | `rail_depot_mouth` (`pathfinder.rs:274-278`) | `rail_depot_beside_x_line_connects_exit_tile` |
+| Depósito solo por la boca; autoempalme local en openttdrs | `rail_cmd.cpp` (`CmdBuildTrainDepot`) + `rail_map.h` (`MakeRailDepot`; upstream no autoempalma) | `rail_depot_mouth`; `place_rail_depot_dir` agrega sólo las piezas necesarias en la tesela de salida, sin propagarlas a vecinos | `rail_depot_keeps_prebuilt_exit_junction_unchanged`, `rail_depot_connects_exit_without_touching_parallel_neighbors` |
 | Estación no transitable salvo origen/destino | `yapf_rail.cpp` (penalización plataforma) | trenes no rutean a través de plataformas (`astar_rail_station_reaches_track_below_entrance`) | test citado |
 
 ### Trazabilidad (Fases Rail 1–4)
@@ -405,13 +405,13 @@ vehículos de carretera. Muchos ítems ya están ~~tachados~~ (implementados).
    boca (`m3`) y el vehículo carga dentro (`bay_stop_position` «no observada»).
    Las 8 tablas `_rv_station_left_*` (lado izquierdo, el que usa el port) están
    copiadas en `road_movement.rs::bay_station_table` y validadas punto a punto
-   por el golden `bay_station_tables_match_rust_copies`. Sin portar: las 8
-   `_rv_station_right_*` (conducción por la derecha) y la dársena `near`
-   (la sim modela una dársena por bahía y usa siempre la `far`).
-3. ~~**Frame de parada `_road_stop_stop_frame` exacto**~~ — **IMPLEMENTADO en
-   la Fase 2**: cada tabla de bahía lleva su stop frame upstream (valores
-   11–20, `roadveh_movement.h:1087-1093`); el vehículo se dibuja detenido en
-   ese punto y el golden verifica que sea el vértice del lazo.
+   por el golden `bay_station_tables_match_rust_copies`. El controlador usa
+   las variantes `far/near`; siguen pendientes las 8 `_rv_station_right_*`
+   para conducción por la derecha.
+3. ~~**Frame de parada `_road_stop_stop_frame` exacto**~~ — **IMPLEMENTADO**:
+   el controlador no inicia la carga al cruzar la tesela; espera el stop frame
+   upstream (15–20 para las tablas left far/near) y el render usa ese mismo
+   contador autoritativo.
 4. **Retardo de un frame por dirección de giro** — `roadveh_cmd.cpp:1483-1487`:
    en curvas el vehículo «pierde» un frame extra por cada cambio de dirección
    (la curva corta de 8 frames pasa a 10). Afecta el timing en esquinas.
@@ -421,9 +421,9 @@ vehículos de carretera. Muchos ítems ya están ~~tachados~~ (implementados).
 
 ### Prioridad media
 
-6. **Ocupación/bloqueo de bahías (`RoadStop::Enter/Leave`)** —
-   `src/roadstop.cpp`: una bahía tiene 2 plazas; un tercer camión espera fuera.
-   Hoy no hay exclusión ni cola.
+6. ~~**Ocupación/bloqueo de bahías (`RoadStop::Enter/Leave`)**~~ —
+   **IMPLEMENTADA**: asignación `far` y luego `near`, exclusión de la boca al
+   entrar/salir y espera del tercer vehículo en el acceso.
 7. **Adelantamiento (`overtaking`)** — `roadveh_cmd.cpp:821-860`: los
    vehículos se adelantan en rectas (con aceleración 512 en vez de 256).
 8. **Colisión/seguimiento entre vehículos de carretera**
@@ -440,7 +440,8 @@ vehículos de carretera. Muchos ítems ya están ~~tachados~~ (implementados).
 
 ### Prioridad baja (para fases posteriores)
 
-12. **Averías (`HandleBreakdown`)** y humo/efectos asociados.
+12. ~~**Averías (`HandleBreakdown`)** y humo/efectos asociados.~~ Implementadas;
+    `vehicle_breakdowns` respeta normal/reducidas/ninguna y la UI permite ciclarlo.
 13. **`reverse_ctr` y giros en U forzados** fuera de paradas.
 14. **Tranvías** (tablas `_roadveh_tram_turn_*`, `roadveh_movement.h:1095+`).
 15. **Articulados** (`HasArticulatedPart`): trailers que siguen al frontal.
@@ -599,10 +600,10 @@ gaps frente a `_vehicle_subcoord` y `_tunnel_visibility_frame`.
 | Aspecto | Traza lógica (`parity`) | Render (`vehicle_subtile` + cliente) | Estado |
 |---|---|---|---|
 | Sub-tesela en JSONL | `rail.parts[0].subtile_x/y` | Misma función `vehicle_subtile` a `tick_alpha=0` | **Alineado** — chequeo `train_render_subtile_consistency` |
-| Interpolación entre ticks | Sim ~37 Hz; render extrapola | `extrapolate_vehicle_pose` + `tick_alpha` | **Sin retrocesos** en recta (`train_line_extrapolation_subtile_is_monotonic`) |
+| Interpolación entre ticks | Sim ~37 Hz; render extrapola | `extrapolate_vehicle_pose` usa `rail_pixel` + remanente físico + `tick_alpha` | **Continua incluso entre píxeles** (`train_motion_remainder_advances_between_rail_pixels`) |
 | Sprite del tren | `dir` lógico | Capa según pose extrapolada | **Alineado** — `sprite_selection_uses_extrapolated_pose_for_train` |
 | CSV de render | — | Columnas `logical_subtile_*` / `extrap_subtile_*` añadidas | **Listo** para diff manual vs JSONL |
-| `_vehicle_subcoord` por pieza | Golden 3A (`vehicle_subcoord_matches_rust_copy`) | Render usa `train_straight_subtile` (eje central) | **Divergencia cosmética** en piezas diagonales puras (`train_diagonal_subcoord_approximation`) |
+| Track por pieza | Golden 3A (`vehicle_subcoord_matches_rust_copy`) | Reconstruye el track de la ruta y recorre recta/Bézier de borde a borde | **Alineado topológicamente** en empalmes; geometría curva continua propia |
 | Ocultamiento en túnel | Constante `{12,8,8,12}` portada | Sin ocultar sprite en túnel | **Pendiente** — `tunnel_hides_train_at_progress` solo evalúa umbral |
 
 ### Cómo reproducir
@@ -621,21 +622,23 @@ Comparar `rail.parts[0].subtile_*` del JSONL (por tick) con
 
 Tolerancia recomendada: `0.51` (medio píxel), igual que `parity_diff --subtile-epsilon`.
 
-### Decisiones (Rail 3E)
+### Decisiones (Rail 3E + corrección de continuidad)
 
-1. **No portar** `_vehicle_subcoord` completo al render en esta fase: en vías `X`/`Y`
-   el eje central coincide con la entrada OpenTTD; en `UPPER`/`LOWER`/`LEFT`/`RIGHT`
-   el sprite puede desplazarse ~1 px respecto al original.
+1. Usar los lados exactos del `TrackBit` elegido por la ruta. Rectas y curvas
+   terminan en el mismo borde donde comienza la tesela siguiente; se elimina el
+   salto de 16 px y la selección visual arbitraria de una recta en empalmes.
 2. ~~**Ocultamiento por `_tunnel_visibility_frame`**~~ ✅
    `tunnel_hides_train_at_progress` / `vehicle_hidden_in_tunnel` (ítem 9 cerrado).
-3. **Mantener** extrapolación genérica de carretera para trenes: sin stutter medible
-   en `train_line` con física Rail 3B.
+3. La extrapolación ferroviaria usa su escala física propia (`GetAdvanceSpeed`,
+   `GetAdvanceDistance`, dos handlers por tick), separada de carretera.
 
 ### Tests de regresión
 
 - `train_render_subtile_consistency` en `parity/report.rs`
 - `train_line_divergences_are_absent_after_rail_3b` (incluye consistencia render)
 - `train_line_extrapolation_subtile_is_monotonic`
+- `train_crosses_tile_boundary_without_visual_jump`
+- `train_render_follows_route_track_at_switch`
 - `sprite_selection_uses_extrapolated_pose_for_train`
 - `tunnel_hides_train_matches_visibility_frame`
 
@@ -878,7 +881,7 @@ Checklist versionado de superficies de UI. Los conteos deben coincidir con
 `ui_enum_inventory_counts`).
 
 **Fecha:** 2026-07-17 · **FloatingWindowId:** 43 · **BuildMenuAction:** 66 ·
-**SaveMenuAction:** 22 · **ToolbarGroup:** 8
+**SaveMenuAction:** 24 · **ToolbarGroup:** 8
 
 ### Ventanas flotantes (`FloatingWindowId`)
 
@@ -941,7 +944,7 @@ Checklist versionado de superficies de UI. Los conteos deben coincidir con
 
 - **ToolbarGroup (8):** Rail, Road, Water, Air, Economy, Landscape, Info, Settings
 - **BuildMenuAction (66):** ver `BuildMenuAction::ALL` en `toolbar/mod.rs`
-- **SaveMenuAction (18):** ver `SaveMenuAction::ALL`
+- **SaveMenuAction (24):** ver `SaveMenuAction::ALL`
 
 ### Mantenimiento
 
@@ -973,7 +976,7 @@ Del video de OpenTTD (camión aproximándose a una bahía de carga):
 3. **Movimiento continuo**: sin saltos; el sprite cambia de orientación en
    sincronía con la trayectoria curva pixel a pixel.
 
-Del video de openttdrs:
+Del video de openttdrs anterior a esta corrección:
 
 1. La velocidad NO baja en las curvas.
 2. El camión se detiene en la carretera frente a la parada (nunca entra a la
@@ -981,7 +984,7 @@ Del video de openttdrs:
 3. El movimiento presenta tirones y la orientación del sprite cambia tarde
    respecto a la posición dibujada en las curvas.
 
-### Timeline del runner (traza tras la Fase 2, 500 ticks)
+### Timeline del runner (traza actual, 2000 ticks)
 
 Camión id 1, motor MPS (velocidad interna máx. 96 = 48 km/h). Ruta con dos
 curvas de 90° y bahías `TruckStop` en ambos extremos.
@@ -989,14 +992,13 @@ curvas de 90° y bahías `TruckStop` en ambos extremos.
 | Tick | Evento / estado | Detalle |
 |---|---|---|
 | 1 | `start` | arranca desde parado (aceleración AM_ORIGINAL) |
-| 35 | primer `tile_crossed` | aún acelerando (≈14 ticks/tesela) |
-| 90, 130 | `direction_changed` (curvas 90°) | **velocidad 96→72** (−25 %, Fase 2) y recupera acelerando |
-| 168 | `tile_crossed` + `station_entry` | **entra a la tesela de la bahía** (4,5) desde el acceso (4,6) (Fase 2) |
-| 169 | `loading_started` + `loading_finished` + `order_advanced` | carga 0→20 **en un solo tick** (OpenTTD: gradual — pendiente) |
-| 170–178 | `depart_turn_started` … `depart_turn_ended` | media vuelta animada dentro de la bahía |
-| 238, 277 | curvas de vuelta | con penalización −25 % en cada giro |
-| 315–316 | `station_entry` + `unloading_started/finished` | descarga gradual dentro de la bahía destino |
-| 462–463 | segundo ciclo de carga | el ciclo es estable y determinístico |
+| 91 | primer `tile_crossed` | acelerando; a máxima velocidad tarda ≈43 ticks/tesela |
+| 326, 582 | `direction_changed` (curvas 90°) | **velocidad 96→72** (−25 %) y recupera acelerando |
+| 820 | `tile_crossed` | cruza a la tesela de la bahía, pero todavía no carga |
+| 912 | `station_entry` | alcanza el stop frame real y se detiene dentro |
+| 913–917 | `loading_started` … `loading_finished` | carga gradual 0→20 y avanza la orden |
+| 918–1034 | salida por `_rv_station_left_*` | recorre el lazo; `depart_turn` permanece en 0 y vuelve a la carretera |
+| 1934–1939 | segunda estación | alcanza stop frame, descarga y avanza la orden |
 
 ### Qué divergencia del reporte explica cada diferencia visual
 
@@ -1005,8 +1007,8 @@ curvas de 90° y bahías `TruckStop` en ambos extremos.
 | No frena en las curvas (48 km/h constantes vs 48→33→31) | `curve_speed_penalty` | **CORREGIDA en Fase 2**: `Vehicle::set_direction_with_curve_penalty` aplica −25 % en cada giro (ticks 90/130/238/277 de la traza: 96→72) |
 | Se detiene fuera de la dársena | `bay_stop_position` | **CORREGIDA en Fase 2**: el destino es la tesela de la bahía; carga con el camión en (4,5). El render sigue las tablas exactas `_rv_station_left_*` (entrada por la boca, lazo, parada en el stop frame 11–20 y salida), validadas punto a punto por el golden |
 | La pausa de carga parece un frenazo inmediato | `instant_loading` — ya gradual por tick (`load_unload_speed`) | Resuelto (regresión en reportes) |
-| Tirones / baja fluidez general | `tick_rate` — sim ~37 Hz, `REFERENCE_PROGRESS_STEP=112` | Resuelto — ver `docs/PARIDAD.md` / ADR 0003 |
-| Sprite gira tarde en las curvas | corregido en Fase 1: el selector de textura ahora usa la pose extrapolada (`render/vehicles.rs::for_vehicle`); antes usaba `v.render_direction()` lógico | test `sprite_selection_uses_extrapolated_pose_not_logical_direction`; verificable con `OPENTTDRS_RENDER_TRACE` |
+| Tirones / velocidad visual excesiva | el render trataba `progress` físico como avance lineal 0–255 | **Resuelto**: sim y render usan `Vehicle::frame`; `progress` solo interpola hacia el frame siguiente |
+| Sprite gira tarde en las curvas | selector y posición no compartían el frame autoritativo | **Resuelto**: ambos muestrean `_road_drive_data`; test `sprite_selection_uses_extrapolated_pose_not_logical_direction` |
 
 ### Cómo verificar la parte visual (render vs sim)
 
@@ -1014,10 +1016,10 @@ curvas de 90° y bahías `TruckStop` en ambos extremos.
 OPENTTDRS_RENDER_TRACE=/tmp/render_trace.csv cargo run -p openttdrs-client
 ```
 
-El CSV registra por frame: pose lógica (tesela + progress del último tick de
-sim), pose extrapolada (lo que se dibuja), `tick_alpha` y `sprite_dir`. Si la
-columna extrapolada avanza suave mientras la lógica salta cada ~27 ms, la
-extrapolación solo suaviza el render; el tick lógico ya está a ~37 Hz.
+El CSV registra por frame: pose lógica, pose extrapolada, `tick_alpha`,
+`sprite_dir` y `logical_road_frame`/`extrap_road_frame`. Estas dos últimas
+columnas permiten verificar que la interpolación suaviza el mismo frame que
+consume la simulación a ~37 Hz.
 
 ## Divergencias train line
 
@@ -1507,7 +1509,8 @@ Contrato rail (solo trenes):
 - Umbral `GetAdvanceDistance` (192 axial / 256 corner); sobrante en `progress`.
 - Un tick de juego = 2× `TrainLocoHandler`; 16 pasos de píxel por tesela.
 - Aceleración realista al importar `.sav` (`train_acceleration_model = Realistic`).
-- Render: `rail_pixel / 16` → progreso visual 0..=255 (no usar el remanente físico).
+- Render: `(rail_pixel + progress/GetAdvanceDistance) / 16` → progreso visual
+  0..=255; el remanente sólo suaviza el dibujo y no adelanta la física de Z.
 - Import: no teletransportar vehículos ya sobre su red aunque YAPF falle (path signal).
 
 ## Oráculo Airport FTA

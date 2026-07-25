@@ -3,6 +3,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use crate::command::{Command, CommandError, apply_command};
+use crate::map::{RAIL_TB_LOWER, RAIL_TB_RIGHT};
 use crate::test_fixtures::SandboxMap;
 use crate::{GameState, TileCoord, TileKind, Vehicle, VehicleKind, VehicleOrder};
 
@@ -44,7 +45,7 @@ fn sell_vehicle_requires_depot_tile() {
 }
 
 #[test]
-fn rail_depot_beside_x_line_connects_exit_tile() {
+fn rail_depot_keeps_prebuilt_exit_junction_unchanged() {
     use crate::pathfinder::{PathNetwork, find_path};
 
     let mut s = GameState::new(12, 12);
@@ -53,11 +54,22 @@ fn rail_depot_beside_x_line_connects_exit_tile() {
         apply_command(&mut s, &Command::PlaceRail(TileCoord::new(x, 4))).unwrap();
     }
     let depot = TileCoord::new(5, 5);
+    let exit_pos = TileCoord::new(5, 4);
+    // En OpenTTD el empalme se construye explícitamente antes o después del depósito.
+    apply_command(
+        &mut s,
+        &Command::PlaceRailBits(exit_pos, RAIL_TB_LOWER | RAIL_TB_RIGHT),
+    )
+    .unwrap();
+    let exit_before = s.map.get(exit_pos).unwrap();
     apply_command(&mut s, &Command::PlaceRailDepotDir(depot, 3)).unwrap();
 
-    // La tesela de salida gana las curvas de empalme hacia la boca del depósito:
     // X (recta NE↔SW) + LOWER (SE↔SW) + RIGHT (NE↔SE) = 0x29.
-    let exit = s.map.get(TileCoord::new(5, 4)).unwrap();
+    let exit = s.map.get(exit_pos).unwrap();
+    assert_eq!(
+        exit, exit_before,
+        "el depósito no debe reescribir la salida"
+    );
     assert_eq!(
         exit.m5 & 0x3F,
         0x29,
@@ -74,6 +86,50 @@ fn rail_depot_beside_x_line_connects_exit_tile() {
         find_path(&s.map, depot, TileCoord::new(8, 4), PathNetwork::Rail).is_some(),
         "depósito → línea"
     );
+}
+
+#[test]
+fn rail_depot_connects_exit_without_touching_parallel_neighbors() {
+    let mut s = GameState::new(12, 12);
+    for y in [4, 5] {
+        for x in 2..=8_i32 {
+            apply_command(
+                &mut s,
+                &Command::PlaceRailBits(TileCoord::new(x, y), crate::map::RAIL_TB_X),
+            )
+            .unwrap();
+        }
+    }
+
+    let depot = TileCoord::new(5, 6);
+    let before: Vec<_> = {
+        let map = &s.map;
+        (3..=7)
+            .flat_map(|y| {
+                (1..=9).map(move |x| {
+                    let pos = TileCoord::new(x, y);
+                    (pos, map.get(pos))
+                })
+            })
+            .collect()
+    };
+    apply_command(&mut s, &Command::PlaceRailDepotDir(depot, 3)).unwrap();
+
+    for (pos, tile_before) in before {
+        if pos == depot {
+            continue;
+        }
+        if pos == TileCoord::new(5, 5) {
+            let exit = s.map.get(pos).unwrap();
+            assert_eq!(exit.m5 & 0x3F, 0x29, "empalme automático de salida");
+            continue;
+        }
+        assert_eq!(
+            s.map.get(pos),
+            tile_before,
+            "el depósito modificó una tesela vecina en {pos:?}"
+        );
+    }
 }
 
 #[test]

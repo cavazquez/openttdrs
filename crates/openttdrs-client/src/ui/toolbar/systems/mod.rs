@@ -334,6 +334,10 @@ mod tests {
         world.spawn((Button, SaveMenuAction::Normalize, Interaction::Pressed));
         world.run_system_once(handle_settings_menu_buttons).unwrap();
         assert_eq!(world.resource::<SimHudControls>().sim_speed, 1.0);
+
+        world.spawn((Button, SaveMenuAction::SlowDown, Interaction::Pressed));
+        world.run_system_once(handle_settings_menu_buttons).unwrap();
+        assert_eq!(world.resource::<SimHudControls>().sim_speed, 0.5);
         let mut q_norm =
             world.query_filtered::<(&Transform, &Projection), With<PrimaryGameCamera>>();
         let (tf_norm, proj_norm) = q_norm.single(&world).unwrap();

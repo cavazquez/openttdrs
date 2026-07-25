@@ -285,7 +285,11 @@ pub(crate) fn update_tile_info_text(
     } else {
         "Pausa OFF"
     };
-    let speed_l = format!("Velocidad {:.0}x", hud.sim_speed);
+    let speed_l = if hud.sim_speed < 1.0 {
+        format!("Velocidad {:.2}x", hud.sim_speed)
+    } else {
+        format!("Velocidad {:.0}x", hud.sim_speed)
+    };
     let tool_l = tool_state
         .active_tool
         .map(tool_hud_label)

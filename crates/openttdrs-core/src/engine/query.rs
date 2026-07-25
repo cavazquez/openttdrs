@@ -243,4 +243,11 @@ mod tests {
         assert_eq!(train_sprite_group(2), 2);
         assert_eq!(train_sprite_group(23), 4);
     }
+
+    #[test]
+    fn mps_regal_speed_matches_openttd_internal_units() {
+        let mps = engine_for_vehicle(VehicleKind::Bus, ENGINE_BUS_MPS);
+        assert_eq!(mps.max_speed, 112);
+        assert_eq!(mps.speed_kmh(), 56);
+    }
 }

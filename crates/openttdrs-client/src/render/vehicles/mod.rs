@@ -288,16 +288,21 @@ mod tests {
         v.kind = VehicleKind::Bus;
         v.pos = TileCoord::new(1, 1);
         v.path = VecDeque::from([TileCoord::new(0, 1), TileCoord::new(0, 2)]);
+        v.direction = openttdrs_core::DIR_NE;
+        v.road_state = 3; // TRACKDIR_LOWER_E: curva NE -> SE
+        v.frame = 4;
         v.set_cruise_speed();
-        v.progress = 100;
+        v.progress = 140;
 
-        let logical_dir = v.render_direction().min(7) as usize;
+        let logical_pose = extrapolate_vehicle_pose(&v, 0.0);
+        let logical_dir =
+            openttdrs_core::vehicle_render_direction_at(&v, logical_pose).min(7) as usize;
         assert_eq!(logical_dir, openttdrs_core::DIR_NE as usize);
 
         let pose = extrapolate_vehicle_pose(&v, 1.0);
         assert!(
-            pose.progress >= 128,
-            "la extrapolación cruza el punto medio"
+            pose.road_frame_f >= 5.0,
+            "la extrapolación cruza al tramo diagonal de la tabla"
         );
         let render_dir = openttdrs_core::vehicle_render_direction_at(&v, pose).min(7) as usize;
         assert_eq!(render_dir, openttdrs_core::DIR_E as usize);

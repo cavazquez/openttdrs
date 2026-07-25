@@ -493,6 +493,20 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
             state.pathfinding = next;
             Ok(())
         }
+        Command::SetVehicleBreakdowns(level) => {
+            let level = (*level).min(2);
+            state.vehicle_breakdowns = level;
+            if level == 0 {
+                // El cambio es efectivo en el acto: no deja una avería ya
+                // sorteada esperando varios ticks para detener el vehículo.
+                for vehicle in &mut state.vehicles {
+                    vehicle.breakdown_ctr = 0;
+                    vehicle.breakdown_delay = 0;
+                    vehicle.breakdown_chance = 0;
+                }
+            }
+            Ok(())
+        }
         Command::SetCargoDistDistribution(mode) => {
             if state.cargo_dist.distribution == *mode {
                 return Ok(());

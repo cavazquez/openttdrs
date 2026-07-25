@@ -14,7 +14,7 @@ mod chunks;
 mod container;
 mod date;
 mod entities;
-mod house_population_generated;
+pub(crate) mod house_population_generated;
 
 /// Población de un `HouseID` original (`HouseSpec::population`).
 #[must_use]

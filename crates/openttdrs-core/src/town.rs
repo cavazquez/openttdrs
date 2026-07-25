@@ -13,6 +13,123 @@ use crate::world_gen::{
 
 use crate::town_authority_serde as authority_serde;
 
+/// Zonas urbanas / clima de casa (`HouseZone`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(u8)]
+pub enum HouseZone {
+    TownEdge = 0,
+    TownOutskirt = 1,
+    TownOuterSuburb = 2,
+    TownInnerSuburb = 3,
+    TownCentre = 4,
+    ClimateSubarcticAboveSnow = 11,
+    ClimateTemperate = 12,
+    ClimateSubarcticBelowSnow = 13,
+    ClimateSubtropic = 14,
+    ClimateToyland = 15,
+}
+
+/// Número de zonas de radio (edge…centre).
+pub const NUM_HOUSE_ZONES: usize = 5;
+
+impl HouseZone {
+    /// Índice 0..4 → zona urbana; `None` si está fuera de rango.
+    #[must_use]
+    pub const fn from_zone_index(i: usize) -> Option<Self> {
+        match i {
+            0 => Some(Self::TownEdge),
+            1 => Some(Self::TownOutskirt),
+            2 => Some(Self::TownOuterSuburb),
+            3 => Some(Self::TownInnerSuburb),
+            4 => Some(Self::TownCentre),
+            _ => None,
+        }
+    }
+}
+
+/// Layout de calles del pueblo (`TownLayout`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[repr(u8)]
+pub enum TownLayout {
+    #[default]
+    Original = 0,
+    BetterRoads = 1,
+    Grid2x2 = 2,
+    Grid3x3 = 3,
+    Random = 4,
+}
+
+/// Tabla `_town_squared_town_zone_radius_data` (`town_cmd.cpp:1958`).
+static TOWN_SQUARED_ZONE_RADIUS: [[u32; NUM_HOUSE_ZONES]; 23] = [
+    [4, 0, 0, 0, 0],
+    [16, 0, 0, 0, 0],
+    [25, 0, 0, 0, 0],
+    [36, 0, 0, 0, 0],
+    [49, 0, 4, 0, 0],
+    [64, 0, 4, 0, 0],
+    [64, 0, 9, 0, 1],
+    [64, 0, 9, 0, 4],
+    [64, 0, 16, 0, 4],
+    [81, 0, 16, 0, 4],
+    [81, 0, 16, 0, 4],
+    [81, 0, 25, 0, 9],
+    [81, 36, 25, 0, 9],
+    [81, 36, 25, 16, 9],
+    [81, 49, 0, 25, 9],
+    [81, 64, 0, 25, 9],
+    [81, 64, 0, 36, 9],
+    [81, 64, 0, 36, 16],
+    [100, 81, 0, 49, 16],
+    [100, 81, 0, 49, 25],
+    [121, 81, 0, 49, 25],
+    [121, 81, 0, 49, 25],
+    [121, 81, 0, 49, 36],
+];
+
+/// Actualiza radios de zona según número de casas (`UpdateTownRadius`).
+pub fn update_town_radius(town: &mut Town) {
+    let n = usize::from(town.num_houses);
+    if n < TOWN_SQUARED_ZONE_RADIUS.len() * 4 {
+        town.squared_town_zone_radius = TOWN_SQUARED_ZONE_RADIUS[n / 4];
+    } else {
+        let mass = i32::from(town.num_houses) / 8;
+        town.squared_town_zone_radius = [
+            u32::try_from((mass * 15 - 40).max(0)).unwrap_or(0),
+            u32::try_from((mass * 9 - 15).max(0)).unwrap_or(0),
+            0,
+            u32::try_from((mass * 5 - 5).max(0)).unwrap_or(0),
+            u32::try_from((mass * 3 + 5).max(0)).unwrap_or(0),
+        ];
+    }
+}
+
+/// Recuenta casas del pueblo en el mapa y actualiza radios.
+pub fn recount_town_houses(map: &Map, town: &mut Town) {
+    let mut count = 0_u16;
+    let (mw, mh) = map.dimensions();
+    let search = i32::try_from(town.squared_town_zone_radius[0].saturating_add(4).max(64))
+        .unwrap_or(64)
+        .max(24);
+    for dy in -search..=search {
+        for dx in -search..=search {
+            let pos = TileCoord::new(town.pos.x + dx, town.pos.y + dy);
+            if pos.x < 0
+                || pos.y < 0
+                || pos.x >= i32::try_from(mw).unwrap_or(i32::MAX)
+                || pos.y >= i32::try_from(mh).unwrap_or(i32::MAX)
+            {
+                continue;
+            }
+            if map.get_kind(pos) == Some(TileKind::House) {
+                count = count.saturating_add(1);
+            }
+        }
+    }
+    town.num_houses = count;
+    update_town_radius(town);
+}
+
 /// Efectos de carga que alimentan metas de crecimiento (`TownEffect` simplificado).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(usize)]
@@ -128,6 +245,28 @@ pub struct Town {
     /// Ruido acumulado de aeropuertos (`Town::noise_reached`).
     #[serde(default)]
     pub noise_reached: u16,
+    /// Número de casas (`Town::cache.num_houses`).
+    #[serde(default)]
+    pub num_houses: u16,
+    /// Radios al cuadrado por zona (`squared_town_zone_radius`).
+    #[serde(default)]
+    pub squared_town_zone_radius: [u32; NUM_HOUSE_ZONES],
+    /// Layout de calles (`Town::layout`).
+    #[serde(default)]
+    pub layout: TownLayout,
+    /// ¿Ya tiene iglesia? (`TownFlag::HasChurch`).
+    #[serde(default)]
+    pub has_church: bool,
+    /// ¿Ya tiene estadio? (`TownFlag::HasStadium`).
+    #[serde(default)]
+    pub has_stadium: bool,
+    /// Contador hasta la siguiente renovación (`time_until_rebuild`).
+    #[serde(default = "default_time_until_rebuild")]
+    pub time_until_rebuild: u16,
+}
+
+fn default_time_until_rebuild() -> u16 {
+    10
 }
 
 fn default_authority_ratings() -> Vec<i16> {
@@ -155,11 +294,33 @@ impl Default for Town {
             grow_counter: 0,
             history: TownHistory::default(),
             noise_reached: 0,
+            num_houses: 0,
+            squared_town_zone_radius: [0; NUM_HOUSE_ZONES],
+            layout: TownLayout::Original,
+            has_church: false,
+            has_stadium: false,
+            time_until_rebuild: default_time_until_rebuild(),
         }
     }
 }
 
 impl Town {
+    /// Elige layout a partir del hash de posición (`Town::InitializeLayout`).
+    pub fn initialize_layout(&mut self, preferred: Option<TownLayout>) {
+        if let Some(layout) = preferred.filter(|l| *l != TownLayout::Random) {
+            self.layout = layout;
+            return;
+        }
+        let hash = (self.pos.x.cast_unsigned().wrapping_mul(3))
+            .wrapping_add(self.pos.y.cast_unsigned().wrapping_mul(5));
+        self.layout = match hash % 4 {
+            0 => TownLayout::Original,
+            1 => TownLayout::BetterRoads,
+            2 => TownLayout::Grid2x2,
+            _ => TownLayout::Grid3x3,
+        };
+    }
+
     /// Rating de autoridad para una compañía (default `TOWN_RATING_INITIAL` si falta slot).
     #[must_use]
     pub fn authority_rating(&self, company: CompanyId) -> i16 {
@@ -661,6 +822,27 @@ pub fn grow_town_if_served(
     towns: &mut [Town],
     tick: u64,
 ) -> Vec<TileCoord> {
+    grow_town_if_served_with_ctx(
+        map,
+        industries,
+        stations,
+        towns,
+        tick,
+        Climate::Temperate,
+        1960,
+    )
+}
+
+/// Variante con clima/año para selección de casas (P3.5).
+pub fn grow_town_if_served_with_ctx(
+    map: &mut Map,
+    industries: &[Industry],
+    stations: &[Station],
+    towns: &mut [Town],
+    tick: u64,
+    climate: Climate,
+    calendar_year: u32,
+) -> Vec<TileCoord> {
     let mut dirty = Vec::new();
     for town in towns {
         if !town.is_growing {
@@ -675,7 +857,16 @@ pub fn grow_town_if_served(
                     town.growth_rate
                         .min(u16::try_from(TOWN_GROWTH_TICKS - 1).unwrap_or(0)),
                 );
-            } else if try_expand_growing_town(map, industries, stations, town, tick, &mut dirty) {
+            } else if try_expand_growing_town_with_ctx(
+                map,
+                industries,
+                stations,
+                town,
+                tick,
+                climate,
+                calendar_year,
+                &mut dirty,
+            ) {
                 counter = i32::from(town.growth_rate);
             } else {
                 counter = i32::from(
@@ -689,12 +880,16 @@ pub fn grow_town_if_served(
     dirty
 }
 
-fn try_expand_growing_town(
+/// Expansión con clima/año (desde `GameState`).
+#[allow(clippy::too_many_arguments)]
+pub fn try_expand_growing_town_with_ctx(
     map: &mut Map,
     industries: &[Industry],
     stations: &[Station],
     town: &mut Town,
     tick: u64,
+    climate: crate::world_gen::Climate,
+    calendar_year: u32,
     dirty: &mut Vec<TileCoord>,
 ) -> bool {
     let funded = town.fund_buildings_months > 0 || town.growth_funded > 0;
@@ -706,12 +901,145 @@ fn try_expand_growing_town(
     if coverage.house_tiles == 0 && !funded && !has_station {
         return false;
     }
-    let placed = crate::town_expand::expand_town_physically(map, town, tick);
+    let ctx = crate::town_expand::TownExpandContext {
+        climate,
+        calendar_year,
+    };
+    let before_houses = town.num_houses;
+    let placed = crate::town_expand::expand_town_physically_with_ctx(map, town, tick, ctx);
     if placed.is_empty() {
         return false;
     }
+    // Feedback de crecimiento si solo se extendió calle (sin casa nueva).
+    if town.num_houses == before_houses {
+        town.population = town.population.saturating_add(TOWN_GROWTH_POPULATION_STEP);
+    }
     dirty.extend(placed);
     true
+}
+
+/// Probabilidad de demolición/renovación por visita de tile loop (`20/256`).
+pub const HOUSE_REBUILD_CHANCE_NUM: u32 = 20;
+pub const HOUSE_REBUILD_CHANCE_DEN: u32 = 256;
+
+/// Incrementa la edad de todas las casas completadas (`IncrementHouseAge` anual).
+pub fn increment_all_house_ages(map: &mut Map) {
+    let (mw, mh) = map.dimensions();
+    for y in 0..mh {
+        for x in 0..mw {
+            let pos = TileCoord::new(x.cast_signed(), y.cast_signed());
+            let Some(mut tile) = map.get(pos) else {
+                continue;
+            };
+            if tile.kind != TileKind::House {
+                continue;
+            }
+            // Completada: bit 7 de m3.
+            if tile.m3 & 0x80 == 0 {
+                continue;
+            }
+            if tile.m5 < 0xFF {
+                tile.m5 = tile.m5.saturating_add(1);
+                let _ = map.set_tile(pos, tile);
+            }
+        }
+    }
+}
+
+/// Renovación urbana en visitas del tile loop (`TileLoop_Town` aging/rebuild).
+///
+/// Pasado `minimum_life`, con probabilidad 20/256 demuele y reconstruye.
+pub fn tile_loop_town_house_renovation(
+    map: &mut Map,
+    towns: &mut [Town],
+    visits: &[TileCoord],
+    climate: Climate,
+    calendar_year: u32,
+    rng: &mut Randomizer,
+) -> Vec<TileCoord> {
+    let mut dirty = Vec::new();
+    for &pos in visits {
+        let Some(tile) = map.get(pos) else {
+            continue;
+        };
+        if tile.kind != TileKind::House || tile.m3 & 0x80 == 0 {
+            continue;
+        }
+        let house_id = tile.m8 & 0x0FFF;
+        let age = tile.m5;
+        let Some(hs) = crate::house_spec::HouseSpec::get(house_id) else {
+            continue;
+        };
+        if age < hs.minimum_life {
+            continue;
+        }
+        let Some((town_idx, _)) = nearest_town_index(towns, pos) else {
+            continue;
+        };
+        if !towns[town_idx].is_growing {
+            continue;
+        }
+        // Contador global + chance 20/256 (plan P3.6).
+        if towns[town_idx].time_until_rebuild > 0 {
+            towns[town_idx].time_until_rebuild -= 1;
+        }
+        if towns[town_idx].time_until_rebuild != 0 {
+            continue;
+        }
+        if !chance16(rng, HOUSE_REBUILD_CHANCE_NUM, HOUSE_REBUILD_CHANCE_DEN) {
+            // Reprogramar aunque no demuela ahora.
+            towns[town_idx].time_until_rebuild = u16::try_from(rng.random_range(256))
+                .unwrap_or(192)
+                .saturating_add(192);
+            continue;
+        }
+        towns[town_idx].time_until_rebuild = u16::try_from(rng.random_range(256))
+            .unwrap_or(192)
+            .saturating_add(192);
+
+        // Demoler → hierba.
+        let height = tile.height;
+        let mut clear = tile;
+        clear.kind = TileKind::Grass;
+        clear.mapt = 0;
+        clear.m5 = 3; // hierba completa
+        clear.m3 = 0;
+        clear.m8 = 0;
+        clear.m1 = 0;
+        if map.set_tile(pos, clear).is_err() {
+            continue;
+        }
+        towns[town_idx].num_houses = towns[town_idx].num_houses.saturating_sub(1);
+        if hs.is_church() {
+            towns[town_idx].has_church = false;
+        }
+        if hs.is_stadium() {
+            towns[town_idx].has_stadium = false;
+        }
+        update_town_radius(&mut towns[town_idx]);
+        dirty.push(pos);
+
+        // Reconstruir (~244/256 en OpenTTD: GB(r,24,8) >= 12). Aquí siempre intentamos.
+        let ctx = crate::town_expand::TownExpandContext {
+            climate,
+            calendar_year,
+        };
+        if crate::town_expand::place_house_with_spec(
+            map,
+            &mut towns[town_idx],
+            pos,
+            ctx,
+            rng.next(),
+        )
+        .is_some()
+        {
+            dirty.push(pos);
+        } else {
+            // Dejar hierba si no hay spec válido.
+            let _ = height;
+        }
+    }
+    dirty
 }
 
 /// Límite de spam al financiar (`TownActionFundBuildings`).
@@ -1199,6 +1527,56 @@ mod tests {
             }
         }
         assert!(lucky_found, "alguna semilla debe pasar Chance16(1,12)");
+    }
+
+    #[test]
+    fn update_town_radius_matches_table_for_small_towns() {
+        let mut town = Town {
+            num_houses: 0,
+            ..Default::default()
+        };
+        update_town_radius(&mut town);
+        assert_eq!(town.squared_town_zone_radius, [4, 0, 0, 0, 0]);
+        town.num_houses = 20;
+        update_town_radius(&mut town);
+        assert_eq!(town.squared_town_zone_radius, [64, 0, 4, 0, 0]);
+        town.num_houses = 88;
+        update_town_radius(&mut town);
+        assert_eq!(town.squared_town_zone_radius, [121, 81, 0, 49, 36]);
+    }
+
+    #[test]
+    fn house_renovation_demolishes_when_chance_hits() {
+        let mut map = Map::new_flat(16, 16, 0);
+        let pos = TileCoord::new(8, 8);
+        map.set_completed_house(pos, 6, 5).unwrap(); // town houses, min_life 0
+        let mut towns = vec![Town {
+            pos,
+            is_growing: true,
+            num_houses: 1,
+            time_until_rebuild: 0,
+            ..Default::default()
+        }];
+        update_town_radius(&mut towns[0]);
+        let mut hit = false;
+        for seed in 0..64 {
+            let mut map2 = map.clone();
+            let mut towns2 = towns.clone();
+            let mut rng = Randomizer::new(seed);
+            let dirty = tile_loop_town_house_renovation(
+                &mut map2,
+                &mut towns2,
+                &[pos],
+                Climate::Temperate,
+                1980,
+                &mut rng,
+            );
+            if !dirty.is_empty() {
+                hit = true;
+                break;
+            }
+        }
+        assert!(hit, "alguna semilla debe disparar renovación 20/256");
     }
 
     /// `OpenTTD` arranca los pueblos en `RATING_INITIAL = 500` (`town_type.h:45`),

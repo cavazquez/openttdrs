@@ -29,6 +29,7 @@ pub mod engine;
 pub mod entity_history;
 mod game_state;
 pub mod gs;
+pub mod house_spec;
 pub mod industry;
 pub mod industry_tile;
 pub mod map;
@@ -260,6 +261,7 @@ pub use map::{
     water_class_from_m1,
 };
 // Runtime NewGRF en raíz; builders/fixtures vía `newgrf_actions` / `newgrf_sprites::fixture` (#157).
+pub use house_spec::{HouseSpec, get_town_radius_group, pick_town_house_id};
 pub use newgrf_actions::{
     ACTION0_FEATURE_INDUSTRYTILES, ACTION0_FEATURE_ROADTYPES, ACTION0_FEATURE_STATIONS,
     ACTION0_FEATURE_TRAINS, Action0Header, Action5SlotSummary, GrfInspectReport,
@@ -423,15 +425,17 @@ pub use tick::GameTick;
 pub use timer::{CalendarTimer, DAY_TICKS, EconomyTimer, TimerTriggers, tick_at_end_of_day};
 pub use timetable::{TRAVEL_PRESETS, WAIT_PRESETS, cycle_travel_ticks, cycle_wait_ticks};
 pub use town::{
-    AUTHORITY_MIN_STATION, FUND_BUILDINGS_COST, FUND_BUILDINGS_MONTHS, MAIL_PER_HOUSE,
-    PASSENGERS_PER_HOUSE, STATION_TOWN_CARGO_CAPACITY, TOWN_ADVERTISE_COST, TOWN_AUTHORITY_RADIUS,
-    TOWN_GROWTH_DESERT, TOWN_GROWTH_TICKS, TOWN_GROWTH_WINTER, TOWN_PRODUCE_TICKS,
-    TOWN_RATING_INITIAL, Town, TownGrowthEffect, authority_allows_new_station, grow_town_if_served,
+    AUTHORITY_MIN_STATION, FUND_BUILDINGS_COST, FUND_BUILDINGS_MONTHS, HouseZone, MAIL_PER_HOUSE,
+    NUM_HOUSE_ZONES, PASSENGERS_PER_HOUSE, STATION_TOWN_CARGO_CAPACITY, TOWN_ADVERTISE_COST,
+    TOWN_AUTHORITY_RADIUS, TOWN_GROWTH_DESERT, TOWN_GROWTH_TICKS, TOWN_GROWTH_WINTER,
+    TOWN_PRODUCE_TICKS, TOWN_RATING_INITIAL, Town, TownGrowthEffect, TownLayout,
+    authority_allows_new_station, grow_town_if_served, grow_town_if_served_with_ctx,
     process_town_monthly_growth, produce_town_cargo, town_goal_satisfied, update_town_growth_state,
+    update_town_radius,
 };
 pub use town_expand::{
-    TOWN_EXPAND_ATTEMPTS, TOWN_EXPAND_POP_PER_HOUSE, TOWN_EXPAND_SEARCH_RADIUS, TownExpandResult,
-    expand_town_once, expand_town_physically,
+    TOWN_EXPAND_ATTEMPTS, TOWN_EXPAND_POP_PER_HOUSE, TOWN_EXPAND_SEARCH_RADIUS, TownExpandContext,
+    TownExpandResult, expand_town_once, expand_town_physically,
 };
 pub use townname::generate_town_name;
 pub use train_collision::{TrainCollision, detect_train_collisions, resolve_train_collisions};

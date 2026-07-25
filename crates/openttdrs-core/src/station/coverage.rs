@@ -1,4 +1,5 @@
 use crate::airport_class::airport_spec_def;
+use crate::house_spec::{STATION_ACCEPTANCE_THRESHOLD, add_accepted_cargo_of_house};
 use crate::industry::{Industry, IndustryKind};
 use crate::map::{Map, TileCoord, TileKind};
 
@@ -21,8 +22,14 @@ pub fn station_catchment_radius(station: &Station) -> i32 {
 pub struct StationCoverage {
     /// Teselas `House` dentro del radio (origen de pasajeros/correo).
     pub house_tiles: u32,
+    /// Aceptación de correo en octavos (`AddAcceptedCargo_Town`).
     pub accepts_mail: u32,
+    /// Aceptación de mercancías/comida en octavos.
     pub accepts_goods: u32,
+    /// Aceptación de agua (proxy Oil) en octavos.
+    pub accepts_water: u32,
+    /// Aceptación de pasajeros en octavos.
+    pub accepts_passengers: u32,
     pub supplies_coal: u32,
     pub supplies_wood: u32,
     pub supplies_oil: u32,
@@ -32,7 +39,15 @@ pub struct StationCoverage {
 impl StationCoverage {
     #[must_use]
     pub const fn accepts_anything(self) -> bool {
-        self.accepts_mail > 0 || self.accepts_goods > 0
+        self.accepts_mail >= STATION_ACCEPTANCE_THRESHOLD
+            || self.accepts_goods >= STATION_ACCEPTANCE_THRESHOLD
+            || self.accepts_water >= STATION_ACCEPTANCE_THRESHOLD
+    }
+
+    /// ¿La estación acepta mercancías urbanas? (`amt >= 8`).
+    #[must_use]
+    pub const fn accepts_town_goods(self) -> bool {
+        self.accepts_goods >= STATION_ACCEPTANCE_THRESHOLD
     }
 
     #[must_use]
@@ -141,9 +156,20 @@ pub fn station_coverage_at(
             match tile.kind {
                 TileKind::House => {
                     coverage.house_tiles += 1;
-                    coverage.accepts_mail += 1;
+                    let house_id = tile.m8 & 0x0FFF;
+                    let mut amounts = [0u32; 5];
+                    add_accepted_cargo_of_house(house_id, &mut amounts);
+                    coverage.accepts_passengers =
+                        coverage.accepts_passengers.saturating_add(amounts[0]);
+                    coverage.accepts_mail = coverage.accepts_mail.saturating_add(amounts[1]);
+                    coverage.accepts_goods = coverage.accepts_goods.saturating_add(amounts[2]);
+                    coverage.accepts_water = coverage.accepts_water.saturating_add(amounts[3]);
                 }
-                TileKind::Industry => coverage.accepts_goods += 1,
+                TileKind::Industry => {
+                    coverage.accepts_goods = coverage
+                        .accepts_goods
+                        .saturating_add(STATION_ACCEPTANCE_THRESHOLD);
+                }
                 _ => {}
             }
         }
@@ -158,7 +184,11 @@ pub fn station_coverage_at(
             IndustryKind::CoalMine => coverage.supplies_coal += 1,
             IndustryKind::Forest => coverage.supplies_wood += 1,
             IndustryKind::OilWell => coverage.supplies_oil += 1,
-            IndustryKind::Factory => coverage.accepts_goods += 1,
+            IndustryKind::Factory => {
+                coverage.accepts_goods = coverage
+                    .accepts_goods
+                    .saturating_add(STATION_ACCEPTANCE_THRESHOLD);
+            }
         }
     }
 
@@ -218,5 +248,23 @@ mod tests {
     fn rail_station_keeps_default_catchment() {
         let st = Station::new_with_kind(TileCoord::new(5, 5), StopKind::RailStation);
         assert_eq!(station_catchment_radius(&st), STATION_COVERAGE_RADIUS);
+    }
+
+    #[test]
+    fn house_spec_acceptance_feeds_catchment_goods() {
+        let mut map = Map::new_flat(16, 16, 0);
+        let house = TileCoord::new(8, 8);
+        map.set_completed_house(house, 0, 0).unwrap(); // office: goods 4/8
+        let cov = station_coverage_at(&map, &[], TileCoord::new(8, 8), 1);
+        assert_eq!(cov.house_tiles, 1);
+        assert_eq!(cov.accepts_passengers, 8);
+        assert_eq!(cov.accepts_mail, 3);
+        assert_eq!(cov.accepts_goods, 4);
+        assert!(!cov.accepts_town_goods(), "hace falta ≥8/8");
+
+        map.set_completed_house(TileCoord::new(8, 9), 0, 0).unwrap();
+        let cov2 = station_coverage_at(&map, &[], TileCoord::new(8, 8), 1);
+        assert_eq!(cov2.accepts_goods, 8);
+        assert!(cov2.accepts_town_goods());
     }
 }

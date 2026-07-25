@@ -3,7 +3,7 @@
 use crate::command::{Command, apply_command, command_would_fail};
 use crate::map::{TileCoord, TileKind, tile_slope_and_z};
 use crate::sav::house_spec_population;
-use crate::town::Town;
+use crate::town::{Town, update_town_radius};
 use crate::townname::generate_town_name;
 
 use super::{
@@ -101,10 +101,13 @@ pub(super) fn place_towns(
             passengers_served: 0,
             mail_served: 0,
             growth_funded: 0,
+            num_houses: u16::try_from(placed_houses).unwrap_or(0),
             ..Default::default()
         };
+        town.initialize_layout(None);
         town.init_growth_goals(ctx.state.climate);
         town.init_grow_counter();
+        update_town_radius(&mut town);
         ctx.state.towns.push(town);
         town_centers.push(plan.town_pos);
     }

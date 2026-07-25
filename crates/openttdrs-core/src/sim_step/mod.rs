@@ -190,6 +190,7 @@ fn phase_timer_economy(state: &mut GameState) {
     }
     if state.runtime.calendar_triggers.new_year {
         economy::rollover_vehicle_profit_year(state);
+        crate::town::increment_all_house_ages(&mut state.map);
     }
 }
 

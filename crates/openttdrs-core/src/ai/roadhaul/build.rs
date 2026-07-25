@@ -504,9 +504,11 @@ mod tests {
             ..Town::default()
         };
         // Generar calles/casas como en partida real (owner m1=0).
+        let mut town_a = town_a;
+        let mut town_b = town_b;
         for seed in 0..24 {
-            let _ = expand_town_once(&mut state.map, &town_a, seed);
-            let _ = expand_town_once(&mut state.map, &town_b, seed.wrapping_add(40));
+            let _ = expand_town_once(&mut state.map, &mut town_a, seed);
+            let _ = expand_town_once(&mut state.map, &mut town_b, seed.wrapping_add(40));
         }
         state.towns.push(town_a);
         state.towns.push(town_b);

@@ -22,6 +22,22 @@ pub(super) fn call_landscape_tick(state: &mut GameState, t: u64) {
 fn on_tick_town(state: &mut GameState, t: u64) {
     super::economy::produce_town_demand(state, t);
     super::economy::grow_towns(state, t);
+    // Renovación en visitas del tile loop (P3.6).
+    let visit_coords: Vec<_> = state
+        .runtime
+        .tile_loop_visited
+        .iter()
+        .map(|(c, _)| *c)
+        .collect();
+    let dirty = crate::town::tile_loop_town_house_renovation(
+        &mut state.map,
+        &mut state.towns,
+        &visit_coords,
+        state.climate,
+        state.calendar.year,
+        &mut state.random,
+    );
+    state.runtime.landscape_tile_dirty.extend(dirty);
 }
 
 /// `OnTick_Trees`: ciclo de vegetación sobre las visitas del tile loop.

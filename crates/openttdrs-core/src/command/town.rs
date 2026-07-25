@@ -5,7 +5,9 @@ use crate::map::{TileCoord, TileKind, tile_slope_and_z};
 use crate::station::{
     TOWN_ADVERTISE_MEDIUM_RADIUS, TOWN_ADVERTISE_MEDIUM_RATING_BOOST, modify_station_rating_around,
 };
-use crate::town::{FUND_BUILDINGS_COST, FUND_BUILDINGS_RATING_BOOST, TOWN_ADVERTISE_COST, Town};
+use crate::town::{
+    FUND_BUILDINGS_COST, FUND_BUILDINGS_RATING_BOOST, TOWN_ADVERTISE_COST, Town, update_town_radius,
+};
 use crate::townname::generate_town_name;
 
 use super::error::CommandError;
@@ -119,10 +121,13 @@ pub(crate) fn found_town(state: &mut GameState, center: TileCoord) -> Result<(),
         pos: TileCoord::new(center.x, center.y.saturating_sub(1)),
         name,
         population: u32::try_from(placed.saturating_mul(8)).unwrap_or(8),
+        num_houses: u16::try_from(placed).unwrap_or(0),
         ..Default::default()
     };
+    town.initialize_layout(None);
     town.init_growth_goals(state.climate);
     town.init_grow_counter();
+    update_town_radius(&mut town);
     state.towns.push(town);
     Ok(())
 }

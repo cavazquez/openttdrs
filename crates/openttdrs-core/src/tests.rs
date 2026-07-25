@@ -624,8 +624,9 @@ fn station_coverage_counts_nearby_cargo_sources_and_acceptors() {
 
     let coverage = station_coverage_at(&s.map, &s.industries, station_pos, STATION_COVERAGE_RADIUS);
     assert_eq!(coverage.house_tiles, 1);
-    assert_eq!(coverage.accepts_mail, 1);
-    assert_eq!(coverage.accepts_goods, 1);
+    // Casa id 0 (m8=0): mail 3/8 + goods 4/8; industria en mapa aporta 8/8 goods.
+    assert_eq!(coverage.accepts_mail, 3);
+    assert!(coverage.accepts_goods >= 8);
     assert_eq!(coverage.supplies_coal, 1);
     assert_eq!(coverage.supplies_wood, 0);
     assert_eq!(coverage.supplied_stock, 42);

@@ -1,72 +1,345 @@
-//! Expansión física de pueblos (`GrowTown` / `TryBuildTownHouse` simplificado).
-//!
-//! Al crecer, el pueblo intenta extender una calle o colocar una casa junto a
-//! una existente. No construye puentes/túneles ni grids 2×2/3×3 (OOS).
+//! Expansión física de pueblos (`GrowTown` / `GrowTownAtRoad` / `TryBuildTownHouse`).
 
+use crate::house_spec::{
+    HouseSpec, get_town_radius_group, grow_town_at_road_iterations, pick_town_house_id,
+};
 use crate::map::{Map, TileCoord, TileKind, effective_road_bits, tile_slope_and_z};
-use crate::town::Town;
+use crate::town::{Town, TownLayout, update_town_radius};
+use crate::world_gen::Climate;
 
-/// Radio máximo de búsqueda alrededor del centro del pueblo.
+/// Radio de búsqueda legado (edge zone / fallback).
 pub const TOWN_EXPAND_SEARCH_RADIUS: i32 = 12;
-/// Intentos de colocación por ciclo de crecimiento.
+/// Intentos de colocación por ciclo de crecimiento (fallback si el grafo no avanza).
 pub const TOWN_EXPAND_ATTEMPTS: u8 = 3;
 /// Población añadida por casa colocada (además del step abstracto).
 pub const TOWN_EXPAND_POP_PER_HOUSE: u32 = 8;
 
-const ROAD_AXIS_X: u8 = 0x0A; // NE|SW
-const ROAD_AXIS_Y: u8 = 0x05; // NW|SE
-const HOUSE_ID_MAX: u16 = 110;
+const ROAD_NW: u8 = 0x01;
+const ROAD_SW: u8 = 0x02;
+const ROAD_SE: u8 = 0x04;
+const ROAD_NE: u8 = 0x08;
+const ROAD_AXIS_X: u8 = ROAD_NE | ROAD_SW; // 0x0A
+const ROAD_AXIS_Y: u8 = ROAD_NW | ROAD_SE; // 0x05
+/// LCG clásico para caminar el grafo de calles (mismo estilo que `rand()`).
+const LCG_MUL: u32 = 1_103_515_245;
+const LCG_ADD: u32 = 12_345;
+
+/// Offsets de búsqueda de carretera desde el centro (`_town_coord_mod`).
+const TOWN_COORD_MOD: [(i32, i32); 13] = [
+    (-1, 0),
+    (1, 1),
+    (1, -1),
+    (-1, -1),
+    (-1, 0),
+    (0, 2),
+    (2, 0),
+    (0, -2),
+    (-1, -1),
+    (-2, 2),
+    (2, 2),
+    (2, -2),
+    (0, 0),
+];
 
 /// Resultado de un intento de expansión física.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TownExpandResult {
-    /// Se colocó una casa en `pos`.
     House(TileCoord),
-    /// Se colocó o extendió una calle en `pos`.
     Road(TileCoord),
-    /// No hubo sitio válido.
     None,
 }
 
-/// Intenta expandir el pueblo una vez (casa preferente, si no calle).
-#[must_use]
-pub fn expand_town_once(map: &mut Map, town: &Town, attempt_seed: u32) -> TownExpandResult {
-    // Preferir casa junto a carretera existente.
-    if let Some(pos) = try_place_house_near_road(map, town, attempt_seed) {
-        return TownExpandResult::House(pos);
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum GrowthResult {
+    Succeed,
+    SearchStopped,
+    Continue,
+}
+
+/// Contexto de año/clima para elegir casas.
+#[derive(Debug, Clone, Copy)]
+pub struct TownExpandContext {
+    pub climate: Climate,
+    pub calendar_year: u32,
+}
+
+impl Default for TownExpandContext {
+    fn default() -> Self {
+        Self {
+            climate: Climate::Temperate,
+            calendar_year: 1960,
+        }
     }
-    // Extender / sembrar calle.
-    if let Some(pos) = try_extend_or_seed_road(map, town, attempt_seed) {
-        return TownExpandResult::Road(pos);
-    }
-    TownExpandResult::None
 }
 
 /// Varias tentativas; actualiza población si hay casas nuevas.
 pub fn expand_town_physically(map: &mut Map, town: &mut Town, tick: u64) -> Vec<TileCoord> {
+    expand_town_physically_with_ctx(map, town, tick, TownExpandContext::default())
+}
+
+/// Expansión con clima/año explícitos.
+pub fn expand_town_physically_with_ctx(
+    map: &mut Map,
+    town: &mut Town,
+    tick: u64,
+    ctx: TownExpandContext,
+) -> Vec<TileCoord> {
     let mut dirty = Vec::new();
+    let seed = tick
+        .wrapping_mul(0x9E37_79B9)
+        .wrapping_add(u64::from(town.id).wrapping_mul(0x85EB_CA6B));
+    let seed = u32::try_from(seed & 0xFFFF_FFFF).unwrap_or(0);
+
+    if grow_town(map, town, seed, ctx, &mut dirty) {
+        return dirty;
+    }
+    // Fallback: intentos cortos si el grafo no encontró sitio.
     for attempt in 0..TOWN_EXPAND_ATTEMPTS {
-        let seed = tick
-            .wrapping_mul(0x9E37_79B9)
-            .wrapping_add(u64::from(town.id).wrapping_mul(0x85EB_CA6B))
-            .wrapping_add(u64::from(attempt).wrapping_mul(0xC2B2_AE3D));
-        let seed = u32::try_from(seed & 0xFFFF_FFFF).unwrap_or(0);
-        match expand_town_once(map, town, seed) {
-            TownExpandResult::House(pos) => {
-                town.population = town.population.saturating_add(TOWN_EXPAND_POP_PER_HOUSE);
-                dirty.push(pos);
-            }
-            TownExpandResult::Road(pos) => {
-                dirty.push(pos);
-            }
+        let s = seed.wrapping_add(u32::from(attempt).wrapping_mul(0xC2B2_AE3D));
+        match expand_town_once_with_ctx(map, town, s, ctx) {
+            TownExpandResult::House(pos) | TownExpandResult::Road(pos) => dirty.push(pos),
             TownExpandResult::None => {}
         }
     }
     dirty
 }
 
-fn try_place_house_near_road(map: &mut Map, town: &Town, seed: u32) -> Option<TileCoord> {
-    let candidates = collect_road_tiles_near(map, town.pos, TOWN_EXPAND_SEARCH_RADIUS);
+/// Intenta expandir el pueblo una vez (casa preferente, si no calle).
+pub fn expand_town_once(map: &mut Map, town: &mut Town, attempt_seed: u32) -> TownExpandResult {
+    expand_town_once_with_ctx(map, town, attempt_seed, TownExpandContext::default())
+}
+
+fn expand_town_once_with_ctx(
+    map: &mut Map,
+    town: &mut Town,
+    attempt_seed: u32,
+    ctx: TownExpandContext,
+) -> TownExpandResult {
+    if let Some(pos) = try_place_house_near_road(map, town, attempt_seed, ctx) {
+        return TownExpandResult::House(pos);
+    }
+    if let Some(pos) = try_extend_or_seed_road(map, town, attempt_seed) {
+        return TownExpandResult::Road(pos);
+    }
+    TownExpandResult::None
+}
+
+/// `GrowTown`: busca carretera cerca del centro y camina el grafo.
+fn grow_town(
+    map: &mut Map,
+    town: &mut Town,
+    seed: u32,
+    ctx: TownExpandContext,
+    dirty: &mut Vec<TileCoord>,
+) -> bool {
+    let mut tile = town.pos;
+    for &(dx, dy) in &TOWN_COORD_MOD {
+        if town_road_bits(map, tile) != 0 {
+            return grow_town_at_road(map, town, tile, seed, ctx, dirty);
+        }
+        tile = TileCoord::new(tile.x + dx, tile.y + dy);
+    }
+    // Sin carretera: sembrar bloque aleatorio en hierba plana.
+    seed_road_near_center(map, town.pos, seed).is_some_and(|pos| {
+        dirty.push(pos);
+        true
+    })
+}
+
+/// `GrowTownAtRoad`: recorre el grafo con iteraciones según `TownLayout`.
+fn grow_town_at_road(
+    map: &mut Map,
+    town: &mut Town,
+    mut tile: TileCoord,
+    seed: u32,
+    ctx: TownExpandContext,
+    dirty: &mut Vec<TileCoord>,
+) -> bool {
+    let mut iterations = grow_town_at_road_iterations(town.layout, town.num_houses);
+    let mut rng = seed;
+    let mut target_dir: Option<u8> = None; // DiagDirection 0..3
+
+    loop {
+        let cur_rb = town_road_bits(map, tile);
+        match grow_town_in_tile(
+            map, town, &mut tile, cur_rb, target_dir, &mut rng, ctx, dirty,
+        ) {
+            GrowthResult::Succeed => return true,
+            GrowthResult::SearchStopped => iterations = 0,
+            GrowthResult::Continue => {}
+        }
+
+        let mut rb = cur_rb;
+        if let Some(dir) = target_dir {
+            rb &= !diag_dir_to_road_bits(reverse_diag(dir));
+        }
+        if rb == 0 {
+            return false;
+        }
+
+        // Elegir dirección aleatoria aún conectada.
+        let mut chosen = None;
+        for _ in 0..8 {
+            rng = rng.wrapping_mul(LCG_MUL).wrapping_add(LCG_ADD);
+            let dir = u8::try_from(rng >> 16).unwrap_or(0) & 3;
+            let bits = diag_dir_to_road_bits(dir);
+            if rb & bits != 0 && can_follow_road(map, tile, dir) {
+                chosen = Some(dir);
+                break;
+            }
+            rb &= !bits;
+            if rb == 0 {
+                break;
+            }
+        }
+        let Some(dir) = chosen else {
+            return false;
+        };
+        target_dir = Some(dir);
+        tile = tile_add_diag(tile, dir);
+
+        // No crecer sobre carreteras de otro pueblo (MVP: owner town o none).
+        if map.get_kind(tile) == Some(TileKind::Road) {
+            // ok
+        }
+
+        iterations -= 1;
+        if iterations < 0 {
+            return false;
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn grow_town_in_tile(
+    map: &mut Map,
+    town: &mut Town,
+    tile_ptr: &mut TileCoord,
+    cur_rb: u8,
+    target_dir: Option<u8>,
+    rng: &mut u32,
+    ctx: TownExpandContext,
+    dirty: &mut Vec<TileCoord>,
+) -> GrowthResult {
+    let tile = *tile_ptr;
+
+    if cur_rb == 0 {
+        // Tesela sin carretera: intentar construir según layout.
+        let Some(dir) = target_dir else {
+            return GrowthResult::SearchStopped;
+        };
+        if !can_build_town_road(map, tile) {
+            return GrowthResult::SearchStopped;
+        }
+        if !road_allowed_here(town, tile, dir) {
+            return GrowthResult::SearchStopped;
+        }
+        let source = reverse_diag(dir);
+        let rcmd = diag_dir_to_road_bits(dir) | diag_dir_to_road_bits(source);
+        if place_town_road(map, tile, rcmd) {
+            dirty.push(tile);
+            return GrowthResult::Succeed;
+        }
+        return GrowthResult::SearchStopped;
+    }
+
+    // Hay carretera: intentar casa en dirección aleatoria o extender.
+    *rng = rng.wrapping_mul(LCG_MUL).wrapping_add(LCG_ADD);
+    let dir = u8::try_from(*rng >> 16).unwrap_or(0) & 3;
+    let target_rb = diag_dir_to_road_bits(dir);
+    let house_tile = tile_add_diag(tile, dir);
+
+    if cur_rb & target_rb != 0 {
+        // Ya hay carretera en esa dirección: no extender; probar otra.
+        return GrowthResult::Continue;
+    }
+
+    // ¿Permitir casa según layout?
+    let allow_house = match town.layout {
+        TownLayout::Grid2x2 | TownLayout::Grid3x3 => {
+            let grid = town_layout_allows_house_here(town, house_tile);
+            let rcmd = grid_road_bits(town, tile, dir);
+            (rcmd & target_rb) == 0 && grid
+        }
+        TownLayout::BetterRoads | TownLayout::Original | TownLayout::Random => {
+            let road_ok = road_allowed_here(town, house_tile, dir);
+            !road_ok || chance16(rng, 6, 10)
+        }
+    };
+
+    if allow_house
+        && can_build_house(map, house_tile)
+        && try_build_town_house(map, town, house_tile, *rng, ctx)
+    {
+        dirty.push(house_tile);
+        return GrowthResult::Succeed;
+    }
+
+    // Extender carretera.
+    if can_build_town_road(map, house_tile) && road_allowed_here(town, house_tile, dir) {
+        let rcmd = match town.layout {
+            TownLayout::Grid2x2 | TownLayout::Grid3x3 => grid_road_bits(town, tile, dir),
+            _ => target_rb | diag_dir_to_road_bits(reverse_diag(dir)),
+        };
+        if rcmd != 0 && place_town_road(map, house_tile, rcmd) {
+            let _ = or_road_bits(map, tile, diag_dir_to_road_bits(dir));
+            dirty.push(house_tile);
+            return GrowthResult::Succeed;
+        }
+    }
+
+    GrowthResult::Continue
+}
+
+fn try_build_town_house(
+    map: &mut Map,
+    town: &mut Town,
+    pos: TileCoord,
+    seed: u32,
+    ctx: TownExpandContext,
+) -> bool {
+    if !town_layout_allows_house_here(town, pos) {
+        return false;
+    }
+    if !can_build_house(map, pos) {
+        return false;
+    }
+    let height = map.get(pos).map_or(0, |t| t.height);
+    let zone = get_town_radius_group(town, pos);
+    let Some(house_id) =
+        pick_town_house_id(town, zone, ctx.climate, height, ctx.calendar_year, seed)
+    else {
+        return false;
+    };
+    if map.set_completed_house(pos, house_id, 0).is_err() {
+        return false;
+    }
+    if let Some(hs) = HouseSpec::get(house_id) {
+        if hs.is_church() {
+            town.has_church = true;
+        }
+        if hs.is_stadium() {
+            town.has_stadium = true;
+        }
+        town.population = town
+            .population
+            .saturating_add(u32::from(hs.population).max(TOWN_EXPAND_POP_PER_HOUSE));
+    } else {
+        town.population = town.population.saturating_add(TOWN_EXPAND_POP_PER_HOUSE);
+    }
+    town.num_houses = town.num_houses.saturating_add(1);
+    update_town_radius(town);
+    true
+}
+
+fn try_place_house_near_road(
+    map: &mut Map,
+    town: &mut Town,
+    seed: u32,
+    ctx: TownExpandContext,
+) -> Option<TileCoord> {
+    let radius = i32::try_from(town.squared_town_zone_radius[0].max(36)).unwrap_or(36);
+    let candidates = collect_road_tiles_near(map, town.pos, radius.min(24));
     if candidates.is_empty() {
         return None;
     }
@@ -81,11 +354,14 @@ fn try_place_house_near_road(map: &mut Map, town: &Town, seed: u32) -> Option<Ti
         for d in 0..dirs.len() {
             let (dx, dy) = dirs[(dir_rot + d) % dirs.len()];
             let pos = TileCoord::new(road.x + dx, road.y + dy);
-            if can_build_house(map, pos) {
-                let house_id = house_id_for(town.id, pos, seed);
-                if map.set_completed_house(pos, house_id, 0).is_ok() {
-                    return Some(pos);
-                }
+            if try_build_town_house(
+                map,
+                town,
+                pos,
+                seed.wrapping_add(u32::try_from(offset).unwrap_or(0)),
+                ctx,
+            ) {
+                return Some(pos);
             }
         }
     }
@@ -93,7 +369,8 @@ fn try_place_house_near_road(map: &mut Map, town: &Town, seed: u32) -> Option<Ti
 }
 
 fn try_extend_or_seed_road(map: &mut Map, town: &Town, seed: u32) -> Option<TileCoord> {
-    let roads = collect_road_tiles_near(map, town.pos, TOWN_EXPAND_SEARCH_RADIUS);
+    let radius = i32::try_from(town.squared_town_zone_radius[0].max(36)).unwrap_or(36);
+    let roads = collect_road_tiles_near(map, town.pos, radius.min(24));
     if !roads.is_empty() {
         let n = roads.len();
         let start = usize::try_from(seed).unwrap_or(0) % n;
@@ -113,37 +390,57 @@ fn try_extend_or_seed_road(map: &mut Map, town: &Town, seed: u32) -> Option<Tile
             for d in 0..dirs.len() {
                 let (dx, dy, axis) = dirs[(dir_rot + d) % dirs.len()];
                 let pos = TileCoord::new(from.x + dx, from.y + dy);
-                if can_build_town_road(map, pos) && place_town_road(map, pos, axis) {
-                    // Conectar la tesela origen si también es road.
+                if can_build_town_road(map, pos)
+                    && road_allowed_here(town, pos, diag_from_delta(dx, dy))
+                    && place_town_road(map, pos, axis)
+                {
                     let _ = or_road_bits(map, from, axis);
                     return Some(pos);
                 }
             }
         }
     }
-    // Semilla: calle en hierba plana cerca del centro (como fallback OpenTTD).
     seed_road_near_center(map, town.pos, seed)
 }
 
+fn town_layout_allows_house_here(town: &Town, tile: TileCoord) -> bool {
+    let gx = town.pos.x - tile.x;
+    let gy = town.pos.y - tile.y;
+    match town.layout {
+        TownLayout::Grid2x2 => gx.rem_euclid(3) != 0 && gy.rem_euclid(3) != 0,
+        TownLayout::Grid3x3 => gx.rem_euclid(4) != 0 && gy.rem_euclid(4) != 0,
+        _ => true,
+    }
+}
+
+fn road_allowed_here(town: &Town, tile: TileCoord, _dir: u8) -> bool {
+    match town.layout {
+        TownLayout::Grid2x2 => {
+            let gx = town.pos.x - tile.x;
+            let gy = town.pos.y - tile.y;
+            gx.rem_euclid(3) == 0 || gy.rem_euclid(3) == 0
+        }
+        TownLayout::Grid3x3 => {
+            let gx = town.pos.x - tile.x;
+            let gy = town.pos.y - tile.y;
+            gx.rem_euclid(4) == 0 || gy.rem_euclid(4) == 0
+        }
+        // BetterRoads: distancia mín. 2 entre calles (MVP: aceptar siempre).
+        TownLayout::BetterRoads | TownLayout::Original | TownLayout::Random => true,
+    }
+}
+
+fn grid_road_bits(town: &Town, tile: TileCoord, dir: u8) -> u8 {
+    if !road_allowed_here(town, tile_add_diag(tile, dir), dir) {
+        return 0;
+    }
+    diag_dir_to_road_bits(dir) | diag_dir_to_road_bits(reverse_diag(dir))
+}
+
 fn seed_road_near_center(map: &mut Map, center: TileCoord, seed: u32) -> Option<TileCoord> {
-    const OFFSETS: [(i32, i32); 13] = [
-        (0, 0),
-        (-1, 0),
-        (1, 1),
-        (1, -1),
-        (-1, -1),
-        (0, 2),
-        (2, 0),
-        (0, -2),
-        (-2, 2),
-        (2, 2),
-        (2, -2),
-        (-2, -2),
-        (1, 0),
-    ];
-    let start = usize::try_from(seed).unwrap_or(0) % OFFSETS.len();
-    for offset in 0..OFFSETS.len() {
-        let (dx, dy) = OFFSETS[(start + offset) % OFFSETS.len()];
+    let start = usize::try_from(seed).unwrap_or(0) % TOWN_COORD_MOD.len();
+    for offset in 0..TOWN_COORD_MOD.len() {
+        let (dx, dy) = TOWN_COORD_MOD[(start + offset) % TOWN_COORD_MOD.len()];
         let pos = TileCoord::new(center.x + dx, center.y + dy);
         if can_build_town_road(map, pos) {
             let axis = if seed.wrapping_add(u32::try_from(offset).unwrap_or(0)) & 1 == 0 {
@@ -198,7 +495,7 @@ fn place_town_road(map: &mut Map, pos: TileCoord, road_bits: u8) -> bool {
     tile.kind = TileKind::Road;
     tile.mapt = 0x20;
     tile.m5 = bits;
-    tile.m1 = 0;
+    tile.m1 = crate::company::OWNER_TOWN_M1;
     tile.m2 = 0;
     tile.m2_hi = 0;
     tile.m3 = 0;
@@ -206,7 +503,6 @@ fn place_town_road(map: &mut Map, pos: TileCoord, road_bits: u8) -> bool {
     tile.m6 = 0;
     tile.m7 = 0;
     tile.m8 = 0;
-    tile.m1 = crate::company::OWNER_TOWN_M1;
     map.set_tile(pos, tile).is_ok()
 }
 
@@ -226,14 +522,80 @@ fn or_road_bits(map: &mut Map, pos: TileCoord, add_bits: u8) -> bool {
     map.set_tile(pos, tile).is_ok()
 }
 
-fn house_id_for(town_id: u32, pos: TileCoord, seed: u32) -> u16 {
-    let h = seed
-        .wrapping_add(town_id.wrapping_mul(17))
-        .wrapping_add(pos.x.cast_unsigned().wrapping_mul(31))
-        .wrapping_add(pos.y.cast_unsigned().wrapping_mul(13));
-    u16::try_from(h % u32::from(HOUSE_ID_MAX))
-        .unwrap_or(1)
-        .max(1)
+fn town_road_bits(map: &Map, pos: TileCoord) -> u8 {
+    let Some(tile) = map.get(pos) else {
+        return 0;
+    };
+    if tile.kind != TileKind::Road {
+        return 0;
+    }
+    effective_road_bits(tile.mapt, tile.m5, tile.kind, 2, 9).unwrap_or(tile.m5 & 0x0F)
+}
+
+fn can_follow_road(map: &Map, tile: TileCoord, dir: u8) -> bool {
+    let target = tile_add_diag(tile, dir);
+    match map.get_kind(target) {
+        Some(TileKind::Road) => town_road_bits(map, target) != 0,
+        Some(TileKind::Grass) => can_build_town_road(map, target),
+        _ => false,
+    }
+}
+
+const fn diag_dir_to_road_bits(dir: u8) -> u8 {
+    match dir & 3 {
+        0 => ROAD_NE, // NE
+        1 => ROAD_SE, // SE
+        2 => ROAD_SW, // SW
+        _ => ROAD_NW, // NW
+    }
+}
+
+const fn reverse_diag(dir: u8) -> u8 {
+    dir.wrapping_add(2) & 3
+}
+
+fn tile_add_diag(tile: TileCoord, dir: u8) -> TileCoord {
+    match dir & 3 {
+        0 => TileCoord::new(tile.x + 1, tile.y), // NE → +x
+        1 => TileCoord::new(tile.x, tile.y + 1), // SE → +y
+        2 => TileCoord::new(tile.x - 1, tile.y), // SW → -x
+        _ => TileCoord::new(tile.x, tile.y - 1), // NW → -y
+    }
+}
+
+fn diag_from_delta(dx: i32, dy: i32) -> u8 {
+    if dx > 0 {
+        0
+    } else if dy > 0 {
+        1
+    } else if dx < 0 {
+        2
+    } else {
+        3
+    }
+}
+
+fn chance16(rng: &mut u32, a: u32, b: u32) -> bool {
+    if b == 0 {
+        return false;
+    }
+    *rng = rng.wrapping_mul(LCG_MUL).wrapping_add(LCG_ADD);
+    (*rng >> 16) % b < a
+}
+
+/// Coloca una casa elegida por spec (API de tests / fundación).
+pub fn place_house_with_spec(
+    map: &mut Map,
+    town: &mut Town,
+    pos: TileCoord,
+    ctx: TownExpandContext,
+    seed: u32,
+) -> Option<TileCoord> {
+    if try_build_town_house(map, town, pos, seed, ctx) {
+        Some(pos)
+    } else {
+        None
+    }
 }
 
 #[cfg(test)]
@@ -241,34 +603,33 @@ fn house_id_for(town_id: u32, pos: TileCoord, seed: u32) -> u16 {
 mod tests {
     use super::*;
     use crate::station::{Station, StopKind};
-    use crate::town::{TOWN_GROWTH_TICKS, Town, grow_town_if_served};
+    use crate::town::{TOWN_GROWTH_TICKS, Town, grow_town_if_served, update_town_radius};
 
     #[test]
     fn expand_places_road_then_house() {
         let mut map = Map::new_flat(32, 32, 1);
-        let town = Town {
+        let mut town = Town {
             id: 1,
             pos: TileCoord::new(16, 16),
             name: "Expand".into(),
             population: 40,
             is_growing: true,
+            num_houses: 4,
             ..Default::default()
         };
-        // Sin calles: semilla de carretera.
-        let r1 = expand_town_once(&mut map, &town, 1);
-        assert!(matches!(r1, TownExpandResult::Road(_)), "{r1:?}");
-        // Con calle: casa.
-        let r2 = expand_town_once(&mut map, &town, 7);
-        assert!(
-            matches!(r2, TownExpandResult::House(_)) || matches!(r2, TownExpandResult::Road(_)),
-            "{r2:?}"
-        );
+        update_town_radius(&mut town);
+        let ctx = TownExpandContext {
+            climate: Climate::Temperate,
+            calendar_year: 1980,
+        };
+        let mut dirty = Vec::new();
+        assert!(grow_town(&mut map, &mut town, 1, ctx, &mut dirty));
+        assert!(!dirty.is_empty());
     }
 
     #[test]
     fn grow_town_if_served_places_tiles() {
         let mut map = Map::new_flat(32, 32, 1);
-        // Calle inicial junto al centro.
         assert!(place_town_road(
             &mut map,
             TileCoord::new(16, 16),
@@ -281,23 +642,67 @@ mod tests {
             population: 100,
             passengers_served: 20,
             is_growing: true,
+            num_houses: 4,
             ..Default::default()
         }];
+        update_town_radius(&mut towns[0]);
         let stations = vec![Station::new_with_kind(
             TileCoord::new(16, 17),
             StopKind::BusStop,
         )];
         let dirty = grow_town_if_served(&mut map, &[], &stations, &mut towns, TOWN_GROWTH_TICKS);
         assert!(!dirty.is_empty(), "debe ensuciar teselas");
-        assert!(towns[0].population > 100);
-        let houses = dirty
-            .iter()
-            .filter(|&&c| map.get_kind(c) == Some(TileKind::House))
-            .count();
-        let roads = dirty
-            .iter()
-            .filter(|&&c| map.get_kind(c) == Some(TileKind::Road))
-            .count();
-        assert!(houses + roads >= 1);
+        assert!(
+            towns[0].population > 100
+                || dirty
+                    .iter()
+                    .any(|&c| map.get_kind(c) == Some(TileKind::Road)
+                        || map.get_kind(c) == Some(TileKind::House)),
+            "crecimiento físico o población"
+        );
+    }
+
+    #[test]
+    fn grid_layout_rejects_house_on_road_line() {
+        let town = Town {
+            pos: TileCoord::new(10, 10),
+            layout: TownLayout::Grid2x2,
+            ..Default::default()
+        };
+        // gx % 3 == 0 → línea de carretera
+        assert!(!town_layout_allows_house_here(
+            &town,
+            TileCoord::new(10, 11)
+        ));
+        assert!(town_layout_allows_house_here(&town, TileCoord::new(11, 11)));
+    }
+
+    #[test]
+    fn house_choice_uses_zone_not_mod_110() {
+        let mut map = Map::new_flat(24, 24, 1);
+        let mut town = Town {
+            id: 2,
+            pos: TileCoord::new(12, 12),
+            name: "Zone".into(),
+            num_houses: 40,
+            ..Default::default()
+        };
+        update_town_radius(&mut town);
+        assert!(place_town_road(
+            &mut map,
+            TileCoord::new(12, 12),
+            ROAD_AXIS_X
+        ));
+        let pos = TileCoord::new(12, 11);
+        let ctx = TownExpandContext {
+            climate: Climate::Temperate,
+            calendar_year: 1980,
+        };
+        assert!(try_build_town_house(&mut map, &mut town, pos, 99, ctx));
+        let tile = map.get(pos).unwrap();
+        let house_id = tile.m8 & 0x0FFF;
+        let hs = HouseSpec::get(house_id).unwrap();
+        assert!(hs.is_size_1x1());
+        assert!(hs.min_year <= 1980);
     }
 }

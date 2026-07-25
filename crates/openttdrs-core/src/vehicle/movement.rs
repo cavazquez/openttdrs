@@ -864,6 +864,12 @@ impl super::model::Vehicle {
                 Some(crate::vehicle::order::VehicleOrder::Station { .. })
             )
         {
+            // P2.17: registrar visita e insertar OT_IMPLICIT si procede.
+            if let Some(crate::vehicle::order::VehicleOrder::Station { station, .. }) =
+                self.orders.get(self.current_order).copied()
+            {
+                self.maybe_insert_implicit_order(station);
+            }
             self.awaiting_load_window = true;
             self.progress = 255;
             return;

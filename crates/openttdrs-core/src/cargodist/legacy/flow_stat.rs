@@ -25,10 +25,26 @@ pub enum DistributionType {
 }
 
 /// Ajustes de `CargoDist` (persistidos; flows se reconstruyen).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CargoDistSettings {
     #[serde(default)]
     pub distribution: DistributionType,
+    /// Intervalo de recálculo en días de economía (`linkgraph.recalc_interval` / 74).
+    #[serde(default = "default_recalc_interval_days")]
+    pub recalc_interval_days: u32,
+}
+
+const fn default_recalc_interval_days() -> u32 {
+    4
+}
+
+impl Default for CargoDistSettings {
+    fn default() -> Self {
+        Self {
+            distribution: DistributionType::default(),
+            recalc_interval_days: default_recalc_interval_days(),
+        }
+    }
 }
 
 /// Shares `via → amount` para un origen (`FlowStat`).

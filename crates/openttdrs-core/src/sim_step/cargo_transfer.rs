@@ -40,21 +40,53 @@ pub(super) fn unload_vehicles(
         if !st.accepts_cargo(cargo_type) || !st.can_service_vehicle(state.vehicles[i].kind) {
             continue;
         }
-        // CargoDist: no bajar si `next_hop` apunta a otra estación.
+        // CargoDist / P2.19: `PrepareUnload` + `Stage` (TRANSFER/DELIVER/KEEP).
         let reinsert = !cargo_type.is_town_cargo();
         let force_transfer = state.vehicles[i]
             .orders
             .get(state.vehicles[i].current_order)
             .is_some_and(|o| o.transfer());
-        if state.vehicles[i].cargo_packets.packets.iter().all(|p| {
-            crate::cargo_packet::decide_cargo_unload_action(p, station_pos, force_transfer)
-                == crate::cargo_packet::CargoUnloadAction::Keep
-        }) {
+        let no_unload = state.vehicles[i]
+            .orders
+            .get(state.vehicles[i].current_order)
+            .is_some_and(|o| o.no_unload());
+        let cargo_pct = if state.vehicles[i].capacity == 0 {
+            0
+        } else {
+            u8::try_from(
+                (u64::from(state.vehicles[i].cargo) * 100 / u64::from(state.vehicles[i].capacity))
+                    .min(100),
+            )
+            .unwrap_or(100)
+        };
+        let next_stations = crate::VehicleOrder::get_next_stopping_station(
+            &state.vehicles[i].orders,
+            state.vehicles[i].cur_implicit_order_index,
+            station_pos,
+            Some(cargo_pct),
+        );
+        let accepted = state.stations[station_idx].accepts_cargo(cargo_type);
+        let will_unload = crate::cargo_packet::prepare_unload(
+            &mut state.vehicles[i].cargo_packets,
+            accepted,
+            station_pos,
+            &next_stations,
+            force_transfer,
+            no_unload,
+        );
+        if !will_unload {
             continue;
         }
 
         let speed = crate::cargo_packet::load_unload_speed(cargo_type);
-        let taken = state.vehicles[i].cargo_packets.take_amount(speed);
+        // Tras `Stage`, transfer/deliver están al frente de la lista.
+        let unloadable = state.vehicles[i]
+            .cargo_packets
+            .staged_transfer
+            .saturating_add(state.vehicles[i].cargo_packets.staged_deliver);
+        let taken = state.vehicles[i]
+            .cargo_packets
+            .take_amount(speed.min(unloadable));
         if taken.is_empty() {
             continue;
         }
@@ -104,10 +136,13 @@ pub(super) fn unload_vehicles(
                 packet.source,
                 vehicle_owner,
             ));
-            let action = crate::cargo_packet::decide_cargo_unload_action(
+            let action = crate::cargo_packet::choose_cargo_action(
                 packet,
                 station_pos,
+                &next_stations,
                 force_transfer,
+                no_unload,
+                accepted,
             );
             match action {
                 crate::cargo_packet::CargoUnloadAction::Transfer => {
@@ -146,7 +181,8 @@ pub(super) fn unload_vehicles(
                     }
                     payment = payment.saturating_add(deliverer_part);
                 }
-                crate::cargo_packet::CargoUnloadAction::Keep => {}
+                crate::cargo_packet::CargoUnloadAction::Keep
+                | crate::cargo_packet::CargoUnloadAction::Load => {}
             }
         }
 
@@ -397,11 +433,14 @@ fn try_load_from_industry(
     let count = load.min(u32::from(u16::MAX)) as u16;
     let mut packet = crate::cargo_packet::CargoPacket::new(output, count, source);
     packet.first_station = Some(station_pos);
-    let order_hop = crate::VehicleOrder::next_station_hop(
+    let order_hop = crate::VehicleOrder::get_next_stopping_station(
         &state.vehicles[vehicle_idx].orders,
-        state.vehicles[vehicle_idx].current_order,
+        state.vehicles[vehicle_idx].cur_implicit_order_index,
         station_pos,
-    );
+        None,
+    )
+    .into_iter()
+    .next();
     packet.next_hop = crate::flow_stat::resolve_next_hop(
         state.cargo_dist.distribution,
         &state.runtime.station_flows,
@@ -532,16 +571,23 @@ fn try_load_from_station_waiting_cargo(
         return false;
     }
 
+    let _ = state.stations[station_idx].cargo_packets.reserve(load);
     let mut taken = state.stations[station_idx].take_waiting_cargo(cargo, load);
     if taken.is_empty() {
+        state.stations[station_idx]
+            .cargo_packets
+            .consume_reserved(load);
         return false;
     }
     // Feeder + next_hop: Manual = órdenes; Asymmetric/Symmetric = FlowStat.
-    let order_hop = crate::VehicleOrder::next_station_hop(
+    let order_hop = crate::VehicleOrder::get_next_stopping_station(
         &state.vehicles[vehicle_idx].orders,
-        state.vehicles[vehicle_idx].current_order,
+        state.vehicles[vehicle_idx].cur_implicit_order_index,
         station_pos,
-    );
+        None,
+    )
+    .into_iter()
+    .next();
     let distribution = state.cargo_dist.distribution;
     for packet in &mut taken {
         if packet.first_station.is_none() {
@@ -559,6 +605,10 @@ fn try_load_from_station_waiting_cargo(
         );
     }
     let loaded_units: u32 = taken.iter().map(|p| u32::from(p.count)).sum();
+    // P2.20: consumir reserva de la cola indexada por hop.
+    state.stations[station_idx]
+        .cargo_packets
+        .consume_reserved(loaded_units);
     let first_pickup = state.vehicles[vehicle_idx].cargo == 0;
     state.vehicles[vehicle_idx]
         .cargo_packets

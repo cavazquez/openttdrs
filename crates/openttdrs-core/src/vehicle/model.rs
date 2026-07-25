@@ -206,8 +206,15 @@ pub struct Vehicle {
     /// Lista circular de destinos asignados por el jugador.
     #[serde(default)]
     pub orders: Vec<crate::vehicle::order::VehicleOrder>,
-    #[serde(default)]
+    /// Índice de orden real (`cur_real_order_index` / `Vehicle::current_order` del port).
+    #[serde(default, alias = "cur_real_order_index")]
     pub current_order: usize,
+    /// Índice de orden implícita (`cur_implicit_order_index`).
+    #[serde(default)]
+    pub cur_implicit_order_index: usize,
+    /// Última estación visitada (`Vehicle::last_station_visited`).
+    #[serde(default)]
+    pub last_station_visited: Option<TileCoord>,
     /// Último intento de `find_path` falló estando `orders` no vacío; no usar Manhattan (queda bloqueado).
     #[serde(default)]
     pub no_network_route_to_order: bool,
@@ -449,6 +456,8 @@ impl Vehicle {
             rail_tile_history: VecDeque::new(),
             orders: Vec::new(),
             current_order: 0,
+            cur_implicit_order_index: 0,
+            last_station_visited: None,
             no_network_route_to_order: false,
             cargo_source: None,
             cargo_transit_ticks: 0,
@@ -584,6 +593,7 @@ impl Vehicle {
     pub fn set_vehicle_orders(&mut self, orders: Vec<crate::vehicle::order::VehicleOrder>) {
         self.orders = orders;
         self.current_order = 0;
+        self.cur_implicit_order_index = 0;
         self.path.clear();
         self.progress = 0;
         self.depart_turn = 0;
@@ -630,12 +640,21 @@ impl Vehicle {
             >= threshold
     }
 
-    /// Sanitiza `current_order` para prevenir indexación fuera de límites.
+    /// Índice real de orden (`cur_real_order_index`).
+    #[must_use]
+    pub const fn cur_real_order_index(&self) -> usize {
+        self.current_order
+    }
+
+    /// Sanitiza índices de orden para prevenir indexación fuera de límites.
     ///
-    /// Política: si `orders` está vacío → `current_order=0`; si `current_order >= len` → clamp a 0.
+    /// Política: si `orders` está vacío → índices a 0; si algún índice `>= len` → clamp a 0.
     pub fn sanitize_current_order(&mut self) {
         if self.orders.is_empty() || self.current_order >= self.orders.len() {
             self.current_order = 0;
+        }
+        if self.orders.is_empty() || self.cur_implicit_order_index >= self.orders.len() {
+            self.cur_implicit_order_index = 0;
         }
     }
 

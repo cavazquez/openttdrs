@@ -379,8 +379,7 @@ fn station_waiting_total(station: &openttdrs_core::Station) -> u32 {
     station.stock.max(stock_total).max(
         station
             .cargo_packets
-            .packets
-            .iter()
+            .packets()
             .map(|packet| u32::from(packet.count))
             .fold(0, u32::saturating_add),
     )

@@ -11,8 +11,12 @@ mod operations;
 mod types;
 
 // Re-exports públicos para mantener API estable
-pub use operations::{decide_cargo_unload_action, load_unload_speed};
-pub use types::{CargoPacket, CargoUnloadAction, StationCargoList, VehicleCargoList};
+pub use operations::{
+    choose_cargo_action, decide_cargo_unload_action, load_unload_speed, prepare_unload,
+};
+pub use types::{
+    CargoPacket, CargoUnloadAction, StationCargoList, StationHopKey, VehicleCargoList,
+};
 
 #[cfg(test)]
 mod tests {
@@ -69,6 +73,39 @@ mod tests {
             decide_cargo_unload_action(&p2, at, true),
             CargoUnloadAction::Transfer
         );
+    }
+
+    #[test]
+    fn station_cargo_list_indexes_by_next_hop_and_reserves() {
+        let mut list = StationCargoList::default();
+        let a = TileCoord::new(1, 1);
+        let b = TileCoord::new(2, 2);
+        list.push(CargoPacket::new(CargoType::Coal, 5, a).with_next_hop(Some(b)));
+        list.push(CargoPacket::new(CargoType::Coal, 3, a).with_next_hop(None));
+        assert_eq!(list.by_next_hop.len(), 2);
+        assert_eq!(list.reserve(4), 4);
+        assert_eq!(list.reserved, 4);
+        list.consume_reserved(4);
+        assert_eq!(list.reserved, 0);
+    }
+
+    #[test]
+    fn stage_classifies_transfer_deliver_keep() {
+        let at = TileCoord::new(5, 5);
+        let next = TileCoord::new(9, 9);
+        let elsewhere = TileCoord::new(12, 12);
+        let mut list = VehicleCargoList::default();
+        list.push(CargoPacket::new(CargoType::Goods, 2, at).with_next_hop(Some(at)));
+        list.push(
+            CargoPacket::new(CargoType::Goods, 3, at)
+                .with_first_station(TileCoord::new(0, 0))
+                .with_next_hop(Some(elsewhere)),
+        );
+        list.push(CargoPacket::new(CargoType::Goods, 4, at).with_next_hop(Some(next)));
+        assert!(list.stage(true, at, &[next], false, false));
+        assert_eq!(list.staged_deliver, 2);
+        assert_eq!(list.staged_transfer, 3);
+        assert_eq!(list.staged_keep, 4);
     }
 
     #[test]

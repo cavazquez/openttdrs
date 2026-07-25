@@ -212,7 +212,7 @@ pub(crate) fn date_from_riff(body: &[u8]) -> Option<(i32, u64)> {
 }
 
 /// Avanza el struct `common` de vehículo hasta los campos que importan.
-fn vehicle_common_fields(rec: &[u8]) -> Option<(u32, u8, u8, u32, u8, u8)> {
+fn vehicle_common_fields(rec: &[u8]) -> Option<(u32, u8, u8, u32, u8, u8, u8)> {
     let mut off = 0usize;
     let subtype = read_u8(rec, &mut off).ok()?;
     skip_scalar(ScalarKind::U32, rec, &mut off).ok()?; // next
@@ -242,7 +242,7 @@ fn vehicle_common_fields(rec: &[u8]) -> Option<(u32, u8, u8, u32, u8, u8)> {
     skip_scalar(ScalarKind::U8, rec, &mut off).ok()?; // day_counter
     skip_scalar(ScalarKind::U8, rec, &mut off).ok()?; // tick_counter
     skip_scalar(ScalarKind::U8, rec, &mut off).ok()?; // running_ticks
-    skip_scalar(ScalarKind::U8, rec, &mut off).ok()?; // cur_implicit_order_index
+    let cur_implicit_order_index = read_u8(rec, &mut off).ok()?;
     let cur_real_order_index = read_u8(rec, &mut off).ok()?;
     off += 1 + 1 + 2;
     skip_scalar(ScalarKind::U8, rec, &mut off).ok()?; // refit_cargo
@@ -260,6 +260,7 @@ fn vehicle_common_fields(rec: &[u8]) -> Option<(u32, u8, u8, u32, u8, u8)> {
         cargo_type,
         orders,
         cur_real_order_index,
+        cur_implicit_order_index,
         vehstatus,
     ))
 }
@@ -288,13 +289,18 @@ fn vehs_record(rec: &[u8]) -> Option<SlRecord> {
         _ => return None,
     };
     let payload = rec.get(payload_off..)?;
-    let (tile, subtype, cargo_type, orders, cur_order, vehstatus) = vehicle_common_fields(payload)?;
+    let (tile, subtype, cargo_type, orders, cur_order, cur_implicit, vehstatus) =
+        vehicle_common_fields(payload)?;
     let common = record(&[
         ("tile", SlValue::Uint(u64::from(tile))),
         ("subtype", SlValue::Uint(u64::from(subtype))),
         ("cargo_type", SlValue::Uint(u64::from(cargo_type))),
         ("orders", SlValue::Uint(u64::from(orders))),
         ("cur_real_order_index", SlValue::Uint(u64::from(cur_order))),
+        (
+            "cur_implicit_order_index",
+            SlValue::Uint(u64::from(cur_implicit)),
+        ),
         ("vehstatus", SlValue::Uint(u64::from(vehstatus))),
     ]);
     Some(record(&[

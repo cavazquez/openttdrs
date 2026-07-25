@@ -581,7 +581,7 @@ pub(crate) fn join_stations(
         .ok_or(CommandError::StationNotFound)?;
 
     merge_st.ensure_packets_from_stock();
-    let merge_packets: Vec<_> = merge_st.cargo_packets.packets.drain(..).collect();
+    let merge_packets = merge_st.cargo_packets.drain_all();
     let merge_income = merge_st.income;
     let merge_tsp = merge_st.time_since_pickup;
     let merge_joined = std::mem::take(&mut merge_st.joined_tiles);

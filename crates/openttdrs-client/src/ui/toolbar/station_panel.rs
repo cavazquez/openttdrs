@@ -438,10 +438,7 @@ pub(crate) fn sync_station_cargo_panel(
                 cargo_display_name(cargo)
             ));
         }
-        lines.push(format!(
-            "Packets en cola: {}",
-            station.cargo_packets.packets.len()
-        ));
+        lines.push(format!("Packets en cola: {}", station.cargo_packets.len()));
         lines.join("\n")
     };
 

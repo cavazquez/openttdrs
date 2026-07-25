@@ -389,10 +389,10 @@ fn feeder_share_paid_on_unload_preserves_packet_flags() {
     assert_eq!(waiting, 8, "freight queda en cola del hub de destino");
     let reinserted = state.stations[1]
         .cargo_packets
-        .packets
-        .iter()
+        .packets()
         .find(|p| p.cargo == CargoType::Coal)
-        .expect("packet reinsertado");
+        .expect("packet reinsertado")
+        .clone();
     assert_eq!(reinserted.first_station, Some(hub));
     assert!(reinserted.next_hop.is_none(), "trasbordo limpia next_hop");
     assert!(!reinserted.feeder_paid, "feeder no se liquida en trasbordo");
@@ -586,8 +586,7 @@ fn load_from_station_sets_first_station_when_missing() {
     st.sync_stock_from_packets();
     assert!(
         st.cargo_packets
-            .packets
-            .iter()
+            .packets()
             .all(|p| p.first_station.is_none())
     );
     state.stations = vec![st];

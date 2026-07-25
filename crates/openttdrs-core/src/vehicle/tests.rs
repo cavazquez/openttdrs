@@ -8,7 +8,7 @@ use crate::map::TileCoord;
 
 use super::VEHICLE_CAPACITY;
 use super::model::{DIR_N, DIR_NE, DIR_S, DIR_SE, DIR_SW, Vehicle, VehicleKind};
-use super::order::VehicleOrder;
+use super::order::{OrderConditionKind, VehicleOrder};
 
 #[test]
 fn progress_requires_multiple_ticks_per_tile() {
@@ -47,6 +47,40 @@ fn next_station_hop_skips_current_and_wraps() {
     assert_eq!(VehicleOrder::next_station_hop(&orders, 0, a), Some(b));
     assert_eq!(VehicleOrder::next_station_hop(&orders, 1, b), Some(c));
     assert_eq!(VehicleOrder::next_station_hop(&orders, 2, c), Some(a));
+}
+
+#[test]
+fn get_next_stopping_station_explores_conditional_branches() {
+    let a = TileCoord::new(1, 1);
+    let b = TileCoord::new(2, 2);
+    let c = TileCoord::new(3, 3);
+    let orders = vec![
+        VehicleOrder::station(a),
+        VehicleOrder::conditional(OrderConditionKind::CargoLoadAbove, 50, 3),
+        VehicleOrder::station(b),
+        VehicleOrder::station(c),
+    ];
+    let hops = VehicleOrder::get_next_stopping_station(&orders, 0, a, None);
+    assert!(hops.contains(&b));
+    assert!(hops.contains(&c));
+}
+
+#[test]
+fn maybe_insert_implicit_order_on_unscheduled_visit() {
+    let a = TileCoord::new(1, 1);
+    let b = TileCoord::new(5, 5);
+    let mid = TileCoord::new(3, 3);
+    let mut v = Vehicle::new(0, VehicleKind::Truck, a, b);
+    v.set_vehicle_orders(vec![VehicleOrder::station(a), VehicleOrder::station(b)]);
+    v.current_order = 1;
+    v.cur_implicit_order_index = 0;
+    v.maybe_insert_implicit_order(mid);
+    assert!(
+        v.orders
+            .iter()
+            .any(|o| o.is_implicit() && o.destination() == mid)
+    );
+    assert_eq!(v.last_station_visited, Some(mid));
 }
 
 #[test]

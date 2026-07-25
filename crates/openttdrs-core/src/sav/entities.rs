@@ -436,6 +436,8 @@ pub struct SavVehicle {
     pub orders: Vec<super::orders::SavOrder>,
     /// Índice de orden actual (`cur_real_order_index`).
     pub current_order: usize,
+    /// Índice de orden implícita (`cur_implicit_order_index`).
+    pub cur_implicit_order_index: usize,
     /// `false` si el jugador detuvo el vehículo (`VehState::Stopped`).
     pub running: bool,
     /// Tren: unidad sin `GVSF_FRONT` (vagón del consist anterior).
@@ -569,6 +571,10 @@ pub(crate) fn vehicles_from_chunks(
             .and_then(SlValue::as_u64)
             .and_then(|v| usize::try_from(v).ok())
             .unwrap_or(0);
+        let cur_implicit_order_index = record_get(common, "cur_implicit_order_index")
+            .and_then(SlValue::as_u64)
+            .and_then(|v| usize::try_from(v).ok())
+            .unwrap_or(current_order);
         let vehstatus = record_get(common, "vehstatus")
             .and_then(SlValue::as_u64)
             .unwrap_or(0);
@@ -611,6 +617,7 @@ pub(crate) fn vehicles_from_chunks(
             cargo_type: cargo_type.min(255) as u8,
             orders,
             current_order,
+            cur_implicit_order_index,
             running,
             is_wagon,
             is_helicopter,

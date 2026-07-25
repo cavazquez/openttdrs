@@ -3,7 +3,7 @@
 use crate::cargo::CargoType;
 use crate::map::TileCoord;
 
-use super::types::{CargoPacket, CargoUnloadAction};
+use super::types::{CargoPacket, CargoUnloadAction, VehicleCargoList};
 
 /// Unidades transferidas por tick en carga/descarga gradual (MVP).
 ///
@@ -49,4 +49,60 @@ pub fn decide_cargo_unload_action(
     } else {
         CargoUnloadAction::Deliver
     }
+}
+
+/// `ChooseAction` / `Stage` — clasificación de un packet (P2.19).
+#[must_use]
+pub fn choose_cargo_action(
+    packet: &CargoPacket,
+    at: TileCoord,
+    next_stations: &[TileCoord],
+    force_transfer: bool,
+    no_unload: bool,
+    accepted: bool,
+) -> CargoUnloadAction {
+    if no_unload {
+        return CargoUnloadAction::Keep;
+    }
+    if packet.cargo.is_town_cargo() && packet.first_station == Some(at) {
+        return CargoUnloadAction::Keep;
+    }
+    if force_transfer {
+        return CargoUnloadAction::Transfer;
+    }
+    match packet.next_hop {
+        None => {
+            // OpenTTD: Deliver solo si accepted && first != current.
+            // Freight sin hop (ruta Manual / industria→estación) se entrega o
+            // reinserta aunque `first_station` sea esta misma estación.
+            if !accepted || (packet.cargo.is_town_cargo() && packet.first_station == Some(at)) {
+                CargoUnloadAction::Keep
+            } else {
+                CargoUnloadAction::Deliver
+            }
+        }
+        Some(hop) if hop == at => CargoUnloadAction::Deliver,
+        Some(hop) if next_stations.contains(&hop) => CargoUnloadAction::Keep,
+        Some(_) => CargoUnloadAction::Transfer,
+    }
+}
+
+/// `PrepareUnload` — clasifica la carga a bordo antes de la descarga gradual.
+///
+/// Usa `GetNextStoppingStation` + `Stage` (P2.19 / P2.22).
+pub fn prepare_unload(
+    cargo: &mut VehicleCargoList,
+    accepted: bool,
+    current_station: TileCoord,
+    next_stations: &[TileCoord],
+    force_transfer: bool,
+    no_unload: bool,
+) -> bool {
+    cargo.stage(
+        accepted,
+        current_station,
+        next_stations,
+        force_transfer,
+        no_unload,
+    )
 }

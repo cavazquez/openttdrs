@@ -73,9 +73,11 @@ abrir el issue.
 | 6 | [P1.4](#p14--prod_level-y-cierre-de-industrias--hecho) Industrias dinámicas + [P1.3](#p13--producción-industrial-por-spec--hecho) rates | P1 | XL | hecho | Sin esto el mundo económico es estático y las rutas no caducan |
 | 7 | [P3.1](#tabla-p3) `GenerateTowns` / `GenerateIndustries` | P3 | XL | | Un mapa nuevo nace vacío: bloquea comparar una partida completa |
 | 8 | [P2.1](#tabla-p2) Relojes calendario/economía | P2 | XL | hecho | Habilita los barridos escalonados de los que todo depende |
+| 9 | Bloque 6: [P2.17](#tabla-p2)–[P2.22](#tabla-p2) órdenes/carga/linkgraph | P2 | XL | hecho | Órdenes implícitas, staging de carga y planificador linkgraph |
 
-**P1 completo** (22/22). P3.1 se adelanta al resto de P3 porque sin mundo generado no hay
-escenario de comparación. Los P0 puntuales también están cerrados (P0.7 reclasificado a P2).
+**P1 completo** (22/22). **Siguiente: [P3.1](#tabla-p3)** (`GenerateTowns` /
+`GenerateIndustries`). El Bloque 6 de órdenes/carga/linkgraph (P2.17–P2.22) está cerrado.
+Los P0 puntuales también están cerrados (P0.7 reclasificado a P2).
 
 ---
 
@@ -567,12 +569,12 @@ tick contra OpenTTD seguirá divergiendo aunque las fórmulas individuales sean 
 | **P2.14** | Controlador de carretera | · hecho | `IndividualRoadVehicleController` avanza frame a frame con `_road_drive_data` y los estados `RVSB_*` (`roadveh_cmd.cpp:1201-1576`, `roadveh.h:38-57`) | FSM en `road_movement/controller.rs` + tablas `drive_data` | XL · **hecho** |
 | **P2.15** | Tráfico en carretera | · hecho | `RoadVehFindCloseTo` sincroniza velocidad con el de delante y `blocked_ctr > 1480` permite atravesarlo (`roadveh_cmd.cpp:627-694`) | `road_movement/traffic.rs` | XL · **hecho** |
 | **P2.16** | Pasos por tick | · hecho | Bucle `while (j >= adv_spd)` que consume varios sub-pasos en el mismo tick (`roadveh_cmd.cpp:1610-1645`) | `road_vehicle_tick` con remanente en `progress` | L · **hecho** |
-| **P2.17** | Órdenes implícitas | Un solo `current_order`; el índice implícito del save se descarta (`sav/array_legacy.rs:245-246`) | `OT_IMPLICIT` con `cur_implicit_order_index` y `cur_real_order_index`, insertadas al visitar estaciones (`base_consist.h:47-48`, `vehicle.cpp:2152-2275`) | Portar los dos índices y la inserción automática | XL |
-| **P2.18** | `ProcessOrders` | Avance lineal módulo longitud de lista (`order_execution.rs:65-78`) | Máquina que interrumpe por depósito, resuelve vías, avanza índices y busca depósito más cercano (`order_cmd.cpp:1949-2159`) | Portar `ProcessOrders` y `UpdateOrderDest`; depende de P2.17 | XL |
-| **P2.19** | Clasificación de carga | Decisión directa al descargar, sin fase previa ni reserva (`cargo_packet/operations.rs:31-48`) | `PrepareUnload` llama a `Stage`, que clasifica cada paquete en `TRANSFER`, `DELIVER`, `KEEP` o `LOAD` usando los flujos (`cargopacket.cpp:406-526`) | Portar el staging; es lo que hace correcto el pago diferido de P1.6 | XL |
-| **P2.20** | Cola de estación | Cola FIFO por tipo de carga (`cargo_packet/types.rs:74-76`) | `StationCargoList` es un `MultiMap` indexado por `next_hop`, con cantidad reservada (`cargopacket.h:513-608`) | Reindexar la cola por destino | L |
-| **P2.21** | Planificador del linkgraph | El MCF portado se alimenta de estadísticas de viajes y se reconstruye al mes (`cargodist/legacy/link_graph.rs`) | `OnTick_LinkGraph` lanza y recoge jobs asíncronos sobre una copia del grafo de estaciones cuando `date_fract == 21`, con `recalc_interval` (`linkgraphschedule.cpp:202-216`) | Construir el grafo desde estaciones y planificar jobs; el MCF ya está portado en `cargodist/parity/` | XL |
-| **P2.22** | Siguiente parada del flujo | Siguiente estación distinta de la lista (`vehicle/order.rs:134-152`) | `GetNextStoppingStation` recorre la lista de forma recursiva con vías y condicionales (`order_cmd.cpp:363-409`) | Portar la resolución recursiva; depende de los flags de P1.20 | M |
+| **P2.17** | Órdenes implícitas | · hecho | `OT_IMPLICIT` con `cur_implicit_order_index` y `cur_real_order_index`, insertadas al visitar estaciones (`base_consist.h:47-48`, `vehicle.cpp:2152-2275`) | Índices en `Vehicle`; inserción en llegada; SAV conserva implícito | XL · **hecho** |
+| **P2.18** | `ProcessOrders` | · hecho | Máquina que interrumpe por depósito, resuelve vías, avanza índices y busca depósito más cercano (`order_cmd.cpp:1949-2159`) | `process_orders` / `update_order_dest` en `order_execution.rs` | XL · **hecho** |
+| **P2.19** | Clasificación de carga | · hecho | `PrepareUnload` llama a `Stage`, que clasifica cada paquete en `TRANSFER`, `DELIVER`, `KEEP` o `LOAD` usando los flujos (`cargopacket.cpp:406-526`) | `prepare_unload` / `Stage` cableado en `cargo_transfer.rs` | XL · **hecho** |
+| **P2.20** | Cola de estación | · hecho | `StationCargoList` es un `MultiMap` indexado por `next_hop`, con cantidad reservada (`cargopacket.h:513-608`) | `by_next_hop` + `reserved` en `cargo_packet/types.rs` | L · **hecho** |
+| **P2.21** | Planificador del linkgraph | · hecho | `OnTick_LinkGraph` lanza y recoge jobs asíncronos sobre una copia del grafo de estaciones cuando `date_fract == 21`, con `recalc_interval` (`linkgraphschedule.cpp:202-216`) | Jobs síncronos MCF en `landscape.rs` (`date_fract == 21`) | XL · **hecho** |
+| **P2.22** | Siguiente parada del flujo | · hecho | `GetNextStoppingStation` recorre la lista de forma recursiva con vías y condicionales (`order_cmd.cpp:363-409`) | `get_next_stopping_station` recursivo; `next_station_hop` delega | M · **hecho** |
 
 **P2.1 · hecho** — `timer/mod.rs`: `CalendarTimer` y `EconomyTimer` con `date_fract` 0..73,
 `elapsed_tick()` → `TimerTriggers` (día/mes/año), persistidos en `GameState` con migración serde
@@ -587,7 +589,7 @@ wallclock).
 PBS post-move → landscape. El routing PBS completo ya no precede a la carga.
 
 **P2.4 · hecho** — `call_landscape_tick`: town → trees → station → industry → companies →
-linkgraph (stub).
+linkgraph (P2.21 cablea el planificador).
 
 **P2.7 · hecho** — `choose_train_track_on_enter` elige ramal con `next_rail_trackdir_yapf`
 en cruces y anota reserva atómica al entrar; `advance_one_tile` lo invoca antes de consumir
@@ -607,6 +609,10 @@ reserva permanece roja con Split/MultiEnter.
 
 **P2.14–P2.16 · hecho** — controlador road con `road_state`/`frame`, tablas drive, bucle
 `while j >= adv_spd` y `RoadVehFindCloseTo` (`blocked_ctr`).
+
+**P2.17–P2.22 · hecho (Bloque 6)** — `cur_real`/`cur_implicit` + `OT_IMPLICIT` al visitar;
+`ProcessOrders`/`UpdateOrderDest`; `GetNextStoppingStation` recursivo; `StationCargoList`
+por `next_hop`+`reserved`; `PrepareUnload`/`Stage`; `OnTick_LinkGraph` en `date_fract==21`.
 
 ---
 

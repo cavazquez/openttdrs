@@ -46,6 +46,9 @@ pub enum VehicleOrder {
         /// Tiempo mínimo de viaje hasta esta orden (ticks desde la anterior).
         #[serde(default)]
         travel_ticks: u32,
+        /// Orden implícita (`OT_IMPLICIT`) insertada al visitar una estación.
+        #[serde(default)]
+        implicit: bool,
     },
     Waypoint {
         waypoint: TileCoord,
@@ -153,30 +156,182 @@ impl VehicleOrder {
             non_stop: OrderNonStop::NonStopDestination,
             wait_ticks: 0,
             travel_ticks: 0,
+            implicit: false,
+        }
+    }
+
+    /// Orden implícita (`OT_IMPLICIT`) al visitar una estación no programada.
+    #[must_use]
+    pub const fn implicit(station: TileCoord) -> Self {
+        Self::Station {
+            station,
+            full_load: false,
+            full_load_any: false,
+            no_load: false,
+            no_unload: false,
+            transfer: false,
+            non_stop: OrderNonStop::NonStopDestination,
+            wait_ticks: 0,
+            travel_ticks: 0,
+            implicit: true,
         }
     }
 
     /// Siguiente estación distinta en la lista circular (`CargoDist` Manual / `next_hop`).
+    ///
+    /// Delega en [`Self::get_next_stopping_station`] (P2.22).
     #[must_use]
     pub fn next_station_hop(
         orders: &[Self],
         current_order: usize,
         from: TileCoord,
     ) -> Option<TileCoord> {
-        if orders.is_empty() {
-            return None;
+        Self::get_next_stopping_station(orders, current_order, from, None)
+            .into_iter()
+            .next()
+    }
+
+    /// `OrderList::GetNextStoppingStation` — recorrido recursivo con vías y condicionales.
+    ///
+    /// Devuelve una o más estaciones candidatas (ambas ramas de un condicional).
+    #[must_use]
+    pub fn get_next_stopping_station(
+        orders: &[Self],
+        cur_implicit: usize,
+        last_station: TileCoord,
+        cargo_load_pct: Option<u8>,
+    ) -> Vec<TileCoord> {
+        let mut out = Vec::new();
+        Self::collect_next_stopping_station(
+            orders,
+            cur_implicit,
+            last_station,
+            cargo_load_pct,
+            None,
+            0,
+            &mut out,
+        );
+        out
+    }
+
+    #[allow(clippy::too_many_lines)]
+    fn collect_next_stopping_station(
+        orders: &[Self],
+        cur_implicit: usize,
+        last_station: TileCoord,
+        cargo_load_pct: Option<u8>,
+        first: Option<usize>,
+        hops: usize,
+        out: &mut Vec<TileCoord>,
+    ) {
+        if orders.is_empty() || hops > orders.len().saturating_mul(2) {
+            return;
         }
         let n = orders.len();
-        let start = current_order.min(n.saturating_sub(1));
-        for offset in 1..=n {
-            let idx = (start + offset) % n;
-            if let Self::Station { station, .. } = orders[idx]
-                && station != from
-            {
-                return Some(station);
+        let mut next = if let Some(idx) = first {
+            idx % n
+        } else {
+            let start = cur_implicit.min(n.saturating_sub(1));
+            (start + 1) % n
+        };
+        let origin = first.unwrap_or(cur_implicit.min(n.saturating_sub(1)));
+
+        loop {
+            // Resolver condicionales (ambas ramas si hace falta).
+            while matches!(orders.get(next), Some(Self::Conditional { .. })) {
+                let Some(Self::Conditional {
+                    condition,
+                    value,
+                    jump_to,
+                }) = orders.get(next).copied()
+                else {
+                    break;
+                };
+                let pct = cargo_load_pct.unwrap_or(0);
+                let take_jump = match condition {
+                    OrderConditionKind::CargoLoadAbove => pct > value,
+                    OrderConditionKind::CargoLoadBelow => pct < value,
+                };
+                // Sin porcentaje conocido: explorar ambas ramas (estimación OpenTTD).
+                if cargo_load_pct.is_none() {
+                    let skip_to = jump_to.min(n.saturating_sub(1));
+                    let advance = (next + 1) % n;
+                    if skip_to != origin {
+                        Self::collect_next_stopping_station(
+                            orders,
+                            cur_implicit,
+                            last_station,
+                            cargo_load_pct,
+                            Some(skip_to),
+                            hops + 1,
+                            out,
+                        );
+                    }
+                    if advance != origin && advance != skip_to {
+                        Self::collect_next_stopping_station(
+                            orders,
+                            cur_implicit,
+                            last_station,
+                            cargo_load_pct,
+                            Some(advance),
+                            hops + 1,
+                            out,
+                        );
+                    }
+                    return;
+                }
+                next = if take_jump {
+                    jump_to.min(n.saturating_sub(1))
+                } else {
+                    (next + 1) % n
+                };
+            }
+
+            let Some(order) = orders.get(next) else {
+                return;
+            };
+            match order {
+                Self::Station {
+                    station,
+                    transfer,
+                    non_stop,
+                    ..
+                } if *station != last_station => {
+                    let _ = (transfer, non_stop);
+                    if !out.contains(station) {
+                        out.push(*station);
+                    }
+                    return;
+                }
+                Self::Station {
+                    station,
+                    transfer: true,
+                    ..
+                } if *station == last_station => {
+                    return;
+                }
+                Self::Depot { .. }
+                | Self::Station { .. }
+                | Self::Waypoint { .. }
+                | Self::Tile(_)
+                | Self::Conditional { .. } => {
+                    next = (next + 1) % n;
+                    if next == origin {
+                        return;
+                    }
+                }
             }
         }
-        None
+    }
+
+    #[must_use]
+    pub const fn is_implicit(self) -> bool {
+        matches!(self, Self::Station { implicit: true, .. })
+    }
+
+    #[must_use]
+    pub const fn is_station_like(self) -> bool {
+        matches!(self, Self::Station { .. })
     }
 
     #[must_use]
@@ -191,6 +346,7 @@ impl VehicleOrder {
             non_stop: OrderNonStop::NonStopDestination,
             wait_ticks: 0,
             travel_ticks: 0,
+            implicit: false,
         }
     }
 
@@ -216,6 +372,7 @@ impl VehicleOrder {
             non_stop,
             wait_ticks: 0,
             travel_ticks: 0,
+            implicit: false,
         }
     }
 
@@ -370,6 +527,7 @@ impl VehicleOrder {
                 non_stop,
                 wait_ticks,
                 travel_ticks,
+                implicit,
             } => Some(Self::Station {
                 station,
                 full_load: !full_load,
@@ -380,6 +538,7 @@ impl VehicleOrder {
                 non_stop,
                 wait_ticks,
                 travel_ticks,
+                implicit,
             }),
             _ => None,
         }
@@ -399,6 +558,7 @@ impl VehicleOrder {
                 non_stop,
                 wait_ticks,
                 travel_ticks,
+                implicit,
             } => Some(Self::Station {
                 station,
                 full_load,
@@ -409,6 +569,7 @@ impl VehicleOrder {
                 non_stop,
                 wait_ticks,
                 travel_ticks,
+                implicit,
             }),
             _ => None,
         }
@@ -501,6 +662,7 @@ impl VehicleOrder {
                 non_stop,
                 wait_ticks,
                 travel_ticks,
+                implicit,
             } => Some(Self::Station {
                 station,
                 full_load,
@@ -511,6 +673,7 @@ impl VehicleOrder {
                 non_stop,
                 wait_ticks: cycle_wait_ticks(wait_ticks),
                 travel_ticks,
+                implicit,
             }),
             Self::Depot {
                 depot,
@@ -543,6 +706,7 @@ impl VehicleOrder {
                 non_stop,
                 wait_ticks,
                 travel_ticks,
+                implicit,
             } => Self::Station {
                 station,
                 full_load,
@@ -553,6 +717,7 @@ impl VehicleOrder {
                 non_stop,
                 wait_ticks,
                 travel_ticks: cycle_travel_ticks(travel_ticks),
+                implicit,
             },
             Self::Waypoint {
                 waypoint,
@@ -600,6 +765,7 @@ impl VehicleOrder {
                 non_stop,
                 wait_ticks: _,
                 travel_ticks,
+                implicit,
             } => Some(Self::Station {
                 station,
                 full_load,
@@ -610,6 +776,7 @@ impl VehicleOrder {
                 non_stop,
                 wait_ticks,
                 travel_ticks,
+                implicit,
             }),
             Self::Depot {
                 depot,
@@ -641,6 +808,7 @@ impl VehicleOrder {
                 non_stop,
                 wait_ticks,
                 travel_ticks: _,
+                implicit,
             } => Self::Station {
                 station,
                 full_load,
@@ -651,6 +819,7 @@ impl VehicleOrder {
                 non_stop,
                 wait_ticks,
                 travel_ticks,
+                implicit,
             },
             Self::Waypoint { waypoint, .. } => Self::Waypoint {
                 waypoint,

@@ -555,8 +555,9 @@ impl GameState {
                     orders::vehicle_orders_from_sav(&v.orders, &sav.station_index, map_w);
                 if !imported_orders.is_empty() {
                     vehicle.set_vehicle_orders(imported_orders);
-                    vehicle.current_order =
-                        v.current_order.min(vehicle.orders.len().saturating_sub(1));
+                    let last = vehicle.orders.len().saturating_sub(1);
+                    vehicle.current_order = v.current_order.min(last);
+                    vehicle.cur_implicit_order_index = v.cur_implicit_order_index.min(last);
                 }
                 if let Some(target) = sav.station_index.get(&u32::from(v.airport_targetairport)) {
                     vehicle.dest = target.pos;
@@ -627,7 +628,9 @@ impl GameState {
                 orders::vehicle_orders_from_sav(&v.orders, &sav.station_index, map_w);
             if !imported_orders.is_empty() {
                 vehicle.set_vehicle_orders(imported_orders);
-                vehicle.current_order = v.current_order.min(vehicle.orders.len().saturating_sub(1));
+                let last = vehicle.orders.len().saturating_sub(1);
+                vehicle.current_order = v.current_order.min(last);
+                vehicle.cur_implicit_order_index = v.cur_implicit_order_index.min(last);
                 // Saves reales suelen traer trenes parados en depósito; arrancar si hay órdenes.
                 vehicle.running = true;
                 reconcile_imported_vehicle_position(&state.map, &mut vehicle);
@@ -724,6 +727,7 @@ mod tests {
                     cargo_type: 9,
                     orders: Vec::new(),
                     current_order: 0,
+                    cur_implicit_order_index: 0,
                     running: true,
                     is_wagon: false,
                     is_helicopter: false,
@@ -747,6 +751,7 @@ mod tests {
                     cargo_type: 0,
                     orders: Vec::new(),
                     current_order: 0,
+                    cur_implicit_order_index: 0,
                     running: true,
                     is_wagon: false,
                     is_helicopter: false,
@@ -770,6 +775,7 @@ mod tests {
                     cargo_type: 5,
                     orders: Vec::new(),
                     current_order: 0,
+                    cur_implicit_order_index: 0,
                     running: true,
                     is_wagon: false,
                     is_helicopter: false,

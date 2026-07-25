@@ -123,8 +123,8 @@ pub use bridge_spec::{
 };
 pub use cargo::{ALL_CARGO_TYPES, CargoStock, CargoType, OrderSettings, TEMPERATE_CARGO_TYPES};
 pub use cargo_packet::{
-    CargoPacket, CargoUnloadAction, StationCargoList, VehicleCargoList, decide_cargo_unload_action,
-    load_unload_speed,
+    CargoPacket, CargoUnloadAction, StationCargoList, VehicleCargoList, choose_cargo_action,
+    decide_cargo_unload_action, load_unload_speed, prepare_unload,
 };
 pub use cheats::CheatsState;
 pub use command::{

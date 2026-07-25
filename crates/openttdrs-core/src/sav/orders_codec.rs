@@ -17,6 +17,8 @@ use super::write::codec::write_str;
 pub(crate) const OT_NOTHING: u8 = 0;
 pub(crate) const OT_GOTO_STATION: u8 = 1;
 pub(crate) const OT_GOTO_DEPOT: u8 = 2;
+/// Orden implícita insertada al visitar estación (`OT_IMPLICIT`).
+pub(crate) const OT_IMPLICIT: u8 = 4;
 pub(crate) const OT_GOTO_WAYPOINT: u8 = 6;
 pub(crate) const OT_CONDITIONAL: u8 = 7;
 
@@ -213,18 +215,30 @@ pub(crate) fn encode_vehicle_order(
             station,
             wait_ticks,
             travel_ticks,
+            implicit,
             ..
         } => {
             let id = station_id(station)?;
-            let (order_type, flags) = station_flags_to_sav(order);
-            (
-                order_type,
-                id,
-                flags,
-                0xFFu8,
-                u16::try_from(wait_ticks).unwrap_or(u16::MAX),
-                u16::try_from(travel_ticks).unwrap_or(u16::MAX),
-            )
+            if implicit {
+                (
+                    OT_IMPLICIT,
+                    id,
+                    0,
+                    0xFFu8,
+                    u16::try_from(wait_ticks).unwrap_or(u16::MAX),
+                    u16::try_from(travel_ticks).unwrap_or(u16::MAX),
+                )
+            } else {
+                let (order_type, flags) = station_flags_to_sav(order);
+                (
+                    order_type,
+                    id,
+                    flags,
+                    0xFFu8,
+                    u16::try_from(wait_ticks).unwrap_or(u16::MAX),
+                    u16::try_from(travel_ticks).unwrap_or(u16::MAX),
+                )
+            }
         }
         VehicleOrder::Waypoint {
             waypoint,
@@ -305,7 +319,7 @@ pub(crate) fn vehicle_orders_from_sav(
     for order in sav_orders {
         let ot = order.order_type & 0x0F;
         match ot {
-            OT_GOTO_STATION => {
+            OT_GOTO_STATION | OT_IMPLICIT => {
                 if let Some(st) = station_for_dest(order.dest) {
                     let parsed = station_flags_from_sav(order.order_type, order.flags);
                     if st.is_waypoint {
@@ -313,6 +327,8 @@ pub(crate) fn vehicle_orders_from_sav(
                             waypoint: st.pos,
                             travel_ticks: u32::from(order.travel_time),
                         });
+                    } else if ot == OT_IMPLICIT {
+                        out.push(VehicleOrder::implicit(st.pos));
                     } else {
                         out.push(VehicleOrder::Station {
                             station: st.pos,
@@ -324,6 +340,7 @@ pub(crate) fn vehicle_orders_from_sav(
                             non_stop: parsed.non_stop,
                             wait_ticks: u32::from(order.wait_time),
                             travel_ticks: u32::from(order.travel_time),
+                            implicit: false,
                         });
                     }
                 }

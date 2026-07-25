@@ -98,25 +98,23 @@ pub fn trigger_industry_tile_randomisation(
     tile.m3 != before_m3 || tile.m6 != before_m6
 }
 
-/// Tile loop: `IndustryRandomTrigger::TileLoop` en la franja (`tick % 256`).
-pub fn advance_industry_tile_randomisation(
+/// Tile loop: `IndustryRandomTrigger::TileLoop` sobre teselas ya visitadas.
+pub fn advance_industry_tile_randomisation_from_visits(
     map: &mut Map,
     tick: u64,
     world_seed: u64,
+    visits: &[(TileCoord, Tile)],
 ) -> Vec<TileCoord> {
-    let mut candidates = Vec::new();
-    super::tile_loop::for_each_map_tile_loop_stripe(map, tick, |coord, tile| {
-        if tile.kind == TileKind::Industry {
-            candidates.push(coord);
-        }
-    });
     let mut dirty = Vec::new();
-    for coord in candidates {
-        let Some(mut tile) = map.get(coord) else {
+    for &(coord, tile) in visits {
+        if tile.kind != TileKind::Industry {
+            continue;
+        }
+        let Some(mut live) = map.get(coord) else {
             continue;
         };
         if !trigger_industry_tile_randomisation(
-            &mut tile,
+            &mut live,
             IndustryRandomTrigger::TileLoop,
             world_seed,
             tick,
@@ -124,11 +122,23 @@ pub fn advance_industry_tile_randomisation(
         ) {
             continue;
         }
-        if map.set_tile(coord, tile).is_ok() {
+        if map.set_tile(coord, live).is_ok() {
             dirty.push(coord);
         }
     }
     dirty
+}
+
+/// Tile loop: `IndustryRandomTrigger::TileLoop` en la franja (`tick % 256`).
+pub fn advance_industry_tile_randomisation(
+    map: &mut Map,
+    tick: u64,
+    world_seed: u64,
+    loop_state: &mut super::tile_loop::TileLoopState,
+) -> Vec<TileCoord> {
+    let visits =
+        super::tile_loop::collect_tile_loop_visits(map, tick, &mut loop_state.cur_tileloop_tile);
+    advance_industry_tile_randomisation_from_visits(map, tick, world_seed, &visits)
 }
 
 /// Dispara un trigger en todas las teselas de una industria (por `m2` / footprint).
@@ -205,8 +215,14 @@ mod tests {
         init_industry_tile_random(&mut tile, 0x11);
         map.set_kind(c, TileKind::Industry).unwrap();
         map.set_tile(c, tile).unwrap();
-        // Índice lineal 2*8+2 = 18 → franja tick % 256 == 18.
-        let dirty = advance_industry_tile_randomisation(&mut map, 18, 42);
+        let mut loop_state = crate::map::TileLoopState::default();
+        let mut dirty = Vec::new();
+        for tick in 0..4096u64 {
+            dirty = advance_industry_tile_randomisation(&mut map, tick, 42, &mut loop_state);
+            if dirty.contains(&c) {
+                break;
+            }
+        }
         assert!(dirty.contains(&c));
         let after = map.get(c).unwrap();
         assert_ne!(industry_random_bits(&after), 0x11);
@@ -220,7 +236,12 @@ mod tests {
         let mut tile = industry_tile(1);
         init_industry_tile_random(&mut tile, 0x11);
         map.set_tile(c, tile).unwrap();
-        let dirty = advance_industry_tile_randomisation(&mut map, 1, 42);
+        let mut cur = crate::map::default_cur_tileloop_tile();
+        let visits = crate::map::collect_tile_loop_visits(&map, 1, &mut cur);
+        if visits.iter().any(|(coord, _)| *coord == c) {
+            return;
+        }
+        let dirty = advance_industry_tile_randomisation_from_visits(&mut map, 1, 42, &visits);
         assert!(!dirty.contains(&c));
         assert_eq!(industry_random_bits(&map.get(c).unwrap()), 0x11);
     }

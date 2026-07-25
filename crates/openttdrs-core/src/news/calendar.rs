@@ -13,9 +13,18 @@ pub fn tick_for_calendar_year(year: u32) -> GameTick {
     GameTick::new(years * crate::economy::TICKS_PER_YEAR)
 }
 
+/// Índice de día de calendario a partir del tick de simulación (compatibilidad).
+///
+/// Preferir [`calendar_day_index_from_state`] cuando se disponga del [`crate::GameState`].
 #[must_use]
 pub fn calendar_day_index(tick: GameTick) -> u64 {
     tick.get() / u64::from(TICKS_PER_DAY)
+}
+
+/// Índice de día de calendario desde el reloj autoritativo del estado.
+#[must_use]
+pub fn calendar_day_index_from_state(state: &crate::GameState) -> u64 {
+    state.calendar.day_index()
 }
 
 #[must_use]
@@ -29,6 +38,12 @@ pub fn calendar_year_day(day_index: u64) -> (u32, u64) {
 #[must_use]
 pub fn format_calendar_date(tick: GameTick) -> String {
     format_calendar_day_index(calendar_day_index(tick))
+}
+
+/// Formatea la fecha de calendario del estado (reloj autoritativo).
+#[must_use]
+pub fn format_calendar_date_from_state(state: &crate::GameState) -> String {
+    format_calendar_day_index(calendar_day_index_from_state(state))
 }
 
 /// Formatea un índice de día de calendario (p. ej. `NewsItem.calendar_day`).

@@ -33,11 +33,13 @@ pub(super) fn migrate_loaded_state(
             20 => migrate_state_v20_to_v21(&mut state),
             21 => migrate_state_v21_to_v22(&mut state),
             22 => migrate_state_v22_to_v23(&mut state),
+            23 => migrate_state_v23_to_v24(&mut state),
             _ => return Err(SaveError::UnsupportedVersion(version)),
         }
         v += 1;
     }
     after_migrate_refresh_newgrf(&mut state);
+    state.ensure_timers_from_tick();
     state.rebuild_station_flows();
     state.sanitize_all_vehicle_orders();
     Ok(state)
@@ -46,6 +48,13 @@ pub(super) fn migrate_loaded_state(
 /// v20: modo `CargoDist` por defecto (`Manual`); `station_flows` se reconstruyen.
 fn migrate_state_v19_to_v20(state: &mut GameState) {
     state.cargo_dist = crate::flow_stat::CargoDistSettings::default();
+}
+
+/// v24: RNG global (`random`, `interactive_random`) y estado LFSR del tile loop.
+fn migrate_state_v23_to_v24(state: &mut GameState) {
+    if state.cur_tileloop_tile == 0 {
+        state.cur_tileloop_tile = crate::map::tile_loop::default_cur_tileloop_tile();
+    }
 }
 
 /// v23: rating de autoridad por compañía; campos de crecimiento urbano.

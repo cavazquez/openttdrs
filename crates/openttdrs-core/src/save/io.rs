@@ -83,6 +83,7 @@ pub fn load_from_str(text: &str) -> Result<GameState, SaveError> {
         let mut state = GameState::load_json(text)?;
         crate::command::normalize_synthetic_rail_crossings(&mut state.map);
         state.map.migrate_legacy_clear_grass_m5();
+        state.ensure_timers_from_tick();
         state.rebuild_station_flows();
         state.sanitize_all_vehicle_orders();
         Ok(state)

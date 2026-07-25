@@ -6,8 +6,9 @@ mod queue;
 mod vehicle_advice;
 
 pub use calendar::{
-    CALENDAR_BASE_YEAR, CALENDAR_DAYS_PER_YEAR, calendar_day_index, calendar_year_day,
-    format_calendar_date, format_calendar_day_index, tick_for_calendar_year,
+    CALENDAR_BASE_YEAR, CALENDAR_DAYS_PER_YEAR, calendar_day_index, calendar_day_index_from_state,
+    calendar_year_day, format_calendar_date, format_calendar_date_from_state,
+    format_calendar_day_index, tick_for_calendar_year,
 };
 pub use formatting::{
     cargo_display_name, format_money, news_display_mode_label, news_type_label, vehicle_kind_label,
@@ -142,6 +143,7 @@ mod tests {
         let mut state = GameState::new(4, 4);
         let day_ticks = |days: u64| GameTick::new(u64::from(crate::economy::TICKS_PER_DAY) * days);
         state.tick = day_ticks(900);
+        state.sync_timers_from_tick();
         add_news_item(
             &mut state,
             NewsItem::new(

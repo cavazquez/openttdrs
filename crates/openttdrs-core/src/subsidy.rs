@@ -129,14 +129,14 @@ pub fn tick_subsidies(state: &mut GameState) {
         .subsidies
         .retain(|s| s.awarded || s.is_offer_active(tick));
 
-    if tick > 0 && tick.is_multiple_of(TICKS_PER_MONTH) {
+    if state.runtime.economy_triggers.new_month {
         let _ = try_create_monthly_subsidy(state);
     }
 }
 
 fn try_create_monthly_subsidy(state: &mut GameState) -> bool {
     for _ in 0..1000 {
-        let chance = state.cargo_rng.next() % 16;
+        let chance = state.random.next() % 16;
         let created = if chance < 2 {
             try_create_passenger_subsidy(state)
         } else if chance == 2 {
@@ -157,12 +157,11 @@ fn try_create_passenger_subsidy(state: &mut GameState) -> bool {
     if state.towns.len() < 2 {
         return false;
     }
-    let src_idx = (state.cargo_rng.next() as usize) % state.towns.len();
+    let src_idx = (state.random.next() as usize) % state.towns.len();
     let dst_idx = if state.towns.len() == 1 {
         return false;
     } else {
-        (src_idx + 1 + (state.cargo_rng.next() as usize) % (state.towns.len() - 1))
-            % state.towns.len()
+        (src_idx + 1 + (state.random.next() as usize) % (state.towns.len() - 1)) % state.towns.len()
     };
     let src = &state.towns[src_idx];
     let dst = &state.towns[dst_idx];
@@ -190,7 +189,7 @@ fn try_create_town_cargo_subsidy(state: &mut GameState) -> bool {
     if state.towns.is_empty() {
         return false;
     }
-    let src_idx = (state.cargo_rng.next() as usize) % state.towns.len();
+    let src_idx = (state.random.next() as usize) % state.towns.len();
     let src = &state.towns[src_idx];
     if src.population < SUBSIDY_CARGO_MIN_POPULATION {
         return false;
@@ -199,12 +198,12 @@ fn try_create_town_cargo_subsidy(state: &mut GameState) -> bool {
     if town_percent_transported(src, cargo) > SUBSIDY_MAX_PCT_TRANSPORTED {
         return false;
     }
-    let dest_is_town = state.cargo_rng.next() & 1 == 0;
+    let dest_is_town = state.random.next() & 1 == 0;
     if dest_is_town {
         if state.towns.len() < 2 {
             return false;
         }
-        let dst_idx = (state.cargo_rng.next() as usize) % state.towns.len();
+        let dst_idx = (state.random.next() as usize) % state.towns.len();
         let dst = &state.towns[dst_idx];
         if dst.pos == src.pos || dst.population < SUBSIDY_CARGO_MIN_POPULATION {
             return false;
@@ -228,7 +227,7 @@ fn try_create_industry_subsidy(state: &mut GameState) -> bool {
     if state.industries.is_empty() {
         return false;
     }
-    let idx = (state.cargo_rng.next() as usize) % state.industries.len();
+    let idx = (state.random.next() as usize) % state.industries.len();
     let industry = &state.industries[idx];
     let cargo = industry.output_cargo();
     if cargo.is_town_cargo() {
@@ -248,12 +247,12 @@ fn find_industry_destination_for_cargo(
     source: TileCoord,
     source_town: Option<TileCoord>,
 ) -> bool {
-    let dest_is_town = state.cargo_rng.next() & 1 == 0;
+    let dest_is_town = state.random.next() & 1 == 0;
     if dest_is_town {
         if state.towns.is_empty() {
             return false;
         }
-        let dst_idx = (state.cargo_rng.next() as usize) % state.towns.len();
+        let dst_idx = (state.random.next() as usize) % state.towns.len();
         let dst = &state.towns[dst_idx];
         if dst.population < SUBSIDY_CARGO_MIN_POPULATION {
             return false;
@@ -286,7 +285,7 @@ fn find_industry_destination_for_cargo(
     if stations.is_empty() {
         return false;
     }
-    let dest = stations[(state.cargo_rng.next() as usize) % stations.len()];
+    let dest = stations[(state.random.next() as usize) % stations.len()];
     push_subsidy(state, cargo, source, dest, source_town, None)
 }
 
@@ -496,8 +495,8 @@ mod tests {
     #[test]
     fn monthly_tick_can_create_subsidy() {
         let mut state = setup_subsidy_route();
-        state.cargo_rng = crate::linkgraph_parity::Randomizer::new(7);
-        state.tick = crate::GameTick::new(TICKS_PER_MONTH);
+        state.random = crate::linkgraph_parity::Randomizer::new(7);
+        state.runtime.economy_triggers.new_month = true;
         tick_subsidies(&mut state);
         assert!(!state.subsidies.is_empty());
     }

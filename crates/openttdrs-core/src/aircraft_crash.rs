@@ -130,7 +130,7 @@ pub fn maybe_crash_after_brake_tick(
     let engine_id = v.engine_id.unwrap_or(0);
     let is_jet = crate::engine::aircraft_is_jet(engine_id);
     let no_jetcrash = state.cheats.no_jetcrash_active();
-    let roll = roll_crash_die(&mut state.cargo_rng);
+    let roll = roll_crash_die(&mut state.random);
     if !should_crash_short_strip_jet(def.fta_flags.short_strip(), is_jet, no_jetcrash, roll) {
         return false;
     }
@@ -198,14 +198,14 @@ mod tests {
         s.vehicles[0].airport_prev_pos = 11;
         s.vehicles[0].pos = hangar;
         // Forzar tirada mortal: seed que produzca next() & mask == 0.
-        s.cargo_rng.set_seed(0);
+        s.random.set_seed(0);
         // Probar varios seeds hasta tirada ≤ prob (determinista en test).
         let mut crashed = false;
         for seed in 0..10_000u32 {
-            s.cargo_rng.set_seed(seed);
-            let roll = roll_crash_die(&mut s.cargo_rng);
+            s.random.set_seed(seed);
+            let roll = roll_crash_die(&mut s.random);
             if should_crash_short_strip_jet(true, true, false, roll) {
-                s.cargo_rng.set_seed(seed);
+                s.random.set_seed(seed);
                 assert!(maybe_crash_after_brake_tick(&mut s, id, 11, true));
                 crashed = true;
                 break;
@@ -251,7 +251,7 @@ mod tests {
         s.vehicles[0].airport_fta_active = true;
         s.vehicles[0].airport_pos = 12;
         s.vehicles[0].kind = VehicleKind::Aircraft;
-        s.cargo_rng.set_seed(0);
+        s.random.set_seed(0);
         assert!(!maybe_crash_after_brake_tick(&mut s, id, 11, true));
         assert!(s.vehicles.iter().any(|v| v.id == id));
     }

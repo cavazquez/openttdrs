@@ -88,6 +88,7 @@ impl TickPhaseTimings {
 pub(crate) fn step(state: &mut GameState) {
     state.ensure_companies();
     state.tick.advance();
+    state.advance_game_timers();
     let t = state.tick.get();
 
     phase_economy_and_world(state, t);
@@ -112,6 +113,7 @@ pub fn step_profiled(state: &mut GameState) -> TickPhaseTimings {
 
     state.ensure_companies();
     state.tick.advance();
+    state.advance_game_timers();
     let t = state.tick.get();
 
     let p0 = Instant::now();
@@ -155,13 +157,21 @@ fn nanos(start: Instant) -> u64 {
 
 /// Fase 1: economía mensual, producción de industrias/ciudades, envejecimiento de carga, subsidios.
 fn phase_economy_and_world(state: &mut GameState, t: u64) {
-    economy::process_monthly_economy(state, t);
-    economy::rollover_vehicle_profit_year(state, t);
+    if state.runtime.economy_triggers.new_month {
+        economy::process_monthly_economy(state);
+    }
+    if state.runtime.calendar_triggers.new_year {
+        economy::rollover_vehicle_profit_year(state);
+    }
     crate::ai::tick_ai_companies(state, t);
     crate::gs::tick_gs(state);
     economy::produce_industries(state, t);
-    economy::maybe_change_industry_production(state, t);
-    crate::vehicle::process_vehicle_economy_day(state, t);
+    if state.runtime.calendar_triggers.new_day {
+        economy::maybe_change_industry_production(state);
+    }
+    // Barridos escalonados: cada tick procesa 1/74 de la flota (P2.5).
+    crate::vehicle::process_vehicle_calendar_day(state);
+    crate::vehicle::process_vehicle_economy_day(state);
     economy::produce_town_demand(state, t);
     economy::grow_towns(state, t);
     economy::age_vehicle_cargo(state);
@@ -171,12 +181,14 @@ fn phase_economy_and_world(state: &mut GameState, t: u64) {
         station::update_station_ratings(
             &mut state.stations,
             state.order.selectgoods,
-            &mut state.cargo_rng,
+            &mut state.random,
         );
     }
 
     crate::subsidy::tick_subsidies(state);
     state.runtime.landscape_tile_dirty.clear();
+    state.runtime.tile_loop_visited =
+        crate::map::collect_tile_loop_visits(&state.map, t, &mut state.cur_tileloop_tile);
     crate::map::tree_tile_loop::tick_tree_tile_loop(state);
     crate::disaster::tick_disasters(state);
 }
@@ -222,9 +234,11 @@ fn phase_routing_and_signals(state: &mut GameState) {
 
 /// Fase 3: animación de teselas de industrias y aeropuertos.
 fn phase_tile_animation(state: &mut GameState, t: u64) {
+    let visits = std::mem::take(&mut state.runtime.tile_loop_visited);
     state.runtime.industry_tile_dirty = crate::map::step_industry_tiles_with_seed(
         &mut state.map,
         t,
+        &visits,
         state.world_seed,
         &state.industries,
     );

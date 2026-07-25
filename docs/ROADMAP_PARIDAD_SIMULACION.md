@@ -72,7 +72,7 @@ abrir el issue.
 | 5 | [P1.2](#p12--reparto-de-carga-entre-estaciones-competidoras--hecho) Reparto entre estaciones | P1 | L | hecho | Cierra la mitad que le faltaba a P1.1: el rating ya reparte la producción |
 | 6 | [P1.4](#p14--prod_level-y-cierre-de-industrias--hecho) Industrias dinámicas + [P1.3](#p13--producción-industrial-por-spec--hecho) rates | P1 | XL | hecho | Sin esto el mundo económico es estático y las rutas no caducan |
 | 7 | [P3.1](#tabla-p3) `GenerateTowns` / `GenerateIndustries` | P3 | XL | | Un mapa nuevo nace vacío: bloquea comparar una partida completa |
-| 8 | [P2.1](#tabla-p2) Relojes calendario/economía | P2 | XL | | Habilita los barridos escalonados de los que todo depende |
+| 8 | [P2.1](#tabla-p2) Relojes calendario/economía | P2 | XL | hecho | Habilita los barridos escalonados de los que todo depende |
 
 **P1 completo** (22/22). P3.1 se adelanta al resto de P3 porque sin mundo generado no hay
 escenario de comparación. Los P0 puntuales también están cerrados (P0.7 reclasificado a P2).
@@ -193,7 +193,7 @@ con la clasificación de segmentos de señal y está reclasificada a P2 (detalle
 ## 5. P1 — Reglas de comportamiento
 
 Veintidós entradas, **todas cerradas** (P1.1 —con P0.3— a P1.22).
-
+1
 ### P1.1 — `UpdateStationRating` completo · hecho
 
 - **Problema** — el rating era `255 − días de espera`. No influían la velocidad del vehículo, la
@@ -395,7 +395,7 @@ Veintidós entradas, **todas cerradas** (P1.1 —con P0.3— a P1.22).
   copia al vehículo al comprar, y `age_vehicle_calendar_day` duplica `reliability_spd_dec` en los
   años tras `max_age`. Tests `reliability_decays_by_engine_spd_dec` y
   `reliability_spd_dec_doubles_after_max_age_year_boundary`.
-- **Pendiente** — barrido diario de economía separado del calendario si se porta [P2.5](#tabla-p2).
+- **Hecho (P2.5)** — barrido diario de economía escalonado con `economy_timer.date_fract`.
 
 ### P1.13 — Autorenew · hecho
 
@@ -551,12 +551,12 @@ tick contra OpenTTD seguirá divergiendo aunque las fórmulas individuales sean 
 
 | ID | Tema | Problema (port) | Original | Solución | Coste |
 |----|------|-----------------|----------|----------|-------|
-| **P2.1** | Relojes separados | Un único `GameTick`; el calendario se deriva como `tick / 74` (`tick.rs:16-31`) | Tres relojes independientes —calendario, economía y tick— con `date_fract` 0..73 (`timer_game_economy.cpp:131`, `timer_game_calendar.cpp:117`) | Introducir los tres timers con su `date_fract`; es la base de todos los barridos escalonados | XL |
+| **P2.1** | Relojes separados | Un único `GameTick`; el calendario se deriva como `tick / 74` (`tick.rs:16-31`) | Tres relojes independientes —calendario, economía y tick— con `date_fract` 0..73 (`timer_game_economy.cpp:131`, `timer_game_calendar.cpp:117`) | Introducir los tres timers con su `date_fract`; es la base de todos los barridos escalonados | XL · **hecho** |
 | **P2.2** | Orden del tick | Routing y PBS completos antes de la carga (`sim_step/mod.rs:88-105`) | `AnimateAnimatedTiles` → timers → `RunTileLoop` → `CallVehicleTicks` (carga y luego movimiento en la misma pasada) → `CallLandscapeTick` (`openttd.cpp:1261-1276`, `vehicle.cpp:954-976`) | Reordenar `sim_step` a la secuencia original; el PBS debe resolverse dentro del movimiento, no antes | XL |
-| **P2.3** | RNG global | Solo `cargo_rng`; averías, subsidios, industrias y desastres usan hashes del tick (`game_state/mod.rs:429`) | `_random` global consumido por toda la simulación y persistido en el save, con `_interactive_random` aparte (`random_func.cpp:36-48`, `misc_sl.cpp:96`) | Un `Randomizer` de partida en `GameState`, consumido en los mismos puntos y guardado; el algoritmo ya está portado y verificado | XL |
+| **P2.3** | RNG global | · hecho | `_random` global consumido por toda la simulación y persistido en el save, con `_interactive_random` aparte (`random_func.cpp:36-48`, `misc_sl.cpp:96`) | `random` + `interactive_random` en `GameState`; alias serde `cargo_rng` → `random`; consumido en rating/subsidios/averías/desastres | XL |
 | **P2.4** | `CallLandscapeTick` | Subsistemas repartidos sin orden fijo, sin hook de compañías ni de linkgraph (`sim_step/mod.rs:157-175`) | Orden town → trees → station → industry → companies → linkgraph (`landscape.cpp:1717-1729`) | Agrupar los `OnTick_*` en una función con ese orden | L |
-| **P2.5** | Barridos diarios de vehículos | Edad derivada de `build_tick`, averías cada tick (`vehicle/reliability.rs:72-77`) | `RunVehicleCalendarDayProc` y `RunEconomyVehicleDayProc` recorren 1/74 de la flota por día, con costes y averías cada 8 días (`vehicle.cpp:907-951`) | Portar el barrido escalonado; requiere P2.1 | M |
-| **P2.6** | `RunTileLoop` | Barrido lineal `tick % 256` (`map/tile_loop.rs:17-33`) | LFSR de Galois con feedback según tamaño de mapa y estado en `_cur_tileloop_tile` (`landscape.cpp:798-835`) | Portar el LFSR; sin él las teselas visitadas por tick no coinciden nunca | M |
+| **P2.5** | Barridos diarios de vehículos | · hecho | `RunVehicleCalendarDayProc` y `RunEconomyVehicleDayProc` recorren 1/74 de la flota por día, con costes y averías cada 8 días (`vehicle.cpp:907-951`) | Barrido escalonado por `date_fract`; calendar day envejece, economy day averías; cada tick en `sim_step` | M · **hecho** |
+| **P2.6** | `RunTileLoop` | · hecho | LFSR de Galois con feedback según tamaño de mapa y estado en `_cur_tileloop_tile` (`landscape.cpp:798-835`) | LFSR portado; una pasada por tick; tesela 0 especial cada 256 ticks; estado persistido | M |
 | **P2.7** | `TrainController` | El tren consume un `path` precalculado; no se elige vía en el cruce (`vehicle/movement.rs:537-545`) | `ChooseTrainTrack` decide el ramal con YAPF y reserva de forma atómica al entrar en la tesela; los vagones siguen `_connecting_track` (`train_cmd.cpp:3289-3487`, `2727-2888`) | Portar el controlador con la elección de vía integrada en el movimiento | XL |
 | **P2.8** | Liberación de reservas | El mapa se reescribe desde `reserved_steps` (`rail_pbs/map_sync.rs:16-99`) | `FreeTrainTrackReservation` recorre la reserva tesela a tesela y pone en rojo las señales PBS al liberarlas (`train_cmd.cpp:2419-2477`) | Portar el walk de liberación y el flip de señal | L |
 | **P2.9** | Costes de YAPF | A* con tesela 1, señal roja 100, cruce de reserva 80; sin caché ni look-ahead (`pathfinder/yapf.rs:24-194`) | Segmentos con caché y penalizaciones calibradas: tesela 100, esquina 71, primera roja 1000, cruce de reserva 300, coste de estación y plataforma (`yapf_costrail.hpp:59-615`) | Portar la escala de costes y la segmentación; hoy las elecciones de ramal divergen en redes densas | XL |
@@ -573,6 +573,15 @@ tick contra OpenTTD seguirá divergiendo aunque las fórmulas individuales sean 
 | **P2.20** | Cola de estación | Cola FIFO por tipo de carga (`cargo_packet/types.rs:74-76`) | `StationCargoList` es un `MultiMap` indexado por `next_hop`, con cantidad reservada (`cargopacket.h:513-608`) | Reindexar la cola por destino | L |
 | **P2.21** | Planificador del linkgraph | El MCF portado se alimenta de estadísticas de viajes y se reconstruye al mes (`cargodist/legacy/link_graph.rs`) | `OnTick_LinkGraph` lanza y recoge jobs asíncronos sobre una copia del grafo de estaciones cuando `date_fract == 21`, con `recalc_interval` (`linkgraphschedule.cpp:202-216`) | Construir el grafo desde estaciones y planificar jobs; el MCF ya está portado en `cargodist/parity/` | XL |
 | **P2.22** | Siguiente parada del flujo | Siguiente estación distinta de la lista (`vehicle/order.rs:134-152`) | `GetNextStoppingStation` recorre la lista de forma recursiva con vías y condicionales (`order_cmd.cpp:363-409`) | Portar la resolución recursiva; depende de los flags de P1.20 | M |
+
+**P2.1 · hecho** — `timer/mod.rs`: `CalendarTimer` y `EconomyTimer` con `date_fract` 0..73,
+`elapsed_tick()` → `TimerTriggers` (día/mes/año), persistidos en `GameState` con migración serde
+desde `tick`. `sim_step` avanza ambos relojes tras `tick.advance()`; economía mensual e intereses
+usan `economy_timer`, noticias y edad de vehículo usan `calendar`. Por defecto alineados (sin
+wallclock).
+
+**P2.5 · hecho** — `process_vehicle_calendar_day` / `process_vehicle_economy_day` recorren
+`index % DAY_TICKS == date_fract` cada tick (`vehicle/reliability.rs`); cadencia OpenTTD 1/74.
 
 ---
 

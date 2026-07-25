@@ -150,7 +150,7 @@ mod economy_history_tests {
 
     #[test]
     fn monthly_close_records_per_company_history() {
-        use crate::economy::TICKS_PER_MONTH;
+        use crate::timer::tick_at_end_of_day;
         use crate::{GameState, GameTick};
 
         let mut s = GameState::new(12, 12);
@@ -158,7 +158,8 @@ mod economy_history_tests {
         // en el mismo tick mensual (después del cierre) y dejarlo sin muestra.
         s.ensure_rival_ais();
         assert_eq!(s.companies.len(), 3);
-        s.tick = GameTick::new(TICKS_PER_MONTH.saturating_sub(1));
+        s.tick = GameTick::new(tick_at_end_of_day(30));
+        s.sync_timers_from_tick();
         s.step();
         assert!(
             s.companies
@@ -194,9 +195,9 @@ mod economy_history_tests {
 
     #[test]
     fn monthly_close_records_town_and_industry_history() {
-        use crate::economy::TICKS_PER_MONTH;
         use crate::industry::IndustryKind;
         use crate::map::TileCoord;
+        use crate::timer::tick_at_end_of_day;
         use crate::{GameState, GameTick, Industry, Town};
 
         let mut s = GameState::new(12, 12);
@@ -214,7 +215,8 @@ mod economy_history_tests {
         industry.transported_total = 2;
         industry.stock = 6;
         s.industries.push(industry);
-        s.tick = GameTick::new(TICKS_PER_MONTH.saturating_sub(1));
+        s.tick = GameTick::new(tick_at_end_of_day(30));
+        s.sync_timers_from_tick();
         s.step();
         assert_eq!(s.towns[0].history.samples.len(), 1);
         assert_eq!(s.towns[0].history.samples[0].population, 50);
@@ -287,6 +289,12 @@ pub struct GameState {
     // ───── Campos persistidos ─────
     pub map: Map,
     pub tick: GameTick,
+    /// Reloj de calendario (edad de vehículos, noticias, año mostrado).
+    #[serde(default)]
+    pub calendar: crate::timer::CalendarTimer,
+    /// Reloj de economía (intereses, inflación, subsidios, producción).
+    #[serde(default)]
+    pub economy_timer: crate::timer::EconomyTimer,
     pub industries: Vec<Industry>,
     pub vehicles: Vec<Vehicle>,
     pub stations: Vec<Station>,
@@ -429,9 +437,15 @@ pub struct GameState {
     /// GameScript-lite: story / goals / league (#43).
     #[serde(default)]
     pub gs: crate::gs::GsState,
-    /// RNG de partida para `GetVia` (`Random` de `OpenTTD`) — persistido desde v21.
-    #[serde(default = "default_cargo_rng")]
-    pub cargo_rng: crate::linkgraph_parity::Randomizer,
+    /// RNG global de simulación (`_random` en `OpenTTD`): rating, subsidios, averías, etc.
+    #[serde(default = "default_random", alias = "cargo_rng")]
+    pub random: crate::linkgraph_parity::Randomizer,
+    /// RNG interactivo / UI (`_interactive_random` en `OpenTTD`); no afecta la sim determinista.
+    #[serde(default = "default_interactive_random")]
+    pub interactive_random: crate::linkgraph_parity::Randomizer,
+    /// Índice LFSR del tile loop (`_cur_tileloop_tile` en `OpenTTD`).
+    #[serde(default = "crate::map::tile_loop::default_cur_tileloop_tile")]
+    pub cur_tileloop_tile: u32,
     /// Inflación compuesta, recesiones y escala global de `max_loan` (`_economy`).
     #[serde(default)]
     pub global_economy: crate::economy::GlobalEconomy,
@@ -485,8 +499,12 @@ const fn default_next_sign_id() -> u32 {
     1
 }
 
-fn default_cargo_rng() -> crate::linkgraph_parity::Randomizer {
+fn default_random() -> crate::linkgraph_parity::Randomizer {
     crate::linkgraph_parity::Randomizer::new(1)
+}
+
+fn default_interactive_random() -> crate::linkgraph_parity::Randomizer {
+    crate::linkgraph_parity::Randomizer::new(1u32.wrapping_mul(0x0123_4567))
 }
 
 impl GameState {
@@ -495,6 +513,8 @@ impl GameState {
         let mut state = Self {
             map: Map::new_flat(map_width, map_height, 1),
             tick: GameTick::default(),
+            calendar: crate::timer::CalendarTimer::from_tick(0),
+            economy_timer: crate::timer::EconomyTimer::from_tick(0),
             industries: Vec::new(),
             vehicles: Vec::new(),
             stations: Vec::new(),
@@ -548,7 +568,9 @@ impl GameState {
             link_graph: crate::link_graph::LinkGraphStats::default(),
             cargo_dist: crate::flow_stat::CargoDistSettings::default(),
             gs: crate::gs::GsState::default(),
-            cargo_rng: crate::linkgraph_parity::Randomizer::new(1),
+            random: crate::linkgraph_parity::Randomizer::new(1),
+            interactive_random: default_interactive_random(),
+            cur_tileloop_tile: crate::map::tile_loop::default_cur_tileloop_tile(),
             global_economy: crate::economy::GlobalEconomy::new(),
             no_servicing_if_no_breakdowns: true,
             vehicle_breakdowns: default_vehicle_breakdowns(),
@@ -564,7 +586,7 @@ impl GameState {
     /// Inicializa economía global (inflación previa a 1950, `max_loan` escalado).
     pub fn finish_new_game_startup(&mut self) {
         let start_year = crate::news::CALENDAR_BASE_YEAR;
-        self.global_economy.startup(&mut self.cargo_rng, start_year);
+        self.global_economy.startup(&mut self.random, start_year);
         self.sync_scaled_max_loan();
     }
 
@@ -583,6 +605,8 @@ impl GameState {
         let mut state = Self {
             map,
             tick: GameTick::default(),
+            calendar: crate::timer::CalendarTimer::from_tick(0),
+            economy_timer: crate::timer::EconomyTimer::from_tick(0),
             industries: Vec::new(),
             vehicles: Vec::new(),
             stations: Vec::new(),
@@ -636,7 +660,9 @@ impl GameState {
             link_graph: crate::link_graph::LinkGraphStats::default(),
             cargo_dist: crate::flow_stat::CargoDistSettings::default(),
             gs: crate::gs::GsState::default(),
-            cargo_rng: crate::linkgraph_parity::Randomizer::new(1),
+            random: crate::linkgraph_parity::Randomizer::new(1),
+            interactive_random: default_interactive_random(),
+            cur_tileloop_tile: crate::map::tile_loop::default_cur_tileloop_tile(),
             global_economy: crate::economy::GlobalEconomy::new(),
             no_servicing_if_no_breakdowns: true,
             vehicle_breakdowns: default_vehicle_breakdowns(),
@@ -654,10 +680,33 @@ impl GameState {
     /// Llama este método después de deserializar desde JSON para inicializar
     /// correctamente los campos de [`SimulationRuntime`].
     pub fn hydrate_runtime(&mut self) {
+        self.ensure_timers_from_tick();
+        if self.cur_tileloop_tile == 0 {
+            self.cur_tileloop_tile = crate::map::tile_loop::default_cur_tileloop_tile();
+        }
         self.runtime = SimulationRuntime::new();
         self.rebuild_station_flows();
         self.sanitize_all_vehicle_orders();
         self.sync_scaled_max_loan();
+    }
+
+    /// Deriva los relojes desde `tick` si el save no los tenía (migración serde).
+    pub fn ensure_timers_from_tick(&mut self) {
+        if self.calendar.year == 0 && self.calendar.month == 0 {
+            self.sync_timers_from_tick();
+        }
+    }
+
+    /// Fuerza la alineación de relojes con el tick actual (tests / cheats).
+    pub fn sync_timers_from_tick(&mut self) {
+        self.calendar = crate::timer::CalendarTimer::from_tick(self.tick.get());
+        self.economy_timer = crate::timer::EconomyTimer::from_tick(self.tick.get());
+    }
+
+    /// Avanza los relojes de calendario y economía un tick de simulación.
+    pub(crate) fn advance_game_timers(&mut self) {
+        self.runtime.calendar_triggers = self.calendar.elapsed_tick();
+        self.runtime.economy_triggers = self.economy_timer.elapsed_tick();
     }
 
     /// Sanitiza `current_order` en todos los vehículos para prevenir indexación fuera de límites.

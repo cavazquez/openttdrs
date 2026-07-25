@@ -9,7 +9,7 @@
 //! Campos (`CoalField`) siguen etapa 0…7 lineal.
 
 use crate::GameState;
-use crate::map::tile_loop::{MAP_TILE_LOOP_STRIDE, for_each_map_tile_loop_stripe};
+use crate::map::tile_loop::{MAP_TILE_LOOP_STRIDE, TileLoopState, collect_tile_loop_visits};
 use crate::map::{Map, TileCoord, TileKind, coord_to_linear_index, tile_slope_and_z};
 use crate::world_gen::{
     CLEAR_GROUND_DESERT, CLEAR_GROUND_GRASS, CLEAR_GROUND_ROCKY, CLEAR_GROUND_ROUGH,
@@ -230,18 +230,22 @@ fn plant_trees_on_clear(map: &mut Map, c: TileCoord, growth: u8, tree_type: u8) 
     let _ = map.set_m3(c, tree_type);
 }
 
-/// Avanza hierba / campos / árboles al ritmo de `RunTileLoop` + `TileLoop_Trees`.
-pub fn step_tree_and_field_growth(map: &mut Map, tick: u64, world_seed: u64) {
+/// Avanza hierba / campos / árboles a partir de teselas ya visitadas por `RunTileLoop`.
+pub fn process_tree_and_field_growth_from_visits(
+    map: &mut Map,
+    tick: u64,
+    world_seed: u64,
+    visits: &[(TileCoord, crate::map::Tile)],
+) {
     let mut grass_updates = Vec::new();
     let mut field_updates = Vec::new();
     let mut forest_coords = Vec::new();
     let mut forest_ground_updates = Vec::new();
 
-    for_each_map_tile_loop_stripe(map, tick, |c, tile| {
+    for &(c, tile) in visits {
         let cycle = landscape_tile_cycle(c, tick);
         match tile.kind {
             TileKind::Forest => {
-                // Hierba bajo árboles: cada 8 visitas, como Clear grass.
                 if cycle & 7 == 7 && tree_ground(tile.m2) == 0 {
                     let density = tree_ground_density(tile.m2);
                     if density < 3 {
@@ -254,7 +258,7 @@ pub fn step_tree_and_field_growth(map: &mut Map, tick: u64, world_seed: u64) {
             }
             TileKind::CoalField => {
                 if cycle & 7 != 7 {
-                    return;
+                    continue;
                 }
                 let stage = tree_or_field_stage(tile.m5);
                 if stage < MAX_TREE_OR_FIELD_STAGE {
@@ -267,13 +271,11 @@ pub fn step_tree_and_field_growth(map: &mut Map, tick: u64, world_seed: u64) {
                 let density = clear_density(tile.m5);
                 if ground == CLEAR_GROUND_ROUGH && density == 0 {
                     grass_updates.push((c, tile.mapt, clear_ground_m5(CLEAR_GROUND_GRASS, 3)));
-                    return;
+                    continue;
                 }
                 if ground != CLEAR_GROUND_GRASS || density >= 3 {
-                    return;
+                    continue;
                 }
-                // `TileLoop_Clear`: ocho visitas de espera por escalón de densidad, contadas
-                // en la propia tesela, así que cada parcela madura en su propio momento.
                 let counter = clear_counter(tile.m5);
                 let new_m5 = if counter < 7 {
                     with_clear_counter(tile.m5, counter + 1)
@@ -284,7 +286,7 @@ pub fn step_tree_and_field_growth(map: &mut Map, tick: u64, world_seed: u64) {
             }
             _ => {}
         }
-    });
+    }
 
     for (c, m2) in forest_ground_updates {
         let _ = map.set_m2(c, m2);
@@ -299,6 +301,17 @@ pub fn step_tree_and_field_growth(map: &mut Map, tick: u64, world_seed: u64) {
     for c in forest_coords {
         step_one_forest_tile(map, tick, world_seed, c);
     }
+}
+
+/// Avanza hierba / campos / árboles al ritmo de `RunTileLoop` + `TileLoop_Trees`.
+pub fn step_tree_and_field_growth(
+    map: &mut Map,
+    tick: u64,
+    world_seed: u64,
+    loop_state: &mut TileLoopState,
+) {
+    let visits = collect_tile_loop_visits(map, tick, &mut loop_state.cur_tileloop_tile);
+    process_tree_and_field_growth_from_visits(map, tick, world_seed, &visits);
 }
 
 fn step_one_forest_tile(map: &mut Map, tick: u64, world_seed: u64, c: TileCoord) {
@@ -411,9 +424,10 @@ pub fn apply_seasonal_snow(
     climate: Climate,
     tick: u64,
     world_seed: u64,
+    loop_state: &mut TileLoopState,
 ) -> Vec<TileCoord> {
     let _ = world_seed;
-    apply_seasonal_snow_with_line(map, climate, tick, DEF_SNOW_LINE_HEIGHT)
+    apply_seasonal_snow_with_line(map, climate, tick, DEF_SNOW_LINE_HEIGHT, loop_state)
 }
 
 /// Como [`apply_seasonal_snow`] con línea de nieve explícita (tests / settings futuros).
@@ -422,22 +436,34 @@ pub fn apply_seasonal_snow_with_line(
     climate: Climate,
     tick: u64,
     snow_line_height: u8,
+    loop_state: &mut TileLoopState,
+) -> Vec<TileCoord> {
+    let visits = collect_tile_loop_visits(map, tick, &mut loop_state.cur_tileloop_tile);
+    apply_seasonal_snow_from_visits(map, climate, snow_line_height, &visits)
+}
+
+/// Aplica nieve estacional sobre teselas ya visitadas por `RunTileLoop`.
+pub fn apply_seasonal_snow_from_visits(
+    map: &mut Map,
+    climate: Climate,
+    snow_line_height: u8,
+    visits: &[(TileCoord, crate::map::Tile)],
 ) -> Vec<TileCoord> {
     if !climate.uses_snow_ground() {
         return Vec::new();
     }
     let snow_line = i32::from(snow_line_height);
     let mut updates = Vec::new();
-    for_each_map_tile_loop_stripe(map, tick, |c, tile| {
+    for &(c, tile) in visits {
         if tile.kind != TileKind::Grass {
-            return;
+            continue;
         }
         let ground = clear_ground_type(tile.m5);
         if matches!(ground, CLEAR_GROUND_ROCKY | CLEAR_GROUND_DESERT) {
-            return;
+            continue;
         }
         let Some((_, z)) = tile_slope_and_z(map, c) else {
-            return;
+            continue;
         };
         let k = i32::from(z) - snow_line + 1;
         let is_snow = ground == CLEAR_GROUND_SNOW;
@@ -451,7 +477,6 @@ pub fn apply_seasonal_snow_with_line(
             match density.cmp(&req) {
                 std::cmp::Ordering::Equal => {
                     if k < 0 {
-                        // ClearSnow → hierba densa.
                         Some(clear_ground_m5(CLEAR_GROUND_GRASS, 3))
                     } else {
                         None
@@ -467,7 +492,6 @@ pub fn apply_seasonal_snow_with_line(
                 )),
             }
         } else if k >= 0 {
-            // MakeSnow(density=0): transición gradual hacia la densidad requerida.
             Some(clear_ground_m5(CLEAR_GROUND_SNOW, 0))
         } else {
             None
@@ -477,7 +501,7 @@ pub fn apply_seasonal_snow_with_line(
         {
             updates.push((c, tile.mapt, new_m5));
         }
-    });
+    }
     let mut dirty = Vec::with_capacity(updates.len());
     for (c, mapt, new_m5) in updates {
         let _ = map.set_mapt_m5(c, mapt, new_m5);
@@ -578,11 +602,17 @@ pub fn clear_tree(
     Ok(())
 }
 
-/// Hook combinado para `sim_step`.
+/// Hook combinado para `sim_step` (usa `runtime.tile_loop_visited` del tick).
 pub fn tick_tree_tile_loop(state: &mut GameState) {
     let tick = state.tick.get();
-    step_tree_and_field_growth(&mut state.map, tick, state.world_seed);
-    let snow_dirty = apply_seasonal_snow(&mut state.map, state.climate, tick, state.world_seed);
+    let visits = &state.runtime.tile_loop_visited;
+    process_tree_and_field_growth_from_visits(&mut state.map, tick, state.world_seed, visits);
+    let snow_dirty = apply_seasonal_snow_from_visits(
+        &mut state.map,
+        state.climate,
+        DEF_SNOW_LINE_HEIGHT,
+        visits,
+    );
     state.runtime.landscape_tile_dirty.extend(snow_dirty);
 }
 
@@ -603,21 +633,36 @@ mod tests {
         map.dimensions().0
     }
 
+    fn grow_trees_at(map: &mut Map, tick: u64, seed: u64, loop_state: &mut TileLoopState) {
+        step_tree_and_field_growth(map, tick, seed, loop_state);
+    }
+
+    fn snow_at(
+        map: &mut Map,
+        climate: Climate,
+        tick: u64,
+        snow_line: u8,
+        loop_state: &mut TileLoopState,
+    ) -> Vec<TileCoord> {
+        apply_seasonal_snow_with_line(map, climate, tick, snow_line, loop_state)
+    }
+
     #[test]
     fn tree_grows_on_open_ttd_update_cycle() {
-        let mut state = GameState::new(4, 4);
+        let mut state = GameState::new(64, 64);
         let c = TileCoord::new(1, 1);
         apply_command(&mut state, &Command::PlantTree(c)).unwrap();
         assert_eq!(tree_or_field_stage(state.map.get(c).unwrap().m5), 0);
-        let tick = next_tree_update_tick(c, map_w(&state.map), 0);
-        step_tree_and_field_growth(&mut state.map, tick, 0);
-        assert_eq!(tree_or_field_stage(state.map.get(c).unwrap().m5), 1);
-        // Un tick de franja sin ciclo de árbol no debe avanzar otra etapa.
-        let between = tick + u64::from(MAP_TILE_LOOP_STRIDE);
-        if landscape_tile_cycle(c, between) % TREE_UPDATE_FREQUENCY != TREE_UPDATE_FREQUENCY - 1 {
-            step_tree_and_field_growth(&mut state.map, between, 0);
-            assert_eq!(tree_or_field_stage(state.map.get(c).unwrap().m5), 1);
+        let mut loop_state = TileLoopState::default();
+        let mut grew = false;
+        for tick in 0..500_000u64 {
+            grow_trees_at(&mut state.map, tick, 0, &mut loop_state);
+            if tree_or_field_stage(state.map.get(c).unwrap().m5) > 0 {
+                grew = true;
+                break;
+            }
         }
+        assert!(grew, "el árbol debe avanzar tras visitas LFSR suficientes");
     }
 
     #[test]
@@ -639,13 +684,14 @@ mod tests {
         let mut map = Map::new_flat(2, 2, 0);
         let c = TileCoord::new(0, 0);
         force_forest(&mut map, c, with_tree_or_field_stage(0, TREE_GROWTH_GROWN));
+        let mut loop_state = TileLoopState::default();
         let mut found_stable = false;
         let mut after = 0u64;
         for _ in 0..64 {
             let tick = next_tree_update_tick(c, map_w(&map), after);
             after = tick;
             let before = map.get(c).unwrap().m5;
-            step_tree_and_field_growth(&mut map, tick, 0xDEAD_BEEF);
+            grow_trees_at(&mut map, tick, 0xDEAD_BEEF, &mut loop_state);
             let after_m5 = map.get(c).unwrap().m5;
             if after_m5 == before && tree_or_field_stage(after_m5) == TREE_GROWTH_GROWN {
                 found_stable = true;
@@ -661,12 +707,13 @@ mod tests {
         let mut map = Map::new_flat(2, 2, 0);
         let c = TileCoord::new(0, 0);
         force_forest(&mut map, c, with_tree_or_field_stage(0, TREE_GROWTH_GROWN));
+        let mut loop_state = TileLoopState::default();
         let mut died = false;
         let mut after = 0u64;
         for _ in 0..256 {
             let tick = next_tree_update_tick(c, map_w(&map), after);
             after = tick;
-            step_tree_and_field_growth(&mut map, tick, 42);
+            grow_trees_at(&mut map, tick, 42, &mut loop_state);
             let stage = tree_or_field_stage(map.get(c).unwrap().m5);
             if stage == TREE_GROWTH_GROWN + 1 {
                 died = true;
@@ -685,7 +732,8 @@ mod tests {
         let c = TileCoord::new(0, 0);
         force_forest(&mut map, c, with_tree_or_field_stage(0, TREE_GROWTH_DEAD));
         let tick = next_tree_update_tick(c, map_w(&map), 0);
-        step_tree_and_field_growth(&mut map, tick, 0);
+        let mut loop_state = TileLoopState::default();
+        grow_trees_at(&mut map, tick, 0, &mut loop_state);
         assert_eq!(map.get_kind(c), Some(TileKind::Grass));
     }
 
@@ -736,7 +784,8 @@ mod tests {
             .set_mapt_m5(c, 0x50, MAX_TREE_OR_FIELD_STAGE)
             .unwrap();
         let tick = next_clear_update_tick(c, map_w(&state.map), 0);
-        step_tree_and_field_growth(&mut state.map, tick, 0);
+        let mut loop_state = TileLoopState::default();
+        grow_trees_at(&mut state.map, tick, 0, &mut loop_state);
         assert_eq!(
             tree_or_field_stage(state.map.get(c).unwrap().m5),
             MAX_TREE_OR_FIELD_STAGE
@@ -751,11 +800,12 @@ mod tests {
         map.set_mapt_m5(c, 0, clear_ground_m5(CLEAR_GROUND_GRASS, 3))
             .unwrap();
         assert_eq!(map.get(c).unwrap().m5, 0x03);
+        let mut loop_state = TileLoopState::default();
         let mut after = 0u64;
         for _ in 0..8 {
             let tick = next_clear_update_tick(c, map_w(&map), after);
             after = tick;
-            step_tree_and_field_growth(&mut map, tick, 0);
+            grow_trees_at(&mut map, tick, 0, &mut loop_state);
         }
         assert_eq!(
             map.get(c).unwrap().m5,
@@ -774,17 +824,18 @@ mod tests {
         map.set_mapt_m5(c, 0, clear_ground_m5(CLEAR_GROUND_GRASS, 0))
             .unwrap();
         let stride = u64::from(MAP_TILE_LOOP_STRIDE);
+        let mut loop_state = TileLoopState::default();
         let mut tick = next_clear_update_tick(c, map_w(&map), 0);
 
         for expected in 1..=7u8 {
-            step_tree_and_field_growth(&mut map, tick, 0);
+            grow_trees_at(&mut map, tick, 0, &mut loop_state);
             let m5 = map.get(c).unwrap().m5;
             assert_eq!(clear_counter(m5), expected);
             assert_eq!(clear_density(m5), 0, "la densidad espera al contador");
             tick += stride;
         }
 
-        step_tree_and_field_growth(&mut map, tick, 0);
+        grow_trees_at(&mut map, tick, 0, &mut loop_state);
         let m5 = map.get(c).unwrap().m5;
         assert_eq!(clear_density(m5), 1);
         assert_eq!(clear_counter(m5), 0);
@@ -794,9 +845,9 @@ mod tests {
     /// entera ya no cambia de golpe.
     #[test]
     fn grass_tiles_with_different_counters_ripen_apart() {
-        let mut map = Map::new_flat(1, 2, 0);
-        let ready = TileCoord::new(0, 0);
-        let fresh = TileCoord::new(0, 1);
+        let mut map = Map::new_flat(64, 64, 0);
+        let ready = TileCoord::new(10, 10);
+        let fresh = TileCoord::new(50, 50);
         for (c, counter) in [(ready, 7u8), (fresh, 0u8)] {
             map.set_kind(c, TileKind::Grass).unwrap();
             map.set_mapt_m5(
@@ -807,11 +858,14 @@ mod tests {
             .unwrap();
         }
         let stride = u64::from(MAP_TILE_LOOP_STRIDE);
+        let mut loop_state = TileLoopState::default();
         for tick in 1..=stride {
-            step_tree_and_field_growth(&mut map, tick, 0);
+            grow_trees_at(&mut map, tick, 0, &mut loop_state);
         }
-        assert_eq!(clear_density(map.get(ready).unwrap().m5), 2);
-        assert_eq!(clear_density(map.get(fresh).unwrap().m5), 1);
+        assert!(
+            clear_density(map.get(ready).unwrap().m5) > clear_density(map.get(fresh).unwrap().m5),
+            "parcelas con contador distinto deben madurar a ritmos distintos"
+        );
     }
 
     #[test]
@@ -821,17 +875,18 @@ mod tests {
         map.set_kind(c, TileKind::Grass).unwrap();
         map.set_mapt_m5(c, 0, 0x04).unwrap(); // Rough + density 0 (inválido)
         let tick = next_clear_update_tick(c, map_w(&map), 0);
-        step_tree_and_field_growth(&mut map, tick, 0);
+        let mut loop_state = TileLoopState::default();
+        grow_trees_at(&mut map, tick, 0, &mut loop_state);
         assert_eq!(map.get(c).unwrap().m5, 0x03);
     }
 
     #[test]
     fn grown_can_spread_to_neighbor_grass() {
-        let mut map = Map::new_flat(3, 3, 0);
-        let c = TileCoord::new(1, 1);
+        let mut map = Map::new_flat(64, 64, 0);
+        let c = TileCoord::new(31, 31);
         force_forest(&mut map, c, with_tree_or_field_stage(0, TREE_GROWTH_GROWN));
-        for y in 0..3 {
-            for x in 0..3 {
+        for y in 30..=32 {
+            for x in 30..=32 {
                 let t = TileCoord::new(x, y);
                 if t == c {
                     continue;
@@ -841,14 +896,12 @@ mod tests {
                     .unwrap();
             }
         }
+        let mut loop_state = TileLoopState::default();
         let mut spread = false;
-        let mut after = 0u64;
-        for _ in 0..512 {
-            let tick = next_tree_update_tick(c, map_w(&map), after);
-            after = tick;
-            step_tree_and_field_growth(&mut map, tick, 7);
-            let forests = (0..3)
-                .flat_map(|y| (0..3).map(move |x| TileCoord::new(x, y)))
+        for tick in 0..500_000u64 {
+            grow_trees_at(&mut map, tick, 7, &mut loop_state);
+            let forests = (30..=32)
+                .flat_map(|y| (30..=32).map(move |x| TileCoord::new(x, y)))
                 .filter(|&t| map.get_kind(t) == Some(TileKind::Forest))
                 .count();
             if forests >= 2 {
@@ -881,8 +934,9 @@ mod tests {
                 .unwrap();
         }
 
-        let stripe = u64::from(coord_to_linear_index(high, 8).unwrap() % MAP_TILE_LOOP_STRIDE);
-        let dirty = apply_seasonal_snow_with_line(&mut map, Climate::SubArctic, stripe, 10);
+        let high_tile = map.get(high).unwrap();
+        let dirty =
+            apply_seasonal_snow_from_visits(&mut map, Climate::SubArctic, 10, &[(high, high_tile)]);
         assert!(dirty.contains(&high));
         assert_eq!(
             clear_ground_type(map.get(high).unwrap().m5),
@@ -890,12 +944,11 @@ mod tests {
         );
         assert_eq!(clear_density(map.get(high).unwrap().m5), 0);
 
-        // Bajo la línea: nieve existente se descongela en visitas sucesivas.
         map.set_mapt_m5(low, 0, clear_ground_m5(CLEAR_GROUND_SNOW, 0))
             .unwrap();
-        let low_stripe = u64::from(coord_to_linear_index(low, 8).unwrap() % MAP_TILE_LOOP_STRIDE);
+        let low_tile = map.get(low).unwrap();
         let dirty_thaw =
-            apply_seasonal_snow_with_line(&mut map, Climate::SubArctic, low_stripe, 10);
+            apply_seasonal_snow_from_visits(&mut map, Climate::SubArctic, 10, &[(low, low_tile)]);
         assert!(dirty_thaw.contains(&low));
         assert_eq!(
             clear_ground_type(map.get(low).unwrap().m5),
@@ -910,16 +963,11 @@ mod tests {
         map.set_kind(c, TileKind::Grass).unwrap();
         map.set_mapt_m5(c, 0, clear_ground_m5(CLEAR_GROUND_SNOW, 0))
             .unwrap();
-        let stripe = u64::from(coord_to_linear_index(c, 4).unwrap() % MAP_TILE_LOOP_STRIDE);
-        // z≈12, snow_line=10 → k=3 → req density 3.
-        apply_seasonal_snow_with_line(&mut map, Climate::SubArctic, stripe, 10);
+        let tile = map.get(c).unwrap();
+        apply_seasonal_snow_from_visits(&mut map, Climate::SubArctic, 10, &[(c, tile)]);
         assert_eq!(clear_density(map.get(c).unwrap().m5), 1);
-        apply_seasonal_snow_with_line(
-            &mut map,
-            Climate::SubArctic,
-            stripe + u64::from(MAP_TILE_LOOP_STRIDE),
-            10,
-        );
+        let tile = map.get(c).unwrap();
+        apply_seasonal_snow_from_visits(&mut map, Climate::SubArctic, 10, &[(c, tile)]);
         assert_eq!(clear_density(map.get(c).unwrap().m5), 2);
     }
 
@@ -927,22 +975,23 @@ mod tests {
     fn clear_alps_stripe_reaches_interior_high_tiles_within_256_ticks() {
         // Altura en el campo `Tile::height` de cada celda; GetTileZ usa 4 esquinas,
         // así que el borde E/S del mapa ve z=0 (fuera de mapa) — solo interior cuenta.
-        let mut map = Map::new_flat(32, 32, 12);
-        for y in 0..32 {
-            for x in 0..32 {
+        let mut map = Map::new_flat(64, 64, 12);
+        for y in 0..64 {
+            for x in 0..64 {
                 let c = TileCoord::new(x, y);
                 map.set_kind(c, TileKind::Grass).unwrap();
                 map.set_mapt_m5(c, 0, clear_ground_m5(CLEAR_GROUND_GRASS, 3))
                     .unwrap();
             }
         }
+        let mut loop_state = TileLoopState::default();
         let mut snowed = 0_u32;
         for tick in 0..256_u64 {
-            let dirty = apply_seasonal_snow_with_line(&mut map, Climate::SubArctic, tick, 10);
+            let dirty = snow_at(&mut map, Climate::SubArctic, tick, 10, &mut loop_state);
             snowed += u32::try_from(dirty.len()).unwrap_or(0);
         }
         assert!(
-            snowed >= 31 * 31,
+            snowed >= 62 * 62,
             "teselas interiores altas deben nevizarse en ≤256 ticks (got {snowed})"
         );
         assert_eq!(

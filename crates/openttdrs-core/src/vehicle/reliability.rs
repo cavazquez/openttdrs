@@ -168,11 +168,13 @@ impl super::model::Vehicle {
     }
 
     /// `AgeVehicle`: duplica `reliability_spd_dec` en ciertos años tras `max_age`.
-    pub fn age_vehicle_calendar_day(&mut self, current_tick: u64) {
+    pub fn age_vehicle_calendar_day(&mut self, calendar_day: u64) {
         if !self.is_primary_for_aging() {
             return;
         }
-        let age_days = self.vehicle_age_days(current_tick);
+        let build_day =
+            crate::news::calendar_day_index(crate::tick::GameTick::new(self.build_tick));
+        let age_days = calendar_day.saturating_sub(build_day);
         let past_max = age_days.saturating_sub(u64::from(self.max_age_days));
         for i in 0_u32..=4_u32 {
             let boundary = u64::from(i) * u64::from(DAYS_PER_VEHICLE_YEAR);
@@ -270,18 +272,40 @@ impl super::model::Vehicle {
     }
 }
 
-/// Procesa el barrido diario de fiabilidad/avería para vehículos primarios en marcha.
-pub(crate) fn process_vehicle_economy_day(state: &mut crate::GameState, tick: u64) {
-    if tick == 0 || !tick.is_multiple_of(u64::from(crate::economy::TICKS_PER_DAY)) {
-        return;
-    }
-    for vehicle in &mut state.vehicles {
-        vehicle.sim_tick = tick;
-        if vehicle.prev_unit.is_some() {
-            continue;
+/// Procesa el barrido diario de calendario: envejecimiento de fiabilidad.
+///
+/// Cada tick solo procesa vehículos con `index % DAY_TICKS == calendar.date_fract`
+/// (`RunVehicleCalendarDayProc`, `vehicle.cpp:937-947`).
+pub(crate) fn process_vehicle_calendar_day(state: &mut crate::GameState) {
+    let calendar_day = state.calendar.day_index();
+    let tick = state.tick.get();
+    let fract = usize::from(state.calendar.date_fract);
+    let day_ticks = usize::from(crate::timer::DAY_TICKS);
+    let mut i = fract;
+    while i < state.vehicles.len() {
+        state.vehicles[i].sim_tick = tick;
+        if state.vehicles[i].prev_unit.is_none() {
+            state.vehicles[i].age_vehicle_calendar_day(calendar_day);
         }
-        vehicle.age_vehicle_calendar_day(tick);
-        vehicle.check_vehicle_breakdown(&mut state.cargo_rng);
+        i = i.saturating_add(day_ticks);
+    }
+}
+
+/// Procesa el barrido diario de economía: riesgo de avería.
+///
+/// Cada tick solo procesa `index % DAY_TICKS == economy_timer.date_fract`
+/// (`RunEconomyVehicleDayProc`, `vehicle.cpp:954-960`).
+pub(crate) fn process_vehicle_economy_day(state: &mut crate::GameState) {
+    let tick = state.tick.get();
+    let fract = usize::from(state.economy_timer.date_fract);
+    let day_ticks = usize::from(crate::timer::DAY_TICKS);
+    let mut i = fract;
+    while i < state.vehicles.len() {
+        state.vehicles[i].sim_tick = tick;
+        if state.vehicles[i].prev_unit.is_none() {
+            state.vehicles[i].check_vehicle_breakdown(&mut state.random);
+        }
+        i = i.saturating_add(day_ticks);
     }
 }
 
@@ -317,10 +341,11 @@ pub(crate) fn check_road_vehicles_need_service(state: &mut crate::GameState) {
     use crate::vehicle::VehicleKind;
     use crate::vehicle::order::VehicleOrder;
 
-    let tick = state.tick.get();
-    if tick == 0 || !tick.is_multiple_of(u64::from(crate::economy::TICKS_PER_DAY)) {
+    if !state.runtime.calendar_triggers.new_day {
         return;
     }
+
+    let tick = state.tick.get();
 
     let candidates: Vec<usize> = state
         .vehicles
@@ -420,8 +445,8 @@ mod tests {
         v.reliability_spd_dec = 80;
         v.max_age_days = DAYS_PER_VEHICLE_YEAR;
         v.build_tick = 0;
-        let tick = u64::from(DAYS_PER_VEHICLE_YEAR) * u64::from(crate::economy::TICKS_PER_DAY);
-        v.age_vehicle_calendar_day(tick);
+        let calendar_day = u64::from(DAYS_PER_VEHICLE_YEAR);
+        v.age_vehicle_calendar_day(calendar_day);
         assert_eq!(v.reliability_spd_dec, 160);
     }
 
@@ -458,6 +483,37 @@ mod tests {
     }
 
     #[test]
+    fn staggered_day_sweep_processes_one_slot_per_tick() {
+        let mut state = crate::GameState::new(8, 8);
+        for i in 0..crate::timer::DAY_TICKS {
+            let mut v = Vehicle::new(
+                u32::from(i) + 1,
+                VehicleKind::Bus,
+                TileCoord::new(1, 1),
+                TileCoord::new(2, 1),
+            );
+            v.reliability = 5_000;
+            v.reliability_spd_dec = 80;
+            v.running = true;
+            v.cur_speed = 40;
+            state.vehicles.push(v);
+        }
+        let before: Vec<u16> = state.vehicles.iter().map(|v| v.reliability).collect();
+        state.calendar.date_fract = 3;
+        state.economy_timer.date_fract = 3;
+        process_vehicle_calendar_day(&mut state);
+        process_vehicle_economy_day(&mut state);
+        let changed: Vec<usize> = state
+            .vehicles
+            .iter()
+            .enumerate()
+            .filter(|(i, v)| v.reliability != before[*i])
+            .map(|(i, _)| i)
+            .collect();
+        assert_eq!(changed, vec![3]);
+    }
+
+    #[test]
     fn road_vehicle_inserts_depot_order_when_service_due() {
         use crate::vehicle::order::VehicleOrder;
         use crate::{Command, GameState, apply_command};
@@ -480,6 +536,8 @@ mod tests {
         v.orders = vec![VehicleOrder::station(TileCoord::new(8, 4))];
         state.vehicles.push(v);
         state.tick = crate::GameTick::new(u64::from(crate::economy::TICKS_PER_DAY));
+        state.sync_timers_from_tick();
+        state.runtime.calendar_triggers.new_day = true;
         state.vehicles[0].sim_tick = state.tick.get();
         check_road_vehicles_need_service(&mut state);
         assert!(matches!(

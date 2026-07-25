@@ -8,7 +8,7 @@
 //! Torres: gfx idle ↔ animado (0↔1, 47↔48, 79↔88) + frames `m3hi`.
 //! Pozos: gfx 29 → 30–32 (+ vuelta a 29). Fuente Toyland: 148–155.
 
-use super::tile_loop::for_each_map_tile_loop_stripe;
+use super::tile_loop::TileLoopState;
 use super::{Map, Tile, TileCoord, TileKind};
 
 /// `GFX_COAL_MINE_TOWER_NOT_ANIMATED`
@@ -348,15 +348,29 @@ fn commit_industry_updates(
     dirty
 }
 
-/// Eventos `TileLoop_Industry` (franja cada 256 ticks).
-pub fn advance_industry_tile_loop_events(map: &mut Map, tick: u64) -> Vec<TileCoord> {
-    let mut candidates = Vec::new();
-    for_each_map_tile_loop_stripe(map, tick, |coord, tile| {
-        if tile.kind == TileKind::Industry {
-            candidates.push(coord);
-        }
-    });
+/// Eventos `TileLoop_Industry` sobre teselas ya visitadas por `RunTileLoop`.
+pub fn advance_industry_tile_loop_events_from_visits(
+    map: &mut Map,
+    tick: u64,
+    visits: &[(TileCoord, Tile)],
+) -> Vec<TileCoord> {
+    let candidates: Vec<TileCoord> = visits
+        .iter()
+        .filter(|(_, tile)| tile.kind == TileKind::Industry)
+        .map(|(coord, _)| *coord)
+        .collect();
     commit_industry_updates(map, &candidates, tick, apply_tile_loop_industry)
+}
+
+/// Eventos `TileLoop_Industry` (franja cada 256 ticks).
+pub fn advance_industry_tile_loop_events(
+    map: &mut Map,
+    tick: u64,
+    loop_state: &mut super::tile_loop::TileLoopState,
+) -> Vec<TileCoord> {
+    let visits =
+        super::tile_loop::collect_tile_loop_visits(map, tick, &mut loop_state.cur_tileloop_tile);
+    advance_industry_tile_loop_events_from_visits(map, tick, &visits)
 }
 
 /// `AnimateTile_Industry` sobre footprints conocidos (cada tick).
@@ -369,8 +383,12 @@ pub fn advance_industry_animated_tiles(
 }
 
 /// Compat tests / herramientas: TileLoop (franja) + Animate sobre industrias del mapa.
-pub fn advance_industry_tile_animations(map: &mut Map, tick: u64) -> Vec<TileCoord> {
-    let mut dirty = advance_industry_tile_loop_events(map, tick);
+pub fn advance_industry_tile_animations(
+    map: &mut Map,
+    tick: u64,
+    loop_state: &mut TileLoopState,
+) -> Vec<TileCoord> {
+    let mut dirty = advance_industry_tile_loop_events(map, tick, loop_state);
     let (w, h) = map.dimensions();
     let mut coords = Vec::new();
     for y in 0..h {
@@ -420,9 +438,10 @@ mod tests {
         .unwrap();
         let mut promoted = false;
         // TileLoop: tesela 0 solo en ticks múltiplo de 256.
+        let mut loop_state = TileLoopState::default();
         for visit in 0..=32u64 {
             let tick = visit * 256;
-            advance_industry_tile_loop_events(&mut map, tick);
+            advance_industry_tile_loop_events(&mut map, tick, &mut loop_state);
             if industry_gfx(&map.get(TileCoord::new(0, 0)).unwrap()) == GFX_COAL_MINE_TOWER_ANIMATED
             {
                 promoted = true;
@@ -440,12 +459,13 @@ mod tests {
             industry_tile(GFX_COAL_MINE_TOWER_ANIMATED, 0x80, 0),
         )
         .unwrap();
+        let mut loop_state = TileLoopState::default();
         let mut saw_change = false;
         let mut prev = map.get(TileCoord::new(0, 0)).unwrap().m3hi & 3;
         // Ventana activa (`counter & 0x7FF >= 0x400`) sin demote a gfx 0.
         // Con sim a ~37 Hz, `OTTD_ANIM_SCALE = 1` → counter ≈ tick (activo desde tick 1024).
         for tick in 1024..=1100 {
-            advance_industry_tile_animations(&mut map, tick);
+            advance_industry_tile_animations(&mut map, tick, &mut loop_state);
             let tile = map.get(TileCoord::new(0, 0)).unwrap();
             assert_eq!(industry_gfx(&tile), GFX_COAL_MINE_TOWER_ANIMATED);
             let frame = tile.m3hi & 3;
@@ -465,9 +485,10 @@ mod tests {
             industry_tile(GFX_OILWELL_NOT_ANIMATED, 0x80, 0),
         )
         .unwrap();
+        let mut loop_state = TileLoopState::default();
         let mut promoted = false;
         for visit in 0..=64u64 {
-            advance_industry_tile_loop_events(&mut map, visit * 256);
+            advance_industry_tile_loop_events(&mut map, visit * 256, &mut loop_state);
             if industry_gfx(&map.get(TileCoord::new(0, 0)).unwrap()) >= GFX_OILWELL_ANIMATED_1 {
                 promoted = true;
                 break;
@@ -484,9 +505,10 @@ mod tests {
             industry_tile(GFX_OILWELL_ANIMATED_3, 0x80, 3),
         )
         .unwrap();
+        let mut loop_state = TileLoopState::default();
         let mut reverted = false;
         for tick in 0..=4096 {
-            advance_industry_tile_animations(&mut map, tick);
+            advance_industry_tile_animations(&mut map, tick, &mut loop_state);
             if industry_gfx(&map.get(TileCoord::new(0, 0)).unwrap()) == GFX_OILWELL_NOT_ANIMATED {
                 reverted = true;
                 break;
@@ -503,9 +525,10 @@ mod tests {
             industry_tile(GFX_PLASTIC_FOUNTAIN_ANIMATED_1, 0x80, 0),
         )
         .unwrap();
+        let mut loop_state = TileLoopState::default();
         let mut changed = false;
         for tick in 0..=64 {
-            advance_industry_tile_animations(&mut map, tick);
+            advance_industry_tile_animations(&mut map, tick, &mut loop_state);
             if industry_gfx(&map.get(TileCoord::new(0, 0)).unwrap())
                 > GFX_PLASTIC_FOUNTAIN_ANIMATED_1
             {
@@ -524,8 +547,9 @@ mod tests {
             industry_tile(GFX_OILWELL_ANIMATED_1, 0x80, 0),
         )
         .unwrap();
+        let mut loop_state = TileLoopState::default();
         for tick in 1..=24 {
-            advance_industry_tile_animations(&mut map, tick);
+            advance_industry_tile_animations(&mut map, tick, &mut loop_state);
         }
         let tile = map.get(TileCoord::new(0, 0)).unwrap();
         assert!(
@@ -542,7 +566,8 @@ mod tests {
             industry_tile(GFX_COAL_MINE_TOWER_ANIMATED, 0x01, 0),
         )
         .unwrap();
-        advance_industry_tile_animations(&mut map, 8);
+        let mut loop_state = TileLoopState::default();
+        advance_industry_tile_animations(&mut map, 8, &mut loop_state);
         assert_eq!(map.get(TileCoord::new(0, 0)).unwrap().m3hi, 0);
     }
 
@@ -551,7 +576,8 @@ mod tests {
         let mut map = Map::new_flat(1, 1, 0);
         map.set_tile(TileCoord::new(0, 0), industry_tile(10, 0x80, 0))
             .unwrap();
-        advance_industry_tile_animations(&mut map, 4);
+        let mut loop_state = TileLoopState::default();
+        advance_industry_tile_animations(&mut map, 4, &mut loop_state);
         assert_eq!(map.get(TileCoord::new(0, 0)).unwrap().m3hi, 1);
     }
 }

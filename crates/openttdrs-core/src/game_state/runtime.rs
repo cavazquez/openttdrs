@@ -1,5 +1,5 @@
 use crate::command::Command;
-use crate::map::TileCoord;
+use crate::map::{Tile, TileCoord};
 use std::collections::{HashSet, VecDeque};
 
 /// Campos efímeros de la simulación (no persistidos; reconstruidos tras carga).
@@ -24,6 +24,9 @@ pub struct SimulationRuntime {
     /// Teselas de paisaje (nieve estacional, etc.) mutadas este tick → remap cliente.
     pub landscape_tile_dirty: Vec<TileCoord>,
 
+    /// Teselas visitadas por `RunTileLoop` este tick (una pasada LFSR; no persistido).
+    pub tile_loop_visited: Vec<(TileCoord, Tile)>,
+
     /// Teselas con señales cuyo estado verde/rojo cambió este tick (remap cliente).
     pub signal_tile_dirty: Vec<TileCoord>,
 
@@ -44,6 +47,12 @@ pub struct SimulationRuntime {
 
     /// Último día de calendario en que se ejecutó purga de noticias antiguas.
     pub news_last_purge_day: u64,
+
+    /// Bordes del reloj de calendario en el tick actual.
+    pub calendar_triggers: crate::timer::TimerTriggers,
+
+    /// Bordes del reloj de economía en el tick actual.
+    pub economy_triggers: crate::timer::TimerTriggers,
 
     /// Tracer de paridad opcional (coste cero si es `None`; no se persiste).
     pub parity: Option<crate::parity::ParityTracer>,
@@ -72,6 +81,7 @@ impl SimulationRuntime {
             pending_sim_events: crate::sim_events::SimEventQueue::new(),
             industry_tile_dirty: Vec::new(),
             landscape_tile_dirty: Vec::new(),
+            tile_loop_visited: Vec::new(),
             signal_tile_dirty: Vec::new(),
             signal_globset: HashSet::new(),
             reservation_tile_dirty: Vec::new(),
@@ -79,6 +89,8 @@ impl SimulationRuntime {
             pending_news_events: Vec::new(),
             news_advice_sent: HashSet::new(),
             news_last_purge_day: 0,
+            calendar_triggers: crate::timer::TimerTriggers::default(),
+            economy_triggers: crate::timer::TimerTriggers::default(),
             parity: None,
             shore_newgrf_sprites: Vec::new(),
             catenary_newgrf_sprites: Vec::new(),
@@ -93,6 +105,7 @@ impl SimulationRuntime {
         self.pending_sim_events.discard_all();
         self.industry_tile_dirty.clear();
         self.landscape_tile_dirty.clear();
+        self.tile_loop_visited.clear();
         self.signal_tile_dirty.clear();
         self.signal_globset.clear();
         self.reservation_tile_dirty.clear();

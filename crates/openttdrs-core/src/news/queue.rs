@@ -9,7 +9,9 @@ use crate::map::TileCoord;
 use crate::tick::GameTick;
 use crate::vehicle::VehicleKind;
 
-use super::calendar::{calendar_day_index, format_calendar_day_index};
+use super::calendar::{
+    calendar_day_index, calendar_day_index_from_state, format_calendar_day_index,
+};
 use super::formatting::{cargo_display_name, format_money, vehicle_kind_label};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -506,7 +508,7 @@ pub fn push_autoreplace_failed_news(
 
 /// Elimina noticias más antiguas que [`NEWS_MAX_AGE_DAYS`].
 pub fn purge_old_news_items(state: &mut crate::GameState) {
-    let current_day = calendar_day_index(state.tick);
+    let current_day = calendar_day_index_from_state(state);
     state
         .news
         .items
@@ -515,7 +517,7 @@ pub fn purge_old_news_items(state: &mut crate::GameState) {
 
 /// Purga mensual (cada 30 días de calendario) al estilo `RemoveOldNewsItems`.
 pub fn maybe_purge_old_news(state: &mut crate::GameState) {
-    let day = calendar_day_index(state.tick);
+    let day = calendar_day_index_from_state(state);
     if day == state.runtime.news_last_purge_day {
         return;
     }

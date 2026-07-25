@@ -1,10 +1,7 @@
 use crate::{GameState, TileCoord, economy, town};
 
-pub(super) fn process_monthly_economy(state: &mut GameState, tick: u64) {
-    if tick == 0 || !tick.is_multiple_of(economy::TICKS_PER_MONTH) {
-        return;
-    }
-    apply_monthly_inflation_and_fluctuations(state, tick);
+pub(super) fn process_monthly_economy(state: &mut GameState) {
+    apply_monthly_inflation_and_fluctuations(state);
     apply_monthly_interest_and_bankruptcy(state);
     // Industrias ya marcadas con prod_level = 0 el mes pasado: fuera del mapa.
     let closed = crate::industry::remove_closed_industries(&mut state.industries, &mut state.map);
@@ -74,7 +71,7 @@ pub(super) fn process_monthly_economy(state: &mut GameState, tick: u64) {
         &state.industries,
         state.climate,
         state.world_seed,
-        &mut state.cargo_rng,
+        &mut state.random,
         company_count,
     );
     let active_rating_company = state.active_company;
@@ -94,11 +91,8 @@ pub(super) fn process_monthly_economy(state: &mut GameState, tick: u64) {
     }
 }
 
-fn apply_monthly_inflation_and_fluctuations(state: &mut GameState, tick: u64) {
-    let calendar_year = {
-        let day = tick / u64::from(economy::TICKS_PER_DAY);
-        crate::news::calendar_year_day(day).0
-    };
+fn apply_monthly_inflation_and_fluctuations(state: &mut GameState) {
+    let calendar_year = state.calendar.year;
     if !state
         .global_economy
         .add_monthly_inflation(calendar_year, true)
@@ -107,15 +101,14 @@ fn apply_monthly_inflation_and_fluctuations(state: &mut GameState, tick: u64) {
     }
     if let Some(event) = state
         .global_economy
-        .handle_monthly_fluctuations(&mut state.cargo_rng)
+        .handle_monthly_fluctuations(&mut state.random)
     {
         crate::news::push_economy_fluctuation_news(state, event);
     }
 }
 
 fn apply_monthly_interest_and_bankruptcy(state: &mut GameState) {
-    let day = state.tick.get() / u64::from(economy::TICKS_PER_DAY);
-    let month = economy::calendar_month_index(day);
+    let month = state.economy_timer.month;
     let rate = i64::from(state.global_economy.interest_rate);
     let maintenance = economy::monthly_station_maintenance_fee(&state.global_economy);
     for i in 0..state.companies.len() {
@@ -178,22 +171,19 @@ fn apply_monthly_interest_and_bankruptcy(state: &mut GameState) {
 ///
 /// En mapas grandes `OpenTTD` escala el número de cambios; aquí bastará con uno por día,
 /// que es lo que tocaba en el mapa 256×256 clásico.
-pub(super) fn maybe_change_industry_production(state: &mut GameState, tick: u64) {
-    if tick == 0 || !tick.is_multiple_of(u64::from(economy::TICKS_PER_DAY)) {
-        return;
-    }
+pub(super) fn maybe_change_industry_production(state: &mut GameState) {
     if state.industries.is_empty() {
         return;
     }
     let idx = state
-        .cargo_rng
+        .random
         .random_range(u32::try_from(state.industries.len()).unwrap_or(1)) as usize;
     let climate = state.climate;
     let change = crate::industry::change_industry_production(
         &mut state.industries[idx],
         false,
         climate,
-        &mut state.cargo_rng,
+        &mut state.random,
     );
     if change == crate::industry::IndustryProductionChange::Closing {
         let at = state.industries[idx].pos;
@@ -290,10 +280,7 @@ pub(super) fn age_vehicle_cargo(state: &mut GameState) {
     }
 }
 
-pub(super) fn rollover_vehicle_profit_year(state: &mut GameState, tick: u64) {
-    if tick == 0 || !tick.is_multiple_of(economy::TICKS_PER_YEAR) {
-        return;
-    }
+pub(super) fn rollover_vehicle_profit_year(state: &mut GameState) {
     for vehicle in &mut state.vehicles {
         if !vehicle.is_consist_head() {
             continue;

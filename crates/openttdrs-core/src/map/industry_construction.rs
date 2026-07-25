@@ -6,7 +6,7 @@
 
 use std::collections::HashSet;
 
-use super::tile_loop::for_each_map_tile_loop_stripe;
+use super::tile_loop::TileLoopState;
 use super::{Map, TileCoord, TileKind};
 use crate::Industry;
 
@@ -67,28 +67,37 @@ fn construction_progress_key(m1: u8) -> u16 {
 }
 
 /// Obra + animaciones + random triggers de industria en un tick de sim (P6 + P7).
-pub fn step_industry_tiles(map: &mut Map, tick: u64) -> Vec<TileCoord> {
-    step_industry_tiles_with_seed(map, tick, 0, &[])
+pub fn step_industry_tiles(
+    map: &mut Map,
+    tick: u64,
+    visits: &[(TileCoord, super::Tile)],
+) -> Vec<TileCoord> {
+    step_industry_tiles_with_seed(map, tick, visits, 0, &[])
 }
 
 /// Como [`step_industry_tiles`], con `world_seed` y footprints para `AnimateTile`.
 pub fn step_industry_tiles_with_seed(
     map: &mut Map,
     tick: u64,
+    visits: &[(TileCoord, super::Tile)],
     world_seed: u64,
     industries: &[Industry],
 ) -> Vec<TileCoord> {
-    let mut dirty = advance_industry_construction(map, tick, industries);
-    dirty.extend(super::industry_tile_anim::advance_industry_tile_loop_events(map, tick));
+    let mut dirty = advance_industry_construction_from_visits(map, visits, industries);
+    dirty.extend(
+        super::industry_tile_anim::advance_industry_tile_loop_events_from_visits(map, tick, visits),
+    );
     let anim_coords = industry_animation_coords(industries);
     dirty.extend(super::industry_tile_anim::advance_industry_animated_tiles(
         map,
         tick,
         &anim_coords,
     ));
-    dirty.extend(super::industry_random::advance_industry_tile_randomisation(
-        map, tick, world_seed,
-    ));
+    dirty.extend(
+        super::industry_random::advance_industry_tile_randomisation_from_visits(
+            map, tick, world_seed, visits,
+        ),
+    );
     dirty.sort_by_key(|c| (c.x, c.y));
     dirty.dedup();
     dirty
@@ -108,30 +117,28 @@ fn industry_animation_coords(industries: &[Industry]) -> Vec<TileCoord> {
     coords
 }
 
-/// Avanza obra incompleta. Con footprints conocidos, todas las teselas de la
-/// industria comparten etapa; el ritmo lo marca `Industry::pos` en el tile loop.
-pub fn advance_industry_construction(
+/// Avanza obra incompleta a partir de teselas visitadas por `RunTileLoop`.
+pub fn advance_industry_construction_from_visits(
     map: &mut Map,
-    tick: u64,
+    visits: &[(TileCoord, super::Tile)],
     industries: &[Industry],
 ) -> Vec<TileCoord> {
     let mut triggered_ids = HashSet::new();
     let mut orphan_coords = Vec::new();
-    for_each_map_tile_loop_stripe(map, tick, |coord, tile| {
+    for &(coord, tile) in visits {
         if tile.kind != TileKind::Industry || is_industry_completed(tile.m1) {
-            return;
+            continue;
         }
         if tile.m2 != 0
             && let Some(ind) = industries.iter().find(|i| i.instance_id == tile.m2)
         {
-            // Un latido por industria: ancla en `pos` para no acelerar footprints grandes.
             if coord == ind.pos {
                 triggered_ids.insert(tile.m2);
             }
-            return;
+            continue;
         }
         orphan_coords.push(coord);
-    });
+    }
 
     let mut dirty = Vec::new();
     for id in triggered_ids {
@@ -145,11 +152,22 @@ pub fn advance_industry_construction(
         };
         advance_synced_footprint(map, tiles, &mut dirty);
     }
-    // Tests / tiles sin Industry en lista: comportamiento por tesela.
     for coord in orphan_coords {
         advance_single_tile(map, coord, &mut dirty);
     }
     dirty
+}
+
+/// Avanza obra incompleta (tests: ejecuta su propio tile loop).
+pub fn advance_industry_construction(
+    map: &mut Map,
+    tick: u64,
+    industries: &[Industry],
+    loop_state: &mut TileLoopState,
+) -> Vec<TileCoord> {
+    let visits =
+        super::tile_loop::collect_tile_loop_visits(map, tick, &mut loop_state.cur_tileloop_tile);
+    advance_industry_construction_from_visits(map, &visits, industries)
 }
 
 fn advance_synced_footprint(map: &mut Map, tiles: &[TileCoord], dirty: &mut Vec<TileCoord>) {
@@ -260,8 +278,14 @@ mod tests {
         map.set_tile(TileCoord::new(0, 0), industry_tile(0, 1, 0))
             .unwrap();
         // ~12 visitas al tile loop (counter×stages) × 256 ticks.
+        let mut loop_state = TileLoopState::default();
         for visit in 0..16u64 {
-            advance_industry_construction(&mut map, visit * u64::from(MAP_TILE_LOOP_STRIDE), &[]);
+            advance_industry_construction(
+                &mut map,
+                visit * u64::from(MAP_TILE_LOOP_STRIDE),
+                &[],
+                &mut loop_state,
+            );
         }
         let tile = map.get(TileCoord::new(0, 0)).unwrap();
         assert!(is_industry_completed(tile.m1));
@@ -272,8 +296,9 @@ mod tests {
         let mut map = Map::new_flat(4, 4, 0);
         map.set_tile(TileCoord::new(0, 0), industry_tile(0, 1, 0))
             .unwrap();
+        let mut loop_state = TileLoopState::default();
         for tick in 0..64u64 {
-            advance_industry_construction(&mut map, tick, &[]);
+            advance_industry_construction(&mut map, tick, &[], &mut loop_state);
         }
         let tile = map.get(TileCoord::new(0, 0)).unwrap();
         assert!(
@@ -296,11 +321,13 @@ mod tests {
             Industry::with_tiles(a, IndustryKind::Factory, vec![a, b, c]).with_instance_id(1);
 
         // Varias visitas al ancla `pos` (= a).
+        let mut loop_state = TileLoopState::default();
         for visit in 0..5u64 {
             advance_industry_construction(
                 &mut map,
                 visit * u64::from(MAP_TILE_LOOP_STRIDE),
                 std::slice::from_ref(&industry),
+                &mut loop_state,
             );
         }
 
@@ -327,6 +354,31 @@ mod tests {
                 WaterClass::Invalid
             );
         }
+    }
+
+    #[test]
+    fn construction_completes_on_16x16_with_lfsr() {
+        use crate::{Command, GameState, IndustrySpec, apply_command};
+        let mut state = GameState::new(16, 16);
+        let origin = TileCoord::new(5, 5);
+        apply_command(
+            &mut state,
+            &Command::PlaceIndustrySpec(origin, IndustrySpec::Sawmill),
+        )
+        .unwrap();
+        let mut loop_state = TileLoopState::default();
+        for tick in 0..20_000u64 {
+            let visits = crate::map::collect_tile_loop_visits(
+                &state.map,
+                tick,
+                &mut loop_state.cur_tileloop_tile,
+            );
+            advance_industry_construction_from_visits(&mut state.map, &visits, &state.industries);
+            if state.map.get(origin).unwrap().m1 & 0x80 != 0 {
+                return;
+            }
+        }
+        panic!("obra no terminó en 20k ticks LFSR");
     }
 
     #[test]

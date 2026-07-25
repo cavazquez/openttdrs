@@ -81,8 +81,9 @@ pub use station_tile_anim::{
     AIRPORT_RADAR_FRAMES, airport_radar_frame, is_airport_tower_tile, step_airport_tiles,
 };
 pub use tile_loop::{
-    MAP_FULL_SCAN_TILE_LIMIT, MAP_TILE_LOOP_STRIDE, for_each_map_tile_loop,
-    for_each_map_tile_loop_stripe,
+    MAP_FULL_SCAN_TILE_LIMIT, MAP_TILE_LOOP_STRIDE, TileLoopState, collect_tile_loop_visits,
+    default_cur_tileloop_tile, for_each_map_tile_loop, for_each_map_tile_loop_stripe, map_log_x,
+    map_log_y, run_tile_loop, tile_index_bits, tile_index_to_coord,
 };
 pub use tree_tile_loop::{
     MAX_TREE_OR_FIELD_STAGE, TILE_LOOP_FREQUENCY, TREE_GROWTH_DEAD, TREE_GROWTH_GROWING1,

@@ -18,7 +18,6 @@ pub use transcargo::{AI_BUILD_MONEY_THRESHOLD, MAX_AI_ROUTES, TransCargoAi};
 use crate::GameState;
 use crate::command::Command;
 use crate::company::{RIVAL_NAME_ROADHAUL, RIVAL_NAME_TRANSCARGO};
-use crate::economy::TICKS_PER_MONTH;
 use crate::format_money;
 use crate::vehicle::{VehicleKind, VehicleOrder};
 
@@ -38,7 +37,7 @@ pub fn tick_ai_companies(state: &mut GameState, tick: u64) {
     transcargo::maintain_transcargo_vehicles(state);
     roadhaul::maintain_roadhaul_vehicles(state);
     drain_ai_build_queues(state, tick);
-    if tick == 0 || !tick.is_multiple_of(TICKS_PER_MONTH) {
+    if !state.runtime.economy_triggers.new_month {
         return;
     }
     transcargo::tick_transcargo(state);
@@ -151,6 +150,7 @@ fn format_vehicle_route_line(v: &crate::vehicle::Vehicle) -> String {
 mod tests {
     use super::*;
     use crate::company::{RIVAL_NAME_ROADHAUL, RIVAL_NAME_TRANSCARGO};
+    use crate::economy::TICKS_PER_MONTH;
     use crate::map::TileCoord;
     use crate::town::Town;
 
@@ -230,6 +230,7 @@ mod tests {
         }
         let tick = TICKS_PER_MONTH;
         state.tick = crate::GameTick::new(tick);
+        state.runtime.economy_triggers.new_month = true;
         tick_ai_companies(&mut state, tick);
         assert!(
             !state.ai_build_queues.is_empty(),
@@ -314,6 +315,7 @@ mod tests {
             let target_buses = usize::try_from(cycle + 1).unwrap_or(1);
             let tick = TICKS_PER_MONTH.saturating_mul(cycle + 1);
             state.tick = crate::GameTick::new(tick);
+            state.runtime.economy_triggers.new_month = true;
             tick_ai_companies(&mut state, tick);
             for _ in 0..4_000 {
                 let buses = state
@@ -368,10 +370,12 @@ mod tests {
         }
         let tick = TICKS_PER_MONTH;
         state.tick = crate::GameTick::new(tick);
+        state.runtime.economy_triggers.new_month = true;
         tick_ai_companies(&mut state, tick);
         let queued = state.ai_build_queues.len();
         assert_eq!(queued, 1);
         // Otro mes con cola activa: no segunda obra.
+        state.runtime.economy_triggers.new_month = true;
         tick_ai_companies(&mut state, tick.saturating_mul(2));
         assert_eq!(state.ai_build_queues.len(), 1, "una obra por rival");
     }

@@ -196,6 +196,12 @@ fn dispatch_sim_events(
                 }
                 fx.push_explosion(at);
             }
+            SimEvent::RoadVehCrash { at, .. } => {
+                if hud.sound_disaster || hud.sound_vehicle {
+                    sfx.write(PlayWorldSfx::new(SoundId::Explosion, at, 1.0).with_priority(130));
+                }
+                fx.push_explosion(at);
+            }
             SimEvent::VehicleFlooded { at, .. } => {
                 if hud.sound_disaster || hud.sound_vehicle {
                     sfx.write(PlayWorldSfx::new(SoundId::Explosion, at, 1.0).with_priority(125));

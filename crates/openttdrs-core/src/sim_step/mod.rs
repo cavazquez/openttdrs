@@ -272,6 +272,7 @@ fn phase_pbs_reservations(state: &mut GameState) {
 fn phase_movement(state: &mut GameState) {
     movement::move_vehicles(state);
     crate::train_collision::resolve_train_collisions(state);
+    crate::ground_crash::tick_crashed_vehicles(state);
     // OpenTTD sigue/libera la reserva al cruzar tesela; recalcular evita un tick de retraso.
     phase_pbs_reservations(state);
 }

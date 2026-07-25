@@ -5,9 +5,11 @@ pub mod controller;
 mod curves;
 pub mod depot;
 pub mod drive_data;
+pub mod overtake;
 pub mod pose;
 mod render_pose;
 pub mod rvsb;
+pub mod slope;
 pub mod traffic;
 
 // Re-exportar tipos y funciones públicas principales
@@ -21,6 +23,9 @@ pub use depot::{
     road_depot_entry_direction, road_depot_exit_direction, road_depot_subtile,
 };
 pub use drive_data::{RDE_NEXT_TILE, RDE_TURNED, RoadDriveEntry, road_drive_entry};
+pub use overtake::{
+    ROAD_ACCEL_OVERTAKE, RV_OVERTAKE_TIMEOUT, drive_state_with_overtake, road_veh_check_overtake,
+};
 pub use pose::{
     VehiclePose, extrapolate_vehicle_pose, retreat_vehicle_pose, vehicle_render_progress,
 };
@@ -29,7 +34,9 @@ pub use render_pose::{
     vehicle_render_direction_at, vehicle_render_direction_at_with_map, vehicle_subtile,
     vehicle_subtile_at, vehicle_subtile_at_with_map, vehicle_subtile_with_progress,
 };
+pub use rvsb::RVSB_DRIVE_SIDE;
 pub use rvsb::{RVSB_IN_DEPOT, RVSB_TRACKDIR_MASK, trackdir_from_direction};
+pub use slope::{road_z_pos_affect_speed, sync_road_slope_speed};
 pub use traffic::{BLOCKED_CTR_LIMIT, apply_road_veh_close_to, road_veh_find_close_to};
 
 #[cfg(test)]

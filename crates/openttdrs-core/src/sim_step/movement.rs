@@ -71,6 +71,9 @@ pub(super) fn move_vehicles(state: &mut GameState) {
         if tick_road_depot_movement(state, i) {
             continue;
         }
+        if state.vehicles[i].crashed {
+            continue;
+        }
         if matches!(
             state.vehicles[i].kind,
             VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram
@@ -80,6 +83,7 @@ pub(super) fn move_vehicles(state: &mut GameState) {
             let mut vehicles = std::mem::take(&mut state.vehicles);
             crate::road_movement::road_vehicle_tick(&mut vehicles, i, map);
             state.vehicles = vehicles;
+            let _ = crate::ground_crash::maybe_road_train_crash(state, i);
             continue;
         }
         let blocked = {

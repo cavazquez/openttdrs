@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 use crate::cargo::CargoType;
 use crate::map::{TileCoord, coord_from_linear_index, coord_to_linear_index};
-use crate::vehicle::{OrderConditionKind, OrderNonStop, VehicleOrder};
+use crate::vehicle::{OrderConditionKind, OrderNonStop, OrderStopLocation, VehicleOrder};
 
 use super::SavError;
 use super::entities::SavStationIndex;
@@ -37,6 +37,9 @@ pub(crate) const OTTD_LOAD_FULL_ANY: u8 = 3;
 pub(crate) const OTTD_LOAD_NO_LOAD: u8 = 4;
 /// `OrderNonStopFlag::GoVia` en bit 6 de `type`.
 pub(crate) const OTTD_NON_STOP_GO_VIA: u8 = 1 << 6;
+/// `OrderStopLocation` en bits 4–5 de `type` (`order_base.h` Get/SetStopLocation).
+pub(crate) const OTTD_STOP_LOCATION_SHIFT: u8 = 4;
+pub(crate) const OTTD_STOP_LOCATION_MASK: u8 = 0x3 << OTTD_STOP_LOCATION_SHIFT;
 
 /// Bytes por orden en el wire ORDL moderno:
 /// `type(1) | flags(1) | dest(2) | refit(1) | wait(2) | travel(2) | max_speed(2)`.
@@ -65,6 +68,7 @@ pub struct StationOrderFlags {
     pub no_unload: bool,
     pub transfer: bool,
     pub non_stop: OrderNonStop,
+    pub stop_location: OrderStopLocation,
 }
 
 #[must_use]
@@ -76,6 +80,9 @@ pub(crate) fn station_flags_from_sav(order_type: u8, flags: u8) -> StationOrderF
     } else {
         OrderNonStop::NonStopDestination
     };
+    let stop_location = OrderStopLocation::from_u8(
+        (order_type & OTTD_STOP_LOCATION_MASK) >> OTTD_STOP_LOCATION_SHIFT,
+    );
     StationOrderFlags {
         full_load: load == OTTD_LOAD_FULL,
         full_load_any: load == OTTD_LOAD_FULL_ANY,
@@ -83,6 +90,7 @@ pub(crate) fn station_flags_from_sav(order_type: u8, flags: u8) -> StationOrderF
         no_unload: unload == OTTD_UNLOAD_NO_UNLOAD,
         transfer: unload == OTTD_UNLOAD_TRANSFER,
         non_stop,
+        stop_location,
     }
 }
 
@@ -102,6 +110,7 @@ pub(crate) fn station_flags_to_sav(order: &VehicleOrder) -> (u8, u8) {
         no_unload,
         transfer,
         non_stop,
+        stop_location,
         ..
     } = *order
     else {
@@ -111,6 +120,7 @@ pub(crate) fn station_flags_to_sav(order: &VehicleOrder) -> (u8, u8) {
     if non_stop == OrderNonStop::StopAtIntermediate {
         order_type |= OTTD_NON_STOP_GO_VIA;
     }
+    order_type |= (stop_location.as_u8() << OTTD_STOP_LOCATION_SHIFT) & OTTD_STOP_LOCATION_MASK;
     let mut flags = 0u8;
     if transfer {
         flags |= OTTD_UNLOAD_TRANSFER;
@@ -338,6 +348,7 @@ pub(crate) fn vehicle_orders_from_sav(
                             no_unload: parsed.no_unload,
                             transfer: parsed.transfer,
                             non_stop: parsed.non_stop,
+                            stop_location: parsed.stop_location,
                             wait_ticks: u32::from(order.wait_time),
                             travel_ticks: u32::from(order.travel_time),
                             implicit: false,
@@ -551,7 +562,8 @@ mod tests {
             },
         );
         let order = SavOrder {
-            order_type: OT_GOTO_STATION,
+            // Middle (default de `VehicleOrder::station`) en bits 4–5.
+            order_type: OT_GOTO_STATION | (1 << 4),
             dest: 0,
             flags: 0,
             wait_time: 0,

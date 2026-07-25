@@ -201,7 +201,8 @@ mod tests {
         let order = VehicleOrder::station(TileCoord::new(28, 39));
         let enc = encode_goto_order(&order, &state, 64).expect("encode");
         assert_eq!(enc.len(), 11);
-        assert_eq!(enc[0], 1);
+        // OT_GOTO_STATION | (OrderStopLocation::Middle << 4) = 0x11.
+        assert_eq!(enc[0], 0x11);
         assert_eq!(&enc[2..4], &0u16.to_be_bytes());
     }
 

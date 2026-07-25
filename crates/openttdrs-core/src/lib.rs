@@ -28,6 +28,7 @@ pub mod economy_quarterly;
 pub mod engine;
 pub mod entity_history;
 mod game_state;
+pub mod ground_crash;
 pub mod gs;
 pub mod house_spec;
 pub mod industry;
@@ -186,6 +187,10 @@ pub use engine::{
 };
 pub use entity_history::{
     ENTITY_HISTORY_MONTHS, IndustryHistory, IndustryHistorySample, TownHistory, TownHistorySample,
+};
+pub use ground_crash::{
+    CRASHED_CTR_REMOVE, CRASHED_CTR_START, crash_vehicle, maybe_road_train_crash,
+    road_veh_check_train_crash, tick_crashed_vehicles,
 };
 // Namespaces de compatibilidad cargodist (sin aplanar tipos en la raíz; #157).
 pub mod flow_stat {
@@ -346,7 +351,7 @@ pub use rail_signals::{
 pub use rail_type::{
     RAIL_CONVERT_COST, RailType, engine_compatible_with_rail, engine_requires_electric,
     engine_requires_maglev, engine_requires_monorail, powered_railtypes_mask, rail_type_bit,
-    rail_type_from_tile, rail_types_compatible, railtypes_mask_contains,
+    rail_type_from_tile, rail_type_track_speed_cap, rail_types_compatible, railtypes_mask_contains,
     required_rail_type_for_engine, set_rail_type_on_tile, tile_usable_by_rail_type,
 };
 pub use refit::{
@@ -399,9 +404,11 @@ pub use station::{
     StationVisit, StopKind, TOWN_CARGO_MIN_OWNER_RATING, can_move_goods_to_station,
     default_station_catenary_flags, industry_in_station_coverage, is_rail_waypoint_at,
     is_rail_waypoint_tile, load_amount_for_rating, move_goods_to_station,
-    note_station_load_attempt, on_station_cargo_pickup, rail_station_approach_tile,
-    rail_station_axis_y, rail_station_owned_tiles, rail_station_platform_tiles,
-    rail_station_stop_candidates, rail_station_stop_tile, rail_station_stop_tile_for_approach,
+    note_station_load_attempt, on_station_cargo_pickup, pick_stop_tile, platform_past_stop_tiles,
+    rail_station_approach_tile, rail_station_axis_y, rail_station_owned_tiles,
+    rail_station_platform_tiles, rail_station_stop_candidates, rail_station_stop_candidates_osl,
+    rail_station_stop_tile, rail_station_stop_tile_for_approach,
+    rail_station_stop_tile_for_approach_osl, rail_station_stop_tile_with_osl,
     recompute_station_rating, resolve_order_destination, resolve_order_destination_from,
     road_stop_approach_tile, station_at_tile, station_catchment_radius, station_coverage_at,
     station_coverage_for, station_covers_tile, station_footprint_tiles, station_map_coherence,
@@ -461,9 +468,10 @@ pub use train_movement::{
 pub use vehicle::reverse_direction;
 pub use vehicle::{
     AircraftPhase, BREAKDOWN_DURATION_TICKS, DEFAULT_SERVICE_INTERVAL_DAYS, DIR_E, DIR_N, DIR_NE,
-    DIR_NW, DIR_S, DIR_SE, DIR_SW, DIR_W, OrderConditionKind, SERVICING_RELIABILITY_THRESHOLD,
-    TimetableWaitKind, VEHICLE_PROGRESS_STEP, Vehicle, VehicleDirection, VehicleIssueDetail,
-    VehicleKind, VehicleOperationalSummary, VehicleOrder, direction_from_tile_step,
+    DIR_NW, DIR_S, DIR_SE, DIR_SW, DIR_W, OrderConditionKind, OrderNonStop, OrderStopLocation,
+    SERVICING_RELIABILITY_THRESHOLD, TimetableWaitKind, VEHICLE_PROGRESS_STEP, Vehicle,
+    VehicleDirection, VehicleIssueDetail, VehicleKind, VehicleOperationalSummary, VehicleOrder,
+    direction_from_tile_step,
 };
 pub use vehicle_group::{MAX_VEHICLE_GROUP_NAME_CHARS, VehicleGroup};
 pub use world_gen::{

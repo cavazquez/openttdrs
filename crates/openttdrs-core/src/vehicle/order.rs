@@ -17,6 +17,45 @@ pub enum OrderNonStop {
     NonStopDestination,
 }
 
+/// Punto de parada en el andén (`OrderStopLocation`, bits 4–5 de `Order::type`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OrderStopLocation {
+    /// Extremo cercano al sentido de entrada.
+    NearEnd = 0,
+    /// Centro del andén (default `OpenTTD` / port).
+    #[default]
+    Middle = 1,
+    /// Extremo lejano del andén.
+    FarEnd = 2,
+}
+
+impl OrderStopLocation {
+    #[must_use]
+    pub const fn from_u8(v: u8) -> Self {
+        match v & 0x3 {
+            0 => Self::NearEnd,
+            2 => Self::FarEnd,
+            _ => Self::Middle,
+        }
+    }
+
+    #[must_use]
+    pub const fn as_u8(self) -> u8 {
+        self as u8
+    }
+
+    /// Cicla Near → Middle → Far → Near.
+    #[must_use]
+    pub const fn next(self) -> Self {
+        match self {
+            Self::NearEnd => Self::Middle,
+            Self::Middle => Self::FarEnd,
+            Self::FarEnd => Self::NearEnd,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(untagged)]
 pub enum VehicleOrder {
@@ -40,6 +79,9 @@ pub enum VehicleOrder {
         /// Sin parar en estaciones intermedias hacia este destino.
         #[serde(default)]
         non_stop: OrderNonStop,
+        /// Dónde detener el tren en el andén (`GetTrainStopLocation`).
+        #[serde(default)]
+        stop_location: OrderStopLocation,
         /// Espera mínima en parada con horario activo (ticks de sim).
         #[serde(default)]
         wait_ticks: u32,
@@ -154,6 +196,7 @@ impl VehicleOrder {
             no_unload: false,
             transfer: false,
             non_stop: OrderNonStop::NonStopDestination,
+            stop_location: OrderStopLocation::Middle,
             wait_ticks: 0,
             travel_ticks: 0,
             implicit: false,
@@ -171,6 +214,7 @@ impl VehicleOrder {
             no_unload: false,
             transfer: false,
             non_stop: OrderNonStop::NonStopDestination,
+            stop_location: OrderStopLocation::Middle,
             wait_ticks: 0,
             travel_ticks: 0,
             implicit: true,
@@ -344,6 +388,7 @@ impl VehicleOrder {
             no_unload,
             transfer: false,
             non_stop: OrderNonStop::NonStopDestination,
+            stop_location: OrderStopLocation::Middle,
             wait_ticks: 0,
             travel_ticks: 0,
             implicit: false,
@@ -370,6 +415,7 @@ impl VehicleOrder {
             no_unload,
             transfer,
             non_stop,
+            stop_location: OrderStopLocation::Middle,
             wait_ticks: 0,
             travel_ticks: 0,
             implicit: false,
@@ -492,6 +538,47 @@ impl VehicleOrder {
         )
     }
 
+    #[must_use]
+    pub const fn stop_location(self) -> OrderStopLocation {
+        match self {
+            Self::Station { stop_location, .. } => stop_location,
+            _ => OrderStopLocation::Middle,
+        }
+    }
+
+    /// Cicla Near → Middle → Far en una orden de estación.
+    #[must_use]
+    pub fn with_cycled_stop_location(self) -> Option<Self> {
+        match self {
+            Self::Station {
+                station,
+                full_load,
+                full_load_any,
+                no_load,
+                no_unload,
+                transfer,
+                non_stop,
+                stop_location,
+                wait_ticks,
+                travel_ticks,
+                implicit,
+            } => Some(Self::Station {
+                station,
+                full_load,
+                full_load_any,
+                no_load,
+                no_unload,
+                transfer,
+                non_stop,
+                stop_location: stop_location.next(),
+                wait_ticks,
+                travel_ticks,
+                implicit,
+            }),
+            _ => None,
+        }
+    }
+
     /// ¿Debe seguir esperando carga según `FullLoad` / `FullLoadAny`?
     #[must_use]
     pub const fn should_wait_for_loading(self, cargo: u32, capacity: u32) -> bool {
@@ -525,6 +612,7 @@ impl VehicleOrder {
                 no_unload,
                 transfer,
                 non_stop,
+                stop_location,
                 wait_ticks,
                 travel_ticks,
                 implicit,
@@ -536,6 +624,7 @@ impl VehicleOrder {
                 no_unload,
                 transfer,
                 non_stop,
+                stop_location,
                 wait_ticks,
                 travel_ticks,
                 implicit,
@@ -556,6 +645,7 @@ impl VehicleOrder {
                 no_unload,
                 transfer,
                 non_stop,
+                stop_location,
                 wait_ticks,
                 travel_ticks,
                 implicit,
@@ -567,6 +657,7 @@ impl VehicleOrder {
                 no_unload: !no_unload,
                 transfer,
                 non_stop,
+                stop_location,
                 wait_ticks,
                 travel_ticks,
                 implicit,
@@ -660,6 +751,7 @@ impl VehicleOrder {
                 no_unload,
                 transfer,
                 non_stop,
+                stop_location,
                 wait_ticks,
                 travel_ticks,
                 implicit,
@@ -671,6 +763,7 @@ impl VehicleOrder {
                 no_unload,
                 transfer,
                 non_stop,
+                stop_location,
                 wait_ticks: cycle_wait_ticks(wait_ticks),
                 travel_ticks,
                 implicit,
@@ -704,6 +797,7 @@ impl VehicleOrder {
                 no_unload,
                 transfer,
                 non_stop,
+                stop_location,
                 wait_ticks,
                 travel_ticks,
                 implicit,
@@ -715,6 +809,7 @@ impl VehicleOrder {
                 no_unload,
                 transfer,
                 non_stop,
+                stop_location,
                 wait_ticks,
                 travel_ticks: cycle_travel_ticks(travel_ticks),
                 implicit,
@@ -763,6 +858,7 @@ impl VehicleOrder {
                 no_unload,
                 transfer,
                 non_stop,
+                stop_location,
                 wait_ticks: _,
                 travel_ticks,
                 implicit,
@@ -774,6 +870,7 @@ impl VehicleOrder {
                 no_unload,
                 transfer,
                 non_stop,
+                stop_location,
                 wait_ticks,
                 travel_ticks,
                 implicit,
@@ -806,6 +903,7 @@ impl VehicleOrder {
                 no_unload,
                 transfer,
                 non_stop,
+                stop_location,
                 wait_ticks,
                 travel_ticks: _,
                 implicit,
@@ -817,6 +915,7 @@ impl VehicleOrder {
                 no_unload,
                 transfer,
                 non_stop,
+                stop_location,
                 wait_ticks,
                 travel_ticks,
                 implicit,

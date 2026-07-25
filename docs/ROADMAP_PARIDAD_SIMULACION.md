@@ -511,8 +511,7 @@ Veintidós entradas, **todas cerradas** (P1.1 —con P0.3— a P1.22).
   respeto en `cargo_transfer.rs` y `order_execution`/`movement.rs`. Tests
   `station_flags_preserve_transfer_no_load_and_timetable`, `full_load_any_flag_is_not_collapsed_to_full_load`,
   `no_load_order_skips_loading`.
-- **Pendiente** — `OrderStopLocation` (andén inicio/medio/fin, ver P3.14) y condicionales
-  extendidas (ocho variables).
+- **Pendiente** — condicionales extendidas (ocho variables). `OrderStopLocation` cerrado en P3.14.
 
 ### P1.21 — Horarios reales · hecho
 

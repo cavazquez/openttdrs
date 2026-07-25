@@ -76,6 +76,25 @@ impl RailType {
             Self::Maglev => 2,
         }
     }
+
+    /// Límite de velocidad del tipo de vía (`RailTypeInfo::max_speed`).
+    ///
+    /// `0` = sin límite (vanilla `OpenTTD`: rail/electric/mono/maglev = 0).
+    #[must_use]
+    pub const fn max_speed(self) -> u16 {
+        // Tabla `_original_railtypes`: todos 0. NewGRF puede imponer techos > 0.
+        let _ = self;
+        0
+    }
+}
+
+/// Velocidad máxima efectiva de la tesela para un tren (`GetMaxTrackSpeed`).
+///
+/// Devuelve `None` si el railtype no impone techo (`max_speed == 0`).
+#[must_use]
+pub fn rail_type_track_speed_cap(tile: Tile) -> Option<u16> {
+    let cap = rail_type_from_tile(tile).max_speed();
+    (cap > 0).then_some(cap)
 }
 
 /// Máscara de bits 0–5 de `m8` (tipo de vía).

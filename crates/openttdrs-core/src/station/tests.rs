@@ -37,6 +37,34 @@ mod coherence_tests {
     }
 
     #[test]
+    fn pick_stop_tile_respects_order_stop_location() {
+        use crate::vehicle::OrderStopLocation;
+        let platform = vec![
+            TileCoord::new(1, 0),
+            TileCoord::new(2, 0),
+            TileCoord::new(3, 0),
+            TileCoord::new(4, 0),
+        ];
+        assert_eq!(
+            pick_stop_tile(&platform, OrderStopLocation::NearEnd, 8),
+            TileCoord::new(1, 0)
+        );
+        assert_eq!(
+            pick_stop_tile(&platform, OrderStopLocation::Middle, 8),
+            TileCoord::new(3, 0)
+        );
+        assert_eq!(
+            pick_stop_tile(&platform, OrderStopLocation::FarEnd, 8),
+            TileCoord::new(4, 0)
+        );
+        // Tren más largo que el andén → FarEnd.
+        assert_eq!(
+            pick_stop_tile(&platform, OrderStopLocation::NearEnd, 80),
+            TileCoord::new(4, 0)
+        );
+    }
+
+    #[test]
     fn dual_platform_stop_prefers_approach_track() {
         use crate::command::{Command, apply_command};
         let mut state = GameState::new(20, 20);

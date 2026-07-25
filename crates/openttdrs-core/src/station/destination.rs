@@ -28,10 +28,25 @@ pub fn resolve_order_destination_from(
     from: TileCoord,
 ) -> TileCoord {
     match (kind, order) {
-        (VehicleKind::Train, VehicleOrder::Station { station, .. }) => {
-            rail_station_stop_tile_for_approach(map, station, from)
-                .or_else(|| rail_station_approach_tile(map, station))
-                .unwrap_or(station)
+        (
+            VehicleKind::Train,
+            VehicleOrder::Station {
+                station,
+                stop_location,
+                ..
+            },
+        ) => {
+            // Sin longitud de consist aquí (pathfinding pre-spawn); Middle/OSL de la orden.
+            super::geometry::rail_station_stop_tile_for_approach_osl(
+                map,
+                station,
+                from,
+                stop_location,
+                0,
+            )
+            .or_else(|| rail_station_approach_tile(map, station))
+            .or_else(|| rail_station_stop_tile_for_approach(map, station, from))
+            .unwrap_or(station)
         }
         (VehicleKind::Train, VehicleOrder::Waypoint { waypoint, .. }) => waypoint,
         (_, VehicleOrder::Depot { depot, .. }) => depot,

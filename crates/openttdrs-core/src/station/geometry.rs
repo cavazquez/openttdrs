@@ -131,15 +131,36 @@ pub fn rail_station_platform_tiles(map: &Map, station_anchor: TileCoord) -> Vec<
 /// cuando se conoce la posición del tren.
 #[must_use]
 pub fn rail_station_stop_tile(map: &Map, station_anchor: TileCoord) -> Option<TileCoord> {
+    rail_station_stop_tile_with_osl(
+        map,
+        station_anchor,
+        crate::vehicle::OrderStopLocation::Middle,
+        0,
+    )
+}
+
+/// Como [`rail_station_stop_tile`] con `OrderStopLocation` y longitud del consist.
+#[must_use]
+pub fn rail_station_stop_tile_with_osl(
+    map: &Map,
+    station_anchor: TileCoord,
+    osl: crate::vehicle::OrderStopLocation,
+    train_length: u16,
+) -> Option<TileCoord> {
     let platforms = rail_station_platform_tiles(map, station_anchor);
     match platforms.len() {
         0 => None,
         1 => Some(platforms[0]),
-        n => Some(platforms[n / 2]),
+        _ => {
+            let mut tiles = platforms;
+            let axis_y = map.get(tiles[0]).is_some_and(|t| t.m5 & 1 != 0);
+            tiles.sort_by(|a, b| if axis_y { a.y.cmp(&b.y) } else { a.x.cmp(&b.x) });
+            Some(pick_stop_tile(&tiles, osl, train_length))
+        }
     }
 }
 
-/// Parada `Middle` en el andén alineado con `from` (misma vía / columna).
+/// Parada según OSL en el andén alineado con `from` (misma vía / columna).
 ///
 /// `OpenTTD` `GetTrainStopLocation` usa la tesela actual del tren para medir el
 /// andén (`GetPlatformLength(tile, …)`); sin eso, un destino en el andén
@@ -150,7 +171,25 @@ pub fn rail_station_stop_tile_for_approach(
     station_anchor: TileCoord,
     from: TileCoord,
 ) -> Option<TileCoord> {
-    rail_station_stop_candidates(map, station_anchor, from)
+    rail_station_stop_tile_for_approach_osl(
+        map,
+        station_anchor,
+        from,
+        crate::vehicle::OrderStopLocation::Middle,
+        0,
+    )
+}
+
+/// Como [`rail_station_stop_tile_for_approach`] con `OrderStopLocation`.
+#[must_use]
+pub fn rail_station_stop_tile_for_approach_osl(
+    map: &Map,
+    station_anchor: TileCoord,
+    from: TileCoord,
+    osl: crate::vehicle::OrderStopLocation,
+    train_length: u16,
+) -> Option<TileCoord> {
+    rail_station_stop_candidates_osl(map, station_anchor, from, osl, train_length)
         .into_iter()
         .next()
 }
@@ -164,6 +203,24 @@ pub fn rail_station_stop_candidates(
     station_anchor: TileCoord,
     from: TileCoord,
 ) -> Vec<TileCoord> {
+    rail_station_stop_candidates_osl(
+        map,
+        station_anchor,
+        from,
+        crate::vehicle::OrderStopLocation::Middle,
+        0,
+    )
+}
+
+/// Candidatos con `OrderStopLocation` (`GetTrainStopLocation` por tesela).
+#[must_use]
+pub fn rail_station_stop_candidates_osl(
+    map: &Map,
+    station_anchor: TileCoord,
+    from: TileCoord,
+    osl: crate::vehicle::OrderStopLocation,
+    train_length: u16,
+) -> Vec<TileCoord> {
     let platforms = rail_station_platform_tiles(map, station_anchor);
     if platforms.is_empty() {
         return Vec::new();
@@ -176,24 +233,94 @@ pub fn rail_station_stop_candidates(
     for c in platforms {
         by_track.entry(track_key(c)).or_default().push(c);
     }
-    let middle = |tiles: &mut Vec<TileCoord>| -> TileCoord {
+    let pick = |tiles: &mut Vec<TileCoord>| -> TileCoord {
         tiles.sort_by(|a, b| if axis_y { a.y.cmp(&b.y) } else { a.x.cmp(&b.x) });
-        tiles[tiles.len() / 2]
+        // Middle: centro geométrico del andén (paridad con `tiles[len/2]` previo).
+        // Near/Far: orientar entrada→salida según el sentido de aproximación.
+        match osl {
+            crate::vehicle::OrderStopLocation::Middle => pick_stop_tile(tiles, osl, train_length),
+            crate::vehicle::OrderStopLocation::NearEnd
+            | crate::vehicle::OrderStopLocation::FarEnd => {
+                let approaching_positive = if axis_y {
+                    from.y <= tiles[0].y
+                } else {
+                    from.x <= tiles[0].x
+                };
+                let oriented = if approaching_positive {
+                    tiles.clone()
+                } else {
+                    tiles.iter().rev().copied().collect()
+                };
+                pick_stop_tile(&oriented, osl, train_length)
+            }
+        }
     };
     let mut out = Vec::with_capacity(by_track.len());
     if let Some(tiles) = by_track.remove(&want) {
         let mut tiles = tiles;
-        out.push(middle(&mut tiles));
+        out.push(pick(&mut tiles));
     }
     for (_, mut tiles) in by_track {
-        out.push(middle(&mut tiles));
+        out.push(pick(&mut tiles));
     }
     if out.is_empty()
-        && let Some(fallback) = rail_station_stop_tile(map, station_anchor)
+        && let Some(fallback) =
+            rail_station_stop_tile_with_osl(map, station_anchor, osl, train_length)
     {
         out.push(fallback);
     }
     out
+}
+
+/// Índice de tesela de parada según OSL (andén ordenado entrada→salida).
+///
+/// Tren más largo que el andén → `FarEnd` (como `OpenTTD`).
+#[must_use]
+pub fn pick_stop_tile(
+    platform_entry_to_exit: &[TileCoord],
+    osl: crate::vehicle::OrderStopLocation,
+    train_length: u16,
+) -> TileCoord {
+    use crate::vehicle::OrderStopLocation;
+    let n = platform_entry_to_exit.len();
+    debug_assert!(n > 0);
+    // Longitud de andén en unidades de vehículo (tile ≈ 16 = 2×VEHICLE_LENGTH).
+    let station_len = u16::try_from(n.saturating_mul(16)).unwrap_or(u16::MAX);
+    let effective = if train_length > 0 && train_length >= station_len {
+        OrderStopLocation::FarEnd
+    } else {
+        osl
+    };
+    let idx = match effective {
+        OrderStopLocation::NearEnd => 0,
+        OrderStopLocation::Middle => n / 2,
+        OrderStopLocation::FarEnd => n.saturating_sub(1),
+    };
+    platform_entry_to_exit[idx]
+}
+
+/// Fracción de andén más allá del punto de parada (`(station_length - stop_at) / TILE_SIZE`).
+#[must_use]
+pub fn platform_past_stop_tiles(
+    platform_len: i32,
+    osl: crate::vehicle::OrderStopLocation,
+    train_length_tiles: i32,
+) -> i32 {
+    use crate::vehicle::OrderStopLocation;
+    if platform_len <= 0 {
+        return 0;
+    }
+    let osl = if train_length_tiles >= platform_len {
+        OrderStopLocation::FarEnd
+    } else {
+        osl
+    };
+    match osl {
+        // Near: stop ≈ longitud del tren → casi todo el andén queda por delante.
+        OrderStopLocation::NearEnd => (platform_len - train_length_tiles.max(1)).max(0),
+        OrderStopLocation::Middle => platform_len / 2,
+        OrderStopLocation::FarEnd => 0,
+    }
 }
 
 /// `true` si el tren está sobre una plataforma rail de alguna estación del mapa.

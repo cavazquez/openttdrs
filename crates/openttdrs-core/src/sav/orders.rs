@@ -319,9 +319,11 @@ mod tests {
                 airport_blocks: 0,
             },
         );
+        // Middle = bits 4–5 = 1 (default `VehicleOrder::station`).
+        let order_type = OT_GOTO_STATION | (1 << 4);
         let orders = vehicle_orders_from_sav(
             &[SavOrder {
-                order_type: OT_GOTO_STATION,
+                order_type,
                 dest: 0,
                 flags: 0,
                 wait_time: 0,
@@ -356,9 +358,10 @@ mod tests {
         assert!(full.0);
         let no_unload = stop_flags_from_sav(OTTD_UNLOAD_NO_UNLOAD);
         assert!(no_unload.1);
+        let order_type = OT_GOTO_STATION | (1 << 4); // Middle
         let orders = vehicle_orders_from_sav(
             &[SavOrder {
-                order_type: OT_GOTO_STATION,
+                order_type,
                 dest: 1,
                 flags: (OTTD_LOAD_FULL << 4) | OTTD_UNLOAD_NO_UNLOAD,
                 wait_time: 0,

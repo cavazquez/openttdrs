@@ -153,9 +153,24 @@ pub struct Vehicle {
     /// Contador de bloqueo por tráfico (`RoadVehFindCloseTo`).
     #[serde(default)]
     pub blocked_ctr: u16,
+    /// Carril opuesto durante adelantamiento (`RVSB_DRIVE_SIDE` o 0).
+    #[serde(default)]
+    pub overtaking: u8,
+    /// Contador de ticks de adelantamiento (`RV_OVERTAKE_TIMEOUT = 35`).
+    #[serde(default)]
+    pub overtaking_ctr: u8,
+    /// Vehículo estrellado (`VehState::Crashed`).
+    #[serde(default)]
+    pub crashed: bool,
+    /// Animación / eliminación tras choque (`crashed_ctr`, máx. 2220).
+    #[serde(default)]
+    pub crashed_ctr: u16,
     /// Tren: píxeles consumidos en la tesela actual (0..15) hacia el cruce.
     #[serde(default)]
     pub rail_pixel: u8,
+    /// Techo de velocidad por tipo de vía (`gcache.cached_max_track_speed`).
+    #[serde(default)]
+    pub cached_max_track_speed: u16,
     /// Caché de esfuerzo tractor máximo (N) del consist; cabeza.
     #[serde(default)]
     pub cached_max_te_n: u32,
@@ -446,7 +461,12 @@ impl Vehicle {
             road_state: 0,
             frame: 0,
             blocked_ctr: 0,
+            overtaking: 0,
+            overtaking_ctr: 0,
+            crashed: false,
+            crashed_ctr: 0,
             rail_pixel: 0,
+            cached_max_track_speed: 0,
             cached_max_te_n: 0,
             cached_air_drag: 0,
             cached_tilt: false,

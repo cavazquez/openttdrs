@@ -127,6 +127,11 @@ pub enum SimEvent {
         vehicle_id: u32,
         at: TileCoord,
     },
+    /// Choque de vehículo de carretera (`RoadVehCrash` / paso a nivel).
+    RoadVehCrash {
+        vehicle_id: u32,
+        at: TileCoord,
+    },
     /// Vehículo ahogado por inundación (`FloodVehicle`).
     VehicleFlooded {
         vehicle_id: u32,

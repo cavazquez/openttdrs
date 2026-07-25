@@ -57,6 +57,7 @@ pub const RIVAL_NAME_ROADHAUL: &str = "RoadHaul";
 
 /// Compañía jugable o IA.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[allow(clippy::struct_excessive_bools)] // flags de settings OpenTTD (engine_renew, servint, …)
 pub struct Company {
     pub id: CompanyId,
     pub name: String,
@@ -92,6 +93,9 @@ pub struct Company {
     /// Dinero mínimo a conservar al renovar (`settings.engine_renew_money`).
     #[serde(default = "default_engine_renew_money")]
     pub engine_renew_money: i64,
+    /// Quitar vagones al autoreemplazar si el consist crece (`renew_keep_length` / wagon removal).
+    #[serde(default)]
+    pub renew_keep_length: bool,
     /// Intervalo de servicio en % en lugar de días (`settings.vehicle.servint_ispercent`).
     #[serde(default)]
     pub servint_ispercent: bool,
@@ -127,6 +131,7 @@ impl Company {
             engine_renew: true,
             engine_renew_months: 6,
             engine_renew_money: 100_000,
+            renew_keep_length: false,
             servint_ispercent: false,
         }
     }
@@ -148,6 +153,7 @@ impl Company {
             engine_renew: true,
             engine_renew_months: 6,
             engine_renew_money: 100_000,
+            renew_keep_length: false,
             servint_ispercent: false,
         }
     }
@@ -169,6 +175,7 @@ impl Company {
             engine_renew: true,
             engine_renew_months: 6,
             engine_renew_money: 100_000,
+            renew_keep_length: false,
             servint_ispercent: false,
         }
     }

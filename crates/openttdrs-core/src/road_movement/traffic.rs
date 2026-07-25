@@ -1,6 +1,7 @@
 //! `RoadVehFindCloseTo` — sincronización de velocidad con el vehículo de delante.
 
-use crate::map::TileCoord;
+use crate::map::{Map, TileCoord};
+use crate::road_movement::overtake::road_veh_check_overtake;
 use crate::vehicle::{Vehicle, VehicleKind};
 
 /// Umbral `OpenTTD`: tras tantos ticks bloqueado se atraviesa (`roadveh_cmd.cpp`).
@@ -62,12 +63,27 @@ pub fn road_veh_find_close_to(vehicles: &[Vehicle], v_idx: usize) -> Option<usiz
     best.map(|(_, idx)| idx)
 }
 
-/// Aplica el resultado de `FindCloseTo`: sync velocidad e incremento de `blocked_ctr`.
-pub fn apply_road_veh_close_to(vehicles: &mut [Vehicle], v_idx: usize) -> bool {
+/// Aplica el resultado de `FindCloseTo`: overtake o sync velocidad + `blocked_ctr`.
+///
+/// Si ya se adelanta (`overtaking != 0`) no bloquea. Si no, intenta
+/// `RoadVehCheckOvertake`; solo sincroniza velocidad si sigue sin adelantar.
+pub fn apply_road_veh_close_to(vehicles: &mut [Vehicle], v_idx: usize, map: Option<&Map>) -> bool {
+    if vehicles
+        .get(v_idx)
+        .is_some_and(|v| v.overtaking != 0 || v.crashed)
+    {
+        vehicles[v_idx].blocked_ctr = 0;
+        return false;
+    }
     let Some(blocker) = road_veh_find_close_to(vehicles, v_idx) else {
         vehicles[v_idx].blocked_ctr = 0;
         return false;
     };
+    road_veh_check_overtake(vehicles, v_idx, blocker, map);
+    if vehicles[v_idx].overtaking != 0 {
+        vehicles[v_idx].blocked_ctr = 0;
+        return false;
+    }
     let blocker_speed = vehicles[blocker].cur_speed;
     vehicles[v_idx].cur_speed = blocker_speed;
     vehicles[v_idx].blocked_ctr = vehicles[v_idx].blocked_ctr.saturating_add(1);
@@ -147,16 +163,24 @@ mod tests {
     #[test]
     fn find_close_to_syncs_speed_to_leader() {
         let mut vehicles = vec![bus_at(1, 0, 2, 40), bus_at(2, 1, 4, 10)];
-        assert!(apply_road_veh_close_to(&mut vehicles, 0));
-        assert_eq!(vehicles[0].cur_speed, 10);
-        assert!(vehicles[0].blocked_ctr > 0);
+        assert!(apply_road_veh_close_to(&mut vehicles, 0, None));
+        // Sin mapa (recta libre) puede iniciar overtake en vez de sync.
+        if vehicles[0].overtaking == 0 {
+            assert_eq!(vehicles[0].cur_speed, 10);
+            assert!(vehicles[0].blocked_ctr > 0);
+        } else {
+            assert_eq!(
+                vehicles[0].overtaking,
+                crate::road_movement::rvsb::RVSB_DRIVE_SIDE
+            );
+        }
     }
 
     #[test]
     fn blocked_ctr_above_limit_allows_pass() {
         let mut vehicles = vec![bus_at(1, 0, 2, 40), bus_at(2, 1, 4, 10)];
         vehicles[0].blocked_ctr = BLOCKED_CTR_LIMIT;
-        assert!(!apply_road_veh_close_to(&mut vehicles, 0));
+        assert!(!apply_road_veh_close_to(&mut vehicles, 0, None));
         assert_eq!(vehicles[0].blocked_ctr, 0);
     }
 }

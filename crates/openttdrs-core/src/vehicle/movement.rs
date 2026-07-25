@@ -371,6 +371,10 @@ impl super::model::Vehicle {
         if self.cached_max_speed > 0 && self.cached_max_speed < u16::MAX {
             max_speed = max_speed.min(self.cached_max_speed);
         }
+        // P3.15: techo del tipo de vía (`gcache.cached_max_track_speed`); `0` = sin límite.
+        if self.cached_max_track_speed > 0 {
+            max_speed = max_speed.min(self.cached_max_track_speed);
+        }
         if let Some(map) = map
             && let Some(bridge_cap) = crate::bridge_spec::bridge_max_speed_for_tile(map, self.pos)
         {
@@ -482,10 +486,40 @@ impl super::model::Vehicle {
         } else {
             i32::try_from(pos_i).unwrap_or(0) + 1
         };
-        // Middle: `(station_length - stop_at)/TILE_SIZE ≈ station_length/2`.
-        let past_stop_to_end = station_length / 2;
+        let osl = self
+            .current_order_ref()
+            .map_or(crate::vehicle::OrderStopLocation::Middle, |o| {
+                o.stop_location()
+            });
+        let train_len_tiles = i32::from(self.cached_total_length.div_ceil(16).max(1));
+        let past_stop_to_end =
+            crate::station::platform_past_stop_tiles(station_length, osl, train_len_tiles);
         let distance_to_go = station_ahead - past_stop_to_end;
         (distance_to_go > 0).then_some(distance_to_go)
+    }
+
+    /// Actualiza `cached_max_track_speed` desde el railtype de la tesela actual.
+    ///
+    /// `0` = sin techo de vía (railtype vanilla `max_speed == 0`); no se siembra con
+    /// la velocidad del motor para no alterar la cinemática cuando no hay límite.
+    pub(crate) fn refresh_cached_max_track_speed(&mut self, map: &Map) {
+        if self.kind != super::model::VehicleKind::Train || !self.is_consist_head() {
+            return;
+        }
+        let mut max_track = 0_u16;
+        if let Some(tile) = map.get(self.pos)
+            && let Some(cap) = crate::rail_type::rail_type_track_speed_cap(tile)
+        {
+            max_track = cap;
+        }
+        if let Some(bridge_cap) = crate::bridge_spec::bridge_max_speed_for_tile(map, self.pos) {
+            max_track = if max_track == 0 {
+                bridge_cap
+            } else {
+                max_track.min(bridge_cap)
+            };
+        }
+        self.cached_max_track_speed = max_track;
     }
 
     /// `true` si este tick de juego (2× loco handler) cruzaría la tesela actual.
@@ -615,6 +649,9 @@ impl super::model::Vehicle {
             }
         }
         if let Some(map) = map {
+            if self.kind == super::model::VehicleKind::Train {
+                self.refresh_cached_max_track_speed(map);
+            }
             self.sync_train_slope_speed(map);
         }
     }
@@ -641,6 +678,9 @@ impl super::model::Vehicle {
             .get(self.pos)
             .map_or(0, |t| rail_type_from_tile(t).accel_table_index());
         let mut max_speed = self.effective_engine().max_speed;
+        if self.cached_max_track_speed > 0 {
+            max_speed = max_speed.min(self.cached_max_track_speed);
+        }
         if let Some(bridge_cap) = crate::bridge_spec::bridge_max_speed_for_tile(map, self.pos) {
             max_speed = max_speed.min(bridge_cap);
         }

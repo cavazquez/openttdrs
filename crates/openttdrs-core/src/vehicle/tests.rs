@@ -497,6 +497,40 @@ fn timetable_wait_delays_order_advance() {
 }
 
 #[test]
+fn no_load_order_skips_loading() {
+    let pos = TileCoord::new(1, 1);
+    let mut v = Vehicle::new(1, VehicleKind::Bus, pos, pos);
+    let mut order = VehicleOrder::station(pos);
+    if let VehicleOrder::Station { no_load, .. } = &mut order {
+        *no_load = true;
+    }
+    v.orders = vec![order];
+    v.running = true;
+    v.progress = 255;
+    v.capacity = 20;
+    assert!(!v.orders[0].should_wait_for_loading(v.cargo, v.capacity));
+}
+
+#[test]
+fn timetable_start_offsets_lateness_on_first_arrival() {
+    let mut v = Vehicle::new(
+        1,
+        VehicleKind::Bus,
+        TileCoord::new(0, 0),
+        TileCoord::new(1, 0),
+    );
+    v.timetable_active = true;
+    v.timetable_start = 100;
+    v.sim_tick = 150;
+    v.orders = vec![VehicleOrder::station(TileCoord::new(1, 0))];
+    v.current_order_time = 10;
+    v.update_vehicle_timetable(true);
+    assert_eq!(v.timetable_lateness, 50);
+    assert_eq!(v.timetable_start, 0);
+    assert!(v.timetable_started);
+}
+
+#[test]
 fn service_at_depot_restores_reliability() {
     let mut v = Vehicle::new(
         1,
@@ -517,7 +551,12 @@ fn service_at_depot_restores_reliability() {
 
 #[test]
 fn requires_service_by_percent_threshold() {
-    let mut v = Vehicle::new(1, VehicleKind::Bus, TileCoord::new(0, 0), TileCoord::new(1, 0));
+    let mut v = Vehicle::new(
+        1,
+        VehicleKind::Bus,
+        TileCoord::new(0, 0),
+        TileCoord::new(1, 0),
+    );
     v.service_interval_days = 20;
     v.reliability = 7_500;
     assert!(!v.requires_service_for_company(true));

@@ -4,6 +4,7 @@ pub(super) fn tick_vehicle_timetables(state: &mut GameState) {
     let tick = state.tick.get();
     for vehicle in &mut state.vehicles {
         vehicle.sim_tick = tick;
+        vehicle.tick_timetable_clock();
         vehicle.tick_timetable_wait();
     }
 }

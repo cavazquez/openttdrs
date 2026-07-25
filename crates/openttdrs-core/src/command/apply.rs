@@ -191,6 +191,10 @@ fn apply_vehicle_command(state: &mut GameState, cmd: &Command) -> Result<(), Com
         Command::ToggleVehicleTimetableAutofill(id) => {
             super::vehicle_fleet::toggle_vehicle_timetable_autofill(state, *id)
         }
+        Command::SetVehicleTimetableStart {
+            vehicle_id,
+            start_tick,
+        } => super::vehicle_fleet::set_vehicle_timetable_start(state, *vehicle_id, *start_tick),
         Command::ToggleAutoReplaceOnlyWhenOld { from_engine_id } => {
             let only_when_old = state
                 .autoreplace_rules
@@ -391,6 +395,7 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
         | Command::SetVehicleOrderWaitTicks { .. }
         | Command::SetVehicleOrderTravelTicks { .. }
         | Command::ToggleVehicleTimetableAutofill(..)
+        | Command::SetVehicleTimetableStart { .. }
         | Command::ToggleAutoReplaceOnlyWhenOld { .. }
         | Command::SetAutoReplaceRuleGroup { .. }
         | Command::DepotMassAutoreplace { .. }

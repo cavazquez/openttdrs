@@ -7,8 +7,9 @@ al cargar (`RebuildTownCaches`, `town_sl.cpp`) sumando
 HouseID es el 3er argumento de las macros `MS(...)` de
 `_original_house_specs` (`table/town_land.h`).
 
-También emite `HOUSE_SIZE_1X1` (`BuildingFlag::Size1x1`) para el poblado
-procedural (solo footprint 1×1).
+También emite `HOUSE_MAIL_GENERATION` (`HouseSpec::mail_generation`, 7.º
+argumento de `MS`) y `HOUSE_SIZE_1X1` (`BuildingFlag::Size1x1`) para el
+poblado procedural (solo footprint 1×1).
 
 Salida: `crates/openttdrs-core/src/sav/house_population_generated.rs`.
 
@@ -28,7 +29,7 @@ TOWN_LAND_H = REPO / "reference" / "openttd-upstream" / "src" / "table" / "town_
 OUT_RS = REPO / "crates" / "openttdrs-core" / "src" / "sav" / "house_population_generated.rs"
 
 
-def parse_specs(town_land: Path) -> tuple[list[int], list[bool]]:
+def parse_specs(town_land: Path) -> tuple[list[int], list[int], list[bool]]:
     text = town_land.read_text(encoding="utf-8")
     m = re.search(r"_original_house_specs\[\] = \{(.*)\};", text, re.S)
     if not m:
@@ -38,12 +39,17 @@ def parse_specs(town_land: Path) -> tuple[list[int], list[bool]]:
     if len(parts) < 100:
         raise SystemExit(f"esperaba ~110 entradas MS, hay {len(parts)}")
     pops: list[int] = []
+    mails: list[int] = []
     size_1x1: list[bool] = []
     for p in parts:
         am = re.match(r"\s*(-?\d+)\s*,[^,]+,\s*(\d+)\s*,", p)
         if not am:
             raise SystemExit(f"MS mal formado: {p[:80]!r}")
+        mm = re.search(r"STR_\w+,\s*\d+,\s*(\d+),", p)
+        if not mm:
+            raise SystemExit(f"MS sin mail_generation: {p[:80]!r}")
         pops.append(int(am.group(2)))
+        mails.append(int(mm.group(1)))
         head = p[:500]
         # Size2x* / Size1x2 ganan sobre Size1x1 si aparecen juntos.
         if re.search(r"BuildingFlag::Size(?:2x1|1x2|2x2)\b", head):
@@ -52,7 +58,7 @@ def parse_specs(town_land: Path) -> tuple[list[int], list[bool]]:
             size_1x1.append(True)
         else:
             size_1x1.append(False)
-    return pops, size_1x1
+    return pops, mails, size_1x1
 
 
 def fmt_bool_row(vals: list[bool], start: int) -> str:
@@ -62,7 +68,7 @@ def fmt_bool_row(vals: list[bool], start: int) -> str:
 
 
 def build_content(town_land: Path) -> str:
-    pops, size_1x1 = parse_specs(town_land)
+    pops, mails, size_1x1 = parse_specs(town_land)
     n = len(pops)
     lines = [
         "// Generado por scripts/gen_house_population.py — NO EDITAR A MANO.",
@@ -72,12 +78,21 @@ def build_content(town_land: Path) -> str:
         "// Usado para reconstruir `Town::cache.population` como",
         "// `RebuildTownCaches` (`town_sl.cpp`).",
         "//",
+        "// `HOUSE_MAIL_GENERATION`: `HouseSpec::mail_generation` (7.º arg de `MS`).",
         "// `HOUSE_SIZE_1X1`: `BuildingFlag::Size1x1` (footprint de una tesela).",
         "",
         f"pub(crate) static HOUSE_POPULATION: [u16; {n}] = [",
     ]
     for start in range(0, n, 10):
         chunk = ", ".join(str(p) for p in pops[start : start + 10])
+        lines.append(f"    {chunk}, // {start}..{min(start + 10, n) - 1}")
+    lines += [
+        "];",
+        "",
+        f"pub(crate) static HOUSE_MAIL_GENERATION: [u16; {n}] = [",
+    ]
+    for start in range(0, n, 10):
+        chunk = ", ".join(str(m) for m in mails[start : start + 10])
         lines.append(f"    {chunk}, // {start}..{min(start + 10, n) - 1}")
     lines += [
         "];",

@@ -356,7 +356,9 @@ fn feeder_share_paid_on_unload_preserves_packet_flags() {
     let mut truck = Vehicle::new(90, VehicleKind::Truck, dest, dest);
     let mut transfer_order = VehicleOrder::station(dest);
     if let VehicleOrder::Station {
-        transfer, no_unload, ..
+        transfer,
+        no_unload,
+        ..
     } = &mut transfer_order
     {
         *transfer = true;
@@ -393,10 +395,7 @@ fn feeder_share_paid_on_unload_preserves_packet_flags() {
         .expect("packet reinsertado");
     assert_eq!(reinserted.first_station, Some(hub));
     assert!(reinserted.next_hop.is_none(), "trasbordo limpia next_hop");
-    assert!(
-        !reinserted.feeder_paid,
-        "feeder no se liquida en trasbordo"
-    );
+    assert!(!reinserted.feeder_paid, "feeder no se liquida en trasbordo");
     assert!(reinserted.feeder_share > 0, "packet acumula feeder_share");
     assert_eq!(
         state.company_economy(ai).money,

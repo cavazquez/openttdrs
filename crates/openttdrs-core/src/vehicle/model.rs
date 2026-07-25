@@ -259,6 +259,15 @@ pub struct Vehicle {
     /// Tick de simulación al salir de la orden anterior (viaje mínimo).
     #[serde(default)]
     pub timetable_leg_start_tick: u64,
+    /// Ticks transcurridos en la orden actual (`Vehicle::current_order_time`).
+    #[serde(skip, default)]
+    pub(crate) current_order_time: u32,
+    /// Inicio escalonado del ciclo de horario (`Vehicle::timetable_start`).
+    #[serde(default)]
+    pub timetable_start: u32,
+    /// El vehículo ya completó la primera llegada del horario.
+    #[serde(default)]
+    pub timetable_started: bool,
     /// Autoreemplazo ya intentado en esta parada en depósito.
     #[serde(default)]
     pub autoreplace_attempted_this_stop: bool,
@@ -383,6 +392,7 @@ pub struct Vehicle {
 
 impl Vehicle {
     #[must_use]
+    #[allow(clippy::too_many_lines)]
     pub fn new(id: u32, kind: VehicleKind, pos: TileCoord, dest: TileCoord) -> Self {
         let cargo_type = match kind {
             VehicleKind::Bus | VehicleKind::Tram | VehicleKind::Aircraft => {
@@ -447,6 +457,9 @@ impl Vehicle {
             timetable_wait_remaining: 0,
             timetable_wait_kind: TimetableWaitKind::None,
             timetable_leg_start_tick: 0,
+            current_order_time: 0,
+            timetable_start: 0,
+            timetable_started: false,
             autoreplace_attempted_this_stop: false,
             build_tick: 0,
             group_id: None,
@@ -594,19 +607,15 @@ impl Vehicle {
             return false;
         }
         if self.kind == VehicleKind::Train
-            && self
-                .engine_id
-                .map(|id| {
-                    !crate::engine::engine_for_vehicle(self.kind, id).is_train_engine()
-                })
-                .unwrap_or(false)
+            && self.engine_id.is_some_and(|id| {
+                !crate::engine::engine_for_vehicle(self.kind, id).is_train_engine()
+            })
         {
             return false;
         }
         let age_days = self.vehicle_age_days(current_tick);
         let threshold = i64::from(engine_renew_months) * 30;
-        i64::try_from(age_days.saturating_sub(u64::from(self.max_age_days)))
-            .unwrap_or(i64::MAX)
+        i64::try_from(age_days.saturating_sub(u64::from(self.max_age_days))).unwrap_or(i64::MAX)
             >= threshold
     }
 

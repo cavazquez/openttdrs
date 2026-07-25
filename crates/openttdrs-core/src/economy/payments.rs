@@ -145,8 +145,7 @@ pub fn transported_goods_income(
     let (time_factor, asymptotic) = cargo_time_factor(transit_days, spec);
     let effective_rate =
         (i64::from(spec.base_rate) * i64::try_from(inflation_payment).unwrap_or(i64::MAX)) >> 16;
-    let mut income =
-        i64::from(dist) * i64::from(time_factor) * i64::from(count) * effective_rate;
+    let mut income = i64::from(dist) * i64::from(time_factor) * i64::from(count) * effective_rate;
     let shift = if asymptotic {
         21 + TIME_FACTOR_FRAC_BITS
     } else {
@@ -183,12 +182,7 @@ pub fn monthly_loan_interest_with_rate(loan: i64, annual_rate_pct: i64) -> i64 {
 /// `month` es 0..=11 dentro del año de calendario. Incluye interés sobre caja negativa
 /// (`money < 0`) además del préstamo.
 #[must_use]
-pub fn monthly_company_interest(
-    loan: i64,
-    money: i64,
-    annual_rate_pct: i64,
-    month: u8,
-) -> i64 {
+pub fn monthly_company_interest(loan: i64, money: i64, annual_rate_pct: i64, month: u8) -> i64 {
     let mut yearly_fee = loan.saturating_mul(annual_rate_pct) / 100;
     if money < 0 {
         yearly_fee = yearly_fee.saturating_add((-money).saturating_mul(annual_rate_pct) / 100);

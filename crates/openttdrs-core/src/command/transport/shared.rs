@@ -229,17 +229,15 @@ fn check_town_demolition_rating(
     if state.cheats.magic_bulldozer_active() {
         return Ok(());
     }
-    let tile = state
-        .map
-        .get(c)
-        .ok_or(CommandError::OutOfBounds)?;
+    let tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
     if !crate::company::CompanyId::is_town_owner_m1(tile.m1) {
         return Ok(());
     }
     let check_type = match kind {
-        TileKind::RoadBridge | TileKind::RailBridge | TileKind::RoadTunnel | TileKind::RailTunnel => {
-            crate::town::TownRatingCheckType::TunnelBridgeRemove
-        }
+        TileKind::RoadBridge
+        | TileKind::RailBridge
+        | TileKind::RoadTunnel
+        | TileKind::RailTunnel => crate::town::TownRatingCheckType::TunnelBridgeRemove,
         TileKind::Road => crate::town::TownRatingCheckType::RoadRemove,
         _ => return Ok(()),
     };

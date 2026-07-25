@@ -1,8 +1,8 @@
 use crate::command::{Command, CommandError, apply_command};
 use crate::test_fixtures::SandboxMap;
 use crate::{
-    GameState, IndustryKind, IndustrySpec, LevelMode, TileCoord, TileKind,
-    industry_template, tile_slope_and_z,
+    GameState, IndustryKind, IndustrySpec, LevelMode, TileCoord, TileKind, industry_template,
+    tile_slope_and_z,
 };
 
 #[test]

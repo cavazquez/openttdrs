@@ -736,6 +736,7 @@ impl super::model::Vehicle {
             self.progress = 0;
             return;
         }
+        self.update_vehicle_timetable(true);
         let early = self.travel_early_wait_ticks();
         if early > 0 {
             self.timetable_wait_remaining = early.max(1);
@@ -875,7 +876,9 @@ impl super::model::Vehicle {
             self.do_advance_after_arrival(true);
             return;
         }
-        if order.full_load() && self.cargo < self.capacity {
+        if let Some(order) = self.current_order_ref().copied()
+            && order.should_wait_for_loading(self.cargo, self.capacity)
+        {
             self.progress = 255;
             return;
         }

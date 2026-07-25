@@ -372,7 +372,7 @@ mod tests {
 
     #[test]
     fn ottn_roundtrip_preserves_vehicles_and_orders() {
-        use crate::vehicle::{Vehicle, VehicleKind, VehicleOrder};
+        use crate::vehicle::{OrderNonStop, Vehicle, VehicleKind, VehicleOrder};
 
         let mut state = tiny_state();
         let mut rail = Station::new_with_kind(TileCoord::new(28, 39), StopKind::RailStation);
@@ -391,8 +391,11 @@ mod tests {
         train.set_vehicle_orders(vec![VehicleOrder::Station {
             station: TileCoord::new(28, 39),
             full_load: false,
+            full_load_any: false,
+            no_load: false,
             no_unload: false,
             transfer: false,
+            non_stop: OrderNonStop::default(),
             wait_ticks: 0,
             travel_ticks: 0,
         }]);
@@ -406,8 +409,11 @@ mod tests {
         bus.set_vehicle_orders(vec![VehicleOrder::Station {
             station: TileCoord::new(17, 15),
             full_load: false,
+            full_load_any: false,
+            no_load: false,
             no_unload: false,
             transfer: false,
+            non_stop: OrderNonStop::default(),
             wait_ticks: 0,
             travel_ticks: 0,
         }]);

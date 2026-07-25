@@ -3,8 +3,8 @@
 use crate::economy::station_build_cost;
 use crate::test_fixtures::SandboxMap;
 use crate::{
-    Command, DEPOT_BUILD_COST, GameState, StopKind, TileCoord, TileKind,
-    VehicleKind, apply_command, bridge_above_axis_from_mapt,
+    Command, DEPOT_BUILD_COST, GameState, StopKind, TileCoord, TileKind, VehicleKind,
+    apply_command, bridge_above_axis_from_mapt,
 };
 
 #[test]

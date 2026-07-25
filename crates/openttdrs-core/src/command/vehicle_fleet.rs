@@ -114,6 +114,21 @@ pub(super) fn set_vehicle_order_travel_ticks(
     Ok(())
 }
 
+pub(super) fn set_vehicle_timetable_start(
+    state: &mut GameState,
+    vehicle_id: u32,
+    start_tick: u32,
+) -> Result<(), CommandError> {
+    require_vehicle_owned_by_active(state, vehicle_id)?;
+    let Some(vehicle) = state.vehicles.iter_mut().find(|v| v.id == vehicle_id) else {
+        return Err(CommandError::VehicleNotFound);
+    };
+    vehicle.timetable_start = start_tick;
+    vehicle.timetable_lateness = 0;
+    vehicle.timetable_started = false;
+    Ok(())
+}
+
 pub(super) fn toggle_vehicle_timetable_autofill(
     state: &mut GameState,
     vehicle_id: u32,

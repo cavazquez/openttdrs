@@ -72,17 +72,10 @@ abrir el issue.
 | 5 | [P1.2](#p12--reparto-de-carga-entre-estaciones-competidoras--hecho) Reparto entre estaciones | P1 | L | hecho | Cierra la mitad que le faltaba a P1.1: el rating ya reparte la producción |
 | 6 | [P1.4](#p14--prod_level-y-cierre-de-industrias--hecho) Industrias dinámicas + [P1.3](#p13--producción-industrial-por-spec--hecho) rates | P1 | XL | hecho | Sin esto el mundo económico es estático y las rutas no caducan |
 | 7 | [P3.1](#tabla-p3) `GenerateTowns` / `GenerateIndustries` | P3 | XL | | Un mapa nuevo nace vacío: bloquea comparar una partida completa |
-| 8 | [P1.6](#p16--pago-diferido-de-transferencias--hecho) Pago diferido de transferencias | P1 | L | hecho | El cobro inmediato hace rentables cadenas que no lo son |
-| 9 | [P2.1](#tabla-p2) Relojes calendario/economía | P2 | XL | | Habilita los barridos escalonados de los que todo depende |
+| 8 | [P2.1](#tabla-p2) Relojes calendario/economía | P2 | XL | | Habilita los barridos escalonados de los que todo depende |
 
-P3.1 se adelanta al resto de P3 porque sin mundo generado no hay escenario de comparación.
-
-Los otros dos P0 que quedaban ([P0.5](#p05--todas-las-industrias-producen-en-el-mismo-tick--hecho) y
-[P0.6](#p06--la-hierba-crece-ocho-veces-más-rápido--hecho)) también están cerrados.
-
-Fuera del camino crítico pero ya cerrados en P1: [P1.15](#p115--inflación--hecho) (inflación
-compuesta mensual) y [P1.22](#p122--rama-asintótica-del-factor-de-tiempo-y-fluctuaciones--hecho)
-(factor de tiempo asintótico + recesiones con noticias).
+**P1 completo** (22/22). P3.1 se adelanta al resto de P3 porque sin mundo generado no hay
+escenario de comparación. Los P0 puntuales también están cerrados (P0.7 reclasificado a P2).
 
 ---
 
@@ -199,7 +192,7 @@ con la clasificación de segmentos de señal y está reclasificada a P2 (detalle
 
 ## 5. P1 — Reglas de comportamiento
 
-Veintidós entradas, **dieciséis cerradas** (P1.1 —con P0.3—, P1.2, el bloque P1.3+P1.4 de industrias, P1.8, P1.9, P1.10, P1.11, P1.12, P1.13, P1.14, P1.15, P1.16, P1.17, P1.18, P1.19 y P1.22).
+Veintidós entradas, **todas cerradas** (P1.1 —con P0.3— a P1.22).
 
 ### P1.1 — `UpdateStationRating` completo · hecho
 
@@ -285,16 +278,20 @@ Veintidós entradas, **dieciséis cerradas** (P1.1 —con P0.3—, P1.2, el bloq
 - **Pendiente** — economía smooth, creación diaria de industrias nuevas, abandono de
   procesadoras a los 5 años, noticias de subida/bajada de producción (hoy solo cierre).
 
-### P1.5 — Transformación de insumos
+### P1.5 — Transformación de insumos · hecho
 
 - **Problema** — solo las fábricas de `Goods` consumen algo; acería, refinería y el resto de
   cadenas no transforman.
 - **Original** — al aceptar carga, `produced.waiting += accepted.waiting * input_cargo_multiplier / 256`
   con la matriz de multiplicadores del spec (`economy.cpp:1156-1165`).
-- **Port** — caso especial de madera y carbón (`industry.rs:306-357`).
-- **Solución** — modelar colas `accepted[]` / `produced[]` por industria y la matriz de
-  multiplicadores en la tabla de specs.
-- **Coste** — XL.
+- **Hecho** — `IndustrySpec::processing_inputs` con multiplicadores 256 para temperate:
+  aserradero (madera→goods), refinería (petróleo→goods), acería (hierro+carbón→acero),
+  fábrica (madera+carbón→goods). `produce_from_nearby_stations` consume desde estaciones en
+  cobertura y aplica `out += in * multiplier / 256`. Corregido `output_cargo` de aserradero y
+  refinería. Tests `sawmill_consumes_wood_for_goods`, `steel_mill_consumes_iron_and_coal_for_steel`,
+  `oil_refinery_consumes_oil_for_goods` y fábrica actualizada.
+- **Pendiente** — colas `accepted[]`/`produced[]` persistentes en la industria (hoy se consume
+  del andén cada ciclo); specs de otros climas y segundo cargo de granja.
 
 ### P1.6 — Pago diferido de transferencias · hecho
 
@@ -314,16 +311,19 @@ Veintidós entradas, **dieciséis cerradas** (P1.1 —con P0.3—, P1.2, el bloq
   staging de OpenTTD ([P2.19](#p219--clasificación-de-carga)); hoy no hay ingreso en andén
   intermedio, solo en entrega final de pax/mail.
 
-### P1.7 — Producción de pasajeros por casa
+### P1.7 — Producción de pasajeros por casa · hecho
 
 - **Problema** — el port genera 2 pasajeros y 1 correo por casa dentro de la cobertura de la
   parada. La producción no depende del tipo de casa ni existe fuera del alcance de una estación.
 - **Original** — `TileLoop_Town` genera por casa con `hs->population` y `hs->mail_generation`,
   vía `TownGenerateCargoOriginal` o binomial con RNG (`town_cmd.cpp:602-667`, `751-778`).
-- **Port** — `produce_town_cargo` agregado por estación cada 256 ticks (`town.rs:217-287`).
-- **Solución** — portar `TileLoop_Town` y usar la tabla de specs que ya existe para saves
-  (`sav/house_population_generated.rs`), hoy sin uso en runtime.
-- **Coste** — L.
+- **Hecho** — `produce_town_cargo` recorre casas del mapa, usa `HOUSE_POPULATION` y
+  `HOUSE_MAIL_GENERATION` (generado desde `town_land.h`), escala al ciclo de 256 ticks y reparte
+  con `MoveGoodsToStation` entre paradas que comparten cobertura. Tests
+  `produce_uses_house_spec_population`, `competing_bus_stops_split_house_passengers_by_rating` y
+  `produce_adds_cargo_when_houses_in_coverage` actualizado.
+- **Pendiente** — algoritmo original/binomial con RNG por tesela; `TileLoop_Town` completo con
+  edad de casas ([P3.6](#p36--renovación-de-casas)).
 
 ### P1.8 — Tasa de crecimiento urbano · hecho
 
@@ -495,32 +495,36 @@ Veintidós entradas, **dieciséis cerradas** (P1.1 —con P0.3—, P1.2, el bloq
   `subsidy_award_duration_uses_subsidy_duration_years` y `award_on_first_delivery_uses_difficulty_multiplier`.
 - **Coste** — L.
 
-### P1.20 — Flags de orden que faltan
+### P1.20 — Flags de orden que faltan · hecho
 
-- **Problema** — la orden solo tiene `full_load` y `no_unload`, así que no existen transferencia
+- **Problema** — la orden solo tenía `full_load` y `no_unload`, así que no existen transferencia
   forzada, no cargar, `FullLoadAny`, vías sin parar ni posición de parada. Es la carencia que más
   limita las rutas que el jugador puede montar.
 - **Original** — `OrderLoadFlags` y `OrderUnloadFlags` en `order_type.h:67-82`;
   `OrderNonStopFlags` y `OrderStopLocation` en `order_type.h:87-123`; condicionales con ocho
   variables por ocho comparadores en `order_type.h:128-152`.
-- **Port** — `vehicle/order.rs:14-60`; el decodificador de saves ya distingue los valores pero los
-  colapsa (`sav/orders_codec.rs:28-52`).
-- **Solución** — modelar los flags completos y respetarlos en carga, descarga y parada. El
-  decodificador ya trae la información, así que buena parte del trabajo es de runtime.
-- **Coste** — M los flags de carga, M adicional el non-stop, M las condicionales.
+- **Hecho** — `VehicleOrder::Station` con `no_load`, `full_load_any`, `transfer`, `non_stop`
+  (`OrderNonStop`); `station_flags_from_sav` / `station_flags_to_sav` sin colapsar flags;
+  respeto en `cargo_transfer.rs` y `order_execution`/`movement.rs`. Tests
+  `station_flags_preserve_transfer_no_load_and_timetable`, `full_load_any_flag_is_not_collapsed_to_full_load`,
+  `no_load_order_skips_loading`.
+- **Pendiente** — `OrderStopLocation` (andén inicio/medio/fin, ver P3.14) y condicionales
+  extendidas (ocho variables).
 
-### P1.21 — Horarios reales
+### P1.21 — Horarios reales · hecho
 
 - **Problema** — hay esperas por `wait_ticks` pero nadie mide el tiempo real de viaje, así que el
   retraso no es fiable y no se puede escalonar una línea.
 - **Original** — `UpdateVehicleTimetable` resetea `current_order_time`, hace autofill con redondeo
   y ajusta `lateness_counter` (`timetable_cmd.cpp:469-575`); `timetable_start` y
   `CmdSetTimetableStart` reparten los vehículos de un grupo (`timetable_cmd.cpp:351-411`).
-- **Port** — `order_execution.rs:100-128` y `vehicle/movement.rs:889-904`; el import de save
-  descarta wait y travel (`sav/orders_codec.rs:99`).
-- **Solución** — portar la medición por orden y `timetable_start`, y conservar los horarios al
-  importar.
-- **Coste** — L.
+- **Hecho** — `current_order_time` + `update_vehicle_timetable` (lateness, autofill con redondeo
+  a segundo); import ORDL conserva `wait_time`/`travel_time`; `timetable_start` y comando
+  `SetVehicleTimetableStart`. Tests `timetable_clock_increments_current_order_time`,
+  `autofill_sets_travel_ticks_on_arrival`, `lateness_increases_when_late`,
+  `timetable_start_offsets_lateness_on_first_arrival`.
+- **Pendiente** — reparto automático entre vehículos de órdenes compartidas (`timetable_all`);
+  import de `timetable_start` desde chunk `VEHS`.
 
 ### P1.22 — Rama asintótica del factor de tiempo y fluctuaciones · hecho
 

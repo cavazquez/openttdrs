@@ -65,7 +65,13 @@ fn table_rows(chunk: &RawChunk, save_version: u16) -> Vec<(u32, SlRecord)> {
     super::array_legacy::chunk_rows(chunk, save_version)
 }
 
-fn sav_order_from_fields(order_type: u8, dest: u16, flags: u8) -> Option<SavOrder> {
+fn sav_order_from_fields(
+    order_type: u8,
+    dest: u16,
+    flags: u8,
+    wait_time: u16,
+    travel_time: u16,
+) -> Option<SavOrder> {
     if (order_type & 0x0F) == OT_NOTHING {
         None
     } else {
@@ -73,6 +79,8 @@ fn sav_order_from_fields(order_type: u8, dest: u16, flags: u8) -> Option<SavOrde
             order_type,
             dest,
             flags,
+            wait_time,
+            travel_time,
         })
     }
 }
@@ -96,7 +104,15 @@ fn orders_from_record(record: &SlRecord) -> Vec<SavOrder> {
                 .and_then(SlValue::as_u64)
                 .and_then(|v| u8::try_from(v).ok())
                 .unwrap_or(0);
-            sav_order_from_fields(order_type, dest, flags)
+            let wait_time = record_get(item, "wait_time")
+                .and_then(SlValue::as_u64)
+                .and_then(|v| u16::try_from(v).ok())
+                .unwrap_or(0);
+            let travel_time = record_get(item, "travel_time")
+                .and_then(SlValue::as_u64)
+                .and_then(|v| u16::try_from(v).ok())
+                .unwrap_or(0);
+            sav_order_from_fields(order_type, dest, flags, wait_time, travel_time)
         })
         .collect()
 }
@@ -145,7 +161,8 @@ fn chain_from_ordr_ref(start_ref: u32, pool: &HashMap<u32, OrdrEntry>) -> Vec<Sa
         let Some(entry) = pool.get(&key) else {
             break;
         };
-        if let Some(order) = sav_order_from_fields(entry.order_type, entry.dest, entry.flags) {
+        if let Some(order) = sav_order_from_fields(entry.order_type, entry.dest, entry.flags, 0, 0)
+        {
             out.push(order);
         }
         if entry.next == 0 || entry.next == ref_idx {
@@ -307,6 +324,8 @@ mod tests {
                 order_type: OT_GOTO_STATION,
                 dest: 0,
                 flags: 0,
+                wait_time: 0,
+                travel_time: 0,
             }],
             &stations,
             64,
@@ -342,6 +361,8 @@ mod tests {
                 order_type: OT_GOTO_STATION,
                 dest: 1,
                 flags: (OTTD_LOAD_FULL << 4) | OTTD_UNLOAD_NO_UNLOAD,
+                wait_time: 0,
+                travel_time: 0,
             }],
             &stations,
             64,
@@ -364,11 +385,15 @@ mod tests {
                     order_type: OT_GOTO_DEPOT,
                     dest: 5 + 2 * 64,
                     flags: OTTD_DEPOT_HALT | (1 << 1),
+                    wait_time: 0,
+                    travel_time: 0,
                 },
                 SavOrder {
                     order_type: OT_CONDITIONAL | (4 << 5),
                     dest: 50,
                     flags: 2,
+                    wait_time: 0,
+                    travel_time: 0,
                 },
             ],
             &HashMap::new(),

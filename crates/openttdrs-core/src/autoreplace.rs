@@ -78,24 +78,20 @@ fn apply_engine_with_refit(vehicle: &mut Vehicle, new_engine: &EngineDef, curren
     crate::vehicle::init_vehicle_reliability_from_engine(vehicle, new_engine);
 }
 
-fn company_for_vehicle<'a>(state: &'a GameState, owner: crate::company::CompanyId) -> Option<&'a crate::company::Company> {
+fn company_for_vehicle(
+    state: &GameState,
+    owner: crate::company::CompanyId,
+) -> Option<&crate::company::Company> {
     state.companies.get(owner.index())
 }
 
-fn can_afford_replacement(
-    money: i64,
-    cost: i64,
-    engine_renew_money: i64,
-) -> bool {
+fn can_afford_replacement(money: i64, cost: i64, engine_renew_money: i64) -> bool {
     money >= cost.saturating_add(engine_renew_money)
 }
 
 /// Evalúa si hay un reemplazo/autorenovación pendiente con fondos (`NeedsServicing` autoreplace).
 #[must_use]
-pub fn pending_autoreplace_for_service(
-    state: &GameState,
-    vehicle: &Vehicle,
-) -> bool {
+pub fn pending_autoreplace_for_service(state: &GameState, vehicle: &Vehicle) -> bool {
     let Some(company) = company_for_vehicle(state, vehicle.owner) else {
         return false;
     };
@@ -191,11 +187,7 @@ pub fn try_autoreplace_vehicle(
             }
             let vehicle = &state.vehicles[vehicle_idx];
             let cost = autoreplace_cost(vehicle, new_engine);
-            if !can_afford_replacement(
-                company.economy.money,
-                cost,
-                company.engine_renew_money,
-            ) {
+            if !can_afford_replacement(company.economy.money, cost, company.engine_renew_money) {
                 crate::news::push_autoreplace_failed_news(
                     state,
                     vehicle_id,
@@ -229,11 +221,7 @@ pub fn try_autoreplace_vehicle(
     }
     let vehicle = &state.vehicles[vehicle_idx];
     let cost = autoreplace_cost(vehicle, new_engine);
-    if !can_afford_replacement(
-        company.economy.money,
-        cost,
-        company.engine_renew_money,
-    ) {
+    if !can_afford_replacement(company.economy.money, cost, company.engine_renew_money) {
         crate::news::push_autoreplace_failed_news(
             state,
             vehicle_id,
@@ -253,6 +241,7 @@ pub fn try_autoreplace_vehicle(
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::map::TileCoord;
@@ -291,10 +280,7 @@ mod tests {
     fn autorenew_same_engine_when_old_enough() {
         let mut state = GameState::new(8, 8);
         let depot = TileCoord::new(2, 2);
-        state
-            .map
-            .set_kind(depot, TileKind::RoadDepot)
-            .unwrap();
+        state.map.set_kind(depot, TileKind::RoadDepot).unwrap();
         state.companies[0].engine_renew_money = 0;
         state.economy.money = 500_000;
         state.companies[0].economy.money = 500_000;
@@ -314,10 +300,7 @@ mod tests {
     fn autorenew_respects_engine_renew_money() {
         let mut state = GameState::new(8, 8);
         let depot = TileCoord::new(2, 2);
-        state
-            .map
-            .set_kind(depot, TileKind::RoadDepot)
-            .unwrap();
+        state.map.set_kind(depot, TileKind::RoadDepot).unwrap();
         state.companies[0].engine_renew_money = 1_000_000;
         state.companies[0].economy.money = 50_000;
         state.economy.money = 50_000;

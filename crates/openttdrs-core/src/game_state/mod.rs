@@ -263,6 +263,7 @@ pub const TERRAFORM_BASE_PRICE: i64 = 250;
 /// Precio base por tesela de terreno comprado (`Price::BuildObject`).
 pub const BUY_LAND_BASE_PRICE: i64 = 40;
 /// Precio base faro/transmisor (`Price::BuildObject`).
+#[allow(dead_code)]
 pub const BUILD_OBJECT_BASE_PRICE: i64 = 40;
 /// Alias en tick 0 (sin inflación de precios); preferir [`crate::economy::terraform_cost_per_corner`].
 pub const TERRAFORM_COST: i64 = TERRAFORM_BASE_PRICE;
@@ -563,8 +564,7 @@ impl GameState {
     /// Inicializa economía global (inflación previa a 1950, `max_loan` escalado).
     pub fn finish_new_game_startup(&mut self) {
         let start_year = crate::news::CALENDAR_BASE_YEAR;
-        self.global_economy
-            .startup(&mut self.cargo_rng, start_year);
+        self.global_economy.startup(&mut self.cargo_rng, start_year);
         self.sync_scaled_max_loan();
     }
 

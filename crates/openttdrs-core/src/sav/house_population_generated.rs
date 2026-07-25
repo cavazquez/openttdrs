@@ -5,6 +5,7 @@
 // Usado para reconstruir `Town::cache.population` como
 // `RebuildTownCaches` (`town_sl.cpp`).
 //
+// `HOUSE_MAIL_GENERATION`: `HouseSpec::mail_generation` (7.º arg de `MS`).
 // `HOUSE_SIZE_1X1`: `BuildingFlag::Size1x1` (footprint de una tesela).
 
 pub(crate) static HOUSE_POPULATION: [u16; 110] = [
@@ -19,6 +20,20 @@ pub(crate) static HOUSE_POPULATION: [u16; 110] = [
     16, 7, 45, 8, 18, 90, 120, 250, 0, 80, // 80..89
     180, 8, 18, 7, 15, 17, 19, 21, 75, 35, // 90..99
     0, 85, 11, 10, 67, 86, 95, 30, 25, 18, // 100..109
+];
+
+pub(crate) static HOUSE_MAIL_GENERATION: [u16; 110] = [
+    70, 55, 20, 2, 85, 85, 12, 22, 22, 0, // 0..9
+    0, 0, 0, 65, 48, 48, 48, 50, 10, 55, // 10..19
+    5, 5, 5, 5, 6, 7, 8, 35, 50, 40, // 20..29
+    64, 23, 5, 5, 5, 5, 65, 6, 6, 23, // 30..39
+    5, 5, 5, 5, 20, 20, 6, 6, 6, 6, // 40..49
+    60, 60, 70, 70, 80, 80, 5, 5, 20, 20, // 50..59
+    2, 2, 7, 7, 45, 45, 25, 25, 25, 25, // 60..69
+    50, 50, 75, 75, 60, 60, 60, 60, 6, 6, // 70..79
+    5, 4, 15, 3, 7, 24, 25, 80, 80, 23, // 80..89
+    90, 3, 5, 3, 6, 6, 6, 6, 20, 9, // 90..99
+    0, 18, 3, 3, 22, 23, 28, 10, 8, 7, // 100..109
 ];
 
 pub(crate) static HOUSE_SIZE_1X1: [bool; 110] = [

@@ -58,8 +58,8 @@ pub fn terraform_cost_per_corner_inflated(inflation_prices: u64) -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::economy::pricebase::medium_default_price;
     use crate::economy::pricebase::PriceIndex;
+    use crate::economy::pricebase::medium_default_price;
 
     #[test]
     fn build_costs_track_price_base_at_default_difficulty() {
@@ -68,7 +68,10 @@ mod tests {
             terraform_cost_per_corner(&ge),
             medium_default_price(PriceIndex::Terraform)
         );
-        assert_eq!(rail_build_cost(&ge), medium_default_price(PriceIndex::BuildRail));
+        assert_eq!(
+            rail_build_cost(&ge),
+            medium_default_price(PriceIndex::BuildRail)
+        );
         assert_eq!(
             station_build_cost(&ge),
             medium_default_price(PriceIndex::BuildStationRail)

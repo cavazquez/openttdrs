@@ -1,6 +1,6 @@
+use crate::economy::road_build_cost;
 use crate::map::{Map, TileCoord, TileKind};
 use crate::pathfinder::{diag_dir_offset, station_site_tile_allows_build};
-use crate::economy::road_build_cost;
 use crate::{DEPOT_BUILD_COST, GameState};
 
 use super::super::terraform::apply_autoslope_if_needed;

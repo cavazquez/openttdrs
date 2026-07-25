@@ -24,8 +24,8 @@ pub const STATION_RATING_TICKS: u32 = 185;
 /// Mes de calendario 0..=11 a partir del índice de día (`calendar_day_index`).
 #[must_use]
 pub fn calendar_month_index(day_index: u64) -> u8 {
-    let doy = day_index % 365 + 1;
     const MONTH_LEN: [u64; 12] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    let doy = day_index % 365 + 1;
     let mut remaining = doy;
     for (i, len) in MONTH_LEN.iter().enumerate() {
         if remaining <= *len {

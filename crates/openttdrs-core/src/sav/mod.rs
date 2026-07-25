@@ -25,6 +25,15 @@ pub fn house_spec_population(house_id: u16) -> u16 {
         .unwrap_or(0)
 }
 
+/// Generación de correo de un `HouseID` original (`HouseSpec::mail_generation`).
+#[must_use]
+pub fn house_spec_mail_generation(house_id: u16) -> u16 {
+    house_population_generated::HOUSE_MAIL_GENERATION
+        .get(usize::from(house_id))
+        .copied()
+        .unwrap_or(0)
+}
+
 /// `true` si el `HouseID` original tiene footprint `Size1x1`.
 #[must_use]
 pub fn house_spec_is_size_1x1(house_id: u16) -> bool {
@@ -36,7 +45,7 @@ pub fn house_spec_is_size_1x1(house_id: u16) -> bool {
 
 #[cfg(test)]
 mod house_spec_tests {
-    use super::{house_spec_is_size_1x1, house_spec_population};
+    use super::{house_spec_is_size_1x1, house_spec_mail_generation, house_spec_population};
 
     #[test]
     fn large_office_is_1x1_with_high_population() {
@@ -44,6 +53,7 @@ mod house_spec_tests {
         assert!(house_spec_is_size_1x1(5));
         assert_eq!(house_spec_population(4), 220);
         assert_eq!(house_spec_population(5), 220);
+        assert_eq!(house_spec_mail_generation(4), 85);
     }
 
     #[test]

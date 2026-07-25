@@ -3,9 +3,7 @@ use crate::link_graph::LinkEdgeKey;
 use crate::tnbp_decode::JgrTunnelRecord;
 use std::collections::VecDeque;
 
-use crate::industry::{
-    INDUSTRY_PRODUCE_AMOUNT, INDUSTRY_PRODUCE_TICKS, industry_produce_period_ticks,
-};
+use crate::industry::{INDUSTRY_PRODUCE_TICKS, industry_produce_period_ticks};
 
 use crate::vehicle::VEHICLE_CAPACITY;
 
@@ -358,7 +356,7 @@ fn factory_chain_produces_goods_from_delivered_cargo() {
         s.step();
     }
 
-    assert_eq!(s.industries[0].stock, INDUSTRY_PRODUCE_AMOUNT);
+    assert_eq!(s.industries[0].stock, 6);
     assert_eq!(s.stations[0].cargo_stock.wood, 0);
     assert_eq!(s.stations[0].cargo_stock.coal, 0);
 }

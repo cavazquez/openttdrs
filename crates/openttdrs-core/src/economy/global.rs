@@ -122,8 +122,8 @@ impl GlobalEconomy {
         if self.inflation_enabled {
             let end_year = start_year.min(ORIGINAL_MAX_YEAR);
             let months = usize::try_from(
-                u32::try_from(end_year.saturating_sub(ORIGINAL_BASE_YEAR))
-                    .unwrap_or(0)
+                end_year
+                    .saturating_sub(ORIGINAL_BASE_YEAR)
                     .saturating_mul(12),
             )
             .unwrap_or(0);
@@ -145,15 +145,16 @@ impl GlobalEconomy {
         if scaled > u32::MAX as u64 {
             u32::MAX
         } else {
-            scaled as u32
+            #[allow(clippy::cast_possible_truncation)]
+            {
+                scaled as u32
+            }
         }
     }
 
     /// `AddInflation` (`economy.cpp:704-727`). Devuelve `true` si no hay más inflación.
     pub fn add_monthly_inflation(&mut self, calendar_year: u32, check_year: bool) -> bool {
-        if check_year
-            && (calendar_year < ORIGINAL_BASE_YEAR || calendar_year >= ORIGINAL_MAX_YEAR)
-        {
+        if check_year && !(ORIGINAL_BASE_YEAR..ORIGINAL_MAX_YEAR).contains(&calendar_year) {
             return true;
         }
         if !self.inflation_enabled {
@@ -165,9 +166,9 @@ impl GlobalEconomy {
         self.inflation_prices = self
             .inflation_prices
             .saturating_add((self.inflation_prices * u64::from(self.infl_amount) * 54) >> 16);
-        self.inflation_payment = self.inflation_payment.saturating_add(
-            (self.inflation_payment * u64::from(self.infl_amount_pr) * 54) >> 16,
-        );
+        self.inflation_payment = self
+            .inflation_payment
+            .saturating_add((self.inflation_payment * u64::from(self.infl_amount_pr) * 54) >> 16);
         if self.inflation_prices > MAX_INFLATION {
             self.inflation_prices = MAX_INFLATION;
         }
@@ -180,13 +181,20 @@ impl GlobalEconomy {
     /// `RecomputePrices` → escala de `max_loan` (`economy.cpp:736`).
     #[must_use]
     pub fn scaled_max_loan(&self) -> i64 {
-        let scaled = (self.base_max_loan as u64).saturating_mul(self.inflation_prices) >> 16;
+        let scaled = self
+            .base_max_loan
+            .cast_unsigned()
+            .saturating_mul(self.inflation_prices)
+            >> 16;
         let interval = LOAN_INTERVAL as u64;
         i64::try_from((scaled / interval) * interval).unwrap_or(i64::MAX)
     }
 
     /// `HandleEconomyFluctuations` (`economy.cpp:831-851`).
-    pub fn handle_monthly_fluctuations(&mut self, rng: &mut Randomizer) -> Option<FluctuationEvent> {
+    pub fn handle_monthly_fluctuations(
+        &mut self,
+        rng: &mut Randomizer,
+    ) -> Option<FluctuationEvent> {
         if self.recessions_enabled {
             self.fluct -= 1;
         } else if self.is_in_recession() {

@@ -6,20 +6,40 @@ use crate::map::TileCoord;
 /// Nombre personalizado del jugador (`OpenTTD` `MAX_LENGTH_VEHICLE_NAME_CHARS` = 32).
 pub const MAX_VEHICLE_NAME_CHARS: usize = 32;
 
+/// Paradas intermedias en ruta (`OrderNonStopFlag` en bits 6–7 de `Order::type`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OrderNonStop {
+    /// Parar en estaciones intermedias del trayecto (`GoVia`, bit 6 de `type`).
+    StopAtIntermediate,
+    /// No parar salvo en el destino de la orden (`NonStop`, default en `OpenTTD`).
+    #[default]
+    NonStopDestination,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(untagged)]
 pub enum VehicleOrder {
     Station {
         station: TileCoord,
-        /// Esperar carga completa antes de salir (`OrderLoadType::FullLoad` / `FullLoadAny`).
+        /// Esperar carga completa de todos los tipos (`OrderLoadType::FullLoad`).
         #[serde(default)]
         full_load: bool,
+        /// Salir cuando cualquier tipo de carga esté lleno (`OrderLoadType::FullLoadAny`).
+        #[serde(default)]
+        full_load_any: bool,
+        /// No cargar en esta parada (`OrderLoadType::NoLoad`).
+        #[serde(default)]
+        no_load: bool,
         /// No descargar en esta parada (`OrderUnloadType::NoUnload`).
         #[serde(default)]
         no_unload: bool,
         /// Trasbordo forzado (`OrderUnloadType::Transfer`): acumula feeder, no cobra.
         #[serde(default)]
         transfer: bool,
+        /// Sin parar en estaciones intermedias hacia este destino.
+        #[serde(default)]
+        non_stop: OrderNonStop,
         /// Espera mínima en parada con horario activo (ticks de sim).
         #[serde(default)]
         wait_ticks: u32,
@@ -126,8 +146,11 @@ impl VehicleOrder {
         Self::Station {
             station,
             full_load: false,
+            full_load_any: false,
+            no_load: false,
             no_unload: false,
             transfer: false,
+            non_stop: OrderNonStop::NonStopDestination,
             wait_ticks: 0,
             travel_ticks: 0,
         }
@@ -161,8 +184,36 @@ impl VehicleOrder {
         Self::Station {
             station,
             full_load,
+            full_load_any: false,
+            no_load: false,
             no_unload,
             transfer: false,
+            non_stop: OrderNonStop::NonStopDestination,
+            wait_ticks: 0,
+            travel_ticks: 0,
+        }
+    }
+
+    /// Construye una parada con todos los flags de carga/descarga/ruta.
+    #[must_use]
+    #[allow(clippy::fn_params_excessive_bools)]
+    pub const fn station_with_load_unload_flags(
+        station: TileCoord,
+        full_load: bool,
+        full_load_any: bool,
+        no_load: bool,
+        no_unload: bool,
+        transfer: bool,
+        non_stop: OrderNonStop,
+    ) -> Self {
+        Self::Station {
+            station,
+            full_load,
+            full_load_any,
+            no_load,
+            no_unload,
+            transfer,
+            non_stop,
             wait_ticks: 0,
             travel_ticks: 0,
         }
@@ -241,6 +292,28 @@ impl VehicleOrder {
     }
 
     #[must_use]
+    pub const fn full_load_any(self) -> bool {
+        matches!(
+            self,
+            Self::Station {
+                full_load_any: true,
+                ..
+            }
+        )
+    }
+
+    /// `FullLoad` o `FullLoadAny` (`Order::IsFullLoadOrder`).
+    #[must_use]
+    pub const fn is_full_load_order(self) -> bool {
+        self.full_load() || self.full_load_any()
+    }
+
+    #[must_use]
+    pub const fn no_load(self) -> bool {
+        matches!(self, Self::Station { no_load: true, .. })
+    }
+
+    #[must_use]
     pub const fn no_unload(self) -> bool {
         matches!(
             self,
@@ -251,16 +324,36 @@ impl VehicleOrder {
         )
     }
 
-    /// Trasbordo forzado: no cobra entrega, solo acumula `feeder_share`.
     #[must_use]
-    pub const fn transfer(self) -> bool {
+    pub const fn non_stop_destination(self) -> bool {
         matches!(
             self,
             Self::Station {
-                transfer: true,
+                non_stop: OrderNonStop::NonStopDestination,
                 ..
             }
         )
+    }
+
+    /// ¿Debe seguir esperando carga según `FullLoad` / `FullLoadAny`?
+    #[must_use]
+    pub const fn should_wait_for_loading(self, cargo: u32, capacity: u32) -> bool {
+        if self.no_load() || capacity == 0 {
+            return false;
+        }
+        if self.full_load() {
+            return cargo < capacity;
+        }
+        if self.full_load_any() {
+            return cargo < capacity;
+        }
+        false
+    }
+
+    /// Trasbordo forzado: no cobra entrega, solo acumula `feeder_share`.
+    #[must_use]
+    pub const fn transfer(self) -> bool {
+        matches!(self, Self::Station { transfer: true, .. })
     }
 
     /// Alterna «carga completa» en una parada de estación.
@@ -270,15 +363,21 @@ impl VehicleOrder {
             Self::Station {
                 station,
                 full_load,
+                full_load_any,
+                no_load,
                 no_unload,
                 transfer,
+                non_stop,
                 wait_ticks,
                 travel_ticks,
             } => Some(Self::Station {
                 station,
                 full_load: !full_load,
+                full_load_any,
+                no_load,
                 no_unload,
                 transfer,
+                non_stop,
                 wait_ticks,
                 travel_ticks,
             }),
@@ -293,15 +392,21 @@ impl VehicleOrder {
             Self::Station {
                 station,
                 full_load,
+                full_load_any,
+                no_load,
                 no_unload,
                 transfer,
+                non_stop,
                 wait_ticks,
                 travel_ticks,
             } => Some(Self::Station {
                 station,
                 full_load,
+                full_load_any,
+                no_load,
                 no_unload: !no_unload,
                 transfer,
+                non_stop,
                 wait_ticks,
                 travel_ticks,
             }),
@@ -389,15 +494,21 @@ impl VehicleOrder {
             Self::Station {
                 station,
                 full_load,
+                full_load_any,
+                no_load,
                 no_unload,
                 transfer,
+                non_stop,
                 wait_ticks,
                 travel_ticks,
             } => Some(Self::Station {
                 station,
                 full_load,
+                full_load_any,
+                no_load,
                 no_unload,
                 transfer,
+                non_stop,
                 wait_ticks: cycle_wait_ticks(wait_ticks),
                 travel_ticks,
             }),
@@ -425,15 +536,21 @@ impl VehicleOrder {
             Self::Station {
                 station,
                 full_load,
+                full_load_any,
+                no_load,
                 no_unload,
                 transfer,
+                non_stop,
                 wait_ticks,
                 travel_ticks,
             } => Self::Station {
                 station,
                 full_load,
+                full_load_any,
+                no_load,
                 no_unload,
                 transfer,
+                non_stop,
                 wait_ticks,
                 travel_ticks: cycle_travel_ticks(travel_ticks),
             },
@@ -476,15 +593,21 @@ impl VehicleOrder {
             Self::Station {
                 station,
                 full_load,
+                full_load_any,
+                no_load,
                 no_unload,
                 transfer,
+                non_stop,
+                wait_ticks: _,
                 travel_ticks,
-                ..
             } => Some(Self::Station {
                 station,
                 full_load,
+                full_load_any,
+                no_load,
                 no_unload,
                 transfer,
+                non_stop,
                 wait_ticks,
                 travel_ticks,
             }),
@@ -511,15 +634,21 @@ impl VehicleOrder {
             Self::Station {
                 station,
                 full_load,
+                full_load_any,
+                no_load,
                 no_unload,
                 transfer,
+                non_stop,
                 wait_ticks,
-                ..
+                travel_ticks: _,
             } => Self::Station {
                 station,
                 full_load,
+                full_load_any,
+                no_load,
                 no_unload,
                 transfer,
+                non_stop,
                 wait_ticks,
                 travel_ticks,
             },

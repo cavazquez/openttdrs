@@ -4,10 +4,10 @@ use crate::airport::{
     AirportPiece, airport_m6_airport, airport_spec_footprint, airport_spec_tiles,
 };
 use crate::airport_class::AirportSpecId;
+use crate::economy::station_build_cost;
 use crate::map::{Map, TileCoord, TileKind};
 use crate::pathfinder::{station_site_tile_allows_build, station_site_tile_needs_clear};
 use crate::town::authority_allows_new_station;
-use crate::economy::station_build_cost;
 use crate::{DEPOT_BUILD_COST, GameState, Station, StopKind};
 
 use super::super::CommandError;

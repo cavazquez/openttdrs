@@ -46,6 +46,7 @@ pub(crate) fn settings_from_client_prefs(prefs: &ClientPreferences) -> NewsDispl
         accident: mode_from_u8(prefs.news_accident),
         company_info: mode_from_u8(prefs.news_company_info),
         industry_close: mode_from_u8(prefs.news_industry_close),
+        economy: mode_from_u8(prefs.news_economy),
     }
 }
 
@@ -60,6 +61,7 @@ pub(crate) fn apply_settings_to_client_prefs(
     prefs.news_accident = mode_to_u8(settings.accident);
     prefs.news_company_info = mode_to_u8(settings.company_info);
     prefs.news_industry_close = mode_to_u8(settings.industry_close);
+    prefs.news_economy = mode_to_u8(settings.economy);
 }
 
 pub(crate) fn hydrate_news_display_prefs(
@@ -90,7 +92,8 @@ pub(crate) fn sync_news_display_prefs_to_client(
         || client.news_vehicle_advice != scratch.news_vehicle_advice
         || client.news_accident != scratch.news_accident
         || client.news_company_info != scratch.news_company_info
-        || client.news_industry_close != scratch.news_industry_close;
+        || client.news_industry_close != scratch.news_industry_close
+        || client.news_economy != scratch.news_economy;
     if !changed {
         return;
     }

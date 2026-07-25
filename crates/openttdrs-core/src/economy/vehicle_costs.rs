@@ -88,7 +88,7 @@ pub fn vehicle_running_cost_per_tick(vehicles: &[Vehicle], vehicle: &Vehicle) ->
     if yearly <= 0 {
         return 0;
     }
-  yearly / i64::try_from(YEAR_TICKS).unwrap_or(1)
+    yearly / i64::try_from(YEAR_TICKS).unwrap_or(1)
 }
 
 /// Coste anual vía tabla de precios + factor motor (paridad `Engine::GetRunningCost`).
@@ -105,7 +105,12 @@ mod tests {
 
     #[test]
     fn running_cost_prorates_yearly_catalog_cost() {
-        let mut bus = Vehicle::new(1, VehicleKind::Bus, TileCoord::new(0, 0), TileCoord::new(1, 0));
+        let mut bus = Vehicle::new(
+            1,
+            VehicleKind::Bus,
+            TileCoord::new(0, 0),
+            TileCoord::new(1, 0),
+        );
         let yearly = engine_running_cost_year(bus.effective_engine());
         let mut total = 0_i64;
         for _ in 0..YEAR_TICKS {
@@ -116,7 +121,12 @@ mod tests {
 
     #[test]
     fn stopped_bus_with_running_flag_still_costs() {
-        let mut bus = Vehicle::new(2, VehicleKind::Bus, TileCoord::new(0, 0), TileCoord::new(1, 0));
+        let mut bus = Vehicle::new(
+            2,
+            VehicleKind::Bus,
+            TileCoord::new(0, 0),
+            TileCoord::new(1, 0),
+        );
         bus.running = true;
         bus.cur_speed = 0;
         let yearly = engine_running_cost_year(bus.effective_engine());

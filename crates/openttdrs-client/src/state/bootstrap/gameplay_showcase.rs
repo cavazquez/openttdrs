@@ -47,7 +47,8 @@ fn place_town_block(state: &mut GameState) {
         .enumerate()
     {
         let c = TileCoord::new(x, y);
-        let house_id = u16::try_from(8 + (i % 5)).unwrap_or(8);
+        // IDs con población > 0 en `HOUSE_POPULATION` (8..=12 son 0).
+        let house_id = [0_u16, 1, 4, 5, 7, 13][i % 6];
         let _ = state.map.set_completed_house(c, house_id, 40);
     }
     // Entrada de ciudad: habilita el cartel y la ventana de pueblo del barrio.
@@ -299,6 +300,15 @@ mod tests {
             STATION_COVERAGE_RADIUS,
         );
         assert!(coverage.house_tiles >= 3, "casas en cobertura");
+        // selectgoods: sin visita previa no llega carga a la parada.
+        for st in state
+            .stations
+            .iter_mut()
+            .filter(|s| s.stop_kind == StopKind::BusStop)
+        {
+            st.goods.get_mut(CargoType::Passengers).last_speed = 1;
+            st.goods.get_mut(CargoType::Mail).last_speed = 1;
+        }
         for _ in 0..TOWN_PRODUCE_TICKS {
             state.step();
         }

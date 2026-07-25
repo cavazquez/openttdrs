@@ -1,13 +1,11 @@
+use crate::economy::{station_build_cost, waypoint_build_cost};
 use crate::map::{Map, TileCoord, TileKind};
 use crate::pathfinder::{
     station_entrance_faces_rail, station_entrance_faces_road, station_site_tile_allows_build,
     station_site_tile_needs_clear,
 };
 use crate::station::is_rail_waypoint_tile;
-use crate::economy::{station_build_cost, waypoint_build_cost};
-use crate::{
-    CLEAR_TILE_COST, GameState, Station, StopKind,
-};
+use crate::{CLEAR_TILE_COST, GameState, Station, StopKind};
 
 use super::super::{CommandError, require_tile_owned_by_active};
 use crate::town::{self, authority_allows_new_station};

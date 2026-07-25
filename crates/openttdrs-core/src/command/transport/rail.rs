@@ -1,10 +1,10 @@
+use crate::economy::rail_build_cost;
 use crate::map::{Map, TileCoord, TileKind, rail_trackbits_valid_on_slope, tile_slope_and_z};
 use crate::pathfinder::{station_entrance_faces_rail, station_site_tile_allows_build};
 use crate::rail_signals::{
     RAIL_REMOVE_REFUND, RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS, SIGNAL_BUILD_COST,
     SIGNAL_REMOVE_REFUND, rail_signal_present_mask, rail_signal_state_mask, rail_tile_is_signals,
 };
-use crate::economy::rail_build_cost;
 use crate::{DEPOT_BUILD_COST, GameState};
 
 use super::super::terraform::{apply_autoslope_if_needed, check_autoslope_flat};

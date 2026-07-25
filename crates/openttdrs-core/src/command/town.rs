@@ -3,8 +3,7 @@
 use crate::GameState;
 use crate::map::{TileCoord, TileKind, tile_slope_and_z};
 use crate::station::{
-    TOWN_ADVERTISE_MEDIUM_RADIUS, TOWN_ADVERTISE_MEDIUM_RATING_BOOST,
-    modify_station_rating_around,
+    TOWN_ADVERTISE_MEDIUM_RADIUS, TOWN_ADVERTISE_MEDIUM_RATING_BOOST, modify_station_rating_around,
 };
 use crate::town::{FUND_BUILDINGS_COST, FUND_BUILDINGS_RATING_BOOST, TOWN_ADVERTISE_COST, Town};
 use crate::townname::generate_town_name;
@@ -207,7 +206,10 @@ mod tests {
 
         apply_command(&mut s, &Command::TownAdvertise(1)).unwrap();
 
-        assert_eq!(s.towns[0].authority_rating(s.active_company), authority_before);
+        assert_eq!(
+            s.towns[0].authority_rating(s.active_company),
+            authority_before
+        );
         assert_eq!(
             station_rating_for_cargo(&s.stations[0], CargoType::Passengers),
             station_before.saturating_add(crate::station::TOWN_ADVERTISE_MEDIUM_RATING_BOOST)

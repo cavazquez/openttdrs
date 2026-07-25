@@ -16,9 +16,9 @@ pub const DAYS_PER_VEHICLE_YEAR: u32 = 366;
 
 /// Tabla `_breakdown_chance[rel >> 10]` (`vehicle.cpp:1303-1312`).
 const BREAKDOWN_CHANCE_TABLE: [u8; 64] = [
-    3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 13, 13, 13,
-    13, 14, 15, 16, 17, 19, 21, 25, 28, 31, 34, 37, 40, 44, 48, 52, 56, 60, 64, 68, 72, 80, 90,
-    100, 110, 120, 130, 140, 150, 170, 190, 210, 230, 250, 250, 250,
+    3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 13, 13, 13, 13,
+    14, 15, 16, 17, 19, 21, 25, 28, 31, 34, 37, 40, 44, 48, 52, 56, 60, 64, 68, 72, 80, 90, 100,
+    110, 120, 130, 140, 150, 170, 190, 210, 230, 250, 250, 250,
 ];
 
 /// Bonus de fiabilidad efectiva para barcos (`vehicle.cpp:1355`).
@@ -35,8 +35,7 @@ pub(crate) fn init_vehicle_reliability_from_engine(
     vehicle: &mut super::model::Vehicle,
     engine: &crate::engine::EngineDef,
 ) {
-    vehicle.reliability =
-        initial_reliability_for_engine(engine.id, engine.kind);
+    vehicle.reliability = initial_reliability_for_engine(engine.id, engine.kind);
     vehicle.reliability_spd_dec = engine.reliability_spd_dec;
     vehicle.max_age_days = u32::from(engine.lifelength_years) * DAYS_PER_VEHICLE_YEAR;
 }
@@ -68,7 +67,7 @@ fn chance16i(a: u32, b: u32, r: u32) -> bool {
     if b == 0 {
         return false;
     }
-  ((u32::from(r as u16) * b + b / 2) >> 16) < a
+    ((u32::from(u16::try_from(r).unwrap_or(u16::MAX)) * b + b / 2) >> 16) < a
 }
 
 fn extract_bits(value: u32, offset: u32, count: u32) -> u8 {
@@ -189,8 +188,7 @@ impl super::model::Vehicle {
         if !self.running {
             return;
         }
-        self.reliability =
-            decay_reliability_port(self.reliability, self.reliability_spd_dec);
+        self.reliability = decay_reliability_port(self.reliability, self.reliability_spd_dec);
         self.needs_servicing = self.requires_service();
 
         if self.breakdown_ctr != 0 {
@@ -234,8 +232,7 @@ impl super::model::Vehicle {
                 if self.kind == VehicleKind::Aircraft {
                     return false;
                 }
-                let half_rate =
-                    self.kind == VehicleKind::Train && (tick & 3) != 0;
+                let half_rate = self.kind == VehicleKind::Train && (tick & 3) != 0;
                 if !half_rate && self.breakdown_delay > 0 {
                     self.breakdown_delay -= 1;
                     if self.breakdown_delay == 0 {
@@ -258,10 +255,9 @@ impl super::model::Vehicle {
             return false;
         }
         if self.kind == VehicleKind::Train {
-            return self
-                .engine_id
-                .map(|id| crate::engine::engine_for_vehicle(self.kind, id).is_train_engine())
-                .unwrap_or(true);
+            return self.engine_id.is_none_or(|id| {
+                crate::engine::engine_for_vehicle(self.kind, id).is_train_engine()
+            });
         }
         true
     }
@@ -331,10 +327,15 @@ pub(crate) fn check_road_vehicles_need_service(state: &mut crate::GameState) {
         .iter()
         .enumerate()
         .filter(|(_, v)| {
-            matches!(v.kind, VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram)
-                && v.running
+            matches!(
+                v.kind,
+                VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram
+            ) && v.running
                 && v.prev_unit.is_none()
-                && !v.orders.iter().any(|o| matches!(o, VehicleOrder::Depot { .. }))
+                && !v
+                    .orders
+                    .iter()
+                    .any(|o| matches!(o, VehicleOrder::Depot { .. }))
         })
         .map(|(i, _)| i)
         .collect();
@@ -355,7 +356,8 @@ pub(crate) fn check_road_vehicles_need_service(state: &mut crate::GameState) {
         let Some(depot) = nearest_reachable_depot_tile(&state.map, pos, kind) else {
             continue;
         };
-        let path_target = crate::depot::road_depot_entrance_tile(&state.map, depot).unwrap_or(depot);
+        let path_target =
+            crate::depot::road_depot_entrance_tile(&state.map, depot).unwrap_or(depot);
         if find_path(&state.map, pos, path_target, PathNetwork::Road).is_none() {
             continue;
         }
@@ -365,13 +367,17 @@ pub(crate) fn check_road_vehicles_need_service(state: &mut crate::GameState) {
         }
         let vehicle = &mut state.vehicles[idx];
         vehicle.needs_servicing = true;
-        vehicle.orders.insert(vehicle.current_order, VehicleOrder::depot_pass_through(depot));
+        vehicle.orders.insert(
+            vehicle.current_order,
+            VehicleOrder::depot_pass_through(depot),
+        );
         vehicle.path.clear();
         vehicle.sync_order_destination(&state.map);
     }
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::map::TileCoord;
@@ -389,7 +395,12 @@ mod tests {
 
     #[test]
     fn reliability_decays_by_engine_spd_dec() {
-        let mut v = Vehicle::new(1, VehicleKind::Bus, TileCoord::new(0, 0), TileCoord::new(1, 0));
+        let mut v = Vehicle::new(
+            1,
+            VehicleKind::Bus,
+            TileCoord::new(0, 0),
+            TileCoord::new(1, 0),
+        );
         v.reliability = 5_000;
         v.reliability_spd_dec = 80;
         v.running = true;
@@ -400,7 +411,12 @@ mod tests {
 
     #[test]
     fn reliability_spd_dec_doubles_after_max_age_year_boundary() {
-        let mut v = Vehicle::new(1, VehicleKind::Bus, TileCoord::new(0, 0), TileCoord::new(1, 0));
+        let mut v = Vehicle::new(
+            1,
+            VehicleKind::Bus,
+            TileCoord::new(0, 0),
+            TileCoord::new(1, 0),
+        );
         v.reliability_spd_dec = 80;
         v.max_age_days = DAYS_PER_VEHICLE_YEAR;
         v.build_tick = 0;
@@ -411,7 +427,12 @@ mod tests {
 
     #[test]
     fn breakdown_requires_min_speed_for_chance() {
-        let mut v = Vehicle::new(1, VehicleKind::Truck, TileCoord::new(0, 0), TileCoord::new(1, 0));
+        let mut v = Vehicle::new(
+            1,
+            VehicleKind::Truck,
+            TileCoord::new(0, 0),
+            TileCoord::new(1, 0),
+        );
         v.reliability = 100;
         v.running = true;
         v.cur_speed = 0;
@@ -422,7 +443,12 @@ mod tests {
 
     #[test]
     fn handle_breakdown_stops_vehicle_at_phase_two() {
-        let mut v = Vehicle::new(1, VehicleKind::Bus, TileCoord::new(0, 0), TileCoord::new(1, 0));
+        let mut v = Vehicle::new(
+            1,
+            VehicleKind::Bus,
+            TileCoord::new(0, 0),
+            TileCoord::new(1, 0),
+        );
         v.breakdown_ctr = 2;
         v.breakdown_delay = 120;
         v.cur_speed = 40;

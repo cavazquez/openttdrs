@@ -1,9 +1,6 @@
 use crate::command::{Command, CommandError, apply_command, command_would_fail};
 use crate::economy::{road_build_cost, station_build_cost};
-use crate::{
-    CLEAR_TILE_COST, GameState, TileCoord, TileKind, Vehicle,
-    VehicleKind,
-};
+use crate::{CLEAR_TILE_COST, GameState, TileCoord, TileKind, Vehicle, VehicleKind};
 
 #[test]
 fn place_station_requires_adjacent_transport() {
@@ -47,8 +44,7 @@ fn place_station_on_forest_clears_and_builds_when_entrance_faces_road() {
     apply_command(&mut s, &Command::PlaceStationDir(c, 3)).unwrap();
     assert_eq!(s.map.get_kind(c), Some(TileKind::Station));
     let ge = &s.global_economy;
-    let expected_cost =
-        30 + CLEAR_TILE_COST + road_build_cost(ge) + station_build_cost(ge);
+    let expected_cost = 30 + CLEAR_TILE_COST + road_build_cost(ge) + station_build_cost(ge);
     assert_eq!(s.economy.money, money_before - expected_cost);
 }
 

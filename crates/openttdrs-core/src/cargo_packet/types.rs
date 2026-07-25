@@ -309,8 +309,7 @@ impl VehicleCargoList {
                 let mut taken = p.clone();
                 taken.count = take;
                 if p.feeder_share > 0 {
-                    let share = (i64::from(p.feeder_share) * i64::from(take))
-                        / i64::from(p.count);
+                    let share = (p.feeder_share * i64::from(take)) / i64::from(p.count);
                     taken.feeder_share = share;
                     p.feeder_share = p.feeder_share.saturating_sub(share);
                 }

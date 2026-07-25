@@ -111,7 +111,6 @@ const PRICE_BASE_SPECS: [PriceBaseSpec; PRICE_TABLE_LEN] = {
 pub const fn difficulty_multiplier(mod_setting: u8) -> i32 {
     match mod_setting {
         0 => 6,
-        1 => 8,
         2 => 9,
         _ => 8,
     }
@@ -149,7 +148,7 @@ pub fn base_price_at(
     if shift >= 0 {
         price <<= shift;
     } else {
-        price >>= (-shift) as u32;
+        price >>= (-shift).cast_unsigned();
     }
 
     if price == 0 {
@@ -160,12 +159,7 @@ pub fn base_price_at(
 
 /// `GetPrice` (`economy.cpp:936-949`).
 #[must_use]
-pub fn get_price(
-    ge: &GlobalEconomy,
-    index: PriceIndex,
-    cost_factor: i64,
-    shift: i32,
-) -> i64 {
+pub fn get_price(ge: &GlobalEconomy, index: PriceIndex, cost_factor: i64, shift: i32) -> i64 {
     let base = base_price_at(
         index,
         ge.inflation_prices,
@@ -174,9 +168,9 @@ pub fn get_price(
     );
     let mut cost = base.saturating_mul(cost_factor);
     if shift >= 0 {
-        cost <<= shift as u32;
+        cost <<= shift.cast_unsigned();
     } else {
-        cost >>= (-shift) as u32;
+        cost >>= (-shift).cast_unsigned();
     }
     cost
 }

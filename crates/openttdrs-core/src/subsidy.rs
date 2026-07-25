@@ -97,9 +97,7 @@ fn town_covers_tile(towns: &[crate::town::Town], town_pos: TileCoord, tile: Tile
     towns
         .iter()
         .find(|t| t.pos == town_pos)
-        .is_some_and(|town| {
-            manhattan_distance(town.pos, tile) <= STATION_COVERAGE_RADIUS as u32
-        })
+        .is_some_and(|town| manhattan_distance(town.pos, tile) <= STATION_COVERAGE_RADIUS as u32)
 }
 
 fn town_percent_transported(_town: &crate::town::Town, _cargo: CargoType) -> u32 {
@@ -118,9 +116,8 @@ fn industry_percent_transported(industry: &crate::industry::Industry) -> u32 {
 #[must_use]
 pub const fn subsidy_payment_multiplier_from_index(index: u8) -> i64 {
     match index {
-        0 => 3, // +50 %
+        0 | 2 => 3, // +50 % (índices 0 y 2)
         1 => 2,
-        2 => 3,
         _ => 4,
     }
 }
@@ -169,9 +166,7 @@ fn try_create_passenger_subsidy(state: &mut GameState) -> bool {
     };
     let src = &state.towns[src_idx];
     let dst = &state.towns[dst_idx];
-    if src.population < SUBSIDY_PAX_MIN_POPULATION
-        || dst.population < SUBSIDY_PAX_MIN_POPULATION
-    {
+    if src.population < SUBSIDY_PAX_MIN_POPULATION || dst.population < SUBSIDY_PAX_MIN_POPULATION {
         return false;
     }
     let cargo = CargoType::Passengers;
@@ -334,8 +329,7 @@ fn push_subsidy(
     let tick = state.tick.get();
     let id = state.next_subsidy_id;
     state.next_subsidy_id = state.next_subsidy_id.saturating_add(1);
-    let offer_expires_tick =
-        tick.saturating_add(u64::from(SUBSIDY_OFFER_MONTHS) * TICKS_PER_MONTH);
+    let offer_expires_tick = tick.saturating_add(u64::from(SUBSIDY_OFFER_MONTHS) * TICKS_PER_MONTH);
     let industry_pos = source_town.unwrap_or(source_industry);
     let station_pos = dest_town.unwrap_or(dest_station);
     state.subsidies.push(Subsidy {
@@ -354,7 +348,7 @@ fn push_subsidy(
         .runtime
         .pending_sim_events
         .push(SimEvent::SubsidyCreated {
-            industry_pos: industry_pos,
+            industry_pos,
             station_pos,
             cargo,
         });

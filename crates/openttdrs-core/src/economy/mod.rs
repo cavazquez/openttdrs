@@ -12,15 +12,14 @@ pub use build_costs::{
     terraform_cost_per_corner, terraform_cost_per_corner_inflated, waypoint_build_cost,
 };
 pub use global::{
-    FluctuationEvent, GlobalEconomy, INFLATION_FRAC_ONE, MAX_INFLATION, ORIGINAL_BASE_YEAR,
-    ORIGINAL_MAX_YEAR, DEFAULT_DIFFICULTY_MOD, DEFAULT_INTEREST_RATE,
+    DEFAULT_DIFFICULTY_MOD, DEFAULT_INTEREST_RATE, FluctuationEvent, GlobalEconomy,
+    INFLATION_FRAC_ONE, MAX_INFLATION, ORIGINAL_BASE_YEAR, ORIGINAL_MAX_YEAR,
 };
 pub use payments::{
     ANNUAL_INTEREST_RATE_PCT, CargoPaymentSpec, DEFAULT_MAX_LOAN, LOAN_INTERVAL, cargo_time_factor,
     check_bankruptcy, decrease_loan, increase_loan, inflation_income_factor,
-    inflation_prices_factor, manhattan_distance, monthly_company_interest,
-    monthly_loan_interest, monthly_loan_interest_with_rate, monthly_station_maintenance_fee,
-    transported_goods_income,
+    inflation_prices_factor, manhattan_distance, monthly_company_interest, monthly_loan_interest,
+    monthly_loan_interest_with_rate, monthly_station_maintenance_fee, transported_goods_income,
 };
 pub use pricebase::{PriceIndex, base_price_at, get_price, medium_default_price};
 pub use time::{
@@ -28,10 +27,10 @@ pub use time::{
     TICKS_PER_DAY, TICKS_PER_MONTH, TICKS_PER_YEAR, calendar_month_index, ticks_to_transit_periods,
 };
 pub use vehicle_costs::{
-    accumulate_running_cost_for_head, accumulate_vehicle_running_cost, consist_running_cost_year,
-    engine_running_cost_from_price_base, engine_running_cost_year, vehicle_asset_value,
-    vehicle_counts_running_tick, vehicle_purchase_cost, vehicle_running_cost_per_tick,
-    vehicle_sell_refund, YEAR_TICKS,
+    YEAR_TICKS, accumulate_running_cost_for_head, accumulate_vehicle_running_cost,
+    consist_running_cost_year, engine_running_cost_from_price_base, engine_running_cost_year,
+    vehicle_asset_value, vehicle_counts_running_tick, vehicle_purchase_cost,
+    vehicle_running_cost_per_tick, vehicle_sell_refund,
 };
 
 #[cfg(test)]
@@ -163,7 +162,10 @@ mod tests {
         assert!(is_asymptotic);
         assert!(very_long >= 1);
         assert!(very_long < medium);
-        assert!(very_long < 31, "la rama asintótica cae por debajo del suelo fijo antiguo");
+        assert!(
+            very_long < 31,
+            "la rama asintótica cae por debajo del suelo fijo antiguo"
+        );
     }
 
     #[test]

@@ -145,12 +145,7 @@ pub fn calculate_company_value(state: &GameState, company_id: CompanyId) -> i64 
     let Some(company) = state.companies.get(company_id.index()) else {
         return 0;
     };
-    let station_value = get_price(
-        &state.global_economy,
-        PriceIndex::StationValue,
-        1,
-        0,
-    );
+    let station_value = get_price(&state.global_economy, PriceIndex::StationValue, 1, 0);
     let facilities: u64 = state
         .stations
         .iter()
@@ -169,8 +164,12 @@ pub fn calculate_company_value(state: &GameState, company_id: CompanyId) -> i64 
         }
         if matches!(
             v.kind,
-            VehicleKind::Train | VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram
-                | VehicleKind::Ship | VehicleKind::Aircraft
+            VehicleKind::Train
+                | VehicleKind::Bus
+                | VehicleKind::Truck
+                | VehicleKind::Tram
+                | VehicleKind::Ship
+                | VehicleKind::Aircraft
         ) {
             vehicle_assets =
                 vehicle_assets.saturating_add(vehicle_asset_value(v).saturating_mul(3) / 2);
@@ -222,11 +221,7 @@ pub fn calculate_performance_rating(
             min_profit_set = true;
         }
     }
-    let min_profit_score = if min_profit > 0 {
-        min_profit >> 8
-    } else {
-        0
-    };
+    let min_profit_score = if min_profit > 0 { min_profit >> 8 } else { 0 };
 
     let recent = company
         .economy_history
@@ -234,11 +229,7 @@ pub fn calculate_performance_rating(
         .iter()
         .rev()
         .take(12)
-        .map(|m| {
-            m.income
-                .cast_signed()
-                .saturating_add(m.operating_profit())
-        })
+        .map(|m| m.income.cast_signed().saturating_add(m.operating_profit()))
         .collect::<Vec<_>>();
     let (min_income, max_income) = if recent.is_empty() {
         (0, 0)
@@ -249,16 +240,16 @@ pub fn calculate_performance_rating(
     };
 
     let delivered = i64::try_from(quarter_deliveries.min(40_000)).unwrap_or(i64::MAX);
-    let cargo_variety = if quarter_deliveries > 0 { 1 } else { 0 };
+    let cargo_variety = i64::from(quarter_deliveries > 0);
     let money = company.economy.money.max(0);
-    let loan_headroom = i64::from(SCORE_LOAN.needed).saturating_sub(company.economy.loan);
+    let loan_headroom = SCORE_LOAN.needed.saturating_sub(company.economy.loan);
 
     let mut score = 0_i32;
     score += score_component(
         i64::try_from(profitable_vehicles).unwrap_or(0),
         SCORE_VEHICLES,
     );
-    score += score_component(active_stations as i64, SCORE_STATIONS);
+    score += score_component(active_stations.cast_signed(), SCORE_STATIONS);
     score += score_component(min_profit_score, SCORE_MIN_PROFIT);
     score += score_component(min_income, SCORE_MIN_INCOME);
     score += score_component(max_income, SCORE_MAX_INCOME);

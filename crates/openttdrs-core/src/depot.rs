@@ -101,8 +101,7 @@ pub fn nearest_reachable_depot_tile(
             if map.get_kind(c) != Some(target) {
                 continue;
             }
-            let path_target =
-                road_depot_entrance_tile(map, c).unwrap_or(c);
+            let path_target = road_depot_entrance_tile(map, c).unwrap_or(c);
             if find_path(map, from, path_target, network).is_none() {
                 continue;
             }

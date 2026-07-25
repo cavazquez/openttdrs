@@ -5,9 +5,7 @@ use std::sync::OnceLock;
 use crate::cargo::CargoType;
 use crate::vehicle::VehicleKind;
 
-use super::model::{
-    EngineDef, DEFAULT_RELIABILITY_SPD_DEC, SHIP_RELIABILITY_SPD_DEC,
-};
+use super::model::{DEFAULT_RELIABILITY_SPD_DEC, EngineDef, SHIP_RELIABILITY_SPD_DEC};
 
 pub const ENGINE_BUS_MPS: u16 = 0;
 pub const ENGINE_BUS_HEREFORD: u16 = 1;
@@ -61,13 +59,35 @@ pub(crate) const RELIABILITY_ROAD: u8 = 85;
 macro_rules! road {
     ($id:expr, $kind:expr, $name:expr, $speed:expr, $cf:expr, $rc:expr, $cap:expr, $cargo:expr, $hp:expr, $wt:expr, $year:expr) => {
         road!(
-            $id, $kind, $name, $speed, $cf, $rc, $cap, $cargo, $hp, $wt, $year, 40,
+            $id,
+            $kind,
+            $name,
+            $speed,
+            $cf,
+            $rc,
+            $cap,
+            $cargo,
+            $hp,
+            $wt,
+            $year,
+            40,
             DEFAULT_RELIABILITY_SPD_DEC
         )
     };
     ($id:expr, $kind:expr, $name:expr, $speed:expr, $cf:expr, $rc:expr, $cap:expr, $cargo:expr, $hp:expr, $wt:expr, $year:expr, $life:expr) => {
         road!(
-            $id, $kind, $name, $speed, $cf, $rc, $cap, $cargo, $hp, $wt, $year, $life,
+            $id,
+            $kind,
+            $name,
+            $speed,
+            $cf,
+            $rc,
+            $cap,
+            $cargo,
+            $hp,
+            $wt,
+            $year,
+            $life,
             DEFAULT_RELIABILITY_SPD_DEC
         )
     };
@@ -103,8 +123,8 @@ macro_rules! road {
 macro_rules! train {
     ($id:expr, $name:expr, $speed:expr, $cf:expr, $rc_base:expr, $rc:expr, $cap:expr, $cargo:expr, $hp:expr, $wt:expr, $year:expr, $rel:expr, $img:expr) => {
         train!(
-            $id, $name, $speed, $cf, $rc_base, $rc, $cap, $cargo, $hp, $wt, $year, $rel, $img,
-            30, false
+            $id, $name, $speed, $cf, $rc_base, $rc, $cap, $cargo, $hp, $wt, $year, $rel, $img, 30,
+            false
         )
     };
     ($id:expr, $name:expr, $speed:expr, $cf:expr, $rc_base:expr, $rc:expr, $cap:expr, $cargo:expr, $hp:expr, $wt:expr, $year:expr, $rel:expr, $img:expr, $life:expr) => {
@@ -115,8 +135,8 @@ macro_rules! train {
     };
     ($id:expr, $name:expr, $speed:expr, $cf:expr, $rc_base:expr, $rc:expr, $cap:expr, $cargo:expr, $hp:expr, $wt:expr, $year:expr, $rel:expr, $img:expr, $dual:expr) => {
         train!(
-            $id, $name, $speed, $cf, $rc_base, $rc, $cap, $cargo, $hp, $wt, $year, $rel, $img,
-            30, $dual
+            $id, $name, $speed, $cf, $rc_base, $rc, $cap, $cargo, $hp, $wt, $year, $rel, $img, 30,
+            $dual
         )
     };
     ($id:expr, $name:expr, $speed:expr, $cf:expr, $rc_base:expr, $rc:expr, $cap:expr, $cargo:expr, $hp:expr, $wt:expr, $year:expr, $rel:expr, $img:expr, $life:expr, $dual:expr) => {

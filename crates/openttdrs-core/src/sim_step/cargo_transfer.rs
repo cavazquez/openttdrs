@@ -251,7 +251,14 @@ pub(super) fn load_vehicles(
         let allow_top_up = state.vehicles[i]
             .orders
             .get(state.vehicles[i].current_order)
-            .is_some_and(|o| o.full_load());
+            .is_some_and(|o| o.is_full_load_order());
+        let no_load = state.vehicles[i]
+            .orders
+            .get(state.vehicles[i].current_order)
+            .is_some_and(|o| o.no_load());
+        if no_load {
+            continue;
+        }
         let loading = state.vehicles[i].cargo_loading;
         // Con carga a bordo: solo seguir cargando si full_load o carga gradual.
         if state.vehicles[i].cargo != 0 && !allow_top_up && !loading {
@@ -426,7 +433,11 @@ fn try_load_from_industry(
         .orders
         .get(state.vehicles[vehicle_idx].current_order)
         .is_some_and(|o| o.full_load());
-    if full || (!full_load && industry_empty) {
+    let full_load_any = state.vehicles[vehicle_idx]
+        .orders
+        .get(state.vehicles[vehicle_idx].current_order)
+        .is_some_and(|o| o.full_load_any());
+    if full || full_load_any && industry_empty || industry_empty && !full_load {
         state.vehicles[vehicle_idx].cargo_loading = false;
         state.vehicles[vehicle_idx].advance_after_loading();
     } else {
@@ -570,7 +581,11 @@ fn try_load_from_station_waiting_cargo(
         .orders
         .get(state.vehicles[vehicle_idx].current_order)
         .is_some_and(|o| o.full_load());
-    if full || (!full_load && station_empty) {
+    let full_load_any = state.vehicles[vehicle_idx]
+        .orders
+        .get(state.vehicles[vehicle_idx].current_order)
+        .is_some_and(|o| o.full_load_any());
+    if full || full_load_any && station_empty || station_empty && !full_load {
         state.vehicles[vehicle_idx].cargo_loading = false;
         state.vehicles[vehicle_idx].advance_after_loading();
     } else {

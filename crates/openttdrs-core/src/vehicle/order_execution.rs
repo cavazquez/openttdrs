@@ -43,8 +43,7 @@ impl super::model::Vehicle {
         }
         self.sanitize_current_order();
         if let Some(order) = self.current_order_ref()
-            && order.full_load()
-            && self.cargo < self.capacity
+            && order.should_wait_for_loading(self.cargo, self.capacity)
         {
             return;
         }
@@ -71,6 +70,7 @@ impl super::model::Vehicle {
         self.sanitize_current_order();
         self.origin = self.pos;
         self.timetable_leg_start_tick = self.sim_tick;
+        self.current_order_time = 0;
         if self.kind != super::model::VehicleKind::Train
             && let Some(order) = self.current_order_ref()
         {
@@ -97,34 +97,9 @@ impl super::model::Vehicle {
         true
     }
 
-    fn record_timetable_autofill_sample(&mut self, wait: u32, travel: u32) {
-        if !self.timetable_autofill {
-            return;
-        }
-        self.sanitize_current_order();
-        let idx = self.current_order;
-        if self.timetable_autofill_samples.len() <= idx {
-            self.timetable_autofill_samples.resize(idx + 1, (0, 0));
-        }
-        let (w, t) = &mut self.timetable_autofill_samples[idx];
-        *w = u32::midpoint(*w, wait);
-        *t = u32::midpoint(*t, travel);
-        let new_w = *w;
-        let new_t = *t;
-        if let Some(order) = self.orders.get_mut(idx) {
-            *order = order.with_travel_ticks(new_t);
-            if let Some(updated) = order.with_wait_ticks(new_w) {
-                *order = updated;
-            }
-        }
-    }
-
-    fn update_timetable_lateness_on_wait_end(&mut self, planned_wait: u32) {
-        if !self.timetable_active {
-            return;
-        }
-        let delta = i32::try_from(planned_wait).unwrap_or(i32::MAX);
-        self.timetable_lateness = self.timetable_lateness.saturating_sub(delta);
+    #[allow(clippy::unused_self)]
+    fn record_timetable_autofill_sample(&mut self, _wait: u32, _travel: u32) {
+        // Autofill completo en `timetable::Vehicle::update_vehicle_timetable`.
     }
 
     pub(crate) fn complete_timetable_wait(&mut self) {
@@ -135,12 +110,10 @@ impl super::model::Vehicle {
             .map_or(0, |o| o.wait_ticks());
         self.timetable_wait_kind = super::model::TimetableWaitKind::None;
         if kind != super::model::TimetableWaitKind::None && planned > 0 {
-            self.update_timetable_lateness_on_wait_end(planned);
-            let travel = self
-                .orders
-                .get(self.current_order)
-                .map_or(0, |o| o.travel_ticks());
-            self.record_timetable_autofill_sample(planned, travel);
+            if kind != super::model::TimetableWaitKind::TravelEarly {
+                self.update_vehicle_timetable(false);
+            }
+            self.record_timetable_autofill_sample(planned, 0);
         }
         match kind {
             super::model::TimetableWaitKind::None => {}

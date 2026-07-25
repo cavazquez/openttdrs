@@ -196,6 +196,7 @@ pub fn command_effects(cmd: &Command) -> CommandEffects {
         | Command::SetVehicleOrderWaitTicks { .. }
         | Command::SetVehicleOrderTravelTicks { .. }
         | Command::ToggleVehicleTimetableAutofill(..)
+        | Command::SetVehicleTimetableStart { .. }
         | Command::ToggleAutoReplaceOnlyWhenOld { .. }
         | Command::SetAutoReplaceRuleGroup { .. }
         | Command::DepotMassAutoreplace { .. }

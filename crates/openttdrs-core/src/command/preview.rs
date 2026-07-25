@@ -107,7 +107,9 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
         Command::SetRailBits(c, bits) => require_tile_owned_by_active(state, *c)
             .err()
             .or_else(|| check_place_rail(map, *c).err())
-            .or_else(|| check_rail_trackbits_with_autoslope(map, *c, bits & 0x3F, inflation_prices).err()),
+            .or_else(|| {
+                check_rail_trackbits_with_autoslope(map, *c, bits & 0x3F, inflation_prices).err()
+            }),
         Command::PlaceRailWaypoint(c) => require_tile_owned_by_active(state, *c)
             .err()
             .or_else(|| check_place_rail_waypoint(map, *c, stations).err()),
@@ -284,6 +286,7 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
         | Command::SetVehicleOrderWaitTicks { .. }
         | Command::SetVehicleOrderTravelTicks { .. }
         | Command::ToggleVehicleTimetableAutofill(..)
+        | Command::SetVehicleTimetableStart { .. }
         | Command::ToggleAutoReplaceOnlyWhenOld { .. }
         | Command::SetAutoReplaceRuleGroup { .. }
         | Command::DepotMassAutoreplace { .. }

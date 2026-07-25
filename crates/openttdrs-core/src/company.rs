@@ -22,7 +22,7 @@ impl CompanyId {
         self.0 as usize
     }
 
-    /// ¿El byte `m1` de tesela es el owner municipal (`OWNER_TOWN` en OpenTTD)?
+    /// ¿El byte `m1` de tesela es el owner municipal (`OWNER_TOWN` en `OpenTTD`)?
     #[must_use]
     pub const fn is_town_owner_m1(m1: u8) -> bool {
         m1 == OWNER_TOWN_M1
@@ -40,7 +40,7 @@ impl CompanyId {
     }
 }
 
-/// Owner municipal en byte `m1` (`OWNER_TOWN` = `MAX_COMPANIES` en OpenTTD).
+/// Owner municipal en byte `m1` (`OWNER_TOWN` = `MAX_COMPANIES` en `OpenTTD`).
 pub const OWNER_TOWN_M1: u8 = 14;
 
 /// Escribe el owner de infraestructura en `m1` (vía / carretera / depósitos).

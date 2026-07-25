@@ -8,15 +8,25 @@ use crate::station::{self, Station, StopKind};
 /// Ticks entre cada ciclo de producción (equivale a `INDUSTRY_PRODUCE_TICKS` del upstream).
 pub const INDUSTRY_PRODUCE_TICKS: u64 = 256;
 
-/// Unidades de salida de una fábrica de goods por ciclo a `prod_level` por defecto.
+/// Unidades de salida de una fábrica de goods por ciclo a `prod_level` por defecto (legacy).
 ///
-/// Las industrias primarias ya no usan esta constante: producen
-/// `CeilDiv(production_rate * prod_level, PRODLEVEL_DEFAULT)`.
+/// Las procesadoras usan [`IndustrySpec::processing_inputs`] y la fórmula
+/// `out += in * multiplier / 256`.
 pub const INDUSTRY_PRODUCE_AMOUNT: u32 = 8;
 
-/// Insumos por ciclo de fábrica (`CargoType::Goods`).
+/// Insumos por ciclo de fábrica temperate (`IndustrySpec::Factory`).
 pub const FACTORY_WOOD_INPUT: u32 = 4;
 pub const FACTORY_COAL_INPUT: u32 = 2;
+
+/// Entrada de procesamiento con multiplicador hacia la salida (`/256`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct IndustryProcessingInput {
+    pub cargo: CargoType,
+    /// Unidades consumidas por ciclo a [`PRODLEVEL_DEFAULT`].
+    pub batch: u32,
+    /// Multiplicador hacia la salida (`economy.cpp:1156`).
+    pub multiplier: u16,
+}
 
 /// Capacidad máxima de stock por defecto.
 pub const INDUSTRY_STOCK_CAPACITY: u32 = 500;
@@ -175,14 +185,15 @@ impl IndustrySpec {
     #[must_use]
     pub const fn output_cargo(self) -> CargoType {
         match self {
-            Self::Forest | Self::Sawmill | Self::CottonCandy | Self::BubbleGenerator => {
-                CargoType::Wood
-            }
+            Self::Forest | Self::CottonCandy | Self::BubbleGenerator => CargoType::Wood,
+            Self::Sawmill
+            | Self::Factory
+            | Self::OilRefinery
+            | Self::CandyFactory
+            | Self::ToyFactory
+            | Self::FizzyDrinkFactory => CargoType::Goods,
             Self::Farm => CargoType::Grain,
-            Self::OilWells | Self::OilRefinery | Self::ColaWells => CargoType::Oil,
-            Self::Factory | Self::CandyFactory | Self::ToyFactory | Self::FizzyDrinkFactory => {
-                CargoType::Goods
-            }
+            Self::OilWells | Self::ColaWells => CargoType::Oil,
             Self::SteelMill => CargoType::Steel,
             Self::Bank => CargoType::Valuables,
             Self::IronOreMine | Self::CopperOreMine => CargoType::IronOre,
@@ -193,6 +204,53 @@ impl IndustrySpec {
             | Self::SugarMine
             | Self::ToffeeQuarry => CargoType::Coal,
         }
+    }
+
+    /// Insumos y multiplicadores de procesadoras temperate (MVP P1.5).
+    #[must_use]
+    pub const fn processing_inputs(self) -> &'static [IndustryProcessingInput] {
+        match self {
+            Self::Sawmill => &[IndustryProcessingInput {
+                cargo: CargoType::Wood,
+                batch: 8,
+                multiplier: 256,
+            }],
+            Self::OilRefinery => &[IndustryProcessingInput {
+                cargo: CargoType::Oil,
+                batch: 8,
+                multiplier: 256,
+            }],
+            Self::SteelMill => &[
+                IndustryProcessingInput {
+                    cargo: CargoType::IronOre,
+                    batch: 8,
+                    multiplier: 256,
+                },
+                IndustryProcessingInput {
+                    cargo: CargoType::Coal,
+                    batch: 4,
+                    multiplier: 256,
+                },
+            ],
+            Self::Factory => &[
+                IndustryProcessingInput {
+                    cargo: CargoType::Wood,
+                    batch: FACTORY_WOOD_INPUT,
+                    multiplier: 256,
+                },
+                IndustryProcessingInput {
+                    cargo: CargoType::Coal,
+                    batch: FACTORY_COAL_INPUT,
+                    multiplier: 256,
+                },
+            ],
+            _ => &[],
+        }
+    }
+
+    #[must_use]
+    pub const fn is_processor(self) -> bool {
+        !self.processing_inputs().is_empty()
     }
 
     /// `production_rate[0]` del spec vanilla (`build_industry.h`).
@@ -467,15 +525,39 @@ impl Industry {
             .min(255)
     }
 
-    /// Salida de fábrica de goods escalada por `prod_level`.
+    /// Salida de procesadora escalada por `prod_level` (legacy; preferir [`Self::processing_output_amount`]).
     #[must_use]
     pub fn factory_output_amount(&self) -> u32 {
+        self.processing_output_amount()
+    }
+
+    /// Unidades de salida tras consumir los lotes de [`Self::processing_inputs`].
+    #[must_use]
+    pub fn processing_output_amount(&self) -> u32 {
         if self.prod_level == PRODLEVEL_CLOSURE {
             return 0;
         }
-        (INDUSTRY_PRODUCE_AMOUNT * u32::from(self.prod_level))
-            .div_ceil(u32::from(PRODLEVEL_DEFAULT))
-            .max(1)
+        let inputs = self.processing_inputs();
+        if inputs.is_empty() {
+            return 0;
+        }
+        inputs
+            .iter()
+            .map(|input| {
+                let consumed = scaled_processing_batch(input.batch, self.prod_level);
+                consumed.saturating_mul(u32::from(input.multiplier)) / 256
+            })
+            .sum()
+    }
+
+    fn processing_inputs(&self) -> &'static [IndustryProcessingInput] {
+        if let Some(spec) = self.spec {
+            return spec.processing_inputs();
+        }
+        if self.kind == IndustryKind::Factory {
+            return IndustrySpec::Factory.processing_inputs();
+        }
+        &[]
     }
 
     #[must_use]
@@ -510,18 +592,27 @@ impl Industry {
         }
     }
 
-    /// Fábricas: consumen madera/carbón en estaciones de carga dentro de cobertura y producen goods.
+    /// Procesadoras: consumen insumos en estaciones de carga dentro de cobertura.
     ///
     /// Devuelve `true` si hubo un ciclo de procesamiento en este tick.
     pub fn produce_from_nearby_stations(&mut self, stations: &mut [Station], tick: u64) -> bool {
-        if !self.requires_station_inputs() || self.is_closing() {
+        let inputs = self.processing_inputs();
+        if inputs.is_empty() || self.is_closing() {
             return false;
         }
         if !self.produces_on_tick(tick) || self.stock >= self.capacity {
             return false;
         }
 
-        let requirements = self.station_input_requirements();
+        let requirements: Vec<(CargoType, u32)> = inputs
+            .iter()
+            .map(|input| {
+                (
+                    input.cargo,
+                    scaled_processing_batch(input.batch, self.prod_level),
+                )
+            })
+            .collect();
         let station_indices = covering_freight_station_indices(self, stations);
         if station_indices.is_empty() {
             return false;
@@ -530,7 +621,7 @@ impl Industry {
         for &idx in &station_indices {
             stations[idx].ensure_packets_from_stock();
         }
-        for &(cargo, amount) in requirements {
+        for &(cargo, amount) in &requirements {
             let available: u32 = station_indices
                 .iter()
                 .map(|&idx| stations[idx].cargo_stock.get(cargo))
@@ -540,7 +631,7 @@ impl Industry {
             }
         }
 
-        for &(cargo, amount) in requirements {
+        for &(cargo, amount) in &requirements {
             let mut remaining = amount;
             for &idx in &station_indices {
                 if remaining == 0 {
@@ -555,26 +646,37 @@ impl Industry {
             debug_assert_eq!(remaining, 0);
         }
 
-        let output = self.factory_output_amount();
+        let output = self.processing_output_amount();
+        if output == 0 {
+            return false;
+        }
         self.stock = self.stock.saturating_add(output).min(self.capacity);
         true
     }
 
-    /// Solo industrias que transforman cargo entregado en estaciones (p. ej. fábrica → goods).
+    /// Industrias que transforman cargo entregado en estaciones cercanas.
     #[must_use]
     pub fn requires_station_inputs(&self) -> bool {
-        self.output_cargo() == CargoType::Goods
+        !self.processing_inputs().is_empty()
     }
 
+    /// Insumos de estación (cargo + lote a `prod_level` por defecto) para UI y tests.
     #[must_use]
     pub fn station_input_requirements(&self) -> &'static [(CargoType, u32)] {
-        if self.output_cargo() == CargoType::Goods {
-            &[
+        match self.spec.unwrap_or(match self.kind {
+            IndustryKind::Factory => IndustrySpec::Factory,
+            IndustryKind::CoalMine => IndustrySpec::CoalMine,
+            IndustryKind::Forest => IndustrySpec::Forest,
+            IndustryKind::OilWell => IndustrySpec::OilWells,
+        }) {
+            IndustrySpec::Factory => &[
                 (CargoType::Wood, FACTORY_WOOD_INPUT),
                 (CargoType::Coal, FACTORY_COAL_INPUT),
-            ]
-        } else {
-            &[]
+            ],
+            IndustrySpec::Sawmill => &[(CargoType::Wood, 8)],
+            IndustrySpec::OilRefinery => &[(CargoType::Oil, 8)],
+            IndustrySpec::SteelMill => &[(CargoType::IronOre, 8), (CargoType::Coal, 4)],
+            _ => &[],
         }
     }
 
@@ -590,6 +692,12 @@ impl Industry {
             IndustryKind::Factory => CargoType::Goods,
         }
     }
+}
+
+fn scaled_processing_batch(batch: u32, prod_level: u8) -> u32 {
+    (batch * u32::from(prod_level))
+        .div_ceil(u32::from(PRODLEVEL_DEFAULT))
+        .max(1)
 }
 
 fn covering_freight_station_indices(industry: &Industry, stations: &[Station]) -> Vec<usize> {
@@ -907,9 +1015,77 @@ mod tests {
         stations[0].cargo_stock.coal = 10;
 
         assert!(fact.produce_from_nearby_stations(&mut stations, 512));
-        assert_eq!(fact.stock, INDUSTRY_PRODUCE_AMOUNT);
+        assert_eq!(fact.stock, fact.processing_output_amount());
         assert_eq!(stations[0].cargo_stock.wood, 10 - FACTORY_WOOD_INPUT);
         assert_eq!(stations[0].cargo_stock.coal, 10 - FACTORY_COAL_INPUT);
+    }
+
+    #[test]
+    fn sawmill_consumes_wood_for_goods() {
+        let pos = TileCoord::new(0, 0);
+        let mut saw = Industry::with_tiles_spec(
+            pos,
+            IndustryKind::Factory,
+            IndustrySpec::Sawmill,
+            vec![pos],
+            0,
+        );
+        let mut stations = vec![Station::new_with_kind(
+            TileCoord::new(1, 0),
+            StopKind::TruckStop,
+        )];
+        stations[0].cargo_stock.wood = 16;
+
+        assert!(saw.produce_from_nearby_stations(&mut stations, 512));
+        assert_eq!(saw.stock, 8);
+        assert_eq!(saw.output_cargo(), CargoType::Goods);
+        assert_eq!(stations[0].cargo_stock.wood, 8);
+    }
+
+    #[test]
+    fn steel_mill_consumes_iron_and_coal_for_steel() {
+        let pos = TileCoord::new(0, 0);
+        let mut mill = Industry::with_tiles_spec(
+            pos,
+            IndustryKind::Factory,
+            IndustrySpec::SteelMill,
+            vec![pos],
+            0,
+        );
+        let mut stations = vec![Station::new_with_kind(
+            TileCoord::new(1, 0),
+            StopKind::TruckStop,
+        )];
+        stations[0].cargo_stock.iron_ore = 16;
+        stations[0].cargo_stock.coal = 16;
+
+        assert!(mill.produce_from_nearby_stations(&mut stations, 512));
+        assert_eq!(mill.stock, 12);
+        assert_eq!(mill.output_cargo(), CargoType::Steel);
+        assert_eq!(stations[0].cargo_stock.iron_ore, 8);
+        assert_eq!(stations[0].cargo_stock.coal, 12);
+    }
+
+    #[test]
+    fn oil_refinery_consumes_oil_for_goods() {
+        let pos = TileCoord::new(0, 0);
+        let mut refinery = Industry::with_tiles_spec(
+            pos,
+            IndustryKind::OilWell,
+            IndustrySpec::OilRefinery,
+            vec![pos],
+            0,
+        );
+        let mut stations = vec![Station::new_with_kind(
+            TileCoord::new(1, 0),
+            StopKind::TruckStop,
+        )];
+        stations[0].cargo_stock.oil = 16;
+
+        assert!(refinery.produce_from_nearby_stations(&mut stations, 512));
+        assert_eq!(refinery.stock, 8);
+        assert_eq!(refinery.output_cargo(), CargoType::Goods);
+        assert_eq!(stations[0].cargo_stock.oil, 8);
     }
 
     #[test]

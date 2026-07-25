@@ -133,12 +133,11 @@ fn apply_monthly_interest_and_bankruptcy(state: &mut GameState) {
         if is_active {
             state.economy = state.companies[i].economy;
             if monthly_fee > 0 {
-                state
-                    .runtime
-                    .pending_sim_events
-                    .push(crate::sim_events::SimEvent::LoanInterestPaid {
+                state.runtime.pending_sim_events.push(
+                    crate::sim_events::SimEvent::LoanInterestPaid {
                         amount: monthly_fee,
-                    });
+                    },
+                );
             }
             if economy::check_bankruptcy(money, loan, max_loan) {
                 state.bankruptcy_streak = state.bankruptcy_streak.saturating_add(1);

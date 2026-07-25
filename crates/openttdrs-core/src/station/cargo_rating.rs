@@ -144,7 +144,7 @@ pub fn modify_station_rating_around(
                 continue;
             }
             let entry = station.goods.get_mut(cargo);
-            entry.rating = entry.rating.saturating_add(amount).min(255);
+            entry.rating = entry.rating.saturating_add(amount);
             entry.has_rating = true;
             station_changed = true;
             touched += 1;

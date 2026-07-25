@@ -163,7 +163,6 @@ mod tests {
         TRAIN_SUPPLY_VEHICLE_ID, TRAIN_SUPPLY_WAIT_SIGNAL, build_train_supply,
     };
 
-
     #[test]
     fn train_supply_waits_and_resumes_at_mid_signal() {
         let mut state = build_train_supply();

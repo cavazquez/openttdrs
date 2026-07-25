@@ -259,6 +259,11 @@ pub enum Command {
         travel_ticks: u32,
     },
     ToggleVehicleTimetableAutofill(u32),
+    /// Fija el tick de inicio escalonado del horario (`timetable_start`).
+    SetVehicleTimetableStart {
+        vehicle_id: u32,
+        start_tick: u32,
+    },
     ToggleAutoReplaceOnlyWhenOld {
         from_engine_id: u16,
     },

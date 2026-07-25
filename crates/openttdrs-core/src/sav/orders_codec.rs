@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 use crate::cargo::CargoType;
 use crate::map::{TileCoord, coord_from_linear_index, coord_to_linear_index};
-use crate::vehicle::{OrderConditionKind, VehicleOrder};
+use crate::vehicle::{OrderConditionKind, OrderNonStop, VehicleOrder};
 
 use super::SavError;
 use super::entities::SavStationIndex;
@@ -26,33 +26,107 @@ pub(crate) const OTTD_DEPOT_HALT: u8 = 1 << 3;
 
 /// `OrderUnloadType::NoUnload` en bits 0–2 de `flags`.
 pub(crate) const OTTD_UNLOAD_NO_UNLOAD: u8 = 4;
+/// `OrderUnloadType::Transfer` en bits 0–2.
+pub(crate) const OTTD_UNLOAD_TRANSFER: u8 = 2;
 /// `OrderLoadType::FullLoad` / `FullLoadAny` en bits 4–6 de `flags`.
 pub(crate) const OTTD_LOAD_FULL: u8 = 2;
 pub(crate) const OTTD_LOAD_FULL_ANY: u8 = 3;
+/// `OrderLoadType::NoLoad` en bits 4–6.
+pub(crate) const OTTD_LOAD_NO_LOAD: u8 = 4;
+/// `OrderNonStopFlag::GoVia` en bit 6 de `type`.
+pub(crate) const OTTD_NON_STOP_GO_VIA: u8 = 1 << 6;
 
 /// Bytes por orden en el wire ORDL moderno:
 /// `type(1) | flags(1) | dest(2) | refit(1) | wait(2) | travel(2) | max_speed(2)`.
 pub(crate) const ORDER_WIRE_LEN: usize = 11;
 
-/// Orden cruda decodificada del save (`Order::type` + `dest` + `flags`).
+/// Orden cruda decodificada del save (`Order::type` + `dest` + `flags` + horario).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SavOrder {
     pub order_type: u8,
     pub dest: u16,
     /// Byte `Order::flags` (`order_base.h`: unload bits 0–2, load bits 4–6).
     pub flags: u8,
+    /// `Order::wait_time` (ticks).
+    pub wait_time: u16,
+    /// `Order::travel_time` (ticks).
+    pub travel_time: u16,
+}
+
+/// Flags de parada de estación decodificados del wire.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct StationOrderFlags {
+    pub full_load: bool,
+    pub full_load_any: bool,
+    pub no_load: bool,
+    pub no_unload: bool,
+    pub transfer: bool,
+    pub non_stop: OrderNonStop,
 }
 
 #[must_use]
-pub(crate) fn stop_flags_from_sav(flags: u8) -> (bool, bool) {
+pub(crate) fn station_flags_from_sav(order_type: u8, flags: u8) -> StationOrderFlags {
     let unload = flags & 0x07;
     let load = (flags >> 4) & 0x07;
-    let no_unload = unload == OTTD_UNLOAD_NO_UNLOAD;
-    let full_load = load == OTTD_LOAD_FULL || load == OTTD_LOAD_FULL_ANY;
-    (full_load, no_unload)
+    let non_stop = if order_type & OTTD_NON_STOP_GO_VIA != 0 {
+        OrderNonStop::StopAtIntermediate
+    } else {
+        OrderNonStop::NonStopDestination
+    };
+    StationOrderFlags {
+        full_load: load == OTTD_LOAD_FULL,
+        full_load_any: load == OTTD_LOAD_FULL_ANY,
+        no_load: load == OTTD_LOAD_NO_LOAD,
+        no_unload: unload == OTTD_UNLOAD_NO_UNLOAD,
+        transfer: unload == OTTD_UNLOAD_TRANSFER,
+        non_stop,
+    }
 }
 
 #[must_use]
+#[allow(dead_code)]
+pub(crate) fn stop_flags_from_sav(flags: u8) -> (bool, bool) {
+    let parsed = station_flags_from_sav(OT_GOTO_STATION, flags);
+    (parsed.full_load || parsed.full_load_any, parsed.no_unload)
+}
+
+#[must_use]
+pub(crate) fn station_flags_to_sav(order: &VehicleOrder) -> (u8, u8) {
+    let VehicleOrder::Station {
+        full_load,
+        full_load_any,
+        no_load,
+        no_unload,
+        transfer,
+        non_stop,
+        ..
+    } = *order
+    else {
+        return (OT_GOTO_STATION, 0);
+    };
+    let mut order_type = OT_GOTO_STATION;
+    if non_stop == OrderNonStop::StopAtIntermediate {
+        order_type |= OTTD_NON_STOP_GO_VIA;
+    }
+    let mut flags = 0u8;
+    if transfer {
+        flags |= OTTD_UNLOAD_TRANSFER;
+    } else if no_unload {
+        flags |= OTTD_UNLOAD_NO_UNLOAD;
+    }
+    if no_load {
+        flags |= OTTD_LOAD_NO_LOAD << 4;
+    } else if full_load_any {
+        flags |= OTTD_LOAD_FULL_ANY << 4;
+    } else if full_load {
+        flags |= OTTD_LOAD_FULL << 4;
+    }
+    (order_type, flags)
+}
+
+#[must_use]
+#[allow(dead_code)]
 pub(crate) fn stop_flags_to_sav(full_load: bool, no_unload: bool) -> u8 {
     let mut flags = 0u8;
     if full_load {
@@ -83,35 +157,43 @@ pub(crate) fn depot_stop_from_sav(flags: u8) -> bool {
     halt || !service
 }
 
-/// Empaqueta campos en el layout ORDL de 10 bytes (timetable en cero).
+/// Empaqueta campos en el layout ORDL de 11 bytes.
 #[must_use]
 pub(crate) fn encode_order_wire(
     order_type: u8,
     flags: u8,
     dest: u16,
     refit: u8,
+    wait_time: u16,
+    travel_time: u16,
 ) -> [u8; ORDER_WIRE_LEN] {
     let mut out = [0u8; ORDER_WIRE_LEN];
     out[0] = order_type;
     out[1] = flags;
     out[2..4].copy_from_slice(&dest.to_be_bytes());
     out[4] = refit;
-    // wait_time / travel_time / max_speed quedan en cero (timetable no exportado).
+    out[5..7].copy_from_slice(&wait_time.to_be_bytes());
+    out[7..9].copy_from_slice(&travel_time.to_be_bytes());
+    // max_speed queda en cero (no exportado).
     out
 }
 
-/// Desempaqueta `type`/`flags`/`dest`/`refit` del wire (ignora timetable).
+/// Desempaqueta `type`/`flags`/`dest`/`refit`/horario del wire.
 #[must_use]
 #[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn decode_order_wire(bytes: &[u8]) -> Option<(SavOrder, u8)> {
     if bytes.len() < ORDER_WIRE_LEN {
         return None;
     }
+    let wait_time = u16::from_be_bytes([bytes[5], bytes[6]]);
+    let travel_time = u16::from_be_bytes([bytes[7], bytes[8]]);
     Some((
         SavOrder {
             order_type: bytes[0],
             flags: bytes[1],
             dest: u16::from_be_bytes([bytes[2], bytes[3]]),
+            wait_time,
+            travel_time,
         },
         bytes[4],
     ))
@@ -126,34 +208,55 @@ pub(crate) fn encode_vehicle_order(
     station_id: impl Fn(TileCoord) -> Option<u16>,
     map_w: u32,
 ) -> Option<[u8; ORDER_WIRE_LEN]> {
-    let (order_type, dest, flags, refit) = match *order {
+    let (order_type, dest, flags, refit, wait_time, travel_time) = match *order {
         VehicleOrder::Station {
             station,
-            full_load,
-            no_unload,
+            wait_ticks,
+            travel_ticks,
             ..
         } => {
             let id = station_id(station)?;
+            let (order_type, flags) = station_flags_to_sav(order);
             (
-                OT_GOTO_STATION,
+                order_type,
                 id,
-                stop_flags_to_sav(full_load, no_unload),
+                flags,
                 0xFFu8,
+                u16::try_from(wait_ticks).unwrap_or(u16::MAX),
+                u16::try_from(travel_ticks).unwrap_or(u16::MAX),
             )
         }
-        VehicleOrder::Waypoint { waypoint, .. } => {
+        VehicleOrder::Waypoint {
+            waypoint,
+            travel_ticks,
+        } => {
             let id = station_id(waypoint)?;
-            (OT_GOTO_WAYPOINT, id, 0, 0xFF)
+            (
+                OT_GOTO_WAYPOINT,
+                id,
+                0,
+                0xFF,
+                0,
+                u16::try_from(travel_ticks).unwrap_or(u16::MAX),
+            )
         }
         VehicleOrder::Depot {
             depot,
             stop,
             refit_cargo,
-            ..
+            wait_ticks,
+            travel_ticks,
         } => {
             let id = u16::try_from(coord_to_linear_index(depot, map_w)?).ok()?;
             let refit = refit_cargo.map_or(0xFF, CargoType::temperate_id);
-            (OT_GOTO_DEPOT, id, depot_flags_to_sav(stop), refit)
+            (
+                OT_GOTO_DEPOT,
+                id,
+                depot_flags_to_sav(stop),
+                refit,
+                u16::try_from(wait_ticks).unwrap_or(u16::MAX),
+                u16::try_from(travel_ticks).unwrap_or(u16::MAX),
+            )
         }
         VehicleOrder::Conditional {
             condition,
@@ -167,11 +270,18 @@ pub(crate) fn encode_vehicle_order(
             let order_type = OT_CONDITIONAL | (comparator << 5);
             let flags = u8::try_from(jump_to.min(255)).unwrap_or(255);
             let dest = u16::from(value);
-            (order_type, dest, flags, 0xFF)
+            (order_type, dest, flags, 0xFF, 0, 0)
         }
         VehicleOrder::Tile(_) => return None,
     };
-    Some(encode_order_wire(order_type, flags, dest, refit))
+    Some(encode_order_wire(
+        order_type,
+        flags,
+        dest,
+        refit,
+        wait_time,
+        travel_time,
+    ))
 }
 
 /// Convierte órdenes del save a destinos jugables (estación/waypoint/depósito/condicional).
@@ -197,19 +307,33 @@ pub(crate) fn vehicle_orders_from_sav(
         match ot {
             OT_GOTO_STATION => {
                 if let Some(st) = station_for_dest(order.dest) {
-                    let (full_load, no_unload) = stop_flags_from_sav(order.flags);
+                    let parsed = station_flags_from_sav(order.order_type, order.flags);
                     if st.is_waypoint {
-                        out.push(VehicleOrder::waypoint(st.pos));
+                        out.push(VehicleOrder::Waypoint {
+                            waypoint: st.pos,
+                            travel_ticks: u32::from(order.travel_time),
+                        });
                     } else {
-                        out.push(VehicleOrder::station_with_flags(
-                            st.pos, full_load, no_unload,
-                        ));
+                        out.push(VehicleOrder::Station {
+                            station: st.pos,
+                            full_load: parsed.full_load,
+                            full_load_any: parsed.full_load_any,
+                            no_load: parsed.no_load,
+                            no_unload: parsed.no_unload,
+                            transfer: parsed.transfer,
+                            non_stop: parsed.non_stop,
+                            wait_ticks: u32::from(order.wait_time),
+                            travel_ticks: u32::from(order.travel_time),
+                        });
                     }
                 }
             }
             OT_GOTO_WAYPOINT => {
                 if let Some(st) = station_for_dest(order.dest) {
-                    out.push(VehicleOrder::waypoint(st.pos));
+                    out.push(VehicleOrder::Waypoint {
+                        waypoint: st.pos,
+                        travel_ticks: u32::from(order.travel_time),
+                    });
                 }
             }
             OT_GOTO_DEPOT => {
@@ -220,7 +344,12 @@ pub(crate) fn vehicle_orders_from_sav(
                 } else {
                     VehicleOrder::depot_pass_through(pos)
                 };
-                out.push(depot_order);
+                out.push(
+                    depot_order
+                        .with_wait_ticks(u32::from(order.wait_time))
+                        .unwrap_or(depot_order)
+                        .with_travel_ticks(u32::from(order.travel_time)),
+                );
             }
             OT_CONDITIONAL => {
                 let comparator = (order.order_type >> 5) & 0x07;
@@ -295,6 +424,62 @@ mod tests {
     }
 
     #[test]
+    fn station_flags_preserve_transfer_no_load_and_timetable() {
+        use crate::vehicle::OrderNonStop;
+        let flags = station_flags_from_sav(
+            OT_GOTO_STATION | OTTD_NON_STOP_GO_VIA,
+            (OTTD_LOAD_NO_LOAD << 4) | OTTD_UNLOAD_TRANSFER,
+        );
+        assert!(flags.no_load);
+        assert!(flags.transfer);
+        assert!(!flags.full_load);
+        assert_eq!(flags.non_stop, OrderNonStop::StopAtIntermediate);
+
+        let order = VehicleOrder::station_with_load_unload_flags(
+            TileCoord::new(2, 2),
+            false,
+            false,
+            true,
+            false,
+            true,
+            OrderNonStop::StopAtIntermediate,
+        )
+        .with_wait_ticks(120)
+        .unwrap()
+        .with_travel_ticks(240);
+        let wire = encode_vehicle_order(&order, |_| Some(3), 64).unwrap();
+        let (sav, _) = decode_order_wire(&wire).unwrap();
+        assert_eq!(sav.wait_time, 120);
+        assert_eq!(sav.travel_time, 240);
+        let mut stations = HashMap::new();
+        stations.insert(
+            3,
+            SavStationIndex {
+                pos: TileCoord::new(2, 2),
+                is_waypoint: false,
+                facilities: 1,
+                name: None,
+                string_id: None,
+                town_id: None,
+                airport_type: 0,
+                airport_w: 0,
+                airport_h: 0,
+                airport_layout: 0,
+                airport_blocks: 0,
+            },
+        );
+        let decoded = vehicle_orders_from_sav(&[sav], &stations, 64);
+        assert_eq!(decoded, vec![order]);
+    }
+
+    #[test]
+    fn full_load_any_flag_is_not_collapsed_to_full_load() {
+        let flags = station_flags_from_sav(OT_GOTO_STATION, OTTD_LOAD_FULL_ANY << 4);
+        assert!(!flags.full_load);
+        assert!(flags.full_load_any);
+    }
+
+    #[test]
     fn depot_flags_roundtrip() {
         assert!(depot_stop_from_sav(depot_flags_to_sav(true)));
         assert!(!depot_stop_from_sav(depot_flags_to_sav(false)));
@@ -352,6 +537,8 @@ mod tests {
             order_type: OT_GOTO_STATION,
             dest: 0,
             flags: 0,
+            wait_time: 0,
+            travel_time: 0,
         };
         assert_eq!(
             vehicle_orders_from_sav(&[order], &stations, 64),

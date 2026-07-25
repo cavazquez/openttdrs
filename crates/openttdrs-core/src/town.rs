@@ -5,10 +5,10 @@ use crate::cargodist::parity::Randomizer;
 use crate::company::CompanyId;
 use crate::entity_history::TownHistory;
 use crate::industry::Industry;
-use crate::map::{Map, TileCoord, tile_slope_and_z};
+use crate::map::{Map, TileCoord, TileKind, tile_slope_and_z};
 use crate::station::{self, STATION_COVERAGE_RADIUS, Station, StopKind};
 use crate::world_gen::{
-    Climate, CLEAR_GROUND_DESERT, DEF_SNOW_LINE_HEIGHT, desert_patch, effective_clear_ground,
+    CLEAR_GROUND_DESERT, Climate, DEF_SNOW_LINE_HEIGHT, desert_patch, effective_clear_ground,
 };
 
 use crate::town_authority_serde as authority_serde;
@@ -58,16 +58,14 @@ pub const TOWN_GROWTH_RATE_NONE: u16 = 0xFFFF;
 pub const MAX_TOWN_GROWTH_SOURCE_TICKS: u16 = 930;
 
 /// Tolerancia del ayuntamiento a demolición municipal (`town_council_tolerance`).
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TownCouncilTolerance {
-  Lenient,
-  #[default]
-  Neutral,
-  Hostile,
-  Permissive,
+    Lenient,
+    #[default]
+    Neutral,
+    Hostile,
+    Permissive,
 }
 
 /// Tipo de chequeo de rating para demolición (`TownRatingCheckType`).
@@ -93,7 +91,7 @@ pub struct Town {
     pub authority_ratings: Vec<i16>,
     /// Campo legado en saves v22 (`local_authority_rating` único).
     #[serde(default, skip_serializing, rename = "local_authority_rating")]
-    pub(crate) legacy_local_authority_rating: Option<i16>,
+    pub legacy_local_authority_rating: Option<i16>,
     /// Pasajeros entregados cerca de la ciudad (contador de crecimiento).
     #[serde(default)]
     pub passengers_served: u32,
@@ -335,11 +333,7 @@ static GROW_COUNT_VALUES_FUNDED: [u16; 6] = [120, 120, 120, 100, 80, 60];
 static GROW_COUNT_VALUES_NORMAL: [u16; 6] = [320, 420, 300, 220, 160, 100];
 
 #[must_use]
-fn count_houses_for_growth(
-    map: &Map,
-    industries: &[Industry],
-    town: &Town,
-) -> u32 {
+fn count_houses_for_growth(map: &Map, industries: &[Industry], town: &Town) -> u32 {
     station::station_coverage_at(
         map,
         industries,
@@ -373,7 +367,7 @@ fn station_recently_active(station: &Station) -> bool {
 pub fn count_active_stations_near_town(town: &Town, stations: &[Station]) -> usize {
     stations_near_town(town, stations)
         .iter()
-        .filter(|st| station_recently_active(*st))
+        .filter(|st| station_recently_active(st))
         .count()
 }
 
@@ -473,6 +467,7 @@ pub fn update_town_growth_state(
 }
 
 /// Rollover mensual de entregas + decaimiento de financiación + gate de crecimiento.
+#[allow(clippy::too_many_arguments)]
 pub fn process_town_monthly_growth(
     towns: &mut [Town],
     stations: &[Station],
@@ -518,7 +513,10 @@ pub fn update_town_rating(town: &mut Town, stations: &[Station], company_count: 
             } else {
                 RATING_STATION_DOWN_STEP
             };
-            Some((idx, i32::from(town.authority_ratings[idx]) + i32::from(delta)))
+            Some((
+                idx,
+                i32::from(town.authority_ratings[idx]) + i32::from(delta),
+            ))
         })
         .collect();
     for (idx, next) in station_rating_updates {
@@ -533,8 +531,12 @@ pub const TOWN_GROWTH_TICKS: u64 = 70;
 /// Población añadida al financiar edificios (feedback inmediato en UI).
 pub const TOWN_GROWTH_POPULATION_STEP: u32 = 10;
 
+/// Estimación media por casa y ciclo (solo UI; el runtime usa el spec de cada casa).
 pub const PASSENGERS_PER_HOUSE: u32 = 2;
 pub const MAIL_PER_HOUSE: u32 = 1;
+
+/// Escala `population` / `mail_generation` al ciclo de 256 ticks (MVP `TileLoop_Town`).
+const TOWN_CARGO_RATE_DIVISOR: u32 = 94;
 
 /// Tope de espera en parada bus (análogo al stock de industria).
 pub const STATION_TOWN_CARGO_CAPACITY: u32 = 500;
@@ -552,14 +554,24 @@ pub const FUND_BUILDINGS_RATING_BOOST: i8 = 50;
 /// Penalización al construir estación cerca de una ciudad.
 pub const STATION_BUILD_RATING_PENALTY: i8 = -15;
 
-/// Añade pasajeros/correo en paradas bus según casas dentro del radio de cobertura.
+/// Unidades de pasajeros/correo generadas por casa y ciclo según su spec.
+#[must_use]
+pub fn town_cargo_amount_per_cycle(rate: u16) -> u32 {
+    if rate == 0 {
+        return 0;
+    }
+    u32::from(rate).div_ceil(TOWN_CARGO_RATE_DIVISOR).max(1)
+}
+
+/// Añade pasajeros/correo por casa en cobertura de paradas bus/aeropuerto.
 ///
-/// La cantidad generada pasa por [`station::move_goods_to_station`]: el rating decide
-/// cuánto llega al andén. El reparto entre paradas que se pisan las mismas casas
-/// exige producción por casa (P1.7 del roadmap de paridad).
+/// Cada casa usa `HouseSpec::population` y `mail_generation` de
+/// [`crate::sav::house_spec_population`]. La cantidad pasa por
+/// [`station::move_goods_to_station`]: el rating decide cuánto llega al andén y
+/// las paradas que comparten casas compiten entre sí.
 pub fn produce_town_cargo(
     map: &Map,
-    industries: &[Industry],
+    _industries: &[Industry],
     stations: &mut [Station],
     tick: u64,
     selectgoods: bool,
@@ -568,46 +580,72 @@ pub fn produce_town_cargo(
         return (0, 0);
     }
 
+    let station_coverage: Vec<(usize, TileCoord, i32)> = stations
+        .iter()
+        .enumerate()
+        .filter(|(_, station)| matches!(station.stop_kind, StopKind::BusStop | StopKind::Airport))
+        .map(|(idx, station)| (idx, station.pos, station::station_catchment_radius(station)))
+        .collect();
+    if station_coverage.is_empty() {
+        return (0, 0);
+    }
+
     let mut passengers = 0_u64;
     let mut mail = 0_u64;
+    let (mw, mh) = map.dimensions();
 
-    for idx in 0..stations.len() {
-        if !matches!(
-            stations[idx].stop_kind,
-            StopKind::BusStop | StopKind::Airport
-        ) {
-            continue;
+    for y in 0..mh {
+        for x in 0..mw {
+            let tile_pos = TileCoord::new(x.cast_signed(), y.cast_signed());
+            let Some(tile) = map.get(tile_pos) else {
+                continue;
+            };
+            if tile.kind != TileKind::House {
+                continue;
+            }
+            let house_id = tile.m8 & 0x0FFF;
+            let population = crate::sav::house_spec_population(house_id);
+            let mail_rate = crate::sav::house_spec_mail_generation(house_id);
+            if population == 0 && mail_rate == 0 {
+                continue;
+            }
+
+            let covering: Vec<usize> = station_coverage
+                .iter()
+                .filter(|(_, station_pos, radius)| {
+                    station::station_covers_tile(*station_pos, tile_pos, *radius)
+                })
+                .map(|(idx, _, _)| *idx)
+                .collect();
+            if covering.is_empty() {
+                continue;
+            }
+
+            let pax_amount = town_cargo_amount_per_cycle(population);
+            if pax_amount > 0 {
+                passengers += u64::from(station::move_goods_to_station(
+                    stations,
+                    &covering,
+                    CargoType::Passengers,
+                    pax_amount,
+                    tile_pos,
+                    selectgoods,
+                    None,
+                ));
+            }
+            let mail_amount = town_cargo_amount_per_cycle(mail_rate);
+            if mail_amount > 0 {
+                mail += u64::from(station::move_goods_to_station(
+                    stations,
+                    &covering,
+                    CargoType::Mail,
+                    mail_amount,
+                    tile_pos,
+                    selectgoods,
+                    None,
+                ));
+            }
         }
-        let coverage = station::station_coverage_for(map, industries, &stations[idx]);
-        if coverage.house_tiles == 0 {
-            continue;
-        }
-
-        let pax_room =
-            STATION_TOWN_CARGO_CAPACITY.saturating_sub(stations[idx].cargo_stock.passengers);
-        let mail_room = STATION_TOWN_CARGO_CAPACITY.saturating_sub(stations[idx].cargo_stock.mail);
-        let pax_amount = (coverage.house_tiles * PASSENGERS_PER_HOUSE).min(pax_room);
-        let mail_amount = (coverage.house_tiles * MAIL_PER_HOUSE).min(mail_room);
-        let source = stations[idx].pos;
-
-        passengers += u64::from(station::move_goods_to_station(
-            stations,
-            &[idx],
-            CargoType::Passengers,
-            pax_amount,
-            source,
-            selectgoods,
-            None,
-        ));
-        mail += u64::from(station::move_goods_to_station(
-            stations,
-            &[idx],
-            CargoType::Mail,
-            mail_amount,
-            source,
-            selectgoods,
-            None,
-        ));
     }
 
     (passengers, mail)
@@ -621,7 +659,7 @@ pub fn grow_town_if_served(
     industries: &[Industry],
     stations: &[Station],
     towns: &mut [Town],
-    _tick: u64,
+    tick: u64,
 ) -> Vec<TileCoord> {
     let mut dirty = Vec::new();
     for town in towns {
@@ -633,8 +671,11 @@ pub fn grow_town_if_served(
             let funded = town.fund_buildings_months > 0 || town.growth_funded > 0;
             let has_station = !stations_near_town(town, stations).is_empty();
             if !funded && !has_station {
-                counter = i32::from(town.growth_rate.min(u16::try_from(TOWN_GROWTH_TICKS - 1).unwrap_or(0)));
-            } else if try_expand_growing_town(map, industries, stations, town, _tick, &mut dirty) {
+                counter = i32::from(
+                    town.growth_rate
+                        .min(u16::try_from(TOWN_GROWTH_TICKS - 1).unwrap_or(0)),
+                );
+            } else if try_expand_growing_town(map, industries, stations, town, tick, &mut dirty) {
                 counter = i32::from(town.growth_rate);
             } else {
                 counter = i32::from(
@@ -661,8 +702,7 @@ fn try_expand_growing_town(
     if !funded && !has_station {
         return false;
     }
-    let coverage =
-        station::station_coverage_at(map, industries, town.pos, STATION_COVERAGE_RADIUS);
+    let coverage = station::station_coverage_at(map, industries, town.pos, STATION_COVERAGE_RADIUS);
     if coverage.house_tiles == 0 && !funded && !has_station {
         return false;
     }
@@ -745,11 +785,7 @@ pub fn check_town_rating(
 
 /// Comprueba si la autoridad local permite una nueva estación en `pos`.
 #[must_use]
-pub fn authority_allows_new_station(
-    towns: &[Town],
-    pos: TileCoord,
-    company: CompanyId,
-) -> bool {
+pub fn authority_allows_new_station(towns: &[Town], pos: TileCoord, company: CompanyId) -> bool {
     let Some((idx, dist)) = nearest_town_index(towns, pos) else {
         return true;
     };
@@ -817,6 +853,44 @@ mod tests {
     }
 
     #[test]
+    fn produce_uses_house_spec_population() {
+        let mut map = Map::new_flat(16, 16, 0);
+        let stop_pos = TileCoord::new(8, 8);
+        map.set_completed_house(TileCoord::new(7, 8), 4, 0).unwrap(); // pop 220
+        let mut stations = vec![Station::new_with_kind(stop_pos, StopKind::BusStop)];
+        stations[0].goods.get_mut(CargoType::Passengers).last_speed = 1;
+
+        assert_eq!(town_cargo_amount_per_cycle(220), 3);
+        let (pax, _) = produce_town_cargo(&map, &[], &mut stations, TOWN_PRODUCE_TICKS, true);
+        // 3 pax × (175+1) >> 8 = 2
+        assert_eq!(pax, 2);
+        assert_eq!(stations[0].cargo_stock.passengers, 2);
+    }
+
+    #[test]
+    fn competing_bus_stops_split_house_passengers_by_rating() {
+        let mut map = Map::new_flat(16, 16, 0);
+        let house = TileCoord::new(8, 8);
+        map.set_completed_house(house, 0, 0).unwrap();
+        let mut good = Station::new_with_kind(TileCoord::new(7, 8), StopKind::BusStop);
+        let mut bad = Station::new_with_kind(TileCoord::new(9, 8), StopKind::BusStop);
+        good.goods.get_mut(CargoType::Passengers).last_speed = 1;
+        bad.goods.get_mut(CargoType::Passengers).last_speed = 1;
+        good.goods.get_mut(CargoType::Passengers).rating = 200;
+        bad.goods.get_mut(CargoType::Passengers).rating = 50;
+        let mut stations = vec![good, bad];
+
+        let (pax, _) = produce_town_cargo(&map, &[], &mut stations, TOWN_PRODUCE_TICKS, true);
+        assert!(pax > 0);
+        assert!(
+            stations[0].cargo_stock.passengers > stations[1].cargo_stock.passengers,
+            "buena {} vs mala {}",
+            stations[0].cargo_stock.passengers,
+            stations[1].cargo_stock.passengers
+        );
+    }
+
+    #[test]
     fn produce_skips_non_bus_stops() {
         let mut map = Map::new_flat(8, 8, 0);
         let pos = TileCoord::new(2, 2);
@@ -841,9 +915,11 @@ mod tests {
             ..Default::default()
         }];
         towns[0].authority_ratings[CompanyId::PLAYER.index()] = -500;
-        assert!(
-            !authority_allows_new_station(&towns, TileCoord::new(6, 5), CompanyId::PLAYER)
-        );
+        assert!(!authority_allows_new_station(
+            &towns,
+            TileCoord::new(6, 5),
+            CompanyId::PLAYER
+        ));
         assert!(authority_allows_new_station(
             &towns,
             TileCoord::new(30, 30),
@@ -967,15 +1043,7 @@ mod tests {
         };
         town.init_growth_goals(Climate::SubArctic);
         let mut rng = Randomizer::new(1);
-        update_town_growth_state(
-            &mut town,
-            &[],
-            &map,
-            &[],
-            Climate::SubArctic,
-            0,
-            &mut rng,
-        );
+        update_town_growth_state(&mut town, &[], &map, &[], Climate::SubArctic, 0, &mut rng);
         assert!(town.is_growing);
     }
 
@@ -1075,10 +1143,7 @@ mod tests {
         let unserved = get_normal_growth_rate(&town, &[], &map, &[]);
         let mut active: Vec<Station> = Vec::new();
         for i in 0..5 {
-            let mut st = Station::new_with_kind(
-                TileCoord::new(8 + i, 9),
-                StopKind::BusStop,
-            );
+            let mut st = Station::new_with_kind(TileCoord::new(8 + i, 9), StopKind::BusStop);
             st.time_since_pickup.passengers = 0;
             active.push(st);
         }
@@ -1144,7 +1209,10 @@ mod tests {
             pos: TileCoord::new(5, 5),
             ..Default::default()
         };
-        assert_eq!(town.authority_rating(CompanyId::PLAYER), TOWN_RATING_INITIAL);
+        assert_eq!(
+            town.authority_rating(CompanyId::PLAYER),
+            TOWN_RATING_INITIAL
+        );
         assert_eq!(TOWN_RATING_INITIAL, 500);
         assert!(authority_allows_new_station(
             std::slice::from_ref(&town),

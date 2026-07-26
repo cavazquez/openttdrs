@@ -346,6 +346,16 @@ pub fn update_train_reservations_with_wormholes(
             vehicles[i].reserved_steps.clear();
             continue;
         }
+        // Un tren todavía cerrado dentro del depósito no participa del PBS
+        // global. `tick_train_stay_in_depot` reserva atómicamente al autorizar
+        // su salida; reservar antes permitía que varios consists apilados se
+        // bloquearan entre sí y ocuparan el bloque de la vía principal.
+        if map.get_kind(vehicles[i].pos) == Some(TileKind::RailDepot)
+            && !vehicles[i].depot_leave_cleared
+        {
+            vehicles[i].reserved_steps.clear();
+            continue;
+        }
         let head_id = vehicles[i].id;
         let previous = vehicles[i].reserved_steps.clone();
         let reserved = compute_train_reservation_with_wormholes(

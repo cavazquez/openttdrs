@@ -331,10 +331,11 @@ pub use rail_pbs::{
     ChosenTrainTrack, ReservedRailStep, YAPF_RESERVATION_CROSS_PENALTY,
     choose_train_track_on_enter, decode_rail_reservation_m2_hi, encode_rail_reservation_to_m2_hi,
     find_path_to_safe_wait, find_path_to_safe_wait_with_wormholes, follow_train_reservation,
-    free_train_track_reservation, is_safe_waiting_position, rail_tile_has_pbs_reservation,
-    reservation_ends_at_safe_wait, sync_reservations_to_map, tick_pbs_wait_and_maybe_reverse,
-    tick_signal_wait_and_maybe_reverse, train_blocked_by_reservation, train_waiting_for_pbs_path,
-    try_path_reserve, update_train_reservations, update_train_reservations_with_settings,
+    free_train_track_reservation, is_safe_waiting_position, platform_track_reserved_or_occupied,
+    rail_tile_has_pbs_reservation, reservation_ends_at_safe_wait, sync_reservations_to_map,
+    tick_pbs_wait_and_maybe_reverse, tick_signal_wait_and_maybe_reverse,
+    train_blocked_by_reservation, train_waiting_for_pbs_path, try_path_reserve,
+    update_train_reservations, update_train_reservations_with_settings,
     update_train_reservations_with_wormholes,
 };
 pub use rail_signals::{
@@ -406,8 +407,8 @@ pub use station::{
     is_rail_waypoint_tile, load_amount_for_rating, move_goods_to_station,
     note_station_load_attempt, on_station_cargo_pickup, pick_stop_tile, platform_past_stop_tiles,
     rail_station_approach_tile, rail_station_axis_y, rail_station_owned_tiles,
-    rail_station_platform_tiles, rail_station_stop_candidates, rail_station_stop_candidates_osl,
-    rail_station_stop_tile, rail_station_stop_tile_for_approach,
+    rail_station_platform_tiles, rail_station_platform_track_tiles, rail_station_stop_candidates,
+    rail_station_stop_candidates_osl, rail_station_stop_tile, rail_station_stop_tile_for_approach,
     rail_station_stop_tile_for_approach_osl, rail_station_stop_tile_with_osl,
     recompute_station_rating, resolve_order_destination, resolve_order_destination_from,
     road_stop_approach_tile, station_at_tile, station_catchment_radius, station_coverage_at,
@@ -452,8 +453,8 @@ pub use train_consist::{
     cargo_class_bits, cargo_type_a_id, consist_changed, consist_changed_with_map, consist_head_id,
     consist_occupied_tiles, consist_power_hp, consist_tile_span, consist_unit_ids,
     consist_unit_poses, consist_weight_t, detach_unit, detach_unit_keep_tail,
-    engine_is_train_engine, engine_is_wagon, propagate_consist_unit_poses, same_consist,
-    sell_chain_ids,
+    engine_is_train_engine, engine_is_wagon, propagate_consist_unit_poses, reverse_consist_at_stop,
+    same_consist, sell_chain_ids,
 };
 pub use train_movement::{
     ACCEL_SLOWDOWN, AccelSlowdownParams, DELTACOORD_LEAVE_OFFSET, FRACTCOORDS_BEHIND,

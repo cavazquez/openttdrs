@@ -336,7 +336,7 @@ mod tests {
     }
 
     #[test]
-    fn preview_resolves_signal_sprite_for_diagonal_track() {
+    fn preview_face_zero_draws_in_authorized_positive_x_direction() {
         let map = flat_rail_x_map();
         let draws = signal_draws_for_face(&map, 0);
         assert!(
@@ -352,19 +352,19 @@ mod tests {
             "sprite de señal no debe coincidir con ui_demolish (1565)"
         );
         assert_eq!(
-            draws[0].sprite_id, 1278,
-            "NE eléctrica (1950+) → textura 1278, no topadora 1419"
+            draws[0].sprite_id, 1276,
+            "salida +X debe verse SW (1276), no apuntar a contramano"
         );
     }
 
     #[test]
-    fn preview_sw_facing_maps_electric_texture_to_classic_block() {
+    fn preview_face_two_draws_in_authorized_negative_x_direction() {
         let map = flat_rail_x_map();
         let draws = signal_draws_for_face(&map, 2);
         assert!(!draws.is_empty());
         assert_eq!(
-            draws[0].sprite_id, 1276,
-            "SW eléctrica (1950+) → textura 1276, no topadora 1417"
+            draws[0].sprite_id, 1278,
+            "salida -X debe verse NE (1278), no apuntar a contramano"
         );
     }
 }

@@ -94,6 +94,35 @@ pub fn platform_reserved_or_occupied(
     false
 }
 
+/// ¿Algún tren ajeno tiene reserva o cola sobre el andén concreto que contiene
+/// `stop_tile`?
+///
+/// A diferencia de [`platform_reserved_or_occupied`], no mezcla vías paralelas
+/// de la misma estación.
+#[must_use]
+pub fn platform_track_reserved_or_occupied(
+    map: &Map,
+    vehicles: &[Vehicle],
+    self_id: u32,
+    station_anchor: TileCoord,
+    stop_tile: TileCoord,
+    already_reserved: &HashSet<ReservedRailStep>,
+) -> bool {
+    let platform =
+        crate::station::rail_station_platform_track_tiles(map, station_anchor, stop_tile);
+    platform.into_iter().any(|tile| {
+        already_reserved.iter().any(|s| s.tile == tile)
+            || vehicles.iter().any(|v| {
+                v.id != self_id
+                    && v.kind == VehicleKind::Train
+                    && v.is_consist_head()
+                    && (v.reserved_steps.iter().any(|s| s.tile == tile)
+                        || crate::train_consist::consist_occupied_tiles(vehicles, v.id)
+                            .contains(&tile))
+            })
+    })
+}
+
 /// Reserva las teselas de plataforma del destino de estación (si la orden actual es Station).
 pub(super) fn append_platform_reservation(
     map: &Map,
@@ -107,10 +136,20 @@ pub(super) fn append_platform_reservation(
     else {
         return;
     };
-    if platform_reserved_or_occupied(map, vehicles, vehicle.id, *station, already_reserved) {
+    let platform = crate::station::rail_station_platform_track_tiles(map, *station, vehicle.dest);
+    if platform.is_empty()
+        || platform_track_reserved_or_occupied(
+            map,
+            vehicles,
+            vehicle.id,
+            *station,
+            vehicle.dest,
+            already_reserved,
+        )
+    {
         return;
     }
-    for tile in crate::station::rail_station_platform_tiles(map, *station) {
+    for tile in platform {
         if out.iter().any(|s| s.tile == tile) {
             continue;
         }

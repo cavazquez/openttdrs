@@ -261,7 +261,7 @@ fn signal_bit_block_green(
         // Path semantics del port: sin reserva completa permanece roja.
         false
     } else {
-        !block_is_occupied_by_trains(vehicles, c, &block)
+        !block_is_occupied_by_trains(map, vehicles, c, &block)
     }
 }
 

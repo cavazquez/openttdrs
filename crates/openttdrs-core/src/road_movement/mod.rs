@@ -284,6 +284,27 @@ mod tests {
     }
 
     #[test]
+    fn fta_aircraft_sprite_follows_actual_subpixel_heading() {
+        let mut aircraft = Vehicle::new(
+            77,
+            VehicleKind::Aircraft,
+            TileCoord::new(5, 5),
+            TileCoord::new(10, 5),
+        );
+        aircraft.running = true;
+        aircraft.airport_fta_active = true;
+        aircraft.airport_subpos_valid = true;
+        aircraft.direction = DIR_NW;
+
+        let pose = VehiclePose::from_vehicle(&aircraft);
+        assert_eq!(
+            vehicle_render_direction_at(&aircraft, pose),
+            DIR_NW,
+            "la orden global apunta al este, pero el sprite debe seguir el giro FTA al noroeste"
+        );
+    }
+
+    #[test]
     fn turn_midpoint_differs_from_tile_center() {
         let mut v = ne_to_se_turn_vehicle();
         v.road_state = 3; // TRACKDIR_LOWER_E: NE -> SE

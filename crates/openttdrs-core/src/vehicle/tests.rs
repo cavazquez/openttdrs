@@ -101,6 +101,27 @@ fn train_reverses_immediately_when_next_tile_opposite() {
 }
 
 #[test]
+fn moving_train_stops_before_reversing() {
+    let mut v = Vehicle::new(
+        0,
+        VehicleKind::Train,
+        TileCoord::new(21, 15),
+        TileCoord::new(21, 15),
+    );
+    v.path = VecDeque::from([TileCoord::new(20, 15)]);
+    v.direction = DIR_SW;
+    v.cur_speed = 20;
+
+    v.step();
+    assert_eq!(v.pos, TileCoord::new(21, 15));
+    assert_eq!(v.direction, DIR_SW, "no debe girar mientras se mueve");
+    assert_eq!(v.cur_speed, 0, "primero debe detenerse por completo");
+
+    v.step();
+    assert_eq!(v.direction, DIR_NE, "gira recién en el tick detenido");
+}
+
+#[test]
 fn maglev_45_degree_turn_skips_small_turn_penalty() {
     use crate::map::{Map, TileKind};
     use crate::rail_type::{RailType, set_rail_type_on_tile};
@@ -432,6 +453,9 @@ fn train_loses_speed_when_climbing_tile_z() {
     );
     v.path = VecDeque::from([TileCoord::new(3, 2)]);
     v.running = true;
+    // El ensayo mide solo el cambio de cota, no una inversión de marcha.
+    v.direction = DIR_SW;
+    v.curve_prev_direction = DIR_SW;
     let max = v.effective_engine().max_speed;
     // Mantener velocidad al tope del motor para que UpdateSpeed no la mueva.
     while v.pos != TileCoord::new(3, 2) {

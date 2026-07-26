@@ -128,6 +128,7 @@ pub(crate) fn kind_label(k: IndustryKind) -> &'static str {
 pub(crate) fn spec_label(spec: IndustrySpec) -> &'static str {
     match spec {
         IndustrySpec::CoalMine => "Mina de carbón",
+        IndustrySpec::PowerStation => "Central eléctrica",
         IndustrySpec::IronOreMine => "Mina de hierro",
         IndustrySpec::CopperOreMine => "Mina de cobre",
         IndustrySpec::GoldMine => "Mina de oro",

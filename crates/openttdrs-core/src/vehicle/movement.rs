@@ -190,6 +190,14 @@ impl super::model::Vehicle {
         self.complete_station_load_window();
 
         if self.kind == super::model::VehicleKind::Train {
+            if self.cur_speed != 0 && self.needs_train_turnaround() {
+                // Consumir el tick completo en detener la formación. Como el
+                // handler ferroviario corre dos veces, hacerlo dentro de él
+                // permitiría parar en la primera llamada y girar en la segunda.
+                self.cur_speed = 0;
+                self.subspeed = 0;
+                return;
+            }
             // `Train::Tick` llama `TrainLocoHandler` dos veces por tick de juego.
             for _ in 0..2 {
                 self.train_loco_handler(map, train_accel);
@@ -869,24 +877,39 @@ impl super::model::Vehicle {
         outbound == super::reverse_direction(self.direction)
     }
 
-    /// Tren: invierte el rumbo en el acto si la siguiente tesela exige sentido opuesto.
+    /// Tren unitario: invierte el rumbo únicamente después de detenerse.
+    ///
+    /// En `GameState`, los consists se invierten antes mediante
+    /// `reverse_consist_at_stop`, que actualiza todos los vagones a la vez.
     fn apply_immediate_train_turnaround(
         &mut self,
         map: Option<&Map>,
         train_accel: TrainAccelerationModel,
     ) {
+        if self.cur_speed != 0 {
+            return;
+        }
+        if !self.needs_train_turnaround() {
+            return;
+        }
         let Some(next) = self.movement_target() else {
             return;
         };
         let outbound = super::direction_from_tile_step(self.pos, next);
-        if outbound != super::reverse_direction(self.direction) {
-            return;
-        }
         self.set_direction_with_curve_penalty(outbound, map, train_accel);
+        self.rail_pixel = 15_u8.saturating_sub(self.rail_pixel.min(15));
+        self.rail_tile_history.clear();
         self.depart_turn = 0;
-        if self.progress == 255 {
-            self.progress = 0;
-        }
+        self.progress = 0;
+    }
+
+    #[must_use]
+    fn needs_train_turnaround(&self) -> bool {
+        let Some(next) = self.movement_target() else {
+            return false;
+        };
+        let outbound = super::direction_from_tile_step(self.pos, next);
+        outbound == super::reverse_direction(self.direction)
     }
 
     pub(crate) fn holding_for_timetable(&self) -> bool {
@@ -944,6 +967,10 @@ impl super::model::Vehicle {
                 self.maybe_insert_implicit_order(station);
             }
             self.awaiting_load_window = true;
+            if self.kind == super::model::VehicleKind::Train {
+                self.cur_speed = 0;
+                self.subspeed = 0;
+            }
             self.progress = 255;
             return;
         }

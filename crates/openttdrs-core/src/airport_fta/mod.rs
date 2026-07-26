@@ -508,6 +508,61 @@ mod tests {
     }
 
     #[test]
+    fn country_airport_admits_only_one_landing_at_a_time() {
+        let mut s = GameState::new(32, 32);
+        apply_command(
+            &mut s,
+            &Command::PlaceAirportArea {
+                origin: TileCoord::new(2, 2),
+                axis_y: false,
+                spec: AirportSpecId::Small,
+            },
+        )
+        .unwrap();
+        let hangar = s.stations[0].pos;
+        for _ in 0..2 {
+            apply_command(
+                &mut s,
+                &Command::BuildVehicleAtDepot(hangar, ENGINE_AIRCRAFT_DAKOTA),
+            )
+            .unwrap();
+        }
+
+        // El primero ya fue admitido a pista; el segundo alcanzó el último
+        // waypoint de espera (10) y solicita comenzar su aterrizaje (10→11).
+        s.vehicles[0].airport_blocks_held = BLOCK_AIRPORT_BUSY;
+        s.stations[0].airport_blocks = BLOCK_AIRPORT_BUSY;
+        s.vehicles[1].airport_fta_active = true;
+        s.vehicles[1].airport_fta_station = Some(hangar);
+        s.vehicles[1].airport_pos = 10;
+        s.vehicles[1].airport_prev_pos = 18;
+        s.vehicles[1].airport_heading = AirportHeading::Landing;
+        s.vehicles[1].aircraft_phase = AircraftPhase::Flying;
+        s.vehicles[1].airport_waypoint_reached = true;
+        s.vehicles[1].aircraft_phase_ticks = 0;
+        s.vehicles[1].running = true;
+
+        for _ in 0..40 {
+            let _ = tick_airport_fta(&mut s.vehicles[1], &s.map, &mut s.stations);
+            assert_eq!(
+                s.vehicles[1].airport_pos, 10,
+                "la segunda aeronave debe permanecer en espera mientras la pista está ocupada"
+            );
+        }
+
+        s.stations[0].airport_blocks &= !BLOCK_AIRPORT_BUSY;
+        s.vehicles[0].airport_blocks_held = 0;
+        for _ in 0..80 {
+            let _ = tick_airport_fta(&mut s.vehicles[1], &s.map, &mut s.stations);
+            if s.vehicles[1].airport_pos == 11 {
+                break;
+            }
+        }
+        assert_eq!(s.vehicles[1].airport_pos, 11);
+        assert_ne!(s.vehicles[1].airport_blocks_held & BLOCK_AIRPORT_BUSY, 0);
+    }
+
+    #[test]
     fn commuter_tables_have_expected_size() {
         assert_eq!(COMMUTER_MOVING_DATA.len(), 38);
         assert_eq!(COMMUTER_NOF_ELEMENTS, 38);

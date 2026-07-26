@@ -287,6 +287,7 @@ fn classify_industry_kind_from_gfx(gfx: u16) -> IndustryKind {
 fn classify_industry_spec_from_gfx(gfx: u16) -> Option<IndustrySpec> {
     match gfx {
         0..=6 => Some(IndustrySpec::CoalMine),
+        7..=10 => Some(IndustrySpec::PowerStation),
         11..=15 => Some(IndustrySpec::Sawmill),
         16..=17 => Some(IndustrySpec::Forest),
         18..=23 => Some(IndustrySpec::OilRefinery),
@@ -371,6 +372,10 @@ mod tests {
 
     #[test]
     fn classify_industry_spec_matches_farm_range() {
+        assert_eq!(
+            classify_industry_spec_from_gfx(7),
+            Some(IndustrySpec::PowerStation)
+        );
         assert_eq!(
             classify_industry_spec_from_gfx(33),
             Some(IndustrySpec::Farm)

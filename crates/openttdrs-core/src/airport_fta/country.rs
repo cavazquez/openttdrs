@@ -178,7 +178,10 @@ static COUNTRY_FTA_BUILDUP: &[(u8, u8, AirportBlockBits, u8)] = &[
     (8, 11, 0, 9),
     (9, 12, 0, 0),
     (10, 14, 0, 15),
-    (10, 15, 0, 11),
+    // Reservar la pista antes de abandonar la espera y comenzar el aterrizaje.
+    // Si se toma AirportBusy recién en 11→12, dos aeronaves pueden alcanzar
+    // físicamente el mismo punto de recepción (11) antes de que una espere.
+    (10, 15, BLOCK_AIRPORT_BUSY, 11),
     (10, 17, 0, 20),
     (11, 15, BLOCK_AIRPORT_BUSY, 12),
     (12, 0, BLOCK_AIRPORT_BUSY, 13),

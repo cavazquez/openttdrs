@@ -72,6 +72,8 @@ pub enum IndustryKind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum IndustrySpec {
     CoalMine,
+    /// Central térmica: consume carbón y no produce carga transportable.
+    PowerStation,
     IronOreMine,
     CopperOreMine,
     GoldMine,
@@ -172,7 +174,8 @@ impl IndustrySpec {
                 IndustryKind::Forest
             }
             Self::OilWells | Self::OilRefinery | Self::ColaWells => IndustryKind::OilWell,
-            Self::Factory
+            Self::PowerStation
+            | Self::Factory
             | Self::Sawmill
             | Self::SteelMill
             | Self::Bank
@@ -186,7 +189,8 @@ impl IndustrySpec {
     pub const fn output_cargo(self) -> CargoType {
         match self {
             Self::Forest | Self::CottonCandy | Self::BubbleGenerator => CargoType::Wood,
-            Self::Sawmill
+            Self::PowerStation
+            | Self::Sawmill
             | Self::Factory
             | Self::OilRefinery
             | Self::CandyFactory
@@ -210,6 +214,12 @@ impl IndustrySpec {
     #[must_use]
     pub const fn processing_inputs(self) -> &'static [IndustryProcessingInput] {
         match self {
+            Self::PowerStation => &[IndustryProcessingInput {
+                cargo: CargoType::Coal,
+                batch: 8,
+                // Sumidero: consume el lote sin crear carga de salida.
+                multiplier: 0,
+            }],
             Self::Sawmill => &[IndustryProcessingInput {
                 cargo: CargoType::Wood,
                 batch: 8,
@@ -268,7 +278,8 @@ impl IndustrySpec {
             Self::Bank => 6,
             Self::BatteryFarm | Self::SugarMine => 11,
             Self::PlasticFountain => 14,
-            Self::Factory
+            Self::PowerStation
+            | Self::Factory
             | Self::Sawmill
             | Self::SteelMill
             | Self::OilRefinery
@@ -295,6 +306,7 @@ impl IndustrySpec {
             Self::Forest | Self::Farm | Self::CottonCandy | Self::BatteryFarm => {
                 IndustryLifeType::Organic
             }
+            Self::PowerStation => IndustryLifeType::BlackHole,
             Self::Factory
             | Self::Sawmill
             | Self::SteelMill
@@ -648,7 +660,7 @@ impl Industry {
 
         let output = self.processing_output_amount();
         if output == 0 {
-            return false;
+            return self.life_type() == IndustryLifeType::BlackHole;
         }
         self.stock = self.stock.saturating_add(output).min(self.capacity);
         true
@@ -673,6 +685,7 @@ impl Industry {
                 (CargoType::Wood, FACTORY_WOOD_INPUT),
                 (CargoType::Coal, FACTORY_COAL_INPUT),
             ],
+            IndustrySpec::PowerStation => &[(CargoType::Coal, 8)],
             IndustrySpec::Sawmill => &[(CargoType::Wood, 8)],
             IndustrySpec::OilRefinery => &[(CargoType::Oil, 8)],
             IndustrySpec::SteelMill => &[(CargoType::IronOre, 8), (CargoType::Coal, 4)],
@@ -1018,6 +1031,28 @@ mod tests {
         assert_eq!(fact.stock, fact.processing_output_amount());
         assert_eq!(stations[0].cargo_stock.wood, 10 - FACTORY_WOOD_INPUT);
         assert_eq!(stations[0].cargo_stock.coal, 10 - FACTORY_COAL_INPUT);
+    }
+
+    #[test]
+    fn power_station_consumes_only_coal_and_produces_no_cargo() {
+        let pos = TileCoord::new(4, 4);
+        let mut power_station = Industry::with_tiles_spec(
+            pos,
+            IndustryKind::Factory,
+            IndustrySpec::PowerStation,
+            vec![pos],
+            0,
+        );
+        let mut stations = vec![Station::new_with_kind(
+            TileCoord::new(5, 4),
+            StopKind::RailStation,
+        )];
+        stations[0].cargo_stock.coal = 16;
+
+        assert!(power_station.produce_from_nearby_stations(&mut stations, 512));
+        assert_eq!(power_station.life_type(), IndustryLifeType::BlackHole);
+        assert_eq!(power_station.stock, 0);
+        assert_eq!(stations[0].cargo_stock.coal, 8);
     }
 
     #[test]

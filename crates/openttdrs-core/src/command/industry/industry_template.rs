@@ -3,7 +3,8 @@ use crate::map::TileCoord;
 
 use super::layout_tables::{
     COAL_MINE_LAYOUTS, FACTORY_LAYOUTS, FARM_LAYOUTS, FOREST_LAYOUTS, GOLD_MINE_LAYOUTS,
-    IRON_MINE_LAYOUTS, METAL_MINE_LAYOUTS, OIL_LAYOUTS, REFINERY_LAYOUTS, SAWMILL_LAYOUTS,
+    IRON_MINE_LAYOUTS, METAL_MINE_LAYOUTS, OIL_LAYOUTS, POWER_STATION_LAYOUTS, REFINERY_LAYOUTS,
+    SAWMILL_LAYOUTS,
 };
 use super::toyland_layout_tables::{
     BATTERY_FARM_LAYOUTS, BUBBLE_GENERATOR_LAYOUTS, CANDY_FACTORY_LAYOUTS, COLA_WELLS_LAYOUTS,
@@ -15,6 +16,7 @@ use super::toyland_layout_tables::{
 pub fn industry_template(c: TileCoord, spec: IndustrySpec) -> Vec<(TileCoord, u8)> {
     let offsets_and_gfx = match spec {
         IndustrySpec::CoalMine => choose_layout(c, &COAL_MINE_LAYOUTS),
+        IndustrySpec::PowerStation => choose_layout(c, &POWER_STATION_LAYOUTS),
         IndustrySpec::IronOreMine => choose_layout(c, &IRON_MINE_LAYOUTS),
         IndustrySpec::CopperOreMine => choose_layout(c, &METAL_MINE_LAYOUTS),
         IndustrySpec::GoldMine => choose_layout(c, &GOLD_MINE_LAYOUTS),

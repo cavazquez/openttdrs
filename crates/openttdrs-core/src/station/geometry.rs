@@ -123,6 +123,35 @@ pub fn rail_station_platform_tiles(map: &Map, station_anchor: TileCoord) -> Vec<
     tiles
 }
 
+/// Teselas del andén individual que contiene `stop_tile`.
+///
+/// Una estación ferroviaria puede tener varias vías paralelas dentro del mismo
+/// footprint. Las reservas y la asignación de llegada deben operar sobre una
+/// sola de ellas para permitir un tren por andén, no bloquear la estación
+/// completa cuando entra el primer consist.
+#[must_use]
+pub fn rail_station_platform_track_tiles(
+    map: &Map,
+    station_anchor: TileCoord,
+    stop_tile: TileCoord,
+) -> Vec<TileCoord> {
+    let platforms = rail_station_platform_tiles(map, station_anchor);
+    let Some(&first) = platforms.first() else {
+        return Vec::new();
+    };
+    let axis_y = map.get(first).is_some_and(|t| t.m5 & 1 != 0);
+    let same_track = |c: TileCoord| {
+        if axis_y {
+            c.x == stop_tile.x
+        } else {
+            c.y == stop_tile.y
+        }
+    };
+    let mut track: Vec<_> = platforms.into_iter().filter(|&c| same_track(c)).collect();
+    track.sort_by(|a, b| if axis_y { a.y.cmp(&b.y) } else { a.x.cmp(&b.x) });
+    track
+}
+
 /// Tesela de parada en plataforma (paridad simplificada con `GetTrainStopLocation`:
 /// tren puntual → `Middle`; una sola tesela → esa tesela).
 ///

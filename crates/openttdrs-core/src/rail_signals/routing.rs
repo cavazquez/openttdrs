@@ -174,7 +174,7 @@ fn signal_exit_denied(
             return true;
         }
         let block = rail_block_ahead(map, signal_tile, exit_dir);
-        if block_is_occupied_by_trains(vehicles, signal_tile, &block) {
+        if block_is_occupied_by_trains(map, vehicles, signal_tile, &block) {
             return true;
         }
     }
@@ -192,7 +192,7 @@ fn signal_exit_denied(
         });
         if has_non_pbs {
             let block = rail_block_ahead(map, signal_tile, exit_dir);
-            if block_is_occupied_by_trains(vehicles, signal_tile, &block) {
+            if block_is_occupied_by_trains(map, vehicles, signal_tile, &block) {
                 return true;
             }
         }

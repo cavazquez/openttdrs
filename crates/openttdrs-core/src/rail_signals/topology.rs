@@ -156,6 +156,7 @@ pub fn rail_block_ahead_with_wormholes(
 /// propia señal la pondría en rojo y no podría salir (deadlock).
 #[must_use]
 pub(super) fn block_is_occupied_by_trains(
+    map: &Map,
     vehicles: &[Vehicle],
     signal_tile: TileCoord,
     block: &[TileCoord],
@@ -163,6 +164,11 @@ pub(super) fn block_is_occupied_by_trains(
     let block_set: HashSet<TileCoord> = block.iter().copied().collect();
     for v in vehicles {
         if v.kind != VehicleKind::Train {
+            continue;
+        }
+        // Varios consists pueden estar apilados en Track::Depot. Mientras el
+        // gate de salida siga cerrado no ocupan el bloque ferroviario exterior.
+        if map.get_kind(v.pos) == Some(TileKind::RailDepot) && !v.depot_leave_cleared {
             continue;
         }
         if block_set.contains(&v.pos) {

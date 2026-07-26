@@ -86,6 +86,7 @@ fn industry_ottd_type(ind: &Industry) -> u8 {
     });
     match spec {
         IndustrySpec::CoalMine => 0,
+        IndustrySpec::PowerStation => 1,
         IndustrySpec::Sawmill => 2,
         IndustrySpec::Forest => 3,
         IndustrySpec::OilRefinery => 4,

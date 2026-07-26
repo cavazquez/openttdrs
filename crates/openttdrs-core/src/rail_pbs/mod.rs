@@ -35,7 +35,8 @@ pub use search::{
 
 // Reexports públicos desde conflicts
 pub use conflicts::{
-    pbs_exit_has_complete_reservation, platform_reserved_or_occupied, tile_track_reserved_by_map,
+    pbs_exit_has_complete_reservation, platform_reserved_or_occupied,
+    platform_track_reserved_or_occupied, tile_track_reserved_by_map,
 };
 
 // Reexports públicos desde train_reservation

@@ -9,7 +9,7 @@ use crate::map::TileCoord;
 use crate::rail_signals::{
     SIGTYPE_BLOCK, SIGTYPE_COMBO, SIGTYPE_ENTRY, SIGTYPE_EXIT, SIGTYPE_PATH, SIGTYPE_PATH_ONEWAY,
 };
-use crate::vehicle::{Vehicle, VehicleKind, VehicleOrder};
+use crate::vehicle::{DIR_SW, Vehicle, VehicleKind, VehicleOrder};
 use crate::{GameState, PathNetwork, find_path};
 
 /// Añade un vagón de carga al tren de un escenario fijo.
@@ -500,7 +500,12 @@ pub fn build_train_signal() -> GameState {
         goal,
     );
     lead.path = VecDeque::from((3..=6).map(|x| TileCoord::new(x, 0)).collect::<Vec<_>>());
+    lead.direction = DIR_SW;
+    lead.curve_prev_direction = DIR_SW;
     lead.set_cruise_speed();
+    // El golden histórico comienza a media velocidad; antes esa reducción
+    // surgía incidentalmente de corregir una orientación inicial incoherente.
+    lead.cur_speed /= 2;
 
     let mut blocker = Vehicle::new(
         TRAIN_SIGNAL_BLOCKER_ID,
@@ -557,7 +562,10 @@ pub fn build_train_pbs() -> GameState {
             .collect::<Vec<_>>(),
     );
     north.running = true;
+    north.direction = DIR_SW;
+    north.curve_prev_direction = DIR_SW;
     north.set_cruise_speed();
+    north.cur_speed /= 2;
 
     let mut south = Vehicle::new(
         TRAIN_PBS_SOUTH_ID,
@@ -571,7 +579,10 @@ pub fn build_train_pbs() -> GameState {
             .collect::<Vec<_>>(),
     );
     south.running = true;
+    south.direction = DIR_SW;
+    south.curve_prev_direction = DIR_SW;
     south.set_cruise_speed();
+    south.cur_speed /= 2;
 
     state.vehicles.push(north);
     state.vehicles.push(south);

@@ -86,6 +86,24 @@ pub(super) fn move_vehicles(state: &mut GameState) {
             let _ = crate::ground_crash::maybe_road_train_crash(state, i);
             continue;
         }
+        if state.vehicles[i].kind == VehicleKind::Train && state.vehicles[i].is_consist_head() {
+            // Cerrar primero la parada: la nueva orden puede exigir salir en el
+            // sentido opuesto. La inversión del consist ocurre en un tick
+            // detenido y antes de evaluar tráfico o mover un solo píxel.
+            let was_at_station = state.vehicles[i].awaiting_load_window;
+            state.vehicles[i].complete_station_load_window();
+            if was_at_station && !state.vehicles[i].awaiting_load_window {
+                state.vehicles[i].sync_order_destination(&state.map);
+            }
+            let head_id = state.vehicles[i].id;
+            if crate::train_consist::reverse_consist_at_stop(
+                &mut state.vehicles,
+                head_id,
+                &state.map,
+            ) {
+                continue;
+            }
+        }
         let blocked = {
             let vehicles = &state.vehicles;
             let vehicle = &vehicles[i];

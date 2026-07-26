@@ -11,7 +11,7 @@ mod newgrf_vars;
 mod pose;
 mod topology;
 
-pub use controller::propagate_consist_unit_poses;
+pub use controller::{propagate_consist_unit_poses, reverse_consist_at_stop};
 pub use couple::{
     attach_wagon, attach_wagon_chain, detach_unit, detach_unit_keep_tail, sell_chain_ids,
 };

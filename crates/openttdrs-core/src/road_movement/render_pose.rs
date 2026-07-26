@@ -227,6 +227,13 @@ pub fn vehicle_render_direction_at_with_map(
     pose: VehiclePose,
     map: Option<&Map>,
 ) -> VehicleDirection {
+    // La FTA mueve aeronaves en coordenadas sub-tesela y actualiza `direction`
+    // con el desplazamiento real de cada tick. Su `path` permanece vacío; si
+    // se reconstruye aquí un movimiento Manhattan hacia la orden global, el
+    // sprite queda apuntando al aeropuerto aunque el avión esté girando.
+    if v.kind == VehicleKind::Aircraft && v.airport_fta_active {
+        return v.direction;
+    }
     if matches!(v.kind, VehicleKind::Train)
         && let Some(map) = map
         && vehicle_in_depot(map, pose.pos)

@@ -1167,8 +1167,11 @@ pub fn collect_signal_sprite_draws(m2: u8, m3: u8, m3hi: u8, m5: u8) -> Vec<Sign
                 push_if(0, 4, OTTD_TRACK_LOWER, 7);
             }
         } else {
-            push_if(3, 0, OTTD_TRACK_X, 8); // SW
-            push_if(2, 1, OTTD_TRACK_X, 9); // NE
+            // La lógica usa el trackdir de salida (bit 2 para +X y bit 3 para
+            // −X). Orientar el sprite según ese avance evita que el poste se
+            // vea apuntando a contramano.
+            push_if(2, 0, OTTD_TRACK_X, 8); // +X / SW visual
+            push_if(3, 1, OTTD_TRACK_X, 9); // −X / NE visual
         }
     } else {
         push_if(3, 2, OTTD_TRACK_Y, 10); // SE
@@ -1396,7 +1399,7 @@ pub fn signal_draw_pos(ottd_track: u8, sig_bit: u8) -> u8 {
             }
         }
         OTTD_TRACK_X => {
-            if sig_bit == 3 {
+            if sig_bit == 2 {
                 8
             } else {
                 9
@@ -1905,7 +1908,7 @@ mod tests {
     #[test]
     fn collect_signal_draws_maps_electric_ids_to_classic_textures() {
         let m5 = (RAIL_TILE_SIGNALS << 6) | RAIL_TB_X;
-        let m3 = 1 << (4 + 3); // SW present
+        let m3 = 1 << (4 + 2); // autoriza +X y se dibuja en el lado SW
         let m3hi = m3;
         // OpenTTD: SIG_ELECTRIC = 0 → `SPR_ORIGINAL_SIGNALS_BASE` (1275).
         let m2 = m2_for_signal_encoding(0, 0, OTTD_TRACK_X);
@@ -1936,7 +1939,7 @@ mod tests {
 
     #[test]
     fn signal_draw_pos_matches_draw_signals_order() {
-        assert_eq!(signal_draw_pos(OTTD_TRACK_X, 3), 8);
+        assert_eq!(signal_draw_pos(OTTD_TRACK_X, 2), 8);
         assert_eq!(signal_draw_pos(OTTD_TRACK_Y, 2), 11);
         assert_eq!(signal_draw_pos(OTTD_TRACK_UPPER, 3), 4);
     }
@@ -2107,14 +2110,15 @@ mod tests {
     #[test]
     fn golden_rail_signal_sprite_texture_ids() {
         // Paridad con `crates/openttdrs-core/tests/fixtures/parity/rail_signals_golden.json`
-        // (TRACK_X, cara NE, SIG_ELECTRIC=0, verde). Banco alt = Action5 (`SPR_SIGNALS_BASE-16`).
+        // (TRACK_X, cara lógica +X, SIG_ELECTRIC=0, verde). Visualmente esa
+        // cara ocupa el lado SW. Banco alt = Action5 (`SPR_SIGNALS_BASE-16`).
         const ROWS: &[(u8, u8, u8, u8, u32, &str)] = &[
-            (0, 64, 64, 65, 1278, "block"),
-            (1, 64, 64, 65, 5091, "entry"),
-            (2, 64, 64, 65, 5107, "exit"),
-            (3, 64, 64, 65, 5123, "combo"),
-            (4, 64, 64, 65, 5203, "path"),
-            (5, 64, 64, 65, 5219, "path_oneway"),
+            (0, 64, 64, 65, 1276, "block"),
+            (1, 64, 64, 65, 5089, "entry"),
+            (2, 64, 64, 65, 5105, "exit"),
+            (3, 64, 64, 65, 5121, "combo"),
+            (4, 64, 64, 65, 5201, "path"),
+            (5, 64, 64, 65, 5217, "path_oneway"),
         ];
         for &(m2, m3, m3hi, m5, tex_id, label) in ROWS {
             let ids = collect_signal_sprite_ids(m2, m3, m3hi, m5);

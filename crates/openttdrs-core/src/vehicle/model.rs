@@ -379,12 +379,30 @@ pub struct Vehicle {
     /// Waypoint FTA previo (liberación de bloques).
     #[serde(default)]
     pub airport_prev_pos: u8,
+    /// Posición X continua FTA en dieciseisavos de tesela (`x_pos` de OpenTTD).
+    #[serde(default)]
+    pub airport_sub_x: i32,
+    /// Posición Y continua FTA en dieciseisavos de tesela (`y_pos` de OpenTTD).
+    #[serde(default)]
+    pub airport_sub_y: i32,
+    /// Los campos continuos FTA fueron inicializados (compatibilidad con saves anteriores).
+    #[serde(default)]
+    pub airport_subpos_valid: bool,
+    /// El avión alcanzó físicamente el waypoint FTA actual.
+    #[serde(default)]
+    pub airport_waypoint_reached: bool,
+    /// El waypoint alcanzado es un stand válido de carga/descarga.
+    #[serde(default)]
+    pub airport_loading_stand_reached: bool,
     /// Heading FTA (`v->state` / `AirportMovementStates`).
     #[serde(default)]
     pub airport_heading: crate::airport_fta::AirportHeading,
     /// `true` mientras el avión está bajo control FTA de un aeropuerto Country.
     #[serde(default)]
     pub airport_fta_active: bool,
+    /// Ancla de la estación que controla el circuito FTA actual.
+    #[serde(default)]
+    pub airport_fta_station: Option<TileCoord>,
     /// Bloques FTA que este avión tiene reservados en la estación (`airport_blocks`).
     #[serde(default)]
     pub airport_blocks_held: u64,
@@ -536,8 +554,14 @@ impl Vehicle {
             aircraft_phase_ticks: 0,
             airport_pos: 0,
             airport_prev_pos: 0,
+            airport_sub_x: 0,
+            airport_sub_y: 0,
+            airport_subpos_valid: false,
+            airport_waypoint_reached: false,
+            airport_loading_stand_reached: false,
             airport_heading: crate::airport_fta::AirportHeading::Hangar,
             airport_fta_active: false,
+            airport_fta_station: None,
             airport_blocks_held: 0,
             next_unit: None,
             prev_unit: None,

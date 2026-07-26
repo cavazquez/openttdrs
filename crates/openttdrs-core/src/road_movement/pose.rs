@@ -205,7 +205,7 @@ fn previous_tile_on_route(
 pub fn extrapolate_vehicle_pose(v: &Vehicle, alpha: f32) -> VehiclePose {
     let mut pose = VehiclePose::from_vehicle(v);
     let alpha = alpha.clamp(0.0, 1.0);
-    if alpha <= 0.0 || !v.running {
+    if alpha <= 0.0 || !v.running || (v.kind == VehicleKind::Aircraft && v.airport_fta_active) {
         return pose;
     }
     if matches!(

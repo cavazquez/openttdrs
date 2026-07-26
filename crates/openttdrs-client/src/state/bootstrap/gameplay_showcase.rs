@@ -4,9 +4,10 @@ use bevy::prelude::*;
 use openttdrs_core::Command;
 use openttdrs_core::prelude::*;
 use openttdrs_core::{
-    AirportSpecId, CargoType, ENGINE_AIRCRAFT_DAKOTA, ENGINE_SHIP_FERRY, ENGINE_SHIP_MPS,
-    ENGINE_TRAIN_KIRBY, ENGINE_WAGON_PASSENGER, IndustryKind, IndustrySpec, PathNetwork,
-    RAIL_TB_LEFT, RAIL_TB_LOWER, RAIL_TB_RIGHT, RAIL_TB_UPPER, RAIL_TB_X, SIGTYPE_BLOCK, find_path,
+    AirportSpecId, CargoType, ENGINE_AIRCRAFT_DAKOTA, ENGINE_AIRCRAFT_TRICARIO, ENGINE_SHIP_FERRY,
+    ENGINE_SHIP_MPS, ENGINE_TRAIN_KIRBY, ENGINE_WAGON_PASSENGER, IndustryKind, IndustrySpec,
+    PathNetwork, RAIL_TB_LEFT, RAIL_TB_LOWER, RAIL_TB_RIGHT, RAIL_TB_UPPER, RAIL_TB_X,
+    SIGTYPE_PATH_ONEWAY, find_path,
 };
 
 /// Carretera del barrio residencial (eje X).
@@ -35,6 +36,8 @@ pub const SHOWCASE_RAIL_EAST: TileCoord = TileCoord::new(50, SHOWCASE_RAIL_Y);
 pub const SHOWCASE_RAIL_DEPOT: TileCoord = TileCoord::new(30, 38);
 const SHOWCASE_RAIL_WEST_TURN_X: i32 = 9;
 const SHOWCASE_RAIL_EAST_TURN_X: i32 = 53;
+// Separación de seis teselas: mayor que el consist de locomotora + 2 vagones.
+const SHOWCASE_RAIL_SIGNAL_XS: [i32; 6] = [15, 21, 27, 33, 39, 45];
 /// Punto de control sobre la vía de regreso (tests de topología del óvalo).
 #[cfg(test)]
 const SHOWCASE_RAIL_EAST_RETURN: TileCoord = TileCoord::new(48, SHOWCASE_RAIL_RETURN_Y);
@@ -52,7 +55,8 @@ const SHOWCASE_SHIP_DEPOT: TileCoord = TileCoord::new(31, 25);
 
 /// Dos aeropuertos Country (Small) con su hangar y circuito FTA completo.
 const SHOWCASE_AIRPORT_WEST_ORIGIN: TileCoord = TileCoord::new(7, 49);
-const SHOWCASE_AIRPORT_EAST_ORIGIN: TileCoord = TileCoord::new(50, 49);
+// Deja visible el circuito de espera Country completo (+273/16 tiles al este).
+const SHOWCASE_AIRPORT_EAST_ORIGIN: TileCoord = TileCoord::new(43, 49);
 
 const STATION_ENTRANCE_SOUTH: u8 = 1;
 
@@ -186,19 +190,19 @@ fn place_rail_showcase(state: &mut GameState) {
     for (c, bits) in [
         (
             TileCoord::new(SHOWCASE_RAIL_WEST_TURN_X, SHOWCASE_RAIL_Y),
-            RAIL_TB_RIGHT,
-        ),
-        (
-            TileCoord::new(SHOWCASE_RAIL_WEST_TURN_X, SHOWCASE_RAIL_RETURN_Y),
-            RAIL_TB_UPPER,
-        ),
-        (
-            TileCoord::new(SHOWCASE_RAIL_EAST_TURN_X, SHOWCASE_RAIL_Y),
             RAIL_TB_LOWER,
         ),
         (
-            TileCoord::new(SHOWCASE_RAIL_EAST_TURN_X, SHOWCASE_RAIL_RETURN_Y),
+            TileCoord::new(SHOWCASE_RAIL_WEST_TURN_X, SHOWCASE_RAIL_RETURN_Y),
             RAIL_TB_LEFT,
+        ),
+        (
+            TileCoord::new(SHOWCASE_RAIL_EAST_TURN_X, SHOWCASE_RAIL_Y),
+            RAIL_TB_RIGHT,
+        ),
+        (
+            TileCoord::new(SHOWCASE_RAIL_EAST_TURN_X, SHOWCASE_RAIL_RETURN_Y),
+            RAIL_TB_UPPER,
         ),
     ] {
         set_showcase_rail_bits(state, c, bits);
@@ -220,7 +224,9 @@ fn place_rail_showcase(state: &mut GameState) {
     }
     let _ = apply_command(state, &Command::PlaceRailDepotDir(SHOWCASE_RAIL_DEPOT, 3));
 
-    for x in [18, 28, 38, 48] {
+    // Señales PBS de un solo sentido a lo largo de ambas vías. El hueco en
+    // x=30 deja libre el empalme del depósito ferroviario.
+    for x in SHOWCASE_RAIL_SIGNAL_XS {
         let _ = apply_command(
             state,
             &Command::PlaceRailSignal(
@@ -228,7 +234,7 @@ fn place_rail_showcase(state: &mut GameState) {
                 0,
                 128,
                 128,
-                SIGTYPE_BLOCK,
+                SIGTYPE_PATH_ONEWAY,
             ),
         );
         let _ = apply_command(
@@ -238,7 +244,7 @@ fn place_rail_showcase(state: &mut GameState) {
                 2,
                 128,
                 128,
-                SIGTYPE_BLOCK,
+                SIGTYPE_PATH_ONEWAY,
             ),
         );
     }
@@ -451,19 +457,27 @@ fn spawn_air_lines(state: &mut GameState) {
     let Some(east) = airport_anchor_covering(state, SHOWCASE_AIRPORT_EAST_ORIGIN) else {
         return;
     };
-    for (hangar, orders, name) in [
+    for (engine, hangar, orders, name) in [
         (
+            ENGINE_AIRCRAFT_DAKOTA,
             west,
             vec![VehicleOrder::station(east), VehicleOrder::station(west)],
             "Vuelo Demo 1",
         ),
         (
+            ENGINE_AIRCRAFT_DAKOTA,
             east,
             vec![VehicleOrder::station(west), VehicleOrder::station(east)],
             "Vuelo Demo 2",
         ),
+        (
+            ENGINE_AIRCRAFT_TRICARIO,
+            west,
+            vec![VehicleOrder::station(east), VehicleOrder::station(west)],
+            "Helicóptero Demo",
+        ),
     ] {
-        if let Some(id) = build_vehicle_at(state, hangar, ENGINE_AIRCRAFT_DAKOTA) {
+        if let Some(id) = build_vehicle_at(state, hangar, engine) {
             let _ = apply_command(state, &Command::SetVehicleOrderList(id, orders));
             if let Some(aircraft) = state.vehicles.iter_mut().find(|vehicle| vehicle.id == id) {
                 aircraft.name = Some(name.to_string());
@@ -491,7 +505,7 @@ pub(crate) fn log_gameplay_showcase_zones() {
          cadena bosque ({},{}) → hub ({},{}) → fábrica ({},{}) | \
          mina legacy ({},{}) con camión #9010 | \
          2 trenes, doble vía y={SHOWCASE_RAIL_Y}/{SHOWCASE_RAIL_RETURN_Y} (depósito {},{}) | \
-         2 barcos ({},{})↔({},{}) | 2 aviones Small | \
+         2 barcos ({},{})↔({},{}) | 2 aviones + 1 helicóptero Small | \
          lab pathfinding: carreteras y=12/13 unidas en x=22",
         SHOWCASE_BUS_A.x,
         SHOWCASE_BUS_A.y,
@@ -610,8 +624,15 @@ mod tests {
                 .iter()
                 .filter(|vehicle| vehicle.kind == VehicleKind::Aircraft)
                 .count(),
-            2,
-            "dos aviones activos"
+            3,
+            "dos aviones y un helicóptero activos"
+        );
+        assert!(
+            state.vehicles.iter().any(|vehicle| {
+                vehicle.kind == VehicleKind::Aircraft
+                    && vehicle.engine_id == Some(ENGINE_AIRCRAFT_TRICARIO)
+            }),
+            "helicóptero visible para verificar su ciclo FTA"
         );
         assert!(!state.disasters_enabled, "demo determinista sin desastres");
         assert_eq!(state.vehicle_breakdowns, 0, "demo sin averías aleatorias");
@@ -691,19 +712,19 @@ mod tests {
         for (coord, expected_bits) in [
             (
                 TileCoord::new(SHOWCASE_RAIL_WEST_TURN_X, SHOWCASE_RAIL_Y),
-                RAIL_TB_RIGHT,
-            ),
-            (
-                TileCoord::new(SHOWCASE_RAIL_WEST_TURN_X, SHOWCASE_RAIL_RETURN_Y),
-                RAIL_TB_UPPER,
-            ),
-            (
-                TileCoord::new(SHOWCASE_RAIL_EAST_TURN_X, SHOWCASE_RAIL_Y),
                 RAIL_TB_LOWER,
             ),
             (
-                TileCoord::new(SHOWCASE_RAIL_EAST_TURN_X, SHOWCASE_RAIL_RETURN_Y),
+                TileCoord::new(SHOWCASE_RAIL_WEST_TURN_X, SHOWCASE_RAIL_RETURN_Y),
                 RAIL_TB_LEFT,
+            ),
+            (
+                TileCoord::new(SHOWCASE_RAIL_EAST_TURN_X, SHOWCASE_RAIL_Y),
+                RAIL_TB_RIGHT,
+            ),
+            (
+                TileCoord::new(SHOWCASE_RAIL_EAST_TURN_X, SHOWCASE_RAIL_RETURN_Y),
+                RAIL_TB_UPPER,
             ),
         ] {
             let tile = state.map.get(coord).expect("tesela de giro ferroviario");
@@ -724,6 +745,34 @@ mod tests {
                 state.map.get_kind(coord),
                 Some(TileKind::Rail),
                 "la unión no debe dejar vías sobresaliendo en {coord:?}"
+            );
+        }
+        for x in SHOWCASE_RAIL_SIGNAL_XS {
+            let outbound = state
+                .map
+                .get(TileCoord::new(x, SHOWCASE_RAIL_Y))
+                .expect("señal en vía de ida");
+            let inbound = state
+                .map
+                .get(TileCoord::new(x, SHOWCASE_RAIL_RETURN_Y))
+                .expect("señal en vía de regreso");
+            assert_eq!(
+                openttdrs_core::rail_signal_present_mask(outbound.m3),
+                0b0100,
+                "ida +x/face NE en x={x}"
+            );
+            assert_eq!(
+                openttdrs_core::rail_signal_present_mask(inbound.m3),
+                0b1000,
+                "regreso -x/face SW en x={x}"
+            );
+            assert_eq!(
+                openttdrs_core::signal_type_for_track(outbound.m2, openttdrs_core::SignalTrack::X,),
+                SIGTYPE_PATH_ONEWAY
+            );
+            assert_eq!(
+                openttdrs_core::signal_type_for_track(inbound.m2, openttdrs_core::SignalTrack::X,),
+                SIGTYPE_PATH_ONEWAY
             );
         }
         let west = openttdrs_core::rail_station_stop_tile(&state.map, SHOWCASE_RAIL_WEST)
@@ -765,6 +814,33 @@ mod tests {
             .is_some(),
             "regreso este → oeste por y={SHOWCASE_RAIL_RETURN_Y}"
         );
+        let east_turn_path = find_path(
+            &state.map,
+            east,
+            SHOWCASE_RAIL_EAST_RETURN,
+            PathNetwork::Rail,
+        )
+        .expect("retorno corto por el extremo este");
+        for curve in [
+            TileCoord::new(SHOWCASE_RAIL_EAST_TURN_X, SHOWCASE_RAIL_Y),
+            TileCoord::new(SHOWCASE_RAIL_EAST_TURN_X, SHOWCASE_RAIL_RETURN_Y),
+        ] {
+            assert!(
+                east_turn_path.contains(&curve),
+                "el retorno este debe atravesar su curva {curve:?}: {east_turn_path:?}"
+            );
+        }
+        let west_turn_path = find_path(&state.map, west_return, west, PathNetwork::Rail)
+            .expect("retorno corto por el extremo oeste");
+        for curve in [
+            TileCoord::new(SHOWCASE_RAIL_WEST_TURN_X, SHOWCASE_RAIL_RETURN_Y),
+            TileCoord::new(SHOWCASE_RAIL_WEST_TURN_X, SHOWCASE_RAIL_Y),
+        ] {
+            assert!(
+                west_turn_path.contains(&curve),
+                "el retorno oeste debe atravesar su curva {curve:?}: {west_turn_path:?}"
+            );
+        }
     }
 
     #[test]
@@ -962,9 +1038,28 @@ mod tests {
                     VehicleKind::Train => {
                         visit.0 |= west_rail.contains(&vehicle.pos);
                         visit.1 |= east_rail.contains(&vehicle.pos);
-                        if let Some(lanes) = train_lanes.get_mut(&vehicle.id) {
-                            lanes.0 |= vehicle.pos.y == SHOWCASE_RAIL_Y;
-                            lanes.1 |= vehicle.pos.y == SHOWCASE_RAIL_RETURN_Y;
+                        if let (Some(lanes), Some(next)) =
+                            (train_lanes.get_mut(&vehicle.id), vehicle.movement_target())
+                            && state.map.get_kind(vehicle.pos) == Some(TileKind::Rail)
+                            && next.y == vehicle.pos.y
+                        {
+                            if vehicle.pos.y == SHOWCASE_RAIL_Y {
+                                assert!(
+                                    next.x > vehicle.pos.x,
+                                    "tren #{} circuló al revés por la vía de ida: {:?} -> {next:?}",
+                                    vehicle.id,
+                                    vehicle.pos
+                                );
+                                lanes.0 = true;
+                            } else if vehicle.pos.y == SHOWCASE_RAIL_RETURN_Y {
+                                assert!(
+                                    next.x < vehicle.pos.x,
+                                    "tren #{} circuló al revés por la vía de vuelta: {:?} -> {next:?}",
+                                    vehicle.id,
+                                    vehicle.pos
+                                );
+                                lanes.1 = true;
+                            }
                         }
                     }
                     VehicleKind::Ship => {

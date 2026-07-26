@@ -10,10 +10,9 @@
 //!   la posición real que trackeamos internamente en `Vehicle::pos`.
 //! - `pos`/`previous_pos`/`state`/`targetairport`/`speed`/`direction`/`running`:
 //!   estado FTA vivo, tomado de la simulación tick a tick.
-//! - `x_pos`/`y_pos`/`z_pos`: `OpenTTD` los interpola en sub-tesela vía
-//!   `AirportMovingData`; nuestro motor solo trackea tesela + nodo FTA (sin
-//!   sub-tesela), así que son una aproximación best-effort (centro de tesela /
-//!   altitud escalada), no comparables 1:1 con el oráculo.
+//! - `x_pos`/`y_pos`/`z_pos`: posición viva en sub-tesela calculada a partir de
+//!   `AirportMovingData`, más la altitud escalada. Al importar una aeronave que
+//!   todavía no activó FTA, usamos temporalmente el centro de su tesela.
 //! - `airports[].{x,y,w,h,type,layout}`: estáticos, tomados crudos del `.sav`
 //!   (no de nuestro `AirportSpecId` interno, que remapea el `type`).
 //! - `airports[].blocks`: dinámico, vivo desde `Station::airport_blocks`.
@@ -134,9 +133,13 @@ fn trace_row(
         .filter(|v| v.kind == VehicleKind::Aircraft)
         .map(|v| {
             let frozen = frozen_aircraft.get(&v.id);
-            let targetairport = station_pos_to_id.get(&v.dest).copied().unwrap_or(u32::MAX);
-            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-            let (x_pos, y_pos) = (v.pos.x * 16 + 8, v.pos.y * 16 + 8);
+            let target = v.airport_fta_station.unwrap_or(v.dest);
+            let targetairport = station_pos_to_id.get(&target).copied().unwrap_or(u32::MAX);
+            let (x_pos, y_pos) = if v.airport_subpos_valid {
+                (v.airport_sub_x, v.airport_sub_y)
+            } else {
+                (v.pos.x * 16 + 8, v.pos.y * 16 + 8)
+            };
             FtaAircraft {
                 vehicle: v.id,
                 engine: frozen.map_or(0, |f| f.engine_type),

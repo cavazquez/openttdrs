@@ -167,10 +167,24 @@ fn rail_station_entrance_links_track(map: &Map, station: TileCoord, track: TileC
     if station.x.abs_diff(track.x) + station.y.abs_diff(track.y) != 1 {
         return false;
     }
+    // Mantener la compatibilidad de las bocas externas ya construidas; el bug
+    // relevante es tratar otro andén paralelo como si fuera un cambio de vía.
+    if map.get_kind(track) != Some(TileKind::Station) {
+        return (0..4).any(|dir| {
+            let (dx, dy) = rail_diag_dir_offset(dir);
+            TileCoord::new(station.x + dx, station.y + dy) == track
+                && station_entrance_faces_rail(map, station, yapf_dir_to_pathfinder(dir))
+        });
+    }
+    let station_tb = yapf_traversal_bits(map, station);
+    let track_tb = yapf_traversal_bits(map, track);
     (0..4).any(|dir| {
         let (dx, dy) = rail_diag_dir_offset(dir);
+        let pf_dir = yapf_dir_to_pathfinder(dir);
         TileCoord::new(station.x + dx, station.y + dy) == track
-            && station_entrance_faces_rail(map, station, yapf_dir_to_pathfinder(dir))
+            && station_entrance_faces_rail(map, station, pf_dir)
+            && station_tb & rail_bits_touching_side(pf_dir) != 0
+            && track_tb & rail_bits_touching_side(opposite_dir(pf_dir)) != 0
     })
 }
 
@@ -602,6 +616,29 @@ mod tests {
             path,
             vec![TileCoord::new(2, 3), TileCoord::new(2, 4)],
             "no debe saltar el andén intermedio"
+        );
+    }
+
+    #[test]
+    fn yapf_parallel_platforms_do_not_connect_sideways() {
+        let mut map = Map::new_flat(8, 8, 0);
+        for y in 2..=3 {
+            for x in 2..=4 {
+                let c = TileCoord::new(x, y);
+                map.set_kind(c, TileKind::Station).expect("station");
+                let mut t = map.get(c).expect("tile");
+                t.m5 = 0; // eje X
+                t.m6 = 0; // StationType::Rail
+                map.set_tile(c, t).expect("set");
+            }
+        }
+        assert!(
+            find_rail_path_yapf(&map, TileCoord::new(2, 2), TileCoord::new(4, 2), None).is_some(),
+            "un andén sigue conectado longitudinalmente"
+        );
+        assert!(
+            find_rail_path_yapf(&map, TileCoord::new(2, 2), TileCoord::new(2, 3), None).is_none(),
+            "dos andenes paralelos no son un cambio de vía"
         );
     }
 

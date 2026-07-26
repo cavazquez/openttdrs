@@ -211,7 +211,14 @@ impl super::model::Vehicle {
         self.update_movement_speed(map, train_accel);
 
         if self.movement_target().is_none() {
-            if self.cur_speed == 0 && self.pos == self.dest {
+            let at_fta_airport_stand = self.kind == super::model::VehicleKind::Aircraft
+                && self.airport_fta_active
+                && self.airport_loading_stand_reached
+                && self.pos == self.dest;
+            if at_fta_airport_stand {
+                self.cur_speed = 0;
+            }
+            if (self.cur_speed == 0 || at_fta_airport_stand) && self.pos == self.dest {
                 self.advance_destination_after_arrival();
             }
             return;

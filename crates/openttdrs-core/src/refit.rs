@@ -60,6 +60,12 @@ const TRAIN_DEPOT_EXIT_VISIBILITY_PROGRESS: u8 = 192;
 /// Vehículo oculto en el mapa isométrico (`OpenTTD` `VS_HIDDEN` al entrar al depósito).
 #[must_use]
 pub fn vehicle_hidden_on_map(map: &Map, vehicle: &Vehicle) -> bool {
+    if vehicle.kind == VehicleKind::Aircraft && map.get_kind(vehicle.pos) == Some(TileKind::Airport)
+    {
+        // Una tesela Airport no equivale a estar dentro del hangar. Taxi,
+        // despegue y aterrizaje deben seguir visibles sobre el footprint.
+        return vehicle.aircraft_phase == crate::vehicle::AircraftPhase::InHangar;
+    }
     if vehicle_in_depot(map, vehicle.pos) {
         return vehicle_hidden_on_depot_tile(map, vehicle);
     }
@@ -239,6 +245,20 @@ mod tests {
         bus.running = true;
         bus.road_depot_phase = crate::vehicle::RoadDepotPhase::InDepot;
         assert!(vehicle_hidden_on_map(&map, &bus));
+    }
+
+    #[test]
+    fn aircraft_is_hidden_only_inside_hangar_not_while_taxiing() {
+        let mut map = crate::map::Map::new_flat(8, 8, 0);
+        let airport = TileCoord::new(3, 3);
+        map.set_kind(airport, TileKind::Airport).unwrap();
+        let mut aircraft = Vehicle::new(1, VehicleKind::Aircraft, airport, airport);
+        aircraft.aircraft_phase = crate::vehicle::AircraftPhase::InHangar;
+        assert!(vehicle_hidden_on_map(&map, &aircraft));
+        aircraft.aircraft_phase = crate::vehicle::AircraftPhase::Taxi;
+        assert!(!vehicle_hidden_on_map(&map, &aircraft));
+        aircraft.aircraft_phase = crate::vehicle::AircraftPhase::Landing;
+        assert!(!vehicle_hidden_on_map(&map, &aircraft));
     }
 
     #[test]

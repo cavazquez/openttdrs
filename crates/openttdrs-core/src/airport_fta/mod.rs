@@ -101,6 +101,7 @@ mod tests {
     #[test]
     fn country_airport_cycle_hangar_takeoff_fly_land_term() {
         let mut s = GameState::new(48, 48);
+        s.disasters_enabled = false;
         apply_command(
             &mut s,
             &Command::PlaceAirportArea {
@@ -153,6 +154,8 @@ mod tests {
         let mut saw_landing = false;
         let mut saw_term = false;
         let mut saw_order_advance = false;
+        let mut saw_between_airports = false;
+        let mut previous_pos = hangar_a;
 
         for _ in 0..12_000 {
             s.step();
@@ -169,11 +172,26 @@ mod tests {
             {
                 saw_landing = true;
             }
+            assert!(
+                !s.vehicles.is_empty(),
+                "el Dakota fue eliminado durante el ciclo FTA; events={events:?} news={:?}",
+                s.news.items
+            );
             let v = &s.vehicles[0];
+            assert!(
+                v.pos.x.abs_diff(previous_pos.x) <= 1 && v.pos.y.abs_diff(previous_pos.y) <= 1,
+                "el avión no debe saltar entre waypoints: {previous_pos:?} -> {:?}",
+                v.pos
+            );
+            previous_pos = v.pos;
             saw_order_advance |= v.current_order == 1;
             if v.aircraft_phase == AircraftPhase::Flying {
                 saw_flying = true;
             }
+            saw_between_airports |= v.aircraft_phase == AircraftPhase::Flying
+                && !v.airport_fta_active
+                && !s.stations[0].covers_tile(v.pos)
+                && !s.stations[1].covers_tile(v.pos);
             if saw_landing
                 && (matches!(v.airport_pos, 2 | 3)
                     || (matches!(
@@ -183,24 +201,40 @@ mod tests {
             {
                 saw_term = true;
             }
-            if saw_takeoff && saw_flying && saw_landing && saw_term && saw_order_advance {
+            if saw_takeoff
+                && saw_flying
+                && saw_between_airports
+                && saw_landing
+                && saw_term
+                && saw_order_advance
+            {
                 break;
             }
         }
 
         assert!(saw_takeoff, "debe emitir takeoff FTA");
-        assert!(saw_flying, "debe entrar en crucero Flying");
+        assert!(
+            saw_flying,
+            "debe entrar en crucero Flying; estado final={:?}",
+            s.vehicles.first()
+        );
+        assert!(
+            saw_between_airports,
+            "debe verse físicamente entre ambos aeropuertos"
+        );
         assert!(saw_landing, "debe emitir/aterrizar Landing");
         assert!(saw_term, "debe llegar a terminal/hangar del destino");
         assert!(
             saw_order_advance,
-            "debe completar la escala y avanzar la orden"
+            "debe completar la escala y avanzar la orden; estado final={:?}",
+            s.vehicles.first()
         );
     }
 
     #[test]
     fn helidepot_cycle_hangar_takeoff_fly_land_pad() {
         let mut s = GameState::new(48, 48);
+        s.disasters_enabled = false;
         apply_command(
             &mut s,
             &Command::PlaceAirportArea {
@@ -250,6 +284,8 @@ mod tests {
         let mut saw_flying = false;
         let mut saw_landing = false;
         let mut saw_pad = false;
+        let mut saw_between_airports = false;
+        let mut previous_pos = hangar_a;
 
         for _ in 0..12_000 {
             s.step();
@@ -270,19 +306,30 @@ mod tests {
                 saw_landing = true;
             }
             let v = &s.vehicles[0];
+            assert!(
+                v.pos.x.abs_diff(previous_pos.x) <= 1 && v.pos.y.abs_diff(previous_pos.y) <= 1,
+                "el helicóptero no debe saltar entre waypoints: {previous_pos:?} -> {:?}",
+                v.pos
+            );
+            previous_pos = v.pos;
             if v.aircraft_phase == AircraftPhase::Flying {
                 saw_flying = true;
             }
+            saw_between_airports |= v.aircraft_phase == AircraftPhase::Flying
+                && !v.airport_fta_active
+                && !s.stations[0].covers_tile(v.pos)
+                && !s.stations[1].covers_tile(v.pos);
             if saw_landing && v.airport_pos == 14 && s.stations[1].covers_tile(v.pos) {
                 saw_pad = true;
             }
-            if saw_takeoff && saw_flying && saw_landing && saw_pad {
+            if saw_takeoff && saw_flying && saw_between_airports && saw_landing && saw_pad {
                 break;
             }
         }
 
         assert!(saw_takeoff, "Helidepot: takeoff heli");
         assert!(saw_flying, "Helidepot: crucero");
+        assert!(saw_between_airports, "Helidepot: vuelo visible entre bases");
         assert!(saw_landing, "Helidepot: landing/lower");
         assert!(saw_pad, "Helidepot: llegar a helipad1 (pos 14)");
     }
@@ -1073,6 +1120,7 @@ mod tests {
     #[test]
     fn oilrig_cycle_pad_takeoff_fly_land_pad() {
         let mut s = GameState::new(48, 48);
+        s.disasters_enabled = false;
         apply_command(
             &mut s,
             &Command::PlaceAirportArea {

@@ -99,6 +99,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)] // Escenario integral: salida, vuelo, llegada y escala.
     fn country_airport_cycle_hangar_takeoff_fly_land_term() {
         let mut s = GameState::new(48, 48);
         s.disasters_enabled = false;

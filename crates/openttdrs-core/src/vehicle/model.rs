@@ -379,10 +379,10 @@ pub struct Vehicle {
     /// Waypoint FTA previo (liberación de bloques).
     #[serde(default)]
     pub airport_prev_pos: u8,
-    /// Posición X continua FTA en dieciseisavos de tesela (`x_pos` de OpenTTD).
+    /// Posición X continua FTA en dieciseisavos de tesela (`x_pos` de `OpenTTD`).
     #[serde(default)]
     pub airport_sub_x: i32,
-    /// Posición Y continua FTA en dieciseisavos de tesela (`y_pos` de OpenTTD).
+    /// Posición Y continua FTA en dieciseisavos de tesela (`y_pos` de `OpenTTD`).
     #[serde(default)]
     pub airport_sub_y: i32,
     /// Los campos continuos FTA fueron inicializados (compatibilidad con saves anteriores).

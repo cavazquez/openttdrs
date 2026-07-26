@@ -476,20 +476,18 @@ fn apply_enter_heading(v: &mut Vehicle, next: u8, profile: &AirportFtaProfile) {
             7 => v.airport_heading = AirportHeading::Takeoff,
             8 => v.airport_heading = AirportHeading::StartTakeoff,
             9 => v.airport_heading = AirportHeading::EndTakeoff,
-            2 => v.airport_heading = AirportHeading::Term1,
+            2 | 14 => v.airport_heading = AirportHeading::Term1,
             3 => v.airport_heading = AirportHeading::Term2,
             13 => v.airport_heading = AirportHeading::EndLanding,
-            14 => v.airport_heading = AirportHeading::Term1,
             1 if matches!(v.airport_heading, AirportHeading::EndLanding) => {
                 v.airport_heading = AirportHeading::Term1;
             }
             _ => {}
         },
         AirportFtaKind::Helidepot => match next {
-            14 => v.airport_heading = AirportHeading::Helipad1,
+            10 | 14 => v.airport_heading = AirportHeading::Helipad1,
             11 | 15 | 17 => v.airport_heading = AirportHeading::HeliTakeoff,
             7 | 8 => v.airport_heading = AirportHeading::HeliLanding,
-            10 => v.airport_heading = AirportHeading::Helipad1,
             _ => {}
         },
         AirportFtaKind::Heliport => match next {
@@ -1147,7 +1145,7 @@ fn direction_from_subpixel_step(dx: i32, dy: i32, fallback: u8) -> u8 {
 }
 
 /// Avanza hacia el `AirportMovingData` actual en coordenadas 1/16 de tesela.
-/// OpenTTD no salta entre nodos FTA: sólo elige el nodo siguiente cuando la
+/// `OpenTTD` no salta entre nodos FTA: sólo elige el nodo siguiente cuando la
 /// posición de píxel alcanza estas coordenadas.
 fn move_towards_waypoint(
     v: &mut Vehicle,

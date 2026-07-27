@@ -894,8 +894,17 @@ fn update_window_chrome_buttons(
     >,
     title_parents: Query<&ChildOf, With<FloatingWindowTitleBar>>,
     mut windows: Query<(&FloatingWindow, &mut FloatingWindowChromeState, &mut Node)>,
-    mut contents: Query<(&FloatingWindowContent, &mut Visibility)>,
-    mut resize_buttons: Query<(&ChildOf, &mut Visibility), With<FloatingWindowResizeButton>>,
+    mut contents: Query<
+        (&FloatingWindowContent, &mut Visibility),
+        Without<FloatingWindowResizeButton>,
+    >,
+    mut resize_buttons: Query<
+        (&ChildOf, &mut Visibility),
+        (
+            With<FloatingWindowResizeButton>,
+            Without<FloatingWindowContent>,
+        ),
+    >,
     mut images: Query<&mut ImageNode>,
     asset_server: Res<AssetServer>,
 ) {
@@ -1109,5 +1118,18 @@ mod tests {
         app.configure_sets(Update, UpdateSet::Ui);
         app.add_plugins(FloatingWindowPlugin);
         assert!(app.world().contains_resource::<WindowDragState>());
+    }
+
+    #[test]
+    fn chrome_system_queries_are_runtime_compatible() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .add_plugins(bevy::asset::AssetPlugin::default())
+            .init_asset::<Image>()
+            .add_systems(Update, update_window_chrome_buttons);
+
+        // Bevy valida conflictos entre queries al inicializar el sistema,
+        // no durante la compilación ni al registrarlo en el schedule.
+        app.update();
     }
 }

@@ -26,6 +26,10 @@ pub(crate) struct ClientPreferences {
     pub(crate) sound_disaster: bool,
     pub(crate) sound_confirm: bool,
     pub(crate) sound_click_beep: bool,
+    /// Ejecutar una entrada al arrastrar desde el ancla y soltar sobre el dropdown.
+    pub(crate) toolbar_dropdown_autoselect: bool,
+    /// Overrides `command_id=Ctrl+F1;...` de la tabla central de hotkeys.
+    pub(crate) toolbar_hotkeys: String,
     /// Año previo al cual el selector de señales inicia en semáforo.
     pub(crate) semaphore_build_before: u32,
     pub(crate) show_debug_gizmos: bool,
@@ -84,6 +88,8 @@ impl Default for ClientPreferences {
             sound_disaster: true,
             sound_confirm: true,
             sound_click_beep: true,
+            toolbar_dropdown_autoselect: true,
+            toolbar_hotkeys: String::new(),
             semaphore_build_before: openttdrs_core::SEMAPHORE_BUILD_BEFORE_YEAR,
             show_debug_gizmos: false,
             show_diagnostics_overlay: false,

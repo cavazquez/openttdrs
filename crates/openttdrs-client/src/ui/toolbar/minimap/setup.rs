@@ -4,8 +4,8 @@ use crate::ui::toolbar::BuildMenuUi;
 
 use super::{
     MINIMAP_BOTTOM, MINIMAP_CELL, MINIMAP_COLS, MINIMAP_CONTROLS_H, MINIMAP_PAD, MINIMAP_RIGHT,
-    MINIMAP_ROWS, MinimapCell, MinimapLayerState, MinimapLayerToggle, MinimapLegendText,
-    MinimapRoot, MinimapViewport,
+    MINIMAP_ROWS, MinimapCell, MinimapGrid, MinimapGridRow, MinimapLayerState, MinimapLayerToggle,
+    MinimapLegendText, MinimapRoot, MinimapViewport,
 };
 
 pub(crate) fn setup_minimap(mut commands: Commands) {
@@ -36,28 +36,47 @@ pub(crate) fn setup_minimap(mut commands: Commands) {
         .id();
 
     commands.entity(root).with_children(|root| {
-        for row in 0..MINIMAP_ROWS {
-            root.spawn(Node {
-                flex_direction: FlexDirection::Row,
-                column_gap: Val::Px(0.0),
+        root.spawn((
+            MinimapGrid,
+            Node {
+                width: Val::Px(MINIMAP_COLS as f32 * MINIMAP_CELL),
+                height: Val::Px(MINIMAP_ROWS as f32 * MINIMAP_CELL),
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(0.0),
                 ..default()
-            })
-            .with_children(|line| {
-                for col in 0..MINIMAP_COLS {
-                    line.spawn((
-                        MinimapCell { col, row },
-                        Node {
-                            width: Val::Px(MINIMAP_CELL),
-                            height: Val::Px(MINIMAP_CELL),
-                            ..default()
-                        },
-                        BackgroundColor(Color::srgb(0.12, 0.2, 0.09)),
-                        Interaction::default(),
-                        BuildMenuUi,
-                    ));
-                }
-            });
-        }
+            },
+            BuildMenuUi,
+        ))
+        .with_children(|grid| {
+            for row in 0..MINIMAP_ROWS {
+                grid.spawn((
+                    MinimapGridRow,
+                    Node {
+                        width: Val::Percent(100.0),
+                        height: Val::Px(MINIMAP_CELL),
+                        flex_direction: FlexDirection::Row,
+                        column_gap: Val::Px(0.0),
+                        ..default()
+                    },
+                    BuildMenuUi,
+                ))
+                .with_children(|line| {
+                    for col in 0..MINIMAP_COLS {
+                        line.spawn((
+                            MinimapCell { col, row },
+                            Node {
+                                width: Val::Px(MINIMAP_CELL),
+                                height: Val::Px(MINIMAP_CELL),
+                                ..default()
+                            },
+                            BackgroundColor(Color::srgb(0.12, 0.2, 0.09)),
+                            Interaction::default(),
+                            BuildMenuUi,
+                        ));
+                    }
+                });
+            }
+        });
         root.spawn((
             MinimapViewport,
             Node {

@@ -1,6 +1,7 @@
 //! Enruta comandos del jugador según el rol de red (handle global instalado por el plugin).
 
 use std::sync::RwLock;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use openttdrs_core::Command;
 use openttdrs_core::prelude::*;
@@ -29,6 +30,12 @@ static DISPATCH: RwLock<DispatchState> = RwLock::new(DispatchState {
     server: None,
     client: None,
 });
+static PLAYER_COMMAND_REVISION: AtomicU64 = AtomicU64::new(0);
+
+#[must_use]
+pub fn player_command_revision() -> u64 {
+    PLAYER_COMMAND_REVISION.load(Ordering::Relaxed)
+}
 
 pub(super) fn install_offline() {
     if let Ok(mut g) = DISPATCH.write() {
@@ -62,9 +69,13 @@ pub(super) fn install_client(handle: ClientSessionHandle) {
 /// llamando `openttdrs_core::apply_command` directamente.
 pub fn apply_player_command(state: &mut GameState, cmd: &Command) -> Result<(), CommandError> {
     let Ok(guard) = DISPATCH.read() else {
-        return apply_command(state, cmd);
+        let result = apply_command(state, cmd);
+        if result.is_ok() {
+            PLAYER_COMMAND_REVISION.fetch_add(1, Ordering::Relaxed);
+        }
+        return result;
     };
-    match guard.role {
+    let result = match guard.role {
         NetworkRole::Offline => apply_command(state, cmd),
         NetworkRole::ListenServer => {
             apply_command(state, cmd)?;
@@ -83,5 +94,9 @@ pub fn apply_player_command(state: &mut GameState, cmd: &Command) -> Result<(), 
             }
             Ok(())
         }
+    };
+    if result.is_ok() {
+        PLAYER_COMMAND_REVISION.fetch_add(1, Ordering::Relaxed);
     }
+    result
 }

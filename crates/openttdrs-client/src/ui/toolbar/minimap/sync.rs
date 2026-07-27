@@ -10,7 +10,8 @@ use crate::ui::hud::SimHudControls;
 use super::palette::minimap_cell_color;
 use super::{
     MINIMAP_BOTTOM, MINIMAP_COLS, MINIMAP_PAD, MINIMAP_RIGHT, MINIMAP_ROWS, MinimapCell,
-    MinimapLayerState, MinimapLayerToggle, MinimapLegendText, MinimapRoot, MinimapViewport,
+    MinimapGrid, MinimapGridRow, MinimapLayerState, MinimapLayerToggle, MinimapLegendText,
+    MinimapRoot, MinimapViewport,
 };
 
 /// Filtros disjuntos para evitar B0001 entre root / celdas / viewport / toggles.
@@ -19,12 +20,16 @@ type MinimapRootFilter = (
     Without<MinimapCell>,
     Without<MinimapViewport>,
     Without<MinimapLayerToggle>,
+    Without<MinimapGrid>,
+    Without<MinimapGridRow>,
 );
 type MinimapCellFilter = (
     With<MinimapCell>,
     Without<MinimapRoot>,
     Without<MinimapViewport>,
     Without<MinimapLayerToggle>,
+    Without<MinimapGrid>,
+    Without<MinimapGridRow>,
 );
 type MinimapToggleFilter = (
     With<MinimapLayerToggle>,
@@ -32,11 +37,31 @@ type MinimapToggleFilter = (
     Without<MinimapCell>,
     Without<MinimapRoot>,
     Without<MinimapViewport>,
+    Without<MinimapGrid>,
+    Without<MinimapGridRow>,
 );
 type MinimapViewportFilter = (
     With<MinimapViewport>,
     Without<MinimapRoot>,
     Without<MinimapCell>,
+    Without<MinimapLayerToggle>,
+    Without<MinimapGrid>,
+    Without<MinimapGridRow>,
+);
+type MinimapGridFilter = (
+    With<MinimapGrid>,
+    Without<MinimapRoot>,
+    Without<MinimapGridRow>,
+    Without<MinimapCell>,
+    Without<MinimapViewport>,
+    Without<MinimapLayerToggle>,
+);
+type MinimapGridRowFilter = (
+    With<MinimapGridRow>,
+    Without<MinimapRoot>,
+    Without<MinimapGrid>,
+    Without<MinimapCell>,
+    Without<MinimapViewport>,
     Without<MinimapLayerToggle>,
 );
 
@@ -52,6 +77,8 @@ pub(crate) fn sync_minimap(
     windows: Query<&Window, With<PrimaryWindow>>,
     cam_q: Query<(&Transform, &Projection), (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
     mut viewport_q: Query<&mut Node, MinimapViewportFilter>,
+    mut grid_q: Query<&mut Node, MinimapGridFilter>,
+    mut grid_rows: Query<&mut Node, MinimapGridRowFilter>,
 ) {
     let Ok((mut vis, mut root_node, mut z)) = root_q.single_mut() else {
         return;
@@ -69,6 +96,13 @@ pub(crate) fn sync_minimap(
     let (root_w, root_h) = layers.root_size();
     root_node.width = Val::Px(root_w);
     root_node.height = Val::Px(root_h);
+    if let Ok(mut grid) = grid_q.single_mut() {
+        grid.width = Val::Px(MINIMAP_COLS as f32 * cell);
+        grid.height = Val::Px(MINIMAP_ROWS as f32 * cell);
+    }
+    for mut row in &mut grid_rows {
+        row.height = Val::Px(cell);
+    }
     if layers.expanded {
         let Ok(window) = windows.single() else {
             return;
@@ -226,5 +260,27 @@ mod tests {
                 .next()
                 .is_some()
         );
+    }
+
+    #[test]
+    fn minimap_grid_rows_are_contiguous() {
+        let mut world = World::new();
+        world.run_system_once(setup_minimap).unwrap();
+
+        let mut grid_q = world.query_filtered::<(&Node, &Children), With<MinimapGrid>>();
+        let (grid, children) = grid_q.single(&world).unwrap();
+        assert_eq!(grid.row_gap, Val::Px(0.0));
+        assert_eq!(children.len(), MINIMAP_ROWS as usize);
+
+        let row_count = world
+            .query_filtered::<Entity, With<MinimapGridRow>>()
+            .iter(&world)
+            .count();
+        let cell_count = world
+            .query_filtered::<Entity, With<MinimapCell>>()
+            .iter(&world)
+            .count();
+        assert_eq!(row_count, MINIMAP_ROWS as usize);
+        assert_eq!(cell_count, (MINIMAP_ROWS * MINIMAP_COLS) as usize);
     }
 }

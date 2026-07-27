@@ -18,9 +18,10 @@ use crate::ui::league_window::{
     sync_league_window,
 };
 use crate::ui::navigation::{
-    OpenUiRoute, ToolbarMenuState, dismiss_toolbar_menu_on_outside_click,
+    OpenUiRoute, ToolbarContext, ToolbarMenuState, dismiss_toolbar_menu_on_outside_click,
     handle_toolbar_menu_entries, handle_toolbar_menu_keyboard, handle_toolbar_navigation_button,
-    sync_toolbar_navigation_menu,
+    open_file_actions_from_routes, open_help_windows_from_routes, open_message_windows_from_routes,
+    open_settings_windows_from_routes, refresh_toolbar_context, sync_toolbar_navigation_menu,
 };
 use crate::ui::station_directory::{
     StationDirectoryState, handle_station_directory_buttons, open_station_directory_from_routes,
@@ -34,6 +35,7 @@ use crate::ui::subsidy_list::{
     SubsidyListState, handle_subsidy_list_buttons, open_subsidy_list_from_routes,
     setup_subsidy_list, subsidy_list_on_closed, sync_subsidy_list,
 };
+use crate::ui::toolbar::handle_editor_file_routes;
 use crate::ui::town_directory::{
     TownDirectoryState, handle_town_directory_buttons, open_town_directory_from_routes,
     setup_town_directory, sync_town_directory, town_directory_on_closed,
@@ -57,6 +59,7 @@ impl Plugin for NavigationUiPlugin {
             .init_resource::<StoryWindowState>()
             .init_resource::<LeagueWindowState>()
             .init_resource::<ToolbarMenuState>()
+            .init_resource::<ToolbarContext>()
             .add_message::<OpenUiRoute>()
             .add_systems(
                 OnEnter(ClientScreen::InGame),
@@ -75,7 +78,21 @@ impl Plugin for NavigationUiPlugin {
             .add_systems(
                 Update,
                 (
+                    open_file_actions_from_routes,
+                    handle_editor_file_routes,
+                    open_settings_windows_from_routes,
+                    open_message_windows_from_routes,
+                    open_help_windows_from_routes,
+                )
+                    .after(handle_toolbar_menu_entries)
+                    .in_set(UpdateSet::Ui)
+                    .run_if(in_state(ClientScreen::InGame)),
+            )
+            .add_systems(
+                Update,
+                (
                     (
+                        refresh_toolbar_context,
                         handle_toolbar_navigation_button,
                         handle_toolbar_menu_entries,
                         handle_toolbar_menu_keyboard,

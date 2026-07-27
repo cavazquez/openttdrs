@@ -6,12 +6,16 @@ use super::super::{
     BuildMenuAction, BuildMenuUi, SoundMusicToolbarButton, ToolButtonGroup, ToolbarGroup,
     ToolbarGroupButton, ToolbarTooltipTarget, TooltipBox, TooltipText,
 };
+use super::ResponsiveToolbarSlot;
 use super::controls::{spawn_icon_tool_buttons, spawn_panel_title, spawn_settings_buttons};
+use super::{ToolbarHalf, ToolbarSwitchButton, ToolbarSwitchLabel};
 use crate::ui::navigation::{
-    spawn_economy_navigation_button, spawn_fleet_navigation_button,
-    spawn_industries_navigation_button, spawn_map_navigation_button, spawn_world_navigation_button,
+    spawn_economy_navigation_button, spawn_file_navigation_button, spawn_fleet_navigation_button,
+    spawn_help_navigation_button, spawn_industries_navigation_button, spawn_map_navigation_button,
+    spawn_messages_navigation_button, spawn_settings_navigation_button,
+    spawn_world_navigation_button,
 };
-use crate::ui::save_window::{SaveLoadToolbarButton, SaveWindowMode};
+use crate::ui::toolbar::ToolbarIcon;
 
 pub(super) fn spawn_toolbar_group_buttons(
     root: &mut ChildSpawnerCommands,
@@ -33,141 +37,138 @@ pub(super) fn spawn_toolbar_group_buttons(
         Interaction::default(),
     ))
     .with_children(|parent| {
-        for (i, icon_path, group) in [
-            (
-                0_u8,
-                "assets/opengfx/tiles/rail_1005.png",
-                ToolbarGroup::Rail,
-            ),
-            (
-                1,
-                "assets/opengfx/tiles/road_flat_00.png",
-                ToolbarGroup::Road,
-            ),
-            (
-                2,
-                "assets/opengfx/tiles/ship_depot_ne.png",
-                ToolbarGroup::Water,
-            ),
-            (
-                3,
-                "assets/opengfx/tiles/airport_heliport.png",
-                ToolbarGroup::Air,
-            ),
-            (
-                4,
-                "assets/opengfx/tiles/house_church_build.png",
-                ToolbarGroup::Economy,
-            ),
-            (
-                5,
-                "assets/opengfx/tiles/ui_terraform_up.png",
-                ToolbarGroup::Landscape,
-            ),
-            (
-                6,
-                "assets/opengfx/tiles/object_lighthouse.png",
-                ToolbarGroup::Info,
-            ),
-            (
-                7,
-                "assets/opengfx/tiles/ui_settings.png",
-                ToolbarGroup::Settings,
-            ),
-        ] {
-            parent
-                .spawn((
-                    Button,
-                    group,
-                    ToolbarGroupButton,
-                    ToolbarTooltipTarget {
-                        text: match group {
-                            ToolbarGroup::Rail => "Ferrocarriles",
-                            ToolbarGroup::Road => "Carreteras",
-                            ToolbarGroup::Water => "Agua (barcos)",
-                            ToolbarGroup::Air => "Aeropuertos",
-                            ToolbarGroup::Economy => "Economia",
-                            ToolbarGroup::Landscape => "Paisaje",
-                            ToolbarGroup::Info => "Informacion",
-                            ToolbarGroup::Settings => "Ajustes (pausa, zoom, noticias, PBS...)",
-                        },
-                    },
-                    BuildMenuUi,
-                    Node {
-                        width: Val::Px(48.0),
-                        height: Val::Px(48.0),
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
-                        border: UiRect::all(Val::Px(2.0)),
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgb(0.33, 0.28, 0.19)),
-                    BorderColor::all(Color::srgb(0.64, 0.57, 0.39)),
-                    Interaction::default(),
-                ))
-                .with_children(|p| {
-                    p.spawn((
-                        ImageNode::new(asset_server.load::<Image>(icon_path)),
-                        Node {
-                            width: Val::Px(32.0),
-                            height: Val::Px(32.0),
-                            padding: UiRect::all(Val::Px(1.0)),
-                            ..default()
-                        },
-                    ));
-                });
-            if i < 6 {
-                parent.spawn((
-                    Node {
-                        width: Val::Px(2.0),
-                        height: Val::Px(40.0),
-                        margin: UiRect::horizontal(Val::Px(2.0)),
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgb(0.62, 0.55, 0.38)),
-                    BuildMenuUi,
-                ));
-            }
-        }
+        parent
+            .spawn((
+                ToolbarHalf::Upper,
+                Node {
+                    flex_direction: FlexDirection::Row,
+                    column_gap: Val::Px(2.0),
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                BuildMenuUi,
+            ))
+            .with_children(|upper| {
+                for (i, icon, group) in [
+                    (0_u8, ToolbarIcon::BuildRail, ToolbarGroup::Rail),
+                    (1, ToolbarIcon::BuildRoad, ToolbarGroup::Road),
+                    (2, ToolbarIcon::BuildWater, ToolbarGroup::Water),
+                    (3, ToolbarIcon::BuildAir, ToolbarGroup::Air),
+                    (4, ToolbarIcon::Industry, ToolbarGroup::Economy),
+                    (5, ToolbarIcon::Landscape, ToolbarGroup::Landscape),
+                    (6, ToolbarIcon::Settings, ToolbarGroup::Settings),
+                ] {
+                    upper
+                        .spawn((
+                            Button,
+                            group,
+                            ToolbarGroupButton,
+                            ToolbarTooltipTarget {
+                                text: match group {
+                                    ToolbarGroup::Rail => "Ferrocarriles",
+                                    ToolbarGroup::Road => "Carreteras",
+                                    ToolbarGroup::Water => "Agua (barcos)",
+                                    ToolbarGroup::Air => "Aeropuertos",
+                                    ToolbarGroup::Economy => "Economia",
+                                    ToolbarGroup::Landscape => "Paisaje",
+                                    ToolbarGroup::Info => "Informacion",
+                                    ToolbarGroup::Settings => {
+                                        "Ajustes (pausa, zoom, noticias, PBS...)"
+                                    }
+                                },
+                            },
+                            BuildMenuUi,
+                            Node {
+                                width: Val::Px(48.0),
+                                height: Val::Px(48.0),
+                                justify_content: JustifyContent::Center,
+                                align_items: AlignItems::Center,
+                                border: UiRect::all(Val::Px(2.0)),
+                                ..default()
+                            },
+                            BackgroundColor(Color::srgb(0.33, 0.28, 0.19)),
+                            BorderColor::all(Color::srgb(0.64, 0.57, 0.39)),
+                            Interaction::default(),
+                        ))
+                        .with_children(|p| {
+                            p.spawn((
+                                ImageNode::new(asset_server.load::<Image>(icon.path())),
+                                Node {
+                                    width: Val::Px(32.0),
+                                    height: Val::Px(32.0),
+                                    padding: UiRect::all(Val::Px(1.0)),
+                                    ..default()
+                                },
+                            ));
+                        });
+                    if i < 6 {
+                        spawn_toolbar_separator(upper);
+                    }
+                }
+            });
+        parent
+            .spawn((
+                ToolbarHalf::Lower,
+                Node {
+                    flex_direction: FlexDirection::Row,
+                    column_gap: Val::Px(2.0),
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                BuildMenuUi,
+            ))
+            .with_children(|lower| {
+                spawn_file_navigation_button(lower, asset_server);
+                spawn_map_navigation_button(lower, asset_server);
+                spawn_world_navigation_button(lower, asset_server);
+                spawn_industries_navigation_button(lower, asset_server);
+                spawn_fleet_navigation_button(lower, asset_server);
+                spawn_economy_navigation_button(lower, asset_server);
+                spawn_settings_navigation_button(lower, asset_server);
+                spawn_messages_navigation_button(lower, asset_server);
+                spawn_help_navigation_button(lower, asset_server);
+                spawn_sound_music_toolbar_button(lower, asset_server);
+            });
         parent.spawn((
+            Button,
+            ToolbarSwitchButton,
+            BuildMenuUi,
             Node {
-                width: Val::Px(2.0),
-                height: Val::Px(40.0),
-                margin: UiRect::horizontal(Val::Px(2.0)),
+                display: Display::None,
+                width: Val::Px(32.0),
+                height: Val::Px(48.0),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                border: UiRect::all(Val::Px(2.0)),
                 ..default()
             },
-            BackgroundColor(Color::srgb(0.62, 0.55, 0.38)),
-            BuildMenuUi,
+            BackgroundColor(Color::srgb(0.33, 0.28, 0.19)),
+            BorderColor::all(Color::srgb(0.64, 0.57, 0.39)),
+            Interaction::default(),
+            children![(
+                ToolbarSwitchLabel,
+                ImageNode::new(asset_server.load::<Image>(ToolbarIcon::Switch.path())),
+                Node {
+                    width: Val::Px(26.0),
+                    height: Val::Px(26.0),
+                    ..default()
+                },
+            )],
         ));
-        spawn_map_navigation_button(parent, asset_server);
-        spawn_world_navigation_button(parent, asset_server);
-        spawn_industries_navigation_button(parent, asset_server);
-        spawn_fleet_navigation_button(parent, asset_server);
-        spawn_economy_navigation_button(parent, asset_server);
-        spawn_sound_music_toolbar_button(parent, asset_server);
-        parent.spawn((
-            Node {
-                width: Val::Px(2.0),
-                height: Val::Px(40.0),
-                margin: UiRect::horizontal(Val::Px(2.0)),
-                ..default()
-            },
-            BackgroundColor(Color::srgb(0.62, 0.55, 0.38)),
-            BuildMenuUi,
-        ));
-        spawn_save_load_button(
-            parent,
-            SaveWindowMode::Save,
-            "Guardar",
-            "Guardar partida (ventana de partidas)",
-        );
-        spawn_save_load_button(
-            parent,
-            SaveWindowMode::Load,
-            "Cargar",
-            "Cargar partida (ventana de partidas)",
-        );
     });
+}
+
+fn spawn_toolbar_separator(parent: &mut ChildSpawnerCommands) {
+    parent.spawn((
+        Node {
+            width: Val::Px(2.0),
+            height: Val::Px(40.0),
+            margin: UiRect::horizontal(Val::Px(2.0)),
+            ..default()
+        },
+        BackgroundColor(Color::srgb(0.62, 0.55, 0.38)),
+        BuildMenuUi,
+    ));
 }
 
 fn spawn_sound_music_toolbar_button(parent: &mut ChildSpawnerCommands, asset_server: &AssetServer) {
@@ -175,6 +176,7 @@ fn spawn_sound_music_toolbar_button(parent: &mut ChildSpawnerCommands, asset_ser
         .spawn((
             Button,
             SoundMusicToolbarButton,
+            ResponsiveToolbarSlot { full_width: 48.0 },
             ToolbarTooltipTarget {
                 text: "Sonido y música (volúmenes, efectos, jukebox)",
             },
@@ -202,39 +204,6 @@ fn spawn_sound_music_toolbar_button(parent: &mut ChildSpawnerCommands, asset_ser
                 },
             ));
         });
-}
-
-fn spawn_save_load_button(
-    parent: &mut ChildSpawnerCommands,
-    mode: SaveWindowMode,
-    label: &'static str,
-    tip: &'static str,
-) {
-    parent.spawn((
-        Button,
-        SaveLoadToolbarButton(mode),
-        ToolbarTooltipTarget { text: tip },
-        BuildMenuUi,
-        Node {
-            width: Val::Px(72.0),
-            height: Val::Px(48.0),
-            justify_content: JustifyContent::Center,
-            align_items: AlignItems::Center,
-            border: UiRect::all(Val::Px(2.0)),
-            ..default()
-        },
-        BackgroundColor(Color::srgb(0.33, 0.28, 0.19)),
-        BorderColor::all(Color::srgb(0.64, 0.57, 0.39)),
-        Interaction::default(),
-        children![(
-            Text::new(label),
-            TextFont {
-                font_size: FontSize::Rem(0.85),
-                ..default()
-            },
-            TextColor(Color::srgb(0.95, 0.92, 0.78)),
-        )],
-    ));
 }
 
 pub(super) fn spawn_road_panel(root: &mut ChildSpawnerCommands, asset_server: &AssetServer) {
@@ -532,7 +501,6 @@ pub(super) fn spawn_secondary_tool_panels(
     for group in [
         ToolbarGroup::Economy,
         ToolbarGroup::Landscape,
-        ToolbarGroup::Info,
         ToolbarGroup::Settings,
     ] {
         root.spawn(secondary_panel_node(group))
@@ -694,15 +662,7 @@ pub(super) fn spawn_secondary_tool_panels(
                         ),
                     ],
                 ),
-                ToolbarGroup::Info => spawn_icon_tool_buttons(
-                    buttons,
-                    asset_server,
-                    &[(
-                        "Editar ordenes",
-                        "assets/opengfx/tiles/object_lighthouse.png",
-                        BuildMenuAction::Orders,
-                    )],
-                ),
+                ToolbarGroup::Info => {}
                 ToolbarGroup::Settings => spawn_settings_buttons(buttons),
                 ToolbarGroup::Rail
                 | ToolbarGroup::Road

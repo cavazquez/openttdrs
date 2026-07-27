@@ -1,4 +1,6 @@
 use bevy::prelude::*;
+use bevy::ui::UiScale;
+use bevy::window::PrimaryWindow;
 
 mod controls;
 mod sections;
@@ -11,6 +13,122 @@ use sections::{
 use super::BuildMenuUi;
 use super::editor_toolbar::NormalToolbarRoot;
 use crate::state::ingame_lifecycle::InGameUi;
+
+const FULL_TOOLBAR_MIN_WIDTH: f32 = 1120.0;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum ToolbarLayoutMode {
+    #[default]
+    Full,
+    Upper,
+    Lower,
+}
+
+#[derive(Resource, Debug, Clone, Copy, Default)]
+pub(crate) struct ToolbarLayoutState {
+    pub(crate) mode: ToolbarLayoutMode,
+}
+
+#[derive(Component, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ToolbarHalf {
+    Upper,
+    Lower,
+}
+
+#[derive(Component)]
+pub(crate) struct ToolbarSwitchButton;
+
+#[derive(Component)]
+pub(crate) struct ToolbarSwitchLabel;
+
+/// Slot cuyo ancho puede compactarse para respetar resolución y escala UI.
+#[derive(Component, Clone, Copy)]
+pub(crate) struct ResponsiveToolbarSlot {
+    pub(crate) full_width: f32,
+}
+
+#[must_use]
+pub(crate) fn compact_slot_width(ui_scale: f32) -> f32 {
+    (60.0 / ui_scale.max(1.0)).clamp(30.0, 60.0)
+}
+
+#[must_use]
+pub(crate) fn toolbar_layout_for_width(
+    width: f32,
+    ui_scale: f32,
+    current: ToolbarLayoutMode,
+) -> ToolbarLayoutMode {
+    if width >= FULL_TOOLBAR_MIN_WIDTH * ui_scale.max(0.5) {
+        ToolbarLayoutMode::Full
+    } else if current == ToolbarLayoutMode::Full {
+        ToolbarLayoutMode::Upper
+    } else {
+        current
+    }
+}
+
+pub(crate) fn handle_toolbar_switch(
+    interaction: Query<&Interaction, (Changed<Interaction>, With<ToolbarSwitchButton>)>,
+    mut state: ResMut<ToolbarLayoutState>,
+) {
+    if interaction
+        .iter()
+        .any(|value| *value == Interaction::Pressed)
+    {
+        state.mode = match state.mode {
+            ToolbarLayoutMode::Full | ToolbarLayoutMode::Lower => ToolbarLayoutMode::Upper,
+            ToolbarLayoutMode::Upper => ToolbarLayoutMode::Lower,
+        };
+    }
+}
+
+pub(crate) fn sync_toolbar_layout(
+    windows: Query<&Window, With<PrimaryWindow>>,
+    ui_scale: Res<UiScale>,
+    mut state: ResMut<ToolbarLayoutState>,
+    mut halves: Query<(&ToolbarHalf, &mut Node)>,
+    mut switch: Query<&mut Node, (With<ToolbarSwitchButton>, Without<ToolbarHalf>)>,
+    mut label: Query<&mut Text, With<ToolbarSwitchLabel>>,
+    mut responsive_slots: Query<
+        (&ResponsiveToolbarSlot, &mut Node),
+        (Without<ToolbarHalf>, Without<ToolbarSwitchButton>),
+    >,
+) {
+    let Ok(window) = windows.single() else {
+        return;
+    };
+    state.mode = toolbar_layout_for_width(window.width(), ui_scale.0, state.mode);
+    for (half, mut node) in &mut halves {
+        node.display = match state.mode {
+            ToolbarLayoutMode::Full => Display::Flex,
+            ToolbarLayoutMode::Upper if *half == ToolbarHalf::Upper => Display::Flex,
+            ToolbarLayoutMode::Lower if *half == ToolbarHalf::Lower => Display::Flex,
+            _ => Display::None,
+        };
+    }
+    if let Ok(mut node) = switch.single_mut() {
+        node.display = if state.mode == ToolbarLayoutMode::Full {
+            Display::None
+        } else {
+            Display::Flex
+        };
+    }
+    if let Ok(mut text) = label.single_mut() {
+        **text = match state.mode {
+            ToolbarLayoutMode::Lower => "▲",
+            ToolbarLayoutMode::Upper | ToolbarLayoutMode::Full => "▼",
+        }
+        .into();
+    }
+    let compact_width = compact_slot_width(ui_scale.0);
+    for (slot, mut node) in &mut responsive_slots {
+        node.width = Val::Px(if state.mode == ToolbarLayoutMode::Full {
+            slot.full_width
+        } else {
+            compact_width.min(slot.full_width)
+        });
+    }
+}
 
 /// Barra superior compacta tipo toolbar para seleccion rapida de herramienta.
 pub(crate) fn setup_top_toolbar(mut commands: Commands, asset_server: Res<AssetServer>) {
@@ -44,7 +162,7 @@ pub(crate) fn setup_top_toolbar(mut commands: Commands, asset_server: Res<AssetS
 }
 
 #[cfg(test)]
-#[allow(clippy::expect_used)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use std::fs;
     use std::path::Path;
@@ -54,8 +172,13 @@ mod tests {
     use bevy::ecs::system::RunSystemOnce;
     use bevy::image::ImagePlugin;
     use bevy::prelude::*;
+    use bevy::window::PrimaryWindow;
 
-    use super::setup_top_toolbar;
+    use super::{
+        ResponsiveToolbarSlot, ToolbarHalf, ToolbarLayoutMode, ToolbarLayoutState,
+        ToolbarSwitchButton, ToolbarSwitchLabel, compact_slot_width, handle_toolbar_switch,
+        setup_top_toolbar, sync_toolbar_layout, toolbar_layout_for_width,
+    };
 
     const ONE_PX_PNG: &[u8] = include_bytes!(concat!(
         env!("CARGO_MANIFEST_DIR"),
@@ -134,5 +257,92 @@ mod tests {
         app.world_mut()
             .run_system_once(setup_top_toolbar)
             .expect("toolbar");
+    }
+
+    #[test]
+    fn layout_policy_uses_stable_halves_when_full_toolbar_does_not_fit() {
+        assert_eq!(
+            toolbar_layout_for_width(1920.0, 1.0, ToolbarLayoutMode::Upper),
+            ToolbarLayoutMode::Full
+        );
+        assert_eq!(
+            toolbar_layout_for_width(1024.0, 1.0, ToolbarLayoutMode::Full),
+            ToolbarLayoutMode::Upper
+        );
+        assert_eq!(
+            toolbar_layout_for_width(800.0, 1.0, ToolbarLayoutMode::Lower),
+            ToolbarLayoutMode::Lower
+        );
+        assert_eq!(
+            toolbar_layout_for_width(1920.0, 2.0, ToolbarLayoutMode::Full),
+            ToolbarLayoutMode::Upper
+        );
+        assert_eq!(compact_slot_width(1.0), 60.0);
+        assert_eq!(compact_slot_width(1.5), 40.0);
+        assert_eq!(compact_slot_width(2.0), 30.0);
+    }
+
+    #[test]
+    fn compact_switch_alternates_halves() {
+        let mut world = World::new();
+        world.insert_resource(ToolbarLayoutState {
+            mode: ToolbarLayoutMode::Upper,
+        });
+        world.spawn((Button, ToolbarSwitchButton, Interaction::Pressed));
+
+        world.run_system_once(handle_toolbar_switch).unwrap();
+        assert_eq!(
+            world.resource::<ToolbarLayoutState>().mode,
+            ToolbarLayoutMode::Lower
+        );
+    }
+
+    #[test]
+    fn sync_layout_hides_only_the_inactive_compact_half() {
+        let mut world = World::new();
+        world.insert_resource(ToolbarLayoutState {
+            mode: ToolbarLayoutMode::Lower,
+        });
+        world.insert_resource(UiScale(2.0));
+        world.spawn((
+            Window {
+                resolution: (800, 600).into(),
+                ..default()
+            },
+            PrimaryWindow,
+        ));
+        let upper = world.spawn((ToolbarHalf::Upper, Node::default())).id();
+        let lower = world.spawn((ToolbarHalf::Lower, Node::default())).id();
+        let switch = world.spawn((ToolbarSwitchButton, Node::default())).id();
+        let label = world.spawn((ToolbarSwitchLabel, Text::new(""))).id();
+        let responsive = world
+            .spawn((
+                ResponsiveToolbarSlot { full_width: 78.0 },
+                Node {
+                    width: Val::Px(78.0),
+                    ..default()
+                },
+            ))
+            .id();
+
+        world.run_system_once(sync_toolbar_layout).unwrap();
+
+        assert_eq!(
+            world.entity(upper).get::<Node>().unwrap().display,
+            Display::None
+        );
+        assert_eq!(
+            world.entity(lower).get::<Node>().unwrap().display,
+            Display::Flex
+        );
+        assert_eq!(
+            world.entity(switch).get::<Node>().unwrap().display,
+            Display::Flex
+        );
+        assert_eq!(world.entity(label).get::<Text>().unwrap().as_str(), "▲");
+        assert_eq!(
+            world.entity(responsive).get::<Node>().unwrap().width,
+            Val::Px(30.0)
+        );
     }
 }

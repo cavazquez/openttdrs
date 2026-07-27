@@ -15,6 +15,7 @@ Uso: python3 scripts/gen_oil_refinery_anim_frames.py
 """
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 from PIL import Image
@@ -103,12 +104,14 @@ def render_frame(base: Image.Image, frame: int) -> Image.Image:
     return out
 
 
-def main() -> None:
+def main() -> int:
     total = 0
+    missing: list[int] = []
     for sid in REFINERY_FIRE_SPRITE_IDS:
         src = TILES_DIR / f"industry_{sid}.png"
         if not src.is_file():
             print(f"  (omitido industry_{sid}.png: no existe)")
+            missing.append(sid)
             continue
         base = Image.open(src).convert("RGBA")
         fire_px = sum(1 for r, g, b, a in base.getdata() if is_fire_pixel(r, g, b, a))
@@ -127,7 +130,19 @@ def main() -> None:
         f"Generados {total} frames de fuego refinería "
         f"({len(REFINERY_FIRE_SPRITE_IDS)} sprites × {FRAME_COUNT}) en {TILES_DIR}"
     )
+    if missing:
+        print(
+            "Faltan sprites base requeridos para la animación: "
+            + ", ".join(map(str, missing)),
+            file=sys.stderr,
+        )
+        return 1
+    expected = len(REFINERY_FIRE_SPRITE_IDS) * FRAME_COUNT
+    if total != expected:
+        print(f"Frames incompletos: {total}/{expected}", file=sys.stderr)
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

@@ -7,5 +7,5 @@ mod failover;
 mod plugin;
 
 pub use cli::{NetCli, parse_net_cli};
-pub use dispatch::apply_player_command;
+pub use dispatch::{apply_player_command, player_command_revision};
 pub use plugin::{NetworkPlugin, NetworkRole, NetworkRuntime, NetworkStatus};

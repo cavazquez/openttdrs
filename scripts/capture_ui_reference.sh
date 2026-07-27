@@ -4,6 +4,7 @@
 # Uso:
 #   bash scripts/capture_ui_reference.sh
 #   bash scripts/capture_ui_reference.sh save/partida.json
+#   OPENTTDRS_WINDOW_SHOT_ID=Vehicle bash scripts/capture_ui_reference.sh
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -19,9 +20,14 @@ fi
 
 capture_one() {
   local res="$1"
-  local out="${OUT_ROOT}/${res}/windows_reference.png"
+  local scale="${OPENTTDRS_SHOT_UI_SCALE:-1}"
+  local shot_id="${OPENTTDRS_WINDOW_SHOT_ID:-all}"
+  local out="${OUT_ROOT}/${res}/window_${shot_id}_${scale}x.png"
   echo "→ ${res} → ${out}"
-  if ! OPENTTDRS_SHOT_RES="${res}" OPENTTDRS_WINDOWS_SHOT="${out}" \
+  if ! OPENTTDRS_SHOT_RES="${res}" \
+    OPENTTDRS_SHOT_UI_SCALE="${scale}" \
+    OPENTTDRS_WINDOW_SHOT_ID="${OPENTTDRS_WINDOW_SHOT_ID:-}" \
+    OPENTTDRS_WINDOWS_SHOT="${out}" \
     cargo run -p openttdrs-client --release; then
     echo "Aviso: captura ${res} falló (¿hay display?). Harness listo para regenerar." >&2
   fi

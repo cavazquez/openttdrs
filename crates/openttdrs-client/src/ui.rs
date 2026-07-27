@@ -25,6 +25,7 @@ mod genland_window;
 mod goal_list_window;
 mod graph_window;
 mod help_window;
+mod hotkeys;
 mod hud;
 mod industry_directory;
 mod industry_panel;

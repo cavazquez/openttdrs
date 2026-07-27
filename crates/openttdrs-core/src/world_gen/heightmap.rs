@@ -15,6 +15,28 @@ pub struct HeightmapData {
     pub heights: Vec<u8>,
 }
 
+/// Serializa las alturas actuales al formato textual `OTDRHMAP1`.
+#[must_use]
+pub fn serialize_heightmap(map: &Map) -> String {
+    use std::fmt::Write as _;
+
+    let (width, height) = map.dimensions();
+    let mut out = format!("OTDRHMAP1\n{width} {height}\n");
+    for y in 0..height {
+        for x in 0..width {
+            let coord = TileCoord::new(x as i32, y as i32);
+            let value = map.get(coord).map_or(0, |tile| tile.height.min(15));
+            let _ = write!(out, "{value}");
+            if x + 1 == width {
+                out.push('\n');
+            } else {
+                out.push(' ');
+            }
+        }
+    }
+    out
+}
+
 /// Parsea un heightmap `.hmap` en texto.
 ///
 /// # Errors
@@ -100,4 +122,24 @@ pub fn apply_heightmap(
     }
     mark_water_coasts(map, mw, mh, sea_level, &[]);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn serialize_heightmap_roundtrips_dimensions_and_heights() {
+        let mut map = Map::new_flat(3, 2, 0);
+        map.set_height(TileCoord::new(0, 0), 2)
+            .expect("set height (0,0)");
+        map.set_height(TileCoord::new(1, 0), 7)
+            .expect("set height (1,0)");
+        map.set_height(TileCoord::new(2, 1), 15)
+            .expect("set height (2,1)");
+
+        let parsed = parse_hmap(&serialize_heightmap(&map)).expect("parse serialized heightmap");
+        assert_eq!((parsed.width, parsed.height), (3, 2));
+        assert_eq!(parsed.heights, vec![2, 7, 0, 0, 0, 15]);
+    }
 }

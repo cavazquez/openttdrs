@@ -10,9 +10,8 @@ mod systems;
 
 pub(crate) use setup::setup_save_window;
 pub(crate) use systems::{
-    SaveLoadToolbarButton, handle_save_load_toolbar_buttons, handle_save_window_buttons,
-    prepare_save_window_name, save_window_editable_keyboard, save_window_keyboard,
-    save_window_name_click_focus, sync_save_window,
+    handle_save_window_buttons, prepare_save_window_name, save_window_editable_keyboard,
+    save_window_keyboard, save_window_name_click_focus, sync_save_window,
 };
 
 /// Filas visibles por página en la lista de partidas.

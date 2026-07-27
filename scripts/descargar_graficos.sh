@@ -1375,6 +1375,12 @@ python3 "$(dirname "$0")/gen_ufo_sprites.py" || true
 # Catenaria Action5 (wires + postes + entradas de túnel) desde ogfxe_extra.
 python3 "$(dirname "$0")/extract_elrail_catenary.py" || true
 
+# Assets requeridos en runtime: rotores de helicóptero y los siete pasos del
+# ciclo de paleta de refinería. Deben generarse antes del atlas y sin `|| true`:
+# una descarga incompleta no puede considerarse válida.
+python3 "$(dirname "$0")/extract_aircraft_vehicle_sprites.py"
+python3 "$(dirname "$0")/gen_oil_refinery_anim_frames.py"
+
 # Texture atlas: empaqueta tiles/*.png en páginas + metadata Rust (batching).
 python3 "$(dirname "$0")/gen_tile_atlas.py"
 else

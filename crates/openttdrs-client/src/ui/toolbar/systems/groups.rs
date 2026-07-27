@@ -21,6 +21,7 @@ pub(crate) fn toolbar_group_interaction(
             if let Some(menu) = navigation_menu.as_deref_mut() {
                 menu.open = None;
                 menu.focus = None;
+                menu.pointer_capture = false;
             }
             if toolbar_state.active_group == Some(*group) {
                 toolbar_state.active_group = None;

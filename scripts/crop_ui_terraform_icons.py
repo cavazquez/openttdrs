@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Recorta iconos UI de toolbar (OpenGFX) a assets/opengfx/tiles/.
+"""Recorta el catálogo SPR_IMG_* de toolbar a assets/opengfx/tiles/.
 
 Elevar/bajar: sprites 694–695 en el NFO base.
 Nivelar: sprite 4964 (`SPR_IMG_LEVEL_LAND` = `SPR_OPENTTD_BASE + 68`) en el GRF extra.
 Ajustes / audio: sprites 751 (`SPR_IMG_SETTINGS`) y 713 (`SPR_IMG_MUSIC`).
 
-Útil sin volver a correr descargar_graficos.sh entero.
-Requiere assets/opengfx/opengfx2-32ez/sprites/ (base + extra ya extraídos).
+Útil sin volver a correr descargar_graficos.sh entero. Detecta automáticamente
+la fuente 8bpp o 32bpp ya extraída por el pipeline.
 
 Uso:
   python3 scripts/crop_ui_terraform_icons.py
@@ -26,7 +26,11 @@ except ImportError:
 
 ROOT = Path(__file__).resolve().parents[1]
 TILES_DIR = ROOT / "assets/opengfx/tiles"
-SPRITES_DIR = ROOT / "assets/opengfx/opengfx2-32ez/sprites"
+SPRITES_DIR_32 = ROOT / "assets/opengfx/opengfx2-32ez/sprites"
+SPRITES_DIR_8 = next(
+    iter(sorted((ROOT / "assets/opengfx").glob("opengfx-*/sprites"))), None
+)
+SPRITES_DIR = SPRITES_DIR_32 if SPRITES_DIR_32.is_dir() else SPRITES_DIR_8
 
 NFO_LINE = re.compile(
     r"^\s*(\d+)\s+(\S*?((?:ogfx1_base|ogfx21_base_32ez|ogfx2e_extra_32ez)\d+\.(?:32\.png|png|pcx)))\s+"
@@ -40,6 +44,35 @@ SPRITES = [
     (4964, "ui_terraform_level.png", "ogfx2e_extra_32ez.nfo"),
     (751, "ui_settings.png", "ogfx21_base_32ez.nfo"),
     (713, "ui_sound.png", "ogfx21_base_32ez.nfo"),
+    (726, "toolbar_pause.png", "ogfx21_base_32ez.nfo"),
+    (724, "toolbar_save.png", "ogfx21_base_32ez.nfo"),
+    (708, "toolbar_smallmap.png", "ogfx21_base_32ez.nfo"),
+    (4077, "toolbar_town.png", "ogfx21_base_32ez.nfo"),
+    (679, "toolbar_subsidies.png", "ogfx21_base_32ez.nfo"),
+    (1299, "toolbar_stations.png", "ogfx21_base_32ez.nfo"),
+    (737, "toolbar_finances.png", "ogfx21_base_32ez.nfo"),
+    (743, "toolbar_companies.png", "ogfx21_base_32ez.nfo"),
+    (745, "toolbar_graphs.png", "ogfx21_base_32ez.nfo"),
+    (684, "toolbar_league.png", "ogfx21_base_32ez.nfo"),
+    (741, "toolbar_industry.png", "ogfx21_base_32ez.nfo"),
+    (742, "toolbar_trees.png", "ogfx21_base_32ez.nfo"),
+    (731, "toolbar_trains.png", "ogfx21_base_32ez.nfo"),
+    (732, "toolbar_road_vehicles.png", "ogfx21_base_32ez.nfo"),
+    (733, "toolbar_ships.png", "ogfx21_base_32ez.nfo"),
+    (734, "toolbar_aircraft.png", "ogfx21_base_32ez.nfo"),
+    (735, "toolbar_zoom_in.png", "ogfx21_base_32ez.nfo"),
+    (736, "toolbar_zoom_out.png", "ogfx21_base_32ez.nfo"),
+    (727, "toolbar_build_rail.png", "ogfx21_base_32ez.nfo"),
+    (728, "toolbar_build_road.png", "ogfx21_base_32ez.nfo"),
+    (729, "toolbar_build_water.png", "ogfx21_base_32ez.nfo"),
+    (730, "toolbar_build_air.png", "ogfx21_base_32ez.nfo"),
+    (4083, "toolbar_landscape.png", "ogfx21_base_32ez.nfo"),
+    (680, "toolbar_messages.png", "ogfx21_base_32ez.nfo"),
+    (723, "toolbar_help.png", "ogfx21_base_32ez.nfo"),
+    (4082, "toolbar_sign.png", "ogfx21_base_32ez.nfo"),
+    (4986, "toolbar_fast_forward.png", "ogfx2e_extra_32ez.nfo"),
+    (5075, "toolbar_build_tram.png", "ogfx2e_extra_32ez.nfo"),
+    (5040, "toolbar_switch.png", "ogfx2e_extra_32ez.nfo"),
 ]
 
 
@@ -74,7 +107,12 @@ def load_sprite_rects(nfo_path: Path) -> dict[int, tuple[int, int, int, int, str
 
 def load_sheets(sprites_dir: Path) -> dict[str, Image.Image]:
     sheets: dict[str, Image.Image] = {}
-    for prefix in ("ogfx21_base_32ez", "ogfx2e_extra_32ez", "ogfx1_base"):
+    for prefix in (
+        "ogfx21_base_32ez",
+        "ogfx2e_extra_32ez",
+        "ogfx1_base",
+        "ogfxe_extra",
+    ):
         for p in sorted(sprites_dir.glob(f"{prefix}*.png")):
             if p.stat().st_size == 0:
                 continue
@@ -83,7 +121,7 @@ def load_sheets(sprites_dir: Path) -> dict[str, Image.Image]:
 
 
 def main() -> int:
-    if not SPRITES_DIR.is_dir():
+    if SPRITES_DIR is None or not SPRITES_DIR.is_dir():
         print(
             "No se encontró sprites OpenGFX. Ejecutá: ./scripts/descargar_graficos.sh --32bpp",
             file=sys.stderr,
@@ -95,6 +133,9 @@ def main() -> int:
 
     for sid, out_name, nfo_name in SPRITES:
         nfo_path = SPRITES_DIR / nfo_name
+        if not nfo_path.is_file():
+            fallback = "ogfxe_extra.nfo" if "extra" in nfo_name else "ogfx1_base.nfo"
+            nfo_path = SPRITES_DIR / fallback
         if not nfo_path.is_file():
             print(f"  (omitido {out_name}: no existe {nfo_path})")
             continue

@@ -6,13 +6,14 @@ use bevy::ui::RelativeCursorPosition;
 use crate::state::ingame_lifecycle::InGameUi;
 use crate::ui::floating_window::{WINDOW_TEXT, window_text_font};
 use crate::ui::font::UiFontRole;
-use crate::ui::toolbar::BuildMenuUi;
+use crate::ui::toolbar::{BuildMenuUi, ResponsiveToolbarSlot, ToolbarIcon, ToolbarTooltipTarget};
 
 use super::model::{
-    MenuAction, MenuEntryKind, MenuEntrySpec, MenuId, MenuSpec, all_toolbar_menu_specs,
+    MenuAction, MenuAvailability, MenuEntryKind, MenuEntrySpec, MenuId, MenuSpec,
+    all_toolbar_menu_specs,
 };
 
-pub(crate) const ANCHOR_W: f32 = 78.0;
+pub(crate) const ANCHOR_W: f32 = 48.0;
 pub(crate) const ANCHOR_H: f32 = 48.0;
 pub(crate) const MENU_MIN_WIDTH: f32 = 228.0;
 
@@ -45,6 +46,7 @@ pub(crate) struct ToolbarMenuEntry {
     pub menu: MenuId,
     pub action: MenuAction,
     pub enabled: bool,
+    pub availability: MenuAvailability,
     pub checkable: bool,
 }
 
@@ -55,7 +57,7 @@ pub(crate) struct ToolbarMenuEntryLabel;
 pub(crate) struct ToolbarMenuEntryCheck;
 
 #[derive(Component)]
-pub(crate) struct ToolbarMenuEntryHotkey;
+pub(crate) struct ToolbarMenuEntryHotkey(pub(crate) MenuAction);
 
 #[derive(Component)]
 pub(crate) struct ToolbarMenuDivider;
@@ -66,17 +68,28 @@ pub(crate) fn spawn_menu_anchor_button(
     asset_server: &AssetServer,
     id: MenuId,
 ) {
+    spawn_menu_anchor_button_sized(parent, asset_server, id, ANCHOR_W, ANCHOR_H);
+}
+
+pub(crate) fn spawn_menu_anchor_button_sized(
+    parent: &mut ChildSpawnerCommands,
+    asset_server: &AssetServer,
+    id: MenuId,
+    width: f32,
+    height: f32,
+) {
     let Some(spec) = all_toolbar_menu_specs().iter().find(|s| s.id == id) else {
         return;
     };
     parent
         .spawn((
             Node {
-                width: Val::Px(ANCHOR_W),
-                height: Val::Px(ANCHOR_H),
+                width: Val::Px(width),
+                height: Val::Px(height),
                 flex_direction: FlexDirection::Column,
                 ..default()
             },
+            ResponsiveToolbarSlot { full_width: width },
             BuildMenuUi,
             ZIndex(1),
         ))
@@ -84,6 +97,7 @@ pub(crate) fn spawn_menu_anchor_button(
             wrap.spawn((
                 Button,
                 ToolbarNavigationButton(id),
+                ToolbarTooltipTarget { text: id.label() },
                 RelativeCursorPosition::default(),
                 BuildMenuUi,
                 Node {
@@ -98,21 +112,42 @@ pub(crate) fn spawn_menu_anchor_button(
                 BorderColor::all(MENU_BORDER),
                 Interaction::default(),
                 children![(
-                    Text::new(id.label()),
-                    window_text_font(asset_server, UiFontRole::Caption),
-                    TextColor(ENTRY_TEXT),
+                    ImageNode::new(asset_server.load::<Image>(menu_icon(id).path())),
+                    Node {
+                        width: Val::Px(height.min(28.0)),
+                        height: Val::Px(height.min(28.0)),
+                        ..default()
+                    },
                 )],
             ));
-            spawn_menu_from_spec(wrap, asset_server, spec);
+            spawn_menu_from_spec(wrap, asset_server, spec, height);
         });
+}
+
+fn menu_icon(id: MenuId) -> ToolbarIcon {
+    match id {
+        MenuId::File | MenuId::EditorFile => ToolbarIcon::Save,
+        MenuId::Map | MenuId::EditorMap => ToolbarIcon::SmallMap,
+        MenuId::World => ToolbarIcon::Town,
+        MenuId::Industries => ToolbarIcon::Industry,
+        MenuId::Fleet => ToolbarIcon::Fleet,
+        MenuId::Economy => ToolbarIcon::Finances,
+        MenuId::Settings => ToolbarIcon::Settings,
+        MenuId::Messages => ToolbarIcon::Messages,
+        MenuId::Help => ToolbarIcon::Help,
+    }
 }
 
 pub(crate) fn spawn_menu_from_spec(
     parent: &mut ChildSpawnerCommands,
     asset_server: &AssetServer,
     spec: &MenuSpec,
+    anchor_height: f32,
 ) {
-    let align_end = matches!(spec.id, MenuId::Fleet | MenuId::Economy);
+    let align_end = matches!(
+        spec.id,
+        MenuId::Fleet | MenuId::Economy | MenuId::Settings | MenuId::Messages | MenuId::Help
+    );
     parent
         .spawn((
             ToolbarMenuRoot(spec.id),
@@ -127,7 +162,7 @@ pub(crate) fn spawn_menu_from_spec(
                 border: UiRect::all(Val::Px(2.0)),
                 display: Display::None,
                 position_type: PositionType::Absolute,
-                top: Val::Px(ANCHOR_H + 2.0),
+                top: Val::Px(anchor_height + 2.0),
                 left: if align_end { Val::Auto } else { Val::Px(0.0) },
                 right: if align_end { Val::Px(0.0) } else { Val::Auto },
                 ..default()
@@ -182,6 +217,7 @@ fn spawn_menu_entry(
                 menu,
                 action,
                 enabled: entry.enabled,
+                availability: entry.availability,
                 checkable: entry.checkable,
             },
             BuildMenuUi,
@@ -227,17 +263,15 @@ fn spawn_menu_entry(
                     ..default()
                 },
             ));
-            if let Some(hk) = entry.hotkey {
-                row.spawn((
-                    ToolbarMenuEntryHotkey,
-                    Text::new(hk),
-                    window_text_font(asset_server, UiFontRole::Caption),
-                    TextColor(if entry.enabled {
-                        HOTKEY_TEXT
-                    } else {
-                        ENTRY_TEXT_DISABLED
-                    }),
-                ));
-            }
+            row.spawn((
+                ToolbarMenuEntryHotkey(action),
+                Text::new(entry.hotkey.unwrap_or("")),
+                window_text_font(asset_server, UiFontRole::Caption),
+                TextColor(if entry.enabled {
+                    HOTKEY_TEXT
+                } else {
+                    ENTRY_TEXT_DISABLED
+                }),
+            ));
         });
 }

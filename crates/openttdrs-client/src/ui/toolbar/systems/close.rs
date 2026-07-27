@@ -91,6 +91,7 @@ pub(crate) fn handle_ingame_escape(
         && menu.open.take().is_some()
     {
         menu.focus = None;
+        menu.pointer_capture = false;
         return;
     }
     if let Some(layers) = overlays.minimap_layers.as_deref_mut()

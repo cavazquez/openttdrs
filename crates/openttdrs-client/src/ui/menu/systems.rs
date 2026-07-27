@@ -8,32 +8,55 @@ use bevy::ui::RelativeCursorPosition;
 use crate::settings::ClientPreferences;
 use crate::ui::display_options_window::DisplayOptionsWindowState;
 use crate::ui::extra_viewport_window::ExtraViewportWindowState;
+use crate::ui::hotkeys::{UiCommandId, UiHotkeys};
 use crate::ui::hud::SimHudControls;
 use crate::ui::navigation::OpenUiRoute;
-use crate::ui::toolbar::build_input::cancel_placement;
-use crate::ui::toolbar::{DragBuildState, MinimapLayerState, ToolbarState, UiToolState};
+use crate::ui::toolbar::{MinimapLayerState, UiToolState};
 
 use super::chrome::{
     ENTRY_BG, ENTRY_BORDER, ENTRY_CHECKED, ENTRY_DISABLED, ENTRY_FOCUS_BORDER, ENTRY_HOVER,
     MENU_BORDER, ToolbarMenuEntry, ToolbarMenuEntryCheck, ToolbarMenuRoot, ToolbarNavigationButton,
 };
-use super::model::{MenuAction, MenuClientAction, MenuId};
+use super::model::{MenuAction, MenuClientAction, MenuId, ToolbarContext};
+
+pub(crate) fn refresh_toolbar_context(
+    sim: Option<Res<crate::state::SimWorld>>,
+    network: Option<Res<crate::network::NetworkRuntime>>,
+    mut context: ResMut<ToolbarContext>,
+) {
+    let Some(sim) = sim else {
+        return;
+    };
+    *context = ToolbarContext {
+        has_companies: !sim.state.companies.is_empty(),
+        has_goals: !sim.state.gs.goals.is_empty(),
+        has_story: !sim.state.gs.story_pages.is_empty(),
+        can_control_simulation: network
+            .is_none_or(|network| network.role() != crate::network::NetworkRole::Client),
+    };
+}
 
 #[derive(Resource, Default)]
 pub(crate) struct ToolbarMenuState {
     pub(crate) open: Option<MenuId>,
     /// Índice de foco teclado entre entradas *enabled* del menú abierto.
     pub(crate) focus: Option<usize>,
+    /// El botón izquierdo sigue pulsado desde el ancla (press/drag/release).
+    pub(crate) pointer_capture: bool,
 }
 
 pub(crate) fn handle_toolbar_navigation_button(
     buttons: Query<(&Interaction, &ToolbarNavigationButton), (Changed<Interaction>, With<Button>)>,
     mut menu_state: ResMut<ToolbarMenuState>,
-    mut toolbar_state: ResMut<ToolbarState>,
     mut tool_state: ResMut<UiToolState>,
-    mut drag_state: ResMut<DragBuildState>,
+    prefs: Res<ClientPreferences>,
 ) {
     for (interaction, button) in &buttons {
+        if *interaction == Interaction::Hovered && menu_state.pointer_capture {
+            menu_state.open = Some(button.0);
+            menu_state.focus = None;
+            continue;
+        }
         if *interaction != Interaction::Pressed {
             continue;
         }
@@ -43,16 +66,20 @@ pub(crate) fn handle_toolbar_navigation_button(
             Some(button.0)
         };
         menu_state.focus = None;
+        menu_state.pointer_capture = prefs.toolbar_dropdown_autoselect && menu_state.open.is_some();
+        // Navigation is orthogonal to map placement. Looking at a directory or
+        // graph must not discard an armed drag or the currently selected tool.
+        // We only consume the pointer press that opened/closed the popover so it
+        // cannot leak through to the map in the same frame.
         tool_state.block_map_click = true;
-        toolbar_state.active_group = None;
-        tool_state.active_tool = None;
-        cancel_placement(&mut drag_state);
     }
 }
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn handle_toolbar_menu_entries(
-    entries: Query<(&Interaction, &ToolbarMenuEntry), (Changed<Interaction>, With<Button>)>,
+    entries: Query<(&Interaction, &ToolbarMenuEntry), With<Button>>,
+    mouse: Res<ButtonInput<MouseButton>>,
+    context: Res<ToolbarContext>,
     mut menu_state: ResMut<ToolbarMenuState>,
     mut tool_state: ResMut<UiToolState>,
     mut routes: MessageWriter<OpenUiRoute>,
@@ -63,7 +90,16 @@ pub(crate) fn handle_toolbar_menu_entries(
     mut extra_viewport: ResMut<ExtraViewportWindowState>,
 ) {
     for (interaction, entry) in &entries {
-        if *interaction != Interaction::Pressed || !entry.enabled {
+        let click_select = *interaction == Interaction::Pressed && !menu_state.pointer_capture;
+        let drag_release_select = menu_state.pointer_capture
+            && prefs.toolbar_dropdown_autoselect
+            && mouse.just_released(MouseButton::Left)
+            && *interaction == Interaction::Hovered
+            && menu_state.open == Some(entry.menu);
+        if (!click_select && !drag_release_select)
+            || !entry.enabled
+            || !context.allows(entry.availability)
+        {
             continue;
         }
         apply_menu_action(
@@ -77,7 +113,12 @@ pub(crate) fn handle_toolbar_menu_entries(
         );
         menu_state.open = None;
         menu_state.focus = None;
+        menu_state.pointer_capture = false;
         tool_state.block_map_click = true;
+        return;
+    }
+    if mouse.just_released(MouseButton::Left) {
+        menu_state.pointer_capture = false;
     }
 }
 
@@ -119,6 +160,8 @@ pub(crate) fn sync_toolbar_navigation_menu(
     menu_state: Res<ToolbarMenuState>,
     prefs: Res<ClientPreferences>,
     minimap: Res<MinimapLayerState>,
+    context: Res<ToolbarContext>,
+    hotkeys: Option<Res<UiHotkeys>>,
     mut visuals: ParamSet<(
         Query<(&ToolbarMenuRoot, &mut Node)>,
         Query<
@@ -145,6 +188,15 @@ pub(crate) fn sync_toolbar_navigation_menu(
             (With<Button>, Without<ToolbarNavigationButton>),
         >,
         Query<&mut Text, With<ToolbarMenuEntryCheck>>,
+        Query<
+            &mut TextColor,
+            Or<(
+                With<super::chrome::ToolbarMenuEntryLabel>,
+                With<ToolbarMenuEntryCheck>,
+                With<super::chrome::ToolbarMenuEntryHotkey>,
+            )>,
+        >,
+        Query<(&super::chrome::ToolbarMenuEntryHotkey, &mut Text)>,
     )>,
     children_q: Query<&Children>,
 ) {
@@ -184,19 +236,21 @@ pub(crate) fn sync_toolbar_navigation_menu(
     let open = menu_state.open;
     let mut enabled_index = 0usize;
     let mut check_updates: Vec<(Entity, bool)> = Vec::new();
+    let mut text_updates: Vec<(Entity, bool)> = Vec::new();
     {
         let mut entries = visuals.p2();
         for (entity, entry, interaction, mut bg, mut border) in &mut entries {
             if open != Some(entry.menu) {
                 continue;
             }
+            let enabled = entry.enabled && context.allows(entry.availability);
             let checked = entry.checkable && menu_entry_checked(entry.action, &prefs, &minimap);
-            let is_focus = entry.enabled && menu_state.focus == Some(enabled_index);
-            if entry.enabled {
+            let is_focus = enabled && menu_state.focus == Some(enabled_index);
+            if enabled {
                 enabled_index = enabled_index.saturating_add(1);
             }
 
-            *bg = if !entry.enabled {
+            *bg = if !enabled {
                 BackgroundColor(ENTRY_DISABLED)
             } else if *interaction == Interaction::Hovered {
                 BackgroundColor(ENTRY_HOVER)
@@ -214,20 +268,69 @@ pub(crate) fn sync_toolbar_navigation_menu(
             if entry.checkable {
                 check_updates.push((entity, checked));
             }
+            text_updates.push((entity, enabled));
         }
     }
 
-    let mut checks = visuals.p3();
-    for (entity, checked) in check_updates {
-        let Ok(children) = children_q.get(entity) else {
-            continue;
-        };
-        for child in children.iter() {
-            if let Ok(mut text) = checks.get_mut(child) {
-                **text = if checked { "✓" } else { " " }.to_string();
+    {
+        let mut checks = visuals.p3();
+        for (entity, checked) in check_updates {
+            let Ok(children) = children_q.get(entity) else {
+                continue;
+            };
+            for child in children.iter() {
+                if let Ok(mut text) = checks.get_mut(child) {
+                    **text = if checked { "✓" } else { " " }.to_string();
+                }
             }
         }
     }
+
+    {
+        let mut text_colors = visuals.p4();
+        for (entity, enabled) in text_updates {
+            let Ok(children) = children_q.get(entity) else {
+                continue;
+            };
+            for child in children.iter() {
+                if let Ok(mut color) = text_colors.get_mut(child) {
+                    *color = TextColor(if enabled {
+                        super::chrome::ENTRY_TEXT
+                    } else {
+                        super::chrome::ENTRY_TEXT_DISABLED
+                    });
+                }
+            }
+        }
+    }
+
+    let mut hotkey_texts = visuals.p5();
+    for (marker, mut text) in &mut hotkey_texts {
+        let label = command_for_menu_action(marker.0)
+            .and_then(|command| hotkeys.as_deref()?.label(command))
+            .unwrap_or_default();
+        if **text != label {
+            **text = label;
+        }
+    }
+}
+
+fn command_for_menu_action(action: MenuAction) -> Option<UiCommandId> {
+    use crate::ui::navigation::UiRoute;
+    Some(match action {
+        MenuAction::Client(MenuClientAction::ToggleMinimap) => UiCommandId::SmallMap,
+        MenuAction::Client(MenuClientAction::OpenExtraViewport) => UiCommandId::ExtraViewport,
+        MenuAction::Route(UiRoute::Towns) => UiCommandId::TownDirectory,
+        MenuAction::Route(UiRoute::Stations) => UiCommandId::StationList,
+        MenuAction::Route(UiRoute::Industries) => UiCommandId::IndustryDirectory,
+        MenuAction::Route(UiRoute::Finances) => UiCommandId::Finances,
+        MenuAction::Route(UiRoute::League) => UiCommandId::League,
+        MenuAction::Route(UiRoute::SoundMusic) => UiCommandId::Music,
+        MenuAction::Route(UiRoute::Help) => UiCommandId::Help,
+        MenuAction::Route(UiRoute::Cheats) => UiCommandId::Cheats,
+        MenuAction::Route(UiRoute::SaveGame | UiRoute::LoadGame) => UiCommandId::SaveLoad,
+        _ => return None,
+    })
 }
 
 fn menu_entry_checked(
@@ -264,6 +367,7 @@ pub(crate) fn dismiss_toolbar_menu_on_outside_click(
     if !over_menu && !over_button {
         menu_state.open = None;
         menu_state.focus = None;
+        menu_state.pointer_capture = false;
         tool_state.block_map_click = true;
     }
 }
@@ -274,6 +378,7 @@ pub(crate) fn handle_toolbar_menu_keyboard(
     mut menu_state: ResMut<ToolbarMenuState>,
     mut tool_state: ResMut<UiToolState>,
     entries: Query<&ToolbarMenuEntry>,
+    context: Res<ToolbarContext>,
     mut routes: MessageWriter<OpenUiRoute>,
     mut prefs: ResMut<ClientPreferences>,
     mut hud: ResMut<SimHudControls>,
@@ -287,7 +392,7 @@ pub(crate) fn handle_toolbar_menu_keyboard(
     };
     let enabled: Vec<MenuAction> = entries
         .iter()
-        .filter(|e| e.menu == open && e.enabled)
+        .filter(|e| e.menu == open && e.enabled && context.allows(e.availability))
         .map(|e| e.action)
         .collect();
     if enabled.is_empty() {
@@ -302,6 +407,7 @@ pub(crate) fn handle_toolbar_menu_keyboard(
             Key::Escape => {
                 menu_state.open = None;
                 menu_state.focus = None;
+                menu_state.pointer_capture = false;
                 tool_state.block_map_click = true;
             }
             Key::ArrowDown => {
@@ -329,6 +435,7 @@ pub(crate) fn handle_toolbar_menu_keyboard(
                     );
                     menu_state.open = None;
                     menu_state.focus = None;
+                    menu_state.pointer_capture = false;
                     tool_state.block_map_click = true;
                 }
             }
@@ -342,6 +449,7 @@ pub(crate) fn handle_toolbar_menu_keyboard(
 mod tests {
     use super::*;
     use crate::ui::navigation::UiRoute;
+    use crate::ui::toolbar::DragBuildState;
     use bevy::ecs::system::RunSystemOnce;
 
     #[test]
@@ -350,12 +458,14 @@ mod tests {
         world.insert_resource(ToolbarMenuState {
             open: Some(MenuId::Map),
             focus: Some(0),
+            pointer_capture: false,
         });
         world.insert_resource(ClientPreferences {
             minimap_visible: false,
             ..Default::default()
         });
         world.insert_resource(MinimapLayerState::default());
+        world.insert_resource(ToolbarContext::default());
         world.spawn((
             Button,
             ToolbarNavigationButton(MenuId::Map),
@@ -370,6 +480,7 @@ mod tests {
                     menu: MenuId::Map,
                     action: MenuAction::Client(MenuClientAction::ToggleMinimap),
                     enabled: true,
+                    availability: super::super::model::MenuAvailability::Always,
                     checkable: true,
                 },
                 Interaction::None,
@@ -394,10 +505,10 @@ mod tests {
     }
 
     #[test]
-    fn menu_button_toggles_and_cancels_active_tool() {
+    fn menu_button_toggles_without_cancelling_active_placement() {
         let mut world = World::new();
         world.insert_resource(ToolbarMenuState::default());
-        world.insert_resource(ToolbarState::default());
+        world.insert_resource(ClientPreferences::default());
         world.insert_resource(UiToolState {
             active_tool: Some(crate::ui::BuildMenuAction::Road),
             ..Default::default()
@@ -418,8 +529,11 @@ mod tests {
             world.resource::<ToolbarMenuState>().open,
             Some(MenuId::World)
         );
-        assert!(world.resource::<UiToolState>().active_tool.is_none());
-        assert!(!world.resource::<DragBuildState>().armed);
+        assert_eq!(
+            world.resource::<UiToolState>().active_tool,
+            Some(crate::ui::BuildMenuAction::Road)
+        );
+        assert!(world.resource::<DragBuildState>().armed);
         assert!(world.resource::<UiToolState>().block_map_click);
     }
 
@@ -447,6 +561,7 @@ mod tests {
         world.insert_resource(ToolbarMenuState {
             open: Some(MenuId::Map),
             focus: Some(0),
+            pointer_capture: false,
         });
         world.insert_resource(UiToolState::default());
         world.init_resource::<Messages<OpenUiRoute>>();
@@ -454,12 +569,15 @@ mod tests {
         world.insert_resource(ClientPreferences::default());
         world.insert_resource(SimHudControls::default());
         world.insert_resource(MinimapLayerState::default());
+        world.insert_resource(ToolbarContext::default());
         world.insert_resource(DisplayOptionsWindowState::default());
         world.insert_resource(ExtraViewportWindowState::default());
+        world.insert_resource(ButtonInput::<MouseButton>::default());
         world.spawn(ToolbarMenuEntry {
             menu: MenuId::Map,
             action: MenuAction::Client(MenuClientAction::ToggleMinimap),
             enabled: true,
+            availability: super::super::model::MenuAvailability::Always,
             checkable: true,
         });
         world.write_message(KeyboardInput {
@@ -490,17 +608,131 @@ mod tests {
         world.insert_resource(MinimapLayerState::default());
         world.insert_resource(DisplayOptionsWindowState::default());
         world.insert_resource(ExtraViewportWindowState::default());
+        world.insert_resource(ButtonInput::<MouseButton>::default());
+        world.insert_resource(ToolbarContext::default());
         world.spawn((
             Button,
             ToolbarMenuEntry {
                 menu: MenuId::Industries,
                 action: MenuAction::Route(UiRoute::LinkGraph),
                 enabled: false,
+                availability: super::super::model::MenuAvailability::Always,
                 checkable: false,
             },
             Interaction::Pressed,
         ));
         world.run_system_once(handle_toolbar_menu_entries).unwrap();
         assert!(world.resource::<ToolbarMenuState>().open.is_some());
+    }
+
+    #[test]
+    fn unavailable_entry_does_not_fire_route() {
+        let mut world = World::new();
+        world.insert_resource(ToolbarMenuState {
+            open: Some(MenuId::Economy),
+            ..default()
+        });
+        world.insert_resource(UiToolState::default());
+        world.init_resource::<Messages<OpenUiRoute>>();
+        world.insert_resource(ClientPreferences::default());
+        world.insert_resource(SimHudControls::default());
+        world.insert_resource(MinimapLayerState::default());
+        world.insert_resource(DisplayOptionsWindowState::default());
+        world.insert_resource(ExtraViewportWindowState::default());
+        world.insert_resource(ButtonInput::<MouseButton>::default());
+        world.insert_resource(ToolbarContext {
+            has_goals: false,
+            ..default()
+        });
+        world.spawn((
+            Button,
+            ToolbarMenuEntry {
+                menu: MenuId::Economy,
+                action: MenuAction::Route(UiRoute::Goals),
+                enabled: true,
+                availability: super::super::model::MenuAvailability::HasGoals,
+                checkable: false,
+            },
+            Interaction::Pressed,
+        ));
+
+        world.run_system_once(handle_toolbar_menu_entries).unwrap();
+
+        assert_eq!(
+            world.resource::<ToolbarMenuState>().open,
+            Some(MenuId::Economy)
+        );
+        assert!(world.resource::<Messages<OpenUiRoute>>().is_empty());
+    }
+
+    #[test]
+    fn captured_pointer_switches_to_hovered_anchor() {
+        let mut world = World::new();
+        world.insert_resource(ToolbarMenuState {
+            open: Some(MenuId::Map),
+            pointer_capture: true,
+            ..default()
+        });
+        world.insert_resource(ClientPreferences::default());
+        world.insert_resource(UiToolState::default());
+        world.spawn((
+            Button,
+            ToolbarNavigationButton(MenuId::World),
+            Interaction::Hovered,
+        ));
+
+        world
+            .run_system_once(handle_toolbar_navigation_button)
+            .unwrap();
+
+        assert_eq!(
+            world.resource::<ToolbarMenuState>().open,
+            Some(MenuId::World)
+        );
+        assert!(world.resource::<ToolbarMenuState>().pointer_capture);
+    }
+
+    #[test]
+    fn autoselect_executes_hovered_entry_on_pointer_release() {
+        let mut world = World::new();
+        world.insert_resource(ToolbarMenuState {
+            open: Some(MenuId::Map),
+            pointer_capture: true,
+            ..default()
+        });
+        world.insert_resource(UiToolState::default());
+        world.init_resource::<Messages<OpenUiRoute>>();
+        world.insert_resource(ClientPreferences {
+            minimap_visible: false,
+            toolbar_dropdown_autoselect: true,
+            ..default()
+        });
+        world.insert_resource(SimHudControls::default());
+        world.insert_resource(MinimapLayerState::default());
+        world.insert_resource(DisplayOptionsWindowState::default());
+        world.insert_resource(ExtraViewportWindowState::default());
+        world.insert_resource(ToolbarContext::default());
+        let mut mouse = ButtonInput::<MouseButton>::default();
+        mouse.press(MouseButton::Left);
+        mouse.clear();
+        mouse.release(MouseButton::Left);
+        world.insert_resource(mouse);
+        world.spawn((
+            Button,
+            ToolbarMenuEntry {
+                menu: MenuId::Map,
+                action: MenuAction::Client(MenuClientAction::ToggleMinimap),
+                enabled: true,
+                availability: super::super::model::MenuAvailability::Always,
+                checkable: true,
+            },
+            Interaction::Hovered,
+        ));
+
+        world.run_system_once(handle_toolbar_menu_entries).unwrap();
+
+        assert!(world.resource::<ClientPreferences>().minimap_visible);
+        assert!(world.resource::<ToolbarMenuState>().open.is_none());
+        assert!(!world.resource::<ToolbarMenuState>().pointer_capture);
     }
 }

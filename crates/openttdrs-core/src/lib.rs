@@ -494,7 +494,7 @@ pub use world_gen::{
     apply_heightmap, apply_population_gen, apply_world_gen, ceil_div, clear_ground_m5,
     effective_clear_ground, generate_industries, generate_towns, house_beside_road,
     industry_target_count, initial_clear_ground, parse_hmap, road_tiles_are_flat, scale_by_size,
-    town_target_count,
+    serialize_heightmap, town_target_count,
 };
 
 #[cfg(test)]

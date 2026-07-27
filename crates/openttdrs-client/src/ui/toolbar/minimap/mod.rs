@@ -77,6 +77,13 @@ pub(crate) enum MinimapLayerToggle {
 #[derive(Component)]
 pub(crate) struct MinimapRoot;
 
+/// Contenedor continuo de filas; separa la grilla del gap usado por los controles.
+#[derive(Component)]
+pub(crate) struct MinimapGrid;
+
+#[derive(Component)]
+pub(crate) struct MinimapGridRow;
+
 #[derive(Component)]
 pub(crate) struct MinimapCell {
     pub(super) col: u32,

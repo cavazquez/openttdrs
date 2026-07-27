@@ -28,22 +28,6 @@ use super::{
 /// Largo máximo del nombre al guardar.
 const MAX_FILENAME_CHARS: usize = 40;
 
-/// Botón de la barra superior que abre la ventana en un modo dado.
-#[derive(Component, Clone, Copy)]
-pub(crate) struct SaveLoadToolbarButton(pub(crate) SaveWindowMode);
-
-pub(crate) fn handle_save_load_toolbar_buttons(
-    q: Query<(&Interaction, &SaveLoadToolbarButton), (Changed<Interaction>, With<Button>)>,
-    mut state: ResMut<SaveWindowState>,
-    hud: Res<SimHudControls>,
-) {
-    for (interaction, button) in &q {
-        if *interaction == Interaction::Pressed {
-            state.open_in_mode(button.0, &save_dir_from(&hud.json_save_path));
-        }
-    }
-}
-
 /// Escape cierra la ventana.
 pub(crate) fn save_window_keyboard(
     mut state: ResMut<SaveWindowState>,
@@ -147,6 +131,7 @@ pub(crate) fn handle_save_window_buttons(
     screen: Option<Res<State<ClientScreen>>>,
     mut next_screen: Option<ResMut<NextState<ClientScreen>>>,
     mut suspended: Option<ResMut<SuspendedGameSession>>,
+    mut editor_document: Option<ResMut<crate::ui::toolbar::editor_toolbar::EditorDocumentState>>,
     q_menu: Query<Entity, With<MainMenuUi>>,
     q_menu_cam: Query<Entity, With<MainMenuCamera>>,
     intro_layers: Query<Entity, Or<(With<MapVisualLayer>, With<WaterTile>, With<ShoreTile>)>>,
@@ -228,7 +213,11 @@ pub(crate) fn handle_save_window_buttons(
                         .ok()
                         .map(|e| e.value().to_string())
                         .unwrap_or_default();
-                    confirm_save(&mut state, &mut hud, &sim, &name_text);
+                    if confirm_save(&mut state, &mut hud, &sim, &name_text)
+                        && let Some(document) = editor_document.as_deref_mut()
+                    {
+                        document.mark_saved();
+                    }
                 }
                 SaveWindowMode::Load => {
                     if confirm_load(
@@ -260,16 +249,21 @@ pub(crate) fn handle_save_window_buttons(
     }
 }
 
-fn confirm_save(state: &mut SaveWindowState, hud: &mut SimHudControls, sim: &SimWorld, name: &str) {
+fn confirm_save(
+    state: &mut SaveWindowState,
+    hud: &mut SimHudControls,
+    sim: &SimWorld,
+    name: &str,
+) -> bool {
     let name = name.trim();
     if name.is_empty() {
         state.status = "Escribí un nombre para la partida.".into();
-        return;
+        return false;
     }
     let dir = save_dir_from(&hud.json_save_path);
     if let Err(e) = std::fs::create_dir_all(&dir) {
         state.status = format!("No se pudo crear {}: {e}", dir.display());
-        return;
+        return false;
     }
     let lower = name.to_ascii_lowercase();
     let (file, as_json) = if lower.ends_with(".json") {
@@ -293,9 +287,11 @@ fn confirm_save(state: &mut SaveWindowState, hud: &mut SimHudControls, sim: &Sim
             info!("Guardado en {path_s}");
             hud.json_save_path = path_s;
             state.close();
+            true
         }
         Err(e) => {
             state.status = format!("No se pudo guardar: {e}");
+            false
         }
     }
 }

@@ -3,7 +3,7 @@
 // Offsets NFO (sprite_id, w, h, xrel, yrel) de las piezas de estación de
 // tren (`_station_display_datas_rail`, `table/station_land.h`).
 
-/// Metadata NFO de plataformas, edificios, techos (1069–1086) y waypoints (4974–4981).
+/// Metadata NFO de plataformas, edificios, techos (1069–1082) y waypoints (4974–4981).
 pub static RAIL_STATION_SPRITE_META: [(u32, f32, f32, f32, f32); 26] = [
     (1069, 42.0, 23.0, -9.0, -3.0), // rail_platform_y_front.png [nfo_8bpp_match]
     (1070, 42.0, 23.0, -31.0, -3.0), // rail_platform_x_rear.png [nfo_8bpp_match]

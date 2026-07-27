@@ -6,6 +6,7 @@ pub(crate) mod build_input;
 mod company_selector;
 mod depot_panel;
 pub(crate) mod editor_toolbar;
+mod icons;
 mod layout;
 mod minimap;
 mod order_panel;
@@ -34,12 +35,19 @@ pub(crate) use depot_panel::{
     handle_depot_panel_buttons, setup_depot_panel, sync_depot_panel,
 };
 pub(crate) use editor_toolbar::{
-    EditorTownMenuState, handle_editor_toolbar_build_buttons,
-    handle_editor_toolbar_control_buttons, handle_editor_toolbar_tool_buttons,
-    handle_editor_town_dropdown, setup_editor_toolbar, sync_editor_toolbar_button_visuals,
-    sync_editor_toolbar_date, sync_editor_toolbar_visibility, sync_editor_town_dropdown,
+    EditorDocumentState, EditorToolbarLayoutState, EditorTownMenuState,
+    handle_editor_exit_confirmation, handle_editor_file_routes,
+    handle_editor_toolbar_build_buttons, handle_editor_toolbar_control_buttons,
+    handle_editor_toolbar_switch, handle_editor_toolbar_tool_buttons, handle_editor_town_dropdown,
+    initialize_editor_document, setup_editor_toolbar, sync_editor_exit_confirmation,
+    sync_editor_toolbar_button_visuals, sync_editor_toolbar_date, sync_editor_toolbar_layout,
+    sync_editor_toolbar_visibility, sync_editor_town_dropdown,
 };
-pub(crate) use layout::setup_top_toolbar;
+pub(crate) use icons::ToolbarIcon;
+pub(crate) use layout::{
+    ResponsiveToolbarSlot, ToolbarLayoutState, handle_toolbar_switch, setup_top_toolbar,
+    sync_toolbar_layout,
+};
 pub(crate) use minimap::{
     MinimapLayerState, MinimapRoot, handle_minimap_click, handle_minimap_layer_buttons,
     setup_minimap, sync_minimap,

@@ -24,7 +24,7 @@ pub use config::{
     PreserveRect, QuantitySeaLakes, TerrainType, TgenSmoothness, WorldGenConfig, clear_ground_m5,
     effective_clear_ground, initial_clear_ground, initial_clear_ground_with_lines,
 };
-pub use heightmap::{HeightmapData, apply_heightmap, parse_hmap};
+pub use heightmap::{HeightmapData, apply_heightmap, parse_hmap, serialize_heightmap};
 pub use population::{
     IndustryDensity, NUM_INITIAL_INDUSTRIES, NUM_INITIAL_TOWNS, PopulationGenConfig, TownDensity,
     apply_population_gen, ceil_div, generate_industries, generate_towns, house_beside_road,

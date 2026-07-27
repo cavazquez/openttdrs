@@ -2,16 +2,20 @@
 //!
 //! Con `OPENTTDRS_WINDOWS_SHOT=/ruta/captura.png` el cliente abre **todas** las
 //! [`FloatingWindowId`] (más SaveWindow / OrderPanel / paneles auxiliares),
-//! guarda una captura y sale.
+//! guarda una captura y sale. `OPENTTDRS_WINDOW_SHOT_ID=Town` limita la captura
+//! a una sola entrada de [`WINDOW_PARITY_MATRIX`].
 //!
 //! Inventario cubierto: ver [`windows_shot_covered_ids`] (debe == `FloatingWindowId::ALL`).
 //!
 //! Resolución opcional: `OPENTTDRS_SHOT_RES=1280x720` o `1920x1080`.
+//! Escala opcional: `OPENTTDRS_SHOT_UI_SCALE=1` o `2`.
 
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
+use bevy::ui::UiScale;
 use bevy::window::PrimaryWindow;
 use openttdrs_core::prelude::*;
+use std::fmt::Write as _;
 
 use crate::state::{ClientScreen, SimWorld};
 use crate::ui::ai_settings_window::AiSettingsWindowState;
@@ -72,14 +76,427 @@ pub(crate) fn windows_shot_covered_ids() -> &'static [FloatingWindowId] {
     FloatingWindowId::ALL
 }
 
+/// Estado de la ruta equivalente en OpenTTD 15.3.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum WindowParityKind {
+    /// Ventana directamente comparable con una clase upstream.
+    Upstream,
+    /// UI propia del port: se inventaría, pero no se fuerza una falsa equivalencia.
+    Extension,
+}
+
+/// Entrada del inventario verificable de ventanas (#240).
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct WindowParityEntry {
+    pub(crate) id: FloatingWindowId,
+    pub(crate) family: &'static str,
+    pub(crate) upstream_source: &'static str,
+    pub(crate) upstream_window: &'static str,
+    pub(crate) parent: Option<FloatingWindowId>,
+    pub(crate) kind: WindowParityKind,
+}
+
+macro_rules! upstream_window {
+    ($id:ident, $family:literal, $source:literal, $window:literal) => {
+        WindowParityEntry {
+            id: FloatingWindowId::$id,
+            family: $family,
+            upstream_source: $source,
+            upstream_window: $window,
+            parent: None,
+            kind: WindowParityKind::Upstream,
+        }
+    };
+    ($id:ident, $family:literal, $source:literal, $window:literal, $parent:ident) => {
+        WindowParityEntry {
+            id: FloatingWindowId::$id,
+            family: $family,
+            upstream_source: $source,
+            upstream_window: $window,
+            parent: Some(FloatingWindowId::$parent),
+            kind: WindowParityKind::Upstream,
+        }
+    };
+}
+
+macro_rules! extension_window {
+    ($id:ident, $family:literal) => {
+        WindowParityEntry {
+            id: FloatingWindowId::$id,
+            family: $family,
+            upstream_source: "",
+            upstream_window: "",
+            parent: None,
+            kind: WindowParityKind::Extension,
+        }
+    };
+}
+
+/// Matriz OpenTTD 15.3 commit `14ec60f`: cada ventana del port aparece una vez.
+pub(crate) const WINDOW_PARITY_MATRIX: &[WindowParityEntry] = &[
+    upstream_window!(Town, "world", "town_gui.cpp", "WC_TOWN_VIEW"),
+    upstream_window!(TownDirectory, "world", "town_gui.cpp", "WC_TOWN_DIRECTORY"),
+    upstream_window!(
+        IndustryDirectory,
+        "world",
+        "industry_gui.cpp",
+        "WC_INDUSTRY_DIRECTORY"
+    ),
+    upstream_window!(Industry, "world", "industry_gui.cpp", "WC_INDUSTRY_VIEW"),
+    upstream_window!(
+        StationDirectory,
+        "world",
+        "station_gui.cpp",
+        "WC_STATION_LIST"
+    ),
+    upstream_window!(
+        VehicleList,
+        "vehicles",
+        "vehicle_gui.cpp",
+        "WC_TRAINS_LIST/WC_ROADVEH_LIST/WC_SHIPS_LIST/WC_AIRCRAFT_LIST"
+    ),
+    upstream_window!(
+        SubsidyList,
+        "economy",
+        "subsidy_gui.cpp",
+        "WC_SUBSIDIES_LIST"
+    ),
+    upstream_window!(Depot, "vehicles", "depot_gui.cpp", "WC_VEHICLE_DEPOT"),
+    upstream_window!(
+        BuyVehicle,
+        "vehicles",
+        "build_vehicle_gui.cpp",
+        "WC_BUILD_VEHICLE",
+        Depot
+    ),
+    upstream_window!(Vehicle, "vehicles", "vehicle_gui.cpp", "WC_VEHICLE_VIEW"),
+    upstream_window!(
+        VehicleDetails,
+        "vehicles",
+        "vehicle_gui.cpp",
+        "WC_VEHICLE_DETAILS",
+        Vehicle
+    ),
+    upstream_window!(
+        RailStationPicker,
+        "construction",
+        "rail_gui.cpp",
+        "WC_BUILD_STATION"
+    ),
+    upstream_window!(
+        AirportPicker,
+        "construction",
+        "airport_gui.cpp",
+        "WC_BUILD_STATION"
+    ),
+    upstream_window!(
+        BridgePicker,
+        "construction",
+        "bridge_gui.cpp",
+        "WC_BUILD_BRIDGE"
+    ),
+    upstream_window!(
+        DestinationPicker,
+        "vehicles",
+        "station_gui.cpp",
+        "WC_SELECT_STATION",
+        Orders
+    ),
+    upstream_window!(NewsHistory, "reports", "news_gui.cpp", "WC_MESSAGE_HISTORY"),
+    upstream_window!(Finances, "economy", "company_gui.cpp", "WC_FINANCES"),
+    upstream_window!(
+        NewsSettings,
+        "reports",
+        "news_gui.cpp",
+        "WC_MESSAGE_OPTIONS"
+    ),
+    upstream_window!(
+        PathfindingSettings,
+        "settings",
+        "settings_gui.cpp",
+        "WC_GAME_OPTIONS"
+    ),
+    upstream_window!(
+        CargoDistSettings,
+        "settings",
+        "settings_gui.cpp",
+        "WC_GAME_OPTIONS"
+    ),
+    upstream_window!(AiSettings, "settings", "ai/ai_gui.cpp", "WC_GAME_OPTIONS"),
+    upstream_window!(
+        NewGrf,
+        "settings",
+        "newgrf_gui.cpp",
+        "WC_GAME_OPTIONS/GS_NEWGRF"
+    ),
+    upstream_window!(SoundMusic, "settings", "music_gui.cpp", "WC_MUSIC_WINDOW"),
+    upstream_window!(
+        Timetable,
+        "vehicles",
+        "timetable_gui.cpp",
+        "WC_VEHICLE_TIMETABLE",
+        Vehicle
+    ),
+    upstream_window!(
+        Orders,
+        "vehicles",
+        "order_gui.cpp",
+        "WC_VEHICLE_ORDERS",
+        Vehicle
+    ),
+    upstream_window!(
+        Refit,
+        "vehicles",
+        "vehicle_gui.cpp",
+        "WC_VEHICLE_REFIT",
+        Vehicle
+    ),
+    upstream_window!(
+        SharedOrders,
+        "vehicles",
+        "vehicle_gui.cpp",
+        "WC_VEHICLE_LIST"
+    ),
+    upstream_window!(
+        Autoreplace,
+        "vehicles",
+        "autoreplace_gui.cpp",
+        "WC_REPLACE_VEHICLE"
+    ),
+    upstream_window!(
+        Graphs,
+        "economy",
+        "graph_gui.cpp",
+        "WC_INCOME_GRAPH and related graph classes"
+    ),
+    upstream_window!(
+        CargoPaymentRates,
+        "economy",
+        "graph_gui.cpp",
+        "WC_PAYMENT_RATES"
+    ),
+    upstream_window!(
+        DisplayOptions,
+        "settings",
+        "settings_gui.cpp",
+        "WC_GAME_OPTIONS"
+    ),
+    upstream_window!(
+        ExtraViewport,
+        "world",
+        "viewport_gui.cpp",
+        "WC_EXTRA_VIEW_PORT"
+    ),
+    upstream_window!(SignList, "world", "signs_gui.cpp", "WC_SIGN_LIST"),
+    upstream_window!(
+        LinkGraphLegend,
+        "world",
+        "linkgraph/linkgraph_gui.cpp",
+        "WC_LINKGRAPH_LEGEND"
+    ),
+    upstream_window!(
+        SignalPicker,
+        "construction",
+        "rail_gui.cpp",
+        "WC_BUILD_SIGNAL"
+    ),
+    upstream_window!(Help, "settings", "help_gui.cpp", "WC_HELPWIN"),
+    extension_window!(DevConsole, "debug"),
+    upstream_window!(TileInspector, "debug", "misc_gui.cpp", "WC_LAND_INFO"),
+    upstream_window!(CheatWindow, "settings", "cheat_gui.cpp", "WC_CHEATS"),
+    upstream_window!(
+        GenLand,
+        "editor",
+        "genworld_gui.cpp",
+        "WC_GENERATE_LANDSCAPE"
+    ),
+    upstream_window!(Goals, "gamescript", "goal_gui.cpp", "WC_GOALS_LIST"),
+    upstream_window!(Story, "gamescript", "story_gui.cpp", "WC_STORY_BOOK"),
+    upstream_window!(League, "gamescript", "league_gui.cpp", "WC_LEAGUE"),
+];
+
+/// Política inicial declarada por `WindowDesc` en OpenTTD 15.3.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ReferencePlacement {
+    Auto,
+    Center,
+}
+
+/// Geometría explícita del descriptor upstream. Un eje `None` significa que
+/// 15.3 lo calcula desde el árbol de widgets (`0` o constante dinámica).
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ReferenceGeometry {
+    pub(crate) id: FloatingWindowId,
+    pub(crate) variant: &'static str,
+    pub(crate) placement: ReferencePlacement,
+    pub(crate) width: Option<u16>,
+    pub(crate) height: Option<u16>,
+}
+
+macro_rules! reference_geometry {
+    ($id:ident, $variant:literal, $placement:ident, $width:expr, $height:expr) => {
+        ReferenceGeometry {
+            id: FloatingWindowId::$id,
+            variant: $variant,
+            placement: ReferencePlacement::$placement,
+            width: $width,
+            height: $height,
+        }
+    };
+}
+
+/// Tamaños iniciales que 15.3 expresa directamente en sus `WindowDesc`.
+/// Las variantes comparten ID mientras #242 no soporte `WindowKey`.
+pub(crate) const WINDOW_REFERENCE_GEOMETRY: &[ReferenceGeometry] = &[
+    reference_geometry!(Town, "game", Auto, Some(260), None),
+    reference_geometry!(TownDirectory, "default", Auto, Some(208), Some(202)),
+    reference_geometry!(Industry, "default", Auto, Some(260), Some(120)),
+    reference_geometry!(IndustryDirectory, "default", Auto, Some(428), Some(190)),
+    reference_geometry!(StationDirectory, "default", Auto, Some(358), Some(162)),
+    reference_geometry!(VehicleList, "train", Auto, Some(325), Some(246)),
+    reference_geometry!(
+        VehicleList,
+        "road/ship/aircraft",
+        Auto,
+        Some(260),
+        Some(246)
+    ),
+    reference_geometry!(Vehicle, "train", Auto, Some(250), Some(134)),
+    reference_geometry!(Vehicle, "road/ship/aircraft", Auto, Some(250), Some(116)),
+    reference_geometry!(VehicleDetails, "train", Auto, Some(405), Some(178)),
+    reference_geometry!(
+        VehicleDetails,
+        "road/ship/aircraft",
+        Auto,
+        Some(405),
+        Some(113)
+    ),
+    reference_geometry!(BridgePicker, "default", Auto, Some(200), Some(114)),
+    reference_geometry!(DestinationPicker, "default", Auto, Some(200), Some(180)),
+    reference_geometry!(NewsHistory, "default", Auto, Some(400), Some(140)),
+    reference_geometry!(PathfindingSettings, "settings", Center, None, None),
+    reference_geometry!(CargoDistSettings, "settings", Center, None, None),
+    reference_geometry!(AiSettings, "config", Center, None, None),
+    reference_geometry!(NewGrf, "settings", Center, Some(300), Some(263)),
+    reference_geometry!(SoundMusic, "main", Auto, None, None),
+    reference_geometry!(Timetable, "default", Auto, Some(400), Some(130)),
+    reference_geometry!(Orders, "owned", Auto, Some(384), Some(100)),
+    reference_geometry!(Orders, "competitor", Auto, Some(384), Some(86)),
+    reference_geometry!(Refit, "default", Auto, Some(240), Some(174)),
+    reference_geometry!(DisplayOptions, "settings", Center, None, None),
+    reference_geometry!(ExtraViewport, "default", Auto, Some(300), Some(268)),
+    reference_geometry!(Help, "default", Center, None, None),
+    reference_geometry!(GenLand, "main", Center, None, None),
+];
+
+fn window_id_by_storage_key(requested: &str) -> Option<FloatingWindowId> {
+    WINDOW_PARITY_MATRIX
+        .iter()
+        .find(|entry| {
+            entry
+                .id
+                .storage_key()
+                .eq_ignore_ascii_case(requested.trim())
+        })
+        .map(|entry| entry.id)
+}
+
+fn requested_window_shot_id() -> Result<Option<FloatingWindowId>, String> {
+    let Ok(requested) = std::env::var("OPENTTDRS_WINDOW_SHOT_ID") else {
+        return Ok(None);
+    };
+    if requested.trim().is_empty() {
+        return Ok(None);
+    }
+    window_id_by_storage_key(&requested)
+        .map(Some)
+        .ok_or(requested)
+}
+
+fn json_string(value: &str) -> String {
+    format!("{value:?}")
+}
+
+fn window_parity_matrix_json() -> String {
+    let mut output = String::from(
+        "{\n  \"schema_version\": 1,\n  \"openttd_commit\": \"14ec60f248547d4d062a1160f0fc26d742319888\",\n  \"windows\": [\n",
+    );
+    for (index, entry) in WINDOW_PARITY_MATRIX.iter().enumerate() {
+        let kind = match entry.kind {
+            WindowParityKind::Upstream => "upstream",
+            WindowParityKind::Extension => "extension",
+        };
+        let parent = entry
+            .parent
+            .map(|id| json_string(id.storage_key()))
+            .unwrap_or_else(|| "null".to_owned());
+        let _ = write!(
+            output,
+            "    {{\"id\":{},\"family\":{},\"kind\":{},\"upstream_source\":{},\"upstream_window\":{},\"parent\":{},\"geometry\":[",
+            json_string(entry.id.storage_key()),
+            json_string(entry.family),
+            json_string(kind),
+            json_string(entry.upstream_source),
+            json_string(entry.upstream_window),
+            parent,
+        );
+        for (geometry_index, geometry) in WINDOW_REFERENCE_GEOMETRY
+            .iter()
+            .filter(|geometry| geometry.id == entry.id)
+            .enumerate()
+        {
+            if geometry_index > 0 {
+                output.push(',');
+            }
+            let placement = match geometry.placement {
+                ReferencePlacement::Auto => "auto",
+                ReferencePlacement::Center => "center",
+            };
+            let width = geometry
+                .width
+                .map_or_else(|| "null".to_owned(), |v| v.to_string());
+            let height = geometry
+                .height
+                .map_or_else(|| "null".to_owned(), |v| v.to_string());
+            let _ = write!(
+                output,
+                "{{\"variant\":{},\"placement\":{},\"width\":{},\"height\":{}}}",
+                json_string(geometry.variant),
+                json_string(placement),
+                width,
+                height,
+            );
+        }
+        let comma = if index + 1 == WINDOW_PARITY_MATRIX.len() {
+            ""
+        } else {
+            ","
+        };
+        let _ = writeln!(output, "]}}{comma}");
+    }
+    output.push_str("  ]\n}\n");
+    output
+}
+
+fn export_window_parity_matrix_if_requested() {
+    let Ok(path) = std::env::var("OPENTTDRS_WINDOW_MATRIX") else {
+        return;
+    };
+    match std::fs::write(&path, window_parity_matrix_json()) {
+        Ok(()) => info!("window parity: matriz JSON guardada en {path}"),
+        Err(error) => error!("window parity: no se pudo escribir {path}: {error}"),
+    }
+}
+
 pub(crate) struct WindowsShotPlugin;
 
 impl Plugin for WindowsShotPlugin {
     fn build(&self, app: &mut App) {
+        export_window_parity_matrix_if_requested();
         if std::env::var_os("OPENTTDRS_WINDOWS_SHOT").is_some()
             || std::env::var_os("OPENTTDRS_MAP_SHOT").is_some()
         {
-            app.add_systems(Startup, apply_shot_resolution);
+            app.add_systems(Startup, apply_shot_settings);
         }
         if std::env::var_os("OPENTTDRS_WINDOWS_SHOT").is_some() {
             app.add_systems(
@@ -117,13 +534,28 @@ fn parse_shot_resolution() -> Option<(u32, u32)> {
     Some((w, h))
 }
 
-fn apply_shot_resolution(mut windows: Query<&mut Window, With<PrimaryWindow>>) {
-    let Some((w, h)) = parse_shot_resolution() else {
-        return;
-    };
-    for mut window in &mut windows {
-        window.resolution.set(w as f32, h as f32);
-        info!("shot: resolución {w}×{h}");
+fn parse_shot_ui_scale(raw: &str) -> Option<f32> {
+    let scale = raw.trim().parse::<f32>().ok()?;
+    (scale.is_finite() && (0.5..=4.0).contains(&scale)).then_some(scale)
+}
+
+fn apply_shot_settings(
+    mut windows: Query<&mut Window, With<PrimaryWindow>>,
+    mut ui_scale: ResMut<UiScale>,
+) {
+    if let Some((w, h)) = parse_shot_resolution() {
+        for mut window in &mut windows {
+            window.resolution.set(w as f32, h as f32);
+            info!("shot: resolución {w}×{h}");
+        }
+    }
+    if let Ok(raw) = std::env::var("OPENTTDRS_SHOT_UI_SCALE") {
+        if let Some(scale) = parse_shot_ui_scale(&raw) {
+            ui_scale.0 = scale;
+            info!("shot: escala UI {scale}");
+        } else {
+            error!("shot: OPENTTDRS_SHOT_UI_SCALE inválida: {raw:?}; rango permitido 0.5..=4");
+        }
     }
 }
 
@@ -277,23 +709,38 @@ fn windows_shot_driver(world: &mut World, mut frame: Local<u32>) {
         open_all_windows_for_shot(world);
     }
 
-    // Fuerza visibilidad de pickers tool-gated (Airport/Signal/Bridge/RailStation)
-    // que el sync ocultaría por la herramienta activa única.
+    // Fuerza visibilidad de pickers tool-gated. En modo individual oculta el
+    // resto aunque sus sistemas de sync intenten reabrirlos.
     if (OPEN_FRAME..=SHOT_FRAME).contains(&*frame) {
+        let selection = requested_window_shot_id();
         let mut q = world.query::<(&FloatingWindow, &mut Visibility)>();
-        for (_, mut vis) in q.iter_mut(world) {
-            *vis = Visibility::Visible;
+        for (window, mut vis) in q.iter_mut(world) {
+            *vis = if selection
+                .as_ref()
+                .is_ok_and(|selected| selected.is_none_or(|id| id == window.id))
+            {
+                Visibility::Visible
+            } else {
+                Visibility::Hidden
+            };
         }
     }
 
-    if *frame == SHOT_FRAME
-        && let Ok(path) = std::env::var("OPENTTDRS_WINDOWS_SHOT")
-    {
-        info!("windows_shot: guardando captura en {path}");
-        world
-            .commands()
-            .spawn(Screenshot::primary_window())
-            .observe(save_to_disk(path));
+    if *frame == SHOT_FRAME {
+        match requested_window_shot_id() {
+            Ok(_) => {
+                if let Ok(path) = std::env::var("OPENTTDRS_WINDOWS_SHOT") {
+                    info!("windows_shot: guardando captura en {path}");
+                    world
+                        .commands()
+                        .spawn(Screenshot::primary_window())
+                        .observe(save_to_disk(path));
+                }
+            }
+            Err(id) => error!(
+                "windows_shot: OPENTTDRS_WINDOW_SHOT_ID desconocido: {id:?}; no se genera captura"
+            ),
+        }
     }
     if *frame == EXIT_FRAME {
         world.write_message(AppExit::Success);
@@ -438,5 +885,84 @@ mod tests {
             FloatingWindowId::ALL,
             "actualizar windows_shot_covered_ids al añadir FloatingWindowId"
         );
+    }
+
+    #[test]
+    fn parity_matrix_covers_every_window_exactly_once() {
+        assert_eq!(WINDOW_PARITY_MATRIX.len(), FloatingWindowId::ALL.len());
+        for id in FloatingWindowId::ALL {
+            assert_eq!(
+                WINDOW_PARITY_MATRIX
+                    .iter()
+                    .filter(|entry| entry.id == *id)
+                    .count(),
+                1,
+                "la matriz debe contener exactamente una entrada para {id:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn upstream_entries_name_their_reference() {
+        for entry in WINDOW_PARITY_MATRIX {
+            if entry.kind == WindowParityKind::Upstream {
+                assert!(!entry.family.is_empty());
+                assert!(entry.upstream_source.ends_with(".cpp"));
+                assert!(!entry.upstream_window.is_empty());
+            }
+            if let Some(parent) = entry.parent {
+                assert_ne!(parent, entry.id);
+                assert!(FloatingWindowId::ALL.contains(&parent));
+            }
+        }
+    }
+
+    #[test]
+    fn reference_geometry_points_to_inventory_and_has_unique_variants() {
+        for (index, geometry) in WINDOW_REFERENCE_GEOMETRY.iter().enumerate() {
+            assert!(FloatingWindowId::ALL.contains(&geometry.id));
+            assert!(!geometry.variant.is_empty());
+            assert!(geometry.width.is_none_or(|value| value > 0));
+            assert!(geometry.height.is_none_or(|value| value > 0));
+            assert!(
+                !WINDOW_REFERENCE_GEOMETRY[..index]
+                    .iter()
+                    .any(|other| other.id == geometry.id && other.variant == geometry.variant)
+            );
+            let _placement = geometry.placement;
+        }
+    }
+
+    #[test]
+    fn individual_shot_ids_use_stable_storage_keys() {
+        assert_eq!(
+            window_id_by_storage_key("Vehicle"),
+            Some(FloatingWindowId::Vehicle)
+        );
+        assert_eq!(
+            window_id_by_storage_key("orders"),
+            Some(FloatingWindowId::Orders)
+        );
+        assert_eq!(window_id_by_storage_key("does-not-exist"), None);
+    }
+
+    #[test]
+    fn shot_ui_scale_is_finite_and_bounded() {
+        assert_eq!(parse_shot_ui_scale("1"), Some(1.0));
+        assert_eq!(parse_shot_ui_scale("2.0"), Some(2.0));
+        assert_eq!(parse_shot_ui_scale("0"), None);
+        assert_eq!(parse_shot_ui_scale("NaN"), None);
+        assert_eq!(parse_shot_ui_scale("5"), None);
+    }
+
+    #[test]
+    fn machine_readable_matrix_contains_inventory_and_geometry() {
+        let json = window_parity_matrix_json();
+        assert!(json.starts_with("{\n  \"schema_version\": 1,"));
+        for id in FloatingWindowId::ALL {
+            assert!(json.contains(&format!("\"id\":{:?}", id.storage_key())));
+        }
+        assert!(json.contains("\"variant\":\"train\""));
+        assert!(json.contains("\"placement\":\"center\""));
     }
 }

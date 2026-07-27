@@ -1,3 +1,61 @@
 # Screenshots de paridad
 
 Capturas de evidencia visual. Documentación viva: [../../PARIDAD.md](../../PARIDAD.md).
+
+## Ventanas y subventanas
+
+La matriz tipada `WINDOW_PARITY_MATRIX`, en
+`crates/openttdrs-client/src/ui/windows_shot.rs`, relaciona cada
+`FloatingWindowId` con su familia, archivo/clase de OpenTTD 15.3, parent lógico
+y condición de ventana upstream o extensión propia. Un test exige cobertura
+exacta: una entrada por cada ID, sin faltantes ni duplicados.
+
+`WINDOW_REFERENCE_GEOMETRY` registra aparte los tamaños iniciales expresados
+directamente por `WindowDesc`. Mantiene variantes cuando 15.3 usa descriptores
+distintos (por ejemplo tren frente a carretera/barco/aeronave) y usa `None`
+cuando el eje se calcula desde los widgets. Esos valores son el baseline de
+geometría para #243, no dimensiones elegidas por el port.
+
+La matriz completa puede exportarse como JSON para tooling/CI:
+
+```bash
+OPENTTDRS_WINDOW_MATRIX=/tmp/openttdrs-window-matrix.json \
+  cargo run -p openttdrs-client
+```
+
+El archivo se escribe al instalar el plugin de UI; se puede cerrar el cliente
+una vez iniciado. El JSON incluye versión de schema, commit upstream, parent y
+las variantes de geometría conocidas.
+
+La referencia upstream es el commit `14ec60f248547d4d062a1160f0fc26d742319888`
+(tag 15.3), registrado en `../openttd-reference.json`.
+
+Para capturar la composición completa en las dos resoluciones base:
+
+```bash
+bash scripts/capture_ui_reference.sh
+```
+
+Para aislar una ventana por su `storage_key`:
+
+```bash
+OPENTTDRS_WINDOW_SHOT_ID=Vehicle bash scripts/capture_ui_reference.sh
+OPENTTDRS_WINDOW_SHOT_ID=Orders bash scripts/capture_ui_reference.sh
+```
+
+Para comprobar escalado:
+
+```bash
+OPENTTDRS_WINDOW_SHOT_ID=Vehicle OPENTTDRS_SHOT_UI_SCALE=2 \
+  bash scripts/capture_ui_reference.sh
+```
+
+Las salidas quedan como `1280x720/window_<id>_<scale>x.png` y
+`1920x1080/window_<id>_<scale>x.png`. Un ID desconocido no genera captura y se
+informa como error; antes de incorporar una referencia se debe usar una clave
+presente en la matriz. Las escalas aceptadas van de 0.5× a 4×.
+
+Las capturas por ventana son el insumo visual de #240. Las diferencias deben
+clasificarse en chrome/iconos (#241), lifecycle (#242), geometría (#243) o la
+familia funcional correspondiente (#244–#248), sin aceptar tolerancias
+anónimas.

@@ -209,6 +209,23 @@ impl TrainSpriteGraphics {
             .filter(|s| !s.is_empty())
     }
 
+    /// Resuelve el grupo Action3 específico de una carga y usa el grupo default
+    /// cuando esa carga no tiene asignación. Es la selección de sprites de los
+    /// features de vehículos de `OpenTTD`.
+    pub fn views_for_local_id_cargo_ctx(
+        &self,
+        local_id: u8,
+        cargo: Option<crate::cargo::CargoType>,
+        ctx: &mut Action2EvalCtx,
+    ) -> Option<&[DecodedSprite]> {
+        if let Some(selector) = cargo.map(crate::cargo::CargoType::temperate_id)
+            && self.has_specific_assignment(local_id, selector)
+        {
+            return self.views_for_specific_ctx(local_id, selector, ctx);
+        }
+        self.views_for_local_id_ctx(local_id, ctx)
+    }
+
     /// ¿Action3 asignó este grupo específico al id local?
     #[must_use]
     pub fn has_specific_assignment(&self, local_id: u8, selector: u8) -> bool {

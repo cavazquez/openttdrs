@@ -147,12 +147,13 @@ impl NewGrfTrainSpriteCache {
         &mut self,
         engine: &EngineDef,
         dir: usize,
+        cargo: Option<openttdrs_core::CargoType>,
         colour: CompanyColour,
         ctx: &mut openttdrs_core::Action2EvalCtx,
         images: &mut Assets<Image>,
     ) -> Option<Handle<Image>> {
         let runtime = engine.newgrf_runtime.as_ref()?;
-        let views = runtime.views_for_local_id_ctx(engine.newgrf_local_id, ctx)?;
+        let views = runtime.views_for_local_id_cargo_ctx(engine.newgrf_local_id, cargo, ctx)?;
         if views.is_empty() {
             return None;
         }
@@ -353,8 +354,7 @@ impl TruckHandles {
         images: &mut Assets<Image>,
     ) -> Handle<Image> {
         let dir = openttdrs_core::vehicle_render_direction_at(v, pose).min(7) as usize;
-        if v.kind == VehicleKind::Train
-            && let Some(eid) = v.engine_id
+        if let Some(eid) = v.engine_id
             && let Some(eng) = super::engine_in_sim(sim, eid)
         {
             let colour = owner_colour.unwrap_or(CompanyColour::DarkBlue);
@@ -371,7 +371,9 @@ impl TruckHandles {
                     &sim.state.newgrf_stack,
                     eng.newgrf_grfid,
                 ));
-                if let Some(handle) = cache.handle_for_runtime(eng, dir, colour, &mut ctx, images) {
+                if let Some(handle) =
+                    cache.handle_for_runtime(eng, dir, v.cargo_type, colour, &mut ctx, images)
+                {
                     return handle;
                 }
             } else if let Some(handle) = cache.handle_for(eng, dir, colour, images) {

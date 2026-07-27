@@ -882,7 +882,7 @@ fn update_window_chrome_button_style(
     }
 }
 
-#[allow(clippy::type_complexity)]
+#[allow(clippy::type_complexity, clippy::too_many_arguments)]
 fn update_window_chrome_buttons(
     shade_buttons: Query<
         (&Interaction, &ChildOf, &Children),

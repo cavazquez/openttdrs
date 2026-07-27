@@ -28,6 +28,10 @@ no existe. Ningún nivel implica compatibilidad binaria o de red con OpenTTD.
 | Guardado propio JSON | **Alta** | Formato versionado con migraciones y determinismo mid-run |
 | Compatibilidad `.sav` | **Inicial-media** | Import/export parcial; no es round-trip completo ni garantía de compatibilidad histórica |
 | NewGRF | **Media de parseo / inicial-media de runtime** | Actions 0–14 reconocidas y varios paths Action 1/2/3/5; callbacks y semántica total incompletos |
+
+La cobertura declarada por feature y propiedad está en
+[`parity/newgrf-action0-matrix.md`](parity/newgrf-action0-matrix.md); consumir los
+bytes de una propiedad no cuenta allí como soporte runtime.
 | Multijugador | **Inicial** | Lockstep TCP, dedicated, late join y host migration; protocolo propio sin lobby, auth, cifrado ni interoperabilidad |
 | IA / GameScript / editor | **Inicial-media** | TransCargo/RoadHaul, GS-lite y editor propios; Squirrel compatible ausente |
 | Render/UI vanilla | **Media-alta visual / media funcional** | Cobertura OpenGFX amplia; no hay oracle visual total ni internacionalización completa |

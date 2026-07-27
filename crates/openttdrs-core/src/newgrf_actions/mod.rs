@@ -11,14 +11,15 @@ pub mod inspect;
 
 // Re-exports públicos
 pub use action0::{
-    ACTION0_FEATURE_INDUSTRYTILES, ACTION0_FEATURE_RAILTYPES, ACTION0_FEATURE_ROADTYPES,
+    ACTION0_FEATURE_AIRCRAFT, ACTION0_FEATURE_INDUSTRYTILES, ACTION0_FEATURE_RAILTYPES,
+    ACTION0_FEATURE_ROAD_VEHICLES, ACTION0_FEATURE_ROADTYPES, ACTION0_FEATURE_SHIPS,
     ACTION0_FEATURE_STATIONS, ACTION0_FEATURE_TRAINS, Action0Header, ParsedIndustryTileMeta,
-    ParsedRailTypeMeta, ParsedRoadTypeMeta, ParsedStationMeta, ParsedTrainMeta,
+    ParsedRailTypeMeta, ParsedRoadTypeMeta, ParsedStationMeta, ParsedTrainMeta, ParsedVehicleMeta,
     collect_industry_tile_metas_from_grf, collect_railtype_metas_from_grf,
     collect_roadtype_metas_from_grf, collect_station_metas_from_grf, collect_train_metas_from_grf,
-    for_each_pseudo_payload, parse_action0_header, parse_action0_industry_tile_meta,
-    parse_action0_railtype_metas, parse_action0_roadtype_meta, parse_action0_station_meta,
-    parse_action0_train_meta,
+    collect_vehicle_metas_from_grf, for_each_pseudo_payload, parse_action0_header,
+    parse_action0_industry_tile_meta, parse_action0_railtype_metas, parse_action0_roadtype_meta,
+    parse_action0_station_meta, parse_action0_train_meta, parse_action0_vehicle_metas,
 };
 
 pub use apply::{
@@ -573,6 +574,140 @@ mod tests {
         assert_eq!(eng.name, "Locomotora NewGRF");
         assert_eq!(eng.kind, VehicleKind::Train);
         assert!(eng.newgrf_preview().is_none());
+    }
+
+    #[test]
+    fn parse_action0_vehicle_features_with_upstream_widths() {
+        let road = vec![
+            0x00,
+            ACTION0_FEATURE_ROAD_VEHICLES,
+            0x08,
+            0x01,
+            0x07,
+            0x00,
+            0x42,
+            0x0E, // 3650 days after 1920 -> 1930
+            0x08,
+            120,
+            0x09,
+            80,
+            0x0F,
+            32,
+            0x10,
+            0,
+            0x11,
+            144,
+            0x13,
+            90,
+            0x14,
+            44,
+        ];
+        let meta = parse_action0_vehicle_metas(&road).unwrap().remove(0);
+        assert_eq!(meta.local_id, 7);
+        assert_eq!(meta.kind, VehicleKind::Bus);
+        assert_eq!(meta.intro_year, 1930);
+        assert_eq!(meta.max_speed, 120);
+        assert_eq!(meta.capacity, 32);
+        assert_eq!(meta.power_hp, 900);
+        assert_eq!(meta.weight_t, 11);
+
+        let ship = vec![
+            0x00,
+            ACTION0_FEATURE_SHIPS,
+            0x04,
+            0x01,
+            0x02,
+            0x0A,
+            100,
+            0x0C,
+            7,
+            0x0D,
+            0x2C,
+            0x01,
+            0x23,
+            0x20,
+            0x01,
+        ];
+        let meta = parse_action0_vehicle_metas(&ship).unwrap().remove(0);
+        assert_eq!(meta.kind, VehicleKind::Ship);
+        assert_eq!(meta.cargo, Some(crate::CargoType::Wood));
+        assert_eq!(meta.capacity, 300);
+        assert_eq!(meta.max_speed, 288);
+
+        let aircraft = vec![
+            0x00,
+            ACTION0_FEATURE_AIRCRAFT,
+            0x04,
+            0x01,
+            0x09,
+            0x0B,
+            160,
+            0x0C,
+            40,
+            0x0E,
+            90,
+            0x0F,
+            0x78,
+            0x00,
+        ];
+        let meta = parse_action0_vehicle_metas(&aircraft).unwrap().remove(0);
+        assert_eq!(meta.kind, VehicleKind::Aircraft);
+        assert_eq!(meta.max_speed, 512);
+        assert_eq!(meta.capacity, 120);
+    }
+
+    #[test]
+    fn apply_registers_road_ship_and_aircraft_in_runtime_catalog() {
+        let fixtures = [
+            (
+                ACTION0_FEATURE_ROAD_VEHICLES,
+                vec![0x00, 0x01, 0x03, 0x01, 0x04, 0x08, 100, 0x0F, 25, 0x10, 5],
+                VehicleKind::Truck,
+            ),
+            (
+                ACTION0_FEATURE_SHIPS,
+                vec![0x00, 0x02, 0x03, 0x01, 0x05, 0x0B, 80, 0x0C, 0, 0x0D, 90, 0],
+                VehicleKind::Ship,
+            ),
+            (
+                ACTION0_FEATURE_AIRCRAFT,
+                vec![0x00, 0x03, 0x02, 0x01, 0x06, 0x0C, 32, 0x0F, 70, 0],
+                VehicleKind::Aircraft,
+            ),
+        ];
+        for (index, (feature, action0, expected_kind)) in fixtures.into_iter().enumerate() {
+            let filename = format!("vehicle-{index}.grf");
+            let bytes = build_grf_v2_with_action0_and_action8(
+                &action0,
+                [b'V', b'E', 0, u8::try_from(index).unwrap_or(0)],
+                "vehicle",
+                "",
+            );
+            let dir = tempfile_dir_with(&filename, &bytes);
+            let mut state = GameState::new(4, 4);
+            state
+                .newgrf_stack
+                .push(crate::NewGrfEntry::new(&filename, u32::from(feature) + 10));
+            apply_newgrf_vehicles_trains(&mut state, &[&dir]);
+            let eng = state.engine_catalog.iter().find(|e| e.from_newgrf).unwrap();
+            assert_eq!(eng.kind, expected_kind);
+            assert_eq!(eng.newgrf_local_id, action0[4]);
+            assert!(
+                crate::engine::engines_for_depot_kind_in(
+                    &state.engine_catalog,
+                    match expected_kind {
+                        VehicleKind::Ship => crate::engine::DepotPurchaseKind::Ship,
+                        VehicleKind::Aircraft => crate::engine::DepotPurchaseKind::Aircraft,
+                        _ => crate::engine::DepotPurchaseKind::Road,
+                    },
+                    2050,
+                    crate::engine::EngineCatalogSort::Catalog,
+                    crate::engine::RoadEngineFilter::All,
+                )
+                .iter()
+                .any(|candidate| candidate.id == eng.id)
+            );
+        }
     }
 
     #[test]

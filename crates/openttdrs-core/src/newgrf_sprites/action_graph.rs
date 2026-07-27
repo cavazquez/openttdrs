@@ -1,7 +1,8 @@
 //! Parseo y construcción de grafos Action1/2/3 + builders sintéticos de GRF.
 
 use crate::newgrf_actions::{
-    ACTION0_FEATURE_INDUSTRYTILES, ACTION0_FEATURE_RAILTYPES, ACTION0_FEATURE_ROADTYPES,
+    ACTION0_FEATURE_AIRCRAFT, ACTION0_FEATURE_INDUSTRYTILES, ACTION0_FEATURE_RAILTYPES,
+    ACTION0_FEATURE_ROAD_VEHICLES, ACTION0_FEATURE_ROADTYPES, ACTION0_FEATURE_SHIPS,
     ACTION0_FEATURE_STATIONS, ACTION0_FEATURE_TRAINS,
 };
 use crate::newgrf_config::{GrfContainerVersion, GrfScanError, parse_grf_full};
@@ -295,6 +296,9 @@ fn supports_action2_chain(feature: u8) -> bool {
     matches!(
         feature,
         ACTION0_FEATURE_TRAINS
+            | ACTION0_FEATURE_ROAD_VEHICLES
+            | ACTION0_FEATURE_SHIPS
+            | ACTION0_FEATURE_AIRCRAFT
             | ACTION0_FEATURE_STATIONS
             | ACTION0_FEATURE_RAILTYPES
             | ACTION0_FEATURE_ROADTYPES
@@ -389,6 +393,23 @@ pub fn collect_feature_sprite_graphics(
 /// Contenedor inválido.
 pub fn collect_train_sprite_graphics(data: &[u8]) -> Result<TrainSpriteGraphics, GrfScanError> {
     collect_feature_sprite_graphics(data, ACTION0_FEATURE_TRAINS)
+}
+
+/// Action1/2/3 road vehicles, incluido el selector Action3 por cargo.
+pub fn collect_road_vehicle_sprite_graphics(
+    data: &[u8],
+) -> Result<TrainSpriteGraphics, GrfScanError> {
+    collect_feature_sprite_graphics(data, ACTION0_FEATURE_ROAD_VEHICLES)
+}
+
+/// Action1/2/3 ships, incluido el selector Action3 por cargo.
+pub fn collect_ship_sprite_graphics(data: &[u8]) -> Result<TrainSpriteGraphics, GrfScanError> {
+    collect_feature_sprite_graphics(data, ACTION0_FEATURE_SHIPS)
+}
+
+/// Action1/2/3 aircraft, incluido el selector Action3 por cargo.
+pub fn collect_aircraft_sprite_graphics(data: &[u8]) -> Result<TrainSpriteGraphics, GrfScanError> {
+    collect_feature_sprite_graphics(data, ACTION0_FEATURE_AIRCRAFT)
 }
 
 /// Action1/3 roadtypes.

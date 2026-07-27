@@ -3,9 +3,16 @@
 use crate::newgrf_config::{GrfScanError, parse_grf_container};
 use crate::newgrf_walk::for_each_pseudo_sprite;
 use crate::road_type::RoadTramType;
+use crate::vehicle::VehicleKind;
 
 /// Feature Action0: `Trains` (`OpenTTD` `GSF_TRAINS`).
 pub const ACTION0_FEATURE_TRAINS: u8 = 0x00;
+/// Feature Action0: `RoadVehicles` (`OpenTTD` `GSF_ROADVEHICLES`).
+pub const ACTION0_FEATURE_ROAD_VEHICLES: u8 = 0x01;
+/// Feature Action0: `Ships` (`OpenTTD` `GSF_SHIPS`).
+pub const ACTION0_FEATURE_SHIPS: u8 = 0x02;
+/// Feature Action0: `Aircraft` (`OpenTTD` `GSF_AIRCRAFT`).
+pub const ACTION0_FEATURE_AIRCRAFT: u8 = 0x03;
 /// Feature Action0: `Stations` (`OpenTTD` `GSF_STATIONS`).
 pub const ACTION0_FEATURE_STATIONS: u8 = 0x04;
 /// Feature Action0: `IndustryTiles` (`OpenTTD` `GSF_INDUSTRYTILES`).
@@ -83,6 +90,91 @@ pub struct ParsedTrainMeta {
     pub intro_year: u16,
     pub max_speed: u16,
     pub power_hp: u32,
+}
+
+/// Subset de propiedades Action0 que alimenta el catálogo jugable de vehículos.
+///
+/// Los campos no representados por [`crate::engine::EngineDef`] se consumen con
+/// su ancho de `OpenTTD` 15.3, pero no se anuncian como aplicados.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParsedVehicleMeta {
+    pub local_id: u8,
+    pub kind: VehicleKind,
+    pub name: String,
+    pub intro_year: u16,
+    pub max_speed: u16,
+    pub price_factor: u8,
+    pub running_cost_factor: u8,
+    pub capacity: u32,
+    pub cargo: Option<crate::cargo::CargoType>,
+    pub power_hp: u32,
+    pub weight_t: u16,
+    pub lifelength_years: u8,
+    pub reliability_spd_dec: u16,
+}
+
+impl ParsedVehicleMeta {
+    fn defaults(feature: u8, local_id: u8) -> Option<Self> {
+        let (kind, name, speed, price, running, capacity, cargo, power, weight, life) =
+            match feature {
+                ACTION0_FEATURE_ROAD_VEHICLES => (
+                    VehicleKind::Bus,
+                    "NewGRF Road Vehicle",
+                    96,
+                    128,
+                    128,
+                    20,
+                    Some(crate::cargo::CargoType::Passengers),
+                    100,
+                    10,
+                    30,
+                ),
+                ACTION0_FEATURE_SHIPS => (
+                    VehicleKind::Ship,
+                    "NewGRF Ship",
+                    80,
+                    128,
+                    128,
+                    100,
+                    Some(crate::cargo::CargoType::Passengers),
+                    0,
+                    100,
+                    30,
+                ),
+                ACTION0_FEATURE_AIRCRAFT => (
+                    VehicleKind::Aircraft,
+                    "NewGRF Aircraft",
+                    320,
+                    128,
+                    128,
+                    100,
+                    Some(crate::cargo::CargoType::Passengers),
+                    0,
+                    30,
+                    30,
+                ),
+                _ => return None,
+            };
+        Some(Self {
+            local_id,
+            kind,
+            name: name.into(),
+            intro_year: 1920,
+            max_speed: speed,
+            price_factor: price,
+            running_cost_factor: running,
+            capacity,
+            cargo,
+            power_hp: power,
+            weight_t: weight,
+            lifelength_years: life,
+            reliability_spd_dec: if feature == ACTION0_FEATURE_SHIPS {
+                crate::engine::SHIP_RELIABILITY_SPD_DEC
+            } else {
+                crate::engine::DEFAULT_RELIABILITY_SPD_DEC
+            },
+        })
+    }
 }
 
 /// Asociación local de `RailType` Action0 (`prop 0x08`) con una etiqueta global.
@@ -566,6 +658,255 @@ pub fn collect_train_metas_from_grf(data: &[u8]) -> Vec<ParsedTrainMeta> {
     let _ = for_each_pseudo_payload(data, |payload| {
         if let Some(meta) = parse_action0_train_meta(payload) {
             out.push(meta);
+        }
+    });
+    out
+}
+
+fn read_u8(payload: &[u8], i: &mut usize) -> Option<u8> {
+    let value = *payload.get(*i)?;
+    *i += 1;
+    Some(value)
+}
+
+fn read_u16(payload: &[u8], i: &mut usize) -> Option<u16> {
+    let bytes = payload.get(*i..i.checked_add(2)?)?;
+    *i += 2;
+    Some(u16::from_le_bytes(bytes.try_into().ok()?))
+}
+
+fn skip_bytes(payload: &[u8], i: &mut usize, amount: usize) -> Option<()> {
+    let end = i.checked_add(amount)?;
+    payload.get(*i..end)?;
+    *i = end;
+    Some(())
+}
+
+fn parse_common_vehicle_property(
+    prop: u8,
+    payload: &[u8],
+    i: &mut usize,
+    metas: &mut [ParsedVehicleMeta],
+) -> Option<bool> {
+    match prop {
+        0x00 => {
+            for meta in metas {
+                let days = read_u16(payload, i)?;
+                meta.intro_year = 1920u16.saturating_add(days / 365);
+            }
+        }
+        0x02 => {
+            for meta in metas {
+                meta.reliability_spd_dec = u16::from(read_u8(payload, i)?) << 2;
+            }
+        }
+        0x03 => {
+            for meta in metas {
+                meta.lifelength_years = read_u8(payload, i)?;
+            }
+        }
+        // Model life, climate mask y load amount aún no tienen campo runtime.
+        0x04 | 0x06 | 0x07 => skip_bytes(payload, i, metas.len())?,
+        _ => return Some(false),
+    }
+    Some(true)
+}
+
+fn parse_road_vehicle_property(
+    prop: u8,
+    payload: &[u8],
+    i: &mut usize,
+    metas: &mut [ParsedVehicleMeta],
+) -> Option<()> {
+    match prop {
+        0x08 | 0x15 => {
+            for meta in metas {
+                meta.max_speed = u16::from(read_u8(payload, i)?).max(1);
+            }
+        }
+        0x09 => {
+            for meta in metas {
+                meta.running_cost_factor = read_u8(payload, i)?;
+            }
+        }
+        // 0x0A/0x16/0x1F/0x27: dword props aún no mapeadas al runtime.
+        0x0A | 0x16 | 0x1F | 0x27 => skip_bytes(payload, i, metas.len().checked_mul(4)?)?,
+        // 0x05 translation table; 0x20/0x28 extended byte (fixtures usan BYTE).
+        0x05 | 0x0E | 0x12 | 0x17 | 0x18 | 0x19 | 0x1A | 0x1B | 0x1C | 0x20 | 0x21 | 0x23
+        | 0x28 => {
+            skip_bytes(payload, i, metas.len())?;
+        }
+        0x0F => {
+            for meta in metas {
+                meta.capacity = u32::from(read_u8(payload, i)?);
+            }
+        }
+        0x10 => {
+            for meta in metas {
+                let cargo = crate::cargo::CargoType::from_temperate_id(read_u8(payload, i)?);
+                meta.cargo = cargo;
+                meta.kind = if cargo == Some(crate::cargo::CargoType::Passengers) {
+                    VehicleKind::Bus
+                } else {
+                    VehicleKind::Truck
+                };
+            }
+        }
+        0x11 => {
+            for meta in metas {
+                meta.price_factor = read_u8(payload, i)?;
+            }
+        }
+        0x13 => {
+            for meta in metas {
+                meta.power_hp = u32::from(read_u8(payload, i)?) * 10;
+            }
+        }
+        0x14 => {
+            for meta in metas {
+                meta.weight_t = u16::from(read_u8(payload, i)?).div_ceil(4);
+            }
+        }
+        0x1D | 0x1E | 0x22 | 0x26 | 0x29 => {
+            skip_bytes(payload, i, metas.len().checked_mul(2)?)?;
+        }
+        _ => return None,
+    }
+    Some(())
+}
+
+fn parse_ship_property(
+    prop: u8,
+    payload: &[u8],
+    i: &mut usize,
+    metas: &mut [ParsedVehicleMeta],
+) -> Option<()> {
+    match prop {
+        0x08 | 0x09 | 0x10 | 0x12 | 0x13 | 0x14 | 0x15 | 0x16 | 0x17 | 0x1C | 0x24 => {
+            skip_bytes(payload, i, metas.len())?;
+        }
+        0x0A => {
+            for meta in metas {
+                meta.price_factor = read_u8(payload, i)?;
+            }
+        }
+        0x0B => {
+            for meta in metas {
+                meta.max_speed = u16::from(read_u8(payload, i)?).max(1);
+            }
+        }
+        0x0C => {
+            for meta in metas {
+                meta.cargo = crate::cargo::CargoType::from_temperate_id(read_u8(payload, i)?);
+            }
+        }
+        0x0D => {
+            for meta in metas {
+                meta.capacity = u32::from(read_u16(payload, i)?);
+            }
+        }
+        0x0F => {
+            for meta in metas {
+                meta.running_cost_factor = read_u8(payload, i)?;
+            }
+        }
+        0x11 | 0x1A | 0x21 => skip_bytes(payload, i, metas.len().checked_mul(4)?)?,
+        0x18 | 0x19 | 0x1D | 0x20 | 0x25 => {
+            skip_bytes(payload, i, metas.len().checked_mul(2)?)?;
+        }
+        0x1B | 0x22 => skip_bytes(payload, i, metas.len())?,
+        0x23 => {
+            for meta in metas {
+                meta.max_speed = read_u16(payload, i)?.max(1);
+            }
+        }
+        _ => return None,
+    }
+    Some(())
+}
+
+fn parse_aircraft_property(
+    prop: u8,
+    payload: &[u8],
+    i: &mut usize,
+    metas: &mut [ParsedVehicleMeta],
+) -> Option<()> {
+    match prop {
+        0x08 | 0x09 | 0x0A | 0x0D | 0x12 | 0x14 | 0x15 | 0x16 | 0x17 | 0x1B | 0x22 => {
+            skip_bytes(payload, i, metas.len())?;
+        }
+        0x0B => {
+            for meta in metas {
+                meta.price_factor = read_u8(payload, i)?;
+            }
+        }
+        0x0C => {
+            for meta in metas {
+                meta.max_speed = (u16::from(read_u8(payload, i)?) * 128 / 10).max(1);
+            }
+        }
+        0x0E => {
+            for meta in metas {
+                meta.running_cost_factor = read_u8(payload, i)?;
+            }
+        }
+        0x0F => {
+            for meta in metas {
+                meta.capacity = u32::from(read_u16(payload, i)?);
+            }
+        }
+        0x11 => skip_bytes(payload, i, metas.len())?, // mail capacity: EngineDef has one cargo
+        0x13 | 0x1A | 0x21 => skip_bytes(payload, i, metas.len().checked_mul(4)?)?,
+        0x18 | 0x19 | 0x1C | 0x1F | 0x20 | 0x23 => {
+            skip_bytes(payload, i, metas.len().checked_mul(2)?)?;
+        }
+        _ => return None,
+    }
+    Some(())
+}
+
+/// Parsea un bloque Action0 completo de road vehicles, ships o aircraft.
+#[must_use]
+pub fn parse_action0_vehicle_metas(payload: &[u8]) -> Option<Vec<ParsedVehicleMeta>> {
+    let header = parse_action0_header(payload)?;
+    if !matches!(
+        header.feature,
+        ACTION0_FEATURE_ROAD_VEHICLES | ACTION0_FEATURE_SHIPS | ACTION0_FEATURE_AIRCRAFT
+    ) || header.num_ids == 0
+        || payload.len() < 5
+    {
+        return None;
+    }
+    let first_id = payload[4];
+    let mut metas = (0..header.num_ids)
+        .map(|offset| ParsedVehicleMeta::defaults(header.feature, first_id.wrapping_add(offset)))
+        .collect::<Option<Vec<_>>>()?;
+    let mut i = 5usize;
+    for _ in 0..header.num_props {
+        let prop = read_u8(payload, &mut i)?;
+        if parse_common_vehicle_property(prop, payload, &mut i, &mut metas)? {
+            continue;
+        }
+        match header.feature {
+            ACTION0_FEATURE_ROAD_VEHICLES => {
+                parse_road_vehicle_property(prop, payload, &mut i, &mut metas)?;
+            }
+            ACTION0_FEATURE_SHIPS => parse_ship_property(prop, payload, &mut i, &mut metas)?,
+            ACTION0_FEATURE_AIRCRAFT => parse_aircraft_property(prop, payload, &mut i, &mut metas)?,
+            _ => return None,
+        }
+    }
+    Some(metas)
+}
+
+#[must_use]
+pub fn collect_vehicle_metas_from_grf(data: &[u8], feature: u8) -> Vec<ParsedVehicleMeta> {
+    let mut out = Vec::new();
+    let _ = for_each_pseudo_payload(data, |payload| {
+        if payload.get(1) == Some(&feature)
+            && let Some(metas) = parse_action0_vehicle_metas(payload)
+        {
+            out.extend(metas);
         }
     });
     out

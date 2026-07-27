@@ -30,9 +30,10 @@ pub use pixel_codec::{
 
 // Re-exportar funciones de runtime de action_graph
 pub use action_graph::{
-    collect_feature_sprite_graphics, collect_industry_tile_sprite_graphics,
-    collect_railtype_sprite_graphics, collect_roadtype_sprite_graphics,
-    collect_station_sprite_graphics, collect_train_sprite_graphics,
+    collect_aircraft_sprite_graphics, collect_feature_sprite_graphics,
+    collect_industry_tile_sprite_graphics, collect_railtype_sprite_graphics,
+    collect_road_vehicle_sprite_graphics, collect_roadtype_sprite_graphics,
+    collect_ship_sprite_graphics, collect_station_sprite_graphics, collect_train_sprite_graphics,
 };
 
 // Re-exportar funciones de runtime de action5
@@ -935,5 +936,36 @@ mod tests {
         merge_shore_action5_block(&mut slots, &blocks[0]);
         // offset 4804 ≥ 18 → escribe en slot 0
         assert!(slots[0].is_some());
+    }
+
+    #[test]
+    fn action3_vehicle_cargo_group_overrides_default() {
+        let sprite = |red| DecodedSprite {
+            width: 1,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: vec![red, 0, 0, 255],
+            mask: Vec::new(),
+        };
+        let mut gfx = TrainSpriteGraphics {
+            sets: vec![vec![sprite(10)], vec![sprite(20)]],
+            assigns: vec![TrainSpriteAssign {
+                local_id: 4,
+                set_id: 0,
+            }],
+            ..Default::default()
+        };
+        gfx.specific_assigns
+            .insert((4, crate::CargoType::Goods.temperate_id()), 1);
+        let mut ctx = Action2EvalCtx::default();
+        let goods = gfx
+            .views_for_local_id_cargo_ctx(4, Some(crate::CargoType::Goods), &mut ctx)
+            .unwrap();
+        assert_eq!(goods[0].rgba[0], 20);
+        let coal = gfx
+            .views_for_local_id_cargo_ctx(4, Some(crate::CargoType::Coal), &mut ctx)
+            .unwrap();
+        assert_eq!(coal[0].rgba[0], 10);
     }
 }

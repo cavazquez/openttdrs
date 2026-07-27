@@ -254,23 +254,37 @@ fn spawn_catalog_dropdown(
                 BorderColor::all(BTN_BORDER),
                 Interaction::default(),
             ))
-            .with_children(|btn| match kind {
-                StationCatalogKind::Class => {
-                    btn.spawn((
-                        StationClassLabel,
-                        Text::new(initial),
-                        window_text_font(asset_server, UiFontRole::Caption),
-                        TextColor(Color::srgb(0.92, 0.88, 0.72)),
-                    ));
+            .with_children(|btn| {
+                match kind {
+                    StationCatalogKind::Class => {
+                        btn.spawn((
+                            StationClassLabel,
+                            Text::new(initial),
+                            window_text_font(asset_server, UiFontRole::Caption),
+                            TextColor(Color::srgb(0.92, 0.88, 0.72)),
+                        ));
+                    }
+                    StationCatalogKind::Spec => {
+                        btn.spawn((
+                            StationSpecLabel,
+                            Text::new(initial),
+                            window_text_font(asset_server, UiFontRole::Caption),
+                            TextColor(Color::srgb(0.92, 0.88, 0.72)),
+                        ));
+                    }
                 }
-                StationCatalogKind::Spec => {
-                    btn.spawn((
-                        StationSpecLabel,
-                        Text::new(initial),
-                        window_text_font(asset_server, UiFontRole::Caption),
-                        TextColor(Color::srgb(0.92, 0.88, 0.72)),
-                    ));
-                }
+                btn.spawn((
+                    ImageNode::new(
+                        asset_server.load::<Image>("assets/opengfx/tiles/scroll_down.png"),
+                    ),
+                    Node {
+                        position_type: PositionType::Absolute,
+                        right: Val::Px(4.0),
+                        width: Val::Px(8.0),
+                        height: Val::Px(8.0),
+                        ..default()
+                    },
+                ));
             });
             col.spawn((
                 StationCatalogPopover(kind),

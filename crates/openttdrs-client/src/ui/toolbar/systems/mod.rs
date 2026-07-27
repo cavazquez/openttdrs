@@ -137,7 +137,7 @@ mod tests {
             file_path: asset_root.into(),
             ..default()
         });
-        app.world_mut().init_resource::<Assets<Image>>();
+        app.init_asset::<Image>();
         app.init_asset::<Font>();
         app.world_mut().run_system_once(setup_order_panel).unwrap();
         app.world_mut().insert_resource(OrderEditState::default());

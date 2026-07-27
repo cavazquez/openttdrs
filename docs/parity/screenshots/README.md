@@ -30,6 +30,29 @@ las variantes de geometría conocidas.
 La referencia upstream es el commit `14ec60f248547d4d062a1160f0fc26d742319888`
 (tag 15.3), registrado en `../openttd-reference.json`.
 
+La build gráfica oficial se prepara sin modificar el checkout y valida commit,
+versión y OpenGFX 8.0:
+
+```bash
+bash scripts/build_openttd_ui_reference.sh
+```
+
+Dependencias mínimas en Debian/Ubuntu: `libsdl2-dev`, `libpng-dev`,
+`libfreetype6-dev` y `liblzma-dev`. El script rechaza una build sin LZMA porque
+no puede cargar `opntitle.dat`, aunque el enlace del ejecutable haya terminado
+sin error.
+
+El binario queda por defecto en `/tmp/openttdrs-openttd-15.3/openttd`. Para que
+las referencias no dependan de configuración, autosaves o contenido personal,
+debe ejecutarse con un perfil XDG aislado:
+
+```bash
+XDG_DATA_HOME=/tmp/openttdrs-ref-data \
+XDG_CONFIG_HOME=/tmp/openttdrs-ref-config \
+  /tmp/openttdrs-openttd-15.3/openttd \
+  -v sdl -s null -m null -r 1280x720 -I OpenGFX -x -Q
+```
+
 Para capturar la composición completa en las dos resoluciones base:
 
 ```bash

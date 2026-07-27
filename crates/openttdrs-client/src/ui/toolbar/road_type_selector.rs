@@ -139,6 +139,7 @@ fn spawn_class_dropdown(
                     min_width: Val::Px(56.0),
                     height: Val::Px(48.0),
                     padding: UiRect::horizontal(Val::Px(4.0)),
+                    column_gap: Val::Px(3.0),
                     justify_content: JustifyContent::Center,
                     align_items: AlignItems::Center,
                     border: UiRect::all(Val::Px(1.0)),
@@ -147,12 +148,24 @@ fn spawn_class_dropdown(
                 BackgroundColor(BTN_BG),
                 BorderColor::all(BTN_BORDER),
                 Interaction::default(),
-                children![(
-                    RoadTypeClassLabel(class),
-                    Text::new(default_short(class)),
-                    ui_text_font_loaded(asset_server, UiFontRole::Caption),
-                    TextColor(BTN_TEXT),
-                )],
+                children![
+                    (
+                        RoadTypeClassLabel(class),
+                        Text::new(default_short(class)),
+                        ui_text_font_loaded(asset_server, UiFontRole::Caption),
+                        TextColor(BTN_TEXT),
+                    ),
+                    (
+                        ImageNode::new(
+                            asset_server.load::<Image>("assets/opengfx/tiles/scroll_down.png"),
+                        ),
+                        Node {
+                            width: Val::Px(8.0),
+                            height: Val::Px(8.0),
+                            ..default()
+                        },
+                    ),
+                ],
             ));
             col.spawn((
                 RoadTypePopover(class),

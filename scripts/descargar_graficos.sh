@@ -1354,6 +1354,16 @@ if [[ "${GRAPHICS_MODE}" == "32bpp" ]]; then
 fi
 python3 "$(dirname "$0")/gen_toolbar_rail_icons.py"
 python3 "$(dirname "$0")/gen_toolbar_water_icons.py"
+# Hoja fuente de los controles Action5 de ventana. El NFO decodificado no
+# conserva para éstos la numeración runtime `SPR_OPENTTD_BASE + offset`.
+UI_SOURCE_DIR="${DEST}/.ui-source"
+UI_SOURCE_SHEET="${UI_SOURCE_DIR}/icons_8px_32bpp.png"
+if [[ ! -s "${UI_SOURCE_SHEET}" ]]; then
+  mkdir -p "${UI_SOURCE_DIR}"
+  curl -fL \
+    "https://media.githubusercontent.com/media/OpenTTD/OpenGFX2/${OPENGFX2_TAG}/graphics/icons/1/icons_8px_32bpp.png" \
+    -o "${UI_SOURCE_SHEET}"
+fi
 # Tiles in-world de esclusas (Action5 canals / SPR_LOCK_*) antes del atlas.
 python3 "$(dirname "$0")/gen_water_lock_tiles.py"
 python3 "$(dirname "$0")/crop_ui_terraform_icons.py"

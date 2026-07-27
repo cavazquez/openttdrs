@@ -307,7 +307,7 @@ pub(crate) fn setup_vehicle_list(mut commands: Commands, asset_server: Res<Asset
                 false,
             );
         });
-        spawn_list_scroll_area(body, VehicleListRoot, LIST_HEIGHT);
+        spawn_list_scroll_area(body, asset_server, VehicleListRoot, LIST_HEIGHT);
     });
 }
 

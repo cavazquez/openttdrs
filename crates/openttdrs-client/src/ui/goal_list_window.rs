@@ -56,7 +56,7 @@ pub(crate) fn setup_goal_list_window(mut commands: Commands, asset_server: Res<A
             },
             BuildMenuUi,
         ));
-        spawn_list_scroll_area(body, GoalListRoot, LIST_DEFAULT_HEIGHT);
+        spawn_list_scroll_area(body, asset_server, GoalListRoot, LIST_DEFAULT_HEIGHT);
     });
 }
 

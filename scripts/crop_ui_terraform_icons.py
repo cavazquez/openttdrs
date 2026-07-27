@@ -39,6 +39,7 @@ NFO_LINE = re.compile(
 
 # (sprite_id, output_name, nfo_filename)
 SPRITES = [
+    (143, "window_close.png", "ogfx21_base_32ez.nfo"),
     (694, "ui_terraform_up.png", "ogfx21_base_32ez.nfo"),
     (695, "ui_terraform_down.png", "ogfx21_base_32ez.nfo"),
     (4964, "ui_terraform_level.png", "ogfx2e_extra_32ez.nfo"),
@@ -75,6 +76,21 @@ SPRITES = [
     (5040, "toolbar_switch.png", "ogfx2e_extra_32ez.nfo"),
 ]
 
+# Action5 `OTTD_GUI` no conserva el SpriteID runtime como número de sprite del
+# NFO decodificado. Estos controles se recortan de su hoja fuente oficial.
+WINDOW_SPRITES = [
+    ("window_resize.png", 0, 1),
+    ("scroll_up.png", 1, 0),
+    ("scroll_down.png", 2, 0),
+    ("scroll_left.png", 5, 0),
+    ("scroll_right.png", 6, 0),
+    ("window_pin_up.png", 3, 1),
+    ("window_pin_down.png", 4, 1),
+    ("window_shade.png", 4, 2),
+    ("window_unshade.png", 5, 2),
+]
+WINDOW_SPRITE_SHEET = ROOT / "assets/opengfx/.ui-source/icons_8px_32bpp.png"
+
 
 def dematte_cc_blue(img: Image.Image) -> Image.Image:
     data = []
@@ -105,6 +121,18 @@ def load_sprite_rects(nfo_path: Path) -> dict[int, tuple[int, int, int, int, str
     return rects
 
 
+def crop_window_sprites() -> None:
+    if not WINDOW_SPRITE_SHEET.is_file():
+        raise SystemExit(f"Falta la hoja Action5 de UI: {WINDOW_SPRITE_SHEET}")
+    sheet = Image.open(WINDOW_SPRITE_SHEET).convert("RGBA")
+    for output_name, column, row in WINDOW_SPRITES:
+        x = 1 + column * 9
+        y = 1 + row * 9
+        icon = dematte_cc_blue(sheet.crop((x, y, x + 8, y + 8)))
+        icon.save(TILES_DIR / output_name)
+        print(f"  {output_name} (8×8) ← Action5 OTTD_GUI [{column},{row}]")
+
+
 def load_sheets(sprites_dir: Path) -> dict[str, Image.Image]:
     sheets: dict[str, Image.Image] = {}
     for prefix in (
@@ -130,6 +158,7 @@ def main() -> int:
 
     sheets = load_sheets(SPRITES_DIR)
     TILES_DIR.mkdir(parents=True, exist_ok=True)
+    crop_window_sprites()
 
     for sid, out_name, nfo_name in SPRITES:
         nfo_path = SPRITES_DIR / nfo_name

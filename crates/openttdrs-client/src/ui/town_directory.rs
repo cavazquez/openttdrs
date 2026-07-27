@@ -140,7 +140,12 @@ pub(crate) fn setup_town_directory(mut commands: Commands, asset_server: Res<Ass
                 TextColor(WINDOW_TEXT),
             )],
         ));
-        spawn_list_scroll_area(body, TownDirectoryListRoot, LIST_DEFAULT_HEIGHT);
+        spawn_list_scroll_area(
+            body,
+            asset_server,
+            TownDirectoryListRoot,
+            LIST_DEFAULT_HEIGHT,
+        );
     });
 }
 

@@ -6,18 +6,20 @@
 //! [`FloatingWindowClosed`] para que cada ventana limpie su estado.
 
 use bevy::prelude::*;
+use bevy::ui::widget::ImageNode;
 use bevy::window::PrimaryWindow;
 
 use crate::bevy_app::UpdateSet;
 use crate::settings::ClientPreferences;
 use crate::state::ClientScreen;
 use crate::ui::font::UiFontRole;
-use crate::ui::toolbar::BuildMenuUi;
+use crate::ui::toolbar::{BuildMenuUi, ToolbarTooltipTarget};
 
 /// Fondo marrón clásico de las ventanas de `OpenTTD`.
 pub(crate) const WINDOW_BG: Color = Color::srgb(0.45, 0.36, 0.26);
 /// Borde exterior oscuro.
 pub(crate) const WINDOW_BORDER: Color = Color::srgb(0.13, 0.10, 0.07);
+const WINDOW_FOCUSED_BORDER: Color = Color::srgb(0.76, 0.65, 0.39);
 /// Texto crema por defecto.
 pub(crate) const WINDOW_TEXT: Color = Color::srgb(0.95, 0.93, 0.82);
 /// Barra de título marrón (ventanas genéricas).
@@ -33,6 +35,18 @@ const WINDOW_BASE_Z: i32 = 2400;
 pub(crate) const MENU_OVERLAY_WINDOW_Z: i32 = 3100;
 /// Altura de la barra de título.
 const TITLE_BAR_H: f32 = 20.0;
+/// Ancho del closebox; el sprite vanilla es 8×9 y queda centrado sin escalar.
+const CLOSEBOX_W: f32 = 16.0;
+const CLOSEBOX_ICON_W: f32 = 8.0;
+const CLOSEBOX_ICON_H: f32 = 9.0;
+const CLOSEBOX_IDLE: Color = Color::srgb(0.45, 0.36, 0.26);
+const CLOSEBOX_HOVER: Color = Color::srgb(0.53, 0.43, 0.31);
+const CLOSEBOX_PRESSED: Color = Color::srgb(0.29, 0.23, 0.16);
+const CHROME_BUTTON_W: f32 = 16.0;
+const CHROME_ICON_SIZE: f32 = 8.0;
+const RESIZE_HANDLE_SIZE: f32 = 16.0;
+const MIN_WINDOW_WIDTH: f32 = 160.0;
+const MIN_WINDOW_HEIGHT: f32 = TITLE_BAR_H + 48.0;
 /// Margen mínimo visible al clampear el arrastre.
 const DRAG_MARGIN: f32 = 48.0;
 
@@ -245,6 +259,112 @@ pub(crate) struct FloatingWindowTitleText(pub(crate) FloatingWindowId);
 #[derive(Component)]
 pub(crate) struct FloatingWindowCloseButton;
 
+#[derive(Component)]
+struct FloatingWindowContent(FloatingWindowId);
+
+#[derive(Component, Default)]
+struct FloatingWindowChromeState {
+    shaded: bool,
+    sticky: bool,
+    /// Altura declarada antes de plegar (`Auto` o el tamaño elegido por resize).
+    unshaded_height: Option<Val>,
+}
+
+#[derive(Component)]
+struct FloatingWindowShadeButton;
+
+#[derive(Component)]
+struct FloatingWindowStickyButton;
+
+#[derive(Component)]
+struct FloatingWindowResizeButton;
+
+#[derive(Clone, Copy, Default)]
+struct WindowChromeCapabilities {
+    shade: bool,
+    sticky: bool,
+    resize: bool,
+}
+
+/// Sólo activa widgets presentes en el `WindowDesc` equivalente de 15.3.
+fn chrome_capabilities(id: FloatingWindowId) -> WindowChromeCapabilities {
+    let shade = matches!(
+        id,
+        FloatingWindowId::Town
+            | FloatingWindowId::TownDirectory
+            | FloatingWindowId::IndustryDirectory
+            | FloatingWindowId::Industry
+            | FloatingWindowId::StationDirectory
+            | FloatingWindowId::VehicleList
+            | FloatingWindowId::SubsidyList
+            | FloatingWindowId::BuyVehicle
+            | FloatingWindowId::Vehicle
+            | FloatingWindowId::VehicleDetails
+            | FloatingWindowId::RailStationPicker
+            | FloatingWindowId::AirportPicker
+            | FloatingWindowId::NewsHistory
+            | FloatingWindowId::Finances
+            | FloatingWindowId::SoundMusic
+            | FloatingWindowId::Orders
+            | FloatingWindowId::SharedOrders
+            | FloatingWindowId::Autoreplace
+            | FloatingWindowId::Graphs
+            | FloatingWindowId::CargoPaymentRates
+            | FloatingWindowId::SignList
+            | FloatingWindowId::SignalPicker
+            | FloatingWindowId::CheatWindow
+            | FloatingWindowId::Goals
+            | FloatingWindowId::Story
+    );
+    let sticky = shade
+        && !matches!(
+            id,
+            FloatingWindowId::RailStationPicker
+                | FloatingWindowId::AirportPicker
+                | FloatingWindowId::SignalPicker
+        );
+    let resize = matches!(
+        id,
+        FloatingWindowId::Town
+            | FloatingWindowId::TownDirectory
+            | FloatingWindowId::IndustryDirectory
+            | FloatingWindowId::Industry
+            | FloatingWindowId::StationDirectory
+            | FloatingWindowId::VehicleList
+            | FloatingWindowId::SubsidyList
+            | FloatingWindowId::Depot
+            | FloatingWindowId::BuyVehicle
+            | FloatingWindowId::Vehicle
+            | FloatingWindowId::VehicleDetails
+            | FloatingWindowId::BridgePicker
+            | FloatingWindowId::DestinationPicker
+            | FloatingWindowId::NewsHistory
+            | FloatingWindowId::NewsSettings
+            | FloatingWindowId::PathfindingSettings
+            | FloatingWindowId::CargoDistSettings
+            | FloatingWindowId::AiSettings
+            | FloatingWindowId::NewGrf
+            | FloatingWindowId::Timetable
+            | FloatingWindowId::Orders
+            | FloatingWindowId::Refit
+            | FloatingWindowId::SharedOrders
+            | FloatingWindowId::Autoreplace
+            | FloatingWindowId::Graphs
+            | FloatingWindowId::CargoPaymentRates
+            | FloatingWindowId::DisplayOptions
+            | FloatingWindowId::ExtraViewport
+            | FloatingWindowId::SignList
+            | FloatingWindowId::Goals
+            | FloatingWindowId::Story
+            | FloatingWindowId::League
+    );
+    WindowChromeCapabilities {
+        shade,
+        sticky,
+        resize,
+    }
+}
+
 /// El usuario cerró la ventana con ✕; el dueño debe limpiar su estado.
 #[derive(Message)]
 pub(crate) struct FloatingWindowClosed(pub(crate) FloatingWindowId);
@@ -254,6 +374,13 @@ pub(crate) struct FloatingWindowClosed(pub(crate) FloatingWindowId);
 pub(crate) struct WindowDragState {
     window: Option<Entity>,
     grab_offset: Vec2,
+}
+
+#[derive(Resource, Default)]
+struct WindowResizeState {
+    window: Option<Entity>,
+    start_cursor: Vec2,
+    start_size: Vec2,
 }
 
 /// Contador para traer ventanas al frente.
@@ -271,6 +398,7 @@ pub(crate) struct FloatingWindowPlugin;
 impl Plugin for FloatingWindowPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<WindowDragState>()
+            .init_resource::<WindowResizeState>()
             .init_resource::<WindowZCounter>()
             .add_message::<FloatingWindowClosed>()
             .add_systems(
@@ -278,7 +406,11 @@ impl Plugin for FloatingWindowPlugin {
                 (
                     begin_window_drag,
                     drag_floating_windows,
+                    update_focused_window_style,
+                    (begin_window_resize, resize_floating_windows).chain(),
                     close_window_buttons,
+                    update_window_chrome_button_style,
+                    update_window_chrome_buttons,
                     apply_saved_floating_window_positions,
                 )
                     .in_set(UpdateSet::Ui)
@@ -289,7 +421,11 @@ impl Plugin for FloatingWindowPlugin {
                 (
                     begin_window_drag,
                     drag_floating_windows,
+                    update_focused_window_style,
+                    (begin_window_resize, resize_floating_windows).chain(),
                     close_window_buttons,
+                    update_window_chrome_button_style,
+                    update_window_chrome_buttons,
                 )
                     .in_set(UpdateSet::Ui)
                     .run_if(in_state(ClientScreen::MainMenu)),
@@ -314,9 +450,11 @@ pub(crate) fn spawn_floating_window(
     width: f32,
 ) -> (Entity, Entity) {
     let mut content = Entity::PLACEHOLDER;
+    let capabilities = chrome_capabilities(id);
     let root = commands
         .spawn((
             FloatingWindow { id },
+            FloatingWindowChromeState::default(),
             Node {
                 position_type: PositionType::Absolute,
                 left: Val::Px(pos.x),
@@ -353,23 +491,31 @@ pub(crate) fn spawn_floating_window(
             .with_children(|bar| {
                 bar.spawn((
                     FloatingWindowCloseButton,
+                    ToolbarTooltipTarget {
+                        text: "Cerrar ventana",
+                    },
                     Button,
                     Node {
-                        width: Val::Px(20.0),
+                        width: Val::Px(CLOSEBOX_W),
                         height: Val::Percent(100.0),
                         justify_content: JustifyContent::Center,
                         align_items: AlignItems::Center,
                         border: UiRect::right(Val::Px(1.0)),
                         ..default()
                     },
-                    BackgroundColor(Color::NONE),
+                    BackgroundColor(CLOSEBOX_IDLE),
                     BorderColor::all(WINDOW_BORDER),
                     Interaction::default(),
                     BuildMenuUi,
                     children![(
-                        Text::new("×"),
-                        window_text_font(asset_server, UiFontRole::Caption),
-                        TextColor(WINDOW_TEXT),
+                        ImageNode::new(
+                            asset_server.load::<Image>("assets/opengfx/tiles/window_close.png"),
+                        ),
+                        Node {
+                            width: Val::Px(CLOSEBOX_ICON_W),
+                            height: Val::Px(CLOSEBOX_ICON_H),
+                            ..default()
+                        },
                     )],
                 ));
                 bar.spawn((
@@ -385,24 +531,129 @@ pub(crate) fn spawn_floating_window(
                         TextColor(WINDOW_TEXT),
                     )],
                 ));
-                // Hueco simétrico al botón ✕ para que el título quede centrado.
-                bar.spawn(Node {
-                    width: Val::Px(20.0),
-                    ..default()
-                });
+                if capabilities.shade {
+                    bar.spawn((
+                        FloatingWindowShadeButton,
+                        ToolbarTooltipTarget {
+                            text: "Plegar / desplegar ventana",
+                        },
+                        Button,
+                        Node {
+                            width: Val::Px(CHROME_BUTTON_W),
+                            height: Val::Percent(100.0),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            border: UiRect::left(Val::Px(1.0)),
+                            ..default()
+                        },
+                        BackgroundColor(CLOSEBOX_IDLE),
+                        BorderColor::all(WINDOW_BORDER),
+                        Interaction::default(),
+                        BuildMenuUi,
+                        children![(
+                            ImageNode::new(
+                                asset_server
+                                    .load::<Image>("assets/opengfx/tiles/window_unshade.png",)
+                            ),
+                            Node {
+                                width: Val::Px(CHROME_ICON_SIZE),
+                                height: Val::Px(CHROME_ICON_SIZE),
+                                ..default()
+                            },
+                        )],
+                    ));
+                }
+                if capabilities.sticky {
+                    bar.spawn((
+                        FloatingWindowStickyButton,
+                        ToolbarTooltipTarget {
+                            text: "Fijar / liberar ventana",
+                        },
+                        Button,
+                        Node {
+                            width: Val::Px(CHROME_BUTTON_W),
+                            height: Val::Percent(100.0),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            border: UiRect::left(Val::Px(1.0)),
+                            ..default()
+                        },
+                        BackgroundColor(CLOSEBOX_IDLE),
+                        BorderColor::all(WINDOW_BORDER),
+                        Interaction::default(),
+                        BuildMenuUi,
+                        children![(
+                            ImageNode::new(
+                                asset_server
+                                    .load::<Image>("assets/opengfx/tiles/window_pin_down.png",)
+                            ),
+                            Node {
+                                width: Val::Px(CHROME_ICON_SIZE),
+                                height: Val::Px(CHROME_ICON_SIZE),
+                                ..default()
+                            },
+                        )],
+                    ));
+                }
             });
             content = win
                 .spawn((
+                    FloatingWindowContent(id),
                     Node {
                         width: Val::Percent(100.0),
                         flex_direction: FlexDirection::Column,
-                        padding: UiRect::all(Val::Px(6.0)),
+                        padding: UiRect {
+                            left: Val::Px(6.0),
+                            right: Val::Px(if capabilities.resize {
+                                RESIZE_HANDLE_SIZE
+                            } else {
+                                6.0
+                            }),
+                            top: Val::Px(6.0),
+                            bottom: Val::Px(if capabilities.resize {
+                                RESIZE_HANDLE_SIZE
+                            } else {
+                                6.0
+                            }),
+                        },
                         row_gap: Val::Px(4.0),
                         ..default()
                     },
                     BuildMenuUi,
                 ))
                 .id();
+            if capabilities.resize {
+                win.spawn((
+                    FloatingWindowResizeButton,
+                    ToolbarTooltipTarget {
+                        text: "Redimensionar ventana",
+                    },
+                    Button,
+                    Node {
+                        position_type: PositionType::Absolute,
+                        right: Val::Px(0.0),
+                        bottom: Val::Px(0.0),
+                        width: Val::Px(RESIZE_HANDLE_SIZE),
+                        height: Val::Px(RESIZE_HANDLE_SIZE),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        ..default()
+                    },
+                    BackgroundColor(CLOSEBOX_IDLE),
+                    Interaction::default(),
+                    BuildMenuUi,
+                    children![(
+                        ImageNode::new(
+                            asset_server.load::<Image>("assets/opengfx/tiles/window_resize.png"),
+                        ),
+                        Node {
+                            width: Val::Px(CHROME_ICON_SIZE),
+                            height: Val::Px(CHROME_ICON_SIZE),
+                            ..default()
+                        },
+                    )],
+                ));
+            }
         })
         .id();
     (root, content)
@@ -417,6 +668,14 @@ pub(crate) fn drag_window_position(cursor: Vec2, grab_offset: Vec2, viewport: Ve
             .x
             .clamp(DRAG_MARGIN - 200.0, (viewport.x - DRAG_MARGIN).max(0.0)),
         target.y.clamp(0.0, (viewport.y - TITLE_BAR_H).max(0.0)),
+    )
+}
+
+#[must_use]
+fn resized_window_size(start_size: Vec2, cursor_delta: Vec2, viewport: Vec2) -> Vec2 {
+    Vec2::new(
+        (start_size.x + cursor_delta.x).clamp(MIN_WINDOW_WIDTH, viewport.x),
+        (start_size.y + cursor_delta.y).clamp(MIN_WINDOW_HEIGHT, viewport.y),
     )
 }
 
@@ -496,6 +755,87 @@ fn drag_floating_windows(
     node.top = Val::Px(pos.y);
 }
 
+fn update_focused_window_style(
+    mut windows: ParamSet<(
+        Query<(Entity, &GlobalZIndex, &Visibility), With<FloatingWindow>>,
+        Query<(Entity, &mut BorderColor), With<FloatingWindow>>,
+    )>,
+) {
+    let focused = windows
+        .p0()
+        .iter()
+        .filter(|(_, _, visibility)| **visibility != Visibility::Hidden)
+        .max_by_key(|(_, z, _)| z.0)
+        .map(|(entity, _, _)| entity);
+    for (entity, mut border) in &mut windows.p1() {
+        *border = BorderColor::all(if Some(entity) == focused {
+            WINDOW_FOCUSED_BORDER
+        } else {
+            WINDOW_BORDER
+        });
+    }
+}
+
+fn begin_window_resize(
+    buttons: Query<
+        (&Interaction, &ChildOf),
+        (Changed<Interaction>, With<FloatingWindowResizeButton>),
+    >,
+    windows: Query<&ComputedNode, With<FloatingWindow>>,
+    primary: Query<&Window, With<PrimaryWindow>>,
+    mut resize: ResMut<WindowResizeState>,
+) {
+    let Ok(primary) = primary.single() else {
+        return;
+    };
+    let Some(cursor) = primary.cursor_position() else {
+        return;
+    };
+    for (interaction, parent) in &buttons {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+        let Ok(computed) = windows.get(parent.parent()) else {
+            continue;
+        };
+        resize.window = Some(parent.parent());
+        resize.start_cursor = cursor;
+        resize.start_size = computed.size();
+    }
+}
+
+fn resize_floating_windows(
+    mouse: Res<ButtonInput<MouseButton>>,
+    primary: Query<&Window, With<PrimaryWindow>>,
+    mut resize: ResMut<WindowResizeState>,
+    mut windows: Query<&mut Node, With<FloatingWindow>>,
+) {
+    let Some(entity) = resize.window else {
+        return;
+    };
+    if !mouse.pressed(MouseButton::Left) {
+        resize.window = None;
+        return;
+    }
+    let Ok(primary) = primary.single() else {
+        return;
+    };
+    let Some(cursor) = primary.cursor_position() else {
+        return;
+    };
+    let Ok(mut node) = windows.get_mut(entity) else {
+        resize.window = None;
+        return;
+    };
+    let size = resized_window_size(
+        resize.start_size,
+        cursor - resize.start_cursor,
+        Vec2::new(primary.width(), primary.height()),
+    );
+    node.width = Val::Px(size.x);
+    node.height = Val::Px(size.y);
+}
+
 /// Aplica posiciones guardadas una vez al entrar en partida.
 fn apply_saved_floating_window_positions(
     prefs: Res<ClientPreferences>,
@@ -514,7 +854,122 @@ fn apply_saved_floating_window_positions(
     *applied = true;
 }
 
-/// Botón ✕: oculta la ventana y avisa al dueño para que limpie su estado.
+fn closebox_color(interaction: Interaction) -> Color {
+    match interaction {
+        Interaction::None => CLOSEBOX_IDLE,
+        Interaction::Hovered => CLOSEBOX_HOVER,
+        Interaction::Pressed => CLOSEBOX_PRESSED,
+    }
+}
+
+/// Replica el relieve visual del closebox en sus estados interactivos.
+fn update_window_chrome_button_style(
+    mut buttons: Query<
+        (&Interaction, &mut BackgroundColor),
+        (
+            Changed<Interaction>,
+            Or<(
+                With<FloatingWindowCloseButton>,
+                With<FloatingWindowShadeButton>,
+                With<FloatingWindowStickyButton>,
+                With<FloatingWindowResizeButton>,
+            )>,
+        ),
+    >,
+) {
+    for (interaction, mut background) in &mut buttons {
+        background.0 = closebox_color(*interaction);
+    }
+}
+
+#[allow(clippy::type_complexity)]
+fn update_window_chrome_buttons(
+    shade_buttons: Query<
+        (&Interaction, &ChildOf, &Children),
+        (Changed<Interaction>, With<FloatingWindowShadeButton>),
+    >,
+    sticky_buttons: Query<
+        (&Interaction, &ChildOf, &Children),
+        (Changed<Interaction>, With<FloatingWindowStickyButton>),
+    >,
+    title_parents: Query<&ChildOf, With<FloatingWindowTitleBar>>,
+    mut windows: Query<(&FloatingWindow, &mut FloatingWindowChromeState, &mut Node)>,
+    mut contents: Query<(&FloatingWindowContent, &mut Visibility)>,
+    mut resize_buttons: Query<(&ChildOf, &mut Visibility), With<FloatingWindowResizeButton>>,
+    mut images: Query<&mut ImageNode>,
+    asset_server: Res<AssetServer>,
+) {
+    for (interaction, title, children) in &shade_buttons {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+        let Ok(root) = title_parents.get(title.parent()) else {
+            continue;
+        };
+        let root_entity = root.parent();
+        let Ok((window, mut state, mut window_node)) = windows.get_mut(root_entity) else {
+            continue;
+        };
+        state.shaded = !state.shaded;
+        if state.shaded {
+            state.unshaded_height = Some(window_node.height);
+            window_node.height = Val::Px(TITLE_BAR_H);
+        } else {
+            window_node.height = state.unshaded_height.take().unwrap_or(Val::Auto);
+        }
+        for (content, mut visibility) in &mut contents {
+            if content.0 == window.id {
+                *visibility = if state.shaded {
+                    Visibility::Hidden
+                } else {
+                    Visibility::Inherited
+                };
+            }
+        }
+        for (parent, mut visibility) in &mut resize_buttons {
+            if parent.parent() == root_entity {
+                *visibility = if state.shaded {
+                    Visibility::Hidden
+                } else {
+                    Visibility::Inherited
+                };
+            }
+        }
+        for child in children.iter() {
+            if let Ok(mut image) = images.get_mut(child) {
+                image.image = asset_server.load(if state.shaded {
+                    "assets/opengfx/tiles/window_shade.png"
+                } else {
+                    "assets/opengfx/tiles/window_unshade.png"
+                });
+            }
+        }
+    }
+
+    for (interaction, title, children) in &sticky_buttons {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+        let Ok(root) = title_parents.get(title.parent()) else {
+            continue;
+        };
+        let Ok((_window, mut state, _node)) = windows.get_mut(root.parent()) else {
+            continue;
+        };
+        state.sticky = !state.sticky;
+        for child in children.iter() {
+            if let Ok(mut image) = images.get_mut(child) {
+                image.image = asset_server.load(if state.sticky {
+                    "assets/opengfx/tiles/window_pin_up.png"
+                } else {
+                    "assets/opengfx/tiles/window_pin_down.png"
+                });
+            }
+        }
+    }
+}
+
+/// Closebox: oculta la ventana y avisa al dueño para que limpie su estado.
 fn close_window_buttons(
     buttons: Query<
         (&Interaction, &ChildOf),
@@ -598,6 +1053,51 @@ mod tests {
         assert_eq!(
             FloatingWindowId::DisplayOptions.storage_key(),
             "DisplayOptions"
+        );
+    }
+
+    #[test]
+    fn closebox_interaction_has_distinct_visual_states() {
+        assert_eq!(closebox_color(Interaction::None), CLOSEBOX_IDLE);
+        assert_eq!(closebox_color(Interaction::Hovered), CLOSEBOX_HOVER);
+        assert_eq!(closebox_color(Interaction::Pressed), CLOSEBOX_PRESSED);
+        assert_ne!(CLOSEBOX_IDLE, CLOSEBOX_PRESSED);
+    }
+
+    #[test]
+    fn chrome_capabilities_are_opt_in_from_upstream_descriptors() {
+        let town = chrome_capabilities(FloatingWindowId::Town);
+        assert!(town.shade && town.sticky && town.resize);
+
+        let help = chrome_capabilities(FloatingWindowId::Help);
+        assert!(!help.shade && !help.sticky && !help.resize);
+    }
+
+    #[test]
+    fn resize_clamps_to_minimum_and_viewport() {
+        assert_eq!(
+            resized_window_size(
+                Vec2::new(300.0, 200.0),
+                Vec2::new(50.0, 30.0),
+                Vec2::splat(800.0)
+            ),
+            Vec2::new(350.0, 230.0)
+        );
+        assert_eq!(
+            resized_window_size(
+                Vec2::new(200.0, 100.0),
+                Vec2::new(-500.0, -500.0),
+                Vec2::splat(800.0)
+            ),
+            Vec2::new(MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT)
+        );
+        assert_eq!(
+            resized_window_size(
+                Vec2::new(700.0, 600.0),
+                Vec2::splat(500.0),
+                Vec2::new(900.0, 700.0)
+            ),
+            Vec2::new(900.0, 700.0)
         );
     }
 

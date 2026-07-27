@@ -16,6 +16,7 @@ use crate::ui::floating_window::{
 };
 use crate::ui::font::UiFontRole;
 use crate::ui::hud::{HudBuildFeedback, push_build_command_error};
+use crate::ui::scrollbar::spawn_classic_scroll_area_with;
 use crate::ui::toolbar::BuildMenuUi;
 
 /// Cubrir `TRUCK_FREIGHT` (9) y margen; la lista hace scroll.
@@ -119,16 +120,26 @@ pub(crate) fn setup_refit_window(mut commands: Commands, asset_server: Res<Asset
                     ));
                 }
             });
-        panel
-            .spawn(Node {
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(2.0),
-                margin: UiRect::top(Val::Px(6.0)),
-                max_height: Val::Px(200.0),
+        spawn_classic_scroll_area_with(
+            panel,
+            asset_server,
+            Node {
+                flex_grow: 1.0,
+                min_width: Val::Px(0.0),
                 overflow: Overflow::scroll_y(),
                 ..default()
-            })
-            .with_children(|list| {
+            },
+            Node {
+                width: Val::Percent(100.0),
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(2.0),
+                ..default()
+            },
+            BTN_BG,
+            BTN_BORDER,
+            (),
+            (),
+            |list| {
                 for slot in 0..REFIT_ROWS {
                     list.spawn((
                         Button,
@@ -155,7 +166,9 @@ pub(crate) fn setup_refit_window(mut commands: Commands, asset_server: Res<Asset
                         )],
                     ));
                 }
-            });
+            },
+            200.0,
+        );
     });
 }
 

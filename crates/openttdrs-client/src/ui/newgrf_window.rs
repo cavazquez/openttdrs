@@ -15,6 +15,7 @@ use crate::ui::floating_window::{
 };
 use crate::ui::font::UiFontRole;
 use crate::ui::hud::{HudBuildFeedback, push_build_command_error};
+use crate::ui::scrollbar::spawn_classic_scroll_area_with;
 use crate::ui::toolbar::BuildMenuUi;
 
 const BTN_BG: Color = Color::srgb(0.36, 0.31, 0.21);
@@ -88,43 +89,55 @@ pub(crate) fn setup_newgrf_window(mut commands: Commands, asset_server: Res<Asse
                 ..default()
             },
         ));
-        body.spawn(Node {
-            width: Val::Percent(100.0),
-            flex_direction: FlexDirection::Column,
-            row_gap: Val::Px(2.0),
-            max_height: Val::Px(220.0),
-            overflow: Overflow::scroll_y(),
-            margin: UiRect::bottom(Val::Px(6.0)),
-            ..default()
-        })
-        .with_children(|list| {
-            for index in 0..NEWGRF_ROWS {
-                list.spawn((
-                    Button,
-                    NewGrfRow { index },
-                    Node {
-                        width: Val::Percent(100.0),
-                        min_height: Val::Px(34.0),
-                        padding: UiRect::all(Val::Px(4.0)),
-                        border: UiRect::all(Val::Px(1.0)),
-                        display: Display::None,
-                        ..default()
-                    },
-                    BackgroundColor(ROW_BG),
-                    BorderColor::all(BTN_BORDER),
-                    Interaction::default(),
-                    BuildMenuUi,
-                ))
-                .with_children(|row| {
-                    row.spawn((
-                        NewGrfRowText { index },
-                        Text::new(""),
-                        window_text_font(asset_server, UiFontRole::Caption),
-                        TextColor(TEXT_COLOR),
-                    ));
-                });
-            }
-        });
+        spawn_classic_scroll_area_with(
+            body,
+            asset_server,
+            Node {
+                flex_grow: 1.0,
+                min_width: Val::Px(0.0),
+                overflow: Overflow::scroll_y(),
+                ..default()
+            },
+            Node {
+                width: Val::Percent(100.0),
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(2.0),
+                ..default()
+            },
+            ROW_BG,
+            BTN_BORDER,
+            (),
+            (),
+            |list| {
+                for index in 0..NEWGRF_ROWS {
+                    list.spawn((
+                        Button,
+                        NewGrfRow { index },
+                        Node {
+                            width: Val::Percent(100.0),
+                            min_height: Val::Px(34.0),
+                            padding: UiRect::all(Val::Px(4.0)),
+                            border: UiRect::all(Val::Px(1.0)),
+                            display: Display::None,
+                            ..default()
+                        },
+                        BackgroundColor(ROW_BG),
+                        BorderColor::all(BTN_BORDER),
+                        Interaction::default(),
+                        BuildMenuUi,
+                    ))
+                    .with_children(|row| {
+                        row.spawn((
+                            NewGrfRowText { index },
+                            Text::new(""),
+                            window_text_font(asset_server, UiFontRole::Caption),
+                            TextColor(TEXT_COLOR),
+                        ));
+                    });
+                }
+            },
+            220.0,
+        );
         body.spawn(Node {
             width: Val::Percent(100.0),
             flex_direction: FlexDirection::Row,

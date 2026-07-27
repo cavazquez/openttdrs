@@ -9,6 +9,7 @@ use crate::ui::floating_window::{
     spawn_floating_window, window_text_font,
 };
 use crate::ui::font::UiFontRole;
+use crate::ui::scrollbar::spawn_classic_scroll_area_with;
 use crate::ui::toolbar::BuildMenuUi;
 
 use super::NewsUiState;
@@ -56,32 +57,31 @@ pub(crate) fn setup_news_history_window(mut commands: Commands, asset_server: Re
         ..default()
     });
     commands.entity(content).with_children(|body| {
-        body.spawn((
-            NewsHistoryScrollArea,
+        spawn_classic_scroll_area_with(
+            body,
+            asset_server,
             Node {
-                width: Val::Percent(100.0),
-                height: Val::Px(HISTORY_LIST_HEIGHT),
+                flex_grow: 1.0,
+                height: Val::Percent(100.0),
+                min_width: Val::Px(0.0),
                 overflow: Overflow::scroll_y(),
                 border: UiRect::all(Val::Px(1.0)),
                 ..default()
             },
-            BackgroundColor(Color::srgb(0.22, 0.18, 0.12)),
-            BorderColor::all(Color::srgb(0.45, 0.39, 0.27)),
-            BuildMenuUi,
-        ))
-        .with_children(|scroll| {
-            scroll.spawn((
-                NewsHistoryListRoot,
-                Node {
-                    width: Val::Percent(100.0),
-                    flex_direction: FlexDirection::Column,
-                    row_gap: Val::Px(2.0),
-                    padding: UiRect::all(Val::Px(2.0)),
-                    ..default()
-                },
-                BuildMenuUi,
-            ));
-        });
+            Node {
+                width: Val::Percent(100.0),
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(2.0),
+                padding: UiRect::all(Val::Px(2.0)),
+                ..default()
+            },
+            Color::srgb(0.22, 0.18, 0.12),
+            Color::srgb(0.45, 0.39, 0.27),
+            NewsHistoryScrollArea,
+            NewsHistoryListRoot,
+            |_| {},
+            HISTORY_LIST_HEIGHT,
+        );
     });
 }
 

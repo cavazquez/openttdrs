@@ -225,7 +225,7 @@ pub(crate) fn setup_station_directory(mut commands: Commands, asset_server: Res<
             spawn_cargo_filter(row, asset_server, "Ganado", StationCargoFilter::Livestock);
             spawn_cargo_filter(row, asset_server, "Valor", StationCargoFilter::Valuables);
         });
-        spawn_list_scroll_area(body, StationDirectoryListRoot, LIST_HEIGHT);
+        spawn_list_scroll_area(body, asset_server, StationDirectoryListRoot, LIST_HEIGHT);
     });
 }
 

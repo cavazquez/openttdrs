@@ -16,6 +16,7 @@ use crate::ui::floating_window::{
 };
 use crate::ui::font::UiFontRole;
 use crate::ui::hud::HoveredTileCoord;
+use crate::ui::scrollbar::spawn_classic_scroll_area_with;
 
 use super::{BuildMenuAction, BuildMenuUi, StationBuildState, UiToolState};
 
@@ -73,17 +74,26 @@ pub(crate) fn setup_airport_picker(mut commands: Commands, asset_server: Res<Ass
                 }
             });
         spawn_section_label(panel, asset_server, "Tipo");
-        panel
-            .spawn(Node {
-                width: Val::Percent(100.0),
-                max_height: Val::Px(200.0),
+        spawn_classic_scroll_area_with(
+            panel,
+            asset_server,
+            Node {
+                flex_grow: 1.0,
+                min_width: Val::Px(0.0),
                 overflow: Overflow::scroll_y(),
+                ..default()
+            },
+            Node {
+                width: Val::Percent(100.0),
                 flex_direction: FlexDirection::Column,
                 row_gap: Val::Px(3.0),
-                margin: UiRect::bottom(Val::Px(6.0)),
                 ..default()
-            })
-            .with_children(|col| {
+            },
+            BTN_BG,
+            BTN_BORDER,
+            (),
+            (),
+            |col| {
                 for class in list_airport_classes("") {
                     for def in list_airport_specs(class.id, "") {
                         spawn_text_button(
@@ -95,7 +105,9 @@ pub(crate) fn setup_airport_picker(mut commands: Commands, asset_server: Res<Ass
                         );
                     }
                 }
-            });
+            },
+            200.0,
+        );
         spawn_section_label(panel, asset_server, "Orientación");
         panel
             .spawn(Node {

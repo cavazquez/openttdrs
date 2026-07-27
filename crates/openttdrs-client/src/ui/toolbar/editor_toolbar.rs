@@ -850,14 +850,26 @@ fn spawn_editor_town_btn(parent: &mut ChildSpawnerCommands, asset_server: &Asset
                 BackgroundColor(BTN_BG),
                 BorderColor::all(BTN_BORDER),
                 Interaction::default(),
-                children![(
-                    ImageNode::new(asset_server.load::<Image>(ToolbarIcon::Town.path())),
-                    Node {
-                        width: Val::Px(22.0),
-                        height: Val::Px(22.0),
-                        ..default()
-                    },
-                )],
+                children![
+                    (
+                        ImageNode::new(asset_server.load::<Image>(ToolbarIcon::Town.path())),
+                        Node {
+                            width: Val::Px(22.0),
+                            height: Val::Px(22.0),
+                            ..default()
+                        },
+                    ),
+                    (
+                        ImageNode::new(
+                            asset_server.load::<Image>("assets/opengfx/tiles/scroll_down.png"),
+                        ),
+                        Node {
+                            width: Val::Px(8.0),
+                            height: Val::Px(8.0),
+                            ..default()
+                        },
+                    ),
+                ],
             ));
             wrap.spawn((
                 EditorTownDropdownRoot,

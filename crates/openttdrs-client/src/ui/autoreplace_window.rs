@@ -16,6 +16,7 @@ use crate::ui::floating_window::{
 };
 use crate::ui::font::UiFontRole;
 use crate::ui::hud::{HudBuildFeedback, push_build_command_error};
+use crate::ui::scrollbar::spawn_classic_scroll_area_with;
 use crate::ui::toolbar::BuildMenuUi;
 
 const RULE_ROWS: usize = 10;
@@ -147,15 +148,26 @@ fn spawn_labeled_list(
             ..default()
         },
     ));
-    panel
-        .spawn(Node {
-            flex_direction: FlexDirection::Column,
-            row_gap: Val::Px(2.0),
-            max_height: Val::Px(120.0),
+    spawn_classic_scroll_area_with(
+        panel,
+        asset_server,
+        Node {
+            flex_grow: 1.0,
+            min_width: Val::Px(0.0),
             overflow: Overflow::scroll_y(),
             ..default()
-        })
-        .with_children(|list| {
+        },
+        Node {
+            width: Val::Percent(100.0),
+            flex_direction: FlexDirection::Column,
+            row_gap: Val::Px(2.0),
+            ..default()
+        },
+        BTN_BG,
+        BTN_BORDER,
+        (),
+        (),
+        |list| {
             if rules {
                 for slot in 0..RULE_ROWS {
                     list.spawn((
@@ -175,7 +187,9 @@ fn spawn_labeled_list(
                     ));
                 }
             }
-        });
+        },
+        120.0,
+    );
 }
 
 fn spawn_engine_pickers(panel: &mut ChildSpawnerCommands, asset_server: &AssetServer) {
@@ -210,50 +224,64 @@ fn spawn_engine_column(
                 window_text_font(asset_server, UiFontRole::Caption),
                 TextColor(WINDOW_TEXT),
             ));
-            col.spawn(Node {
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(2.0),
-                max_height: Val::Px(140.0),
-                overflow: Overflow::scroll_y(),
-                ..default()
-            })
-            .with_children(|list| {
-                for slot in 0..ENGINE_ROWS {
-                    if is_from {
-                        list.spawn((
-                            Button,
-                            AutoreplaceFromRow { slot },
-                            row_style(),
-                            BackgroundColor(BTN_BG),
-                            BorderColor::all(BTN_BORDER),
-                            Interaction::default(),
-                            BuildMenuUi,
-                            children![(
-                                AutoreplaceFromRowText { slot },
-                                Text::new(""),
-                                window_text_font(asset_server, UiFontRole::Caption),
-                                TextColor(WINDOW_TEXT),
-                            )],
-                        ));
-                    } else {
-                        list.spawn((
-                            Button,
-                            AutoreplaceToRow { slot },
-                            row_style(),
-                            BackgroundColor(BTN_BG),
-                            BorderColor::all(BTN_BORDER),
-                            Interaction::default(),
-                            BuildMenuUi,
-                            children![(
-                                AutoreplaceToRowText { slot },
-                                Text::new(""),
-                                window_text_font(asset_server, UiFontRole::Caption),
-                                TextColor(WINDOW_TEXT),
-                            )],
-                        ));
+            spawn_classic_scroll_area_with(
+                col,
+                asset_server,
+                Node {
+                    flex_grow: 1.0,
+                    min_width: Val::Px(0.0),
+                    overflow: Overflow::scroll_y(),
+                    ..default()
+                },
+                Node {
+                    width: Val::Percent(100.0),
+                    flex_direction: FlexDirection::Column,
+                    row_gap: Val::Px(2.0),
+                    ..default()
+                },
+                BTN_BG,
+                BTN_BORDER,
+                (),
+                (),
+                |list| {
+                    for slot in 0..ENGINE_ROWS {
+                        if is_from {
+                            list.spawn((
+                                Button,
+                                AutoreplaceFromRow { slot },
+                                row_style(),
+                                BackgroundColor(BTN_BG),
+                                BorderColor::all(BTN_BORDER),
+                                Interaction::default(),
+                                BuildMenuUi,
+                                children![(
+                                    AutoreplaceFromRowText { slot },
+                                    Text::new(""),
+                                    window_text_font(asset_server, UiFontRole::Caption),
+                                    TextColor(WINDOW_TEXT),
+                                )],
+                            ));
+                        } else {
+                            list.spawn((
+                                Button,
+                                AutoreplaceToRow { slot },
+                                row_style(),
+                                BackgroundColor(BTN_BG),
+                                BorderColor::all(BTN_BORDER),
+                                Interaction::default(),
+                                BuildMenuUi,
+                                children![(
+                                    AutoreplaceToRowText { slot },
+                                    Text::new(""),
+                                    window_text_font(asset_server, UiFontRole::Caption),
+                                    TextColor(WINDOW_TEXT),
+                                )],
+                            ));
+                        }
                     }
-                }
-            });
+                },
+                140.0,
+            );
         });
 }
 

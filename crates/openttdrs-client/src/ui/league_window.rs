@@ -54,7 +54,7 @@ pub(crate) fn setup_league_window(mut commands: Commands, asset_server: Res<Asse
             },
             BuildMenuUi,
         ));
-        spawn_list_scroll_area(body, LeagueListRoot, LIST_DEFAULT_HEIGHT);
+        spawn_list_scroll_area(body, asset_server, LeagueListRoot, LIST_DEFAULT_HEIGHT);
     });
 }
 

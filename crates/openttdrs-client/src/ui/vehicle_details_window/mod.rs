@@ -16,6 +16,7 @@ use crate::ui::floating_window::{
 };
 use crate::ui::font::UiFontRole;
 use crate::ui::refit_window::RefitWindowState;
+use crate::ui::scrollbar::spawn_classic_scroll_area_with;
 use crate::ui::toolbar::BuildMenuUi;
 use crate::ui::vehicle_window::{
     CONSIST_UNIT_SPRITE_H, CONSIST_UNIT_SPRITE_W, vehicle_side_sprite,
@@ -123,25 +124,33 @@ pub(crate) fn setup_vehicle_details_window(mut commands: Commands, asset_server:
                 ..default()
             },
         ));
-        panel
-            .spawn((
-                Node {
-                    width: Val::Percent(100.0),
-                    flex_direction: FlexDirection::Column,
-                    row_gap: Val::Px(1.0),
-                    padding: UiRect::all(Val::Px(2.0)),
-                    max_height: Val::Px(ROW_HEIGHT * LIST_VISIBLE_ROWS as f32 + 4.0),
-                    overflow: Overflow::scroll_y(),
-                    ..default()
-                },
-                BackgroundColor(LIST_BG),
-                BuildMenuUi,
-            ))
-            .with_children(|list| {
+        spawn_classic_scroll_area_with(
+            panel,
+            asset_server,
+            Node {
+                flex_grow: 1.0,
+                min_width: Val::Px(0.0),
+                overflow: Overflow::scroll_y(),
+                ..default()
+            },
+            Node {
+                width: Val::Percent(100.0),
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(1.0),
+                padding: UiRect::all(Val::Px(2.0)),
+                ..default()
+            },
+            LIST_BG,
+            BTN_BORDER,
+            (),
+            (),
+            |list| {
                 for unit_idx in 0..DETAILS_UNIT_ROWS {
                     spawn_details_unit_row(list, asset_server, unit_idx);
                 }
-            });
+            },
+            ROW_HEIGHT * LIST_VISIBLE_ROWS as f32 + 4.0,
+        );
     });
 }
 

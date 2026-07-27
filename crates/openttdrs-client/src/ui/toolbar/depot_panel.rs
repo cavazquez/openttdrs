@@ -21,6 +21,7 @@ use crate::ui::floating_window::{
 };
 use crate::ui::font::UiFontRole;
 use crate::ui::hud::{HudBuildFeedback, push_build_command_error};
+use crate::ui::scrollbar::spawn_classic_scroll_area_with;
 use crate::ui::vehicle_window::{
     CONSIST_STRIP_MAX_UNITS, CONSIST_UNIT_SPRITE_H, CONSIST_UNIT_SPRITE_W, VehicleWindowState,
     vehicle_side_sprite,
@@ -146,24 +147,33 @@ pub(crate) fn setup_depot_panel(mut commands: Commands, asset_server: Res<AssetS
                 ..default()
             })
             .with_children(|body| {
-                body.spawn((
+                spawn_classic_scroll_area_with(
+                    body,
+                    asset_server,
                     Node {
                         flex_grow: 1.0,
-                        flex_direction: FlexDirection::Column,
-                        row_gap: Val::Px(1.0),
-                        padding: UiRect::all(Val::Px(2.0)),
-                        max_height: Val::Px(ROW_HEIGHT * DEPOT_LIST_VISIBLE_ROWS as f32 + 4.0),
+                        min_width: Val::Px(0.0),
                         overflow: Overflow::scroll_y(),
                         ..default()
                     },
-                    BackgroundColor(LIST_BG),
-                    BuildMenuUi,
-                ))
-                .with_children(|list| {
-                    for slot in 0..DEPOT_VEHICLE_ROWS {
-                        spawn_depot_vehicle_row(list, asset_server, slot);
-                    }
-                });
+                    Node {
+                        width: Val::Percent(100.0),
+                        flex_direction: FlexDirection::Column,
+                        row_gap: Val::Px(1.0),
+                        padding: UiRect::all(Val::Px(2.0)),
+                        ..default()
+                    },
+                    LIST_BG,
+                    Color::srgb(0.45, 0.39, 0.27),
+                    (),
+                    (),
+                    |list| {
+                        for slot in 0..DEPOT_VEHICLE_ROWS {
+                            spawn_depot_vehicle_row(list, asset_server, slot);
+                        }
+                    },
+                    ROW_HEIGHT * DEPOT_LIST_VISIBLE_ROWS as f32 + 4.0,
+                );
                 body.spawn(Node {
                     width: Val::Px(72.0),
                     flex_direction: FlexDirection::Column,

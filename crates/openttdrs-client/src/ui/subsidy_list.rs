@@ -14,6 +14,7 @@ use crate::ui::floating_window::{
 use crate::ui::font::UiFontRole;
 use crate::ui::industry_panel::{IndustryPanelState, kind_label, spec_label};
 use crate::ui::navigation::{OpenUiRoute, UiRoute};
+use crate::ui::scrollbar::spawn_classic_scroll_area;
 use crate::ui::toolbar::{BuildMenuUi, StationCargoPanelState};
 
 const LIST_HEIGHT: f32 = 330.0;
@@ -97,31 +98,14 @@ pub(crate) fn setup_subsidy_list(mut commands: Commands, asset_server: Res<Asset
                 SubsidyListAction::OpenRelated,
             );
         });
-        body.spawn((
-            Node {
-                width: Val::Percent(100.0),
-                height: Val::Px(LIST_HEIGHT),
-                overflow: Overflow::scroll_y(),
-                border: UiRect::all(Val::Px(1.0)),
-                ..default()
-            },
-            BackgroundColor(Color::srgb(0.22, 0.18, 0.12)),
-            BorderColor::all(Color::srgb(0.45, 0.39, 0.27)),
-            BuildMenuUi,
-        ))
-        .with_children(|scroll| {
-            scroll.spawn((
-                SubsidyListRoot,
-                Node {
-                    width: Val::Percent(100.0),
-                    flex_direction: FlexDirection::Column,
-                    row_gap: Val::Px(2.0),
-                    padding: UiRect::all(Val::Px(2.0)),
-                    ..default()
-                },
-                BuildMenuUi,
-            ));
-        });
+        spawn_classic_scroll_area(
+            body,
+            asset_server,
+            SubsidyListRoot,
+            LIST_HEIGHT,
+            Color::srgb(0.22, 0.18, 0.12),
+            Color::srgb(0.45, 0.39, 0.27),
+        );
     });
 }
 

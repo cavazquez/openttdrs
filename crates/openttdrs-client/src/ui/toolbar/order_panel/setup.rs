@@ -3,6 +3,7 @@ use bevy::ui::FocusPolicy;
 
 use crate::ui::floating_window::{TITLE_CRIMSON, spawn_floating_window, window_text_font};
 use crate::ui::font::UiFontRole;
+use crate::ui::scrollbar::spawn_classic_scroll_area_with;
 use crate::ui::toolbar::{BuildMenuUi, OrderPanelButton, OrderPanelRoot};
 
 use super::{ORDER_PANEL_LIST_MAX_HEIGHT, ORDER_PANEL_ROWS, OrderPanelRow, OrderPanelRowText};
@@ -40,26 +41,33 @@ pub(crate) fn setup_order_panel(mut commands: Commands, asset_server: Res<AssetS
                 );
             });
         // Lista/tabla de órdenes cargadas.
-        panel
-            .spawn((
-                Node {
-                    width: Val::Percent(100.0),
-                    flex_direction: FlexDirection::Column,
-                    row_gap: Val::Px(1.0),
-                    min_height: Val::Px(120.0),
-                    max_height: Val::Px(ORDER_PANEL_LIST_MAX_HEIGHT),
-                    overflow: Overflow::scroll_y(),
-                    padding: UiRect::all(Val::Px(2.0)),
-                    ..default()
-                },
-                BackgroundColor(Color::srgb(0.16, 0.13, 0.09)),
-                BuildMenuUi,
-            ))
-            .with_children(|list| {
+        spawn_classic_scroll_area_with(
+            panel,
+            asset_server,
+            Node {
+                flex_grow: 1.0,
+                min_width: Val::Px(0.0),
+                overflow: Overflow::scroll_y(),
+                ..default()
+            },
+            Node {
+                width: Val::Percent(100.0),
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(1.0),
+                padding: UiRect::all(Val::Px(2.0)),
+                ..default()
+            },
+            Color::srgb(0.16, 0.13, 0.09),
+            Color::srgb(0.45, 0.39, 0.27),
+            (),
+            (),
+            |list| {
                 for slot in 0..ORDER_PANEL_ROWS {
                     spawn_order_panel_row(list, asset_server, slot);
                 }
-            });
+            },
+            ORDER_PANEL_LIST_MAX_HEIGHT,
+        );
         // Fila de modos de la orden seleccionada (carga / descarga).
         panel
             .spawn(Node {

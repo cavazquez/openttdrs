@@ -40,6 +40,7 @@ mod news_settings_window;
 mod pathfinding_settings_window;
 mod refit_window;
 mod save_window;
+mod scrollbar;
 mod shared_orders_window;
 mod sign_list_window;
 mod sparkline;
@@ -72,6 +73,7 @@ impl Plugin for ClientUiPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins((
             floating_window::FloatingWindowPlugin,
+            scrollbar::ClassicScrollbarPlugin,
             windows_shot::WindowsShotPlugin,
             lifecycle::InGameLifecyclePlugin,
             plugins::MainMenuUiPlugin,

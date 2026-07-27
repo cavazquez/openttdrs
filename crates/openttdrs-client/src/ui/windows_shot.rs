@@ -17,6 +17,7 @@ use bevy::window::PrimaryWindow;
 use openttdrs_core::prelude::*;
 use std::fmt::Write as _;
 
+use crate::bevy_app::UpdateSet;
 use crate::state::{ClientScreen, SimWorld};
 use crate::ui::ai_settings_window::AiSettingsWindowState;
 use crate::ui::audio_settings_window::SoundMusicWindowState;
@@ -503,7 +504,11 @@ impl Plugin for WindowsShotPlugin {
                 Update,
                 (
                     auto_start_game.run_if(in_state(ClientScreen::MainMenu)),
-                    windows_shot_driver.run_if(in_state(ClientScreen::InGame)),
+                    windows_shot_driver
+                        .run_if(in_state(ClientScreen::InGame))
+                        // Los sync de cada ventana también viven en `UpdateSet::Ui`.
+                        // Ocultar antes permite que vuelvan a mostrarla en el mismo frame.
+                        .after(UpdateSet::Ui),
                 ),
             );
         } else if std::env::var_os("OPENTTDRS_MAP_SHOT").is_some() {
@@ -706,7 +711,8 @@ fn map_shot_driver(
 fn windows_shot_driver(world: &mut World, mut frame: Local<u32>) {
     *frame += 1;
     if *frame == OPEN_FRAME {
-        open_all_windows_for_shot(world);
+        let include_auxiliary = requested_window_shot_id().is_ok_and(|id| id.is_none());
+        open_all_windows_for_shot(world, include_auxiliary);
     }
 
     // Fuerza visibilidad de pickers tool-gated. En modo individual oculta el
@@ -747,7 +753,7 @@ fn windows_shot_driver(world: &mut World, mut frame: Local<u32>) {
     }
 }
 
-fn open_all_windows_for_shot(world: &mut World) {
+fn open_all_windows_for_shot(world: &mut World, include_auxiliary: bool) {
     let town_id = world
         .resource::<SimWorld>()
         .state
@@ -821,7 +827,9 @@ fn open_all_windows_for_shot(world: &mut World) {
             .resource_mut::<AutoreplaceWindowState>()
             .open_for_depot(pos);
     }
-    world.resource_mut::<StationCargoPanelState>().station_pos = station_pos;
+    if include_auxiliary {
+        world.resource_mut::<StationCargoPanelState>().station_pos = station_pos;
+    }
     if let Some(pos) = industry_pos {
         let mut panel = world.resource_mut::<IndustryPanelState>();
         panel.open = true;
@@ -855,22 +863,24 @@ fn open_all_windows_for_shot(world: &mut World) {
     world.resource_mut::<StoryWindowState>().open = true;
     world.resource_mut::<LeagueWindowState>().open = true;
 
-    world
-        .resource_mut::<SaveWindowState>()
-        .open_in_mode(SaveWindowMode::Save, &save_dir);
-    world.resource_mut::<StationCatalogPickerState>().open = Some(StationCatalogKind::Spec);
+    if include_auxiliary {
+        world
+            .resource_mut::<SaveWindowState>()
+            .open_in_mode(SaveWindowMode::Save, &save_dir);
+        world.resource_mut::<StationCatalogPickerState>().open = Some(StationCatalogKind::Spec);
 
-    world.resource_mut::<ToolbarState>().active_group = Some(ToolbarGroup::Rail);
-    world.resource_mut::<UiToolState>().active_tool = Some(BuildMenuAction::RailStation);
-    world.resource_mut::<BridgeBuildState>().pending = Some(PendingBridge {
-        start: TileCoord::new(2, 2),
-        end: TileCoord::new(6, 2),
-        road: false,
-    });
+        world.resource_mut::<ToolbarState>().active_group = Some(ToolbarGroup::Rail);
+        world.resource_mut::<UiToolState>().active_tool = Some(BuildMenuAction::RailStation);
+        world.resource_mut::<BridgeBuildState>().pending = Some(PendingBridge {
+            start: TileCoord::new(2, 2),
+            end: TileCoord::new(6, 2),
+            road: false,
+        });
+    }
 
     info!(
-        "windows_shot: abriendo ALL FloatingWindowId ({}) + Save/Order/panels",
-        FloatingWindowId::ALL.len()
+        "windows_shot: abriendo ALL FloatingWindowId ({}); auxiliares={include_auxiliary}",
+        FloatingWindowId::ALL.len(),
     );
 }
 

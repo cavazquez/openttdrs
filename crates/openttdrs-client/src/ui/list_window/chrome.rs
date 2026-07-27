@@ -4,6 +4,7 @@ use bevy::prelude::*;
 
 use crate::ui::floating_window::{WINDOW_TEXT, window_text_font};
 use crate::ui::font::UiFontRole;
+use crate::ui::scrollbar::spawn_classic_scroll_area;
 use crate::ui::toolbar::BuildMenuUi;
 
 pub(crate) const LIST_BTN_BG: Color = Color::srgb(0.36, 0.31, 0.21);
@@ -75,35 +76,18 @@ pub(crate) fn spawn_list_filter_input<M: Component>(
 /// Área con scroll + raíz de filas (`list_root_marker`).
 pub(crate) fn spawn_list_scroll_area(
     parent: &mut ChildSpawnerCommands,
+    asset_server: &AssetServer,
     list_root_marker: impl Bundle,
     height: f32,
 ) {
-    parent
-        .spawn((
-            Node {
-                width: Val::Percent(100.0),
-                height: Val::Px(height),
-                overflow: Overflow::scroll_y(),
-                border: UiRect::all(Val::Px(1.0)),
-                ..default()
-            },
-            BackgroundColor(Color::srgb(0.22, 0.18, 0.12)),
-            BorderColor::all(Color::srgb(0.45, 0.39, 0.27)),
-            BuildMenuUi,
-        ))
-        .with_children(|scroll| {
-            scroll.spawn((
-                list_root_marker,
-                Node {
-                    width: Val::Percent(100.0),
-                    flex_direction: FlexDirection::Column,
-                    row_gap: Val::Px(2.0),
-                    padding: UiRect::all(Val::Px(2.0)),
-                    ..default()
-                },
-                BuildMenuUi,
-            ));
-        });
+    spawn_classic_scroll_area(
+        parent,
+        asset_server,
+        list_root_marker,
+        height,
+        Color::srgb(0.22, 0.18, 0.12),
+        Color::srgb(0.45, 0.39, 0.27),
+    );
 }
 
 /// Color de chip: activo / hover / idle.

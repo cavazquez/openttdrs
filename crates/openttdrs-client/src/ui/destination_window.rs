@@ -11,6 +11,7 @@ use crate::ui::floating_window::{
 };
 use crate::ui::font::UiFontRole;
 use crate::ui::hud::{HudBuildFeedback, push_build_command_error};
+use crate::ui::scrollbar::spawn_classic_scroll_area_with;
 use crate::ui::toolbar::build_input::orders::order_for_clicked_tile;
 use crate::ui::toolbar::{
     BuildMenuUi, DragBuildState, OrderEditState, start_order_destination_pick,
@@ -66,16 +67,26 @@ pub(crate) fn setup_destination_picker(mut commands: Commands, asset_server: Res
             window_text_font(asset_server, UiFontRole::Caption),
             TextColor(WINDOW_TEXT),
         ));
-        panel
-            .spawn(Node {
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(2.0),
-                margin: UiRect::top(Val::Px(6.0)),
-                max_height: Val::Px(280.0),
+        spawn_classic_scroll_area_with(
+            panel,
+            asset_server,
+            Node {
+                flex_grow: 1.0,
+                min_width: Val::Px(0.0),
                 overflow: Overflow::scroll_y(),
                 ..default()
-            })
-            .with_children(|list| {
+            },
+            Node {
+                width: Val::Percent(100.0),
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(2.0),
+                ..default()
+            },
+            Color::srgb(0.22, 0.18, 0.12),
+            BTN_BORDER,
+            (),
+            (),
+            |list| {
                 for slot in 0..DEST_ROWS {
                     list.spawn((
                         Button,
@@ -102,7 +113,9 @@ pub(crate) fn setup_destination_picker(mut commands: Commands, asset_server: Res
                         )],
                     ));
                 }
-            });
+            },
+            280.0,
+        );
         panel
             .spawn((
                 Button,

@@ -144,7 +144,12 @@ pub(crate) fn setup_industry_directory(mut commands: Commands, asset_server: Res
             },
             BuildMenuUi,
         ));
-        spawn_list_scroll_area(body, IndustryDirectoryListRoot, LIST_DEFAULT_HEIGHT - 50.0);
+        spawn_list_scroll_area(
+            body,
+            asset_server,
+            IndustryDirectoryListRoot,
+            LIST_DEFAULT_HEIGHT - 50.0,
+        );
     });
 }
 

@@ -720,8 +720,7 @@ impl VehicleCargoList {
         accepted: bool,
         current_station: TileCoord,
         next_stations: &[TileCoord],
-        force_transfer: bool,
-        no_unload: bool,
+        unload_type: crate::vehicle::OrderUnloadType,
     ) -> bool {
         self.staged_transfer = 0;
         self.staged_deliver = 0;
@@ -733,14 +732,7 @@ impl VehicleCargoList {
         let mut deliver = Vec::new();
         let mut keep = Vec::new();
         for mut cp in self.packets.drain(..) {
-            let action = stage_packet(
-                &cp,
-                accepted,
-                current_station,
-                next_stations,
-                force_transfer,
-                no_unload,
-            );
+            let action = stage_packet(&cp, accepted, current_station, next_stations, unload_type);
             match action {
                 CargoUnloadAction::Transfer => {
                     // Trasbordo: next_hop hacia un destino distinto de las siguientes paradas.
@@ -775,16 +767,14 @@ fn stage_packet(
     accepted: bool,
     current_station: TileCoord,
     next_stations: &[TileCoord],
-    force_transfer: bool,
-    no_unload: bool,
+    unload_type: crate::vehicle::OrderUnloadType,
 ) -> CargoUnloadAction {
     // Misma regla que `choose_cargo_action` (evita divergencia Stage/pago).
     super::operations::choose_cargo_action(
         packet,
         current_station,
         next_stations,
-        force_transfer,
-        no_unload,
+        unload_type,
         accepted,
     )
 }

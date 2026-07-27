@@ -44,6 +44,10 @@ AIRCRAFT_SPRITES: tuple[tuple[int, str], ...] = (
     (3818, "vehicle_aircraft_tricario_sw.png"),
     (3819, "vehicle_aircraft_tricario_w.png"),
     (3820, "vehicle_aircraft_tricario_nw.png"),
+    (3901, "vehicle_aircraft_rotor_stopped.png"),
+    (3902, "vehicle_aircraft_rotor_moving_1.png"),
+    (3903, "vehicle_aircraft_rotor_moving_2.png"),
+    (3904, "vehicle_aircraft_rotor_moving_3.png"),
 )
 
 NFO_ROW = re.compile(

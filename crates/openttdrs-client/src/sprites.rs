@@ -33,6 +33,8 @@ mod rail;
 mod road;
 #[path = "sprites/shore_draw_data_generated.rs"]
 mod shore_draw_data_generated;
+#[path = "sprites/signal_sprite_meta_generated.rs"]
+mod signal_sprite_meta_generated;
 #[path = "sprites/smoke_draw_data_generated.rs"]
 mod smoke_draw_data_generated;
 #[path = "sprites/station.rs"]
@@ -47,10 +49,15 @@ mod transparency;
 mod tree_draw_data_generated;
 #[path = "sprites/tunnel.rs"]
 mod tunnel;
+#[path = "sprites/water_palette_generated.rs"]
+mod water_palette_generated;
 
 pub(crate) use tile_atlas_generated::{
     TILE_ATLAS_NAMES, TILE_ATLAS_PAGE_COUNT, TILE_ATLAS_PAGE_RANGES, TILE_ATLAS_PAGE_SIZES,
     TILE_ATLAS_RECTS,
+};
+pub(crate) use water_palette_generated::{
+    DARK_WATER_FRAME_COUNT, GLITTER_WATER_FRAME_COUNT, WATER_PALETTE_FRAME_COUNT,
 };
 
 // ── Constantes de renderizado de carreteras y vías ───────────────────────────
@@ -156,9 +163,10 @@ pub use rail::{
     level_crossing_has_rail_reservation, level_crossing_rail_sprite_id,
     level_crossing_rail_sprite_id_for_type, rail_depot_build_layers, rail_ghost_overlay_offset,
     rail_signal_present_mask, rail_signal_state_mask, rail_signal_subtile_offset,
-    rail_sprite_atlas_keys, rail_sprite_ids_for_preload, rail_tile_has_pbs_reservation,
-    rail_tile_is_signals, remap_rail_sprite_id, signal_draw_pos, signal_screen_position,
-    signal_sprite_bases, signal_sprite_center_offset, signal_sprite_ids_for_preload,
+    rail_signal_subtile_offset_for_side, rail_sprite_atlas_keys, rail_sprite_ids_for_preload,
+    rail_tile_has_pbs_reservation, rail_tile_is_signals, remap_rail_sprite_id, signal_draw_pos,
+    signal_screen_position, signal_screen_position_for_side, signal_sprite_bases,
+    signal_sprite_center_offset, signal_sprite_ids_for_preload, signal_sprite_metadata,
     signal_sprite_texture_id,
 };
 #[allow(unused_imports)]
@@ -237,9 +245,9 @@ pub use smoke_draw_data_generated::{CHIMNEY_SMOKE_FRAMES, CHIMNEY_SMOKE_META};
 
 /// EffectVehicle tren / explosión. Regenerar: `python3 scripts/gen_effect_vehicle_sprites.py`.
 pub use effect_vehicle_draw_data_generated::{
-    BREAKDOWN_SMOKE_FRAMES, BREAKDOWN_SMOKE_META, DIESEL_SMOKE_FRAMES, DIESEL_SMOKE_META,
-    ELECTRIC_SPARK_FRAMES, ELECTRIC_SPARK_META, EXPLOSION_LARGE_FRAMES, EXPLOSION_LARGE_META,
-    STEAM_SMOKE_FRAMES, STEAM_SMOKE_META,
+    BREAKDOWN_SMOKE_FRAMES, BREAKDOWN_SMOKE_META, BUBBLE_FRAMES, BUBBLE_META, DIESEL_SMOKE_FRAMES,
+    DIESEL_SMOKE_META, ELECTRIC_SPARK_FRAMES, ELECTRIC_SPARK_META, EXPLOSION_LARGE_FRAMES,
+    EXPLOSION_LARGE_META, STEAM_SMOKE_FRAMES, STEAM_SMOKE_META,
 };
 
 /// Devuelve el nombre de archivo (relativo a `assets/opengfx/tiles/`) para un sprite de casa.

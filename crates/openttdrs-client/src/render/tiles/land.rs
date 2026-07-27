@@ -144,7 +144,10 @@ pub(crate) fn spawn_house_tile(
             ctx.map_tile_chunk(),
             sprite,
             Transform::from_translation(pos3),
-            crate::render::HouseLiftAnim { base: pos3 },
+            crate::render::HouseLiftAnim {
+                base: pos3,
+                coord: ctx.coord,
+            },
         ));
     }
 }
@@ -211,7 +214,7 @@ pub(crate) fn spawn_industry_tile(
         commands.spawn((
             MapVisualLayer,
             chunk,
-            WaterTile,
+            WaterTile::ANIMATED,
             assets.water.sprite(),
             Transform::from_translation(tile_pos(
                 ctx.tx_i32(),

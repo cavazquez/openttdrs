@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Extrae sprites de EffectVehicle (humo tren, chispas, explosión, avería).
+"""Extrae sprites de EffectVehicle (humo, chispas, explosión, avería, burbujas).
 
 OpenTTD `table/sprites.h` + `effectvehicle.cpp`:
   - SPR_DIESEL_SMOKE_0..5     = 3073..3078
@@ -7,6 +7,7 @@ OpenTTD `table/sprites.h` + `effectvehicle.cpp`:
   - SPR_ELECTRIC_SPARK_0..5   = 3084..3089
   - SPR_EXPLOSION_LARGE_0..F  = 3709..3724
   - SPR_BREAKDOWN_SMOKE_0..3  = 3737..3740
+  - SPR_BUBBLE_0..ABSORB_4    = 4748..4762
 
 Uso: python3 scripts/gen_effect_vehicle_sprites.py
 """
@@ -24,6 +25,7 @@ GROUPS: list[tuple[str, int, int, str]] = [
     ("electric_spark", 3084, 6, "ELECTRIC_SPARK"),
     ("explosion_large", 3709, 16, "EXPLOSION_LARGE"),
     ("breakdown_smoke", 3737, 4, "BREAKDOWN_SMOKE"),
+    ("bubble", 4748, 15, "BUBBLE"),
 ]
 
 
@@ -62,7 +64,7 @@ def main() -> None:
     lines = [
         "// Generado por scripts/gen_effect_vehicle_sprites.py — NO EDITAR A MANO.",
         "//",
-        "// EffectVehicle: humo vapor/diésel, chispas eléctricas, explosión, avería.",
+        "// EffectVehicle: humo, chispas, explosión, avería y burbujas Toyland.",
         "",
     ]
     for png_prefix, first_id, count, const in GROUPS:

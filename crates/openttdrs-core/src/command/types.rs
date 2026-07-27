@@ -156,12 +156,12 @@ pub enum Command {
     },
     /// Salta la orden actual sin cumplirla (pasa a la siguiente).
     SkipVehicleOrder(u32),
-    /// Alterna «carga completa» en la orden de estación `index`.
+    /// Cicla el tipo de carga en la orden de estación `index`.
     ToggleVehicleOrderFullLoad {
         vehicle_id: u32,
         index: usize,
     },
-    /// Alterna «no descargar» en la orden de estación `index`.
+    /// Cicla el tipo de descarga en la orden de estación `index`.
     ToggleVehicleOrderNoUnload {
         vehicle_id: u32,
         index: usize,

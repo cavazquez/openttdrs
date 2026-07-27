@@ -139,7 +139,17 @@ mod tests {
         let layout_handles = (0..TILE_ATLAS_PAGE_COUNT)
             .map(|p| {
                 let (pw, ph) = TILE_ATLAS_PAGE_SIZES[p];
-                layouts.add(TextureAtlasLayout::new_empty(UVec2::new(pw, ph)))
+                let mut layout = TextureAtlasLayout::new_empty(UVec2::new(pw, ph));
+                let (start, end) = TILE_ATLAS_PAGE_RANGES[p];
+                for &(_page, x, y, w, h) in &TILE_ATLAS_RECTS[start as usize..end as usize] {
+                    layout.add_texture(URect::new(
+                        u32::from(x),
+                        u32::from(y),
+                        u32::from(x) + u32::from(w),
+                        u32::from(y) + u32::from(h),
+                    ));
+                }
+                layouts.add(layout)
             })
             .collect();
         (
@@ -193,6 +203,25 @@ mod tests {
         let a = atlas.get("grass.png");
         let b = atlas.get_path("assets/opengfx/tiles/grass.png");
         assert_eq!(a, b);
+    }
+
+    #[test]
+    fn water_global_animation_covers_flat_water_and_all_shores() {
+        let (atlas, layouts) = test_atlas();
+        let mut images = Assets::<Image>::default();
+        let assets = crate::render::WorldAssets::load(&atlas, &mut images);
+        let frames = crate::render::water_anim_frames_from_assets(&assets, &layouts);
+        assert!(frames.water.is_some());
+        assert_eq!(frames.shore.len(), crate::sprites::SHORE_SPRITE_COUNT);
+        assert_eq!(
+            frames.water.as_ref().map(|anim| anim.frame_rects.len()),
+            Some(crate::sprites::WATER_PALETTE_FRAME_COUNT)
+        );
+        assert!(
+            frames.shore.iter().all(|shore| {
+                shore.frame_rects.len() == crate::sprites::WATER_PALETTE_FRAME_COUNT
+            })
+        );
     }
 
     #[test]

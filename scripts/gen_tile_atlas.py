@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -35,6 +36,9 @@ PAGE_W = 2048
 PAGE_H = 4096
 # 1 px de separación: con sampler nearest y sin mipmaps evita el bleeding.
 PAD = 1
+LEGACY_WATER_FRAME_RE = re.compile(
+    r"(?:water|shore_full_\d{2})_anim_\d{2}\.png$"
+)
 
 
 def shelf_pack(items):
@@ -64,7 +68,11 @@ def assets_available() -> bool:
 
 def build_atlas():
     """Devuelve (rs_text, pages, used_h, files, unique) sin escribir disco."""
-    files = sorted(f for f in os.listdir(TILES_DIR) if f.endswith(".png"))
+    files = sorted(
+        f
+        for f in os.listdir(TILES_DIR)
+        if f.endswith(".png") and not LEGACY_WATER_FRAME_RE.fullmatch(f)
+    )
     if not files:
         raise SystemExit(f"No hay PNGs en {TILES_DIR}; corré descargar_graficos.sh")
 

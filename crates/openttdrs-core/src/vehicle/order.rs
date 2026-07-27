@@ -56,58 +56,92 @@ impl OrderStopLocation {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[serde(untagged)]
+/// Política de carga de una orden de estación (`OrderLoadType` de `OpenTTD`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OrderLoadType {
+    /// Cargar lo disponible y salir cuando termina la transferencia del tick.
+    #[default]
+    LoadIfPossible,
+    /// Esperar hasta completar todas las capacidades del consist.
+    FullLoad,
+    /// Esperar hasta completar al menos un tipo de carga del consist.
+    FullLoadAny,
+    /// No cargar en esta parada.
+    NoLoad,
+}
+
+impl OrderLoadType {
+    /// Orden de ciclo que usa el botón de la ventana de órdenes.
+    #[must_use]
+    pub const fn next(self) -> Self {
+        match self {
+            Self::LoadIfPossible => Self::FullLoad,
+            Self::FullLoad => Self::FullLoadAny,
+            Self::FullLoadAny => Self::NoLoad,
+            Self::NoLoad => Self::LoadIfPossible,
+        }
+    }
+}
+
+/// Política de descarga de una orden de estación (`OrderUnloadType` de `OpenTTD`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OrderUnloadType {
+    /// Descargar únicamente la carga aceptada o encaminada a esta estación.
+    #[default]
+    UnloadIfPossible,
+    /// Forzar la descarga: entregar si se acepta y transferir en caso contrario.
+    Unload,
+    /// Transferir siempre, sin cobro de entrega final.
+    Transfer,
+    /// Mantener toda la carga a bordo.
+    NoUnload,
+}
+
+impl OrderUnloadType {
+    /// Orden de ciclo que usa el botón de la ventana de órdenes.
+    #[must_use]
+    pub const fn next(self) -> Self {
+        match self {
+            Self::UnloadIfPossible => Self::Unload,
+            Self::Unload => Self::Transfer,
+            Self::Transfer => Self::NoUnload,
+            Self::NoUnload => Self::UnloadIfPossible,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VehicleOrder {
     Station {
         station: TileCoord,
-        /// Esperar carga completa de todos los tipos (`OrderLoadType::FullLoad`).
-        #[serde(default)]
-        full_load: bool,
-        /// Salir cuando cualquier tipo de carga esté lleno (`OrderLoadType::FullLoadAny`).
-        #[serde(default)]
-        full_load_any: bool,
-        /// No cargar en esta parada (`OrderLoadType::NoLoad`).
-        #[serde(default)]
-        no_load: bool,
-        /// No descargar en esta parada (`OrderUnloadType::NoUnload`).
-        #[serde(default)]
-        no_unload: bool,
-        /// Trasbordo forzado (`OrderUnloadType::Transfer`): acumula feeder, no cobra.
-        #[serde(default)]
-        transfer: bool,
+        /// Política completa de carga de `OpenTTD`.
+        load_type: OrderLoadType,
+        /// Política completa de descarga de `OpenTTD`.
+        unload_type: OrderUnloadType,
         /// Sin parar en estaciones intermedias hacia este destino.
-        #[serde(default)]
         non_stop: OrderNonStop,
         /// Dónde detener el tren en el andén (`GetTrainStopLocation`).
-        #[serde(default)]
         stop_location: OrderStopLocation,
         /// Espera mínima en parada con horario activo (ticks de sim).
-        #[serde(default)]
         wait_ticks: u32,
         /// Tiempo mínimo de viaje hasta esta orden (ticks desde la anterior).
-        #[serde(default)]
         travel_ticks: u32,
         /// Orden implícita (`OT_IMPLICIT`) insertada al visitar una estación.
-        #[serde(default)]
         implicit: bool,
     },
     Waypoint {
         waypoint: TileCoord,
-        #[serde(default)]
         travel_ticks: u32,
     },
     /// Parada en depósito (`stop`: detener al llegar; `false` = pasar sin parar).
     Depot {
         depot: TileCoord,
-        #[serde(default = "default_depot_stop")]
         stop: bool,
-        #[serde(default)]
         wait_ticks: u32,
-        #[serde(default)]
         travel_ticks: u32,
         /// Refit automático al llegar (solo si `stop` y sin carga a bordo).
-        #[serde(default)]
         refit_cargo: Option<CargoType>,
     },
     Tile(TileCoord),
@@ -117,6 +151,225 @@ pub enum VehicleOrder {
         value: u8,
         jump_to: usize,
     },
+}
+
+/// Representación serde compatible con los saves v24, que guardaban cinco
+/// booleanos independientes. Los saves nuevos escriben solamente los dos enums.
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(untagged)]
+enum VehicleOrderSerde {
+    Station {
+        station: TileCoord,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        load_type: Option<OrderLoadType>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        unload_type: Option<OrderUnloadType>,
+        #[serde(default, skip_serializing_if = "is_false")]
+        full_load: bool,
+        #[serde(default, skip_serializing_if = "is_false")]
+        full_load_any: bool,
+        #[serde(default, skip_serializing_if = "is_false")]
+        no_load: bool,
+        #[serde(default, skip_serializing_if = "is_false")]
+        no_unload: bool,
+        #[serde(default, skip_serializing_if = "is_false")]
+        transfer: bool,
+        #[serde(default)]
+        non_stop: OrderNonStop,
+        #[serde(default)]
+        stop_location: OrderStopLocation,
+        #[serde(default)]
+        wait_ticks: u32,
+        #[serde(default)]
+        travel_ticks: u32,
+        #[serde(default)]
+        implicit: bool,
+    },
+    Waypoint {
+        waypoint: TileCoord,
+        #[serde(default)]
+        travel_ticks: u32,
+    },
+    Depot {
+        depot: TileCoord,
+        #[serde(default = "default_depot_stop")]
+        stop: bool,
+        #[serde(default)]
+        wait_ticks: u32,
+        #[serde(default)]
+        travel_ticks: u32,
+        #[serde(default)]
+        refit_cargo: Option<CargoType>,
+    },
+    Tile(TileCoord),
+    Conditional {
+        condition: OrderConditionKind,
+        value: u8,
+        jump_to: usize,
+    },
+}
+
+#[allow(clippy::trivially_copy_pass_by_ref)] // firma requerida por serde skip_serializing_if
+const fn is_false(value: &bool) -> bool {
+    !*value
+}
+
+impl From<VehicleOrder> for VehicleOrderSerde {
+    fn from(order: VehicleOrder) -> Self {
+        match order {
+            VehicleOrder::Station {
+                station,
+                load_type,
+                unload_type,
+                non_stop,
+                stop_location,
+                wait_ticks,
+                travel_ticks,
+                implicit,
+            } => Self::Station {
+                station,
+                load_type: Some(load_type),
+                unload_type: Some(unload_type),
+                full_load: false,
+                full_load_any: false,
+                no_load: false,
+                no_unload: false,
+                transfer: false,
+                non_stop,
+                stop_location,
+                wait_ticks,
+                travel_ticks,
+                implicit,
+            },
+            VehicleOrder::Waypoint {
+                waypoint,
+                travel_ticks,
+            } => Self::Waypoint {
+                waypoint,
+                travel_ticks,
+            },
+            VehicleOrder::Depot {
+                depot,
+                stop,
+                wait_ticks,
+                travel_ticks,
+                refit_cargo,
+            } => Self::Depot {
+                depot,
+                stop,
+                wait_ticks,
+                travel_ticks,
+                refit_cargo,
+            },
+            VehicleOrder::Tile(tile) => Self::Tile(tile),
+            VehicleOrder::Conditional {
+                condition,
+                value,
+                jump_to,
+            } => Self::Conditional {
+                condition,
+                value,
+                jump_to,
+            },
+        }
+    }
+}
+
+impl From<VehicleOrderSerde> for VehicleOrder {
+    fn from(order: VehicleOrderSerde) -> Self {
+        match order {
+            VehicleOrderSerde::Station {
+                station,
+                load_type,
+                unload_type,
+                full_load,
+                full_load_any,
+                no_load,
+                no_unload,
+                transfer,
+                non_stop,
+                stop_location,
+                wait_ticks,
+                travel_ticks,
+                implicit,
+            } => Self::Station {
+                station,
+                load_type: load_type.unwrap_or({
+                    if no_load {
+                        OrderLoadType::NoLoad
+                    } else if full_load_any {
+                        OrderLoadType::FullLoadAny
+                    } else if full_load {
+                        OrderLoadType::FullLoad
+                    } else {
+                        OrderLoadType::LoadIfPossible
+                    }
+                }),
+                unload_type: unload_type.unwrap_or({
+                    if transfer {
+                        OrderUnloadType::Transfer
+                    } else if no_unload {
+                        OrderUnloadType::NoUnload
+                    } else {
+                        OrderUnloadType::UnloadIfPossible
+                    }
+                }),
+                non_stop,
+                stop_location,
+                wait_ticks,
+                travel_ticks,
+                implicit,
+            },
+            VehicleOrderSerde::Waypoint {
+                waypoint,
+                travel_ticks,
+            } => Self::Waypoint {
+                waypoint,
+                travel_ticks,
+            },
+            VehicleOrderSerde::Depot {
+                depot,
+                stop,
+                wait_ticks,
+                travel_ticks,
+                refit_cargo,
+            } => Self::Depot {
+                depot,
+                stop,
+                wait_ticks,
+                travel_ticks,
+                refit_cargo,
+            },
+            VehicleOrderSerde::Tile(tile) => Self::Tile(tile),
+            VehicleOrderSerde::Conditional {
+                condition,
+                value,
+                jump_to,
+            } => Self::Conditional {
+                condition,
+                value,
+                jump_to,
+            },
+        }
+    }
+}
+
+impl serde::Serialize for VehicleOrder {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serde::Serialize::serialize(&VehicleOrderSerde::from(*self), serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for VehicleOrder {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        <VehicleOrderSerde as serde::Deserialize>::deserialize(deserializer).map(Self::from)
+    }
 }
 
 /// Condición de orden condicional (MVP).
@@ -190,11 +443,8 @@ impl VehicleOrder {
     pub const fn station(station: TileCoord) -> Self {
         Self::Station {
             station,
-            full_load: false,
-            full_load_any: false,
-            no_load: false,
-            no_unload: false,
-            transfer: false,
+            load_type: OrderLoadType::LoadIfPossible,
+            unload_type: OrderUnloadType::UnloadIfPossible,
             non_stop: OrderNonStop::NonStopDestination,
             stop_location: OrderStopLocation::Middle,
             wait_ticks: 0,
@@ -208,11 +458,8 @@ impl VehicleOrder {
     pub const fn implicit(station: TileCoord) -> Self {
         Self::Station {
             station,
-            full_load: false,
-            full_load_any: false,
-            no_load: false,
-            no_unload: false,
-            transfer: false,
+            load_type: OrderLoadType::LoadIfPossible,
+            unload_type: OrderUnloadType::UnloadIfPossible,
             non_stop: OrderNonStop::NonStopDestination,
             stop_location: OrderStopLocation::Middle,
             wait_ticks: 0,
@@ -335,13 +582,7 @@ impl VehicleOrder {
                 return;
             };
             match order {
-                Self::Station {
-                    station,
-                    transfer,
-                    non_stop,
-                    ..
-                } if *station != last_station => {
-                    let _ = (transfer, non_stop);
+                Self::Station { station, .. } if *station != last_station => {
                     if !out.contains(station) {
                         out.push(*station);
                     }
@@ -349,7 +590,7 @@ impl VehicleOrder {
                 }
                 Self::Station {
                     station,
-                    transfer: true,
+                    unload_type: OrderUnloadType::Transfer,
                     ..
                 } if *station == last_station => {
                     return;
@@ -382,11 +623,16 @@ impl VehicleOrder {
     pub const fn station_with_flags(station: TileCoord, full_load: bool, no_unload: bool) -> Self {
         Self::Station {
             station,
-            full_load,
-            full_load_any: false,
-            no_load: false,
-            no_unload,
-            transfer: false,
+            load_type: if full_load {
+                OrderLoadType::FullLoad
+            } else {
+                OrderLoadType::LoadIfPossible
+            },
+            unload_type: if no_unload {
+                OrderUnloadType::NoUnload
+            } else {
+                OrderUnloadType::UnloadIfPossible
+            },
             non_stop: OrderNonStop::NonStopDestination,
             stop_location: OrderStopLocation::Middle,
             wait_ticks: 0,
@@ -407,13 +653,37 @@ impl VehicleOrder {
         transfer: bool,
         non_stop: OrderNonStop,
     ) -> Self {
+        let load_type = if no_load {
+            OrderLoadType::NoLoad
+        } else if full_load_any {
+            OrderLoadType::FullLoadAny
+        } else if full_load {
+            OrderLoadType::FullLoad
+        } else {
+            OrderLoadType::LoadIfPossible
+        };
+        let unload_type = if transfer {
+            OrderUnloadType::Transfer
+        } else if no_unload {
+            OrderUnloadType::NoUnload
+        } else {
+            OrderUnloadType::UnloadIfPossible
+        };
+        Self::station_with_types(station, load_type, unload_type, non_stop)
+    }
+
+    /// Construye una parada con las políticas completas de carga y descarga.
+    #[must_use]
+    pub const fn station_with_types(
+        station: TileCoord,
+        load_type: OrderLoadType,
+        unload_type: OrderUnloadType,
+        non_stop: OrderNonStop,
+    ) -> Self {
         Self::Station {
             station,
-            full_load,
-            full_load_any,
-            no_load,
-            no_unload,
-            transfer,
+            load_type,
+            unload_type,
             non_stop,
             stop_location: OrderStopLocation::Middle,
             wait_ticks: 0,
@@ -484,11 +754,19 @@ impl VehicleOrder {
     }
 
     #[must_use]
+    pub const fn load_type(self) -> OrderLoadType {
+        match self {
+            Self::Station { load_type, .. } => load_type,
+            _ => OrderLoadType::LoadIfPossible,
+        }
+    }
+
+    #[must_use]
     pub const fn full_load(self) -> bool {
         matches!(
             self,
             Self::Station {
-                full_load: true,
+                load_type: OrderLoadType::FullLoad,
                 ..
             }
         )
@@ -499,7 +777,7 @@ impl VehicleOrder {
         matches!(
             self,
             Self::Station {
-                full_load_any: true,
+                load_type: OrderLoadType::FullLoadAny,
                 ..
             }
         )
@@ -513,7 +791,21 @@ impl VehicleOrder {
 
     #[must_use]
     pub const fn no_load(self) -> bool {
-        matches!(self, Self::Station { no_load: true, .. })
+        matches!(
+            self,
+            Self::Station {
+                load_type: OrderLoadType::NoLoad,
+                ..
+            }
+        )
+    }
+
+    #[must_use]
+    pub const fn unload_type(self) -> OrderUnloadType {
+        match self {
+            Self::Station { unload_type, .. } => unload_type,
+            _ => OrderUnloadType::UnloadIfPossible,
+        }
     }
 
     #[must_use]
@@ -521,7 +813,7 @@ impl VehicleOrder {
         matches!(
             self,
             Self::Station {
-                no_unload: true,
+                unload_type: OrderUnloadType::NoUnload,
                 ..
             }
         )
@@ -552,11 +844,8 @@ impl VehicleOrder {
         match self {
             Self::Station {
                 station,
-                full_load,
-                full_load_any,
-                no_load,
-                no_unload,
-                transfer,
+                load_type,
+                unload_type,
                 non_stop,
                 stop_location,
                 wait_ticks,
@@ -564,11 +853,8 @@ impl VehicleOrder {
                 implicit,
             } => Some(Self::Station {
                 station,
-                full_load,
-                full_load_any,
-                no_load,
-                no_unload,
-                transfer,
+                load_type,
+                unload_type,
                 non_stop,
                 stop_location: stop_location.next(),
                 wait_ticks,
@@ -594,23 +880,54 @@ impl VehicleOrder {
         false
     }
 
+    /// Decide la espera de carga sobre todas las unidades de un consist.
+    ///
+    /// Cada tupla es `(tipo, carga, capacidad)`. `FullLoad` espera por toda
+    /// unidad con capacidad; `FullLoadAny` termina cuando un tipo de carga está
+    /// completo en el conjunto de unidades que transportan ese tipo.
+    #[must_use]
+    pub fn should_wait_for_consist_loading(self, units: &[(CargoType, u32, u32)]) -> bool {
+        match self.load_type() {
+            OrderLoadType::LoadIfPossible | OrderLoadType::NoLoad => false,
+            OrderLoadType::FullLoad => units
+                .iter()
+                .any(|(_, cargo, capacity)| *capacity > 0 && cargo < capacity),
+            OrderLoadType::FullLoadAny => {
+                let has_capacity = units.iter().any(|(_, _, capacity)| *capacity > 0);
+                has_capacity
+                    && !crate::cargo::ALL_CARGO_TYPES.iter().any(|cargo_type| {
+                        let (cargo, capacity) = units
+                            .iter()
+                            .filter(|(kind, _, capacity)| kind == cargo_type && *capacity > 0)
+                            .fold((0_u64, 0_u64), |(cargo_sum, capacity_sum), (_, c, cap)| {
+                                (cargo_sum + u64::from(*c), capacity_sum + u64::from(*cap))
+                            });
+                        capacity > 0 && cargo >= capacity
+                    })
+            }
+        }
+    }
+
     /// Trasbordo forzado: no cobra entrega, solo acumula `feeder_share`.
     #[must_use]
     pub const fn transfer(self) -> bool {
-        matches!(self, Self::Station { transfer: true, .. })
+        matches!(
+            self,
+            Self::Station {
+                unload_type: OrderUnloadType::Transfer,
+                ..
+            }
+        )
     }
 
-    /// Alterna «carga completa» en una parada de estación.
+    /// Cicla los cuatro tipos de carga en una parada de estación.
     #[must_use]
     pub fn with_toggled_full_load(self) -> Option<Self> {
         match self {
             Self::Station {
                 station,
-                full_load,
-                full_load_any,
-                no_load,
-                no_unload,
-                transfer,
+                load_type,
+                unload_type,
                 non_stop,
                 stop_location,
                 wait_ticks,
@@ -618,11 +935,8 @@ impl VehicleOrder {
                 implicit,
             } => Some(Self::Station {
                 station,
-                full_load: !full_load,
-                full_load_any,
-                no_load,
-                no_unload,
-                transfer,
+                load_type: load_type.next(),
+                unload_type,
                 non_stop,
                 stop_location,
                 wait_ticks,
@@ -633,17 +947,14 @@ impl VehicleOrder {
         }
     }
 
-    /// Alterna «no descargar» en una parada de estación.
+    /// Cicla los cuatro tipos de descarga en una parada de estación.
     #[must_use]
     pub fn with_toggled_no_unload(self) -> Option<Self> {
         match self {
             Self::Station {
                 station,
-                full_load,
-                full_load_any,
-                no_load,
-                no_unload,
-                transfer,
+                load_type,
+                unload_type,
                 non_stop,
                 stop_location,
                 wait_ticks,
@@ -651,11 +962,8 @@ impl VehicleOrder {
                 implicit,
             } => Some(Self::Station {
                 station,
-                full_load,
-                full_load_any,
-                no_load,
-                no_unload: !no_unload,
-                transfer,
+                load_type,
+                unload_type: unload_type.next(),
                 non_stop,
                 stop_location,
                 wait_ticks,
@@ -745,11 +1053,8 @@ impl VehicleOrder {
         match self {
             Self::Station {
                 station,
-                full_load,
-                full_load_any,
-                no_load,
-                no_unload,
-                transfer,
+                load_type,
+                unload_type,
                 non_stop,
                 stop_location,
                 wait_ticks,
@@ -757,11 +1062,8 @@ impl VehicleOrder {
                 implicit,
             } => Some(Self::Station {
                 station,
-                full_load,
-                full_load_any,
-                no_load,
-                no_unload,
-                transfer,
+                load_type,
+                unload_type,
                 non_stop,
                 stop_location,
                 wait_ticks: cycle_wait_ticks(wait_ticks),
@@ -791,11 +1093,8 @@ impl VehicleOrder {
         match self {
             Self::Station {
                 station,
-                full_load,
-                full_load_any,
-                no_load,
-                no_unload,
-                transfer,
+                load_type,
+                unload_type,
                 non_stop,
                 stop_location,
                 wait_ticks,
@@ -803,11 +1102,8 @@ impl VehicleOrder {
                 implicit,
             } => Self::Station {
                 station,
-                full_load,
-                full_load_any,
-                no_load,
-                no_unload,
-                transfer,
+                load_type,
+                unload_type,
                 non_stop,
                 stop_location,
                 wait_ticks,
@@ -852,11 +1148,8 @@ impl VehicleOrder {
         match self {
             Self::Station {
                 station,
-                full_load,
-                full_load_any,
-                no_load,
-                no_unload,
-                transfer,
+                load_type,
+                unload_type,
                 non_stop,
                 stop_location,
                 wait_ticks: _,
@@ -864,11 +1157,8 @@ impl VehicleOrder {
                 implicit,
             } => Some(Self::Station {
                 station,
-                full_load,
-                full_load_any,
-                no_load,
-                no_unload,
-                transfer,
+                load_type,
+                unload_type,
                 non_stop,
                 stop_location,
                 wait_ticks,
@@ -897,11 +1187,8 @@ impl VehicleOrder {
         match self {
             Self::Station {
                 station,
-                full_load,
-                full_load_any,
-                no_load,
-                no_unload,
-                transfer,
+                load_type,
+                unload_type,
                 non_stop,
                 stop_location,
                 wait_ticks,
@@ -909,11 +1196,8 @@ impl VehicleOrder {
                 implicit,
             } => Self::Station {
                 station,
-                full_load,
-                full_load_any,
-                no_load,
-                no_unload,
-                transfer,
+                load_type,
+                unload_type,
                 non_stop,
                 stop_location,
                 wait_ticks,

@@ -19,7 +19,7 @@ pub(super) fn migrate_loaded_state(
                 crate::command::normalize_synthetic_rail_crossings(&mut state.map);
             }
             3 => migrate_state_v3_to_v4(&mut state),
-            4 | 6 | 7 | 8 | 9 | 15 => {}
+            4 | 6 | 7 | 8 | 9 | 15 | 24 => {}
             5 => migrate_state_v5_to_v6(&mut state),
             10 => migrate_state_v10_to_v11(&mut state),
             11 => migrate_state_v11_to_v12(&mut state),
@@ -234,12 +234,9 @@ fn migrate_state_v3_to_v4(state: &mut GameState) {
                         VehicleOrder::tile(pos)
                     }
                 }
-                VehicleOrder::Station {
-                    station,
-                    full_load,
-                    no_unload,
-                    ..
-                } => VehicleOrder::station_with_flags(station, full_load, no_unload),
+                VehicleOrder::Station { station, .. } => {
+                    VehicleOrder::station_with_flags(station, order.full_load(), order.no_unload())
+                }
                 VehicleOrder::Waypoint { waypoint, .. } => VehicleOrder::waypoint(waypoint),
                 VehicleOrder::Depot { depot, stop, .. } => VehicleOrder::Depot {
                     depot,

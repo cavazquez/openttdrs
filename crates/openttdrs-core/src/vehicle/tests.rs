@@ -572,15 +572,48 @@ fn timetable_wait_delays_order_advance() {
 fn no_load_order_skips_loading() {
     let pos = TileCoord::new(1, 1);
     let mut v = Vehicle::new(1, VehicleKind::Bus, pos, pos);
-    let mut order = VehicleOrder::station(pos);
-    if let VehicleOrder::Station { no_load, .. } = &mut order {
-        *no_load = true;
-    }
+    let order = VehicleOrder::station_with_types(
+        pos,
+        crate::vehicle::OrderLoadType::NoLoad,
+        crate::vehicle::OrderUnloadType::UnloadIfPossible,
+        crate::vehicle::OrderNonStop::NonStopDestination,
+    );
     v.orders = vec![order];
     v.running = true;
     v.progress = 255;
     v.capacity = 20;
     assert!(!v.orders[0].should_wait_for_loading(v.cargo, v.capacity));
+}
+
+#[test]
+fn full_load_modes_distinguish_multi_cargo_consist() {
+    use crate::vehicle::{OrderLoadType, OrderNonStop, OrderUnloadType};
+
+    let pos = TileCoord::new(1, 1);
+    let full = VehicleOrder::station_with_types(
+        pos,
+        OrderLoadType::FullLoad,
+        OrderUnloadType::UnloadIfPossible,
+        OrderNonStop::NonStopDestination,
+    );
+    let full_any = VehicleOrder::station_with_types(
+        pos,
+        OrderLoadType::FullLoadAny,
+        OrderUnloadType::UnloadIfPossible,
+        OrderNonStop::NonStopDestination,
+    );
+    let mixed = [
+        (crate::CargoType::Coal, 20, 20),
+        (crate::CargoType::Mail, 5, 10),
+    ];
+    assert!(full.should_wait_for_consist_loading(&mixed));
+    assert!(!full_any.should_wait_for_consist_loading(&mixed));
+
+    let same_cargo_split = [
+        (crate::CargoType::Coal, 20, 20),
+        (crate::CargoType::Coal, 0, 20),
+    ];
+    assert!(full_any.should_wait_for_consist_loading(&same_cargo_split));
 }
 
 #[test]

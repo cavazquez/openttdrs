@@ -1,7 +1,7 @@
 //! Comportamiento de vehículos sin órdenes manuales (paridad `OpenTTD` `ProcessOrders` +
 //! lookahead / `PickRandomBit` en carretera).
 
-use crate::depot::nearest_depot_tile;
+use crate::depot::{DepotSpatialIndex, nearest_depot_tile_indexed};
 use crate::map::{Map, TileCoord, TileKind};
 use crate::rail_signals::{dir_from_to, rail_neighbors};
 use crate::ship_movement::water_tiles_connected;
@@ -285,8 +285,12 @@ pub(crate) fn orderless_tram_next(
 
 /// Aeropuerto más cercano para aviones sin órdenes (`HandleMissingAircraftOrders`).
 #[must_use]
-pub(crate) fn orderless_aircraft_hangar(map: &Map, pos: TileCoord) -> Option<TileCoord> {
-    nearest_depot_tile(map, pos, crate::vehicle::VehicleKind::Aircraft)
+pub(crate) fn orderless_aircraft_hangar(
+    map: &Map,
+    pos: TileCoord,
+    depot_index: &mut DepotSpatialIndex,
+) -> Option<TileCoord> {
+    nearest_depot_tile_indexed(map, pos, crate::vehicle::VehicleKind::Aircraft, depot_index)
 }
 
 /// Fallback Manhattan para vehículos de carretera sin red adyacente.

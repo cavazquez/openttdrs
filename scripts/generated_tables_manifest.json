@@ -38,9 +38,48 @@
       "inputs": [],
       "check": "hash",
       "requires_opengfx": true,
-      "output_sha256": "a53924f0081ad5aadefd036511e4e5c6407b89125d3224cd4ad5e0d41c9d2082",
+      "output_sha256": "81616c59e84287e007bca77c7aaa17914b312c64851c19ab350ff6bffee15031",
       "license": "metadatos OpenGFX locales (no vendorizado)",
-      "note": "Regenerado 2026-07-16: offsets E/W de capas tren. CI solo hash."
+      "note": "Regenerado 2026-07-27: agrega metadatos NFO de rotor de helicóptero 3901..3904. CI solo hash."
+    },
+    {
+      "id": "signal_sprite_meta",
+      "generator": "scripts/gen_signal_sprite_meta.py",
+      "output": "crates/openttdrs-client/src/sprites/signal_sprite_meta_generated.rs",
+      "inputs": [],
+      "check": "hash",
+      "requires_opengfx": true,
+      "output_sha256": "22901d7c186c39c7cbfa8a4d1d46b428b870b1bcf31b01dd913945951358af65",
+      "license": "metadatos NFO OpenGFX locales (GPL-2.0+)",
+      "note": "BBox/offset del recorte exacto usado para señales clásicas y Action5; CI valida hash."
+    },
+    {
+      "id": "water_palette",
+      "generator": "scripts/gen_water_anim_frames.py",
+      "output": "crates/openttdrs-client/src/sprites/water_palette_generated.rs",
+      "inputs": [
+        "reference/openttd-upstream/src/palette.cpp",
+        "reference/openttd-upstream/src/table/palettes.h"
+      ],
+      "check": "hash",
+      "requires_opengfx": true,
+      "output_sha256": "abfc32cdb132a32cd3477032ba9a67e2510254b266969eac0e7a05c17dc87daf",
+      "license": "GPL-2.0-only (OpenTTD) + índices NFO OpenGFX locales",
+      "note": "Valida cobertura NFO 245..254 y genera las constantes para las 5 fases dark × 15 glitter."
+    },
+    {
+      "id": "effect_vehicle_draw_data",
+      "generator": "scripts/gen_effect_vehicle_sprites.py",
+      "output": "crates/openttdrs-client/src/sprites/effect_vehicle_draw_data_generated.rs",
+      "inputs": [
+        "reference/openttd-upstream/src/effectvehicle.cpp",
+        "reference/openttd-upstream/src/table/sprites.h"
+      ],
+      "check": "hash",
+      "requires_opengfx": true,
+      "output_sha256": "710e387147f6256bb52f5e9432de0d8371c366e089a058b607cbb05863e3c083",
+      "license": "GPL-2.0-only (OpenTTD) + sprites OpenGFX locales",
+      "note": "Incluye los 15 frames y metadatos NFO usados por EV_BUBBLE. CI valida hash."
     },
     {
       "id": "tile_atlas",
@@ -49,9 +88,9 @@
       "inputs": [],
       "check": "hash",
       "requires_opengfx": true,
-      "output_sha256": "d99b14fffa1769747604d4e1178f3ab31fbcfc0a72f7d28ffb5193c27c768166",
+      "output_sha256": "17aef9d2237a05213bcf04a7af0831030b06b7e6a86bacd7f52be1fd65b7640e",
       "license": "layout derivado de PNG OpenGFX locales",
-      "note": "Regenerado y verificado 2026-07-25 con OpenGFX local; CI solo hash del .rs. rustfmt_skip evita drift mecánico."
+      "note": "Regenerado y verificado 2026-07-27 con agua, burbujas y rotor OpenGFX; CI solo hash del .rs."
     }
   ],
   "inventory": [
@@ -68,6 +107,16 @@
     {
       "output": "crates/openttdrs-client/src/sprites/vehicle_gfx_data_generated.rs",
       "generator": "scripts/gen_vehicle_gfx_data.py",
+      "pilot": true
+    },
+    {
+      "output": "crates/openttdrs-client/src/sprites/signal_sprite_meta_generated.rs",
+      "generator": "scripts/gen_signal_sprite_meta.py",
+      "pilot": true
+    },
+    {
+      "output": "crates/openttdrs-client/src/sprites/water_palette_generated.rs",
+      "generator": "scripts/gen_water_anim_frames.py",
       "pilot": true
     },
     {

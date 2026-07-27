@@ -35,6 +35,8 @@ pub const GFX_GOLD_MINE_TOWER_ANIMATED: u16 = 88;
 pub const GFX_PLASTIC_FOUNTAIN_ANIMATED_1: u16 = 148;
 /// `GFX_PLASTIC_FOUNTAIN_ANIMATED_8`
 pub const GFX_PLASTIC_FOUNTAIN_ANIMATED_8: u16 = 155;
+/// `GFX_BUBBLE_GENERATOR`: cada visita de TileLoop crea `EV_BUBBLE`.
+pub const GFX_BUBBLE_GENERATOR: u16 = 161;
 
 const TOWER_ANIM_GFX: [u16; 3] = [
     GFX_COAL_MINE_TOWER_ANIMATED,
@@ -362,6 +364,23 @@ pub fn advance_industry_tile_loop_events_from_visits(
     commit_industry_updates(map, &candidates, tick, apply_tile_loop_industry)
 }
 
+/// Generadores de burbujas terminados visitados por `RunTileLoop` este tick.
+///
+/// La creación del EffectVehicle ocurre una vez por visita, igual que
+/// `TileLoopIndustry_BubbleGenerator`; no requiere barrer el mapa.
+#[must_use]
+pub fn bubble_generator_spawns_from_visits(visits: &[(TileCoord, Tile)]) -> Vec<TileCoord> {
+    visits
+        .iter()
+        .filter(|(_, tile)| {
+            tile.kind == TileKind::Industry
+                && is_industry_completed(tile)
+                && industry_gfx(tile) == GFX_BUBBLE_GENERATOR
+        })
+        .map(|(coord, _)| *coord)
+        .collect()
+}
+
 /// Eventos `TileLoop_Industry` (franja cada 256 ticks).
 pub fn advance_industry_tile_loop_events(
     map: &mut Map,
@@ -579,5 +598,21 @@ mod tests {
         let mut loop_state = TileLoopState::default();
         advance_industry_tile_animations(&mut map, 4, &mut loop_state);
         assert_eq!(map.get(TileCoord::new(0, 0)).unwrap().m3hi, 1);
+    }
+
+    #[test]
+    fn bubble_effect_spawns_only_from_completed_generator_visits() {
+        let generator = industry_tile(GFX_BUBBLE_GENERATOR, 0x80, 0);
+        let incomplete = industry_tile(GFX_BUBBLE_GENERATOR, 0x01, 0);
+        let other = industry_tile(160, 0x80, 0);
+        let visits = [
+            (TileCoord::new(2, 3), generator),
+            (TileCoord::new(3, 3), incomplete),
+            (TileCoord::new(4, 3), other),
+        ];
+        assert_eq!(
+            bubble_generator_spawns_from_visits(&visits),
+            vec![TileCoord::new(2, 3)]
+        );
     }
 }

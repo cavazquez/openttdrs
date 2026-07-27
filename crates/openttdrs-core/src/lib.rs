@@ -19,6 +19,7 @@ pub mod cargodist;
 pub mod cheats;
 pub mod command;
 pub mod company;
+pub mod construction_settings;
 pub mod depot;
 pub mod depot_leave;
 pub mod dev_metrics;
@@ -27,6 +28,7 @@ pub mod economy;
 pub mod economy_quarterly;
 pub mod engine;
 pub mod entity_history;
+pub mod fleet_index;
 mod game_state;
 pub mod ground_crash;
 pub mod gs;
@@ -142,6 +144,7 @@ pub use company::{
     RIVAL_NAME_ROADHAUL, RIVAL_NAME_TRANSCARGO, company_colour_taken_by_other, company_id_by_name,
     feeder_share_of, first_free_company_colour, tile_owner_colour, tile_with_owner,
 };
+pub use construction_settings::{ConstructionSettings, RoadVehicleDrivingSide, TrainSignalSide};
 pub use depot::{
     DEPOT_RESERVATION_M5_BIT, clear_all_depot_reservations, depot_tile_kind_for_vehicle,
     has_depot_reservation, nearest_depot_tile, rail_depot_mouth_dir, set_depot_reservation,
@@ -188,6 +191,7 @@ pub use engine::{
 pub use entity_history::{
     ENTITY_HISTORY_MONTHS, IndustryHistory, IndustryHistorySample, TownHistory, TownHistorySample,
 };
+pub use fleet_index::{FleetIndex, TerminalSpatialIndex};
 pub use ground_crash::{
     CRASHED_CTR_REMOVE, CRASHED_CTR_START, crash_vehicle, maybe_road_train_crash,
     road_veh_check_train_crash, tick_crashed_vehicles,
@@ -231,7 +235,7 @@ pub use industry_tile::{
     get_translated_industry_tile_id, industry_tile_spec_def, next_free_industry_tile_gfx_id,
 };
 pub use map::{
-    AIRPORT_RADAR_FRAMES, FloodingBehaviour, GFX_COAL_MINE_TOWER_ANIMATED,
+    AIRPORT_RADAR_FRAMES, FloodingBehaviour, GFX_BUBBLE_GENERATOR, GFX_COAL_MINE_TOWER_ANIMATED,
     GFX_COPPER_MINE_TOWER_ANIMATED, GFX_GOLD_MINE_TOWER_ANIMATED, GFX_OILWELL_ANIMATED_1,
     GFX_OILWELL_ANIMATED_2, GFX_OILWELL_ANIMATED_3, INDUSTRY_RANDOM_TRIGGERS_MASK,
     IndustryRandomTrigger, IndustryTileLink, MAX_TREE_OR_FIELD_STAGE, Map, MapError,
@@ -243,27 +247,28 @@ pub use map::{
     SLOPE_SE, SLOPE_SW, TILE_PIXEL_HEIGHT, TREE_GROWTH_TICK_INTERVAL, Tile, TileCoord, TileKind,
     WaterClass, advance_industry_animated_tiles, advance_industry_construction,
     advance_industry_tile_animations, advance_industry_tile_loop_events, airport_radar_frame,
-    apply_desert_transition_from_visits, apply_seasonal_snow, clear_tree, coord_from_linear_index,
-    coord_to_dense_index, coord_to_linear_index, do_flood_tile, effective_rail_trackbits,
-    effective_road_bits, flood_vehicles, get_flooding_behaviour, inclined_slope_direction,
-    industry_animation_frame, industry_construction_counter, industry_construction_stage,
-    industry_gfx, industry_instance_id, industry_random_bits, industry_random_triggers,
-    industry_tile_anim_state, industry_tile_link, industry_tile_on_water, industry_tile_rng,
-    industry_tiles_mergeable, industry_uses_water_ground, init_industry_tile_random,
-    is_airport_tower_tile, is_canal_tile, is_industry_completed, is_map_object_tile,
-    is_owned_land_tile, is_river_tile, is_tropic_desert_zone, is_tunnel_entrance_slope,
-    make_industry_tile_bigger, make_shore_tile, make_water_tile, openttd_tile_index_to_coord,
-    opposite_diag_dir, partial_pixel_z, plant_tree, process_water_flood_from_visits,
-    rail_bit_for_sides, rail_bits_touching_side, rail_foundation_for_trackbits,
-    rail_signal_diag_dir_offset, rail_tile_is_signals, rail_trackbits_valid_on_slope,
-    rail_traversal_bits, resolve_tunnel_end, river_tile_is_ship_navigable, set_industry_gfx,
-    set_industry_random_bits, set_industry_random_triggers, set_water_class_m1,
-    slope_dz_at_subtile, slope_dz_on_tile, slope_pixel_z, step_airport_tiles, step_industry_tiles,
-    step_industry_tiles_with_seed, step_tree_and_field_growth, tick_tree_tile_loop,
-    tick_water_flood, tile_adjacent_to_water, tile_has_water_class, tile_loop_clear_desert,
-    tile_loop_water_at, tile_slope_and_z, tree_or_field_stage, trigger_industry_randomisation_at,
-    trigger_industry_tile_randomisation, tunnel_entrance_m5, tunnel_preview_path, water_class,
-    water_class_from_m1,
+    apply_desert_transition_from_visits, apply_seasonal_snow, bubble_generator_spawns_from_visits,
+    clear_tree, coord_from_linear_index, coord_to_dense_index, coord_to_linear_index,
+    do_flood_tile, effective_rail_trackbits, effective_road_bits, flood_vehicles,
+    get_flooding_behaviour, inclined_slope_direction, industry_animation_frame,
+    industry_construction_counter, industry_construction_stage, industry_gfx, industry_instance_id,
+    industry_random_bits, industry_random_triggers, industry_tile_anim_state, industry_tile_link,
+    industry_tile_on_water, industry_tile_rng, industry_tiles_mergeable,
+    industry_uses_water_ground, init_industry_tile_random, is_airport_tower_tile, is_canal_tile,
+    is_industry_completed, is_map_object_tile, is_owned_land_tile, is_river_tile,
+    is_tropic_desert_zone, is_tunnel_entrance_slope, lift_destination, lift_has_destination,
+    lift_position, make_industry_tile_bigger, make_shore_tile, make_water_tile,
+    openttd_tile_index_to_coord, opposite_diag_dir, partial_pixel_z, plant_tree,
+    process_water_flood_from_visits, rail_bit_for_sides, rail_bits_touching_side,
+    rail_foundation_for_trackbits, rail_signal_diag_dir_offset, rail_tile_is_signals,
+    rail_trackbits_valid_on_slope, rail_traversal_bits, resolve_tunnel_end,
+    river_tile_is_ship_navigable, set_industry_gfx, set_industry_random_bits,
+    set_industry_random_triggers, set_water_class_m1, slope_dz_at_subtile, slope_dz_on_tile,
+    slope_pixel_z, step_airport_tiles, step_industry_tiles, step_industry_tiles_with_seed,
+    step_tree_and_field_growth, tick_tree_tile_loop, tick_water_flood, tile_adjacent_to_water,
+    tile_has_water_class, tile_loop_clear_desert, tile_loop_water_at, tile_slope_and_z,
+    tree_or_field_stage, trigger_industry_randomisation_at, trigger_industry_tile_randomisation,
+    tunnel_entrance_m5, tunnel_preview_path, water_class, water_class_from_m1,
 };
 // Runtime NewGRF en raíz; builders/fixtures vía `newgrf_actions` / `newgrf_sprites::fixture` (#157).
 pub use house_spec::{HouseSpec, get_town_radius_group, pick_town_house_id};
@@ -452,9 +457,9 @@ pub use train_consist::{
     TrainUnitPose, VEHICLE_LENGTH, action2_eval_ctx_for_unit, attach_wagon, attach_wagon_chain,
     cargo_class_bits, cargo_type_a_id, consist_changed, consist_changed_with_map, consist_head_id,
     consist_occupied_tiles, consist_power_hp, consist_tile_span, consist_unit_ids,
-    consist_unit_poses, consist_weight_t, detach_unit, detach_unit_keep_tail,
-    engine_is_train_engine, engine_is_wagon, propagate_consist_unit_poses, reverse_consist_at_stop,
-    same_consist, sell_chain_ids,
+    consist_unit_ids_indexed, consist_unit_poses, consist_weight_t, detach_unit,
+    detach_unit_keep_tail, engine_is_train_engine, engine_is_wagon, propagate_consist_unit_poses,
+    reverse_consist_at_stop, same_consist, sell_chain_ids,
 };
 pub use train_movement::{
     ACCEL_SLOWDOWN, AccelSlowdownParams, DELTACOORD_LEAVE_OFFSET, FRACTCOORDS_BEHIND,
@@ -469,10 +474,10 @@ pub use train_movement::{
 pub use vehicle::reverse_direction;
 pub use vehicle::{
     AircraftPhase, BREAKDOWN_DURATION_TICKS, DEFAULT_SERVICE_INTERVAL_DAYS, DIR_E, DIR_N, DIR_NE,
-    DIR_NW, DIR_S, DIR_SE, DIR_SW, DIR_W, OrderConditionKind, OrderNonStop, OrderStopLocation,
-    SERVICING_RELIABILITY_THRESHOLD, TimetableWaitKind, VEHICLE_PROGRESS_STEP, Vehicle,
-    VehicleDirection, VehicleIssueDetail, VehicleKind, VehicleOperationalSummary, VehicleOrder,
-    direction_from_tile_step,
+    DIR_NW, DIR_S, DIR_SE, DIR_SW, DIR_W, OrderConditionKind, OrderLoadType, OrderNonStop,
+    OrderStopLocation, OrderUnloadType, SERVICING_RELIABILITY_THRESHOLD, TimetableWaitKind,
+    VEHICLE_PROGRESS_STEP, Vehicle, VehicleDirection, VehicleIssueDetail, VehicleKind,
+    VehicleOperationalSummary, VehicleOrder, direction_from_tile_step,
 };
 pub use vehicle_group::{MAX_VEHICLE_GROUP_NAME_CHARS, VehicleGroup};
 pub use world_gen::{

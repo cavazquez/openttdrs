@@ -57,6 +57,94 @@ fn fresh_map8() -> Map {
 }
 
 #[test]
+fn water_surface_markers_cover_flat_locks_and_industry_water() {
+    let assets = boot_assets_app();
+    let mut map = Map::new_flat(5, 5, 0);
+    for x in 0..5 {
+        for y in 0..5 {
+            map.set_kind(TileCoord::new(x, y), TileKind::Water)
+                .expect("water");
+        }
+    }
+    let flat = TileCoord::new(1, 1);
+    let lock = TileCoord::new(2, 2);
+    map.set_mapt_m5(lock, 0x60, 0x20).expect("lock");
+
+    let oil_rig = TileCoord::new(3, 3);
+    let mut oil_tile = tile_template();
+    oil_tile.kind = TileKind::Industry;
+    oil_tile.mapt = 0x80;
+    oil_tile.m5 = 24; // GFX_OILRIG_1
+    oil_tile.m1 = 0x80;
+    map.set_tile(oil_rig, oil_tile).expect("oil rig");
+
+    let grid = RenderGrid::from_map(&map, 5, 5);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world
+        .run_system_once(
+            move |mut commands: Commands,
+                  m: Res<TsMap>,
+                  g: Res<TsGrid>,
+                  a: Res<TsAssets>,
+                  mut company: Local<CompanyColoredSprites>,
+                  mut images: Local<Assets<Image>>| {
+                let mut batches = MapSpriteBatches::default();
+                for coord in [flat, lock] {
+                    push_water_tile(
+                        &mut commands,
+                        &m.0,
+                        m.0.dimensions(),
+                        &a.0,
+                        &TileRenderContext::new(
+                            &m.0,
+                            &g.0,
+                            u32::try_from(coord.x).unwrap(),
+                            u32::try_from(coord.y).unwrap(),
+                        ),
+                        false,
+                        &mut batches,
+                        &[],
+                        None,
+                        None,
+                    );
+                }
+                assert!(batches.water[0].1.is_palette_animated());
+                assert!(!batches.water[1].1.is_palette_animated());
+                flush_map_batches(&mut commands, batches);
+                spawn_industry_tile(
+                    &mut commands,
+                    &a.0,
+                    &m.0,
+                    &TileRenderContext::new(&m.0, &g.0, 3, 3),
+                    4.0,
+                    &[],
+                    &mut company,
+                    &mut images,
+                    &[],
+                    &openttdrs_core::empty_industry_tile_overrides(),
+                    None,
+                    &[],
+                );
+            },
+        )
+        .expect("water coverage");
+
+    let mut water = world.query::<&crate::render::WaterTile>();
+    let markers: Vec<_> = water.iter(&world).copied().collect();
+    assert_eq!(markers.len(), 3);
+    assert_eq!(
+        markers
+            .iter()
+            .filter(|marker| marker.is_palette_animated())
+            .count(),
+        2
+    );
+}
+
+#[test]
 fn spawn_road_rail_station_and_transport_cover_main_paths() {
     let assets = boot_assets_app();
     let mut map = fresh_map8();
@@ -168,6 +256,7 @@ fn spawn_road_rail_station_and_transport_cover_main_paths() {
                     TEST_CLIMATE,
                     true,
                     true,
+                    false,
                     &[],
                     None,
                     None,
@@ -184,6 +273,7 @@ fn spawn_road_rail_station_and_transport_cover_main_paths() {
                     TEST_CLIMATE,
                     true,
                     true,
+                    false,
                     &[],
                     None,
                     None,

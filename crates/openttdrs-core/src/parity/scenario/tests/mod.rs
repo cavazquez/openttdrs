@@ -354,16 +354,12 @@ fn feeder_share_paid_on_unload_preserves_packet_flags() {
     state.stations = vec![hub_st, dest_st];
 
     let mut truck = Vehicle::new(90, VehicleKind::Truck, dest, dest);
-    let mut transfer_order = VehicleOrder::station(dest);
-    if let VehicleOrder::Station {
-        transfer,
-        no_unload,
-        ..
-    } = &mut transfer_order
-    {
-        *transfer = true;
-        *no_unload = false;
-    }
+    let transfer_order = VehicleOrder::station_with_types(
+        dest,
+        crate::OrderLoadType::LoadIfPossible,
+        crate::OrderUnloadType::Transfer,
+        crate::OrderNonStop::NonStopDestination,
+    );
     truck.set_vehicle_orders(vec![transfer_order]);
     truck.sync_order_destination(&state.map);
     let mut packet = CargoPacket::new(CargoType::Coal, 8, TileCoord::new(1, 1));

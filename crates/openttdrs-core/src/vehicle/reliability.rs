@@ -372,7 +372,7 @@ const ROAD_SERVICE_MAX_PENALTY: u32 = 20;
 
 /// Inserta orden de depósito si un vehículo road necesita servicio (`CheckIfRoadVehNeedsService`).
 pub(crate) fn check_road_vehicles_need_service(state: &mut crate::GameState) {
-    use crate::depot::nearest_reachable_depot_tile;
+    use crate::depot::nearest_reachable_depot_tile_indexed;
     use crate::pathfinder::{PathNetwork, find_path};
     use crate::vehicle::VehicleKind;
     use crate::vehicle::order::VehicleOrder;
@@ -414,7 +414,12 @@ pub(crate) fn check_road_vehicles_need_service(state: &mut crate::GameState) {
             let v = &state.vehicles[idx];
             (v.pos, v.kind)
         };
-        let Some(depot) = nearest_reachable_depot_tile(&state.map, pos, kind) else {
+        let Some(depot) = nearest_reachable_depot_tile_indexed(
+            &state.map,
+            pos,
+            kind,
+            &mut state.runtime.depot_spatial_index,
+        ) else {
             continue;
         };
         let path_target =

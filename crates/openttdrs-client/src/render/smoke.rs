@@ -8,7 +8,9 @@ use bevy::prelude::*;
 
 use crate::bevy_app::UpdateSet;
 use crate::iso::{overlay_pos, remap_tile_offset, wang_hash};
-use crate::render::{AtlasSprite, MapVisualLayer, TileRenderContext, WorldAssets};
+use crate::render::{
+    AtlasSprite, MapVisualLayer, TileRenderContext, WorldAssets, palette_animations_should_run,
+};
 use crate::sprites::{
     CHIMNEY_SMOKE_FRAMES, CHIMNEY_SMOKE_META, COPPER_MINE_SMOKE_FRAMES, COPPER_MINE_SMOKE_META,
 };
@@ -22,7 +24,8 @@ impl Plugin for IndustrySmokePlugin {
             Update,
             (animate_chimney_smoke, animate_copper_mine_smoke)
                 .in_set(UpdateSet::Visuals)
-                .run_if(in_state(ClientScreen::InGame)),
+                .run_if(in_state(ClientScreen::InGame))
+                .run_if(palette_animations_should_run),
         );
     }
 }
@@ -85,6 +88,8 @@ pub(crate) fn spawn_chimney_smoke(
         ctx.tx_i32(),
         ctx.ty_i32(),
     );
+    let color =
+        crate::sprites::with_to_alpha(Color::WHITE, crate::sprites::TransparencyOption::Industries);
     commands.spawn((
         MapVisualLayer,
         ctx.map_tile_chunk(),
@@ -94,7 +99,7 @@ pub(crate) fn spawn_chimney_smoke(
             tile: (ctx.tx_i32(), ctx.ty_i32()),
             phase,
         },
-        assets.chimney_smoke[phase].sprite(),
+        assets.chimney_smoke[phase].sprite_colored(color),
         Transform::from_translation(pos3),
     ));
 }
@@ -130,6 +135,8 @@ pub(crate) fn spawn_copper_mine_smoke(
         ctx.tx_i32(),
         ctx.ty_i32(),
     );
+    let color =
+        crate::sprites::with_to_alpha(Color::WHITE, crate::sprites::TransparencyOption::Industries);
     commands.spawn((
         MapVisualLayer,
         ctx.map_tile_chunk(),
@@ -139,7 +146,7 @@ pub(crate) fn spawn_copper_mine_smoke(
             tile: (ctx.tx_i32(), ctx.ty_i32()),
             phase,
         },
-        assets.copper_mine_smoke[phase].sprite(),
+        assets.copper_mine_smoke[phase].sprite_colored(color),
         Transform::from_translation(pos3),
     ));
 }
@@ -197,9 +204,10 @@ pub(crate) fn animate_copper_mine_smoke(
     let tick = sim.state.tick.get();
     for (smoke, mut sprite, mut transform) in &mut q {
         let idx = copper_smoke_frame_index(tick, smoke.phase);
-        if !frames.0[idx].matches(&sprite) {
-            frames.0[idx].apply_to(&mut sprite);
+        if frames.0[idx].matches(&sprite) {
+            continue;
         }
+        frames.0[idx].apply_to(&mut sprite);
         let (w, h, xrel, yrel) = COPPER_MINE_SMOKE_META[idx];
         let rise = idx as f32 * COPPER_SMOKE_RISE;
         let mut pos3 = overlay_pos(

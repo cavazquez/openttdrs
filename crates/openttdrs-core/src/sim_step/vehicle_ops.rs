@@ -30,7 +30,7 @@ pub(super) fn run_autoreplace_in_depots(state: &mut GameState) {
         .map(|v| v.id)
         .collect();
     for vehicle_id in candidates {
-        if let Some(idx) = state.vehicles.iter().position(|v| v.id == vehicle_id) {
+        if let Some(idx) = state.runtime.fleet_index.slot(vehicle_id) {
             state.vehicles[idx].autoreplace_attempted_this_stop = true;
         }
         let _ = crate::autoreplace::try_autoreplace_vehicle(state, vehicle_id);
@@ -49,12 +49,14 @@ pub(super) fn apply_pending_depot_order_refits(state: &mut GameState) {
         .filter_map(|v| v.pending_depot_order_refit.map(|cargo| (v.id, cargo)))
         .collect();
     for (head_id, cargo) in pending {
-        if let Some(v) = state.vehicles.iter_mut().find(|v| v.id == head_id) {
+        if let Some(slot) = state.runtime.fleet_index.slot(head_id)
+            && let Some(v) = state.vehicles.get_mut(slot)
+        {
             v.pending_depot_order_refit = None;
         }
-        let unit_ids = crate::consist_unit_ids(&state.vehicles, head_id);
+        let unit_ids = state.runtime.fleet_index.consist(head_id).to_vec();
         for unit_id in unit_ids {
-            let Some(idx) = state.vehicles.iter().position(|v| v.id == unit_id) else {
+            let Some(idx) = state.runtime.fleet_index.slot(unit_id) else {
                 continue;
             };
             if state.vehicles[idx].cargo > 0 {

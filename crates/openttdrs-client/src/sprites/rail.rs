@@ -1053,25 +1053,41 @@ fn signal_sprite_id(sig_type: u8, variant: u8, image: u8, green: bool) -> u32 {
         + pbs_extra
 }
 
-/// Coordenadas sub-tesela OpenTTD (`SignalPositions[side][pos]`, lado izquierdo).
-const SIGNAL_SUBTILE_XY: [(i8, i8); 12] = [
-    (8, 5),
-    (14, 1),
-    (1, 14),
-    (9, 11),
-    (1, 0),
-    (3, 10),
-    (11, 4),
-    (14, 14),
-    (11, 3),
-    (4, 13),
-    (3, 4),
-    (11, 13),
+/// Coordenadas sub-tesela `SignalPositions[signal_on_right][pos]` de OpenTTD.
+const SIGNAL_SUBTILE_XY: [[(i8, i8); 12]; 2] = [
+    [
+        (8, 5),
+        (14, 1),
+        (1, 14),
+        (9, 11),
+        (1, 0),
+        (3, 10),
+        (11, 4),
+        (14, 14),
+        (11, 3),
+        (4, 13),
+        (3, 4),
+        (11, 13),
+    ],
+    [
+        (14, 1),
+        (12, 10),
+        (4, 6),
+        (1, 14),
+        (10, 4),
+        (0, 1),
+        (14, 14),
+        (5, 12),
+        (11, 13),
+        (4, 3),
+        (13, 4),
+        (3, 11),
+    ],
 ];
 
 #[inline]
-fn signal_subtile_xy(pos: u8) -> (i8, i8) {
-    SIGNAL_SUBTILE_XY[pos.min(11) as usize]
+fn signal_subtile_xy(pos: u8, signals_on_right: bool) -> (i8, i8) {
+    SIGNAL_SUBTILE_XY[usize::from(signals_on_right)][pos.min(11) as usize]
 }
 
 /// PNG a cargar para un ID lógico de señal (`DrawSingleSignal` → atlas).
@@ -1085,17 +1101,32 @@ pub fn signal_sprite_texture_id(sprite_id: u32) -> u32 {
     sprite_id
 }
 
-/// Ajuste del centro del sprite respecto al ancla `DrawSingleSignal`
-/// (xrel/yrel OpenGFX + mitad del bbox; Bevy ancla al centro del sprite).
+/// Bbox/offset NFO del sprite de señal elegido por el pipeline de assets.
+#[must_use]
+pub fn signal_sprite_metadata(tex_id: u32) -> Option<(i16, i16, i16, i16)> {
+    let table = super::signal_sprite_meta_generated::SIGNAL_SPRITE_META;
+    table
+        .binary_search_by_key(&tex_id, |entry| entry.0)
+        .ok()
+        .map(|index| {
+            let (_, width, height, xrel, yrel) = table[index];
+            (width, height, xrel, yrel)
+        })
+}
+
+/// Ajuste del centro del sprite respecto al ancla `DrawSingleSignal`.
+///
+/// OpenTTD posiciona la esquina superior izquierda con `xrel/yrel`; Bevy usa
+/// el centro y eje Y ascendente. La metadata se genera desde NFO/PNG.
 #[must_use]
 pub fn signal_sprite_center_offset(tex_id: u32) -> Vec2 {
-    match tex_id {
-        1275 | 1276 => Vec2::new(0.5, 5.0),
-        1277 | 1278 => Vec2::new(1.5, 5.0),
-        // Action5 (`rail_5088..`): típico 4×20, xrel=-1, yrel≈-18 → (1, -8).
-        5088..=5327 => Vec2::new(1.0, -8.0),
-        _ => Vec2::ZERO,
-    }
+    let Some((width, height, xrel, yrel)) = signal_sprite_metadata(tex_id) else {
+        return Vec2::ZERO;
+    };
+    Vec2::new(
+        f32::from(xrel) + f32::from(width) * 0.5,
+        -(f32::from(yrel) + f32::from(height) * 0.5),
+    )
 }
 
 /// Posición en pantalla de una señal, alineada al mismo ancla que la vía (`tile_pos_half`).
@@ -1111,10 +1142,29 @@ pub fn signal_screen_position(
     half_h: f32,
     base_z: u8,
 ) -> Vec2 {
+    signal_screen_position_for_side(tx, ty, pos, tex_id, half_h, base_z, false)
+}
+
+/// Variante de [`signal_screen_position`] que aplica el lado configurado.
+#[must_use]
+pub fn signal_screen_position_for_side(
+    tx: i32,
+    ty: i32,
+    pos: u8,
+    tex_id: u32,
+    half_h: f32,
+    base_z: u8,
+    signals_on_right: bool,
+) -> Vec2 {
     let p = crate::iso::iso(tx, ty);
     let elev = f32::from(base_z) * crate::iso::HEIGHT_PX;
     let track_base = Vec2::new(p.x, p.y - half_h + elev);
-    track_base + rail_signal_subtile_offset(pos) + signal_sprite_center_offset(tex_id)
+    let subtile = if signals_on_right {
+        rail_signal_subtile_offset_for_side(pos, true)
+    } else {
+        rail_signal_subtile_offset(pos)
+    };
+    track_base + subtile + signal_sprite_center_offset(tex_id)
 }
 
 /// Sprites de señal visibles en la tesela, con carril para el offset de dibujo.
@@ -1419,10 +1469,17 @@ pub fn signal_draw_pos(ottd_track: u8, sig_bit: u8) -> u8 {
 /// Sub-tesela OpenTTD (0–16) → desplazamiento desde el centro del rombo (`DrawSingleSignal`).
 #[must_use]
 pub fn rail_signal_subtile_offset(pos: u8) -> Vec2 {
-    let (ox, oy) = signal_subtile_xy(pos);
+    rail_signal_subtile_offset_for_side(pos, false)
+}
+
+/// Sub-tesela para el lado configurado de las señales.
+#[must_use]
+pub fn rail_signal_subtile_offset_for_side(pos: u8, signals_on_right: bool) -> Vec2 {
+    let (ox, oy) = signal_subtile_xy(pos, signals_on_right);
     let dx = f32::from(ox) - 8.0;
     let dy = f32::from(oy) - 8.0;
-    remap_tile_offset(dx, dy, 0.0)
+    // `iso(tx, ty)` usa `RemapCoords(16·tx, 16·ty) / 2`.
+    remap_tile_offset(dx, dy, 0.0) * 0.5
 }
 
 /// Sprite de señal + carril para posicionamiento en pantalla.
@@ -1923,9 +1980,21 @@ mod tests {
         let sw = signal_screen_position(2, 2, 8, 1276, TILE_HALF_H, 0);
         let ne = signal_screen_position(2, 2, 9, 1278, TILE_HALF_H, 0);
         assert_ne!(sw, ne);
-        assert!(sw.distance(base) < 40.0);
-        assert!(ne.distance(base) < 40.0);
+        assert_eq!(sw - base, Vec2::new(-12.5, 7.0));
+        assert_eq!(ne - base, Vec2::new(22.5, 4.5));
         assert!((sw - ne).length() > 8.0, "lados opuestos del riel");
+    }
+
+    #[test]
+    fn generated_signal_metadata_covers_every_renderable_sprite() {
+        for id in signal_sprite_ids_for_preload() {
+            assert!(
+                signal_sprite_metadata(id).is_some(),
+                "falta bbox/offset NFO para rail_{id}.png"
+            );
+        }
+        assert_eq!(signal_sprite_center_offset(1275), Vec2::new(3.5, 5.0));
+        assert_eq!(signal_sprite_center_offset(5088), Vec2::new(1.0, 8.0));
     }
 
     #[test]

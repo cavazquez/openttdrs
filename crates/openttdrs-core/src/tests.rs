@@ -253,6 +253,32 @@ fn vehicle_delivers_when_inside_station_coverage() {
 }
 
 #[test]
+fn forced_unload_transfers_cargo_not_accepted_by_station() {
+    let mut s = GameState::new(12, 8);
+    let source = TileCoord::new(1, 1);
+    let stop = TileCoord::new(6, 2);
+    s.stations.push(Station::new(stop));
+    let mut truck = Vehicle::new(0, VehicleKind::Truck, stop, stop);
+    truck.orders = vec![VehicleOrder::station_with_types(
+        stop,
+        OrderLoadType::NoLoad,
+        OrderUnloadType::Unload,
+        OrderNonStop::NonStopDestination,
+    )];
+    let mut packet = crate::CargoPacket::new(CargoType::Passengers, 8, source);
+    packet.first_station = Some(source);
+    truck.cargo_packets.push(packet);
+    truck.sync_cargo_from_packets();
+    truck.last_pickup_station = Some(source);
+    s.vehicles.push(truck);
+
+    SimHarness::until_vehicle_cargo(&mut s, 0, 0, 8);
+
+    assert_eq!(s.stations[0].cargo_stock.passengers, 8);
+    assert_eq!(s.stations[0].income, 0, "el trasbordo no es entrega final");
+}
+
+#[test]
 fn sim_stats_do_not_count_freight_transfer_as_delivery() {
     let mut s = GameState::new(8, 8);
     let ipos = TileCoord::new(0, 0);

@@ -76,3 +76,32 @@ pub(crate) fn vehicle_sprite_pos_at_with_catalog(
 pub(crate) fn vehicle_sprite_pos(v: &Vehicle, map: &Map, tick_alpha: f32) -> Vec3 {
     vehicle_sprite_pos_at(v, map, extrapolate_vehicle_pose(v, tick_alpha))
 }
+
+/// Posición de una capa auxiliar de aeronave (sombra o rotor) usando los
+/// offsets NFO de esa capa contra el mismo punto continuo del vehículo.
+pub(super) fn aircraft_aux_sprite_pos_at(
+    v: &Vehicle,
+    map: &Map,
+    pose: openttdrs_core::VehiclePose,
+    layer: &VehicleLayerGfx,
+    airborne: bool,
+    layer_z: f32,
+) -> Vec3 {
+    let (anchor, base_z, tx, ty) = vehicle_draw_anchor_from_pose(v, map, pose);
+    let height = if airborne {
+        base_z.saturating_add(v.altitude)
+    } else {
+        base_z
+    };
+    overlay_pos(
+        anchor,
+        layer.x_offs,
+        layer.y_offs,
+        layer.w,
+        layer.h,
+        height,
+        layer_z,
+        tx,
+        ty,
+    )
+}

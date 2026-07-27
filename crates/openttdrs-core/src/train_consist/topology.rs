@@ -19,39 +19,23 @@ pub fn engine_is_train_engine(engine: &EngineDef) -> bool {
 /// Recorre la cadena desde `head_id` hacia atrás (`next_unit`).
 #[must_use]
 pub fn consist_unit_ids(vehicles: &[Vehicle], head_id: u32) -> Vec<u32> {
-    let mut out = Vec::new();
-    let mut cur = Some(head_id);
-    let mut guard = 0_u32;
-    while let Some(id) = cur {
-        if guard > 256 {
-            break;
-        }
-        guard += 1;
-        out.push(id);
-        cur = vehicles
-            .iter()
-            .find(|v| v.id == id)
-            .and_then(|v| v.next_unit);
-    }
-    out
+    let mut index = crate::fleet_index::FleetIndex::default();
+    index.rebuild(vehicles);
+    index.consist(head_id).to_vec()
+}
+
+/// Versión sin asignación/rebuild para hot paths que ya poseen el índice del tick.
+#[must_use]
+pub fn consist_unit_ids_indexed(index: &crate::fleet_index::FleetIndex, head_id: u32) -> &[u32] {
+    index.consist(head_id)
 }
 
 /// ID de la cabeza del consist que contiene `vehicle_id`.
 #[must_use]
 pub fn consist_head_id(vehicles: &[Vehicle], vehicle_id: u32) -> Option<u32> {
-    let mut cur = vehicle_id;
-    let mut guard = 0_u32;
-    loop {
-        if guard > 256 {
-            return None;
-        }
-        guard += 1;
-        let v = vehicles.iter().find(|v| v.id == cur)?;
-        match v.prev_unit {
-            Some(prev) => cur = prev,
-            None => return Some(cur),
-        }
-    }
+    let mut index = crate::fleet_index::FleetIndex::default();
+    index.rebuild(vehicles);
+    index.head_id(vehicle_id)
 }
 
 /// ¿`other_id` pertenece al mismo consist que `vehicle_id`?

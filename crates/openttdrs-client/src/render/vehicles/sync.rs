@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use bevy::prelude::*;
 use openttdrs_core::extrapolate_vehicle_pose;
 use openttdrs_core::prelude::*;
@@ -8,23 +6,21 @@ use crate::render::CompanyColoredSprites;
 use crate::simulation::SimClock;
 use crate::state::SimWorld;
 
-use super::assets::{NewGrfTrainSpriteCache, TruckHandles};
-use super::pose::{vehicle_sprite_pos, vehicle_sprite_pos_at_with_catalog};
+use super::assets::{NewGrfTrainSpriteCache, TruckHandles, vehicle_layers};
+use super::pose::{
+    aircraft_aux_sprite_pos_at, vehicle_sprite_pos, vehicle_sprite_pos_at_with_catalog,
+};
 use super::spawn::{vehicle_cargo_color, vehicle_cargo_label};
 
 /// Índice `Vehicle.id` → posición en `GameState::vehicles` (evita `find` O(V) por sprite).
 #[derive(Resource, Default)]
 pub(crate) struct VehicleIndex {
-    pub(super) by_id: HashMap<u32, usize>,
+    pub(super) core: openttdrs_core::FleetIndex,
 }
 
 impl VehicleIndex {
     pub(crate) fn rebuild(&mut self, vehicles: &[Vehicle]) {
-        self.by_id.clear();
-        self.by_id.reserve(vehicles.len());
-        for (i, v) in vehicles.iter().enumerate() {
-            self.by_id.insert(v.id, i);
-        }
+        self.core.rebuild(vehicles);
     }
 }
 
@@ -34,6 +30,12 @@ pub(crate) fn rebuild_vehicle_index(sim: Res<SimWorld>, mut idx: ResMut<VehicleI
 
 #[derive(Component)]
 pub(crate) struct VehicleSprite(pub(super) u32);
+
+#[derive(Component)]
+pub(crate) struct AircraftShadowSprite(pub(super) u32);
+
+#[derive(Component)]
+pub(crate) struct AircraftRotorSprite(pub(super) u32);
 
 /// Sprite de vagón enganchado (mismo id de cabeza + offset visual).
 #[derive(Component)]
@@ -75,6 +77,15 @@ fn vehicle_cargo_label_pos(vehicle_pos: Vec3) -> Vec3 {
     Vec3::new(vehicle_pos.x, vehicle_pos.y + 21.0, vehicle_pos.z + 0.35)
 }
 
+#[must_use]
+fn aircraft_rotor_frame(v: &Vehicle, tick: u64) -> usize {
+    if !v.running || v.awaiting_load_window || v.cur_speed == 0 {
+        0
+    } else {
+        1 + usize::try_from((tick / 2) % 3).unwrap_or(0)
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn update_vehicles(
     sim: Res<SimWorld>,
@@ -92,7 +103,11 @@ pub(crate) fn update_vehicles(
             &mut Sprite,
             &mut Visibility,
         ),
-        Without<VehicleSprite>,
+        (
+            Without<VehicleSprite>,
+            Without<AircraftShadowSprite>,
+            Without<AircraftRotorSprite>,
+        ),
     >,
     mut labels: Query<
         (
@@ -102,7 +117,40 @@ pub(crate) fn update_vehicles(
             &mut TextColor,
             &mut Visibility,
         ),
-        (Without<VehicleSprite>, Without<ConsistUnitSprite>),
+        (
+            Without<VehicleSprite>,
+            Without<ConsistUnitSprite>,
+            Without<AircraftShadowSprite>,
+            Without<AircraftRotorSprite>,
+        ),
+    >,
+    mut shadows: Query<
+        (
+            &AircraftShadowSprite,
+            &mut Transform,
+            &mut Sprite,
+            &mut Visibility,
+        ),
+        (
+            Without<VehicleSprite>,
+            Without<ConsistUnitSprite>,
+            Without<VehicleCargoLabel>,
+            Without<AircraftRotorSprite>,
+        ),
+    >,
+    mut rotors: Query<
+        (
+            &AircraftRotorSprite,
+            &mut Transform,
+            &mut Sprite,
+            &mut Visibility,
+        ),
+        (
+            Without<VehicleSprite>,
+            Without<ConsistUnitSprite>,
+            Without<VehicleCargoLabel>,
+            Without<AircraftShadowSprite>,
+        ),
     >,
 ) {
     for c in &sim.state.companies {
@@ -112,7 +160,7 @@ pub(crate) fn update_vehicles(
         );
     }
     for (vs, mut transform, mut sprite, mut visibility) in &mut q {
-        let Some(&i) = vehicle_index.by_id.get(&vs.0) else {
+        let Some(i) = vehicle_index.core.slot(vs.0) else {
             continue;
         };
         let Some(v) = sim.state.vehicles.get(i) else {
@@ -144,7 +192,7 @@ pub(crate) fn update_vehicles(
     }
 
     for (trailer, mut transform, mut sprite, mut visibility) in &mut trailers {
-        let Some(&i) = vehicle_index.by_id.get(&trailer.head_id) else {
+        let Some(i) = vehicle_index.core.slot(trailer.head_id) else {
             *visibility = Visibility::Hidden;
             continue;
         };
@@ -152,12 +200,16 @@ pub(crate) fn update_vehicles(
             *visibility = Visibility::Hidden;
             continue;
         };
-        let ids = openttdrs_core::consist_unit_ids(&sim.state.vehicles, head.id);
+        let ids = vehicle_index.core.consist(head.id);
         let Some(&uid) = ids.get(trailer.unit_index) else {
             *visibility = Visibility::Hidden;
             continue;
         };
-        let Some(unit) = sim.state.vehicles.iter().find(|v| v.id == uid) else {
+        let Some(unit) = vehicle_index
+            .core
+            .slot(uid)
+            .and_then(|slot| sim.state.vehicles.get(slot))
+        else {
             *visibility = Visibility::Hidden;
             continue;
         };
@@ -186,8 +238,52 @@ pub(crate) fn update_vehicles(
         sprite.color = vehicle_tint(unit);
     }
 
+    for (shadow, mut transform, mut sprite, mut visibility) in &mut shadows {
+        let Some(i) = vehicle_index.core.slot(shadow.0) else {
+            *visibility = Visibility::Hidden;
+            continue;
+        };
+        let Some(v) = sim.state.vehicles.get(i) else {
+            *visibility = Visibility::Hidden;
+            continue;
+        };
+        let pose = extrapolate_vehicle_pose(v, sim_clock.tick_alpha);
+        if vehicle_is_hidden_from_view(&sim, v, pose) {
+            *visibility = Visibility::Hidden;
+            continue;
+        }
+        *visibility = Visibility::Visible;
+        let dir = openttdrs_core::vehicle_render_direction_at(v, pose).min(7) as usize;
+        let layer = &vehicle_layers(v)[dir];
+        transform.translation =
+            aircraft_aux_sprite_pos_at(v, &sim.state.map, pose, layer, false, 0.85);
+        sprite.image = trucks.for_vehicle(v, pose, None, None);
+    }
+
+    for (rotor, mut transform, mut sprite, mut visibility) in &mut rotors {
+        let Some(i) = vehicle_index.core.slot(rotor.0) else {
+            *visibility = Visibility::Hidden;
+            continue;
+        };
+        let Some(v) = sim.state.vehicles.get(i) else {
+            *visibility = Visibility::Hidden;
+            continue;
+        };
+        let pose = extrapolate_vehicle_pose(v, sim_clock.tick_alpha);
+        if vehicle_is_hidden_from_view(&sim, v, pose) {
+            *visibility = Visibility::Hidden;
+            continue;
+        }
+        let frame = aircraft_rotor_frame(v, sim.state.tick.get());
+        let layer = &super::assets::AIRCRAFT_ROTOR_LAYERS[frame];
+        *visibility = Visibility::Visible;
+        transform.translation =
+            aircraft_aux_sprite_pos_at(v, &sim.state.map, pose, layer, true, 1.1);
+        sprite.image = trucks.aircraft_rotor(frame);
+    }
+
     for (label, mut transform, mut text, mut color, mut visibility) in &mut labels {
-        let Some(&i) = vehicle_index.by_id.get(&label.0) else {
+        let Some(i) = vehicle_index.core.slot(label.0) else {
             continue;
         };
         let Some(v) = sim.state.vehicles.get(i) else {
@@ -203,5 +299,31 @@ pub(crate) fn update_vehicles(
         transform.translation = vehicle_cargo_label_pos(pos3);
         **text = vehicle_cargo_label(v);
         color.0 = vehicle_cargo_color(v);
+    }
+}
+
+#[cfg(test)]
+mod aircraft_aux_tests {
+    use super::*;
+
+    #[test]
+    fn rotor_stops_and_cycles_only_while_running() {
+        let mut v = Vehicle::new(
+            1,
+            VehicleKind::Aircraft,
+            TileCoord::new(1, 1),
+            TileCoord::new(2, 2),
+        );
+        v.engine_id = Some(openttdrs_core::ENGINE_AIRCRAFT_TRICARIO);
+        v.cur_speed = 40;
+        assert_eq!(aircraft_rotor_frame(&v, 0), 1);
+        assert_eq!(aircraft_rotor_frame(&v, 2), 2);
+        assert_eq!(aircraft_rotor_frame(&v, 4), 3);
+        assert_eq!(aircraft_rotor_frame(&v, 6), 1);
+        v.awaiting_load_window = true;
+        assert_eq!(aircraft_rotor_frame(&v, 8), 0);
+        v.awaiting_load_window = false;
+        v.running = false;
+        assert_eq!(aircraft_rotor_frame(&v, 8), 0);
     }
 }

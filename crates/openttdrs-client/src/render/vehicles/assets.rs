@@ -28,7 +28,7 @@ use vehicle_gfx::{
     TRUCK_VEHICLE_LAYERS, TRUCK_VEHICLE_LAYERS_LOADED,
 };
 
-pub(crate) use vehicle_gfx::VehicleLayerGfx;
+pub(crate) use vehicle_gfx::{AIRCRAFT_ROTOR_LAYERS, VehicleLayerGfx};
 
 const TRAIN_GROUP_COUNT: usize = 10;
 const TRAIN_GROUP_COAL_LOADED: usize = 9;
@@ -189,6 +189,7 @@ pub(crate) struct TruckHandles {
     pub(super) aircraft: DirHandles,
     pub(super) aircraft_fokker: DirHandles,
     pub(super) aircraft_tricario: DirHandles,
+    pub(super) aircraft_rotor: [Handle<Image>; 4],
     pub(super) train_groups: [DirHandles; TRAIN_GROUP_COUNT],
 }
 
@@ -221,6 +222,9 @@ impl TruckHandles {
             aircraft: load_set(asset_server, &AIRCRAFT_VEHICLE_LAYERS),
             aircraft_fokker: load_set(asset_server, &AIRCRAFT_VEHICLE_LAYERS_FOKKER),
             aircraft_tricario: load_set(asset_server, &AIRCRAFT_VEHICLE_LAYERS_TRICARIO),
+            aircraft_rotor: std::array::from_fn(|i| {
+                asset_server.load(AIRCRAFT_ROTOR_LAYERS[i].path)
+            }),
             train_groups: [
                 load_set(asset_server, &TRAIN_VEHICLE_LAYERS_T0),
                 load_set(asset_server, &TRAIN_VEHICLE_LAYERS_T1),
@@ -234,6 +238,10 @@ impl TruckHandles {
                 load_set(asset_server, &TRAIN_WAGON_COAL_LOADED_LAYERS),
             ],
         }
+    }
+
+    pub(super) fn aircraft_rotor(&self, frame: usize) -> Handle<Image> {
+        self.aircraft_rotor[frame.min(self.aircraft_rotor.len() - 1)].clone()
     }
 
     pub(crate) fn intro_sprite(&self, kind: VehicleKind, dir: usize) -> Handle<Image> {

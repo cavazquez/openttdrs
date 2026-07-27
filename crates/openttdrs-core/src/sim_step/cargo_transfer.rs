@@ -1,4 +1,4 @@
-use crate::vehicle::VehicleKind;
+use crate::vehicle::{OrderUnloadType, VehicleKind};
 use crate::{CargoType, GameState, TileCoord, economy, station, town};
 
 #[allow(clippy::too_many_lines)]
@@ -38,19 +38,14 @@ pub(super) fn unload_vehicles(
             continue;
         }
         let station_pos = st.pos;
-        if !st.accepts_cargo(cargo_type) || !st.can_service_vehicle(state.vehicles[i].kind) {
+        if !st.can_service_vehicle(state.vehicles[i].kind) {
             continue;
         }
         // CargoDist / P2.19: `PrepareUnload` + `Stage` (TRANSFER/DELIVER/KEEP).
-        let reinsert = !cargo_type.is_town_cargo();
-        let force_transfer = state.vehicles[i]
+        let unload_type = state.vehicles[i]
             .orders
             .get(state.vehicles[i].current_order)
-            .is_some_and(|o| o.transfer());
-        let no_unload = state.vehicles[i]
-            .orders
-            .get(state.vehicles[i].current_order)
-            .is_some_and(|o| o.no_unload());
+            .map_or(OrderUnloadType::UnloadIfPossible, |o| o.unload_type());
         let cargo_pct = if state.vehicles[i].capacity == 0 {
             0
         } else {
@@ -72,8 +67,7 @@ pub(super) fn unload_vehicles(
             accepted,
             station_pos,
             &next_stations,
-            force_transfer,
-            no_unload,
+            unload_type,
         );
         if !will_unload {
             continue;
@@ -114,6 +108,8 @@ pub(super) fn unload_vehicles(
         let mut feeder_total = 0_i64;
         let mut feeder_income_by_owner: Vec<(crate::company::CompanyId, i64)> = Vec::new();
         let mut taken = taken;
+        let mut transfer_mask = Vec::with_capacity(taken.len());
+        let mut delivered_units = 0_u32;
         for packet in &mut taken {
             // P3.16: pago por tramos recorridos (`GetDistance`), no Manhattan origen→destino.
             let distance = packet.get_distance(station_pos);
@@ -142,10 +138,10 @@ pub(super) fn unload_vehicles(
                 packet,
                 station_pos,
                 &next_stations,
-                force_transfer,
-                no_unload,
+                unload_type,
                 accepted,
             );
+            transfer_mask.push(action == crate::cargo_packet::CargoUnloadAction::Transfer);
             match action {
                 crate::cargo_packet::CargoUnloadAction::Transfer => {
                     if !packet.feeder_paid
@@ -159,6 +155,7 @@ pub(super) fn unload_vehicles(
                     }
                 }
                 crate::cargo_packet::CargoUnloadAction::Deliver => {
+                    delivered_units = delivered_units.saturating_add(u32::from(packet.count));
                     let mut deliverer_part = part;
                     if !packet.feeder_paid
                         && packet.feeder_share > 0
@@ -189,22 +186,26 @@ pub(super) fn unload_vehicles(
         }
 
         let town_cargo = cargo_type.is_town_cargo();
-        if town_cargo {
+        if town_cargo && delivered_units > 0 {
             town::record_delivery_near_town(
                 &mut state.towns,
                 station_pos,
                 cargo_type,
-                unload_units,
+                delivered_units,
             );
         }
-        if !town_cargo {
-            // Trasbordo: limpiar next_hop; el siguiente vehículo lo vuelve a fijar.
-            let mut taken = taken;
-            for p in &mut taken {
+        let mut reinserted = Vec::new();
+        for (mut p, was_transfer) in taken.into_iter().zip(transfer_mask) {
+            // El modelo actual usa las estaciones como hub para todo freight;
+            // una transferencia forzada de pax/mail también debe quedar allí.
+            if !town_cargo || was_transfer {
                 p.update_unloading_tile(station_pos);
                 p.next_hop = None;
+                reinserted.push(p);
             }
-            state.stations[station_idx].push_waiting_packets(taken);
+        }
+        if !reinserted.is_empty() {
+            state.stations[station_idx].push_waiting_packets(reinserted);
         }
         state.stations[station_idx].income += payment.cast_unsigned();
         state.credit_company(vehicle_owner, payment);
@@ -240,9 +241,9 @@ pub(super) fn unload_vehicles(
             });
         let first_chunk = !state.vehicles[i].cargo_unloading;
         let first_delivery = state.stats.cargo_deliveries == 0 && first_chunk;
-        // Freight baja en una estación como trasbordo: no es una entrega
-        // final ni debe disparar una noticia de cargo entregado.
-        let final_delivery = !reinsert;
+        // Freight baja en una estación como trasbordo: no es una entrega final
+        // ni debe disparar una noticia. Transfer pax/mail tampoco entrega.
+        let final_delivery = town_cargo && delivered_units > 0;
         if first_chunk && final_delivery {
             crate::news::push_cargo_delivery_news(
                 state,
@@ -674,6 +675,21 @@ fn vehicle_should_unload_at_station(vehicle: &crate::Vehicle, state: &GameState)
     if !at_stop {
         return false;
     }
+    let unload_type = vehicle
+        .orders
+        .get(vehicle.current_order)
+        .map_or(OrderUnloadType::UnloadIfPossible, |order| {
+            order.unload_type()
+        });
+    if unload_type == OrderUnloadType::NoUnload {
+        return false;
+    }
+    if matches!(
+        unload_type,
+        OrderUnloadType::Unload | OrderUnloadType::Transfer
+    ) {
+        return true;
+    }
     let station_pos = state.stations[station_idx].pos;
     if let Some(cargo) = vehicle.cargo_type {
         // Pax/mail: nunca descargar donde se embarcó.
@@ -713,10 +729,7 @@ fn vehicle_should_unload_at_station(vehicle: &crate::Vehicle, state: &GameState)
             return false;
         }
     }
-    !vehicle
-        .orders
-        .get(vehicle.current_order)
-        .is_some_and(|o| o.no_unload())
+    true
 }
 
 fn station_matches_current_order(vehicle: &crate::Vehicle, station_pos: TileCoord) -> bool {
@@ -738,6 +751,24 @@ fn station_matches_current_order(vehicle: &crate::Vehicle, station_pos: TileCoor
 }
 
 fn station_index_at_vehicle(state: &GameState, vehicle: &crate::Vehicle) -> Option<usize> {
+    if let Some(indexed) = state
+        .runtime
+        .terminal_spatial_index
+        .at(vehicle.pos)
+        .iter()
+        .copied()
+        .filter(|&idx| {
+            state.stations.get(idx).is_some_and(|station| {
+                station::vehicle_physically_at_station(&state.map, vehicle, station)
+            })
+        })
+        .min_by_key(|&idx| {
+            let station = &state.stations[idx];
+            (station.pos.x - vehicle.pos.x).abs() + (station.pos.y - vehicle.pos.y).abs()
+        })
+    {
+        return Some(indexed);
+    }
     state
         .stations
         .iter()

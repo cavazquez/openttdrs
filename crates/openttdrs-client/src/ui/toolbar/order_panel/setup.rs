@@ -73,13 +73,13 @@ pub(crate) fn setup_order_panel(mut commands: Commands, asset_server: Res<AssetS
                     row,
                     asset_server,
                     OrderPanelButton::ToggleFullLoad,
-                    "Carga completa",
+                    "Modo carga",
                 );
                 spawn_order_button(
                     row,
                     asset_server,
                     OrderPanelButton::ToggleNoUnload,
-                    "Descargar todo",
+                    "Modo descarga",
                 );
                 spawn_order_button(
                     row,

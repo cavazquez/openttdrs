@@ -298,6 +298,18 @@ GFX_SETS: tuple[tuple[str, tuple[tuple[int, str], ...]], ...] = (
     ),
 )
 
+AUX_GFX_SETS: tuple[tuple[str, tuple[tuple[int, str], ...]], ...] = (
+    (
+        "AIRCRAFT_ROTOR_LAYERS",
+        (
+            (3901, "vehicle_aircraft_rotor_stopped.png"),
+            (3902, "vehicle_aircraft_rotor_moving_1.png"),
+            (3903, "vehicle_aircraft_rotor_moving_2.png"),
+            (3904, "vehicle_aircraft_rotor_moving_3.png"),
+        ),
+    ),
+)
+
 
 KIRBY_FALLBACK = (
     "vehicle_train_n.png",
@@ -349,6 +361,41 @@ def emit_layers(
     return rows, missing, nfo_ok
 
 
+def emit_aux_layers(
+    repo: Path,
+    tiles_dir: Path,
+    nfo: dict,
+    prefer_bpp: str | None,
+    set_name: str,
+    entries: tuple[tuple[int, str], ...],
+) -> tuple[list[str], list[str], int]:
+    rows = [f"pub const {set_name}: [VehicleLayerGfx; {len(entries)}] = ["]
+    missing: list[str] = []
+    nfo_ok = 0
+    for frame, (sid, png) in enumerate(entries):
+        w, h, xr, yr, note = sprite_dims_from_assets(
+            repo,
+            tiles_dir,
+            nfo,
+            sid,
+            png,
+            prefer_bpp,
+            fallback=FALLBACK,
+        )
+        if note.startswith("nfo"):
+            nfo_ok += 1
+        if not (tiles_dir / png).is_file():
+            missing.append(png)
+        rows.append(f"    // frame {frame} (sprite {sid})")
+        rows.append(
+            f"    VehicleLayerGfx {{ w: {w:.1f}, h: {h:.1f}, "
+            f"x_offs: {xr:.1f}, y_offs: {yr:.1f}, "
+            f'path: "assets/opengfx/tiles/{png}" }},'
+        )
+    rows.extend(("];", ""))
+    return rows, missing, nfo_ok
+
+
 def assets_available(repo: Path) -> bool:
     tiles = repo / "assets" / "opengfx" / "tiles"
     return (tiles / "vehicle_bus_n.png").is_file()
@@ -381,6 +428,13 @@ def build_content(repo: Path) -> tuple[str, list[str], int]:
     total_nfo = 0
     for set_name, entries in GFX_SETS:
         block, missing, nfo_ok = emit_layers(
+            repo, tiles_dir, nfo, prefer_bpp, set_name, entries
+        )
+        lines.extend(block)
+        all_missing.extend(missing)
+        total_nfo += nfo_ok
+    for set_name, entries in AUX_GFX_SETS:
+        block, missing, nfo_ok = emit_aux_layers(
             repo, tiles_dir, nfo, prefer_bpp, set_name, entries
         )
         lines.extend(block)

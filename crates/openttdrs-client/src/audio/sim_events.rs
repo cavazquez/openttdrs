@@ -7,6 +7,7 @@ use openttdrs_core::{ConstructionKind, SoundId, VehicleRunningPhase};
 
 use crate::audio::PlayWorldSfx;
 use crate::bevy_app::{FixedUpdateSet, UpdateSet};
+use crate::render::BubbleSpawnQueue;
 use crate::render::effect_fx::FxSpawnQueue;
 use crate::state::{ClientScreen, SimWorld};
 use crate::ui::SimHudControls;
@@ -21,6 +22,7 @@ impl Plugin for SimEventsPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<PendingSimEvents>()
             .init_resource::<FxSpawnQueue>()
+            .init_resource::<BubbleSpawnQueue>()
             .add_systems(
                 OnEnter(ClientScreen::InGame),
                 discard_bootstrap_sim_events_on_enter,
@@ -54,11 +56,32 @@ fn drain_sim_events_from_core(mut sim: ResMut<SimWorld>, mut pending: ResMut<Pen
         .extend(sim.state.runtime.pending_sim_events.drain());
 }
 
+#[must_use]
+const fn aircraft_takeoff_sound(engine_id: u16) -> SoundId {
+    if openttdrs_core::aircraft_is_helicopter(engine_id) {
+        SoundId::TakeoffHelicopter
+    } else if openttdrs_core::aircraft_is_jet(engine_id) {
+        SoundId::TakeoffJet
+    } else {
+        SoundId::TakeoffPropeller
+    }
+}
+
+#[must_use]
+const fn aircraft_landing_sound(engine_id: u16) -> SoundId {
+    if openttdrs_core::aircraft_is_helicopter(engine_id) {
+        SoundId::TakeoffHelicopter
+    } else {
+        SoundId::SkidPlane
+    }
+}
+
 fn dispatch_sim_events(
     mut pending: ResMut<PendingSimEvents>,
     hud: Res<SimHudControls>,
     mut sfx: MessageWriter<PlayWorldSfx>,
     mut fx: ResMut<FxSpawnQueue>,
+    mut bubbles: ResMut<BubbleSpawnQueue>,
 ) {
     for event in pending.0.drain(..) {
         match event {
@@ -125,6 +148,14 @@ fn dispatch_sim_events(
                 }
                 fx.push_breakdown(at);
             }
+            SimEvent::Bubble { at, direction } => {
+                bubbles.push(at, direction);
+                if hud.sound_ambient {
+                    sfx.write(
+                        PlayWorldSfx::new(SoundId::BubbleGenerator, at, 0.55).with_priority(12),
+                    );
+                }
+            }
             SimEvent::Disaster { at, .. } => {
                 if hud.sound_disaster {
                     sfx.write(PlayWorldSfx::new(SoundId::Explosion, at, 1.0).with_priority(120));
@@ -178,16 +209,20 @@ fn dispatch_sim_events(
             SimEvent::LoanInterestPaid { .. }
             | SimEvent::BankruptcyWarning
             | SimEvent::GameOver { .. } => {}
-            SimEvent::AircraftTakeoff { at, .. } => {
+            SimEvent::AircraftTakeoff { at, engine_id, .. } => {
                 if hud.sound_vehicle {
                     sfx.write(
-                        PlayWorldSfx::new(SoundId::TakeoffHelicopter, at, 0.85).with_priority(78),
+                        PlayWorldSfx::new(aircraft_takeoff_sound(engine_id), at, 0.85)
+                            .with_priority(78),
                     );
                 }
             }
-            SimEvent::AircraftLanding { at, .. } => {
+            SimEvent::AircraftLanding { at, engine_id, .. } => {
                 if hud.sound_vehicle {
-                    sfx.write(PlayWorldSfx::new(SoundId::SkidPlane, at, 0.8).with_priority(78));
+                    sfx.write(
+                        PlayWorldSfx::new(aircraft_landing_sound(engine_id), at, 0.8)
+                            .with_priority(78),
+                    );
                 }
             }
             SimEvent::AircraftCrash { at, .. } => {
@@ -229,6 +264,31 @@ fn dispatch_sim_events(
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod aircraft_sound_tests {
+    use super::*;
+
+    #[test]
+    fn selects_helicopter_propeller_and_jet_sounds_by_engine() {
+        assert_eq!(
+            aircraft_takeoff_sound(openttdrs_core::ENGINE_AIRCRAFT_TRICARIO),
+            SoundId::TakeoffHelicopter
+        );
+        assert_eq!(
+            aircraft_takeoff_sound(openttdrs_core::ENGINE_AIRCRAFT_DAKOTA),
+            SoundId::TakeoffPropeller
+        );
+        assert_eq!(
+            aircraft_takeoff_sound(openttdrs_core::ENGINE_AIRCRAFT_FOKKER),
+            SoundId::TakeoffJet
+        );
+        assert_eq!(
+            aircraft_landing_sound(openttdrs_core::ENGINE_AIRCRAFT_TRICARIO),
+            SoundId::TakeoffHelicopter
+        );
     }
 }
 

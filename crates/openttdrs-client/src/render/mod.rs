@@ -4,6 +4,7 @@ mod airport_radar_anim;
 mod animation_gate;
 mod assets;
 mod atlas;
+mod bubble;
 mod catenary_newgrf;
 mod company_recolor;
 mod components;
@@ -38,6 +39,7 @@ pub(crate) use airport_radar_anim::{AirportRadarAnim, AirportRadarAnimPlugin};
 pub(crate) use animation_gate::palette_animations_should_run;
 pub(crate) use assets::WorldAssets;
 pub(crate) use atlas::{AtlasSprite, TileAtlas};
+pub(crate) use bubble::{BubbleEffectPlugin, BubbleSpawnQueue};
 pub(crate) use company_recolor::{
     CompanyColoredSprites, sprite_from_atlas_or_company_white_colour,
     sprite_from_atlas_or_industry_palette, sprite_from_company_or_asset,
@@ -45,7 +47,7 @@ pub(crate) use company_recolor::{
 pub(crate) use components::{
     FizzyDrinkAnimFrames, IndustryPreviewCamera, LighthouseAnimFrames, MapPreviewCamera,
     MapSpriteBatches, MapTileChunk, MapVisualLayer, PrimaryGameCamera, RefineryFireAnimFrames,
-    ShoreTile, WaterAnimFrames, WaterTile,
+    ShoreTile, WaterAnimFrames, WaterAtlasAnimation, WaterTile,
 };
 pub(crate) use disaster_craft::DisasterCraftPlugin;
 pub(crate) use effect_fx::EffectVehiclePlugin;
@@ -90,6 +92,7 @@ pub(crate) use viewport::{
     large_map_viewport_cull_enabled,
 };
 pub(crate) use water::WaterAnimationPlugin;
+pub(crate) use water::water_anim_frames_from_assets;
 pub(crate) use world::{
     LoadedMapTileChunks, MapTileSpawnViewport, RemapMapVisualsPending, WorldRenderPlugin,
     initial_map_camera_pose, request_map_visual_remap, spawn_intro_map_render,

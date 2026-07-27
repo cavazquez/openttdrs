@@ -1,6 +1,6 @@
 // Generado por scripts/gen_effect_vehicle_sprites.py — NO EDITAR A MANO.
 //
-// EffectVehicle: humo vapor/diésel, chispas eléctricas, explosión, avería.
+// EffectVehicle: humo, chispas, explosión, avería y burbujas Toyland.
 
 pub const DIESEL_SMOKE_FRAMES: usize = 6;
 
@@ -67,4 +67,25 @@ pub static BREAKDOWN_SMOKE_META: [(f32, f32, f32, f32); 4] = [
     (31.0, 30.0, 0.0, -31.0),
     (32.0, 32.0, 0.0, -31.0),
     (30.0, 30.0, 0.0, -31.0),
+];
+
+pub const BUBBLE_FRAMES: usize = 15;
+
+/// (w, h, xrel, yrel) de `bubble_{i}.png`.
+pub static BUBBLE_META: [(f32, f32, f32, f32); 15] = [
+    (15.0, 15.0, -7.0, -15.0),
+    (15.0, 16.0, -7.0, -16.0),
+    (16.0, 15.0, -7.0, -15.0),
+    (17.0, 4.0, -8.0, -2.0),
+    (17.0, 8.0, -8.0, -6.0),
+    (17.0, 12.0, -8.0, -10.0),
+    (17.0, 15.0, -8.0, -13.0),
+    (20.0, 21.0, -9.0, -18.0),
+    (28.0, 28.0, -13.0, -21.0),
+    (37.0, 36.0, -17.0, -25.0),
+    (15.0, 16.0, -7.0, -15.0),
+    (15.0, 18.0, -7.0, -14.0),
+    (13.0, 21.0, -6.0, -12.0),
+    (11.0, 25.0, -5.0, -6.0),
+    (7.0, 31.0, -2.0, 10.0),
 ];

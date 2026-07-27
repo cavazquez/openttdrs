@@ -77,6 +77,12 @@ pub enum SimEvent {
         at: TileCoord,
         kind: crate::vehicle::VehicleKind,
     },
+    /// Burbuja libre creada por el generador Toyland (`EV_BUBBLE`).
+    Bubble {
+        at: TileCoord,
+        /// Punto de salida 0..3 de `_bubble_spawn_location`.
+        direction: u8,
+    },
     Disaster {
         kind: DisasterKind,
         at: TileCoord,
@@ -116,10 +122,12 @@ pub enum SimEvent {
     },
     AircraftTakeoff {
         vehicle_id: u32,
+        engine_id: u16,
         at: TileCoord,
     },
     AircraftLanding {
         vehicle_id: u32,
+        engine_id: u16,
         at: TileCoord,
     },
     /// Jet estrellado en pista corta (`MaybeCrashAirplane`).

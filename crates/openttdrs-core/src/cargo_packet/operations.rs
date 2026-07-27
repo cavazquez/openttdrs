@@ -2,6 +2,7 @@
 
 use crate::cargo::CargoType;
 use crate::map::TileCoord;
+use crate::vehicle::OrderUnloadType;
 
 use super::types::{CargoPacket, CargoUnloadAction, VehicleCargoList};
 
@@ -26,7 +27,7 @@ pub const fn load_unload_speed(cargo: CargoType) -> u32 {
 
 /// Decide si el packet debe bajarse en `at` según `next_hop` y flags de orden.
 ///
-/// `force_transfer`: orden con `OrderUnloadType::Transfer` (P1.20). El reinsert
+/// `unload_type`: política completa `OrderUnloadType` de la orden. El reinsert
 /// físico de freight en cola **no** implica trasbordo económico: sin este flag la
 /// bajada cobra como entrega final (`PayFinalDelivery`). Con él solo se acumula
 /// `feeder_share` (`PayTransfer`).
@@ -57,18 +58,23 @@ pub fn choose_cargo_action(
     packet: &CargoPacket,
     at: TileCoord,
     next_stations: &[TileCoord],
-    force_transfer: bool,
-    no_unload: bool,
+    unload_type: OrderUnloadType,
     accepted: bool,
 ) -> CargoUnloadAction {
-    if no_unload {
+    if unload_type == OrderUnloadType::NoUnload {
         return CargoUnloadAction::Keep;
+    }
+    if unload_type == OrderUnloadType::Unload && accepted && packet.first_station != Some(at) {
+        return CargoUnloadAction::Deliver;
+    }
+    if matches!(
+        unload_type,
+        OrderUnloadType::Unload | OrderUnloadType::Transfer
+    ) {
+        return CargoUnloadAction::Transfer;
     }
     if packet.cargo.is_town_cargo() && packet.first_station == Some(at) {
         return CargoUnloadAction::Keep;
-    }
-    if force_transfer {
-        return CargoUnloadAction::Transfer;
     }
     match packet.next_hop {
         None => {
@@ -95,14 +101,7 @@ pub fn prepare_unload(
     accepted: bool,
     current_station: TileCoord,
     next_stations: &[TileCoord],
-    force_transfer: bool,
-    no_unload: bool,
+    unload_type: OrderUnloadType,
 ) -> bool {
-    cargo.stage(
-        accepted,
-        current_station,
-        next_stations,
-        force_transfer,
-        no_unload,
-    )
+    cargo.stage(accepted, current_station, next_stations, unload_type)
 }

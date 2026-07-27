@@ -411,3 +411,14 @@ pub const TRAIN_WAGON_COAL_LOADED_LAYERS: [VehicleLayerGfx; 8] = [
     // NW (sprite 2784)
     VehicleLayerGfx { w: 20.0, h: 14.0, x_offs: -6.0, y_offs: -7.0, path: "assets/opengfx/tiles/vehicle_wagon_coal_loaded_se.png" },
 ];
+
+pub const AIRCRAFT_ROTOR_LAYERS: [VehicleLayerGfx; 4] = [
+    // frame 0 (sprite 3901)
+    VehicleLayerGfx { w: 22.0, h: 10.0, x_offs: -10.0, y_offs: -3.0, path: "assets/opengfx/tiles/vehicle_aircraft_rotor_stopped.png" },
+    // frame 1 (sprite 3902)
+    VehicleLayerGfx { w: 30.0, h: 10.0, x_offs: -14.0, y_offs: -3.0, path: "assets/opengfx/tiles/vehicle_aircraft_rotor_moving_1.png" },
+    // frame 2 (sprite 3903)
+    VehicleLayerGfx { w: 17.0, h: 14.0, x_offs: -7.0, y_offs: -5.0, path: "assets/opengfx/tiles/vehicle_aircraft_rotor_moving_2.png" },
+    // frame 3 (sprite 3904)
+    VehicleLayerGfx { w: 22.0, h: 14.0, x_offs: -10.0, y_offs: -5.0, path: "assets/opengfx/tiles/vehicle_aircraft_rotor_moving_3.png" },
+];

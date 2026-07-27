@@ -37,7 +37,10 @@ pub use io::{load, load_from_str, save};
 /// v22: rating persistente por carga (`Station::goods`) en vez de derivado del tiempo de espera.
 /// v23: rating de autoridad local por compañía + `growth_rate` / `grow_counter` por pueblo.
 /// v24: `random` / `interactive_random` / `cur_tileloop_tile` (`cargo_rng` → alias `random`).
-pub const CURRENT_SAVE_VERSION: u32 = 24;
+/// v25: órdenes de estación usan `load_type` / `unload_type`; el lector acepta
+/// los cinco booleanos legacy de v24 y JSON plano. Añade ajustes persistentes
+/// de lado de circulación y de señales (con defaults compatibles).
+pub const CURRENT_SAVE_VERSION: u32 = 25;
 
 const SAVE_VERSION: u32 = CURRENT_SAVE_VERSION;
 
@@ -149,6 +152,41 @@ mod tests {
     }
 
     #[test]
+    fn v24_boolean_order_flags_migrate_to_complete_types() {
+        use crate::{OrderLoadType, OrderNonStop, OrderUnloadType};
+
+        let stop = TileCoord::new(1, 1);
+        let mut state = crate::GameState::new(3, 3);
+        let mut vehicle = Vehicle::new(1, VehicleKind::Truck, stop, stop);
+        vehicle.orders = vec![VehicleOrder::station_with_types(
+            stop,
+            OrderLoadType::FullLoadAny,
+            OrderUnloadType::Transfer,
+            OrderNonStop::NonStopDestination,
+        )];
+        state.vehicles.push(vehicle);
+
+        let mut json = serde_json::to_value(io::GameStateFile { version: 24, state }).unwrap();
+        let order = json["state"]["vehicles"][0]["orders"][0]
+            .as_object_mut()
+            .unwrap();
+        order.remove("load_type");
+        order.remove("unload_type");
+        order.insert("full_load_any".into(), true.into());
+        order.insert("transfer".into(), true.into());
+
+        let loaded = load_from_str(&serde_json::to_string(&json).unwrap()).unwrap();
+        assert_eq!(
+            loaded.vehicles[0].orders[0].load_type(),
+            OrderLoadType::FullLoadAny
+        );
+        assert_eq!(
+            loaded.vehicles[0].orders[0].unload_type(),
+            OrderUnloadType::Transfer
+        );
+    }
+
+    #[test]
     fn save_load_after_n_steps() {
         let mut s = crate::GameState::new(5, 5);
         for _ in 0..7 {
@@ -252,15 +290,10 @@ mod tests {
         };
         let text = serde_json::to_string(&file).unwrap();
         let loaded = load_from_str(&text).unwrap();
-        assert!(matches!(
-            loaded.vehicles[0].orders[0],
-            VehicleOrder::Station {
-                station,
-                full_load: false,
-                no_unload: false,
-                ..
-            } if station == stop
-        ));
+        let order = loaded.vehicles[0].orders[0];
+        assert!(matches!(order, VehicleOrder::Station { station, .. } if station == stop));
+        assert!(!order.full_load());
+        assert!(!order.no_unload());
     }
 
     #[test]

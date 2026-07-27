@@ -1,5 +1,5 @@
 use crate::GameState;
-use crate::depot::nearest_depot_tile;
+use crate::depot::nearest_depot_tile_indexed;
 use crate::map::{TileCoord, TileKind};
 use crate::pathfinder::{PathNetwork, farthest_reachable_tile};
 use crate::vehicle::{MAX_VEHICLE_NAME_CHARS, Vehicle, VehicleKind, VehicleOrder};
@@ -707,7 +707,7 @@ pub(super) fn cycle_vehicle_order_depot_refit(
     index: usize,
 ) -> Result<(), CommandError> {
     require_vehicle_owned_by_active(state, vehicle_id)?;
-    let Some(vehicle_idx) = state.vehicles.iter().position(|v| v.id == vehicle_id) else {
+    let Some(vehicle_idx) = state.runtime.fleet_index.slot(vehicle_id) else {
         return Err(CommandError::VehicleNotFound);
     };
     if index >= state.vehicles[vehicle_idx].orders.len() {
@@ -832,14 +832,19 @@ pub(super) fn append_goto_nearest_depot(
     vehicle_id: u32,
 ) -> Result<(), CommandError> {
     require_vehicle_owned_by_active(state, vehicle_id)?;
-    let Some(vehicle_idx) = state.vehicles.iter().position(|v| v.id == vehicle_id) else {
+    let Some(vehicle_idx) = state.runtime.fleet_index.slot(vehicle_id) else {
         return Err(CommandError::VehicleNotFound);
     };
     let (kind, pos) = {
         let v = &state.vehicles[vehicle_idx];
         (v.kind, v.pos)
     };
-    let Some(depot) = nearest_depot_tile(&state.map, pos, kind) else {
+    let Some(depot) = nearest_depot_tile_indexed(
+        &state.map,
+        pos,
+        kind,
+        &mut state.runtime.depot_spatial_index,
+    ) else {
         return Err(CommandError::DepotNotFound);
     };
     in_bounds(&state.map, depot)?;

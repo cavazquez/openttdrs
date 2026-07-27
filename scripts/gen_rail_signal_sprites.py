@@ -44,6 +44,8 @@ ROW_RE = re.compile(
     r"(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(-?\d+)\s+(-?\d+)"
 )
 
+SignalRow = tuple[str, int, int, int, int, int, int]
+
 
 def find_sprite_dirs() -> list[Path]:
     out: list[Path] = []
@@ -53,9 +55,9 @@ def find_sprite_dirs() -> list[Path]:
     return out
 
 
-def parse_rows(nfo: Path) -> dict[int, tuple[str, int, int, int, int]]:
+def parse_rows(nfo: Path) -> dict[int, SignalRow]:
     sprites_dir = nfo.parent
-    rows: dict[int, tuple[str, int, int, int, int]] = {}
+    rows: dict[int, SignalRow] = {}
     for line in nfo.read_text(errors="replace").splitlines():
         m = ROW_RE.match(line)
         if not m:
@@ -69,6 +71,8 @@ def parse_rows(nfo: Path) -> dict[int, tuple[str, int, int, int, int]]:
                 int(m.group(4)),
                 int(m.group(5)),
                 int(m.group(6)),
+                int(m.group(7)),
+                int(m.group(8)),
             )
     return rows
 
@@ -144,8 +148,8 @@ def is_extra_cc_mask(w: int, h: int, pri: int) -> bool:
 
 def collect_candidates(
     dirs: list[Path],
-) -> dict[int, list[tuple[int, tuple[str, int, int, int, int]]]]:
-    by_id: dict[int, list[tuple[int, tuple[str, int, int, int, int]]]] = {}
+) -> dict[int, list[tuple[int, SignalRow]]]:
+    by_id: dict[int, list[tuple[int, SignalRow]]] = {}
     for sprites_dir in dirs:
         for nfo in sorted(sprites_dir.glob("*.nfo")):
             pri = nfo_source_priority(nfo)
@@ -158,16 +162,16 @@ def collect_candidates(
 
 def pick_signal_row(
     sid: int,
-    rows: list[tuple[int, tuple[str, int, int, int, int]]],
+    rows: list[tuple[int, SignalRow]],
     mode: str,
     sheet_cache: dict[str, Image.Image],
-) -> tuple[tuple[str, int, int, int, int], str] | None:
+) -> tuple[SignalRow, str] | None:
     """Base colorido (3×14…) > máscara extra CC; rechaza vehículos 64×31."""
-    extra_masks: list[tuple[int, tuple[str, int, int, int, int]]] = []
-    colorful: list[tuple[int, int, tuple[str, int, int, int, int]]] = []
+    extra_masks: list[tuple[int, SignalRow]] = []
+    colorful: list[tuple[int, int, SignalRow]] = []
 
     for pri, row in rows:
-        sheet_path, x, y, w, h = row
+        sheet_path, x, y, w, h, _xrel, _yrel = row
         if w <= 0 or h <= 0:
             continue
         if sheet_path not in sheet_cache:
@@ -186,13 +190,13 @@ def pick_signal_row(
         ):
             colorful.append((nc, w * h, row))
 
-    def best_colorful() -> tuple[tuple[str, int, int, int, int], str] | None:
+    def best_colorful() -> tuple[SignalRow, str] | None:
         if not colorful:
             return None
         _nc, _area, row = max(colorful, key=lambda item: (item[0], item[1]))
         return row, "color"
 
-    def best_extra() -> tuple[tuple[str, int, int, int, int], str] | None:
+    def best_extra() -> tuple[SignalRow, str] | None:
         if not extra_masks:
             return None
         _area, row = max(extra_masks, key=lambda item: item[0])
@@ -211,8 +215,8 @@ def merge_signal_rows(
     dirs: list[Path],
     mode: str,
     sheet_cache: dict[str, Image.Image],
-) -> dict[int, tuple[tuple[str, int, int, int, int], str]]:
-    merged: dict[int, tuple[tuple[str, int, int, int, int], str]] = {}
+) -> dict[int, tuple[SignalRow, str]]:
+    merged: dict[int, tuple[SignalRow, str]] = {}
     by_id = collect_candidates(dirs)
     for sid in SIGNAL_RANGE:
         rows = by_id.get(sid, [])
@@ -225,7 +229,7 @@ def merge_signal_rows(
 
 
 def crop_and_save(
-    merged: dict[int, tuple[tuple[str, int, int, int, int], str]],
+    merged: dict[int, tuple[SignalRow, str]],
     sid: int,
     mode: str,
     sheet_cache: dict[str, Image.Image],
@@ -233,7 +237,7 @@ def crop_and_save(
     if sid not in merged:
         return False
     row, kind = merged[sid]
-    sheet_path, x, y, w, h = row
+    sheet_path, x, y, w, h, _xrel, _yrel = row
     if sheet_path not in sheet_cache:
         sheet_cache[sheet_path] = load_sheet(Path(sheet_path), mode)
     crop_img = dematte_sprite(sheet_cache[sheet_path].crop((x, y, x + w, y + h)))

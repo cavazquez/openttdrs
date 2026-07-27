@@ -469,9 +469,14 @@ pub fn vehicle_physically_at_station(
     let vpos = vehicle.pos;
     if station.covers_tile(vpos) {
         return match vehicle.kind {
-            VehicleKind::Aircraft => map
-                .get(vpos)
-                .is_some_and(|t| crate::airport::AirportPiece::from_m5(t.m5).is_loading()),
+            VehicleKind::Aircraft => map.get(vpos).is_some_and(|tile| {
+                let piece = if tile.kind == crate::map::TileKind::Station {
+                    crate::airport::AirportPiece::from_station_gfx(tile.m5)
+                } else {
+                    crate::airport::AirportPiece::from_m5(tile.m5)
+                };
+                piece.is_loading()
+            }),
             VehicleKind::Truck | VehicleKind::Bus | VehicleKind::Tram
                 if is_connected_bay_road_stop(map, vpos) =>
             {

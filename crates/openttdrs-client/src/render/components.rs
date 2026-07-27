@@ -4,20 +4,50 @@ use bevy::prelude::*;
 
 use crate::render::atlas::AtlasSprite;
 
-/// Marca los tiles de agua plana: ciclan los frames `water_anim_{f}.png`.
-#[derive(Component)]
-pub(crate) struct WaterTile;
+/// Marca superficies acuáticas y distingue las que usan la paleta animada.
+///
+/// Esclusas y otras estructuras se limpian junto con el agua, pero conservan
+/// su sprite estático en vez de ser reemplazadas por `water_anim_*`.
+#[derive(Component, Clone, Copy)]
+#[allow(dead_code)] // conserva la semantica animada/estatica para inspeccion y NewGRF
+pub(crate) struct WaterTile {
+    palette_animated: bool,
+}
+
+impl WaterTile {
+    pub(crate) const ANIMATED: Self = Self {
+        palette_animated: true,
+    };
+    pub(crate) const STATIC: Self = Self {
+        palette_animated: false,
+    };
+
+    #[must_use]
+    #[allow(dead_code)]
+    pub(crate) const fn is_palette_animated(self) -> bool {
+        self.palette_animated
+    }
+}
 
 /// Tesela de orilla: slot `i` de `shore_full_{i:02}.png` para ciclar sus frames.
 #[derive(Component)]
+#[allow(dead_code)] // slot semantico para NewGRF/diagnostico; el atlas anima globalmente
 pub(crate) struct ShoreTile(pub(crate) u8);
 
-/// Frames pre-horneados del ciclo de paleta del agua (dark + glitter water),
-/// generados por `scripts/gen_water_anim_frames.py`. Frame 0 = sprite base.
+/// Entrada compartida del atlas que se redirige globalmente entre frames.
+pub(crate) struct WaterAtlasAnimation {
+    pub(crate) layout: Handle<TextureAtlasLayout>,
+    pub(crate) target_index: usize,
+    pub(crate) frame_rects: Vec<URect>,
+}
+
+/// 75 combinaciones pre-horneadas, indexadas como `dark * 15 + glitter`.
+///
+/// Se mutan 19 rects compartidos del atlas, no cada entidad de agua del mapa.
 #[derive(Resource)]
 pub(crate) struct WaterAnimFrames {
-    pub(crate) water: Vec<AtlasSprite>,
-    pub(crate) shore: Vec<Vec<AtlasSprite>>,
+    pub(crate) water: Option<WaterAtlasAnimation>,
+    pub(crate) shore: Vec<WaterAtlasAnimation>,
 }
 
 /// Frames del fuego de refinería (`industry_{id}_fire_anim_{f}.png`), 7 pasos.
@@ -75,7 +105,7 @@ pub(crate) struct IndustryPreviewCamera;
 
 #[derive(Default)]
 pub(crate) struct MapSpriteBatches {
-    pub(super) water: Vec<(MapTileChunk, Sprite, Transform)>,
+    pub(super) water: Vec<(MapTileChunk, WaterTile, Sprite, Transform)>,
     pub(super) shore: Vec<(MapTileChunk, ShoreTile, Sprite, Transform)>,
     pub(super) trees: Vec<(MapTileChunk, Sprite, Transform)>,
 }

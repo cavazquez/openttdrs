@@ -441,12 +441,14 @@ pub(crate) fn spawn_station_tile(
             } else {
                 SLOPE_HALF_H[tileh as usize]
             };
-            let piece = openttdrs_core::AirportPiece::from_m5(m5);
+            // Los tiles `MP_STATION` importados conservan el índice
+            // `StationGfx` vanilla completo, no el enum interno 0..7.
+            let piece = openttdrs_core::AirportPiece::from_station_gfx(m5);
             let tower_pos = tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.04, half_h);
             commands.spawn((
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
-                tint_building_sprite(assets.airport_piece_sprite(piece).sprite()),
+                tint_building_sprite(assets.airport_station_gfx_sprite(m5).sprite()),
                 Transform::from_translation(tower_pos),
             ));
             if piece == openttdrs_core::AirportPiece::Tower {

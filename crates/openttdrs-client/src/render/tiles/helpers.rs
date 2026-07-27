@@ -1,7 +1,9 @@
 use bevy::prelude::*;
 
 use crate::iso::{HEIGHT_PX, TILE_HALF_H, overlay_pos, tile_pos, tile_pos_half};
-use crate::render::{AtlasSprite, MapTileChunk, MapVisualLayer, TileRenderContext, WorldAssets};
+use crate::render::{
+    AtlasSprite, MapTileChunk, MapVisualLayer, TileRenderContext, WaterTile, WorldAssets,
+};
 use crate::sprites::foundation_gfx_for_tileh;
 use crate::sprites::leveled_foundation_z_delta;
 use openttdrs_core::rail_foundation_for_trackbits;
@@ -128,12 +130,13 @@ pub(crate) fn spawn_ground_sprite(
 }
 
 pub(crate) fn push_water_sprite(
-    batch_water: &mut Vec<(MapTileChunk, Sprite, Transform)>,
+    batch_water: &mut Vec<(MapTileChunk, WaterTile, Sprite, Transform)>,
     h_water: &AtlasSprite,
     ctx: &TileRenderContext,
 ) {
     batch_water.push((
         ctx.map_tile_chunk(),
+        WaterTile::ANIMATED,
         h_water.sprite(),
         Transform::from_translation(tile_pos(
             ctx.tx_i32(),

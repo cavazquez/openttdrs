@@ -104,10 +104,43 @@ mod tests {
                 .with_next_hop(Some(elsewhere)),
         );
         list.push(CargoPacket::new(CargoType::Goods, 4, at).with_next_hop(Some(next)));
-        assert!(list.stage(true, at, &[next], false, false));
+        assert!(list.stage(
+            true,
+            at,
+            &[next],
+            crate::vehicle::OrderUnloadType::UnloadIfPossible
+        ));
         assert_eq!(list.staged_deliver, 2);
         assert_eq!(list.staged_transfer, 3);
         assert_eq!(list.staged_keep, 4);
+    }
+
+    #[test]
+    fn forced_unload_delivers_when_accepted_and_transfers_otherwise() {
+        use crate::vehicle::OrderUnloadType;
+
+        let source = TileCoord::new(1, 1);
+        let at = TileCoord::new(5, 5);
+        let packet = CargoPacket::new(CargoType::Goods, 3, source)
+            .with_first_station(source)
+            .with_next_hop(Some(TileCoord::new(9, 9)));
+
+        assert_eq!(
+            choose_cargo_action(&packet, at, &[], OrderUnloadType::Unload, true),
+            CargoUnloadAction::Deliver
+        );
+        assert_eq!(
+            choose_cargo_action(&packet, at, &[], OrderUnloadType::Unload, false),
+            CargoUnloadAction::Transfer
+        );
+        assert_eq!(
+            choose_cargo_action(&packet, at, &[], OrderUnloadType::Transfer, true),
+            CargoUnloadAction::Transfer
+        );
+        assert_eq!(
+            choose_cargo_action(&packet, at, &[], OrderUnloadType::NoUnload, true),
+            CargoUnloadAction::Keep
+        );
     }
 
     #[test]

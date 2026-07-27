@@ -5,9 +5,11 @@ use openttdrs_core::prelude::*;
 use crate::render::{CompanyColoredSprites, MapVisualLayer};
 use crate::state::SimWorld;
 
-use super::assets::{NewGrfTrainSpriteCache, TruckHandles};
-use super::pose::vehicle_sprite_pos_at_with_catalog;
-use super::sync::{ConsistUnitSprite, VehicleCargoLabel, VehicleSprite};
+use super::assets::{NewGrfTrainSpriteCache, TruckHandles, vehicle_layers};
+use super::pose::{aircraft_aux_sprite_pos_at, vehicle_sprite_pos_at_with_catalog};
+use super::sync::{
+    AircraftRotorSprite, AircraftShadowSprite, ConsistUnitSprite, VehicleCargoLabel, VehicleSprite,
+};
 
 fn vehicle_is_hidden_from_view(
     sim: &SimWorld,
@@ -65,6 +67,8 @@ pub(crate) fn spawn_initial_vehicles(
     cache: &mut NewGrfTrainSpriteCache,
     images: &mut Assets<Image>,
 ) {
+    let mut fleet_index = openttdrs_core::FleetIndex::default();
+    fleet_index.rebuild(&sim.state.vehicles);
     for c in &sim.state.companies {
         company.ensure_palette(crate::sprites::CompanyColour::from_u8(c.colour), images);
     }
@@ -103,9 +107,62 @@ pub(crate) fn spawn_initial_vehicles(
             Transform::from_translation(pos3),
             vis,
         ));
+        if vehicle.kind == VehicleKind::Aircraft {
+            let layer = &vehicle_layers(vehicle)
+                [openttdrs_core::vehicle_render_direction_at(vehicle, pose).min(7) as usize];
+            commands.spawn((
+                MapVisualLayer,
+                AircraftShadowSprite(vehicle.id),
+                Sprite {
+                    image: trucks.for_vehicle(vehicle, pose, None, None),
+                    color: Color::srgba(0.08, 0.08, 0.08, 0.5),
+                    ..default()
+                },
+                Transform::from_translation(aircraft_aux_sprite_pos_at(
+                    vehicle,
+                    &sim.state.map,
+                    pose,
+                    layer,
+                    false,
+                    0.85,
+                )),
+                vis,
+            ));
+            if vehicle
+                .engine_id
+                .is_some_and(openttdrs_core::aircraft_is_helicopter)
+            {
+                let rotor = &super::assets::AIRCRAFT_ROTOR_LAYERS[0];
+                commands.spawn((
+                    MapVisualLayer,
+                    AircraftRotorSprite(vehicle.id),
+                    Sprite {
+                        image: trucks.aircraft_rotor(0),
+                        ..default()
+                    },
+                    Transform::from_translation(aircraft_aux_sprite_pos_at(
+                        vehicle,
+                        &sim.state.map,
+                        pose,
+                        rotor,
+                        true,
+                        1.1,
+                    )),
+                    vis,
+                ));
+            }
+        }
         if vehicle.kind == VehicleKind::Train {
             spawn_consist_trailer_sprites(
-                commands, sim, trucks, company, vehicle, vis, cache, images,
+                commands,
+                sim,
+                trucks,
+                company,
+                vehicle,
+                vis,
+                cache,
+                images,
+                &fleet_index,
             );
         }
         if !crate::sprites::is_hidden(crate::sprites::TransparencyOption::Text) {
@@ -138,11 +195,15 @@ fn spawn_consist_trailer_sprites(
     vis: Visibility,
     cache: &mut NewGrfTrainSpriteCache,
     images: &mut Assets<Image>,
+    fleet_index: &openttdrs_core::FleetIndex,
 ) {
     let owner_colour = Some(vehicle_owner_colour(sim, head));
-    let ids = openttdrs_core::consist_unit_ids(&sim.state.vehicles, head.id);
+    let ids = fleet_index.consist(head.id);
     for (i, &uid) in ids.iter().enumerate().skip(1) {
-        let Some(unit) = sim.state.vehicles.iter().find(|v| v.id == uid) else {
+        let Some(unit) = fleet_index
+            .slot(uid)
+            .and_then(|slot| sim.state.vehicles.get(slot))
+        else {
             continue;
         };
         let unit_pose = openttdrs_core::VehiclePose::from_vehicle(unit);

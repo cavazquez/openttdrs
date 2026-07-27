@@ -20,7 +20,7 @@ use crate::sprites::{
     rail_tile_has_pbs_reservation, rail_tile_is_signals, rail_track_base_color,
     rail_trackbits_for_render, road_bits_for_render, road_flat_sprite_color,
     road_flat_sprite_index, road_tile_roadside, road_tile_snow_or_desert,
-    road_tile_tram_visual_active, roadside_is_paved, signal_screen_position,
+    road_tile_tram_visual_active, roadside_is_paved, signal_screen_position_for_side,
     track_fence_draws_for_tile, tram_flat_sprite_index,
 };
 
@@ -328,6 +328,7 @@ pub(crate) fn spawn_rail_tile(
     climate: Climate,
     show_pbs_reservations: bool,
     show_full_detail: bool,
+    signals_on_right: bool,
     catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     mut catenary_sprites: Option<&mut crate::render::NewGrfCatenarySpriteCache>,
     mut images: Option<&mut Assets<Image>>,
@@ -490,13 +491,14 @@ pub(crate) fn spawn_rail_tile(
             let Some(img) = assets.rail.get(&draw.sprite_id) else {
                 continue;
             };
-            let signal_xy = signal_screen_position(
+            let signal_xy = signal_screen_position_for_side(
                 ctx.tx_i32(),
                 ctx.ty_i32(),
                 draw.pos,
                 draw.sprite_id,
                 rail_half_h,
                 rail_base_z,
+                signals_on_right,
             );
             // Misma profundidad que el fantasma de colocación (`tile_pos_half`), no z≈0.
             let layer = 0.04 + si as f32 * 0.0015;

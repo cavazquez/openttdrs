@@ -84,6 +84,7 @@ pub(crate) fn push_water_tile(
             };
             batches.water.push((
                 ctx.map_tile_chunk(),
+                crate::render::WaterTile::STATIC,
                 assets.water_lock[axis][level].sprite(),
                 Transform::from_translation(tile_pos_half(
                     ctx.tx_i32(),

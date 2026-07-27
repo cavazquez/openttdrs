@@ -455,9 +455,9 @@ pub(crate) enum OrderPanelButton {
     DeleteSelected,
     /// Salta la orden actual sin cumplirla.
     SkipOrder,
-    /// Alterna «carga completa» en la fila seleccionada.
+    /// Cicla el tipo de carga en la fila seleccionada.
     ToggleFullLoad,
-    /// Alterna «no descargar» en la fila seleccionada.
+    /// Cicla el tipo de descarga en la fila seleccionada.
     ToggleNoUnload,
     /// Alterna «parar en depósito» en una orden de depósito.
     ToggleDepotStop,

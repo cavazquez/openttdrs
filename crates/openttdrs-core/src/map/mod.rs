@@ -2,6 +2,7 @@
 #![allow(clippy::doc_markdown, clippy::expect_used, clippy::unwrap_used)]
 
 mod binary;
+pub mod house_lift;
 pub mod index;
 pub mod industry_construction;
 pub mod industry_link;
@@ -25,6 +26,11 @@ pub mod water_flood;
 #[cfg(test)]
 use binary::{OTTDMAP_FLAG_HAS_M2_HI, OTTDMAP_FORMAT_VERSION_CURRENT};
 pub(crate) use binary::{OTTDMAP_HEADER_LEN_VERSIONED, OTTDMAP_MAGIC_VERSIONED};
+pub use house_lift::{
+    LIFT_MAX_POSITION, LiftStep, advance_house_lift, halt_lift, house_tile_has_lift,
+    lift_destination, lift_has_destination, lift_position, step_house_lifts, with_lift_destination,
+    with_lift_position,
+};
 pub use index::{
     coord_from_linear_index, coord_to_dense_index, coord_to_linear_index,
     openttd_tile_index_to_coord,
@@ -49,11 +55,11 @@ pub use industry_terrain::{
     industry_uses_water_ground, tile_adjacent_to_water,
 };
 pub use industry_tile_anim::{
-    GFX_COAL_MINE_TOWER_ANIMATED, GFX_COPPER_MINE_TOWER_ANIMATED, GFX_GOLD_MINE_TOWER_ANIMATED,
-    GFX_OILWELL_ANIMATED_1, GFX_OILWELL_ANIMATED_2, GFX_OILWELL_ANIMATED_3,
-    advance_industry_animated_tiles, advance_industry_tile_animations,
-    advance_industry_tile_loop_events, industry_animation_frame, industry_gfx,
-    industry_tile_anim_state, set_industry_gfx,
+    GFX_BUBBLE_GENERATOR, GFX_COAL_MINE_TOWER_ANIMATED, GFX_COPPER_MINE_TOWER_ANIMATED,
+    GFX_GOLD_MINE_TOWER_ANIMATED, GFX_OILWELL_ANIMATED_1, GFX_OILWELL_ANIMATED_2,
+    GFX_OILWELL_ANIMATED_3, advance_industry_animated_tiles, advance_industry_tile_animations,
+    advance_industry_tile_loop_events, bubble_generator_spawns_from_visits,
+    industry_animation_frame, industry_gfx, industry_tile_anim_state, set_industry_gfx,
 };
 pub use level_crossing::is_road_level_crossing;
 pub use object::{

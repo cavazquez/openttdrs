@@ -30,9 +30,9 @@ pub(crate) struct WorldAssets {
     pub(crate) water: AtlasSprite,
     /// Set completo `SPR_SHORE_BASE + 0..17` (`shore_full_{i:02}.png`).
     pub(crate) shore: Vec<AtlasSprite>,
-    /// 15 frames del ciclo de paleta del agua (`water_anim_{f}.png`).
+    /// 5 fases dark × 15 glitter (`water_anim_d{d}_g{g}.png`).
     pub(crate) water_frames: Vec<AtlasSprite>,
-    /// 18 orillas × 15 frames (`shore_full_{i:02}_anim_{f}.png`).
+    /// 18 orillas × 5 fases dark × 15 glitter.
     pub(crate) shore_frames: Vec<Vec<AtlasSprite>>,
     pub(crate) lighthouse: AtlasSprite,
     pub(crate) transmitter: AtlasSprite,
@@ -75,6 +75,11 @@ pub(crate) struct WorldAssets {
     pub(crate) airport_taxiway: AtlasSprite,
     pub(crate) airport_tower: AtlasSprite,
     pub(crate) airport_stand: AtlasSprite,
+    /// Variantes reales usadas por `StationGfx` vanilla.
+    pub(crate) airport_terminals: [AtlasSprite; 3],
+    pub(crate) airport_runways: [AtlasSprite; 5],
+    pub(crate) airport_taxiways: [AtlasSprite; 9],
+    pub(crate) airport_concourse: AtlasSprite,
     /// Radar vanilla: `airport_radar_00` … `_11`.
     pub(crate) airport_radar: [AtlasSprite; 12],
     /// Esclusa: [NS, EW] × [lower, middle, upper].
@@ -107,6 +112,8 @@ pub(crate) struct WorldAssets {
     pub(crate) explosion_large: Vec<AtlasSprite>,
     /// `breakdown_smoke_{i}.png`: humo de avería (SPR_BREAKDOWN_SMOKE_0..3).
     pub(crate) breakdown_smoke: Vec<AtlasSprite>,
+    /// `bubble_{i}.png`: EV_BUBBLE (base, generación, burst y absorción).
+    pub(crate) bubble: Vec<AtlasSprite>,
     pub(crate) industries: HashMap<u32, AtlasSprite>,
     /// Llama refinería: `industry_{id}_fire_anim_{f}.png` (7 frames por sprite).
     pub(crate) refinery_fire_frames: HashMap<u32, Vec<AtlasSprite>>,
@@ -154,13 +161,20 @@ impl WorldAssets {
         let shore: Vec<AtlasSprite> = (0..crate::sprites::SHORE_SPRITE_COUNT)
             .map(|i| atlas.get(&format!("shore_full_{i:02}.png")))
             .collect();
-        let water_frames = (0..15)
-            .map(|f| atlas.get(&format!("water_anim_{f:02}.png")))
+        let water_frames = (0..crate::sprites::DARK_WATER_FRAME_COUNT)
+            .flat_map(|d| {
+                (0..crate::sprites::GLITTER_WATER_FRAME_COUNT)
+                    .map(move |g| atlas.get(&format!("water_anim_d{d:02}_g{g:02}.png")))
+            })
             .collect();
         let shore_frames = (0..crate::sprites::SHORE_SPRITE_COUNT)
             .map(|i| {
-                (0..15)
-                    .map(|f| atlas.get(&format!("shore_full_{i:02}_anim_{f:02}.png")))
+                (0..crate::sprites::DARK_WATER_FRAME_COUNT)
+                    .flat_map(|d| {
+                        (0..crate::sprites::GLITTER_WATER_FRAME_COUNT).map(move |g| {
+                            atlas.get(&format!("shore_full_{i:02}_anim_d{d:02}_g{g:02}.png"))
+                        })
+                    })
                     .collect()
             })
             .collect();
@@ -275,6 +289,14 @@ impl WorldAssets {
         let airport_taxiway = atlas.get("airport_taxiway_0.png");
         let airport_tower = atlas.get("airport_tower.png");
         let airport_stand = atlas.get("airport_stand.png");
+        let airport_terminals = std::array::from_fn(|i| {
+            atlas.get(&format!("airport_terminal_{}.png", ['a', 'b', 'c'][i]))
+        });
+        let airport_runways =
+            std::array::from_fn(|i| atlas.get(&format!("airport_runway_{i}.png")));
+        let airport_taxiways =
+            std::array::from_fn(|i| atlas.get(&format!("airport_taxiway_{i}.png")));
+        let airport_concourse = atlas.get("airport_concourse.png");
         let airport_radar: [AtlasSprite; 12] =
             std::array::from_fn(|i| atlas.get(&format!("airport_radar_{i:02}.png")));
         // Esclusas: `scripts/gen_water_lock_tiles.py` (Action5 canals SPR_LOCK_*).
@@ -421,6 +443,9 @@ impl WorldAssets {
         let breakdown_smoke = (0..crate::sprites::BREAKDOWN_SMOKE_FRAMES)
             .map(|i| atlas.get(&format!("breakdown_smoke_{i}.png")))
             .collect();
+        let bubble = (0..crate::sprites::BUBBLE_FRAMES)
+            .map(|i| atlas.get(&format!("bubble_{i}.png")))
+            .collect();
 
         let mut industries = HashMap::new();
         for entry in &INDUSTRY_GFX_DATA {
@@ -512,6 +537,10 @@ impl WorldAssets {
             airport_taxiway,
             airport_tower,
             airport_stand,
+            airport_terminals,
+            airport_runways,
+            airport_taxiways,
+            airport_concourse,
             airport_radar,
             water_lock,
             road_tunnels,
@@ -529,6 +558,7 @@ impl WorldAssets {
             electric_spark,
             explosion_large,
             breakdown_smoke,
+            bubble,
             industries,
             refinery_fire_frames,
             fizzy_drink_frames,
@@ -547,6 +577,25 @@ impl WorldAssets {
             AirportPiece::Taxiway => &self.airport_taxiway,
             AirportPiece::Tower => &self.airport_tower,
             AirportPiece::Stand => &self.airport_stand,
+        }
+    }
+
+    /// Sprite más específico disponible para un `StationGfx` vanilla.
+    #[must_use]
+    pub(crate) fn airport_station_gfx_sprite(&self, gfx: u8) -> &AtlasSprite {
+        use openttdrs_core::AirportPiece;
+        match gfx {
+            // `APT_APRON_W` .. cruces y `APT_APRON_HOR`.
+            4..=12 => &self.airport_taxiways[usize::from(gfx - 4)],
+            // `APT_RUNWAY_1..4` y `APT_RUNWAY_5`.
+            14..=17 => &self.airport_runways[usize::from(gfx - 14) + 1],
+            46 => &self.airport_runways[2],
+            // Terminal A, concourse, terminal B/C.
+            19 => &self.airport_terminals[0],
+            21 | 27..=28 => &self.airport_concourse,
+            22 => &self.airport_terminals[1],
+            23 => &self.airport_terminals[2],
+            _ => self.airport_piece_sprite(AirportPiece::from_station_gfx(gfx)),
         }
     }
 

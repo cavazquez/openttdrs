@@ -22,7 +22,7 @@ pub use newgrf_vars::{action2_eval_ctx_for_unit, cargo_class_bits, cargo_type_a_
 pub use pose::{TrainUnitPose, consist_unit_poses};
 pub use topology::{
     consist_changed, consist_changed_with_map, consist_head_id, consist_unit_ids,
-    engine_is_train_engine, engine_is_wagon, same_consist,
+    consist_unit_ids_indexed, engine_is_train_engine, engine_is_wagon, same_consist,
 };
 
 /// Longitud de una unidad de tren en fracciones de tesela (`OpenTTD` `VEHICLE_LENGTH`).

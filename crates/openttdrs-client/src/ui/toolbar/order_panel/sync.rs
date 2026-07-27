@@ -239,19 +239,24 @@ fn order_row_label(
     };
     let mut line = format!("{current} {:>2}. {label} ({}, {})", index + 1, pos.x, pos.y);
     if let VehicleOrder::Station {
-        full_load,
-        no_unload,
         wait_ticks,
         travel_ticks,
         ..
     } = order
     {
-        if full_load {
-            line.push_str(" · carga completa");
-        }
-        if no_unload {
-            line.push_str(" · no descargar");
-        }
+        let load_label = match order.load_type() {
+            openttdrs_core::OrderLoadType::LoadIfPossible => "cargar si posible",
+            openttdrs_core::OrderLoadType::FullLoad => "carga completa",
+            openttdrs_core::OrderLoadType::FullLoadAny => "completar una carga",
+            openttdrs_core::OrderLoadType::NoLoad => "no cargar",
+        };
+        let unload_label = match order.unload_type() {
+            openttdrs_core::OrderUnloadType::UnloadIfPossible => "descargar si posible",
+            openttdrs_core::OrderUnloadType::Unload => "descarga forzada",
+            openttdrs_core::OrderUnloadType::Transfer => "transferir",
+            openttdrs_core::OrderUnloadType::NoUnload => "no descargar",
+        };
+        line.push_str(&format!(" · {load_label} · {unload_label}"));
         if wait_ticks > 0 {
             line.push_str(&format!(" · esp.{wait_ticks}"));
         }
@@ -335,5 +340,22 @@ mod tests {
             order_row_label(0, VehicleOrder::tile(rail_depot), &train, &sim, false)
                 .contains("Depósito vía")
         );
+    }
+
+    #[test]
+    fn order_row_labels_complete_load_and_unload_modes() {
+        let sim = SimWorld::default();
+        let stop = TileCoord::new(2, 2);
+        let vehicle = Vehicle::new(1, VehicleKind::Truck, stop, stop);
+        let order = VehicleOrder::station_with_types(
+            stop,
+            openttdrs_core::OrderLoadType::FullLoadAny,
+            openttdrs_core::OrderUnloadType::Unload,
+            openttdrs_core::OrderNonStop::NonStopDestination,
+        );
+
+        let label = order_row_label(0, order, &vehicle, &sim, false);
+        assert!(label.contains("completar una carga"));
+        assert!(label.contains("descarga forzada"));
     }
 }

@@ -33,6 +33,34 @@ impl AirportPiece {
         }
     }
 
+    /// Clasifica el `StationGfx` vanilla que `OpenTTD` persiste en `m5` para
+    /// tiles `MP_STATION/Airport`.
+    ///
+    /// A diferencia de [`Self::from_m5`], esta tabla cubre los índices reales
+    /// de `_station_display_datas_airport` (0..=72), incluidos los helipads
+    /// embebidos de commuter/metropolitan/international.
+    #[must_use]
+    pub const fn from_station_gfx(gfx: u8) -> Self {
+        match gfx {
+            // Stands y jetways.
+            3 | 25 | 26 => Self::Stand,
+            // Taxiways / cruces de apron.
+            4..=13 => Self::Taxiway,
+            // Pistas grandes y chicas, con sus extremos/cercas.
+            14..=18 | 40..=42 | 45..=46 | 49..=50 | 57..=60 => Self::Runway,
+            // Terminales, concourse, pier y edificios bajos.
+            19 | 21..=23 | 27..=28 | 33..=35 | 63..=64 | 69 => Self::Terminal,
+            // Hangares grande/chico.
+            24 | 43 => Self::Hangar,
+            // Torre, radar, radio tower y flags animados.
+            20 | 31..=32 | 39 | 47 | 51..=52 | 72 => Self::Tower,
+            // Helipuerto simple y helipads embebidos.
+            44 | 53..=55 | 61 | 66..=68 => Self::Heliport,
+            // Apron, grass y cercas restantes.
+            _ => Self::Apron,
+        }
+    }
+
     #[must_use]
     pub const fn is_hangar(self) -> bool {
         matches!(self, Self::Hangar | Self::Heliport)
@@ -49,6 +77,32 @@ impl AirportPiece {
     #[must_use]
     pub const fn is_runway(self) -> bool {
         matches!(self, Self::Runway)
+    }
+}
+
+#[cfg(test)]
+mod station_gfx_tests {
+    use super::AirportPiece;
+
+    #[test]
+    fn classifies_all_vanilla_station_gfx_without_falling_back_to_heliport() {
+        for gfx in 0..=72 {
+            let piece = AirportPiece::from_station_gfx(gfx);
+            if matches!(gfx, 44 | 53..=55 | 61 | 66..=68) {
+                assert_eq!(piece, AirportPiece::Heliport, "gfx={gfx}");
+            } else {
+                assert_ne!(piece, AirportPiece::Heliport, "gfx={gfx}");
+            }
+        }
+    }
+
+    #[test]
+    fn station_gfx_covers_runways_hangars_terminals_and_towers() {
+        assert_eq!(AirportPiece::from_station_gfx(14), AirportPiece::Runway);
+        assert_eq!(AirportPiece::from_station_gfx(24), AirportPiece::Hangar);
+        assert_eq!(AirportPiece::from_station_gfx(33), AirportPiece::Terminal);
+        assert_eq!(AirportPiece::from_station_gfx(51), AirportPiece::Tower);
+        assert_eq!(AirportPiece::from_station_gfx(66), AirportPiece::Heliport);
     }
 }
 

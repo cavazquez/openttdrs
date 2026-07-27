@@ -9,6 +9,15 @@ use std::collections::{HashSet, VecDeque};
 /// reconstruirse/limpiarse tras cargar un save.
 #[derive(Debug, Clone, Default)]
 pub struct SimulationRuntime {
+    /// `VehicleID -> slot` y topología de consists, reconstruidos una vez por tick.
+    pub fleet_index: crate::fleet_index::FleetIndex,
+
+    /// Teselas propias de estaciones/terminales -> slots de estación.
+    pub terminal_spatial_index: crate::fleet_index::TerminalSpatialIndex,
+
+    /// Depósitos por tipo; evita barridos repetidos de mapas grandes.
+    pub depot_spatial_index: crate::depot::DepotSpatialIndex,
+
     /// Caché efímera de rutas A* (no persistida).
     pub path_cache: crate::pathfinder::PathCache,
 
@@ -26,6 +35,9 @@ pub struct SimulationRuntime {
 
     /// Teselas visitadas por `RunTileLoop` este tick (una pasada LFSR; no persistido).
     pub tile_loop_visited: Vec<(TileCoord, Tile)>,
+
+    /// Teselas con ascensor Large Office en movimiento (`AnimatedTileList`).
+    pub active_house_lifts: HashSet<TileCoord>,
 
     /// Teselas con señales cuyo estado verde/rojo cambió este tick (remap cliente).
     pub signal_tile_dirty: Vec<TileCoord>,
@@ -85,12 +97,16 @@ impl SimulationRuntime {
     #[must_use]
     pub fn new() -> Self {
         Self {
+            fleet_index: crate::fleet_index::FleetIndex::default(),
+            terminal_spatial_index: crate::fleet_index::TerminalSpatialIndex::default(),
+            depot_spatial_index: crate::depot::DepotSpatialIndex::default(),
             path_cache: crate::pathfinder::PathCache::default(),
             pending_income_popups: Vec::new(),
             pending_sim_events: crate::sim_events::SimEventQueue::new(),
             industry_tile_dirty: Vec::new(),
             landscape_tile_dirty: Vec::new(),
             tile_loop_visited: Vec::new(),
+            active_house_lifts: HashSet::new(),
             signal_tile_dirty: Vec::new(),
             signal_globset: HashSet::new(),
             signal_spatial_index: crate::rail_signals::SignalSpatialIndex::default(),

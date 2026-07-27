@@ -216,6 +216,11 @@ impl super::model::Vehicle {
             return;
         }
 
+        self.step_path_vehicle(map, train_accel);
+    }
+
+    /// Movimiento genérico de barcos y aeronaves que siguen `movement_target`.
+    fn step_path_vehicle(&mut self, map: Option<&Map>, train_accel: TrainAccelerationModel) {
         self.update_movement_speed(map, train_accel);
 
         if self.movement_target().is_none() {

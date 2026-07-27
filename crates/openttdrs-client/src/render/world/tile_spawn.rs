@@ -162,6 +162,7 @@ pub(crate) fn spawn_map_tiles_in_bounds(
                     climate,
                     show_pbs_reservations,
                     show_full_detail,
+                    sim.state.construction.signals_on_right(),
                     &sim.state.runtime.catenary_newgrf_sprites,
                     Some(catenary_sprites),
                     Some(images),
@@ -426,10 +427,10 @@ pub(crate) fn setup(
     let atlas = TileAtlas::build(&asset_server, &mut layout_assets);
     let assets = WorldAssets::load(&atlas, &mut images);
     commands.insert_resource(assets.clone());
-    commands.insert_resource(crate::render::WaterAnimFrames {
-        water: assets.water_frames.clone(),
-        shore: assets.shore_frames.clone(),
-    });
+    commands.insert_resource(crate::render::water_anim_frames_from_assets(
+        &assets,
+        &layout_assets,
+    ));
     commands.insert_resource(crate::render::RefineryFireAnimFrames {
         by_sprite: assets.refinery_fire_frames.clone(),
     });
@@ -506,10 +507,10 @@ pub(crate) fn spawn_intro_map_render(
     let atlas = TileAtlas::build(asset_server, layout_assets);
     let assets = WorldAssets::load(&atlas, images);
     commands.insert_resource(assets.clone());
-    commands.insert_resource(crate::render::WaterAnimFrames {
-        water: assets.water_frames.clone(),
-        shore: assets.shore_frames.clone(),
-    });
+    commands.insert_resource(crate::render::water_anim_frames_from_assets(
+        &assets,
+        layout_assets,
+    ));
     commands.insert_resource(crate::render::RefineryFireAnimFrames {
         by_sprite: assets.refinery_fire_frames.clone(),
     });

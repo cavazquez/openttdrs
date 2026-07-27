@@ -466,30 +466,31 @@ fn spawn_wood_to_hub_truck(state: &mut GameState) {
 }
 
 fn spawn_rail_loop(state: &mut GameState) {
-    let orders = vec![
-        VehicleOrder::station_with_load_unload_flags(
-            SHOWCASE_RAIL_WEST,
-            true,
-            false,
-            false,
-            true,
-            false,
-            OrderNonStop::NonStopDestination,
-        )
+    let west_order = VehicleOrder::station_with_load_unload_flags(
+        SHOWCASE_RAIL_WEST,
+        true,
+        false,
+        false,
+        true,
+        false,
+        OrderNonStop::NonStopDestination,
+    );
+    let west_order = west_order
         .with_wait_ticks(SHOWCASE_RAIL_DWELL_TICKS)
-        .expect("una orden de estación admite espera"),
-        VehicleOrder::station_with_load_unload_flags(
-            SHOWCASE_RAIL_EAST,
-            false,
-            false,
-            true,
-            false,
-            false,
-            OrderNonStop::NonStopDestination,
-        )
+        .unwrap_or(west_order);
+    let east_order = VehicleOrder::station_with_load_unload_flags(
+        SHOWCASE_RAIL_EAST,
+        false,
+        false,
+        true,
+        false,
+        false,
+        OrderNonStop::NonStopDestination,
+    );
+    let east_order = east_order
         .with_wait_ticks(SHOWCASE_RAIL_DWELL_TICKS)
-        .expect("una orden de estación admite espera"),
-    ];
+        .unwrap_or(east_order);
+    let orders = vec![west_order, east_order];
     for (train_index, id) in [9102, 9103, 9105, 9106, 9107, 9108].into_iter().enumerate() {
         let mut train = Vehicle::new(
             id,

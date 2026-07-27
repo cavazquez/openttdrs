@@ -92,6 +92,11 @@ impl TickPhaseTimings {
 /// Tick principal de la simulación (sin instrumentación).
 pub(crate) fn step(state: &mut GameState) {
     state.ensure_companies();
+    state.runtime.fleet_index.rebuild(&state.vehicles);
+    state
+        .runtime
+        .terminal_spatial_index
+        .rebuild(&state.stations);
     state.tick.advance();
     state.advance_game_timers();
     let t = state.tick.get();
@@ -128,6 +133,11 @@ pub fn step_profiled(state: &mut GameState) -> TickPhaseTimings {
     let mut timings = TickPhaseTimings::default();
 
     state.ensure_companies();
+    state.runtime.fleet_index.rebuild(&state.vehicles);
+    state
+        .runtime
+        .terminal_spatial_index
+        .rebuild(&state.stations);
     state.tick.advance();
     state.advance_game_timers();
     let t = state.tick.get();
@@ -199,6 +209,14 @@ fn phase_timer_economy(state: &mut GameState) {
 /// Usa las visitas del tile loop del tick anterior (si las hay) más la lista de industrias.
 fn phase_tile_animation(state: &mut GameState, t: u64) {
     let visits = std::mem::take(&mut state.runtime.tile_loop_visited);
+    let bubble_spawns = crate::map::bubble_generator_spawns_from_visits(&visits);
+    let _lift_dirty = crate::map::step_house_lifts(
+        &mut state.map,
+        t,
+        &visits,
+        &mut state.random,
+        &mut state.runtime.active_house_lifts,
+    );
     state.runtime.industry_tile_dirty = crate::map::step_industry_tiles_with_seed(
         &mut state.map,
         t,
@@ -206,6 +224,15 @@ fn phase_tile_animation(state: &mut GameState, t: u64) {
         state.world_seed,
         &state.industries,
     );
+    for at in bubble_spawns {
+        state
+            .runtime
+            .pending_sim_events
+            .push(crate::sim_events::SimEvent::Bubble {
+                at,
+                direction: (state.random.next() & 3) as u8,
+            });
+    }
     let airport_dirty = crate::map::step_airport_tiles(&mut state.map, t, &state.stations);
     state.runtime.industry_tile_dirty.extend(airport_dirty);
 }

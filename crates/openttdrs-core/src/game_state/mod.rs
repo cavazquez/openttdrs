@@ -392,6 +392,9 @@ pub struct GameState {
     /// Límite de ruido de aeropuerto (`economy.station_noise_level`).
     #[serde(default)]
     pub station_noise_level: bool,
+    /// Lado de señales y circulación (`construction.train_signal_side`).
+    #[serde(default)]
+    pub construction: crate::construction_settings::ConstructionSettings,
     /// Ticks hasta la próxima comprobación de desastre.
     #[serde(default = "default_disaster_timer")]
     pub disaster_timer: u64,
@@ -555,6 +558,7 @@ impl GameState {
             next_subsidy_id: 1,
             disasters_enabled: true,
             station_noise_level: false,
+            construction: crate::construction_settings::ConstructionSettings::default(),
             town_council_tolerance: crate::town::TownCouncilTolerance::default(),
             disaster_timer: default_disaster_timer(),
             disaster_crafts: Vec::new(),
@@ -648,6 +652,7 @@ impl GameState {
             next_subsidy_id: 1,
             disasters_enabled: true,
             station_noise_level: false,
+            construction: crate::construction_settings::ConstructionSettings::default(),
             town_council_tolerance: crate::town::TownCouncilTolerance::default(),
             disaster_timer: default_disaster_timer(),
             disaster_crafts: Vec::new(),

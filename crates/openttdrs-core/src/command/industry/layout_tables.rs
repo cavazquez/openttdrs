@@ -44,7 +44,7 @@ pub(super) const COAL_MINE_LAYOUTS: [&[(i32, i32, u8)]; 4] = [
     ],
 ];
 
-/// OpenTTD `_tile_table_power_station_0` (gfx vanilla 7..=10).
+/// `OpenTTD` `_tile_table_power_station_0` (gfx vanilla 7..=10).
 pub(super) const POWER_STATION_LAYOUTS: [&[(i32, i32, u8)]; 1] =
     [&[(0, 0, 7), (1, 0, 8), (0, 1, 9), (1, 1, 10)]];
 

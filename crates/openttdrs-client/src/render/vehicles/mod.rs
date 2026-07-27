@@ -34,7 +34,7 @@ mod tests {
     use openttdrs_core::prelude::*;
 
     use assets::vehicle_gfx::{
-        BUS_VEHICLE_LAYERS, TRAIN_VEHICLE_LAYERS, TRAIN_WAGON_COAL_LAYERS,
+        AIRCRAFT_ROTOR_LAYERS, BUS_VEHICLE_LAYERS, TRAIN_VEHICLE_LAYERS, TRAIN_WAGON_COAL_LAYERS,
         TRAIN_WAGON_COAL_LOADED_LAYERS, TRAIN_WAGON_PASSENGER_LAYERS,
     };
     use assets::{TruckHandles, vehicle_layers};
@@ -66,6 +66,7 @@ mod tests {
             aircraft: Default::default(),
             aircraft_fokker: Default::default(),
             aircraft_tricario: Default::default(),
+            aircraft_rotor: Default::default(),
             train_groups: Default::default(),
         }
     }
@@ -98,7 +99,7 @@ mod tests {
         let mut idx = VehicleIndex::default();
         let v = sample_vehicle(7);
         idx.rebuild(std::slice::from_ref(&v));
-        assert_eq!(idx.by_id.get(&7), Some(&0));
+        assert_eq!(idx.core.slot(7), Some(0));
         assert_eq!(v.render_direction(), DIR_SW);
         assert_ne!(vehicle_layers(&v)[1].path, vehicle_layers(&v)[3].path);
         assert!(!v.uses_loaded_road_sprite());
@@ -124,6 +125,37 @@ mod tests {
         assert_eq!(vehicle_tint(&v), Color::WHITE);
         v.pbs_stuck = true;
         assert_eq!(vehicle_tint(&v), Color::srgb(1.0, 0.75, 0.35));
+    }
+
+    #[test]
+    fn helicopter_rotor_sprite_set_is_complete_and_positioned_above_shadow() {
+        assert_eq!(AIRCRAFT_ROTOR_LAYERS.len(), 4);
+        for layer in AIRCRAFT_ROTOR_LAYERS {
+            let asset_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../..")
+                .join(layer.path);
+            assert!(asset_path.is_file(), "{}", asset_path.display());
+            assert!(layer.w > 0.0 && layer.h > 0.0);
+        }
+
+        let map = Map::new_flat(4, 4, 0);
+        let pos = TileCoord::new(1, 1);
+        let mut heli = Vehicle::new(1, VehicleKind::Aircraft, pos, pos);
+        heli.engine_id = Some(openttdrs_core::ENGINE_AIRCRAFT_TRICARIO);
+        heli.altitude = 8;
+        let pose = openttdrs_core::VehiclePose::from_vehicle(&heli);
+        let body = &vehicle_layers(&heli)[0];
+        let shadow = pose::aircraft_aux_sprite_pos_at(&heli, &map, pose, body, false, 0.85);
+        let rotor = pose::aircraft_aux_sprite_pos_at(
+            &heli,
+            &map,
+            pose,
+            &AIRCRAFT_ROTOR_LAYERS[1],
+            true,
+            1.1,
+        );
+        assert!(rotor.y > shadow.y);
+        assert!(rotor.z > shadow.z);
     }
 
     #[test]

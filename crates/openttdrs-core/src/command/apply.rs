@@ -17,6 +17,11 @@ use super::{
 /// Ver variantes de [`CommandError`].
 pub fn apply_command(state: &mut GameState, cmd: &Command) -> Result<(), CommandError> {
     state.prepare_player_command();
+    state.runtime.fleet_index.rebuild(&state.vehicles);
+    state
+        .runtime
+        .terminal_spatial_index
+        .rebuild(&state.stations);
     let money_before = state.economy.money;
     let result = apply_command_inner(state, cmd);
     if result.is_ok() {
@@ -25,6 +30,7 @@ pub fn apply_command(state: &mut GameState, cmd: &Command) -> Result<(), Command
         // seguiría cruzando vía recién desconectada. Se recalculan el próximo tick.
         if effects.modifies_map {
             invalidate_vehicle_paths(state);
+            state.runtime.depot_spatial_index.invalidate();
         }
         if let Some((kind, at)) = effects.construction_event {
             state
@@ -43,6 +49,11 @@ pub fn apply_command(state: &mut GameState, cmd: &Command) -> Result<(), Command
         }
         // Comandos mutan el espejo `economy`; sincronizar pool.
         state.sync_active_from_mirrors();
+        state.runtime.fleet_index.rebuild(&state.vehicles);
+        state
+            .runtime
+            .terminal_spatial_index
+            .rebuild(&state.stations);
         if let Some(rec) = state.runtime.command_recorder.as_mut() {
             rec.push_back(cmd.clone());
         }

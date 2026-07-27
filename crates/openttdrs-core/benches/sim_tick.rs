@@ -114,6 +114,70 @@ fn bench_sim_tick(c: &mut Criterion) {
         });
     }
     group.finish();
+
+    let mut group = c.benchmark_group("fleet_indices");
+    const FLEET_SIZE: u32 = 16_384;
+    let pos = openttdrs_core::TileCoord::new(1, 1);
+    let mut fleet: Vec<_> = (0..FLEET_SIZE)
+        .map(|id| openttdrs_core::Vehicle::new(id, openttdrs_core::VehicleKind::Train, pos, pos))
+        .collect();
+    for base in (0..FLEET_SIZE).step_by(64) {
+        for offset in 0..63_u32 {
+            let slot = usize::try_from(base + offset).unwrap_or(0);
+            fleet[slot].next_unit = Some(base + offset + 1);
+            fleet[slot + 1].prev_unit = Some(base + offset);
+        }
+    }
+    group.throughput(Throughput::Elements(u64::from(FLEET_SIZE)));
+    group.bench_function("rebuild_16384", |b| {
+        let mut index = openttdrs_core::FleetIndex::default();
+        b.iter(|| {
+            index.rebuild(&fleet);
+            black_box(index.slot(FLEET_SIZE - 1));
+            black_box(index.consist(0).len());
+        });
+    });
+    let mut index = openttdrs_core::FleetIndex::default();
+    index.rebuild(&fleet);
+    group.bench_function("lookup_16384", |b| {
+        b.iter(|| {
+            for id in (0..FLEET_SIZE).step_by(127) {
+                black_box(index.slot(id));
+                black_box(index.head_id(id));
+            }
+        });
+    });
+    group.finish();
+
+    let mut group = c.benchmark_group("depot_spatial_index");
+    let mut map = openttdrs_core::Map::new_flat(4_096, 4_096, 0);
+    for n in 0..128_i32 {
+        map.set_kind(
+            openttdrs_core::TileCoord::new(32 * n, 31 * n),
+            openttdrs_core::TileKind::RoadDepot,
+        )
+        .unwrap_or_else(|error| panic!("depot bench setup: {error:?}"));
+    }
+    let mut depot_index = openttdrs_core::depot::DepotSpatialIndex::default();
+    let from = openttdrs_core::TileCoord::new(2_048, 2_048);
+    black_box(openttdrs_core::depot::nearest_depot_tile_indexed(
+        &map,
+        from,
+        openttdrs_core::VehicleKind::Truck,
+        &mut depot_index,
+    ));
+    assert_eq!(depot_index.full_map_scans(), 1);
+    group.bench_function("lookup_4096_squared", |b| {
+        b.iter(|| {
+            black_box(openttdrs_core::depot::nearest_depot_tile_indexed(
+                &map,
+                from,
+                openttdrs_core::VehicleKind::Truck,
+                &mut depot_index,
+            ));
+        });
+    });
+    group.finish();
 }
 
 criterion_group!(benches, bench_sim_tick);

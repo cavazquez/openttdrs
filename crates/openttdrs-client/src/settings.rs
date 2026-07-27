@@ -40,6 +40,8 @@ pub(crate) struct ClientPreferences {
     pub(crate) show_station_labels: bool,
     /// Ciclos de paleta (agua, refinería, burbujas…). Off o pausa → congelados.
     pub(crate) full_animation: bool,
+    /// Densidad de humo de locomotoras (`vehicle.smoke_amount`): 0=off, 1=bajo, 2=normal.
+    pub(crate) smoke_amount: u8,
     /// Detalle extra de mapa (faroles, árboles de acera, cercas). Off → sin detalle.
     pub(crate) full_detail: bool,
     /// Bits `_transparency_opt` (`TransparencyOption`).
@@ -90,6 +92,7 @@ impl Default for ClientPreferences {
             show_town_labels: true,
             show_station_labels: true,
             full_animation: true,
+            smoke_amount: 2,
             full_detail: true,
             transparency_opt: 0,
             invisibility_opt: 0,
@@ -236,6 +239,7 @@ impl ClientPreferences {
             ClientSettingsPreset::Classic => {
                 self.minimap_visible = true;
                 self.full_animation = true;
+                self.smoke_amount = 2;
                 self.full_detail = true;
                 self.show_town_labels = true;
                 self.show_station_labels = true;
@@ -248,6 +252,7 @@ impl ClientPreferences {
             ClientSettingsPreset::Performance => {
                 self.minimap_visible = true;
                 self.full_animation = false;
+                self.smoke_amount = 0;
                 self.full_detail = false;
                 self.show_town_labels = false;
                 self.show_station_labels = false;
@@ -260,6 +265,7 @@ impl ClientPreferences {
             ClientSettingsPreset::Dev => {
                 self.minimap_visible = true;
                 self.full_animation = true;
+                self.smoke_amount = 2;
                 self.full_detail = true;
                 self.show_town_labels = true;
                 self.show_station_labels = true;
@@ -522,6 +528,7 @@ mod tests {
         let mut prefs = ClientPreferences::default();
         prefs.apply_preset(ClientSettingsPreset::Performance);
         assert!(!prefs.full_animation);
+        assert_eq!(prefs.smoke_amount, 0);
         assert!(!prefs.full_detail);
         assert!(!prefs.show_town_labels);
         assert!(!prefs.show_debug_gizmos);
@@ -530,6 +537,7 @@ mod tests {
         assert!(prefs.show_diagnostics_overlay);
         prefs.apply_preset(ClientSettingsPreset::Classic);
         assert!(prefs.full_animation);
+        assert_eq!(prefs.smoke_amount, 2);
         assert!(!prefs.show_debug_gizmos);
     }
 

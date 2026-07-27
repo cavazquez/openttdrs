@@ -1,5 +1,7 @@
 //! Consultas sobre depósitos en el mapa (sin lógica de UI).
 
+use std::collections::BTreeSet;
+
 use crate::map::{Map, TileCoord, TileKind};
 use crate::vehicle::VehicleKind;
 
@@ -7,6 +9,84 @@ use crate::vehicle::VehicleKind;
 ///
 /// Coincide con el bit de cruces a nivel; la interpretación depende de `TileKind`.
 pub const DEPOT_RESERVATION_M5_BIT: u8 = 1 << 4;
+
+/// Índice espacial efímero de depósitos; el primer uso hace un solo barrido
+/// del mapa y las consultas posteriores recorren únicamente depósitos.
+#[derive(Debug, Clone, Default)]
+pub struct DepotSpatialIndex {
+    road: BTreeSet<TileCoord>,
+    rail: BTreeSet<TileCoord>,
+    ship: BTreeSet<TileCoord>,
+    airport: BTreeSet<TileCoord>,
+    initialized: bool,
+    full_map_scans: u64,
+}
+
+impl DepotSpatialIndex {
+    fn ensure_initialized(&mut self, map: &Map) {
+        if self.initialized {
+            return;
+        }
+        self.road.clear();
+        self.rail.clear();
+        self.ship.clear();
+        self.airport.clear();
+        let (width, height) = map.dimensions();
+        for y in 0..height.cast_signed() {
+            for x in 0..width.cast_signed() {
+                let pos = TileCoord::new(x, y);
+                if let Some(kind) = map.get_kind(pos) {
+                    self.insert_kind(pos, kind);
+                }
+            }
+        }
+        self.initialized = true;
+        self.full_map_scans = self.full_map_scans.saturating_add(1);
+    }
+
+    fn insert_kind(&mut self, pos: TileCoord, kind: TileKind) {
+        match kind {
+            TileKind::RoadDepot => {
+                self.road.insert(pos);
+            }
+            TileKind::RailDepot => {
+                self.rail.insert(pos);
+            }
+            TileKind::ShipDepot => {
+                self.ship.insert(pos);
+            }
+            TileKind::Airport => {
+                self.airport.insert(pos);
+            }
+            _ => {}
+        }
+    }
+
+    /// Invalida tras una mutación de mapa; el próximo lookup reconstruye una vez.
+    pub fn invalidate(&mut self) {
+        self.initialized = false;
+    }
+
+    #[must_use]
+    pub const fn full_map_scans(&self) -> u64 {
+        self.full_map_scans
+    }
+
+    #[must_use]
+    pub fn len_for(&mut self, map: &Map, kind: VehicleKind) -> usize {
+        self.ensure_initialized(map);
+        self.candidates(kind).len()
+    }
+
+    fn candidates(&self, kind: VehicleKind) -> &BTreeSet<TileCoord> {
+        match kind {
+            VehicleKind::Train => &self.rail,
+            VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram => &self.road,
+            VehicleKind::Ship => &self.ship,
+            VehicleKind::Aircraft => &self.airport,
+        }
+    }
+}
 
 /// `HasDepotReservation` (`rail_map.h`): bit 4 de `m5` en `RailDepot`.
 #[must_use]
@@ -78,6 +158,22 @@ pub fn nearest_depot_tile(map: &Map, from: TileCoord, kind: VehicleKind) -> Opti
     best.map(|(_, c)| c)
 }
 
+/// Variante indexada: O(cantidad de depósitos), independiente del área del mapa.
+#[must_use]
+pub fn nearest_depot_tile_indexed(
+    map: &Map,
+    from: TileCoord,
+    kind: VehicleKind,
+    index: &mut DepotSpatialIndex,
+) -> Option<TileCoord> {
+    index.ensure_initialized(map);
+    index
+        .candidates(kind)
+        .iter()
+        .copied()
+        .min_by_key(|c| (from.x.abs_diff(c.x) + from.y.abs_diff(c.y), c.y, c.x))
+}
+
 /// Depósito alcanzable más cercano por pathfinding (road/tram).
 #[must_use]
 pub fn nearest_reachable_depot_tile(
@@ -112,6 +208,33 @@ pub fn nearest_reachable_depot_tile(
         }
     }
     best.map(|(_, c)| c)
+}
+
+/// Variante alcanzable apoyada en [`DepotSpatialIndex`].
+#[must_use]
+pub fn nearest_reachable_depot_tile_indexed(
+    map: &Map,
+    from: TileCoord,
+    kind: VehicleKind,
+    index: &mut DepotSpatialIndex,
+) -> Option<TileCoord> {
+    use crate::pathfinder::{PathNetwork, find_path};
+
+    index.ensure_initialized(map);
+    let network = if kind == VehicleKind::Tram {
+        PathNetwork::Tram
+    } else {
+        PathNetwork::Road
+    };
+    index
+        .candidates(kind)
+        .iter()
+        .copied()
+        .filter(|&depot| {
+            let target = road_depot_entrance_tile(map, depot).unwrap_or(depot);
+            find_path(map, from, target, network).is_some()
+        })
+        .min_by_key(|c| (from.x.abs_diff(c.x) + from.y.abs_diff(c.y), c.y, c.x))
 }
 
 /// Boca del depósito de vía (`m5 & 3`) si la tesela es un depósito ferroviario.
@@ -203,6 +326,31 @@ mod tests {
             nearest_depot_tile(&s.map, from, VehicleKind::Bus),
             Some(near)
         );
+    }
+
+    #[test]
+    fn indexed_lookup_scans_large_map_only_once() {
+        let mut s = GameState::new(256, 256);
+        let depot = TileCoord::new(240, 240);
+        s.map.set_kind(depot, TileKind::RoadDepot).unwrap();
+        let mut index = DepotSpatialIndex::default();
+        assert_eq!(
+            nearest_depot_tile_indexed(
+                &s.map,
+                TileCoord::new(0, 0),
+                VehicleKind::Truck,
+                &mut index,
+            ),
+            Some(depot)
+        );
+        assert_eq!(index.full_map_scans(), 1);
+        let _ = nearest_depot_tile_indexed(
+            &s.map,
+            TileCoord::new(1, 1),
+            VehicleKind::Truck,
+            &mut index,
+        );
+        assert_eq!(index.full_map_scans(), 1);
     }
 
     #[test]

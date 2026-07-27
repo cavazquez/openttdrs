@@ -38,46 +38,14 @@ pub(super) fn recompute_vehicle_paths(state: &mut GameState) {
         Some(&wormholes)
     };
 
-    // Sincronizar primero todos los destinos permite adjudicar los andenes por
-    // cercanía real. El orden del `Vec<Vehicle>` no debe darle prioridad a un
-    // tren lejano sobre otro que ya está entrando en la estación.
-    for vehicle in &mut state.vehicles {
-        vehicle.sync_order_destination(&state.map);
-    }
-    let mut claimed_platform_tiles = HashSet::new();
-    let mut station_route_resolved = vec![false; state.vehicles.len()];
-    let mut train_priority: Vec<usize> = state
-        .vehicles
-        .iter()
-        .enumerate()
-        .filter(|(_, vehicle)| {
-            vehicle.kind == VehicleKind::Train
-                && vehicle.is_consist_head()
-                && matches!(
-                    vehicle.current_order_ref(),
-                    Some(crate::vehicle::VehicleOrder::Station { .. })
-                )
-        })
-        .map(|(index, _)| index)
-        .collect();
-    train_priority.sort_by_key(|&index| {
-        let vehicle = &state.vehicles[index];
-        (
-            vehicle.pos.x.abs_diff(vehicle.dest.x) + vehicle.pos.y.abs_diff(vehicle.dest.y),
-            vehicle.id,
-        )
-    });
-    for index in train_priority {
-        station_route_resolved[index] =
-            route_train_to_available_platform(state, index, wh, &mut claimed_platform_tiles);
-    }
+    let station_route_resolved = route_station_bound_trains(state, wh);
 
-    for i in 0..state.vehicles.len() {
+    for (i, station_route_resolved) in station_route_resolved.into_iter().enumerate() {
         if state.vehicles[i].orders.is_empty() {
             state.vehicles[i].no_network_route_to_order = false;
             continue;
         }
-        if station_route_resolved[i] {
+        if station_route_resolved {
             continue;
         }
         if !state.vehicles[i].path.is_empty() {
@@ -148,6 +116,46 @@ pub(super) fn recompute_vehicle_paths(state: &mut GameState) {
             }
         }
     }
+}
+
+/// Sincroniza destinos y adjudica primero los andenes a los trenes más cercanos.
+/// El orden del `Vec<Vehicle>` no debe darle prioridad a un tren lejano sobre
+/// otro que ya está entrando en la estación.
+fn route_station_bound_trains(
+    state: &mut GameState,
+    wormholes: Option<&pathfinder::TunnelWormholes>,
+) -> Vec<bool> {
+    for vehicle in &mut state.vehicles {
+        vehicle.sync_order_destination(&state.map);
+    }
+    let mut claimed_platform_tiles = HashSet::new();
+    let mut station_route_resolved = vec![false; state.vehicles.len()];
+    let mut train_priority: Vec<usize> = state
+        .vehicles
+        .iter()
+        .enumerate()
+        .filter(|(_, vehicle)| {
+            vehicle.kind == VehicleKind::Train
+                && vehicle.is_consist_head()
+                && matches!(
+                    vehicle.current_order_ref(),
+                    Some(crate::vehicle::VehicleOrder::Station { .. })
+                )
+        })
+        .map(|(index, _)| index)
+        .collect();
+    train_priority.sort_by_key(|&index| {
+        let vehicle = &state.vehicles[index];
+        (
+            vehicle.pos.x.abs_diff(vehicle.dest.x) + vehicle.pos.y.abs_diff(vehicle.dest.y),
+            vehicle.id,
+        )
+    });
+    for index in train_priority {
+        station_route_resolved[index] =
+            route_train_to_available_platform(state, index, wormholes, &mut claimed_platform_tiles);
+    }
+    station_route_resolved
 }
 
 /// Asigna un andén libre de forma independiente. Devuelve `true` cuando la
@@ -309,7 +317,11 @@ pub(super) fn extend_orderless_vehicle_paths(state: &mut GameState) {
                 if pos != state.vehicles[i].dest {
                     continue;
                 }
-                let Some(hangar) = vehicle_ai::orderless_aircraft_hangar(&state.map, pos) else {
+                let Some(hangar) = vehicle_ai::orderless_aircraft_hangar(
+                    &state.map,
+                    pos,
+                    &mut state.runtime.depot_spatial_index,
+                ) else {
                     continue;
                 };
                 if hangar == pos {

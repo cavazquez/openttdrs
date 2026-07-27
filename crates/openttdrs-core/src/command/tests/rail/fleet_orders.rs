@@ -5,8 +5,8 @@
 use crate::command::{Command, CommandError, apply_command};
 use crate::test_fixtures::SandboxMap;
 use crate::{
-    CargoType, GameState, OrderConditionKind, TileCoord, Vehicle, VehicleKind, VehicleOrder,
-    pathfinder,
+    CargoType, GameState, OrderConditionKind, OrderUnloadType, TileCoord, Vehicle, VehicleKind,
+    VehicleOrder, pathfinder,
 };
 
 #[test]
@@ -115,15 +115,22 @@ fn toggle_full_load_on_station_order() {
     )
     .unwrap();
     assert!(s.vehicles[0].orders[0].full_load());
-    apply_command(
-        &mut s,
-        &Command::ToggleVehicleOrderNoUnload {
-            vehicle_id: 1,
-            index: 0,
-        },
-    )
-    .unwrap();
-    assert!(s.vehicles[0].orders[0].no_unload());
+    for expected in [
+        OrderUnloadType::Unload,
+        OrderUnloadType::Transfer,
+        OrderUnloadType::NoUnload,
+        OrderUnloadType::UnloadIfPossible,
+    ] {
+        apply_command(
+            &mut s,
+            &Command::ToggleVehicleOrderNoUnload {
+                vehicle_id: 1,
+                index: 0,
+            },
+        )
+        .unwrap();
+        assert_eq!(s.vehicles[0].orders[0].unload_type(), expected);
+    }
 }
 
 #[test]

@@ -7,7 +7,10 @@ use std::collections::HashMap;
 
 use crate::cargo::CargoType;
 use crate::map::{TileCoord, coord_from_linear_index, coord_to_linear_index};
-use crate::vehicle::{OrderConditionKind, OrderNonStop, OrderStopLocation, VehicleOrder};
+use crate::vehicle::{
+    OrderConditionKind, OrderLoadType, OrderNonStop, OrderStopLocation, OrderUnloadType,
+    VehicleOrder,
+};
 
 use super::SavError;
 use super::entities::SavStationIndex;
@@ -28,6 +31,8 @@ pub(crate) const OTTD_DEPOT_HALT: u8 = 1 << 3;
 
 /// `OrderUnloadType::NoUnload` en bits 0–2 de `flags`.
 pub(crate) const OTTD_UNLOAD_NO_UNLOAD: u8 = 4;
+/// `OrderUnloadType::Unload` en bits 0–2.
+pub(crate) const OTTD_UNLOAD: u8 = 1;
 /// `OrderUnloadType::Transfer` en bits 0–2.
 pub(crate) const OTTD_UNLOAD_TRANSFER: u8 = 2;
 /// `OrderLoadType::FullLoad` / `FullLoadAny` en bits 4–6 de `flags`.
@@ -60,13 +65,9 @@ pub struct SavOrder {
 
 /// Flags de parada de estación decodificados del wire.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(clippy::struct_excessive_bools)]
 pub struct StationOrderFlags {
-    pub full_load: bool,
-    pub full_load_any: bool,
-    pub no_load: bool,
-    pub no_unload: bool,
-    pub transfer: bool,
+    pub load_type: OrderLoadType,
+    pub unload_type: OrderUnloadType,
     pub non_stop: OrderNonStop,
     pub stop_location: OrderStopLocation,
 }
@@ -84,11 +85,18 @@ pub(crate) fn station_flags_from_sav(order_type: u8, flags: u8) -> StationOrderF
         (order_type & OTTD_STOP_LOCATION_MASK) >> OTTD_STOP_LOCATION_SHIFT,
     );
     StationOrderFlags {
-        full_load: load == OTTD_LOAD_FULL,
-        full_load_any: load == OTTD_LOAD_FULL_ANY,
-        no_load: load == OTTD_LOAD_NO_LOAD,
-        no_unload: unload == OTTD_UNLOAD_NO_UNLOAD,
-        transfer: unload == OTTD_UNLOAD_TRANSFER,
+        load_type: match load {
+            OTTD_LOAD_FULL => OrderLoadType::FullLoad,
+            OTTD_LOAD_FULL_ANY => OrderLoadType::FullLoadAny,
+            OTTD_LOAD_NO_LOAD => OrderLoadType::NoLoad,
+            _ => OrderLoadType::LoadIfPossible,
+        },
+        unload_type: match unload {
+            OTTD_UNLOAD => OrderUnloadType::Unload,
+            OTTD_UNLOAD_TRANSFER => OrderUnloadType::Transfer,
+            OTTD_UNLOAD_NO_UNLOAD => OrderUnloadType::NoUnload,
+            _ => OrderUnloadType::UnloadIfPossible,
+        },
         non_stop,
         stop_location,
     }
@@ -98,17 +106,20 @@ pub(crate) fn station_flags_from_sav(order_type: u8, flags: u8) -> StationOrderF
 #[allow(dead_code)]
 pub(crate) fn stop_flags_from_sav(flags: u8) -> (bool, bool) {
     let parsed = station_flags_from_sav(OT_GOTO_STATION, flags);
-    (parsed.full_load || parsed.full_load_any, parsed.no_unload)
+    (
+        matches!(
+            parsed.load_type,
+            OrderLoadType::FullLoad | OrderLoadType::FullLoadAny
+        ),
+        parsed.unload_type == OrderUnloadType::NoUnload,
+    )
 }
 
 #[must_use]
 pub(crate) fn station_flags_to_sav(order: &VehicleOrder) -> (u8, u8) {
     let VehicleOrder::Station {
-        full_load,
-        full_load_any,
-        no_load,
-        no_unload,
-        transfer,
+        load_type,
+        unload_type,
         non_stop,
         stop_location,
         ..
@@ -122,18 +133,18 @@ pub(crate) fn station_flags_to_sav(order: &VehicleOrder) -> (u8, u8) {
     }
     order_type |= (stop_location.as_u8() << OTTD_STOP_LOCATION_SHIFT) & OTTD_STOP_LOCATION_MASK;
     let mut flags = 0u8;
-    if transfer {
-        flags |= OTTD_UNLOAD_TRANSFER;
-    } else if no_unload {
-        flags |= OTTD_UNLOAD_NO_UNLOAD;
-    }
-    if no_load {
-        flags |= OTTD_LOAD_NO_LOAD << 4;
-    } else if full_load_any {
-        flags |= OTTD_LOAD_FULL_ANY << 4;
-    } else if full_load {
-        flags |= OTTD_LOAD_FULL << 4;
-    }
+    flags |= match unload_type {
+        OrderUnloadType::UnloadIfPossible => 0,
+        OrderUnloadType::Unload => OTTD_UNLOAD,
+        OrderUnloadType::Transfer => OTTD_UNLOAD_TRANSFER,
+        OrderUnloadType::NoUnload => OTTD_UNLOAD_NO_UNLOAD,
+    };
+    flags |= match load_type {
+        OrderLoadType::LoadIfPossible => 0,
+        OrderLoadType::FullLoad => OTTD_LOAD_FULL << 4,
+        OrderLoadType::FullLoadAny => OTTD_LOAD_FULL_ANY << 4,
+        OrderLoadType::NoLoad => OTTD_LOAD_NO_LOAD << 4,
+    };
     (order_type, flags)
 }
 
@@ -342,11 +353,8 @@ pub(crate) fn vehicle_orders_from_sav(
                     } else {
                         out.push(VehicleOrder::Station {
                             station: st.pos,
-                            full_load: parsed.full_load,
-                            full_load_any: parsed.full_load_any,
-                            no_load: parsed.no_load,
-                            no_unload: parsed.no_unload,
-                            transfer: parsed.transfer,
+                            load_type: parsed.load_type,
+                            unload_type: parsed.unload_type,
                             non_stop: parsed.non_stop,
                             stop_location: parsed.stop_location,
                             wait_ticks: u32::from(order.wait_time),
@@ -447,7 +455,7 @@ mod tests {
             stop_flags_from_sav(stop_flags_to_sav(true, true)),
             (true, true)
         );
-        // Decode acepta FullLoadAny; encode emite FullLoad.
+        // El helper booleano considera ambos modos como carga completa.
         assert!(stop_flags_from_sav(OTTD_LOAD_FULL_ANY << 4).0);
     }
 
@@ -458,9 +466,8 @@ mod tests {
             OT_GOTO_STATION | OTTD_NON_STOP_GO_VIA,
             (OTTD_LOAD_NO_LOAD << 4) | OTTD_UNLOAD_TRANSFER,
         );
-        assert!(flags.no_load);
-        assert!(flags.transfer);
-        assert!(!flags.full_load);
+        assert_eq!(flags.load_type, OrderLoadType::NoLoad);
+        assert_eq!(flags.unload_type, OrderUnloadType::Transfer);
         assert_eq!(flags.non_stop, OrderNonStop::StopAtIntermediate);
 
         let order = VehicleOrder::station_with_load_unload_flags(
@@ -503,8 +510,39 @@ mod tests {
     #[test]
     fn full_load_any_flag_is_not_collapsed_to_full_load() {
         let flags = station_flags_from_sav(OT_GOTO_STATION, OTTD_LOAD_FULL_ANY << 4);
-        assert!(!flags.full_load);
-        assert!(flags.full_load_any);
+        assert_eq!(flags.load_type, OrderLoadType::FullLoadAny);
+    }
+
+    #[test]
+    fn all_station_load_unload_types_roundtrip_ordl_flags() {
+        let load_types = [
+            OrderLoadType::LoadIfPossible,
+            OrderLoadType::FullLoad,
+            OrderLoadType::FullLoadAny,
+            OrderLoadType::NoLoad,
+        ];
+        let unload_types = [
+            OrderUnloadType::UnloadIfPossible,
+            OrderUnloadType::Unload,
+            OrderUnloadType::Transfer,
+            OrderUnloadType::NoUnload,
+        ];
+
+        for load_type in load_types {
+            for unload_type in unload_types {
+                let order = VehicleOrder::station_with_types(
+                    TileCoord::new(2, 2),
+                    load_type,
+                    unload_type,
+                    OrderNonStop::NonStopDestination,
+                );
+                let wire = encode_vehicle_order(&order, |_| Some(7), 64).unwrap();
+                let (sav, _) = decode_order_wire(&wire).unwrap();
+                let decoded = station_flags_from_sav(sav.order_type, sav.flags);
+                assert_eq!(decoded.load_type, load_type);
+                assert_eq!(decoded.unload_type, unload_type);
+            }
+        }
     }
 
     #[test]

@@ -12,18 +12,29 @@ pub(super) fn tick_aircraft_phases(state: &mut GameState) {
         let ev = tick_aircraft_phase(&mut state.vehicles[i], &state.map, &mut state.stations);
         let id = state.vehicles[i].id;
         let at = state.vehicles[i].pos;
+        let engine_id = state.vehicles[i]
+            .engine_id
+            .unwrap_or_else(|| crate::engine::default_engine_id(VehicleKind::Aircraft));
         match ev {
             AircraftPhaseEvent::Takeoff => {
                 state
                     .runtime
                     .pending_sim_events
-                    .push(SimEvent::AircraftTakeoff { vehicle_id: id, at });
+                    .push(SimEvent::AircraftTakeoff {
+                        vehicle_id: id,
+                        engine_id,
+                        at,
+                    });
             }
             AircraftPhaseEvent::Landing => {
                 state
                     .runtime
                     .pending_sim_events
-                    .push(SimEvent::AircraftLanding { vehicle_id: id, at });
+                    .push(SimEvent::AircraftLanding {
+                        vehicle_id: id,
+                        engine_id,
+                        at,
+                    });
             }
             AircraftPhaseEvent::None => {}
         }

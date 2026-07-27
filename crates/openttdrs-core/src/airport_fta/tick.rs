@@ -14,7 +14,9 @@ use super::types::{
 };
 
 const FTA_DWELL_TICKS: u16 = 6;
-const FTA_HOLD_DWELL_TICKS: u16 = 10;
+// En vuelo no hay una parada física en cada punto del circuito: los nodos de
+// holding sólo cambian el objetivo de movimiento del tick siguiente.
+const FTA_HOLD_DWELL_TICKS: u16 = 0;
 
 /// `true` si la estación usa motor FTA (perfil + footprint completo).
 #[must_use]
@@ -138,16 +140,17 @@ fn try_enter_approach(v: &mut Vehicle, stations: &[Station]) -> Option<AircraftP
     v.airport_prev_pos = entry;
     v.airport_waypoint_reached = false;
     v.airport_loading_stand_reached = false;
-    v.airport_heading = match profile.kind {
-        AirportFtaKind::Helidepot | AirportFtaKind::Heliport | AirportFtaKind::Helistation => {
-            AirportHeading::HeliLanding
-        }
-        AirportFtaKind::Country
-        | AirportFtaKind::Commuter
-        | AirportFtaKind::City
-        | AirportFtaKind::Metropolitan
-        | AirportFtaKind::International
-        | AirportFtaKind::Intercontinental => AirportHeading::Landing,
+    let is_helicopter = v
+        .engine_id
+        .is_some_and(crate::engine::aircraft_is_helicopter);
+    v.airport_heading = if is_helicopter
+        || matches!(
+            profile.kind,
+            AirportFtaKind::Helidepot | AirportFtaKind::Heliport | AirportFtaKind::Helistation
+        ) {
+        AirportHeading::HeliLanding
+    } else {
+        AirportHeading::Landing
     };
     v.aircraft_phase = AircraftPhase::Landing;
     v.aircraft_phase_ticks = FTA_HOLD_DWELL_TICKS;
@@ -194,7 +197,7 @@ fn advance_fta_node(
     let prev = v.airport_pos;
     nudge_heading_at_node(v, profile);
 
-    let Some(edge) = choose_next_edge(v, profile) else {
+    let Some(mut edge) = choose_next_edge(v, profile) else {
         if should_finish_takeoff(v, profile)
             || (profile.fixedwing_takeoff_pos == Some(v.airport_pos))
         {
@@ -213,12 +216,34 @@ fn advance_fta_node(
         return finish_takeoff(v, station);
     }
 
-    let next = edge.next_position;
     // Multi-avión: no pisar reservas ajenas; mantener las propias hasta poder avanzar.
     if !blocks_free_for(station, v.airport_blocks_held, edge.blocks) {
-        hold_or_wait(v, profile);
-        return sync_phase_from_node(v, profile);
+        // Un avión al que todavía no se le puede adjudicar pista/stand debe
+        // continuar el circuito, no congelarse en el punto de aproximación.
+        let alternate = (profile.fta_edges)(v.airport_pos)
+            .into_iter()
+            .find(|candidate| {
+                candidate.next_position != edge.next_position
+                    && matches!(
+                        candidate.heading,
+                        AirportHeading::ToAll | AirportHeading::Flying
+                    )
+                    && blocks_free_for(station, v.airport_blocks_held, candidate.blocks)
+                    && ((profile.hold_min..=profile.hold_max).contains(&candidate.next_position)
+                        || profile.moving_data[usize::from(candidate.next_position)
+                            .min(profile.moving_data.len() - 1)]
+                        .flags
+                            & FLAG_HOLD
+                            != 0)
+            });
+        if let Some(holding_edge) = alternate {
+            edge = holding_edge;
+        } else {
+            hold_or_wait(v, profile);
+            return sync_phase_from_node(v, profile);
+        }
     }
+    let next = edge.next_position;
     release_held_blocks(station, v);
     acquire_blocks(station, v, edge.blocks);
 
@@ -268,6 +293,18 @@ fn airport_node_is_loading_stand(kind: AirportFtaKind, node: u8) -> bool {
 }
 
 fn nudge_heading_at_node(v: &mut Vehicle, profile: &AirportFtaProfile) {
+    if v.engine_id
+        .is_some_and(crate::engine::aircraft_is_helicopter)
+        && profile.kind == AirportFtaKind::Country
+    {
+        match v.airport_pos {
+            19 => v.airport_heading = AirportHeading::HeliTakeoff,
+            20 => v.airport_heading = AirportHeading::HeliLanding,
+            21 => v.airport_heading = AirportHeading::HeliEndLanding,
+            _ => {}
+        }
+        return;
+    }
     match profile.kind {
         AirportFtaKind::Country => match v.airport_pos {
             8 => v.airport_heading = AirportHeading::EndTakeoff,
@@ -479,7 +516,13 @@ fn apply_enter_heading(v: &mut Vehicle, next: u8, profile: &AirportFtaProfile) {
             2 | 14 => v.airport_heading = AirportHeading::Term1,
             3 => v.airport_heading = AirportHeading::Term2,
             13 => v.airport_heading = AirportHeading::EndLanding,
+            19 => v.airport_heading = AirportHeading::HeliTakeoff,
+            20 => v.airport_heading = AirportHeading::HeliLanding,
+            21 => v.airport_heading = AirportHeading::HeliEndLanding,
             1 if matches!(v.airport_heading, AirportHeading::EndLanding) => {
+                v.airport_heading = AirportHeading::Term1;
+            }
+            1 if matches!(v.airport_heading, AirportHeading::HeliEndLanding) => {
                 v.airport_heading = AirportHeading::Term1;
             }
             _ => {}
@@ -730,6 +773,31 @@ fn update_heading_for_orders(v: &mut Vehicle, station: &Station, kind: AirportFt
     }
     if kind == AirportFtaKind::Helistation {
         update_heading_helistation(v, remote);
+        return;
+    }
+    if v.engine_id
+        .is_some_and(crate::engine::aircraft_is_helicopter)
+        && kind == AirportFtaKind::Country
+    {
+        // Country no tiene helipad: el helicóptero despega/aterriza en vertical
+        // junto a terminal, sin usar la pista de ala fija.
+        if matches!(
+            v.airport_heading,
+            AirportHeading::HeliLanding | AirportHeading::HeliEndLanding
+        ) && matches!(
+            v.aircraft_phase,
+            AircraftPhase::Flying | AircraftPhase::Landing
+        ) {
+            return;
+        }
+        if remote {
+            v.airport_heading = AirportHeading::HeliTakeoff;
+            if v.aircraft_phase == AircraftPhase::InHangar {
+                v.aircraft_phase = AircraftPhase::Taxi;
+            }
+        } else {
+            v.airport_heading = AirportHeading::Term1;
+        }
         return;
     }
     // Country / Commuter / City / Metropolitan / International / Intercontinental.

@@ -178,7 +178,7 @@ mod tests {
         pose.progress = 255;
         pose.progress_f = 255.0;
         let sub = vehicle_subtile_at_with_map(&v, pose, Some(&map));
-        assert_eq!(sub, (8.0, 16.0), "debe tomar RIGHT, no seguir por X");
+        assert_eq!(sub, (7.0, 15.0), "debe tomar RIGHT, no seguir por X");
     }
 
     #[test]

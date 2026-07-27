@@ -264,25 +264,20 @@ pub fn rail_station_stop_candidates_osl(
     }
     let pick = |tiles: &mut Vec<TileCoord>| -> TileCoord {
         tiles.sort_by(|a, b| if axis_y { a.y.cmp(&b.y) } else { a.x.cmp(&b.x) });
-        // Middle: centro geométrico del andén (paridad con `tiles[len/2]` previo).
-        // Near/Far: orientar entrada→salida según el sentido de aproximación.
-        match osl {
-            crate::vehicle::OrderStopLocation::Middle => pick_stop_tile(tiles, osl, train_length),
-            crate::vehicle::OrderStopLocation::NearEnd
-            | crate::vehicle::OrderStopLocation::FarEnd => {
-                let approaching_positive = if axis_y {
-                    from.y <= tiles[0].y
-                } else {
-                    from.x <= tiles[0].x
-                };
-                let oriented = if approaching_positive {
-                    tiles.clone()
-                } else {
-                    tiles.iter().rev().copied().collect()
-                };
-                pick_stop_tile(&oriented, osl, train_length)
-            }
-        }
+        // `GetTrainStopLocation` mide siempre desde el extremo de entrada. Esto
+        // también importa para Middle: sin orientar, un consist que llega desde
+        // el extremo decreciente deja la cola fuera del andén.
+        let approaching_positive = if axis_y {
+            from.y <= tiles[0].y
+        } else {
+            from.x <= tiles[0].x
+        };
+        let oriented = if approaching_positive {
+            tiles.clone()
+        } else {
+            tiles.iter().rev().copied().collect()
+        };
+        pick_stop_tile(&oriented, osl, train_length)
     };
     let mut out = Vec::with_capacity(by_track.len());
     if let Some(tiles) = by_track.remove(&want) {
@@ -320,10 +315,24 @@ pub fn pick_stop_tile(
     } else {
         osl
     };
-    let idx = match effective {
-        OrderStopLocation::NearEnd => 0,
-        OrderStopLocation::Middle => n / 2,
-        OrderStopLocation::FarEnd => n.saturating_sub(1),
+    let idx = if train_length == 0 {
+        match effective {
+            OrderStopLocation::NearEnd => 0,
+            OrderStopLocation::Middle => n / 2,
+            OrderStopLocation::FarEnd => n.saturating_sub(1),
+        }
+    } else {
+        // `GetTrainStopLocation`: posición del frente, menos media locomotora.
+        // El controlador actual detiene por tesela; elegir la que contiene esa
+        // coordenada evita parar una tesela antes y dejar la cola afuera.
+        let front_center = match effective {
+            OrderStopLocation::NearEnd => train_length,
+            OrderStopLocation::Middle => station_len - station_len.saturating_sub(train_length) / 2,
+            OrderStopLocation::FarEnd => station_len,
+        };
+        let front_stop = front_center
+            .saturating_sub(u16::from(crate::train_consist::VEHICLE_LENGTH.div_ceil(2)));
+        usize::from(front_stop.saturating_sub(1) / 16).min(n.saturating_sub(1))
     };
     platform_entry_to_exit[idx]
 }

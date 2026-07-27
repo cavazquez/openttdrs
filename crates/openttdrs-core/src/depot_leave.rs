@@ -257,9 +257,27 @@ fn maybe_clear_depot_reservation_after_exit(
     if any_in_depot {
         return;
     }
-    // Liberar depósitos vecinos a la cabeza (típicamente el recién abandonado).
-    for (dx, dy) in [(-1_i32, 0), (1, 0), (0, -1), (0, 1), (0, 0)] {
-        let c = TileCoord::new(head_pos.x + dx, head_pos.y + dy);
+    // Cuando la cola termina de salir, la cabeza ya puede estar varias teselas
+    // adelante. Buscar sólo sus vecinos dejaba el bit del depósito pegado para
+    // siempre y bloqueaba todos los consists apilados. `origin` y el historial
+    // conservan la boca realmente abandonada hasta mucho después de liberar la
+    // última unidad.
+    let Some(head) = vehicles.iter().find(|vehicle| vehicle.id == head_id) else {
+        return;
+    };
+    let mut candidates: Vec<TileCoord> = head
+        .rail_tile_history
+        .iter()
+        .copied()
+        .chain(std::iter::once(head.origin))
+        .collect();
+    candidates.extend(
+        [(-1_i32, 0), (1, 0), (0, -1), (0, 1), (0, 0)]
+            .map(|(dx, dy)| TileCoord::new(head_pos.x + dx, head_pos.y + dy)),
+    );
+    candidates.sort_unstable_by_key(|tile| (tile.y, tile.x));
+    candidates.dedup();
+    for c in candidates {
         if map.get_kind(c) != Some(TileKind::RailDepot) || !has_depot_reservation(map, c) {
             continue;
         }
@@ -520,6 +538,41 @@ mod tests {
         assert!(
             saw_wagon_activate,
             "al menos un follower debe activarse vía TicksToLeaveDepot"
+        );
+    }
+
+    #[test]
+    fn consist_clears_depot_reservation_after_tail_leaves_far_behind_head() {
+        use crate::vehicle::Vehicle;
+
+        let mut s = SandboxMap::flat_rich(20, 12, 1);
+        let depot = TileCoord::new(5, 5);
+        apply_command(&mut s, &Command::PlaceRail(TileCoord::new(5, 4))).unwrap();
+        apply_command(&mut s, &Command::PlaceRailDepotDir(depot, 3)).unwrap();
+        assert!(set_depot_reservation(&mut s.map, depot, true));
+
+        let mut head = Vehicle::new(
+            1,
+            VehicleKind::Train,
+            TileCoord::new(12, 4),
+            TileCoord::new(16, 4),
+        );
+        head.origin = depot;
+        head.next_unit = Some(2);
+        head.rail_tile_history.push_back(depot);
+        let mut wagon = Vehicle::new(
+            2,
+            VehicleKind::Train,
+            TileCoord::new(11, 4),
+            TileCoord::new(16, 4),
+        );
+        wagon.prev_unit = Some(1);
+        let vehicles = vec![head, wagon];
+
+        maybe_clear_depot_reservation_after_exit(&mut s.map, &vehicles, 1, TileCoord::new(12, 4));
+        assert!(
+            !has_depot_reservation(&s.map, depot),
+            "la reserva debe liberarse aunque la cabeza ya no sea vecina"
         );
     }
 

@@ -542,17 +542,32 @@ mod tests {
         s.vehicles[1].aircraft_phase_ticks = 0;
         s.vehicles[1].running = true;
 
-        for _ in 0..40 {
+        let mut holding_nodes = std::collections::HashSet::new();
+        for _ in 0..240 {
             let _ = tick_airport_fta(&mut s.vehicles[1], &s.map, &mut s.stations);
-            assert_eq!(
-                s.vehicles[1].airport_pos, 10,
-                "la segunda aeronave debe permanecer en espera mientras la pista está ocupada"
+            holding_nodes.insert(s.vehicles[1].airport_pos);
+            assert_ne!(
+                s.vehicles[1].airport_pos,
+                11,
+                "la segunda aeronave no debe entrar a pista mientras está ocupada: \
+                 station_blocks={:#x}, held={:#x}, heading={:?}",
+                s.stations[0].airport_blocks,
+                s.vehicles[1].airport_blocks_held,
+                s.vehicles[1].airport_heading,
             );
         }
+        assert!(
+            holding_nodes.iter().any(|node| matches!(node, 15..=18)),
+            "la segunda aeronave debe continuar volando el circuito: {holding_nodes:?}"
+        );
+        assert!(
+            holding_nodes.len() > 2,
+            "no debe quedar congelada frente al aeropuerto: {holding_nodes:?}"
+        );
 
         s.stations[0].airport_blocks &= !BLOCK_AIRPORT_BUSY;
         s.vehicles[0].airport_blocks_held = 0;
-        for _ in 0..80 {
+        for _ in 0..1_000 {
             let _ = tick_airport_fta(&mut s.vehicles[1], &s.map, &mut s.stations);
             if s.vehicles[1].airport_pos == 11 {
                 break;
@@ -560,6 +575,53 @@ mod tests {
         }
         assert_eq!(s.vehicles[1].airport_pos, 11);
         assert_ne!(s.vehicles[1].airport_blocks_held & BLOCK_AIRPORT_BUSY, 0);
+    }
+
+    #[test]
+    fn country_helicopter_uses_vertical_fta_instead_of_runway() {
+        let mut s = GameState::new(32, 32);
+        apply_command(
+            &mut s,
+            &Command::PlaceAirportArea {
+                origin: TileCoord::new(2, 2),
+                axis_y: false,
+                spec: AirportSpecId::Small,
+            },
+        )
+        .unwrap();
+        let hangar = s.stations[0].pos;
+        apply_command(
+            &mut s,
+            &Command::BuildVehicleAtDepot(hangar, ENGINE_AIRCRAFT_TRICARIO),
+        )
+        .unwrap();
+        let heli = &mut s.vehicles[0];
+        heli.running = true;
+        heli.airport_fta_active = true;
+        heli.airport_fta_station = Some(hangar);
+        heli.airport_pos = 1;
+        heli.airport_waypoint_reached = true;
+        heli.aircraft_phase_ticks = 0;
+        heli.aircraft_phase = AircraftPhase::Taxi;
+        heli.airport_heading = AirportHeading::Hangar;
+        heli.dest = TileCoord::new(20, 20);
+
+        let _ = tick_airport_fta(&mut s.vehicles[0], &s.map, &mut s.stations);
+        assert_eq!(s.vehicles[0].airport_pos, 19, "despegue vertical");
+        assert_eq!(s.vehicles[0].airport_heading, AirportHeading::HeliTakeoff);
+
+        let heli = &mut s.vehicles[0];
+        heli.airport_fta_active = true;
+        heli.airport_fta_station = Some(hangar);
+        heli.airport_pos = 10;
+        heli.airport_waypoint_reached = true;
+        heli.aircraft_phase_ticks = 0;
+        heli.aircraft_phase = AircraftPhase::Flying;
+        heli.airport_heading = AirportHeading::HeliLanding;
+        heli.dest = hangar;
+        let _ = tick_airport_fta(&mut s.vehicles[0], &s.map, &mut s.stations);
+        assert_eq!(s.vehicles[0].airport_pos, 20, "descenso vertical");
+        assert_eq!(s.vehicles[0].airport_heading, AirportHeading::HeliLanding);
     }
 
     #[test]

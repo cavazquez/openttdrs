@@ -51,7 +51,7 @@ mod coherence_tests {
         );
         assert_eq!(
             pick_stop_tile(&platform, OrderStopLocation::Middle, 8),
-            TileCoord::new(3, 0)
+            TileCoord::new(2, 0)
         );
         assert_eq!(
             pick_stop_tile(&platform, OrderStopLocation::FarEnd, 8),
@@ -87,6 +87,43 @@ mod coherence_tests {
         let cands = rail_station_stop_candidates(&state.map, anchor, TileCoord::new(4, 8));
         assert_eq!(cands.first().map(|c| c.x), Some(4));
         assert!(cands.iter().any(|c| c.x == 5), "incluye andén paralelo");
+    }
+
+    #[test]
+    fn middle_stop_orients_consist_from_the_platform_entry() {
+        use crate::command::{Command, apply_command};
+        use crate::vehicle::OrderStopLocation;
+
+        let mut state = GameState::new(20, 20);
+        apply_command(
+            &mut state,
+            &Command::PlaceRailStationArea {
+                origin: TileCoord::new(4, 4),
+                axis_y: true,
+                platforms: 1,
+                length: 4,
+            },
+        )
+        .unwrap();
+        let anchor = state.stations[0].pos;
+
+        let from_north = rail_station_stop_tile_for_approach_osl(
+            &state.map,
+            anchor,
+            TileCoord::new(4, 2),
+            OrderStopLocation::Middle,
+            24,
+        );
+        let from_south = rail_station_stop_tile_for_approach_osl(
+            &state.map,
+            anchor,
+            TileCoord::new(4, 9),
+            OrderStopLocation::Middle,
+            24,
+        );
+
+        assert_eq!(from_north, Some(TileCoord::new(4, 6)));
+        assert_eq!(from_south, Some(TileCoord::new(4, 5)));
     }
 
     #[test]

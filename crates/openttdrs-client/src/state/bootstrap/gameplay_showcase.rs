@@ -1157,6 +1157,66 @@ mod tests {
     }
 
     #[test]
+    fn showcase_dispatches_next_train_before_first_reaches_destination() {
+        let mut state = showcase_state();
+        let mut departed = std::collections::BTreeMap::new();
+        let mut first_arrival = None;
+
+        for tick in 0..8_000_u32 {
+            state.step();
+            for train in state
+                .vehicles
+                .iter()
+                .filter(|vehicle| vehicle.kind == VehicleKind::Train && vehicle.is_consist_head())
+            {
+                if train.pos != SHOWCASE_RAIL_DEPOT {
+                    departed.entry(train.id).or_insert(tick);
+                }
+                if state.map.get_kind(train.pos) == Some(TileKind::Station) {
+                    first_arrival = Some((tick, train.id));
+                }
+            }
+            if first_arrival.is_some() {
+                break;
+            }
+        }
+
+        assert!(
+            departed.len() >= 2,
+            "debe salir un segundo servicio antes de que el primero llegue: \
+             departed={departed:?}, first_arrival={first_arrival:?}, depot_reserved={}, \
+             heads={:?}, first_units={:?}",
+            openttdrs_core::depot::has_depot_reservation(&state.map, SHOWCASE_RAIL_DEPOT),
+            state
+                .vehicles
+                .iter()
+                .filter(|vehicle| vehicle.kind == VehicleKind::Train && vehicle.is_consist_head())
+                .map(|vehicle| (
+                    vehicle.id,
+                    vehicle.pos,
+                    vehicle.rail_pixel,
+                    vehicle.depot_leave_cleared,
+                    vehicle.wait_counter,
+                    vehicle.reserved_steps.len(),
+                ))
+                .collect::<Vec<_>>(),
+            state
+                .vehicles
+                .iter()
+                .filter(|vehicle| vehicle.id == 9102
+                    || vehicle.prev_unit == Some(9102)
+                    || vehicle.id == 9111)
+                .map(|vehicle| (
+                    vehicle.id,
+                    vehicle.pos,
+                    vehicle.rail_pixel,
+                    vehicle.depot_leave_cleared
+                ))
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
     fn showcase_town_bus_stays_on_road_network() {
         let mut state = showcase_state();
         let idx = state

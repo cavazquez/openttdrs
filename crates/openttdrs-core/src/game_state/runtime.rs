@@ -79,6 +79,9 @@ pub struct SimulationRuntime {
     /// Slots Action5 catenary `0x05` (wires/entrances/pylons; `None` = `OpenGFX`).
     pub catenary_newgrf_sprites: Vec<Option<crate::newgrf_sprites::DecodedSprite>>,
 
+    /// Overrides Action3 `RailType` `Signals`, indexados por `RailType` vanilla.
+    pub rail_signal_newgrf: Vec<Option<crate::rail_type::RailSignalSpriteSpec>>,
+
     /// `FlowStat` reconstruidos desde `link_graph` (no persistidos).
     pub station_flows: crate::flow_stat::StationFlows,
 
@@ -120,6 +123,7 @@ impl SimulationRuntime {
             parity: None,
             shore_newgrf_sprites: Vec::new(),
             catenary_newgrf_sprites: Vec::new(),
+            rail_signal_newgrf: Vec::new(),
             station_flows: crate::flow_stat::StationFlows::default(),
             station_flow_rebuilds: 0,
             command_recorder: None,

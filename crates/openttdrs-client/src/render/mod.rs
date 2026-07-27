@@ -23,6 +23,7 @@ mod refinery_fire;
 mod road_newgrf;
 mod shore_newgrf;
 mod sign_labels;
+mod signal_newgrf;
 mod smoke;
 mod station_labels;
 mod station_newgrf;
@@ -77,6 +78,7 @@ pub(crate) use catenary_newgrf::NewGrfCatenarySpriteCache;
 pub(crate) use industry_newgrf::NewGrfIndustrySpriteCache;
 pub(crate) use road_newgrf::NewGrfRoadSpriteCache;
 pub(crate) use shore_newgrf::NewGrfShoreSpriteCache;
+pub(crate) use signal_newgrf::NewGrfSignalSpriteCache;
 pub(crate) use station_newgrf::NewGrfStationSpriteCache;
 pub(crate) use tiles::{
     flush_map_batches, leveled_foundation_overlay_pos, push_forest_tree, push_water_tile,

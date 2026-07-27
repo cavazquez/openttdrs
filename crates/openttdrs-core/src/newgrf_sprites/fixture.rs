@@ -4,8 +4,8 @@
 //! usados en tests. Las funciones de decodificación en runtime permanecen en sus módulos.
 
 use crate::newgrf_actions::{
-    ACTION0_FEATURE_INDUSTRYTILES, ACTION0_FEATURE_ROADTYPES, ACTION0_FEATURE_STATIONS,
-    ACTION0_FEATURE_TRAINS,
+    ACTION0_FEATURE_INDUSTRYTILES, ACTION0_FEATURE_RAILTYPES, ACTION0_FEATURE_ROADTYPES,
+    ACTION0_FEATURE_STATIONS, ACTION0_FEATURE_TRAINS,
 };
 
 use super::pixel_codec::{encode_chunked_8bpp_full_rows, encode_chunked_pixels_full_rows};
@@ -284,6 +284,21 @@ pub fn build_action3_feature_payload(feature: u8, local_id: u8, default_set: u16
     p
 }
 
+/// Action3 con un grupo específico (`cargo id` / `RailSpriteType`) y fallback.
+#[must_use]
+pub fn build_action3_feature_specific_payload(
+    feature: u8,
+    local_id: u8,
+    selector: u8,
+    set_id: u16,
+    default_set: u16,
+) -> Vec<u8> {
+    let mut p = vec![0x03, feature, 0x01, local_id, 0x01, selector];
+    p.extend_from_slice(&set_id.to_le_bytes());
+    p.extend_from_slice(&default_set.to_le_bytes());
+    p
+}
+
 /// Action3 trains: un id local → set por defecto (sin cargos).
 #[must_use]
 pub fn build_action3_trains_payload(local_id: u8, default_set: u16) -> Vec<u8> {
@@ -554,6 +569,85 @@ pub fn build_grf_v2_with_preview_sprite(
     for payload in [action3.as_slice(), action8.as_slice()] {
         let sz = u32::try_from(payload.len()).unwrap_or(0);
         data_section.extend_from_slice(&sz.to_le_bytes());
+        data_section.push(0xFF);
+        data_section.extend_from_slice(payload);
+    }
+    data_section.extend_from_slice(&0u32.to_le_bytes());
+
+    let sprite_offs = u32::try_from(1 + data_section.len()).unwrap_or(0);
+    let mut out = Vec::new();
+    out.extend_from_slice(&[0x00, 0x00]);
+    out.extend_from_slice(&SIG);
+    out.extend_from_slice(&sprite_offs.to_le_bytes());
+    out.push(0x00);
+    out.extend_from_slice(&data_section);
+    out.extend_from_slice(&0u32.to_le_bytes());
+    out
+}
+
+/// GRF `RailType` sintético con 8 orientaciones rojas + 8 verdes.
+///
+/// Action3 asigna `RailSpriteType::Signals` y Action2 selecciona el set por
+/// `param2 & 0xFF` (`SignalState`), igual que `GetCustomSignalSprite`.
+#[must_use]
+#[expect(clippy::too_many_arguments)]
+pub fn build_grf_v2_railtype_signal_sprites(
+    action0: &[u8],
+    local_id: u8,
+    width: u16,
+    height: u16,
+    red_indices: &[u8],
+    green_indices: &[u8],
+    grfid: [u8; 4],
+    name: &str,
+) -> Vec<u8> {
+    const SIG: [u8; 8] = [b'G', b'R', b'F', 0x82, 0x0D, 0x0A, 0x1A, 0x0A];
+    const ACTION2_SET: u8 = 0x20;
+    let action1 = build_action1_feature_payload(ACTION0_FEATURE_RAILTYPES, 2, 8);
+    let action2 = build_action2_variational_payload(
+        ACTION0_FEATURE_RAILTYPES,
+        ACTION2_SET,
+        0x18,
+        0,
+        0xFF,
+        &[(0, 0, 0), (1, 1, 1)],
+        0,
+    );
+    let action3 = build_action3_feature_specific_payload(
+        ACTION0_FEATURE_RAILTYPES,
+        local_id,
+        crate::rail_type::RAIL_SPRITE_TYPE_SIGNALS,
+        u16::from(ACTION2_SET),
+        0,
+    );
+    let mut action8 = vec![0x08, 0x07];
+    action8.extend_from_slice(&grfid);
+    action8.extend_from_slice(name.as_bytes());
+    action8.push(0);
+    action8.push(0);
+
+    let mut data_section = Vec::new();
+    for payload in [action0, action1.as_slice()] {
+        let size = u32::try_from(payload.len()).unwrap_or(0);
+        data_section.extend_from_slice(&size.to_le_bytes());
+        data_section.push(0xFF);
+        data_section.extend_from_slice(payload);
+    }
+    for indices in [red_indices, green_indices] {
+        for image in 0..8i16 {
+            let body = build_real_sprite_v1_uncompressed_payload(
+                width,
+                height,
+                -i16::try_from(width / 2).unwrap_or(0) + image,
+                -i16::try_from(height).unwrap_or(0),
+                indices,
+            );
+            append_v2_real_sprite(&mut data_section, 0x01, &body);
+        }
+    }
+    for payload in [action2.as_slice(), action3.as_slice(), action8.as_slice()] {
+        let size = u32::try_from(payload.len()).unwrap_or(0);
+        data_section.extend_from_slice(&size.to_le_bytes());
         data_section.push(0xFF);
         data_section.extend_from_slice(payload);
     }

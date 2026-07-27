@@ -259,7 +259,11 @@ fn spawn_road_rail_station_and_transport_cover_main_paths() {
                     false,
                     &[],
                     None,
+                    &[],
                     None,
+                    None,
+                    0,
+                    &[],
                 );
                 rails.clear();
                 spawn_rail_tile(
@@ -276,7 +280,11 @@ fn spawn_road_rail_station_and_transport_cover_main_paths() {
                     false,
                     &[],
                     None,
+                    &[],
                     None,
+                    None,
+                    0,
+                    &[],
                 );
                 spawn_station_tile(
                     &mut commands,

@@ -138,6 +138,7 @@ pub(crate) fn apply_remap_map_visuals(
                 newgrf_sprites.station.as_mut(),
                 newgrf_sprites.shore.as_mut(),
                 newgrf_sprites.catenary.as_mut(),
+                newgrf_sprites.signal.as_mut(),
                 newgrf_sprites.industry.as_mut(),
             );
         }
@@ -168,6 +169,7 @@ pub(crate) fn apply_remap_map_visuals(
                 newgrf_sprites.station.as_mut(),
                 newgrf_sprites.shore.as_mut(),
                 newgrf_sprites.catenary.as_mut(),
+                newgrf_sprites.signal.as_mut(),
                 newgrf_sprites.industry.as_mut(),
             );
         }
@@ -239,6 +241,7 @@ pub(crate) fn apply_remap_map_visuals(
             newgrf_sprites.station.as_mut(),
             newgrf_sprites.shore.as_mut(),
             newgrf_sprites.catenary.as_mut(),
+            newgrf_sprites.signal.as_mut(),
             newgrf_sprites.industry.as_mut(),
         );
         loaded_chunks.chunks = chunks_in_bounds(spawn_bounds);

@@ -1156,6 +1156,21 @@ pub fn signal_screen_position_for_side(
     base_z: u8,
     signals_on_right: bool,
 ) -> Vec2 {
+    signal_screen_anchor_for_side(tx, ty, pos, half_h, base_z, signals_on_right)
+        + signal_sprite_center_offset(tex_id)
+}
+
+/// Ancla `AddSortableSpriteToDraw` sin offsets internos del sprite.
+/// Sirve tanto para OpenGFX como para imágenes HD decodificadas desde NewGRF.
+#[must_use]
+pub fn signal_screen_anchor_for_side(
+    tx: i32,
+    ty: i32,
+    pos: u8,
+    half_h: f32,
+    base_z: u8,
+    signals_on_right: bool,
+) -> Vec2 {
     let p = crate::iso::iso(tx, ty);
     let elev = f32::from(base_z) * crate::iso::HEIGHT_PX;
     let track_base = Vec2::new(p.x, p.y - half_h + elev);
@@ -1164,7 +1179,7 @@ pub fn signal_screen_position_for_side(
     } else {
         rail_signal_subtile_offset(pos)
     };
-    track_base + subtile + signal_sprite_center_offset(tex_id)
+    track_base + subtile
 }
 
 /// Sprites de señal visibles en la tesela, con carril para el offset de dibujo.
@@ -1195,6 +1210,10 @@ pub fn collect_signal_sprite_draws(m2: u8, m3: u8, m3hi: u8, m5: u8) -> Vec<Sign
             sprite_id: signal_sprite_texture_id(signal_sprite_id(ty, var, image, green)),
             track,
             pos,
+            image,
+            signal_type: ty,
+            variant: var,
+            green,
         });
     };
 
@@ -1489,6 +1508,11 @@ pub struct SignalSpriteDraw {
     pub track: u8,
     /// Índice en `SignalPositions` de OpenTTD (`DrawSingleSignal`, `rail_cmd.cpp`).
     pub pos: u8,
+    /// Offset dentro del ResultSpriteGroup custom (`sprite += image`).
+    pub image: u8,
+    pub signal_type: u8,
+    pub variant: u8,
+    pub green: bool,
 }
 
 /// Sprites para el fantasma: mismos IDs que la vía colocada (`collect_rail_sprites`).
@@ -2004,6 +2028,65 @@ mod tests {
         assert_ne!(sw, Vec2::ZERO);
         assert_ne!(ne, Vec2::ZERO);
         assert_ne!(sw, ne);
+    }
+
+    #[test]
+    fn golden_signal_positions_cover_both_sides_and_every_track_orientation() {
+        const LEFT: [(i8, i8); 12] = [
+            (8, 5),
+            (14, 1),
+            (1, 14),
+            (9, 11),
+            (1, 0),
+            (3, 10),
+            (11, 4),
+            (14, 14),
+            (11, 3),
+            (4, 13),
+            (3, 4),
+            (11, 13),
+        ];
+        const RIGHT: [(i8, i8); 12] = [
+            (14, 1),
+            (12, 10),
+            (4, 6),
+            (1, 14),
+            (10, 4),
+            (0, 1),
+            (14, 14),
+            (5, 12),
+            (11, 13),
+            (4, 3),
+            (13, 4),
+            (3, 11),
+        ];
+        for pos in 0u8..12 {
+            assert_eq!(signal_subtile_xy(pos, false), LEFT[usize::from(pos)]);
+            assert_eq!(signal_subtile_xy(pos, true), RIGHT[usize::from(pos)]);
+            assert_ne!(
+                rail_signal_subtile_offset_for_side(pos, false),
+                rail_signal_subtile_offset_for_side(pos, true),
+                "pos {pos}"
+            );
+        }
+    }
+
+    #[test]
+    fn diagonal_pbs_draw_exposes_get_custom_signal_sprite_parameters() {
+        let m2 = m2_for_signal_encoding(4, 1, OTTD_TRACK_LEFT);
+        let draws = collect_signal_sprite_draws(m2, 0x40, 0x40, 0x40 | TB_LEFT);
+        assert_eq!(draws.len(), 1);
+        let draw = draws[0];
+        assert_eq!(draw.track, OTTD_TRACK_LEFT);
+        assert_eq!(draw.pos, 0);
+        assert_eq!(draw.image, 7);
+        assert_eq!(draw.signal_type, 4);
+        assert_eq!(draw.variant, 1);
+        assert!(draw.green);
+        assert_ne!(
+            signal_screen_anchor_for_side(3, 4, draw.pos, TILE_HALF_H, 0, false),
+            signal_screen_anchor_for_side(3, 4, draw.pos, TILE_HALF_H, 0, true)
+        );
     }
 
     #[test]

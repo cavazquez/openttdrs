@@ -10,6 +10,8 @@ pub const ACTION0_FEATURE_TRAINS: u8 = 0x00;
 pub const ACTION0_FEATURE_STATIONS: u8 = 0x04;
 /// Feature Action0: `IndustryTiles` (`OpenTTD` `GSF_INDUSTRYTILES`).
 pub const ACTION0_FEATURE_INDUSTRYTILES: u8 = 0x09;
+/// Feature Action0: `RailTypes` (`OpenTTD` `GSF_RAILTYPES`).
+pub const ACTION0_FEATURE_RAILTYPES: u8 = 0x10;
 /// Feature Action0: `RoadTypes` (`OpenTTD` `GSF_ROADTYPES`).
 pub const ACTION0_FEATURE_ROADTYPES: u8 = 0x12;
 
@@ -81,6 +83,13 @@ pub struct ParsedTrainMeta {
     pub intro_year: u16,
     pub max_speed: u16,
     pub power_hp: u32,
+}
+
+/// Asociación local de `RailType` Action0 (`prop 0x08`) con una etiqueta global.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ParsedRailTypeMeta {
+    pub local_id: u8,
+    pub label: crate::newgrf_type_tables::TypeLabel,
 }
 
 /// Metadatos `IndustryTiles` Action0 (antes de asignar gfx ≥175).
@@ -193,6 +202,61 @@ pub fn collect_roadtype_metas_from_grf(data: &[u8]) -> Vec<ParsedRoadTypeMeta> {
     let _ = for_each_pseudo_payload(data, |payload| {
         if let Some(meta) = parse_action0_roadtype_meta(payload) {
             out.push(meta);
+        }
+    });
+    out
+}
+
+/// Lee etiquetas `RailType` de un Action0. La propiedad `0x08` contiene un DWORD
+/// por id y suele ser la primera del bloque, como en la fase Reserve de `OpenTTD`.
+#[must_use]
+pub fn parse_action0_railtype_metas(payload: &[u8]) -> Option<Vec<ParsedRailTypeMeta>> {
+    let header = parse_action0_header(payload)?;
+    if header.feature != ACTION0_FEATURE_RAILTYPES || header.num_ids == 0 || payload.len() < 5 {
+        return None;
+    }
+    let first_id = payload[4];
+    let mut i = 5usize;
+    for _ in 0..header.num_props {
+        let prop = *payload.get(i)?;
+        i += 1;
+        if prop == PROP_LABEL {
+            let bytes = usize::from(header.num_ids).checked_mul(4)?;
+            if i.checked_add(bytes)? > payload.len() {
+                return None;
+            }
+            let mut out = Vec::with_capacity(usize::from(header.num_ids));
+            for offset in 0..header.num_ids {
+                let start = i + usize::from(offset) * 4;
+                out.push(ParsedRailTypeMeta {
+                    local_id: first_id.wrapping_add(offset),
+                    label: payload[start..start + 4].try_into().ok()?,
+                });
+            }
+            return Some(out);
+        }
+
+        // Tamaños fijos por id para poder alcanzar prop 08 si no viene primero.
+        let width = match prop {
+            0x09..=0x0D | 0x13 | 0x14 | 0x1B | 0x1C => 2usize,
+            0x10..=0x12 | 0x15 | 0x16 | 0x1A => 1usize,
+            0x17 => 4usize,
+            _ => return None,
+        };
+        i = i.checked_add(width.checked_mul(usize::from(header.num_ids))?)?;
+        if i > payload.len() {
+            return None;
+        }
+    }
+    None
+}
+
+#[must_use]
+pub fn collect_railtype_metas_from_grf(data: &[u8]) -> Vec<ParsedRailTypeMeta> {
+    let mut out = Vec::new();
+    let _ = for_each_pseudo_payload(data, |payload| {
+        if let Some(metas) = parse_action0_railtype_metas(payload) {
+            out.extend(metas);
         }
     });
     out

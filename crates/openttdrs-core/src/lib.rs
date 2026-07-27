@@ -49,6 +49,7 @@ pub mod parity;
 pub mod pathfinder;
 pub mod pathfinding_settings;
 pub mod prelude;
+pub mod rail_action2;
 pub mod rail_lane;
 pub mod rail_pbs;
 pub mod rail_signals;
@@ -273,17 +274,19 @@ pub use map::{
 // Runtime NewGRF en raíz; builders/fixtures vía `newgrf_actions` / `newgrf_sprites::fixture` (#157).
 pub use house_spec::{HouseSpec, get_town_radius_group, pick_town_house_id};
 pub use newgrf_actions::{
-    ACTION0_FEATURE_INDUSTRYTILES, ACTION0_FEATURE_ROADTYPES, ACTION0_FEATURE_STATIONS,
-    ACTION0_FEATURE_TRAINS, Action0Header, Action5SlotSummary, GrfInspectReport,
-    ParsedIndustryTileMeta, ParsedRoadTypeMeta, ParsedStationMeta, ParsedTrainMeta,
-    apply_newgrf_action5_catenary, apply_newgrf_action5_catenary_default_dirs,
-    apply_newgrf_action5_shore, apply_newgrf_action5_shore_default_dirs,
-    apply_newgrf_industry_tiles, apply_newgrf_industry_tiles_default_dirs, apply_newgrf_road_types,
+    ACTION0_FEATURE_INDUSTRYTILES, ACTION0_FEATURE_RAILTYPES, ACTION0_FEATURE_ROADTYPES,
+    ACTION0_FEATURE_STATIONS, ACTION0_FEATURE_TRAINS, Action0Header, Action5SlotSummary,
+    GrfInspectReport, ParsedIndustryTileMeta, ParsedRailTypeMeta, ParsedRoadTypeMeta,
+    ParsedStationMeta, ParsedTrainMeta, apply_newgrf_action5_catenary,
+    apply_newgrf_action5_catenary_default_dirs, apply_newgrf_action5_shore,
+    apply_newgrf_action5_shore_default_dirs, apply_newgrf_industry_tiles,
+    apply_newgrf_industry_tiles_default_dirs, apply_newgrf_rail_signals,
+    apply_newgrf_rail_signals_default_dirs, apply_newgrf_road_types,
     apply_newgrf_road_types_default_dirs, apply_newgrf_stack_catalogs_default_dirs,
     apply_newgrf_stations, apply_newgrf_stations_default_dirs, apply_newgrf_vehicles_trains,
     apply_newgrf_vehicles_trains_default_dirs, inspect_grf_bytes, inspect_grf_file,
-    parse_action0_header, parse_action0_industry_tile_meta, parse_action0_roadtype_meta,
-    parse_action0_station_meta, parse_action0_train_meta,
+    parse_action0_header, parse_action0_industry_tile_meta, parse_action0_railtype_metas,
+    parse_action0_roadtype_meta, parse_action0_station_meta, parse_action0_train_meta,
 };
 pub use newgrf_config::{
     GrfContainerVersion, GrfFileInfo, GrfParsed, GrfScanError, GrfStackIssue, MAX_NEWGRF_PARAMS,
@@ -299,8 +302,9 @@ pub use newgrf_sprites::{
     TrainSpriteAssign, TrainSpriteGraphics, action5_type_name, apply_company_colour_mask,
     bake_sprite_company_mask, catenary_action5_local_slot, collect_action5_blocks,
     collect_feature_sprite_graphics, collect_industry_tile_sprite_graphics,
-    collect_roadtype_sprite_graphics, collect_station_sprite_graphics,
-    collect_train_sprite_graphics, merge_catenary_action5_block, merge_shore_action5_block,
+    collect_railtype_sprite_graphics, collect_roadtype_sprite_graphics,
+    collect_station_sprite_graphics, collect_train_sprite_graphics, merge_catenary_action5_block,
+    merge_shore_action5_block,
 };
 pub use newgrf_type_tables::{
     GrfTypeTranslationTables, TypeLabel, collect_type_tables_from_grf,
@@ -329,6 +333,7 @@ pub use pathfinding_settings::{
     DEFAULT_PATH_BACKOFF_INTERVAL, DEFAULT_WAIT_FOR_PBS_PATH_DAYS, DEFAULT_WAIT_ONEWAY_SIGNAL_DAYS,
     DEFAULT_WAIT_TWOWAY_SIGNAL_DAYS, PBS_WAIT_FOREVER, PathfindingSettings,
 };
+pub use rail_action2::action2_eval_ctx_for_rail_tile;
 pub use rail_lane::{
     autorail_drag_uses_x_axis, autorail_trackbit_from_fract, rail_horz_lane_bit, rail_vert_lane_bit,
 };
@@ -355,9 +360,10 @@ pub use rail_signals::{
     tracks_overlap, valid_signal_facings_track, yapf_routing_signal,
 };
 pub use rail_type::{
-    RAIL_CONVERT_COST, RailType, engine_compatible_with_rail, engine_requires_electric,
-    engine_requires_maglev, engine_requires_monorail, powered_railtypes_mask, rail_type_bit,
-    rail_type_from_tile, rail_type_track_speed_cap, rail_types_compatible, railtypes_mask_contains,
+    RAIL_CONVERT_COST, RAIL_SPRITE_TYPE_SIGNALS, RailSignalSpriteSpec, RailType,
+    engine_compatible_with_rail, engine_requires_electric, engine_requires_maglev,
+    engine_requires_monorail, powered_railtypes_mask, rail_type_bit, rail_type_from_tile,
+    rail_type_track_speed_cap, rail_types_compatible, railtypes_mask_contains,
     required_rail_type_for_engine, set_rail_type_on_tile, tile_usable_by_rail_type,
 };
 pub use refit::{

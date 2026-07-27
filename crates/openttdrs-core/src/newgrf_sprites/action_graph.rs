@@ -1,8 +1,8 @@
 //! Parseo y construcción de grafos Action1/2/3 + builders sintéticos de GRF.
 
 use crate::newgrf_actions::{
-    ACTION0_FEATURE_INDUSTRYTILES, ACTION0_FEATURE_ROADTYPES, ACTION0_FEATURE_STATIONS,
-    ACTION0_FEATURE_TRAINS,
+    ACTION0_FEATURE_INDUSTRYTILES, ACTION0_FEATURE_RAILTYPES, ACTION0_FEATURE_ROADTYPES,
+    ACTION0_FEATURE_STATIONS, ACTION0_FEATURE_TRAINS,
 };
 use crate::newgrf_config::{GrfContainerVersion, GrfScanError, parse_grf_full};
 use crate::newgrf_walk::{GrfEntry, walk_grf_entries};
@@ -241,7 +241,9 @@ pub(super) fn parse_action2_random(
     ))
 }
 
-pub(super) fn parse_action3_feature(payload: &[u8], feature: u8) -> Option<Vec<TrainSpriteAssign>> {
+type ParsedAction3 = (Vec<TrainSpriteAssign>, Vec<((u8, u8), u16)>);
+
+pub(super) fn parse_action3_feature(payload: &[u8], feature: u8) -> Option<ParsedAction3> {
     // 03 <feature> <n-id> <ids…> <num-cid> [cargo…] <default:u16>
     if payload.len() < 6 || payload[0] != 0x03 {
         return None;
@@ -259,26 +261,31 @@ pub(super) fn parse_action3_feature(payload: &[u8], feature: u8) -> Option<Vec<T
     }
     let ids = &payload[3..ids_end];
     let num_cid = payload[ids_end];
-    // Saltar pares cargo (1+2 bytes) — MVP no los usa.
     let mut i = ids_end + 1;
+    let mut specific = Vec::with_capacity(usize::from(num_cid) * ids.len());
     for _ in 0..num_cid {
         if i + 3 > payload.len() {
             return None;
         }
-        i += 3; // cargo:u8 + set:u16
+        let selector = payload[i];
+        let set_id = u16::from_le_bytes([payload[i + 1], payload[i + 2]]);
+        for &local_id in ids {
+            specific.push(((local_id, selector), set_id));
+        }
+        i += 3;
     }
     if i + 2 > payload.len() {
         return None;
     }
     let default_set = u16::from_le_bytes([payload[i], payload[i + 1]]);
-    Some(
-        ids.iter()
-            .map(|&local_id| TrainSpriteAssign {
-                local_id,
-                set_id: default_set,
-            })
-            .collect(),
-    )
+    let defaults = ids
+        .iter()
+        .map(|&local_id| TrainSpriteAssign {
+            local_id,
+            set_id: default_set,
+        })
+        .collect();
+    Some((defaults, specific))
 }
 
 /// Índice sprite section v2: `id` → lista `(info, body)` (body = tras el BYTE info).
@@ -289,6 +296,7 @@ fn supports_action2_chain(feature: u8) -> bool {
         feature,
         ACTION0_FEATURE_TRAINS
             | ACTION0_FEATURE_STATIONS
+            | ACTION0_FEATURE_RAILTYPES
             | ACTION0_FEATURE_ROADTYPES
             | ACTION0_FEATURE_INDUSTRYTILES
     )
@@ -335,8 +343,9 @@ pub fn collect_feature_sprite_graphics(
                 && let Some((a2_id, rnd)) = parse_action2_random(payload, feature)
             {
                 out.action2_random.insert(a2_id, rnd);
-            } else if let Some(assigns) = parse_action3_feature(payload, feature) {
+            } else if let Some((assigns, specific)) = parse_action3_feature(payload, feature) {
                 out.assigns.extend(assigns);
+                out.specific_assigns.extend(specific);
             }
         }
         GrfEntry::Real { info, payload } => {
@@ -389,6 +398,15 @@ pub fn collect_train_sprite_graphics(data: &[u8]) -> Result<TrainSpriteGraphics,
 /// Contenedor inválido.
 pub fn collect_roadtype_sprite_graphics(data: &[u8]) -> Result<TrainSpriteGraphics, GrfScanError> {
     collect_feature_sprite_graphics(data, ACTION0_FEATURE_ROADTYPES)
+}
+
+/// Action1/2/3 `RailTypes` (`0x10`), incluidos grupos Action3 por `RailSpriteType`.
+///
+/// # Errors
+///
+/// Contenedor inválido.
+pub fn collect_railtype_sprite_graphics(data: &[u8]) -> Result<TrainSpriteGraphics, GrfScanError> {
+    collect_feature_sprite_graphics(data, ACTION0_FEATURE_RAILTYPES)
 }
 
 /// Action1/3 stations.

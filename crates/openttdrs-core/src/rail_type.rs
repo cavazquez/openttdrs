@@ -88,6 +88,44 @@ impl RailType {
     }
 }
 
+/// Selector Action3 `RailSpriteType::Signals` de `OpenTTD`.
+pub const RAIL_SPRITE_TYPE_SIGNALS: u8 = 11;
+
+/// Gráfico de señales provisto por un `RailType` `NewGRF`.
+///
+/// Es efímero: se reconstruye desde el stack y nunca se serializa en el save.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RailSignalSpriteSpec {
+    pub rail_type: RailType,
+    pub local_id: u8,
+    pub grfid: u32,
+    pub type_tables: Option<crate::newgrf_type_tables::GrfTypeTranslationTables>,
+    pub graphics: crate::newgrf_sprites::TrainSpriteGraphics,
+}
+
+impl RailSignalSpriteSpec {
+    /// Replica `GetCustomSignalSprite`: resuelve Action2 con param1/param2 y
+    /// devuelve el sprite en el offset `image` del `ResultSpriteGroup`.
+    pub fn resolve_sprite(
+        &self,
+        image: u8,
+        signal_type: u8,
+        variant: u8,
+        green: bool,
+        ctx: &mut crate::newgrf_sprites::Action2EvalCtx,
+    ) -> Option<crate::newgrf_sprites::DecodedSprite> {
+        ctx.vars.insert(0x10, 0); // param1: gui=false
+        ctx.vars.insert(
+            0x18,
+            (u32::from(signal_type) << 16) | (u32::from(variant) << 8) | u32::from(green),
+        );
+        self.graphics
+            .views_for_specific_ctx(self.local_id, RAIL_SPRITE_TYPE_SIGNALS, ctx)?
+            .get(usize::from(image))
+            .cloned()
+    }
+}
+
 /// Velocidad máxima efectiva de la tesela para un tren (`GetMaxTrackSpeed`).
 ///
 /// Devuelve `None` si el railtype no impone techo (`max_speed == 0`).

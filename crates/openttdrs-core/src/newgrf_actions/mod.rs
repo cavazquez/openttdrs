@@ -11,12 +11,14 @@ pub mod inspect;
 
 // Re-exports públicos
 pub use action0::{
-    ACTION0_FEATURE_INDUSTRYTILES, ACTION0_FEATURE_ROADTYPES, ACTION0_FEATURE_STATIONS,
-    ACTION0_FEATURE_TRAINS, Action0Header, ParsedIndustryTileMeta, ParsedRoadTypeMeta,
-    ParsedStationMeta, ParsedTrainMeta, collect_industry_tile_metas_from_grf,
+    ACTION0_FEATURE_INDUSTRYTILES, ACTION0_FEATURE_RAILTYPES, ACTION0_FEATURE_ROADTYPES,
+    ACTION0_FEATURE_STATIONS, ACTION0_FEATURE_TRAINS, Action0Header, ParsedIndustryTileMeta,
+    ParsedRailTypeMeta, ParsedRoadTypeMeta, ParsedStationMeta, ParsedTrainMeta,
+    collect_industry_tile_metas_from_grf, collect_railtype_metas_from_grf,
     collect_roadtype_metas_from_grf, collect_station_metas_from_grf, collect_train_metas_from_grf,
     for_each_pseudo_payload, parse_action0_header, parse_action0_industry_tile_meta,
-    parse_action0_roadtype_meta, parse_action0_station_meta, parse_action0_train_meta,
+    parse_action0_railtype_metas, parse_action0_roadtype_meta, parse_action0_station_meta,
+    parse_action0_train_meta,
 };
 
 pub use apply::{
@@ -26,6 +28,7 @@ pub use apply::{
     },
     apply_newgrf_stack_catalogs_default_dirs,
     industry::{apply_newgrf_industry_tiles, apply_newgrf_industry_tiles_default_dirs},
+    rail::{apply_newgrf_rail_signals, apply_newgrf_rail_signals_default_dirs},
     road::{apply_newgrf_road_types, apply_newgrf_road_types_default_dirs},
     station::{apply_newgrf_stations, apply_newgrf_stations_default_dirs},
     train::{apply_newgrf_vehicles_trains, apply_newgrf_vehicles_trains_default_dirs},
@@ -34,6 +37,13 @@ pub use apply::{
 pub use inspect::{Action5SlotSummary, GrfInspectReport, inspect_grf_bytes, inspect_grf_file};
 
 // Builders para tests
+#[must_use]
+pub fn build_action0_railtype_payload(local_id: u8, label: &[u8; 4]) -> Vec<u8> {
+    let mut payload = vec![0x00, ACTION0_FEATURE_RAILTYPES, 0x01, 0x01, local_id, 0x08];
+    payload.extend_from_slice(label);
+    payload
+}
+
 #[must_use]
 pub fn build_action0_roadtype_payload(
     short_label: &[u8; 4],

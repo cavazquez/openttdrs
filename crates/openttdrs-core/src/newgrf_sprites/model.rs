@@ -112,6 +112,10 @@ pub struct TrainSpriteGraphics {
     /// `sets[set_id][view]` — sets Action1 en orden de aparición.
     pub sets: Vec<Vec<DecodedSprite>>,
     pub assigns: Vec<TrainSpriteAssign>,
+    /// Action3 específico: `(id local, cargo/sprite-type)` → set Action2.
+    ///
+    /// Para `RailTypes` el segundo byte es `RailSpriteType`; señales usan `11`.
+    pub specific_assigns: HashMap<(u8, u8), u16>,
     /// Action2 set-id → índice del primer set Action1 "moving" (solo trains).
     pub action2_to_action1: HashMap<u8, u16>,
     /// Action2 variational completo (rangos + default / advanced).
@@ -188,6 +192,27 @@ impl TrainSpriteGraphics {
             .get(usize::from(action1_idx))
             .map(Vec::as_slice)
             .filter(|s| !s.is_empty())
+    }
+
+    /// Vistas del grupo Action3 específico (p. ej. `RailType` Signals = selector 11).
+    pub fn views_for_specific_ctx(
+        &self,
+        local_id: u8,
+        selector: u8,
+        ctx: &mut Action2EvalCtx,
+    ) -> Option<&[DecodedSprite]> {
+        let set_id = *self.specific_assigns.get(&(local_id, selector))?;
+        let action1_idx = self.resolve_action1_set_ctx(set_id, ctx);
+        self.sets
+            .get(usize::from(action1_idx))
+            .map(Vec::as_slice)
+            .filter(|s| !s.is_empty())
+    }
+
+    /// ¿Action3 asignó este grupo específico al id local?
+    #[must_use]
+    pub fn has_specific_assignment(&self, local_id: u8, selector: u8) -> bool {
+        self.specific_assigns.contains_key(&(local_id, selector))
     }
 
     /// ¿Necesita re-resolución en runtime (random o cualquier variational)?

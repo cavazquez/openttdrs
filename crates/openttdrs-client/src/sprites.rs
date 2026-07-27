@@ -165,9 +165,9 @@ pub use rail::{
     rail_signal_present_mask, rail_signal_state_mask, rail_signal_subtile_offset,
     rail_signal_subtile_offset_for_side, rail_sprite_atlas_keys, rail_sprite_ids_for_preload,
     rail_tile_has_pbs_reservation, rail_tile_is_signals, remap_rail_sprite_id, signal_draw_pos,
-    signal_screen_position, signal_screen_position_for_side, signal_sprite_bases,
-    signal_sprite_center_offset, signal_sprite_ids_for_preload, signal_sprite_metadata,
-    signal_sprite_texture_id,
+    signal_screen_anchor_for_side, signal_screen_position, signal_screen_position_for_side,
+    signal_sprite_bases, signal_sprite_center_offset, signal_sprite_ids_for_preload,
+    signal_sprite_metadata, signal_sprite_texture_id,
 };
 #[allow(unused_imports)]
 pub use station::{

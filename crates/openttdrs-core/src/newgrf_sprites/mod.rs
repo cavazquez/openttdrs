@@ -31,8 +31,8 @@ pub use pixel_codec::{
 // Re-exportar funciones de runtime de action_graph
 pub use action_graph::{
     collect_feature_sprite_graphics, collect_industry_tile_sprite_graphics,
-    collect_roadtype_sprite_graphics, collect_station_sprite_graphics,
-    collect_train_sprite_graphics,
+    collect_railtype_sprite_graphics, collect_roadtype_sprite_graphics,
+    collect_station_sprite_graphics, collect_train_sprite_graphics,
 };
 
 // Re-exportar funciones de runtime de action5
@@ -52,21 +52,22 @@ pub use fixture::{
     build_action2_trains_random_consist, build_action2_trains_variational_default,
     build_action2_variational_advanced_add_literal, build_action2_variational_default_payload,
     build_action2_variational_divmod_payload, build_action2_variational_payload,
-    build_action2_vehicle_payload, build_action3_feature_payload, build_action3_trains_payload,
+    build_action2_vehicle_payload, build_action3_feature_payload,
+    build_action3_feature_specific_payload, build_action3_trains_payload,
     build_grf_v2_action5_with_sprite, build_grf_v2_feature_with_action2_chain,
-    build_grf_v2_industry_tile_with_preview_sprite, build_grf_v2_roadtype_with_action2_chain,
-    build_grf_v2_roadtype_with_preview_sprite, build_grf_v2_station_with_action2_chain,
-    build_grf_v2_station_with_preview_sprite, build_grf_v2_train_with_action2_chain,
-    build_grf_v2_train_with_chunked_sprite, build_grf_v2_train_with_compressed_sprite,
-    build_grf_v2_train_with_fd_rgba_sprite, build_grf_v2_train_with_fd_sprite,
-    build_grf_v2_train_with_preview_sprite, build_grf_v2_train_with_variational_chain,
-    build_grf_v2_with_preview_sprite, build_real_sprite_v1_chunked,
-    build_real_sprite_v1_chunked_payload, build_real_sprite_v1_compressed,
-    build_real_sprite_v1_compressed_payload, build_real_sprite_v1_dims,
-    build_real_sprite_v1_uncompressed, build_real_sprite_v1_uncompressed_payload,
-    build_sprite_section_palette_entry, build_sprite_section_rgba_chunked_entry,
-    build_sprite_section_rgba_entry, build_sprite_section_rgba_mask_entry,
-    compress_grf_lz77_literals,
+    build_grf_v2_industry_tile_with_preview_sprite, build_grf_v2_railtype_signal_sprites,
+    build_grf_v2_roadtype_with_action2_chain, build_grf_v2_roadtype_with_preview_sprite,
+    build_grf_v2_station_with_action2_chain, build_grf_v2_station_with_preview_sprite,
+    build_grf_v2_train_with_action2_chain, build_grf_v2_train_with_chunked_sprite,
+    build_grf_v2_train_with_compressed_sprite, build_grf_v2_train_with_fd_rgba_sprite,
+    build_grf_v2_train_with_fd_sprite, build_grf_v2_train_with_preview_sprite,
+    build_grf_v2_train_with_variational_chain, build_grf_v2_with_preview_sprite,
+    build_real_sprite_v1_chunked, build_real_sprite_v1_chunked_payload,
+    build_real_sprite_v1_compressed, build_real_sprite_v1_compressed_payload,
+    build_real_sprite_v1_dims, build_real_sprite_v1_uncompressed,
+    build_real_sprite_v1_uncompressed_payload, build_sprite_section_palette_entry,
+    build_sprite_section_rgba_chunked_entry, build_sprite_section_rgba_entry,
+    build_sprite_section_rgba_mask_entry, compress_grf_lz77_literals,
 };
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]

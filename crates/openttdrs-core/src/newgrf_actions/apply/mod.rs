@@ -6,6 +6,7 @@ use crate::GameState;
 
 pub mod action5;
 pub mod industry;
+pub mod rail;
 pub mod road;
 pub mod station;
 pub mod train;
@@ -30,6 +31,7 @@ pub fn apply_newgrf_stack_catalogs_default_dirs(state: &mut GameState) {
     station::apply_newgrf_stations_default_dirs(state);
     train::apply_newgrf_vehicles_trains_default_dirs(state);
     industry::apply_newgrf_industry_tiles_default_dirs(state);
+    rail::apply_newgrf_rail_signals_default_dirs(state);
     action5::apply_newgrf_action5_shore_default_dirs(state);
     action5::apply_newgrf_action5_catenary_default_dirs(state);
 }

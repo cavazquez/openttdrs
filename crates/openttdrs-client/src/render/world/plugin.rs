@@ -28,6 +28,7 @@ pub(crate) struct NewGrfMapSpriteCaches<'w> {
     pub station: ResMut<'w, crate::render::NewGrfStationSpriteCache>,
     pub shore: ResMut<'w, crate::render::NewGrfShoreSpriteCache>,
     pub catenary: ResMut<'w, crate::render::NewGrfCatenarySpriteCache>,
+    pub signal: ResMut<'w, crate::render::NewGrfSignalSpriteCache>,
     pub industry: ResMut<'w, crate::render::NewGrfIndustrySpriteCache>,
 }
 
@@ -115,6 +116,7 @@ impl Plugin for WorldRenderPlugin {
             .init_resource::<crate::render::NewGrfStationSpriteCache>()
             .init_resource::<crate::render::NewGrfShoreSpriteCache>()
             .init_resource::<crate::render::NewGrfCatenarySpriteCache>()
+            .init_resource::<crate::render::NewGrfSignalSpriteCache>()
             .init_resource::<crate::render::NewGrfIndustrySpriteCache>()
             .add_systems(OnEnter(ClientScreen::InGame), setup)
             .add_systems(

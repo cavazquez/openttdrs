@@ -20,8 +20,8 @@ use crate::sprites::{
     rail_tile_has_pbs_reservation, rail_tile_is_signals, rail_track_base_color,
     rail_trackbits_for_render, road_bits_for_render, road_flat_sprite_color,
     road_flat_sprite_index, road_tile_roadside, road_tile_snow_or_desert,
-    road_tile_tram_visual_active, roadside_is_paved, signal_screen_position_for_side,
-    track_fence_draws_for_tile, tram_flat_sprite_index,
+    road_tile_tram_visual_active, roadside_is_paved, signal_screen_anchor_for_side,
+    signal_screen_position_for_side, track_fence_draws_for_tile, tram_flat_sprite_index,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -331,7 +331,11 @@ pub(crate) fn spawn_rail_tile(
     signals_on_right: bool,
     catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     mut catenary_sprites: Option<&mut crate::render::NewGrfCatenarySpriteCache>,
+    rail_signal_newgrf: &[Option<openttdrs_core::RailSignalSpriteSpec>],
+    mut signal_sprites: Option<&mut crate::render::NewGrfSignalSpriteCache>,
     mut images: Option<&mut Assets<Image>>,
+    calendar_date: u32,
+    newgrf_stack: &[openttdrs_core::NewGrfEntry],
 ) {
     let tileh = ctx.info.tileh;
     // Vano con puente encima: la vía la dibuja `spawn_bridge_deck` a la altura del tablero.
@@ -487,26 +491,74 @@ pub(crate) fn spawn_rail_tile(
     }
     if let Some(t) = ctx.tile.filter(|t| rail_tile_is_signals(t.m5)) {
         let sig_draws = collect_signal_sprite_draws(t.m2, t.m3, t.m3hi, t.m5);
+        let rail_type = openttdrs_core::rail_type_from_tile(t);
+        let signal_spec = rail_signal_newgrf
+            .get(usize::from(rail_type.as_u8()))
+            .and_then(Option::as_ref);
         for (si, draw) in sig_draws.iter().copied().enumerate() {
-            let Some(img) = assets.rail.get(&draw.sprite_id) else {
-                continue;
+            let custom = if let (Some(spec), Some(cache), Some(images)) = (
+                signal_spec,
+                signal_sprites.as_deref_mut(),
+                images.as_deref_mut(),
+            ) {
+                let mut action2 = openttdrs_core::action2_eval_ctx_for_rail_tile(
+                    map,
+                    t,
+                    ctx.coord,
+                    climate,
+                    calendar_date,
+                    spec.type_tables.as_ref(),
+                );
+                action2.set_grf_params(openttdrs_core::stack_params_for_grfid(
+                    newgrf_stack,
+                    spec.grfid,
+                ));
+                cache.sprite_for(
+                    spec,
+                    draw.image,
+                    draw.signal_type,
+                    draw.variant,
+                    draw.green,
+                    &mut action2,
+                    images,
+                )
+            } else {
+                None
             };
-            let signal_xy = signal_screen_position_for_side(
-                ctx.tx_i32(),
-                ctx.ty_i32(),
-                draw.pos,
-                draw.sprite_id,
-                rail_half_h,
-                rail_base_z,
-                signals_on_right,
-            );
+            let (sprite, signal_xy) = if let Some(custom) = custom {
+                let anchor = signal_screen_anchor_for_side(
+                    ctx.tx_i32(),
+                    ctx.ty_i32(),
+                    draw.pos,
+                    rail_half_h,
+                    rail_base_z,
+                    signals_on_right,
+                );
+                (custom.sprite, anchor + custom.center_offset)
+            } else {
+                let Some(img) = assets.rail.get(&draw.sprite_id) else {
+                    continue;
+                };
+                (
+                    img.sprite(),
+                    signal_screen_position_for_side(
+                        ctx.tx_i32(),
+                        ctx.ty_i32(),
+                        draw.pos,
+                        draw.sprite_id,
+                        rail_half_h,
+                        rail_base_z,
+                        signals_on_right,
+                    ),
+                )
+            };
             // Misma profundidad que el fantasma de colocación (`tile_pos_half`), no z≈0.
             let layer = 0.04 + si as f32 * 0.0015;
             let depth = tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), rail_base_z, layer, rail_half_h);
             commands.spawn((
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
-                img.sprite(),
+                sprite,
                 Transform::from_translation(Vec3::new(signal_xy.x, signal_xy.y, depth.z)),
             ));
         }

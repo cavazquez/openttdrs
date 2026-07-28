@@ -1062,6 +1062,61 @@ mod tests {
     }
 
     #[test]
+    fn apply_stations_registers_multiple_classes_and_specs_without_collision() {
+        const SIG: [u8; 8] = [b'G', b'R', b'F', 0x82, 0x0D, 0x0A, 0x1A, 0x0A];
+        let a0_a = build_action0_station_payload(b"CLSA", b"XXXX", 0, 0, "Alpha One");
+        let a0_b = build_action0_station_payload(b"CLSB", b"YYYY", 0b0000_0010, 0, "Beta Two");
+        let mut action8 = vec![0x08, 0x07];
+        action8.extend_from_slice(&[b'M', b'C', 0, 1]);
+        action8.extend_from_slice(b"multi\0d\0");
+        let mut data_section = Vec::new();
+        for payload in [a0_a.as_slice(), a0_b.as_slice(), action8.as_slice()] {
+            let size = u32::try_from(payload.len()).unwrap();
+            data_section.extend_from_slice(&size.to_le_bytes());
+            data_section.push(0xFF);
+            data_section.extend_from_slice(payload);
+        }
+        data_section.extend_from_slice(&0u32.to_le_bytes());
+        let sprite_offs = u32::try_from(1 + data_section.len()).unwrap();
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&[0x00, 0x00]);
+        bytes.extend_from_slice(&SIG);
+        bytes.extend_from_slice(&sprite_offs.to_le_bytes());
+        bytes.push(0x00);
+        bytes.extend_from_slice(&data_section);
+        bytes.extend_from_slice(&0u32.to_le_bytes());
+
+        let dir = tempfile_dir_with("multi_stat.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("multi_stat.grf", 1));
+        apply_newgrf_stations(&mut state, &[&dir]);
+
+        let classes: Vec<_> = state
+            .station_class_catalog
+            .iter()
+            .filter(|c| c.from_newgrf)
+            .collect();
+        assert_eq!(classes.len(), 2);
+        assert_ne!(classes[0].id, classes[1].id);
+        assert_ne!(classes[0].short_label, classes[1].short_label);
+
+        let specs: Vec<_> = state
+            .station_spec_catalog
+            .iter()
+            .filter(|s| s.from_newgrf)
+            .collect();
+        assert_eq!(specs.len(), 2);
+        assert_ne!(specs[0].id, specs[1].id);
+        assert_eq!(specs[0].class, classes[0].id);
+        assert_eq!(specs[1].class, classes[1].id);
+        assert_eq!(specs[1].disallowed_platforms, 0b0000_0010);
+        assert_eq!(specs[0].short_label, "Alph");
+        assert_eq!(specs[1].short_label, "Beta");
+    }
+
+    #[test]
     fn parse_station_disallowed_props_0c_0d() {
         let a0 = build_action0_station_payload(b"MODN", b"XXXX", 0b0000_0010, 0b0000_0100, "Plat");
         let meta = parse_action0_station_meta(&a0).unwrap();

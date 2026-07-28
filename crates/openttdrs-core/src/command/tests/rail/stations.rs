@@ -135,6 +135,74 @@ fn place_rail_station_area_persists_newgrf_station_spec() {
 }
 
 #[test]
+fn place_rail_station_area_rejects_disallowed_platforms_and_lengths() {
+    use crate::station_class::{StationClassDef, StationClassId, StationSpecDef, StationSpecId};
+
+    let mut s = GameState::new(16, 16);
+    let class_id = StationClassId::from_u16(1);
+    let spec_id = StationSpecId::from_u16(1);
+    s.station_class_catalog.push(StationClassDef {
+        id: class_id,
+        label: "Restringida".into(),
+        short_label: "RSTR".into(),
+        from_newgrf: true,
+    });
+    // Bit1 = 2 andenes; bit2 = longitud 3 (bit n-1).
+    s.station_spec_catalog.push(StationSpecDef {
+        id: spec_id,
+        class: class_id,
+        label: "Solo 1×2".into(),
+        short_label: "Solo".into(),
+        disallowed_platforms: 0b0000_0010,
+        disallowed_lengths: 0b0000_0100,
+        from_newgrf: true,
+        newgrf_preview: None,
+        newgrf_views: Vec::new(),
+        newgrf_local_id: 0,
+        newgrf_runtime: None,
+        newgrf_grfid: 0,
+        newgrf_type_tables: None,
+        custom_layouts: std::collections::HashMap::new(),
+    });
+    s.current_station_class = class_id;
+    s.current_station_spec = spec_id;
+
+    let err_plat = apply_command(
+        &mut s,
+        &Command::PlaceRailStationArea {
+            origin: TileCoord::new(3, 3),
+            axis_y: false,
+            platforms: 2,
+            length: 2,
+        },
+    );
+    assert_eq!(err_plat, Err(CommandError::StationSizeNotAllowed));
+
+    let err_len = apply_command(
+        &mut s,
+        &Command::PlaceRailStationArea {
+            origin: TileCoord::new(3, 3),
+            axis_y: false,
+            platforms: 1,
+            length: 3,
+        },
+    );
+    assert_eq!(err_len, Err(CommandError::StationSizeNotAllowed));
+
+    apply_command(
+        &mut s,
+        &Command::PlaceRailStationArea {
+            origin: TileCoord::new(3, 3),
+            axis_y: false,
+            platforms: 1,
+            length: 2,
+        },
+    )
+    .unwrap();
+    assert_eq!(s.stations.len(), 1);
+}
+
+#[test]
 fn place_rail_station_0e_layout_writes_tiletypes_for_distinct_views() {
     use crate::newgrf_sprites::DecodedSprite;
     use crate::station_class::{

@@ -215,6 +215,25 @@ mod tests {
     }
 
     #[test]
+    fn station_dynamic_vars_share_action2_eval_ctx_for_228() {
+        // #228: vars dinámicas de estación alimentan el mismo `Action2EvalCtx`
+        // que el resolver variational/callback (no un camino paralelo).
+        let mut map = Map::new_flat(8, 8, 0);
+        let c = TileCoord::new(3, 3);
+        map.set_tile(c, rail_station_tile(2)).unwrap();
+        let mut st = Station::new_with_kind(c, StopKind::RailStation);
+        st.newgrf_random_bits = 0x42;
+        let ctx = action2_eval_ctx_for_station_tile(&map, &[st], c, 1, Climate::Temperate, None);
+        assert!(ctx.vars.contains_key(&0x40));
+        assert!(ctx.vars.contains_key(&0x42));
+        assert!(ctx.vars.contains_key(&0x43));
+        assert!(ctx.vars.contains_key(&0x5F));
+        assert!(ctx.vars.contains_key(&0x10));
+        assert!(ctx.vars.contains_key(&0x67));
+        assert_eq!(ctx.random_bits, 0x42);
+    }
+
+    #[test]
     fn station_ctx_var40_single_tile() {
         let mut map = Map::new_flat(8, 8, 0);
         let c = TileCoord::new(3, 3);

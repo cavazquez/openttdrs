@@ -18,7 +18,7 @@ Estados:
 | `01` | Road vehicles | runtime parcial | runtime + cargo | compra, render, save/load |
 | `02` | Ships | runtime parcial | runtime + cargo | compra, render, save/load |
 | `03` | Aircraft | runtime parcial | runtime + cargo | compra, render, save/load |
-| `04` | Stations | runtime parcial | runtime | picker, construcción, render |
+| `04` | Stations | runtime (salvo `09`) | runtime + cargo fallback | picker, construcción, render |
 | `05` | Canals | pendiente | pendiente | — |
 | `06` | Bridges | pendiente | pendiente | — |
 | `07` | Houses | pendiente | pendiente | — |
@@ -127,8 +127,10 @@ Fuente: `newgrf_act0_stations.cpp`.
 | `0D` disallowed lengths bitmask | **runtime** |
 | `0E` custom tile layout | **runtime** |
 | `0F` copy custom layout | **runtime** |
-| `09` sprite layouts | pendiente (variable) |
+| `09` sprite layouts | pendiente (variable; no bloquea AC de catálogo/construcción) |
 | short label del spec | derivado del nombre (no hay prop Action0 15.3) |
+| Action3 cargo group / default | **runtime** (`views_for_local_id_cargo_ctx`; fallback verificable) |
+| vars/CB dinámicas (`40`/`42`/`43`/`5F`/`10`/`67`, CB24) | **runtime** vía `Action2EvalCtx` compartido (#228) |
 
 ## Rail types (`10`)
 

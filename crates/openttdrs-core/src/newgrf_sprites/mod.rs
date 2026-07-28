@@ -977,4 +977,40 @@ mod tests {
             .unwrap();
         assert_eq!(coal[0].rgba[0], 10);
     }
+
+    #[test]
+    fn action3_station_cargo_group_overrides_default_with_fallback() {
+        // Stations comparten el grafo Action3 → cargo group / default (#251).
+        let sprite = |red| DecodedSprite {
+            width: 1,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: vec![red, 0, 0, 255],
+            mask: Vec::new(),
+        };
+        let mut gfx = TrainSpriteGraphics {
+            sets: vec![vec![sprite(11)], vec![sprite(22)]],
+            assigns: vec![TrainSpriteAssign {
+                local_id: 0,
+                set_id: 0,
+            }],
+            ..Default::default()
+        };
+        gfx.specific_assigns
+            .insert((0, crate::CargoType::Goods.temperate_id()), 1);
+        let mut ctx = Action2EvalCtx::default();
+        let goods = gfx
+            .views_for_local_id_cargo_ctx(0, Some(crate::CargoType::Goods), &mut ctx)
+            .unwrap();
+        assert_eq!(goods[0].rgba[0], 22);
+        let fallback = gfx
+            .views_for_local_id_cargo_ctx(0, Some(crate::CargoType::Coal), &mut ctx)
+            .unwrap();
+        assert_eq!(fallback[0].rgba[0], 11);
+        assert_eq!(
+            gfx.views_for_local_id_cargo_ctx(0, None, &mut ctx).unwrap()[0].rgba[0],
+            11
+        );
+    }
 }

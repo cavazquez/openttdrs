@@ -282,12 +282,15 @@ pub(crate) fn sync_road_stop_preview_image(
 pub(crate) fn sync_road_stop_picker(
     tool_state: Res<UiToolState>,
     sim: Res<SimWorld>,
-    mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
+    mut root_q: Query<
+        (&FloatingWindow, &mut Visibility),
+        Without<RoadStopPickerButton>,
+    >,
     mut title_q: Query<(&FloatingWindowTitleText, &mut Text), Without<RoadStopPickerEmptyHint>>,
     mut hint_q: Query<&mut Node, With<RoadStopPickerEmptyHint>>,
     mut buttons: Query<
         (&RoadStopPickerButton, &mut BackgroundColor, &mut Visibility),
-        With<Button>,
+        (With<Button>, Without<FloatingWindow>),
     >,
 ) {
     let Some((_, mut visibility)) = root_q

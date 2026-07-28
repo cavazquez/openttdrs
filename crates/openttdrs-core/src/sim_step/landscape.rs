@@ -35,6 +35,8 @@ fn on_tick_town(state: &mut GameState, t: u64) {
         &visit_coords,
         state.climate,
         state.calendar.year,
+        &state.house_spec_catalog,
+        &state.house_overrides,
         &mut state.random,
     );
     state.runtime.landscape_tile_dirty.extend(dirty);

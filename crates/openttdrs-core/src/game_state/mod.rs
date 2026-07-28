@@ -359,6 +359,12 @@ pub struct GameState {
     /// Overrides vanilla gfx → `NewGRF` (`GetTranslatedIndustryTileID`).
     #[serde(default = "crate::industry_tile::empty_industry_tile_overrides")]
     pub industry_tile_overrides: Vec<u16>,
+    /// Specs `NewGRF` de casas (id ≥110).
+    #[serde(default)]
+    pub house_spec_catalog: Vec<crate::house_spec::HouseSpecDef>,
+    /// Overrides vanilla house → id NewGRF (`prop 0x15`).
+    #[serde(default = "crate::house_spec::empty_house_overrides")]
+    pub house_overrides: Vec<u16>,
     /// Catálogo Action0 `Badges` (`0x15`).
     #[serde(default)]
     pub badge_catalog: Vec<crate::badge::BadgeDef>,
@@ -581,6 +587,8 @@ impl GameState {
             engine_catalog: crate::engine::vanilla_engine_catalog(),
             industry_tile_spec_catalog: Vec::new(),
             industry_tile_overrides: crate::industry_tile::empty_industry_tile_overrides(),
+            house_spec_catalog: Vec::new(),
+            house_overrides: crate::house_spec::empty_house_overrides(),
             badge_catalog: Vec::new(),
             sound_effect_catalog: Vec::new(),
             cargo_spec_catalog: Vec::new(),
@@ -686,6 +694,8 @@ impl GameState {
             engine_catalog: crate::engine::vanilla_engine_catalog(),
             industry_tile_spec_catalog: Vec::new(),
             industry_tile_overrides: crate::industry_tile::empty_industry_tile_overrides(),
+            house_spec_catalog: Vec::new(),
+            house_overrides: crate::house_spec::empty_house_overrides(),
             badge_catalog: Vec::new(),
             sound_effect_catalog: Vec::new(),
             cargo_spec_catalog: Vec::new(),

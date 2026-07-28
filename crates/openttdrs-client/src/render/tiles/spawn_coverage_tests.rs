@@ -469,6 +469,7 @@ fn spawn_land_house_industry_generics_and_batches() {
                     &a.0,
                     &TileRenderContext::new(&m.0, &g.0, 0, 1),
                     4.0,
+                    &[],
                 );
                 spawn_industry_tile(
                     &mut commands,

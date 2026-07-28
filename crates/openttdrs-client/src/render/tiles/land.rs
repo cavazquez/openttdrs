@@ -20,7 +20,7 @@ use crate::render::{
 use crate::sprites::{
     FENCE_MOD_BY_TILEH_NE, FENCE_MOD_BY_TILEH_NW, FENCE_MOD_BY_TILEH_SE, FENCE_MOD_BY_TILEH_SW,
     FENCE_SPRITE_META, FIELD_STATES, HOUSE_DRAW_DATA, TREE_LAYOUT_SPRITE, TREE_LAYOUT_XY,
-    TREE_SPRITE_META, house_building_stage_from_tile, house_draw_data_index_for_tile,
+    TREE_SPRITE_META, house_building_stage_from_tile,
     industry_anim_layer_used_in_any_frame, industry_building_needs_client_anim,
     industry_effective_m4_for_draw, industry_gfx_entry_for_tile,
     industry_gfx_uses_fizzy_drink_anim, industry_gfx_uses_random_colour,
@@ -44,6 +44,7 @@ pub(crate) fn spawn_house_tile(
     assets: &WorldAssets,
     ctx: &TileRenderContext,
     slope_half_ground: f32,
+    house_catalog: &[openttdrs_core::HouseSpecDef],
 ) {
     let tileh = ctx.info.tileh;
     let base_z = ctx.info.base_z;
@@ -53,8 +54,13 @@ pub(crate) fn spawn_house_tile(
     spawn_ground_sprite(commands, &house_base, Color::WHITE, ctx, slope_half_ground);
     let (m5, m3) = ctx.tile.map_or((0u8, 0x80u8), |t| (t.m5, t.m3));
     let building_stage = house_building_stage_from_tile(m5, m3);
-    let spec_idx =
-        house_draw_data_index_for_tile(clean_house_id, ctx.tx_i32(), ctx.ty_i32(), building_stage);
+    let spec_idx = crate::sprites::house_draw_data_index_for_tile_with_catalog(
+        clean_house_id,
+        ctx.tx_i32(),
+        ctx.ty_i32(),
+        building_stage,
+        house_catalog,
+    );
     let spec = &HOUSE_DRAW_DATA[spec_idx];
     use crate::sprites::{TransparencyOption, is_hidden, sprite_color};
     if is_hidden(TransparencyOption::Houses) {

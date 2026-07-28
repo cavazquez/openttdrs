@@ -19,6 +19,8 @@ pub const ACTION0_FEATURE_STATIONS: u8 = 0x04;
 pub const ACTION0_FEATURE_CANALS: u8 = 0x05;
 /// Feature Action0: `Bridges` (`OpenTTD` `GSF_BRIDGES`).
 pub const ACTION0_FEATURE_BRIDGES: u8 = 0x06;
+/// Feature Action0: `Houses` (`OpenTTD` `GSF_HOUSES`).
+pub const ACTION0_FEATURE_HOUSES: u8 = 0x07;
 /// Feature Action0: `IndustryTiles` (`OpenTTD` `GSF_INDUSTRYTILES`).
 pub const ACTION0_FEATURE_INDUSTRYTILES: u8 = 0x09;
 /// Feature Action0: `Cargoes` (`OpenTTD` `GSF_CARGOES`).
@@ -327,6 +329,24 @@ pub struct ParsedIndustryTileMeta {
     pub subst_id: u8,
     /// Override de gfx vanilla (`prop 0x09`).
     pub override_of: Option<u8>,
+}
+
+/// Metadatos `Houses` Action0 (antes de asignar id ≥110).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParsedHouseMeta {
+    pub local_id: u8,
+    pub subst_id: u8,
+    pub building_flags: u8,
+    pub min_year: u32,
+    pub max_year: u32,
+    pub population: u16,
+    pub mail_generation: u16,
+    pub availability: u16,
+    pub probability: u8,
+    pub override_id: Option<u8>,
+    /// `0x14` lo + `0x1D` hi; almacenado sin ejecutar callbacks.
+    pub callback_mask: u16,
+    pub name: String,
 }
 
 /// Metadatos `RoadStops` Action0 (antes de asignar IDs).
@@ -1101,6 +1121,234 @@ pub fn collect_industry_tile_metas_from_grf(data: &[u8]) -> Vec<ParsedIndustryTi
     let mut out = Vec::new();
     let _ = for_each_pseudo_payload(data, |payload| {
         if let Some(meta) = parse_action0_industry_tile_meta(payload) {
+            out.push(meta);
+        }
+    });
+    out
+}
+
+/// Parsea Action0 `Houses` (`0x07`). Requiere `prop 0x08` (subst) para definir la casa.
+#[must_use]
+#[allow(clippy::too_many_lines)]
+pub fn parse_action0_house_meta(payload: &[u8]) -> Option<ParsedHouseMeta> {
+    let header = parse_action0_header(payload)?;
+    if header.feature != ACTION0_FEATURE_HOUSES || header.num_ids == 0 {
+        return None;
+    }
+    if payload.len() < 5 {
+        return None;
+    }
+    let local_id = payload[4];
+    let mut i = 5usize;
+    let mut subst_id: Option<u8> = None;
+    let mut building_flags = crate::house_spec::BUILDING_FLAG_SIZE_1X1;
+    let mut min_year = 0u32;
+    let mut max_year = crate::house_spec::HOUSE_YEAR_MAX;
+    let mut population = 0u16;
+    let mut mail_generation = 0u16;
+    let mut availability = crate::house_spec::DEFAULT_HOUSE_AVAILABILITY;
+    let mut probability = crate::house_spec::DEFAULT_HOUSE_PROBABILITY;
+    let mut override_id: Option<u8> = None;
+    let mut callback_mask = 0u16;
+    let mut name = String::new();
+
+    for _ in 0..header.num_props {
+        if i >= payload.len() {
+            break;
+        }
+        let prop = payload[i];
+        i += 1;
+        match prop {
+            0x08 => {
+                if i >= payload.len() {
+                    break;
+                }
+                let s = payload[i];
+                i += 1;
+                if s == 0xFF {
+                    // Desactivar vanilla: no crea slot NewGRF.
+                    return None;
+                }
+                if u16::from(s) < crate::house_spec::NEW_HOUSE_OFFSET {
+                    subst_id = Some(s);
+                }
+            }
+            0x09 => {
+                if i >= payload.len() {
+                    break;
+                }
+                building_flags = payload[i];
+                i += 1;
+            }
+            0x0A => {
+                if i + 2 > payload.len() {
+                    break;
+                }
+                let years = u16::from_le_bytes([payload[i], payload[i + 1]]);
+                i += 2;
+                let lo = (years & 0xFF) as u8;
+                let hi = (years >> 8) as u8;
+                min_year = if lo > 150 {
+                    crate::house_spec::HOUSE_YEAR_MAX
+                } else {
+                    1920u32.saturating_add(u32::from(lo))
+                };
+                max_year = if hi > 150 {
+                    crate::house_spec::HOUSE_YEAR_MAX
+                } else {
+                    1920u32.saturating_add(u32::from(hi))
+                };
+            }
+            0x0B => {
+                if i >= payload.len() {
+                    break;
+                }
+                population = u16::from(payload[i]);
+                i += 1;
+            }
+            0x0C => {
+                if i >= payload.len() {
+                    break;
+                }
+                mail_generation = u16::from(payload[i]);
+                i += 1;
+            }
+            0x0D | 0x0E | 0x0F | 0x11 | 0x16 | 0x18 | 0x19 | 0x1A | 0x1B | 0x1C | 0x1F => {
+                if i >= payload.len() {
+                    break;
+                }
+                if prop == 0x18 {
+                    probability = payload[i];
+                }
+                i += 1;
+            }
+            0x14 => {
+                if i >= payload.len() {
+                    break;
+                }
+                callback_mask = (callback_mask & 0xFF00) | u16::from(payload[i]);
+                i += 1;
+            }
+            0x15 => {
+                if i >= payload.len() {
+                    break;
+                }
+                let o = payload[i];
+                i += 1;
+                if u16::from(o) < crate::house_spec::NEW_HOUSE_OFFSET {
+                    override_id = Some(o);
+                }
+            }
+            0x1D => {
+                if i >= payload.len() {
+                    break;
+                }
+                callback_mask = (callback_mask & 0x00FF) | (u16::from(payload[i]) << 8);
+                i += 1;
+            }
+            0x10 | 0x12 | 0x13 | 0x21 | 0x22 => {
+                if i + 2 > payload.len() {
+                    break;
+                }
+                let w = u16::from_le_bytes([payload[i], payload[i + 1]]);
+                i += 2;
+                match prop {
+                    0x13 => availability = w,
+                    0x21 => min_year = u32::from(w),
+                    0x22 => {
+                        max_year = if w == u16::MAX {
+                            crate::house_spec::HOUSE_YEAR_MAX
+                        } else {
+                            u32::from(w)
+                        };
+                    }
+                    _ => {}
+                }
+            }
+            0x17 => {
+                if i + 4 > payload.len() {
+                    break;
+                }
+                i += 4;
+            }
+            0x1E => {
+                if i + 4 > payload.len() {
+                    break;
+                }
+                i += 4;
+            }
+            0x20 => {
+                if i >= payload.len() {
+                    break;
+                }
+                let count = usize::from(payload[i]);
+                i += 1;
+                if i + count > payload.len() {
+                    break;
+                }
+                i += count;
+            }
+            0x23 => {
+                if i >= payload.len() {
+                    break;
+                }
+                let count = usize::from(payload[i]);
+                i += 1;
+                let need = count.saturating_mul(2);
+                if i + need > payload.len() {
+                    break;
+                }
+                i += need;
+            }
+            0x24 => {
+                // Badge list: WORD count + n×WORD (OpenTTD `ReadBadgeList`).
+                if i + 2 > payload.len() {
+                    break;
+                }
+                let count = usize::from(u16::from_le_bytes([payload[i], payload[i + 1]]));
+                i += 2;
+                let need = count.saturating_mul(2);
+                if i + need > payload.len() {
+                    break;
+                }
+                i += need;
+            }
+            PROP_NAME_CSTRING => {
+                let Some(nul) = payload[i..].iter().position(|&b| b == 0) else {
+                    break;
+                };
+                name = String::from_utf8_lossy(&payload[i..i + nul]).to_string();
+                i += nul + 1;
+            }
+            _ => break,
+        }
+    }
+
+    let subst_id = subst_id?;
+    if name.is_empty() {
+        name = format!("House {local_id}");
+    }
+    Some(ParsedHouseMeta {
+        local_id,
+        subst_id,
+        building_flags,
+        min_year,
+        max_year,
+        population,
+        mail_generation,
+        availability,
+        probability,
+        override_id,
+        callback_mask,
+        name,
+    })
+}
+
+#[must_use]
+pub fn collect_house_metas_from_grf(data: &[u8]) -> Vec<ParsedHouseMeta> {
+    let mut out = Vec::new();
+    let _ = for_each_pseudo_payload(data, |payload| {
+        if let Some(meta) = parse_action0_house_meta(payload) {
             out.push(meta);
         }
     });

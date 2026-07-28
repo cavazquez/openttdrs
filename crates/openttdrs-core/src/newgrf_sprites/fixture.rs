@@ -4,8 +4,8 @@
 //! usados en tests. Las funciones de decodificación en runtime permanecen en sus módulos.
 
 use crate::newgrf_actions::{
-    ACTION0_FEATURE_INDUSTRYTILES, ACTION0_FEATURE_RAILTYPES, ACTION0_FEATURE_ROADTYPES,
-    ACTION0_FEATURE_STATIONS, ACTION0_FEATURE_TRAINS,
+    ACTION0_FEATURE_HOUSES, ACTION0_FEATURE_INDUSTRYTILES, ACTION0_FEATURE_RAILTYPES,
+    ACTION0_FEATURE_ROADTYPES, ACTION0_FEATURE_STATIONS, ACTION0_FEATURE_TRAINS,
 };
 
 use super::pixel_codec::{encode_chunked_8bpp_full_rows, encode_chunked_pixels_full_rows};
@@ -1242,6 +1242,29 @@ pub fn build_grf_v2_industry_tile_with_preview_sprite(
     build_grf_v2_with_preview_sprite(
         action0,
         ACTION0_FEATURE_INDUSTRYTILES,
+        local_id,
+        width,
+        height,
+        indices,
+        grfid,
+        name,
+    )
+}
+
+/// GRF v2 sintético: Action0 house + Action1 + sprite + Action3 + Action8.
+#[must_use]
+pub fn build_grf_v2_house_with_preview_sprite(
+    action0: &[u8],
+    local_id: u8,
+    width: u16,
+    height: u16,
+    indices: &[u8],
+    grfid: [u8; 4],
+    name: &str,
+) -> Vec<u8> {
+    build_grf_v2_with_preview_sprite(
+        action0,
+        ACTION0_FEATURE_HOUSES,
         local_id,
         width,
         height,

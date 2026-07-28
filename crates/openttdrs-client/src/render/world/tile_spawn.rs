@@ -286,7 +286,13 @@ pub(crate) fn spawn_map_tiles_in_bounds(
                 climate,
                 &sim.state.newgrf_stack,
             ),
-            TileKind::House => spawn_house_tile(commands, assets, &ctx, slope_half_ground),
+            TileKind::House => spawn_house_tile(
+                commands,
+                assets,
+                &ctx,
+                slope_half_ground,
+                &sim.state.house_spec_catalog,
+            ),
             TileKind::Industry => {
                 spawn_industry_tile(
                     commands,

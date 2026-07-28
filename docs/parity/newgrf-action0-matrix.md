@@ -21,7 +21,7 @@ Estados:
 | `04` | Stations | runtime (salvo `09`) | runtime + cargo fallback | picker, construcción, render |
 | `05` | Canals | runtime | runtime parcial | catálogo `canal_feature` + Action5 `0x08` |
 | `06` | Bridges | runtime | N/A (sin Action3) | catálogo `bridge_spec` (13 slots in-place) |
-| `07` | Houses | pendiente | pendiente | — |
+| `07` | Houses | runtime | runtime | catálogo `house_spec` + overrides; crecimiento/render |
 | `08` | Global variables | runtime parcial | no aplica | tablas rail/road/tram |
 | `09` | Industry tiles | runtime parcial | runtime | construcción/render industria |
 | `0A` | Industries | pendiente | pendiente | — |
@@ -243,6 +243,39 @@ override → costes/disponibilidad iguales a `_orig_bridge` / `BRIDGE_SPECS`.
 | `13` price WORD | **runtime** |
 | `15` pillar extended list | consumida |
 | `FE` nombre C-string (extensión local) | **runtime** |
+
+## Houses (`07`)
+
+Fuente: `newgrf_act0_houses.cpp` / GRFSpecs Action0/Houses.
+
+Catálogo runtime `house_spec_catalog` (ids ≥ `NEW_HOUSE_OFFSET` = 110). El pool de
+crecimiento (`pick_town_house_id_with_catalog`) combina vanilla + NewGRF 1×1/norte
+multitile filtrando zona+clima+año; `callback_mask` (`0x14`/`0x1D`) se almacena
+sin ejecutar callbacks (#228). Action3 adjunta `newgrf_views`; dibujo usa vistas
+o fallback `subst_id` / `% 110` (`resolve_house_draw_id`). Overrides `0x15` →
+`house_overrides[vanilla]`. Multitile: footprint N/E/W/S con ids consecutivos.
+
+| Props | Estado |
+|---|---|
+| `08` substitute BYTE | **runtime** (obligatorio; define el slot) |
+| `09` building flags BYTE | **runtime** (tamaño / church / stadium) |
+| `0A` availability years WORD | **runtime** (`1920+lo/hi`; `>150` → max) |
+| `0B` population BYTE | **runtime** |
+| `0C` mail BYTE | **runtime** (catálogo) |
+| `0D`–`0F` acceptance BYTE | consumidas |
+| `10` WORD / `11` BYTE / `12` WORD | consumidas |
+| `13` availability mask WORD | **runtime** (zonas+climas) |
+| `14` callback lo BYTE | **runtime** (almacenado; sin ejecutar) |
+| `15` override BYTE | **runtime** (`house_overrides`) |
+| `16`–`17`, `19`–`1C` | consumidas |
+| `18` probability BYTE | **runtime** |
+| `1D` callback hi BYTE | **runtime** (almacenado; sin ejecutar) |
+| `1E` DWORD / `1F` BYTE | consumidas |
+| `20` watch list / `23` tile acceptance | consumidas (listas) |
+| `21`/`22` long years WORD | **runtime** |
+| `24` badge list | consumida |
+| `FE` nombre C-string (extensión local) | **runtime** |
+| Action1/3 views | **runtime** (`newgrf_views` / subst fallback) |
 
 ## Objects (`0F`)
 

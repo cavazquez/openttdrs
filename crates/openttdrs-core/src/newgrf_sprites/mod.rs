@@ -31,11 +31,11 @@ pub use pixel_codec::{
 // Re-exportar funciones de runtime de action_graph
 pub use action_graph::{
     collect_aircraft_sprite_graphics, collect_canal_sprite_graphics,
-    collect_feature_sprite_graphics, collect_industry_tile_sprite_graphics,
-    collect_object_sprite_graphics, collect_railtype_sprite_graphics,
-    collect_road_vehicle_sprite_graphics, collect_roadstop_sprite_graphics,
-    collect_roadtype_sprite_graphics, collect_ship_sprite_graphics,
-    collect_station_sprite_graphics, collect_train_sprite_graphics,
+    collect_feature_sprite_graphics, collect_house_sprite_graphics,
+    collect_industry_tile_sprite_graphics, collect_object_sprite_graphics,
+    collect_railtype_sprite_graphics, collect_road_vehicle_sprite_graphics,
+    collect_roadstop_sprite_graphics, collect_roadtype_sprite_graphics,
+    collect_ship_sprite_graphics, collect_station_sprite_graphics, collect_train_sprite_graphics,
 };
 
 // Re-exportar funciones de runtime de action5
@@ -70,7 +70,8 @@ pub use fixture::{
     build_action2_vehicle_payload, build_action3_feature_payload,
     build_action3_feature_specific_payload, build_action3_trains_payload,
     build_grf_v2_action5_with_sprite, build_grf_v2_feature_with_action2_chain,
-    build_grf_v2_industry_tile_with_preview_sprite, build_grf_v2_railtype_signal_sprites,
+    build_grf_v2_house_with_preview_sprite, build_grf_v2_industry_tile_with_preview_sprite,
+    build_grf_v2_railtype_signal_sprites,
     build_grf_v2_roadtype_with_action2_chain, build_grf_v2_roadtype_with_preview_sprite,
     build_grf_v2_station_with_action2_chain, build_grf_v2_station_with_preview_sprite,
     build_grf_v2_train_with_action2_chain, build_grf_v2_train_with_chunked_sprite,

@@ -1,7 +1,9 @@
 //! Expansión física de pueblos (`GrowTown` / `GrowTownAtRoad` / `TryBuildTownHouse`).
 
 use crate::house_spec::{
-    HouseSpec, get_town_radius_group, grow_town_at_road_iterations, pick_town_house_id,
+    HouseSpec, HouseSpecDef, get_town_radius_group, grow_town_at_road_iterations,
+    house_footprint_offsets, house_spec_def, pick_town_house_id_with_catalog,
+    vanilla_or_newgrf_house,
 };
 use crate::map::{Map, TileCoord, TileKind, effective_road_bits, tile_slope_and_z};
 use crate::town::{Town, TownLayout, update_town_radius};
@@ -56,18 +58,22 @@ enum GrowthResult {
     Continue,
 }
 
-/// Contexto de año/clima para elegir casas.
+/// Contexto de año/clima/catálogo NewGRF para elegir casas.
 #[derive(Debug, Clone, Copy)]
-pub struct TownExpandContext {
+pub struct TownExpandContext<'a> {
     pub climate: Climate,
     pub calendar_year: u32,
+    pub house_catalog: &'a [HouseSpecDef],
+    pub house_overrides: &'a [u16],
 }
 
-impl Default for TownExpandContext {
+impl Default for TownExpandContext<'static> {
     fn default() -> Self {
         Self {
             climate: Climate::Temperate,
             calendar_year: 1960,
+            house_catalog: &[],
+            house_overrides: &[],
         }
     }
 }
@@ -77,12 +83,12 @@ pub fn expand_town_physically(map: &mut Map, town: &mut Town, tick: u64) -> Vec<
     expand_town_physically_with_ctx(map, town, tick, TownExpandContext::default())
 }
 
-/// Expansión con clima/año explícitos.
+/// Expansión con clima/año/catálogo explícitos.
 pub fn expand_town_physically_with_ctx(
     map: &mut Map,
     town: &mut Town,
     tick: u64,
-    ctx: TownExpandContext,
+    ctx: TownExpandContext<'_>,
 ) -> Vec<TileCoord> {
     let mut dirty = Vec::new();
     let seed = tick
@@ -113,7 +119,7 @@ fn expand_town_once_with_ctx(
     map: &mut Map,
     town: &mut Town,
     attempt_seed: u32,
-    ctx: TownExpandContext,
+    ctx: TownExpandContext<'_>,
 ) -> TownExpandResult {
     if let Some(pos) = try_place_house_near_road(map, town, attempt_seed, ctx) {
         return TownExpandResult::House(pos);
@@ -129,7 +135,7 @@ fn grow_town(
     map: &mut Map,
     town: &mut Town,
     seed: u32,
-    ctx: TownExpandContext,
+    ctx: TownExpandContext<'_>,
     dirty: &mut Vec<TileCoord>,
 ) -> bool {
     let mut tile = town.pos;
@@ -152,7 +158,7 @@ fn grow_town_at_road(
     town: &mut Town,
     mut tile: TileCoord,
     seed: u32,
-    ctx: TownExpandContext,
+    ctx: TownExpandContext<'_>,
     dirty: &mut Vec<TileCoord>,
 ) -> bool {
     let mut iterations = grow_town_at_road_iterations(town.layout, town.num_houses);
@@ -218,7 +224,7 @@ fn grow_town_in_tile(
     cur_rb: u8,
     target_dir: Option<u8>,
     rng: &mut u32,
-    ctx: TownExpandContext,
+    ctx: TownExpandContext<'_>,
     dirty: &mut Vec<TileCoord>,
 ) -> GrowthResult {
     let tile = *tile_ptr;
@@ -296,7 +302,7 @@ fn try_build_town_house(
     town: &mut Town,
     pos: TileCoord,
     seed: u32,
-    ctx: TownExpandContext,
+    ctx: TownExpandContext<'_>,
 ) -> bool {
     if !town_layout_allows_house_here(town, pos) {
         return false;
@@ -306,29 +312,65 @@ fn try_build_town_house(
     }
     let height = map.get(pos).map_or(0, |t| t.height);
     let zone = get_town_radius_group(town, pos);
-    let Some(house_id) =
-        pick_town_house_id(town, zone, ctx.climate, height, ctx.calendar_year, seed)
-    else {
+    let Some(house_id) = pick_town_house_id_with_catalog(
+        town,
+        zone,
+        ctx.climate,
+        height,
+        ctx.calendar_year,
+        seed,
+        ctx.house_catalog,
+        ctx.house_overrides,
+    ) else {
         return false;
     };
-    if map.set_completed_house(pos, house_id, 0).is_err() {
+    let flags = house_spec_def(ctx.house_catalog, house_id)
+        .map(|d| d.building_flags)
+        .or_else(|| HouseSpec::get(house_id).map(|hs| hs.building_flags))
+        .unwrap_or(crate::house_spec::BUILDING_FLAG_SIZE_1X1);
+    if !place_house_footprint(map, pos, house_id, flags) {
         return false;
     }
-    if let Some(hs) = HouseSpec::get(house_id) {
-        if hs.is_church() {
+    let tiles = u16::try_from(house_footprint_offsets(flags).len()).unwrap_or(1);
+    if let Some(lookup) = vanilla_or_newgrf_house(ctx.house_catalog, house_id) {
+        if lookup.is_church() {
             town.has_church = true;
         }
-        if hs.is_stadium() {
+        if lookup.is_stadium() {
             town.has_stadium = true;
         }
         town.population = town
             .population
-            .saturating_add(u32::from(hs.population).max(TOWN_EXPAND_POP_PER_HOUSE));
+            .saturating_add(u32::from(lookup.population()).max(TOWN_EXPAND_POP_PER_HOUSE));
     } else {
         town.population = town.population.saturating_add(TOWN_EXPAND_POP_PER_HOUSE);
     }
-    town.num_houses = town.num_houses.saturating_add(1);
+    town.num_houses = town.num_houses.saturating_add(tiles);
     update_town_radius(town);
+    true
+}
+
+/// Coloca el footprint de una casa (1×1 / 2×1 / 1×2 / 2×2) con ids consecutivos.
+pub fn place_house_footprint(
+    map: &mut Map,
+    north: TileCoord,
+    base_id: u16,
+    building_flags: u8,
+) -> bool {
+    let offsets = house_footprint_offsets(building_flags);
+    for &(dx, dy) in &offsets {
+        let pos = TileCoord::new(north.x + dx, north.y + dy);
+        if !can_build_house(map, pos) {
+            return false;
+        }
+    }
+    for (i, &(dx, dy)) in offsets.iter().enumerate() {
+        let pos = TileCoord::new(north.x + dx, north.y + dy);
+        let id = base_id.saturating_add(u16::try_from(i).unwrap_or(0));
+        if map.set_completed_house(pos, id, 0).is_err() {
+            return false;
+        }
+    }
     true
 }
 
@@ -336,7 +378,7 @@ fn try_place_house_near_road(
     map: &mut Map,
     town: &mut Town,
     seed: u32,
-    ctx: TownExpandContext,
+    ctx: TownExpandContext<'_>,
 ) -> Option<TileCoord> {
     let radius = i32::try_from(town.squared_town_zone_radius[0].max(36)).unwrap_or(36);
     let candidates = collect_road_tiles_near(map, town.pos, radius.min(24));
@@ -588,7 +630,7 @@ pub fn place_house_with_spec(
     map: &mut Map,
     town: &mut Town,
     pos: TileCoord,
-    ctx: TownExpandContext,
+    ctx: TownExpandContext<'_>,
     seed: u32,
 ) -> Option<TileCoord> {
     if try_build_town_house(map, town, pos, seed, ctx) {
@@ -621,6 +663,8 @@ mod tests {
         let ctx = TownExpandContext {
             climate: Climate::Temperate,
             calendar_year: 1980,
+            house_catalog: &[],
+            house_overrides: &[],
         };
         let mut dirty = Vec::new();
         assert!(grow_town(&mut map, &mut town, 1, ctx, &mut dirty));
@@ -697,6 +741,8 @@ mod tests {
         let ctx = TownExpandContext {
             climate: Climate::Temperate,
             calendar_year: 1980,
+            house_catalog: &[],
+            house_overrides: &[],
         };
         assert!(try_build_town_house(&mut map, &mut town, pos, 99, ctx));
         let tile = map.get(pos).unwrap();

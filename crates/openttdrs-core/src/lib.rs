@@ -298,16 +298,23 @@ pub use map::{
     tunnel_entrance_m5, tunnel_preview_path, water_class, water_class_from_m1,
 };
 // Runtime NewGRF en raíz; builders/fixtures vía `newgrf_actions` / `newgrf_sprites::fixture` (#157).
-pub use house_spec::{HouseSpec, get_town_radius_group, pick_town_house_id};
+pub use house_spec::{
+    DEFAULT_HOUSE_AVAILABILITY, DEFAULT_HOUSE_PROBABILITY, HOUSE_YEAR_MAX, HouseLookup, HouseSpec,
+    HouseSpecDef, INVALID_HOUSE, NEW_HOUSE_OFFSET, NUM_HOUSES, empty_house_overrides,
+    empty_house_spec_catalog, get_town_radius_group, get_translated_house_id, house_footprint_offsets,
+    house_spec_def, next_free_house_id, pick_town_house_id, pick_town_house_id_with_catalog,
+    resolve_house_draw_id, vanilla_or_newgrf_house,
+};
 pub use newgrf_actions::{
     ACTION0_FEATURE_BADGES, ACTION0_FEATURE_BRIDGES, ACTION0_FEATURE_CANALS,
-    ACTION0_FEATURE_CARGOES, ACTION0_FEATURE_INDUSTRYTILES, ACTION0_FEATURE_OBJECTS,
-    ACTION0_FEATURE_RAILTYPES, ACTION0_FEATURE_ROADSTOPS, ACTION0_FEATURE_ROADTYPES,
-    ACTION0_FEATURE_SOUNDS, ACTION0_FEATURE_STATIONS, ACTION0_FEATURE_TRAINS,
-    ACTION0_FEATURE_TRAMTYPES, Action0Header, Action5SlotSummary, GrfInspectReport,
-    ParsedBadgeMeta, ParsedBridgeMeta, ParsedCanalMeta, ParsedCargoMeta, ParsedIndustryTileMeta,
-    ParsedObjectMeta, ParsedRailTypeMeta, ParsedRoadStopMeta, ParsedRoadTypeMeta, ParsedSoundMeta,
-    ParsedStationMeta, ParsedTrainMeta, apply_newgrf_action5_airport_preview,
+    ACTION0_FEATURE_CARGOES, ACTION0_FEATURE_HOUSES, ACTION0_FEATURE_INDUSTRYTILES,
+    ACTION0_FEATURE_OBJECTS, ACTION0_FEATURE_RAILTYPES, ACTION0_FEATURE_ROADSTOPS,
+    ACTION0_FEATURE_ROADTYPES, ACTION0_FEATURE_SOUNDS, ACTION0_FEATURE_STATIONS,
+    ACTION0_FEATURE_TRAINS, ACTION0_FEATURE_TRAMTYPES, Action0Header, Action5SlotSummary,
+    GrfInspectReport, ParsedBadgeMeta, ParsedBridgeMeta, ParsedCanalMeta, ParsedCargoMeta,
+    ParsedHouseMeta, ParsedIndustryTileMeta, ParsedObjectMeta, ParsedRailTypeMeta,
+    ParsedRoadStopMeta, ParsedRoadTypeMeta, ParsedSoundMeta, ParsedStationMeta, ParsedTrainMeta,
+    apply_newgrf_action5_airport_preview,
     apply_newgrf_action5_airport_preview_default_dirs, apply_newgrf_action5_all_default_dirs,
     apply_newgrf_action5_bridge_decks, apply_newgrf_action5_bridge_decks_default_dirs,
     apply_newgrf_action5_canals, apply_newgrf_action5_canals_default_dirs,
@@ -320,7 +327,8 @@ pub use newgrf_actions::{
     apply_newgrf_action5_signals, apply_newgrf_action5_signals_default_dirs,
     apply_newgrf_badges, apply_newgrf_badges_default_dirs, apply_newgrf_bridges,
     apply_newgrf_bridges_default_dirs, apply_newgrf_canals, apply_newgrf_canals_default_dirs,
-    apply_newgrf_cargoes, apply_newgrf_cargoes_default_dirs, apply_newgrf_industry_tiles,
+    apply_newgrf_cargoes, apply_newgrf_cargoes_default_dirs, apply_newgrf_houses,
+    apply_newgrf_houses_default_dirs, apply_newgrf_industry_tiles,
     apply_newgrf_industry_tiles_default_dirs, apply_newgrf_objects,
     apply_newgrf_objects_default_dirs, apply_newgrf_rail_signals,
     apply_newgrf_rail_signals_default_dirs, apply_newgrf_road_types,
@@ -330,10 +338,10 @@ pub use newgrf_actions::{
     apply_newgrf_stations_default_dirs, apply_newgrf_vehicles_trains,
     apply_newgrf_vehicles_trains_default_dirs, inspect_grf_bytes, inspect_grf_file,
     parse_action0_badge_meta, parse_action0_bridge_meta, parse_action0_canal_meta,
-    parse_action0_cargo_meta, parse_action0_header, parse_action0_industry_tile_meta,
-    parse_action0_object_meta, parse_action0_railtype_metas, parse_action0_roadstop_meta,
-    parse_action0_roadtype_meta, parse_action0_sound_meta, parse_action0_station_meta,
-    parse_action0_train_meta,
+    parse_action0_cargo_meta, parse_action0_header, parse_action0_house_meta,
+    parse_action0_industry_tile_meta, parse_action0_object_meta, parse_action0_railtype_metas,
+    parse_action0_roadstop_meta, parse_action0_roadtype_meta, parse_action0_sound_meta,
+    parse_action0_station_meta, parse_action0_train_meta,
 };
 pub use newgrf_config::{
     GrfContainerVersion, GrfFileInfo, GrfParsed, GrfScanError, GrfStackIssue, MAX_NEWGRF_PARAMS,
@@ -355,7 +363,7 @@ pub use newgrf_sprites::{
     TrainSpriteAssign, TrainSpriteGraphics, action5_type_name, airport_preview_action5_slot,
     apply_company_colour_mask, bake_sprite_company_mask, bridge_decks_action5_base,
     bridge_decks_action5_slot, catenary_action5_local_slot, collect_action5_blocks,
-    collect_canal_sprite_graphics, collect_feature_sprite_graphics,
+    collect_canal_sprite_graphics, collect_feature_sprite_graphics, collect_house_sprite_graphics,
     collect_industry_tile_sprite_graphics, collect_object_sprite_graphics,
     collect_railtype_sprite_graphics, collect_roadstop_sprite_graphics,
     collect_roadtype_sprite_graphics, collect_station_sprite_graphics,
@@ -538,7 +546,7 @@ pub use town::{
 };
 pub use town_expand::{
     TOWN_EXPAND_ATTEMPTS, TOWN_EXPAND_POP_PER_HOUSE, TOWN_EXPAND_SEARCH_RADIUS, TownExpandContext,
-    TownExpandResult, expand_town_once, expand_town_physically,
+    TownExpandResult, expand_town_once, expand_town_physically, place_house_footprint,
 };
 pub use townname::generate_town_name;
 pub use train_collision::{TrainCollision, detect_train_collisions, resolve_train_collisions};

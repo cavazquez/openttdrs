@@ -9,6 +9,7 @@ pub mod badges;
 pub mod bridges;
 pub mod canals;
 pub mod cargo;
+pub mod houses;
 pub mod industry;
 pub mod objects;
 pub mod rail;
@@ -42,6 +43,7 @@ pub fn apply_newgrf_stack_catalogs_default_dirs(state: &mut GameState) {
     roadstop::apply_newgrf_roadstops_default_dirs(state);
     train::apply_newgrf_vehicles_trains_default_dirs(state);
     industry::apply_newgrf_industry_tiles_default_dirs(state);
+    houses::apply_newgrf_houses_default_dirs(state);
     cargo::apply_newgrf_cargoes_default_dirs(state);
     objects::apply_newgrf_objects_default_dirs(state);
     sounds::apply_newgrf_sounds_default_dirs(state);

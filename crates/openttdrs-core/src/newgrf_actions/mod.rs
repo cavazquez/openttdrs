@@ -4,6 +4,7 @@
 //! - `RoadTypes` (0x12) → `GameState.road_type_catalog`
 //! - `Stations` (0x04) → `station_class_catalog` / `station_spec_catalog`
 //! - `IndustryTiles` (0x09) → `industry_tile_spec_catalog`
+//! - `Houses` (0x07) → `house_spec_catalog`
 //! - `Cargoes` (0x0B) → `cargo_spec_catalog`
 //! - `Objects` (0x0F) → `object_spec_catalog`
 //! - `RoadStops` (0x14) → `road_stop_class_catalog` / `road_stop_spec_catalog`
@@ -19,20 +20,21 @@ pub mod inspect;
 // Re-exports públicos
 pub use action0::{
     ACTION0_FEATURE_AIRCRAFT, ACTION0_FEATURE_BADGES, ACTION0_FEATURE_BRIDGES,
-    ACTION0_FEATURE_CANALS, ACTION0_FEATURE_CARGOES, ACTION0_FEATURE_INDUSTRYTILES,
-    ACTION0_FEATURE_OBJECTS, ACTION0_FEATURE_RAILTYPES, ACTION0_FEATURE_ROAD_VEHICLES,
-    ACTION0_FEATURE_ROADSTOPS, ACTION0_FEATURE_ROADTYPES, ACTION0_FEATURE_SHIPS,
-    ACTION0_FEATURE_SOUNDS, ACTION0_FEATURE_STATIONS, ACTION0_FEATURE_TRAINS,
-    ACTION0_FEATURE_TRAMTYPES, Action0Header, ParsedBadgeMeta, ParsedBridgeMeta, ParsedCanalMeta,
-    ParsedCargoMeta, ParsedIndustryTileMeta, ParsedObjectMeta, ParsedRailTypeMeta,
-    ParsedRoadStopMeta, ParsedRoadTypeMeta, ParsedSoundMeta, ParsedStationMeta, ParsedTrainMeta,
-    ParsedVehicleMeta, collect_badge_metas_from_grf, collect_bridge_metas_from_grf,
-    collect_canal_metas_from_grf, collect_cargo_metas_from_grf, collect_industry_tile_metas_from_grf,
-    collect_object_metas_from_grf, collect_railtype_metas_from_grf, collect_roadstop_metas_from_grf,
-    collect_roadtype_metas_from_grf, collect_sound_metas_from_grf, collect_station_metas_from_grf,
-    collect_train_metas_from_grf, collect_vehicle_metas_from_grf, for_each_pseudo_payload,
-    parse_action0_badge_meta, parse_action0_bridge_meta, parse_action0_canal_meta,
-    parse_action0_cargo_meta, parse_action0_header, parse_action0_industry_tile_meta,
+    ACTION0_FEATURE_CANALS, ACTION0_FEATURE_CARGOES, ACTION0_FEATURE_HOUSES,
+    ACTION0_FEATURE_INDUSTRYTILES, ACTION0_FEATURE_OBJECTS, ACTION0_FEATURE_RAILTYPES,
+    ACTION0_FEATURE_ROAD_VEHICLES, ACTION0_FEATURE_ROADSTOPS, ACTION0_FEATURE_ROADTYPES,
+    ACTION0_FEATURE_SHIPS, ACTION0_FEATURE_SOUNDS, ACTION0_FEATURE_STATIONS,
+    ACTION0_FEATURE_TRAINS, ACTION0_FEATURE_TRAMTYPES, Action0Header, ParsedBadgeMeta,
+    ParsedBridgeMeta, ParsedCanalMeta, ParsedCargoMeta, ParsedHouseMeta, ParsedIndustryTileMeta,
+    ParsedObjectMeta, ParsedRailTypeMeta, ParsedRoadStopMeta, ParsedRoadTypeMeta, ParsedSoundMeta,
+    ParsedStationMeta, ParsedTrainMeta, ParsedVehicleMeta, collect_badge_metas_from_grf,
+    collect_bridge_metas_from_grf, collect_canal_metas_from_grf, collect_cargo_metas_from_grf,
+    collect_house_metas_from_grf, collect_industry_tile_metas_from_grf, collect_object_metas_from_grf,
+    collect_railtype_metas_from_grf, collect_roadstop_metas_from_grf, collect_roadtype_metas_from_grf,
+    collect_sound_metas_from_grf, collect_station_metas_from_grf, collect_train_metas_from_grf,
+    collect_vehicle_metas_from_grf, for_each_pseudo_payload, parse_action0_badge_meta,
+    parse_action0_bridge_meta, parse_action0_canal_meta, parse_action0_cargo_meta,
+    parse_action0_header, parse_action0_house_meta, parse_action0_industry_tile_meta,
     parse_action0_object_meta, parse_action0_railtype_metas, parse_action0_roadstop_meta,
     parse_action0_roadtype_meta, parse_action0_sound_meta, parse_action0_station_meta,
     parse_action0_train_meta, parse_action0_vehicle_metas,
@@ -57,6 +59,7 @@ pub use apply::{
     bridges::{apply_newgrf_bridges, apply_newgrf_bridges_default_dirs},
     canals::{apply_newgrf_canals, apply_newgrf_canals_default_dirs},
     cargo::{apply_newgrf_cargoes, apply_newgrf_cargoes_default_dirs},
+    houses::{apply_newgrf_houses, apply_newgrf_houses_default_dirs},
     industry::{apply_newgrf_industry_tiles, apply_newgrf_industry_tiles_default_dirs},
     objects::{apply_newgrf_objects, apply_newgrf_objects_default_dirs},
     rail::{apply_newgrf_rail_signals, apply_newgrf_rail_signals_default_dirs},
@@ -251,6 +254,97 @@ pub fn build_action0_industry_tile_payload(subst_id: u8, override_of: Option<u8>
         p.push(0x09); // PROP_INDTILE_OVERRIDE
         p.push(o);
     }
+    p
+}
+
+/// Action0 `Houses` (`0x07`): subst, flags, years, availability, probability, nombre.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn build_action0_house_payload(
+    local_id: u8,
+    subst: u8,
+    flags: u8,
+    min_year: u32,
+    max_year: u32,
+    availability: u16,
+    probability: u8,
+    name: &str,
+) -> Vec<u8> {
+    build_action0_house_payload_ex(
+        local_id,
+        subst,
+        flags,
+        min_year,
+        max_year,
+        availability,
+        probability,
+        None,
+        0,
+        name,
+    )
+}
+
+/// Action0 Houses con override y callback_mask opcionales.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn build_action0_house_payload_ex(
+    local_id: u8,
+    subst: u8,
+    flags: u8,
+    min_year: u32,
+    max_year: u32,
+    availability: u16,
+    probability: u8,
+    override_of: Option<u8>,
+    callback_mask: u16,
+    name: &str,
+) -> Vec<u8> {
+    let lo_year = min_year.saturating_sub(1920).min(255) as u8;
+    let hi_year = if max_year >= crate::house_spec::HOUSE_YEAR_MAX {
+        0xFFu8
+    } else {
+        max_year.saturating_sub(1920).min(255) as u8
+    };
+    let mut num_props = 7u8; // 08,09,0A,0B,13,18,FE
+    if override_of.is_some() {
+        num_props += 1;
+    }
+    if callback_mask != 0 {
+        num_props += 2; // 14 + 1D
+    }
+    let mut p = vec![
+        0x00,
+        ACTION0_FEATURE_HOUSES,
+        num_props,
+        0x01,
+        local_id,
+        0x08,
+        subst,
+        0x09,
+        flags,
+        0x0A,
+        lo_year,
+        hi_year,
+        0x0B,
+        40, // population default (pool de expansión)
+        0x13,
+    ];
+    p.extend_from_slice(&availability.to_le_bytes());
+    p.push(0x18);
+    p.push(probability);
+    if let Some(o) = override_of {
+        p.push(0x15);
+        p.push(o);
+    }
+    if callback_mask != 0 {
+        p.push(0x14);
+        p.push((callback_mask & 0xFF) as u8);
+        p.push(0x1D);
+        p.push((callback_mask >> 8) as u8);
+    }
+    p.push(0xFE);
+    p.extend_from_slice(name.as_bytes());
+    p.push(0);
     p
 }
 
@@ -2995,5 +3089,286 @@ mod tests {
         let _ = std::fs::create_dir_all(&dir);
         std::fs::write(dir.join(name), bytes).unwrap();
         dir
+    }
+
+    fn house_avail(zones: u16, climate_bit: u8) -> u16 {
+        zones | (1u16 << climate_bit)
+    }
+
+    #[test]
+    fn houses_ac_catalog_climate_zone_year() {
+        use crate::house_spec::{
+            BUILDING_FLAG_SIZE_1X1, NEW_HOUSE_OFFSET, pick_town_house_id_with_catalog,
+        };
+        use crate::town::{HouseZone, Town};
+        use crate::world_gen::Climate;
+
+        let centre = 1u16 << (HouseZone::TownCentre as u8);
+        let temp = HouseZone::ClimateTemperate as u8;
+        let toy = HouseZone::ClimateToyland as u8;
+        let a0 = build_action0_house_payload(
+            0,
+            0,
+            BUILDING_FLAG_SIZE_1X1,
+            1950,
+            2000,
+            house_avail(centre, temp),
+            200,
+            "CasaTemp",
+        );
+        let bytes = build_grf_v2_with_action0_and_action8(&a0, [b'H', b'S', 0, 1], "hs", "");
+        let dir = tempfile_dir_with("hs.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("hs.grf", 7));
+        apply_newgrf_houses(&mut state, &[&dir]);
+        assert_eq!(state.house_spec_catalog.len(), 1);
+        let def_id = state.house_spec_catalog[0].id;
+        let def = &state.house_spec_catalog[0];
+        assert!(def_id >= NEW_HOUSE_OFFSET);
+        assert_eq!(def.callback_mask, 0);
+        let centre_temp = centre | (1u16 << temp);
+        let centre_toy = centre | (1u16 << toy);
+        assert!(def.matches_zones(centre_temp));
+        assert!(!def.matches_zones(centre_toy));
+
+        // Sin vanilla en el pool: overrides ocupan todos los ids 0..109.
+        for slot in &mut state.house_overrides {
+            *slot = def_id;
+        }
+        let town = Town {
+            pos: crate::map::TileCoord::new(10, 10),
+            num_houses: 48,
+            ..Default::default()
+        };
+        // Toyland: NewGRF no entra → pool vacío.
+        assert!(
+            pick_town_house_id_with_catalog(
+                &town,
+                HouseZone::TownCentre,
+                Climate::Toyland,
+                1,
+                1980,
+                0,
+                &state.house_spec_catalog,
+                &state.house_overrides,
+            )
+            .is_none()
+        );
+        // Temperate + centre + year: solo NewGRF.
+        assert_eq!(
+            pick_town_house_id_with_catalog(
+                &town,
+                HouseZone::TownCentre,
+                Climate::Temperate,
+                1,
+                1980,
+                0,
+                &state.house_spec_catalog,
+                &state.house_overrides,
+            ),
+            Some(def_id)
+        );
+        // Año fuera de rango.
+        assert!(
+            pick_town_house_id_with_catalog(
+                &town,
+                HouseZone::TownCentre,
+                Climate::Temperate,
+                1,
+                1900,
+                0,
+                &state.house_spec_catalog,
+                &state.house_overrides,
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn houses_ac_subst_and_action3_views() {
+        use crate::house_spec::{BUILDING_FLAG_SIZE_1X1, resolve_house_draw_id};
+        let a0 = build_action0_house_payload(
+            0,
+            3,
+            BUILDING_FLAG_SIZE_1X1,
+            0,
+            5000,
+            0xFFFF,
+            16,
+            "Vista",
+        );
+        let mut indices = vec![0u8; 8 * 8];
+        for y in 2..6 {
+            for x in 2..6 {
+                indices[y * 8 + x] = 174;
+            }
+        }
+        let bytes = crate::newgrf_sprites::build_grf_v2_house_with_preview_sprite(
+            &a0,
+            0,
+            8,
+            8,
+            &indices,
+            [b'H', b'V', 0, 1],
+            "hview",
+        );
+        let dir = tempfile_dir_with("hview.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("hview.grf", 8));
+        apply_newgrf_houses(&mut state, &[&dir]);
+        let def = &state.house_spec_catalog[0];
+        assert_eq!(def.subst_id, 3);
+        assert!(!def.newgrf_views.is_empty());
+        assert!(def.has_newgrf_sprites());
+        assert_eq!(resolve_house_draw_id(def.id, &state.house_spec_catalog), def.id);
+    }
+
+    #[test]
+    fn houses_ac_override_and_two_grf() {
+        use crate::house_spec::{BUILDING_FLAG_SIZE_1X1, NEW_HOUSE_OFFSET, get_translated_house_id};
+        let a0_a = build_action0_house_payload_ex(
+            0,
+            0,
+            BUILDING_FLAG_SIZE_1X1,
+            0,
+            5000,
+            0xFFFF,
+            16,
+            Some(5),
+            0x0102,
+            "A",
+        );
+        let a0_b = build_action0_house_payload_ex(
+            0,
+            1,
+            BUILDING_FLAG_SIZE_1X1,
+            0,
+            5000,
+            0xFFFF,
+            16,
+            Some(5),
+            0,
+            "B",
+        );
+        let bytes_a = build_grf_v2_with_action0_and_action8(&a0_a, [b'H', b'A', 0, 1], "ha", "");
+        let bytes_b = build_grf_v2_with_action0_and_action8(&a0_b, [b'H', b'B', 0, 1], "hb", "");
+        let dir = tempfile_dir_with("ha.grf", &bytes_a);
+        std::fs::write(dir.join("hb.grf"), &bytes_b).unwrap();
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("ha.grf", 1));
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("hb.grf", 2));
+        apply_newgrf_houses(&mut state, &[&dir]);
+        assert_eq!(state.house_spec_catalog.len(), 2);
+        let last = state.house_spec_catalog.iter().find(|d| d.grfid == 2).unwrap();
+        assert_eq!(state.house_overrides[5], last.id);
+        assert_eq!(
+            get_translated_house_id(5, &state.house_overrides),
+            last.id
+        );
+        assert!(last.id >= NEW_HOUSE_OFFSET);
+        let first = state.house_spec_catalog.iter().find(|d| d.grfid == 1).unwrap();
+        assert_eq!(first.callback_mask, 0x0102);
+    }
+
+    #[test]
+    fn houses_ac_multitile_geometry() {
+        use crate::house_spec::{
+            BUILDING_FLAG_SIZE_2X2, house_footprint_offsets, next_free_house_id,
+        };
+        let flags = BUILDING_FLAG_SIZE_2X2;
+        let offs = house_footprint_offsets(flags);
+        assert_eq!(offs.len(), 4);
+        // Cuatro Action0 consecutivos → ids globales consecutivos.
+        let mut payloads = Vec::new();
+        for local in 0u8..4 {
+            let f = if local == 0 { flags } else { 0 };
+            payloads.push(build_action0_house_payload(
+                local, 0, f, 0, 5000, 0xFFFF, 16, "MT",
+            ));
+        }
+        let refs: Vec<&[u8]> = payloads.iter().map(Vec::as_slice).collect();
+        let bytes =
+            build_grf_v2_with_action0s_and_action8(&refs, [b'H', b'M', 0, 1], "hm", "");
+        let dir = tempfile_dir_with("hm.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("hm.grf", 9));
+        apply_newgrf_houses(&mut state, &[&dir]);
+        assert_eq!(state.house_spec_catalog.len(), 4);
+        let base = state.house_spec_catalog[0].id;
+        for (i, def) in state.house_spec_catalog.iter().enumerate() {
+            assert_eq!(def.id, base + u16::try_from(i).unwrap());
+        }
+        assert_eq!(
+            next_free_house_id(&state.house_spec_catalog),
+            Some(base + 4)
+        );
+    }
+
+    #[test]
+    fn houses_ac_truncated_payload_no_panic() {
+        let _ = parse_action0_house_meta(&[0x00, ACTION0_FEATURE_HOUSES, 0x01, 0x01, 0x00]);
+        let _ = parse_action0_house_meta(&[0x00, ACTION0_FEATURE_HOUSES, 0x02, 0x01, 0x00, 0x08]);
+        let _ = parse_action0_house_meta(&[]);
+    }
+
+    #[test]
+    fn houses_ac_deterministic_pick() {
+        use crate::house_spec::{
+            BUILDING_FLAG_SIZE_1X1, pick_town_house_id_with_catalog,
+        };
+        use crate::town::{HouseZone, Town};
+        use crate::world_gen::Climate;
+
+        let a0 = build_action0_house_payload(
+            0,
+            0,
+            BUILDING_FLAG_SIZE_1X1,
+            0,
+            5000,
+            0xFFFF,
+            16,
+            "Det",
+        );
+        let meta = parse_action0_house_meta(&a0).unwrap();
+        assert_eq!(meta.subst_id, 0);
+        let bytes = build_grf_v2_with_action0_and_action8(&a0, [b'H', b'D', 0, 1], "hd", "");
+        let dir = tempfile_dir_with("hd.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("hd.grf", 3));
+        apply_newgrf_houses(&mut state, &[&dir]);
+        let town = Town::default();
+        let a = pick_town_house_id_with_catalog(
+            &town,
+            HouseZone::TownCentre,
+            Climate::Temperate,
+            1,
+            1980,
+            42,
+            &state.house_spec_catalog,
+            &state.house_overrides,
+        );
+        let b = pick_town_house_id_with_catalog(
+            &town,
+            HouseZone::TownCentre,
+            Climate::Temperate,
+            1,
+            1980,
+            42,
+            &state.house_spec_catalog,
+            &state.house_overrides,
+        );
+        assert_eq!(a, b);
     }
 }

@@ -259,6 +259,8 @@ pub(super) fn grow_towns(state: &mut GameState, tick: u64) {
         tick,
         state.climate,
         state.calendar.year,
+        &state.house_spec_catalog,
+        &state.house_overrides,
     );
     state.runtime.landscape_tile_dirty.extend(dirty);
 }

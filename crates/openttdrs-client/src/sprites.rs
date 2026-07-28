@@ -276,10 +276,20 @@ pub const NEW_HOUSE_OFFSET: u16 = 110;
 /// Casas originales con filas en `_town_draw_tile_data` (0..=109).
 pub const ORIGINAL_HOUSE_COUNT: usize = NEW_HOUSE_OFFSET as usize;
 
-/// HouseID efectivo para [`HOUSE_DRAW_DATA`] sin cargar NewGRF (sustituto `% 110`).
+/// HouseID efectivo para [`HOUSE_DRAW_DATA`] (fallback `% 110` sin catálogo).
 #[must_use]
 pub fn house_id_for_draw_table(clean_house_id: u16) -> usize {
-    let id = usize::from(clean_house_id & 0xFFF);
+    house_id_for_draw_table_with_catalog(clean_house_id, &[])
+}
+
+/// Resuelve id de dibujo vía `resolve_house_draw_id` (vistas / subst / `% 110`).
+#[must_use]
+pub fn house_id_for_draw_table_with_catalog(
+    clean_house_id: u16,
+    catalog: &[openttdrs_core::HouseSpecDef],
+) -> usize {
+    let draw = openttdrs_core::resolve_house_draw_id(clean_house_id, catalog);
+    let id = usize::from(draw & 0xFFF);
     if id >= ORIGINAL_HOUSE_COUNT {
         id % ORIGINAL_HOUSE_COUNT
     } else {
@@ -297,10 +307,22 @@ pub fn house_draw_data_index_for_tile(
     ty: i32,
     building_stage: usize,
 ) -> usize {
+    house_draw_data_index_for_tile_with_catalog(clean_house_id, tx, ty, building_stage, &[])
+}
+
+/// Índice en [`HOUSE_DRAW_DATA`] con catálogo NewGRF (subst / `% 110`).
+#[must_use]
+pub fn house_draw_data_index_for_tile_with_catalog(
+    clean_house_id: u16,
+    tx: i32,
+    ty: i32,
+    building_stage: usize,
+    catalog: &[openttdrs_core::HouseSpecDef],
+) -> usize {
     const ROWS_PER_HOUSE: usize = 16;
     const MAX_STAGE: usize = 3;
 
-    let house_id = house_id_for_draw_table(clean_house_id);
+    let house_id = house_id_for_draw_table_with_catalog(clean_house_id, catalog);
     let hash2 = tile_hash_2bit(tx, ty);
     let stage = building_stage.min(MAX_STAGE);
     house_id * ROWS_PER_HOUSE + hash2 * 4 + stage

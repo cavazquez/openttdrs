@@ -830,10 +830,13 @@ pub fn grow_town_if_served(
         tick,
         Climate::Temperate,
         1960,
+        &[],
+        &[],
     )
 }
 
-/// Variante con clima/año para selección de casas (P3.5).
+/// Variante con clima/año/catálogo para selección de casas (P3.5 / #253).
+#[allow(clippy::too_many_arguments)]
 pub fn grow_town_if_served_with_ctx(
     map: &mut Map,
     industries: &[Industry],
@@ -842,6 +845,8 @@ pub fn grow_town_if_served_with_ctx(
     tick: u64,
     climate: Climate,
     calendar_year: u32,
+    house_catalog: &[crate::house_spec::HouseSpecDef],
+    house_overrides: &[u16],
 ) -> Vec<TileCoord> {
     let mut dirty = Vec::new();
     for town in towns {
@@ -865,6 +870,8 @@ pub fn grow_town_if_served_with_ctx(
                 tick,
                 climate,
                 calendar_year,
+                house_catalog,
+                house_overrides,
                 &mut dirty,
             ) {
                 counter = i32::from(town.growth_rate);
@@ -880,7 +887,7 @@ pub fn grow_town_if_served_with_ctx(
     dirty
 }
 
-/// Expansión con clima/año (desde `GameState`).
+/// Expansión con clima/año/catálogo (desde `GameState`).
 #[allow(clippy::too_many_arguments)]
 pub fn try_expand_growing_town_with_ctx(
     map: &mut Map,
@@ -890,6 +897,8 @@ pub fn try_expand_growing_town_with_ctx(
     tick: u64,
     climate: crate::world_gen::Climate,
     calendar_year: u32,
+    house_catalog: &[crate::house_spec::HouseSpecDef],
+    house_overrides: &[u16],
     dirty: &mut Vec<TileCoord>,
 ) -> bool {
     let funded = town.fund_buildings_months > 0 || town.growth_funded > 0;
@@ -904,6 +913,8 @@ pub fn try_expand_growing_town_with_ctx(
     let ctx = crate::town_expand::TownExpandContext {
         climate,
         calendar_year,
+        house_catalog,
+        house_overrides,
     };
     let before_houses = town.num_houses;
     let placed = crate::town_expand::expand_town_physically_with_ctx(map, town, tick, ctx);
@@ -949,12 +960,15 @@ pub fn increment_all_house_ages(map: &mut Map) {
 /// Renovación urbana en visitas del tile loop (`TileLoop_Town` aging/rebuild).
 ///
 /// Pasado `minimum_life`, con probabilidad 20/256 demuele y reconstruye.
+#[allow(clippy::too_many_arguments)]
 pub fn tile_loop_town_house_renovation(
     map: &mut Map,
     towns: &mut [Town],
     visits: &[TileCoord],
     climate: Climate,
     calendar_year: u32,
+    house_catalog: &[crate::house_spec::HouseSpecDef],
+    house_overrides: &[u16],
     rng: &mut Randomizer,
 ) -> Vec<TileCoord> {
     let mut dirty = Vec::new();
@@ -1023,6 +1037,8 @@ pub fn tile_loop_town_house_renovation(
         let ctx = crate::town_expand::TownExpandContext {
             climate,
             calendar_year,
+            house_catalog,
+            house_overrides,
         };
         if crate::town_expand::place_house_with_spec(
             map,
@@ -1569,6 +1585,8 @@ mod tests {
                 &[pos],
                 Climate::Temperate,
                 1980,
+                &[],
+                &[],
                 &mut rng,
             );
             if !dirty.is_empty() {

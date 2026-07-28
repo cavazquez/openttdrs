@@ -1,7 +1,9 @@
-//! Specs de casas vanilla (`HouseSpec` / `_original_house_specs`).
+//! Specs de casas vanilla (`HouseSpec` / `_original_house_specs`) y NewGRF (`HouseSpecDef`).
 //!
 //! Datos generados en el módulo privado `crate::sav::house_population_generated`; aquí viven
-//! las consultas runtime para zonas, años, pesos y aceptación (P3.5–P3.7).
+//! las consultas runtime para zonas, años, pesos y aceptación (P3.5–P3.7). Feature Action0 `0x07`.
+
+use serde::{Deserialize, Serialize};
 
 use crate::cargo::CargoType;
 use crate::map::TileCoord;
@@ -16,6 +18,17 @@ use crate::world_gen::{Climate, DEF_SNOW_LINE_HEIGHT};
 /// Número de `HouseID` vanilla.
 pub const NUM_HOUSES_VANILLA: usize = HOUSE_SPEC_COUNT;
 pub const HOUSE_YEAR_MAX: u32 = HOUSE_MAX_YEAR;
+
+/// Primer `HouseID` definido por `NewGRF` (`OpenTTD` `NEW_HOUSE_OFFSET`).
+pub const NEW_HOUSE_OFFSET: u16 = 110;
+/// Total de slots de casa (`OpenTTD` `NUM_HOUSES` histórico).
+pub const NUM_HOUSES: u16 = 512;
+/// Id inválido / sin override.
+pub const INVALID_HOUSE: u16 = NUM_HOUSES;
+/// Probabilidad por defecto Action0 si no hay prop `0x18`.
+pub const DEFAULT_HOUSE_PROBABILITY: u8 = 16;
+/// Availability por defecto (todas las zonas + climas).
+pub const DEFAULT_HOUSE_AVAILABILITY: u16 = 0xFFFF;
 
 /// Flags de edificio (`BuildingFlag`).
 pub const BUILDING_FLAG_SIZE_1X1: u8 = 1 << 0;
@@ -98,6 +111,204 @@ impl HouseSpec {
     }
 }
 
+/// Spec `NewGRF` de casa (feature Action0 `0x07`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HouseSpecDef {
+    /// Id global (`≥` [`NEW_HOUSE_OFFSET`] si `from_newgrf`).
+    pub id: u16,
+    pub local_id: u8,
+    /// Substitute vanilla (`prop 0x08`) para dibujo / fallback.
+    pub subst_id: u8,
+    /// Building flags (`prop 0x09`).
+    pub building_flags: u8,
+    pub min_year: u32,
+    pub max_year: u32,
+    pub population: u16,
+    pub mail_generation: u16,
+    /// Zonas + climas (`prop 0x13`).
+    pub availability: u16,
+    pub probability: u8,
+    /// Override de casa vanilla (`prop 0x15`).
+    pub override_id: Option<u8>,
+    /// Callback mask (`0x14` lo + `0x1D` hi); almacenado, sin ejecutar CBs (#228).
+    pub callback_mask: u16,
+    pub name: String,
+    pub from_newgrf: bool,
+    pub grfid: u32,
+    #[serde(default, skip)]
+    pub newgrf_views: Vec<crate::newgrf_sprites::DecodedSprite>,
+    #[serde(default, skip)]
+    pub newgrf_local_id: u8,
+    #[serde(default, skip)]
+    pub newgrf_runtime: Option<Box<crate::newgrf_sprites::TrainSpriteGraphics>>,
+}
+
+impl HouseSpecDef {
+    #[must_use]
+    pub const fn is_size_1x1(&self) -> bool {
+        self.building_flags & BUILDING_FLAG_SIZE_1X1 != 0
+            && self.building_flags
+                & (BUILDING_FLAG_SIZE_2X1 | BUILDING_FLAG_SIZE_1X2 | BUILDING_FLAG_SIZE_2X2)
+                == 0
+    }
+
+    #[must_use]
+    pub const fn is_church(&self) -> bool {
+        self.building_flags & BUILDING_FLAG_IS_CHURCH != 0
+    }
+
+    #[must_use]
+    pub const fn is_stadium(&self) -> bool {
+        self.building_flags & BUILDING_FLAG_IS_STADIUM != 0
+    }
+
+    #[must_use]
+    pub const fn matches_zones(&self, required: u16) -> bool {
+        self.availability & required == required
+    }
+
+    /// ¿Es la tesela norte de un multitile (flags de tamaño >1×1)?
+    #[must_use]
+    pub const fn is_multitile_north(&self) -> bool {
+        self.building_flags
+            & (BUILDING_FLAG_SIZE_2X1 | BUILDING_FLAG_SIZE_1X2 | BUILDING_FLAG_SIZE_2X2)
+            != 0
+    }
+
+    #[must_use]
+    pub fn has_newgrf_sprites(&self) -> bool {
+        !self.newgrf_views.is_empty() || self.newgrf_runtime.is_some()
+    }
+
+    #[must_use]
+    pub fn newgrf_view(&self, idx: usize) -> Option<&crate::newgrf_sprites::DecodedSprite> {
+        if self.newgrf_views.is_empty() {
+            return None;
+        }
+        self.newgrf_views.get(idx % self.newgrf_views.len())
+    }
+}
+
+/// Catálogo vacío (solo NewGRF).
+#[must_use]
+pub fn empty_house_spec_catalog() -> Vec<HouseSpecDef> {
+    Vec::new()
+}
+
+/// Tabla de overrides vanilla → id NewGRF (`prop 0x15`).
+#[must_use]
+pub fn empty_house_overrides() -> Vec<u16> {
+    vec![INVALID_HOUSE; NEW_HOUSE_OFFSET as usize]
+}
+
+#[must_use]
+pub fn house_spec_def(catalog: &[HouseSpecDef], id: u16) -> Option<&HouseSpecDef> {
+    catalog.iter().find(|d| d.id == id)
+}
+
+/// Lookup vanilla o NewGRF por id global.
+#[must_use]
+pub fn vanilla_or_newgrf_house(
+    catalog: &[HouseSpecDef],
+    id: u16,
+) -> Option<HouseLookup<'_>> {
+    if let Some(def) = house_spec_def(catalog, id) {
+        return Some(HouseLookup::NewGrf(def));
+    }
+    HouseSpec::get(id).map(HouseLookup::Vanilla)
+}
+
+/// Vista unificada vanilla / NewGRF para población y flags.
+#[derive(Debug, Clone, Copy)]
+pub enum HouseLookup<'a> {
+    Vanilla(HouseSpec),
+    NewGrf(&'a HouseSpecDef),
+}
+
+impl HouseLookup<'_> {
+    #[must_use]
+    pub const fn population(self) -> u16 {
+        match self {
+            Self::Vanilla(hs) => hs.population,
+            Self::NewGrf(d) => d.population,
+        }
+    }
+
+    #[must_use]
+    pub const fn is_church(self) -> bool {
+        match self {
+            Self::Vanilla(hs) => hs.is_church(),
+            Self::NewGrf(d) => d.is_church(),
+        }
+    }
+
+    #[must_use]
+    pub const fn is_stadium(self) -> bool {
+        match self {
+            Self::Vanilla(hs) => hs.is_stadium(),
+            Self::NewGrf(d) => d.is_stadium(),
+        }
+    }
+
+    #[must_use]
+    pub const fn building_flags(self) -> u8 {
+        match self {
+            Self::Vanilla(hs) => hs.building_flags,
+            Self::NewGrf(d) => d.building_flags,
+        }
+    }
+}
+
+/// Siguiente id libre en `[NEW_HOUSE_OFFSET, NUM_HOUSES)`.
+#[must_use]
+pub fn next_free_house_id(catalog: &[HouseSpecDef]) -> Option<u16> {
+    (NEW_HOUSE_OFFSET..NUM_HOUSES).find(|&id| !catalog.iter().any(|d| d.id == id))
+}
+
+/// Offsets del footprint multitile (norte = `(0,0)`).
+///
+/// Orden OTTD: 2×2 → N, E `(1,0)`, W `(0,1)`, S `(1,1)`.
+#[must_use]
+pub fn house_footprint_offsets(building_flags: u8) -> Vec<(i32, i32)> {
+    if building_flags & BUILDING_FLAG_SIZE_2X2 != 0 {
+        return vec![(0, 0), (1, 0), (0, 1), (1, 1)];
+    }
+    if building_flags & BUILDING_FLAG_SIZE_2X1 != 0 {
+        return vec![(0, 0), (1, 0)];
+    }
+    if building_flags & BUILDING_FLAG_SIZE_1X2 != 0 {
+        return vec![(0, 0), (0, 1)];
+    }
+    vec![(0, 0)]
+}
+
+/// Id de dibujo vanilla: vistas NewGRF → el propio id; si no, `subst_id`; si no, `% 110`.
+#[must_use]
+pub fn resolve_house_draw_id(house_id: u16, catalog: &[HouseSpecDef]) -> u16 {
+    let clean = house_id & 0xFFF;
+    if let Some(def) = house_spec_def(catalog, clean) {
+        if def.has_newgrf_sprites() {
+            return clean;
+        }
+        return u16::from(def.subst_id);
+    }
+    if clean >= NEW_HOUSE_OFFSET {
+        return clean % NEW_HOUSE_OFFSET;
+    }
+    clean
+}
+
+/// Traduce id vanilla aplicando override NewGRF (si hay).
+#[must_use]
+pub fn get_translated_house_id(clean: u16, overrides: &[u16]) -> u16 {
+    if let Some(&ovr) = overrides.get(usize::from(clean))
+        && ovr != INVALID_HOUSE
+    {
+        return ovr;
+    }
+    clean
+}
+
 /// Máscara de clima para el landscape actual (`GetClimateMaskForLandscape`).
 #[must_use]
 pub fn climate_zone_mask(climate: Climate, tile_height: u8) -> u16 {
@@ -151,7 +362,7 @@ pub fn add_accepted_cargo_of_house(house_id: u16, amounts: &mut [u32; 5]) {
     }
 }
 
-/// Elige un `HouseID` ponderado por zona/clima/año (`TryBuildTownHouse` simplificado a 1×1).
+/// Elige un `HouseID` ponderado por zona/clima/año (solo pool vanilla).
 #[must_use]
 pub fn pick_town_house_id(
     town: &Town,
@@ -161,16 +372,51 @@ pub fn pick_town_house_id(
     calendar_year: u32,
     rng_value: u32,
 ) -> Option<u16> {
+    pick_town_house_id_with_catalog(
+        town,
+        zone,
+        climate,
+        tile_height,
+        calendar_year,
+        rng_value,
+        &[],
+        &[],
+    )
+}
+
+/// Pool vanilla + NewGRF (1×1 y norte multitile) con filtros clima/zona/año.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn pick_town_house_id_with_catalog(
+    town: &Town,
+    zone: HouseZone,
+    climate: Climate,
+    tile_height: u8,
+    calendar_year: u32,
+    rng_value: u32,
+    catalog: &[HouseSpecDef],
+    overrides: &[u16],
+) -> Option<u16> {
     let climate_mask = climate_zone_mask(climate, tile_height);
     let zone_mask = (1u16 << (zone as u8)) | climate_mask;
 
     let mut probs: Vec<(u16, u32)> = Vec::new();
     let mut probability_max = 0_u32;
+
     for (id, &is_1x1) in HOUSE_SIZE_1X1.iter().enumerate() {
         if !is_1x1 {
             continue;
         }
-        let hs = HouseSpec::get(u16::try_from(id).unwrap_or(0))?;
+        let house_id = u16::try_from(id).unwrap_or(0);
+        if overrides
+            .get(id)
+            .is_some_and(|&ovr| ovr != INVALID_HOUSE)
+        {
+            continue;
+        }
+        let Some(hs) = HouseSpec::get(house_id) else {
+            continue;
+        };
         if !hs.matches_zones(zone_mask) {
             continue;
         }
@@ -183,7 +429,6 @@ pub fn pick_town_house_id(
         if hs.is_stadium() && town.has_stadium {
             continue;
         }
-        // Evitar specs sin población (estatuas/parques) en expansión normal.
         if hs.population == 0 && !hs.is_church() {
             continue;
         }
@@ -191,6 +436,35 @@ pub fn pick_town_house_id(
         probability_max = probability_max.saturating_add(p);
         probs.push((hs.id, p));
     }
+
+    for def in catalog {
+        if !def.from_newgrf {
+            continue;
+        }
+        // Pool: 1×1 o tesela norte multitile (tiles adicionales no llevan flag de tamaño).
+        if !def.is_size_1x1() && !def.is_multitile_north() {
+            continue;
+        }
+        if !def.matches_zones(zone_mask) {
+            continue;
+        }
+        if calendar_year < def.min_year || calendar_year > def.max_year {
+            continue;
+        }
+        if def.is_church() && town.has_church {
+            continue;
+        }
+        if def.is_stadium() && town.has_stadium {
+            continue;
+        }
+        if def.population == 0 && !def.is_church() {
+            continue;
+        }
+        let p = u32::from(def.probability.max(1));
+        probability_max = probability_max.saturating_add(p);
+        probs.push((def.id, p));
+    }
+
     if probability_max == 0 || probs.is_empty() {
         return None;
     }
@@ -295,5 +569,39 @@ mod tests {
         assert_eq!(amounts[0], 8); // passengers
         assert_eq!(amounts[1], 3); // mail
         assert_eq!(amounts[2], 4); // goods
+    }
+
+    #[test]
+    fn multitile_footprint_2x2_four_offsets() {
+        let offs = house_footprint_offsets(BUILDING_FLAG_SIZE_2X2);
+        assert_eq!(offs, vec![(0, 0), (1, 0), (0, 1), (1, 1)]);
+        assert_eq!(house_footprint_offsets(BUILDING_FLAG_SIZE_2X1).len(), 2);
+        assert_eq!(house_footprint_offsets(BUILDING_FLAG_SIZE_1X1).len(), 1);
+    }
+
+    #[test]
+    fn resolve_draw_uses_subst_without_views() {
+        let catalog = vec![HouseSpecDef {
+            id: NEW_HOUSE_OFFSET,
+            local_id: 0,
+            subst_id: 7,
+            building_flags: BUILDING_FLAG_SIZE_1X1,
+            min_year: 0,
+            max_year: HOUSE_YEAR_MAX,
+            population: 10,
+            mail_generation: 1,
+            availability: DEFAULT_HOUSE_AVAILABILITY,
+            probability: DEFAULT_HOUSE_PROBABILITY,
+            override_id: None,
+            callback_mask: 0,
+            name: "H".into(),
+            from_newgrf: true,
+            grfid: 1,
+            newgrf_views: Vec::new(),
+            newgrf_local_id: 0,
+            newgrf_runtime: None,
+        }];
+        assert_eq!(resolve_house_draw_id(NEW_HOUSE_OFFSET, &catalog), 7);
+        assert_eq!(resolve_house_draw_id(200, &[]), 200 % NEW_HOUSE_OFFSET);
     }
 }

@@ -52,6 +52,13 @@ macro_rules! define_action5_apply {
 }
 
 define_action5_apply!(
+    apply_newgrf_action5_signals,
+    apply_newgrf_action5_signals_default_dirs,
+    signal_action5_newgrf_sprites,
+    crate::newgrf_sprites::SIGNAL_ACTION5_SLOT_COUNT,
+    crate::newgrf_sprites::merge_signals_action5_block
+);
+define_action5_apply!(
     apply_newgrf_action5_shore,
     apply_newgrf_action5_shore_default_dirs,
     shore_newgrf_sprites,
@@ -110,6 +117,7 @@ define_action5_apply!(
 
 /// Aplica todos los tipos Action5 runtime soportados.
 pub fn apply_newgrf_action5_all_default_dirs(state: &mut GameState) {
+    apply_newgrf_action5_signals_default_dirs(state);
     apply_newgrf_action5_shore_default_dirs(state);
     apply_newgrf_action5_catenary_default_dirs(state);
     apply_newgrf_action5_foundations_default_dirs(state);

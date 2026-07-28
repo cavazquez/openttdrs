@@ -4,6 +4,10 @@
 //! - `RoadTypes` (0x12) → `GameState.road_type_catalog`
 //! - `Stations` (0x04) → `station_class_catalog` / `station_spec_catalog`
 //! - `IndustryTiles` (0x09) → `industry_tile_spec_catalog`
+//! - `Cargoes` (0x0B) → `cargo_spec_catalog`
+//! - `Objects` (0x0F) → `object_spec_catalog`
+//! - `RoadStops` (0x14) → `road_stop_class_catalog` / `road_stop_spec_catalog`
+//! - `Badges` (0x15) → `badge_catalog`
 
 pub mod action0;
 pub mod apply;
@@ -11,16 +15,22 @@ pub mod inspect;
 
 // Re-exports públicos
 pub use action0::{
-    ACTION0_FEATURE_AIRCRAFT, ACTION0_FEATURE_INDUSTRYTILES, ACTION0_FEATURE_RAILTYPES,
-    ACTION0_FEATURE_ROAD_VEHICLES, ACTION0_FEATURE_ROADTYPES, ACTION0_FEATURE_SHIPS,
-    ACTION0_FEATURE_STATIONS, ACTION0_FEATURE_TRAINS, ACTION0_FEATURE_TRAMTYPES, Action0Header,
-    ParsedIndustryTileMeta, ParsedRailTypeMeta, ParsedRoadTypeMeta, ParsedStationMeta,
-    ParsedTrainMeta, ParsedVehicleMeta, collect_industry_tile_metas_from_grf,
-    collect_railtype_metas_from_grf, collect_roadtype_metas_from_grf,
-    collect_station_metas_from_grf, collect_train_metas_from_grf, collect_vehicle_metas_from_grf,
-    for_each_pseudo_payload, parse_action0_header, parse_action0_industry_tile_meta,
-    parse_action0_railtype_metas, parse_action0_roadtype_meta, parse_action0_station_meta,
-    parse_action0_train_meta, parse_action0_vehicle_metas,
+    ACTION0_FEATURE_AIRCRAFT, ACTION0_FEATURE_BADGES, ACTION0_FEATURE_CARGOES,
+    ACTION0_FEATURE_INDUSTRYTILES, ACTION0_FEATURE_OBJECTS, ACTION0_FEATURE_RAILTYPES,
+    ACTION0_FEATURE_ROAD_VEHICLES, ACTION0_FEATURE_ROADSTOPS, ACTION0_FEATURE_ROADTYPES,
+    ACTION0_FEATURE_SHIPS, ACTION0_FEATURE_STATIONS, ACTION0_FEATURE_TRAINS,
+    ACTION0_FEATURE_TRAMTYPES, Action0Header, ParsedBadgeMeta, ParsedCargoMeta,
+    ParsedIndustryTileMeta, ParsedObjectMeta, ParsedRailTypeMeta, ParsedRoadStopMeta,
+    ParsedRoadTypeMeta, ParsedStationMeta, ParsedTrainMeta, ParsedVehicleMeta,
+    collect_badge_metas_from_grf, collect_cargo_metas_from_grf,
+    collect_industry_tile_metas_from_grf, collect_object_metas_from_grf,
+    collect_railtype_metas_from_grf, collect_roadstop_metas_from_grf,
+    collect_roadtype_metas_from_grf, collect_station_metas_from_grf, collect_train_metas_from_grf,
+    collect_vehicle_metas_from_grf, for_each_pseudo_payload, parse_action0_badge_meta,
+    parse_action0_cargo_meta, parse_action0_header, parse_action0_industry_tile_meta,
+    parse_action0_object_meta, parse_action0_railtype_metas, parse_action0_roadstop_meta,
+    parse_action0_roadtype_meta, parse_action0_station_meta, parse_action0_train_meta,
+    parse_action0_vehicle_metas,
 };
 
 pub use apply::{
@@ -33,12 +43,17 @@ pub use apply::{
         apply_newgrf_action5_oneway_default_dirs, apply_newgrf_action5_openttd_gui,
         apply_newgrf_action5_openttd_gui_default_dirs, apply_newgrf_action5_roadstops,
         apply_newgrf_action5_roadstops_default_dirs, apply_newgrf_action5_shore,
-        apply_newgrf_action5_shore_default_dirs,
+        apply_newgrf_action5_shore_default_dirs, apply_newgrf_action5_signals,
+        apply_newgrf_action5_signals_default_dirs,
     },
     apply_newgrf_stack_catalogs_default_dirs,
+    badges::{apply_newgrf_badges, apply_newgrf_badges_default_dirs},
+    cargo::{apply_newgrf_cargoes, apply_newgrf_cargoes_default_dirs},
     industry::{apply_newgrf_industry_tiles, apply_newgrf_industry_tiles_default_dirs},
+    objects::{apply_newgrf_objects, apply_newgrf_objects_default_dirs},
     rail::{apply_newgrf_rail_signals, apply_newgrf_rail_signals_default_dirs},
     road::{apply_newgrf_road_types, apply_newgrf_road_types_default_dirs},
+    roadstop::{apply_newgrf_roadstops, apply_newgrf_roadstops_default_dirs},
     station::{apply_newgrf_stations, apply_newgrf_stations_default_dirs},
     train::{apply_newgrf_vehicles_trains, apply_newgrf_vehicles_trains_default_dirs},
 };
@@ -179,6 +194,130 @@ pub fn build_action0_industry_tile_payload(subst_id: u8, override_of: Option<u8>
         p.push(o);
     }
     p
+}
+
+#[must_use]
+pub fn build_action0_roadstop_payload(class_label: &[u8; 4], stop_type: u8, name: &str) -> Vec<u8> {
+    let mut p = vec![
+        0x00,
+        ACTION0_FEATURE_ROADSTOPS,
+        0x03,
+        0x01,
+        0x00,
+        0x08, // PROP_LABEL
+    ];
+    p.extend_from_slice(class_label);
+    p.push(0x09); // PROP_ROADSTOP_STOP_TYPE
+    p.push(stop_type);
+    p.push(0xFE); // PROP_NAME_CSTRING
+    p.extend_from_slice(name.as_bytes());
+    p.push(0);
+    p
+}
+
+#[must_use]
+pub fn build_action0_badge_payload(label: &[u8; 4], flags: u32, name: Option<&str>) -> Vec<u8> {
+    let num_props = 2 + u8::from(name.is_some());
+    let mut p = vec![0x00, ACTION0_FEATURE_BADGES, num_props, 0x01, 0x00, 0x08];
+    p.extend_from_slice(label);
+    p.push(0x09);
+    p.extend_from_slice(&flags.to_le_bytes());
+    if let Some(n) = name {
+        p.push(0xFE);
+        p.extend_from_slice(n.as_bytes());
+        p.push(0);
+    }
+    p
+}
+
+#[must_use]
+pub fn build_action0_cargo_payload(
+    local_id: u8,
+    bitnum: u8,
+    label: &[u8; 4],
+    name: &str,
+) -> Vec<u8> {
+    let mut p = vec![
+        0x00,
+        ACTION0_FEATURE_CARGOES,
+        0x03,
+        0x01,
+        local_id,
+        0x08, // bitnum
+        bitnum,
+        0x17, // label
+    ];
+    p.extend_from_slice(label);
+    p.push(0xFE);
+    p.extend_from_slice(name.as_bytes());
+    p.push(0);
+    p
+}
+
+#[must_use]
+pub fn build_action0_object_payload(
+    local_id: u8,
+    class_label: &[u8; 4],
+    size: u8,
+    name: &str,
+) -> Vec<u8> {
+    let mut p = vec![
+        0x00,
+        ACTION0_FEATURE_OBJECTS,
+        0x03,
+        0x01,
+        local_id,
+        0x08, // class label
+    ];
+    p.extend_from_slice(class_label);
+    p.push(0x0C); // size
+    p.push(size);
+    p.push(0xFE);
+    p.extend_from_slice(name.as_bytes());
+    p.push(0);
+    p
+}
+
+/// GRF v2 con varios Action0 + Action8 (tests multi-feature / multi-id).
+#[must_use]
+pub fn build_grf_v2_with_action0s_and_action8(
+    action0_payloads: &[&[u8]],
+    grfid: [u8; 4],
+    name: &str,
+    description: &str,
+) -> Vec<u8> {
+    const SIG: [u8; 8] = [b'G', b'R', b'F', 0x82, 0x0D, 0x0A, 0x1A, 0x0A];
+    let mut action8 = vec![0x08, 0x07];
+    action8.extend_from_slice(&grfid);
+    action8.extend_from_slice(name.as_bytes());
+    action8.push(0);
+    action8.extend_from_slice(description.as_bytes());
+    action8.push(0);
+
+    let mut data_section = Vec::new();
+    for payload in action0_payloads {
+        let size = u32::try_from(payload.len()).unwrap_or(0);
+        data_section.extend_from_slice(&size.to_le_bytes());
+        data_section.push(0xFF);
+        data_section.extend_from_slice(payload);
+    }
+    {
+        let size = u32::try_from(action8.len()).unwrap_or(0);
+        data_section.extend_from_slice(&size.to_le_bytes());
+        data_section.push(0xFF);
+        data_section.extend_from_slice(&action8);
+    }
+    data_section.extend_from_slice(&0u32.to_le_bytes());
+
+    let sprite_offs = u32::try_from(1 + data_section.len()).unwrap_or(0);
+    let mut out = Vec::new();
+    out.extend_from_slice(&[0x00, 0x00]);
+    out.extend_from_slice(&SIG);
+    out.extend_from_slice(&sprite_offs.to_le_bytes());
+    out.push(0x00);
+    out.extend_from_slice(&data_section);
+    out.extend_from_slice(&0u32.to_le_bytes());
+    out
 }
 
 #[must_use]
@@ -689,6 +828,35 @@ mod tests {
         assert_eq!(crate::action5_type_name(0x16), "airport-preview");
         assert_eq!(crate::action5_type_name(0x1B), "bridge-decks");
         assert_eq!(crate::action5_type_name(0x0C), "snowy-tree-unused");
+    }
+
+    #[test]
+    fn action5_signals_merge_fills_slot_from_stack() {
+        let mut indices = vec![0u8; 8 * 8];
+        for y in 2..6 {
+            for x in 2..6 {
+                indices[y * 8 + x] = 174;
+            }
+        }
+        let bytes = crate::newgrf_sprites::build_grf_v2_action5_with_sprite(
+            0x04,
+            12,
+            8,
+            8,
+            &indices,
+            [b'S', b'G', 0, 4],
+            "sig5",
+        );
+        let dir = tempfile_dir_with("sig5.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("sig5.grf", 4));
+        apply_newgrf_action5_signals(&mut state, &[&dir]);
+        assert_eq!(state.runtime.signal_action5_newgrf_sprites.len(), 240);
+        assert!(state.runtime.signal_action5_newgrf_sprites[12].is_some());
+        assert_eq!(crate::signal_action5_slot(5088 + 12), Some(12));
+        assert_eq!(crate::action5_type_name(0x04), "signals");
     }
 
     #[test]
@@ -1226,6 +1394,119 @@ mod tests {
         assert_eq!(def.newgrf_grfid, grfid);
         let tables = def.newgrf_type_tables.as_ref().unwrap();
         assert_eq!(tables.rail, vec![*b"ELRL", *b"RAIL"]);
+    }
+
+    #[test]
+    fn parse_roadstop_meta_and_apply_from_bytes() {
+        let a0 = build_action0_roadstop_payload(b"BUSC", 0, "Parada bus");
+        let meta = parse_action0_roadstop_meta(&a0).unwrap();
+        assert_eq!(meta.class_short_label, "BUSC");
+        assert_eq!(meta.stop_type, 0);
+        assert_eq!(meta.label, "Parada bus");
+        assert_eq!(meta.short_label, "Para");
+
+        let bytes = build_grf_v2_with_action0_and_action8(&a0, [b'R', b'S', 0, 1], "rstop", "");
+        let dir = tempfile_dir_with("rstop.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("rstop.grf", 20));
+        apply_newgrf_roadstops(&mut state, &[&dir]);
+        assert_eq!(state.road_stop_spec_catalog.len(), 1);
+        assert!(
+            state
+                .road_stop_class_catalog
+                .iter()
+                .any(|c| c.from_newgrf && c.short_label == "BUSC")
+        );
+        let def = &state.road_stop_spec_catalog[0];
+        assert!(def.from_newgrf);
+        assert_eq!(def.label, "Parada bus");
+        assert_eq!(def.stop_type, 0);
+        assert_eq!(def.grfid, 20);
+        assert!(def.newgrf_views.is_empty());
+    }
+
+    #[test]
+    fn parse_badge_meta_and_apply_from_bytes() {
+        let a0 = build_action0_badge_payload(b"ELEC", 0x0000_0003, None);
+        let meta = parse_action0_badge_meta(&a0).unwrap();
+        assert_eq!(meta.label, "ELEC");
+        assert_eq!(meta.flags, 3);
+
+        let bytes = build_grf_v2_with_action0_and_action8(&a0, [b'B', b'D', 0, 1], "badge", "");
+        let dir = tempfile_dir_with("badge.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("badge.grf", 15));
+        apply_newgrf_badges(&mut state, &[&dir]);
+        assert_eq!(state.badge_catalog.len(), 1);
+        let def = &state.badge_catalog[0];
+        assert!(def.from_newgrf);
+        assert_eq!(def.label, "ELEC");
+        assert_eq!(def.flags, 3);
+        assert_eq!(def.grfid, 15);
+    }
+
+    #[test]
+    fn parse_cargo_two_labels_distinct() {
+        let a0_a = build_action0_cargo_payload(0, 1, b"PASS", "Pasajeros");
+        let a0_b = build_action0_cargo_payload(1, 2, b"COAL", "Carbón");
+        let meta_a = parse_action0_cargo_meta(&a0_a).unwrap();
+        let meta_b = parse_action0_cargo_meta(&a0_b).unwrap();
+        assert_eq!(meta_a.label, "PASS");
+        assert_eq!(meta_b.label, "COAL");
+        assert_ne!(meta_a.label, meta_b.label);
+
+        let bytes = build_grf_v2_with_action0s_and_action8(
+            &[&a0_a, &a0_b],
+            [b'C', b'G', 0, 1],
+            "cargos",
+            "",
+        );
+        let dir = tempfile_dir_with("cargos.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("cargos.grf", 11));
+        apply_newgrf_cargoes(&mut state, &[&dir]);
+        assert_eq!(state.cargo_spec_catalog.len(), 2);
+        let labels: Vec<_> = state
+            .cargo_spec_catalog
+            .iter()
+            .map(|c| c.label.as_str())
+            .collect();
+        assert!(labels.contains(&"PASS"));
+        assert!(labels.contains(&"COAL"));
+        assert_ne!(
+            state.cargo_spec_catalog[0].label,
+            state.cargo_spec_catalog[1].label
+        );
+    }
+
+    #[test]
+    fn parse_object_meta_and_apply_registers() {
+        let a0 = build_action0_object_payload(0, b"LIGT", 0x11, "Faro");
+        let meta = parse_action0_object_meta(&a0).unwrap();
+        assert_eq!(meta.class_label, "LIGT");
+        assert_eq!(meta.size, 0x11);
+        assert_eq!(meta.name, "Faro");
+
+        let bytes = build_grf_v2_with_action0_and_action8(&a0, [b'O', b'B', 0, 1], "obj", "");
+        let dir = tempfile_dir_with("obj.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("obj.grf", 15));
+        apply_newgrf_objects(&mut state, &[&dir]);
+        assert_eq!(state.object_spec_catalog.len(), 1);
+        let def = &state.object_spec_catalog[0];
+        assert!(def.from_newgrf);
+        assert_eq!(def.class_label, "LIGT");
+        assert_eq!(def.name, "Faro");
+        assert_eq!(def.size, 0x11);
+        assert_eq!(def.local_id, 0);
     }
 
     #[test]

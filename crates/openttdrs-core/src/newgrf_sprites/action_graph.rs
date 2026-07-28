@@ -1,9 +1,10 @@
 //! Parseo y construcción de grafos Action1/2/3 + builders sintéticos de GRF.
 
 use crate::newgrf_actions::{
-    ACTION0_FEATURE_AIRCRAFT, ACTION0_FEATURE_INDUSTRYTILES, ACTION0_FEATURE_RAILTYPES,
-    ACTION0_FEATURE_ROAD_VEHICLES, ACTION0_FEATURE_ROADTYPES, ACTION0_FEATURE_SHIPS,
-    ACTION0_FEATURE_STATIONS, ACTION0_FEATURE_TRAINS,
+    ACTION0_FEATURE_AIRCRAFT, ACTION0_FEATURE_INDUSTRYTILES, ACTION0_FEATURE_OBJECTS,
+    ACTION0_FEATURE_RAILTYPES, ACTION0_FEATURE_ROAD_VEHICLES, ACTION0_FEATURE_ROADSTOPS,
+    ACTION0_FEATURE_ROADTYPES, ACTION0_FEATURE_SHIPS, ACTION0_FEATURE_STATIONS,
+    ACTION0_FEATURE_TRAINS,
 };
 use crate::newgrf_config::{GrfContainerVersion, GrfScanError, parse_grf_full};
 use crate::newgrf_walk::{GrfEntry, walk_grf_entries};
@@ -300,8 +301,10 @@ fn supports_action2_chain(feature: u8) -> bool {
             | ACTION0_FEATURE_SHIPS
             | ACTION0_FEATURE_AIRCRAFT
             | ACTION0_FEATURE_STATIONS
+            | ACTION0_FEATURE_OBJECTS
             | ACTION0_FEATURE_RAILTYPES
             | ACTION0_FEATURE_ROADTYPES
+            | ACTION0_FEATURE_ROADSTOPS
             | ACTION0_FEATURE_INDUSTRYTILES
     )
 }
@@ -448,4 +451,22 @@ pub fn collect_industry_tile_sprite_graphics(
     data: &[u8],
 ) -> Result<TrainSpriteGraphics, GrfScanError> {
     collect_feature_sprite_graphics(data, ACTION0_FEATURE_INDUSTRYTILES)
+}
+
+/// Action1/3 objects.
+///
+/// # Errors
+///
+/// Contenedor inválido.
+pub fn collect_object_sprite_graphics(data: &[u8]) -> Result<TrainSpriteGraphics, GrfScanError> {
+    collect_feature_sprite_graphics(data, ACTION0_FEATURE_OBJECTS)
+}
+
+/// Action1/3 road stops.
+///
+/// # Errors
+///
+/// Contenedor inválido.
+pub fn collect_roadstop_sprite_graphics(data: &[u8]) -> Result<TrainSpriteGraphics, GrfScanError> {
+    collect_feature_sprite_graphics(data, ACTION0_FEATURE_ROADSTOPS)
 }

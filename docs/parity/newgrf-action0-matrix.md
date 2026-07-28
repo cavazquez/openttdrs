@@ -25,17 +25,17 @@ Estados:
 | `08` | Global variables | runtime parcial | no aplica | tablas rail/road/tram |
 | `09` | Industry tiles | runtime parcial | runtime | construcción/render industria |
 | `0A` | Industries | pendiente | pendiente | — |
-| `0B` | Cargoes | pendiente | pendiente | — |
+| `0B` | Cargoes | runtime parcial | pendiente | catálogo `cargo_spec` |
 | `0C` | Sound effects | pendiente | pendiente | — |
 | `0D` | Airports | pendiente | pendiente | — |
-| `0E` | Signals | pendiente | pendiente | señales usan hoy RailTypes |
-| `0F` | Objects | pendiente | pendiente | — |
+| `0E` | Signals | ignorada por spec (null en OTTD 15.3) | N/A | gráficos: RailTypes `RTSG_SIGNALS` + Action5 `0x04` |
+| `0F` | Objects | runtime parcial | pendiente | catálogo `object_spec` |
 | `10` | Rail types | runtime parcial | runtime por sprite type | construcción/render + techo velocidad |
 | `11` | Airport tiles | pendiente | pendiente | — |
 | `12` | Road types | runtime parcial | runtime | construcción/render + techo velocidad |
 | `13` | Tram types | runtime parcial (mismo parser que Road) | pendiente | catálogo road (clase tram) |
-| `14` | Road stops | pendiente | pendiente | — |
-| `15` | Badges | pendiente | no aplica | — |
+| `14` | Road stops | runtime parcial | pendiente | catálogo `road_stop` |
+| `15` | Badges | runtime parcial | no aplica | catálogo `badge` |
 
 ## Propiedades comunes de vehículos
 
@@ -154,6 +154,51 @@ Fuente: `newgrf_act0_roadtypes.cpp` (TramTypes reutiliza el handler).
 | `09` flags tram (extensión local en RoadTypes) | **runtime** (bit0); en TramTypes `0x09` es string WORD consumido |
 | feature `13` | **runtime** parcial: parse/apply al catálogo road con `RoadTramType::Tram` |
 
+## Cargoes (`0B`)
+
+Fuente: `newgrf_act0_cargo.cpp`.
+
+| Props | Estado |
+|---|---|
+| `08` bitnum BYTE | **runtime** (catálogo) |
+| `17` label 4 chars | **runtime** (catálogo) |
+| `FE` nombre C-string (extensión local) | **runtime** (catálogo) |
+| resto | pendiente |
+
+## Objects (`0F`)
+
+Fuente: `newgrf_act0_objects.cpp`.
+
+| Props | Estado |
+|---|---|
+| `08` class label 4 chars | **runtime** (catálogo) |
+| `0C` size BYTE | **runtime** (catálogo) |
+| `FE` nombre C-string (extensión local) | **runtime** (catálogo) |
+| Action1/3 views | **runtime** parcial (si el GRF las trae) |
+| resto | pendiente |
+
+## Road stops (`14`)
+
+Fuente: `newgrf_act0_roadstops.cpp`.
+
+| Props | Estado |
+|---|---|
+| `08` class label 4 chars | **runtime** (catálogo) |
+| `09` stop type BYTE (`0` bus / `1` truck) | **runtime** (catálogo) |
+| `FE` nombre C-string (extensión local) | **runtime** (catálogo) |
+| Action1/3 views | **runtime** parcial (si el GRF las trae) |
+| resto | pendiente |
+
+## Badges (`15`)
+
+Fuente: `newgrf_act0_badges.cpp`.
+
+| Props | Estado |
+|---|---|
+| `08` label 4 chars (scaffold; OTTD usa C-string) | **runtime** (catálogo) |
+| `09` flags DWORD | **runtime** (catálogo) |
+| `FE` nombre C-string (extensión local) | **runtime** (catálogo; sustituye label) |
+
 ## Action3 de vehículos
 
 Los features `00`–`03` comparten el grafo Action1 → Action2 → Action3. El
@@ -169,7 +214,7 @@ en slots vecinos. Los tipos `A5BLOCK_INVALID` se inspeccionan, pero no se aplica
 
 | Tipo | Bloque 15.3 | Slots | Estado |
 |---:|---|---:|---|
-| `04` | signal graphics | — | pendiente (feature Signals / #255) |
+| `04` | signal graphics | 240 | **runtime** (#255; Action0 `0E` N/A en 15.3) |
 | `05` | catenary | 36 | **runtime** |
 | `06` | foundations | 90 | **runtime** |
 | `07` | TTDP GUI | — | ignorada por spec (no usada por OTTD) |

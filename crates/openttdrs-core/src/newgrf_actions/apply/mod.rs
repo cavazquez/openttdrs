@@ -5,9 +5,13 @@ use std::path::PathBuf;
 use crate::GameState;
 
 pub mod action5;
+pub mod badges;
+pub mod cargo;
 pub mod industry;
+pub mod objects;
 pub mod rail;
 pub mod road;
+pub mod roadstop;
 pub mod station;
 pub mod train;
 
@@ -29,8 +33,12 @@ pub fn default_newgrf_search_dirs() -> Vec<PathBuf> {
 pub fn apply_newgrf_stack_catalogs_default_dirs(state: &mut GameState) {
     road::apply_newgrf_road_types_default_dirs(state);
     station::apply_newgrf_stations_default_dirs(state);
+    roadstop::apply_newgrf_roadstops_default_dirs(state);
     train::apply_newgrf_vehicles_trains_default_dirs(state);
     industry::apply_newgrf_industry_tiles_default_dirs(state);
+    cargo::apply_newgrf_cargoes_default_dirs(state);
+    objects::apply_newgrf_objects_default_dirs(state);
+    badges::apply_newgrf_badges_default_dirs(state);
     rail::apply_newgrf_rail_signals_default_dirs(state);
     action5::apply_newgrf_action5_all_default_dirs(state);
 }

@@ -17,20 +17,36 @@ pub const ACTION0_FEATURE_AIRCRAFT: u8 = 0x03;
 pub const ACTION0_FEATURE_STATIONS: u8 = 0x04;
 /// Feature Action0: `IndustryTiles` (`OpenTTD` `GSF_INDUSTRYTILES`).
 pub const ACTION0_FEATURE_INDUSTRYTILES: u8 = 0x09;
+/// Feature Action0: `Cargoes` (`OpenTTD` `GSF_CARGOES`).
+pub const ACTION0_FEATURE_CARGOES: u8 = 0x0B;
+/// Feature Action0: `Objects` (`OpenTTD` `GSF_OBJECTS`).
+pub const ACTION0_FEATURE_OBJECTS: u8 = 0x0F;
 /// Feature Action0: `RailTypes` (`OpenTTD` `GSF_RAILTYPES`).
 pub const ACTION0_FEATURE_RAILTYPES: u8 = 0x10;
 /// Feature Action0: `RoadTypes` (`OpenTTD` `GSF_ROADTYPES`).
 pub const ACTION0_FEATURE_ROADTYPES: u8 = 0x12;
+/// Feature Action0: `RoadStops` (`OpenTTD` `GSF_ROADSTOPS`).
+pub const ACTION0_FEATURE_ROADSTOPS: u8 = 0x14;
+/// Feature Action0: `Badges` (`OpenTTD` `GSF_BADGES`).
+pub const ACTION0_FEATURE_BADGES: u8 = 0x15;
 
 /// `IndustryTiles`: substitute vanilla gfx (`prop 0x08`).
 const PROP_INDTILE_SUBST: u8 = 0x08;
 /// `IndustryTiles`: override vanilla gfx (`prop 0x09`).
 const PROP_INDTILE_OVERRIDE: u8 = 0x09;
 
-/// Prop etiqueta 4 chars (`RoadTypes` short / Stations class label).
+/// Prop etiqueta 4 chars (`RoadTypes` short / Stations class label / Badges / Objects / `RoadStops` class).
 const PROP_LABEL: u8 = 0x08;
-/// Prop flags (`RoadTypes`: bit0 = tram).
+/// Prop flags (`RoadTypes`: bit0 = tram; `Badges`: DWORD).
 const PROP_FLAGS: u8 = 0x09;
+/// `RoadStops`: tipo de parada BYTE (`0` bus / `1` truck; OTTD `0x09`).
+const PROP_ROADSTOP_STOP_TYPE: u8 = 0x09;
+/// Cargoes: bit number (`OpenTTD` `0x08`).
+const PROP_CARGO_BITNUM: u8 = 0x08;
+/// Cargoes: label 4 chars (`OpenTTD` `0x17`).
+const PROP_CARGO_LABEL: u8 = 0x17;
+/// Objects: size BYTE (`OpenTTD` `0x0C`).
+const PROP_OBJECT_SIZE: u8 = 0x0C;
 /// Stations: callback mask (`OpenTTD` 15.3; consumida).
 const PROP_STATION_CALLBACK_MASK: u8 = 0x0B;
 /// Stations: platforms disallowed bitmask (`OpenTTD` `0x0C`).
@@ -220,6 +236,42 @@ pub struct ParsedIndustryTileMeta {
     pub subst_id: u8,
     /// Override de gfx vanilla (`prop 0x09`).
     pub override_of: Option<u8>,
+}
+
+/// Metadatos `RoadStops` Action0 (antes de asignar IDs).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParsedRoadStopMeta {
+    pub class_short_label: String,
+    pub class_label: String,
+    pub short_label: String,
+    pub label: String,
+    /// `0` = bus, `1` = truck (común).
+    pub stop_type: u8,
+}
+
+/// Metadatos `Badges` Action0 (antes de asignar ID global).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParsedBadgeMeta {
+    pub label: String,
+    pub flags: u32,
+}
+
+/// Metadatos `Cargoes` Action0 (antes de registrar en catálogo).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParsedCargoMeta {
+    pub local_id: u8,
+    pub bitnum: u8,
+    pub label: String,
+    pub name: String,
+}
+
+/// Metadatos `Objects` Action0 (antes de asignar ID global).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParsedObjectMeta {
+    pub local_id: u8,
+    pub class_label: String,
+    pub name: String,
+    pub size: u8,
 }
 
 #[must_use]
@@ -704,6 +756,292 @@ pub fn collect_industry_tile_metas_from_grf(data: &[u8]) -> Vec<ParsedIndustryTi
     let mut out = Vec::new();
     let _ = for_each_pseudo_payload(data, |payload| {
         if let Some(meta) = parse_action0_industry_tile_meta(payload) {
+            out.push(meta);
+        }
+    });
+    out
+}
+
+/// Parsea Action0 `RoadStops` (`0x14`): class label 4 chars, stop type BYTE, nombre `0xFE`.
+#[must_use]
+pub fn parse_action0_roadstop_meta(payload: &[u8]) -> Option<ParsedRoadStopMeta> {
+    let header = parse_action0_header(payload)?;
+    if header.feature != ACTION0_FEATURE_ROADSTOPS || header.num_ids == 0 || payload.len() < 5 {
+        return None;
+    }
+    let mut i = 5usize;
+    let mut class_short = String::from("NGRF");
+    let mut label = String::new();
+    let mut stop_type = 0u8;
+    for _ in 0..header.num_props {
+        if i >= payload.len() {
+            break;
+        }
+        let prop = payload[i];
+        i += 1;
+        match prop {
+            PROP_LABEL => {
+                let Some(s) = read_four_char_label(payload, &mut i, "NGRF") else {
+                    break;
+                };
+                class_short = s;
+            }
+            PROP_ROADSTOP_STOP_TYPE => {
+                if i >= payload.len() {
+                    break;
+                }
+                stop_type = payload[i];
+                i += 1;
+            }
+            PROP_NAME_CSTRING => {
+                let Some(nul) = payload[i..].iter().position(|&b| b == 0) else {
+                    break;
+                };
+                label = String::from_utf8_lossy(&payload[i..i + nul]).to_string();
+                i += nul + 1;
+            }
+            _ => break,
+        }
+    }
+    Some(finish_parsed_roadstop_meta(class_short, label, stop_type))
+}
+
+fn finish_parsed_roadstop_meta(
+    class_short: String,
+    mut label: String,
+    stop_type: u8,
+) -> ParsedRoadStopMeta {
+    let short_label = {
+        let ascii: String = label
+            .chars()
+            .filter(char::is_ascii_alphanumeric)
+            .take(4)
+            .collect();
+        if ascii.is_empty() {
+            String::from("Stop")
+        } else {
+            ascii
+        }
+    };
+    if label.is_empty() {
+        label.clone_from(&short_label);
+    }
+    let class_label = class_short.clone();
+    ParsedRoadStopMeta {
+        class_short_label: class_short,
+        class_label,
+        short_label,
+        label,
+        stop_type,
+    }
+}
+
+#[must_use]
+pub fn collect_roadstop_metas_from_grf(data: &[u8]) -> Vec<ParsedRoadStopMeta> {
+    let mut out = Vec::new();
+    let _ = for_each_pseudo_payload(data, |payload| {
+        if let Some(meta) = parse_action0_roadstop_meta(payload) {
+            out.push(meta);
+        }
+    });
+    out
+}
+
+/// Parsea Action0 `Badges` (`0x15`): label 4 chars / `0xFE` nombre, flags DWORD.
+#[must_use]
+pub fn parse_action0_badge_meta(payload: &[u8]) -> Option<ParsedBadgeMeta> {
+    let header = parse_action0_header(payload)?;
+    if header.feature != ACTION0_FEATURE_BADGES || header.num_ids == 0 || payload.len() < 5 {
+        return None;
+    }
+    let mut i = 5usize;
+    let mut label = String::new();
+    let mut flags = 0u32;
+    for _ in 0..header.num_props {
+        if i >= payload.len() {
+            break;
+        }
+        let prop = payload[i];
+        i += 1;
+        match prop {
+            PROP_LABEL => {
+                let Some(s) = read_four_char_label(payload, &mut i, "BDGE") else {
+                    break;
+                };
+                label = s;
+            }
+            PROP_FLAGS => {
+                if i + 4 > payload.len() {
+                    break;
+                }
+                flags = u32::from_le_bytes([
+                    payload[i],
+                    payload[i + 1],
+                    payload[i + 2],
+                    payload[i + 3],
+                ]);
+                i += 4;
+            }
+            PROP_NAME_CSTRING => {
+                let Some(nul) = payload[i..].iter().position(|&b| b == 0) else {
+                    break;
+                };
+                label = String::from_utf8_lossy(&payload[i..i + nul]).to_string();
+                i += nul + 1;
+            }
+            _ => break,
+        }
+    }
+    if label.is_empty() {
+        return None;
+    }
+    Some(ParsedBadgeMeta { label, flags })
+}
+
+#[must_use]
+pub fn collect_badge_metas_from_grf(data: &[u8]) -> Vec<ParsedBadgeMeta> {
+    let mut out = Vec::new();
+    let _ = for_each_pseudo_payload(data, |payload| {
+        if let Some(meta) = parse_action0_badge_meta(payload) {
+            out.push(meta);
+        }
+    });
+    out
+}
+
+/// Parsea Action0 `Cargoes` (`0x0B`): bitnum, label 4 chars, nombre `0xFE`.
+#[must_use]
+pub fn parse_action0_cargo_meta(payload: &[u8]) -> Option<ParsedCargoMeta> {
+    let header = parse_action0_header(payload)?;
+    if header.feature != ACTION0_FEATURE_CARGOES || header.num_ids == 0 || payload.len() < 5 {
+        return None;
+    }
+    let local_id = payload[4];
+    let mut i = 5usize;
+    let mut bitnum = 0u8;
+    let mut label = String::new();
+    let mut name = String::new();
+    for _ in 0..header.num_props {
+        if i >= payload.len() {
+            break;
+        }
+        let prop = payload[i];
+        i += 1;
+        match prop {
+            PROP_CARGO_BITNUM => {
+                if i >= payload.len() {
+                    break;
+                }
+                bitnum = payload[i];
+                i += 1;
+            }
+            PROP_CARGO_LABEL => {
+                let Some(s) = read_four_char_label(payload, &mut i, "CARG") else {
+                    break;
+                };
+                label = s;
+            }
+            PROP_NAME_CSTRING => {
+                let Some(nul) = payload[i..].iter().position(|&b| b == 0) else {
+                    break;
+                };
+                name = String::from_utf8_lossy(&payload[i..i + nul]).to_string();
+                i += nul + 1;
+            }
+            _ => break,
+        }
+    }
+    if label.is_empty() {
+        return None;
+    }
+    if name.is_empty() {
+        name.clone_from(&label);
+    }
+    Some(ParsedCargoMeta {
+        local_id,
+        bitnum,
+        label,
+        name,
+    })
+}
+
+#[must_use]
+pub fn collect_cargo_metas_from_grf(data: &[u8]) -> Vec<ParsedCargoMeta> {
+    let mut out = Vec::new();
+    let _ = for_each_pseudo_payload(data, |payload| {
+        if let Some(meta) = parse_action0_cargo_meta(payload) {
+            out.push(meta);
+        }
+    });
+    out
+}
+
+/// Parsea Action0 `Objects` (`0x0F`): class label, size, nombre `0xFE`.
+#[must_use]
+pub fn parse_action0_object_meta(payload: &[u8]) -> Option<ParsedObjectMeta> {
+    let header = parse_action0_header(payload)?;
+    if header.feature != ACTION0_FEATURE_OBJECTS || header.num_ids == 0 || payload.len() < 5 {
+        return None;
+    }
+    let local_id = payload[4];
+    let mut i = 5usize;
+    let mut class_label = String::new();
+    let mut name = String::new();
+    let mut size = crate::object_spec::OBJECT_SIZE_1X1;
+    for _ in 0..header.num_props {
+        if i >= payload.len() {
+            break;
+        }
+        let prop = payload[i];
+        i += 1;
+        match prop {
+            PROP_LABEL => {
+                let Some(s) = read_four_char_label(payload, &mut i, "OBJT") else {
+                    break;
+                };
+                class_label = s;
+            }
+            PROP_OBJECT_SIZE => {
+                if i >= payload.len() {
+                    break;
+                }
+                size = payload[i];
+                i += 1;
+                let w = size & 0x0F;
+                let h = (size >> 4) & 0x0F;
+                if w == 0 || h == 0 {
+                    size = crate::object_spec::OBJECT_SIZE_1X1;
+                }
+            }
+            PROP_NAME_CSTRING => {
+                let Some(nul) = payload[i..].iter().position(|&b| b == 0) else {
+                    break;
+                };
+                name = String::from_utf8_lossy(&payload[i..i + nul]).to_string();
+                i += nul + 1;
+            }
+            _ => break,
+        }
+    }
+    if class_label.is_empty() {
+        return None;
+    }
+    if name.is_empty() {
+        name.clone_from(&class_label);
+    }
+    Some(ParsedObjectMeta {
+        local_id,
+        class_label,
+        name,
+        size,
+    })
+}
+
+#[must_use]
+pub fn collect_object_metas_from_grf(data: &[u8]) -> Vec<ParsedObjectMeta> {
+    let mut out = Vec::new();
+    let _ = for_each_pseudo_payload(data, |payload| {
+        if let Some(meta) = parse_action0_object_meta(payload) {
             out.push(meta);
         }
     });

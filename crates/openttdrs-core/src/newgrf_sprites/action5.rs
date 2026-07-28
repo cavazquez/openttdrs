@@ -31,6 +31,10 @@ pub const ACTION5_TYPE_AIRPORT_PREVIEW: u8 = 0x16;
 /// Tipo Action5: bridge decks (`0x1B`).
 pub const ACTION5_TYPE_BRIDGE_DECKS: u8 = 0x1B;
 
+/// `PRESIGNAL_SEMAPHORE_AND_PBS_SPRITE_COUNT` (Action5 tipo `0x04`).
+pub const SIGNAL_ACTION5_SLOT_COUNT: usize = 240;
+/// `SPR_SIGNALS_BASE` en el atlas cliente (`rail_5088..`).
+pub const SPR_SIGNALS_ACTION5_BASE: u32 = 5088;
 /// Slots `SPR_SHORE_BASE + 0..17`.
 pub const SHORE_ACTION5_SLOT_COUNT: usize = 18;
 /// Orden del bloque de 10 («missing shore sprites», `newgrf_act5.cpp`).
@@ -284,10 +288,26 @@ macro_rules! define_action5_merge {
 }
 
 define_action5_merge!(
+    merge_signals_action5_block,
+    ACTION5_TYPE_SIGNALS,
+    SIGNAL_ACTION5_SLOT_COUNT
+);
+define_action5_merge!(
     merge_foundation_action5_block,
     ACTION5_TYPE_FOUNDATIONS,
     FOUNDATION_ACTION5_SLOT_COUNT
 );
+
+/// Slot Action5 `0x04` para un `sprite_id` del banco `SPR_SIGNALS_BASE`.
+#[must_use]
+pub fn signal_action5_slot(sprite_id: u32) -> Option<usize> {
+    let base = SPR_SIGNALS_ACTION5_BASE;
+    let end = base + u32::try_from(SIGNAL_ACTION5_SLOT_COUNT).unwrap_or(0);
+    if !(sprite_id >= base && sprite_id < end) {
+        return None;
+    }
+    usize::try_from(sprite_id - base).ok()
+}
 define_action5_merge!(
     merge_oneway_action5_block,
     ACTION5_TYPE_ONEWAY,

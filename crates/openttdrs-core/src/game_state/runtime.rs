@@ -79,6 +79,9 @@ pub struct SimulationRuntime {
     /// Slots Action5 catenary `0x05` (wires/entrances/pylons; `None` = `OpenGFX`).
     pub catenary_newgrf_sprites: Vec<Option<crate::newgrf_sprites::DecodedSprite>>,
 
+    /// Slots Action5 signal graphics `0x04` (240; `None` = `OpenGFX`).
+    pub signal_action5_newgrf_sprites: Vec<Option<crate::newgrf_sprites::DecodedSprite>>,
+
     /// Slots Action5 foundations `0x06` (90; `None` = `OpenGFX`).
     pub foundation_newgrf_sprites: Vec<Option<crate::newgrf_sprites::DecodedSprite>>,
 
@@ -144,6 +147,7 @@ impl SimulationRuntime {
             parity: None,
             shore_newgrf_sprites: Vec::new(),
             catenary_newgrf_sprites: Vec::new(),
+            signal_action5_newgrf_sprites: Vec::new(),
             foundation_newgrf_sprites: Vec::new(),
             oneway_newgrf_sprites: Vec::new(),
             roadstop_action5_newgrf_sprites: Vec::new(),

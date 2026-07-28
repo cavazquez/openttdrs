@@ -21,7 +21,8 @@ use crate::sprites::{
     rail_trackbits_for_render, road_bits_for_render, road_flat_sprite_color,
     road_flat_sprite_index, road_tile_roadside, road_tile_snow_or_desert,
     road_tile_tram_visual_active, roadside_is_paved, signal_screen_anchor_for_side,
-    signal_screen_position_for_side, track_fence_draws_for_tile, tram_flat_sprite_index,
+    signal_screen_position_for_side, signal_sprite_center_offset, track_fence_draws_for_tile,
+    tram_flat_sprite_index,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -364,6 +365,7 @@ pub(crate) fn spawn_rail_tile(
     mut catenary_sprites: Option<&mut crate::render::NewGrfCatenarySpriteCache>,
     rail_signal_newgrf: &[Option<openttdrs_core::RailSignalSpriteSpec>],
     mut signal_sprites: Option<&mut crate::render::NewGrfSignalSpriteCache>,
+    signal_action5: &[Option<openttdrs_core::DecodedSprite>],
     foundation_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     mut action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
     mut images: Option<&mut Assets<Image>>,
@@ -577,6 +579,26 @@ pub(crate) fn spawn_rail_tile(
                     signals_on_right,
                 );
                 (custom.sprite, anchor + custom.center_offset)
+            } else if let Some(slot) = openttdrs_core::signal_action5_slot(draw.sprite_id)
+                && let (Some(cache), Some(images)) = (action5_sprites.as_mut(), images.as_mut())
+                && let Some(sprite) = cache.sprite_colored(
+                    openttdrs_core::ACTION5_TYPE_SIGNALS,
+                    slot,
+                    signal_action5,
+                    Color::WHITE,
+                    images,
+                )
+            {
+                let anchor = signal_screen_anchor_for_side(
+                    ctx.tx_i32(),
+                    ctx.ty_i32(),
+                    draw.pos,
+                    rail_half_h,
+                    rail_base_z,
+                    signals_on_right,
+                );
+                let offset = signal_sprite_center_offset(draw.sprite_id);
+                (sprite, anchor + offset)
             } else {
                 let Some(img) = assets.rail.get(&draw.sprite_id) else {
                     continue;

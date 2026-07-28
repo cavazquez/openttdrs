@@ -362,6 +362,9 @@ pub struct GameState {
     /// Catálogo Action0 `Badges` (`0x15`).
     #[serde(default)]
     pub badge_catalog: Vec<crate::badge::BadgeDef>,
+    /// Catálogo Action11 + Action0 `Sounds` (`0x0C`).
+    #[serde(default)]
+    pub sound_effect_catalog: Vec<crate::sound_effect::SoundEffectDef>,
     /// Catálogo Action0 `Cargoes` (`0x0B`); no altera [`crate::cargo::CargoType`].
     #[serde(default)]
     pub cargo_spec_catalog: Vec<crate::cargo_spec::CargoSpecDef>,
@@ -573,6 +576,7 @@ impl GameState {
             industry_tile_spec_catalog: Vec::new(),
             industry_tile_overrides: crate::industry_tile::empty_industry_tile_overrides(),
             badge_catalog: Vec::new(),
+            sound_effect_catalog: Vec::new(),
             cargo_spec_catalog: Vec::new(),
             object_spec_catalog: Vec::new(),
             current_object_spec: 0,
@@ -675,6 +679,7 @@ impl GameState {
             industry_tile_spec_catalog: Vec::new(),
             industry_tile_overrides: crate::industry_tile::empty_industry_tile_overrides(),
             badge_catalog: Vec::new(),
+            sound_effect_catalog: Vec::new(),
             cargo_spec_catalog: Vec::new(),
             object_spec_catalog: Vec::new(),
             current_object_spec: 0,

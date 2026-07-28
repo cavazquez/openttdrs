@@ -12,6 +12,7 @@ pub mod objects;
 pub mod rail;
 pub mod road;
 pub mod roadstop;
+pub mod sounds;
 pub mod station;
 pub mod train;
 
@@ -41,6 +42,7 @@ pub fn apply_newgrf_stack_catalogs_default_dirs(state: &mut GameState) {
     industry::apply_newgrf_industry_tiles_default_dirs(state);
     cargo::apply_newgrf_cargoes_default_dirs(state);
     objects::apply_newgrf_objects_default_dirs(state);
+    sounds::apply_newgrf_sounds_default_dirs(state);
     rail::apply_newgrf_rail_signals_default_dirs(state);
     action5::apply_newgrf_action5_all_default_dirs(state);
 }

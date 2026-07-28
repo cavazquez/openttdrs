@@ -145,7 +145,10 @@ pub fn consist_changed_with_map(
         }
         // Compatible railtypes: solo unidades con potencia propia (no powered wagons).
         if eng.power_hp > 0 && !v.powered_wagon {
-            let rt = required_rail_type_for_engine(eng.id);
+            let rt = eng
+                .required_rail_type
+                .map(RailType::from_u8)
+                .unwrap_or_else(|| required_rail_type_for_engine(eng.id));
             compatible_railtypes |= powered_railtypes_mask(rt);
         }
     }
@@ -168,16 +171,10 @@ pub fn consist_changed_with_map(
         head.capacity = total_cap;
         head.cached_power_hp = total_power;
         head.cached_weight_t = total_weight.max(1);
-        let te_coeff = head
-            .engine_id
-            .map_or(75, crate::engine::vanilla_train_tractive_effort);
+        let te_coeff = crate::engine::engine_tractive_effort(head_eng);
         head.cached_max_te_n = crate::engine::train_max_te_n(head.cached_weight_t, te_coeff);
-        let display_max = head
-            .engine_id
-            .and_then(crate::engine::engine_by_id)
-            .map_or(128, |e| e.max_speed);
         let parts = u32::try_from(ids.len()).unwrap_or(1);
-        head.cached_air_drag = crate::engine::train_default_air_drag(display_max, parts);
+        head.cached_air_drag = crate::engine::engine_air_drag(head_eng, parts);
         head.cached_tilt = tilt;
         head.cached_curve_speed_mod = curve_mod;
         head.cached_max_speed = max_speed;

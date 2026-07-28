@@ -8,6 +8,7 @@
 //! - `Objects` (0x0F) → `object_spec_catalog`
 //! - `RoadStops` (0x14) → `road_stop_class_catalog` / `road_stop_spec_catalog`
 //! - `Badges` (0x15) → `badge_catalog`
+//! - `Sounds` (0x0C) → `sound_effect_catalog` (samples Action11)
 
 pub mod action0;
 pub mod apply;
@@ -18,19 +19,19 @@ pub use action0::{
     ACTION0_FEATURE_AIRCRAFT, ACTION0_FEATURE_BADGES, ACTION0_FEATURE_CARGOES,
     ACTION0_FEATURE_INDUSTRYTILES, ACTION0_FEATURE_OBJECTS, ACTION0_FEATURE_RAILTYPES,
     ACTION0_FEATURE_ROAD_VEHICLES, ACTION0_FEATURE_ROADSTOPS, ACTION0_FEATURE_ROADTYPES,
-    ACTION0_FEATURE_SHIPS, ACTION0_FEATURE_STATIONS, ACTION0_FEATURE_TRAINS,
-    ACTION0_FEATURE_TRAMTYPES, Action0Header, ParsedBadgeMeta, ParsedCargoMeta,
-    ParsedIndustryTileMeta, ParsedObjectMeta, ParsedRailTypeMeta, ParsedRoadStopMeta,
-    ParsedRoadTypeMeta, ParsedStationMeta, ParsedTrainMeta, ParsedVehicleMeta,
-    collect_badge_metas_from_grf, collect_cargo_metas_from_grf,
+    ACTION0_FEATURE_SHIPS, ACTION0_FEATURE_SOUNDS, ACTION0_FEATURE_STATIONS,
+    ACTION0_FEATURE_TRAINS, ACTION0_FEATURE_TRAMTYPES, Action0Header, ParsedBadgeMeta,
+    ParsedCargoMeta, ParsedIndustryTileMeta, ParsedObjectMeta, ParsedRailTypeMeta,
+    ParsedRoadStopMeta, ParsedRoadTypeMeta, ParsedSoundMeta, ParsedStationMeta, ParsedTrainMeta,
+    ParsedVehicleMeta, collect_badge_metas_from_grf, collect_cargo_metas_from_grf,
     collect_industry_tile_metas_from_grf, collect_object_metas_from_grf,
     collect_railtype_metas_from_grf, collect_roadstop_metas_from_grf,
-    collect_roadtype_metas_from_grf, collect_station_metas_from_grf, collect_train_metas_from_grf,
-    collect_vehicle_metas_from_grf, for_each_pseudo_payload, parse_action0_badge_meta,
-    parse_action0_cargo_meta, parse_action0_header, parse_action0_industry_tile_meta,
-    parse_action0_object_meta, parse_action0_railtype_metas, parse_action0_roadstop_meta,
-    parse_action0_roadtype_meta, parse_action0_station_meta, parse_action0_train_meta,
-    parse_action0_vehicle_metas,
+    collect_roadtype_metas_from_grf, collect_sound_metas_from_grf, collect_station_metas_from_grf,
+    collect_train_metas_from_grf, collect_vehicle_metas_from_grf, for_each_pseudo_payload,
+    parse_action0_badge_meta, parse_action0_cargo_meta, parse_action0_header,
+    parse_action0_industry_tile_meta, parse_action0_object_meta, parse_action0_railtype_metas,
+    parse_action0_roadstop_meta, parse_action0_roadtype_meta, parse_action0_sound_meta,
+    parse_action0_station_meta, parse_action0_train_meta, parse_action0_vehicle_metas,
 };
 
 pub use apply::{
@@ -54,6 +55,7 @@ pub use apply::{
     rail::{apply_newgrf_rail_signals, apply_newgrf_rail_signals_default_dirs},
     road::{apply_newgrf_road_types, apply_newgrf_road_types_default_dirs},
     roadstop::{apply_newgrf_roadstops, apply_newgrf_roadstops_default_dirs},
+    sounds::{apply_newgrf_sounds, apply_newgrf_sounds_default_dirs},
     station::{apply_newgrf_stations, apply_newgrf_stations_default_dirs},
     train::{apply_newgrf_vehicles_trains, apply_newgrf_vehicles_trains_default_dirs},
 };
@@ -432,6 +434,88 @@ fn append_badge_association_prop(p: &mut Vec<u8>, badge_labels: &[[u8; 4]]) {
     for label in badge_labels.iter().take(usize::from(count)) {
         p.extend_from_slice(label);
     }
+}
+
+/// Action0 `Sounds` (`0x0C`): volume `0x08`, priority `0x09`, override opcional `0x0A`.
+#[must_use]
+pub fn build_action0_sound_payload(
+    local_id: u8,
+    volume: u8,
+    priority: u8,
+    override_old: Option<u8>,
+) -> Vec<u8> {
+    let num_props = if override_old.is_some() { 3u8 } else { 2u8 };
+    let mut p = vec![
+        0x00,
+        ACTION0_FEATURE_SOUNDS,
+        num_props,
+        0x01,
+        local_id,
+        0x08,
+        volume,
+        0x09,
+        priority,
+    ];
+    if let Some(old) = override_old {
+        p.push(0x0A);
+        p.push(old);
+    }
+    p
+}
+
+/// Payload Action11 fixture: `0x11`, count, luego N× (`WORD` size LE + PCM).
+#[must_use]
+pub fn build_action11_sounds_payload(samples: &[&[u8]]) -> Vec<u8> {
+    let count = u8::try_from(samples.len()).unwrap_or(u8::MAX);
+    let mut p = vec![0x11, count];
+    for sample in samples.iter().take(usize::from(count)) {
+        let size = u16::try_from(sample.len()).unwrap_or(u16::MAX);
+        p.extend_from_slice(&size.to_le_bytes());
+        p.extend_from_slice(&sample[..usize::from(size)]);
+    }
+    p
+}
+
+/// GRF v2 con Action11 samples + Action0 Sounds + Action8 (fixtures #254).
+#[must_use]
+pub fn build_grf_v2_with_action11_sounds_and_action0(
+    samples: &[&[u8]],
+    action0s: &[&[u8]],
+    grfid: [u8; 4],
+    name: &str,
+) -> Vec<u8> {
+    const SIG: [u8; 8] = [b'G', b'R', b'F', 0x82, 0x0D, 0x0A, 0x1A, 0x0A];
+    let action11 = build_action11_sounds_payload(samples);
+    let mut action8 = vec![0x08, 0x07];
+    action8.extend_from_slice(&grfid);
+    action8.extend_from_slice(name.as_bytes());
+    action8.push(0);
+    action8.push(0); // description vacío
+
+    let mut data_section = Vec::new();
+    for payload in std::iter::once(action11.as_slice()).chain(action0s.iter().copied()) {
+        let size = u32::try_from(payload.len()).unwrap_or(0);
+        data_section.extend_from_slice(&size.to_le_bytes());
+        data_section.push(0xFF);
+        data_section.extend_from_slice(payload);
+    }
+    {
+        let size = u32::try_from(action8.len()).unwrap_or(0);
+        data_section.extend_from_slice(&size.to_le_bytes());
+        data_section.push(0xFF);
+        data_section.extend_from_slice(&action8);
+    }
+    data_section.extend_from_slice(&0u32.to_le_bytes());
+
+    let sprite_offs = u32::try_from(1 + data_section.len()).unwrap_or(0);
+    let mut out = Vec::new();
+    out.extend_from_slice(&[0x00, 0x00]);
+    out.extend_from_slice(&SIG);
+    out.extend_from_slice(&sprite_offs.to_le_bytes());
+    out.push(0x00);
+    out.extend_from_slice(&data_section);
+    out.extend_from_slice(&0u32.to_le_bytes());
+    out
 }
 
 /// GRF v2 con varios Action0 + Action8 (tests multi-feature / multi-id).
@@ -2375,6 +2459,293 @@ mod tests {
                 .unwrap()
                 .name,
             "Pax Custom"
+        );
+    }
+
+    #[test]
+    fn sounds_ac_register_and_play() {
+        let pcm: &[u8] = &[0x10, 0x20, 0x30, 0x40];
+        let a0 = build_action0_sound_payload(0, 64, 10, None);
+        let bytes =
+            build_grf_v2_with_action11_sounds_and_action0(&[pcm], &[&a0], [b'S', b'F', 0, 1], "sfx");
+        let dir = tempfile_dir_with("sfx.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("sfx.grf", 0x5346_0001));
+        apply_newgrf_sounds(&mut state, &[&dir]);
+
+        let def = crate::sound_effect_def(&state.sound_effect_catalog, 0x5346_0001, 0).unwrap();
+        assert!(def.has_sample);
+        assert_eq!(def.volume, 64);
+        assert_eq!(def.priority, 10);
+        assert_eq!(def.sample_pcm, pcm);
+        assert!((crate::effective_volume(def) - 0.5).abs() < f32::EPSILON);
+
+        assert!(crate::play_newgrf_sound(&mut state, 0x5346_0001, 0).is_ok());
+        assert_eq!(state.runtime.pending_newgrf_sounds.len(), 1);
+        assert_eq!(state.runtime.pending_newgrf_sounds[0].grfid, 0x5346_0001);
+        assert_eq!(state.runtime.pending_newgrf_sounds[0].local_id, 0);
+        assert!((state.runtime.pending_newgrf_sounds[0].volume - 0.5).abs() < f32::EPSILON);
+        assert_eq!(state.runtime.pending_newgrf_sounds[0].priority, 10);
+
+        let report = inspect_grf_bytes(&bytes).unwrap();
+        assert!(report.action0_features.contains(&ACTION0_FEATURE_SOUNDS));
+        assert!(report.sound_local_ids.contains(&0));
+    }
+
+    #[test]
+    fn sounds_ac_two_grfs_isolate_local_ids() {
+        let pcm_a: &[u8] = &[1, 2, 3];
+        let pcm_b: &[u8] = &[9, 8, 7, 6];
+        let a0_a = build_action0_sound_payload(0, 32, 1, None);
+        let a0_b = build_action0_sound_payload(0, 96, 2, None);
+        let bytes_a = build_grf_v2_with_action11_sounds_and_action0(
+            &[pcm_a],
+            &[&a0_a],
+            [b'S', b'A', 0, 1],
+            "sa",
+        );
+        let bytes_b = build_grf_v2_with_action11_sounds_and_action0(
+            &[pcm_b],
+            &[&a0_b],
+            [b'S', b'B', 0, 2],
+            "sb",
+        );
+        let dir_a = tempfile_dir_with("sa.grf", &bytes_a);
+        let dir_b = tempfile_dir_with("sb.grf", &bytes_b);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("sa.grf", 0x5341_0001));
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("sb.grf", 0x5342_0002));
+        apply_newgrf_sounds(&mut state, &[&dir_a, &dir_b]);
+
+        assert_eq!(state.sound_effect_catalog.len(), 2);
+        let a = crate::sound_effect_def(&state.sound_effect_catalog, 0x5341_0001, 0).unwrap();
+        let b = crate::sound_effect_def(&state.sound_effect_catalog, 0x5342_0002, 0).unwrap();
+        assert_eq!(a.sample_pcm, pcm_a);
+        assert_eq!(a.volume, 32);
+        assert_eq!(b.sample_pcm, pcm_b);
+        assert_eq!(b.volume, 96);
+        assert_ne!(a.sample_pcm, b.sample_pcm);
+    }
+
+    #[test]
+    fn sounds_ac_invalid_missing_sample() {
+        let a0 = build_action0_sound_payload(0, 128, 0, None);
+        let bytes = build_grf_v2_with_action0_and_action8(&a0, [b'S', b'M', 0, 1], "nosamp", "");
+        let dir = tempfile_dir_with("nosamp.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("nosamp.grf", 0x534D_0001));
+        apply_newgrf_sounds(&mut state, &[&dir]);
+
+        assert!(
+            state
+                .runtime
+                .newgrf_diagnostics
+                .iter()
+                .any(|d| d.contains("missing sample") && d.contains("local_id=0"))
+        );
+        assert_eq!(
+            crate::play_newgrf_sound(&mut state, 0x534D_0001, 0),
+            Err(crate::SoundPlayError::InvalidSample)
+        );
+        assert!(state.runtime.pending_newgrf_sounds.is_empty());
+    }
+
+    #[test]
+    fn sounds_ac_truncated_action11_diagnostic() {
+        // count=2 pero solo un sample completo → truncated.
+        let mut action11 = vec![0x11, 2];
+        action11.extend_from_slice(&3u16.to_le_bytes());
+        action11.extend_from_slice(&[1, 2, 3]);
+        // segundo sample: size pedida sin bytes suficientes
+        action11.extend_from_slice(&8u16.to_le_bytes());
+        let a0 = build_action0_sound_payload(0, 128, 0, Some(12));
+        const SIG: [u8; 8] = [b'G', b'R', b'F', 0x82, 0x0D, 0x0A, 0x1A, 0x0A];
+        let mut action8 = vec![0x08, 0x07];
+        action8.extend_from_slice(&[b'S', b'T', 0, 1]);
+        action8.extend_from_slice(b"trunc\0\0");
+        let mut data_section = Vec::new();
+        for payload in [action11.as_slice(), a0.as_slice(), action8.as_slice()] {
+            let size = u32::try_from(payload.len()).unwrap_or(0);
+            data_section.extend_from_slice(&size.to_le_bytes());
+            data_section.push(0xFF);
+            data_section.extend_from_slice(payload);
+        }
+        data_section.extend_from_slice(&0u32.to_le_bytes());
+        let sprite_offs = u32::try_from(1 + data_section.len()).unwrap_or(0);
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&[0x00, 0x00]);
+        bytes.extend_from_slice(&SIG);
+        bytes.extend_from_slice(&sprite_offs.to_le_bytes());
+        bytes.push(0x00);
+        bytes.extend_from_slice(&data_section);
+        bytes.extend_from_slice(&0u32.to_le_bytes());
+
+        let dir = tempfile_dir_with("trunc.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("trunc.grf", 0x5354_0001));
+        apply_newgrf_sounds(&mut state, &[&dir]);
+
+        assert!(
+            state
+                .runtime
+                .newgrf_diagnostics
+                .iter()
+                .any(|d| d.contains("Action11 truncated"))
+        );
+        // Sample 0 sí llegó; override baseset LevelCrossing (12).
+        assert!(crate::play_newgrf_sound(&mut state, 0x5354_0001, 0).is_ok());
+        assert_eq!(
+            state.runtime.sound_overrides[12],
+            Some((0x5354_0001, 0))
+        );
+        state.runtime.pending_newgrf_sounds.clear();
+        assert!(crate::play_sound_or_override(&mut state, crate::SoundId::LevelCrossing).is_ok());
+        assert_eq!(state.runtime.pending_newgrf_sounds.len(), 1);
+    }
+
+    /// #249: Vehicles AC — TE, railtype y refit mask en runtime.
+    #[test]
+    fn vehicles_ac_train_te_railtype_refit_mask() {
+        // Bits temperate: Passengers=0, Coal=1 → mask 0x0003.
+        let a0 = vec![
+            0x00,
+            ACTION0_FEATURE_TRAINS,
+            0x04,
+            0x01,
+            0x00,
+            0x05,
+            0x01, // required_rail_type = Electric
+            0x1F,
+            200, // tractive_effort
+            0x1D,
+            0x03,
+            0x00, // refit_mask WORD
+            0xFE,
+            b'T',
+            b'E',
+            0,
+        ];
+        let meta = parse_action0_train_meta(&a0).unwrap();
+        assert_eq!(meta.required_rail_type, Some(1));
+        assert_eq!(meta.tractive_effort, 200);
+        assert_eq!(meta.refit_mask, 3);
+
+        let bytes = build_grf_v2_with_action0_and_action8(&a0, [b'T', b'E', 0, 1], "te", "");
+        let dir = tempfile_dir_with("te.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state.newgrf_stack.push(crate::NewGrfEntry::new("te.grf", 1));
+        apply_newgrf_vehicles_trains(&mut state, &[&dir]);
+        let eng = state.engine_catalog.iter().find(|e| e.from_newgrf).unwrap();
+        assert_eq!(eng.required_rail_type, Some(1));
+        assert_eq!(eng.tractive_effort, 200);
+        assert_eq!(eng.refit_mask, 3);
+        assert_eq!(crate::engine_tractive_effort(eng), 200);
+        assert!(!crate::engine_compatible_with_rail(eng, crate::RailType::Rail));
+        assert!(crate::engine_compatible_with_rail(
+            eng,
+            crate::RailType::Electric
+        ));
+        let cargos = crate::refittable_cargo_types_for_engine(eng);
+        assert_eq!(
+            cargos,
+            vec![crate::CargoType::Passengers, crate::CargoType::Coal]
+        );
+
+        // Truncated Action0: no panic.
+        assert!(
+            parse_action0_train_meta(&[0x00, ACTION0_FEATURE_TRAINS, 0x01, 0x01, 0x00, 0x1F])
+                .is_none()
+        );
+        assert!(
+            parse_action0_train_meta(&[0x00, ACTION0_FEATURE_TRAINS, 0x01, 0x01, 0x00, 0x1D, 0x01])
+                .is_none()
+        );
+    }
+
+    /// #249: Vehicles AC — flag helicóptero aircraft prop 0x09.
+    #[test]
+    fn vehicles_ac_aircraft_heli_flag() {
+        let a0 = vec![
+            0x00,
+            ACTION0_FEATURE_AIRCRAFT,
+            0x01,
+            0x01,
+            0x00,
+            0x09,
+            0x01,
+        ];
+        let meta = parse_action0_vehicle_metas(&a0).unwrap().remove(0);
+        assert!(meta.is_helicopter);
+
+        let bytes = build_grf_v2_with_action0_and_action8(&a0, [b'H', b'E', 0, 1], "heli", "");
+        let dir = tempfile_dir_with("heli.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("heli.grf", 1));
+        apply_newgrf_vehicles_trains(&mut state, &[&dir]);
+        let eng = state
+            .engine_catalog
+            .iter()
+            .find(|e| e.from_newgrf && e.kind == VehicleKind::Aircraft)
+            .unwrap();
+        assert!(eng.is_helicopter);
+        assert!(crate::aircraft_is_helicopter_def(eng));
+        assert!(
+            parse_action0_vehicle_metas(&[0x00, ACTION0_FEATURE_AIRCRAFT, 0x01, 0x01, 0x00, 0x09])
+                .is_none()
+        );
+    }
+
+    /// #249: Vehicles AC — fracciones de velocidad océano/canal.
+    #[test]
+    fn vehicles_ac_ship_speed_fracs() {
+        let a0 = vec![
+            0x00,
+            ACTION0_FEATURE_SHIPS,
+            0x03,
+            0x01,
+            0x00,
+            0x0B,
+            100, // max_speed
+            0x14,
+            128, // ocean = 50%
+            0x15,
+            64, // canal = 25%
+        ];
+        let meta = parse_action0_vehicle_metas(&a0).unwrap().remove(0);
+        assert_eq!(meta.ocean_speed_frac, 128);
+        assert_eq!(meta.canal_speed_frac, 64);
+
+        let bytes = build_grf_v2_with_action0_and_action8(&a0, [b'S', b'P', 0, 1], "ship", "");
+        let dir = tempfile_dir_with("shipf.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("shipf.grf", 1));
+        apply_newgrf_vehicles_trains(&mut state, &[&dir]);
+        let eng = state
+            .engine_catalog
+            .iter()
+            .find(|e| e.from_newgrf && e.kind == VehicleKind::Ship)
+            .unwrap();
+        assert_eq!(eng.ocean_speed_frac, 128);
+        assert_eq!(eng.canal_speed_frac, 64);
+        assert_eq!(crate::ship_speed_for_tile(eng, false), 50);
+        assert_eq!(crate::ship_speed_for_tile(eng, true), 25);
+        assert!(
+            parse_action0_vehicle_metas(&[0x00, ACTION0_FEATURE_SHIPS, 0x01, 0x01, 0x00, 0x14])
+                .is_none()
         );
     }
 

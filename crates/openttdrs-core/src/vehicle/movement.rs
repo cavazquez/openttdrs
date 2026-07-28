@@ -1,10 +1,9 @@
 //! Lógica de movimiento del vehículo: step, progress, dirección, velocidad.
 
 use crate::engine::{
-    ROAD_ACCEL_ORIGINAL, TrainAccelerationModel, decelerate_road_speed, get_advance_distance,
-    progress_step_for_speed, train_default_air_drag, train_max_te_n,
-    train_realistic_station_max_speed, update_road_speed, update_train_speed,
-    vanilla_train_tractive_effort,
+    ROAD_ACCEL_ORIGINAL, TrainAccelerationModel, decelerate_road_speed, engine_air_drag,
+    engine_tractive_effort, get_advance_distance, progress_step_for_speed, ship_speed_for_tile,
+    train_max_te_n, train_realistic_station_max_speed, update_road_speed, update_train_speed,
 };
 use crate::map::{Map, TileCoord, slope_pixel_z};
 use crate::rail_type::rail_type_from_tile;
@@ -422,13 +421,12 @@ impl super::model::Vehicle {
         let te = if self.cached_max_te_n > 0 {
             self.cached_max_te_n
         } else {
-            let te_coeff = vanilla_train_tractive_effort(engine.id);
-            train_max_te_n(weight, te_coeff)
+            train_max_te_n(weight, engine_tractive_effort(engine))
         };
         let air = if self.cached_air_drag > 0 {
             self.cached_air_drag
         } else {
-            train_default_air_drag(engine.max_speed, 1)
+            engine_air_drag(engine, 1)
         };
         update_train_speed(
             self.cur_speed,
@@ -569,12 +567,12 @@ impl super::model::Vehicle {
         let te = if self.cached_max_te_n > 0 {
             self.cached_max_te_n
         } else {
-            train_max_te_n(weight, vanilla_train_tractive_effort(engine.id))
+            train_max_te_n(weight, engine_tractive_effort(engine))
         };
         let air = if self.cached_air_drag > 0 {
             self.cached_air_drag
         } else {
-            train_default_air_drag(engine.max_speed, 1)
+            engine_air_drag(engine, 1)
         };
         for _ in 0..2 {
             let r = update_train_speed(
@@ -781,6 +779,12 @@ impl super::model::Vehicle {
     fn update_movement_speed(&mut self, map: Option<&Map>, train_accel: TrainAccelerationModel) {
         let engine = self.effective_engine();
         let mut max_speed = engine.max_speed;
+        if self.kind == super::model::VehicleKind::Ship
+            && let Some(map) = map
+        {
+            let is_canal = map.get(self.pos).is_some_and(crate::map::is_canal_tile);
+            max_speed = ship_speed_for_tile(engine, is_canal);
+        }
         if let Some(map) = map
             && let Some(bridge_cap) = crate::bridge_spec::bridge_max_speed_for_tile(map, self.pos)
         {
@@ -805,12 +809,12 @@ impl super::model::Vehicle {
             let te = if self.cached_max_te_n > 0 {
                 self.cached_max_te_n
             } else {
-                train_max_te_n(weight, vanilla_train_tractive_effort(engine.id))
+                train_max_te_n(weight, engine_tractive_effort(engine))
             };
             let air = if self.cached_air_drag > 0 {
                 self.cached_air_drag
             } else {
-                train_default_air_drag(engine.max_speed, 1)
+                engine_air_drag(engine, 1)
             };
             let r = update_train_speed(
                 self.cur_speed,

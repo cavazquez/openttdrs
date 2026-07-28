@@ -80,6 +80,36 @@ pub struct EngineDef {
     /// Procedente de Action0 Vehicles `NewGRF`.
     #[serde(default)]
     pub from_newgrf: bool,
+    /// Action0 train `0x1F`: coeficiente de esfuerzo tractor (`0` = vanilla).
+    #[serde(default)]
+    pub tractive_effort: u8,
+    /// Action0 train `0x20`: coeficiente de arrastre (`0` = fórmula por velocidad).
+    #[serde(default)]
+    pub air_drag: u8,
+    /// Action0 train `0x21`: acorta la longitud visual (`8 - shorten_factor`).
+    #[serde(default)]
+    pub shorten_factor: u8,
+    /// Action0 train `0x05`: índice `RailType` 0..3 (`None` = lookup vanilla por id).
+    #[serde(default)]
+    pub required_rail_type: Option<u8>,
+    /// Action0 train `0x1D`: bitmask de cargos temperate (`0` = lista vanilla por kind).
+    #[serde(default)]
+    pub refit_mask: u32,
+    /// Action0 aircraft `0x09`: helicóptero.
+    #[serde(default)]
+    pub is_helicopter: bool,
+    /// Action0 aircraft `0x0A`: avión grande.
+    #[serde(default)]
+    pub is_large_aircraft: bool,
+    /// Action0 ship `0x14`: fracción de velocidad en océano (`0` = 256/256).
+    #[serde(default)]
+    pub ocean_speed_frac: u8,
+    /// Action0 ship `0x15`: fracción de velocidad en canal (`0` = 256/256).
+    #[serde(default)]
+    pub canal_speed_frac: u8,
+    /// Action0 RV `0x12` / ship `0x10` / aircraft `0x12` (`0`/`0xFF` = default).
+    #[serde(default)]
+    pub sound_effect: u8,
     /// Vistas Action1 (1..=8); vacías = sin gfx `NewGRF`. No se serializa en saves.
     #[serde(default, skip)]
     pub newgrf_views: Vec<crate::newgrf_sprites::DecodedSprite>,

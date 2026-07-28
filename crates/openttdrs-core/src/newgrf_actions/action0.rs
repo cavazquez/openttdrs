@@ -19,6 +19,8 @@ pub const ACTION0_FEATURE_STATIONS: u8 = 0x04;
 pub const ACTION0_FEATURE_INDUSTRYTILES: u8 = 0x09;
 /// Feature Action0: `Cargoes` (`OpenTTD` `GSF_CARGOES`).
 pub const ACTION0_FEATURE_CARGOES: u8 = 0x0B;
+/// Feature Action0: `Sounds` (`OpenTTD` `GSF_SOUNDFX`).
+pub const ACTION0_FEATURE_SOUNDS: u8 = 0x0C;
 /// Feature Action0: `Objects` (`OpenTTD` `GSF_OBJECTS`).
 pub const ACTION0_FEATURE_OBJECTS: u8 = 0x0F;
 /// Feature Action0: `RailTypes` (`OpenTTD` `GSF_RAILTYPES`).
@@ -49,6 +51,12 @@ const PROP_ROADSTOP_FLAGS: u8 = 0x12;
 const PROP_CARGO_BITNUM: u8 = 0x08;
 /// Cargoes: label 4 chars (`OpenTTD` `0x17`).
 const PROP_CARGO_LABEL: u8 = 0x17;
+/// Sounds: relative volume BYTE (`OpenTTD` `0x08`; default 128).
+const PROP_SOUND_VOLUME: u8 = 0x08;
+/// Sounds: priority BYTE (`OpenTTD` `0x09`).
+const PROP_SOUND_PRIORITY: u8 = 0x09;
+/// Sounds: override old SoundId BYTE (`OpenTTD` `0x0A`).
+const PROP_SOUND_OVERRIDE: u8 = 0x0A;
 /// Objects: climate mask BYTE (`OpenTTD` `0x0B`).
 const PROP_OBJECT_CLIMATE: u8 = 0x0B;
 /// Objects: size BYTE (`OpenTTD` `0x0C`).
@@ -146,6 +154,11 @@ pub struct ParsedTrainMeta {
     pub pow_wag_weight: u16,
     pub rail_tilts: bool,
     pub curve_speed_mod: i16,
+    pub tractive_effort: u8,
+    pub air_drag: u8,
+    pub shorten_factor: u8,
+    pub required_rail_type: Option<u8>,
+    pub refit_mask: u32,
 }
 
 /// Subset de propiedades Action0 que alimenta el catálogo jugable de vehículos.
@@ -170,6 +183,11 @@ pub struct ParsedVehicleMeta {
     pub climate_mask: u8,
     pub load_amount: u8,
     pub reliability_spd_dec: u16,
+    pub is_helicopter: bool,
+    pub is_large_aircraft: bool,
+    pub ocean_speed_frac: u8,
+    pub canal_speed_frac: u8,
+    pub sound_effect: u8,
 }
 
 impl ParsedVehicleMeta {
@@ -235,6 +253,11 @@ impl ParsedVehicleMeta {
             } else {
                 crate::engine::DEFAULT_RELIABILITY_SPD_DEC
             },
+            is_helicopter: false,
+            is_large_aircraft: false,
+            ocean_speed_frac: 0,
+            canal_speed_frac: 0,
+            sound_effect: 0,
         })
     }
 }
@@ -322,6 +345,15 @@ pub struct ParsedCargoMeta {
     pub capacity_multiplier: u16,
     pub rating_colour: u8,
     pub legend_colour: u8,
+}
+
+/// Metadatos `Sounds` Action0 (`0x0C`; props sobre samples Action11).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParsedSoundMeta {
+    pub local_id: u8,
+    pub volume: u8,
+    pub priority: u8,
+    pub override_old: Option<u8>,
 }
 
 /// Metadatos `Objects` Action0 (antes de asignar ID global).
@@ -1237,6 +1269,68 @@ pub fn collect_badge_metas_from_grf(data: &[u8]) -> Vec<ParsedBadgeMeta> {
     out
 }
 
+/// Parsea Action0 `Sounds` (`0x0C`): volume `0x08`, priority `0x09`, override `0x0A`.
+#[must_use]
+pub fn parse_action0_sound_meta(payload: &[u8]) -> Option<ParsedSoundMeta> {
+    let header = parse_action0_header(payload)?;
+    if header.feature != ACTION0_FEATURE_SOUNDS || header.num_ids == 0 || payload.len() < 5 {
+        return None;
+    }
+    let local_id = payload[4];
+    let mut i = 5usize;
+    let mut volume = 128u8;
+    let mut priority = 0u8;
+    let mut override_old = None;
+    for _ in 0..header.num_props {
+        if i >= payload.len() {
+            break;
+        }
+        let prop = payload[i];
+        i += 1;
+        match prop {
+            PROP_SOUND_VOLUME => {
+                if i >= payload.len() {
+                    break;
+                }
+                volume = payload[i].min(128);
+                i += 1;
+            }
+            PROP_SOUND_PRIORITY => {
+                if i >= payload.len() {
+                    break;
+                }
+                priority = payload[i];
+                i += 1;
+            }
+            PROP_SOUND_OVERRIDE => {
+                if i >= payload.len() {
+                    break;
+                }
+                override_old = Some(payload[i]);
+                i += 1;
+            }
+            _ => break,
+        }
+    }
+    Some(ParsedSoundMeta {
+        local_id,
+        volume,
+        priority,
+        override_old,
+    })
+}
+
+#[must_use]
+pub fn collect_sound_metas_from_grf(data: &[u8]) -> Vec<ParsedSoundMeta> {
+    let mut out = Vec::new();
+    let _ = for_each_pseudo_payload(data, |payload| {
+        if let Some(meta) = parse_action0_sound_meta(payload) {
+            out.push(meta);
+        }
+    });
+    out
+}
+
 /// Parsea Action0 `Cargoes` (`0x0B`): bitnum, label, pagos, clases, nombre `0xFE`.
 #[must_use]
 pub fn parse_action0_cargo_meta(payload: &[u8]) -> Option<ParsedCargoMeta> {
@@ -1550,6 +1644,11 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
     let mut pow_wag_weight = 0u16;
     let mut rail_tilts = false;
     let mut curve_speed_mod = 0i16;
+    let mut tractive_effort = 0u8;
+    let mut air_drag = 0u8;
+    let mut shorten_factor = 0u8;
+    let mut required_rail_type = None;
+    let mut refit_mask = 0u32;
     for _ in 0..header.num_props {
         if i >= payload.len() {
             break;
@@ -1573,6 +1672,12 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
             }
             0x04 => {
                 model_life_years = read_u8(payload, &mut i)?;
+            }
+            0x05 => {
+                let v = read_u8(payload, &mut i)?;
+                if v < 4 {
+                    required_rail_type = Some(v);
+                }
             }
             0x06 => {
                 climate_mask = read_u8(payload, &mut i)?;
@@ -1623,6 +1728,19 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
             0x1B => {
                 pow_wag_power = u32::from(read_u16(payload, &mut i)?);
             }
+            0x1D => {
+                // Fixtures locales: WORD (bits bajos del bitmask temperate).
+                refit_mask = u32::from(read_u16(payload, &mut i)?);
+            }
+            0x1F => {
+                tractive_effort = read_u8(payload, &mut i)?;
+            }
+            0x20 => {
+                air_drag = read_u8(payload, &mut i)?;
+            }
+            0x21 => {
+                shorten_factor = read_u8(payload, &mut i)?;
+            }
             0x23 => {
                 pow_wag_weight = u16::from(read_u8(payload, &mut i)?);
             }
@@ -1640,15 +1758,15 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
                 curve_speed_mod = i16::from_le_bytes(read_u16(payload, &mut i)?.to_le_bytes());
             }
             // Anchos fijos restantes consumidos sin semántica runtime.
-            0x08 | 0x0A | 0x0C | 0x0F | 0x10 | 0x11 | 0x18 | 0x19 | 0x1C | 0x1E | 0x1F | 0x20
-            | 0x21 | 0x22 | 0x25 | 0x26 | 0x31 => {
+            0x08 | 0x0A | 0x0C | 0x0F | 0x10 | 0x11 | 0x18 | 0x19 | 0x1C | 0x1E | 0x22
+            | 0x25 | 0x26 | 0x31 => {
                 skip_bytes(payload, &mut i, 1)?;
             }
             0x1A => {
                 // Extended byte sort order: BYTE en fixtures locales.
                 skip_bytes(payload, &mut i, 1)?;
             }
-            0x1D | 0x28 | 0x29 | 0x2B | 0x2F => {
+            0x28 | 0x29 | 0x2B | 0x2F => {
                 skip_bytes(payload, &mut i, 2)?;
             }
             // 0x0E running cost base; 0x2A/0x30 listas/DWORD: consumidas.
@@ -1707,6 +1825,11 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
         pow_wag_weight,
         rail_tilts,
         curve_speed_mod,
+        tractive_effort,
+        air_drag,
+        shorten_factor,
+        required_rail_type,
+        refit_mask,
     })
 }
 
@@ -1803,8 +1926,7 @@ fn parse_road_vehicle_property(
         // 0x0A/0x16/0x1F/0x27: dword props aún no mapeadas al runtime.
         0x0A | 0x16 | 0x1F | 0x27 => skip_bytes(payload, i, metas.len().checked_mul(4)?)?,
         // 0x05 translation table; 0x20/0x28 extended byte (fixtures usan BYTE).
-        0x05 | 0x0E | 0x12 | 0x17 | 0x18 | 0x19 | 0x1A | 0x1B | 0x1C | 0x20 | 0x21 | 0x23
-        | 0x28 => {
+        0x05 | 0x0E | 0x17 | 0x18 | 0x19 | 0x1A | 0x1B | 0x1C | 0x20 | 0x21 | 0x23 | 0x28 => {
             skip_bytes(payload, i, metas.len())?;
         }
         0x0F => {
@@ -1826,6 +1948,11 @@ fn parse_road_vehicle_property(
         0x11 => {
             for meta in metas {
                 meta.price_factor = read_u8(payload, i)?;
+            }
+        }
+        0x12 => {
+            for meta in metas {
+                meta.sound_effect = read_u8(payload, i)?;
             }
         }
         0x13 => {
@@ -1853,7 +1980,7 @@ fn parse_ship_property(
     metas: &mut [ParsedVehicleMeta],
 ) -> Option<()> {
     match prop {
-        0x08 | 0x09 | 0x10 | 0x12 | 0x13 | 0x14 | 0x15 | 0x16 | 0x17 | 0x1C | 0x24 => {
+        0x08 | 0x09 | 0x12 | 0x13 | 0x16 | 0x17 | 0x1C | 0x24 => {
             skip_bytes(payload, i, metas.len())?;
         }
         0x0A => {
@@ -1881,7 +2008,22 @@ fn parse_ship_property(
                 meta.running_cost_factor = read_u8(payload, i)?;
             }
         }
+        0x10 => {
+            for meta in metas {
+                meta.sound_effect = read_u8(payload, i)?;
+            }
+        }
         0x11 | 0x1A | 0x21 => skip_bytes(payload, i, metas.len().checked_mul(4)?)?,
+        0x14 => {
+            for meta in metas {
+                meta.ocean_speed_frac = read_u8(payload, i)?;
+            }
+        }
+        0x15 => {
+            for meta in metas {
+                meta.canal_speed_frac = read_u8(payload, i)?;
+            }
+        }
         0x18 | 0x19 | 0x1D | 0x20 | 0x25 => {
             skip_bytes(payload, i, metas.len().checked_mul(2)?)?;
         }
@@ -1903,8 +2045,18 @@ fn parse_aircraft_property(
     metas: &mut [ParsedVehicleMeta],
 ) -> Option<()> {
     match prop {
-        0x08 | 0x09 | 0x0A | 0x0D | 0x12 | 0x14 | 0x15 | 0x16 | 0x17 | 0x1B | 0x22 => {
+        0x08 | 0x0D | 0x14 | 0x15 | 0x16 | 0x17 | 0x1B | 0x22 => {
             skip_bytes(payload, i, metas.len())?;
+        }
+        0x09 => {
+            for meta in metas {
+                meta.is_helicopter = read_u8(payload, i)? != 0;
+            }
+        }
+        0x0A => {
+            for meta in metas {
+                meta.is_large_aircraft = read_u8(payload, i)? != 0;
+            }
         }
         0x0B => {
             for meta in metas {
@@ -1927,6 +2079,11 @@ fn parse_aircraft_property(
             }
         }
         0x11 => skip_bytes(payload, i, metas.len())?, // mail capacity: EngineDef has one cargo
+        0x12 => {
+            for meta in metas {
+                meta.sound_effect = read_u8(payload, i)?;
+            }
+        }
         0x13 | 0x1A | 0x21 => skip_bytes(payload, i, metas.len().checked_mul(4)?)?,
         0x18 | 0x19 | 0x1C | 0x1F | 0x20 | 0x23 => {
             skip_bytes(payload, i, metas.len().checked_mul(2)?)?;

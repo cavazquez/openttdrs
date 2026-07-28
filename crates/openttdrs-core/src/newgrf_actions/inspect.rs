@@ -7,8 +7,9 @@ use crate::newgrf_walk::{GrfEntry, walk_grf_entries};
 
 use super::action0::{
     ACTION0_FEATURE_BADGES, ACTION0_FEATURE_CARGOES, ACTION0_FEATURE_OBJECTS,
-    ACTION0_FEATURE_ROADSTOPS, parse_action0_badge_meta, parse_action0_cargo_meta,
-    parse_action0_header, parse_action0_object_meta, parse_action0_roadstop_meta,
+    ACTION0_FEATURE_ROADSTOPS, ACTION0_FEATURE_SOUNDS, parse_action0_badge_meta,
+    parse_action0_cargo_meta, parse_action0_header, parse_action0_object_meta,
+    parse_action0_roadstop_meta, parse_action0_sound_meta,
 };
 
 /// Resumen de un bloque Action5 para Inspeccionar.
@@ -36,6 +37,8 @@ pub struct GrfInspectReport {
     pub badge_associations: Vec<String>,
     /// Labels de cargos Action0 `0x0B` (`LABEL` + nombre).
     pub cargo_labels: Vec<String>,
+    /// Local ids de sonidos Action0 `0x0C`.
+    pub sound_local_ids: Vec<u8>,
 }
 
 impl GrfInspectReport {
@@ -81,6 +84,14 @@ impl GrfInspectReport {
         }
         if !self.cargo_labels.is_empty() {
             lines.push(format!("Cargoes: {}", self.cargo_labels.join(", ")));
+        }
+        if !self.sound_local_ids.is_empty() {
+            let ids: Vec<_> = self
+                .sound_local_ids
+                .iter()
+                .map(|id| format!("{id}"))
+                .collect();
+            lines.push(format!("Sounds: {}", ids.join(", ")));
         }
         if !self.action5_slots.is_empty() {
             let slots: Vec<_> = self
@@ -203,6 +214,13 @@ fn inspect_action0_feature(payload: &[u8], feature: u8, report: &mut GrfInspectR
                 if !report.cargo_labels.iter().any(|l| l == &entry) {
                     report.cargo_labels.push(entry);
                 }
+            }
+        }
+        ACTION0_FEATURE_SOUNDS => {
+            if let Some(meta) = parse_action0_sound_meta(payload)
+                && !report.sound_local_ids.contains(&meta.local_id)
+            {
+                report.sound_local_ids.push(meta.local_id);
             }
         }
         ACTION0_FEATURE_ROADSTOPS => {

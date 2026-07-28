@@ -7,7 +7,7 @@ use std::collections::{HashSet, VecDeque};
 /// Todos los campos aquí tienen `#[serde(skip)]` implícito por no estar en
 /// `GameState` serializado. Estos datos no aparecen en el save JSON y deben
 /// reconstruirse/limpiarse tras cargar un save.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct SimulationRuntime {
     /// `VehicleID -> slot` y topología de consists, reconstruidos una vez por tick.
     pub fleet_index: crate::fleet_index::FleetIndex,
@@ -131,6 +131,20 @@ pub struct SimulationRuntime {
     /// Diagnósticos NewGRF del último apply (listas truncadas, badges inválidos, …).
     /// No se persiste; se reconstruye al reaplicar el stack.
     pub newgrf_diagnostics: Vec<String>,
+
+    /// Overrides baseset [`crate::SoundId`] → `(grfid, local_id)` NewGRF (Action0 prop `0x0A`).
+    /// Índice = `SoundId` 0..72; reconstruido al aplicar Sounds.
+    pub sound_overrides: [Option<(u32, u8)>; crate::sound_id::SOUND_COUNT],
+
+    /// Cola de reproducción NewGRF (drenable por cliente / tests; no se persiste).
+    /// El cliente puede drenar a Bevy Audio más adelante; la AC se valida en core.
+    pub pending_newgrf_sounds: Vec<crate::sound_effect::PendingNewgrfSound>,
+}
+
+impl Default for SimulationRuntime {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl SimulationRuntime {
@@ -177,6 +191,8 @@ impl SimulationRuntime {
             station_flow_rebuilds: 0,
             command_recorder: None,
             newgrf_diagnostics: Vec::new(),
+            sound_overrides: [None; crate::sound_id::SOUND_COUNT],
+            pending_newgrf_sounds: Vec::new(),
         }
     }
 
@@ -191,5 +207,6 @@ impl SimulationRuntime {
         self.signal_globset.clear();
         self.reservation_tile_dirty.clear();
         self.pending_news_events.clear();
+        self.pending_newgrf_sounds.clear();
     }
 }

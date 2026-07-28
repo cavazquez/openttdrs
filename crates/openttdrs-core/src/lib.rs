@@ -70,6 +70,7 @@ pub mod ship_movement;
 mod sign;
 mod sim_events;
 mod sim_step;
+pub mod sound_effect;
 pub mod sound_id;
 pub mod station;
 pub mod station_action2;
@@ -194,15 +195,17 @@ pub use engine::{
     ENGINE_TRAIN_X2001, ENGINE_TRUCK_MPS, ENGINE_WAGON_COAL, ENGINE_WAGON_GOODS, ENGINE_WAGON_MAIL,
     ENGINE_WAGON_PASSENGER, EngineCatalogSort, EngineDef, NEWGRF_ENGINE_ID_BASE,
     REFERENCE_PROGRESS_STEP, ROAD_ACCEL_ORIGINAL, RoadEngineFilter, TrainAccelerationModel,
-    accelerate_train_speed, aircraft_is_helicopter, aircraft_is_jet, decelerate_road_speed,
-    decelerate_train_speed, default_engine_id, do_update_speed, engine_available_in_year,
-    engine_by_id, engine_catalog, engine_for_vehicle, engine_in_catalog, engines_for_depot_kind,
-    engines_for_depot_kind_in, engines_for_depot_purchase, engines_of_kind, get_advance_distance,
-    get_advance_speed, get_curve_speed_limit, next_free_engine_id, progress_step_for_speed,
-    tile_progress_length, train_acceleration, train_default_air_drag, train_max_te_n,
-    train_realistic_acceleration, train_realistic_station_max_speed, train_smoke_kind,
-    train_sprite_group, train_visual_progress_from_motion, train_visual_progress_from_pixel,
-    update_road_speed, update_train_speed, vanilla_engine_catalog, vanilla_train_tractive_effort,
+    accelerate_train_speed, aircraft_is_helicopter, aircraft_is_helicopter_def, aircraft_is_jet,
+    decelerate_road_speed, decelerate_train_speed, default_engine_id, do_update_speed,
+    engine_air_drag, engine_available_in_year, engine_by_id, engine_catalog, engine_for_vehicle,
+    engine_in_catalog, engine_tractive_effort, engines_for_depot_kind, engines_for_depot_kind_in,
+    engines_for_depot_purchase, engines_of_kind, get_advance_distance, get_advance_speed,
+    get_curve_speed_limit, next_free_engine_id, progress_step_for_speed, scale_train_air_drag,
+    ship_speed_for_tile, tile_progress_length, train_acceleration, train_default_air_drag,
+    train_max_te_n, train_realistic_acceleration, train_realistic_station_max_speed,
+    train_smoke_kind, train_sprite_group, train_visual_progress_from_motion,
+    train_visual_progress_from_pixel, update_road_speed, update_train_speed, vanilla_engine_catalog,
+    vanilla_train_tractive_effort,
 };
 pub use entity_history::{
     ENTITY_HISTORY_MONTHS, IndustryHistory, IndustryHistorySample, TownHistory, TownHistorySample,
@@ -292,32 +295,34 @@ pub use house_spec::{HouseSpec, get_town_radius_group, pick_town_house_id};
 pub use newgrf_actions::{
     ACTION0_FEATURE_BADGES, ACTION0_FEATURE_CARGOES, ACTION0_FEATURE_INDUSTRYTILES,
     ACTION0_FEATURE_OBJECTS, ACTION0_FEATURE_RAILTYPES, ACTION0_FEATURE_ROADSTOPS,
-    ACTION0_FEATURE_ROADTYPES, ACTION0_FEATURE_STATIONS, ACTION0_FEATURE_TRAINS,
-    ACTION0_FEATURE_TRAMTYPES, Action0Header, Action5SlotSummary, GrfInspectReport,
-    ParsedBadgeMeta, ParsedCargoMeta, ParsedIndustryTileMeta, ParsedObjectMeta, ParsedRailTypeMeta,
-    ParsedRoadStopMeta, ParsedRoadTypeMeta, ParsedStationMeta, ParsedTrainMeta,
-    apply_newgrf_action5_airport_preview, apply_newgrf_action5_airport_preview_default_dirs,
-    apply_newgrf_action5_all_default_dirs, apply_newgrf_action5_bridge_decks,
-    apply_newgrf_action5_bridge_decks_default_dirs, apply_newgrf_action5_catenary,
-    apply_newgrf_action5_catenary_default_dirs, apply_newgrf_action5_foundations,
-    apply_newgrf_action5_foundations_default_dirs, apply_newgrf_action5_oneway,
-    apply_newgrf_action5_oneway_default_dirs, apply_newgrf_action5_openttd_gui,
-    apply_newgrf_action5_openttd_gui_default_dirs, apply_newgrf_action5_roadstops,
-    apply_newgrf_action5_roadstops_default_dirs, apply_newgrf_action5_shore,
-    apply_newgrf_action5_shore_default_dirs, apply_newgrf_action5_signals,
-    apply_newgrf_action5_signals_default_dirs, apply_newgrf_badges,
-    apply_newgrf_badges_default_dirs, apply_newgrf_cargoes, apply_newgrf_cargoes_default_dirs,
-    apply_newgrf_industry_tiles, apply_newgrf_industry_tiles_default_dirs, apply_newgrf_objects,
+    ACTION0_FEATURE_ROADTYPES, ACTION0_FEATURE_SOUNDS, ACTION0_FEATURE_STATIONS,
+    ACTION0_FEATURE_TRAINS, ACTION0_FEATURE_TRAMTYPES, Action0Header, Action5SlotSummary,
+    GrfInspectReport, ParsedBadgeMeta, ParsedCargoMeta, ParsedIndustryTileMeta, ParsedObjectMeta,
+    ParsedRailTypeMeta, ParsedRoadStopMeta, ParsedRoadTypeMeta, ParsedSoundMeta, ParsedStationMeta,
+    ParsedTrainMeta, apply_newgrf_action5_airport_preview,
+    apply_newgrf_action5_airport_preview_default_dirs, apply_newgrf_action5_all_default_dirs,
+    apply_newgrf_action5_bridge_decks, apply_newgrf_action5_bridge_decks_default_dirs,
+    apply_newgrf_action5_catenary, apply_newgrf_action5_catenary_default_dirs,
+    apply_newgrf_action5_foundations, apply_newgrf_action5_foundations_default_dirs,
+    apply_newgrf_action5_oneway, apply_newgrf_action5_oneway_default_dirs,
+    apply_newgrf_action5_openttd_gui, apply_newgrf_action5_openttd_gui_default_dirs,
+    apply_newgrf_action5_roadstops, apply_newgrf_action5_roadstops_default_dirs,
+    apply_newgrf_action5_shore, apply_newgrf_action5_shore_default_dirs,
+    apply_newgrf_action5_signals, apply_newgrf_action5_signals_default_dirs,
+    apply_newgrf_badges, apply_newgrf_badges_default_dirs, apply_newgrf_cargoes,
+    apply_newgrf_cargoes_default_dirs, apply_newgrf_industry_tiles,
+    apply_newgrf_industry_tiles_default_dirs, apply_newgrf_objects,
     apply_newgrf_objects_default_dirs, apply_newgrf_rail_signals,
     apply_newgrf_rail_signals_default_dirs, apply_newgrf_road_types,
     apply_newgrf_road_types_default_dirs, apply_newgrf_roadstops,
-    apply_newgrf_roadstops_default_dirs, apply_newgrf_stack_catalogs_default_dirs,
-    apply_newgrf_stations, apply_newgrf_stations_default_dirs, apply_newgrf_vehicles_trains,
+    apply_newgrf_roadstops_default_dirs, apply_newgrf_sounds, apply_newgrf_sounds_default_dirs,
+    apply_newgrf_stack_catalogs_default_dirs, apply_newgrf_stations,
+    apply_newgrf_stations_default_dirs, apply_newgrf_vehicles_trains,
     apply_newgrf_vehicles_trains_default_dirs, inspect_grf_bytes, inspect_grf_file,
     parse_action0_badge_meta, parse_action0_cargo_meta, parse_action0_header,
     parse_action0_industry_tile_meta, parse_action0_object_meta, parse_action0_railtype_metas,
-    parse_action0_roadstop_meta, parse_action0_roadtype_meta, parse_action0_station_meta,
-    parse_action0_train_meta,
+    parse_action0_roadstop_meta, parse_action0_roadtype_meta, parse_action0_sound_meta,
+    parse_action0_station_meta, parse_action0_train_meta,
 };
 pub use newgrf_config::{
     GrfContainerVersion, GrfFileInfo, GrfParsed, GrfScanError, GrfStackIssue, MAX_NEWGRF_PARAMS,
@@ -417,8 +422,8 @@ pub use rail_type::{
     required_rail_type_for_engine, set_rail_type_on_tile, tile_usable_by_rail_type,
 };
 pub use refit::{
-    next_refit_cargo, refit_allowed, refittable_cargo_types, vehicle_hidden_from_view,
-    vehicle_hidden_in_tunnel, vehicle_hidden_on_map, vehicle_in_depot,
+    next_refit_cargo, refit_allowed, refittable_cargo_types, refittable_cargo_types_for_engine,
+    vehicle_hidden_from_view, vehicle_hidden_in_tunnel, vehicle_hidden_on_map, vehicle_in_depot,
 };
 pub use road_action2::action2_eval_ctx_for_road_tile;
 pub use road_movement::{
@@ -468,6 +473,11 @@ pub use sim_events::{
     ConstructionKind, DisasterKind, SimEvent, SimEventQueue, TrainSmokeKind, VehicleRunningPhase,
 };
 pub use sim_step::{TickPhaseTimings, step_profiled};
+pub use sound_effect::{
+    CollectedSoundSamples, PendingNewgrfSound, SoundEffectDef, SoundPlayError,
+    clamp_sound_volume, collect_sound_samples_from_grf, effective_volume,
+    empty_sound_effect_catalog, play_newgrf_sound, play_sound_or_override, sound_effect_def,
+};
 pub use sound_id::SoundId;
 pub use station::{
     CargoTimeSincePickup, GoodsEntry, INITIAL_STATION_RATING, MAX_TIME_SINCE_PICKUP_DAYS,

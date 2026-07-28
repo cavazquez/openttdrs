@@ -135,8 +135,51 @@ pub fn train_default_air_drag(display_max_speed: u16, consist_parts: u32) -> u32
     } else {
         std::cmp::max(2048 / u32::from(display_max_speed.max(1)), 1)
     };
+    scale_train_air_drag(air_drag, consist_parts)
+}
+
+/// Escala el coeficiente base con el número de unidades (`PowerChanged`).
+#[must_use]
+pub fn scale_train_air_drag(air_drag: u32, consist_parts: u32) -> u32 {
     let parts = consist_parts.max(1);
     air_drag + 3 * air_drag * parts / 20
+}
+
+/// Arrastre efectivo: Action0 `0x20` si ≠0; si no, fórmula por velocidad.
+#[must_use]
+pub fn engine_air_drag(engine: &super::EngineDef, consist_parts: u32) -> u32 {
+    if engine.air_drag != 0 {
+        scale_train_air_drag(u32::from(engine.air_drag), consist_parts)
+    } else {
+        train_default_air_drag(engine.max_speed, consist_parts)
+    }
+}
+
+/// Esfuerzo tractor: Action0 `0x1F` si ≠0; si no, tabla vanilla por id.
+#[must_use]
+pub fn engine_tractive_effort(engine: &super::EngineDef) -> u8 {
+    if engine.tractive_effort != 0 {
+        engine.tractive_effort
+    } else {
+        vanilla_train_tractive_effort(engine.id)
+    }
+}
+
+/// Velocidad máxima de barco según tesela (océano vs canal). `frac == 0` → 256/256.
+#[must_use]
+pub fn ship_speed_for_tile(engine: &super::EngineDef, is_canal: bool) -> u16 {
+    let frac = if is_canal {
+        engine.canal_speed_frac
+    } else {
+        engine.ocean_speed_frac
+    };
+    let frac = if frac == 0 {
+        256u32
+    } else {
+        u32::from(frac)
+    };
+    let speed = u32::from(engine.max_speed).saturating_mul(frac) / 256;
+    u16::try_from(speed).unwrap_or(u16::MAX).max(1)
 }
 
 /// Esfuerzo tractor máximo en N (`PowerChanged`: `weight * TE * g / 256`).

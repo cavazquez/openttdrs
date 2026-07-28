@@ -298,7 +298,10 @@ pub fn engine_compatible_with_rail(engine: &EngineDef, rail_type: RailType) -> b
     if !engine.is_train_engine() && !engine.is_wagon() {
         return true;
     }
-    let required = required_rail_type_for_engine(engine.id);
+    let required = engine
+        .required_rail_type
+        .map(RailType::from_u8)
+        .unwrap_or_else(|| required_rail_type_for_engine(engine.id));
     match required {
         RailType::Rail => matches!(rail_type, RailType::Rail | RailType::Electric),
         other => other == rail_type,

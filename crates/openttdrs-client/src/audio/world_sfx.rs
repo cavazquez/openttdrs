@@ -1,4 +1,8 @@
 //! SFX espaciales del mundo (OpenSFX completo) con mixer de 8 canales.
+//!
+//! NewGRF (#254): la cola `GameState.runtime.pending_newgrf_sounds` se valida en
+//! core (`play_newgrf_sound`). Un drenado futuro a `AudioSource` PCM puede
+//! engancharse aquí sin cambiar el catálogo.
 
 use bevy::prelude::*;
 

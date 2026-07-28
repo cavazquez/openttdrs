@@ -26,7 +26,7 @@ Estados:
 | `09` | Industry tiles | runtime parcial | runtime | construcción/render industria |
 | `0A` | Industries | pendiente | pendiente | — |
 | `0B` | Cargoes | runtime | pendiente | catálogo `cargo_spec` → pagos/capacidad/UI |
-| `0C` | Sound effects | pendiente | pendiente | — |
+| `0C` | Sound effects | runtime | no aplica | catálogo `sound_effect` + cola play; samples Action11 |
 | `0D` | Airports | pendiente | pendiente | — |
 | `0E` | Signals | ignorada por spec (null en OTTD 15.3; #255) | N/A | gráficos: RailTypes `RTSG_SIGNALS` + Action5 `0x04`; estilo en `m2` save/load |
 | `0F` | Objects | runtime | runtime | catálogo `object_spec`; build+render multitile |
@@ -56,6 +56,7 @@ Fuente: `newgrf_act0_trains.cpp`.
 
 | Props | Estado |
 |---|---|
+| `05` track type BYTE | **runtime** (`required_rail_type` 0..3; `engine_compatible_with_rail`) |
 | `09` velocidad WORD | **runtime** |
 | `0B` potencia WORD | **runtime** |
 | `0D` running cost factor | **runtime** |
@@ -66,10 +67,14 @@ Fuente: `newgrf_act0_trains.cpp`.
 | `16`/`24` peso BYTE/high | **runtime** (`weight_t`) |
 | `17` cost factor | **runtime** |
 | `1B` powered wagon power | **runtime** |
+| `1D` refit mask WORD | **runtime** (`refit_mask` → `refittable_cargo_types_for_engine`) |
+| `1F` tractive effort BYTE | **runtime** (`tractive_effort` → `engine_tractive_effort`) |
+| `20` air drag BYTE | **runtime** (`air_drag` → `engine_air_drag` / consist) |
+| `21` shorten factor BYTE | **runtime** (almacenado en `EngineDef.shorten_factor`) |
 | `23` powered wagon weight | **runtime** |
 | `27` misc flags (bit0 `RailTilts`) | **runtime** (`rail_tilts`) |
 | `2E` curve speed mod | **runtime** |
-| `0E`, `08`, `0A`, `0C`, `0F`–`11`, `18`–`1A`, `1C`–`22`, `25`–`26`, `28`–`2D`, `2F`–`31` | consumidas (ancho fijo / CTT / callbacks) |
+| `0E`, `08`, `0A`, `0C`, `0F`–`11`, `18`–`1A`, `1C`, `1E`, `22`, `25`–`26`, `28`–`2D`, `2F`–`31` | consumidas (ancho fijo / CTT / callbacks) |
 
 ## Road vehicles (`01`)
 
@@ -82,9 +87,10 @@ Fuente: `newgrf_act0_roadvehs.cpp`.
 | `0F` capacidad | **runtime** |
 | `10` carga default | **runtime**; pasajeros selecciona Bus, el resto Truck |
 | `11` cost factor | **runtime** |
+| `12` sound effect BYTE | **runtime** (`sound_effect`; `0`/`0xFF` = default) |
 | `13` potencia (×10 HP) | **runtime** |
 | `14` peso (cuartos de tonelada) | **runtime** |
-| `05`, `0A`, `0E`, `12`, `16`–`1F`, `21`–`29` | consumidas cuando tienen ancho fijo; semántica pendiente |
+| `05`, `0A`, `0E`, `16`–`1F`, `21`–`29` | consumidas cuando tienen ancho fijo; semántica pendiente |
 | `20`, `24`, `25`, `2A` | pendiente: extended/listas variables |
 
 ## Ships (`02`)
@@ -98,7 +104,10 @@ Fuente: `newgrf_act0_ships.cpp`.
 | `0C` carga default | **runtime** |
 | `0D` capacidad WORD | **runtime** |
 | `0F` running cost factor | **runtime** |
-| `08`, `09`, `10`–`1D`, `20`–`26` restantes | consumidas si tienen ancho fijo; semántica pendiente |
+| `10` sound effect BYTE | **runtime** (`sound_effect`) |
+| `14` ocean speed fraction | **runtime** (`ocean_speed_frac` → `ship_speed_for_tile`) |
+| `15` canal speed fraction | **runtime** (`canal_speed_frac` → `ship_speed_for_tile`) |
+| `08`, `09`, `11`–`13`, `16`–`1D`, `20`–`26` restantes | consumidas si tienen ancho fijo; semántica pendiente |
 | `1E`, `1F` | pendiente: listas CTT variables |
 
 ## Aircraft (`03`)
@@ -107,11 +116,14 @@ Fuente: `newgrf_act0_aircraft.cpp`.
 
 | Props | Estado |
 |---|---|
+| `09` helicopter flag | **runtime** (`is_helicopter` → `aircraft_is_helicopter_def`) |
+| `0A` large aircraft flag | **runtime** (`is_large_aircraft`) |
 | `0B` cost factor | **runtime** |
 | `0C` velocidad (conversión `×128/10`) | **runtime** |
 | `0E` running cost factor | **runtime** |
 | `0F` capacidad de pasajeros | **runtime** |
-| `08`–`0A`, `0D`, `11`–`1C`, `1F`–`24` restantes | consumidas si tienen ancho fijo; semántica pendiente |
+| `12` sound effect BYTE | **runtime** (`sound_effect`) |
+| `08`, `0D`, `11`, `13`–`1C`, `1F`–`24` restantes | consumidas si tienen ancho fijo; semántica pendiente |
 | `1D`, `1E` | pendiente: listas CTT variables |
 
 ## Stations (`04`)
@@ -231,6 +243,25 @@ Fuente: `newgrf_act0_roadstops.cpp` / `newgrf_roadstop.h`.
 | drive-through `m5`=`RSV_*` 4/5 | **runtime** (colocación + connect eje X/Y) |
 | `grfid` + `newgrf_local_id` | **runtime** (save/load + rebind tras re-apply multi-GRF) |
 | resto (`0x0A`–`0x0B`, `0x0D`–`0x11`, `0x13`–`0x16`) | consumidas (ancho fijo) / pendiente |
+
+## Sound effects (`0C`)
+
+Fuente: `newgrf_act0_sound.cpp` / Action11 (`newgrf_sound.cpp`).
+
+Action0 `0C` solo ajusta volume/priority/override sobre samples registrados vía
+Action11. Identidad runtime: `(grfid, local_id)` — dos GRFs con el mismo
+`local_id` no se contaminan. Formato fixture Action11: `0x11`, count, luego
+N× (`WORD` size LE + PCM mono u8). Action0 sin sample o Action11 truncado →
+`GameState.runtime.newgrf_diagnostics`. Reproducción observable:
+`play_newgrf_sound` / `pending_newgrf_sounds` (cliente Bevy puede drenar después).
+`override_old` (`0x0A`) rellena `runtime.sound_overrides[SoundId]`.
+
+| Props | Estado |
+|---|---|
+| Action11 samples | **runtime** (PCM + `has_sample`) |
+| `08` relative volume BYTE | **runtime** (default 128; clamp `0..=128`) |
+| `09` priority BYTE | **runtime** |
+| `0A` override old SoundId BYTE | **runtime** (`sound_overrides` si `< SOUND_COUNT`) |
 
 ## Badges (`15`)
 

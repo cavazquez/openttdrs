@@ -35,7 +35,11 @@ pub(super) fn set_vehicle_order_list(
                 if vehicle_kind == VehicleKind::Aircraft
                     && let Some(engine_id) = aircraft_engine_id
                 {
-                    let is_heli = crate::engine::aircraft_is_helicopter(engine_id);
+                    let is_heli = crate::engine::engine_in_catalog(&state.engine_catalog, engine_id)
+                        .map_or_else(
+                            || crate::engine::aircraft_is_helicopter(engine_id),
+                            crate::engine::aircraft_is_helicopter_def,
+                        );
                     if !crate::airport_class::airport_allows_aircraft(st.airport_spec, is_heli) {
                         return Err(CommandError::IncompatibleStopForVehicle);
                     }
@@ -237,7 +241,11 @@ fn check_aircraft_heli_depot_compat(
     depot_pos: TileCoord,
     engine_id: u16,
 ) -> Result<(), CommandError> {
-    let heli_engine = crate::engine::aircraft_is_helicopter(engine_id);
+    let heli_engine = crate::engine::engine_in_catalog(&state.engine_catalog, engine_id)
+        .map_or_else(
+            || crate::engine::aircraft_is_helicopter(engine_id),
+            crate::engine::aircraft_is_helicopter_def,
+        );
     // `CanVehicleUseStation` / `CmdBuildAircraft`: flags FTA del aeropuerto.
     let spec = state
         .stations
@@ -696,7 +704,14 @@ pub(super) fn refit_vehicle(
         if !crate::refit::vehicle_in_depot(&state.map, vehicle.pos) {
             return Err(CommandError::RefitNotAllowed);
         }
-        if !crate::refit::refittable_cargo_types(vehicle).contains(&cargo) {
+        let allowed = vehicle
+            .engine_id
+            .and_then(|id| crate::engine::engine_in_catalog(&state.engine_catalog, id))
+            .map_or_else(
+                || crate::refit::refittable_cargo_types(vehicle).to_vec(),
+                crate::refit::refittable_cargo_types_for_engine,
+            );
+        if !allowed.contains(&cargo) {
             return Err(CommandError::RefitNotAllowed);
         }
     }
@@ -721,7 +736,13 @@ pub(super) fn cycle_vehicle_order_depot_refit(
     if index >= state.vehicles[vehicle_idx].orders.len() {
         return Err(CommandError::OrderIndexOutOfRange);
     }
-    let options = crate::refit::refittable_cargo_types(&state.vehicles[vehicle_idx]).to_vec();
+    let engine_id = state.vehicles[vehicle_idx].engine_id;
+    let options = engine_id
+        .and_then(|id| crate::engine::engine_in_catalog(&state.engine_catalog, id))
+        .map(crate::refit::refittable_cargo_types_for_engine)
+        .unwrap_or_else(|| {
+            crate::refit::refittable_cargo_types(&state.vehicles[vehicle_idx]).to_vec()
+        });
     let Some(updated) = state.vehicles[vehicle_idx].orders[index].with_cycled_depot_refit(&options)
     else {
         return Err(CommandError::OrderIndexOutOfRange);

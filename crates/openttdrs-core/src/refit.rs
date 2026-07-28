@@ -45,6 +45,29 @@ pub fn refittable_cargo_types(vehicle: &Vehicle) -> &'static [CargoType] {
     }
 }
 
+/// Refit según [`EngineDef::refit_mask`] (Action0 train `0x1D`) o listas vanilla.
+#[must_use]
+pub fn refittable_cargo_types_for_engine(engine: &crate::engine::EngineDef) -> Vec<CargoType> {
+    if engine.refit_mask != 0 {
+        return crate::cargo::ALL_CARGO_TYPES
+            .iter()
+            .copied()
+            .filter(|c| engine.refit_mask & (1u32 << c.temperate_id()) != 0)
+            .collect();
+    }
+    match engine.kind {
+        VehicleKind::Bus | VehicleKind::Tram => vec![CargoType::Passengers],
+        VehicleKind::Truck => TRUCK_FREIGHT.to_vec(),
+        VehicleKind::Ship => vec![CargoType::Goods, CargoType::Oil, CargoType::Valuables],
+        VehicleKind::Aircraft => vec![CargoType::Passengers, CargoType::Mail],
+        VehicleKind::Train => match engine.cargo {
+            Some(CargoType::Passengers) => vec![CargoType::Passengers],
+            Some(CargoType::Mail) => vec![CargoType::Mail],
+            _ => TRAIN_FREIGHT.to_vec(),
+        },
+    }
+}
+
 #[must_use]
 pub fn vehicle_in_depot(map: &Map, pos: crate::TileCoord) -> bool {
     matches!(

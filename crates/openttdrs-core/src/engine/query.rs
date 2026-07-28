@@ -200,6 +200,12 @@ pub const fn aircraft_is_helicopter(engine_id: u16) -> bool {
     engine_id == ENGINE_AIRCRAFT_TRICARIO
 }
 
+/// Helicóptero por flag Action0 `0x09` o id vanilla (Tricario).
+#[must_use]
+pub fn aircraft_is_helicopter_def(engine: &EngineDef) -> bool {
+    engine.is_helicopter || aircraft_is_helicopter(engine.id)
+}
+
 /// ¿El motor aéreo es jet (`AIR_FAST`)? Catálogo reducido: Fokker F27.
 #[must_use]
 pub const fn aircraft_is_jet(engine_id: u16) -> bool {

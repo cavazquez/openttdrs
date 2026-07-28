@@ -662,3 +662,37 @@ fn place_road_writes_newgrf_road_type_m8() {
     apply_command(&mut s, &Command::PlaceRoad(c)).unwrap();
     assert_eq!(road_type_from_tile(&s.map.get(c).unwrap()), ngrf);
 }
+
+#[test]
+fn place_bus_stop_persists_current_road_stop_spec() {
+    use crate::road_stop_spec::{RoadStopClassDef, RoadStopSpecDef};
+
+    let mut s = GameState::new(8, 8);
+    let class_id = 0u16;
+    let spec_id = 0u16;
+    s.road_stop_class_catalog.push(RoadStopClassDef {
+        id: class_id,
+        label: "Paradas NewGRF".into(),
+        short_label: "RSTP".into(),
+        from_newgrf: true,
+    });
+    s.road_stop_spec_catalog.push(RoadStopSpecDef {
+        id: spec_id,
+        class: class_id,
+        label: "Bus NewGRF".into(),
+        short_label: "BUSN".into(),
+        stop_type: 0,
+        from_newgrf: true,
+        grfid: 0,
+        newgrf_views: Vec::new(),
+    });
+    apply_command(&mut s, &Command::SetCurrentRoadStopSpec(spec_id)).unwrap();
+    assert_eq!(s.current_road_stop_spec, Some(spec_id));
+    assert_eq!(s.current_road_stop_class, Some(class_id));
+
+    let stop = TileCoord::new(1, 1);
+    let road = TileCoord::new(1, 0);
+    apply_command(&mut s, &Command::PlaceRoad(road)).unwrap();
+    apply_command(&mut s, &Command::PlaceBusStop(stop, 3)).unwrap();
+    assert_eq!(s.stations[0].road_stop_spec, Some(spec_id));
+}

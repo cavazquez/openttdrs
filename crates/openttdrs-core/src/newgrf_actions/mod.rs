@@ -1503,6 +1503,7 @@ mod tests {
         assert_eq!(state.object_spec_catalog.len(), 1);
         let def = &state.object_spec_catalog[0];
         assert!(def.from_newgrf);
+        assert_eq!(def.id, crate::object_spec::NEW_OBJECT_OFFSET);
         assert_eq!(def.class_label, "LIGT");
         assert_eq!(def.name, "Faro");
         assert_eq!(def.size, 0x11);

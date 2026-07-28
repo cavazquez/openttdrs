@@ -338,6 +338,12 @@ pub struct GameState {
     /// Catálogo de specs de estación (vanilla + Action0 Stations).
     #[serde(default = "crate::station_class::vanilla_station_spec_catalog")]
     pub station_spec_catalog: Vec<crate::station_class::StationSpecDef>,
+    /// Clase de road stop activa (`None` = sin selección `NewGRF`).
+    #[serde(default)]
+    pub current_road_stop_class: Option<u16>,
+    /// Spec de road stop activo (`None` = vanilla / sin `NewGRF`).
+    #[serde(default)]
+    pub current_road_stop_spec: Option<u16>,
     /// Catálogo de clases de road stop (Action0 `RoadStops`).
     #[serde(default)]
     pub road_stop_class_catalog: Vec<crate::road_stop_spec::RoadStopClassDef>,
@@ -362,6 +368,9 @@ pub struct GameState {
     /// Catálogo Action0 `Objects` (`0x0F`).
     #[serde(default)]
     pub object_spec_catalog: Vec<crate::object_spec::ObjectSpecDef>,
+    /// Spec de objeto `NewGRF` activo (`0` = ninguno; id del catálogo).
+    #[serde(default)]
+    pub current_object_spec: u16,
     /// Clase de aeropuerto activa (picker).
     #[serde(default)]
     pub current_airport_class: crate::airport_class::AirportClassId,
@@ -556,6 +565,8 @@ impl GameState {
             current_station_spec: crate::station_class::StationSpecId::DefaultRail,
             station_class_catalog: crate::station_class::vanilla_station_class_catalog(),
             station_spec_catalog: crate::station_class::vanilla_station_spec_catalog(),
+            current_road_stop_class: None,
+            current_road_stop_spec: None,
             road_stop_class_catalog: Vec::new(),
             road_stop_spec_catalog: Vec::new(),
             engine_catalog: crate::engine::vanilla_engine_catalog(),
@@ -564,6 +575,7 @@ impl GameState {
             badge_catalog: Vec::new(),
             cargo_spec_catalog: Vec::new(),
             object_spec_catalog: Vec::new(),
+            current_object_spec: 0,
             current_airport_class: crate::airport_class::AirportClassId::Small,
             current_airport_spec: crate::airport_class::AirportSpecId::Small,
             climate: Climate::default(),
@@ -655,6 +667,8 @@ impl GameState {
             current_station_spec: crate::station_class::StationSpecId::DefaultRail,
             station_class_catalog: crate::station_class::vanilla_station_class_catalog(),
             station_spec_catalog: crate::station_class::vanilla_station_spec_catalog(),
+            current_road_stop_class: None,
+            current_road_stop_spec: None,
             road_stop_class_catalog: Vec::new(),
             road_stop_spec_catalog: Vec::new(),
             engine_catalog: crate::engine::vanilla_engine_catalog(),
@@ -663,6 +677,7 @@ impl GameState {
             badge_catalog: Vec::new(),
             cargo_spec_catalog: Vec::new(),
             object_spec_catalog: Vec::new(),
+            current_object_spec: 0,
             current_airport_class: crate::airport_class::AirportClassId::Small,
             current_airport_spec: crate::airport_class::AirportSpecId::Small,
             climate: Climate::default(),

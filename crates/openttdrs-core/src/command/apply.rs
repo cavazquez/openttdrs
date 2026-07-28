@@ -579,6 +579,30 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
             state.current_station_spec = *spec;
             Ok(())
         }
+        Command::SetCurrentRoadStopClass(class) => {
+            state.current_road_stop_class = Some(*class);
+            state.current_road_stop_spec = state
+                .road_stop_spec_catalog
+                .iter()
+                .find(|s| s.class == *class)
+                .map(|s| s.id);
+            Ok(())
+        }
+        Command::SetCurrentRoadStopSpec(spec) => {
+            if state.current_road_stop_spec == Some(*spec) {
+                return Ok(());
+            }
+            if let Some(def) =
+                crate::road_stop_spec::road_stop_spec_def(&state.road_stop_spec_catalog, *spec)
+            {
+                state.current_road_stop_class = Some(def.class);
+                state.current_road_stop_spec = Some(*spec);
+            } else {
+                state.current_road_stop_class = None;
+                state.current_road_stop_spec = None;
+            }
+            Ok(())
+        }
         Command::SetCurrentAirportClass(class) => {
             state.current_airport_class = *class;
             if let Some(first) = crate::airport_class::list_airport_specs(*class, "").first() {

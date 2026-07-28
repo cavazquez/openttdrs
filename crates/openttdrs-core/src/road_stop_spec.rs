@@ -31,6 +31,27 @@ pub struct RoadStopSpecDef {
     pub newgrf_views: Vec<crate::newgrf_sprites::DecodedSprite>,
 }
 
+impl RoadStopSpecDef {
+    /// Vista Action1/3 para índice de dirección (módulo `len` si hay varias).
+    #[must_use]
+    pub fn newgrf_view(&self, idx: usize) -> Option<&crate::newgrf_sprites::DecodedSprite> {
+        if self.newgrf_views.is_empty() {
+            return None;
+        }
+        self.newgrf_views.get(idx % self.newgrf_views.len())
+    }
+
+    /// `true` si el `stop_type` coincide con la clase de parada a construir.
+    #[must_use]
+    pub fn matches_stop_kind(&self, kind: crate::station::StopKind) -> bool {
+        match kind {
+            crate::station::StopKind::BusStop => self.stop_type == 0,
+            crate::station::StopKind::TruckStop => self.stop_type == 1,
+            _ => false,
+        }
+    }
+}
+
 /// Catálogo vacío de clases (solo desde `NewGRF`).
 #[must_use]
 pub fn empty_road_stop_class_catalog() -> Vec<RoadStopClassDef> {
@@ -63,4 +84,15 @@ pub fn road_stop_class_def(catalog: &[RoadStopClassDef], id: u16) -> Option<&Roa
 #[must_use]
 pub fn road_stop_spec_def(catalog: &[RoadStopSpecDef], id: u16) -> Option<&RoadStopSpecDef> {
     catalog.iter().find(|d| d.id == id)
+}
+
+/// Primer spec `from_newgrf` compatible con `kind` (auto-select S-slice).
+#[must_use]
+pub fn first_matching_road_stop_spec(
+    catalog: &[RoadStopSpecDef],
+    kind: crate::station::StopKind,
+) -> Option<&RoadStopSpecDef> {
+    catalog
+        .iter()
+        .find(|d| d.from_newgrf && d.matches_stop_kind(kind))
 }

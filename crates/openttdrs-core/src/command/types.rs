@@ -412,6 +412,10 @@ pub enum Command {
     SetCurrentStationClass(crate::station_class::StationClassId),
     /// Spec de estación activo.
     SetCurrentStationSpec(crate::station_class::StationSpecId),
+    /// Clase de road stop activa (elige el primer spec de esa clase).
+    SetCurrentRoadStopClass(u16),
+    /// Spec de road stop activo.
+    SetCurrentRoadStopSpec(u16),
     /// Clase de aeropuerto activa (elige el primer spec de esa clase).
     SetCurrentAirportClass(crate::airport_class::AirportClassId),
     /// Spec de aeropuerto activo.

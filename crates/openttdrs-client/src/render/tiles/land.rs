@@ -3,7 +3,8 @@ use openttdrs_core::prelude::*;
 use openttdrs_core::{
     CLEAR_GROUND_DESERT, CLEAR_GROUND_GRASS, CLEAR_GROUND_ROCKY, CLEAR_GROUND_ROUGH,
     CLEAR_GROUND_SNOW, Climate, OBJECT_TYPE_LIGHTHOUSE, OBJECT_TYPE_OWNED_LAND,
-    OBJECT_TYPE_TRANSMITTER, effective_clear_ground, industry_uses_water_ground,
+    OBJECT_TYPE_TRANSMITTER, ObjectSpecDef, effective_clear_ground, industry_uses_water_ground,
+    is_newgrf_object_type,
 };
 
 use super::{
@@ -447,6 +448,7 @@ pub(crate) fn spawn_industry_tile(
     );
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_generic_land_tile(
     commands: &mut Commands,
     assets: &WorldAssets,
@@ -454,6 +456,9 @@ pub(crate) fn spawn_generic_land_tile(
     slope_half_ground: f32,
     climate: Climate,
     world_seed: u64,
+    object_catalog: &[ObjectSpecDef],
+    mut object_sprites: Option<&mut crate::render::NewGrfObjectSpriteCache>,
+    mut images: Option<&mut Assets<Image>>,
 ) {
     let tileh = ctx.info.tileh;
     let ottd_type = ctx.tile.map_or(0u8, |t| (t.mapt >> 4) & 0xF);
@@ -535,14 +540,44 @@ pub(crate) fn spawn_generic_land_tile(
     };
     spawn_ground_sprite(commands, &image, color, ctx, slope_half_ground);
 
-    // MP_OBJECT: renderizar faro o transmisor como overlay.
-    // ObjectType de OpenTTD: 0=Transmisor, 1=Faro.
+    // MP_OBJECT: renderizar faro/transmisor vanilla o vista NewGRF `views[0]`.
+    // ObjectType de OpenTTD: 0=Transmisor, 1=Faro; ≥5 = NewGRF.
     if ottd_type == 10 {
         use crate::sprites::{TransparencyOption, is_hidden, sprite_color};
         if is_hidden(TransparencyOption::Structures) {
             return;
         }
         let tint = sprite_color(TransparencyOption::Structures);
+        if is_newgrf_object_type(tile_m5)
+            && let Some(def) =
+                crate::render::object_newgrf::newgrf_object_def_for_m5(object_catalog, tile_m5)
+            && let Some(view) = def.view(0)
+            && let (Some(cache), Some(images)) = (object_sprites.as_mut(), images.as_mut())
+        {
+            let handle = cache.handle_for(def, 0, view, images);
+            let pos3 = overlay_pos(
+                ctx.iso_pos,
+                f32::from(view.x_offs),
+                f32::from(view.y_offs),
+                f32::from(view.width),
+                f32::from(view.height),
+                ctx.info.base_z,
+                0.6,
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+            );
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                Sprite {
+                    image: handle,
+                    color: tint,
+                    ..default()
+                },
+                Transform::from_translation(pos3),
+            ));
+            return;
+        }
         // Offsets NFO OpenGFX2 32ez (`ogfx21_base_32ez.nfo` sprites 2601/2602).
         let (obj_img, obj_xrel, obj_yrel, obj_w, obj_h) = match tile_m5 {
             OBJECT_TYPE_TRANSMITTER => (Some(assets.transmitter.clone()), -26.0, -80.0, 54.0, 94.0),

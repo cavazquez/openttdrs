@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use openttdrs_core::{Command, StopKind, first_matching_road_stop_spec};
 
 use crate::settings::ClientPreferences;
 use crate::state::{EditorSession, OrderPickState};
@@ -17,7 +18,7 @@ pub(crate) fn build_menu_interaction(
     mut drag_state: ResMut<DragBuildState>,
     mut station_state: ResMut<crate::ui::toolbar::StationBuildState>,
     prefs: Option<Res<ClientPreferences>>,
-    sim: Option<Res<crate::state::SimWorld>>,
+    mut sim: Option<ResMut<crate::state::SimWorld>>,
     order_state: Res<OrderEditState>,
     mut next_pick: ResMut<NextState<OrderPickState>>,
 ) {
@@ -36,6 +37,23 @@ pub(crate) fn build_menu_interaction(
             let year = openttdrs_core::calendar_year_at_tick(sim.state.tick);
             station_state.signal_variant =
                 u8::from(year < prefs.semaphore_build_before.clamp(1800, 2200));
+        }
+        if matches!(*action, BuildMenuAction::BusStop | BuildMenuAction::Station)
+            && let Some(sim) = sim.as_mut()
+        {
+            let kind = if *action == BuildMenuAction::BusStop {
+                StopKind::BusStop
+            } else {
+                StopKind::TruckStop
+            };
+            if let Some(spec_id) =
+                first_matching_road_stop_spec(&sim.state.road_stop_spec_catalog, kind).map(|d| d.id)
+            {
+                let _ = crate::network::apply_player_command(
+                    &mut sim.state,
+                    &Command::SetCurrentRoadStopSpec(spec_id),
+                );
+            }
         }
         if *action != BuildMenuAction::JoinStation {
             station_state.join_keep = None;

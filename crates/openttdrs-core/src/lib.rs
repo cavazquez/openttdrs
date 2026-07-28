@@ -262,13 +262,13 @@ pub use map::{
     industry_random_bits, industry_random_triggers, industry_tile_anim_state, industry_tile_link,
     industry_tile_on_water, industry_tile_rng, industry_tiles_mergeable,
     industry_uses_water_ground, init_industry_tile_random, is_airport_tower_tile, is_canal_tile,
-    is_industry_completed, is_map_object_tile, is_owned_land_tile, is_river_tile,
-    is_tropic_desert_zone, is_tunnel_entrance_slope, lift_destination, lift_has_destination,
-    lift_position, make_industry_tile_bigger, make_shore_tile, make_water_tile,
-    openttd_tile_index_to_coord, opposite_diag_dir, partial_pixel_z, plant_tree,
-    process_water_flood_from_visits, rail_bit_for_sides, rail_bits_touching_side,
-    rail_foundation_for_trackbits, rail_signal_diag_dir_offset, rail_tile_is_signals,
-    rail_trackbits_valid_on_slope, rail_traversal_bits, resolve_tunnel_end,
+    is_industry_completed, is_map_object_tile, is_newgrf_object_type, is_owned_land_tile,
+    is_river_tile, is_tropic_desert_zone, is_tunnel_entrance_slope, lift_destination,
+    lift_has_destination, lift_position, make_industry_tile_bigger, make_shore_tile,
+    make_water_tile, object_spec_id_from_tile, openttd_tile_index_to_coord, opposite_diag_dir,
+    partial_pixel_z, plant_tree, process_water_flood_from_visits, rail_bit_for_sides,
+    rail_bits_touching_side, rail_foundation_for_trackbits, rail_signal_diag_dir_offset,
+    rail_tile_is_signals, rail_trackbits_valid_on_slope, rail_traversal_bits, resolve_tunnel_end,
     river_tile_is_ship_navigable, set_industry_gfx, set_industry_random_bits,
     set_industry_random_triggers, set_water_class_m1, slope_dz_at_subtile, slope_dz_on_tile,
     slope_pixel_z, step_airport_tiles, step_industry_tiles, step_industry_tiles_with_seed,
@@ -353,8 +353,8 @@ pub use news::{
     tick_for_calendar_year, vehicle_kind_label,
 };
 pub use object_spec::{
-    OBJECT_SIZE_1X1, ObjectSpecDef, empty_object_spec_catalog, next_free_object_spec_id,
-    object_spec_def,
+    NEW_OBJECT_OFFSET, OBJECT_SIZE_1X1, ObjectSpecDef, empty_object_spec_catalog,
+    next_free_object_spec_id, object_size_is_1x1, object_spec_def,
 };
 pub use ottdmap_extras::{OttdmapExtras, dense_payload_end};
 pub use pathfinder::{
@@ -417,8 +417,8 @@ pub use road_movement::{
 };
 pub use road_stop_spec::{
     RoadStopClassDef, RoadStopSpecDef, empty_road_stop_class_catalog, empty_road_stop_spec_catalog,
-    next_free_road_stop_class_id, next_free_road_stop_spec_id, road_stop_class_def,
-    road_stop_spec_def,
+    first_matching_road_stop_spec, next_free_road_stop_class_id, next_free_road_stop_spec_id,
+    road_stop_class_def, road_stop_spec_def,
 };
 pub use road_type::{
     RoadTramType, RoadType, RoadTypeDef, all_road_type_defs, list_road_types,

@@ -77,6 +77,7 @@ pub(crate) fn spawn_map_tiles_in_bounds(
     catenary_sprites: &mut crate::render::NewGrfCatenarySpriteCache,
     signal_sprites: &mut crate::render::NewGrfSignalSpriteCache,
     industry_sprites: &mut crate::render::NewGrfIndustrySpriteCache,
+    object_sprites: &mut crate::render::NewGrfObjectSpriteCache,
     action5_sprites: &mut crate::render::NewGrfAction5SpriteCache,
 ) {
     let (mw, mh) = sim.state.map.dimensions();
@@ -231,6 +232,9 @@ pub(crate) fn spawn_map_tiles_in_bounds(
                     slope_half_ground,
                     climate,
                     world_seed,
+                    &sim.state.object_spec_catalog,
+                    Some(object_sprites),
+                    Some(images),
                 );
             }
             TileKind::Void => unreachable!(),
@@ -271,6 +275,7 @@ pub(crate) fn spawn_map_tiles_in_bounds(
                 &sim.state.stations,
                 slope_half_ground,
                 &sim.state.station_spec_catalog,
+                &sim.state.road_stop_spec_catalog,
                 Some(station_sprites),
                 Some(images),
                 &sim.state.runtime.catenary_newgrf_sprites,
@@ -332,6 +337,7 @@ pub(crate) fn spawn_world_layer(
     catenary_sprites: &mut crate::render::NewGrfCatenarySpriteCache,
     signal_sprites: &mut crate::render::NewGrfSignalSpriteCache,
     industry_sprites: &mut crate::render::NewGrfIndustrySpriteCache,
+    object_sprites: &mut crate::render::NewGrfObjectSpriteCache,
     action5_sprites: &mut crate::render::NewGrfAction5SpriteCache,
 ) {
     if include_world_extras {
@@ -379,6 +385,7 @@ pub(crate) fn spawn_world_layer(
         catenary_sprites,
         signal_sprites,
         industry_sprites,
+        object_sprites,
         action5_sprites,
     );
 }
@@ -400,6 +407,7 @@ pub(crate) fn spawn_map_chunk(
     catenary_sprites: &mut crate::render::NewGrfCatenarySpriteCache,
     signal_sprites: &mut crate::render::NewGrfSignalSpriteCache,
     industry_sprites: &mut crate::render::NewGrfIndustrySpriteCache,
+    object_sprites: &mut crate::render::NewGrfObjectSpriteCache,
     action5_sprites: &mut crate::render::NewGrfAction5SpriteCache,
 ) {
     let (mw, mh) = sim.state.map.dimensions();
@@ -418,6 +426,7 @@ pub(crate) fn spawn_map_chunk(
         catenary_sprites,
         signal_sprites,
         industry_sprites,
+        object_sprites,
         action5_sprites,
     );
 }
@@ -493,6 +502,7 @@ pub(crate) fn setup(
     let mut catenary_sprites = crate::render::NewGrfCatenarySpriteCache::default();
     let mut signal_sprites = crate::render::NewGrfSignalSpriteCache::default();
     let mut industry_sprites = crate::render::NewGrfIndustrySpriteCache::default();
+    let mut object_sprites = crate::render::NewGrfObjectSpriteCache::default();
     let mut action5_sprites = crate::render::NewGrfAction5SpriteCache::default();
     spawn_world_layer(
         &mut commands,
@@ -513,6 +523,7 @@ pub(crate) fn setup(
         &mut catenary_sprites,
         &mut signal_sprites,
         &mut industry_sprites,
+        &mut object_sprites,
         &mut action5_sprites,
     );
     commands.insert_resource(road_sprites);
@@ -521,6 +532,7 @@ pub(crate) fn setup(
     commands.insert_resource(catenary_sprites);
     commands.insert_resource(signal_sprites);
     commands.insert_resource(industry_sprites);
+    commands.insert_resource(object_sprites);
     commands.insert_resource(action5_sprites);
     commands.insert_resource(atlas);
     commands.insert_resource(LoadedMapTileChunks {
@@ -573,6 +585,7 @@ pub(crate) fn spawn_intro_map_render(
     let mut catenary_sprites = crate::render::NewGrfCatenarySpriteCache::default();
     let mut signal_sprites = crate::render::NewGrfSignalSpriteCache::default();
     let mut industry_sprites = crate::render::NewGrfIndustrySpriteCache::default();
+    let mut object_sprites = crate::render::NewGrfObjectSpriteCache::default();
     let mut action5_sprites = crate::render::NewGrfAction5SpriteCache::default();
     spawn_world_layer(
         commands,
@@ -593,6 +606,7 @@ pub(crate) fn spawn_intro_map_render(
         &mut catenary_sprites,
         &mut signal_sprites,
         &mut industry_sprites,
+        &mut object_sprites,
         &mut action5_sprites,
     );
     commands.insert_resource(road_sprites);
@@ -602,6 +616,7 @@ pub(crate) fn spawn_intro_map_render(
     commands.insert_resource(action5_sprites);
     commands.insert_resource(signal_sprites);
     commands.insert_resource(industry_sprites);
+    commands.insert_resource(object_sprites);
     commands.insert_resource(atlas);
     commands.insert_resource(LoadedMapTileChunks {
         chunks: chunks_in_bounds(spawn_bounds),

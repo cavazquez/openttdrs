@@ -116,6 +116,9 @@ pub struct Station {
     /// Spec NewGRF/vanilla usado al construir (`StationSpecId`; 0 = default).
     #[serde(default)]
     pub station_spec: crate::station_class::StationSpecId,
+    /// Spec `NewGRF` de road stop al construir (`None` = vanilla / Action5 / `OpenGFX`).
+    #[serde(default)]
+    pub road_stop_spec: Option<u16>,
     /// Bits aleatorios `NewGRF` de la estación (var `5F` / random Action2).
     #[serde(default)]
     pub newgrf_random_bits: u8,
@@ -176,6 +179,7 @@ impl Station {
             airport_blocks: 0,
             joined_tiles: Vec::new(),
             station_spec: crate::station_class::StationSpecId::DefaultRail,
+            road_stop_spec: None,
             newgrf_random_bits: seed_station_newgrf_random_bits(pos),
         }
     }

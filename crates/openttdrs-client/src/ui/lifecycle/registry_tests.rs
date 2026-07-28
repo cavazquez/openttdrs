@@ -78,6 +78,7 @@ const REQUIRED_SESSION_POLICIES: &[&str] = &[
     "NewGrfStationSpriteCache",
     "NewGrfShoreSpriteCache",
     "NewGrfAction5SpriteCache",
+    "NewGrfObjectSpriteCache",
     "NewGrfCatenarySpriteCache",
     "DestinationPickerState",
     "VehicleWindowState",
@@ -127,6 +128,7 @@ const REQUIRED_SESSION_POLICIES: &[&str] = &[
     "NewGrfStationSpriteCache(remove)",
     "NewGrfShoreSpriteCache(remove)",
     "NewGrfAction5SpriteCache(remove)",
+    "NewGrfObjectSpriteCache(remove)",
     "NewGrfCatenarySpriteCache(remove)",
 ];
 

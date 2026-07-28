@@ -309,6 +309,7 @@ fn spawn_road_rail_station_and_transport_cover_main_paths() {
                     &[],
                     4.0,
                     &[],
+                    &[],
                     None,
                     None,
                     &[],
@@ -415,6 +416,9 @@ fn spawn_land_house_industry_generics_and_batches() {
                     4.0,
                     TEST_CLIMATE,
                     TEST_WORLD_SEED,
+                    &[],
+                    None,
+                    None,
                 );
                 spawn_generic_land_tile(
                     &mut commands,
@@ -423,6 +427,9 @@ fn spawn_land_house_industry_generics_and_batches() {
                     4.0,
                     TEST_CLIMATE,
                     TEST_WORLD_SEED,
+                    &[],
+                    None,
+                    None,
                 );
                 spawn_generic_land_tile(
                     &mut commands,
@@ -431,6 +438,9 @@ fn spawn_land_house_industry_generics_and_batches() {
                     4.0,
                     TEST_CLIMATE,
                     TEST_WORLD_SEED,
+                    &[],
+                    None,
+                    None,
                 );
                 spawn_generic_land_tile(
                     &mut commands,
@@ -439,6 +449,9 @@ fn spawn_land_house_industry_generics_and_batches() {
                     4.0,
                     TEST_CLIMATE,
                     TEST_WORLD_SEED,
+                    &[],
+                    None,
+                    None,
                 );
                 spawn_generic_land_tile(
                     &mut commands,
@@ -447,6 +460,9 @@ fn spawn_land_house_industry_generics_and_batches() {
                     4.0,
                     TEST_CLIMATE,
                     TEST_WORLD_SEED,
+                    &[],
+                    None,
+                    None,
                 );
                 spawn_house_tile(
                     &mut commands,
@@ -558,6 +574,7 @@ fn spawn_sloped_road_and_station_hit_slope_ground_branch() {
                     &TileRenderContext::new(&m.0, &g.0, 1, 1),
                     &[],
                     4.0,
+                    &[],
                     &[],
                     None,
                     None,
@@ -941,6 +958,9 @@ fn spawn_field_tile_draws_crop_ground_and_fences() {
                     4.0,
                     TEST_CLIMATE,
                     TEST_WORLD_SEED,
+                    &[],
+                    None,
+                    None,
                 );
             },
         )
@@ -958,6 +978,9 @@ fn spawn_field_tile_draws_crop_ground_and_fences() {
                     4.0,
                     TEST_CLIMATE,
                     TEST_WORLD_SEED,
+                    &[],
+                    None,
+                    None,
                 );
             },
         )

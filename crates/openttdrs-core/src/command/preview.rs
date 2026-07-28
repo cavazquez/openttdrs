@@ -238,7 +238,7 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
             }
         }
         Command::BuildObject { pos, object_type } => {
-            check_build_object_placement(map, *pos, *object_type).err()
+            check_build_object_placement(map, *pos, *object_type, &state.object_spec_catalog).err()
         }
         Command::PlaceIndustry(_)
         | Command::PlaceIndustryKind(_, _)
@@ -327,6 +327,8 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
         | Command::SetCurrentTramType(..)
         | Command::SetCurrentStationClass(..)
         | Command::SetCurrentStationSpec(..)
+        | Command::SetCurrentRoadStopClass(..)
+        | Command::SetCurrentRoadStopSpec(..)
         | Command::SetCurrentAirportClass(..)
         | Command::SetCurrentAirportSpec(..)
         | Command::SetAiSettings(..)

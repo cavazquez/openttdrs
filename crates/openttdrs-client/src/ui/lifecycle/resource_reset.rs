@@ -8,10 +8,10 @@ use crate::render::effect_fx::FxSpawnQueue;
 use crate::render::{
     ChimneySmokeFrames, CompanyColoredSprites, CopperMineSmokeFrames, EffectVehicleFrames,
     FizzyDrinkAnimFrames, LighthouseAnimFrames, LoadedMapTileChunks, MapTileSpawnViewport,
-    NewGrfAction5SpriteCache, NewGrfCatenarySpriteCache, NewGrfRoadSpriteCache,
-    NewGrfShoreSpriteCache, NewGrfStationSpriteCache, NewGrfTrainSpriteCache,
-    RefineryFireAnimFrames, RemapMapVisualsPending, TileAtlas, TruckHandles, VehicleIndex,
-    WaterAnimFrames, WorldAssets,
+    NewGrfAction5SpriteCache, NewGrfCatenarySpriteCache, NewGrfObjectSpriteCache,
+    NewGrfRoadSpriteCache, NewGrfShoreSpriteCache, NewGrfStationSpriteCache,
+    NewGrfTrainSpriteCache, RefineryFireAnimFrames, RemapMapVisualsPending, TileAtlas,
+    TruckHandles, VehicleIndex, WaterAnimFrames, WorldAssets,
 };
 use crate::simulation::SimClock;
 use crate::state::{EditorSession, OrderPickState};
@@ -157,6 +157,12 @@ fn clear_newgrf_catenary_sprites(world: &mut World) {
 
 fn clear_newgrf_action5_sprites(world: &mut World) {
     if let Some(mut cache) = world.get_resource_mut::<NewGrfAction5SpriteCache>() {
+        cache.clear();
+    }
+}
+
+fn clear_newgrf_object_sprites(world: &mut World) {
+    if let Some(mut cache) = world.get_resource_mut::<NewGrfObjectSpriteCache>() {
         cache.clear();
     }
 }
@@ -320,6 +326,10 @@ pub(super) static RESOURCE_RESETS: &[ResourceTeardown] = &[
     ResourceTeardown {
         name: "NewGrfAction5SpriteCache",
         apply: clear_newgrf_action5_sprites,
+    },
+    ResourceTeardown {
+        name: "NewGrfObjectSpriteCache",
+        apply: clear_newgrf_object_sprites,
     },
     ResourceTeardown {
         name: "DestinationPickerState",
@@ -520,6 +530,10 @@ pub(super) static RESOURCE_REMOVES: &[ResourceTeardown] = &[
     ResourceTeardown {
         name: "NewGrfAction5SpriteCache(remove)",
         apply: remove_res::<NewGrfAction5SpriteCache>,
+    },
+    ResourceTeardown {
+        name: "NewGrfObjectSpriteCache(remove)",
+        apply: remove_res::<NewGrfObjectSpriteCache>,
     },
 ];
 

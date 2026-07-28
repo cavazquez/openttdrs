@@ -76,6 +76,18 @@ pub fn apply_newgrf_roadstops(state: &mut GameState, search_dirs: &[&Path]) {
             });
         }
     }
+    if state
+        .current_road_stop_class
+        .is_some_and(|id| !classes.iter().any(|c| c.id == id))
+    {
+        state.current_road_stop_class = None;
+    }
+    if state
+        .current_road_stop_spec
+        .is_some_and(|id| !specs.iter().any(|s| s.id == id))
+    {
+        state.current_road_stop_spec = None;
+    }
     state.road_stop_class_catalog = classes;
     state.road_stop_spec_catalog = specs;
 }

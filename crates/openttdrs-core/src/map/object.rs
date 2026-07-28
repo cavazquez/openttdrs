@@ -1,6 +1,7 @@
 //! Objetos de mapa (`MP_OBJECT` / `TileType::Object` en `OpenTTD`).
 
 use super::Tile;
+use crate::object_spec::NEW_OBJECT_OFFSET;
 
 /// Nibble alto de `mapt` para teselas objeto.
 pub const OTTD_MP_OBJECT: u8 = 10;
@@ -18,12 +19,27 @@ pub const fn is_map_object_tile(mapt: u8) -> bool {
     (mapt >> 4) & 0xF == OTTD_MP_OBJECT
 }
 
+/// `true` si `m5` es un id de objeto `NewGRF` (`≥` [`NEW_OBJECT_OFFSET`]).
+#[must_use]
+pub const fn is_newgrf_object_type(m5: u8) -> bool {
+    (m5 as u16) >= NEW_OBJECT_OFFSET
+}
+
 #[must_use]
 pub const fn object_type_from_tile(tile: &Tile) -> Option<u8> {
     if is_map_object_tile(tile.mapt) {
         Some(tile.m5)
     } else {
         None
+    }
+}
+
+/// Id de spec `NewGRF` persistido en `m5`, si aplica.
+#[must_use]
+pub const fn object_spec_id_from_tile(tile: &Tile) -> Option<u16> {
+    match object_type_from_tile(tile) {
+        Some(m5) if is_newgrf_object_type(m5) => Some(m5 as u16),
+        _ => None,
     }
 }
 

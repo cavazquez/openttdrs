@@ -262,6 +262,8 @@ pub fn command_effects(cmd: &Command) -> CommandEffects {
         | Command::SetCurrentTramType(..)
         | Command::SetCurrentStationClass(..)
         | Command::SetCurrentStationSpec(..)
+        | Command::SetCurrentRoadStopClass(..)
+        | Command::SetCurrentRoadStopSpec(..)
         | Command::SetCurrentAirportClass(..)
         | Command::SetCurrentAirportSpec(..)
         | Command::SetAiSettings(..) => CommandEffects::none(),

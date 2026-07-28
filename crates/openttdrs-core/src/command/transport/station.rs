@@ -294,6 +294,24 @@ pub(in crate::command::transport) fn clear_station_site_tile(
     Ok(())
 }
 
+/// Resuelve el spec `NewGRF` a persistir; limpia la selección si no encaja con `stop_kind`.
+fn resolve_road_stop_spec_for_placement(state: &mut GameState, stop_kind: StopKind) -> Option<u16> {
+    let id = state.current_road_stop_spec?;
+    let Some(def) = crate::road_stop_spec::road_stop_spec_def(&state.road_stop_spec_catalog, id)
+    else {
+        state.current_road_stop_class = None;
+        state.current_road_stop_spec = None;
+        return None;
+    };
+    if def.matches_stop_kind(stop_kind) {
+        Some(id)
+    } else {
+        state.current_road_stop_class = None;
+        state.current_road_stop_spec = None;
+        None
+    }
+}
+
 pub(in crate::command::transport) fn station_placement_on_tile(
     state: &mut GameState,
     c: TileCoord,
@@ -337,6 +355,9 @@ pub(in crate::command::transport) fn station_placement_on_tile(
     st.owner = state.active_company;
     if stop_kind == StopKind::RailStation {
         st.station_spec = state.current_station_spec;
+    }
+    if matches!(stop_kind, StopKind::BusStop | StopKind::TruckStop) {
+        st.road_stop_spec = resolve_road_stop_spec_for_placement(state, stop_kind);
     }
     state.stations.push(st);
     state.economy.money -= station_build_cost(&state.global_economy);

@@ -1,7 +1,8 @@
 use bevy::prelude::*;
 use openttdrs_core::prelude::*;
 use openttdrs_core::{
-    StationSpecDef, inclined_slope_direction, is_tunnel_entrance_slope, rail_type_from_tile,
+    RoadStopSpecDef, StationSpecDef, inclined_slope_direction, is_tunnel_entrance_slope,
+    rail_type_from_tile, road_stop_spec_def, station_at_tile,
 };
 
 use super::bridge_draw::{bridge_span_at, spawn_bridge_deck};
@@ -75,6 +76,7 @@ pub(crate) fn spawn_station_tile(
     stations: &[Station],
     slope_half_ground: f32,
     station_catalog: &[StationSpecDef],
+    road_stop_catalog: &[RoadStopSpecDef],
     mut station_sprites: Option<&mut NewGrfStationSpriteCache>,
     mut images: Option<&mut Assets<Image>>,
     catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
@@ -379,10 +381,13 @@ pub(crate) fn spawn_station_tile(
                 assets,
                 company,
                 owner_colour,
+                map,
+                stations,
                 ctx,
                 base_z,
                 class,
                 dir,
+                road_stop_catalog,
                 roadstop_action5,
                 action5_sprites,
                 images,
@@ -506,21 +511,61 @@ fn spawn_road_stop_link(
     ));
 }
 
+/// Tipo sintético en la caché Action5 para vistas Action3 del catálogo `RoadStops`.
+const ROADSTOP_ACTION3_CACHE_TYPE: u8 = 0x14;
+
 #[allow(clippy::too_many_arguments)]
 fn spawn_road_stop_buildings(
     commands: &mut Commands,
     assets: &WorldAssets,
     company: Option<&CompanyColoredSprites>,
     owner_colour: Option<CompanyColour>,
+    map: &Map,
+    stations: &[Station],
     ctx: &TileRenderContext,
     base_z: u8,
     class: StationTileClass,
     dir: usize,
+    road_stop_catalog: &[RoadStopSpecDef],
     roadstop_action5: &[Option<openttdrs_core::DecodedSprite>],
     mut action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
     mut images: Option<&mut Assets<Image>>,
 ) {
     if buildings_hidden() {
+        return;
+    }
+    // Action3: vista NewGRF del spec persistido en la estación.
+    if let Some(st) = station_at_tile(map, stations, ctx.coord)
+        && let Some(spec_id) = st.road_stop_spec
+        && let Some(def) = road_stop_spec_def(road_stop_catalog, spec_id)
+        && let Some(view) = def.newgrf_view(dir)
+        && let (Some(cache), Some(images)) = (action5_sprites.as_mut(), images.as_mut())
+    {
+        let slot = spec_id
+            .saturating_mul(4)
+            .saturating_add(u16::try_from(dir).unwrap_or(0));
+        let handle = cache.handle_for(ROADSTOP_ACTION3_CACHE_TYPE, slot, view, images);
+        let pos3 = crate::iso::overlay_pos(
+            ctx.iso_pos,
+            f32::from(view.x_offs),
+            f32::from(view.y_offs),
+            f32::from(view.width),
+            f32::from(view.height),
+            base_z,
+            0.05,
+            ctx.tx_i32(),
+            ctx.ty_i32(),
+        );
+        commands.spawn((
+            MapVisualLayer,
+            ctx.map_tile_chunk(),
+            tint_building_sprite(Sprite {
+                image: handle,
+                color: Color::WHITE,
+                ..default()
+            }),
+            Transform::from_translation(pos3),
+        ));
         return;
     }
     let handles = match class {

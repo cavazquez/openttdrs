@@ -191,6 +191,18 @@ pub(crate) const WINDOW_PARITY_MATRIX: &[WindowParityEntry] = &[
         "WC_BUILD_STATION"
     ),
     upstream_window!(
+        RoadStopPicker,
+        "construction",
+        "road_gui.cpp",
+        "WC_BUILD_STATION"
+    ),
+    upstream_window!(
+        ObjectPicker,
+        "construction",
+        "object_gui.cpp",
+        "WC_BUILD_OBJECT"
+    ),
+    upstream_window!(
         BridgePicker,
         "construction",
         "bridge_gui.cpp",
@@ -643,6 +655,7 @@ fn map_shot_driver(
                 station_state.signal_type,
                 false,
                 sim.state.current_rail_type,
+                sim.state.current_object_spec,
             ) else {
                 continue;
             };

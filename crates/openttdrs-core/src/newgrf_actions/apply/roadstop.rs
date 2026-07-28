@@ -3,6 +3,7 @@
 use std::path::Path;
 
 use crate::GameState;
+use crate::badge::resolve_badge_labels;
 use crate::road_stop_spec::{
     RoadStopClassDef, RoadStopSpecDef, empty_road_stop_class_catalog, empty_road_stop_spec_catalog,
     next_free_road_stop_class_id, next_free_road_stop_spec_id,
@@ -64,6 +65,8 @@ pub fn apply_newgrf_roadstops(state: &mut GameState, search_dirs: &[&Path]) {
                 .views_for_local_id(local_id)
                 .map(<[crate::newgrf_sprites::DecodedSprite]>::to_vec)
                 .unwrap_or_default();
+            let associated_badges =
+                resolve_badge_labels(&meta.badge_labels, &state.badge_catalog, entry.grfid);
             specs.push(RoadStopSpecDef {
                 id: spec_id,
                 class: class_id,
@@ -73,6 +76,7 @@ pub fn apply_newgrf_roadstops(state: &mut GameState, search_dirs: &[&Path]) {
                 from_newgrf: true,
                 grfid: entry.grfid,
                 newgrf_views: views,
+                associated_badges,
             });
         }
     }

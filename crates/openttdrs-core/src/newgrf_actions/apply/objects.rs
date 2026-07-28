@@ -3,6 +3,7 @@
 use std::path::Path;
 
 use crate::GameState;
+use crate::badge::resolve_badge_labels;
 use crate::object_spec::{ObjectSpecDef, empty_object_spec_catalog, next_free_object_spec_id};
 
 use super::super::action0::collect_object_metas_from_grf;
@@ -34,6 +35,8 @@ pub fn apply_newgrf_objects(state: &mut GameState, search_dirs: &[&Path]) {
                 .views_for_local_id(meta.local_id)
                 .map(<[crate::newgrf_sprites::DecodedSprite]>::to_vec)
                 .unwrap_or_default();
+            let associated_badges =
+                resolve_badge_labels(&meta.badge_labels, &state.badge_catalog, entry.grfid);
             catalog.push(ObjectSpecDef {
                 id,
                 class_label: meta.class_label,
@@ -43,6 +46,7 @@ pub fn apply_newgrf_objects(state: &mut GameState, search_dirs: &[&Path]) {
                 local_id: meta.local_id,
                 grfid: entry.grfid,
                 views,
+                associated_badges,
             });
         }
     }

@@ -110,6 +110,7 @@ pub(crate) fn preview_build_command_valid(
         station_state.signal_type,
         false,
         state.current_rail_type,
+        state.current_object_spec,
     ) else {
         return true;
     };

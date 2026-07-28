@@ -617,6 +617,15 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
             }
             Ok(())
         }
+        Command::SetCurrentObjectSpec(spec) => {
+            if state.current_object_spec == *spec {
+                return Ok(());
+            }
+            if crate::object_spec::is_selectable_object_spec(&state.object_spec_catalog, *spec) {
+                state.current_object_spec = *spec;
+            }
+            Ok(())
+        }
         Command::SetAiSettings(settings) => {
             let next = settings.clamped();
             if state.ai == next {

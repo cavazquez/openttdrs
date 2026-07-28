@@ -316,10 +316,10 @@ pub enum Command {
         from: TileCoord,
         to: TileCoord,
     },
-    /// Coloca faro o transmisor vanilla (`CmdBuildObject`).
+    /// Coloca faro/transmisor vanilla o objeto `NewGRF` 1×1 (`CmdBuildObject`).
     BuildObject {
         pos: TileCoord,
-        /// `OBJECT_TYPE_TRANSMITTER` o `OBJECT_TYPE_LIGHTHOUSE`.
+        /// `0`/`1` vanilla, o id `NewGRF` ≥5 (`m5`).
         object_type: u8,
     },
     /// Solicita más préstamo bancario (`CmdIncreaseLoan`).
@@ -420,6 +420,8 @@ pub enum Command {
     SetCurrentAirportClass(crate::airport_class::AirportClassId),
     /// Spec de aeropuerto activo.
     SetCurrentAirportSpec(crate::airport_class::AirportSpecId),
+    /// Spec de objeto activo (vanilla 0/1 o id `NewGRF` 1×1 del catálogo).
+    SetCurrentObjectSpec(u16),
     /// Ajustes de IA `TransCargo` de la partida.
     SetAiSettings(crate::ai::AiSettings),
     /// Post-proceso de arrastre de carretera (merge/propagate bits entre vecinos).

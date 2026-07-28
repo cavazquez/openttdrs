@@ -884,7 +884,7 @@ Checklist versionado de superficies de UI. Los conteos deben coincidir con
 `FloatingWindowId::ALL` / `BuildMenuAction::ALL` / etc. (test
 `ui_enum_inventory_counts`).
 
-**Fecha:** 2026-07-17 · **FloatingWindowId:** 43 · **BuildMenuAction:** 66 ·
+**Fecha:** 2026-07-28 · **FloatingWindowId:** 45 · **BuildMenuAction:** 67 ·
 **SaveMenuAction:** 24 · **ToolbarGroup:** 8
 
 ### Ventanas flotantes (`FloatingWindowId`)
@@ -904,6 +904,8 @@ Checklist versionado de superficies de UI. Los conteos deben coincidir con
 | VehicleDetails | View → Detalles | Tabs Info/Carga/Capacidad/Totales (#173) |
 | RailStationPicker | herramienta estación rail | |
 | AirportPicker | herramienta aeropuerto | |
+| RoadStopPicker | herramienta bus / parada camión | NewGRF RoadStops |
+| ObjectPicker | Landscape → Objeto | vanilla 0/1 + NewGRF 1×1 |
 | BridgePicker | tras tramo de puente | |
 | DestinationPicker | órdenes → destino | |
 | NewsHistory | barra de noticias | |
@@ -947,7 +949,7 @@ Checklist versionado de superficies de UI. Los conteos deben coincidir con
 ### Toolbar
 
 - **ToolbarGroup (8):** Rail, Road, Water, Air, Economy, Landscape, Info, Settings
-- **BuildMenuAction (66):** ver `BuildMenuAction::ALL` en `toolbar/mod.rs`
+- **BuildMenuAction (67):** ver `BuildMenuAction::ALL` en `toolbar/mod.rs`
 - **SaveMenuAction (24):** ver `SaveMenuAction::ALL`
 
 ### Mantenimiento

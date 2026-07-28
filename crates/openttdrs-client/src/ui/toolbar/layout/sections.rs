@@ -664,6 +664,11 @@ pub(super) fn spawn_secondary_tool_panels(
                             "assets/opengfx/tiles/object_transmitter.png",
                             BuildMenuAction::BuildTransmitter,
                         ),
+                        (
+                            "Objeto",
+                            "assets/opengfx/tiles/object_statue_company.png",
+                            BuildMenuAction::PlaceNewGrfObject,
+                        ),
                     ],
                 ),
                 ToolbarGroup::Info => {}

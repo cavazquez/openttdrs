@@ -685,6 +685,7 @@ fn place_bus_stop_persists_current_road_stop_spec() {
         from_newgrf: true,
         grfid: 0,
         newgrf_views: Vec::new(),
+        associated_badges: Vec::new(),
     });
     apply_command(&mut s, &Command::SetCurrentRoadStopSpec(spec_id)).unwrap();
     assert_eq!(s.current_road_stop_spec, Some(spec_id));

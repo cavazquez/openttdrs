@@ -266,6 +266,7 @@ pub fn command_effects(cmd: &Command) -> CommandEffects {
         | Command::SetCurrentRoadStopSpec(..)
         | Command::SetCurrentAirportClass(..)
         | Command::SetCurrentAirportSpec(..)
+        | Command::SetCurrentObjectSpec(..)
         | Command::SetAiSettings(..) => CommandEffects::none(),
 
         Command::FinalizeRoadDragLine { .. } | Command::RegenerateLandscape { .. } => {

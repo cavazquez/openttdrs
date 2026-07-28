@@ -303,6 +303,7 @@ pub(crate) fn apply_intent(intent: MapClickIntent, ctx: &mut IntentApplyContext,
                     sig_type,
                     cycle,
                     ctx.sim.state.current_rail_type,
+                    ctx.sim.state.current_object_spec,
                 )
             }) {
                 if let Err(e) = crate::network::apply_player_command(&mut ctx.sim.state, &cmd) {

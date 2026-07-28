@@ -162,7 +162,8 @@ pub(crate) fn toolbar_group_for_action(action: BuildMenuAction) -> ToolbarGroup 
         | BuildMenuAction::PlantTree
         | BuildMenuAction::PlaceSign
         | BuildMenuAction::BuildLighthouse
-        | BuildMenuAction::BuildTransmitter => ToolbarGroup::Landscape,
+        | BuildMenuAction::BuildTransmitter
+        | BuildMenuAction::PlaceNewGrfObject => ToolbarGroup::Landscape,
     }
 }
 

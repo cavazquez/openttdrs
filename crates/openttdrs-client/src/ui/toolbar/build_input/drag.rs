@@ -464,6 +464,7 @@ pub(crate) fn apply_drag_action(
             station_state.signal_type,
             false,
             sim.state.current_rail_type,
+            sim.state.current_object_spec,
         ) {
             match crate::network::apply_player_command(&mut sim.state, &cmd) {
                 Ok(()) => changed = true,

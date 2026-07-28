@@ -9,11 +9,13 @@ pub(crate) mod editor_toolbar;
 mod icons;
 mod layout;
 mod minimap;
+mod object_picker_window;
 mod order_panel;
 mod orders_cursor;
 mod preview;
 mod rail_station_window;
 pub(crate) mod rail_type_selector;
+mod road_stop_picker_window;
 pub(crate) mod road_type_selector;
 mod settings;
 mod signal_picker_window;
@@ -52,6 +54,10 @@ pub(crate) use minimap::{
     MinimapLayerState, MinimapRoot, handle_minimap_click, handle_minimap_layer_buttons,
     setup_minimap, sync_minimap,
 };
+pub(crate) use object_picker_window::{
+    handle_object_picker_buttons, object_picker_on_closed, setup_object_picker,
+    sync_object_catalog_entries, sync_object_picker, sync_object_preview_image,
+};
 pub(crate) use order_panel::{
     begin_order_list_drag, finish_order_list_drag, handle_order_panel_buttons,
     open_order_edit_for_vehicle, order_panel_on_closed, setup_order_panel,
@@ -71,6 +77,10 @@ pub(crate) use rail_station_window::{
 };
 pub(crate) use rail_type_selector::{
     handle_rail_type_select_buttons, sync_rail_toolbar_icons, sync_rail_type_select_visuals,
+};
+pub(crate) use road_stop_picker_window::{
+    handle_road_stop_picker_buttons, road_stop_picker_on_closed, setup_road_stop_picker,
+    sync_road_stop_catalog_entries, sync_road_stop_picker, sync_road_stop_preview_image,
 };
 pub(crate) use road_type_selector::{
     NewGrfRoadTypePreviewCache, RoadTypeEscapeConsumed, RoadTypePickerState,
@@ -181,6 +191,8 @@ pub(crate) enum BuildMenuAction {
     BuildLighthouse,
     /// Transmisor vanilla (`OBJECT_TYPE_TRANSMITTER`).
     BuildTransmitter,
+    /// Colocar objeto NewGRF / seleccionado en el picker (`current_object_spec`).
+    PlaceNewGrfObject,
     /// Unir dos paradas bus/camión adyacentes (2 clics).
     JoinStation,
 }
@@ -254,6 +266,7 @@ impl BuildMenuAction {
         Self::PlaceSign,
         Self::BuildLighthouse,
         Self::BuildTransmitter,
+        Self::PlaceNewGrfObject,
         Self::JoinStation,
     ];
 

@@ -237,7 +237,7 @@ mod tests {
 
     #[test]
     fn build_newgrf_object_1x1_sets_m5_from_catalog() {
-        let a0 = build_action0_object_payload(0, b"LIGT", OBJECT_SIZE_1X1, "Faro");
+        let a0 = build_action0_object_payload(0, b"LIGT", OBJECT_SIZE_1X1, "Faro", &[]);
         let bytes = build_grf_v2_with_action0_and_action8(&a0, [b'O', b'B', 0, 1], "obj", "");
         let dir = std::env::temp_dir().join(format!("openttdrs_obj_build_{}", std::process::id()));
         let _ = std::fs::create_dir_all(&dir);
@@ -278,6 +278,7 @@ mod tests {
             local_id: 0,
             grfid: 0,
             views: Vec::new(),
+            associated_badges: Vec::new(),
         });
         assert_eq!(
             apply_command(
@@ -303,6 +304,7 @@ mod tests {
             local_id: 0,
             grfid: 0,
             views: Vec::new(),
+            associated_badges: Vec::new(),
         });
         let ot = NEW_OBJECT_OFFSET as u8;
         apply_command(
@@ -321,5 +323,54 @@ mod tests {
             },
         )
         .expect("second newgrf object allowed");
+    }
+
+    #[test]
+    fn set_current_object_spec_accepts_vanilla_and_catalog_1x1() {
+        let mut state = GameState::new(4, 4);
+        assert_eq!(state.current_object_spec, 0);
+        apply_command(&mut state, &Command::SetCurrentObjectSpec(1)).unwrap();
+        assert_eq!(state.current_object_spec, 1);
+        apply_command(&mut state, &Command::SetCurrentObjectSpec(0)).unwrap();
+        assert_eq!(state.current_object_spec, 0);
+
+        state.object_spec_catalog.push(ObjectSpecDef {
+            id: NEW_OBJECT_OFFSET,
+            class_label: "OBJ ".into(),
+            name: "Obj".into(),
+            size: OBJECT_SIZE_1X1,
+            from_newgrf: true,
+            local_id: 0,
+            grfid: 0,
+            views: Vec::new(),
+            associated_badges: Vec::new(),
+        });
+        apply_command(
+            &mut state,
+            &Command::SetCurrentObjectSpec(NEW_OBJECT_OFFSET),
+        )
+        .unwrap();
+        assert_eq!(state.current_object_spec, NEW_OBJECT_OFFSET);
+
+        // Id desconocido o no 1×1: no cambia.
+        apply_command(&mut state, &Command::SetCurrentObjectSpec(99)).unwrap();
+        assert_eq!(state.current_object_spec, NEW_OBJECT_OFFSET);
+        state.object_spec_catalog.push(ObjectSpecDef {
+            id: NEW_OBJECT_OFFSET + 1,
+            class_label: "BIG ".into(),
+            name: "Big".into(),
+            size: 0x22,
+            from_newgrf: true,
+            local_id: 1,
+            grfid: 0,
+            views: Vec::new(),
+            associated_badges: Vec::new(),
+        });
+        apply_command(
+            &mut state,
+            &Command::SetCurrentObjectSpec(NEW_OBJECT_OFFSET + 1),
+        )
+        .unwrap();
+        assert_eq!(state.current_object_spec, NEW_OBJECT_OFFSET);
     }
 }

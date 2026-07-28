@@ -69,6 +69,7 @@ pub(crate) fn tool_hud_label(action: BuildMenuAction) -> &'static str {
         BuildMenuAction::PlaceSign => "Cartel",
         BuildMenuAction::BuildLighthouse => "Faro",
         BuildMenuAction::BuildTransmitter => "Transmisor",
+        BuildMenuAction::PlaceNewGrfObject => "Objeto",
         BuildMenuAction::JoinStation => "Unir estaciones",
         BuildMenuAction::TramRemove => "Quitar tranvía",
     }
@@ -91,8 +92,9 @@ pub(crate) fn tool_hud_hint(action: BuildMenuAction) -> Option<&'static str> {
             Some("arrastre dens.N; clic sentido; Ctrl+clic tipo; Shift+RMB dens.; RMB dir")
         }
         BuildMenuAction::Station | BuildMenuAction::BusStop => {
-            Some("hierba junto a vía; carga/descarga")
+            Some("picker NewGRF; hierba junto a vía; carga/descarga")
         }
+        BuildMenuAction::PlaceNewGrfObject => Some("picker: vanilla/NewGRF 1×1; hierba/bosque"),
         BuildMenuAction::Orders => Some("clic mapa: destino"),
         BuildMenuAction::RailStation => Some("hierba junto a vía"),
         BuildMenuAction::FoundTown => Some("clic en hierba: funda un pueblo nuevo"),

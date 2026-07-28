@@ -29,6 +29,9 @@ pub struct RoadStopSpecDef {
     /// Vistas Action1/3 (opcional; catálogo-only si vacío).
     #[serde(default, skip)]
     pub newgrf_views: Vec<crate::newgrf_sprites::DecodedSprite>,
+    /// Ids de badges asociados (catálogo `badge`).
+    #[serde(default)]
+    pub associated_badges: Vec<u16>,
 }
 
 impl RoadStopSpecDef {
@@ -95,4 +98,96 @@ pub fn first_matching_road_stop_spec(
     catalog
         .iter()
         .find(|d| d.from_newgrf && d.matches_stop_kind(kind))
+}
+
+/// Clases con al menos un spec compatible con `kind`.
+#[must_use]
+pub fn list_road_stop_classes<'a>(
+    classes: &'a [RoadStopClassDef],
+    specs: &[RoadStopSpecDef],
+    kind: crate::station::StopKind,
+) -> Vec<&'a RoadStopClassDef> {
+    classes
+        .iter()
+        .filter(|c| {
+            specs
+                .iter()
+                .any(|s| s.class == c.id && s.matches_stop_kind(kind))
+        })
+        .collect()
+}
+
+/// Specs de una clase (o todas si `class` es `None`) filtrados por `kind`.
+#[must_use]
+pub fn list_road_stop_specs(
+    specs: &[RoadStopSpecDef],
+    class: Option<u16>,
+    kind: crate::station::StopKind,
+) -> Vec<&RoadStopSpecDef> {
+    specs
+        .iter()
+        .filter(|s| s.matches_stop_kind(kind))
+        .filter(|s| class.is_none_or(|c| s.class == c))
+        .collect()
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use crate::station::StopKind;
+
+    fn sample_catalog() -> (Vec<RoadStopClassDef>, Vec<RoadStopSpecDef>) {
+        let classes = vec![
+            RoadStopClassDef {
+                id: 0,
+                label: "Bus".into(),
+                short_label: "BUS".into(),
+                from_newgrf: true,
+            },
+            RoadStopClassDef {
+                id: 1,
+                label: "Truck".into(),
+                short_label: "TRK".into(),
+                from_newgrf: true,
+            },
+        ];
+        let specs = vec![
+            RoadStopSpecDef {
+                id: 10,
+                class: 0,
+                label: "Bus A".into(),
+                short_label: "BA".into(),
+                stop_type: 0,
+                from_newgrf: true,
+                grfid: 0,
+                newgrf_views: Vec::new(),
+                associated_badges: Vec::new(),
+            },
+            RoadStopSpecDef {
+                id: 11,
+                class: 1,
+                label: "Truck A".into(),
+                short_label: "TA".into(),
+                stop_type: 1,
+                from_newgrf: true,
+                grfid: 0,
+                newgrf_views: Vec::new(),
+                associated_badges: Vec::new(),
+            },
+        ];
+        (classes, specs)
+    }
+
+    #[test]
+    fn list_helpers_filter_by_stop_kind() {
+        let (classes, specs) = sample_catalog();
+        let bus_classes = list_road_stop_classes(&classes, &specs, StopKind::BusStop);
+        assert_eq!(bus_classes.len(), 1);
+        assert_eq!(bus_classes[0].id, 0);
+        let truck_specs = list_road_stop_specs(&specs, Some(1), StopKind::TruckStop);
+        assert_eq!(truck_specs.len(), 1);
+        assert_eq!(truck_specs[0].id, 11);
+        assert!(list_road_stop_specs(&specs, Some(0), StopKind::TruckStop).is_empty());
+    }
 }

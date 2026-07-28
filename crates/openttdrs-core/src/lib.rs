@@ -123,7 +123,10 @@ pub use airport_fta::{
     OILRIG_MOVING_DATA, OILRIG_NOF_ELEMENTS, station_uses_airport_fta, station_uses_country_fta,
 };
 pub use autoreplace::{AutoReplaceRule, try_autoreplace_vehicle};
-pub use badge::{BadgeDef, badge_def, empty_badge_catalog, next_free_badge_id};
+pub use badge::{
+    BadgeDef, badge_def, badges_for_spec, empty_badge_catalog, list_badges, next_free_badge_id,
+    resolve_badge_labels,
+};
 pub use bridge_spec::{
     BRIDGE_SPECS, BridgePiece, BridgeSpec, BridgeType, bridge_above_axis_from_mapt,
     bridge_available, bridge_available_at_tick, bridge_build_cost, bridge_line_tiles,
@@ -354,7 +357,8 @@ pub use news::{
 };
 pub use object_spec::{
     NEW_OBJECT_OFFSET, OBJECT_SIZE_1X1, ObjectSpecDef, empty_object_spec_catalog,
-    next_free_object_spec_id, object_size_is_1x1, object_spec_def,
+    is_selectable_object_spec, list_1x1_object_specs, next_free_object_spec_id, object_size_is_1x1,
+    object_spec_def,
 };
 pub use ottdmap_extras::{OttdmapExtras, dense_payload_end};
 pub use pathfinder::{
@@ -417,8 +421,9 @@ pub use road_movement::{
 };
 pub use road_stop_spec::{
     RoadStopClassDef, RoadStopSpecDef, empty_road_stop_class_catalog, empty_road_stop_spec_catalog,
-    first_matching_road_stop_spec, next_free_road_stop_class_id, next_free_road_stop_spec_id,
-    road_stop_class_def, road_stop_spec_def,
+    first_matching_road_stop_spec, list_road_stop_classes, list_road_stop_specs,
+    next_free_road_stop_class_id, next_free_road_stop_spec_id, road_stop_class_def,
+    road_stop_spec_def,
 };
 pub use road_type::{
     RoadTramType, RoadType, RoadTypeDef, all_road_type_defs, list_road_types,

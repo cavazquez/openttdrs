@@ -30,6 +30,9 @@ pub struct ObjectSpecDef {
     /// Vistas Action1/3 (opcional; catálogo-only si vacío).
     #[serde(default, skip)]
     pub views: Vec<crate::newgrf_sprites::DecodedSprite>,
+    /// Ids de badges asociados (catálogo `badge`).
+    #[serde(default)]
+    pub associated_badges: Vec<u16>,
 }
 
 impl ObjectSpecDef {
@@ -84,4 +87,16 @@ pub fn next_free_object_spec_id(catalog: &[ObjectSpecDef]) -> Option<u16> {
 #[must_use]
 pub fn object_spec_def(catalog: &[ObjectSpecDef], id: u16) -> Option<&ObjectSpecDef> {
     catalog.iter().find(|d| d.id == id)
+}
+
+/// Specs 1×1 del catálogo (picker / colocación `NewGRF`).
+#[must_use]
+pub fn list_1x1_object_specs(catalog: &[ObjectSpecDef]) -> Vec<&ObjectSpecDef> {
+    catalog.iter().filter(|d| d.is_1x1()).collect()
+}
+
+/// `true` si `id` es vanilla construible (0/1) o un spec 1×1 del catálogo.
+#[must_use]
+pub fn is_selectable_object_spec(catalog: &[ObjectSpecDef], id: u16) -> bool {
+    matches!(id, 0 | 1) || object_spec_def(catalog, id).is_some_and(ObjectSpecDef::is_1x1)
 }

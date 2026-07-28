@@ -35,7 +35,7 @@ Estados:
 | `12` | Road types | runtime parcial | runtime | construcción/render + techo velocidad |
 | `13` | Tram types | runtime parcial (mismo parser que Road) | pendiente | catálogo road (clase tram) |
 | `14` | Road stops | runtime parcial | runtime parcial | auto-select / construcción / render (`road_stop_spec`) |
-| `15` | Badges | runtime parcial | no aplica | catálogo `badge` |
+| `15` | Badges | runtime parcial | no aplica | catálogo `badge`; asociaciones parciales en roadstops/objects |
 
 ## Propiedades comunes de vehículos
 
@@ -177,6 +177,7 @@ Consumidor S-slice (#261): `BuildObject` coloca specs 1×1 del catálogo (`m5` =
 | `08` class label 4 chars | **runtime** (catálogo) |
 | `0C` size BYTE | **runtime** (catálogo; build exige 1×1) |
 | `FE` nombre C-string (extensión local) | **runtime** (catálogo) |
+| `FD` badge associations (extensión local: BYTE count + N× label 4 chars) | **runtime** parcial (`associated_badges`) |
 | Action1/3 views | **runtime** parcial (render `views[0]` si hay) |
 | resto | pendiente |
 
@@ -189,12 +190,16 @@ Fuente: `newgrf_act0_roadstops.cpp`.
 | `08` class label 4 chars | **runtime** (catálogo) |
 | `09` stop type BYTE (`0` bus / `1` truck) | **runtime** (catálogo; validado al colocar) |
 | `FE` nombre C-string (extensión local) | **runtime** (catálogo) |
+| `FD` badge associations (extensión local: BYTE count + N× label 4 chars) | **runtime** parcial (`associated_badges`) |
 | Action1/3 views | **runtime** parcial (render in-world si hay vistas; si no Action5 `0x11` / OpenGFX) |
 | resto | pendiente |
 
 ## Badges (`15`)
 
 Fuente: `newgrf_act0_badges.cpp`.
+
+Asociaciones parciales: roadstops/objects pueden referenciar badges por label
+(`prop 0xFD` local); apply resuelve contra `badge_catalog` (mismo GRF primero).
 
 | Props | Estado |
 |---|---|

@@ -241,6 +241,9 @@ pub(crate) fn preview_image_for_action(
         BuildMenuAction::BuildTransmitter => {
             Some(asset_server.load::<Image>("assets/opengfx/tiles/object_transmitter.png"))
         }
+        BuildMenuAction::PlaceNewGrfObject => {
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/object_statue_company.png"))
+        }
         BuildMenuAction::JoinStation => {
             Some(asset_server.load::<Image>("assets/opengfx/tiles/bus_stop_ne_ground.png"))
         }

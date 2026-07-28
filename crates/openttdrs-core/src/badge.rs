@@ -1,6 +1,6 @@
 //! Badges `NewGRF` (`Badges`, feature Action0 `0x15`).
 //!
-//! Catálogo runtime parcial: etiqueta + flags; sin consumidor de UI aún.
+//! Catálogo runtime parcial: etiqueta + flags; asociaciones a roadstops/objects.
 
 use serde::{Deserialize, Serialize};
 
@@ -31,4 +31,85 @@ pub fn next_free_badge_id(catalog: &[BadgeDef]) -> Option<u16> {
 #[must_use]
 pub fn badge_def(catalog: &[BadgeDef], id: u16) -> Option<&BadgeDef> {
     catalog.iter().find(|d| d.id == id)
+}
+
+/// Lista badges del catálogo filtrando por etiqueta (subcadena, case-insensitive).
+#[must_use]
+pub fn list_badges<'a>(catalog: &'a [BadgeDef], filter: &str) -> Vec<&'a BadgeDef> {
+    let needle = filter.trim().to_ascii_lowercase();
+    catalog
+        .iter()
+        .filter(|b| needle.is_empty() || b.label.to_ascii_lowercase().contains(&needle))
+        .collect()
+}
+
+/// Resuelve ids de asociación a entradas del catálogo (omite ids desconocidos).
+#[must_use]
+pub fn badges_for_spec<'a>(ids: &[u16], badge_catalog: &'a [BadgeDef]) -> Vec<&'a BadgeDef> {
+    ids.iter()
+        .filter_map(|&id| badge_def(badge_catalog, id))
+        .collect()
+}
+
+/// Resuelve etiquetas de badge a ids del catálogo (mismo GRF primero, luego cualquiera).
+///
+/// Etiquetas sin match se omiten (sin panic).
+#[must_use]
+pub fn resolve_badge_labels(
+    labels: &[String],
+    badge_catalog: &[BadgeDef],
+    preferred_grfid: u32,
+) -> Vec<u16> {
+    let mut out = Vec::with_capacity(labels.len());
+    for label in labels {
+        if let Some(b) = badge_catalog
+            .iter()
+            .find(|b| b.grfid == preferred_grfid && b.label.eq_ignore_ascii_case(label))
+        {
+            out.push(b.id);
+            continue;
+        }
+        if let Some(b) = badge_catalog
+            .iter()
+            .find(|b| b.label.eq_ignore_ascii_case(label))
+        {
+            out.push(b.id);
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn list_and_resolve_badges_no_collision() {
+        let catalog = vec![
+            BadgeDef {
+                id: 0,
+                label: "ELEC".into(),
+                flags: 0,
+                from_newgrf: true,
+                grfid: 1,
+            },
+            BadgeDef {
+                id: 1,
+                label: "DIESEL".into(),
+                flags: 0,
+                from_newgrf: true,
+                grfid: 1,
+            },
+        ];
+        assert_eq!(list_badges(&catalog, "").len(), 2);
+        assert_eq!(list_badges(&catalog, "ele").len(), 1);
+        assert_ne!(catalog[0].label, catalog[1].label);
+        let ids = resolve_badge_labels(
+            &["ELEC".into(), "NOPE".into(), "DIESEL".into()],
+            &catalog,
+            1,
+        );
+        assert_eq!(ids, vec![0, 1]);
+        assert_eq!(badges_for_spec(&ids, &catalog).len(), 2);
+    }
 }

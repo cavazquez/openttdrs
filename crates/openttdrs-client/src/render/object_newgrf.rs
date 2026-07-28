@@ -78,6 +78,7 @@ mod tests {
             local_id: 0,
             grfid: 0,
             views: vec![view.clone()],
+            associated_badges: Vec::new(),
         };
         let mut images = Assets::<Image>::default();
         let mut cache = NewGrfObjectSpriteCache::default();

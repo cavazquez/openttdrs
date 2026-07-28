@@ -513,6 +513,7 @@ mod tests {
                 openttdrs_core::SIGTYPE_BLOCK,
                 false,
                 openttdrs_core::RailType::Rail,
+                0,
             ),
             Some(Command::PlaceStationDir(_, 3))
         ));
@@ -530,6 +531,7 @@ mod tests {
                 openttdrs_core::SIGTYPE_BLOCK,
                 false,
                 openttdrs_core::RailType::Rail,
+                0,
             ),
             Some(Command::PlaceRoadDepotDir(_, 2))
         ));
@@ -544,6 +546,7 @@ mod tests {
                 openttdrs_core::SIGTYPE_BLOCK,
                 false,
                 openttdrs_core::RailType::Rail,
+                0,
             ),
             Some(Command::PlaceIndustrySpec(
                 _,
@@ -561,6 +564,7 @@ mod tests {
                 openttdrs_core::SIGTYPE_BLOCK,
                 false,
                 openttdrs_core::RailType::Rail,
+                0,
             )
             .is_none()
         );
@@ -575,6 +579,7 @@ mod tests {
                 openttdrs_core::SIGTYPE_BLOCK,
                 false,
                 openttdrs_core::RailType::Electric,
+                0,
             ),
             Some(Command::ConvertRail(_, 1))
         ));

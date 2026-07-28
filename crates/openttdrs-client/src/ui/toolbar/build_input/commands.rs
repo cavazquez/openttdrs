@@ -20,6 +20,7 @@ pub(crate) fn command_for_action(
     sig_type: u8,
     cycle_existing_signal_type: bool,
     current_rail_type: RailType,
+    current_object_spec: u16,
 ) -> Option<Command> {
     match action {
         BuildMenuAction::Road => {
@@ -221,6 +222,10 @@ pub(crate) fn command_for_action(
         BuildMenuAction::BuildTransmitter => Some(Command::BuildObject {
             pos,
             object_type: openttdrs_core::OBJECT_TYPE_TRANSMITTER,
+        }),
+        BuildMenuAction::PlaceNewGrfObject => Some(Command::BuildObject {
+            pos,
+            object_type: u8::try_from(current_object_spec).unwrap_or(0),
         }),
     }
 }

@@ -63,6 +63,8 @@ pub const ACTION0_FEATURE_TRAMTYPES: u8 = 0x13;
 const PROP_INTRO_YEAR: u8 = 0x16;
 /// Extensión local: nombre C-string (tests / GRFs propios).
 const PROP_NAME_CSTRING: u8 = 0xFE;
+/// Extensión local: lista de badges asociados (BYTE count + N× label 4 chars).
+const PROP_BADGE_ASSOCIATIONS: u8 = 0xFD;
 
 /// Prop velocidad máxima tren (uint16 LE) — extensión local / subset Action0.
 const PROP_TRAIN_SPEED: u8 = 0x09;
@@ -247,6 +249,8 @@ pub struct ParsedRoadStopMeta {
     pub label: String,
     /// `0` = bus, `1` = truck (común).
     pub stop_type: u8,
+    /// Etiquetas de badge (`prop 0xFD`); se resuelven en apply.
+    pub badge_labels: Vec<String>,
 }
 
 /// Metadatos `Badges` Action0 (antes de asignar ID global).
@@ -272,6 +276,8 @@ pub struct ParsedObjectMeta {
     pub class_label: String,
     pub name: String,
     pub size: u8,
+    /// Etiquetas de badge (`prop 0xFD`); se resuelven en apply.
+    pub badge_labels: Vec<String>,
 }
 
 #[must_use]
@@ -504,6 +510,23 @@ fn read_four_char_label(payload: &[u8], i: &mut usize, fallback: &str) -> Option
         s = fallback.into();
     }
     Some(s)
+}
+
+/// Lee `prop 0xFD`: BYTE count + N× label 4 chars.
+fn read_badge_association_labels(payload: &[u8], i: &mut usize) -> Option<Vec<String>> {
+    if *i >= payload.len() {
+        return None;
+    }
+    let count = usize::from(payload[*i]);
+    *i += 1;
+    let mut labels = Vec::with_capacity(count);
+    for _ in 0..count {
+        let s = read_four_char_label(payload, i, "")?;
+        if !s.is_empty() {
+            labels.push(s);
+        }
+    }
+    Some(labels)
 }
 
 fn parse_station_custom_layouts(
@@ -762,7 +785,7 @@ pub fn collect_industry_tile_metas_from_grf(data: &[u8]) -> Vec<ParsedIndustryTi
     out
 }
 
-/// Parsea Action0 `RoadStops` (`0x14`): class label 4 chars, stop type BYTE, nombre `0xFE`.
+/// Parsea Action0 `RoadStops` (`0x14`): class label 4 chars, stop type BYTE, nombre `0xFE`, badges `0xFD`.
 #[must_use]
 pub fn parse_action0_roadstop_meta(payload: &[u8]) -> Option<ParsedRoadStopMeta> {
     let header = parse_action0_header(payload)?;
@@ -773,6 +796,7 @@ pub fn parse_action0_roadstop_meta(payload: &[u8]) -> Option<ParsedRoadStopMeta>
     let mut class_short = String::from("NGRF");
     let mut label = String::new();
     let mut stop_type = 0u8;
+    let mut badge_labels = Vec::new();
     for _ in 0..header.num_props {
         if i >= payload.len() {
             break;
@@ -800,16 +824,28 @@ pub fn parse_action0_roadstop_meta(payload: &[u8]) -> Option<ParsedRoadStopMeta>
                 label = String::from_utf8_lossy(&payload[i..i + nul]).to_string();
                 i += nul + 1;
             }
+            PROP_BADGE_ASSOCIATIONS => {
+                let Some(labels) = read_badge_association_labels(payload, &mut i) else {
+                    break;
+                };
+                badge_labels = labels;
+            }
             _ => break,
         }
     }
-    Some(finish_parsed_roadstop_meta(class_short, label, stop_type))
+    Some(finish_parsed_roadstop_meta(
+        class_short,
+        label,
+        stop_type,
+        badge_labels,
+    ))
 }
 
 fn finish_parsed_roadstop_meta(
     class_short: String,
     mut label: String,
     stop_type: u8,
+    badge_labels: Vec<String>,
 ) -> ParsedRoadStopMeta {
     let short_label = {
         let ascii: String = label
@@ -833,6 +869,7 @@ fn finish_parsed_roadstop_meta(
         short_label,
         label,
         stop_type,
+        badge_labels,
     }
 }
 
@@ -976,7 +1013,7 @@ pub fn collect_cargo_metas_from_grf(data: &[u8]) -> Vec<ParsedCargoMeta> {
     out
 }
 
-/// Parsea Action0 `Objects` (`0x0F`): class label, size, nombre `0xFE`.
+/// Parsea Action0 `Objects` (`0x0F`): class label, size, nombre `0xFE`, badges `0xFD`.
 #[must_use]
 pub fn parse_action0_object_meta(payload: &[u8]) -> Option<ParsedObjectMeta> {
     let header = parse_action0_header(payload)?;
@@ -988,6 +1025,7 @@ pub fn parse_action0_object_meta(payload: &[u8]) -> Option<ParsedObjectMeta> {
     let mut class_label = String::new();
     let mut name = String::new();
     let mut size = crate::object_spec::OBJECT_SIZE_1X1;
+    let mut badge_labels = Vec::new();
     for _ in 0..header.num_props {
         if i >= payload.len() {
             break;
@@ -1020,6 +1058,12 @@ pub fn parse_action0_object_meta(payload: &[u8]) -> Option<ParsedObjectMeta> {
                 name = String::from_utf8_lossy(&payload[i..i + nul]).to_string();
                 i += nul + 1;
             }
+            PROP_BADGE_ASSOCIATIONS => {
+                let Some(labels) = read_badge_association_labels(payload, &mut i) else {
+                    break;
+                };
+                badge_labels = labels;
+            }
             _ => break,
         }
     }
@@ -1034,6 +1078,7 @@ pub fn parse_action0_object_meta(payload: &[u8]) -> Option<ParsedObjectMeta> {
         class_label,
         name,
         size,
+        badge_labels,
     })
 }
 

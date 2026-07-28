@@ -80,6 +80,10 @@ pub(crate) enum FloatingWindowId {
     RailStationPicker,
     /// Selección de aeropuerto (clase / tipo / orientación).
     AirportPicker,
+    /// Selección de parada road NewGRF (bus / camión).
+    RoadStopPicker,
+    /// Selección de objeto (vanilla + NewGRF 1×1).
+    ObjectPicker,
     /// «Selección de puente» tras definir el tramo.
     BridgePicker,
     /// Lista de destinos para la ruta del vehículo.
@@ -159,6 +163,8 @@ impl FloatingWindowId {
         Self::VehicleDetails,
         Self::RailStationPicker,
         Self::AirportPicker,
+        Self::RoadStopPicker,
+        Self::ObjectPicker,
         Self::BridgePicker,
         Self::DestinationPicker,
         Self::NewsHistory,
@@ -208,6 +214,8 @@ impl FloatingWindowId {
             Self::VehicleDetails => "VehicleDetails",
             Self::RailStationPicker => "RailStationPicker",
             Self::AirportPicker => "AirportPicker",
+            Self::RoadStopPicker => "RoadStopPicker",
+            Self::ObjectPicker => "ObjectPicker",
             Self::BridgePicker => "BridgePicker",
             Self::DestinationPicker => "DestinationPicker",
             Self::NewsHistory => "NewsHistory",
@@ -302,6 +310,8 @@ fn chrome_capabilities(id: FloatingWindowId) -> WindowChromeCapabilities {
             | FloatingWindowId::VehicleDetails
             | FloatingWindowId::RailStationPicker
             | FloatingWindowId::AirportPicker
+            | FloatingWindowId::RoadStopPicker
+            | FloatingWindowId::ObjectPicker
             | FloatingWindowId::NewsHistory
             | FloatingWindowId::Finances
             | FloatingWindowId::SoundMusic
@@ -321,6 +331,8 @@ fn chrome_capabilities(id: FloatingWindowId) -> WindowChromeCapabilities {
             id,
             FloatingWindowId::RailStationPicker
                 | FloatingWindowId::AirportPicker
+                | FloatingWindowId::RoadStopPicker
+                | FloatingWindowId::ObjectPicker
                 | FloatingWindowId::SignalPicker
         );
     let resize = matches!(

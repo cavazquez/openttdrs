@@ -107,6 +107,21 @@ pub struct RoadTypeDef {
     /// Techo de velocidad del tipo (`0` = sin límite). Prop Action0 `0x14`.
     #[serde(default)]
     pub max_speed: u16,
+    /// Factor de coste de construcción (`prop 0x13`); `0` = default.
+    #[serde(default)]
+    pub cost_multiplier: u16,
+    /// Factor de mantenimiento (`prop 0x1C`); `0` = default.
+    #[serde(default)]
+    pub maintenance_multiplier: u16,
+    /// Flags Action0 `0x10` (o extensión local `0x09` en RoadTypes).
+    #[serde(default)]
+    pub flags: u8,
+    /// Máscara de `RoadType` powered (`prop 0x0F` resuelta); bit = `id.as_u8()`.
+    #[serde(default)]
+    pub powered_mask: u64,
+    /// Registrado vía feature `TramTypes` (`0x13`), no RoadTypes.
+    #[serde(default)]
+    pub from_tramtypes_feature: bool,
     pub from_newgrf: bool,
     /// Preview Action1/3 (primera vista); no se serializa en saves.
     #[serde(default, skip)]
@@ -172,6 +187,11 @@ pub fn vanilla_road_type_catalog() -> Vec<RoadTypeDef> {
             short_label: "Norm".into(),
             intro_year: 0,
             max_speed: 0,
+            cost_multiplier: 0,
+            maintenance_multiplier: 0,
+            flags: 0,
+            powered_mask: 0,
+            from_tramtypes_feature: false,
             from_newgrf: false,
             newgrf_preview: None,
             newgrf_views: Vec::new(),
@@ -187,6 +207,11 @@ pub fn vanilla_road_type_catalog() -> Vec<RoadTypeDef> {
             short_label: "Tram".into(),
             intro_year: 0,
             max_speed: 0,
+            cost_multiplier: 0,
+            maintenance_multiplier: 0,
+            flags: 0,
+            powered_mask: 0,
+            from_tramtypes_feature: true,
             from_newgrf: false,
             newgrf_preview: None,
             newgrf_views: Vec::new(),

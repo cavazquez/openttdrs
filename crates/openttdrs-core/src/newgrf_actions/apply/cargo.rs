@@ -3,11 +3,15 @@
 use std::path::Path;
 
 use crate::GameState;
-use crate::cargo_spec::{CargoSpecDef, empty_cargo_spec_catalog};
+use crate::cargo_spec::{CargoSpecDef, DEFAULT_CARGO_CAPACITY_MULTIPLIER, empty_cargo_spec_catalog};
 
 use super::super::action0::collect_cargo_metas_from_grf;
 
 /// Reconstruye el catálogo de cargo specs desde el stack `enabled`.
+///
+/// Merge por `local_id` dentro del GRF; el mismo label en otro GRF posterior
+/// actualiza el slot si comparte `id`, o añade entrada (identidad por label
+/// vía [`crate::cargo_spec::cargo_spec_by_label`]).
 pub fn apply_newgrf_cargoes(state: &mut GameState, search_dirs: &[&Path]) {
     let mut catalog = empty_cargo_spec_catalog();
     let stack = state.newgrf_stack.clone();
@@ -26,21 +30,31 @@ pub fn apply_newgrf_cargoes(state: &mut GameState, search_dirs: &[&Path]) {
             continue;
         };
         for meta in collect_cargo_metas_from_grf(&data) {
-            if let Some(existing) = catalog.iter_mut().find(|d| d.id == meta.local_id) {
-                existing.bitnum = meta.bitnum;
-                existing.label = meta.label;
-                existing.name = meta.name;
-                existing.from_newgrf = true;
-                existing.grfid = entry.grfid;
+            let def = CargoSpecDef {
+                id: meta.local_id,
+                bitnum: meta.bitnum,
+                label: meta.label,
+                name: meta.name,
+                from_newgrf: true,
+                grfid: entry.grfid,
+                weight: meta.weight,
+                initial_payment: meta.initial_payment,
+                transit_fast: meta.transit_fast,
+                transit_slow: meta.transit_slow,
+                is_freight: meta.is_freight,
+                classes: meta.classes,
+                capacity_multiplier: if meta.capacity_multiplier == 0 {
+                    DEFAULT_CARGO_CAPACITY_MULTIPLIER
+                } else {
+                    meta.capacity_multiplier
+                },
+                rating_colour: meta.rating_colour,
+                legend_colour: meta.legend_colour,
+            };
+            if let Some(existing) = catalog.iter_mut().find(|d| d.id == def.id) {
+                *existing = def;
             } else {
-                catalog.push(CargoSpecDef {
-                    id: meta.local_id,
-                    bitnum: meta.bitnum,
-                    label: meta.label,
-                    name: meta.name,
-                    from_newgrf: true,
-                    grfid: entry.grfid,
-                });
+                catalog.push(def);
             }
         }
     }

@@ -75,8 +75,57 @@ pub fn build_action0_railtype_payload_with_speed(
     label: &[u8; 4],
     max_speed: u16,
 ) -> Vec<u8> {
-    let mut payload = vec![0x00, ACTION0_FEATURE_RAILTYPES, 0x02, 0x01, local_id, 0x08];
+    build_action0_railtype_payload_full(local_id, label, max_speed, 0, 0, &[], &[])
+}
+
+/// Action0 `RailTypes` con speed, coste y listas compatible/powered.
+#[must_use]
+pub fn build_action0_railtype_payload_full(
+    local_id: u8,
+    label: &[u8; 4],
+    max_speed: u16,
+    cost_multiplier: u16,
+    flags: u8,
+    compatible: &[[u8; 4]],
+    powered: &[[u8; 4]],
+) -> Vec<u8> {
+    let mut num_props = 2u8; // 08 + 14
+    if cost_multiplier > 0 {
+        num_props += 1;
+    }
+    if flags > 0 {
+        num_props += 1;
+    }
+    if !compatible.is_empty() {
+        num_props += 1;
+    }
+    if !powered.is_empty() {
+        num_props += 1;
+    }
+    let mut payload = vec![0x00, ACTION0_FEATURE_RAILTYPES, num_props, 0x01, local_id, 0x08];
     payload.extend_from_slice(label);
+    if !compatible.is_empty() {
+        payload.push(0x0E);
+        payload.push(u8::try_from(compatible.len()).unwrap_or(0));
+        for l in compatible {
+            payload.extend_from_slice(l);
+        }
+    }
+    if !powered.is_empty() {
+        payload.push(0x0F);
+        payload.push(u8::try_from(powered.len()).unwrap_or(0));
+        for l in powered {
+            payload.extend_from_slice(l);
+        }
+    }
+    if flags > 0 {
+        payload.push(0x10);
+        payload.push(flags);
+    }
+    if cost_multiplier > 0 {
+        payload.push(0x13);
+        payload.extend_from_slice(&cost_multiplier.to_le_bytes());
+    }
     payload.push(0x14);
     payload.extend_from_slice(&max_speed.to_le_bytes());
     payload
@@ -268,17 +317,51 @@ pub fn build_action0_cargo_payload(
     label: &[u8; 4],
     name: &str,
 ) -> Vec<u8> {
+    build_action0_cargo_payload_full(local_id, bitnum, label, name, 0, 0, 0, 0, false, 0, 0x100)
+}
+
+/// Action0 `Cargoes` con pagos / freight / capacity multiplier.
+#[must_use]
+pub fn build_action0_cargo_payload_full(
+    local_id: u8,
+    bitnum: u8,
+    label: &[u8; 4],
+    name: &str,
+    weight: u8,
+    initial_payment: u32,
+    transit_fast: u8,
+    transit_slow: u8,
+    is_freight: bool,
+    classes: u16,
+    capacity_multiplier: u16,
+) -> Vec<u8> {
+    // 08 bitnum, 0F weight, 10/11 transit, 12 payment, 15 freight, 16 classes,
+    // 17 label, 1D multiplier, FE name = 10 props.
     let mut p = vec![
         0x00,
         ACTION0_FEATURE_CARGOES,
-        0x03,
+        0x0A,
         0x01,
         local_id,
-        0x08, // bitnum
+        0x08,
         bitnum,
-        0x17, // label
+        0x0F,
+        weight,
+        0x10,
+        transit_fast,
+        0x11,
+        transit_slow,
+        0x12,
     ];
+    p.extend_from_slice(&initial_payment.to_le_bytes());
+    p.push(0x15);
+    p.push(u8::from(is_freight));
+    p.push(0x16);
+    p.extend_from_slice(&classes.to_le_bytes());
+    p.push(0x17);
     p.extend_from_slice(label);
+    p.push(0x1D);
+    p.extend_from_slice(&capacity_multiplier.to_le_bytes());
     p.push(0xFE);
     p.extend_from_slice(name.as_bytes());
     p.push(0);
@@ -1979,6 +2062,319 @@ mod tests {
         assert_eq!(
             crate::get_translated_industry_tile_id(42, &state.industry_tile_overrides),
             def.gfx.as_u16()
+        );
+    }
+
+    /// #255: sin NewGRF, Action5 señales no altera vanilla (todos los slots `None`).
+    #[test]
+    fn signals_ac_no_grf_leaves_action5_empty() {
+        let mut state = GameState::new(4, 4);
+        apply_newgrf_action5_signals(&mut state, &[]);
+        assert!(
+            state
+                .runtime
+                .signal_action5_newgrf_sprites
+                .iter()
+                .all(Option::is_none)
+        );
+        assert!(state.runtime.rail_signal_newgrf.iter().all(Option::is_none));
+    }
+
+    /// #255: Action5 custom llena su slot; vanilla OpenGFX fuera de rango intacto.
+    #[test]
+    fn signals_ac_action5_custom_without_clobbering_other_slots() {
+        let mut indices = vec![0u8; 8 * 8];
+        for y in 2..6 {
+            for x in 2..6 {
+                indices[y * 8 + x] = 174;
+            }
+        }
+        let bytes = crate::newgrf_sprites::build_grf_v2_action5_with_sprite(
+            0x04,
+            5,
+            8,
+            8,
+            &indices,
+            [b'S', b'G', 0, 5],
+            "sig5ac",
+        );
+        let dir = tempfile_dir_with("sig5ac.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("sig5ac.grf", 5));
+        apply_newgrf_action5_signals(&mut state, &[&dir]);
+        assert_eq!(state.runtime.signal_action5_newgrf_sprites.len(), 240);
+        assert!(state.runtime.signal_action5_newgrf_sprites[5].is_some());
+        assert!(state.runtime.signal_action5_newgrf_sprites[0].is_none());
+        assert!(state.runtime.signal_action5_newgrf_sprites[12].is_none());
+    }
+
+    /// #255: orientación × rojo/verde × PBS (path) vía Action3 RailTypes.
+    #[test]
+    fn signals_ac_orientation_red_green_pbs_and_fallback_slot() {
+        let action0 = build_action0_railtype_payload(0, b"RAIL");
+        let red = vec![10u8; 16 * 24];
+        let green = vec![200u8; 16 * 24];
+        let bytes = crate::newgrf_sprites::build_grf_v2_railtype_signal_sprites(
+            &action0,
+            0,
+            16,
+            24,
+            &red,
+            &green,
+            [b'S', b'I', 0, 2],
+            "sigac",
+        );
+        let dir = tempfile_dir_with("sigac.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("sigac.grf", 0x5349_0002));
+        apply_newgrf_rail_signals(&mut state, &[&dir]);
+        let spec = state.runtime.rail_signal_newgrf[0]
+            .as_ref()
+            .expect("RAIL signals");
+        // PBS path = signal_type 4; block = 0; semaphore variant = 1.
+        for (sig_type, variant) in [(0u8, 0u8), (4u8, 0u8), (4u8, 1u8)] {
+            for image in [0u8, 3u8, 7u8] {
+                let mut red_ctx = crate::newgrf_sprites::Action2EvalCtx::default();
+                let r = spec
+                    .resolve_sprite(image, sig_type, variant, false, &mut red_ctx)
+                    .expect("red");
+                let mut green_ctx = crate::newgrf_sprites::Action2EvalCtx::default();
+                let g = spec
+                    .resolve_sprite(image, sig_type, variant, true, &mut green_ctx)
+                    .expect("green");
+                assert_ne!(r.rgba, g.rgba, "type={sig_type} var={variant} img={image}");
+                assert_eq!(
+                    red_ctx.vars.get(&0x18),
+                    Some(&((u32::from(sig_type) << 16) | (u32::from(variant) << 8)))
+                );
+            }
+        }
+        // Fallback Action5: slot mapping sigue válido aunque no haya sprite en 0.
+        assert_eq!(crate::signal_action5_slot(5088), Some(0));
+    }
+
+    /// #255: tipo/variante de señal persisten en m2 tras save/load.
+    #[test]
+    fn signals_ac_type_variant_survive_save_load() {
+        use crate::rail_signals::{
+            SIGTYPE_PATH, SignalTrack, signal_type_for_track, signal_variant_for_track,
+        };
+        use crate::{Command, apply_command};
+        let mut state = GameState::new(8, 8);
+        let c = crate::map::TileCoord::new(2, 2);
+        apply_command(
+            &mut state,
+            &Command::PlaceRailBits(c, crate::map::RAIL_TB_X),
+        )
+        .unwrap();
+        apply_command(
+            &mut state,
+            &Command::PlaceRailSignalWithVariant(c, 0, 128, 128, SIGTYPE_PATH, 1),
+        )
+        .unwrap();
+
+        let json = state.save_json().expect("save");
+        let loaded = GameState::load_json(&json).expect("load");
+        let t = loaded.map.get(c).unwrap();
+        assert_eq!(signal_type_for_track(t.m2, SignalTrack::X), SIGTYPE_PATH);
+        assert_eq!(signal_variant_for_track(t.m2, SignalTrack::X), 1);
+    }
+
+    /// #263: rail props compatible/powered/cost + road/tram IDs separados.
+    #[test]
+    fn types_ac_rail_road_tram_labels_compat_and_cost() {
+        let rail_a0 = build_action0_railtype_payload_full(
+            0,
+            b"RAIL",
+            120,
+            16, // ×2 coste
+            0x01,
+            &[*b"ELRL"],
+            &[*b"RAIL", *b"ELRL"],
+        );
+        let road_a0 =
+            build_action0_roadtype_payload_with_speed(b"COBB", false, 1850, 60, "Cobble");
+        let tram_a0 =
+            build_action0_roadtype_payload_with_speed(b"TRAM", true, 1900, 40, "Tram NG");
+        let bytes = build_grf_v2_with_action0s_and_action8(
+            &[&rail_a0, &road_a0, &tram_a0],
+            [b'T', b'Y', 0, 1],
+            "types",
+            "",
+        );
+        let dir = tempfile_dir_with("types.grf", &bytes);
+        let mut state = GameState::new(8, 8);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("types.grf", 0x5459_0001));
+        apply_newgrf_rail_signals(&mut state, &[&dir]);
+        apply_newgrf_road_types(&mut state, &[&dir]);
+
+        let rail_props = state.runtime.rail_type_props[0];
+        assert_eq!(rail_props.max_speed, 120);
+        assert_eq!(rail_props.cost_multiplier, 16);
+        assert_ne!(rail_props.compatible_mask, 0);
+        assert_ne!(rail_props.powered_mask, 0);
+        assert!(crate::rail_types_compatible_with_props(
+            crate::RailType::Rail,
+            crate::RailType::Electric,
+            &state.runtime.rail_type_props,
+        ));
+
+        let roads: Vec<_> = state
+            .road_type_catalog
+            .iter()
+            .filter(|d| d.from_newgrf)
+            .collect();
+        assert_eq!(roads.len(), 2);
+        let road = roads.iter().find(|d| d.short_label == "COBB").unwrap();
+        let tram = roads.iter().find(|d| d.short_label == "TRAM").unwrap();
+        assert_ne!(road.id, tram.id);
+        assert_eq!(road.class, crate::RoadTramType::Road);
+        assert_eq!(tram.class, crate::RoadTramType::Tram);
+        assert!(tram.from_tramtypes_feature);
+        assert!(!road.from_tramtypes_feature);
+        assert_eq!(road.max_speed, 60);
+        assert_eq!(tram.max_speed, 40);
+
+        // Coste rail ×2 vs default.
+        let base = crate::economy::rail_build_cost(&state.global_economy);
+        let factored = crate::economy::rail_build_cost_factored(&state.global_economy, 16);
+        assert_eq!(factored, base * 2);
+    }
+
+    /// #263: Action3 sprite types underlay/signals resuelven grupo o fallback vacío.
+    #[test]
+    fn types_ac_rail_sprite_types_resolve_or_fallback() {
+        let action0 = build_action0_railtype_payload(1, b"ELRL");
+        let red = vec![1u8; 8 * 8];
+        let green = vec![2u8; 8 * 8];
+        let bytes = crate::newgrf_sprites::build_grf_v2_railtype_signal_sprites(
+            &action0,
+            1,
+            8,
+            8,
+            &red,
+            &green,
+            [b'T', b'S', 0, 3],
+            "rst",
+        );
+        let dir = tempfile_dir_with("rst.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("rst.grf", 3));
+        apply_newgrf_rail_signals(&mut state, &[&dir]);
+        let idx = usize::from(crate::RailType::Electric.as_u8());
+        assert!(state.runtime.rail_signal_newgrf[idx].is_some());
+        // Sin underlay/overlay en el fixture → fallback None (OpenGFX).
+        assert!(state.runtime.rail_type_underlay_newgrf[idx].is_none());
+        assert!(state.runtime.rail_type_overlay_newgrf[idx].is_none());
+        let mut ctx = crate::newgrf_sprites::Action2EvalCtx::default();
+        assert!(
+            state.runtime.rail_signal_newgrf[idx]
+                .as_ref()
+                .unwrap()
+                .resolve_group(0, &mut ctx)
+                .is_some()
+        );
+    }
+
+    /// #264: dos cargos, pagos/capacidad/textos y traducción local/global estable.
+    #[test]
+    fn cargoes_ac_identity_payment_capacity_and_inspect() {
+        let a0_pass = build_action0_cargo_payload_full(
+            0,
+            0,
+            b"PASS",
+            "Pax Custom",
+            1,
+            5000,
+            1,
+            20,
+            false,
+            1,
+            0x200,
+        );
+        let a0_coal = build_action0_cargo_payload_full(
+            1,
+            1,
+            b"COAL",
+            "Carbón Custom",
+            16,
+            8000,
+            5,
+            100,
+            true,
+            2,
+            0x100,
+        );
+        let bytes = build_grf_v2_with_action0s_and_action8(
+            &[&a0_pass, &a0_coal],
+            [b'C', b'G', 0, 2],
+            "cargoac",
+            "",
+        );
+        let dir = tempfile_dir_with("cargoac.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("cargoac.grf", 0x4347_0002));
+        apply_newgrf_cargoes(&mut state, &[&dir]);
+        assert_eq!(state.cargo_spec_catalog.len(), 2);
+        let pass = crate::cargo_spec_by_label(&state.cargo_spec_catalog, "PASS").unwrap();
+        let coal = crate::cargo_spec_by_label(&state.cargo_spec_catalog, "COAL").unwrap();
+        assert_eq!(pass.name, "Pax Custom");
+        assert_eq!(coal.name, "Carbón Custom");
+        assert_eq!(pass.grfid, 0x4347_0002);
+        assert_ne!(pass.label, coal.label);
+
+        let pay = crate::payment_spec_for_cargo(crate::CargoType::Coal, &state.cargo_spec_catalog);
+        assert_eq!(pay.base_rate, 8000);
+        assert_eq!(
+            crate::apply_cargo_capacity_multiplier(
+                40,
+                &state.cargo_spec_catalog,
+                crate::CargoType::Passengers
+            ),
+            80
+        );
+        assert_eq!(
+            crate::cargo_spec_display_name(crate::CargoType::Passengers, &state.cargo_spec_catalog),
+            "Pax Custom"
+        );
+
+        let vanilla = crate::transported_goods_income(
+            10,
+            8,
+            4,
+            crate::CargoType::Coal,
+            state.global_economy.inflation_payment,
+        );
+        let custom = crate::transported_goods_income_with_spec(
+            10,
+            8,
+            4,
+            pay,
+            state.global_economy.inflation_payment,
+        );
+        assert_ne!(vanilla, custom);
+
+        let report = inspect_grf_bytes(&bytes).unwrap();
+        assert!(report.cargo_labels.iter().any(|l| l.contains("PASS")));
+        assert!(report.cargo_labels.iter().any(|l| l.contains("COAL")));
+
+        // Re-apply tras “load”: misma traducción local→label.
+        apply_newgrf_cargoes(&mut state, &[&dir]);
+        assert_eq!(
+            crate::cargo_spec_by_label(&state.cargo_spec_catalog, "pass")
+                .unwrap()
+                .name,
+            "Pax Custom"
         );
     }
 

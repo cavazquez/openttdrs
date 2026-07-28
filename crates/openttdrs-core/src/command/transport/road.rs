@@ -1,4 +1,24 @@
-use crate::economy::road_build_cost;
+use crate::economy::road_build_cost_factored;
+
+fn charge_road_build(state: &mut GameState) {
+    let mult = state
+        .road_type_catalog
+        .iter()
+        .find(|d| d.id == state.current_road_type)
+        .map(|d| d.cost_multiplier)
+        .unwrap_or(0);
+    state.economy.money -= road_build_cost_factored(&state.global_economy, mult);
+}
+
+fn road_build_amount(state: &GameState) -> i64 {
+    let mult = state
+        .road_type_catalog
+        .iter()
+        .find(|d| d.id == state.current_road_type)
+        .map(|d| d.cost_multiplier)
+        .unwrap_or(0);
+    road_build_cost_factored(&state.global_economy, mult)
+}
 use crate::map::{Map, TileCoord, TileKind};
 use crate::pathfinder::{diag_dir_offset, station_site_tile_allows_build};
 use crate::{DEPOT_BUILD_COST, GameState};
@@ -135,12 +155,12 @@ pub(in crate::command) fn place_road_bits(
             .map
             .set_tile(c, tile)
             .map_err(|_| CommandError::OutOfBounds)?;
-        state.economy.money -= road_build_cost(&state.global_economy);
+        charge_road_build(state);
         return Ok(());
     }
     write_normal_road_tile(state, c, road_bits)?;
     propagate_road_bits_to_neighbors(state, c, road_bits)?;
-    state.economy.money -= road_build_cost(&state.global_economy);
+    charge_road_build(state);
     Ok(())
 }
 
@@ -369,7 +389,7 @@ pub(in crate::command) fn set_road_bits(
     check_place_road_bits(&state.map, c)?;
     let road_bits = (bits & 0x0F).max(0x01);
     write_normal_road_tile(state, c, road_bits)?;
-    state.economy.money -= road_build_cost(&state.global_economy);
+    charge_road_build(state);
     Ok(())
 }
 
@@ -442,7 +462,7 @@ pub(in crate::command) fn place_tram_bits(
         merge_tram_bits_with_neighbors(&state.map, c, requested, existing_tram, force_axis);
     write_tram_geometry(state, c, tram_bits)?;
     propagate_tram_bits_to_neighbors(state, c, tram_bits)?;
-    state.economy.money -= road_build_cost(&state.global_economy);
+    charge_road_build(state);
     Ok(())
 }
 
@@ -472,7 +492,7 @@ pub(in crate::command) fn remove_tram_bits(
         .map
         .set_tile(c, out)
         .map_err(|_| CommandError::OutOfBounds)?;
-    state.economy.money -= road_build_cost(&state.global_economy) / 2;
+    state.economy.money -= road_build_amount(state) / 2;
     Ok(())
 }
 

@@ -25,15 +25,15 @@ Estados:
 | `08` | Global variables | runtime parcial | no aplica | tablas rail/road/tram |
 | `09` | Industry tiles | runtime parcial | runtime | construcción/render industria |
 | `0A` | Industries | pendiente | pendiente | — |
-| `0B` | Cargoes | runtime parcial | pendiente | catálogo `cargo_spec` |
+| `0B` | Cargoes | runtime | pendiente | catálogo `cargo_spec` → pagos/capacidad/UI |
 | `0C` | Sound effects | pendiente | pendiente | — |
 | `0D` | Airports | pendiente | pendiente | — |
-| `0E` | Signals | ignorada por spec (null en OTTD 15.3) | N/A | gráficos: RailTypes `RTSG_SIGNALS` + Action5 `0x04` |
+| `0E` | Signals | ignorada por spec (null en OTTD 15.3; #255) | N/A | gráficos: RailTypes `RTSG_SIGNALS` + Action5 `0x04`; estilo en `m2` save/load |
 | `0F` | Objects | runtime | runtime | catálogo `object_spec`; build+render multitile |
-| `10` | Rail types | runtime parcial | runtime por sprite type | construcción/render + techo velocidad |
+| `10` | Rail types | runtime | runtime (signals/underlay/overlay) | construcción/coste/compat + techo velocidad |
 | `11` | Airport tiles | pendiente | pendiente | — |
-| `12` | Road types | runtime parcial | runtime | construcción/render + techo velocidad |
-| `13` | Tram types | runtime parcial (mismo parser que Road) | pendiente | catálogo road (clase tram) |
+| `12` | Road types | runtime | runtime | construcción/coste + techo velocidad |
+| `13` | Tram types | runtime (feature propio + catálogo road) | runtime | IDs/clase tram separados |
 | `14` | Road stops | runtime parcial | runtime parcial | auto-select / construcción / render (`road_stop_spec`) |
 | `15` | Badges | runtime | no aplica | catálogo `badge` (merge por label); asociaciones roadstops/objects |
 
@@ -139,8 +139,15 @@ Fuente: `newgrf_act0_railtypes.cpp`.
 | Props | Estado |
 |---|---|
 | `08` label | **runtime** (señales / tablas) |
-| `14` max speed | **runtime** (`GameState.runtime.rail_type_max_speed` → techo tren) |
-| resto tamaños fijos usados para avanzar el bloque | consumidas |
+| `0E`/`0F` compatible / powered lists | **runtime** (`rail_type_props` → convert/vehicles) |
+| `10` flags | **runtime** |
+| `11` curve speed | **runtime** (almacenado) |
+| `13` construction cost | **runtime** (`rail_build_cost_factored`) |
+| `14` max speed | **runtime** (`rail_type_max_speed` / `rail_type_props`) |
+| `17` introduction date | **runtime** (almacenado) |
+| `1C` maintenance cost | **runtime** (almacenado) |
+| Action3 signals / underlay / overlay | **runtime** (slots por `RailType`; fallback OpenGFX) |
+| resto tamaños fijos | consumidas |
 
 ## Road types (`12`) / Tram types (`13`)
 
@@ -149,10 +156,14 @@ Fuente: `newgrf_act0_roadtypes.cpp` (TramTypes reutiliza el handler).
 | Props | Estado |
 |---|---|
 | `08` short label | **runtime** |
+| `0F` powered list | **runtime** (`RoadTypeDef.powered_mask`) |
+| `10` flags | **runtime** |
+| `13`/`1C` cost / maintenance | **runtime** (coste build factored) |
 | `14` max speed | **runtime** (`RoadTypeDef.max_speed` → techo RV) |
 | `16` intro year (extensión local WORD) | **runtime** |
 | `09` flags tram (extensión local en RoadTypes) | **runtime** (bit0); en TramTypes `0x09` es string WORD consumido |
-| feature `13` | **runtime** parcial: parse/apply al catálogo road con `RoadTramType::Tram` |
+| feature `13` | **runtime**: `from_tramtypes_feature` + clase `Tram`; IDs ≠ road |
+| Action3 views | **runtime** (grupo local; fallback OpenGFX) |
 
 ## Cargoes (`0B`)
 
@@ -161,9 +172,28 @@ Fuente: `newgrf_act0_cargo.cpp`.
 | Props | Estado |
 |---|---|
 | `08` bitnum BYTE | **runtime** (catálogo) |
-| `17` label 4 chars | **runtime** (catálogo) |
-| `FE` nombre C-string (extensión local) | **runtime** (catálogo) |
-| resto | pendiente |
+| `0F` weight | **runtime** (catálogo) |
+| `10`/`11` transit periods | **runtime** → pagos |
+| `12` initial payment | **runtime** → `payment_spec_for_cargo` |
+| `13`/`14` colours | **runtime** (catálogo) |
+| `15` freight | **runtime** (catálogo) |
+| `16` classes | **runtime** (catálogo) |
+| `17` label 4 chars | **runtime** (identidad; lookup case-insensitive) |
+| `1D` capacity multiplier | **runtime** → compra vehículo |
+| `FE` nombre C-string (extensión local) | **runtime** (UI / inspect) |
+| strings WORD `09`–`0D` / `1B`/`1C` | consumidas |
+| resto (`18`/`1A`/`1E`/`1F`) | consumidas (ancho fijo) |
+
+## Signals (`0E`) — N/A Action0 en 15.3
+
+OpenTTD 15.3 registra `GSF_SIGNALS` como `nullptr`. Gráficos:
+
+| Fuente | Estado |
+|---|---|
+| Action5 `0x04` (240 slots) | **runtime** (no altera slots no escritos; vanilla si vacío) |
+| RailTypes Action3 `RTSG_SIGNALS` | **runtime** (rojo/verde × tipo/variante/PBS) |
+| tipo/variante en `Tile.m2` | **runtime** (save/load) |
+| Action0 `0E` | **ignorada por spec** |
 
 ## Objects (`0F`)
 

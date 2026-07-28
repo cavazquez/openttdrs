@@ -137,11 +137,28 @@ pub fn transported_goods_income(
     cargo: CargoType,
     inflation_payment: u64,
 ) -> i64 {
+    transported_goods_income_with_spec(
+        count,
+        distance,
+        transit_days,
+        cargo.payment_spec(),
+        inflation_payment,
+    )
+}
+
+/// Igual que [`transported_goods_income`] con `CargoPaymentSpec` explícito (NewGRF).
+#[must_use]
+pub fn transported_goods_income_with_spec(
+    count: u32,
+    distance: u32,
+    transit_days: u16,
+    spec: CargoPaymentSpec,
+    inflation_payment: u64,
+) -> i64 {
     if count == 0 {
         return 0;
     }
     let dist = distance.max(1);
-    let spec = cargo.payment_spec();
     let (time_factor, asymptotic) = cargo_time_factor(transit_days, spec);
     let effective_rate =
         (i64::from(spec.base_rate) * i64::try_from(inflation_payment).unwrap_or(i64::MAX)) >> 16;

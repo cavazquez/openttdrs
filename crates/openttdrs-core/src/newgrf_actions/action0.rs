@@ -96,6 +96,16 @@ pub struct ParsedRoadTypeMeta {
     pub intro_year: u16,
     /// Prop `0x14` speed limit (`0` = sin techo).
     pub max_speed: u16,
+    /// Prop `0x13` construction cost factor (`0` = default).
+    pub cost_multiplier: u16,
+    /// Prop `0x1C` maintenance cost factor (`0` = default).
+    pub maintenance_multiplier: u16,
+    /// Prop `0x10` flags BYTE.
+    pub flags: u8,
+    /// Labels de `prop 0x0F` powered list (sin resolver).
+    pub powered_labels: Vec<[u8; 4]>,
+    /// `true` si el bloque era feature `TramTypes` (`0x13`), no extensión local.
+    pub from_tramtypes_feature: bool,
 }
 
 /// Metadatos `Stations` leídos de un Action0 (antes de asignar IDs).
@@ -230,12 +240,26 @@ impl ParsedVehicleMeta {
 }
 
 /// Asociación local de `RailType` Action0 (`prop 0x08`) con una etiqueta global.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParsedRailTypeMeta {
     pub local_id: u8,
     pub label: crate::newgrf_type_tables::TypeLabel,
     /// Prop `0x14` speed limit (`0` = sin techo).
     pub max_speed: u16,
+    /// Prop `0x13` construction cost factor.
+    pub cost_multiplier: u16,
+    /// Prop `0x1C` maintenance cost factor.
+    pub maintenance_multiplier: u16,
+    /// Prop `0x10` flags.
+    pub flags: u8,
+    /// Prop `0x11` curve speed advantage.
+    pub curve_speed: u8,
+    /// Prop `0x17` introduction date (días desde epoch OTTD); `0` = siempre.
+    pub introduction_date: u32,
+    /// Labels `prop 0x0E` compatible.
+    pub compatible_labels: Vec<[u8; 4]>,
+    /// Labels `prop 0x0F` powered (implica compatible).
+    pub powered_labels: Vec<[u8; 4]>,
 }
 
 /// Metadatos `IndustryTiles` Action0 (antes de asignar gfx ≥175).
@@ -289,6 +313,15 @@ pub struct ParsedCargoMeta {
     pub bitnum: u8,
     pub label: String,
     pub name: String,
+    pub weight: u8,
+    pub initial_payment: u32,
+    pub transit_fast: u8,
+    pub transit_slow: u8,
+    pub is_freight: bool,
+    pub classes: u16,
+    pub capacity_multiplier: u16,
+    pub rating_colour: u8,
+    pub legend_colour: u8,
 }
 
 /// Metadatos `Objects` Action0 (antes de asignar ID global).
@@ -329,6 +362,28 @@ pub fn for_each_pseudo_payload(
     Ok(())
 }
 
+fn read_label_list(payload: &[u8], i: &mut usize) -> Option<Vec<[u8; 4]>> {
+    if *i >= payload.len() {
+        return None;
+    }
+    let n = usize::from(payload[*i]);
+    *i += 1;
+    let mut out = Vec::with_capacity(n);
+    for _ in 0..n {
+        if *i + 4 > payload.len() {
+            return None;
+        }
+        out.push([
+            payload[*i],
+            payload[*i + 1],
+            payload[*i + 2],
+            payload[*i + 3],
+        ]);
+        *i += 4;
+    }
+    Some(out)
+}
+
 #[must_use]
 pub fn parse_action0_roadtype_meta(payload: &[u8]) -> Option<ParsedRoadTypeMeta> {
     let header = parse_action0_header(payload)?;
@@ -344,6 +399,10 @@ pub fn parse_action0_roadtype_meta(payload: &[u8]) -> Option<ParsedRoadTypeMeta>
     let mut label = String::new();
     let mut intro_year = 0u16;
     let mut max_speed = 0u16;
+    let mut cost_multiplier = 0u16;
+    let mut maintenance_multiplier = 0u16;
+    let mut flags = 0u8;
+    let mut powered_labels = Vec::new();
     // Extensión local en RoadTypes: bit0 de `0x09` = tram. En OTTD `0x09` es string WORD.
     let mut is_tram = feature_tram;
     for _ in 0..header.num_props {
@@ -367,13 +426,40 @@ pub fn parse_action0_roadtype_meta(payload: &[u8]) -> Option<ParsedRoadTypeMeta>
                 i += 4;
             }
             PROP_FLAGS if !feature_tram => {
-                // Local: BYTE flags tram. OTTD: WORD string id — si hay ≥2 bytes y el
-                // segundo no parece prop, tratar como WORD consumido.
+                // Local: BYTE flags (bit0 tram). OTTD `0x09` es WORD string.
                 if i >= payload.len() {
                     break;
                 }
-                is_tram = payload[i] & 0x01 != 0;
+                flags = payload[i];
+                is_tram = flags & 0x01 != 0;
                 i += 1;
+            }
+            0x0F | 0x18 | 0x19 => {
+                let Some(list) = read_label_list(payload, &mut i) else {
+                    break;
+                };
+                if prop == 0x0F {
+                    powered_labels = list;
+                }
+            }
+            0x10 => {
+                if i >= payload.len() {
+                    break;
+                }
+                flags = payload[i];
+                i += 1;
+            }
+            0x13 | 0x1C => {
+                if i + 2 > payload.len() {
+                    break;
+                }
+                let v = u16::from_le_bytes([payload[i], payload[i + 1]]);
+                i += 2;
+                if prop == 0x13 {
+                    cost_multiplier = v;
+                } else {
+                    maintenance_multiplier = v;
+                }
             }
             0x14 => {
                 if i + 2 > payload.len() {
@@ -383,11 +469,28 @@ pub fn parse_action0_roadtype_meta(payload: &[u8]) -> Option<ParsedRoadTypeMeta>
                 i += 2;
             }
             PROP_INTRO_YEAR => {
+                // Extensión local WORD año; OTTD `0x16` es map colour BYTE.
                 if i + 2 > payload.len() {
                     break;
                 }
                 intro_year = u16::from_le_bytes([payload[i], payload[i + 1]]);
                 i += 2;
+            }
+            0x17 => {
+                // Introduction date DWORD (OTTD); derivar año aproximado si local year=0.
+                if i + 4 > payload.len() {
+                    break;
+                }
+                let days = u32::from_le_bytes([
+                    payload[i],
+                    payload[i + 1],
+                    payload[i + 2],
+                    payload[i + 3],
+                ]);
+                i += 4;
+                if intro_year == 0 && days > 0 {
+                    intro_year = 1920u16.saturating_add(u16::try_from(days / 365).unwrap_or(0));
+                }
             }
             PROP_NAME_CSTRING => {
                 let Some(nul) = payload[i..].iter().position(|&b| b == 0) else {
@@ -396,12 +499,29 @@ pub fn parse_action0_roadtype_meta(payload: &[u8]) -> Option<ParsedRoadTypeMeta>
                 label = String::from_utf8_lossy(&payload[i..i + nul]).to_string();
                 i += nul + 1;
             }
-            // Strings OTTD 0x09–0x0D / 0x1B: WORD cada una (feature tram o road real).
+            // Strings OTTD 0x09–0x0D / 0x1B: WORD.
             0x09 | 0x0A | 0x0B | 0x0C | 0x0D | 0x1B if feature_tram => {
                 if i + 2 > payload.len() {
                     break;
                 }
                 i += 2;
+            }
+            0x0A | 0x0B | 0x0C | 0x0D | 0x1B if !feature_tram => {
+                if i + 2 > payload.len() {
+                    break;
+                }
+                i += 2;
+            }
+            0x1A | 0x1D => {
+                // sort BYTE / alternate label list
+                if prop == 0x1A {
+                    if i >= payload.len() {
+                        break;
+                    }
+                    i += 1;
+                } else if read_label_list(payload, &mut i).is_none() {
+                    break;
+                }
             }
             _ => break,
         }
@@ -419,6 +539,11 @@ pub fn parse_action0_roadtype_meta(payload: &[u8]) -> Option<ParsedRoadTypeMeta>
         short_label,
         intro_year,
         max_speed,
+        cost_multiplier,
+        maintenance_multiplier,
+        flags,
+        powered_labels,
+        from_tramtypes_feature: feature_tram,
     })
 }
 
@@ -446,6 +571,13 @@ pub fn parse_action0_railtype_metas(payload: &[u8]) -> Option<Vec<ParsedRailType
     let mut i = 5usize;
     let mut labels: Option<Vec<crate::newgrf_type_tables::TypeLabel>> = None;
     let mut max_speeds = vec![0u16; n];
+    let mut cost_multipliers = vec![0u16; n];
+    let mut maintenance_multipliers = vec![0u16; n];
+    let mut flags = vec![0u8; n];
+    let mut curve_speeds = vec![0u8; n];
+    let mut introduction_dates = vec![0u32; n];
+    let mut compatible_labels = vec![Vec::<[u8; 4]>::new(); n];
+    let mut powered_labels = vec![Vec::<[u8; 4]>::new(); n];
     for _ in 0..header.num_props {
         let prop = *payload.get(i)?;
         i += 1;
@@ -463,8 +595,19 @@ pub fn parse_action0_railtype_metas(payload: &[u8]) -> Option<Vec<ParsedRailType
                 i += bytes;
                 labels = Some(out);
             }
+            0x0E | 0x0F | 0x18 | 0x19 => {
+                for offset in 0..n {
+                    let Some(list) = read_label_list(payload, &mut i) else {
+                        return None;
+                    };
+                    match prop {
+                        0x0E => compatible_labels[offset] = list,
+                        0x0F => powered_labels[offset] = list,
+                        _ => {}
+                    }
+                }
+            }
             0x14 => {
-                // Speed limit WORD por id.
                 let bytes = n.checked_mul(2)?;
                 if i.checked_add(bytes)? > payload.len() {
                     return None;
@@ -475,28 +618,63 @@ pub fn parse_action0_railtype_metas(payload: &[u8]) -> Option<Vec<ParsedRailType
                 }
                 i += bytes;
             }
-            // Tamaños fijos por id para poder alcanzar prop 08 / 14.
-            0x09..=0x0D | 0x13 | 0x1B | 0x1C => {
+            0x13 | 0x1C => {
+                let bytes = n.checked_mul(2)?;
+                if i.checked_add(bytes)? > payload.len() {
+                    return None;
+                }
+                let target = if prop == 0x13 {
+                    &mut cost_multipliers
+                } else {
+                    &mut maintenance_multipliers
+                };
+                for (offset, slot) in target.iter_mut().enumerate() {
+                    let start = i + offset * 2;
+                    *slot = u16::from_le_bytes([payload[start], payload[start + 1]]);
+                }
+                i += bytes;
+            }
+            0x09..=0x0D | 0x1B => {
                 i = i.checked_add(2usize.checked_mul(n)?)?;
             }
-            0x10..=0x12 | 0x15 | 0x16 | 0x1A => {
-                i = i.checked_add(n)?;
+            0x10 | 0x11 | 0x12 | 0x15 | 0x16 | 0x1A => {
+                if i.checked_add(n)? > payload.len() {
+                    return None;
+                }
+                for offset in 0..n {
+                    match prop {
+                        0x10 => flags[offset] = payload[i + offset],
+                        0x11 => curve_speeds[offset] = payload[i + offset],
+                        _ => {}
+                    }
+                }
+                i += n;
             }
             0x17 => {
-                i = i.checked_add(4usize.checked_mul(n)?)?;
+                let bytes = n.checked_mul(4)?;
+                if i.checked_add(bytes)? > payload.len() {
+                    return None;
+                }
+                for (offset, slot) in introduction_dates.iter_mut().enumerate() {
+                    let start = i + offset * 4;
+                    *slot = u32::from_le_bytes([
+                        payload[start],
+                        payload[start + 1],
+                        payload[start + 2],
+                        payload[start + 3],
+                    ]);
+                }
+                i += bytes;
             }
-            _ => {
-                return labels.map(|labs| {
-                    labs.into_iter()
-                        .enumerate()
-                        .map(|(offset, label)| ParsedRailTypeMeta {
-                            local_id: first_id.wrapping_add(u8::try_from(offset).unwrap_or(0)),
-                            label,
-                            max_speed: max_speeds.get(offset).copied().unwrap_or(0),
-                        })
-                        .collect()
-                });
+            0x1D => {
+                // alternate rail type label list
+                for _ in 0..n {
+                    if read_label_list(payload, &mut i).is_none() {
+                        return None;
+                    }
+                }
             }
+            _ => break,
         }
         if i > payload.len() {
             return None;
@@ -509,6 +687,13 @@ pub fn parse_action0_railtype_metas(payload: &[u8]) -> Option<Vec<ParsedRailType
                 local_id: first_id.wrapping_add(u8::try_from(offset).unwrap_or(0)),
                 label,
                 max_speed: max_speeds.get(offset).copied().unwrap_or(0),
+                cost_multiplier: cost_multipliers.get(offset).copied().unwrap_or(0),
+                maintenance_multiplier: maintenance_multipliers.get(offset).copied().unwrap_or(0),
+                flags: flags.get(offset).copied().unwrap_or(0),
+                curve_speed: curve_speeds.get(offset).copied().unwrap_or(0),
+                introduction_date: introduction_dates.get(offset).copied().unwrap_or(0),
+                compatible_labels: compatible_labels.get(offset).cloned().unwrap_or_default(),
+                powered_labels: powered_labels.get(offset).cloned().unwrap_or_default(),
             })
             .collect()
     })
@@ -1052,7 +1237,7 @@ pub fn collect_badge_metas_from_grf(data: &[u8]) -> Vec<ParsedBadgeMeta> {
     out
 }
 
-/// Parsea Action0 `Cargoes` (`0x0B`): bitnum, label 4 chars, nombre `0xFE`.
+/// Parsea Action0 `Cargoes` (`0x0B`): bitnum, label, pagos, clases, nombre `0xFE`.
 #[must_use]
 pub fn parse_action0_cargo_meta(payload: &[u8]) -> Option<ParsedCargoMeta> {
     let header = parse_action0_header(payload)?;
@@ -1064,6 +1249,15 @@ pub fn parse_action0_cargo_meta(payload: &[u8]) -> Option<ParsedCargoMeta> {
     let mut bitnum = 0u8;
     let mut label = String::new();
     let mut name = String::new();
+    let mut weight = 0u8;
+    let mut initial_payment = 0u32;
+    let mut transit_fast = 0u8;
+    let mut transit_slow = 0u8;
+    let mut is_freight = false;
+    let mut classes = 0u16;
+    let mut capacity_multiplier = crate::cargo_spec::DEFAULT_CARGO_CAPACITY_MULTIPLIER;
+    let mut rating_colour = 0u8;
+    let mut legend_colour = 0u8;
     for _ in 0..header.num_props {
         if i >= payload.len() {
             break;
@@ -1078,11 +1272,104 @@ pub fn parse_action0_cargo_meta(payload: &[u8]) -> Option<ParsedCargoMeta> {
                 bitnum = payload[i];
                 i += 1;
             }
+            // String IDs WORD (0x09–0x0D, 0x1B, 0x1C) — consumidas.
+            0x09 | 0x0A | 0x0B | 0x0C | 0x0D | 0x1B | 0x1C => {
+                if i + 2 > payload.len() {
+                    break;
+                }
+                i += 2;
+            }
+            0x0E => {
+                if i + 2 > payload.len() {
+                    break;
+                }
+                i += 2; // sprite WORD
+            }
+            0x0F => {
+                if i >= payload.len() {
+                    break;
+                }
+                weight = payload[i];
+                i += 1;
+            }
+            0x10 => {
+                if i >= payload.len() {
+                    break;
+                }
+                transit_fast = payload[i];
+                i += 1;
+            }
+            0x11 => {
+                if i >= payload.len() {
+                    break;
+                }
+                transit_slow = payload[i];
+                i += 1;
+            }
+            0x12 => {
+                if i + 4 > payload.len() {
+                    break;
+                }
+                initial_payment = u32::from_le_bytes([
+                    payload[i],
+                    payload[i + 1],
+                    payload[i + 2],
+                    payload[i + 3],
+                ]);
+                i += 4;
+            }
+            0x13 => {
+                if i >= payload.len() {
+                    break;
+                }
+                rating_colour = payload[i];
+                i += 1;
+            }
+            0x14 => {
+                if i >= payload.len() {
+                    break;
+                }
+                legend_colour = payload[i];
+                i += 1;
+            }
+            0x15 => {
+                if i >= payload.len() {
+                    break;
+                }
+                is_freight = payload[i] != 0;
+                i += 1;
+            }
+            0x16 => {
+                if i + 2 > payload.len() {
+                    break;
+                }
+                classes = u16::from_le_bytes([payload[i], payload[i + 1]]);
+                i += 2;
+            }
             PROP_CARGO_LABEL => {
                 let Some(s) = read_four_char_label(payload, &mut i, "CARG") else {
                     break;
                 };
                 label = s;
+            }
+            0x18 | 0x1A | 0x1E => {
+                if i >= payload.len() {
+                    break;
+                }
+                i += 1; // town subst / callback mask / town prod subst
+            }
+            0x19 | 0x1F => {
+                if i + 2 > payload.len() {
+                    break;
+                }
+                i += 2;
+            }
+            0x1D => {
+                if i + 2 > payload.len() {
+                    break;
+                }
+                capacity_multiplier = u16::from_le_bytes([payload[i], payload[i + 1]]).max(1);
+                i += 2;
             }
             PROP_NAME_CSTRING => {
                 let Some(nul) = payload[i..].iter().position(|&b| b == 0) else {
@@ -1105,6 +1392,15 @@ pub fn parse_action0_cargo_meta(payload: &[u8]) -> Option<ParsedCargoMeta> {
         bitnum,
         label,
         name,
+        weight,
+        initial_payment,
+        transit_fast,
+        transit_slow,
+        is_freight,
+        classes,
+        capacity_multiplier,
+        rating_colour,
+        legend_colour,
     })
 }
 

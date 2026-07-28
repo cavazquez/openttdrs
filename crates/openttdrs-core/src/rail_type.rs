@@ -90,14 +90,98 @@ impl RailType {
 
 /// Selector Action3 `RailSpriteType::Signals` de `OpenTTD`.
 pub const RAIL_SPRITE_TYPE_SIGNALS: u8 = 11;
+/// Selector Action3 `RailSpriteType::TrackOverlay` (guías / catenaria overlay).
+pub const RAIL_SPRITE_TYPE_TRACK_OVERLAY: u8 = 1;
+/// Selector Action3 `RailSpriteType::Underlay` / ground.
+pub const RAIL_SPRITE_TYPE_UNDERLAY: u8 = 0;
 
-/// Gráfico de señales provisto por un `RailType` `NewGRF`.
+/// Props Action0 runtime por `RailType` vanilla (reconstruidas desde el stack).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct RailTypeRuntimeProps {
+    pub max_speed: u16,
+    pub cost_multiplier: u16,
+    pub maintenance_multiplier: u16,
+    pub flags: u8,
+    pub curve_speed: u8,
+    pub introduction_date: u32,
+    /// Bitmask compatible; `0` = reglas vanilla.
+    pub compatible_mask: u8,
+    /// Bitmask powered; `0` = reglas vanilla.
+    pub powered_mask: u8,
+}
+
+impl RailTypeRuntimeProps {
+    #[must_use]
+    pub const fn defaults() -> [Self; 4] {
+        [Self {
+            max_speed: 0,
+            cost_multiplier: 0,
+            maintenance_multiplier: 0,
+            flags: 0,
+            curve_speed: 0,
+            introduction_date: 0,
+            compatible_mask: 0,
+            powered_mask: 0,
+        }; 4]
+    }
+}
+
+/// ¿Compatibles según máscaras NewGRF (si hay) o reglas vanilla?
+#[must_use]
+pub fn rail_types_compatible_with_props(
+    a: RailType,
+    b: RailType,
+    props: &[RailTypeRuntimeProps; 4],
+) -> bool {
+    let ia = usize::from(a.as_u8());
+    let ib = usize::from(b.as_u8());
+    let pa = props.get(ia).copied().unwrap_or_default();
+    let pb = props.get(ib).copied().unwrap_or_default();
+    if pa.compatible_mask != 0 {
+        return a == b || railtypes_mask_contains(pa.compatible_mask, b);
+    }
+    if pb.compatible_mask != 0 {
+        return a == b || railtypes_mask_contains(pb.compatible_mask, a);
+    }
+    rail_types_compatible(a, b)
+}
+
+/// Máscara powered con override NewGRF.
+#[must_use]
+pub fn powered_railtypes_mask_with_props(
+    rt: RailType,
+    props: &[RailTypeRuntimeProps; 4],
+) -> u8 {
+    let p = props
+        .get(usize::from(rt.as_u8()))
+        .copied()
+        .unwrap_or_default();
+    if p.powered_mask != 0 {
+        p.powered_mask
+    } else {
+        powered_railtypes_mask(rt)
+    }
+}
+
+/// Coste de construcción factored por `prop 0x13` (`8` = ×1 en OTTD).
+#[must_use]
+pub fn rail_build_cost_multiplier(props: &RailTypeRuntimeProps) -> u16 {
+    if props.cost_multiplier == 0 {
+        8
+    } else {
+        props.cost_multiplier
+    }
+}
+
+/// Gráfico Action3 de un `RailType` `NewGRF` (señales u otro sprite type).
 ///
 /// Es efímero: se reconstruye desde el stack y nunca se serializa en el save.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RailSignalSpriteSpec {
     pub rail_type: RailType,
     pub local_id: u8,
+    /// Selector Action3 (`RailSpriteType`).
+    pub sprite_type: u8,
     pub grfid: u32,
     pub type_tables: Option<crate::newgrf_type_tables::GrfTypeTranslationTables>,
     pub graphics: crate::newgrf_sprites::TrainSpriteGraphics,
@@ -119,8 +203,17 @@ impl RailSignalSpriteSpec {
             0x18,
             (u32::from(signal_type) << 16) | (u32::from(variant) << 8) | u32::from(green),
         );
+        self.resolve_group(image, ctx)
+    }
+
+    /// Resuelve el grupo Action3 del `sprite_type` almacenado (fallback: vacío → `None`).
+    pub fn resolve_group(
+        &self,
+        image: u8,
+        ctx: &mut crate::newgrf_sprites::Action2EvalCtx,
+    ) -> Option<crate::newgrf_sprites::DecodedSprite> {
         self.graphics
-            .views_for_specific_ctx(self.local_id, RAIL_SPRITE_TYPE_SIGNALS, ctx)?
+            .views_for_specific_ctx(self.local_id, self.sprite_type, ctx)?
             .get(usize::from(image))
             .cloned()
     }

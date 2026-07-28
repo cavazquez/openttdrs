@@ -1,4 +1,4 @@
-//! Aplicación de grupos Action3 `RailType` para señales custom.
+//! Aplicación de grupos Action3 `RailType` y props Action0 runtime.
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -6,12 +6,27 @@ use std::path::Path;
 use crate::GameState;
 use crate::newgrf_actions::collect_railtype_metas_from_grf;
 use crate::newgrf_type_tables::rail_type_from_label;
-use crate::rail_type::{RAIL_SPRITE_TYPE_SIGNALS, RailSignalSpriteSpec, RailType};
+use crate::rail_type::{
+    RAIL_SPRITE_TYPE_SIGNALS, RAIL_SPRITE_TYPE_TRACK_OVERLAY, RAIL_SPRITE_TYPE_UNDERLAY,
+    RailSignalSpriteSpec, RailType, RailTypeRuntimeProps, rail_type_bit,
+};
 
-/// Reconstruye los overrides `GetCustomSignalSprite` y techos `0x14` desde el stack.
+fn labels_to_mask(labels: &[[u8; 4]]) -> u8 {
+    let mut mask = 0u8;
+    for label in labels {
+        if let Some(rt) = rail_type_from_label(*label) {
+            mask |= rail_type_bit(rt);
+        }
+    }
+    mask
+}
+
+/// Reconstruye overrides de señales, techos y props Action0 desde el stack.
 pub fn apply_newgrf_rail_signals(state: &mut GameState, search_dirs: &[&Path]) {
     let mut slots: Vec<Option<RailSignalSpriteSpec>> = vec![None; 4];
-    let mut max_speed = [0u16; 4];
+    let mut props = RailTypeRuntimeProps::defaults();
+    let mut overlay_slots: Vec<Option<RailSignalSpriteSpec>> = vec![None; 4];
+    let mut underlay_slots: Vec<Option<RailSignalSpriteSpec>> = vec![None; 4];
     let stack = state.newgrf_stack.clone();
     for entry in &stack {
         if !entry.enabled {
@@ -30,7 +45,23 @@ pub fn apply_newgrf_rail_signals(state: &mut GameState, search_dirs: &[&Path]) {
         let metas = collect_railtype_metas_from_grf(&data);
         for meta in &metas {
             if let Some(rt) = rail_type_from_label(meta.label) {
-                max_speed[usize::from(rt.as_u8())] = meta.max_speed;
+                let idx = usize::from(rt.as_u8());
+                let mut compatible = labels_to_mask(&meta.compatible_labels);
+                let powered = labels_to_mask(&meta.powered_labels);
+                if powered != 0 {
+                    // Powered implica compatible (OpenTTD).
+                    compatible |= powered;
+                }
+                props[idx] = RailTypeRuntimeProps {
+                    max_speed: meta.max_speed,
+                    cost_multiplier: meta.cost_multiplier,
+                    maintenance_multiplier: meta.maintenance_multiplier,
+                    flags: meta.flags,
+                    curve_speed: meta.curve_speed,
+                    introduction_date: meta.introduction_date,
+                    compatible_mask: compatible,
+                    powered_mask: powered,
+                };
             }
         }
         let Ok(graphics) = crate::newgrf_sprites::collect_railtype_sprite_graphics(&data) else {
@@ -43,16 +74,7 @@ pub fn apply_newgrf_rail_signals(state: &mut GameState, search_dirs: &[&Path]) {
         let type_tables = crate::newgrf_type_tables::collect_type_tables_from_grf(&data);
         let type_tables = (!type_tables.is_empty()).then_some(type_tables);
 
-        let mut local_ids: Vec<u8> = graphics
-            .specific_assigns
-            .keys()
-            .filter_map(|&(local_id, selector)| {
-                (selector == RAIL_SPRITE_TYPE_SIGNALS).then_some(local_id)
-            })
-            .collect();
-        local_ids.sort_unstable();
-        local_ids.dedup();
-        for local_id in local_ids {
+        for &(local_id, selector) in graphics.specific_assigns.keys() {
             let rail_type = labels
                 .get(&local_id)
                 .copied()
@@ -60,17 +82,33 @@ pub fn apply_newgrf_rail_signals(state: &mut GameState, search_dirs: &[&Path]) {
             let Some(rail_type) = rail_type else {
                 continue;
             };
-            slots[usize::from(rail_type.as_u8())] = Some(RailSignalSpriteSpec {
+            let spec = RailSignalSpriteSpec {
                 rail_type,
                 local_id,
+                sprite_type: selector,
                 grfid: entry.grfid,
                 type_tables: type_tables.clone(),
                 graphics: graphics.clone(),
-            });
+            };
+            let idx = usize::from(rail_type.as_u8());
+            match selector {
+                RAIL_SPRITE_TYPE_SIGNALS => slots[idx] = Some(spec),
+                RAIL_SPRITE_TYPE_TRACK_OVERLAY => overlay_slots[idx] = Some(spec),
+                RAIL_SPRITE_TYPE_UNDERLAY => underlay_slots[idx] = Some(spec),
+                _ => {}
+            }
         }
     }
     state.runtime.rail_signal_newgrf = slots;
-    state.runtime.rail_type_max_speed = max_speed;
+    state.runtime.rail_type_overlay_newgrf = overlay_slots;
+    state.runtime.rail_type_underlay_newgrf = underlay_slots;
+    state.runtime.rail_type_props = props;
+    state.runtime.rail_type_max_speed = [
+        props[0].max_speed,
+        props[1].max_speed,
+        props[2].max_speed,
+        props[3].max_speed,
+    ];
 }
 
 pub fn apply_newgrf_rail_signals_default_dirs(state: &mut GameState) {

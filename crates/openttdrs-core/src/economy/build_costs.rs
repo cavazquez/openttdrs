@@ -34,10 +34,35 @@ pub fn rail_build_cost(ge: &GlobalEconomy) -> i64 {
     get_price(ge, PriceIndex::BuildRail, 1, 0)
 }
 
+/// Coste de vía con factor Action0 `0x13` (`8` = ×1).
+#[must_use]
+pub fn rail_build_cost_factored(ge: &GlobalEconomy, cost_multiplier: u16) -> i64 {
+    let factor = if cost_multiplier == 0 {
+        8
+    } else {
+        cost_multiplier
+    };
+    // Escala relativa a default 8: price * factor / 8.
+    let base = get_price(ge, PriceIndex::BuildRail, 1, 0);
+    base.saturating_mul(i64::from(factor)) / 8
+}
+
 /// Coste por tesela de carretera (`Price::BuildRoad`).
 #[must_use]
 pub fn road_build_cost(ge: &GlobalEconomy) -> i64 {
     get_price(ge, PriceIndex::BuildRoad, 1, 0)
+}
+
+/// Coste de carretera con factor Action0 `0x13` (`8` = ×1).
+#[must_use]
+pub fn road_build_cost_factored(ge: &GlobalEconomy, cost_multiplier: u16) -> i64 {
+    let factor = if cost_multiplier == 0 {
+        8
+    } else {
+        cost_multiplier
+    };
+    let base = get_price(ge, PriceIndex::BuildRoad, 1, 0);
+    base.saturating_mul(i64::from(factor)) / 8
 }
 
 /// Coste base de estación jugable (`Price::BuildStationRail` y equivalentes road).

@@ -1,4 +1,4 @@
-use crate::economy::rail_build_cost;
+use crate::economy::rail_build_cost_factored;
 use crate::map::{
     Map, TileCoord, TileKind, opposite_diag_dir, rail_bit_for_sides, rail_bits_touching_side,
     rail_trackbits_valid_on_slope, tile_slope_and_z,
@@ -405,9 +405,15 @@ pub(in crate::command) fn place_rail_depot_dir(
         // El empalme automático afecta sólo a la salida. No debe ejecutar la
         // propagación de autorraíl, que contaminaría líneas paralelas vecinas.
         write_normal_rail_tile(state, exit, after)?;
-        state.economy.money -= rail_build_cost(&state.global_economy);
+        charge_rail_build(state);
     }
     Ok(())
+}
+
+fn charge_rail_build(state: &mut GameState) {
+    let mult = state.runtime.rail_type_props[usize::from(state.current_rail_type.as_u8())]
+        .cost_multiplier;
+    state.economy.money -= rail_build_cost_factored(&state.global_economy, mult);
 }
 
 fn rail_depot_connection(map: &Map, depot: TileCoord, dir: u8) -> Option<(TileCoord, u8, u8)> {
@@ -483,7 +489,7 @@ pub(in crate::command) fn place_rail_bits(
     } else if (add & RAIL_PARALLEL_MASK) != 0 {
         refresh_rail_neighbors_after_place(state, c)?;
     }
-    state.economy.money -= rail_build_cost(&state.global_economy);
+    charge_rail_build(state);
     Ok(())
 }
 
@@ -498,7 +504,7 @@ pub(in crate::command) fn set_rail_bits(
     check_rail_trackbits_on_tile(&state.map, c, tb)?;
     write_normal_rail_tile(state, c, tb)?;
     refresh_rail_neighbors(state, c)?;
-    state.economy.money -= rail_build_cost(&state.global_economy);
+    charge_rail_build(state);
     Ok(())
 }
 
@@ -512,7 +518,7 @@ pub(in crate::command) fn place_rail(
     check_rail_trackbits_on_tile(&state.map, c, tb)?;
     write_normal_rail_tile(state, c, tb)?;
     refresh_rail_neighbors(state, c)?;
-    state.economy.money -= rail_build_cost(&state.global_economy);
+    charge_rail_build(state);
     Ok(())
 }
 
@@ -665,7 +671,12 @@ pub(in crate::command) fn convert_rail(
         v.pos == c
             && v.engine_id.is_some_and(|eid| {
                 let req = crate::rail_type::required_rail_type_for_engine(eid);
-                !(req == to_type || crate::rail_type::rail_types_compatible(req, to_type))
+                !(req == to_type
+                    || crate::rail_type::rail_types_compatible_with_props(
+                        req,
+                        to_type,
+                        &state.runtime.rail_type_props,
+                    ))
             })
     }) {
         return Err(CommandError::TrainIncompatibleWithRailType);

@@ -188,14 +188,22 @@ pub(super) fn build_vehicle_at_depot(
     vehicle.engine_id = Some(engine.id);
     crate::vehicle::init_vehicle_reliability_from_engine(&mut vehicle, &engine);
     if engine.capacity > 0 {
-        vehicle.capacity = engine.capacity;
+        vehicle.capacity = crate::cargo_spec::apply_cargo_capacity_multiplier(
+            engine.capacity,
+            &state.cargo_spec_catalog,
+            engine.cargo.unwrap_or(crate::cargo::CargoType::Passengers),
+        );
     } else if engine.kind == VehicleKind::Train && engine.is_train_engine() {
         // Loco sola: capacidad placeholder hasta enganchar vagones.
         vehicle.capacity = crate::vehicle::VEHICLE_CAPACITY;
     }
     if engine.is_wagon() {
         vehicle.cargo_type = engine.cargo;
-        vehicle.capacity = engine.capacity;
+        vehicle.capacity = crate::cargo_spec::apply_cargo_capacity_multiplier(
+            engine.capacity,
+            &state.cargo_spec_catalog,
+            engine.cargo.unwrap_or(crate::cargo::CargoType::Goods),
+        );
     }
     vehicle.build_tick = state.tick.get();
     vehicle.owner = state.active_company;

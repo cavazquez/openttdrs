@@ -6,9 +6,9 @@ use crate::newgrf_config::{GrfContainerVersion, GrfScanError, parse_grf_containe
 use crate::newgrf_walk::{GrfEntry, walk_grf_entries};
 
 use super::action0::{
-    ACTION0_FEATURE_BADGES, ACTION0_FEATURE_OBJECTS, ACTION0_FEATURE_ROADSTOPS,
-    parse_action0_badge_meta, parse_action0_header, parse_action0_object_meta,
-    parse_action0_roadstop_meta,
+    ACTION0_FEATURE_BADGES, ACTION0_FEATURE_CARGOES, ACTION0_FEATURE_OBJECTS,
+    ACTION0_FEATURE_ROADSTOPS, parse_action0_badge_meta, parse_action0_cargo_meta,
+    parse_action0_header, parse_action0_object_meta, parse_action0_roadstop_meta,
 };
 
 /// Resumen de un bloque Action5 para Inspeccionar.
@@ -34,6 +34,8 @@ pub struct GrfInspectReport {
     pub badge_labels: Vec<String>,
     /// Asociaciones badge vistas en roadstops/objects (`prop 0xFD`).
     pub badge_associations: Vec<String>,
+    /// Labels de cargos Action0 `0x0B` (`LABEL` + nombre).
+    pub cargo_labels: Vec<String>,
 }
 
 impl GrfInspectReport {
@@ -76,6 +78,9 @@ impl GrfInspectReport {
                 "Badge assoc: {}",
                 self.badge_associations.join("; ")
             ));
+        }
+        if !self.cargo_labels.is_empty() {
+            lines.push(format!("Cargoes: {}", self.cargo_labels.join(", ")));
         }
         if !self.action5_slots.is_empty() {
             let slots: Vec<_> = self
@@ -170,7 +175,7 @@ fn process_pseudo_payload(payload: &[u8], report: &mut GrfInspectReport) {
                 if !report.action0_features.contains(&h.feature) {
                     report.action0_features.push(h.feature);
                 }
-                inspect_action0_badges(payload, h.feature, report);
+                inspect_action0_feature(payload, h.feature, report);
             }
             None => report
                 .warnings
@@ -179,7 +184,7 @@ fn process_pseudo_payload(payload: &[u8], report: &mut GrfInspectReport) {
     }
 }
 
-fn inspect_action0_badges(payload: &[u8], feature: u8, report: &mut GrfInspectReport) {
+fn inspect_action0_feature(payload: &[u8], feature: u8, report: &mut GrfInspectReport) {
     match feature {
         ACTION0_FEATURE_BADGES => {
             if let Some(meta) = parse_action0_badge_meta(payload) {
@@ -189,6 +194,14 @@ fn inspect_action0_badges(payload: &[u8], feature: u8, report: &mut GrfInspectRe
                     .any(|l| l.eq_ignore_ascii_case(&meta.label))
                 {
                     report.badge_labels.push(meta.label);
+                }
+            }
+        }
+        ACTION0_FEATURE_CARGOES => {
+            if let Some(meta) = parse_action0_cargo_meta(payload) {
+                let entry = format!("{}({})", meta.label, meta.name);
+                if !report.cargo_labels.iter().any(|l| l == &entry) {
+                    report.cargo_labels.push(entry);
                 }
             }
         }

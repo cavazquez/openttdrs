@@ -139,7 +139,11 @@ pub use cargo_packet::{
     CargoPacket, CargoUnloadAction, StationCargoList, VehicleCargoList, choose_cargo_action,
     decide_cargo_unload_action, load_unload_speed, prepare_unload,
 };
-pub use cargo_spec::{CargoSpecDef, cargo_spec_def, empty_cargo_spec_catalog};
+pub use cargo_spec::{
+    CargoSpecDef, DEFAULT_CARGO_CAPACITY_MULTIPLIER, apply_cargo_capacity_multiplier,
+    cargo_spec_by_label, cargo_spec_def, cargo_spec_display_name, cargo_type_label,
+    empty_cargo_spec_catalog, payment_spec_for_cargo,
+};
 pub use cheats::CheatsState;
 pub use command::{
     Command, CommandError, LevelMode, MAX_STATION_NAME_CHARS, OrderMoveDirection,
@@ -176,6 +180,7 @@ pub use economy::{
     increase_loan,
     inflation_income_factor, inflation_prices_factor, manhattan_distance, monthly_loan_interest,
     terraform_cost_per_corner, ticks_to_transit_periods, transported_goods_income,
+    transported_goods_income_with_spec, rail_build_cost_factored, road_build_cost_factored,
     vehicle_purchase_cost, vehicle_running_cost_per_tick, vehicle_sell_refund,
 };
 pub use economy_quarterly::{
@@ -403,10 +408,12 @@ pub use rail_signals::{
     tracks_overlap, valid_signal_facings_track, yapf_routing_signal,
 };
 pub use rail_type::{
-    RAIL_CONVERT_COST, RAIL_SPRITE_TYPE_SIGNALS, RailSignalSpriteSpec, RailType,
+    RAIL_CONVERT_COST, RAIL_SPRITE_TYPE_SIGNALS, RAIL_SPRITE_TYPE_TRACK_OVERLAY,
+    RAIL_SPRITE_TYPE_UNDERLAY, RailSignalSpriteSpec, RailType, RailTypeRuntimeProps,
     engine_compatible_with_rail, engine_requires_electric, engine_requires_maglev,
-    engine_requires_monorail, powered_railtypes_mask, rail_type_bit, rail_type_from_tile,
-    rail_type_track_speed_cap, rail_types_compatible, railtypes_mask_contains,
+    engine_requires_monorail, powered_railtypes_mask, powered_railtypes_mask_with_props,
+    rail_build_cost_multiplier, rail_type_bit, rail_type_from_tile, rail_type_track_speed_cap,
+    rail_types_compatible, rail_types_compatible_with_props, railtypes_mask_contains,
     required_rail_type_for_engine, set_rail_type_on_tile, tile_usable_by_rail_type,
 };
 pub use refit::{

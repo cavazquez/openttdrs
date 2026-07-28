@@ -8,7 +8,8 @@ pub mod time;
 pub mod vehicle_costs;
 
 pub use build_costs::{
-    build_object_cost, build_object_cost_factored, buy_land_cost, rail_build_cost, road_build_cost,
+    build_object_cost, build_object_cost_factored, buy_land_cost, rail_build_cost,
+    rail_build_cost_factored, road_build_cost, road_build_cost_factored,
     station_build_cost, terraform_cost_per_corner, terraform_cost_per_corner_inflated,
     waypoint_build_cost,
 };
@@ -21,6 +22,7 @@ pub use payments::{
     check_bankruptcy, decrease_loan, increase_loan, inflation_income_factor,
     inflation_prices_factor, manhattan_distance, monthly_company_interest, monthly_loan_interest,
     monthly_loan_interest_with_rate, monthly_station_maintenance_fee, transported_goods_income,
+    transported_goods_income_with_spec,
 };
 pub use pricebase::{PriceIndex, base_price_at, get_price, medium_default_price};
 pub use time::{

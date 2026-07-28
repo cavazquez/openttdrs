@@ -124,8 +124,8 @@ pub use airport_fta::{
 };
 pub use autoreplace::{AutoReplaceRule, try_autoreplace_vehicle};
 pub use badge::{
-    BadgeDef, badge_def, badges_for_spec, empty_badge_catalog, list_badges, next_free_badge_id,
-    resolve_badge_labels,
+    BadgeDef, badge_def, badges_for_spec, empty_badge_catalog, find_badge_by_label, list_badges,
+    next_free_badge_id, resolve_badge_labels, resolve_badge_labels_detailed,
 };
 pub use bridge_spec::{
     BRIDGE_SPECS, BridgePiece, BridgeSpec, BridgeType, bridge_above_axis_from_mapt,
@@ -172,7 +172,8 @@ pub use economy::{
     FluctuationEvent, GlobalEconomy, INFLATION_FRAC_ONE, LOAN_INTERVAL, MAX_INFLATION,
     ORIGINAL_BASE_YEAR, ORIGINAL_MAX_YEAR, OTTD_MILLISECONDS_PER_TICK, SIM_TICKS_PER_SECOND,
     STATION_RATING_TICKS, TICKS_PER_DAY, TICKS_PER_MONTH, TICKS_PER_YEAR, build_object_cost,
-    buy_land_cost, cargo_time_factor, check_bankruptcy, decrease_loan, increase_loan,
+    build_object_cost_factored, buy_land_cost, cargo_time_factor, check_bankruptcy, decrease_loan,
+    increase_loan,
     inflation_income_factor, inflation_prices_factor, manhattan_distance, monthly_loan_interest,
     terraform_cost_per_corner, ticks_to_transit_periods, transported_goods_income,
     vehicle_purchase_cost, vehicle_running_cost_per_tick, vehicle_sell_refund,
@@ -268,7 +269,8 @@ pub use map::{
     is_industry_completed, is_map_object_tile, is_newgrf_object_type, is_owned_land_tile,
     is_river_tile, is_tropic_desert_zone, is_tunnel_entrance_slope, lift_destination,
     lift_has_destination, lift_position, make_industry_tile_bigger, make_shore_tile,
-    make_water_tile, object_spec_id_from_tile, openttd_tile_index_to_coord, opposite_diag_dir,
+    make_water_tile, object_footprint_at, object_footprint_tiles, object_spec_id_from_tile,
+    object_type_dims, object_view_index_for_tile, openttd_tile_index_to_coord, opposite_diag_dir,
     partial_pixel_z, plant_tree, process_water_flood_from_visits, rail_bit_for_sides,
     rail_bits_touching_side, rail_foundation_for_trackbits, rail_signal_diag_dir_offset,
     rail_tile_is_signals, rail_trackbits_valid_on_slope, rail_traversal_bits, resolve_tunnel_end,
@@ -356,9 +358,10 @@ pub use news::{
     tick_for_calendar_year, vehicle_kind_label,
 };
 pub use object_spec::{
-    NEW_OBJECT_OFFSET, OBJECT_SIZE_1X1, ObjectSpecDef, empty_object_spec_catalog,
-    is_selectable_object_spec, list_1x1_object_specs, next_free_object_spec_id, object_size_is_1x1,
-    object_spec_def,
+    DEFAULT_OBJECT_BUILD_COST_FACTOR, DEFAULT_OBJECT_CLIMATE_MASK, NEW_OBJECT_OFFSET,
+    OBJECT_SIZE_1X1, ObjectSpecDef, empty_object_spec_catalog, is_selectable_object_spec,
+    list_1x1_object_specs, list_buildable_object_specs, next_free_object_spec_id,
+    object_size_is_1x1, object_spec_def,
 };
 pub use ottdmap_extras::{OttdmapExtras, dense_payload_end};
 pub use pathfinder::{
@@ -420,10 +423,14 @@ pub use road_movement::{
     vehicle_subtile_with_progress,
 };
 pub use road_stop_spec::{
-    RoadStopClassDef, RoadStopSpecDef, empty_road_stop_class_catalog, empty_road_stop_spec_catalog,
-    first_matching_road_stop_spec, list_road_stop_classes, list_road_stop_specs,
-    next_free_road_stop_class_id, next_free_road_stop_spec_id, road_stop_class_def,
-    road_stop_spec_def,
+    ROADSTOP_DRAW_MODE_DEFAULT, ROADSTOP_DRAW_MODE_OVERLAY, ROADSTOP_DRAW_MODE_ROAD,
+    ROADSTOP_FLAG_DRIVE_THROUGH_ONLY, ROADSTOP_FLAG_ROAD_ONLY, ROADSTOP_FLAG_TRAM_ONLY,
+    ROADSTOP_TYPE_ALL, ROADSTOP_TYPE_BUS, ROADSTOP_TYPE_TRUCK, RSV_BAY_NE, RSV_BAY_NW, RSV_BAY_SE,
+    RSV_BAY_SW, RSV_DRIVE_THROUGH_X, RSV_DRIVE_THROUGH_Y, RoadStopClassDef, RoadStopSpecDef,
+    drive_through_axis_y, empty_road_stop_class_catalog, empty_road_stop_spec_catalog,
+    first_matching_road_stop_spec, is_drive_through_orientation, list_road_stop_classes,
+    list_road_stop_specs, next_free_road_stop_class_id, next_free_road_stop_spec_id,
+    road_stop_class_def, road_stop_spec_by_grf_local, road_stop_spec_def,
 };
 pub use road_type::{
     RoadTramType, RoadType, RoadTypeDef, all_road_type_defs, list_road_types,

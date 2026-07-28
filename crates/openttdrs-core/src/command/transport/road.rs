@@ -570,8 +570,13 @@ pub(in crate::command::transport) fn propagate_road_bits_to_neighbors(
     )
 }
 
+/// Codifica orientación en `m5` (`RSV_BAY_*` 0..3 / `RSV_DRIVE_THROUGH_*` 4..5).
 pub(in crate::command::transport) fn road_stop_m5(dir: u8) -> u8 {
-    dir & 0x03
+    if crate::road_stop_spec::is_drive_through_orientation(dir) {
+        dir
+    } else {
+        dir & 0x03
+    }
 }
 
 pub(in crate::command::transport) fn road_bits_toward_neighbor(dx: i32, dy: i32) -> u8 {
@@ -617,11 +622,39 @@ pub(in crate::command::transport) fn connect_road_stop(
     c: TileCoord,
     dir: u8,
 ) -> Result<(), CommandError> {
+    if crate::road_stop_spec::is_drive_through_orientation(dir) {
+        return connect_drive_through_road_stop(state, c, dir);
+    }
     let (dx, dy) = diag_dir_offset(dir);
     let road_pos = TileCoord::new(c.x + dx, c.y + dy);
     merge_road_bits(state, road_pos, road_link_bits_toward_stop(dir))?;
     let mut tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
     tile.m3 = road_stop_stub_bits(dir);
+    state
+        .map
+        .set_tile(c, tile)
+        .map_err(|_| CommandError::OutOfBounds)
+}
+
+/// Drive-through: bits de eje en `m3` y stubs en ambos extremos.
+pub(in crate::command::transport) fn connect_drive_through_road_stop(
+    state: &mut GameState,
+    c: TileCoord,
+    dir: u8,
+) -> Result<(), CommandError> {
+    let axis_y = crate::road_stop_spec::drive_through_axis_y(dir);
+    let (bits, ends) = if axis_y {
+        (0x05u8, [(0i32, -1i32), (0, 1)])
+    } else {
+        (0x0Au8, [(-1i32, 0i32), (1, 0)])
+    };
+    for (dx, dy) in ends {
+        let n = TileCoord::new(c.x + dx, c.y + dy);
+        let link = road_bits_toward_neighbor(-dx, -dy);
+        merge_road_bits(state, n, link)?;
+    }
+    let mut tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
+    tile.m3 = bits;
     state
         .map
         .set_tile(c, tile)

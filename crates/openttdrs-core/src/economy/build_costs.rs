@@ -15,10 +15,17 @@ pub fn buy_land_cost(ge: &GlobalEconomy) -> i64 {
     get_price(ge, PriceIndex::BuildObject, 1, 0)
 }
 
-/// Coste de colocar faro o transmisor (`Price::BuildObject`).
+/// Coste de colocar faro o transmisor (`Price::BuildObject`, factor 1, 1 tesela).
 #[must_use]
 pub fn build_object_cost(ge: &GlobalEconomy) -> i64 {
-    get_price(ge, PriceIndex::BuildObject, 1, 0)
+    build_object_cost_factored(ge, 1, 1)
+}
+
+/// Coste de objeto con factor Action0 `0x0D` y número de teselas del footprint.
+#[must_use]
+pub fn build_object_cost_factored(ge: &GlobalEconomy, cost_factor: u8, tile_count: u32) -> i64 {
+    let per_tile = get_price(ge, PriceIndex::BuildObject, i64::from(cost_factor), 0);
+    per_tile.saturating_mul(i64::from(tile_count.max(1)))
 }
 
 /// Coste por tesela de vía (`Price::BuildRail`).

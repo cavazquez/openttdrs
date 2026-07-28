@@ -203,7 +203,27 @@ pub fn build_action0_roadstop_payload(
     name: &str,
     badge_labels: &[[u8; 4]],
 ) -> Vec<u8> {
-    let num_props = 3 + u8::from(!badge_labels.is_empty());
+    build_action0_roadstop_payload_ex(
+        class_label,
+        stop_type,
+        name,
+        badge_labels,
+        crate::road_stop_spec::ROADSTOP_DRAW_MODE_DEFAULT,
+        0,
+    )
+}
+
+/// Action0 `RoadStops` con `0x0C` draw_mode y `0x12` flags.
+#[must_use]
+pub fn build_action0_roadstop_payload_ex(
+    class_label: &[u8; 4],
+    stop_type: u8,
+    name: &str,
+    badge_labels: &[[u8; 4]],
+    draw_mode: u8,
+    flags: u32,
+) -> Vec<u8> {
+    let num_props = 5 + u8::from(!badge_labels.is_empty());
     let mut p = vec![
         0x00,
         ACTION0_FEATURE_ROADSTOPS,
@@ -215,6 +235,10 @@ pub fn build_action0_roadstop_payload(
     p.extend_from_slice(class_label);
     p.push(0x09); // PROP_ROADSTOP_STOP_TYPE
     p.push(stop_type);
+    p.push(0x0C); // PROP_ROADSTOP_DRAW_MODE
+    p.push(draw_mode);
+    p.push(0x12); // PROP_ROADSTOP_FLAGS
+    p.extend_from_slice(&flags.to_le_bytes());
     p.push(0xFE); // PROP_NAME_CSTRING
     p.extend_from_slice(name.as_bytes());
     p.push(0);
@@ -269,7 +293,29 @@ pub fn build_action0_object_payload(
     name: &str,
     badge_labels: &[[u8; 4]],
 ) -> Vec<u8> {
-    let num_props = 3 + u8::from(!badge_labels.is_empty());
+    build_action0_object_payload_full(
+        local_id,
+        class_label,
+        size,
+        crate::object_spec::DEFAULT_OBJECT_CLIMATE_MASK,
+        crate::object_spec::DEFAULT_OBJECT_BUILD_COST_FACTOR,
+        name,
+        badge_labels,
+    )
+}
+
+/// Action0 Objects con climate (`0x0B`) y cost factor (`0x0D`).
+#[must_use]
+pub fn build_action0_object_payload_full(
+    local_id: u8,
+    class_label: &[u8; 4],
+    size: u8,
+    climate_mask: u8,
+    cost_factor: u8,
+    name: &str,
+    badge_labels: &[[u8; 4]],
+) -> Vec<u8> {
+    let num_props = 5 + u8::from(!badge_labels.is_empty());
     let mut p = vec![
         0x00,
         ACTION0_FEATURE_OBJECTS,
@@ -279,8 +325,12 @@ pub fn build_action0_object_payload(
         0x08, // class label
     ];
     p.extend_from_slice(class_label);
+    p.push(0x0B); // climate
+    p.push(climate_mask);
     p.push(0x0C); // size
     p.push(size);
+    p.push(0x0D); // build cost multiplier
+    p.push(cost_factor);
     p.push(0xFE);
     p.extend_from_slice(name.as_bytes());
     p.push(0);
@@ -1421,12 +1471,24 @@ mod tests {
 
     #[test]
     fn parse_roadstop_meta_and_apply_from_bytes() {
-        let a0 = build_action0_roadstop_payload(b"BUSC", 0, "Parada bus", &[]);
+        let a0 = build_action0_roadstop_payload_ex(
+            b"BUSC",
+            0,
+            "Parada bus",
+            &[],
+            0x03,
+            crate::ROADSTOP_FLAG_DRIVE_THROUGH_ONLY | crate::ROADSTOP_FLAG_ROAD_ONLY,
+        );
         let meta = parse_action0_roadstop_meta(&a0).unwrap();
         assert_eq!(meta.class_short_label, "BUSC");
         assert_eq!(meta.stop_type, 0);
         assert_eq!(meta.label, "Parada bus");
         assert_eq!(meta.short_label, "Para");
+        assert_eq!(meta.draw_mode, 0x03);
+        assert_eq!(
+            meta.flags,
+            crate::ROADSTOP_FLAG_DRIVE_THROUGH_ONLY | crate::ROADSTOP_FLAG_ROAD_ONLY
+        );
         assert!(meta.badge_labels.is_empty());
 
         let bytes = build_grf_v2_with_action0_and_action8(&a0, [b'R', b'S', 0, 1], "rstop", "");
@@ -1448,8 +1510,55 @@ mod tests {
         assert_eq!(def.label, "Parada bus");
         assert_eq!(def.stop_type, 0);
         assert_eq!(def.grfid, 20);
+        assert_eq!(def.newgrf_local_id, 0);
+        assert_eq!(def.draw_mode, 0x03);
+        assert!(def.drive_through_only());
+        assert!(def.road_only());
         assert!(def.newgrf_views.is_empty());
         assert!(def.associated_badges.is_empty());
+    }
+
+    #[test]
+    fn apply_roadstops_multi_grf_two_specs() {
+        let a0_a = build_action0_roadstop_payload(b"AAA ", 0, "Stop A", &[]);
+        let a0_b = build_action0_roadstop_payload_ex(
+            b"BBB ",
+            1,
+            "Stop B",
+            &[],
+            0x01,
+            crate::ROADSTOP_FLAG_TRAM_ONLY,
+        );
+        let bytes_a = build_grf_v2_with_action0_and_action8(&a0_a, [b'R', b'A', 0, 1], "ra", "");
+        let bytes_b = build_grf_v2_with_action0_and_action8(&a0_b, [b'R', b'B', 0, 1], "rb", "");
+        let dir_a = tempfile_dir_with("ra.grf", &bytes_a);
+        let dir_b = tempfile_dir_with("rb.grf", &bytes_b);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("ra.grf", 100));
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("rb.grf", 200));
+        apply_newgrf_roadstops(&mut state, &[&dir_a, &dir_b]);
+        assert_eq!(state.road_stop_spec_catalog.len(), 2);
+        let a = state
+            .road_stop_spec_catalog
+            .iter()
+            .find(|d| d.grfid == 100)
+            .unwrap();
+        let b = state
+            .road_stop_spec_catalog
+            .iter()
+            .find(|d| d.grfid == 200)
+            .unwrap();
+        assert_eq!(a.label, "Stop A");
+        assert_eq!(a.stop_type, 0);
+        assert_eq!(a.newgrf_local_id, 0);
+        assert_eq!(b.label, "Stop B");
+        assert_eq!(b.stop_type, 1);
+        assert!(b.tram_only());
+        assert_ne!(a.id, b.id);
     }
 
     #[test]
@@ -1573,6 +1682,198 @@ mod tests {
             vec![badge_id]
         );
         assert!(state.object_spec_catalog[0].associated_badges.is_empty());
+        assert!(
+            state
+                .runtime
+                .newgrf_diagnostics
+                .iter()
+                .any(|d| d.contains("NOPE") || d.contains("desconocido")),
+            "diagnósticos: {:?}",
+            state.runtime.newgrf_diagnostics
+        );
+        assert!(
+            state
+                .runtime
+                .newgrf_diagnostics
+                .iter()
+                .any(|d| d.contains("MISS")),
+            "diagnósticos: {:?}",
+            state.runtime.newgrf_diagnostics
+        );
+    }
+
+    #[test]
+    fn merge_same_badge_label_across_grfs_no_collision() {
+        let a0_a = build_action0_badge_payload(b"ELEC", 1, None);
+        let a0_b = build_action0_badge_payload(b"elec", 9, None);
+        let bytes_a = build_grf_v2_with_action0_and_action8(&a0_a, [b'B', b'1', 0, 1], "ba", "");
+        let bytes_b = build_grf_v2_with_action0_and_action8(&a0_b, [b'B', b'2', 0, 2], "bb", "");
+        let shared = std::env::temp_dir().join(format!(
+            "openttdrs_ngr_merge_{}",
+            std::process::id()
+        ));
+        let _ = std::fs::create_dir_all(&shared);
+        std::fs::write(shared.join("ba.grf"), &bytes_a).unwrap();
+        std::fs::write(shared.join("bb.grf"), &bytes_b).unwrap();
+
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("ba.grf", 0x4231_0001));
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("bb.grf", 0x4232_0002));
+        apply_newgrf_badges(&mut state, &[&shared]);
+        assert_eq!(state.badge_catalog.len(), 1, "mismo label → un BadgeDef");
+        assert_eq!(state.badge_catalog[0].grfid, 0x4231_0001);
+        assert_eq!(state.badge_catalog[0].flags, 9); // último gana flags
+        assert!(state.badge_catalog[0].label.eq_ignore_ascii_case("elec"));
+    }
+
+    #[test]
+    fn badge_identity_prefers_fe_cstring_over_08() {
+        // FE primero, luego 08 — debe ganar FE.
+        let mut p = vec![0x00, ACTION0_FEATURE_BADGES, 0x03, 0x01, 0x00];
+        p.push(0xFE);
+        p.extend_from_slice(b"Electric\0");
+        p.push(0x08);
+        p.extend_from_slice(b"XXXX");
+        p.push(0x09);
+        p.extend_from_slice(&7u32.to_le_bytes());
+        let meta = parse_action0_badge_meta(&p).unwrap();
+        assert_eq!(meta.label, "Electric");
+        assert_eq!(meta.flags, 7);
+    }
+
+    #[test]
+    fn truncated_badge_list_emits_diagnostics_and_inspect_warning() {
+        let a0_badge = build_action0_badge_payload(b"ELEC", 0, None);
+        // Roadstop con 0xFD count=2 pero sólo 4 bytes (1 label) → truncado.
+        let mut a0_stop = build_action0_roadstop_payload(b"BUSC", 0, "Parada", &[]);
+        // Sustituir num_props e inyectar 0xFD truncado.
+        a0_stop[2] = a0_stop[2].saturating_add(1);
+        a0_stop.push(0xFD);
+        a0_stop.push(2); // pide 2 labels
+        a0_stop.extend_from_slice(b"ELEC"); // sólo 1
+
+        let meta = parse_action0_roadstop_meta(&a0_stop).unwrap();
+        assert!(meta.badge_list_error.as_ref().is_some_and(|e| e.contains("truncad")));
+        assert_eq!(meta.badge_labels, vec!["ELEC".to_string()]);
+
+        let bytes = build_grf_v2_with_action0s_and_action8(
+            &[&a0_badge, &a0_stop],
+            [b'B', b'T', 0, 1],
+            "trunc",
+            "",
+        );
+        let report = inspect_grf_bytes(&bytes).unwrap();
+        assert!(
+            report.warnings.iter().any(|w| w.contains("truncad") || w.contains("0xFD")),
+            "warnings: {:?}",
+            report.warnings
+        );
+        assert!(report.badge_labels.iter().any(|l| l == "ELEC"));
+
+        let dir = tempfile_dir_with("trunc.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("trunc.grf", 99));
+        apply_newgrf_badges(&mut state, &[&dir]);
+        apply_newgrf_roadstops(&mut state, &[&dir]);
+        assert!(
+            state
+                .runtime
+                .newgrf_diagnostics
+                .iter()
+                .any(|d| d.contains("truncad") || d.contains("0xFD")),
+            "diagnostics: {:?}",
+            state.runtime.newgrf_diagnostics
+        );
+    }
+
+    #[test]
+    fn badge_associations_survive_save_load_and_reapply() {
+        let a0_badge = build_action0_badge_payload(b"ELEC", 0, None);
+        let a0_stop = build_action0_roadstop_payload(b"BUSC", 0, "Parada", &[*b"ELEC"]);
+        let a0_obj = build_action0_object_payload(0, b"LIGT", 0x11, "Faro", &[*b"ELEC"]);
+        let bytes = build_grf_v2_with_action0s_and_action8(
+            &[&a0_badge, &a0_stop, &a0_obj],
+            [b'B', b'S', 0, 1],
+            "svbdg",
+            "",
+        );
+        let dir = tempfile_dir_with("svbdg.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("svbdg.grf", 0x4253_0001));
+        apply_newgrf_badges(&mut state, &[&dir]);
+        apply_newgrf_roadstops(&mut state, &[&dir]);
+        apply_newgrf_objects(&mut state, &[&dir]);
+        let badge_id = state.badge_catalog[0].id;
+        assert_eq!(state.badge_catalog[0].grfid, 0x4253_0001);
+        assert_eq!(
+            state.road_stop_spec_catalog[0].associated_badges,
+            vec![badge_id]
+        );
+
+        let json = state.save_json().expect("save");
+        let mut loaded = GameState::load_json(&json).expect("load");
+        assert_eq!(loaded.badge_catalog.len(), 1);
+        assert_eq!(loaded.badge_catalog[0].grfid, 0x4253_0001);
+        assert_eq!(
+            loaded.road_stop_spec_catalog[0].associated_badges,
+            vec![badge_id]
+        );
+        assert_eq!(
+            loaded.object_spec_catalog[0].associated_badges,
+            vec![badge_id]
+        );
+
+        // Reaplicar catálogos desde el GRF: asociaciones deben resolverse de nuevo.
+        apply_newgrf_badges(&mut loaded, &[&dir]);
+        apply_newgrf_roadstops(&mut loaded, &[&dir]);
+        apply_newgrf_objects(&mut loaded, &[&dir]);
+        let badge_id2 = loaded.badge_catalog[0].id;
+        assert_eq!(
+            loaded.road_stop_spec_catalog[0].associated_badges,
+            vec![badge_id2]
+        );
+        assert_eq!(
+            loaded.object_spec_catalog[0].associated_badges,
+            vec![badge_id2]
+        );
+    }
+
+    #[test]
+    fn inspect_lists_badge_labels_and_associations() {
+        let a0_badge = build_action0_badge_payload(b"ELEC", 0, Some("Electric"));
+        let a0_stop = build_action0_roadstop_payload(b"BUSC", 0, "Parada", &[*b"ELEC"]);
+        let a0_obj = build_action0_object_payload(0, b"LIGT", 0x11, "Faro", &[*b"ELEC"]);
+        let bytes = build_grf_v2_with_action0s_and_action8(
+            &[&a0_badge, &a0_stop, &a0_obj],
+            [b'B', b'I', 0, 1],
+            "insp",
+            "",
+        );
+        let report = inspect_grf_bytes(&bytes).unwrap();
+        assert!(
+            report.badge_labels.iter().any(|l| l == "Electric"),
+            "labels: {:?}",
+            report.badge_labels
+        );
+        assert!(
+            report
+                .badge_associations
+                .iter()
+                .any(|a| a.contains("ELEC")),
+            "assoc: {:?}",
+            report.badge_associations
+        );
+        let summary = report.format_summary();
+        assert!(summary.contains("Badges:"));
+        assert!(summary.contains("Badge assoc:"));
     }
 
     #[test]
@@ -1613,10 +1914,12 @@ mod tests {
 
     #[test]
     fn parse_object_meta_and_apply_registers() {
-        let a0 = build_action0_object_payload(0, b"LIGT", 0x11, "Faro", &[]);
+        let a0 = build_action0_object_payload_full(0, b"LIGT", 0x12, 0x05, 7, "Faro", &[]);
         let meta = parse_action0_object_meta(&a0).unwrap();
         assert_eq!(meta.class_label, "LIGT");
-        assert_eq!(meta.size, 0x11);
+        assert_eq!(meta.size, 0x12);
+        assert_eq!(meta.climate_mask, 0x05);
+        assert_eq!(meta.build_cost_factor, 7);
         assert_eq!(meta.name, "Faro");
         assert!(meta.badge_labels.is_empty());
 
@@ -1633,7 +1936,9 @@ mod tests {
         assert_eq!(def.id, crate::object_spec::NEW_OBJECT_OFFSET);
         assert_eq!(def.class_label, "LIGT");
         assert_eq!(def.name, "Faro");
-        assert_eq!(def.size, 0x11);
+        assert_eq!(def.size, 0x12);
+        assert_eq!(def.climate_mask, 0x05);
+        assert_eq!(def.build_cost_factor, 7);
         assert_eq!(def.local_id, 0);
         assert!(def.associated_badges.is_empty());
     }

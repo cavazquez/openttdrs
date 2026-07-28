@@ -77,6 +77,8 @@ mod tests {
             from_newgrf: true,
             local_id: 0,
             grfid: 0,
+            climate_mask: openttdrs_core::DEFAULT_OBJECT_CLIMATE_MASK,
+            build_cost_factor: openttdrs_core::DEFAULT_OBJECT_BUILD_COST_FACTOR,
             views: vec![view.clone()],
             associated_badges: Vec::new(),
         };

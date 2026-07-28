@@ -286,6 +286,32 @@ pub(in crate::command) fn clear_tile(
         state.economy.money -= CLEAR_TILE_COST;
         return Ok(());
     }
+    if let Some(object_tiles) =
+        crate::map::object_footprint_at(&state.map, c, &state.object_spec_catalog)
+    {
+        for tile in &object_tiles {
+            if !state.cheats.magic_bulldozer_active() {
+                require_tile_owned_by_active(state, *tile)?;
+            }
+        }
+        for &tile in &object_tiles {
+            state
+                .map
+                .set_kind(tile, TileKind::Grass)
+                .map_err(|_| CommandError::OutOfBounds)?;
+            state
+                .map
+                .set_mapt_m5(tile, 0x00, 0x00)
+                .map_err(|_| CommandError::OutOfBounds)?;
+            let _ = state.map.set_m2(tile, 0);
+            crate::command::sign::remove_signs_at(state, tile);
+        }
+        state
+            .stations
+            .retain(|s| !object_tiles.iter().any(|t| *t == s.pos));
+        state.economy.money -= CLEAR_TILE_COST;
+        return Ok(());
+    }
     state
         .map
         .set_kind(c, TileKind::Grass)

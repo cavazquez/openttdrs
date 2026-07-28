@@ -158,6 +158,12 @@ pub enum CommandError {
     NewGrfInvalidEntry,
     /// Índice de parámetro `NewGRF` fuera de rango (`≥ 128`).
     NewGrfParamOutOfRange,
+    /// Spec de road stop incompatible con bus/camión.
+    RoadStopSpecTypeMismatch,
+    /// Spec `RoadOnly`/`TramOnly` incompatible con el tipo de vía actual.
+    RoadStopRoadTypeMismatch,
+    /// Spec `DriveThroughOnly` colocado como bahía (o viceversa no aplicable).
+    RoadStopDriveThroughRequired,
 }
 
 impl core::fmt::Display for CommandError {

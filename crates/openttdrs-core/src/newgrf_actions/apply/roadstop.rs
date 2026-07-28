@@ -3,10 +3,10 @@
 use std::path::Path;
 
 use crate::GameState;
-use crate::badge::resolve_badge_labels;
+use crate::badge::resolve_badge_labels_detailed;
 use crate::road_stop_spec::{
     RoadStopClassDef, RoadStopSpecDef, empty_road_stop_class_catalog, empty_road_stop_spec_catalog,
-    next_free_road_stop_class_id, next_free_road_stop_spec_id,
+    next_free_road_stop_class_id, next_free_road_stop_spec_id, road_stop_spec_by_grf_local,
 };
 
 use super::super::action0::{ParsedRoadStopMeta, collect_roadstop_metas_from_grf};
@@ -33,6 +33,25 @@ fn resolve_or_create_road_stop_class(
 
 /// Reconstruye catálogos de road stop desde el stack `enabled`.
 pub fn apply_newgrf_roadstops(state: &mut GameState, search_dirs: &[&Path]) {
+    // Snapshot identidad estable → rebind `Station.road_stop_spec` tras rebuild.
+    let station_bindings: Vec<(usize, u32, u8)> = state
+        .stations
+        .iter()
+        .enumerate()
+        .filter_map(|(i, st)| {
+            let id = st.road_stop_spec?;
+            let def = state.road_stop_spec_catalog.iter().find(|d| d.id == id)?;
+            Some((i, def.grfid, def.newgrf_local_id))
+        })
+        .collect();
+    let current_binding = state.current_road_stop_spec.and_then(|id| {
+        state
+            .road_stop_spec_catalog
+            .iter()
+            .find(|d| d.id == id)
+            .map(|d| (d.grfid, d.newgrf_local_id))
+    });
+
     let mut classes = empty_road_stop_class_catalog();
     let mut specs = empty_road_stop_spec_catalog();
     let stack = state.newgrf_stack.clone();
@@ -65,8 +84,23 @@ pub fn apply_newgrf_roadstops(state: &mut GameState, search_dirs: &[&Path]) {
                 .views_for_local_id(local_id)
                 .map(<[crate::newgrf_sprites::DecodedSprite]>::to_vec)
                 .unwrap_or_default();
-            let associated_badges =
-                resolve_badge_labels(&meta.badge_labels, &state.badge_catalog, entry.grfid);
+            if let Some(err) = &meta.badge_list_error {
+                state.runtime.newgrf_diagnostics.push(format!(
+                    "{}: roadstop '{}': {err}",
+                    entry.filename, meta.label
+                ));
+            }
+            let (associated_badges, unresolved) = resolve_badge_labels_detailed(
+                &meta.badge_labels,
+                &state.badge_catalog,
+                entry.grfid,
+            );
+            for label in unresolved {
+                state.runtime.newgrf_diagnostics.push(format!(
+                    "{}: roadstop '{}': badge desconocido '{label}'",
+                    entry.filename, meta.label
+                ));
+            }
             specs.push(RoadStopSpecDef {
                 id: spec_id,
                 class: class_id,
@@ -75,23 +109,34 @@ pub fn apply_newgrf_roadstops(state: &mut GameState, search_dirs: &[&Path]) {
                 stop_type: meta.stop_type,
                 from_newgrf: true,
                 grfid: entry.grfid,
+                newgrf_local_id: local_id,
+                draw_mode: meta.draw_mode,
+                flags: meta.flags,
                 newgrf_views: views,
                 associated_badges,
             });
         }
     }
+
+    for (station_idx, grfid, local_id) in station_bindings {
+        let new_id = road_stop_spec_by_grf_local(&specs, grfid, local_id).map(|d| d.id);
+        if let Some(st) = state.stations.get_mut(station_idx) {
+            st.road_stop_spec = new_id;
+        }
+    }
+    state.current_road_stop_spec = current_binding.and_then(|(grfid, local_id)| {
+        road_stop_spec_by_grf_local(&specs, grfid, local_id).map(|d| d.id)
+    });
+    state.current_road_stop_class = state
+        .current_road_stop_spec
+        .and_then(|id| specs.iter().find(|d| d.id == id).map(|d| d.class));
     if state
         .current_road_stop_class
         .is_some_and(|id| !classes.iter().any(|c| c.id == id))
     {
         state.current_road_stop_class = None;
     }
-    if state
-        .current_road_stop_spec
-        .is_some_and(|id| !specs.iter().any(|s| s.id == id))
-    {
-        state.current_road_stop_spec = None;
-    }
+
     state.road_stop_class_catalog = classes;
     state.road_stop_spec_catalog = specs;
 }

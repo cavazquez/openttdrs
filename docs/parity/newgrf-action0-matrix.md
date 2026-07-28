@@ -29,13 +29,13 @@ Estados:
 | `0C` | Sound effects | pendiente | pendiente | — |
 | `0D` | Airports | pendiente | pendiente | — |
 | `0E` | Signals | ignorada por spec (null en OTTD 15.3) | N/A | gráficos: RailTypes `RTSG_SIGNALS` + Action5 `0x04` |
-| `0F` | Objects | runtime parcial | pendiente | catálogo `object_spec`; build+render 1×1 |
+| `0F` | Objects | runtime | runtime | catálogo `object_spec`; build+render multitile |
 | `10` | Rail types | runtime parcial | runtime por sprite type | construcción/render + techo velocidad |
 | `11` | Airport tiles | pendiente | pendiente | — |
 | `12` | Road types | runtime parcial | runtime | construcción/render + techo velocidad |
 | `13` | Tram types | runtime parcial (mismo parser que Road) | pendiente | catálogo road (clase tram) |
 | `14` | Road stops | runtime parcial | runtime parcial | auto-select / construcción / render (`road_stop_spec`) |
-| `15` | Badges | runtime parcial | no aplica | catálogo `badge`; asociaciones parciales en roadstops/objects |
+| `15` | Badges | runtime | no aplica | catálogo `badge` (merge por label); asociaciones roadstops/objects |
 
 ## Propiedades comunes de vehículos
 
@@ -169,43 +169,58 @@ Fuente: `newgrf_act0_cargo.cpp`.
 
 Fuente: `newgrf_act0_objects.cpp`.
 
-Consumidor S-slice (#261): `BuildObject` coloca specs 1×1 del catálogo (`m5` = id ≥
-`NEW_OBJECT_OFFSET`); el cliente dibuja `views[0]` en teselas `MP_OBJECT`.
+Consumidor (#261): `BuildObject` valida footprint W×H, clima y coste antes de
+mutar; escribe todas las teselas (`m5` = id ≥ `NEW_OBJECT_OFFSET`, `m2` = offset);
+`ClearTile` demuele el footprint completo. Action3 dibuja `views[i % len]` en
+cada tesela. `grfid`/`local_id` persisten; NewGRF se re-aplica tras load.
 
 | Props | Estado |
 |---|---|
 | `08` class label 4 chars | **runtime** (catálogo) |
-| `0C` size BYTE | **runtime** (catálogo; build exige 1×1) |
+| `0B` climate mask BYTE | **runtime** (filtra en `check_build_object`) |
+| `0C` size BYTE | **runtime** (footprint W×H en build/clear/render) |
+| `0D` build cost multiplier BYTE | **runtime** (`build_object_cost_factored`) |
 | `FE` nombre C-string (extensión local) | **runtime** (catálogo) |
-| `FD` badge associations (extensión local: BYTE count + N× label 4 chars) | **runtime** parcial (`associated_badges`) |
-| Action1/3 views | **runtime** parcial (render `views[0]` si hay) |
+| `FD` badge associations (extensión local: BYTE count + N× label 4 chars) | **runtime** (`associated_badges` + diagnósticos) |
+| Action1/3 views | **runtime** (render `views[i % len]` por tesela del footprint) |
 | resto | pendiente |
 
 ## Road stops (`14`)
 
-Fuente: `newgrf_act0_roadstops.cpp`.
+Fuente: `newgrf_act0_roadstops.cpp` / `newgrf_roadstop.h`.
 
 | Props | Estado |
 |---|---|
 | `08` class label 4 chars | **runtime** (catálogo) |
-| `09` stop type BYTE (`0` bus / `1` truck) | **runtime** (catálogo; validado al colocar) |
+| `09` stop type BYTE (`0` bus / `1` truck / `2` all) | **runtime** (catálogo; validado en query+execute) |
+| `0C` draw_mode BYTE (`Road`/`Overlay`/`WaypGround`) | **runtime** (catálogo; bits en `road_stop_spec`) |
+| `12` flags DWORD (`DriveThroughOnly` bit3, `RoadOnly` bit5, `TramOnly` bit6, …) | **runtime** (validado en query+execute; resto almacenado) |
 | `FE` nombre C-string (extensión local) | **runtime** (catálogo) |
-| `FD` badge associations (extensión local: BYTE count + N× label 4 chars) | **runtime** parcial (`associated_badges`) |
-| Action1/3 views | **runtime** parcial (render in-world si hay vistas; si no Action5 `0x11` / OpenGFX) |
-| resto | pendiente |
+| `FD` badge associations (extensión local: BYTE count + N× label 4 chars) | **runtime** (`associated_badges` + diagnósticos) |
+| Action1/3 views | **runtime** parcial (bahía `0..3`; DT `4`/`5` si hay vistas; si no Action5 `0x11` / OpenGFX) |
+| drive-through `m5`=`RSV_*` 4/5 | **runtime** (colocación + connect eje X/Y) |
+| `grfid` + `newgrf_local_id` | **runtime** (save/load + rebind tras re-apply multi-GRF) |
+| resto (`0x0A`–`0x0B`, `0x0D`–`0x11`, `0x13`–`0x16`) | consumidas (ancho fijo) / pendiente |
 
 ## Badges (`15`)
 
 Fuente: `newgrf_act0_badges.cpp`.
 
-Asociaciones parciales: roadstops/objects pueden referenciar badges por label
-(`prop 0xFD` local); apply resuelve contra `badge_catalog` (mismo GRF primero).
+Catálogo global por label (case-insensitive): el mismo label en varios GRFs
+produce un solo `BadgeDef` (sin colisión). Identidad: preferir `0xFE` C-string;
+si no hay, `0x08` 4-char. `BadgeDef.grfid` se persiste (primer registrador).
+
+Asociaciones: roadstops/objects referencian badges por label (`prop 0xFD` local);
+apply resuelve contra `badge_catalog` (mismo GRF primero). Listas `0xFD`
+truncadas / labels inválidos → `GameState.runtime.newgrf_diagnostics` y
+`GrfInspectReport.warnings`. Inspector lista labels y asociaciones.
 
 | Props | Estado |
 |---|---|
-| `08` label 4 chars (scaffold; OTTD usa C-string) | **runtime** (catálogo) |
-| `09` flags DWORD | **runtime** (catálogo) |
-| `FE` nombre C-string (extensión local) | **runtime** (catálogo; sustituye label) |
+| `08` label 4 chars | **runtime** (catálogo; fallback si no hay `FE`) |
+| `09` flags DWORD | **runtime** (catálogo; merge actualiza flags) |
+| `FE` nombre C-string (extensión local) | **runtime** (identidad preferida) |
+| `FD` badge associations (en roadstops/objects) | **runtime** (`associated_badges` + diagnósticos) |
 
 ## Action3 de vehículos
 

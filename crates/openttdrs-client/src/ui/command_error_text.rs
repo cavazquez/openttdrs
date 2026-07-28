@@ -138,6 +138,15 @@ pub const fn command_error_message(err: CommandError) -> &'static str {
         CommandError::NewGrfDuplicateGrfid => "Ya hay un NewGRF con ese GRFID.",
         CommandError::NewGrfInvalidEntry => "Entrada NewGRF inválida.",
         CommandError::NewGrfParamOutOfRange => "Índice de parámetro NewGRF inválido.",
+        CommandError::RoadStopSpecTypeMismatch => {
+            "Esta parada NewGRF no admite bus o camión en esta herramienta."
+        }
+        CommandError::RoadStopRoadTypeMismatch => {
+            "Esta parada NewGRF no admite el tipo de vía actual (carretera/tranvía)."
+        }
+        CommandError::RoadStopDriveThroughRequired => {
+            "Esta parada NewGRF solo admite colocación drive-through."
+        }
     }
 }
 
@@ -231,6 +240,9 @@ mod tests {
             CommandError::NewGrfDuplicateGrfid,
             CommandError::NewGrfInvalidEntry,
             CommandError::NewGrfParamOutOfRange,
+            CommandError::RoadStopSpecTypeMismatch,
+            CommandError::RoadStopRoadTypeMismatch,
+            CommandError::RoadStopDriveThroughRequired,
         ];
         for err in errors {
             let msg = command_error_message(err);

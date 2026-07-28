@@ -16,6 +16,31 @@ use crate::command::transport::internal::{
     rail_axis_y_unambiguous, road_stop_m5,
 };
 
+/// Acceso a red de carretera para bahía (`dir` 0..3) o drive-through (`4`/`5`).
+fn road_stop_entrance_ok(map: &Map, c: TileCoord, dir: u8) -> bool {
+    if crate::road_stop_spec::is_drive_through_orientation(dir) {
+        let ends = if crate::road_stop_spec::drive_through_axis_y(dir) {
+            [(0i32, -1i32), (0, 1)]
+        } else {
+            [(-1i32, 0i32), (1, 0)]
+        };
+        ends.into_iter().any(|(dx, dy)| {
+            let n = TileCoord::new(c.x + dx, c.y + dy);
+            map.get_kind(n).is_some_and(|k| {
+                matches!(
+                    k,
+                    TileKind::Road
+                        | TileKind::RoadDepot
+                        | TileKind::RoadTunnel
+                        | TileKind::RoadBridge
+                )
+            })
+        })
+    } else {
+        station_entrance_faces_road(map, c, dir)
+    }
+}
+
 pub(crate) fn check_station_placement(
     map: &Map,
     stations: &[Station],
@@ -37,7 +62,7 @@ pub(crate) fn check_station_placement(
             let entrance_ok = if stop_kind == StopKind::RailStation {
                 station_entrance_faces_rail(map, c, dir)
             } else {
-                station_entrance_faces_road(map, c, dir)
+                road_stop_entrance_ok(map, c, dir)
             };
             if entrance_ok {
                 Ok(())
@@ -46,6 +71,38 @@ pub(crate) fn check_station_placement(
             }
         }
     }
+}
+
+/// Restricciones del `RoadStopSpec` activo (query + execute).
+pub(crate) fn check_road_stop_spec_restrictions(
+    state: &GameState,
+    orientation: u8,
+    stop_kind: StopKind,
+) -> Result<(), CommandError> {
+    let Some(id) = state.current_road_stop_spec else {
+        return Ok(());
+    };
+    let Some(def) = crate::road_stop_spec::road_stop_spec_def(&state.road_stop_spec_catalog, id)
+    else {
+        return Err(CommandError::RoadStopSpecTypeMismatch);
+    };
+    if !def.matches_stop_kind(stop_kind) {
+        return Err(CommandError::RoadStopSpecTypeMismatch);
+    }
+    let is_dt = crate::road_stop_spec::is_drive_through_orientation(orientation);
+    if def.drive_through_only() && !is_dt {
+        return Err(CommandError::RoadStopDriveThroughRequired);
+    }
+    let rt_class = crate::road_type::road_type_def(&state.road_type_catalog, state.current_road_type)
+        .map(|d| d.class)
+        .unwrap_or_else(|| state.current_road_type.road_tram_type());
+    if def.road_only() && rt_class != crate::road_type::RoadTramType::Road {
+        return Err(CommandError::RoadStopRoadTypeMismatch);
+    }
+    if def.tram_only() && rt_class != crate::road_type::RoadTramType::Tram {
+        return Err(CommandError::RoadStopRoadTypeMismatch);
+    }
+    Ok(())
 }
 
 pub(in crate::command) fn place_station(
@@ -294,22 +351,11 @@ pub(in crate::command::transport) fn clear_station_site_tile(
     Ok(())
 }
 
-/// Resuelve el spec `NewGRF` a persistir; limpia la selección si no encaja con `stop_kind`.
-fn resolve_road_stop_spec_for_placement(state: &mut GameState, stop_kind: StopKind) -> Option<u16> {
-    let id = state.current_road_stop_spec?;
-    let Some(def) = crate::road_stop_spec::road_stop_spec_def(&state.road_stop_spec_catalog, id)
-    else {
-        state.current_road_stop_class = None;
-        state.current_road_stop_spec = None;
-        return None;
-    };
-    if def.matches_stop_kind(stop_kind) {
-        Some(id)
-    } else {
-        state.current_road_stop_class = None;
-        state.current_road_stop_spec = None;
-        None
-    }
+/// Spec `NewGRF` a persistir (ya validado por `check_road_stop_spec_restrictions`).
+fn resolve_road_stop_spec_for_placement(state: &GameState) -> Option<u16> {
+    state.current_road_stop_spec.filter(|&id| {
+        crate::road_stop_spec::road_stop_spec_def(&state.road_stop_spec_catalog, id).is_some()
+    })
 }
 
 pub(in crate::command::transport) fn station_placement_on_tile(
@@ -357,7 +403,7 @@ pub(in crate::command::transport) fn station_placement_on_tile(
         st.station_spec = state.current_station_spec;
     }
     if matches!(stop_kind, StopKind::BusStop | StopKind::TruckStop) {
-        st.road_stop_spec = resolve_road_stop_spec_for_placement(state, stop_kind);
+        st.road_stop_spec = resolve_road_stop_spec_for_placement(state);
     }
     state.stations.push(st);
     state.economy.money -= station_build_cost(&state.global_economy);
@@ -379,6 +425,9 @@ pub(in crate::command) fn place_stop_kind(
     stop_kind: StopKind,
 ) -> Result<(), CommandError> {
     check_station_placement(&state.map, &state.stations, c, dir, stop_kind)?;
+    if matches!(stop_kind, StopKind::BusStop | StopKind::TruckStop) {
+        check_road_stop_spec_restrictions(state, dir, stop_kind)?;
+    }
     station_placement_on_tile(state, c, dir, stop_kind)
 }
 

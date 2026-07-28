@@ -341,7 +341,8 @@ pub(crate) fn handle_newgrf_window_buttons(
                 state.inspect_text = "Selecciona una entrada del stack.".into();
                 continue;
             };
-            state.inspect_text = inspect_newgrf_entry(&sim.state.newgrf_stack, index);
+            state.inspect_text =
+                inspect_newgrf_entry(&sim.state.newgrf_stack, index, &sim.state.badge_catalog);
             continue;
         }
         if matches!(action, NewGrfAction::ParamPrev | NewGrfAction::ParamNext) {
@@ -426,7 +427,11 @@ pub(crate) fn handle_newgrf_window_buttons(
     }
 }
 
-fn inspect_newgrf_entry(stack: &[NewGrfEntry], index: usize) -> String {
+fn inspect_newgrf_entry(
+    stack: &[NewGrfEntry],
+    index: usize,
+    badge_catalog: &[openttdrs_core::BadgeDef],
+) -> String {
     let Some(entry) = stack.get(index) else {
         return "Índice fuera de rango.".into();
     };
@@ -496,6 +501,20 @@ fn inspect_newgrf_entry(stack: &[NewGrfEntry], index: usize) -> String {
             }
         }
         None => lines.push("archivo no encontrado en dirs de búsqueda".into()),
+    }
+    if badge_catalog.is_empty() {
+        lines.push("badge_catalog: (vacío)".into());
+    } else {
+        let preview: Vec<String> = badge_catalog
+            .iter()
+            .take(16)
+            .map(|b| format!("{}[{:#010X}]", b.label, b.grfid))
+            .collect();
+        lines.push(format!(
+            "badge_catalog ({}): {}",
+            badge_catalog.len(),
+            preview.join(", ")
+        ));
     }
     let dir_refs: Vec<&std::path::Path> = dirs.iter().map(std::path::PathBuf::as_path).collect();
     let issues = validate_stack(stack, &dir_refs);

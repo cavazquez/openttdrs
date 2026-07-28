@@ -8,6 +8,8 @@ use crate::badge::{BadgeDef, empty_badge_catalog, next_free_badge_id};
 use super::super::action0::collect_badge_metas_from_grf;
 
 /// Reconstruye el catálogo de badges desde el stack `enabled`.
+///
+/// Misma etiqueta (case-insensitive) entre GRFs → un solo [`BadgeDef`] (sin colisión).
 pub fn apply_newgrf_badges(state: &mut GameState, search_dirs: &[&Path]) {
     let mut catalog = empty_badge_catalog();
     let stack = state.newgrf_stack.clone();
@@ -26,6 +28,15 @@ pub fn apply_newgrf_badges(state: &mut GameState, search_dirs: &[&Path]) {
             continue;
         };
         for meta in collect_badge_metas_from_grf(&data) {
+            if let Some(existing) = catalog
+                .iter_mut()
+                .find(|b| b.label.eq_ignore_ascii_case(&meta.label))
+            {
+                // Merge: conservar id/label/grfid del primero; actualizar flags.
+                existing.flags = meta.flags;
+                existing.from_newgrf = true;
+                continue;
+            }
             let Some(id) = next_free_badge_id(&catalog) else {
                 break;
             };
@@ -38,6 +49,13 @@ pub fn apply_newgrf_badges(state: &mut GameState, search_dirs: &[&Path]) {
             });
         }
     }
+    // Sanity: no debe haber duplicados case-insensitive tras el merge.
+    debug_assert!(catalog.iter().enumerate().all(|(i, a)| {
+        !catalog
+            .iter()
+            .skip(i + 1)
+            .any(|b| a.label.eq_ignore_ascii_case(&b.label))
+    }));
     state.badge_catalog = catalog;
 }
 

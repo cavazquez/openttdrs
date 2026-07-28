@@ -31,6 +31,7 @@ pub fn default_newgrf_search_dirs() -> Vec<PathBuf> {
 
 /// Refresco completo de catálogos Action0 tras cambiar el stack.
 pub fn apply_newgrf_stack_catalogs_default_dirs(state: &mut GameState) {
+    state.runtime.newgrf_diagnostics.clear();
     road::apply_newgrf_road_types_default_dirs(state);
     station::apply_newgrf_stations_default_dirs(state);
     // Badges antes de roadstops/objects para resolver asociaciones `0xFD`.

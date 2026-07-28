@@ -684,6 +684,9 @@ fn place_bus_stop_persists_current_road_stop_spec() {
         stop_type: 0,
         from_newgrf: true,
         grfid: 0,
+        newgrf_local_id: 0,
+        draw_mode: crate::ROADSTOP_DRAW_MODE_DEFAULT,
+        flags: 0,
         newgrf_views: Vec::new(),
         associated_badges: Vec::new(),
     });
@@ -696,4 +699,184 @@ fn place_bus_stop_persists_current_road_stop_spec() {
     apply_command(&mut s, &Command::PlaceRoad(road)).unwrap();
     apply_command(&mut s, &Command::PlaceBusStop(stop, 3)).unwrap();
     assert_eq!(s.stations[0].road_stop_spec, Some(spec_id));
+}
+
+#[test]
+fn place_bus_stop_bay_orients_0_to_3() {
+    for dir in 0u8..4 {
+        let mut s = GameState::new(8, 8);
+        let stop = TileCoord::new(3, 3);
+        let (dx, dy) = crate::map::diag_dir_offset(dir);
+        let road = TileCoord::new(stop.x + dx, stop.y + dy);
+        apply_command(&mut s, &Command::PlaceRoad(road)).unwrap();
+        apply_command(&mut s, &Command::PlaceBusStop(stop, dir)).unwrap();
+        assert_eq!(s.map.get(stop).unwrap().m5, dir);
+    }
+}
+
+#[test]
+fn place_bus_stop_drive_through_x_y() {
+    let mut s = GameState::new(8, 8);
+    let stop = TileCoord::new(3, 3);
+    apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(2, 3))).unwrap();
+    apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(4, 3))).unwrap();
+    apply_command(
+        &mut s,
+        &Command::PlaceBusStop(stop, crate::RSV_DRIVE_THROUGH_X),
+    )
+    .unwrap();
+    assert_eq!(s.map.get(stop).unwrap().m5, crate::RSV_DRIVE_THROUGH_X);
+    assert_eq!(s.map.get(stop).unwrap().m3 & 0x0F, 0x0A);
+}
+
+#[test]
+fn reject_bus_spec_on_truck_stop() {
+    use crate::road_stop_spec::{RoadStopClassDef, RoadStopSpecDef};
+
+    let mut s = GameState::new(8, 8);
+    s.road_stop_class_catalog.push(RoadStopClassDef {
+        id: 0,
+        label: "Bus".into(),
+        short_label: "BUS".into(),
+        from_newgrf: true,
+    });
+    s.road_stop_spec_catalog.push(RoadStopSpecDef {
+        id: 0,
+        class: 0,
+        label: "Solo bus".into(),
+        short_label: "SB".into(),
+        stop_type: 0,
+        from_newgrf: true,
+        grfid: 1,
+        newgrf_local_id: 0,
+        draw_mode: crate::ROADSTOP_DRAW_MODE_DEFAULT,
+        flags: 0,
+        newgrf_views: Vec::new(),
+        associated_badges: Vec::new(),
+    });
+    apply_command(&mut s, &Command::SetCurrentRoadStopSpec(0)).unwrap();
+    let stop = TileCoord::new(1, 1);
+    let road = TileCoord::new(1, 0);
+    apply_command(&mut s, &Command::PlaceRoad(road)).unwrap();
+    let err = apply_command(&mut s, &Command::PlaceTruckStop(stop, 3)).unwrap_err();
+    assert_eq!(err, CommandError::RoadStopSpecTypeMismatch);
+    assert!(command_would_fail(&s, &Command::PlaceTruckStop(stop, 3)).is_some());
+}
+
+#[test]
+fn reject_drive_through_only_as_bay() {
+    use crate::road_stop_spec::{RoadStopClassDef, RoadStopSpecDef};
+
+    let mut s = GameState::new(8, 8);
+    s.road_stop_class_catalog.push(RoadStopClassDef {
+        id: 0,
+        label: "DT".into(),
+        short_label: "DT".into(),
+        from_newgrf: true,
+    });
+    s.road_stop_spec_catalog.push(RoadStopSpecDef {
+        id: 0,
+        class: 0,
+        label: "Solo DT".into(),
+        short_label: "DT".into(),
+        stop_type: 0,
+        from_newgrf: true,
+        grfid: 2,
+        newgrf_local_id: 0,
+        draw_mode: crate::ROADSTOP_DRAW_MODE_DEFAULT,
+        flags: crate::ROADSTOP_FLAG_DRIVE_THROUGH_ONLY,
+        newgrf_views: Vec::new(),
+        associated_badges: Vec::new(),
+    });
+    apply_command(&mut s, &Command::SetCurrentRoadStopSpec(0)).unwrap();
+    let stop = TileCoord::new(1, 1);
+    let road = TileCoord::new(1, 0);
+    apply_command(&mut s, &Command::PlaceRoad(road)).unwrap();
+    let err = apply_command(&mut s, &Command::PlaceBusStop(stop, 3)).unwrap_err();
+    assert_eq!(err, CommandError::RoadStopDriveThroughRequired);
+}
+
+#[test]
+fn reject_road_only_spec_with_tram() {
+    use crate::road_stop_spec::{RoadStopClassDef, RoadStopSpecDef};
+    use crate::RoadType;
+
+    let mut s = GameState::new(8, 8);
+    s.current_road_type = RoadType::TRAM;
+    s.road_stop_class_catalog.push(RoadStopClassDef {
+        id: 0,
+        label: "R".into(),
+        short_label: "R".into(),
+        from_newgrf: true,
+    });
+    s.road_stop_spec_catalog.push(RoadStopSpecDef {
+        id: 0,
+        class: 0,
+        label: "Road only".into(),
+        short_label: "RO".into(),
+        stop_type: 0,
+        from_newgrf: true,
+        grfid: 3,
+        newgrf_local_id: 0,
+        draw_mode: crate::ROADSTOP_DRAW_MODE_DEFAULT,
+        flags: crate::ROADSTOP_FLAG_ROAD_ONLY,
+        newgrf_views: Vec::new(),
+        associated_badges: Vec::new(),
+    });
+    apply_command(&mut s, &Command::SetCurrentRoadStopSpec(0)).unwrap();
+    let stop = TileCoord::new(1, 1);
+    let road = TileCoord::new(1, 0);
+    apply_command(&mut s, &Command::PlaceRoad(road)).unwrap();
+    let err = apply_command(&mut s, &Command::PlaceBusStop(stop, 3)).unwrap_err();
+    assert_eq!(err, CommandError::RoadStopRoadTypeMismatch);
+}
+
+#[test]
+fn road_stop_spec_json_roundtrip_keeps_station_link() {
+    use crate::road_stop_spec::{RoadStopClassDef, RoadStopSpecDef};
+
+    let mut s = GameState::new(8, 8);
+    s.road_stop_class_catalog.push(RoadStopClassDef {
+        id: 0,
+        label: "Cls".into(),
+        short_label: "CLS".into(),
+        from_newgrf: true,
+    });
+    s.road_stop_spec_catalog.push(RoadStopSpecDef {
+        id: 7,
+        class: 0,
+        label: "Bus".into(),
+        short_label: "B".into(),
+        stop_type: 0,
+        from_newgrf: true,
+        grfid: 0x1234_5678,
+        newgrf_local_id: 2,
+        draw_mode: 0x03,
+        flags: crate::ROADSTOP_FLAG_DRIVE_THROUGH_ONLY,
+        newgrf_views: Vec::new(),
+        associated_badges: Vec::new(),
+    });
+    apply_command(&mut s, &Command::SetCurrentRoadStopSpec(7)).unwrap();
+    let stop = TileCoord::new(1, 1);
+    apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(0, 1))).unwrap();
+    apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(2, 1))).unwrap();
+    apply_command(
+        &mut s,
+        &Command::PlaceBusStop(stop, crate::RSV_DRIVE_THROUGH_X),
+    )
+    .unwrap();
+    assert_eq!(s.stations[0].road_stop_spec, Some(7));
+
+    let round = serde_json::to_value(&s).unwrap();
+    let back: GameState = serde_json::from_value(round).unwrap();
+    assert_eq!(back.stations[0].road_stop_spec, Some(7));
+    let def = back
+        .road_stop_spec_catalog
+        .iter()
+        .find(|d| d.id == 7)
+        .unwrap();
+    assert_eq!(def.grfid, 0x1234_5678);
+    assert_eq!(def.newgrf_local_id, 2);
+    assert_eq!(def.flags, crate::ROADSTOP_FLAG_DRIVE_THROUGH_ONLY);
+    assert_eq!(def.draw_mode, 0x03);
 }

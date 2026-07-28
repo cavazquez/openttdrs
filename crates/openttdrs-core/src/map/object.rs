@@ -1,7 +1,10 @@
 //! Objetos de mapa (`MP_OBJECT` / `TileType::Object` en `OpenTTD`).
 
-use super::Tile;
-use crate::object_spec::NEW_OBJECT_OFFSET;
+use super::{Map, Tile, TileCoord};
+use crate::object_spec::{
+    NEW_OBJECT_OFFSET, ObjectSpecDef, decode_object_tile_offset, encode_object_tile_offset,
+    object_footprint_tile_index, object_spec_def,
+};
 
 /// Nibble alto de `mapt` para teselas objeto.
 pub const OTTD_MP_OBJECT: u8 = 10;
@@ -48,11 +51,77 @@ pub const fn is_owned_land_tile(tile: &Tile) -> bool {
     is_map_object_tile(tile.mapt) && tile.m5 == OBJECT_TYPE_OWNED_LAND
 }
 
+/// Dimensiones W×H del objeto (vanilla = 1×1).
+#[must_use]
+pub fn object_type_dims(object_type: u8, catalog: &[ObjectSpecDef]) -> (u8, u8) {
+    if is_newgrf_object_type(object_type) {
+        object_spec_def(catalog, u16::from(object_type))
+            .map(|d| (d.size_width(), d.size_height()))
+            .unwrap_or((1, 1))
+    } else {
+        (1, 1)
+    }
+}
+
+/// Teselas del footprint con origen en `origin` y tamaño `w`×`h`.
+#[must_use]
+pub fn object_footprint_tiles(origin: TileCoord, w: u8, h: u8) -> Vec<TileCoord> {
+    let mut out = Vec::with_capacity(usize::from(w).saturating_mul(usize::from(h)));
+    for dy in 0..h {
+        for dx in 0..w {
+            out.push(TileCoord::new(
+                origin.x.saturating_add(i32::from(dx)),
+                origin.y.saturating_add(i32::from(dy)),
+            ));
+        }
+    }
+    out
+}
+
+/// Origen del objeto a partir de una tesela del footprint (`m2` = offset).
+#[must_use]
+pub fn object_origin_from_tile(tile: &Tile, at: TileCoord) -> Option<TileCoord> {
+    let _ = object_type_from_tile(tile)?;
+    let (dx, dy) = decode_object_tile_offset(tile.m2);
+    Some(TileCoord::new(
+        at.x.saturating_sub(i32::from(dx)),
+        at.y.saturating_sub(i32::from(dy)),
+    ))
+}
+
+/// Todas las teselas del footprint del objeto que contiene `at`.
+#[must_use]
+pub fn object_footprint_at(
+    map: &Map,
+    at: TileCoord,
+    catalog: &[ObjectSpecDef],
+) -> Option<Vec<TileCoord>> {
+    let tile = map.get(at)?;
+    let object_type = object_type_from_tile(&tile)?;
+    let origin = object_origin_from_tile(&tile, at)?;
+    let (w, h) = object_type_dims(object_type, catalog);
+    Some(object_footprint_tiles(origin, w, h))
+}
+
+/// Índice de vista Action3 para la tesela (`dy * width + dx`).
+#[must_use]
+pub fn object_view_index_for_tile(tile: &Tile, catalog: &[ObjectSpecDef]) -> Option<usize> {
+    let object_type = object_type_from_tile(tile)?;
+    let (w, _) = object_type_dims(object_type, catalog);
+    let (dx, dy) = decode_object_tile_offset(tile.m2);
+    Some(object_footprint_tile_index(dx, dy, w))
+}
+
+/// Codifica offset de footprint en `m2` (reexport útil para build).
+#[must_use]
+pub const fn object_tile_offset_byte(dx: u8, dy: u8) -> u8 {
+    encode_object_tile_offset(dx, dy)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::GameState;
-    use crate::TileCoord;
     use crate::sav;
 
     #[test]

@@ -361,17 +361,18 @@ pub(crate) fn spawn_station_tile(
             if stub != 0 {
                 spawn_road_stop_link(commands, assets, ctx, base_z, rail_half_h, tileh, stub);
             }
-            let dir = road_stop_ground_index(m5).min(3);
+            let ground_dir = road_stop_ground_index(m5).min(3);
+            let view_idx = usize::from(m5.min(5));
             let image = if class == StationTileClass::Bus {
                 assets
                     .bus_stop_grounds
-                    .get(dir)
+                    .get(ground_dir)
                     .cloned()
                     .unwrap_or_else(|| assets.bus_stop_grounds[0].clone())
             } else {
                 assets
                     .station_grounds
-                    .get(dir)
+                    .get(ground_dir)
                     .cloned()
                     .unwrap_or_else(|| assets.station_grounds[0].clone())
             };
@@ -386,7 +387,7 @@ pub(crate) fn spawn_station_tile(
                 ctx,
                 base_z,
                 class,
-                dir,
+                view_idx,
                 road_stop_catalog,
                 roadstop_action5,
                 action5_sprites,
@@ -542,8 +543,8 @@ fn spawn_road_stop_buildings(
         && let (Some(cache), Some(images)) = (action5_sprites.as_mut(), images.as_mut())
     {
         let slot = spec_id
-            .saturating_mul(4)
-            .saturating_add(u16::try_from(dir).unwrap_or(0));
+            .saturating_mul(6)
+            .saturating_add(u16::try_from(dir.min(5)).unwrap_or(0));
         let handle = cache.handle_for(ROADSTOP_ACTION3_CACHE_TYPE, slot, view, images);
         let pos3 = crate::iso::overlay_pos(
             ctx.iso_pos,
@@ -574,7 +575,9 @@ fn spawn_road_stop_buildings(
         _ => return,
     };
     let is_truck = class == StationTileClass::Truck;
-    for (layer_i, spec) in road_stop_build_layers(class, dir).iter().enumerate() {
+    // OpenGFX / Action5 solo tienen bahía 0..3; DT 4/5 cae al eje.
+    let build_dir = road_stop_ground_index(u8::try_from(dir).unwrap_or(0)).min(3);
+    for (layer_i, spec) in road_stop_build_layers(class, build_dir).iter().enumerate() {
         let center = road_stop_build_sprite_center(
             ctx.iso_pos,
             ctx.tx_i32(),
@@ -587,7 +590,7 @@ fn spawn_road_stop_buildings(
         );
         // Action5 `0x11`: sustituye la primera capa si hay sprite en el slot.
         if layer_i == 0
-            && let Some(slot) = openttdrs_core::roadstop_action5_slot(is_truck, dir)
+            && let Some(slot) = openttdrs_core::roadstop_action5_slot(is_truck, build_dir)
             && let (Some(cache), Some(images)) = (action5_sprites.as_mut(), images.as_mut())
             && let Some(sprite) = cache.sprite_colored(
                 openttdrs_core::ACTION5_TYPE_ROADSTOPS,
@@ -605,7 +608,7 @@ fn spawn_road_stop_buildings(
             ));
             continue;
         }
-        let image = &handles[dir][layer_i];
+        let image = &handles[build_dir][layer_i];
         commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),

@@ -283,10 +283,14 @@ pub fn rail_station_sprite_layers(axis_y: bool) -> (u32, u32) {
     if axis_y { (1069, 1074) } else { (1072, 1073) }
 }
 
-/// Índice 0..3 para `bus_stop_*` / `truck_stop_*` desde `m5` bajo (DiagDirection).
+/// Índice de suelo OpenGFX: bahía `m5` 0..3; drive-through 4/5 → eje como 0/1.
 #[must_use]
 pub fn road_stop_ground_index(m5: u8) -> usize {
-    (m5 & 0x03) as usize
+    match m5 {
+        4 => 0, // RSV_DRIVE_THROUGH_X
+        5 => 1, // RSV_DRIVE_THROUGH_Y
+        d => (d & 0x03) as usize,
+    }
 }
 
 include!(concat!(

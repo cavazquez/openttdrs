@@ -94,7 +94,7 @@ pub(crate) fn tool_hud_hint(action: BuildMenuAction) -> Option<&'static str> {
         BuildMenuAction::Station | BuildMenuAction::BusStop => {
             Some("picker NewGRF; hierba junto a vía; carga/descarga")
         }
-        BuildMenuAction::PlaceNewGrfObject => Some("picker: vanilla/NewGRF 1×1; hierba/bosque"),
+        BuildMenuAction::PlaceNewGrfObject => Some("picker: vanilla/NewGRF W×H; hierba/bosque"),
         BuildMenuAction::Orders => Some("clic mapa: destino"),
         BuildMenuAction::RailStation => Some("hierba junto a vía"),
         BuildMenuAction::FoundTown => Some("clic en hierba: funda un pueblo nuevo"),

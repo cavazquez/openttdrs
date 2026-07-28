@@ -1,8 +1,8 @@
-//! Ventana «Selección de objeto» (vanilla faro/transmisor + NewGRF 1×1).
+//! Ventana «Selección de objeto» (vanilla faro/transmisor + NewGRF W×H).
 
 use bevy::prelude::*;
 use openttdrs_core::{
-    Command, OBJECT_TYPE_LIGHTHOUSE, OBJECT_TYPE_TRANSMITTER, list_1x1_object_specs,
+    Command, OBJECT_TYPE_LIGHTHOUSE, OBJECT_TYPE_TRANSMITTER, list_buildable_object_specs,
     object_spec_def,
 };
 
@@ -172,12 +172,19 @@ fn object_label(sim: &SimWorld, id: u16) -> String {
         0 => "Transmisor".into(),
         1 => "Faro".into(),
         other => object_spec_def(&sim.state.object_spec_catalog, other)
-            .map(|d| d.name.clone())
+            .map(|d| {
+                format!(
+                    "{} ({}×{})",
+                    d.name,
+                    d.size_width(),
+                    d.size_height()
+                )
+            })
             .unwrap_or_else(|| format!("Objeto {other}")),
     }
 }
 
-/// Añade specs 1×1 NewGRF que aún no tienen botón.
+/// Añade specs NewGRF (cualquier W×H) que aún no tienen botón.
 pub(crate) fn sync_object_catalog_entries(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
@@ -189,12 +196,17 @@ pub(crate) fn sync_object_catalog_entries(
     let Ok(list) = lists.single() else {
         return;
     };
-    for def in list_1x1_object_specs(&sim.state.object_spec_catalog) {
+    for def in list_buildable_object_specs(&sim.state.object_spec_catalog) {
         if existing_ids.contains(&def.id) {
             continue;
         }
         let id = def.id;
-        let label = def.name.clone();
+        let label = format!(
+            "{} ({}×{})",
+            def.name,
+            def.size_width(),
+            def.size_height()
+        );
         commands.entity(list).with_children(|col| {
             spawn_text_button(col, &asset_server, ObjectPickerButton(id), &label, 260.0);
         });

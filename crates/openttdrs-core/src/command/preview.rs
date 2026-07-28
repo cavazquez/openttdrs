@@ -16,8 +16,9 @@ use super::transport::{
     check_place_rail_waypoint, check_place_river, check_place_road_bits, check_place_road_waypoint,
     check_rail_depot_placement, check_rail_station_area, check_rail_trackbits_with_autoslope,
     check_remove_rail, check_remove_rail_signal, check_road_depot_placement,
-    check_ship_depot_placement, check_single_transport_tile, check_station_placement, check_tunnel,
-    merged_rail_trackbits_on_tile, rail_station_footprint, rail_trackbits_from_neighbors,
+    check_road_stop_spec_restrictions, check_ship_depot_placement, check_single_transport_tile,
+    check_station_placement, check_tunnel, merged_rail_trackbits_on_tile, rail_station_footprint,
+    rail_trackbits_from_neighbors,
 };
 use super::types::Command;
 use super::util::require_tile_owned_by_active;
@@ -238,7 +239,14 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
             }
         }
         Command::BuildObject { pos, object_type } => {
-            check_build_object_placement(map, *pos, *object_type, &state.object_spec_catalog).err()
+            check_build_object_placement(
+                map,
+                *pos,
+                *object_type,
+                &state.object_spec_catalog,
+                state.climate,
+            )
+            .err()
         }
         Command::PlaceIndustry(_)
         | Command::PlaceIndustryKind(_, _)
@@ -347,7 +355,13 @@ fn preview_station_with_authority(
     if !crate::town::authority_allows_new_station(&state.towns, c, state.active_company) {
         return Some(CommandError::AuthorityRatingTooLow);
     }
-    check_station_placement(&state.map, &state.stations, c, dir, stop_kind).err()
+    if let Err(e) = check_station_placement(&state.map, &state.stations, c, dir, stop_kind) {
+        return Some(e);
+    }
+    if matches!(stop_kind, StopKind::BusStop | StopKind::TruckStop) {
+        return check_road_stop_spec_restrictions(state, dir, stop_kind).err();
+    }
+    None
 }
 
 /// Devuelve el error que obtendría `apply_command` sin mutar el estado.

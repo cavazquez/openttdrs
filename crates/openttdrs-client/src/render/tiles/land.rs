@@ -540,7 +540,7 @@ pub(crate) fn spawn_generic_land_tile(
     };
     spawn_ground_sprite(commands, &image, color, ctx, slope_half_ground);
 
-    // MP_OBJECT: renderizar faro/transmisor vanilla o vista NewGRF `views[0]`.
+    // MP_OBJECT: faro/transmisor vanilla o Action3 NewGRF `views[i % len]` por tesela.
     // ObjectType de OpenTTD: 0=Transmisor, 1=Faro; ≥5 = NewGRF.
     if ottd_type == 10 {
         use crate::sprites::{TransparencyOption, is_hidden, sprite_color};
@@ -548,13 +548,17 @@ pub(crate) fn spawn_generic_land_tile(
             return;
         }
         let tint = sprite_color(TransparencyOption::Structures);
+        let view_idx = ctx
+            .tile
+            .and_then(|t| openttdrs_core::object_view_index_for_tile(&t, object_catalog))
+            .unwrap_or(0);
         if is_newgrf_object_type(tile_m5)
             && let Some(def) =
                 crate::render::object_newgrf::newgrf_object_def_for_m5(object_catalog, tile_m5)
-            && let Some(view) = def.view(0)
+            && let Some(view) = def.view(view_idx)
             && let (Some(cache), Some(images)) = (object_sprites.as_mut(), images.as_mut())
         {
-            let handle = cache.handle_for(def, 0, view, images);
+            let handle = cache.handle_for(def, view_idx, view, images);
             let pos3 = overlay_pos(
                 ctx.iso_pos,
                 f32::from(view.x_offs),

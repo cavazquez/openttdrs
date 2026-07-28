@@ -11,8 +11,8 @@ pub struct BadgeDef {
     pub label: String,
     pub flags: u32,
     pub from_newgrf: bool,
-    /// GRFID del set (`0` = vanilla / sin set).
-    #[serde(default, skip)]
+    /// GRFID del set que lo registró primero (`0` = vanilla / sin set).
+    #[serde(default)]
     pub grfid: u32,
 }
 
@@ -53,14 +53,26 @@ pub fn badges_for_spec<'a>(ids: &[u16], badge_catalog: &'a [BadgeDef]) -> Vec<&'
 
 /// Resuelve etiquetas de badge a ids del catálogo (mismo GRF primero, luego cualquiera).
 ///
-/// Etiquetas sin match se omiten (sin panic).
+/// Etiquetas sin match se omiten (sin panic). Ver [`resolve_badge_labels_detailed`]
+/// para obtener también las no resueltas (diagnósticos).
 #[must_use]
 pub fn resolve_badge_labels(
     labels: &[String],
     badge_catalog: &[BadgeDef],
     preferred_grfid: u32,
 ) -> Vec<u16> {
+    resolve_badge_labels_detailed(labels, badge_catalog, preferred_grfid).0
+}
+
+/// Como [`resolve_badge_labels`], pero también devuelve etiquetas sin match.
+#[must_use]
+pub fn resolve_badge_labels_detailed(
+    labels: &[String],
+    badge_catalog: &[BadgeDef],
+    preferred_grfid: u32,
+) -> (Vec<u16>, Vec<String>) {
     let mut out = Vec::with_capacity(labels.len());
+    let mut unresolved = Vec::new();
     for label in labels {
         if let Some(b) = badge_catalog
             .iter()
@@ -74,9 +86,19 @@ pub fn resolve_badge_labels(
             .find(|b| b.label.eq_ignore_ascii_case(label))
         {
             out.push(b.id);
+            continue;
         }
+        unresolved.push(label.clone());
     }
-    out
+    (out, unresolved)
+}
+
+/// Busca un badge por etiqueta (case-insensitive).
+#[must_use]
+pub fn find_badge_by_label<'a>(catalog: &'a [BadgeDef], label: &str) -> Option<&'a BadgeDef> {
+    catalog
+        .iter()
+        .find(|b| b.label.eq_ignore_ascii_case(label))
 }
 
 #[cfg(test)]
@@ -104,12 +126,14 @@ mod tests {
         assert_eq!(list_badges(&catalog, "").len(), 2);
         assert_eq!(list_badges(&catalog, "ele").len(), 1);
         assert_ne!(catalog[0].label, catalog[1].label);
-        let ids = resolve_badge_labels(
+        let (ids, unresolved) = resolve_badge_labels_detailed(
             &["ELEC".into(), "NOPE".into(), "DIESEL".into()],
             &catalog,
             1,
         );
         assert_eq!(ids, vec![0, 1]);
+        assert_eq!(unresolved, vec!["NOPE".to_string()]);
         assert_eq!(badges_for_spec(&ids, &catalog).len(), 2);
+        assert!(find_badge_by_label(&catalog, "elec").is_some());
     }
 }

@@ -422,6 +422,9 @@ mod tests {
             stop_type: 0,
             from_newgrf: true,
             grfid: 0,
+            newgrf_local_id: 0,
+            draw_mode: openttdrs_core::ROADSTOP_DRAW_MODE_DEFAULT,
+            flags: 0,
             newgrf_views: Vec::new(),
             associated_badges: Vec::new(),
         });

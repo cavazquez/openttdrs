@@ -32,6 +32,8 @@ pub(crate) fn apply_loaded_state(
     let prev = sim.state.map.dimensions();
     let nw = loaded.map.dimensions();
     sim.state = loaded;
+    // Rehidratar catálogos NewGRF (vistas Action1/3) tras save/load.
+    openttdrs_core::apply_newgrf_stack_catalogs_default_dirs(&mut sim.state);
     sim.ottdmap_extras = None;
     sim.loaded_file = true;
     vehicle_index.rebuild(&sim.state.vehicles);

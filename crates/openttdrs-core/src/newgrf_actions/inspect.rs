@@ -5,7 +5,11 @@ use std::path::Path;
 use crate::newgrf_config::{GrfContainerVersion, GrfScanError, parse_grf_container};
 use crate::newgrf_walk::{GrfEntry, walk_grf_entries};
 
-use super::action0::parse_action0_header;
+use super::action0::{
+    ACTION0_FEATURE_BADGES, ACTION0_FEATURE_OBJECTS, ACTION0_FEATURE_ROADSTOPS,
+    parse_action0_badge_meta, parse_action0_header, parse_action0_object_meta,
+    parse_action0_roadstop_meta,
+};
 
 /// Resumen de un bloque Action5 para Inspeccionar.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -26,6 +30,10 @@ pub struct GrfInspectReport {
     pub pseudo_sprites: u32,
     pub real_sprites: u32,
     pub warnings: Vec<String>,
+    /// Labels de badges definidos (`Action0` feature `0x15`).
+    pub badge_labels: Vec<String>,
+    /// Asociaciones badge vistas en roadstops/objects (`prop 0xFD`).
+    pub badge_associations: Vec<String>,
 }
 
 impl GrfInspectReport {
@@ -59,6 +67,15 @@ impl GrfInspectReport {
                 .map(|f| format!("0x{f:02X}"))
                 .collect();
             lines.push(format!("Action0 features: {}", feats.join(", ")));
+        }
+        if !self.badge_labels.is_empty() {
+            lines.push(format!("Badges: {}", self.badge_labels.join(", ")));
+        }
+        if !self.badge_associations.is_empty() {
+            lines.push(format!(
+                "Badge assoc: {}",
+                self.badge_associations.join("; ")
+            ));
         }
         if !self.action5_slots.is_empty() {
             let slots: Vec<_> = self
@@ -153,10 +170,56 @@ fn process_pseudo_payload(payload: &[u8], report: &mut GrfInspectReport) {
                 if !report.action0_features.contains(&h.feature) {
                     report.action0_features.push(h.feature);
                 }
+                inspect_action0_badges(payload, h.feature, report);
             }
             None => report
                 .warnings
                 .push("Action0 con cabecera incompleta".into()),
         }
+    }
+}
+
+fn inspect_action0_badges(payload: &[u8], feature: u8, report: &mut GrfInspectReport) {
+    match feature {
+        ACTION0_FEATURE_BADGES => {
+            if let Some(meta) = parse_action0_badge_meta(payload) {
+                if !report
+                    .badge_labels
+                    .iter()
+                    .any(|l| l.eq_ignore_ascii_case(&meta.label))
+                {
+                    report.badge_labels.push(meta.label);
+                }
+            }
+        }
+        ACTION0_FEATURE_ROADSTOPS => {
+            if let Some(meta) = parse_action0_roadstop_meta(payload) {
+                if let Some(err) = meta.badge_list_error {
+                    report.warnings.push(format!("roadstop: {err}"));
+                }
+                if !meta.badge_labels.is_empty() {
+                    report.badge_associations.push(format!(
+                        "{}→[{}]",
+                        meta.label,
+                        meta.badge_labels.join(",")
+                    ));
+                }
+            }
+        }
+        ACTION0_FEATURE_OBJECTS => {
+            if let Some(meta) = parse_action0_object_meta(payload) {
+                if let Some(err) = meta.badge_list_error {
+                    report.warnings.push(format!("object: {err}"));
+                }
+                if !meta.badge_labels.is_empty() {
+                    report.badge_associations.push(format!(
+                        "{}→[{}]",
+                        meta.name,
+                        meta.badge_labels.join(",")
+                    ));
+                }
+            }
+        }
+        _ => {}
     }
 }

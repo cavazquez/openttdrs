@@ -1,13 +1,17 @@
-//! Colocar objetos vanilla jugables y `NewGRF` 1×1 (`object_cmd.cpp` simplificado).
+//! Colocar objetos vanilla jugables y `NewGRF` multitile (`object_cmd.cpp` simplificado).
 #![allow(clippy::cast_possible_wrap, clippy::cast_possible_truncation)]
 
-use crate::economy::build_object_cost;
+use crate::economy::build_object_cost_factored;
 use crate::game_state::GameState;
 use crate::map::{
     MP_OBJECT_MAPT, Map, OBJECT_TYPE_LIGHTHOUSE, OBJECT_TYPE_TRANSMITTER, TileCoord, TileKind,
-    is_map_object_tile, is_newgrf_object_type, object_type_from_tile,
+    is_map_object_tile, is_newgrf_object_type, object_footprint_tiles, object_tile_offset_byte,
+    object_type_dims, object_type_from_tile,
 };
-use crate::object_spec::{ObjectSpecDef, object_spec_def};
+use crate::object_spec::{
+    DEFAULT_OBJECT_BUILD_COST_FACTOR, ObjectSpecDef, object_spec_def,
+};
+use crate::world_gen::Climate;
 
 use super::error::CommandError;
 use super::util::in_bounds;
@@ -21,7 +25,7 @@ pub const fn is_buildable_object_type(object_type: u8) -> bool {
     )
 }
 
-/// Vanilla 0/1, o id `NewGRF` presente en el catálogo con tamaño 1×1.
+/// Vanilla 0/1, o id `NewGRF` presente en el catálogo con tamaño válido.
 #[must_use]
 pub fn is_allowed_build_object_type(object_type: u8, catalog: &[ObjectSpecDef]) -> bool {
     if is_buildable_object_type(object_type) {
@@ -30,19 +34,24 @@ pub fn is_allowed_build_object_type(object_type: u8, catalog: &[ObjectSpecDef]) 
     if !is_newgrf_object_type(object_type) {
         return false;
     }
-    object_spec_def(catalog, u16::from(object_type)).is_some_and(ObjectSpecDef::is_1x1)
+    object_spec_def(catalog, u16::from(object_type))
+        .is_some_and(|d| d.size_width() > 0 && d.size_height() > 0)
 }
 
-pub(crate) fn check_build_object(
-    map: &Map,
-    c: TileCoord,
+fn object_build_cost_params(
     object_type: u8,
     catalog: &[ObjectSpecDef],
-) -> Result<(), CommandError> {
-    in_bounds(map, c)?;
-    if !is_allowed_build_object_type(object_type, catalog) {
-        return Err(CommandError::CannotBuildObjectHere);
+) -> (u8, u32) {
+    if is_newgrf_object_type(object_type)
+        && let Some(def) = object_spec_def(catalog, u16::from(object_type))
+    {
+        return (def.build_cost_factor, def.tile_count().max(1));
     }
+    (DEFAULT_OBJECT_BUILD_COST_FACTOR, 1)
+}
+
+fn check_single_object_tile(map: &Map, c: TileCoord) -> Result<(), CommandError> {
+    in_bounds(map, c)?;
     let Some(tile) = map.get(c) else {
         return Err(CommandError::OutOfBounds);
     };
@@ -56,6 +65,36 @@ pub(crate) fn check_build_object(
     }
 }
 
+pub(crate) fn check_build_object(
+    map: &Map,
+    c: TileCoord,
+    object_type: u8,
+    catalog: &[ObjectSpecDef],
+    climate: Climate,
+) -> Result<(), CommandError> {
+    in_bounds(map, c)?;
+    if !is_allowed_build_object_type(object_type, catalog) {
+        return Err(CommandError::CannotBuildObjectHere);
+    }
+    if is_newgrf_object_type(object_type) {
+        let Some(def) = object_spec_def(catalog, u16::from(object_type)) else {
+            return Err(CommandError::CannotBuildObjectHere);
+        };
+        if !def.available_in_climate(climate.newgrf_landscape_bit()) {
+            return Err(CommandError::CannotBuildObjectHere);
+        }
+    }
+    let (w, h) = object_type_dims(object_type, catalog);
+    if w == 0 || h == 0 {
+        return Err(CommandError::CannotBuildObjectHere);
+    }
+    // Validar footprint completo ANTES de mutar el mapa.
+    for tile in object_footprint_tiles(c, w, h) {
+        check_single_object_tile(map, tile)?;
+    }
+    Ok(())
+}
+
 fn count_objects_of_type(map: &Map, object_type: u8) -> usize {
     let (w, h) = map.dimensions();
     let mut n = 0usize;
@@ -64,7 +103,9 @@ fn count_objects_of_type(map: &Map, object_type: u8) -> usize {
             let c = TileCoord::new(x as i32, y as i32);
             if let Some(tile) = map.get(c)
                 && object_type_from_tile(&tile) == Some(object_type)
+                && tile.m2 == 0
             {
+                // Contar solo orígenes (m2 == 0) para multitile.
                 n += 1;
             }
         }
@@ -78,10 +119,38 @@ pub(crate) fn check_build_object_placement(
     c: TileCoord,
     object_type: u8,
     catalog: &[ObjectSpecDef],
+    climate: Climate,
 ) -> Result<(), CommandError> {
-    check_build_object(map, c, object_type, catalog)?;
+    check_build_object(map, c, object_type, catalog, climate)?;
     if !is_newgrf_object_type(object_type) && count_objects_of_type(map, object_type) >= 1 {
         return Err(CommandError::ObjectLimitReached);
+    }
+    Ok(())
+}
+
+fn place_object_tile(
+    state: &mut GameState,
+    c: TileCoord,
+    object_type: u8,
+    offset: u8,
+) -> Result<(), CommandError> {
+    state
+        .map
+        .set_mapt_m5(c, MP_OBJECT_MAPT, object_type)
+        .map_err(|_| CommandError::OutOfBounds)?;
+    state
+        .map
+        .set_m2(c, offset)
+        .map_err(|_| CommandError::OutOfBounds)?;
+    state
+        .map
+        .set_m1(c, state.active_company.0)
+        .map_err(|_| CommandError::OutOfBounds)?;
+    if state.map.get_kind(c) == Some(TileKind::Forest) {
+        state
+            .map
+            .set_kind(c, TileKind::Grass)
+            .map_err(|_| CommandError::OutOfBounds)?;
     }
     Ok(())
 }
@@ -91,25 +160,29 @@ pub(crate) fn build_object(
     c: TileCoord,
     object_type: u8,
 ) -> Result<(), CommandError> {
-    check_build_object_placement(&state.map, c, object_type, &state.object_spec_catalog)?;
-    let cost = build_object_cost(&state.global_economy);
+    check_build_object_placement(
+        &state.map,
+        c,
+        object_type,
+        &state.object_spec_catalog,
+        state.climate,
+    )?;
+    let (factor, tiles) = object_build_cost_params(object_type, &state.object_spec_catalog);
+    let cost = build_object_cost_factored(&state.global_economy, factor, tiles);
     if state.economy.money < cost {
         return Err(CommandError::InsufficientFunds);
     }
-    state
-        .map
-        .set_mapt_m5(c, MP_OBJECT_MAPT, object_type)
-        .map_err(|_| CommandError::OutOfBounds)?;
-    state
-        .map
-        .set_m1(c, state.active_company.0)
-        .map_err(|_| CommandError::OutOfBounds)?;
-    // Mantener hierba/bosque como base visual; el render usa `mapt`/`m5`.
-    if state.map.get_kind(c) == Some(TileKind::Forest) {
-        state
-            .map
-            .set_kind(c, TileKind::Grass)
-            .map_err(|_| CommandError::OutOfBounds)?;
+    let (w, h) = object_type_dims(object_type, &state.object_spec_catalog);
+    for dy in 0..h {
+        for dx in 0..w {
+            let tile = TileCoord::new(c.x + i32::from(dx), c.y + i32::from(dy));
+            place_object_tile(
+                state,
+                tile,
+                object_type,
+                object_tile_offset_byte(dx, dy),
+            )?;
+        }
     }
     state.economy.money -= cost;
     Ok(())
@@ -124,10 +197,13 @@ pub(crate) fn build_object_quote(state: &GameState, cmd: &super::types::Command)
                 *pos,
                 *object_type,
                 &state.object_spec_catalog,
+                state.climate,
             )
             .is_ok() =>
         {
-            build_object_cost(&state.global_economy)
+            let (factor, tiles) =
+                object_build_cost_params(*object_type, &state.object_spec_catalog);
+            build_object_cost_factored(&state.global_economy, factor, tiles)
         }
         _ => 0,
     }
@@ -138,11 +214,33 @@ pub(crate) fn build_object_quote(state: &GameState, cmd: &super::types::Command)
 mod tests {
     use super::*;
     use crate::command::{Command, apply_command};
+    use crate::economy::build_object_cost;
     use crate::map::object_type_from_tile;
     use crate::newgrf_actions::{
-        apply_newgrf_objects, build_action0_object_payload, build_grf_v2_with_action0_and_action8,
+        apply_newgrf_objects, build_action0_object_payload, build_action0_object_payload_full,
+        build_grf_v2_with_action0_and_action8,
     };
-    use crate::object_spec::{NEW_OBJECT_OFFSET, OBJECT_SIZE_1X1, ObjectSpecDef};
+    use crate::object_spec::{
+        DEFAULT_OBJECT_CLIMATE_MASK, NEW_OBJECT_OFFSET, OBJECT_SIZE_1X1, ObjectSpecDef,
+    };
+
+    fn push_spec(state: &mut GameState, size: u8, cost_factor: u8, climate_mask: u8) -> u8 {
+        let id = NEW_OBJECT_OFFSET + state.object_spec_catalog.len() as u16;
+        state.object_spec_catalog.push(ObjectSpecDef {
+            id,
+            class_label: "OBJ ".into(),
+            name: "Obj".into(),
+            size,
+            from_newgrf: true,
+            local_id: u8::try_from(state.object_spec_catalog.len()).unwrap_or(0),
+            grfid: 0x4F_42_00_01,
+            climate_mask,
+            build_cost_factor: cost_factor,
+            views: Vec::new(),
+            associated_badges: Vec::new(),
+        });
+        u8::try_from(id).expect("id fits m5")
+    }
 
     #[test]
     fn build_lighthouse_marks_object_and_charges() {
@@ -183,7 +281,6 @@ mod tests {
             ),
             Err(CommandError::ObjectLimitReached)
         );
-        // Faro distinto: permitido.
         apply_command(
             &mut state,
             &Command::BuildObject {
@@ -267,25 +364,103 @@ mod tests {
     }
 
     #[test]
-    fn build_newgrf_object_rejects_non_1x1() {
+    fn build_newgrf_object_2x1_writes_full_footprint() {
         let mut state = GameState::new(8, 8);
-        state.object_spec_catalog.push(ObjectSpecDef {
-            id: NEW_OBJECT_OFFSET,
-            class_label: "BIG ".into(),
-            name: "Big".into(),
-            size: 0x22,
-            from_newgrf: true,
-            local_id: 0,
-            grfid: 0,
-            views: Vec::new(),
-            associated_badges: Vec::new(),
-        });
+        let ot = push_spec(&mut state, 0x12, 1, DEFAULT_OBJECT_CLIMATE_MASK); // 2×1
+        let origin = TileCoord::new(2, 2);
+        apply_command(
+            &mut state,
+            &Command::BuildObject {
+                pos: origin,
+                object_type: ot,
+            },
+        )
+        .expect("build 2x1");
+        let a = state.map.get(origin).unwrap();
+        let b = state.map.get(TileCoord::new(3, 2)).unwrap();
+        assert_eq!(object_type_from_tile(&a), Some(ot));
+        assert_eq!(object_type_from_tile(&b), Some(ot));
+        assert_eq!(a.m2, object_tile_offset_byte(0, 0));
+        assert_eq!(b.m2, object_tile_offset_byte(1, 0));
+    }
+
+    #[test]
+    fn build_newgrf_object_rejects_occupied_footprint() {
+        let mut state = GameState::new(8, 8);
+        let ot = push_spec(&mut state, 0x12, 1, DEFAULT_OBJECT_CLIMATE_MASK);
+        apply_command(
+            &mut state,
+            &Command::BuildObject {
+                pos: TileCoord::new(2, 2),
+                object_type: OBJECT_TYPE_LIGHTHOUSE,
+            },
+        )
+        .unwrap();
+        // Footprint (1,2)-(2,2) overlaps lighthouse at (2,2).
+        assert_eq!(
+            apply_command(
+                &mut state,
+                &Command::BuildObject {
+                    pos: TileCoord::new(1, 2),
+                    object_type: ot,
+                },
+            ),
+            Err(CommandError::CannotBuildObjectHere)
+        );
+        // Origin tile must remain grass (no partial mutate).
+        let origin = state.map.get(TileCoord::new(1, 2)).unwrap();
+        assert!(!is_map_object_tile(origin.mapt));
+    }
+
+    #[test]
+    fn clear_tile_demolishes_multitile_footprint() {
+        let mut state = GameState::new(8, 8);
+        let ot = push_spec(&mut state, 0x12, 1, DEFAULT_OBJECT_CLIMATE_MASK);
+        let origin = TileCoord::new(2, 2);
+        let other = TileCoord::new(3, 2);
+        apply_command(
+            &mut state,
+            &Command::BuildObject {
+                pos: origin,
+                object_type: ot,
+            },
+        )
+        .unwrap();
+        apply_command(&mut state, &Command::ClearTile(other)).unwrap();
+        assert!(!is_map_object_tile(state.map.get(origin).unwrap().mapt));
+        assert!(!is_map_object_tile(state.map.get(other).unwrap().mapt));
+    }
+
+    #[test]
+    fn build_newgrf_object_uses_cost_factor() {
+        let mut state = GameState::new(8, 8);
+        let factor = 4u8;
+        let ot = push_spec(&mut state, OBJECT_SIZE_1X1, factor, DEFAULT_OBJECT_CLIMATE_MASK);
+        let before = state.economy.money;
+        apply_command(
+            &mut state,
+            &Command::BuildObject {
+                pos: TileCoord::new(1, 1),
+                object_type: ot,
+            },
+        )
+        .unwrap();
+        let expected = build_object_cost_factored(&state.global_economy, factor, 1);
+        assert_eq!(before - state.economy.money, expected);
+        assert_ne!(expected, build_object_cost(&state.global_economy));
+    }
+
+    #[test]
+    fn build_newgrf_object_rejects_wrong_climate() {
+        let mut state = GameState::new(8, 8);
+        state.climate = Climate::Temperate;
+        let ot = push_spec(&mut state, OBJECT_SIZE_1X1, 1, 0x02); // solo ártico
         assert_eq!(
             apply_command(
                 &mut state,
                 &Command::BuildObject {
                     pos: TileCoord::new(1, 1),
-                    object_type: NEW_OBJECT_OFFSET as u8,
+                    object_type: ot,
                 },
             ),
             Err(CommandError::CannotBuildObjectHere)
@@ -295,18 +470,7 @@ mod tests {
     #[test]
     fn build_newgrf_object_skips_one_per_type_limit() {
         let mut state = GameState::new(8, 8);
-        state.object_spec_catalog.push(ObjectSpecDef {
-            id: NEW_OBJECT_OFFSET,
-            class_label: "OBJ ".into(),
-            name: "Obj".into(),
-            size: OBJECT_SIZE_1X1,
-            from_newgrf: true,
-            local_id: 0,
-            grfid: 0,
-            views: Vec::new(),
-            associated_badges: Vec::new(),
-        });
-        let ot = NEW_OBJECT_OFFSET as u8;
+        let ot = push_spec(&mut state, OBJECT_SIZE_1X1, 1, DEFAULT_OBJECT_CLIMATE_MASK);
         apply_command(
             &mut state,
             &Command::BuildObject {
@@ -326,7 +490,7 @@ mod tests {
     }
 
     #[test]
-    fn set_current_object_spec_accepts_vanilla_and_catalog_1x1() {
+    fn set_current_object_spec_accepts_vanilla_and_catalog_sizes() {
         let mut state = GameState::new(4, 4);
         assert_eq!(state.current_object_spec, 0);
         apply_command(&mut state, &Command::SetCurrentObjectSpec(1)).unwrap();
@@ -334,43 +498,116 @@ mod tests {
         apply_command(&mut state, &Command::SetCurrentObjectSpec(0)).unwrap();
         assert_eq!(state.current_object_spec, 0);
 
+        let id_1x1 = NEW_OBJECT_OFFSET;
         state.object_spec_catalog.push(ObjectSpecDef {
-            id: NEW_OBJECT_OFFSET,
+            id: id_1x1,
             class_label: "OBJ ".into(),
             name: "Obj".into(),
             size: OBJECT_SIZE_1X1,
             from_newgrf: true,
             local_id: 0,
-            grfid: 0,
+            grfid: 1,
+            climate_mask: DEFAULT_OBJECT_CLIMATE_MASK,
+            build_cost_factor: 1,
             views: Vec::new(),
             associated_badges: Vec::new(),
         });
-        apply_command(
-            &mut state,
-            &Command::SetCurrentObjectSpec(NEW_OBJECT_OFFSET),
-        )
-        .unwrap();
-        assert_eq!(state.current_object_spec, NEW_OBJECT_OFFSET);
+        apply_command(&mut state, &Command::SetCurrentObjectSpec(id_1x1)).unwrap();
+        assert_eq!(state.current_object_spec, id_1x1);
 
-        // Id desconocido o no 1×1: no cambia.
-        apply_command(&mut state, &Command::SetCurrentObjectSpec(99)).unwrap();
-        assert_eq!(state.current_object_spec, NEW_OBJECT_OFFSET);
+        let id_2x1 = NEW_OBJECT_OFFSET + 1;
         state.object_spec_catalog.push(ObjectSpecDef {
-            id: NEW_OBJECT_OFFSET + 1,
+            id: id_2x1,
             class_label: "BIG ".into(),
             name: "Big".into(),
-            size: 0x22,
+            size: 0x12,
             from_newgrf: true,
             local_id: 1,
-            grfid: 0,
+            grfid: 1,
+            climate_mask: DEFAULT_OBJECT_CLIMATE_MASK,
+            build_cost_factor: 1,
             views: Vec::new(),
             associated_badges: Vec::new(),
         });
+        apply_command(&mut state, &Command::SetCurrentObjectSpec(id_2x1)).unwrap();
+        assert_eq!(state.current_object_spec, id_2x1);
+
+        apply_command(&mut state, &Command::SetCurrentObjectSpec(99)).unwrap();
+        assert_eq!(state.current_object_spec, id_2x1);
+    }
+
+    #[test]
+    fn object_spec_json_roundtrips_grfid_local_id_and_cost() {
+        let def = ObjectSpecDef {
+            id: NEW_OBJECT_OFFSET,
+            class_label: "LIGT".into(),
+            name: "Faro2".into(),
+            size: 0x12,
+            from_newgrf: true,
+            local_id: 3,
+            grfid: 0x4F_42_00_02,
+            climate_mask: 0x05,
+            build_cost_factor: 5,
+            views: Vec::new(),
+            associated_badges: vec![1, 2],
+        };
+        let json = serde_json::to_string(&def).expect("ser");
+        assert!(json.contains("\"local_id\":3"));
+        assert!(json.contains("\"grfid\":"));
+        assert!(json.contains("\"build_cost_factor\":5"));
+        let loaded: ObjectSpecDef = serde_json::from_str(&json).expect("de");
+        assert_eq!(loaded.local_id, 3);
+        assert_eq!(loaded.grfid, 0x4F_42_00_02);
+        assert_eq!(loaded.size, 0x12);
+        assert_eq!(loaded.build_cost_factor, 5);
+        assert_eq!(loaded.climate_mask, 0x05);
+        assert!(loaded.views.is_empty());
+    }
+
+    #[test]
+    fn newgrf_object_map_survives_save_load_and_reapply() {
+        let a0 = build_action0_object_payload_full(3, b"LIGT", 0x12, 0x0F, 5, "Faro2", &[]);
+        let bytes = build_grf_v2_with_action0_and_action8(&a0, [b'O', b'B', 0, 2], "obj2", "");
+        let dir = std::env::temp_dir().join(format!(
+            "openttdrs_obj_saveload_{}",
+            std::process::id()
+        ));
+        let _ = std::fs::create_dir_all(&dir);
+        std::fs::write(dir.join("obj2.grf"), &bytes).expect("write");
+        let mut state = GameState::new(8, 8);
+        let grfid = crate::newgrf_config::grfid_from_bytes([b'O', b'B', 0, 2]);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("obj2.grf", grfid));
+        apply_newgrf_objects(&mut state, &[&dir]);
+        let ot = u8::try_from(state.object_spec_catalog[0].id).unwrap();
         apply_command(
             &mut state,
-            &Command::SetCurrentObjectSpec(NEW_OBJECT_OFFSET + 1),
+            &Command::BuildObject {
+                pos: TileCoord::new(2, 2),
+                object_type: ot,
+            },
         )
         .unwrap();
-        assert_eq!(state.current_object_spec, NEW_OBJECT_OFFSET);
+
+        let path = dir.join("game.json");
+        crate::save::save(&state, &path).unwrap();
+        let mut loaded = crate::save::load(&path).unwrap();
+        // Re-aplicar NewGRF post-load (como hace migrate con search dirs).
+        apply_newgrf_objects(&mut loaded, &[&dir]);
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert_eq!(loaded.object_spec_catalog.len(), 1);
+        let loaded_def = &loaded.object_spec_catalog[0];
+        assert_eq!(loaded_def.local_id, 3);
+        assert_eq!(loaded_def.grfid, grfid);
+        assert_eq!(loaded_def.size, 0x12);
+        assert_eq!(loaded_def.build_cost_factor, 5);
+        let a = loaded.map.get(TileCoord::new(2, 2)).unwrap();
+        let b = loaded.map.get(TileCoord::new(3, 2)).unwrap();
+        assert_eq!(object_type_from_tile(&a), Some(ot));
+        assert_eq!(object_type_from_tile(&b), Some(ot));
+        assert_eq!(a.m2, object_tile_offset_byte(0, 0));
+        assert_eq!(b.m2, object_tile_offset_byte(1, 0));
     }
 }

@@ -316,7 +316,7 @@ pub enum Command {
         from: TileCoord,
         to: TileCoord,
     },
-    /// Coloca faro/transmisor vanilla o objeto `NewGRF` 1×1 (`CmdBuildObject`).
+    /// Coloca faro/transmisor vanilla o objeto `NewGRF` (footprint W×H) (`CmdBuildObject`).
     BuildObject {
         pos: TileCoord,
         /// `0`/`1` vanilla, o id `NewGRF` ≥5 (`m5`).

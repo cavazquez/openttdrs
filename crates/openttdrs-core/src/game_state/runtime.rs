@@ -117,6 +117,10 @@ pub struct SimulationRuntime {
 
     /// Grabador opcional: cada `apply_command` exitoso se encola (plan IA progresiva).
     pub command_recorder: Option<VecDeque<Command>>,
+
+    /// Diagnósticos NewGRF del último apply (listas truncadas, badges inválidos, …).
+    /// No se persiste; se reconstruye al reaplicar el stack.
+    pub newgrf_diagnostics: Vec<String>,
 }
 
 impl SimulationRuntime {
@@ -159,6 +163,7 @@ impl SimulationRuntime {
             station_flows: crate::flow_stat::StationFlows::default(),
             station_flow_rebuilds: 0,
             command_recorder: None,
+            newgrf_diagnostics: Vec::new(),
         }
     }
 

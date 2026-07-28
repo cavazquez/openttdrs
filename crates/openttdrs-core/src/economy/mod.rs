@@ -8,8 +8,9 @@ pub mod time;
 pub mod vehicle_costs;
 
 pub use build_costs::{
-    build_object_cost, buy_land_cost, rail_build_cost, road_build_cost, station_build_cost,
-    terraform_cost_per_corner, terraform_cost_per_corner_inflated, waypoint_build_cost,
+    build_object_cost, build_object_cost_factored, buy_land_cost, rail_build_cost, road_build_cost,
+    station_build_cost, terraform_cost_per_corner, terraform_cost_per_corner_inflated,
+    waypoint_build_cost,
 };
 pub use global::{
     DEFAULT_DIFFICULTY_MOD, DEFAULT_INTEREST_RATE, FluctuationEvent, GlobalEconomy,

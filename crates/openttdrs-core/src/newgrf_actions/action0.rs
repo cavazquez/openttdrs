@@ -39,14 +39,22 @@ const PROP_INDTILE_OVERRIDE: u8 = 0x09;
 const PROP_LABEL: u8 = 0x08;
 /// Prop flags (`RoadTypes`: bit0 = tram; `Badges`: DWORD).
 const PROP_FLAGS: u8 = 0x09;
-/// `RoadStops`: tipo de parada BYTE (`0` bus / `1` truck; OTTD `0x09`).
+/// `RoadStops`: tipo de parada BYTE (`0` bus / `1` truck / `2` all; OTTD `0x09`).
 const PROP_ROADSTOP_STOP_TYPE: u8 = 0x09;
+/// `RoadStops`: draw modes BYTE (`OpenTTD` `0x0C`).
+const PROP_ROADSTOP_DRAW_MODE: u8 = 0x0C;
+/// `RoadStops`: general flags DWORD (`OpenTTD` `0x12`).
+const PROP_ROADSTOP_FLAGS: u8 = 0x12;
 /// Cargoes: bit number (`OpenTTD` `0x08`).
 const PROP_CARGO_BITNUM: u8 = 0x08;
 /// Cargoes: label 4 chars (`OpenTTD` `0x17`).
 const PROP_CARGO_LABEL: u8 = 0x17;
+/// Objects: climate mask BYTE (`OpenTTD` `0x0B`).
+const PROP_OBJECT_CLIMATE: u8 = 0x0B;
 /// Objects: size BYTE (`OpenTTD` `0x0C`).
 const PROP_OBJECT_SIZE: u8 = 0x0C;
+/// Objects: build cost multiplier BYTE (`OpenTTD` `0x0D`).
+const PROP_OBJECT_BUILD_COST: u8 = 0x0D;
 /// Stations: callback mask (`OpenTTD` 15.3; consumida).
 const PROP_STATION_CALLBACK_MASK: u8 = 0x0B;
 /// Stations: platforms disallowed bitmask (`OpenTTD` `0x0C`).
@@ -247,10 +255,16 @@ pub struct ParsedRoadStopMeta {
     pub class_label: String,
     pub short_label: String,
     pub label: String,
-    /// `0` = bus, `1` = truck (común).
+    /// `0` bus / `1` truck / `2` all (`RoadStopAvailabilityType`).
     pub stop_type: u8,
+    /// Action0 `0x0C` draw modes.
+    pub draw_mode: u8,
+    /// Action0 `0x12` flags DWORD.
+    pub flags: u32,
     /// Etiquetas de badge (`prop 0xFD`); se resuelven en apply.
     pub badge_labels: Vec<String>,
+    /// Lista `0xFD` truncada / inválida (diagnóstico observable).
+    pub badge_list_error: Option<String>,
 }
 
 /// Metadatos `Badges` Action0 (antes de asignar ID global).
@@ -258,6 +272,14 @@ pub struct ParsedRoadStopMeta {
 pub struct ParsedBadgeMeta {
     pub label: String,
     pub flags: u32,
+}
+
+/// Resultado de leer la lista de asociaciones `0xFD`.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct BadgeAssocParse {
+    pub labels: Vec<String>,
+    /// Mensaje si la lista está truncada o contiene labels inválidos.
+    pub error: Option<String>,
 }
 
 /// Metadatos `Cargoes` Action0 (antes de registrar en catálogo).
@@ -276,8 +298,14 @@ pub struct ParsedObjectMeta {
     pub class_label: String,
     pub name: String,
     pub size: u8,
+    /// Máscara de climas (`prop 0x0B`).
+    pub climate_mask: u8,
+    /// Multiplicador de coste de construcción (`prop 0x0D`).
+    pub build_cost_factor: u8,
     /// Etiquetas de badge (`prop 0xFD`); se resuelven en apply.
     pub badge_labels: Vec<String>,
+    /// Lista `0xFD` truncada / inválida (diagnóstico observable).
+    pub badge_list_error: Option<String>,
 }
 
 #[must_use]
@@ -513,20 +541,36 @@ fn read_four_char_label(payload: &[u8], i: &mut usize, fallback: &str) -> Option
 }
 
 /// Lee `prop 0xFD`: BYTE count + N× label 4 chars.
-fn read_badge_association_labels(payload: &[u8], i: &mut usize) -> Option<Vec<String>> {
+///
+/// Devuelve `None` sólo si falta el BYTE count. Truncado / label vacío → `error`.
+fn read_badge_association_labels(payload: &[u8], i: &mut usize) -> Option<BadgeAssocParse> {
     if *i >= payload.len() {
         return None;
     }
     let count = usize::from(payload[*i]);
     *i += 1;
     let mut labels = Vec::with_capacity(count);
-    for _ in 0..count {
-        let s = read_four_char_label(payload, i, "")?;
-        if !s.is_empty() {
-            labels.push(s);
+    let mut error = None;
+    for n in 0..count {
+        if *i + 4 > payload.len() {
+            error = Some(format!(
+                "lista de badges 0xFD truncada (pedía {count}, leídos {n})"
+            ));
+            break;
         }
+        let Some(s) = read_four_char_label(payload, i, "") else {
+            error = Some(format!(
+                "lista de badges 0xFD truncada (pedía {count}, leídos {n})"
+            ));
+            break;
+        };
+        if s.is_empty() {
+            error = Some("lista de badges 0xFD con label vacío/inválido".into());
+            continue;
+        }
+        labels.push(s);
     }
-    Some(labels)
+    Some(BadgeAssocParse { labels, error })
 }
 
 fn parse_station_custom_layouts(
@@ -785,7 +829,7 @@ pub fn collect_industry_tile_metas_from_grf(data: &[u8]) -> Vec<ParsedIndustryTi
     out
 }
 
-/// Parsea Action0 `RoadStops` (`0x14`): class label 4 chars, stop type BYTE, nombre `0xFE`, badges `0xFD`.
+/// Parsea Action0 `RoadStops` (`0x14`): class, stop type, draw_mode, flags, nombre `0xFE`, badges `0xFD`.
 #[must_use]
 pub fn parse_action0_roadstop_meta(payload: &[u8]) -> Option<ParsedRoadStopMeta> {
     let header = parse_action0_header(payload)?;
@@ -796,7 +840,10 @@ pub fn parse_action0_roadstop_meta(payload: &[u8]) -> Option<ParsedRoadStopMeta>
     let mut class_short = String::from("NGRF");
     let mut label = String::new();
     let mut stop_type = 0u8;
+    let mut draw_mode = crate::road_stop_spec::ROADSTOP_DRAW_MODE_DEFAULT;
+    let mut flags = 0u32;
     let mut badge_labels = Vec::new();
+    let mut badge_list_error = None;
     for _ in 0..header.num_props {
         if i >= payload.len() {
             break;
@@ -817,6 +864,25 @@ pub fn parse_action0_roadstop_meta(payload: &[u8]) -> Option<ParsedRoadStopMeta>
                 stop_type = payload[i];
                 i += 1;
             }
+            PROP_ROADSTOP_DRAW_MODE => {
+                if i >= payload.len() {
+                    break;
+                }
+                draw_mode = payload[i];
+                i += 1;
+            }
+            PROP_ROADSTOP_FLAGS => {
+                if i + 4 > payload.len() {
+                    break;
+                }
+                flags = u32::from_le_bytes([
+                    payload[i],
+                    payload[i + 1],
+                    payload[i + 2],
+                    payload[i + 3],
+                ]);
+                i += 4;
+            }
             PROP_NAME_CSTRING => {
                 let Some(nul) = payload[i..].iter().position(|&b| b == 0) else {
                     break;
@@ -825,10 +891,33 @@ pub fn parse_action0_roadstop_meta(payload: &[u8]) -> Option<ParsedRoadStopMeta>
                 i += nul + 1;
             }
             PROP_BADGE_ASSOCIATIONS => {
-                let Some(labels) = read_badge_association_labels(payload, &mut i) else {
+                let Some(parsed) = read_badge_association_labels(payload, &mut i) else {
+                    badge_list_error = Some("lista de badges 0xFD sin BYTE count".into());
                     break;
                 };
-                badge_labels = labels;
+                badge_labels = parsed.labels;
+                if parsed.error.is_some() {
+                    badge_list_error = parsed.error;
+                }
+            }
+            // Anchos fijos OTTD (avanzar el bloque sin semántica).
+            0x0F | 0x11 => {
+                if i >= payload.len() {
+                    break;
+                }
+                i += 1;
+            }
+            0x0A | 0x0B | 0x0E | 0x10 | 0x15 => {
+                if i + 2 > payload.len() {
+                    break;
+                }
+                i += 2;
+            }
+            0x0D => {
+                if i + 4 > payload.len() {
+                    break;
+                }
+                i += 4;
             }
             _ => break,
         }
@@ -837,7 +926,10 @@ pub fn parse_action0_roadstop_meta(payload: &[u8]) -> Option<ParsedRoadStopMeta>
         class_short,
         label,
         stop_type,
+        draw_mode,
+        flags,
         badge_labels,
+        badge_list_error,
     ))
 }
 
@@ -845,7 +937,10 @@ fn finish_parsed_roadstop_meta(
     class_short: String,
     mut label: String,
     stop_type: u8,
+    draw_mode: u8,
+    flags: u32,
     badge_labels: Vec<String>,
+    badge_list_error: Option<String>,
 ) -> ParsedRoadStopMeta {
     let short_label = {
         let ascii: String = label
@@ -869,7 +964,10 @@ fn finish_parsed_roadstop_meta(
         short_label,
         label,
         stop_type,
+        draw_mode,
+        flags,
         badge_labels,
+        badge_list_error,
     }
 }
 
@@ -885,6 +983,8 @@ pub fn collect_roadstop_metas_from_grf(data: &[u8]) -> Vec<ParsedRoadStopMeta> {
 }
 
 /// Parsea Action0 `Badges` (`0x15`): label 4 chars / `0xFE` nombre, flags DWORD.
+///
+/// Identidad: preferir `0xFE` C-string; si no hay, `0x08` 4-char.
 #[must_use]
 pub fn parse_action0_badge_meta(payload: &[u8]) -> Option<ParsedBadgeMeta> {
     let header = parse_action0_header(payload)?;
@@ -892,7 +992,8 @@ pub fn parse_action0_badge_meta(payload: &[u8]) -> Option<ParsedBadgeMeta> {
         return None;
     }
     let mut i = 5usize;
-    let mut label = String::new();
+    let mut label_4 = String::new();
+    let mut label_cstr = String::new();
     let mut flags = 0u32;
     for _ in 0..header.num_props {
         if i >= payload.len() {
@@ -905,7 +1006,7 @@ pub fn parse_action0_badge_meta(payload: &[u8]) -> Option<ParsedBadgeMeta> {
                 let Some(s) = read_four_char_label(payload, &mut i, "BDGE") else {
                     break;
                 };
-                label = s;
+                label_4 = s;
             }
             PROP_FLAGS => {
                 if i + 4 > payload.len() {
@@ -923,12 +1024,17 @@ pub fn parse_action0_badge_meta(payload: &[u8]) -> Option<ParsedBadgeMeta> {
                 let Some(nul) = payload[i..].iter().position(|&b| b == 0) else {
                     break;
                 };
-                label = String::from_utf8_lossy(&payload[i..i + nul]).to_string();
+                label_cstr = String::from_utf8_lossy(&payload[i..i + nul]).to_string();
                 i += nul + 1;
             }
             _ => break,
         }
     }
+    let label = if !label_cstr.is_empty() {
+        label_cstr
+    } else {
+        label_4
+    };
     if label.is_empty() {
         return None;
     }
@@ -1025,7 +1131,10 @@ pub fn parse_action0_object_meta(payload: &[u8]) -> Option<ParsedObjectMeta> {
     let mut class_label = String::new();
     let mut name = String::new();
     let mut size = crate::object_spec::OBJECT_SIZE_1X1;
+    let mut climate_mask = crate::object_spec::DEFAULT_OBJECT_CLIMATE_MASK;
+    let mut build_cost_factor = crate::object_spec::DEFAULT_OBJECT_BUILD_COST_FACTOR;
     let mut badge_labels = Vec::new();
+    let mut badge_list_error = None;
     for _ in 0..header.num_props {
         if i >= payload.len() {
             break;
@@ -1039,6 +1148,13 @@ pub fn parse_action0_object_meta(payload: &[u8]) -> Option<ParsedObjectMeta> {
                 };
                 class_label = s;
             }
+            PROP_OBJECT_CLIMATE => {
+                if i >= payload.len() {
+                    break;
+                }
+                climate_mask = payload[i];
+                i += 1;
+            }
             PROP_OBJECT_SIZE => {
                 if i >= payload.len() {
                     break;
@@ -1051,6 +1167,13 @@ pub fn parse_action0_object_meta(payload: &[u8]) -> Option<ParsedObjectMeta> {
                     size = crate::object_spec::OBJECT_SIZE_1X1;
                 }
             }
+            PROP_OBJECT_BUILD_COST => {
+                if i >= payload.len() {
+                    break;
+                }
+                build_cost_factor = payload[i];
+                i += 1;
+            }
             PROP_NAME_CSTRING => {
                 let Some(nul) = payload[i..].iter().position(|&b| b == 0) else {
                     break;
@@ -1059,10 +1182,14 @@ pub fn parse_action0_object_meta(payload: &[u8]) -> Option<ParsedObjectMeta> {
                 i += nul + 1;
             }
             PROP_BADGE_ASSOCIATIONS => {
-                let Some(labels) = read_badge_association_labels(payload, &mut i) else {
+                let Some(parsed) = read_badge_association_labels(payload, &mut i) else {
+                    badge_list_error = Some("lista de badges 0xFD sin BYTE count".into());
                     break;
                 };
-                badge_labels = labels;
+                badge_labels = parsed.labels;
+                if parsed.error.is_some() {
+                    badge_list_error = parsed.error;
+                }
             }
             _ => break,
         }
@@ -1078,7 +1205,10 @@ pub fn parse_action0_object_meta(payload: &[u8]) -> Option<ParsedObjectMeta> {
         class_label,
         name,
         size,
+        climate_mask,
+        build_cost_factor,
         badge_labels,
+        badge_list_error,
     })
 }
 

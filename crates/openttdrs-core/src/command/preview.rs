@@ -1,6 +1,6 @@
 //! Validación de solo lectura alineada con [`apply_command`] (preview / HUD).
 
-use crate::bridge_spec::{bridge_available_at_tick, bridge_build_cost};
+use crate::bridge_spec::{bridge_available_at_tick_in, bridge_build_cost_in};
 use crate::{GameState, IndustrySpec, StopKind};
 
 use super::build_object::check_build_object_placement;
@@ -175,14 +175,22 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
             check_bridge(map, *a, *b)
                 .err()
                 .or_else(|| {
-                    if bridge_available_at_tick(*bt, state.tick, *a, *b) {
+                    if bridge_available_at_tick_in(
+                        &state.bridge_spec_catalog,
+                        *bt,
+                        state.tick,
+                        *a,
+                        *b,
+                    ) {
                         None
                     } else {
                         Some(CommandError::BridgeTypeNotAvailable)
                     }
                 })
                 .or_else(|| {
-                    if state.economy.money >= bridge_build_cost(*bt, *a, *b) {
+                    if state.economy.money
+                        >= bridge_build_cost_in(&state.bridge_spec_catalog, *bt, *a, *b)
+                    {
                         None
                     } else {
                         Some(CommandError::InsufficientFunds)

@@ -114,6 +114,13 @@ define_action5_apply!(
     crate::newgrf_sprites::BRIDGE_DECKS_ACTION5_SLOT_COUNT,
     crate::newgrf_sprites::merge_bridge_decks_action5_block
 );
+define_action5_apply!(
+    apply_newgrf_action5_canals,
+    apply_newgrf_action5_canals_default_dirs,
+    canal_action5_newgrf_sprites,
+    crate::newgrf_sprites::CANALS_ACTION5_SLOT_COUNT,
+    crate::newgrf_sprites::merge_canals_action5_block
+);
 
 /// Aplica todos los tipos Action5 runtime soportados.
 pub fn apply_newgrf_action5_all_default_dirs(state: &mut GameState) {
@@ -126,4 +133,5 @@ pub fn apply_newgrf_action5_all_default_dirs(state: &mut GameState) {
     apply_newgrf_action5_openttd_gui_default_dirs(state);
     apply_newgrf_action5_airport_preview_default_dirs(state);
     apply_newgrf_action5_bridge_decks_default_dirs(state);
+    apply_newgrf_action5_canals_default_dirs(state);
 }

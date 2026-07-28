@@ -1,6 +1,7 @@
 use crate::GameState;
 use crate::bridge_spec::{
-    BridgeType, bridge_build_cost, set_bridge_middle_mapt, set_bridge_type_m6,
+    BridgeType, bridge_available_at_tick_in, bridge_build_cost_in, set_bridge_middle_mapt,
+    set_bridge_type_m6,
 };
 use crate::map::{
     Map, TileCoord, TileKind, complement_slope, inclined_slope_direction, resolve_tunnel_end,
@@ -134,7 +135,16 @@ pub(in crate::command) fn place_tunnel_or_bridge(
     let cost = if is_tunnel {
         crate::TUNNEL_BUILD_COST_PER_TILE * i64::try_from(line.len()).unwrap_or(i64::MAX)
     } else {
-        bridge_build_cost(bridge_type, a, b)
+        if !bridge_available_at_tick_in(
+            &state.bridge_spec_catalog,
+            bridge_type,
+            state.tick,
+            a,
+            b,
+        ) {
+            return Err(CommandError::BridgeTypeNotAvailable);
+        }
+        bridge_build_cost_in(&state.bridge_spec_catalog, bridge_type, a, b)
     };
     for (i, c) in line.iter().enumerate() {
         let mut tile = state.map.get(*c).ok_or(CommandError::OutOfBounds)?;

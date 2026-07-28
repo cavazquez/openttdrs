@@ -1,7 +1,7 @@
 //! Construcción acuática: depósito, muelle, canal, boya, acueducto y esclusa.
 
 use crate::bridge_spec::{
-    BridgeType, axis_line, bridge_build_cost, set_bridge_middle_mapt, set_bridge_type_m6,
+    BridgeType, axis_line, bridge_build_cost_in, set_bridge_middle_mapt, set_bridge_type_m6,
 };
 use crate::economy::station_build_cost;
 use crate::map::{
@@ -339,7 +339,7 @@ pub(in crate::command) fn place_aqueduct(
     let line = axis_line(a, b);
     let bridge_axis_y = (b.x - a.x).abs() < (b.y - a.y).abs();
     let bridge_type = BridgeType::Wooden;
-    let cost = bridge_build_cost(bridge_type, a, b);
+    let cost = bridge_build_cost_in(&state.bridge_spec_catalog, bridge_type, a, b);
     for (i, c) in line.iter().enumerate() {
         let mut tile = state.map.get(*c).ok_or(CommandError::OutOfBounds)?;
         let is_endpoint = i == 0 || i + 1 == line.len();

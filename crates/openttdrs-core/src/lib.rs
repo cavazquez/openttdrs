@@ -14,6 +14,7 @@ pub mod airport_fta;
 pub mod autoreplace;
 pub mod badge;
 pub mod bridge_spec;
+pub mod canal_spec;
 pub mod cargo;
 pub mod cargo_packet;
 pub mod cargo_spec;
@@ -129,11 +130,17 @@ pub use badge::{
     next_free_badge_id, resolve_badge_labels, resolve_badge_labels_detailed,
 };
 pub use bridge_spec::{
-    BRIDGE_SPECS, BridgePiece, BridgeSpec, BridgeType, bridge_above_axis_from_mapt,
-    bridge_available, bridge_available_at_tick, bridge_build_cost, bridge_line_tiles,
-    bridge_max_speed_for_tile, bridge_middle_length, bridge_spec, bridge_total_length,
-    bridge_type_from_m6, calc_bridge_piece, road_bridge_other_end, set_bridge_middle_mapt,
-    set_bridge_type_m6,
+    BRIDGE_SPECS, BridgePiece, BridgeSpec, BridgeSpecDef, BridgeType, bridge_above_axis_from_mapt,
+    bridge_available, bridge_available_at_tick, bridge_available_at_tick_in, bridge_available_in,
+    bridge_build_cost, bridge_build_cost_in, bridge_line_tiles, bridge_max_speed_for_tile,
+    bridge_middle_length, bridge_spec, bridge_spec_def, bridge_total_length, bridge_type_from_m6,
+    calc_bridge_piece, road_bridge_other_end, set_bridge_middle_mapt, set_bridge_type_m6,
+    vanilla_bridge_spec_catalog,
+};
+pub use canal_spec::{
+    CANAL_FEATURE_COUNT, CF_BUOY, CF_DIKES, CF_DOCKS, CF_ICON, CF_LOCKS, CF_RIVER_EDGE,
+    CF_RIVER_GUI, CF_RIVER_SLOPE, CF_WATERSLOPE, CanalFeatureDef, canal_feature_def,
+    vanilla_canal_feature_catalog,
 };
 pub use cargo::{ALL_CARGO_TYPES, CargoStock, CargoType, OrderSettings, TEMPERATE_CARGO_TYPES};
 pub use cargo_packet::{
@@ -293,15 +300,17 @@ pub use map::{
 // Runtime NewGRF en raíz; builders/fixtures vía `newgrf_actions` / `newgrf_sprites::fixture` (#157).
 pub use house_spec::{HouseSpec, get_town_radius_group, pick_town_house_id};
 pub use newgrf_actions::{
-    ACTION0_FEATURE_BADGES, ACTION0_FEATURE_CARGOES, ACTION0_FEATURE_INDUSTRYTILES,
-    ACTION0_FEATURE_OBJECTS, ACTION0_FEATURE_RAILTYPES, ACTION0_FEATURE_ROADSTOPS,
-    ACTION0_FEATURE_ROADTYPES, ACTION0_FEATURE_SOUNDS, ACTION0_FEATURE_STATIONS,
-    ACTION0_FEATURE_TRAINS, ACTION0_FEATURE_TRAMTYPES, Action0Header, Action5SlotSummary,
-    GrfInspectReport, ParsedBadgeMeta, ParsedCargoMeta, ParsedIndustryTileMeta, ParsedObjectMeta,
-    ParsedRailTypeMeta, ParsedRoadStopMeta, ParsedRoadTypeMeta, ParsedSoundMeta, ParsedStationMeta,
-    ParsedTrainMeta, apply_newgrf_action5_airport_preview,
+    ACTION0_FEATURE_BADGES, ACTION0_FEATURE_BRIDGES, ACTION0_FEATURE_CANALS,
+    ACTION0_FEATURE_CARGOES, ACTION0_FEATURE_INDUSTRYTILES, ACTION0_FEATURE_OBJECTS,
+    ACTION0_FEATURE_RAILTYPES, ACTION0_FEATURE_ROADSTOPS, ACTION0_FEATURE_ROADTYPES,
+    ACTION0_FEATURE_SOUNDS, ACTION0_FEATURE_STATIONS, ACTION0_FEATURE_TRAINS,
+    ACTION0_FEATURE_TRAMTYPES, Action0Header, Action5SlotSummary, GrfInspectReport,
+    ParsedBadgeMeta, ParsedBridgeMeta, ParsedCanalMeta, ParsedCargoMeta, ParsedIndustryTileMeta,
+    ParsedObjectMeta, ParsedRailTypeMeta, ParsedRoadStopMeta, ParsedRoadTypeMeta, ParsedSoundMeta,
+    ParsedStationMeta, ParsedTrainMeta, apply_newgrf_action5_airport_preview,
     apply_newgrf_action5_airport_preview_default_dirs, apply_newgrf_action5_all_default_dirs,
     apply_newgrf_action5_bridge_decks, apply_newgrf_action5_bridge_decks_default_dirs,
+    apply_newgrf_action5_canals, apply_newgrf_action5_canals_default_dirs,
     apply_newgrf_action5_catenary, apply_newgrf_action5_catenary_default_dirs,
     apply_newgrf_action5_foundations, apply_newgrf_action5_foundations_default_dirs,
     apply_newgrf_action5_oneway, apply_newgrf_action5_oneway_default_dirs,
@@ -309,8 +318,9 @@ pub use newgrf_actions::{
     apply_newgrf_action5_roadstops, apply_newgrf_action5_roadstops_default_dirs,
     apply_newgrf_action5_shore, apply_newgrf_action5_shore_default_dirs,
     apply_newgrf_action5_signals, apply_newgrf_action5_signals_default_dirs,
-    apply_newgrf_badges, apply_newgrf_badges_default_dirs, apply_newgrf_cargoes,
-    apply_newgrf_cargoes_default_dirs, apply_newgrf_industry_tiles,
+    apply_newgrf_badges, apply_newgrf_badges_default_dirs, apply_newgrf_bridges,
+    apply_newgrf_bridges_default_dirs, apply_newgrf_canals, apply_newgrf_canals_default_dirs,
+    apply_newgrf_cargoes, apply_newgrf_cargoes_default_dirs, apply_newgrf_industry_tiles,
     apply_newgrf_industry_tiles_default_dirs, apply_newgrf_objects,
     apply_newgrf_objects_default_dirs, apply_newgrf_rail_signals,
     apply_newgrf_rail_signals_default_dirs, apply_newgrf_road_types,
@@ -319,10 +329,11 @@ pub use newgrf_actions::{
     apply_newgrf_stack_catalogs_default_dirs, apply_newgrf_stations,
     apply_newgrf_stations_default_dirs, apply_newgrf_vehicles_trains,
     apply_newgrf_vehicles_trains_default_dirs, inspect_grf_bytes, inspect_grf_file,
-    parse_action0_badge_meta, parse_action0_cargo_meta, parse_action0_header,
-    parse_action0_industry_tile_meta, parse_action0_object_meta, parse_action0_railtype_metas,
-    parse_action0_roadstop_meta, parse_action0_roadtype_meta, parse_action0_sound_meta,
-    parse_action0_station_meta, parse_action0_train_meta,
+    parse_action0_badge_meta, parse_action0_bridge_meta, parse_action0_canal_meta,
+    parse_action0_cargo_meta, parse_action0_header, parse_action0_industry_tile_meta,
+    parse_action0_object_meta, parse_action0_railtype_metas, parse_action0_roadstop_meta,
+    parse_action0_roadtype_meta, parse_action0_sound_meta, parse_action0_station_meta,
+    parse_action0_train_meta,
 };
 pub use newgrf_config::{
     GrfContainerVersion, GrfFileInfo, GrfParsed, GrfScanError, GrfStackIssue, MAX_NEWGRF_PARAMS,
@@ -330,28 +341,30 @@ pub use newgrf_config::{
     parse_grf_full, scan_grf_bytes, scan_grf_file, stack_params_for_grfid, validate_stack,
 };
 pub use newgrf_sprites::{
-    ACTION5_TYPE_AIRPORT_PREVIEW, ACTION5_TYPE_BRIDGE_DECKS, ACTION5_TYPE_CATENARY,
-    ACTION5_TYPE_FOUNDATIONS, ACTION5_TYPE_ONEWAY, ACTION5_TYPE_OPENTTD_GUI,
+    ACTION5_TYPE_AIRPORT_PREVIEW, ACTION5_TYPE_BRIDGE_DECKS, ACTION5_TYPE_CANALS,
+    ACTION5_TYPE_CATENARY, ACTION5_TYPE_FOUNDATIONS, ACTION5_TYPE_ONEWAY, ACTION5_TYPE_OPENTTD_GUI,
     ACTION5_TYPE_ROADSTOPS, ACTION5_TYPE_SHORE, ACTION5_TYPE_SIGNALS,
     AIRPORT_PREVIEW_ACTION5_SLOT_COUNT, Action2EvalCtx, Action2RandomEntry, Action2VarAdjust,
     Action2VarEntry, Action2VarOp, Action2VarTerm, Action5Block, BRIDGE_DECKS_ACTION5_SLOT_COUNT,
-    CALLBACK_FAILED, CATENARY_ACTION5_SLOT_COUNT, CATENARY_ENTRANCE_SPRITE_BASE,
-    CATENARY_PYLON_SPRITE_BASE, CATENARY_WIRE_SPRITE_BASE, CBID_STATION_BUILD_TILE_LAYOUT,
-    DecodedSprite, FOUNDATION_ACTION5_SLOT_COUNT, ONEWAY_ACTION5_SLOT_COUNT,
-    OPENTTD_GUI_ACTION5_SLOT_COUNT, ROADSTOP_ACTION5_SLOT_COUNT, SHORE_ACTION5_SLOT_COUNT,
-    SHORE_MISSING_BLOCK_SLOTS, SIGNAL_ACTION5_SLOT_COUNT, SPR_SIGNALS_ACTION5_BASE,
-    SPRITE_V2_ZOOM_PREFERENCE, TrainSpriteAssign, TrainSpriteGraphics, action5_type_name,
-    airport_preview_action5_slot, apply_company_colour_mask, bake_sprite_company_mask,
-    bridge_decks_action5_base, bridge_decks_action5_slot, catenary_action5_local_slot,
-    collect_action5_blocks, collect_feature_sprite_graphics, collect_industry_tile_sprite_graphics,
-    collect_object_sprite_graphics, collect_railtype_sprite_graphics,
-    collect_roadstop_sprite_graphics, collect_roadtype_sprite_graphics,
-    collect_station_sprite_graphics, collect_train_sprite_graphics, disallowed_road_directions,
-    foundation_action5_slot_for_tileh, merge_action5_offset_block,
-    merge_airport_preview_action5_block, merge_bridge_decks_action5_block,
-    merge_catenary_action5_block, merge_foundation_action5_block, merge_oneway_action5_block,
-    merge_openttd_gui_action5_block, merge_roadstop_action5_block, merge_shore_action5_block,
-    merge_signals_action5_block, oneway_action5_slot, roadstop_action5_slot, signal_action5_slot,
+    CALLBACK_FAILED, CANALS_ACTION5_LOCK_SLOT, CANALS_ACTION5_SLOT_COUNT,
+    CATENARY_ACTION5_SLOT_COUNT, CATENARY_ENTRANCE_SPRITE_BASE, CATENARY_PYLON_SPRITE_BASE,
+    CATENARY_WIRE_SPRITE_BASE, CBID_STATION_BUILD_TILE_LAYOUT, DecodedSprite,
+    FOUNDATION_ACTION5_SLOT_COUNT, ONEWAY_ACTION5_SLOT_COUNT, OPENTTD_GUI_ACTION5_SLOT_COUNT,
+    ROADSTOP_ACTION5_SLOT_COUNT, SHORE_ACTION5_SLOT_COUNT, SHORE_MISSING_BLOCK_SLOTS,
+    SIGNAL_ACTION5_SLOT_COUNT, SPR_SIGNALS_ACTION5_BASE, SPRITE_V2_ZOOM_PREFERENCE,
+    TrainSpriteAssign, TrainSpriteGraphics, action5_type_name, airport_preview_action5_slot,
+    apply_company_colour_mask, bake_sprite_company_mask, bridge_decks_action5_base,
+    bridge_decks_action5_slot, catenary_action5_local_slot, collect_action5_blocks,
+    collect_canal_sprite_graphics, collect_feature_sprite_graphics,
+    collect_industry_tile_sprite_graphics, collect_object_sprite_graphics,
+    collect_railtype_sprite_graphics, collect_roadstop_sprite_graphics,
+    collect_roadtype_sprite_graphics, collect_station_sprite_graphics,
+    collect_train_sprite_graphics, disallowed_road_directions, foundation_action5_slot_for_tileh,
+    merge_action5_offset_block, merge_airport_preview_action5_block,
+    merge_bridge_decks_action5_block, merge_canals_action5_block, merge_catenary_action5_block,
+    merge_foundation_action5_block, merge_oneway_action5_block, merge_openttd_gui_action5_block,
+    merge_roadstop_action5_block, merge_shore_action5_block, merge_signals_action5_block,
+    oneway_action5_slot, roadstop_action5_slot, signal_action5_slot,
 };
 pub use newgrf_type_tables::{
     GrfTypeTranslationTables, TypeLabel, collect_type_tables_from_grf,

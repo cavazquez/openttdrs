@@ -1,10 +1,10 @@
 //! Parseo y construcción de grafos Action1/2/3 + builders sintéticos de GRF.
 
 use crate::newgrf_actions::{
-    ACTION0_FEATURE_AIRCRAFT, ACTION0_FEATURE_INDUSTRYTILES, ACTION0_FEATURE_OBJECTS,
-    ACTION0_FEATURE_RAILTYPES, ACTION0_FEATURE_ROAD_VEHICLES, ACTION0_FEATURE_ROADSTOPS,
-    ACTION0_FEATURE_ROADTYPES, ACTION0_FEATURE_SHIPS, ACTION0_FEATURE_STATIONS,
-    ACTION0_FEATURE_TRAINS,
+    ACTION0_FEATURE_AIRCRAFT, ACTION0_FEATURE_CANALS, ACTION0_FEATURE_INDUSTRYTILES,
+    ACTION0_FEATURE_OBJECTS, ACTION0_FEATURE_RAILTYPES, ACTION0_FEATURE_ROAD_VEHICLES,
+    ACTION0_FEATURE_ROADSTOPS, ACTION0_FEATURE_ROADTYPES, ACTION0_FEATURE_SHIPS,
+    ACTION0_FEATURE_STATIONS, ACTION0_FEATURE_TRAINS,
 };
 use crate::newgrf_config::{GrfContainerVersion, GrfScanError, parse_grf_full};
 use crate::newgrf_walk::{GrfEntry, walk_grf_entries};
@@ -469,4 +469,13 @@ pub fn collect_object_sprite_graphics(data: &[u8]) -> Result<TrainSpriteGraphics
 /// Contenedor inválido.
 pub fn collect_roadstop_sprite_graphics(data: &[u8]) -> Result<TrainSpriteGraphics, GrfScanError> {
     collect_feature_sprite_graphics(data, ACTION0_FEATURE_ROADSTOPS)
+}
+
+/// Action1/3 canals (`0x05`).
+///
+/// # Errors
+///
+/// Contenedor inválido.
+pub fn collect_canal_sprite_graphics(data: &[u8]) -> Result<TrainSpriteGraphics, GrfScanError> {
+    collect_feature_sprite_graphics(data, ACTION0_FEATURE_CANALS)
 }

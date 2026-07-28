@@ -6,6 +6,8 @@ use crate::GameState;
 
 pub mod action5;
 pub mod badges;
+pub mod bridges;
+pub mod canals;
 pub mod cargo;
 pub mod industry;
 pub mod objects;
@@ -43,6 +45,8 @@ pub fn apply_newgrf_stack_catalogs_default_dirs(state: &mut GameState) {
     cargo::apply_newgrf_cargoes_default_dirs(state);
     objects::apply_newgrf_objects_default_dirs(state);
     sounds::apply_newgrf_sounds_default_dirs(state);
+    bridges::apply_newgrf_bridges_default_dirs(state);
+    canals::apply_newgrf_canals_default_dirs(state);
     rail::apply_newgrf_rail_signals_default_dirs(state);
     action5::apply_newgrf_action5_all_default_dirs(state);
 }

@@ -371,6 +371,12 @@ pub struct GameState {
     /// Catálogo Action0 `Objects` (`0x0F`).
     #[serde(default)]
     pub object_spec_catalog: Vec<crate::object_spec::ObjectSpecDef>,
+    /// Catálogo de puentes (13 slots vanilla + overrides Action0 `0x06`).
+    #[serde(default = "crate::bridge_spec::vanilla_bridge_spec_catalog")]
+    pub bridge_spec_catalog: Vec<crate::bridge_spec::BridgeSpecDef>,
+    /// Catálogo de features de canal (Action0 `0x05`; 9 slots).
+    #[serde(default = "crate::canal_spec::vanilla_canal_feature_catalog")]
+    pub canal_feature_catalog: Vec<crate::canal_spec::CanalFeatureDef>,
     /// Spec de objeto `NewGRF` activo (`0` = ninguno; id del catálogo).
     #[serde(default)]
     pub current_object_spec: u16,
@@ -579,6 +585,8 @@ impl GameState {
             sound_effect_catalog: Vec::new(),
             cargo_spec_catalog: Vec::new(),
             object_spec_catalog: Vec::new(),
+            bridge_spec_catalog: crate::bridge_spec::vanilla_bridge_spec_catalog(),
+            canal_feature_catalog: crate::canal_spec::vanilla_canal_feature_catalog(),
             current_object_spec: 0,
             current_airport_class: crate::airport_class::AirportClassId::Small,
             current_airport_spec: crate::airport_class::AirportSpecId::Small,
@@ -682,6 +690,8 @@ impl GameState {
             sound_effect_catalog: Vec::new(),
             cargo_spec_catalog: Vec::new(),
             object_spec_catalog: Vec::new(),
+            bridge_spec_catalog: crate::bridge_spec::vanilla_bridge_spec_catalog(),
+            canal_feature_catalog: crate::canal_spec::vanilla_canal_feature_catalog(),
             current_object_spec: 0,
             current_airport_class: crate::airport_class::AirportClassId::Small,
             current_airport_spec: crate::airport_class::AirportSpecId::Small,

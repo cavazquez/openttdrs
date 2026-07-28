@@ -53,6 +53,10 @@ pub const OPENTTD_GUI_ACTION5_SLOT_COUNT: usize = 192;
 pub const AIRPORT_PREVIEW_ACTION5_SLOT_COUNT: usize = 9;
 /// `BRIDGE_DECKS_SPRITE_COUNT` (6 direcciones × 4 tipos).
 pub const BRIDGE_DECKS_ACTION5_SLOT_COUNT: usize = 24;
+/// `CANALS_SPRITE_COUNT` (Action5 tipo `0x08`).
+pub const CANALS_ACTION5_SLOT_COUNT: usize = 65;
+/// Primer slot de esclusa en Action5 canals (`SPR_LOCK_BASE - SPR_CANALS_BASE`).
+pub const CANALS_ACTION5_LOCK_SLOT: usize = 4;
 
 /// Base `OpenTTD` de wires (`SPR_WIRE_*` / `rail_1039`).
 pub const CATENARY_WIRE_SPRITE_BASE: u32 = 1039;
@@ -332,6 +336,11 @@ define_action5_merge!(
     merge_bridge_decks_action5_block,
     ACTION5_TYPE_BRIDGE_DECKS,
     BRIDGE_DECKS_ACTION5_SLOT_COUNT
+);
+define_action5_merge!(
+    merge_canals_action5_block,
+    ACTION5_TYPE_CANALS,
+    CANALS_ACTION5_SLOT_COUNT
 );
 
 /// Slot Action5 foundations para `tileh` 1..=14 (cimientos nivelados del cliente).

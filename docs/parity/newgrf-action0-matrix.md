@@ -19,8 +19,8 @@ Estados:
 | `02` | Ships | runtime parcial | runtime + cargo | compra, render, save/load |
 | `03` | Aircraft | runtime parcial | runtime + cargo | compra, render, save/load |
 | `04` | Stations | runtime (salvo `09`) | runtime + cargo fallback | picker, construcción, render |
-| `05` | Canals | pendiente | pendiente | — |
-| `06` | Bridges | pendiente | pendiente | — |
+| `05` | Canals | runtime | runtime parcial | catálogo `canal_feature` + Action5 `0x08` |
+| `06` | Bridges | runtime | N/A (sin Action3) | catálogo `bridge_spec` (13 slots in-place) |
 | `07` | Houses | pendiente | pendiente | — |
 | `08` | Global variables | runtime parcial | no aplica | tablas rail/road/tram |
 | `09` | Industry tiles | runtime parcial | runtime | construcción/render industria |
@@ -207,6 +207,43 @@ OpenTTD 15.3 registra `GSF_SIGNALS` como `nullptr`. Gráficos:
 | tipo/variante en `Tile.m2` | **runtime** (save/load) |
 | Action0 `0E` | **ignorada por spec** |
 
+## Canals (`05`)
+
+Fuente: `newgrf_act0_canals.cpp` / `newgrf.h` (`CanalFeature` / `CF_*`).
+
+IDs `0..8` (`CF_END=9`). Action3 opcional adjunta vistas al feature.
+Action5 tipo `0x08` (65 slots; `SPR_LOCK_*` desde offset 4). Construcción
+`PlaceCanal`/`PlaceLock` no depende del catálogo; el override se observa en
+`canal_feature_catalog` + `canal_action5_newgrf_sprites`.
+
+| Props | Estado |
+|---|---|
+| `08` callback_mask BYTE | **runtime** (catálogo) |
+| `09` flags BYTE | **runtime** (catálogo) |
+| Action1/3 views | **runtime** parcial (`newgrf_views` por local_id) |
+| Action5 `0x08` | **runtime** (65 slots; no clobber vecinos) |
+
+## Bridges (`06`)
+
+Fuente: `newgrf_act0_bridges.cpp`. OpenTTD muta los 13 slots vanilla in-place;
+no hay Action3 de bridges. Último GRF del stack gana por `local_id`. Sin
+override → costes/disponibilidad iguales a `_orig_bridge` / `BRIDGE_SPECS`.
+
+| Props | Estado |
+|---|---|
+| `08` year BYTE (`0`=siempre; else `1920+year`) | **runtime** |
+| `09` min length BYTE | **runtime** |
+| `0A` max length BYTE (`>16` → unlimited) | **runtime** |
+| `0B` price BYTE | **runtime** |
+| `0C` speed WORD (`0`→`u16::MAX`) | **runtime** |
+| `0D` sprite tables | consumida (ancho fijo; `has_custom_sprites`) |
+| `0E` flags BYTE | consumida |
+| `0F` year DWORD | **runtime** |
+| `10`–`12` string IDs WORD | consumidas |
+| `13` price WORD | **runtime** |
+| `15` pillar extended list | consumida |
+| `FE` nombre C-string (extensión local) | **runtime** |
+
 ## Objects (`0F`)
 
 Fuente: `newgrf_act0_objects.cpp`.
@@ -302,7 +339,7 @@ en slots vecinos. Los tipos `A5BLOCK_INVALID` se inspeccionan, pero no se aplica
 | `05` | catenary | 36 | **runtime** |
 | `06` | foundations | 90 | **runtime** |
 | `07` | TTDP GUI | — | ignorada por spec (no usada por OTTD) |
-| `08` | canals | 65 | pendiente (#259) |
+| `08` | canals | 65 | **runtime** (#259; `canal_action5_newgrf_sprites`) |
 | `09` | one-way roads | 18 | **runtime** |
 | `0A` | 2CC colour maps | — | pendiente |
 | `0B` | tramway | — | pendiente |

@@ -1,4 +1,6 @@
 //! Especificaciones de puentes vanilla (`_orig_bridge[]` en `bridge_land.h`).
+//!
+//! El catálogo mutable [`BridgeSpecDef`] admite overrides Action0 `Bridges` (`0x06`).
 
 use crate::map::TileCoord;
 use crate::rail_signals::calendar_year_at_tick;
@@ -99,6 +101,108 @@ pub struct BridgeSpec {
     pub max_speed: u16,
     /// Nombre corto para UI.
     pub name: &'static str,
+}
+
+/// Spec de puente owned (catálogo `GameState` + overrides NewGRF).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct BridgeSpecDef {
+    pub bridge_type: BridgeType,
+    pub available_from_year: u32,
+    pub min_middle_len: u16,
+    pub max_middle_len: Option<u16>,
+    pub price_mult: u16,
+    pub max_speed: u16,
+    pub name: String,
+    pub from_newgrf: bool,
+    pub grfid: u32,
+    /// Action0 prop `0x0D` (tablas de sprites) presente en algún override.
+    #[serde(default)]
+    pub has_custom_sprites: bool,
+}
+
+impl BridgeSpecDef {
+    #[must_use]
+    pub fn from_vanilla(spec: &BridgeSpec) -> Self {
+        Self {
+            bridge_type: spec.bridge_type,
+            available_from_year: spec.available_from_year,
+            min_middle_len: spec.min_middle_len,
+            max_middle_len: spec.max_middle_len,
+            price_mult: spec.price_mult,
+            max_speed: spec.max_speed,
+            name: spec.name.to_string(),
+            from_newgrf: false,
+            grfid: 0,
+            has_custom_sprites: false,
+        }
+    }
+}
+
+/// Catálogo de los 13 slots vanilla (clonado de [`BRIDGE_SPECS`]).
+#[must_use]
+pub fn vanilla_bridge_spec_catalog() -> Vec<BridgeSpecDef> {
+    BRIDGE_SPECS.iter().map(BridgeSpecDef::from_vanilla).collect()
+}
+
+/// Spec del tipo en el catálogo (índice = `BridgeType`).
+#[must_use]
+pub fn bridge_spec_def(catalog: &[BridgeSpecDef], bt: BridgeType) -> Option<&BridgeSpecDef> {
+    catalog.get(usize::from(bt.as_u8()))
+}
+
+/// Disponibilidad según catálogo (año + longitud de vano).
+#[must_use]
+pub fn bridge_available_in(
+    catalog: &[BridgeSpecDef],
+    bt: BridgeType,
+    year: u32,
+    middle_len: u16,
+) -> bool {
+    let Some(spec) = bridge_spec_def(catalog, bt) else {
+        return false;
+    };
+    if year < spec.available_from_year {
+        return false;
+    }
+    if middle_len < spec.min_middle_len {
+        return false;
+    }
+    if let Some(max) = spec.max_middle_len
+        && middle_len > max
+    {
+        return false;
+    }
+    true
+}
+
+/// Disponibilidad en el tick actual contra el catálogo.
+#[must_use]
+pub fn bridge_available_at_tick_in(
+    catalog: &[BridgeSpecDef],
+    bt: BridgeType,
+    tick: GameTick,
+    start: TileCoord,
+    end: TileCoord,
+) -> bool {
+    let year = calendar_year_at_tick(tick);
+    let middle = bridge_middle_length(start, end);
+    bridge_available_in(catalog, bt, year, middle)
+}
+
+/// Coste de construcción según catálogo.
+#[must_use]
+pub fn bridge_build_cost_in(
+    catalog: &[BridgeSpecDef],
+    bt: BridgeType,
+    start: TileCoord,
+    end: TileCoord,
+) -> i64 {
+    let total = i64::from(bridge_total_length(start, end));
+    let factor = total.saturating_add(1);
+    let mult = bridge_spec_def(catalog, bt)
+        .map(|s| s.price_mult)
+        .unwrap_or_else(|| bridge_spec(bt).price_mult);
+    i64::from(mult) * factor
 }
 
 /// Los 13 puentes del juego base (`OpenTTD/src/table/bridge_land.h`).
@@ -245,6 +349,7 @@ pub fn bridge_total_length(start: TileCoord, end: TileCoord) -> u16 {
     u16::try_from(axis_line(start, end).len().min(usize::from(u16::MAX))).unwrap_or(u16::MAX)
 }
 
+/// Disponibilidad contra la tabla estática vanilla ([`BRIDGE_SPECS`]).
 #[must_use]
 pub fn bridge_available(bt: BridgeType, year: u32, middle_len: u16) -> bool {
     let spec = bridge_spec(bt);
@@ -274,7 +379,7 @@ pub fn bridge_available_at_tick(
     bridge_available(bt, year, middle)
 }
 
-/// Coste aproximado del puente (`CalcBridgeLenCostFactor` × `price_mult`).
+/// Coste aproximado del puente vanilla (`CalcBridgeLenCostFactor` × `price_mult`).
 #[must_use]
 pub fn bridge_build_cost(bt: BridgeType, start: TileCoord, end: TileCoord) -> i64 {
     let total = i64::from(bridge_total_length(start, end));

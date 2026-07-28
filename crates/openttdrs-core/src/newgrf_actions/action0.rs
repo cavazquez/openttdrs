@@ -15,6 +15,10 @@ pub const ACTION0_FEATURE_SHIPS: u8 = 0x02;
 pub const ACTION0_FEATURE_AIRCRAFT: u8 = 0x03;
 /// Feature Action0: `Stations` (`OpenTTD` `GSF_STATIONS`).
 pub const ACTION0_FEATURE_STATIONS: u8 = 0x04;
+/// Feature Action0: `Canals` (`OpenTTD` `GSF_CANALS`).
+pub const ACTION0_FEATURE_CANALS: u8 = 0x05;
+/// Feature Action0: `Bridges` (`OpenTTD` `GSF_BRIDGES`).
+pub const ACTION0_FEATURE_BRIDGES: u8 = 0x06;
 /// Feature Action0: `IndustryTiles` (`OpenTTD` `GSF_INDUSTRYTILES`).
 pub const ACTION0_FEATURE_INDUSTRYTILES: u8 = 0x09;
 /// Feature Action0: `Cargoes` (`OpenTTD` `GSF_CARGOES`).
@@ -57,6 +61,36 @@ const PROP_SOUND_VOLUME: u8 = 0x08;
 const PROP_SOUND_PRIORITY: u8 = 0x09;
 /// Sounds: override old SoundId BYTE (`OpenTTD` `0x0A`).
 const PROP_SOUND_OVERRIDE: u8 = 0x0A;
+/// Canals: callback mask BYTE (`OpenTTD` `0x08`).
+const PROP_CANAL_CALLBACK_MASK: u8 = 0x08;
+/// Canals: flags BYTE (`OpenTTD` `0x09`).
+const PROP_CANAL_FLAGS: u8 = 0x09;
+/// Bridges: year of availability BYTE (`OpenTTD` `0x08`).
+const PROP_BRIDGE_YEAR: u8 = 0x08;
+/// Bridges: minimum length BYTE (`OpenTTD` `0x09`).
+const PROP_BRIDGE_MIN_LEN: u8 = 0x09;
+/// Bridges: maximum length BYTE (`OpenTTD` `0x0A`; `>16` → unlimited).
+const PROP_BRIDGE_MAX_LEN: u8 = 0x0A;
+/// Bridges: cost factor BYTE (`OpenTTD` `0x0B`).
+const PROP_BRIDGE_PRICE: u8 = 0x0B;
+/// Bridges: max speed WORD (`OpenTTD` `0x0C`; `0` → `u16::MAX`).
+const PROP_BRIDGE_SPEED: u8 = 0x0C;
+/// Bridges: sprite tables (consumida; compleja).
+const PROP_BRIDGE_SPRITE_TABLES: u8 = 0x0D;
+/// Bridges: flags BYTE (`OpenTTD` `0x0E`).
+const PROP_BRIDGE_FLAGS: u8 = 0x0E;
+/// Bridges: long format year DWORD (`OpenTTD` `0x0F`).
+const PROP_BRIDGE_YEAR_LONG: u8 = 0x0F;
+/// Bridges: purchase / rail / road string IDs WORD (`0x10`–`0x12`).
+const PROP_BRIDGE_STR_PURCHASE: u8 = 0x10;
+const PROP_BRIDGE_STR_RAIL: u8 = 0x11;
+const PROP_BRIDGE_STR_ROAD: u8 = 0x12;
+/// Bridges: 16-bit cost multiplier WORD (`OpenTTD` `0x13`).
+const PROP_BRIDGE_PRICE_WORD: u8 = 0x13;
+/// Bridges: pillar flags extended list (`OpenTTD` `0x15`).
+const PROP_BRIDGE_PILLARS: u8 = 0x15;
+/// `SPRITES_PER_BRIDGE_PIECE` en `OpenTTD`.
+const BRIDGE_SPRITES_PER_PIECE: usize = 32;
 /// Objects: climate mask BYTE (`OpenTTD` `0x0B`).
 const PROP_OBJECT_CLIMATE: u8 = 0x0B;
 /// Objects: size BYTE (`OpenTTD` `0x0C`).
@@ -354,6 +388,33 @@ pub struct ParsedSoundMeta {
     pub volume: u8,
     pub priority: u8,
     pub override_old: Option<u8>,
+}
+
+/// Metadatos `Canals` Action0 (`0x05`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParsedCanalMeta {
+    pub local_id: u8,
+    pub callback_mask: u8,
+    pub flags: u8,
+}
+
+/// Metadatos `Bridges` Action0 (`0x06`; override in-place de slots 0..12).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParsedBridgeMeta {
+    pub local_id: u8,
+    pub available_from_year: u32,
+    pub min_middle_len: u16,
+    pub max_middle_len: Option<u16>,
+    pub price_mult: u16,
+    pub max_speed: u16,
+    pub name: Option<String>,
+    pub has_custom_sprites: bool,
+    /// Props runtime vistas (si no, el apply conserva el slot vanilla).
+    pub year_set: bool,
+    pub min_len_set: bool,
+    pub max_len_set: bool,
+    pub price_set: bool,
+    pub speed_set: bool,
 }
 
 /// Metadatos `Objects` Action0 (antes de asignar ID global).
@@ -1331,6 +1392,248 @@ pub fn collect_sound_metas_from_grf(data: &[u8]) -> Vec<ParsedSoundMeta> {
     out
 }
 
+/// Parsea Action0 `Canals` (`0x05`): callback_mask `0x08`, flags `0x09`.
+#[must_use]
+pub fn parse_action0_canal_meta(payload: &[u8]) -> Option<ParsedCanalMeta> {
+    let header = parse_action0_header(payload)?;
+    if header.feature != ACTION0_FEATURE_CANALS || header.num_ids == 0 || payload.len() < 5 {
+        return None;
+    }
+    let local_id = payload[4];
+    if usize::from(local_id) >= crate::canal_spec::CANAL_FEATURE_COUNT {
+        return None;
+    }
+    let mut i = 5usize;
+    let mut callback_mask = 0u8;
+    let mut flags = 0u8;
+    for _ in 0..header.num_props {
+        if i >= payload.len() {
+            break;
+        }
+        let prop = payload[i];
+        i += 1;
+        match prop {
+            PROP_CANAL_CALLBACK_MASK => {
+                if i >= payload.len() {
+                    break;
+                }
+                callback_mask = payload[i];
+                i += 1;
+            }
+            PROP_CANAL_FLAGS => {
+                if i >= payload.len() {
+                    break;
+                }
+                flags = payload[i];
+                i += 1;
+            }
+            _ => break,
+        }
+    }
+    Some(ParsedCanalMeta {
+        local_id,
+        callback_mask,
+        flags,
+    })
+}
+
+#[must_use]
+pub fn collect_canal_metas_from_grf(data: &[u8]) -> Vec<ParsedCanalMeta> {
+    let mut out = Vec::new();
+    let _ = for_each_pseudo_payload(data, |payload| {
+        if let Some(meta) = parse_action0_canal_meta(payload) {
+            out.push(meta);
+        }
+    });
+    out
+}
+
+fn skip_bridge_sprite_tables(payload: &[u8], i: &mut usize) -> bool {
+    if *i + 2 > payload.len() {
+        return false;
+    }
+    let _tableid = payload[*i];
+    let numtables = payload[*i + 1];
+    *i += 2;
+    let bytes = usize::from(numtables).saturating_mul(BRIDGE_SPRITES_PER_PIECE * 4);
+    if *i + bytes > payload.len() {
+        return false;
+    }
+    *i += bytes;
+    true
+}
+
+fn skip_bridge_pillars(payload: &[u8], i: &mut usize) -> bool {
+    if *i >= payload.len() {
+        return false;
+    }
+    let b = payload[*i];
+    *i += 1;
+    let tiles = if b == 0xFF {
+        if *i + 1 > payload.len() {
+            return false;
+        }
+        let v = u16::from_le_bytes([payload[*i], payload[*i + 1]]);
+        *i += 2;
+        usize::from(v)
+    } else {
+        usize::from(b)
+    };
+    let bytes = tiles.saturating_mul(2);
+    if *i + bytes > payload.len() {
+        return false;
+    }
+    *i += bytes;
+    true
+}
+
+/// Parsea Action0 `Bridges` (`0x06`): year/len/price/speed (+ props consumidas).
+#[must_use]
+pub fn parse_action0_bridge_meta(payload: &[u8]) -> Option<ParsedBridgeMeta> {
+    let header = parse_action0_header(payload)?;
+    if header.feature != ACTION0_FEATURE_BRIDGES || header.num_ids == 0 || payload.len() < 5 {
+        return None;
+    }
+    let local_id = payload[4];
+    if local_id >= 13 {
+        return None;
+    }
+    let mut i = 5usize;
+    let mut available_from_year = 0u32;
+    let mut min_middle_len = 0u16;
+    let mut max_middle_len: Option<u16> = None;
+    let mut price_mult = 0u16;
+    let mut max_speed = u16::MAX;
+    let mut name = None;
+    let mut has_custom_sprites = false;
+    let mut year_set = false;
+    let mut min_len_set = false;
+    let mut max_len_set = false;
+    let mut price_set = false;
+    let mut speed_set = false;
+    for _ in 0..header.num_props {
+        if i >= payload.len() {
+            break;
+        }
+        let prop = payload[i];
+        i += 1;
+        match prop {
+            PROP_BRIDGE_YEAR => {
+                let Some(year) = read_u8(payload, &mut i) else {
+                    break;
+                };
+                available_from_year = if year == 0 {
+                    0
+                } else {
+                    crate::economy::ORIGINAL_BASE_YEAR + u32::from(year)
+                };
+                year_set = true;
+            }
+            PROP_BRIDGE_MIN_LEN => {
+                let Some(v) = read_u8(payload, &mut i) else {
+                    break;
+                };
+                min_middle_len = u16::from(v);
+                min_len_set = true;
+            }
+            PROP_BRIDGE_MAX_LEN => {
+                let Some(v) = read_u8(payload, &mut i) else {
+                    break;
+                };
+                max_middle_len = if v > 16 { None } else { Some(u16::from(v)) };
+                max_len_set = true;
+            }
+            PROP_BRIDGE_PRICE => {
+                let Some(v) = read_u8(payload, &mut i) else {
+                    break;
+                };
+                price_mult = u16::from(v);
+                price_set = true;
+            }
+            PROP_BRIDGE_SPEED => {
+                let Some(v) = read_u16(payload, &mut i) else {
+                    break;
+                };
+                max_speed = if v == 0 { u16::MAX } else { v };
+                speed_set = true;
+            }
+            PROP_BRIDGE_SPRITE_TABLES => {
+                if !skip_bridge_sprite_tables(payload, &mut i) {
+                    break;
+                }
+                has_custom_sprites = true;
+            }
+            PROP_BRIDGE_FLAGS => {
+                if read_u8(payload, &mut i).is_none() {
+                    break;
+                }
+            }
+            PROP_BRIDGE_YEAR_LONG => {
+                let Some(v) = read_u32(payload, &mut i) else {
+                    break;
+                };
+                available_from_year = v;
+                year_set = true;
+            }
+            PROP_BRIDGE_STR_PURCHASE | PROP_BRIDGE_STR_RAIL | PROP_BRIDGE_STR_ROAD => {
+                if read_u16(payload, &mut i).is_none() {
+                    break;
+                }
+            }
+            PROP_BRIDGE_PRICE_WORD => {
+                let Some(v) = read_u16(payload, &mut i) else {
+                    break;
+                };
+                price_mult = v;
+                price_set = true;
+            }
+            PROP_BRIDGE_PILLARS => {
+                if !skip_bridge_pillars(payload, &mut i) {
+                    break;
+                }
+            }
+            PROP_NAME_CSTRING => {
+                let mut bytes = Vec::new();
+                while i < payload.len() && payload[i] != 0 {
+                    bytes.push(payload[i]);
+                    i += 1;
+                }
+                if i < payload.len() {
+                    i += 1; // NUL
+                }
+                name = Some(String::from_utf8_lossy(&bytes).into_owned());
+            }
+            _ => break,
+        }
+    }
+    Some(ParsedBridgeMeta {
+        local_id,
+        available_from_year,
+        min_middle_len,
+        max_middle_len,
+        price_mult,
+        max_speed,
+        name,
+        has_custom_sprites,
+        year_set,
+        min_len_set,
+        max_len_set,
+        price_set,
+        speed_set,
+    })
+}
+
+#[must_use]
+pub fn collect_bridge_metas_from_grf(data: &[u8]) -> Vec<ParsedBridgeMeta> {
+    let mut out = Vec::new();
+    let _ = for_each_pseudo_payload(data, |payload| {
+        if let Some(meta) = parse_action0_bridge_meta(payload) {
+            out.push(meta);
+        }
+    });
+    out
+}
+
 /// Parsea Action0 `Cargoes` (`0x0B`): bitnum, label, pagos, clases, nombre `0xFE`.
 #[must_use]
 pub fn parse_action0_cargo_meta(payload: &[u8]) -> Option<ParsedCargoMeta> {
@@ -1854,6 +2157,12 @@ fn read_u16(payload: &[u8], i: &mut usize) -> Option<u16> {
     let bytes = payload.get(*i..i.checked_add(2)?)?;
     *i += 2;
     Some(u16::from_le_bytes(bytes.try_into().ok()?))
+}
+
+fn read_u32(payload: &[u8], i: &mut usize) -> Option<u32> {
+    let bytes = payload.get(*i..i.checked_add(4)?)?;
+    *i += 4;
+    Some(u32::from_le_bytes(bytes.try_into().ok()?))
 }
 
 fn skip_bytes(payload: &[u8], i: &mut usize, amount: usize) -> Option<()> {

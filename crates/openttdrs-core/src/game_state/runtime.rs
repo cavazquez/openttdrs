@@ -100,6 +100,9 @@ pub struct SimulationRuntime {
     /// Slots Action5 bridge decks `0x1B` (24; `None` = `OpenGFX`).
     pub bridge_decks_newgrf_sprites: Vec<Option<crate::newgrf_sprites::DecodedSprite>>,
 
+    /// Slots Action5 canals `0x08` (65; `None` = `OpenGFX`).
+    pub canal_action5_newgrf_sprites: Vec<Option<crate::newgrf_sprites::DecodedSprite>>,
+
     /// Overrides Action3 `RailType` `Signals`, indexados por `RailType` vanilla.
     pub rail_signal_newgrf: Vec<Option<crate::rail_type::RailSignalSpriteSpec>>,
 
@@ -182,6 +185,7 @@ impl SimulationRuntime {
             openttd_gui_newgrf_sprites: Vec::new(),
             airport_preview_newgrf_sprites: Vec::new(),
             bridge_decks_newgrf_sprites: Vec::new(),
+            canal_action5_newgrf_sprites: Vec::new(),
             rail_signal_newgrf: Vec::new(),
             rail_type_overlay_newgrf: Vec::new(),
             rail_type_underlay_newgrf: Vec::new(),

@@ -9,6 +9,8 @@
 //! - `RoadStops` (0x14) → `road_stop_class_catalog` / `road_stop_spec_catalog`
 //! - `Badges` (0x15) → `badge_catalog`
 //! - `Sounds` (0x0C) → `sound_effect_catalog` (samples Action11)
+//! - `Canals` (0x05) → `canal_feature_catalog` + Action5 `0x08`
+//! - `Bridges` (0x06) → `bridge_spec_catalog` (13 slots in-place)
 
 pub mod action0;
 pub mod apply;
@@ -16,29 +18,32 @@ pub mod inspect;
 
 // Re-exports públicos
 pub use action0::{
-    ACTION0_FEATURE_AIRCRAFT, ACTION0_FEATURE_BADGES, ACTION0_FEATURE_CARGOES,
-    ACTION0_FEATURE_INDUSTRYTILES, ACTION0_FEATURE_OBJECTS, ACTION0_FEATURE_RAILTYPES,
-    ACTION0_FEATURE_ROAD_VEHICLES, ACTION0_FEATURE_ROADSTOPS, ACTION0_FEATURE_ROADTYPES,
-    ACTION0_FEATURE_SHIPS, ACTION0_FEATURE_SOUNDS, ACTION0_FEATURE_STATIONS,
-    ACTION0_FEATURE_TRAINS, ACTION0_FEATURE_TRAMTYPES, Action0Header, ParsedBadgeMeta,
+    ACTION0_FEATURE_AIRCRAFT, ACTION0_FEATURE_BADGES, ACTION0_FEATURE_BRIDGES,
+    ACTION0_FEATURE_CANALS, ACTION0_FEATURE_CARGOES, ACTION0_FEATURE_INDUSTRYTILES,
+    ACTION0_FEATURE_OBJECTS, ACTION0_FEATURE_RAILTYPES, ACTION0_FEATURE_ROAD_VEHICLES,
+    ACTION0_FEATURE_ROADSTOPS, ACTION0_FEATURE_ROADTYPES, ACTION0_FEATURE_SHIPS,
+    ACTION0_FEATURE_SOUNDS, ACTION0_FEATURE_STATIONS, ACTION0_FEATURE_TRAINS,
+    ACTION0_FEATURE_TRAMTYPES, Action0Header, ParsedBadgeMeta, ParsedBridgeMeta, ParsedCanalMeta,
     ParsedCargoMeta, ParsedIndustryTileMeta, ParsedObjectMeta, ParsedRailTypeMeta,
     ParsedRoadStopMeta, ParsedRoadTypeMeta, ParsedSoundMeta, ParsedStationMeta, ParsedTrainMeta,
-    ParsedVehicleMeta, collect_badge_metas_from_grf, collect_cargo_metas_from_grf,
-    collect_industry_tile_metas_from_grf, collect_object_metas_from_grf,
-    collect_railtype_metas_from_grf, collect_roadstop_metas_from_grf,
+    ParsedVehicleMeta, collect_badge_metas_from_grf, collect_bridge_metas_from_grf,
+    collect_canal_metas_from_grf, collect_cargo_metas_from_grf, collect_industry_tile_metas_from_grf,
+    collect_object_metas_from_grf, collect_railtype_metas_from_grf, collect_roadstop_metas_from_grf,
     collect_roadtype_metas_from_grf, collect_sound_metas_from_grf, collect_station_metas_from_grf,
     collect_train_metas_from_grf, collect_vehicle_metas_from_grf, for_each_pseudo_payload,
-    parse_action0_badge_meta, parse_action0_cargo_meta, parse_action0_header,
-    parse_action0_industry_tile_meta, parse_action0_object_meta, parse_action0_railtype_metas,
-    parse_action0_roadstop_meta, parse_action0_roadtype_meta, parse_action0_sound_meta,
-    parse_action0_station_meta, parse_action0_train_meta, parse_action0_vehicle_metas,
+    parse_action0_badge_meta, parse_action0_bridge_meta, parse_action0_canal_meta,
+    parse_action0_cargo_meta, parse_action0_header, parse_action0_industry_tile_meta,
+    parse_action0_object_meta, parse_action0_railtype_metas, parse_action0_roadstop_meta,
+    parse_action0_roadtype_meta, parse_action0_sound_meta, parse_action0_station_meta,
+    parse_action0_train_meta, parse_action0_vehicle_metas,
 };
 
 pub use apply::{
     action5::{
         apply_newgrf_action5_airport_preview, apply_newgrf_action5_airport_preview_default_dirs,
         apply_newgrf_action5_all_default_dirs, apply_newgrf_action5_bridge_decks,
-        apply_newgrf_action5_bridge_decks_default_dirs, apply_newgrf_action5_catenary,
+        apply_newgrf_action5_bridge_decks_default_dirs, apply_newgrf_action5_canals,
+        apply_newgrf_action5_canals_default_dirs, apply_newgrf_action5_catenary,
         apply_newgrf_action5_catenary_default_dirs, apply_newgrf_action5_foundations,
         apply_newgrf_action5_foundations_default_dirs, apply_newgrf_action5_oneway,
         apply_newgrf_action5_oneway_default_dirs, apply_newgrf_action5_openttd_gui,
@@ -49,6 +54,8 @@ pub use apply::{
     },
     apply_newgrf_stack_catalogs_default_dirs,
     badges::{apply_newgrf_badges, apply_newgrf_badges_default_dirs},
+    bridges::{apply_newgrf_bridges, apply_newgrf_bridges_default_dirs},
+    canals::{apply_newgrf_canals, apply_newgrf_canals_default_dirs},
     cargo::{apply_newgrf_cargoes, apply_newgrf_cargoes_default_dirs},
     industry::{apply_newgrf_industry_tiles, apply_newgrf_industry_tiles_default_dirs},
     objects::{apply_newgrf_objects, apply_newgrf_objects_default_dirs},
@@ -459,6 +466,59 @@ pub fn build_action0_sound_payload(
     if let Some(old) = override_old {
         p.push(0x0A);
         p.push(old);
+    }
+    p
+}
+
+/// Action0 `Canals` (`0x05`): callback_mask `0x08`, flags `0x09`.
+#[must_use]
+pub fn build_action0_canal_payload(local_id: u8, callback_mask: u8, flags: u8) -> Vec<u8> {
+    vec![
+        0x00,
+        ACTION0_FEATURE_CANALS,
+        0x02,
+        0x01,
+        local_id,
+        0x08,
+        callback_mask,
+        0x09,
+        flags,
+    ]
+}
+
+/// Action0 `Bridges` (`0x06`): year/min/max/price/speed + nombre `0xFE` opcional.
+#[must_use]
+pub fn build_action0_bridge_payload(
+    local_id: u8,
+    year: u8,
+    min_len: u8,
+    max_len: u8,
+    price: u8,
+    speed: u16,
+    name: &str,
+) -> Vec<u8> {
+    let num_props = if name.is_empty() { 5u8 } else { 6u8 };
+    let mut p = vec![
+        0x00,
+        ACTION0_FEATURE_BRIDGES,
+        num_props,
+        0x01,
+        local_id,
+        0x08,
+        year,
+        0x09,
+        min_len,
+        0x0A,
+        max_len,
+        0x0B,
+        price,
+        0x0C,
+    ];
+    p.extend_from_slice(&speed.to_le_bytes());
+    if !name.is_empty() {
+        p.push(0xFE);
+        p.extend_from_slice(name.as_bytes());
+        p.push(0);
     }
     p
 }
@@ -2705,6 +2765,186 @@ mod tests {
             parse_action0_vehicle_metas(&[0x00, ACTION0_FEATURE_AIRCRAFT, 0x01, 0x01, 0x00, 0x09])
                 .is_none()
         );
+    }
+
+    /// #259: Bridges — Action0 override precio/año del puente madera.
+    #[test]
+    fn infra_ac_bridge_override_cost_and_avail() {
+        use crate::bridge_spec::{BridgeType, bridge_build_cost, bridge_build_cost_in};
+        use crate::command::{Command, apply_command};
+        use crate::map::{TileCoord, TileKind};
+
+        // year=50 → 1970; price=10 (vanilla madera=80); max_len unlimited; speed 40.
+        let a0 = build_action0_bridge_payload(0, 50, 0, 255, 10, 40, "Madera Custom");
+        let bytes = build_grf_v2_with_action0_and_action8(&a0, [b'B', b'R', 0, 1], "br", "");
+        let dir = tempfile_dir_with("br.grf", &bytes);
+        let mut state = GameState::new(12, 8);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("br.grf", 0x4252_0001));
+        apply_newgrf_bridges(&mut state, &[&dir]);
+
+        let def = crate::bridge_spec_def(&state.bridge_spec_catalog, BridgeType::Wooden).unwrap();
+        assert!(def.from_newgrf);
+        assert_eq!(def.grfid, 0x4252_0001);
+        assert_eq!(def.available_from_year, 1970);
+        assert_eq!(def.price_mult, 10);
+        assert_eq!(def.max_speed, 40);
+        assert_eq!(def.name, "Madera Custom");
+        assert_eq!(def.max_middle_len, None);
+
+        let a = TileCoord::new(1, 2);
+        let b = TileCoord::new(5, 2);
+        for x in 2..=4 {
+            state.map.set_kind(TileCoord::new(x, 2), TileKind::Water).unwrap();
+        }
+        let vanilla = bridge_build_cost(BridgeType::Wooden, a, b);
+        let custom = bridge_build_cost_in(&state.bridge_spec_catalog, BridgeType::Wooden, a, b);
+        assert_ne!(vanilla, custom);
+        assert_eq!(custom, 10 * (i64::from(crate::bridge_total_length(a, b)) + 1));
+
+        // Año calendario inicial (1950) < 1970 → no disponible.
+        assert_eq!(
+            apply_command(
+                &mut state,
+                &Command::PlaceRailBridge(a, b, BridgeType::Wooden)
+            ),
+            Err(crate::CommandError::BridgeTypeNotAvailable)
+        );
+        // Avanzar calendario a 1970+.
+        state.tick = crate::news::tick_for_calendar_year(1970);
+        apply_command(
+            &mut state,
+            &Command::PlaceRailBridge(a, b, BridgeType::Wooden),
+        )
+        .unwrap();
+        assert_eq!(state.map.get_kind(a), Some(TileKind::RailBridge));
+
+        // Truncated Action0 no panica.
+        let _ = parse_action0_bridge_meta(&[0x00, ACTION0_FEATURE_BRIDGES, 0x01, 0x01, 0x00, 0x08]);
+        let _ = parse_action0_bridge_meta(&[0x00, ACTION0_FEATURE_BRIDGES, 0x02, 0x01, 0x00]);
+    }
+
+    /// #259: Bridges — dos GRFs mismo local_id; el último gana.
+    #[test]
+    fn infra_ac_bridge_two_grf_stack_last_wins() {
+        use crate::bridge_spec::BridgeType;
+
+        let a0_a = build_action0_bridge_payload(0, 0, 0, 255, 11, 32, "A");
+        let a0_b = build_action0_bridge_payload(0, 0, 0, 255, 99, 64, "B");
+        let bytes_a = build_grf_v2_with_action0_and_action8(&a0_a, [b'B', b'A', 0, 1], "ba", "");
+        let bytes_b = build_grf_v2_with_action0_and_action8(&a0_b, [b'B', b'B', 0, 2], "bb", "");
+        let dir_a = tempfile_dir_with("ba.grf", &bytes_a);
+        let dir_b = tempfile_dir_with("bb.grf", &bytes_b);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("ba.grf", 0x4241_0001));
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("bb.grf", 0x4242_0002));
+        apply_newgrf_bridges(&mut state, &[&dir_a, &dir_b]);
+
+        let def = crate::bridge_spec_def(&state.bridge_spec_catalog, BridgeType::Wooden).unwrap();
+        assert_eq!(def.price_mult, 99);
+        assert_eq!(def.max_speed, 64);
+        assert_eq!(def.name, "B");
+        assert_eq!(def.grfid, 0x4242_0002);
+    }
+
+    /// #259: Canals — Action0 feature + Action5 slot; PlaceCanal en hierba.
+    #[test]
+    fn infra_ac_canal_feature_and_action5() {
+        use crate::command::{Command, apply_command};
+        use crate::map::TileCoord;
+        use crate::newgrf_sprites::{
+            ACTION5_TYPE_CANALS, CANALS_ACTION5_LOCK_SLOT, build_grf_v2_action5_with_sprite,
+        };
+
+        let a0 = build_action0_canal_payload(crate::CF_LOCKS, 0x03, 0x05);
+        let bytes_a0 = build_grf_v2_with_action0_and_action8(&a0, [b'C', b'A', 0, 1], "ca", "");
+        let indices = vec![1u8; 8 * 8];
+        let bytes_a5 = build_grf_v2_action5_with_sprite(
+            ACTION5_TYPE_CANALS,
+            u16::try_from(CANALS_ACTION5_LOCK_SLOT).unwrap(),
+            8,
+            8,
+            &indices,
+            [b'C', b'5', 0, 1],
+            "c5",
+        );
+        let dir_a0 = tempfile_dir_with("ca.grf", &bytes_a0);
+        let dir_a5 = tempfile_dir_with("c5.grf", &bytes_a5);
+        let mut state = GameState::new(8, 8);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("ca.grf", 0x4341_0001));
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("c5.grf", 0x4335_0001));
+        apply_newgrf_canals(&mut state, &[&dir_a0, &dir_a5]);
+        apply_newgrf_action5_canals(&mut state, &[&dir_a0, &dir_a5]);
+
+        let def = crate::canal_feature_def(&state.canal_feature_catalog, crate::CF_LOCKS).unwrap();
+        assert!(def.from_newgrf);
+        assert_eq!(def.callback_mask, 0x03);
+        assert_eq!(def.flags, 0x05);
+        assert_eq!(def.grfid, 0x4341_0001);
+
+        assert_eq!(
+            state.runtime.canal_action5_newgrf_sprites.len(),
+            crate::CANALS_ACTION5_SLOT_COUNT
+        );
+        assert!(state.runtime.canal_action5_newgrf_sprites[CANALS_ACTION5_LOCK_SLOT].is_some());
+        assert!(state.runtime.canal_action5_newgrf_sprites[0].is_none());
+
+        let c = TileCoord::new(3, 3);
+        apply_command(&mut state, &Command::PlaceCanal(c)).unwrap();
+        assert_eq!(state.map.get_kind(c), Some(crate::TileKind::Water));
+
+        // Truncated Action0 canal no panica.
+        let _ = parse_action0_canal_meta(&[0x00, ACTION0_FEATURE_CANALS, 0x01, 0x01, 0x01, 0x08]);
+        let _ = parse_action0_canal_meta(&[0x00, ACTION0_FEATURE_CANALS, 0x02, 0x01]);
+    }
+
+    /// #259: Canals — dos GRFs features distintos no se pisan; mismo id last-wins.
+    #[test]
+    fn infra_ac_canal_two_grf_isolate() {
+        let a0_locks = build_action0_canal_payload(crate::CF_LOCKS, 0x01, 0x02);
+        let a0_buoy = build_action0_canal_payload(crate::CF_BUOY, 0x10, 0x20);
+        let a0_locks2 = build_action0_canal_payload(crate::CF_LOCKS, 0x77, 0x88);
+        let bytes_a =
+            build_grf_v2_with_action0_and_action8(&a0_locks, [b'C', b'1', 0, 1], "c1", "");
+        let bytes_b =
+            build_grf_v2_with_action0_and_action8(&a0_buoy, [b'C', b'2', 0, 2], "c2", "");
+        let bytes_c =
+            build_grf_v2_with_action0_and_action8(&a0_locks2, [b'C', b'3', 0, 3], "c3", "");
+        let dir_a = tempfile_dir_with("c1.grf", &bytes_a);
+        let dir_b = tempfile_dir_with("c2.grf", &bytes_b);
+        let dir_c = tempfile_dir_with("c3.grf", &bytes_c);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("c1.grf", 0x4331_0001));
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("c2.grf", 0x4332_0002));
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("c3.grf", 0x4333_0003));
+        apply_newgrf_canals(&mut state, &[&dir_a, &dir_b, &dir_c]);
+
+        let locks = crate::canal_feature_def(&state.canal_feature_catalog, crate::CF_LOCKS).unwrap();
+        let buoy = crate::canal_feature_def(&state.canal_feature_catalog, crate::CF_BUOY).unwrap();
+        let slope =
+            crate::canal_feature_def(&state.canal_feature_catalog, crate::CF_WATERSLOPE).unwrap();
+        assert_eq!(locks.callback_mask, 0x77);
+        assert_eq!(locks.flags, 0x88);
+        assert_eq!(locks.grfid, 0x4333_0003);
+        assert_eq!(buoy.callback_mask, 0x10);
+        assert_eq!(buoy.flags, 0x20);
+        assert_eq!(buoy.grfid, 0x4332_0002);
+        assert!(!slope.from_newgrf);
     }
 
     /// #249: Vehicles AC — fracciones de velocidad océano/canal.

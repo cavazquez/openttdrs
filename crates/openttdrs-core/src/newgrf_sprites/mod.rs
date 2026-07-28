@@ -30,11 +30,12 @@ pub use pixel_codec::{
 
 // Re-exportar funciones de runtime de action_graph
 pub use action_graph::{
-    collect_aircraft_sprite_graphics, collect_feature_sprite_graphics,
-    collect_industry_tile_sprite_graphics, collect_object_sprite_graphics,
-    collect_railtype_sprite_graphics, collect_road_vehicle_sprite_graphics,
-    collect_roadstop_sprite_graphics, collect_roadtype_sprite_graphics,
-    collect_ship_sprite_graphics, collect_station_sprite_graphics, collect_train_sprite_graphics,
+    collect_aircraft_sprite_graphics, collect_canal_sprite_graphics,
+    collect_feature_sprite_graphics, collect_industry_tile_sprite_graphics,
+    collect_object_sprite_graphics, collect_railtype_sprite_graphics,
+    collect_road_vehicle_sprite_graphics, collect_roadstop_sprite_graphics,
+    collect_roadtype_sprite_graphics, collect_ship_sprite_graphics,
+    collect_station_sprite_graphics, collect_train_sprite_graphics,
 };
 
 // Re-exportar funciones de runtime de action5
@@ -43,17 +44,19 @@ pub use action5::{
     ACTION5_TYPE_CATENARY, ACTION5_TYPE_FOUNDATIONS, ACTION5_TYPE_ONEWAY, ACTION5_TYPE_OPENTTD_GUI,
     ACTION5_TYPE_ROADSTOPS, ACTION5_TYPE_SHORE, ACTION5_TYPE_SIGNALS, ACTION5_TYPE_TRAMWAY,
     ACTION5_TYPE_TWOCC, AIRPORT_PREVIEW_ACTION5_SLOT_COUNT, BRIDGE_DECKS_ACTION5_SLOT_COUNT,
-    CATENARY_ACTION5_SLOT_COUNT, CATENARY_ENTRANCE_SPRITE_BASE, CATENARY_PYLON_SPRITE_BASE,
-    CATENARY_WIRE_SPRITE_BASE, FOUNDATION_ACTION5_SLOT_COUNT, ONEWAY_ACTION5_SLOT_COUNT,
-    OPENTTD_GUI_ACTION5_SLOT_COUNT, ROADSTOP_ACTION5_SLOT_COUNT, SHORE_ACTION5_SLOT_COUNT,
-    SHORE_MISSING_BLOCK_SLOTS, SIGNAL_ACTION5_SLOT_COUNT, SPR_SIGNALS_ACTION5_BASE,
-    action5_type_name, airport_preview_action5_slot, bridge_decks_action5_base,
-    bridge_decks_action5_slot, catenary_action5_local_slot, collect_action5_blocks,
-    disallowed_road_directions, foundation_action5_slot_for_tileh, merge_action5_offset_block,
+    CANALS_ACTION5_LOCK_SLOT, CANALS_ACTION5_SLOT_COUNT, CATENARY_ACTION5_SLOT_COUNT,
+    CATENARY_ENTRANCE_SPRITE_BASE, CATENARY_PYLON_SPRITE_BASE, CATENARY_WIRE_SPRITE_BASE,
+    FOUNDATION_ACTION5_SLOT_COUNT, ONEWAY_ACTION5_SLOT_COUNT, OPENTTD_GUI_ACTION5_SLOT_COUNT,
+    ROADSTOP_ACTION5_SLOT_COUNT, SHORE_ACTION5_SLOT_COUNT, SHORE_MISSING_BLOCK_SLOTS,
+    SIGNAL_ACTION5_SLOT_COUNT, SPR_SIGNALS_ACTION5_BASE, action5_type_name,
+    airport_preview_action5_slot, bridge_decks_action5_base, bridge_decks_action5_slot,
+    catenary_action5_local_slot, collect_action5_blocks, disallowed_road_directions,
+    foundation_action5_slot_for_tileh, merge_action5_offset_block,
     merge_airport_preview_action5_block, merge_bridge_decks_action5_block,
-    merge_catenary_action5_block, merge_foundation_action5_block, merge_oneway_action5_block,
-    merge_openttd_gui_action5_block, merge_roadstop_action5_block, merge_shore_action5_block,
-    merge_signals_action5_block, oneway_action5_slot, roadstop_action5_slot, signal_action5_slot,
+    merge_canals_action5_block, merge_catenary_action5_block, merge_foundation_action5_block,
+    merge_oneway_action5_block, merge_openttd_gui_action5_block, merge_roadstop_action5_block,
+    merge_shore_action5_block, merge_signals_action5_block, oneway_action5_slot,
+    roadstop_action5_slot, signal_action5_slot,
 };
 
 // Re-exportar builders sintéticos desde fixture (para compatibilidad temporal)

@@ -648,6 +648,7 @@ fn place_road_writes_newgrf_road_type_m8() {
         label: "Adoquines".into(),
         short_label: "COBB".into(),
         intro_year: 0,
+        max_speed: 0,
         from_newgrf: true,
         newgrf_preview: None,
         newgrf_views: Vec::new(),

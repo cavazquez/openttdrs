@@ -53,6 +53,7 @@ pub fn apply_newgrf_road_types(state: &mut GameState, search_dirs: &[&Path]) {
                 label: meta.label,
                 short_label: meta.short_label,
                 intro_year: meta.intro_year,
+                max_speed: meta.max_speed,
                 from_newgrf: true,
                 newgrf_preview: preview,
                 newgrf_views: views,

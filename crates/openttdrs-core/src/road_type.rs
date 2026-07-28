@@ -104,6 +104,9 @@ pub struct RoadTypeDef {
     pub label: String,
     pub short_label: String,
     pub intro_year: u16,
+    /// Techo de velocidad del tipo (`0` = sin límite). Prop Action0 `0x14`.
+    #[serde(default)]
+    pub max_speed: u16,
     pub from_newgrf: bool,
     /// Preview Action1/3 (primera vista); no se serializa en saves.
     #[serde(default, skip)]
@@ -168,6 +171,7 @@ pub fn vanilla_road_type_catalog() -> Vec<RoadTypeDef> {
             label: "Carretera normal".into(),
             short_label: "Norm".into(),
             intro_year: 0,
+            max_speed: 0,
             from_newgrf: false,
             newgrf_preview: None,
             newgrf_views: Vec::new(),
@@ -182,6 +186,7 @@ pub fn vanilla_road_type_catalog() -> Vec<RoadTypeDef> {
             label: "Tranvía eléctrico".into(),
             short_label: "Tram".into(),
             intro_year: 0,
+            max_speed: 0,
             from_newgrf: false,
             newgrf_preview: None,
             newgrf_views: Vec::new(),

@@ -128,10 +128,16 @@ impl RailSignalSpriteSpec {
 
 /// Velocidad máxima efectiva de la tesela para un tren (`GetMaxTrackSpeed`).
 ///
-/// Devuelve `None` si el railtype no impone techo (`max_speed == 0`).
+/// `overrides` indexa por `RailType` vanilla (Action0 prop `0x14`). Devuelve
+/// `None` si no hay techo (`0`).
 #[must_use]
-pub fn rail_type_track_speed_cap(tile: Tile) -> Option<u16> {
-    let cap = rail_type_from_tile(tile).max_speed();
+pub fn rail_type_track_speed_cap(tile: Tile, overrides: &[u16; 4]) -> Option<u16> {
+    let rt = rail_type_from_tile(tile);
+    let cap = overrides
+        .get(usize::from(rt.as_u8()))
+        .copied()
+        .unwrap_or(0)
+        .max(rt.max_speed());
     (cap > 0).then_some(cap)
 }
 

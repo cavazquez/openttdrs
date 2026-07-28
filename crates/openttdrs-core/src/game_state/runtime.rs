@@ -100,6 +100,9 @@ pub struct SimulationRuntime {
     /// Overrides Action3 `RailType` `Signals`, indexados por `RailType` vanilla.
     pub rail_signal_newgrf: Vec<Option<crate::rail_type::RailSignalSpriteSpec>>,
 
+    /// Techos Action0 `0x14` por `RailType` vanilla (`0` = sin límite).
+    pub rail_type_max_speed: [u16; 4],
+
     /// `FlowStat` reconstruidos desde `link_graph` (no persistidos).
     pub station_flows: crate::flow_stat::StationFlows,
 
@@ -148,6 +151,7 @@ impl SimulationRuntime {
             airport_preview_newgrf_sprites: Vec::new(),
             bridge_decks_newgrf_sprites: Vec::new(),
             rail_signal_newgrf: Vec::new(),
+            rail_type_max_speed: [0; 4],
             station_flows: crate::flow_stat::StationFlows::default(),
             station_flow_rebuilds: 0,
             command_recorder: None,

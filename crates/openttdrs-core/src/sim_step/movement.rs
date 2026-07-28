@@ -228,7 +228,9 @@ pub(super) fn move_vehicles(state: &mut GameState) {
         let vehicle_kind = state.vehicles[i].kind;
         let vehicle_running = state.vehicles[i].running;
         let train_accel = state.train_acceleration_model;
+        refresh_vehicle_track_speed_cap(state, i, vehicle_kind);
         state.vehicles[i].step_with_map_and_accel(Some(&state.map), train_accel);
+        refresh_vehicle_track_speed_cap(state, i, vehicle_kind);
         if matches!(
             vehicle_kind,
             VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram
@@ -449,6 +451,34 @@ fn update_vehicle_running_sounds(state: &mut GameState, i: usize, tick: u64) {
                     VehicleRunningPhase::Stopped16
                 },
             });
+    }
+}
+
+/// Techos Action0 `0x14` (railtypes / roadtypes) → `cached_max_track_speed`.
+fn refresh_vehicle_track_speed_cap(state: &mut GameState, vehicle_idx: usize, kind: VehicleKind) {
+    if kind == VehicleKind::Train {
+        let caps = state.runtime.rail_type_max_speed;
+        state.vehicles[vehicle_idx].refresh_cached_max_track_speed(&state.map, caps);
+        return;
+    }
+    if matches!(
+        kind,
+        VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram
+    ) {
+        let pos = state.vehicles[vehicle_idx].pos;
+        let cap = state
+            .map
+            .get(pos)
+            .map(|tile| crate::road_type::road_type_from_tile(&tile))
+            .and_then(|id| {
+                state
+                    .road_type_catalog
+                    .iter()
+                    .find(|d| d.id == id)
+                    .map(|d| d.max_speed)
+            })
+            .unwrap_or(0);
+        state.vehicles[vehicle_idx].cached_max_track_speed = cap;
     }
 }
 

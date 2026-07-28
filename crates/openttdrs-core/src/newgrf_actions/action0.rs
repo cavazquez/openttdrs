@@ -31,16 +31,18 @@ const PROP_INDTILE_OVERRIDE: u8 = 0x09;
 const PROP_LABEL: u8 = 0x08;
 /// Prop flags (`RoadTypes`: bit0 = tram).
 const PROP_FLAGS: u8 = 0x09;
-/// Stations: platforms disallowed bitmask.
-const PROP_STATION_DISALLOWED_PLATFORMS: u8 = 0x0A;
-/// Stations: lengths disallowed bitmask.
-const PROP_STATION_DISALLOWED_LENGTHS: u8 = 0x0B;
-/// Stations: short label 4 chars del spec.
-const PROP_STATION_SPEC_SHORT: u8 = 0x0C;
+/// Stations: callback mask (`OpenTTD` 15.3; consumida).
+const PROP_STATION_CALLBACK_MASK: u8 = 0x0B;
+/// Stations: platforms disallowed bitmask (`OpenTTD` `0x0C`).
+const PROP_STATION_DISALLOWED_PLATFORMS: u8 = 0x0C;
+/// Stations: lengths disallowed bitmask (`OpenTTD` `0x0D`).
+const PROP_STATION_DISALLOWED_LENGTHS: u8 = 0x0D;
 /// Stations: custom tile layout (platforms × length).
 const PROP_STATION_CUSTOM_LAYOUT: u8 = 0x0E;
 /// Stations: copy custom layout from another station id.
 const PROP_STATION_COPY_LAYOUT: u8 = 0x0F;
+/// Feature Action0: `TramTypes` (`OpenTTD` `GSF_TRAMTYPES`; mismo handler que `RoadTypes`).
+pub const ACTION0_FEATURE_TRAMTYPES: u8 = 0x13;
 /// Prop año introducción (uint16 LE).
 const PROP_INTRO_YEAR: u8 = 0x16;
 /// Extensión local: nombre C-string (tests / GRFs propios).
@@ -66,6 +68,8 @@ pub struct ParsedRoadTypeMeta {
     pub label: String,
     pub short_label: String,
     pub intro_year: u16,
+    /// Prop `0x14` speed limit (`0` = sin techo).
+    pub max_speed: u16,
 }
 
 /// Metadatos `Stations` leídos de un Action0 (antes de asignar IDs).
@@ -204,6 +208,8 @@ impl ParsedVehicleMeta {
 pub struct ParsedRailTypeMeta {
     pub local_id: u8,
     pub label: crate::newgrf_type_tables::TypeLabel,
+    /// Prop `0x14` speed limit (`0` = sin techo).
+    pub max_speed: u16,
 }
 
 /// Metadatos `IndustryTiles` Action0 (antes de asignar gfx ≥175).
@@ -240,7 +246,8 @@ pub fn for_each_pseudo_payload(
 #[must_use]
 pub fn parse_action0_roadtype_meta(payload: &[u8]) -> Option<ParsedRoadTypeMeta> {
     let header = parse_action0_header(payload)?;
-    if header.feature != ACTION0_FEATURE_ROADTYPES || header.num_ids == 0 {
+    let feature_tram = header.feature == ACTION0_FEATURE_TRAMTYPES;
+    if !(header.feature == ACTION0_FEATURE_ROADTYPES || feature_tram) || header.num_ids == 0 {
         return None;
     }
     if payload.len() < 5 {
@@ -250,7 +257,9 @@ pub fn parse_action0_roadtype_meta(payload: &[u8]) -> Option<ParsedRoadTypeMeta>
     let mut short_label = String::from("NGRF");
     let mut label = String::new();
     let mut intro_year = 0u16;
-    let mut is_tram = false;
+    let mut max_speed = 0u16;
+    // Extensión local en RoadTypes: bit0 de `0x09` = tram. En OTTD `0x09` es string WORD.
+    let mut is_tram = feature_tram;
     for _ in 0..header.num_props {
         if i >= payload.len() {
             break;
@@ -271,12 +280,21 @@ pub fn parse_action0_roadtype_meta(payload: &[u8]) -> Option<ParsedRoadTypeMeta>
                 }
                 i += 4;
             }
-            PROP_FLAGS => {
+            PROP_FLAGS if !feature_tram => {
+                // Local: BYTE flags tram. OTTD: WORD string id — si hay ≥2 bytes y el
+                // segundo no parece prop, tratar como WORD consumido.
                 if i >= payload.len() {
                     break;
                 }
                 is_tram = payload[i] & 0x01 != 0;
                 i += 1;
+            }
+            0x14 => {
+                if i + 2 > payload.len() {
+                    break;
+                }
+                max_speed = u16::from_le_bytes([payload[i], payload[i + 1]]);
+                i += 2;
             }
             PROP_INTRO_YEAR => {
                 if i + 2 > payload.len() {
@@ -291,6 +309,13 @@ pub fn parse_action0_roadtype_meta(payload: &[u8]) -> Option<ParsedRoadTypeMeta>
                 };
                 label = String::from_utf8_lossy(&payload[i..i + nul]).to_string();
                 i += nul + 1;
+            }
+            // Strings OTTD 0x09–0x0D / 0x1B: WORD cada una (feature tram o road real).
+            0x09 | 0x0A | 0x0B | 0x0C | 0x0D | 0x1B if feature_tram => {
+                if i + 2 > payload.len() {
+                    break;
+                }
+                i += 2;
             }
             _ => break,
         }
@@ -307,6 +332,7 @@ pub fn parse_action0_roadtype_meta(payload: &[u8]) -> Option<ParsedRoadTypeMeta>
         label,
         short_label,
         intro_year,
+        max_speed,
     })
 }
 
@@ -330,39 +356,76 @@ pub fn parse_action0_railtype_metas(payload: &[u8]) -> Option<Vec<ParsedRailType
         return None;
     }
     let first_id = payload[4];
+    let n = usize::from(header.num_ids);
     let mut i = 5usize;
+    let mut labels: Option<Vec<crate::newgrf_type_tables::TypeLabel>> = None;
+    let mut max_speeds = vec![0u16; n];
     for _ in 0..header.num_props {
         let prop = *payload.get(i)?;
         i += 1;
-        if prop == PROP_LABEL {
-            let bytes = usize::from(header.num_ids).checked_mul(4)?;
-            if i.checked_add(bytes)? > payload.len() {
-                return None;
+        match prop {
+            PROP_LABEL => {
+                let bytes = n.checked_mul(4)?;
+                if i.checked_add(bytes)? > payload.len() {
+                    return None;
+                }
+                let mut out = Vec::with_capacity(n);
+                for offset in 0..n {
+                    let start = i + offset * 4;
+                    out.push(payload[start..start + 4].try_into().ok()?);
+                }
+                i += bytes;
+                labels = Some(out);
             }
-            let mut out = Vec::with_capacity(usize::from(header.num_ids));
-            for offset in 0..header.num_ids {
-                let start = i + usize::from(offset) * 4;
-                out.push(ParsedRailTypeMeta {
-                    local_id: first_id.wrapping_add(offset),
-                    label: payload[start..start + 4].try_into().ok()?,
+            0x14 => {
+                // Speed limit WORD por id.
+                let bytes = n.checked_mul(2)?;
+                if i.checked_add(bytes)? > payload.len() {
+                    return None;
+                }
+                for (offset, speed) in max_speeds.iter_mut().enumerate() {
+                    let start = i + offset * 2;
+                    *speed = u16::from_le_bytes([payload[start], payload[start + 1]]);
+                }
+                i += bytes;
+            }
+            // Tamaños fijos por id para poder alcanzar prop 08 / 14.
+            0x09..=0x0D | 0x13 | 0x1B | 0x1C => {
+                i = i.checked_add(2usize.checked_mul(n)?)?;
+            }
+            0x10..=0x12 | 0x15 | 0x16 | 0x1A => {
+                i = i.checked_add(n)?;
+            }
+            0x17 => {
+                i = i.checked_add(4usize.checked_mul(n)?)?;
+            }
+            _ => {
+                return labels.map(|labs| {
+                    labs.into_iter()
+                        .enumerate()
+                        .map(|(offset, label)| ParsedRailTypeMeta {
+                            local_id: first_id.wrapping_add(u8::try_from(offset).unwrap_or(0)),
+                            label,
+                            max_speed: max_speeds.get(offset).copied().unwrap_or(0),
+                        })
+                        .collect()
                 });
             }
-            return Some(out);
         }
-
-        // Tamaños fijos por id para poder alcanzar prop 08 si no viene primero.
-        let width = match prop {
-            0x09..=0x0D | 0x13 | 0x14 | 0x1B | 0x1C => 2usize,
-            0x10..=0x12 | 0x15 | 0x16 | 0x1A => 1usize,
-            0x17 => 4usize,
-            _ => return None,
-        };
-        i = i.checked_add(width.checked_mul(usize::from(header.num_ids))?)?;
         if i > payload.len() {
             return None;
         }
     }
-    None
+    labels.map(|labs| {
+        labs.into_iter()
+            .enumerate()
+            .map(|(offset, label)| ParsedRailTypeMeta {
+                local_id: first_id.wrapping_add(u8::try_from(offset).unwrap_or(0)),
+                label,
+                max_speed: max_speeds.get(offset).copied().unwrap_or(0),
+            })
+            .collect()
+    })
 }
 
 #[must_use]
@@ -449,7 +512,6 @@ pub fn parse_action0_station_meta(payload: &[u8]) -> Option<ParsedStationMeta> {
     }
     let mut i = 5usize;
     let mut class_short = String::from("NGRF");
-    let mut short_label = String::from("Stat");
     let mut label = String::new();
     let mut disallowed_platforms = 0u8;
     let mut disallowed_lengths = 0u8;
@@ -468,11 +530,17 @@ pub fn parse_action0_station_meta(payload: &[u8]) -> Option<ParsedStationMeta> {
                 };
                 class_short = s;
             }
-            PROP_STATION_SPEC_SHORT => {
-                let Some(s) = read_four_char_label(payload, &mut i, "Stat") else {
+            // 0x0A copy sprite layout: extended-byte id (consumida; gfx vía Action1/3).
+            0x0A => {
+                if parse_station_copy_layout_id(payload, &mut i).is_none() {
                     break;
-                };
-                short_label = s;
+                }
+            }
+            PROP_STATION_CALLBACK_MASK => {
+                if i >= payload.len() {
+                    break;
+                }
+                i += 1;
             }
             PROP_STATION_DISALLOWED_PLATFORMS => {
                 if i >= payload.len() {
@@ -504,9 +572,40 @@ pub fn parse_action0_station_meta(payload: &[u8]) -> Option<ParsedStationMeta> {
                 label = String::from_utf8_lossy(&payload[i..i + nul]).to_string();
                 i += nul + 1;
             }
+            // 0x09 sprite layout es variable; sin consumidor aún → cortar el bloque.
             _ => break,
         }
     }
+    Some(finish_parsed_station_meta(
+        class_short,
+        label,
+        disallowed_platforms,
+        disallowed_lengths,
+        custom_layouts,
+        copy_layout_from,
+    ))
+}
+
+fn finish_parsed_station_meta(
+    class_short: String,
+    mut label: String,
+    disallowed_platforms: u8,
+    disallowed_lengths: u8,
+    custom_layouts: std::collections::HashMap<(u8, u8), Vec<u8>>,
+    copy_layout_from: Option<u16>,
+) -> ParsedStationMeta {
+    let short_label = {
+        let ascii: String = label
+            .chars()
+            .filter(char::is_ascii_alphanumeric)
+            .take(4)
+            .collect();
+        if ascii.is_empty() {
+            String::from("Stat")
+        } else {
+            ascii
+        }
+    };
     if label.is_empty() {
         label.clone_from(&short_label);
     }
@@ -515,7 +614,7 @@ pub fn parse_action0_station_meta(payload: &[u8]) -> Option<ParsedStationMeta> {
     } else {
         class_short.clone()
     };
-    Some(ParsedStationMeta {
+    ParsedStationMeta {
         class_short_label: class_short,
         class_label,
         short_label,
@@ -524,7 +623,7 @@ pub fn parse_action0_station_meta(payload: &[u8]) -> Option<ParsedStationMeta> {
         disallowed_lengths,
         custom_layouts,
         copy_layout_from,
-    })
+    }
 }
 
 #[must_use]

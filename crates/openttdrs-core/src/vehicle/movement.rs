@@ -522,13 +522,18 @@ impl super::model::Vehicle {
     ///
     /// `0` = sin techo de vía (railtype vanilla `max_speed == 0`); no se siembra con
     /// la velocidad del motor para no alterar la cinemática cuando no hay límite.
-    pub(crate) fn refresh_cached_max_track_speed(&mut self, map: &Map) {
+    pub(crate) fn refresh_cached_max_track_speed(
+        &mut self,
+        map: &Map,
+        rail_type_max_speed: [u16; 4],
+    ) {
         if self.kind != super::model::VehicleKind::Train || !self.is_consist_head() {
             return;
         }
         let mut max_track = 0_u16;
         if let Some(tile) = map.get(self.pos)
-            && let Some(cap) = crate::rail_type::rail_type_track_speed_cap(tile)
+            && let Some(cap) =
+                crate::rail_type::rail_type_track_speed_cap(tile, &rail_type_max_speed)
         {
             max_track = cap;
         }
@@ -672,9 +677,6 @@ impl super::model::Vehicle {
             }
         }
         if let Some(map) = map {
-            if self.kind == super::model::VehicleKind::Train {
-                self.refresh_cached_max_track_speed(map);
-            }
             self.sync_train_slope_speed(map);
         }
     }

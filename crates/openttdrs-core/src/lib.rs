@@ -275,9 +275,9 @@ pub use map::{
 pub use house_spec::{HouseSpec, get_town_radius_group, pick_town_house_id};
 pub use newgrf_actions::{
     ACTION0_FEATURE_INDUSTRYTILES, ACTION0_FEATURE_RAILTYPES, ACTION0_FEATURE_ROADTYPES,
-    ACTION0_FEATURE_STATIONS, ACTION0_FEATURE_TRAINS, Action0Header, Action5SlotSummary,
-    GrfInspectReport, ParsedIndustryTileMeta, ParsedRailTypeMeta, ParsedRoadTypeMeta,
-    ParsedStationMeta, ParsedTrainMeta, apply_newgrf_action5_airport_preview,
+    ACTION0_FEATURE_STATIONS, ACTION0_FEATURE_TRAINS, ACTION0_FEATURE_TRAMTYPES, Action0Header,
+    Action5SlotSummary, GrfInspectReport, ParsedIndustryTileMeta, ParsedRailTypeMeta,
+    ParsedRoadTypeMeta, ParsedStationMeta, ParsedTrainMeta, apply_newgrf_action5_airport_preview,
     apply_newgrf_action5_airport_preview_default_dirs, apply_newgrf_action5_all_default_dirs,
     apply_newgrf_action5_bridge_decks, apply_newgrf_action5_bridge_decks_default_dirs,
     apply_newgrf_action5_catenary, apply_newgrf_action5_catenary_default_dirs,

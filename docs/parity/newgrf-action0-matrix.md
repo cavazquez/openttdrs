@@ -30,10 +30,10 @@ Estados:
 | `0D` | Airports | pendiente | pendiente | — |
 | `0E` | Signals | pendiente | pendiente | señales usan hoy RailTypes |
 | `0F` | Objects | pendiente | pendiente | — |
-| `10` | Rail types | runtime parcial | runtime por sprite type | construcción/render |
+| `10` | Rail types | runtime parcial | runtime por sprite type | construcción/render + techo velocidad |
 | `11` | Airport tiles | pendiente | pendiente | — |
-| `12` | Road types | runtime parcial | runtime | construcción/render |
-| `13` | Tram types | pendiente (alias incompleto) | pendiente | — |
+| `12` | Road types | runtime parcial | runtime | construcción/render + techo velocidad |
+| `13` | Tram types | runtime parcial (mismo parser que Road) | pendiente | catálogo road (clase tram) |
 | `14` | Road stops | pendiente | pendiente | — |
 | `15` | Badges | pendiente | no aplica | — |
 
@@ -113,6 +113,44 @@ Fuente: `newgrf_act0_aircraft.cpp`.
 | `0F` capacidad de pasajeros | **runtime** |
 | `08`–`0A`, `0D`, `11`–`1C`, `1F`–`24` restantes | consumidas si tienen ancho fijo; semántica pendiente |
 | `1D`, `1E` | pendiente: listas CTT variables |
+
+## Stations (`04`)
+
+Fuente: `newgrf_act0_stations.cpp`.
+
+| Props | Estado |
+|---|---|
+| `08` class label | **runtime** |
+| `0A` copy sprite layout | consumida (extended-byte id) |
+| `0B` callback mask | consumida |
+| `0C` disallowed platforms bitmask | **runtime** |
+| `0D` disallowed lengths bitmask | **runtime** |
+| `0E` custom tile layout | **runtime** |
+| `0F` copy custom layout | **runtime** |
+| `09` sprite layouts | pendiente (variable) |
+| short label del spec | derivado del nombre (no hay prop Action0 15.3) |
+
+## Rail types (`10`)
+
+Fuente: `newgrf_act0_railtypes.cpp`.
+
+| Props | Estado |
+|---|---|
+| `08` label | **runtime** (señales / tablas) |
+| `14` max speed | **runtime** (`GameState.runtime.rail_type_max_speed` → techo tren) |
+| resto tamaños fijos usados para avanzar el bloque | consumidas |
+
+## Road types (`12`) / Tram types (`13`)
+
+Fuente: `newgrf_act0_roadtypes.cpp` (TramTypes reutiliza el handler).
+
+| Props | Estado |
+|---|---|
+| `08` short label | **runtime** |
+| `14` max speed | **runtime** (`RoadTypeDef.max_speed` → techo RV) |
+| `16` intro year (extensión local WORD) | **runtime** |
+| `09` flags tram (extensión local en RoadTypes) | **runtime** (bit0); en TramTypes `0x09` es string WORD consumido |
+| feature `13` | **runtime** parcial: parse/apply al catálogo road con `RoadTramType::Tram` |
 
 ## Action3 de vehículos
 

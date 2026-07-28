@@ -13,13 +13,14 @@ pub mod inspect;
 pub use action0::{
     ACTION0_FEATURE_AIRCRAFT, ACTION0_FEATURE_INDUSTRYTILES, ACTION0_FEATURE_RAILTYPES,
     ACTION0_FEATURE_ROAD_VEHICLES, ACTION0_FEATURE_ROADTYPES, ACTION0_FEATURE_SHIPS,
-    ACTION0_FEATURE_STATIONS, ACTION0_FEATURE_TRAINS, Action0Header, ParsedIndustryTileMeta,
-    ParsedRailTypeMeta, ParsedRoadTypeMeta, ParsedStationMeta, ParsedTrainMeta, ParsedVehicleMeta,
-    collect_industry_tile_metas_from_grf, collect_railtype_metas_from_grf,
-    collect_roadtype_metas_from_grf, collect_station_metas_from_grf, collect_train_metas_from_grf,
-    collect_vehicle_metas_from_grf, for_each_pseudo_payload, parse_action0_header,
-    parse_action0_industry_tile_meta, parse_action0_railtype_metas, parse_action0_roadtype_meta,
-    parse_action0_station_meta, parse_action0_train_meta, parse_action0_vehicle_metas,
+    ACTION0_FEATURE_STATIONS, ACTION0_FEATURE_TRAINS, ACTION0_FEATURE_TRAMTYPES, Action0Header,
+    ParsedIndustryTileMeta, ParsedRailTypeMeta, ParsedRoadTypeMeta, ParsedStationMeta,
+    ParsedTrainMeta, ParsedVehicleMeta, collect_industry_tile_metas_from_grf,
+    collect_railtype_metas_from_grf, collect_roadtype_metas_from_grf,
+    collect_station_metas_from_grf, collect_train_metas_from_grf, collect_vehicle_metas_from_grf,
+    for_each_pseudo_payload, parse_action0_header, parse_action0_industry_tile_meta,
+    parse_action0_railtype_metas, parse_action0_roadtype_meta, parse_action0_station_meta,
+    parse_action0_train_meta, parse_action0_vehicle_metas,
 };
 
 pub use apply::{
@@ -52,6 +53,20 @@ pub fn build_action0_railtype_payload(local_id: u8, label: &[u8; 4]) -> Vec<u8> 
     payload
 }
 
+/// Action0 `RailTypes` con label + `0x14` `max_speed`.
+#[must_use]
+pub fn build_action0_railtype_payload_with_speed(
+    local_id: u8,
+    label: &[u8; 4],
+    max_speed: u16,
+) -> Vec<u8> {
+    let mut payload = vec![0x00, ACTION0_FEATURE_RAILTYPES, 0x02, 0x01, local_id, 0x08];
+    payload.extend_from_slice(label);
+    payload.push(0x14);
+    payload.extend_from_slice(&max_speed.to_le_bytes());
+    payload
+}
+
 #[must_use]
 pub fn build_action0_roadtype_payload(
     short_label: &[u8; 4],
@@ -59,20 +74,35 @@ pub fn build_action0_roadtype_payload(
     intro_year: u16,
     name: &str,
 ) -> Vec<u8> {
-    let mut p = vec![
-        0x00,
-        ACTION0_FEATURE_ROADTYPES,
-        0x04,
-        0x01,
-        0x00,
-        0x08, // PROP_LABEL
-    ];
+    build_action0_roadtype_payload_with_speed(short_label, is_tram, intro_year, 0, name)
+}
+
+/// Action0 `RoadTypes`/`TramTypes` con `0x14` `max_speed`.
+#[must_use]
+pub fn build_action0_roadtype_payload_with_speed(
+    short_label: &[u8; 4],
+    is_tram: bool,
+    intro_year: u16,
+    max_speed: u16,
+    name: &str,
+) -> Vec<u8> {
+    let feature = if is_tram {
+        ACTION0_FEATURE_TRAMTYPES
+    } else {
+        ACTION0_FEATURE_ROADTYPES
+    };
+    let num_props = if is_tram { 0x04 } else { 0x05 };
+    let mut p = vec![0x00, feature, num_props, 0x01, 0x00, 0x08];
     p.extend_from_slice(short_label);
-    p.push(0x09); // PROP_FLAGS
-    p.push(u8::from(is_tram));
-    p.push(0x16); // PROP_INTRO_YEAR
+    if !is_tram {
+        p.push(0x09); // extensión local: flags tram
+        p.push(0);
+    }
+    p.push(0x14); // max_speed
+    p.extend_from_slice(&max_speed.to_le_bytes());
+    p.push(0x16); // intro year (local WORD)
     p.extend_from_slice(&intro_year.to_le_bytes());
-    p.push(0xFE); // PROP_NAME_CSTRING
+    p.push(0xFE);
     p.extend_from_slice(name.as_bytes());
     p.push(0);
     p
@@ -81,25 +111,24 @@ pub fn build_action0_roadtype_payload(
 #[must_use]
 pub fn build_action0_station_payload(
     class_label: &[u8; 4],
-    spec_short: &[u8; 4],
+    _spec_short: &[u8; 4],
     disallowed_platforms: u8,
     disallowed_lengths: u8,
     name: &str,
 ) -> Vec<u8> {
+    // IDs OpenTTD 15.3: 0x0C/0x0D = disallowed; short label se deriva del nombre.
     let mut p = vec![
         0x00,
         ACTION0_FEATURE_STATIONS,
-        0x05,
+        0x04,
         0x01,
         0x00,
         0x08, // PROP_LABEL
     ];
     p.extend_from_slice(class_label);
-    p.push(0x0C); // PROP_STATION_SPEC_SHORT
-    p.extend_from_slice(spec_short);
-    p.push(0x0A); // PROP_STATION_DISALLOWED_PLATFORMS
+    p.push(0x0C); // PROP_STATION_DISALLOWED_PLATFORMS
     p.push(disallowed_platforms);
-    p.push(0x0B); // PROP_STATION_DISALLOWED_LENGTHS
+    p.push(0x0D); // PROP_STATION_DISALLOWED_LENGTHS
     p.push(disallowed_lengths);
     p.push(0xFE); // PROP_NAME_CSTRING
     p.extend_from_slice(name.as_bytes());
@@ -314,7 +343,8 @@ mod tests {
         let a0 = build_action0_station_payload(b"MODN", b"Plat", 0, 0, "Andén moderno");
         let meta = parse_action0_station_meta(&a0).unwrap();
         assert_eq!(meta.class_short_label, "MODN");
-        assert_eq!(meta.short_label, "Plat");
+        // Short label se deriva del nombre (ASCII), no de un prop Action0.
+        assert_eq!(meta.short_label, "Andn");
         assert_eq!(meta.label, "Andén moderno");
 
         let mut state = GameState::new(4, 4);
@@ -331,7 +361,7 @@ mod tests {
             state
                 .station_spec_catalog
                 .iter()
-                .any(|d| d.from_newgrf && d.short_label == "Plat")
+                .any(|d| d.from_newgrf && d.short_label == "Andn")
         );
         assert!(
             state
@@ -1029,6 +1059,66 @@ mod tests {
         p.push(0);
         let meta = parse_action0_station_meta(&p).unwrap();
         assert_eq!(meta.custom_layouts.get(&(1, 3)), Some(&vec![0, 2, 0]));
+    }
+
+    #[test]
+    fn parse_station_disallowed_props_0c_0d() {
+        let a0 = build_action0_station_payload(b"MODN", b"XXXX", 0b0000_0010, 0b0000_0100, "Plat");
+        let meta = parse_action0_station_meta(&a0).unwrap();
+        assert_eq!(meta.disallowed_platforms, 0b0000_0010);
+        assert_eq!(meta.disallowed_lengths, 0b0000_0100);
+        assert_eq!(meta.short_label, "Plat");
+        assert!(a0.windows(2).any(|w| w == [0x0C, 0b0000_0010]));
+        assert!(a0.windows(2).any(|w| w == [0x0D, 0b0000_0100]));
+    }
+
+    #[test]
+    fn parse_roadtype_max_speed_and_tramtypes_feature() {
+        let a0 = build_action0_roadtype_payload_with_speed(b"FAST", false, 2000, 80, "Fast Road");
+        let meta = parse_action0_roadtype_meta(&a0).unwrap();
+        assert_eq!(meta.max_speed, 80);
+        assert_eq!(meta.class, RoadTramType::Road);
+
+        let tram = build_action0_roadtype_payload_with_speed(b"TRAM", true, 1900, 40, "Tram");
+        assert_eq!(tram[1], ACTION0_FEATURE_TRAMTYPES);
+        let tmeta = parse_action0_roadtype_meta(&tram).unwrap();
+        assert_eq!(tmeta.class, RoadTramType::Tram);
+        assert_eq!(tmeta.max_speed, 40);
+        assert_eq!(tmeta.short_label, "TRAM");
+
+        let mut state = GameState::new(4, 4);
+        let bytes = build_grf_v2_with_action0_and_action8(&a0, [b'F', b'S', 0, 1], "fast", "");
+        let dir = tempfile_dir_with("fast.grf", &bytes);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("fast.grf", 1));
+        apply_newgrf_road_types(&mut state, &[&dir]);
+        let def = state
+            .road_type_catalog
+            .iter()
+            .find(|d| d.from_newgrf)
+            .unwrap();
+        assert_eq!(def.max_speed, 80);
+    }
+
+    #[test]
+    fn parse_and_apply_railtype_max_speed_prop_14() {
+        let a0 = build_action0_railtype_payload_with_speed(0, b"RAIL", 90);
+        let meta = parse_action0_railtype_metas(&a0).unwrap();
+        assert_eq!(meta.len(), 1);
+        assert_eq!(meta[0].max_speed, 90);
+
+        let mut state = GameState::new(4, 4);
+        let bytes = build_grf_v2_with_action0_and_action8(&a0, [b'R', b'S', 0, 1], "railspd", "");
+        let dir = tempfile_dir_with("railspd.grf", &bytes);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("railspd.grf", 1));
+        apply_newgrf_rail_signals(&mut state, &[&dir]);
+        assert_eq!(
+            state.runtime.rail_type_max_speed[usize::from(crate::RailType::Rail.as_u8())],
+            90
+        );
     }
 
     #[test]

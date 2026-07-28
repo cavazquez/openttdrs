@@ -17,6 +17,8 @@ pub struct VehiclePose {
     pub road_frame_f: f32,
     /// Índice en `Vehicle::path` del siguiente paso desde `pos`.
     pub path_index: usize,
+    /// `vehicle.road_side` / conducción por la derecha (`_rv_station_right_*`).
+    pub drive_on_right: bool,
 }
 
 impl VehiclePose {
@@ -58,7 +60,15 @@ impl VehiclePose {
             depart_turn_f: f32::from(v.depart_turn),
             road_frame_f,
             path_index: 0,
+            drive_on_right: false,
         }
+    }
+
+    /// Marca el lado de circulación para tablas `_rv_station_*` / `_road_drive_data`.
+    #[must_use]
+    pub const fn with_drive_on_right(mut self, drive_on_right: bool) -> Self {
+        self.drive_on_right = drive_on_right;
+        self
     }
 
     #[must_use]

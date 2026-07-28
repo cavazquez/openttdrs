@@ -103,7 +103,19 @@ pub fn tick_overtaking(v: &mut Vehicle, map: Option<&Map>) {
 /// Índice de tabla `_road_drive_data` con carril opuesto si `overtaking`.
 #[must_use]
 pub fn drive_state_with_overtake(road_state: u8, overtaking: u8) -> u8 {
-    (road_state & RVSB_TRACKDIR_MASK) ^ (overtaking & RVSB_DRIVE_SIDE)
+    drive_state_with_overtake_and_side(road_state, overtaking, false)
+}
+
+/// Como [`drive_state_with_overtake`], aplicando `vehicle.road_side` de `OpenTTD`
+/// (`road_side << RVS_DRIVE_SIDE` XOR overtaking).
+#[must_use]
+pub fn drive_state_with_overtake_and_side(
+    road_state: u8,
+    overtaking: u8,
+    drive_on_right: bool,
+) -> u8 {
+    let side = if drive_on_right { RVSB_DRIVE_SIDE } else { 0 };
+    (road_state & RVSB_TRACKDIR_MASK) ^ (overtaking & RVSB_DRIVE_SIDE) ^ side
 }
 
 fn tile_is_station(map: &Map, pos: TileCoord) -> bool {

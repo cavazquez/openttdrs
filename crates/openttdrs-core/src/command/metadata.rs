@@ -254,6 +254,7 @@ pub fn command_effects(cmd: &Command) -> CommandEffects {
         // Settings de partida (NO modifican mapa)
         // ═══════════════════════════════════════════════════════════════════
         Command::SetPathfindingSettings(..)
+        | Command::SetConstructionSettings(..)
         | Command::SetVehicleBreakdowns(..)
         | Command::SetCargoDistDistribution(..)
         | Command::SetCompanyColour(..)

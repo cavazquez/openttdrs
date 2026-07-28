@@ -32,6 +32,12 @@ pub struct PathfindingSettings {
     /// Días de espera ante señal bidireccional roja antes de girar (2..=255).
     #[serde(default = "default_wait_twoway")]
     pub wait_twoway_signal: u8,
+    /// Forzar reserva PBS también en segmentos sin path signal (`pf.reserve_paths`).
+    ///
+    /// Vanilla `OpenTTD`: `false`. Con `false`, sólo se reserva cuando el segmento
+    /// delante del tren es PBS (`SigSegState::Path`).
+    #[serde(default = "default_reserve_paths")]
+    pub reserve_paths: bool,
 }
 
 fn default_wait_oneway() -> u8 {
@@ -42,6 +48,10 @@ fn default_wait_twoway() -> u8 {
     DEFAULT_WAIT_TWOWAY_SIGNAL_DAYS
 }
 
+fn default_reserve_paths() -> bool {
+    false
+}
+
 impl Default for PathfindingSettings {
     fn default() -> Self {
         Self {
@@ -50,6 +60,7 @@ impl Default for PathfindingSettings {
             reverse_at_signals: true,
             wait_oneway_signal: DEFAULT_WAIT_ONEWAY_SIGNAL_DAYS,
             wait_twoway_signal: DEFAULT_WAIT_TWOWAY_SIGNAL_DAYS,
+            reserve_paths: false,
         }
     }
 }

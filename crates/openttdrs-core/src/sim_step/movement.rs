@@ -90,9 +90,10 @@ pub(super) fn move_vehicles(state: &mut GameState) {
             VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram
         ) {
             let map = Some(&state.map);
+            let drive_on_right = state.construction.road_drive_on_right();
             // Split borrow: tick road con flota completa para FindCloseTo.
             let mut vehicles = std::mem::take(&mut state.vehicles);
-            crate::road_movement::road_vehicle_tick(&mut vehicles, i, map);
+            crate::road_movement::road_vehicle_tick_side(&mut vehicles, i, map, drive_on_right);
             state.vehicles = vehicles;
             let _ = crate::ground_crash::maybe_road_train_crash(state, i);
             continue;

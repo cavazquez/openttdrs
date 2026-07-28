@@ -29,6 +29,7 @@ pub(crate) enum PathfindingSettingsAction {
     WaitDays(u8),
     Backoff(u8),
     ToggleReverse,
+    ToggleReservePaths,
     ResetDefaults,
 }
 
@@ -46,7 +47,7 @@ pub(crate) fn setup_pathfinding_settings_window(
         FloatingWindowId::PathfindingSettings,
         "Señales PBS",
         TITLE_BROWN,
-        Vec2::new(280.0, 160.0),
+        Vec2::new(280.0, 190.0),
         400.0,
     );
     commands.entity(content).with_children(|body| {
@@ -107,6 +108,28 @@ pub(crate) fn setup_pathfinding_settings_window(
                     BuildMenuUi,
                     children![(
                         Text::new("Girar en señales"),
+                        window_text_font(asset_server, UiFontRole::Caption),
+                        TextColor(WINDOW_TEXT),
+                    )],
+                ),
+                (
+                    Button,
+                    PathfindingSettingsAction::ToggleReservePaths,
+                    Node {
+                        min_width: Val::Px(160.0),
+                        height: Val::Px(26.0),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        border: UiRect::all(Val::Px(1.0)),
+                        padding: UiRect::horizontal(Val::Px(8.0)),
+                        ..default()
+                    },
+                    BackgroundColor(BTN_BG),
+                    BorderColor::all(BTN_BORDER),
+                    Interaction::default(),
+                    BuildMenuUi,
+                    children![(
+                        Text::new("Siempre reservar"),
                         window_text_font(asset_server, UiFontRole::Caption),
                         TextColor(WINDOW_TEXT),
                     )],
@@ -231,6 +254,7 @@ pub(crate) fn sync_pathfinding_settings_window(
             PathfindingSettingsAction::WaitDays(d) => pf.wait_for_pbs_path == d,
             PathfindingSettingsAction::Backoff(b) => pf.path_backoff_interval == b,
             PathfindingSettingsAction::ToggleReverse => pf.reverse_at_signals,
+            PathfindingSettingsAction::ToggleReservePaths => pf.reserve_paths,
             PathfindingSettingsAction::ResetDefaults => false,
         };
         *border = if active {
@@ -262,6 +286,9 @@ pub(crate) fn handle_pathfinding_settings_buttons(
             }
             PathfindingSettingsAction::ToggleReverse => {
                 next.reverse_at_signals = !next.reverse_at_signals;
+            }
+            PathfindingSettingsAction::ToggleReservePaths => {
+                next.reserve_paths = !next.reserve_paths;
             }
             PathfindingSettingsAction::ResetDefaults => {
                 next = PathfindingSettings::default();

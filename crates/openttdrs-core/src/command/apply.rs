@@ -504,6 +504,13 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
             state.pathfinding = next;
             Ok(())
         }
+        Command::SetConstructionSettings(settings) => {
+            if state.construction == *settings {
+                return Ok(());
+            }
+            state.construction = *settings;
+            Ok(())
+        }
         Command::SetVehicleBreakdowns(level) => {
             let level = (*level).min(2);
             state.vehicle_breakdowns = level;

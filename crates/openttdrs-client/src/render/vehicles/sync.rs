@@ -1,5 +1,4 @@
 use bevy::prelude::*;
-use openttdrs_core::extrapolate_vehicle_pose;
 use openttdrs_core::prelude::*;
 
 use crate::render::CompanyColoredSprites;
@@ -8,7 +7,8 @@ use crate::state::SimWorld;
 
 use super::assets::{NewGrfTrainSpriteCache, TruckHandles, vehicle_layers};
 use super::pose::{
-    aircraft_aux_sprite_pos_at, vehicle_sprite_pos, vehicle_sprite_pos_at_with_catalog,
+    aircraft_aux_sprite_pos_at, vehicle_pose_for_construction, vehicle_sprite_pos,
+    vehicle_sprite_pos_at_with_catalog,
 };
 use super::spawn::{vehicle_cargo_color, vehicle_cargo_label};
 
@@ -166,7 +166,7 @@ pub(crate) fn update_vehicles(
         let Some(v) = sim.state.vehicles.get(i) else {
             continue;
         };
-        let pose = extrapolate_vehicle_pose(v, sim_clock.tick_alpha);
+        let pose = vehicle_pose_for_construction(v, sim_clock.tick_alpha, sim.state.construction);
         if vehicle_is_hidden_from_view(&sim, v, pose) {
             *visibility = Visibility::Hidden;
             continue;
@@ -213,7 +213,8 @@ pub(crate) fn update_vehicles(
             *visibility = Visibility::Hidden;
             continue;
         };
-        let trailer_pose = openttdrs_core::VehiclePose::from_vehicle(unit);
+        let trailer_pose = openttdrs_core::VehiclePose::from_vehicle(unit)
+            .with_drive_on_right(sim.state.construction.road_drive_on_right());
         if vehicle_is_hidden_from_view(&sim, unit, trailer_pose) {
             *visibility = Visibility::Hidden;
             continue;
@@ -247,7 +248,7 @@ pub(crate) fn update_vehicles(
             *visibility = Visibility::Hidden;
             continue;
         };
-        let pose = extrapolate_vehicle_pose(v, sim_clock.tick_alpha);
+        let pose = vehicle_pose_for_construction(v, sim_clock.tick_alpha, sim.state.construction);
         if vehicle_is_hidden_from_view(&sim, v, pose) {
             *visibility = Visibility::Hidden;
             continue;
@@ -269,7 +270,7 @@ pub(crate) fn update_vehicles(
             *visibility = Visibility::Hidden;
             continue;
         };
-        let pose = extrapolate_vehicle_pose(v, sim_clock.tick_alpha);
+        let pose = vehicle_pose_for_construction(v, sim_clock.tick_alpha, sim.state.construction);
         if vehicle_is_hidden_from_view(&sim, v, pose) {
             *visibility = Visibility::Hidden;
             continue;
@@ -289,7 +290,7 @@ pub(crate) fn update_vehicles(
         let Some(v) = sim.state.vehicles.get(i) else {
             continue;
         };
-        let pose = extrapolate_vehicle_pose(v, sim_clock.tick_alpha);
+        let pose = vehicle_pose_for_construction(v, sim_clock.tick_alpha, sim.state.construction);
         if vehicle_is_hidden_from_view(&sim, v, pose) {
             *visibility = Visibility::Hidden;
             continue;

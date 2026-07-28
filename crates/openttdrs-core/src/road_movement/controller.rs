@@ -2,10 +2,12 @@
 
 use crate::engine::{ROAD_ACCEL_ORIGINAL, do_update_speed, get_advance_distance};
 use crate::map::Map;
-use crate::road_movement::bay::{bay_direction_at_frame, bay_drive_entry, bay_stop_frame};
+use crate::road_movement::bay::{
+    bay_direction_at_frame_side, bay_drive_entry_side, bay_stop_frame_side,
+};
 use crate::road_movement::drive_data::{RDE_NEXT_TILE, road_drive_entry};
 use crate::road_movement::overtake::{
-    ROAD_ACCEL_OVERTAKE, drive_state_with_overtake, tick_overtaking,
+    ROAD_ACCEL_OVERTAKE, drive_state_with_overtake_and_side, tick_overtaking,
 };
 use crate::road_movement::rvsb::{
     RVC_DEFAULT_START_FRAME, RVSB_ENTERED_STOP, RVSB_IN_DEPOT, RVSB_IN_ROAD_STOP,
@@ -21,6 +23,16 @@ pub fn individual_road_vehicle_controller(
     vehicles: &mut [Vehicle],
     v_idx: usize,
     map: Option<&Map>,
+) -> bool {
+    individual_road_vehicle_controller_side(vehicles, v_idx, map, false)
+}
+
+/// Como [`individual_road_vehicle_controller`], con lado de circulación.
+pub fn individual_road_vehicle_controller_side(
+    vehicles: &mut [Vehicle],
+    v_idx: usize,
+    map: Option<&Map>,
+    drive_on_right: bool,
 ) -> bool {
     if vehicles.get(v_idx).is_some_and(|v| v.crashed) {
         return false;
@@ -54,20 +66,20 @@ pub fn individual_road_vehicle_controller(
     }
 
     let state = v.road_state;
-    let lookup = drive_state_with_overtake(state, v.overtaking);
+    let lookup = drive_state_with_overtake_and_side(state, v.overtaking, drive_on_right);
     let next_frame = v.frame.saturating_add(1);
     let rd = if is_bay_road_state(state) {
-        bay_drive_entry(state, next_frame)
+        bay_drive_entry_side(state, next_frame, drive_on_right)
     } else {
         road_drive_entry(lookup & 0x1F, next_frame)
     };
     let Some(rd) = rd else {
         // Fin de tabla sin marcador: forzar NEXT_TILE lógico.
-        return enter_next_tile(vehicles, v_idx, map);
+        return enter_next_tile(vehicles, v_idx, map, drive_on_right);
     };
 
     if rd.is_next_tile() {
-        return enter_next_tile(vehicles, v_idx, map);
+        return enter_next_tile(vehicles, v_idx, map, drive_on_right);
     }
 
     if rd.is_turned() {
@@ -92,11 +104,11 @@ pub fn individual_road_vehicle_controller(
     }
 
     if is_bay_road_state(state) {
-        let stop = bay_stop_frame(state).unwrap_or(u8::MAX);
+        let stop = bay_stop_frame_side(state, drive_on_right).unwrap_or(u8::MAX);
         let entered = state & RVSB_ENTERED_STOP != 0;
         if entered
             && vehicles[v_idx].frame == stop
-            && bay_entrance_busy(vehicles, v_idx, vehicles[v_idx].pos)
+            && bay_entrance_busy(vehicles, v_idx, vehicles[v_idx].pos, drive_on_right)
         {
             return false;
         }
@@ -112,7 +124,8 @@ pub fn individual_road_vehicle_controller(
             return true;
         }
         if next_frame != stop
-            && let Some(direction) = bay_direction_at_frame(state, f32::from(next_frame))
+            && let Some(direction) =
+                bay_direction_at_frame_side(state, f32::from(next_frame), drive_on_right)
         {
             vehicles[v_idx].set_direction_with_curve_penalty(
                 direction,
@@ -129,7 +142,12 @@ pub fn individual_road_vehicle_controller(
     true
 }
 
-fn enter_next_tile(vehicles: &mut [Vehicle], v_idx: usize, map: Option<&Map>) -> bool {
+fn enter_next_tile(
+    vehicles: &mut [Vehicle],
+    v_idx: usize,
+    map: Option<&Map>,
+    drive_on_right: bool,
+) -> bool {
     let Some(target) = vehicles[v_idx].movement_target() else {
         vehicles[v_idx].cur_speed = 0;
         return false;
@@ -146,7 +164,7 @@ fn enter_next_tile(vehicles: &mut [Vehicle], v_idx: usize, map: Option<&Map>) ->
                     ))
         })
     {
-        let Some(far) = allocate_bay(vehicles, v_idx, target) else {
+        let Some(far) = allocate_bay(vehicles, v_idx, target, drive_on_right) else {
             return false;
         };
         let inbound = crate::vehicle::direction_from_tile_step(vehicles[v_idx].pos, target);
@@ -179,8 +197,9 @@ fn allocate_bay(
     vehicles: &[Vehicle],
     v_idx: usize,
     station: crate::map::TileCoord,
+    drive_on_right: bool,
 ) -> Option<bool> {
-    if bay_entrance_busy(vehicles, v_idx, station) {
+    if bay_entrance_busy(vehicles, v_idx, station, drive_on_right) {
         return None;
     }
     let mut far_used = false;
@@ -204,12 +223,17 @@ fn allocate_bay(
     }
 }
 
-fn bay_entrance_busy(vehicles: &[Vehicle], v_idx: usize, station: crate::map::TileCoord) -> bool {
+fn bay_entrance_busy(
+    vehicles: &[Vehicle],
+    v_idx: usize,
+    station: crate::map::TileCoord,
+    drive_on_right: bool,
+) -> bool {
     vehicles.iter().enumerate().any(|(i, other)| {
         if i == v_idx || other.pos != station || !is_bay_road_state(other.road_state) {
             return false;
         }
-        let Some(stop) = bay_stop_frame(other.road_state) else {
+        let Some(stop) = bay_stop_frame_side(other.road_state, drive_on_right) else {
             return false;
         };
         let entered = other.road_state & RVSB_ENTERED_STOP != 0;
@@ -224,6 +248,16 @@ fn road_vehicle_has_motion_target(v: &Vehicle) -> bool {
 
 /// Tick completo de roadveh: `UpdateSpeed` + bucle `while j >= adv_spd`.
 pub fn road_vehicle_tick(vehicles: &mut [Vehicle], v_idx: usize, map: Option<&Map>) {
+    road_vehicle_tick_side(vehicles, v_idx, map, false);
+}
+
+/// Como [`road_vehicle_tick`], con lado de circulación (`vehicle.road_side`).
+pub fn road_vehicle_tick_side(
+    vehicles: &mut [Vehicle],
+    v_idx: usize,
+    map: Option<&Map>,
+    drive_on_right: bool,
+) {
     if !is_road_vehicle_kind(vehicles[v_idx].kind) {
         return;
     }
@@ -306,7 +340,7 @@ pub fn road_vehicle_tick(vehicles: &mut [Vehicle], v_idx: usize, map: Option<&Ma
     let mut blocked = false;
     while j >= adv_spd {
         j -= adv_spd;
-        if !individual_road_vehicle_controller(vehicles, v_idx, map) {
+        if !individual_road_vehicle_controller_side(vehicles, v_idx, map, drive_on_right) {
             blocked = true;
             break;
         }
@@ -337,6 +371,8 @@ pub fn road_vehicle_step_solo(v: &mut Vehicle, map: Option<&Map>) {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
+    use crate::road_movement::bay::bay_stop_frame;
+
     use super::*;
     use crate::map::{Map, TileCoord, TileKind};
     use crate::road_movement::rvsb::{RVSB_ENTERED_STOP, RVSB_USING_SECOND_BAY};

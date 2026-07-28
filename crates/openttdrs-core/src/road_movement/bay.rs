@@ -335,6 +335,312 @@ const BAY_LEFT_SE_NEAR: BayStationTable = BayStationTable {
     stop: 15,
 };
 
+// Tablas `_rv_station_right_*` (OpenTTD 15.3 roadveh_movement.h).
+
+const BAY_RIGHT_SW_FAR: BayStationTable = BayStationTable {
+    points: &[
+        (15.0, 9.0),
+        (14.0, 9.0),
+        (13.0, 10.0),
+        (13.0, 11.0),
+        (12.0, 12.0),
+        (11.0, 12.0),
+        (10.0, 12.0),
+        (9.0, 12.0),
+        (8.0, 12.0),
+        (7.0, 12.0),
+        (6.0, 12.0),
+        (5.0, 11.0),
+        (5.0, 10.0),
+        (5.0, 9.0),
+        (5.0, 8.0),
+        (5.0, 7.0),
+        (5.0, 6.0),
+        (5.0, 7.0),
+        (5.0, 8.0),
+        (5.0, 9.0),
+        (5.0, 10.0),
+        (5.0, 11.0),
+        (6.0, 12.0),
+        (7.0, 12.0),
+        (8.0, 12.0),
+        (9.0, 12.0),
+        (10.0, 12.0),
+        (11.0, 12.0),
+        (12.0, 12.0),
+        (13.0, 11.0),
+        (13.0, 10.0),
+        (13.0, 9.0),
+        (13.0, 8.0),
+        (13.0, 7.0),
+        (13.0, 6.0),
+        (14.0, 5.0),
+        (15.0, 5.0),
+    ],
+    stop: 16,
+};
+
+const BAY_RIGHT_NW_FAR: BayStationTable = BayStationTable {
+    points: &[
+        (9.0, 0.0),
+        (9.0, 1.0),
+        (10.0, 2.0),
+        (11.0, 2.0),
+        (12.0, 3.0),
+        (12.0, 4.0),
+        (12.0, 5.0),
+        (12.0, 6.0),
+        (12.0, 7.0),
+        (12.0, 8.0),
+        (12.0, 9.0),
+        (11.0, 10.0),
+        (10.0, 10.0),
+        (9.0, 10.0),
+        (8.0, 10.0),
+        (7.0, 10.0),
+        (6.0, 10.0),
+        (7.0, 10.0),
+        (8.0, 10.0),
+        (9.0, 10.0),
+        (10.0, 10.0),
+        (11.0, 10.0),
+        (12.0, 9.0),
+        (12.0, 8.0),
+        (12.0, 7.0),
+        (12.0, 6.0),
+        (12.0, 5.0),
+        (12.0, 4.0),
+        (12.0, 3.0),
+        (11.0, 2.0),
+        (10.0, 2.0),
+        (9.0, 2.0),
+        (8.0, 2.0),
+        (7.0, 2.0),
+        (6.0, 2.0),
+        (5.0, 1.0),
+        (5.0, 0.0),
+    ],
+    stop: 16,
+};
+
+const BAY_RIGHT_SW_NEAR: BayStationTable = BayStationTable {
+    points: &[
+        (15.0, 9.0),
+        (14.0, 9.0),
+        (13.0, 10.0),
+        (13.0, 11.0),
+        (12.0, 12.0),
+        (11.0, 12.0),
+        (10.0, 12.0),
+        (9.0, 11.0),
+        (9.0, 10.0),
+        (9.0, 9.0),
+        (9.0, 8.0),
+        (9.0, 7.0),
+        (9.0, 6.0),
+        (9.0, 7.0),
+        (9.0, 8.0),
+        (9.0, 9.0),
+        (9.0, 10.0),
+        (9.0, 11.0),
+        (10.0, 12.0),
+        (11.0, 12.0),
+        (12.0, 12.0),
+        (13.0, 11.0),
+        (13.0, 10.0),
+        (13.0, 9.0),
+        (13.0, 8.0),
+        (13.0, 7.0),
+        (13.0, 6.0),
+        (14.0, 5.0),
+        (15.0, 5.0),
+    ],
+    stop: 12,
+};
+
+const BAY_RIGHT_NW_NEAR: BayStationTable = BayStationTable {
+    points: &[
+        (9.0, 0.0),
+        (9.0, 1.0),
+        (10.0, 2.0),
+        (11.0, 2.0),
+        (12.0, 3.0),
+        (12.0, 4.0),
+        (12.0, 5.0),
+        (11.0, 6.0),
+        (10.0, 6.0),
+        (9.0, 6.0),
+        (8.0, 6.0),
+        (7.0, 6.0),
+        (6.0, 6.0),
+        (7.0, 6.0),
+        (8.0, 6.0),
+        (9.0, 6.0),
+        (10.0, 6.0),
+        (11.0, 6.0),
+        (12.0, 5.0),
+        (12.0, 4.0),
+        (12.0, 3.0),
+        (11.0, 2.0),
+        (10.0, 2.0),
+        (9.0, 2.0),
+        (8.0, 2.0),
+        (7.0, 2.0),
+        (6.0, 2.0),
+        (5.0, 1.0),
+        (5.0, 0.0),
+    ],
+    stop: 12,
+};
+
+const BAY_RIGHT_NE_FAR: BayStationTable = BayStationTable {
+    points: &[
+        (0.0, 5.0),
+        (1.0, 5.0),
+        (2.0, 4.0),
+        (3.0, 3.0),
+        (4.0, 3.0),
+        (5.0, 3.0),
+        (6.0, 3.0),
+        (7.0, 3.0),
+        (8.0, 3.0),
+        (9.0, 3.0),
+        (10.0, 4.0),
+        (10.0, 5.0),
+        (10.0, 6.0),
+        (10.0, 7.0),
+        (10.0, 8.0),
+        (10.0, 9.0),
+        (10.0, 8.0),
+        (10.0, 7.0),
+        (10.0, 6.0),
+        (10.0, 5.0),
+        (10.0, 4.0),
+        (9.0, 3.0),
+        (8.0, 3.0),
+        (7.0, 3.0),
+        (6.0, 3.0),
+        (5.0, 3.0),
+        (4.0, 3.0),
+        (3.0, 3.0),
+        (2.0, 4.0),
+        (2.0, 5.0),
+        (2.0, 6.0),
+        (2.0, 7.0),
+        (2.0, 8.0),
+        (1.0, 9.0),
+        (0.0, 9.0),
+    ],
+    stop: 15,
+};
+
+const BAY_RIGHT_SE_FAR: BayStationTable = BayStationTable {
+    points: &[
+        (5.0, 15.0),
+        (5.0, 14.0),
+        (4.0, 13.0),
+        (3.0, 12.0),
+        (3.0, 11.0),
+        (3.0, 10.0),
+        (3.0, 9.0),
+        (3.0, 8.0),
+        (3.0, 7.0),
+        (3.0, 6.0),
+        (4.0, 5.0),
+        (5.0, 5.0),
+        (6.0, 5.0),
+        (7.0, 5.0),
+        (8.0, 5.0),
+        (9.0, 5.0),
+        (8.0, 5.0),
+        (7.0, 5.0),
+        (6.0, 5.0),
+        (5.0, 5.0),
+        (4.0, 5.0),
+        (3.0, 6.0),
+        (3.0, 7.0),
+        (3.0, 8.0),
+        (3.0, 9.0),
+        (3.0, 10.0),
+        (3.0, 11.0),
+        (3.0, 12.0),
+        (4.0, 13.0),
+        (5.0, 13.0),
+        (6.0, 13.0),
+        (7.0, 13.0),
+        (8.0, 13.0),
+        (9.0, 14.0),
+        (9.0, 15.0),
+    ],
+    stop: 15,
+};
+
+const BAY_RIGHT_NE_NEAR: BayStationTable = BayStationTable {
+    points: &[
+        (0.0, 5.0),
+        (1.0, 5.0),
+        (2.0, 4.0),
+        (3.0, 3.0),
+        (4.0, 3.0),
+        (5.0, 3.0),
+        (6.0, 4.0),
+        (6.0, 5.0),
+        (6.0, 6.0),
+        (6.0, 7.0),
+        (6.0, 8.0),
+        (6.0, 9.0),
+        (6.0, 8.0),
+        (6.0, 7.0),
+        (6.0, 6.0),
+        (6.0, 5.0),
+        (6.0, 4.0),
+        (5.0, 3.0),
+        (4.0, 3.0),
+        (3.0, 3.0),
+        (2.0, 4.0),
+        (2.0, 5.0),
+        (2.0, 6.0),
+        (2.0, 7.0),
+        (2.0, 8.0),
+        (1.0, 9.0),
+        (0.0, 9.0),
+    ],
+    stop: 11,
+};
+
+const BAY_RIGHT_SE_NEAR: BayStationTable = BayStationTable {
+    points: &[
+        (5.0, 15.0),
+        (5.0, 14.0),
+        (4.0, 13.0),
+        (3.0, 12.0),
+        (3.0, 11.0),
+        (3.0, 10.0),
+        (4.0, 9.0),
+        (5.0, 9.0),
+        (6.0, 9.0),
+        (7.0, 9.0),
+        (8.0, 9.0),
+        (9.0, 9.0),
+        (8.0, 9.0),
+        (7.0, 9.0),
+        (6.0, 9.0),
+        (5.0, 9.0),
+        (4.0, 9.0),
+        (3.0, 10.0),
+        (3.0, 11.0),
+        (3.0, 12.0),
+        (4.0, 13.0),
+        (5.0, 13.0),
+        (6.0, 13.0),
+        (7.0, 13.0),
+        (8.0, 13.0),
+        (9.0, 14.0),
+        (9.0, 15.0),
+    ],
+    stop: 11,
+};
+
 use crate::vehicle::{DIR_NE, DIR_NW, DIR_SE, DIR_SW};
 
 /// Tabla de bahía según la dirección con la que el vehículo ENTRA por la boca
@@ -347,6 +653,29 @@ pub const fn bay_station_table(
     inbound: VehicleDirection,
     far: bool,
 ) -> Option<&'static BayStationTable> {
+    bay_station_table_for_side(inbound, far, false)
+}
+
+/// Como [`bay_station_table`], eligiendo tablas left (`false`) o right (`true`).
+#[must_use]
+pub const fn bay_station_table_for_side(
+    inbound: VehicleDirection,
+    far: bool,
+    drive_on_right: bool,
+) -> Option<&'static BayStationTable> {
+    if drive_on_right {
+        return match (inbound, far) {
+            (DIR_NE, true) => Some(&BAY_RIGHT_SW_FAR),
+            (DIR_NE, false) => Some(&BAY_RIGHT_SW_NEAR),
+            (DIR_SE, true) => Some(&BAY_RIGHT_NW_FAR),
+            (DIR_SE, false) => Some(&BAY_RIGHT_NW_NEAR),
+            (DIR_SW, true) => Some(&BAY_RIGHT_NE_FAR),
+            (DIR_SW, false) => Some(&BAY_RIGHT_NE_NEAR),
+            (DIR_NW, true) => Some(&BAY_RIGHT_SE_FAR),
+            (DIR_NW, false) => Some(&BAY_RIGHT_SE_NEAR),
+            _ => None,
+        };
+    }
     match (inbound, far) {
         (DIR_NE, true) => Some(&BAY_LEFT_SW_FAR),
         (DIR_NE, false) => Some(&BAY_LEFT_SW_NEAR),
@@ -364,26 +693,52 @@ pub const fn bay_station_table(
 /// dársena cercana y parada alcanzada. Es el índice de `_road_stop_stop_frame`
 /// y `_road_drive_data` usado por `OpenTTD`.
 #[must_use]
+#[allow(dead_code)] // API left-side; el controlador usa `_side`.
 pub(crate) fn bay_station_table_for_state(state: u8) -> Option<&'static BayStationTable> {
+    bay_station_table_for_state_side(state, false)
+}
+
+#[must_use]
+pub(crate) fn bay_station_table_for_state_side(
+    state: u8,
+    drive_on_right: bool,
+) -> Option<&'static BayStationTable> {
     if !is_bay_road_state(state) {
         return None;
     }
     let inbound = direction_from_trackdir(state & (RVSB_TRACKDIR_MASK & 0x09));
     let far = state & RVSB_USING_SECOND_BAY == 0;
-    bay_station_table(inbound, far)
+    bay_station_table_for_side(inbound, far, drive_on_right)
 }
 
 /// Frame exacto donde empieza la carga para este estado de bahía.
 #[must_use]
+#[allow(dead_code)] // API left-side; el controlador usa `_side`.
 pub(crate) fn bay_stop_frame(state: u8) -> Option<u8> {
-    u8::try_from(bay_station_table_for_state(state)?.stop).ok()
+    bay_stop_frame_side(state, false)
 }
 
-/// Entrada de la tabla `_rv_station_left_*`, incluido su marcador de salida.
+#[must_use]
+pub(crate) fn bay_stop_frame_side(state: u8, drive_on_right: bool) -> Option<u8> {
+    u8::try_from(bay_station_table_for_state_side(state, drive_on_right)?.stop).ok()
+}
+
+/// Entrada de la tabla `_rv_station_*`, incluido su marcador de salida.
 #[must_use]
 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+#[allow(dead_code)] // API left-side; el controlador usa `_side`.
 pub(crate) fn bay_drive_entry(state: u8, frame: u8) -> Option<RoadDriveEntry> {
-    let table = bay_station_table_for_state(state)?;
+    bay_drive_entry_side(state, frame, false)
+}
+
+#[must_use]
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+pub(crate) fn bay_drive_entry_side(
+    state: u8,
+    frame: u8,
+    drive_on_right: bool,
+) -> Option<RoadDriveEntry> {
+    let table = bay_station_table_for_state_side(state, drive_on_right)?;
     let index = usize::from(frame);
     if let Some(&(x, y)) = table.points.get(index) {
         return Some(RoadDriveEntry {
@@ -416,8 +771,23 @@ pub(crate) fn bay_drive_entry(state: u8, frame: u8) -> Option<RoadDriveEntry> {
     clippy::cast_sign_loss,
     clippy::cast_precision_loss
 )]
+#[allow(dead_code)] // API left-side; el render usa `_side`.
 pub(crate) fn bay_subtile_at_frame(state: u8, frame_f: f32) -> Option<SubTile> {
-    let table = bay_station_table_for_state(state)?;
+    bay_subtile_at_frame_side(state, frame_f, false)
+}
+
+#[must_use]
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss
+)]
+pub(crate) fn bay_subtile_at_frame_side(
+    state: u8,
+    frame_f: f32,
+    drive_on_right: bool,
+) -> Option<SubTile> {
+    let table = bay_station_table_for_state_side(state, drive_on_right)?;
     let max = (table.points.len().saturating_sub(1)) as f32;
     let frame_f = frame_f.clamp(0.0, max);
     let index = frame_f.floor() as usize;
@@ -431,8 +801,19 @@ pub(crate) fn bay_subtile_at_frame(state: u8, frame_f: f32) -> Option<SubTile> {
 /// Orientación del sprite derivada de los puntos contiguos de la tabla.
 #[must_use]
 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+#[allow(dead_code)] // API left-side; el render usa `_side`.
 pub(crate) fn bay_direction_at_frame(state: u8, frame_f: f32) -> Option<VehicleDirection> {
-    let table = bay_station_table_for_state(state)?;
+    bay_direction_at_frame_side(state, frame_f, false)
+}
+
+#[must_use]
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+pub(crate) fn bay_direction_at_frame_side(
+    state: u8,
+    frame_f: f32,
+    drive_on_right: bool,
+) -> Option<VehicleDirection> {
+    let table = bay_station_table_for_state_side(state, drive_on_right)?;
     let index = (frame_f.floor() as usize).min(table.points.len() - 1);
     let mut a = index.saturating_sub(1);
     let mut b = (index + 1).min(table.points.len() - 1);
@@ -450,9 +831,15 @@ pub(crate) fn bay_direction_at_frame(state: u8, frame_f: f32) -> Option<VehicleD
 /// El vehículo alcanzó el frame de servicio y conserva la dársena asignada.
 #[must_use]
 pub fn road_vehicle_stopped_in_bay(v: &Vehicle) -> bool {
+    road_vehicle_stopped_in_bay_side(v, false)
+}
+
+/// Como [`road_vehicle_stopped_in_bay`], con lado de circulación.
+#[must_use]
+pub fn road_vehicle_stopped_in_bay_side(v: &Vehicle, drive_on_right: bool) -> bool {
     is_bay_road_state(v.road_state)
         && v.road_state & RVSB_ENTERED_STOP != 0
-        && bay_stop_frame(v.road_state).is_some_and(|stop| v.frame == stop)
+        && bay_stop_frame_side(v.road_state, drive_on_right).is_some_and(|stop| v.frame == stop)
 }
 
 /// El vehículo está detenido dentro de una bahía de sus órdenes (ancló en la
@@ -499,7 +886,7 @@ fn needs_depart_turnaround_at(v: &Vehicle, pos: TileCoord, path_index: usize) ->
     outbound == reverse_direction(v.direction)
 }
 
-/// Sub-tesela dentro de la bahía siguiendo `_rv_station_left_*`:
+/// Sub-tesela dentro de la bahía siguiendo `_rv_station_{left,right}_*`:
 /// entrada = frames `0..=stop`, parada = frame `stop`, salida = `stop..`.
 pub(super) fn bay_subtile(v: &Vehicle, pose: VehiclePose) -> Option<SubTile> {
     let has_target = movement_target_at(v, pose.pos, pose.path_index).is_some();
@@ -508,7 +895,11 @@ pub(super) fn bay_subtile(v: &Vehicle, pose: VehiclePose) -> Option<SubTile> {
     let exiting = has_target
         && pose.depart_turn_f <= 0.0
         && !needs_depart_turnaround_at(v, pose.pos, pose.path_index);
-    let table = bay_station_table(bay_inbound_direction(v, pose, exiting), true)?;
+    let table = bay_station_table_for_side(
+        bay_inbound_direction(v, pose, exiting),
+        true,
+        pose.drive_on_right,
+    )?;
     if exiting {
         // Lazo de retorno hacia la boca (retraza el carril con rumbo opuesto).
         return Some(sample_curve(&table.points[table.stop..], pose.progress_f));

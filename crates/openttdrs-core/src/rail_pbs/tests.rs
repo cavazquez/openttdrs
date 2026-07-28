@@ -14,7 +14,9 @@ use crate::parity::{
     TRAIN_DUAL_TRACK_OUT_Y, TRAIN_DUAL_TRACK_RET_Y, TRAIN_DUAL_VEHICLE_2_ID, TRAIN_DUAL_VEHICLE_ID,
     build_train_supply_dual,
 };
-use crate::rail_signals::{RAIL_TILE_NORMAL, SIGTYPE_PATH, update_rail_signal_states};
+use crate::rail_signals::{
+    RAIL_TILE_NORMAL, SIGTYPE_BLOCK, SIGTYPE_PATH, update_rail_signal_states,
+};
 use crate::vehicle::{Vehicle, VehicleKind};
 
 #[test]
@@ -980,5 +982,129 @@ fn choose_train_track_reserves_on_enter() {
             .iter()
             .any(|s| s.tile == TileCoord::new(2, y)),
         "debe reservar la tesela de entrada"
+    );
+}
+
+/// #222: red solo block no crea reservas PBS con `reserve_paths=false` (default).
+#[test]
+fn block_only_network_skips_pbs_reservation_unless_reserve_paths() {
+    use crate::pathfinding_settings::PathfindingSettings;
+
+    let mut state = GameState::new(12, 4);
+    let y = 1;
+    for x in 0..=8 {
+        apply_command(&mut state, &Command::PlaceRail(TileCoord::new(x, y))).expect("vía");
+        let mut t = state.map.get(TileCoord::new(x, y)).expect("tile");
+        t.m5 = 0x01 | (RAIL_TILE_NORMAL << 6);
+        state.map.set_tile(TileCoord::new(x, y), t).expect("x");
+    }
+    apply_command(
+        &mut state,
+        &Command::PlaceRailSignal(TileCoord::new(3, y), 0, 128, 128, SIGTYPE_BLOCK),
+    )
+    .expect("block");
+    apply_command(
+        &mut state,
+        &Command::PlaceRailSignal(TileCoord::new(6, y), 0, 128, 128, SIGTYPE_BLOCK),
+    )
+    .expect("block 2");
+
+    let mut train = Vehicle::new(
+        1,
+        VehicleKind::Train,
+        TileCoord::new(1, y),
+        TileCoord::new(8, y),
+    );
+    train.running = true;
+    train.path = VecDeque::from([
+        TileCoord::new(2, y),
+        TileCoord::new(3, y),
+        TileCoord::new(4, y),
+        TileCoord::new(5, y),
+        TileCoord::new(6, y),
+        TileCoord::new(7, y),
+        TileCoord::new(8, y),
+    ]);
+    state.vehicles = vec![train];
+
+    let default_pf = PathfindingSettings::default();
+    assert!(!default_pf.reserve_paths);
+    let empty = HashSet::new();
+    let none =
+        compute_train_reservation_with_settings(&state.map, &state.vehicles, 0, &empty, default_pf);
+    assert!(
+        none.is_empty(),
+        "block-only + reserve_paths=false → sin reserva PBS: {none:?}"
+    );
+
+    assert!(
+        !crate::rail_pbs::train_reservation::vehicle_segment_requires_path_reserve(
+            &state.map,
+            &state.vehicles[0],
+        ),
+        "red solo block no clasifica segmento PBS"
+    );
+
+    let mut force = default_pf;
+    force.reserve_paths = true;
+    let forced =
+        compute_train_reservation_with_settings(&state.map, &state.vehicles, 0, &empty, force);
+    assert!(
+        forced.iter().any(|s| s.tile.x > 1),
+        "reserve_paths=true fuerza reserva por delante: {forced:?}"
+    );
+}
+
+/// #222: path signal delante activa reserva con `reserve_paths=false`.
+#[test]
+fn path_signal_segment_reserves_with_default_reserve_paths() {
+    use crate::pathfinding_settings::PathfindingSettings;
+
+    let mut state = GameState::new(12, 4);
+    let y = 1;
+    for x in 0..=8 {
+        apply_command(&mut state, &Command::PlaceRail(TileCoord::new(x, y))).expect("vía");
+        let mut t = state.map.get(TileCoord::new(x, y)).expect("tile");
+        t.m5 = 0x01 | (RAIL_TILE_NORMAL << 6);
+        state.map.set_tile(TileCoord::new(x, y), t).expect("x");
+    }
+    apply_command(
+        &mut state,
+        &Command::PlaceRailSignal(TileCoord::new(3, y), 0, 128, 128, SIGTYPE_PATH),
+    )
+    .expect("path");
+
+    let mut train = Vehicle::new(
+        1,
+        VehicleKind::Train,
+        TileCoord::new(1, y),
+        TileCoord::new(8, y),
+    );
+    train.running = true;
+    train.path = VecDeque::from([
+        TileCoord::new(2, y),
+        TileCoord::new(3, y),
+        TileCoord::new(4, y),
+        TileCoord::new(5, y),
+    ]);
+    state.vehicles = vec![train];
+
+    assert!(
+        crate::rail_pbs::train_reservation::vehicle_segment_requires_path_reserve(
+            &state.map,
+            &state.vehicles[0],
+        ),
+        "path en el path de órdenes clasifica PBS"
+    );
+    let reserved = compute_train_reservation_with_settings(
+        &state.map,
+        &state.vehicles,
+        0,
+        &HashSet::new(),
+        PathfindingSettings::default(),
+    );
+    assert!(
+        reserved.iter().any(|s| s.tile.x >= 2),
+        "default reserve_paths=false aún reserva ante path signal: {reserved:?}"
     );
 }

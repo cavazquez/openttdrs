@@ -132,6 +132,9 @@ pub(crate) fn handle_settings_menu_buttons(
             SaveMenuAction::CycleVehicleBreakdowns => {
                 // Aplicado en un sistema separado para no superar SystemParam.
             }
+            SaveMenuAction::ToggleRoadDrivingSide => {
+                // Aplicado en un sistema separado para no superar SystemParam.
+            }
             SaveMenuAction::CargoDistSettings => {
                 help_tools.p5().open = true;
             }
@@ -270,6 +273,59 @@ pub(crate) fn sync_vehicle_breakdowns_button_label(
     };
     for (action, children) in &buttons {
         if !matches!(action, SaveMenuAction::CycleVehicleBreakdowns) {
+            continue;
+        }
+        for child in children.iter() {
+            if let Ok(mut text) = texts.get_mut(child)
+                && text.as_str() != label
+            {
+                **text = label.to_string();
+            }
+        }
+    }
+}
+
+/// Cicla circulación vial izquierda/derecha (`construction.road_vehicle_driving_side`).
+pub(crate) fn handle_road_driving_side_menu_button(
+    mut q: Query<(&Interaction, &SaveMenuAction), (Changed<Interaction>, With<Button>)>,
+    mut sim: ResMut<SimWorld>,
+) {
+    for (interaction, action) in &mut q {
+        if *interaction != Interaction::Pressed
+            || !matches!(action, SaveMenuAction::ToggleRoadDrivingSide)
+        {
+            continue;
+        }
+        let mut next = sim.state.construction;
+        next.road_vehicle_driving_side = match next.road_vehicle_driving_side {
+            openttdrs_core::RoadVehicleDrivingSide::Left => {
+                openttdrs_core::RoadVehicleDrivingSide::Right
+            }
+            openttdrs_core::RoadVehicleDrivingSide::Right => {
+                openttdrs_core::RoadVehicleDrivingSide::Left
+            }
+        };
+        if let Err(error) = crate::network::apply_player_command(
+            &mut sim.state,
+            &openttdrs_core::Command::SetConstructionSettings(next),
+        ) {
+            warn!("No se pudo cambiar el lado de circulación: {error}");
+        }
+    }
+}
+
+pub(crate) fn sync_road_driving_side_button_label(
+    sim: Res<SimWorld>,
+    buttons: Query<(&SaveMenuAction, &Children), With<Button>>,
+    mut texts: Query<&mut Text>,
+) {
+    let label = if sim.state.construction.road_drive_on_right() {
+        "Carretera: derecha"
+    } else {
+        "Carretera: izquierda"
+    };
+    for (action, children) in &buttons {
+        if !matches!(action, SaveMenuAction::ToggleRoadDrivingSide) {
             continue;
         }
         for child in children.iter() {

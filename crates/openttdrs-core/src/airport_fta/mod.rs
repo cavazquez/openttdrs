@@ -577,6 +577,65 @@ mod tests {
         assert_ne!(s.vehicles[1].airport_blocks_held & BLOCK_AIRPORT_BUSY, 0);
     }
 
+    /// #223: helicóptero en `City` usa `Helipad1` / `HeliTakeoff`, no `Takeoff` de ala fija.
+    #[test]
+    fn city_helicopter_orders_use_heli_headings() {
+        let mut s = GameState::new(48, 48);
+        apply_command(
+            &mut s,
+            &Command::PlaceAirportArea {
+                origin: TileCoord::new(2, 2),
+                axis_y: false,
+                spec: AirportSpecId::City,
+            },
+        )
+        .unwrap();
+        let hangar = s.stations[0].pos;
+        apply_command(
+            &mut s,
+            &Command::BuildVehicleAtDepot(hangar, ENGINE_AIRCRAFT_TRICARIO),
+        )
+        .unwrap();
+        let heli = &mut s.vehicles[0];
+        heli.running = true;
+        heli.airport_fta_active = true;
+        heli.airport_fta_station = Some(hangar);
+        heli.airport_pos = 0;
+        heli.airport_waypoint_reached = true;
+        heli.aircraft_phase_ticks = 0;
+        heli.aircraft_phase = AircraftPhase::InHangar;
+        heli.airport_heading = AirportHeading::Hangar;
+        heli.dest = TileCoord::new(40, 40);
+
+        let _ = tick_airport_fta(&mut s.vehicles[0], &s.map, &mut s.stations);
+        assert_eq!(
+            s.vehicles[0].airport_heading,
+            AirportHeading::HeliTakeoff,
+            "remoto → HeliTakeoff en City"
+        );
+        assert_ne!(
+            s.vehicles[0].airport_heading,
+            AirportHeading::Takeoff,
+            "no reutiliza Takeoff de ala fija"
+        );
+
+        let heli = &mut s.vehicles[0];
+        heli.airport_fta_active = true;
+        heli.airport_fta_station = Some(hangar);
+        heli.airport_heading = AirportHeading::Hangar;
+        heli.aircraft_phase = AircraftPhase::InHangar;
+        heli.airport_pos = 0;
+        heli.airport_waypoint_reached = true;
+        heli.aircraft_phase_ticks = 0;
+        heli.dest = hangar;
+        let _ = tick_airport_fta(&mut s.vehicles[0], &s.map, &mut s.stations);
+        assert_eq!(
+            s.vehicles[0].airport_heading,
+            AirportHeading::Helipad1,
+            "destino local → Helipad1 en City"
+        );
+    }
+
     #[test]
     fn country_helicopter_uses_vertical_fta_instead_of_runway() {
         let mut s = GameState::new(32, 32);

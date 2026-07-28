@@ -33,6 +33,8 @@ pub(super) struct SigSegmentProbe {
     pub(super) split: bool,
     /// Dos o más señales entrando al bloque (`SigFlag::MultiEnter`).
     pub(super) multi_enter: bool,
+    /// Hay path signal en el segmento (`SigFlag::Pbs` → `SigSegState::Path`).
+    pub(super) pbs: bool,
 }
 
 impl SigSegmentProbe {
@@ -109,6 +111,10 @@ pub(super) fn explore_sig_segment(
                 // Enter: señal en sentido contrario al de entrada (`reversedir`).
                 if sig_exit == enterdir {
                     enter_count = enter_count.saturating_add(1);
+                }
+                if is_pbs_signal_type(sig_type) {
+                    // Path signal (forward o reverse) marca el segmento como PBS.
+                    probe.pbs = true;
                 }
                 if sig_type == SIGTYPE_EXIT || sig_type == SIGTYPE_COMBO {
                     probe.exits.push((cur, bit));

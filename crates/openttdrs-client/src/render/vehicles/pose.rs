@@ -1,9 +1,19 @@
 use bevy::prelude::*;
 use openttdrs_core::prelude::*;
 use openttdrs_core::{
-    EngineDef, extrapolate_vehicle_pose, slope_dz_at_subtile, vehicle_render_direction_at_with_map,
-    vehicle_subtile_at_with_map,
+    ConstructionSettings, EngineDef, extrapolate_vehicle_pose, slope_dz_at_subtile,
+    vehicle_render_direction_at_with_map, vehicle_subtile_at_with_map,
 };
+
+/// Pose de render con el lado de circulación de la partida.
+#[must_use]
+pub(crate) fn vehicle_pose_for_construction(
+    v: &Vehicle,
+    tick_alpha: f32,
+    construction: ConstructionSettings,
+) -> openttdrs_core::VehiclePose {
+    extrapolate_vehicle_pose(v, tick_alpha).with_drive_on_right(construction.road_drive_on_right())
+}
 
 use crate::iso::{overlay_pos, road_vehicle_tile_anchor, tile_min_z, tile_slope_and_min_z};
 

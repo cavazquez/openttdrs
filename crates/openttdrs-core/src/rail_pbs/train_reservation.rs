@@ -13,6 +13,28 @@ use super::search::{
     find_path_to_safe_wait_with_wormholes, is_safe_waiting_position, tile_has_any_pbs_signal,
 };
 
+/// `true` si delante del tren hay (o habrá) un segmento PBS que exige reserva.
+///
+/// Aproxima `UpdateSignalsOnSegment == SigSegState::Path`: cualquier path signal
+/// en la tesela actual, en el destino inmediato o en las primeras teselas del
+/// path de órdenes activa la reserva aunque `reserve_paths` sea `false`.
+#[must_use]
+pub fn vehicle_segment_requires_path_reserve(map: &Map, vehicle: &Vehicle) -> bool {
+    if tile_has_any_pbs_signal(map, vehicle.pos) {
+        return true;
+    }
+    if let Some(next) = vehicle.movement_target()
+        && tile_has_any_pbs_signal(map, next)
+    {
+        return true;
+    }
+    vehicle
+        .path
+        .iter()
+        .take(16)
+        .any(|tile| tile_has_any_pbs_signal(map, *tile))
+}
+
 /// Calcula la reserva de un tren sin mutar el mapa global de reservas.
 #[must_use]
 pub fn compute_train_reservation(
@@ -21,13 +43,13 @@ pub fn compute_train_reservation(
     vehicle_idx: usize,
     already_reserved: &HashSet<ReservedRailStep>,
 ) -> Vec<ReservedRailStep> {
-    compute_train_reservation_with_settings(
-        map,
-        vehicles,
-        vehicle_idx,
-        already_reserved,
-        crate::pathfinding_settings::PathfindingSettings::default(),
-    )
+    // Helper de tests / callers legacy: fuerza reserva aunque el default vanilla
+    // de `pf.reserve_paths` sea `false`.
+    let settings = crate::pathfinding_settings::PathfindingSettings {
+        reserve_paths: true,
+        ..crate::pathfinding_settings::PathfindingSettings::default()
+    };
+    compute_train_reservation_with_settings(map, vehicles, vehicle_idx, already_reserved, settings)
 }
 
 /// Como [`compute_train_reservation`], con settings PBS (look-ahead / `TryReserve`).
@@ -61,6 +83,12 @@ pub fn compute_train_reservation_with_wormholes(
 ) -> Vec<ReservedRailStep> {
     let vehicle = &vehicles[vehicle_idx];
     if vehicle.kind != VehicleKind::Train || !vehicle.running {
+        return Vec::new();
+    }
+    // OpenTTD: `SIGSEG_PBS || pf.reserve_paths`. Sin path signal delante y con
+    // `reserve_paths=false` (default vanilla) las redes de block/entry/exit no
+    // crean reservas PBS; gobiernan las señales clásicas.
+    if !settings.reserve_paths && !vehicle_segment_requires_path_reserve(map, vehicle) {
         return Vec::new();
     }
 
@@ -315,12 +343,15 @@ fn merge_consist_footprint(
 }
 
 /// Recalcula `reserved_steps` de todos los trenes (orden por índice = prioridad).
+///
+/// Helper legacy/tests: `reserve_paths=true`. La simulación real usa
+/// [`update_train_reservations_with_settings`] con `GameState.pathfinding`.
 pub fn update_train_reservations(map: &Map, vehicles: &mut [Vehicle]) {
-    update_train_reservations_with_settings(
-        map,
-        vehicles,
-        crate::pathfinding_settings::PathfindingSettings::default(),
-    );
+    let settings = crate::pathfinding_settings::PathfindingSettings {
+        reserve_paths: true,
+        ..crate::pathfinding_settings::PathfindingSettings::default()
+    };
+    update_train_reservations_with_settings(map, vehicles, settings);
 }
 
 /// Como [`update_train_reservations`], con settings PBS.

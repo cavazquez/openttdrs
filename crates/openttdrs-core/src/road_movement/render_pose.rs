@@ -1,7 +1,7 @@
 //! Funciones de rendering: dirección y posición sub-tesela para sprites.
 
 use super::bay::{
-    bay_direction_at_frame, bay_render_direction, bay_subtile, bay_subtile_at_frame,
+    bay_direction_at_frame_side, bay_render_direction, bay_subtile, bay_subtile_at_frame_side,
     direction_from_subtile_delta, parked_inside_bay,
 };
 use super::curves::{
@@ -9,7 +9,7 @@ use super::curves::{
 };
 use super::depot::{road_depot_direction, road_depot_subtile};
 use super::drive_data::road_drive_entry;
-use super::overtake::drive_state_with_overtake;
+use super::overtake::drive_state_with_overtake_and_side;
 use super::pose::{VehiclePose, movement_target_at};
 use super::rvsb::is_bay_road_state;
 use crate::depot::rail_depot_mouth_dir;
@@ -71,7 +71,7 @@ pub fn vehicle_subtile_at_with_map(
         return subtile;
     }
     if is_road_kind(v.kind)
-        && let Some(subtile) = road_frame_subtile(v, pose.road_frame_f)
+        && let Some(subtile) = road_frame_subtile(v, pose.road_frame_f, pose.drive_on_right)
     {
         return subtile;
     }
@@ -259,7 +259,7 @@ pub fn vehicle_render_direction_at_with_map(
         return dir;
     }
     if is_road_kind(v.kind)
-        && let Some(direction) = road_frame_direction(v, pose.road_frame_f)
+        && let Some(direction) = road_frame_direction(v, pose.road_frame_f, pose.drive_on_right)
     {
         return direction;
     }
@@ -296,11 +296,12 @@ const fn is_road_kind(kind: VehicleKind) -> bool {
 }
 
 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-fn road_frame_subtile(v: &Vehicle, frame_f: f32) -> Option<(f32, f32)> {
+fn road_frame_subtile(v: &Vehicle, frame_f: f32, drive_on_right: bool) -> Option<(f32, f32)> {
     if is_bay_road_state(v.road_state) {
-        return bay_subtile_at_frame(v.road_state, frame_f);
+        return bay_subtile_at_frame_side(v.road_state, frame_f, drive_on_right);
     }
-    let state = drive_state_with_overtake(v.road_state, v.overtaking) & 0x1F;
+    let state =
+        drive_state_with_overtake_and_side(v.road_state, v.overtaking, drive_on_right) & 0x1F;
     let frame_f = frame_f.max(0.0);
     let index = frame_f.floor().min(f32::from(u8::MAX)) as u8;
     let a = normal_road_point(state, index).or_else(|| {
@@ -317,11 +318,16 @@ fn road_frame_subtile(v: &Vehicle, frame_f: f32) -> Option<(f32, f32)> {
 }
 
 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-fn road_frame_direction(v: &Vehicle, frame_f: f32) -> Option<VehicleDirection> {
+fn road_frame_direction(
+    v: &Vehicle,
+    frame_f: f32,
+    drive_on_right: bool,
+) -> Option<VehicleDirection> {
     if is_bay_road_state(v.road_state) {
-        return bay_direction_at_frame(v.road_state, frame_f);
+        return bay_direction_at_frame_side(v.road_state, frame_f, drive_on_right);
     }
-    let state = drive_state_with_overtake(v.road_state, v.overtaking) & 0x1F;
+    let state =
+        drive_state_with_overtake_and_side(v.road_state, v.overtaking, drive_on_right) & 0x1F;
     let index = frame_f.floor().clamp(0.0, f32::from(u8::MAX)) as u8;
     let here = normal_road_point(state, index)?;
     if let Some(next) = index

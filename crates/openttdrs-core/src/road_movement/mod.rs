@@ -13,9 +13,10 @@ pub mod slope;
 pub mod traffic;
 
 // Re-exportar tipos y funciones públicas principales
-pub use bay::{BayStationTable, bay_station_table, parked_inside_bay};
+pub use bay::{BayStationTable, bay_station_table, bay_station_table_for_side, parked_inside_bay};
 pub use controller::{
-    individual_road_vehicle_controller, road_vehicle_step_solo, road_vehicle_tick,
+    individual_road_vehicle_controller, individual_road_vehicle_controller_side,
+    road_vehicle_step_solo, road_vehicle_tick, road_vehicle_tick_side,
 };
 pub use curves::{straight_subtile, train_straight_subtile, turn_curve_points};
 pub use depot::{
@@ -24,7 +25,8 @@ pub use depot::{
 };
 pub use drive_data::{RDE_NEXT_TILE, RDE_TURNED, RoadDriveEntry, road_drive_entry};
 pub use overtake::{
-    ROAD_ACCEL_OVERTAKE, RV_OVERTAKE_TIMEOUT, drive_state_with_overtake, road_veh_check_overtake,
+    ROAD_ACCEL_OVERTAKE, RV_OVERTAKE_TIMEOUT, drive_state_with_overtake,
+    drive_state_with_overtake_and_side, road_veh_check_overtake,
 };
 pub use pose::{
     VehiclePose, extrapolate_vehicle_pose, retreat_vehicle_pose, vehicle_render_progress,
@@ -40,12 +42,12 @@ pub use slope::{road_z_pos_affect_speed, sync_road_slope_speed};
 pub use traffic::{BLOCKED_CTR_LIMIT, apply_road_veh_close_to, road_veh_find_close_to};
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use std::collections::VecDeque;
 
     use crate::map::TileCoord;
-    use crate::vehicle::{DIR_NE, DIR_NW, DIR_SE, DIR_SW, Vehicle, VehicleKind};
+    use crate::vehicle::{DIR_NE, DIR_NW, DIR_SE, DIR_SW, Vehicle, VehicleDirection, VehicleKind};
 
     use super::*;
 
@@ -333,5 +335,61 @@ mod tests {
         assert_eq!(vehicle_subtile(&far), far_table.points[far_table.stop]);
         assert_eq!(vehicle_subtile(&near), near_table.points[near_table.stop]);
         assert_ne!(vehicle_subtile(&far), vehicle_subtile(&near));
+    }
+
+    /// #227: las ocho tablas `_rv_station_right_*` coinciden con `OpenTTD` 15.3
+    /// (stop frame y primer punto del lazo).
+    #[test]
+    fn bay_right_tables_match_openttd_stop_and_mouth() {
+        let cases: [(VehicleDirection, bool, (f32, f32), usize); 8] = [
+            (DIR_NE, true, (15.0, 9.0), 16),
+            (DIR_NE, false, (15.0, 9.0), 12),
+            (DIR_SE, true, (9.0, 0.0), 16),
+            (DIR_SE, false, (9.0, 0.0), 12),
+            (DIR_SW, true, (0.0, 5.0), 15),
+            (DIR_SW, false, (0.0, 5.0), 11),
+            (DIR_NW, true, (5.0, 15.0), 15),
+            (DIR_NW, false, (5.0, 15.0), 11),
+        ];
+        for (inbound, far, mouth, stop) in cases {
+            let left = bay_station_table(inbound, far).expect("left");
+            let right = bay_station_table_for_side(inbound, far, true).expect("right");
+            assert_eq!(right.points[0], mouth, "mouth {inbound:?} far={far}");
+            assert_eq!(right.stop, stop, "stop {inbound:?} far={far}");
+            assert_ne!(
+                left.points, right.points,
+                "tabla right distinta de left ({inbound:?} far={far})"
+            );
+            let state = rvsb::RVSB_IN_ROAD_STOP
+                | match inbound {
+                    DIR_NE => 0,
+                    DIR_SE => 1,
+                    DIR_SW => 8,
+                    DIR_NW => 9,
+                    _ => unreachable!(),
+                }
+                | if far { 0 } else { rvsb::RVSB_USING_SECOND_BAY };
+            assert_eq!(
+                bay::bay_stop_frame_side(state, true),
+                Some(u8::try_from(stop).unwrap())
+            );
+        }
+    }
+
+    #[test]
+    fn bay_right_render_uses_right_stop_point() {
+        let bay = TileCoord::new(4, 5);
+        let mut v = Vehicle::new(1, VehicleKind::Bus, bay, bay);
+        v.direction = DIR_NW;
+        v.road_state = rvsb::RVSB_IN_ROAD_STOP | 9 | rvsb::RVSB_ENTERED_STOP;
+        let stop = bay::bay_stop_frame_side(v.road_state, true).unwrap();
+        v.frame = stop;
+        let pose = VehiclePose::from_vehicle(&v).with_drive_on_right(true);
+        let right = bay_station_table_for_side(DIR_NW, true, true).unwrap();
+        assert_eq!(
+            vehicle_subtile_at(&v, pose),
+            right.points[right.stop],
+            "render right en stop frame"
+        );
     }
 }

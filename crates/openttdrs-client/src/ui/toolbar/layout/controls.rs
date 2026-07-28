@@ -163,6 +163,11 @@ pub(super) fn spawn_settings_buttons(buttons: &mut ChildSpawnerCommands) {
             SaveMenuAction::PathfindingSettings,
         ),
         (
+            "Carretera: izquierda",
+            "Cicla circulación vial izquierda / derecha (tablas bay)",
+            SaveMenuAction::ToggleRoadDrivingSide,
+        ),
+        (
             "Distribución de carga...",
             "CargoDist: Manual / Asimétrica / Simétrica",
             SaveMenuAction::CargoDistSettings,

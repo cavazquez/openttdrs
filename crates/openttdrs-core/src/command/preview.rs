@@ -246,16 +246,14 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
                 Some(CommandError::CannotBuyLandHere)
             }
         }
-        Command::BuildObject { pos, object_type } => {
-            check_build_object_placement(
-                map,
-                *pos,
-                *object_type,
-                &state.object_spec_catalog,
-                state.climate,
-            )
-            .err()
-        }
+        Command::BuildObject { pos, object_type } => check_build_object_placement(
+            map,
+            *pos,
+            *object_type,
+            &state.object_spec_catalog,
+            state.climate,
+        )
+        .err(),
         Command::PlaceIndustry(_)
         | Command::PlaceIndustryKind(_, _)
         | Command::PlaceIndustrySpec(_, _)
@@ -335,6 +333,7 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
         | Command::AddNewGrfToStack { .. }
         | Command::SetNewGrfParam { .. }
         | Command::SetPathfindingSettings(..)
+        | Command::SetConstructionSettings(..)
         | Command::SetVehicleBreakdowns(..)
         | Command::SetCargoDistDistribution(..)
         | Command::SetCompanyColour(..)

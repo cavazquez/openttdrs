@@ -292,18 +292,41 @@ fn airport_node_is_loading_stand(kind: AirportFtaKind, node: u8) -> bool {
     }
 }
 
+#[allow(
+    clippy::too_many_lines,
+    clippy::unnested_or_patterns,
+    clippy::match_same_arms
+)]
 fn nudge_heading_at_node(v: &mut Vehicle, profile: &AirportFtaProfile) {
     if v.engine_id
         .is_some_and(crate::engine::aircraft_is_helicopter)
-        && profile.kind == AirportFtaKind::Country
     {
-        match v.airport_pos {
-            19 => v.airport_heading = AirportHeading::HeliTakeoff,
-            20 => v.airport_heading = AirportHeading::HeliLanding,
-            21 => v.airport_heading = AirportHeading::HeliEndLanding,
+        // Nodos verticales: no pisar headings heli con nudges de ala fija.
+        match (profile.kind, v.airport_pos) {
+            (AirportFtaKind::Country, 19)
+            | (AirportFtaKind::Commuter, 37)
+            | (AirportFtaKind::City, 22)
+            | (AirportFtaKind::Metropolitan, 24)
+            | (AirportFtaKind::International, 47 | 48 | 51 | 52)
+            | (AirportFtaKind::Intercontinental, 53 | 54 | 74 | 75) => {
+                v.airport_heading = AirportHeading::HeliTakeoff;
+                return;
+            }
+            (AirportFtaKind::Country, 20)
+            | (AirportFtaKind::Commuter, 25 | 26)
+            | (AirportFtaKind::City, 23 | 24)
+            | (AirportFtaKind::Metropolitan, 25 | 26)
+            | (AirportFtaKind::International, 41 | 42)
+            | (AirportFtaKind::Intercontinental, 47 | 48) => {
+                v.airport_heading = AirportHeading::HeliLanding;
+                return;
+            }
+            (AirportFtaKind::Country, 21) => {
+                v.airport_heading = AirportHeading::HeliEndLanding;
+                return;
+            }
             _ => {}
         }
-        return;
     }
     match profile.kind {
         AirportFtaKind::Country => match v.airport_pos {
@@ -777,10 +800,18 @@ fn update_heading_for_orders(v: &mut Vehicle, station: &Station, kind: AirportFt
     }
     if v.engine_id
         .is_some_and(crate::engine::aircraft_is_helicopter)
-        && kind == AirportFtaKind::Country
+        && matches!(
+            kind,
+            AirportFtaKind::Country
+                | AirportFtaKind::Commuter
+                | AirportFtaKind::City
+                | AirportFtaKind::Metropolitan
+                | AirportFtaKind::International
+                | AirportFtaKind::Intercontinental
+        )
     {
-        // Country no tiene helipad: el helicóptero despega/aterriza en vertical
-        // junto a terminal, sin usar la pista de ala fija.
+        // Aeropuertos mixtos: el helicóptero usa HELITAKEOFF / HELILANDING /
+        // HELIPAD y no la pista de ala fija (tablas FTA con heading 13/17).
         if matches!(
             v.airport_heading,
             AirportHeading::HeliLanding | AirportHeading::HeliEndLanding
@@ -795,8 +826,11 @@ fn update_heading_for_orders(v: &mut Vehicle, station: &Station, kind: AirportFt
             if v.aircraft_phase == AircraftPhase::InHangar {
                 v.aircraft_phase = AircraftPhase::Taxi;
             }
-        } else {
+        } else if kind == AirportFtaKind::Country {
+            // Country no tiene helipad: aterriza en terminal.
             v.airport_heading = AirportHeading::Term1;
+        } else {
+            v.airport_heading = AirportHeading::Helipad1;
         }
         return;
     }

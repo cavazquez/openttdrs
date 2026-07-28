@@ -396,6 +396,8 @@ pub enum Command {
     },
     /// Sustituye los ajustes PBS / pathfinding de la partida (deuda I8 settings).
     SetPathfindingSettings(crate::pathfinding_settings::PathfindingSettings),
+    /// Lado de circulación vial y señales (`construction.*`).
+    SetConstructionSettings(crate::construction_settings::ConstructionSettings),
     /// Nivel de averías de vehículos: 0=ninguna, 1=reducidas, 2=normales.
     SetVehicleBreakdowns(u8),
     /// Cambia el modo `CargoDist` y reconstruye flows de estación.

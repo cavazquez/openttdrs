@@ -29,18 +29,22 @@ pub struct ConstructionSettings {
 }
 
 impl ConstructionSettings {
+    /// `true` si los vehículos de carretera circulan por la derecha.
+    #[must_use]
+    pub const fn road_drive_on_right(self) -> bool {
+        matches!(
+            self.road_vehicle_driving_side,
+            RoadVehicleDrivingSide::Right
+        )
+    }
+
     /// Resuelve el modo relativo al lado de circulación.
     #[must_use]
     pub const fn signals_on_right(self) -> bool {
         match self.train_signal_side {
             TrainSignalSide::Left => false,
             TrainSignalSide::Right => true,
-            TrainSignalSide::RoadVehicleDrivingSide => {
-                matches!(
-                    self.road_vehicle_driving_side,
-                    RoadVehicleDrivingSide::Right
-                )
-            }
+            TrainSignalSide::RoadVehicleDrivingSide => self.road_drive_on_right(),
         }
     }
 }
@@ -57,5 +61,13 @@ mod tests {
         assert!(settings.signals_on_right());
         settings.train_signal_side = TrainSignalSide::Left;
         assert!(!settings.signals_on_right());
+    }
+
+    #[test]
+    fn road_drive_on_right_tracks_setting() {
+        let mut settings = ConstructionSettings::default();
+        assert!(!settings.road_drive_on_right());
+        settings.road_vehicle_driving_side = RoadVehicleDrivingSide::Right;
+        assert!(settings.road_drive_on_right());
     }
 }

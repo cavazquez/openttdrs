@@ -581,12 +581,14 @@ mod tests {
         let road = vec![
             0x00,
             ACTION0_FEATURE_ROAD_VEHICLES,
-            0x08,
+            0x09,
             0x01,
             0x07,
             0x00,
             0x42,
             0x0E, // 3650 days after 1920 -> 1930
+            0x04,
+            12,
             0x08,
             120,
             0x09,
@@ -606,6 +608,7 @@ mod tests {
         assert_eq!(meta.local_id, 7);
         assert_eq!(meta.kind, VehicleKind::Bus);
         assert_eq!(meta.intro_year, 1930);
+        assert_eq!(meta.model_life_years, 12);
         assert_eq!(meta.max_speed, 120);
         assert_eq!(meta.capacity, 32);
         assert_eq!(meta.power_hp, 900);

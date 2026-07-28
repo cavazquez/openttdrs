@@ -18,6 +18,10 @@ fn default_lifelength_years() -> u8 {
     30
 }
 
+const fn default_model_life_years() -> u8 {
+    u8::MAX
+}
+
 /// Primer ID reservado para motores Action0 `NewGRF` (trains).
 pub const NEWGRF_ENGINE_ID_BASE: u16 = 1000;
 
@@ -48,6 +52,10 @@ pub struct EngineDef {
     /// Vida útil del modelo en años de calendario (`EngineInfo::lifelength`).
     #[serde(default = "default_lifelength_years")]
     pub lifelength_years: u8,
+    /// Años durante los que el modelo permanece a la venta (`EngineInfo::base_life`).
+    /// `0xFF` conserva la semántica de disponibilidad ilimitada de OpenTTD.
+    #[serde(default = "default_model_life_years")]
+    pub model_life_years: u8,
     /// Índice de sprite de locomotora (`OpenTTD` `image_index`; 0 en carretera).
     pub train_image_index: u8,
     /// `RailVehicleType::Multihead` (`engines.h`): compra spawnea cabina trasera.

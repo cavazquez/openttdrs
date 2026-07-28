@@ -350,6 +350,7 @@ fn build_vehicle_at_depot_buys_newgrf_train_from_catalog() {
         reliability_pct: 85,
         reliability_spd_dec: crate::engine::DEFAULT_RELIABILITY_SPD_DEC,
         lifelength_years: 30,
+        model_life_years: u8::MAX,
         train_image_index: 2,
         dual_headed: false,
         rail_tilts: false,

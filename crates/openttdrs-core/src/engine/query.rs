@@ -50,7 +50,10 @@ pub enum RoadEngineFilter {
 /// `true` si el modelo ya está disponible en el año calendario dado.
 #[must_use]
 pub fn engine_available_in_year(engine: &EngineDef, calendar_year: u32) -> bool {
-    calendar_year >= u32::from(engine.intro_year)
+    let intro = u32::from(engine.intro_year);
+    calendar_year >= intro
+        && (engine.model_life_years == u8::MAX
+            || calendar_year < intro.saturating_add(u32::from(engine.model_life_years)))
 }
 
 /// Motores visibles en la ventana de compra de un depósito, filtrados y ordenados.
@@ -240,6 +243,20 @@ mod tests {
             RoadEngineFilter::BusOnly,
         );
         assert!(road.iter().all(|e| e.kind == VehicleKind::Bus));
+    }
+
+    #[test]
+    fn model_life_retires_engine_but_ff_never_expires() {
+        let mut engine = engine_for_vehicle(VehicleKind::Bus, ENGINE_BUS_MPS).clone();
+        engine.intro_year = 1950;
+        engine.model_life_years = 10;
+        assert!(!engine_available_in_year(&engine, 1949));
+        assert!(engine_available_in_year(&engine, 1950));
+        assert!(engine_available_in_year(&engine, 1959));
+        assert!(!engine_available_in_year(&engine, 1960));
+
+        engine.model_life_years = u8::MAX;
+        assert!(engine_available_in_year(&engine, 2200));
     }
 
     #[test]

@@ -110,6 +110,7 @@ pub struct ParsedVehicleMeta {
     pub power_hp: u32,
     pub weight_t: u16,
     pub lifelength_years: u8,
+    pub model_life_years: u8,
     pub reliability_spd_dec: u16,
 }
 
@@ -168,6 +169,7 @@ impl ParsedVehicleMeta {
             power_hp: power,
             weight_t: weight,
             lifelength_years: life,
+            model_life_years: u8::MAX,
             reliability_spd_dec: if feature == ACTION0_FEATURE_SHIPS {
                 crate::engine::SHIP_RELIABILITY_SPD_DEC
             } else {
@@ -705,8 +707,13 @@ fn parse_common_vehicle_property(
                 meta.lifelength_years = read_u8(payload, i)?;
             }
         }
-        // Model life, climate mask y load amount aún no tienen campo runtime.
-        0x04 | 0x06 | 0x07 => skip_bytes(payload, i, metas.len())?,
+        0x04 => {
+            for meta in metas {
+                meta.model_life_years = read_u8(payload, i)?;
+            }
+        }
+        // Climate mask y load amount aún no tienen campo runtime.
+        0x06 | 0x07 => skip_bytes(payload, i, metas.len())?,
         _ => return Some(false),
     }
     Some(true)

@@ -46,7 +46,7 @@ Fuente: `newgrf_act0.cpp::CommonVehicleChangeInfo`.
 | `00` | fecha de introducción | **runtime** (año derivado de días) |
 | `02` | decay speed | **runtime** (`reliability_spd_dec`) |
 | `03` | vida del vehículo | **runtime** |
-| `04` | vida del modelo | consumida; falta campo de retiro del modelo |
+| `04` | vida del modelo | **runtime**; retira el modelo del catálogo salvo `0xFF` |
 | `06` | climas disponibles | consumida; falta filtro de landscape |
 | `07` | velocidad de carga | consumida; falta campo/callback de carga |
 

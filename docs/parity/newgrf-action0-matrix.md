@@ -23,8 +23,8 @@ Estados:
 | `06` | Bridges | runtime | N/A (sin Action3) | catálogo `bridge_spec` (13 slots in-place) |
 | `07` | Houses | runtime | runtime | catálogo `house_spec` + overrides; crecimiento/render |
 | `08` | Global variables | runtime parcial | no aplica | tablas rail/road/tram |
-| `09` | Industry tiles | runtime parcial | runtime | construcción/render industria |
-| `0A` | Industries | pendiente | pendiente | — |
+| `09` | Industry tiles | runtime | runtime | catálogo `industry_tile_spec` + overrides; render/place |
+| `0A` | Industries | runtime | N/A (sprites vía tiles 09) | catálogo `industry_spec` + layouts/I/O; place |
 | `0B` | Cargoes | runtime | pendiente | catálogo `cargo_spec` → pagos/capacidad/UI |
 | `0C` | Sound effects | runtime | no aplica | catálogo `sound_effect` + cola play; samples Action11 |
 | `0D` | Airports | pendiente | pendiente | — |
@@ -276,6 +276,67 @@ o fallback `subst_id` / `% 110` (`resolve_house_draw_id`). Overrides `0x15` →
 | `24` badge list | consumida |
 | `FE` nombre C-string (extensión local) | **runtime** |
 | Action1/3 views | **runtime** (`newgrf_views` / subst fallback) |
+
+## Industry tiles (`09`)
+
+Fuente: `newgrf_act0_industries.cpp` (`IndustrytilesChangeInfo`).
+
+Catálogo runtime `industry_tile_spec_catalog` (gfx ≥ `NEW_INDUSTRYTILEOFFSET` = 175).
+Overrides `0x09` → `industry_tile_overrides[vanilla]`. Acceptance y
+`callback_mask` se almacenan; callbacks no se ejecutan (#228). Cargos vía
+`GetCargoTranslation` / `cargo_spec` (#224). Action3 adjunta `newgrf_views`;
+dibujo NewGRF o fallback `subst_id` (`resolve_industry_tile_draw_gfx`).
+
+| Props | Estado |
+|---|---|
+| `08` substitute BYTE | **runtime** (obligatorio; define el slot) |
+| `09` override BYTE | **runtime** (`industry_tile_overrides`) |
+| `0A`–`0C` acceptance WORD | **runtime** (índice+amt; labels vía `cargo_spec`) |
+| `0D` land shape flags BYTE | consumida |
+| `0E` callback mask BYTE | **runtime** (almacenado; sin ejecutar) |
+| `0F` anim info WORD | consumida |
+| `10`–`12` anim/special BYTE | consumidas |
+| `13` acceptance list | **runtime** (variable; labels vía `cargo_spec`) |
+| `14` badge list | consumida (WORD count + n×WORD) |
+| Action1/3 views | **runtime** (`newgrf_views` / subst fallback) |
+
+## Industries (`0A`)
+
+Fuente: `newgrf_act0_industries.cpp` (`IndustriesChangeInfo`).
+
+Catálogo runtime `industry_spec_catalog` (ids ≥ `NEW_INDUSTRYOFFSET` = 37).
+Apply: tiles (`09`) antes que industries. Layouts `0x0A` resuelven `gfx==0xFE`
+→ tile local del mismo GRF a gfx global. Produced/accepted (`0x10`/`0x11` o
+`0x25`/`0x26`) como índices+labels vía `cargo_spec`. `callback_mask`
+(`0x21`/`0x22`) almacenado (#228). Place: `place_industry_spec_def_sandbox`
+escribe footprint con gfx NewGRF; producción/aceptación leen def cuando existe.
+
+| Props | Estado |
+|---|---|
+| `08` substitute BYTE | **runtime** (obligatorio; define el slot) |
+| `09` override BYTE | **runtime** (`industry_overrides`) |
+| `0A` layouts | **runtime** (`0xFE` → tile local del GRF) |
+| `0B` life type BYTE | consumida |
+| `0C`–`0E` string IDs WORD | consumidas |
+| `0F` fund cost BYTE | **runtime** (`cost_multiplier`) |
+| `10` produced cargos (2 B) | **runtime** (índices+labels) |
+| `11` accepted cargos (3 B +1) | **runtime** (índices+labels) |
+| `12`/`13` production rates BYTE | **runtime** |
+| `14` minimal cargo BYTE | consumida |
+| `15` random sounds list | consumida |
+| `16` conflicting (3 B) | consumida |
+| `17`–`19` probs/colour BYTE | consumidas |
+| `1A` behaviour DWORD | consumida |
+| `1B`/`1F`/`24` string WORD | consumidas |
+| `1C`–`1E` input multipliers DWORD | **runtime** (almacenados) |
+| `20` prospecting DWORD | consumida |
+| `21`/`22` callback mask BYTE | **runtime** (almacenado; sin ejecutar) |
+| `23` removal cost DWORD | consumida |
+| `25`/`26` cargo lists variables | **runtime** (índices+labels) |
+| `27` production rates list | **runtime** |
+| `28` multiplier table | **runtime** (almacenada) |
+| `29` badge list | consumida |
+| `FE` nombre C-string (extensión local) | **runtime** |
 
 ## Objects (`0F`)
 

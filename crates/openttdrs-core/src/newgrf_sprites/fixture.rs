@@ -1251,6 +1251,87 @@ pub fn build_grf_v2_industry_tile_with_preview_sprite(
     )
 }
 
+/// GRF v2: N IndustryTiles (Action0+Action1/3+sprite) + Industries Action0 + Action8.
+///
+/// `tile_specs`: `(action0, local_id, sprite_indices)`.
+#[must_use]
+#[expect(clippy::too_many_arguments)]
+pub fn build_grf_v2_industries_with_tiles(
+    tile_specs: &[(Vec<u8>, u8, Vec<u8>)],
+    industry_action0: &[u8],
+    width: u16,
+    height: u16,
+    grfid: [u8; 4],
+    name: &str,
+) -> Vec<u8> {
+    const SIG: [u8; 8] = [b'G', b'R', b'F', 0x82, 0x0D, 0x0A, 0x1A, 0x0A];
+    let n = u8::try_from(tile_specs.len()).unwrap_or(0);
+    let action1 = build_action1_feature_payload(ACTION0_FEATURE_INDUSTRYTILES, n.max(1), 1);
+    let mut action8 = vec![0x08, 0x07];
+    action8.extend_from_slice(&grfid);
+    action8.extend_from_slice(name.as_bytes());
+    action8.push(0);
+    action8.push(0);
+
+    let mut data_section = Vec::new();
+    for (a0, _, _) in tile_specs {
+        let sz = u32::try_from(a0.len()).unwrap_or(0);
+        data_section.extend_from_slice(&sz.to_le_bytes());
+        data_section.push(0xFF);
+        data_section.extend_from_slice(a0);
+    }
+    {
+        let sz = u32::try_from(industry_action0.len()).unwrap_or(0);
+        data_section.extend_from_slice(&sz.to_le_bytes());
+        data_section.push(0xFF);
+        data_section.extend_from_slice(industry_action0);
+    }
+    if !tile_specs.is_empty() {
+        let sz = u32::try_from(action1.len()).unwrap_or(0);
+        data_section.extend_from_slice(&sz.to_le_bytes());
+        data_section.push(0xFF);
+        data_section.extend_from_slice(&action1);
+        for (_, _, indices) in tile_specs {
+            let sprite_body = build_real_sprite_v1_uncompressed_payload(
+                width,
+                height,
+                -i16::try_from(width / 2).unwrap_or(0),
+                -i16::try_from(height).unwrap_or(0),
+                indices,
+            );
+            append_v2_real_sprite(&mut data_section, 0x01, &sprite_body);
+        }
+        for (set_idx, (_, local_id, _)) in tile_specs.iter().enumerate() {
+            let a3 = build_action3_feature_payload(
+                ACTION0_FEATURE_INDUSTRYTILES,
+                *local_id,
+                u16::try_from(set_idx).unwrap_or(0),
+            );
+            let sz = u32::try_from(a3.len()).unwrap_or(0);
+            data_section.extend_from_slice(&sz.to_le_bytes());
+            data_section.push(0xFF);
+            data_section.extend_from_slice(&a3);
+        }
+    }
+    {
+        let sz = u32::try_from(action8.len()).unwrap_or(0);
+        data_section.extend_from_slice(&sz.to_le_bytes());
+        data_section.push(0xFF);
+        data_section.extend_from_slice(&action8);
+    }
+    data_section.extend_from_slice(&0u32.to_le_bytes());
+
+    let sprite_offs = u32::try_from(1 + data_section.len()).unwrap_or(0);
+    let mut out = Vec::new();
+    out.extend_from_slice(&[0x00, 0x00]);
+    out.extend_from_slice(&SIG);
+    out.extend_from_slice(&sprite_offs.to_le_bytes());
+    out.push(0x00);
+    out.extend_from_slice(&data_section);
+    out.extend_from_slice(&0u32.to_le_bytes());
+    out
+}
+
 /// GRF v2 sintético: Action0 house + Action1 + sprite + Action3 + Action8.
 #[must_use]
 pub fn build_grf_v2_house_with_preview_sprite(

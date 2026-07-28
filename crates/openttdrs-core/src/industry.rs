@@ -362,6 +362,15 @@ pub struct Industry {
     /// [`PRODLEVEL_DEFAULT`].
     #[serde(default = "default_prod_level")]
     pub prod_level: u8,
+    /// Id global en `industry_spec_catalog` si proviene de NewGRF (`None` = vanilla).
+    #[serde(default)]
+    pub newgrf_type_id: Option<u16>,
+    /// Rate de producción NewGRF (copia del def al colocar; `None` = usar vanilla).
+    #[serde(default)]
+    pub newgrf_production_rate: Option<u8>,
+    /// Cargo de salida NewGRF resuelto (`None` = usar vanilla/`kind`).
+    #[serde(default)]
+    pub newgrf_output_cargo: Option<CargoType>,
 }
 
 const fn default_prod_level() -> u8 {
@@ -409,6 +418,9 @@ impl Industry {
             history: IndustryHistory::default(),
             counter: 0,
             prod_level: PRODLEVEL_DEFAULT,
+            newgrf_type_id: None,
+            newgrf_production_rate: None,
+            newgrf_output_cargo: None,
         }
     }
 
@@ -428,6 +440,9 @@ impl Industry {
             history: IndustryHistory::default(),
             counter: 0,
             prod_level: PRODLEVEL_DEFAULT,
+            newgrf_type_id: None,
+            newgrf_production_rate: None,
+            newgrf_output_cargo: None,
         }
     }
 
@@ -453,6 +468,9 @@ impl Industry {
             history: IndustryHistory::default(),
             counter: 0,
             prod_level: PRODLEVEL_DEFAULT,
+            newgrf_type_id: None,
+            newgrf_production_rate: None,
+            newgrf_output_cargo: None,
         }
     }
 
@@ -499,6 +517,9 @@ impl Industry {
     /// Rate base del spec o, sin spec, el del kind.
     #[must_use]
     pub fn production_rate(&self) -> u8 {
+        if let Some(rate) = self.newgrf_production_rate {
+            return rate;
+        }
         if let Some(spec) = self.spec {
             return spec.production_rate();
         }
@@ -695,6 +716,9 @@ impl Industry {
 
     #[must_use]
     pub fn output_cargo(&self) -> CargoType {
+        if let Some(cargo) = self.newgrf_output_cargo {
+            return cargo;
+        }
         if let Some(spec) = self.spec {
             return spec.output_cargo();
         }
@@ -704,6 +728,20 @@ impl Industry {
             IndustryKind::OilWell => CargoType::Oil,
             IndustryKind::Factory => CargoType::Goods,
         }
+    }
+
+    /// Asocia datos NewGRF resueltos al colocar desde [`crate::industry_spec::IndustrySpecDef`].
+    #[must_use]
+    pub fn with_newgrf(
+        mut self,
+        type_id: u16,
+        production_rate: u8,
+        output_cargo: Option<CargoType>,
+    ) -> Self {
+        self.newgrf_type_id = Some(type_id);
+        self.newgrf_production_rate = Some(production_rate);
+        self.newgrf_output_cargo = output_cargo;
+        self
     }
 }
 

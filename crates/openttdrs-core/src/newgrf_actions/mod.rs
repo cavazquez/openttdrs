@@ -4,6 +4,7 @@
 //! - `RoadTypes` (0x12) → `GameState.road_type_catalog`
 //! - `Stations` (0x04) → `station_class_catalog` / `station_spec_catalog`
 //! - `IndustryTiles` (0x09) → `industry_tile_spec_catalog`
+//! - `Industries` (0x0A) → `industry_spec_catalog`
 //! - `Houses` (0x07) → `house_spec_catalog`
 //! - `Cargoes` (0x0B) → `cargo_spec_catalog`
 //! - `Objects` (0x0F) → `object_spec_catalog`
@@ -21,23 +22,25 @@ pub mod inspect;
 pub use action0::{
     ACTION0_FEATURE_AIRCRAFT, ACTION0_FEATURE_BADGES, ACTION0_FEATURE_BRIDGES,
     ACTION0_FEATURE_CANALS, ACTION0_FEATURE_CARGOES, ACTION0_FEATURE_HOUSES,
-    ACTION0_FEATURE_INDUSTRYTILES, ACTION0_FEATURE_OBJECTS, ACTION0_FEATURE_RAILTYPES,
-    ACTION0_FEATURE_ROAD_VEHICLES, ACTION0_FEATURE_ROADSTOPS, ACTION0_FEATURE_ROADTYPES,
-    ACTION0_FEATURE_SHIPS, ACTION0_FEATURE_SOUNDS, ACTION0_FEATURE_STATIONS,
-    ACTION0_FEATURE_TRAINS, ACTION0_FEATURE_TRAMTYPES, Action0Header, ParsedBadgeMeta,
-    ParsedBridgeMeta, ParsedCanalMeta, ParsedCargoMeta, ParsedHouseMeta, ParsedIndustryTileMeta,
-    ParsedObjectMeta, ParsedRailTypeMeta, ParsedRoadStopMeta, ParsedRoadTypeMeta, ParsedSoundMeta,
-    ParsedStationMeta, ParsedTrainMeta, ParsedVehicleMeta, collect_badge_metas_from_grf,
-    collect_bridge_metas_from_grf, collect_canal_metas_from_grf, collect_cargo_metas_from_grf,
-    collect_house_metas_from_grf, collect_industry_tile_metas_from_grf, collect_object_metas_from_grf,
-    collect_railtype_metas_from_grf, collect_roadstop_metas_from_grf, collect_roadtype_metas_from_grf,
-    collect_sound_metas_from_grf, collect_station_metas_from_grf, collect_train_metas_from_grf,
-    collect_vehicle_metas_from_grf, for_each_pseudo_payload, parse_action0_badge_meta,
-    parse_action0_bridge_meta, parse_action0_canal_meta, parse_action0_cargo_meta,
-    parse_action0_header, parse_action0_house_meta, parse_action0_industry_tile_meta,
-    parse_action0_object_meta, parse_action0_railtype_metas, parse_action0_roadstop_meta,
-    parse_action0_roadtype_meta, parse_action0_sound_meta, parse_action0_station_meta,
-    parse_action0_train_meta, parse_action0_vehicle_metas,
+    ACTION0_FEATURE_INDUSTRIES, ACTION0_FEATURE_INDUSTRYTILES, ACTION0_FEATURE_OBJECTS,
+    ACTION0_FEATURE_RAILTYPES, ACTION0_FEATURE_ROAD_VEHICLES, ACTION0_FEATURE_ROADSTOPS,
+    ACTION0_FEATURE_ROADTYPES, ACTION0_FEATURE_SHIPS, ACTION0_FEATURE_SOUNDS,
+    ACTION0_FEATURE_STATIONS, ACTION0_FEATURE_TRAINS, ACTION0_FEATURE_TRAMTYPES, Action0Header,
+    ParsedBadgeMeta, ParsedBridgeMeta, ParsedCanalMeta, ParsedCargoMeta, ParsedHouseMeta,
+    ParsedIndustryMeta, ParsedIndustryTileMeta, ParsedObjectMeta, ParsedRailTypeMeta,
+    ParsedRoadStopMeta, ParsedRoadTypeMeta, ParsedSoundMeta, ParsedStationMeta, ParsedTrainMeta,
+    ParsedVehicleMeta, collect_badge_metas_from_grf, collect_bridge_metas_from_grf,
+    collect_canal_metas_from_grf, collect_cargo_metas_from_grf, collect_house_metas_from_grf,
+    collect_industry_metas_from_grf, collect_industry_tile_metas_from_grf,
+    collect_object_metas_from_grf, collect_railtype_metas_from_grf, collect_roadstop_metas_from_grf,
+    collect_roadtype_metas_from_grf, collect_sound_metas_from_grf, collect_station_metas_from_grf,
+    collect_train_metas_from_grf, collect_vehicle_metas_from_grf, for_each_pseudo_payload,
+    parse_action0_badge_meta, parse_action0_bridge_meta, parse_action0_canal_meta,
+    parse_action0_cargo_meta, parse_action0_header, parse_action0_house_meta,
+    parse_action0_industry_meta, parse_action0_industry_tile_meta, parse_action0_object_meta,
+    parse_action0_railtype_metas, parse_action0_roadstop_meta, parse_action0_roadtype_meta,
+    parse_action0_sound_meta, parse_action0_station_meta, parse_action0_train_meta,
+    parse_action0_vehicle_metas,
 };
 
 pub use apply::{
@@ -60,7 +63,10 @@ pub use apply::{
     canals::{apply_newgrf_canals, apply_newgrf_canals_default_dirs},
     cargo::{apply_newgrf_cargoes, apply_newgrf_cargoes_default_dirs},
     houses::{apply_newgrf_houses, apply_newgrf_houses_default_dirs},
-    industry::{apply_newgrf_industry_tiles, apply_newgrf_industry_tiles_default_dirs},
+    industry::{
+        apply_newgrf_industries, apply_newgrf_industries_default_dirs,
+        apply_newgrf_industry_tiles, apply_newgrf_industry_tiles_default_dirs,
+    },
     objects::{apply_newgrf_objects, apply_newgrf_objects_default_dirs},
     rail::{apply_newgrf_rail_signals, apply_newgrf_rail_signals_default_dirs},
     road::{apply_newgrf_road_types, apply_newgrf_road_types_default_dirs},
@@ -240,20 +246,136 @@ pub fn build_action0_train_payload(
 
 #[must_use]
 pub fn build_action0_industry_tile_payload(subst_id: u8, override_of: Option<u8>) -> Vec<u8> {
-    let num_props = 1 + u8::from(override_of.is_some());
+    build_action0_industry_tile_payload_ex(0, subst_id, override_of, &[], 0)
+}
+
+/// Action0 `IndustryTiles` con acceptance / callback_mask.
+///
+/// `acceptance`: pares `(cargo_idx, acceptance_amt)` para props `0x0A`…
+#[must_use]
+pub fn build_action0_industry_tile_payload_ex(
+    local_id: u8,
+    subst_id: u8,
+    override_of: Option<u8>,
+    acceptance: &[(u8, u8)],
+    callback_mask: u8,
+) -> Vec<u8> {
+    let mut num_props = 1u8; // subst
+    if override_of.is_some() {
+        num_props += 1;
+    }
+    num_props += u8::try_from(acceptance.len().min(3)).unwrap_or(0);
+    if callback_mask != 0 {
+        num_props += 1;
+    }
     let mut p = vec![
         0x00,
         ACTION0_FEATURE_INDUSTRYTILES,
         num_props,
         0x01,
-        0x00,
-        0x08, // PROP_INDTILE_SUBST
+        local_id,
+        0x08,
         subst_id,
     ];
     if let Some(o) = override_of {
-        p.push(0x09); // PROP_INDTILE_OVERRIDE
+        p.push(0x09);
         p.push(o);
     }
+    for (i, &(cargo, amt)) in acceptance.iter().take(3).enumerate() {
+        p.push(0x0A + u8::try_from(i).unwrap_or(0));
+        p.push(cargo);
+        p.push(amt);
+    }
+    if callback_mask != 0 {
+        p.push(0x0E);
+        p.push(callback_mask);
+    }
+    p
+}
+
+/// Action0 `Industries` (`0x0A`) con layout, cargos y callback_mask.
+///
+/// `layout_tiles`: `(x, y, local_tile_id)` — siempre `0xFE` + WORD local.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn build_action0_industry_payload(
+    local_id: u8,
+    subst_id: u8,
+    override_of: Option<u8>,
+    layout_tiles: &[(i8, i8, u16)],
+    produced: &[u8],
+    accepted: &[u8],
+    production_rates: &[u8],
+    callback_mask: u16,
+    name: &str,
+) -> Vec<u8> {
+    let mut num_props = 3u8; // 08, 0A, FE
+    if override_of.is_some() {
+        num_props += 1;
+    }
+    if !produced.is_empty() {
+        num_props += 1; // 25
+    }
+    if !accepted.is_empty() {
+        num_props += 1; // 26
+    }
+    if !production_rates.is_empty() {
+        num_props += 1; // 27
+    }
+    if callback_mask != 0 {
+        num_props += 2; // 21 + 22
+    }
+    let mut p = vec![
+        0x00,
+        ACTION0_FEATURE_INDUSTRIES,
+        num_props,
+        0x01,
+        local_id,
+        0x08,
+        subst_id,
+    ];
+    if let Some(o) = override_of {
+        p.push(0x09);
+        p.push(o);
+    }
+    // Layout 0x0A
+    p.push(0x0A);
+    p.push(1); // num_layouts
+    let mut layout_body = Vec::new();
+    for &(x, y, local_tile) in layout_tiles {
+        layout_body.push(x as u8);
+        layout_body.push(y as u8);
+        layout_body.push(0xFE);
+        layout_body.extend_from_slice(&local_tile.to_le_bytes());
+    }
+    layout_body.extend_from_slice(&[0x00, 0x80]); // terminator
+    let def_size = u32::try_from(layout_body.len()).unwrap_or(0);
+    p.extend_from_slice(&def_size.to_le_bytes());
+    p.extend_from_slice(&layout_body);
+    if !produced.is_empty() {
+        p.push(0x25);
+        p.push(u8::try_from(produced.len()).unwrap_or(0));
+        p.extend_from_slice(produced);
+    }
+    if !accepted.is_empty() {
+        p.push(0x26);
+        p.push(u8::try_from(accepted.len()).unwrap_or(0));
+        p.extend_from_slice(accepted);
+    }
+    if !production_rates.is_empty() {
+        p.push(0x27);
+        p.push(u8::try_from(production_rates.len()).unwrap_or(0));
+        p.extend_from_slice(production_rates);
+    }
+    if callback_mask != 0 {
+        p.push(0x21);
+        p.push((callback_mask & 0xFF) as u8);
+        p.push(0x22);
+        p.push((callback_mask >> 8) as u8);
+    }
+    p.push(0xFE);
+    p.extend_from_slice(name.as_bytes());
+    p.push(0);
     p
 }
 
@@ -3370,5 +3492,296 @@ mod tests {
             &state.house_overrides,
         );
         assert_eq!(a, b);
+    }
+
+    fn sample_tile_indices() -> Vec<u8> {
+        let mut indices = vec![0u8; 8 * 8];
+        for y in 2..6 {
+            for x in 2..6 {
+                indices[y * 8 + x] = 174;
+            }
+        }
+        indices
+    }
+
+    /// #256: industria custom multitile con inputs/outputs correctos.
+    #[test]
+    fn industries_ac_multitile_io() {
+        use crate::command::place_industry_spec_def_sandbox;
+        use crate::industry_spec::NEW_INDUSTRY_OFFSET;
+        use crate::map::{TileCoord, industry_gfx};
+        use crate::newgrf_sprites::build_grf_v2_industries_with_tiles;
+
+        let tile0 = build_action0_industry_tile_payload_ex(0, 0, None, &[(5, 8)], 0x01);
+        let tile1 = build_action0_industry_tile_payload_ex(1, 1, None, &[], 0);
+        let ind = build_action0_industry_payload(
+            0,
+            0,
+            None,
+            &[(0, 0, 0), (1, 0, 1)],
+            &[1],    // COAL
+            &[7],    // WOOD input
+            &[15],
+            0x0102,
+            "MultiIO",
+        );
+        let indices = sample_tile_indices();
+        let bytes = build_grf_v2_industries_with_tiles(
+            &[
+                (tile0, 0, indices.clone()),
+                (tile1, 1, indices),
+            ],
+            &ind,
+            8,
+            8,
+            [b'I', b'N', 0, 1],
+            "indio",
+        );
+        let dir = tempfile_dir_with("ind_io.grf", &bytes);
+        let mut state = GameState::new(16, 16);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("ind_io.grf", 0x494E0001));
+        apply_newgrf_industry_tiles(&mut state, &[&dir]);
+        apply_newgrf_industries(&mut state, &[&dir]);
+        assert_eq!(state.industry_tile_spec_catalog.len(), 2);
+        assert_eq!(state.industry_spec_catalog.len(), 1);
+        let def = &state.industry_spec_catalog[0];
+        assert!(def.id >= NEW_INDUSTRY_OFFSET);
+        assert_eq!(def.produced_cargo_labels, vec!["COAL".to_string()]);
+        assert_eq!(def.accepted_cargo_labels, vec!["WOOD".to_string()]);
+        assert_eq!(def.production_rates, vec![15]);
+        assert_eq!(def.callback_mask, 0x0102);
+        assert_eq!(def.layouts[0].len(), 2);
+        assert_eq!(
+            state.industry_tile_spec_catalog[0].accepts_cargo_labels,
+            vec!["GOOD".to_string()]
+        );
+        assert_eq!(state.industry_tile_spec_catalog[0].callback_mask, 0x01);
+        let def_id = def.id;
+
+        place_industry_spec_def_sandbox(&mut state, TileCoord::new(2, 2), def_id).unwrap();
+        assert_eq!(state.industries.len(), 1);
+        let ind = &state.industries[0];
+        assert_eq!(ind.tiles.len(), 2);
+        assert_eq!(ind.newgrf_type_id, Some(def_id));
+        assert_eq!(ind.newgrf_production_rate, Some(15));
+        assert_eq!(ind.newgrf_output_cargo, Some(crate::CargoType::Coal));
+        let g0 = industry_gfx(&state.map.get(TileCoord::new(2, 2)).unwrap());
+        let g1 = industry_gfx(&state.map.get(TileCoord::new(3, 2)).unwrap());
+        assert!(g0 >= crate::industry_tile::NEW_INDUSTRY_TILE_OFFSET);
+        assert!(g1 >= crate::industry_tile::NEW_INDUSTRY_TILE_OFFSET);
+        assert_ne!(g0, g1);
+    }
+
+    /// #256: IDs locales/globales y overrides estables con varios GRF.
+    #[test]
+    fn industries_ac_multi_grf_ids_overrides() {
+        use crate::industry_spec::{NEW_INDUSTRY_OFFSET, get_translated_industry_id};
+
+        let a0_a = build_action0_industry_payload(
+            0,
+            0,
+            Some(3),
+            &[(0, 0, 0)],
+            &[1],
+            &[],
+            &[10],
+            0x00AB,
+            "A",
+        );
+        let a0_b = build_action0_industry_payload(
+            0,
+            1,
+            Some(3),
+            &[(0, 0, 0)],
+            &[7],
+            &[],
+            &[12],
+            0,
+            "B",
+        );
+        let tile_a = build_action0_industry_tile_payload_ex(0, 0, None, &[], 0);
+        let tile_b = build_action0_industry_tile_payload_ex(0, 2, None, &[], 0);
+        let bytes_a = build_grf_v2_with_action0s_and_action8(
+            &[tile_a.as_slice(), a0_a.as_slice()],
+            [b'I', b'A', 0, 1],
+            "ia",
+            "",
+        );
+        let bytes_b = build_grf_v2_with_action0s_and_action8(
+            &[tile_b.as_slice(), a0_b.as_slice()],
+            [b'I', b'B', 0, 1],
+            "ib",
+            "",
+        );
+        let dir = tempfile_dir_with("ia.grf", &bytes_a);
+        std::fs::write(dir.join("ib.grf"), &bytes_b).unwrap();
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("ia.grf", 1));
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("ib.grf", 2));
+        apply_newgrf_industry_tiles(&mut state, &[&dir]);
+        apply_newgrf_industries(&mut state, &[&dir]);
+        assert_eq!(state.industry_spec_catalog.len(), 2);
+        let last = state
+            .industry_spec_catalog
+            .iter()
+            .find(|d| d.grfid == 2)
+            .unwrap();
+        assert_eq!(state.industry_overrides[3], last.id);
+        assert_eq!(get_translated_industry_id(3, &state.industry_overrides), last.id);
+        assert!(last.id >= NEW_INDUSTRY_OFFSET);
+        let first = state
+            .industry_spec_catalog
+            .iter()
+            .find(|d| d.grfid == 1)
+            .unwrap();
+        assert_eq!(first.callback_mask, 0x00AB);
+        assert_ne!(first.id, last.id);
+        // Tiles: ids globales estables y distintos por GRF.
+        assert_eq!(state.industry_tile_spec_catalog.len(), 2);
+        assert_ne!(
+            state.industry_tile_spec_catalog[0].gfx,
+            state.industry_tile_spec_catalog[1].gfx
+        );
+    }
+
+    /// #256: Action3 selecciona sprites por tile y respeta fallback subst.
+    #[test]
+    fn industries_ac_action3_sprite_fallback_per_tile() {
+        use crate::industry_tile::resolve_industry_tile_draw_gfx;
+        use crate::newgrf_sprites::build_grf_v2_industries_with_tiles;
+
+        let tile0 = build_action0_industry_tile_payload_ex(0, 5, None, &[], 0);
+        let tile1 = build_action0_industry_tile_payload_ex(1, 9, None, &[], 0);
+        let ind = build_action0_industry_payload(
+            0,
+            0,
+            None,
+            &[(0, 0, 0), (1, 0, 1)],
+            &[1],
+            &[],
+            &[8],
+            0,
+            "Spr",
+        );
+        let indices = sample_tile_indices();
+        let bytes = build_grf_v2_industries_with_tiles(
+            &[
+                (tile0, 0, indices.clone()),
+                (tile1, 1, indices),
+            ],
+            &ind,
+            8,
+            8,
+            [b'I', b'S', 0, 1],
+            "indspr",
+        );
+        let dir = tempfile_dir_with("ind_spr.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("ind_spr.grf", 3));
+        apply_newgrf_industry_tiles(&mut state, &[&dir]);
+        apply_newgrf_industries(&mut state, &[&dir]);
+        let t0 = &state.industry_tile_spec_catalog[0];
+        let t1 = &state.industry_tile_spec_catalog[1];
+        assert!(t0.has_newgrf_sprites());
+        assert!(t1.has_newgrf_sprites());
+        assert!(!t0.newgrf_views.is_empty());
+        assert!(!t1.newgrf_views.is_empty());
+        assert_eq!(
+            resolve_industry_tile_draw_gfx(t0.gfx.as_u16(), &state.industry_tile_spec_catalog),
+            t0.gfx.as_u16()
+        );
+        // Sin vistas → fallback subst.
+        let mut bare = t0.clone();
+        bare.newgrf_views.clear();
+        bare.newgrf_preview = None;
+        bare.newgrf_runtime = None;
+        let cat = vec![bare];
+        assert_eq!(
+            resolve_industry_tile_draw_gfx(cat[0].gfx.as_u16(), &cat),
+            5
+        );
+        // Layout apunta a gfx globales distintos por tile.
+        let layout = &state.industry_spec_catalog[0].layouts[0];
+        assert_eq!(layout[0].gfx, t0.gfx.as_u16());
+        assert_eq!(layout[1].gfx, t1.gfx.as_u16());
+    }
+
+    /// #256: callback_mask y cargo labels almacenados (sin ejecutar CBs).
+    #[test]
+    fn industries_ac_callback_mask_and_cargo_labels_stored() {
+        let tile = build_action0_industry_tile_payload_ex(
+            0,
+            0,
+            Some(10),
+            &[(1, 4), (5, 8)],
+            0x3C,
+        );
+        let ind = build_action0_industry_payload(
+            0,
+            0,
+            Some(2),
+            &[(0, 0, 0)],
+            &[1, 9], // COAL, STEL
+            &[7, 5], // WOOD, GOOD
+            &[11, 3],
+            0x55AA,
+            "CB",
+        );
+        let meta_t = parse_action0_industry_tile_meta(&tile).unwrap();
+        assert_eq!(meta_t.callback_mask, 0x3C);
+        assert_eq!(meta_t.accepts_cargo_indices, vec![1, 5]);
+        assert_eq!(meta_t.override_of, Some(10));
+        let meta_i = parse_action0_industry_meta(&ind).unwrap();
+        assert_eq!(meta_i.callback_mask, 0x55AA);
+        assert_eq!(meta_i.produced_cargo_indices, vec![1, 9]);
+        assert_eq!(meta_i.accepted_cargo_indices, vec![7, 5]);
+
+        let bytes = build_grf_v2_with_action0s_and_action8(
+            &[tile.as_slice(), ind.as_slice()],
+            [b'I', b'C', 0, 1],
+            "icb",
+            "",
+        );
+        let dir = tempfile_dir_with("icb.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("icb.grf", 4));
+        apply_newgrf_industry_tiles(&mut state, &[&dir]);
+        apply_newgrf_industries(&mut state, &[&dir]);
+        let tdef = &state.industry_tile_spec_catalog[0];
+        assert_eq!(tdef.callback_mask, 0x3C);
+        assert_eq!(
+            tdef.accepts_cargo_labels,
+            vec!["COAL".to_string(), "GOOD".to_string()]
+        );
+        let idef = &state.industry_spec_catalog[0];
+        assert_eq!(idef.callback_mask, 0x55AA);
+        assert_eq!(
+            idef.produced_cargo_labels,
+            vec!["COAL".to_string(), "STEL".to_string()]
+        );
+        assert_eq!(
+            idef.accepted_cargo_labels,
+            vec!["WOOD".to_string(), "GOOD".to_string()]
+        );
+        // Truncated payloads: no panic.
+        let _ = parse_action0_industry_meta(&[0x00, ACTION0_FEATURE_INDUSTRIES, 0x01, 0x01, 0x00]);
+        let _ = parse_action0_industry_tile_meta(&[
+            0x00,
+            ACTION0_FEATURE_INDUSTRYTILES,
+            0x02,
+            0x01,
+            0x00,
+            0x08,
+        ]);
     }
 }

@@ -37,6 +37,7 @@ pub mod ground_crash;
 pub mod gs;
 pub mod house_spec;
 pub mod industry;
+pub mod industry_spec;
 pub mod industry_tile;
 pub mod map;
 pub mod newgrf_actions;
@@ -255,10 +256,17 @@ pub use industry::{
     PRODLEVEL_MINIMUM, change_industry_production, industry_produce_period_ticks,
     remove_closed_industries, transport_industry_goods,
 };
+pub use industry_spec::{
+    INDUSTRY_ORIGINAL_NUM_INPUTS, INDUSTRY_ORIGINAL_NUM_OUTPUTS, INVALID_INDUSTRY,
+    IndustryLayoutTile, IndustrySpecDef, IndustryTileLayout, NEW_INDUSTRY_OFFSET, NUM_INDUSTRY_TYPES,
+    cargo_type_from_label, empty_industry_overrides, empty_industry_spec_catalog,
+    get_cargo_translation, get_translated_industry_id, industry_spec_def, next_free_industry_id,
+};
 pub use industry_tile::{
     INVALID_INDUSTRY_TILE, IndustryTileGfxId, IndustryTileSpecDef, NEW_INDUSTRY_TILE_OFFSET,
     NUM_INDUSTRY_TILES, empty_industry_tile_overrides, get_clean_industry_gfx,
     get_translated_industry_tile_id, industry_tile_spec_def, next_free_industry_tile_gfx_id,
+    resolve_industry_tile_draw_gfx,
 };
 pub use map::{
     AIRPORT_RADAR_FRAMES, FloodingBehaviour, GFX_BUBBLE_GENERATOR, GFX_COAL_MINE_TOWER_ANIMATED,
@@ -307,13 +315,14 @@ pub use house_spec::{
 };
 pub use newgrf_actions::{
     ACTION0_FEATURE_BADGES, ACTION0_FEATURE_BRIDGES, ACTION0_FEATURE_CANALS,
-    ACTION0_FEATURE_CARGOES, ACTION0_FEATURE_HOUSES, ACTION0_FEATURE_INDUSTRYTILES,
-    ACTION0_FEATURE_OBJECTS, ACTION0_FEATURE_RAILTYPES, ACTION0_FEATURE_ROADSTOPS,
-    ACTION0_FEATURE_ROADTYPES, ACTION0_FEATURE_SOUNDS, ACTION0_FEATURE_STATIONS,
-    ACTION0_FEATURE_TRAINS, ACTION0_FEATURE_TRAMTYPES, Action0Header, Action5SlotSummary,
-    GrfInspectReport, ParsedBadgeMeta, ParsedBridgeMeta, ParsedCanalMeta, ParsedCargoMeta,
-    ParsedHouseMeta, ParsedIndustryTileMeta, ParsedObjectMeta, ParsedRailTypeMeta,
-    ParsedRoadStopMeta, ParsedRoadTypeMeta, ParsedSoundMeta, ParsedStationMeta, ParsedTrainMeta,
+    ACTION0_FEATURE_CARGOES, ACTION0_FEATURE_HOUSES, ACTION0_FEATURE_INDUSTRIES,
+    ACTION0_FEATURE_INDUSTRYTILES, ACTION0_FEATURE_OBJECTS, ACTION0_FEATURE_RAILTYPES,
+    ACTION0_FEATURE_ROADSTOPS, ACTION0_FEATURE_ROADTYPES, ACTION0_FEATURE_SOUNDS,
+    ACTION0_FEATURE_STATIONS, ACTION0_FEATURE_TRAINS, ACTION0_FEATURE_TRAMTYPES, Action0Header,
+    Action5SlotSummary, GrfInspectReport, ParsedBadgeMeta, ParsedBridgeMeta, ParsedCanalMeta,
+    ParsedCargoMeta, ParsedHouseMeta, ParsedIndustryMeta, ParsedIndustryTileMeta, ParsedObjectMeta,
+    ParsedRailTypeMeta, ParsedRoadStopMeta, ParsedRoadTypeMeta, ParsedSoundMeta, ParsedStationMeta,
+    ParsedTrainMeta,
     apply_newgrf_action5_airport_preview,
     apply_newgrf_action5_airport_preview_default_dirs, apply_newgrf_action5_all_default_dirs,
     apply_newgrf_action5_bridge_decks, apply_newgrf_action5_bridge_decks_default_dirs,
@@ -328,7 +337,8 @@ pub use newgrf_actions::{
     apply_newgrf_badges, apply_newgrf_badges_default_dirs, apply_newgrf_bridges,
     apply_newgrf_bridges_default_dirs, apply_newgrf_canals, apply_newgrf_canals_default_dirs,
     apply_newgrf_cargoes, apply_newgrf_cargoes_default_dirs, apply_newgrf_houses,
-    apply_newgrf_houses_default_dirs, apply_newgrf_industry_tiles,
+    apply_newgrf_houses_default_dirs, apply_newgrf_industries,
+    apply_newgrf_industries_default_dirs, apply_newgrf_industry_tiles,
     apply_newgrf_industry_tiles_default_dirs, apply_newgrf_objects,
     apply_newgrf_objects_default_dirs, apply_newgrf_rail_signals,
     apply_newgrf_rail_signals_default_dirs, apply_newgrf_road_types,
@@ -339,7 +349,8 @@ pub use newgrf_actions::{
     apply_newgrf_vehicles_trains_default_dirs, inspect_grf_bytes, inspect_grf_file,
     parse_action0_badge_meta, parse_action0_bridge_meta, parse_action0_canal_meta,
     parse_action0_cargo_meta, parse_action0_header, parse_action0_house_meta,
-    parse_action0_industry_tile_meta, parse_action0_object_meta, parse_action0_railtype_metas,
+    parse_action0_industry_meta, parse_action0_industry_tile_meta, parse_action0_object_meta,
+    parse_action0_railtype_metas,
     parse_action0_roadstop_meta, parse_action0_roadtype_meta, parse_action0_sound_meta,
     parse_action0_station_meta, parse_action0_train_meta,
 };

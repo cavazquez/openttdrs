@@ -23,6 +23,8 @@ pub const ACTION0_FEATURE_BRIDGES: u8 = 0x06;
 pub const ACTION0_FEATURE_HOUSES: u8 = 0x07;
 /// Feature Action0: `IndustryTiles` (`OpenTTD` `GSF_INDUSTRYTILES`).
 pub const ACTION0_FEATURE_INDUSTRYTILES: u8 = 0x09;
+/// Feature Action0: `Industries` (`OpenTTD` `GSF_INDUSTRIES`).
+pub const ACTION0_FEATURE_INDUSTRIES: u8 = 0x0A;
 /// Feature Action0: `Cargoes` (`OpenTTD` `GSF_CARGOES`).
 pub const ACTION0_FEATURE_CARGOES: u8 = 0x0B;
 /// Feature Action0: `Sounds` (`OpenTTD` `GSF_SOUNDFX`).
@@ -42,6 +44,16 @@ pub const ACTION0_FEATURE_BADGES: u8 = 0x15;
 const PROP_INDTILE_SUBST: u8 = 0x08;
 /// `IndustryTiles`: override vanilla gfx (`prop 0x09`).
 const PROP_INDTILE_OVERRIDE: u8 = 0x09;
+/// `IndustryTiles`: acceptance slot 0..2 WORD (`prop 0x0A`–`0x0C`).
+const PROP_INDTILE_ACCEPT_0: u8 = 0x0A;
+const PROP_INDTILE_ACCEPT_1: u8 = 0x0B;
+const PROP_INDTILE_ACCEPT_2: u8 = 0x0C;
+/// `IndustryTiles`: callback mask BYTE (`prop 0x0E`).
+const PROP_INDTILE_CALLBACK_MASK: u8 = 0x0E;
+/// `IndustryTiles`: variable-length acceptance (`prop 0x13`).
+const PROP_INDTILE_ACCEPT_LIST: u8 = 0x13;
+/// `IndustryTiles`: badge list WORD count + n×WORD (`prop 0x14`).
+const PROP_INDTILE_BADGES: u8 = 0x14;
 
 /// Prop etiqueta 4 chars (`RoadTypes` short / Stations class label / Badges / Objects / `RoadStops` class).
 const PROP_LABEL: u8 = 0x08;
@@ -329,6 +341,38 @@ pub struct ParsedIndustryTileMeta {
     pub subst_id: u8,
     /// Override de gfx vanilla (`prop 0x09`).
     pub override_of: Option<u8>,
+    /// Índices GRF-local de cargos aceptados (`0x0A`–`0x0C` / `0x13`).
+    pub accepts_cargo_indices: Vec<u8>,
+    /// Cantidades de aceptación (octavos; pueden ser negativas en `0x13`).
+    pub acceptance: Vec<i8>,
+    /// Callback mask (`prop 0x0E`); almacenado sin ejecutar.
+    pub callback_mask: u8,
+}
+
+/// Tesela cruda de layout industria (`prop 0x0A`); `local_tile` = gfx era `0xFE`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ParsedIndustryLayoutTile {
+    pub x: i8,
+    pub y: i8,
+    /// Gfx vanilla, o id local de IndustryTile si [`Self::use_local_tile`].
+    pub gfx_or_local: u16,
+    pub use_local_tile: bool,
+}
+
+/// Metadatos `Industries` Action0 (antes de asignar id ≥37).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParsedIndustryMeta {
+    pub local_id: u8,
+    pub subst_id: u8,
+    pub override_id: Option<u8>,
+    pub layouts: Vec<Vec<ParsedIndustryLayoutTile>>,
+    pub produced_cargo_indices: Vec<u8>,
+    pub accepted_cargo_indices: Vec<u8>,
+    pub production_rates: Vec<u8>,
+    pub input_multipliers: Vec<u16>,
+    pub callback_mask: u16,
+    pub cost_multiplier: u8,
+    pub name: String,
 }
 
 /// Metadatos `Houses` Action0 (antes de asignar id ≥110).
@@ -1055,6 +1099,7 @@ pub fn collect_station_metas_from_grf(data: &[u8]) -> Vec<ParsedStationMeta> {
 }
 
 #[must_use]
+#[allow(clippy::too_many_lines)]
 pub fn parse_action0_industry_tile_meta(payload: &[u8]) -> Option<ParsedIndustryTileMeta> {
     let header = parse_action0_header(payload)?;
     if header.feature != ACTION0_FEATURE_INDUSTRYTILES || header.num_ids == 0 {
@@ -1067,6 +1112,9 @@ pub fn parse_action0_industry_tile_meta(payload: &[u8]) -> Option<ParsedIndustry
     let mut i = 5usize;
     let mut subst_id: Option<u8> = None;
     let mut override_of: Option<u8> = None;
+    let mut accepts = [0xFFu8; 3];
+    let mut acceptance = [0i8; 3];
+    let mut callback_mask = 0u8;
     for _ in 0..header.num_props {
         if i >= payload.len() {
             break;
@@ -1094,25 +1142,93 @@ pub fn parse_action0_industry_tile_meta(payload: &[u8]) -> Option<ParsedIndustry
                     override_of = Some(o);
                 }
             }
-            0x0D | 0x0E | 0x10 | 0x11 | 0x12 => {
+            PROP_INDTILE_ACCEPT_0 | PROP_INDTILE_ACCEPT_1 | PROP_INDTILE_ACCEPT_2 => {
+                if i + 2 > payload.len() {
+                    break;
+                }
+                let acctp = u16::from_le_bytes([payload[i], payload[i + 1]]);
+                i += 2;
+                let slot = usize::from(prop - PROP_INDTILE_ACCEPT_0);
+                accepts[slot] = (acctp & 0xFF) as u8;
+                acceptance[slot] = ((acctp >> 8) as u8).min(16) as i8;
+            }
+            PROP_INDTILE_CALLBACK_MASK => {
+                if i >= payload.len() {
+                    break;
+                }
+                callback_mask = payload[i];
+                i += 1;
+            }
+            0x0D | 0x10 | 0x11 | 0x12 => {
                 if i >= payload.len() {
                     break;
                 }
                 i += 1;
             }
-            0x0A | 0x0B | 0x0C | 0x0F => {
+            0x0F => {
                 if i + 2 > payload.len() {
                     break;
                 }
                 i += 2;
             }
+            PROP_INDTILE_ACCEPT_LIST => {
+                if i >= payload.len() {
+                    break;
+                }
+                let num = usize::from(payload[i]);
+                i += 1;
+                accepts = [0xFF; 3];
+                acceptance = [0; 3];
+                for slot in 0..3 {
+                    if slot < num {
+                        if i + 2 > payload.len() {
+                            break;
+                        }
+                        accepts[slot] = payload[i];
+                        acceptance[slot] = payload[i + 1] as i8;
+                        i += 2;
+                    }
+                }
+                // Consumir extras si num > 3 (OpenTTD deshabilita GRF; nosotros avanzamos).
+                if num > 3 {
+                    let extra = (num - 3).saturating_mul(2);
+                    if i + extra > payload.len() {
+                        break;
+                    }
+                    i += extra;
+                }
+            }
+            PROP_INDTILE_BADGES => {
+                // ReadBadgeList: WORD count + n×WORD (estilo houses `0x24`).
+                if i + 2 > payload.len() {
+                    break;
+                }
+                let count = usize::from(u16::from_le_bytes([payload[i], payload[i + 1]]));
+                i += 2;
+                let need = count.saturating_mul(2);
+                if i + need > payload.len() {
+                    break;
+                }
+                i += need;
+            }
             _ => break,
+        }
+    }
+    let mut accepts_cargo_indices = Vec::new();
+    let mut acceptance_out = Vec::new();
+    for slot in 0..3 {
+        if accepts[slot] != 0xFF {
+            accepts_cargo_indices.push(accepts[slot]);
+            acceptance_out.push(acceptance[slot]);
         }
     }
     Some(ParsedIndustryTileMeta {
         local_id,
         subst_id: subst_id?,
         override_of,
+        accepts_cargo_indices,
+        acceptance: acceptance_out,
+        callback_mask,
     })
 }
 
@@ -1121,6 +1237,318 @@ pub fn collect_industry_tile_metas_from_grf(data: &[u8]) -> Vec<ParsedIndustryTi
     let mut out = Vec::new();
     let _ = for_each_pseudo_payload(data, |payload| {
         if let Some(meta) = parse_action0_industry_tile_meta(payload) {
+            out.push(meta);
+        }
+    });
+    out
+}
+
+/// Parsea Action0 `Industries` (`0x0A`). Requiere `prop 0x08` (subst) para definir el slot.
+#[must_use]
+#[allow(clippy::too_many_lines)]
+pub fn parse_action0_industry_meta(payload: &[u8]) -> Option<ParsedIndustryMeta> {
+    let header = parse_action0_header(payload)?;
+    if header.feature != ACTION0_FEATURE_INDUSTRIES || header.num_ids == 0 || payload.len() < 5 {
+        return None;
+    }
+    let local_id = payload[4];
+    let mut i = 5usize;
+    let mut subst_id: Option<u8> = None;
+    let mut override_id: Option<u8> = None;
+    let mut layouts: Vec<Vec<ParsedIndustryLayoutTile>> = Vec::new();
+    let mut produced_cargo_indices = Vec::new();
+    let mut accepted_cargo_indices = Vec::new();
+    let mut production_rates = vec![0u8; crate::industry_spec::INDUSTRY_ORIGINAL_NUM_OUTPUTS];
+    let mut input_multipliers = Vec::new();
+    let mut callback_mask = 0u16;
+    let mut cost_multiplier = 0u8;
+    let mut name = String::new();
+
+    for _ in 0..header.num_props {
+        if i >= payload.len() {
+            break;
+        }
+        let prop = payload[i];
+        i += 1;
+        match prop {
+            0x08 => {
+                if i >= payload.len() {
+                    break;
+                }
+                let s = payload[i];
+                i += 1;
+                if s == 0xFF {
+                    // Desactivar vanilla: no crea slot NewGRF.
+                    return None;
+                }
+                if u16::from(s) < crate::industry_spec::NEW_INDUSTRY_OFFSET {
+                    subst_id = Some(s);
+                }
+            }
+            0x09 => {
+                if i >= payload.len() {
+                    break;
+                }
+                let o = payload[i];
+                i += 1;
+                if u16::from(o) < crate::industry_spec::NEW_INDUSTRY_OFFSET {
+                    override_id = Some(o);
+                }
+            }
+            0x0A => {
+                let Some(parsed) = parse_industry_layouts(payload, &mut i) else {
+                    break;
+                };
+                layouts = parsed;
+            }
+            0x0B | 0x0F | 0x14 | 0x17 | 0x18 | 0x19 => {
+                if i >= payload.len() {
+                    break;
+                }
+                if prop == 0x0F {
+                    cost_multiplier = payload[i];
+                }
+                i += 1;
+            }
+            0x21 | 0x22 => {
+                if i >= payload.len() {
+                    break;
+                }
+                let shift = u16::from(prop - 0x21) * 8;
+                callback_mask = (callback_mask & !(0xFFu16 << shift))
+                    | (u16::from(payload[i]) << shift);
+                i += 1;
+            }
+            0x12 | 0x13 => {
+                if i >= payload.len() {
+                    break;
+                }
+                let idx = usize::from(prop - 0x12);
+                if idx < production_rates.len() {
+                    production_rates[idx] = payload[i];
+                }
+                i += 1;
+            }
+            0x0C | 0x0D | 0x0E | 0x1B | 0x1F | 0x24 => {
+                if i + 2 > payload.len() {
+                    break;
+                }
+                i += 2;
+            }
+            0x10 => {
+                // INDUSTRY_ORIGINAL_NUM_OUTPUTS bytes.
+                let n = crate::industry_spec::INDUSTRY_ORIGINAL_NUM_OUTPUTS;
+                if i + n > payload.len() {
+                    break;
+                }
+                produced_cargo_indices = payload[i..i + n].to_vec();
+                i += n;
+            }
+            0x11 => {
+                // INDUSTRY_ORIGINAL_NUM_INPUTS bytes + 1 unused.
+                let n = crate::industry_spec::INDUSTRY_ORIGINAL_NUM_INPUTS;
+                if i + n + 1 > payload.len() {
+                    break;
+                }
+                accepted_cargo_indices = payload[i..i + n].to_vec();
+                i += n + 1;
+            }
+            0x1A | 0x1C | 0x1D | 0x1E | 0x20 | 0x23 => {
+                if i + 4 > payload.len() {
+                    break;
+                }
+                if matches!(prop, 0x1C | 0x1D | 0x1E) {
+                    let multiples = u32::from_le_bytes([
+                        payload[i],
+                        payload[i + 1],
+                        payload[i + 2],
+                        payload[i + 3],
+                    ]);
+                    input_multipliers.push((multiples & 0xFFFF) as u16);
+                    input_multipliers.push((multiples >> 16) as u16);
+                }
+                i += 4;
+            }
+            0x15 | 0x25 | 0x26 | 0x27 => {
+                if i >= payload.len() {
+                    break;
+                }
+                let num = usize::from(payload[i]);
+                i += 1;
+                if i + num > payload.len() {
+                    break;
+                }
+                match prop {
+                    0x25 => {
+                        produced_cargo_indices = payload[i..i + num].to_vec();
+                    }
+                    0x26 => {
+                        accepted_cargo_indices = payload[i..i + num].to_vec();
+                    }
+                    0x27 => {
+                        production_rates = payload[i..i + num].to_vec();
+                    }
+                    _ => {}
+                }
+                i += num;
+            }
+            0x16 => {
+                // 3 conflicting industry types.
+                if i + 3 > payload.len() {
+                    break;
+                }
+                i += 3;
+            }
+            0x28 => {
+                if i + 2 > payload.len() {
+                    break;
+                }
+                let num_in = usize::from(payload[i]);
+                let num_out = usize::from(payload[i + 1]);
+                i += 2;
+                let need = num_in.saturating_mul(num_out).saturating_mul(2);
+                if i + need > payload.len() {
+                    break;
+                }
+                input_multipliers.clear();
+                for _ in 0..num_in * num_out {
+                    input_multipliers
+                        .push(u16::from_le_bytes([payload[i], payload[i + 1]]));
+                    i += 2;
+                }
+            }
+            0x29 => {
+                // Badge list: WORD count + n×WORD.
+                if i + 2 > payload.len() {
+                    break;
+                }
+                let count = usize::from(u16::from_le_bytes([payload[i], payload[i + 1]]));
+                i += 2;
+                let need = count.saturating_mul(2);
+                if i + need > payload.len() {
+                    break;
+                }
+                i += need;
+            }
+            PROP_NAME_CSTRING => {
+                let Some(nul) = payload[i..].iter().position(|&b| b == 0) else {
+                    break;
+                };
+                name = String::from_utf8_lossy(&payload[i..i + nul]).to_string();
+                i += nul + 1;
+            }
+            _ => break,
+        }
+    }
+
+    let subst_id = subst_id?;
+    if name.is_empty() {
+        name = format!("Industry {local_id}");
+    }
+    // Filtrar cargos inválidos 0xFF.
+    produced_cargo_indices.retain(|&c| c != 0xFF);
+    accepted_cargo_indices.retain(|&c| c != 0xFF);
+    Some(ParsedIndustryMeta {
+        local_id,
+        subst_id,
+        override_id,
+        layouts,
+        produced_cargo_indices,
+        accepted_cargo_indices,
+        production_rates,
+        input_multipliers,
+        callback_mask,
+        cost_multiplier,
+        name,
+    })
+}
+
+fn parse_industry_layouts(
+    payload: &[u8],
+    i: &mut usize,
+) -> Option<Vec<Vec<ParsedIndustryLayoutTile>>> {
+    if *i >= payload.len() {
+        return None;
+    }
+    let num_layouts = usize::from(payload[*i]);
+    *i += 1;
+    if *i + 4 > payload.len() {
+        return None;
+    }
+    let definition_size =
+        usize::try_from(u32::from_le_bytes(payload[*i..*i + 4].try_into().ok()?)).ok()?;
+    *i += 4;
+    let layout_start = *i;
+    let mut layouts = Vec::with_capacity(num_layouts);
+    for _ in 0..num_layouts {
+        let mut layout = Vec::new();
+        let mut k = 0usize;
+        loop {
+            if *i >= payload.len() || (*i).saturating_sub(layout_start) >= definition_size {
+                break;
+            }
+            let x = payload[*i];
+            *i += 1;
+            if x == 0xFE && k == 0 {
+                // Borrow vanilla layout: type + laynbr (consumidos; sin expandir).
+                if *i + 2 > payload.len() {
+                    return Some(layouts);
+                }
+                *i += 2;
+                break;
+            }
+            if *i >= payload.len() {
+                return Some(layouts);
+            }
+            let y = payload[*i];
+            *i += 1;
+            if x == 0 && y == 0x80 {
+                break;
+            }
+            if *i >= payload.len() {
+                return Some(layouts);
+            }
+            let gfx = payload[*i];
+            *i += 1;
+            let (gfx_or_local, use_local_tile) = if gfx == 0xFE {
+                if *i + 2 > payload.len() {
+                    return Some(layouts);
+                }
+                let local =
+                    u16::from_le_bytes([payload[*i], payload[*i + 1]]);
+                *i += 2;
+                (local, true)
+            } else {
+                (u16::from(gfx), false)
+            };
+            layout.push(ParsedIndustryLayoutTile {
+                x: x as i8,
+                y: y as i8,
+                gfx_or_local,
+                use_local_tile,
+            });
+            k += 1;
+        }
+        if !layout.is_empty() {
+            layouts.push(layout);
+        }
+    }
+    // Asegurar consumo exacto del bloque definition_size si quedó padding.
+    let consumed = (*i).saturating_sub(layout_start);
+    if consumed < definition_size {
+        let pad = definition_size - consumed;
+        if *i + pad <= payload.len() {
+            *i += pad;
+        }
+    }
+    Some(layouts)
+}
+
+#[must_use]
+pub fn collect_industry_metas_from_grf(data: &[u8]) -> Vec<ParsedIndustryMeta> {
+    let mut out = Vec::new();
+    let _ = for_each_pseudo_payload(data, |payload| {
+        if let Some(meta) = parse_action0_industry_meta(payload) {
             out.push(meta);
         }
     });

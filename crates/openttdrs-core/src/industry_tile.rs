@@ -31,6 +31,18 @@ pub struct IndustryTileSpecDef {
     /// Fallback vanilla (`subst_id` &lt; 175).
     pub subst_id: u16,
     pub from_newgrf: bool,
+    /// Índices GRF-local de cargos aceptados (`0x0A`–`0x0C` / `0x13`).
+    #[serde(default)]
+    pub accepts_cargo_indices: Vec<u8>,
+    /// Labels resueltos (`GetCargoTranslation` / `cargo_spec`).
+    #[serde(default)]
+    pub accepts_cargo_labels: Vec<String>,
+    /// Cantidades de aceptación (octavos; `0x0A`–`0x0C` / `0x13`).
+    #[serde(default)]
+    pub acceptance: Vec<i8>,
+    /// Callback mask (`prop 0x0E`); almacenado, sin ejecutar (#228).
+    #[serde(default)]
+    pub callback_mask: u8,
     /// Id local Action3 en el GRF.
     #[serde(default, skip)]
     pub newgrf_local_id: u8,
@@ -116,6 +128,19 @@ pub fn next_free_industry_tile_gfx_id(catalog: &[IndustryTileSpecDef]) -> Option
         .find(|&id| !catalog.iter().any(|d| d.gfx.as_u16() == id))
 }
 
+/// Gfx de dibujo: id NewGRF si hay Action3; si no, `subst_id` fallback.
+#[must_use]
+pub fn resolve_industry_tile_draw_gfx(gfx: u16, catalog: &[IndustryTileSpecDef]) -> u16 {
+    let Some(def) = industry_tile_spec_def(catalog, gfx) else {
+        return gfx;
+    };
+    if def.has_newgrf_sprites() {
+        gfx
+    } else {
+        def.subst_id
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -138,6 +163,10 @@ mod tests {
             gfx: IndustryTileGfxId(175),
             subst_id: 0,
             from_newgrf: true,
+            accepts_cargo_indices: Vec::new(),
+            accepts_cargo_labels: Vec::new(),
+            acceptance: Vec::new(),
+            callback_mask: 0,
             newgrf_local_id: 0,
             newgrf_grfid: 1,
             newgrf_preview: None,

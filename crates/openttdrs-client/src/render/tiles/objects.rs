@@ -63,7 +63,7 @@ fn spawn_airport_radar_overlay(
     ));
 }
 
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, clippy::needless_option_as_deref)]
 pub(crate) fn spawn_station_tile(
     commands: &mut Commands,
     map: &Map,
@@ -79,6 +79,9 @@ pub(crate) fn spawn_station_tile(
     mut images: Option<&mut Assets<Image>>,
     catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     mut catenary_sprites: Option<&mut crate::render::NewGrfCatenarySpriteCache>,
+    foundation_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    mut action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
+    roadstop_action5: &[Option<openttdrs_core::DecodedSprite>],
     climate: openttdrs_core::Climate,
     newgrf_stack: &[openttdrs_core::NewGrfEntry],
 ) {
@@ -116,7 +119,16 @@ pub(crate) fn spawn_station_tile(
             }
             // En pendiente el suelo ya se pintó arriba (evita hierba duplicada).
             let station_tb = if m5 & 1 != 0 { 0x02 } else { 0x01 };
-            let rail_base_z = spawn_rail_foundation(commands, assets, ctx, tileh, station_tb);
+            let rail_base_z = spawn_rail_foundation(
+                commands,
+                assets,
+                ctx,
+                tileh,
+                station_tb,
+                foundation_newgrf,
+                action5_sprites.as_deref_mut(),
+                images.as_deref_mut(),
+            );
             // OpenTTD: ground SPR_RAIL_TRACK_* bajo estación y waypoint (`station_land.h`).
             let track_sid = rail_station_ground_track_sprite(m5, tileh);
             if let Some(img) = assets.rail.get(&track_sid) {
@@ -371,6 +383,9 @@ pub(crate) fn spawn_station_tile(
                 base_z,
                 class,
                 dir,
+                roadstop_action5,
+                action5_sprites,
+                images,
             );
         }
         StationTileClass::RoadWaypoint => {
@@ -501,6 +516,9 @@ fn spawn_road_stop_buildings(
     base_z: u8,
     class: StationTileClass,
     dir: usize,
+    roadstop_action5: &[Option<openttdrs_core::DecodedSprite>],
+    mut action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
+    mut images: Option<&mut Assets<Image>>,
 ) {
     if buildings_hidden() {
         return;
@@ -510,8 +528,8 @@ fn spawn_road_stop_buildings(
         StationTileClass::Truck => &assets.truck_stop_builds,
         _ => return,
     };
+    let is_truck = class == StationTileClass::Truck;
     for (layer_i, spec) in road_stop_build_layers(class, dir).iter().enumerate() {
-        let image = &handles[dir][layer_i];
         let center = road_stop_build_sprite_center(
             ctx.iso_pos,
             ctx.tx_i32(),
@@ -522,6 +540,27 @@ fn spawn_road_stop_buildings(
             spec.w,
             spec.h,
         );
+        // Action5 `0x11`: sustituye la primera capa si hay sprite en el slot.
+        if layer_i == 0
+            && let Some(slot) = openttdrs_core::roadstop_action5_slot(is_truck, dir)
+            && let (Some(cache), Some(images)) = (action5_sprites.as_mut(), images.as_mut())
+            && let Some(sprite) = cache.sprite_colored(
+                openttdrs_core::ACTION5_TYPE_ROADSTOPS,
+                slot,
+                roadstop_action5,
+                Color::WHITE,
+                images,
+            )
+        {
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                sprite,
+                Transform::from_translation(center),
+            ));
+            continue;
+        }
+        let image = &handles[dir][layer_i];
         commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
@@ -563,6 +602,8 @@ pub(crate) fn spawn_transport_object_tile(
     dims: (u32, u32),
     catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     catenary_sprites: Option<&mut crate::render::NewGrfCatenarySpriteCache>,
+    bridge_decks_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
     images: Option<&mut Assets<Image>>,
 ) {
     let tileh = ctx.info.tileh;
@@ -699,6 +740,8 @@ pub(crate) fn spawn_transport_object_tile(
                     false,
                     catenary_newgrf,
                     catenary_sprites,
+                    bridge_decks_newgrf,
+                    action5_sprites,
                     images,
                 );
             }

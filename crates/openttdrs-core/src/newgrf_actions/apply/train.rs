@@ -20,11 +20,20 @@ fn vehicle_price_bases(kind: VehicleKind) -> (i64, i64) {
     }
 }
 
-fn push_feature_vehicles(catalog: &mut Vec<EngineDef>, data: &[u8], feature: u8, grfid: u32) {
+fn push_feature_vehicles(
+    catalog: &mut Vec<EngineDef>,
+    data: &[u8],
+    feature: u8,
+    grfid: u32,
+    climate_bit: u8,
+) {
     let metas = collect_vehicle_metas_from_grf(data, feature);
     let gfx =
         crate::newgrf_sprites::collect_feature_sprite_graphics(data, feature).unwrap_or_default();
     for meta in metas {
+        if meta.climate_mask & climate_bit == 0 {
+            continue;
+        }
         let Some(id) = next_free_engine_id(catalog) else {
             break;
         };
@@ -59,6 +68,7 @@ fn push_feature_vehicles(catalog: &mut Vec<EngineDef>, data: &[u8], feature: u8,
             reliability_spd_dec: meta.reliability_spd_dec,
             lifelength_years: meta.lifelength_years,
             model_life_years: meta.model_life_years,
+            load_amount: meta.load_amount,
             train_image_index: 0,
             dual_headed: false,
             rail_tilts: false,
@@ -79,6 +89,7 @@ fn push_feature_vehicles(catalog: &mut Vec<EngineDef>, data: &[u8], feature: u8,
 pub fn apply_newgrf_vehicles_trains(state: &mut GameState, search_dirs: &[&Path]) {
     let mut catalog = vanilla_engine_catalog();
     let stack = state.newgrf_stack.clone();
+    let climate_bit = state.climate.newgrf_landscape_bit();
     for entry in &stack {
         if !entry.enabled {
             continue;
@@ -97,6 +108,9 @@ pub fn apply_newgrf_vehicles_trains(state: &mut GameState, search_dirs: &[&Path]
         let gfx = crate::newgrf_sprites::collect_train_sprite_graphics(&data).unwrap_or_default();
         // Emparejar Action0 (orden de aparición) con ids locales 0,1,2,…
         for (local_idx, meta) in metas.into_iter().enumerate() {
+            if meta.climate_mask & climate_bit == 0 {
+                continue;
+            }
             let Some(id) = next_free_engine_id(&catalog) else {
                 break;
             };
@@ -115,23 +129,24 @@ pub fn apply_newgrf_vehicles_trains(state: &mut GameState, search_dirs: &[&Path]
                 kind: VehicleKind::Train,
                 name: meta.name,
                 max_speed: meta.max_speed,
-                price: (400_000_i64 * 20) >> 8,
-                running_cost_year: (5_200 * 80) >> 8,
-                capacity: 0,
-                cargo: None,
+                price: (400_000_i64 * i64::from(meta.price_factor)) >> 8,
+                running_cost_year: (5_200 * i64::from(meta.running_cost_factor)) >> 8,
+                capacity: meta.capacity,
+                cargo: meta.cargo,
                 power_hp: meta.power_hp,
-                weight_t: 80,
+                weight_t: meta.weight_t,
                 intro_year: meta.intro_year,
                 reliability_pct: 85,
-                reliability_spd_dec: crate::engine::DEFAULT_RELIABILITY_SPD_DEC,
-                lifelength_years: 30,
-                model_life_years: u8::MAX,
-                train_image_index: 2,
-                dual_headed: false,
-                rail_tilts: false,
-                curve_speed_mod: 0,
-                pow_wag_power: 0,
-                pow_wag_weight: 0,
+                reliability_spd_dec: meta.reliability_spd_dec,
+                lifelength_years: meta.lifelength_years,
+                model_life_years: meta.model_life_years,
+                load_amount: meta.load_amount,
+                train_image_index: meta.train_image_index,
+                dual_headed: meta.dual_headed,
+                rail_tilts: meta.rail_tilts,
+                curve_speed_mod: meta.curve_speed_mod,
+                pow_wag_power: meta.pow_wag_power,
+                pow_wag_weight: meta.pow_wag_weight,
                 from_newgrf: true,
                 newgrf_views: views,
                 newgrf_local_id: local_id,
@@ -145,7 +160,7 @@ pub fn apply_newgrf_vehicles_trains(state: &mut GameState, search_dirs: &[&Path]
             ACTION0_FEATURE_SHIPS,
             ACTION0_FEATURE_AIRCRAFT,
         ] {
-            push_feature_vehicles(&mut catalog, &data, feature, entry.grfid);
+            push_feature_vehicles(&mut catalog, &data, feature, entry.grfid, climate_bit);
         }
     }
     state.engine_catalog = catalog;

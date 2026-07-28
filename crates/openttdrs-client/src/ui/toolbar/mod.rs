@@ -22,7 +22,7 @@ mod systems;
 
 pub(crate) use airport_picker_window::{
     airport_picker_on_closed, handle_airport_picker_buttons, setup_airport_picker,
-    sync_airport_picker,
+    sync_airport_picker, sync_airport_preview_image,
 };
 pub(crate) use bridge_window::{
     BridgeBuildState, PendingBridge, bridge_picker_on_closed, handle_bridge_picker_buttons,
@@ -43,7 +43,7 @@ pub(crate) use editor_toolbar::{
     sync_editor_toolbar_button_visuals, sync_editor_toolbar_date, sync_editor_toolbar_layout,
     sync_editor_toolbar_visibility, sync_editor_town_dropdown,
 };
-pub(crate) use icons::ToolbarIcon;
+pub(crate) use icons::{Action5GuiIconSlot, ToolbarIcon, sync_action5_gui_toolbar_icons};
 pub(crate) use layout::{
     ResponsiveToolbarSlot, ToolbarLayoutState, handle_toolbar_switch, setup_top_toolbar,
     sync_toolbar_layout,

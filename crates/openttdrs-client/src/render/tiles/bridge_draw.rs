@@ -9,7 +9,10 @@ use openttdrs_core::{
 
 use crate::iso::{HEIGHT_PX, TILE_HALF_H, remap_tile_offset, tile_pos_half, tile_slope_and_min_z};
 use crate::render::catenary_newgrf::catenary_sprite_colored;
-use crate::render::{MapVisualLayer, NewGrfCatenarySpriteCache, TileRenderContext, WorldAssets};
+use crate::render::{
+    MapVisualLayer, NewGrfAction5SpriteCache, NewGrfCatenarySpriteCache, TileRenderContext,
+    WorldAssets,
+};
 use crate::sprites::{
     RAIL_SPRITE_TRACK_X, RAIL_SPRITE_TRACK_Y, bridge_deck_sprite_ids, bridge_sprite_meta,
     bridge_structure_palette, catenary_sprite_color, catenary_tile_location_group,
@@ -37,6 +40,8 @@ pub(crate) struct BridgeSpanInfo {
     pub middle_num: u32,
     /// ¿La rampa norte es vía eléctrica?
     pub electric: bool,
+    /// Tipo de vía en la rampa norte (para Action5 bridge decks).
+    pub rail_type: openttdrs_core::RailType,
 }
 
 fn ramp_tile(tile: Tile) -> bool {
@@ -191,10 +196,11 @@ pub(crate) fn bridge_span_at(
     } else {
         north_len.saturating_sub(1).min(middle_length).max(1)
     };
-    let electric = rail
-        && map
-            .get(north)
-            .is_some_and(|t| rail_type_from_tile(t).has_catenary());
+    let rail_type = map
+        .get(north)
+        .map(rail_type_from_tile)
+        .unwrap_or(openttdrs_core::RailType::Rail);
+    let electric = rail && rail_type.has_catenary();
 
     Some(BridgeSpanInfo {
         deck_z,
@@ -205,6 +211,7 @@ pub(crate) fn bridge_span_at(
         middle_length,
         middle_num,
         electric,
+        rail_type,
     })
 }
 
@@ -355,7 +362,9 @@ pub(crate) fn spawn_bridge_deck(
     draw_pillars: bool,
     catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     catenary_sprites: Option<&mut NewGrfCatenarySpriteCache>,
-    images: Option<&mut Assets<Image>>,
+    bridge_decks_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    mut action5_sprites: Option<&mut NewGrfAction5SpriteCache>,
+    mut images: Option<&mut Assets<Image>>,
 ) {
     use crate::sprites::{TransparencyOption, is_hidden};
     if is_hidden(TransparencyOption::Bridges) {
@@ -393,6 +402,31 @@ pub(crate) fn spawn_bridge_deck(
         span.deck_z,
         span.bridge_type,
     );
+    // Superficie Action5 `0x1B` (tablero NewGRF sobre la estructura OpenGFX).
+    if let Some(slot) =
+        openttdrs_core::bridge_decks_action5_slot(span.rail, span.rail_type, span.axis)
+        && let (Some(cache), Some(images)) = (action5_sprites.as_mut(), images.as_mut())
+        && let Some(sprite) = cache.sprite_colored(
+            openttdrs_core::ACTION5_TYPE_BRIDGE_DECKS,
+            slot,
+            bridge_decks_newgrf,
+            Color::WHITE,
+            images,
+        )
+    {
+        commands.spawn((
+            MapVisualLayer,
+            ctx.map_tile_chunk(),
+            sprite,
+            Transform::from_translation(tile_pos_half(
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+                span.deck_z,
+                DECK_LAYER_FRAC + 0.001,
+                TILE_HALF_H,
+            )),
+        ));
+    }
     if span.rail && bridge_draws_separate_rail_overlay(span.bridge_type) {
         spawn_bridge_rail_overlay(commands, assets, ctx, span);
     }

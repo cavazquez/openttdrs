@@ -79,6 +79,24 @@ pub struct SimulationRuntime {
     /// Slots Action5 catenary `0x05` (wires/entrances/pylons; `None` = `OpenGFX`).
     pub catenary_newgrf_sprites: Vec<Option<crate::newgrf_sprites::DecodedSprite>>,
 
+    /// Slots Action5 foundations `0x06` (90; `None` = `OpenGFX`).
+    pub foundation_newgrf_sprites: Vec<Option<crate::newgrf_sprites::DecodedSprite>>,
+
+    /// Slots Action5 one-way roads `0x09` (18; `None` = `OpenGFX`).
+    pub oneway_newgrf_sprites: Vec<Option<crate::newgrf_sprites::DecodedSprite>>,
+
+    /// Slots Action5 road stops `0x11` (8; `None` = `OpenGFX`). No es el catálogo Action0 `RoadStops`.
+    pub roadstop_action5_newgrf_sprites: Vec<Option<crate::newgrf_sprites::DecodedSprite>>,
+
+    /// Slots Action5 `OpenTTD` GUI `0x15` (192; `None` = sprite base).
+    pub openttd_gui_newgrf_sprites: Vec<Option<crate::newgrf_sprites::DecodedSprite>>,
+
+    /// Slots Action5 airport preview `0x16` (9; `None` = preview vanilla).
+    pub airport_preview_newgrf_sprites: Vec<Option<crate::newgrf_sprites::DecodedSprite>>,
+
+    /// Slots Action5 bridge decks `0x1B` (24; `None` = `OpenGFX`).
+    pub bridge_decks_newgrf_sprites: Vec<Option<crate::newgrf_sprites::DecodedSprite>>,
+
     /// Overrides Action3 `RailType` `Signals`, indexados por `RailType` vanilla.
     pub rail_signal_newgrf: Vec<Option<crate::rail_type::RailSignalSpriteSpec>>,
 
@@ -123,6 +141,12 @@ impl SimulationRuntime {
             parity: None,
             shore_newgrf_sprites: Vec::new(),
             catenary_newgrf_sprites: Vec::new(),
+            foundation_newgrf_sprites: Vec::new(),
+            oneway_newgrf_sprites: Vec::new(),
+            roadstop_action5_newgrf_sprites: Vec::new(),
+            openttd_gui_newgrf_sprites: Vec::new(),
+            airport_preview_newgrf_sprites: Vec::new(),
+            bridge_decks_newgrf_sprites: Vec::new(),
             rail_signal_newgrf: Vec::new(),
             station_flows: crate::flow_stat::StationFlows::default(),
             station_flow_rebuilds: 0,

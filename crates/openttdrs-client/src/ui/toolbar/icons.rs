@@ -1,5 +1,10 @@
 //! Catálogo tipado de sprites `SPR_IMG_*` extraídos desde OpenGFX (#238).
 
+use bevy::prelude::*;
+
+use crate::render::NewGrfAction5SpriteCache;
+use crate::state::SimWorld;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum ToolbarIcon {
     Pause,
@@ -55,6 +60,46 @@ impl ToolbarIcon {
             Self::Fleet => "assets/opengfx/tiles/toolbar_trains.png",
             Self::Finances => "assets/opengfx/tiles/toolbar_finances.png",
         }
+    }
+
+    /// Slot Action5 `0x15` (`SPR_OPENTTD_BASE + slot`) si el icono vive en esa tabla.
+    #[must_use]
+    pub(crate) const fn openttd_gui_action5_slot(self) -> Option<u16> {
+        match self {
+            // `SPR_IMG_FASTFORWARD` / `SPR_IMG_SWITCH_TOOLBAR` / `SPR_IMG_BUILDTRAMS`
+            Self::FastForward => Some(90),
+            Self::Switch => Some(144),
+            Self::BuildTram => Some(179),
+            _ => None,
+        }
+    }
+}
+
+/// Icono de toolbar sustituible por Action5 OpenTTD GUI (`0x15`).
+#[derive(Component, Clone, Copy)]
+pub(crate) struct Action5GuiIconSlot(pub u16);
+
+/// Sustituye iconos marcados si el stack NewGRF aportó el slot Action5 `0x15`.
+pub(crate) fn sync_action5_gui_toolbar_icons(
+    sim: Res<SimWorld>,
+    mut cache: ResMut<NewGrfAction5SpriteCache>,
+    mut images: ResMut<Assets<Image>>,
+    mut icons: Query<(&Action5GuiIconSlot, &mut ImageNode)>,
+) {
+    let table = &sim.state.runtime.openttd_gui_newgrf_sprites;
+    if table.is_empty() {
+        return;
+    }
+    for (slot, mut node) in &mut icons {
+        let Some(decoded) = table.get(usize::from(slot.0)).and_then(|s| s.as_ref()) else {
+            continue;
+        };
+        node.image = cache.handle_for(
+            openttdrs_core::ACTION5_TYPE_OPENTTD_GUI,
+            slot.0,
+            decoded,
+            &mut images,
+        );
     }
 }
 

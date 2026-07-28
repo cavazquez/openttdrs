@@ -14,6 +14,17 @@ pub enum Climate {
 }
 
 impl Climate {
+    /// Bit usado por `EngineInfo::climates` / Action0 prop `0x06`.
+    #[must_use]
+    pub const fn newgrf_landscape_bit(self) -> u8 {
+        1 << match self {
+            Self::Temperate => 0,
+            Self::SubArctic => 1,
+            Self::SubTropical => 2,
+            Self::Toyland => 3,
+        }
+    }
+
     /// Parsea nombres usados en `OPENTTDRS_CLIMATE` y saves JSON.
     #[must_use]
     pub fn parse(s: &str) -> Option<Self> {

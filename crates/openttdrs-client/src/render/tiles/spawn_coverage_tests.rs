@@ -127,6 +127,8 @@ fn water_surface_markers_cover_flat_locks_and_industry_water() {
                     &openttdrs_core::empty_industry_tile_overrides(),
                     None,
                     &[],
+                    None,
+                    &[],
                 );
             },
         )
@@ -228,6 +230,8 @@ fn spawn_road_rail_station_and_transport_cover_main_paths() {
                     None,
                     None,
                     &[],
+                    &[],
+                    None,
                 );
                 spawn_road_tile(
                     &mut commands,
@@ -244,6 +248,8 @@ fn spawn_road_rail_station_and_transport_cover_main_paths() {
                     None,
                     None,
                     &[],
+                    &[],
+                    None,
                 );
                 spawn_rail_tile(
                     &mut commands,
@@ -257,6 +263,8 @@ fn spawn_road_rail_station_and_transport_cover_main_paths() {
                     true,
                     true,
                     false,
+                    &[],
+                    None,
                     &[],
                     None,
                     &[],
@@ -282,6 +290,8 @@ fn spawn_road_rail_station_and_transport_cover_main_paths() {
                     None,
                     &[],
                     None,
+                    &[],
+                    None,
                     None,
                     0,
                     &[],
@@ -301,6 +311,9 @@ fn spawn_road_rail_station_and_transport_cover_main_paths() {
                     None,
                     &[],
                     None,
+                    &[],
+                    None,
+                    &[],
                     TEST_CLIMATE,
                     &[],
                 );
@@ -314,6 +327,8 @@ fn spawn_road_rail_station_and_transport_cover_main_paths() {
                         4.0,
                         &m.0,
                         (m.0.dimensions().0, m.0.dimensions().1),
+                        &[],
+                        None,
                         &[],
                         None,
                         None,
@@ -450,6 +465,8 @@ fn spawn_land_house_industry_generics_and_batches() {
                     &openttdrs_core::empty_industry_tile_overrides(),
                     None,
                     &[],
+                    None,
+                    &[],
                 );
 
                 let mut batches = MapSpriteBatches::default();
@@ -526,6 +543,8 @@ fn spawn_sloped_road_and_station_hit_slope_ground_branch() {
                     None,
                     None,
                     &[],
+                    &[],
+                    None,
                 );
                 spawn_station_tile(
                     &mut commands,
@@ -542,6 +561,9 @@ fn spawn_sloped_road_and_station_hit_slope_ground_branch() {
                     None,
                     &[],
                     None,
+                    &[],
+                    None,
+                    &[],
                     TEST_CLIMATE,
                     &[],
                 );
@@ -596,6 +618,8 @@ fn spawn_industry_on_slope_spawns_foundation_layer() {
                     &openttdrs_core::empty_industry_tile_overrides(),
                     None,
                     &[],
+                    None,
+                    &[],
                 );
             },
         )
@@ -642,6 +666,8 @@ fn spawn_bridge_middle_draws_deck_over_marked_water() {
                     &TileRenderContext::new(&m.0, &g.0, 2, 1),
                     &[],
                     None,
+                    &[],
+                    None,
                     None,
                 );
                 // Tesela sin puente encima: no debe agregar nada.
@@ -651,6 +677,8 @@ fn spawn_bridge_middle_draws_deck_over_marked_water() {
                     dims,
                     &a.0,
                     &TileRenderContext::new(&m.0, &g.0, 6, 6),
+                    &[],
+                    None,
                     &[],
                     None,
                     None,
@@ -708,6 +736,8 @@ fn power_plant_chimney_spawns_animated_smoke() {
                         &openttdrs_core::empty_industry_tile_overrides(),
                         None,
                         &[],
+                        None,
+                        &[],
                     );
                 },
             )
@@ -762,6 +792,8 @@ fn copper_mine_chimney_spawns_animated_smoke() {
                         &mut images,
                         &[],
                         &openttdrs_core::empty_industry_tile_overrides(),
+                        None,
+                        &[],
                         None,
                         &[],
                     );
@@ -822,6 +854,8 @@ fn paved_roadside_uses_paved_set_and_streetlights_spawn_lamps() {
                     None,
                     None,
                     &[],
+                    &[],
+                    None,
                 );
             },
         )
@@ -858,6 +892,8 @@ fn paved_roadside_uses_paved_set_and_streetlights_spawn_lamps() {
                     None,
                     None,
                     &[],
+                    &[],
+                    None,
                 );
             },
         )

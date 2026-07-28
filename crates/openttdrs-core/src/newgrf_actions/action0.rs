@@ -90,6 +90,22 @@ pub struct ParsedTrainMeta {
     pub intro_year: u16,
     pub max_speed: u16,
     pub power_hp: u32,
+    pub lifelength_years: u8,
+    pub model_life_years: u8,
+    pub reliability_spd_dec: u16,
+    pub climate_mask: u8,
+    pub load_amount: u8,
+    pub train_image_index: u8,
+    pub dual_headed: bool,
+    pub capacity: u32,
+    pub cargo: Option<crate::cargo::CargoType>,
+    pub weight_t: u16,
+    pub price_factor: u8,
+    pub running_cost_factor: u8,
+    pub pow_wag_power: u32,
+    pub pow_wag_weight: u16,
+    pub rail_tilts: bool,
+    pub curve_speed_mod: i16,
 }
 
 /// Subset de propiedades Action0 que alimenta el catálogo jugable de vehículos.
@@ -111,6 +127,8 @@ pub struct ParsedVehicleMeta {
     pub weight_t: u16,
     pub lifelength_years: u8,
     pub model_life_years: u8,
+    pub climate_mask: u8,
+    pub load_amount: u8,
     pub reliability_spd_dec: u16,
 }
 
@@ -170,6 +188,8 @@ impl ParsedVehicleMeta {
             weight_t: weight,
             lifelength_years: life,
             model_life_years: u8::MAX,
+            climate_mask: 0x0F,
+            load_amount: 0,
             reliability_spd_dec: if feature == ACTION0_FEATURE_SHIPS {
                 crate::engine::SHIP_RELIABILITY_SPD_DEC
             } else {
@@ -592,6 +612,7 @@ pub fn collect_industry_tile_metas_from_grf(data: &[u8]) -> Vec<ParsedIndustryTi
 }
 
 #[must_use]
+#[allow(clippy::too_many_lines)]
 pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
     let header = parse_action0_header(payload)?;
     if header.feature != ACTION0_FEATURE_TRAINS || header.num_ids == 0 {
@@ -605,6 +626,22 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
     let mut intro_year = 1920u16;
     let mut max_speed = 96u16;
     let mut power_hp = 500u32;
+    let mut lifelength_years = 30u8;
+    let mut model_life_years = u8::MAX;
+    let mut reliability_spd_dec = crate::engine::DEFAULT_RELIABILITY_SPD_DEC;
+    let mut climate_mask = 0x0Fu8;
+    let mut load_amount = 0u8;
+    let mut train_image_index = 2u8;
+    let mut dual_headed = false;
+    let mut capacity = 0u32;
+    let mut cargo = None;
+    let mut weight_t = 80u16;
+    let mut price_factor = 20u8;
+    let mut running_cost_factor = 80u8;
+    let mut pow_wag_power = 0u32;
+    let mut pow_wag_weight = 0u16;
+    let mut rail_tilts = false;
+    let mut curve_speed_mod = 0i16;
     for _ in 0..header.num_props {
         if i >= payload.len() {
             break;
@@ -612,12 +649,107 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
         let prop = payload[i];
         i += 1;
         match prop {
-            PROP_INTRO_YEAR => {
+            0x00 => {
                 if i + 2 > payload.len() {
                     break;
                 }
-                intro_year = u16::from_le_bytes([payload[i], payload[i + 1]]);
+                let days = u16::from_le_bytes([payload[i], payload[i + 1]]);
+                intro_year = 1920u16.saturating_add(days / 365);
                 i += 2;
+            }
+            0x02 => {
+                reliability_spd_dec = u16::from(read_u8(payload, &mut i)?) << 2;
+            }
+            0x03 => {
+                lifelength_years = read_u8(payload, &mut i)?;
+            }
+            0x04 => {
+                model_life_years = read_u8(payload, &mut i)?;
+            }
+            0x06 => {
+                climate_mask = read_u8(payload, &mut i)?;
+            }
+            0x07 => {
+                load_amount = read_u8(payload, &mut i)?;
+            }
+            0x0D => {
+                running_cost_factor = read_u8(payload, &mut i)?;
+            }
+            0x12 => {
+                let mut spriteid = read_u8(payload, &mut i)?;
+                // TTD sprite IDs → índice local (`CUSTOM_VEHICLE_SPRITENUM` = 0xFD).
+                if spriteid < 0xFD {
+                    spriteid >>= 1;
+                }
+                train_image_index = spriteid;
+            }
+            0x13 => {
+                dual_headed = read_u8(payload, &mut i)? != 0;
+            }
+            0x14 => {
+                capacity = u32::from(read_u8(payload, &mut i)?);
+            }
+            0x15 => {
+                let ctype = read_u8(payload, &mut i)?;
+                cargo = if ctype == 0xFF {
+                    None
+                } else {
+                    crate::cargo::CargoType::from_temperate_id(ctype)
+                };
+            }
+            0x16 => {
+                // Upstream: peso low BYTE. Fixtures locales usan WORD año (1800..3000).
+                if let Some(year) = payload.get(i..i.checked_add(2)?).and_then(|bytes| {
+                    let year = u16::from_le_bytes([bytes[0], bytes[1]]);
+                    (1800..3000).contains(&year).then_some(year)
+                }) {
+                    intro_year = year;
+                    i += 2;
+                } else {
+                    weight_t = (weight_t & 0xFF00) | u16::from(read_u8(payload, &mut i)?);
+                }
+            }
+            0x17 => {
+                price_factor = read_u8(payload, &mut i)?;
+            }
+            0x1B => {
+                pow_wag_power = u32::from(read_u16(payload, &mut i)?);
+            }
+            0x23 => {
+                pow_wag_weight = u16::from(read_u8(payload, &mut i)?);
+            }
+            0x24 => {
+                let hi = read_u8(payload, &mut i)?;
+                if hi <= 4 {
+                    weight_t = (u16::from(hi) << 8) | (weight_t & 0x00FF);
+                }
+            }
+            0x27 => {
+                // `EngineMiscFlag::RailTilts` = bit 0.
+                rail_tilts = read_u8(payload, &mut i)? & 0x01 != 0;
+            }
+            0x2E => {
+                curve_speed_mod = i16::from_le_bytes(read_u16(payload, &mut i)?.to_le_bytes());
+            }
+            // Anchos fijos restantes consumidos sin semántica runtime.
+            0x08 | 0x0A | 0x0C | 0x0F | 0x10 | 0x11 | 0x18 | 0x19 | 0x1C | 0x1E | 0x1F | 0x20
+            | 0x21 | 0x22 | 0x25 | 0x26 | 0x31 => {
+                skip_bytes(payload, &mut i, 1)?;
+            }
+            0x1A => {
+                // Extended byte sort order: BYTE en fixtures locales.
+                skip_bytes(payload, &mut i, 1)?;
+            }
+            0x1D | 0x28 | 0x29 | 0x2B | 0x2F => {
+                skip_bytes(payload, &mut i, 2)?;
+            }
+            // 0x0E running cost base; 0x2A/0x30 listas/DWORD: consumidas.
+            0x0E | 0x2A | 0x30 => {
+                skip_bytes(payload, &mut i, 4)?;
+            }
+            0x2C | 0x2D => {
+                let count = usize::from(read_u8(payload, &mut i)?);
+                skip_bytes(payload, &mut i, count)?;
             }
             PROP_TRAIN_SPEED => {
                 if i + 2 > payload.len() {
@@ -651,6 +783,22 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
         intro_year,
         max_speed,
         power_hp,
+        lifelength_years,
+        model_life_years,
+        reliability_spd_dec,
+        climate_mask,
+        load_amount,
+        train_image_index,
+        dual_headed,
+        capacity,
+        cargo,
+        weight_t,
+        price_factor,
+        running_cost_factor,
+        pow_wag_power,
+        pow_wag_weight,
+        rail_tilts,
+        curve_speed_mod,
     })
 }
 
@@ -712,8 +860,16 @@ fn parse_common_vehicle_property(
                 meta.model_life_years = read_u8(payload, i)?;
             }
         }
-        // Climate mask y load amount aún no tienen campo runtime.
-        0x06 | 0x07 => skip_bytes(payload, i, metas.len())?,
+        0x06 => {
+            for meta in metas {
+                meta.climate_mask = read_u8(payload, i)?;
+            }
+        }
+        0x07 => {
+            for meta in metas {
+                meta.load_amount = read_u8(payload, i)?;
+            }
+        }
         _ => return Some(false),
     }
     Some(true)

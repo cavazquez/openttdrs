@@ -39,7 +39,8 @@ use crate::ui::toolbar::{
     setup_bridge_picker, setup_build_menu, setup_depot_panel, setup_minimap, setup_order_panel,
     setup_rail_station_picker, setup_signal_picker, setup_station_cargo_panel, setup_top_toolbar,
     signal_picker_on_closed, station_catalog_filter_keyboard, station_rename_editable_keyboard,
-    station_rename_keyboard, sync_airport_picker, sync_bridge_picker, sync_build_pointer_modifiers,
+    station_rename_keyboard, sync_action5_gui_toolbar_icons, sync_airport_picker,
+    sync_airport_preview_image, sync_bridge_picker, sync_build_pointer_modifiers,
     sync_climate_industry_tools, sync_company_colour_swatch_visuals, sync_company_selector,
     sync_depot_panel, sync_editor_only_build_tools, sync_minimap, sync_order_panel,
     sync_orders_pick_cursor, sync_rail_station_picker, sync_rail_toolbar_icons,
@@ -302,6 +303,8 @@ impl Plugin for ToolbarUiPlugin {
                     sync_road_type_entry_previews,
                     sync_road_type_class_labels,
                     sync_station_spec_entry_previews,
+                    sync_action5_gui_toolbar_icons,
+                    sync_airport_preview_image,
                 )
                     .in_set(UpdateSet::Ui)
                     .run_if(in_state(ClientScreen::InGame)),

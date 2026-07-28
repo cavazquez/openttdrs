@@ -53,9 +53,13 @@ pub struct EngineDef {
     #[serde(default = "default_lifelength_years")]
     pub lifelength_years: u8,
     /// Años durante los que el modelo permanece a la venta (`EngineInfo::base_life`).
-    /// `0xFF` conserva la semántica de disponibilidad ilimitada de OpenTTD.
+    /// `0xFF` conserva la semántica de disponibilidad ilimitada de `OpenTTD`.
     #[serde(default = "default_model_life_years")]
     pub model_life_years: u8,
+    /// Unidades transferidas por tick (`EngineInfo::load_amount`). Cero usa el
+    /// fallback por tipo de carga para saves y motores vanilla del port.
+    #[serde(default)]
+    pub load_amount: u8,
     /// Índice de sprite de locomotora (`OpenTTD` `image_index`; 0 en carretera).
     pub train_image_index: u8,
     /// `RailVehicleType::Multihead` (`engines.h`): compra spawnea cabina trasera.

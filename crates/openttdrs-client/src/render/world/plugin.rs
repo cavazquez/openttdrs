@@ -30,6 +30,7 @@ pub(crate) struct NewGrfMapSpriteCaches<'w> {
     pub catenary: ResMut<'w, crate::render::NewGrfCatenarySpriteCache>,
     pub signal: ResMut<'w, crate::render::NewGrfSignalSpriteCache>,
     pub industry: ResMut<'w, crate::render::NewGrfIndustrySpriteCache>,
+    pub action5: ResMut<'w, crate::render::NewGrfAction5SpriteCache>,
 }
 
 /// Petición de redibujo del mapa. `sync_camera`: solo tras F9 / cambio de tamaño.
@@ -118,6 +119,7 @@ impl Plugin for WorldRenderPlugin {
             .init_resource::<crate::render::NewGrfCatenarySpriteCache>()
             .init_resource::<crate::render::NewGrfSignalSpriteCache>()
             .init_resource::<crate::render::NewGrfIndustrySpriteCache>()
+            .init_resource::<crate::render::NewGrfAction5SpriteCache>()
             .add_systems(OnEnter(ClientScreen::InGame), setup)
             .add_systems(
                 Update,

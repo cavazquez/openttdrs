@@ -8,9 +8,10 @@ use crate::render::effect_fx::FxSpawnQueue;
 use crate::render::{
     ChimneySmokeFrames, CompanyColoredSprites, CopperMineSmokeFrames, EffectVehicleFrames,
     FizzyDrinkAnimFrames, LighthouseAnimFrames, LoadedMapTileChunks, MapTileSpawnViewport,
-    NewGrfCatenarySpriteCache, NewGrfRoadSpriteCache, NewGrfShoreSpriteCache,
-    NewGrfStationSpriteCache, NewGrfTrainSpriteCache, RefineryFireAnimFrames,
-    RemapMapVisualsPending, TileAtlas, TruckHandles, VehicleIndex, WaterAnimFrames, WorldAssets,
+    NewGrfAction5SpriteCache, NewGrfCatenarySpriteCache, NewGrfRoadSpriteCache,
+    NewGrfShoreSpriteCache, NewGrfStationSpriteCache, NewGrfTrainSpriteCache,
+    RefineryFireAnimFrames, RemapMapVisualsPending, TileAtlas, TruckHandles, VehicleIndex,
+    WaterAnimFrames, WorldAssets,
 };
 use crate::simulation::SimClock;
 use crate::state::{EditorSession, OrderPickState};
@@ -150,6 +151,12 @@ fn clear_newgrf_shore_sprites(world: &mut World) {
 
 fn clear_newgrf_catenary_sprites(world: &mut World) {
     if let Some(mut cache) = world.get_resource_mut::<NewGrfCatenarySpriteCache>() {
+        cache.clear();
+    }
+}
+
+fn clear_newgrf_action5_sprites(world: &mut World) {
+    if let Some(mut cache) = world.get_resource_mut::<NewGrfAction5SpriteCache>() {
         cache.clear();
     }
 }
@@ -309,6 +316,10 @@ pub(super) static RESOURCE_RESETS: &[ResourceTeardown] = &[
     ResourceTeardown {
         name: "NewGrfCatenarySpriteCache",
         apply: clear_newgrf_catenary_sprites,
+    },
+    ResourceTeardown {
+        name: "NewGrfAction5SpriteCache",
+        apply: clear_newgrf_action5_sprites,
     },
     ResourceTeardown {
         name: "DestinationPickerState",
@@ -505,6 +516,10 @@ pub(super) static RESOURCE_REMOVES: &[ResourceTeardown] = &[
     ResourceTeardown {
         name: "NewGrfCatenarySpriteCache(remove)",
         apply: remove_res::<NewGrfCatenarySpriteCache>,
+    },
+    ResourceTeardown {
+        name: "NewGrfAction5SpriteCache(remove)",
+        apply: remove_res::<NewGrfAction5SpriteCache>,
     },
 ];
 

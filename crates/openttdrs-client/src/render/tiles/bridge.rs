@@ -18,6 +18,8 @@ pub(crate) fn spawn_bridge_middle(
     ctx: &TileRenderContext,
     catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     catenary_sprites: Option<&mut crate::render::NewGrfCatenarySpriteCache>,
+    bridge_decks_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
     images: Option<&mut Assets<Image>>,
 ) {
     let Some(tile) = ctx.tile else {
@@ -37,6 +39,8 @@ pub(crate) fn spawn_bridge_middle(
         true,
         catenary_newgrf,
         catenary_sprites,
+        bridge_decks_newgrf,
+        action5_sprites,
         images,
     );
 }

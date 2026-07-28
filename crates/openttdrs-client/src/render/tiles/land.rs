@@ -165,6 +165,8 @@ pub(crate) fn spawn_industry_tile(
     industry_catalog: &[openttdrs_core::IndustryTileSpecDef],
     industry_overrides: &[u16],
     mut industry_sprites: Option<&mut crate::render::NewGrfIndustrySpriteCache>,
+    foundation_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
     newgrf_stack: &[openttdrs_core::NewGrfEntry],
 ) {
     let tileh = ctx.info.tileh;
@@ -237,7 +239,15 @@ pub(crate) fn spawn_industry_tile(
     }
     let leveled = tileh != 0;
     if leveled {
-        spawn_leveled_foundation(commands, assets, ctx, tileh);
+        spawn_leveled_foundation(
+            commands,
+            assets,
+            ctx,
+            tileh,
+            foundation_newgrf,
+            action5_sprites,
+            Some(&mut *images),
+        );
     }
     let overlay_z = if leveled {
         base_z.saturating_add(crate::sprites::leveled_foundation_z_delta(tileh))

@@ -1,6 +1,20 @@
 use crate::vehicle::{OrderUnloadType, VehicleKind};
 use crate::{CargoType, GameState, TileCoord, economy, station, town};
 
+fn vehicle_load_unload_speed(state: &GameState, vehicle_idx: usize, cargo: CargoType) -> u32 {
+    let configured = state
+        .vehicles
+        .get(vehicle_idx)
+        .and_then(|vehicle| vehicle.engine_id)
+        .and_then(|engine_id| crate::engine::engine_in_catalog(&state.engine_catalog, engine_id))
+        .map_or(0, |engine| engine.load_amount);
+    if configured == 0 {
+        crate::cargo_packet::load_unload_speed(cargo)
+    } else {
+        u32::from(configured)
+    }
+}
+
 #[allow(clippy::too_many_lines)]
 pub(super) fn unload_vehicles(
     state: &mut GameState,
@@ -73,7 +87,7 @@ pub(super) fn unload_vehicles(
             continue;
         }
 
-        let speed = crate::cargo_packet::load_unload_speed(cargo_type);
+        let speed = vehicle_load_unload_speed(state, i, cargo_type);
         // Tras `Stage`, transfer/deliver están al frente de la lista.
         let unloadable = state.vehicles[i]
             .cargo_packets
@@ -433,7 +447,7 @@ fn try_load_from_industry(
     }
 
     let output = state.industries[ind_idx].output_cargo();
-    let speed = crate::cargo_packet::load_unload_speed(output);
+    let speed = vehicle_load_unload_speed(state, vehicle_idx, output);
     let load = state.industries[ind_idx].stock.min(room).min(speed);
     if load == 0 {
         return false;
@@ -574,7 +588,7 @@ fn try_load_from_station_waiting_cargo(
     let company = state.vehicles[vehicle_idx].owner;
     let rating =
         station::station_rating_for_company_cargo(&state.stations[station_idx], company, cargo);
-    let speed = crate::cargo_packet::load_unload_speed(cargo);
+    let speed = vehicle_load_unload_speed(state, vehicle_idx, cargo);
     let mut load = station::load_amount_for_rating(available.min(room).min(speed), rating);
     if load == 0 && available > 0 && rating > 0 {
         load = 1.min(speed).min(room);
@@ -827,4 +841,43 @@ fn station_has_industry_waiting(
             && station.cargo_stock.get(output) > 0
             && station::industry_in_station_coverage(ind, station.pos, radius)
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn newgrf_load_amount_overrides_cargo_fallback() {
+        let mut state = GameState::new(4, 4);
+        let vehicle = crate::Vehicle::new(
+            1,
+            VehicleKind::Bus,
+            TileCoord::new(1, 1),
+            TileCoord::new(1, 1),
+        );
+        let engine_id = vehicle.engine_id;
+        assert!(engine_id.is_some(), "Vehicle::new debe asignar engine_id");
+        state.vehicles.push(vehicle);
+
+        assert_eq!(
+            vehicle_load_unload_speed(&state, 0, CargoType::Passengers),
+            crate::cargo_packet::load_unload_speed(CargoType::Passengers)
+        );
+        let mut patched = false;
+        if let Some(id) = engine_id {
+            for engine in &mut state.engine_catalog {
+                if engine.id == id {
+                    engine.load_amount = 3;
+                    patched = true;
+                    break;
+                }
+            }
+        }
+        assert!(patched, "engine in catalog");
+        assert_eq!(
+            vehicle_load_unload_speed(&state, 0, CargoType::Passengers),
+            3
+        );
+    }
 }

@@ -1,5 +1,6 @@
 //! Tipos y helpers para construir la capa visual del mapa.
 
+mod action5_newgrf;
 mod airport_radar_anim;
 mod animation_gate;
 mod assets;
@@ -74,6 +75,7 @@ pub(crate) use tile_anims::TileAnimPlugin;
 pub(crate) use town_labels::town_id_at_label_pos;
 pub(crate) use train_smoke::TrainSmokePlugin;
 
+pub(crate) use action5_newgrf::NewGrfAction5SpriteCache;
 pub(crate) use catenary_newgrf::NewGrfCatenarySpriteCache;
 pub(crate) use industry_newgrf::NewGrfIndustrySpriteCache;
 pub(crate) use road_newgrf::NewGrfRoadSpriteCache;

@@ -47,8 +47,29 @@ Fuente: `newgrf_act0.cpp::CommonVehicleChangeInfo`.
 | `02` | decay speed | **runtime** (`reliability_spd_dec`) |
 | `03` | vida del vehículo | **runtime** |
 | `04` | vida del modelo | **runtime**; retira el modelo del catálogo salvo `0xFF` |
-| `06` | climas disponibles | consumida; falta filtro de landscape |
-| `07` | velocidad de carga | consumida; falta campo/callback de carga |
+| `06` | climas disponibles | **runtime**; filtra el catálogo por landscape activo |
+| `07` | velocidad de carga | **runtime**; limita carga y descarga gradual por tick |
+
+## Trains (`00`)
+
+Fuente: `newgrf_act0_trains.cpp`.
+
+| Props | Estado |
+|---|---|
+| `09` velocidad WORD | **runtime** |
+| `0B` potencia WORD | **runtime** |
+| `0D` running cost factor | **runtime** |
+| `12` sprite / image index | **runtime** (`train_image_index`) |
+| `13` dual-headed | **runtime** |
+| `14` capacidad | **runtime** |
+| `15` cargo default | **runtime** |
+| `16`/`24` peso BYTE/high | **runtime** (`weight_t`) |
+| `17` cost factor | **runtime** |
+| `1B` powered wagon power | **runtime** |
+| `23` powered wagon weight | **runtime** |
+| `27` misc flags (bit0 `RailTilts`) | **runtime** (`rail_tilts`) |
+| `2E` curve speed mod | **runtime** |
+| `0E`, `08`, `0A`, `0C`, `0F`–`11`, `18`–`1A`, `1C`–`22`, `25`–`26`, `28`–`2D`, `2F`–`31` | consumidas (ancho fijo / CTT / callbacks) |
 
 ## Road vehicles (`01`)
 
@@ -102,17 +123,23 @@ aviones; cambiar/refitear la carga cambia también el grupo seleccionado.
 
 ## Action5
 
-| Tipo | Bloque | Estado |
-|---:|---|---|
-| `05` | catenaria | **runtime**, 36 slots acotados |
-| `0D` | costa | **runtime**, 18 slots y mapping especial 10/16 sprites |
-| `04`, `06` | foundations | pendiente |
-| `07` | GUI | pendiente |
-| `08` | previews de aeropuerto | pendiente |
-| `09` | road stops | pendiente |
-| `0A` | one-way roads | pendiente |
-| `0B` | bridges | pendiente |
-| `0C` | grass | pendiente |
-
+IDs y tamaños según `newgrf_act5.cpp` / `table/sprites.h` de OpenTTD 15.3.
 Un bloque soportado se recorta al rango de su propia tabla; nunca puede escribir
-en slots vecinos. Los tipos pendientes se inspeccionan, pero no se aplican.
+en slots vecinos. Los tipos `A5BLOCK_INVALID` se inspeccionan, pero no se aplican.
+
+| Tipo | Bloque 15.3 | Slots | Estado |
+|---:|---|---:|---|
+| `04` | signal graphics | — | pendiente (feature Signals / #255) |
+| `05` | catenary | 36 | **runtime** |
+| `06` | foundations | 90 | **runtime** |
+| `07` | TTDP GUI | — | ignorada por spec (no usada por OTTD) |
+| `08` | canals | 65 | pendiente (#259) |
+| `09` | one-way roads | 18 | **runtime** |
+| `0A` | 2CC colour maps | — | pendiente |
+| `0B` | tramway | — | pendiente |
+| `0C` | snowy temperate tree | — | ignorada por spec (`A5BLOCK_INVALID`; no es «grass» — #250 N/A en 15.3) |
+| `0D` | shore | 18 | **runtime** |
+| `11` | road stop graphics | 8 | **runtime** (no Action0 RoadStops) |
+| `15` | OpenTTD GUI | 192 | **runtime** |
+| `16` | airport preview | 9 | **runtime** |
+| `1B` | bridge decks | 24 | **runtime** |

@@ -140,6 +140,7 @@ pub(crate) fn apply_remap_map_visuals(
                 newgrf_sprites.catenary.as_mut(),
                 newgrf_sprites.signal.as_mut(),
                 newgrf_sprites.industry.as_mut(),
+                newgrf_sprites.action5.as_mut(),
             );
         }
         let mut refresh_despawn = Vec::new();
@@ -171,6 +172,7 @@ pub(crate) fn apply_remap_map_visuals(
                 newgrf_sprites.catenary.as_mut(),
                 newgrf_sprites.signal.as_mut(),
                 newgrf_sprites.industry.as_mut(),
+                newgrf_sprites.action5.as_mut(),
             );
         }
         loaded_chunks.chunks = needed;
@@ -243,6 +245,7 @@ pub(crate) fn apply_remap_map_visuals(
             newgrf_sprites.catenary.as_mut(),
             newgrf_sprites.signal.as_mut(),
             newgrf_sprites.industry.as_mut(),
+            newgrf_sprites.action5.as_mut(),
         );
         loaded_chunks.chunks = chunks_in_bounds(spawn_bounds);
     }

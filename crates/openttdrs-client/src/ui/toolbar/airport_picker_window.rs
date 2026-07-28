@@ -9,6 +9,7 @@ use openttdrs_core::{
     airport_spec_footprint, list_airport_classes, list_airport_specs, station_coverage_at,
 };
 
+use crate::render::NewGrfAction5SpriteCache;
 use crate::state::SimWorld;
 use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, FloatingWindowTitleText, TITLE_BROWN,
@@ -39,6 +40,10 @@ pub(crate) struct AirportPickerSizeLabel;
 
 #[derive(Component)]
 pub(crate) struct AirportPickerCoverageText;
+
+/// Miniatura Action5 `0x16` del spec seleccionado.
+#[derive(Component)]
+pub(crate) struct AirportPickerPreviewImage;
 
 pub(crate) fn setup_airport_picker(mut commands: Commands, asset_server: Res<AssetServer>) {
     let asset_server = &*asset_server;
@@ -73,6 +78,18 @@ pub(crate) fn setup_airport_picker(mut commands: Commands, asset_server: Res<Ass
                     );
                 }
             });
+        spawn_section_label(panel, asset_server, "Vista previa");
+        panel.spawn((
+            AirportPickerPreviewImage,
+            ImageNode::default(),
+            Node {
+                width: Val::Px(96.0),
+                height: Val::Px(48.0),
+                margin: UiRect::bottom(Val::Px(6.0)),
+                display: Display::None,
+                ..default()
+            },
+        ));
         spawn_section_label(panel, asset_server, "Tipo");
         spawn_classic_scroll_area_with(
             panel,
@@ -209,6 +226,42 @@ fn spawn_text_button(
 
 fn airport_tool_active(tool: &UiToolState) -> bool {
     tool.active_tool == Some(BuildMenuAction::Airport)
+}
+
+/// Actualiza la miniatura Action5 `0x16` según el aeropuerto seleccionado.
+pub(crate) fn sync_airport_preview_image(
+    station_state: Res<StationBuildState>,
+    sim: Res<SimWorld>,
+    mut cache: ResMut<NewGrfAction5SpriteCache>,
+    mut images: ResMut<Assets<Image>>,
+    mut preview: Query<(&mut ImageNode, &mut Node), With<AirportPickerPreviewImage>>,
+) {
+    let Ok((mut image, mut node)) = preview.single_mut() else {
+        return;
+    };
+    let Some(slot) = openttdrs_core::airport_preview_action5_slot(station_state.airport_spec)
+    else {
+        node.display = Display::None;
+        return;
+    };
+    let Some(decoded) = sim
+        .state
+        .runtime
+        .airport_preview_newgrf_sprites
+        .get(slot)
+        .and_then(|s| s.as_ref())
+    else {
+        node.display = Display::None;
+        return;
+    };
+    let slot_u16 = u16::try_from(slot).unwrap_or(0);
+    image.image = cache.handle_for(
+        openttdrs_core::ACTION5_TYPE_AIRPORT_PREVIEW,
+        slot_u16,
+        decoded,
+        &mut images,
+    );
+    node.display = Display::Flex;
 }
 
 #[allow(clippy::too_many_arguments)]

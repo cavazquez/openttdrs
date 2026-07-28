@@ -40,6 +40,8 @@ pub(crate) fn spawn_road_tile(
     mut road_sprites: Option<&mut NewGrfRoadSpriteCache>,
     mut images: Option<&mut Assets<Image>>,
     newgrf_stack: &[openttdrs_core::NewGrfEntry],
+    oneway_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    mut action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
 ) {
     let tileh = ctx.info.tileh;
     let base_z = ctx.info.base_z;
@@ -145,6 +147,35 @@ pub(crate) fn spawn_road_tile(
                 road_half_h,
             )),
         ));
+    }
+
+    // Overlay one-way (`SPR_ONEWAY_BASE` / Action5 `0x09`).
+    if let Some(tile) = ctx.tile {
+        let drd = openttdrs_core::disallowed_road_directions(tile.m5);
+        let road_x = (rb & 0x0F) == 0x0A;
+        if let Some(slot) = openttdrs_core::oneway_action5_slot(tileh, road_x, drd)
+            && let (Some(cache), Some(images)) = (action5_sprites.as_mut(), images.as_mut())
+            && let Some(sprite) = cache.sprite_colored(
+                openttdrs_core::ACTION5_TYPE_ONEWAY,
+                slot,
+                oneway_newgrf,
+                Color::WHITE,
+                images,
+            )
+        {
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                sprite,
+                Transform::from_translation(tile_pos_half(
+                    ctx.tx_i32(),
+                    ctx.ty_i32(),
+                    base_z,
+                    0.025,
+                    road_half_h,
+                )),
+            ));
+        }
     }
 
     if let Some(tfi) = ctx.tile.and_then(|t| tram_flat_sprite_index(tileh, t.m3)) {
@@ -316,7 +347,7 @@ pub(crate) fn spawn_road_tile(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, clippy::needless_option_as_deref)]
 pub(crate) fn spawn_rail_tile(
     commands: &mut Commands,
     map: &Map,
@@ -333,6 +364,8 @@ pub(crate) fn spawn_rail_tile(
     mut catenary_sprites: Option<&mut crate::render::NewGrfCatenarySpriteCache>,
     rail_signal_newgrf: &[Option<openttdrs_core::RailSignalSpriteSpec>],
     mut signal_sprites: Option<&mut crate::render::NewGrfSignalSpriteCache>,
+    foundation_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    mut action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
     mut images: Option<&mut Assets<Image>>,
     calendar_date: u32,
     newgrf_stack: &[openttdrs_core::NewGrfEntry],
@@ -359,7 +392,16 @@ pub(crate) fn spawn_rail_tile(
         .tile
         .is_some_and(|t| (t.m3 & 0x0F) == RAIL_GROUND_SNOW_OR_DESERT)
         || climate.uses_snow_ground();
-    let rail_base_z = spawn_rail_foundation(commands, assets, ctx, tileh, tb);
+    let rail_base_z = spawn_rail_foundation(
+        commands,
+        assets,
+        ctx,
+        tileh,
+        tb,
+        foundation_newgrf,
+        action5_sprites.as_deref_mut(),
+        images.as_deref_mut(),
+    );
     let rail_half_h = if tileh == 0 {
         TILE_HALF_H
     } else {

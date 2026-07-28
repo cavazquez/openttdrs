@@ -15,7 +15,7 @@ use crate::ui::navigation::{
     spawn_messages_navigation_button, spawn_settings_navigation_button,
     spawn_world_navigation_button,
 };
-use crate::ui::toolbar::ToolbarIcon;
+use crate::ui::toolbar::{Action5GuiIconSlot, ToolbarIcon};
 
 pub(super) fn spawn_toolbar_group_buttons(
     root: &mut ChildSpawnerCommands,
@@ -91,7 +91,7 @@ pub(super) fn spawn_toolbar_group_buttons(
                             Interaction::default(),
                         ))
                         .with_children(|p| {
-                            p.spawn((
+                            let mut entity = p.spawn((
                                 ImageNode::new(asset_server.load::<Image>(icon.path())),
                                 Node {
                                     width: Val::Px(32.0),
@@ -100,6 +100,9 @@ pub(super) fn spawn_toolbar_group_buttons(
                                     ..default()
                                 },
                             ));
+                            if let Some(slot) = icon.openttd_gui_action5_slot() {
+                                entity.insert(Action5GuiIconSlot(slot));
+                            }
                         });
                     if i < 6 {
                         spawn_toolbar_separator(upper);
@@ -147,6 +150,7 @@ pub(super) fn spawn_toolbar_group_buttons(
             Interaction::default(),
             children![(
                 ToolbarSwitchLabel,
+                Action5GuiIconSlot(144),
                 ImageNode::new(asset_server.load::<Image>(ToolbarIcon::Switch.path())),
                 Node {
                     width: Val::Px(26.0),

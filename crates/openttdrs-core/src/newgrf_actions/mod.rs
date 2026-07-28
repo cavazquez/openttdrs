@@ -24,8 +24,15 @@ pub use action0::{
 
 pub use apply::{
     action5::{
-        apply_newgrf_action5_catenary, apply_newgrf_action5_catenary_default_dirs,
-        apply_newgrf_action5_shore, apply_newgrf_action5_shore_default_dirs,
+        apply_newgrf_action5_airport_preview, apply_newgrf_action5_airport_preview_default_dirs,
+        apply_newgrf_action5_all_default_dirs, apply_newgrf_action5_bridge_decks,
+        apply_newgrf_action5_bridge_decks_default_dirs, apply_newgrf_action5_catenary,
+        apply_newgrf_action5_catenary_default_dirs, apply_newgrf_action5_foundations,
+        apply_newgrf_action5_foundations_default_dirs, apply_newgrf_action5_oneway,
+        apply_newgrf_action5_oneway_default_dirs, apply_newgrf_action5_openttd_gui,
+        apply_newgrf_action5_openttd_gui_default_dirs, apply_newgrf_action5_roadstops,
+        apply_newgrf_action5_roadstops_default_dirs, apply_newgrf_action5_shore,
+        apply_newgrf_action5_shore_default_dirs,
     },
     apply_newgrf_stack_catalogs_default_dirs,
     industry::{apply_newgrf_industry_tiles, apply_newgrf_industry_tiles_default_dirs},
@@ -552,6 +559,160 @@ mod tests {
     }
 
     #[test]
+    fn parse_train_runtime_props_dual_tilt_curve_and_weight() {
+        let a0 = vec![
+            0x00,
+            ACTION0_FEATURE_TRAINS,
+            0x08,
+            0x01,
+            0x00,
+            0x12,
+            0x04, // image_index TTD 4 → local 2
+            0x13,
+            0x01, // dual-headed
+            0x14,
+            40, // capacity
+            0x16,
+            90, // weight low
+            0x17,
+            30, // cost factor
+            0x1B,
+            0x10,
+            0x00, // pow_wag_power = 16
+            0x27,
+            0x01, // RailTilts
+            0x2E,
+            0x00,
+            0x01, // curve_speed_mod = 256
+        ];
+        let meta = parse_action0_train_meta(&a0).unwrap();
+        assert_eq!(meta.train_image_index, 2);
+        assert!(meta.dual_headed);
+        assert_eq!(meta.capacity, 40);
+        assert_eq!(meta.weight_t, 90);
+        assert_eq!(meta.price_factor, 30);
+        assert_eq!(meta.pow_wag_power, 16);
+        assert!(meta.rail_tilts);
+        assert_eq!(meta.curve_speed_mod, 256);
+
+        let bytes = build_grf_v2_with_action0_and_action8(&a0, [b'T', b'R', 0, 9], "t9", "");
+        let dir = tempfile_dir_with("t9.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("t9.grf", 2));
+        apply_newgrf_vehicles_trains(&mut state, &[&dir]);
+        let eng = state.engine_catalog.iter().find(|e| e.from_newgrf).unwrap();
+        assert!(eng.dual_headed);
+        assert!(eng.rail_tilts);
+        assert_eq!(eng.curve_speed_mod, 256);
+        assert_eq!(eng.capacity, 40);
+        assert_eq!(eng.weight_t, 90);
+    }
+
+    #[test]
+    fn action5_foundations_and_bridge_decks_merge_respect_ranges() {
+        let mut indices = vec![0u8; 8 * 8];
+        for y in 2..6 {
+            for x in 2..6 {
+                indices[y * 8 + x] = 174;
+            }
+        }
+        let found = crate::newgrf_sprites::build_grf_v2_action5_with_sprite(
+            0x06,
+            3,
+            8,
+            8,
+            &indices,
+            [b'F', b'N', 0, 1],
+            "fn",
+        );
+        let bridge = crate::newgrf_sprites::build_grf_v2_action5_with_sprite(
+            0x1B,
+            2,
+            8,
+            8,
+            &indices,
+            [b'B', b'D', 0, 1],
+            "bd",
+        );
+        let dir = tempfile_dir_with("fn.grf", &found);
+        std::fs::write(dir.join("bd.grf"), &bridge).unwrap();
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("fn.grf", 1));
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("bd.grf", 2));
+        apply_newgrf_action5_foundations(&mut state, &[&dir]);
+        apply_newgrf_action5_bridge_decks(&mut state, &[&dir]);
+        assert_eq!(state.runtime.foundation_newgrf_sprites.len(), 90);
+        assert!(state.runtime.foundation_newgrf_sprites[3].is_some());
+        assert!(state.runtime.foundation_newgrf_sprites[4].is_none());
+        assert_eq!(state.runtime.bridge_decks_newgrf_sprites.len(), 24);
+        assert!(state.runtime.bridge_decks_newgrf_sprites[2].is_some());
+        assert_eq!(crate::action5_type_name(0x06), "foundations");
+        assert_eq!(crate::action5_type_name(0x09), "oneway-road");
+        assert_eq!(crate::action5_type_name(0x11), "roadstops");
+        assert_eq!(crate::action5_type_name(0x15), "openttd-gui");
+        assert_eq!(crate::action5_type_name(0x16), "airport-preview");
+        assert_eq!(crate::action5_type_name(0x1B), "bridge-decks");
+        assert_eq!(crate::action5_type_name(0x0C), "snowy-tree-unused");
+    }
+
+    #[test]
+    fn action5_oneway_roadstops_gui_airport_merge() {
+        let mut indices = vec![0u8; 8 * 8];
+        for y in 2..6 {
+            for x in 2..6 {
+                indices[y * 8 + x] = 174;
+            }
+        }
+        let ow = crate::newgrf_sprites::build_grf_v2_action5_with_sprite(
+            0x09,
+            1,
+            8,
+            8,
+            &indices,
+            [b'T', b'5', 0x09, 0],
+            "ow",
+        );
+        let dir = tempfile_dir_with("ow.grf", &ow);
+        for (name, ty, off) in [
+            ("rs.grf", 0x11_u8, 2_u16),
+            ("gui.grf", 0x15, 90),
+            ("ap.grf", 0x16, 4),
+        ] {
+            let bytes = crate::newgrf_sprites::build_grf_v2_action5_with_sprite(
+                ty,
+                off,
+                8,
+                8,
+                &indices,
+                [b'T', b'5', ty, 0],
+                name,
+            );
+            std::fs::write(dir.join(name), &bytes).unwrap();
+        }
+        let mut state = GameState::new(4, 4);
+        for (name, id) in [("ow.grf", 1), ("rs.grf", 2), ("gui.grf", 3), ("ap.grf", 4)] {
+            state.newgrf_stack.push(crate::NewGrfEntry::new(name, id));
+        }
+        let roots = [dir.as_path()];
+        apply_newgrf_action5_oneway(&mut state, &roots);
+        apply_newgrf_action5_roadstops(&mut state, &roots);
+        apply_newgrf_action5_openttd_gui(&mut state, &roots);
+        apply_newgrf_action5_airport_preview(&mut state, &roots);
+        assert!(state.runtime.oneway_newgrf_sprites[1].is_some());
+        assert!(state.runtime.roadstop_action5_newgrf_sprites[2].is_some());
+        assert!(state.runtime.openttd_gui_newgrf_sprites[90].is_some());
+        assert!(state.runtime.airport_preview_newgrf_sprites[4].is_some());
+        assert_eq!(crate::oneway_action5_slot(0, true, 1), Some(0));
+        assert_eq!(crate::roadstop_action5_slot(true, 0), Some(4));
+    }
+
+    #[test]
     fn parse_train_meta_and_apply_from_bytes() {
         let a0 = build_action0_train_payload(1955, 120, 1500, "Locomotora NewGRF");
         let meta = parse_action0_train_meta(&a0).unwrap();
@@ -577,11 +738,40 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn parse_action0_vehicle_features_with_upstream_widths() {
+        let train = vec![
+            0x00,
+            ACTION0_FEATURE_TRAINS,
+            0x06,
+            0x01,
+            0x00,
+            0x00,
+            0x42,
+            0x0E, // 3650 days after 1920 -> 1930
+            0x02,
+            10,
+            0x03,
+            25,
+            0x04,
+            40,
+            0x06,
+            0x04,
+            0x07,
+            13,
+        ];
+        let meta = parse_action0_train_meta(&train).unwrap();
+        assert_eq!(meta.intro_year, 1930);
+        assert_eq!(meta.reliability_spd_dec, 40);
+        assert_eq!(meta.lifelength_years, 25);
+        assert_eq!(meta.model_life_years, 40);
+        assert_eq!(meta.climate_mask, 0x04);
+        assert_eq!(meta.load_amount, 13);
+
         let road = vec![
             0x00,
             ACTION0_FEATURE_ROAD_VEHICLES,
-            0x09,
+            0x0B,
             0x01,
             0x07,
             0x00,
@@ -589,6 +779,10 @@ mod tests {
             0x0E, // 3650 days after 1920 -> 1930
             0x04,
             12,
+            0x06,
+            0x02,
+            0x07,
+            3,
             0x08,
             120,
             0x09,
@@ -609,6 +803,8 @@ mod tests {
         assert_eq!(meta.kind, VehicleKind::Bus);
         assert_eq!(meta.intro_year, 1930);
         assert_eq!(meta.model_life_years, 12);
+        assert_eq!(meta.climate_mask, 0x02);
+        assert_eq!(meta.load_amount, 3);
         assert_eq!(meta.max_speed, 120);
         assert_eq!(meta.capacity, 32);
         assert_eq!(meta.power_hp, 900);
@@ -709,6 +905,42 @@ mod tests {
                 )
                 .iter()
                 .any(|candidate| candidate.id == eng.id)
+            );
+        }
+    }
+
+    #[test]
+    fn action0_climate_mask_filters_runtime_vehicle_catalog() {
+        let action0 = vec![
+            0x00,
+            ACTION0_FEATURE_ROAD_VEHICLES,
+            0x02,
+            0x01,
+            0x04,
+            0x06,
+            0x02, // sólo subártico
+            0x0F,
+            25,
+        ];
+        let bytes =
+            build_grf_v2_with_action0_and_action8(&action0, [b'C', b'L', 0, 1], "climate", "");
+        let dir = tempfile_dir_with("climate.grf", &bytes);
+
+        for (climate, expected) in [
+            (crate::Climate::Temperate, false),
+            (crate::Climate::SubArctic, true),
+            (crate::Climate::SubTropical, false),
+            (crate::Climate::Toyland, false),
+        ] {
+            let mut state = GameState::new(4, 4);
+            state.climate = climate;
+            state
+                .newgrf_stack
+                .push(crate::NewGrfEntry::new("climate.grf", 0x434C_0001));
+            apply_newgrf_vehicles_trains(&mut state, &[&dir]);
+            assert_eq!(
+                state.engine_catalog.iter().any(|engine| engine.from_newgrf),
+                expected
             );
         }
     }

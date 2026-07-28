@@ -63,11 +63,11 @@ pub(crate) fn spawn_leveled_foundation(
     assets: &WorldAssets,
     ctx: &TileRenderContext,
     tileh: u8,
+    foundation_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
+    images: Option<&mut Assets<Image>>,
 ) {
     let Some(gfx) = foundation_gfx_for_tileh(tileh) else {
-        return;
-    };
-    let Some(img) = assets.foundations.get((tileh - 1) as usize) else {
         return;
     };
     let pos = overlay_pos(
@@ -81,6 +81,27 @@ pub(crate) fn spawn_leveled_foundation(
         ctx.tx_i32(),
         ctx.ty_i32(),
     );
+    if let Some(slot) = openttdrs_core::foundation_action5_slot_for_tileh(tileh)
+        && let (Some(cache), Some(images)) = (action5_sprites, images)
+        && let Some(sprite) = cache.sprite_colored(
+            openttdrs_core::ACTION5_TYPE_FOUNDATIONS,
+            slot,
+            foundation_newgrf,
+            Color::WHITE,
+            images,
+        )
+    {
+        commands.spawn((
+            MapVisualLayer,
+            ctx.map_tile_chunk(),
+            sprite,
+            Transform::from_translation(pos),
+        ));
+        return;
+    }
+    let Some(img) = assets.foundations.get((tileh - 1) as usize) else {
+        return;
+    };
     commands.spawn((
         MapVisualLayer,
         ctx.map_tile_chunk(),
@@ -92,17 +113,29 @@ pub(crate) fn spawn_leveled_foundation(
 /// Cimiento nivelado bajo vía/estación en pendiente (`DrawFoundation` + `GetRailFoundation` = 1).
 /// Devuelve `base_z` efectivo para capas de riel encima del cimiento.
 #[must_use]
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_rail_foundation(
     commands: &mut Commands,
     assets: &WorldAssets,
     ctx: &TileRenderContext,
     tileh: u8,
     trackbits: u8,
+    foundation_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
+    images: Option<&mut Assets<Image>>,
 ) -> u8 {
     if tileh == 0 || rail_foundation_for_trackbits(tileh, trackbits) != 1 {
         return ctx.info.base_z;
     }
-    spawn_leveled_foundation(commands, assets, ctx, tileh);
+    spawn_leveled_foundation(
+        commands,
+        assets,
+        ctx,
+        tileh,
+        foundation_newgrf,
+        action5_sprites,
+        images,
+    );
     ctx.info
         .base_z
         .saturating_add(leveled_foundation_z_delta(tileh))

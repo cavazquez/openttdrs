@@ -32,6 +32,5 @@ pub fn apply_newgrf_stack_catalogs_default_dirs(state: &mut GameState) {
     train::apply_newgrf_vehicles_trains_default_dirs(state);
     industry::apply_newgrf_industry_tiles_default_dirs(state);
     rail::apply_newgrf_rail_signals_default_dirs(state);
-    action5::apply_newgrf_action5_shore_default_dirs(state);
-    action5::apply_newgrf_action5_catenary_default_dirs(state);
+    action5::apply_newgrf_action5_all_default_dirs(state);
 }

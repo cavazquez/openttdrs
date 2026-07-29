@@ -34,7 +34,7 @@ pub fn current_road_max_speed(v: &Vehicle, map: Option<&Map>) -> u16 {
     {
         max_speed = max_speed.min(cap);
     }
-    if let Some(order) = v.current_order() {
+    if let Some(order) = v.current_order_ref() {
         let cap = order.max_speed_limit();
         if cap > 0 {
             max_speed = max_speed.min(cap);

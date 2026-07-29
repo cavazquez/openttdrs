@@ -83,6 +83,7 @@ mod tests {
         world.init_resource::<Messages<FloatingWindowClosed>>();
         world.init_resource::<crate::ui::toolbar::RoadTypeEscapeConsumed>();
         world.init_resource::<crate::ui::toolbar::StationBuildState>();
+        world.init_resource::<crate::ui::modal_stack::ModalStack>();
         insert_order_pick_test_resources(&mut world);
         world.run_system_once(handle_ingame_escape).unwrap();
         assert!(world.resource::<UiToolState>().active_tool.is_none());

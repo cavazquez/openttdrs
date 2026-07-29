@@ -74,7 +74,10 @@ pub fn init_industry_tile_random(tile: &mut Tile, random_bits: u8) {
     set_industry_random_triggers(tile, 0);
 }
 
-/// Acumula un trigger, reseedea `m3` y limpia triggers (MVP sin sprite groups).
+/// Acumula un trigger, reseedea `m3` y limpia triggers.
+///
+/// #266: el reseed alimenta `resolve_industry_tile_random_trigger` cuando el
+/// caller tiene un `IndustryTileSpecDef` con Action2 random (call site separado).
 ///
 /// Devuelve `true` si la tesela cambió.
 pub fn trigger_industry_tile_randomisation(

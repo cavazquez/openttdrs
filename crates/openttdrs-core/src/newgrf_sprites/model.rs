@@ -280,6 +280,14 @@ pub const CALLBACK_FAILED: u16 = 0xFFFF;
 pub const CBID_STATION_BUILD_TILE_LAYOUT: u16 = 0x24;
 /// Callback vehículos: permitir start/stop (`CBID_VEHICLE_START_STOP_CHECK`).
 pub const CBID_VEHICLE_START_STOP_CHECK: u16 = 0x31;
+/// Callback industrias: disponibilidad / ubicación al colocar (`CBID_INDUSTRY_LOCATION`).
+pub const CBID_INDUSTRY_LOCATION: u16 = 0x28;
+/// Callback casas: permitir construcción (`CBID_HOUSE_ALLOW_CONSTRUCTION`).
+pub const CBID_HOUSE_ALLOW_CONSTRUCTION: u16 = 0x17;
+/// Callback teselas industria: decisión de animación / next frame (`CBID_INDTILE_ANIM_NEXT_FRAME`).
+pub const CBID_INDTILE_ANIM_NEXT_FRAME: u16 = 0x25;
+/// Callback estaciones: disponibilidad de clase/spec (`CBID_STATION_AVAILABILITY`).
+pub const CBID_STATION_AVAILABILITY: u16 = 0x13;
 
 /// Bloque de sprites Action5 (shore / catenary / …).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

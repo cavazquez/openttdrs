@@ -24,10 +24,10 @@ no existe. Ningún nivel implica compatibilidad binaria o de red con OpenTTD.
 | Órdenes y horarios | **Media-alta en core / media en UI** | Full-load all/any, no-load/no-unload, transfer, non-stop/go-via, stop-location, refit de depósito, condicionales y timetable-start; la UI no expone todo |
 | Fiabilidad y servicio | **Media en core / inicial en UI** | Averías normales/reducidas/OFF configurables desde Ajustes, intervalos días/porcentaje, servicio y autoenvío a depósito; falta el editor completo de intervalos/unbunch |
 | Aviones | **Media** | Aeropuertos FTA, compra, vuelo, ruido y crashes; presentación y casos límite incompletos |
-| Barcos | **Parcial** | Infra acuática + A* tile→track X/Y, `_ship_subcoord`, `ShipAccelerate`, esclusa vertical (`ShipMoveUpDownOnLock`; sin `LOCK_TRANSIT_TICKS`). Residual: YAPF ship/water regions, ocupación multi-barco, arrival exacta dock/depot (8,8), goldens externos pos/dir/vel/z/orden |
+| Barcos | **Parcial → media MVP (#268)** | Infra acuática + `ChooseShipTrack`-like (path A*/cache), `FindClosestShipDepot` BFS, arrival dock/depot (8,8) / buoy ≤3, ocupación esclusa (bitset), golden interno tick pos/dir/z/orden. Residual: YAPF ship/water regions completas, goldens externos vs OpenTTD 15.3 |
 | Guardado propio JSON | **Alta** | Formato versionado con migraciones y determinismo mid-run |
 | Compatibilidad `.sav` | **Inicial-media** | Import/export parcial; no es round-trip completo ni garantía de compatibilidad histórica |
-| NewGRF | **Media de parseo / media de runtime (MVP callbacks)** | Actions 0–14 + catálogos Action0/3/5; evaluador Action2 + CB24/CB31 + storage persistente en vehículo. Residual: resto de CBIDs, triggers→random groups, storage no-vehículo; ver [`parity/newgrf-callback-matrix.md`](parity/newgrf-callback-matrix.md) (#228) |
+| NewGRF | **Media de parseo / media de runtime (MVP callbacks #228/#266)** | Actions 0–14 + catálogos Action0/3/5; CB24/CB31 + CB28/CB17/CB13/CB25; storage vehículo+estación; trigger industry-tile → Action2 random. Residual: resto CBIDs, goldens vs OpenTTD; ver [`parity/newgrf-callback-matrix.md`](parity/newgrf-callback-matrix.md) |
 
 La cobertura declarada por feature y propiedad está en
 [`parity/newgrf-action0-matrix.md`](parity/newgrf-action0-matrix.md); consumir los
@@ -885,7 +885,7 @@ Checklist versionado de superficies de UI. Los conteos deben coincidir con
 `FloatingWindowId::ALL` / `BuildMenuAction::ALL` / etc. (test
 `ui_enum_inventory_counts`).
 
-**Fecha:** 2026-07-29 · **FloatingWindowId:** 59 · **BuildMenuAction:** 77 ·
+**Fecha:** 2026-07-29 · **FloatingWindowId:** 62 · **BuildMenuAction:** 77 ·
 **SaveMenuAction:** 25 · **ToolbarGroup:** 8
 
 ### Ventanas flotantes (`FloatingWindowId`)
@@ -946,6 +946,7 @@ Checklist versionado de superficies de UI. Los conteos deben coincidir con
 | Goals | menú Economía | |
 | Story | menú Mundo | |
 | League | menú Economía | |
+| QueryString / ErrorDialog / OnScreenKeyboard | modales (#272) | Pila modal + Enter/Esc; OSK stub; snapshots → #240 |
 
 ### Paneles no flotantes (fijos)
 

@@ -178,6 +178,12 @@ pub(crate) enum FloatingWindowId {
     Story,
     /// Liga / ranking de compañías (#43).
     League,
+    /// Query string modal (`WC_QUERY_STRING`; #272).
+    QueryString,
+    /// Diálogo de error modal (`error_gui`; #272).
+    ErrorDialog,
+    /// Teclado en pantalla stub (`osk_gui`; #272).
+    OnScreenKeyboard,
 }
 
 /// Clave equivalente a `WindowClass + WindowNumber` de OpenTTD (#242).
@@ -266,6 +272,9 @@ impl FloatingWindowId {
         Self::Goals,
         Self::Story,
         Self::League,
+        Self::QueryString,
+        Self::ErrorDialog,
+        Self::OnScreenKeyboard,
     ];
 
     /// Clave estable para persistir posición en `ClientPreferences`.
@@ -331,6 +340,9 @@ impl FloatingWindowId {
             Self::Goals => "Goals",
             Self::Story => "Story",
             Self::League => "League",
+            Self::QueryString => "QueryString",
+            Self::ErrorDialog => "ErrorDialog",
+            Self::OnScreenKeyboard => "OnScreenKeyboard",
         }
     }
 }

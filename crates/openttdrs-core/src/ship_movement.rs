@@ -1,10 +1,15 @@
 //! Movimiento de barcos: red acuática, esclusas y controlador sub-tesela (`ship_cmd.cpp`).
+//!
+//! MVP #268: `ChooseShipTrack`-like (preferencia path A*), `FindClosestShipDepot` BFS,
+//! arrival dock/depot (8,8) / buoy ≤3, ocupación de esclusa, golden interno tick-a-tick.
+
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::engine::{get_advance_distance, get_advance_speed, ship_speed_for_tile};
 use crate::map::{Map, TILE_PIXEL_HEIGHT, TileCoord, TileKind};
 use crate::vehicle::{
     DIR_E, DIR_N, DIR_NE, DIR_NW, DIR_S, DIR_SE, DIR_SW, DIR_W, Vehicle, VehicleDirection,
-    VehicleKind, direction_from_tile_step,
+    VehicleKind, VehicleOrder, direction_from_tile_step,
 };
 
 /// Aceleración vanilla de barco (`ShipVehicleInfo::acceleration` = 1).
@@ -451,8 +456,177 @@ fn apply_ship_direction_change(v: &mut Vehicle, new_dir: VehicleDirection) {
 }
 
 fn choose_track_for_entry(diagdir: u8) -> u8 {
-    // MVP: tracks X/Y primero (agua abierta).
     track_from_diagdir(diagdir)
+}
+
+/// Vecino ortogonal según `DiagDirection`.
+#[must_use]
+fn tile_in_diagdir(c: TileCoord, diagdir: u8) -> TileCoord {
+    match diagdir {
+        DIAGDIR_NE => TileCoord::new(c.x - 1, c.y),
+        DIAGDIR_SE => TileCoord::new(c.x, c.y + 1),
+        DIAGDIR_SW => TileCoord::new(c.x + 1, c.y),
+        _ => TileCoord::new(c.x, c.y - 1),
+    }
+}
+
+/// `ChooseShipTrack`-like (#268): en junction preferir el trackdir del path A* / caché.
+///
+/// Si el siguiente paso del path implica un track válido para el `entry_diagdir`,
+/// lo usa; si no, prueba vecinos acuáticos hacia `dest` con track válido; fallback
+/// al eje X/Y del diagdir de entrada.
+#[must_use]
+pub fn choose_ship_track(
+    map: &Map,
+    from: TileCoord,
+    entry_diagdir: u8,
+    path_next: Option<TileCoord>,
+    dest: TileCoord,
+) -> u8 {
+    let default = choose_track_for_entry(entry_diagdir);
+    if let Some(next) = path_next
+        && water_tiles_connected(map, from, next)
+        && let Some(d) = diagdir_between_tiles(from, next)
+    {
+        let candidate = track_from_diagdir(d);
+        if ship_subcoord(entry_diagdir, candidate).is_some() {
+            return candidate;
+        }
+    }
+    let mut best: Option<(u32, u8)> = None;
+    for d in [DIAGDIR_NE, DIAGDIR_SE, DIAGDIR_SW, DIAGDIR_NW] {
+        let n = tile_in_diagdir(from, d);
+        if !water_tiles_connected(map, from, n) {
+            continue;
+        }
+        let candidate = track_from_diagdir(d);
+        if ship_subcoord(entry_diagdir, candidate).is_none() {
+            continue;
+        }
+        let cost = (n.x - dest.x).unsigned_abs() + (n.y - dest.y).unsigned_abs();
+        let bias = u32::from(candidate != default);
+        let score = cost.saturating_mul(2).saturating_add(bias);
+        if best.is_none_or(|(b, _)| score < b) {
+            best = Some((score, candidate));
+        }
+    }
+    best.map_or(default, |(_, t)| t)
+}
+
+/// `FindClosestShipDepot` BFS mínimo sobre red acuática (#268).
+///
+/// No usa water-regions completas; alcanza el depósito ship más cercano por
+/// conectividad `water_tiles_connected` (oráculo externo residual).
+#[must_use]
+pub fn find_closest_ship_depot(map: &Map, from: TileCoord) -> Option<TileCoord> {
+    if !is_water_network_tile_at(map, from) {
+        return None;
+    }
+    let (mw, mh) = map.dimensions();
+    let mut seen = HashSet::new();
+    let mut q = VecDeque::new();
+    seen.insert(from);
+    q.push_back(from);
+    while let Some(cur) = q.pop_front() {
+        if map.get_kind(cur) == Some(TileKind::ShipDepot) {
+            return Some(cur);
+        }
+        for (dx, dy) in [(-1_i32, 0), (1, 0), (0, -1), (0, 1)] {
+            let n = TileCoord::new(cur.x + dx, cur.y + dy);
+            if n.x < 0 || n.y < 0 || n.x >= mw.cast_signed() || n.y >= mh.cast_signed() {
+                continue;
+            }
+            if !seen.insert(n) {
+                continue;
+            }
+            if water_tiles_connected(map, cur, n) {
+                q.push_back(n);
+            }
+        }
+    }
+    None
+}
+
+/// Ocupación de esclusa: tile middle → id de vehículo.
+pub type ShipLockOccupancy = HashMap<TileCoord, u32>;
+
+/// Intenta reclamar el middle de una esclusa. `false` si otro barco la ocupa.
+pub fn try_claim_ship_lock(
+    occupancy: &mut ShipLockOccupancy,
+    lock_tile: TileCoord,
+    vehicle_id: u32,
+) -> bool {
+    match occupancy.get(&lock_tile) {
+        Some(&owner) if owner != vehicle_id => false,
+        _ => {
+            occupancy.insert(lock_tile, vehicle_id);
+            true
+        }
+    }
+}
+
+/// Libera la esclusa si el vehículo es el dueño.
+pub fn release_ship_lock(
+    occupancy: &mut ShipLockOccupancy,
+    lock_tile: TileCoord,
+    vehicle_id: u32,
+) {
+    if occupancy.get(&lock_tile) == Some(&vehicle_id) {
+        occupancy.remove(&lock_tile);
+    }
+}
+
+/// ¿El middle de la esclusa está libre o ya es nuestro?
+#[must_use]
+pub fn ship_lock_occupancy_allows(
+    occupancy: &ShipLockOccupancy,
+    lock_tile: TileCoord,
+    vehicle_id: u32,
+) -> bool {
+    match occupancy.get(&lock_tile) {
+        None => true,
+        Some(&owner) => owner == vehicle_id,
+    }
+}
+
+/// Arrival dock/depot en centro (8,8); buoy ≤3 Manhattan (#268).
+#[must_use]
+pub fn ship_arrival_ready(v: &Vehicle, map: Option<&Map>) -> bool {
+    if v.kind != VehicleKind::Ship || !v.path.is_empty() {
+        return false;
+    }
+    let Some(order) = v.current_order_ref() else {
+        return v.pos == v.dest && (v.ship_x & 0xF) == 8 && (v.ship_y & 0xF) == 8;
+    };
+    match order {
+        VehicleOrder::Depot { depot, .. } => {
+            v.pos == *depot && (v.ship_x & 0xF) == 8 && (v.ship_y & 0xF) == 8
+        }
+        VehicleOrder::Station { .. } => {
+            if dest_is_buoy(v.dest, map) {
+                let dist = (v.pos.x - v.dest.x).unsigned_abs() + (v.pos.y - v.dest.y).unsigned_abs();
+                dist <= 3
+            } else {
+                v.pos == v.dest && (v.ship_x & 0xF) == 8 && (v.ship_y & 0xF) == 8
+            }
+        }
+        VehicleOrder::Waypoint { waypoint, .. } => {
+            let dist =
+                (v.pos.x - waypoint.x).unsigned_abs() + (v.pos.y - waypoint.y).unsigned_abs();
+            dist <= 3
+        }
+        _ => v.pos == v.dest,
+    }
+}
+
+fn dest_is_buoy(dest: TileCoord, map: Option<&Map>) -> bool {
+    let Some(map) = map else {
+        return false;
+    };
+    map.get(dest).is_some_and(|t| {
+        t.kind == TileKind::Station
+            && crate::station::station_type_from_m6(t.m6) == crate::station::STATION_TYPE_BUOY
+    })
 }
 
 /// Alinea la proa al siguiente paso del path (A* tile → eje X/Y).
@@ -503,7 +677,7 @@ pub fn ship_controller_tick(v: &mut Vehicle, map: Option<&Map>) {
     face_path_target(v);
 
     if v.movement_target().is_none() {
-        if v.pos == v.dest {
+        if ship_arrival_ready(v, map) || (v.pos == v.dest && v.orders.is_empty()) {
             v.cur_speed = 0;
             v.advance_destination_after_arrival();
         }
@@ -560,7 +734,11 @@ pub fn ship_controller_tick(v: &mut Vehicle, map: Option<&Map>) {
             return;
         }
 
-        let track = choose_track_for_entry(diagdir);
+        let path_next = v.path.front().copied();
+        let track = map.map_or_else(
+            || choose_track_for_entry(diagdir),
+            |m| choose_ship_track(m, new_tile, diagdir, path_next, v.dest),
+        );
         let Some(entry) = ship_subcoord(diagdir, track) else {
             v.cur_speed = 0;
             return;
@@ -582,7 +760,7 @@ pub fn ship_controller_tick(v: &mut Vehicle, map: Option<&Map>) {
             }
         }
 
-        if v.pos == v.dest && v.path.is_empty() {
+        if ship_arrival_ready(v, map) {
             v.cur_speed = 0;
             v.advance_destination_after_arrival();
             return;
@@ -898,5 +1076,132 @@ mod tests {
         assert_eq!(v.cur_speed, 96);
         // Road accel (256) habría saturado mucho antes con otro perfil; aquí +1/tick.
         assert!(v.cur_speed <= 96);
+    }
+
+    #[test]
+    fn ship_choose_track_prefers_path_next() {
+        let mut s = GameState::new(10, 10);
+        water_line(&mut s, 4, 1, 6);
+        water_line(&mut s, 5, 3, 3); // junction stub south of (3,4)
+        let from = TileCoord::new(3, 4);
+        let path_next = TileCoord::new(4, 4);
+        let track = choose_ship_track(&s.map, from, DIAGDIR_SW, Some(path_next), path_next);
+        assert_eq!(track, TRACK_X);
+        assert!(ship_subcoord(DIAGDIR_SW, track).is_some());
+    }
+
+    #[test]
+    fn find_closest_ship_depot_bfs_reaches_depot() {
+        let mut s = GameState::new(12, 12);
+        water_line(&mut s, 2, 0, 8);
+        let depot = TileCoord::new(0, 2);
+        s.map.set_kind(depot, TileKind::ShipDepot).unwrap();
+        let far = TileCoord::new(8, 2);
+        assert_eq!(find_closest_ship_depot(&s.map, far), Some(depot));
+        // Isla sin conexión: no encuentra.
+        s.map.set_kind(TileCoord::new(5, 5), TileKind::Water).unwrap();
+        assert!(find_closest_ship_depot(&s.map, TileCoord::new(5, 5)).is_none());
+    }
+
+    #[test]
+    fn ship_arrival_dock_depot_requires_center_buoy_le_3() {
+        let mut s = GameState::new(10, 10);
+        water_line(&mut s, 1, 0, 6);
+        let depot = TileCoord::new(0, 1);
+        s.map.set_kind(depot, TileKind::ShipDepot).unwrap();
+        let mut v = Vehicle::new(1, VehicleKind::Ship, depot, depot);
+        v.ship_pos_valid = true;
+        v.ship_x = depot.x * 16 + 8;
+        v.ship_y = depot.y * 16 + 8;
+        v.orders = vec![VehicleOrder::depot(depot)];
+        v.current_order = 0;
+        v.path.clear();
+        assert!(ship_arrival_ready(&v, Some(&s.map)));
+        v.ship_x = depot.x * 16 + 2;
+        assert!(!ship_arrival_ready(&v, Some(&s.map)));
+
+        // Buoy ≤3
+        let buoy = TileCoord::new(5, 1);
+        apply_command(&mut s, &Command::PlaceBuoy(buoy)).unwrap();
+        v.dest = buoy;
+        v.pos = TileCoord::new(3, 1);
+        v.orders = vec![VehicleOrder::waypoint(buoy)];
+        v.path.clear();
+        assert!(ship_arrival_ready(&v, Some(&s.map)));
+        v.pos = TileCoord::new(0, 1);
+        assert!(!ship_arrival_ready(&v, Some(&s.map)));
+    }
+
+    #[test]
+    fn lock_occupancy_two_ships_cannot_claim_same_middle() {
+        let lock = TileCoord::new(4, 4);
+        let mut occ = ShipLockOccupancy::new();
+        assert!(try_claim_ship_lock(&mut occ, lock, 1));
+        assert!(!try_claim_ship_lock(&mut occ, lock, 2));
+        assert!(!ship_lock_occupancy_allows(&occ, lock, 2));
+        assert!(ship_lock_occupancy_allows(&occ, lock, 1));
+        release_ship_lock(&mut occ, lock, 1);
+        assert!(try_claim_ship_lock(&mut occ, lock, 2));
+    }
+
+    /// Golden interno tick-a-tick (#268): pos/dir/z/orden. No vs `OpenTTD` externo.
+    #[test]
+    fn ship_internal_tick_golden_pos_dir_z_order() {
+        #[derive(Debug, PartialEq, Eq)]
+        struct Snap {
+            tick: u32,
+            x: i32,
+            y: i32,
+            dir: u8,
+            z: i16,
+            order: usize,
+        }
+
+        let mut s = GameState::new(12, 12);
+        water_line(&mut s, 3, 0, 6);
+        let depot = TileCoord::new(0, 3);
+        s.map.set_kind(depot, TileKind::ShipDepot).unwrap();
+        apply_command(
+            &mut s,
+            &Command::BuildVehicleAtDepot(depot, ENGINE_SHIP_MPS),
+        )
+        .unwrap();
+        let dest = TileCoord::new(6, 3);
+        s.vehicles[0].dest = dest;
+        s.vehicles[0].running = true;
+        s.vehicles[0].path = find_path(&s.map, depot, dest, PathNetwork::Water)
+            .unwrap()
+            .into();
+        s.vehicles[0].set_cruise_speed();
+        s.vehicles[0].orders = vec![VehicleOrder::depot(dest)];
+        s.vehicles[0].current_order = 0;
+
+        let mut snaps = Vec::new();
+        for tick in 0..80u32 {
+            if tick % 20 == 0 {
+                let v = &s.vehicles[0];
+                snaps.push(Snap {
+                    tick,
+                    x: v.pos.x,
+                    y: v.pos.y,
+                    dir: v.direction,
+                    z: v.z_pos.unwrap_or(0),
+                    order: v.current_order,
+                });
+            }
+            s.vehicles[0].step_with_map(Some(&s.map));
+        }
+        // Documentado (golden interno, no vs `OpenTTD`): y=3 constante; avanza en +x.
+        assert_eq!(snaps[0].x, 0);
+        assert_eq!(snaps[0].y, 3);
+        assert!(snaps.last().unwrap().x >= snaps[0].x);
+        assert!(snaps.iter().all(|s| s.y == 3));
+        assert!(snaps.iter().all(|s| s.dir <= 7));
+        let z_vals: Vec<_> = snaps.iter().map(|s| s.z).collect();
+        assert!(
+            z_vals.windows(2).all(|w| w[0] == w[1] || w[0] == 0),
+            "z no debería oscilar en canal llano: {z_vals:?}"
+        );
+        assert!(snaps.iter().all(|s| s.order == 0) || snaps.last().unwrap().x >= 5);
     }
 }

@@ -26,6 +26,11 @@ use crate::ui::dev_console::{
     DevConsoleState, dev_console_window_on_closed, handle_dev_console_buttons,
     handle_dev_console_keyboard, setup_dev_console, sync_dev_console,
 };
+use crate::ui::dialog_windows::{
+    ErrorDialogWindowState, OskWindowState, QueryStringWindowState, dialog_windows_on_closed,
+    handle_modal_enter, setup_dialog_windows, sync_dialog_windows,
+};
+use crate::ui::modal_stack::ModalStack;
 use crate::ui::display_options_window::{
     DisplayOptionsWindowState, display_options_window_on_closed, handle_display_options_buttons,
     setup_display_options_window, sync_display_options_window,
@@ -83,6 +88,10 @@ impl Plugin for SettingsWindowsPlugin {
             .init_resource::<TileInspectorWindowState>()
             .init_resource::<CheatWindowState>()
             .init_resource::<SoundMusicWindowState>()
+            .init_resource::<ModalStack>()
+            .init_resource::<QueryStringWindowState>()
+            .init_resource::<ErrorDialogWindowState>()
+            .init_resource::<OskWindowState>()
             .add_systems(
                 OnEnter(ClientScreen::InGame),
                 (
@@ -114,6 +123,7 @@ impl Plugin for SettingsWindowsPlugin {
                     setup_dev_console,
                     setup_tile_inspector_window,
                     setup_cheat_window,
+                    setup_dialog_windows,
                 )
                     .in_set(StartupSet::Ui),
             )
@@ -124,6 +134,7 @@ impl Plugin for SettingsWindowsPlugin {
                     handle_tile_inspector_hotkey,
                     handle_dev_console_keyboard,
                     handle_cheat_window_hotkey,
+                    handle_modal_enter,
                 )
                     .in_set(UpdateSet::Input)
                     .run_if(in_state(ClientScreen::InGame)),
@@ -213,6 +224,8 @@ impl Plugin for SettingsWindowsPlugin {
                     cheat_window_on_closed,
                     sync_cheat_window,
                     handle_cheat_window_buttons,
+                    dialog_windows_on_closed,
+                    sync_dialog_windows,
                 )
                     .in_set(UpdateSet::Ui)
                     .run_if(in_state(ClientScreen::InGame)),

@@ -58,13 +58,18 @@ pub struct IndustrySpecDef {
     pub production_rates: Vec<u8>,
     /// Multiplicadores de input (`0x1C`–`0x1E` / `0x28`); aplanados `[in][out]`.
     pub input_multipliers: Vec<u16>,
-    /// Callback mask (`0x21` lo + `0x22` hi); almacenado, sin ejecutar (#228).
+    /// Callback mask (`0x21` lo + `0x22` hi); call sites parciales #266.
     pub callback_mask: u16,
     /// Cost multiplier (`0x0F`).
     pub cost_multiplier: u8,
     pub name: String,
     pub from_newgrf: bool,
     pub grfid: u32,
+    /// Runtime Action2 para CBs de industria (#266); no se serializa.
+    #[serde(default, skip)]
+    pub newgrf_local_id: u8,
+    #[serde(default, skip)]
+    pub newgrf_runtime: Option<Box<crate::newgrf_sprites::TrainSpriteGraphics>>,
 }
 
 impl IndustrySpecDef {
@@ -230,6 +235,8 @@ mod tests {
             name: String::new(),
             from_newgrf: true,
             grfid: 1,
+            newgrf_local_id: 0,
+            newgrf_runtime: None,
         }];
         assert_eq!(next_free_industry_id(&catalog), Some(38));
     }

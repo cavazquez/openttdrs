@@ -170,6 +170,8 @@ pub fn apply_newgrf_industries(state: &mut GameState, search_dirs: &[&Path]) {
                 name: meta.name,
                 from_newgrf: true,
                 grfid: entry.grfid,
+                newgrf_local_id: meta.local_id,
+                newgrf_runtime: None,
             });
         }
     }

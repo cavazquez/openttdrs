@@ -27,7 +27,12 @@ use crate::ui::cargo_payment_window::CargoPaymentWindowState;
 use crate::ui::cheat_window::CheatWindowState;
 use crate::ui::destination_window::DestinationPickerState;
 use crate::ui::dev_console::DevConsoleState;
+use crate::ui::dialog_windows::{
+    ErrorDialogWindowState, OskWindowState, QueryStringWindowState, open_error_modal,
+    open_osk_for_query, open_query_for_newgrf_rename,
+};
 use crate::ui::display_options_window::DisplayOptionsWindowState;
+use crate::ui::modal_stack::ModalStack;
 use crate::ui::extra_viewport_window::ExtraViewportWindowState;
 use crate::ui::company_view_window::CompanyViewWindowState;
 use crate::ui::finances_window::FinancesWindowState;
@@ -366,6 +371,14 @@ pub(crate) const WINDOW_PARITY_MATRIX: &[WindowParityEntry] = &[
     upstream_window!(Goals, "gamescript", "goal_gui.cpp", "WC_GOALS_LIST"),
     upstream_window!(Story, "gamescript", "story_gui.cpp", "WC_STORY_BOOK"),
     upstream_window!(League, "gamescript", "league_gui.cpp", "WC_LEAGUE"),
+    upstream_window!(
+        QueryString,
+        "dialogs",
+        "querystring_gui.cpp",
+        "WC_QUERY_STRING"
+    ),
+    upstream_window!(ErrorDialog, "dialogs", "error_gui.cpp", "WC_ERRMSG"),
+    upstream_window!(OnScreenKeyboard, "dialogs", "osk_gui.cpp", "WC_OSK"),
 ];
 
 /// Path relativo al crate client (`src/`) de la implementación Rust (#240).
@@ -431,6 +444,9 @@ pub(crate) const fn window_rust_impl(id: FloatingWindowId) -> &'static str {
         FloatingWindowId::Goals => "ui/goal_list_window.rs",
         FloatingWindowId::Story => "ui/story_window.rs",
         FloatingWindowId::League => "ui/league_window.rs",
+        FloatingWindowId::QueryString => "ui/dialog_windows.rs",
+        FloatingWindowId::ErrorDialog => "ui/dialog_windows.rs",
+        FloatingWindowId::OnScreenKeyboard => "ui/dialog_windows.rs",
     }
 }
 
@@ -489,6 +505,7 @@ pub(crate) fn window_known_gaps(id: FloatingWindowId) -> &'static [WindowKnownGa
         || WORLD_FAMILY_WINDOW_IDS.contains(&id)
         || ECONOMY_FAMILY_WINDOW_IDS.contains(&id)
         || SETTINGS_FAMILY_WINDOW_IDS.contains(&id)
+        || DIALOGS_FAMILY_WINDOW_IDS.contains(&id)
     {
         return CAPTURE_ONLY;
     }
@@ -667,6 +684,15 @@ pub(crate) const SETTINGS_FAMILY_WINDOW_IDS: &[FloatingWindowId] = &[
     FloatingWindowId::CheatWindow,
 ];
 
+/// Inventario diálogos modales (#272): QueryString / Error / OSK.
+///
+/// Snapshots residual → #240. Pila modal / Enter / Escape en `modal_stack.rs`.
+pub(crate) const DIALOGS_FAMILY_WINDOW_IDS: &[FloatingWindowId] = &[
+    FloatingWindowId::QueryString,
+    FloatingWindowId::ErrorDialog,
+    FloatingWindowId::OnScreenKeyboard,
+];
+
 /// Variante preferida al spawnear (singleton): `default`/`game`/`owned`/`settings`…
 #[must_use]
 pub(crate) fn reference_geometry_primary(
@@ -760,6 +786,9 @@ pub(crate) const WINDOW_REFERENCE_GEOMETRY: &[ReferenceGeometry] = &[
     reference_geometry!(CheatWindow, "default", Auto, None, None),
     reference_geometry!(GenLand, "main", Center, None, None),
     reference_geometry!(League, "default", Auto, None, None),
+    reference_geometry!(QueryString, "default", Center, Some(300), Some(90)),
+    reference_geometry!(ErrorDialog, "default", Center, Some(280), Some(90)),
+    reference_geometry!(OnScreenKeyboard, "default", Center, Some(360), Some(144)),
 ];
 
 fn window_id_by_storage_key(requested: &str) -> Option<FloatingWindowId> {
@@ -1315,6 +1344,15 @@ fn open_all_windows_for_shot(world: &mut World, include_auxiliary: bool) {
     world.resource_mut::<GoalListWindowState>().open = true;
     world.resource_mut::<StoryWindowState>().open = true;
     world.resource_mut::<LeagueWindowState>().open = true;
+    {
+        let mut stack = world.resource_mut::<ModalStack>();
+        open_query_for_newgrf_rename(&mut stack, "windows_shot");
+        open_osk_for_query(&mut stack, "windows_shot");
+        open_error_modal(&mut stack, "windows_shot error");
+    }
+    world.resource_mut::<QueryStringWindowState>().open = true;
+    world.resource_mut::<ErrorDialogWindowState>().open = true;
+    world.resource_mut::<OskWindowState>().open = true;
 
     if include_auxiliary {
         world
@@ -1775,6 +1813,50 @@ mod tests {
                 gaps.iter()
                     .all(|g| g.category != "lifecycle" && g.category != "geometry"),
                 "sin lifecycle→#242 ni geometry→#243 para {id:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn dialogs_family_inventory_is_in_parity_matrix() {
+        for id in DIALOGS_FAMILY_WINDOW_IDS {
+            assert!(
+                WINDOW_PARITY_MATRIX.iter().any(|e| e.id == *id),
+                "familia dialogs falta en matriz: {id:?}"
+            );
+            assert!(
+                PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .join("src")
+                    .join(window_rust_impl(*id))
+                    .is_file(),
+                "rust_impl de familia dialogs ausente: {id:?}"
+            );
+            assert!(
+                reference_geometry_primary(*id).is_some(),
+                "familia dialogs sin geometría primary: {id:?}"
+            );
+            assert_eq!(
+                WINDOW_PARITY_MATRIX
+                    .iter()
+                    .find(|e| e.id == *id)
+                    .map(|e| e.family),
+                Some("dialogs"),
+                "familia matriz debe ser dialogs: {id:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn dialogs_family_known_gaps_are_capture_only() {
+        for id in DIALOGS_FAMILY_WINDOW_IDS {
+            let gaps = window_known_gaps(*id);
+            assert_eq!(
+                gaps,
+                &[WindowKnownGap {
+                    category: "capture",
+                    issue: 240,
+                }],
+                "familia dialogs debe ser solo capture→#240: {id:?}"
             );
         }
     }

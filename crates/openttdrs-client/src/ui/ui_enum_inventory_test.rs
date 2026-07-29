@@ -5,7 +5,7 @@ use super::toolbar::editor_toolbar::EditorToolbarAction;
 use super::toolbar::{BuildMenuAction, SaveMenuAction, ToolbarGroup};
 
 /// Debe coincidir con la tabla de `docs/PARIDAD.md`.
-const EXPECTED_FLOATING_WINDOWS: usize = 59; // +TownAuthority/IndustryProduction/CompanyView/+2 graph classes (#269/#271)
+const EXPECTED_FLOATING_WINDOWS: usize = 62; // +QueryString/ErrorDialog/OSK (#272)
 const EXPECTED_BUILD_MENU_ACTIONS: usize = 77; // +10 climate industry tools (#273)
 const EXPECTED_SAVE_MENU_ACTIONS: usize = 25;
 const EXPECTED_TOOLBAR_GROUPS: usize = 8;

@@ -26,8 +26,12 @@ use super::super::cargo_payment_window::CargoPaymentWindowState;
 use super::super::cheat_window::CheatWindowState;
 use super::super::destination_window::DestinationPickerState;
 use super::super::dev_console::DevConsoleState;
+use super::super::dialog_windows::{
+    ErrorDialogWindowState, OskWindowState, QueryStringWindowState,
+};
 use super::super::endscreen::{EndScreenState, RetireGameRequested};
 use super::super::finances_window::FinancesWindowState;
+use super::super::modal_stack::ModalStack;
 use super::super::genland_window::GenLandWindowState;
 use super::super::goal_list_window::GoalListWindowState;
 use super::super::graph_window::GraphWindowState;
@@ -411,6 +415,22 @@ pub(super) static RESOURCE_RESETS: &[ResourceTeardown] = &[
     ResourceTeardown {
         name: "CheatWindowState",
         apply: reset_default::<CheatWindowState>,
+    },
+    ResourceTeardown {
+        name: "ModalStack",
+        apply: reset_default::<ModalStack>,
+    },
+    ResourceTeardown {
+        name: "QueryStringWindowState",
+        apply: reset_default::<QueryStringWindowState>,
+    },
+    ResourceTeardown {
+        name: "ErrorDialogWindowState",
+        apply: reset_default::<ErrorDialogWindowState>,
+    },
+    ResourceTeardown {
+        name: "OskWindowState",
+        apply: reset_default::<OskWindowState>,
     },
     ResourceTeardown {
         name: "GenLandWindowState",

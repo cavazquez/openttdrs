@@ -367,8 +367,12 @@ pub use newgrf_actions::{
     parse_action0_sound_meta, parse_action0_station_meta, parse_action0_train_meta,
 };
 pub use newgrf_callback::{
-    action2_eval_ctx_from_vehicle, apply_vehicle_start_stop_callback, resolve_callback_or_failed,
-    resolve_vehicle_callback, vehicle_start_stop_callback_allows,
+    action2_eval_ctx_from_station, action2_eval_ctx_from_vehicle,
+    apply_house_construction_callback, apply_industry_location_callback,
+    apply_industry_tile_anim_callback, apply_station_availability_callback,
+    apply_vehicle_start_stop_callback, callback_allows_placement, resolve_callback_or_failed,
+    resolve_industry_tile_random_trigger, resolve_vehicle_callback,
+    vehicle_start_stop_callback_allows, writeback_station_persistent_registers,
     writeback_vehicle_persistent_registers,
 };
 pub use newgrf_config::{
@@ -384,8 +388,10 @@ pub use newgrf_sprites::{
     Action2VarAdjust, Action2VarEntry, Action2VarOp, Action2VarTerm, Action5Block,
     BRIDGE_DECKS_ACTION5_SLOT_COUNT, CALLBACK_FAILED, CANALS_ACTION5_LOCK_SLOT,
     CANALS_ACTION5_SLOT_COUNT, CATENARY_ACTION5_SLOT_COUNT, CATENARY_ENTRANCE_SPRITE_BASE,
-    CATENARY_PYLON_SPRITE_BASE, CATENARY_WIRE_SPRITE_BASE, CBID_STATION_BUILD_TILE_LAYOUT,
-    CBID_VEHICLE_START_STOP_CHECK, DecodedSprite, FOUNDATION_ACTION5_SLOT_COUNT,
+    CATENARY_PYLON_SPRITE_BASE, CATENARY_WIRE_SPRITE_BASE, CBID_HOUSE_ALLOW_CONSTRUCTION,
+    CBID_INDUSTRY_LOCATION, CBID_INDTILE_ANIM_NEXT_FRAME, CBID_STATION_AVAILABILITY,
+    CBID_STATION_BUILD_TILE_LAYOUT, CBID_VEHICLE_START_STOP_CHECK, DecodedSprite,
+    FOUNDATION_ACTION5_SLOT_COUNT,
     ONEWAY_ACTION5_SLOT_COUNT, OPENTTD_GUI_ACTION5_SLOT_COUNT, ROADSTOP_ACTION5_SLOT_COUNT,
     SHORE_ACTION5_SLOT_COUNT, SHORE_MISSING_BLOCK_SLOTS, SIGNAL_ACTION5_SLOT_COUNT,
     SPR_SIGNALS_ACTION5_BASE, SPRITE_V2_ZOOM_PREFERENCE, TRAMWAY_ACTION5_SLOT_COUNT,
@@ -517,9 +523,11 @@ pub use score::{
 pub use shared_orders::SharedOrderList;
 #[allow(deprecated)]
 pub use ship_movement::{
-    LOCK_TRANSIT_TICKS, SHIP_ACCELERATION_DEFAULT, SHIP_SUBCOORD, ShipSubcoordData,
-    is_water_network_tile, is_water_network_tile_at, lock_sprite_level, ship_accelerate,
-    ship_controller_tick, ship_move_up_down_on_lock, ship_requires_path, ship_subcoord,
+    LOCK_TRANSIT_TICKS, SHIP_ACCELERATION_DEFAULT, SHIP_SUBCOORD, ShipLockOccupancy,
+    ShipSubcoordData, choose_ship_track, find_closest_ship_depot, is_water_network_tile,
+    is_water_network_tile_at, lock_sprite_level, release_ship_lock, ship_accelerate,
+    ship_arrival_ready, ship_controller_tick, ship_lock_occupancy_allows,
+    ship_move_up_down_on_lock, ship_requires_path, ship_subcoord, try_claim_ship_lock,
     water_tile_is_lock, water_tiles_connected,
 };
 pub use sign::{MAX_SIGN_NAME_CHARS, Sign};

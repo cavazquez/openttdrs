@@ -205,6 +205,9 @@ pub struct Station {
     /// Bits aleatorios `NewGRF` de la estación (var `5F` / random Action2).
     #[serde(default)]
     pub newgrf_random_bits: u8,
+    /// Registros persistentes `NewGRF` (`7C` / `\2psto`); writeback tras CB/Action2 (#266).
+    #[serde(default)]
+    pub newgrf_persistent_regs: std::collections::HashMap<u8, u32>,
 }
 
 const fn default_station_rating() -> u8 {
@@ -265,6 +268,7 @@ impl Station {
             station_spec: crate::station_class::StationSpecId::DefaultRail,
             road_stop_spec: None,
             newgrf_random_bits: seed_station_newgrf_random_bits(pos),
+            newgrf_persistent_regs: std::collections::HashMap::new(),
         }
     }
 

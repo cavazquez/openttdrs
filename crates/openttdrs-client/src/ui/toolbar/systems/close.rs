@@ -7,6 +7,7 @@ use crate::ui::floating_window::{
 };
 use crate::ui::industry_panel::IndustryPanelState;
 use crate::ui::main_menu::return_to_main_menu;
+use crate::ui::modal_stack::ModalStack;
 use crate::ui::navigation::ToolbarMenuState;
 use crate::ui::save_window::SaveWindowState;
 use crate::ui::toolbar::build_input::cancel_placement;
@@ -20,6 +21,7 @@ pub(crate) struct InGameEscOverlays<'w> {
     navigation_menu: Option<ResMut<'w, ToolbarMenuState>>,
     minimap_layers: Option<ResMut<'w, MinimapLayerState>>,
     road_type_escape: Res<'w, RoadTypeEscapeConsumed>,
+    modal_stack: ResMut<'w, ModalStack>,
 }
 
 /// Hay herramienta, panel o modo de colocación activo que Esc debe cancelar primero.
@@ -100,6 +102,10 @@ pub(crate) fn handle_ingame_escape(
         layers.expanded = false;
         return;
     }
+    // #272: Escape cierra el modal tope antes que el resto de flotantes.
+    if overlays.modal_stack.handle_escape() {
+        return;
+    }
     if ingame_placement_busy(
         &save_window,
         &tool_state,
@@ -171,12 +177,31 @@ mod tests {
         world.insert_resource(IndustryPanelState::default());
         world.insert_resource(crate::ui::toolbar::StationBuildState::default());
         world.insert_resource(crate::ui::toolbar::RoadTypeEscapeConsumed::default());
+        world.insert_resource(ModalStack::default());
         world.insert_resource(SuspendedGameSession::default());
         world.insert_resource(NextState::<ClientScreen>::default());
         world.insert_resource(State::new(ClientScreen::InGame));
         insert_test_order_pick_state(&mut world);
         world.init_resource::<Messages<FloatingWindowClosed>>();
         world
+    }
+
+    #[test]
+    fn escape_closes_modal_top_before_leaving_game() {
+        let mut world = escape_test_world();
+        {
+            let mut stack = world.resource_mut::<ModalStack>();
+            crate::ui::dialog_windows::open_error_modal(&mut stack, "test");
+        }
+        let mut keys = ButtonInput::<KeyCode>::default();
+        keys.press(KeyCode::Escape);
+        world.insert_resource(keys);
+        world.run_system_once(handle_ingame_escape).unwrap();
+        assert!(world.resource::<ModalStack>().is_empty());
+        assert!(matches!(
+            world.resource::<NextState<ClientScreen>>(),
+            NextState::Unchanged
+        ));
     }
 
     #[test]

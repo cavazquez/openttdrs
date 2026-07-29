@@ -3,6 +3,7 @@
 use crate::company::CompanyId;
 use crate::map::{TileCoord, TileKind};
 use crate::station::{Station, modify_station_rating_around};
+use crate::map::Map;
 use crate::town::{
     FUND_BUILDINGS_RATING_BOOST, MAX_TOWN_AUTHORITY_COMPANIES, Town, apply_fund_buildings_boost,
 };
@@ -77,7 +78,7 @@ pub const ROAD_REBUILD_MONTHS: u8 = 6;
 pub const EXCLUSIVE_RIGHTS_MONTHS: u8 = 12;
 pub const BRIBE_UNWANTED_MONTHS: u8 = 6;
 /// Bonus al construir una estatua (`CmdDoTownAction`): +26 en OpenTTD.
-pub const BUILD_STATUE_AUTHORITY_RATING_BOOST: i16 = 26;
+pub const BUILD_STATUE_AUTHORITY_RATING_BOOST: i8 = 26;
 /// Rating al fallar soborno (`RATING_BRIBE_DOWN_TO`).
 pub const RATING_BRIBE_DOWN_TO: i16 = -50;
 /// Paso / tope de soborno exitoso.
@@ -175,8 +176,7 @@ fn action_allowed(
 pub fn execute_town_action(
     town: &mut Town,
     stations: &mut [Station],
-    map_w: i32,
-    map_h: i32,
+    map: &Map,
     company: CompanyId,
     action: TownAction,
     bribe_fails: bool,
@@ -217,8 +217,7 @@ pub fn execute_town_action(
             if town.has_statue(company) {
                 return Err(TownActionError::AlreadyHasStatue);
             }
-            let tile =
-                find_statue_tile(town.pos, map_w, map_h).ok_or(TownActionError::NoStatuePlace)?;
+            let tile = find_statue_tile(map, town.pos)?;
             town.set_statue(company, true);
             // Bonus de autoridad por estatua.
             let _ = town.adjust_rating(company, BUILD_STATUE_AUTHORITY_RATING_BOOST);
@@ -289,7 +288,10 @@ fn zero_company_station_ratings(stations: &mut [Station], town: &Town, company: 
 }
 
 /// Búsqueda espiral 9×9 simplificada: primera hierba/bosque libre.
-fn find_statue_tile(center: TileCoord, map_w: i32, map_h: i32) -> Option<TileCoord> {
+fn find_statue_tile(map: &Map, center: TileCoord) -> Option<TileCoord> {
+    let (map_w, map_h) = map.dimensions();
+    let map_w = i32::try_from(map_w).unwrap_or(0);
+    let map_h = i32::try_from(map_h).unwrap_or(0);
     for radius in 0_i32..=4 {
         for dy in -radius..=radius {
             for dx in -radius..=radius {
@@ -301,7 +303,10 @@ fn find_statue_tile(center: TileCoord, map_w: i32, map_h: i32) -> Option<TileCoo
                 if x < 0 || y < 0 || x >= map_w || y >= map_h {
                     continue;
                 }
-                return Some(TileCoord::new(x, y));
+                let candidate = TileCoord::new(x, y);
+                if statue_tile_is_clear(map.get_kind(candidate)) {
+                    return Some(TileCoord::new(x, y));
+                }
             }
         }
     }

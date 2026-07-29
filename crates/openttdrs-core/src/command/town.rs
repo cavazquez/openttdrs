@@ -4,8 +4,7 @@ use crate::GameState;
 use crate::map::{TileCoord, TileKind, tile_slope_and_z};
 use crate::town::{Town, update_town_radius};
 use crate::town_action::{
-    TownAction, TownActionError, TownAuthoritySettings, BUILD_STATUE_AUTHORITY_RATING_BOOST,
-    execute_town_action, mask_of_town_actions, statue_tile_is_clear,
+    TownAction, TownActionError, TownAuthoritySettings, execute_town_action, mask_of_town_actions,
 };
 use crate::townname::generate_town_name;
 
@@ -53,16 +52,11 @@ pub(crate) fn do_town_action(
         false
     };
 
-    let (map_w, map_h) = state.map.dimensions();
-    let map_w = i32::try_from(map_w).unwrap_or(0);
-    let map_h = i32::try_from(map_h).unwrap_or(0);
-
     state.economy.money -= cost;
     let result = execute_town_action(
         &mut state.towns[idx],
         &mut state.stations,
-        map_w,
-        map_h,
+        &state.map,
         company,
         action,
         bribe_fails,
@@ -92,31 +86,6 @@ pub(crate) fn do_town_action(
             Err(CommandError::StatueNoPlace)
         }
     }
-}
-
-fn find_clear_statue_tile(state: &GameState, center: TileCoord) -> Result<TileCoord, CommandError> {
-    let (mw, mh) = state.map.dimensions();
-    let mw = i32::try_from(mw).unwrap_or(0);
-    let mh = i32::try_from(mh).unwrap_or(0);
-    for radius in 0_i32..=4 {
-        for dy in -radius..=radius {
-            for dx in -radius..=radius {
-                if radius != 0 && dx.abs() != radius && dy.abs() != radius {
-                    continue;
-                }
-                let x = center.x + dx;
-                let y = center.y + dy;
-                if x < 0 || y < 0 || x >= mw || y >= mh {
-                    continue;
-                }
-                let c = TileCoord::new(x, y);
-                if statue_tile_is_clear(state.map.get_kind(c)) {
-                    return Ok(c);
-                }
-            }
-        }
-    }
-    Err(CommandError::StatueNoPlace)
 }
 
 /// Funda un pueblo en hierba plana (`CmdBuildTown` MVP).
@@ -232,9 +201,7 @@ mod tests {
     use crate::company::CompanyId;
     use crate::station::{StopKind, station_rating_for_cargo};
     use crate::town_action::{
-        ADVERTISE_MEDIUM_BOOST,
-        BUILD_STATUE_AUTHORITY_RATING_BOOST,
-        EXCLUSIVE_RIGHTS_MONTHS,
+        ADVERTISE_MEDIUM_BOOST, EXCLUSIVE_RIGHTS_MONTHS, BUILD_STATUE_AUTHORITY_RATING_BOOST,
     };
     use crate::{Command, GameState, apply_command, map::TileCoord};
 
@@ -402,6 +369,33 @@ mod tests {
     }
 
     #[test]
+    fn build_statue_rejects_when_no_clear_tile_found() {
+        let mut s = GameState::new(12, 12);
+        s.economy.money = 50_000;
+        s.towns.push(Town {
+            id: 1,
+            pos: TileCoord::new(6, 6),
+            name: "S".into(),
+            ..Default::default()
+        });
+        for dx in -4..=4 {
+            for dy in -4..=4 {
+                let c = TileCoord::new(6 + dx, 6 + dy);
+                s.map.set_kind(c, TileKind::Road).unwrap();
+            }
+        }
+        let err = apply_command(
+            &mut s,
+            &Command::DoTownAction {
+                town_id: 1,
+                action: TownAction::BuildStatue,
+            },
+        )
+        .unwrap_err();
+        assert_eq!(err, CommandError::StatueNoPlace);
+    }
+
+    #[test]
     fn build_statue_increases_authority_by_26() {
         let mut s = GameState::new(32, 32);
         s.economy.money = 50_000;
@@ -424,7 +418,7 @@ mod tests {
 
         assert_eq!(
             s.towns[0].authority_rating(CompanyId::PLAYER),
-            before + BUILD_STATUE_AUTHORITY_RATING_BOOST
+            before + i16::from(BUILD_STATUE_AUTHORITY_RATING_BOOST)
         );
     }
 }

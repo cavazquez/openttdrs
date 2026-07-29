@@ -1,3 +1,4 @@
+use bevy::ecs::system::SystemParam;
 use bevy::input::ButtonState;
 use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::prelude::*;
@@ -59,6 +60,13 @@ pub(crate) struct StationCargoPanelState {
     pub(crate) station_pos: Option<TileCoord>,
     pub(crate) rename_editing: bool,
     pub(crate) cargo_filter: StationCargoFilter,
+}
+
+#[derive(SystemParam)]
+struct StationWindowContext<'w, 's> {
+    windows: Query<'w, 's, &'static FloatingWindow>,
+    parents: Query<'w, 's, &'static ChildOf>,
+    station_pool: Option<ResMut<'w, StationPoolRegistry>>,
 }
 
 #[derive(Component)]
@@ -632,29 +640,29 @@ pub(crate) fn handle_station_cargo_panel_buttons(
     mut rename_input_q: Query<&mut EditableText, With<StationCargoRenameInput>>,
     time: Res<Time>,
     mut cam_q: Query<&mut Transform, (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
-    windows: Query<&FloatingWindow>,
-    parents: Query<&ChildOf>,
-    mut station_pool: Option<ResMut<StationPoolRegistry>>,
+    mut window_ctx: StationWindowContext,
 ) {
     for (entity, interaction, button) in &mut q {
         if *interaction != Interaction::Pressed {
             continue;
         }
-        let keyed_pos = window_key_for_descendant(entity, &windows, &parents).and_then(|key| {
-            station_pool
-                .as_deref()
-                .and_then(|pool| pool.slots.get(key.instance as usize).copied().flatten())
-        });
+        let keyed_pos = window_key_for_descendant(entity, &window_ctx.windows, &window_ctx.parents)
+            .and_then(|key| {
+                window_ctx
+                    .station_pool
+                    .as_deref()
+                    .and_then(|pool| pool.slots.get(key.instance as usize).copied().flatten())
+            });
         let Some(station_pos) = keyed_pos.or(station_panel.station_pos) else {
             continue;
         };
         station_panel.station_pos = Some(station_pos);
-        if let Some(pool) = station_pool.as_deref_mut() {
+        if let Some(pool) = window_ctx.station_pool.as_deref_mut() {
             pool.focused = Some(station_pos);
         }
         match button {
             StationCargoPanelButton::Close => {
-                if let Some(pool) = station_pool.as_deref_mut() {
+                if let Some(pool) = window_ctx.station_pool.as_deref_mut() {
                     if let Some(slot) = pool.slot_of(station_pos) {
                         pool.slots[usize::from(slot)] = None;
                     }

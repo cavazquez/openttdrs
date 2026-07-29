@@ -885,7 +885,7 @@ Checklist versionado de superficies de UI. Los conteos deben coincidir con
 `FloatingWindowId::ALL` / `BuildMenuAction::ALL` / etc. (test
 `ui_enum_inventory_counts`).
 
-**Fecha:** 2026-07-29 · **FloatingWindowId:** 46 · **BuildMenuAction:** 67 ·
+**Fecha:** 2026-07-29 · **FloatingWindowId:** 54 · **BuildMenuAction:** 67 ·
 **SaveMenuAction:** 25 · **ToolbarGroup:** 8
 
 ### Ventanas flotantes (`FloatingWindowId`)

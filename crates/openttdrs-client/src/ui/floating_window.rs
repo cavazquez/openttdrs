@@ -94,6 +94,22 @@ pub(crate) enum FloatingWindowId {
     ObjectPicker,
     /// «Selección de puente» tras definir el tramo.
     BridgePicker,
+    /// Selección de muelle antes de colocarlo.
+    DockPicker,
+    /// Selección de boya antes de colocarla.
+    BuoyPicker,
+    /// Selección de waypoint ferroviario.
+    RailWaypointPicker,
+    /// Selección de waypoint de carretera.
+    RoadWaypointPicker,
+    /// Selección de árbol en edición de paisaje.
+    TreePicker,
+    /// Selección de modo terraform antes de pintar.
+    TerraformPicker,
+    /// Selección de estilo de cartel en edición de mapa.
+    SignPicker,
+    /// Selección de tipo de depósito en construcción.
+    DepotBuildPicker,
     /// Lista de destinos para la ruta del vehículo.
     DestinationPicker,
     /// Historial de noticias (Message history).
@@ -198,6 +214,14 @@ impl FloatingWindowId {
         Self::RoadStopPicker,
         Self::ObjectPicker,
         Self::BridgePicker,
+        Self::DockPicker,
+        Self::BuoyPicker,
+        Self::RailWaypointPicker,
+        Self::RoadWaypointPicker,
+        Self::TreePicker,
+        Self::TerraformPicker,
+        Self::SignPicker,
+        Self::DepotBuildPicker,
         Self::DestinationPicker,
         Self::NewsHistory,
         Self::Finances,
@@ -250,6 +274,14 @@ impl FloatingWindowId {
             Self::RoadStopPicker => "RoadStopPicker",
             Self::ObjectPicker => "ObjectPicker",
             Self::BridgePicker => "BridgePicker",
+            Self::DockPicker => "DockPicker",
+            Self::BuoyPicker => "BuoyPicker",
+            Self::RailWaypointPicker => "RailWaypointPicker",
+            Self::RoadWaypointPicker => "RoadWaypointPicker",
+            Self::TreePicker => "TreePicker",
+            Self::TerraformPicker => "TerraformPicker",
+            Self::SignPicker => "SignPicker",
+            Self::DepotBuildPicker => "DepotBuildPicker",
             Self::DestinationPicker => "DestinationPicker",
             Self::NewsHistory => "NewsHistory",
             Self::Finances => "Finances",
@@ -348,6 +380,14 @@ fn chrome_capabilities(id: FloatingWindowId) -> WindowChromeCapabilities {
             | FloatingWindowId::AirportPicker
             | FloatingWindowId::RoadStopPicker
             | FloatingWindowId::ObjectPicker
+            | FloatingWindowId::DockPicker
+            | FloatingWindowId::BuoyPicker
+            | FloatingWindowId::RailWaypointPicker
+            | FloatingWindowId::RoadWaypointPicker
+            | FloatingWindowId::TreePicker
+            | FloatingWindowId::TerraformPicker
+            | FloatingWindowId::SignPicker
+            | FloatingWindowId::DepotBuildPicker
             | FloatingWindowId::NewsHistory
             | FloatingWindowId::Finances
             | FloatingWindowId::SoundMusic
@@ -369,6 +409,14 @@ fn chrome_capabilities(id: FloatingWindowId) -> WindowChromeCapabilities {
                 | FloatingWindowId::AirportPicker
                 | FloatingWindowId::RoadStopPicker
                 | FloatingWindowId::ObjectPicker
+                | FloatingWindowId::DockPicker
+                | FloatingWindowId::BuoyPicker
+                | FloatingWindowId::RailWaypointPicker
+                | FloatingWindowId::RoadWaypointPicker
+                | FloatingWindowId::TreePicker
+                | FloatingWindowId::TerraformPicker
+                | FloatingWindowId::SignPicker
+                | FloatingWindowId::DepotBuildPicker
                 | FloatingWindowId::SignalPicker
         );
     let resize = matches!(

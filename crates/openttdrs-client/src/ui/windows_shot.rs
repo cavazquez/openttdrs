@@ -210,6 +210,14 @@ pub(crate) const WINDOW_PARITY_MATRIX: &[WindowParityEntry] = &[
         "bridge_gui.cpp",
         "WC_BUILD_BRIDGE"
     ),
+    upstream_window!(DockPicker, "construction", "dock_gui.cpp", "WC_BUILD_DOCK"),
+    upstream_window!(BuoyPicker, "construction", "dock_gui.cpp", "WC_BUILD_BUOY"),
+    extension_window!(RailWaypointPicker, "construction"),
+    extension_window!(RoadWaypointPicker, "construction"),
+    extension_window!(TreePicker, "editor"),
+    extension_window!(TerraformPicker, "editor"),
+    extension_window!(SignPicker, "world"),
+    extension_window!(DepotBuildPicker, "construction"),
     upstream_window!(
         DestinationPicker,
         "vehicles",
@@ -351,6 +359,14 @@ pub(crate) const fn window_rust_impl(id: FloatingWindowId) -> &'static str {
         FloatingWindowId::RoadStopPicker => "ui/toolbar/road_stop_picker_window.rs",
         FloatingWindowId::ObjectPicker => "ui/toolbar/object_picker_window.rs",
         FloatingWindowId::BridgePicker => "ui/toolbar/bridge_window.rs",
+        FloatingWindowId::DockPicker => "ui/toolbar/construction_picker_windows.rs",
+        FloatingWindowId::BuoyPicker => "ui/toolbar/construction_picker_windows.rs",
+        FloatingWindowId::RailWaypointPicker => "ui/toolbar/construction_picker_windows.rs",
+        FloatingWindowId::RoadWaypointPicker => "ui/toolbar/construction_picker_windows.rs",
+        FloatingWindowId::TreePicker => "ui/toolbar/construction_picker_windows.rs",
+        FloatingWindowId::TerraformPicker => "ui/toolbar/construction_picker_windows.rs",
+        FloatingWindowId::SignPicker => "ui/toolbar/construction_picker_windows.rs",
+        FloatingWindowId::DepotBuildPicker => "ui/toolbar/construction_picker_windows.rs",
         FloatingWindowId::DestinationPicker => "ui/destination_window.rs",
         FloatingWindowId::NewsHistory => "ui/statusbar/history.rs",
         FloatingWindowId::Finances => "ui/finances_window.rs",
@@ -550,15 +566,21 @@ pub(crate) const VEHICLE_FAMILY_WINDOW_IDS: &[FloatingWindowId] = &[
     FloatingWindowId::DestinationPicker,
 ];
 
-/// Inventario de pickers construction existentes cubiertos por #246 slice 1.
-///
-/// Greenfield (dock/waypoint/landscaping pickers) queda fuera: follow-up del issue.
+/// Inventario de pickers construction cubiertos por #246 y #270 (#270 greenfield).
 pub(crate) const CONSTRUCTION_FAMILY_WINDOW_IDS: &[FloatingWindowId] = &[
     FloatingWindowId::RailStationPicker,
     FloatingWindowId::AirportPicker,
     FloatingWindowId::RoadStopPicker,
     FloatingWindowId::ObjectPicker,
     FloatingWindowId::BridgePicker,
+    FloatingWindowId::DockPicker,
+    FloatingWindowId::BuoyPicker,
+    FloatingWindowId::RailWaypointPicker,
+    FloatingWindowId::RoadWaypointPicker,
+    FloatingWindowId::TreePicker,
+    FloatingWindowId::TerraformPicker,
+    FloatingWindowId::SignPicker,
+    FloatingWindowId::DepotBuildPicker,
     FloatingWindowId::SignalPicker,
 ];
 
@@ -664,6 +686,14 @@ pub(crate) const WINDOW_REFERENCE_GEOMETRY: &[ReferenceGeometry] = &[
     reference_geometry!(RoadStopPicker, "default", Auto, Some(220), Some(180)),
     reference_geometry!(ObjectPicker, "default", Auto, Some(220), Some(200)),
     reference_geometry!(BridgePicker, "default", Auto, Some(200), Some(114)),
+    reference_geometry!(DockPicker, "default", Auto, Some(258), Some(120)),
+    reference_geometry!(BuoyPicker, "default", Auto, Some(258), Some(96)),
+    reference_geometry!(RailWaypointPicker, "default", Auto, Some(284), Some(96)),
+    reference_geometry!(RoadWaypointPicker, "default", Auto, Some(284), Some(96)),
+    reference_geometry!(TreePicker, "default", Auto, Some(260), Some(96)),
+    reference_geometry!(TerraformPicker, "default", Auto, Some(260), Some(96)),
+    reference_geometry!(SignPicker, "default", Auto, Some(300), Some(96)),
+    reference_geometry!(DepotBuildPicker, "default", Auto, Some(260), Some(96)),
     reference_geometry!(SignalPicker, "default", Auto, Some(200), Some(140)),
     reference_geometry!(DestinationPicker, "default", Auto, Some(200), Some(180)),
     reference_geometry!(SubsidyList, "default", Auto, Some(500), Some(127)),

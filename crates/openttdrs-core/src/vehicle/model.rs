@@ -153,6 +153,9 @@ pub struct Vehicle {
     /// Contador de bloqueo por tráfico (`RoadVehFindCloseTo`).
     #[serde(default)]
     pub blocked_ctr: u16,
+    /// Ventana para ejecutar una reversa vial forzada (`RoadVehicle::reverse_ctr`).
+    #[serde(default)]
+    pub reverse_ctr: u8,
     /// Carril opuesto durante adelantamiento (`RVSB_DRIVE_SIDE` o 0).
     #[serde(default)]
     pub overtaking: u8,
@@ -503,6 +506,7 @@ impl Vehicle {
             road_state: 0,
             frame: 0,
             blocked_ctr: 0,
+            reverse_ctr: 0,
             overtaking: 0,
             overtaking_ctr: 0,
             crashed: false,

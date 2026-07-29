@@ -10,10 +10,10 @@ use crate::road_movement::overtake::{
     ROAD_ACCEL_OVERTAKE, drive_state_with_overtake_and_side, tick_overtaking,
 };
 use crate::road_movement::rvsb::{
-    RVC_DEFAULT_START_FRAME, RVC_DRIVE_THROUGH_STOP_FRAME, RVSB_ENTERED_STOP, RVSB_IN_DEPOT,
-    RVSB_IN_DT_ROAD_STOP, RVSB_IN_ROAD_STOP, RVSB_TRACKDIR_MASK, RVSB_USING_SECOND_BAY,
-    RVSB_WORMHOLE, is_bay_road_state, is_drive_through_road_state, trackdir_for_entry_exit,
-    trackdir_from_direction,
+    RVC_DEFAULT_START_FRAME, RVC_DRIVE_THROUGH_STOP_FRAME, RVC_TURN_AROUND_START_FRAME,
+    RVSB_ENTERED_STOP, RVSB_IN_DEPOT, RVSB_IN_DT_ROAD_STOP, RVSB_IN_ROAD_STOP,
+    RVSB_TRACKDIR_MASK, RVSB_USING_SECOND_BAY, RVSB_WORMHOLE, is_bay_road_state,
+    is_drive_through_road_state, trackdir_for_entry_exit, trackdir_from_direction,
 };
 use crate::road_movement::slope::sync_road_slope_speed;
 use crate::road_movement::traffic::{apply_road_veh_close_to, is_road_vehicle_kind};
@@ -304,6 +304,29 @@ fn road_vehicle_has_motion_target(v: &Vehicle) -> bool {
         || is_bay_road_state(v.road_state) && v.road_state & RVSB_ENTERED_STOP == 0
 }
 
+fn tick_reverse_counter(v: &mut Vehicle) -> bool {
+    if v.reverse_ctr == 0 {
+        return false;
+    }
+    v.reverse_ctr -= 1;
+    if v.frame != RVC_DEFAULT_START_FRAME || v.road_state > RVSB_TRACKDIR_MASK {
+        return false;
+    }
+
+    let reverse_trackdir = match v.road_state & RVSB_TRACKDIR_MASK {
+        0 => 14,
+        1 => 15,
+        8 => 6,
+        9 => 7,
+        _ => return false,
+    };
+    v.road_state = reverse_trackdir;
+    v.frame = RVC_TURN_AROUND_START_FRAME;
+    v.reverse_ctr = 0;
+    v.path.clear();
+    true
+}
+
 /// Tick completo de roadveh: `UpdateSpeed` + bucle `while j >= adv_spd`.
 pub fn road_vehicle_tick(vehicles: &mut [Vehicle], v_idx: usize, map: Option<&Map>) {
     road_vehicle_tick_side(vehicles, v_idx, map, false);
@@ -320,6 +343,7 @@ pub fn road_vehicle_tick_side(
         return;
     }
     let v = &mut vehicles[v_idx];
+    tick_reverse_counter(v);
     if v.crashed {
         v.cur_speed = 0;
         return;
@@ -585,6 +609,43 @@ mod tests {
         assert_eq!(vehicles[0].direction, DIR_SW);
         assert_eq!(vehicles[0].frame, RVC_DEFAULT_START_FRAME);
         assert_eq!(vehicles[0].cur_speed, 75);
+    }
+
+    #[test]
+    fn reverse_counter_starts_turnaround_once_at_segment_start() {
+        let mut v = Vehicle::new(
+            1,
+            VehicleKind::Bus,
+            TileCoord::new(0, 0),
+            TileCoord::new(5, 0),
+        );
+        v.road_state = 0;
+        v.frame = RVC_DEFAULT_START_FRAME;
+        v.reverse_ctr = 180;
+        v.path = VecDeque::from([TileCoord::new(1, 0)]);
+
+        assert!(tick_reverse_counter(&mut v));
+        assert_eq!(v.reverse_ctr, 0);
+        assert_eq!(v.road_state, 14);
+        assert_eq!(v.frame, RVC_TURN_AROUND_START_FRAME);
+        assert!(v.path.is_empty());
+        assert!(!tick_reverse_counter(&mut v));
+    }
+
+    #[test]
+    fn reverse_counter_waits_while_inside_a_road_stop() {
+        let mut v = Vehicle::new(
+            1,
+            VehicleKind::Bus,
+            TileCoord::new(0, 0),
+            TileCoord::new(5, 0),
+        );
+        v.road_state = RVSB_IN_ROAD_STOP;
+        v.reverse_ctr = 2;
+
+        assert!(!tick_reverse_counter(&mut v));
+        assert_eq!(v.reverse_ctr, 1);
+        assert_eq!(v.road_state, RVSB_IN_ROAD_STOP);
     }
 
     #[test]

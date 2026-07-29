@@ -11,9 +11,9 @@ use crate::road_movement::overtake::{
 };
 use crate::road_movement::rvsb::{
     RVC_DEFAULT_START_FRAME, RVC_DRIVE_THROUGH_STOP_FRAME, RVC_TURN_AROUND_START_FRAME,
-    RVSB_ENTERED_STOP, RVSB_IN_DEPOT, RVSB_IN_DT_ROAD_STOP, RVSB_IN_ROAD_STOP,
-    RVSB_TRACKDIR_MASK, RVSB_USING_SECOND_BAY, RVSB_WORMHOLE, is_bay_road_state,
-    is_drive_through_road_state, trackdir_for_entry_exit, trackdir_from_direction,
+    RVSB_ENTERED_STOP, RVSB_IN_DEPOT, RVSB_IN_DT_ROAD_STOP, RVSB_IN_ROAD_STOP, RVSB_TRACKDIR_MASK,
+    RVSB_USING_SECOND_BAY, RVSB_WORMHOLE, is_bay_road_state, is_drive_through_road_state,
+    trackdir_for_entry_exit, trackdir_from_direction,
 };
 use crate::road_movement::slope::sync_road_slope_speed;
 use crate::road_movement::traffic::{apply_road_veh_close_to, is_road_vehicle_kind};
@@ -227,9 +227,8 @@ fn drive_through_should_stop(v: &Vehicle, map: Option<&Map>) -> bool {
         _ => false,
     };
     type_matches
-        && v.current_order_ref().is_some_and(|order| {
-            order.should_stop_at_station(v.last_station_visited, v.pos)
-        })
+        && v.current_order_ref()
+            .is_some_and(|order| order.should_stop_at_station(v.last_station_visited, v.pos))
 }
 
 fn handle_drive_through_stop(

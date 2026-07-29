@@ -1061,7 +1061,8 @@ impl VehicleOrder {
         last_station_visited: Option<TileCoord>,
         station: TileCoord,
     ) -> bool {
-        if matches!(last_station_visited, Some(last) if last.x == station.x && last.y == station.y) {
+        if matches!(last_station_visited, Some(last) if last.x == station.x && last.y == station.y)
+        {
             return false;
         }
         match self {

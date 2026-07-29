@@ -471,7 +471,9 @@ fn window_visual_states(id: FloatingWindowId) -> &'static [&'static str] {
     if DIALOGS_FAMILY_WINDOW_IDS.contains(&id) {
         &["normal", "pressed", "disabled", "modal"]
     } else {
-        &["normal", "pressed", "disabled", "shaded", "sticky", "resized"]
+        &[
+            "normal", "pressed", "disabled", "shaded", "sticky", "resized",
+        ]
     }
 }
 
@@ -874,13 +876,18 @@ fn window_parity_matrix_json() -> String {
                 .map(|state| json_string(state))
                 .collect::<Vec<_>>()
                 .join(","),
-            [(1280, 720, 1), (1280, 720, 2), (1920, 1080, 1), (1920, 1080, 2)]
-                .iter()
-                .map(|&(width, height, scale)| json_string(&window_capture_path(
-                    entry.id, width, height, scale
-                )))
-                .collect::<Vec<_>>()
-                .join(","),
+            [
+                (1280, 720, 1),
+                (1280, 720, 2),
+                (1920, 1080, 1),
+                (1920, 1080, 2),
+            ]
+            .iter()
+            .map(|&(width, height, scale)| json_string(&window_capture_path(
+                entry.id, width, height, scale
+            )))
+            .collect::<Vec<_>>()
+            .join(","),
             json_string(key.class.storage_key()),
             key.instance,
         );

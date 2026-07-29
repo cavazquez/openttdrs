@@ -780,7 +780,6 @@ impl super::model::Vehicle {
                 | super::model::VehicleKind::Truck
                 | super::model::VehicleKind::Tram => {
                     self.cur_speed -= self.cur_speed >> 2;
-                    self.road_turn_delay = 1;
                 }
                 super::model::VehicleKind::Aircraft => self.cur_speed -= self.cur_speed >> 2,
                 // Barcos: giros fuertes los resuelve `ship_controller_tick` (cur_speed=0).

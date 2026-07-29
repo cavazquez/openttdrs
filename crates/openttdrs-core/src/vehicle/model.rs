@@ -150,9 +150,6 @@ pub struct Vehicle {
     /// Frame dentro de la tabla `_road_drive_data` actual.
     #[serde(default)]
     pub frame: u8,
-    /// Tick extra que consume un roadveh tras cambiar de dirección.
-    #[serde(default)]
-    pub road_turn_delay: u8,
     /// Contador de bloqueo por tráfico (`RoadVehFindCloseTo`).
     #[serde(default)]
     pub blocked_ctr: u16,
@@ -505,7 +502,6 @@ impl Vehicle {
             progress: 0,
             road_state: 0,
             frame: 0,
-            road_turn_delay: 0,
             blocked_ctr: 0,
             overtaking: 0,
             overtaking_ctr: 0,

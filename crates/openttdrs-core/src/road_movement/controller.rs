@@ -282,10 +282,6 @@ pub fn road_vehicle_tick_side(
     if v.holding_for_timetable() {
         return;
     }
-    if v.road_turn_delay != 0 {
-        v.road_turn_delay = v.road_turn_delay.saturating_sub(1);
-        return;
-    }
 
     // Inicializar state desde dirección.
     if v.road_state != RVSB_IN_DEPOT
@@ -449,42 +445,23 @@ mod tests {
     }
 
     #[test]
-    fn direction_change_consumes_one_road_tick() {
+    fn turn_marker_consumes_a_substep_without_advancing_the_tile() {
         let start = TileCoord::new(0, 0);
         let end = TileCoord::new(1, 0);
         let mut v = Vehicle::new(1, VehicleKind::Bus, start, end);
         v.direction = DIR_NE;
+        v.road_state = 6;
+        v.frame = 3;
         v.path = VecDeque::from([end]);
-        v.cur_speed = 112;
-        v.set_direction_with_curve_penalty(
-            DIR_SW,
-            None,
-            crate::engine::TrainAccelerationModel::Original,
-        );
-        assert_eq!(v.road_turn_delay, 1);
+        v.cur_speed = 100;
+        let mut vehicles = vec![v];
 
-        let before = (v.pos, v.frame, v.progress);
-        road_vehicle_step_solo(&mut v, None);
+        assert!(individual_road_vehicle_controller(&mut vehicles, 0, None));
 
-        assert_eq!(v.road_turn_delay, 0);
-        assert_eq!((v.pos, v.frame, v.progress), before);
-    }
-
-    #[test]
-    fn stable_direction_does_not_arm_road_turn_delay() {
-        let mut v = Vehicle::new(
-            1,
-            VehicleKind::Bus,
-            TileCoord::new(0, 0),
-            TileCoord::new(1, 0),
-        );
-        v.direction = DIR_SW;
-        v.set_direction_with_curve_penalty(
-            DIR_SW,
-            None,
-            crate::engine::TrainAccelerationModel::Original,
-        );
-        assert_eq!(v.road_turn_delay, 0);
+        assert_eq!(vehicles[0].pos, start);
+        assert_eq!(vehicles[0].direction, DIR_SW);
+        assert_eq!(vehicles[0].frame, RVC_DEFAULT_START_FRAME);
+        assert_eq!(vehicles[0].cur_speed, 75);
     }
 
     #[test]

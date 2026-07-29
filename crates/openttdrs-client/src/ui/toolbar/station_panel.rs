@@ -19,8 +19,8 @@ use crate::ui::floating_window::{
 };
 use crate::ui::font::UiFontRole;
 use crate::ui::hud::{HudBuildFeedback, push_build_command_error};
-use crate::ui::vehicle_list::VehicleListState;
 use crate::ui::station_pool::{MAX_STATION_POOL_SLOTS, StationPoolRegistry};
+use crate::ui::vehicle_list::VehicleListState;
 
 use super::order_panel::apply_order_edit;
 use super::{
@@ -108,112 +108,112 @@ pub(crate) fn setup_station_cargo_panel(mut commands: Commands, asset_server: Re
             249.0,
         );
         commands.entity(content).with_children(|panel| {
-        panel.spawn((
-            StationCargoPanelText,
-            Text::new(""),
-            window_text_font(asset_server, UiFontRole::Caption),
-            TextColor(WINDOW_TEXT),
-        ));
-        panel
-            .spawn((
-                StationCargoRenameRow,
-                Node {
-                    flex_direction: FlexDirection::Row,
-                    column_gap: Val::Px(4.0),
-                    align_items: AlignItems::Center,
-                    display: Display::None,
-                    margin: UiRect::top(Val::Px(4.0)),
-                    ..default()
-                },
-                BuildMenuUi,
-            ))
-            .with_children(|row| {
-                row.spawn((
-                    StationCargoRenameInput,
-                    EditableText::new(""),
-                    window_text_font(asset_server, UiFontRole::Caption),
-                    TextColor(WINDOW_TEXT),
+            panel.spawn((
+                StationCargoPanelText,
+                Text::new(""),
+                window_text_font(asset_server, UiFontRole::Caption),
+                TextColor(WINDOW_TEXT),
+            ));
+            panel
+                .spawn((
+                    StationCargoRenameRow,
                     Node {
-                        flex_grow: 1.0,
-                        height: Val::Px(22.0),
-                        padding: UiRect::horizontal(Val::Px(4.0)),
-                        border: UiRect::all(Val::Px(1.0)),
+                        flex_direction: FlexDirection::Row,
+                        column_gap: Val::Px(4.0),
+                        align_items: AlignItems::Center,
+                        display: Display::None,
+                        margin: UiRect::top(Val::Px(4.0)),
                         ..default()
                     },
-                    BorderColor::all(Color::srgb(0.66, 0.58, 0.38)),
-                ));
-                spawn_rename_action(row, asset_server, StationCargoRenameButton::Apply, "OK");
-                spawn_rename_action(row, asset_server, StationCargoRenameButton::Cancel, "No");
-            });
-        // Chrome compacto (#183/#269): labels cortos + tooltip. Cierre vía chrome ✕ (#245).
-        // Multi-instancia: pool stub `StationPoolRegistry` (2 slots); dual-entity residual #242.
-        panel
-            .spawn(Node {
-                flex_direction: FlexDirection::Row,
-                column_gap: Val::Px(3.0),
-                flex_wrap: FlexWrap::Wrap,
-                row_gap: Val::Px(3.0),
-                margin: UiRect::top(Val::Px(6.0)),
-                ..default()
-            })
-            .with_children(|row| {
-                spawn_station_button(
-                    row,
-                    asset_server,
-                    StationCargoPanelButton::AddToRoute,
-                    "Ruta",
-                    "Añadir a ruta del vehículo",
-                );
-                spawn_station_button(
-                    row,
-                    asset_server,
-                    StationCargoPanelButton::PickOrders,
-                    "Órd.",
-                    "Editar órdenes",
-                );
-                spawn_station_button(
-                    row,
-                    asset_server,
-                    StationCargoPanelButton::CenterCamera,
-                    "Loc",
-                    "Centrar cámara en la estación",
-                );
-                spawn_station_button(
-                    row,
-                    asset_server,
-                    StationCargoPanelButton::Rename,
-                    "Nom.",
-                    "Renombrar estación",
-                );
-                spawn_station_button(
-                    row,
-                    asset_server,
-                    StationCargoPanelButton::ViewVehicles,
-                    "Flota",
-                    "Ver vehículos que visitan esta estación",
-                );
-                spawn_station_button(
-                    row,
-                    asset_server,
-                    StationCargoPanelButton::CargoFilter,
-                    "Carga",
-                    "Filtrar carga: todas / con espera / aceptadas",
-                );
-                spawn_station_button(
-                    row,
-                    asset_server,
-                    StationCargoPanelButton::JoinWith,
-                    "Unir",
-                    "Unir con otra estación",
-                );
-                spawn_station_button(
-                    row,
-                    asset_server,
-                    StationCargoPanelButton::Close,
-                    "✕",
-                    "Cerrar",
-                );
-            });
+                    BuildMenuUi,
+                ))
+                .with_children(|row| {
+                    row.spawn((
+                        StationCargoRenameInput,
+                        EditableText::new(""),
+                        window_text_font(asset_server, UiFontRole::Caption),
+                        TextColor(WINDOW_TEXT),
+                        Node {
+                            flex_grow: 1.0,
+                            height: Val::Px(22.0),
+                            padding: UiRect::horizontal(Val::Px(4.0)),
+                            border: UiRect::all(Val::Px(1.0)),
+                            ..default()
+                        },
+                        BorderColor::all(Color::srgb(0.66, 0.58, 0.38)),
+                    ));
+                    spawn_rename_action(row, asset_server, StationCargoRenameButton::Apply, "OK");
+                    spawn_rename_action(row, asset_server, StationCargoRenameButton::Cancel, "No");
+                });
+            // Chrome compacto (#183/#269): labels cortos + tooltip. Cierre vía chrome ✕ (#245).
+            // Multi-instancia: pool stub `StationPoolRegistry` (2 slots); dual-entity residual #242.
+            panel
+                .spawn(Node {
+                    flex_direction: FlexDirection::Row,
+                    column_gap: Val::Px(3.0),
+                    flex_wrap: FlexWrap::Wrap,
+                    row_gap: Val::Px(3.0),
+                    margin: UiRect::top(Val::Px(6.0)),
+                    ..default()
+                })
+                .with_children(|row| {
+                    spawn_station_button(
+                        row,
+                        asset_server,
+                        StationCargoPanelButton::AddToRoute,
+                        "Ruta",
+                        "Añadir a ruta del vehículo",
+                    );
+                    spawn_station_button(
+                        row,
+                        asset_server,
+                        StationCargoPanelButton::PickOrders,
+                        "Órd.",
+                        "Editar órdenes",
+                    );
+                    spawn_station_button(
+                        row,
+                        asset_server,
+                        StationCargoPanelButton::CenterCamera,
+                        "Loc",
+                        "Centrar cámara en la estación",
+                    );
+                    spawn_station_button(
+                        row,
+                        asset_server,
+                        StationCargoPanelButton::Rename,
+                        "Nom.",
+                        "Renombrar estación",
+                    );
+                    spawn_station_button(
+                        row,
+                        asset_server,
+                        StationCargoPanelButton::ViewVehicles,
+                        "Flota",
+                        "Ver vehículos que visitan esta estación",
+                    );
+                    spawn_station_button(
+                        row,
+                        asset_server,
+                        StationCargoPanelButton::CargoFilter,
+                        "Carga",
+                        "Filtrar carga: todas / con espera / aceptadas",
+                    );
+                    spawn_station_button(
+                        row,
+                        asset_server,
+                        StationCargoPanelButton::JoinWith,
+                        "Unir",
+                        "Unir con otra estación",
+                    );
+                    spawn_station_button(
+                        row,
+                        asset_server,
+                        StationCargoPanelButton::Close,
+                        "✕",
+                        "Cerrar",
+                    );
+                });
         });
     }
 }
@@ -371,7 +371,10 @@ pub(crate) fn sync_station_cargo_panel(
     order_state: Res<OrderEditState>,
     sim: Res<SimWorld>,
     mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
-    mut title_q: Query<(Entity, &FloatingWindowTitleText, &mut Text), Without<StationCargoPanelText>>,
+    mut title_q: Query<
+        (Entity, &FloatingWindowTitleText, &mut Text),
+        Without<StationCargoPanelText>,
+    >,
     mut text_q: Query<
         (Entity, &mut Text),
         (
@@ -442,14 +445,11 @@ pub(crate) fn sync_station_cargo_panel(
     }
 
     let name = station_display_name(station);
-    if let Some((_, _, mut title)) = title_q
-        .iter_mut()
-        .find(|(entity, title, _)| {
-            title.0 == FloatingWindowId::Station
-                && window_key_for_descendant(*entity, &windows, &parents)
-                    .is_some_and(|key| key.instance == u32::from(focused_slot))
-        })
-    {
+    if let Some((_, _, mut title)) = title_q.iter_mut().find(|(entity, title, _)| {
+        title.0 == FloatingWindowId::Station
+            && window_key_for_descendant(*entity, &windows, &parents)
+                .is_some_and(|key| key.instance == u32::from(focused_slot))
+    }) {
         **title = name.clone();
     }
     let owner_name = sim
@@ -615,7 +615,10 @@ fn apply_station_rename(
 
 #[allow(clippy::too_many_arguments)] // sistema ECS Bevy
 pub(crate) fn handle_station_cargo_panel_buttons(
-    mut q: Query<(Entity, &Interaction, &StationCargoPanelButton), (Changed<Interaction>, With<Button>)>,
+    mut q: Query<
+        (Entity, &Interaction, &StationCargoPanelButton),
+        (Changed<Interaction>, With<Button>),
+    >,
     mut station_panel: ResMut<StationCargoPanelState>,
     mut order_state: ResMut<OrderEditState>,
     mut vehicle_chain: ResMut<crate::ui::vehicle_chain::VehicleChainRegistry>,

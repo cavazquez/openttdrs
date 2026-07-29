@@ -209,6 +209,22 @@ impl WindowKey {
     }
 }
 
+/// Resuelve la instancia de ventana dueña de cualquier descendiente UI (#287).
+#[must_use]
+pub(crate) fn window_key_for_descendant(
+    mut entity: Entity,
+    windows: &Query<&FloatingWindow>,
+    parents: &Query<&ChildOf>,
+) -> Option<WindowKey> {
+    for _ in 0..16 {
+        if let Ok(window) = windows.get(entity) {
+            return Some(window.key);
+        }
+        entity = parents.get(entity).ok()?.parent();
+    }
+    None
+}
+
 #[allow(dead_code)] // inventarios UI-0 consumidos en tests
 impl FloatingWindowId {
     /// Inventario estable UI-0 (#30): actualizar al añadir variantes.

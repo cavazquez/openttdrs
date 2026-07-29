@@ -26,10 +26,37 @@ use super::{
     UiToolState, open_order_edit_for_vehicle,
 };
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum StationCargoFilter {
+    #[default]
+    All,
+    Waiting,
+    Accepted,
+}
+
+impl StationCargoFilter {
+    const fn next(self) -> Self {
+        match self {
+            Self::All => Self::Waiting,
+            Self::Waiting => Self::Accepted,
+            Self::Accepted => Self::All,
+        }
+    }
+
+    const fn label(self) -> &'static str {
+        match self {
+            Self::All => "todas",
+            Self::Waiting => "con espera",
+            Self::Accepted => "aceptadas",
+        }
+    }
+}
+
 #[derive(Resource, Default)]
 pub(crate) struct StationCargoPanelState {
     pub(crate) station_pos: Option<TileCoord>,
     pub(crate) rename_editing: bool,
+    pub(crate) cargo_filter: StationCargoFilter,
 }
 
 #[derive(Component)]
@@ -54,6 +81,7 @@ pub(crate) enum StationCargoPanelButton {
     CenterCamera,
     Rename,
     ViewVehicles,
+    CargoFilter,
     /// Activa JoinStation con esta estación como `keep`.
     JoinWith,
     Close,
@@ -157,6 +185,13 @@ pub(crate) fn setup_station_cargo_panel(mut commands: Commands, asset_server: Re
                     StationCargoPanelButton::ViewVehicles,
                     "Flota",
                     "Ver vehículos que visitan esta estación",
+                );
+                spawn_station_button(
+                    row,
+                    asset_server,
+                    StationCargoPanelButton::CargoFilter,
+                    "Carga",
+                    "Filtrar carga: todas / con espera / aceptadas",
                 );
                 spawn_station_button(
                     row,
@@ -419,11 +454,17 @@ pub(crate) fn sync_station_cargo_panel(
                 "Cobertura r{}: casas {} · stock ind. {}",
                 STATION_COVERAGE_RADIUS, coverage.house_tiles, coverage.supplied_stock
             ),
-            "Carga en espera:".to_string(),
+            format!("Carga (filtro: {}):", station_panel.cargo_filter.label()),
         ];
         for &cargo in CARGO_TYPES {
             let waiting = station.cargo_stock.get(cargo);
-            if waiting == 0 && !station.accepts_cargo(cargo) {
+            let accepted = station.accepts_cargo(cargo);
+            let visible = match station_panel.cargo_filter {
+                StationCargoFilter::All => waiting > 0 || accepted,
+                StationCargoFilter::Waiting => waiting > 0,
+                StationCargoFilter::Accepted => accepted,
+            };
+            if !visible {
                 continue;
             }
             let rating = station_rating_for_cargo(station, cargo);
@@ -445,8 +486,9 @@ pub(crate) fn sync_station_cargo_panel(
                 " · nunca servida".to_string()
             };
             lines.push(format!(
-                "  {} · espera {waiting} · rating {rating}/255{since_pickup}{last_vehicle}",
-                cargo_display_name(cargo)
+                "  {} · espera {waiting} · {} · rating {rating}/255{since_pickup}{last_vehicle}",
+                cargo_display_name(cargo),
+                if accepted { "aceptada" } else { "no aceptada" }
             ));
         }
         lines.push(format!("Packets en cola: {}", station.cargo_packets.len()));
@@ -573,6 +615,9 @@ pub(crate) fn handle_station_cargo_panel_buttons(
                 if let Some(station) = sim.state.stations.iter().find(|s| s.pos == station_pos) {
                     vehicle_list.open_for_station(station.pos, station.stop_kind);
                 }
+            }
+            StationCargoPanelButton::CargoFilter => {
+                station_panel.cargo_filter = station_panel.cargo_filter.next();
             }
             StationCargoPanelButton::JoinWith => {
                 station_build.join_keep = Some(station_pos);
@@ -782,6 +827,7 @@ mod tests {
         world.insert_resource(StationCargoPanelState {
             station_pos: Some(pos),
             rename_editing: false,
+            cargo_filter: StationCargoFilter::All,
         });
         fixture_resources(&mut world);
         world.spawn((Transform::from_xyz(0.0, 0.0, 0.0), PrimaryGameCamera));
@@ -816,6 +862,7 @@ mod tests {
         world.insert_resource(StationCargoPanelState {
             station_pos: Some(pos),
             rename_editing: false,
+            cargo_filter: StationCargoFilter::All,
         });
         fixture_resources(&mut world);
         world.spawn((
@@ -847,6 +894,7 @@ mod tests {
         world.insert_resource(StationCargoPanelState {
             station_pos: Some(pos),
             rename_editing: true,
+            cargo_filter: StationCargoFilter::All,
         });
         world.init_resource::<HudBuildFeedback>();
         world.insert_resource(Time::<()>::default());
@@ -877,6 +925,7 @@ mod tests {
         world.insert_resource(StationCargoPanelState {
             station_pos: Some(TileCoord::new(3, 4)),
             rename_editing: true,
+            cargo_filter: StationCargoFilter::All,
         });
         world.init_resource::<Messages<FloatingWindowClosed>>();
         world.write_message(FloatingWindowClosed(WindowKey::singleton(
@@ -895,6 +944,7 @@ mod tests {
         world.insert_resource(StationCargoPanelState {
             station_pos: Some(pos),
             rename_editing: false,
+            cargo_filter: StationCargoFilter::All,
         });
         world.init_resource::<Messages<FloatingWindowClosed>>();
         world.write_message(FloatingWindowClosed(WindowKey::singleton(
@@ -905,5 +955,13 @@ mod tests {
             world.resource::<StationCargoPanelState>().station_pos,
             Some(pos)
         );
+    }
+
+    #[test]
+    fn cargo_filter_cycles_all_waiting_accepted() {
+        let filter = StationCargoFilter::All;
+        assert_eq!(filter.next(), StationCargoFilter::Waiting);
+        assert_eq!(filter.next().next(), StationCargoFilter::Accepted);
+        assert_eq!(filter.next().next().next(), StationCargoFilter::All);
     }
 }

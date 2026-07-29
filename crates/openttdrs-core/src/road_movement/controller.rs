@@ -226,10 +226,10 @@ fn drive_through_should_stop(v: &Vehicle, map: Option<&Map>) -> bool {
         }
         _ => false,
     };
-    type_matches && v.current_order_ref().is_some_and(|order| {
-        matches!(order, crate::vehicle::VehicleOrder::Station { station, .. } if *station == v.pos)
-            && !order.is_pass_through()
-    })
+    type_matches
+        && v.current_order_ref().is_some_and(|order| {
+            order.should_stop_at_station(v.last_station_visited, v.pos)
+        })
 }
 
 fn handle_drive_through_stop(

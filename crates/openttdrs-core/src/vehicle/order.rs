@@ -1054,6 +1054,29 @@ impl VehicleOrder {
         )
     }
 
+    /// Equivalente a `Order::ShouldStopAtStation` de OpenTTD 15.3.
+    #[must_use]
+    pub const fn should_stop_at_station(
+        self,
+        last_station_visited: Option<TileCoord>,
+        station: TileCoord,
+    ) -> bool {
+        if matches!(last_station_visited, Some(last) if last.x == station.x && last.y == station.y) {
+            return false;
+        }
+        match self {
+            Self::Station {
+                station: destination,
+                non_stop,
+                ..
+            } => {
+                (destination.x == station.x && destination.y == station.y)
+                    || matches!(non_stop, OrderNonStop::StopAtIntermediate)
+            }
+            _ => false,
+        }
+    }
+
     #[must_use]
     pub const fn stop_location(self) -> OrderStopLocation {
         match self {
@@ -1599,6 +1622,29 @@ mod tests {
         assert!(toggled.depot_stops());
         let station = VehicleOrder::station(TileCoord::new(1, 1)).with_max_speed(80);
         assert_eq!(station.max_speed_limit(), 80);
+    }
+
+    #[test]
+    fn should_stop_at_destination_unless_just_visited() {
+        let station = TileCoord::new(3, 4);
+        let order = VehicleOrder::station(station);
+        assert!(order.should_stop_at_station(None, station));
+        assert!(!order.should_stop_at_station(Some(station), station));
+    }
+
+    #[test]
+    fn should_stop_at_intermediate_respects_non_stop_mode() {
+        let destination = TileCoord::new(8, 4);
+        let intermediate = TileCoord::new(3, 4);
+        let non_stop = VehicleOrder::station(destination);
+        let stopping = VehicleOrder::station_with_types(
+            destination,
+            OrderLoadType::LoadIfPossible,
+            OrderUnloadType::UnloadIfPossible,
+            OrderNonStop::StopAtIntermediate,
+        );
+        assert!(!non_stop.should_stop_at_station(None, intermediate));
+        assert!(stopping.should_stop_at_station(None, intermediate));
     }
 
     #[test]

@@ -677,8 +677,15 @@ pub fn ship_controller_tick(v: &mut Vehicle, map: Option<&Map>) {
         if ship_arrival_ready(v, map) || (v.pos == v.dest && v.orders.is_empty()) {
             v.cur_speed = 0;
             v.advance_destination_after_arrival();
+            return;
         }
-        return;
+        // El path por teselas se consume al entrar al destino, pero docks y
+        // depósitos exigen alcanzar el centro sub-tesela antes de llegar.
+        // Mantener el rumbo dentro de la tesela hasta (8,8) evita quedar
+        // detenido en el borde con `path` vacío.
+        if v.pos != v.dest {
+            return;
+        }
     }
 
     let max_speed = ship_max_speed(v, map);
@@ -703,6 +710,11 @@ pub fn ship_controller_tick(v: &mut Vehicle, map: Option<&Map>) {
         if new_tile == old_tile {
             v.ship_x = new_x;
             v.ship_y = new_y;
+            if ship_arrival_ready(v, map) {
+                v.cur_speed = 0;
+                v.advance_destination_after_arrival();
+                return;
+            }
             continue;
         }
 
@@ -1129,6 +1141,30 @@ mod tests {
         assert!(ship_arrival_ready(&v, Some(&s.map)));
         v.pos = TileCoord::new(0, 1);
         assert!(!ship_arrival_ready(&v, Some(&s.map)));
+    }
+
+    #[test]
+    fn ship_controller_centers_on_destination_tile_before_arrival() {
+        let mut s = GameState::new(10, 4);
+        water_line(&mut s, 1, 0, 8);
+        let dock = TileCoord::new(4, 1);
+        let mut v = Vehicle::new(1, VehicleKind::Ship, dock, dock);
+        v.orders = vec![VehicleOrder::station(dock)];
+        v.running = true;
+        v.direction = 5;
+        v.ship_pos_valid = true;
+        v.ship_x = dock.x * 16 + 2;
+        v.ship_y = dock.y * 16 + 8;
+
+        for _ in 0..256 {
+            ship_controller_tick(&mut v, Some(&s.map));
+            if (v.ship_x & 0xF) == 8 {
+                break;
+            }
+        }
+
+        assert_eq!(v.pos, dock);
+        assert_eq!((v.ship_x & 0xF, v.ship_y & 0xF), (8, 8));
     }
 
     #[test]

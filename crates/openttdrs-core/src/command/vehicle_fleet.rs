@@ -371,5 +371,36 @@ pub(super) fn toggle_vehicle_running_checked(
     if !was_running {
         can_start_vehicle_from_depot(state, vehicle_id)?;
     }
+    // #228: CBID_VEHICLE_START_STOP_CHECK (fallo observable → NewGrfCallbackDenied).
+    check_vehicle_start_stop_callback(state, vehicle_id)?;
     vehicles::toggle_vehicle_running(state, vehicle_id)
+}
+
+fn check_vehicle_start_stop_callback(
+    state: &mut GameState,
+    vehicle_id: u32,
+) -> Result<(), CommandError> {
+    let engine_id = state
+        .vehicles
+        .iter()
+        .find(|v| v.id == vehicle_id)
+        .and_then(|v| v.engine_id);
+    let Some(engine_id) = engine_id else {
+        return Ok(());
+    };
+    let Some(engine) = crate::engine::engine_in_catalog(&state.engine_catalog, engine_id).cloned()
+    else {
+        return Ok(());
+    };
+    if engine.newgrf_runtime.is_none() {
+        return Ok(());
+    }
+    let Some(vehicle) = state.vehicles.iter_mut().find(|v| v.id == vehicle_id) else {
+        return Err(CommandError::VehicleNotFound);
+    };
+    if crate::newgrf_callback::apply_vehicle_start_stop_callback(&engine, vehicle) {
+        Ok(())
+    } else {
+        Err(CommandError::NewGrfCallbackDenied)
+    }
 }

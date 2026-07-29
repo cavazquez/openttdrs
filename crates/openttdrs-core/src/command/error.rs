@@ -168,6 +168,8 @@ pub enum CommandError {
     RoadStopRoadTypeMismatch,
     /// Spec `DriveThroughOnly` colocado como bahía (o viceversa no aplicable).
     RoadStopDriveThroughRequired,
+    /// Callback NewGRF denegó la acción (p. ej. `CBID_VEHICLE_START_STOP_CHECK`).
+    NewGrfCallbackDenied,
 }
 
 impl core::fmt::Display for CommandError {

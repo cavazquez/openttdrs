@@ -14,8 +14,8 @@ mod pixel_codec;
 // Re-exportar todos los tipos públicos del módulo model
 pub use model::{
     Action2EvalCtx, Action2RandomEntry, Action2VarAdjust, Action2VarEntry, Action2VarOp,
-    Action2VarTerm, Action5Block, CALLBACK_FAILED, CBID_STATION_BUILD_TILE_LAYOUT, DecodedSprite,
-    TrainSpriteAssign, TrainSpriteGraphics,
+    Action2VarTerm, Action5Block, CALLBACK_FAILED, CBID_STATION_BUILD_TILE_LAYOUT,
+    CBID_VEHICLE_START_STOP_CHECK, DecodedSprite, TrainSpriteAssign, TrainSpriteGraphics,
 };
 
 // Re-exportar funciones de runtime de pixel_codec

@@ -3,6 +3,9 @@
 Referencia fijada: commit `14ec60f248547d4d062a1160f0fc26d742319888`, en
 `reference/openttd-upstream/src/newgrf/`.
 
+Callbacks (CBID) y storage/triggers: ver
+[`newgrf-callback-matrix.md`](newgrf-callback-matrix.md) (#228).
+
 Estados:
 
 - **runtime**: la propiedad modifica un catálogo usado por compra, construcción o render.
@@ -142,7 +145,7 @@ Fuente: `newgrf_act0_stations.cpp`.
 | `09` sprite layouts | pendiente (variable; no bloquea AC de catálogo/construcción) |
 | short label del spec | derivado del nombre (no hay prop Action0 15.3) |
 | Action3 cargo group / default | **runtime** (`views_for_local_id_cargo_ctx`; fallback verificable) |
-| vars/CB dinámicas (`40`/`42`/`43`/`5F`/`10`/`67`, CB24) | **runtime** vía `Action2EvalCtx` compartido (#228) |
+| vars/CB dinámicas (`40`/`42`/`43`/`5F`/`10`/`67`, CB24) | **runtime** vía `Action2EvalCtx` compartido; CB24 call site (#228) |
 
 ## Rail types (`10`)
 
@@ -252,7 +255,7 @@ Fuente: `newgrf_act0_houses.cpp` / GRFSpecs Action0/Houses.
 Catálogo runtime `house_spec_catalog` (ids ≥ `NEW_HOUSE_OFFSET` = 110). El pool de
 crecimiento (`pick_town_house_id_with_catalog`) combina vanilla + NewGRF 1×1/norte
 multitile filtrando zona+clima+año; `callback_mask` (`0x14`/`0x1D`) se almacena
-sin ejecutar callbacks (#228). Action3 adjunta `newgrf_views`; dibujo usa vistas
+sin ejecutar callbacks (residual #228; ver `newgrf-callback-matrix.md`). Action3 adjunta `newgrf_views`; dibujo usa vistas
 o fallback `subst_id` / `% 110` (`resolve_house_draw_id`). Overrides `0x15` →
 `house_overrides[vanilla]`. Multitile: footprint N/E/W/S con ids consecutivos.
 
@@ -303,7 +306,7 @@ Fuente: `newgrf_act0_industries.cpp` (`IndustrytilesChangeInfo`).
 
 Catálogo runtime `industry_tile_spec_catalog` (gfx ≥ `NEW_INDUSTRYTILEOFFSET` = 175).
 Overrides `0x09` → `industry_tile_overrides[vanilla]`. Acceptance y
-`callback_mask` se almacenan; callbacks no se ejecutan (#228). Cargos vía
+`callback_mask` se almacenan; callbacks de industria residuales (#228). Cargos vía
 `GetCargoTranslation` / `cargo_spec` (#224). Action3 adjunta `newgrf_views`;
 dibujo NewGRF o fallback `subst_id` (`resolve_industry_tile_draw_gfx`).
 

@@ -243,6 +243,21 @@ impl TrainSpriteGraphics {
     /// Inserta `0x0C`/`0x10`/`0x18` en el contexto (como `ResolverObject` upstream).
     #[must_use]
     pub fn resolve_callback(&self, local_id: u8, callback: u16, param1: u32, param2: u32) -> u16 {
+        let mut ctx = Action2EvalCtx::default();
+        self.resolve_callback_ctx(local_id, callback, param1, param2, &mut ctx)
+    }
+
+    /// Como [`Self::resolve_callback`], pero reutiliza/muta `ctx` (regs persistentes, etc.).
+    ///
+    /// Fallo sin cadena callback → [`CALLBACK_FAILED`] (observable; no silencioso).
+    pub fn resolve_callback_ctx(
+        &self,
+        local_id: u8,
+        callback: u16,
+        param1: u32,
+        param2: u32,
+        ctx: &mut Action2EvalCtx,
+    ) -> u16 {
         let set_id = self
             .assigns
             .iter()
@@ -252,11 +267,10 @@ impl TrainSpriteGraphics {
         let Some(set_id) = set_id else {
             return CALLBACK_FAILED;
         };
-        let mut ctx = Action2EvalCtx::default();
         ctx.vars.insert(0x0C, u32::from(callback));
         ctx.vars.insert(0x10, param1);
         ctx.vars.insert(0x18, param2);
-        resolve_callback_chain(self, set_id, &mut ctx)
+        resolve_callback_chain(self, set_id, ctx)
     }
 }
 
@@ -264,6 +278,8 @@ impl TrainSpriteGraphics {
 pub const CALLBACK_FAILED: u16 = 0xFFFF;
 /// Callback estaciones: layout de tesela al construir (`CBID_STATION_BUILD_TILE_LAYOUT`).
 pub const CBID_STATION_BUILD_TILE_LAYOUT: u16 = 0x24;
+/// Callback vehículos: permitir start/stop (`CBID_VEHICLE_START_STOP_CHECK`).
+pub const CBID_VEHICLE_START_STOP_CHECK: u16 = 0x31;
 
 /// Bloque de sprites Action5 (shore / catenary / …).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

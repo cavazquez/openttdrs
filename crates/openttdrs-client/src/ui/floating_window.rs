@@ -73,6 +73,8 @@ pub(crate) enum FloatingWindowId {
     Industry,
     /// Lista global de estaciones.
     StationDirectory,
+    /// Ficha de estación (antes HUD `station_panel`; #245).
+    Station,
     /// Lista global de flota (filtro por tipo).
     VehicleList,
     /// Lista de subvenciones (ofertas y contratos).
@@ -186,6 +188,7 @@ impl FloatingWindowId {
         Self::IndustryDirectory,
         Self::Industry,
         Self::StationDirectory,
+        Self::Station,
         Self::VehicleList,
         Self::SubsidyList,
         Self::Depot,
@@ -237,6 +240,7 @@ impl FloatingWindowId {
             Self::IndustryDirectory => "IndustryDirectory",
             Self::Industry => "Industry",
             Self::StationDirectory => "StationDirectory",
+            Self::Station => "Station",
             Self::VehicleList => "VehicleList",
             Self::SubsidyList => "SubsidyList",
             Self::Depot => "Depot",
@@ -336,6 +340,7 @@ fn chrome_capabilities(id: FloatingWindowId) -> WindowChromeCapabilities {
             | FloatingWindowId::IndustryDirectory
             | FloatingWindowId::Industry
             | FloatingWindowId::StationDirectory
+            | FloatingWindowId::Station
             | FloatingWindowId::VehicleList
             | FloatingWindowId::SubsidyList
             | FloatingWindowId::BuyVehicle
@@ -375,6 +380,7 @@ fn chrome_capabilities(id: FloatingWindowId) -> WindowChromeCapabilities {
             | FloatingWindowId::IndustryDirectory
             | FloatingWindowId::Industry
             | FloatingWindowId::StationDirectory
+            | FloatingWindowId::Station
             | FloatingWindowId::VehicleList
             | FloatingWindowId::SubsidyList
             | FloatingWindowId::Depot
@@ -1373,6 +1379,9 @@ mod tests {
     fn chrome_capabilities_are_opt_in_from_upstream_descriptors() {
         let town = chrome_capabilities(FloatingWindowId::Town);
         assert!(town.shade && town.sticky && town.resize);
+
+        let station = chrome_capabilities(FloatingWindowId::Station);
+        assert!(station.shade && station.sticky && station.resize);
 
         let help = chrome_capabilities(FloatingWindowId::Help);
         assert!(!help.shade && !help.sticky && !help.resize);

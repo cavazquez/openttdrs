@@ -101,7 +101,7 @@ pub(crate) use signal_picker_window::{
 pub(crate) use station_panel::{
     StationCargoPanelState, handle_station_cargo_panel_buttons, handle_station_rename_buttons,
     setup_station_cargo_panel, station_rename_editable_keyboard, station_rename_keyboard,
-    sync_station_cargo_panel,
+    station_view_on_closed, sync_station_cargo_panel,
 };
 pub(crate) use systems::{
     build_menu_interaction, close_toolbar_button_interaction, handle_ingame_escape,

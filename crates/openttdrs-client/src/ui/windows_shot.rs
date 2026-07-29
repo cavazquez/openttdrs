@@ -151,6 +151,7 @@ pub(crate) const WINDOW_PARITY_MATRIX: &[WindowParityEntry] = &[
         "station_gui.cpp",
         "WC_STATION_LIST"
     ),
+    upstream_window!(Station, "world", "station_gui.cpp", "WC_STATION_VIEW"),
     upstream_window!(
         VehicleList,
         "vehicles",
@@ -338,6 +339,7 @@ pub(crate) const fn window_rust_impl(id: FloatingWindowId) -> &'static str {
         FloatingWindowId::IndustryDirectory => "ui/industry_directory.rs",
         FloatingWindowId::Industry => "ui/industry_panel/mod.rs",
         FloatingWindowId::StationDirectory => "ui/station_directory.rs",
+        FloatingWindowId::Station => "ui/toolbar/station_panel.rs",
         FloatingWindowId::VehicleList => "ui/vehicle_list.rs",
         FloatingWindowId::SubsidyList => "ui/subsidy_list.rs",
         FloatingWindowId::Depot => "ui/toolbar/mod.rs",
@@ -397,9 +399,9 @@ pub(crate) struct WindowKnownGap {
 /// Gaps documentados mientras faltan capturas/oráculo pixel.
 ///
 /// - `geometry→#243` sólo sin fila en [`WINDOW_REFERENCE_GEOMETRY`].
-/// - `lifecycle→#242` no aplica a la familia vehículo (pools #244) ni a la
-///   familia construction de pickers existentes (#246); sí al resto de clases
-///   aún singleton (town/industry/…).
+/// - `lifecycle→#242` no aplica a la familia vehículo (pools #244), a la
+///   familia construction de pickers existentes (#246), ni a la familia world
+///   inventariada (#245); sí al resto de clases aún singleton.
 #[must_use]
 pub(crate) fn window_known_gaps(id: FloatingWindowId) -> &'static [WindowKnownGap] {
     const CAPTURE_ONLY: &[WindowKnownGap] = &[
@@ -432,7 +434,10 @@ pub(crate) fn window_known_gaps(id: FloatingWindowId) -> &'static [WindowKnownGa
             issue: 243,
         },
     ];
-    if VEHICLE_FAMILY_WINDOW_IDS.contains(&id) || CONSTRUCTION_FAMILY_WINDOW_IDS.contains(&id) {
+    if VEHICLE_FAMILY_WINDOW_IDS.contains(&id)
+        || CONSTRUCTION_FAMILY_WINDOW_IDS.contains(&id)
+        || WORLD_FAMILY_WINDOW_IDS.contains(&id)
+    {
         return CAPTURE_ONLY;
     }
     if reference_geometry_primary(id).is_some() {
@@ -555,6 +560,19 @@ pub(crate) const CONSTRUCTION_FAMILY_WINDOW_IDS: &[FloatingWindowId] = &[
     FloatingWindowId::SignalPicker,
 ];
 
+/// Inventario world (Town/Industry/Station + directorios) cubierto por #245 slice 1.
+///
+/// Follow-up del issue: `TownAuthority` / `IndustryProduction` como hijas
+/// (matriz padre/hija + stubs UI); multi-instancia de vistas; capturas PNG.
+pub(crate) const WORLD_FAMILY_WINDOW_IDS: &[FloatingWindowId] = &[
+    FloatingWindowId::Town,
+    FloatingWindowId::TownDirectory,
+    FloatingWindowId::Industry,
+    FloatingWindowId::IndustryDirectory,
+    FloatingWindowId::StationDirectory,
+    FloatingWindowId::Station,
+];
+
 /// Variante preferida al spawnear (singleton): `default`/`game`/`owned`/`settings`…
 #[must_use]
 pub(crate) fn reference_geometry_primary(id: FloatingWindowId) -> Option<&'static ReferenceGeometry> {
@@ -589,6 +607,7 @@ pub(crate) const WINDOW_REFERENCE_GEOMETRY: &[ReferenceGeometry] = &[
     reference_geometry!(Industry, "default", Auto, Some(260), Some(120)),
     reference_geometry!(IndustryDirectory, "default", Auto, Some(428), Some(190)),
     reference_geometry!(StationDirectory, "default", Auto, Some(358), Some(162)),
+    reference_geometry!(Station, "default", Auto, Some(249), Some(117)),
     reference_geometry!(VehicleList, "train", Auto, Some(325), Some(246)),
     reference_geometry!(
         VehicleList,
@@ -1140,9 +1159,7 @@ fn open_all_windows_for_shot(world: &mut World, include_auxiliary: bool) {
             .resource_mut::<AutoreplaceWindowState>()
             .open_for_depot(pos);
     }
-    if include_auxiliary {
-        world.resource_mut::<StationCargoPanelState>().station_pos = station_pos;
-    }
+    world.resource_mut::<StationCargoPanelState>().station_pos = station_pos;
     if let Some(pos) = industry_pos {
         let mut panel = world.resource_mut::<IndustryPanelState>();
         panel.open = true;
@@ -1449,6 +1466,50 @@ mod tests {
                     issue: 240,
                 }],
                 "familia construction debe ser solo capture→#240: {id:?}"
+            );
+            assert!(
+                gaps.iter()
+                    .all(|g| g.category != "lifecycle" && g.category != "geometry"),
+                "sin lifecycle→#242 ni geometry→#243 para {id:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn world_family_inventory_is_in_parity_matrix() {
+        for id in WORLD_FAMILY_WINDOW_IDS {
+            assert!(
+                WINDOW_PARITY_MATRIX.iter().any(|e| e.id == *id),
+                "familia world falta en matriz: {id:?}"
+            );
+            assert!(
+                PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .join("src")
+                    .join(window_rust_impl(*id))
+                    .is_file(),
+                "rust_impl de familia world ausente: {id:?}"
+            );
+            assert!(
+                reference_geometry_primary(*id).is_some(),
+                "familia world sin geometría primary: {id:?}"
+            );
+        }
+        let station = reference_geometry_primary(FloatingWindowId::Station).expect("Station");
+        assert_eq!(station.width, Some(249));
+        assert_eq!(station.height, Some(117));
+    }
+
+    #[test]
+    fn world_family_known_gaps_are_capture_only() {
+        for id in WORLD_FAMILY_WINDOW_IDS {
+            let gaps = window_known_gaps(*id);
+            assert_eq!(
+                gaps,
+                &[WindowKnownGap {
+                    category: "capture",
+                    issue: 240,
+                }],
+                "familia world debe ser solo capture→#240: {id:?}"
             );
             assert!(
                 gaps.iter()

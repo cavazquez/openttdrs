@@ -834,7 +834,7 @@ Checklist OpenTTD vs openttdrs vs acción (epic UI-Layout #172).
 
 | Superficie | OpenTTD | openttdrs | Acción |
 |---|---|---|---|
-| Estación | `station_gui` viewport + iconos | Panel fijo; barra Ruta/Órd./Loc… (#183) | ✔ chrome; viewport **A** residual |
+| Estación | `station_gui` viewport + iconos | `FloatingWindowId::Station` + barra Ruta/Órd./Loc… (#183/#245) | ✔ chrome flotante; viewport **A** residual |
 | Industria | `industry_gui` | `FloatingWindowId::Industry` + preview RT + Loc | ✔ chrome (#179); Authority/catchment **B/C** |
 | Pueblo | `town_gui` viewport + iconos | Flotante; barra Loc/Pub/Fondos | ✔ chrome (#179); Authority completa **B** |
 | Compra | matriz sprites | Filas con sprite + stats | ✔ chrome (#179); TE/ocultar motor **B** |
@@ -884,8 +884,8 @@ Checklist versionado de superficies de UI. Los conteos deben coincidir con
 `FloatingWindowId::ALL` / `BuildMenuAction::ALL` / etc. (test
 `ui_enum_inventory_counts`).
 
-**Fecha:** 2026-07-28 · **FloatingWindowId:** 45 · **BuildMenuAction:** 67 ·
-**SaveMenuAction:** 24 · **ToolbarGroup:** 8
+**Fecha:** 2026-07-29 · **FloatingWindowId:** 46 · **BuildMenuAction:** 67 ·
+**SaveMenuAction:** 25 · **ToolbarGroup:** 8
 
 ### Ventanas flotantes (`FloatingWindowId`)
 
@@ -896,6 +896,7 @@ Checklist versionado de superficies de UI. Los conteos deben coincidir con
 | IndustryDirectory | menú Info | |
 | Industry | clic industria | Viewport RT + Loc (#179) |
 | StationDirectory | menú Info | |
+| Station | clic estación / directorio | FloatingWindow (#245); chrome fino follow-up |
 | VehicleList | menú Info / flota | |
 | SubsidyList | menú Economía | |
 | Depot | clic depósito | |
@@ -941,7 +942,6 @@ Checklist versionado de superficies de UI. Los conteos deben coincidir con
 
 | Superficie | Apertura |
 |------------|----------|
-| StationCargoPanel | clic estación |
 | SaveWindow | Guardar/Cargar |
 | Minimap | HUD |
 | Build toolbar groups | barra superior |
@@ -950,7 +950,7 @@ Checklist versionado de superficies de UI. Los conteos deben coincidir con
 
 - **ToolbarGroup (8):** Rail, Road, Water, Air, Economy, Landscape, Info, Settings
 - **BuildMenuAction (67):** ver `BuildMenuAction::ALL` en `toolbar/mod.rs`
-- **SaveMenuAction (24):** ver `SaveMenuAction::ALL`
+- **SaveMenuAction (25):** ver `SaveMenuAction::ALL`
 
 ### Mantenimiento
 

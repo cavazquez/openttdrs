@@ -394,12 +394,19 @@ pub(crate) struct WindowKnownGap {
     pub(crate) issue: u16,
 }
 
-/// Gaps documentados mientras faltan capturas/oráculo pixel y multi-instance.
+/// Gaps documentados mientras faltan capturas/oráculo pixel.
 ///
-/// `geometry→#243` sólo para clases sin fila en [`WINDOW_REFERENCE_GEOMETRY`]
-/// (el spawn ya aplica descriptor + placement para las inventariadas).
+/// - `geometry→#243` sólo sin fila en [`WINDOW_REFERENCE_GEOMETRY`].
+/// - `lifecycle→#242` no aplica a la familia vehículo (pools #244); sí al resto
+///   de clases aún singleton (town/industry/…).
 #[must_use]
 pub(crate) fn window_known_gaps(id: FloatingWindowId) -> &'static [WindowKnownGap] {
+    const VEHICLE_FAMILY: &[WindowKnownGap] = &[
+        WindowKnownGap {
+            category: "capture",
+            issue: 240,
+        },
+    ];
     const WITH_GEOMETRY: &[WindowKnownGap] = &[
         WindowKnownGap {
             category: "capture",
@@ -424,6 +431,9 @@ pub(crate) fn window_known_gaps(id: FloatingWindowId) -> &'static [WindowKnownGa
             issue: 243,
         },
     ];
+    if VEHICLE_FAMILY_WINDOW_IDS.contains(&id) {
+        return VEHICLE_FAMILY;
+    }
     if reference_geometry_primary(id).is_some() {
         WITH_GEOMETRY
     } else {
@@ -1074,23 +1084,38 @@ fn open_all_windows_for_shot(world: &mut World, include_auxiliary: bool) {
         vehicle_window.open.clear();
         vehicle_window.rename_editing = false;
     }
-    world.resource_mut::<TimetableWindowState>().vehicle_id = vehicle_id;
     if let Some(vid) = vehicle_id {
-        world
-            .resource_mut::<VehicleDetailsWindowState>()
-            .open_for(vid);
-        world.resource_mut::<RefitWindowState>().open_for(vid);
+        let slot = world
+            .resource::<VehicleChainRegistry>()
+            .slot_of(vid)
+            .unwrap_or(0);
+        {
+            let mut tt = world.resource_mut::<TimetableWindowState>();
+            tt.slots[slot as usize] = Some(vid);
+            tt.focused = Some(vid);
+        }
+        world.resource_scope(|world, chain: Mut<VehicleChainRegistry>| {
+            world
+                .resource_mut::<VehicleDetailsWindowState>()
+                .open_for(&chain, vid);
+            world.resource_mut::<RefitWindowState>().open_for(&chain, vid);
+        });
         {
             let mut order = world.resource_mut::<OrderEditState>();
-            order.vehicle_id = Some(vid);
-            order.orders = vehicle_orders.unwrap_or_default();
+            order.bind_slot(slot, vid, vehicle_orders.unwrap_or_default(), None);
         }
         {
             let mut shared = world.resource_mut::<SharedOrdersWindowState>();
             shared.open = true;
             shared.link_vehicle_id = Some(vid);
         }
-        world.resource_mut::<DestinationPickerState>().open = true;
+        world
+            .resource_mut::<DestinationPickerState>()
+            .open_for_chain_slot(slot);
+    } else {
+        let mut tt = world.resource_mut::<TimetableWindowState>();
+        tt.focused = None;
+        tt.slots = [None; 2];
     }
     if let Some(pos) = depot_pos {
         world

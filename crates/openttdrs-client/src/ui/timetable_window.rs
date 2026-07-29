@@ -9,19 +9,54 @@ use crate::render::RemapMapVisualsPending;
 use crate::state::SimWorld;
 use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, FloatingWindowTitleText, TITLE_CRIMSON,
-    WINDOW_TEXT, spawn_floating_window, window_text_font,
+    WINDOW_TEXT, WindowKey, spawn_floating_window_keyed, window_text_font,
 };
 use crate::ui::font::UiFontRole;
 use crate::ui::hud::{HudBuildFeedback, push_build_command_error};
 use crate::ui::toolbar::BuildMenuUi;
+use crate::ui::vehicle_chain::{
+    MAX_VEHICLE_CHAIN_SLOTS, VehicleChainRegistry, VehicleChainSlot, vehicle_window_key,
+};
 
 const TIMETABLE_ROWS: usize = 8;
+const BASE_POS: Vec2 = Vec2::new(420.0, 220.0);
+const SLOT_OFFSET: Vec2 = Vec2::new(36.0, 36.0);
 const BTN_BG: Color = Color::srgb(0.36, 0.31, 0.21);
 const BTN_BORDER: Color = Color::srgb(0.66, 0.58, 0.38);
 
-#[derive(Resource, Default)]
+#[derive(Resource, Debug)]
 pub(crate) struct TimetableWindowState {
-    pub(crate) vehicle_id: Option<u32>,
+    pub(crate) slots: [Option<u32>; MAX_VEHICLE_CHAIN_SLOTS],
+    pub(crate) focused: Option<u32>,
+}
+
+impl Default for TimetableWindowState {
+    fn default() -> Self {
+        Self {
+            slots: [None; MAX_VEHICLE_CHAIN_SLOTS],
+            focused: None,
+        }
+    }
+}
+
+impl TimetableWindowState {
+    #[must_use]
+    #[allow(dead_code)] // API multi-slot (#244); handlers usan slots[idx] directo.
+    pub(crate) fn vehicle_id(&self) -> Option<u32> {
+        self.focused
+            .filter(|&id| self.slots.iter().any(|&s| s == Some(id)))
+    }
+
+    pub(crate) fn close_vehicle(&mut self, vehicle_id: u32) {
+        for slot in &mut self.slots {
+            if *slot == Some(vehicle_id) {
+                *slot = None;
+            }
+        }
+        if self.focused == Some(vehicle_id) {
+            self.focused = self.slots.iter().flatten().next().copied();
+        }
+    }
 }
 
 #[derive(Component)]
@@ -61,18 +96,37 @@ pub(crate) enum TimetableRowButton {
 
 pub(crate) fn setup_timetable_window(mut commands: Commands, asset_server: Res<AssetServer>) {
     let asset_server = &*asset_server;
-    let (_root, content) = spawn_floating_window(
-        &mut commands,
-        asset_server,
-        FloatingWindowId::Timetable,
-        "Horario",
-        TITLE_CRIMSON,
-        Vec2::new(420.0, 220.0),
-        420.0,
-    );
+    for slot in 0..MAX_VEHICLE_CHAIN_SLOTS {
+        let slot_u8 = slot as u8;
+        let pos = BASE_POS + SLOT_OFFSET * slot as f32;
+        let (root, content) = spawn_floating_window_keyed(
+            &mut commands,
+            asset_server,
+            WindowKey {
+                class: FloatingWindowId::Timetable,
+                instance: 0,
+            },
+            "Horario",
+            TITLE_CRIMSON,
+            pos,
+            420.0,
+        );
+        commands.entity(root).insert(VehicleChainSlot(slot_u8));
+        spawn_timetable_content(&mut commands, content, asset_server, slot_u8);
+    }
+}
+
+fn spawn_timetable_content(
+    commands: &mut Commands,
+    content: Entity,
+    asset_server: &AssetServer,
+    chain_slot: u8,
+) {
+    let chain = VehicleChainSlot(chain_slot);
     commands.entity(content).with_children(|panel| {
         panel.spawn((
             TimetableSummaryText,
+            chain,
             Text::new(""),
             window_text_font(asset_server, UiFontRole::Caption),
             TextColor(WINDOW_TEXT),
@@ -85,7 +139,7 @@ pub(crate) fn setup_timetable_window(mut commands: Commands, asset_server: Res<A
             })
             .with_children(|list| {
                 for index in 0..TIMETABLE_ROWS {
-                    spawn_timetable_row(list, asset_server, index);
+                    spawn_timetable_row(list, asset_server, chain, index);
                 }
             });
         panel
@@ -100,28 +154,38 @@ pub(crate) fn setup_timetable_window(mut commands: Commands, asset_server: Res<A
                 spawn_tt_button(
                     row,
                     asset_server,
+                    chain,
                     TimetableWindowButton::ToggleTimetable,
                     "Horario ON/OFF",
                 );
                 spawn_tt_button(
                     row,
                     asset_server,
+                    chain,
                     TimetableWindowButton::ToggleAutofill,
                     "Autofill",
                 );
                 spawn_tt_button(
                     row,
                     asset_server,
+                    chain,
                     TimetableWindowButton::ClearLateness,
                     "Poner en hora",
                 );
                 spawn_tt_button(
                     row,
                     asset_server,
+                    chain,
                     TimetableWindowButton::ToggleSeconds,
                     "Ticks/Seg",
                 );
-                spawn_tt_button(row, asset_server, TimetableWindowButton::Close, "Cerrar");
+                spawn_tt_button(
+                    row,
+                    asset_server,
+                    chain,
+                    TimetableWindowButton::Close,
+                    "Cerrar",
+                );
             });
     });
 }
@@ -129,11 +193,13 @@ pub(crate) fn setup_timetable_window(mut commands: Commands, asset_server: Res<A
 fn spawn_timetable_row(
     parent: &mut ChildSpawnerCommands,
     asset_server: &AssetServer,
+    chain_slot: VehicleChainSlot,
     index: usize,
 ) {
     parent
         .spawn((
             TimetableOrderRowStrip { index },
+            chain_slot,
             Node {
                 width: Val::Percent(100.0),
                 flex_direction: FlexDirection::Row,
@@ -146,6 +212,7 @@ fn spawn_timetable_row(
         .with_children(|row| {
             row.spawn((
                 TimetableOrderRowLabel { index },
+                chain_slot,
                 Text::new(""),
                 window_text_font(asset_server, UiFontRole::Caption),
                 TextColor(WINDOW_TEXT),
@@ -153,6 +220,7 @@ fn spawn_timetable_row(
             spawn_row_btn(
                 row,
                 asset_server,
+                chain_slot,
                 index,
                 TimetableRowButton::Wait,
                 "Espera",
@@ -161,6 +229,7 @@ fn spawn_timetable_row(
             spawn_row_btn(
                 row,
                 asset_server,
+                chain_slot,
                 index,
                 TimetableRowButton::Travel,
                 "Viaje",
@@ -172,6 +241,7 @@ fn spawn_timetable_row(
 fn spawn_row_btn(
     parent: &mut ChildSpawnerCommands,
     asset_server: &AssetServer,
+    chain_slot: VehicleChainSlot,
     index: usize,
     kind: TimetableRowButton,
     label: &'static str,
@@ -180,6 +250,7 @@ fn spawn_row_btn(
     parent.spawn((
         Button,
         TimetableRowAction { index, kind },
+        chain_slot,
         Node {
             width: Val::Px(width),
             height: Val::Px(22.0),
@@ -203,12 +274,14 @@ fn spawn_row_btn(
 fn spawn_tt_button(
     parent: &mut ChildSpawnerCommands,
     asset_server: &AssetServer,
+    chain_slot: VehicleChainSlot,
     action: TimetableWindowButton,
     label: &str,
 ) {
     parent.spawn((
         Button,
         action,
+        chain_slot,
         Node {
             height: Val::Px(24.0),
             padding: UiRect::horizontal(Val::Px(8.0)),
@@ -266,89 +339,117 @@ fn order_timing_label(order: VehicleOrder, seconds_mode: bool) -> String {
     }
 }
 
-pub(crate) fn open_timetable_for_vehicle(state: &mut TimetableWindowState, vehicle_id: u32) {
-    state.vehicle_id = Some(vehicle_id);
+pub(crate) fn open_timetable_for_vehicle(
+    state: &mut TimetableWindowState,
+    chain: &VehicleChainRegistry,
+    vehicle_id: u32,
+) {
+    let Some(slot) = chain.slot_of(vehicle_id) else {
+        return;
+    };
+    state.slots[slot as usize] = Some(vehicle_id);
+    state.focused = Some(vehicle_id);
 }
 
 pub(crate) fn sync_timetable_window(
     tt_state: Res<TimetableWindowState>,
+    chain: Res<VehicleChainRegistry>,
     sim: Res<SimWorld>,
-    mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
-    mut title_q: Query<(&FloatingWindowTitleText, &mut Text)>,
-    mut summary_q: Query<&mut Text, (With<TimetableSummaryText>, Without<FloatingWindowTitleText>)>,
+    mut root_q: Query<(Entity, &mut FloatingWindow, &VehicleChainSlot, &mut Visibility)>,
+    mut title_q: Query<(&FloatingWindowTitleText, &mut Text, &ChildOf)>,
+    parents: Query<&ChildOf>,
+    mut summary_q: Query<
+        (&VehicleChainSlot, &mut Text),
+        (With<TimetableSummaryText>, Without<FloatingWindowTitleText>),
+    >,
     mut row_strip_q: Query<
-        (&TimetableOrderRowStrip, &mut Node),
+        (&VehicleChainSlot, &TimetableOrderRowStrip, &mut Node),
         (Without<Button>, Without<TimetableOrderRowLabel>),
     >,
     mut row_label_q: Query<
-        (&TimetableOrderRowLabel, &mut Text),
+        (&VehicleChainSlot, &TimetableOrderRowLabel, &mut Text),
         (
             Without<TimetableSummaryText>,
             Without<FloatingWindowTitleText>,
         ),
     >,
 ) {
-    let Some((_, mut vis)) = root_q
-        .iter_mut()
-        .find(|(w, _)| w.id == FloatingWindowId::Timetable)
-    else {
-        return;
-    };
-    let Some(vehicle_id) = tt_state.vehicle_id else {
-        *vis = Visibility::Hidden;
-        return;
-    };
-    let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.id == vehicle_id) else {
-        *vis = Visibility::Hidden;
-        return;
-    };
-    *vis = Visibility::Visible;
-    if let Some((_, mut title)) = title_q
-        .iter_mut()
-        .find(|(t, _)| t.0 == FloatingWindowId::Timetable)
-    {
-        **title = format!("Horario — {}", vehicle.display_name());
+    fn title_root_entity(child_of: &ChildOf, parents: &Query<&ChildOf>) -> Option<Entity> {
+        let center = child_of.parent();
+        let bar = parents.get(center).ok()?.parent();
+        parents.get(bar).ok().map(|c| c.parent())
     }
-    if let Ok(mut summary) = summary_q.single_mut() {
-        let late = vehicle.timetable_lateness;
-        let late_label = if late > 0 {
-            format!("+{late}t tarde")
-        } else if late < 0 {
-            format!("{late}t adelantado")
-        } else {
-            "en hora".into()
+
+    for (root_entity, mut win, slot, mut vis) in &mut root_q {
+        if win.id != FloatingWindowId::Timetable {
+            continue;
+        }
+        let idx = slot.0 as usize;
+        if idx >= MAX_VEHICLE_CHAIN_SLOTS {
+            continue;
+        }
+        let vehicle_id = tt_state.slots[idx].filter(|&id| chain.slot_of(id) == Some(slot.0));
+        win.key = vehicle_window_key(FloatingWindowId::Timetable, vehicle_id.unwrap_or(0));
+        let Some(vehicle_id) = vehicle_id else {
+            *vis = Visibility::Hidden;
+            continue;
         };
-        **summary = format!(
-            "Horario: {} · Autofill: {} · {late_label}",
-            if vehicle.timetable_active {
-                "ON"
-            } else {
-                "OFF"
-            },
-            if vehicle.timetable_autofill {
-                "ON"
-            } else {
-                "OFF"
-            },
-        );
-    }
-    let seconds_mode = vehicle.timetable_display_seconds;
-    for (strip, mut node) in &mut row_strip_q {
-        node.display = if strip.index < vehicle.orders.len() {
-            Display::Flex
-        } else {
-            Display::None
+        let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.id == vehicle_id) else {
+            *vis = Visibility::Hidden;
+            continue;
         };
-    }
-    for (label, mut text) in &mut row_label_q {
-        if label.index < vehicle.orders.len() {
-            **text = format!(
-                "{}. {}",
-                label.index + 1,
-                order_timing_label(vehicle.orders[label.index], seconds_mode)
+        *vis = Visibility::Visible;
+        let title_name = format!("Horario — {}", vehicle.display_name());
+        for (title, mut text, child_of) in &mut title_q {
+            if title.0 != FloatingWindowId::Timetable {
+                continue;
+            }
+            if title_root_entity(child_of, &parents) == Some(root_entity) {
+                **text = title_name.clone();
+            }
+        }
+        for (sum_slot, mut summary) in &mut summary_q {
+            if sum_slot.0 != slot.0 {
+                continue;
+            }
+            let late = vehicle.timetable_lateness;
+            let late_label = if late > 0 {
+                format!("+{late}t tarde")
+            } else if late < 0 {
+                format!("{late}t adelantado")
+            } else {
+                "en hora".into()
+            };
+            **summary = format!(
+                "Horario: {} · Autofill: {} · {late_label}",
+                if vehicle.timetable_active { "ON" } else { "OFF" },
+                if vehicle.timetable_autofill { "ON" } else { "OFF" },
             );
-        } else {
-            **text = String::new();
+        }
+        let seconds_mode = vehicle.timetable_display_seconds;
+        for (strip_slot, strip, mut node) in &mut row_strip_q {
+            if strip_slot.0 != slot.0 {
+                continue;
+            }
+            node.display = if strip.index < vehicle.orders.len() {
+                Display::Flex
+            } else {
+                Display::None
+            };
+        }
+        for (label_slot, label, mut text) in &mut row_label_q {
+            if label_slot.0 != slot.0 {
+                continue;
+            }
+            if label.index < vehicle.orders.len() {
+                **text = format!(
+                    "{}. {}",
+                    label.index + 1,
+                    order_timing_label(vehicle.orders[label.index], seconds_mode)
+                );
+            } else {
+                **text = String::new();
+            }
         }
     }
 }
@@ -358,16 +459,24 @@ pub(crate) fn timetable_window_on_closed(
     mut tt_state: ResMut<TimetableWindowState>,
 ) {
     for msg in closed.read() {
-        if msg.0.class == FloatingWindowId::Timetable {
-            tt_state.vehicle_id = None;
+        if msg.0.class != FloatingWindowId::Timetable {
+            continue;
         }
+        let vehicle_id = msg.0.instance;
+        if vehicle_id == 0 {
+            continue;
+        }
+        tt_state.close_vehicle(vehicle_id);
     }
 }
 
 pub(crate) fn handle_timetable_window_buttons(
-    mut btn_q: Query<(&Interaction, &TimetableWindowButton), (Changed<Interaction>, With<Button>)>,
+    mut btn_q: Query<
+        (&Interaction, &TimetableWindowButton, &VehicleChainSlot),
+        (Changed<Interaction>, With<Button>),
+    >,
     mut row_btn_q: Query<
-        (&Interaction, &TimetableRowAction),
+        (&Interaction, &TimetableRowAction, &VehicleChainSlot),
         (
             Changed<Interaction>,
             With<Button>,
@@ -380,13 +489,15 @@ pub(crate) fn handle_timetable_window_buttons(
     mut hud_feedback: ResMut<HudBuildFeedback>,
     time: Res<Time>,
 ) {
-    for (interaction, action) in &mut row_btn_q {
+    for (interaction, action, chain_slot) in &mut row_btn_q {
         if *interaction != Interaction::Pressed {
             continue;
         }
-        let Some(vehicle_id) = tt_state.vehicle_id else {
+        let idx = chain_slot.0 as usize;
+        let Some(vehicle_id) = tt_state.slots.get(idx).copied().flatten() else {
             continue;
         };
+        tt_state.focused = Some(vehicle_id);
         let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.id == vehicle_id) else {
             continue;
         };
@@ -418,13 +529,15 @@ pub(crate) fn handle_timetable_window_buttons(
         }
     }
 
-    for (interaction, button) in &mut btn_q {
+    for (interaction, button, chain_slot) in &mut btn_q {
         if *interaction != Interaction::Pressed {
             continue;
         }
-        let Some(vehicle_id) = tt_state.vehicle_id else {
+        let idx = chain_slot.0 as usize;
+        let Some(vehicle_id) = tt_state.slots.get(idx).copied().flatten() else {
             continue;
         };
+        tt_state.focused = Some(vehicle_id);
         match button {
             TimetableWindowButton::ToggleTimetable => {
                 let _ = crate::network::apply_player_command(
@@ -453,7 +566,7 @@ pub(crate) fn handle_timetable_window_buttons(
                 }
             }
             TimetableWindowButton::Close => {
-                tt_state.vehicle_id = None;
+                tt_state.close_vehicle(vehicle_id);
             }
         }
     }

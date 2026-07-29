@@ -14,11 +14,11 @@ pub(crate) fn spawn_order_route_preview(
     map: &Map,
     order_state: &OrderEditState,
 ) {
-    if order_state.vehicle_id.is_none() {
+    if order_state.vehicle_id().is_none() {
         return;
     }
     let image = asset_server.load::<Image>("assets/opengfx/tiles/grass_rough.png");
-    for (i, order) in order_state.orders.iter().enumerate() {
+    for (i, order) in order_state.orders().iter().enumerate() {
         let pos = order.destination();
         let Some(tile) = map.get(pos) else {
             continue;
@@ -49,7 +49,7 @@ pub(crate) fn spawn_order_pick_target_preview(
     order_state: &OrderEditState,
     hover: TileCoord,
 ) {
-    let Some(vehicle_id) = order_state.vehicle_id else {
+    let Some(vehicle_id) = order_state.vehicle_id() else {
         return;
     };
     if !order_pick_valid(sim, vehicle_id, hover) {

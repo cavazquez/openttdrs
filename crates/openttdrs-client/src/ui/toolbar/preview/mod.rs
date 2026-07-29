@@ -98,7 +98,7 @@ pub(crate) fn update_build_ghost_preview(
     // Preview de órdenes (caso especial, manejado aparte)
     let orders_preview =
         order_pick_active(&pick_state) || tool_state.active_tool == Some(BuildMenuAction::Orders);
-    if orders_preview && order_state.vehicle_id.is_some() {
+    if orders_preview && order_state.vehicle_id().is_some() {
         spawn_order_route_preview(&mut commands, &asset_server, &sim.state.map, &order_state);
         if order_pick_active(&pick_state)
             && let Some(hover) = hovered.pos

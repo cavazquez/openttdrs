@@ -167,7 +167,7 @@ pub(crate) fn handle_tile_click(
     let orders_mode = order_pick_active(&panels.pick_state)
         || tool_state.active_tool == Some(BuildMenuAction::Orders);
     let order_pick_active_flag = order_pick_active(&panels.pick_state);
-    let order_vehicle_selected = apply_ctx.order_state.vehicle_id.is_some();
+    let order_vehicle_selected = apply_ctx.order_state.vehicle_id().is_some();
 
     let signal_tile_has_signals = if tool_state.active_tool == Some(BuildMenuAction::RailSignals) {
         if let Some(tile) = apply_ctx.sim.state.map.get(build_pos)

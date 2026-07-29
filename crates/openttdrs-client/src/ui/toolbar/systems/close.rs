@@ -35,7 +35,7 @@ fn ingame_placement_busy(
         || tool_state.active_tool.is_some()
         || toolbar_state.active_group.is_some()
         || order_pick_active(pick_state)
-        || order_state.vehicle_id.is_some()
+        || order_state.vehicle_id().is_some()
         || industry_panel.open
 }
 

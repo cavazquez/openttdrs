@@ -23,9 +23,9 @@ pub(crate) fn sync_orders_pick_cursor(
     let over_menu = menu_pointer.iter().any(|i| *i != Interaction::None);
     let picking =
         order_pick_active(&pick_state) || tool_state.active_tool == Some(BuildMenuAction::Orders);
-    let active = picking && order_state.vehicle_id.is_some() && !over_menu;
+    let active = picking && order_state.vehicle_id().is_some() && !over_menu;
     let hover_valid = active
-        && order_state.vehicle_id.is_some_and(|vehicle_id| {
+        && order_state.vehicle_id().is_some_and(|vehicle_id| {
             hovered
                 .pos
                 .is_some_and(|pos| order_pick_valid(&sim, vehicle_id, pos))

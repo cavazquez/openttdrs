@@ -191,11 +191,13 @@ mod tests {
         world.insert_resource(OrderEditState::default());
         world.insert_resource(crate::ui::destination_window::DestinationPickerState::default());
         world.insert_resource(SimWorld::default());
+        world.init_resource::<crate::ui::vehicle_chain::VehicleChainRegistry>();
         world.insert_resource(UiToolState::default());
         world.insert_resource(DragBuildState::default());
         world.insert_resource(RemapMapVisualsPending::default());
         world.insert_resource(HudBuildFeedback::default());
         world.insert_resource(TimetableWindowState::default());
+        world.init_resource::<crate::ui::shared_orders_window::SharedOrdersWindowState>();
         world.insert_resource(Time::<()>::default());
         insert_order_pick_test_resources(&mut world);
         world.run_system_once(handle_order_panel_buttons).unwrap();
@@ -204,12 +206,15 @@ mod tests {
     #[test]
     fn order_goto_button_opens_destination_picker() {
         let mut world = World::new();
-        world.insert_resource(OrderEditState {
-            vehicle_id: Some(7),
-            ..default()
-        });
+        let mut order_edit = OrderEditState::default();
+        order_edit.bind_slot(0, 7, vec![], None);
+        world.insert_resource(order_edit);
         world.insert_resource(crate::ui::destination_window::DestinationPickerState::default());
         world.insert_resource(SimWorld::default());
+        world.init_resource::<crate::ui::vehicle_chain::VehicleChainRegistry>();
+        world
+            .resource_mut::<crate::ui::vehicle_chain::VehicleChainRegistry>()
+            .open_or_focus(7);
         world.insert_resource(DragBuildState::default());
         world.insert_resource(RemapMapVisualsPending::default());
         world.insert_resource(HudBuildFeedback::default());
@@ -219,13 +224,14 @@ mod tests {
         world.spawn((
             Button,
             crate::ui::toolbar::OrderPanelButton::PickDestOnMap,
+            crate::ui::vehicle_chain::VehicleChainSlot(0),
             Interaction::Pressed,
         ));
         world.run_system_once(handle_order_panel_buttons).unwrap();
         assert!(
             world
                 .resource::<crate::ui::destination_window::DestinationPickerState>()
-                .open
+                .any_open()
         );
     }
 

@@ -18,12 +18,17 @@ use super::OrderPanelRow;
 /// Carga el vehículo en el panel de órdenes (lista + selección en la orden actual).
 pub(crate) fn open_order_edit_for_vehicle(
     order_state: &mut OrderEditState,
+    chain: &mut crate::ui::vehicle_chain::VehicleChainRegistry,
     vehicle: &Vehicle,
     next_pick: &mut NextState<OrderPickState>,
 ) {
-    order_state.vehicle_id = Some(vehicle.id);
-    order_state.orders = vehicle.orders.clone();
-    order_state.selected_slot = selected_slot_for_vehicle(vehicle);
+    let slot = chain.open_or_focus(vehicle.id);
+    order_state.bind_slot(
+        slot,
+        vehicle.id,
+        vehicle.orders.clone(),
+        selected_slot_for_vehicle(vehicle),
+    );
     next_pick.set(OrderPickState::Idle);
 }
 
@@ -36,43 +41,39 @@ fn selected_slot_for_vehicle(vehicle: &Vehicle) -> Option<usize> {
 }
 
 fn refresh_orders_from_sim(order_state: &mut OrderEditState, sim: &SimWorld) {
-    let Some(vehicle_id) = order_state.vehicle_id else {
+    let Some(vehicle_id) = order_state.vehicle_id() else {
         return;
     };
-    let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.id == vehicle_id) else {
-        order_state.vehicle_id = None;
-        order_state.orders.clear();
-        order_state.selected_slot = None;
+    let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.id == vehicle_id).cloned() else {
+        order_state.close_vehicle(vehicle_id);
         return;
     };
-    order_state.orders = vehicle.orders.clone();
-    if let Some(sel) = order_state.selected_slot
-        && sel >= order_state.orders.len()
+    let Some(slot) = order_state.focused_slot_mut() else {
+        return;
+    };
+    slot.orders = vehicle.orders.clone();
+    if let Some(sel) = slot.selected_slot
+        && sel >= slot.orders.len()
     {
-        order_state.selected_slot =
-            order_state
-                .orders
-                .len()
-                .checked_sub(1)
-                .or(if order_state.orders.is_empty() {
-                    None
-                } else {
-                    Some(0)
-                });
+        slot.selected_slot = slot.orders.len().checked_sub(1).or(if slot.orders.is_empty() {
+            None
+        } else {
+            Some(0)
+        });
     }
 }
 
 fn clamp_selected_after_remove(order_state: &mut OrderEditState, removed_index: usize) {
-    let Some(sel) = order_state.selected_slot else {
+    let Some(sel) = order_state.selected_slot() else {
         return;
     };
-    let len = order_state.orders.len();
+    let len = order_state.orders().len();
     if len == 0 {
-        order_state.selected_slot = None;
+        order_state.set_selected_slot(None);
     } else if sel == removed_index {
-        order_state.selected_slot = Some(removed_index.min(len - 1));
+        order_state.set_selected_slot(Some(removed_index.min(len - 1)));
     } else if sel > removed_index {
-        order_state.selected_slot = Some(sel - 1);
+        order_state.set_selected_slot(Some(sel - 1));
     }
 }
 
@@ -80,7 +81,7 @@ pub(crate) fn start_order_destination_pick(
     order_state: &OrderEditState,
     next_pick: &mut NextState<OrderPickState>,
 ) {
-    if order_state.vehicle_id.is_some() {
+    if order_state.vehicle_id().is_some() {
         next_pick.set(OrderPickState::Picking);
     }
 }
@@ -93,7 +94,7 @@ pub(crate) fn cancel_order_destination_pick(next_pick: &mut NextState<OrderPickS
 /// Inicia drag al pulsar una fila de órdenes (#194).
 pub(crate) fn begin_order_list_drag(
     mut row_q: Query<
-        (&Interaction, &OrderPanelRow),
+        (&Interaction, &OrderPanelRow, &crate::ui::vehicle_chain::VehicleChainSlot),
         (
             Changed<Interaction>,
             With<Button>,
@@ -102,13 +103,21 @@ pub(crate) fn begin_order_list_drag(
     >,
     mut order_state: ResMut<OrderEditState>,
 ) {
-    for (interaction, row) in &mut row_q {
+    for (interaction, row, chain_slot) in &mut row_q {
         if *interaction != Interaction::Pressed {
             continue;
         }
-        if row.slot < order_state.orders.len() {
-            order_state.list_drag_from = Some(row.slot);
-            order_state.selected_slot = Some(row.slot);
+        let idx = chain_slot.0 as usize;
+        let focused = order_state.slots.get(idx).and_then(|s| s.vehicle_id);
+        if let Some(vid) = focused {
+            order_state.focused = Some(vid);
+        }
+        let Some(slot) = order_state.slots.get_mut(idx) else {
+            continue;
+        };
+        if row.slot < slot.orders.len() {
+            slot.list_drag_from = Some(row.slot);
+            slot.selected_slot = Some(row.slot);
         }
     }
 }
@@ -124,15 +133,15 @@ pub(crate) fn finish_order_list_drag(
     mut hud_feedback: ResMut<HudBuildFeedback>,
     time: Res<Time>,
 ) {
-    let Some(from_slot) = order_state.list_drag_from else {
+    let Some(from_slot) = order_state.list_drag_from() else {
         return;
     };
     if mouse.pressed(MouseButton::Left) {
         return;
     }
-    order_state.list_drag_from = None;
+    order_state.set_list_drag_from(None);
     let drop_slot = row_q.iter().find_map(|(row, interaction)| {
-        (row.slot < order_state.orders.len()
+        (row.slot < order_state.orders().len()
             && matches!(*interaction, Interaction::Hovered | Interaction::Pressed))
         .then_some(row.slot)
     });
@@ -150,18 +159,19 @@ pub(crate) fn finish_order_list_drag(
         );
         return;
     }
-    if from_slot < order_state.orders.len() {
-        order_state.selected_slot = Some(from_slot);
+    if from_slot < order_state.orders().len() {
+        order_state.set_selected_slot(Some(from_slot));
     }
 }
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn handle_order_panel_buttons(
     mut btn_q: Query<
-        (&Interaction, &OrderPanelButton),
+        (&Interaction, &OrderPanelButton, &crate::ui::vehicle_chain::VehicleChainSlot),
         (Changed<Interaction>, With<Button>, Without<OrderPanelRow>),
     >,
     mut order_state: ResMut<OrderEditState>,
+    chain: Res<crate::ui::vehicle_chain::VehicleChainRegistry>,
     mut next_pick: ResMut<NextState<OrderPickState>>,
     mut sim: ResMut<SimWorld>,
     mut drag_state: ResMut<DragBuildState>,
@@ -172,16 +182,22 @@ pub(crate) fn handle_order_panel_buttons(
     mut destination_picker: Option<ResMut<DestinationPickerState>>,
     time: Res<Time>,
 ) {
-    for (interaction, button) in &mut btn_q {
+    for (interaction, button, chain_slot) in &mut btn_q {
         if *interaction != Interaction::Pressed {
             continue;
         }
+        // Enfocar el panel del botón pulsado (#244).
+        if let Some(slot) = order_state.slots.get(chain_slot.0 as usize)
+            && let Some(vid) = slot.vehicle_id
+        {
+            order_state.focused = Some(vid);
+        }
         match button {
             OrderPanelButton::DeleteSelected => {
-                let Some(vehicle_id) = order_state.vehicle_id else {
+                let Some(vehicle_id) = order_state.vehicle_id() else {
                     continue;
                 };
-                let Some(index) = order_state.selected_slot else {
+                let Some(index) = order_state.selected_slot() else {
                     continue;
                 };
                 match crate::network::apply_player_command(
@@ -197,7 +213,7 @@ pub(crate) fn handle_order_panel_buttons(
                 }
             }
             OrderPanelButton::SkipOrder => {
-                let Some(vehicle_id) = order_state.vehicle_id else {
+                let Some(vehicle_id) = order_state.vehicle_id() else {
                     continue;
                 };
                 match crate::network::apply_player_command(
@@ -210,7 +226,7 @@ pub(crate) fn handle_order_panel_buttons(
                         if let Some(vehicle) =
                             sim.state.vehicles.iter().find(|v| v.id == vehicle_id)
                         {
-                            order_state.selected_slot = selected_slot_for_vehicle(vehicle);
+                            order_state.set_selected_slot(selected_slot_for_vehicle(vehicle));
                         }
                     }
                     Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),
@@ -277,13 +293,13 @@ pub(crate) fn handle_order_panel_buttons(
                 );
             }
             OrderPanelButton::OpenTimetableWindow => {
-                let Some(vehicle_id) = order_state.vehicle_id else {
+                let Some(vehicle_id) = order_state.vehicle_id() else {
                     continue;
                 };
-                open_timetable_for_vehicle(&mut tt_state, vehicle_id);
+                open_timetable_for_vehicle(&mut tt_state, &chain, vehicle_id);
             }
             OrderPanelButton::ShareOrders => {
-                let Some(vehicle_id) = order_state.vehicle_id else {
+                let Some(vehicle_id) = order_state.vehicle_id() else {
                     continue;
                 };
                 match crate::network::apply_player_command(
@@ -298,7 +314,7 @@ pub(crate) fn handle_order_panel_buttons(
                 }
             }
             OrderPanelButton::UnlinkSharedOrders => {
-                let Some(vehicle_id) = order_state.vehicle_id else {
+                let Some(vehicle_id) = order_state.vehicle_id() else {
                     continue;
                 };
                 match crate::network::apply_player_command(
@@ -314,13 +330,15 @@ pub(crate) fn handle_order_panel_buttons(
             }
             OrderPanelButton::OpenSharedOrders => {
                 shared_orders.open = true;
-                shared_orders.link_vehicle_id = order_state.vehicle_id;
+                shared_orders.link_vehicle_id = order_state.vehicle_id();
             }
             OrderPanelButton::PickDestOnMap => {
                 // Primero abre la lista global de destinos. Desde esa ventana
                 // se puede elegir una fila o pasar al picker sobre el mapa.
                 if let Some(picker) = destination_picker.as_deref_mut() {
-                    picker.open = order_state.vehicle_id.is_some();
+                    if order_state.vehicle_id().is_some() {
+                        picker.open_for_chain_slot(chain_slot.0);
+                    }
                     next_pick.set(OrderPickState::Idle);
                 } else {
                     start_order_destination_pick(&order_state, &mut next_pick);
@@ -368,10 +386,10 @@ fn append_conditional_order(
     elapsed_secs: f32,
     condition: OrderConditionKind,
 ) {
-    let Some(vehicle_id) = order_state.vehicle_id else {
+    let Some(vehicle_id) = order_state.vehicle_id() else {
         return;
     };
-    let mut orders = order_state.orders.clone();
+    let mut orders = order_state.orders().to_vec();
     // Salta a la primera orden si se cumple; si la lista estaba vacía, jump_to=0
     // es válido tras insertar (índice de la propia condicional).
     let jump_to = 0;
@@ -380,7 +398,7 @@ fn append_conditional_order(
         Ok(()) => {
             pending.pending = true;
             refresh_orders_from_sim(order_state, sim);
-            order_state.selected_slot = order_state.orders.len().checked_sub(1);
+            order_state.set_selected_slot(order_state.orders().len().checked_sub(1));
         }
         Err(e) => push_build_command_error(hud_feedback, e, elapsed_secs),
     }
@@ -393,10 +411,10 @@ fn cycle_selected_conditional(
     hud_feedback: &mut HudBuildFeedback,
     elapsed_secs: f32,
 ) {
-    let Some(vehicle_id) = order_state.vehicle_id else {
+    let Some(vehicle_id) = order_state.vehicle_id() else {
         return;
     };
-    let Some(index) = order_state.selected_slot else {
+    let Some(index) = order_state.selected_slot() else {
         push_build_command_error(
             hud_feedback,
             CommandError::OrderIndexOutOfRange,
@@ -404,7 +422,7 @@ fn cycle_selected_conditional(
         );
         return;
     };
-    let Some(order) = order_state.orders.get(index).copied() else {
+    let Some(order) = order_state.orders().get(index).copied() else {
         push_build_command_error(
             hud_feedback,
             CommandError::OrderIndexOutOfRange,
@@ -447,10 +465,10 @@ fn cycle_selected_conditional(
         }
         _ => {
             // Convierte la orden seleccionada en condicional (salto a la siguiente).
-            let jump_to = if order_state.orders.is_empty() {
+            let jump_to = if order_state.orders().is_empty() {
                 0
             } else {
-                (index + 1) % order_state.orders.len()
+                (index + 1) % order_state.orders().len()
             };
             (OrderConditionKind::CargoLoadAbove, 50, jump_to)
         }
@@ -481,10 +499,10 @@ fn toggle_order_flag(
     elapsed_secs: f32,
     make_cmd: impl FnOnce(u32, usize) -> Command,
 ) {
-    let Some(vehicle_id) = order_state.vehicle_id else {
+    let Some(vehicle_id) = order_state.vehicle_id() else {
         return;
     };
-    let Some(index) = order_state.selected_slot else {
+    let Some(index) = order_state.selected_slot() else {
         push_build_command_error(
             hud_feedback,
             CommandError::OrderIndexOutOfRange,
@@ -509,7 +527,7 @@ fn move_selected_order(
     elapsed_secs: f32,
     direction: OrderMoveDirection,
 ) {
-    let Some(index) = order_state.selected_slot else {
+    let Some(index) = order_state.selected_slot() else {
         push_build_command_error(
             hud_feedback,
             CommandError::OrderIndexOutOfRange,
@@ -528,7 +546,7 @@ fn move_selected_order(
     ) else {
         return;
     };
-    order_state.selected_slot = Some(new_slot);
+    order_state.set_selected_slot(Some(new_slot));
 }
 
 /// Reordena la orden `from` hasta el índice `to` con pasos ↑/↓ adyacentes.
@@ -541,7 +559,7 @@ fn move_order_to_slot(
     from: usize,
     to: usize,
 ) {
-    if from == to || from >= order_state.orders.len() || to >= order_state.orders.len() {
+    if from == to || from >= order_state.orders().len() || to >= order_state.orders().len() {
         return;
     }
     let mut idx = from;
@@ -576,7 +594,7 @@ fn move_order_to_slot(
             idx = next;
         }
     }
-    order_state.selected_slot = Some(to);
+    order_state.set_selected_slot(Some(to));
 }
 
 fn apply_move_vehicle_order(
@@ -588,7 +606,7 @@ fn apply_move_vehicle_order(
     index: usize,
     direction: OrderMoveDirection,
 ) -> Option<usize> {
-    let vehicle_id = order_state.vehicle_id?;
+    let vehicle_id = order_state.vehicle_id()?;
     match crate::network::apply_player_command(
         &mut sim.state,
         &Command::MoveVehicleOrder {
@@ -603,7 +621,7 @@ fn apply_move_vehicle_order(
             Some(match direction {
                 OrderMoveDirection::Up => index.saturating_sub(1),
                 OrderMoveDirection::Down => {
-                    (index + 1).min(order_state.orders.len().saturating_sub(1))
+                    (index + 1).min(order_state.orders().len().saturating_sub(1))
                 }
             })
         }
@@ -678,29 +696,44 @@ pub(crate) fn handle_order_destination_click(
     if !mouse.just_pressed(MouseButton::Left) {
         return false;
     }
-    let Some(vehicle_id) = order_state.vehicle_id else {
+    let Some(vehicle_id) = order_state.vehicle_id() else {
         return false;
     };
     // Prioridad 1: añadir la parada válida (estación/waypoint/depósito) de la
     // tesela clicada, aunque haya un vehículo parado ahí (p.ej. el propio tren
     // dentro del depósito).
     if order_pick_valid(sim, vehicle_id, pos) {
-        match try_append_order_at_tile(sim, vehicle_id, pos, &mut order_state.orders) {
+        let result = {
+            let Some(orders) = order_state.orders_mut() else {
+                return false;
+            };
+            try_append_order_at_tile(sim, vehicle_id, pos, orders)
+        };
+        match result {
             Ok(()) => {
                 pending.pending = true;
-                order_state.selected_slot = order_state.orders.len().checked_sub(1);
+                let len = order_state.orders().len();
+                order_state.set_selected_slot(len.checked_sub(1));
             }
             Err(e) => {
-                order_state.orders.pop();
+                if let Some(orders) = order_state.orders_mut() {
+                    orders.pop();
+                }
                 push_build_command_error(hud_feedback, e, elapsed_secs);
             }
         }
         return true;
     }
     // Prioridad 2: clic sobre otro vehículo (fuera de un destino) → editar sus
-    // órdenes.
+    // órdenes. Sin registry real aquí (API legacy / dead_code); el flujo activo
+    // usa apply_intent con VehicleChainRegistry.
     if let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.pos == pos) {
-        open_order_edit_for_vehicle(order_state, vehicle, next_pick);
+        let mut chain = crate::ui::vehicle_chain::VehicleChainRegistry::default();
+        if let Some(vid) = order_state.vehicle_id() {
+            let _ = chain.open_or_focus(vid);
+        }
+        let _ = chain.open_or_focus(vehicle.id);
+        open_order_edit_for_vehicle(order_state, &mut chain, vehicle, next_pick);
         return true;
     }
     // Estación presente pero incompatible con este vehículo → feedback.
@@ -749,14 +782,18 @@ mod tests {
             state,
             ..SimWorld::default()
         });
-        world.insert_resource(OrderEditState {
-            vehicle_id: Some(1),
-            orders: world.resource::<SimWorld>().state.vehicles[0]
-                .orders
-                .clone(),
-            selected_slot: Some(0),
-            list_drag_from: None,
-        });
+        let mut order_edit = OrderEditState::default();
+        order_edit.bind_slot(
+            0,
+            1,
+            world.resource::<SimWorld>().state.vehicles[0].orders.clone(),
+            Some(0),
+        );
+        world.insert_resource(order_edit);
+        world.init_resource::<crate::ui::vehicle_chain::VehicleChainRegistry>();
+        world
+            .resource_mut::<crate::ui::vehicle_chain::VehicleChainRegistry>()
+            .open_or_focus(1);
         world.init_resource::<RemapMapVisualsPending>();
         world.init_resource::<HudBuildFeedback>();
         world.init_resource::<DragBuildState>();
@@ -767,11 +804,12 @@ mod tests {
         world.spawn((
             Button,
             OrderPanelButton::MoveOrderDown,
+            crate::ui::vehicle_chain::VehicleChainSlot(0),
             Interaction::Pressed,
         ));
         world.run_system_once(handle_order_panel_buttons).unwrap();
         let order_state = world.resource::<OrderEditState>();
-        assert_eq!(order_state.selected_slot, Some(1));
+        assert_eq!(order_state.selected_slot(), Some(1));
         let sim = world.resource::<SimWorld>();
         assert_eq!(
             sim.state.vehicles[0].orders[0],
@@ -794,12 +832,9 @@ mod tests {
             state,
             ..SimWorld::default()
         });
-        world.insert_resource(OrderEditState {
-            vehicle_id: Some(1),
-            orders,
-            selected_slot: Some(0),
-            list_drag_from: None,
-        });
+        let mut order_edit = OrderEditState::default();
+        order_edit.bind_slot(0, 1, orders, Some(0));
+        world.insert_resource(order_edit);
         world.init_resource::<RemapMapVisualsPending>();
         world.init_resource::<HudBuildFeedback>();
         world.insert_resource(Time::<()>::default());
@@ -813,11 +848,16 @@ mod tests {
             VehicleOrder::station(TileCoord::new(2, 2)),
             VehicleOrder::station(TileCoord::new(3, 3)),
         ]);
-        world.spawn((Button, OrderPanelRow { slot: 1 }, Interaction::Pressed));
+        world.spawn((
+            Button,
+            OrderPanelRow { slot: 1 },
+            crate::ui::vehicle_chain::VehicleChainSlot(0),
+            Interaction::Pressed,
+        ));
         world.run_system_once(begin_order_list_drag).unwrap();
         let order_state = world.resource::<OrderEditState>();
-        assert_eq!(order_state.list_drag_from, Some(1));
-        assert_eq!(order_state.selected_slot, Some(1));
+        assert_eq!(order_state.list_drag_from(), Some(1));
+        assert_eq!(order_state.selected_slot(), Some(1));
     }
 
     #[test]
@@ -827,13 +867,20 @@ mod tests {
             VehicleOrder::station(TileCoord::new(3, 3)),
             VehicleOrder::station(TileCoord::new(4, 4)),
         ]);
-        world.resource_mut::<OrderEditState>().list_drag_from = Some(0);
-        world.spawn((Button, OrderPanelRow { slot: 2 }, Interaction::Hovered));
+        world
+            .resource_mut::<OrderEditState>()
+            .set_list_drag_from(Some(0));
+        world.spawn((
+            Button,
+            OrderPanelRow { slot: 2 },
+            crate::ui::vehicle_chain::VehicleChainSlot(0),
+            Interaction::Hovered,
+        ));
         // LMB no presionado → soltar.
         world.run_system_once(finish_order_list_drag).unwrap();
         let order_state = world.resource::<OrderEditState>();
-        assert_eq!(order_state.list_drag_from, None);
-        assert_eq!(order_state.selected_slot, Some(2));
+        assert_eq!(order_state.list_drag_from(), None);
+        assert_eq!(order_state.selected_slot(), Some(2));
         let sim = world.resource::<SimWorld>();
         assert_eq!(
             sim.state.vehicles[0].orders,
@@ -851,12 +898,19 @@ mod tests {
             VehicleOrder::station(TileCoord::new(2, 2)),
             VehicleOrder::station(TileCoord::new(3, 3)),
         ]);
-        world.resource_mut::<OrderEditState>().list_drag_from = Some(1);
-        world.spawn((Button, OrderPanelRow { slot: 1 }, Interaction::Hovered));
+        world
+            .resource_mut::<OrderEditState>()
+            .set_list_drag_from(Some(1));
+        world.spawn((
+            Button,
+            OrderPanelRow { slot: 1 },
+            crate::ui::vehicle_chain::VehicleChainSlot(0),
+            Interaction::Hovered,
+        ));
         world.run_system_once(finish_order_list_drag).unwrap();
         let order_state = world.resource::<OrderEditState>();
-        assert_eq!(order_state.list_drag_from, None);
-        assert_eq!(order_state.selected_slot, Some(1));
+        assert_eq!(order_state.list_drag_from(), None);
+        assert_eq!(order_state.selected_slot(), Some(1));
         let sim = world.resource::<SimWorld>();
         assert_eq!(
             sim.state.vehicles[0].orders[0],

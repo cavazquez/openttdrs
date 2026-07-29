@@ -21,7 +21,7 @@ use openttdrs_core::{default_engine_id, engine_for_vehicle};
 use crate::render::TruckHandles;
 use crate::ui::floating_window::FloatingWindowClosed;
 use crate::ui::vehicle_chain::VehicleChainRegistry;
-use crate::ui::vehicle_details_window::{VehicleDetailsTab, VehicleDetailsWindowState};
+use crate::ui::vehicle_details_window::VehicleDetailsWindowState;
 
 pub(crate) use actions::handle_vehicle_window_buttons;
 pub(crate) use rename::{
@@ -29,7 +29,7 @@ pub(crate) use rename::{
     vehicle_window_rename_keyboard,
 };
 pub(crate) use setup::setup_vehicle_window;
-pub(crate) use sync::{bind_focused_child_window_keys, sync_vehicle_window};
+pub(crate) use sync::sync_vehicle_window;
 
 const PREVIEW_TEX_W: u32 = 260;
 const PREVIEW_TEX_H: u32 = 100;
@@ -164,17 +164,13 @@ pub(crate) fn vehicle_window_on_closed(
         if vehicle_id == 0 {
             // Slot sin bind (instance 0): limpiar todo el estado legacy.
             window_state.clear_with_chain(&mut chain);
-            details_state.vehicle_id = None;
-            details_state.details_tab = VehicleDetailsTab::Info;
+            *details_state = Default::default();
             continue;
         }
         chain.close_vehicle(vehicle_id);
         window_state.sync_from_chain(&chain);
         // No pisar Details de otra instancia (#244).
-        if details_state.vehicle_id == Some(vehicle_id) {
-            details_state.vehicle_id = None;
-            details_state.details_tab = VehicleDetailsTab::Info;
-        }
+        details_state.close_vehicle(vehicle_id);
     }
 }
 

@@ -8,7 +8,6 @@ use crate::render::{PrimaryGameCamera, TruckHandles, vehicle_world_position};
 use crate::state::SimWorld;
 use crate::ui::floating_window::{FloatingWindow, FloatingWindowId, FloatingWindowTitleText};
 use crate::ui::vehicle_chain::{VehicleChainRegistry, VehicleChainSlot};
-use crate::ui::vehicle_details_window::VehicleDetailsWindowState;
 
 use super::status::format_vehicle_status;
 use super::{
@@ -229,23 +228,3 @@ pub(crate) fn sync_vehicle_window(
     }
 }
 
-/// Alinea `WindowKey.instance` de hijas singleton al vehículo que muestran (#242).
-pub(crate) fn bind_focused_child_window_keys(
-    details: Res<VehicleDetailsWindowState>,
-    orders: Res<crate::ui::toolbar::OrderEditState>,
-    timetable: Res<crate::ui::timetable_window::TimetableWindowState>,
-    refit: Res<crate::ui::refit_window::RefitWindowState>,
-    mut windows: Query<&mut FloatingWindow>,
-) {
-    for mut win in &mut windows {
-        let instance = match win.id {
-            FloatingWindowId::VehicleDetails => details.vehicle_id.unwrap_or(0),
-            FloatingWindowId::Orders => orders.vehicle_id.unwrap_or(0),
-            FloatingWindowId::Timetable => timetable.vehicle_id.unwrap_or(0),
-            FloatingWindowId::Refit => refit.vehicle_id.unwrap_or(0),
-            FloatingWindowId::DestinationPicker => orders.vehicle_id.unwrap_or(0),
-            _ => continue,
-        };
-        win.key.instance = instance;
-    }
-}

@@ -67,23 +67,27 @@ pub(crate) fn apply_intent(intent: MapClickIntent, ctx: &mut IntentApplyContext,
         }
         MapClickIntent::HandleOrderDestination(pos) => {
             // Replicar lógica de handle_order_destination_click sin verificar mouse
-            let Some(vehicle_id) = ctx.order_state.vehicle_id else {
+            let Some(vehicle_id) = ctx.order_state.vehicle_id() else {
                 return;
             };
             // Prioridad 1: añadir la parada válida
             if order_pick_valid(&ctx.sim, vehicle_id, pos) {
-                match try_append_order_at_tile(
-                    &mut ctx.sim,
-                    vehicle_id,
-                    pos,
-                    &mut ctx.order_state.orders,
-                ) {
+                let result = {
+                    let Some(orders) = ctx.order_state.orders_mut() else {
+                        return;
+                    };
+                    try_append_order_at_tile(&mut ctx.sim, vehicle_id, pos, orders)
+                };
+                match result {
                     Ok(()) => {
                         ctx.pending.pending = true;
-                        ctx.order_state.selected_slot = ctx.order_state.orders.len().checked_sub(1);
+                        let len = ctx.order_state.orders().len();
+                        ctx.order_state.set_selected_slot(len.checked_sub(1));
                     }
                     Err(e) => {
-                        ctx.order_state.orders.pop();
+                        if let Some(orders) = ctx.order_state.orders_mut() {
+                            orders.pop();
+                        }
                         push_build_command_error(&mut ctx.hud_feedback, e, time_secs);
                     }
                 }
@@ -91,7 +95,7 @@ pub(crate) fn apply_intent(intent: MapClickIntent, ctx: &mut IntentApplyContext,
             }
             // Prioridad 2: clic sobre otro vehículo
             if let Some(vehicle) = ctx.sim.state.vehicles.iter().find(|v| v.pos == pos) {
-                open_order_edit_for_vehicle(&mut ctx.order_state, vehicle, &mut ctx.pick_next);
+                open_order_edit_for_vehicle(&mut ctx.order_state, &mut ctx.vehicle_chain, vehicle, &mut ctx.pick_next);
                 return;
             }
             // Estación incompatible
@@ -117,7 +121,7 @@ pub(crate) fn apply_intent(intent: MapClickIntent, ctx: &mut IntentApplyContext,
         }
         MapClickIntent::StartOrderEditForVehicle(vehicle_id) => {
             if let Some(vehicle) = ctx.sim.state.vehicles.iter().find(|v| v.id == vehicle_id) {
-                open_order_edit_for_vehicle(&mut ctx.order_state, vehicle, &mut ctx.pick_next);
+                open_order_edit_for_vehicle(&mut ctx.order_state, &mut ctx.vehicle_chain, vehicle, &mut ctx.pick_next);
                 start_order_destination_pick(&ctx.order_state, &mut ctx.pick_next);
             }
         }

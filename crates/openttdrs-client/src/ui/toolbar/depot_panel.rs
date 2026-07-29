@@ -946,8 +946,8 @@ fn apply_depot_sell_drop(
                 if depot_state.selected_vehicle == Some(id) {
                     depot_state.selected_vehicle = None;
                 }
-                if order_state.vehicle_id == Some(id) {
-                    order_state.clear();
+                if order_state.is_open_for(id) {
+                    order_state.close_vehicle(id);
                 }
             }
             Err(e) => {
@@ -1121,8 +1121,8 @@ pub(crate) fn handle_depot_panel_buttons(
                 if depot_state.selected_vehicle == Some(vehicle_id) {
                     depot_state.selected_vehicle = None;
                 }
-                if order_state.vehicle_id == Some(vehicle_id) {
-                    order_state.clear();
+                if order_state.is_open_for(vehicle_id) {
+                    order_state.close_vehicle(vehicle_id);
                 }
             }
             Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),

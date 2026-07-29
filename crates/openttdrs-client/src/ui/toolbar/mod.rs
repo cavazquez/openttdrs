@@ -446,8 +446,9 @@ pub(crate) struct DragBuildState {
     pub(crate) press_world_pos: Option<bevy::math::Vec2>,
 }
 
-#[derive(Resource, Default)]
-pub(crate) struct OrderEditState {
+/// Estado de un panel de órdenes (un vehículo / chain slot).
+#[derive(Clone, Debug, Default)]
+pub(crate) struct OrderSlotState {
     pub(crate) vehicle_id: Option<u32>,
     pub(crate) orders: Vec<openttdrs_core::VehicleOrder>,
     /// Fila seleccionada en el panel (para borrar o editar flags).
@@ -456,12 +457,114 @@ pub(crate) struct OrderEditState {
     pub(crate) list_drag_from: Option<usize>,
 }
 
+/// Multi-instancia (#244): hasta 2 paneles de órdenes concurrentes.
+#[derive(Resource, Debug)]
+pub(crate) struct OrderEditState {
+    pub(crate) slots: [OrderSlotState; crate::ui::vehicle_chain::MAX_VEHICLE_CHAIN_SLOTS],
+    /// Vehículo enfocado (handlers / pick en mapa).
+    pub(crate) focused: Option<u32>,
+}
+
+impl Default for OrderEditState {
+    fn default() -> Self {
+        Self {
+            slots: Default::default(),
+            focused: None,
+        }
+    }
+}
+
 impl OrderEditState {
+    /// Compat: vehicle_id del panel enfocado.
+    #[must_use]
+    pub(crate) fn vehicle_id(&self) -> Option<u32> {
+        self.focused
+            .filter(|&id| self.slots.iter().any(|s| s.vehicle_id == Some(id)))
+    }
+
+    #[must_use]
+    pub(crate) fn focused_slot(&self) -> Option<&OrderSlotState> {
+        let id = self.focused?;
+        self.slots.iter().find(|s| s.vehicle_id == Some(id))
+    }
+
+    pub(crate) fn focused_slot_mut(&mut self) -> Option<&mut OrderSlotState> {
+        let id = self.focused?;
+        self.slots.iter_mut().find(|s| s.vehicle_id == Some(id))
+    }
+
+    /// Compat: órdenes del panel enfocado.
+    #[must_use]
+    pub(crate) fn orders(&self) -> &[openttdrs_core::VehicleOrder] {
+        self.focused_slot()
+            .map(|s| s.orders.as_slice())
+            .unwrap_or(&[])
+    }
+
+    pub(crate) fn orders_mut(&mut self) -> Option<&mut Vec<openttdrs_core::VehicleOrder>> {
+        self.focused_slot_mut().map(|s| &mut s.orders)
+    }
+
+    #[must_use]
+    pub(crate) fn selected_slot(&self) -> Option<usize> {
+        self.focused_slot().and_then(|s| s.selected_slot)
+    }
+
+    pub(crate) fn set_selected_slot(&mut self, slot: Option<usize>) {
+        if let Some(s) = self.focused_slot_mut() {
+            s.selected_slot = slot;
+        }
+    }
+
+    #[must_use]
+    pub(crate) fn list_drag_from(&self) -> Option<usize> {
+        self.focused_slot().and_then(|s| s.list_drag_from)
+    }
+
+    pub(crate) fn set_list_drag_from(&mut self, from: Option<usize>) {
+        if let Some(s) = self.focused_slot_mut() {
+            s.list_drag_from = from;
+        }
+    }
+
+    pub(crate) fn bind_slot(
+        &mut self,
+        chain_slot: u8,
+        vehicle_id: u32,
+        orders: Vec<openttdrs_core::VehicleOrder>,
+        selected_slot: Option<usize>,
+    ) {
+        let idx = chain_slot as usize;
+        if idx >= crate::ui::vehicle_chain::MAX_VEHICLE_CHAIN_SLOTS {
+            return;
+        }
+        self.slots[idx] = OrderSlotState {
+            vehicle_id: Some(vehicle_id),
+            orders,
+            selected_slot,
+            list_drag_from: None,
+        };
+        self.focused = Some(vehicle_id);
+    }
+
+    pub(crate) fn close_vehicle(&mut self, vehicle_id: u32) {
+        for slot in &mut self.slots {
+            if slot.vehicle_id == Some(vehicle_id) {
+                *slot = OrderSlotState::default();
+            }
+        }
+        if self.focused == Some(vehicle_id) {
+            self.focused = self.slots.iter().find_map(|s| s.vehicle_id);
+        }
+    }
+
     pub(crate) fn clear(&mut self) {
-        self.vehicle_id = None;
-        self.orders.clear();
-        self.selected_slot = None;
-        self.list_drag_from = None;
+        *self = Self::default();
+    }
+
+    #[must_use]
+    pub(crate) fn is_open_for(&self, vehicle_id: u32) -> bool {
+        self.slots.iter().any(|s| s.vehicle_id == Some(vehicle_id))
     }
 }
 

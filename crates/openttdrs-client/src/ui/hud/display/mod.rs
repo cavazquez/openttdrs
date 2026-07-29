@@ -243,8 +243,8 @@ pub(crate) fn update_tile_info_text(
         sim_speed_bits: hud.sim_speed.to_bits(),
         minimap: hud.minimap_visible,
         tool: tool_state.active_tool,
-        order_vehicle: order_state.vehicle_id,
-        order_len: order_state.orders.len(),
+        order_vehicle: order_state.vehicle_id(),
+        order_len: order_state.orders().len(),
         feedback: feedback.message.clone(),
         money: sim.state.economy.money,
         loan: sim.state.economy.loan,
@@ -296,8 +296,8 @@ pub(crate) fn update_tile_info_text(
         .unwrap_or("Ninguna");
     let tool_hint = tool_state.active_tool.and_then(tool_hud_hint);
     let order_l = order_state
-        .vehicle_id
-        .map(|id| format!(" | ordenes veh #{id}:{}", order_state.orders.len()))
+        .vehicle_id()
+        .map(|id| format!(" | ordenes veh #{id}:{}", order_state.orders().len()))
         .unwrap_or_default();
     let minimap_l = if hud.minimap_visible {
         "mapa M:on"

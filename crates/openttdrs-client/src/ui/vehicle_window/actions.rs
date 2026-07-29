@@ -22,7 +22,7 @@ use super::{VehicleWindowButton, VehicleWindowRenameInput, VehicleWindowState};
 pub(crate) fn handle_vehicle_window_buttons(
     mut buttons: Query<(&Interaction, &VehicleWindowButton), (Changed<Interaction>, With<Button>)>,
     mut window_state: ResMut<VehicleWindowState>,
-    chain: Res<VehicleChainRegistry>,
+    mut chain: ResMut<VehicleChainRegistry>,
     mut details_state: ResMut<VehicleDetailsWindowState>,
     mut order_state: ResMut<OrderEditState>,
     mut next_pick: ResMut<NextState<OrderPickState>>,
@@ -59,11 +59,16 @@ pub(crate) fn handle_vehicle_window_buttons(
             }
             VehicleWindowButton::Orders => {
                 if let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.id == vehicle_id) {
-                    open_order_edit_for_vehicle(&mut order_state, vehicle, &mut next_pick);
+                    open_order_edit_for_vehicle(
+                        &mut order_state,
+                        &mut chain,
+                        vehicle,
+                        &mut next_pick,
+                    );
                 }
             }
             VehicleWindowButton::Timetable => {
-                open_timetable_for_vehicle(&mut timetable, vehicle_id);
+                open_timetable_for_vehicle(&mut timetable, &chain, vehicle_id);
             }
             VehicleWindowButton::GotoDepot => {
                 match crate::network::apply_player_command(
@@ -136,10 +141,10 @@ pub(crate) fn handle_vehicle_window_buttons(
                 }
             }
             VehicleWindowButton::Refit => {
-                refit_window.open_for(vehicle_id);
+                refit_window.open_for(&chain, vehicle_id);
             }
             VehicleWindowButton::Details => {
-                details_state.open_for(vehicle_id);
+                details_state.open_for(&chain, vehicle_id);
             }
         }
     }
@@ -147,12 +152,15 @@ pub(crate) fn handle_vehicle_window_buttons(
 
 #[cfg(test)]
 mod tests {
+    use crate::ui::vehicle_chain::VehicleChainRegistry;
     use crate::ui::vehicle_details_window::VehicleDetailsWindowState;
 
     #[test]
     fn details_button_opens_details_state() {
+        let mut chain = VehicleChainRegistry::default();
+        chain.open_or_focus(42);
         let mut details = VehicleDetailsWindowState::default();
-        details.open_for(42);
-        assert_eq!(details.vehicle_id, Some(42));
+        details.open_for(&chain, 42);
+        assert_eq!(details.vehicle_id(), Some(42));
     }
 }

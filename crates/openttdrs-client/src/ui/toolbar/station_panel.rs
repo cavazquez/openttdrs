@@ -463,7 +463,7 @@ pub(crate) fn sync_station_cargo_panel(
         ));
     }
 
-    let active_vehicle = vehicle_id_for_station_panel(&sim, station_pos, order_state.vehicle_id);
+    let active_vehicle = vehicle_id_for_station_panel(&sim, station_pos, order_state.vehicle_id());
     if let Some(vid) = active_vehicle {
         out.push_str(&format!("\nVehículo activo para órdenes: #{vid}"));
     } else if !station.is_waypoint() {
@@ -504,6 +504,7 @@ pub(crate) fn handle_station_cargo_panel_buttons(
     mut q: Query<(&Interaction, &StationCargoPanelButton), (Changed<Interaction>, With<Button>)>,
     mut station_panel: ResMut<StationCargoPanelState>,
     mut order_state: ResMut<OrderEditState>,
+    mut vehicle_chain: ResMut<crate::ui::vehicle_chain::VehicleChainRegistry>,
     mut next_pick: ResMut<NextState<OrderPickState>>,
     mut tool_state: ResMut<UiToolState>,
     mut station_build: ResMut<StationBuildState>,
@@ -555,7 +556,7 @@ pub(crate) fn handle_station_cargo_panel_buttons(
             }
             StationCargoPanelButton::PickOrders => {
                 let Some(vehicle_id) =
-                    vehicle_id_for_station_panel(&sim, station_pos, order_state.vehicle_id)
+                    vehicle_id_for_station_panel(&sim, station_pos, order_state.vehicle_id())
                 else {
                     push_build_command_error(
                         &mut hud_feedback,
@@ -565,13 +566,18 @@ pub(crate) fn handle_station_cargo_panel_buttons(
                     continue;
                 };
                 if let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.id == vehicle_id) {
-                    open_order_edit_for_vehicle(&mut order_state, vehicle, &mut next_pick);
+                    open_order_edit_for_vehicle(
+                        &mut order_state,
+                        &mut vehicle_chain,
+                        vehicle,
+                        &mut next_pick,
+                    );
                     tool_state.active_tool = None;
                 }
             }
             StationCargoPanelButton::AddToRoute => {
                 let Some(vehicle_id) =
-                    vehicle_id_for_station_panel(&sim, station_pos, order_state.vehicle_id)
+                    vehicle_id_for_station_panel(&sim, station_pos, order_state.vehicle_id())
                 else {
                     push_build_command_error(
                         &mut hud_feedback,
@@ -580,27 +586,31 @@ pub(crate) fn handle_station_cargo_panel_buttons(
                     );
                     continue;
                 };
-                order_state.vehicle_id = Some(vehicle_id);
-                if let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.id == vehicle_id) {
-                    order_state.orders = vehicle.orders.clone();
-                    order_state.selected_slot = if vehicle.orders.is_empty() {
-                        None
-                    } else {
-                        Some(vehicle.current_order.min(vehicle.orders.len() - 1))
-                    };
+                if let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.id == vehicle_id).cloned()
+                {
+                    open_order_edit_for_vehicle(
+                        &mut order_state,
+                        &mut vehicle_chain,
+                        &vehicle,
+                        &mut next_pick,
+                    );
                 }
-                match try_append_station_order(
-                    &mut sim.state,
-                    vehicle_id,
-                    station_pos,
-                    &mut order_state.orders,
-                ) {
+                let append_result = {
+                    let Some(orders) = order_state.orders_mut() else {
+                        continue;
+                    };
+                    try_append_station_order(&mut sim.state, vehicle_id, station_pos, orders)
+                };
+                match append_result {
                     Ok(()) => {
                         pending.pending = true;
-                        order_state.selected_slot = order_state.orders.len().checked_sub(1);
+                        let len = order_state.orders().len();
+                        order_state.set_selected_slot(len.checked_sub(1));
                     }
                     Err(e) => {
-                        order_state.orders.pop();
+                        if let Some(orders) = order_state.orders_mut() {
+                            orders.pop();
+                        }
                         push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
                     }
                 }

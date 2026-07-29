@@ -1129,6 +1129,7 @@ mod tests {
             let pos = state.vehicles[train_idx].pos;
             if state.map.get_kind(pos) == Some(TileKind::Station) {
                 on_platform = true;
+                break;
             }
         }
         assert!(
@@ -1343,6 +1344,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "soak de 24.000 ticks; ejecutar con cargo nextest run --run-ignored all"]
     fn complete_showcase_visits_both_ends_without_stalling() {
         use std::collections::HashMap;
 

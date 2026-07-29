@@ -138,15 +138,7 @@ pub fn individual_road_vehicle_controller_side(
     }
 
     vehicles[v_idx].frame = next_frame;
-    if is_drive_through_road_state(state)
-        && next_frame == RVC_DRIVE_THROUGH_STOP_FRAME
-        && drive_through_should_stop(&vehicles[v_idx], map)
-    {
-        let v = &mut vehicles[v_idx];
-        v.cur_speed = 0;
-        v.subspeed = 0;
-        v.progress = 0;
-        v.advance_destination_after_arrival();
+    if handle_drive_through_stop(&mut vehicles[v_idx], state, next_frame, map) {
         return true;
     }
     let _ = (rd.x, rd.y); // pose visual: frame indexa la tabla
@@ -238,6 +230,25 @@ fn drive_through_should_stop(v: &Vehicle, map: Option<&Map>) -> bool {
         matches!(order, crate::vehicle::VehicleOrder::Station { station, .. } if *station == v.pos)
             && !order.is_pass_through()
     })
+}
+
+fn handle_drive_through_stop(
+    v: &mut Vehicle,
+    state: u8,
+    next_frame: u8,
+    map: Option<&Map>,
+) -> bool {
+    if !is_drive_through_road_state(state)
+        || next_frame != RVC_DRIVE_THROUGH_STOP_FRAME
+        || !drive_through_should_stop(v, map)
+    {
+        return false;
+    }
+    v.cur_speed = 0;
+    v.subspeed = 0;
+    v.progress = 0;
+    v.advance_destination_after_arrival();
+    true
 }
 
 fn allocate_bay(

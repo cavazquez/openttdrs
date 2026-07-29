@@ -37,12 +37,14 @@ pub fn apply_command(state: &mut GameState, cmd: &Command) -> Result<(), Command
                 .runtime
                 .pending_sim_events
                 .push(crate::sim_events::SimEvent::Construction { kind, at });
+            mark_landscape_tiles_dirty_for_action(state, at);
         }
         if let Some(at) = effects.demolition_event {
             state
                 .runtime
                 .pending_sim_events
                 .push(crate::sim_events::SimEvent::Demolition { at });
+            mark_landscape_tiles_dirty_for_action(state, at);
         }
         if state.cheats.infinite_money_active() && state.economy.money < money_before {
             state.economy.money = money_before;
@@ -59,6 +61,35 @@ pub fn apply_command(state: &mut GameState, cmd: &Command) -> Result<(), Command
         }
     }
     result
+}
+
+fn mark_landscape_tiles_dirty_for_action(state: &mut GameState, at: crate::map::TileCoord) {
+    let (map_w, map_h) = state.map.dimensions();
+    let map_w = match i32::try_from(map_w) {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    let map_h = match i32::try_from(map_h) {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    let mut add = |runtime: &mut crate::game_state::runtime::SimulationRuntime, x: i32, y: i32| {
+        if x >= 0 && y >= 0 && x < map_w && y < map_h {
+            let coord = crate::map::TileCoord::new(x, y);
+            if state.map.get(coord).is_none() {
+                return;
+            }
+            if !runtime.landscape_tile_dirty.contains(&coord) {
+                runtime.landscape_tile_dirty.push(coord);
+            }
+        }
+    };
+
+    let runtime = &mut state.runtime;
+    add(runtime, at.x, at.y);
+    for (dx, dy) in [(-1_i32, 0), (1, 0), (0, -1), (0, 1)] {
+        add(runtime, at.x + dx, at.y + dy);
+    }
 }
 
 fn invalidate_vehicle_paths(state: &mut GameState) {

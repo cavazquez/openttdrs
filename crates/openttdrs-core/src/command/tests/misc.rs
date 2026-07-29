@@ -340,6 +340,19 @@ fn place_rail_tunnel_and_bridge_write_active_company_owner_m1() {
 }
 
 #[test]
+fn construction_command_marks_landscape_tile_dirty() {
+    let mut s = GameState::new(8, 8);
+    let c = TileCoord::new(3, 3);
+    apply_command(&mut s, &Command::PlaceRoad(c)).unwrap();
+
+    assert!(s.runtime.landscape_tile_dirty.contains(&c));
+    assert!(s.runtime.landscape_tile_dirty.contains(&TileCoord::new(2, 3)));
+    assert!(s.runtime.landscape_tile_dirty.contains(&TileCoord::new(4, 3)));
+    assert!(s.runtime.landscape_tile_dirty.contains(&TileCoord::new(3, 2)));
+    assert!(s.runtime.landscape_tile_dirty.contains(&TileCoord::new(3, 4)));
+}
+
+#[test]
 fn toggle_vehicle_running_rejects_other_company_owner() {
     let mut s = SandboxMap::flat_rich(8, 8, 1);
     s.ensure_rival_transcargo();

@@ -73,7 +73,7 @@ fn mark_landscape_tiles_dirty_for_action(state: &mut GameState, at: crate::map::
         Ok(value) => value,
         Err(_) => return,
     };
-    let mut add = |runtime: &mut crate::game_state::runtime::SimulationRuntime, x: i32, y: i32| {
+    let mut add = |runtime: &mut crate::game_state::SimulationRuntime, x: i32, y: i32| {
         if x >= 0 && y >= 0 && x < map_w && y < map_h {
             let coord = crate::map::TileCoord::new(x, y);
             if state.map.get(coord).is_none() {

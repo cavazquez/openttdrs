@@ -125,6 +125,11 @@ pub(in crate::command) fn road_depot_exit_for_dir(
 
 pub const ROAD_PLACE_FORCE_AXIS: u8 = 0x10;
 
+#[inline]
+const fn road_drag_axis_bits(axis_bits: u8) -> u8 {
+    axis_bits & 0x0F
+}
+
 pub(in crate::command) fn place_road_bits(
     state: &mut GameState,
     c: TileCoord,
@@ -188,6 +193,7 @@ pub fn finalize_road_drag_line(
 
 #[must_use]
 pub fn road_locked_tool_axis(map: &Map, start: TileCoord, end: TileCoord, tool_axis: u8) -> u8 {
+    let tool_axis = road_drag_axis_bits(tool_axis);
     if let Some(tile_axis) = road_axis_from_start_tile(map, start) {
         let drag_horizontal = (end.x - start.x).abs() >= (end.y - start.y).abs();
         if tile_axis == 0x0A && !drag_horizontal {
@@ -202,6 +208,7 @@ pub fn road_locked_tool_axis(map: &Map, start: TileCoord, end: TileCoord, tool_a
 
 #[must_use]
 pub fn infer_road_drag_axis(map: &Map, start: TileCoord, end: TileCoord, tool_axis: u8) -> u8 {
+    let tool_axis = road_drag_axis_bits(tool_axis);
     if let Some(axis) = road_axis_from_start_tile(map, start) {
         let drag_horizontal = (end.x - start.x).abs() >= (end.y - start.y).abs();
         if axis == 0x0A && !drag_horizontal {
@@ -218,9 +225,9 @@ pub fn infer_road_drag_axis(map: &Map, start: TileCoord, end: TileCoord, tool_ax
     if let Some(axis) = road_axis_from_colinear_neighbor(map, start) {
         return axis;
     }
-    if start == end {
-        return tool_axis;
-    }
+        if start == end {
+            return tool_axis;
+        }
     if (end.x - start.x).abs() >= (end.y - start.y).abs() {
         0x0A
     } else {

@@ -4,11 +4,44 @@ use crate::map::{Map, slope_pixel_z};
 use crate::road_movement::traffic::is_road_vehicle_kind;
 use crate::vehicle::Vehicle;
 
+const REVERSING_TRACKDIRS: [u8; 4] = [6, 7, 14, 15];
+
 /// Factor al subir (`cur_speed * 232 / 256`, ≈ −10 %).
 pub const ROAD_Z_UP_NUM: u32 = 232;
 pub const ROAD_Z_UP_DEN: u32 = 256;
 /// Empuje al bajar (`+2`), acotado por el techo de vía.
 pub const ROAD_Z_DOWN_BOOST: u16 = 2;
+
+/// Techo equivalente a `RoadVehicle::GetCurrentMaxSpeed` para el estado actual.
+#[must_use]
+pub fn current_road_max_speed(v: &Vehicle, map: Option<&Map>) -> u16 {
+    let engine_speed = v.effective_engine().max_speed;
+    let mut max_speed = if v.cached_max_track_speed > 0 {
+        v.cached_max_track_speed.min(engine_speed)
+    } else {
+        engine_speed
+    };
+
+    let trackdir = v.road_state & crate::road_movement::rvsb::RVSB_TRACKDIR_MASK;
+    if REVERSING_TRACKDIRS.contains(&trackdir) {
+        max_speed /= 2;
+    } else if v.direction & 1 == 0 {
+        max_speed = max_speed.saturating_mul(3) / 4;
+    }
+
+    if let Some(map) = map
+        && let Some(cap) = crate::bridge_spec::bridge_max_speed_for_tile(map, v.pos)
+    {
+        max_speed = max_speed.min(cap);
+    }
+    if let Some(order) = v.current_order() {
+        let cap = order.max_speed_limit();
+        if cap > 0 {
+            max_speed = max_speed.min(cap);
+        }
+    }
+    max_speed.max(1)
+}
 
 /// Aplica `RoadZPosAffectSpeed` (`roadveh_cmd.cpp:859-868`).
 #[must_use]
@@ -61,6 +94,48 @@ pub fn sync_road_slope_speed(v: &mut Vehicle, map: &Map) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::map::TileCoord;
+    use crate::vehicle::{DIR_E, DIR_NE, VehicleKind};
+
+    fn road_vehicle() -> Vehicle {
+        let mut v = Vehicle::new(
+            1,
+            VehicleKind::Bus,
+            TileCoord::new(0, 0),
+            TileCoord::new(1, 0),
+        );
+        v.cached_max_track_speed = 120;
+        v.direction = DIR_NE;
+        v.road_state = 0;
+        v
+    }
+
+    #[test]
+    fn current_max_speed_uses_track_cap_on_straight() {
+        assert_eq!(current_road_max_speed(&road_vehicle(), None), 120);
+    }
+
+    #[test]
+    fn current_max_speed_caps_curves_at_three_quarters() {
+        let mut v = road_vehicle();
+        v.direction = DIR_E;
+        assert_eq!(current_road_max_speed(&v, None), 90);
+    }
+
+    #[test]
+    fn current_max_speed_caps_reversing_trackdir_at_half() {
+        let mut v = road_vehicle();
+        v.road_state = 6;
+        assert_eq!(current_road_max_speed(&v, None), 60);
+    }
+
+    #[test]
+    fn current_max_speed_uses_lowest_order_cap() {
+        let mut v = road_vehicle();
+        v.set_station_orders(vec![TileCoord::new(1, 0)]);
+        v.orders[0] = v.orders[0].with_max_speed(80);
+        assert_eq!(current_road_max_speed(&v, None), 80);
+    }
 
     #[test]
     fn uphill_slows_by_232_over_256() {

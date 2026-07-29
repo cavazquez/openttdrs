@@ -352,13 +352,7 @@ pub fn road_vehicle_tick_side(
         }
     }
 
-    let engine = v.effective_engine();
-    let mut max_speed = engine.max_speed;
-    if let Some(map) = map
-        && let Some(cap) = crate::bridge_spec::bridge_max_speed_for_tile(map, v.pos)
-    {
-        max_speed = max_speed.min(cap);
-    }
+    let max_speed = super::slope::current_road_max_speed(v, map);
 
     let accel = if v.overtaking != 0 {
         i32::from(ROAD_ACCEL_OVERTAKE)

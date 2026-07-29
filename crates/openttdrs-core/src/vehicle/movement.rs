@@ -2,8 +2,8 @@
 
 use crate::engine::{
     ROAD_ACCEL_ORIGINAL, TrainAccelerationModel, decelerate_road_speed, engine_air_drag,
-    engine_tractive_effort, get_advance_distance, progress_step_for_speed, ship_speed_for_tile,
-    train_max_te_n, train_realistic_station_max_speed, update_road_speed, update_train_speed,
+    engine_tractive_effort, get_advance_distance, progress_step_for_speed, train_max_te_n,
+    train_realistic_station_max_speed, update_road_speed, update_train_speed,
 };
 use crate::map::{Map, TileCoord, slope_pixel_z};
 use crate::rail_type::rail_type_from_tile;
@@ -212,6 +212,11 @@ impl super::model::Vehicle {
         ) {
             // Sin vecinos: el tick de simulación usa `road_vehicle_tick` con la flota.
             crate::road_movement::road_vehicle_step_solo(self, map);
+            return;
+        }
+
+        if self.kind == super::model::VehicleKind::Ship {
+            crate::ship_movement::ship_controller_tick(self, map);
             return;
         }
 
@@ -774,10 +779,11 @@ impl super::model::Vehicle {
                 super::model::VehicleKind::Bus
                 | super::model::VehicleKind::Truck
                 | super::model::VehicleKind::Tram
-                | super::model::VehicleKind::Ship
                 | super::model::VehicleKind::Aircraft => {
                     self.cur_speed -= self.cur_speed >> 2;
                 }
+                // Barcos: giros fuertes los resuelve `ship_controller_tick` (cur_speed=0).
+                super::model::VehicleKind::Ship => {}
             }
         }
         self.direction = new_dir;
@@ -786,11 +792,12 @@ impl super::model::Vehicle {
     fn update_movement_speed(&mut self, map: Option<&Map>, train_accel: TrainAccelerationModel) {
         let engine = self.effective_engine();
         let mut max_speed = engine.max_speed;
-        if self.kind == super::model::VehicleKind::Ship
-            && let Some(map) = map
-        {
-            let is_canal = map.get(self.pos).is_some_and(crate::map::is_canal_tile);
-            max_speed = ship_speed_for_tile(engine, is_canal);
+        // Barcos: velocidad en `ship_accelerate` / `ship_controller_tick` (no road-like).
+        if self.kind == super::model::VehicleKind::Ship {
+            if !self.running {
+                self.cur_speed = 0;
+            }
+            return;
         }
         if let Some(map) = map
             && let Some(bridge_cap) = crate::bridge_spec::bridge_max_speed_for_tile(map, self.pos)

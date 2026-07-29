@@ -24,7 +24,7 @@ no existe. Ningún nivel implica compatibilidad binaria o de red con OpenTTD.
 | Órdenes y horarios | **Media-alta en core / media en UI** | Full-load all/any, no-load/no-unload, transfer, non-stop/go-via, stop-location, refit de depósito, condicionales y timetable-start; la UI no expone todo |
 | Fiabilidad y servicio | **Media en core / inicial en UI** | Averías normales/reducidas/OFF configurables desde Ajustes, intervalos días/porcentaje, servicio y autoenvío a depósito; falta el editor completo de intervalos/unbunch |
 | Aviones | **Media** | Aeropuertos FTA, compra, vuelo, ruido y crashes; presentación y casos límite incompletos |
-| Barcos | **Inicial** | Depósitos, docks, boyas, locks, compra y A* acuático; movimiento y órdenes todavía simplificados |
+| Barcos | **Parcial** | Infra acuática + A* tile→track X/Y, `_ship_subcoord`, `ShipAccelerate`, esclusa vertical (`ShipMoveUpDownOnLock`; sin `LOCK_TRANSIT_TICKS`). Residual: YAPF ship/water regions, ocupación multi-barco, arrival exacta dock/depot (8,8), goldens externos pos/dir/vel/z/orden |
 | Guardado propio JSON | **Alta** | Formato versionado con migraciones y determinismo mid-run |
 | Compatibilidad `.sav` | **Inicial-media** | Import/export parcial; no es round-trip completo ni garantía de compatibilidad histórica |
 | NewGRF | **Media de parseo / inicial-media de runtime** | Actions 0–14 reconocidas y varios paths Action 1/2/3/5; callbacks y semántica total incompletos |

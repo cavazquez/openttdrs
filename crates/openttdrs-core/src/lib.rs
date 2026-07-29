@@ -506,10 +506,12 @@ pub use score::{
     snapshot_active_score,
 };
 pub use shared_orders::SharedOrderList;
+#[allow(deprecated)]
 pub use ship_movement::{
-    LOCK_TRANSIT_TICKS, is_water_network_tile, is_water_network_tile_at, lock_sprite_level,
-    maybe_start_lock_transit, ship_requires_path, tick_ship_lock_wait, water_tile_is_lock,
-    water_tiles_connected,
+    LOCK_TRANSIT_TICKS, SHIP_ACCELERATION_DEFAULT, SHIP_SUBCOORD, ShipSubcoordData,
+    is_water_network_tile, is_water_network_tile_at, lock_sprite_level, ship_accelerate,
+    ship_controller_tick, ship_move_up_down_on_lock, ship_requires_path, ship_subcoord,
+    water_tile_is_lock, water_tiles_connected,
 };
 pub use sign::{MAX_SIGN_NAME_CHARS, Sign};
 pub use sim_events::{

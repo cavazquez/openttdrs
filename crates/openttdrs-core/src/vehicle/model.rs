@@ -213,6 +213,21 @@ pub struct Vehicle {
     /// Altura en píxeles (`Vehicle::z_pos` / `GetSlopePixelZ`); `None` = sin sincronizar.
     #[serde(default)]
     pub z_pos: Option<i16>,
+    /// Posición X continua de barco en dieciseisavos de tesela (`Vehicle::x_pos`).
+    #[serde(default)]
+    pub ship_x: i32,
+    /// Posición Y continua de barco en dieciseisavos de tesela (`Vehicle::y_pos`).
+    #[serde(default)]
+    pub ship_y: i32,
+    /// `ship_x`/`ship_y` inicializados (saves antiguos → false).
+    #[serde(default)]
+    pub ship_pos_valid: bool,
+    /// Track actual del barco (`Track` / `v->state` bits → índice 0..5).
+    #[serde(default)]
+    pub ship_track: u8,
+    /// Contador de tick del barco (`Ship::tick_counter`; esclusa cada 8).
+    #[serde(default)]
+    pub ship_tick_counter: u8,
     /// Contador de movimiento para SFX de motor (`vehicle.cpp` `motion_counter`).
     #[serde(default)]
     pub motion_counter: u16,
@@ -508,6 +523,11 @@ impl Vehicle {
             name: None,
             cur_speed: 0,
             z_pos: None,
+            ship_x: 0,
+            ship_y: 0,
+            ship_pos_valid: false,
+            ship_track: 0,
+            ship_tick_counter: 0,
             motion_counter: 0,
             subspeed: 0,
             path: VecDeque::new(),

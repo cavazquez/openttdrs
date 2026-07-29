@@ -58,6 +58,12 @@ pub fn vehicle_subtile_at_with_map(
             f32::from(u8::try_from(v.airport_sub_y.rem_euclid(16)).unwrap_or(0)),
         );
     }
+    if v.kind == VehicleKind::Ship && v.ship_pos_valid {
+        return (
+            f32::from(u8::try_from(v.ship_x.rem_euclid(16)).unwrap_or(0)),
+            f32::from(u8::try_from(v.ship_y.rem_euclid(16)).unwrap_or(0)),
+        );
+    }
     if matches!(v.kind, VehicleKind::Train) {
         return train_subtile_with_map(v, pose, map);
     }

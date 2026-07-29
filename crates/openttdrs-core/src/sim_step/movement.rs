@@ -205,9 +205,6 @@ pub(super) fn move_vehicles(state: &mut GameState) {
             state.vehicles[i].pbs_stuck = false;
             state.vehicles[i].wait_counter = 0;
         }
-        if crate::ship_movement::tick_ship_lock_wait(&mut state.vehicles[i]) {
-            continue;
-        }
         let had_force = state.vehicles[i].force_proceed;
         let just_broke = state.vehicles[i].handle_breakdown(tick);
         if just_broke {
@@ -258,13 +255,10 @@ pub(super) fn move_vehicles(state: &mut GameState) {
                 Some(&state.map),
             );
         }
-        if state.vehicles[i].pos != prev_pos {
-            crate::ship_movement::maybe_start_lock_transit(&mut state.vehicles[i], &state.map);
-            if vehicle_kind == VehicleKind::Train {
-                super::routing::enqueue_signal_glob_flush(state, prev_pos);
-                let pos = state.vehicles[i].pos;
-                super::routing::enqueue_signal_glob_flush(state, pos);
-            }
+        if state.vehicles[i].pos != prev_pos && vehicle_kind == VehicleKind::Train {
+            super::routing::enqueue_signal_glob_flush(state, prev_pos);
+            let pos = state.vehicles[i].pos;
+            super::routing::enqueue_signal_glob_flush(state, pos);
         }
         if vehicle_running {
             if prev_speed == 0 && state.vehicles[i].cur_speed > 0 {

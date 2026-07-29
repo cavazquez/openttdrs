@@ -31,8 +31,8 @@ REQUIRED_MAP = [
     "MAP7",
     "MAP8",
 ]
-REQUIRED_EXPORT_EXTRA = ["DATE", "PLYR"]
-OPTIONAL_HINT = ("STNN", "CITY", "INDY", "VEHS", "ORDL")
+REQUIRED_EXPORT_EXTRA = ["CITY", "DATE", "PLYR"]
+OPTIONAL_HINT = ("STNN", "INDY", "VEHS", "ORDL")
 
 
 def main() -> int:

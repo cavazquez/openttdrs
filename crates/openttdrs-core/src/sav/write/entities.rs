@@ -51,13 +51,30 @@ pub(super) fn stnn_records(state: &GameState, map_w: u32) -> Result<Vec<Vec<u8>>
     Ok(out)
 }
 
+/// Record CITY mínimo (OpenTTD exige ≥1 municipio: `STR_ERROR_NO_TOWN_IN_SCENARIO`).
+pub(super) fn default_city_record(map_w: u32, map_h: u32) -> Result<Vec<u8>, SavError> {
+    let x = map_w / 2;
+    let y = map_h / 2;
+    let tile_idx = y.saturating_mul(map_w).saturating_add(x);
+    let mut rec = Vec::new();
+    rec.extend_from_slice(&tile_idx.to_be_bytes());
+    write_str("Town", &mut rec)?;
+    rec.extend_from_slice(&500u32.to_be_bytes()); // cache.population
+    rec.extend_from_slice(&0u32.to_be_bytes()); // townnamegrfid
+    rec.extend_from_slice(&0x20C0u16.to_be_bytes()); // townnametype (inglés)
+    rec.extend_from_slice(&0u32.to_be_bytes()); // townnameparts
+    Ok(rec)
+}
+
 /// Construye records CITY desde ciudades del estado.
+///
+/// Si no hay towns, emite un municipio sintético (requerido por OpenTTD al load).
 ///
 /// # Errors
 ///
 /// Falla si algún nombre de ciudad es demasiado largo.
 pub(super) fn city_records(state: &GameState, map_w: u32) -> Result<Vec<Vec<u8>>, SavError> {
-    let mut out = Vec::with_capacity(state.towns.len());
+    let mut out = Vec::with_capacity(state.towns.len().max(1));
     for town in &state.towns {
         let Some(tile_idx) = coord_to_linear_index(town.pos, map_w) else {
             continue;
@@ -72,6 +89,10 @@ pub(super) fn city_records(state: &GameState, map_w: u32) -> Result<Vec<Vec<u8>>
         rec.extend_from_slice(&0x20C0u16.to_be_bytes()); // townnametype (inglés)
         rec.extend_from_slice(&0u32.to_be_bytes()); // townnameparts
         out.push(rec);
+    }
+    if out.is_empty() {
+        let (_, h) = state.map.dimensions();
+        out.push(default_city_record(map_w, h)?);
     }
     Ok(out)
 }

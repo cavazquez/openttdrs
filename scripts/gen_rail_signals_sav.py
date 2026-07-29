@@ -25,6 +25,7 @@ MP_RAILWAY = 1
 TRACK_X = 1
 RAIL_TILE_SIGNALS = 1
 CH_RIFF = 0
+CH_TABLE = 3
 
 # Fila de señales (alineada con build_rail_signals_mixed: x=1..6).
 SIGNAL_ROW_Y = 8
@@ -40,6 +41,21 @@ SIGNAL_X_TYPES: list[tuple[int, int]] = [
 SIG_BIT_NE = 2
 
 
+def write_gamma(v: int, buf: bytearray) -> None:
+    assert v < (1 << 14), "el generador usa gammas pequeños"
+    if v < (1 << 7):
+        buf.append(v)
+    else:
+        buf.append(0x80 | (v >> 8))
+        buf.append(v & 0xFF)
+
+
+def write_str(s: str, buf: bytearray) -> None:
+    raw = s.encode("utf-8")
+    write_gamma(len(raw), buf)
+    buf.extend(raw)
+
+
 def riff_chunk(name: bytes, payload: bytes) -> bytes:
     size = len(payload)
     out = bytearray(name)
@@ -48,6 +64,23 @@ def riff_chunk(name: bytes, payload: bytes) -> bytes:
     out.append((size >> 8) & 0xFF)
     out.append(size & 0xFF)
     out.extend(payload)
+    return bytes(out)
+
+
+def table_chunk(name: bytes, fields: list[tuple[int, str]], records: list[bytes]) -> bytes:
+    header = bytearray()
+    for ftype, key in fields:
+        header.append(ftype)
+        write_str(key, header)
+    header.append(0)
+    out = bytearray(name)
+    out.append(CH_TABLE)
+    write_gamma(len(header) + 1, out)
+    out.extend(header)
+    for rec in records:
+        write_gamma(len(rec) + 1, out)
+        out.extend(rec)
+    write_gamma(0, out)
     return bytes(out)
 
 
@@ -112,7 +145,14 @@ def build_sav() -> bytes:
     mapt, maph, m5, m6, m8, map2, m3lo, m3hi = build_map_planes()
 
     data = bytearray()
-    data.extend(riff_chunk(b"MAPS", struct.pack(">II", W, H)))
+    # MAPS CH_TABLE (SLV ≥ 294), igual que gen_demo_sav / writer Rust.
+    data.extend(
+        table_chunk(
+            b"MAPS",
+            [(6, "dim_x"), (6, "dim_y")],
+            [struct.pack(">II", W, H)],
+        )
+    )
     data.extend(riff_chunk(b"MAPT", bytes(mapt)))
     data.extend(riff_chunk(b"MAPH", bytes(maph)))
     data.extend(riff_chunk(b"MAPO", bytes(N)))

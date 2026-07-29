@@ -1233,7 +1233,7 @@ En saves &lt; 214, OpenTTD mueve el RoadType desde bits 6–7 de `m7` a `m4` (ro
 
 ### Notas
 
-- Saves sintéticos (`rail_signals_mixed.sav`, `demo_openttd.sav`) no cargan en 15.3 (`MAPS` ya no es RIFF simple).
+- Export MVP (#226): `MAPS` `CH_TABLE` (`dim_x`/`dim_y`) + `CITY` (≥1) + DATE/PLYR; planos RIFF. Fixture `mvp_openttd_load.sav`; smoke dedicated real (`validate_sav_openttd.sh`). Residual: STNN moderno (SAVEBYTE+structs), VEHS/PATS/OPTS/GSET/ENGN/SRND/NewGRF/PLYR completo; round-trip OpenTTD→openttdrs fuera de alcance.
 - Dedicated + `-g` dispara dos `AfterLoadGame` (new-game luego load); el export usa `OPENTTDRS_SNAPSHOT_MIN_CALL=2`.
 - El oráculo **no** invoca `parse_sav.py` ni `snapshot_dumper`.
 

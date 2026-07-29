@@ -1,9 +1,13 @@
 //! Export mínimo de [`GameState`] a savegame `OpenTTD` (`.sav`).
 //!
 //! Contenedor por defecto: `OTTZ` (zlib). Versión de save: [`EXPORT_SAVE_VERSION`].
-//! Chunks: `MAPS` + planos + `STNN`/`CITY`/`INDY`/`ORDL`/`VEHS`/`LGRP` + `DATE` + `PLYR`.
+//! Chunks: `MAPS` (CH_TABLE) + planos RIFF + `STNN`/`CITY`/`INDY`/`ORDL`/`VEHS`/`LGRP` + `DATE` + `PLYR`.
 //!
-//! Limitaciones: ver `docs/PLANIFICACION.md`.
+//! Subconjunto prometido (MVP #226): mapa + `CITY` (≥1) + DATE/PLYR cargable por
+//! OpenTTD ≥15.3 dedicated. `STNN`/`VEHS`/`ORDL`/`INDY` siguen siendo subconjunto
+//! para roundtrip interno; el esquema moderno de `STNN` (SAVEBYTE + structs) no
+//! está implementado — residual del issue junto a PATS/OPTS/GSET/ENGN/SRND/NewGRF.
+//! Limitaciones: `docs/PARIDAD.md` y `docs/archive/merged-2026-07/ROADMAP_SAV_EXPORT.md`.
 
 #![allow(clippy::cast_possible_truncation)]
 
@@ -23,7 +27,12 @@ use flate2::write::ZlibEncoder;
 use super::SavError;
 use crate::game_state::GameState;
 
-/// Versión SLV del export (≥ 348: `HouseID` en MAP8; ≥ 300: tick u64).
+/// Versión SLV del export.
+///
+/// Se mantiene en **350** (mínimo viable): ≥294 `MAPS` CH_TABLE, ≥295 tablas,
+/// ≥300 tick u64, ≥348 `HouseID` en MAP8. OpenTTD 15.3 (`SAVEGAME_VERSION` 362)
+/// carga saves más antiguos; subir a 362 no aporta al MVP de load y obligaría
+/// campos DATE/economía posteriores sin ganancia.
 pub const EXPORT_SAVE_VERSION: u16 = 350;
 
 /// Contenedor exterior del `.sav`.
@@ -62,10 +71,11 @@ pub fn save_to_bytes_with(state: &GameState, container: SavContainer) -> Result<
     wrap_container(&payload, EXPORT_SAVE_VERSION, container)
 }
 
-/// Chunks siempre presentes en un export mínimo (mapa vacío + DATE + PLYR).
+/// Chunks siempre presentes en un export mínimo (mapa + CITY + DATE + PLYR).
+/// `CITY` es obligatorio para OpenTTD (`STR_ERROR_NO_TOWN_IN_SCENARIO`).
 pub const REQUIRED_EXPORT_CHUNKS: &[&str] = &[
-    "MAPS", "MAPT", "MAPH", "MAPO", "MAP2", "M3LO", "M3HI", "MAP5", "MAPE", "MAP7", "MAP8", "DATE",
-    "PLYR",
+    "MAPS", "MAPT", "MAPH", "MAPO", "MAP2", "M3LO", "M3HI", "MAP5", "MAPE", "MAP7", "MAP8", "CITY",
+    "DATE", "PLYR",
 ];
 
 /// Nombres de chunks RIFF/TABLE en el stream exportado (orden de aparición).
@@ -171,13 +181,16 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
     let planes = map::collect_planes(&state.map, w, h, n);
 
     let mut data = Vec::new();
-    // MAPS RIFF: dims big-endian (como gen_demo_sav.py / saves clásicos).
-    data.extend_from_slice(&chunks::riff_chunk(*b"MAPS", &{
-        let mut dims = [0u8; 8];
-        dims[0..4].copy_from_slice(&w.to_be_bytes());
-        dims[4..8].copy_from_slice(&h.to_be_bytes());
-        dims
-    }));
+    // MAPS CH_TABLE (SLV ≥ 294): dim_x/dim_y SLE_FILE_U32 BE — ver map_sl.cpp.
+    // Planos MAPT…MAP8 siguen CH_RIFF densos.
+    let mut maps_rec = Vec::with_capacity(8);
+    maps_rec.extend_from_slice(&w.to_be_bytes());
+    maps_rec.extend_from_slice(&h.to_be_bytes());
+    data.extend_from_slice(&chunks::table_chunk(
+        *b"MAPS",
+        &[(6, "dim_x"), (6, "dim_y")],
+        &[maps_rec],
+    )?);
     data.extend_from_slice(&chunks::riff_chunk(*b"MAPT", &planes.mapt));
     data.extend_from_slice(&chunks::riff_chunk(*b"MAPH", &planes.maph));
     data.extend_from_slice(&chunks::riff_chunk(*b"MAPO", &planes.mapo));
@@ -198,21 +211,20 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
         )?);
     }
 
+    // CITY siempre: OpenTTD rechaza saves sin municipios.
     let city = entities::city_records(state, w)?;
-    if !city.is_empty() {
-        data.extend_from_slice(&chunks::table_chunk(
-            *b"CITY",
-            &[
-                (6, "xy"),
-                (0x0A | 0x10, "name"),
-                (6, "cache.population"),
-                (6, "townnamegrfid"),
-                (4, "townnametype"),
-                (6, "townnameparts"),
-            ],
-            &city,
-        )?);
-    }
+    data.extend_from_slice(&chunks::table_chunk(
+        *b"CITY",
+        &[
+            (6, "xy"),
+            (0x0A | 0x10, "name"),
+            (6, "cache.population"),
+            (6, "townnamegrfid"),
+            (4, "townnametype"),
+            (6, "townnameparts"),
+        ],
+        &city,
+    )?);
 
     let indy = entities::indy_records(state, w);
     if !indy.is_empty() {
@@ -490,6 +502,47 @@ mod tests {
         let tile = loaded.map.get(TileCoord::new(10, 20)).expect("tile");
         assert_eq!(tile.kind, TileKind::Rail);
         assert_eq!(tile.m5, 0x01);
+    }
+
+    #[test]
+    fn export_maps_is_ch_table_with_dim_xy() {
+        use crate::sav::chunks::{CH_TABLE, parse_chunks};
+        use crate::sav::table::{SlValue, parse_table_chunk, record_get};
+
+        let bytes = save_to_bytes_with(&tiny_state(), SavContainer::Ottn).expect("save");
+        assert!(bytes.starts_with(b"OTTN"));
+        let payload = &bytes[8..];
+        let chunks = parse_chunks(payload).expect("parse chunks");
+        let maps = chunks
+            .iter()
+            .find(|c| &c.name == b"MAPS")
+            .expect("MAPS presente");
+        assert_eq!(maps.ch_type, CH_TABLE, "MAPS debe ser CH_TABLE (SLV≥294)");
+        let rows = parse_table_chunk(&maps.body, false).expect("MAPS table");
+        assert_eq!(rows.len(), 1);
+        let rec = &rows[0].1;
+        assert_eq!(record_get(rec, "dim_x").and_then(SlValue::as_u64), Some(64));
+        assert_eq!(record_get(rec, "dim_y").and_then(SlValue::as_u64), Some(64));
+        // Planos siguen RIFF.
+        let mapt = chunks.iter().find(|c| &c.name == b"MAPT").expect("MAPT");
+        assert_eq!(mapt.ch_type, 0);
+        assert_eq!(mapt.body.len(), 64 * 64);
+    }
+
+    #[test]
+    fn export_emits_synthetic_city_when_no_towns() {
+        let names = exported_chunk_names(&tiny_state()).expect("chunks");
+        assert!(names.iter().any(|n| n == "CITY"), "{names:?}");
+        let bytes = save_to_bytes_with(&tiny_state(), SavContainer::Ottn).expect("save");
+        let sav_game = sav::load(&bytes).expect("load");
+        assert!(
+            !sav_game.towns.is_empty(),
+            "OpenTTD exige ≥1 municipio; el export sintético debe roundtrippear"
+        );
+        // Dump opcional para smoke OpenTTD: OPENTTDRS_DUMP_MVP_SAV=/ruta.sav
+        if let Ok(path) = std::env::var("OPENTTDRS_DUMP_MVP_SAV") {
+            std::fs::write(&path, &bytes).expect("dump mvp sav");
+        }
     }
 
     #[test]

@@ -27,7 +27,7 @@ from pathlib import Path
 
 W = H = 64
 N = W * H
-SAVE_VERSION = 350  # ≥ 295: chunks de tabla; ≥ 348: m8 directo
+SAVE_VERSION = 350  # ≥ 294 MAPS TABLE; ≥ 295 tablas; ≥ 348 m8 HouseID
 
 # Tipos MAPT (nibble alto)
 MP_CLEAR = 0
@@ -171,8 +171,15 @@ def build_sav() -> bytes:
 
     data = bytearray()
 
-    # MAPS como RIFF (dims BE), igual que los saves clásicos.
-    data.extend(riff_chunk(b"MAPS", struct.pack(">II", W, H)))
+    # MAPS CH_TABLE (SLV ≥ 294): dim_x/dim_y U32 BE — alineado con map_sl.cpp.
+    # Planos MAPT…MAP8 siguen RIFF.
+    data.extend(
+        table_chunk(
+            b"MAPS",
+            [(6, "dim_x"), (6, "dim_y")],
+            [struct.pack(">II", W, H)],
+        )
+    )
     data.extend(riff_chunk(b"MAPT", bytes(mapt)))
     data.extend(riff_chunk(b"MAPH", bytes(maph)))
     data.extend(riff_chunk(b"MAPO", bytes(N)))
@@ -230,6 +237,10 @@ def build_sav() -> bytes:
     ind.append(2)
     ind.append(0)
     data.extend(table_chunk(b"INDY", indy_fields, [bytes(ind)]))
+
+    # DATE: calendario + tick (como sav/write/meta.rs).
+    date = struct.pack(">i", 1950 * 365) + struct.pack(">Q", 0)
+    data.extend(table_chunk(b"DATE", [(5, "date"), (8, "tick_counter")], [date]))
 
     # PLYR: dinero de la empresa del jugador.
     pl = bytearray()

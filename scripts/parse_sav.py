@@ -687,7 +687,9 @@ def parse_chunks(
                     blob, offset = slurp_array_payload(data, offset)
                     chunks[chunk_name] = blob
                 else:
-                    offset = skip_array(data, offset)
+                    # Registrar presencia (CITY/DATE/PLYR/…); payload no se interpreta aquí.
+                    blob, offset = slurp_array_payload(data, offset)
+                    chunks[chunk_name] = blob
 
             elif chunk_type in (CH_ARRAY, CH_SPARSE_ARRAY, CH_SPARSE_TABLE):
                 if chunk_name == "INDY" and chunk_type == CH_ARRAY:
@@ -700,7 +702,8 @@ def parse_chunks(
                     blob, offset = slurp_array_payload(data, offset)
                     chunks[chunk_name] = blob
                 else:
-                    offset = skip_array(data, offset)
+                    blob, offset = slurp_array_payload(data, offset)
+                    chunks[chunk_name] = blob
 
             elif chunk_type == 5:
                 # CH_READONLY: sin formato de payload conocido en este parser.

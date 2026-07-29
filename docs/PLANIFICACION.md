@@ -2103,7 +2103,7 @@ payload (zlib si OTTZ; raw si OTTN)
 
 #### Stream de chunks (orden)
 
-1. `MAPS` — `CH_RIFF`, 8 bytes: `dim_x`, `dim_y` **big-endian** u32  
+1. `MAPS` — `CH_TABLE` `dim_x` / `dim_y` (SLE_FILE_U32 BE; SLV ≥ 294) — MVP #226  
 2. Planos `CH_RIFF` densos (W×H bytes, salvo MAP2/MAP8 = 2×):
    - `MAPT`, `MAPH`, `MAPO` (m1), `MAP2` (u16 BE: hi=`m2_hi`, lo=`m2`),
    - `M3LO`, `M3HI` (= m4 OpenTTD), `MAP5`, `MAPE` (m6), `MAP7`, `MAP8` (u16 BE desde `Tile.m8` LE)

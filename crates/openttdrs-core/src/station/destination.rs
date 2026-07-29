@@ -2,8 +2,8 @@ use crate::map::{Map, TileCoord};
 use crate::vehicle::{VehicleKind, VehicleOrder};
 
 use super::geometry::{
-    is_connected_bay_road_stop, rail_station_approach_tile, rail_station_stop_tile_for_approach,
-    road_stop_approach_tile,
+    is_connected_bay_road_stop, is_drive_through_road_stop, rail_station_approach_tile,
+    rail_station_stop_tile_for_approach, road_stop_approach_tile,
 };
 use super::{Station, StopKind};
 
@@ -54,7 +54,8 @@ pub fn resolve_order_destination_from(
             VehicleKind::Truck | VehicleKind::Bus | VehicleKind::Tram,
             VehicleOrder::Station { station, .. },
         ) => {
-            if is_connected_bay_road_stop(map, station) {
+            if is_connected_bay_road_stop(map, station) || is_drive_through_road_stop(map, station)
+            {
                 station
             } else {
                 road_stop_approach_tile(map, station).unwrap_or(station)

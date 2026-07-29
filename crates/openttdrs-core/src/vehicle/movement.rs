@@ -699,7 +699,10 @@ impl super::model::Vehicle {
             super::model::VehicleKind::Bus
                 | super::model::VehicleKind::Truck
                 | super::model::VehicleKind::Tram
-        ) && map.is_some_and(|map| crate::station::is_connected_bay_road_stop(map, self.pos))
+        ) && map.is_some_and(|map| {
+            crate::station::is_connected_bay_road_stop(map, self.pos)
+                || crate::station::is_drive_through_road_stop(map, self.pos)
+        })
     }
 
     /// `UpdateInclination` + `AffectSpeedByZChange` (`ground_vehicle.hpp` / `train_cmd.cpp`).

@@ -31,12 +31,20 @@ pub const fn is_bay_road_state(state: u8) -> bool {
     state & 0xE0 == RVSB_IN_ROAD_STOP
 }
 
+/// `state` pertenece a una parada drive-through.
+#[must_use]
+pub const fn is_drive_through_road_state(state: u8) -> bool {
+    state & 0xE0 == RVSB_IN_DT_ROAD_STOP
+}
+
 /// Frame inicial al entrar en tesela.
 pub const RVC_DEFAULT_START_FRAME: u8 = 0;
 /// Frame al girar en U.
 pub const RVC_TURN_AROUND_START_FRAME: u8 = 1;
 /// Frame al salir de depósito.
 pub const RVC_DEPOT_START_FRAME: u8 = 6;
+/// Frame de servicio dentro de una parada drive-through (`roadveh.h`).
+pub const RVC_DRIVE_THROUGH_STOP_FRAME: u8 = 11;
 
 /// Trackdir recto según dirección de sprite del port (`DIR_NE`…).
 #[must_use]

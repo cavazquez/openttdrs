@@ -413,7 +413,19 @@ pub fn is_connected_bay_road_stop(map: &Map, station_pos: TileCoord) -> bool {
     map.get(station_pos).is_some_and(|t| {
         t.kind == TileKind::Station
             && matches!(station_type_from_m6(t.m6), 2 | 3)
+            && !crate::road_stop_spec::is_drive_through_orientation(t.m5)
             && (t.m3 & 0x0F) != 0
+    })
+}
+
+/// Parada bus/camión atravesable, con eje vial codificado en `m3`.
+#[must_use]
+pub fn is_drive_through_road_stop(map: &Map, station_pos: TileCoord) -> bool {
+    map.get(station_pos).is_some_and(|t| {
+        t.kind == TileKind::Station
+            && matches!(station_type_from_m6(t.m6), 2 | 3)
+            && crate::road_stop_spec::is_drive_through_orientation(t.m5)
+            && matches!(t.m3 & 0x0F, 0x05 | 0x0A)
     })
 }
 
@@ -444,6 +456,9 @@ pub fn road_stop_approach_tile(map: &Map, station_pos: TileCoord) -> Option<Tile
     match station_type_from_m6(tile.m6) {
         2 | 3 => {}
         _ => return None,
+    }
+    if crate::road_stop_spec::is_drive_through_orientation(tile.m5) {
+        return Some(station_pos);
     }
     let dir = tile.m5 & 0x03;
     let (dx, dy) = diag_dir_offset(dir);

@@ -394,9 +394,22 @@ pub(crate) struct WindowKnownGap {
 }
 
 /// Gaps documentados mientras faltan capturas/oráculo pixel y multi-instance.
+///
+/// `geometry→#243` sólo para clases sin fila en [`WINDOW_REFERENCE_GEOMETRY`]
+/// (el spawn ya aplica descriptor + placement para las inventariadas).
 #[must_use]
-pub(crate) fn window_known_gaps(_id: FloatingWindowId) -> &'static [WindowKnownGap] {
-    const DEFAULT: &[WindowKnownGap] = &[
+pub(crate) fn window_known_gaps(id: FloatingWindowId) -> &'static [WindowKnownGap] {
+    const WITH_GEOMETRY: &[WindowKnownGap] = &[
+        WindowKnownGap {
+            category: "capture",
+            issue: 240,
+        },
+        WindowKnownGap {
+            category: "lifecycle",
+            issue: 242,
+        },
+    ];
+    const WITHOUT_GEOMETRY: &[WindowKnownGap] = &[
         WindowKnownGap {
             category: "capture",
             issue: 240,
@@ -410,7 +423,36 @@ pub(crate) fn window_known_gaps(_id: FloatingWindowId) -> &'static [WindowKnownG
             issue: 243,
         },
     ];
-    DEFAULT
+    if reference_geometry_primary(id).is_some() {
+        WITH_GEOMETRY
+    } else {
+        WITHOUT_GEOMETRY
+    }
+}
+
+/// Hijos directos según [`WINDOW_PARITY_MATRIX`] (ownership padre/hija, #242).
+#[must_use]
+pub(crate) fn window_child_ids(parent: FloatingWindowId) -> Vec<FloatingWindowId> {
+    WINDOW_PARITY_MATRIX
+        .iter()
+        .filter(|entry| entry.parent == Some(parent))
+        .map(|entry| entry.id)
+        .collect()
+}
+
+/// Descendientes (BFS) para cierre en cascada singleton (#242 foundation).
+#[must_use]
+pub(crate) fn window_descendant_ids(root: FloatingWindowId) -> Vec<FloatingWindowId> {
+    let mut out = Vec::new();
+    let mut stack = window_child_ids(root);
+    while let Some(id) = stack.pop() {
+        if out.contains(&id) {
+            continue;
+        }
+        out.push(id);
+        stack.extend(window_child_ids(id));
+    }
+    out
 }
 
 /// ¿La captura 1280×720 1× está pendiente? Ausencia → issue, no silencio (#240).
@@ -436,6 +478,11 @@ pub(crate) struct ReferenceGeometry {
     pub(crate) placement: ReferencePlacement,
     pub(crate) width: Option<u16>,
     pub(crate) height: Option<u16>,
+    /// Mínimo de resize; por defecto el tamaño inicial si está definido (#243).
+    pub(crate) min_width: Option<u16>,
+    pub(crate) min_height: Option<u16>,
+    /// Paso de resize `(dx, dy)` en px; `None` → 1×1.
+    pub(crate) resize_step: Option<(u16, u16)>,
 }
 
 macro_rules! reference_geometry {
@@ -446,8 +493,37 @@ macro_rules! reference_geometry {
             placement: ReferencePlacement::$placement,
             width: $width,
             height: $height,
+            min_width: $width,
+            min_height: $height,
+            resize_step: Some((1, 1)),
         }
     };
+}
+
+/// Variante preferida al spawnear (singleton): `default`/`game`/`owned`/`settings`…
+#[must_use]
+pub(crate) fn reference_geometry_primary(id: FloatingWindowId) -> Option<&'static ReferenceGeometry> {
+    let matches: Vec<_> = WINDOW_REFERENCE_GEOMETRY
+        .iter()
+        .filter(|geometry| geometry.id == id)
+        .collect();
+    if matches.is_empty() {
+        return None;
+    }
+    for preferred in [
+        "default",
+        "game",
+        "owned",
+        "settings",
+        "main",
+        "config",
+        "train",
+    ] {
+        if let Some(geometry) = matches.iter().find(|geometry| geometry.variant == preferred) {
+            return Some(*geometry);
+        }
+    }
+    Some(matches[0])
 }
 
 /// Tamaños iniciales que 15.3 expresa directamente en sus `WindowDesc`.
@@ -586,13 +662,22 @@ fn window_parity_matrix_json() -> String {
             let height = geometry
                 .height
                 .map_or_else(|| "null".to_owned(), |v| v.to_string());
+            let min_width = geometry
+                .min_width
+                .map_or_else(|| "null".to_owned(), |v| v.to_string());
+            let min_height = geometry
+                .min_height
+                .map_or_else(|| "null".to_owned(), |v| v.to_string());
+            let (step_x, step_y) = geometry.resize_step.unwrap_or((1, 1));
             let _ = write!(
                 output,
-                "{{\"variant\":{},\"placement\":{},\"width\":{},\"height\":{}}}",
+                "{{\"variant\":{},\"placement\":{},\"width\":{},\"height\":{},\"min_width\":{},\"min_height\":{},\"resize_step\":[{step_x},{step_y}]}}",
                 json_string(geometry.variant),
                 json_string(placement),
                 width,
                 height,
+                min_width,
+                min_height,
             );
         }
         let comma = if index + 1 == WINDOW_PARITY_MATRIX.len() {
@@ -613,7 +698,7 @@ fn window_parity_matrix_json() -> String {
     ));
     output.push_str("    \"missing_rust_files\": [],\n");
     output.push_str(
-        "    \"notes\": \"Pixel/chrome diffs → #241; multi-instance → #242; geometry → #243\"\n",
+        "    \"notes\": \"Pixel/chrome diffs → #241; multi-instance instance≠0 → #242; geometry gaps = clases sin WindowDesc inventariado\"\n",
     );
     output.push_str("  }\n}\n");
     output
@@ -1169,5 +1254,50 @@ mod tests {
             assert_eq!(key.class(), *id);
             assert_eq!(key.instance, 0);
         }
+    }
+
+    #[test]
+    fn parent_child_matrix_covers_vehicle_and_depot_chains() {
+        let vehicle_children = window_child_ids(FloatingWindowId::Vehicle);
+        for expected in [
+            FloatingWindowId::VehicleDetails,
+            FloatingWindowId::Timetable,
+            FloatingWindowId::Orders,
+            FloatingWindowId::Refit,
+        ] {
+            assert!(
+                vehicle_children.contains(&expected),
+                "Vehicle debe listar hijo {expected:?}"
+            );
+        }
+        assert_eq!(
+            window_child_ids(FloatingWindowId::Orders),
+            vec![FloatingWindowId::DestinationPicker]
+        );
+        assert_eq!(
+            window_child_ids(FloatingWindowId::Depot),
+            vec![FloatingWindowId::BuyVehicle]
+        );
+        let descendants = window_descendant_ids(FloatingWindowId::Vehicle);
+        assert!(descendants.contains(&FloatingWindowId::DestinationPicker));
+        assert!(!descendants.contains(&FloatingWindowId::Vehicle));
+    }
+
+    #[test]
+    fn geometry_gap_only_for_classes_without_descriptor() {
+        assert!(
+            window_known_gaps(FloatingWindowId::Town)
+                .iter()
+                .all(|g| g.category != "geometry")
+        );
+        assert!(
+            window_known_gaps(FloatingWindowId::Finances)
+                .iter()
+                .any(|g| g.category == "geometry" && g.issue == 243)
+        );
+        let geo = reference_geometry_primary(FloatingWindowId::NewGrf).expect("NewGrf");
+        assert_eq!(geo.placement, ReferencePlacement::Center);
+        assert_eq!(geo.width, Some(300));
+        assert_eq!(geo.resize_step, Some((1, 1)));
     }
 }

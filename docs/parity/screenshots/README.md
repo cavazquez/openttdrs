@@ -10,11 +10,11 @@ La matriz tipada `WINDOW_PARITY_MATRIX`, en
 y condición de ventana upstream o extensión propia. Un test exige cobertura
 exacta: una entrada por cada ID, sin faltantes ni duplicados.
 
-`WINDOW_REFERENCE_GEOMETRY` registra aparte los tamaños iniciales expresados
-directamente por `WindowDesc`. Mantiene variantes cuando 15.3 usa descriptores
-distintos (por ejemplo tren frente a carretera/barco/aeronave) y usa `None`
-cuando el eje se calcula desde los widgets. Esos valores son el baseline de
-geometría para #243, no dimensiones elegidas por el port.
+`WINDOW_REFERENCE_GEOMETRY` registra los tamaños iniciales, mínimos, paso de
+resize y política `auto`/`center` de `WindowDesc`. `spawn_floating_window`
+aplica la variante primaria al crear el marco (#243): width/height conocidos,
+centrado cuando corresponde, y clamp que evita toolbar/statusbar a 1280×720.
+Las preferencias pueden persistir `Id=x,y` o `Id=x,y,w,h`.
 
 La matriz completa puede exportarse como JSON para tooling/CI:
 

@@ -146,6 +146,15 @@ impl ClientPreferences {
     /// Posición guardada de una ventana flotante, si existe.
     #[must_use]
     pub(crate) fn window_pos_by_key(&self, key: &str) -> Option<bevy::math::Vec2> {
+        self.window_layout_by_key(key).map(|(pos, _)| pos)
+    }
+
+    /// Layout guardado: `Id=x,y` o `Id=x,y,w,h` (#243).
+    #[must_use]
+    pub(crate) fn window_layout_by_key(
+        &self,
+        key: &str,
+    ) -> Option<(bevy::math::Vec2, Option<bevy::math::Vec2>)> {
         for entry in self.window_layouts.split(';').filter(|s| !s.is_empty()) {
             let Some((k, rest)) = entry.split_once('=') else {
                 continue;
@@ -153,17 +162,35 @@ impl ClientPreferences {
             if k != key {
                 continue;
             }
-            let Some((xs, ys)) = rest.split_once(',') else {
-                continue;
-            };
+            let mut parts = rest.split(',');
+            let xs = parts.next()?;
+            let ys = parts.next()?;
             let x: f32 = xs.parse().ok()?;
             let y: f32 = ys.parse().ok()?;
-            return Some(bevy::math::Vec2::new(x, y));
+            let size = match (parts.next(), parts.next()) {
+                (Some(ws), Some(hs)) => {
+                    let w: f32 = ws.parse().ok()?;
+                    let h: f32 = hs.parse().ok()?;
+                    Some(bevy::math::Vec2::new(w, h))
+                }
+                _ => None,
+            };
+            return Some((bevy::math::Vec2::new(x, y), size));
         }
         None
     }
 
     pub(crate) fn set_window_pos_by_key(&mut self, key: &str, pos: bevy::math::Vec2) {
+        let size = self.window_layout_by_key(key).and_then(|(_, size)| size);
+        self.set_window_layout_by_key(key, pos, size);
+    }
+
+    pub(crate) fn set_window_layout_by_key(
+        &mut self,
+        key: &str,
+        pos: bevy::math::Vec2,
+        size: Option<bevy::math::Vec2>,
+    ) {
         let mut parts: Vec<String> = self
             .window_layouts
             .split(';')
@@ -171,7 +198,15 @@ impl ClientPreferences {
             .filter(|s| !s.starts_with(&format!("{key}=")))
             .map(str::to_string)
             .collect();
-        parts.push(format!("{key}={:.0},{:.0}", pos.x, pos.y));
+        let entry = if let Some(size) = size {
+            format!(
+                "{key}={:.0},{:.0},{:.0},{:.0}",
+                pos.x, pos.y, size.x, size.y
+            )
+        } else {
+            format!("{key}={:.0},{:.0}", pos.x, pos.y)
+        };
+        parts.push(entry);
         self.window_layouts = parts.join(";");
     }
 
@@ -526,6 +561,18 @@ mod tests {
         assert_eq!(
             prefs.window_pos_by_key("NewGrf"),
             Some(bevy::math::Vec2::new(100.0, 120.0))
+        );
+        prefs.set_window_layout_by_key(
+            "Town",
+            bevy::math::Vec2::new(60.0, 90.0),
+            Some(bevy::math::Vec2::new(260.0, 180.0)),
+        );
+        assert_eq!(
+            prefs.window_layout_by_key("Town"),
+            Some((
+                bevy::math::Vec2::new(60.0, 90.0),
+                Some(bevy::math::Vec2::new(260.0, 180.0))
+            ))
         );
     }
 

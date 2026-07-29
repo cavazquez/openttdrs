@@ -352,7 +352,7 @@ pub(crate) const fn window_rust_impl(id: FloatingWindowId) -> &'static str {
         FloatingWindowId::ObjectPicker => "ui/toolbar/object_picker_window.rs",
         FloatingWindowId::BridgePicker => "ui/toolbar/bridge_window.rs",
         FloatingWindowId::DestinationPicker => "ui/destination_window.rs",
-        FloatingWindowId::NewsHistory => "ui/statusbar/mod.rs",
+        FloatingWindowId::NewsHistory => "ui/statusbar/history.rs",
         FloatingWindowId::Finances => "ui/finances_window.rs",
         FloatingWindowId::NewsSettings => "ui/news_settings_window.rs",
         FloatingWindowId::PathfindingSettings => "ui/pathfinding_settings_window.rs",
@@ -400,8 +400,9 @@ pub(crate) struct WindowKnownGap {
 ///
 /// - `geometry→#243` sólo sin fila en [`WINDOW_REFERENCE_GEOMETRY`].
 /// - `lifecycle→#242` no aplica a la familia vehículo (pools #244), a la
-///   familia construction de pickers existentes (#246), ni a la familia world
-///   inventariada (#245); sí al resto de clases aún singleton.
+///   familia construction de pickers existentes (#246), a la familia world
+///   inventariada (#245), a la familia economy/reports (#247), ni a la familia
+///   dialogs/settings (#248); sí al resto de clases aún singleton.
 #[must_use]
 pub(crate) fn window_known_gaps(id: FloatingWindowId) -> &'static [WindowKnownGap] {
     const CAPTURE_ONLY: &[WindowKnownGap] = &[
@@ -437,6 +438,8 @@ pub(crate) fn window_known_gaps(id: FloatingWindowId) -> &'static [WindowKnownGa
     if VEHICLE_FAMILY_WINDOW_IDS.contains(&id)
         || CONSTRUCTION_FAMILY_WINDOW_IDS.contains(&id)
         || WORLD_FAMILY_WINDOW_IDS.contains(&id)
+        || ECONOMY_FAMILY_WINDOW_IDS.contains(&id)
+        || SETTINGS_FAMILY_WINDOW_IDS.contains(&id)
     {
         return CAPTURE_ONLY;
     }
@@ -573,6 +576,38 @@ pub(crate) const WORLD_FAMILY_WINDOW_IDS: &[FloatingWindowId] = &[
     FloatingWindowId::Station,
 ];
 
+/// Inventario economy/reports existentes cubiertos por #247 slice 1.
+///
+/// Follow-up: Company View / Infrastructure / Livery / ManagerFace (sin
+/// `FloatingWindowId` hoy); separar clases graph 15.3 (beneficio, ingresos,
+/// carga, performance, valor, leyenda) en lugar del modo interno de `Graphs`;
+/// capturas PNG.
+pub(crate) const ECONOMY_FAMILY_WINDOW_IDS: &[FloatingWindowId] = &[
+    FloatingWindowId::Finances,
+    FloatingWindowId::Graphs,
+    FloatingWindowId::CargoPaymentRates,
+    FloatingWindowId::SubsidyList,
+    FloatingWindowId::League,
+    FloatingWindowId::NewsHistory,
+    FloatingWindowId::NewsSettings,
+];
+
+/// Inventario settings/dialogs existentes cubiertos por #248 slice 1.
+///
+/// `DevConsole` / `TileInspector` quedan en familia matriz `"debug"` (fuera de
+/// este slice). Follow-up: pila modal/parent ownership, OSK, Enter/Escape
+/// pixel-perfect; capturas PNG.
+pub(crate) const SETTINGS_FAMILY_WINDOW_IDS: &[FloatingWindowId] = &[
+    FloatingWindowId::NewGrf,
+    FloatingWindowId::SoundMusic,
+    FloatingWindowId::DisplayOptions,
+    FloatingWindowId::PathfindingSettings,
+    FloatingWindowId::CargoDistSettings,
+    FloatingWindowId::AiSettings,
+    FloatingWindowId::Help,
+    FloatingWindowId::CheatWindow,
+];
+
 /// Variante preferida al spawnear (singleton): `default`/`game`/`owned`/`settings`…
 #[must_use]
 pub(crate) fn reference_geometry_primary(id: FloatingWindowId) -> Option<&'static ReferenceGeometry> {
@@ -633,7 +668,10 @@ pub(crate) const WINDOW_REFERENCE_GEOMETRY: &[ReferenceGeometry] = &[
     reference_geometry!(BridgePicker, "default", Auto, Some(200), Some(114)),
     reference_geometry!(SignalPicker, "default", Auto, Some(200), Some(140)),
     reference_geometry!(DestinationPicker, "default", Auto, Some(200), Some(180)),
+    reference_geometry!(SubsidyList, "default", Auto, Some(500), Some(127)),
     reference_geometry!(NewsHistory, "default", Auto, Some(400), Some(140)),
+    reference_geometry!(Finances, "default", Auto, None, None),
+    reference_geometry!(NewsSettings, "settings", Center, None, None),
     reference_geometry!(PathfindingSettings, "settings", Center, None, None),
     reference_geometry!(CargoDistSettings, "settings", Center, None, None),
     reference_geometry!(AiSettings, "config", Center, None, None),
@@ -643,10 +681,15 @@ pub(crate) const WINDOW_REFERENCE_GEOMETRY: &[ReferenceGeometry] = &[
     reference_geometry!(Orders, "owned", Auto, Some(384), Some(100)),
     reference_geometry!(Orders, "competitor", Auto, Some(384), Some(86)),
     reference_geometry!(Refit, "default", Auto, Some(240), Some(174)),
+    // Una sola clase Graphs con modos internos; split 15.3 → follow-up #247.
+    reference_geometry!(Graphs, "default", Auto, None, None),
+    reference_geometry!(CargoPaymentRates, "default", Auto, None, None),
     reference_geometry!(DisplayOptions, "settings", Center, None, None),
     reference_geometry!(ExtraViewport, "default", Auto, Some(300), Some(268)),
     reference_geometry!(Help, "default", Center, None, None),
+    reference_geometry!(CheatWindow, "default", Auto, None, None),
     reference_geometry!(GenLand, "main", Center, None, None),
+    reference_geometry!(League, "default", Auto, None, None),
 ];
 
 fn window_id_by_storage_key(requested: &str) -> Option<FloatingWindowId> {
@@ -1397,6 +1440,11 @@ mod tests {
         assert!(
             window_known_gaps(FloatingWindowId::Finances)
                 .iter()
+                .all(|g| g.category != "geometry")
+        );
+        assert!(
+            window_known_gaps(FloatingWindowId::SignList)
+                .iter()
                 .any(|g| g.category == "geometry" && g.issue == 243)
         );
         let geo = reference_geometry_primary(FloatingWindowId::NewGrf).expect("NewGrf");
@@ -1510,6 +1558,100 @@ mod tests {
                     issue: 240,
                 }],
                 "familia world debe ser solo capture→#240: {id:?}"
+            );
+            assert!(
+                gaps.iter()
+                    .all(|g| g.category != "lifecycle" && g.category != "geometry"),
+                "sin lifecycle→#242 ni geometry→#243 para {id:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn economy_family_inventory_is_in_parity_matrix() {
+        for id in ECONOMY_FAMILY_WINDOW_IDS {
+            assert!(
+                WINDOW_PARITY_MATRIX.iter().any(|e| e.id == *id),
+                "familia economy falta en matriz: {id:?}"
+            );
+            assert!(
+                PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .join("src")
+                    .join(window_rust_impl(*id))
+                    .is_file(),
+                "rust_impl de familia economy ausente: {id:?}"
+            );
+            assert!(
+                reference_geometry_primary(*id).is_some(),
+                "familia economy sin geometría primary: {id:?}"
+            );
+        }
+        let finances = reference_geometry_primary(FloatingWindowId::Finances).expect("Finances");
+        assert_eq!(finances.placement, ReferencePlacement::Auto);
+        assert_eq!(finances.width, None);
+        assert_eq!(finances.height, None);
+        let subsidy = reference_geometry_primary(FloatingWindowId::SubsidyList).expect("Subsidy");
+        assert_eq!(subsidy.width, Some(500));
+        assert_eq!(subsidy.height, Some(127));
+    }
+
+    #[test]
+    fn economy_family_known_gaps_are_capture_only() {
+        for id in ECONOMY_FAMILY_WINDOW_IDS {
+            let gaps = window_known_gaps(*id);
+            assert_eq!(
+                gaps,
+                &[WindowKnownGap {
+                    category: "capture",
+                    issue: 240,
+                }],
+                "familia economy debe ser solo capture→#240: {id:?}"
+            );
+            assert!(
+                gaps.iter()
+                    .all(|g| g.category != "lifecycle" && g.category != "geometry"),
+                "sin lifecycle→#242 ni geometry→#243 para {id:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn settings_family_inventory_is_in_parity_matrix() {
+        for id in SETTINGS_FAMILY_WINDOW_IDS {
+            assert!(
+                WINDOW_PARITY_MATRIX.iter().any(|e| e.id == *id),
+                "familia settings falta en matriz: {id:?}"
+            );
+            assert!(
+                PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .join("src")
+                    .join(window_rust_impl(*id))
+                    .is_file(),
+                "rust_impl de familia settings ausente: {id:?}"
+            );
+            assert!(
+                reference_geometry_primary(*id).is_some(),
+                "familia settings sin geometría primary: {id:?}"
+            );
+        }
+        let cheat = reference_geometry_primary(FloatingWindowId::CheatWindow).expect("Cheat");
+        assert_eq!(cheat.placement, ReferencePlacement::Auto);
+        assert_eq!(cheat.width, None);
+        assert!(!SETTINGS_FAMILY_WINDOW_IDS.contains(&FloatingWindowId::DevConsole));
+        assert!(!SETTINGS_FAMILY_WINDOW_IDS.contains(&FloatingWindowId::TileInspector));
+    }
+
+    #[test]
+    fn settings_family_known_gaps_are_capture_only() {
+        for id in SETTINGS_FAMILY_WINDOW_IDS {
+            let gaps = window_known_gaps(*id);
+            assert_eq!(
+                gaps,
+                &[WindowKnownGap {
+                    category: "capture",
+                    issue: 240,
+                }],
+                "familia settings debe ser solo capture→#240: {id:?}"
             );
             assert!(
                 gaps.iter()

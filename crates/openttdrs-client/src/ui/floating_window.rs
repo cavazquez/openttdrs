@@ -1385,6 +1385,18 @@ mod tests {
 
         let help = chrome_capabilities(FloatingWindowId::Help);
         assert!(!help.shade && !help.sticky && !help.resize);
+
+        // Economy (#247): Finances shade/sticky; Graphs también resize.
+        let finances = chrome_capabilities(FloatingWindowId::Finances);
+        assert!(finances.shade && finances.sticky && !finances.resize);
+        let graphs = chrome_capabilities(FloatingWindowId::Graphs);
+        assert!(graphs.shade && graphs.sticky && graphs.resize);
+
+        // Settings (#248): Cheat shade/sticky; NewGrf resize centrado sin shade.
+        let cheat = chrome_capabilities(FloatingWindowId::CheatWindow);
+        assert!(cheat.shade && cheat.sticky && !cheat.resize);
+        let newgrf = chrome_capabilities(FloatingWindowId::NewGrf);
+        assert!(!newgrf.shade && !newgrf.sticky && newgrf.resize);
     }
 
     #[test]

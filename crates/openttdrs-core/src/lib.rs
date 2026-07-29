@@ -11,6 +11,7 @@ pub mod aircraft_movement;
 pub mod airport;
 pub mod airport_class;
 pub mod airport_fta;
+pub mod airport_tile_spec;
 pub mod autoreplace;
 pub mod badge;
 pub mod bridge_spec;
@@ -110,10 +111,17 @@ pub use airport::{
     airport_spec_footprint, airport_spec_tiles, airport_tile_is_hangar, airport_tile_is_heliport,
 };
 pub use airport_class::{
-    AirportClassDef, AirportClassId, AirportFtaFlags, AirportSpecDef, AirportSpecId,
+    AirportClassDef, AirportClassId, AirportFtaFlags, AirportLayoutTile, AirportSpecDef,
+    AirportSpecId, AirportTileLayout, NEW_AIRPORT_OFFSET, NUM_AIRPORTS, NewgrfAirportSpecDef,
     TOWN_NOISE_POPULATION_DEFAULT, airport_allows_aircraft, airport_class_def,
     airport_noise_for_distance, airport_spec_def, all_airport_class_defs, all_airport_spec_defs,
-    list_airport_classes, list_airport_specs, max_town_noise,
+    list_airport_classes, list_airport_specs, list_newgrf_airport_specs, max_town_noise,
+    newgrf_airport_spec_def, next_free_airport_id,
+};
+pub use airport_tile_spec::{
+    AirportTileGfxId, AirportTileSpecDef, INVALID_AIRPORT_TILE, NEW_AIRPORT_TILE_OFFSET,
+    NUM_AIRPORT_TILES, empty_airport_tile_overrides, get_translated_airport_tile_id,
+    next_free_airport_tile_gfx_id, resolve_airport_tile_draw_gfx,
 };
 pub use airport_fta::{
     AirportHeading, AirportMovingData, CITY_ENTRIES, CITY_MOVING_DATA, CITY_NOF_ELEMENTS,

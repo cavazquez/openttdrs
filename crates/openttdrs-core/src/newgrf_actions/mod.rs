@@ -5,6 +5,8 @@
 //! - `Stations` (0x04) → `station_class_catalog` / `station_spec_catalog`
 //! - `IndustryTiles` (0x09) → `industry_tile_spec_catalog`
 //! - `Industries` (0x0A) → `industry_spec_catalog`
+//! - `AirportTiles` (0x11) → `airport_tile_spec_catalog`
+//! - `Airports` (0x0D) → `airport_spec_catalog`
 //! - `Houses` (0x07) → `house_spec_catalog`
 //! - `Cargoes` (0x0B) → `cargo_spec_catalog`
 //! - `Objects` (0x0F) → `object_spec_catalog`
@@ -20,27 +22,30 @@ pub mod inspect;
 
 // Re-exports públicos
 pub use action0::{
-    ACTION0_FEATURE_AIRCRAFT, ACTION0_FEATURE_BADGES, ACTION0_FEATURE_BRIDGES,
-    ACTION0_FEATURE_CANALS, ACTION0_FEATURE_CARGOES, ACTION0_FEATURE_HOUSES,
-    ACTION0_FEATURE_INDUSTRIES, ACTION0_FEATURE_INDUSTRYTILES, ACTION0_FEATURE_OBJECTS,
-    ACTION0_FEATURE_RAILTYPES, ACTION0_FEATURE_ROAD_VEHICLES, ACTION0_FEATURE_ROADSTOPS,
-    ACTION0_FEATURE_ROADTYPES, ACTION0_FEATURE_SHIPS, ACTION0_FEATURE_SOUNDS,
-    ACTION0_FEATURE_STATIONS, ACTION0_FEATURE_TRAINS, ACTION0_FEATURE_TRAMTYPES, Action0Header,
-    ParsedBadgeMeta, ParsedBridgeMeta, ParsedCanalMeta, ParsedCargoMeta, ParsedHouseMeta,
-    ParsedIndustryMeta, ParsedIndustryTileMeta, ParsedObjectMeta, ParsedRailTypeMeta,
-    ParsedRoadStopMeta, ParsedRoadTypeMeta, ParsedSoundMeta, ParsedStationMeta, ParsedTrainMeta,
-    ParsedVehicleMeta, collect_badge_metas_from_grf, collect_bridge_metas_from_grf,
-    collect_canal_metas_from_grf, collect_cargo_metas_from_grf, collect_house_metas_from_grf,
-    collect_industry_metas_from_grf, collect_industry_tile_metas_from_grf,
-    collect_object_metas_from_grf, collect_railtype_metas_from_grf, collect_roadstop_metas_from_grf,
+    ACTION0_FEATURE_AIRCRAFT, ACTION0_FEATURE_AIRPORTS, ACTION0_FEATURE_AIRPORTTILES,
+    ACTION0_FEATURE_BADGES, ACTION0_FEATURE_BRIDGES, ACTION0_FEATURE_CANALS,
+    ACTION0_FEATURE_CARGOES, ACTION0_FEATURE_HOUSES, ACTION0_FEATURE_INDUSTRIES,
+    ACTION0_FEATURE_INDUSTRYTILES, ACTION0_FEATURE_OBJECTS, ACTION0_FEATURE_RAILTYPES,
+    ACTION0_FEATURE_ROAD_VEHICLES, ACTION0_FEATURE_ROADSTOPS, ACTION0_FEATURE_ROADTYPES,
+    ACTION0_FEATURE_SHIPS, ACTION0_FEATURE_SOUNDS, ACTION0_FEATURE_STATIONS,
+    ACTION0_FEATURE_TRAINS, ACTION0_FEATURE_TRAMTYPES, Action0Header, ParsedAirportLayout,
+    ParsedAirportLayoutTile, ParsedAirportMeta, ParsedAirportTileMeta, ParsedBadgeMeta,
+    ParsedBridgeMeta, ParsedCanalMeta, ParsedCargoMeta, ParsedHouseMeta, ParsedIndustryMeta,
+    ParsedIndustryTileMeta, ParsedObjectMeta, ParsedRailTypeMeta, ParsedRoadStopMeta,
+    ParsedRoadTypeMeta, ParsedSoundMeta, ParsedStationMeta, ParsedTrainMeta, ParsedVehicleMeta,
+    collect_airport_metas_from_grf, collect_airport_tile_metas_from_grf,
+    collect_badge_metas_from_grf, collect_bridge_metas_from_grf, collect_canal_metas_from_grf,
+    collect_cargo_metas_from_grf, collect_house_metas_from_grf, collect_industry_metas_from_grf,
+    collect_industry_tile_metas_from_grf, collect_object_metas_from_grf,
+    collect_railtype_metas_from_grf, collect_roadstop_metas_from_grf,
     collect_roadtype_metas_from_grf, collect_sound_metas_from_grf, collect_station_metas_from_grf,
     collect_train_metas_from_grf, collect_vehicle_metas_from_grf, for_each_pseudo_payload,
-    parse_action0_badge_meta, parse_action0_bridge_meta, parse_action0_canal_meta,
-    parse_action0_cargo_meta, parse_action0_header, parse_action0_house_meta,
-    parse_action0_industry_meta, parse_action0_industry_tile_meta, parse_action0_object_meta,
-    parse_action0_railtype_metas, parse_action0_roadstop_meta, parse_action0_roadtype_meta,
-    parse_action0_sound_meta, parse_action0_station_meta, parse_action0_train_meta,
-    parse_action0_vehicle_metas,
+    parse_action0_airport_meta, parse_action0_airport_tile_meta, parse_action0_badge_meta,
+    parse_action0_bridge_meta, parse_action0_canal_meta, parse_action0_cargo_meta,
+    parse_action0_header, parse_action0_house_meta, parse_action0_industry_meta,
+    parse_action0_industry_tile_meta, parse_action0_object_meta, parse_action0_railtype_metas,
+    parse_action0_roadstop_meta, parse_action0_roadtype_meta, parse_action0_sound_meta,
+    parse_action0_station_meta, parse_action0_train_meta, parse_action0_vehicle_metas,
 };
 
 pub use apply::{
@@ -56,6 +61,10 @@ pub use apply::{
         apply_newgrf_action5_roadstops_default_dirs, apply_newgrf_action5_shore,
         apply_newgrf_action5_shore_default_dirs, apply_newgrf_action5_signals,
         apply_newgrf_action5_signals_default_dirs,
+    },
+    airport::{
+        apply_newgrf_airport_tiles, apply_newgrf_airport_tiles_default_dirs,
+        apply_newgrf_airports, apply_newgrf_airports_default_dirs,
     },
     apply_newgrf_stack_catalogs_default_dirs,
     badges::{apply_newgrf_badges, apply_newgrf_badges_default_dirs},
@@ -247,6 +256,86 @@ pub fn build_action0_train_payload(
 #[must_use]
 pub fn build_action0_industry_tile_payload(subst_id: u8, override_of: Option<u8>) -> Vec<u8> {
     build_action0_industry_tile_payload_ex(0, subst_id, override_of, &[], 0)
+}
+
+
+/// Action0 `AirportTiles` (`0x11`) con subst (+ override/callback opcionales).
+#[must_use]
+pub fn build_action0_airport_tile_payload(
+    local_id: u8,
+    subst_id: u8,
+    override_of: Option<u8>,
+    callback_mask: u8,
+) -> Vec<u8> {
+    let mut num_props = 1u8;
+    if override_of.is_some() {
+        num_props += 1;
+    }
+    if callback_mask != 0 {
+        num_props += 1;
+    }
+    let mut p = vec![
+        0x00,
+        ACTION0_FEATURE_AIRPORTTILES,
+        num_props,
+        0x01,
+        local_id,
+        0x08,
+        subst_id,
+    ];
+    if let Some(o) = override_of {
+        p.push(0x09);
+        p.push(o);
+    }
+    if callback_mask != 0 {
+        p.push(0x0E);
+        p.push(callback_mask);
+    }
+    p
+}
+
+/// Action0 `Airports` (`0x0D`) con layout 0xFE + nombre C-string.
+///
+/// `layout_tiles`: `(x, y, local_tile_id)`.
+#[must_use]
+pub fn build_action0_airport_payload(
+    local_id: u8,
+    subst_ottd: u8,
+    layout_tiles: &[(i8, i8, u16)],
+    catchment: u8,
+    noise: u8,
+    name: &str,
+) -> Vec<u8> {
+    let mut p = vec![
+        0x00,
+        ACTION0_FEATURE_AIRPORTS,
+        0x05, // 08, 0A, 0E, 0F, 10
+        0x01,
+        local_id,
+        0x08,
+        subst_ottd,
+        0x0A,
+        1, // num_layouts
+    ];
+    p.extend_from_slice(&0u32.to_le_bytes()); // size dword
+    p.push(0); // rotation NORTH
+    for &(x, y, local_tile) in layout_tiles {
+        p.push(x as u8);
+        p.push(y as u8);
+        p.push(0xFE);
+        p.extend_from_slice(&local_tile.to_le_bytes());
+    }
+    p.push(0);
+    p.push(0x80); // terminator
+    p.push(0x0E);
+    p.push(catchment);
+    p.push(0x0F);
+    p.push(noise);
+    p.push(0x10);
+    p.extend_from_slice(&0xFEu16.to_le_bytes());
+    p.extend_from_slice(name.as_bytes());
+    p.push(0);
+    p
 }
 
 /// Action0 `IndustryTiles` con acceptance / callback_mask.
@@ -3203,6 +3292,82 @@ mod tests {
             parse_action0_vehicle_metas(&[0x00, ACTION0_FEATURE_SHIPS, 0x01, 0x01, 0x00, 0x14])
                 .is_none()
         );
+    }
+
+
+    #[test]
+    fn parse_and_apply_airports_registers_catalog_and_blocks_fta() {
+        use crate::airport_class::{NEW_AIRPORT_OFFSET, newgrf_airport_spec_def};
+        use crate::airport_tile_spec::NEW_AIRPORT_TILE_OFFSET;
+        use crate::{AirportSpecId, Command, TileCoord, apply_command, station_uses_airport_fta};
+
+        let tile = build_action0_airport_tile_payload(0, 24, None, 0x01); // subst hangar gfx
+        let tile2 = build_action0_airport_tile_payload(1, 14, None, 0); // runway
+        let air = build_action0_airport_payload(
+            0,
+            0, // AT_SMALL
+            &[(0, 0, 0), (1, 0, 1), (0, 1, 0), (1, 1, 1)],
+            5,
+            4,
+            "MiniPort",
+        );
+        let bytes = build_grf_v2_with_action0s_and_action8(
+            &[tile.as_slice(), tile2.as_slice(), air.as_slice()],
+            [b'A', b'P', 0, 1],
+            "ap",
+            "",
+        );
+        let dir = tempfile_dir_with("ap.grf", &bytes);
+        let mut state = GameState::new(16, 16);
+        state.economy.money = 1_000_000;
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("ap.grf", 0x4150_0001));
+        apply_newgrf_airport_tiles(&mut state, &[&dir]);
+        apply_newgrf_airports(&mut state, &[&dir]);
+        assert_eq!(state.airport_tile_spec_catalog.len(), 2);
+        assert!(
+            state.airport_tile_spec_catalog[0].gfx.as_u16() >= NEW_AIRPORT_TILE_OFFSET
+        );
+        assert_eq!(state.airport_tile_spec_catalog[0].callback_mask, 0x01);
+        assert_eq!(state.airport_spec_catalog.len(), 1);
+        {
+            let def = &state.airport_spec_catalog[0];
+            assert!(def.id >= NEW_AIRPORT_OFFSET);
+            assert_eq!(def.label, "MiniPort");
+            assert_eq!(def.subst_id, AirportSpecId::Small);
+            assert_eq!(def.catchment, 5);
+            assert_eq!(def.noise_level, 4);
+            assert!(!def.layouts.is_empty());
+            assert_eq!(def.layouts[0].tiles.len(), 4);
+        }
+        let newgrf_id = state.airport_spec_catalog[0].id;
+
+        apply_command(
+            &mut state,
+            &Command::SetCurrentAirportNewgrfSpec(newgrf_id),
+        )
+        .unwrap();
+        assert_eq!(state.current_airport_newgrf_id, Some(newgrf_id));
+        apply_command(
+            &mut state,
+            &Command::PlaceAirportArea {
+                origin: TileCoord::new(2, 2),
+                axis_y: false,
+                spec: AirportSpecId::Small,
+            },
+        )
+        .unwrap();
+        assert_eq!(state.stations.len(), 1);
+        let st = &state.stations[0];
+        assert_eq!(st.airport_newgrf_spec_id, Some(newgrf_id));
+        assert_eq!(st.airport_spec, AirportSpecId::Small);
+        assert_eq!(st.airport_tiles.len(), 4);
+        assert!(
+            !station_uses_airport_fta(st),
+            "NewGRF airport must not use vanilla FTA"
+        );
+        assert!(newgrf_airport_spec_def(&state.airport_spec_catalog, newgrf_id).is_some());
     }
 
     fn tempfile_dir_with(name: &str, bytes: &[u8]) -> std::path::PathBuf {

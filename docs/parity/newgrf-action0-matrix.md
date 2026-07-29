@@ -27,11 +27,11 @@ Estados:
 | `0A` | Industries | runtime | N/A (sprites vía tiles 09) | catálogo `industry_spec` + layouts/I/O; place |
 | `0B` | Cargoes | runtime | pendiente | catálogo `cargo_spec` → pagos/capacidad/UI |
 | `0C` | Sound effects | runtime | no aplica | catálogo `sound_effect` + cola play; samples Action11 |
-| `0D` | Airports | pendiente | pendiente | — |
+| `0D` | Airports | runtime parcial | pendiente | catálogo `airport_spec_catalog` (≥10); build+save; FTA/callbacks bloqueados (#260) |
 | `0E` | Signals | ignorada por spec (null en OTTD 15.3; #255) | N/A | gráficos: RailTypes `RTSG_SIGNALS` + Action5 `0x04`; estilo en `m2` save/load |
 | `0F` | Objects | runtime | runtime | catálogo `object_spec`; build+render multitile |
 | `10` | Rail types | runtime | runtime (signals/underlay/overlay) | construcción/coste/compat + techo velocidad |
-| `11` | Airport tiles | pendiente | pendiente | — |
+| `11` | Airport tiles | runtime parcial | pendiente | catálogo `airport_tile_spec_catalog` (≥74); layouts `0xFE`; callbacks/anim consumidos (#260) |
 | `12` | Road types | runtime | runtime | construcción/coste + techo velocidad |
 | `13` | Tram types | runtime (feature propio + catálogo road) | runtime | IDs/clase tram separados |
 | `14` | Road stops | runtime parcial | runtime parcial | auto-select / construcción / render (`road_stop_spec`) |
@@ -276,6 +276,22 @@ o fallback `subst_id` / `% 110` (`resolve_house_draw_id`). Overrides `0x15` →
 | `24` badge list | consumida |
 | `FE` nombre C-string (extensión local) | **runtime** |
 | Action1/3 views | **runtime** (`newgrf_views` / subst fallback) |
+
+## Airports (`0D`) / Airport tiles (`11`)
+
+Fuente: `newgrf_act0_airports.cpp`.
+
+Catálogo tiles `airport_tile_spec_catalog` (gfx ≥74) y aeropuertos
+`airport_spec_catalog` (ids ≥10). Apply: tiles antes que airports; layouts
+`0x0A` resuelven `0xFE`→tile local. Construcción via
+`SetCurrentAirportNewgrfSpec` + `PlaceAirportArea`. FTA y callbacks **bloqueados**
+explícitamente (#260 / #228): `station_uses_airport_fta` es false si hay
+`airport_newgrf_spec_id`. Action3 sprites: pendiente.
+
+| Feature | Props runtime | Props consumidas |
+|---|---|---|
+| Airport tiles `11` | `08` subst, `09` override, `0E` callback_mask (almacenado) | `0F`–`11` anim, `12` badges |
+| Airports `0D` | `08` subst/disable, `0A` layouts, `0C` years, `0E` catchment, `0F` noise, `10` name, `11` maintenance | `0D` TTDP type (almacenado), `12` badges |
 
 ## Industry tiles (`09`)
 

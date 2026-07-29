@@ -508,6 +508,56 @@ pub fn airport_spec_tiles(
     })
 }
 
+/// Footprint NewGRF (`size` del layout; `axis_y` intercambia ejes).
+#[must_use]
+pub fn newgrf_airport_footprint(
+    def: &crate::airport_class::NewgrfAirportSpecDef,
+    axis_y: bool,
+) -> (i32, i32) {
+    if axis_y {
+        (def.size_y, def.size_x)
+    } else {
+        (def.size_x, def.size_y)
+    }
+}
+
+/// Itera (coord, pieza) del primer layout NewGRF usable.
+///
+/// Piezas se derivan del `subst` gfx de cada tile (`AirportPiece::from_station_gfx`).
+/// FTA NewGRF queda fuera de alcance (#260): construcción usa subst visual.
+pub fn newgrf_airport_tiles(
+    origin: TileCoord,
+    def: &crate::airport_class::NewgrfAirportSpecDef,
+    tile_catalog: &[crate::airport_tile_spec::AirportTileSpecDef],
+    axis_y: bool,
+) -> Vec<(TileCoord, AirportPiece)> {
+    let layout = def
+        .layouts
+        .iter()
+        .find(|l| {
+            // Prefer north (0) or south (4); else first.
+            l.rotation == 0 || l.rotation == 4
+        })
+        .or_else(|| def.layouts.first());
+    let Some(layout) = layout else {
+        return airport_spec_tiles(origin, def.subst_id, axis_y).collect();
+    };
+    layout
+        .tiles
+        .iter()
+        .map(|t| {
+            let (dx, dy) = if axis_y {
+                (i32::from(t.y), i32::from(t.x))
+            } else {
+                (i32::from(t.x), i32::from(t.y))
+            };
+            let gfx = crate::airport_tile_spec::resolve_airport_tile_draw_gfx(t.gfx, tile_catalog);
+            let piece = AirportPiece::from_station_gfx(gfx);
+            (TileCoord::new(origin.x + dx, origin.y + dy), piece)
+        })
+        .collect()
+}
+
 #[must_use]
 pub fn airport_small_footprint(axis_y: bool) -> (i32, i32) {
     airport_spec_footprint(AirportSpecId::Small, axis_y)

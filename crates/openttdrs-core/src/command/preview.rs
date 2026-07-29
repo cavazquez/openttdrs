@@ -349,6 +349,7 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
         | Command::SetCurrentRoadStopSpec(..)
         | Command::SetCurrentAirportClass(..)
         | Command::SetCurrentAirportSpec(..)
+        | Command::SetCurrentAirportNewgrfSpec(..)
         | Command::SetCurrentObjectSpec(..)
         | Command::SetAiSettings(..)
         | Command::FinalizeRoadDragLine { .. }

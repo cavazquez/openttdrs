@@ -623,6 +623,7 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
         }
         Command::SetCurrentAirportClass(class) => {
             state.current_airport_class = *class;
+            state.current_airport_newgrf_id = None;
             if let Some(first) = crate::airport_class::list_airport_specs(*class, "").first() {
                 state.current_airport_spec = first.id;
             }
@@ -632,6 +633,17 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
             if let Some(def) = crate::airport_class::airport_spec_def(*spec) {
                 state.current_airport_class = def.class;
                 state.current_airport_spec = *spec;
+                state.current_airport_newgrf_id = None;
+            }
+            Ok(())
+        }
+        Command::SetCurrentAirportNewgrfSpec(id) => {
+            if let Some(def) =
+                crate::airport_class::newgrf_airport_spec_def(&state.airport_spec_catalog, *id)
+            {
+                state.current_airport_class = def.class;
+                state.current_airport_spec = def.subst_id;
+                state.current_airport_newgrf_id = Some(*id);
             }
             Ok(())
         }

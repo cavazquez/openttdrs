@@ -21,6 +21,10 @@ const FTA_HOLD_DWELL_TICKS: u16 = 0;
 /// `true` si la estación usa motor FTA (perfil + footprint completo).
 #[must_use]
 pub fn station_uses_airport_fta(station: &Station) -> bool {
+    // NewGRF airports: FTA bloqueado explícitamente (#260) — layout custom ≠ FSM subst.
+    if station.airport_newgrf_spec_id.is_some() {
+        return false;
+    }
     station.stop_kind == crate::station::StopKind::Airport
         && fta_profile_for_spec(station.airport_spec).is_some_and(|p| {
             station.airport_tiles.len()

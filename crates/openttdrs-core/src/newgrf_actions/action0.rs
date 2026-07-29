@@ -29,8 +29,12 @@ pub const ACTION0_FEATURE_INDUSTRIES: u8 = 0x0A;
 pub const ACTION0_FEATURE_CARGOES: u8 = 0x0B;
 /// Feature Action0: `Sounds` (`OpenTTD` `GSF_SOUNDFX`).
 pub const ACTION0_FEATURE_SOUNDS: u8 = 0x0C;
+/// Feature Action0: `Airports` (`OpenTTD` `GSF_AIRPORTS`).
+pub const ACTION0_FEATURE_AIRPORTS: u8 = 0x0D;
 /// Feature Action0: `Objects` (`OpenTTD` `GSF_OBJECTS`).
 pub const ACTION0_FEATURE_OBJECTS: u8 = 0x0F;
+/// Feature Action0: `AirportTiles` (`OpenTTD` `GSF_AIRPORTTILES`).
+pub const ACTION0_FEATURE_AIRPORTTILES: u8 = 0x11;
 /// Feature Action0: `RailTypes` (`OpenTTD` `GSF_RAILTYPES`).
 pub const ACTION0_FEATURE_RAILTYPES: u8 = 0x10;
 /// Feature Action0: `RoadTypes` (`OpenTTD` `GSF_ROADTYPES`).
@@ -347,6 +351,53 @@ pub struct ParsedIndustryTileMeta {
     pub acceptance: Vec<i8>,
     /// Callback mask (`prop 0x0E`); almacenado sin ejecutar.
     pub callback_mask: u8,
+}
+
+/// Tesela de layout aeropuerto (`prop 0x0A`); `local_tile` si gfx era `0xFE`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ParsedAirportLayoutTile {
+    pub x: i8,
+    pub y: i8,
+    /// Gfx vanilla/airport-tile global, o id local si [`Self::use_local_tile`].
+    pub gfx_or_local: u16,
+    pub use_local_tile: bool,
+}
+
+/// Una rotación de layout de aeropuerto.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParsedAirportLayout {
+    /// `Direction` OpenTTD (N/E/S/W); bits bajos.
+    pub rotation: u8,
+    pub tiles: Vec<ParsedAirportLayoutTile>,
+}
+
+/// Metadatos `AirportTiles` Action0 (antes de asignar gfx ≥74).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParsedAirportTileMeta {
+    pub local_id: u8,
+    pub subst_id: u8,
+    pub override_of: Option<u8>,
+    /// Callback mask (`prop 0x0E`); almacenado sin ejecutar (#228).
+    pub callback_mask: u8,
+}
+
+/// Metadatos `Airports` Action0 (antes de asignar id ≥10).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParsedAirportMeta {
+    pub local_id: u8,
+    /// `0xFF` = disable vanilla id; else subst vanilla &lt;10.
+    pub subst_id: u8,
+    pub disabled: bool,
+    pub layouts: Vec<ParsedAirportLayout>,
+    pub size_x: u8,
+    pub size_y: u8,
+    pub min_year: u16,
+    pub max_year: u16,
+    pub ttd_airport_type: u8,
+    pub catchment: u8,
+    pub noise_level: u8,
+    pub maintenance_cost: u16,
+    pub name: String,
 }
 
 /// Tesela cruda de layout industria (`prop 0x0A`); `local_tile` = gfx era `0xFE`.
@@ -3120,6 +3171,325 @@ pub fn collect_vehicle_metas_from_grf(data: &[u8], feature: u8) -> Vec<ParsedVeh
             && let Some(metas) = parse_action0_vehicle_metas(payload)
         {
             out.extend(metas);
+        }
+    });
+    out
+}
+
+
+/// Parsea Action0 `AirportTiles` (`0x11`). Requiere `prop 0x08` (subst).
+#[must_use]
+pub fn parse_action0_airport_tile_meta(payload: &[u8]) -> Option<ParsedAirportTileMeta> {
+    let header = parse_action0_header(payload)?;
+    if header.feature != ACTION0_FEATURE_AIRPORTTILES || header.num_ids == 0 || payload.len() < 5 {
+        return None;
+    }
+    let local_id = payload[4];
+    let mut i = 5usize;
+    let mut subst_id: Option<u8> = None;
+    let mut override_of: Option<u8> = None;
+    let mut callback_mask = 0u8;
+    for _ in 0..header.num_props {
+        if i >= payload.len() {
+            break;
+        }
+        let prop = payload[i];
+        i += 1;
+        match prop {
+            0x08 => {
+                if i >= payload.len() {
+                    break;
+                }
+                let s = payload[i];
+                i += 1;
+                if u16::from(s) < crate::airport_tile_spec::NEW_AIRPORT_TILE_OFFSET {
+                    subst_id = Some(s);
+                }
+            }
+            0x09 => {
+                if i >= payload.len() {
+                    break;
+                }
+                let o = payload[i];
+                i += 1;
+                if u16::from(o) < crate::airport_tile_spec::NEW_AIRPORT_TILE_OFFSET {
+                    override_of = Some(o);
+                }
+            }
+            0x0E => {
+                if i >= payload.len() {
+                    break;
+                }
+                callback_mask = payload[i];
+                i += 1;
+            }
+            0x0F => {
+                // Animation: frames + status
+                if i + 2 > payload.len() {
+                    break;
+                }
+                i += 2;
+            }
+            0x10 | 0x11 => {
+                if i >= payload.len() {
+                    break;
+                }
+                i += 1;
+            }
+            0x12 => {
+                // Badge list: WORD count + n×WORD
+                if i + 2 > payload.len() {
+                    break;
+                }
+                let count = usize::from(u16::from_le_bytes([payload[i], payload[i + 1]]));
+                i += 2;
+                let need = count.saturating_mul(2);
+                if i + need > payload.len() {
+                    break;
+                }
+                i += need;
+            }
+            _ => break,
+        }
+    }
+    Some(ParsedAirportTileMeta {
+        local_id,
+        subst_id: subst_id?,
+        override_of,
+        callback_mask,
+    })
+}
+
+#[must_use]
+pub fn collect_airport_tile_metas_from_grf(data: &[u8]) -> Vec<ParsedAirportTileMeta> {
+    let mut out = Vec::new();
+    let _ = for_each_pseudo_payload(data, |payload| {
+        if let Some(meta) = parse_action0_airport_tile_meta(payload) {
+            out.push(meta);
+        }
+    });
+    out
+}
+
+/// Parsea Action0 `Airports` (`0x0D`). Requiere `prop 0x08` (subst o disable).
+#[must_use]
+#[allow(clippy::too_many_lines)]
+pub fn parse_action0_airport_meta(payload: &[u8]) -> Option<ParsedAirportMeta> {
+    let header = parse_action0_header(payload)?;
+    if header.feature != ACTION0_FEATURE_AIRPORTS || header.num_ids == 0 || payload.len() < 5 {
+        return None;
+    }
+    let local_id = payload[4];
+    let mut i = 5usize;
+    let mut subst_id: Option<u8> = None;
+    let mut disabled = false;
+    let mut layouts: Vec<ParsedAirportLayout> = Vec::new();
+    let mut size_x = 0u8;
+    let mut size_y = 0u8;
+    let mut min_year = 0u16;
+    let mut max_year = 0xFFFFu16;
+    let mut ttd_airport_type = 0u8;
+    let mut catchment = 4u8;
+    let mut noise_level = 3u8;
+    let mut maintenance_cost = 0u16;
+    let mut name = String::new();
+
+    for _ in 0..header.num_props {
+        if i >= payload.len() {
+            break;
+        }
+        let prop = payload[i];
+        i += 1;
+        match prop {
+            0x08 => {
+                if i >= payload.len() {
+                    break;
+                }
+                let s = payload[i];
+                i += 1;
+                if s == 0xFF {
+                    disabled = true;
+                    subst_id = Some(local_id); // disable target = local vanilla id
+                } else if s < 10 {
+                    subst_id = Some(s);
+                }
+            }
+            0x0A => {
+                if i >= payload.len() {
+                    break;
+                }
+                let num_layouts = usize::from(payload[i]);
+                i += 1;
+                if i + 4 > payload.len() {
+                    break;
+                }
+                i += 4; // total size DWORD (ignored)
+                layouts.clear();
+                size_x = 0;
+                size_y = 0;
+                for _j in 0..num_layouts {
+                    if i >= payload.len() {
+                        break;
+                    }
+                    let rotation = payload[i] & 6;
+                    i += 1;
+                    let mut tiles = Vec::new();
+                    loop {
+                        if i + 2 > payload.len() {
+                            break;
+                        }
+                        let x = payload[i] as i8;
+                        let y = payload[i + 1] as i8;
+                        i += 2;
+                        if x == 0 && (y as u8) == 0x80 {
+                            break;
+                        }
+                        if i >= payload.len() {
+                            break;
+                        }
+                        let gfx = payload[i];
+                        i += 1;
+                        let (gfx_or_local, use_local_tile) = if gfx == 0xFE {
+                            if i + 2 > payload.len() {
+                                break;
+                            }
+                            let local = u16::from_le_bytes([payload[i], payload[i + 1]]);
+                            i += 2;
+                            (local, true)
+                        } else {
+                            (u16::from(gfx), false)
+                        };
+                        // size from tile coords (N/S vs E/W)
+                        let (sx, sy) = if rotation == 2 || rotation == 6 {
+                            (u8::try_from((y as i32) + 1).unwrap_or(1),
+                             u8::try_from((x as i32) + 1).unwrap_or(1))
+                        } else {
+                            (u8::try_from((x as i32) + 1).unwrap_or(1),
+                             u8::try_from((y as i32) + 1).unwrap_or(1))
+                        };
+                        size_x = size_x.max(sx);
+                        size_y = size_y.max(sy);
+                        tiles.push(ParsedAirportLayoutTile {
+                            x,
+                            y,
+                            gfx_or_local,
+                            use_local_tile,
+                        });
+                    }
+                    layouts.push(ParsedAirportLayout { rotation, tiles });
+                }
+            }
+            0x0C => {
+                if i + 4 > payload.len() {
+                    break;
+                }
+                min_year = u16::from_le_bytes([payload[i], payload[i + 1]]);
+                max_year = u16::from_le_bytes([payload[i + 2], payload[i + 3]]);
+                i += 4;
+            }
+            0x0D => {
+                if i >= payload.len() {
+                    break;
+                }
+                ttd_airport_type = payload[i];
+                i += 1;
+            }
+            0x0E => {
+                if i >= payload.len() {
+                    break;
+                }
+                catchment = payload[i].clamp(1, 10);
+                i += 1;
+            }
+            0x0F => {
+                if i >= payload.len() {
+                    break;
+                }
+                noise_level = payload[i];
+                i += 1;
+            }
+            0x10 => {
+                if i + 2 > payload.len() {
+                    break;
+                }
+                let sid = u16::from_le_bytes([payload[i], payload[i + 1]]);
+                i += 2;
+                if sid == 0xFE {
+                    // C-string local name
+                    let start = i;
+                    while i < payload.len() && payload[i] != 0 {
+                        i += 1;
+                    }
+                    name = String::from_utf8_lossy(&payload[start..i]).into_owned();
+                    if i < payload.len() {
+                        i += 1;
+                    }
+                } else {
+                    name = format!("Airport#{sid}");
+                }
+            }
+            0x11 => {
+                if i + 2 > payload.len() {
+                    break;
+                }
+                maintenance_cost = u16::from_le_bytes([payload[i], payload[i + 1]]);
+                i += 2;
+            }
+            0x12 => {
+                if i + 2 > payload.len() {
+                    break;
+                }
+                let count = usize::from(u16::from_le_bytes([payload[i], payload[i + 1]]));
+                i += 2;
+                let need = count.saturating_mul(2);
+                if i + need > payload.len() {
+                    break;
+                }
+                i += need;
+            }
+            _ => break,
+        }
+    }
+    if disabled {
+        return Some(ParsedAirportMeta {
+            local_id,
+            subst_id: subst_id.unwrap_or(local_id),
+            disabled: true,
+            layouts: Vec::new(),
+            size_x: 0,
+            size_y: 0,
+            min_year,
+            max_year,
+            ttd_airport_type,
+            catchment,
+            noise_level,
+            maintenance_cost,
+            name,
+        });
+    }
+    Some(ParsedAirportMeta {
+        local_id,
+        subst_id: subst_id?,
+        disabled: false,
+        layouts,
+        size_x,
+        size_y,
+        min_year,
+        max_year,
+        ttd_airport_type,
+        catchment,
+        noise_level,
+        maintenance_cost,
+        name,
+    })
+}
+
+#[must_use]
+pub fn collect_airport_metas_from_grf(data: &[u8]) -> Vec<ParsedAirportMeta> {
+    let mut out = Vec::new();
+    let _ = for_each_pseudo_payload(data, |payload| {
+        if let Some(meta) = parse_action0_airport_meta(payload) {
+            out.push(meta);
         }
     });
     out

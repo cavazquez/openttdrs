@@ -271,6 +271,7 @@ pub fn command_effects(cmd: &Command) -> CommandEffects {
         | Command::SetCurrentRoadStopSpec(..)
         | Command::SetCurrentAirportClass(..)
         | Command::SetCurrentAirportSpec(..)
+        | Command::SetCurrentAirportNewgrfSpec(..)
         | Command::SetCurrentObjectSpec(..)
         | Command::SetAiSettings(..) => CommandEffects::none(),
 

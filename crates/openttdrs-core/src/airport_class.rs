@@ -1,9 +1,13 @@
 //! Clases y specs de aeropuerto (`AirportClass` / `AirportSpec` de `OpenTTD`).
 //!
-//! Catálogo filtrable (UI-6): vanilla hoy; `NewGRF` Action0 Airports ampliará
-//! el registro cuando exista el runtime.
+//! Catálogo filtrable (UI-6): vanilla + `NewGRF` Action0 Airports (`≥10`).
 
 use serde::{Deserialize, Serialize};
+
+/// Primera spec definida por `NewGRF` (`OpenTTD` `NEW_AIRPORT_OFFSET`).
+pub const NEW_AIRPORT_OFFSET: u16 = 10;
+/// Máximo de aeropuertos (`OpenTTD` `NUM_AIRPORTS`).
+pub const NUM_AIRPORTS: u16 = 128;
 
 /// Identificador de clase de aeropuerto (`AirportClassID`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
@@ -108,9 +112,14 @@ impl AirportSpecId {
     ///
     /// `AT_SMALL=0, AT_LARGE=1, AT_HELIPORT=2, AT_METROPOLITAN=3,
     /// AT_INTERNATIONAL=4, AT_COMMUTER=5, AT_HELIDEPOT=6, AT_INTERCON=7,
-    /// AT_HELISTATION=8, AT_OILRIG=9` (`airport.h`). `NewGRF` (≥10) → `Small`.
+    /// AT_HELISTATION=8, AT_OILRIG=9` (`airport.h`).
+    /// `NewGRF` (`≥10`) se conserva como id global vía [`AirportSpecId::as_newgrf_id`].
     #[must_use]
     pub const fn from_ottd_airport_type(at: u8) -> Self {
+        if at >= NEW_AIRPORT_OFFSET as u8 {
+            // Placeholder vanilla; el id NewGRF viaja en `Station.airport_newgrf_spec_id`.
+            return Self::Small;
+        }
         match at {
             1 => Self::City, // AT_LARGE
             2 => Self::Heliport,
@@ -121,9 +130,120 @@ impl AirportSpecId {
             7 => Self::Intercontinental,
             8 => Self::Helistation,
             9 => Self::Oilrig,
-            _ => Self::Small, // AT_SMALL=0 y NewGRF (≥10, best-effort).
+            _ => Self::Small, // AT_SMALL=0
         }
     }
+
+    /// Id raw OpenTTD (`AT_*` o NewGRF ≥10).
+    #[must_use]
+    pub const fn as_ottd_airport_type(self) -> u8 {
+        match self {
+            Self::Small => 0,
+            Self::City => 1,
+            Self::Heliport => 2,
+            Self::Metropolitan => 3,
+            Self::International => 4,
+            Self::Commuter => 5,
+            Self::Helidepot => 6,
+            Self::Intercontinental => 7,
+            Self::Helistation => 8,
+            Self::Oilrig => 9,
+        }
+    }
+}
+
+/// Tesela de layout NewGRF ya resuelta a gfx global o vanilla.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AirportLayoutTile {
+    pub x: i8,
+    pub y: i8,
+    /// Gfx de airport tile (vanilla &lt;74 o NewGRF ≥74).
+    pub gfx: u16,
+}
+
+/// Una rotación de layout NewGRF.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AirportTileLayout {
+    pub rotation: u8,
+    pub tiles: Vec<AirportLayoutTile>,
+}
+
+/// Spec NewGRF de aeropuerto (ids globales ≥ [`NEW_AIRPORT_OFFSET`]).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NewgrfAirportSpecDef {
+    pub id: u16,
+    pub class: AirportClassId,
+    pub label: String,
+    pub short_label: String,
+    pub size_x: i32,
+    pub size_y: i32,
+    pub catchment: i32,
+    pub noise_level: u8,
+    /// Spec vanilla de la que hereda clase/FTA flags (sin ejecutar FTA NewGRF).
+    pub subst_id: AirportSpecId,
+    pub layouts: Vec<AirportTileLayout>,
+    pub enabled: bool,
+    pub min_year: u16,
+    pub max_year: u16,
+    pub maintenance_cost: u16,
+    #[serde(default, skip)]
+    pub newgrf_local_id: u8,
+    #[serde(default, skip)]
+    pub newgrf_grfid: u32,
+}
+
+impl NewgrfAirportSpecDef {
+    #[must_use]
+    pub fn fta_flags(&self) -> AirportFtaFlags {
+        airport_spec_def(self.subst_id)
+            .map(|d| d.fta_flags)
+            .unwrap_or(AirportFtaFlags::empty())
+    }
+}
+
+/// Siguiente id libre ≥ [`NEW_AIRPORT_OFFSET`].
+#[must_use]
+pub fn next_free_airport_id(catalog: &[NewgrfAirportSpecDef]) -> Option<u16> {
+    let mut used: Vec<u16> = catalog.iter().map(|d| d.id).collect();
+    used.sort_unstable();
+    used.dedup();
+    let mut candidate = NEW_AIRPORT_OFFSET;
+    for &u in &used {
+        if u == candidate {
+            candidate = candidate.saturating_add(1);
+        } else if u > candidate {
+            break;
+        }
+    }
+    (candidate < NUM_AIRPORTS).then_some(candidate)
+}
+
+/// Specs NewGRF de una clase (filtradas).
+#[must_use]
+pub fn list_newgrf_airport_specs<'a>(
+    class: AirportClassId,
+    filter: &str,
+    newgrf: &'a [NewgrfAirportSpecDef],
+) -> Vec<&'a NewgrfAirportSpecDef> {
+    let needle = filter.trim().to_ascii_lowercase();
+    newgrf
+        .iter()
+        .filter(|s| s.enabled && s.class == class)
+        .filter(|s| {
+            needle.is_empty()
+                || s.label.to_ascii_lowercase().contains(&needle)
+                || s.short_label.to_ascii_lowercase().contains(&needle)
+        })
+        .collect()
+}
+
+/// Lookup NewGRF por id global.
+#[must_use]
+pub fn newgrf_airport_spec_def(
+    catalog: &[NewgrfAirportSpecDef],
+    id: u16,
+) -> Option<&NewgrfAirportSpecDef> {
+    catalog.iter().find(|s| s.id == id && s.enabled)
 }
 
 /// Metadatos de una clase.

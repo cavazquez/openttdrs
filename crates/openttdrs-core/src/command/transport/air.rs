@@ -2,8 +2,9 @@
 
 use crate::airport::{
     AirportPiece, airport_m6_airport, airport_spec_footprint, airport_spec_tiles,
+    newgrf_airport_footprint, newgrf_airport_tiles,
 };
-use crate::airport_class::AirportSpecId;
+use crate::airport_class::{AirportSpecId, newgrf_airport_spec_def};
 use crate::economy::station_build_cost;
 use crate::map::{Map, TileCoord, TileKind};
 use crate::pathfinder::{station_site_tile_allows_build, station_site_tile_needs_clear};
@@ -47,7 +48,13 @@ pub(crate) fn check_airport_area(
     axis_y: bool,
     spec: AirportSpecId,
 ) -> Result<(), CommandError> {
-    let (w, h) = airport_spec_footprint(spec, axis_y);
+    let (w, h) = if let Some(id) = state.current_airport_newgrf_id
+        && let Some(def) = newgrf_airport_spec_def(&state.airport_spec_catalog, id)
+    {
+        newgrf_airport_footprint(def, axis_y)
+    } else {
+        airport_spec_footprint(spec, axis_y)
+    };
     let h0 = state.map.get(origin).map_or(0, |t| t.height);
     for dy in 0..h {
         for dx in 0..w {
@@ -62,7 +69,7 @@ pub(crate) fn check_airport_area(
     Ok(())
 }
 
-/// Aeropuerto según [`AirportSpecId`]: hangar/helipuerto + footprint.
+/// Aeropuerto según [`AirportSpecId`] o layout NewGRF activo.
 pub(in crate::command) fn place_airport_area(
     state: &mut GameState,
     origin: TileCoord,
@@ -70,25 +77,50 @@ pub(in crate::command) fn place_airport_area(
     spec: AirportSpecId,
 ) -> Result<(), CommandError> {
     check_airport_area(state, origin, axis_y, spec)?;
-    let station_anchor = airport_spec_tiles(origin, spec, axis_y)
+
+    let newgrf_id = state.current_airport_newgrf_id;
+    let newgrf_def = newgrf_id.and_then(|id| {
+        state
+            .airport_spec_catalog
+            .iter()
+            .find(|d| d.id == id && d.enabled)
+            .cloned()
+    });
+    let place_spec = newgrf_def
+        .as_ref()
+        .map_or(spec, |d| d.subst_id);
+
+    let placed: Vec<(TileCoord, AirportPiece)> = if let Some(ref def) = newgrf_def {
+        newgrf_airport_tiles(origin, def, &state.airport_tile_spec_catalog, axis_y)
+    } else {
+        airport_spec_tiles(origin, place_spec, axis_y).collect()
+    };
+
+    let station_anchor = placed
+        .iter()
         .find(|(_, p)| p.is_hangar())
-        .map_or(origin, |(c, _)| c);
+        .map_or(origin, |(c, _)| *c);
     if !authority_allows_new_station(&state.towns, station_anchor, state.active_company) {
         return Err(CommandError::AuthorityRatingTooLow);
     }
 
-    let noise_add = airport_noise_contribution(state, station_anchor, spec)?;
+    let noise_spec = place_spec;
+    let noise_level_override = newgrf_def.as_ref().map(|d| d.noise_level);
+    let noise_add =
+        airport_noise_contribution_with_level(state, station_anchor, noise_spec, noise_level_override)?;
 
-    let tile_count = airport_spec_tiles(origin, spec, axis_y).count();
+    let tile_count = placed.len();
     let mut tiles = Vec::with_capacity(tile_count);
-    for (c, piece) in airport_spec_tiles(origin, spec, axis_y) {
+    for (c, piece) in placed {
         if station_site_tile_needs_clear(state.map.get_kind(c).unwrap_or(TileKind::Grass)) {
             clear_station_site_tile(state, c)?;
         }
         write_airport_tile(state, c, piece)?;
         tiles.push(c);
     }
-    if matches!(spec, AirportSpecId::Heliport | AirportSpecId::Oilrig) {
+    if matches!(place_spec, AirportSpecId::Heliport | AirportSpecId::Oilrig)
+        && newgrf_def.is_none()
+    {
         state.economy.money -= DEPOT_BUILD_COST;
     } else {
         let cost = station_build_cost(&state.global_economy)
@@ -103,7 +135,8 @@ pub(in crate::command) fn place_airport_area(
     let mut st = Station::new_with_kind(station_anchor, StopKind::Airport);
     st.owner = state.active_company;
     st.airport_tiles = tiles;
-    st.airport_spec = spec;
+    st.airport_spec = place_spec;
+    st.airport_newgrf_spec_id = newgrf_id.filter(|_| newgrf_def.is_some());
     st.airport_blocks = 0;
     // Catchment: `station_catchment_radius` lee `airport_spec` en cobertura.
     state.stations.push(st);
@@ -113,10 +146,11 @@ pub(in crate::command) fn place_airport_area(
 /// Contribución de ruido al pueblo más cercano (`GetAirportNoiseLevelForDistance`).
 ///
 /// Con `station_noise_level` activo, rechaza si supera `MaxTownNoise`.
-fn airport_noise_contribution(
+fn airport_noise_contribution_with_level(
     state: &GameState,
     airport_pos: TileCoord,
     spec: AirportSpecId,
+    noise_override: Option<u8>,
 ) -> Result<Option<(usize, u8)>, CommandError> {
     use crate::airport_class::{
         TOWN_NOISE_POPULATION_DEFAULT, airport_noise_for_distance, airport_spec_def, max_town_noise,
@@ -126,7 +160,8 @@ fn airport_noise_contribution(
     let Some((town_idx, dist)) = nearest_town_index(&state.towns, airport_pos) else {
         return Ok(None);
     };
-    let noise_level = airport_spec_def(spec).map_or(0, |d| d.noise_level);
+    let noise_level =
+        noise_override.unwrap_or_else(|| airport_spec_def(spec).map_or(0, |d| d.noise_level));
     // Tolerancia permisiva: 8 + 0×4 (sin setting de council tolerance).
     let effective = airport_noise_for_distance(noise_level, dist, 8);
     if state.station_noise_level {

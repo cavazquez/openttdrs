@@ -371,6 +371,18 @@ pub struct GameState {
     /// Overrides vanilla house → id NewGRF (`prop 0x15`).
     #[serde(default = "crate::house_spec::empty_house_overrides")]
     pub house_overrides: Vec<u16>,
+    /// Specs `NewGRF` de teselas de aeropuerto (gfx ≥74).
+    #[serde(default)]
+    pub airport_tile_spec_catalog: Vec<crate::airport_tile_spec::AirportTileSpecDef>,
+    /// Overrides vanilla airport tile → gfx NewGRF.
+    #[serde(default = "crate::airport_tile_spec::empty_airport_tile_overrides")]
+    pub airport_tile_overrides: Vec<u16>,
+    /// Specs `NewGRF` de aeropuertos (id ≥10).
+    #[serde(default)]
+    pub airport_spec_catalog: Vec<crate::airport_class::NewgrfAirportSpecDef>,
+    /// Aeropuertos vanilla deshabilitados por Action0 `08=FF` (índice `AT_*`).
+    #[serde(default)]
+    pub airport_vanilla_disabled: Vec<bool>,
     /// Catálogo Action0 `Badges` (`0x15`).
     #[serde(default)]
     pub badge_catalog: Vec<crate::badge::BadgeDef>,
@@ -398,6 +410,9 @@ pub struct GameState {
     /// Spec de aeropuerto activo dentro de la clase.
     #[serde(default)]
     pub current_airport_spec: crate::airport_class::AirportSpecId,
+    /// Spec NewGRF activo (`None` = vanilla [`Self::current_airport_spec`]).
+    #[serde(default)]
+    pub current_airport_newgrf_id: Option<u16>,
     /// Clima del paisaje (`LandscapeType` en `OpenTTD`).
     #[serde(default)]
     pub climate: Climate,
@@ -597,6 +612,10 @@ impl GameState {
             industry_overrides: crate::industry_spec::empty_industry_overrides(),
             house_spec_catalog: Vec::new(),
             house_overrides: crate::house_spec::empty_house_overrides(),
+            airport_tile_spec_catalog: Vec::new(),
+            airport_tile_overrides: crate::airport_tile_spec::empty_airport_tile_overrides(),
+            airport_spec_catalog: Vec::new(),
+            airport_vanilla_disabled: Vec::new(),
             badge_catalog: Vec::new(),
             sound_effect_catalog: Vec::new(),
             cargo_spec_catalog: Vec::new(),
@@ -606,6 +625,7 @@ impl GameState {
             current_object_spec: 0,
             current_airport_class: crate::airport_class::AirportClassId::Small,
             current_airport_spec: crate::airport_class::AirportSpecId::Small,
+            current_airport_newgrf_id: None,
             climate: Climate::default(),
             world_seed: 0,
             jgr_tunnels_from_footer: Vec::new(),
@@ -706,6 +726,10 @@ impl GameState {
             industry_overrides: crate::industry_spec::empty_industry_overrides(),
             house_spec_catalog: Vec::new(),
             house_overrides: crate::house_spec::empty_house_overrides(),
+            airport_tile_spec_catalog: Vec::new(),
+            airport_tile_overrides: crate::airport_tile_spec::empty_airport_tile_overrides(),
+            airport_spec_catalog: Vec::new(),
+            airport_vanilla_disabled: Vec::new(),
             badge_catalog: Vec::new(),
             sound_effect_catalog: Vec::new(),
             cargo_spec_catalog: Vec::new(),
@@ -715,6 +739,7 @@ impl GameState {
             current_object_spec: 0,
             current_airport_class: crate::airport_class::AirportClassId::Small,
             current_airport_spec: crate::airport_class::AirportSpecId::Small,
+            current_airport_newgrf_id: None,
             climate: Climate::default(),
             world_seed: 0,
             jgr_tunnels_from_footer: Vec::new(),

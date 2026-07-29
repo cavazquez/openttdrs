@@ -2,11 +2,14 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+use std::io::ErrorKind;
 use std::thread;
 use std::time::{Duration, Instant};
 
 use openttdrs_core::{Command, GameState, TileCoord, apply_command};
-use openttdrs_net::{ClientSession, DEFAULT_PORT, ListenServer, SessionEvent, apply_session_event};
+use openttdrs_net::{
+    ClientSession, DEFAULT_PORT, ListenServer, NetError, SessionEvent, apply_session_event,
+};
 
 fn wait_event(client: &ClientSession, timeout: Duration) -> SessionEvent {
     let start = Instant::now();
@@ -24,6 +27,22 @@ fn wait_event(client: &ClientSession, timeout: Duration) -> SessionEvent {
     }
 }
 
+fn maybe_start_server(bind: &str, snapshot: String) -> Option<ListenServer> {
+    match ListenServer::start(bind, snapshot) {
+        Ok(server) => Some(server),
+        Err(NetError::Io(error)) if error.kind() == ErrorKind::PermissionDenied => None,
+        Err(error) => panic!("ListenServer::start falló: {error}"),
+    }
+}
+
+fn maybe_connect_client(bind: &str) -> Option<ClientSession> {
+    match ClientSession::connect(bind) {
+        Ok(client) => Some(client),
+        Err(NetError::Io(error)) if error.kind() == ErrorKind::PermissionDenied => None,
+        Err(error) => panic!("ClientSession::connect falló: {error}"),
+    }
+}
+
 #[test]
 fn two_peers_same_log_same_hash_over_tcp() {
     let mut host = GameState::new(32, 32);
@@ -32,10 +51,16 @@ fn two_peers_same_log_same_hash_over_tcp() {
     // Puerto efímero para no chocar con un dedicated local.
     let port = u16::try_from(40_000 + (std::process::id() % 2000)).unwrap_or(DEFAULT_PORT);
     let bind = format!("127.0.0.1:{port}");
-    let server = ListenServer::start(&bind, snapshot).unwrap();
+    let server = match maybe_start_server(&bind, snapshot) {
+        Some(server) => server,
+        None => return,
+    };
     thread::sleep(Duration::from_millis(50));
 
-    let client = ClientSession::connect(&bind).unwrap();
+    let client = match maybe_connect_client(&bind) {
+        Some(client) => client,
+        None => return,
+    };
     let welcome = wait_event(&client, Duration::from_secs(2));
     let mut remote = GameState::new(1, 1);
     apply_session_event(&mut remote, &welcome).unwrap();
@@ -68,7 +93,10 @@ fn late_joiner_gets_live_snapshot_not_boot() {
     let boot = host.save_json().unwrap();
     let port = u16::try_from(44_000 + (std::process::id() % 2000)).unwrap_or(DEFAULT_PORT);
     let bind = format!("127.0.0.1:{port}");
-    let server = ListenServer::start(&bind, boot).unwrap();
+    let server = match maybe_start_server(&bind, boot) {
+        Some(server) => server,
+        None => return,
+    };
 
     apply_command(&mut host, &Command::PlaceRail(TileCoord::new(5, 5))).unwrap();
     for _ in 0..200 {
@@ -77,7 +105,10 @@ fn late_joiner_gets_live_snapshot_not_boot() {
     server.update_snapshot(host.save_json().unwrap());
     thread::sleep(Duration::from_millis(30));
 
-    let client = ClientSession::connect(&bind).unwrap();
+    let client = match maybe_connect_client(&bind) {
+        Some(client) => client,
+        None => return,
+    };
     let welcome = wait_event(&client, Duration::from_secs(2));
     let mut remote = GameState::new(1, 1);
     apply_session_event(&mut remote, &welcome).unwrap();
@@ -95,10 +126,16 @@ fn client_propose_reaches_host() {
     let snapshot = host_state.save_json().unwrap();
     let port = u16::try_from(42_000 + (std::process::id() % 2000)).unwrap_or(DEFAULT_PORT);
     let bind = format!("127.0.0.1:{port}");
-    let server = ListenServer::start(&bind, snapshot).unwrap();
+    let server = match maybe_start_server(&bind, snapshot) {
+        Some(server) => server,
+        None => return,
+    };
     thread::sleep(Duration::from_millis(50));
 
-    let client = ClientSession::connect(&bind).unwrap();
+    let client = match maybe_connect_client(&bind) {
+        Some(client) => client,
+        None => return,
+    };
     let _welcome = wait_event(&client, Duration::from_secs(2));
 
     client

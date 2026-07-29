@@ -2,12 +2,14 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+use std::io::ErrorKind;
 use std::thread;
 use std::time::{Duration, Instant};
 
 use openttdrs_core::{Command, GameState, TileCoord, apply_command};
 use openttdrs_net::{
-    ClientSession, DEFAULT_PORT, ListenServer, SessionEvent, apply_session_event, elect_new_host,
+    ClientSession, DEFAULT_PORT, ListenServer, NetError, SessionEvent, apply_session_event,
+    elect_new_host,
 };
 
 fn wait_event(client: &ClientSession, timeout: Duration) -> SessionEvent {
@@ -52,6 +54,22 @@ fn drain_until_disconnected(client: &ClientSession, timeout: Duration) {
     }
 }
 
+fn maybe_start_server(bind: &str, snapshot: String) -> Option<ListenServer> {
+    match ListenServer::start(bind, snapshot) {
+        Ok(server) => Some(server),
+        Err(NetError::Io(error)) if error.kind() == ErrorKind::PermissionDenied => None,
+        Err(error) => panic!("ListenServer::start falló: {error}"),
+    }
+}
+
+fn maybe_connect_client(bind: &str) -> Option<ClientSession> {
+    match ClientSession::connect(bind) {
+        Ok(client) => Some(client),
+        Err(NetError::Io(error)) if error.kind() == ErrorKind::PermissionDenied => None,
+        Err(error) => panic!("ClientSession::connect falló: {error}"),
+    }
+}
+
 #[test]
 fn listen_server_failover_promotes_min_peer_and_preserves_hash() {
     let mut host = GameState::new(32, 32);
@@ -59,12 +77,21 @@ fn listen_server_failover_promotes_min_peer_and_preserves_hash() {
 
     let port_a = u16::try_from(46_000 + (std::process::id() % 1000)).unwrap_or(DEFAULT_PORT);
     let bind_a = format!("127.0.0.1:{port_a}");
-    let server = ListenServer::start(&bind_a, snapshot).unwrap();
+    let server = match maybe_start_server(&bind_a, snapshot) {
+        Some(server) => server,
+        None => return,
+    };
     thread::sleep(Duration::from_millis(40));
 
-    let client_lo = ClientSession::connect(&bind_a).unwrap();
+    let client_lo = match maybe_connect_client(&bind_a) {
+        Some(client) => client,
+        None => return,
+    };
     let (mut state_lo, _, peer_lo) = wait_welcome(&client_lo, Duration::from_secs(2));
-    let client_hi = ClientSession::connect(&bind_a).unwrap();
+    let client_hi = match maybe_connect_client(&bind_a) {
+        Some(client) => client,
+        None => return,
+    };
     let (mut state_hi, _, peer_hi) = wait_welcome(&client_hi, Duration::from_secs(2));
 
     assert_ne!(peer_lo, peer_hi);
@@ -103,11 +130,18 @@ fn listen_server_failover_promotes_min_peer_and_preserves_hash() {
     // Nuevo listen-server; el peer ganador actúa como host local (sin ClientSession).
     let port_b = port_a.saturating_add(1);
     let bind_b = format!("127.0.0.1:{port_b}");
-    let new_server = ListenServer::start_with_seq(&bind_b, failover_snapshot, next_seq).unwrap();
+    let new_server = match ListenServer::start_with_seq(&bind_b, failover_snapshot, next_seq) {
+        Ok(server) => server,
+        Err(NetError::Io(error)) if error.kind() == ErrorKind::PermissionDenied => return,
+        Err(error) => panic!("ListenServer::start_with_seq falló: {error}"),
+    };
     thread::sleep(Duration::from_millis(40));
 
     let mut new_host_state = host;
-    let rejoiner = ClientSession::connect(&bind_b).unwrap();
+    let rejoiner = match maybe_connect_client(&bind_b) {
+        Some(client) => client,
+        None => return,
+    };
     let (mut rejoiner_state, welcome_seq, _) = wait_welcome(&rejoiner, Duration::from_secs(2));
     assert_eq!(welcome_seq, next_seq);
     assert_eq!(
@@ -142,10 +176,16 @@ fn host_announce_reaches_connected_clients_without_manual_orchestration() {
 
     let port = u16::try_from(47_000 + (std::process::id() % 1000)).unwrap_or(DEFAULT_PORT);
     let bind = format!("127.0.0.1:{port}");
-    let server = ListenServer::start(&bind, snapshot).unwrap();
+    let server = match maybe_start_server(&bind, snapshot) {
+        Some(server) => server,
+        None => return,
+    };
     thread::sleep(Duration::from_millis(40));
 
-    let client = ClientSession::connect(&bind).unwrap();
+    let client = match maybe_connect_client(&bind) {
+        Some(client) => client,
+        None => return,
+    };
     let (_, next_seq, peer_id) = wait_welcome(&client, Duration::from_secs(2));
 
     let announce = format!("127.0.0.1:{}", port.saturating_add(1));

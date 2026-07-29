@@ -13,12 +13,13 @@ Contenido del mapa (64×64):
 
 Nota (#226): OpenTTD 15.3 dedicated carga:
   - `mvp_openttd_stations.sav` (STNN sin VEHS)
-  - `mvp_openttd_train.sav` (STNN + tren + ORDL; preferido vía cargo dump)
-  - este demo (mapa rico + un tren; ROAD vehicles omitidos del export)
+  - `mvp_openttd_train.sav` (STNN + tren + ORDL)
+  - `mvp_openttd_rich.sav` (STNN + tren + bus ROAD + INDY; preferido vía cargo dump)
+  - este demo (mapa rico + tren + bus + industria)
 
 Preferido para regenerar fixtures OpenTTD-loadable:
-  OPENTTDRS_DUMP_MVP_TRAIN_SAV=$PWD/crates/.../mvp_openttd_train.sav \\
-    cargo test -p openttdrs-core --lib sav::write::tests::export_mvp_train_emits_vehs_ordl_and_direction -- --exact
+  OPENTTDRS_DUMP_MVP_RICH_SAV=$PWD/crates/.../mvp_openttd_rich.sav \\
+    cargo test -p openttdrs-core --lib sav::write::tests::export_mvp_rich_emits_indy_road_vehs_and_stations -- --exact
 
 Uso:
   python3 scripts/gen_demo_sav.py [salida.sav]   (default: save/demo_openttd.sav)
@@ -448,7 +449,7 @@ def build_sav() -> bytes:
     pl.extend(struct.pack(">q", 250_000))
     data.extend(table_chunk(b"PLYR", [(7, "money")], [bytes(pl)]))
 
-    # ORDL: una lista (tren → estación rail 0). ROAD omitido (#226).
+    # ORDL: tren → estación rail 0; bus → parada bus 1.
     ordl_header = bytearray()
     ordl_header.append(0x1B)
     write_str("orders", ordl_header)
@@ -491,13 +492,15 @@ def build_sav() -> bytes:
         raw_table_chunk(
             b"ORDL",
             bytes(ordl_header),
-            [ordl_record(goto_station_order(0))],
+            [
+                ordl_record(goto_station_order(0)),
+                ordl_record(goto_station_order(1)),
+            ],
             CH_TABLE,
         )
     )
 
-    # VEHS (sparse): un tren loadable OpenTTD 15.3 — schema mínimo #226
-    # (direction/owner/engine_type/x_pos/y_pos/z_pos/track). ROAD omitido.
+    # VEHS (sparse): tren + bus ROAD — schema mínimo #226.
     def append_vehs_common_fields(hdr: bytearray) -> None:
         for ftype, name in [
             (2, "subtype"),
@@ -532,7 +535,7 @@ def build_sav() -> bytes:
     write_str("track", vehs_header)
     vehs_header.append(0)
     append_vehs_common_fields(vehs_header)
-    # roadveh stub nest
+    # roadveh nest (common; state/path/gv_flags → defaults)
     vehs_header.append(0x1B)
     write_str("common", vehs_header)
     vehs_header.append(0)
@@ -560,8 +563,34 @@ def build_sav() -> bytes:
     v_train.append(1)  # TRACK_BIT_X
     v_train.append(0)  # roadveh ausente
 
+    bus_tile = idx(13, 16)
+    bx, by = 13, 16
+    v_bus = bytearray()
+    v_bus.append(1)  # sparse index
+    v_bus.append(1)  # VEH_ROAD
+    v_bus.append(0)  # train ausente
+    v_bus.append(1)  # roadveh presente
+    v_bus.append(1)  # common presente
+    v_bus.append(0x09)  # GVSF_FRONT | GVSF_ENGINE
+    v_bus.append(0)  # owner
+    v_bus.extend(struct.pack(">I", bus_tile))
+    v_bus.extend(struct.pack(">I", bx * 16))
+    v_bus.extend(struct.pack(">I", by * 16 + 8))
+    v_bus.extend(struct.pack(">i", 0))
+    v_bus.append(1)  # DIR_NE
+    v_bus.extend(struct.pack(">H", 116))  # MPS Regal Bus
+    v_bus.append(0)  # running
+    v_bus.append(0)  # passengers
+    v_bus.extend(struct.pack(">I", 2))  # ORDL ref 2
+    v_bus.append(0)
+
     data.extend(
-        raw_table_chunk(b"VEHS", bytes(vehs_header), [bytes(v_train)], CH_SPARSE_TABLE)
+        raw_table_chunk(
+            b"VEHS",
+            bytes(vehs_header),
+            [bytes(v_train), bytes(v_bus)],
+            CH_SPARSE_TABLE,
+        )
     )
 
     data.extend(b"\x00\x00\x00\x00")  # terminador de stream

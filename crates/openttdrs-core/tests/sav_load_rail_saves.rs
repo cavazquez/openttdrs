@@ -50,8 +50,7 @@ fn count_rail(map: &openttdrs_core::Map) -> usize {
 
 #[test]
 fn demo_openttd_sav_has_train_orders_and_rail() {
-    // #226: VEHS export oficial es tren-only (ROAD omitido). El smoke de
-    // movimiento ya no depende de un bus; verificamos forma + órdenes.
+    // #226: demo incluye tren + bus ROAD + industria.
     let path = fixture_path("demo_openttd.sav");
     let raw = read_bytes(&path, "demo_openttd.sav");
     let sav = sav::load(&raw).expect("demo load");
@@ -63,6 +62,13 @@ fn demo_openttd_sav_has_train_orders_and_rail() {
             .any(|v| v.kind == sav::SavVehicleKind::Train && !v.orders.is_empty()),
         "demo: falta tren con órdenes"
     );
+    assert!(
+        sav.vehicles
+            .iter()
+            .any(|v| v.kind == sav::SavVehicleKind::RoadVehicle),
+        "demo: falta bus ROAD"
+    );
+    assert!(!sav.industries.is_empty(), "demo: falta INDY");
     let state = GameState::from_sav_game(sav);
     assert!(
         state

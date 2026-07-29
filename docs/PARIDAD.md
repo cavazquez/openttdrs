@@ -1233,7 +1233,7 @@ En saves &lt; 214, OpenTTD mueve el RoadType desde bits 6–7 de `m7` a `m4` (ro
 
 ### Notas
 
-- Export MVP (#226): `MAPS` `CH_TABLE` + `CITY` (≥1) + `STNN` moderno + `VEHS`/`ORDL` (tren: `direction`/`owner`/`engine_type`/`track`/pos) + DATE/PLYR; planos RIFF. Fixtures smoke `validate_sav_openttd.sh`: `mvp_openttd_load.sav`, `mvp_openttd_stations.sav`, `mvp_openttd_train.sav`, `demo_openttd.sav` (tren+órdenes; ROAD omitido del export). Residual: ROAD vehicles, PATS/OPTS/GSET/ENGN/SRND/NewGRF/PLYR completo; round-trip OpenTTD→openttdrs fuera de alcance.
+- Export MVP (#226): `MAPS` `CH_TABLE` + `CITY` (≥1) + `STNN` moderno + `VEHS`/`ORDL` (tren + bus/camión ROAD) + `INDY` + DATE/PLYR; planos RIFF. Cargamentos: goods×64 vacíos en STNN (sin CAPY/ECMY). Fixtures smoke `validate_sav_openttd.sh`: `mvp_openttd_load.sav`, `mvp_openttd_stations.sav`, `mvp_openttd_train.sav`, `mvp_openttd_rich.sav` (estaciones+tren+bus+industria), `demo_openttd.sav`. Round-trip OpenTTD→openttdrs: `scripts/roundtrip_sav_openttd.sh` (dedicated `save` por consola + import subconjunto). Residual: ship/aircraft/tram, CAPY/ECMY packets, PATS/OPTS/GSET/ENGN/SRND/NewGRF/PLYR completo.
 - Dedicated + `-g` dispara dos `AfterLoadGame` (new-game luego load); el export usa `OPENTTDRS_SNAPSHOT_MIN_CALL=2`.
 - El oráculo **no** invoca `parse_sav.py` ni `snapshot_dumper`.
 

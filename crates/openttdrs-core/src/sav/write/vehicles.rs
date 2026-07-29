@@ -1,12 +1,12 @@
 //! Serialización de vehículos y órdenes (ORDL, VEHS).
 //!
-//! Schema VEHS mínimo loadable por OpenTTD ≥15.3 (#226):
-//! `direction`/`owner`/`engine_type`/`x_pos`/`y_pos`/`z_pos`/`track` son
-//! obligatorios — sin ellos AfterLoad deja `INVALID_DIR`/`INVALID_OWNER` y
-//! crashea en `Train::UpdateDeltaXY` (`train_cmd.cpp`).
+//! Schema VEHS mínimo loadable por `OpenTTD` ≥15.3 (#226):
+//! `direction`/`owner`/`engine_type`/`x_pos`/`y_pos`/`z_pos` son
+//! obligatorios — sin ellos `AfterLoad` deja `INVALID_DIR`/`INVALID_OWNER` y
+//! crashea en `Train::UpdateDeltaXY` / `GetImage`.
 //!
-//! Solo se exportan **trenes**. Bus/camión quedan fuera del export oficial
-//! hasta que ROAD + estado de vía sean loadables (residual #226).
+//! Tren: + `track`. ROAD (bus/camión): tesela `MP_ROAD` con roadtype válido
+//! (`m4`/`M3HI`; 0 = `ROADTYPE_ROAD`). Ship/aircraft/tram quedan fuera.
 
 use super::super::SavError;
 use super::super::chunks::{CH_SPARSE_TABLE, CH_TABLE};
@@ -32,6 +32,16 @@ const TRACK_BIT_Y: u8 = 0x02;
 /// Kirby Paul Tank (primer motor rail vanilla).
 const DEFAULT_OPENTTD_TRAIN_ENGINE: u16 = 0;
 
+/// MPS Regal Bus (`engines.h` id 116).
+const DEFAULT_OPENTTD_BUS_ENGINE: u16 = 116;
+
+/// MPS Mail Truck (`engines.h` id 126).
+const DEFAULT_OPENTTD_TRUCK_ENGINE: u16 = 126;
+
+/// `VEH_TRAIN` / `VEH_ROAD`.
+const VEH_TRAIN: u8 = 0;
+const VEH_ROAD: u8 = 1;
+
 /// Píxeles por tesela (`TILE_SIZE`).
 const TILE_SIZE: i32 = 16;
 
@@ -44,9 +54,13 @@ fn station_id_for_pos(state: &GameState, pos: TileCoord) -> Option<u16> {
 }
 
 fn cargo_ottd_byte(v: &Vehicle) -> u8 {
-    match v.cargo_type {
-        Some(c) => c.temperate_id(),
-        None => 1, // carbón por defecto en tren
+    if let Some(c) = v.cargo_type {
+        return c.temperate_id();
+    }
+    match v.kind {
+        VehicleKind::Bus | VehicleKind::Tram => 0, // pasajeros
+        VehicleKind::Truck => 2,                   // correo
+        _ => 1,                                    // carbón (tren)
     }
 }
 
@@ -54,7 +68,7 @@ fn encode_goto_order(order: &VehicleOrder, state: &GameState, map_w: u32) -> Opt
     encode_vehicle_order(order, |pos| station_id_for_pos(state, pos), map_w).map(|b| b.to_vec())
 }
 
-/// TrackBits desde el mapa, o `TRACK_BIT_X` si no hay vía legible.
+/// `TrackBits` desde el mapa, o `TRACK_BIT_X` si no hay vía legible.
 fn track_bits_for(state: &GameState, pos: TileCoord) -> u8 {
     let Some(tile) = state.map.get(pos) else {
         return TRACK_BIT_X;
@@ -87,7 +101,15 @@ fn train_direction(track: u8, dir: u8) -> u8 {
     }
 }
 
-/// EngineID vanilla OpenTTD desde el catálogo Rust (inverso de `vanilla_train_engine_id`).
+/// `OpenTTD` exige roadtype válido en la tesela del ROAD vehicle (`AfterLoad`).
+fn road_tile_ok(state: &GameState, pos: TileCoord) -> bool {
+    let Some(tile) = state.map.get(pos) else {
+        return false;
+    };
+    matches!(tile.kind, TileKind::Road | TileKind::RoadDepot)
+}
+
+/// `EngineID` vanilla `OpenTTD` desde el catálogo Rust (inverso de `vanilla_train_engine_id`).
 fn openttd_train_engine_type(v: &Vehicle) -> u16 {
     match v.engine_id {
         Some(100) => 0,  // Kirby Paul Tank
@@ -108,91 +130,30 @@ fn openttd_train_engine_type(v: &Vehicle) -> u16 {
     }
 }
 
+/// `EngineID` `OpenTTD` para bus/camión (ids globales en `table/engines.h`).
+fn openttd_road_engine_type(v: &Vehicle) -> u16 {
+    match v.kind {
+        VehicleKind::Bus => match v.engine_id {
+            Some(0) => 116, // MPS Regal Bus
+            Some(1) => 117, // Hereford Leopard
+            Some(2) => 118, // Foster Bus
+            _ => DEFAULT_OPENTTD_BUS_ENGINE,
+        },
+        VehicleKind::Truck => match v.engine_id {
+            Some(10) => 126, // MPS Mail Truck
+            Some(11) => 138, // Balogh Goods
+            Some(12) => 139, // Craighead Goods
+            Some(13) => 140, // Goss Goods
+            _ => DEFAULT_OPENTTD_TRUCK_ENGINE,
+        },
+        _ => DEFAULT_OPENTTD_BUS_ENGINE,
+    }
+}
+
 type SavRecordBytes = Vec<u8>;
 type SavRecordList = Vec<SavRecordBytes>;
 
-/// Una lista ORDL por tren con órdenes; VEHS solo cabezas tren.
-///
-/// # Errors
-///
-/// Falla si algún valor gamma está fuera de rango.
-pub(super) fn ordl_and_vehs_records(
-    state: &GameState,
-    map_w: u32,
-) -> Result<(SavRecordList, SavRecordList), SavError> {
-    let mut ordl = Vec::new();
-    let mut vehs = Vec::new();
-    let mut sparse_idx = 0u32;
-
-    for v in &state.vehicles {
-        // ROAD/bus/camión: omitidos del export oficial (#226 residual).
-        if v.kind != VehicleKind::Train {
-            continue;
-        }
-        let Some(tile_idx) = coord_to_linear_index(v.pos, map_w) else {
-            continue;
-        };
-
-        let mut order_bytes = Vec::new();
-        for order in &v.orders {
-            if let Some(enc) = encode_goto_order(order, state, map_w) {
-                order_bytes.push(enc);
-            }
-        }
-        let order_list_ref = if order_bytes.is_empty() {
-            0u32
-        } else {
-            let list_idx = u32::try_from(ordl.len()).unwrap_or(0);
-            let mut rec = Vec::new();
-            write_gamma(order_bytes.len() as u32, &mut rec)?;
-            for o in &order_bytes {
-                rec.extend_from_slice(o);
-            }
-            ordl.push(rec);
-            list_idx + 1
-        };
-
-        let cargo = cargo_ottd_byte(v);
-        let cur_order = u8::try_from(v.current_order.min(255)).unwrap_or(0);
-        let vehstatus = if v.running { 0 } else { VEHSTATUS_STOPPED };
-        let track = track_bits_for(state, v.pos);
-        let direction = train_direction(track, v.direction);
-        let engine_type = openttd_train_engine_type(v);
-        let x_pos = i32::from(v.pos.x) * TILE_SIZE + i32::from(v.rail_pixel.min(15));
-        let y_pos = i32::from(v.pos.y) * TILE_SIZE + TILE_SIZE / 2;
-        let z_pos = i32::from(v.z_pos.unwrap_or(0));
-
-        let mut rec = Vec::new();
-        write_gamma(sparse_idx, &mut rec)?;
-        rec.push(0); // VEH_TRAIN (SAVEBYTE)
-        write_gamma(1, &mut rec)?; // train struct presente
-        write_gamma(1, &mut rec)?; // common presente
-        write_vehs_train_common(
-            &mut rec,
-            TrainCommonWire {
-                subtype: TRAIN_SUBTYPE_FRONT_ENGINE,
-                owner: v.owner.0,
-                tile: tile_idx,
-                x_pos,
-                y_pos,
-                z_pos,
-                direction,
-                engine_type,
-                vehstatus,
-                cargo,
-                order_list_ref,
-                cur_order,
-            },
-        );
-        rec.push(track);
-        write_gamma(0, &mut rec)?; // roadveh ausente
-        vehs.push(rec);
-        sparse_idx += 1;
-    }
-    Ok((ordl, vehs))
-}
-
-struct TrainCommonWire {
+struct CommonWire {
     subtype: u8,
     owner: u8,
     tile: u32,
@@ -207,7 +168,7 @@ struct TrainCommonWire {
     cur_order: u8,
 }
 
-fn write_vehs_train_common(buf: &mut Vec<u8>, c: TrainCommonWire) {
+fn write_vehs_common(buf: &mut Vec<u8>, c: &CommonWire) {
     buf.push(c.subtype);
     buf.push(c.owner);
     buf.extend_from_slice(&c.tile.to_be_bytes());
@@ -222,12 +183,135 @@ fn write_vehs_train_common(buf: &mut Vec<u8>, c: TrainCommonWire) {
     buf.push(c.cur_order);
 }
 
+fn push_orders(
+    v: &Vehicle,
+    state: &GameState,
+    map_w: u32,
+    ordl: &mut SavRecordList,
+) -> Result<u32, SavError> {
+    let mut order_bytes = Vec::new();
+    for order in &v.orders {
+        if let Some(enc) = encode_goto_order(order, state, map_w) {
+            order_bytes.push(enc);
+        }
+    }
+    if order_bytes.is_empty() {
+        return Ok(0);
+    }
+    let list_idx = u32::try_from(ordl.len()).unwrap_or(0);
+    let mut rec = Vec::new();
+    write_gamma(order_bytes.len() as u32, &mut rec)?;
+    for o in &order_bytes {
+        rec.extend_from_slice(o);
+    }
+    ordl.push(rec);
+    Ok(list_idx + 1)
+}
+
+fn common_wire_for(
+    v: &Vehicle,
+    tile_idx: u32,
+    direction: u8,
+    engine_type: u16,
+    order_list_ref: u32,
+) -> CommonWire {
+    let cargo = cargo_ottd_byte(v);
+    let cur_order = u8::try_from(v.current_order.min(255)).unwrap_or(0);
+    let vehstatus = if v.running { 0 } else { VEHSTATUS_STOPPED };
+    let x_pos = v.pos.x * TILE_SIZE + i32::from(v.rail_pixel.min(15));
+    let y_pos = v.pos.y * TILE_SIZE + TILE_SIZE / 2;
+    let z_pos = i32::from(v.z_pos.unwrap_or(0));
+    CommonWire {
+        subtype: TRAIN_SUBTYPE_FRONT_ENGINE,
+        owner: v.owner.0,
+        tile: tile_idx,
+        x_pos,
+        y_pos,
+        z_pos,
+        direction,
+        engine_type,
+        vehstatus,
+        cargo,
+        order_list_ref,
+        cur_order,
+    }
+}
+
+/// ORDL + VEHS: cabezas tren y ROAD (bus/camión sobre carretera).
+///
+/// # Errors
+///
+/// Falla si algún valor gamma está fuera de rango.
+pub(super) fn ordl_and_vehs_records(
+    state: &GameState,
+    map_w: u32,
+) -> Result<(SavRecordList, SavRecordList), SavError> {
+    let mut ordl = Vec::new();
+    let mut vehs = Vec::new();
+    let mut sparse_idx = 0u32;
+
+    for v in &state.vehicles {
+        let is_train = v.kind == VehicleKind::Train;
+        let is_road = matches!(v.kind, VehicleKind::Bus | VehicleKind::Truck);
+        if !is_train && !is_road {
+            continue;
+        }
+        if is_road && !road_tile_ok(state, v.pos) {
+            // Sin roadtype válido AfterLoad hace SlErrorCorrupt.
+            continue;
+        }
+        let Some(tile_idx) = coord_to_linear_index(v.pos, map_w) else {
+            continue;
+        };
+
+        let order_list_ref = push_orders(v, state, map_w, &mut ordl)?;
+
+        let mut rec = Vec::new();
+        write_gamma(sparse_idx, &mut rec)?;
+
+        if is_train {
+            let track = track_bits_for(state, v.pos);
+            let direction = train_direction(track, v.direction);
+            let engine_type = openttd_train_engine_type(v);
+            rec.push(VEH_TRAIN);
+            write_gamma(1, &mut rec)?; // train presente
+            write_gamma(1, &mut rec)?; // common presente
+            write_vehs_common(
+                &mut rec,
+                &common_wire_for(v, tile_idx, direction, engine_type, order_list_ref),
+            );
+            rec.push(track);
+            write_gamma(0, &mut rec)?; // roadveh ausente
+        } else {
+            let direction = if matches!(v.direction, DIR_NE | DIR_SE | DIR_SW | DIR_NW) {
+                v.direction
+            } else {
+                DIR_NE
+            };
+            let engine_type = openttd_road_engine_type(v);
+            rec.push(VEH_ROAD);
+            write_gamma(0, &mut rec)?; // train ausente
+            write_gamma(1, &mut rec)?; // roadveh presente
+            write_gamma(1, &mut rec)?; // common presente
+            write_vehs_common(
+                &mut rec,
+                &common_wire_for(v, tile_idx, direction, engine_type, order_list_ref),
+            );
+            // state/frame/path/gv_flags: ausentes en header → defaults 0 (TRACKDIR_NE).
+        }
+
+        vehs.push(rec);
+        sparse_idx += 1;
+    }
+    Ok((ordl, vehs))
+}
+
 fn append_field(header: &mut Vec<u8>, ftype: u8, name: &str) -> Result<(), SavError> {
     header.push(ftype);
     write_str(name, header)
 }
 
-/// Header VEHS mínimo (train + stub roadveh) alineado con `vehicle_sl.cpp`.
+/// Header VEHS mínimo (train + roadveh) alineado con `vehicle_sl.cpp`.
 fn append_vehs_header(header: &mut Vec<u8>) -> Result<(), SavError> {
     append_field(header, 2, "type")?; // SAVEBYTE → U8
     append_field(header, 0x1B, "train")?;
@@ -240,7 +324,7 @@ fn append_vehs_header(header: &mut Vec<u8>) -> Result<(), SavError> {
     header.push(0);
     append_vehs_common_fields(header)?;
 
-    // roadveh stub (nunca emitimos registros type=1; header requerido por el parser)
+    // roadveh → common (state/path/gv_flags usan defaults si faltan)
     append_field(header, 0x1B, "common")?;
     header.push(0);
     append_vehs_common_fields(header)?;
@@ -330,24 +414,39 @@ mod tests {
     }
 
     #[test]
-    fn vehs_omits_road_vehicles() {
+    fn vehs_exports_road_bus_on_road_tile() {
         let mut state = GameState::new(64, 64);
+        let bus_pos = TileCoord::new(13, 16);
+        let mut road = state.map.get(bus_pos).unwrap();
+        road.kind = TileKind::Road;
+        road.mapt = 0x20;
+        road.m5 = 0x0A; // ROAD_X
+        state.map.set_tile(bus_pos, road).unwrap();
+
         let train = Vehicle::new(
             0,
             VehicleKind::Train,
             TileCoord::new(20, 40),
             TileCoord::new(20, 40),
         );
+        let bus = Vehicle::new(1, VehicleKind::Bus, bus_pos, bus_pos);
+        state.vehicles = vec![train, bus];
+        let (_, vehs) = ordl_and_vehs_records(&state, 64).unwrap();
+        assert_eq!(vehs.len(), 2, "tren + bus");
+    }
+
+    #[test]
+    fn vehs_skips_road_vehicle_off_road() {
+        let mut state = GameState::new(64, 64);
         let bus = Vehicle::new(
             1,
             VehicleKind::Bus,
             TileCoord::new(13, 16),
             TileCoord::new(13, 16),
         );
-        state.vehicles = vec![train, bus];
-        let (ordl, vehs) = ordl_and_vehs_records(&state, 64).unwrap();
-        assert!(ordl.is_empty());
-        assert_eq!(vehs.len(), 1, "solo el tren");
+        state.vehicles = vec![bus];
+        let (_, vehs) = ordl_and_vehs_records(&state, 64).unwrap();
+        assert!(vehs.is_empty(), "bus sobre grass omitido");
     }
 
     #[test]

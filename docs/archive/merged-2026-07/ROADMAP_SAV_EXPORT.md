@@ -87,7 +87,9 @@ python3 scripts/gen_demo_sav.py crates/openttdrs-core/tests/fixtures/demo_opentt
 | `crates/openttdrs-client/src/ui/save_window/systems.rs` | `confirm_save` / `confirm_load` |
 | `scripts/gen_demo_sav.py` | Generador OTTN de referencia |
 | `scripts/validate_sav_export.py` | Validación estructural de chunks (#66) |
-| `scripts/validate_sav_openttd.sh` | Smoke carga con OpenTTD oficial (opcional) |
+| `scripts/validate_sav_openttd.sh` | Smoke carga con OpenTTD dedicated (#226) |
+| `scripts/roundtrip_sav_openttd.sh` | Round-trip OpenTTD `save` → import openttdrs subconjunto |
+| `./scripts/check.sh openttd-smoke` | Gate local: rich load + round-trip (SKIP sin binario) |
 | `docs/TILES_Y_SAVEGAMES_OPENTTD.md` §16–17 | Formato chunks / import |
 
 Versión de export: `EXPORT_SAVE_VERSION = 350` (≥ 348 HouseID en MAP8; ≥ 300 tick u64).
@@ -140,16 +142,17 @@ Endianness crítica (debe coincidir con `build.rs` al importar):
 | `STNN` | ✅ nombres + facilities |
 | `CITY` | ✅ nombre + pos; población se recalcula al load |
 | `INDY` | ✅ tile/w/h/type (mapeo `IndustrySpec` → tipo OTTD best-effort) |
-| `VEHS` / `ORDL` | ✅ tren/bus/camión + goto estación/waypoint/depósito/condicional + full_load |
-| Barcos / aviones | ❌ omitidos |
+| `VEHS` / `ORDL` | ✅ tren + bus/camión ROAD (tesela `MP_ROAD`) + goto estación/waypoint/depósito/condicional + full_load |
+| Barcos / aviones / tranvía | ❌ omitidos del export |
+| CAPY / ECMY (packets) | ❌; goods×64 vacíos en STNN bastan para load |
 | Horarios / grupos / shared orders / autoreplace | ❌ solo en `.json` |
-| `OBJS`, `NEWS`, settings, NewGRF | ❌ |
+| `OBJS`, `NEWS`, settings, NewGRF, ENGN, PATS, OPTS, GSET, SRND | ❌ (OpenTTD rellena defaults al load) |
 
 Por eso:
 
 - Para **horarios, grupos, shared orders** → seguir usando `.json`.
-- Para **mapa + estaciones + ciudades + flota básica** → `.sav` ya roundtrippea con `sav::load`.
-- Abrir el `.sav` en OpenTTD oficial puede fallar (faltan settings/NewGRF/chunks de juego completo). Objetivo: **roundtrip con nuestro loader**.
+- Para **mapa + estaciones + ciudades + flota básica + industria** → `.sav` roundtrippea con `sav::load` y carga en OpenTTD 15.3 dedicated (`mvp_openttd_rich.sav`).
+- Smoke: `bash scripts/validate_sav_openttd.sh …/mvp_openttd_rich.sav`. Round-trip oficial→openttdrs: `bash scripts/roundtrip_sav_openttd.sh`.
 
 Fecha de calendario en `DATE`: aproximación `year * 365 + (doy - 1)`; el tick monotónico se preserva exactamente.
 
@@ -164,7 +167,7 @@ Orden sugerido:
 3. ~~**`INDY`**~~ ✅  
 4. ~~**`ORDL` + `VEHS`**~~ ✅ (goto estación/waypoint/depósito/condicional + full_load)  
 5. ~~Órdenes depósito / condicionales / flags full_load más fieles~~ ✅  
-6. ~~Validar export (#66)~~ ✅ estructural; smoke dedicated real (`validate_sav_openttd.sh`). MVP load #226: `MAPS` TABLE + `CITY`≥1 + `STNN` moderno + `VEHS`/`ORDL` tren (`mvp_openttd_train.sav`, `demo_openttd.sav`). Residual: ROAD vehicles, PATS/OPTS/GSET/ENGN/SRND/NewGRF/PLYR completo.
+6. ~~Validar export (#66)~~ ✅ estructural; smoke dedicated real (`validate_sav_openttd.sh`). MVP load #226: `MAPS` TABLE + `CITY`≥1 + `STNN` moderno + `VEHS`/`ORDL` tren+ROAD + `INDY` (`mvp_openttd_rich.sav`, `demo_openttd.sav`). Round-trip OpenTTD→openttdrs: `scripts/roundtrip_sav_openttd.sh`. Residual: ship/aircraft/tram, CAPY/ECMY, PATS/OPTS/GSET/ENGN/SRND/NewGRF/PLYR completo.
 
 Reglas:
 
@@ -198,4 +201,4 @@ Reglas:
 
 ---
 
-*Última actualización: 2026-07-13 — #66 validación estructural + smoke OpenTTD opcional.*
+*Última actualización: 2026-07-29 — #226 ROAD+INDY loadable + round-trip dedicated.*

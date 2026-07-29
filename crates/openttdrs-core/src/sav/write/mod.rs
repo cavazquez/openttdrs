@@ -4,9 +4,10 @@
 //! Chunks: `MAPS` (CH_TABLE) + planos RIFF + `STNN`/`CITY`/`INDY`/`ORDL`/`VEHS`/`LGRP` + `DATE` + `PLYR`.
 //!
 //! Subconjunto prometido (MVP #226): mapa + `CITY` (≥1) + `STNN` moderno
-//! (SAVEBYTE + structs) + DATE/PLYR cargable por OpenTTD ≥15.3 dedicated.
-//! `VEHS`/`ORDL` (solo tren) + `INDY` son subconjunto best-effort; residual:
-//! ROAD vehicles, PATS/OPTS/GSET/ENGN/SRND/NewGRF/PLYR completo.
+//! (SAVEBYTE + structs) + `VEHS`/`ORDL` (tren + ROAD bus/camión) + `INDY`
+//! + `DATE`/`PLYR` cargable por `OpenTTD` ≥15.3 dedicated.
+//!
+//! Residual: ship/aircraft/tram, `CAPY`/`ECMY`, `PATS`/`OPTS`/`GSET`/`ENGN`/`SRND`/NewGRF/`PLYR` completo.
 //! Limitaciones: `docs/PARIDAD.md` y `docs/archive/merged-2026-07/ROADMAP_SAV_EXPORT.md`.
 
 #![allow(clippy::cast_possible_truncation)]
@@ -397,34 +398,46 @@ mod tests {
         );
         train.running = true;
         train.set_vehicle_orders(vec![VehicleOrder::station(TileCoord::new(28, 39))]);
-        // Bus en el estado: el export oficial omite ROAD (#226); solo roundtrip del tren.
-        let mut bus = Vehicle::new(
-            1,
-            VehicleKind::Bus,
-            TileCoord::new(13, 16),
-            TileCoord::new(13, 16),
-        );
+        let bus_pos = TileCoord::new(13, 16);
+        let mut road = state.map.get(bus_pos).expect("in bounds");
+        road.kind = TileKind::Road;
+        road.mapt = 0x20;
+        road.m5 = 0x0A;
+        state.map.set_tile(bus_pos, road).expect("set");
+        let mut bus = Vehicle::new(1, VehicleKind::Bus, bus_pos, bus_pos);
         bus.running = true;
         bus.set_vehicle_orders(vec![VehicleOrder::station(TileCoord::new(17, 15))]);
         state.vehicles = vec![train, bus];
 
         let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
         let sav_game = sav::load(&bytes).expect("load");
-        assert_eq!(sav_game.vehicles.len(), 1, "solo tren en VEHS export");
+        assert_eq!(sav_game.vehicles.len(), 2, "tren + bus en VEHS");
         assert!(
             sav_game
                 .vehicles
                 .iter()
                 .any(|v| v.kind == sav::SavVehicleKind::Train && !v.orders.is_empty())
         );
+        assert!(
+            sav_game
+                .vehicles
+                .iter()
+                .any(|v| v.kind == sav::SavVehicleKind::RoadVehicle && !v.orders.is_empty())
+        );
 
         let loaded = GameState::from_sav_game(sav_game);
-        assert_eq!(loaded.vehicles.len(), 1);
+        assert_eq!(loaded.vehicles.len(), 2);
         assert!(
             loaded
                 .vehicles
                 .iter()
                 .any(|v| v.kind == VehicleKind::Train && !v.orders.is_empty())
+        );
+        assert!(
+            loaded
+                .vehicles
+                .iter()
+                .any(|v| v.kind == VehicleKind::Bus && !v.orders.is_empty())
         );
     }
 
@@ -489,7 +502,7 @@ mod tests {
         assert_eq!(tile.m5, 0x01);
     }
 
-    /// Estado mínimo con STNN moderno cargable por OpenTTD 15.3.
+    /// Estado mínimo con STNN moderno cargable por `OpenTTD` 15.3.
     fn mvp_stations_state() -> GameState {
         let mut state = tiny_state();
         let rail_pos = TileCoord::new(28, 39);
@@ -592,6 +605,64 @@ mod tests {
         state
     }
 
+    /// Fixture rico: estaciones + tren + bus ROAD + industria (`#226`).
+    fn mvp_rich_state() -> GameState {
+        use crate::industry::{Industry, IndustryKind, IndustrySpec};
+        use crate::vehicle::VehicleOrder;
+
+        let mut state = mvp_train_state();
+        let bus_stop = TileCoord::new(17, 15);
+        let mut bus_st = Station::new_with_kind(bus_stop, StopKind::BusStop);
+        bus_st.name = Some("Parada Villa Demo".into());
+        state.stations.push(bus_st);
+
+        // Carretera bajo el bus (ROAD_X) — AfterLoad exige roadtype válido.
+        let bus_pos = TileCoord::new(13, 16);
+        for x in 10..23 {
+            let c = TileCoord::new(x, 16);
+            let mut t = state.map.get(c).expect("in bounds");
+            t.kind = TileKind::Road;
+            t.mapt = 0x20;
+            t.m5 = 0x0A; // ROAD_X
+            t.m3hi = 0; // m4 / ROADTYPE_ROAD
+            state.map.set_tile(c, t).expect("set");
+        }
+        let mut stop_tile = state.map.get(bus_stop).expect("in bounds");
+        stop_tile.kind = TileKind::Station;
+        stop_tile.mapt = 0x50;
+        stop_tile.m6 = 3 << 3; // ST_BUS
+        state.map.set_tile(bus_stop, stop_tile).expect("set");
+
+        let mut bus = Vehicle::new(1, VehicleKind::Bus, bus_pos, bus_pos);
+        bus.running = true;
+        bus.direction = crate::vehicle::DIR_NE;
+        bus.set_vehicle_orders(vec![VehicleOrder::station(bus_stop)]);
+        state.vehicles.push(bus);
+
+        // Mina de carbón 2×2 + INDY.
+        let ind_tiles = [
+            TileCoord::new(36, 20),
+            TileCoord::new(37, 20),
+            TileCoord::new(36, 21),
+            TileCoord::new(37, 21),
+        ];
+        for (i, &c) in ind_tiles.iter().enumerate() {
+            let mut t = state.map.get(c).expect("in bounds");
+            t.kind = TileKind::Industry;
+            t.mapt = 0x80;
+            t.m5 = u8::try_from(i).unwrap_or(0);
+            state.map.set_tile(c, t).expect("set");
+        }
+        state.industries = vec![Industry::with_tiles_spec(
+            TileCoord::new(36, 20),
+            IndustryKind::CoalMine,
+            IndustrySpec::CoalMine,
+            ind_tiles.to_vec(),
+            0,
+        )];
+        state
+    }
+
     #[test]
     fn export_mvp_train_emits_vehs_ordl_and_direction() {
         use crate::sav::chunks::{find_chunk, parse_chunks};
@@ -633,41 +704,70 @@ mod tests {
     }
 
     #[test]
-    fn export_demo_with_modern_stnn_and_vehs_for_rust_roundtrip() {
-        use crate::vehicle::VehicleOrder;
+    fn export_mvp_rich_emits_indy_road_vehs_and_stations() {
+        use crate::sav::chunks::{find_chunk, parse_chunks};
+        use crate::sav::table::{SlValue, parse_table_chunk, record_get};
 
-        let mut state = mvp_stations_state();
-        let rail_pos = TileCoord::new(28, 39);
-        let mut bus = Station::new_with_kind(TileCoord::new(17, 15), StopKind::BusStop);
-        bus.name = Some("Parada Villa Demo".into());
-        state.stations.push(bus);
+        let state = mvp_rich_state();
+        let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
+        let payload = &bytes[8..];
+        let chunks = parse_chunks(payload).expect("chunks");
+        assert!(find_chunk(&chunks, "INDY").is_some());
+        assert!(find_chunk(&chunks, "VEHS").is_some());
+        assert!(find_chunk(&chunks, "STNN").is_some());
 
-        let train_pos = TileCoord::new(20, 40);
-        let mut track_tile = state.map.get(train_pos).expect("in bounds");
-        track_tile.kind = TileKind::Rail;
-        track_tile.mapt = 0x10;
-        track_tile.m5 = 0x01;
-        state.map.set_tile(train_pos, track_tile).expect("set");
-
-        let mut train = Vehicle::new(0, VehicleKind::Train, train_pos, train_pos);
-        train.running = true;
-        train.direction = crate::vehicle::DIR_NE;
-        train.set_vehicle_orders(vec![VehicleOrder::station(rail_pos)]);
-        // Bus solo en el estado interno; VEHS export oficial es tren-only.
-        let mut bus_v = Vehicle::new(
-            1,
-            VehicleKind::Bus,
-            TileCoord::new(13, 16),
-            TileCoord::new(13, 16),
+        let sav_game = sav::load(&bytes).expect("load rust");
+        assert!(sav_game.stations.len() >= 2);
+        assert_eq!(sav_game.industries.len(), 1);
+        assert_eq!(sav_game.vehicles.len(), 2, "tren + bus");
+        assert!(
+            sav_game
+                .vehicles
+                .iter()
+                .any(|v| v.kind == sav::SavVehicleKind::RoadVehicle)
         );
-        bus_v.running = true;
-        bus_v.set_vehicle_orders(vec![VehicleOrder::station(TileCoord::new(17, 15))]);
-        state.vehicles = vec![train, bus_v];
 
+        let vehs = find_chunk(&chunks, "VEHS").expect("VEHS");
+        let rows = parse_table_chunk(&vehs.body, true).expect("VEHS table");
+        assert_eq!(rows.len(), 2);
+        let road = rows
+            .iter()
+            .find(|(_, r)| {
+                record_get(r, "type").and_then(SlValue::as_u64) == Some(1)
+            })
+            .expect("roadveh row");
+        let rv = match record_get(&road.1, "roadveh") {
+            Some(SlValue::Structs(items)) => items.first().expect("roadveh"),
+            other => panic!("roadveh ausente: {other:?}"),
+        };
+        let common = match record_get(rv, "common") {
+            Some(SlValue::Structs(items)) => items.first().expect("common"),
+            other => panic!("common ausente: {other:?}"),
+        };
+        assert_eq!(
+            record_get(common, "engine_type").and_then(SlValue::as_u64),
+            Some(116),
+            "MPS Regal Bus"
+        );
+
+        // Smoke OpenTTD: OPENTTDRS_DUMP_MVP_RICH_SAV=/ruta/mvp_openttd_rich.sav
+        if let Ok(path) = std::env::var("OPENTTDRS_DUMP_MVP_RICH_SAV") {
+            let path = std::path::PathBuf::from(&path);
+            if let Some(parent) = path.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            std::fs::write(&path, &bytes).expect("dump rich sav");
+        }
+    }
+
+    #[test]
+    fn export_demo_with_modern_stnn_and_vehs_for_rust_roundtrip() {
+        let state = mvp_rich_state();
         let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
         let sav_game = sav::load(&bytes).expect("load rust");
         assert!(sav_game.stations.len() >= 2);
-        assert_eq!(sav_game.vehicles.len(), 1, "ROAD omitido del export");
+        assert_eq!(sav_game.vehicles.len(), 2, "tren + bus");
+        assert_eq!(sav_game.industries.len(), 1);
 
         // Dump opcional (mapa mínimo). Fixture completo: gen_demo_sav.py.
         if let Ok(path) = std::env::var("OPENTTDRS_DUMP_DEMO_SAV") {

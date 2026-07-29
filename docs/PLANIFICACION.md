@@ -2034,8 +2034,9 @@ cargo test -p openttdrs-core sav::write::
 python3 scripts/validate_sav_export.py
 python3 scripts/validate_sav_export.py --export ruta/export.sav
 
-## Smoke opcional con OpenTTD oficial (SKIP si no hay binario)
+## Smoke OpenTTD dedicated (#226; SKIP si no hay binario)
 bash scripts/validate_sav_openttd.sh [ruta.sav]
+bash scripts/roundtrip_sav_openttd.sh   # o: ./scripts/check.sh openttd-smoke
 
 ## Suite habitual (incluye validate_sav_export.py)
 bash scripts/check.sh
@@ -2083,7 +2084,9 @@ python3 scripts/gen_demo_sav.py crates/openttdrs-core/tests/fixtures/demo_opentt
 | `crates/openttdrs-client/src/ui/save_window/systems.rs` | `confirm_save` / `confirm_load` |
 | `scripts/gen_demo_sav.py` | Generador OTTN de referencia |
 | `scripts/validate_sav_export.py` | Validación estructural de chunks (#66) |
-| `scripts/validate_sav_openttd.sh` | Smoke carga con OpenTTD oficial (opcional) |
+| `scripts/validate_sav_openttd.sh` | Smoke carga dedicated (#226; SKIP sin binario) |
+| `scripts/roundtrip_sav_openttd.sh` | Round-trip OpenTTD→openttdrs subconjunto |
+| `./scripts/check.sh openttd-smoke` | Gate load+round-trip fixture rico |
 | `docs/MAPA_Y_FERROCARRIL.md` §16–17 | Formato chunks / import |
 
 Versión de export: `EXPORT_SAVE_VERSION = 350` (≥ 348 HouseID en MAP8; ≥ 300 tick u64).
@@ -2144,8 +2147,8 @@ Endianness crítica (debe coincidir con `build.rs` al importar):
 Por eso:
 
 - Para **horarios, grupos, shared orders** → seguir usando `.json`.
-- Para **mapa + estaciones + ciudades + flota básica** → `.sav` ya roundtrippea con `sav::load`.
-- Abrir el `.sav` en OpenTTD oficial puede fallar (faltan settings/NewGRF/chunks de juego completo). Objetivo: **roundtrip con nuestro loader**.
+- Para **mapa + estaciones + ciudades + flota tren/ROAD + industria** → `.sav` roundtrippea con `sav::load` y carga en OpenTTD 15.3 (`mvp_openttd_rich.sav`).
+- Smoke: `validate_sav_openttd.sh` / `roundtrip_sav_openttd.sh` (`./scripts/check.sh openttd-smoke`). Residual: ship/aircraft, CAPY/ECMY, settings/NewGRF completos.
 
 Fecha de calendario en `DATE`: aproximación `year * 365 + (doy - 1)`; el tick monotónico se preserva exactamente.
 
@@ -2158,9 +2161,9 @@ Orden sugerido:
 1. ~~**`STNN`**~~ ✅  
 2. ~~**`CITY`**~~ ✅  
 3. ~~**`INDY`**~~ ✅  
-4. ~~**`ORDL` + `VEHS`**~~ ✅ (goto estación/waypoint/depósito/condicional + full_load)  
+4. ~~**`ORDL` + `VEHS`**~~ ✅ tren + bus/camión ROAD + goto estación/waypoint/depósito/condicional + full_load  
 5. ~~Órdenes depósito / condicionales / flags full_load más fieles~~ ✅  
-6. ~~Validar export (#66)~~ ✅ estructural (`REQUIRED_EXPORT_CHUNKS` + `validate_sav_export.py`); smoke OpenTTD opcional (`validate_sav_openttd.sh`). Pendiente: GSET/NewGRF para carga completa en oficial.
+6. ~~Validar export (#66/#226)~~ ✅ estructural + smoke dedicated (`validate_sav_openttd.sh`, `roundtrip_sav_openttd.sh`). Residual: CAPY/ECMY, ship/aircraft, GSET/NewGRF/ENGN.
 
 Reglas:
 

@@ -17,6 +17,7 @@
 #   ./scripts/check.sh doctor # deps de entorno (delegado a scripts/doctor.sh)
 #   ./scripts/check.sh bench  # smoke Criterion (#116; no forma parte de `ci`)
 #   ./scripts/check.sh parity-docs  # frescura docs tick/carga (#125)
+#   ./scripts/check.sh openttd-smoke  # load+roundtrip #226 (SKIP si no hay binario)
 #
 # Excepciones documentadas (solo en GitHub Actions, no en `ci` local):
 #   - cargo-audit / cargo-deny — #106
@@ -175,6 +176,16 @@ do_parity_docs() {
     info "parity-docs OK ✓"
 }
 
+do_openttd_smoke() {
+    info "Smoke OpenTTD dedicated (#226)..."
+    # Gate real cuando hay binario (reference/ o $OPENTTD); SKIP limpio si no.
+    ./scripts/validate_sav_openttd.sh \
+        crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav
+    ./scripts/roundtrip_sav_openttd.sh \
+        crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav
+    info "openttd-smoke OK ✓"
+}
+
 do_all() {
     do_fmt
     do_lint
@@ -202,6 +213,8 @@ do_ci() {
     do_tnbp
     do_ci_python
     do_generated_tables
+    # Smoke OpenTTD: obligatorio en local si hay binario; en GHA suele SKIP.
+    do_openttd_smoke
     echo
     info "=== CI OK (núcleo compartido con ci.yml; ver excepciones GHA en cabecera) ==="
 }
@@ -226,10 +239,11 @@ case "${1:-all}" in
     doctor)      do_doctor ;;
     bench)       do_bench ;;
     parity-docs) do_parity_docs ;;
+    openttd-smoke) do_openttd_smoke ;;
     ci)          do_ci ;;
     all)         do_all ;;
     *)
-        echo "Uso: $0 {fmt|fmt-check|lint|doc|test|tnbp|golden|py|ci-python|generated-tables|generated-tables-ci|openttd-ref|snapshot-oracle|audit|cov|build|doctor|bench|parity-docs|ci|all}"
+        echo "Uso: $0 {fmt|fmt-check|lint|doc|test|tnbp|golden|py|ci-python|generated-tables|generated-tables-ci|openttd-ref|snapshot-oracle|audit|cov|build|doctor|bench|parity-docs|openttd-smoke|ci|all}"
         exit 1
         ;;
 esac

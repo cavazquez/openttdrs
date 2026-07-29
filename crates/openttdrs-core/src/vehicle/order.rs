@@ -1054,7 +1054,7 @@ impl VehicleOrder {
         )
     }
 
-    /// Equivalente a `Order::ShouldStopAtStation` de OpenTTD 15.3.
+    /// Equivalente a `Order::ShouldStopAtStation` de `OpenTTD` 15.3.
     #[must_use]
     pub const fn should_stop_at_station(
         self,

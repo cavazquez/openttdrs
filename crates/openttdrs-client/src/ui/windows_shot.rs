@@ -451,6 +451,30 @@ pub(crate) fn window_capture_stem(id: FloatingWindowId) -> String {
     format!("window_{}_1x", id.storage_key())
 }
 
+/// Ruta versionada de una captura para resolución y escala concretas (#284).
+#[must_use]
+pub(crate) fn window_capture_path(
+    id: FloatingWindowId,
+    width: u16,
+    height: u16,
+    ui_scale: u8,
+) -> String {
+    format!(
+        "docs/parity/screenshots/{width}x{height}/window_{}_{}x.png",
+        id.storage_key(),
+        ui_scale
+    )
+}
+
+#[must_use]
+fn window_visual_states(id: FloatingWindowId) -> &'static [&'static str] {
+    if DIALOGS_FAMILY_WINDOW_IDS.contains(&id) {
+        &["normal", "pressed", "disabled", "modal"]
+    } else {
+        &["normal", "pressed", "disabled", "shaded", "sticky", "resized"]
+    }
+}
+
 /// Gap conocido: categoría → issue GitHub.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct WindowKnownGap {
@@ -836,7 +860,7 @@ fn window_parity_matrix_json() -> String {
         }
         let _ = write!(
             output,
-            "    {{\"id\":{},\"family\":{},\"kind\":{},\"upstream_source\":{},\"upstream_window\":{},\"parent\":{},\"rust_impl\":{},\"capture_stem\":{},\"window_key\":{{\"class\":{},\"instance\":{}}},\"known_gaps\":[",
+            "    {{\"id\":{},\"family\":{},\"kind\":{},\"upstream_source\":{},\"upstream_window\":{},\"parent\":{},\"rust_impl\":{},\"capture_stem\":{},\"states\":[{}],\"captures\":[{}],\"window_key\":{{\"class\":{},\"instance\":{}}},\"known_gaps\":[",
             json_string(entry.id.storage_key()),
             json_string(entry.family),
             json_string(kind),
@@ -845,6 +869,18 @@ fn window_parity_matrix_json() -> String {
             parent,
             json_string(rust_impl),
             json_string(&capture),
+            window_visual_states(entry.id)
+                .iter()
+                .map(|state| json_string(state))
+                .collect::<Vec<_>>()
+                .join(","),
+            [(1280, 720, 1), (1280, 720, 2), (1920, 1080, 1), (1920, 1080, 2)]
+                .iter()
+                .map(|&(width, height, scale)| json_string(&window_capture_path(
+                    entry.id, width, height, scale
+                )))
+                .collect::<Vec<_>>()
+                .join(","),
             json_string(key.class.storage_key()),
             key.instance,
         );
@@ -1466,6 +1502,23 @@ mod tests {
         assert!(json.contains("\"missing_captures\""));
         assert!(json.contains("\"known_gaps\""));
         assert!(json.contains("\"window_key\""));
+        assert!(json.contains("\"states\":[\"normal\",\"pressed\",\"disabled\""));
+        assert!(json.contains("docs/parity/screenshots/1920x1080/window_Town_2x.png"));
+    }
+
+    #[test]
+    fn capture_matrix_covers_supported_resolutions_and_scales() {
+        let id = FloatingWindowId::Station;
+        assert_eq!(
+            window_capture_path(id, 1280, 720, 1),
+            "docs/parity/screenshots/1280x720/window_Station_1x.png"
+        );
+        assert_eq!(
+            window_capture_path(id, 1920, 1080, 2),
+            "docs/parity/screenshots/1920x1080/window_Station_2x.png"
+        );
+        assert!(window_visual_states(id).contains(&"resized"));
+        assert!(window_visual_states(FloatingWindowId::ErrorDialog).contains(&"modal"));
     }
 
     #[test]

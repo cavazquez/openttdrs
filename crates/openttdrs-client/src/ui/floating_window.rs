@@ -1379,6 +1379,26 @@ mod tests {
     }
 
     #[test]
+    fn construction_tool_pickers_shade_without_sticky() {
+        for id in [
+            FloatingWindowId::RailStationPicker,
+            FloatingWindowId::AirportPicker,
+            FloatingWindowId::RoadStopPicker,
+            FloatingWindowId::ObjectPicker,
+            FloatingWindowId::SignalPicker,
+        ] {
+            let caps = chrome_capabilities(id);
+            assert!(caps.shade, "{id:?} debe tener shade");
+            assert!(!caps.sticky, "{id:?} no debe ser sticky");
+        }
+        // Bridge: resize sí, shade/sticky no (descriptor distinto).
+        let bridge = chrome_capabilities(FloatingWindowId::BridgePicker);
+        assert!(!bridge.shade);
+        assert!(!bridge.sticky);
+        assert!(bridge.resize);
+    }
+
+    #[test]
     fn resize_clamps_to_minimum_and_viewport() {
         assert_eq!(
             resized_window_size(

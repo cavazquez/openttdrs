@@ -210,3 +210,51 @@ pub(crate) fn bridge_picker_on_closed(
         }
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use bevy::ecs::system::RunSystemOnce;
+
+    use crate::ui::floating_window::WindowKey;
+
+    #[test]
+    fn bridge_picker_on_closed_clears_pending() {
+        let mut world = World::new();
+        world.insert_resource(BridgeBuildState {
+            pending: Some(PendingBridge {
+                start: TileCoord::new(1, 2),
+                end: TileCoord::new(4, 2),
+                road: false,
+            }),
+            ..Default::default()
+        });
+        world.init_resource::<Messages<FloatingWindowClosed>>();
+        world.write_message(FloatingWindowClosed(WindowKey::singleton(
+            FloatingWindowId::BridgePicker,
+        )));
+        world.run_system_once(bridge_picker_on_closed).unwrap();
+        assert!(world.resource::<BridgeBuildState>().pending.is_none());
+    }
+
+    #[test]
+    fn bridge_picker_on_closed_ignores_other_window() {
+        let mut world = World::new();
+        let pending = PendingBridge {
+            start: TileCoord::new(0, 0),
+            end: TileCoord::new(0, 3),
+            road: true,
+        };
+        world.insert_resource(BridgeBuildState {
+            pending: Some(pending),
+            ..Default::default()
+        });
+        world.init_resource::<Messages<FloatingWindowClosed>>();
+        world.write_message(FloatingWindowClosed(WindowKey::singleton(
+            FloatingWindowId::SignalPicker,
+        )));
+        world.run_system_once(bridge_picker_on_closed).unwrap();
+        assert_eq!(world.resource::<BridgeBuildState>().pending, Some(pending));
+    }
+}

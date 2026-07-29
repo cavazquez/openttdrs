@@ -338,4 +338,19 @@ mod tests {
         world.run_system_once(handle_object_picker_buttons).unwrap();
         assert_eq!(world.resource::<SimWorld>().state.current_object_spec, 1);
     }
+
+    #[test]
+    fn object_picker_on_closed_clears_object_tool() {
+        let mut world = World::new();
+        world.insert_resource(UiToolState {
+            active_tool: Some(BuildMenuAction::PlaceNewGrfObject),
+            ..Default::default()
+        });
+        world.init_resource::<Messages<FloatingWindowClosed>>();
+        world.write_message(FloatingWindowClosed(
+            crate::ui::floating_window::WindowKey::singleton(FloatingWindowId::ObjectPicker),
+        ));
+        world.run_system_once(object_picker_on_closed).unwrap();
+        assert!(world.resource::<UiToolState>().active_tool.is_none());
+    }
 }

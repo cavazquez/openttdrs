@@ -976,3 +976,64 @@ pub(crate) fn rail_station_picker_on_closed(
         }
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use bevy::ecs::system::RunSystemOnce;
+
+    use crate::ui::floating_window::WindowKey;
+
+    #[test]
+    fn rail_station_picker_on_closed_clears_tool_and_catalog() {
+        let mut world = World::new();
+        world.insert_resource(UiToolState {
+            active_tool: Some(BuildMenuAction::RailStation),
+            ..Default::default()
+        });
+        world.insert_resource(StationCatalogPickerState {
+            open: Some(StationCatalogKind::Class),
+            filter: "ab".into(),
+        });
+        world.init_resource::<Messages<FloatingWindowClosed>>();
+        world.write_message(FloatingWindowClosed(WindowKey::singleton(
+            FloatingWindowId::RailStationPicker,
+        )));
+        world
+            .run_system_once(rail_station_picker_on_closed)
+            .unwrap();
+        assert!(world.resource::<UiToolState>().active_tool.is_none());
+        let catalog = world.resource::<StationCatalogPickerState>();
+        assert!(catalog.open.is_none());
+        assert!(catalog.filter.is_empty());
+    }
+
+    #[test]
+    fn rail_station_picker_on_closed_ignores_other_tool() {
+        let mut world = World::new();
+        world.insert_resource(UiToolState {
+            active_tool: Some(BuildMenuAction::Rail),
+            ..Default::default()
+        });
+        world.insert_resource(StationCatalogPickerState {
+            open: Some(StationCatalogKind::Spec),
+            filter: "keep".into(),
+        });
+        world.init_resource::<Messages<FloatingWindowClosed>>();
+        world.write_message(FloatingWindowClosed(WindowKey::singleton(
+            FloatingWindowId::RailStationPicker,
+        )));
+        world
+            .run_system_once(rail_station_picker_on_closed)
+            .unwrap();
+        assert_eq!(
+            world.resource::<UiToolState>().active_tool,
+            Some(BuildMenuAction::Rail)
+        );
+        assert_eq!(
+            world.resource::<StationCatalogPickerState>().filter,
+            "keep"
+        );
+    }
+}

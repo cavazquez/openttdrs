@@ -344,11 +344,11 @@ pub(crate) const fn window_rust_impl(id: FloatingWindowId) -> &'static str {
         FloatingWindowId::BuyVehicle => "ui/buy_window.rs",
         FloatingWindowId::Vehicle => "ui/vehicle_window/mod.rs",
         FloatingWindowId::VehicleDetails => "ui/vehicle_details_window/mod.rs",
-        FloatingWindowId::RailStationPicker => "ui/toolbar/mod.rs",
+        FloatingWindowId::RailStationPicker => "ui/toolbar/rail_station_window.rs",
         FloatingWindowId::AirportPicker => "ui/toolbar/airport_picker_window.rs",
-        FloatingWindowId::RoadStopPicker => "ui/toolbar/mod.rs",
-        FloatingWindowId::ObjectPicker => "ui/toolbar/mod.rs",
-        FloatingWindowId::BridgePicker => "ui/toolbar/mod.rs",
+        FloatingWindowId::RoadStopPicker => "ui/toolbar/road_stop_picker_window.rs",
+        FloatingWindowId::ObjectPicker => "ui/toolbar/object_picker_window.rs",
+        FloatingWindowId::BridgePicker => "ui/toolbar/bridge_window.rs",
         FloatingWindowId::DestinationPicker => "ui/destination_window.rs",
         FloatingWindowId::NewsHistory => "ui/statusbar/mod.rs",
         FloatingWindowId::Finances => "ui/finances_window.rs",
@@ -369,7 +369,7 @@ pub(crate) const fn window_rust_impl(id: FloatingWindowId) -> &'static str {
         FloatingWindowId::ExtraViewport => "ui/extra_viewport_window.rs",
         FloatingWindowId::SignList => "ui/sign_list_window.rs",
         FloatingWindowId::LinkGraphLegend => "ui/ui5_blocked_stubs.rs",
-        FloatingWindowId::SignalPicker => "ui/toolbar/mod.rs",
+        FloatingWindowId::SignalPicker => "ui/toolbar/signal_picker_window.rs",
         FloatingWindowId::Help => "ui/help_window.rs",
         FloatingWindowId::DevConsole => "ui/dev_console.rs",
         FloatingWindowId::TileInspector => "ui/tile_inspector_window.rs",
@@ -397,11 +397,12 @@ pub(crate) struct WindowKnownGap {
 /// Gaps documentados mientras faltan capturas/oráculo pixel.
 ///
 /// - `geometry→#243` sólo sin fila en [`WINDOW_REFERENCE_GEOMETRY`].
-/// - `lifecycle→#242` no aplica a la familia vehículo (pools #244); sí al resto
-///   de clases aún singleton (town/industry/…).
+/// - `lifecycle→#242` no aplica a la familia vehículo (pools #244) ni a la
+///   familia construction de pickers existentes (#246); sí al resto de clases
+///   aún singleton (town/industry/…).
 #[must_use]
 pub(crate) fn window_known_gaps(id: FloatingWindowId) -> &'static [WindowKnownGap] {
-    const VEHICLE_FAMILY: &[WindowKnownGap] = &[
+    const CAPTURE_ONLY: &[WindowKnownGap] = &[
         WindowKnownGap {
             category: "capture",
             issue: 240,
@@ -431,8 +432,8 @@ pub(crate) fn window_known_gaps(id: FloatingWindowId) -> &'static [WindowKnownGa
             issue: 243,
         },
     ];
-    if VEHICLE_FAMILY_WINDOW_IDS.contains(&id) {
-        return VEHICLE_FAMILY;
+    if VEHICLE_FAMILY_WINDOW_IDS.contains(&id) || CONSTRUCTION_FAMILY_WINDOW_IDS.contains(&id) {
+        return CAPTURE_ONLY;
     }
     if reference_geometry_primary(id).is_some() {
         WITH_GEOMETRY
@@ -542,6 +543,18 @@ pub(crate) const VEHICLE_FAMILY_WINDOW_IDS: &[FloatingWindowId] = &[
     FloatingWindowId::DestinationPicker,
 ];
 
+/// Inventario de pickers construction existentes cubiertos por #246 slice 1.
+///
+/// Greenfield (dock/waypoint/landscaping pickers) queda fuera: follow-up del issue.
+pub(crate) const CONSTRUCTION_FAMILY_WINDOW_IDS: &[FloatingWindowId] = &[
+    FloatingWindowId::RailStationPicker,
+    FloatingWindowId::AirportPicker,
+    FloatingWindowId::RoadStopPicker,
+    FloatingWindowId::ObjectPicker,
+    FloatingWindowId::BridgePicker,
+    FloatingWindowId::SignalPicker,
+];
+
 /// Variante preferida al spawnear (singleton): `default`/`game`/`owned`/`settings`…
 #[must_use]
 pub(crate) fn reference_geometry_primary(id: FloatingWindowId) -> Option<&'static ReferenceGeometry> {
@@ -594,7 +607,12 @@ pub(crate) const WINDOW_REFERENCE_GEOMETRY: &[ReferenceGeometry] = &[
         Some(405),
         Some(113)
     ),
+    reference_geometry!(RailStationPicker, "default", Auto, Some(280), Some(220)),
+    reference_geometry!(AirportPicker, "default", Auto, Some(320), Some(220)),
+    reference_geometry!(RoadStopPicker, "default", Auto, Some(220), Some(180)),
+    reference_geometry!(ObjectPicker, "default", Auto, Some(220), Some(200)),
     reference_geometry!(BridgePicker, "default", Auto, Some(200), Some(114)),
+    reference_geometry!(SignalPicker, "default", Auto, Some(200), Some(140)),
     reference_geometry!(DestinationPicker, "default", Auto, Some(200), Some(180)),
     reference_geometry!(NewsHistory, "default", Auto, Some(400), Some(140)),
     reference_geometry!(PathfindingSettings, "settings", Center, None, None),
@@ -1397,5 +1415,46 @@ mod tests {
         .expect("road");
         assert_eq!(train.height, Some(134));
         assert_eq!(road.height, Some(116));
+    }
+
+    #[test]
+    fn construction_family_inventory_is_in_parity_matrix() {
+        for id in CONSTRUCTION_FAMILY_WINDOW_IDS {
+            assert!(
+                WINDOW_PARITY_MATRIX.iter().any(|e| e.id == *id),
+                "familia construction falta en matriz: {id:?}"
+            );
+            assert!(
+                PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .join("src")
+                    .join(window_rust_impl(*id))
+                    .is_file(),
+                "rust_impl de familia construction ausente: {id:?}"
+            );
+            assert!(
+                reference_geometry_primary(*id).is_some(),
+                "familia construction sin geometría primary: {id:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn construction_family_known_gaps_are_capture_only() {
+        for id in CONSTRUCTION_FAMILY_WINDOW_IDS {
+            let gaps = window_known_gaps(*id);
+            assert_eq!(
+                gaps,
+                &[WindowKnownGap {
+                    category: "capture",
+                    issue: 240,
+                }],
+                "familia construction debe ser solo capture→#240: {id:?}"
+            );
+            assert!(
+                gaps.iter()
+                    .all(|g| g.category != "lifecycle" && g.category != "geometry"),
+                "sin lifecycle→#242 ni geometry→#243 para {id:?}"
+            );
+        }
     }
 }

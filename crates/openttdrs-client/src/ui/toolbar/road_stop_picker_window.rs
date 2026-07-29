@@ -441,4 +441,21 @@ mod tests {
             Some(7)
         );
     }
+
+    #[test]
+    fn road_stop_picker_on_closed_clears_stop_tool() {
+        let mut world = World::new();
+        world.insert_resource(UiToolState {
+            active_tool: Some(BuildMenuAction::BusStop),
+            ..Default::default()
+        });
+        world.init_resource::<Messages<FloatingWindowClosed>>();
+        world.write_message(FloatingWindowClosed(
+            crate::ui::floating_window::WindowKey::singleton(FloatingWindowId::RoadStopPicker),
+        ));
+        world
+            .run_system_once(road_stop_picker_on_closed)
+            .unwrap();
+        assert!(world.resource::<UiToolState>().active_tool.is_none());
+    }
 }

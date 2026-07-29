@@ -263,4 +263,19 @@ mod tests {
         world.run_system_once(handle_signal_picker_buttons).unwrap();
         assert_eq!(world.resource::<StationBuildState>().signal_variant, 1);
     }
+
+    #[test]
+    fn signal_picker_on_closed_clears_signals_tool() {
+        let mut world = World::new();
+        world.insert_resource(UiToolState {
+            active_tool: Some(BuildMenuAction::RailSignals),
+            ..Default::default()
+        });
+        world.init_resource::<Messages<FloatingWindowClosed>>();
+        world.write_message(FloatingWindowClosed(
+            crate::ui::floating_window::WindowKey::singleton(FloatingWindowId::SignalPicker),
+        ));
+        world.run_system_once(signal_picker_on_closed).unwrap();
+        assert!(world.resource::<UiToolState>().active_tool.is_none());
+    }
 }

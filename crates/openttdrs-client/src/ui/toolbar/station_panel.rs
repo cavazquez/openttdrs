@@ -14,11 +14,13 @@ use crate::render::{MapPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending}
 use crate::state::{OrderPickState, SimWorld};
 use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, FloatingWindowTitleText, TITLE_CREAM,
-    WINDOW_TEXT, spawn_floating_window, window_text_font,
+    WINDOW_TEXT, WindowKey, spawn_floating_window_keyed, window_key_for_descendant,
+    window_text_font,
 };
 use crate::ui::font::UiFontRole;
 use crate::ui::hud::{HudBuildFeedback, push_build_command_error};
 use crate::ui::vehicle_list::VehicleListState;
+use crate::ui::station_pool::{MAX_STATION_POOL_SLOTS, StationPoolRegistry};
 
 use super::order_panel::apply_order_edit;
 use super::{
@@ -92,16 +94,20 @@ const CARGO_TYPES: &[CargoType] = &ALL_CARGO_TYPES;
 /// Station View como [`FloatingWindowId::Station`] (#245); reutiliza el contenido del panel HUD.
 pub(crate) fn setup_station_cargo_panel(mut commands: Commands, asset_server: Res<AssetServer>) {
     let asset_server = &*asset_server;
-    let (_root, content) = spawn_floating_window(
-        &mut commands,
-        asset_server,
-        FloatingWindowId::Station,
-        "Estación",
-        TITLE_CREAM,
-        Vec2::new(420.0, 120.0),
-        249.0,
-    );
-    commands.entity(content).with_children(|panel| {
+    for slot in 0..MAX_STATION_POOL_SLOTS {
+        let (_root, content) = spawn_floating_window_keyed(
+            &mut commands,
+            asset_server,
+            WindowKey {
+                class: FloatingWindowId::Station,
+                instance: slot as u32,
+            },
+            "Estación",
+            TITLE_CREAM,
+            Vec2::new(420.0 + slot as f32 * 28.0, 120.0 + slot as f32 * 28.0),
+            249.0,
+        );
+        commands.entity(content).with_children(|panel| {
         panel.spawn((
             StationCargoPanelText,
             Text::new(""),
@@ -208,7 +214,8 @@ pub(crate) fn setup_station_cargo_panel(mut commands: Commands, asset_server: Re
                     "Cerrar",
                 );
             });
-    });
+        });
+    }
 }
 
 fn spawn_rename_action(
@@ -360,35 +367,57 @@ fn vehicles_visiting(sim: &SimWorld, station_pos: TileCoord) -> Vec<u32> {
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn sync_station_cargo_panel(
     mut station_panel: ResMut<StationCargoPanelState>,
+    mut station_pool: Option<ResMut<StationPoolRegistry>>,
     order_state: Res<OrderEditState>,
     sim: Res<SimWorld>,
     mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
-    mut title_q: Query<(&FloatingWindowTitleText, &mut Text), Without<StationCargoPanelText>>,
+    mut title_q: Query<(Entity, &FloatingWindowTitleText, &mut Text), Without<StationCargoPanelText>>,
     mut text_q: Query<
-        &mut Text,
+        (Entity, &mut Text),
         (
             With<StationCargoPanelText>,
             Without<FloatingWindowTitleText>,
         ),
     >,
-    mut rename_row_q: Query<&mut Node, With<StationCargoRenameRow>>,
+    mut rename_row_q: Query<(Entity, &mut Node), With<StationCargoRenameRow>>,
+    windows: Query<&FloatingWindow>,
+    parents: Query<&ChildOf>,
     mut last_pos: Local<Option<TileCoord>>,
 ) {
-    let Some((_, mut vis)) = root_q
-        .iter_mut()
-        .find(|(w, _)| w.id == FloatingWindowId::Station)
-    else {
-        return;
-    };
+    if let (Some(pos), Some(pool)) = (station_panel.station_pos, station_pool.as_deref_mut()) {
+        pool.open_or_focus(pos);
+    }
     if station_panel.station_pos != *last_pos {
         station_panel.rename_editing = false;
         *last_pos = station_panel.station_pos;
     }
     let Some(station_pos) = station_panel.station_pos else {
-        *vis = Visibility::Hidden;
+        for (window, mut vis) in &mut root_q {
+            if window.id == FloatingWindowId::Station {
+                *vis = Visibility::Hidden;
+            }
+        }
         return;
     };
-    *vis = Visibility::Visible;
+    let focused_slot = station_pool
+        .as_deref()
+        .and_then(|pool| pool.slot_of(station_pos))
+        .unwrap_or(0);
+    for (window, mut vis) in &mut root_q {
+        if window.id != FloatingWindowId::Station {
+            continue;
+        }
+        let occupied = station_pool.as_deref().is_some_and(|pool| {
+            pool.slots
+                .get(window.key.instance as usize)
+                .is_some_and(Option::is_some)
+        });
+        *vis = if occupied || window.key.instance == u32::from(focused_slot) {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        };
+    }
     let Some(station) = sim
         .state
         .stations
@@ -401,7 +430,10 @@ pub(crate) fn sync_station_cargo_panel(
         return;
     };
 
-    if let Ok(mut row) = rename_row_q.single_mut() {
+    if let Some((_, mut row)) = rename_row_q.iter_mut().find(|(entity, _)| {
+        window_key_for_descendant(*entity, &windows, &parents)
+            .is_some_and(|key| key.instance == u32::from(focused_slot))
+    }) {
         row.display = if station_panel.rename_editing {
             Display::Flex
         } else {
@@ -410,9 +442,13 @@ pub(crate) fn sync_station_cargo_panel(
     }
 
     let name = station_display_name(station);
-    if let Some((_, mut title)) = title_q
+    if let Some((_, _, mut title)) = title_q
         .iter_mut()
-        .find(|(t, _)| t.0 == FloatingWindowId::Station)
+        .find(|(entity, title, _)| {
+            title.0 == FloatingWindowId::Station
+                && window_key_for_descendant(*entity, &windows, &parents)
+                    .is_some_and(|key| key.instance == u32::from(focused_slot))
+        })
     {
         **title = name.clone();
     }
@@ -523,7 +559,10 @@ pub(crate) fn sync_station_cargo_panel(
         out.push_str("\nSelecciona un vehículo o usa «Editar órdenes».");
     }
 
-    if let Ok(mut text) = text_q.single_mut() {
+    if let Some((_, mut text)) = text_q.iter_mut().find(|(entity, _)| {
+        window_key_for_descendant(*entity, &windows, &parents)
+            .is_some_and(|key| key.instance == u32::from(focused_slot))
+    }) {
         **text = out;
     }
 }
@@ -532,10 +571,19 @@ pub(crate) fn sync_station_cargo_panel(
 pub(crate) fn station_view_on_closed(
     mut closed: MessageReader<FloatingWindowClosed>,
     mut station_panel: ResMut<StationCargoPanelState>,
+    mut station_pool: Option<ResMut<StationPoolRegistry>>,
 ) {
     for msg in closed.read() {
         if msg.0.class == FloatingWindowId::Station {
-            station_panel.station_pos = None;
+            if let Some(pool) = station_pool.as_deref_mut() {
+                if let Some(slot) = pool.slots.get_mut(msg.0.instance as usize) {
+                    *slot = None;
+                }
+                pool.focused = pool.slots.iter().flatten().next().copied();
+                station_panel.station_pos = pool.focused;
+            } else {
+                station_panel.station_pos = None;
+            }
             station_panel.rename_editing = false;
         }
     }
@@ -567,7 +615,7 @@ fn apply_station_rename(
 
 #[allow(clippy::too_many_arguments)] // sistema ECS Bevy
 pub(crate) fn handle_station_cargo_panel_buttons(
-    mut q: Query<(&Interaction, &StationCargoPanelButton), (Changed<Interaction>, With<Button>)>,
+    mut q: Query<(Entity, &Interaction, &StationCargoPanelButton), (Changed<Interaction>, With<Button>)>,
     mut station_panel: ResMut<StationCargoPanelState>,
     mut order_state: ResMut<OrderEditState>,
     mut vehicle_chain: ResMut<crate::ui::vehicle_chain::VehicleChainRegistry>,
@@ -581,17 +629,37 @@ pub(crate) fn handle_station_cargo_panel_buttons(
     mut rename_input_q: Query<&mut EditableText, With<StationCargoRenameInput>>,
     time: Res<Time>,
     mut cam_q: Query<&mut Transform, (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
+    windows: Query<&FloatingWindow>,
+    parents: Query<&ChildOf>,
+    mut station_pool: Option<ResMut<StationPoolRegistry>>,
 ) {
-    for (interaction, button) in &mut q {
+    for (entity, interaction, button) in &mut q {
         if *interaction != Interaction::Pressed {
             continue;
         }
-        let Some(station_pos) = station_panel.station_pos else {
+        let keyed_pos = window_key_for_descendant(entity, &windows, &parents).and_then(|key| {
+            station_pool
+                .as_deref()
+                .and_then(|pool| pool.slots.get(key.instance as usize).copied().flatten())
+        });
+        let Some(station_pos) = keyed_pos.or(station_panel.station_pos) else {
             continue;
         };
+        station_panel.station_pos = Some(station_pos);
+        if let Some(pool) = station_pool.as_deref_mut() {
+            pool.focused = Some(station_pos);
+        }
         match button {
             StationCargoPanelButton::Close => {
-                station_panel.station_pos = None;
+                if let Some(pool) = station_pool.as_deref_mut() {
+                    if let Some(slot) = pool.slot_of(station_pos) {
+                        pool.slots[usize::from(slot)] = None;
+                    }
+                    pool.focused = pool.slots.iter().flatten().next().copied();
+                    station_panel.station_pos = pool.focused;
+                } else {
+                    station_panel.station_pos = None;
+                }
                 station_panel.rename_editing = false;
             }
             StationCargoPanelButton::CenterCamera => {
@@ -963,5 +1031,36 @@ mod tests {
         assert_eq!(filter.next(), StationCargoFilter::Waiting);
         assert_eq!(filter.next().next(), StationCargoFilter::Accepted);
         assert_eq!(filter.next().next().next(), StationCargoFilter::All);
+    }
+
+    #[test]
+    fn closing_one_station_view_keeps_the_other_open() {
+        let mut world = World::new();
+        let a = TileCoord::new(3, 4);
+        let b = TileCoord::new(8, 9);
+        world.insert_resource(StationCargoPanelState {
+            station_pos: Some(b),
+            rename_editing: false,
+            cargo_filter: StationCargoFilter::All,
+        });
+        world.insert_resource(StationPoolRegistry {
+            slots: [Some(a), Some(b)],
+            focused: Some(b),
+        });
+        world.init_resource::<Messages<FloatingWindowClosed>>();
+        world.write_message(FloatingWindowClosed(WindowKey {
+            class: FloatingWindowId::Station,
+            instance: 0,
+        }));
+
+        world.run_system_once(station_view_on_closed).unwrap();
+
+        let pool = world.resource::<StationPoolRegistry>();
+        assert_eq!(pool.slots, [None, Some(b)]);
+        assert_eq!(pool.focused, Some(b));
+        assert_eq!(
+            world.resource::<StationCargoPanelState>().station_pos,
+            Some(b)
+        );
     }
 }

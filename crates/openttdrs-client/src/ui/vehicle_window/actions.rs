@@ -13,6 +13,7 @@ use crate::ui::hud::{HudBuildFeedback, push_build_command_error};
 use crate::ui::refit_window::RefitWindowState;
 use crate::ui::timetable_window::{TimetableWindowState, open_timetable_for_vehicle};
 use crate::ui::toolbar::{OrderEditState, open_order_edit_for_vehicle};
+use crate::ui::vehicle_chain::{VehicleChainRegistry, VehicleChainSlot};
 use crate::ui::vehicle_details_window::VehicleDetailsWindowState;
 
 use super::{VehicleWindowButton, VehicleWindowRenameInput, VehicleWindowState};
@@ -21,6 +22,7 @@ use super::{VehicleWindowButton, VehicleWindowRenameInput, VehicleWindowState};
 pub(crate) fn handle_vehicle_window_buttons(
     mut buttons: Query<(&Interaction, &VehicleWindowButton), (Changed<Interaction>, With<Button>)>,
     mut window_state: ResMut<VehicleWindowState>,
+    chain: Res<VehicleChainRegistry>,
     mut details_state: ResMut<VehicleDetailsWindowState>,
     mut order_state: ResMut<OrderEditState>,
     mut next_pick: ResMut<NextState<OrderPickState>>,
@@ -28,7 +30,10 @@ pub(crate) fn handle_vehicle_window_buttons(
     mut pending: ResMut<RemapMapVisualsPending>,
     mut hud_feedback: ResMut<HudBuildFeedback>,
     mut cam_q: Query<&mut Transform, (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
-    mut rename_input_q: Query<&mut EditableText, With<VehicleWindowRenameInput>>,
+    mut rename_input_q: Query<
+        (&VehicleChainSlot, &mut EditableText),
+        With<VehicleWindowRenameInput>,
+    >,
     mut refit_window: ResMut<RefitWindowState>,
     mut timetable: ResMut<TimetableWindowState>,
     time: Res<Time>,
@@ -87,7 +92,9 @@ pub(crate) fn handle_vehicle_window_buttons(
             VehicleWindowButton::Rename => {
                 window_state.rename_editing = true;
                 if let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.id == vehicle_id)
-                    && let Ok(mut editable) = rename_input_q.single_mut()
+                    && let Some(slot) = chain.slot_of(vehicle_id)
+                    && let Some((_, mut editable)) =
+                        rename_input_q.iter_mut().find(|(s, _)| s.0 == slot)
                 {
                     let seed = vehicle
                         .name

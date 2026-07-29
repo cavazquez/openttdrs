@@ -369,7 +369,7 @@ pub(crate) fn finances_window_on_closed(
     mut finances: ResMut<FinancesWindowState>,
 ) {
     for msg in closed.read() {
-        if msg.0 == FloatingWindowId::Finances {
+        if msg.0.class == FloatingWindowId::Finances {
             finances.open = false;
         }
     }

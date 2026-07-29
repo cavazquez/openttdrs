@@ -217,7 +217,7 @@ pub(crate) fn news_history_on_closed(
     mut history: ResMut<NewsHistoryState>,
 ) {
     for msg in closed.read() {
-        if msg.0 == FloatingWindowId::NewsHistory {
+        if msg.0.class == FloatingWindowId::NewsHistory {
             history.open = false;
         }
     }

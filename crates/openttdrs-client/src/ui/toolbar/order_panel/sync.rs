@@ -136,7 +136,7 @@ pub(crate) fn order_panel_on_closed(
     mut next_pick: ResMut<NextState<OrderPickState>>,
 ) {
     for msg in closed.read() {
-        if msg.0 == FloatingWindowId::Orders {
+        if msg.0.class == FloatingWindowId::Orders {
             order_state.clear();
             next_pick.set(OrderPickState::Idle);
         }

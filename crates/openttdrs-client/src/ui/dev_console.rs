@@ -345,7 +345,7 @@ pub(crate) fn dev_console_window_on_closed(
     mut state: ResMut<DevConsoleState>,
 ) {
     for msg in closed.read() {
-        if msg.0 == FloatingWindowId::DevConsole {
+        if msg.0.class == FloatingWindowId::DevConsole {
             state.open = false;
             state.input.clear();
         }

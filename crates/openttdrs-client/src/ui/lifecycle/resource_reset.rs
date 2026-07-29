@@ -55,6 +55,7 @@ use super::super::toolbar::{
 };
 use super::super::town_directory::TownDirectoryState;
 use super::super::town_window::TownWindowState;
+use super::super::vehicle_chain::VehicleChainRegistry;
 use super::super::vehicle_details_window::VehicleDetailsWindowState;
 use super::super::vehicle_list::VehicleListState;
 use super::super::vehicle_window::VehicleWindowState;
@@ -338,6 +339,10 @@ pub(super) static RESOURCE_RESETS: &[ResourceTeardown] = &[
     ResourceTeardown {
         name: "VehicleWindowState",
         apply: reset_default::<VehicleWindowState>,
+    },
+    ResourceTeardown {
+        name: "VehicleChainRegistry",
+        apply: reset_default::<VehicleChainRegistry>,
     },
     ResourceTeardown {
         name: "VehicleDetailsWindowState",

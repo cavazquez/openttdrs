@@ -407,7 +407,7 @@ pub(crate) fn airport_picker_on_closed(
     mut tool_state: ResMut<UiToolState>,
 ) {
     for msg in closed.read() {
-        if msg.0 == FloatingWindowId::AirportPicker && airport_tool_active(&tool_state) {
+        if msg.0.class == FloatingWindowId::AirportPicker && airport_tool_active(&tool_state) {
             tool_state.active_tool = None;
         }
     }

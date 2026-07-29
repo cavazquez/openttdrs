@@ -8,20 +8,35 @@ use openttdrs_core::{Command, vehicle::MAX_VEHICLE_NAME_CHARS};
 
 use crate::state::SimWorld;
 use crate::ui::hud::{HudBuildFeedback, push_build_command_error};
+use crate::ui::vehicle_chain::{VehicleChainRegistry, VehicleChainSlot};
 
 use super::{VehicleWindowRenameButton, VehicleWindowRenameInput, VehicleWindowState};
 
+fn focused_rename_name(
+    window_state: &VehicleWindowState,
+    chain: &VehicleChainRegistry,
+    rename_input_q: &Query<(&VehicleChainSlot, &EditableText), With<VehicleWindowRenameInput>>,
+) -> Option<String> {
+    let vehicle_id = window_state.vehicle_id?;
+    let slot = chain.slot_of(vehicle_id)?;
+    rename_input_q
+        .iter()
+        .find(|(s, _)| s.0 == slot)
+        .map(|(_, e)| e.value().to_string())
+}
+
 fn apply_vehicle_rename(
     window_state: &mut VehicleWindowState,
+    chain: &VehicleChainRegistry,
     sim: &mut SimWorld,
     hud_feedback: &mut HudBuildFeedback,
-    rename_input_q: &Query<&EditableText, With<VehicleWindowRenameInput>>,
+    rename_input_q: &Query<(&VehicleChainSlot, &EditableText), With<VehicleWindowRenameInput>>,
     elapsed_secs: f32,
 ) {
     let Some(vehicle_id) = window_state.vehicle_id else {
         return;
     };
-    let name = rename_input_q.single().ok().map(|e| e.value().to_string());
+    let name = focused_rename_name(window_state, chain, rename_input_q);
     match crate::network::apply_player_command(
         &mut sim.state,
         &Command::RenameVehicle { vehicle_id, name },
@@ -37,7 +52,8 @@ pub(crate) fn handle_vehicle_rename_buttons(
         (Changed<Interaction>, With<Button>),
     >,
     mut window_state: ResMut<VehicleWindowState>,
-    rename_input_q: Query<&EditableText, With<VehicleWindowRenameInput>>,
+    chain: Res<VehicleChainRegistry>,
+    rename_input_q: Query<(&VehicleChainSlot, &EditableText), With<VehicleWindowRenameInput>>,
     mut sim: ResMut<SimWorld>,
     mut hud_feedback: ResMut<HudBuildFeedback>,
     time: Res<Time>,
@@ -53,6 +69,7 @@ pub(crate) fn handle_vehicle_rename_buttons(
             VehicleWindowRenameButton::Apply => {
                 apply_vehicle_rename(
                     &mut window_state,
+                    &chain,
                     &mut sim,
                     &mut hud_feedback,
                     &rename_input_q,
@@ -65,8 +82,9 @@ pub(crate) fn handle_vehicle_rename_buttons(
 
 pub(crate) fn vehicle_window_rename_keyboard(
     mut window_state: ResMut<VehicleWindowState>,
+    chain: Res<VehicleChainRegistry>,
     keys: Res<ButtonInput<KeyCode>>,
-    rename_input_q: Query<&EditableText, With<VehicleWindowRenameInput>>,
+    rename_input_q: Query<(&VehicleChainSlot, &EditableText), With<VehicleWindowRenameInput>>,
     mut sim: ResMut<SimWorld>,
     mut hud_feedback: ResMut<HudBuildFeedback>,
     time: Res<Time>,
@@ -81,6 +99,7 @@ pub(crate) fn vehicle_window_rename_keyboard(
     if keys.just_pressed(KeyCode::Enter) {
         apply_vehicle_rename(
             &mut window_state,
+            &chain,
             &mut sim,
             &mut hud_feedback,
             &rename_input_q,
@@ -91,13 +110,23 @@ pub(crate) fn vehicle_window_rename_keyboard(
 
 pub(crate) fn vehicle_window_rename_editable_keyboard(
     window_state: Res<VehicleWindowState>,
+    chain: Res<VehicleChainRegistry>,
     mut key_events: MessageReader<KeyboardInput>,
-    mut rename_input_q: Query<&mut EditableText, With<VehicleWindowRenameInput>>,
+    mut rename_input_q: Query<
+        (&VehicleChainSlot, &mut EditableText),
+        With<VehicleWindowRenameInput>,
+    >,
 ) {
     if !window_state.rename_editing {
         return;
     }
-    let Ok(mut editable) = rename_input_q.single_mut() else {
+    let Some(vehicle_id) = window_state.vehicle_id else {
+        return;
+    };
+    let Some(slot) = chain.slot_of(vehicle_id) else {
+        return;
+    };
+    let Some((_, mut editable)) = rename_input_q.iter_mut().find(|(s, _)| s.0 == slot) else {
         return;
     };
     for ev in key_events.read() {

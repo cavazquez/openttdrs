@@ -343,7 +343,7 @@ pub(crate) fn town_window_on_closed(
     mut town_state: ResMut<TownWindowState>,
 ) {
     for msg in closed.read() {
-        if msg.0 == FloatingWindowId::Town {
+        if msg.0.class == FloatingWindowId::Town {
             town_state.town_id = None;
         }
     }

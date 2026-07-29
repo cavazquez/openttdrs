@@ -282,7 +282,7 @@ pub(crate) fn shared_orders_window_on_closed(
     mut state: ResMut<SharedOrdersWindowState>,
 ) {
     for message in closed.read() {
-        if message.0 == FloatingWindowId::SharedOrders {
+        if message.0.class == FloatingWindowId::SharedOrders {
             state.open = false;
             state.link_vehicle_id = None;
             state.selected_shared_id = None;

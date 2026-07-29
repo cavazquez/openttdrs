@@ -423,7 +423,7 @@ pub(crate) fn refit_window_on_closed(
     mut state: ResMut<RefitWindowState>,
 ) {
     for message in closed.read() {
-        if message.0 == FloatingWindowId::Refit {
+        if message.0.class == FloatingWindowId::Refit {
             state.open = false;
             state.vehicle_id = None;
             state.selected_unit_ids.clear();

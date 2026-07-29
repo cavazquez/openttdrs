@@ -20,6 +20,7 @@ use crate::ui::toolbar::preview::rail_signal_flash_position;
 use crate::ui::toolbar::station_panel::StationCargoPanelState;
 use crate::ui::toolbar::{BuildMenuAction, DragBuildState, OrderEditState, StationBuildState};
 use crate::ui::town_window::TownWindowState;
+use crate::ui::vehicle_chain::VehicleChainRegistry;
 use crate::ui::vehicle_window::VehicleWindowState;
 
 use super::click_intent::MapClickIntent;
@@ -50,6 +51,7 @@ pub(crate) struct IntentApplyContext<'w> {
     pub industry_panel: ResMut<'w, IndustryPanelState>,
     pub town_window: ResMut<'w, TownWindowState>,
     pub vehicle_window: ResMut<'w, VehicleWindowState>,
+    pub vehicle_chain: ResMut<'w, VehicleChainRegistry>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -128,6 +130,7 @@ pub(crate) fn apply_intent(intent: MapClickIntent, ctx: &mut IntentApplyContext,
                     &mut ctx.industry_panel,
                     &mut ctx.town_window,
                     &mut ctx.vehicle_window,
+                    &mut ctx.vehicle_chain,
                     vehicle,
                 );
             }
@@ -140,6 +143,7 @@ pub(crate) fn apply_intent(intent: MapClickIntent, ctx: &mut IntentApplyContext,
                 &mut ctx.industry_panel,
                 &mut ctx.order_state,
                 &mut ctx.vehicle_window,
+                &mut ctx.vehicle_chain,
                 town_id,
             );
         }
@@ -151,6 +155,7 @@ pub(crate) fn apply_intent(intent: MapClickIntent, ctx: &mut IntentApplyContext,
                 &mut ctx.station_panel,
                 &mut ctx.town_window,
                 &mut ctx.vehicle_window,
+                &mut ctx.vehicle_chain,
                 pos,
             );
         }
@@ -165,6 +170,7 @@ pub(crate) fn apply_intent(intent: MapClickIntent, ctx: &mut IntentApplyContext,
                 &mut ctx.industry_panel,
                 &mut ctx.town_window,
                 &mut ctx.vehicle_window,
+                &mut ctx.vehicle_chain,
                 depot_pos,
                 vehicle_id,
             );
@@ -177,6 +183,7 @@ pub(crate) fn apply_intent(intent: MapClickIntent, ctx: &mut IntentApplyContext,
                 &mut ctx.industry_panel,
                 &mut ctx.town_window,
                 &mut ctx.vehicle_window,
+                &mut ctx.vehicle_chain,
                 station_pos,
             );
         }

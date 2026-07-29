@@ -225,7 +225,7 @@ pub(crate) fn signal_picker_on_closed(
     mut tool_state: ResMut<UiToolState>,
 ) {
     for msg in closed.read() {
-        if msg.0 == FloatingWindowId::SignalPicker
+        if msg.0.class == FloatingWindowId::SignalPicker
             && tool_state.active_tool == Some(BuildMenuAction::RailSignals)
         {
             tool_state.active_tool = None;

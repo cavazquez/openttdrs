@@ -511,7 +511,7 @@ pub(crate) fn sound_music_window_on_closed(
     mut state: ResMut<SoundMusicWindowState>,
 ) {
     for msg in closed.read() {
-        if msg.0 == FloatingWindowId::SoundMusic {
+        if msg.0.class == FloatingWindowId::SoundMusic {
             state.open = false;
         }
     }

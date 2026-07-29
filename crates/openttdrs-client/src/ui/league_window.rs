@@ -141,7 +141,7 @@ pub(crate) fn league_window_on_closed(
     mut state: ResMut<LeagueWindowState>,
 ) {
     for msg in closed.read() {
-        if msg.0 == FloatingWindowId::League {
+        if msg.0.class == FloatingWindowId::League {
             state.open = false;
         }
     }

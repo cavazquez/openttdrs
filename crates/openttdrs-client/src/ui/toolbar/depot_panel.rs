@@ -22,6 +22,7 @@ use crate::ui::floating_window::{
 use crate::ui::font::UiFontRole;
 use crate::ui::hud::{HudBuildFeedback, push_build_command_error};
 use crate::ui::scrollbar::spawn_classic_scroll_area_with;
+use crate::ui::vehicle_chain::VehicleChainRegistry;
 use crate::ui::vehicle_window::{
     CONSIST_STRIP_MAX_UNITS, CONSIST_UNIT_SPRITE_H, CONSIST_UNIT_SPRITE_W, VehicleWindowState,
     vehicle_side_sprite,
@@ -374,9 +375,14 @@ fn spawn_depot_vehicle_row(
                 Interaction::default(),
                 BuildMenuUi,
                 children![(
-                    Text::new("✕"),
-                    window_text_font(asset_server, UiFontRole::Caption),
-                    TextColor(Color::srgb(0.98, 0.92, 0.9)),
+                    ImageNode::new(
+                        asset_server.load::<Image>("assets/opengfx/tiles/window_close.png"),
+                    ),
+                    Node {
+                        width: Val::Px(8.0),
+                        height: Val::Px(9.0),
+                        ..default()
+                    },
                 )],
             ));
         });
@@ -696,7 +702,7 @@ pub(crate) fn depot_panel_on_closed(
     mut depot_state: ResMut<DepotPanelState>,
 ) {
     for msg in closed.read() {
-        if msg.0 == FloatingWindowId::Depot {
+        if msg.0.class == FloatingWindowId::Depot {
             depot_state.depot_pos = None;
             depot_state.selected_vehicle = None;
             depot_state.reorder_from_slot = None;
@@ -771,6 +777,7 @@ pub(crate) fn finish_depot_list_drag(
     unit_q: Query<(&DepotConsistUnitSprite, &Interaction, &Node), With<Button>>,
     sell_drop_q: Query<(&DepotSellDrop, &Interaction), With<Button>>,
     mut vehicle_window: ResMut<VehicleWindowState>,
+    mut vehicle_chain: ResMut<VehicleChainRegistry>,
     mut order_state: ResMut<OrderEditState>,
     mut sim: ResMut<SimWorld>,
     mut pending: ResMut<RemapMapVisualsPending>,
@@ -876,6 +883,7 @@ pub(crate) fn finish_depot_list_drag(
         from_slot,
         &mut depot_state,
         &mut vehicle_window,
+        &mut vehicle_chain,
         &mut sim,
         &mut pending,
         &mut hud_feedback,
@@ -996,6 +1004,7 @@ fn activate_depot_row_click(
     slot: usize,
     depot_state: &mut DepotPanelState,
     vehicle_window: &mut VehicleWindowState,
+    vehicle_chain: &mut VehicleChainRegistry,
     sim: &mut SimWorld,
     pending: &mut RemapMapVisualsPending,
     hud_feedback: &mut HudBuildFeedback,
@@ -1054,8 +1063,7 @@ fn activate_depot_row_click(
     }
     depot_state.selected_vehicle = Some(vehicle_id);
     // Solo View; órdenes/detalles se abren desde botones de la ventana (#173).
-    vehicle_window.vehicle_id = Some(vehicle_id);
-    vehicle_window.rename_editing = false;
+    vehicle_window.open_or_focus(vehicle_chain, vehicle_id);
 }
 
 #[allow(clippy::too_many_arguments)] // sistema ECS Bevy

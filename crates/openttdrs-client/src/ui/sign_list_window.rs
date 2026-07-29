@@ -380,7 +380,7 @@ pub(crate) fn sign_list_window_on_closed(
     mut state: ResMut<SignListWindowState>,
 ) {
     for msg in closed.read() {
-        if msg.0 == FloatingWindowId::SignList {
+        if msg.0.class == FloatingWindowId::SignList {
             state.open = false;
             state.rename_editing = false;
         }

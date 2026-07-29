@@ -25,6 +25,7 @@ use super::super::toolbar::{
     StationBuildState, StationCargoPanelState, ToolbarState, UiToolState,
 };
 use super::super::town_window::TownWindowState;
+use super::super::vehicle_chain::VehicleChainRegistry;
 use super::super::vehicle_details_window::VehicleDetailsWindowState;
 use super::super::vehicle_window::VehicleWindowState;
 use super::entity_cleanup::{ENTITY_TEARDOWNS, entity_teardown_names};
@@ -82,6 +83,7 @@ const REQUIRED_SESSION_POLICIES: &[&str] = &[
     "NewGrfCatenarySpriteCache",
     "DestinationPickerState",
     "VehicleWindowState",
+    "VehicleChainRegistry",
     "VehicleDetailsWindowState",
     "RefitWindowState",
     "SharedOrdersWindowState",
@@ -200,6 +202,7 @@ fn leave_ingame_despawns_world_entities() {
     world.init_resource::<BuyVehicleWindowState>();
     world.init_resource::<DestinationPickerState>();
     world.init_resource::<VehicleWindowState>();
+    world.init_resource::<VehicleChainRegistry>();
     world.init_resource::<VehicleDetailsWindowState>();
     world.init_resource::<RefitWindowState>();
     world.init_resource::<SharedOrdersWindowState>();

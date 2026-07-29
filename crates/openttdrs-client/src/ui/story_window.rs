@@ -251,7 +251,7 @@ pub(crate) fn story_window_on_closed(
     mut state: ResMut<StoryWindowState>,
 ) {
     for msg in closed.read() {
-        if msg.0 == FloatingWindowId::Story {
+        if msg.0.class == FloatingWindowId::Story {
             state.open = false;
         }
     }

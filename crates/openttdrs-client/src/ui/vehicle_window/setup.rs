@@ -8,10 +8,12 @@ use bevy::ui::widget::ImageNode;
 
 use crate::render::MapPreviewCamera;
 use crate::ui::floating_window::{
-    FloatingWindowId, TITLE_CRIMSON, WINDOW_TEXT, spawn_floating_window, window_text_font,
+    FloatingWindowId, TITLE_CRIMSON, WINDOW_TEXT, WindowKey, spawn_floating_window_keyed,
+    window_text_font,
 };
 use crate::ui::font::UiFontRole;
 use crate::ui::toolbar::{BuildMenuUi, ToolbarTooltipTarget};
+use crate::ui::vehicle_chain::{MAX_VEHICLE_CHAIN_SLOTS, VehicleChainSlot};
 
 use super::{
     BTN_BG, BTN_BORDER, CONSIST_STRIP_MAX_UNITS, CONSIST_UNIT_SPRITE_H, CONSIST_UNIT_SPRITE_W,
@@ -21,6 +23,9 @@ use super::{
     VehicleWindowRenameRow, VehicleWindowStatusText, VehicleWindowToggleText,
     VehicleWindowTrainOnly,
 };
+
+const BASE_POS: Vec2 = Vec2::new(720.0, 148.0);
+const SLOT_OFFSET: Vec2 = Vec2::new(40.0, 40.0);
 
 pub(crate) fn setup_vehicle_window(
     mut commands: Commands,
@@ -36,6 +41,7 @@ pub(crate) fn setup_vehicle_window(
     );
     let rt_handle = images.add(image);
 
+    // Una sola cámara de preview: sigue al vehículo enfocado (#242).
     commands.spawn((
         Camera2d,
         MapPreviewCamera,
@@ -54,19 +60,49 @@ pub(crate) fn setup_vehicle_window(
         }),
     ));
 
-    // Vista compacta OpenTTD (#174): preview + status + fila de iconos.
-    let (_root, content) = spawn_floating_window(
-        &mut commands,
-        asset_server,
-        FloatingWindowId::Vehicle,
-        "Vehículo",
-        TITLE_CRIMSON,
-        Vec2::new(720.0, 148.0),
-        280.0,
-    );
+    for slot in 0..MAX_VEHICLE_CHAIN_SLOTS {
+        let slot_u8 = slot as u8;
+        let pos = BASE_POS + SLOT_OFFSET * slot as f32;
+        let (root, content) = spawn_floating_window_keyed(
+            &mut commands,
+            asset_server,
+            WindowKey {
+                class: FloatingWindowId::Vehicle,
+                instance: 0,
+            },
+            "Vehículo",
+            TITLE_CRIMSON,
+            pos,
+            280.0,
+        );
+        commands.entity(root).insert(VehicleChainSlot(slot_u8));
+        spawn_vehicle_window_content(
+            &mut commands,
+            content,
+            asset_server,
+            rt_handle.clone(),
+            slot_u8,
+        );
+    }
+}
+
+fn spawn_vehicle_window_content(
+    commands: &mut Commands,
+    content: Entity,
+    asset_server: &AssetServer,
+    rt_handle: Handle<Image>,
+    slot: u8,
+) {
+    let chain_slot = VehicleChainSlot(slot);
     commands.entity(content).with_children(|panel| {
+        // Slot 0 comparte el RT de la cámara; slot 1 usa placeholder (misma RT también OK).
+        let preview_image = if slot == 0 {
+            rt_handle
+        } else {
+            asset_server.load::<Image>(PLACEHOLDER_SPRITE)
+        };
         panel.spawn((
-            ImageNode::new(rt_handle),
+            ImageNode::new(preview_image),
             Node {
                 width: Val::Percent(100.0),
                 height: Val::Px(PREVIEW_TEX_H as f32),
@@ -91,6 +127,7 @@ pub(crate) fn setup_vehicle_window(
                 for unit_idx in 0..CONSIST_STRIP_MAX_UNITS {
                     strip.spawn((
                         VehicleConsistUnitSprite { unit_idx },
+                        chain_slot,
                         ImageNode::new(asset_server.load::<Image>(PLACEHOLDER_SPRITE)),
                         Node {
                             width: Val::Px(CONSIST_UNIT_SPRITE_W),
@@ -103,6 +140,7 @@ pub(crate) fn setup_vehicle_window(
             });
         panel.spawn((
             VehicleWindowStatusText,
+            chain_slot,
             Text::new(""),
             window_text_font(asset_server, UiFontRole::Caption),
             TextColor(STATUS_STOPPED),
@@ -116,6 +154,7 @@ pub(crate) fn setup_vehicle_window(
         panel
             .spawn((
                 VehicleWindowRenameRow,
+                chain_slot,
                 Node {
                     flex_direction: FlexDirection::Row,
                     column_gap: Val::Px(4.0),
@@ -129,6 +168,7 @@ pub(crate) fn setup_vehicle_window(
             .with_children(|row| {
                 row.spawn((
                     VehicleWindowRenameInput,
+                    chain_slot,
                     EditableText::new(""),
                     window_text_font(asset_server, UiFontRole::Caption),
                     TextColor(WINDOW_TEXT),
@@ -171,6 +211,7 @@ pub(crate) fn setup_vehicle_window(
                     "text:▶",
                     "Iniciar / Detener",
                     true,
+                    slot,
                 );
                 spawn_vehicle_icon(
                     row,
@@ -179,6 +220,7 @@ pub(crate) fn setup_vehicle_window(
                     "assets/opengfx/tiles/toolbar_rail_station.png",
                     "Órdenes",
                     false,
+                    slot,
                 );
                 spawn_vehicle_icon(
                     row,
@@ -187,6 +229,7 @@ pub(crate) fn setup_vehicle_window(
                     "text:⏱",
                     "Horario",
                     false,
+                    slot,
                 );
                 spawn_vehicle_icon(
                     row,
@@ -195,6 +238,7 @@ pub(crate) fn setup_vehicle_window(
                     "assets/opengfx/tiles/toolbar_rail_depot.png",
                     "Enviar al depósito",
                     false,
+                    slot,
                 );
                 spawn_vehicle_icon(
                     row,
@@ -203,6 +247,7 @@ pub(crate) fn setup_vehicle_window(
                     "assets/opengfx/tiles/toolbar_rail_waypoint.png",
                     "Ir a orden activa",
                     false,
+                    slot,
                 );
                 spawn_vehicle_icon(
                     row,
@@ -211,6 +256,7 @@ pub(crate) fn setup_vehicle_window(
                     "assets/opengfx/tiles/ui_terraform_up.png",
                     "Centrar cámara",
                     false,
+                    slot,
                 );
                 spawn_vehicle_icon(
                     row,
@@ -219,6 +265,7 @@ pub(crate) fn setup_vehicle_window(
                     "assets/opengfx/tiles/ui_settings.png",
                     "Detalles",
                     false,
+                    slot,
                 );
                 spawn_vehicle_icon(
                     row,
@@ -227,6 +274,7 @@ pub(crate) fn setup_vehicle_window(
                     "text:Aa",
                     "Renombrar",
                     false,
+                    slot,
                 );
             });
         panel
@@ -240,6 +288,7 @@ pub(crate) fn setup_vehicle_window(
                     ..default()
                 },
                 VehicleWindowTrainOnly,
+                chain_slot,
                 BuildMenuUi,
             ))
             .with_children(|row| {
@@ -250,6 +299,7 @@ pub(crate) fn setup_vehicle_window(
                     "text:↺",
                     "Dar la vuelta",
                     false,
+                    slot,
                 );
                 spawn_vehicle_icon(
                     row,
@@ -258,6 +308,7 @@ pub(crate) fn setup_vehicle_window(
                     "text:⏭",
                     "Forzar paso",
                     false,
+                    slot,
                 );
             });
         panel
@@ -270,6 +321,7 @@ pub(crate) fn setup_vehicle_window(
                     ..default()
                 },
                 VehicleWindowRefitOnly,
+                chain_slot,
                 BuildMenuUi,
             ))
             .with_children(|row| {
@@ -280,6 +332,7 @@ pub(crate) fn setup_vehicle_window(
                     "text:⚙",
                     "Refit carga",
                     false,
+                    slot,
                 );
             });
     });
@@ -324,6 +377,7 @@ fn spawn_vehicle_icon(
     icon: &str,
     tip: &'static str,
     is_toggle: bool,
+    slot: u8,
 ) {
     parent
         .spawn((
@@ -354,7 +408,7 @@ fn spawn_vehicle_icon(
                     TextColor(Color::srgb(0.96, 0.92, 0.78)),
                 ));
                 if is_toggle {
-                    text.insert(VehicleWindowToggleText);
+                    text.insert((VehicleWindowToggleText, VehicleChainSlot(slot)));
                 }
             } else {
                 btn.spawn((

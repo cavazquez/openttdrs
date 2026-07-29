@@ -461,6 +461,7 @@ mod tests {
         world.insert_resource(IndustryPanelState::default());
         world.insert_resource(crate::ui::town_window::TownWindowState::default());
         world.insert_resource(crate::ui::vehicle_window::VehicleWindowState::default());
+        world.insert_resource(crate::ui::vehicle_chain::VehicleChainRegistry::default());
         world.insert_resource(HudBuildFeedback::default());
         world.insert_resource(Time::<()>::default());
         world.init_resource::<crate::ui::toolbar::MinimapLayerState>();

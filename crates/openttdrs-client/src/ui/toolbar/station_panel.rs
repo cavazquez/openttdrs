@@ -117,7 +117,7 @@ pub(crate) fn setup_station_cargo_panel(mut commands: Commands, asset_server: Re
                         BorderColor::all(Color::srgb(0.66, 0.58, 0.38)),
                     ));
                     spawn_rename_action(row, asset_server, StationCargoRenameButton::Apply, "OK");
-                    spawn_rename_action(row, asset_server, StationCargoRenameButton::Cancel, "✕");
+                    spawn_rename_action(row, asset_server, StationCargoRenameButton::Cancel, "No");
                 });
             // Chrome compacto (#183): labels cortos + tooltip.
             panel

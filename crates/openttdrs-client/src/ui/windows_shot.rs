@@ -61,6 +61,7 @@ use crate::ui::toolbar::{
 use crate::ui::town_directory::TownDirectoryState;
 use crate::ui::town_window::TownWindowState;
 use crate::ui::ui5_blocked_stubs::LinkGraphWindowState;
+use crate::ui::vehicle_chain::VehicleChainRegistry;
 use crate::ui::vehicle_details_window::VehicleDetailsWindowState;
 use crate::ui::vehicle_list::VehicleListState;
 use crate::ui::vehicle_window::VehicleWindowState;
@@ -499,6 +500,37 @@ macro_rules! reference_geometry {
         }
     };
 }
+
+/// Variante de geometría según tipo de vehículo (#244).
+#[must_use]
+pub(crate) fn reference_geometry_for_vehicle_kind(
+    id: FloatingWindowId,
+    kind: openttdrs_core::VehicleKind,
+) -> Option<&'static ReferenceGeometry> {
+    let prefer = match kind {
+        openttdrs_core::VehicleKind::Train => "train",
+        _ => "road/ship/aircraft",
+    };
+    WINDOW_REFERENCE_GEOMETRY
+        .iter()
+        .find(|geometry| geometry.id == id && geometry.variant == prefer)
+        .or_else(|| reference_geometry_primary(id))
+}
+
+/// Inventario de la familia vehículo cubierta por #244.
+pub(crate) const VEHICLE_FAMILY_WINDOW_IDS: &[FloatingWindowId] = &[
+    FloatingWindowId::VehicleList,
+    FloatingWindowId::Depot,
+    FloatingWindowId::BuyVehicle,
+    FloatingWindowId::Vehicle,
+    FloatingWindowId::VehicleDetails,
+    FloatingWindowId::Orders,
+    FloatingWindowId::Timetable,
+    FloatingWindowId::Refit,
+    FloatingWindowId::SharedOrders,
+    FloatingWindowId::Autoreplace,
+    FloatingWindowId::DestinationPicker,
+];
 
 /// Variante preferida al spawnear (singleton): `default`/`game`/`owned`/`settings`…
 #[must_use]
@@ -1029,7 +1061,19 @@ fn open_all_windows_for_shot(world: &mut World, include_auxiliary: bool) {
         buy.depot_pos = depot_pos;
         buy.selected_engine = selected_engine;
     }
-    world.resource_mut::<VehicleWindowState>().vehicle_id = vehicle_id;
+    if let Some(vid) = vehicle_id {
+        world.resource_scope(|world, mut chain: Mut<VehicleChainRegistry>| {
+            world
+                .resource_mut::<VehicleWindowState>()
+                .open_or_focus(&mut chain, vid);
+        });
+    } else {
+        world.resource_mut::<VehicleChainRegistry>().clear();
+        let mut vehicle_window = world.resource_mut::<VehicleWindowState>();
+        vehicle_window.vehicle_id = None;
+        vehicle_window.open.clear();
+        vehicle_window.rename_editing = false;
+    }
     world.resource_mut::<TimetableWindowState>().vehicle_id = vehicle_id;
     if let Some(vid) = vehicle_id {
         world
@@ -1299,5 +1343,34 @@ mod tests {
         assert_eq!(geo.placement, ReferencePlacement::Center);
         assert_eq!(geo.width, Some(300));
         assert_eq!(geo.resize_step, Some((1, 1)));
+    }
+
+    #[test]
+    fn vehicle_family_inventory_is_in_parity_matrix() {
+        for id in VEHICLE_FAMILY_WINDOW_IDS {
+            assert!(
+                WINDOW_PARITY_MATRIX.iter().any(|e| e.id == *id),
+                "familia vehículo falta en matriz: {id:?}"
+            );
+            assert!(
+                PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .join("src")
+                    .join(window_rust_impl(*id))
+                    .is_file(),
+                "rust_impl de familia vehículo ausente: {id:?}"
+            );
+        }
+        let train = reference_geometry_for_vehicle_kind(
+            FloatingWindowId::Vehicle,
+            openttdrs_core::VehicleKind::Train,
+        )
+        .expect("train");
+        let road = reference_geometry_for_vehicle_kind(
+            FloatingWindowId::Vehicle,
+            openttdrs_core::VehicleKind::Truck,
+        )
+        .expect("road");
+        assert_eq!(train.height, Some(134));
+        assert_eq!(road.height, Some(116));
     }
 }

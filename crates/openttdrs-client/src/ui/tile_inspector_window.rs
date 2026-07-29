@@ -107,7 +107,7 @@ pub(crate) fn tile_inspector_window_on_closed(
     mut state: ResMut<TileInspectorWindowState>,
 ) {
     for msg in closed.read() {
-        if msg.0 == FloatingWindowId::TileInspector {
+        if msg.0.class == FloatingWindowId::TileInspector {
             state.open = false;
         }
     }

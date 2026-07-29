@@ -5,9 +5,8 @@
 //! Órdenes, Depósito, Detalles, Centrar…). Los stats/tabs viven en
 //! [`crate::ui::vehicle_details_window`]. La venta es del depósito.
 //!
-//! **Single-instance:** solo hay una [`FloatingWindowId::Vehicle`]; al elegir
-//! otro vehículo se reemplaza `VehicleWindowState.vehicle_id` (y el contexto
-//! de Órdenes/Refit/Timetable/Details vinculados).
+//! Multi-instancia (#242): hasta 2 Views concurrentes vía [`VehicleChainRegistry`].
+//! `vehicle_id` es el enfocado; `open` lista todas las abiertas.
 
 mod actions;
 mod rename;
@@ -20,7 +19,8 @@ use openttdrs_core::prelude::*;
 use openttdrs_core::{default_engine_id, engine_for_vehicle};
 
 use crate::render::TruckHandles;
-use crate::ui::floating_window::{FloatingWindowClosed, FloatingWindowId};
+use crate::ui::floating_window::FloatingWindowClosed;
+use crate::ui::vehicle_chain::VehicleChainRegistry;
 use crate::ui::vehicle_details_window::{VehicleDetailsTab, VehicleDetailsWindowState};
 
 pub(crate) use actions::handle_vehicle_window_buttons;
@@ -29,7 +29,7 @@ pub(crate) use rename::{
     vehicle_window_rename_keyboard,
 };
 pub(crate) use setup::setup_vehicle_window;
-pub(crate) use sync::sync_vehicle_window;
+pub(crate) use sync::{bind_focused_child_window_keys, sync_vehicle_window};
 
 const PREVIEW_TEX_W: u32 = 260;
 const PREVIEW_TEX_H: u32 = 100;
@@ -50,8 +50,41 @@ const STATUS_NO_ROUTE: Color = Color::srgb(0.95, 0.75, 0.25);
 
 #[derive(Resource, Default)]
 pub(crate) struct VehicleWindowState {
+    /// Vehículo enfocado (acciones/rename/preview RT).
     pub(crate) vehicle_id: Option<u32>,
+    /// Todas las vistas abiertas (máx. 2); espejo de [`VehicleChainRegistry`].
+    pub(crate) open: Vec<u32>,
     pub(crate) rename_editing: bool,
+}
+
+impl VehicleWindowState {
+    /// Abre o trae al frente la vista de `vehicle_id` (#242).
+    pub(crate) fn open_or_focus(
+        &mut self,
+        chain: &mut VehicleChainRegistry,
+        vehicle_id: u32,
+    ) -> u8 {
+        let slot = chain.open_or_focus(vehicle_id);
+        self.vehicle_id = chain.focused;
+        self.open = chain.open_ids();
+        self.rename_editing = false;
+        slot
+    }
+
+    pub(crate) fn sync_from_chain(&mut self, chain: &VehicleChainRegistry) {
+        self.vehicle_id = chain.focused;
+        self.open = chain.open_ids();
+        if self.vehicle_id.is_none() {
+            self.rename_editing = false;
+        }
+    }
+
+    pub(crate) fn clear_with_chain(&mut self, chain: &mut VehicleChainRegistry) {
+        chain.clear();
+        self.vehicle_id = None;
+        self.open.clear();
+        self.rename_editing = false;
+    }
 }
 
 #[derive(Component)]
@@ -119,14 +152,47 @@ pub(crate) fn vehicle_side_sprite(
 pub(crate) fn vehicle_window_on_closed(
     mut closed: MessageReader<FloatingWindowClosed>,
     mut window_state: ResMut<VehicleWindowState>,
+    mut chain: ResMut<VehicleChainRegistry>,
     mut details_state: ResMut<VehicleDetailsWindowState>,
 ) {
+    use crate::ui::floating_window::FloatingWindowId;
     for msg in closed.read() {
-        if msg.0 == FloatingWindowId::Vehicle {
-            window_state.vehicle_id = None;
-            window_state.rename_editing = false;
+        if msg.0.class != FloatingWindowId::Vehicle {
+            continue;
+        }
+        let vehicle_id = msg.0.instance;
+        if vehicle_id == 0 {
+            // Slot sin bind (instance 0): limpiar todo el estado legacy.
+            window_state.clear_with_chain(&mut chain);
+            details_state.vehicle_id = None;
+            details_state.details_tab = VehicleDetailsTab::Info;
+            continue;
+        }
+        chain.close_vehicle(vehicle_id);
+        window_state.sync_from_chain(&chain);
+        // No pisar Details de otra instancia (#244).
+        if details_state.vehicle_id == Some(vehicle_id) {
             details_state.vehicle_id = None;
             details_state.details_tab = VehicleDetailsTab::Info;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ui::vehicle_chain::VehicleChainRegistry;
+
+    #[test]
+    fn open_or_focus_keeps_two_ids() {
+        let mut state = VehicleWindowState::default();
+        let mut chain = VehicleChainRegistry::default();
+        state.open_or_focus(&mut chain, 10);
+        state.open_or_focus(&mut chain, 20);
+        assert_eq!(state.open, vec![10, 20]);
+        assert_eq!(state.vehicle_id, Some(20));
+        state.open_or_focus(&mut chain, 10);
+        assert_eq!(state.open, vec![10, 20]);
+        assert_eq!(state.vehicle_id, Some(10));
     }
 }

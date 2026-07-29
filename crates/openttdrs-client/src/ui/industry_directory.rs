@@ -451,7 +451,7 @@ pub(crate) fn industry_directory_on_closed(
     mut search_q: Query<(&mut EditableText, &mut Text), With<IndustryDirectorySearchInput>>,
 ) {
     for message in closed.read() {
-        if message.0 == FloatingWindowId::IndustryDirectory {
+        if message.0.class == FloatingWindowId::IndustryDirectory {
             state.open = false;
             state.filter_text.clear();
             if let Ok((mut editable, mut text)) = search_q.single_mut() {

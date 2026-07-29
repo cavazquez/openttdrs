@@ -366,7 +366,7 @@ pub(crate) fn subsidy_list_on_closed(
     mut state: ResMut<SubsidyListState>,
 ) {
     for message in closed.read() {
-        if message.0 == FloatingWindowId::SubsidyList {
+        if message.0.class == FloatingWindowId::SubsidyList {
             state.open = false;
             state.selected = None;
         }

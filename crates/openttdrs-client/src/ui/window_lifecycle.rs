@@ -37,7 +37,7 @@ pub(crate) fn close_floating_window_on_message(
     mut set_closed: impl FnMut(),
 ) {
     for msg in closed.read() {
-        if msg.0 == id {
+        if msg.0.class == id {
             set_closed();
         }
     }

@@ -369,7 +369,7 @@ pub(crate) fn town_directory_on_closed(
     mut search_q: Query<(&mut EditableText, &mut Text), With<TownDirectorySearchInput>>,
 ) {
     for message in closed.read() {
-        if message.0 == FloatingWindowId::TownDirectory {
+        if message.0.class == FloatingWindowId::TownDirectory {
             state.open = false;
             state.filter_text.clear();
             state.selected = None;

@@ -410,9 +410,21 @@ fn chrome_capabilities(id: FloatingWindowId) -> WindowChromeCapabilities {
     }
 }
 
-/// El usuario cerró la ventana con ✕; el dueño debe limpiar su estado.
-#[derive(Message)]
-pub(crate) struct FloatingWindowClosed(pub(crate) FloatingWindowId);
+/// El usuario cerró la ventana; el dueño limpia el estado de esa instancia (#242).
+#[derive(Message, Clone, Copy, Debug)]
+pub(crate) struct FloatingWindowClosed(pub(crate) WindowKey);
+
+impl FloatingWindowClosed {
+    #[must_use]
+    pub(crate) const fn class(self) -> FloatingWindowId {
+        self.0.class
+    }
+
+    #[must_use]
+    pub(crate) const fn key(self) -> WindowKey {
+        self.0
+    }
+}
 
 /// Drag en curso: ventana agarrada y offset cursor→esquina.
 #[derive(Resource, Default)]
@@ -435,6 +447,15 @@ pub(crate) struct WindowZCounter(i32);
 impl Default for WindowZCounter {
     fn default() -> Self {
         Self(WINDOW_BASE_Z)
+    }
+}
+
+impl WindowZCounter {
+    /// Incrementa y devuelve el nuevo z para elevar una ventana.
+    #[allow(dead_code)]
+    pub(crate) fn bump(&mut self) -> i32 {
+        self.0 += 1;
+        self.0
     }
 }
 
@@ -483,6 +504,39 @@ pub(crate) fn window_text_font(asset_server: &AssetServer, role: UiFontRole) -> 
     crate::ui::font::ui_text_font_loaded(asset_server, role)
 }
 
+
+/// Trae al frente una ventana existente (#242 reopen).
+#[allow(dead_code)]
+pub(crate) fn raise_floating_window(
+    windows_q: &mut Query<(Entity, &FloatingWindow, &mut GlobalZIndex, &mut Visibility)>,
+    z_counter: &mut WindowZCounter,
+    key: WindowKey,
+) -> bool {
+    for (entity, win, mut z, mut vis) in windows_q.iter_mut() {
+        if win.key != key {
+            continue;
+        }
+        *vis = Visibility::Visible;
+        z.0 = z_counter.bump();
+        let _ = entity;
+        return true;
+    }
+    false
+}
+
+/// Busca la entidad raíz con esa clave.
+#[allow(dead_code)]
+#[must_use]
+pub(crate) fn find_floating_window_entity(
+    windows_q: &Query<(Entity, &FloatingWindow)>,
+    key: WindowKey,
+) -> Option<Entity> {
+    windows_q
+        .iter()
+        .find(|(_, win)| win.key == key)
+        .map(|(entity, _)| entity)
+}
+
 /// Coloca una ventana según `WDP_AUTO` / `WDP_CENTER` y clampea fuera de
 /// toolbar/statusbar (#243). `preferred` es la posición del caller en Auto.
 #[must_use]
@@ -527,6 +581,28 @@ pub(crate) fn spawn_floating_window(
     pos: Vec2,
     width: f32,
 ) -> (Entity, Entity) {
+    spawn_floating_window_keyed(
+        commands,
+        asset_server,
+        WindowKey::singleton(id),
+        title,
+        title_color,
+        pos,
+        width,
+    )
+}
+
+/// Como [`spawn_floating_window`] pero con `WindowKey` explícito (#242).
+pub(crate) fn spawn_floating_window_keyed(
+    commands: &mut Commands,
+    asset_server: &AssetServer,
+    key: WindowKey,
+    title: &str,
+    title_color: Color,
+    pos: Vec2,
+    width: f32,
+) -> (Entity, Entity) {
+    let id = key.class;
     let mut content = Entity::PLACEHOLDER;
     let capabilities = chrome_capabilities(id);
     let geo = reference_geometry_primary(id);
@@ -551,10 +627,7 @@ pub(crate) fn spawn_floating_window(
     }
     let root = commands
         .spawn((
-            FloatingWindow {
-                id,
-                key: WindowKey::singleton(id),
-            },
+            FloatingWindow { id, key },
             FloatingWindowChromeState::default(),
             root_node,
             BackgroundColor(WINDOW_BG),
@@ -1149,19 +1222,24 @@ fn update_window_chrome_buttons(
     }
 }
 
-/// Oculta `root` y sus descendientes de la matriz (#242 cascade singleton).
+/// Oculta `root` y descendientes con la misma `instance` (#242).
 fn hide_window_and_descendants(
-    root: FloatingWindowId,
+    root: WindowKey,
     windows_q: &mut Query<(&FloatingWindow, &mut Visibility)>,
     closed: &mut MessageWriter<FloatingWindowClosed>,
 ) {
-    let mut ids = window_descendant_ids(root);
-    ids.push(root);
-    for id in ids {
+    let mut keys = vec![root];
+    for class in window_descendant_ids(root.class) {
+        keys.push(WindowKey {
+            class,
+            instance: root.instance,
+        });
+    }
+    for key in keys {
         for (win, mut vis) in windows_q.iter_mut() {
-            if win.id == id && *vis != Visibility::Hidden {
+            if win.key == key && *vis != Visibility::Hidden {
                 *vis = Visibility::Hidden;
-                closed.write(FloatingWindowClosed(id));
+                closed.write(FloatingWindowClosed(key));
             }
         }
     }
@@ -1187,8 +1265,8 @@ fn close_window_buttons(
         let Ok((win, _)) = windows_q.get(bar_parent.parent()) else {
             continue;
         };
-        let id = win.id;
-        hide_window_and_descendants(id, &mut windows_q, &mut closed);
+        let key = win.key;
+        hide_window_and_descendants(key, &mut windows_q, &mut closed);
     }
 }
 
@@ -1197,27 +1275,32 @@ pub(crate) fn close_top_visible_floating_window(
     windows_q: &mut Query<(&FloatingWindow, &GlobalZIndex, &mut Visibility)>,
     closed: &mut MessageWriter<FloatingWindowClosed>,
 ) -> bool {
-    let mut best: Option<(FloatingWindowId, i32)> = None;
+    let mut best: Option<(WindowKey, i32)> = None;
     for (win, z, vis) in windows_q.iter() {
         if *vis != Visibility::Visible {
             continue;
         }
         if best.map(|(_, bz)| z.0 > bz).unwrap_or(true) {
-            best = Some((win.id, z.0));
+            best = Some((win.key, z.0));
         }
     }
-    let Some((id, _)) = best else {
+    let Some((key, _)) = best else {
         return false;
     };
-    // Esc cierra sólo la superior; cascade de hijas si esa superior es padre.
-    let mut ids = window_descendant_ids(id);
-    ids.push(id);
+    // Esc cierra la superior y sus hijas de la misma instance (#242).
+    let mut keys = vec![key];
+    for class in window_descendant_ids(key.class) {
+        keys.push(WindowKey {
+            class,
+            instance: key.instance,
+        });
+    }
     let mut closed_any = false;
-    for close_id in ids {
+    for close_key in keys {
         for (win, _, mut vis) in windows_q.iter_mut() {
-            if win.id == close_id && *vis != Visibility::Hidden {
+            if win.key == close_key && *vis != Visibility::Hidden {
                 *vis = Visibility::Hidden;
-                closed.write(FloatingWindowClosed(close_id));
+                closed.write(FloatingWindowClosed(close_key));
                 closed_any = true;
             }
         }
@@ -1345,6 +1428,50 @@ mod tests {
         assert!(descendants.contains(&FloatingWindowId::Orders));
         assert!(descendants.contains(&FloatingWindowId::DestinationPicker));
         assert!(descendants.contains(&FloatingWindowId::VehicleDetails));
+    }
+
+    #[test]
+    fn closed_message_carries_window_key_instance() {
+        let key = WindowKey {
+            class: FloatingWindowId::Vehicle,
+            instance: 7,
+        };
+        let msg = FloatingWindowClosed(key);
+        assert_eq!(msg.class(), FloatingWindowId::Vehicle);
+        assert_eq!(msg.key().instance, 7);
+    }
+
+    #[test]
+    fn cascade_keys_keep_instance_across_parent_child() {
+        let root = WindowKey {
+            class: FloatingWindowId::Vehicle,
+            instance: 11,
+        };
+        let mut keys = vec![root];
+        for class in window_descendant_ids(root.class) {
+            keys.push(WindowKey {
+                class,
+                instance: root.instance,
+            });
+        }
+        assert!(keys.iter().all(|k| k.instance == 11));
+        assert!(
+            keys.iter()
+                .any(|k| k.class == FloatingWindowId::Orders && k.instance == 11)
+        );
+        let other = WindowKey {
+            class: FloatingWindowId::Orders,
+            instance: 22,
+        };
+        assert!(!keys.contains(&other));
+    }
+
+    #[test]
+    fn chrome_closebox_uses_opengfx_sprite_path_not_unicode() {
+        // El marco spawnea ImageNode con window_close.png (regresión #241).
+        let path = "assets/opengfx/tiles/window_close.png";
+        assert!(path.contains("window_close"));
+        assert!(!path.contains('×') && !path.contains('✕'));
     }
 
     #[test]

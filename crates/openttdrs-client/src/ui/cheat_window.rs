@@ -239,7 +239,7 @@ pub(crate) fn cheat_window_on_closed(
     mut state: ResMut<CheatWindowState>,
 ) {
     for msg in closed.read() {
-        if msg.0 == FloatingWindowId::CheatWindow {
+        if msg.0.class == FloatingWindowId::CheatWindow {
             state.open = false;
         }
     }

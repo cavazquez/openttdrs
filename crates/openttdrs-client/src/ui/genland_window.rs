@@ -287,7 +287,7 @@ pub(crate) fn genland_window_on_closed(
     mut state: ResMut<GenLandWindowState>,
 ) {
     for msg in closed.read() {
-        if msg.0 == FloatingWindowId::GenLand {
+        if msg.0.class == FloatingWindowId::GenLand {
             state.open = false;
         }
     }

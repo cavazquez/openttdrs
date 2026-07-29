@@ -317,7 +317,7 @@ pub(crate) fn object_picker_on_closed(
     mut tool_state: ResMut<UiToolState>,
 ) {
     for msg in closed.read() {
-        if msg.0 == FloatingWindowId::ObjectPicker && object_tool_active(&tool_state) {
+        if msg.0.class == FloatingWindowId::ObjectPicker && object_tool_active(&tool_state) {
             tool_state.active_tool = None;
         }
     }

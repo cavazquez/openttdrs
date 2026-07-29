@@ -611,7 +611,7 @@ pub(crate) fn station_directory_on_closed(
     mut state: ResMut<StationDirectoryState>,
 ) {
     for message in closed.read() {
-        if message.0 == FloatingWindowId::StationDirectory {
+        if message.0.class == FloatingWindowId::StationDirectory {
             state.open = false;
         }
     }

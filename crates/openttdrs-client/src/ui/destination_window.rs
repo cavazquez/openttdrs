@@ -325,7 +325,7 @@ pub(crate) fn destination_picker_on_closed(
     mut picker_state: ResMut<DestinationPickerState>,
 ) {
     for msg in reader.read() {
-        if msg.0 == FloatingWindowId::DestinationPicker {
+        if msg.0.class == FloatingWindowId::DestinationPicker {
             picker_state.open = false;
         }
     }

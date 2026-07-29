@@ -393,7 +393,7 @@ pub(crate) fn road_stop_picker_on_closed(
     mut tool_state: ResMut<UiToolState>,
 ) {
     for msg in closed.read() {
-        if msg.0 == FloatingWindowId::RoadStopPicker && road_stop_tool_kind(&tool_state).is_some() {
+        if msg.0.class == FloatingWindowId::RoadStopPicker && road_stop_tool_kind(&tool_state).is_some() {
             tool_state.active_tool = None;
         }
     }

@@ -305,7 +305,7 @@ pub(crate) fn link_graph_window_on_closed(
     mut state: ResMut<LinkGraphWindowState>,
 ) {
     for msg in closed.read() {
-        if msg.0 == FloatingWindowId::LinkGraphLegend {
+        if msg.0.class == FloatingWindowId::LinkGraphLegend {
             state.open = false;
         }
     }

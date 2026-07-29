@@ -205,7 +205,7 @@ pub(crate) fn bridge_picker_on_closed(
     mut bridge_state: ResMut<BridgeBuildState>,
 ) {
     for msg in reader.read() {
-        if msg.0 == FloatingWindowId::BridgePicker {
+        if msg.0.class == FloatingWindowId::BridgePicker {
             bridge_state.pending = None;
         }
     }

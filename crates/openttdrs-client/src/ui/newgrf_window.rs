@@ -603,7 +603,7 @@ pub(crate) fn newgrf_window_on_closed(
     mut state: ResMut<NewGrfWindowState>,
 ) {
     for msg in closed.read() {
-        if msg.0 == FloatingWindowId::NewGrf {
+        if msg.0.class == FloatingWindowId::NewGrf {
             state.open = false;
             state.selected = None;
             state.selected_param = 0;

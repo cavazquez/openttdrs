@@ -112,7 +112,7 @@ pub(crate) fn cargo_payment_window_on_closed(
     mut state: ResMut<CargoPaymentWindowState>,
 ) {
     for message in closed.read() {
-        if message.0 == FloatingWindowId::CargoPaymentRates {
+        if message.0.class == FloatingWindowId::CargoPaymentRates {
             state.open = false;
         }
     }

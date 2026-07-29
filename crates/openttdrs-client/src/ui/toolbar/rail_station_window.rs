@@ -967,7 +967,7 @@ pub(crate) fn rail_station_picker_on_closed(
     mut catalog: ResMut<StationCatalogPickerState>,
 ) {
     for msg in closed.read() {
-        if msg.0 == FloatingWindowId::RailStationPicker
+        if msg.0.class == FloatingWindowId::RailStationPicker
             && tool_state.active_tool == Some(BuildMenuAction::RailStation)
         {
             tool_state.active_tool = None;

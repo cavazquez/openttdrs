@@ -50,9 +50,11 @@ use crate::ui::vehicle_details_window::{
     VehicleDetailsWindowState, handle_vehicle_details_buttons, setup_vehicle_details_window,
     sync_vehicle_details_window, vehicle_details_window_on_closed,
 };
+use crate::ui::vehicle_chain::VehicleChainRegistry;
 use crate::ui::vehicle_window::{
     VehicleWindowState, handle_vehicle_rename_buttons, handle_vehicle_window_buttons,
-    setup_vehicle_window, sync_vehicle_window, vehicle_window_on_closed,
+    bind_focused_child_window_keys, setup_vehicle_window, sync_vehicle_window,
+    vehicle_window_on_closed,
     vehicle_window_rename_editable_keyboard, vehicle_window_rename_keyboard,
 };
 
@@ -69,6 +71,7 @@ impl Plugin for GameWindowsPlugin {
             .init_resource::<NewGrfTrainPreviewCache>()
             .init_resource::<DestinationPickerState>()
             .init_resource::<VehicleWindowState>()
+            .init_resource::<VehicleChainRegistry>()
             .init_resource::<VehicleDetailsWindowState>()
             .init_resource::<RefitWindowState>()
             .init_resource::<SharedOrdersWindowState>()
@@ -175,6 +178,7 @@ impl Plugin for GameWindowsPlugin {
                     sync_buy_window,
                     sync_destination_picker,
                     sync_vehicle_window,
+                    bind_focused_child_window_keys,
                     sync_vehicle_details_window,
                     sync_timetable_window,
                 )

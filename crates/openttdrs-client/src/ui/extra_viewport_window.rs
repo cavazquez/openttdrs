@@ -129,7 +129,7 @@ pub(crate) fn extra_viewport_window_on_closed(
     mut cam_q: Query<&mut Camera, With<ExtraViewportCamera>>,
 ) {
     for msg in closed.read() {
-        if msg.0 == FloatingWindowId::ExtraViewport {
+        if msg.0.class == FloatingWindowId::ExtraViewport {
             state.open = false;
             if let Ok(mut camera) = cam_q.single_mut() {
                 camera.is_active = false;
@@ -157,7 +157,7 @@ mod tests {
                 ..default()
             },
         ));
-        world.write_message(FloatingWindowClosed(FloatingWindowId::ExtraViewport));
+        world.write_message(FloatingWindowClosed(crate::ui::floating_window::WindowKey::singleton(FloatingWindowId::ExtraViewport)));
         world
             .run_system_once(extra_viewport_window_on_closed)
             .unwrap();

@@ -22,6 +22,7 @@ use crate::ui::list_window::{
 };
 use crate::ui::navigation::{OpenUiRoute, UiRoute};
 use crate::ui::toolbar::BuildMenuUi;
+use crate::ui::vehicle_chain::VehicleChainRegistry;
 use crate::ui::vehicle_window::{
     CONSIST_UNIT_SPRITE_H, CONSIST_UNIT_SPRITE_W, VehicleWindowState, vehicle_side_sprite,
 };
@@ -406,6 +407,7 @@ pub(crate) fn handle_vehicle_list_buttons(
     >,
     rows: Query<(&Interaction, &VehicleListRow), (Changed<Interaction>, With<Button>)>,
     mut vehicle_window: ResMut<VehicleWindowState>,
+    mut vehicle_chain: ResMut<VehicleChainRegistry>,
     mut sim: ResMut<SimWorld>,
     mut pending: ResMut<RemapMapVisualsPending>,
     mut hud_feedback: ResMut<HudBuildFeedback>,
@@ -440,8 +442,7 @@ pub(crate) fn handle_vehicle_list_buttons(
     for (interaction, row) in &rows {
         if *interaction == Interaction::Pressed {
             state.selected = Some(row.vehicle_id);
-            vehicle_window.vehicle_id = Some(row.vehicle_id);
-            vehicle_window.rename_editing = false;
+            vehicle_window.open_or_focus(&mut vehicle_chain, row.vehicle_id);
         }
     }
     for (interaction, action) in &action_buttons {
@@ -778,7 +779,7 @@ pub(crate) fn vehicle_list_on_closed(
     mut state: ResMut<VehicleListState>,
 ) {
     for message in closed.read() {
-        if message.0 == FloatingWindowId::VehicleList {
+        if message.0.class == FloatingWindowId::VehicleList {
             state.open = false;
             state.selected = None;
             state.station_filter = None;
@@ -795,6 +796,7 @@ mod tests {
     fn fixture_resources(world: &mut World) {
         world.init_resource::<VehicleListState>();
         world.init_resource::<VehicleWindowState>();
+        world.init_resource::<VehicleChainRegistry>();
         world.init_resource::<RemapMapVisualsPending>();
         world.init_resource::<HudBuildFeedback>();
         world.insert_resource(Time::<()>::default());

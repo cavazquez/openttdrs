@@ -522,7 +522,7 @@ pub(crate) fn graph_window_on_closed(
     mut state: ResMut<GraphWindowState>,
 ) {
     for message in closed.read() {
-        if message.0 == FloatingWindowId::Graphs {
+        if message.0.class == FloatingWindowId::Graphs {
             state.open = false;
         }
     }

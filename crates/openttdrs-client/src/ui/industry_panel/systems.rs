@@ -24,7 +24,7 @@ pub(crate) fn industry_panel_on_closed(
     mut preview_cam: Query<&mut Camera, (With<IndustryPreviewCamera>, Without<PrimaryGameCamera>)>,
 ) {
     for msg in closed.read() {
-        if msg.0 != FloatingWindowId::Industry {
+        if msg.0.class != FloatingWindowId::Industry {
             continue;
         }
         panel.open = false;

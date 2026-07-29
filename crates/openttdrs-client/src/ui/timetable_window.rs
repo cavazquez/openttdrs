@@ -358,7 +358,7 @@ pub(crate) fn timetable_window_on_closed(
     mut tt_state: ResMut<TimetableWindowState>,
 ) {
     for msg in closed.read() {
-        if msg.0 == FloatingWindowId::Timetable {
+        if msg.0.class == FloatingWindowId::Timetable {
             tt_state.vehicle_id = None;
         }
     }

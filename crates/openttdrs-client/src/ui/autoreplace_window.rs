@@ -719,7 +719,7 @@ pub(crate) fn autoreplace_window_on_closed(
     mut state: ResMut<AutoreplaceWindowState>,
 ) {
     for message in closed.read() {
-        if message.0 == FloatingWindowId::Autoreplace {
+        if message.0.class == FloatingWindowId::Autoreplace {
             *state = AutoreplaceWindowState::default();
         }
     }

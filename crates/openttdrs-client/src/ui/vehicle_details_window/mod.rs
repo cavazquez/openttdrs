@@ -407,7 +407,7 @@ pub(crate) fn vehicle_details_window_on_closed(
     mut details_state: ResMut<VehicleDetailsWindowState>,
 ) {
     for msg in closed.read() {
-        if msg.0 == FloatingWindowId::VehicleDetails {
+        if msg.0.class == FloatingWindowId::VehicleDetails {
             details_state.vehicle_id = None;
             details_state.details_tab = VehicleDetailsTab::Info;
         }

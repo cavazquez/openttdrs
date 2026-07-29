@@ -441,7 +441,7 @@ pub(crate) fn display_options_window_on_closed(
     mut state: ResMut<DisplayOptionsWindowState>,
 ) {
     for msg in closed.read() {
-        if msg.0 == FloatingWindowId::DisplayOptions {
+        if msg.0.class == FloatingWindowId::DisplayOptions {
             state.open = false;
         }
     }

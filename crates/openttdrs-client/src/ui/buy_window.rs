@@ -902,7 +902,7 @@ pub(crate) fn buy_window_on_closed(
     mut search_q: Query<(&mut EditableText, &mut Text), With<BuyVehicleSearchInput>>,
 ) {
     for msg in closed.read() {
-        if msg.0 == FloatingWindowId::BuyVehicle {
+        if msg.0.class == FloatingWindowId::BuyVehicle {
             buy_state.depot_pos = None;
             buy_state.selected_engine = None;
             buy_state.sort = EngineCatalogSort::default();

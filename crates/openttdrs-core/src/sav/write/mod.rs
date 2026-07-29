@@ -3,11 +3,11 @@
 //! Contenedor por defecto: `OTTZ` (zlib). Versión de save: [`EXPORT_SAVE_VERSION`].
 //! Chunks: `MAPS` (`CH_TABLE`) + planos RIFF + `STNN`/`CITY`/`INDY`/`ORDL`/`VEHS`/`LGRP` + `DATE` + `PLYR`.
 //!
-//! Subconjunto prometido (MVP #226): mapa + `CITY` (≥1) + `STNN` moderno
-//! (SAVEBYTE + structs) + `VEHS`/`ORDL` (tren + ROAD bus/camión) + `INDY`
-//! + `DATE`/`PLYR` cargable por `OpenTTD` ≥15.3 dedicated.
+//! Subconjunto prometido (MVP #226/#267): mapa + `CITY` (≥1) + `STNN` moderno
+//! (SAVEBYTE + structs) + `VEHS`/`ORDL` (tren + ROAD + ship + aircraft ala fija)
+//! + `INDY` + `DATE`/`PLYR` cargable por `OpenTTD` ≥15.3 dedicated.
 //!
-//! Residual: ship/aircraft/tram, `CAPY`/`ECMY`, `PATS`/`OPTS`/`GSET`/`ENGN`/`SRND`/`NewGRF`/`PLYR` completo.
+//! Residual: tram, rotor heli, `CAPY`/`ECMY` packets, `PATS`/`OPTS`/`GSET`/`ENGN`/`SRND`/`NewGRF`/`PLYR` completo.
 //! Limitaciones: `docs/PARIDAD.md` y `docs/archive/merged-2026-07/ROADMAP_SAV_EXPORT.md`.
 
 #![allow(clippy::cast_possible_truncation)]
@@ -605,6 +605,39 @@ mod tests {
         state
     }
 
+    /// Fixture ship (#267): CITY+STNN dock + VEHS ship sobre agua.
+    fn mvp_ship_state() -> GameState {
+        use crate::map::{WaterClass, make_water_tile};
+        use crate::vehicle::VehicleOrder;
+
+        let mut state = mvp_stations_state();
+        let dock_pos = TileCoord::new(32, 32);
+        let mut dock = Station::new_with_kind(dock_pos, StopKind::Dock);
+        dock.name = Some("Muelle Demo".into());
+        state.stations.push(dock);
+
+        let ship_pos = TileCoord::new(30, 32);
+        make_water_tile(&mut state.map, ship_pos, WaterClass::Sea).expect("sea");
+        // Franja de agua adyacente (navegación / AfterLoad).
+        for x in 28..36 {
+            let c = TileCoord::new(x, 32);
+            let _ = make_water_tile(&mut state.map, c, WaterClass::Sea);
+        }
+        let mut dock_tile = state.map.get(dock_pos).expect("in bounds");
+        dock_tile.kind = TileKind::Station;
+        dock_tile.mapt = 0x50;
+        // ST_DOCK en bits 3–6 de m6 (= 6 << 3).
+        dock_tile.m6 = 6 << 3;
+        state.map.set_tile(dock_pos, dock_tile).expect("set");
+
+        let mut ship = Vehicle::new(0, VehicleKind::Ship, ship_pos, ship_pos);
+        ship.running = false;
+        ship.direction = crate::vehicle::DIR_NE;
+        ship.set_vehicle_orders(vec![VehicleOrder::station(dock_pos)]);
+        state.vehicles = vec![ship];
+        state
+    }
+
     /// Fixture rico: estaciones + tren + bus ROAD + industria (`#226`).
     fn mvp_rich_state() -> GameState {
         use crate::industry::{Industry, IndustryKind, IndustrySpec};
@@ -700,6 +733,45 @@ mod tests {
                 let _ = std::fs::create_dir_all(parent);
             }
             std::fs::write(&path, &bytes).expect("dump train sav");
+        }
+    }
+
+    #[test]
+    fn export_mvp_ship_emits_vehs_ship_and_ordl() {
+        use crate::sav::chunks::{find_chunk, parse_chunks};
+        use crate::sav::table::{SlValue, parse_table_chunk, record_get};
+
+        let state = mvp_ship_state();
+        let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
+        let payload = &bytes[8..];
+        let chunks = parse_chunks(payload).expect("chunks");
+        assert!(find_chunk(&chunks, "VEHS").is_some());
+        assert!(find_chunk(&chunks, "ORDL").is_some());
+
+        let sav_game = sav::load(&bytes).expect("load rust");
+        assert!(
+            sav_game
+                .vehicles
+                .iter()
+                .any(|v| v.kind == sav::SavVehicleKind::Ship),
+            "ship en VEHS"
+        );
+
+        let vehs = find_chunk(&chunks, "VEHS").expect("VEHS");
+        let rows = parse_table_chunk(&vehs.body, true).expect("VEHS table");
+        assert_eq!(rows.len(), 1);
+        assert_eq!(
+            record_get(&rows[0].1, "type").and_then(SlValue::as_u64),
+            Some(2)
+        );
+
+        // Smoke OpenTTD: OPENTTDRS_DUMP_MVP_SHIP_SAV=/ruta/mvp_openttd_ship.sav
+        if let Ok(path) = std::env::var("OPENTTDRS_DUMP_MVP_SHIP_SAV") {
+            let path = std::path::PathBuf::from(&path);
+            if let Some(parent) = path.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            std::fs::write(&path, &bytes).expect("dump ship sav");
         }
     }
 

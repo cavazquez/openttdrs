@@ -885,19 +885,21 @@ Checklist versionado de superficies de UI. Los conteos deben coincidir con
 `FloatingWindowId::ALL` / `BuildMenuAction::ALL` / etc. (test
 `ui_enum_inventory_counts`).
 
-**Fecha:** 2026-07-29 · **FloatingWindowId:** 54 · **BuildMenuAction:** 67 ·
+**Fecha:** 2026-07-29 · **FloatingWindowId:** 59 · **BuildMenuAction:** 77 ·
 **SaveMenuAction:** 25 · **ToolbarGroup:** 8
 
 ### Ventanas flotantes (`FloatingWindowId`)
 
 | Id | Apertura típica | Notas |
 |----|-----------------|-------|
-| Town | clic pueblo / menú | Chrome compacto (#179) |
+| Town | clic pueblo / menú | Chrome compacto (#179); Aut. → Authority (#269) |
+| TownAuthority | Town → Aut. | Stub ratings dominio (#269); acciones 15.3 residual |
 | TownDirectory | menú Info / `UiRoute` | |
 | IndustryDirectory | menú Info | |
-| Industry | clic industria | Viewport RT + Loc (#179) |
+| Industry | clic industria | Viewport RT + Loc (#179); Prod → Production (#269) |
+| IndustryProduction | Industry → Prod | Stub prod_level/rate (#269); plot residual |
 | StationDirectory | menú Info | |
-| Station | clic estación / directorio | FloatingWindow (#245); chrome fino follow-up |
+| Station | clic estación / directorio | FloatingWindow (#245); pool 2 slots stub (#269); chrome fino #240 |
 | VehicleList | menú Info / flota | |
 | SubsidyList | menú Economía | |
 | Depot | clic depósito | |
@@ -915,6 +917,7 @@ Checklist versionado de superficies de UI. Los conteos deben coincidir con
 | DestinationPicker | órdenes → destino | |
 | NewsHistory | barra de noticias | |
 | Finances | menú Economía | |
+| CompanyView | menú Economía | Stub dinero/flota (#271); Livery/ManagerFace residual |
 | NewsSettings | Ajustes | |
 | PathfindingSettings | Ajustes | |
 | CargoDistSettings | Ajustes | Manual / Asimétrica / Simétrica |
@@ -926,7 +929,9 @@ Checklist versionado de superficies de UI. Los conteos deben coincidir con
 | Refit | depósito | |
 | SharedOrders | vehículo | |
 | Autoreplace | depósito / flota | |
-| Graphs | menú Economía | |
+| GraphIncome | menú Economía → Ingresos | Clase 15.3 separada (#271) |
+| GraphOperatingProfit | menú Economía → Beneficio | (#271) |
+| GraphCompanyValue | menú Economía → Valor | (#271) |
 | CargoPaymentRates | menú Economía | |
 | DisplayOptions | Ajustes | |
 | ExtraViewport | Ajustes | |
@@ -1237,7 +1242,7 @@ En saves &lt; 214, OpenTTD mueve el RoadType desde bits 6–7 de `m7` a `m4` (ro
 
 ### Notas
 
-- Export MVP (#226): `MAPS` `CH_TABLE` + `CITY` (≥1) + `STNN` moderno + `VEHS`/`ORDL` (tren + bus/camión ROAD) + `INDY` + DATE/PLYR; planos RIFF. Cargamentos: goods×64 vacíos en STNN (sin CAPY/ECMY). Fixtures smoke `validate_sav_openttd.sh`: `mvp_openttd_load.sav`, `mvp_openttd_stations.sav`, `mvp_openttd_train.sav`, `mvp_openttd_rich.sav` (estaciones+tren+bus+industria), `demo_openttd.sav`. Round-trip OpenTTD→openttdrs: `scripts/roundtrip_sav_openttd.sh` (dedicated `save` por consola + import subconjunto). Residual: ship/aircraft/tram, CAPY/ECMY packets, PATS/OPTS/GSET/ENGN/SRND/NewGRF/PLYR completo.
+- Export MVP (#226/#267): `MAPS` `CH_TABLE` + `CITY` (≥1) + `STNN` moderno + `VEHS`/`ORDL` (tren + ROAD + **ship** + **aircraft** ala fija+sombra) + `INDY` + DATE/PLYR; planos RIFF. Cargamentos: goods×64 vacíos en STNN (sin CAPY/ECMY). Fixtures smoke `validate_sav_openttd.sh`: `mvp_openttd_load.sav`, `mvp_openttd_stations.sav`, `mvp_openttd_train.sav`, `mvp_openttd_rich.sav`, `mvp_openttd_ship.sav` (#267), `demo_openttd.sav`. Round-trip OpenTTD→openttdrs: `scripts/roundtrip_sav_openttd.sh`. Residual: tram, rotor heli, **CAPY/ECMY packets**, PATS/OPTS/GSET/ENGN/SRND/NewGRF/PLYR completo.
 - Dedicated + `-g` dispara dos `AfterLoadGame` (new-game luego load); el export usa `OPENTTDRS_SNAPSHOT_MIN_CALL=2`.
 - El oráculo **no** invoca `parse_sav.py` ni `snapshot_dumper`.
 

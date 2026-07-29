@@ -539,6 +539,7 @@ impl GameState {
                 // Pasajeros (cargo 0) → bus; el resto, camión.
                 SavVehicleKind::RoadVehicle if v.cargo_type == 0 => VehicleKind::Bus,
                 SavVehicleKind::RoadVehicle => VehicleKind::Truck,
+                SavVehicleKind::Ship => VehicleKind::Ship,
                 SavVehicleKind::Aircraft => VehicleKind::Aircraft,
             };
             #[allow(clippy::cast_possible_truncation)]

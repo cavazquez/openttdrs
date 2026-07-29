@@ -52,6 +52,7 @@ pub(crate) struct IntentApplyContext<'w> {
     pub town_window: ResMut<'w, TownWindowState>,
     pub vehicle_window: ResMut<'w, VehicleWindowState>,
     pub vehicle_chain: ResMut<'w, VehicleChainRegistry>,
+    pub station_pool: ResMut<'w, crate::ui::station_pool::StationPoolRegistry>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -198,6 +199,7 @@ pub(crate) fn apply_intent(intent: MapClickIntent, ctx: &mut IntentApplyContext,
                 &mut ctx.town_window,
                 &mut ctx.vehicle_window,
                 &mut ctx.vehicle_chain,
+                &mut ctx.station_pool,
                 station_pos,
             );
         }

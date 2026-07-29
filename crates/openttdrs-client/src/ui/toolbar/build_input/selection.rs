@@ -101,8 +101,10 @@ pub(crate) fn open_station_panel(
     town_window: &mut TownWindowState,
     vehicle_window: &mut VehicleWindowState,
     chain: &mut VehicleChainRegistry,
+    station_pool: &mut crate::ui::station_pool::StationPoolRegistry,
     station_pos: openttdrs_core::TileCoord,
 ) {
+    let _slot = station_pool.open_or_focus(station_pos);
     station_panel.station_pos = Some(station_pos);
     depot_state.depot_pos = None;
     depot_state.selected_vehicle = None;

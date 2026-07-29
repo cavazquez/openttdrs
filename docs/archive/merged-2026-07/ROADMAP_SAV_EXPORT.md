@@ -142,9 +142,9 @@ Endianness crítica (debe coincidir con `build.rs` al importar):
 | `STNN` | ✅ nombres + facilities |
 | `CITY` | ✅ nombre + pos; población se recalcula al load |
 | `INDY` | ✅ tile/w/h/type (mapeo `IndustrySpec` → tipo OTTD best-effort) |
-| `VEHS` / `ORDL` | ✅ tren + bus/camión ROAD (tesela `MP_ROAD`) + goto estación/waypoint/depósito/condicional + full_load |
-| Barcos / aviones / tranvía | ❌ omitidos del export |
-| CAPY / ECMY (packets) | ❌; goods×64 vacíos en STNN bastan para load |
+| `VEHS` / `ORDL` | ✅ tren + ROAD + **ship** (agua) + **aircraft** (ala fija + sombra `next`) (#267) |
+| Barcos / aviones / tranvía | ✅ ship + aircraft ala fija (#267); ❌ tram / rotor heli residual |
+| CAPY / ECMY (packets) | ❌ residual documentado; goods×64 vacíos en STNN bastan para load |
 | Horarios / grupos / shared orders / autoreplace | ❌ solo en `.json` |
 | `OBJS`, `NEWS`, settings, NewGRF, ENGN, PATS, OPTS, GSET, SRND | ❌ (OpenTTD rellena defaults al load) |
 
@@ -167,7 +167,7 @@ Orden sugerido:
 3. ~~**`INDY`**~~ ✅  
 4. ~~**`ORDL` + `VEHS`**~~ ✅ (goto estación/waypoint/depósito/condicional + full_load)  
 5. ~~Órdenes depósito / condicionales / flags full_load más fieles~~ ✅  
-6. ~~Validar export (#66)~~ ✅ estructural; smoke dedicated real (`validate_sav_openttd.sh`). MVP load #226: `MAPS` TABLE + `CITY`≥1 + `STNN` moderno + `VEHS`/`ORDL` tren+ROAD + `INDY` (`mvp_openttd_rich.sav`, `demo_openttd.sav`). Round-trip OpenTTD→openttdrs: `scripts/roundtrip_sav_openttd.sh`. Residual: ship/aircraft/tram, CAPY/ECMY, PATS/OPTS/GSET/ENGN/SRND/NewGRF/PLYR completo.
+6. ~~Validar export (#66)~~ ✅ estructural; smoke dedicated real (`validate_sav_openttd.sh`). MVP load #226/#267: `MAPS` TABLE + `CITY`≥1 + `STNN` moderno + `VEHS`/`ORDL` tren+ROAD+ship+aircraft + `INDY` (`mvp_openttd_rich.sav`, `mvp_openttd_ship.sav`, `demo_openttd.sav`). Round-trip OpenTTD→openttdrs: `scripts/roundtrip_sav_openttd.sh`. Residual: tram, rotor heli, CAPY/ECMY packets, PATS/OPTS/GSET/ENGN/SRND/NewGRF/PLYR completo.
 
 Reglas:
 

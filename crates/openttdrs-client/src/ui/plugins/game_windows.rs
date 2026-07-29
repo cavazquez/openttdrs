@@ -24,6 +24,10 @@ use crate::ui::endscreen::{
     EndScreenState, RetireGameRequested, handle_endscreen_menu_button, process_retire_game_request,
     setup_endscreen, sync_endscreen, watch_game_over_events,
 };
+use crate::ui::company_view_window::{
+    CompanyViewWindowState, company_view_window_on_closed, handle_company_view_buttons,
+    open_company_view_from_routes, setup_company_view_window, sync_company_view_window,
+};
 use crate::ui::finances_window::{
     FinancesWindowState, finances_window_on_closed, handle_finances_window_buttons,
     handle_open_finances_window, open_finances_from_routes, setup_finances_window,
@@ -62,6 +66,7 @@ pub(crate) struct GameWindowsPlugin;
 impl Plugin for GameWindowsPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<FinancesWindowState>()
+            .init_resource::<CompanyViewWindowState>()
             .init_resource::<GraphWindowState>()
             .init_resource::<CargoPaymentWindowState>()
             .init_resource::<EndScreenState>()
@@ -80,6 +85,7 @@ impl Plugin for GameWindowsPlugin {
                 OnEnter(ClientScreen::InGame),
                 (
                     setup_finances_window,
+                    setup_company_view_window,
                     setup_buy_window,
                     setup_destination_picker,
                 )
@@ -110,6 +116,9 @@ impl Plugin for GameWindowsPlugin {
                     finances_window_on_closed,
                     sync_finances_window,
                     handle_finances_window_buttons,
+                    company_view_window_on_closed,
+                    sync_company_view_window,
+                    handle_company_view_buttons,
                 )
                     .in_set(UpdateSet::Ui)
                     .run_if(in_state(ClientScreen::InGame)),
@@ -197,6 +206,7 @@ impl Plugin for GameWindowsPlugin {
                 Update,
                 (
                     open_finances_from_routes,
+                    open_company_view_from_routes,
                     open_graph_from_routes,
                     open_cargo_payment_from_routes,
                 )

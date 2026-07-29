@@ -401,6 +401,7 @@ fn first_company_record(chunks: &[RawChunk], save_version: u16) -> Option<SlReco
 pub enum SavVehicleKind {
     Train,
     RoadVehicle,
+    Ship,
     Aircraft,
 }
 
@@ -457,8 +458,8 @@ pub struct SavVehicle {
 /// Bit `GVSF_FRONT` de `Vehicle::subtype` (cabeza de convoy en tren/camión).
 const GVSF_FRONT: u64 = 0x01;
 
-/// Vehículos del chunk `VEHS` (sparse table): trenes (cabeza + vagones) y
-/// vehículos de carretera cabeza de convoy; barcos/aviones se omiten.
+/// Vehículos del chunk `VEHS` (sparse table): tren/road/ship/aircraft.
+/// Aviones: solo el primario (`subtype` ≤ 2); sombra/rotor se omiten.
 #[must_use]
 #[allow(clippy::too_many_lines)]
 pub(crate) fn vehicles_from_chunks(
@@ -478,6 +479,7 @@ pub(crate) fn vehicles_from_chunks(
         let (kind, sub_name) = match vtype {
             0 => (SavVehicleKind::Train, "train"),
             1 => (SavVehicleKind::RoadVehicle, "roadveh"),
+            2 => (SavVehicleKind::Ship, "ship"),
             3 => (SavVehicleKind::Aircraft, "aircraft"),
             _ => continue,
         };

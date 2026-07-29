@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use openttdrs_core::prelude::*;
-use openttdrs_core::{company_net_value, format_money};
+use openttdrs_core::format_money;
 
 use crate::state::SimWorld;
 use crate::ui::floating_window::{
@@ -21,10 +21,6 @@ const PROFIT_POS: Color = Color::srgb(0.28, 0.55, 0.85);
 const PROFIT_NEG: Color = Color::srgb(0.85, 0.32, 0.28);
 const VALUE_POS: Color = Color::srgb(0.72, 0.58, 0.22);
 const VALUE_NEG: Color = Color::srgb(0.75, 0.28, 0.35);
-const BTN_BG: Color = Color::srgb(0.36, 0.31, 0.21);
-const BTN_ACTIVE: Color = Color::srgb(0.58, 0.50, 0.31);
-const BTN_BORDER: Color = Color::srgb(0.66, 0.58, 0.38);
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub(crate) enum GraphKind {
     #[default]
@@ -32,13 +28,40 @@ pub(crate) enum GraphKind {
     OperatingProfit,
     CompanyValue,
     /// Rating 0..=1000 por trimestre (`performance_history`).
+    /// Residual: reutiliza la ventana GraphIncome (#271).
     PerformanceHistory,
+}
+
+impl GraphKind {
+    /// Clase flotante 15.3 asociada (PerformanceHistory → Income).
+    #[must_use]
+    pub(crate) const fn window_id(self) -> FloatingWindowId {
+        match self {
+            Self::Income | Self::PerformanceHistory => FloatingWindowId::GraphIncome,
+            Self::OperatingProfit => FloatingWindowId::GraphOperatingProfit,
+            Self::CompanyValue => FloatingWindowId::GraphCompanyValue,
+        }
+    }
+
+    #[must_use]
+    const fn title_label(self) -> &'static str {
+        match self {
+            Self::Income => "Ingresos",
+            Self::OperatingProfit => "Beneficio operativo",
+            Self::CompanyValue => "Valor compañía",
+            Self::PerformanceHistory => "Rendimiento",
+        }
+    }
 }
 
 #[derive(Resource)]
 pub(crate) struct GraphWindowState {
-    pub(crate) open: bool,
-    pub(crate) kind: GraphKind,
+    /// Ventanas de gráfico abiertas por clase principal (#271).
+    pub(crate) income_open: bool,
+    pub(crate) profit_open: bool,
+    pub(crate) value_open: bool,
+    /// Kind activo en GraphIncome (Income o PerformanceHistory residual).
+    pub(crate) income_kind: GraphKind,
     /// Compañía cuyas series se muestran (`None` = seguir la activa).
     pub(crate) filter_company: Option<CompanyId>,
 }
@@ -46,8 +69,10 @@ pub(crate) struct GraphWindowState {
 impl Default for GraphWindowState {
     fn default() -> Self {
         Self {
-            open: false,
-            kind: GraphKind::Income,
+            income_open: false,
+            profit_open: false,
+            value_open: false,
+            income_kind: GraphKind::Income,
             filter_company: None,
         }
     }
@@ -58,6 +83,27 @@ impl GraphWindowState {
     pub(crate) fn resolved_company(&self, active: CompanyId) -> CompanyId {
         self.filter_company.unwrap_or(active)
     }
+
+    pub(crate) fn set_open(&mut self, kind: GraphKind, open: bool) {
+        match kind.window_id() {
+            FloatingWindowId::GraphIncome => {
+                self.income_open = open;
+                if open {
+                    self.income_kind = kind;
+                }
+            }
+            FloatingWindowId::GraphOperatingProfit => self.profit_open = open,
+            FloatingWindowId::GraphCompanyValue => self.value_open = open,
+            _ => {}
+        }
+    }
+
+    /// Compat tests / windows_shot: alguna clase abierta.
+    #[must_use]
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) fn open(&self) -> bool {
+        self.income_open || self.profit_open || self.value_open
+    }
 }
 
 #[derive(Component)]
@@ -66,80 +112,26 @@ pub(crate) struct GraphWindowHintText;
 #[derive(Component, Clone, Copy)]
 pub(crate) struct GraphBar {
     slot: usize,
+    kind: GraphKind,
 }
 
-#[derive(Component, Clone, Copy)]
-pub(crate) struct GraphKindButton(GraphKind);
-
-#[derive(Component, Clone, Copy)]
-pub(crate) struct GraphCompanyButton(CompanyId);
-
-#[derive(Component)]
-pub(crate) struct GraphCompanyFilterRow;
-
-pub(crate) fn setup_graph_window(mut commands: Commands, asset_server: Res<AssetServer>) {
-    let asset_server = &*asset_server;
+fn spawn_one_graph_window(
+    commands: &mut Commands,
+    asset_server: &AssetServer,
+    kind: GraphKind,
+    pos: Vec2,
+) {
+    let id = kind.window_id();
     let (_root, content) = spawn_floating_window(
-        &mut commands,
+        commands,
         asset_server,
-        FloatingWindowId::Graphs,
-        "Gráficos",
+        id,
+        kind.title_label(),
         TITLE_BROWN,
-        Vec2::new(200.0, 80.0),
+        pos,
         420.0,
     );
     commands.entity(content).with_children(|panel| {
-        panel
-            .spawn(Node {
-                flex_direction: FlexDirection::Row,
-                flex_wrap: FlexWrap::Wrap,
-                column_gap: Val::Px(4.0),
-                row_gap: Val::Px(4.0),
-                margin: UiRect::bottom(Val::Px(6.0)),
-                ..default()
-            })
-            .with_children(|row| {
-                spawn_kind_button(row, asset_server, GraphKind::Income, "Ingresos");
-                spawn_kind_button(
-                    row,
-                    asset_server,
-                    GraphKind::OperatingProfit,
-                    "Beneficio operativo",
-                );
-                spawn_kind_button(row, asset_server, GraphKind::CompanyValue, "Valor compañía");
-                spawn_kind_button(
-                    row,
-                    asset_server,
-                    GraphKind::PerformanceHistory,
-                    "Rendimiento",
-                );
-            });
-        panel.spawn((
-            GraphCompanyFilterRow,
-            Node {
-                flex_direction: FlexDirection::Row,
-                flex_wrap: FlexWrap::Wrap,
-                column_gap: Val::Px(4.0),
-                row_gap: Val::Px(4.0),
-                margin: UiRect::bottom(Val::Px(6.0)),
-                ..default()
-            },
-            BuildMenuUi,
-        ));
-        panel
-            .spawn(Node {
-                flex_direction: FlexDirection::Row,
-                column_gap: Val::Px(12.0),
-                align_items: AlignItems::Center,
-                margin: UiRect::bottom(Val::Px(4.0)),
-                ..default()
-            })
-            .with_children(|legend| {
-                spawn_legend_swatch(legend, asset_server, INCOME_COLOR, "Ingresos");
-                spawn_legend_swatch(legend, asset_server, PROFIT_POS, "Beneficio +");
-                spawn_legend_swatch(legend, asset_server, PROFIT_NEG, "Beneficio −");
-                spawn_legend_swatch(legend, asset_server, VALUE_POS, "Valor");
-            });
         panel.spawn((
             GraphWindowHintText,
             Text::new(""),
@@ -166,7 +158,7 @@ pub(crate) fn setup_graph_window(mut commands: Commands, asset_server: Res<Asset
             .with_children(|chart| {
                 for slot in 0..BAR_COUNT {
                     chart.spawn((
-                        GraphBar { slot },
+                        GraphBar { slot, kind },
                         Node {
                             width: Val::Px(BAR_W),
                             height: Val::Px(2.0),
@@ -180,67 +172,26 @@ pub(crate) fn setup_graph_window(mut commands: Commands, asset_server: Res<Asset
     });
 }
 
-fn spawn_kind_button(
-    parent: &mut ChildSpawnerCommands,
-    asset_server: &AssetServer,
-    kind: GraphKind,
-    label: &'static str,
-) {
-    parent.spawn((
-        Button,
-        GraphKindButton(kind),
-        Node {
-            min_width: Val::Px(110.0),
-            height: Val::Px(24.0),
-            padding: UiRect::horizontal(Val::Px(6.0)),
-            justify_content: JustifyContent::Center,
-            align_items: AlignItems::Center,
-            border: UiRect::all(Val::Px(1.0)),
-            ..default()
-        },
-        BackgroundColor(BTN_BG),
-        BorderColor::all(BTN_BORDER),
-        Interaction::default(),
-        BuildMenuUi,
-        children![(
-            Text::new(label),
-            window_text_font(asset_server, UiFontRole::Caption),
-            TextColor(WINDOW_TEXT),
-        )],
-    ));
-}
-
-fn spawn_legend_swatch(
-    parent: &mut ChildSpawnerCommands,
-    asset_server: &AssetServer,
-    color: Color,
-    label: &'static str,
-) {
-    parent
-        .spawn(Node {
-            flex_direction: FlexDirection::Row,
-            column_gap: Val::Px(4.0),
-            align_items: AlignItems::Center,
-            ..default()
-        })
-        .with_children(|row| {
-            row.spawn((
-                Node {
-                    width: Val::Px(10.0),
-                    height: Val::Px(10.0),
-                    border: UiRect::all(Val::Px(1.0)),
-                    ..default()
-                },
-                BackgroundColor(color),
-                BorderColor::all(Color::srgb(0.55, 0.48, 0.35)),
-                BuildMenuUi,
-            ));
-            row.spawn((
-                Text::new(label),
-                window_text_font(asset_server, UiFontRole::Caption),
-                TextColor(Color::srgb(0.82, 0.78, 0.68)),
-            ));
-        });
+pub(crate) fn setup_graph_window(mut commands: Commands, asset_server: Res<AssetServer>) {
+    let asset_server = &*asset_server;
+    spawn_one_graph_window(
+        &mut commands,
+        asset_server,
+        GraphKind::Income,
+        Vec2::new(200.0, 80.0),
+    );
+    spawn_one_graph_window(
+        &mut commands,
+        asset_server,
+        GraphKind::OperatingProfit,
+        Vec2::new(240.0, 120.0),
+    );
+    spawn_one_graph_window(
+        &mut commands,
+        asset_server,
+        GraphKind::CompanyValue,
+        Vec2::new(280.0, 160.0),
+    );
 }
 
 pub(crate) fn open_graph_from_routes(
@@ -250,165 +201,23 @@ pub(crate) fn open_graph_from_routes(
 ) {
     for route in routes.read() {
         if let UiRoute::Graph(kind) = route.0 {
-            state.kind = kind;
-            state.open = true;
-            // Al abrir desde menú, anclar a la compañía activa.
+            state.set_open(kind, true);
             state.filter_company = Some(sim.state.active_company);
         }
     }
 }
 
-pub(crate) fn handle_graph_window_buttons(
-    mut kind_buttons: Query<(&Interaction, &GraphKindButton), (Changed<Interaction>, With<Button>)>,
-    mut company_buttons: Query<
-        (&Interaction, &GraphCompanyButton),
-        (Changed<Interaction>, With<Button>, Without<GraphKindButton>),
-    >,
-    mut state: ResMut<GraphWindowState>,
-) {
-    for (interaction, button) in &mut kind_buttons {
-        if *interaction == Interaction::Pressed {
-            state.kind = button.0;
-            state.open = true;
-        }
-    }
-    for (interaction, button) in &mut company_buttons {
-        if *interaction == Interaction::Pressed {
-            state.filter_company = Some(button.0);
-            state.open = true;
-        }
-    }
+pub(crate) fn handle_graph_window_buttons() {
+    // Filtro por compañía: residual polish (#271); menú ancla a compañía activa.
 }
 
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn sync_graph_window(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut state: ResMut<GraphWindowState>,
-    sim: Res<SimWorld>,
-    mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
-    mut title_q: Query<(&FloatingWindowTitleText, &mut Text), Without<GraphWindowHintText>>,
-    mut hint_q: Query<&mut Text, (With<GraphWindowHintText>, Without<FloatingWindowTitleText>)>,
-    mut bars: Query<(&GraphBar, &mut Node, &mut BackgroundColor), Without<GraphKindButton>>,
-    mut kind_buttons: Query<
-        (&GraphKindButton, &Interaction, &mut BackgroundColor),
-        (With<Button>, Without<GraphBar>, Without<GraphCompanyButton>),
-    >,
-    company_row: Query<Entity, With<GraphCompanyFilterRow>>,
-    existing_company_btns: Query<Entity, With<GraphCompanyButton>>,
-    mut company_btn_style: Query<
-        (&GraphCompanyButton, &Interaction, &mut BackgroundColor),
-        (With<Button>, Without<GraphKindButton>, Without<GraphBar>),
-    >,
-) {
-    let Some((_, mut vis)) = root_q
-        .iter_mut()
-        .find(|(window, _)| window.id == FloatingWindowId::Graphs)
-    else {
-        return;
-    };
-    if !state.open {
-        *vis = Visibility::Hidden;
-        return;
-    }
-    *vis = Visibility::Visible;
-
-    if state.filter_company.is_none() {
-        state.filter_company = Some(sim.state.active_company);
-    }
-    let filter_id = state.resolved_company(sim.state.active_company);
-    // Si la compañía filtrada ya no existe, volver a la activa.
-    if !sim.state.companies.iter().any(|c| c.id == filter_id) {
-        state.filter_company = Some(sim.state.active_company);
-    }
-    let filter_id = state.resolved_company(sim.state.active_company);
-
-    let company_name = sim
-        .state
-        .companies
-        .iter()
-        .find(|c| c.id == filter_id)
-        .map(|c| c.name.as_str())
-        .unwrap_or("Compañía");
-
-    let title = match state.kind {
-        GraphKind::Income => format!("Ingresos — {company_name}"),
-        GraphKind::OperatingProfit => format!("Beneficio operativo — {company_name}"),
-        GraphKind::CompanyValue => format!("Valor — {company_name}"),
-        GraphKind::PerformanceHistory => format!("Rendimiento — {company_name}"),
-    };
-    if let Some((_, mut t)) = title_q
-        .iter_mut()
-        .find(|(text, _)| text.0 == FloatingWindowId::Graphs)
-    {
-        **t = title;
-    }
-
-    for (button, interaction, mut bg) in &mut kind_buttons {
-        *bg = if button.0 == state.kind {
-            BackgroundColor(BTN_ACTIVE)
-        } else if *interaction == Interaction::Hovered {
-            BackgroundColor(Color::srgb(0.47, 0.41, 0.28))
-        } else {
-            BackgroundColor(BTN_BG)
-        };
-    }
-
-    // Rebuild company filter buttons if the pool changed.
-    let want_ids: Vec<CompanyId> = sim.state.companies.iter().map(|c| c.id).collect();
-    let have_ids: Vec<CompanyId> = company_btn_style.iter().map(|(b, _, _)| b.0).collect();
-    if want_ids != have_ids
-        && let Ok(row) = company_row.single()
-    {
-        for e in &existing_company_btns {
-            commands.entity(e).despawn();
-        }
-        let asset_server = &*asset_server;
-        commands.entity(row).with_children(|parent| {
-            for company in &sim.state.companies {
-                let label = if company.id == sim.state.active_company {
-                    format!("{}*", company.name)
-                } else {
-                    company.name.clone()
-                };
-                parent.spawn((
-                    Button,
-                    GraphCompanyButton(company.id),
-                    Node {
-                        min_width: Val::Px(72.0),
-                        height: Val::Px(22.0),
-                        padding: UiRect::horizontal(Val::Px(6.0)),
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
-                        border: UiRect::all(Val::Px(1.0)),
-                        ..default()
-                    },
-                    BackgroundColor(BTN_BG),
-                    BorderColor::all(BTN_BORDER),
-                    Interaction::default(),
-                    BuildMenuUi,
-                    children![(
-                        Text::new(label),
-                        window_text_font(asset_server, UiFontRole::Caption),
-                        TextColor(WINDOW_TEXT),
-                    )],
-                ));
-            }
-        });
-    }
-
-    for (button, interaction, mut bg) in &mut company_btn_style {
-        *bg = if button.0 == filter_id {
-            BackgroundColor(BTN_ACTIVE)
-        } else if *interaction == Interaction::Hovered {
-            BackgroundColor(Color::srgb(0.47, 0.41, 0.28))
-        } else {
-            BackgroundColor(BTN_BG)
-        };
-    }
-
+fn graph_series_for(
+    kind: GraphKind,
+    sim: &SimWorld,
+    filter_id: CompanyId,
+) -> (Vec<i64>, &'static str) {
     let company = sim.state.companies.iter().find(|c| c.id == filter_id);
-    let (values, period_label): (Vec<i64>, &str) = match state.kind {
+    match kind {
         GraphKind::PerformanceHistory => {
             let q = company
                 .map(|c| c.quarterly_economy.samples.as_slice())
@@ -422,7 +231,6 @@ pub(crate) fn sync_graph_window(
             let samples = company
                 .map(|c| c.economy_history.samples.as_slice())
                 .unwrap_or(&[]);
-            // Fallback: saves antiguos sin historial por compañía.
             let legacy = &sim.state.stats.economy_history.samples;
             let samples = if samples.is_empty() && filter_id == sim.state.active_company {
                 legacy.as_slice()
@@ -432,7 +240,7 @@ pub(crate) fn sync_graph_window(
             (
                 samples
                     .iter()
-                    .map(|s| match state.kind {
+                    .map(|s| match kind {
                         GraphKind::Income => s.income as i64,
                         GraphKind::OperatingProfit => s.operating_profit(),
                         GraphKind::CompanyValue => s.company_value,
@@ -442,78 +250,112 @@ pub(crate) fn sync_graph_window(
                 "mensuales",
             )
         }
-    };
-    let max_abs = values
-        .iter()
-        .map(|v| v.unsigned_abs())
-        .max()
-        .unwrap_or(1)
-        .max(1);
-
-    if let Ok(mut hint) = hint_q.single_mut() {
-        if values.is_empty() {
-            **hint = format!("Sin datos {period_label} de {company_name} (avanza el tiempo).");
-        } else {
-            let last = *values.last().unwrap_or(&0);
-            match state.kind {
-                GraphKind::CompanyValue => {
-                    let (money, loan) = company
-                        .map(|c| (c.economy.money, c.economy.loan))
-                        .unwrap_or((sim.state.economy.money, sim.state.economy.loan));
-                    let live = company_net_value(money, loan);
-                    **hint = format!(
-                        "{company_name} · Último cierre: {} · Actual: {}",
-                        format_money(last),
-                        format_money(live),
-                    );
-                }
-                GraphKind::PerformanceHistory => {
-                    let live_value = company
-                        .map(|c| openttdrs_core::calculate_company_value(&sim.state, c.id))
-                        .unwrap_or(0);
-                    **hint = format!(
-                        "{company_name} · Último trimestre: {last}/1000 · Valoración activos: {}",
-                        format_money(live_value),
-                    );
-                }
-                _ => {
-                    let lifetime_income = company
-                        .map(|c| c.cargo_income_earned)
-                        .unwrap_or(sim.state.stats.cargo_income_earned);
-                    let lifetime_costs = company
-                        .map(|c| c.vehicle_running_costs)
-                        .unwrap_or(sim.state.stats.vehicle_running_costs);
-                    let lifetime_profit = lifetime_income as i64 - lifetime_costs as i64;
-                    **hint = format!(
-                        "{company_name} · Último mes: {} · Acumulado: ingresos {} · costes {} · beneficio {}",
-                        format_money(last),
-                        format_money(lifetime_income as i64),
-                        format_money(lifetime_costs as i64),
-                        format_money(lifetime_profit),
-                    );
-                }
-            }
-        }
     }
+}
 
-    let start = values.len().saturating_sub(BAR_COUNT);
-    for (bar, mut node, mut bg) in &mut bars {
-        let idx = start + bar.slot;
-        let Some(&value) = values.get(idx) else {
-            node.height = Val::Px(2.0);
-            *bg = BackgroundColor(Color::srgb(0.28, 0.24, 0.17));
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn sync_graph_window(
+    mut state: ResMut<GraphWindowState>,
+    sim: Res<SimWorld>,
+    mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
+    mut title_q: Query<(&FloatingWindowTitleText, &mut Text), Without<GraphWindowHintText>>,
+    mut hint_q: Query<&mut Text, (With<GraphWindowHintText>, Without<FloatingWindowTitleText>)>,
+    mut bars: Query<(&GraphBar, &mut Node, &mut BackgroundColor)>,
+) {
+    if state.filter_company.is_none() {
+        state.filter_company = Some(sim.state.active_company);
+    }
+    let filter_id = state.resolved_company(sim.state.active_company);
+    if !sim.state.companies.iter().any(|c| c.id == filter_id) {
+        state.filter_company = Some(sim.state.active_company);
+    }
+    let filter_id = state.resolved_company(sim.state.active_company);
+    let company_name = sim
+        .state
+        .companies
+        .iter()
+        .find(|c| c.id == filter_id)
+        .map(|c| c.name.as_str())
+        .unwrap_or("Compañía");
+
+    let windows = [
+        (
+            FloatingWindowId::GraphIncome,
+            if state.income_kind == GraphKind::PerformanceHistory {
+                GraphKind::PerformanceHistory
+            } else {
+                GraphKind::Income
+            },
+            state.income_open,
+            GraphKind::Income,
+        ),
+        (
+            FloatingWindowId::GraphOperatingProfit,
+            GraphKind::OperatingProfit,
+            state.profit_open,
+            GraphKind::OperatingProfit,
+        ),
+        (
+            FloatingWindowId::GraphCompanyValue,
+            GraphKind::CompanyValue,
+            state.value_open,
+            GraphKind::CompanyValue,
+        ),
+    ];
+
+    for (id, series_kind, open, bar_kind) in windows {
+        let Some((_, mut vis)) = root_q.iter_mut().find(|(w, _)| w.id == id) else {
             continue;
         };
-        let h = (value.unsigned_abs() as f32 / max_abs as f32 * BAR_MAX_H).max(2.0);
-        node.height = Val::Px(h);
-        *bg = BackgroundColor(match state.kind {
-            GraphKind::Income => INCOME_COLOR,
-            GraphKind::OperatingProfit if value >= 0 => PROFIT_POS,
-            GraphKind::OperatingProfit => PROFIT_NEG,
-            GraphKind::CompanyValue if value >= 0 => VALUE_POS,
-            GraphKind::CompanyValue => VALUE_NEG,
-            GraphKind::PerformanceHistory => Color::srgb(0.45, 0.62, 0.78),
-        });
+        if !open {
+            *vis = Visibility::Hidden;
+            continue;
+        }
+        *vis = Visibility::Visible;
+
+        if let Some((_, mut t)) = title_q.iter_mut().find(|(text, _)| text.0 == id) {
+            **t = format!("{} — {company_name}", series_kind.title_label());
+        }
+
+        let (values, _) = graph_series_for(series_kind, &sim, filter_id);
+        let max_abs = values
+            .iter()
+            .map(|v| v.unsigned_abs())
+            .max()
+            .unwrap_or(1)
+            .max(1);
+
+        if let Some(mut hint) = hint_q.iter_mut().next() {
+            if values.is_empty() {
+                **hint = format!("Sin datos de {company_name} (avanza el tiempo).");
+            } else {
+                let last = *values.last().unwrap_or(&0);
+                **hint = format!("{company_name} · Último: {}", format_money(last));
+            }
+        }
+
+        let start = values.len().saturating_sub(BAR_COUNT);
+        for (bar, mut node, mut bg) in &mut bars {
+            if bar.kind != bar_kind {
+                continue;
+            }
+            let idx = start + bar.slot;
+            let Some(&value) = values.get(idx) else {
+                node.height = Val::Px(2.0);
+                *bg = BackgroundColor(Color::srgb(0.28, 0.24, 0.17));
+                continue;
+            };
+            let h = (value.unsigned_abs() as f32 / max_abs as f32 * BAR_MAX_H).max(2.0);
+            node.height = Val::Px(h);
+            *bg = BackgroundColor(match series_kind {
+                GraphKind::Income => INCOME_COLOR,
+                GraphKind::OperatingProfit if value >= 0 => PROFIT_POS,
+                GraphKind::OperatingProfit => PROFIT_NEG,
+                GraphKind::CompanyValue if value >= 0 => VALUE_POS,
+                GraphKind::CompanyValue => VALUE_NEG,
+                GraphKind::PerformanceHistory => Color::srgb(0.45, 0.62, 0.78),
+            });
+        }
     }
 }
 
@@ -522,8 +364,11 @@ pub(crate) fn graph_window_on_closed(
     mut state: ResMut<GraphWindowState>,
 ) {
     for message in closed.read() {
-        if message.0.class == FloatingWindowId::Graphs {
-            state.open = false;
+        match message.0.class {
+            FloatingWindowId::GraphIncome => state.income_open = false,
+            FloatingWindowId::GraphOperatingProfit => state.profit_open = false,
+            FloatingWindowId::GraphCompanyValue => state.value_open = false,
+            _ => {}
         }
     }
 }
@@ -547,9 +392,10 @@ mod tests {
         world.write_message(OpenUiRoute(UiRoute::Graph(GraphKind::Income)));
         world.run_system_once(open_graph_from_routes).unwrap();
         let state = world.resource::<GraphWindowState>();
-        assert!(state.open);
-        assert_eq!(state.kind, GraphKind::Income);
+        assert!(state.income_open);
+        assert_eq!(state.income_kind, GraphKind::Income);
         assert_eq!(state.filter_company, Some(CompanyId::PLAYER));
+        assert_eq!(GraphKind::Income.window_id(), FloatingWindowId::GraphIncome);
     }
 
     #[test]
@@ -563,9 +409,15 @@ mod tests {
         world.init_resource::<Messages<OpenUiRoute>>();
         world.write_message(OpenUiRoute(UiRoute::Graph(GraphKind::CompanyValue)));
         world.run_system_once(open_graph_from_routes).unwrap();
+        let state = world.resource::<GraphWindowState>();
+        assert!(state.value_open);
         assert_eq!(
-            world.resource::<GraphWindowState>().kind,
-            GraphKind::CompanyValue
+            GraphKind::CompanyValue.window_id(),
+            FloatingWindowId::GraphCompanyValue
+        );
+        assert_eq!(
+            GraphKind::OperatingProfit.window_id(),
+            FloatingWindowId::GraphOperatingProfit
         );
     }
 
@@ -583,12 +435,12 @@ mod tests {
 
     #[test]
     fn empty_history_keeps_graph_openable() {
-        let state = GraphWindowState {
-            open: true,
-            kind: GraphKind::OperatingProfit,
+        let mut state = GraphWindowState {
             filter_company: Some(CompanyId::PLAYER),
+            ..Default::default()
         };
-        assert!(state.open);
+        state.set_open(GraphKind::OperatingProfit, true);
+        assert!(state.open());
         assert_eq!(state.resolved_company(CompanyId::PLAYER), CompanyId::PLAYER);
         let gs = GameState::new(8, 8);
         assert!(

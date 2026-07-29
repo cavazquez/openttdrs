@@ -336,6 +336,8 @@ pub(crate) const ECONOMY_MENU: MenuSpec = MenuSpec {
     entries: &[
         MenuEntrySpec::item("Finanzas", MenuAction::Route(UiRoute::Finances))
             .when(MenuAvailability::HasCompanies),
+        MenuEntrySpec::item("Compañía", MenuAction::Route(UiRoute::CompanyView))
+            .when(MenuAvailability::HasCompanies),
         MenuEntrySpec::item(
             "Ingresos",
             MenuAction::Route(UiRoute::Graph(GraphKind::Income)),

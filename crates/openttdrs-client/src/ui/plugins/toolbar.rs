@@ -12,6 +12,15 @@ use crate::ui::industry_panel::{
     IndustryPanelState, industry_panel_center_interaction, industry_panel_on_closed,
     setup_industry_panel, sync_industry_panel,
 };
+use crate::ui::industry_production_window::{
+    IndustryProductionWindowState, industry_production_window_on_closed,
+    setup_industry_production_window, sync_industry_production_window,
+};
+use crate::ui::station_pool::StationPoolRegistry;
+use crate::ui::town_authority_window::{
+    TownAuthorityWindowState, setup_town_authority_window, sync_town_authority_window,
+    town_authority_window_on_closed,
+};
 use crate::ui::save_window::{
     SaveWindowState, handle_save_window_buttons, prepare_save_window_name,
     save_window_editable_keyboard, save_window_keyboard, save_window_name_click_focus,
@@ -91,8 +100,11 @@ impl Plugin for ToolbarUiPlugin {
             .init_resource::<ToolbarState>()
             .init_resource::<MinimapLayerState>()
             .init_resource::<IndustryPanelState>()
+            .init_resource::<IndustryProductionWindowState>()
             .init_resource::<SaveWindowState>()
             .init_resource::<TownWindowState>()
+            .init_resource::<TownAuthorityWindowState>()
+            .init_resource::<StationPoolRegistry>()
             .add_systems(
                 OnEnter(ClientScreen::InGame),
                 (
@@ -105,8 +117,10 @@ impl Plugin for ToolbarUiPlugin {
                     setup_rail_station_picker,
                     setup_bridge_picker,
                     setup_industry_panel,
+                    setup_industry_production_window,
                     setup_save_window,
                     setup_town_window,
+                    setup_town_authority_window,
                 )
                     .chain()
                     .in_set(StartupSet::Ui),
@@ -234,6 +248,8 @@ impl Plugin for ToolbarUiPlugin {
                 (
                     handle_town_window_buttons,
                     town_window_on_closed,
+                    town_authority_window_on_closed,
+                    industry_production_window_on_closed,
                     depot_panel_on_closed,
                     order_panel_on_closed,
                     buoy_picker_on_closed,
@@ -324,7 +340,9 @@ impl Plugin for ToolbarUiPlugin {
                     sync_depot_panel,
                     sync_station_cargo_panel,
                     sync_industry_panel,
+                    sync_industry_production_window,
                     sync_town_window,
+                    sync_town_authority_window,
                     sync_rail_station_picker,
                     sync_station_catalog_entries,
                     sync_bridge_picker,

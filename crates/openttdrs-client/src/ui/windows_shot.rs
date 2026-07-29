@@ -29,6 +29,7 @@ use crate::ui::destination_window::DestinationPickerState;
 use crate::ui::dev_console::DevConsoleState;
 use crate::ui::display_options_window::DisplayOptionsWindowState;
 use crate::ui::extra_viewport_window::ExtraViewportWindowState;
+use crate::ui::company_view_window::CompanyViewWindowState;
 use crate::ui::finances_window::FinancesWindowState;
 use crate::ui::floating_window::{FloatingWindow, FloatingWindowId, WindowKey};
 use crate::ui::genland_window::GenLandWindowState;
@@ -38,6 +39,7 @@ use crate::ui::help_window::HelpWindowState;
 use crate::ui::hud::SimHudControls;
 use crate::ui::industry_directory::IndustryDirectoryState;
 use crate::ui::industry_panel::IndustryPanelState;
+use crate::ui::industry_production_window::IndustryProductionWindowState;
 use crate::ui::league_window::LeagueWindowState;
 use crate::ui::main_menu::{MainMenuCamera, MainMenuUi};
 use crate::ui::newgrf_window::NewGrfWindowState;
@@ -58,6 +60,7 @@ use crate::ui::toolbar::{
     StationCargoPanelState, StationCatalogKind, StationCatalogPickerState, ToolbarGroup,
     ToolbarState, UiToolState,
 };
+use crate::ui::town_authority_window::TownAuthorityWindowState;
 use crate::ui::town_directory::TownDirectoryState;
 use crate::ui::town_window::TownWindowState;
 use crate::ui::ui5_blocked_stubs::LinkGraphWindowState;
@@ -137,6 +140,13 @@ macro_rules! extension_window {
 /// Matriz OpenTTD 15.3 commit `14ec60f`: cada ventana del port aparece una vez.
 pub(crate) const WINDOW_PARITY_MATRIX: &[WindowParityEntry] = &[
     upstream_window!(Town, "world", "town_gui.cpp", "WC_TOWN_VIEW"),
+    upstream_window!(
+        TownAuthority,
+        "world",
+        "town_gui.cpp",
+        "WC_TOWN_AUTHORITY",
+        Town
+    ),
     upstream_window!(TownDirectory, "world", "town_gui.cpp", "WC_TOWN_DIRECTORY"),
     upstream_window!(
         IndustryDirectory,
@@ -145,6 +155,13 @@ pub(crate) const WINDOW_PARITY_MATRIX: &[WindowParityEntry] = &[
         "WC_INDUSTRY_DIRECTORY"
     ),
     upstream_window!(Industry, "world", "industry_gui.cpp", "WC_INDUSTRY_VIEW"),
+    upstream_window!(
+        IndustryProduction,
+        "world",
+        "graph_gui.cpp",
+        "WC_INDUSTRY_PRODUCTION",
+        Industry
+    ),
     upstream_window!(
         StationDirectory,
         "world",
@@ -227,6 +244,7 @@ pub(crate) const WINDOW_PARITY_MATRIX: &[WindowParityEntry] = &[
     ),
     upstream_window!(NewsHistory, "reports", "news_gui.cpp", "WC_MESSAGE_HISTORY"),
     upstream_window!(Finances, "economy", "company_gui.cpp", "WC_FINANCES"),
+    upstream_window!(CompanyView, "economy", "company_gui.cpp", "WC_COMPANY"),
     upstream_window!(
         NewsSettings,
         "reports",
@@ -287,10 +305,22 @@ pub(crate) const WINDOW_PARITY_MATRIX: &[WindowParityEntry] = &[
         "WC_REPLACE_VEHICLE"
     ),
     upstream_window!(
-        Graphs,
+        GraphIncome,
         "economy",
         "graph_gui.cpp",
-        "WC_INCOME_GRAPH and related graph classes"
+        "WC_INCOME_GRAPH"
+    ),
+    upstream_window!(
+        GraphOperatingProfit,
+        "economy",
+        "graph_gui.cpp",
+        "WC_OPERATING_PROFIT_GRAPH"
+    ),
+    upstream_window!(
+        GraphCompanyValue,
+        "economy",
+        "graph_gui.cpp",
+        "WC_COMPANY_VALUE"
     ),
     upstream_window!(
         CargoPaymentRates,
@@ -343,9 +373,11 @@ pub(crate) const WINDOW_PARITY_MATRIX: &[WindowParityEntry] = &[
 pub(crate) const fn window_rust_impl(id: FloatingWindowId) -> &'static str {
     match id {
         FloatingWindowId::Town => "ui/town_window.rs",
+        FloatingWindowId::TownAuthority => "ui/town_authority_window.rs",
         FloatingWindowId::TownDirectory => "ui/town_directory.rs",
         FloatingWindowId::IndustryDirectory => "ui/industry_directory.rs",
         FloatingWindowId::Industry => "ui/industry_panel/mod.rs",
+        FloatingWindowId::IndustryProduction => "ui/industry_production_window.rs",
         FloatingWindowId::StationDirectory => "ui/station_directory.rs",
         FloatingWindowId::Station => "ui/toolbar/station_panel.rs",
         FloatingWindowId::VehicleList => "ui/vehicle_list.rs",
@@ -370,6 +402,7 @@ pub(crate) const fn window_rust_impl(id: FloatingWindowId) -> &'static str {
         FloatingWindowId::DestinationPicker => "ui/destination_window.rs",
         FloatingWindowId::NewsHistory => "ui/statusbar/history.rs",
         FloatingWindowId::Finances => "ui/finances_window.rs",
+        FloatingWindowId::CompanyView => "ui/company_view_window.rs",
         FloatingWindowId::NewsSettings => "ui/news_settings_window.rs",
         FloatingWindowId::PathfindingSettings => "ui/pathfinding_settings_window.rs",
         FloatingWindowId::CargoDistSettings => "ui/cargo_dist_settings_window.rs",
@@ -381,7 +414,9 @@ pub(crate) const fn window_rust_impl(id: FloatingWindowId) -> &'static str {
         FloatingWindowId::Refit => "ui/refit_window.rs",
         FloatingWindowId::SharedOrders => "ui/shared_orders_window.rs",
         FloatingWindowId::Autoreplace => "ui/autoreplace_window.rs",
-        FloatingWindowId::Graphs => "ui/graph_window.rs",
+        FloatingWindowId::GraphIncome => "ui/graph_window.rs",
+        FloatingWindowId::GraphOperatingProfit => "ui/graph_window.rs",
+        FloatingWindowId::GraphCompanyValue => "ui/graph_window.rs",
         FloatingWindowId::CargoPaymentRates => "ui/cargo_payment_window.rs",
         FloatingWindowId::DisplayOptions => "ui/display_options_window.rs",
         FloatingWindowId::ExtraViewport => "ui/extra_viewport_window.rs",
@@ -584,28 +619,31 @@ pub(crate) const CONSTRUCTION_FAMILY_WINDOW_IDS: &[FloatingWindowId] = &[
     FloatingWindowId::SignalPicker,
 ];
 
-/// Inventario world (Town/Industry/Station + directorios) cubierto por #245 slice 1.
+/// Inventario world (Town/Industry/Station + hijas + directorios) cubierto por #245/#269.
 ///
-/// Follow-up del issue: `TownAuthority` / `IndustryProduction` como hijas
-/// (matriz padre/hija + stubs UI); multi-instancia de vistas; capturas PNG.
+/// Residual: capturas PNG (#240); dual-entity Station (pool stub hoy); chrome
+/// Station fino (#240); Authority acciones 15.3 completas; plot Production.
 pub(crate) const WORLD_FAMILY_WINDOW_IDS: &[FloatingWindowId] = &[
     FloatingWindowId::Town,
+    FloatingWindowId::TownAuthority,
     FloatingWindowId::TownDirectory,
     FloatingWindowId::Industry,
+    FloatingWindowId::IndustryProduction,
     FloatingWindowId::IndustryDirectory,
     FloatingWindowId::StationDirectory,
     FloatingWindowId::Station,
 ];
 
-/// Inventario economy/reports existentes cubiertos por #247 slice 1.
+/// Inventario economy/reports cubiertos por #247/#271.
 ///
-/// Follow-up: Company View / Infrastructure / Livery / ManagerFace (sin
-/// `FloatingWindowId` hoy); separar clases graph 15.3 (beneficio, ingresos,
-/// carga, performance, valor, leyenda) en lugar del modo interno de `Graphs`;
-/// capturas PNG.
+/// Residual: Livery / ManagerFace / Infrastructure detallado; polish plot;
+/// PerformanceHistory como clase propia; capturas PNG (#240).
 pub(crate) const ECONOMY_FAMILY_WINDOW_IDS: &[FloatingWindowId] = &[
     FloatingWindowId::Finances,
-    FloatingWindowId::Graphs,
+    FloatingWindowId::CompanyView,
+    FloatingWindowId::GraphIncome,
+    FloatingWindowId::GraphOperatingProfit,
+    FloatingWindowId::GraphCompanyValue,
     FloatingWindowId::CargoPaymentRates,
     FloatingWindowId::SubsidyList,
     FloatingWindowId::League,
@@ -658,8 +696,10 @@ pub(crate) fn reference_geometry_primary(
 /// Las variantes comparten class; `WindowKey.instance` sigue en 0 hasta #242.
 pub(crate) const WINDOW_REFERENCE_GEOMETRY: &[ReferenceGeometry] = &[
     reference_geometry!(Town, "game", Auto, Some(260), None),
+    reference_geometry!(TownAuthority, "default", Auto, Some(200), None),
     reference_geometry!(TownDirectory, "default", Auto, Some(208), Some(202)),
     reference_geometry!(Industry, "default", Auto, Some(260), Some(120)),
+    reference_geometry!(IndustryProduction, "default", Auto, Some(300), Some(215)),
     reference_geometry!(IndustryDirectory, "default", Auto, Some(428), Some(190)),
     reference_geometry!(StationDirectory, "default", Auto, Some(358), Some(162)),
     reference_geometry!(Station, "default", Auto, Some(249), Some(117)),
@@ -699,6 +739,7 @@ pub(crate) const WINDOW_REFERENCE_GEOMETRY: &[ReferenceGeometry] = &[
     reference_geometry!(SubsidyList, "default", Auto, Some(500), Some(127)),
     reference_geometry!(NewsHistory, "default", Auto, Some(400), Some(140)),
     reference_geometry!(Finances, "default", Auto, None, None),
+    reference_geometry!(CompanyView, "default", Auto, Some(280), None),
     reference_geometry!(NewsSettings, "settings", Center, None, None),
     reference_geometry!(PathfindingSettings, "settings", Center, None, None),
     reference_geometry!(CargoDistSettings, "settings", Center, None, None),
@@ -709,8 +750,9 @@ pub(crate) const WINDOW_REFERENCE_GEOMETRY: &[ReferenceGeometry] = &[
     reference_geometry!(Orders, "owned", Auto, Some(384), Some(100)),
     reference_geometry!(Orders, "competitor", Auto, Some(384), Some(86)),
     reference_geometry!(Refit, "default", Auto, Some(240), Some(174)),
-    // Una sola clase Graphs con modos internos; split 15.3 → follow-up #247.
-    reference_geometry!(Graphs, "default", Auto, None, None),
+    reference_geometry!(GraphIncome, "default", Auto, None, None),
+    reference_geometry!(GraphOperatingProfit, "default", Auto, None, None),
+    reference_geometry!(GraphCompanyValue, "default", Auto, None, None),
     reference_geometry!(CargoPaymentRates, "default", Auto, None, None),
     reference_geometry!(DisplayOptions, "settings", Center, None, None),
     reference_geometry!(ExtraViewport, "default", Auto, Some(300), Some(268)),
@@ -1240,6 +1282,9 @@ fn open_all_windows_for_shot(world: &mut World, include_auxiliary: bool) {
     }
 
     world.resource_mut::<FinancesWindowState>().open = true;
+    world.resource_mut::<CompanyViewWindowState>().open = true;
+    world.resource_mut::<TownAuthorityWindowState>().open = true;
+    world.resource_mut::<IndustryProductionWindowState>().open = true;
     world.resource_mut::<TownDirectoryState>().open = true;
     world.resource_mut::<IndustryDirectoryState>().open = true;
     world.resource_mut::<StationDirectoryState>().open = true;
@@ -1251,7 +1296,12 @@ fn open_all_windows_for_shot(world: &mut World, include_auxiliary: bool) {
     world.resource_mut::<AiSettingsWindowState>().open = true;
     world.resource_mut::<NewGrfWindowState>().open = true;
     world.resource_mut::<SoundMusicWindowState>().open = true;
-    world.resource_mut::<GraphWindowState>().open = true;
+    {
+        let mut graphs = world.resource_mut::<GraphWindowState>();
+        graphs.income_open = true;
+        graphs.profit_open = true;
+        graphs.value_open = true;
+    }
     world.resource_mut::<CargoPaymentWindowState>().open = true;
     world.resource_mut::<DisplayOptionsWindowState>().open = true;
     world.resource_mut::<ExtraViewportWindowState>().open = true;
@@ -1596,6 +1646,43 @@ mod tests {
                 "sin lifecycle→#242 ni geometry→#243 para {id:?}"
             );
         }
+    }
+
+    #[test]
+    fn world_family_parent_child_matrix() {
+        assert_eq!(
+            window_child_ids(FloatingWindowId::Town),
+            vec![FloatingWindowId::TownAuthority]
+        );
+        assert_eq!(
+            window_child_ids(FloatingWindowId::Industry),
+            vec![FloatingWindowId::IndustryProduction]
+        );
+        assert!(window_descendant_ids(FloatingWindowId::Town)
+            .contains(&FloatingWindowId::TownAuthority));
+    }
+
+    #[test]
+    fn economy_family_graph_classes_are_distinct() {
+        assert!(ECONOMY_FAMILY_WINDOW_IDS.contains(&FloatingWindowId::GraphIncome));
+        assert!(ECONOMY_FAMILY_WINDOW_IDS.contains(&FloatingWindowId::GraphOperatingProfit));
+        assert!(ECONOMY_FAMILY_WINDOW_IDS.contains(&FloatingWindowId::GraphCompanyValue));
+        assert!(ECONOMY_FAMILY_WINDOW_IDS.contains(&FloatingWindowId::CompanyView));
+        assert!(!ECONOMY_FAMILY_WINDOW_IDS
+            .iter()
+            .any(|id| id.storage_key() == "Graphs"));
+        assert_eq!(
+            crate::ui::graph_window::GraphKind::Income.window_id(),
+            FloatingWindowId::GraphIncome
+        );
+        assert_eq!(
+            crate::ui::graph_window::GraphKind::OperatingProfit.window_id(),
+            FloatingWindowId::GraphOperatingProfit
+        );
+        assert_eq!(
+            crate::ui::graph_window::GraphKind::CompanyValue.window_id(),
+            FloatingWindowId::GraphCompanyValue
+        );
     }
 
     #[test]

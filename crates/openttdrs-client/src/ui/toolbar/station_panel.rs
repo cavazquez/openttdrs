@@ -111,7 +111,8 @@ pub(crate) fn setup_station_cargo_panel(mut commands: Commands, asset_server: Re
                 spawn_rename_action(row, asset_server, StationCargoRenameButton::Apply, "OK");
                 spawn_rename_action(row, asset_server, StationCargoRenameButton::Cancel, "No");
             });
-        // Chrome compacto (#183): labels cortos + tooltip. Cierre fino vía chrome ✕ (#245).
+        // Chrome compacto (#183/#269): labels cortos + tooltip. Cierre vía chrome ✕ (#245).
+        // Multi-instancia: pool stub `StationPoolRegistry` (2 slots); dual-entity residual #242.
         panel
             .spawn(Node {
                 flex_direction: FlexDirection::Row,

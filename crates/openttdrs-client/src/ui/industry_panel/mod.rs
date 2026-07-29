@@ -29,3 +29,7 @@ pub(crate) struct IndustryPanelDetails;
 
 #[derive(Component)]
 pub(crate) struct IndustryPanelCenterButton;
+
+/// Abre stub IndustryProduction (#269).
+#[derive(Component)]
+pub(crate) struct IndustryPanelProductionButton;

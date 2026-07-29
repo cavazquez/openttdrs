@@ -38,6 +38,8 @@ pub(crate) enum TownWindowButton {
     CenterCamera,
     Advertise,
     FundBuildings,
+    /// Abre stub Authority (#269).
+    OpenAuthority,
 }
 
 pub(crate) fn setup_town_window(mut commands: Commands, asset_server: Res<AssetServer>) {
@@ -80,6 +82,7 @@ pub(crate) fn setup_town_window(mut commands: Commands, asset_server: Res<AssetS
                 &format!("Fondos {}", format_money(FUND_BUILDINGS_COST)),
                 TownWindowButton::FundBuildings,
             );
+            spawn_town_action_button(row, asset_server, "Aut.", TownWindowButton::OpenAuthority);
         });
     });
 }
@@ -287,6 +290,7 @@ pub(crate) fn sync_town_window(
 pub(crate) fn handle_town_window_buttons(
     buttons: Query<(&Interaction, &TownWindowButton), (Changed<Interaction>, With<Button>)>,
     town_state: Res<TownWindowState>,
+    mut authority: ResMut<crate::ui::town_authority_window::TownAuthorityWindowState>,
     mut sim: ResMut<SimWorld>,
     mut hud_feedback: ResMut<HudBuildFeedback>,
     time: Res<Time>,
@@ -331,6 +335,13 @@ pub(crate) fn handle_town_window_buttons(
                     &Command::TownFundBuildings(town_id),
                 ) {
                     push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
+                }
+            }
+            TownWindowButton::OpenAuthority => {
+                if let Some(town_id) = town_state.town_id {
+                    crate::ui::town_authority_window::open_town_authority_for(
+                        town_id, &mut authority,
+                    );
                 }
             }
         }

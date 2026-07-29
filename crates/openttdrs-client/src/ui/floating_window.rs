@@ -65,12 +65,16 @@ const DEFAULT_LAYOUT_VIEWPORT: Vec2 = Vec2::new(1280.0, 720.0);
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub(crate) enum FloatingWindowId {
     Town,
+    /// Autoridad local del pueblo (hija de Town; #269).
+    TownAuthority,
     /// Directorio global de pueblos.
     TownDirectory,
     /// Directorio global de industrias.
     IndustryDirectory,
     /// Ficha de industria (viewport + stats; #179).
     Industry,
+    /// Gráfico/stub de producción de industria (hija de Industry; #269).
+    IndustryProduction,
     /// Lista global de estaciones.
     StationDirectory,
     /// Ficha de estación (antes HUD `station_panel`; #245).
@@ -116,6 +120,8 @@ pub(crate) enum FloatingWindowId {
     NewsHistory,
     /// Finanzas de la compañía.
     Finances,
+    /// Vista de compañía (`WC_COMPANY`; #271).
+    CompanyView,
     /// Configuración Off / Summary / Full por tipo de noticia.
     NewsSettings,
     /// Ajustes PBS / pathfinding (`pf.wait_for_pbs_path`, etc.).
@@ -138,8 +144,12 @@ pub(crate) enum FloatingWindowId {
     SharedOrders,
     /// Reglas de autoreemplazo de motores.
     Autoreplace,
-    /// Gráficos económicos (ingresos / beneficio).
-    Graphs,
+    /// Gráfico de ingresos (`WC_INCOME_GRAPH`; #271).
+    GraphIncome,
+    /// Gráfico de beneficio operativo (`WC_OPERATING_PROFIT_GRAPH`; #271).
+    GraphOperatingProfit,
+    /// Gráfico de valor de compañía (`WC_COMPANY_VALUE`; #271).
+    GraphCompanyValue,
     /// Tarifas de pago por tipo de carga.
     CargoPaymentRates,
     /// Opciones de visualización (Display Options).
@@ -198,9 +208,11 @@ impl FloatingWindowId {
     /// Inventario estable UI-0 (#30): actualizar al añadir variantes.
     pub(crate) const ALL: &[Self] = &[
         Self::Town,
+        Self::TownAuthority,
         Self::TownDirectory,
         Self::IndustryDirectory,
         Self::Industry,
+        Self::IndustryProduction,
         Self::StationDirectory,
         Self::Station,
         Self::VehicleList,
@@ -225,6 +237,7 @@ impl FloatingWindowId {
         Self::DestinationPicker,
         Self::NewsHistory,
         Self::Finances,
+        Self::CompanyView,
         Self::NewsSettings,
         Self::PathfindingSettings,
         Self::CargoDistSettings,
@@ -236,7 +249,9 @@ impl FloatingWindowId {
         Self::Refit,
         Self::SharedOrders,
         Self::Autoreplace,
-        Self::Graphs,
+        Self::GraphIncome,
+        Self::GraphOperatingProfit,
+        Self::GraphCompanyValue,
         Self::CargoPaymentRates,
         Self::DisplayOptions,
         Self::ExtraViewport,
@@ -258,9 +273,11 @@ impl FloatingWindowId {
     pub(crate) const fn storage_key(self) -> &'static str {
         match self {
             Self::Town => "Town",
+            Self::TownAuthority => "TownAuthority",
             Self::TownDirectory => "TownDirectory",
             Self::IndustryDirectory => "IndustryDirectory",
             Self::Industry => "Industry",
+            Self::IndustryProduction => "IndustryProduction",
             Self::StationDirectory => "StationDirectory",
             Self::Station => "Station",
             Self::VehicleList => "VehicleList",
@@ -285,6 +302,7 @@ impl FloatingWindowId {
             Self::DestinationPicker => "DestinationPicker",
             Self::NewsHistory => "NewsHistory",
             Self::Finances => "Finances",
+            Self::CompanyView => "CompanyView",
             Self::NewsSettings => "NewsSettings",
             Self::PathfindingSettings => "PathfindingSettings",
             Self::CargoDistSettings => "CargoDistSettings",
@@ -296,7 +314,9 @@ impl FloatingWindowId {
             Self::Refit => "Refit",
             Self::SharedOrders => "SharedOrders",
             Self::Autoreplace => "Autoreplace",
-            Self::Graphs => "Graphs",
+            Self::GraphIncome => "GraphIncome",
+            Self::GraphOperatingProfit => "GraphOperatingProfit",
+            Self::GraphCompanyValue => "GraphCompanyValue",
             Self::CargoPaymentRates => "CargoPaymentRates",
             Self::DisplayOptions => "DisplayOptions",
             Self::ExtraViewport => "ExtraViewport",
@@ -366,9 +386,11 @@ fn chrome_capabilities(id: FloatingWindowId) -> WindowChromeCapabilities {
     let shade = matches!(
         id,
         FloatingWindowId::Town
+            | FloatingWindowId::TownAuthority
             | FloatingWindowId::TownDirectory
             | FloatingWindowId::IndustryDirectory
             | FloatingWindowId::Industry
+            | FloatingWindowId::IndustryProduction
             | FloatingWindowId::StationDirectory
             | FloatingWindowId::Station
             | FloatingWindowId::VehicleList
@@ -390,11 +412,14 @@ fn chrome_capabilities(id: FloatingWindowId) -> WindowChromeCapabilities {
             | FloatingWindowId::DepotBuildPicker
             | FloatingWindowId::NewsHistory
             | FloatingWindowId::Finances
+            | FloatingWindowId::CompanyView
             | FloatingWindowId::SoundMusic
             | FloatingWindowId::Orders
             | FloatingWindowId::SharedOrders
             | FloatingWindowId::Autoreplace
-            | FloatingWindowId::Graphs
+            | FloatingWindowId::GraphIncome
+            | FloatingWindowId::GraphOperatingProfit
+            | FloatingWindowId::GraphCompanyValue
             | FloatingWindowId::CargoPaymentRates
             | FloatingWindowId::SignList
             | FloatingWindowId::SignalPicker
@@ -422,9 +447,11 @@ fn chrome_capabilities(id: FloatingWindowId) -> WindowChromeCapabilities {
     let resize = matches!(
         id,
         FloatingWindowId::Town
+            | FloatingWindowId::TownAuthority
             | FloatingWindowId::TownDirectory
             | FloatingWindowId::IndustryDirectory
             | FloatingWindowId::Industry
+            | FloatingWindowId::IndustryProduction
             | FloatingWindowId::StationDirectory
             | FloatingWindowId::Station
             | FloatingWindowId::VehicleList
@@ -446,11 +473,14 @@ fn chrome_capabilities(id: FloatingWindowId) -> WindowChromeCapabilities {
             | FloatingWindowId::Refit
             | FloatingWindowId::SharedOrders
             | FloatingWindowId::Autoreplace
-            | FloatingWindowId::Graphs
+            | FloatingWindowId::GraphIncome
+            | FloatingWindowId::GraphOperatingProfit
+            | FloatingWindowId::GraphCompanyValue
             | FloatingWindowId::CargoPaymentRates
             | FloatingWindowId::DisplayOptions
             | FloatingWindowId::ExtraViewport
             | FloatingWindowId::SignList
+            | FloatingWindowId::CompanyView
             | FloatingWindowId::Goals
             | FloatingWindowId::Story
             | FloatingWindowId::League
@@ -1434,10 +1464,10 @@ mod tests {
         let help = chrome_capabilities(FloatingWindowId::Help);
         assert!(!help.shade && !help.sticky && !help.resize);
 
-        // Economy (#247): Finances shade/sticky; Graphs también resize.
+        // Economy (#247/#271): Finances shade/sticky; graph classes también resize.
         let finances = chrome_capabilities(FloatingWindowId::Finances);
         assert!(finances.shade && finances.sticky && !finances.resize);
-        let graphs = chrome_capabilities(FloatingWindowId::Graphs);
+        let graphs = chrome_capabilities(FloatingWindowId::GraphIncome);
         assert!(graphs.shade && graphs.sticky && graphs.resize);
 
         // Settings (#248): Cheat shade/sticky; NewGrf resize centrado sin shade.

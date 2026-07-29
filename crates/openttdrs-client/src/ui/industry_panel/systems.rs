@@ -12,8 +12,12 @@ use super::logic::{
     dominant_gfx_for_component, flood_industry_tiles, format_panel_title, industry_gfx,
     industry_stats_for_component, kind_label, spec_label,
 };
-use super::{IndustryPanelCenterButton, IndustryPanelDetails, IndustryPanelState};
+use super::{
+    IndustryPanelCenterButton, IndustryPanelDetails, IndustryPanelProductionButton,
+    IndustryPanelState,
+};
 use crate::ui::industry_directory::industry_chain_label;
+use crate::ui::industry_production_window::IndustryProductionWindowState;
 use crate::ui::sparkline::sparkline_u32;
 
 const PREVIEW_SCALE_MUL: f32 = 0.62;
@@ -37,13 +41,27 @@ pub(crate) fn industry_panel_on_closed(
 
 pub(crate) fn industry_panel_center_interaction(
     q: Query<&Interaction, (Changed<Interaction>, With<IndustryPanelCenterButton>)>,
+    prod_q: Query<
+        &Interaction,
+        (
+            Changed<Interaction>,
+            With<IndustryPanelProductionButton>,
+            Without<IndustryPanelCenterButton>,
+        ),
+    >,
     panel: Res<IndustryPanelState>,
+    mut production: ResMut<IndustryProductionWindowState>,
     sim: Res<SimWorld>,
     mut cam_q: Query<&mut Transform, (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
 ) {
     let Some(focus) = panel.focus_tile else {
         return;
     };
+    for interaction in &prod_q {
+        if *interaction == Interaction::Pressed {
+            production.open = true;
+        }
+    }
     for interaction in &q {
         if *interaction != Interaction::Pressed {
             continue;

@@ -8,7 +8,7 @@ use crate::ui::floating_window::{TITLE_CREAM, spawn_floating_window, window_text
 use crate::ui::font::UiFontRole;
 use crate::ui::toolbar::BuildMenuUi;
 
-use super::{IndustryPanelCenterButton, IndustryPanelDetails};
+use super::{IndustryPanelCenterButton, IndustryPanelDetails, IndustryPanelProductionButton};
 
 const PREVIEW_TEX_W: u32 = 320;
 const PREVIEW_TEX_H: u32 = 180;
@@ -82,6 +82,27 @@ pub(crate) fn setup_industry_panel(
                     BuildMenuUi,
                     children![(
                         Text::new("Loc"),
+                        window_text_font(asset_server, UiFontRole::Caption),
+                        TextColor(Color::srgb(0.92, 0.88, 0.78)),
+                    )],
+                ));
+                row.spawn((
+                    IndustryPanelProductionButton,
+                    Button,
+                    Node {
+                        width: Val::Px(40.0),
+                        height: Val::Px(22.0),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        border: UiRect::all(Val::Px(1.0)),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(0.36, 0.31, 0.21)),
+                    BorderColor::all(Color::srgb(0.7, 0.62, 0.42)),
+                    Interaction::default(),
+                    BuildMenuUi,
+                    children![(
+                        Text::new("Prod"),
                         window_text_font(asset_server, UiFontRole::Caption),
                         TextColor(Color::srgb(0.92, 0.88, 0.78)),
                     )],

@@ -1,12 +1,15 @@
 //! Serialización de vehículos y órdenes (ORDL, VEHS).
 //!
-//! Schema VEHS mínimo loadable por `OpenTTD` ≥15.3 (#226):
+//! Schema VEHS mínimo loadable por `OpenTTD` ≥15.3 (#226/#267):
 //! `direction`/`owner`/`engine_type`/`x_pos`/`y_pos`/`z_pos` son
 //! obligatorios — sin ellos `AfterLoad` deja `INVALID_DIR`/`INVALID_OWNER` y
 //! crashea en `Train::UpdateDeltaXY` / `GetImage`.
 //!
 //! Tren: + `track`. ROAD (bus/camión): tesela `MP_ROAD` con roadtype válido
-//! (`m4`/`M3HI`; 0 = `ROADTYPE_ROAD`). Ship/aircraft/tram quedan fuera.
+//! (`m4`/`M3HI`; 0 = `ROADTYPE_ROAD`). Ship: agua (`MP_WATER`). Aircraft:
+//! primario + sombra encadenada (`next` REF) — `OpenTTD` exige shadow.
+//!
+//! Residual: tram, CAPY/ECMY packets, rotor heli (solo ala fija en export).
 
 use super::super::SavError;
 use super::super::chunks::{CH_SPARSE_TABLE, CH_TABLE};
@@ -19,6 +22,11 @@ use crate::vehicle::{DIR_NE, DIR_NW, DIR_SE, DIR_SW, Vehicle, VehicleKind, Vehic
 
 /// Cabeza de convoy + motor (`GVSF_FRONT | GVSF_ENGINE`).
 const TRAIN_SUBTYPE_FRONT_ENGINE: u8 = 0x01 | 0x08;
+
+/// `AirVehicleSubType::AIR_AIRCRAFT` (ala fija; no requiere rotor).
+const AIR_AIRCRAFT: u8 = 2;
+/// `AirVehicleSubType::AIR_SHADOW`.
+const AIR_SHADOW: u8 = 4;
 
 /// `VehState::Stopped` (bit 1).
 const VEHSTATUS_STOPPED: u8 = 1 << 1;
@@ -36,9 +44,17 @@ const DEFAULT_OPENTTD_BUS_ENGINE: u16 = 116;
 /// MPS Mail Truck (`engines.h` id 126).
 const DEFAULT_OPENTTD_TRUCK_ENGINE: u16 = 126;
 
-/// `VEH_TRAIN` / `VEH_ROAD`.
+/// MPS Oil Tanker (`engines.h` id 204).
+const DEFAULT_OPENTTD_SHIP_ENGINE: u16 = 204;
+
+/// Yate Haugan (`engines.h` id 218).
+const DEFAULT_OPENTTD_AIRCRAFT_ENGINE: u16 = 218;
+
+/// `VEH_TRAIN` / `VEH_ROAD` / `VEH_SHIP` / `VEH_AIRCRAFT`.
 const VEH_TRAIN: u8 = 0;
 const VEH_ROAD: u8 = 1;
+const VEH_SHIP: u8 = 2;
+const VEH_AIRCRAFT: u8 = 3;
 
 /// Píxeles por tesela (`TILE_SIZE`).
 const TILE_SIZE: i32 = 16;
@@ -56,9 +72,10 @@ fn cargo_ottd_byte(v: &Vehicle) -> u8 {
         return c.temperate_id();
     }
     match v.kind {
-        VehicleKind::Bus | VehicleKind::Tram => 0, // pasajeros
-        VehicleKind::Truck => 2,                   // correo
-        _ => 1,                                    // carbón (tren)
+        VehicleKind::Bus | VehicleKind::Tram | VehicleKind::Aircraft => 0, // pasajeros
+        VehicleKind::Truck => 2,                                          // correo
+        VehicleKind::Ship => 3,                                           // petróleo
+        VehicleKind::Train => 1,                                          // carbón
     }
 }
 
@@ -97,6 +114,13 @@ fn road_tile_ok(state: &GameState, pos: TileCoord) -> bool {
         return false;
     };
     matches!(tile.kind, TileKind::Road | TileKind::RoadDepot)
+}
+
+fn water_tile_ok(state: &GameState, pos: TileCoord) -> bool {
+    let Some(tile) = state.map.get(pos) else {
+        return false;
+    };
+    matches!(tile.kind, TileKind::Water | TileKind::ShipDepot)
 }
 
 /// `EngineID` vanilla `OpenTTD` desde el catálogo Rust (inverso de `vanilla_train_engine_id`).
@@ -140,6 +164,23 @@ fn openttd_road_engine_type(v: &Vehicle) -> u16 {
     }
 }
 
+fn openttd_ship_engine_type(v: &Vehicle) -> u16 {
+    match v.engine_id {
+        Some(0) => 204, // MPS Oil Tanker
+        Some(2) => 206, // MPS Passenger Ferry
+        Some(7) => 211, // Yate Cargo ship
+        _ => DEFAULT_OPENTTD_SHIP_ENGINE,
+    }
+}
+
+fn openttd_aircraft_engine_type(v: &Vehicle) -> u16 {
+    match v.engine_id {
+        Some(0) => 218, // Yate Haugan
+        Some(10) => 225, // Yate Aerospace YAC 1-11
+        _ => DEFAULT_OPENTTD_AIRCRAFT_ENGINE,
+    }
+}
+
 type SavRecordBytes = Vec<u8>;
 type SavRecordList = Vec<SavRecordBytes>;
 
@@ -156,6 +197,8 @@ struct CommonWire {
     cargo: u8,
     order_list_ref: u32,
     cur_order: u8,
+    /// `REF_VEHICLE`: 0 = null, resto = índice sparse + 1.
+    next_ref: u32,
 }
 
 fn write_vehs_common(buf: &mut Vec<u8>, c: &CommonWire) {
@@ -171,6 +214,7 @@ fn write_vehs_common(buf: &mut Vec<u8>, c: &CommonWire) {
     buf.push(c.cargo);
     buf.extend_from_slice(&c.order_list_ref.to_be_bytes());
     buf.push(c.cur_order);
+    buf.extend_from_slice(&c.next_ref.to_be_bytes());
 }
 
 fn push_orders(
@@ -204,6 +248,8 @@ fn common_wire_for(
     direction: u8,
     engine_type: u16,
     order_list_ref: u32,
+    subtype: u8,
+    next_ref: u32,
 ) -> CommonWire {
     let cargo = cargo_ottd_byte(v);
     let cur_order = u8::try_from(v.current_order.min(255)).unwrap_or(0);
@@ -212,7 +258,7 @@ fn common_wire_for(
     let y_pos = v.pos.y * TILE_SIZE + TILE_SIZE / 2;
     let z_pos = i32::from(v.z_pos.unwrap_or(0));
     CommonWire {
-        subtype: TRAIN_SUBTYPE_FRONT_ENGINE,
+        subtype,
         owner: v.owner.0,
         tile: tile_idx,
         x_pos,
@@ -224,14 +270,46 @@ fn common_wire_for(
         cargo,
         order_list_ref,
         cur_order,
+        next_ref,
     }
 }
 
-/// ORDL + VEHS: cabezas tren y ROAD (bus/camión sobre carretera).
+fn diag_direction(v: &Vehicle) -> u8 {
+    if matches!(v.direction, DIR_NE | DIR_SE | DIR_SW | DIR_NW) {
+        v.direction
+    } else {
+        DIR_NE
+    }
+}
+
+fn push_typed_vehicle(
+    rec: &mut Vec<u8>,
+    veh_type: u8,
+    common: &CommonWire,
+    train_track: Option<u8>,
+) -> Result<(), SavError> {
+    rec.push(veh_type);
+    for t in VEH_TRAIN..=VEH_AIRCRAFT {
+        if t == veh_type {
+            write_gamma(1, rec)?; // struct presente
+            write_gamma(1, rec)?; // common presente
+            write_vehs_common(rec, common);
+            if let Some(track) = train_track {
+                rec.push(track);
+            }
+        } else {
+            write_gamma(0, rec)?;
+        }
+    }
+    Ok(())
+}
+
+/// ORDL + VEHS: tren, ROAD, ship y aircraft (ala fija + sombra).
 ///
 /// # Errors
 ///
 /// Falla si algún valor gamma está fuera de rango.
+#[allow(clippy::too_many_lines)]
 pub(super) fn ordl_and_vehs_records(
     state: &GameState,
     map_w: u32,
@@ -243,11 +321,15 @@ pub(super) fn ordl_and_vehs_records(
     for v in &state.vehicles {
         let is_train = v.kind == VehicleKind::Train;
         let is_road = matches!(v.kind, VehicleKind::Bus | VehicleKind::Truck);
-        if !is_train && !is_road {
+        let is_ship = v.kind == VehicleKind::Ship;
+        let is_air = v.kind == VehicleKind::Aircraft;
+        if !is_train && !is_road && !is_ship && !is_air {
             continue;
         }
         if is_road && !road_tile_ok(state, v.pos) {
-            // Sin roadtype válido AfterLoad hace SlErrorCorrupt.
+            continue;
+        }
+        if is_ship && !water_tile_ok(state, v.pos) {
             continue;
         }
         let Some(tile_idx) = coord_to_linear_index(v.pos, map_w) else {
@@ -255,39 +337,118 @@ pub(super) fn ordl_and_vehs_records(
         };
 
         let order_list_ref = push_orders(v, state, map_w, &mut ordl)?;
+        let direction = if is_train {
+            let track = track_bits_for(state, v.pos);
+            train_direction(track, v.direction)
+        } else {
+            diag_direction(v)
+        };
+
+        if is_air {
+            // Primario + sombra (OpenTTD `Missing shadow for aircraft`).
+            let shadow_idx = sparse_idx + 1;
+            let next_ref = shadow_idx + 1; // REF = index+1
+            let engine_type = openttd_aircraft_engine_type(v);
+
+            let mut primary = Vec::new();
+            write_gamma(sparse_idx, &mut primary)?;
+            push_typed_vehicle(
+                &mut primary,
+                VEH_AIRCRAFT,
+                &common_wire_for(
+                    v,
+                    tile_idx,
+                    direction,
+                    engine_type,
+                    order_list_ref,
+                    AIR_AIRCRAFT,
+                    next_ref,
+                ),
+                None,
+            )?;
+            vehs.push(primary);
+            sparse_idx += 1;
+
+            let mut shadow = Vec::new();
+            write_gamma(sparse_idx, &mut shadow)?;
+            push_typed_vehicle(
+                &mut shadow,
+                VEH_AIRCRAFT,
+                &CommonWire {
+                    subtype: AIR_SHADOW,
+                    owner: v.owner.0,
+                    tile: tile_idx,
+                    x_pos: v.pos.x * TILE_SIZE + TILE_SIZE / 2,
+                    y_pos: v.pos.y * TILE_SIZE + TILE_SIZE / 2,
+                    z_pos: i32::from(v.z_pos.unwrap_or(0)),
+                    direction,
+                    engine_type,
+                    vehstatus: VEHSTATUS_STOPPED,
+                    cargo: 0,
+                    order_list_ref: 0,
+                    cur_order: 0,
+                    next_ref: 0,
+                },
+                None,
+            )?;
+            vehs.push(shadow);
+            sparse_idx += 1;
+            continue;
+        }
 
         let mut rec = Vec::new();
         write_gamma(sparse_idx, &mut rec)?;
 
         if is_train {
             let track = track_bits_for(state, v.pos);
-            let direction = train_direction(track, v.direction);
             let engine_type = openttd_train_engine_type(v);
-            rec.push(VEH_TRAIN);
-            write_gamma(1, &mut rec)?; // train presente
-            write_gamma(1, &mut rec)?; // common presente
-            write_vehs_common(
+            push_typed_vehicle(
                 &mut rec,
-                &common_wire_for(v, tile_idx, direction, engine_type, order_list_ref),
-            );
-            rec.push(track);
-            write_gamma(0, &mut rec)?; // roadveh ausente
-        } else {
-            let direction = if matches!(v.direction, DIR_NE | DIR_SE | DIR_SW | DIR_NW) {
-                v.direction
-            } else {
-                DIR_NE
-            };
+                VEH_TRAIN,
+                &common_wire_for(
+                    v,
+                    tile_idx,
+                    direction,
+                    engine_type,
+                    order_list_ref,
+                    TRAIN_SUBTYPE_FRONT_ENGINE,
+                    0,
+                ),
+                Some(track),
+            )?;
+        } else if is_road {
             let engine_type = openttd_road_engine_type(v);
-            rec.push(VEH_ROAD);
-            write_gamma(0, &mut rec)?; // train ausente
-            write_gamma(1, &mut rec)?; // roadveh presente
-            write_gamma(1, &mut rec)?; // common presente
-            write_vehs_common(
+            push_typed_vehicle(
                 &mut rec,
-                &common_wire_for(v, tile_idx, direction, engine_type, order_list_ref),
-            );
-            // state/frame/path/gv_flags: ausentes en header → defaults 0 (TRACKDIR_NE).
+                VEH_ROAD,
+                &common_wire_for(
+                    v,
+                    tile_idx,
+                    direction,
+                    engine_type,
+                    order_list_ref,
+                    TRAIN_SUBTYPE_FRONT_ENGINE,
+                    0,
+                ),
+                None,
+            )?;
+        } else {
+            // ship
+            let engine_type = openttd_ship_engine_type(v);
+            push_typed_vehicle(
+                &mut rec,
+                VEH_SHIP,
+                &common_wire_for(
+                    v,
+                    tile_idx,
+                    direction,
+                    engine_type,
+                    order_list_ref,
+                    TRAIN_SUBTYPE_FRONT_ENGINE,
+                    0,
+                ),
+                None,
+            )?;
         }
 
         vehs.push(rec);
@@ -301,11 +462,13 @@ fn append_field(header: &mut Vec<u8>, ftype: u8, name: &str) -> Result<(), SavEr
     write_str(name, header)
 }
 
-/// Header VEHS mínimo (train + roadveh) alineado con `vehicle_sl.cpp`.
+/// Header VEHS mínimo (train + roadveh + ship + aircraft) alineado con `vehicle_sl.cpp`.
 fn append_vehs_header(header: &mut Vec<u8>) -> Result<(), SavError> {
     append_field(header, 2, "type")?; // SAVEBYTE → U8
     append_field(header, 0x1B, "train")?;
     append_field(header, 0x1B, "roadveh")?;
+    append_field(header, 0x1B, "ship")?;
+    append_field(header, 0x1B, "aircraft")?;
     header.push(0);
 
     // train → common + track
@@ -314,7 +477,17 @@ fn append_vehs_header(header: &mut Vec<u8>) -> Result<(), SavError> {
     header.push(0);
     append_vehs_common_fields(header)?;
 
-    // roadveh → common (state/path/gv_flags usan defaults si faltan)
+    // roadveh → common
+    append_field(header, 0x1B, "common")?;
+    header.push(0);
+    append_vehs_common_fields(header)?;
+
+    // ship → common (state/path/rotation usan defaults)
+    append_field(header, 0x1B, "common")?;
+    header.push(0);
+    append_vehs_common_fields(header)?;
+
+    // aircraft → common (pos/state/targetairport usan defaults)
     append_field(header, 0x1B, "common")?;
     header.push(0);
     append_vehs_common_fields(header)?;
@@ -334,6 +507,7 @@ fn append_vehs_common_fields(header: &mut Vec<u8>) -> Result<(), SavError> {
     append_field(header, 2, "cargo_type")?;
     append_field(header, 6, "orders")?; // REF_ORDERLIST → U32
     append_field(header, 2, "cur_real_order_index")?;
+    append_field(header, 6, "next")?; // REF_VEHICLE → U32
     header.push(0);
     Ok(())
 }
@@ -358,6 +532,14 @@ pub(super) fn vehs_chunk(records: &[Vec<u8>]) -> Result<Vec<u8>, SavError> {
     let mut header = Vec::new();
     append_vehs_header(&mut header)?;
     raw_table_chunk(*b"VEHS", &header, records, CH_SPARSE_TABLE)
+}
+
+/// Asegura agua de mar bajo `pos` (fixture ship).
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+pub(crate) fn ensure_sea_tile(state: &mut GameState, pos: TileCoord) {
+    use crate::map::{WaterClass, make_water_tile};
+    make_water_tile(&mut state.map, pos, WaterClass::Sea).expect("water");
 }
 
 #[cfg(test)]
@@ -437,6 +619,108 @@ mod tests {
         state.vehicles = vec![bus];
         let (_, vehs) = ordl_and_vehs_records(&state, 64).unwrap();
         assert!(vehs.is_empty(), "bus sobre grass omitido");
+    }
+
+    #[test]
+    fn vehs_exports_ship_on_water() {
+        use crate::sav::chunks::{find_chunk, parse_chunks};
+        use crate::sav::table::{SlValue, parse_table_chunk, record_get};
+
+        let mut state = GameState::new(64, 64);
+        let ship_pos = TileCoord::new(30, 30);
+        ensure_sea_tile(&mut state, ship_pos);
+        let mut ship = Vehicle::new(0, VehicleKind::Ship, ship_pos, ship_pos);
+        ship.running = false;
+        ship.direction = DIR_NE;
+        state.vehicles = vec![ship];
+
+        let (_, vehs) = ordl_and_vehs_records(&state, 64).unwrap();
+        assert_eq!(vehs.len(), 1);
+        let chunk = vehs_chunk(&vehs).unwrap();
+        let chunks = parse_chunks(&chunk).unwrap();
+        let raw = find_chunk(&chunks, "VEHS").expect("VEHS");
+        let rows = parse_table_chunk(&raw.body, true).expect("parse VEHS");
+        assert_eq!(rows.len(), 1);
+        assert_eq!(
+            record_get(&rows[0].1, "type").and_then(SlValue::as_u64),
+            Some(2)
+        );
+        let ship = match record_get(&rows[0].1, "ship") {
+            Some(SlValue::Structs(items)) => items.first().expect("ship"),
+            other => panic!("ship ausente: {other:?}"),
+        };
+        let common = match record_get(ship, "common") {
+            Some(SlValue::Structs(items)) => items.first().expect("common"),
+            other => panic!("common ausente: {other:?}"),
+        };
+        assert_eq!(
+            record_get(common, "engine_type").and_then(SlValue::as_u64),
+            Some(u64::from(DEFAULT_OPENTTD_SHIP_ENGINE))
+        );
+    }
+
+    #[test]
+    fn vehs_skips_ship_off_water() {
+        let mut state = GameState::new(64, 64);
+        let ship = Vehicle::new(
+            0,
+            VehicleKind::Ship,
+            TileCoord::new(30, 30),
+            TileCoord::new(30, 30),
+        );
+        state.vehicles = vec![ship];
+        let (_, vehs) = ordl_and_vehs_records(&state, 64).unwrap();
+        assert!(vehs.is_empty());
+    }
+
+    #[test]
+    fn vehs_exports_aircraft_with_shadow_chain() {
+        use crate::sav::chunks::{find_chunk, parse_chunks};
+        use crate::sav::table::{SlValue, parse_table_chunk, record_get};
+
+        let mut state = GameState::new(64, 64);
+        let air_pos = TileCoord::new(40, 40);
+        let mut air = Vehicle::new(0, VehicleKind::Aircraft, air_pos, air_pos);
+        air.running = false;
+        air.direction = DIR_NE;
+        state.vehicles = vec![air];
+
+        let (_, vehs) = ordl_and_vehs_records(&state, 64).unwrap();
+        assert_eq!(vehs.len(), 2, "primario + sombra");
+        let chunk = vehs_chunk(&vehs).unwrap();
+        let chunks = parse_chunks(&chunk).unwrap();
+        let raw = find_chunk(&chunks, "VEHS").expect("VEHS");
+        let rows = parse_table_chunk(&raw.body, true).expect("parse VEHS");
+        assert_eq!(rows.len(), 2);
+        let primary = match record_get(&rows[0].1, "aircraft") {
+            Some(SlValue::Structs(items)) => items.first().expect("aircraft"),
+            other => panic!("aircraft ausente: {other:?}"),
+        };
+        let common = match record_get(primary, "common") {
+            Some(SlValue::Structs(items)) => items.first().expect("common"),
+            other => panic!("common ausente: {other:?}"),
+        };
+        assert_eq!(
+            record_get(common, "subtype").and_then(SlValue::as_u64),
+            Some(u64::from(AIR_AIRCRAFT))
+        );
+        assert_eq!(
+            record_get(common, "next").and_then(SlValue::as_u64),
+            Some(2),
+            "REF sombra = sparse_idx 1 + 1"
+        );
+        let shadow = match record_get(&rows[1].1, "aircraft") {
+            Some(SlValue::Structs(items)) => items.first().expect("shadow"),
+            other => panic!("shadow ausente: {other:?}"),
+        };
+        let shadow_common = match record_get(shadow, "common") {
+            Some(SlValue::Structs(items)) => items.first().expect("common"),
+            other => panic!("shadow common ausente: {other:?}"),
+        };
+        assert_eq!(
+            record_get(shadow_common, "subtype").and_then(SlValue::as_u64),
+            Some(u64::from(AIR_SHADOW))
+        );
     }
 
     #[test]

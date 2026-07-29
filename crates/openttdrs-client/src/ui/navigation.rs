@@ -33,6 +33,7 @@ pub(crate) enum UiRoute {
     Subsidies,
     Vehicles(VehicleListKind),
     Finances,
+    CompanyView,
     Graph(GraphKind),
     CargoPaymentRates,
     SignList,

@@ -176,7 +176,9 @@ mod tests {
         world.init_resource::<CompanyViewWindowState>();
         world.init_resource::<Messages<OpenUiRoute>>();
         world.write_message(OpenUiRoute(UiRoute::CompanyView));
-        world.run_system_once(open_company_view_from_routes).unwrap();
+        world
+            .run_system_once(open_company_view_from_routes)
+            .unwrap();
         assert!(world.resource::<CompanyViewWindowState>().open);
     }
 }

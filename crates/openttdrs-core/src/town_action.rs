@@ -1,9 +1,9 @@
 //! Acciones de autoridad local (`TownAction` / `CmdDoTownAction`).
 
 use crate::company::CompanyId;
+use crate::map::Map;
 use crate::map::{TileCoord, TileKind};
 use crate::station::{Station, modify_station_rating_around};
-use crate::map::Map;
 use crate::town::{
     FUND_BUILDINGS_RATING_BOOST, MAX_TOWN_AUTHORITY_COMPANIES, Town, apply_fund_buildings_boost,
 };

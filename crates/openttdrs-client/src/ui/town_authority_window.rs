@@ -58,7 +58,13 @@ pub(crate) fn sync_town_authority_window(
     sim: Res<SimWorld>,
     mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
     mut title_q: Query<(&FloatingWindowTitleText, &mut Text), Without<TownAuthorityBodyText>>,
-    mut body_q: Query<&mut Text, (With<TownAuthorityBodyText>, Without<FloatingWindowTitleText>)>,
+    mut body_q: Query<
+        &mut Text,
+        (
+            With<TownAuthorityBodyText>,
+            Without<FloatingWindowTitleText>,
+        ),
+    >,
 ) {
     let Some((_, mut vis)) = root_q
         .iter_mut()

@@ -37,10 +37,11 @@ pub(crate) use construction_picker_windows::{
     buoy_picker_on_closed, depot_build_picker_on_closed, dock_picker_on_closed,
     handle_depot_build_picker_buttons, handle_dock_picker_buttons, rail_waypoint_picker_on_closed,
     road_waypoint_picker_on_closed, setup_buoy_picker, setup_depot_build_picker, setup_dock_picker,
-    setup_rail_waypoint_picker, setup_road_waypoint_picker, setup_sign_picker, setup_terraform_picker,
-    setup_tree_picker, sign_picker_on_closed, sync_buoy_picker, sync_depot_build_picker,
-    sync_dock_picker, sync_rail_waypoint_picker, sync_road_waypoint_picker, sync_sign_picker,
-    sync_terraform_picker, sync_tree_picker, terraform_picker_on_closed, tree_picker_on_closed,
+    setup_rail_waypoint_picker, setup_road_waypoint_picker, setup_sign_picker,
+    setup_terraform_picker, setup_tree_picker, sign_picker_on_closed, sync_buoy_picker,
+    sync_depot_build_picker, sync_dock_picker, sync_rail_waypoint_picker,
+    sync_road_waypoint_picker, sync_sign_picker, sync_terraform_picker, sync_tree_picker,
+    terraform_picker_on_closed, tree_picker_on_closed,
 };
 pub(crate) use depot_panel::{
     DepotPanelState, begin_depot_list_drag, depot_panel_on_closed, finish_depot_list_drag,

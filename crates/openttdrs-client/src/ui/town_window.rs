@@ -340,7 +340,8 @@ pub(crate) fn handle_town_window_buttons(
             TownWindowButton::OpenAuthority => {
                 if let Some(town_id) = town_state.town_id {
                     crate::ui::town_authority_window::open_town_authority_for(
-                        town_id, &mut authority,
+                        town_id,
+                        &mut authority,
                     );
                 }
             }

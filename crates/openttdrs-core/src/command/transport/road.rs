@@ -225,9 +225,9 @@ pub fn infer_road_drag_axis(map: &Map, start: TileCoord, end: TileCoord, tool_ax
     if let Some(axis) = road_axis_from_colinear_neighbor(map, start) {
         return axis;
     }
-        if start == end {
-            return tool_axis;
-        }
+    if start == end {
+        return tool_axis;
+    }
     if (end.x - start.x).abs() >= (end.y - start.y).abs() {
         0x0A
     } else {

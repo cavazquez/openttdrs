@@ -31,7 +31,6 @@ use super::super::dialog_windows::{
 };
 use super::super::endscreen::{EndScreenState, RetireGameRequested};
 use super::super::finances_window::FinancesWindowState;
-use super::super::modal_stack::ModalStack;
 use super::super::genland_window::GenLandWindowState;
 use super::super::goal_list_window::GoalListWindowState;
 use super::super::graph_window::GraphWindowState;
@@ -39,6 +38,7 @@ use super::super::help_window::HelpWindowState;
 use super::super::industry_directory::IndustryDirectoryState;
 use super::super::industry_panel::IndustryPanelState;
 use super::super::league_window::LeagueWindowState;
+use super::super::modal_stack::ModalStack;
 use super::super::navigation::ToolbarMenuState;
 use super::super::newgrf_window::NewGrfWindowState;
 use super::super::news_settings_window::NewsSettingsWindowState;

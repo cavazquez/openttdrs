@@ -201,7 +201,7 @@ mod tests {
     use crate::company::CompanyId;
     use crate::station::{StopKind, station_rating_for_cargo};
     use crate::town_action::{
-        ADVERTISE_MEDIUM_BOOST, EXCLUSIVE_RIGHTS_MONTHS, BUILD_STATUE_AUTHORITY_RATING_BOOST,
+        ADVERTISE_MEDIUM_BOOST, BUILD_STATUE_AUTHORITY_RATING_BOOST, EXCLUSIVE_RIGHTS_MONTHS,
     };
     use crate::{Command, GameState, apply_command, map::TileCoord};
 

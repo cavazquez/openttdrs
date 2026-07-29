@@ -73,9 +73,9 @@ fn cargo_ottd_byte(v: &Vehicle) -> u8 {
     }
     match v.kind {
         VehicleKind::Bus | VehicleKind::Tram | VehicleKind::Aircraft => 0, // pasajeros
-        VehicleKind::Truck => 2,                                          // correo
-        VehicleKind::Ship => 3,                                           // petróleo
-        VehicleKind::Train => 1,                                          // carbón
+        VehicleKind::Truck => 2,                                           // correo
+        VehicleKind::Ship => 3,                                            // petróleo
+        VehicleKind::Train => 1,                                           // carbón
     }
 }
 
@@ -175,7 +175,7 @@ fn openttd_ship_engine_type(v: &Vehicle) -> u16 {
 
 fn openttd_aircraft_engine_type(v: &Vehicle) -> u16 {
     match v.engine_id {
-        Some(0) => 218, // Yate Haugan
+        Some(0) => 218,  // Yate Haugan
         Some(10) => 225, // Yate Aerospace YAC 1-11
         _ => DEFAULT_OPENTTD_AIRCRAFT_ENGINE,
     }

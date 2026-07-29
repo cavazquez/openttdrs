@@ -1,8 +1,8 @@
 //! Gráficos económicos (Income / Operating Profit / Company Value) filtrados por compañía.
 
 use bevy::prelude::*;
-use openttdrs_core::prelude::*;
 use openttdrs_core::format_money;
+use openttdrs_core::prelude::*;
 
 use crate::state::SimWorld;
 use crate::ui::floating_window::{

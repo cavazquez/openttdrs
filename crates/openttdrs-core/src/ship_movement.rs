@@ -566,11 +566,7 @@ pub fn try_claim_ship_lock(
 }
 
 /// Libera la esclusa si el vehículo es el dueño.
-pub fn release_ship_lock(
-    occupancy: &mut ShipLockOccupancy,
-    lock_tile: TileCoord,
-    vehicle_id: u32,
-) {
+pub fn release_ship_lock(occupancy: &mut ShipLockOccupancy, lock_tile: TileCoord, vehicle_id: u32) {
     if occupancy.get(&lock_tile) == Some(&vehicle_id) {
         occupancy.remove(&lock_tile);
     }
@@ -604,7 +600,8 @@ pub fn ship_arrival_ready(v: &Vehicle, map: Option<&Map>) -> bool {
         }
         VehicleOrder::Station { .. } => {
             if dest_is_buoy(v.dest, map) {
-                let dist = (v.pos.x - v.dest.x).unsigned_abs() + (v.pos.y - v.dest.y).unsigned_abs();
+                let dist =
+                    (v.pos.x - v.dest.x).unsigned_abs() + (v.pos.y - v.dest.y).unsigned_abs();
                 dist <= 3
             } else {
                 v.pos == v.dest && (v.ship_x & 0xF) == 8 && (v.ship_y & 0xF) == 8
@@ -1099,7 +1096,9 @@ mod tests {
         let far = TileCoord::new(8, 2);
         assert_eq!(find_closest_ship_depot(&s.map, far), Some(depot));
         // Isla sin conexión: no encuentra.
-        s.map.set_kind(TileCoord::new(5, 5), TileKind::Water).unwrap();
+        s.map
+            .set_kind(TileCoord::new(5, 5), TileKind::Water)
+            .unwrap();
         assert!(find_closest_ship_depot(&s.map, TileCoord::new(5, 5)).is_none());
     }
 

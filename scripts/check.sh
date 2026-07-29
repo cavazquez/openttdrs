@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# check.sh - Formatea, verifica lints y ejecuta tests
+# check.sh - Verifica formato, lints y ejecuta tests
 #
 # Uso:
-#   ./scripts/check.sh        # Todo local (fmt, lint, test)
+#   ./scripts/check.sh        # Todo local sin mutar fuentes (fmt-check, lint, test)
 #   ./scripts/check.sh fmt    # Solo formatear
 #   ./scripts/check.sh fmt-check  # Solo verificar formato (como CI)
 #   ./scripts/check.sh lint   # Clippy estricto (como CI)
@@ -187,7 +187,7 @@ do_openttd_smoke() {
 }
 
 do_all() {
-    do_fmt
+    do_fmt_check
     do_lint
     do_test
     echo

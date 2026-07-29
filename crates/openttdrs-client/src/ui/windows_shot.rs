@@ -25,6 +25,7 @@ use crate::ui::autoreplace_window::AutoreplaceWindowState;
 use crate::ui::buy_window::BuyVehicleWindowState;
 use crate::ui::cargo_payment_window::CargoPaymentWindowState;
 use crate::ui::cheat_window::CheatWindowState;
+use crate::ui::company_view_window::CompanyViewWindowState;
 use crate::ui::destination_window::DestinationPickerState;
 use crate::ui::dev_console::DevConsoleState;
 use crate::ui::dialog_windows::{
@@ -32,9 +33,7 @@ use crate::ui::dialog_windows::{
     open_osk_for_query, open_query_for_newgrf_rename,
 };
 use crate::ui::display_options_window::DisplayOptionsWindowState;
-use crate::ui::modal_stack::ModalStack;
 use crate::ui::extra_viewport_window::ExtraViewportWindowState;
-use crate::ui::company_view_window::CompanyViewWindowState;
 use crate::ui::finances_window::FinancesWindowState;
 use crate::ui::floating_window::{FloatingWindow, FloatingWindowId, WindowKey};
 use crate::ui::genland_window::GenLandWindowState;
@@ -47,6 +46,7 @@ use crate::ui::industry_panel::IndustryPanelState;
 use crate::ui::industry_production_window::IndustryProductionWindowState;
 use crate::ui::league_window::LeagueWindowState;
 use crate::ui::main_menu::{MainMenuCamera, MainMenuUi};
+use crate::ui::modal_stack::ModalStack;
 use crate::ui::newgrf_window::NewGrfWindowState;
 use crate::ui::news_settings_window::NewsSettingsWindowState;
 use crate::ui::pathfinding_settings_window::PathfindingSettingsWindowState;
@@ -309,12 +309,7 @@ pub(crate) const WINDOW_PARITY_MATRIX: &[WindowParityEntry] = &[
         "autoreplace_gui.cpp",
         "WC_REPLACE_VEHICLE"
     ),
-    upstream_window!(
-        GraphIncome,
-        "economy",
-        "graph_gui.cpp",
-        "WC_INCOME_GRAPH"
-    ),
+    upstream_window!(GraphIncome, "economy", "graph_gui.cpp", "WC_INCOME_GRAPH"),
     upstream_window!(
         GraphOperatingProfit,
         "economy",
@@ -1696,8 +1691,10 @@ mod tests {
             window_child_ids(FloatingWindowId::Industry),
             vec![FloatingWindowId::IndustryProduction]
         );
-        assert!(window_descendant_ids(FloatingWindowId::Town)
-            .contains(&FloatingWindowId::TownAuthority));
+        assert!(
+            window_descendant_ids(FloatingWindowId::Town)
+                .contains(&FloatingWindowId::TownAuthority)
+        );
     }
 
     #[test]
@@ -1706,9 +1703,11 @@ mod tests {
         assert!(ECONOMY_FAMILY_WINDOW_IDS.contains(&FloatingWindowId::GraphOperatingProfit));
         assert!(ECONOMY_FAMILY_WINDOW_IDS.contains(&FloatingWindowId::GraphCompanyValue));
         assert!(ECONOMY_FAMILY_WINDOW_IDS.contains(&FloatingWindowId::CompanyView));
-        assert!(!ECONOMY_FAMILY_WINDOW_IDS
-            .iter()
-            .any(|id| id.storage_key() == "Graphs"));
+        assert!(
+            !ECONOMY_FAMILY_WINDOW_IDS
+                .iter()
+                .any(|id| id.storage_key() == "Graphs")
+        );
         assert_eq!(
             crate::ui::graph_window::GraphKind::Income.window_id(),
             FloatingWindowId::GraphIncome

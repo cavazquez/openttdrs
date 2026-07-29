@@ -246,7 +246,10 @@ mod tests {
         let z2 = push_osk(&mut stack, Some(owner), "b");
         assert!(z2 > z1);
         assert!(z1 >= MODAL_BASE_Z);
-        assert_eq!(stack.top().map(|e| e.kind), Some(ModalKind::OnScreenKeyboard));
+        assert_eq!(
+            stack.top().map(|e| e.kind),
+            Some(ModalKind::OnScreenKeyboard)
+        );
         assert!(stack.handle_escape());
         assert_eq!(stack.top().map(|e| e.kind), Some(ModalKind::QueryString));
     }

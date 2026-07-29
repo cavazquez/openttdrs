@@ -240,15 +240,21 @@ fn tropic_oil_wood_payment_differs_from_temperate() {
     assert!(oil_trop > oil_temp);
     assert!(wood_trop > wood_temp);
     assert_eq!(
-        CargoType::Oil.payment_spec_for_climate(Climate::SubTropical).base_rate,
+        CargoType::Oil
+            .payment_spec_for_climate(Climate::SubTropical)
+            .base_rate,
         4892
     );
     assert_eq!(
-        CargoType::Wood.payment_spec_for_climate(Climate::SubTropical).base_rate,
+        CargoType::Wood
+            .payment_spec_for_climate(Climate::SubTropical)
+            .base_rate,
         7964
     );
     assert_eq!(
-        CargoType::Oil.payment_spec_for_climate(Climate::Temperate).base_rate,
+        CargoType::Oil
+            .payment_spec_for_climate(Climate::Temperate)
+            .base_rate,
         CargoType::Oil.payment_spec().base_rate
     );
 }
@@ -256,13 +262,8 @@ fn tropic_oil_wood_payment_differs_from_temperate() {
 #[test]
 fn farm_dual_output_produces_and_stores_both() {
     let pos = TileCoord::new(2, 2);
-    let mut farm = Industry::with_tiles_spec(
-        pos,
-        IndustryKind::Forest,
-        IndustrySpec::Farm,
-        vec![pos],
-        0,
-    );
+    let mut farm =
+        Industry::with_tiles_spec(pos, IndustryKind::Forest, IndustrySpec::Farm, vec![pos], 0);
     assert_eq!(
         farm.produced_cargos(),
         &[CargoType::Grain, CargoType::Livestock]

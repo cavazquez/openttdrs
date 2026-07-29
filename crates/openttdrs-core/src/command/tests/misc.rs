@@ -346,10 +346,26 @@ fn construction_command_marks_landscape_tile_dirty() {
     apply_command(&mut s, &Command::PlaceRoad(c)).unwrap();
 
     assert!(s.runtime.landscape_tile_dirty.contains(&c));
-    assert!(s.runtime.landscape_tile_dirty.contains(&TileCoord::new(2, 3)));
-    assert!(s.runtime.landscape_tile_dirty.contains(&TileCoord::new(4, 3)));
-    assert!(s.runtime.landscape_tile_dirty.contains(&TileCoord::new(3, 2)));
-    assert!(s.runtime.landscape_tile_dirty.contains(&TileCoord::new(3, 4)));
+    assert!(
+        s.runtime
+            .landscape_tile_dirty
+            .contains(&TileCoord::new(2, 3))
+    );
+    assert!(
+        s.runtime
+            .landscape_tile_dirty
+            .contains(&TileCoord::new(4, 3))
+    );
+    assert!(
+        s.runtime
+            .landscape_tile_dirty
+            .contains(&TileCoord::new(3, 2))
+    );
+    assert!(
+        s.runtime
+            .landscape_tile_dirty
+            .contains(&TileCoord::new(3, 4))
+    );
 }
 
 #[test]

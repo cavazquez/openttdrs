@@ -30,7 +30,6 @@ use crate::ui::dialog_windows::{
     ErrorDialogWindowState, OskWindowState, QueryStringWindowState, dialog_windows_on_closed,
     handle_modal_enter, setup_dialog_windows, sync_dialog_windows,
 };
-use crate::ui::modal_stack::ModalStack;
 use crate::ui::display_options_window::{
     DisplayOptionsWindowState, display_options_window_on_closed, handle_display_options_buttons,
     setup_display_options_window, sync_display_options_window,
@@ -42,6 +41,7 @@ use crate::ui::extra_viewport_window::{
 use crate::ui::help_window::{
     HelpWindowState, handle_help_hotkey, help_window_on_closed, setup_help_window, sync_help_window,
 };
+use crate::ui::modal_stack::ModalStack;
 use crate::ui::newgrf_window::{
     NewGrfWindowState, handle_newgrf_window_buttons, newgrf_window_on_closed, setup_newgrf_window,
     sync_newgrf_window,

@@ -3083,10 +3083,7 @@ mod tests {
             .unwrap();
         assert_eq!(eng.refit_mask, expected);
         let cargos = crate::refittable_cargo_types_for_engine(eng);
-        assert_eq!(
-            cargos,
-            vec![crate::CargoType::Oil, crate::CargoType::Goods]
-        );
+        assert_eq!(cargos, vec![crate::CargoType::Oil, crate::CargoType::Goods]);
     }
 
     /// #249: Vehicles AC — flag helicóptero aircraft prop 0x09.

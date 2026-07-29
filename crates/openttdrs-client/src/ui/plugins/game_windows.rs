@@ -16,6 +16,10 @@ use crate::ui::cargo_payment_window::{
     CargoPaymentWindowState, cargo_payment_window_on_closed, open_cargo_payment_from_routes,
     setup_cargo_payment_window, sync_cargo_payment_window,
 };
+use crate::ui::company_view_window::{
+    CompanyViewWindowState, company_view_window_on_closed, handle_company_view_buttons,
+    open_company_view_from_routes, setup_company_view_window, sync_company_view_window,
+};
 use crate::ui::destination_window::{
     DestinationPickerState, destination_picker_on_closed, handle_destination_picker_buttons,
     setup_destination_picker, sync_destination_picker,
@@ -23,10 +27,6 @@ use crate::ui::destination_window::{
 use crate::ui::endscreen::{
     EndScreenState, RetireGameRequested, handle_endscreen_menu_button, process_retire_game_request,
     setup_endscreen, sync_endscreen, watch_game_over_events,
-};
-use crate::ui::company_view_window::{
-    CompanyViewWindowState, company_view_window_on_closed, handle_company_view_buttons,
-    open_company_view_from_routes, setup_company_view_window, sync_company_view_window,
 };
 use crate::ui::finances_window::{
     FinancesWindowState, finances_window_on_closed, handle_finances_window_buttons,

@@ -125,13 +125,19 @@ pub(crate) fn dialog_windows_on_closed(
 ) {
     close_floating_window_on_message(&mut closed, FloatingWindowId::QueryString, || {
         query_state.open = false;
-        if stack.top().is_some_and(|e| e.kind == ModalKind::QueryString) {
+        if stack
+            .top()
+            .is_some_and(|e| e.kind == ModalKind::QueryString)
+        {
             let _ = stack.pop_cancel();
         }
     });
     close_floating_window_on_message(&mut closed, FloatingWindowId::ErrorDialog, || {
         error_state.open = false;
-        if stack.top().is_some_and(|e| e.kind == ModalKind::ErrorDialog) {
+        if stack
+            .top()
+            .is_some_and(|e| e.kind == ModalKind::ErrorDialog)
+        {
             let _ = stack.pop_cancel();
         }
     });

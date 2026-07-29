@@ -12,7 +12,7 @@ use crate::industry_spec::IndustrySpecDef;
 use crate::industry_tile::IndustryTileSpecDef;
 use crate::newgrf_sprites::{
     Action2EvalCtx, Action2RandomEntry, CALLBACK_FAILED, CBID_HOUSE_ALLOW_CONSTRUCTION,
-    CBID_INDUSTRY_LOCATION, CBID_INDTILE_ANIM_NEXT_FRAME, CBID_STATION_AVAILABILITY,
+    CBID_INDTILE_ANIM_NEXT_FRAME, CBID_INDUSTRY_LOCATION, CBID_STATION_AVAILABILITY,
     CBID_VEHICLE_START_STOP_CHECK, TrainSpriteGraphics,
 };
 use crate::station::Station;
@@ -130,8 +130,7 @@ pub fn apply_house_construction_callback(def: &HouseSpecDef) -> bool {
     let Some(runtime) = def.newgrf_runtime.as_ref() else {
         return true;
     };
-    let result =
-        runtime.resolve_callback(def.newgrf_local_id, CBID_HOUSE_ALLOW_CONSTRUCTION, 0, 0);
+    let result = runtime.resolve_callback(def.newgrf_local_id, CBID_HOUSE_ALLOW_CONSTRUCTION, 0, 0);
     callback_allows_placement(result)
 }
 
@@ -143,8 +142,7 @@ pub fn apply_station_availability_callback(
     station: &mut Station,
 ) -> bool {
     let mut ctx = action2_eval_ctx_from_station(station);
-    let result =
-        gfx.resolve_callback_ctx(local_id, CBID_STATION_AVAILABILITY, 0, 0, &mut ctx);
+    let result = gfx.resolve_callback_ctx(local_id, CBID_STATION_AVAILABILITY, 0, 0, &mut ctx);
     writeback_station_persistent_registers(station, &ctx);
     callback_allows_placement(result)
 }
@@ -482,10 +480,7 @@ mod tests {
         state.stations.push(st);
         let json = state.save_json().unwrap();
         let loaded = crate::GameState::load_json(&json).unwrap();
-        assert_eq!(
-            loaded.stations[0].newgrf_persistent_regs.get(&2),
-            Some(&99)
-        );
+        assert_eq!(loaded.stations[0].newgrf_persistent_regs.get(&2), Some(&99));
     }
 
     #[test]
@@ -520,7 +515,13 @@ mod tests {
         assert!(set.is_some());
         assert!(matches!(set, Some(10..=13)));
         // Sin match de trigger → None
-        tile.newgrf_runtime.as_mut().unwrap().action2_random.get_mut(&3).unwrap().triggers = 0x04;
+        tile.newgrf_runtime
+            .as_mut()
+            .unwrap()
+            .action2_random
+            .get_mut(&3)
+            .unwrap()
+            .triggers = 0x04;
         let mut bits2 = 0u8;
         assert!(resolve_industry_tile_random_trigger(&tile, 0x01, &mut bits2, 1, 1, 1).is_none());
     }

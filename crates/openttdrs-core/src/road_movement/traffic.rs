@@ -53,13 +53,22 @@ pub fn road_veh_find_close_to(vehicles: &[Vehicle], v_idx: usize) -> Option<usiz
         if crate::road_movement::rvsb::is_bay_road_state(other.road_state) {
             continue;
         }
+        // El carril opuesto se representa con RVSB_DRIVE_SIDE. OpenTTD lo
+        // descarta por coordenadas sub-tesela; el modelo lógico debe hacerlo
+        // explícitamente para no frenar detrás de un vehículo adelantando.
+        if other.overtaking != v.overtaking {
+            continue;
+        }
         if other.direction != dir {
             continue;
         }
         if !same_or_adjacent_tile(pos, other.pos) {
             continue;
         }
-        if !is_ahead(pos, frame, other.pos, other.frame, dir) {
+        let overlaps = pos == other.pos && frame == other.frame;
+        if overlaps && other.id > v.id
+            || !overlaps && !is_ahead(pos, frame, other.pos, other.frame, dir)
+        {
             continue;
         }
         let dist = axial_distance(pos, frame, other.pos, other.frame, dir);
@@ -93,7 +102,10 @@ pub fn apply_road_veh_close_to(vehicles: &mut [Vehicle], v_idx: usize, map: Opti
         return false;
     }
     let blocker_speed = vehicles[blocker].cur_speed;
-    vehicles[v_idx].cur_speed = blocker_speed;
+    if vehicles[v_idx].cur_speed > blocker_speed {
+        vehicles[v_idx].cur_speed = blocker_speed;
+        vehicles[v_idx].subspeed = vehicles[v_idx].subspeed.min(vehicles[blocker].subspeed);
+    }
     vehicles[v_idx].blocked_ctr = vehicles[v_idx].blocked_ctr.saturating_add(1);
     if vehicles[v_idx].blocked_ctr > BLOCKED_CTR_LIMIT {
         vehicles[v_idx].blocked_ctr = 0;
@@ -188,6 +200,36 @@ mod tests {
     fn blocked_ctr_above_limit_allows_pass() {
         let mut vehicles = vec![bus_at(1, 0, 2, 40), bus_at(2, 1, 4, 10)];
         vehicles[0].blocked_ctr = BLOCKED_CTR_LIMIT;
+        assert!(!apply_road_veh_close_to(&mut vehicles, 0, None));
+        assert_eq!(vehicles[0].blocked_ctr, 0);
+    }
+
+    #[test]
+    fn faster_leader_never_accelerates_follower() {
+        let mut vehicles = vec![bus_at(1, 0, 2, 10), bus_at(2, 1, 4, 40)];
+        assert!(apply_road_veh_close_to(&mut vehicles, 0, None));
+        assert_eq!(vehicles[0].cur_speed, 10);
+    }
+
+    #[test]
+    fn vehicle_overtaking_in_other_lane_does_not_block() {
+        let mut vehicles = vec![bus_at(1, 0, 2, 40), bus_at(2, 1, 4, 10)];
+        vehicles[1].overtaking = crate::road_movement::rvsb::RVSB_DRIVE_SIDE;
+        assert_eq!(road_veh_find_close_to(&vehicles, 0), None);
+    }
+
+    #[test]
+    fn exact_overlap_yields_to_lower_vehicle_id() {
+        let mut follower = bus_at(2, 0, 4, 40);
+        let leader = bus_at(1, 0, 4, 0);
+        follower.road_state = crate::road_movement::rvsb::RVSB_IN_DT_ROAD_STOP;
+        let mut vehicles = vec![follower, leader];
+
+        assert!(apply_road_veh_close_to(&mut vehicles, 0, None));
+        assert_eq!(vehicles[0].cur_speed, 0);
+        assert_eq!(vehicles[0].blocked_ctr, 1);
+
+        vehicles[1].pos = TileCoord::new(4, 0);
         assert!(!apply_road_veh_close_to(&mut vehicles, 0, None));
         assert_eq!(vehicles[0].blocked_ctr, 0);
     }

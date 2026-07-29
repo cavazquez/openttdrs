@@ -281,6 +281,15 @@ pub struct Vehicle {
     /// Por defecto `true` para no bloquear poses de vagones en vía tras import/spawn.
     #[serde(default = "default_depot_leave_cleared")]
     pub depot_leave_cleared: bool,
+    /// Próxima salida permitida tras unbunch (`depot_unbunching_next_departure`).
+    #[serde(default)]
+    pub depot_unbunching_next_departure: u64,
+    /// Última salida de un depósito unbunch (`depot_unbunching_last_departure`).
+    #[serde(default)]
+    pub depot_unbunching_last_departure: u64,
+    /// Duración del último viaje redondo para separar salidas unbunch (ticks).
+    #[serde(default)]
+    pub round_trip_time: u32,
     /// Estado de depósito para bus/camión/tranvía.
     #[serde(default)]
     pub road_depot_phase: RoadDepotPhase,
@@ -521,6 +530,9 @@ impl Vehicle {
             force_proceed: false,
             wait_counter: 0,
             depot_leave_cleared: true,
+            depot_unbunching_next_departure: 0,
+            depot_unbunching_last_departure: 0,
+            round_trip_time: 0,
             road_depot_phase: RoadDepotPhase::None,
             pbs_stuck: false,
             timetable_active: false,

@@ -263,6 +263,25 @@ pub struct Town {
     /// Contador hasta la siguiente renovación (`time_until_rebuild`).
     #[serde(default = "default_time_until_rebuild")]
     pub time_until_rebuild: u16,
+    /// Meses de reconstrucción vial financiada (`road_build_months`).
+    #[serde(default)]
+    pub road_build_months: u8,
+    /// Meses restantes de derechos exclusivos (`exclusive_counter`).
+    #[serde(default)]
+    pub exclusive_counter: u8,
+    /// Compañía con derechos exclusivos (`exclusivity`).
+    #[serde(default)]
+    pub exclusivity: Option<crate::company::CompanyId>,
+    /// Bitset de estatuas por compañía (`statues`).
+    #[serde(default)]
+    pub statues: u16,
+    /// Meses de «unwanted» por compañía tras soborno fallido.
+    #[serde(default = "default_unwanted")]
+    pub unwanted: Vec<u8>,
+}
+
+fn default_unwanted() -> Vec<u8> {
+    vec![0; MAX_TOWN_AUTHORITY_COMPANIES]
 }
 
 fn default_time_until_rebuild() -> u16 {
@@ -300,6 +319,11 @@ impl Default for Town {
             has_church: false,
             has_stadium: false,
             time_until_rebuild: default_time_until_rebuild(),
+            road_build_months: 0,
+            exclusive_counter: 0,
+            exclusivity: None,
+            statues: 0,
+            unwanted: default_unwanted(),
         }
     }
 }
@@ -328,6 +352,57 @@ impl Town {
             .get(company.index())
             .copied()
             .unwrap_or(TOWN_RATING_INITIAL)
+    }
+
+    /// Escribe el rating de autoridad (amplía el vector si hace falta).
+    pub fn set_authority_rating(&mut self, company: CompanyId, rating: i16) {
+        self.ensure_authority_ratings(company.index() + 1);
+        if let Some(slot) = self.authority_ratings.get_mut(company.index()) {
+            *slot = rating;
+        }
+    }
+
+    /// `true` si la compañía ya tiene estatua en este pueblo.
+    #[must_use]
+    pub const fn has_statue(&self, company: CompanyId) -> bool {
+        let bit = company.0 as u16;
+        if bit >= 16 {
+            return false;
+        }
+        self.statues & (1 << bit) != 0
+    }
+
+    /// Marca o limpia la estatua de la compañía.
+    pub fn set_statue(&mut self, company: CompanyId, present: bool) {
+        let bit = company.0 as u16;
+        if bit >= 16 {
+            return;
+        }
+        if present {
+            self.statues |= 1 << bit;
+        } else {
+            self.statues &= !(1 << bit);
+        }
+    }
+
+    /// Meses de unwanted tras soborno fallido.
+    #[must_use]
+    pub fn unwanted_months(&self, company: CompanyId) -> u8 {
+        self.unwanted
+            .get(company.index())
+            .copied()
+            .unwrap_or(0)
+    }
+
+    /// Asigna meses de unwanted.
+    pub fn set_unwanted(&mut self, company: CompanyId, months: u8) {
+        if self.unwanted.len() < MAX_TOWN_AUTHORITY_COMPANIES {
+            self.unwanted
+                .resize(MAX_TOWN_AUTHORITY_COMPANIES, 0);
+        }
+        if let Some(slot) = self.unwanted.get_mut(company.index()) {
+            *slot = months;
+        }
     }
 
     /// Asegura slots de rating para todas las compañías del pool.
@@ -639,7 +714,7 @@ pub fn process_town_monthly_growth(
     rng: &mut Randomizer,
     company_count: usize,
 ) {
-    for town in towns {
+    for town in &mut *towns {
         town.ensure_authority_ratings(company_count);
         update_town_rating(town, stations, company_count);
         town.received_old = town.received_new;
@@ -649,6 +724,7 @@ pub fn process_town_monthly_growth(
         }
         update_town_growth_state(town, stations, map, industries, climate, world_seed, rng);
     }
+    crate::town_action::tick_town_authority_months(towns);
 }
 
 /// Evolución mensual de ratings (`UpdateTownRating`).
@@ -734,6 +810,7 @@ pub fn produce_town_cargo(
     map: &Map,
     _industries: &[Industry],
     stations: &mut [Station],
+    towns: &[Town],
     tick: u64,
     selectgoods: bool,
 ) -> (u64, u64) {
@@ -782,6 +859,7 @@ pub fn produce_town_cargo(
                 continue;
             }
 
+            let exclusivity = closest_town_exclusivity(towns, tile_pos);
             let pax_amount = town_cargo_amount_per_cycle(population);
             if pax_amount > 0 {
                 passengers += u64::from(station::move_goods_to_station(
@@ -791,7 +869,7 @@ pub fn produce_town_cargo(
                     pax_amount,
                     tile_pos,
                     selectgoods,
-                    None,
+                    exclusivity,
                 ));
             }
             let mail_amount = town_cargo_amount_per_cycle(mail_rate);
@@ -803,13 +881,28 @@ pub fn produce_town_cargo(
                     mail_amount,
                     tile_pos,
                     selectgoods,
-                    None,
+                    exclusivity,
                 ));
             }
         }
     }
 
     (passengers, mail)
+}
+
+/// Dueño exclusivo del pueblo más cercano (si el contador sigue activo).
+fn closest_town_exclusivity(
+    towns: &[Town],
+    pos: TileCoord,
+) -> Option<crate::company::CompanyId> {
+    let mut best: Option<(&Town, u32)> = None;
+    for town in towns {
+        let dist = crate::economy::manhattan_distance(town.pos, pos);
+        if best.is_none_or(|(_, d)| dist < d) {
+            best = Some((town, dist));
+        }
+    }
+    best.and_then(|(town, _)| crate::town_action::town_exclusivity_owner(town))
 }
 
 /// Crece la población si `is_growing` (`TownTickHandler` / `GrowTown`).
@@ -1188,7 +1281,7 @@ mod tests {
         stations[0].goods.get_mut(CargoType::Passengers).last_speed = 1;
         stations[0].goods.get_mut(CargoType::Mail).last_speed = 1;
 
-        let (pax, mail) = produce_town_cargo(&map, &[], &mut stations, TOWN_PRODUCE_TICKS, true);
+        let (pax, mail) = produce_town_cargo(&map, &[], &mut stations, &[], TOWN_PRODUCE_TICKS, true);
         // 4 pax × (175+1) >> 8 = 2; 2 mail × 176 >> 8 = 1.
         assert_eq!(pax, 2);
         assert_eq!(mail, 1);
@@ -1205,7 +1298,7 @@ mod tests {
         stations[0].goods.get_mut(CargoType::Passengers).last_speed = 1;
 
         assert_eq!(town_cargo_amount_per_cycle(220), 3);
-        let (pax, _) = produce_town_cargo(&map, &[], &mut stations, TOWN_PRODUCE_TICKS, true);
+        let (pax, _) = produce_town_cargo(&map, &[], &mut stations, &[], TOWN_PRODUCE_TICKS, true);
         // 3 pax × (175+1) >> 8 = 2
         assert_eq!(pax, 2);
         assert_eq!(stations[0].cargo_stock.passengers, 2);
@@ -1224,7 +1317,7 @@ mod tests {
         bad.goods.get_mut(CargoType::Passengers).rating = 50;
         let mut stations = vec![good, bad];
 
-        let (pax, _) = produce_town_cargo(&map, &[], &mut stations, TOWN_PRODUCE_TICKS, true);
+        let (pax, _) = produce_town_cargo(&map, &[], &mut stations, &[], TOWN_PRODUCE_TICKS, true);
         assert!(pax > 0);
         assert!(
             stations[0].cargo_stock.passengers > stations[1].cargo_stock.passengers,
@@ -1241,7 +1334,7 @@ mod tests {
         map.set_kind(TileCoord::new(2, 1), TileKind::House).unwrap();
         let mut stations = vec![Station::new_with_kind(pos, StopKind::TruckStop)];
 
-        let (pax, mail) = produce_town_cargo(&map, &[], &mut stations, TOWN_PRODUCE_TICKS, true);
+        let (pax, mail) = produce_town_cargo(&map, &[], &mut stations, &[], TOWN_PRODUCE_TICKS, true);
         assert_eq!(pax, 0);
         assert_eq!(mail, 0);
     }

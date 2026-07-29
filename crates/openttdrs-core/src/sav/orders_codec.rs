@@ -8,8 +8,8 @@ use std::collections::HashMap;
 use crate::cargo::CargoType;
 use crate::map::{TileCoord, coord_from_linear_index, coord_to_linear_index};
 use crate::vehicle::{
-    OrderConditionKind, OrderLoadType, OrderNonStop, OrderStopLocation, OrderUnloadType,
-    VehicleOrder,
+    OrderConditionComparator, OrderConditionKind, OrderLoadType, OrderNonStop, OrderStopLocation,
+    OrderUnloadType, VehicleOrder,
 };
 
 use super::SavError;
@@ -28,6 +28,8 @@ pub(crate) const OT_CONDITIONAL: u8 = 7;
 pub(crate) const OTTD_DEPOT_SERVICE: u8 = 1 << 0;
 pub(crate) const OTTD_DEPOT_PART_OF_ORDERS: u8 = 1 << 1;
 pub(crate) const OTTD_DEPOT_HALT: u8 = 1 << 3;
+/// `OrderDepotActionFlag::Unbunch` en bits 3–6 de `flags` (valor 2 → bit 4).
+pub(crate) const OTTD_DEPOT_UNBUNCH: u8 = 1 << 4;
 
 /// `OrderUnloadType::NoUnload` en bits 0–2 de `flags`.
 pub(crate) const OTTD_UNLOAD_NO_UNLOAD: u8 = 4;
@@ -61,6 +63,8 @@ pub struct SavOrder {
     pub wait_time: u16,
     /// `Order::travel_time` (ticks).
     pub travel_time: u16,
+    /// `Order::max_speed` (`UINT16_MAX` = sin límite).
+    pub max_speed: u16,
 }
 
 /// Flags de parada de estación decodificados del wire.
@@ -162,9 +166,12 @@ pub(crate) fn stop_flags_to_sav(full_load: bool, no_unload: bool) -> u8 {
 }
 
 #[must_use]
-pub(crate) fn depot_flags_to_sav(stop: bool) -> u8 {
+pub(crate) fn depot_flags_to_sav(stop: bool, unbunch: bool) -> u8 {
     let mut flags = OTTD_DEPOT_PART_OF_ORDERS;
-    if stop {
+    if unbunch {
+        // Servicio + unbunch (no halt).
+        flags |= OTTD_DEPOT_SERVICE | OTTD_DEPOT_UNBUNCH;
+    } else if stop {
         flags |= OTTD_DEPOT_HALT;
     } else {
         flags |= OTTD_DEPOT_SERVICE;
@@ -177,7 +184,13 @@ pub(crate) fn depot_flags_to_sav(stop: bool) -> u8 {
 pub(crate) fn depot_stop_from_sav(flags: u8) -> bool {
     let halt = flags & OTTD_DEPOT_HALT != 0;
     let service = flags & OTTD_DEPOT_SERVICE != 0;
-    halt || !service
+    let unbunch = flags & OTTD_DEPOT_UNBUNCH != 0;
+    (halt || !service) && !unbunch
+}
+
+#[must_use]
+pub(crate) fn depot_unbunch_from_sav(flags: u8) -> bool {
+    flags & OTTD_DEPOT_UNBUNCH != 0
 }
 
 /// Empaqueta campos en el layout ORDL de 11 bytes.
@@ -189,6 +202,7 @@ pub(crate) fn encode_order_wire(
     refit: u8,
     wait_time: u16,
     travel_time: u16,
+    max_speed: u16,
 ) -> [u8; ORDER_WIRE_LEN] {
     let mut out = [0u8; ORDER_WIRE_LEN];
     out[0] = order_type;
@@ -197,7 +211,7 @@ pub(crate) fn encode_order_wire(
     out[4] = refit;
     out[5..7].copy_from_slice(&wait_time.to_be_bytes());
     out[7..9].copy_from_slice(&travel_time.to_be_bytes());
-    // max_speed queda en cero (no exportado).
+    out[9..11].copy_from_slice(&max_speed.to_be_bytes());
     out
 }
 
@@ -210,6 +224,7 @@ pub(crate) fn decode_order_wire(bytes: &[u8]) -> Option<(SavOrder, u8)> {
     }
     let wait_time = u16::from_be_bytes([bytes[5], bytes[6]]);
     let travel_time = u16::from_be_bytes([bytes[7], bytes[8]]);
+    let max_speed = u16::from_be_bytes([bytes[9], bytes[10]]);
     Some((
         SavOrder {
             order_type: bytes[0],
@@ -217,6 +232,7 @@ pub(crate) fn decode_order_wire(bytes: &[u8]) -> Option<(SavOrder, u8)> {
             dest: u16::from_be_bytes([bytes[2], bytes[3]]),
             wait_time,
             travel_time,
+            max_speed,
         },
         bytes[4],
     ))
@@ -231,11 +247,19 @@ pub(crate) fn encode_vehicle_order(
     station_id: impl Fn(TileCoord) -> Option<u16>,
     map_w: u32,
 ) -> Option<[u8; ORDER_WIRE_LEN]> {
-    let (order_type, dest, flags, refit, wait_time, travel_time) = match *order {
+    let wire_max_speed = |limit: u16| -> u16 {
+        if limit == 0 {
+            u16::MAX
+        } else {
+            limit
+        }
+    };
+    let (order_type, dest, flags, refit, wait_time, travel_time, max_speed) = match *order {
         VehicleOrder::Station {
             station,
             wait_ticks,
             travel_ticks,
+            max_speed,
             implicit,
             ..
         } => {
@@ -248,6 +272,7 @@ pub(crate) fn encode_vehicle_order(
                     0xFFu8,
                     u16::try_from(wait_ticks).unwrap_or(u16::MAX),
                     u16::try_from(travel_ticks).unwrap_or(u16::MAX),
+                    wire_max_speed(max_speed),
                 )
             } else {
                 let (order_type, flags) = station_flags_to_sav(order);
@@ -258,12 +283,14 @@ pub(crate) fn encode_vehicle_order(
                     0xFFu8,
                     u16::try_from(wait_ticks).unwrap_or(u16::MAX),
                     u16::try_from(travel_ticks).unwrap_or(u16::MAX),
+                    wire_max_speed(max_speed),
                 )
             }
         }
         VehicleOrder::Waypoint {
             waypoint,
             travel_ticks,
+            max_speed,
         } => {
             let id = station_id(waypoint)?;
             (
@@ -273,6 +300,7 @@ pub(crate) fn encode_vehicle_order(
                 0xFF,
                 0,
                 u16::try_from(travel_ticks).unwrap_or(u16::MAX),
+                wire_max_speed(max_speed),
             )
         }
         VehicleOrder::Depot {
@@ -281,31 +309,35 @@ pub(crate) fn encode_vehicle_order(
             refit_cargo,
             wait_ticks,
             travel_ticks,
+            unbunch,
         } => {
             let id = u16::try_from(coord_to_linear_index(depot, map_w)?).ok()?;
             let refit = refit_cargo.map_or(0xFF, CargoType::temperate_id);
             (
                 OT_GOTO_DEPOT,
                 id,
-                depot_flags_to_sav(stop),
+                depot_flags_to_sav(stop, unbunch),
                 refit,
                 u16::try_from(wait_ticks).unwrap_or(u16::MAX),
                 u16::try_from(travel_ticks).unwrap_or(u16::MAX),
+                u16::MAX,
             )
         }
         VehicleOrder::Conditional {
             condition,
+            comparator,
             value,
             jump_to,
         } => {
-            let comparator: u8 = match condition {
-                OrderConditionKind::CargoLoadAbove => 4,
-                OrderConditionKind::CargoLoadBelow => 2,
-            };
+            let comparator = condition
+                .legacy_comparator()
+                .unwrap_or(comparator)
+                .as_u8();
             let order_type = OT_CONDITIONAL | (comparator << 5);
             let flags = u8::try_from(jump_to.min(255)).unwrap_or(255);
-            let dest = u16::from(value);
-            (order_type, dest, flags, 0xFF, 0, 0)
+            let var = u16::from(condition.as_u8()) << 11;
+            let dest = var | (value & 0x07FF);
+            (order_type, dest, flags, 0xFF, 0, 0, u16::MAX)
         }
         VehicleOrder::Tile(_) => return None,
     };
@@ -316,6 +348,7 @@ pub(crate) fn encode_vehicle_order(
         refit,
         wait_time,
         travel_time,
+        max_speed,
     ))
 }
 
@@ -343,13 +376,19 @@ pub(crate) fn vehicle_orders_from_sav(
             OT_GOTO_STATION | OT_IMPLICIT => {
                 if let Some(st) = station_for_dest(order.dest) {
                     let parsed = station_flags_from_sav(order.order_type, order.flags);
+                    let limit = if order.max_speed == 0 || order.max_speed == u16::MAX {
+                        0
+                    } else {
+                        order.max_speed
+                    };
                     if st.is_waypoint {
                         out.push(VehicleOrder::Waypoint {
                             waypoint: st.pos,
                             travel_ticks: u32::from(order.travel_time),
+                            max_speed: limit,
                         });
                     } else if ot == OT_IMPLICIT {
-                        out.push(VehicleOrder::implicit(st.pos));
+                        out.push(VehicleOrder::implicit(st.pos).with_max_speed(limit));
                     } else {
                         out.push(VehicleOrder::Station {
                             station: st.pos,
@@ -359,6 +398,7 @@ pub(crate) fn vehicle_orders_from_sav(
                             stop_location: parsed.stop_location,
                             wait_ticks: u32::from(order.wait_time),
                             travel_ticks: u32::from(order.travel_time),
+                            max_speed: limit,
                             implicit: false,
                         });
                     }
@@ -366,37 +406,65 @@ pub(crate) fn vehicle_orders_from_sav(
             }
             OT_GOTO_WAYPOINT => {
                 if let Some(st) = station_for_dest(order.dest) {
+                    let limit = if order.max_speed == 0 || order.max_speed == u16::MAX {
+                        0
+                    } else {
+                        order.max_speed
+                    };
                     out.push(VehicleOrder::Waypoint {
                         waypoint: st.pos,
                         travel_ticks: u32::from(order.travel_time),
+                        max_speed: limit,
                     });
                 }
             }
             OT_GOTO_DEPOT => {
                 let pos = coord_from_linear_index(u64::from(order.dest), map_w)
                     .unwrap_or(TileCoord::new(0, 0));
-                let depot_order = if depot_stop_from_sav(order.flags) {
+                let mut depot_order = if depot_unbunch_from_sav(order.flags) {
+                    VehicleOrder::Depot {
+                        depot: pos,
+                        stop: true,
+                        wait_ticks: 0,
+                        travel_ticks: 0,
+                        refit_cargo: None,
+                        unbunch: true,
+                    }
+                } else if depot_stop_from_sav(order.flags) {
                     VehicleOrder::depot(pos)
                 } else {
                     VehicleOrder::depot_pass_through(pos)
                 };
-                out.push(
-                    depot_order
-                        .with_wait_ticks(u32::from(order.wait_time))
-                        .unwrap_or(depot_order)
-                        .with_travel_ticks(u32::from(order.travel_time)),
-                );
+                depot_order = depot_order
+                    .with_wait_ticks(u32::from(order.wait_time))
+                    .unwrap_or(depot_order)
+                    .with_travel_ticks(u32::from(order.travel_time));
+                out.push(depot_order);
             }
             OT_CONDITIONAL => {
-                let comparator = (order.order_type >> 5) & 0x07;
-                let value = u8::try_from(order.dest & 0x07FF).unwrap_or(255);
+                let comparator = OrderConditionComparator::from_u8((order.order_type >> 5) & 0x07);
+                let value = order.dest & 0x07FF;
                 let jump_to = usize::from(order.flags);
-                let condition = match comparator {
-                    4 => OrderConditionKind::CargoLoadAbove,
-                    2 => OrderConditionKind::CargoLoadBelow,
-                    _ => continue,
+                let condition = OrderConditionKind::from_u8(((order.dest >> 11) & 0x1F) as u8);
+                // Compat: saves antiguos sin variable empaquetada usaban solo comparator.
+                let condition = if (order.dest >> 11) == 0
+                    && matches!(
+                        comparator,
+                        OrderConditionComparator::MoreThan | OrderConditionComparator::LessThan
+                    )
+                    && value <= 100
+                {
+                    match comparator {
+                        OrderConditionComparator::MoreThan => OrderConditionKind::CargoLoadAbove,
+                        OrderConditionComparator::LessThan => OrderConditionKind::CargoLoadBelow,
+                        _ => condition,
+                    }
+                } else {
+                    condition
                 };
-                out.push(VehicleOrder::conditional(condition, value, jump_to));
+                out.push(VehicleOrder::conditional_with(
+                    condition, comparator, value, jump_to,
+                ));
             }
             _ => {}
         }
@@ -547,8 +615,8 @@ mod tests {
 
     #[test]
     fn depot_flags_roundtrip() {
-        assert!(depot_stop_from_sav(depot_flags_to_sav(true)));
-        assert!(!depot_stop_from_sav(depot_flags_to_sav(false)));
+        assert!(depot_stop_from_sav(depot_flags_to_sav(true, false)));
+        assert!(!depot_stop_from_sav(depot_flags_to_sav(false, false)));
     }
 
     #[test]
@@ -606,6 +674,7 @@ mod tests {
             flags: 0,
             wait_time: 0,
             travel_time: 0,
+            max_speed: u16::MAX,
         };
         assert_eq!(
             vehicle_orders_from_sav(&[order], &stations, 64),

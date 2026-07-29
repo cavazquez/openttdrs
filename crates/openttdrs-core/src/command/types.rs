@@ -194,6 +194,18 @@ pub enum Command {
         vehicle_id: u32,
         index: usize,
     },
+    /// Alterna unbunch en una orden de depósito (`OrderDepotActionFlag::Unbunch`).
+    ToggleVehicleOrderDepotUnbunch {
+        vehicle_id: u32,
+        index: usize,
+    },
+    /// Fija el techo de velocidad del tramo hacia la orden (`Order::max_speed`).
+    /// `0` = sin límite.
+    SetVehicleOrderMaxSpeed {
+        vehicle_id: u32,
+        index: usize,
+        max_speed: u16,
+    },
     /// Invierte el sentido de marcha (solo trenes).
     TurnAroundVehicle(u32),
     /// Ignora la señal roja en el próximo tick de movimiento (solo trenes).
@@ -289,7 +301,7 @@ pub enum Command {
         vehicle_id: u32,
         index: usize,
         condition: crate::vehicle::OrderConditionKind,
-        value: u8,
+        value: u16,
         jump_to: usize,
     },
     DepotReorderVehicleSlot {
@@ -328,10 +340,15 @@ pub enum Command {
     DecreaseLoan,
     /// Compra una compañía rival en quiebra (`CmdBuyCompany`).
     BuyCompany(crate::company::CompanyId),
-    /// Campaña publicitaria en una ciudad (`CmdTownAction::Advertise`).
+    /// Campaña publicitaria mediana (compat; preferir [`Command::DoTownAction`]).
     TownAdvertise(u32),
-    /// Financia edificios en una ciudad (`CmdTownAction::FundBuildings`).
+    /// Financia edificios (compat; preferir [`Command::DoTownAction`]).
     TownFundBuildings(u32),
+    /// Acción de autoridad local (`CmdDoTownAction`).
+    DoTownAction {
+        town_id: u32,
+        action: crate::town_action::TownAction,
+    },
     /// Funda un pueblo nuevo en hierba (`CmdBuildTown`).
     FoundTown(TileCoord),
     /// Activa/desactiva cheats formales.

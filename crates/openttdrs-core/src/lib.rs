@@ -83,6 +83,7 @@ pub mod timer;
 pub mod timetable;
 pub mod tnbp_decode;
 pub mod town;
+pub mod town_action;
 pub mod town_authority_serde;
 pub mod town_expand;
 pub mod townname;
@@ -555,6 +556,9 @@ pub use town::{
     process_town_monthly_growth, produce_town_cargo, town_goal_satisfied, update_town_growth_state,
     update_town_radius,
 };
+pub use town_action::{
+    TownAction, TownAuthoritySettings, mask_of_town_actions, town_exclusivity_owner,
+};
 pub use town_expand::{
     TOWN_EXPAND_ATTEMPTS, TOWN_EXPAND_POP_PER_HOUSE, TOWN_EXPAND_SEARCH_RADIUS, TownExpandContext,
     TownExpandResult, expand_town_once, expand_town_physically, place_house_footprint,
@@ -582,7 +586,7 @@ pub use train_movement::{
 pub use vehicle::reverse_direction;
 pub use vehicle::{
     AircraftPhase, BREAKDOWN_DURATION_TICKS, DEFAULT_SERVICE_INTERVAL_DAYS, DIR_E, DIR_N, DIR_NE,
-    DIR_NW, DIR_S, DIR_SE, DIR_SW, DIR_W, OrderConditionKind, OrderLoadType, OrderNonStop,
+    DIR_NW, DIR_S, DIR_SE, DIR_SW, DIR_W, OrderConditionComparator, OrderConditionKind, OrderLoadType, OrderNonStop,
     OrderStopLocation, OrderUnloadType, SERVICING_RELIABILITY_THRESHOLD, TimetableWaitKind,
     VEHICLE_PROGRESS_STEP, Vehicle, VehicleDirection, VehicleIssueDetail, VehicleKind,
     VehicleOperationalSummary, VehicleOrder, direction_from_tile_step,

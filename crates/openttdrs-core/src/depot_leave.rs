@@ -98,6 +98,11 @@ pub fn tick_train_stay_in_depot(
         }
         vehicle.wait_counter = 0;
 
+        if is_waiting_for_unbunching(vehicle) {
+            vehicle.cur_speed = 0;
+            return true;
+        }
+
         if has_depot_reservation(map, head_pos) || exit_blocked {
             vehicle.cur_speed = 0;
             return true;
@@ -144,8 +149,80 @@ pub fn tick_train_stay_in_depot(
         v.cur_speed = 0;
         v.pbs_stuck = false;
     }
+    leave_unbunching_depot(vehicles, index);
     activate_depot_leave_units(map, vehicles, head_id);
     false
+}
+
+/// ¿La orden de depósito previa (o actual) pide unbunch y aún no toca salir?
+#[must_use]
+fn is_waiting_for_unbunching(vehicle: &Vehicle) -> bool {
+    // OpenTTD: sin lista compartida no hay unbunch.
+    if vehicle.shared_order_id.is_none() || vehicle.orders.len() <= 1 {
+        return false;
+    }
+    if !previous_or_current_order_is_unbunching(vehicle) {
+        return false;
+    }
+    vehicle.depot_unbunching_next_departure > vehicle.sim_tick
+}
+
+#[must_use]
+fn previous_or_current_order_is_unbunching(vehicle: &Vehicle) -> bool {
+    if vehicle.orders.is_empty() {
+        return false;
+    }
+    let n = vehicle.orders.len();
+    let cur = vehicle.current_order.min(n - 1);
+    let prev = if cur == 0 { n - 1 } else { cur - 1 };
+    vehicle.orders[cur].depot_unbunch() || vehicle.orders[prev].depot_unbunch()
+}
+
+/// Programa la separación de salidas entre vehículos con órdenes compartidas.
+fn leave_unbunching_depot(vehicles: &mut [Vehicle], index: usize) {
+    let Some(vehicle) = vehicles.get(index) else {
+        return;
+    };
+    if vehicle.shared_order_id.is_none() || !previous_or_current_order_is_unbunching(vehicle) {
+        return;
+    }
+    let tick = vehicle.sim_tick;
+    let shared = vehicle.shared_order_id;
+    let head_id = vehicle.id;
+
+    // Actualizar round-trip del que sale.
+    if let Some(v) = vehicles.get_mut(index) {
+        if v.depot_unbunching_last_departure > 0 {
+            let elapsed = tick.saturating_sub(v.depot_unbunching_last_departure);
+            v.round_trip_time = u32::try_from(elapsed.min(u64::from(u32::MAX))).unwrap_or(u32::MAX);
+        }
+        v.depot_unbunching_last_departure = tick;
+        v.timetable_lateness = 0;
+    }
+
+    let peers: Vec<usize> = vehicles
+        .iter()
+        .enumerate()
+        .filter(|(_, v)| {
+            v.is_consist_head()
+                && v.running
+                && (v.id == head_id
+                    || (shared.is_some() && v.shared_order_id == shared))
+        })
+        .map(|(i, _)| i)
+        .collect();
+    let num = peers.len().max(1);
+    let total_travel: u64 = peers
+        .iter()
+        .filter_map(|&i| vehicles.get(i).map(|v| u64::from(v.round_trip_time)))
+        .sum();
+    let separation = (total_travel / (num as u64) / (num as u64)).max(1);
+    let next_departure = tick.saturating_add(separation);
+    for i in peers {
+        if let Some(v) = vehicles.get_mut(i) {
+            v.depot_unbunching_next_departure = next_departure;
+        }
+    }
 }
 
 /// Activa followers aún en `Track::Depot` cuando `TicksToLeaveDepot(prev) <= 0`.
@@ -438,6 +515,7 @@ mod tests {
             wait_ticks: 0,
             travel_ticks: 0,
             refit_cargo: None,
+            unbunch: false,
         }];
         s.vehicles[0].current_order = 0;
         apply_command(&mut s, &Command::ToggleVehicleRunning(id)).unwrap();

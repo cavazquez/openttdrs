@@ -71,6 +71,7 @@ fn sav_order_from_fields(
     flags: u8,
     wait_time: u16,
     travel_time: u16,
+    max_speed: u16,
 ) -> Option<SavOrder> {
     if (order_type & 0x0F) == OT_NOTHING {
         None
@@ -81,6 +82,7 @@ fn sav_order_from_fields(
             flags,
             wait_time,
             travel_time,
+            max_speed,
         })
     }
 }
@@ -112,7 +114,11 @@ fn orders_from_record(record: &SlRecord) -> Vec<SavOrder> {
                 .and_then(SlValue::as_u64)
                 .and_then(|v| u16::try_from(v).ok())
                 .unwrap_or(0);
-            sav_order_from_fields(order_type, dest, flags, wait_time, travel_time)
+            let max_speed = record_get(item, "max_speed")
+                .and_then(SlValue::as_u64)
+                .and_then(|v| u16::try_from(v).ok())
+                .unwrap_or(u16::MAX);
+            sav_order_from_fields(order_type, dest, flags, wait_time, travel_time, max_speed)
         })
         .collect()
 }
@@ -161,7 +167,8 @@ fn chain_from_ordr_ref(start_ref: u32, pool: &HashMap<u32, OrdrEntry>) -> Vec<Sa
         let Some(entry) = pool.get(&key) else {
             break;
         };
-        if let Some(order) = sav_order_from_fields(entry.order_type, entry.dest, entry.flags, 0, 0)
+        if let Some(order) =
+            sav_order_from_fields(entry.order_type, entry.dest, entry.flags, 0, 0, u16::MAX)
         {
             out.push(order);
         }
@@ -328,6 +335,7 @@ mod tests {
                 flags: 0,
                 wait_time: 0,
                 travel_time: 0,
+                max_speed: u16::MAX,
             }],
             &stations,
             64,
@@ -366,6 +374,7 @@ mod tests {
                 flags: (OTTD_LOAD_FULL << 4) | OTTD_UNLOAD_NO_UNLOAD,
                 wait_time: 0,
                 travel_time: 0,
+                max_speed: u16::MAX,
             }],
             &stations,
             64,
@@ -390,6 +399,7 @@ mod tests {
                     flags: OTTD_DEPOT_HALT | (1 << 1),
                     wait_time: 0,
                     travel_time: 0,
+                    max_speed: u16::MAX,
                 },
                 SavOrder {
                     order_type: OT_CONDITIONAL | (4 << 5),
@@ -397,6 +407,7 @@ mod tests {
                     flags: 2,
                     wait_time: 0,
                     travel_time: 0,
+                    max_speed: u16::MAX,
                 },
             ],
             &HashMap::new(),

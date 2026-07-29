@@ -1020,6 +1020,65 @@ pub(super) fn toggle_vehicle_order_depot_stop(
     )
 }
 
+pub(super) fn toggle_vehicle_order_depot_unbunch(
+    state: &mut GameState,
+    vehicle_id: u32,
+    index: usize,
+) -> Result<(), CommandError> {
+    require_vehicle_owned_by_active(state, vehicle_id)?;
+    let Some(vehicle_idx) = state.vehicles.iter().position(|v| v.id == vehicle_id) else {
+        return Err(CommandError::VehicleNotFound);
+    };
+    let vehicle = &mut state.vehicles[vehicle_idx];
+    if index >= vehicle.orders.len() {
+        return Err(CommandError::OrderIndexOutOfRange);
+    }
+    // Solo una orden unbunch por lista (OpenTTD `STR_ERROR_UNBUNCHING_ONLY_ONE_ALLOWED`).
+    let enabling = !vehicle.orders[index].depot_unbunch();
+    if enabling
+        && vehicle
+            .orders
+            .iter()
+            .enumerate()
+            .any(|(i, o)| i != index && o.depot_unbunch())
+    {
+        return Err(CommandError::OrderIndexOutOfRange);
+    }
+    let Some(updated) = vehicle.orders[index].with_toggled_depot_unbunch() else {
+        return Err(CommandError::OrderIndexOutOfRange);
+    };
+    vehicle.orders[index] = updated;
+    Ok(())
+}
+
+pub(super) fn set_vehicle_order_max_speed(
+    state: &mut GameState,
+    vehicle_id: u32,
+    index: usize,
+    max_speed: u16,
+) -> Result<(), CommandError> {
+    require_vehicle_owned_by_active(state, vehicle_id)?;
+    let Some(vehicle_idx) = state.vehicles.iter().position(|v| v.id == vehicle_id) else {
+        return Err(CommandError::VehicleNotFound);
+    };
+    let vehicle = &mut state.vehicles[vehicle_idx];
+    if index >= vehicle.orders.len() {
+        return Err(CommandError::OrderIndexOutOfRange);
+    }
+    let order = vehicle.orders[index];
+    if order.max_speed_limit() == 0 && max_speed == 0 && !matches!(order, VehicleOrder::Station { .. } | VehicleOrder::Waypoint { .. }) {
+        return Err(CommandError::OrderIndexOutOfRange);
+    }
+    if !matches!(
+        order,
+        VehicleOrder::Station { .. } | VehicleOrder::Waypoint { .. }
+    ) {
+        return Err(CommandError::OrderIndexOutOfRange);
+    }
+    vehicle.orders[index] = order.with_max_speed(max_speed);
+    Ok(())
+}
+
 pub(super) fn turn_around_vehicle(
     state: &mut GameState,
     vehicle_id: u32,

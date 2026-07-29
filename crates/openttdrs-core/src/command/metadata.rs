@@ -179,6 +179,8 @@ pub fn command_effects(cmd: &Command) -> CommandEffects {
         | Command::SetDepotVehiclesRunning { .. }
         | Command::MoveVehicleOrder { .. }
         | Command::ToggleVehicleOrderDepotStop { .. }
+        | Command::ToggleVehicleOrderDepotUnbunch { .. }
+        | Command::SetVehicleOrderMaxSpeed { .. }
         | Command::TurnAroundVehicle(..)
         | Command::ForceVehicleProceed(..)
         | Command::RefitVehicle { .. }
@@ -229,7 +231,9 @@ pub fn command_effects(cmd: &Command) -> CommandEffects {
         // ═══════════════════════════════════════════════════════════════════
         // Comandos de ciudad (NO modifican mapa, solo flags)
         // ═══════════════════════════════════════════════════════════════════
-        Command::TownAdvertise(..) | Command::TownFundBuildings(..) => CommandEffects::none(),
+        Command::TownAdvertise(..)
+        | Command::TownFundBuildings(..)
+        | Command::DoTownAction { .. } => CommandEffects::none(),
 
         // ═══════════════════════════════════════════════════════════════════
         // Comandos de cheats (NO modifican mapa)

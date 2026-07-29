@@ -244,6 +244,7 @@ fn migrate_state_v3_to_v4(state: &mut GameState) {
                     wait_ticks: 0,
                     travel_ticks: 0,
                     refit_cargo: None,
+                    unbunch: false,
                 },
                 VehicleOrder::Conditional { .. } => order,
             })

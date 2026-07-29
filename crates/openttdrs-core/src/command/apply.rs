@@ -139,6 +139,14 @@ fn apply_vehicle_command(state: &mut GameState, cmd: &Command) -> Result<(), Com
         Command::ToggleVehicleOrderDepotStop { vehicle_id, index } => {
             vehicles::toggle_vehicle_order_depot_stop(state, *vehicle_id, *index)
         }
+        Command::ToggleVehicleOrderDepotUnbunch { vehicle_id, index } => {
+            vehicles::toggle_vehicle_order_depot_unbunch(state, *vehicle_id, *index)
+        }
+        Command::SetVehicleOrderMaxSpeed {
+            vehicle_id,
+            index,
+            max_speed,
+        } => vehicles::set_vehicle_order_max_speed(state, *vehicle_id, *index, *max_speed),
         Command::TurnAroundVehicle(id) => vehicles::turn_around_vehicle(state, *id),
         Command::ForceVehicleProceed(id) => vehicles::force_vehicle_proceed(state, *id),
         Command::RefitVehicle {
@@ -389,6 +397,8 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
         | Command::SetDepotVehiclesRunning { .. }
         | Command::MoveVehicleOrder { .. }
         | Command::ToggleVehicleOrderDepotStop { .. }
+        | Command::ToggleVehicleOrderDepotUnbunch { .. }
+        | Command::SetVehicleOrderMaxSpeed { .. }
         | Command::TurnAroundVehicle(..)
         | Command::ForceVehicleProceed(..)
         | Command::RefitVehicle { .. }
@@ -430,6 +440,7 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
         Command::BuyCompany(id) => company::buy_company(state, *id),
         Command::TownAdvertise(town_id) => town::town_advertise(state, *town_id),
         Command::TownFundBuildings(town_id) => town::town_fund_buildings(state, *town_id),
+        Command::DoTownAction { town_id, action } => town::do_town_action(state, *town_id, *action),
         Command::FoundTown(c) => town::found_town(state, *c),
         Command::CheatSetEnabled(on) => {
             state.cheats.enabled = *on;

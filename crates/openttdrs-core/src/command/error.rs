@@ -116,6 +116,10 @@ pub enum CommandError {
     NoLoanToRepay,
     /// Ciudad no encontrada.
     TownNotFound,
+    /// Acción de autoridad no disponible (máscara / settings / cooldown).
+    TownActionNotAvailable,
+    /// No hay sitio libre para la estatua.
+    StatueNoPlace,
     /// No se puede fundar pueblo en esta tesela.
     CannotFoundTownHere,
     /// Hay otro pueblo demasiado cerca.

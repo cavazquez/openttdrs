@@ -20,8 +20,8 @@ pub use model::{
 
 // Re-exportaciones públicas desde order.rs
 pub use order::{
-    MAX_VEHICLE_NAME_CHARS, OrderConditionKind, OrderLoadType, OrderNonStop, OrderStopLocation,
-    OrderUnloadType, VehicleOrder,
+    MAX_VEHICLE_NAME_CHARS, OrderConditionComparator, OrderConditionKind, OrderLoadType,
+    OrderNonStop, OrderStopLocation, OrderUnloadType, VehicleOrder,
 };
 
 // Re-exportaciones públicas desde reliability.rs

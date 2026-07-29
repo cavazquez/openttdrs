@@ -390,6 +390,13 @@ impl super::model::Vehicle {
         if self.cached_max_speed > 0 && self.cached_max_speed < u16::MAX {
             max_speed = max_speed.min(self.cached_max_speed);
         }
+        // Techo de la orden actual (`Order::max_speed`); `0` = sin límite.
+        if let Some(order) = self.current_order_ref() {
+            let order_cap = order.max_speed_limit();
+            if order_cap > 0 {
+                max_speed = max_speed.min(order_cap);
+            }
+        }
         // P3.15: techo del tipo de vía (`gcache.cached_max_track_speed`); `0` = sin límite.
         if self.cached_max_track_speed > 0 {
             max_speed = max_speed.min(self.cached_max_track_speed);

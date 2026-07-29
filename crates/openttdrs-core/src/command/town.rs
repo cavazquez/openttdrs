@@ -1,12 +1,11 @@
-//! Acciones de ciudad (`town_cmd.cpp` simplificado).
+//! Acciones de ciudad (`town_cmd.cpp` / `CmdDoTownAction`).
 
 use crate::GameState;
 use crate::map::{TileCoord, TileKind, tile_slope_and_z};
-use crate::station::{
-    TOWN_ADVERTISE_MEDIUM_RADIUS, TOWN_ADVERTISE_MEDIUM_RATING_BOOST, modify_station_rating_around,
-};
-use crate::town::{
-    FUND_BUILDINGS_COST, FUND_BUILDINGS_RATING_BOOST, TOWN_ADVERTISE_COST, Town, update_town_radius,
+use crate::town::{Town, update_town_radius};
+use crate::town_action::{
+    TownAction, TownActionError, TownAuthoritySettings, execute_town_action, mask_of_town_actions,
+    statue_tile_is_clear,
 };
 use crate::townname::generate_town_name;
 
@@ -19,38 +18,116 @@ pub const FOUND_TOWN_MIN_DISTANCE: i32 = 14;
 /// Casas iniciales al fundar.
 const FOUND_TOWN_HOUSE_COUNT: usize = 5;
 
+/// Compat: publicidad mediana.
 pub(crate) fn town_advertise(state: &mut GameState, town_id: u32) -> Result<(), CommandError> {
-    let idx = town_index(state, town_id)?;
-    if state.economy.money < TOWN_ADVERTISE_COST {
-        return Err(CommandError::InsufficientFunds);
-    }
-    state.economy.money -= TOWN_ADVERTISE_COST;
-    let center = state.towns[idx].pos;
-    let owner = state.active_company;
-    let _ = modify_station_rating_around(
-        &mut state.stations,
-        center,
-        owner,
-        TOWN_ADVERTISE_MEDIUM_RADIUS,
-        TOWN_ADVERTISE_MEDIUM_RATING_BOOST,
-    );
-    Ok(())
+    do_town_action(state, town_id, TownAction::AdvertiseMedium)
 }
 
+/// Compat: financiar edificios.
 pub(crate) fn town_fund_buildings(state: &mut GameState, town_id: u32) -> Result<(), CommandError> {
+    do_town_action(state, town_id, TownAction::FundBuildings)
+}
+
+/// `CmdDoTownAction`.
+pub(crate) fn do_town_action(
+    state: &mut GameState,
+    town_id: u32,
+    action: TownAction,
+) -> Result<(), CommandError> {
     let idx = town_index(state, town_id)?;
-    if state.economy.money < FUND_BUILDINGS_COST {
+    let company = state.active_company;
+    let settings = TownAuthoritySettings::default();
+    let mask = mask_of_town_actions(&state.towns[idx], company, state.economy.money, settings);
+    if mask & (1 << (action as u8)) == 0 {
+        return Err(CommandError::TownActionNotAvailable);
+    }
+    let cost = action.cost();
+    if state.economy.money < cost {
         return Err(CommandError::InsufficientFunds);
     }
-    state.economy.money -= FUND_BUILDINGS_COST;
-    let owner = state.active_company;
-    let delta = state.towns[idx].adjust_rating(owner, FUND_BUILDINGS_RATING_BOOST);
-    crate::town::apply_fund_buildings_boost(&mut state.towns[idx]);
-    state
-        .runtime
-        .pending_sim_events
-        .push(crate::sim_events::SimEvent::TownRatingChanged { town_id, delta });
-    Ok(())
+
+    let bribe_fails = if action == TownAction::Bribe {
+        // Chance16(1, 14).
+        state.interactive_random.next() % 14 == 0
+    } else {
+        false
+    };
+
+    let (map_w, map_h) = state.map.dimensions();
+    let map_w = i32::try_from(map_w).unwrap_or(0);
+    let map_h = i32::try_from(map_h).unwrap_or(0);
+
+    // Para estatua: buscar hierba/bosque real antes de cobrar.
+    let statue_override = if action == TownAction::BuildStatue {
+        Some(find_clear_statue_tile(state, state.towns[idx].pos)?)
+    } else {
+        None
+    };
+
+    state.economy.money -= cost;
+    let result = execute_town_action(
+        &mut state.towns[idx],
+        &mut state.stations,
+        map_w,
+        map_h,
+        company,
+        action,
+        bribe_fails,
+    );
+    match result {
+        Ok(suggested) => {
+            if action == TownAction::BuildStatue {
+                let tile = statue_override.or(suggested).ok_or(CommandError::StatueNoPlace)?;
+                // Marca visual mínima: deja hierba (el bitset `statues` es la autoridad).
+                let _ = tile;
+            }
+            if action == TownAction::FundBuildings {
+                state.runtime.pending_sim_events.push(
+                    crate::sim_events::SimEvent::TownRatingChanged {
+                        town_id,
+                        delta: crate::town::FUND_BUILDINGS_RATING_BOOST,
+                    },
+                );
+            }
+            Ok(())
+        }
+        Err(TownActionError::NotAvailable | TownActionError::AlreadyHasStatue) => {
+            state.economy.money += cost;
+            Err(CommandError::TownActionNotAvailable)
+        }
+        Err(TownActionError::NoStatuePlace) => {
+            state.economy.money += cost;
+            Err(CommandError::StatueNoPlace)
+        }
+    }
+}
+
+fn find_clear_statue_tile(
+    state: &GameState,
+    center: TileCoord,
+) -> Result<TileCoord, CommandError> {
+    let (mw, mh) = state.map.dimensions();
+    let mw = i32::try_from(mw).unwrap_or(0);
+    let mh = i32::try_from(mh).unwrap_or(0);
+    for radius in 0_i32..=4 {
+        for dy in -radius..=radius {
+            for dx in -radius..=radius {
+                if radius != 0 && dx.abs() != radius && dy.abs() != radius {
+                    continue;
+                }
+                let x = center.x + dx;
+                let y = center.y + dy;
+                if x < 0 || y < 0 || x >= mw || y >= mh {
+                    continue;
+                }
+                let c = TileCoord::new(x, y);
+                if statue_tile_is_clear(state.map.get_kind(c)) {
+                    return Ok(c);
+                }
+            }
+        }
+    }
+    Err(CommandError::StatueNoPlace)
 }
 
 /// Funda un pueblo en hierba plana (`CmdBuildTown` MVP).
@@ -159,11 +236,13 @@ fn town_index(state: &GameState, town_id: u32) -> Result<usize, CommandError> {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
     use crate::cargo::CargoType;
+    use crate::company::CompanyId;
     use crate::station::{StopKind, station_rating_for_cargo};
+    use crate::town_action::{ADVERTISE_MEDIUM_BOOST, EXCLUSIVE_RIGHTS_MONTHS};
     use crate::{Command, GameState, apply_command, map::TileCoord};
 
     #[test]
@@ -217,7 +296,114 @@ mod tests {
         );
         assert_eq!(
             station_rating_for_cargo(&s.stations[0], CargoType::Passengers),
-            station_before.saturating_add(crate::station::TOWN_ADVERTISE_MEDIUM_RATING_BOOST)
+            station_before.saturating_add(ADVERTISE_MEDIUM_BOOST)
         );
+    }
+
+    #[test]
+    fn eight_town_actions_have_distinct_costs() {
+        let costs: Vec<_> = TownAction::all().map(TownAction::cost).to_vec();
+        assert_eq!(costs.len(), 8);
+        assert_eq!(costs[1], 1_000); // medium
+        assert!(costs[0] < costs[1] && costs[1] < costs[2]);
+        assert!(costs[6] > costs[5]); // rights > fund
+    }
+
+    #[test]
+    fn buy_rights_grants_twelve_month_exclusivity() {
+        let mut s = GameState::new(32, 32);
+        s.economy.money = 100_000;
+        s.towns.push(Town {
+            id: 1,
+            pos: TileCoord::new(8, 8),
+            name: "A".into(),
+            ..Default::default()
+        });
+        apply_command(
+            &mut s,
+            &Command::DoTownAction {
+                town_id: 1,
+                action: TownAction::BuyRights,
+            },
+        )
+        .unwrap();
+        assert_eq!(s.towns[0].exclusive_counter, EXCLUSIVE_RIGHTS_MONTHS);
+        assert_eq!(s.towns[0].exclusivity, Some(CompanyId::PLAYER));
+    }
+
+    #[test]
+    fn exclusivity_filters_cargo_for_rival_company() {
+        use crate::town::produce_town_cargo;
+        use crate::town::TOWN_PRODUCE_TICKS;
+
+        let mut s = GameState::new(16, 16);
+        let town_pos = TileCoord::new(4, 4);
+        s.towns.push(Town {
+            id: 1,
+            pos: town_pos,
+            name: "X".into(),
+            exclusive_counter: 12,
+            exclusivity: Some(CompanyId::PLAYER),
+            ..Default::default()
+        });
+        s.map
+            .set_kind(TileCoord::new(4, 5), TileKind::House)
+            .unwrap();
+
+        let mut player_stop = crate::Station::new_with_kind(TileCoord::new(5, 5), StopKind::BusStop);
+        player_stop.owner = CompanyId::PLAYER;
+        player_stop.goods.get_mut(CargoType::Passengers).has_rating = true;
+        player_stop.goods.get_mut(CargoType::Passengers).rating = 200;
+        player_stop.goods.get_mut(CargoType::Passengers).last_speed = 1;
+
+        let mut rival_stop = crate::Station::new_with_kind(TileCoord::new(3, 5), StopKind::BusStop);
+        rival_stop.owner = CompanyId(1);
+        rival_stop.goods.get_mut(CargoType::Passengers).has_rating = true;
+        rival_stop.goods.get_mut(CargoType::Passengers).rating = 255;
+        rival_stop.goods.get_mut(CargoType::Passengers).last_speed = 1;
+
+        s.stations = vec![player_stop, rival_stop];
+        let _ = produce_town_cargo(
+            &s.map,
+            &[],
+            &mut s.stations,
+            &s.towns,
+            TOWN_PRODUCE_TICKS,
+            true,
+        );
+        let player_waiting = s.stations[0].cargo_stock.get(CargoType::Passengers);
+        let rival_waiting = s.stations[1].cargo_stock.get(CargoType::Passengers);
+        assert!(player_waiting > 0, "dueño exclusivo recibe carga");
+        assert_eq!(rival_waiting, 0, "rival excluido");
+    }
+
+    #[test]
+    fn build_statue_only_once_per_company() {
+        let mut s = GameState::new(32, 32);
+        s.economy.money = 200_000;
+        s.towns.push(Town {
+            id: 1,
+            pos: TileCoord::new(10, 10),
+            name: "S".into(),
+            ..Default::default()
+        });
+        apply_command(
+            &mut s,
+            &Command::DoTownAction {
+                town_id: 1,
+                action: TownAction::BuildStatue,
+            },
+        )
+        .unwrap();
+        assert!(s.towns[0].has_statue(CompanyId::PLAYER));
+        let err = apply_command(
+            &mut s,
+            &Command::DoTownAction {
+                town_id: 1,
+                action: TownAction::BuildStatue,
+            },
+        )
+        .unwrap_err();
+        assert_eq!(err, CommandError::TownActionNotAvailable);
     }
 }

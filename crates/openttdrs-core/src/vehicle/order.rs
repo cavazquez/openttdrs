@@ -128,12 +128,16 @@ pub enum VehicleOrder {
         wait_ticks: u32,
         /// Tiempo mínimo de viaje hasta esta orden (ticks desde la anterior).
         travel_ticks: u32,
+        /// Techo de velocidad del tramo (`Order::max_speed`); 0 = sin límite.
+        max_speed: u16,
         /// Orden implícita (`OT_IMPLICIT`) insertada al visitar una estación.
         implicit: bool,
     },
     Waypoint {
         waypoint: TileCoord,
         travel_ticks: u32,
+        /// Techo de velocidad del tramo; 0 = sin límite.
+        max_speed: u16,
     },
     /// Parada en depósito (`stop`: detener al llegar; `false` = pasar sin parar).
     Depot {
@@ -143,12 +147,15 @@ pub enum VehicleOrder {
         travel_ticks: u32,
         /// Refit automático al llegar (solo si `stop` y sin carga a bordo).
         refit_cargo: Option<CargoType>,
+        /// Servicio + unbunch (`OrderDepotActionFlag::Unbunch`).
+        unbunch: bool,
     },
     Tile(TileCoord),
     /// Salta a `jump_to` si la condición se cumple al llegar a esta «orden».
     Conditional {
         condition: OrderConditionKind,
-        value: u8,
+        comparator: OrderConditionComparator,
+        value: u16,
         jump_to: usize,
     },
 }
@@ -183,12 +190,16 @@ enum VehicleOrderSerde {
         #[serde(default)]
         travel_ticks: u32,
         #[serde(default)]
+        max_speed: u16,
+        #[serde(default)]
         implicit: bool,
     },
     Waypoint {
         waypoint: TileCoord,
         #[serde(default)]
         travel_ticks: u32,
+        #[serde(default)]
+        max_speed: u16,
     },
     Depot {
         depot: TileCoord,
@@ -200,11 +211,15 @@ enum VehicleOrderSerde {
         travel_ticks: u32,
         #[serde(default)]
         refit_cargo: Option<CargoType>,
+        #[serde(default)]
+        unbunch: bool,
     },
     Tile(TileCoord),
     Conditional {
         condition: OrderConditionKind,
-        value: u8,
+        #[serde(default)]
+        comparator: Option<OrderConditionComparator>,
+        value: u16,
         jump_to: usize,
     },
 }
@@ -225,6 +240,7 @@ impl From<VehicleOrder> for VehicleOrderSerde {
                 stop_location,
                 wait_ticks,
                 travel_ticks,
+                max_speed,
                 implicit,
             } => Self::Station {
                 station,
@@ -239,14 +255,17 @@ impl From<VehicleOrder> for VehicleOrderSerde {
                 stop_location,
                 wait_ticks,
                 travel_ticks,
+                max_speed,
                 implicit,
             },
             VehicleOrder::Waypoint {
                 waypoint,
                 travel_ticks,
+                max_speed,
             } => Self::Waypoint {
                 waypoint,
                 travel_ticks,
+                max_speed,
             },
             VehicleOrder::Depot {
                 depot,
@@ -254,20 +273,24 @@ impl From<VehicleOrder> for VehicleOrderSerde {
                 wait_ticks,
                 travel_ticks,
                 refit_cargo,
+                unbunch,
             } => Self::Depot {
                 depot,
                 stop,
                 wait_ticks,
                 travel_ticks,
                 refit_cargo,
+                unbunch,
             },
             VehicleOrder::Tile(tile) => Self::Tile(tile),
             VehicleOrder::Conditional {
                 condition,
+                comparator,
                 value,
                 jump_to,
             } => Self::Conditional {
                 condition,
+                comparator: Some(comparator),
                 value,
                 jump_to,
             },
@@ -291,6 +314,7 @@ impl From<VehicleOrderSerde> for VehicleOrder {
                 stop_location,
                 wait_ticks,
                 travel_ticks,
+                max_speed,
                 implicit,
             } => Self::Station {
                 station,
@@ -318,14 +342,17 @@ impl From<VehicleOrderSerde> for VehicleOrder {
                 stop_location,
                 wait_ticks,
                 travel_ticks,
+                max_speed,
                 implicit,
             },
             VehicleOrderSerde::Waypoint {
                 waypoint,
                 travel_ticks,
+                max_speed,
             } => Self::Waypoint {
                 waypoint,
                 travel_ticks,
+                max_speed,
             },
             VehicleOrderSerde::Depot {
                 depot,
@@ -333,20 +360,26 @@ impl From<VehicleOrderSerde> for VehicleOrder {
                 wait_ticks,
                 travel_ticks,
                 refit_cargo,
+                unbunch,
             } => Self::Depot {
                 depot,
                 stop,
                 wait_ticks,
                 travel_ticks,
                 refit_cargo,
+                unbunch,
             },
             VehicleOrderSerde::Tile(tile) => Self::Tile(tile),
             VehicleOrderSerde::Conditional {
                 condition,
+                comparator,
                 value,
                 jump_to,
             } => Self::Conditional {
                 condition,
+                comparator: comparator
+                    .or_else(|| condition.legacy_comparator())
+                    .unwrap_or(OrderConditionComparator::MoreThan),
                 value,
                 jump_to,
             },
@@ -372,12 +405,124 @@ impl<'de> serde::Deserialize<'de> for VehicleOrder {
     }
 }
 
-/// Condición de orden condicional (MVP).
+/// Comparador de orden condicional (`OrderConditionComparator` en OpenTTD).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OrderConditionComparator {
+    Equal,
+    NotEqual,
+    LessThan,
+    LessThanOrEqual,
+    #[default]
+    MoreThan,
+    MoreThanOrEqual,
+    IsTrue,
+    IsFalse,
+}
+
+impl OrderConditionComparator {
+    #[must_use]
+    pub const fn as_u8(self) -> u8 {
+        match self {
+            Self::Equal => 0,
+            Self::NotEqual => 1,
+            Self::LessThan => 2,
+            Self::LessThanOrEqual => 3,
+            Self::MoreThan => 4,
+            Self::MoreThanOrEqual => 5,
+            Self::IsTrue => 6,
+            Self::IsFalse => 7,
+        }
+    }
+
+    #[must_use]
+    pub const fn from_u8(v: u8) -> Self {
+        match v {
+            0 => Self::Equal,
+            1 => Self::NotEqual,
+            2 => Self::LessThan,
+            3 => Self::LessThanOrEqual,
+            4 => Self::MoreThan,
+            5 => Self::MoreThanOrEqual,
+            6 => Self::IsTrue,
+            _ => Self::IsFalse,
+        }
+    }
+
+    #[must_use]
+    pub fn compare(self, lhs: u16, rhs: u16) -> bool {
+        match self {
+            Self::Equal => lhs == rhs,
+            Self::NotEqual => lhs != rhs,
+            Self::LessThan => lhs < rhs,
+            Self::LessThanOrEqual => lhs <= rhs,
+            Self::MoreThan => lhs > rhs,
+            Self::MoreThanOrEqual => lhs >= rhs,
+            Self::IsTrue => lhs != 0,
+            Self::IsFalse => lhs == 0,
+        }
+    }
+}
+
+/// Variable de orden condicional (`OrderConditionVariable` en OpenTTD).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum OrderConditionKind {
+    /// Alias histórico → `LoadPercentage` + `MoreThan`.
     CargoLoadAbove,
+    /// Alias histórico → `LoadPercentage` + `LessThan`.
     CargoLoadBelow,
+    LoadPercentage,
+    Reliability,
+    MaxSpeed,
+    Age,
+    RequiresService,
+    Unconditionally,
+    RemainingLifetime,
+    MaxReliability,
+    DrivingBackwards,
+}
+
+impl OrderConditionKind {
+    /// Comparador implícito de los alias históricos (si no se serializó otro).
+    #[must_use]
+    pub const fn legacy_comparator(self) -> Option<OrderConditionComparator> {
+        match self {
+            Self::CargoLoadAbove => Some(OrderConditionComparator::MoreThan),
+            Self::CargoLoadBelow => Some(OrderConditionComparator::LessThan),
+            _ => None,
+        }
+    }
+
+    #[must_use]
+    pub const fn as_u8(self) -> u8 {
+        match self {
+            Self::CargoLoadAbove | Self::LoadPercentage | Self::CargoLoadBelow => 0,
+            Self::Reliability => 1,
+            Self::MaxSpeed => 2,
+            Self::Age => 3,
+            Self::RequiresService => 4,
+            Self::Unconditionally => 5,
+            Self::RemainingLifetime => 6,
+            Self::MaxReliability => 7,
+            Self::DrivingBackwards => 8,
+        }
+    }
+
+    #[must_use]
+    pub const fn from_u8(v: u8) -> Self {
+        match v {
+            1 => Self::Reliability,
+            2 => Self::MaxSpeed,
+            3 => Self::Age,
+            4 => Self::RequiresService,
+            5 => Self::Unconditionally,
+            6 => Self::RemainingLifetime,
+            7 => Self::MaxReliability,
+            8 => Self::DrivingBackwards,
+            _ => Self::LoadPercentage,
+        }
+    }
 }
 
 const fn default_depot_stop() -> bool {
@@ -397,9 +542,29 @@ impl VehicleOrder {
     }
 
     #[must_use]
-    pub const fn conditional(condition: OrderConditionKind, value: u8, jump_to: usize) -> Self {
+    pub const fn conditional(condition: OrderConditionKind, value: u16, jump_to: usize) -> Self {
+        let comparator = match condition.legacy_comparator() {
+            Some(c) => c,
+            None => OrderConditionComparator::MoreThan,
+        };
         Self::Conditional {
             condition,
+            comparator,
+            value,
+            jump_to,
+        }
+    }
+
+    #[must_use]
+    pub const fn conditional_with(
+        condition: OrderConditionKind,
+        comparator: OrderConditionComparator,
+        value: u16,
+        jump_to: usize,
+    ) -> Self {
+        Self::Conditional {
+            condition,
+            comparator,
             value,
             jump_to,
         }
@@ -410,25 +575,72 @@ impl VehicleOrder {
         matches!(self, Self::Conditional { .. })
     }
 
+    /// Valor de la variable condicional para un vehículo.
+    #[must_use]
+    pub fn condition_value(condition: OrderConditionKind, vehicle: &super::model::Vehicle) -> u16 {
+        match condition {
+            OrderConditionKind::CargoLoadAbove
+            | OrderConditionKind::CargoLoadBelow
+            | OrderConditionKind::LoadPercentage => {
+                if vehicle.capacity == 0 {
+                    0
+                } else {
+                    u16::try_from(
+                        (u64::from(vehicle.cargo) * 100 / u64::from(vehicle.capacity)).min(100),
+                    )
+                    .unwrap_or(100)
+                }
+            }
+            // OpenTTD compara fiabilidad en porcentaje (0..=100).
+            OrderConditionKind::Reliability | OrderConditionKind::MaxReliability => {
+                (vehicle.reliability / 100).min(100)
+            }
+            OrderConditionKind::MaxSpeed => {
+                if vehicle.cached_max_speed == u16::MAX {
+                    0
+                } else {
+                    vehicle.cached_max_speed
+                }
+            }
+            OrderConditionKind::Age => {
+                let days = vehicle.vehicle_age_days(vehicle.sim_tick);
+                u16::try_from(days.min(u64::from(u16::MAX))).unwrap_or(u16::MAX)
+            }
+            OrderConditionKind::RequiresService => u16::from(vehicle.needs_servicing),
+            OrderConditionKind::Unconditionally => 1,
+            OrderConditionKind::RemainingLifetime => {
+                let age = vehicle.vehicle_age_days(vehicle.sim_tick);
+                let left = u64::from(vehicle.max_age_days).saturating_sub(age);
+                u16::try_from(left.min(u64::from(u16::MAX))).unwrap_or(u16::MAX)
+            }
+            OrderConditionKind::DrivingBackwards => 0,
+        }
+    }
+
     #[must_use]
     pub fn evaluate_conditional(self, vehicle: &super::model::Vehicle) -> usize {
         let Self::Conditional {
             condition,
+            comparator,
             value,
             jump_to,
         } = self
         else {
             return vehicle.current_order;
         };
-        let pct = if vehicle.capacity == 0 {
-            0
-        } else {
-            u8::try_from((u64::from(vehicle.cargo) * 100 / u64::from(vehicle.capacity)).min(100))
-                .unwrap_or(100)
-        };
+        let lhs = Self::condition_value(condition, vehicle);
+        let comparator = condition.legacy_comparator().unwrap_or(comparator);
         let ok = match condition {
-            OrderConditionKind::CargoLoadAbove => pct > value,
-            OrderConditionKind::CargoLoadBelow => pct < value,
+            OrderConditionKind::Unconditionally => true,
+            OrderConditionKind::RequiresService | OrderConditionKind::DrivingBackwards => {
+                match comparator {
+                    OrderConditionComparator::IsFalse => lhs == 0,
+                    OrderConditionComparator::Equal => lhs == value.min(1),
+                    OrderConditionComparator::NotEqual => lhs != value.min(1),
+                    _ => lhs != 0,
+                }
+            }
+            _ => comparator.compare(lhs, value),
         };
         if ok {
             jump_to
@@ -449,6 +661,7 @@ impl VehicleOrder {
             stop_location: OrderStopLocation::Middle,
             wait_ticks: 0,
             travel_ticks: 0,
+            max_speed: 0,
             implicit: false,
         }
     }
@@ -464,6 +677,7 @@ impl VehicleOrder {
             stop_location: OrderStopLocation::Middle,
             wait_ticks: 0,
             travel_ticks: 0,
+            max_speed: 0,
             implicit: true,
         }
     }
@@ -532,16 +746,21 @@ impl VehicleOrder {
             while matches!(orders.get(next), Some(Self::Conditional { .. })) {
                 let Some(Self::Conditional {
                     condition,
+                    comparator,
                     value,
                     jump_to,
                 }) = orders.get(next).copied()
                 else {
                     break;
                 };
-                let pct = cargo_load_pct.unwrap_or(0);
+                let pct = u16::from(cargo_load_pct.unwrap_or(0));
+                let comparator = condition.legacy_comparator().unwrap_or(comparator);
                 let take_jump = match condition {
-                    OrderConditionKind::CargoLoadAbove => pct > value,
-                    OrderConditionKind::CargoLoadBelow => pct < value,
+                    OrderConditionKind::Unconditionally => true,
+                    OrderConditionKind::CargoLoadAbove
+                    | OrderConditionKind::CargoLoadBelow
+                    | OrderConditionKind::LoadPercentage => comparator.compare(pct, value),
+                    _ => false,
                 };
                 // Sin porcentaje conocido: explorar ambas ramas (estimación OpenTTD).
                 if cargo_load_pct.is_none() {
@@ -637,6 +856,7 @@ impl VehicleOrder {
             stop_location: OrderStopLocation::Middle,
             wait_ticks: 0,
             travel_ticks: 0,
+            max_speed: 0,
             implicit: false,
         }
     }
@@ -688,6 +908,7 @@ impl VehicleOrder {
             stop_location: OrderStopLocation::Middle,
             wait_ticks: 0,
             travel_ticks: 0,
+            max_speed: 0,
             implicit: false,
         }
     }
@@ -697,6 +918,7 @@ impl VehicleOrder {
         Self::Waypoint {
             waypoint,
             travel_ticks: 0,
+            max_speed: 0,
         }
     }
 
@@ -708,6 +930,7 @@ impl VehicleOrder {
             wait_ticks: 0,
             travel_ticks: 0,
             refit_cargo: None,
+            unbunch: false,
         }
     }
 
@@ -719,6 +942,7 @@ impl VehicleOrder {
             wait_ticks: 0,
             travel_ticks: 0,
             refit_cargo: None,
+            unbunch: false,
         }
     }
 
@@ -850,6 +1074,7 @@ impl VehicleOrder {
                 stop_location,
                 wait_ticks,
                 travel_ticks,
+                max_speed,
                 implicit,
             } => Some(Self::Station {
                 station,
@@ -859,6 +1084,7 @@ impl VehicleOrder {
                 stop_location: stop_location.next(),
                 wait_ticks,
                 travel_ticks,
+                max_speed,
                 implicit,
             }),
             _ => None,
@@ -932,6 +1158,7 @@ impl VehicleOrder {
                 stop_location,
                 wait_ticks,
                 travel_ticks,
+                max_speed,
                 implicit,
             } => Some(Self::Station {
                 station,
@@ -941,6 +1168,7 @@ impl VehicleOrder {
                 stop_location,
                 wait_ticks,
                 travel_ticks,
+                max_speed,
                 implicit,
             }),
             _ => None,
@@ -959,6 +1187,7 @@ impl VehicleOrder {
                 stop_location,
                 wait_ticks,
                 travel_ticks,
+                max_speed,
                 implicit,
             } => Some(Self::Station {
                 station,
@@ -968,6 +1197,7 @@ impl VehicleOrder {
                 stop_location,
                 wait_ticks,
                 travel_ticks,
+                max_speed,
                 implicit,
             }),
             _ => None,
@@ -984,12 +1214,14 @@ impl VehicleOrder {
                 wait_ticks,
                 travel_ticks,
                 refit_cargo,
+                unbunch,
             } => Some(Self::Depot {
                 depot,
                 stop: !stop,
                 wait_ticks,
                 travel_ticks,
                 refit_cargo,
+                unbunch,
             }),
             _ => None,
         }
@@ -1005,6 +1237,7 @@ impl VehicleOrder {
                 wait_ticks,
                 travel_ticks,
                 refit_cargo,
+                unbunch,
             } => {
                 let next = match refit_cargo {
                     None => options.first().copied(),
@@ -1023,6 +1256,7 @@ impl VehicleOrder {
                     wait_ticks,
                     travel_ticks,
                     refit_cargo: next,
+                    unbunch,
                 })
             }
             _ => None,
@@ -1059,6 +1293,7 @@ impl VehicleOrder {
                 stop_location,
                 wait_ticks,
                 travel_ticks,
+                max_speed,
                 implicit,
             } => Some(Self::Station {
                 station,
@@ -1068,6 +1303,7 @@ impl VehicleOrder {
                 stop_location,
                 wait_ticks: cycle_wait_ticks(wait_ticks),
                 travel_ticks,
+                max_speed,
                 implicit,
             }),
             Self::Depot {
@@ -1076,12 +1312,14 @@ impl VehicleOrder {
                 wait_ticks,
                 travel_ticks,
                 refit_cargo,
+                unbunch,
             } => Some(Self::Depot {
                 depot,
                 stop,
                 wait_ticks: cycle_wait_ticks(wait_ticks),
                 travel_ticks,
                 refit_cargo,
+                unbunch,
             }),
             _ => None,
         }
@@ -1099,6 +1337,7 @@ impl VehicleOrder {
                 stop_location,
                 wait_ticks,
                 travel_ticks,
+                max_speed,
                 implicit,
             } => Self::Station {
                 station,
@@ -1108,14 +1347,17 @@ impl VehicleOrder {
                 stop_location,
                 wait_ticks,
                 travel_ticks: cycle_travel_ticks(travel_ticks),
+                max_speed,
                 implicit,
             },
             Self::Waypoint {
                 waypoint,
                 travel_ticks,
+                max_speed,
             } => Self::Waypoint {
                 waypoint,
                 travel_ticks: cycle_travel_ticks(travel_ticks),
+                max_speed,
             },
             Self::Depot {
                 depot,
@@ -1123,20 +1365,24 @@ impl VehicleOrder {
                 wait_ticks,
                 travel_ticks,
                 refit_cargo,
+                unbunch,
             } => Self::Depot {
                 depot,
                 stop,
                 wait_ticks,
                 travel_ticks: cycle_travel_ticks(travel_ticks),
                 refit_cargo,
+                unbunch,
             },
             Self::Tile(t) => Self::Tile(t),
             Self::Conditional {
                 condition,
+                comparator,
                 value,
                 jump_to,
             } => Self::Conditional {
                 condition,
+                comparator,
                 value,
                 jump_to,
             },
@@ -1154,6 +1400,7 @@ impl VehicleOrder {
                 stop_location,
                 wait_ticks: _,
                 travel_ticks,
+                max_speed,
                 implicit,
             } => Some(Self::Station {
                 station,
@@ -1163,6 +1410,7 @@ impl VehicleOrder {
                 stop_location,
                 wait_ticks,
                 travel_ticks,
+                max_speed,
                 implicit,
             }),
             Self::Depot {
@@ -1170,6 +1418,7 @@ impl VehicleOrder {
                 stop,
                 travel_ticks,
                 refit_cargo,
+                unbunch,
                 ..
             } => Some(Self::Depot {
                 depot,
@@ -1177,6 +1426,7 @@ impl VehicleOrder {
                 wait_ticks,
                 travel_ticks,
                 refit_cargo,
+                unbunch,
             }),
             _ => None,
         }
@@ -1193,6 +1443,7 @@ impl VehicleOrder {
                 stop_location,
                 wait_ticks,
                 travel_ticks: _,
+                max_speed,
                 implicit,
             } => Self::Station {
                 station,
@@ -1202,17 +1453,20 @@ impl VehicleOrder {
                 stop_location,
                 wait_ticks,
                 travel_ticks,
+                max_speed,
                 implicit,
             },
-            Self::Waypoint { waypoint, .. } => Self::Waypoint {
+            Self::Waypoint { waypoint, max_speed, .. } => Self::Waypoint {
                 waypoint,
                 travel_ticks,
+                max_speed,
             },
             Self::Depot {
                 depot,
                 stop,
                 wait_ticks,
                 refit_cargo,
+                unbunch,
                 ..
             } => Self::Depot {
                 depot,
@@ -1220,8 +1474,146 @@ impl VehicleOrder {
                 wait_ticks,
                 travel_ticks,
                 refit_cargo,
+                unbunch,
             },
             other => other,
         }
+    }
+
+    #[must_use]
+    pub const fn max_speed_limit(self) -> u16 {
+        match self {
+            Self::Station { max_speed, .. } | Self::Waypoint { max_speed, .. } => max_speed,
+            _ => 0,
+        }
+    }
+
+    #[must_use]
+    pub fn with_max_speed(self, max_speed: u16) -> Self {
+        match self {
+            Self::Station {
+                station,
+                load_type,
+                unload_type,
+                non_stop,
+                stop_location,
+                wait_ticks,
+                travel_ticks,
+                max_speed: _,
+                implicit,
+            } => Self::Station {
+                station,
+                load_type,
+                unload_type,
+                non_stop,
+                stop_location,
+                wait_ticks,
+                travel_ticks,
+                max_speed,
+                implicit,
+            },
+            Self::Waypoint {
+                waypoint,
+                travel_ticks,
+                max_speed: _,
+            } => Self::Waypoint {
+                waypoint,
+                travel_ticks,
+                max_speed,
+            },
+            other => other,
+        }
+    }
+
+    #[must_use]
+    pub const fn depot_unbunch(self) -> bool {
+        matches!(self, Self::Depot { unbunch: true, .. })
+    }
+
+    #[must_use]
+    pub fn with_toggled_depot_unbunch(self) -> Option<Self> {
+        match self {
+            Self::Depot {
+                depot,
+                stop: _,
+                wait_ticks,
+                travel_ticks,
+                refit_cargo,
+                unbunch,
+            } => Some(Self::Depot {
+                depot,
+                // Unbunch implica servicio (no halt permanente).
+                stop: true,
+                wait_ticks,
+                travel_ticks,
+                refit_cargo,
+                unbunch: !unbunch,
+            }),
+            _ => None,
+        }
+    }
+
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::vehicle::model::{Vehicle, VehicleKind};
+
+    fn sample_vehicle() -> Vehicle {
+        Vehicle::new(1, VehicleKind::Train, TileCoord::new(0, 0), TileCoord::new(1, 1))
+    }
+
+    #[test]
+    fn conditional_load_percentage_jumps() {
+        let mut v = sample_vehicle();
+        v.capacity = 100;
+        v.cargo = 60;
+        v.orders = vec![
+            VehicleOrder::station(TileCoord::new(1, 1)),
+            VehicleOrder::conditional(OrderConditionKind::LoadPercentage, 50, 0),
+            VehicleOrder::station(TileCoord::new(2, 2)),
+        ];
+        v.current_order = 1;
+        let next = v.orders[1].evaluate_conditional(&v);
+        assert_eq!(next, 0);
+        v.cargo = 10;
+        let next = v.orders[1].evaluate_conditional(&v);
+        assert_eq!(next, 2);
+    }
+
+    #[test]
+    fn depot_unbunch_toggle_and_max_speed() {
+        let depot = VehicleOrder::depot(TileCoord::new(3, 3));
+        let toggled = depot.with_toggled_depot_unbunch().unwrap();
+        assert!(toggled.depot_unbunch());
+        assert!(toggled.depot_stops());
+        let station = VehicleOrder::station(TileCoord::new(1, 1)).with_max_speed(80);
+        assert_eq!(station.max_speed_limit(), 80);
+    }
+
+    #[test]
+    fn reliability_and_unconditional_conditions() {
+        let mut v = sample_vehicle();
+        v.reliability = 7500; // 75%
+        v.orders = vec![
+            VehicleOrder::conditional_with(
+                OrderConditionKind::Reliability,
+                OrderConditionComparator::LessThan,
+                80,
+                0,
+            ),
+            VehicleOrder::station(TileCoord::new(1, 1)),
+        ];
+        v.current_order = 0;
+        assert_eq!(v.orders[0].evaluate_conditional(&v), 0);
+        v.orders[0] = VehicleOrder::conditional_with(
+            OrderConditionKind::Unconditionally,
+            OrderConditionComparator::IsTrue,
+            0,
+            0,
+        );
+        assert_eq!(v.orders[0].evaluate_conditional(&v), 0);
     }
 }

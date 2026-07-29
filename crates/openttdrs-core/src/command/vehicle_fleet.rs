@@ -288,7 +288,7 @@ pub(super) fn set_vehicle_order_conditional(
     vehicle_id: u32,
     index: usize,
     condition: OrderConditionKind,
-    value: u8,
+    value: u16,
     jump_to: usize,
 ) -> Result<(), CommandError> {
     require_vehicle_owned_by_active(state, vehicle_id)?;

@@ -283,6 +283,8 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
         | Command::SetDepotVehiclesRunning { .. }
         | Command::MoveVehicleOrder { .. }
         | Command::ToggleVehicleOrderDepotStop { .. }
+        | Command::ToggleVehicleOrderDepotUnbunch { .. }
+        | Command::SetVehicleOrderMaxSpeed { .. }
         | Command::TurnAroundVehicle(..)
         | Command::ForceVehicleProceed(..)
         | Command::RefitVehicle { .. }
@@ -315,6 +317,7 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
         | Command::BuyCompany(_)
         | Command::TownAdvertise(_)
         | Command::TownFundBuildings(_)
+        | Command::DoTownAction { .. }
         | Command::CheatSetEnabled(_)
         | Command::CheatAddMoney(_)
         | Command::CheatToggleInfiniteMoney

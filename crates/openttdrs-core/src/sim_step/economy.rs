@@ -243,6 +243,7 @@ pub(super) fn produce_town_demand(state: &mut GameState, tick: u64) {
         &state.map,
         &state.industries,
         &mut state.stations,
+        &state.towns,
         tick,
         state.order.selectgoods,
     );

@@ -2,7 +2,7 @@ use crate::command::{Command, CommandError, apply_command, command_would_fail};
 use crate::economy::{road_build_cost, waypoint_build_cost};
 use crate::{
     GameState, ROAD_BUILD_COST, ROAD_PLACE_FORCE_AXIS, TileCoord, TileKind, Vehicle, VehicleKind,
-    infer_road_drag_axis, road_bits_for_autoroute, tile_slope_and_z,
+    infer_road_drag_axis, road_bits_for_autoroute, road_locked_tool_axis, tile_slope_and_z,
 };
 
 use super::helpers::set_w_only_slope;
@@ -206,6 +206,30 @@ fn infer_road_drag_axis_branches_perpendicular_from_road_tile() {
         infer_road_drag_axis(&s.map, TileCoord::new(4, 4), TileCoord::new(4, 7), 0x0A),
         0x05,
         "sobre recta horizontal, arrastre vertical → rama"
+    );
+}
+
+#[test]
+fn infer_road_drag_axis_removes_force_bit_out_of_axis_range() {
+    let s = GameState::new(8, 8);
+    let start = TileCoord::new(3, 3);
+    let end = TileCoord::new(6, 3);
+    assert_eq!(
+        infer_road_drag_axis(&s.map, start, end, ROAD_PLACE_FORCE_AXIS | 0x0A | 0x80),
+        0x0A,
+        "tool axis debe ignorar flags fuera del nibble"
+    );
+}
+
+#[test]
+fn road_locked_tool_axis_removes_force_bit_out_of_axis_range() {
+    let s = GameState::new(8, 8);
+    let start = TileCoord::new(3, 3);
+    let end = TileCoord::new(3, 6);
+    assert_eq!(
+        road_locked_tool_axis(&s.map, start, end, 0x05 | 0x40),
+        0x05,
+        "locked axis debe ignorar flags fuera del nibble"
     );
 }
 

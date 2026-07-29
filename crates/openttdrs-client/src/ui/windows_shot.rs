@@ -1279,6 +1279,27 @@ fn open_all_windows_for_shot(world: &mut World, include_auxiliary: bool) {
     let save_dir = save_dir_from(&world.resource::<SimHudControls>().json_save_path);
 
     world.resource_mut::<TownWindowState>().town_id = town_id;
+    let station_positions: Vec<_> = world
+        .resource::<SimWorld>()
+        .state
+        .stations
+        .iter()
+        .filter(|station| !station.is_waypoint())
+        .map(|station| station.pos)
+        .take(crate::ui::station_pool::MAX_STATION_POOL_SLOTS)
+        .collect();
+    if let Some(&focused) = station_positions.last() {
+        {
+            let mut pool = world.resource_mut::<crate::ui::station_pool::StationPoolRegistry>();
+            for (slot, position) in pool.slots.iter_mut().zip(station_positions.iter().copied()) {
+                *slot = Some(position);
+            }
+            pool.focused = Some(focused);
+        }
+        let mut panel = world.resource_mut::<StationCargoPanelState>();
+        panel.station_pos = Some(focused);
+        panel.rename_editing = false;
+    }
     {
         let mut depot = world.resource_mut::<DepotPanelState>();
         depot.depot_pos = depot_pos;

@@ -6,8 +6,8 @@ use bevy::text::EditableText;
 use openttdrs_core::Command;
 use openttdrs_core::prelude::*;
 use openttdrs_core::{
-    ALL_CARGO_TYPES, CargoType, MAX_STATION_NAME_CHARS, STATION_COVERAGE_RADIUS,
-    cargo_display_name, station_coverage_at, station_rating_for_cargo,
+    ALL_CARGO_TYPES, CargoType, MAX_STATION_NAME_CHARS, cargo_display_name,
+    station_rating_for_cargo,
 };
 
 use crate::iso::tile_pos;
@@ -112,7 +112,7 @@ pub(crate) fn setup_station_cargo_panel(mut commands: Commands, asset_server: Re
             },
             "Estación",
             TITLE_CREAM,
-            Vec2::new(420.0 + slot as f32 * 28.0, 120.0 + slot as f32 * 28.0),
+            Vec2::new(100.0 + slot as f32 * 250.0, 120.0 + slot as f32 * 30.0),
             249.0,
         );
         commands.entity(content).with_children(|panel| {
@@ -121,6 +121,11 @@ pub(crate) fn setup_station_cargo_panel(mut commands: Commands, asset_server: Re
                 Text::new(""),
                 window_text_font(asset_server, UiFontRole::Caption),
                 TextColor(WINDOW_TEXT),
+                Node {
+                    max_height: Val::Px(68.0),
+                    overflow: Overflow::clip_y(),
+                    ..default()
+                },
             ));
             panel
                 .spawn((
@@ -452,13 +457,27 @@ pub(crate) fn sync_station_cargo_panel(
         };
     }
 
-    let name = station_display_name(station);
-    if let Some((_, _, mut title)) = title_q.iter_mut().find(|(entity, title, _)| {
-        title.0 == FloatingWindowId::Station
-            && window_key_for_descendant(*entity, &windows, &parents)
-                .is_some_and(|key| key.instance == u32::from(focused_slot))
-    }) {
-        **title = name.clone();
+    for (entity, title_id, mut title) in &mut title_q {
+        if title_id.0 != FloatingWindowId::Station {
+            continue;
+        }
+        let Some(key) = window_key_for_descendant(entity, &windows, &parents) else {
+            continue;
+        };
+        let Some(position) = station_pool
+            .as_deref()
+            .and_then(|pool| pool.slots.get(key.instance as usize))
+            .copied()
+            .flatten()
+        else {
+            continue;
+        };
+        let Some(slot_station) = sim.state.stations.iter().find(|candidate| {
+            candidate.pos == position || candidate.joined_tiles.contains(&position)
+        }) else {
+            continue;
+        };
+        **title = station_display_name(slot_station);
     }
     let owner_name = sim
         .state
@@ -469,37 +488,18 @@ pub(crate) fn sync_station_cargo_panel(
             || format!("Compañía {}", station.owner.0),
             |c| c.name.clone(),
         );
-    let joined = station.joined_tiles.len();
-    let coverage = station_coverage_at(
-        &sim.state.map,
-        &sim.state.industries,
-        station_pos,
-        STATION_COVERAGE_RADIUS,
-    );
-    let mut out = if station.is_waypoint() {
+    let visiting = vehicles_visiting(&sim, station_pos);
+    let active_vehicle = vehicle_id_for_station_panel(&sim, station_pos, order_state.vehicle_id());
+    let out = if station.is_waypoint() {
         format!(
-            "{name}\nWaypoint · ({}, {}) · {owner_name}\nRating global: {}/255",
-            station_pos.x, station_pos.y, station.rating
+            "Waypoint · ({}, {})\n{owner_name}\nRating: {}/255\nVehículos: {}",
+            station_pos.x,
+            station_pos.y,
+            station.rating,
+            visiting.len()
         )
     } else {
-        let mut lines = vec![
-            name,
-            format!(
-                "{} · ({}, {}) · {owner_name}",
-                station_kind_label(station.stop_kind),
-                station_pos.x,
-                station_pos.y,
-            ),
-            format!(
-                "Rating {}/255 · ingresos ${} · tiles unidas {}",
-                station.rating, station.income, joined
-            ),
-            format!(
-                "Cobertura r{}: casas {} · stock ind. {}",
-                STATION_COVERAGE_RADIUS, coverage.house_tiles, coverage.supplied_stock
-            ),
-            format!("Carga (filtro: {}):", station_panel.cargo_filter.label()),
-        ];
+        let mut cargo_summaries = Vec::new();
         for &cargo in CARGO_TYPES {
             let waiting = station.cargo_stock.get(cargo);
             let accepted = station.accepts_cargo(cargo);
@@ -512,66 +512,78 @@ pub(crate) fn sync_station_cargo_panel(
                 continue;
             }
             let rating = station_rating_for_cargo(station, cargo);
-            let entry = station.goods.get(cargo);
-            let since_pickup = if waiting > 0 {
-                let days = u32::from(station.time_since_pickup.get(cargo))
-                    * openttdrs_core::STATION_RATING_TICKS
-                    / openttdrs_core::TICKS_PER_DAY;
-                format!(" · sin recogida {days}d")
-            } else {
-                String::new()
-            };
-            let last_vehicle = if entry.has_vehicle_ever_tried_loading() {
-                format!(
-                    " · último vehículo: velocidad {}, {} años",
-                    entry.last_speed, entry.last_age
-                )
-            } else {
-                " · nunca servida".to_string()
-            };
-            lines.push(format!(
-                "  {} · espera {waiting} · {} · rating {rating}/255{since_pickup}{last_vehicle}",
+            cargo_summaries.push(format!(
+                "{} {waiting} {} {rating}",
                 cargo_display_name(cargo),
-                if accepted { "aceptada" } else { "no aceptada" }
+                if accepted { "A" } else { "-" }
             ));
         }
-        lines.push(format!("Packets en cola: {}", station.cargo_packets.len()));
-        lines.join("\n")
-    };
-
-    let visiting = vehicles_visiting(&sim, station_pos);
-    if visiting.is_empty() {
-        out.push_str("\nVehículos en ruta: ninguno");
-    } else {
-        let ids = visiting
-            .iter()
-            .take(8)
-            .map(|id| format!("#{id}"))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let extra = if visiting.len() > 8 {
-            format!(" (+{})", visiting.len() - 8)
+        let cargo_line = if let Some(first) = cargo_summaries.first() {
+            let extra = cargo_summaries.len().saturating_sub(1);
+            if extra == 0 {
+                first.clone()
+            } else {
+                format!("{first} +{extra}")
+            }
         } else {
-            String::new()
+            "ninguna".to_string()
         };
-        out.push_str(&format!(
-            "\nVehículos en ruta ({}): {ids}{extra}",
-            visiting.len()
-        ));
-    }
-
-    let active_vehicle = vehicle_id_for_station_panel(&sim, station_pos, order_state.vehicle_id());
-    if let Some(vid) = active_vehicle {
-        out.push_str(&format!("\nVehículo activo para órdenes: #{vid}"));
-    } else if !station.is_waypoint() {
-        out.push_str("\nSelecciona un vehículo o usa «Editar órdenes».");
-    }
+        let active = active_vehicle.map_or_else(|| "-".to_string(), |id| format!("#{id}"));
+        format!(
+            "{} · ({}, {})\nRating {}/255 · ingresos ${}\n{}: {}\nVehículos {} · activo {}",
+            station_kind_label(station.stop_kind),
+            station_pos.x,
+            station_pos.y,
+            station.rating,
+            station.income,
+            station_panel.cargo_filter.label(),
+            cargo_line,
+            visiting.len(),
+            active
+        )
+    };
 
     if let Some((_, mut text)) = text_q.iter_mut().find(|(entity, _)| {
         window_key_for_descendant(*entity, &windows, &parents)
             .is_some_and(|key| key.instance == u32::from(focused_slot))
     }) {
         **text = out;
+    }
+
+    for (entity, mut text) in &mut text_q {
+        let Some(key) = window_key_for_descendant(entity, &windows, &parents) else {
+            continue;
+        };
+        if key.instance == u32::from(focused_slot) {
+            continue;
+        }
+        let Some(position) = station_pool
+            .as_deref()
+            .and_then(|pool| pool.slots.get(key.instance as usize))
+            .copied()
+            .flatten()
+        else {
+            continue;
+        };
+        let Some(slot_station) = sim.state.stations.iter().find(|candidate| {
+            candidate.pos == position || candidate.joined_tiles.contains(&position)
+        }) else {
+            continue;
+        };
+        let waiting_types = CARGO_TYPES
+            .iter()
+            .filter(|cargo| slot_station.cargo_stock.get(**cargo) > 0)
+            .count();
+        **text = format!(
+            "{} · ({}, {})\nRating {}/255 · ingresos ${}\nCargas en espera: {}\nVehículos en ruta: {}",
+            station_kind_label(slot_station.stop_kind),
+            slot_station.pos.x,
+            slot_station.pos.y,
+            slot_station.rating,
+            slot_station.income,
+            waiting_types,
+            vehicles_visiting(&sim, slot_station.pos).len()
+        );
     }
 }
 

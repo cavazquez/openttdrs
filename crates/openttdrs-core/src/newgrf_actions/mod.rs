@@ -3949,4 +3949,117 @@ mod tests {
             0x08,
         ]);
     }
+
+    /// #231: Action3 elige sprite de airport tile; sin Action3 cae a subst.
+    #[test]
+    fn airport_tiles_ac_action3_sprite_fallback() {
+        use crate::airport_tile_spec::resolve_airport_tile_draw_gfx;
+        use crate::newgrf_sprites::build_grf_v2_airport_tile_with_preview_sprite;
+
+        let tile = build_action0_airport_tile_payload(0, 24, None, 0);
+        let indices = sample_tile_indices();
+        let bytes = build_grf_v2_airport_tile_with_preview_sprite(
+            &tile,
+            0,
+            8,
+            8,
+            &indices,
+            [b'A', b'T', 0, 1],
+            "atile",
+        );
+        let dir = tempfile_dir_with("atile.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("atile.grf", 0x4154_0001));
+        apply_newgrf_airport_tiles(&mut state, &[&dir]);
+        assert_eq!(state.airport_tile_spec_catalog.len(), 1);
+        let t0 = &state.airport_tile_spec_catalog[0];
+        assert_eq!(t0.subst_id, 24);
+        assert!(t0.has_newgrf_sprites());
+        assert!(!t0.newgrf_views.is_empty());
+        assert_eq!(
+            resolve_airport_tile_draw_gfx(t0.gfx.as_u16(), &state.airport_tile_spec_catalog),
+            t0.gfx.as_u16()
+        );
+        // Sin vistas → fallback subst; no contamina vecinos.
+        let mut bare = t0.clone();
+        bare.newgrf_views.clear();
+        bare.newgrf_preview = None;
+        bare.newgrf_runtime = None;
+        let cat = vec![bare];
+        assert_eq!(resolve_airport_tile_draw_gfx(cat[0].gfx.as_u16(), &cat), 24);
+        assert_eq!(resolve_airport_tile_draw_gfx(23, &cat), 23);
+    }
+
+    /// #231: Airport purchase (`0xFF`) + default group usables en picker/preview.
+    #[test]
+    fn airports_ac_purchase_default_groups() {
+        use crate::newgrf_sprites::build_grf_v2_airport_purchase_default_sprites;
+
+        let air = build_action0_airport_payload(0, 0, &[(0, 0, 0)], 4, 3, "PickPort");
+        let mut purchase = sample_tile_indices();
+        purchase[8 * 4 + 4] = 10;
+        let mut default = sample_tile_indices();
+        default[8 * 4 + 4] = 200;
+        let bytes = build_grf_v2_airport_purchase_default_sprites(
+            &air,
+            0,
+            8,
+            8,
+            &purchase,
+            &default,
+            [b'A', b'P', 0, 2],
+            "apick",
+        );
+        let dir = tempfile_dir_with("apick.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("apick.grf", 0x4150_0002));
+        apply_newgrf_airports(&mut state, &[&dir]);
+        assert_eq!(state.airport_spec_catalog.len(), 1);
+        let def = &state.airport_spec_catalog[0];
+        assert!(def.has_newgrf_sprites());
+        assert!(!def.newgrf_views.is_empty());
+        assert!(!def.newgrf_purchase_views.is_empty());
+        assert_ne!(
+            def.newgrf_purchase_views[0].rgba,
+            def.newgrf_views[0].rgba
+        );
+        let preview = def.newgrf_preview_sprite().unwrap();
+        assert_eq!(preview.rgba, def.newgrf_purchase_views[0].rgba);
+    }
+
+    /// #231: Cargo Action3 adjunta group/views al CargoSpecDef sin contaminar ids.
+    #[test]
+    fn cargoes_ac_action3_views() {
+        use crate::newgrf_sprites::build_grf_v2_cargo_with_preview_sprite;
+
+        let a0 = build_action0_cargo_payload(0, 1, b"PASS", "Pasajeros");
+        let indices = sample_tile_indices();
+        let bytes = build_grf_v2_cargo_with_preview_sprite(
+            &a0,
+            0,
+            8,
+            8,
+            &indices,
+            [b'C', b'G', 0, 1],
+            "cview",
+        );
+        let dir = tempfile_dir_with("cview.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("cview.grf", 0x4347_0003));
+        apply_newgrf_cargoes(&mut state, &[&dir]);
+        assert_eq!(state.cargo_spec_catalog.len(), 1);
+        let pass = &state.cargo_spec_catalog[0];
+        assert_eq!(pass.label, "PASS");
+        assert!(pass.has_newgrf_sprites());
+        assert!(!pass.newgrf_views.is_empty());
+        assert!(pass.newgrf_view(0).is_some());
+        // Id vecino no inventado.
+        assert!(crate::cargo_spec_def(&state.cargo_spec_catalog, 1).is_none());
+    }
 }

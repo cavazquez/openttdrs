@@ -3,7 +3,9 @@
 //! Contiene todas las funciones `build_*` para construir sprites, actions y GRFs sintéticos
 //! usados en tests. Las funciones de decodificación en runtime permanecen en sus módulos.
 
+use crate::airport_class::AIRPORT_ACTION3_PURCHASE;
 use crate::newgrf_actions::{
+    ACTION0_FEATURE_AIRPORTS, ACTION0_FEATURE_AIRPORTTILES, ACTION0_FEATURE_CARGOES,
     ACTION0_FEATURE_HOUSES, ACTION0_FEATURE_INDUSTRYTILES, ACTION0_FEATURE_RAILTYPES,
     ACTION0_FEATURE_ROADTYPES, ACTION0_FEATURE_STATIONS, ACTION0_FEATURE_TRAINS,
 };
@@ -1376,4 +1378,123 @@ pub fn build_grf_v2_station_with_preview_sprite(
         grfid,
         name,
     )
+}
+
+/// GRF v2: Action0 airport tile + Action1 + sprite + Action3 + Action8.
+#[must_use]
+pub fn build_grf_v2_airport_tile_with_preview_sprite(
+    action0: &[u8],
+    local_id: u8,
+    width: u16,
+    height: u16,
+    indices: &[u8],
+    grfid: [u8; 4],
+    name: &str,
+) -> Vec<u8> {
+    build_grf_v2_with_preview_sprite(
+        action0,
+        ACTION0_FEATURE_AIRPORTTILES,
+        local_id,
+        width,
+        height,
+        indices,
+        grfid,
+        name,
+    )
+}
+
+/// GRF v2: Action0 cargo + Action1 + sprite + Action3 + Action8.
+#[must_use]
+pub fn build_grf_v2_cargo_with_preview_sprite(
+    action0: &[u8],
+    local_id: u8,
+    width: u16,
+    height: u16,
+    indices: &[u8],
+    grfid: [u8; 4],
+    name: &str,
+) -> Vec<u8> {
+    build_grf_v2_with_preview_sprite(
+        action0,
+        ACTION0_FEATURE_CARGOES,
+        local_id,
+        width,
+        height,
+        indices,
+        grfid,
+        name,
+    )
+}
+
+/// GRF v2: Airport Action0 + dos sets Action1 (purchase `0xFF` + default) + Action3 + Action8.
+///
+/// `purchase_indices` → set 0 (cid `0xFF`); `default_indices` → set 1 (grupo default).
+#[must_use]
+#[expect(clippy::too_many_arguments)]
+pub fn build_grf_v2_airport_purchase_default_sprites(
+    action0: &[u8],
+    local_id: u8,
+    width: u16,
+    height: u16,
+    purchase_indices: &[u8],
+    default_indices: &[u8],
+    grfid: [u8; 4],
+    name: &str,
+) -> Vec<u8> {
+    const SIG: [u8; 8] = [b'G', b'R', b'F', 0x82, 0x0D, 0x0A, 0x1A, 0x0A];
+    let action1 = build_action1_feature_payload(ACTION0_FEATURE_AIRPORTS, 2, 1);
+    let action3 = build_action3_feature_specific_payload(
+        ACTION0_FEATURE_AIRPORTS,
+        local_id,
+        AIRPORT_ACTION3_PURCHASE,
+        0,
+        1,
+    );
+    let mut action8 = vec![0x08, 0x07];
+    action8.extend_from_slice(&grfid);
+    action8.extend_from_slice(name.as_bytes());
+    action8.push(0);
+    action8.push(0);
+
+    let purchase_body = build_real_sprite_v1_uncompressed_payload(
+        width,
+        height,
+        -i16::try_from(width / 2).unwrap_or(0),
+        -i16::try_from(height).unwrap_or(0),
+        purchase_indices,
+    );
+    let default_body = build_real_sprite_v1_uncompressed_payload(
+        width,
+        height,
+        -i16::try_from(width / 2).unwrap_or(0),
+        -i16::try_from(height).unwrap_or(0),
+        default_indices,
+    );
+
+    let mut data_section = Vec::new();
+    for payload in [action0, action1.as_slice()] {
+        let sz = u32::try_from(payload.len()).unwrap_or(0);
+        data_section.extend_from_slice(&sz.to_le_bytes());
+        data_section.push(0xFF);
+        data_section.extend_from_slice(payload);
+    }
+    append_v2_real_sprite(&mut data_section, 0x01, &purchase_body);
+    append_v2_real_sprite(&mut data_section, 0x01, &default_body);
+    for payload in [action3.as_slice(), action8.as_slice()] {
+        let sz = u32::try_from(payload.len()).unwrap_or(0);
+        data_section.extend_from_slice(&sz.to_le_bytes());
+        data_section.push(0xFF);
+        data_section.extend_from_slice(payload);
+    }
+    data_section.extend_from_slice(&0u32.to_le_bytes());
+
+    let sprite_offs = u32::try_from(1 + data_section.len()).unwrap_or(0);
+    let mut out = Vec::new();
+    out.extend_from_slice(&[0x00, 0x00]);
+    out.extend_from_slice(&SIG);
+    out.extend_from_slice(&sprite_offs.to_le_bytes());
+    out.push(0x00);
+    out.extend_from_slice(&data_section);
+    out.extend_from_slice(&0u32.to_le_bytes());
+    out
 }

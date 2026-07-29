@@ -551,7 +551,7 @@ pub fn newgrf_airport_tiles(
             } else {
                 (i32::from(t.x), i32::from(t.y))
             };
-            let gfx = crate::airport_tile_spec::resolve_airport_tile_draw_gfx(t.gfx, tile_catalog);
+            let gfx = crate::airport_tile_spec::resolve_airport_tile_piece_gfx(t.gfx, tile_catalog);
             let piece = AirportPiece::from_station_gfx(gfx);
             (TileCoord::new(origin.x + dx, origin.y + dy), piece)
         })

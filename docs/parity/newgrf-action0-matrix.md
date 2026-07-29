@@ -25,13 +25,13 @@ Estados:
 | `08` | Global variables | runtime parcial | no aplica | tablas rail/road/tram |
 | `09` | Industry tiles | runtime | runtime | catálogo `industry_tile_spec` + overrides; render/place |
 | `0A` | Industries | runtime | N/A (sprites vía tiles 09) | catálogo `industry_spec` + layouts/I/O; place |
-| `0B` | Cargoes | runtime | pendiente | catálogo `cargo_spec` → pagos/capacidad/UI |
+| `0B` | Cargoes | runtime | runtime | catálogo `cargo_spec` → pagos/capacidad/UI + Action3 views |
 | `0C` | Sound effects | runtime | no aplica | catálogo `sound_effect` + cola play; samples Action11 |
-| `0D` | Airports | runtime parcial | pendiente | catálogo `airport_spec_catalog` (≥10); build+save; FTA/callbacks bloqueados (#260) |
+| `0D` | Airports | runtime parcial | runtime | catálogo `airport_spec_catalog` (≥10); Action3 purchase/default; build+save; FTA/callbacks bloqueados (#260) |
 | `0E` | Signals | ignorada por spec (null en OTTD 15.3; #255) | N/A | gráficos: RailTypes `RTSG_SIGNALS` + Action5 `0x04`; estilo en `m2` save/load |
 | `0F` | Objects | runtime | runtime | catálogo `object_spec`; build+render multitile |
 | `10` | Rail types | runtime | runtime (signals/underlay/overlay) | construcción/coste/compat + techo velocidad |
-| `11` | Airport tiles | runtime parcial | pendiente | catálogo `airport_tile_spec_catalog` (≥74); layouts `0xFE`; callbacks/anim consumidos (#260) |
+| `11` | Airport tiles | runtime parcial | runtime | catálogo `airport_tile_spec_catalog` (≥74); Action3 views/subst; layouts `0xFE`; callbacks/anim consumidos (#260) |
 | `12` | Road types | runtime | runtime | construcción/coste + techo velocidad |
 | `13` | Tram types | runtime (feature propio + catálogo road) | runtime | IDs/clase tram separados |
 | `14` | Road stops | runtime parcial | runtime parcial | auto-select / construcción / render (`road_stop_spec`) |
@@ -195,6 +195,7 @@ Fuente: `newgrf_act0_cargo.cpp`.
 | `FE` nombre C-string (extensión local) | **runtime** (UI / inspect) |
 | strings WORD `09`–`0D` / `1B`/`1C` | consumidas |
 | resto (`18`/`1A`/`1E`/`1F`) | consumidas (ancho fijo) |
+| Action1/3 views | **runtime** (`newgrf_views` en `CargoSpecDef`) |
 
 ## Signals (`0E`) — N/A Action0 en 15.3
 
@@ -286,12 +287,15 @@ Catálogo tiles `airport_tile_spec_catalog` (gfx ≥74) y aeropuertos
 `0x0A` resuelven `0xFE`→tile local. Construcción via
 `SetCurrentAirportNewgrfSpec` + `PlaceAirportArea`. FTA y callbacks **bloqueados**
 explícitamente (#260 / #228): `station_uses_airport_fta` es false si hay
-`airport_newgrf_spec_id`. Action3 sprites: pendiente.
+`airport_newgrf_spec_id`. Action3 adjunta `newgrf_views` (tiles) y
+purchase (`0xFF`)/default (airports); dibujo NewGRF o fallback `subst_id`
+(`resolve_airport_tile_draw_gfx`); piezas de construcción usan siempre subst
+(`resolve_airport_tile_piece_gfx`).
 
 | Feature | Props runtime | Props consumidas |
 |---|---|---|
-| Airport tiles `11` | `08` subst, `09` override, `0E` callback_mask (almacenado) | `0F`–`11` anim, `12` badges |
-| Airports `0D` | `08` subst/disable, `0A` layouts, `0C` years, `0E` catchment, `0F` noise, `10` name, `11` maintenance | `0D` TTDP type (almacenado), `12` badges |
+| Airport tiles `11` | `08` subst, `09` override, `0E` callback_mask (almacenado); Action1/3 views | `0F`–`11` anim, `12` badges |
+| Airports `0D` | `08` subst/disable, `0A` layouts, `0C` years, `0E` catchment, `0F` noise, `10` name, `11` maintenance; Action3 purchase/default | `0D` TTDP type (almacenado), `12` badges |
 
 ## Industry tiles (`09`)
 

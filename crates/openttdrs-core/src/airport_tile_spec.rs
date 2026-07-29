@@ -40,6 +40,29 @@ pub struct AirportTileSpecDef {
     /// GRFID del set.
     #[serde(default, skip)]
     pub newgrf_grfid: u32,
+    #[serde(default, skip)]
+    pub newgrf_preview: Option<crate::newgrf_sprites::DecodedSprite>,
+    #[serde(default, skip)]
+    pub newgrf_views: Vec<crate::newgrf_sprites::DecodedSprite>,
+    #[serde(default, skip)]
+    pub newgrf_runtime: Option<Box<crate::newgrf_sprites::TrainSpriteGraphics>>,
+}
+
+impl AirportTileSpecDef {
+    #[must_use]
+    pub fn newgrf_view(&self, idx: usize) -> Option<&crate::newgrf_sprites::DecodedSprite> {
+        if self.newgrf_views.is_empty() {
+            return self.newgrf_preview.as_ref();
+        }
+        self.newgrf_views.get(idx % self.newgrf_views.len())
+    }
+
+    #[must_use]
+    pub fn has_newgrf_sprites(&self) -> bool {
+        !self.newgrf_views.is_empty()
+            || self.newgrf_preview.is_some()
+            || self.newgrf_runtime.is_some()
+    }
 }
 
 /// Tabla de overrides vanilla → gfx `NewGRF`.
@@ -77,9 +100,25 @@ pub fn next_free_airport_tile_gfx_id(catalog: &[AirportTileSpecDef]) -> Option<u
     (candidate < NUM_AIRPORT_TILES).then_some(candidate)
 }
 
-/// Resuelve pieza de construcción: gfx NewGRF → `subst_id` vanilla → `AirportPiece`.
+/// Gfx de dibujo: id NewGRF si hay Action3; si no, `subst_id` fallback.
 #[must_use]
-pub fn resolve_airport_tile_draw_gfx(gfx: u16, catalog: &[AirportTileSpecDef]) -> u8 {
+pub fn resolve_airport_tile_draw_gfx(gfx: u16, catalog: &[AirportTileSpecDef]) -> u16 {
+    if gfx < NEW_AIRPORT_TILE_OFFSET {
+        return gfx;
+    }
+    let Some(def) = catalog.iter().find(|d| d.gfx.as_u16() == gfx) else {
+        return gfx;
+    };
+    if def.has_newgrf_sprites() {
+        gfx
+    } else {
+        def.subst_id
+    }
+}
+
+/// Pieza de construcción: siempre `subst_id` vanilla (FTA NewGRF fuera de alcance).
+#[must_use]
+pub fn resolve_airport_tile_piece_gfx(gfx: u16, catalog: &[AirportTileSpecDef]) -> u8 {
     if gfx < NEW_AIRPORT_TILE_OFFSET {
         return u8::try_from(gfx).unwrap_or(0);
     }

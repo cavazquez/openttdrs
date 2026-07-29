@@ -111,17 +111,17 @@ pub use airport::{
     airport_spec_footprint, airport_spec_tiles, airport_tile_is_hangar, airport_tile_is_heliport,
 };
 pub use airport_class::{
-    AirportClassDef, AirportClassId, AirportFtaFlags, AirportLayoutTile, AirportSpecDef,
-    AirportSpecId, AirportTileLayout, NEW_AIRPORT_OFFSET, NUM_AIRPORTS, NewgrfAirportSpecDef,
-    TOWN_NOISE_POPULATION_DEFAULT, airport_allows_aircraft, airport_class_def,
-    airport_noise_for_distance, airport_spec_def, all_airport_class_defs, all_airport_spec_defs,
-    list_airport_classes, list_airport_specs, list_newgrf_airport_specs, max_town_noise,
-    newgrf_airport_spec_def, next_free_airport_id,
+    AIRPORT_ACTION3_PURCHASE, AirportClassDef, AirportClassId, AirportFtaFlags, AirportLayoutTile,
+    AirportSpecDef, AirportSpecId, AirportTileLayout, NEW_AIRPORT_OFFSET, NUM_AIRPORTS,
+    NewgrfAirportSpecDef, TOWN_NOISE_POPULATION_DEFAULT, airport_allows_aircraft,
+    airport_class_def, airport_noise_for_distance, airport_spec_def, all_airport_class_defs,
+    all_airport_spec_defs, list_airport_classes, list_airport_specs, list_newgrf_airport_specs,
+    max_town_noise, newgrf_airport_spec_def, next_free_airport_id,
 };
 pub use airport_tile_spec::{
     AirportTileGfxId, AirportTileSpecDef, INVALID_AIRPORT_TILE, NEW_AIRPORT_TILE_OFFSET,
     NUM_AIRPORT_TILES, empty_airport_tile_overrides, get_translated_airport_tile_id,
-    next_free_airport_tile_gfx_id, resolve_airport_tile_draw_gfx,
+    next_free_airport_tile_gfx_id, resolve_airport_tile_draw_gfx, resolve_airport_tile_piece_gfx,
 };
 pub use airport_fta::{
     AirportHeading, AirportMovingData, CITY_ENTRIES, CITY_MOVING_DATA, CITY_NOF_ELEMENTS,
@@ -383,11 +383,13 @@ pub use newgrf_sprites::{
     TrainSpriteAssign, TrainSpriteGraphics, action5_type_name, airport_preview_action5_slot,
     apply_company_colour_mask, bake_sprite_company_mask, bridge_decks_action5_base,
     bridge_decks_action5_slot, catenary_action5_local_slot, collect_action5_blocks,
-    collect_canal_sprite_graphics, collect_feature_sprite_graphics, collect_house_sprite_graphics,
-    collect_industry_tile_sprite_graphics, collect_object_sprite_graphics,
-    collect_railtype_sprite_graphics, collect_roadstop_sprite_graphics,
-    collect_roadtype_sprite_graphics, collect_station_sprite_graphics,
-    collect_train_sprite_graphics, disallowed_road_directions, foundation_action5_slot_for_tileh,
+    collect_airport_sprite_graphics, collect_airport_tile_sprite_graphics,
+    collect_canal_sprite_graphics, collect_cargo_sprite_graphics, collect_feature_sprite_graphics,
+    collect_house_sprite_graphics, collect_industry_tile_sprite_graphics,
+    collect_object_sprite_graphics, collect_railtype_sprite_graphics,
+    collect_roadstop_sprite_graphics, collect_roadtype_sprite_graphics,
+    collect_station_sprite_graphics, collect_train_sprite_graphics, disallowed_road_directions,
+    foundation_action5_slot_for_tileh,
     merge_action5_offset_block, merge_airport_preview_action5_block,
     merge_bridge_decks_action5_block, merge_canals_action5_block, merge_catenary_action5_block,
     merge_foundation_action5_block, merge_oneway_action5_block, merge_openttd_gui_action5_block,

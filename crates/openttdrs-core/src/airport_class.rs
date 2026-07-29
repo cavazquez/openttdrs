@@ -168,6 +168,9 @@ pub struct AirportTileLayout {
     pub tiles: Vec<AirportLayoutTile>,
 }
 
+/// Selector Action3 purchase (`PurchaseDefaultMapSpriteGroupHandler`, cid `0xFF`).
+pub const AIRPORT_ACTION3_PURCHASE: u8 = 0xFF;
+
 /// Spec NewGRF de aeropuerto (ids globales ≥ [`NEW_AIRPORT_OFFSET`]).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NewgrfAirportSpecDef {
@@ -190,6 +193,12 @@ pub struct NewgrfAirportSpecDef {
     pub newgrf_local_id: u8,
     #[serde(default, skip)]
     pub newgrf_grfid: u32,
+    /// Grupo Action3 default (preview / render).
+    #[serde(default, skip)]
+    pub newgrf_views: Vec<crate::newgrf_sprites::DecodedSprite>,
+    /// Grupo Action3 purchase (`0xFF`) para picker.
+    #[serde(default, skip)]
+    pub newgrf_purchase_views: Vec<crate::newgrf_sprites::DecodedSprite>,
 }
 
 impl NewgrfAirportSpecDef {
@@ -198,6 +207,19 @@ impl NewgrfAirportSpecDef {
         airport_spec_def(self.subst_id)
             .map(|d| d.fta_flags)
             .unwrap_or(AirportFtaFlags::empty())
+    }
+
+    #[must_use]
+    pub fn has_newgrf_sprites(&self) -> bool {
+        !self.newgrf_views.is_empty() || !self.newgrf_purchase_views.is_empty()
+    }
+
+    /// Vista para picker: purchase si hay; si no, default.
+    #[must_use]
+    pub fn newgrf_preview_sprite(&self) -> Option<&crate::newgrf_sprites::DecodedSprite> {
+        self.newgrf_purchase_views
+            .first()
+            .or_else(|| self.newgrf_views.first())
     }
 }
 

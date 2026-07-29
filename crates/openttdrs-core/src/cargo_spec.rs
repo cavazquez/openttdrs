@@ -50,6 +50,9 @@ pub struct CargoSpecDef {
     /// Color leyenda gráfico (`prop 0x14`).
     #[serde(default)]
     pub legend_colour: u8,
+    /// Grupo Action3 default (`CargoMapSpriteGroupHandler`).
+    #[serde(default, skip)]
+    pub newgrf_views: Vec<crate::newgrf_sprites::DecodedSprite>,
 }
 
 const fn default_capacity_multiplier() -> u16 {
@@ -74,7 +77,23 @@ impl Default for CargoSpecDef {
             capacity_multiplier: DEFAULT_CARGO_CAPACITY_MULTIPLIER,
             rating_colour: 0,
             legend_colour: 0,
+            newgrf_views: Vec::new(),
         }
+    }
+}
+
+impl CargoSpecDef {
+    #[must_use]
+    pub fn has_newgrf_sprites(&self) -> bool {
+        !self.newgrf_views.is_empty()
+    }
+
+    #[must_use]
+    pub fn newgrf_view(&self, idx: usize) -> Option<&crate::newgrf_sprites::DecodedSprite> {
+        if self.newgrf_views.is_empty() {
+            return None;
+        }
+        self.newgrf_views.get(idx % self.newgrf_views.len())
     }
 }
 

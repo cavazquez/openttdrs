@@ -5,13 +5,14 @@ use std::path::{Path, PathBuf};
 
 use crate::GameState;
 use crate::airport_class::{
-    AirportClassId, AirportLayoutTile, AirportSpecId, AirportTileLayout, NEW_AIRPORT_OFFSET,
-    NewgrfAirportSpecDef, airport_spec_def, next_free_airport_id,
+    AIRPORT_ACTION3_PURCHASE, AirportClassId, AirportLayoutTile, AirportSpecId, AirportTileLayout,
+    NEW_AIRPORT_OFFSET, NewgrfAirportSpecDef, airport_spec_def, next_free_airport_id,
 };
 use crate::airport_tile_spec::{
     AirportTileGfxId, AirportTileSpecDef, empty_airport_tile_overrides,
     next_free_airport_tile_gfx_id,
 };
+use crate::newgrf_sprites::Action2EvalCtx;
 
 use super::super::action0::{
     collect_airport_metas_from_grf, collect_airport_tile_metas_from_grf,
@@ -36,9 +37,21 @@ pub fn apply_newgrf_airport_tiles(state: &mut GameState, search_dirs: &[&Path]) 
         let Ok(data) = std::fs::read(&path) else {
             continue;
         };
+        let gfx =
+            crate::newgrf_sprites::collect_airport_tile_sprite_graphics(&data).unwrap_or_default();
         for meta in collect_airport_tile_metas_from_grf(&data) {
             let Some(global_gfx) = next_free_airport_tile_gfx_id(&catalog) else {
                 break;
+            };
+            let views = gfx
+                .views_for_local_id(meta.local_id)
+                .map(<[crate::newgrf_sprites::DecodedSprite]>::to_vec)
+                .unwrap_or_default();
+            let preview = views.first().cloned();
+            let newgrf_runtime = if gfx.needs_runtime_resolve() {
+                Some(Box::new(gfx.clone()))
+            } else {
+                None
             };
             if let Some(ovr) = meta.override_of {
                 overrides[usize::from(ovr)] = global_gfx;
@@ -50,6 +63,9 @@ pub fn apply_newgrf_airport_tiles(state: &mut GameState, search_dirs: &[&Path]) 
                 callback_mask: meta.callback_mask,
                 newgrf_local_id: meta.local_id,
                 newgrf_grfid: entry.grfid,
+                newgrf_preview: preview,
+                newgrf_views: views,
+                newgrf_runtime,
             });
         }
     }
@@ -92,6 +108,7 @@ pub fn apply_newgrf_airports(state: &mut GameState, search_dirs: &[&Path]) {
         let Ok(data) = std::fs::read(&path) else {
             continue;
         };
+        let gfx = crate::newgrf_sprites::collect_airport_sprite_graphics(&data).unwrap_or_default();
         for meta in collect_airport_metas_from_grf(&data) {
             if meta.disabled {
                 if (meta.subst_id as usize) < disabled_vanilla.len() {
@@ -144,6 +161,18 @@ pub fn apply_newgrf_airports(state: &mut GameState, search_dirs: &[&Path]) {
                 meta.name.clone()
             };
             let short = label.chars().take(6).collect::<String>();
+            let views = gfx
+                .views_for_local_id(meta.local_id)
+                .map(<[crate::newgrf_sprites::DecodedSprite]>::to_vec)
+                .unwrap_or_default();
+            let purchase_views = gfx
+                .views_for_specific_ctx(
+                    meta.local_id,
+                    AIRPORT_ACTION3_PURCHASE,
+                    &mut Action2EvalCtx::default(),
+                )
+                .map(<[crate::newgrf_sprites::DecodedSprite]>::to_vec)
+                .unwrap_or_default();
             catalog.push(NewgrfAirportSpecDef {
                 id: global_id,
                 class: class_of_subst(subst),
@@ -161,6 +190,8 @@ pub fn apply_newgrf_airports(state: &mut GameState, search_dirs: &[&Path]) {
                 maintenance_cost: meta.maintenance_cost,
                 newgrf_local_id: meta.local_id,
                 newgrf_grfid: entry.grfid,
+                newgrf_views: views,
+                newgrf_purchase_views: purchase_views,
             });
         }
     }

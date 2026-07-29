@@ -29,7 +29,12 @@ pub fn apply_newgrf_cargoes(state: &mut GameState, search_dirs: &[&Path]) {
         let Ok(data) = std::fs::read(&path) else {
             continue;
         };
+        let gfx = crate::newgrf_sprites::collect_cargo_sprite_graphics(&data).unwrap_or_default();
         for meta in collect_cargo_metas_from_grf(&data) {
+            let views = gfx
+                .views_for_local_id(meta.local_id)
+                .map(<[crate::newgrf_sprites::DecodedSprite]>::to_vec)
+                .unwrap_or_default();
             let def = CargoSpecDef {
                 id: meta.local_id,
                 bitnum: meta.bitnum,
@@ -50,6 +55,7 @@ pub fn apply_newgrf_cargoes(state: &mut GameState, search_dirs: &[&Path]) {
                 },
                 rating_colour: meta.rating_colour,
                 legend_colour: meta.legend_colour,
+                newgrf_views: views,
             };
             if let Some(existing) = catalog.iter_mut().find(|d| d.id == def.id) {
                 *existing = def;

@@ -63,7 +63,7 @@ pub(crate) struct StationCargoPanelState {
 }
 
 #[derive(SystemParam)]
-struct StationWindowContext<'w, 's> {
+pub(crate) struct StationWindowContext<'w, 's> {
     windows: Query<'w, 's, &'static FloatingWindow>,
     parents: Query<'w, 's, &'static ChildOf>,
     station_pool: Option<ResMut<'w, StationPoolRegistry>>,

@@ -4,8 +4,8 @@ use crate::GameState;
 use crate::map::{TileCoord, TileKind, tile_slope_and_z};
 use crate::town::{Town, update_town_radius};
 use crate::town_action::{
-    TownAction, TownActionError, TownAuthoritySettings, execute_town_action, mask_of_town_actions,
-    statue_tile_is_clear,
+    TownAction, TownActionError, TownAuthoritySettings, BUILD_STATUE_AUTHORITY_RATING_BOOST,
+    execute_town_action, mask_of_town_actions, statue_tile_is_clear,
 };
 use crate::townname::generate_town_name;
 
@@ -57,13 +57,6 @@ pub(crate) fn do_town_action(
     let map_w = i32::try_from(map_w).unwrap_or(0);
     let map_h = i32::try_from(map_h).unwrap_or(0);
 
-    // Para estatua: buscar hierba/bosque real antes de cobrar.
-    let statue_override = if action == TownAction::BuildStatue {
-        Some(find_clear_statue_tile(state, state.towns[idx].pos)?)
-    } else {
-        None
-    };
-
     state.economy.money -= cost;
     let result = execute_town_action(
         &mut state.towns[idx],
@@ -77,11 +70,8 @@ pub(crate) fn do_town_action(
     match result {
         Ok(suggested) => {
             if action == TownAction::BuildStatue {
-                let tile = statue_override
-                    .or(suggested)
-                    .ok_or(CommandError::StatueNoPlace)?;
+                let _ = suggested.ok_or(CommandError::StatueNoPlace)?;
                 // Marca visual mínima: deja hierba (el bitset `statues` es la autoridad).
-                let _ = tile;
             }
             if action == TownAction::FundBuildings {
                 state.runtime.pending_sim_events.push(
@@ -241,7 +231,11 @@ mod tests {
     use crate::cargo::CargoType;
     use crate::company::CompanyId;
     use crate::station::{StopKind, station_rating_for_cargo};
-    use crate::town_action::{ADVERTISE_MEDIUM_BOOST, EXCLUSIVE_RIGHTS_MONTHS};
+    use crate::town_action::{
+        ADVERTISE_MEDIUM_BOOST,
+        BUILD_STATUE_AUTHORITY_RATING_BOOST,
+        EXCLUSIVE_RIGHTS_MONTHS,
+    };
     use crate::{Command, GameState, apply_command, map::TileCoord};
 
     #[test]
@@ -405,5 +399,32 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(err, CommandError::TownActionNotAvailable);
+    }
+
+    #[test]
+    fn build_statue_increases_authority_by_26() {
+        let mut s = GameState::new(32, 32);
+        s.economy.money = 50_000;
+        s.towns.push(Town {
+            id: 1,
+            pos: TileCoord::new(10, 10),
+            name: "S".into(),
+            ..Default::default()
+        });
+        let before = s.towns[0].authority_rating(CompanyId::PLAYER);
+
+        apply_command(
+            &mut s,
+            &Command::DoTownAction {
+                town_id: 1,
+                action: TownAction::BuildStatue,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(
+            s.towns[0].authority_rating(CompanyId::PLAYER),
+            before + BUILD_STATUE_AUTHORITY_RATING_BOOST
+        );
     }
 }

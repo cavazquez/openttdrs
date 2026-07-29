@@ -30,7 +30,7 @@ use crate::ui::dev_console::DevConsoleState;
 use crate::ui::display_options_window::DisplayOptionsWindowState;
 use crate::ui::extra_viewport_window::ExtraViewportWindowState;
 use crate::ui::finances_window::FinancesWindowState;
-use crate::ui::floating_window::{FloatingWindow, FloatingWindowId};
+use crate::ui::floating_window::{FloatingWindow, FloatingWindowId, WindowKey};
 use crate::ui::genland_window::GenLandWindowState;
 use crate::ui::goal_list_window::GoalListWindowState;
 use crate::ui::graph_window::GraphWindowState;
@@ -328,6 +328,98 @@ pub(crate) const WINDOW_PARITY_MATRIX: &[WindowParityEntry] = &[
     upstream_window!(League, "gamescript", "league_gui.cpp", "WC_LEAGUE"),
 ];
 
+/// Path relativo al crate client (`src/`) de la implementación Rust (#240).
+#[must_use]
+pub(crate) const fn window_rust_impl(id: FloatingWindowId) -> &'static str {
+    match id {
+        FloatingWindowId::Town => "ui/town_window.rs",
+        FloatingWindowId::TownDirectory => "ui/town_directory.rs",
+        FloatingWindowId::IndustryDirectory => "ui/industry_directory.rs",
+        FloatingWindowId::Industry => "ui/industry_panel/mod.rs",
+        FloatingWindowId::StationDirectory => "ui/station_directory.rs",
+        FloatingWindowId::VehicleList => "ui/vehicle_list.rs",
+        FloatingWindowId::SubsidyList => "ui/subsidy_list.rs",
+        FloatingWindowId::Depot => "ui/toolbar/mod.rs",
+        FloatingWindowId::BuyVehicle => "ui/buy_window.rs",
+        FloatingWindowId::Vehicle => "ui/vehicle_window/mod.rs",
+        FloatingWindowId::VehicleDetails => "ui/vehicle_details_window/mod.rs",
+        FloatingWindowId::RailStationPicker => "ui/toolbar/mod.rs",
+        FloatingWindowId::AirportPicker => "ui/toolbar/airport_picker_window.rs",
+        FloatingWindowId::RoadStopPicker => "ui/toolbar/mod.rs",
+        FloatingWindowId::ObjectPicker => "ui/toolbar/mod.rs",
+        FloatingWindowId::BridgePicker => "ui/toolbar/mod.rs",
+        FloatingWindowId::DestinationPicker => "ui/destination_window.rs",
+        FloatingWindowId::NewsHistory => "ui/statusbar/mod.rs",
+        FloatingWindowId::Finances => "ui/finances_window.rs",
+        FloatingWindowId::NewsSettings => "ui/news_settings_window.rs",
+        FloatingWindowId::PathfindingSettings => "ui/pathfinding_settings_window.rs",
+        FloatingWindowId::CargoDistSettings => "ui/cargo_dist_settings_window.rs",
+        FloatingWindowId::AiSettings => "ui/ai_settings_window.rs",
+        FloatingWindowId::NewGrf => "ui/newgrf_window.rs",
+        FloatingWindowId::SoundMusic => "ui/audio_settings_window.rs",
+        FloatingWindowId::Timetable => "ui/timetable_window.rs",
+        FloatingWindowId::Orders => "ui/toolbar/mod.rs",
+        FloatingWindowId::Refit => "ui/refit_window.rs",
+        FloatingWindowId::SharedOrders => "ui/shared_orders_window.rs",
+        FloatingWindowId::Autoreplace => "ui/autoreplace_window.rs",
+        FloatingWindowId::Graphs => "ui/graph_window.rs",
+        FloatingWindowId::CargoPaymentRates => "ui/cargo_payment_window.rs",
+        FloatingWindowId::DisplayOptions => "ui/display_options_window.rs",
+        FloatingWindowId::ExtraViewport => "ui/extra_viewport_window.rs",
+        FloatingWindowId::SignList => "ui/sign_list_window.rs",
+        FloatingWindowId::LinkGraphLegend => "ui/ui5_blocked_stubs.rs",
+        FloatingWindowId::SignalPicker => "ui/toolbar/mod.rs",
+        FloatingWindowId::Help => "ui/help_window.rs",
+        FloatingWindowId::DevConsole => "ui/dev_console.rs",
+        FloatingWindowId::TileInspector => "ui/tile_inspector_window.rs",
+        FloatingWindowId::CheatWindow => "ui/cheat_window.rs",
+        FloatingWindowId::GenLand => "ui/genland_window.rs",
+        FloatingWindowId::Goals => "ui/goal_list_window.rs",
+        FloatingWindowId::Story => "ui/story_window.rs",
+        FloatingWindowId::League => "ui/league_window.rs",
+    }
+}
+
+/// Stem de captura esperada: `window_<storage_key>_1x.png` (#240).
+#[must_use]
+pub(crate) fn window_capture_stem(id: FloatingWindowId) -> String {
+    format!("window_{}_1x", id.storage_key())
+}
+
+/// Gap conocido: categoría → issue GitHub.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct WindowKnownGap {
+    pub(crate) category: &'static str,
+    pub(crate) issue: u16,
+}
+
+/// Gaps documentados mientras faltan capturas/oráculo pixel y multi-instance.
+#[must_use]
+pub(crate) fn window_known_gaps(_id: FloatingWindowId) -> &'static [WindowKnownGap] {
+    const DEFAULT: &[WindowKnownGap] = &[
+        WindowKnownGap {
+            category: "capture",
+            issue: 240,
+        },
+        WindowKnownGap {
+            category: "lifecycle",
+            issue: 242,
+        },
+        WindowKnownGap {
+            category: "geometry",
+            issue: 243,
+        },
+    ];
+    DEFAULT
+}
+
+/// ¿La captura 1280×720 1× está pendiente? Ausencia → issue, no silencio (#240).
+#[must_use]
+pub(crate) fn capture_is_pending(id: FloatingWindowId) -> Option<u16> {
+    let _ = id;
+    Some(240)
+}
+
 /// Política inicial declarada por `WindowDesc` en OpenTTD 15.3.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ReferencePlacement {
@@ -359,7 +451,7 @@ macro_rules! reference_geometry {
 }
 
 /// Tamaños iniciales que 15.3 expresa directamente en sus `WindowDesc`.
-/// Las variantes comparten ID mientras #242 no soporte `WindowKey`.
+/// Las variantes comparten class; `WindowKey.instance` sigue en 0 hasta #242.
 pub(crate) const WINDOW_REFERENCE_GEOMETRY: &[ReferenceGeometry] = &[
     reference_geometry!(Town, "game", Auto, Some(260), None),
     reference_geometry!(TownDirectory, "default", Auto, Some(208), Some(202)),
@@ -431,8 +523,9 @@ fn json_string(value: &str) -> String {
 }
 
 fn window_parity_matrix_json() -> String {
+    let mut missing_captures = Vec::new();
     let mut output = String::from(
-        "{\n  \"schema_version\": 1,\n  \"openttd_commit\": \"14ec60f248547d4d062a1160f0fc26d742319888\",\n  \"windows\": [\n",
+        "{\n  \"schema_version\": 2,\n  \"openttd_commit\": \"14ec60f248547d4d062a1160f0fc26d742319888\",\n  \"windows\": [\n",
     );
     for (index, entry) in WINDOW_PARITY_MATRIX.iter().enumerate() {
         let kind = match entry.kind {
@@ -443,16 +536,38 @@ fn window_parity_matrix_json() -> String {
             .parent
             .map(|id| json_string(id.storage_key()))
             .unwrap_or_else(|| "null".to_owned());
+        let rust_impl = window_rust_impl(entry.id);
+        let capture = window_capture_stem(entry.id);
+        let key = WindowKey::singleton(entry.id);
+        if capture_is_pending(entry.id).is_some() {
+            missing_captures.push(entry.id.storage_key());
+        }
         let _ = write!(
             output,
-            "    {{\"id\":{},\"family\":{},\"kind\":{},\"upstream_source\":{},\"upstream_window\":{},\"parent\":{},\"geometry\":[",
+            "    {{\"id\":{},\"family\":{},\"kind\":{},\"upstream_source\":{},\"upstream_window\":{},\"parent\":{},\"rust_impl\":{},\"capture_stem\":{},\"window_key\":{{\"class\":{},\"instance\":{}}},\"known_gaps\":[",
             json_string(entry.id.storage_key()),
             json_string(entry.family),
             json_string(kind),
             json_string(entry.upstream_source),
             json_string(entry.upstream_window),
             parent,
+            json_string(rust_impl),
+            json_string(&capture),
+            json_string(key.class.storage_key()),
+            key.instance,
         );
+        for (gap_i, gap) in window_known_gaps(entry.id).iter().enumerate() {
+            if gap_i > 0 {
+                output.push(',');
+            }
+            let _ = write!(
+                output,
+                "{{\"category\":{},\"issue\":{}}}",
+                json_string(gap.category),
+                gap.issue,
+            );
+        }
+        output.push_str("],\"geometry\":[");
         for (geometry_index, geometry) in WINDOW_REFERENCE_GEOMETRY
             .iter()
             .filter(|geometry| geometry.id == entry.id)
@@ -487,7 +602,20 @@ fn window_parity_matrix_json() -> String {
         };
         let _ = writeln!(output, "]}}{comma}");
     }
-    output.push_str("  ]\n}\n");
+    output.push_str("  ],\n  \"report\": {\n");
+    output.push_str(&format!(
+        "    \"missing_captures\": [{}],\n",
+        missing_captures
+            .iter()
+            .map(|id| json_string(id))
+            .collect::<Vec<_>>()
+            .join(", ")
+    ));
+    output.push_str("    \"missing_rust_files\": [],\n");
+    output.push_str(
+        "    \"notes\": \"Pixel/chrome diffs → #241; multi-instance → #242; geometry → #243\"\n",
+    );
+    output.push_str("  }\n}\n");
     output
 }
 
@@ -900,6 +1028,7 @@ fn open_all_windows_for_shot(world: &mut World, include_auxiliary: bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
 
     #[test]
     fn windows_shot_covers_all_floating_ids() {
@@ -981,11 +1110,64 @@ mod tests {
     #[test]
     fn machine_readable_matrix_contains_inventory_and_geometry() {
         let json = window_parity_matrix_json();
-        assert!(json.starts_with("{\n  \"schema_version\": 1,"));
+        assert!(json.starts_with("{\n  \"schema_version\": 2,"));
         for id in FloatingWindowId::ALL {
             assert!(json.contains(&format!("\"id\":{:?}", id.storage_key())));
+            assert!(json.contains(&format!("\"rust_impl\":{:?}", window_rust_impl(*id))));
         }
         assert!(json.contains("\"variant\":\"train\""));
         assert!(json.contains("\"placement\":\"center\""));
+        assert!(json.contains("\"missing_captures\""));
+        assert!(json.contains("\"known_gaps\""));
+        assert!(json.contains("\"window_key\""));
+    }
+
+    #[test]
+    fn every_window_links_existing_rust_impl() {
+        let src_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src");
+        for id in FloatingWindowId::ALL {
+            let rel = window_rust_impl(*id);
+            let path = src_root.join(rel);
+            assert!(
+                path.is_file(),
+                "rust_impl de {id:?} no existe: {} ({rel})",
+                path.display()
+            );
+        }
+    }
+
+    #[test]
+    fn capture_absence_is_tracked_with_issue_not_silently() {
+        for id in FloatingWindowId::ALL {
+            let stem = window_capture_stem(*id);
+            let capture_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../../docs/parity/screenshots/1280x720")
+                .join(format!("{stem}.png"));
+            if capture_path.is_file() {
+                assert!(
+                    capture_is_pending(*id).is_none(),
+                    "captura de {id:?} existe pero sigue en pending"
+                );
+            } else {
+                let issue = capture_is_pending(*id)
+                    .expect("ausencia de captura debe citar issue (#240)");
+                assert!(issue >= 240, "issue de captura inválido: {issue}");
+                let gaps = window_known_gaps(*id);
+                assert!(
+                    gaps.iter()
+                        .any(|g| g.category == "capture" && g.issue == issue),
+                    "known_gaps debe incluir capture→#{issue} para {id:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn window_key_singleton_matches_class() {
+        for id in FloatingWindowId::ALL {
+            let key = WindowKey::singleton(*id);
+            assert_eq!(key.class(), *id);
+            assert_eq!(key.instance, 0);
+        }
     }
 }

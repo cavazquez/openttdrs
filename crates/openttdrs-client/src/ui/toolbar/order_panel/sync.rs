@@ -225,10 +225,20 @@ fn order_row_label(
             condition,
             value,
             jump_to,
+            comparator: _,
         } => {
             let cond = match condition {
                 openttdrs_core::OrderConditionKind::CargoLoadAbove => "carga>",
                 openttdrs_core::OrderConditionKind::CargoLoadBelow => "carga<",
+                openttdrs_core::OrderConditionKind::LoadPercentage => "carga%",
+                openttdrs_core::OrderConditionKind::Reliability => "fiab",
+                openttdrs_core::OrderConditionKind::MaxSpeed => "vmax",
+                openttdrs_core::OrderConditionKind::Age => "edad",
+                openttdrs_core::OrderConditionKind::RequiresService => "serv",
+                openttdrs_core::OrderConditionKind::Unconditionally => "siempre",
+                openttdrs_core::OrderConditionKind::RemainingLifetime => "vida",
+                openttdrs_core::OrderConditionKind::MaxReliability => "fiabmáx",
+                openttdrs_core::OrderConditionKind::DrivingBackwards => "marcha atrás",
             };
             return format!(
                 "{current} {:>2}. Cond. {cond}{value}% → ord.{}",

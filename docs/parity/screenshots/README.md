@@ -24,8 +24,9 @@ OPENTTDRS_WINDOW_MATRIX=/tmp/openttdrs-window-matrix.json \
 ```
 
 El archivo se escribe al instalar el plugin de UI; se puede cerrar el cliente
-una vez iniciado. El JSON incluye versión de schema, commit upstream, parent y
-las variantes de geometría conocidas.
+una vez iniciado. El JSON (schema v2) incluye commit upstream, `rust_impl`,
+`capture_stem`, `window_key` (class + instance), `known_gaps` (issue por
+categoría) y un bloque `report.missing_captures` para ausencias no silenciosas.
 
 La referencia upstream es el commit `14ec60f248547d4d062a1160f0fc26d742319888`
 (tag 15.3), registrado en `../openttd-reference.json`.
@@ -78,7 +79,9 @@ Las salidas quedan como `1280x720/window_<id>_<scale>x.png` y
 informa como error; antes de incorporar una referencia se debe usar una clave
 presente en la matriz. Las escalas aceptadas van de 0.5× a 4×.
 
-Las capturas por ventana son el insumo visual de #240. Las diferencias deben
-clasificarse en chrome/iconos (#241), lifecycle (#242), geometría (#243) o la
-familia funcional correspondiente (#244–#248), sin aceptar tolerancias
-anónimas.
+Las capturas por ventana son el insumo visual de #240. Mientras falte
+`1280x720/window_<id>_1x.png`, el reporte JSON y los tests de
+`windows_shot` citan el issue #240 (no toleran la ausencia en silencio).
+Las diferencias deben clasificarse en chrome/iconos (#241), lifecycle (#242),
+geometría (#243) o la familia funcional correspondiente (#244–#248), sin
+aceptar tolerancias anónimas.

@@ -417,6 +417,7 @@ fn cycle_selected_conditional(
             condition,
             value,
             jump_to,
+            comparator: _,
         } => {
             // Ciclo: >25 → >50 → >75 → <25 → <50 → <75 → >25…
             match (condition, value) {
@@ -438,6 +439,10 @@ fn cycle_selected_conditional(
                 (OrderConditionKind::CargoLoadBelow, _) => {
                     (OrderConditionKind::CargoLoadAbove, 25, jump_to)
                 }
+                // Condiciones nuevas (#229): ciclo genérico sobre el umbral.
+                (_, v) if v < 50 => (condition, 50, jump_to),
+                (_, v) if v < 75 => (condition, 75, jump_to),
+                _ => (OrderConditionKind::CargoLoadAbove, 25, jump_to),
             }
         }
         _ => {

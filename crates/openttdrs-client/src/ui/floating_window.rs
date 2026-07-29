@@ -50,13 +50,12 @@ const MIN_WINDOW_HEIGHT: f32 = TITLE_BAR_H + 48.0;
 /// Margen mínimo visible al clampear el arrastre.
 const DRAG_MARGIN: f32 = 48.0;
 
-/// Identifica cada ventana del juego (**una instancia por id**).
+/// Identifica la **clase** de ventana del juego.
 ///
-/// Política MVP (UI-4): no hay multi-instance. Abrir otro vehículo/estación
-/// reutiliza la misma ventana y sobrescribe el `Option<ID>` del resource
-/// asociado (`VehicleWindowState`, `OrderEditState`, etc.). Multi-instance
-/// vía `WindowKey { kind, instance }` queda para una fase posterior.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+/// Política actual: una entidad Bevy por clase (`instance == 0` en
+/// [`WindowKey`]). Abrir otro vehículo/estación reutiliza la misma ventana y
+/// sobrescribe el `Option<ID>` del resource. Multi-instance completo: #242.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub(crate) enum FloatingWindowId {
     Town,
     /// Directorio global de pueblos.
@@ -144,6 +143,31 @@ pub(crate) enum FloatingWindowId {
     Story,
     /// Liga / ranking de compañías (#43).
     League,
+}
+
+/// Clave equivalente a `WindowClass + WindowNumber` de OpenTTD (#242).
+///
+/// Hoy todas las ventanas usan `instance = 0` ([`WindowKey::singleton`]).
+/// El tipo existe para migrar Closed/queries sin romper inventarios (#240).
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub(crate) struct WindowKey {
+    pub(crate) class: FloatingWindowId,
+    pub(crate) instance: u32,
+}
+
+impl WindowKey {
+    #[must_use]
+    pub(crate) const fn singleton(class: FloatingWindowId) -> Self {
+        Self {
+            class,
+            instance: 0,
+        }
+    }
+
+    #[must_use]
+    pub(crate) const fn class(self) -> FloatingWindowId {
+        self.class
+    }
 }
 
 #[allow(dead_code)] // inventarios UI-0 consumidos en tests

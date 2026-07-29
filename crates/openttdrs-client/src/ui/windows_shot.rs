@@ -565,8 +565,10 @@ pub(crate) fn window_descendant_ids(root: FloatingWindowId) -> Vec<FloatingWindo
 /// ¿La captura 1280×720 1× está pendiente? Ausencia → issue, no silencio (#240).
 #[must_use]
 pub(crate) fn capture_is_pending(id: FloatingWindowId) -> Option<u16> {
-    let _ = id;
-    Some(240)
+    match id {
+        FloatingWindowId::Station => None,
+        _ => Some(240),
+    }
 }
 
 /// Política inicial declarada por `WindowDesc` en OpenTTD 15.3.

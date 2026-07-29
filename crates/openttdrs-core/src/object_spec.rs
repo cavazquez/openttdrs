@@ -161,6 +161,5 @@ pub fn list_1x1_object_specs(catalog: &[ObjectSpecDef]) -> Vec<&ObjectSpecDef> {
 #[must_use]
 pub fn is_selectable_object_spec(catalog: &[ObjectSpecDef], id: u16) -> bool {
     matches!(id, 0 | 1)
-        || object_spec_def(catalog, id)
-            .is_some_and(|d| d.size_width() > 0 && d.size_height() > 0)
+        || object_spec_def(catalog, id).is_some_and(|d| d.size_width() > 0 && d.size_height() > 0)
 }

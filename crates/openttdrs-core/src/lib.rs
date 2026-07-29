@@ -119,11 +119,6 @@ pub use airport_class::{
     all_airport_spec_defs, list_airport_classes, list_airport_specs, list_newgrf_airport_specs,
     max_town_noise, newgrf_airport_spec_def, next_free_airport_id,
 };
-pub use airport_tile_spec::{
-    AirportTileGfxId, AirportTileSpecDef, INVALID_AIRPORT_TILE, NEW_AIRPORT_TILE_OFFSET,
-    NUM_AIRPORT_TILES, empty_airport_tile_overrides, get_translated_airport_tile_id,
-    next_free_airport_tile_gfx_id, resolve_airport_tile_draw_gfx, resolve_airport_tile_piece_gfx,
-};
 pub use airport_fta::{
     AirportHeading, AirportMovingData, CITY_ENTRIES, CITY_MOVING_DATA, CITY_NOF_ELEMENTS,
     COMMUTER_ENTRIES, COMMUTER_MOVING_DATA, COMMUTER_NOF_ELEMENTS, COUNTRY_ENTRIES,
@@ -134,6 +129,11 @@ pub use airport_fta::{
     INTERNATIONAL_ENTRIES, INTERNATIONAL_MOVING_DATA, INTERNATIONAL_NOF_ELEMENTS,
     METROPOLITAN_ENTRIES, METROPOLITAN_MOVING_DATA, METROPOLITAN_NOF_ELEMENTS, OILRIG_ENTRIES,
     OILRIG_MOVING_DATA, OILRIG_NOF_ELEMENTS, station_uses_airport_fta, station_uses_country_fta,
+};
+pub use airport_tile_spec::{
+    AirportTileGfxId, AirportTileSpecDef, INVALID_AIRPORT_TILE, NEW_AIRPORT_TILE_OFFSET,
+    NUM_AIRPORT_TILES, empty_airport_tile_overrides, get_translated_airport_tile_id,
+    next_free_airport_tile_gfx_id, resolve_airport_tile_draw_gfx, resolve_airport_tile_piece_gfx,
 };
 pub use autoreplace::{AutoReplaceRule, try_autoreplace_vehicle};
 pub use badge::{
@@ -154,9 +154,8 @@ pub use canal_spec::{
     vanilla_canal_feature_catalog,
 };
 pub use cargo::{
-    ALL_CARGO_TYPES, ARCTIC_CARGO_TYPES, CargoStock, CargoType, NUM_ORIGINAL_CARGO,
-    OrderSettings, TEMPERATE_CARGO_TYPES, TOYLAND_CARGO_TYPES, TROPIC_CARGO_TYPES,
-    VANILLA_CARGO_COUNT,
+    ALL_CARGO_TYPES, ARCTIC_CARGO_TYPES, CargoStock, CargoType, NUM_ORIGINAL_CARGO, OrderSettings,
+    TEMPERATE_CARGO_TYPES, TOYLAND_CARGO_TYPES, TROPIC_CARGO_TYPES, VANILLA_CARGO_COUNT,
 };
 pub use cargo_packet::{
     CargoPacket, CargoUnloadAction, StationCargoList, VehicleCargoList, choose_cargo_action,
@@ -200,11 +199,11 @@ pub use economy::{
     ORIGINAL_BASE_YEAR, ORIGINAL_MAX_YEAR, OTTD_MILLISECONDS_PER_TICK, SIM_TICKS_PER_SECOND,
     STATION_RATING_TICKS, TICKS_PER_DAY, TICKS_PER_MONTH, TICKS_PER_YEAR, build_object_cost,
     build_object_cost_factored, buy_land_cost, cargo_time_factor, check_bankruptcy, decrease_loan,
-    increase_loan,
-    inflation_income_factor, inflation_prices_factor, manhattan_distance, monthly_loan_interest,
+    increase_loan, inflation_income_factor, inflation_prices_factor, manhattan_distance,
+    monthly_loan_interest, rail_build_cost_factored, road_build_cost_factored,
     terraform_cost_per_corner, ticks_to_transit_periods, transported_goods_income,
-    transported_goods_income_with_spec, rail_build_cost_factored, road_build_cost_factored,
-    vehicle_purchase_cost, vehicle_running_cost_per_tick, vehicle_sell_refund,
+    transported_goods_income_with_spec, vehicle_purchase_cost, vehicle_running_cost_per_tick,
+    vehicle_sell_refund,
 };
 pub use economy_quarterly::{
     ECONOMY_HISTORY_QUARTERS, QuarterlyEconomyEntry, QuarterlyEconomyHistory,
@@ -226,8 +225,8 @@ pub use engine::{
     ship_speed_for_tile, tile_progress_length, train_acceleration, train_default_air_drag,
     train_max_te_n, train_realistic_acceleration, train_realistic_station_max_speed,
     train_smoke_kind, train_sprite_group, train_visual_progress_from_motion,
-    train_visual_progress_from_pixel, update_road_speed, update_train_speed, vanilla_engine_catalog,
-    vanilla_train_tractive_effort,
+    train_visual_progress_from_pixel, update_road_speed, update_train_speed,
+    vanilla_engine_catalog, vanilla_train_tractive_effort,
 };
 pub use entity_history::{
     ENTITY_HISTORY_MONTHS, IndustryHistory, IndustryHistorySample, TownHistory, TownHistorySample,
@@ -265,17 +264,17 @@ pub use gs::{
 };
 pub use industry::{
     FACTORY_GRAIN_INPUT, FACTORY_LIVESTOCK_INPUT, FACTORY_STEEL_INPUT, INDUSTRY_PRODUCE_AMOUNT,
-    INDUSTRY_PRODUCE_TICKS,
-    Industry, IndustryKind, IndustryLifeType, IndustryProductionChange, IndustrySpec,
-    PERCENT_TRANSPORTED_60, PRODLEVEL_CLOSURE, PRODLEVEL_DEFAULT, PRODLEVEL_MAXIMUM,
+    INDUSTRY_PRODUCE_TICKS, Industry, IndustryKind, IndustryLifeType, IndustryProductionChange,
+    IndustrySpec, PERCENT_TRANSPORTED_60, PRODLEVEL_CLOSURE, PRODLEVEL_DEFAULT, PRODLEVEL_MAXIMUM,
     PRODLEVEL_MINIMUM, change_industry_production, industry_produce_period_ticks,
     remove_closed_industries, transport_industry_goods,
 };
 pub use industry_spec::{
     INDUSTRY_ORIGINAL_NUM_INPUTS, INDUSTRY_ORIGINAL_NUM_OUTPUTS, INVALID_INDUSTRY,
-    IndustryLayoutTile, IndustrySpecDef, IndustryTileLayout, NEW_INDUSTRY_OFFSET, NUM_INDUSTRY_TYPES,
-    cargo_type_from_label, empty_industry_overrides, empty_industry_spec_catalog,
-    get_cargo_translation, get_translated_industry_id, industry_spec_def, next_free_industry_id,
+    IndustryLayoutTile, IndustrySpecDef, IndustryTileLayout, NEW_INDUSTRY_OFFSET,
+    NUM_INDUSTRY_TYPES, cargo_type_from_label, empty_industry_overrides,
+    empty_industry_spec_catalog, get_cargo_translation, get_translated_industry_id,
+    industry_spec_def, next_free_industry_id,
 };
 pub use industry_tile::{
     INVALID_INDUSTRY_TILE, IndustryTileGfxId, IndustryTileSpecDef, NEW_INDUSTRY_TILE_OFFSET,
@@ -324,9 +323,9 @@ pub use map::{
 pub use house_spec::{
     DEFAULT_HOUSE_AVAILABILITY, DEFAULT_HOUSE_PROBABILITY, HOUSE_YEAR_MAX, HouseLookup, HouseSpec,
     HouseSpecDef, INVALID_HOUSE, NEW_HOUSE_OFFSET, NUM_HOUSES, empty_house_overrides,
-    empty_house_spec_catalog, get_town_radius_group, get_translated_house_id, house_footprint_offsets,
-    house_spec_def, next_free_house_id, pick_town_house_id, pick_town_house_id_with_catalog,
-    resolve_house_draw_id, vanilla_or_newgrf_house,
+    empty_house_spec_catalog, get_town_radius_group, get_translated_house_id,
+    house_footprint_offsets, house_spec_def, next_free_house_id, pick_town_house_id,
+    pick_town_house_id_with_catalog, resolve_house_draw_id, vanilla_or_newgrf_house,
 };
 pub use newgrf_actions::{
     ACTION0_FEATURE_BADGES, ACTION0_FEATURE_BRIDGES, ACTION0_FEATURE_CANALS,
@@ -337,8 +336,7 @@ pub use newgrf_actions::{
     Action5SlotSummary, GrfInspectReport, ParsedBadgeMeta, ParsedBridgeMeta, ParsedCanalMeta,
     ParsedCargoMeta, ParsedHouseMeta, ParsedIndustryMeta, ParsedIndustryTileMeta, ParsedObjectMeta,
     ParsedRailTypeMeta, ParsedRoadStopMeta, ParsedRoadTypeMeta, ParsedSoundMeta, ParsedStationMeta,
-    ParsedTrainMeta,
-    apply_newgrf_action5_airport_preview,
+    ParsedTrainMeta, apply_newgrf_action5_airport_preview,
     apply_newgrf_action5_airport_preview_default_dirs, apply_newgrf_action5_all_default_dirs,
     apply_newgrf_action5_bridge_decks, apply_newgrf_action5_bridge_decks_default_dirs,
     apply_newgrf_action5_canals, apply_newgrf_action5_canals_default_dirs,
@@ -348,12 +346,11 @@ pub use newgrf_actions::{
     apply_newgrf_action5_openttd_gui, apply_newgrf_action5_openttd_gui_default_dirs,
     apply_newgrf_action5_roadstops, apply_newgrf_action5_roadstops_default_dirs,
     apply_newgrf_action5_shore, apply_newgrf_action5_shore_default_dirs,
-    apply_newgrf_action5_signals, apply_newgrf_action5_signals_default_dirs,
-    apply_newgrf_badges, apply_newgrf_badges_default_dirs, apply_newgrf_bridges,
-    apply_newgrf_bridges_default_dirs, apply_newgrf_canals, apply_newgrf_canals_default_dirs,
-    apply_newgrf_cargoes, apply_newgrf_cargoes_default_dirs, apply_newgrf_houses,
-    apply_newgrf_houses_default_dirs, apply_newgrf_industries,
-    apply_newgrf_industries_default_dirs, apply_newgrf_industry_tiles,
+    apply_newgrf_action5_signals, apply_newgrf_action5_signals_default_dirs, apply_newgrf_badges,
+    apply_newgrf_badges_default_dirs, apply_newgrf_bridges, apply_newgrf_bridges_default_dirs,
+    apply_newgrf_canals, apply_newgrf_canals_default_dirs, apply_newgrf_cargoes,
+    apply_newgrf_cargoes_default_dirs, apply_newgrf_houses, apply_newgrf_houses_default_dirs,
+    apply_newgrf_industries, apply_newgrf_industries_default_dirs, apply_newgrf_industry_tiles,
     apply_newgrf_industry_tiles_default_dirs, apply_newgrf_objects,
     apply_newgrf_objects_default_dirs, apply_newgrf_rail_signals,
     apply_newgrf_rail_signals_default_dirs, apply_newgrf_road_types,
@@ -365,9 +362,8 @@ pub use newgrf_actions::{
     parse_action0_badge_meta, parse_action0_bridge_meta, parse_action0_canal_meta,
     parse_action0_cargo_meta, parse_action0_header, parse_action0_house_meta,
     parse_action0_industry_meta, parse_action0_industry_tile_meta, parse_action0_object_meta,
-    parse_action0_railtype_metas,
-    parse_action0_roadstop_meta, parse_action0_roadtype_meta, parse_action0_sound_meta,
-    parse_action0_station_meta, parse_action0_train_meta,
+    parse_action0_railtype_metas, parse_action0_roadstop_meta, parse_action0_roadtype_meta,
+    parse_action0_sound_meta, parse_action0_station_meta, parse_action0_train_meta,
 };
 pub use newgrf_callback::{
     action2_eval_ctx_from_vehicle, apply_vehicle_start_stop_callback, resolve_callback_or_failed,
@@ -388,25 +384,24 @@ pub use newgrf_sprites::{
     CALLBACK_FAILED, CANALS_ACTION5_LOCK_SLOT, CANALS_ACTION5_SLOT_COUNT,
     CATENARY_ACTION5_SLOT_COUNT, CATENARY_ENTRANCE_SPRITE_BASE, CATENARY_PYLON_SPRITE_BASE,
     CATENARY_WIRE_SPRITE_BASE, CBID_STATION_BUILD_TILE_LAYOUT, CBID_VEHICLE_START_STOP_CHECK,
-    DecodedSprite,
-    FOUNDATION_ACTION5_SLOT_COUNT, ONEWAY_ACTION5_SLOT_COUNT, OPENTTD_GUI_ACTION5_SLOT_COUNT,
-    ROADSTOP_ACTION5_SLOT_COUNT, SHORE_ACTION5_SLOT_COUNT, SHORE_MISSING_BLOCK_SLOTS,
-    SIGNAL_ACTION5_SLOT_COUNT, SPR_SIGNALS_ACTION5_BASE, SPRITE_V2_ZOOM_PREFERENCE,
-    TrainSpriteAssign, TrainSpriteGraphics, action5_type_name, airport_preview_action5_slot,
-    apply_company_colour_mask, bake_sprite_company_mask, bridge_decks_action5_base,
-    bridge_decks_action5_slot, catenary_action5_local_slot, collect_action5_blocks,
-    collect_airport_sprite_graphics, collect_airport_tile_sprite_graphics,
+    DecodedSprite, FOUNDATION_ACTION5_SLOT_COUNT, ONEWAY_ACTION5_SLOT_COUNT,
+    OPENTTD_GUI_ACTION5_SLOT_COUNT, ROADSTOP_ACTION5_SLOT_COUNT, SHORE_ACTION5_SLOT_COUNT,
+    SHORE_MISSING_BLOCK_SLOTS, SIGNAL_ACTION5_SLOT_COUNT, SPR_SIGNALS_ACTION5_BASE,
+    SPRITE_V2_ZOOM_PREFERENCE, TrainSpriteAssign, TrainSpriteGraphics, action5_type_name,
+    airport_preview_action5_slot, apply_company_colour_mask, bake_sprite_company_mask,
+    bridge_decks_action5_base, bridge_decks_action5_slot, catenary_action5_local_slot,
+    collect_action5_blocks, collect_airport_sprite_graphics, collect_airport_tile_sprite_graphics,
     collect_canal_sprite_graphics, collect_cargo_sprite_graphics, collect_feature_sprite_graphics,
     collect_house_sprite_graphics, collect_industry_tile_sprite_graphics,
     collect_object_sprite_graphics, collect_railtype_sprite_graphics,
     collect_roadstop_sprite_graphics, collect_roadtype_sprite_graphics,
     collect_station_sprite_graphics, collect_train_sprite_graphics, disallowed_road_directions,
-    foundation_action5_slot_for_tileh,
-    merge_action5_offset_block, merge_airport_preview_action5_block,
-    merge_bridge_decks_action5_block, merge_canals_action5_block, merge_catenary_action5_block,
-    merge_foundation_action5_block, merge_oneway_action5_block, merge_openttd_gui_action5_block,
-    merge_roadstop_action5_block, merge_shore_action5_block, merge_signals_action5_block,
-    oneway_action5_slot, roadstop_action5_slot, signal_action5_slot,
+    foundation_action5_slot_for_tileh, merge_action5_offset_block,
+    merge_airport_preview_action5_block, merge_bridge_decks_action5_block,
+    merge_canals_action5_block, merge_catenary_action5_block, merge_foundation_action5_block,
+    merge_oneway_action5_block, merge_openttd_gui_action5_block, merge_roadstop_action5_block,
+    merge_shore_action5_block, merge_signals_action5_block, oneway_action5_slot,
+    roadstop_action5_slot, signal_action5_slot,
 };
 pub use newgrf_type_tables::{
     GrfTypeTranslationTables, TypeLabel, collect_type_tables_from_grf,
@@ -531,9 +526,9 @@ pub use sim_events::{
 };
 pub use sim_step::{TickPhaseTimings, step_profiled};
 pub use sound_effect::{
-    CollectedSoundSamples, PendingNewgrfSound, SoundEffectDef, SoundPlayError,
-    clamp_sound_volume, collect_sound_samples_from_grf, effective_volume,
-    empty_sound_effect_catalog, play_newgrf_sound, play_sound_or_override, sound_effect_def,
+    CollectedSoundSamples, PendingNewgrfSound, SoundEffectDef, SoundPlayError, clamp_sound_volume,
+    collect_sound_samples_from_grf, effective_volume, empty_sound_effect_catalog,
+    play_newgrf_sound, play_sound_or_override, sound_effect_def,
 };
 pub use sound_id::SoundId;
 pub use station::{
@@ -610,10 +605,11 @@ pub use train_movement::{
 pub use vehicle::reverse_direction;
 pub use vehicle::{
     AircraftPhase, BREAKDOWN_DURATION_TICKS, DEFAULT_SERVICE_INTERVAL_DAYS, DIR_E, DIR_N, DIR_NE,
-    DIR_NW, DIR_S, DIR_SE, DIR_SW, DIR_W, OrderConditionComparator, OrderConditionKind, OrderLoadType, OrderNonStop,
-    OrderStopLocation, OrderUnloadType, SERVICING_RELIABILITY_THRESHOLD, TimetableWaitKind,
-    VEHICLE_PROGRESS_STEP, Vehicle, VehicleDirection, VehicleIssueDetail, VehicleKind,
-    VehicleOperationalSummary, VehicleOrder, direction_from_tile_step,
+    DIR_NW, DIR_S, DIR_SE, DIR_SW, DIR_W, OrderConditionComparator, OrderConditionKind,
+    OrderLoadType, OrderNonStop, OrderStopLocation, OrderUnloadType,
+    SERVICING_RELIABILITY_THRESHOLD, TimetableWaitKind, VEHICLE_PROGRESS_STEP, Vehicle,
+    VehicleDirection, VehicleIssueDetail, VehicleKind, VehicleOperationalSummary, VehicleOrder,
+    direction_from_tile_step,
 };
 pub use vehicle_group::{MAX_VEHICLE_GROUP_NAME_CHARS, VehicleGroup};
 pub use world_gen::{

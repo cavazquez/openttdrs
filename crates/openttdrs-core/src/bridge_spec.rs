@@ -103,7 +103,7 @@ pub struct BridgeSpec {
     pub name: &'static str,
 }
 
-/// Spec de puente owned (catálogo `GameState` + overrides NewGRF).
+/// Spec de puente owned (catálogo `GameState` + overrides `NewGRF`).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct BridgeSpecDef {
     pub bridge_type: BridgeType,
@@ -141,7 +141,10 @@ impl BridgeSpecDef {
 /// Catálogo de los 13 slots vanilla (clonado de [`BRIDGE_SPECS`]).
 #[must_use]
 pub fn vanilla_bridge_spec_catalog() -> Vec<BridgeSpecDef> {
-    BRIDGE_SPECS.iter().map(BridgeSpecDef::from_vanilla).collect()
+    BRIDGE_SPECS
+        .iter()
+        .map(BridgeSpecDef::from_vanilla)
+        .collect()
 }
 
 /// Spec del tipo en el catálogo (índice = `BridgeType`).
@@ -199,9 +202,8 @@ pub fn bridge_build_cost_in(
 ) -> i64 {
     let total = i64::from(bridge_total_length(start, end));
     let factor = total.saturating_add(1);
-    let mult = bridge_spec_def(catalog, bt)
-        .map(|s| s.price_mult)
-        .unwrap_or_else(|| bridge_spec(bt).price_mult);
+    let mult =
+        bridge_spec_def(catalog, bt).map_or_else(|| bridge_spec(bt).price_mult, |s| s.price_mult);
     i64::from(mult) * factor
 }
 

@@ -247,13 +247,7 @@ pub(crate) fn encode_vehicle_order(
     station_id: impl Fn(TileCoord) -> Option<u16>,
     map_w: u32,
 ) -> Option<[u8; ORDER_WIRE_LEN]> {
-    let wire_max_speed = |limit: u16| -> u16 {
-        if limit == 0 {
-            u16::MAX
-        } else {
-            limit
-        }
-    };
+    let wire_max_speed = |limit: u16| -> u16 { if limit == 0 { u16::MAX } else { limit } };
     let (order_type, dest, flags, refit, wait_time, travel_time, max_speed) = match *order {
         VehicleOrder::Station {
             station,
@@ -329,10 +323,7 @@ pub(crate) fn encode_vehicle_order(
             value,
             jump_to,
         } => {
-            let comparator = condition
-                .legacy_comparator()
-                .unwrap_or(comparator)
-                .as_u8();
+            let comparator = condition.legacy_comparator().unwrap_or(comparator).as_u8();
             let order_type = OT_CONDITIONAL | (comparator << 5);
             let flags = u8::try_from(jump_to.min(255)).unwrap_or(255);
             let var = u16::from(condition.as_u8()) << 11;
@@ -354,6 +345,7 @@ pub(crate) fn encode_vehicle_order(
 
 /// Convierte órdenes del save a destinos jugables (estación/waypoint/depósito/condicional).
 #[must_use]
+#[allow(clippy::too_many_lines)]
 pub(crate) fn vehicle_orders_from_sav(
     sav_orders: &[SavOrder],
     stations: &HashMap<u32, SavStationIndex>,

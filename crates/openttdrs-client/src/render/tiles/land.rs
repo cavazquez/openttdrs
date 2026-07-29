@@ -20,11 +20,11 @@ use crate::render::{
 use crate::sprites::{
     FENCE_MOD_BY_TILEH_NE, FENCE_MOD_BY_TILEH_NW, FENCE_MOD_BY_TILEH_SE, FENCE_MOD_BY_TILEH_SW,
     FENCE_SPRITE_META, FIELD_STATES, HOUSE_DRAW_DATA, TREE_LAYOUT_SPRITE, TREE_LAYOUT_XY,
-    TREE_SPRITE_META, house_building_stage_from_tile,
-    industry_anim_layer_used_in_any_frame, industry_building_needs_client_anim,
-    industry_effective_m4_for_draw, industry_gfx_entry_for_tile,
-    industry_gfx_uses_fizzy_drink_anim, industry_gfx_uses_random_colour,
-    industry_gfx_uses_refinery_fire_anim, industry_palette_colour_for_instance,
+    TREE_SPRITE_META, house_building_stage_from_tile, industry_anim_layer_used_in_any_frame,
+    industry_building_needs_client_anim, industry_effective_m4_for_draw,
+    industry_gfx_entry_for_tile, industry_gfx_uses_fizzy_drink_anim,
+    industry_gfx_uses_random_colour, industry_gfx_uses_refinery_fire_anim,
+    industry_palette_colour_for_instance,
 };
 
 /// Sprite plano de hierba según densidad (`m5 & 0x3`) en teselas `MP_CLEAR`.

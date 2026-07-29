@@ -69,7 +69,7 @@ pub(crate) fn check_airport_area(
     Ok(())
 }
 
-/// Aeropuerto según [`AirportSpecId`] o layout NewGRF activo.
+/// Aeropuerto según [`AirportSpecId`] o layout `NewGRF` activo.
 pub(in crate::command) fn place_airport_area(
     state: &mut GameState,
     origin: TileCoord,
@@ -86,9 +86,7 @@ pub(in crate::command) fn place_airport_area(
             .find(|d| d.id == id && d.enabled)
             .cloned()
     });
-    let place_spec = newgrf_def
-        .as_ref()
-        .map_or(spec, |d| d.subst_id);
+    let place_spec = newgrf_def.as_ref().map_or(spec, |d| d.subst_id);
 
     let placed: Vec<(TileCoord, AirportPiece)> = if let Some(ref def) = newgrf_def {
         newgrf_airport_tiles(origin, def, &state.airport_tile_spec_catalog, axis_y)
@@ -106,8 +104,12 @@ pub(in crate::command) fn place_airport_area(
 
     let noise_spec = place_spec;
     let noise_level_override = newgrf_def.as_ref().map(|d| d.noise_level);
-    let noise_add =
-        airport_noise_contribution_with_level(state, station_anchor, noise_spec, noise_level_override)?;
+    let noise_add = airport_noise_contribution_with_level(
+        state,
+        station_anchor,
+        noise_spec,
+        noise_level_override,
+    )?;
 
     let tile_count = placed.len();
     let mut tiles = Vec::with_capacity(tile_count);
@@ -118,8 +120,7 @@ pub(in crate::command) fn place_airport_area(
         write_airport_tile(state, c, piece)?;
         tiles.push(c);
     }
-    if matches!(place_spec, AirportSpecId::Heliport | AirportSpecId::Oilrig)
-        && newgrf_def.is_none()
+    if matches!(place_spec, AirportSpecId::Heliport | AirportSpecId::Oilrig) && newgrf_def.is_none()
     {
         state.economy.money -= DEPOT_BUILD_COST;
     } else {

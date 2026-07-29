@@ -2,8 +2,8 @@
 
 use std::path::Path;
 
-use crate::bridge_spec::vanilla_bridge_spec_catalog;
 use crate::GameState;
+use crate::bridge_spec::vanilla_bridge_spec_catalog;
 
 use super::super::action0::collect_bridge_metas_from_grf;
 

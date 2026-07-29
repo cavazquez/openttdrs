@@ -405,12 +405,10 @@ pub(crate) struct WindowKnownGap {
 ///   dialogs/settings (#248); sí al resto de clases aún singleton.
 #[must_use]
 pub(crate) fn window_known_gaps(id: FloatingWindowId) -> &'static [WindowKnownGap] {
-    const CAPTURE_ONLY: &[WindowKnownGap] = &[
-        WindowKnownGap {
-            category: "capture",
-            issue: 240,
-        },
-    ];
+    const CAPTURE_ONLY: &[WindowKnownGap] = &[WindowKnownGap {
+        category: "capture",
+        issue: 240,
+    }];
     const WITH_GEOMETRY: &[WindowKnownGap] = &[
         WindowKnownGap {
             category: "capture",
@@ -522,6 +520,7 @@ macro_rules! reference_geometry {
 
 /// Variante de geometría según tipo de vehículo (#244).
 #[must_use]
+#[allow(dead_code)] // consumido en tests de geometría por kind
 pub(crate) fn reference_geometry_for_vehicle_kind(
     id: FloatingWindowId,
     kind: openttdrs_core::VehicleKind,
@@ -610,7 +609,9 @@ pub(crate) const SETTINGS_FAMILY_WINDOW_IDS: &[FloatingWindowId] = &[
 
 /// Variante preferida al spawnear (singleton): `default`/`game`/`owned`/`settings`…
 #[must_use]
-pub(crate) fn reference_geometry_primary(id: FloatingWindowId) -> Option<&'static ReferenceGeometry> {
+pub(crate) fn reference_geometry_primary(
+    id: FloatingWindowId,
+) -> Option<&'static ReferenceGeometry> {
     let matches: Vec<_> = WINDOW_REFERENCE_GEOMETRY
         .iter()
         .filter(|geometry| geometry.id == id)
@@ -619,15 +620,12 @@ pub(crate) fn reference_geometry_primary(id: FloatingWindowId) -> Option<&'stati
         return None;
     }
     for preferred in [
-        "default",
-        "game",
-        "owned",
-        "settings",
-        "main",
-        "config",
-        "train",
+        "default", "game", "owned", "settings", "main", "config", "train",
     ] {
-        if let Some(geometry) = matches.iter().find(|geometry| geometry.variant == preferred) {
+        if let Some(geometry) = matches
+            .iter()
+            .find(|geometry| geometry.variant == preferred)
+        {
             return Some(*geometry);
         }
     }
@@ -1178,7 +1176,9 @@ fn open_all_windows_for_shot(world: &mut World, include_auxiliary: bool) {
             world
                 .resource_mut::<VehicleDetailsWindowState>()
                 .open_for(&chain, vid);
-            world.resource_mut::<RefitWindowState>().open_for(&chain, vid);
+            world
+                .resource_mut::<RefitWindowState>()
+                .open_for(&chain, vid);
         });
         {
             let mut order = world.resource_mut::<OrderEditState>();
@@ -1258,6 +1258,7 @@ fn open_all_windows_for_shot(world: &mut World, include_auxiliary: bool) {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
     use std::path::PathBuf;
@@ -1381,8 +1382,8 @@ mod tests {
                     "captura de {id:?} existe pero sigue en pending"
                 );
             } else {
-                let issue = capture_is_pending(*id)
-                    .expect("ausencia de captura debe citar issue (#240)");
+                let issue =
+                    capture_is_pending(*id).expect("ausencia de captura debe citar issue (#240)");
                 assert!(issue >= 240, "issue de captura inválido: {issue}");
                 let gaps = window_known_gaps(*id);
                 assert!(

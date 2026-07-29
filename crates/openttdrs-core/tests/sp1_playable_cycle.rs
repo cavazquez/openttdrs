@@ -3,8 +3,9 @@
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
 use openttdrs_core::{
-    Command, FACTORY_WOOD_INPUT, GameState, Industry, IndustryKind, IndustrySpec, PathNetwork,
-    TileCoord, Vehicle, VehicleKind, apply_command, find_path, road_stop_approach_tile,
+    Command, FACTORY_GRAIN_INPUT, FACTORY_LIVESTOCK_INPUT, FACTORY_STEEL_INPUT, GameState,
+    Industry, IndustryKind, IndustrySpec, PathNetwork, TileCoord, Vehicle, VehicleKind,
+    apply_command, find_path, road_stop_approach_tile,
 };
 
 const DEMO_ROAD_Y: i32 = 6;
@@ -51,7 +52,10 @@ fn setup_demo_economy_via_commands(state: &mut GameState) {
     .expect("parada descarga");
 
     if let Some(station) = state.stations.iter_mut().find(|s| s.pos == DEMO_DELIVER) {
-        station.cargo_stock.wood = FACTORY_WOOD_INPUT * 8;
+        // Semilla de insumos temperate para la fábrica adyacente.
+        station.cargo_stock.livestock = FACTORY_LIVESTOCK_INPUT * 8;
+        station.cargo_stock.grain = FACTORY_GRAIN_INPUT * 8;
+        station.cargo_stock.steel = FACTORY_STEEL_INPUT * 8;
     }
 
     let mut truck = Vehicle::new(9010, VehicleKind::Truck, DEMO_LOAD, DEMO_LOAD);

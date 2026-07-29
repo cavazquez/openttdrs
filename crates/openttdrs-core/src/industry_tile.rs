@@ -128,7 +128,7 @@ pub fn next_free_industry_tile_gfx_id(catalog: &[IndustryTileSpecDef]) -> Option
         .find(|&id| !catalog.iter().any(|d| d.gfx.as_u16() == id))
 }
 
-/// Gfx de dibujo: id NewGRF si hay Action3; si no, `subst_id` fallback.
+/// Gfx de dibujo: id `NewGRF` si hay Action3; si no, `subst_id` fallback.
 #[must_use]
 pub fn resolve_industry_tile_draw_gfx(gfx: u16, catalog: &[IndustryTileSpecDef]) -> u16 {
     let Some(def) = industry_tile_spec_def(catalog, gfx) else {

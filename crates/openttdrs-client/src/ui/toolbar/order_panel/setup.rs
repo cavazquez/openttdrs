@@ -31,9 +31,11 @@ pub(crate) fn setup_order_panel(mut commands: Commands, asset_server: Res<AssetS
             pos,
             440.0,
         );
-        commands
-            .entity(root)
-            .insert((OrderPanelRoot, FocusPolicy::Block, VehicleChainSlot(slot_u8)));
+        commands.entity(root).insert((
+            OrderPanelRoot,
+            FocusPolicy::Block,
+            VehicleChainSlot(slot_u8),
+        ));
 
         spawn_order_panel_content(&mut commands, content, asset_server, slot_u8);
     }
@@ -137,7 +139,13 @@ fn spawn_order_panel_content(
             })
             .with_children(|row| {
                 spawn_order_button(row, asset_server, chain, OrderPanelButton::MoveOrderUp, "↑");
-                spawn_order_button(row, asset_server, chain, OrderPanelButton::MoveOrderDown, "↓");
+                spawn_order_button(
+                    row,
+                    asset_server,
+                    chain,
+                    OrderPanelButton::MoveOrderDown,
+                    "↓",
+                );
                 spawn_order_button(
                     row,
                     asset_server,

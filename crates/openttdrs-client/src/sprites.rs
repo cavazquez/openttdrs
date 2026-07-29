@@ -278,6 +278,7 @@ pub const ORIGINAL_HOUSE_COUNT: usize = NEW_HOUSE_OFFSET as usize;
 
 /// HouseID efectivo para [`HOUSE_DRAW_DATA`] (fallback `% 110` sin catálogo).
 #[must_use]
+#[allow(dead_code)] // Wrapper sin catálogo; el render usa `*_with_catalog`.
 pub fn house_id_for_draw_table(clean_house_id: u16) -> usize {
     house_id_for_draw_table_with_catalog(clean_house_id, &[])
 }
@@ -301,6 +302,7 @@ pub fn house_id_for_draw_table_with_catalog(
 ///
 /// OpenTTD: `house_id * 16 + TileHash2Bit(x,y) * 4 + building_stage`.
 #[must_use]
+#[allow(dead_code)] // Wrapper sin catálogo; el render usa `*_with_catalog`.
 pub fn house_draw_data_index_for_tile(
     clean_house_id: u16,
     tx: i32,

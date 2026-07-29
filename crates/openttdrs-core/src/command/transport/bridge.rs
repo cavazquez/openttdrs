@@ -135,13 +135,7 @@ pub(in crate::command) fn place_tunnel_or_bridge(
     let cost = if is_tunnel {
         crate::TUNNEL_BUILD_COST_PER_TILE * i64::try_from(line.len()).unwrap_or(i64::MAX)
     } else {
-        if !bridge_available_at_tick_in(
-            &state.bridge_spec_catalog,
-            bridge_type,
-            state.tick,
-            a,
-            b,
-        ) {
+        if !bridge_available_at_tick_in(&state.bridge_spec_catalog, bridge_type, state.tick, a, b) {
             return Err(CommandError::BridgeTypeNotAvailable);
         }
         bridge_build_cost_in(&state.bridge_spec_catalog, bridge_type, a, b)

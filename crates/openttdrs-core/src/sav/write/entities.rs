@@ -17,10 +17,10 @@ const FACIL_AIRPORT: u8 = 0x08;
 const FACIL_DOCK: u8 = 0x10;
 const FACIL_WAYPOINT: u8 = 0x80;
 
-/// `INVALID_TILE` en OpenTTD.
+/// `INVALID_TILE` en `OpenTTD`.
 const INVALID_TILE: u32 = 0xFFFF_FFFF;
 
-/// `NUM_CARGO` (OpenTTD moderno).
+/// `NUM_CARGO` (`OpenTTD` moderno).
 const NUM_CARGO: u32 = 64;
 
 /// `STR_SV_STNAME` — plantilla de nombre generado.
@@ -221,12 +221,12 @@ fn write_stnn_normal(
     buf.push(1); // base presente
     write_stnn_base(buf, tile_idx, name, facilities, town_ref)?;
 
-    let (train_tile, train_w, train_h) = if facilities & FACIL_TRAIN != 0 && !is_waypoint(facilities)
-    {
-        (tile_idx, 1u8, 1u8)
-    } else {
-        (INVALID_TILE, 0u8, 0u8)
-    };
+    let (train_tile, train_w, train_h) =
+        if facilities & FACIL_TRAIN != 0 && !is_waypoint(facilities) {
+            (tile_idx, 1u8, 1u8)
+        } else {
+            (INVALID_TILE, 0u8, 0u8)
+        };
     buf.extend_from_slice(&train_tile.to_be_bytes());
     buf.push(train_w);
     buf.push(train_h);
@@ -339,7 +339,7 @@ pub(super) fn stnn_records(state: &GameState, map_w: u32) -> Result<Vec<Vec<u8>>
     Ok(out)
 }
 
-/// Chunk `STNN` CH_TABLE con schema moderno.
+/// Chunk `STNN` `CH_TABLE` con schema moderno.
 ///
 /// # Errors
 ///
@@ -350,7 +350,7 @@ pub(super) fn stnn_chunk(records: &[Vec<u8>]) -> Result<Vec<u8>, SavError> {
     raw_table_chunk(*b"STNN", &header, records, CH_TABLE)
 }
 
-/// Record CITY mínimo (OpenTTD exige ≥1 municipio: `STR_ERROR_NO_TOWN_IN_SCENARIO`).
+/// Record CITY mínimo (`OpenTTD` exige ≥1 municipio: `STR_ERROR_NO_TOWN_IN_SCENARIO`).
 pub(super) fn default_city_record(map_w: u32, map_h: u32) -> Result<Vec<u8>, SavError> {
     let x = map_w / 2;
     let y = map_h / 2;
@@ -367,7 +367,7 @@ pub(super) fn default_city_record(map_w: u32, map_h: u32) -> Result<Vec<u8>, Sav
 
 /// Construye records CITY desde ciudades del estado.
 ///
-/// Si no hay towns, emite un municipio sintético (requerido por OpenTTD al load).
+/// Si no hay towns, emite un municipio sintético (requerido por `OpenTTD` al load).
 ///
 /// # Errors
 ///

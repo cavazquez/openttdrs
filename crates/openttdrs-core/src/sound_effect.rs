@@ -1,6 +1,6 @@
 //! Efectos de sonido `NewGRF` (Action11 samples + Action0 feature `0x0C`).
 //!
-//! OpenTTD 15.3: Action0 `Sounds` solo ajusta volume/priority/override sobre samples
+//! `OpenTTD` 15.3: Action0 `Sounds` solo ajusta volume/priority/override sobre samples
 //! registrados vía Action11. Formato local de fixtures: tras cabecera Action11
 //! (`0x11`, count), cada sample es `WORD` tamaño LE + `size` bytes PCM mono u8.
 
@@ -27,7 +27,7 @@ pub struct SoundEffectDef {
     pub from_newgrf: bool,
 }
 
-/// Cola observable de reproducción NewGRF (sin Bevy).
+/// Cola observable de reproducción `NewGRF` (sin Bevy).
 #[derive(Debug, Clone, PartialEq)]
 pub struct PendingNewgrfSound {
     pub grfid: u32,
@@ -36,7 +36,7 @@ pub struct PendingNewgrfSound {
     pub priority: u8,
 }
 
-/// Error al encolar reproducción de un sonido NewGRF.
+/// Error al encolar reproducción de un sonido `NewGRF`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SoundPlayError {
     /// No hay entrada `(grfid, local_id)` en el catálogo.
@@ -53,7 +53,7 @@ pub struct CollectedSoundSamples {
     pub truncated: bool,
 }
 
-/// Catálogo vacío (no hay SFX NewGRF vanilla).
+/// Catálogo vacío (no hay SFX `NewGRF` vanilla).
 #[must_use]
 pub fn empty_sound_effect_catalog() -> Vec<SoundEffectDef> {
     Vec::new()
@@ -113,7 +113,7 @@ pub fn collect_sound_samples_from_grf(data: &[u8]) -> CollectedSoundSamples {
     out
 }
 
-/// Encola reproducción de un sonido NewGRF (observable en tests sin audio).
+/// Encola reproducción de un sonido `NewGRF` (observable en tests sin audio).
 ///
 /// # Errors
 ///
@@ -139,15 +139,12 @@ pub fn play_newgrf_sound(
     Ok(())
 }
 
-/// Reproduce un SFX baseset, o el NewGRF que lo overridea si existe mapping.
+/// Reproduce un SFX baseset, o el `NewGRF` que lo overridea si existe mapping.
 ///
 /// # Errors
 ///
-/// Si hay override pero el sample NewGRF es inválido / ausente.
-pub fn play_sound_or_override(
-    state: &mut GameState,
-    sound: SoundId,
-) -> Result<(), SoundPlayError> {
+/// Si hay override pero el sample `NewGRF` es inválido / ausente.
+pub fn play_sound_or_override(state: &mut GameState, sound: SoundId) -> Result<(), SoundPlayError> {
     let idx = usize::from(sound.as_u8());
     if idx < SOUND_COUNT
         && let Some((grfid, local_id)) = state.runtime.sound_overrides[idx]

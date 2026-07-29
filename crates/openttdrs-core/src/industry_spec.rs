@@ -1,15 +1,15 @@
 //! Specs de industria `NewGRF` (`Industries`, feature Action0 `0x0A`).
 //!
 //! Catálogo runtime ids ≥ [`NEW_INDUSTRY_OFFSET`]. Layouts resuelven `0xFE` → gfx
-//! global de IndustryTiles del mismo GRF. Cargos como índices/labels vía
+//! global de `IndustryTiles` del mismo GRF. Cargos como índices/labels vía
 //! [`crate::cargo_spec`] (`GetCargoTranslation`); `callback_mask` se almacena
 //! sin ejecutar (#228).
 
 use serde::{Deserialize, Serialize};
 
 use crate::cargo::CargoType;
-use crate::cargo_spec::{CargoSpecDef, cargo_spec_def, cargo_type_label};
 use crate::cargo::TEMPERATE_CARGO_TYPES;
+use crate::cargo_spec::{CargoSpecDef, cargo_spec_def, cargo_type_label};
 use crate::map::TileCoord;
 
 /// Primer tipo de industria definido por `NewGRF` (`OpenTTD` `NEW_INDUSTRYOFFSET`).
@@ -27,7 +27,7 @@ pub const INDUSTRY_ORIGINAL_NUM_INPUTS: usize = 3;
 pub struct IndustryLayoutTile {
     pub x: i8,
     pub y: i8,
-    /// Gfx global (vanilla &lt;175 o NewGRF ≥175).
+    /// Gfx global (vanilla &lt;175 o `NewGRF` ≥175).
     pub gfx: u16,
 }
 
@@ -122,13 +122,13 @@ impl IndustrySpecDef {
     }
 }
 
-/// Catálogo vacío (solo NewGRF).
+/// Catálogo vacío (solo `NewGRF`).
 #[must_use]
 pub fn empty_industry_spec_catalog() -> Vec<IndustrySpecDef> {
     Vec::new()
 }
 
-/// Tabla de overrides vanilla → id NewGRF (`prop 0x09`).
+/// Tabla de overrides vanilla → id `NewGRF` (`prop 0x09`).
 #[must_use]
 pub fn empty_industry_overrides() -> Vec<u16> {
     vec![INVALID_INDUSTRY; NEW_INDUSTRY_OFFSET as usize]
@@ -145,7 +145,7 @@ pub fn next_free_industry_id(catalog: &[IndustrySpecDef]) -> Option<u16> {
     (NEW_INDUSTRY_OFFSET..NUM_INDUSTRY_TYPES).find(|&id| !catalog.iter().any(|d| d.id == id))
 }
 
-/// Traduce id limpio aplicando override NewGRF (`GetTranslatedIndustryID`).
+/// Traduce id limpio aplicando override `NewGRF` (`GetTranslatedIndustryID`).
 #[must_use]
 pub fn get_translated_industry_id(clean: u16, overrides: &[u16]) -> u16 {
     if clean == 0xFF {
@@ -169,7 +169,10 @@ pub fn get_cargo_translation(cargo: u8, catalog: &[CargoSpecDef]) -> Option<Stri
     if cargo == 0xFF {
         return None;
     }
-    if let Some(def) = catalog.iter().find(|d| d.bitnum == cargo && d.bitnum != 0xFF) {
+    if let Some(def) = catalog
+        .iter()
+        .find(|d| d.bitnum == cargo && d.bitnum != 0xFF)
+    {
         return Some(def.label.clone());
     }
     if let Some(def) = cargo_spec_def(catalog, cargo) {
@@ -187,12 +190,10 @@ pub fn cargo_type_from_label(label: Option<&str>) -> Option<CargoType> {
     if label.is_empty() {
         return None;
     }
-    for &cargo in &TEMPERATE_CARGO_TYPES {
-        if cargo_type_label(cargo).eq_ignore_ascii_case(label) {
-            return Some(cargo);
-        }
-    }
-    None
+    TEMPERATE_CARGO_TYPES
+        .iter()
+        .find(|&&cargo| cargo_type_label(cargo).eq_ignore_ascii_case(label))
+        .copied()
 }
 
 #[cfg(test)]
@@ -235,14 +236,8 @@ mod tests {
 
     #[test]
     fn cargo_translation_uses_bitnum_table() {
-        assert_eq!(
-            get_cargo_translation(1, &[]).as_deref(),
-            Some("COAL")
-        );
-        assert_eq!(
-            get_cargo_translation(7, &[]).as_deref(),
-            Some("WOOD")
-        );
+        assert_eq!(get_cargo_translation(1, &[]).as_deref(), Some("COAL"));
+        assert_eq!(get_cargo_translation(7, &[]).as_deref(), Some("WOOD"));
         assert_eq!(get_cargo_translation(0xFF, &[]), None);
     }
 }

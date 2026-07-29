@@ -96,9 +96,7 @@ pub fn resolve_badge_labels_detailed(
 /// Busca un badge por etiqueta (case-insensitive).
 #[must_use]
 pub fn find_badge_by_label<'a>(catalog: &'a [BadgeDef], label: &str) -> Option<&'a BadgeDef> {
-    catalog
-        .iter()
-        .find(|b| b.label.eq_ignore_ascii_case(label))
+    catalog.iter().find(|b| b.label.eq_ignore_ascii_case(label))
 }
 
 #[cfg(test)]

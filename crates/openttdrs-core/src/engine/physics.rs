@@ -173,11 +173,7 @@ pub fn ship_speed_for_tile(engine: &super::EngineDef, is_canal: bool) -> u16 {
     } else {
         engine.ocean_speed_frac
     };
-    let frac = if frac == 0 {
-        256u32
-    } else {
-        u32::from(frac)
-    };
+    let frac = if frac == 0 { 256u32 } else { u32::from(frac) };
     let speed = u32::from(engine.max_speed).saturating_mul(frac) / 256;
     u16::try_from(speed).unwrap_or(u16::MAX).max(1)
 }

@@ -116,7 +116,7 @@ impl AirportSpecId {
     /// `NewGRF` (`≥10`) se conserva como id global vía [`AirportSpecId::as_newgrf_id`].
     #[must_use]
     pub const fn from_ottd_airport_type(at: u8) -> Self {
-        if at >= NEW_AIRPORT_OFFSET as u8 {
+        if (at as u16) >= NEW_AIRPORT_OFFSET {
             // Placeholder vanilla; el id NewGRF viaja en `Station.airport_newgrf_spec_id`.
             return Self::Small;
         }
@@ -134,7 +134,7 @@ impl AirportSpecId {
         }
     }
 
-    /// Id raw OpenTTD (`AT_*` o NewGRF ≥10).
+    /// Id raw `OpenTTD` (`AT_*` o `NewGRF` ≥10).
     #[must_use]
     pub const fn as_ottd_airport_type(self) -> u8 {
         match self {
@@ -152,16 +152,16 @@ impl AirportSpecId {
     }
 }
 
-/// Tesela de layout NewGRF ya resuelta a gfx global o vanilla.
+/// Tesela de layout `NewGRF` ya resuelta a gfx global o vanilla.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AirportLayoutTile {
     pub x: i8,
     pub y: i8,
-    /// Gfx de airport tile (vanilla &lt;74 o NewGRF ≥74).
+    /// Gfx de airport tile (vanilla &lt;74 o `NewGRF` ≥74).
     pub gfx: u16,
 }
 
-/// Una rotación de layout NewGRF.
+/// Una rotación de layout `NewGRF`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AirportTileLayout {
     pub rotation: u8,
@@ -171,7 +171,7 @@ pub struct AirportTileLayout {
 /// Selector Action3 purchase (`PurchaseDefaultMapSpriteGroupHandler`, cid `0xFF`).
 pub const AIRPORT_ACTION3_PURCHASE: u8 = 0xFF;
 
-/// Spec NewGRF de aeropuerto (ids globales ≥ [`NEW_AIRPORT_OFFSET`]).
+/// Spec `NewGRF` de aeropuerto (ids globales ≥ [`NEW_AIRPORT_OFFSET`]).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NewgrfAirportSpecDef {
     pub id: u16,
@@ -182,7 +182,7 @@ pub struct NewgrfAirportSpecDef {
     pub size_y: i32,
     pub catchment: i32,
     pub noise_level: u8,
-    /// Spec vanilla de la que hereda clase/FTA flags (sin ejecutar FTA NewGRF).
+    /// Spec vanilla de la que hereda clase/FTA flags (sin ejecutar FTA `NewGRF`).
     pub subst_id: AirportSpecId,
     pub layouts: Vec<AirportTileLayout>,
     pub enabled: bool,
@@ -204,9 +204,7 @@ pub struct NewgrfAirportSpecDef {
 impl NewgrfAirportSpecDef {
     #[must_use]
     pub fn fta_flags(&self) -> AirportFtaFlags {
-        airport_spec_def(self.subst_id)
-            .map(|d| d.fta_flags)
-            .unwrap_or(AirportFtaFlags::empty())
+        airport_spec_def(self.subst_id).map_or(AirportFtaFlags::empty(), |d| d.fta_flags)
     }
 
     #[must_use]
@@ -240,7 +238,7 @@ pub fn next_free_airport_id(catalog: &[NewgrfAirportSpecDef]) -> Option<u16> {
     (candidate < NUM_AIRPORTS).then_some(candidate)
 }
 
-/// Specs NewGRF de una clase (filtradas).
+/// Specs `NewGRF` de una clase (filtradas).
 #[must_use]
 pub fn list_newgrf_airport_specs<'a>(
     class: AirportClassId,
@@ -259,7 +257,7 @@ pub fn list_newgrf_airport_specs<'a>(
         .collect()
 }
 
-/// Lookup NewGRF por id global.
+/// Lookup `NewGRF` por id global.
 #[must_use]
 pub fn newgrf_airport_spec_def(
     catalog: &[NewgrfAirportSpecDef],

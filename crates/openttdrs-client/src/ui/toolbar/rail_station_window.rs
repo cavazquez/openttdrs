@@ -1031,9 +1031,6 @@ mod tests {
             world.resource::<UiToolState>().active_tool,
             Some(BuildMenuAction::Rail)
         );
-        assert_eq!(
-            world.resource::<StationCatalogPickerState>().filter,
-            "keep"
-        );
+        assert_eq!(world.resource::<StationCatalogPickerState>().filter, "keep");
     }
 }

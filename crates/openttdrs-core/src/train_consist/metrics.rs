@@ -10,9 +10,21 @@ use super::topology::consist_unit_ids;
 pub(crate) fn cargo_unit_weight_16ths(cargo: Option<CargoType>) -> u8 {
     match cargo {
         Some(CargoType::Passengers) => 1,
-        Some(CargoType::Mail | CargoType::Valuables | CargoType::Batteries | CargoType::Toys | CargoType::FizzyDrinks) => 4,
-        Some(CargoType::Goods | CargoType::Livestock | CargoType::Candy | CargoType::Bubbles) => 8,
-        Some(CargoType::Gold | CargoType::Diamonds) => 8,
+        Some(
+            CargoType::Mail
+            | CargoType::Valuables
+            | CargoType::Batteries
+            | CargoType::Toys
+            | CargoType::FizzyDrinks,
+        ) => 4,
+        Some(
+            CargoType::Goods
+            | CargoType::Livestock
+            | CargoType::Candy
+            | CargoType::Bubbles
+            | CargoType::Gold
+            | CargoType::Diamonds,
+        ) => 8,
         Some(_) => 16,
         None => 0,
     }

@@ -282,10 +282,7 @@ pub(crate) fn sync_road_stop_preview_image(
 pub(crate) fn sync_road_stop_picker(
     tool_state: Res<UiToolState>,
     sim: Res<SimWorld>,
-    mut root_q: Query<
-        (&FloatingWindow, &mut Visibility),
-        Without<RoadStopPickerButton>,
-    >,
+    mut root_q: Query<(&FloatingWindow, &mut Visibility), Without<RoadStopPickerButton>>,
     mut title_q: Query<(&FloatingWindowTitleText, &mut Text), Without<RoadStopPickerEmptyHint>>,
     mut hint_q: Query<&mut Node, With<RoadStopPickerEmptyHint>>,
     mut buttons: Query<
@@ -393,7 +390,9 @@ pub(crate) fn road_stop_picker_on_closed(
     mut tool_state: ResMut<UiToolState>,
 ) {
     for msg in closed.read() {
-        if msg.0.class == FloatingWindowId::RoadStopPicker && road_stop_tool_kind(&tool_state).is_some() {
+        if msg.0.class == FloatingWindowId::RoadStopPicker
+            && road_stop_tool_kind(&tool_state).is_some()
+        {
             tool_state.active_tool = None;
         }
     }
@@ -453,9 +452,7 @@ mod tests {
         world.write_message(FloatingWindowClosed(
             crate::ui::floating_window::WindowKey::singleton(FloatingWindowId::RoadStopPicker),
         ));
-        world
-            .run_system_once(road_stop_picker_on_closed)
-            .unwrap();
+        world.run_system_once(road_stop_picker_on_closed).unwrap();
         assert!(world.resource::<UiToolState>().active_tool.is_none());
     }
 }

@@ -56,8 +56,7 @@ pub const fn is_owned_land_tile(tile: &Tile) -> bool {
 pub fn object_type_dims(object_type: u8, catalog: &[ObjectSpecDef]) -> (u8, u8) {
     if is_newgrf_object_type(object_type) {
         object_spec_def(catalog, u16::from(object_type))
-            .map(|d| (d.size_width(), d.size_height()))
-            .unwrap_or((1, 1))
+            .map_or((1, 1), |d| (d.size_width(), d.size_height()))
     } else {
         (1, 1)
     }

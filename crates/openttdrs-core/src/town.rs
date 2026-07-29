@@ -374,7 +374,7 @@ impl Town {
 
     /// Marca o limpia la estatua de la compañía.
     pub fn set_statue(&mut self, company: CompanyId, present: bool) {
-        let bit = company.0 as u16;
+        let bit = u16::from(company.0);
         if bit >= 16 {
             return;
         }
@@ -388,17 +388,13 @@ impl Town {
     /// Meses de unwanted tras soborno fallido.
     #[must_use]
     pub fn unwanted_months(&self, company: CompanyId) -> u8 {
-        self.unwanted
-            .get(company.index())
-            .copied()
-            .unwrap_or(0)
+        self.unwanted.get(company.index()).copied().unwrap_or(0)
     }
 
     /// Asigna meses de unwanted.
     pub fn set_unwanted(&mut self, company: CompanyId, months: u8) {
         if self.unwanted.len() < MAX_TOWN_AUTHORITY_COMPANIES {
-            self.unwanted
-                .resize(MAX_TOWN_AUTHORITY_COMPANIES, 0);
+            self.unwanted.resize(MAX_TOWN_AUTHORITY_COMPANIES, 0);
         }
         if let Some(slot) = self.unwanted.get_mut(company.index()) {
             *slot = months;
@@ -891,10 +887,7 @@ pub fn produce_town_cargo(
 }
 
 /// Dueño exclusivo del pueblo más cercano (si el contador sigue activo).
-fn closest_town_exclusivity(
-    towns: &[Town],
-    pos: TileCoord,
-) -> Option<crate::company::CompanyId> {
+fn closest_town_exclusivity(towns: &[Town], pos: TileCoord) -> Option<crate::company::CompanyId> {
     let mut best: Option<(&Town, u32)> = None;
     for town in towns {
         let dist = crate::economy::manhattan_distance(town.pos, pos);
@@ -1281,7 +1274,8 @@ mod tests {
         stations[0].goods.get_mut(CargoType::Passengers).last_speed = 1;
         stations[0].goods.get_mut(CargoType::Mail).last_speed = 1;
 
-        let (pax, mail) = produce_town_cargo(&map, &[], &mut stations, &[], TOWN_PRODUCE_TICKS, true);
+        let (pax, mail) =
+            produce_town_cargo(&map, &[], &mut stations, &[], TOWN_PRODUCE_TICKS, true);
         // 4 pax × (175+1) >> 8 = 2; 2 mail × 176 >> 8 = 1.
         assert_eq!(pax, 2);
         assert_eq!(mail, 1);
@@ -1334,7 +1328,8 @@ mod tests {
         map.set_kind(TileCoord::new(2, 1), TileKind::House).unwrap();
         let mut stations = vec![Station::new_with_kind(pos, StopKind::TruckStop)];
 
-        let (pax, mail) = produce_town_cargo(&map, &[], &mut stations, &[], TOWN_PRODUCE_TICKS, true);
+        let (pax, mail) =
+            produce_town_cargo(&map, &[], &mut stations, &[], TOWN_PRODUCE_TICKS, true);
         assert_eq!(pax, 0);
         assert_eq!(mail, 0);
     }

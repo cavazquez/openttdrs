@@ -16,13 +16,13 @@ pub fn climate_from_chunks(chunks: &[RawChunk]) -> Option<Climate> {
             continue;
         };
         for (_idx, record) in rows {
-            if let Some(v) = record_get(&record, "game_creation.landscape")
-                .and_then(SlValue::as_u64)
+            if let Some(v) =
+                record_get(&record, "game_creation.landscape").and_then(SlValue::as_u64)
             {
-                return climate_from_landscape_u8(v as u8);
+                return climate_from_landscape_u8(u8::try_from(v).ok()?);
             }
             if let Some(v) = record_get(&record, "landscape").and_then(SlValue::as_u64) {
-                return climate_from_landscape_u8(v as u8);
+                return climate_from_landscape_u8(u8::try_from(v).ok()?);
             }
         }
     }

@@ -1253,11 +1253,10 @@ pub fn build_grf_v2_industry_tile_with_preview_sprite(
     )
 }
 
-/// GRF v2: N IndustryTiles (Action0+Action1/3+sprite) + Industries Action0 + Action8.
+/// GRF v2: N `IndustryTiles` (Action0+Action1/3+sprite) + Industries Action0 + Action8.
 ///
 /// `tile_specs`: `(action0, local_id, sprite_indices)`.
 #[must_use]
-#[expect(clippy::too_many_arguments)]
 pub fn build_grf_v2_industries_with_tiles(
     tile_specs: &[(Vec<u8>, u8, Vec<u8>)],
     industry_action0: &[u8],

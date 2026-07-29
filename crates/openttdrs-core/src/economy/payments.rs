@@ -18,6 +18,7 @@ pub struct CargoPaymentSpec {
 
 impl CargoType {
     #[must_use]
+    #[allow(clippy::too_many_lines)]
     pub const fn payment_spec(self) -> CargoPaymentSpec {
         match self {
             Self::Passengers => CargoPaymentSpec {

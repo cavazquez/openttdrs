@@ -44,7 +44,13 @@ fn refresh_orders_from_sim(order_state: &mut OrderEditState, sim: &SimWorld) {
     let Some(vehicle_id) = order_state.vehicle_id() else {
         return;
     };
-    let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.id == vehicle_id).cloned() else {
+    let Some(vehicle) = sim
+        .state
+        .vehicles
+        .iter()
+        .find(|v| v.id == vehicle_id)
+        .cloned()
+    else {
         order_state.close_vehicle(vehicle_id);
         return;
     };
@@ -55,11 +61,15 @@ fn refresh_orders_from_sim(order_state: &mut OrderEditState, sim: &SimWorld) {
     if let Some(sel) = slot.selected_slot
         && sel >= slot.orders.len()
     {
-        slot.selected_slot = slot.orders.len().checked_sub(1).or(if slot.orders.is_empty() {
-            None
-        } else {
-            Some(0)
-        });
+        slot.selected_slot = slot
+            .orders
+            .len()
+            .checked_sub(1)
+            .or(if slot.orders.is_empty() {
+                None
+            } else {
+                Some(0)
+            });
     }
 }
 
@@ -94,7 +104,11 @@ pub(crate) fn cancel_order_destination_pick(next_pick: &mut NextState<OrderPickS
 /// Inicia drag al pulsar una fila de órdenes (#194).
 pub(crate) fn begin_order_list_drag(
     mut row_q: Query<
-        (&Interaction, &OrderPanelRow, &crate::ui::vehicle_chain::VehicleChainSlot),
+        (
+            &Interaction,
+            &OrderPanelRow,
+            &crate::ui::vehicle_chain::VehicleChainSlot,
+        ),
         (
             Changed<Interaction>,
             With<Button>,
@@ -167,7 +181,11 @@ pub(crate) fn finish_order_list_drag(
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn handle_order_panel_buttons(
     mut btn_q: Query<
-        (&Interaction, &OrderPanelButton, &crate::ui::vehicle_chain::VehicleChainSlot),
+        (
+            &Interaction,
+            &OrderPanelButton,
+            &crate::ui::vehicle_chain::VehicleChainSlot,
+        ),
         (Changed<Interaction>, With<Button>, Without<OrderPanelRow>),
     >,
     mut order_state: ResMut<OrderEditState>,
@@ -786,7 +804,9 @@ mod tests {
         order_edit.bind_slot(
             0,
             1,
-            world.resource::<SimWorld>().state.vehicles[0].orders.clone(),
+            world.resource::<SimWorld>().state.vehicles[0]
+                .orders
+                .clone(),
             Some(0),
         );
         world.insert_resource(order_edit);

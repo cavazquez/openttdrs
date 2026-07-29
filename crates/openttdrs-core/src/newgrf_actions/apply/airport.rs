@@ -14,9 +14,7 @@ use crate::airport_tile_spec::{
 };
 use crate::newgrf_sprites::Action2EvalCtx;
 
-use super::super::action0::{
-    collect_airport_metas_from_grf, collect_airport_tile_metas_from_grf,
-};
+use super::super::action0::{collect_airport_metas_from_grf, collect_airport_tile_metas_from_grf};
 
 /// Reconstruye catálogo `AirportTiles` desde el stack enabled.
 pub fn apply_newgrf_airport_tiles(state: &mut GameState, search_dirs: &[&Path]) {
@@ -89,6 +87,7 @@ fn class_of_subst(subst: AirportSpecId) -> AirportClassId {
 }
 
 /// Reconstruye catálogo `Airports` (requiere tiles ya aplicados).
+#[allow(clippy::too_many_lines)]
 pub fn apply_newgrf_airports(state: &mut GameState, search_dirs: &[&Path]) {
     let local_tile_map = local_tile_gfx_map(&state.airport_tile_spec_catalog);
     let mut catalog = Vec::new();
@@ -151,9 +150,7 @@ pub fn apply_newgrf_airports(state: &mut GameState, search_dirs: &[&Path]) {
             let (sx, sy) = if meta.size_x > 0 && meta.size_y > 0 {
                 (i32::from(meta.size_x), i32::from(meta.size_y))
             } else {
-                airport_spec_def(subst)
-                    .map(|d| (d.size_x, d.size_y))
-                    .unwrap_or((2, 2))
+                airport_spec_def(subst).map_or((2, 2), |d| (d.size_x, d.size_y))
             };
             let label = if meta.name.is_empty() {
                 format!("NewGRF Airport {}", meta.local_id)

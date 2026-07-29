@@ -17,10 +17,10 @@ pub const SHIP_ACCELERATION_DEFAULT: u16 = 1;
 #[deprecated(note = "usar ship_move_up_down_on_lock; ya no se aplica en el hot path")]
 pub const LOCK_TRANSIT_TICKS: u32 = 32;
 
-/// `Direction::INVALID_DIR` de OpenTTD.
+/// `Direction::INVALID_DIR` de `OpenTTD`.
 pub const INVALID_DIR: u8 = 0xFF;
 
-/// `Track` de OpenTTD (`track_type.h`).
+/// `Track` de `OpenTTD` (`track_type.h`).
 pub const TRACK_X: u8 = 0;
 pub const TRACK_Y: u8 = 1;
 pub const TRACK_UPPER: u8 = 2;
@@ -28,7 +28,7 @@ pub const TRACK_LOWER: u8 = 3;
 pub const TRACK_LEFT: u8 = 4;
 pub const TRACK_RIGHT: u8 = 5;
 
-/// `DiagDirection` de OpenTTD.
+/// `DiagDirection` de `OpenTTD`.
 pub const DIAGDIR_NE: u8 = 0;
 pub const DIAGDIR_SE: u8 = 1;
 pub const DIAGDIR_SW: u8 = 2;
@@ -43,7 +43,7 @@ pub struct ShipSubcoordData {
     pub dir: u8,
 }
 
-/// Tabla byte-igual a OpenTTD 15.3 `_ship_subcoord[DIAGDIR_END][TRACK_END]`.
+/// Tabla byte-igual a `OpenTTD` 15.3 `_ship_subcoord[DIAGDIR_END][TRACK_END]`.
 pub static SHIP_SUBCOORD: [[ShipSubcoordData; 6]; 4] = [
     /* DIAGDIR_NE */
     [
@@ -365,7 +365,7 @@ pub fn ship_accelerate(v: &mut Vehicle, max_speed: u16) -> u32 {
 
 /// `ShipTestUpDownOnLock` + `ShipMoveUpDownOnLock` (esclusa de una tesela del port).
 ///
-/// En OpenTTD el middle lock tiene pendiente; aquí cualquier tile Lock en el centro
+/// En `OpenTTD` el middle lock tiene pendiente; aquí cualquier tile Lock en el centro
 /// (8,8) sube/baja `z_pos` ±1 cada 8 ticks según el sentido hacia el vecino alto.
 #[must_use]
 pub fn ship_move_up_down_on_lock(v: &mut Vehicle, map: &Map) -> bool {
@@ -402,7 +402,7 @@ pub fn ship_move_up_down_on_lock(v: &mut Vehicle, map: &Map) -> bool {
     let z_high = i16::from(high_h) * TILE_PIXEL_HEIGHT;
     let z_low = i16::from(low_h) * TILE_PIXEL_HEIGHT;
     let dz: i16 = if ship_diag == up_diag {
-        if z < z_high { 1 } else { 0 }
+        i16::from(z < z_high)
     } else if z > z_low {
         -1
     } else {
@@ -415,7 +415,7 @@ pub fn ship_move_up_down_on_lock(v: &mut Vehicle, map: &Map) -> bool {
     if v.cur_speed != 0 {
         v.cur_speed = 0;
     }
-    if v.ship_tick_counter & 7 == 0 {
+    if v.ship_tick_counter.trailing_zeros() >= 3 {
         v.z_pos = Some(z + dz);
     }
     true
@@ -476,6 +476,7 @@ fn face_path_target(v: &mut Vehicle) {
 }
 
 /// Un tick del controlador mínimo (`ShipController` simplificado).
+#[allow(clippy::too_many_lines)]
 pub fn ship_controller_tick(v: &mut Vehicle, map: Option<&Map>) {
     if v.kind != VehicleKind::Ship {
         return;
@@ -576,9 +577,7 @@ pub fn ship_controller_tick(v: &mut Vehicle, map: Option<&Map>) {
 
         if let Some(map) = map {
             let h = tile_height(map, new_tile);
-            if !water_tile_is_lock(map, new_tile) {
-                v.z_pos = Some(i16::from(h) * TILE_PIXEL_HEIGHT);
-            } else if v.z_pos.is_none() {
+            if !water_tile_is_lock(map, new_tile) || v.z_pos.is_none() {
                 v.z_pos = Some(i16::from(h) * TILE_PIXEL_HEIGHT);
             }
         }
@@ -860,8 +859,7 @@ mod tests {
         let mut saw_z_change = false;
         for _ in 0..64 {
             assert_ne!(
-                v.wait_counter,
-                LOCK_TRANSIT_TICKS,
+                v.wait_counter, LOCK_TRANSIT_TICKS,
                 "no debe usarse pausa artificial de 32 ticks"
             );
             let moved = ship_move_up_down_on_lock(&mut v, &s.map);

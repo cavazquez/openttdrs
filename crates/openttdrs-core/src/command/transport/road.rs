@@ -5,8 +5,7 @@ fn charge_road_build(state: &mut GameState) {
         .road_type_catalog
         .iter()
         .find(|d| d.id == state.current_road_type)
-        .map(|d| d.cost_multiplier)
-        .unwrap_or(0);
+        .map_or(0, |d| d.cost_multiplier);
     state.economy.money -= road_build_cost_factored(&state.global_economy, mult);
 }
 
@@ -15,8 +14,7 @@ fn road_build_amount(state: &GameState) -> i64 {
         .road_type_catalog
         .iter()
         .find(|d| d.id == state.current_road_type)
-        .map(|d| d.cost_multiplier)
-        .unwrap_or(0);
+        .map_or(0, |d| d.cost_multiplier);
     road_build_cost_factored(&state.global_economy, mult)
 }
 use crate::map::{Map, TileCoord, TileKind};

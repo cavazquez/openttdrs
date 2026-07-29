@@ -1,4 +1,4 @@
-//! API común de resolución de callbacks NewGRF (#228).
+//! API común de resolución de callbacks `NewGRF` (#228).
 //!
 //! - Fallo observable: [`CALLBACK_FAILED`] (nunca se acepta un resultado “silencioso”).
 //! - Storage: tras eval, [`writeback_vehicle_persistent_registers`] persiste `7C`/`\2psto`;
@@ -50,7 +50,7 @@ pub fn resolve_vehicle_callback(
     result
 }
 
-/// Semántica OpenTTD 15.3 para `CBID_VEHICLE_START_STOP_CHECK` (MVP):
+/// Semántica `OpenTTD` 15.3 para `CBID_VEHICLE_START_STOP_CHECK` (MVP):
 /// - [`CALLBACK_FAILED`] → permitir
 /// - `0x400` (GRF ≥ 8) → permitir
 /// - byte bajo `0xFF` (GRF < 8) → permitir
@@ -118,7 +118,7 @@ mod tests {
         gfx
     }
 
-    /// `16 * 64 = 0x400` vía operador mul (and_mask es BYTE).
+    /// `16 * 64 = 0x400` vía operador mul (`and_mask` es BYTE).
     fn gfx_callback_allow_400() -> TrainSpriteGraphics {
         let mut gfx = TrainSpriteGraphics::default();
         gfx.assigns.push(TrainSpriteAssign {
@@ -235,7 +235,12 @@ mod tests {
             .unwrap();
         engine.newgrf_local_id = 0;
         engine.newgrf_runtime = Some(Box::new(gfx_callback_literal(0x10))); // deny
-        let mut v = Vehicle::new(1, VehicleKind::Train, TileCoord::new(1, 1), TileCoord::new(1, 1));
+        let mut v = Vehicle::new(
+            1,
+            VehicleKind::Train,
+            TileCoord::new(1, 1),
+            TileCoord::new(1, 1),
+        );
         assert!(!apply_vehicle_start_stop_callback(&engine, &mut v));
 
         engine.newgrf_runtime = Some(Box::new(gfx_callback_allow_400()));
@@ -260,7 +265,12 @@ mod tests {
         engine.newgrf_runtime = Some(Box::new(gfx_callback_psto(3, 42, 0xFF)));
 
         let mut state = crate::GameState::new(4, 4);
-        let mut v = Vehicle::new(1, VehicleKind::Train, TileCoord::new(1, 1), TileCoord::new(1, 1));
+        let mut v = Vehicle::new(
+            1,
+            VehicleKind::Train,
+            TileCoord::new(1, 1),
+            TileCoord::new(1, 1),
+        );
         v.engine_id = Some(engine.id);
         assert!(apply_vehicle_start_stop_callback(&engine, &mut v));
         assert_eq!(v.newgrf_persistent_regs.get(&3), Some(&42));
@@ -268,10 +278,7 @@ mod tests {
         state.vehicles.push(v);
         let json = state.save_json().unwrap();
         let loaded = crate::GameState::load_json(&json).unwrap();
-        assert_eq!(
-            loaded.vehicles[0].newgrf_persistent_regs.get(&3),
-            Some(&42)
-        );
+        assert_eq!(loaded.vehicles[0].newgrf_persistent_regs.get(&3), Some(&42));
     }
 
     #[test]

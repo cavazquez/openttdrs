@@ -184,10 +184,10 @@ pub struct Station {
     /// Teselas del aeropuerto (helipuerto = `[pos]`; small = footprint completo).
     #[serde(default)]
     pub airport_tiles: Vec<TileCoord>,
-    /// Spec de aeropuerto vanilla (`AirportSpecId`); si hay NewGRF, es el subst.
+    /// Spec de aeropuerto vanilla (`AirportSpecId`); si hay `NewGRF`, es el subst.
     #[serde(default)]
     pub airport_spec: crate::airport_class::AirportSpecId,
-    /// Id global NewGRF del aeropuerto (`≥10`); `None` = vanilla.
+    /// Id global `NewGRF` del aeropuerto (`≥10`); `None` = vanilla.
     #[serde(default)]
     pub airport_newgrf_spec_id: Option<u16>,
     /// Bloques FTA reservados (`AirportBlocks` / `st->airport.blocks`).

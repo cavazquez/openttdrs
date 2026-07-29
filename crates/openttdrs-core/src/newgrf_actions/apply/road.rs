@@ -7,11 +7,7 @@ use crate::road_type::{RoadType, RoadTypeDef, next_free_road_type_id, vanilla_ro
 
 use super::super::action0::collect_roadtype_metas_from_grf;
 
-fn resolve_powered_mask(
-    catalog: &[RoadTypeDef],
-    labels: &[[u8; 4]],
-    self_id: RoadType,
-) -> u64 {
+fn resolve_powered_mask(catalog: &[RoadTypeDef], labels: &[[u8; 4]], self_id: RoadType) -> u64 {
     let mut mask = 1u64 << self_id.as_u8();
     for label in labels {
         let key = std::str::from_utf8(label)
@@ -21,9 +17,10 @@ fn resolve_powered_mask(
         if key.is_empty() {
             continue;
         }
-        if let Some(def) = catalog.iter().find(|d| {
-            d.short_label.eq_ignore_ascii_case(key) || d.label.eq_ignore_ascii_case(key)
-        }) {
+        if let Some(def) = catalog
+            .iter()
+            .find(|d| d.short_label.eq_ignore_ascii_case(key) || d.label.eq_ignore_ascii_case(key))
+        {
             mask |= 1u64 << def.id.as_u8();
         }
     }

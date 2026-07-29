@@ -405,7 +405,11 @@ impl CargoType {
 
     #[must_use]
     pub const fn from_temperate_id(id: u8) -> Option<Self> {
-        if id <= 10 { Self::from_cargo_id(id) } else { None }
+        if id <= 10 {
+            Self::from_cargo_id(id)
+        } else {
+            None
+        }
     }
 
     #[must_use]
@@ -454,7 +458,10 @@ impl CargoType {
     #[must_use]
     pub fn from_label(label: &str) -> Option<Self> {
         let t = label.trim();
-        ALL_CARGO_TYPES.iter().copied().find(|c| c.label().eq_ignore_ascii_case(t))
+        ALL_CARGO_TYPES
+            .iter()
+            .copied()
+            .find(|c| c.label().eq_ignore_ascii_case(t))
     }
 
     #[must_use]
@@ -471,28 +478,62 @@ impl CargoType {
     pub const fn from_climate_slot(climate: Climate, slot: u8) -> Option<Self> {
         match climate {
             Climate::Temperate => match slot {
-                0 => Some(Self::Passengers), 1 => Some(Self::Coal), 2 => Some(Self::Mail),
-                3 => Some(Self::Oil), 4 => Some(Self::Livestock), 5 => Some(Self::Goods),
-                6 => Some(Self::Grain), 7 => Some(Self::Wood), 8 => Some(Self::IronOre),
-                9 => Some(Self::Steel), 10 => Some(Self::Valuables), _ => None,
+                0 => Some(Self::Passengers),
+                1 => Some(Self::Coal),
+                2 => Some(Self::Mail),
+                3 => Some(Self::Oil),
+                4 => Some(Self::Livestock),
+                5 => Some(Self::Goods),
+                6 => Some(Self::Grain),
+                7 => Some(Self::Wood),
+                8 => Some(Self::IronOre),
+                9 => Some(Self::Steel),
+                10 => Some(Self::Valuables),
+                _ => None,
             },
             Climate::SubArctic => match slot {
-                0 => Some(Self::Passengers), 1 => Some(Self::Coal), 2 => Some(Self::Mail),
-                3 => Some(Self::Oil), 4 => Some(Self::Livestock), 5 => Some(Self::Goods),
-                6 => Some(Self::Wheat), 7 => Some(Self::Wood), 8 => None,
-                9 => Some(Self::Paper), 10 => Some(Self::Gold), 11 => Some(Self::Food), _ => None,
+                0 => Some(Self::Passengers),
+                1 => Some(Self::Coal),
+                2 => Some(Self::Mail),
+                3 => Some(Self::Oil),
+                4 => Some(Self::Livestock),
+                5 => Some(Self::Goods),
+                6 => Some(Self::Wheat),
+                7 => Some(Self::Wood),
+                // Slot 8 vacío en ártico (OpenTTD).
+                9 => Some(Self::Paper),
+                10 => Some(Self::Gold),
+                11 => Some(Self::Food),
+                _ => None,
             },
             Climate::SubTropical => match slot {
-                0 => Some(Self::Passengers), 1 => Some(Self::Rubber), 2 => Some(Self::Mail),
-                3 => Some(Self::Oil), 4 => Some(Self::Fruit), 5 => Some(Self::Goods),
-                6 => Some(Self::Maize), 7 => Some(Self::Wood), 8 => Some(Self::CopperOre),
-                9 => Some(Self::Water), 10 => Some(Self::Diamonds), 11 => Some(Self::Food), _ => None,
+                0 => Some(Self::Passengers),
+                1 => Some(Self::Rubber),
+                2 => Some(Self::Mail),
+                3 => Some(Self::Oil),
+                4 => Some(Self::Fruit),
+                5 => Some(Self::Goods),
+                6 => Some(Self::Maize),
+                7 => Some(Self::Wood),
+                8 => Some(Self::CopperOre),
+                9 => Some(Self::Water),
+                10 => Some(Self::Diamonds),
+                11 => Some(Self::Food),
+                _ => None,
             },
             Climate::Toyland => match slot {
-                0 => Some(Self::Passengers), 1 => Some(Self::Sugar), 2 => Some(Self::Mail),
-                3 => Some(Self::Toys), 4 => Some(Self::Batteries), 5 => Some(Self::Candy),
-                6 => Some(Self::Toffee), 7 => Some(Self::Cola), 8 => Some(Self::CottonCandy),
-                9 => Some(Self::Bubbles), 10 => Some(Self::Plastic), 11 => Some(Self::FizzyDrinks),
+                0 => Some(Self::Passengers),
+                1 => Some(Self::Sugar),
+                2 => Some(Self::Mail),
+                3 => Some(Self::Toys),
+                4 => Some(Self::Batteries),
+                5 => Some(Self::Candy),
+                6 => Some(Self::Toffee),
+                7 => Some(Self::Cola),
+                8 => Some(Self::CottonCandy),
+                9 => Some(Self::Bubbles),
+                10 => Some(Self::Plastic),
+                11 => Some(Self::FizzyDrinks),
                 _ => None,
             },
         }
@@ -502,29 +543,61 @@ impl CargoType {
     pub const fn climate_slot(self, climate: Climate) -> Option<u8> {
         match climate {
             Climate::Temperate => match self {
-                Self::Passengers => Some(0), Self::Coal => Some(1), Self::Mail => Some(2),
-                Self::Oil => Some(3), Self::Livestock => Some(4), Self::Goods => Some(5),
-                Self::Grain => Some(6), Self::Wood => Some(7), Self::IronOre => Some(8),
-                Self::Steel => Some(9), Self::Valuables => Some(10), _ => None,
+                Self::Passengers => Some(0),
+                Self::Coal => Some(1),
+                Self::Mail => Some(2),
+                Self::Oil => Some(3),
+                Self::Livestock => Some(4),
+                Self::Goods => Some(5),
+                Self::Grain => Some(6),
+                Self::Wood => Some(7),
+                Self::IronOre => Some(8),
+                Self::Steel => Some(9),
+                Self::Valuables => Some(10),
+                _ => None,
             },
             Climate::SubArctic => match self {
-                Self::Passengers => Some(0), Self::Coal => Some(1), Self::Mail => Some(2),
-                Self::Oil => Some(3), Self::Livestock => Some(4), Self::Goods => Some(5),
-                Self::Wheat => Some(6), Self::Wood => Some(7), Self::Paper => Some(9),
-                Self::Gold => Some(10), Self::Food => Some(11), _ => None,
+                Self::Passengers => Some(0),
+                Self::Coal => Some(1),
+                Self::Mail => Some(2),
+                Self::Oil => Some(3),
+                Self::Livestock => Some(4),
+                Self::Goods => Some(5),
+                Self::Wheat => Some(6),
+                Self::Wood => Some(7),
+                Self::Paper => Some(9),
+                Self::Gold => Some(10),
+                Self::Food => Some(11),
+                _ => None,
             },
             Climate::SubTropical => match self {
-                Self::Passengers => Some(0), Self::Rubber => Some(1), Self::Mail => Some(2),
-                Self::Oil => Some(3), Self::Fruit => Some(4), Self::Goods => Some(5),
-                Self::Maize => Some(6), Self::Wood => Some(7), Self::CopperOre => Some(8),
-                Self::Water => Some(9), Self::Diamonds => Some(10), Self::Food => Some(11),
+                Self::Passengers => Some(0),
+                Self::Rubber => Some(1),
+                Self::Mail => Some(2),
+                Self::Oil => Some(3),
+                Self::Fruit => Some(4),
+                Self::Goods => Some(5),
+                Self::Maize => Some(6),
+                Self::Wood => Some(7),
+                Self::CopperOre => Some(8),
+                Self::Water => Some(9),
+                Self::Diamonds => Some(10),
+                Self::Food => Some(11),
                 _ => None,
             },
             Climate::Toyland => match self {
-                Self::Passengers => Some(0), Self::Sugar => Some(1), Self::Mail => Some(2),
-                Self::Toys => Some(3), Self::Batteries => Some(4), Self::Candy => Some(5),
-                Self::Toffee => Some(6), Self::Cola => Some(7), Self::CottonCandy => Some(8),
-                Self::Bubbles => Some(9), Self::Plastic => Some(10), Self::FizzyDrinks => Some(11),
+                Self::Passengers => Some(0),
+                Self::Sugar => Some(1),
+                Self::Mail => Some(2),
+                Self::Toys => Some(3),
+                Self::Batteries => Some(4),
+                Self::Candy => Some(5),
+                Self::Toffee => Some(6),
+                Self::Cola => Some(7),
+                Self::CottonCandy => Some(8),
+                Self::Bubbles => Some(9),
+                Self::Plastic => Some(10),
+                Self::FizzyDrinks => Some(11),
                 _ => None,
             },
         }
@@ -543,22 +616,43 @@ impl CargoType {
     #[must_use]
     pub const fn display_name(self) -> &'static str {
         match self {
-            Self::Passengers => "pasajeros", Self::Coal => "carbón", Self::Mail => "correo",
-            Self::Oil => "petróleo", Self::Livestock => "ganado", Self::Goods => "mercancías",
-            Self::Grain => "grano", Self::Wood => "madera", Self::IronOre => "mineral de hierro",
-            Self::Steel => "acero", Self::Valuables => "objetos de valor", Self::Wheat => "trigo",
-            Self::Paper => "papel", Self::Gold => "oro", Self::Food => "comida",
-            Self::Rubber => "caucho", Self::Fruit => "fruta", Self::Maize => "maíz",
-            Self::CopperOre => "mineral de cobre", Self::Water => "agua", Self::Diamonds => "diamantes",
-            Self::Sugar => "azúcar", Self::Toys => "juguetes", Self::Batteries => "baterías",
-            Self::Candy => "caramelos", Self::Toffee => "toffee", Self::Cola => "cola",
-            Self::CottonCandy => "algodón de azúcar", Self::Bubbles => "burbujas",
-            Self::Plastic => "plástico", Self::FizzyDrinks => "refrescos",
+            Self::Passengers => "pasajeros",
+            Self::Coal => "carbón",
+            Self::Mail => "correo",
+            Self::Oil => "petróleo",
+            Self::Livestock => "ganado",
+            Self::Goods => "mercancías",
+            Self::Grain => "grano",
+            Self::Wood => "madera",
+            Self::IronOre => "mineral de hierro",
+            Self::Steel => "acero",
+            Self::Valuables => "objetos de valor",
+            Self::Wheat => "trigo",
+            Self::Paper => "papel",
+            Self::Gold => "oro",
+            Self::Food => "comida",
+            Self::Rubber => "caucho",
+            Self::Fruit => "fruta",
+            Self::Maize => "maíz",
+            Self::CopperOre => "mineral de cobre",
+            Self::Water => "agua",
+            Self::Diamonds => "diamantes",
+            Self::Sugar => "azúcar",
+            Self::Toys => "juguetes",
+            Self::Batteries => "baterías",
+            Self::Candy => "caramelos",
+            Self::Toffee => "toffee",
+            Self::Cola => "cola",
+            Self::CottonCandy => "algodón de azúcar",
+            Self::Bubbles => "burbujas",
+            Self::Plastic => "plástico",
+            Self::FizzyDrinks => "refrescos",
         }
     }
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::*;
 
@@ -567,7 +661,8 @@ mod tests {
         assert_eq!(TEMPERATE_CARGO_TYPES.len(), 11);
         for (i, cargo) in TEMPERATE_CARGO_TYPES.iter().enumerate() {
             assert_eq!(cargo.temperate_id() as usize, i);
-            assert_eq!(cargo.climate_slot(Climate::Temperate), Some(i as u8));
+            let slot = u8::try_from(i).expect("temperate slot fits u8");
+            assert_eq!(cargo.climate_slot(Climate::Temperate), Some(slot));
         }
     }
 
@@ -577,11 +672,23 @@ mod tests {
         assert_eq!(CargoType::for_climate(Climate::SubArctic).len(), 11);
         assert_eq!(CargoType::for_climate(Climate::SubTropical).len(), 12);
         assert_eq!(CargoType::for_climate(Climate::Toyland).len(), 12);
-        assert_eq!(CargoType::from_climate_slot(Climate::Toyland, 8), Some(CargoType::CottonCandy));
-        assert_eq!(CargoType::from_climate_slot(Climate::SubArctic, 10), Some(CargoType::Gold));
-        assert_eq!(CargoType::from_climate_slot(Climate::SubTropical, 1), Some(CargoType::Rubber));
+        assert_eq!(
+            CargoType::from_climate_slot(Climate::Toyland, 8),
+            Some(CargoType::CottonCandy)
+        );
+        assert_eq!(
+            CargoType::from_climate_slot(Climate::SubArctic, 10),
+            Some(CargoType::Gold)
+        );
+        assert_eq!(
+            CargoType::from_climate_slot(Climate::SubTropical, 1),
+            Some(CargoType::Rubber)
+        );
         assert_eq!(CargoType::from_climate_slot(Climate::SubArctic, 8), None);
-        assert_ne!(CargoType::from_climate_slot(Climate::Toyland, 1), Some(CargoType::Coal));
+        assert_ne!(
+            CargoType::from_climate_slot(Climate::Toyland, 1),
+            Some(CargoType::Coal)
+        );
     }
 
     #[test]
@@ -596,14 +703,27 @@ mod tests {
 
     #[test]
     fn pick_freight_honors_preferred_type() {
-        let stock = CargoStock { coal: 5, wood: 20, ..Default::default() };
-        assert_eq!(stock.pick_freight_to_load(Some(CargoType::Coal)), Some(CargoType::Coal));
+        let stock = CargoStock {
+            coal: 5,
+            wood: 20,
+            ..Default::default()
+        };
+        assert_eq!(
+            stock.pick_freight_to_load(Some(CargoType::Coal)),
+            Some(CargoType::Coal)
+        );
         assert_eq!(stock.pick_freight_to_load(Some(CargoType::Oil)), None);
     }
 
     #[test]
     fn pick_freight_without_preference_takes_largest_waiting() {
-        let stock = CargoStock { coal: 5, wood: 20, goods: 12, iron_ore: 40, ..Default::default() };
+        let stock = CargoStock {
+            coal: 5,
+            wood: 20,
+            goods: 12,
+            iron_ore: 40,
+            ..Default::default()
+        };
         assert_eq!(stock.pick_freight_to_load(None), Some(CargoType::IronOre));
     }
 

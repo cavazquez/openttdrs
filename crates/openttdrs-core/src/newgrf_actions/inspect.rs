@@ -198,14 +198,13 @@ fn process_pseudo_payload(payload: &[u8], report: &mut GrfInspectReport) {
 fn inspect_action0_feature(payload: &[u8], feature: u8, report: &mut GrfInspectReport) {
     match feature {
         ACTION0_FEATURE_BADGES => {
-            if let Some(meta) = parse_action0_badge_meta(payload) {
-                if !report
+            if let Some(meta) = parse_action0_badge_meta(payload)
+                && !report
                     .badge_labels
                     .iter()
                     .any(|l| l.eq_ignore_ascii_case(&meta.label))
-                {
-                    report.badge_labels.push(meta.label);
-                }
+            {
+                report.badge_labels.push(meta.label);
             }
         }
         ACTION0_FEATURE_CARGOES => {

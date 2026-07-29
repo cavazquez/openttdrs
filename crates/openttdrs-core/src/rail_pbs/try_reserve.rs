@@ -9,7 +9,7 @@ use crate::vehicle::{Vehicle, VehicleKind};
 
 use super::train_reservation::{
     compute_train_reservation_with_settings, follow_train_reservation,
-    reservation_ends_at_safe_wait_steps,
+    reservation_ends_at_safe_wait_steps, vehicle_segment_requires_path_reserve,
 };
 
 /// Intenta reservar camino PBS; con cabeza en depósito aplica bit tentativo + rollback.
@@ -79,6 +79,16 @@ pub fn try_path_reserve(
     let reserved =
         compute_train_reservation_with_settings(map, vehicles, vehicle_idx, &global, settings);
     let reserved = follow_train_reservation(&previous, reserved, &vehicles[vehicle_idx]);
+
+    // Vanilla (`pf.reserve_paths=false`) sin path signal delante: no hay reserva PBS
+    // que crear. Bloquear aquí dejaba trenes eternos en depósito (#200 + d2a0fdf).
+    if reserved.is_empty()
+        && !settings.reserve_paths
+        && !vehicle_segment_requires_path_reserve(map, &vehicles[vehicle_idx])
+    {
+        vehicles[vehicle_idx].pbs_stuck = false;
+        return true;
+    }
 
     let reached_beyond = reserved.iter().any(|s| s.tile != depot_pos);
     let ends_safe = reservation_ends_at_safe_wait_steps(map, depot_pos, &path_hint, &reserved);

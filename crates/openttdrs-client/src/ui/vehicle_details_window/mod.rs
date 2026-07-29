@@ -79,6 +79,7 @@ impl Default for VehicleDetailsWindowState {
 impl VehicleDetailsWindowState {
     /// Compat: vehicle_id del Details enfocado.
     #[must_use]
+    #[allow(dead_code)] // API multi-slot (#244); tests / handlers futuros.
     pub(crate) fn vehicle_id(&self) -> Option<u32> {
         self.focused
             .filter(|&id| self.slots.iter().any(|s| s.vehicle_id == Some(id)))
@@ -105,6 +106,7 @@ impl VehicleDetailsWindowState {
     }
 
     #[must_use]
+    #[allow(dead_code)] // API multi-slot (#244); tests / handlers futuros.
     pub(crate) fn is_open_for(&self, vehicle_id: u32) -> bool {
         self.slots.iter().any(|s| s.vehicle_id == Some(vehicle_id))
     }
@@ -142,7 +144,7 @@ pub(crate) struct VehicleDetailsUnitText {
 fn title_root_entity(child_of: &ChildOf, parents: &Query<&ChildOf>) -> Option<Entity> {
     let center = child_of.parent();
     let bar = parents.get(center).ok()?.parent();
-    parents.get(bar).ok().map(|c| c.parent())
+    parents.get(bar).ok().map(ChildOf::parent)
 }
 
 pub(crate) fn setup_vehicle_details_window(mut commands: Commands, asset_server: Res<AssetServer>) {
@@ -426,7 +428,12 @@ pub(crate) fn sync_vehicle_details_window(
     chain: Res<VehicleChainRegistry>,
     sim: Res<SimWorld>,
     trucks: Option<Res<TruckHandles>>,
-    mut root_q: Query<(Entity, &mut FloatingWindow, &VehicleChainSlot, &mut Visibility)>,
+    mut root_q: Query<(
+        Entity,
+        &mut FloatingWindow,
+        &VehicleChainSlot,
+        &mut Visibility,
+    )>,
     mut title_q: Query<(&FloatingWindowTitleText, &mut Text, &ChildOf)>,
     parents: Query<&ChildOf>,
     mut summary_q: Query<
@@ -476,11 +483,10 @@ pub(crate) fn sync_vehicle_details_window(
             continue;
         }
         let slot_state = details_state.slots[slot_idx];
-        let vehicle_id = slot_state.vehicle_id.filter(|&id| chain.slot_of(id) == Some(slot.0));
-        win.key = vehicle_window_key(
-            FloatingWindowId::VehicleDetails,
-            vehicle_id.unwrap_or(0),
-        );
+        let vehicle_id = slot_state
+            .vehicle_id
+            .filter(|&id| chain.slot_of(id) == Some(slot.0));
+        win.key = vehicle_window_key(FloatingWindowId::VehicleDetails, vehicle_id.unwrap_or(0));
         let vehicle = vehicle_id.and_then(|id| sim.state.vehicles.iter().find(|v| v.id == id));
         let Some(vehicle) = vehicle else {
             *vis = Visibility::Hidden;
@@ -506,10 +512,10 @@ pub(crate) fn sync_vehicle_details_window(
             if sum_slot.0 != slot.0 {
                 continue;
             }
-            **summary = vehicle_details_summary(&vehicle, &sim, slot_state.details_tab);
+            **summary = vehicle_details_summary(vehicle, &sim, slot_state.details_tab);
         }
 
-        let unit_ids = details_unit_ids(&vehicle, &sim);
+        let unit_ids = details_unit_ids(vehicle, &sim);
         for (row_slot, row, mut node) in &mut row_q {
             if row_slot.0 != slot.0 {
                 continue;
@@ -527,7 +533,7 @@ pub(crate) fn sync_vehicle_details_window(
             if let Some(&unit_id) = unit_ids.get(unit_text.unit_idx)
                 && let Some(unit) = sim.state.vehicles.iter().find(|v| v.id == unit_id)
             {
-                **text = vehicle_details_unit_line(unit, &vehicle, &sim, slot_state.details_tab);
+                **text = vehicle_details_unit_line(unit, vehicle, &sim, slot_state.details_tab);
             } else {
                 **text = String::new();
             }

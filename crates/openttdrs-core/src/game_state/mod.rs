@@ -362,19 +362,19 @@ pub struct GameState {
     /// Specs `NewGRF` de industrias (id ≥37).
     #[serde(default)]
     pub industry_spec_catalog: Vec<crate::industry_spec::IndustrySpecDef>,
-    /// Overrides vanilla industry → id NewGRF (`prop 0x09`).
+    /// Overrides vanilla industry → id `NewGRF` (`prop 0x09`).
     #[serde(default = "crate::industry_spec::empty_industry_overrides")]
     pub industry_overrides: Vec<u16>,
     /// Specs `NewGRF` de casas (id ≥110).
     #[serde(default)]
     pub house_spec_catalog: Vec<crate::house_spec::HouseSpecDef>,
-    /// Overrides vanilla house → id NewGRF (`prop 0x15`).
+    /// Overrides vanilla house → id `NewGRF` (`prop 0x15`).
     #[serde(default = "crate::house_spec::empty_house_overrides")]
     pub house_overrides: Vec<u16>,
     /// Specs `NewGRF` de teselas de aeropuerto (gfx ≥74).
     #[serde(default)]
     pub airport_tile_spec_catalog: Vec<crate::airport_tile_spec::AirportTileSpecDef>,
-    /// Overrides vanilla airport tile → gfx NewGRF.
+    /// Overrides vanilla airport tile → gfx `NewGRF`.
     #[serde(default = "crate::airport_tile_spec::empty_airport_tile_overrides")]
     pub airport_tile_overrides: Vec<u16>,
     /// Specs `NewGRF` de aeropuertos (id ≥10).
@@ -410,7 +410,7 @@ pub struct GameState {
     /// Spec de aeropuerto activo dentro de la clase.
     #[serde(default)]
     pub current_airport_spec: crate::airport_class::AirportSpecId,
-    /// Spec NewGRF activo (`None` = vanilla [`Self::current_airport_spec`]).
+    /// Spec `NewGRF` activo (`None` = vanilla [`Self::current_airport_spec`]).
     #[serde(default)]
     pub current_airport_newgrf_id: Option<u16>,
     /// Clima del paisaje (`LandscapeType` en `OpenTTD`).
@@ -615,7 +615,10 @@ impl GameState {
             airport_tile_spec_catalog: Vec::new(),
             airport_tile_overrides: crate::airport_tile_spec::empty_airport_tile_overrides(),
             airport_spec_catalog: Vec::new(),
-            airport_vanilla_disabled: Vec::new(),
+            airport_vanilla_disabled: vec![
+                false;
+                crate::airport_class::NEW_AIRPORT_OFFSET as usize
+            ],
             badge_catalog: Vec::new(),
             sound_effect_catalog: Vec::new(),
             cargo_spec_catalog: Vec::new(),
@@ -729,7 +732,10 @@ impl GameState {
             airport_tile_spec_catalog: Vec::new(),
             airport_tile_overrides: crate::airport_tile_spec::empty_airport_tile_overrides(),
             airport_spec_catalog: Vec::new(),
-            airport_vanilla_disabled: Vec::new(),
+            airport_vanilla_disabled: vec![
+                false;
+                crate::airport_class::NEW_AIRPORT_OFFSET as usize
+            ],
             badge_catalog: Vec::new(),
             sound_effect_catalog: Vec::new(),
             cargo_spec_catalog: Vec::new(),

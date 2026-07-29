@@ -411,8 +411,8 @@ pub(in crate::command) fn place_rail_depot_dir(
 }
 
 fn charge_rail_build(state: &mut GameState) {
-    let mult = state.runtime.rail_type_props[usize::from(state.current_rail_type.as_u8())]
-        .cost_multiplier;
+    let mult =
+        state.runtime.rail_type_props[usize::from(state.current_rail_type.as_u8())].cost_multiplier;
     state.economy.money -= rail_build_cost_factored(&state.global_economy, mult);
 }
 

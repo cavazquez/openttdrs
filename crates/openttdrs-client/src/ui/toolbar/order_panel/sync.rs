@@ -6,9 +6,7 @@ use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, FloatingWindowTitleText,
 };
 use crate::ui::toolbar::{OrderEditState, OrderSlotState};
-use crate::ui::vehicle_chain::{
-    MAX_VEHICLE_CHAIN_SLOTS, VehicleChainSlot, vehicle_window_key,
-};
+use crate::ui::vehicle_chain::{MAX_VEHICLE_CHAIN_SLOTS, VehicleChainSlot, vehicle_window_key};
 
 use super::{ORDER_PANEL_ROWS, OrderPanelRow, OrderPanelRowText};
 
@@ -16,7 +14,7 @@ use super::{ORDER_PANEL_ROWS, OrderPanelRow, OrderPanelRowText};
 fn title_root_entity(child_of: &ChildOf, parents: &Query<&ChildOf>) -> Option<Entity> {
     let center = child_of.parent();
     let bar = parents.get(center).ok()?.parent();
-    parents.get(bar).ok().map(|c| c.parent())
+    parents.get(bar).ok().map(ChildOf::parent)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -25,7 +23,12 @@ pub(crate) fn sync_order_panel(
     pick_state: Res<State<OrderPickState>>,
     mut next_pick: ResMut<NextState<OrderPickState>>,
     sim: Res<SimWorld>,
-    mut root_q: Query<(Entity, &mut FloatingWindow, &VehicleChainSlot, &mut Visibility)>,
+    mut root_q: Query<(
+        Entity,
+        &mut FloatingWindow,
+        &VehicleChainSlot,
+        &mut Visibility,
+    )>,
     mut title_q: Query<(&FloatingWindowTitleText, &mut Text, &ChildOf)>,
     parents: Query<&ChildOf>,
     mut row_q: Query<(
@@ -79,8 +82,7 @@ pub(crate) fn sync_order_panel(
         };
 
         *vis = Visibility::Visible;
-        let pick_hint = if order_pick_active(&pick_state)
-            && order_state.focused == Some(vehicle_id)
+        let pick_hint = if order_pick_active(&pick_state) && order_state.focused == Some(vehicle_id)
         {
             " · clic en parada"
         } else {
@@ -182,11 +184,15 @@ fn refresh_slot_from_sim(slot: &mut OrderSlotState, sim: &SimWorld) {
     if let Some(sel) = slot.selected_slot
         && sel >= slot.orders.len()
     {
-        slot.selected_slot = slot.orders.len().checked_sub(1).or(if slot.orders.is_empty() {
-            None
-        } else {
-            Some(0)
-        });
+        slot.selected_slot = slot
+            .orders
+            .len()
+            .checked_sub(1)
+            .or(if slot.orders.is_empty() {
+                None
+            } else {
+                Some(0)
+            });
     }
 }
 
@@ -450,7 +456,12 @@ mod tests {
         let s1 = chain.open_or_focus(20);
         let mut state = OrderEditState::default();
         state.bind_slot(s0, 10, vec![], None);
-        state.bind_slot(s1, 20, vec![VehicleOrder::station(TileCoord::new(1, 1))], Some(0));
+        state.bind_slot(
+            s1,
+            20,
+            vec![VehicleOrder::station(TileCoord::new(1, 1))],
+            Some(0),
+        );
         assert_eq!(state.slots[0].vehicle_id, Some(10));
         assert_eq!(state.slots[1].vehicle_id, Some(20));
         assert!(state.is_open_for(10));

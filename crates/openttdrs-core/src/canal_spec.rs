@@ -1,4 +1,4 @@
-//! Features de canal NewGRF (`CanalFeature` / Action0 `0x05`).
+//! Features de canal `NewGRF` (`CanalFeature` / Action0 `0x05`).
 //!
 //! IDs alineados con `OpenTTD` `newgrf.h` (`CF_*`).
 

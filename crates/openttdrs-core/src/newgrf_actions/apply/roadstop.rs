@@ -32,6 +32,7 @@ fn resolve_or_create_road_stop_class(
 }
 
 /// Reconstruye catálogos de road stop desde el stack `enabled`.
+#[allow(clippy::too_many_lines)]
 pub fn apply_newgrf_roadstops(state: &mut GameState, search_dirs: &[&Path]) {
     // Snapshot identidad estable → rebind `Station.road_stop_spec` tras rebuild.
     let station_bindings: Vec<(usize, u32, u8)> = state

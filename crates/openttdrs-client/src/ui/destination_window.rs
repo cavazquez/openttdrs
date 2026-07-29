@@ -19,9 +19,7 @@ use crate::ui::toolbar::{
     BuildMenuUi, DragBuildState, OrderEditState, start_order_destination_pick,
     try_append_order_at_tile,
 };
-use crate::ui::vehicle_chain::{
-    MAX_VEHICLE_CHAIN_SLOTS, VehicleChainSlot, vehicle_window_key,
-};
+use crate::ui::vehicle_chain::{MAX_VEHICLE_CHAIN_SLOTS, VehicleChainSlot, vehicle_window_key};
 
 const DEST_ROWS: usize = 28;
 const BASE_POS: Vec2 = Vec2::new(280.0, 64.0);
@@ -295,10 +293,7 @@ pub(crate) fn sync_destination_picker(
             continue;
         }
         let vehicle_id = order_state.slots[idx].vehicle_id;
-        win.key = vehicle_window_key(
-            FloatingWindowId::DestinationPicker,
-            vehicle_id.unwrap_or(0),
-        );
+        win.key = vehicle_window_key(FloatingWindowId::DestinationPicker, vehicle_id.unwrap_or(0));
         let show = picker_state.open[idx] && vehicle_id.is_some();
         if !show {
             *vis = Visibility::Hidden;

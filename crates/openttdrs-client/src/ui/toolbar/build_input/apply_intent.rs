@@ -95,7 +95,12 @@ pub(crate) fn apply_intent(intent: MapClickIntent, ctx: &mut IntentApplyContext,
             }
             // Prioridad 2: clic sobre otro vehículo
             if let Some(vehicle) = ctx.sim.state.vehicles.iter().find(|v| v.pos == pos) {
-                open_order_edit_for_vehicle(&mut ctx.order_state, &mut ctx.vehicle_chain, vehicle, &mut ctx.pick_next);
+                open_order_edit_for_vehicle(
+                    &mut ctx.order_state,
+                    &mut ctx.vehicle_chain,
+                    vehicle,
+                    &mut ctx.pick_next,
+                );
                 return;
             }
             // Estación incompatible
@@ -121,7 +126,12 @@ pub(crate) fn apply_intent(intent: MapClickIntent, ctx: &mut IntentApplyContext,
         }
         MapClickIntent::StartOrderEditForVehicle(vehicle_id) => {
             if let Some(vehicle) = ctx.sim.state.vehicles.iter().find(|v| v.id == vehicle_id) {
-                open_order_edit_for_vehicle(&mut ctx.order_state, &mut ctx.vehicle_chain, vehicle, &mut ctx.pick_next);
+                open_order_edit_for_vehicle(
+                    &mut ctx.order_state,
+                    &mut ctx.vehicle_chain,
+                    vehicle,
+                    &mut ctx.pick_next,
+                );
                 start_order_destination_pick(&ctx.order_state, &mut ctx.pick_next);
             }
         }

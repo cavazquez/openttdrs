@@ -113,13 +113,13 @@ pub struct RoadTypeDef {
     /// Factor de mantenimiento (`prop 0x1C`); `0` = default.
     #[serde(default)]
     pub maintenance_multiplier: u16,
-    /// Flags Action0 `0x10` (o extensión local `0x09` en RoadTypes).
+    /// Flags Action0 `0x10` (o extensión local `0x09` en `RoadTypes`).
     #[serde(default)]
     pub flags: u8,
     /// Máscara de `RoadType` powered (`prop 0x0F` resuelta); bit = `id.as_u8()`.
     #[serde(default)]
     pub powered_mask: u64,
-    /// Registrado vía feature `TramTypes` (`0x13`), no RoadTypes.
+    /// Registrado vía feature `TramTypes` (`0x13`), no `RoadTypes`.
     #[serde(default)]
     pub from_tramtypes_feature: bool,
     pub from_newgrf: bool,

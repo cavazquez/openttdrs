@@ -126,7 +126,7 @@ impl RailTypeRuntimeProps {
     }
 }
 
-/// ¿Compatibles según máscaras NewGRF (si hay) o reglas vanilla?
+/// ¿Compatibles según máscaras `NewGRF` (si hay) o reglas vanilla?
 #[must_use]
 pub fn rail_types_compatible_with_props(
     a: RailType,
@@ -146,12 +146,9 @@ pub fn rail_types_compatible_with_props(
     rail_types_compatible(a, b)
 }
 
-/// Máscara powered con override NewGRF.
+/// Máscara powered con override `NewGRF`.
 #[must_use]
-pub fn powered_railtypes_mask_with_props(
-    rt: RailType,
-    props: &[RailTypeRuntimeProps; 4],
-) -> u8 {
+pub fn powered_railtypes_mask_with_props(rt: RailType, props: &[RailTypeRuntimeProps; 4]) -> u8 {
     let p = props
         .get(usize::from(rt.as_u8()))
         .copied()
@@ -298,10 +295,10 @@ pub fn engine_compatible_with_rail(engine: &EngineDef, rail_type: RailType) -> b
     if !engine.is_train_engine() && !engine.is_wagon() {
         return true;
     }
-    let required = engine
-        .required_rail_type
-        .map(RailType::from_u8)
-        .unwrap_or_else(|| required_rail_type_for_engine(engine.id));
+    let required = engine.required_rail_type.map_or_else(
+        || required_rail_type_for_engine(engine.id),
+        RailType::from_u8,
+    );
     match required {
         RailType::Rail => matches!(rail_type, RailType::Rail | RailType::Electric),
         other => other == rail_type,

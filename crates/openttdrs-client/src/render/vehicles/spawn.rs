@@ -34,20 +34,7 @@ fn vehicle_cargo_label_pos(vehicle_pos: Vec3) -> Vec3 {
 }
 
 pub(super) fn vehicle_cargo_label(v: &Vehicle) -> String {
-    let cargo = match v.cargo_type {
-        Some(openttdrs_core::CargoType::Passengers) => "PAX",
-        Some(openttdrs_core::CargoType::Mail) => "MAIL",
-        Some(openttdrs_core::CargoType::Goods) => "GOODS",
-        Some(openttdrs_core::CargoType::Coal) => "COAL",
-        Some(openttdrs_core::CargoType::Wood) => "WOOD",
-        Some(openttdrs_core::CargoType::Oil) => "OIL",
-        Some(openttdrs_core::CargoType::Livestock) => "LIVE",
-        Some(openttdrs_core::CargoType::Grain) => "GRAIN",
-        Some(openttdrs_core::CargoType::IronOre) => "ORE",
-        Some(openttdrs_core::CargoType::Steel) => "STEEL",
-        Some(openttdrs_core::CargoType::Valuables) => "VAL",
-        None => "ANY",
-    };
+    let cargo = v.cargo_type.map_or("ANY", openttdrs_core::CargoType::label);
     format!("{cargo} {}/{}", v.cargo, v.capacity)
 }
 

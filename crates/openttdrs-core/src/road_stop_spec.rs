@@ -1,6 +1,6 @@
 //! Clases y specs de paradas de carretera `NewGRF` (`RoadStops`, feature Action0 `0x14`).
 //!
-//! Catálogo runtime parcial: clase, tipo de parada, flags/draw_mode y nombre;
+//! Catálogo runtime parcial: clase, tipo de parada, `flags/draw_mode` y nombre;
 //! sprites opcionales vía Action1/3.
 
 use serde::{Deserialize, Serialize};
@@ -94,7 +94,7 @@ impl RoadStopSpecDef {
     /// Vista Action1/3 para índice de gfx (`RSV_*`).
     ///
     /// Bahía (`0..3`): módulo si hay vistas. Drive-through (`4`/`5`): solo si
-    /// `newgrf_views.len() > idx`; si no, `None` → Action5 / OpenGFX.
+    /// `newgrf_views.len() > idx`; si no, `None` → Action5 / `OpenGFX`.
     #[must_use]
     pub fn newgrf_view(&self, idx: usize) -> Option<&crate::newgrf_sprites::DecodedSprite> {
         if self.newgrf_views.is_empty() {

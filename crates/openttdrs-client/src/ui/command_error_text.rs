@@ -109,9 +109,7 @@ pub const fn command_error_message(err: CommandError) -> &'static str {
         CommandError::LoanAtMaximum => "El préstamo ya está al máximo permitido.",
         CommandError::NoLoanToRepay => "No hay préstamo suficiente para devolver.",
         CommandError::TownNotFound => "Ciudad no encontrada.",
-        CommandError::TownActionNotAvailable => {
-            "Esa acción de autoridad no está disponible ahora."
-        }
+        CommandError::TownActionNotAvailable => "Esa acción de autoridad no está disponible ahora.",
         CommandError::StatueNoPlace => "No hay sitio libre para la estatua.",
         CommandError::CannotFoundTownHere => "No se puede fundar un pueblo aquí.",
         CommandError::TownTooClose => "Hay otro pueblo demasiado cerca.",
@@ -151,6 +149,7 @@ pub const fn command_error_message(err: CommandError) -> &'static str {
         CommandError::RoadStopDriveThroughRequired => {
             "Esta parada NewGRF solo admite colocación drive-through."
         }
+        CommandError::NewGrfCallbackDenied => "Un NewGRF denegó esta acción (callback).",
     }
 }
 
@@ -249,6 +248,7 @@ mod tests {
             CommandError::RoadStopSpecTypeMismatch,
             CommandError::RoadStopRoadTypeMismatch,
             CommandError::RoadStopDriveThroughRequired,
+            CommandError::NewGrfCallbackDenied,
         ];
         for err in errors {
             let msg = command_error_message(err);

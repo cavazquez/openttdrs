@@ -27,6 +27,7 @@ pub const NEWGRF_ENGINE_ID_BASE: u16 = 1000;
 
 /// Definición de motor (paridad con `_orig_*_vehicle_info` del upstream).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct EngineDef {
     pub id: u16,
     pub kind: VehicleKind,

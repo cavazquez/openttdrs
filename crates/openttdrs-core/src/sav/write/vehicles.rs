@@ -15,9 +15,7 @@ use super::chunks::raw_table_chunk;
 use super::codec::{write_gamma, write_str};
 use crate::game_state::GameState;
 use crate::map::{TileCoord, TileKind, coord_to_linear_index};
-use crate::vehicle::{
-    DIR_NE, DIR_NW, DIR_SE, DIR_SW, Vehicle, VehicleKind, VehicleOrder,
-};
+use crate::vehicle::{DIR_NE, DIR_NW, DIR_SE, DIR_SW, Vehicle, VehicleKind, VehicleOrder};
 
 /// Cabeza de convoy + motor (`GVSF_FRONT | GVSF_ENGINE`).
 const TRAIN_SUBTYPE_FRONT_ENGINE: u8 = 0x01 | 0x08;
@@ -77,11 +75,7 @@ fn track_bits_for(state: &GameState, pos: TileCoord) -> u8 {
         return TRACK_BIT_X;
     }
     let bits = tile.m5 & 0x3F;
-    if bits == 0 {
-        TRACK_BIT_X
-    } else {
-        bits
-    }
+    if bits == 0 { TRACK_BIT_X } else { bits }
 }
 
 /// Dirección diagonal coherente con el eje de vía.
@@ -94,11 +88,7 @@ fn train_direction(track: u8, dir: u8) -> u8 {
     if on_y && matches!(dir, DIR_NW | DIR_SE) {
         return dir;
     }
-    if on_y && !on_x {
-        DIR_SE
-    } else {
-        DIR_NE
-    }
+    if on_y && !on_x { DIR_SE } else { DIR_NE }
 }
 
 /// `OpenTTD` exige roadtype válido en la tesela del ROAD vehicle (`AfterLoad`).

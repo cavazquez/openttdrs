@@ -2,15 +2,15 @@
 
 use std::path::Path;
 
+use crate::GameState;
 use crate::sound_effect::{
     SoundEffectDef, clamp_sound_volume, collect_sound_samples_from_grf, empty_sound_effect_catalog,
 };
 use crate::sound_id::SOUND_COUNT;
-use crate::GameState;
 
 use super::super::action0::collect_sound_metas_from_grf;
 
-/// Reconstruye el catálogo de sonidos NewGRF desde el stack `enabled`.
+/// Reconstruye el catálogo de sonidos `NewGRF` desde el stack `enabled`.
 ///
 /// Clave `(grfid, local_id)`: dos GRFs con el mismo `local_id` no se pisan.
 /// Action0 sin sample → diagnóstico + entrada `has_sample=false`.
@@ -34,10 +34,10 @@ pub fn apply_newgrf_sounds(state: &mut GameState, search_dirs: &[&Path]) {
         };
         let collected = collect_sound_samples_from_grf(&data);
         if collected.truncated {
-            state.runtime.newgrf_diagnostics.push(format!(
-                "sound Action11 truncated grfid={}",
-                entry.grfid
-            ));
+            state
+                .runtime
+                .newgrf_diagnostics
+                .push(format!("sound Action11 truncated grfid={}", entry.grfid));
         }
         for (local_id, pcm) in collected.samples {
             let has_sample = !pcm.is_empty();

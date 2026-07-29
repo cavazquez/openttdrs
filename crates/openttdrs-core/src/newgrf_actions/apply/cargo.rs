@@ -3,7 +3,9 @@
 use std::path::Path;
 
 use crate::GameState;
-use crate::cargo_spec::{CargoSpecDef, DEFAULT_CARGO_CAPACITY_MULTIPLIER, empty_cargo_spec_catalog};
+use crate::cargo_spec::{
+    CargoSpecDef, DEFAULT_CARGO_CAPACITY_MULTIPLIER, empty_cargo_spec_catalog,
+};
 
 use super::super::action0::collect_cargo_metas_from_grf;
 

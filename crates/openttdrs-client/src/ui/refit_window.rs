@@ -22,8 +22,8 @@ use crate::ui::vehicle_chain::{
     MAX_VEHICLE_CHAIN_SLOTS, VehicleChainRegistry, VehicleChainSlot, vehicle_window_key,
 };
 
-/// Cubrir `TRUCK_FREIGHT` (9) y margen; la lista hace scroll.
-const REFIT_ROWS: usize = 12;
+/// Cubrir `TRUCK_FREIGHT` (29 cargos vanilla) y margen; la lista hace scroll.
+const REFIT_ROWS: usize = 32;
 const CONSIST_SLOTS: usize = 8;
 const BASE_POS: Vec2 = Vec2::new(520.0, 220.0);
 const SLOT_OFFSET: Vec2 = Vec2::new(36.0, 36.0);
@@ -40,19 +40,10 @@ pub(crate) struct RefitSlotState {
     pub(crate) selected_unit_ids: Vec<u32>,
 }
 
-#[derive(Resource, Debug)]
+#[derive(Resource, Debug, Default)]
 pub(crate) struct RefitWindowState {
     pub(crate) slots: [RefitSlotState; MAX_VEHICLE_CHAIN_SLOTS],
     pub(crate) focused: Option<u32>,
-}
-
-impl Default for RefitWindowState {
-    fn default() -> Self {
-        Self {
-            slots: Default::default(),
-            focused: None,
-        }
-    }
 }
 
 impl RefitWindowState {
@@ -287,7 +278,12 @@ pub(crate) fn sync_refit_window(
     state: Res<RefitWindowState>,
     chain: Res<VehicleChainRegistry>,
     sim: Res<SimWorld>,
-    mut root_q: Query<(Entity, &mut FloatingWindow, &VehicleChainSlot, &mut Visibility)>,
+    mut root_q: Query<(
+        Entity,
+        &mut FloatingWindow,
+        &VehicleChainSlot,
+        &mut Visibility,
+    )>,
     mut title_q: Query<
         (&FloatingWindowTitleText, &mut Text, &ChildOf),
         (
@@ -346,7 +342,7 @@ pub(crate) fn sync_refit_window(
     fn title_root_entity(child_of: &ChildOf, parents: &Query<&ChildOf>) -> Option<Entity> {
         let center = child_of.parent();
         let bar = parents.get(center).ok()?.parent();
-        parents.get(bar).ok().map(|c| c.parent())
+        parents.get(bar).ok().map(ChildOf::parent)
     }
 
     for (root_entity, mut win, slot, mut vis) in &mut root_q {
@@ -500,13 +496,10 @@ pub(crate) fn handle_refit_window_buttons(
             continue;
         }
         let idx = chain_slot.0 as usize;
-        let vehicle_id = state.slots.get(idx).and_then(|s| {
-            if s.open {
-                s.vehicle_id
-            } else {
-                None
-            }
-        });
+        let vehicle_id = state
+            .slots
+            .get(idx)
+            .and_then(|s| if s.open { s.vehicle_id } else { None });
         let Some(vehicle_id) = vehicle_id else {
             continue;
         };
@@ -619,7 +612,9 @@ mod tests {
         refit.focused = Some(9);
         world.insert_resource(refit);
         world.init_resource::<VehicleChainRegistry>();
-        world.resource_mut::<VehicleChainRegistry>().open_or_focus(9);
+        world
+            .resource_mut::<VehicleChainRegistry>()
+            .open_or_focus(9);
         world.init_resource::<RemapMapVisualsPending>();
         world.init_resource::<HudBuildFeedback>();
         world.insert_resource(Time::<()>::default());

@@ -4,8 +4,9 @@ use bevy::prelude::*;
 use openttdrs_core::Command;
 use openttdrs_core::prelude::*;
 use openttdrs_core::{
-    FACTORY_WOOD_INPUT, Industry, IndustryKind, IndustrySpec, PathNetwork, PreserveRect,
-    WorldGenConfig, apply_world_gen, find_path, road_stop_approach_tile,
+    FACTORY_GRAIN_INPUT, FACTORY_LIVESTOCK_INPUT, FACTORY_STEEL_INPUT, Industry, IndustryKind,
+    IndustrySpec, PathNetwork, PreserveRect, WorldGenConfig, apply_world_gen, find_path,
+    road_stop_approach_tile,
 };
 
 /// Carretera horizontal de demo (eje X).
@@ -182,15 +183,16 @@ pub(crate) fn place_demo_economy_loop(state: &mut GameState) {
     state.vehicles.push(truck);
 }
 
-/// Madera y carbón inicial en la parada de descarga para que la fábrica procese
-/// en cuanto el camión demo entregue más carbón de la mina.
+/// Insumos temperate iniciales en la parada de descarga para que la fábrica procese.
 fn seed_factory_inputs_at_deliver_station(state: &mut GameState) {
     if let Some(station) = state
         .stations
         .iter_mut()
         .find(|s| s.pos == DEMO_ECONOMY_DELIVER_STATION)
     {
-        station.cargo_stock.wood = FACTORY_WOOD_INPUT * 8;
+        station.cargo_stock.livestock = FACTORY_LIVESTOCK_INPUT * 8;
+        station.cargo_stock.grain = FACTORY_GRAIN_INPUT * 8;
+        station.cargo_stock.steel = FACTORY_STEEL_INPUT * 8;
     }
 }
 

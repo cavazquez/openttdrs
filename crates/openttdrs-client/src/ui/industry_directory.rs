@@ -542,8 +542,9 @@ mod tests {
         let mut industry = Industry::new(TileCoord::new(0, 0), IndustryKind::Factory);
         industry.spec = Some(IndustrySpec::Factory);
         let label = industry_chain_label(&industry);
-        assert!(label.contains(cargo_display_name(CargoType::Wood)));
-        assert!(label.contains(cargo_display_name(CargoType::Coal)));
+        assert!(label.contains(cargo_display_name(CargoType::Livestock)));
+        assert!(label.contains(cargo_display_name(CargoType::Grain)));
+        assert!(label.contains(cargo_display_name(CargoType::Steel)));
         assert!(label.contains(cargo_display_name(CargoType::Goods)));
     }
 

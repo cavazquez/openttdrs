@@ -35,11 +35,12 @@ pub(super) fn set_vehicle_order_list(
                 if vehicle_kind == VehicleKind::Aircraft
                     && let Some(engine_id) = aircraft_engine_id
                 {
-                    let is_heli = crate::engine::engine_in_catalog(&state.engine_catalog, engine_id)
-                        .map_or_else(
-                            || crate::engine::aircraft_is_helicopter(engine_id),
-                            crate::engine::aircraft_is_helicopter_def,
-                        );
+                    let is_heli =
+                        crate::engine::engine_in_catalog(&state.engine_catalog, engine_id)
+                            .map_or_else(
+                                || crate::engine::aircraft_is_helicopter(engine_id),
+                                crate::engine::aircraft_is_helicopter_def,
+                            );
                     if !crate::airport_class::airport_allows_aircraft(st.airport_spec, is_heli) {
                         return Err(CommandError::IncompatibleStopForVehicle);
                     }
@@ -122,6 +123,7 @@ pub(super) fn build_road_vehicle_at_depot(
 }
 
 /// Compra el modelo `engine_id` en un depósito compatible, validando fondos.
+#[allow(clippy::too_many_lines)]
 pub(super) fn build_vehicle_at_depot(
     state: &mut GameState,
     depot_pos: TileCoord,
@@ -739,10 +741,10 @@ pub(super) fn cycle_vehicle_order_depot_refit(
     let engine_id = state.vehicles[vehicle_idx].engine_id;
     let options = engine_id
         .and_then(|id| crate::engine::engine_in_catalog(&state.engine_catalog, id))
-        .map(crate::refit::refittable_cargo_types_for_engine)
-        .unwrap_or_else(|| {
-            crate::refit::refittable_cargo_types(&state.vehicles[vehicle_idx]).to_vec()
-        });
+        .map_or_else(
+            || crate::refit::refittable_cargo_types(&state.vehicles[vehicle_idx]).to_vec(),
+            crate::refit::refittable_cargo_types_for_engine,
+        );
     let Some(updated) = state.vehicles[vehicle_idx].orders[index].with_cycled_depot_refit(&options)
     else {
         return Err(CommandError::OrderIndexOutOfRange);
@@ -1066,7 +1068,13 @@ pub(super) fn set_vehicle_order_max_speed(
         return Err(CommandError::OrderIndexOutOfRange);
     }
     let order = vehicle.orders[index];
-    if order.max_speed_limit() == 0 && max_speed == 0 && !matches!(order, VehicleOrder::Station { .. } | VehicleOrder::Waypoint { .. }) {
+    if order.max_speed_limit() == 0
+        && max_speed == 0
+        && !matches!(
+            order,
+            VehicleOrder::Station { .. } | VehicleOrder::Waypoint { .. }
+        )
+    {
         return Err(CommandError::OrderIndexOutOfRange);
     }
     if !matches!(

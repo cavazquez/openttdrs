@@ -206,8 +206,7 @@ fn leave_unbunching_depot(vehicles: &mut [Vehicle], index: usize) {
         .filter(|(_, v)| {
             v.is_consist_head()
                 && v.running
-                && (v.id == head_id
-                    || (shared.is_some() && v.shared_order_id == shared))
+                && (v.id == head_id || (shared.is_some() && v.shared_order_id == shared))
         })
         .map(|(i, _)| i)
         .collect();

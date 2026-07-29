@@ -8,9 +8,7 @@ use crate::map::{
     is_map_object_tile, is_newgrf_object_type, object_footprint_tiles, object_tile_offset_byte,
     object_type_dims, object_type_from_tile,
 };
-use crate::object_spec::{
-    DEFAULT_OBJECT_BUILD_COST_FACTOR, ObjectSpecDef, object_spec_def,
-};
+use crate::object_spec::{DEFAULT_OBJECT_BUILD_COST_FACTOR, ObjectSpecDef, object_spec_def};
 use crate::world_gen::Climate;
 
 use super::error::CommandError;
@@ -38,10 +36,7 @@ pub fn is_allowed_build_object_type(object_type: u8, catalog: &[ObjectSpecDef]) 
         .is_some_and(|d| d.size_width() > 0 && d.size_height() > 0)
 }
 
-fn object_build_cost_params(
-    object_type: u8,
-    catalog: &[ObjectSpecDef],
-) -> (u8, u32) {
+fn object_build_cost_params(object_type: u8, catalog: &[ObjectSpecDef]) -> (u8, u32) {
     if is_newgrf_object_type(object_type)
         && let Some(def) = object_spec_def(catalog, u16::from(object_type))
     {
@@ -176,12 +171,7 @@ pub(crate) fn build_object(
     for dy in 0..h {
         for dx in 0..w {
             let tile = TileCoord::new(c.x + i32::from(dx), c.y + i32::from(dy));
-            place_object_tile(
-                state,
-                tile,
-                object_type,
-                object_tile_offset_byte(dx, dy),
-            )?;
+            place_object_tile(state, tile, object_type, object_tile_offset_byte(dx, dy))?;
         }
     }
     state.economy.money -= cost;
@@ -435,7 +425,12 @@ mod tests {
     fn build_newgrf_object_uses_cost_factor() {
         let mut state = GameState::new(8, 8);
         let factor = 4u8;
-        let ot = push_spec(&mut state, OBJECT_SIZE_1X1, factor, DEFAULT_OBJECT_CLIMATE_MASK);
+        let ot = push_spec(
+            &mut state,
+            OBJECT_SIZE_1X1,
+            factor,
+            DEFAULT_OBJECT_CLIMATE_MASK,
+        );
         let before = state.economy.money;
         apply_command(
             &mut state,
@@ -568,10 +563,8 @@ mod tests {
     fn newgrf_object_map_survives_save_load_and_reapply() {
         let a0 = build_action0_object_payload_full(3, b"LIGT", 0x12, 0x0F, 5, "Faro2", &[]);
         let bytes = build_grf_v2_with_action0_and_action8(&a0, [b'O', b'B', 0, 2], "obj2", "");
-        let dir = std::env::temp_dir().join(format!(
-            "openttdrs_obj_saveload_{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("openttdrs_obj_saveload_{}", std::process::id()));
         let _ = std::fs::create_dir_all(&dir);
         std::fs::write(dir.join("obj2.grf"), &bytes).expect("write");
         let mut state = GameState::new(8, 8);

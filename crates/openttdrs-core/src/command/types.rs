@@ -439,7 +439,7 @@ pub enum Command {
     SetCurrentAirportClass(crate::airport_class::AirportClassId),
     /// Spec de aeropuerto activo.
     SetCurrentAirportSpec(crate::airport_class::AirportSpecId),
-    /// Spec NewGRF de aeropuerto activo (id global ≥10).
+    /// Spec `NewGRF` de aeropuerto activo (id global ≥10).
     SetCurrentAirportNewgrfSpec(u16),
     /// Spec de objeto activo (vanilla 0/1 o id `NewGRF` 1×1 del catálogo).
     SetCurrentObjectSpec(u16),

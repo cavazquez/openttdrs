@@ -77,7 +77,7 @@ const PROP_CARGO_LABEL: u8 = 0x17;
 const PROP_SOUND_VOLUME: u8 = 0x08;
 /// Sounds: priority BYTE (`OpenTTD` `0x09`).
 const PROP_SOUND_PRIORITY: u8 = 0x09;
-/// Sounds: override old SoundId BYTE (`OpenTTD` `0x0A`).
+/// Sounds: override old `SoundId` BYTE (`OpenTTD` `0x0A`).
 const PROP_SOUND_OVERRIDE: u8 = 0x0A;
 /// Canals: callback mask BYTE (`OpenTTD` `0x08`).
 const PROP_CANAL_CALLBACK_MASK: u8 = 0x08;
@@ -366,7 +366,7 @@ pub struct ParsedAirportLayoutTile {
 /// Una rotación de layout de aeropuerto.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParsedAirportLayout {
-    /// `Direction` OpenTTD (N/E/S/W); bits bajos.
+    /// `Direction` `OpenTTD` (N/E/S/W); bits bajos.
     pub rotation: u8,
     pub tiles: Vec<ParsedAirportLayoutTile>,
 }
@@ -405,7 +405,7 @@ pub struct ParsedAirportMeta {
 pub struct ParsedIndustryLayoutTile {
     pub x: i8,
     pub y: i8,
-    /// Gfx vanilla, o id local de IndustryTile si [`Self::use_local_tile`].
+    /// Gfx vanilla, o id local de `IndustryTile` si [`Self::use_local_tile`].
     pub gfx_or_local: u16,
     pub use_local_tile: bool,
 }
@@ -515,6 +515,7 @@ pub struct ParsedCanalMeta {
 
 /// Metadatos `Bridges` Action0 (`0x06`; override in-place de slots 0..12).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct ParsedBridgeMeta {
     pub local_id: u8,
     pub available_from_year: u32,
@@ -593,6 +594,7 @@ fn read_label_list(payload: &[u8], i: &mut usize) -> Option<Vec<[u8; 4]>> {
 }
 
 #[must_use]
+#[allow(clippy::too_many_lines)]
 pub fn parse_action0_roadtype_meta(payload: &[u8]) -> Option<ParsedRoadTypeMeta> {
     let header = parse_action0_header(payload)?;
     let feature_tram = header.feature == ACTION0_FEATURE_TRAMTYPES;
@@ -769,6 +771,7 @@ pub fn collect_roadtype_metas_from_grf(data: &[u8]) -> Vec<ParsedRoadTypeMeta> {
 /// Lee etiquetas `RailType` de un Action0. La propiedad `0x08` contiene un DWORD
 /// por id y suele ser la primera del bloque, como en la fase Reserve de `OpenTTD`.
 #[must_use]
+#[allow(clippy::too_many_lines)]
 pub fn parse_action0_railtype_metas(payload: &[u8]) -> Option<Vec<ParsedRailTypeMeta>> {
     let header = parse_action0_header(payload)?;
     if header.feature != ACTION0_FEATURE_RAILTYPES || header.num_ids == 0 || payload.len() < 5 {
@@ -805,9 +808,7 @@ pub fn parse_action0_railtype_metas(payload: &[u8]) -> Option<Vec<ParsedRailType
             }
             0x0E | 0x0F | 0x18 | 0x19 => {
                 for offset in 0..n {
-                    let Some(list) = read_label_list(payload, &mut i) else {
-                        return None;
-                    };
+                    let list = read_label_list(payload, &mut i)?;
                     match prop {
                         0x0E => compatible_labels[offset] = list,
                         0x0F => powered_labels[offset] = list,
@@ -877,9 +878,7 @@ pub fn parse_action0_railtype_metas(payload: &[u8]) -> Option<Vec<ParsedRailType
             0x1D => {
                 // alternate rail type label list
                 for _ in 0..n {
-                    if read_label_list(payload, &mut i).is_none() {
-                        return None;
-                    }
+                    read_label_list(payload, &mut i)?;
                 }
             }
             _ => break,
@@ -1201,7 +1200,7 @@ pub fn parse_action0_industry_tile_meta(payload: &[u8]) -> Option<ParsedIndustry
                 i += 2;
                 let slot = usize::from(prop - PROP_INDTILE_ACCEPT_0);
                 accepts[slot] = (acctp & 0xFF) as u8;
-                acceptance[slot] = ((acctp >> 8) as u8).min(16) as i8;
+                acceptance[slot] = ((acctp >> 8) as u8).min(16).cast_signed();
             }
             PROP_INDTILE_CALLBACK_MASK => {
                 if i >= payload.len() {
@@ -1236,7 +1235,7 @@ pub fn parse_action0_industry_tile_meta(payload: &[u8]) -> Option<ParsedIndustry
                             break;
                         }
                         accepts[slot] = payload[i];
-                        acceptance[slot] = payload[i + 1] as i8;
+                        acceptance[slot] = payload[i + 1].cast_signed();
                         i += 2;
                     }
                 }
@@ -1366,8 +1365,8 @@ pub fn parse_action0_industry_meta(payload: &[u8]) -> Option<ParsedIndustryMeta>
                     break;
                 }
                 let shift = u16::from(prop - 0x21) * 8;
-                callback_mask = (callback_mask & !(0xFFu16 << shift))
-                    | (u16::from(payload[i]) << shift);
+                callback_mask =
+                    (callback_mask & !(0xFFu16 << shift)) | (u16::from(payload[i]) << shift);
                 i += 1;
             }
             0x12 | 0x13 => {
@@ -1408,7 +1407,7 @@ pub fn parse_action0_industry_meta(payload: &[u8]) -> Option<ParsedIndustryMeta>
                 if i + 4 > payload.len() {
                     break;
                 }
-                if matches!(prop, 0x1C | 0x1D | 0x1E) {
+                if matches!(prop, 0x1C..=0x1E) {
                     let multiples = u32::from_le_bytes([
                         payload[i],
                         payload[i + 1],
@@ -1463,8 +1462,7 @@ pub fn parse_action0_industry_meta(payload: &[u8]) -> Option<ParsedIndustryMeta>
                 }
                 input_multipliers.clear();
                 for _ in 0..num_in * num_out {
-                    input_multipliers
-                        .push(u16::from_le_bytes([payload[i], payload[i + 1]]));
+                    input_multipliers.push(u16::from_le_bytes([payload[i], payload[i + 1]]));
                     i += 2;
                 }
             }
@@ -1565,16 +1563,15 @@ fn parse_industry_layouts(
                 if *i + 2 > payload.len() {
                     return Some(layouts);
                 }
-                let local =
-                    u16::from_le_bytes([payload[*i], payload[*i + 1]]);
+                let local = u16::from_le_bytes([payload[*i], payload[*i + 1]]);
                 *i += 2;
                 (local, true)
             } else {
                 (u16::from(gfx), false)
             };
             layout.push(ParsedIndustryLayoutTile {
-                x: x as i8,
-                y: y as i8,
+                x: x.cast_signed(),
+                y: y.cast_signed(),
                 gfx_or_local,
                 use_local_tile,
             });
@@ -1744,13 +1741,7 @@ pub fn parse_action0_house_meta(payload: &[u8]) -> Option<ParsedHouseMeta> {
                     _ => {}
                 }
             }
-            0x17 => {
-                if i + 4 > payload.len() {
-                    break;
-                }
-                i += 4;
-            }
-            0x1E => {
+            0x17 | 0x1E => {
                 if i + 4 > payload.len() {
                     break;
                 }
@@ -1834,7 +1825,7 @@ pub fn collect_house_metas_from_grf(data: &[u8]) -> Vec<ParsedHouseMeta> {
     out
 }
 
-/// Parsea Action0 `RoadStops` (`0x14`): class, stop type, draw_mode, flags, nombre `0xFE`, badges `0xFD`.
+/// Parsea Action0 `RoadStops` (`0x14`): class, stop type, `draw_mode`, flags, nombre `0xFE`, badges `0xFD`.
 #[must_use]
 pub fn parse_action0_roadstop_meta(payload: &[u8]) -> Option<ParsedRoadStopMeta> {
     let header = parse_action0_header(payload)?;
@@ -2035,10 +2026,10 @@ pub fn parse_action0_badge_meta(payload: &[u8]) -> Option<ParsedBadgeMeta> {
             _ => break,
         }
     }
-    let label = if !label_cstr.is_empty() {
-        label_cstr
-    } else {
+    let label = if label_cstr.is_empty() {
         label_4
+    } else {
+        label_cstr
     };
     if label.is_empty() {
         return None;
@@ -2119,7 +2110,7 @@ pub fn collect_sound_metas_from_grf(data: &[u8]) -> Vec<ParsedSoundMeta> {
     out
 }
 
-/// Parsea Action0 `Canals` (`0x05`): callback_mask `0x08`, flags `0x09`.
+/// Parsea Action0 `Canals` (`0x05`): `callback_mask` `0x08`, flags `0x09`.
 #[must_use]
 pub fn parse_action0_canal_meta(payload: &[u8]) -> Option<ParsedCanalMeta> {
     let header = parse_action0_header(payload)?;
@@ -2179,9 +2170,8 @@ fn skip_bridge_sprite_tables(payload: &[u8], i: &mut usize) -> bool {
     if *i + 2 > payload.len() {
         return false;
     }
-    let _tableid = payload[*i];
     let numtables = payload[*i + 1];
-    *i += 2;
+    *i += 2; // skip tableid + numtables
     let bytes = usize::from(numtables).saturating_mul(BRIDGE_SPRITES_PER_PIECE * 4);
     if *i + bytes > payload.len() {
         return false;
@@ -2216,6 +2206,7 @@ fn skip_bridge_pillars(payload: &[u8], i: &mut usize) -> bool {
 
 /// Parsea Action0 `Bridges` (`0x06`): year/len/price/speed (+ props consumidas).
 #[must_use]
+#[allow(clippy::too_many_lines)]
 pub fn parse_action0_bridge_meta(payload: &[u8]) -> Option<ParsedBridgeMeta> {
     let header = parse_action0_header(payload)?;
     if header.feature != ACTION0_FEATURE_BRIDGES || header.num_ids == 0 || payload.len() < 5 {
@@ -2363,6 +2354,7 @@ pub fn collect_bridge_metas_from_grf(data: &[u8]) -> Vec<ParsedBridgeMeta> {
 
 /// Parsea Action0 `Cargoes` (`0x0B`): bitnum, label, pagos, clases, nombre `0xFE`.
 #[must_use]
+#[allow(clippy::too_many_lines)]
 pub fn parse_action0_cargo_meta(payload: &[u8]) -> Option<ParsedCargoMeta> {
     let header = parse_action0_header(payload)?;
     if header.feature != ACTION0_FEATURE_CARGOES || header.num_ids == 0 || payload.len() < 5 {
@@ -2788,8 +2780,8 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
                 curve_speed_mod = i16::from_le_bytes(read_u16(payload, &mut i)?.to_le_bytes());
             }
             // Anchos fijos restantes consumidos sin semántica runtime.
-            0x08 | 0x0A | 0x0C | 0x0F | 0x10 | 0x11 | 0x18 | 0x19 | 0x1C | 0x1E | 0x22
-            | 0x25 | 0x26 | 0x31 => {
+            0x08 | 0x0A | 0x0C | 0x0F | 0x10 | 0x11 | 0x18 | 0x19 | 0x1C | 0x1E | 0x22 | 0x25
+            | 0x26 | 0x31 => {
                 skip_bytes(payload, &mut i, 1)?;
             }
             0x1A => {
@@ -3176,7 +3168,6 @@ pub fn collect_vehicle_metas_from_grf(data: &[u8], feature: u8) -> Vec<ParsedVeh
     out
 }
 
-
 /// Parsea Action0 `AirportTiles` (`0x11`). Requiere `prop 0x08` (subst).
 #[must_use]
 pub fn parse_action0_airport_tile_meta(payload: &[u8]) -> Option<ParsedAirportTileMeta> {
@@ -3338,10 +3329,10 @@ pub fn parse_action0_airport_meta(payload: &[u8]) -> Option<ParsedAirportMeta> {
                         if i + 2 > payload.len() {
                             break;
                         }
-                        let x = payload[i] as i8;
-                        let y = payload[i + 1] as i8;
+                        let x = payload[i].cast_signed();
+                        let y = payload[i + 1].cast_signed();
                         i += 2;
-                        if x == 0 && (y as u8) == 0x80 {
+                        if x == 0 && y.cast_unsigned() == 0x80 {
                             break;
                         }
                         if i >= payload.len() {
@@ -3361,11 +3352,15 @@ pub fn parse_action0_airport_meta(payload: &[u8]) -> Option<ParsedAirportMeta> {
                         };
                         // size from tile coords (N/S vs E/W)
                         let (sx, sy) = if rotation == 2 || rotation == 6 {
-                            (u8::try_from((y as i32) + 1).unwrap_or(1),
-                             u8::try_from((x as i32) + 1).unwrap_or(1))
+                            (
+                                u8::try_from(i32::from(y) + 1).unwrap_or(1),
+                                u8::try_from(i32::from(x) + 1).unwrap_or(1),
+                            )
                         } else {
-                            (u8::try_from((x as i32) + 1).unwrap_or(1),
-                             u8::try_from((y as i32) + 1).unwrap_or(1))
+                            (
+                                u8::try_from(i32::from(x) + 1).unwrap_or(1),
+                                u8::try_from(i32::from(y) + 1).unwrap_or(1),
+                            )
                         };
                         size_x = size_x.max(sx);
                         size_y = size_y.max(sy);

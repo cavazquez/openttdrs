@@ -58,7 +58,7 @@ enum GrowthResult {
     Continue,
 }
 
-/// Contexto de año/clima/catálogo NewGRF para elegir casas.
+/// Contexto de año/clima/catálogo `NewGRF` para elegir casas.
 #[derive(Debug, Clone, Copy)]
 pub struct TownExpandContext<'a> {
     pub climate: Climate,

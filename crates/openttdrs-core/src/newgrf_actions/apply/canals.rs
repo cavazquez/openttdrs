@@ -2,8 +2,8 @@
 
 use std::path::Path;
 
-use crate::canal_spec::{CanalFeatureDef, vanilla_canal_feature_catalog};
 use crate::GameState;
+use crate::canal_spec::{CanalFeatureDef, vanilla_canal_feature_catalog};
 
 use super::super::action0::collect_canal_metas_from_grf;
 
@@ -25,8 +25,7 @@ pub fn apply_newgrf_canals(state: &mut GameState, search_dirs: &[&Path]) {
         let Ok(data) = std::fs::read(&path) else {
             continue;
         };
-        let gfx =
-            crate::newgrf_sprites::collect_canal_sprite_graphics(&data).unwrap_or_default();
+        let gfx = crate::newgrf_sprites::collect_canal_sprite_graphics(&data).unwrap_or_default();
         for meta in collect_canal_metas_from_grf(&data) {
             let idx = usize::from(meta.local_id);
             if idx >= catalog.len() {

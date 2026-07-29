@@ -30,23 +30,17 @@ fn openttd_resaved_preserves_declared_subset() {
         "subconjunto: ≥1 tren"
     );
     assert!(game.money.is_some(), "subconjunto: dinero PLYR");
-    assert!(
-        game.game_time.is_some(),
-        "subconjunto: tick/DATE presente"
-    );
+    assert!(game.game_time.is_some(), "subconjunto: tick/DATE presente");
     // Industria y ROAD son parte del fixture rico; no exigir si el .sav es más pobre.
-    if let Ok(strict) = std::env::var("OPENTTDRS_ROUNDTRIP_STRICT") {
-        if strict == "1" || strict.eq_ignore_ascii_case("true") {
-            assert!(
-                !game.industries.is_empty(),
-                "strict: ≥1 industria"
-            );
-            assert!(
-                game.vehicles
-                    .iter()
-                    .any(|v| v.kind == SavVehicleKind::RoadVehicle),
-                "strict: ≥1 ROAD vehicle"
-            );
-        }
+    if let Ok(strict) = std::env::var("OPENTTDRS_ROUNDTRIP_STRICT")
+        && (strict == "1" || strict.eq_ignore_ascii_case("true"))
+    {
+        assert!(!game.industries.is_empty(), "strict: ≥1 industria");
+        assert!(
+            game.vehicles
+                .iter()
+                .any(|v| v.kind == SavVehicleKind::RoadVehicle),
+            "strict: ≥1 ROAD vehicle"
+        );
     }
 }

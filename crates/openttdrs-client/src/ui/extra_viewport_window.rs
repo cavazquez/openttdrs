@@ -157,7 +157,9 @@ mod tests {
                 ..default()
             },
         ));
-        world.write_message(FloatingWindowClosed(crate::ui::floating_window::WindowKey::singleton(FloatingWindowId::ExtraViewport)));
+        world.write_message(FloatingWindowClosed(
+            crate::ui::floating_window::WindowKey::singleton(FloatingWindowId::ExtraViewport),
+        ));
         world
             .run_system_once(extra_viewport_window_on_closed)
             .unwrap();

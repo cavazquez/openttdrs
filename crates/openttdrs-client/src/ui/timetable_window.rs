@@ -43,8 +43,7 @@ impl TimetableWindowState {
     #[must_use]
     #[allow(dead_code)] // API multi-slot (#244); handlers usan slots[idx] directo.
     pub(crate) fn vehicle_id(&self) -> Option<u32> {
-        self.focused
-            .filter(|&id| self.slots.iter().any(|&s| s == Some(id)))
+        self.focused.filter(|&id| self.slots.contains(&Some(id)))
     }
 
     pub(crate) fn close_vehicle(&mut self, vehicle_id: u32) {
@@ -351,11 +350,17 @@ pub(crate) fn open_timetable_for_vehicle(
     state.focused = Some(vehicle_id);
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn sync_timetable_window(
     tt_state: Res<TimetableWindowState>,
     chain: Res<VehicleChainRegistry>,
     sim: Res<SimWorld>,
-    mut root_q: Query<(Entity, &mut FloatingWindow, &VehicleChainSlot, &mut Visibility)>,
+    mut root_q: Query<(
+        Entity,
+        &mut FloatingWindow,
+        &VehicleChainSlot,
+        &mut Visibility,
+    )>,
     mut title_q: Query<(&FloatingWindowTitleText, &mut Text, &ChildOf)>,
     parents: Query<&ChildOf>,
     mut summary_q: Query<
@@ -377,7 +382,7 @@ pub(crate) fn sync_timetable_window(
     fn title_root_entity(child_of: &ChildOf, parents: &Query<&ChildOf>) -> Option<Entity> {
         let center = child_of.parent();
         let bar = parents.get(center).ok()?.parent();
-        parents.get(bar).ok().map(|c| c.parent())
+        parents.get(bar).ok().map(ChildOf::parent)
     }
 
     for (root_entity, mut win, slot, mut vis) in &mut root_q {
@@ -422,8 +427,16 @@ pub(crate) fn sync_timetable_window(
             };
             **summary = format!(
                 "Horario: {} · Autofill: {} · {late_label}",
-                if vehicle.timetable_active { "ON" } else { "OFF" },
-                if vehicle.timetable_autofill { "ON" } else { "OFF" },
+                if vehicle.timetable_active {
+                    "ON"
+                } else {
+                    "OFF"
+                },
+                if vehicle.timetable_autofill {
+                    "ON"
+                } else {
+                    "OFF"
+                },
             );
         }
         let seconds_mode = vehicle.timetable_display_seconds;

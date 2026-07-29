@@ -93,9 +93,9 @@ pub(crate) fn check_road_stop_spec_restrictions(
     if def.drive_through_only() && !is_dt {
         return Err(CommandError::RoadStopDriveThroughRequired);
     }
-    let rt_class = crate::road_type::road_type_def(&state.road_type_catalog, state.current_road_type)
-        .map(|d| d.class)
-        .unwrap_or_else(|| state.current_road_type.road_tram_type());
+    let rt_class =
+        crate::road_type::road_type_def(&state.road_type_catalog, state.current_road_type)
+            .map_or_else(|| state.current_road_type.road_tram_type(), |d| d.class);
     if def.road_only() && rt_class != crate::road_type::RoadTramType::Road {
         return Err(CommandError::RoadStopRoadTypeMismatch);
     }

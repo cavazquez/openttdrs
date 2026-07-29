@@ -306,9 +306,7 @@ pub(in crate::command) fn clear_tile(
             let _ = state.map.set_m2(tile, 0);
             crate::command::sign::remove_signs_at(state, tile);
         }
-        state
-            .stations
-            .retain(|s| !object_tiles.iter().any(|t| *t == s.pos));
+        state.stations.retain(|s| !object_tiles.contains(&s.pos));
         state.economy.money -= CLEAR_TILE_COST;
         return Ok(());
     }

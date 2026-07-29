@@ -46,15 +46,14 @@ use crate::ui::timetable_window::{
     TimetableWindowState, handle_timetable_window_buttons, setup_timetable_window,
     sync_timetable_window, timetable_window_on_closed,
 };
+use crate::ui::vehicle_chain::VehicleChainRegistry;
 use crate::ui::vehicle_details_window::{
     VehicleDetailsWindowState, handle_vehicle_details_buttons, setup_vehicle_details_window,
     sync_vehicle_details_window, vehicle_details_window_on_closed,
 };
-use crate::ui::vehicle_chain::VehicleChainRegistry;
 use crate::ui::vehicle_window::{
     VehicleWindowState, handle_vehicle_rename_buttons, handle_vehicle_window_buttons,
-    setup_vehicle_window, sync_vehicle_window,
-    vehicle_window_on_closed,
+    setup_vehicle_window, sync_vehicle_window, vehicle_window_on_closed,
     vehicle_window_rename_editable_keyboard, vehicle_window_rename_keyboard,
 };
 

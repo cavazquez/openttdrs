@@ -228,7 +228,7 @@ impl IndustrySpec {
     pub const fn produced_cargos(self) -> &'static [CargoType] {
         match self {
             Self::CoalMine => &[CargoType::Coal],
-            Self::Forest => &[CargoType::Wood],
+            Self::Forest | Self::LumberMill => &[CargoType::Wood],
             Self::Farm => &[CargoType::Grain, CargoType::Livestock],
             Self::FarmTropic => &[CargoType::Maize],
             Self::OilWells => &[CargoType::Oil],
@@ -255,7 +255,6 @@ impl IndustrySpec {
             Self::SteelMill => &[CargoType::Steel],
             Self::PaperMill => &[CargoType::Paper],
             Self::FoodProcessingPlant => &[CargoType::Food],
-            Self::LumberMill => &[CargoType::Wood],
             Self::CandyFactory => &[CargoType::Candy],
             Self::ToyFactory => &[CargoType::Toys],
             Self::FizzyDrinkFactory => &[CargoType::FizzyDrinks],
@@ -310,12 +309,11 @@ impl IndustrySpec {
     pub const fn accepted_cargos(self) -> &'static [CargoType] {
         match self {
             Self::PowerStation => &[CargoType::Coal],
-            Self::Sawmill => &[CargoType::Wood],
+            Self::Sawmill | Self::PaperMill => &[CargoType::Wood],
             Self::OilRefinery => &[CargoType::Oil],
             Self::SteelMill => &[CargoType::IronOre],
             Self::Factory => &[CargoType::Livestock, CargoType::Grain, CargoType::Steel],
             Self::FactoryTropic => &[CargoType::Rubber, CargoType::CopperOre, CargoType::Wood],
-            Self::PaperMill => &[CargoType::Wood],
             Self::PrintingWorks => &[CargoType::Paper],
             Self::FoodProcessingPlant => &[
                 CargoType::Livestock,
@@ -337,6 +335,7 @@ impl IndustrySpec {
 
     /// Insumos y multiplicadores de procesadoras (`build_industry.h` / P1.5).
     #[must_use]
+    #[allow(clippy::too_many_lines)]
     pub const fn processing_inputs(self) -> &'static [IndustryProcessingInput] {
         match self {
             Self::PowerStation => &[IndustryProcessingInput {
@@ -488,10 +487,9 @@ impl IndustrySpec {
             | Self::ToffeeQuarry
             | Self::FruitPlantation
             | Self::RubberPlantation => 10,
-            Self::FarmTropic => 11,
+            Self::FarmTropic | Self::BatteryFarm | Self::SugarMine => 11,
             Self::GoldMine | Self::DiamondMine => 7,
             Self::Bank => 6,
-            Self::BatteryFarm | Self::SugarMine => 11,
             Self::PlasticFountain => 14,
             Self::PowerStation
             | Self::Factory
@@ -599,13 +597,13 @@ pub struct Industry {
     /// [`PRODLEVEL_DEFAULT`].
     #[serde(default = "default_prod_level")]
     pub prod_level: u8,
-    /// Id global en `industry_spec_catalog` si proviene de NewGRF (`None` = vanilla).
+    /// Id global en `industry_spec_catalog` si proviene de `NewGRF` (`None` = vanilla).
     #[serde(default)]
     pub newgrf_type_id: Option<u16>,
-    /// Rate de producción NewGRF (copia del def al colocar; `None` = usar vanilla).
+    /// Rate de producción `NewGRF` (copia del def al colocar; `None` = usar vanilla).
     #[serde(default)]
     pub newgrf_production_rate: Option<u8>,
-    /// Cargo de salida NewGRF resuelto (`None` = usar vanilla/`kind`).
+    /// Cargo de salida `NewGRF` resuelto (`None` = usar vanilla/`kind`).
     #[serde(default)]
     pub newgrf_output_cargo: Option<CargoType>,
 }
@@ -984,7 +982,7 @@ impl Industry {
         }
     }
 
-    /// Asocia datos NewGRF resueltos al colocar desde [`crate::industry_spec::IndustrySpecDef`].
+    /// Asocia datos `NewGRF` resueltos al colocar desde [`crate::industry_spec::IndustrySpecDef`].
     #[must_use]
     pub fn with_newgrf(
         mut self,
@@ -1322,7 +1320,10 @@ mod tests {
 
         assert!(fact.produce_from_nearby_stations(&mut stations, 512));
         assert_eq!(fact.stock, fact.processing_output_amount());
-        assert_eq!(stations[0].cargo_stock.livestock, 10 - FACTORY_LIVESTOCK_INPUT);
+        assert_eq!(
+            stations[0].cargo_stock.livestock,
+            10 - FACTORY_LIVESTOCK_INPUT
+        );
         assert_eq!(stations[0].cargo_stock.grain, 10 - FACTORY_GRAIN_INPUT);
         assert_eq!(stations[0].cargo_stock.steel, 10 - FACTORY_STEEL_INPUT);
     }
@@ -1475,8 +1476,14 @@ mod tests {
 
     #[test]
     fn toyland_cotton_candy_is_not_wood_alias() {
-        assert_eq!(IndustrySpec::CottonCandy.output_cargo(), CargoType::CottonCandy);
-        assert_eq!(IndustrySpec::BatteryFarm.output_cargo(), CargoType::Batteries);
+        assert_eq!(
+            IndustrySpec::CottonCandy.output_cargo(),
+            CargoType::CottonCandy
+        );
+        assert_eq!(
+            IndustrySpec::BatteryFarm.output_cargo(),
+            CargoType::Batteries
+        );
         assert_eq!(IndustrySpec::SugarMine.output_cargo(), CargoType::Sugar);
         assert_eq!(
             IndustrySpec::CandyFactory.accepted_cargos(),
@@ -1486,20 +1493,27 @@ mod tests {
 
     #[test]
     fn arctic_paper_chain_io() {
-        assert_eq!(IndustrySpec::PaperMill.accepted_cargos(), &[CargoType::Wood]);
+        assert_eq!(
+            IndustrySpec::PaperMill.accepted_cargos(),
+            &[CargoType::Wood]
+        );
         assert_eq!(IndustrySpec::PaperMill.output_cargo(), CargoType::Paper);
-        assert_eq!(IndustrySpec::PrintingWorks.accepted_cargos(), &[CargoType::Paper]);
+        assert_eq!(
+            IndustrySpec::PrintingWorks.accepted_cargos(),
+            &[CargoType::Paper]
+        );
         assert_eq!(IndustrySpec::GoldMine.output_cargo(), CargoType::Gold);
     }
 
     #[test]
     fn tropic_factory_accepts_rubber_copper_wood() {
-        assert_eq!(IndustrySpec::CopperOreMine.output_cargo(), CargoType::CopperOre);
+        assert_eq!(
+            IndustrySpec::CopperOreMine.output_cargo(),
+            CargoType::CopperOre
+        );
         assert_eq!(
             IndustrySpec::FactoryTropic.accepted_cargos(),
             &[CargoType::Rubber, CargoType::CopperOre, CargoType::Wood]
         );
     }
-
-
 }

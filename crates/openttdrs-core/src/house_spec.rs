@@ -1,4 +1,4 @@
-//! Specs de casas vanilla (`HouseSpec` / `_original_house_specs`) y NewGRF (`HouseSpecDef`).
+//! Specs de casas vanilla (`HouseSpec` / `_original_house_specs`) y `NewGRF` (`HouseSpecDef`).
 //!
 //! Datos generados en el módulo privado `crate::sav::house_population_generated`; aquí viven
 //! las consultas runtime para zonas, años, pesos y aceptación (P3.5–P3.7). Feature Action0 `0x07`.
@@ -189,13 +189,13 @@ impl HouseSpecDef {
     }
 }
 
-/// Catálogo vacío (solo NewGRF).
+/// Catálogo vacío (solo `NewGRF`).
 #[must_use]
 pub fn empty_house_spec_catalog() -> Vec<HouseSpecDef> {
     Vec::new()
 }
 
-/// Tabla de overrides vanilla → id NewGRF (`prop 0x15`).
+/// Tabla de overrides vanilla → id `NewGRF` (`prop 0x15`).
 #[must_use]
 pub fn empty_house_overrides() -> Vec<u16> {
     vec![INVALID_HOUSE; NEW_HOUSE_OFFSET as usize]
@@ -206,19 +206,16 @@ pub fn house_spec_def(catalog: &[HouseSpecDef], id: u16) -> Option<&HouseSpecDef
     catalog.iter().find(|d| d.id == id)
 }
 
-/// Lookup vanilla o NewGRF por id global.
+/// Lookup vanilla o `NewGRF` por id global.
 #[must_use]
-pub fn vanilla_or_newgrf_house(
-    catalog: &[HouseSpecDef],
-    id: u16,
-) -> Option<HouseLookup<'_>> {
+pub fn vanilla_or_newgrf_house(catalog: &[HouseSpecDef], id: u16) -> Option<HouseLookup<'_>> {
     if let Some(def) = house_spec_def(catalog, id) {
         return Some(HouseLookup::NewGrf(def));
     }
     HouseSpec::get(id).map(HouseLookup::Vanilla)
 }
 
-/// Vista unificada vanilla / NewGRF para población y flags.
+/// Vista unificada vanilla / `NewGRF` para población y flags.
 #[derive(Debug, Clone, Copy)]
 pub enum HouseLookup<'a> {
     Vanilla(HouseSpec),
@@ -282,7 +279,7 @@ pub fn house_footprint_offsets(building_flags: u8) -> Vec<(i32, i32)> {
     vec![(0, 0)]
 }
 
-/// Id de dibujo vanilla: vistas NewGRF → el propio id; si no, `subst_id`; si no, `% 110`.
+/// Id de dibujo vanilla: vistas `NewGRF` → el propio id; si no, `subst_id`; si no, `% 110`.
 #[must_use]
 pub fn resolve_house_draw_id(house_id: u16, catalog: &[HouseSpecDef]) -> u16 {
     let clean = house_id & 0xFFF;
@@ -298,7 +295,7 @@ pub fn resolve_house_draw_id(house_id: u16, catalog: &[HouseSpecDef]) -> u16 {
     clean
 }
 
-/// Traduce id vanilla aplicando override NewGRF (si hay).
+/// Traduce id vanilla aplicando override `NewGRF` (si hay).
 #[must_use]
 pub fn get_translated_house_id(clean: u16, overrides: &[u16]) -> u16 {
     if let Some(&ovr) = overrides.get(usize::from(clean))
@@ -384,7 +381,7 @@ pub fn pick_town_house_id(
     )
 }
 
-/// Pool vanilla + NewGRF (1×1 y norte multitile) con filtros clima/zona/año.
+/// Pool vanilla + `NewGRF` (1×1 y norte multitile) con filtros clima/zona/año.
 #[must_use]
 #[allow(clippy::too_many_arguments)]
 pub fn pick_town_house_id_with_catalog(
@@ -408,10 +405,7 @@ pub fn pick_town_house_id_with_catalog(
             continue;
         }
         let house_id = u16::try_from(id).unwrap_or(0);
-        if overrides
-            .get(id)
-            .is_some_and(|&ovr| ovr != INVALID_HOUSE)
-        {
+        if overrides.get(id).is_some_and(|&ovr| ovr != INVALID_HOUSE) {
             continue;
         }
         let Some(hs) = HouseSpec::get(house_id) else {

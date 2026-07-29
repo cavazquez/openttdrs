@@ -145,6 +145,7 @@ impl ClientPreferences {
 
     /// Posición guardada de una ventana flotante, si existe.
     #[must_use]
+    #[allow(dead_code)] // API layout; hoy se usa `window_layout_by_key`.
     pub(crate) fn window_pos_by_key(&self, key: &str) -> Option<bevy::math::Vec2> {
         self.window_layout_by_key(key).map(|(pos, _)| pos)
     }
@@ -180,6 +181,7 @@ impl ClientPreferences {
         None
     }
 
+    #[allow(dead_code)] // API layout; hoy se usa `set_window_layout_by_key`.
     pub(crate) fn set_window_pos_by_key(&mut self, key: &str, pos: bevy::math::Vec2) {
         let size = self.window_layout_by_key(key).and_then(|(_, size)| size);
         self.set_window_layout_by_key(key, pos, size);

@@ -167,13 +167,11 @@ pub(crate) struct WindowKey {
 impl WindowKey {
     #[must_use]
     pub(crate) const fn singleton(class: FloatingWindowId) -> Self {
-        Self {
-            class,
-            instance: 0,
-        }
+        Self { class, instance: 0 }
     }
 
     #[must_use]
+    #[allow(dead_code)] // API; tests de inventario UI-0.
     pub(crate) const fn class(self) -> FloatingWindowId {
         self.class
     }
@@ -420,6 +418,7 @@ fn chrome_capabilities(id: FloatingWindowId) -> WindowChromeCapabilities {
 #[derive(Message, Clone, Copy, Debug)]
 pub(crate) struct FloatingWindowClosed(pub(crate) WindowKey);
 
+#[allow(dead_code)] // API; tests de inventario UI-0.
 impl FloatingWindowClosed {
     #[must_use]
     pub(crate) const fn class(self) -> FloatingWindowId {
@@ -509,7 +508,6 @@ impl Plugin for FloatingWindowPlugin {
 pub(crate) fn window_text_font(asset_server: &AssetServer, role: UiFontRole) -> TextFont {
     crate::ui::font::ui_text_font_loaded(asset_server, role)
 }
-
 
 /// Trae al frente una ventana existente (#242 reopen).
 #[allow(dead_code)]
@@ -614,7 +612,7 @@ pub(crate) fn spawn_floating_window_keyed(
     let geo = reference_geometry_primary(id);
     let width = geo
         .and_then(|geometry| geometry.width)
-        .map_or(width, |w| f32::from(w));
+        .map_or(width, f32::from);
     let height = geo.and_then(|geometry| geometry.height).map(f32::from);
     let placement = geo.map_or(ReferencePlacement::Auto, |geometry| geometry.placement);
     let size_for_place = Vec2::new(width, height.unwrap_or(MIN_WINDOW_HEIGHT));
@@ -859,7 +857,9 @@ fn resized_window_size(
         (raw.y / step_y).round() * step_y,
     );
     Vec2::new(
-        snapped.x.clamp(min_size.x.max(MIN_WINDOW_WIDTH), viewport.x),
+        snapped
+            .x
+            .clamp(min_size.x.max(MIN_WINDOW_WIDTH), viewport.x),
         snapped
             .y
             .clamp(min_size.y.max(MIN_WINDOW_HEIGHT), viewport.y),
@@ -963,7 +963,7 @@ fn drag_floating_windows(
             };
             Vec2::new(w, h)
         },
-        |c| c.size(),
+        bevy::ui::ComputedNode::size,
     );
     let pos = drag_window_position(
         cursor,

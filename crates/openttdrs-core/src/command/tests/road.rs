@@ -803,8 +803,8 @@ fn reject_drive_through_only_as_bay() {
 
 #[test]
 fn reject_road_only_spec_with_tram() {
-    use crate::road_stop_spec::{RoadStopClassDef, RoadStopSpecDef};
     use crate::RoadType;
+    use crate::road_stop_spec::{RoadStopClassDef, RoadStopSpecDef};
 
     let mut s = GameState::new(8, 8);
     s.current_road_type = RoadType::TRAM;

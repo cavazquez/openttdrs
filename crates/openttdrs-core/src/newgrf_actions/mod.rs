@@ -63,8 +63,8 @@ pub use apply::{
         apply_newgrf_action5_signals_default_dirs,
     },
     airport::{
-        apply_newgrf_airport_tiles, apply_newgrf_airport_tiles_default_dirs,
-        apply_newgrf_airports, apply_newgrf_airports_default_dirs,
+        apply_newgrf_airport_tiles, apply_newgrf_airport_tiles_default_dirs, apply_newgrf_airports,
+        apply_newgrf_airports_default_dirs,
     },
     apply_newgrf_stack_catalogs_default_dirs,
     badges::{apply_newgrf_badges, apply_newgrf_badges_default_dirs},
@@ -73,8 +73,8 @@ pub use apply::{
     cargo::{apply_newgrf_cargoes, apply_newgrf_cargoes_default_dirs},
     houses::{apply_newgrf_houses, apply_newgrf_houses_default_dirs},
     industry::{
-        apply_newgrf_industries, apply_newgrf_industries_default_dirs,
-        apply_newgrf_industry_tiles, apply_newgrf_industry_tiles_default_dirs,
+        apply_newgrf_industries, apply_newgrf_industries_default_dirs, apply_newgrf_industry_tiles,
+        apply_newgrf_industry_tiles_default_dirs,
     },
     objects::{apply_newgrf_objects, apply_newgrf_objects_default_dirs},
     rail::{apply_newgrf_rail_signals, apply_newgrf_rail_signals_default_dirs},
@@ -129,7 +129,14 @@ pub fn build_action0_railtype_payload_full(
     if !powered.is_empty() {
         num_props += 1;
     }
-    let mut payload = vec![0x00, ACTION0_FEATURE_RAILTYPES, num_props, 0x01, local_id, 0x08];
+    let mut payload = vec![
+        0x00,
+        ACTION0_FEATURE_RAILTYPES,
+        num_props,
+        0x01,
+        local_id,
+        0x08,
+    ];
     payload.extend_from_slice(label);
     if !compatible.is_empty() {
         payload.push(0x0E);
@@ -258,7 +265,6 @@ pub fn build_action0_industry_tile_payload(subst_id: u8, override_of: Option<u8>
     build_action0_industry_tile_payload_ex(0, subst_id, override_of, &[], 0)
 }
 
-
 /// Action0 `AirportTiles` (`0x11`) con subst (+ override/callback opcionales).
 #[must_use]
 pub fn build_action0_airport_tile_payload(
@@ -320,8 +326,8 @@ pub fn build_action0_airport_payload(
     p.extend_from_slice(&0u32.to_le_bytes()); // size dword
     p.push(0); // rotation NORTH
     for &(x, y, local_tile) in layout_tiles {
-        p.push(x as u8);
-        p.push(y as u8);
+        p.push(x.cast_unsigned());
+        p.push(y.cast_unsigned());
         p.push(0xFE);
         p.extend_from_slice(&local_tile.to_le_bytes());
     }
@@ -338,7 +344,7 @@ pub fn build_action0_airport_payload(
     p
 }
 
-/// Action0 `IndustryTiles` con acceptance / callback_mask.
+/// Action0 `IndustryTiles` con acceptance / `callback_mask`.
 ///
 /// `acceptance`: pares `(cargo_idx, acceptance_amt)` para props `0x0A`…
 #[must_use]
@@ -382,7 +388,7 @@ pub fn build_action0_industry_tile_payload_ex(
     p
 }
 
-/// Action0 `Industries` (`0x0A`) con layout, cargos y callback_mask.
+/// Action0 `Industries` (`0x0A`) con layout, cargos y `callback_mask`.
 ///
 /// `layout_tiles`: `(x, y, local_tile_id)` — siempre `0xFE` + WORD local.
 #[must_use]
@@ -432,8 +438,8 @@ pub fn build_action0_industry_payload(
     p.push(1); // num_layouts
     let mut layout_body = Vec::new();
     for &(x, y, local_tile) in layout_tiles {
-        layout_body.push(x as u8);
-        layout_body.push(y as u8);
+        layout_body.push(x.cast_unsigned());
+        layout_body.push(y.cast_unsigned());
         layout_body.push(0xFE);
         layout_body.extend_from_slice(&local_tile.to_le_bytes());
     }
@@ -495,7 +501,7 @@ pub fn build_action0_house_payload(
     )
 }
 
-/// Action0 Houses con override y callback_mask opcionales.
+/// Action0 Houses con override y `callback_mask` opcionales.
 #[must_use]
 #[allow(clippy::too_many_arguments)]
 pub fn build_action0_house_payload_ex(
@@ -576,7 +582,7 @@ pub fn build_action0_roadstop_payload(
     )
 }
 
-/// Action0 `RoadStops` con `0x0C` draw_mode y `0x12` flags.
+/// Action0 `RoadStops` con `0x0C` `draw_mode` y `0x12` flags.
 #[must_use]
 pub fn build_action0_roadstop_payload_ex(
     class_label: &[u8; 4],
@@ -636,6 +642,7 @@ pub fn build_action0_cargo_payload(
 
 /// Action0 `Cargoes` con pagos / freight / capacity multiplier.
 #[must_use]
+#[allow(clippy::too_many_arguments)]
 pub fn build_action0_cargo_payload_full(
     local_id: u8,
     bitnum: u8,
@@ -775,7 +782,7 @@ pub fn build_action0_sound_payload(
     p
 }
 
-/// Action0 `Canals` (`0x05`): callback_mask `0x08`, flags `0x09`.
+/// Action0 `Canals` (`0x05`): `callback_mask` `0x08`, flags `0x09`.
 #[must_use]
 pub fn build_action0_canal_payload(local_id: u8, callback_mask: u8, flags: u8) -> Vec<u8> {
     vec![
@@ -850,7 +857,7 @@ pub fn build_grf_v2_with_action11_sounds_and_action0(
     name: &str,
 ) -> Vec<u8> {
     const SIG: [u8; 8] = [b'G', b'R', b'F', 0x82, 0x0D, 0x0A, 0x1A, 0x0A];
-    let action11 = build_action11_sounds_payload(samples);
+    let sounds_payload = build_action11_sounds_payload(samples);
     let mut action8 = vec![0x08, 0x07];
     action8.extend_from_slice(&grfid);
     action8.extend_from_slice(name.as_bytes());
@@ -858,7 +865,7 @@ pub fn build_grf_v2_with_action11_sounds_and_action0(
     action8.push(0); // description vacío
 
     let mut data_section = Vec::new();
-    for payload in std::iter::once(action11.as_slice()).chain(action0s.iter().copied()) {
+    for payload in std::iter::once(sounds_payload.as_slice()).chain(action0s.iter().copied()) {
         let size = u32::try_from(payload.len()).unwrap_or(0);
         data_section.extend_from_slice(&size.to_le_bytes());
         data_section.push(0xFF);
@@ -961,7 +968,7 @@ pub fn build_grf_v2_with_action0_and_action8(
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
     use crate::GameState;
@@ -2240,10 +2247,8 @@ mod tests {
         let a0_b = build_action0_badge_payload(b"elec", 9, None);
         let bytes_a = build_grf_v2_with_action0_and_action8(&a0_a, [b'B', b'1', 0, 1], "ba", "");
         let bytes_b = build_grf_v2_with_action0_and_action8(&a0_b, [b'B', b'2', 0, 2], "bb", "");
-        let shared = std::env::temp_dir().join(format!(
-            "openttdrs_ngr_merge_{}",
-            std::process::id()
-        ));
+        let shared =
+            std::env::temp_dir().join(format!("openttdrs_ngr_merge_{}", std::process::id()));
         let _ = std::fs::create_dir_all(&shared);
         std::fs::write(shared.join("ba.grf"), &bytes_a).unwrap();
         std::fs::write(shared.join("bb.grf"), &bytes_b).unwrap();
@@ -2289,7 +2294,11 @@ mod tests {
         a0_stop.extend_from_slice(b"ELEC"); // sólo 1
 
         let meta = parse_action0_roadstop_meta(&a0_stop).unwrap();
-        assert!(meta.badge_list_error.as_ref().is_some_and(|e| e.contains("truncad")));
+        assert!(
+            meta.badge_list_error
+                .as_ref()
+                .is_some_and(|e| e.contains("truncad"))
+        );
         assert_eq!(meta.badge_labels, vec!["ELEC".to_string()]);
 
         let bytes = build_grf_v2_with_action0s_and_action8(
@@ -2300,7 +2309,10 @@ mod tests {
         );
         let report = inspect_grf_bytes(&bytes).unwrap();
         assert!(
-            report.warnings.iter().any(|w| w.contains("truncad") || w.contains("0xFD")),
+            report
+                .warnings
+                .iter()
+                .any(|w| w.contains("truncad") || w.contains("0xFD")),
             "warnings: {:?}",
             report.warnings
         );
@@ -2396,10 +2408,7 @@ mod tests {
             report.badge_labels
         );
         assert!(
-            report
-                .badge_associations
-                .iter()
-                .any(|a| a.contains("ELEC")),
+            report.badge_associations.iter().any(|a| a.contains("ELEC")),
             "assoc: {:?}",
             report.badge_associations
         );
@@ -2514,7 +2523,7 @@ mod tests {
         );
     }
 
-    /// #255: sin NewGRF, Action5 señales no altera vanilla (todos los slots `None`).
+    /// #255: sin `NewGRF`, Action5 señales no altera vanilla (todos los slots `None`).
     #[test]
     fn signals_ac_no_grf_leaves_action5_empty() {
         let mut state = GameState::new(4, 4);
@@ -2529,7 +2538,7 @@ mod tests {
         assert!(state.runtime.rail_signal_newgrf.iter().all(Option::is_none));
     }
 
-    /// #255: Action5 custom llena su slot; vanilla OpenGFX fuera de rango intacto.
+    /// #255: Action5 custom llena su slot; vanilla `OpenGFX` fuera de rango intacto.
     #[test]
     fn signals_ac_action5_custom_without_clobbering_other_slots() {
         let mut indices = vec![0u8; 8 * 8];
@@ -2559,7 +2568,7 @@ mod tests {
         assert!(state.runtime.signal_action5_newgrf_sprites[12].is_none());
     }
 
-    /// #255: orientación × rojo/verde × PBS (path) vía Action3 RailTypes.
+    /// #255: orientación × rojo/verde × PBS (path) vía Action3 `RailTypes`.
     #[test]
     fn signals_ac_orientation_red_green_pbs_and_fallback_slot() {
         let action0 = build_action0_railtype_payload(0, b"RAIL");
@@ -2645,10 +2654,8 @@ mod tests {
             &[*b"ELRL"],
             &[*b"RAIL", *b"ELRL"],
         );
-        let road_a0 =
-            build_action0_roadtype_payload_with_speed(b"COBB", false, 1850, 60, "Cobble");
-        let tram_a0 =
-            build_action0_roadtype_payload_with_speed(b"TRAM", true, 1900, 40, "Tram NG");
+        let road_a0 = build_action0_roadtype_payload_with_speed(b"COBB", false, 1850, 60, "Cobble");
+        let tram_a0 = build_action0_roadtype_payload_with_speed(b"TRAM", true, 1900, 40, "Tram NG");
         let bytes = build_grf_v2_with_action0s_and_action8(
             &[&rail_a0, &road_a0, &tram_a0],
             [b'T', b'Y', 0, 1],
@@ -2831,8 +2838,12 @@ mod tests {
     fn sounds_ac_register_and_play() {
         let pcm: &[u8] = &[0x10, 0x20, 0x30, 0x40];
         let a0 = build_action0_sound_payload(0, 64, 10, None);
-        let bytes =
-            build_grf_v2_with_action11_sounds_and_action0(&[pcm], &[&a0], [b'S', b'F', 0, 1], "sfx");
+        let bytes = build_grf_v2_with_action11_sounds_and_action0(
+            &[pcm],
+            &[&a0],
+            [b'S', b'F', 0, 1],
+            "sfx",
+        );
         let dir = tempfile_dir_with("sfx.grf", &bytes);
         let mut state = GameState::new(4, 4);
         state
@@ -2925,6 +2936,7 @@ mod tests {
 
     #[test]
     fn sounds_ac_truncated_action11_diagnostic() {
+        const SIG: [u8; 8] = [b'G', b'R', b'F', 0x82, 0x0D, 0x0A, 0x1A, 0x0A];
         // count=2 pero solo un sample completo → truncated.
         let mut action11 = vec![0x11, 2];
         action11.extend_from_slice(&3u16.to_le_bytes());
@@ -2932,7 +2944,6 @@ mod tests {
         // segundo sample: size pedida sin bytes suficientes
         action11.extend_from_slice(&8u16.to_le_bytes());
         let a0 = build_action0_sound_payload(0, 128, 0, Some(12));
-        const SIG: [u8; 8] = [b'G', b'R', b'F', 0x82, 0x0D, 0x0A, 0x1A, 0x0A];
         let mut action8 = vec![0x08, 0x07];
         action8.extend_from_slice(&[b'S', b'T', 0, 1]);
         action8.extend_from_slice(b"trunc\0\0");
@@ -2969,10 +2980,7 @@ mod tests {
         );
         // Sample 0 sí llegó; override baseset LevelCrossing (12).
         assert!(crate::play_newgrf_sound(&mut state, 0x5354_0001, 0).is_ok());
-        assert_eq!(
-            state.runtime.sound_overrides[12],
-            Some((0x5354_0001, 0))
-        );
+        assert_eq!(state.runtime.sound_overrides[12], Some((0x5354_0001, 0)));
         state.runtime.pending_newgrf_sounds.clear();
         assert!(crate::play_sound_or_override(&mut state, crate::SoundId::LevelCrossing).is_ok());
         assert_eq!(state.runtime.pending_newgrf_sounds.len(), 1);
@@ -3008,14 +3016,19 @@ mod tests {
         let bytes = build_grf_v2_with_action0_and_action8(&a0, [b'T', b'E', 0, 1], "te", "");
         let dir = tempfile_dir_with("te.grf", &bytes);
         let mut state = GameState::new(4, 4);
-        state.newgrf_stack.push(crate::NewGrfEntry::new("te.grf", 1));
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("te.grf", 1));
         apply_newgrf_vehicles_trains(&mut state, &[&dir]);
         let eng = state.engine_catalog.iter().find(|e| e.from_newgrf).unwrap();
         assert_eq!(eng.required_rail_type, Some(1));
         assert_eq!(eng.tractive_effort, 200);
         assert_eq!(eng.refit_mask, 3);
         assert_eq!(crate::engine_tractive_effort(eng), 200);
-        assert!(!crate::engine_compatible_with_rail(eng, crate::RailType::Rail));
+        assert!(!crate::engine_compatible_with_rail(
+            eng,
+            crate::RailType::Rail
+        ));
         assert!(crate::engine_compatible_with_rail(
             eng,
             crate::RailType::Electric
@@ -3040,15 +3053,7 @@ mod tests {
     /// #249: Vehicles AC — flag helicóptero aircraft prop 0x09.
     #[test]
     fn vehicles_ac_aircraft_heli_flag() {
-        let a0 = vec![
-            0x00,
-            ACTION0_FEATURE_AIRCRAFT,
-            0x01,
-            0x01,
-            0x00,
-            0x09,
-            0x01,
-        ];
+        let a0 = vec![0x00, ACTION0_FEATURE_AIRCRAFT, 0x01, 0x01, 0x00, 0x09, 0x01];
         let meta = parse_action0_vehicle_metas(&a0).unwrap().remove(0);
         assert!(meta.is_helicopter);
 
@@ -3101,12 +3106,18 @@ mod tests {
         let a = TileCoord::new(1, 2);
         let b = TileCoord::new(5, 2);
         for x in 2..=4 {
-            state.map.set_kind(TileCoord::new(x, 2), TileKind::Water).unwrap();
+            state
+                .map
+                .set_kind(TileCoord::new(x, 2), TileKind::Water)
+                .unwrap();
         }
         let vanilla = bridge_build_cost(BridgeType::Wooden, a, b);
         let custom = bridge_build_cost_in(&state.bridge_spec_catalog, BridgeType::Wooden, a, b);
         assert_ne!(vanilla, custom);
-        assert_eq!(custom, 10 * (i64::from(crate::bridge_total_length(a, b)) + 1));
+        assert_eq!(
+            custom,
+            10 * (i64::from(crate::bridge_total_length(a, b)) + 1)
+        );
 
         // Año calendario inicial (1950) < 1970 → no disponible.
         assert_eq!(
@@ -3130,7 +3141,7 @@ mod tests {
         let _ = parse_action0_bridge_meta(&[0x00, ACTION0_FEATURE_BRIDGES, 0x02, 0x01, 0x00]);
     }
 
-    /// #259: Bridges — dos GRFs mismo local_id; el último gana.
+    /// #259: Bridges — dos GRFs mismo `local_id`; el último gana.
     #[test]
     fn infra_ac_bridge_two_grf_stack_last_wins() {
         use crate::bridge_spec::BridgeType;
@@ -3157,7 +3168,7 @@ mod tests {
         assert_eq!(def.grfid, 0x4242_0002);
     }
 
-    /// #259: Canals — Action0 feature + Action5 slot; PlaceCanal en hierba.
+    /// #259: Canals — Action0 feature + Action5 slot; `PlaceCanal` en hierba.
     #[test]
     fn infra_ac_canal_feature_and_action5() {
         use crate::command::{Command, apply_command};
@@ -3220,8 +3231,7 @@ mod tests {
         let a0_locks2 = build_action0_canal_payload(crate::CF_LOCKS, 0x77, 0x88);
         let bytes_a =
             build_grf_v2_with_action0_and_action8(&a0_locks, [b'C', b'1', 0, 1], "c1", "");
-        let bytes_b =
-            build_grf_v2_with_action0_and_action8(&a0_buoy, [b'C', b'2', 0, 2], "c2", "");
+        let bytes_b = build_grf_v2_with_action0_and_action8(&a0_buoy, [b'C', b'2', 0, 2], "c2", "");
         let bytes_c =
             build_grf_v2_with_action0_and_action8(&a0_locks2, [b'C', b'3', 0, 3], "c3", "");
         let dir_a = tempfile_dir_with("c1.grf", &bytes_a);
@@ -3239,7 +3249,8 @@ mod tests {
             .push(crate::NewGrfEntry::new("c3.grf", 0x4333_0003));
         apply_newgrf_canals(&mut state, &[&dir_a, &dir_b, &dir_c]);
 
-        let locks = crate::canal_feature_def(&state.canal_feature_catalog, crate::CF_LOCKS).unwrap();
+        let locks =
+            crate::canal_feature_def(&state.canal_feature_catalog, crate::CF_LOCKS).unwrap();
         let buoy = crate::canal_feature_def(&state.canal_feature_catalog, crate::CF_BUOY).unwrap();
         let slope =
             crate::canal_feature_def(&state.canal_feature_catalog, crate::CF_WATERSLOPE).unwrap();
@@ -3294,7 +3305,6 @@ mod tests {
         );
     }
 
-
     #[test]
     fn parse_and_apply_airports_registers_catalog_and_blocks_fta() {
         use crate::airport_class::{NEW_AIRPORT_OFFSET, newgrf_airport_spec_def};
@@ -3326,9 +3336,7 @@ mod tests {
         apply_newgrf_airport_tiles(&mut state, &[&dir]);
         apply_newgrf_airports(&mut state, &[&dir]);
         assert_eq!(state.airport_tile_spec_catalog.len(), 2);
-        assert!(
-            state.airport_tile_spec_catalog[0].gfx.as_u16() >= NEW_AIRPORT_TILE_OFFSET
-        );
+        assert!(state.airport_tile_spec_catalog[0].gfx.as_u16() >= NEW_AIRPORT_TILE_OFFSET);
         assert_eq!(state.airport_tile_spec_catalog[0].callback_mask, 0x01);
         assert_eq!(state.airport_spec_catalog.len(), 1);
         {
@@ -3343,11 +3351,7 @@ mod tests {
         }
         let newgrf_id = state.airport_spec_catalog[0].id;
 
-        apply_command(
-            &mut state,
-            &Command::SetCurrentAirportNewgrfSpec(newgrf_id),
-        )
-        .unwrap();
+        apply_command(&mut state, &Command::SetCurrentAirportNewgrfSpec(newgrf_id)).unwrap();
         assert_eq!(state.current_airport_newgrf_id, Some(newgrf_id));
         apply_command(
             &mut state,
@@ -3476,16 +3480,8 @@ mod tests {
     #[test]
     fn houses_ac_subst_and_action3_views() {
         use crate::house_spec::{BUILDING_FLAG_SIZE_1X1, resolve_house_draw_id};
-        let a0 = build_action0_house_payload(
-            0,
-            3,
-            BUILDING_FLAG_SIZE_1X1,
-            0,
-            5000,
-            0xFFFF,
-            16,
-            "Vista",
-        );
+        let a0 =
+            build_action0_house_payload(0, 3, BUILDING_FLAG_SIZE_1X1, 0, 5000, 0xFFFF, 16, "Vista");
         let mut indices = vec![0u8; 8 * 8];
         for y in 2..6 {
             for x in 2..6 {
@@ -3511,12 +3507,17 @@ mod tests {
         assert_eq!(def.subst_id, 3);
         assert!(!def.newgrf_views.is_empty());
         assert!(def.has_newgrf_sprites());
-        assert_eq!(resolve_house_draw_id(def.id, &state.house_spec_catalog), def.id);
+        assert_eq!(
+            resolve_house_draw_id(def.id, &state.house_spec_catalog),
+            def.id
+        );
     }
 
     #[test]
     fn houses_ac_override_and_two_grf() {
-        use crate::house_spec::{BUILDING_FLAG_SIZE_1X1, NEW_HOUSE_OFFSET, get_translated_house_id};
+        use crate::house_spec::{
+            BUILDING_FLAG_SIZE_1X1, NEW_HOUSE_OFFSET, get_translated_house_id,
+        };
         let a0_a = build_action0_house_payload_ex(
             0,
             0,
@@ -3554,14 +3555,19 @@ mod tests {
             .push(crate::NewGrfEntry::new("hb.grf", 2));
         apply_newgrf_houses(&mut state, &[&dir]);
         assert_eq!(state.house_spec_catalog.len(), 2);
-        let last = state.house_spec_catalog.iter().find(|d| d.grfid == 2).unwrap();
+        let last = state
+            .house_spec_catalog
+            .iter()
+            .find(|d| d.grfid == 2)
+            .unwrap();
         assert_eq!(state.house_overrides[5], last.id);
-        assert_eq!(
-            get_translated_house_id(5, &state.house_overrides),
-            last.id
-        );
+        assert_eq!(get_translated_house_id(5, &state.house_overrides), last.id);
         assert!(last.id >= NEW_HOUSE_OFFSET);
-        let first = state.house_spec_catalog.iter().find(|d| d.grfid == 1).unwrap();
+        let first = state
+            .house_spec_catalog
+            .iter()
+            .find(|d| d.grfid == 1)
+            .unwrap();
         assert_eq!(first.callback_mask, 0x0102);
     }
 
@@ -3582,8 +3588,7 @@ mod tests {
             ));
         }
         let refs: Vec<&[u8]> = payloads.iter().map(Vec::as_slice).collect();
-        let bytes =
-            build_grf_v2_with_action0s_and_action8(&refs, [b'H', b'M', 0, 1], "hm", "");
+        let bytes = build_grf_v2_with_action0s_and_action8(&refs, [b'H', b'M', 0, 1], "hm", "");
         let dir = tempfile_dir_with("hm.grf", &bytes);
         let mut state = GameState::new(4, 4);
         state
@@ -3610,22 +3615,12 @@ mod tests {
 
     #[test]
     fn houses_ac_deterministic_pick() {
-        use crate::house_spec::{
-            BUILDING_FLAG_SIZE_1X1, pick_town_house_id_with_catalog,
-        };
+        use crate::house_spec::{BUILDING_FLAG_SIZE_1X1, pick_town_house_id_with_catalog};
         use crate::town::{HouseZone, Town};
         use crate::world_gen::Climate;
 
-        let a0 = build_action0_house_payload(
-            0,
-            0,
-            BUILDING_FLAG_SIZE_1X1,
-            0,
-            5000,
-            0xFFFF,
-            16,
-            "Det",
-        );
+        let a0 =
+            build_action0_house_payload(0, 0, BUILDING_FLAG_SIZE_1X1, 0, 5000, 0xFFFF, 16, "Det");
         let meta = parse_action0_house_meta(&a0).unwrap();
         assert_eq!(meta.subst_id, 0);
         let bytes = build_grf_v2_with_action0_and_action8(&a0, [b'H', b'D', 0, 1], "hd", "");
@@ -3684,18 +3679,15 @@ mod tests {
             0,
             None,
             &[(0, 0, 0), (1, 0, 1)],
-            &[1],    // COAL
-            &[7],    // WOOD input
+            &[1], // COAL
+            &[7], // WOOD input
             &[15],
             0x0102,
             "MultiIO",
         );
         let indices = sample_tile_indices();
         let bytes = build_grf_v2_industries_with_tiles(
-            &[
-                (tile0, 0, indices.clone()),
-                (tile1, 1, indices),
-            ],
+            &[(tile0, 0, indices.clone()), (tile1, 1, indices)],
             &ind,
             8,
             8,
@@ -3706,7 +3698,7 @@ mod tests {
         let mut state = GameState::new(16, 16);
         state
             .newgrf_stack
-            .push(crate::NewGrfEntry::new("ind_io.grf", 0x494E0001));
+            .push(crate::NewGrfEntry::new("ind_io.grf", 0x494E_0001));
         apply_newgrf_industry_tiles(&mut state, &[&dir]);
         apply_newgrf_industries(&mut state, &[&dir]);
         assert_eq!(state.industry_tile_spec_catalog.len(), 2);
@@ -3755,17 +3747,8 @@ mod tests {
             0x00AB,
             "A",
         );
-        let a0_b = build_action0_industry_payload(
-            0,
-            1,
-            Some(3),
-            &[(0, 0, 0)],
-            &[7],
-            &[],
-            &[12],
-            0,
-            "B",
-        );
+        let a0_b =
+            build_action0_industry_payload(0, 1, Some(3), &[(0, 0, 0)], &[7], &[], &[12], 0, "B");
         let tile_a = build_action0_industry_tile_payload_ex(0, 0, None, &[], 0);
         let tile_b = build_action0_industry_tile_payload_ex(0, 2, None, &[], 0);
         let bytes_a = build_grf_v2_with_action0s_and_action8(
@@ -3798,7 +3781,10 @@ mod tests {
             .find(|d| d.grfid == 2)
             .unwrap();
         assert_eq!(state.industry_overrides[3], last.id);
-        assert_eq!(get_translated_industry_id(3, &state.industry_overrides), last.id);
+        assert_eq!(
+            get_translated_industry_id(3, &state.industry_overrides),
+            last.id
+        );
         assert!(last.id >= NEW_INDUSTRY_OFFSET);
         let first = state
             .industry_spec_catalog
@@ -3836,10 +3822,7 @@ mod tests {
         );
         let indices = sample_tile_indices();
         let bytes = build_grf_v2_industries_with_tiles(
-            &[
-                (tile0, 0, indices.clone()),
-                (tile1, 1, indices),
-            ],
+            &[(tile0, 0, indices.clone()), (tile1, 1, indices)],
             &ind,
             8,
             8,
@@ -3869,26 +3852,17 @@ mod tests {
         bare.newgrf_preview = None;
         bare.newgrf_runtime = None;
         let cat = vec![bare];
-        assert_eq!(
-            resolve_industry_tile_draw_gfx(cat[0].gfx.as_u16(), &cat),
-            5
-        );
+        assert_eq!(resolve_industry_tile_draw_gfx(cat[0].gfx.as_u16(), &cat), 5);
         // Layout apunta a gfx globales distintos por tile.
         let layout = &state.industry_spec_catalog[0].layouts[0];
         assert_eq!(layout[0].gfx, t0.gfx.as_u16());
         assert_eq!(layout[1].gfx, t1.gfx.as_u16());
     }
 
-    /// #256: callback_mask y cargo labels almacenados (sin ejecutar CBs).
+    /// #256: `callback_mask` y cargo labels almacenados (sin ejecutar CBs).
     #[test]
     fn industries_ac_callback_mask_and_cargo_labels_stored() {
-        let tile = build_action0_industry_tile_payload_ex(
-            0,
-            0,
-            Some(10),
-            &[(1, 4), (5, 8)],
-            0x3C,
-        );
+        let tile = build_action0_industry_tile_payload_ex(0, 0, Some(10), &[(1, 4), (5, 8)], 0x3C);
         let ind = build_action0_industry_payload(
             0,
             0,
@@ -4023,15 +3997,12 @@ mod tests {
         assert!(def.has_newgrf_sprites());
         assert!(!def.newgrf_views.is_empty());
         assert!(!def.newgrf_purchase_views.is_empty());
-        assert_ne!(
-            def.newgrf_purchase_views[0].rgba,
-            def.newgrf_views[0].rgba
-        );
+        assert_ne!(def.newgrf_purchase_views[0].rgba, def.newgrf_views[0].rgba);
         let preview = def.newgrf_preview_sprite().unwrap();
         assert_eq!(preview.rgba, def.newgrf_purchase_views[0].rgba);
     }
 
-    /// #231: Cargo Action3 adjunta group/views al CargoSpecDef sin contaminar ids.
+    /// #231: Cargo Action3 adjunta group/views al `CargoSpecDef` sin contaminar ids.
     #[test]
     fn cargoes_ac_action3_views() {
         use crate::newgrf_sprites::build_grf_v2_cargo_with_preview_sprite;

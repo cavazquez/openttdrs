@@ -405,7 +405,7 @@ impl<'de> serde::Deserialize<'de> for VehicleOrder {
     }
 }
 
-/// Comparador de orden condicional (`OrderConditionComparator` en OpenTTD).
+/// Comparador de orden condicional (`OrderConditionComparator` en `OpenTTD`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum OrderConditionComparator {
@@ -464,7 +464,7 @@ impl OrderConditionComparator {
     }
 }
 
-/// Variable de orden condicional (`OrderConditionVariable` en OpenTTD).
+/// Variable de orden condicional (`OrderConditionVariable` en `OpenTTD`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum OrderConditionKind {
@@ -1456,7 +1456,11 @@ impl VehicleOrder {
                 max_speed,
                 implicit,
             },
-            Self::Waypoint { waypoint, max_speed, .. } => Self::Waypoint {
+            Self::Waypoint {
+                waypoint,
+                max_speed,
+                ..
+            } => Self::Waypoint {
                 waypoint,
                 travel_ticks,
                 max_speed,
@@ -1552,17 +1556,21 @@ impl VehicleOrder {
             _ => None,
         }
     }
-
 }
 
-
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
     use crate::vehicle::model::{Vehicle, VehicleKind};
 
     fn sample_vehicle() -> Vehicle {
-        Vehicle::new(1, VehicleKind::Train, TileCoord::new(0, 0), TileCoord::new(1, 1))
+        Vehicle::new(
+            1,
+            VehicleKind::Train,
+            TileCoord::new(0, 0),
+            TileCoord::new(1, 1),
+        )
     }
 
     #[test]

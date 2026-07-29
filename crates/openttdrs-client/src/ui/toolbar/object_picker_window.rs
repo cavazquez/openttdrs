@@ -172,14 +172,7 @@ fn object_label(sim: &SimWorld, id: u16) -> String {
         0 => "Transmisor".into(),
         1 => "Faro".into(),
         other => object_spec_def(&sim.state.object_spec_catalog, other)
-            .map(|d| {
-                format!(
-                    "{} ({}×{})",
-                    d.name,
-                    d.size_width(),
-                    d.size_height()
-                )
-            })
+            .map(|d| format!("{} ({}×{})", d.name, d.size_width(), d.size_height()))
             .unwrap_or_else(|| format!("Objeto {other}")),
     }
 }
@@ -201,12 +194,7 @@ pub(crate) fn sync_object_catalog_entries(
             continue;
         }
         let id = def.id;
-        let label = format!(
-            "{} ({}×{})",
-            def.name,
-            def.size_width(),
-            def.size_height()
-        );
+        let label = format!("{} ({}×{})", def.name, def.size_width(), def.size_height());
         commands.entity(list).with_children(|col| {
             spawn_text_button(col, &asset_server, ObjectPickerButton(id), &label, 260.0);
         });

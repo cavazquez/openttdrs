@@ -321,13 +321,20 @@ fn vehicles_visiting(sim: &SimWorld, station_pos: TileCoord) -> Vec<u32> {
         .collect()
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn sync_station_cargo_panel(
     mut station_panel: ResMut<StationCargoPanelState>,
     order_state: Res<OrderEditState>,
     sim: Res<SimWorld>,
     mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
     mut title_q: Query<(&FloatingWindowTitleText, &mut Text), Without<StationCargoPanelText>>,
-    mut text_q: Query<&mut Text, (With<StationCargoPanelText>, Without<FloatingWindowTitleText>)>,
+    mut text_q: Query<
+        &mut Text,
+        (
+            With<StationCargoPanelText>,
+            Without<FloatingWindowTitleText>,
+        ),
+    >,
     mut rename_row_q: Query<&mut Node, With<StationCargoRenameRow>>,
     mut last_pos: Local<Option<TileCoord>>,
 ) {
@@ -602,7 +609,12 @@ pub(crate) fn handle_station_cargo_panel_buttons(
                     );
                     continue;
                 };
-                if let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.id == vehicle_id).cloned()
+                if let Some(vehicle) = sim
+                    .state
+                    .vehicles
+                    .iter()
+                    .find(|v| v.id == vehicle_id)
+                    .cloned()
                 {
                     open_order_edit_for_vehicle(
                         &mut order_state,

@@ -147,8 +147,7 @@ pub fn consist_changed_with_map(
         if eng.power_hp > 0 && !v.powered_wagon {
             let rt = eng
                 .required_rail_type
-                .map(RailType::from_u8)
-                .unwrap_or_else(|| required_rail_type_for_engine(eng.id));
+                .map_or_else(|| required_rail_type_for_engine(eng.id), RailType::from_u8);
             compatible_railtypes |= powered_railtypes_mask(rt);
         }
     }

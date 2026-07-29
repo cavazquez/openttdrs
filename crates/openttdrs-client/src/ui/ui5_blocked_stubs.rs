@@ -134,19 +134,7 @@ fn link_graph_empty_planned() -> &'static str {
 }
 
 fn cargo_label(c: CargoType) -> &'static str {
-    match c {
-        CargoType::Passengers => "Pax",
-        CargoType::Mail => "Mail",
-        CargoType::Goods => "Goods",
-        CargoType::Coal => "Coal",
-        CargoType::Wood => "Wood",
-        CargoType::Oil => "Oil",
-        CargoType::Livestock => "Live",
-        CargoType::Grain => "Grain",
-        CargoType::IronOre => "Ore",
-        CargoType::Steel => "Steel",
-        CargoType::Valuables => "Val",
-    }
+    c.label()
 }
 
 fn filter_label(filter: Option<CargoType>) -> String {

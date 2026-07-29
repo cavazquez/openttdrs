@@ -20,7 +20,7 @@ use super::{
 fn title_root_entity(child_of: &ChildOf, parents: &Query<&ChildOf>) -> Option<Entity> {
     let center = child_of.parent();
     let bar = parents.get(center).ok()?.parent();
-    parents.get(bar).ok().map(|c| c.parent())
+    parents.get(bar).ok().map(ChildOf::parent)
 }
 
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
@@ -29,7 +29,12 @@ pub(crate) fn sync_vehicle_window(
     chain: Res<VehicleChainRegistry>,
     sim: Res<SimWorld>,
     trucks: Option<Res<TruckHandles>>,
-    mut root_q: Query<(Entity, &mut FloatingWindow, &VehicleChainSlot, &mut Visibility)>,
+    mut root_q: Query<(
+        Entity,
+        &mut FloatingWindow,
+        &VehicleChainSlot,
+        &mut Visibility,
+    )>,
     mut title_q: Query<(&FloatingWindowTitleText, &mut Text, &ChildOf)>,
     parents: Query<&ChildOf>,
     mut status_q: Query<
@@ -227,4 +232,3 @@ pub(crate) fn sync_vehicle_window(
         }
     }
 }
-

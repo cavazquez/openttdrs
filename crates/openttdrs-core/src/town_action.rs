@@ -2,9 +2,9 @@
 
 use crate::company::CompanyId;
 use crate::map::{TileCoord, TileKind};
-use crate::station::{modify_station_rating_around, Station};
+use crate::station::{Station, modify_station_rating_around};
 use crate::town::{
-    apply_fund_buildings_boost, FUND_BUILDINGS_RATING_BOOST, MAX_TOWN_AUTHORITY_COMPANIES, Town,
+    FUND_BUILDINGS_RATING_BOOST, MAX_TOWN_AUTHORITY_COMPANIES, Town, apply_fund_buildings_boost,
 };
 
 /// Acciones de autoridad (`enum class TownAction`).
@@ -84,6 +84,7 @@ pub const RATING_BRIBE_MAXIMUM: i16 = 800;
 
 /// Ajustes de economía que habilitan acciones (defaults vanilla: todo ON).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct TownAuthoritySettings {
     #[serde(default = "default_true")]
     pub fund_buildings: bool,
@@ -151,9 +152,7 @@ fn action_allowed(
         TownAction::BuildStatue => !town.has_statue(company),
         TownAction::FundBuildings => settings.fund_buildings,
         TownAction::BuyRights => {
-            settings.exclusive_rights
-                && town.exclusive_counter == 0
-                && town.exclusivity.is_none()
+            settings.exclusive_rights && town.exclusive_counter == 0 && town.exclusivity.is_none()
         }
         TownAction::Bribe => {
             if !settings.bribe {
@@ -216,7 +215,8 @@ pub fn execute_town_action(
             if town.has_statue(company) {
                 return Err(TownActionError::AlreadyHasStatue);
             }
-            let tile = find_statue_tile(town.pos, map_w, map_h).ok_or(TownActionError::NoStatuePlace)?;
+            let tile =
+                find_statue_tile(town.pos, map_w, map_h).ok_or(TownActionError::NoStatuePlace)?;
             town.set_statue(company, true);
             // Bonus de autoridad por estatua (simplificado: +25, una vez).
             let _ = town.adjust_rating(company, 25);

@@ -508,7 +508,7 @@ pub fn airport_spec_tiles(
     })
 }
 
-/// Footprint NewGRF (`size` del layout; `axis_y` intercambia ejes).
+/// Footprint `NewGRF` (`size` del layout; `axis_y` intercambia ejes).
 #[must_use]
 pub fn newgrf_airport_footprint(
     def: &crate::airport_class::NewgrfAirportSpecDef,
@@ -521,10 +521,11 @@ pub fn newgrf_airport_footprint(
     }
 }
 
-/// Itera (coord, pieza) del primer layout NewGRF usable.
+/// Itera (coord, pieza) del primer layout `NewGRF` usable.
 ///
 /// Piezas se derivan del `subst` gfx de cada tile (`AirportPiece::from_station_gfx`).
-/// FTA NewGRF queda fuera de alcance (#260): construcción usa subst visual.
+/// FTA `NewGRF` queda fuera de alcance (#260): construcción usa subst visual.
+#[must_use]
 pub fn newgrf_airport_tiles(
     origin: TileCoord,
     def: &crate::airport_class::NewgrfAirportSpecDef,

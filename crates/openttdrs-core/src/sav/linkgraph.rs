@@ -29,7 +29,7 @@ pub(crate) fn cargo_from_openttd_id(id: u8) -> Option<CargoType> {
     cargo_from_openttd_id_in(Climate::Temperate, id)
 }
 
-/// Resuelve el cargo del slot OpenTTD según landscape (#224).
+/// Resuelve el cargo del slot `OpenTTD` según landscape (#224).
 #[must_use]
 pub(crate) fn cargo_from_openttd_id_in(climate: Climate, id: u8) -> Option<CargoType> {
     CargoType::from_climate_slot(climate, id)
@@ -398,7 +398,8 @@ mod tests {
             ch_type: CH_TABLE,
             body,
         }];
-        let stats = link_graph_from_chunks(&chunks, map_w, &HashMap::new(), 350, Climate::Temperate);
+        let stats =
+            link_graph_from_chunks(&chunks, map_w, &HashMap::new(), 350, Climate::Temperate);
         let sample = stats.edges[&LinkEdgeKey {
             from: a,
             to: b,

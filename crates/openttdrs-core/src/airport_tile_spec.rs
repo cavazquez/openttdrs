@@ -100,7 +100,7 @@ pub fn next_free_airport_tile_gfx_id(catalog: &[AirportTileSpecDef]) -> Option<u
     (candidate < NUM_AIRPORT_TILES).then_some(candidate)
 }
 
-/// Gfx de dibujo: id NewGRF si hay Action3; si no, `subst_id` fallback.
+/// Gfx de dibujo: id `NewGRF` si hay Action3; si no, `subst_id` fallback.
 #[must_use]
 pub fn resolve_airport_tile_draw_gfx(gfx: u16, catalog: &[AirportTileSpecDef]) -> u16 {
     if gfx < NEW_AIRPORT_TILE_OFFSET {
@@ -116,7 +116,7 @@ pub fn resolve_airport_tile_draw_gfx(gfx: u16, catalog: &[AirportTileSpecDef]) -
     }
 }
 
-/// Pieza de construcción: siempre `subst_id` vanilla (FTA NewGRF fuera de alcance).
+/// Pieza de construcción: siempre `subst_id` vanilla (FTA `NewGRF` fuera de alcance).
 #[must_use]
 pub fn resolve_airport_tile_piece_gfx(gfx: u16, catalog: &[AirportTileSpecDef]) -> u8 {
     if gfx < NEW_AIRPORT_TILE_OFFSET {
@@ -125,6 +125,5 @@ pub fn resolve_airport_tile_piece_gfx(gfx: u16, catalog: &[AirportTileSpecDef]) 
     catalog
         .iter()
         .find(|d| d.gfx.as_u16() == gfx)
-        .map(|d| u8::try_from(d.subst_id.min(255)).unwrap_or(0))
-        .unwrap_or(0)
+        .map_or(0, |d| u8::try_from(d.subst_id.min(255)).unwrap_or(0))
 }

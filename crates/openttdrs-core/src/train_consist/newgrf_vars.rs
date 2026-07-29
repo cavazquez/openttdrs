@@ -26,8 +26,16 @@ pub fn cargo_class_bits(cargo: Option<CargoType>) -> u16 {
     match cargo {
         Some(CargoType::Passengers) => 0x0001,
         Some(CargoType::Mail) => 0x0002,
-        Some(CargoType::Goods | CargoType::Valuables | CargoType::Candy | CargoType::Food) => 0x0020,
-        Some(CargoType::Oil | CargoType::Water | CargoType::Rubber | CargoType::Cola | CargoType::Plastic) => 0x0040,
+        Some(CargoType::Goods | CargoType::Valuables | CargoType::Candy | CargoType::Food) => {
+            0x0020
+        }
+        Some(
+            CargoType::Oil
+            | CargoType::Water
+            | CargoType::Rubber
+            | CargoType::Cola
+            | CargoType::Plastic,
+        ) => 0x0040,
         Some(_) => 0x0010,
         None => 0,
     }

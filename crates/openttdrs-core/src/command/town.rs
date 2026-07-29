@@ -48,7 +48,7 @@ pub(crate) fn do_town_action(
 
     let bribe_fails = if action == TownAction::Bribe {
         // Chance16(1, 14).
-        state.interactive_random.next() % 14 == 0
+        state.interactive_random.next().is_multiple_of(14)
     } else {
         false
     };
@@ -77,7 +77,9 @@ pub(crate) fn do_town_action(
     match result {
         Ok(suggested) => {
             if action == TownAction::BuildStatue {
-                let tile = statue_override.or(suggested).ok_or(CommandError::StatueNoPlace)?;
+                let tile = statue_override
+                    .or(suggested)
+                    .ok_or(CommandError::StatueNoPlace)?;
                 // Marca visual mínima: deja hierba (el bitset `statues` es la autoridad).
                 let _ = tile;
             }
@@ -102,10 +104,7 @@ pub(crate) fn do_town_action(
     }
 }
 
-fn find_clear_statue_tile(
-    state: &GameState,
-    center: TileCoord,
-) -> Result<TileCoord, CommandError> {
+fn find_clear_statue_tile(state: &GameState, center: TileCoord) -> Result<TileCoord, CommandError> {
     let (mw, mh) = state.map.dimensions();
     let mw = i32::try_from(mw).unwrap_or(0);
     let mh = i32::try_from(mh).unwrap_or(0);
@@ -333,8 +332,8 @@ mod tests {
 
     #[test]
     fn exclusivity_filters_cargo_for_rival_company() {
-        use crate::town::produce_town_cargo;
         use crate::town::TOWN_PRODUCE_TICKS;
+        use crate::town::produce_town_cargo;
 
         let mut s = GameState::new(16, 16);
         let town_pos = TileCoord::new(4, 4);
@@ -350,7 +349,8 @@ mod tests {
             .set_kind(TileCoord::new(4, 5), TileKind::House)
             .unwrap();
 
-        let mut player_stop = crate::Station::new_with_kind(TileCoord::new(5, 5), StopKind::BusStop);
+        let mut player_stop =
+            crate::Station::new_with_kind(TileCoord::new(5, 5), StopKind::BusStop);
         player_stop.owner = CompanyId::PLAYER;
         player_stop.goods.get_mut(CargoType::Passengers).has_rating = true;
         player_stop.goods.get_mut(CargoType::Passengers).rating = 200;

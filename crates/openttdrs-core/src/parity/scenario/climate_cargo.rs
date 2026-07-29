@@ -1,11 +1,13 @@
 //! Cadenas de cargo por clima (#224): producción → procesamiento → pago.
 
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
+use crate::Climate;
 use crate::cargo::CargoType;
 use crate::economy::transported_goods_income;
 use crate::industry::{Industry, IndustryKind, IndustrySpec};
 use crate::map::TileCoord;
 use crate::station::{Station, StopKind};
-use crate::Climate;
 
 fn chain_produce_process_pay(
     extract: IndustrySpec,
@@ -39,8 +41,13 @@ fn chain_produce_process_pay(
     let processed = processor_ind.stock;
     assert_eq!(processor_ind.output_cargo(), deliver_cargo);
 
-    let pay =
-        transported_goods_income(deliver_amount, distance, transit_days, deliver_cargo, 1 << 16);
+    let pay = transported_goods_income(
+        deliver_amount,
+        distance,
+        transit_days,
+        deliver_cargo,
+        1 << 16,
+    );
     (produced, processed, pay)
 }
 
@@ -177,8 +184,8 @@ fn save_roundtrip_preserves_climate_cargo_labels() {
     stock.add(CargoType::Gold, 11);
     stock.add(CargoType::CottonCandy, 4);
     stock.add(CargoType::Rubber, 9);
-    let json = serde_json::to_string(&stock).expect("ser");
-    let loaded: crate::CargoStock = serde_json::from_str(&json).expect("de");
+    let json = serde_json::to_string(&stock).unwrap();
+    let loaded: crate::CargoStock = serde_json::from_str(&json).unwrap();
     assert_eq!(loaded.gold, 11);
     assert_eq!(loaded.cotton_candy, 4);
     assert_eq!(loaded.rubber, 9);

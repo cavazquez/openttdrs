@@ -1,13 +1,13 @@
 //! Export mínimo de [`GameState`] a savegame `OpenTTD` (`.sav`).
 //!
 //! Contenedor por defecto: `OTTZ` (zlib). Versión de save: [`EXPORT_SAVE_VERSION`].
-//! Chunks: `MAPS` (CH_TABLE) + planos RIFF + `STNN`/`CITY`/`INDY`/`ORDL`/`VEHS`/`LGRP` + `DATE` + `PLYR`.
+//! Chunks: `MAPS` (`CH_TABLE`) + planos RIFF + `STNN`/`CITY`/`INDY`/`ORDL`/`VEHS`/`LGRP` + `DATE` + `PLYR`.
 //!
 //! Subconjunto prometido (MVP #226): mapa + `CITY` (≥1) + `STNN` moderno
 //! (SAVEBYTE + structs) + `VEHS`/`ORDL` (tren + ROAD bus/camión) + `INDY`
 //! + `DATE`/`PLYR` cargable por `OpenTTD` ≥15.3 dedicated.
 //!
-//! Residual: ship/aircraft/tram, `CAPY`/`ECMY`, `PATS`/`OPTS`/`GSET`/`ENGN`/`SRND`/NewGRF/`PLYR` completo.
+//! Residual: ship/aircraft/tram, `CAPY`/`ECMY`, `PATS`/`OPTS`/`GSET`/`ENGN`/`SRND`/`NewGRF`/`PLYR` completo.
 //! Limitaciones: `docs/PARIDAD.md` y `docs/archive/merged-2026-07/ROADMAP_SAV_EXPORT.md`.
 
 #![allow(clippy::cast_possible_truncation)]
@@ -30,8 +30,8 @@ use crate::game_state::GameState;
 
 /// Versión SLV del export.
 ///
-/// Se mantiene en **350** (mínimo viable): ≥294 `MAPS` CH_TABLE, ≥295 tablas,
-/// ≥300 tick u64, ≥348 `HouseID` en MAP8. OpenTTD 15.3 (`SAVEGAME_VERSION` 362)
+/// Se mantiene en **350** (mínimo viable): ≥294 `MAPS` `CH_TABLE`, ≥295 tablas,
+/// ≥300 tick u64, ≥348 `HouseID` en MAP8. `OpenTTD` 15.3 (`SAVEGAME_VERSION` 362)
 /// carga saves más antiguos; subir a 362 no aporta al MVP de load y obligaría
 /// campos DATE/economía posteriores sin ganancia.
 pub const EXPORT_SAVE_VERSION: u16 = 350;
@@ -73,7 +73,7 @@ pub fn save_to_bytes_with(state: &GameState, container: SavContainer) -> Result<
 }
 
 /// Chunks siempre presentes en un export mínimo (mapa + CITY + DATE + PLYR).
-/// `CITY` es obligatorio para OpenTTD (`STR_ERROR_NO_TOWN_IN_SCENARIO`).
+/// `CITY` es obligatorio para `OpenTTD` (`STR_ERROR_NO_TOWN_IN_SCENARIO`).
 pub const REQUIRED_EXPORT_CHUNKS: &[&str] = &[
     "MAPS", "MAPT", "MAPH", "MAPO", "MAP2", "M3LO", "M3HI", "MAP5", "MAPE", "MAP7", "MAP8", "CITY",
     "DATE", "PLYR",
@@ -732,9 +732,7 @@ mod tests {
         assert_eq!(rows.len(), 2);
         let road = rows
             .iter()
-            .find(|(_, r)| {
-                record_get(r, "type").and_then(SlValue::as_u64) == Some(1)
-            })
+            .find(|(_, r)| record_get(r, "type").and_then(SlValue::as_u64) == Some(1))
             .expect("roadveh row");
         let rv = match record_get(&road.1, "roadveh") {
             Some(SlValue::Structs(items)) => items.first().expect("roadveh"),
@@ -799,9 +797,9 @@ mod tests {
         assert_eq!(record_get(rec, "dim_x").and_then(SlValue::as_u64), Some(64));
         assert_eq!(record_get(rec, "dim_y").and_then(SlValue::as_u64), Some(64));
         // Planos siguen RIFF.
-        let mapt = chunks.iter().find(|c| &c.name == b"MAPT").expect("MAPT");
-        assert_eq!(mapt.ch_type, 0);
-        assert_eq!(mapt.body.len(), 64 * 64);
+        let mapt_chunk = chunks.iter().find(|c| &c.name == b"MAPT").expect("MAPT");
+        assert_eq!(mapt_chunk.ch_type, 0);
+        assert_eq!(mapt_chunk.body.len(), 64 * 64);
     }
 
     #[test]

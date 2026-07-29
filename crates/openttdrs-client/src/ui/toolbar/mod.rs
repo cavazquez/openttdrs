@@ -458,20 +458,11 @@ pub(crate) struct OrderSlotState {
 }
 
 /// Multi-instancia (#244): hasta 2 paneles de órdenes concurrentes.
-#[derive(Resource, Debug)]
+#[derive(Resource, Debug, Default)]
 pub(crate) struct OrderEditState {
     pub(crate) slots: [OrderSlotState; crate::ui::vehicle_chain::MAX_VEHICLE_CHAIN_SLOTS],
     /// Vehículo enfocado (handlers / pick en mapa).
     pub(crate) focused: Option<u32>,
-}
-
-impl Default for OrderEditState {
-    fn default() -> Self {
-        Self {
-            slots: Default::default(),
-            focused: None,
-        }
-    }
 }
 
 impl OrderEditState {

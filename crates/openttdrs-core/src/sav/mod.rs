@@ -14,8 +14,8 @@ mod chunks;
 mod container;
 mod date;
 mod entities;
-mod landscape;
 pub(crate) mod house_population_generated;
+mod landscape;
 
 /// Población de un `HouseID` original (`HouseSpec::population`).
 #[must_use]
@@ -611,8 +611,7 @@ impl GameState {
             vehicle.cur_speed = v.cur_speed;
             vehicle.subspeed = v.subspeed;
             vehicle.direction = v.direction;
-            vehicle.cargo_type =
-                crate::CargoType::from_climate_slot(sav.climate, v.cargo_type);
+            vehicle.cargo_type = crate::CargoType::from_climate_slot(sav.climate, v.cargo_type);
             if kind == VehicleKind::Train {
                 vehicle.rail_pixel = rail_pixel_from_openttd_pos(v.x_pos, v.y_pos, v.direction);
                 if let Some(candidate) = vanilla_train_engine_id(v.engine_type)

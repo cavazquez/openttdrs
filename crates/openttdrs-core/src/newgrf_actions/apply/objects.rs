@@ -36,10 +36,10 @@ pub fn apply_newgrf_objects(state: &mut GameState, search_dirs: &[&Path]) {
                 .map(<[crate::newgrf_sprites::DecodedSprite]>::to_vec)
                 .unwrap_or_default();
             if let Some(err) = &meta.badge_list_error {
-                state.runtime.newgrf_diagnostics.push(format!(
-                    "{}: object '{}': {err}",
-                    entry.filename, meta.name
-                ));
+                state
+                    .runtime
+                    .newgrf_diagnostics
+                    .push(format!("{}: object '{}': {err}", entry.filename, meta.name));
             }
             let (associated_badges, unresolved) = resolve_badge_labels_detailed(
                 &meta.badge_labels,

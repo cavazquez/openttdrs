@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::cargo::CargoType;
 use crate::economy::CargoPaymentSpec;
 
-/// Multiplicador de capacidad “×1” en formato OpenTTD (`0x100` = 1.0).
+/// Multiplicador de capacidad “×1” en formato `OpenTTD` (`0x100` = 1.0).
 pub const DEFAULT_CARGO_CAPACITY_MULTIPLIER: u16 = 0x100;
 
 /// Spec de cargo definido por Action0.
@@ -110,19 +110,22 @@ pub fn cargo_spec_def(catalog: &[CargoSpecDef], id: u8) -> Option<&CargoSpecDef>
 
 /// Busca por label 4 chars (case-insensitive).
 #[must_use]
-pub fn cargo_spec_by_label<'a>(catalog: &'a [CargoSpecDef], label: &str) -> Option<&'a CargoSpecDef> {
+pub fn cargo_spec_by_label<'a>(
+    catalog: &'a [CargoSpecDef],
+    label: &str,
+) -> Option<&'a CargoSpecDef> {
     catalog
         .iter()
         .find(|d| d.label.eq_ignore_ascii_case(label.trim()))
 }
 
-/// Label OpenTTD FourCC del `CargoType` (`PASS`, `COAL`, `CTCD`, …).
+/// Label `OpenTTD` `FourCC` del `CargoType` (`PASS`, `COAL`, `CTCD`, …).
 #[must_use]
 pub const fn cargo_type_label(cargo: CargoType) -> &'static str {
     cargo.label()
 }
 
-/// Spec de pago: override NewGRF si hay `initial_payment`/`transit_*`; si no, temperate.
+/// Spec de pago: override `NewGRF` si hay `initial_payment`/`transit_*`; si no, temperate.
 #[must_use]
 pub fn payment_spec_for_cargo(cargo: CargoType, catalog: &[CargoSpecDef]) -> CargoPaymentSpec {
     let vanilla = cargo.payment_spec();
@@ -135,13 +138,17 @@ pub fn payment_spec_for_cargo(cargo: CargoType, catalog: &[CargoSpecDef]) -> Car
         } else {
             vanilla.base_rate
         },
-        transit_fast_days: if def.initial_payment > 0 || def.transit_fast > 0 || def.transit_slow > 0
+        transit_fast_days: if def.initial_payment > 0
+            || def.transit_fast > 0
+            || def.transit_slow > 0
         {
             u16::from(def.transit_fast)
         } else {
             vanilla.transit_fast_days
         },
-        transit_slow_days: if def.initial_payment > 0 || def.transit_fast > 0 || def.transit_slow > 0
+        transit_slow_days: if def.initial_payment > 0
+            || def.transit_fast > 0
+            || def.transit_slow > 0
         {
             u16::from(def.transit_slow)
         } else {
@@ -152,24 +159,30 @@ pub fn payment_spec_for_cargo(cargo: CargoType, catalog: &[CargoSpecDef]) -> Car
 
 /// Capacidad efectiva: `base * multiplier / 0x100` (mínimo 1 si base > 0).
 #[must_use]
-pub fn apply_cargo_capacity_multiplier(base_capacity: u32, catalog: &[CargoSpecDef], cargo: CargoType) -> u32 {
+pub fn apply_cargo_capacity_multiplier(
+    base_capacity: u32,
+    catalog: &[CargoSpecDef],
+    cargo: CargoType,
+) -> u32 {
     if base_capacity == 0 {
         return 0;
     }
-    let mult = cargo_spec_by_label(catalog, cargo_type_label(cargo))
-        .map(|d| {
+    let mult = cargo_spec_by_label(catalog, cargo_type_label(cargo)).map_or(
+        DEFAULT_CARGO_CAPACITY_MULTIPLIER,
+        |d| {
             if d.capacity_multiplier == 0 {
                 DEFAULT_CARGO_CAPACITY_MULTIPLIER
             } else {
                 d.capacity_multiplier
             }
-        })
-        .unwrap_or(DEFAULT_CARGO_CAPACITY_MULTIPLIER);
-    let scaled = (u64::from(base_capacity) * u64::from(mult)) / u64::from(DEFAULT_CARGO_CAPACITY_MULTIPLIER);
+        },
+    );
+    let scaled =
+        (u64::from(base_capacity) * u64::from(mult)) / u64::from(DEFAULT_CARGO_CAPACITY_MULTIPLIER);
     u32::try_from(scaled).unwrap_or(u32::MAX).max(1)
 }
 
-/// Nombre UI: prioriza el spec NewGRF si existe.
+/// Nombre UI: prioriza el spec `NewGRF` si existe.
 #[must_use]
 pub fn cargo_spec_display_name(cargo: CargoType, catalog: &[CargoSpecDef]) -> String {
     cargo_spec_by_label(catalog, cargo_type_label(cargo))

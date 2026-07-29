@@ -131,15 +131,15 @@ pub struct SimulationRuntime {
     /// Grabador opcional: cada `apply_command` exitoso se encola (plan IA progresiva).
     pub command_recorder: Option<VecDeque<Command>>,
 
-    /// Diagnósticos NewGRF del último apply (listas truncadas, badges inválidos, …).
+    /// Diagnósticos `NewGRF` del último apply (listas truncadas, badges inválidos, …).
     /// No se persiste; se reconstruye al reaplicar el stack.
     pub newgrf_diagnostics: Vec<String>,
 
-    /// Overrides baseset [`crate::SoundId`] → `(grfid, local_id)` NewGRF (Action0 prop `0x0A`).
+    /// Overrides baseset [`crate::SoundId`] → `(grfid, local_id)` `NewGRF` (Action0 prop `0x0A`).
     /// Índice = `SoundId` 0..72; reconstruido al aplicar Sounds.
     pub sound_overrides: [Option<(u32, u8)>; crate::sound_id::SOUND_COUNT],
 
-    /// Cola de reproducción NewGRF (drenable por cliente / tests; no se persiste).
+    /// Cola de reproducción `NewGRF` (drenable por cliente / tests; no se persiste).
     /// El cliente puede drenar a Bevy Audio más adelante; la AC se valida en core.
     pub pending_newgrf_sounds: Vec<crate::sound_effect::PendingNewgrfSound>,
 }

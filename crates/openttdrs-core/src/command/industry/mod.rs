@@ -124,7 +124,7 @@ pub(super) fn place_industry_spec_sandbox(
     Ok(())
 }
 
-/// Coloca industria desde [`IndustrySpecDef`] (layout NewGRF → tiles con gfx ≥175).
+/// Coloca industria desde [`IndustrySpecDef`] (layout `NewGRF` → tiles con gfx ≥175).
 pub fn check_place_industry_spec_def(
     map: &crate::map::Map,
     c: TileCoord,
@@ -144,7 +144,7 @@ pub fn check_place_industry_spec_def(
     Ok(())
 }
 
-/// Coloca industria NewGRF por id global del catálogo.
+/// Coloca industria `NewGRF` por id global del catálogo.
 pub fn place_industry_spec_def_sandbox(
     state: &mut GameState,
     c: TileCoord,

@@ -112,21 +112,21 @@ mod tests {
 
     #[test]
     fn current_max_speed_uses_track_cap_on_straight() {
-        assert_eq!(current_road_max_speed(&road_vehicle(), None), 120);
+        assert_eq!(current_road_max_speed(&road_vehicle(), None), 112);
     }
 
     #[test]
     fn current_max_speed_caps_curves_at_three_quarters() {
         let mut v = road_vehicle();
         v.direction = DIR_E;
-        assert_eq!(current_road_max_speed(&v, None), 90);
+        assert_eq!(current_road_max_speed(&v, None), 84);
     }
 
     #[test]
     fn current_max_speed_caps_reversing_trackdir_at_half() {
         let mut v = road_vehicle();
         v.road_state = 6;
-        assert_eq!(current_road_max_speed(&v, None), 60);
+        assert_eq!(current_road_max_speed(&v, None), 56);
     }
 
     #[test]

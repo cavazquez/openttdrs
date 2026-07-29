@@ -3,10 +3,10 @@
 //! Contenedor por defecto: `OTTZ` (zlib). Versión de save: [`EXPORT_SAVE_VERSION`].
 //! Chunks: `MAPS` (CH_TABLE) + planos RIFF + `STNN`/`CITY`/`INDY`/`ORDL`/`VEHS`/`LGRP` + `DATE` + `PLYR`.
 //!
-//! Subconjunto prometido (MVP #226): mapa + `CITY` (≥1) + DATE/PLYR cargable por
-//! OpenTTD ≥15.3 dedicated. `STNN`/`VEHS`/`ORDL`/`INDY` siguen siendo subconjunto
-//! para roundtrip interno; el esquema moderno de `STNN` (SAVEBYTE + structs) no
-//! está implementado — residual del issue junto a PATS/OPTS/GSET/ENGN/SRND/NewGRF.
+//! Subconjunto prometido (MVP #226): mapa + `CITY` (≥1) + `STNN` moderno
+//! (SAVEBYTE + structs) + DATE/PLYR cargable por OpenTTD ≥15.3 dedicated.
+//! `VEHS`/`ORDL` (solo tren) + `INDY` son subconjunto best-effort; residual:
+//! ROAD vehicles, PATS/OPTS/GSET/ENGN/SRND/NewGRF/PLYR completo.
 //! Limitaciones: `docs/PARIDAD.md` y `docs/archive/merged-2026-07/ROADMAP_SAV_EXPORT.md`.
 
 #![allow(clippy::cast_possible_truncation)]
@@ -204,11 +204,7 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
 
     let stnn = entities::stnn_records(state, w)?;
     if !stnn.is_empty() {
-        data.extend_from_slice(&chunks::table_chunk(
-            *b"STNN",
-            &[(6, "xy"), (0x0A | 0x10, "name"), (2, "facilities")],
-            &stnn,
-        )?);
+        data.extend_from_slice(&entities::stnn_chunk(&stnn)?);
     }
 
     // CITY siempre: OpenTTD rechaza saves sin municipios.
@@ -401,6 +397,7 @@ mod tests {
         );
         train.running = true;
         train.set_vehicle_orders(vec![VehicleOrder::station(TileCoord::new(28, 39))]);
+        // Bus en el estado: el export oficial omite ROAD (#226); solo roundtrip del tren.
         let mut bus = Vehicle::new(
             1,
             VehicleKind::Bus,
@@ -413,33 +410,21 @@ mod tests {
 
         let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
         let sav_game = sav::load(&bytes).expect("load");
-        assert_eq!(sav_game.vehicles.len(), 2);
+        assert_eq!(sav_game.vehicles.len(), 1, "solo tren en VEHS export");
         assert!(
             sav_game
                 .vehicles
                 .iter()
                 .any(|v| v.kind == sav::SavVehicleKind::Train && !v.orders.is_empty())
         );
-        assert!(
-            sav_game
-                .vehicles
-                .iter()
-                .any(|v| v.kind == sav::SavVehicleKind::RoadVehicle && !v.orders.is_empty())
-        );
 
         let loaded = GameState::from_sav_game(sav_game);
-        assert!(loaded.vehicles.len() >= 2);
+        assert_eq!(loaded.vehicles.len(), 1);
         assert!(
             loaded
                 .vehicles
                 .iter()
                 .any(|v| v.kind == VehicleKind::Train && !v.orders.is_empty())
-        );
-        assert!(
-            loaded
-                .vehicles
-                .iter()
-                .any(|v| v.kind == VehicleKind::Bus && !v.orders.is_empty())
         );
     }
 
@@ -502,6 +487,196 @@ mod tests {
         let tile = loaded.map.get(TileCoord::new(10, 20)).expect("tile");
         assert_eq!(tile.kind, TileKind::Rail);
         assert_eq!(tile.m5, 0x01);
+    }
+
+    /// Estado mínimo con STNN moderno cargable por OpenTTD 15.3.
+    fn mvp_stations_state() -> GameState {
+        let mut state = tiny_state();
+        let rail_pos = TileCoord::new(28, 39);
+        let mut rail_tile = state.map.get(rail_pos).expect("in bounds");
+        rail_tile.kind = TileKind::Station;
+        rail_tile.mapt = 0x50; // MP_STATION << 4
+        state.map.set_tile(rail_pos, rail_tile).expect("set");
+
+        // Vía bajo/junto a la estación (contexto visual; no requerido por saveload).
+        let track = TileCoord::new(28, 40);
+        let mut track_tile = state.map.get(track).expect("in bounds");
+        track_tile.kind = TileKind::Rail;
+        track_tile.mapt = 0x10;
+        track_tile.m5 = 0x01;
+        state.map.set_tile(track, track_tile).expect("set");
+
+        let mut rail = Station::new_with_kind(rail_pos, StopKind::RailStation);
+        rail.name = Some("Central Demo".into());
+        state.stations = vec![rail];
+        state.towns = vec![Town {
+            id: 0,
+            pos: TileCoord::new(16, 16),
+            name: "Villa Demo".into(),
+            population: 1200,
+            ..Default::default()
+        }];
+        state
+    }
+
+    #[test]
+    fn export_stnn_is_modern_savebyte_schema() {
+        use crate::sav::chunks::{CH_TABLE, find_chunk, parse_chunks};
+        use crate::sav::table::{SlValue, parse_table_chunk, record_get};
+
+        let state = mvp_stations_state();
+        let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
+        let payload = &bytes[8..];
+        let chunks = parse_chunks(payload).expect("chunks");
+        let stnn = find_chunk(&chunks, "STNN").expect("STNN");
+        assert_eq!(stnn.ch_type, CH_TABLE);
+        let rows = parse_table_chunk(&stnn.body, false).expect("STNN table");
+        assert_eq!(rows.len(), 1);
+        let rec = &rows[0].1;
+        // SAVEBYTE facilities en top-level.
+        assert_eq!(
+            record_get(rec, "facilities").and_then(SlValue::as_u64),
+            Some(1)
+        );
+        let normal = match record_get(rec, "normal") {
+            Some(SlValue::Structs(items)) => items.first().expect("normal struct"),
+            other => panic!("normal ausente: {other:?}"),
+        };
+        let base = match record_get(normal, "base") {
+            Some(SlValue::Structs(items)) => items.first().expect("base"),
+            other => panic!("base ausente: {other:?}"),
+        };
+        assert_eq!(
+            record_get(base, "name").and_then(|v| v.as_str()),
+            Some("Central Demo")
+        );
+        assert_eq!(
+            record_get(base, "xy").and_then(SlValue::as_u64),
+            Some(u64::from(39u32 * 64 + 28))
+        );
+        let goods = match record_get(normal, "goods") {
+            Some(SlValue::Structs(items)) => items,
+            other => panic!("goods ausente: {other:?}"),
+        };
+        assert_eq!(goods.len(), 64, "NUM_CARGO goods entries");
+
+        // Smoke OpenTTD: OPENTTDRS_DUMP_MVP_STATIONS_SAV=/ruta/absoluta.sav
+        if let Ok(path) = std::env::var("OPENTTDRS_DUMP_MVP_STATIONS_SAV") {
+            let path = std::path::PathBuf::from(&path);
+            if let Some(parent) = path.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            std::fs::write(&path, &bytes).expect("dump stations sav");
+        }
+    }
+
+    /// Mapa+CITY+STNN+VEHS(tren)+ORDL — fixture OpenTTD-loadable (#226).
+    fn mvp_train_state() -> GameState {
+        use crate::vehicle::VehicleOrder;
+
+        let mut state = mvp_stations_state();
+        let rail_pos = TileCoord::new(28, 39);
+        // Vía bajo el tren (TRACK_BIT_X).
+        let train_pos = TileCoord::new(20, 40);
+        let mut track_tile = state.map.get(train_pos).expect("in bounds");
+        track_tile.kind = TileKind::Rail;
+        track_tile.mapt = 0x10;
+        track_tile.m5 = 0x01;
+        state.map.set_tile(train_pos, track_tile).expect("set");
+
+        let mut train = Vehicle::new(0, VehicleKind::Train, train_pos, train_pos);
+        train.running = true;
+        train.direction = crate::vehicle::DIR_NE;
+        train.set_vehicle_orders(vec![VehicleOrder::station(rail_pos)]);
+        state.vehicles = vec![train];
+        state
+    }
+
+    #[test]
+    fn export_mvp_train_emits_vehs_ordl_and_direction() {
+        use crate::sav::chunks::{find_chunk, parse_chunks};
+        use crate::sav::table::{SlValue, parse_table_chunk, record_get};
+
+        let state = mvp_train_state();
+        let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
+        let payload = &bytes[8..];
+        let chunks = parse_chunks(payload).expect("chunks");
+        assert!(find_chunk(&chunks, "VEHS").is_some());
+        assert!(find_chunk(&chunks, "ORDL").is_some());
+        assert!(find_chunk(&chunks, "STNN").is_some());
+
+        let vehs = find_chunk(&chunks, "VEHS").expect("VEHS");
+        let rows = parse_table_chunk(&vehs.body, true).expect("VEHS table");
+        assert_eq!(rows.len(), 1);
+        let train = match record_get(&rows[0].1, "train") {
+            Some(SlValue::Structs(items)) => items.first().expect("train"),
+            other => panic!("train ausente: {other:?}"),
+        };
+        let common = match record_get(train, "common") {
+            Some(SlValue::Structs(items)) => items.first().expect("common"),
+            other => panic!("common ausente: {other:?}"),
+        };
+        assert_eq!(
+            record_get(common, "direction").and_then(SlValue::as_u64),
+            Some(1),
+            "DIR_NE requerido por UpdateDeltaXY"
+        );
+
+        // Smoke OpenTTD: OPENTTDRS_DUMP_MVP_TRAIN_SAV=/ruta/mvp_openttd_train.sav
+        if let Ok(path) = std::env::var("OPENTTDRS_DUMP_MVP_TRAIN_SAV") {
+            let path = std::path::PathBuf::from(&path);
+            if let Some(parent) = path.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            std::fs::write(&path, &bytes).expect("dump train sav");
+        }
+    }
+
+    #[test]
+    fn export_demo_with_modern_stnn_and_vehs_for_rust_roundtrip() {
+        use crate::vehicle::VehicleOrder;
+
+        let mut state = mvp_stations_state();
+        let rail_pos = TileCoord::new(28, 39);
+        let mut bus = Station::new_with_kind(TileCoord::new(17, 15), StopKind::BusStop);
+        bus.name = Some("Parada Villa Demo".into());
+        state.stations.push(bus);
+
+        let train_pos = TileCoord::new(20, 40);
+        let mut track_tile = state.map.get(train_pos).expect("in bounds");
+        track_tile.kind = TileKind::Rail;
+        track_tile.mapt = 0x10;
+        track_tile.m5 = 0x01;
+        state.map.set_tile(train_pos, track_tile).expect("set");
+
+        let mut train = Vehicle::new(0, VehicleKind::Train, train_pos, train_pos);
+        train.running = true;
+        train.direction = crate::vehicle::DIR_NE;
+        train.set_vehicle_orders(vec![VehicleOrder::station(rail_pos)]);
+        // Bus solo en el estado interno; VEHS export oficial es tren-only.
+        let mut bus_v = Vehicle::new(
+            1,
+            VehicleKind::Bus,
+            TileCoord::new(13, 16),
+            TileCoord::new(13, 16),
+        );
+        bus_v.running = true;
+        bus_v.set_vehicle_orders(vec![VehicleOrder::station(TileCoord::new(17, 15))]);
+        state.vehicles = vec![train, bus_v];
+
+        let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
+        let sav_game = sav::load(&bytes).expect("load rust");
+        assert!(sav_game.stations.len() >= 2);
+        assert_eq!(sav_game.vehicles.len(), 1, "ROAD omitido del export");
+
+        // Dump opcional (mapa mínimo). Fixture completo: gen_demo_sav.py.
+        if let Ok(path) = std::env::var("OPENTTDRS_DUMP_DEMO_SAV") {
+            let path = std::path::PathBuf::from(&path);
+            if let Some(parent) = path.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            std::fs::write(&path, &bytes).expect("dump demo sav");
+        }
     }
 
     #[test]

@@ -3,7 +3,8 @@
 Fixture mínimo cargable por OpenTTD 15.3 dedicated (MVP #226).
 
 Contenido: MAPS CH_TABLE + planos RIFF vacíos 64×64 + CITY (≥1) + DATE + PLYR.
-Sin STNN/VEHS/INDY (el STNN flat del demo no coincide con SAVEBYTE+structs).
+Sin STNN/VEHS/INDY (fixture base). Con estaciones: `mvp_openttd_stations.sav`
+(regenerar con `OPENTTDRS_DUMP_MVP_STATIONS_SAV=... cargo test ...export_stnn_is_modern_savebyte_schema`).
 
 Uso:
   python3 scripts/gen_mvp_openttd_load_sav.py \\

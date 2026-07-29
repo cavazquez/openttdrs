@@ -5,6 +5,8 @@
 # (dedicated cierra el server tras un load fallido con rc=0).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# Default: mapa+CITY. Otros fixtures #226: mvp_openttd_stations.sav (STNN),
+# mvp_openttd_train.sav (STNN+VEHS tren+ORDL), demo_openttd.sav (mapa rico+tren).
 SAV="${1:-$ROOT/crates/openttdrs-core/tests/fixtures/mvp_openttd_load.sav}"
 LOG="${TMPDIR:-/tmp}/openttdrs_sav_openttd.log"
 CFGDIR="${TMPDIR:-/tmp}/openttdrs_sav_openttd_cfg"

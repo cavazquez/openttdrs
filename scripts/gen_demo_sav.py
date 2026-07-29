@@ -9,8 +9,16 @@ Contenido del mapa (64×64):
   - línea férrea horizontal con la estación «Central Demo»
   - «Puerto Sur»: caserío secundario
   - mina de carbón 2×2 con su registro INDY
-  - chunks STNN (estaciones), CITY (ciudades), INDY (industrias),
-    PLYR (dinero de la empresa) y VEHS (un tren y un bus)
+  - chunks STNN moderno (SAVEBYTE+structs), CITY, INDY, PLYR, ORDL, VEHS (tren)
+
+Nota (#226): OpenTTD 15.3 dedicated carga:
+  - `mvp_openttd_stations.sav` (STNN sin VEHS)
+  - `mvp_openttd_train.sav` (STNN + tren + ORDL; preferido vía cargo dump)
+  - este demo (mapa rico + un tren; ROAD vehicles omitidos del export)
+
+Preferido para regenerar fixtures OpenTTD-loadable:
+  OPENTTDRS_DUMP_MVP_TRAIN_SAV=$PWD/crates/.../mvp_openttd_train.sav \\
+    cargo test -p openttdrs-core --lib sav::write::tests::export_mvp_train_emits_vehs_ordl_and_direction -- --exact
 
 Uso:
   python3 scripts/gen_demo_sav.py [salida.sav]   (default: save/demo_openttd.sav)
@@ -107,6 +115,198 @@ def idx(x: int, y: int) -> int:
     return y * W + x
 
 
+INVALID_TILE = 0xFFFFFFFF
+NUM_CARGO = 64
+STR_SV_STNAME = 0x6006
+VEH_INVALID = 0xFF
+
+
+def _field(buf: bytearray, ftype: int, name: str) -> None:
+    buf.append(ftype)
+    write_str(name, buf)
+
+
+def stnn_base_header(buf: bytearray) -> None:
+    for ftype, name in (
+        (6, "xy"),
+        (6, "town"),
+        (9, "string_id"),
+        (0x1A, "name"),
+        (2, "delete_ctr"),
+        (2, "owner"),
+        (2, "facilities"),
+        (5, "build_date"),
+        (4, "random_bits"),
+        (2, "waiting_triggers"),
+    ):
+        _field(buf, ftype, name)
+    buf.append(0)
+
+
+def stnn_modern_header() -> bytes:
+    """Header CH_TABLE alineado con OpenTTD 15.3 `station_sl.cpp` (SLV≥340)."""
+    h = bytearray()
+    for ftype, name in (
+        (2, "facilities"),
+        (0x1B, "normal"),
+        (0x1B, "waypoint"),
+        (0x1B, "speclist"),
+        (0x1B, "roadstopspeclist"),
+        (0x1B, "roadstoptiledata"),
+    ):
+        _field(h, ftype, name)
+    h.append(0)
+
+    # SlStationNormal
+    _field(h, 0x1B, "base")
+    for ftype, name in (
+        (6, "train_station.tile"),
+        (2, "train_station.w"),
+        (2, "train_station.h"),
+        (6, "bus_stops"),
+        (6, "truck_stops"),
+        (6, "ship_station.tile"),
+        (2, "ship_station.w"),
+        (2, "ship_station.h"),
+        (6, "docking_station.tile"),
+        (2, "docking_station.w"),
+        (2, "docking_station.h"),
+        (6, "airport.tile"),
+        (2, "airport.w"),
+        (2, "airport.h"),
+        (2, "airport.type"),
+        (2, "airport.layout"),
+        (8, "airport.flags"),
+        (2, "airport.rotation"),
+        (6, "airport.psa"),
+        (2, "indtype"),
+        (2, "time_since_load"),
+        (2, "time_since_unload"),
+        (2, "last_vehicle_type"),
+        (2, "had_vehicle_of_type"),
+        (0x16, "loading_vehicles"),
+        (8, "always_accepted"),
+        (0x1B, "goods"),
+    ):
+        _field(h, ftype, name)
+    h.append(0)
+
+    stnn_base_header(h)
+
+    # SlStationGoods
+    for ftype, name in (
+        (2, "status"),
+        (2, "time_since_pickup"),
+        (2, "rating"),
+        (2, "last_speed"),
+        (2, "last_age"),
+        (2, "amount_fract"),
+        (6, "cargo.reserved_count"),
+        (4, "link_graph"),
+        (4, "node"),
+        (6, "max_waiting_cargo"),
+        (0x1B, "flow"),
+        (0x1B, "cargo"),
+    ):
+        _field(h, ftype, name)
+    h.append(0)
+
+    for ftype, name in ((4, "source"), (4, "via"), (6, "share"), (1, "restricted")):
+        _field(h, ftype, name)
+    h.append(0)
+
+    _field(h, 4, "first")
+    _field(h, 0x16, "second")
+    h.append(0)
+
+    # SlStationWaypoint
+    _field(h, 0x1B, "base")
+    for ftype, name in (
+        (4, "town_cn"),
+        (6, "train_station.tile"),
+        (2, "train_station.w"),
+        (2, "train_station.h"),
+        (4, "waypoint_flags"),
+        (6, "road_waypoint_area.tile"),
+        (2, "road_waypoint_area.w"),
+        (2, "road_waypoint_area.h"),
+    ):
+        _field(h, ftype, name)
+    h.append(0)
+    stnn_base_header(h)
+
+    for _ in range(2):  # speclist + roadstopspeclist
+        _field(h, 6, "grfid")
+        _field(h, 4, "localidx")
+        h.append(0)
+
+    for ftype, name in ((6, "tile"), (2, "random_bits"), (2, "animation_frame")):
+        _field(h, ftype, name)
+    h.append(0)
+    return bytes(h)
+
+
+def _empty_goods(buf: bytearray) -> None:
+    buf.extend([0, 255, 175, 0, 255, 0])
+    buf.extend(struct.pack(">I", 0))
+    buf.extend(struct.pack(">HH", 0xFFFF, 0xFFFF))
+    buf.extend(struct.pack(">I", 0))
+    write_gamma(0, buf)
+    write_gamma(0, buf)
+
+
+def stnn_normal_record(tile: int, name: str, facilities: int) -> bytes:
+    rec = bytearray()
+    rec.append(facilities & 0xFF)  # SAVEBYTE
+    rec.append(1)  # normal presente
+    rec.append(1)  # base presente
+    rec.extend(struct.pack(">I", tile))
+    rec.extend(struct.pack(">I", 1))  # town ref
+    rec.extend(struct.pack(">H", STR_SV_STNAME))
+    write_str(name, rec)
+    rec.append(0)  # delete_ctr
+    rec.append(0)  # owner
+    rec.append(facilities & 0xFF)
+    rec.extend(struct.pack(">i", 0))  # build_date
+    rec.extend(struct.pack(">H", 0))
+    rec.append(0)  # waiting_triggers
+
+    if facilities & 0x01:
+        rec.extend(struct.pack(">I", tile))
+        rec.extend([1, 1])
+    else:
+        rec.extend(struct.pack(">I", INVALID_TILE))
+        rec.extend([0, 0])
+
+    rec.extend(struct.pack(">II", 0, 0))  # bus/truck stops null
+    rec.extend(struct.pack(">I", INVALID_TILE))
+    rec.extend([0, 0])
+    rec.extend(struct.pack(">I", INVALID_TILE))
+    rec.extend([0, 0])
+
+    if facilities & 0x08:
+        rec.extend(struct.pack(">I", tile))
+        rec.extend([1, 1, 0, 0])
+    else:
+        rec.extend(struct.pack(">I", INVALID_TILE))
+        rec.extend([0, 0, 0, 0])
+    rec.extend(struct.pack(">Q", 0))
+    rec.append(0)  # rotation
+    rec.extend(struct.pack(">I", 0))  # psa
+    rec.extend([0, 0, 0, VEH_INVALID, 0])
+    write_gamma(0, rec)  # loading_vehicles
+    rec.extend(struct.pack(">Q", 0))  # always_accepted
+    write_gamma(NUM_CARGO, rec)
+    for _ in range(NUM_CARGO):
+        _empty_goods(rec)
+
+    rec.append(0)  # waypoint ausente
+    write_gamma(0, rec)
+    write_gamma(0, rec)
+    write_gamma(0, rec)
+    return bytes(rec)
+
+
 def build_map_planes() -> tuple[bytearray, bytearray, bytearray, bytearray, bytearray]:
     mapt = bytearray([MP_CLEAR << 4]) * 1
     mapt = bytearray(N)
@@ -148,10 +348,10 @@ def build_map_planes() -> tuple[bytearray, bytearray, bytearray, bytearray, byte
     # Parada de bus junto a la carretera (al sur de la fila y=16).
     set_tile(17, 15, MP_STATION, m6v=ST_BUS)
 
-    # Línea férrea horizontal y estación de tren al norte de la vía.
+    # Línea férrea horizontal con estación sobre la vía (pathable para el tren).
     for x in range(8, 49):
         set_tile(x, 40, MP_RAILWAY, m5v=TRACK_X)
-    set_tile(28, 39, MP_STATION, m6v=ST_RAIL)
+    set_tile(28, 40, MP_STATION, m6v=ST_RAIL, m5v=TRACK_X)
 
     # Puerto Sur: caserío secundario.
     for x, y, hid in [(44, 46, 21), (45, 46, 22), (44, 47, 23), (46, 47, 24)]:
@@ -191,17 +391,18 @@ def build_sav() -> bytes:
     data.extend(riff_chunk(b"MAP7", bytes(N)))
     data.extend(riff_chunk(b"MAP8", bytes(m8)))
 
-    # STNN: estaciones con nombre (facilities: 1 tren, 4 bus).
-    st_fields = [(6, "xy"), (10 | 0x10, "name"), (2, "facilities")]
-    st1 = bytearray()
-    st1.extend(struct.pack(">I", idx(28, 39)))
-    write_str("Central Demo", st1)
-    st1.append(0x01)
-    st2 = bytearray()
-    st2.extend(struct.pack(">I", idx(17, 15)))
-    write_str("Parada Villa Demo", st2)
-    st2.append(0x04)
-    data.extend(table_chunk(b"STNN", st_fields, [bytes(st1), bytes(st2)]))
+    # STNN moderno (SAVEBYTE + structs) — ver station_sl.cpp / sav/write/entities.rs.
+    data.extend(
+        raw_table_chunk(
+            b"STNN",
+            stnn_modern_header(),
+            [
+                stnn_normal_record(idx(28, 40), "Central Demo", 0x01),
+                stnn_normal_record(idx(17, 15), "Parada Villa Demo", 0x04),
+            ],
+            CH_TABLE,
+        )
+    )
 
     # CITY: ciudades con población. La segunda no tiene nombre custom: usa el
     # generador nativo (townnametype 0x20C0 = inglés original, seed fijo).
@@ -247,7 +448,7 @@ def build_sav() -> bytes:
     pl.extend(struct.pack(">q", 250_000))
     data.extend(table_chunk(b"PLYR", [(7, "money")], [bytes(pl)]))
 
-    # ORDL: listas de órdenes (tren → estación 0, bus → estación 1).
+    # ORDL: una lista (tren → estación rail 0). ROAD omitido (#226).
     ordl_header = bytearray()
     ordl_header.append(0x1B)
     write_str("orders", ordl_header)
@@ -270,7 +471,8 @@ def build_sav() -> bytes:
 
     def goto_station_order(station_id: int) -> bytes:
         o = bytearray()
-        o.append(1)  # OT_GOTO_STATION
+        # OT_GOTO_STATION | (OrderStopLocation::Middle << 4) = 0x11
+        o.append(0x11)
         o.append(0)
         o.extend(struct.pack(">H", station_id))
         o.append(0xFF)
@@ -289,62 +491,77 @@ def build_sav() -> bytes:
         raw_table_chunk(
             b"ORDL",
             bytes(ordl_header),
-            [ordl_record(goto_station_order(0)), ordl_record(goto_station_order(1))],
+            [ordl_record(goto_station_order(0))],
             CH_TABLE,
         )
     )
 
-    # VEHS (sparse): un tren en la vía y un bus en la carretera, ambos cabeza
-    # de convoy (subtype bit 0 = GVSF_FRONT). Header con structs anidados:
-    # type u8 + train/roadveh { common { tile, subtype, cargo_type } }.
+    # VEHS (sparse): un tren loadable OpenTTD 15.3 — schema mínimo #226
+    # (direction/owner/engine_type/x_pos/y_pos/z_pos/track). ROAD omitido.
+    def append_vehs_common_fields(hdr: bytearray) -> None:
+        for ftype, name in [
+            (2, "subtype"),
+            (2, "owner"),
+            (6, "tile"),
+            (6, "x_pos"),
+            (6, "y_pos"),
+            (5, "z_pos"),
+            (2, "direction"),
+            (4, "engine_type"),
+            (2, "vehstatus"),
+            (2, "cargo_type"),
+            (6, "orders"),
+            (2, "cur_real_order_index"),
+        ]:
+            hdr.append(ftype)
+            write_str(name, hdr)
+        hdr.append(0)
+
     vehs_header = bytearray()
     vehs_header.append(2)
     write_str("type", vehs_header)
-    vehs_header.append(11 | 0x10)
+    vehs_header.append(0x1B)
     write_str("train", vehs_header)
-    vehs_header.append(11 | 0x10)
+    vehs_header.append(0x1B)
     write_str("roadveh", vehs_header)
     vehs_header.append(0)
-    for _ in range(2):  # sub-listas de train y roadveh (depth-first)
-        vehs_header.append(11 | 0x10)
-        write_str("common", vehs_header)
-        vehs_header.append(0)
-        vehs_header.append(6)
-        write_str("tile", vehs_header)
-        vehs_header.append(2)
-        write_str("subtype", vehs_header)
-        vehs_header.append(2)
-        write_str("cargo_type", vehs_header)
-        vehs_header.append(6)
-        write_str("orders", vehs_header)
-        vehs_header.append(2)
-        write_str("cur_real_order_index", vehs_header)
-        vehs_header.append(2)
-        write_str("vehstatus", vehs_header)
-        vehs_header.append(0)
+    # train nest
+    vehs_header.append(0x1B)
+    write_str("common", vehs_header)
+    vehs_header.append(2)
+    write_str("track", vehs_header)
+    vehs_header.append(0)
+    append_vehs_common_fields(vehs_header)
+    # roadveh stub nest
+    vehs_header.append(0x1B)
+    write_str("common", vehs_header)
+    vehs_header.append(0)
+    append_vehs_common_fields(vehs_header)
 
-    def vehs_common(tile: int, subtype: int, cargo: int, order_list: int, buf: bytearray) -> None:
-        buf.append(1)  # train/roadveh presente
-        buf.append(1)  # common presente
-        buf.extend(struct.pack(">I", tile))
-        buf.append(subtype)
-        buf.append(cargo)
-        buf.extend(struct.pack(">I", order_list))  # OrderList ref = índice + 1
-        buf.append(0)  # cur_real_order_index
-        buf.append(0)  # vehstatus: running
-
-    v_train = bytearray([0])  # índice sparse 0
-    v_train.append(0)  # type 0 = tren
-    vehs_common(idx(20, 40), 0x01, 1, 1, v_train)  # lista 0 → ref 1; cargo carbón
+    train_tile = idx(20, 40)
+    tx, ty = 20, 40
+    v_train = bytearray()
+    v_train.append(0)  # sparse index
+    v_train.append(0)  # VEH_TRAIN
+    v_train.append(1)  # train presente
+    v_train.append(1)  # common presente
+    v_train.append(0x09)  # GVSF_FRONT | GVSF_ENGINE
+    v_train.append(0)  # owner company 0
+    v_train.extend(struct.pack(">I", train_tile))
+    v_train.extend(struct.pack(">I", tx * 16))  # x_pos
+    v_train.extend(struct.pack(">I", ty * 16 + 8))  # y_pos
+    v_train.extend(struct.pack(">i", 0))  # z_pos
+    v_train.append(1)  # DIR_NE
+    v_train.extend(struct.pack(">H", 0))  # Kirby Paul Tank
+    v_train.append(0)  # vehstatus running
+    v_train.append(1)  # cargo carbón
+    v_train.extend(struct.pack(">I", 1))  # ORDL ref 1
+    v_train.append(0)  # cur_real_order_index
+    v_train.append(1)  # TRACK_BIT_X
     v_train.append(0)  # roadveh ausente
 
-    v_bus = bytearray([1])  # índice sparse 1
-    v_bus.append(1)  # type 1 = carretera
-    v_bus.append(0)  # train ausente
-    vehs_common(idx(13, 16), 0x01, 0, 2, v_bus)  # lista 1 → ref 2; pasajeros
-
     data.extend(
-        raw_table_chunk(b"VEHS", bytes(vehs_header), [bytes(v_train), bytes(v_bus)], CH_SPARSE_TABLE)
+        raw_table_chunk(b"VEHS", bytes(vehs_header), [bytes(v_train)], CH_SPARSE_TABLE)
     )
 
     data.extend(b"\x00\x00\x00\x00")  # terminador de stream

@@ -2107,7 +2107,7 @@ payload (zlib si OTTZ; raw si OTTN)
 2. Planos `CH_RIFF` densos (W×H bytes, salvo MAP2/MAP8 = 2×):
    - `MAPT`, `MAPH`, `MAPO` (m1), `MAP2` (u16 BE: hi=`m2_hi`, lo=`m2`),
    - `M3LO`, `M3HI` (= m4 OpenTTD), `MAP5`, `MAPE` (m6), `MAP7`, `MAP8` (u16 BE desde `Tile.m8` LE)
-3. `STNN` — `CH_TABLE` `xy` / `name` / `facilities` desde `GameState.stations`
+3. `STNN` — `CH_TABLE` moderno (SAVEBYTE + structs; #226) desde `GameState.stations`
 4. `CITY` — `CH_TABLE` `xy` / `name` / `cache.population` / townname* desde `GameState.towns`
 5. `INDY` — `CH_TABLE` `location.tile` / `w` / `h` / `type` desde `GameState.industries`
 6. `ORDL` — `CH_TABLE` con struct `orders` (goto estación/waypoint); una lista por vehículo con órdenes

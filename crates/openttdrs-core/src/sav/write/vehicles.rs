@@ -1,4 +1,12 @@
 //! Serialización de vehículos y órdenes (ORDL, VEHS).
+//!
+//! Schema VEHS mínimo loadable por OpenTTD ≥15.3 (#226):
+//! `direction`/`owner`/`engine_type`/`x_pos`/`y_pos`/`z_pos`/`track` son
+//! obligatorios — sin ellos AfterLoad deja `INVALID_DIR`/`INVALID_OWNER` y
+//! crashea en `Train::UpdateDeltaXY` (`train_cmd.cpp`).
+//!
+//! Solo se exportan **trenes**. Bus/camión quedan fuera del export oficial
+//! hasta que ROAD + estado de vía sean loadables (residual #226).
 
 use super::super::SavError;
 use super::super::chunks::{CH_SPARSE_TABLE, CH_TABLE};
@@ -6,11 +14,26 @@ use super::super::orders_codec::{append_ordl_orders_header, encode_vehicle_order
 use super::chunks::raw_table_chunk;
 use super::codec::{write_gamma, write_str};
 use crate::game_state::GameState;
-use crate::map::{TileCoord, coord_to_linear_index};
-use crate::vehicle::{Vehicle, VehicleKind, VehicleOrder};
+use crate::map::{TileCoord, TileKind, coord_to_linear_index};
+use crate::vehicle::{
+    DIR_NE, DIR_NW, DIR_SE, DIR_SW, Vehicle, VehicleKind, VehicleOrder,
+};
 
-/// Cabeza de convoy (`GVSF_FRONT`).
-const GVSF_FRONT: u8 = 0x01;
+/// Cabeza de convoy + motor (`GVSF_FRONT | GVSF_ENGINE`).
+const TRAIN_SUBTYPE_FRONT_ENGINE: u8 = 0x01 | 0x08;
+
+/// `VehState::Stopped` (bit 1).
+const VEHSTATUS_STOPPED: u8 = 1 << 1;
+
+/// `TRACK_BIT_X` / `TRACK_BIT_Y`.
+const TRACK_BIT_X: u8 = 0x01;
+const TRACK_BIT_Y: u8 = 0x02;
+
+/// Kirby Paul Tank (primer motor rail vanilla).
+const DEFAULT_OPENTTD_TRAIN_ENGINE: u16 = 0;
+
+/// Píxeles por tesela (`TILE_SIZE`).
+const TILE_SIZE: i32 = 16;
 
 fn station_id_for_pos(state: &GameState, pos: TileCoord) -> Option<u16> {
     state
@@ -23,10 +46,7 @@ fn station_id_for_pos(state: &GameState, pos: TileCoord) -> Option<u16> {
 fn cargo_ottd_byte(v: &Vehicle) -> u8 {
     match v.cargo_type {
         Some(c) => c.temperate_id(),
-        None => match v.kind {
-            VehicleKind::Bus | VehicleKind::Aircraft => 0,
-            _ => 1,
-        },
+        None => 1, // carbón por defecto en tren
     }
 }
 
@@ -34,10 +54,64 @@ fn encode_goto_order(order: &VehicleOrder, state: &GameState, map_w: u32) -> Opt
     encode_vehicle_order(order, |pos| station_id_for_pos(state, pos), map_w).map(|b| b.to_vec())
 }
 
+/// TrackBits desde el mapa, o `TRACK_BIT_X` si no hay vía legible.
+fn track_bits_for(state: &GameState, pos: TileCoord) -> u8 {
+    let Some(tile) = state.map.get(pos) else {
+        return TRACK_BIT_X;
+    };
+    if !matches!(tile.kind, TileKind::Rail | TileKind::Station) {
+        return TRACK_BIT_X;
+    }
+    let bits = tile.m5 & 0x3F;
+    if bits == 0 {
+        TRACK_BIT_X
+    } else {
+        bits
+    }
+}
+
+/// Dirección diagonal coherente con el eje de vía.
+fn train_direction(track: u8, dir: u8) -> u8 {
+    let on_x = track & TRACK_BIT_X != 0;
+    let on_y = track & TRACK_BIT_Y != 0;
+    if on_x && matches!(dir, DIR_NE | DIR_SW) {
+        return dir;
+    }
+    if on_y && matches!(dir, DIR_NW | DIR_SE) {
+        return dir;
+    }
+    if on_y && !on_x {
+        DIR_SE
+    } else {
+        DIR_NE
+    }
+}
+
+/// EngineID vanilla OpenTTD desde el catálogo Rust (inverso de `vanilla_train_engine_id`).
+fn openttd_train_engine_type(v: &Vehicle) -> u16 {
+    match v.engine_id {
+        Some(100) => 0,  // Kirby Paul Tank
+        Some(101) => 8,  // Chaney 'Jubilee'
+        Some(102) => 9,  // Ginzu 'A4'
+        Some(103) => 10, // SH '8P'
+        Some(104) => 11, // Manley-Morel
+        Some(105) => 12, // Dash
+        Some(106) => 13, // SH/Hendry '25'
+        Some(107) => 14, // UU '37'
+        Some(108) => 15, // Floss '47'
+        Some(109) => 22, // SH '125'
+        Some(110) => 23, // SH '30'
+        Some(111) => 24, // SH '40'
+        Some(112) => 25, // T.I.M.
+        Some(113) => 26, // AsiaStar
+        _ => DEFAULT_OPENTTD_TRAIN_ENGINE,
+    }
+}
+
 type SavRecordBytes = Vec<u8>;
 type SavRecordList = Vec<SavRecordBytes>;
 
-/// Una lista ORDL por vehículo (goto estación/waypoint/depósito/condicional).
+/// Una lista ORDL por tren con órdenes; VEHS solo cabezas tren.
 ///
 /// # Errors
 ///
@@ -51,10 +125,8 @@ pub(super) fn ordl_and_vehs_records(
     let mut sparse_idx = 0u32;
 
     for v in &state.vehicles {
-        if !matches!(
-            v.kind,
-            VehicleKind::Train | VehicleKind::Bus | VehicleKind::Truck
-        ) {
+        // ROAD/bus/camión: omitidos del export oficial (#226 residual).
+        if v.kind != VehicleKind::Train {
             continue;
         }
         let Some(tile_idx) = coord_to_linear_index(v.pos, map_w) else {
@@ -72,7 +144,7 @@ pub(super) fn ordl_and_vehs_records(
         } else {
             let list_idx = u32::try_from(ordl.len()).unwrap_or(0);
             let mut rec = Vec::new();
-            write_gamma(order_bytes.len() as u32, &mut rec)?; // count of orders struct
+            write_gamma(order_bytes.len() as u32, &mut rec)?;
             for o in &order_bytes {
                 rec.extend_from_slice(o);
             }
@@ -80,62 +152,116 @@ pub(super) fn ordl_and_vehs_records(
             list_idx + 1
         };
 
-        let vtype: u8 = match v.kind {
-            VehicleKind::Train => 0,
-            VehicleKind::Bus | VehicleKind::Truck => 1,
-            _ => continue,
-        };
         let cargo = cargo_ottd_byte(v);
         let cur_order = u8::try_from(v.current_order.min(255)).unwrap_or(0);
-        let vehstatus = u8::from(!v.running); // bit 0 = stopped
+        let vehstatus = if v.running { 0 } else { VEHSTATUS_STOPPED };
+        let track = track_bits_for(state, v.pos);
+        let direction = train_direction(track, v.direction);
+        let engine_type = openttd_train_engine_type(v);
+        let x_pos = i32::from(v.pos.x) * TILE_SIZE + i32::from(v.rail_pixel.min(15));
+        let y_pos = i32::from(v.pos.y) * TILE_SIZE + TILE_SIZE / 2;
+        let z_pos = i32::from(v.z_pos.unwrap_or(0));
 
         let mut rec = Vec::new();
         write_gamma(sparse_idx, &mut rec)?;
-        rec.push(vtype);
-        if vtype == 0 {
-            // train presente, roadveh ausente
-            write_vehs_common(
-                &mut rec,
-                tile_idx,
+        rec.push(0); // VEH_TRAIN (SAVEBYTE)
+        write_gamma(1, &mut rec)?; // train struct presente
+        write_gamma(1, &mut rec)?; // common presente
+        write_vehs_train_common(
+            &mut rec,
+            TrainCommonWire {
+                subtype: TRAIN_SUBTYPE_FRONT_ENGINE,
+                owner: v.owner.0,
+                tile: tile_idx,
+                x_pos,
+                y_pos,
+                z_pos,
+                direction,
+                engine_type,
+                vehstatus,
                 cargo,
                 order_list_ref,
                 cur_order,
-                vehstatus,
-            );
-            rec.push(0); // roadveh count = 0
-        } else {
-            rec.push(0); // train ausente
-            write_vehs_common(
-                &mut rec,
-                tile_idx,
-                cargo,
-                order_list_ref,
-                cur_order,
-                vehstatus,
-            );
-        }
+            },
+        );
+        rec.push(track);
+        write_gamma(0, &mut rec)?; // roadveh ausente
         vehs.push(rec);
         sparse_idx += 1;
     }
     Ok((ordl, vehs))
 }
 
-fn write_vehs_common(
-    buf: &mut Vec<u8>,
+struct TrainCommonWire {
+    subtype: u8,
+    owner: u8,
     tile: u32,
+    x_pos: i32,
+    y_pos: i32,
+    z_pos: i32,
+    direction: u8,
+    engine_type: u16,
+    vehstatus: u8,
     cargo: u8,
     order_list_ref: u32,
     cur_order: u8,
-    vehstatus: u8,
-) {
-    buf.push(1); // train/roadveh struct count
-    buf.push(1); // common struct count
-    buf.extend_from_slice(&tile.to_be_bytes());
-    buf.push(GVSF_FRONT);
-    buf.push(cargo);
-    buf.extend_from_slice(&order_list_ref.to_be_bytes());
-    buf.push(cur_order);
-    buf.push(vehstatus);
+}
+
+fn write_vehs_train_common(buf: &mut Vec<u8>, c: TrainCommonWire) {
+    buf.push(c.subtype);
+    buf.push(c.owner);
+    buf.extend_from_slice(&c.tile.to_be_bytes());
+    buf.extend_from_slice(&u32::try_from(c.x_pos).unwrap_or(0).to_be_bytes());
+    buf.extend_from_slice(&u32::try_from(c.y_pos).unwrap_or(0).to_be_bytes());
+    buf.extend_from_slice(&c.z_pos.to_be_bytes());
+    buf.push(c.direction);
+    buf.extend_from_slice(&c.engine_type.to_be_bytes());
+    buf.push(c.vehstatus);
+    buf.push(c.cargo);
+    buf.extend_from_slice(&c.order_list_ref.to_be_bytes());
+    buf.push(c.cur_order);
+}
+
+fn append_field(header: &mut Vec<u8>, ftype: u8, name: &str) -> Result<(), SavError> {
+    header.push(ftype);
+    write_str(name, header)
+}
+
+/// Header VEHS mínimo (train + stub roadveh) alineado con `vehicle_sl.cpp`.
+fn append_vehs_header(header: &mut Vec<u8>) -> Result<(), SavError> {
+    append_field(header, 2, "type")?; // SAVEBYTE → U8
+    append_field(header, 0x1B, "train")?;
+    append_field(header, 0x1B, "roadveh")?;
+    header.push(0);
+
+    // train → common + track
+    append_field(header, 0x1B, "common")?;
+    append_field(header, 2, "track")?;
+    header.push(0);
+    append_vehs_common_fields(header)?;
+
+    // roadveh stub (nunca emitimos registros type=1; header requerido por el parser)
+    append_field(header, 0x1B, "common")?;
+    header.push(0);
+    append_vehs_common_fields(header)?;
+    Ok(())
+}
+
+fn append_vehs_common_fields(header: &mut Vec<u8>) -> Result<(), SavError> {
+    append_field(header, 2, "subtype")?;
+    append_field(header, 2, "owner")?;
+    append_field(header, 6, "tile")?;
+    append_field(header, 6, "x_pos")?;
+    append_field(header, 6, "y_pos")?;
+    append_field(header, 5, "z_pos")?; // SLE_FILE_I32
+    append_field(header, 2, "direction")?;
+    append_field(header, 4, "engine_type")?;
+    append_field(header, 2, "vehstatus")?;
+    append_field(header, 2, "cargo_type")?;
+    append_field(header, 6, "orders")?; // REF_ORDERLIST → U32
+    append_field(header, 2, "cur_real_order_index")?;
+    header.push(0);
+    Ok(())
 }
 
 /// Construye chunk ORDL con records.
@@ -156,31 +282,7 @@ pub(super) fn ordl_chunk(records: &[Vec<u8>]) -> Result<Vec<u8>, SavError> {
 /// Falla si algún valor gamma está fuera de rango.
 pub(super) fn vehs_chunk(records: &[Vec<u8>]) -> Result<Vec<u8>, SavError> {
     let mut header = Vec::new();
-    header.push(2);
-    write_str("type", &mut header)?;
-    header.push(0x1B); // STRUCT | HAS_LENGTH
-    write_str("train", &mut header)?;
-    header.push(0x1B);
-    write_str("roadveh", &mut header)?;
-    header.push(0);
-    for _ in 0..2 {
-        header.push(0x1B);
-        write_str("common", &mut header)?;
-        header.push(0);
-        header.push(6);
-        write_str("tile", &mut header)?;
-        header.push(2);
-        write_str("subtype", &mut header)?;
-        header.push(2);
-        write_str("cargo_type", &mut header)?;
-        header.push(6);
-        write_str("orders", &mut header)?;
-        header.push(2);
-        write_str("cur_real_order_index", &mut header)?;
-        header.push(2);
-        write_str("vehstatus", &mut header)?;
-        header.push(0);
-    }
+    append_vehs_header(&mut header)?;
     raw_table_chunk(*b"VEHS", &header, records, CH_SPARSE_TABLE)
 }
 
@@ -225,6 +327,81 @@ mod tests {
         assert_eq!(ordl.len(), 1);
         assert_eq!(vehs.len(), 1);
         assert!(ordl[0].len() > 1);
+    }
+
+    #[test]
+    fn vehs_omits_road_vehicles() {
+        let mut state = GameState::new(64, 64);
+        let train = Vehicle::new(
+            0,
+            VehicleKind::Train,
+            TileCoord::new(20, 40),
+            TileCoord::new(20, 40),
+        );
+        let bus = Vehicle::new(
+            1,
+            VehicleKind::Bus,
+            TileCoord::new(13, 16),
+            TileCoord::new(13, 16),
+        );
+        state.vehicles = vec![train, bus];
+        let (ordl, vehs) = ordl_and_vehs_records(&state, 64).unwrap();
+        assert!(ordl.is_empty());
+        assert_eq!(vehs.len(), 1, "solo el tren");
+    }
+
+    #[test]
+    fn vehs_record_includes_direction_and_engine() {
+        use crate::sav::chunks::{find_chunk, parse_chunks};
+        use crate::sav::table::{SlValue, parse_table_chunk, record_get};
+
+        let mut state = GameState::new(64, 64);
+        let mut tile = state.map.get(TileCoord::new(20, 40)).unwrap();
+        tile.kind = TileKind::Rail;
+        tile.mapt = 0x10;
+        tile.m5 = TRACK_BIT_X;
+        state.map.set_tile(TileCoord::new(20, 40), tile).unwrap();
+
+        let mut train = Vehicle::new(
+            0,
+            VehicleKind::Train,
+            TileCoord::new(20, 40),
+            TileCoord::new(20, 40),
+        );
+        train.direction = DIR_NE;
+        train.running = true;
+        state.vehicles = vec![train];
+
+        let (_, vehs) = ordl_and_vehs_records(&state, 64).unwrap();
+        let chunk = vehs_chunk(&vehs).unwrap();
+        let chunks = parse_chunks(&chunk).unwrap();
+        let raw = find_chunk(&chunks, "VEHS").expect("VEHS");
+        let rows = parse_table_chunk(&raw.body, true).expect("parse VEHS");
+        assert_eq!(rows.len(), 1);
+        let train = match record_get(&rows[0].1, "train") {
+            Some(SlValue::Structs(items)) => items.first().expect("train struct"),
+            other => panic!("train ausente: {other:?}"),
+        };
+        let common = match record_get(train, "common") {
+            Some(SlValue::Structs(items)) => items.first().expect("common"),
+            other => panic!("common ausente: {other:?}"),
+        };
+        assert_eq!(
+            record_get(common, "direction").and_then(SlValue::as_u64),
+            Some(u64::from(DIR_NE))
+        );
+        assert_eq!(
+            record_get(common, "engine_type").and_then(SlValue::as_u64),
+            Some(0)
+        );
+        assert_eq!(
+            record_get(common, "owner").and_then(SlValue::as_u64),
+            Some(0)
+        );
+        assert_eq!(
+            record_get(train, "track").and_then(SlValue::as_u64),
+            Some(u64::from(TRACK_BIT_X))
+        );
     }
 
     #[test]

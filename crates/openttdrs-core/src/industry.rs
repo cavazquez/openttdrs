@@ -14,9 +14,10 @@ pub const INDUSTRY_PRODUCE_TICKS: u64 = 256;
 /// `out += in * multiplier / 256`.
 pub const INDUSTRY_PRODUCE_AMOUNT: u32 = 8;
 
-/// Insumos por ciclo de fábrica temperate (`IndustrySpec::Factory`).
-pub const FACTORY_WOOD_INPUT: u32 = 4;
-pub const FACTORY_COAL_INPUT: u32 = 2;
+/// Insumos por ciclo de fábrica temperate (`IndustrySpec::Factory`, `build_industry.h`).
+pub const FACTORY_LIVESTOCK_INPUT: u32 = 8;
+pub const FACTORY_GRAIN_INPUT: u32 = 8;
+pub const FACTORY_STEEL_INPUT: u32 = 8;
 
 /// Entrada de procesamiento con multiplicador hacia la salida (`/256`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -77,35 +78,41 @@ pub enum IndustrySpec {
     IronOreMine,
     CopperOreMine,
     GoldMine,
+    DiamondMine,
     Forest,
     Farm,
+    /// Granja tropic (`IT_FARM_2`): maíz.
+    FarmTropic,
     OilWells,
     OilRefinery,
     Factory,
+    /// Fábrica tropic (`IT_FACTORY_2`): caucho + cobre + madera → goods.
+    FactoryTropic,
     Sawmill,
-    /// Acería temperate (hierro + carbón → acero).
+    PaperMill,
+    PrintingWorks,
+    FoodProcessingPlant,
+    FruitPlantation,
+    RubberPlantation,
+    WaterSupply,
+    WaterTower,
+    LumberMill,
+    /// Acería temperate (mineral de hierro → acero).
     SteelMill,
     /// Banco temperate (objetos de valor).
     Bank,
-    /// Plantación de algodón de azúcar (Toyland).
+    /// Banco ártico/trópico: acepta oro/diamantes.
+    BankArcticTropic,
     CottonCandy,
-    /// Fábrica de caramelos (Toyland).
     CandyFactory,
-    /// Granja de baterías (Toyland).
     BatteryFarm,
-    /// Pozo de cola (Toyland).
     ColaWells,
-    /// Fábrica de juguetes (Toyland).
+    ToyShop,
     ToyFactory,
-    /// Fuente de plástico (Toyland).
     PlasticFountain,
-    /// Fábrica de bebidas gaseosas (Toyland).
     FizzyDrinkFactory,
-    /// Generador de burbujas (Toyland).
     BubbleGenerator,
-    /// Cantera de toffee (Toyland).
     ToffeeQuarry,
-    /// Mina de azúcar (Toyland).
     SugarMine,
 }
 
@@ -116,6 +123,7 @@ impl IndustrySpec {
         match climate {
             Climate::Temperate => &[
                 Self::CoalMine,
+                Self::PowerStation,
                 Self::Forest,
                 Self::Sawmill,
                 Self::Factory,
@@ -123,27 +131,43 @@ impl IndustrySpec {
                 Self::IronOreMine,
                 Self::SteelMill,
                 Self::Bank,
+                Self::OilWells,
+                Self::OilRefinery,
             ],
             Climate::SubArctic => &[
                 Self::CoalMine,
+                Self::PowerStation,
                 Self::Forest,
-                Self::Sawmill,
-                Self::Factory,
+                Self::PaperMill,
+                Self::PrintingWorks,
+                Self::Farm,
+                Self::FoodProcessingPlant,
                 Self::GoldMine,
-                Self::IronOreMine,
+                Self::BankArcticTropic,
+                Self::OilWells,
+                Self::OilRefinery,
             ],
             Climate::SubTropical => &[
                 Self::OilWells,
                 Self::OilRefinery,
-                Self::Farm,
-                Self::Factory,
                 Self::CopperOreMine,
+                Self::FarmTropic,
+                Self::FruitPlantation,
+                Self::RubberPlantation,
+                Self::FactoryTropic,
+                Self::FoodProcessingPlant,
+                Self::WaterSupply,
+                Self::WaterTower,
+                Self::DiamondMine,
+                Self::BankArcticTropic,
+                Self::LumberMill,
             ],
             Climate::Toyland => &[
                 Self::CottonCandy,
                 Self::CandyFactory,
                 Self::BatteryFarm,
                 Self::ColaWells,
+                Self::ToyShop,
                 Self::ToyFactory,
                 Self::PlasticFountain,
                 Self::FizzyDrinkFactory,
@@ -166,61 +190,176 @@ impl IndustrySpec {
             | Self::IronOreMine
             | Self::CopperOreMine
             | Self::GoldMine
+            | Self::DiamondMine
+            | Self::WaterSupply
             | Self::BatteryFarm
             | Self::PlasticFountain
             | Self::SugarMine
             | Self::ToffeeQuarry => IndustryKind::CoalMine,
-            Self::Forest | Self::Farm | Self::CottonCandy | Self::BubbleGenerator => {
-                IndustryKind::Forest
-            }
+            Self::Forest
+            | Self::Farm
+            | Self::FarmTropic
+            | Self::FruitPlantation
+            | Self::RubberPlantation
+            | Self::CottonCandy
+            | Self::BubbleGenerator => IndustryKind::Forest,
             Self::OilWells | Self::OilRefinery | Self::ColaWells => IndustryKind::OilWell,
             Self::PowerStation
             | Self::Factory
+            | Self::FactoryTropic
             | Self::Sawmill
+            | Self::PaperMill
+            | Self::PrintingWorks
+            | Self::FoodProcessingPlant
             | Self::SteelMill
             | Self::Bank
+            | Self::BankArcticTropic
+            | Self::WaterTower
+            | Self::LumberMill
             | Self::CandyFactory
+            | Self::ToyShop
             | Self::ToyFactory
             | Self::FizzyDrinkFactory => IndustryKind::Factory,
         }
     }
 
+    /// Cargos producidos (primario primero). Sin aliases temperate.
     #[must_use]
-    pub const fn output_cargo(self) -> CargoType {
+    pub const fn produced_cargos(self) -> &'static [CargoType] {
         match self {
-            Self::Forest | Self::CottonCandy | Self::BubbleGenerator => CargoType::Wood,
-            Self::PowerStation
-            | Self::Sawmill
+            Self::CoalMine => &[CargoType::Coal],
+            Self::Forest => &[CargoType::Wood],
+            Self::Farm => &[CargoType::Grain, CargoType::Livestock],
+            Self::FarmTropic => &[CargoType::Maize],
+            Self::OilWells => &[CargoType::Oil],
+            Self::IronOreMine => &[CargoType::IronOre],
+            Self::CopperOreMine => &[CargoType::CopperOre],
+            Self::GoldMine => &[CargoType::Gold],
+            Self::DiamondMine => &[CargoType::Diamonds],
+            Self::Bank => &[CargoType::Valuables],
+            Self::FruitPlantation => &[CargoType::Fruit],
+            Self::RubberPlantation => &[CargoType::Rubber],
+            Self::WaterSupply => &[CargoType::Water],
+            Self::CottonCandy => &[CargoType::CottonCandy],
+            Self::BatteryFarm => &[CargoType::Batteries],
+            Self::ColaWells => &[CargoType::Cola],
+            Self::PlasticFountain => &[CargoType::Plastic],
+            Self::BubbleGenerator => &[CargoType::Bubbles],
+            Self::ToffeeQuarry => &[CargoType::Toffee],
+            Self::SugarMine => &[CargoType::Sugar],
+            Self::Sawmill
             | Self::Factory
+            | Self::FactoryTropic
             | Self::OilRefinery
-            | Self::CandyFactory
-            | Self::ToyFactory
-            | Self::FizzyDrinkFactory => CargoType::Goods,
-            Self::Farm => CargoType::Grain,
-            Self::OilWells | Self::ColaWells => CargoType::Oil,
-            Self::SteelMill => CargoType::Steel,
-            Self::Bank => CargoType::Valuables,
-            Self::IronOreMine | Self::CopperOreMine => CargoType::IronOre,
-            Self::CoalMine
-            | Self::GoldMine
-            | Self::BatteryFarm
-            | Self::PlasticFountain
-            | Self::SugarMine
-            | Self::ToffeeQuarry => CargoType::Coal,
+            | Self::PrintingWorks => &[CargoType::Goods],
+            Self::SteelMill => &[CargoType::Steel],
+            Self::PaperMill => &[CargoType::Paper],
+            Self::FoodProcessingPlant => &[CargoType::Food],
+            Self::LumberMill => &[CargoType::Wood],
+            Self::CandyFactory => &[CargoType::Candy],
+            Self::ToyFactory => &[CargoType::Toys],
+            Self::FizzyDrinkFactory => &[CargoType::FizzyDrinks],
+            Self::PowerStation | Self::BankArcticTropic | Self::WaterTower | Self::ToyShop => &[],
         }
     }
 
-    /// Insumos y multiplicadores de procesadoras temperate (MVP P1.5).
+    /// Salida primaria (compat con stock único).
+    #[must_use]
+    pub const fn output_cargo(self) -> CargoType {
+        match self {
+            Self::CoalMine => CargoType::Coal,
+            Self::Forest | Self::LumberMill => CargoType::Wood,
+            Self::Farm => CargoType::Grain,
+            Self::FarmTropic => CargoType::Maize,
+            Self::OilWells => CargoType::Oil,
+            Self::IronOreMine => CargoType::IronOre,
+            Self::CopperOreMine => CargoType::CopperOre,
+            Self::GoldMine => CargoType::Gold,
+            Self::DiamondMine => CargoType::Diamonds,
+            Self::Bank => CargoType::Valuables,
+            Self::FruitPlantation => CargoType::Fruit,
+            Self::RubberPlantation => CargoType::Rubber,
+            Self::WaterSupply => CargoType::Water,
+            Self::CottonCandy => CargoType::CottonCandy,
+            Self::BatteryFarm => CargoType::Batteries,
+            Self::ColaWells => CargoType::Cola,
+            Self::PlasticFountain => CargoType::Plastic,
+            Self::BubbleGenerator => CargoType::Bubbles,
+            Self::ToffeeQuarry => CargoType::Toffee,
+            Self::SugarMine => CargoType::Sugar,
+            Self::SteelMill => CargoType::Steel,
+            Self::PaperMill => CargoType::Paper,
+            Self::FoodProcessingPlant => CargoType::Food,
+            Self::CandyFactory => CargoType::Candy,
+            Self::ToyFactory => CargoType::Toys,
+            Self::FizzyDrinkFactory => CargoType::FizzyDrinks,
+            Self::Sawmill
+            | Self::Factory
+            | Self::FactoryTropic
+            | Self::OilRefinery
+            | Self::PrintingWorks
+            | Self::PowerStation
+            | Self::BankArcticTropic
+            | Self::WaterTower
+            | Self::ToyShop => CargoType::Goods,
+        }
+    }
+
+    /// Cargos aceptados (insumos / sumideros).
+    #[must_use]
+    pub const fn accepted_cargos(self) -> &'static [CargoType] {
+        match self {
+            Self::PowerStation => &[CargoType::Coal],
+            Self::Sawmill => &[CargoType::Wood],
+            Self::OilRefinery => &[CargoType::Oil],
+            Self::SteelMill => &[CargoType::IronOre],
+            Self::Factory => &[CargoType::Livestock, CargoType::Grain, CargoType::Steel],
+            Self::FactoryTropic => &[CargoType::Rubber, CargoType::CopperOre, CargoType::Wood],
+            Self::PaperMill => &[CargoType::Wood],
+            Self::PrintingWorks => &[CargoType::Paper],
+            Self::FoodProcessingPlant => &[
+                CargoType::Livestock,
+                CargoType::Grain,
+                CargoType::Fruit,
+                CargoType::Wheat,
+                CargoType::Maize,
+            ],
+            Self::Bank => &[CargoType::Valuables],
+            Self::BankArcticTropic => &[CargoType::Gold, CargoType::Diamonds],
+            Self::WaterTower => &[CargoType::Water],
+            Self::CandyFactory => &[CargoType::Sugar, CargoType::Toffee, CargoType::CottonCandy],
+            Self::ToyFactory => &[CargoType::Plastic, CargoType::Batteries],
+            Self::ToyShop => &[CargoType::Toys],
+            Self::FizzyDrinkFactory => &[CargoType::Cola, CargoType::Bubbles],
+            _ => &[],
+        }
+    }
+
+    /// Insumos y multiplicadores de procesadoras (`build_industry.h` / P1.5).
     #[must_use]
     pub const fn processing_inputs(self) -> &'static [IndustryProcessingInput] {
         match self {
             Self::PowerStation => &[IndustryProcessingInput {
                 cargo: CargoType::Coal,
                 batch: 8,
-                // Sumidero: consume el lote sin crear carga de salida.
                 multiplier: 0,
             }],
-            Self::Sawmill => &[IndustryProcessingInput {
+            Self::WaterTower => &[IndustryProcessingInput {
+                cargo: CargoType::Water,
+                batch: 8,
+                multiplier: 0,
+            }],
+            Self::ToyShop => &[IndustryProcessingInput {
+                cargo: CargoType::Toys,
+                batch: 8,
+                multiplier: 0,
+            }],
+            Self::BankArcticTropic => &[IndustryProcessingInput {
+                cargo: CargoType::Gold,
+                batch: 8,
+                multiplier: 0,
+            }],
+            Self::Sawmill | Self::PaperMill => &[IndustryProcessingInput {
                 cargo: CargoType::Wood,
                 batch: 8,
                 multiplier: 256,
@@ -230,27 +369,100 @@ impl IndustrySpec {
                 batch: 8,
                 multiplier: 256,
             }],
-            Self::SteelMill => &[
+            Self::SteelMill => &[IndustryProcessingInput {
+                cargo: CargoType::IronOre,
+                batch: 8,
+                multiplier: 256,
+            }],
+            Self::PrintingWorks => &[IndustryProcessingInput {
+                cargo: CargoType::Paper,
+                batch: 8,
+                multiplier: 256,
+            }],
+            Self::Factory => &[
                 IndustryProcessingInput {
-                    cargo: CargoType::IronOre,
+                    cargo: CargoType::Livestock,
+                    batch: FACTORY_LIVESTOCK_INPUT,
+                    multiplier: 256,
+                },
+                IndustryProcessingInput {
+                    cargo: CargoType::Grain,
+                    batch: FACTORY_GRAIN_INPUT,
+                    multiplier: 256,
+                },
+                IndustryProcessingInput {
+                    cargo: CargoType::Steel,
+                    batch: FACTORY_STEEL_INPUT,
+                    multiplier: 256,
+                },
+            ],
+            Self::FactoryTropic => &[
+                IndustryProcessingInput {
+                    cargo: CargoType::Rubber,
                     batch: 8,
                     multiplier: 256,
                 },
                 IndustryProcessingInput {
-                    cargo: CargoType::Coal,
-                    batch: 4,
+                    cargo: CargoType::CopperOre,
+                    batch: 8,
+                    multiplier: 256,
+                },
+                IndustryProcessingInput {
+                    cargo: CargoType::Wood,
+                    batch: 8,
                     multiplier: 256,
                 },
             ],
-            Self::Factory => &[
+            Self::FoodProcessingPlant => &[
                 IndustryProcessingInput {
-                    cargo: CargoType::Wood,
-                    batch: FACTORY_WOOD_INPUT,
+                    cargo: CargoType::Livestock,
+                    batch: 8,
                     multiplier: 256,
                 },
                 IndustryProcessingInput {
-                    cargo: CargoType::Coal,
-                    batch: FACTORY_COAL_INPUT,
+                    cargo: CargoType::Wheat,
+                    batch: 8,
+                    multiplier: 256,
+                },
+            ],
+            Self::CandyFactory => &[
+                IndustryProcessingInput {
+                    cargo: CargoType::Sugar,
+                    batch: 8,
+                    multiplier: 256,
+                },
+                IndustryProcessingInput {
+                    cargo: CargoType::Toffee,
+                    batch: 8,
+                    multiplier: 256,
+                },
+                IndustryProcessingInput {
+                    cargo: CargoType::CottonCandy,
+                    batch: 8,
+                    multiplier: 256,
+                },
+            ],
+            Self::ToyFactory => &[
+                IndustryProcessingInput {
+                    cargo: CargoType::Plastic,
+                    batch: 8,
+                    multiplier: 256,
+                },
+                IndustryProcessingInput {
+                    cargo: CargoType::Batteries,
+                    batch: 8,
+                    multiplier: 256,
+                },
+            ],
+            Self::FizzyDrinkFactory => &[
+                IndustryProcessingInput {
+                    cargo: CargoType::Cola,
+                    batch: 8,
+                    multiplier: 256,
+                },
+                IndustryProcessingInput {
+                    cargo: CargoType::Bubbles,
+                    batch: 8,
                     multiplier: 256,
                 },
             ],
@@ -264,26 +476,37 @@ impl IndustrySpec {
     }
 
     /// `production_rate[0]` del spec vanilla (`build_industry.h`).
-    ///
-    /// Las procesadoras tienen 0: no auto-producen; transforman insumos (P1.5) o,
-    /// en el caso de goods del port, el ciclo de fábrica cercano.
     #[must_use]
     pub const fn production_rate(self) -> u8 {
         match self {
             Self::CoalMine => 15,
             Self::Forest | Self::CottonCandy | Self::BubbleGenerator => 13,
-            Self::OilWells | Self::ColaWells => 12,
-            Self::Farm | Self::IronOreMine | Self::CopperOreMine | Self::ToffeeQuarry => 10,
-            Self::GoldMine => 7,
+            Self::OilWells | Self::ColaWells | Self::WaterSupply => 12,
+            Self::Farm
+            | Self::IronOreMine
+            | Self::CopperOreMine
+            | Self::ToffeeQuarry
+            | Self::FruitPlantation
+            | Self::RubberPlantation => 10,
+            Self::FarmTropic => 11,
+            Self::GoldMine | Self::DiamondMine => 7,
             Self::Bank => 6,
             Self::BatteryFarm | Self::SugarMine => 11,
             Self::PlasticFountain => 14,
             Self::PowerStation
             | Self::Factory
+            | Self::FactoryTropic
             | Self::Sawmill
+            | Self::PaperMill
+            | Self::PrintingWorks
+            | Self::FoodProcessingPlant
             | Self::SteelMill
             | Self::OilRefinery
+            | Self::BankArcticTropic
+            | Self::WaterTower
+            | Self::LumberMill
             | Self::CandyFactory
+            | Self::ToyShop
             | Self::ToyFactory
             | Self::FizzyDrinkFactory => 0,
         }
@@ -297,21 +520,35 @@ impl IndustrySpec {
             | Self::IronOreMine
             | Self::CopperOreMine
             | Self::GoldMine
+            | Self::DiamondMine
             | Self::OilWells
             | Self::ColaWells
+            | Self::WaterSupply
             | Self::PlasticFountain
             | Self::SugarMine
             | Self::ToffeeQuarry
             | Self::BubbleGenerator => IndustryLifeType::Extractive,
-            Self::Forest | Self::Farm | Self::CottonCandy | Self::BatteryFarm => {
-                IndustryLifeType::Organic
-            }
-            Self::PowerStation => IndustryLifeType::BlackHole,
+            Self::Forest
+            | Self::Farm
+            | Self::FarmTropic
+            | Self::FruitPlantation
+            | Self::RubberPlantation
+            | Self::CottonCandy
+            | Self::BatteryFarm => IndustryLifeType::Organic,
+            Self::PowerStation
+            | Self::Bank
+            | Self::BankArcticTropic
+            | Self::WaterTower
+            | Self::ToyShop => IndustryLifeType::BlackHole,
             Self::Factory
+            | Self::FactoryTropic
             | Self::Sawmill
+            | Self::PaperMill
+            | Self::PrintingWorks
+            | Self::FoodProcessingPlant
             | Self::SteelMill
             | Self::OilRefinery
-            | Self::Bank
+            | Self::LumberMill
             | Self::CandyFactory
             | Self::ToyFactory
             | Self::FizzyDrinkFactory => IndustryLifeType::Processing,
@@ -703,13 +940,30 @@ impl Industry {
             IndustryKind::OilWell => IndustrySpec::OilWells,
         }) {
             IndustrySpec::Factory => &[
-                (CargoType::Wood, FACTORY_WOOD_INPUT),
-                (CargoType::Coal, FACTORY_COAL_INPUT),
+                (CargoType::Livestock, FACTORY_LIVESTOCK_INPUT),
+                (CargoType::Grain, FACTORY_GRAIN_INPUT),
+                (CargoType::Steel, FACTORY_STEEL_INPUT),
             ],
             IndustrySpec::PowerStation => &[(CargoType::Coal, 8)],
-            IndustrySpec::Sawmill => &[(CargoType::Wood, 8)],
+            IndustrySpec::Sawmill | IndustrySpec::PaperMill => &[(CargoType::Wood, 8)],
             IndustrySpec::OilRefinery => &[(CargoType::Oil, 8)],
-            IndustrySpec::SteelMill => &[(CargoType::IronOre, 8), (CargoType::Coal, 4)],
+            IndustrySpec::SteelMill => &[(CargoType::IronOre, 8)],
+            IndustrySpec::PrintingWorks => &[(CargoType::Paper, 8)],
+            IndustrySpec::CandyFactory => &[
+                (CargoType::Sugar, 8),
+                (CargoType::Toffee, 8),
+                (CargoType::CottonCandy, 8),
+            ],
+            IndustrySpec::ToyFactory => &[(CargoType::Plastic, 8), (CargoType::Batteries, 8)],
+            IndustrySpec::FizzyDrinkFactory => &[(CargoType::Cola, 8), (CargoType::Bubbles, 8)],
+            IndustrySpec::FactoryTropic => &[
+                (CargoType::Rubber, 8),
+                (CargoType::CopperOre, 8),
+                (CargoType::Wood, 8),
+            ],
+            IndustrySpec::FoodProcessingPlant => {
+                &[(CargoType::Livestock, 8), (CargoType::Wheat, 8)]
+            }
             _ => &[],
         }
     }
@@ -1051,7 +1305,7 @@ mod tests {
     }
 
     #[test]
-    fn factory_consumes_wood_and_coal_from_nearby_truck_stop() {
+    fn factory_consumes_livestock_grain_steel_from_nearby_truck_stop() {
         let fact_pos = TileCoord::new(4, 4);
         let stop_pos = TileCoord::new(5, 4);
         let mut fact = Industry::with_tiles_spec(
@@ -1062,13 +1316,15 @@ mod tests {
             0,
         );
         let mut stations = vec![Station::new_with_kind(stop_pos, StopKind::TruckStop)];
-        stations[0].cargo_stock.wood = 10;
-        stations[0].cargo_stock.coal = 10;
+        stations[0].cargo_stock.livestock = 10;
+        stations[0].cargo_stock.grain = 10;
+        stations[0].cargo_stock.steel = 10;
 
         assert!(fact.produce_from_nearby_stations(&mut stations, 512));
         assert_eq!(fact.stock, fact.processing_output_amount());
-        assert_eq!(stations[0].cargo_stock.wood, 10 - FACTORY_WOOD_INPUT);
-        assert_eq!(stations[0].cargo_stock.coal, 10 - FACTORY_COAL_INPUT);
+        assert_eq!(stations[0].cargo_stock.livestock, 10 - FACTORY_LIVESTOCK_INPUT);
+        assert_eq!(stations[0].cargo_stock.grain, 10 - FACTORY_GRAIN_INPUT);
+        assert_eq!(stations[0].cargo_stock.steel, 10 - FACTORY_STEEL_INPUT);
     }
 
     #[test]
@@ -1116,7 +1372,7 @@ mod tests {
     }
 
     #[test]
-    fn steel_mill_consumes_iron_and_coal_for_steel() {
+    fn steel_mill_consumes_iron_ore_for_steel() {
         let pos = TileCoord::new(0, 0);
         let mut mill = Industry::with_tiles_spec(
             pos,
@@ -1130,13 +1386,11 @@ mod tests {
             StopKind::TruckStop,
         )];
         stations[0].cargo_stock.iron_ore = 16;
-        stations[0].cargo_stock.coal = 16;
 
         assert!(mill.produce_from_nearby_stations(&mut stations, 512));
-        assert_eq!(mill.stock, 12);
+        assert_eq!(mill.stock, 8);
         assert_eq!(mill.output_cargo(), CargoType::Steel);
         assert_eq!(stations[0].cargo_stock.iron_ore, 8);
-        assert_eq!(stations[0].cargo_stock.coal, 12);
     }
 
     #[test]
@@ -1169,7 +1423,7 @@ mod tests {
             TileCoord::new(1, 0),
             StopKind::TruckStop,
         )];
-        stations[0].cargo_stock.wood = FACTORY_WOOD_INPUT;
+        stations[0].cargo_stock.livestock = FACTORY_LIVESTOCK_INPUT;
         assert!(!fact.produce_from_nearby_stations(&mut stations, 512));
         assert_eq!(fact.stock, 0);
     }
@@ -1218,4 +1472,34 @@ mod tests {
         assert_eq!(mine.stock, 40);
         assert_eq!(stations[0].cargo_stock.coal, 0);
     }
+
+    #[test]
+    fn toyland_cotton_candy_is_not_wood_alias() {
+        assert_eq!(IndustrySpec::CottonCandy.output_cargo(), CargoType::CottonCandy);
+        assert_eq!(IndustrySpec::BatteryFarm.output_cargo(), CargoType::Batteries);
+        assert_eq!(IndustrySpec::SugarMine.output_cargo(), CargoType::Sugar);
+        assert_eq!(
+            IndustrySpec::CandyFactory.accepted_cargos(),
+            &[CargoType::Sugar, CargoType::Toffee, CargoType::CottonCandy]
+        );
+    }
+
+    #[test]
+    fn arctic_paper_chain_io() {
+        assert_eq!(IndustrySpec::PaperMill.accepted_cargos(), &[CargoType::Wood]);
+        assert_eq!(IndustrySpec::PaperMill.output_cargo(), CargoType::Paper);
+        assert_eq!(IndustrySpec::PrintingWorks.accepted_cargos(), &[CargoType::Paper]);
+        assert_eq!(IndustrySpec::GoldMine.output_cargo(), CargoType::Gold);
+    }
+
+    #[test]
+    fn tropic_factory_accepts_rubber_copper_wood() {
+        assert_eq!(IndustrySpec::CopperOreMine.output_cargo(), CargoType::CopperOre);
+        assert_eq!(
+            IndustrySpec::FactoryTropic.accepted_cargos(),
+            &[CargoType::Rubber, CargoType::CopperOre, CargoType::Wood]
+        );
+    }
+
+
 }

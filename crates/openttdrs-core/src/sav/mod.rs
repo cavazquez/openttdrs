@@ -14,6 +14,7 @@ mod chunks;
 mod container;
 mod date;
 mod entities;
+mod landscape;
 pub(crate) mod house_population_generated;
 
 /// Población de un `HouseID` original (`HouseSpec::population`).
@@ -166,6 +167,8 @@ pub struct SavGame {
     pub game_time: Option<date::SavGameTime>,
     /// Grafo de enlaces observado (`LGRP`); vacío si el chunk falta o es legacy.
     pub link_graph: LinkGraphStats,
+    /// Landscape del save (`game_creation.landscape`); default temperate.
+    pub climate: crate::Climate,
 }
 
 /// Carga un savegame de `OpenTTD` desde sus bytes.
@@ -192,7 +195,9 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
     let game_time = date::game_time_from_chunks(&chunk_list, version);
     let money = entities::company_money_from_chunks(&chunk_list, version);
     let company_colour = entities::company_colour_from_chunks(&chunk_list, version);
-    let link_graph = linkgraph::link_graph_from_chunks(&chunk_list, map_w, &station_index, version);
+    let climate = landscape::climate_from_chunks(&chunk_list).unwrap_or_default();
+    let link_graph =
+        linkgraph::link_graph_from_chunks(&chunk_list, map_w, &station_index, version, climate);
     Ok(SavGame {
         version,
         map,
@@ -206,6 +211,7 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
         station_index,
         game_time,
         link_graph,
+        climate,
     })
 }
 
@@ -478,6 +484,7 @@ impl GameState {
         let mut state = Self::from_map(map);
         // OpenTTD ≥15 default `train_acceleration_model = 1` (realista).
         state.train_acceleration_model = crate::engine::TrainAccelerationModel::Realistic;
+        state.climate = sav.climate;
         if let Some(time) = sav.game_time {
             state.tick = date::game_tick_from_sav_time(time);
         }
@@ -604,6 +611,8 @@ impl GameState {
             vehicle.cur_speed = v.cur_speed;
             vehicle.subspeed = v.subspeed;
             vehicle.direction = v.direction;
+            vehicle.cargo_type =
+                crate::CargoType::from_climate_slot(sav.climate, v.cargo_type);
             if kind == VehicleKind::Train {
                 vehicle.rail_pixel = rail_pixel_from_openttd_pos(v.x_pos, v.y_pos, v.direction);
                 if let Some(candidate) = vanilla_train_engine_id(v.engine_type)
@@ -789,6 +798,7 @@ mod tests {
             company_colour: Some(9),
             station_index: std::collections::HashMap::new(),
             game_time: None,
+            climate: crate::Climate::Temperate,
         };
         let state = GameState::from_sav_game(sav);
         assert_eq!(state.stations.len(), 1);

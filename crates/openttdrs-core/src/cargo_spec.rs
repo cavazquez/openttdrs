@@ -116,22 +116,10 @@ pub fn cargo_spec_by_label<'a>(catalog: &'a [CargoSpecDef], label: &str) -> Opti
         .find(|d| d.label.eq_ignore_ascii_case(label.trim()))
 }
 
-/// Label OpenTTD temperate del `CargoType` (`PASS`, `COAL`, …).
+/// Label OpenTTD FourCC del `CargoType` (`PASS`, `COAL`, `CTCD`, …).
 #[must_use]
 pub const fn cargo_type_label(cargo: CargoType) -> &'static str {
-    match cargo {
-        CargoType::Passengers => "PASS",
-        CargoType::Coal => "COAL",
-        CargoType::Mail => "MAIL",
-        CargoType::Oil => "OIL_",
-        CargoType::Livestock => "LVST",
-        CargoType::Goods => "GOOD",
-        CargoType::Grain => "GRAI",
-        CargoType::Wood => "WOOD",
-        CargoType::IronOre => "IORE",
-        CargoType::Steel => "STEL",
-        CargoType::Valuables => "VALU",
-    }
+    cargo.label()
 }
 
 /// Spec de pago: override NewGRF si hay `initial_payment`/`transit_*`; si no, temperate.

@@ -12,7 +12,8 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use crate::cargo::{ALL_CARGO_TYPES, CargoType};
+use crate::Climate;
+use crate::cargo::CargoType;
 use crate::link_graph::{LinkEdgeKey, LinkFlowSample, LinkGraphStats};
 use crate::map::{TileCoord, coord_from_linear_index, coord_to_linear_index};
 
@@ -21,19 +22,27 @@ use super::chunks::{RawChunk, find_chunk};
 use super::entities::SavStationIndex;
 use super::table::{SlRecord, SlValue, parse_table_chunk, record_get};
 
-/// Índice temperate `OpenTTD` ↔ [`CargoType`] (mismo orden que `TEMPERATE_CARGO_TYPES`).
+/// Slot climate 0..11 del `.sav` → [`CargoType`] (temperate por defecto).
 #[must_use]
+#[allow(dead_code)]
 pub(crate) fn cargo_from_openttd_id(id: u8) -> Option<CargoType> {
-    ALL_CARGO_TYPES.get(usize::from(id)).copied()
+    cargo_from_openttd_id_in(Climate::Temperate, id)
+}
+
+/// Resuelve el cargo del slot OpenTTD según landscape (#224).
+#[must_use]
+pub(crate) fn cargo_from_openttd_id_in(climate: Climate, id: u8) -> Option<CargoType> {
+    CargoType::from_climate_slot(climate, id)
 }
 
 #[must_use]
 pub(crate) fn cargo_to_openttd_id(cargo: CargoType) -> u8 {
-    ALL_CARGO_TYPES
-        .iter()
-        .position(|&c| c == cargo)
-        .and_then(|i| u8::try_from(i).ok())
-        .unwrap_or(0)
+    cargo_to_openttd_id_in(Climate::Temperate, cargo)
+}
+
+#[must_use]
+pub(crate) fn cargo_to_openttd_id_in(climate: Climate, cargo: CargoType) -> u8 {
+    cargo.climate_slot(climate).unwrap_or(0)
 }
 
 fn node_tile(
@@ -61,6 +70,7 @@ pub(crate) fn link_graph_from_chunks(
     map_w: u32,
     station_index: &HashMap<u32, SavStationIndex>,
     save_version: u16,
+    climate: Climate,
 ) -> LinkGraphStats {
     let Some(chunk) = find_chunk(chunks, "LGRP") else {
         return LinkGraphStats::default();
@@ -78,7 +88,7 @@ pub(crate) fn link_graph_from_chunks(
         let Some(cargo_id) = record_get(&record, "cargo").and_then(SlValue::as_u64) else {
             continue;
         };
-        let Some(cargo) = cargo_from_openttd_id(cargo_id as u8) else {
+        let Some(cargo) = cargo_from_openttd_id_in(climate, cargo_id as u8) else {
             continue;
         };
         let Some(SlValue::Structs(nodes)) = record_get(&record, "nodes") else {
@@ -388,7 +398,7 @@ mod tests {
             ch_type: CH_TABLE,
             body,
         }];
-        let stats = link_graph_from_chunks(&chunks, map_w, &HashMap::new(), 350);
+        let stats = link_graph_from_chunks(&chunks, map_w, &HashMap::new(), 350, Climate::Temperate);
         let sample = stats.edges[&LinkEdgeKey {
             from: a,
             to: b,
@@ -410,7 +420,7 @@ mod tests {
         let bytes = encode_linkgraph_chunks(&stats, &stations, 32).expect("encode");
         // Reparse solo el primer chunk LGRP del blob.
         let chunks = crate::sav::chunks::parse_chunks(&bytes).expect("parse");
-        let loaded = link_graph_from_chunks(&chunks, 32, &HashMap::new(), 350);
+        let loaded = link_graph_from_chunks(&chunks, 32, &HashMap::new(), 350, Climate::Temperate);
         let sample = loaded.edges[&LinkEdgeKey {
             from: a,
             to: b,

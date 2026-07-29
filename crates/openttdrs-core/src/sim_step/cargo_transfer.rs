@@ -548,15 +548,19 @@ fn try_load_from_station_waiting_cargo(
                 }
                 return false;
             };
-            if matches!(
-                cargo,
-                CargoType::Coal
-                    | CargoType::Wood
-                    | CargoType::Oil
-                    | CargoType::Grain
-                    | CargoType::Livestock
-                    | CargoType::IronOre
-            ) && !station::station_is_freight_pickup_stop(
+            if cargo.is_freight()
+                && !matches!(
+                    cargo,
+                    CargoType::Goods
+                        | CargoType::Valuables
+                        | CargoType::Steel
+                        | CargoType::Paper
+                        | CargoType::Food
+                        | CargoType::Candy
+                        | CargoType::Toys
+                        | CargoType::FizzyDrinks
+                )
+                && !station::station_is_freight_pickup_stop(
                 &state.map,
                 &state.industries,
                 station_pos,

@@ -5,7 +5,7 @@ use crate::map::TileCoord;
 
 use super::global::GlobalEconomy;
 
-/// Tasas base del clima templado de `OpenTTD` (`cargo_const.h`), sin inflación.
+/// Tasas base de `OpenTTD` (`cargo_const.h`), sin inflación.
 #[derive(Debug, Clone, Copy)]
 pub struct CargoPaymentSpec {
     /// `CargoSpec::initial_payment`.
@@ -40,18 +40,28 @@ impl CargoType {
                 transit_fast_days: 25,
                 transit_slow_days: 255,
             },
-            Self::Livestock => CargoPaymentSpec {
+            Self::Livestock | Self::Batteries => CargoPaymentSpec {
                 base_rate: 4322,
                 transit_fast_days: 4,
                 transit_slow_days: 18,
             },
-            Self::Goods => CargoPaymentSpec {
+            Self::Fruit => CargoPaymentSpec {
+                base_rate: 4209,
+                transit_fast_days: 0,
+                transit_slow_days: 15,
+            },
+            Self::Goods | Self::Candy => CargoPaymentSpec {
                 base_rate: 6144,
                 transit_fast_days: 5,
                 transit_slow_days: 28,
             },
-            Self::Grain => CargoPaymentSpec {
+            Self::Grain | Self::Wheat | Self::Toffee => CargoPaymentSpec {
                 base_rate: 4778,
+                transit_fast_days: 4,
+                transit_slow_days: 40,
+            },
+            Self::Maize => CargoPaymentSpec {
+                base_rate: 4322,
                 transit_fast_days: 4,
                 transit_slow_days: 40,
             },
@@ -60,12 +70,17 @@ impl CargoType {
                 transit_fast_days: 15,
                 transit_slow_days: 255,
             },
+            Self::CottonCandy => CargoPaymentSpec {
+                base_rate: 5005,
+                transit_fast_days: 10,
+                transit_slow_days: 25,
+            },
             Self::IronOre => CargoPaymentSpec {
                 base_rate: 5120,
                 transit_fast_days: 9,
                 transit_slow_days: 255,
             },
-            Self::Steel => CargoPaymentSpec {
+            Self::Steel | Self::Food => CargoPaymentSpec {
                 base_rate: 5688,
                 transit_fast_days: 7,
                 transit_slow_days: 255,
@@ -74,6 +89,66 @@ impl CargoType {
                 base_rate: 7509,
                 transit_fast_days: 1,
                 transit_slow_days: 32,
+            },
+            Self::Paper => CargoPaymentSpec {
+                base_rate: 5461,
+                transit_fast_days: 7,
+                transit_slow_days: 60,
+            },
+            Self::Gold => CargoPaymentSpec {
+                base_rate: 5802,
+                transit_fast_days: 10,
+                transit_slow_days: 40,
+            },
+            Self::Diamonds => CargoPaymentSpec {
+                base_rate: 5802,
+                transit_fast_days: 10,
+                transit_slow_days: 255,
+            },
+            Self::CopperOre => CargoPaymentSpec {
+                base_rate: 4892,
+                transit_fast_days: 12,
+                transit_slow_days: 255,
+            },
+            Self::Cola => CargoPaymentSpec {
+                base_rate: 4892,
+                transit_fast_days: 5,
+                transit_slow_days: 75,
+            },
+            Self::Water => CargoPaymentSpec {
+                base_rate: 4664,
+                transit_fast_days: 20,
+                transit_slow_days: 80,
+            },
+            Self::Plastic => CargoPaymentSpec {
+                base_rate: 4664,
+                transit_fast_days: 30,
+                transit_slow_days: 255,
+            },
+            Self::Rubber => CargoPaymentSpec {
+                base_rate: 4437,
+                transit_fast_days: 2,
+                transit_slow_days: 20,
+            },
+            Self::Sugar => CargoPaymentSpec {
+                base_rate: 4437,
+                transit_fast_days: 20,
+                transit_slow_days: 255,
+            },
+            Self::Toys => CargoPaymentSpec {
+                base_rate: 5574,
+                transit_fast_days: 25,
+                transit_slow_days: 255,
+            },
+            Self::Bubbles => CargoPaymentSpec {
+                base_rate: 5077,
+                transit_fast_days: 20,
+                transit_slow_days: 80,
+            },
+            Self::FizzyDrinks => CargoPaymentSpec {
+                base_rate: 6250,
+                transit_fast_days: 30,
+                transit_slow_days: 50,
             },
         }
     }
@@ -84,13 +159,11 @@ pub const fn manhattan_distance(a: TileCoord, b: TileCoord) -> u32 {
     (a.x - b.x).unsigned_abs() + (a.y - b.y).unsigned_abs()
 }
 
-/// Factor de inflación de ingresos (/1024) desde el acumulador `inflation_payment`.
 #[must_use]
 pub fn inflation_income_factor(inflation_payment: u64) -> u32 {
     GlobalEconomy::inflation_factor_from_accumulator(inflation_payment)
 }
 
-/// Factor de inflación de precios (/1024) desde el acumulador `inflation_prices`.
 #[must_use]
 pub fn inflation_prices_factor(inflation_prices: u64) -> u32 {
     GlobalEconomy::inflation_factor_from_accumulator(inflation_prices)
@@ -101,7 +174,6 @@ const MAX_TIME_FACTOR: i32 = 255;
 const TIME_FACTOR_FRAC_BITS: i32 = 4;
 const TIME_FACTOR_FRAC: i32 = 1 << TIME_FACTOR_FRAC_BITS;
 
-/// Factor de tiempo del pago y si entra en la rama asintótica (`economy.cpp:989-1013`).
 #[must_use]
 pub fn cargo_time_factor(transit_days: u16, spec: CargoPaymentSpec) -> (i32, bool) {
     let tp = i32::from(transit_days);
@@ -128,7 +200,6 @@ pub fn cargo_time_factor(transit_days: u16, spec: CargoPaymentSpec) -> (i32, boo
     }
 }
 
-/// Ingreso por entrega final (`GetTransportedGoodsIncome`, `economy.cpp:952-1013`).
 #[must_use]
 pub fn transported_goods_income(
     count: u32,
@@ -146,7 +217,6 @@ pub fn transported_goods_income(
     )
 }
 
-/// Igual que [`transported_goods_income`] con `CargoPaymentSpec` explícito (NewGRF).
 #[must_use]
 pub fn transported_goods_income_with_spec(
     count: u32,
@@ -172,20 +242,15 @@ pub fn transported_goods_income_with_spec(
     income.max(1)
 }
 
-/// Préstamo máximo por defecto (`_settings_game.economy.max_loan`).
 pub const DEFAULT_MAX_LOAN: i64 = 300_000;
-/// Incremento/decremento por comando de préstamo (`LOAN_INTERVAL`).
 pub const LOAN_INTERVAL: i64 = 10_000;
-/// Tasa de interés anual sobre préstamo y caja negativa (~10 % en dificultad media).
 pub const ANNUAL_INTEREST_RATE_PCT: i64 = 10;
 
-/// Interés mensual sobre el préstamo (media aritmética; preferir [`monthly_company_interest`]).
 #[must_use]
 pub fn monthly_loan_interest(loan: i64) -> i64 {
     monthly_loan_interest_with_rate(loan, ANNUAL_INTEREST_RATE_PCT)
 }
 
-/// Interés mensual con tasa explícita.
 #[must_use]
 pub fn monthly_loan_interest_with_rate(loan: i64, annual_rate_pct: i64) -> i64 {
     if loan <= 0 {
@@ -194,10 +259,6 @@ pub fn monthly_loan_interest_with_rate(loan: i64, annual_rate_pct: i64) -> i64 {
     loan.saturating_mul(annual_rate_pct) / 100 / 12
 }
 
-/// Cuota mensual exacta (`CompaniesPayInterest`, `economy.cpp:800-827`).
-///
-/// `month` es 0..=11 dentro del año de calendario. Incluye interés sobre caja negativa
-/// (`money < 0`) además del préstamo.
 #[must_use]
 pub fn monthly_company_interest(loan: i64, money: i64, annual_rate_pct: i64, month: u8) -> i64 {
     let mut yearly_fee = loan.saturating_mul(annual_rate_pct) / 100;
@@ -210,22 +271,16 @@ pub fn monthly_company_interest(loan: i64, money: i64, annual_rate_pct: i64, mon
     up_to_this.saturating_sub(up_to_previous)
 }
 
-/// Cargo fijo mensual de mantenimiento (`_price[PR_STATION_VALUE] >> 2`).
 #[must_use]
 pub fn monthly_station_maintenance_fee(ge: &super::global::GlobalEconomy) -> i64 {
     super::pricebase::get_price(ge, super::pricebase::PriceIndex::StationValue, 1, 0) >> 2
 }
 
-/// `true` si la compañía superó el límite de deuda (`CompanyCheckBankrupt`).
-///
-/// `OpenTTD` (`economy.cpp:556`) sobrevive mientras `money - current_loan >= -GetMaxLoan()`:
-/// el préstamo pendiente cuenta como deuda, así que tener caja no basta para librarse.
 #[must_use]
 pub const fn check_bankruptcy(money: i64, loan: i64, max_loan: i64) -> bool {
     money.saturating_sub(loan) < -max_loan
 }
 
-/// Solicita más préstamo hasta `max_loan`. Devuelve el importe añadido.
 pub fn increase_loan(
     economy: &mut crate::game_state::CompanyEconomy,
 ) -> Result<i64, crate::command::CommandError> {
@@ -238,7 +293,6 @@ pub fn increase_loan(
     Ok(LOAN_INTERVAL)
 }
 
-/// Devuelve parte del préstamo si hay fondos.
 pub fn decrease_loan(
     economy: &mut crate::game_state::CompanyEconomy,
 ) -> Result<i64, crate::command::CommandError> {

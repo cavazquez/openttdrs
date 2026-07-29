@@ -18,6 +18,46 @@ pub struct CargoTimeSincePickup {
     pub iron_ore: u8,
     pub steel: u8,
     pub valuables: u8,
+    #[serde(default)]
+    pub wheat: u8,
+    #[serde(default)]
+    pub paper: u8,
+    #[serde(default)]
+    pub gold: u8,
+    #[serde(default)]
+    pub food: u8,
+    #[serde(default)]
+    pub rubber: u8,
+    #[serde(default)]
+    pub fruit: u8,
+    #[serde(default)]
+    pub maize: u8,
+    #[serde(default)]
+    pub copper_ore: u8,
+    #[serde(default)]
+    pub water: u8,
+    #[serde(default)]
+    pub diamonds: u8,
+    #[serde(default)]
+    pub sugar: u8,
+    #[serde(default)]
+    pub toys: u8,
+    #[serde(default)]
+    pub batteries: u8,
+    #[serde(default)]
+    pub candy: u8,
+    #[serde(default)]
+    pub toffee: u8,
+    #[serde(default)]
+    pub cola: u8,
+    #[serde(default)]
+    pub cotton_candy: u8,
+    #[serde(default)]
+    pub bubbles: u8,
+    #[serde(default)]
+    pub plastic: u8,
+    #[serde(default)]
+    pub fizzy_drinks: u8,
 }
 
 impl CargoTimeSincePickup {
@@ -35,6 +75,26 @@ impl CargoTimeSincePickup {
             CargoType::IronOre => self.iron_ore,
             CargoType::Steel => self.steel,
             CargoType::Valuables => self.valuables,
+            CargoType::Wheat => self.wheat,
+            CargoType::Paper => self.paper,
+            CargoType::Gold => self.gold,
+            CargoType::Food => self.food,
+            CargoType::Rubber => self.rubber,
+            CargoType::Fruit => self.fruit,
+            CargoType::Maize => self.maize,
+            CargoType::CopperOre => self.copper_ore,
+            CargoType::Water => self.water,
+            CargoType::Diamonds => self.diamonds,
+            CargoType::Sugar => self.sugar,
+            CargoType::Toys => self.toys,
+            CargoType::Batteries => self.batteries,
+            CargoType::Candy => self.candy,
+            CargoType::Toffee => self.toffee,
+            CargoType::Cola => self.cola,
+            CargoType::CottonCandy => self.cotton_candy,
+            CargoType::Bubbles => self.bubbles,
+            CargoType::Plastic => self.plastic,
+            CargoType::FizzyDrinks => self.fizzy_drinks,
         }
     }
 
@@ -60,6 +120,26 @@ impl CargoTimeSincePickup {
             CargoType::IronOre => &mut self.iron_ore,
             CargoType::Steel => &mut self.steel,
             CargoType::Valuables => &mut self.valuables,
+            CargoType::Wheat => &mut self.wheat,
+            CargoType::Paper => &mut self.paper,
+            CargoType::Gold => &mut self.gold,
+            CargoType::Food => &mut self.food,
+            CargoType::Rubber => &mut self.rubber,
+            CargoType::Fruit => &mut self.fruit,
+            CargoType::Maize => &mut self.maize,
+            CargoType::CopperOre => &mut self.copper_ore,
+            CargoType::Water => &mut self.water,
+            CargoType::Diamonds => &mut self.diamonds,
+            CargoType::Sugar => &mut self.sugar,
+            CargoType::Toys => &mut self.toys,
+            CargoType::Batteries => &mut self.batteries,
+            CargoType::Candy => &mut self.candy,
+            CargoType::Toffee => &mut self.toffee,
+            CargoType::Cola => &mut self.cola,
+            CargoType::CottonCandy => &mut self.cotton_candy,
+            CargoType::Bubbles => &mut self.bubbles,
+            CargoType::Plastic => &mut self.plastic,
+            CargoType::FizzyDrinks => &mut self.fizzy_drinks,
         }
     }
 }

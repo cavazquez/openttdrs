@@ -3,6 +3,8 @@
 //! Familias: [`road`], [`rail`], [`economy`], [`ai`].
 
 mod ai;
+#[cfg(test)]
+mod climate_cargo;
 mod economy;
 mod rail;
 mod road;

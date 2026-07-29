@@ -375,16 +375,18 @@ fn factory_chain_produces_goods_from_delivered_cargo() {
     ));
     s.stations
         .push(Station::new_with_kind(stop_pos, StopKind::TruckStop));
-    s.stations[0].cargo_stock.wood = FACTORY_WOOD_INPUT;
-    s.stations[0].cargo_stock.coal = FACTORY_COAL_INPUT;
+    s.stations[0].cargo_stock.livestock = FACTORY_LIVESTOCK_INPUT;
+    s.stations[0].cargo_stock.grain = FACTORY_GRAIN_INPUT;
+    s.stations[0].cargo_stock.steel = FACTORY_STEEL_INPUT;
 
     for _ in 0..512 {
         s.step();
     }
 
-    assert_eq!(s.industries[0].stock, 6);
-    assert_eq!(s.stations[0].cargo_stock.wood, 0);
-    assert_eq!(s.stations[0].cargo_stock.coal, 0);
+    assert_eq!(s.industries[0].stock, 24);
+    assert_eq!(s.stations[0].cargo_stock.livestock, 0);
+    assert_eq!(s.stations[0].cargo_stock.grain, 0);
+    assert_eq!(s.stations[0].cargo_stock.steel, 0);
 }
 
 #[test]

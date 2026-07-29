@@ -42,6 +42,7 @@ pub mod industry_spec;
 pub mod industry_tile;
 pub mod map;
 pub mod newgrf_actions;
+pub mod newgrf_callback;
 mod newgrf_company_ramp;
 pub mod newgrf_config;
 mod newgrf_palette_data;
@@ -152,7 +153,11 @@ pub use canal_spec::{
     CF_RIVER_GUI, CF_RIVER_SLOPE, CF_WATERSLOPE, CanalFeatureDef, canal_feature_def,
     vanilla_canal_feature_catalog,
 };
-pub use cargo::{ALL_CARGO_TYPES, CargoStock, CargoType, OrderSettings, TEMPERATE_CARGO_TYPES};
+pub use cargo::{
+    ALL_CARGO_TYPES, ARCTIC_CARGO_TYPES, CargoStock, CargoType, NUM_ORIGINAL_CARGO,
+    OrderSettings, TEMPERATE_CARGO_TYPES, TOYLAND_CARGO_TYPES, TROPIC_CARGO_TYPES,
+    VANILLA_CARGO_COUNT,
+};
 pub use cargo_packet::{
     CargoPacket, CargoUnloadAction, StationCargoList, VehicleCargoList, choose_cargo_action,
     decide_cargo_unload_action, load_unload_speed, prepare_unload,
@@ -259,7 +264,8 @@ pub use gs::{
     GsGoal, GsGoalKind, GsLeagueRow, GsState, GsStoryPage, league_rows, seed_gs_demo, tick_gs,
 };
 pub use industry::{
-    FACTORY_COAL_INPUT, FACTORY_WOOD_INPUT, INDUSTRY_PRODUCE_AMOUNT, INDUSTRY_PRODUCE_TICKS,
+    FACTORY_GRAIN_INPUT, FACTORY_LIVESTOCK_INPUT, FACTORY_STEEL_INPUT, INDUSTRY_PRODUCE_AMOUNT,
+    INDUSTRY_PRODUCE_TICKS,
     Industry, IndustryKind, IndustryLifeType, IndustryProductionChange, IndustrySpec,
     PERCENT_TRANSPORTED_60, PRODLEVEL_CLOSURE, PRODLEVEL_DEFAULT, PRODLEVEL_MAXIMUM,
     PRODLEVEL_MINIMUM, change_industry_production, industry_produce_period_ticks,
@@ -363,6 +369,11 @@ pub use newgrf_actions::{
     parse_action0_roadstop_meta, parse_action0_roadtype_meta, parse_action0_sound_meta,
     parse_action0_station_meta, parse_action0_train_meta,
 };
+pub use newgrf_callback::{
+    action2_eval_ctx_from_vehicle, apply_vehicle_start_stop_callback, resolve_callback_or_failed,
+    resolve_vehicle_callback, vehicle_start_stop_callback_allows,
+    writeback_vehicle_persistent_registers,
+};
 pub use newgrf_config::{
     GrfContainerVersion, GrfFileInfo, GrfParsed, GrfScanError, GrfStackIssue, MAX_NEWGRF_PARAMS,
     NewGrfEntry, default_vanilla_stack, format_grfid, grfid_from_bytes, parse_grf_container,
@@ -376,7 +387,8 @@ pub use newgrf_sprites::{
     Action2VarEntry, Action2VarOp, Action2VarTerm, Action5Block, BRIDGE_DECKS_ACTION5_SLOT_COUNT,
     CALLBACK_FAILED, CANALS_ACTION5_LOCK_SLOT, CANALS_ACTION5_SLOT_COUNT,
     CATENARY_ACTION5_SLOT_COUNT, CATENARY_ENTRANCE_SPRITE_BASE, CATENARY_PYLON_SPRITE_BASE,
-    CATENARY_WIRE_SPRITE_BASE, CBID_STATION_BUILD_TILE_LAYOUT, DecodedSprite,
+    CATENARY_WIRE_SPRITE_BASE, CBID_STATION_BUILD_TILE_LAYOUT, CBID_VEHICLE_START_STOP_CHECK,
+    DecodedSprite,
     FOUNDATION_ACTION5_SLOT_COUNT, ONEWAY_ACTION5_SLOT_COUNT, OPENTTD_GUI_ACTION5_SLOT_COUNT,
     ROADSTOP_ACTION5_SLOT_COUNT, SHORE_ACTION5_SLOT_COUNT, SHORE_MISSING_BLOCK_SLOTS,
     SIGNAL_ACTION5_SLOT_COUNT, SPR_SIGNALS_ACTION5_BASE, SPRITE_V2_ZOOM_PREFERENCE,

@@ -19,19 +19,20 @@ no existe. Ningún nivel implica compatibilidad binaria o de red con OpenTTD.
 | Tick y determinismo | **Alta** | Tick de 27 ms, RNG/orden autoritativo, hash canónico, replay y save/load deterministas |
 | Carretera | **Alta funcional / media exacta** | Construcción, depósitos, paradas, overtaking y tablas de movimiento; quedan RVSB/dársenas y escala |
 | Ferrocarril | **Alta funcional / media exacta** | Consists, railtypes, señales, PBS/YAPF, túneles/puentes y plataformas; los oráculos externos cubren escenarios acotados |
-| Economía y carga | **Media** | 11 cargas temperate, packets, transfer/deliver, CargoDist y ratings; faltan reglas completas por clima/NewGRF |
-| Pueblos e industrias | **Media** | Crecimiento, casas/industrias vanilla y producción; contenido de Arctic/Tropic/Toyland incompleto |
+| Economía y carga | **Media** | Catálogo vanilla multi-clima (#224): labels/slots por landscape, packets, transfer/deliver, CargoDist y ratings; NewGRF/cargos custom incompletos |
+| Pueblos e industrias | **Media** | Crecimiento + I/O industria por clima sin aliases temperate (#224); layouts/gráficos Arctic/Tropic/Toyland aún parciales |
 | Órdenes y horarios | **Media-alta en core / media en UI** | Full-load all/any, no-load/no-unload, transfer, non-stop/go-via, stop-location, refit de depósito, condicionales y timetable-start; la UI no expone todo |
 | Fiabilidad y servicio | **Media en core / inicial en UI** | Averías normales/reducidas/OFF configurables desde Ajustes, intervalos días/porcentaje, servicio y autoenvío a depósito; falta el editor completo de intervalos/unbunch |
 | Aviones | **Media** | Aeropuertos FTA, compra, vuelo, ruido y crashes; presentación y casos límite incompletos |
 | Barcos | **Parcial** | Infra acuática + A* tile→track X/Y, `_ship_subcoord`, `ShipAccelerate`, esclusa vertical (`ShipMoveUpDownOnLock`; sin `LOCK_TRANSIT_TICKS`). Residual: YAPF ship/water regions, ocupación multi-barco, arrival exacta dock/depot (8,8), goldens externos pos/dir/vel/z/orden |
 | Guardado propio JSON | **Alta** | Formato versionado con migraciones y determinismo mid-run |
 | Compatibilidad `.sav` | **Inicial-media** | Import/export parcial; no es round-trip completo ni garantía de compatibilidad histórica |
-| NewGRF | **Media de parseo / inicial-media de runtime** | Actions 0–14 reconocidas y varios paths Action 1/2/3/5; callbacks y semántica total incompletos |
+| NewGRF | **Media de parseo / media de runtime (MVP callbacks)** | Actions 0–14 + catálogos Action0/3/5; evaluador Action2 + CB24/CB31 + storage persistente en vehículo. Residual: resto de CBIDs, triggers→random groups, storage no-vehículo; ver [`parity/newgrf-callback-matrix.md`](parity/newgrf-callback-matrix.md) (#228) |
 
 La cobertura declarada por feature y propiedad está en
 [`parity/newgrf-action0-matrix.md`](parity/newgrf-action0-matrix.md); consumir los
-bytes de una propiedad no cuenta allí como soporte runtime.
+bytes de una propiedad no cuenta allí como soporte runtime. CBIDs:
+[`parity/newgrf-callback-matrix.md`](parity/newgrf-callback-matrix.md).
 | Multijugador | **Inicial** | Lockstep TCP, dedicated, late join y host migration; protocolo propio sin lobby, auth, cifrado ni interoperabilidad |
 | IA / GameScript / editor | **Inicial-media** | TransCargo/RoadHaul, GS-lite y editor propios; Squirrel compatible ausente |
 | Render/UI vanilla | **Media-alta visual / media funcional** | Cobertura OpenGFX amplia; no hay oracle visual total ni internacionalización completa |
@@ -840,7 +841,7 @@ Checklist OpenTTD vs openttdrs vs acción (epic UI-Layout #172).
 | Compra | matriz sprites | Filas con sprite + stats | ✔ chrome (#179); TE/ocultar motor **B** |
 | Lista flota | sprites + mass actions | Filas con sprite + start/stop (#182) | ✔ chrome; grupos/mass **A/B** |
 
-Parcial/OOS: callbacks NewGRF completos, cheats, multi-instance y UI completa de servicio/averías. El core ya modela fiabilidad, averías e intervalos.
+Parcial/OOS: callbacks NewGRF más allá del MVP CB24/CB31 (#228), cheats, multi-instance y UI completa de servicio/averías. El core ya modela fiabilidad, averías e intervalos.
 
 ### Resumen: qué tan cerca podemos llegar
 

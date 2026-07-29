@@ -19,15 +19,25 @@ pub fn industry_template(c: TileCoord, spec: IndustrySpec) -> Vec<(TileCoord, u8
         IndustrySpec::PowerStation => choose_layout(c, &POWER_STATION_LAYOUTS),
         IndustrySpec::IronOreMine => choose_layout(c, &IRON_MINE_LAYOUTS),
         IndustrySpec::CopperOreMine => choose_layout(c, &METAL_MINE_LAYOUTS),
-        IndustrySpec::GoldMine => choose_layout(c, &GOLD_MINE_LAYOUTS),
-        IndustrySpec::Forest => choose_layout(c, &FOREST_LAYOUTS),
-        IndustrySpec::Farm => choose_layout(c, &FARM_LAYOUTS),
-        IndustrySpec::OilWells => choose_layout(c, &OIL_LAYOUTS),
+        IndustrySpec::GoldMine | IndustrySpec::DiamondMine => choose_layout(c, &GOLD_MINE_LAYOUTS),
+        IndustrySpec::Forest
+        | IndustrySpec::FruitPlantation
+        | IndustrySpec::RubberPlantation => choose_layout(c, &FOREST_LAYOUTS),
+        IndustrySpec::Farm | IndustrySpec::FarmTropic => choose_layout(c, &FARM_LAYOUTS),
+        IndustrySpec::OilWells | IndustrySpec::WaterSupply => choose_layout(c, &OIL_LAYOUTS),
         IndustrySpec::OilRefinery => choose_layout(c, &REFINERY_LAYOUTS),
-        IndustrySpec::Factory | IndustrySpec::SteelMill | IndustrySpec::Bank => {
-            choose_layout(c, &FACTORY_LAYOUTS)
+        IndustrySpec::Factory
+        | IndustrySpec::FactoryTropic
+        | IndustrySpec::SteelMill
+        | IndustrySpec::Bank
+        | IndustrySpec::BankArcticTropic
+        | IndustrySpec::PrintingWorks
+        | IndustrySpec::FoodProcessingPlant
+        | IndustrySpec::WaterTower
+        | IndustrySpec::ToyShop => choose_layout(c, &FACTORY_LAYOUTS),
+        IndustrySpec::Sawmill | IndustrySpec::PaperMill | IndustrySpec::LumberMill => {
+            choose_layout(c, &SAWMILL_LAYOUTS)
         }
-        IndustrySpec::Sawmill => choose_layout(c, &SAWMILL_LAYOUTS),
         IndustrySpec::CottonCandy => choose_layout(c, &COTTON_CANDY_LAYOUTS),
         IndustrySpec::CandyFactory => choose_layout(c, &CANDY_FACTORY_LAYOUTS),
         IndustrySpec::BatteryFarm => choose_layout(c, &BATTERY_FARM_LAYOUTS),

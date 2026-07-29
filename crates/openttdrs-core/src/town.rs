@@ -464,13 +464,13 @@ impl Town {
                 self.mail_served = self.mail_served.saturating_add(amount);
                 self.add_received(TownGrowthEffect::Mail, amount);
             }
-            CargoType::Goods => {
+            CargoType::Goods | CargoType::Candy => {
                 self.add_received(TownGrowthEffect::Goods, amount);
-                // Proxy Food hasta existir cargo dedicado.
+            }
+            CargoType::Food | CargoType::FizzyDrinks => {
                 self.add_received(TownGrowthEffect::Food, amount);
             }
-            CargoType::Oil => {
-                // Proxy Water (trópico) hasta existir cargo dedicado.
+            CargoType::Water => {
                 self.add_received(TownGrowthEffect::Water, amount);
             }
             _ => {}

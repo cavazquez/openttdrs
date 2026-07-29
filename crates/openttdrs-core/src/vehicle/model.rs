@@ -454,7 +454,7 @@ pub struct Vehicle {
     /// Bits aleatorios `NewGRF` del vehículo (`random_bits`; random Action2 / consist).
     #[serde(default)]
     pub newgrf_random_bits: u8,
-    /// Registros persistentes `NewGRF` (`7C` / `\2psto`); copiados al ctx al dibujar.
+    /// Registros persistentes `NewGRF` (`7C` / `\2psto`); writeback tras eval CB/Action2.
     #[serde(default)]
     pub newgrf_persistent_regs: std::collections::HashMap<u8, u32>,
     /// Beneficio neto del año en curso (ingresos − costes; solo cabeza de consist).

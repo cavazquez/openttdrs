@@ -15,13 +15,16 @@ pub const fn load_unload_speed(cargo: CargoType) -> u32 {
     match cargo {
         CargoType::Passengers => 8,
         CargoType::Mail => 6,
-        CargoType::Goods | CargoType::Valuables | CargoType::Livestock => 5,
-        CargoType::Coal
-        | CargoType::Wood
-        | CargoType::Oil
-        | CargoType::Grain
-        | CargoType::IronOre
-        | CargoType::Steel => 4,
+        CargoType::Goods
+        | CargoType::Valuables
+        | CargoType::Livestock
+        | CargoType::Candy
+        | CargoType::Toys
+        | CargoType::FizzyDrinks
+        | CargoType::Food
+        | CargoType::Gold
+        | CargoType::Diamonds => 5,
+        _ => 4,
     }
 }
 

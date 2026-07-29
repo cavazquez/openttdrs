@@ -353,9 +353,26 @@ pub fn station_is_freight_pickup_stop(
 ) -> bool {
     let coverage = station_coverage_at(map, industries, station_pos, STATION_COVERAGE_RADIUS);
     match cargo {
-        CargoType::Coal | CargoType::IronOre => coverage.supplies_coal > 0,
-        CargoType::Wood | CargoType::Grain | CargoType::Livestock => coverage.supplies_wood > 0,
-        CargoType::Oil => coverage.supplies_oil > 0,
+        CargoType::Coal
+        | CargoType::IronOre
+        | CargoType::CopperOre
+        | CargoType::Gold
+        | CargoType::Diamonds
+        | CargoType::Sugar
+        | CargoType::Batteries
+        | CargoType::Plastic
+        | CargoType::Toffee
+        | CargoType::Water => coverage.supplies_coal > 0,
+        CargoType::Wood
+        | CargoType::Grain
+        | CargoType::Wheat
+        | CargoType::Maize
+        | CargoType::Livestock
+        | CargoType::Fruit
+        | CargoType::Rubber
+        | CargoType::CottonCandy
+        | CargoType::Bubbles => coverage.supplies_wood > 0,
+        CargoType::Oil | CargoType::Cola => coverage.supplies_oil > 0,
         _ => false,
     }
 }

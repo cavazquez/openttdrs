@@ -103,6 +103,12 @@ pub struct SimulationRuntime {
     /// Slots Action5 canals `0x08` (65; `None` = `OpenGFX`).
     pub canal_action5_newgrf_sprites: Vec<Option<crate::newgrf_sprites::DecodedSprite>>,
 
+    /// Slots Action5 2CC colour maps `0x0A` (256; `None` = `OpenGFX`).
+    pub twocc_action5_newgrf_sprites: Vec<Option<crate::newgrf_sprites::DecodedSprite>>,
+
+    /// Slots Action5 tramway `0x0B` (119; `None` = `OpenGFX`).
+    pub tramway_action5_newgrf_sprites: Vec<Option<crate::newgrf_sprites::DecodedSprite>>,
+
     /// Overrides Action3 `RailType` `Signals`, indexados por `RailType` vanilla.
     pub rail_signal_newgrf: Vec<Option<crate::rail_type::RailSignalSpriteSpec>>,
 
@@ -186,6 +192,8 @@ impl SimulationRuntime {
             airport_preview_newgrf_sprites: Vec::new(),
             bridge_decks_newgrf_sprites: Vec::new(),
             canal_action5_newgrf_sprites: Vec::new(),
+            twocc_action5_newgrf_sprites: Vec::new(),
+            tramway_action5_newgrf_sprites: Vec::new(),
             rail_signal_newgrf: Vec::new(),
             rail_type_overlay_newgrf: Vec::new(),
             rail_type_underlay_newgrf: Vec::new(),

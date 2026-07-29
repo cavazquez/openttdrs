@@ -121,6 +121,20 @@ define_action5_apply!(
     crate::newgrf_sprites::CANALS_ACTION5_SLOT_COUNT,
     crate::newgrf_sprites::merge_canals_action5_block
 );
+define_action5_apply!(
+    apply_newgrf_action5_twocc,
+    apply_newgrf_action5_twocc_default_dirs,
+    twocc_action5_newgrf_sprites,
+    crate::newgrf_sprites::TWOCC_ACTION5_SLOT_COUNT,
+    crate::newgrf_sprites::merge_twocc_action5_block
+);
+define_action5_apply!(
+    apply_newgrf_action5_tramway,
+    apply_newgrf_action5_tramway_default_dirs,
+    tramway_action5_newgrf_sprites,
+    crate::newgrf_sprites::TRAMWAY_ACTION5_SLOT_COUNT,
+    crate::newgrf_sprites::merge_tramway_action5_block
+);
 
 /// Aplica todos los tipos Action5 runtime soportados.
 pub fn apply_newgrf_action5_all_default_dirs(state: &mut GameState) {
@@ -134,4 +148,6 @@ pub fn apply_newgrf_action5_all_default_dirs(state: &mut GameState) {
     apply_newgrf_action5_airport_preview_default_dirs(state);
     apply_newgrf_action5_bridge_decks_default_dirs(state);
     apply_newgrf_action5_canals_default_dirs(state);
+    apply_newgrf_action5_twocc_default_dirs(state);
+    apply_newgrf_action5_tramway_default_dirs(state);
 }

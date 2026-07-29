@@ -510,6 +510,15 @@ impl IndustrySpec {
         }
     }
 
+    /// `production_rate[1]` (Farm temperate/arctic: Livestock).
+    #[must_use]
+    pub const fn production_rate_secondary(self) -> Option<u8> {
+        match self {
+            Self::Farm => Some(10),
+            _ => None,
+        }
+    }
+
     /// Vida económica del spec (`IndustryLifeType` en `build_industry.h`).
     #[must_use]
     pub const fn life_type(self) -> IndustryLifeType {
@@ -569,6 +578,9 @@ pub struct Industry {
     pub spec: Option<IndustrySpec>,
     pub kind: IndustryKind,
     pub stock: u32,
+    /// Stock del segundo cargo producido (Farm: Livestock; 0 si no aplica).
+    #[serde(default)]
+    pub secondary_stock: u32,
     pub capacity: u32,
     /// Color aleatorio de industria (`Colours` 0–15) para edificios con paleta.
     #[serde(default)]
@@ -645,6 +657,7 @@ impl Industry {
             spec: None,
             kind,
             stock: 0,
+            secondary_stock: 0,
             capacity: INDUSTRY_STOCK_CAPACITY,
             random_colour: 0,
             instance_id: 0,
@@ -667,6 +680,7 @@ impl Industry {
             spec: None,
             kind,
             stock: 0,
+            secondary_stock: 0,
             capacity: INDUSTRY_STOCK_CAPACITY,
             random_colour: 0,
             instance_id: 0,
@@ -695,6 +709,7 @@ impl Industry {
             spec: Some(spec),
             kind,
             stock: 0,
+            secondary_stock: 0,
             capacity: INDUSTRY_STOCK_CAPACITY,
             random_colour,
             instance_id: 0,
@@ -781,16 +796,45 @@ impl Industry {
     /// Unidades por ciclo de producción (`CeilDiv(rate * prod_level, PRODLEVEL_DEFAULT)`).
     #[must_use]
     pub fn produce_amount(&self) -> u32 {
-        if self.prod_level == PRODLEVEL_CLOSURE {
+        Self::scaled_production_amount(self.production_rate(), self.prod_level)
+    }
+
+    /// Unidades del segundo output (Farm Livestock), si el spec lo define.
+    #[must_use]
+    pub fn produce_secondary_amount(&self) -> u32 {
+        let Some(rate) = self.spec.and_then(IndustrySpec::production_rate_secondary) else {
+            return 0;
+        };
+        Self::scaled_production_amount(rate, self.prod_level)
+    }
+
+    fn scaled_production_amount(rate: u8, prod_level: u8) -> u32 {
+        if prod_level == PRODLEVEL_CLOSURE || rate == 0 {
             return 0;
         }
-        let rate = u32::from(self.production_rate());
-        if rate == 0 {
-            return 0;
-        }
-        (rate * u32::from(self.prod_level))
+        (u32::from(rate) * u32::from(prod_level))
             .div_ceil(u32::from(PRODLEVEL_DEFAULT))
             .min(255)
+    }
+
+    /// Cargos producidos del spec (primario + secundario).
+    #[must_use]
+    pub fn produced_cargos(&self) -> &'static [CargoType] {
+        if let Some(spec) = self.spec {
+            return spec.produced_cargos();
+        }
+        match self.kind {
+            IndustryKind::CoalMine => &[CargoType::Coal],
+            IndustryKind::Forest => &[CargoType::Wood],
+            IndustryKind::OilWell => &[CargoType::Oil],
+            IndustryKind::Factory => &[CargoType::Goods],
+        }
+    }
+
+    /// Segundo cargo de salida (Farm → Livestock).
+    #[must_use]
+    pub fn secondary_output_cargo(&self) -> Option<CargoType> {
+        self.produced_cargos().get(1).copied()
     }
 
     /// Salida de procesadora escalada por `prod_level` (legacy; preferir [`Self::processing_output_amount`]).
@@ -846,17 +890,26 @@ impl Industry {
         u8::try_from(pct.min(255)).unwrap_or(255)
     }
 
-    /// Produce cargo primario si el tick cae en el periodo (minas, bosques, pozos…).
+    /// Produce cargo primario (y secundario si aplica) si el tick cae en el periodo.
     pub fn produce(&mut self, tick: u64) {
         if self.requires_station_inputs() || self.is_closing() {
             return;
         }
         let amount = self.produce_amount();
-        if amount == 0 {
+        let secondary = self.produce_secondary_amount();
+        if amount == 0 && secondary == 0 {
             return;
         }
         if self.produces_on_tick(tick) {
-            self.stock = self.stock.saturating_add(amount).min(self.capacity);
+            if amount > 0 {
+                self.stock = self.stock.saturating_add(amount).min(self.capacity);
+            }
+            if secondary > 0 {
+                self.secondary_stock = self
+                    .secondary_stock
+                    .saturating_add(secondary)
+                    .min(self.capacity);
+            }
         }
     }
 
@@ -1055,10 +1108,41 @@ pub fn transport_industry_goods(
     stations: &mut [Station],
     selectgoods: bool,
 ) -> u32 {
-    if industry.stock == 0 {
+    let mut total = 0u32;
+    total = total.saturating_add(transport_industry_cargo_stock(
+        industry,
+        stations,
+        selectgoods,
+        industry.output_cargo(),
+        true,
+    ));
+    if let Some(secondary) = industry.secondary_output_cargo() {
+        total = total.saturating_add(transport_industry_cargo_stock(
+            industry,
+            stations,
+            selectgoods,
+            secondary,
+            false,
+        ));
+    }
+    total
+}
+
+fn transport_industry_cargo_stock(
+    industry: &mut Industry,
+    stations: &mut [Station],
+    selectgoods: bool,
+    cargo: CargoType,
+    primary: bool,
+) -> u32 {
+    let stock = if primary {
+        industry.stock
+    } else {
+        industry.secondary_stock
+    };
+    if stock == 0 {
         return 0;
     }
-    let cargo = industry.output_cargo();
     let nearby = covering_output_station_indices(industry, stations);
     let eligible: Vec<usize> = nearby
         .into_iter()
@@ -1067,9 +1151,13 @@ pub fn transport_industry_goods(
     if eligible.is_empty() {
         return 0;
     }
-    let amount = industry.stock.min(255);
+    let amount = stock.min(255);
     // Se detrae todo lo intentado, no solo lo entregado: el rating decide cuánto se pierde.
-    industry.stock = industry.stock.saturating_sub(amount);
+    if primary {
+        industry.stock = industry.stock.saturating_sub(amount);
+    } else {
+        industry.secondary_stock = industry.secondary_stock.saturating_sub(amount);
+    }
     let moved = station::move_goods_to_station(
         stations,
         &eligible,

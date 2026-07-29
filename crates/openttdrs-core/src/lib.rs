@@ -164,7 +164,7 @@ pub use cargo_packet::{
 pub use cargo_spec::{
     CargoSpecDef, DEFAULT_CARGO_CAPACITY_MULTIPLIER, apply_cargo_capacity_multiplier,
     cargo_spec_by_label, cargo_spec_def, cargo_spec_display_name, cargo_type_label,
-    empty_cargo_spec_catalog, payment_spec_for_cargo,
+    empty_cargo_spec_catalog, payment_spec_for_cargo, payment_spec_for_cargo_climate,
 };
 pub use cheats::CheatsState;
 pub use command::{
@@ -202,7 +202,8 @@ pub use economy::{
     increase_loan, inflation_income_factor, inflation_prices_factor, manhattan_distance,
     monthly_loan_interest, rail_build_cost_factored, road_build_cost_factored,
     terraform_cost_per_corner, ticks_to_transit_periods, transported_goods_income,
-    transported_goods_income_with_spec, vehicle_purchase_cost, vehicle_running_cost_per_tick,
+    transported_goods_income_for_climate, transported_goods_income_with_spec,
+    vehicle_purchase_cost, vehicle_running_cost_per_tick,
     vehicle_sell_refund,
 };
 pub use economy_quarterly::{
@@ -378,16 +379,17 @@ pub use newgrf_config::{
 pub use newgrf_sprites::{
     ACTION5_TYPE_AIRPORT_PREVIEW, ACTION5_TYPE_BRIDGE_DECKS, ACTION5_TYPE_CANALS,
     ACTION5_TYPE_CATENARY, ACTION5_TYPE_FOUNDATIONS, ACTION5_TYPE_ONEWAY, ACTION5_TYPE_OPENTTD_GUI,
-    ACTION5_TYPE_ROADSTOPS, ACTION5_TYPE_SHORE, ACTION5_TYPE_SIGNALS,
-    AIRPORT_PREVIEW_ACTION5_SLOT_COUNT, Action2EvalCtx, Action2RandomEntry, Action2VarAdjust,
-    Action2VarEntry, Action2VarOp, Action2VarTerm, Action5Block, BRIDGE_DECKS_ACTION5_SLOT_COUNT,
-    CALLBACK_FAILED, CANALS_ACTION5_LOCK_SLOT, CANALS_ACTION5_SLOT_COUNT,
-    CATENARY_ACTION5_SLOT_COUNT, CATENARY_ENTRANCE_SPRITE_BASE, CATENARY_PYLON_SPRITE_BASE,
-    CATENARY_WIRE_SPRITE_BASE, CBID_STATION_BUILD_TILE_LAYOUT, CBID_VEHICLE_START_STOP_CHECK,
-    DecodedSprite, FOUNDATION_ACTION5_SLOT_COUNT, ONEWAY_ACTION5_SLOT_COUNT,
-    OPENTTD_GUI_ACTION5_SLOT_COUNT, ROADSTOP_ACTION5_SLOT_COUNT, SHORE_ACTION5_SLOT_COUNT,
-    SHORE_MISSING_BLOCK_SLOTS, SIGNAL_ACTION5_SLOT_COUNT, SPR_SIGNALS_ACTION5_BASE,
-    SPRITE_V2_ZOOM_PREFERENCE, TrainSpriteAssign, TrainSpriteGraphics, action5_type_name,
+    ACTION5_TYPE_ROADSTOPS, ACTION5_TYPE_SHORE, ACTION5_TYPE_SIGNALS, ACTION5_TYPE_TRAMWAY,
+    ACTION5_TYPE_TWOCC, AIRPORT_PREVIEW_ACTION5_SLOT_COUNT, Action2EvalCtx, Action2RandomEntry,
+    Action2VarAdjust, Action2VarEntry, Action2VarOp, Action2VarTerm, Action5Block,
+    BRIDGE_DECKS_ACTION5_SLOT_COUNT, CALLBACK_FAILED, CANALS_ACTION5_LOCK_SLOT,
+    CANALS_ACTION5_SLOT_COUNT, CATENARY_ACTION5_SLOT_COUNT, CATENARY_ENTRANCE_SPRITE_BASE,
+    CATENARY_PYLON_SPRITE_BASE, CATENARY_WIRE_SPRITE_BASE, CBID_STATION_BUILD_TILE_LAYOUT,
+    CBID_VEHICLE_START_STOP_CHECK, DecodedSprite, FOUNDATION_ACTION5_SLOT_COUNT,
+    ONEWAY_ACTION5_SLOT_COUNT, OPENTTD_GUI_ACTION5_SLOT_COUNT, ROADSTOP_ACTION5_SLOT_COUNT,
+    SHORE_ACTION5_SLOT_COUNT, SHORE_MISSING_BLOCK_SLOTS, SIGNAL_ACTION5_SLOT_COUNT,
+    SPR_SIGNALS_ACTION5_BASE, SPRITE_V2_ZOOM_PREFERENCE, TRAMWAY_ACTION5_SLOT_COUNT,
+    TWOCC_ACTION5_SLOT_COUNT, TrainSpriteAssign, TrainSpriteGraphics, action5_type_name,
     airport_preview_action5_slot, apply_company_colour_mask, bake_sprite_company_mask,
     bridge_decks_action5_base, bridge_decks_action5_slot, catenary_action5_local_slot,
     collect_action5_blocks, collect_airport_sprite_graphics, collect_airport_tile_sprite_graphics,
@@ -400,8 +402,8 @@ pub use newgrf_sprites::{
     merge_airport_preview_action5_block, merge_bridge_decks_action5_block,
     merge_canals_action5_block, merge_catenary_action5_block, merge_foundation_action5_block,
     merge_oneway_action5_block, merge_openttd_gui_action5_block, merge_roadstop_action5_block,
-    merge_shore_action5_block, merge_signals_action5_block, oneway_action5_slot,
-    roadstop_action5_slot, signal_action5_slot,
+    merge_shore_action5_block, merge_signals_action5_block, merge_tramway_action5_block,
+    merge_twocc_action5_block, oneway_action5_slot, roadstop_action5_slot, signal_action5_slot,
 };
 pub use newgrf_type_tables::{
     GrfTypeTranslationTables, TypeLabel, collect_type_tables_from_grf,

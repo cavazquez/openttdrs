@@ -3050,6 +3050,45 @@ mod tests {
         );
     }
 
+    /// #274: Ships Action0 `0x1E` CTT include list → `refit_mask` runtime.
+    #[test]
+    fn ships_ctt_include_list_wires_refit_mask() {
+        // CTT include: count=2, temperate ids Goods=5, Oil=3 → mask bits 3|5.
+        let a0 = vec![
+            0x00,
+            ACTION0_FEATURE_SHIPS,
+            0x01,
+            0x01,
+            0x00,
+            0x1E,
+            0x02,
+            0x05,
+            0x03,
+        ];
+        let meta = parse_action0_vehicle_metas(&a0).unwrap().remove(0);
+        let expected = (1u32 << 5) | (1u32 << 3);
+        assert_eq!(meta.refit_mask, expected);
+
+        let bytes = build_grf_v2_with_action0_and_action8(&a0, [b'C', b'T', 0, 1], "ctt", "");
+        let dir = tempfile_dir_with("ctt.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("ctt.grf", 1));
+        apply_newgrf_vehicles_trains(&mut state, &[&dir]);
+        let eng = state
+            .engine_catalog
+            .iter()
+            .find(|e| e.from_newgrf && e.kind == crate::VehicleKind::Ship)
+            .unwrap();
+        assert_eq!(eng.refit_mask, expected);
+        let cargos = crate::refittable_cargo_types_for_engine(eng);
+        assert_eq!(
+            cargos,
+            vec![crate::CargoType::Oil, crate::CargoType::Goods]
+        );
+    }
+
     /// #249: Vehicles AC — flag helicóptero aircraft prop 0x09.
     #[test]
     fn vehicles_ac_aircraft_heli_flag() {

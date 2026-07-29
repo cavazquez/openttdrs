@@ -564,6 +564,56 @@ pub(super) fn spawn_secondary_tool_panels(
                             BuildMenuAction::BuildFarm,
                         ),
                         (
+                            "Granja tropical",
+                            "assets/opengfx/tiles/industry_2190.png",
+                            BuildMenuAction::BuildFarmTropic,
+                        ),
+                        (
+                            "Mina de cobre",
+                            "assets/opengfx/tiles/industry_2092.png",
+                            BuildMenuAction::BuildCopperOreMine,
+                        ),
+                        (
+                            "Fábrica tropical",
+                            "assets/opengfx/tiles/industry_2169.png",
+                            BuildMenuAction::BuildFactoryTropic,
+                        ),
+                        (
+                            "Plantación de fruta",
+                            "assets/opengfx/tiles/tree_01.png",
+                            BuildMenuAction::BuildFruitPlantation,
+                        ),
+                        (
+                            "Plantación de caucho",
+                            "assets/opengfx/tiles/tree_01.png",
+                            BuildMenuAction::BuildRubberPlantation,
+                        ),
+                        (
+                            "Papelera",
+                            "assets/opengfx/tiles/industry_2063.png",
+                            BuildMenuAction::BuildPaperMill,
+                        ),
+                        (
+                            "Planta de alimentos",
+                            "assets/opengfx/tiles/industry_2169.png",
+                            BuildMenuAction::BuildFoodProcessingPlant,
+                        ),
+                        (
+                            "Mina de diamantes",
+                            "assets/opengfx/tiles/industry_2247.png",
+                            BuildMenuAction::BuildDiamondMine,
+                        ),
+                        (
+                            "Suministro de agua",
+                            "assets/opengfx/tiles/industry_2028.png",
+                            BuildMenuAction::BuildWaterSupply,
+                        ),
+                        (
+                            "Aserradero tropical",
+                            "assets/opengfx/tiles/industry_2063.png",
+                            BuildMenuAction::BuildLumberMill,
+                        ),
+                        (
                             "Algodón de azúcar",
                             "assets/opengfx/tiles/industry_2100.png",
                             BuildMenuAction::BuildCottonCandy,

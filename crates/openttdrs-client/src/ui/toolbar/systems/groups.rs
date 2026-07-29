@@ -144,6 +144,16 @@ pub(crate) fn toolbar_group_for_action(action: BuildMenuAction) -> ToolbarGroup 
         | BuildMenuAction::BuildSawmill
         | BuildMenuAction::BuildForest
         | BuildMenuAction::BuildFarm
+        | BuildMenuAction::BuildFarmTropic
+        | BuildMenuAction::BuildCopperOreMine
+        | BuildMenuAction::BuildFactoryTropic
+        | BuildMenuAction::BuildFruitPlantation
+        | BuildMenuAction::BuildRubberPlantation
+        | BuildMenuAction::BuildPaperMill
+        | BuildMenuAction::BuildFoodProcessingPlant
+        | BuildMenuAction::BuildDiamondMine
+        | BuildMenuAction::BuildWaterSupply
+        | BuildMenuAction::BuildLumberMill
         | BuildMenuAction::BuildCottonCandy
         | BuildMenuAction::BuildCandyFactory
         | BuildMenuAction::BuildBatteryFarm

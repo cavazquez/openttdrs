@@ -111,7 +111,8 @@ Fuente: `newgrf_act0_ships.cpp`.
 | `14` ocean speed fraction | **runtime** (`ocean_speed_frac` → `ship_speed_for_tile`) |
 | `15` canal speed fraction | **runtime** (`canal_speed_frac` → `ship_speed_for_tile`) |
 | `08`, `09`, `11`–`13`, `16`–`1D`, `20`–`26` restantes | consumidas si tienen ancho fijo; semántica pendiente |
-| `1E`, `1F` | pendiente: listas CTT variables |
+| `1E` CTT include (lista variable) | **runtime** (`refit_mask` → `refittable_cargo_types_for_engine`; #274) |
+| `1F` CTT exclude (lista variable) | consumida (bytes); exclude aún no resta de la máscara (#274 residual) |
 
 ## Aircraft (`03`)
 
@@ -458,8 +459,8 @@ en slots vecinos. Los tipos `A5BLOCK_INVALID` se inspeccionan, pero no se aplica
 | `07` | TTDP GUI | — | ignorada por spec (no usada por OTTD) |
 | `08` | canals | 65 | **runtime** (#259; `canal_action5_newgrf_sprites`) |
 | `09` | one-way roads | 18 | **runtime** |
-| `0A` | 2CC colour maps | — | pendiente |
-| `0B` | tramway | — | pendiente |
+| `0A` | 2CC colour maps | 256 | **runtime** (#274; merge no-clobber; slots en `twocc_action5_newgrf_sprites`) |
+| `0B` | tramway | 119 | **runtime** (#274; merge no-clobber; slots en `tramway_action5_newgrf_sprites`) |
 | `0C` | snowy temperate tree | — | ignorada por spec (`A5BLOCK_INVALID`; no es «grass» — #250 N/A en 15.3) |
 | `0D` | shore | 18 | **runtime** |
 | `11` | road stop graphics | 8 | **runtime** (no Action0 RoadStops) |

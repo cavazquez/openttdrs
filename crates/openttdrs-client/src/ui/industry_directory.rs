@@ -162,8 +162,18 @@ fn fund_actions_for_climate(climate: Climate) -> Vec<(BuildMenuAction, &'static 
         (BuildMenuAction::BuildOilRefinery, "Refinería"),
         (BuildMenuAction::BuildForest, "Bosque"),
         (BuildMenuAction::BuildFarm, "Granja"),
+        (BuildMenuAction::BuildFarmTropic, "Granja tropic"),
+        (BuildMenuAction::BuildCopperOreMine, "Cobre"),
+        (BuildMenuAction::BuildFruitPlantation, "Fruta"),
+        (BuildMenuAction::BuildRubberPlantation, "Caucho"),
+        (BuildMenuAction::BuildPaperMill, "Papelera"),
+        (BuildMenuAction::BuildFoodProcessingPlant, "Alimentos"),
+        (BuildMenuAction::BuildDiamondMine, "Diamantes"),
+        (BuildMenuAction::BuildWaterSupply, "Agua"),
+        (BuildMenuAction::BuildLumberMill, "Aserradero tropic"),
         (BuildMenuAction::BuildSawmill, "Aserradero"),
         (BuildMenuAction::BuildFactory, "Fábrica"),
+        (BuildMenuAction::BuildFactoryTropic, "Fábrica tropic"),
         (BuildMenuAction::BuildCottonCandy, "Algodón"),
         (BuildMenuAction::BuildCandyFactory, "Caramelos"),
         (BuildMenuAction::BuildBatteryFarm, "Baterías"),
@@ -182,7 +192,17 @@ fn fund_actions_for_climate(climate: Climate) -> Vec<(BuildMenuAction, &'static 
 
 /// Cadena input → output visible en la lista (MVP de cadenas).
 pub(crate) fn industry_chain_label(industry: &Industry) -> String {
-    let output = cargo_display_name(industry.output_cargo());
+    let outputs = industry
+        .produced_cargos()
+        .iter()
+        .map(|c| cargo_display_name(*c))
+        .collect::<Vec<_>>()
+        .join("+");
+    let output = if outputs.is_empty() {
+        cargo_display_name(industry.output_cargo()).to_string()
+    } else {
+        outputs
+    };
     let inputs = industry.station_input_requirements();
     if inputs.is_empty() {
         format!("→ {output}")
@@ -576,6 +596,37 @@ mod tests {
                 .iter()
                 .any(|(a, _)| *a == BuildMenuAction::BuildToyFactory)
         );
+        let tropic = fund_actions_for_climate(Climate::SubTropical);
+        assert!(
+            tropic
+                .iter()
+                .any(|(a, _)| *a == BuildMenuAction::BuildCopperOreMine)
+        );
+        assert!(
+            tropic
+                .iter()
+                .any(|(a, _)| *a == BuildMenuAction::BuildFarmTropic)
+        );
+        assert!(
+            !tropic
+                .iter()
+                .any(|(a, _)| *a == BuildMenuAction::BuildCoalMine)
+        );
+        let arctic = fund_actions_for_climate(Climate::SubArctic);
+        assert!(
+            arctic
+                .iter()
+                .any(|(a, _)| *a == BuildMenuAction::BuildPaperMill)
+        );
         let _ = GameState::new(4, 4);
+    }
+
+    #[test]
+    fn chain_label_farm_shows_dual_outputs() {
+        let mut industry = Industry::new(TileCoord::new(0, 0), IndustryKind::Forest);
+        industry.spec = Some(IndustrySpec::Farm);
+        let label = industry_chain_label(&industry);
+        assert!(label.contains(cargo_display_name(CargoType::Grain)));
+        assert!(label.contains(cargo_display_name(CargoType::Livestock)));
     }
 }

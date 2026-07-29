@@ -4,7 +4,7 @@
 
 use crate::Climate;
 use crate::cargo::CargoType;
-use crate::economy::transported_goods_income;
+use crate::economy::{transported_goods_income, transported_goods_income_for_climate};
 use crate::industry::{Industry, IndustryKind, IndustrySpec};
 use crate::map::TileCoord;
 use crate::station::{Station, StopKind};
@@ -211,4 +211,65 @@ fn sav_slot_resolves_by_landscape() {
         CargoType::from_climate_slot(Climate::SubArctic, 10),
         Some(CargoType::Gold)
     );
+}
+
+#[test]
+fn tropic_oil_wood_payment_differs_from_temperate() {
+    let oil_temp = transported_goods_income(8, 30, 4, CargoType::Oil, 1 << 16);
+    let oil_trop = transported_goods_income_for_climate(
+        8,
+        30,
+        4,
+        CargoType::Oil,
+        Climate::SubTropical,
+        1 << 16,
+    );
+    let wood_temp = transported_goods_income(8, 30, 4, CargoType::Wood, 1 << 16);
+    let wood_trop = transported_goods_income_for_climate(
+        8,
+        30,
+        4,
+        CargoType::Wood,
+        Climate::SubTropical,
+        1 << 16,
+    );
+    assert_eq!(oil_temp, 129);
+    assert_eq!(oil_trop, 142);
+    assert_eq!(wood_temp, 146);
+    assert_eq!(wood_trop, 232);
+    assert!(oil_trop > oil_temp);
+    assert!(wood_trop > wood_temp);
+    assert_eq!(
+        CargoType::Oil.payment_spec_for_climate(Climate::SubTropical).base_rate,
+        4892
+    );
+    assert_eq!(
+        CargoType::Wood.payment_spec_for_climate(Climate::SubTropical).base_rate,
+        7964
+    );
+    assert_eq!(
+        CargoType::Oil.payment_spec_for_climate(Climate::Temperate).base_rate,
+        CargoType::Oil.payment_spec().base_rate
+    );
+}
+
+#[test]
+fn farm_dual_output_produces_and_stores_both() {
+    let pos = TileCoord::new(2, 2);
+    let mut farm = Industry::with_tiles_spec(
+        pos,
+        IndustryKind::Forest,
+        IndustrySpec::Farm,
+        vec![pos],
+        0,
+    );
+    assert_eq!(
+        farm.produced_cargos(),
+        &[CargoType::Grain, CargoType::Livestock]
+    );
+    assert_eq!(farm.secondary_output_cargo(), Some(CargoType::Livestock));
+    farm.produce(256);
+    assert_eq!(farm.stock, 10, "grain production_rate=10");
+    assert_eq!(farm.secondary_stock, 10, "livestock production_rate=10");
+    assert_eq!(farm.output_cargo(), CargoType::Grain);
 }

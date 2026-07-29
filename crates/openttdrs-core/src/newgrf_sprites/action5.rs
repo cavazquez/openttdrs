@@ -57,6 +57,10 @@ pub const BRIDGE_DECKS_ACTION5_SLOT_COUNT: usize = 24;
 pub const CANALS_ACTION5_SLOT_COUNT: usize = 65;
 /// Primer slot de esclusa en Action5 canals (`SPR_LOCK_BASE - SPR_CANALS_BASE`).
 pub const CANALS_ACTION5_LOCK_SLOT: usize = 4;
+/// `TWOCCMAP_SPRITE_COUNT` (Action5 tipo `0x0A`).
+pub const TWOCC_ACTION5_SLOT_COUNT: usize = 256;
+/// `TRAMWAY_SPRITE_COUNT` (Action5 tipo `0x0B`).
+pub const TRAMWAY_ACTION5_SLOT_COUNT: usize = 119;
 
 /// Base `OpenTTD` de wires (`SPR_WIRE_*` / `rail_1039`).
 pub const CATENARY_WIRE_SPRITE_BASE: u32 = 1039;
@@ -342,6 +346,16 @@ define_action5_merge!(
     ACTION5_TYPE_CANALS,
     CANALS_ACTION5_SLOT_COUNT
 );
+define_action5_merge!(
+    merge_twocc_action5_block,
+    ACTION5_TYPE_TWOCC,
+    TWOCC_ACTION5_SLOT_COUNT
+);
+define_action5_merge!(
+    merge_tramway_action5_block,
+    ACTION5_TYPE_TRAMWAY,
+    TRAMWAY_ACTION5_SLOT_COUNT
+);
 
 /// Slot Action5 foundations para `tileh` 1..=14 (cimientos nivelados del cliente).
 #[must_use]
@@ -436,10 +450,12 @@ pub fn airport_preview_action5_slot(spec: crate::airport_class::AirportSpecId) -
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod slot_helper_tests {
     use super::*;
     use crate::airport_class::AirportSpecId;
     use crate::map::{SLOPE_NE, SLOPE_SE};
+    use crate::newgrf_sprites::{Action5Block, DecodedSprite};
     use crate::rail_type::RailType;
 
     #[test]
@@ -459,5 +475,80 @@ mod slot_helper_tests {
             airport_preview_action5_slot(AirportSpecId::International),
             Some(4)
         );
+    }
+
+    fn dummy_sprite(marker: u8) -> DecodedSprite {
+        DecodedSprite {
+            width: 1,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: vec![marker, 0, 0, 255],
+            mask: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn twocc_and_tramway_merge_do_not_clobber_neighbours() {
+        let block_a = Action5Block {
+            type_id: ACTION5_TYPE_TWOCC,
+            num_sprites: 2,
+            offset: 254,
+            first_preview: None,
+            sprites: vec![dummy_sprite(10), dummy_sprite(11)],
+        };
+        let mut twocc = vec![None; TWOCC_ACTION5_SLOT_COUNT];
+        // Sentinel outside the write range must stay untouched (no neighbour clobber).
+        let sentinel = dummy_sprite(99);
+        // Pre-fill a slot that the block must not touch when truncated at table end.
+        // offset 254 writes slots 254 and 255 only.
+        twocc[0] = Some(sentinel.clone());
+        merge_twocc_action5_block(&mut twocc, &block_a);
+        assert!(twocc[254].is_some());
+        assert!(twocc[255].is_some());
+        assert_eq!(twocc[0].as_ref().unwrap().rgba[0], 99);
+        assert_eq!(twocc.len(), TWOCC_ACTION5_SLOT_COUNT);
+
+        let overflow = Action5Block {
+            type_id: ACTION5_TYPE_TWOCC,
+            num_sprites: 4,
+            offset: 254,
+            first_preview: None,
+            sprites: vec![
+                dummy_sprite(1),
+                dummy_sprite(2),
+                dummy_sprite(3),
+                dummy_sprite(4),
+            ],
+        };
+        let mut twocc2 = vec![None; TWOCC_ACTION5_SLOT_COUNT];
+        merge_twocc_action5_block(&mut twocc2, &overflow);
+        assert!(twocc2[254].is_some());
+        assert!(twocc2[255].is_some());
+        // Sprites 3/4 would be slots 256/257 — discarded, table length unchanged.
+        assert_eq!(twocc2.len(), TWOCC_ACTION5_SLOT_COUNT);
+
+        let tram = Action5Block {
+            type_id: ACTION5_TYPE_TRAMWAY,
+            num_sprites: 1,
+            offset: 118,
+            first_preview: None,
+            sprites: vec![dummy_sprite(42)],
+        };
+        let mut tram_slots = vec![None; TRAMWAY_ACTION5_SLOT_COUNT];
+        tram_slots[0] = Some(sentinel);
+        merge_tramway_action5_block(&mut tram_slots, &tram);
+        assert_eq!(tram_slots[118].as_ref().unwrap().rgba[0], 42);
+        assert_eq!(tram_slots[0].as_ref().unwrap().rgba[0], 99);
+        // Wrong type_id must not write.
+        let wrong = Action5Block {
+            type_id: ACTION5_TYPE_TWOCC,
+            num_sprites: 1,
+            offset: 0,
+            first_preview: None,
+            sprites: vec![dummy_sprite(7)],
+        };
+        merge_tramway_action5_block(&mut tram_slots, &wrong);
+        assert_eq!(tram_slots[0].as_ref().unwrap().rgba[0], 99);
     }
 }

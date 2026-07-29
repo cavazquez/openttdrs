@@ -19,8 +19,8 @@ no existe. Ningún nivel implica compatibilidad binaria o de red con OpenTTD.
 | Tick y determinismo | **Alta** | Tick de 27 ms, RNG/orden autoritativo, hash canónico, replay y save/load deterministas |
 | Carretera | **Alta funcional / media exacta** | Construcción, depósitos, paradas, overtaking y tablas de movimiento; quedan RVSB/dársenas y escala |
 | Ferrocarril | **Alta funcional / media exacta** | Consists, railtypes, señales, PBS/YAPF, túneles/puentes y plataformas; los oráculos externos cubren escenarios acotados |
-| Economía y carga | **Media** | Catálogo vanilla multi-clima (#224): labels/slots por landscape, packets, transfer/deliver, CargoDist y ratings; NewGRF/cargos custom incompletos |
-| Pueblos e industrias | **Media** | Crecimiento + I/O industria por clima sin aliases temperate (#224); layouts/gráficos Arctic/Tropic/Toyland aún parciales |
+| Economía y carga | **Media** | Catálogo multi-clima (#224/#273): pagos Oil/Wood tropic, Farm dual-output, packets/transfer/CargoDist; NewGRF/cargos custom incompletos |
+| Pueblos e industrias | **Media** | I/O por clima (#224/#273): UI fundación Arctic/Tropic/Toyland; layouts/gráficos aún parciales |
 | Órdenes y horarios | **Media-alta en core / media en UI** | Full-load all/any, no-load/no-unload, transfer, non-stop/go-via, stop-location, refit de depósito, condicionales y timetable-start; la UI no expone todo |
 | Fiabilidad y servicio | **Media en core / inicial en UI** | Averías normales/reducidas/OFF configurables desde Ajustes, intervalos días/porcentaje, servicio y autoenvío a depósito; falta el editor completo de intervalos/unbunch |
 | Aviones | **Media** | Aeropuertos FTA, compra, vuelo, ruido y crashes; presentación y casos límite incompletos |
@@ -908,6 +908,9 @@ Checklist versionado de superficies de UI. Los conteos deben coincidir con
 | AirportPicker | herramienta aeropuerto | |
 | RoadStopPicker | herramienta bus / parada camión | NewGRF RoadStops |
 | ObjectPicker | Landscape → Objeto | vanilla 0/1 + NewGRF 1×1 |
+| DockPicker / BuoyPicker / DepotBuildPicker | agua / depósitos | MVP #270: chrome + lifecycle tool↔picker; residual rejillas sprite 15.3 |
+| RailWaypointPicker / RoadWaypointPicker | waypoints | MVP #270 |
+| TreePicker / TerraformPicker / SignPicker | landscaping | MVP #270; residual opciones avanzadas |
 | BridgePicker | tras tramo de puente | |
 | DestinationPicker | órdenes → destino | |
 | NewsHistory | barra de noticias | |

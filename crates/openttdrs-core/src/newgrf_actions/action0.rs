@@ -240,6 +240,8 @@ pub struct ParsedVehicleMeta {
     pub ocean_speed_frac: u8,
     pub canal_speed_frac: u8,
     pub sound_effect: u8,
+    /// Action0 ship `0x1E` CTT include → bitmask temperate (`0` = lista vanilla).
+    pub refit_mask: u32,
 }
 
 impl ParsedVehicleMeta {
@@ -310,6 +312,7 @@ impl ParsedVehicleMeta {
             ocean_speed_frac: 0,
             canal_speed_frac: 0,
             sound_effect: 0,
+            refit_mask: 0,
         })
     }
 }
@@ -3056,6 +3059,22 @@ fn parse_ship_property(
             skip_bytes(payload, i, metas.len().checked_mul(2)?)?;
         }
         0x1B | 0x22 => skip_bytes(payload, i, metas.len())?,
+        // CTT refit include (`0x1E`) / exclude (`0x1F`): BYTE count + N cargo indices.
+        0x1E | 0x1F => {
+            for meta in metas {
+                let count = usize::from(read_u8(payload, i)?);
+                let mut mask = 0u32;
+                for _ in 0..count {
+                    let ctype = read_u8(payload, i)?;
+                    if let Some(cargo) = crate::cargo::CargoType::from_temperate_id(ctype) {
+                        mask |= 1u32 << cargo.temperate_id();
+                    }
+                }
+                if prop == 0x1E && count > 0 {
+                    meta.refit_mask = mask;
+                }
+            }
+        }
         0x23 => {
             for meta in metas {
                 meta.max_speed = read_u16(payload, i)?.max(1);

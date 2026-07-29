@@ -184,8 +184,29 @@ pub(crate) fn preview_image_for_action(
         BuildMenuAction::BuildForest => {
             Some(asset_server.load::<Image>("assets/opengfx/tiles/tree_01.png"))
         }
-        BuildMenuAction::BuildFarm => {
+        BuildMenuAction::BuildFarm | BuildMenuAction::BuildFarmTropic => {
             Some(asset_server.load::<Image>("assets/opengfx/tiles/industry_2190.png"))
+        }
+        BuildMenuAction::BuildCopperOreMine => {
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/industry_2092.png"))
+        }
+        BuildMenuAction::BuildFactoryTropic => {
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/industry_2169.png"))
+        }
+        BuildMenuAction::BuildFruitPlantation | BuildMenuAction::BuildRubberPlantation => {
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/tree_01.png"))
+        }
+        BuildMenuAction::BuildPaperMill | BuildMenuAction::BuildLumberMill => {
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/industry_2063.png"))
+        }
+        BuildMenuAction::BuildFoodProcessingPlant => {
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/industry_2169.png"))
+        }
+        BuildMenuAction::BuildDiamondMine => {
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/industry_2247.png"))
+        }
+        BuildMenuAction::BuildWaterSupply => {
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/industry_2028.png"))
         }
         BuildMenuAction::BuildCottonCandy => {
             Some(asset_server.load::<Image>("assets/opengfx/tiles/industry_2100.png"))

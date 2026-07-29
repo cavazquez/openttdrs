@@ -77,7 +77,7 @@ pub const BUY_RIGHTS_RADIUS: i32 = 17;
 pub const ROAD_REBUILD_MONTHS: u8 = 6;
 pub const EXCLUSIVE_RIGHTS_MONTHS: u8 = 12;
 pub const BRIBE_UNWANTED_MONTHS: u8 = 6;
-/// Bonus al construir una estatua (`CmdDoTownAction`): +26 en OpenTTD.
+/// Bonus al construir una estatua (`CmdDoTownAction`): +26 en `OpenTTD`.
 pub const BUILD_STATUE_AUTHORITY_RATING_BOOST: i8 = 26;
 /// Rating al fallar soborno (`RATING_BRIBE_DOWN_TO`).
 pub const RATING_BRIBE_DOWN_TO: i16 = -50;
@@ -217,7 +217,7 @@ pub fn execute_town_action(
             if town.has_statue(company) {
                 return Err(TownActionError::AlreadyHasStatue);
             }
-            let tile = find_statue_tile(map, town.pos)?;
+            let tile = find_statue_tile(map, town.pos).ok_or(TownActionError::NoStatuePlace)?;
             town.set_statue(company, true);
             // Bonus de autoridad por estatua.
             let _ = town.adjust_rating(company, BUILD_STATUE_AUTHORITY_RATING_BOOST);

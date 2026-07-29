@@ -65,15 +65,13 @@ pub fn apply_command(state: &mut GameState, cmd: &Command) -> Result<(), Command
 
 fn mark_landscape_tiles_dirty_for_action(state: &mut GameState, at: crate::map::TileCoord) {
     let (map_w, map_h) = state.map.dimensions();
-    let map_w = match i32::try_from(map_w) {
-        Ok(value) => value,
-        Err(_) => return,
+    let Ok(map_w) = i32::try_from(map_w) else {
+        return;
     };
-    let map_h = match i32::try_from(map_h) {
-        Ok(value) => value,
-        Err(_) => return,
+    let Ok(map_h) = i32::try_from(map_h) else {
+        return;
     };
-    let mut add = |runtime: &mut crate::game_state::SimulationRuntime, x: i32, y: i32| {
+    let add = |runtime: &mut crate::game_state::SimulationRuntime, x: i32, y: i32| {
         if x >= 0 && y >= 0 && x < map_w && y < map_h {
             let coord = crate::map::TileCoord::new(x, y);
             if state.map.get(coord).is_none() {

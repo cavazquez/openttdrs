@@ -1,5 +1,6 @@
 //! Pagos de transporte inspirados en `GetTransportedGoodsIncome` de `OpenTTD` (Camino B).
 
+use crate::Climate;
 use crate::cargo::CargoType;
 use crate::map::TileCoord;
 
@@ -153,6 +154,24 @@ impl CargoType {
             },
         }
     }
+
+    /// Spec de pago por clima (`cargo_const.h`: Oil/Wood tropic distintos).
+    #[must_use]
+    pub const fn payment_spec_for_climate(self, climate: Climate) -> CargoPaymentSpec {
+        match (self, climate) {
+            (Self::Oil, Climate::SubTropical) => CargoPaymentSpec {
+                base_rate: 4892,
+                transit_fast_days: 25,
+                transit_slow_days: 255,
+            },
+            (Self::Wood, Climate::SubTropical) => CargoPaymentSpec {
+                base_rate: 7964,
+                transit_fast_days: 15,
+                transit_slow_days: 255,
+            },
+            _ => self.payment_spec(),
+        }
+    }
 }
 
 #[must_use]
@@ -214,6 +233,25 @@ pub fn transported_goods_income(
         distance,
         transit_days,
         cargo.payment_spec(),
+        inflation_payment,
+    )
+}
+
+/// Como [`transported_goods_income`], pero con tasas Oil/Wood tropic de 15.3.
+#[must_use]
+pub fn transported_goods_income_for_climate(
+    count: u32,
+    distance: u32,
+    transit_days: u16,
+    cargo: CargoType,
+    climate: Climate,
+    inflation_payment: u64,
+) -> i64 {
+    transported_goods_income_with_spec(
+        count,
+        distance,
+        transit_days,
+        cargo.payment_spec_for_climate(climate),
         inflation_payment,
     )
 }

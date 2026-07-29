@@ -127,8 +127,11 @@ pub(super) fn unload_vehicles(
         for packet in &mut taken {
             // P3.16: pago por tramos recorridos (`GetDistance`), no Manhattan origen→destino.
             let distance = packet.get_distance(station_pos);
-            let pay_spec =
-                crate::cargo_spec::payment_spec_for_cargo(packet.cargo, &state.cargo_spec_catalog);
+            let pay_spec = crate::cargo_spec::payment_spec_for_cargo_climate(
+                packet.cargo,
+                &state.cargo_spec_catalog,
+                state.climate,
+            );
             let part = economy::transported_goods_income_with_spec(
                 u32::from(packet.count),
                 distance,

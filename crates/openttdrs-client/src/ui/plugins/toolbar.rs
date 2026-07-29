@@ -32,7 +32,8 @@ use crate::ui::toolbar::{
     handle_order_panel_buttons, handle_rail_station_picker_buttons,
     handle_rail_type_select_buttons, handle_road_driving_side_menu_button,
     handle_road_stop_picker_buttons, handle_road_type_class_buttons,
-    handle_road_type_select_buttons, handle_settings_menu_buttons, handle_signal_picker_buttons,
+    handle_depot_build_picker_buttons, handle_dock_picker_buttons, handle_road_type_select_buttons,
+    handle_settings_menu_buttons, handle_signal_picker_buttons,
     handle_station_cargo_panel_buttons, handle_station_catalog_open_buttons,
     handle_station_class_select_buttons, handle_station_rename_buttons,
     handle_station_spec_select_buttons, handle_tile_click, handle_toolbar_switch,
@@ -267,6 +268,8 @@ impl Plugin for ToolbarUiPlugin {
                 (
                     handle_signal_picker_buttons,
                     signal_picker_on_closed,
+                    handle_dock_picker_buttons,
+                    handle_depot_build_picker_buttons,
                     handle_airport_picker_buttons,
                     airport_picker_on_closed,
                     handle_road_stop_picker_buttons,

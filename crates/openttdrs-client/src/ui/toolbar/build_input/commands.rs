@@ -161,6 +161,46 @@ pub(crate) fn command_for_action(
             pos,
             openttdrs_core::IndustrySpec::Forest,
         )),
+        BuildMenuAction::BuildFarmTropic => Some(Command::PlaceIndustrySpec(
+            pos,
+            openttdrs_core::IndustrySpec::FarmTropic,
+        )),
+        BuildMenuAction::BuildCopperOreMine => Some(Command::PlaceIndustrySpec(
+            pos,
+            openttdrs_core::IndustrySpec::CopperOreMine,
+        )),
+        BuildMenuAction::BuildFactoryTropic => Some(Command::PlaceIndustrySpec(
+            pos,
+            openttdrs_core::IndustrySpec::FactoryTropic,
+        )),
+        BuildMenuAction::BuildFruitPlantation => Some(Command::PlaceIndustrySpec(
+            pos,
+            openttdrs_core::IndustrySpec::FruitPlantation,
+        )),
+        BuildMenuAction::BuildRubberPlantation => Some(Command::PlaceIndustrySpec(
+            pos,
+            openttdrs_core::IndustrySpec::RubberPlantation,
+        )),
+        BuildMenuAction::BuildPaperMill => Some(Command::PlaceIndustrySpec(
+            pos,
+            openttdrs_core::IndustrySpec::PaperMill,
+        )),
+        BuildMenuAction::BuildFoodProcessingPlant => Some(Command::PlaceIndustrySpec(
+            pos,
+            openttdrs_core::IndustrySpec::FoodProcessingPlant,
+        )),
+        BuildMenuAction::BuildDiamondMine => Some(Command::PlaceIndustrySpec(
+            pos,
+            openttdrs_core::IndustrySpec::DiamondMine,
+        )),
+        BuildMenuAction::BuildWaterSupply => Some(Command::PlaceIndustrySpec(
+            pos,
+            openttdrs_core::IndustrySpec::WaterSupply,
+        )),
+        BuildMenuAction::BuildLumberMill => Some(Command::PlaceIndustrySpec(
+            pos,
+            openttdrs_core::IndustrySpec::LumberMill,
+        )),
         BuildMenuAction::BuildFarm => Some(Command::PlaceIndustrySpec(
             pos,
             openttdrs_core::IndustrySpec::Farm,

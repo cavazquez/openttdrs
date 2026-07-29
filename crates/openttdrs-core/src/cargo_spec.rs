@@ -125,10 +125,20 @@ pub const fn cargo_type_label(cargo: CargoType) -> &'static str {
     cargo.label()
 }
 
-/// Spec de pago: override `NewGRF` si hay `initial_payment`/`transit_*`; si no, temperate.
+/// Spec de pago: override `NewGRF` si hay `initial_payment`/`transit_*`; si no, vanilla temperate.
 #[must_use]
 pub fn payment_spec_for_cargo(cargo: CargoType, catalog: &[CargoSpecDef]) -> CargoPaymentSpec {
-    let vanilla = cargo.payment_spec();
+    payment_spec_for_cargo_climate(cargo, catalog, crate::Climate::Temperate)
+}
+
+/// Como [`payment_spec_for_cargo`], con tasas Oil/Wood tropic de 15.3 si no hay override `NewGRF`.
+#[must_use]
+pub fn payment_spec_for_cargo_climate(
+    cargo: CargoType,
+    catalog: &[CargoSpecDef],
+    climate: crate::Climate,
+) -> CargoPaymentSpec {
+    let vanilla = cargo.payment_spec_for_climate(climate);
     let Some(def) = cargo_spec_by_label(catalog, cargo_type_label(cargo)) else {
         return vanilla;
     };

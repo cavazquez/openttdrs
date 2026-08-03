@@ -43,6 +43,17 @@ pub(crate) const fn news_has_audible_alert(news_type: NewsType) -> bool {
     )
 }
 
+/// Eventos de frecuencia alta que deben conservarse para el historial y el
+/// diagnóstico, pero no interrumpir la partida mediante ticker, popup o punto
+/// de aviso. Los hitos equivalentes tienen tipos propios (p. ej. primera
+/// entrega) y siguen su configuración habitual.
+pub(crate) const fn news_is_history_only(news_type: NewsType) -> bool {
+    matches!(
+        news_type,
+        NewsType::CargoDelivered | NewsType::VehicleAdvice
+    )
+}
+
 #[derive(Resource, Default)]
 pub(crate) struct NewsUiState {
     pub ticker: Option<TickerState>,
@@ -126,5 +137,13 @@ mod tests {
         assert!(news_has_audible_alert(NewsType::FirstCargoDelivered));
         assert!(news_has_audible_alert(NewsType::FirstVehicleRunning));
         assert!(news_has_audible_alert(NewsType::Accident));
+    }
+
+    #[test]
+    fn recurrent_delivery_and_vehicle_advice_do_not_interrupt_the_ui() {
+        assert!(news_is_history_only(NewsType::CargoDelivered));
+        assert!(news_is_history_only(NewsType::VehicleAdvice));
+        assert!(!news_is_history_only(NewsType::FirstCargoDelivered));
+        assert!(!news_is_history_only(NewsType::Accident));
     }
 }

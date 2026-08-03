@@ -11,7 +11,7 @@ use crate::ui::hud::{HudBuildFeedback, SelectedTileInfo};
 use super::{
     COMPANY_DISPLAY_NAME, NewsUiState, StatusBarDateText, StatusBarDefaultText, StatusBarMoneyText,
     StatusBarReminderDot, StatusBarTickerText, TICKER_SCROLL_MAX, TICKER_SCROLL_SPEED, TickerState,
-    news_has_audible_alert,
+    news_has_audible_alert, news_is_history_only,
 };
 
 fn active_company_display_name(sim: &SimWorld) -> String {
@@ -151,6 +151,10 @@ pub(crate) fn drain_news_events(
             .unwrap_or((NewsDisplayMode::Full, NewsType::CompanyInfo));
         if let Some(item) = sim.state.news.items.iter_mut().find(|item| item.id == id) {
             item.display = display;
+        }
+        if news_is_history_only(news_type) {
+            debug!("noticias: id={id} tipo={news_type:?}; sólo historial y log");
+            continue;
         }
         match display {
             NewsDisplayMode::Full => {

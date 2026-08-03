@@ -1020,6 +1020,46 @@ mod tests {
         assert!(spread, "debe poder propagarse a hierba vecina");
     }
 
+    /// Paridad con OpenTTD #15133: la nieve parcial conserva una densidad de
+    /// nieve, no de césped; no debe impedir que un árbol adulto se propague.
+    #[test]
+    fn grown_can_spread_to_partially_snowy_neighbor() {
+        let mut map = Map::new_flat(64, 64, 0);
+        let c = TileCoord::new(31, 31);
+        force_forest(&mut map, c, with_tree_or_field_stage(0, TREE_GROWTH_GROWN));
+        for y in 30..=32 {
+            for x in 30..=32 {
+                let t = TileCoord::new(x, y);
+                if t == c {
+                    continue;
+                }
+                map.set_kind(t, TileKind::Grass).unwrap();
+                map.set_mapt_m5(t, 0, clear_ground_m5(CLEAR_GROUND_SNOW, 1))
+                    .unwrap();
+            }
+        }
+
+        let mut loop_state = TileLoopState::default();
+        let mut spread = false;
+        for tick in 0..500_000u64 {
+            grow_trees_at(&mut map, tick, 7, &mut loop_state);
+            let forests = (30..=32)
+                .flat_map(|y| (30..=32).map(move |x| TileCoord::new(x, y)))
+                .filter(|&t| map.get_kind(t) == Some(TileKind::Forest))
+                .count();
+            if forests >= 2 {
+                spread = true;
+                break;
+            }
+            if map.get_kind(c) != Some(TileKind::Forest)
+                || tree_or_field_stage(map.get(c).unwrap().m5) != TREE_GROWTH_GROWN
+            {
+                force_forest(&mut map, c, with_tree_or_field_stage(0, TREE_GROWTH_GROWN));
+            }
+        }
+        assert!(spread, "debe poder propagarse a nieve parcial");
+    }
+
     #[test]
     fn clear_alps_makes_snow_above_line_and_thaws_below() {
         let mut map = Map::new_flat(8, 8, 0);

@@ -16,7 +16,9 @@ pub(crate) fn order_for_clicked_tile(
     let vehicle = sim.state.vehicles.iter().find(|v| v.id == vehicle_id)?;
     if let Some(station) = sim.state.stations.iter().find(|station| station.pos == pos) {
         if station.is_waypoint() {
-            return (vehicle.kind == VehicleKind::Train).then_some(VehicleOrder::waypoint(pos));
+            return station
+                .can_service_vehicle(vehicle.kind)
+                .then_some(VehicleOrder::waypoint(pos));
         }
         return station
             .can_service_vehicle(vehicle.kind)
@@ -30,5 +32,43 @@ pub(crate) fn order_for_clicked_tile(
             Some(VehicleOrder::depot(pos))
         }
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use openttdrs_core::{Station, StopKind, Vehicle};
+
+    #[test]
+    fn road_vehicle_can_add_a_road_waypoint_order() {
+        let pos = TileCoord::new(3, 3);
+        let mut sim = SimWorld::default();
+        sim.state
+            .vehicles
+            .push(Vehicle::new(1, VehicleKind::Bus, pos, pos));
+        sim.state
+            .stations
+            .push(Station::new_with_kind(pos, StopKind::RoadWaypoint));
+
+        assert_eq!(
+            order_for_clicked_tile(&sim, 1, pos),
+            Some(VehicleOrder::waypoint(pos))
+        );
+        assert!(order_pick_valid(&sim, 1, pos));
+    }
+
+    #[test]
+    fn incompatible_waypoint_is_not_offered_as_an_order() {
+        let pos = TileCoord::new(3, 3);
+        let mut sim = SimWorld::default();
+        sim.state
+            .vehicles
+            .push(Vehicle::new(1, VehicleKind::Train, pos, pos));
+        sim.state
+            .stations
+            .push(Station::new_with_kind(pos, StopKind::RoadWaypoint));
+
+        assert_eq!(order_for_clicked_tile(&sim, 1, pos), None);
     }
 }

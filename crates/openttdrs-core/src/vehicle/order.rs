@@ -291,7 +291,7 @@ impl From<VehicleOrder> for VehicleOrderSerde {
             } => Self::Conditional {
                 condition,
                 comparator: Some(comparator),
-                value,
+                value: condition.normalize_value(value),
                 jump_to,
             },
         }
@@ -380,7 +380,7 @@ impl From<VehicleOrderSerde> for VehicleOrder {
                 comparator: comparator
                     .or_else(|| condition.legacy_comparator())
                     .unwrap_or(OrderConditionComparator::MoreThan),
-                value,
+                value: condition.normalize_value(value),
                 jump_to,
             },
         }
@@ -494,6 +494,30 @@ impl OrderConditionKind {
         }
     }
 
+    /// Normaliza el umbral a su dominio válido para que órdenes antiguas o
+    /// importadas no puedan expresar condiciones imposibles.
+    #[must_use]
+    pub const fn normalize_value(self, value: u16) -> u16 {
+        match self {
+            // OpenTTD expresa ambas fiabilidades como porcentaje entero.
+            Self::Reliability | Self::MaxReliability => {
+                if value > 100 {
+                    100
+                } else {
+                    value
+                }
+            }
+            Self::RequiresService | Self::Unconditionally | Self::DrivingBackwards => {
+                if value > 1 {
+                    1
+                } else {
+                    value
+                }
+            }
+            _ => value,
+        }
+    }
+
     #[must_use]
     pub const fn as_u8(self) -> u8 {
         match self {
@@ -550,7 +574,7 @@ impl VehicleOrder {
         Self::Conditional {
             condition,
             comparator,
-            value,
+            value: condition.normalize_value(value),
             jump_to,
         }
     }
@@ -565,7 +589,7 @@ impl VehicleOrder {
         Self::Conditional {
             condition,
             comparator,
-            value,
+            value: condition.normalize_value(value),
             jump_to,
         }
     }
@@ -630,6 +654,9 @@ impl VehicleOrder {
         };
         let lhs = Self::condition_value(condition, vehicle);
         let comparator = condition.legacy_comparator().unwrap_or(comparator);
+        // Protege órdenes materializadas antes de esta validación (p. ej.
+        // deserializadas por una versión anterior del port).
+        let value = condition.normalize_value(value);
         let ok = match condition {
             OrderConditionKind::Unconditionally => true,
             OrderConditionKind::RequiresService | OrderConditionKind::DrivingBackwards => {
@@ -1670,5 +1697,45 @@ mod tests {
             0,
         );
         assert_eq!(v.orders[0].evaluate_conditional(&v), 0);
+    }
+
+    #[test]
+    fn reliability_condition_thresholds_are_capped_at_100_percent() {
+        let order = VehicleOrder::conditional_with(
+            OrderConditionKind::MaxReliability,
+            OrderConditionComparator::Equal,
+            101,
+            0,
+        );
+        assert!(matches!(
+            order,
+            VehicleOrder::Conditional { value: 100, .. }
+        ));
+
+        // Una orden materializada por una versión anterior también se evalúa
+        // con el dominio correcto, aun si todavía contiene 101 en memoria.
+        let mut v = sample_vehicle();
+        v.reliability = 10_000;
+        v.orders = vec![
+            VehicleOrder::Conditional {
+                condition: OrderConditionKind::MaxReliability,
+                comparator: OrderConditionComparator::Equal,
+                value: 101,
+                jump_to: 0,
+            },
+            VehicleOrder::station(TileCoord::new(1, 1)),
+        ];
+        v.current_order = 0;
+        assert_eq!(v.orders[0].evaluate_conditional(&v), 0);
+
+        // La carga JSON se normaliza igualmente, evitando reintroducir el
+        // valor fuera de rango desde saves propios antiguos.
+        let mut json = serde_json::to_value(order).expect("serialize order");
+        json["Conditional"]["value"] = serde_json::json!(101);
+        let loaded: VehicleOrder = serde_json::from_value(json).expect("load order");
+        assert!(matches!(
+            loaded,
+            VehicleOrder::Conditional { value: 100, .. }
+        ));
     }
 }

@@ -485,7 +485,11 @@ def export_ottdmap_from_chunks(chunks: dict, version: int) -> bytes:
     m3hi = chunks.get("M3HI", b"")
     map2 = chunks.get("MAP2", b"")
     map7 = chunks.get("MAP7", b"")
-    obj_types: dict[int, int] = chunks.get("OBJS", {})  # type: ignore[assignment]
+    raw_obj_types = chunks.get("OBJS", {})
+    # Algunas variantes de save codifican OBJS fuera de la tabla que entiende
+    # ``parse_objs_table``. En ese caso se conserva MAP5 en vez de tratar el
+    # blob crudo como un mapeo de tesela → tipo y abortar la exportación.
+    obj_types: dict[int, int] = raw_obj_types if isinstance(raw_obj_types, dict) else {}
 
     if len(maph) < expected:
         maph = maph + b"\x00" * (expected - len(maph))
@@ -789,7 +793,8 @@ def main() -> None:
             f"Coast {water['coast']:,}, otro {water['other']:,}"
         )
 
-    obj_types: dict[int, int] = chunks.get("OBJS", {})  # type: ignore[assignment]
+    raw_obj_types = chunks.get("OBJS", {})
+    obj_types: dict[int, int] = raw_obj_types if isinstance(raw_obj_types, dict) else {}
     if obj_types:
         n_fixed = sum(
             1

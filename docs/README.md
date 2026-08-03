@@ -22,6 +22,7 @@ Un archivo vivo por temática. Orden sugerido al entrar:
 | [MAPA_Y_FERROCARRIL.md](MAPA_Y_FERROCARRIL.md) | Flujo `.ottdmap`, MAPT/chunks, señales, autorail, waypoints |
 | [GRAFICOS.md](GRAFICOS.md) | Sprites OpenGFX + handoff terreno |
 | [RENDIMIENTO.md](RENDIMIENTO.md) | PERF mapas grandes + benchmarks |
+| [REFERENCIAS_EXTERNAS.md](REFERENCIAS_EXTERNAS.md) | Proyectos locales de consulta (OpenLoco / FreeRCT) |
 
 ### Assets (no markdown)
 
@@ -54,4 +55,4 @@ Planes y roadmaps cerrados o absorbidos en esta consolidación:
 
 ---
 
-*Última actualización: 2026-07-25 (consolidación temática)*
+*Última actualización: 2026-08-03 (referencias externas; consolidación temática 2026-07-25)*

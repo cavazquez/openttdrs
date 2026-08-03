@@ -24,6 +24,7 @@ target-agent
 
 # Código de referencia (no versionar el clone completo)
 /reference/openttd-upstream/
+/reference/ecosystem/
 
 # Assets descargados por los scripts (gráficos y sonidos)
 /assets/*

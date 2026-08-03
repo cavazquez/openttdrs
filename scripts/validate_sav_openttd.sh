@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Smoke real: carga un .sav con OpenTTD dedicated (#66 / #226).
-# Si OpenTTD no está instalado, sale 0 (SKIP).
+# Si OpenTTD no está instalado, sale 0 (SKIP), salvo
+# OPENTTDRS_REQUIRE_OPENTTD=1 para gates de release.
 # Falla si el log indica corrupción / load fallido — aunque el proceso salga 0
 # (dedicated cierra el server tras un load fallido con rc=0).
 set -euo pipefail
@@ -12,9 +13,18 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 #   demo_openttd.sav (mapa rico+tren+bus+industria)
 # Round-trip OpenTTD→openttdrs: scripts/roundtrip_sav_openttd.sh
 SAV="${1:-$ROOT/crates/openttdrs-core/tests/fixtures/mvp_openttd_load.sav}"
-LOG="${TMPDIR:-/tmp}/openttdrs_sav_openttd.log"
+if [[ -n "${OPENTTDRS_OTTD_LOG_DIR:-}" ]]; then
+  mkdir -p "$OPENTTDRS_OTTD_LOG_DIR"
+  LOG="$OPENTTDRS_OTTD_LOG_DIR/$(basename "${SAV%.sav}").load.log"
+else
+  LOG="${TMPDIR:-/tmp}/openttdrs_sav_openttd.log"
+fi
 CFGDIR="${TMPDIR:-/tmp}/openttdrs_sav_openttd_cfg"
 TIMEOUT_SECS="${OPENTTD_SMOKE_TIMEOUT:-12}"
+DEDICATED_ARGS=(-D)
+if [[ -n "${OPENTTD_SMOKE_PORT:-}" ]]; then
+  DEDICATED_ARGS=(-D ":${OPENTTD_SMOKE_PORT}")
+fi
 
 if [[ -z "${OPENTTD:-}" ]]; then
   if [[ -x "$ROOT/reference/openttd-upstream/build/openttd" ]]; then
@@ -27,6 +37,10 @@ else
 fi
 
 if ! command -v "$OPENTTD_BIN" >/dev/null 2>&1 && [[ ! -x "$OPENTTD_BIN" ]]; then
+  if [[ "${OPENTTDRS_REQUIRE_OPENTTD:-0}" == "1" ]]; then
+    echo "FAIL: OpenTTD requerido pero no encontrado (OPENTTD=$OPENTTD_BIN)." >&2
+    exit 1
+  fi
   echo "SKIP: OpenTTD no encontrado (exportá OPENTTD=/ruta/openttd para probar)."
   exit 0
 fi
@@ -51,7 +65,7 @@ fi
 # Si el load OK, el server sigue vivo → timeout (124) = éxito.
 set +e
 timeout --signal=KILL "$TIMEOUT_SECS" \
-  "$OPENTTD_BIN" -D -g "$SAV" -c "$CFGDIR/openttd.cfg" -x \
+  "$OPENTTD_BIN" "${DEDICATED_ARGS[@]}" -g "$SAV" -c "$CFGDIR/openttd.cfg" -x \
   >"$LOG" 2>&1
 rc=$?
 set -e

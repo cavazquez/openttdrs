@@ -94,6 +94,71 @@ jobs:
             assets/opengfx/atlas
             static
 
+  openttd-validation:
+    needs: validate
+    runs-on: ubuntu-latest
+    env:
+      OPENTTD_VERSION: "15.3"
+      OPENTTD_ARCHIVE: openttd-15.3-linux-generic-amd64.tar.xz
+      OPENTTD_SHA256: f49eb25d61b00f8f4d332fee02b530ad75552d1efb8f2bb01e7ca5e6540fe059
+      OPENGFX_ARCHIVE: opengfx-7.1-all.zip
+      OPENGFX_SHA256: 928fcf34efd0719a3560cbab6821d71ce686b6315e8825360fba87a7a94d7846
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Recuperar OpenTTD 15.3 oficial desde caché
+        id: openttd-cache
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cache/openttdrs/openttd-15.3-linux-generic-amd64.tar.xz
+            ~/.cache/openttdrs/opengfx-7.1-all.zip
+          key: openttd-15.3-opengfx-7.1-f49eb25d61b0-928fcf34efd0
+
+      - name: Descargar y verificar OpenTTD 15.3 oficial
+        if: steps.openttd-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/.cache/openttdrs
+          curl --fail --location --retry 3 --retry-all-errors \
+            "https://cdn.openttd.org/openttd-releases/${OPENTTD_VERSION}/${OPENTTD_ARCHIVE}" \
+            --output ~/.cache/openttdrs/${OPENTTD_ARCHIVE}
+          curl --fail --location --retry 3 --retry-all-errors \
+            "https://cdn.openttd.org/opengfx-releases/7.1/${OPENGFX_ARCHIVE}" \
+            --output ~/.cache/openttdrs/${OPENGFX_ARCHIVE}
+          echo "${OPENTTD_SHA256}  $HOME/.cache/openttdrs/${OPENTTD_ARCHIVE}" | sha256sum --check --strict
+          echo "${OPENGFX_SHA256}  $HOME/.cache/openttdrs/${OPENGFX_ARCHIVE}" | sha256sum --check --strict
+
+      - name: Verificar OpenTTD recuperado
+        run: |
+          echo "${OPENTTD_SHA256}  $HOME/.cache/openttdrs/${OPENTTD_ARCHIVE}" | sha256sum --check --strict
+          echo "${OPENGFX_SHA256}  $HOME/.cache/openttdrs/${OPENGFX_ARCHIVE}" | sha256sum --check --strict
+
+      - name: Extraer binario oficial
+        run: |
+          mkdir -p "$RUNNER_TEMP/openttd-validation"
+          tar -xJf "$HOME/.cache/openttdrs/${OPENTTD_ARCHIVE}" -C "$RUNNER_TEMP/openttd-validation" --strip-components=1
+          mkdir -p "$RUNNER_TEMP/openttd-validation/opengfx"
+          unzip -q "$HOME/.cache/openttdrs/${OPENGFX_ARCHIVE}" -d "$RUNNER_TEMP/openttd-validation/opengfx"
+          tar -xf "$RUNNER_TEMP/openttd-validation/opengfx/opengfx-7.1.tar" -C "$RUNNER_TEMP/openttd-validation/baseset" --strip-components=1
+          test -x "$RUNNER_TEMP/openttd-validation/openttd"
+          test -f "$RUNNER_TEMP/openttd-validation/baseset/opengfx.obg"
+
+      - name: Load y roundtrip SAV sin SKIP
+        env:
+          OPENTTD: ${{ runner.temp }}/openttd-validation/openttd
+          OPENTTDRS_OTTD_VERSION: "15.3"
+          OPENTTDRS_OTTD_ARTIFACT_DIR: artifacts/openttd-validation
+        run: ./scripts/validate_sav_openttd_matrix.sh
+
+      - name: Publicar logs y SAV de validación
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: openttd-15.3-sav-validation
+          retention-days: 14
+          if-no-files-found: error
+          path: artifacts/openttd-validation
+
   build:
     needs: [validate, runtime-assets]
     strategy:
@@ -175,7 +240,7 @@ jobs:
 
   publish:
     if: github.ref_type == 'tag'
-    needs: [validate, build]
+    needs: [validate, build, openttd-validation]
     runs-on: ubuntu-latest
     permissions:
       contents: write

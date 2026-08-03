@@ -6,15 +6,25 @@
 #
 # Default: mvp_openttd_rich.sav (estaciones + tren + bus + industria).
 # Requiere binario OpenTTD (reference/.../openttd o $OPENTTD).
-# Si no hay binario: SKIP (exit 0). Fallos de load/save/import → exit 1.
+# Si no hay binario: SKIP (exit 0), salvo OPENTTDRS_REQUIRE_OPENTTD=1.
+# Fallos de load/save/import → exit 1.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SAV="${1:-$ROOT/crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav}"
 TMP="${TMPDIR:-/tmp}/openttdrs_roundtrip_$$"
 CFGDIR="$TMP/cfg"
-LOG="$TMP/openttd.log"
+if [[ -n "${OPENTTDRS_OTTD_LOG_DIR:-}" ]]; then
+  mkdir -p "$OPENTTDRS_OTTD_LOG_DIR"
+  LOG="$OPENTTDRS_OTTD_LOG_DIR/$(basename "${SAV%.sav}").roundtrip.log"
+else
+  LOG="$TMP/openttd.log"
+fi
 OUT_NAME="openttdrs_resaved"
 OUT_SAV=""
+DEDICATED_ARGS=(-D)
+if [[ -n "${OPENTTD_SMOKE_PORT:-}" ]]; then
+  DEDICATED_ARGS=(-D ":${OPENTTD_SMOKE_PORT}")
+fi
 
 if [[ -z "${OPENTTD:-}" ]]; then
   if [[ -x "$ROOT/reference/openttd-upstream/build/openttd" ]]; then
@@ -27,6 +37,10 @@ else
 fi
 
 if ! command -v "$OPENTTD_BIN" >/dev/null 2>&1 && [[ ! -x "$OPENTTD_BIN" ]]; then
+  if [[ "${OPENTTDRS_REQUIRE_OPENTTD:-0}" == "1" ]]; then
+    echo "FAIL: OpenTTD requerido pero no encontrado (OPENTTD=$OPENTTD_BIN)." >&2
+    exit 1
+  fi
   echo "SKIP: OpenTTD no encontrado (exportá OPENTTD=/ruta/openttd)."
   exit 0
 fi
@@ -57,7 +71,7 @@ set +e
   sleep 1
   echo quit
 ) | timeout --signal=KILL 25 \
-  "$OPENTTD_BIN" -D -g "$SAV" -c "$CFGDIR/openttd.cfg" -x \
+  "$OPENTTD_BIN" "${DEDICATED_ARGS[@]}" -g "$SAV" -c "$CFGDIR/openttd.cfg" -x \
   >"$LOG" 2>&1
 rc=$?
 set -e
@@ -78,6 +92,11 @@ if [[ -z "$OUT_SAV" || ! -f "$OUT_SAV" ]]; then
 fi
 
 echo "OK: OpenTTD re-guardó → $OUT_SAV ($(wc -c <"$OUT_SAV") bytes)"
+
+if [[ -n "${OPENTTDRS_OTTD_ARTIFACT_DIR:-}" ]]; then
+  mkdir -p "$OPENTTDRS_OTTD_ARTIFACT_DIR"
+  cp "$OUT_SAV" "$OPENTTDRS_OTTD_ARTIFACT_DIR/$(basename "${SAV%.sav}").resaved.sav"
+fi
 
 # 3) Import openttdrs + assert subconjunto (strict si el input es el fixture rico).
 export OPENTTDRS_ROUNDTRIP_SAV="$OUT_SAV"

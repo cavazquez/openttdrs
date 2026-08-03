@@ -90,6 +90,28 @@ fn clearing_buoy_restores_underlying_canal_water() {
 }
 
 #[test]
+fn place_buoy_under_bridge_keeps_waterway_available() {
+    use crate::BridgeType;
+
+    let mut s = GameState::new(8, 8);
+    let c = |x: i32| TileCoord::new(x, 4);
+    for x in 2..=5 {
+        s.map.set_kind(c(x), TileKind::Water).unwrap();
+    }
+    apply_command(
+        &mut s,
+        &Command::PlaceRoadBridge(c(1), c(6), BridgeType::Wooden),
+    )
+    .unwrap();
+
+    let buoy = c(3);
+    assert_eq!(s.map.get_kind(buoy), Some(TileKind::Water));
+    apply_command(&mut s, &Command::PlaceBuoy(buoy)).unwrap();
+    assert_eq!(s.map.get_kind(buoy), Some(TileKind::Station));
+    assert_eq!(s.stations[0].stop_kind, StopKind::Buoy);
+}
+
+#[test]
 fn place_buoy_rejects_land() {
     let mut s = GameState::new(8, 8);
     let e = apply_command(&mut s, &Command::PlaceBuoy(TileCoord::new(2, 2))).unwrap_err();

@@ -4,10 +4,10 @@ use bevy::prelude::*;
 use openttdrs_core::Command;
 use openttdrs_core::prelude::*;
 use openttdrs_core::{
-    AirportSpecId, CargoType, ENGINE_AIRCRAFT_DAKOTA, ENGINE_AIRCRAFT_TRICARIO, ENGINE_SHIP_FERRY,
-    ENGINE_SHIP_MPS, ENGINE_TRAIN_KIRBY, ENGINE_WAGON_COAL, Industry, IndustryKind, IndustrySpec,
-    OrderNonStop, PathNetwork, RAIL_TB_LEFT, RAIL_TB_LOWER, RAIL_TB_RIGHT, RAIL_TB_UPPER,
-    RAIL_TB_X, SIGTYPE_BLOCK, find_path,
+    AirportSpecId, BridgeType, CargoType, ENGINE_AIRCRAFT_DAKOTA, ENGINE_AIRCRAFT_TRICARIO,
+    ENGINE_SHIP_FERRY, ENGINE_SHIP_MPS, ENGINE_TRAIN_KIRBY, ENGINE_WAGON_COAL, Industry,
+    IndustryKind, IndustrySpec, OrderNonStop, PathNetwork, RAIL_TB_LEFT, RAIL_TB_LOWER,
+    RAIL_TB_RIGHT, RAIL_TB_UPPER, RAIL_TB_X, RAIL_TB_Y, SIGTYPE_BLOCK, find_path,
 };
 
 /// Carretera del barrio residencial (eje X).
@@ -47,6 +47,21 @@ const SHOWCASE_RAIL_SIGNAL_XS: [i32; 5] = [18, 25, 35, 41, 46];
 /// Permanencia suficiente para que dos servicios puedan compartir la estación
 /// y ocupar un andén cada uno, sin convertir la parada en instantánea.
 const SHOWCASE_RAIL_DWELL_TICKS: u32 = 512;
+// Exhibiciones ferroviarias independientes, inmediatamente al sur del
+// servicio carbonero. Son visibles en la misma cámara y no comparten vía con
+// la red de producción: cada una permite probar una topología sin detener a
+// los trenes de la mina.
+const SHOWCASE_BRIDGE_Y: i32 = 40;
+const SHOWCASE_BRIDGE_WEST: TileCoord = TileCoord::new(40, SHOWCASE_BRIDGE_Y);
+const SHOWCASE_BRIDGE_EAST: TileCoord = TileCoord::new(49, SHOWCASE_BRIDGE_Y);
+const SHOWCASE_BRIDGE_START: TileCoord = TileCoord::new(33, SHOWCASE_BRIDGE_Y);
+const SHOWCASE_BRIDGE_END: TileCoord = TileCoord::new(56, SHOWCASE_BRIDGE_Y);
+const SHOWCASE_JUNCTION_TOP_Y: i32 = 42;
+const SHOWCASE_JUNCTION_BOTTOM_Y: i32 = 43;
+const SHOWCASE_TUNNEL_NE: TileCoord = TileCoord::new(16, 45);
+const SHOWCASE_TUNNEL_SW: TileCoord = TileCoord::new(14, 45);
+const SHOWCASE_TUNNEL_START: TileCoord = TileCoord::new(4, 45);
+const SHOWCASE_TUNNEL_END: TileCoord = TileCoord::new(30, 45);
 /// Punto de control sobre la vía de regreso (tests de topología de doble vía).
 #[cfg(test)]
 const SHOWCASE_RAIL_EAST_RETURN: TileCoord = TileCoord::new(42, SHOWCASE_RAIL_RETURN_Y);
@@ -83,6 +98,7 @@ pub(crate) fn place_gameplay_showcase(state: &mut GameState) {
     place_factory_chain_block(state);
     place_town_block(state);
     place_rail_showcase(state);
+    place_rail_exhibits(state);
     place_pathfinding_lab(state);
     place_water_showcase(state);
     place_air_showcase(state);
@@ -264,6 +280,133 @@ fn place_rail_showcase(state: &mut GameState) {
     name_station(state, SHOWCASE_RAIL_EAST, "Central Eléctrica");
 }
 
+/// Tres redes ferroviarias separadas del corredor carbonero:
+///
+/// * un shuttle que cruza un puente real;
+/// * un laboratorio de cruzamientos, desvíos, merges y doble-slip;
+/// * un shuttle que atraviesa un túnel real.
+///
+/// Mantenerlas desconectadas permite observar cada caso sin que las reservas
+/// PBS o los cambios de vía del servicio principal oculten el comportamiento.
+fn place_rail_exhibits(state: &mut GameState) {
+    place_showcase_rail_bridge(state);
+    place_showcase_junction_lab(state);
+    place_showcase_rail_tunnel(state);
+}
+
+fn place_showcase_rail_bridge(state: &mut GameState) {
+    for x in (SHOWCASE_BRIDGE_WEST.x + 1)..SHOWCASE_BRIDGE_EAST.x {
+        let water = TileCoord::new(x, SHOWCASE_BRIDGE_Y);
+        let _ = state.map.set_kind(water, TileKind::Water);
+        let _ = state.map.set_height(water, 1);
+        let _ = state.map.set_mapt_m5(water, 0x60, 0);
+    }
+    if let Err(error) = apply_command(
+        state,
+        &Command::PlaceRailBridge(
+            SHOWCASE_BRIDGE_WEST,
+            SHOWCASE_BRIDGE_EAST,
+            BridgeType::Wooden,
+        ),
+    ) {
+        warn!("Showcase: no se pudo construir puente ferroviario: {error:?}");
+    }
+    for x in SHOWCASE_BRIDGE_START.x..SHOWCASE_BRIDGE_WEST.x {
+        set_showcase_rail_bits(state, TileCoord::new(x, SHOWCASE_BRIDGE_Y), RAIL_TB_X);
+    }
+    for x in (SHOWCASE_BRIDGE_EAST.x + 1)..=SHOWCASE_BRIDGE_END.x {
+        set_showcase_rail_bits(state, TileCoord::new(x, SHOWCASE_BRIDGE_Y), RAIL_TB_X);
+    }
+}
+
+fn place_showcase_junction_lab(state: &mut GameState) {
+    for x in 4..=30 {
+        set_showcase_rail_bits(state, TileCoord::new(x, SHOWCASE_JUNCTION_TOP_Y), RAIL_TB_X);
+        set_showcase_rail_bits(
+            state,
+            TileCoord::new(x, SHOWCASE_JUNCTION_BOTTOM_Y),
+            RAIL_TB_X,
+        );
+    }
+    // Dos crossovers completos: cada uno cubre merge, split y curva de los
+    // dos sentidos. No se conectan con la línea carbonera ni con los shuttles.
+    for x in [8, 26] {
+        set_showcase_rail_bits(
+            state,
+            TileCoord::new(x, SHOWCASE_JUNCTION_TOP_Y),
+            RAIL_TB_X | RAIL_TB_LOWER | RAIL_TB_RIGHT,
+        );
+        set_showcase_rail_bits(
+            state,
+            TileCoord::new(x, SHOWCASE_JUNCTION_BOTTOM_Y),
+            RAIL_TB_X | RAIL_TB_UPPER | RAIL_TB_LEFT,
+        );
+    }
+    // Muestras de los dos cruces simples y del doble-slip (los seis
+    // TrackBits) entre crossovers. Son intencionalmente estáticas: forman una
+    // galería de geometrías sin introducir rutas ambiguas al shuttle vecino.
+    set_showcase_rail_bits(
+        state,
+        TileCoord::new(14, SHOWCASE_JUNCTION_TOP_Y),
+        RAIL_TB_X | RAIL_TB_Y,
+    );
+    set_showcase_rail_bits(
+        state,
+        TileCoord::new(18, SHOWCASE_JUNCTION_TOP_Y),
+        RAIL_TB_X | RAIL_TB_Y | RAIL_TB_UPPER | RAIL_TB_LOWER | RAIL_TB_LEFT | RAIL_TB_RIGHT,
+    );
+    set_showcase_rail_bits(
+        state,
+        TileCoord::new(22, SHOWCASE_JUNCTION_BOTTOM_Y),
+        RAIL_TB_UPPER | RAIL_TB_LOWER | RAIL_TB_LEFT | RAIL_TB_RIGHT,
+    );
+}
+
+fn place_showcase_rail_tunnel(state: &mut GameState) {
+    const BASE: u8 = 1;
+    let y = SHOWCASE_TUNNEL_NE.y;
+    // Misma geometría complementaria de las bocas NE/SW que usa el comando
+    // real de túnel; no es una textura decorativa.
+    let _ = state.map.set_height(SHOWCASE_TUNNEL_NE, BASE + 1);
+    let _ = state
+        .map
+        .set_height(TileCoord::new(SHOWCASE_TUNNEL_NE.x, y + 1), BASE + 1);
+    let _ = state
+        .map
+        .set_height(TileCoord::new(SHOWCASE_TUNNEL_NE.x + 1, y), BASE);
+    let _ = state
+        .map
+        .set_height(TileCoord::new(SHOWCASE_TUNNEL_NE.x + 1, y + 1), BASE);
+    let _ = state.map.set_height(SHOWCASE_TUNNEL_SW, BASE);
+    let _ = state
+        .map
+        .set_height(TileCoord::new(SHOWCASE_TUNNEL_SW.x, y + 1), BASE);
+    let _ = state
+        .map
+        .set_height(TileCoord::new(SHOWCASE_TUNNEL_SW.x + 1, y), BASE + 1);
+    let _ = state
+        .map
+        .set_height(TileCoord::new(SHOWCASE_TUNNEL_SW.x + 1, y + 1), BASE + 1);
+    let _ = state
+        .map
+        .set_height(TileCoord::new(SHOWCASE_TUNNEL_SW.x + 1, y), BASE + 1);
+    let _ = state
+        .map
+        .set_height(TileCoord::new(SHOWCASE_TUNNEL_SW.x + 1, y + 1), BASE + 1);
+    if let Err(error) = apply_command(
+        state,
+        &Command::PlaceRailTunnel(SHOWCASE_TUNNEL_NE, SHOWCASE_TUNNEL_SW),
+    ) {
+        warn!("Showcase: no se pudo construir túnel ferroviario: {error:?}");
+    }
+    for x in SHOWCASE_TUNNEL_START.x..SHOWCASE_TUNNEL_SW.x {
+        set_showcase_rail_bits(state, TileCoord::new(x, y), RAIL_TB_X);
+    }
+    for x in (SHOWCASE_TUNNEL_NE.x + 1)..=SHOWCASE_TUNNEL_END.x {
+        set_showcase_rail_bits(state, TileCoord::new(x, y), RAIL_TB_X);
+    }
+}
+
 fn place_rail_industries(state: &mut GameState) {
     let _ = apply_command(
         state,
@@ -417,8 +560,37 @@ fn spawn_showcase_vehicles(state: &mut GameState) {
     spawn_bus_lines(state);
     spawn_wood_to_hub_truck(state);
     spawn_rail_loop(state);
+    spawn_rail_exhibit_shuttles(state);
     spawn_ship_lines(state);
     spawn_air_lines(state);
+}
+
+fn spawn_rail_exhibit_shuttles(state: &mut GameState) {
+    for (id, start, dest, name) in [
+        (
+            9200,
+            SHOWCASE_BRIDGE_START,
+            SHOWCASE_BRIDGE_END,
+            "Shuttle Puente",
+        ),
+        (
+            9201,
+            SHOWCASE_TUNNEL_START,
+            SHOWCASE_TUNNEL_END,
+            "Shuttle Túnel",
+        ),
+    ] {
+        let mut train = Vehicle::new(id, VehicleKind::Train, start, dest);
+        train.name = Some(name.to_string());
+        train.engine_id = Some(ENGINE_TRAIN_KIRBY);
+        train.running = true;
+        if let Some(path) = find_path(&state.map, start, dest, PathNetwork::Rail) {
+            train.path = path.into();
+        } else {
+            warn!("Showcase: {name} no encontró ruta {start:?} → {dest:?}");
+        }
+        state.vehicles.push(train);
+    }
 }
 
 fn spawn_bus_lines(state: &mut GameState) {
@@ -476,6 +648,8 @@ fn spawn_rail_loop(state: &mut GameState) {
         OrderNonStop::NonStopDestination,
     );
     let west_order = west_order
+        .with_cycled_stop_location()
+        .unwrap_or(west_order)
         .with_wait_ticks(SHOWCASE_RAIL_DWELL_TICKS)
         .unwrap_or(west_order);
     let east_order = VehicleOrder::station_with_load_unload_flags(
@@ -488,6 +662,8 @@ fn spawn_rail_loop(state: &mut GameState) {
         OrderNonStop::NonStopDestination,
     );
     let east_order = east_order
+        .with_cycled_stop_location()
+        .unwrap_or(east_order)
         .with_wait_ticks(SHOWCASE_RAIL_DWELL_TICKS)
         .unwrap_or(east_order);
     let orders = vec![west_order, east_order];
@@ -626,6 +802,8 @@ pub(crate) fn log_gameplay_showcase_zones() {
          mina legacy ({},{}) con camión #9010 | \
          6 carboneros desde depósito ({},{}) entre mina ({},{}) y central ({},{}) \
          por doble vía y={SHOWCASE_RAIL_Y}/{SHOWCASE_RAIL_RETURN_Y} | \
+         exhibiciones rail separadas: puente x={}..{} y={} (shuttle #9200), \
+         junctions x=4..30 y={}/{} y túnel x={}..{} y={} (shuttle #9201) | \
          2 barcos ({},{})↔({},{}) | 2 aviones + 1 helicóptero Small | \
          lab pathfinding: carreteras y=12/13 unidas en x=22",
         SHOWCASE_BUS_A.x,
@@ -646,6 +824,14 @@ pub(crate) fn log_gameplay_showcase_zones() {
         SHOWCASE_COAL_MINE.y,
         SHOWCASE_POWER_STATION.x,
         SHOWCASE_POWER_STATION.y,
+        SHOWCASE_BRIDGE_WEST.x,
+        SHOWCASE_BRIDGE_EAST.x,
+        SHOWCASE_BRIDGE_Y,
+        SHOWCASE_JUNCTION_TOP_Y,
+        SHOWCASE_JUNCTION_BOTTOM_Y,
+        SHOWCASE_TUNNEL_SW.x,
+        SHOWCASE_TUNNEL_NE.x,
+        SHOWCASE_TUNNEL_NE.y,
         SHOWCASE_DOCK_WEST.x,
         SHOWCASE_DOCK_WEST.y,
         SHOWCASE_DOCK_EAST.x,
@@ -668,6 +854,12 @@ mod tests {
         super::super::demo_layout::place_demo_economy_loop(&mut state);
         place_gameplay_showcase(&mut state);
         state
+    }
+
+    fn is_main_carbonero(vehicle: &Vehicle) -> bool {
+        vehicle.kind == VehicleKind::Train
+            && vehicle.is_consist_head()
+            && matches!(vehicle.id, 9102 | 9103 | 9105 | 9106 | 9107 | 9108)
     }
 
     #[test]
@@ -753,6 +945,64 @@ mod tests {
             "tren showcase"
         );
         assert_eq!(
+            state.map.get_kind(SHOWCASE_BRIDGE_WEST),
+            Some(TileKind::RailBridge)
+        );
+        assert_eq!(
+            state.map.get_kind(SHOWCASE_BRIDGE_EAST),
+            Some(TileKind::RailBridge)
+        );
+        for x in SHOWCASE_TUNNEL_SW.x..=SHOWCASE_TUNNEL_NE.x {
+            assert_eq!(
+                state.map.get_kind(TileCoord::new(x, SHOWCASE_TUNNEL_NE.y)),
+                Some(TileKind::RailTunnel),
+                "túnel ferroviario showcase x={x}"
+            );
+        }
+        for (id, start, end, name) in [
+            (9200, SHOWCASE_BRIDGE_START, SHOWCASE_BRIDGE_END, "puente"),
+            (9201, SHOWCASE_TUNNEL_START, SHOWCASE_TUNNEL_END, "túnel"),
+        ] {
+            let route = find_path(&state.map, start, end, PathNetwork::Rail);
+            assert!(
+                route.is_some(),
+                "recorrido {name}: start={:?} end={:?} west={:?} east={:?}",
+                state.map.get(start),
+                state.map.get(end),
+                state.map.get(SHOWCASE_BRIDGE_WEST),
+                state.map.get(SHOWCASE_BRIDGE_EAST),
+            );
+            let shuttle = state
+                .vehicles
+                .iter()
+                .find(|v| v.id == id)
+                .unwrap_or_else(|| panic!("shuttle {name}"));
+            assert!(shuttle.running);
+            assert!(
+                !shuttle.path.is_empty(),
+                "shuttle {name} debe tener recorrido"
+            );
+        }
+        assert_eq!(
+            state
+                .map
+                .get(TileCoord::new(18, SHOWCASE_JUNCTION_TOP_Y))
+                .expect("doble-slip showcase")
+                .m5
+                & 0x3F,
+            RAIL_TB_X | RAIL_TB_Y | RAIL_TB_UPPER | RAIL_TB_LOWER | RAIL_TB_LEFT | RAIL_TB_RIGHT
+        );
+        let carbonero = state
+            .vehicles
+            .iter()
+            .find(|v| v.id == 9102)
+            .expect("carbonero principal");
+        assert_eq!(
+            carbonero.orders[0].stop_location(),
+            openttdrs_core::OrderStopLocation::FarEnd,
+            "el carbonero debe recorrer todo el andén"
+        );
+        assert_eq!(
             state
                 .vehicles
                 .iter()
@@ -765,9 +1015,7 @@ mod tests {
             state
                 .vehicles
                 .iter()
-                .filter(|vehicle| {
-                    vehicle.kind == VehicleKind::Train && vehicle.is_consist_head()
-                })
+                .filter(|vehicle| is_main_carbonero(vehicle))
                 .count(),
             6,
             "seis trenes activos para someter señales y cruces a congestión"
@@ -785,9 +1033,7 @@ mod tests {
             state
                 .vehicles
                 .iter()
-                .filter(|vehicle| {
-                    vehicle.kind == VehicleKind::Train && vehicle.is_consist_head()
-                })
+                .filter(|vehicle| is_main_carbonero(vehicle))
                 .all(|train| {
                     train.pos == SHOWCASE_RAIL_DEPOT
                         && train.orders.first().is_some_and(|order| {
@@ -802,11 +1048,7 @@ mod tests {
             state
                 .vehicles
                 .iter()
-                .filter(|vehicle| {
-                    vehicle.kind == VehicleKind::Train
-                        && vehicle.is_consist_head()
-                        && vehicle.current_order == 0
-                })
+                .filter(|vehicle| is_main_carbonero(vehicle) && vehicle.current_order == 0)
                 .count(),
             3,
             "tres trenes salen hacia la mina"
@@ -815,11 +1057,7 @@ mod tests {
             state
                 .vehicles
                 .iter()
-                .filter(|vehicle| {
-                    vehicle.kind == VehicleKind::Train
-                        && vehicle.is_consist_head()
-                        && vehicle.current_order == 1
-                })
+                .filter(|vehicle| is_main_carbonero(vehicle) && vehicle.current_order == 1)
                 .count(),
             3,
             "tres trenes salen vacíos hacia la central y luego continúan a la mina"
@@ -1123,18 +1361,33 @@ mod tests {
             .iter()
             .position(|v| v.id == 9102)
             .expect("tren showcase");
-        let mut on_platform = false;
+        let target = state.vehicles[train_idx].dest;
+        let platform = openttdrs_core::rail_station_platform_track_tiles(
+            &state.map,
+            SHOWCASE_RAIL_WEST,
+            target,
+        );
+        assert_eq!(
+            target.x,
+            platform
+                .iter()
+                .map(|tile| tile.x)
+                .min()
+                .expect("andén oeste"),
+            "desde el depósito al este, FarEnd debe ser el extremo oeste del andén"
+        );
+        let mut reached_stop = false;
         for _ in 0..8_000 {
             state.step();
             let pos = state.vehicles[train_idx].pos;
-            if state.map.get_kind(pos) == Some(TileKind::Station) {
-                on_platform = true;
+            if pos == target {
+                reached_stop = true;
                 break;
             }
         }
         assert!(
-            on_platform,
-            "el tren debe entrar a la plataforma al menos una vez (Rail 3C): {:#?}; \
+            reached_stop,
+            "el tren debe alcanzar el extremo lejano del andén, no solo entrar: target={target:?}; {:#?}; \
              reservation_block={} signal_block={} traffic_block={}; heads={:?}",
             state.vehicles[train_idx],
             openttdrs_core::train_blocked_by_reservation(&state.map, &state.vehicles[train_idx]),
@@ -1155,6 +1408,40 @@ mod tests {
                 .map(|v| (v.id, v.pos, v.dest, v.path.front().copied()))
                 .collect::<Vec<_>>()
         );
+    }
+
+    #[test]
+    fn showcase_rail_exhibit_shuttles_move_on_their_own_networks() {
+        let mut state = showcase_state();
+        let initial: std::collections::HashMap<_, _> = [9200_u32, 9201]
+            .into_iter()
+            .map(|id| {
+                let vehicle = state
+                    .vehicles
+                    .iter()
+                    .find(|vehicle| vehicle.id == id)
+                    .expect("shuttle ferroviario");
+                (id, (vehicle.pos, vehicle.rail_pixel, vehicle.progress))
+            })
+            .collect();
+        let mut moved = std::collections::HashSet::new();
+        for _ in 0..2_000 {
+            state.step();
+            for id in [9200_u32, 9201] {
+                let vehicle = state
+                    .vehicles
+                    .iter()
+                    .find(|vehicle| vehicle.id == id)
+                    .expect("shuttle ferroviario");
+                if (vehicle.pos, vehicle.rail_pixel, vehicle.progress) != initial[&id] {
+                    moved.insert(id);
+                }
+            }
+            if moved.len() == 2 {
+                return;
+            }
+        }
+        panic!("los shuttles de puente y túnel deben moverse: {moved:?}");
     }
 
     #[test]
@@ -1203,7 +1490,7 @@ mod tests {
             for train in state
                 .vehicles
                 .iter()
-                .filter(|vehicle| vehicle.kind == VehicleKind::Train && vehicle.is_consist_head())
+                .filter(|vehicle| is_main_carbonero(vehicle))
             {
                 if train.pos != SHOWCASE_RAIL_DEPOT {
                     departed.entry(train.id).or_insert(tick);
@@ -1226,7 +1513,7 @@ mod tests {
             state
                 .vehicles
                 .iter()
-                .filter(|vehicle| vehicle.kind == VehicleKind::Train && vehicle.is_consist_head())
+                .filter(|vehicle| is_main_carbonero(vehicle))
                 .map(|vehicle| (
                     vehicle.id,
                     vehicle.pos,
@@ -1442,7 +1729,7 @@ mod tests {
                 state
                     .vehicles
                     .iter()
-                    .filter(|v| v.kind == VehicleKind::Train && v.is_consist_head())
+                    .filter(|v| is_main_carbonero(v))
                     .count(),
                 6,
                 "se perdió un consist por colisión en tick {tick}: antes={before_train_poses:?}; \
@@ -1450,7 +1737,7 @@ mod tests {
                 state
                     .vehicles
                     .iter()
-                    .filter(|v| v.kind == VehicleKind::Train && v.is_consist_head())
+                    .filter(|v| is_main_carbonero(v))
                     .map(|v| (v.id, v.pos, v.path.front().copied()))
                     .collect::<Vec<_>>(),
                 state.news.items.back()
@@ -1464,7 +1751,7 @@ mod tests {
                 state
                     .vehicles
                     .iter()
-                    .filter(|v| v.kind == VehicleKind::Train && v.is_consist_head())
+                    .filter(|v| is_main_carbonero(v))
                     .map(|v| {
                         (
                             v.id,
@@ -1586,7 +1873,7 @@ mod tests {
         let mut congestion_probe: HashMap<u32, ((TileCoord, u8, u8), bool)> = state
             .vehicles
             .iter()
-            .filter(|vehicle| vehicle.kind == VehicleKind::Train && vehicle.is_consist_head())
+            .filter(|vehicle| is_main_carbonero(vehicle))
             .map(|vehicle| {
                 (
                     vehicle.id,
@@ -1599,7 +1886,7 @@ mod tests {
             for vehicle in state
                 .vehicles
                 .iter()
-                .filter(|vehicle| vehicle.kind == VehicleKind::Train && vehicle.is_consist_head())
+                .filter(|vehicle| is_main_carbonero(vehicle))
             {
                 if let Some((initial_pose, moved)) = congestion_probe.get_mut(&vehicle.id) {
                     *moved |= (vehicle.pos, vehicle.rail_pixel, vehicle.progress) != *initial_pose;
@@ -1627,7 +1914,7 @@ mod tests {
                 state
                     .vehicles
                     .iter()
-                    .filter(|v| v.kind == VehicleKind::Train && v.is_consist_head())
+                    .filter(|v| is_main_carbonero(v))
                     .map(|v| { (v.id, v.pos, v.dest, v.path.front().copied(), v.cur_speed,) })
                     .collect::<Vec<_>>(),
             );

@@ -164,7 +164,7 @@ pub(crate) fn drain_news_events(
                     feedback.pending_news_ticker = true;
                     info!("noticias: id={id} tipo={news_type:?}; ticker con sonido");
                 } else {
-                    info!("noticias: id={id} tipo={news_type:?}; ticker sin sonido");
+                    debug!("noticias: id={id} tipo={news_type:?}; ticker sin sonido");
                 }
             }
             NewsDisplayMode::Off => {
@@ -390,13 +390,13 @@ fn spawn_news_popup(
         }
         // Las descargas posteriores a la primera no deben encadenar repiques.
         NewsType::CargoDelivered => {
-            info!(
+            debug!(
                 "noticias: id={} entrega recurrente; popup sin sonido",
                 item.id
             );
         }
         NewsType::VehicleAdvice => {
-            info!("noticias: id={} aviso operativo; popup sin sonido", item.id);
+            debug!("noticias: id={} aviso operativo; popup sin sonido", item.id);
         }
         NewsType::CompanyInfo | NewsType::IndustryClose | NewsType::Economy => {
             feedback.pending_news_ticker = true;

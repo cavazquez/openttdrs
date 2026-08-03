@@ -91,7 +91,7 @@ pub(crate) fn add_newgrf_to_stack(
     Ok(())
 }
 
-/// Escribe `param[param_index]` de una entrada del stack (sin re-aplicar Action0).
+/// Escribe `param[param_index]` y reaplica Action0 para refrescar catálogos.
 pub(crate) fn set_newgrf_param(
     state: &mut GameState,
     index: usize,
@@ -106,6 +106,7 @@ pub(crate) fn set_newgrf_param(
     if !state.newgrf_stack[index].set_param(n, value) {
         return Err(CommandError::NewGrfParamOutOfRange);
     }
+    refresh_newgrf_catalogs(state);
     Ok(())
 }
 

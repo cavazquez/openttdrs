@@ -44,8 +44,9 @@ pub(crate) use assets::WorldAssets;
 pub(crate) use atlas::{AtlasSprite, TileAtlas};
 pub(crate) use bubble::{BubbleEffectPlugin, BubbleSpawnQueue};
 pub(crate) use company_recolor::{
-    CompanyColoredSprites, sprite_from_atlas_or_company_white_colour,
-    sprite_from_atlas_or_industry_palette, sprite_from_company_or_asset,
+    CompanyColoredSprites, sprite_from_atlas_or_company_colour,
+    sprite_from_atlas_or_company_white_colour, sprite_from_atlas_or_industry_palette,
+    sprite_from_company_or_asset,
 };
 pub(crate) use components::{
     FizzyDrinkAnimFrames, IndustryPreviewCamera, LighthouseAnimFrames, MapPreviewCamera,

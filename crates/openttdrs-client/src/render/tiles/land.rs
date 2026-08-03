@@ -15,16 +15,16 @@ use crate::iso::{overlay_pos, remap_tile_offset, tile_pos, wang_hash};
 use crate::render::atlas::AtlasSprite;
 use crate::render::{
     CompanyColoredSprites, MapSpriteBatches, MapVisualLayer, TileRenderContext, WaterTile,
-    WorldAssets, sprite_from_atlas_or_industry_palette,
+    WorldAssets, sprite_from_atlas_or_company_colour, sprite_from_atlas_or_industry_palette,
 };
 use crate::sprites::{
-    FENCE_MOD_BY_TILEH_NE, FENCE_MOD_BY_TILEH_NW, FENCE_MOD_BY_TILEH_SE, FENCE_MOD_BY_TILEH_SW,
-    FENCE_SPRITE_META, FIELD_STATES, HOUSE_DRAW_DATA, TREE_LAYOUT_SPRITE, TREE_LAYOUT_XY,
-    TREE_SPRITE_META, house_building_stage_from_tile, industry_anim_layer_used_in_any_frame,
-    industry_building_needs_client_anim, industry_effective_m4_for_draw,
-    industry_gfx_entry_for_tile, industry_gfx_uses_fizzy_drink_anim,
-    industry_gfx_uses_random_colour, industry_gfx_uses_refinery_fire_anim,
-    industry_palette_colour_for_instance,
+    CompanyColour, FENCE_MOD_BY_TILEH_NE, FENCE_MOD_BY_TILEH_NW, FENCE_MOD_BY_TILEH_SE,
+    FENCE_MOD_BY_TILEH_SW, FENCE_SPRITE_META, FIELD_STATES, HOUSE_DRAW_DATA, TREE_LAYOUT_SPRITE,
+    TREE_LAYOUT_XY, TREE_SPRITE_META, house_building_stage_from_tile,
+    industry_anim_layer_used_in_any_frame, industry_building_needs_client_anim,
+    industry_effective_m4_for_draw, industry_gfx_entry_for_tile,
+    industry_gfx_uses_fizzy_drink_anim, industry_gfx_uses_random_colour,
+    industry_gfx_uses_refinery_fire_anim, industry_palette_colour_for_instance,
 };
 
 /// Sprite plano de hierba según densidad (`m5 & 0x3`) en teselas `MP_CLEAR`.
@@ -458,6 +458,8 @@ pub(crate) fn spawn_industry_tile(
 pub(crate) fn spawn_generic_land_tile(
     commands: &mut Commands,
     assets: &WorldAssets,
+    company: Option<&CompanyColoredSprites>,
+    owner_colour: Option<CompanyColour>,
     ctx: &TileRenderContext,
     slope_half_ground: f32,
     climate: Climate,
@@ -605,7 +607,15 @@ pub(crate) fn spawn_generic_land_tile(
         if let Some(img) = obj_img {
             let anim = tile_m5 == OBJECT_TYPE_LIGHTHOUSE
                 && assets.lighthouse_anim_frames.contains_key(&2602);
-            let mut sprite = if anim {
+            let mut sprite = if tile_m5 == OBJECT_TYPE_STATUE_COMPANY {
+                sprite_from_atlas_or_company_colour(
+                    company,
+                    owner_colour,
+                    &img,
+                    "assets/opengfx/tiles/object_statue_company.png",
+                    tint,
+                )
+            } else if anim {
                 assets.lighthouse_anim_frames[&2602][0].sprite()
             } else {
                 img.sprite()

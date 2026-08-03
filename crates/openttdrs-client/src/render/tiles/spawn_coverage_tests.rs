@@ -412,6 +412,8 @@ fn spawn_land_house_industry_generics_and_batches() {
                 spawn_generic_land_tile(
                     &mut commands,
                     &a.0,
+                    None,
+                    None,
                     &TileRenderContext::new(&m.0, &g.0, 0, 0),
                     4.0,
                     TEST_CLIMATE,
@@ -423,6 +425,8 @@ fn spawn_land_house_industry_generics_and_batches() {
                 spawn_generic_land_tile(
                     &mut commands,
                     &a.0,
+                    None,
+                    None,
                     &TileRenderContext::new(&m.0, &g.0, 1, 0),
                     4.0,
                     TEST_CLIMATE,
@@ -434,6 +438,8 @@ fn spawn_land_house_industry_generics_and_batches() {
                 spawn_generic_land_tile(
                     &mut commands,
                     &a.0,
+                    None,
+                    None,
                     &TileRenderContext::new(&m.0, &g.0, 2, 0),
                     4.0,
                     TEST_CLIMATE,
@@ -445,6 +451,8 @@ fn spawn_land_house_industry_generics_and_batches() {
                 spawn_generic_land_tile(
                     &mut commands,
                     &a.0,
+                    None,
+                    None,
                     &TileRenderContext::new(&m.0, &g.0, 3, 0),
                     4.0,
                     TEST_CLIMATE,
@@ -456,6 +464,8 @@ fn spawn_land_house_industry_generics_and_batches() {
                 spawn_generic_land_tile(
                     &mut commands,
                     &a.0,
+                    None,
+                    None,
                     &TileRenderContext::new(&m.0, &g.0, 4, 0),
                     4.0,
                     TEST_CLIMATE,
@@ -955,6 +965,8 @@ fn spawn_field_tile_draws_crop_ground_and_fences() {
                 spawn_generic_land_tile(
                     &mut commands,
                     &a.0,
+                    None,
+                    None,
                     &TileRenderContext::new(&m.0, &g.0, 2, 2),
                     4.0,
                     TEST_CLIMATE,
@@ -975,6 +987,8 @@ fn spawn_field_tile_draws_crop_ground_and_fences() {
                 spawn_generic_land_tile(
                     &mut commands,
                     &a.0,
+                    None,
+                    None,
                     &TileRenderContext::new(&m.0, &g.0, 3, 2),
                     4.0,
                     TEST_CLIMATE,

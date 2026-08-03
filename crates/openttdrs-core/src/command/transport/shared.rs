@@ -1,4 +1,4 @@
-use crate::map::{Map, TileCoord, TileKind};
+use crate::map::{Map, OBJECT_TYPE_STATUE_COMPANY, TileCoord, TileKind, object_type_from_tile};
 use crate::{CLEAR_TILE_COST, GameState};
 
 use super::super::{CommandError, in_bounds, require_tile_owned_by_active, tile_owner};
@@ -289,6 +289,11 @@ pub(in crate::command) fn clear_tile(
     if let Some(object_tiles) =
         crate::map::object_footprint_at(&state.map, c, &state.object_spec_catalog)
     {
+        let statue_owner = state
+            .map
+            .get(c)
+            .filter(|tile| object_type_from_tile(tile) == Some(OBJECT_TYPE_STATUE_COMPANY))
+            .map(|tile| crate::company::CompanyId(tile.m1));
         for tile in &object_tiles {
             if !state.cheats.magic_bulldozer_active() {
                 require_tile_owned_by_active(state, *tile)?;
@@ -307,6 +312,14 @@ pub(in crate::command) fn clear_tile(
             crate::command::sign::remove_signs_at(state, tile);
         }
         state.stations.retain(|s| !object_tiles.contains(&s.pos));
+        // `Object` upstream conserva el pueblo de la estatua. El port no
+        // mantiene ese pool, por lo que la estatua se vincula al pueblo más
+        // cercano; fue colocada dentro de su búsqueda 9×9.
+        if let Some(owner) = statue_owner
+            && let Some((town_idx, _)) = crate::town::nearest_town_index(&state.towns, c)
+        {
+            state.towns[town_idx].set_statue(owner, false);
+        }
         state.economy.money -= CLEAR_TILE_COST;
         return Ok(());
     }

@@ -26,6 +26,20 @@ fn owner_colour_for_tile(
     coord: TileCoord,
     kind: TileKind,
 ) -> Option<CompanyColour> {
+    if kind == TileKind::Grass
+        && sim.state.map.get(coord).is_some_and(|tile| {
+            openttdrs_core::map::object_type_from_tile(&tile)
+                == Some(openttdrs_core::OBJECT_TYPE_STATUE_COMPANY)
+        })
+    {
+        let owner = sim.state.map.get(coord).map_or(0, |tile| tile.m1);
+        return sim
+            .state
+            .companies
+            .iter()
+            .find(|company| company.id.0 == owner)
+            .map(|company| CompanyColour::from_u8(company.colour));
+    }
     openttdrs_core::tile_owner_colour(
         &sim.state.companies,
         &sim.state.stations,
@@ -228,6 +242,8 @@ pub(crate) fn spawn_map_tiles_in_bounds(
                 spawn_generic_land_tile(
                     commands,
                     assets,
+                    Some(company),
+                    owner_colour_for_tile(sim, ctx.coord, kind),
                     &ctx,
                     slope_half_ground,
                     climate,

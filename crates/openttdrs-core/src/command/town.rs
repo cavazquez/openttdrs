@@ -483,6 +483,33 @@ mod tests {
     }
 
     #[test]
+    fn clearing_statue_restores_town_action_availability() {
+        let mut s = GameState::new(32, 32);
+        s.economy.money = 200_000;
+        s.towns.push(Town {
+            id: 1,
+            pos: TileCoord::new(10, 10),
+            name: "S".into(),
+            ..Default::default()
+        });
+        let cmd = Command::DoTownAction {
+            town_id: 1,
+            action: TownAction::BuildStatue,
+        };
+        apply_command(&mut s, &cmd).unwrap();
+        apply_command(&mut s, &Command::ClearTile(TileCoord::new(10, 10))).unwrap();
+
+        assert!(!s.towns[0].has_statue(CompanyId::PLAYER));
+        assert!(
+            crate::map::object_type_from_tile(
+                &s.map.get(TileCoord::new(10, 10)).expect("cleared tile")
+            )
+            .is_none()
+        );
+        assert!(apply_command(&mut s, &cmd).is_ok());
+    }
+
+    #[test]
     fn road_rebuild_places_a_municipal_road_immediately() {
         let mut s = GameState::new(32, 32);
         s.economy.money = 50_000;

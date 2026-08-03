@@ -15,9 +15,9 @@ pub const MP_OBJECT_MAPT: u8 = OTTD_MP_OBJECT << 4;
 /// `ObjectType` en saves vanilla (`object_type.h`).
 pub const OBJECT_TYPE_TRANSMITTER: u8 = 0;
 pub const OBJECT_TYPE_LIGHTHOUSE: u8 = 1;
-pub const OBJECT_TYPE_OWNED_LAND: u8 = 2;
 /// Estatua de compañía construida por la autoridad local (`SPR_STATUE_COMPANY`).
-pub const OBJECT_TYPE_STATUE_COMPANY: u8 = 3;
+pub const OBJECT_TYPE_STATUE_COMPANY: u8 = 2;
+pub const OBJECT_TYPE_OWNED_LAND: u8 = 3;
 
 #[must_use]
 pub const fn is_map_object_tile(mapt: u8) -> bool {
@@ -143,5 +143,13 @@ mod tests {
             .expect("lighthouse tile");
         assert_eq!(object_type_from_tile(&tx), Some(OBJECT_TYPE_TRANSMITTER));
         assert_eq!(object_type_from_tile(&lh), Some(OBJECT_TYPE_LIGHTHOUSE));
+    }
+
+    #[test]
+    fn vanilla_object_ids_match_openttd_object_type_h() {
+        assert_eq!(OBJECT_TYPE_TRANSMITTER, 0);
+        assert_eq!(OBJECT_TYPE_LIGHTHOUSE, 1);
+        assert_eq!(OBJECT_TYPE_STATUE_COMPANY, 2);
+        assert_eq!(OBJECT_TYPE_OWNED_LAND, 3);
     }
 }

@@ -5,7 +5,7 @@ use openttdrs_core::{Climate, WorldGenConfig, apply_world_gen, tick_for_calendar
 
 use super::demo_layout::{
     apply_optional_world_gen, demo_preserve_rects, fill_flat_grass, place_bridge_demo_gap,
-    place_clean_demo_transport, place_demo_economy_loop,
+    place_clean_demo_transport, place_demo_economy_loop, place_demo_rail_structures,
 };
 use super::gameplay_showcase::place_gameplay_showcase;
 use super::procedural_population::{populate_procedural_world, should_populate_procedurally};
@@ -368,6 +368,7 @@ pub(crate) fn build_procedural_demo_world(settings: &NewGameSettings) -> GameSta
         place_gameplay_showcase(&mut state);
         place_tunnel_demo_ridge(&mut state);
         place_bridge_demo_gap(&mut state);
+        place_demo_rail_structures(&mut state);
     }
     state.economy.money = settings.starting_money;
     state.ensure_companies();

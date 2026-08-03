@@ -1158,6 +1158,41 @@ mod tests {
     }
 
     #[test]
+    fn showcase_train_leaves_platform_after_station_dwell() {
+        let mut state = showcase_state();
+        let train_idx = state
+            .vehicles
+            .iter()
+            .position(|v| v.id == 9102)
+            .expect("tren showcase");
+        let mut entered_platform = false;
+        for _ in 0..8_000 {
+            state.step();
+            let train = &state.vehicles[train_idx];
+            let on_platform = state.map.get_kind(train.pos) == Some(TileKind::Station);
+            entered_platform |= on_platform;
+            if entered_platform && !on_platform {
+                return;
+            }
+        }
+        let train = &state.vehicles[train_idx];
+        panic!(
+            "el carbonero debe abandonar el andén tras cargar: pos={:?} dest={:?} \
+             order={} path={:?} speed={} progress={} waiting={} transfer={} pbs={} no_route={}",
+            train.pos,
+            train.dest,
+            train.current_order,
+            train.path.front(),
+            train.cur_speed,
+            train.progress,
+            train.awaiting_load_window,
+            train.cargo_transfer_active(),
+            train.pbs_stuck,
+            train.no_network_route_to_order,
+        );
+    }
+
+    #[test]
     fn showcase_dispatches_next_train_before_first_reaches_destination() {
         let mut state = showcase_state();
         let mut departed = std::collections::BTreeMap::new();

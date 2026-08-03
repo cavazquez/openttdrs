@@ -4,9 +4,9 @@ use bevy::prelude::*;
 use openttdrs_core::Command;
 use openttdrs_core::prelude::*;
 use openttdrs_core::{
-    FACTORY_GRAIN_INPUT, FACTORY_LIVESTOCK_INPUT, FACTORY_STEEL_INPUT, Industry, IndustryKind,
-    IndustrySpec, PathNetwork, PreserveRect, WorldGenConfig, apply_world_gen, find_path,
-    road_stop_approach_tile,
+    BridgeType, FACTORY_GRAIN_INPUT, FACTORY_LIVESTOCK_INPUT, FACTORY_STEEL_INPUT, Industry,
+    IndustryKind, IndustrySpec, PathNetwork, PreserveRect, WorldGenConfig, apply_world_gen,
+    find_path, road_stop_approach_tile,
 };
 
 /// Carretera horizontal de demo (eje X).
@@ -228,6 +228,41 @@ pub(crate) fn place_bridge_demo_gap(state: &mut GameState) {
     }
 }
 
+/// Convierte las dos zonas de ingeniería de la demo en infraestructura
+/// ferroviaria terminada. Quedan deliberadamente separadas del circuito de
+/// producción: son una muestra visible y segura para probar construcción,
+/// render, señales y reservas sin alterar el tráfico de la mina.
+pub(crate) fn place_demo_rail_structures(state: &mut GameState) {
+    let bridge_west = TileCoord::new(DEMO_BRIDGE_BANK_W, DEMO_BRIDGE_Y);
+    let bridge_east = TileCoord::new(DEMO_BRIDGE_BANK_E, DEMO_BRIDGE_Y);
+    if let Err(error) = apply_command(
+        state,
+        &Command::PlaceRailBridge(bridge_west, bridge_east, BridgeType::Wooden),
+    ) {
+        error!("Demo: no se pudo construir puente ferroviario: {error:?}");
+    }
+    // Aproximaciones cortas para que el puente se lea como un tramo de vía y
+    // pueda prolongarse desde la interfaz sin reconstruir sus rampas.
+    for x in [DEMO_BRIDGE_BANK_W - 1, DEMO_BRIDGE_BANK_E + 1] {
+        if let Err(error) =
+            apply_command(state, &Command::PlaceRail(TileCoord::new(x, DEMO_BRIDGE_Y)))
+        {
+            error!("Demo: no se pudo construir aproximación ferroviaria: {error:?}");
+        }
+    }
+
+    // La cresta se prepara con entrada NE en (18,8) y salida complementaria
+    // en (16,8). `PlaceRailTunnel` resuelve la boca opuesta desde el relieve;
+    // pasarla explícitamente documenta la geometría visible de la demo.
+    let tunnel_exit = TileCoord::new(DEMO_TUNNEL_NE.x - 2, DEMO_TUNNEL_NE.y);
+    if let Err(error) = apply_command(
+        state,
+        &Command::PlaceRailTunnel(DEMO_TUNNEL_NE, tunnel_exit),
+    ) {
+        error!("Demo: no se pudo construir túnel ferroviario: {error:?}");
+    }
+}
+
 fn set_water_cell(state: &mut GameState, c: TileCoord, coast: bool) {
     let _ = state.map.set_kind(c, TileKind::Water);
     let _ = state.map.set_height(c, CHANNEL_Z);
@@ -248,8 +283,8 @@ pub(crate) fn log_procedural_demo_zones() {
          economía mina ({},{}) → fábrica ({},{}) vía est ({},{}) → ({},{}) (camión #9010) | \
          puente agua x={DEMO_BRIDGE_WATER_X0}..{DEMO_BRIDGE_WATER_X1} y={DEMO_BRIDGE_WATER_Y0}..{DEMO_BRIDGE_WATER_Y1} \
          orillas x={DEMO_BRIDGE_BANK_W},{DEMO_BRIDGE_BANK_E} y={DEMO_BRIDGE_BANK_N},{DEMO_BRIDGE_BANK_S} \
-         (construir E–O entre ({DEMO_BRIDGE_BANK_W},{DEMO_BRIDGE_Y}) y ({DEMO_BRIDGE_BANK_E},{DEMO_BRIDGE_Y})) | \
-         túnel NE ({}, {})",
+         (puente ferroviario E–O terminado entre ({DEMO_BRIDGE_BANK_W},{DEMO_BRIDGE_Y}) y ({DEMO_BRIDGE_BANK_E},{DEMO_BRIDGE_Y})) | \
+         túnel ferroviario NE ({}, {})",
         crate::state::MAP_W,
         crate::state::MAP_H,
         DEMO_ECONOMY_INDUSTRY.x,
@@ -308,6 +343,35 @@ mod tests {
             state.vehicles.is_empty(),
             "el trazado limpio no deja vehículos apagados"
         );
+    }
+
+    #[test]
+    fn rail_engineering_demo_builds_bridge_and_tunnel() {
+        let mut state = GameState::new(MAP_W, MAP_H);
+        fill_flat_grass(&mut state);
+        place_tunnel_demo_ridge(&mut state);
+        place_bridge_demo_gap(&mut state);
+        place_demo_rail_structures(&mut state);
+
+        assert_eq!(
+            state
+                .map
+                .get_kind(TileCoord::new(DEMO_BRIDGE_BANK_W, DEMO_BRIDGE_Y)),
+            Some(TileKind::RailBridge)
+        );
+        assert_eq!(
+            state
+                .map
+                .get_kind(TileCoord::new(DEMO_BRIDGE_BANK_E, DEMO_BRIDGE_Y)),
+            Some(TileKind::RailBridge)
+        );
+        for x in (DEMO_TUNNEL_NE.x - 2)..=DEMO_TUNNEL_NE.x {
+            assert_eq!(
+                state.map.get_kind(TileCoord::new(x, DEMO_TUNNEL_NE.y)),
+                Some(TileKind::RailTunnel),
+                "tramo de túnel x={x}"
+            );
+        }
     }
 
     #[test]

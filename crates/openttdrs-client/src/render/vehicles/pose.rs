@@ -35,6 +35,22 @@ pub(crate) fn vehicle_draw_anchor_from_pose(
 ) -> (Vec2, u8, i32, i32) {
     let (tileh, _) = tile_slope_and_min_z(map, pose.pos.x as u32, pose.pos.y as u32);
     let base_z = tile_min_z(map, pose.pos);
+    // El grafo ferroviario representa el vano de un puente como un salto entre
+    // rampas (igual que OpenTTD a nivel de topología). Para dibujo no debemos
+    // teletransportar el tren: mientras consume los 16 píxeles de vía, el
+    // ancla recorre de forma continua las dos rampas. El estado lógico sigue
+    // ocupando la rampa de entrada, por lo que PBS y colisiones permanecen
+    // autoritativos durante todo el cruce.
+    if v.kind == VehicleKind::Train
+        && map.get_kind(pose.pos) == Some(TileKind::RailBridge)
+        && let Some(other_ramp) = openttdrs_core::rail_bridge_other_end(map, pose.pos)
+        && v.movement_target() == Some(other_ramp)
+    {
+        let t = (pose.progress_f / 255.0).clamp(0.0, 1.0);
+        let start = road_vehicle_tile_anchor(pose.pos.x, pose.pos.y, 8.0, 8.0, 0.0);
+        let end = road_vehicle_tile_anchor(other_ramp.x, other_ramp.y, 8.0, 8.0, 0.0);
+        return (start.lerp(end, t), base_z, pose.pos.x, pose.pos.y);
+    }
     let (sub_x, sub_y) = vehicle_subtile_at_with_map(v, pose, Some(map));
     let sub_z = slope_dz_at_subtile(sub_x, sub_y, tileh);
     let anchor = road_vehicle_tile_anchor(pose.pos.x, pose.pos.y, sub_x, sub_y, sub_z);

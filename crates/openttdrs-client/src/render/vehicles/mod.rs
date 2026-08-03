@@ -128,6 +128,43 @@ mod tests {
     }
 
     #[test]
+    fn train_crosses_rail_bridge_without_visual_jump() {
+        let mut map = Map::new_flat(16, 8, 0);
+        let west = TileCoord::new(3, 3);
+        let east = TileCoord::new(10, 3);
+        for x in 4..10 {
+            map.set_kind(TileCoord::new(x, 3), TileKind::Water)
+                .expect("agua bajo el puente");
+        }
+        let mut state = GameState::from_map(map);
+        apply_command(
+            &mut state,
+            &openttdrs_core::Command::PlaceRailBridge(
+                west,
+                east,
+                openttdrs_core::BridgeType::Wooden,
+            ),
+        )
+        .expect("puente ferroviario");
+        let mut train = Vehicle::new(1, VehicleKind::Train, west, east);
+        train.path = VecDeque::from([east]);
+        train.rail_pixel = 8;
+        let pose = openttdrs_core::VehiclePose::from_vehicle(&train);
+        let (anchor, _, _, _) = vehicle_draw_anchor_from_pose(&train, &state.map, pose);
+        let start = crate::iso::road_vehicle_tile_anchor(west.x, west.y, 8.0, 8.0, 0.0);
+        let end = crate::iso::road_vehicle_tile_anchor(east.x, east.y, 8.0, 8.0, 0.0);
+        assert!(anchor.distance(start) > 1.0, "debe salir de la rampa oeste");
+        assert!(
+            anchor.distance(end) > 1.0,
+            "aún no debe llegar a la rampa este"
+        );
+        assert!(
+            (anchor - start.lerp(end, 0.5)).length() < 2.0,
+            "el ancla debe interpolar sobre el vano: {anchor:?}"
+        );
+    }
+
+    #[test]
     fn helicopter_rotor_sprite_set_is_complete_and_positioned_above_shadow() {
         assert_eq!(AIRCRAFT_ROTOR_LAYERS.len(), 4);
         for layer in AIRCRAFT_ROTOR_LAYERS {

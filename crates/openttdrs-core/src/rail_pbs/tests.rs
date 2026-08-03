@@ -18,6 +18,7 @@ use crate::parity::{
 use crate::rail_signals::{
     RAIL_TILE_NORMAL, SIGTYPE_BLOCK, SIGTYPE_PATH, update_rail_signal_states,
 };
+use crate::sav::{self, SavContainer};
 use crate::vehicle::{Vehicle, VehicleKind};
 
 #[test]
@@ -362,6 +363,43 @@ fn pbs_reservation_crosses_bridge_blocks_second_train_and_releases() {
             .any(|step| step.tile == west || step.tile == east),
         "tras liberar, el segundo tren debe poder reservar el puente"
     );
+}
+
+#[test]
+fn sav_roundtrip_preserves_pbs_reservation_on_rail_bridge_ramps() {
+    let mut state = GameState::new(64, 64);
+    let c = |x: i32| TileCoord::new(x, 4);
+    for x in 12..=17 {
+        state.map.set_kind(c(x), TileKind::Water).expect("agua");
+    }
+    let west = c(11);
+    let east = c(18);
+    apply_command(
+        &mut state,
+        &Command::PlaceRailBridge(west, east, BridgeType::Wooden),
+    )
+    .expect("puente ferroviario");
+
+    let mut train = Vehicle::new(1, VehicleKind::Train, west, east);
+    train.reserved_steps = vec![
+        ReservedRailStep::new(west, 0x01),
+        ReservedRailStep::new(east, 0x01),
+    ];
+    state.vehicles.push(train);
+    let mut previous = HashSet::new();
+    let mut dirty = Vec::new();
+    sync_reservations_to_map(&mut state.map, &state.vehicles, &mut previous, &mut dirty);
+
+    let bytes = sav::save_to_bytes_with(&state, SavContainer::Ottn).expect("guardar");
+    let loaded = GameState::from_sav_game(sav::load(&bytes).expect("cargar"));
+    for ramp in [west, east] {
+        let tile = loaded.map.get(ramp).expect("rampa cargada");
+        assert_eq!(tile.kind, TileKind::RailBridge);
+        assert!(
+            rail_tile_has_pbs_reservation(tile.m2_hi),
+            "la reserva PBS debe sobrevivir en {ramp:?}"
+        );
+    }
 }
 
 #[test]

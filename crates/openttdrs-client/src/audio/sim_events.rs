@@ -76,6 +76,54 @@ const fn aircraft_landing_sound(engine_id: u16) -> SoundId {
     }
 }
 
+/// Nivel de detalle para el registro del bus de eventos. Todo `SimEvent` se
+/// conserva en la traza: los eventos frecuentes se bajan a `debug` para que
+/// una partida normal no produzca miles de líneas por minuto.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SimEventLogLevel {
+    Info,
+    Debug,
+}
+
+const fn sim_event_log_level(event: &SimEvent) -> SimEventLogLevel {
+    match event {
+        // Ingresos, pulsos de motor y ambiente son parte del ciclo normal.
+        SimEvent::Income { .. }
+        | SimEvent::VehicleDepart { .. }
+        | SimEvent::VehicleRunning { .. }
+        | SimEvent::LevelCrossing { .. }
+        | SimEvent::Bubble { .. }
+        | SimEvent::AircraftTakeoff { .. }
+        | SimEvent::AircraftLanding { .. } => SimEventLogLevel::Debug,
+        // Obras, avisos, cambios de autoridad, subvenciones y fallos son
+        // decisiones o resultados relevantes para el jugador.
+        SimEvent::Construction { .. }
+        | SimEvent::Demolition { .. }
+        | SimEvent::Breakdown { .. }
+        | SimEvent::Disaster { .. }
+        | SimEvent::TownRatingChanged { .. }
+        | SimEvent::SubsidyCreated { .. }
+        | SimEvent::SubsidyAwarded { .. }
+        | SimEvent::NewsTicker
+        | SimEvent::NewsApplause
+        | SimEvent::NewsChime
+        | SimEvent::LoanInterestPaid { .. }
+        | SimEvent::BankruptcyWarning
+        | SimEvent::TrainCollision { .. }
+        | SimEvent::GameOver { .. }
+        | SimEvent::AircraftCrash { .. }
+        | SimEvent::RoadVehCrash { .. }
+        | SimEvent::VehicleFlooded { .. } => SimEventLogLevel::Info,
+    }
+}
+
+fn log_sim_event(event: &SimEvent) {
+    match sim_event_log_level(event) {
+        SimEventLogLevel::Info => info!("evento: {event:?}"),
+        SimEventLogLevel::Debug => debug!("evento: {event:?}"),
+    }
+}
+
 fn dispatch_sim_events(
     mut pending: ResMut<PendingSimEvents>,
     hud: Res<SimHudControls>,
@@ -84,6 +132,7 @@ fn dispatch_sim_events(
     mut bubbles: ResMut<BubbleSpawnQueue>,
 ) {
     for event in pending.0.drain(..) {
+        log_sim_event(&event);
         match event {
             SimEvent::Income { at, .. } => {
                 if hud.sound_confirm {
@@ -322,5 +371,39 @@ mod tests {
         let drained: Vec<_> = pending.0.drain(..).collect();
         assert_eq!(drained.len(), 1);
         assert!(pending.0.is_empty());
+    }
+
+    #[test]
+    fn event_log_levels_keep_periodic_activity_out_of_normal_output() {
+        assert_eq!(
+            sim_event_log_level(&SimEvent::Income {
+                amount: 10,
+                at: TileCoord::new(1, 2),
+            }),
+            SimEventLogLevel::Debug
+        );
+        assert_eq!(
+            sim_event_log_level(&SimEvent::VehicleRunning {
+                vehicle_id: 1,
+                at: TileCoord::new(1, 2),
+                kind: openttdrs_core::VehicleKind::Bus,
+                phase: VehicleRunningPhase::Running,
+            }),
+            SimEventLogLevel::Debug
+        );
+        assert_eq!(
+            sim_event_log_level(&SimEvent::Construction {
+                kind: ConstructionKind::Road,
+                at: TileCoord::new(1, 2),
+            }),
+            SimEventLogLevel::Info
+        );
+        assert_eq!(
+            sim_event_log_level(&SimEvent::TownRatingChanged {
+                town_id: 7,
+                delta: 20,
+            }),
+            SimEventLogLevel::Info
+        );
     }
 }

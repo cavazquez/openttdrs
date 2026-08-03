@@ -70,8 +70,9 @@ use crate::ui::toolbar::{
     update_toolbar_tooltip,
 };
 use crate::ui::town_authority_window::{
-    TownAuthorityWindowState, handle_town_authority_buttons, setup_town_authority_window,
-    sync_town_authority_window, town_authority_window_on_closed,
+    TownAuthorityEffectWatch, TownAuthorityWindowState, handle_town_authority_buttons,
+    observe_town_authority_effects, setup_town_authority_window, sync_town_authority_window,
+    town_authority_window_on_closed,
 };
 use crate::ui::town_window::{
     TownWindowState, handle_town_window_buttons, setup_town_window, sync_town_window,
@@ -103,6 +104,7 @@ impl Plugin for ToolbarUiPlugin {
             .init_resource::<SaveWindowState>()
             .init_resource::<TownWindowState>()
             .init_resource::<TownAuthorityWindowState>()
+            .init_resource::<TownAuthorityEffectWatch>()
             .init_resource::<StationPoolRegistry>()
             .add_systems(
                 OnEnter(ClientScreen::InGame),
@@ -162,6 +164,13 @@ impl Plugin for ToolbarUiPlugin {
                 )
                     .chain()
                     .in_set(UpdateSet::Input)
+                    .run_if(in_state(ClientScreen::InGame)),
+            )
+            .add_systems(
+                Update,
+                observe_town_authority_effects
+                    .after(handle_town_authority_buttons)
+                    .in_set(UpdateSet::Ui)
                     .run_if(in_state(ClientScreen::InGame)),
             )
             .add_systems(

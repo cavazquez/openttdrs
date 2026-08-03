@@ -3,6 +3,8 @@
 //! Presenta las ocho acciones de autoridad de OpenTTD 15.3 y ejecuta el
 //! `Command::DoTownAction` determinista del dominio.
 
+use std::collections::HashMap;
+
 use bevy::prelude::*;
 use openttdrs_core::{
     Command, TownAction, TownAuthoritySettings, format_money, mask_of_town_actions,
@@ -22,6 +24,23 @@ use crate::ui::town_window::TownWindowState;
 pub(crate) struct TownAuthorityWindowState {
     pub(crate) open: bool,
     pub(crate) town_id: Option<u32>,
+}
+
+/// Pueblos sobre los que una acción de autoridad inició un efecto diferido.
+/// Solo éstos se observan: evita convertir el crecimiento habitual del mapa en
+/// una traza ruidosa.
+#[derive(Resource, Default)]
+pub(crate) struct TownAuthorityEffectWatch {
+    towns: HashMap<u32, TownActionSnapshot>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct TownActionSnapshot {
+    money: i64,
+    population: u32,
+    houses: u16,
+    road_build_months: u8,
+    fund_buildings_months: u8,
 }
 
 #[derive(Component)]
@@ -269,6 +288,7 @@ pub(crate) fn handle_town_authority_buttons(
     >,
     window: Res<TownAuthorityWindowState>,
     mut sim: ResMut<SimWorld>,
+    mut effect_watch: ResMut<TownAuthorityEffectWatch>,
     mut hud_feedback: ResMut<HudBuildFeedback>,
     time: Res<Time>,
 ) {
@@ -280,8 +300,14 @@ pub(crate) fn handle_town_authority_buttons(
             continue;
         }
         let Some(town) = sim.state.towns.iter().find(|town| town.id == town_id) else {
+            info!(
+                "autoridad: acción={} pueblo_id={town_id}; rechazada: pueblo inexistente",
+                town_action_name(button.0)
+            );
             continue;
         };
+        let town_name = town.name.clone();
+        let before = town_action_snapshot(&sim.state, town);
         let enabled_mask = mask_of_town_actions(
             town,
             sim.state.active_company,
@@ -289,18 +315,134 @@ pub(crate) fn handle_town_authority_buttons(
             TownAuthoritySettings::default(),
         );
         if enabled_mask & (1 << button.0 as u8) == 0 {
+            let all_actions = mask_of_town_actions(
+                town,
+                sim.state.active_company,
+                i64::MAX,
+                TownAuthoritySettings::default(),
+            );
+            info!(
+                "autoridad: click acción={} pueblo=\"{town_name}\" id={town_id}; rechazada: {}",
+                town_action_name(button.0),
+                town_action_status_text(town_action_availability(
+                    button.0,
+                    enabled_mask,
+                    all_actions
+                ))
+            );
             continue;
         }
-        if let Err(error) = crate::network::apply_player_command(
+        info!(
+            "autoridad: click acción={} pueblo=\"{town_name}\" id={town_id} coste={} saldo_antes={}",
+            town_action_name(button.0),
+            button.0.cost(),
+            before.money
+        );
+        match crate::network::apply_player_command(
             &mut sim.state,
             &Command::DoTownAction {
                 town_id,
                 action: button.0,
             },
         ) {
-            push_build_command_error(&mut hud_feedback, error, time.elapsed_secs());
+            Ok(()) => {
+                let Some(after_town) = sim.state.towns.iter().find(|town| town.id == town_id)
+                else {
+                    info!(
+                        "autoridad: acción={} pueblo_id={town_id}; aceptada pero el pueblo desapareció",
+                        town_action_name(button.0)
+                    );
+                    continue;
+                };
+                let after = town_action_snapshot(&sim.state, after_town);
+                log_town_action_success(button.0, town_id, &town_name, before, after);
+                if matches!(
+                    button.0,
+                    TownAction::RoadRebuild | TownAction::FundBuildings
+                ) {
+                    effect_watch.towns.insert(town_id, after);
+                }
+            }
+            Err(error) => {
+                info!(
+                    "autoridad: acción={} pueblo=\"{town_name}\" id={town_id}; rechazada por comando: {error:?}",
+                    town_action_name(button.0)
+                );
+                push_build_command_error(&mut hud_feedback, error, time.elapsed_secs());
+            }
         }
     }
+}
+
+fn town_action_snapshot(
+    state: &openttdrs_core::GameState,
+    town: &openttdrs_core::Town,
+) -> TownActionSnapshot {
+    TownActionSnapshot {
+        money: state.economy.money,
+        population: town.population,
+        houses: town.num_houses,
+        road_build_months: town.road_build_months,
+        fund_buildings_months: town.fund_buildings_months,
+    }
+}
+
+fn log_town_action_success(
+    action: TownAction,
+    town_id: u32,
+    town_name: &str,
+    before: TownActionSnapshot,
+    after: TownActionSnapshot,
+) {
+    info!(
+        "autoridad: acción={} pueblo=\"{town_name}\" id={town_id}; aceptada: saldo {} -> {}",
+        town_action_name(action),
+        before.money,
+        after.money,
+    );
+    match action {
+        TownAction::RoadRebuild => info!(
+            "autoridad: reconstrucción vial iniciada en \"{town_name}\": meses {} -> {}; el comando no colocó carreteras todavía",
+            before.road_build_months, after.road_build_months,
+        ),
+        TownAction::FundBuildings => info!(
+            "autoridad: expansión financiada en \"{town_name}\": población {} -> {}, casas {} -> {}, financiación {} meses",
+            before.population,
+            after.population,
+            before.houses,
+            after.houses,
+            after.fund_buildings_months,
+        ),
+        _ => {}
+    }
+}
+
+/// Informa cambios físicos posteriores a una acción financiada. Se ejecuta
+/// después del tick de simulación y sólo imprime cuando cambian población o
+/// casas, por lo que el detalle por tick queda disponible sin spam.
+pub(crate) fn observe_town_authority_effects(
+    sim: Res<SimWorld>,
+    mut watch: ResMut<TownAuthorityEffectWatch>,
+) {
+    watch.towns.retain(|town_id, previous| {
+        let Some(town) = sim.state.towns.iter().find(|town| town.id == *town_id) else {
+            debug!("autoridad: pueblo_id={town_id} dejó de existir; se detiene observación");
+            return false;
+        };
+        let current = town_action_snapshot(&sim.state, town);
+        if current.population != previous.population || current.houses != previous.houses {
+            debug!(
+                "autoridad: efecto confirmado pueblo=\"{}\" id={town_id}: población {} -> {}, casas {} -> {}",
+                town.name,
+                previous.population,
+                current.population,
+                previous.houses,
+                current.houses,
+            );
+        }
+        *previous = current;
+        true
+    });
 }
 
 pub(crate) fn town_authority_window_on_closed(
@@ -408,6 +550,7 @@ mod tests {
             open: true,
             town_id: Some(7),
         });
+        world.init_resource::<TownAuthorityEffectWatch>();
         world.init_resource::<HudBuildFeedback>();
         world.insert_resource(Time::<()>::default());
         world.spawn((
@@ -427,6 +570,37 @@ mod tests {
         );
         assert_eq!(sim.state.towns[0].road_build_months, 6);
         assert!(world.resource::<TownAuthorityWindowState>().open);
+        assert_eq!(
+            world.resource::<TownAuthorityEffectWatch>().towns[&7].road_build_months,
+            6
+        );
+    }
+
+    #[test]
+    fn effect_watch_updates_after_a_confirmed_town_growth() {
+        let state = state_with_town(10_000);
+        let before = town_action_snapshot(&state, &state.towns[0]);
+        let mut world = World::new();
+        world.insert_resource(SimWorld {
+            state,
+            ..SimWorld::default()
+        });
+        let mut watch = TownAuthorityEffectWatch::default();
+        watch.towns.insert(7, before);
+        world.insert_resource(watch);
+        {
+            let mut sim = world.resource_mut::<SimWorld>();
+            sim.state.towns[0].population += 8;
+            sim.state.towns[0].num_houses += 1;
+        }
+
+        world
+            .run_system_once(observe_town_authority_effects)
+            .unwrap();
+
+        let snapshot = world.resource::<TownAuthorityEffectWatch>().towns[&7];
+        assert_eq!(snapshot.population, before.population + 8);
+        assert_eq!(snapshot.houses, before.houses + 1);
     }
 
     #[test]

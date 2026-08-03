@@ -145,7 +145,7 @@ impl std::fmt::Display for SavError {
             Self::InvalidMapDimensions { width, height } => {
                 write!(
                     f,
-                    "dimensiones MAPS inválidas: {width}×{height}; se admiten potencias de dos entre 64 y 4096"
+                    "dimensiones MAPS inválidas: {width}×{height}; se admiten potencias de dos entre 1 y 4096"
                 )
             }
             Self::AllocationFailed { context, requested } => {

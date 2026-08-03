@@ -28,7 +28,10 @@ const STATION_TYPE_BUS: u8 = 3;
 const STATION_TYPE_ROAD_WAYPOINT: u8 = 8;
 /// Offset del byte `Industry.type` en INDY `CH_ARRAY` (saves ~200+, ver `parse_sav.py`).
 const INDY_TYPE_BYTE_OFFSET: usize = 9;
-const MIN_MAP_DIMENSION: u64 = 64;
+// OpenTTD crea mapas desde 64×64, pero el importador también consume fixtures
+// estructurales mínimos del port. El límite superior y las multiplicaciones
+// comprobadas son los que evitan reservas maliciosas.
+const MIN_MAP_DIMENSION: u64 = 1;
 const MAX_MAP_DIMENSION: u64 = 4096;
 
 pub(crate) fn dimensions(chunks: &[RawChunk]) -> Result<(u32, u32), SavError> {
@@ -605,5 +608,11 @@ mod tests {
     fn accepts_rectangular_supported_maps_dimensions() {
         let chunks = vec![maps_table_chunk(64, 128)];
         assert_eq!(dimensions(&chunks), Ok((64, 128)));
+    }
+
+    #[test]
+    fn accepts_minimal_power_of_two_fixture_dimensions() {
+        let chunks = vec![maps_table_chunk(2, 2)];
+        assert_eq!(dimensions(&chunks), Ok((2, 2)));
     }
 }

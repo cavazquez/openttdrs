@@ -72,6 +72,24 @@ fn place_buoy_on_water_is_ship_waypoint() {
 }
 
 #[test]
+fn clearing_buoy_restores_underlying_canal_water() {
+    use crate::map::is_canal_tile;
+
+    let mut s = GameState::new(8, 8);
+    let buoy = TileCoord::new(4, 4);
+    apply_command(&mut s, &Command::PlaceCanal(buoy)).unwrap();
+    apply_command(&mut s, &Command::PlaceBuoy(buoy)).unwrap();
+    assert_eq!(s.map.get_kind(buoy), Some(TileKind::Station));
+
+    apply_command(&mut s, &Command::ClearTile(buoy)).unwrap();
+
+    assert_eq!(s.map.get_kind(buoy), Some(TileKind::Water));
+    assert!(s.map.get(buoy).is_some_and(is_canal_tile));
+    assert_eq!(s.map.get(buoy).map(|tile| tile.m6), Some(0));
+    assert!(s.stations.is_empty());
+}
+
+#[test]
 fn place_buoy_rejects_land() {
     let mut s = GameState::new(8, 8);
     let e = apply_command(&mut s, &Command::PlaceBuoy(TileCoord::new(2, 2))).unwrap_err();

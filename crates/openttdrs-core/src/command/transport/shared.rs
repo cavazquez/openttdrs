@@ -1,4 +1,7 @@
-use crate::map::{Map, OBJECT_TYPE_STATUE_COMPANY, TileCoord, TileKind, object_type_from_tile};
+use crate::map::{
+    Map, OBJECT_TYPE_STATUE_COMPANY, TileCoord, TileKind, WaterClass, make_water_tile,
+    object_type_from_tile, water_class_from_m1,
+};
 use crate::{CLEAR_TILE_COST, GameState};
 
 use super::super::{CommandError, in_bounds, require_tile_owned_by_active, tile_owner};
@@ -323,6 +326,31 @@ pub(in crate::command) fn clear_tile(
         state.economy.money -= CLEAR_TILE_COST;
         return Ok(());
     }
+
+    // Una boya es una estación superpuesta sobre agua. Al retirarla, la
+    // tesela subyacente debe volver a ser agua (con su clase original), no
+    // hierba: de lo contrario se destruye un canal, mar o río navegable.
+    if state
+        .stations
+        .iter()
+        .any(|station| station.pos == c && station.stop_kind == crate::station::StopKind::Buoy)
+    {
+        let water_class = state
+            .map
+            .get(c)
+            .map_or(WaterClass::Sea, |tile| water_class_from_m1(tile.m1));
+        make_water_tile(&mut state.map, c, water_class).map_err(|_| CommandError::OutOfBounds)?;
+        let mut tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
+        tile.m6 = 0;
+        state
+            .map
+            .set_tile(c, tile)
+            .map_err(|_| CommandError::OutOfBounds)?;
+        state.stations.retain(|station| station.pos != c);
+        state.economy.money -= CLEAR_TILE_COST;
+        return Ok(());
+    }
+
     state
         .map
         .set_kind(c, TileKind::Grass)

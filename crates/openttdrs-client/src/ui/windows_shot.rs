@@ -9,6 +9,8 @@
 //!
 //! Resolución opcional: `OPENTTDRS_SHOT_RES=1280x720` o `1920x1080`.
 //! Escala opcional: `OPENTTDRS_SHOT_UI_SCALE=1` o `2`.
+//! Para `TownAuthority`, `OPENTTDRS_TOWN_AUTHORITY_SHOT_STATE=normal|no-funds|unavailable`
+//! prepara estados reproducibles para el oráculo visual de #295.
 
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
@@ -77,6 +79,29 @@ use crate::ui::vehicle_window::VehicleWindowState;
 const OPEN_FRAME: u32 = 30;
 const SHOT_FRAME: u32 = 60;
 const EXIT_FRAME: u32 = 120;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TownAuthorityShotState {
+    Normal,
+    NoFunds,
+    Unavailable,
+}
+
+fn town_authority_shot_state() -> TownAuthorityShotState {
+    parse_town_authority_shot_state(
+        std::env::var("OPENTTDRS_TOWN_AUTHORITY_SHOT_STATE")
+            .ok()
+            .as_deref(),
+    )
+}
+
+fn parse_town_authority_shot_state(raw: Option<&str>) -> TownAuthorityShotState {
+    match raw {
+        Some("no-funds") => TownAuthorityShotState::NoFunds,
+        Some("unavailable") => TownAuthorityShotState::Unavailable,
+        _ => TownAuthorityShotState::Normal,
+    }
+}
 
 /// Inventario de `FloatingWindowId` que `windows_shot` intenta abrir.
 /// Debe coincidir con [`FloatingWindowId::ALL`] (test de cobertura).
@@ -745,7 +770,7 @@ pub(crate) fn reference_geometry_primary(
 /// Las variantes comparten class; `WindowKey.instance` sigue en 0 hasta #242.
 pub(crate) const WINDOW_REFERENCE_GEOMETRY: &[ReferenceGeometry] = &[
     reference_geometry!(Town, "game", Auto, Some(260), None),
-    reference_geometry!(TownAuthority, "default", Auto, Some(200), None),
+    reference_geometry!(TownAuthority, "default", Auto, Some(300), None),
     reference_geometry!(TownDirectory, "default", Auto, Some(208), Some(202)),
     reference_geometry!(Industry, "default", Auto, Some(260), Some(120)),
     reference_geometry!(IndustryProduction, "default", Auto, Some(300), Some(215)),
@@ -1247,6 +1272,26 @@ fn open_all_windows_for_shot(world: &mut World, include_auxiliary: bool) {
         .towns
         .first()
         .map(|t| t.id);
+    if requested_window_shot_id() == Ok(Some(FloatingWindowId::TownAuthority)) {
+        match town_authority_shot_state() {
+            TownAuthorityShotState::Normal => {}
+            TownAuthorityShotState::NoFunds => {
+                world.resource_mut::<SimWorld>().state.economy.money = 0;
+            }
+            TownAuthorityShotState::Unavailable => {
+                if let Some(town_id) = town_id
+                    && let Some(town) = world
+                        .resource_mut::<SimWorld>()
+                        .state
+                        .towns
+                        .iter_mut()
+                        .find(|town| town.id == town_id)
+                {
+                    town.road_build_months = 1;
+                }
+            }
+        }
+    }
     let vehicle_id = world
         .resource::<SimWorld>()
         .state
@@ -1281,6 +1326,7 @@ fn open_all_windows_for_shot(world: &mut World, include_auxiliary: bool) {
     let save_dir = save_dir_from(&world.resource::<SimHudControls>().json_save_path);
 
     world.resource_mut::<TownWindowState>().town_id = town_id;
+    world.resource_mut::<TownAuthorityWindowState>().town_id = town_id;
     let station_positions: Vec<_> = world
         .resource::<SimWorld>()
         .state
@@ -1517,6 +1563,26 @@ mod tests {
         assert_eq!(parse_shot_ui_scale("0"), None);
         assert_eq!(parse_shot_ui_scale("NaN"), None);
         assert_eq!(parse_shot_ui_scale("5"), None);
+    }
+
+    #[test]
+    fn town_authority_shot_state_defaults_and_accepts_known_variants() {
+        assert_eq!(
+            parse_town_authority_shot_state(None),
+            TownAuthorityShotState::Normal
+        );
+        assert_eq!(
+            parse_town_authority_shot_state(Some("no-funds")),
+            TownAuthorityShotState::NoFunds
+        );
+        assert_eq!(
+            parse_town_authority_shot_state(Some("unavailable")),
+            TownAuthorityShotState::Unavailable
+        );
+        assert_eq!(
+            parse_town_authority_shot_state(Some("invalid")),
+            TownAuthorityShotState::Normal
+        );
     }
 
     #[test]

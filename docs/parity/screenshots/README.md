@@ -67,6 +67,17 @@ OPENTTDRS_WINDOW_SHOT_ID=Vehicle bash scripts/capture_ui_reference.sh
 OPENTTDRS_WINDOW_SHOT_ID=Orders bash scripts/capture_ui_reference.sh
 ```
 
+`TownAuthority` ofrece además estados reproducibles para sus acciones:
+
+```bash
+OPENTTDRS_WINDOW_SHOT_ID=TownAuthority \
+OPENTTDRS_TOWN_AUTHORITY_SHOT_STATE=no-funds \
+  bash scripts/capture_ui_reference.sh
+OPENTTDRS_WINDOW_SHOT_ID=TownAuthority \
+OPENTTDRS_TOWN_AUTHORITY_SHOT_STATE=unavailable \
+  bash scripts/capture_ui_reference.sh
+```
+
 Para comprobar escalado:
 
 ```bash

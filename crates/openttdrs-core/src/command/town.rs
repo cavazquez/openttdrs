@@ -270,6 +270,28 @@ mod tests {
     }
 
     #[test]
+    fn same_town_action_has_same_canonical_hash_on_two_replicas() {
+        let mut first = GameState::new(32, 32);
+        first.economy.money = 100_000;
+        first.towns.push(Town {
+            id: 1,
+            pos: TileCoord::new(8, 8),
+            name: "Hashville".into(),
+            ..Default::default()
+        });
+        let mut second = first.clone();
+        let command = Command::DoTownAction {
+            town_id: 1,
+            action: TownAction::RoadRebuild,
+        };
+
+        apply_command(&mut first, &command).unwrap();
+        apply_command(&mut second, &command).unwrap();
+
+        assert_eq!(first.canonical_hash(), second.canonical_hash());
+    }
+
+    #[test]
     fn buy_rights_grants_twelve_month_exclusivity() {
         let mut s = GameState::new(32, 32);
         s.economy.money = 100_000;

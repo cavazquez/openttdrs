@@ -38,7 +38,7 @@ pub(crate) enum TownWindowButton {
     CenterCamera,
     Advertise,
     FundBuildings,
-    /// Abre stub Authority (#269).
+    /// Abre las acciones de autoridad local.
     OpenAuthority,
 }
 

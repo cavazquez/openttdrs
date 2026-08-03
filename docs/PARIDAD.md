@@ -912,7 +912,7 @@ Checklist versionado de superficies de UI. Los conteos deben coincidir con
 | Id | Apertura típica | Notas |
 |----|-----------------|-------|
 | Town | clic pueblo / menú | Chrome compacto (#179); Aut. → Authority (#269) |
-| TownAuthority | Town → Aut. | Stub ratings dominio (#269); acciones 15.3 residual |
+| TownAuthority | Town → Aut. | Ocho acciones 15.3 operativas (#295): coste, disponibilidad, sin fondos, ratings por compañía y `DoTownAction` |
 | TownDirectory | menú Info / `UiRoute` | |
 | IndustryDirectory | menú Info | |
 | Industry | clic industria | Viewport RT + Loc (#179); Prod → Production (#269) |

@@ -70,8 +70,8 @@ use crate::ui::toolbar::{
     update_toolbar_tooltip,
 };
 use crate::ui::town_authority_window::{
-    TownAuthorityWindowState, setup_town_authority_window, sync_town_authority_window,
-    town_authority_window_on_closed,
+    TownAuthorityWindowState, handle_town_authority_buttons, setup_town_authority_window,
+    sync_town_authority_window, town_authority_window_on_closed,
 };
 use crate::ui::town_window::{
     TownWindowState, handle_town_window_buttons, setup_town_window, sync_town_window,
@@ -246,6 +246,7 @@ impl Plugin for ToolbarUiPlugin {
                 Update,
                 (
                     handle_town_window_buttons,
+                    handle_town_authority_buttons,
                     town_window_on_closed,
                     town_authority_window_on_closed,
                     industry_production_window_on_closed,

@@ -113,7 +113,8 @@ impl AirportSpecId {
     /// `AT_SMALL=0, AT_LARGE=1, AT_HELIPORT=2, AT_METROPOLITAN=3,
     /// AT_INTERNATIONAL=4, AT_COMMUTER=5, AT_HELIDEPOT=6, AT_INTERCON=7,
     /// AT_HELISTATION=8, AT_OILRIG=9` (`airport.h`).
-    /// `NewGRF` (`≥10`) se conserva como id global vía [`AirportSpecId::as_newgrf_id`].
+    /// `NewGRF` (`≥10`) se conserva como id global en
+    /// [`crate::station::Station::airport_newgrf_spec_id`].
     #[must_use]
     pub const fn from_ottd_airport_type(at: u8) -> Self {
         if (at as u16) >= NEW_AIRPORT_OFFSET {

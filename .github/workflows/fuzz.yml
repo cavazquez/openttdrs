@@ -9,20 +9,49 @@ concurrency:
   group: fuzz-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  FUZZ_TOOLCHAIN: nightly-2026-07-31
+  CARGO_FUZZ_VERSION: 0.13.2
+
 jobs:
   fuzz:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        target: [sav_load, newgrf_parse, net_message]
+        include:
+          - target: sav_load
+            max_total_time: 600
+          - target: newgrf_parse
+            max_total_time: 60
+          - target: net_message
+            max_total_time: 60
     steps:
       - uses: actions/checkout@v7
 
       - name: Instalar nightly y cargo-fuzz
         run: |
-          rustup toolchain install nightly --profile minimal
-          cargo install cargo-fuzz --locked
+          rustup toolchain install "${FUZZ_TOOLCHAIN}" --profile minimal
+          cargo +"${FUZZ_TOOLCHAIN}" install cargo-fuzz --version "${CARGO_FUZZ_VERSION}" --locked
 
-      - name: Fuzz acotado
-        run: cargo +nightly fuzz run ${{ matrix.target }} -- -max_total_time=60 -timeout=10
+      - name: Fuzz con límite de memoria y repro persistente
+        working-directory: fuzz
+        run: |
+          mkdir -p "artifacts/${{ matrix.target }}"
+          cargo +"${FUZZ_TOOLCHAIN}" fuzz run "${{ matrix.target }}" -- \
+            -max_total_time="${{ matrix.max_total_time }}" \
+            -timeout=10 \
+            -rss_limit_mb=1024 \
+            -artifact_prefix="artifacts/${{ matrix.target }}/" \
+            -print_final_stats=1
+
+      - name: Conservar crashes y estadísticas del fuzz
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: fuzz-${{ matrix.target }}
+          retention-days: 14
+          if-no-files-found: ignore
+          path: |
+            fuzz/artifacts/${{ matrix.target }}/
+            fuzz/target/${{ matrix.target }}/release/${{ matrix.target }}

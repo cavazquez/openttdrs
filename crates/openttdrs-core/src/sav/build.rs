@@ -28,6 +28,8 @@ const STATION_TYPE_BUS: u8 = 3;
 const STATION_TYPE_ROAD_WAYPOINT: u8 = 8;
 /// Offset del byte `Industry.type` en INDY `CH_ARRAY` (saves ~200+, ver `parse_sav.py`).
 const INDY_TYPE_BYTE_OFFSET: usize = 9;
+const MIN_MAP_DIMENSION: u64 = 64;
+const MAX_MAP_DIMENSION: u64 = 4096;
 
 pub(crate) fn dimensions(chunks: &[RawChunk]) -> Result<(u32, u32), SavError> {
     if let Some(maps) = find_chunk(chunks, "MAPS") {
@@ -38,25 +40,58 @@ pub(crate) fn dimensions(chunks: &[RawChunk]) -> Result<(u32, u32), SavError> {
             let dim_x = record_get(record, "dim_x").and_then(SlValue::as_u64);
             let dim_y = record_get(record, "dim_y").and_then(SlValue::as_u64);
             if let (Some(x), Some(y)) = (dim_x, dim_y) {
-                #[allow(clippy::cast_possible_truncation)]
-                return Ok((x as u32, y as u32));
+                return validate_dimensions(x, y);
             }
         }
         if maps.ch_type == super::chunks::CH_RIFF
             && let (Some(xb), Some(yb)) = (maps.body.get(0..4), maps.body.get(4..8))
             && let (Ok(xb), Ok(yb)) = (<[u8; 4]>::try_from(xb), <[u8; 4]>::try_from(yb))
         {
-            return Ok((u32::from_be_bytes(xb), u32::from_be_bytes(yb)));
+            return validate_dimensions(
+                u64::from(u32::from_be_bytes(xb)),
+                u64::from(u32::from_be_bytes(yb)),
+            );
         }
     }
     if let Some(mapt) = find_chunk(chunks, "MAPT")
         && let Some(dims) = infer_dimensions(mapt.body.len())
     {
-        return Ok(dims);
+        return validate_dimensions(u64::from(dims.0), u64::from(dims.1));
     }
     Err(SavError::BadFormat(
         "no se pudieron determinar las dimensiones del mapa (MAPS/MAPT)".into(),
     ))
+}
+
+fn validate_dimensions(width: u64, height: u64) -> Result<(u32, u32), SavError> {
+    let supported = |dimension: u64| {
+        (MIN_MAP_DIMENSION..=MAX_MAP_DIMENSION).contains(&dimension) && dimension.is_power_of_two()
+    };
+    if !supported(width) || !supported(height) {
+        return Err(SavError::InvalidMapDimensions { width, height });
+    }
+
+    let width =
+        u32::try_from(width).map_err(|_| SavError::InvalidMapDimensions { width, height })?;
+    let height = u32::try_from(height).map_err(|_| SavError::InvalidMapDimensions {
+        width: u64::from(width),
+        height,
+    })?;
+    Ok((width, height))
+}
+
+fn map_tile_count(width: u32, height: u32) -> Result<usize, SavError> {
+    usize::try_from(width)
+        .ok()
+        .and_then(|width| {
+            usize::try_from(height)
+                .ok()
+                .and_then(|height| width.checked_mul(height))
+        })
+        .ok_or(SavError::InvalidMapDimensions {
+            width: u64::from(width),
+            height: u64::from(height),
+        })
 }
 
 fn infer_dimensions(mapt_len: usize) -> Option<(u32, u32)> {
@@ -73,13 +108,53 @@ fn infer_dimensions(mapt_len: usize) -> Option<(u32, u32)> {
     None
 }
 
-fn padded_plane(chunks: &[RawChunk], name: &str, len: usize) -> Vec<u8> {
-    let mut plane = find_chunk(chunks, name)
-        .map(|c| c.body.clone())
-        .unwrap_or_default();
-    plane.truncate(len);
-    plane.resize(len, 0);
-    plane
+fn reserved_buffer(capacity: usize, context: &'static str) -> Result<Vec<u8>, SavError> {
+    let mut buffer = Vec::new();
+    buffer
+        .try_reserve_exact(capacity)
+        .map_err(|_| SavError::AllocationFailed {
+            context,
+            requested: capacity,
+        })?;
+    Ok(buffer)
+}
+
+fn zeroed_buffer(len: usize, context: &'static str) -> Result<Vec<u8>, SavError> {
+    let mut buffer = reserved_buffer(len, context)?;
+    buffer.resize(len, 0);
+    Ok(buffer)
+}
+
+fn padded_plane(chunks: &[RawChunk], name: &str, len: usize) -> Result<Vec<u8>, SavError> {
+    let mut plane = zeroed_buffer(len, "plano de mapa")?;
+    if let Some(source) = find_chunk(chunks, name).map(|chunk| chunk.body.as_slice()) {
+        let copied = source.len().min(len);
+        plane[..copied].copy_from_slice(&source[..copied]);
+    }
+    Ok(plane)
+}
+
+fn map2_planes(
+    data: &[u8],
+    expected: usize,
+    expected_twice: usize,
+) -> Result<(Vec<u8>, Vec<u8>), SavError> {
+    if data.len() >= expected_twice {
+        // MAP2 es `SLE_UINT16` big-endian en el save (TownID en MP_HOUSE,
+        // tipo/variante de señal en MP_RAILWAY): byte alto primero.
+        let mut lo = zeroed_buffer(expected, "plano bajo MAP2")?;
+        let mut hi = zeroed_buffer(expected, "plano alto MAP2")?;
+        for (index, bytes) in data[..expected_twice].chunks_exact(2).enumerate() {
+            hi[index] = bytes[0];
+            lo[index] = bytes[1];
+        }
+        return Ok((lo, hi));
+    }
+
+    let mut lo = zeroed_buffer(expected, "plano bajo MAP2")?;
+    let copied = data.len().min(expected);
+    lo[..copied].copy_from_slice(&data[..copied]);
+    Ok((lo, zeroed_buffer(expected, "plano alto MAP2")?))
 }
 
 /// `(industry_index, type)` desde INDY: `CH_ARRAY` (byte fijo) o `CH_TABLE` (campo `type`).
@@ -256,11 +331,15 @@ fn normalize_old_water_m5(version: u16, mapt: &[u8], plane5: &mut [u8]) {
 #[allow(clippy::cast_possible_truncation, clippy::similar_names)]
 pub(crate) fn export_ottdmap(chunks: &[RawChunk], version: u16) -> Result<Vec<u8>, SavError> {
     let (dim_x, dim_y) = dimensions(chunks)?;
-    let expected = dim_x as usize * dim_y as usize;
+    let expected = map_tile_count(dim_x, dim_y)?;
+    let expected_twice = expected
+        .checked_mul(2)
+        .ok_or(SavError::InvalidMapDimensions {
+            width: u64::from(dim_x),
+            height: u64::from(dim_y),
+        })?;
 
-    let mapt_raw = find_chunk(chunks, "MAPT")
-        .map(|c| c.body.clone())
-        .unwrap_or_default();
+    let mapt_raw = find_chunk(chunks, "MAPT").map_or(&[][..], |chunk| chunk.body.as_slice());
     if mapt_raw.len() < expected {
         return Err(SavError::BadFormat(format!(
             "MAPT demasiado corto: {} bytes, esperados {expected}",
@@ -269,17 +348,15 @@ pub(crate) fn export_ottdmap(chunks: &[RawChunk], version: u16) -> Result<Vec<u8
     }
     let mapt = &mapt_raw[..expected];
 
-    let maph = padded_plane(chunks, "MAPH", expected);
-    let map1 = padded_plane(chunks, "MAPO", expected);
-    let map6 = padded_plane(chunks, "MAPE", expected);
-    let mut map7 = padded_plane(chunks, "MAP7", expected);
-    let m3lo = padded_plane(chunks, "M3LO", expected);
-    let mut m3hi = padded_plane(chunks, "M3HI", expected);
-    let mut map5 = padded_plane(chunks, "MAP5", expected);
-    let map8 = padded_plane(chunks, "MAP8", expected * 2);
-    let map2_raw = find_chunk(chunks, "MAP2")
-        .map(|c| c.body.clone())
-        .unwrap_or_default();
+    let maph = padded_plane(chunks, "MAPH", expected)?;
+    let map1 = padded_plane(chunks, "MAPO", expected)?;
+    let map6 = padded_plane(chunks, "MAPE", expected)?;
+    let mut map7 = padded_plane(chunks, "MAP7", expected)?;
+    let m3lo = padded_plane(chunks, "M3LO", expected)?;
+    let mut m3hi = padded_plane(chunks, "M3HI", expected)?;
+    let mut map5 = padded_plane(chunks, "MAP5", expected)?;
+    let map8 = padded_plane(chunks, "MAP8", expected_twice)?;
+    let map2_raw = find_chunk(chunks, "MAP2").map_or(&[][..], |chunk| chunk.body.as_slice());
 
     normalize_old_water_m5(version, mapt, &mut map5);
 
@@ -294,21 +371,16 @@ pub(crate) fn export_ottdmap(chunks: &[RawChunk], version: u16) -> Result<Vec<u8
     let mut m8 = build_m8_le(version, mapt, &map8, &m3lo, &m3hi, expected);
     apply_slv_road_types(version, mapt, &map5, &map6, &mut map7, &mut m3hi, &mut m8);
 
-    let (m2_lo, m2_hi): (Vec<u8>, Vec<u8>) = if map2_raw.len() >= 2 * expected {
-        // MAP2 es `SLE_UINT16` big-endian en el save (TownID en MP_HOUSE,
-        // tipo/variante de señal en MP_RAILWAY): byte alto primero.
-        (
-            (0..expected).map(|i| map2_raw[i * 2 + 1]).collect(),
-            (0..expected).map(|i| map2_raw[i * 2]).collect(),
-        )
-    } else {
-        let mut lo = map2_raw.clone();
-        lo.truncate(expected);
-        lo.resize(expected, 0);
-        (lo, vec![0; expected])
-    };
+    let (m2_lo, m2_hi) = map2_planes(map2_raw, expected, expected_twice)?;
 
-    let mut body = Vec::with_capacity(16 + expected * 12);
+    let map_body_len = expected
+        .checked_mul(12)
+        .and_then(|size| size.checked_add(16))
+        .ok_or(SavError::InvalidMapDimensions {
+            width: u64::from(dim_x),
+            height: u64::from(dim_y),
+        })?;
+    let mut body = reserved_buffer(map_body_len, "exportación ottdmap")?;
     body.extend_from_slice(b"MAP1");
     body.extend_from_slice(&dim_x.to_le_bytes());
     body.extend_from_slice(&dim_y.to_le_bytes());
@@ -503,5 +575,35 @@ mod tests {
     fn missing_mapt_is_error() {
         let chunks = vec![maps_table_chunk(64, 64)];
         assert!(export_ottdmap(&chunks, 300).is_err());
+    }
+
+    #[test]
+    fn rejects_oversized_maps_dimensions_before_allocating_planes() {
+        let chunks = vec![maps_table_chunk(8192, 8192)];
+        assert_eq!(
+            export_ottdmap(&chunks, 300),
+            Err(SavError::InvalidMapDimensions {
+                width: 8192,
+                height: 8192,
+            })
+        );
+    }
+
+    #[test]
+    fn rejects_non_power_of_two_maps_dimensions() {
+        let chunks = vec![maps_table_chunk(192, 64)];
+        assert_eq!(
+            dimensions(&chunks),
+            Err(SavError::InvalidMapDimensions {
+                width: 192,
+                height: 64,
+            })
+        );
+    }
+
+    #[test]
+    fn accepts_rectangular_supported_maps_dimensions() {
+        let chunks = vec![maps_table_chunk(64, 128)];
+        assert_eq!(dimensions(&chunks), Ok((64, 128)));
     }
 }

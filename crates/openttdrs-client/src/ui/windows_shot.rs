@@ -772,7 +772,9 @@ pub(crate) const WINDOW_REFERENCE_GEOMETRY: &[ReferenceGeometry] = &[
     reference_geometry!(Town, "game", Auto, Some(260), None),
     reference_geometry!(TownAuthority, "default", Auto, Some(300), None),
     reference_geometry!(TownDirectory, "default", Auto, Some(208), Some(202)),
-    reference_geometry!(Industry, "default", Auto, Some(260), Some(120)),
+    // La preview fija mide 320 px y los detalles crecen con la industria:
+    // fijar 260×120 hacía desbordar el contenido fuera del chrome.
+    reference_geometry!(Industry, "default", Auto, Some(340), None),
     reference_geometry!(IndustryProduction, "default", Auto, Some(300), Some(215)),
     reference_geometry!(IndustryDirectory, "default", Auto, Some(428), Some(190)),
     reference_geometry!(StationDirectory, "default", Auto, Some(358), Some(162)),
@@ -1541,6 +1543,14 @@ mod tests {
             );
             let _placement = geometry.placement;
         }
+    }
+
+    #[test]
+    fn industry_geometry_fits_its_fixed_preview_without_clipping_details() {
+        let geometry = reference_geometry_primary(FloatingWindowId::Industry)
+            .expect("Industry must have reference geometry");
+        assert_eq!(geometry.width, Some(340));
+        assert_eq!(geometry.height, None, "details must determine the height");
     }
 
     #[test]

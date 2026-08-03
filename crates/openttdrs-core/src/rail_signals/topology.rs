@@ -32,6 +32,12 @@ pub(crate) fn rail_neighbors(map: &Map, cur: TileCoord, prev: Option<TileCoord>)
             out.push(next);
         }
     }
+    if map.get_kind(cur) == Some(TileKind::RailBridge)
+        && let Some(other) = crate::rail_bridge_other_end(map, cur)
+        && prev != Some(other)
+    {
+        out.push(other);
+    }
     out
 }
 

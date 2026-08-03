@@ -379,11 +379,21 @@ fn rail_bridge_placement_and_train_enters_ramp_from_land() {
         s.vehicles[0].pos, west_ramp,
         "el tren debe entrar a la rampa del puente sin descarrilar"
     );
-    // El vano central sigue siendo `Water` con `mapt` de puente: el pathfinder aún
-    // no atraviesa el tramo (divergencia documentada; Fase Rail 3E o pathfinder).
-    assert!(
-        find_path(&s.map, west_ramp, east_ramp, PathNetwork::Rail).is_none(),
-        "cruzar el vano completo aún no está soportado por el pathfinder"
+    let across = find_path(&s.map, west_ramp, east_ramp, PathNetwork::Rail)
+        .expect("el pathfinder debe saltar entre las rampas del puente");
+    assert_eq!(across, vec![east_ramp]);
+
+    s.vehicles[0].dest = east_ramp;
+    s.vehicles[0].path = across.into();
+    for _ in 0..800 {
+        s.step();
+        if s.vehicles[0].pos == east_ramp {
+            break;
+        }
+    }
+    assert_eq!(
+        s.vehicles[0].pos, east_ramp,
+        "el tren debe atravesar el vano del puente y llegar a la rampa opuesta"
     );
 }
 

@@ -114,7 +114,10 @@ pub fn is_safe_waiting_position(
         return true;
     };
     let Some(exit_dir) = dir_from_to(tile, next) else {
-        return true;
+        // El vano de un puente conserva su terreno original y el path contiene
+        // el enlace lógico rampa→rampa. No es un fin de vía ni una posición de
+        // espera segura: la reserva debe alcanzar la rampa opuesta.
+        return crate::rail_bridge_other_end(map, tile) != Some(next);
     };
     if has_block_signal_on_exit(map, tile, exit_dir) {
         return true;

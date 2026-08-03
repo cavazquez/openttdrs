@@ -432,13 +432,15 @@ pub fn bridge_above_axis_from_mapt(mapt: u8) -> Option<bool> {
     }
 }
 
-/// Otra rampa de un puente de carretera (`RoadBridge`), saltando el vano `Water`.
-///
-/// El pathfinder usa esto como wormhole (#187): el vano central sigue siendo agua.
+/// Otra rampa del puente `kind`, saltando el vano que conserva su terreno inferior.
 #[must_use]
-pub fn road_bridge_other_end(map: &crate::map::Map, ramp: TileCoord) -> Option<TileCoord> {
+fn bridge_other_end(
+    map: &crate::map::Map,
+    ramp: TileCoord,
+    kind: crate::map::TileKind,
+) -> Option<TileCoord> {
     let tile = map.get(ramp)?;
-    if tile.kind != crate::map::TileKind::RoadBridge {
+    if tile.kind != kind {
         return None;
     }
     let (map_w, map_h) = map.dimensions();
@@ -454,7 +456,7 @@ pub fn road_bridge_other_end(map: &crate::map::Map, ramp: TileCoord) -> Option<T
             let pos = TileCoord::new(cur_x, cur_y);
             let Some(probe) = map.get(pos) else { break };
             match probe.kind {
-                crate::map::TileKind::RoadBridge => return Some(pos),
+                bridge_kind if bridge_kind == kind => return Some(pos),
                 crate::map::TileKind::Water
                     if bridge_above_axis_from_mapt(probe.mapt).is_some() =>
                 {
@@ -466,6 +468,24 @@ pub fn road_bridge_other_end(map: &crate::map::Map, ramp: TileCoord) -> Option<T
         }
     }
     None
+}
+
+/// Otra rampa de un puente de carretera (`RoadBridge`), saltando el vano `Water`.
+///
+/// El pathfinder usa esto como wormhole (#187): el vano central sigue siendo agua.
+#[must_use]
+pub fn road_bridge_other_end(map: &crate::map::Map, ramp: TileCoord) -> Option<TileCoord> {
+    bridge_other_end(map, ramp, crate::map::TileKind::RoadBridge)
+}
+
+/// Otra rampa de un puente ferroviario (`RailBridge`), saltando el vano `Water`.
+///
+/// Igual que carretera, la geometría visible del tablero no reemplaza el terreno
+/// subyacente. El pathfinder ferroviario y PBS tratan las rampas como un enlace
+/// lógico directo.
+#[must_use]
+pub fn rail_bridge_other_end(map: &crate::map::Map, ramp: TileCoord) -> Option<TileCoord> {
+    bridge_other_end(map, ramp, crate::map::TileKind::RailBridge)
 }
 
 /// Pieza de vano según distancia a cada rampa (`CalcBridgePiece` en `tunnelbridge_cmd.cpp`).

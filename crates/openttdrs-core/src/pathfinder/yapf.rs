@@ -429,6 +429,37 @@ fn expand_neighbors(ctx: &mut SearchCtx<'_>, key: NodeKey, cur_g: u32, cur_td: R
             }
         }
     }
+
+    // Puente ferroviario: las teselas del vano conservan agua/terreno con la
+    // marca visual `IsBridgeAbove`, por lo que las rampas forman un enlace
+    // lógico directo, igual que el pathfinder de carretera.
+    if map.get_kind(key.tile) == Some(TileKind::RailBridge)
+        && let Some(other) = crate::rail_bridge_other_end(map, key.tile)
+        && (other == to
+            || (map.get_kind(other).is_some_and(is_rail_network_tile)
+                && tile_ok_for_required(map, other, required)))
+    {
+        let bridge_tb = yapf_traversal_bits(map, other);
+        for next_td in possible_trackdirs(bridge_tb, ENTRY_ANY) {
+            let Some(step) = cached_signal_step_cost(map, other, next_td, ctx.step_cache) else {
+                continue;
+            };
+            let tentative = cur_g + step;
+            let next_key = NodeKey {
+                tile: other,
+                track: next_td.track,
+                exit_dir: next_td.exit_dir,
+            };
+            if ctx.g_score.get(&next_key).is_none_or(|&g| tentative < g) {
+                ctx.g_score.insert(next_key, tentative);
+                ctx.parent.insert(next_key, key);
+                ctx.heap.push(AstarNode {
+                    est_total: tentative + manhattan(other, to),
+                    key: next_key,
+                });
+            }
+        }
+    }
 }
 
 /// Extiende un path parcial hacia `to` (YAPF incremental).

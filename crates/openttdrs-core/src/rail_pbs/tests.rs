@@ -8,6 +8,7 @@ use super::model::RAIL_TB_HORZ;
 use super::train_reservation::reservation_ends_at_safe_wait_steps;
 use super::*;
 use crate::GameState;
+use crate::bridge_spec::BridgeType;
 use crate::command::{Command, apply_command};
 use crate::map::{OTTD_MP_ROAD, TileCoord, TileKind, is_road_level_crossing};
 use crate::parity::{
@@ -240,6 +241,127 @@ fn sync_sets_m2_reservation_bits_on_rail_bridge_ramp() {
     assert!(!rail_tile_has_pbs_reservation(
         state.map.get(tile).expect("rampa").m2_hi
     ));
+}
+
+#[test]
+fn pbs_reservation_crosses_bridge_blocks_second_train_and_releases() {
+    let mut state = GameState::new(12, 8);
+    let c = |x: i32| TileCoord::new(x, 4);
+    for x in 2..=5 {
+        state.map.set_kind(c(x), TileKind::Water).expect("agua");
+    }
+    let west = c(1);
+    let east = c(6);
+    apply_command(
+        &mut state,
+        &Command::PlaceRailBridge(west, east, BridgeType::Wooden),
+    )
+    .expect("puente ferroviario");
+    for x in [0, 7, 8] {
+        apply_command(&mut state, &Command::PlaceRail(c(x))).expect("acceso ferroviario");
+    }
+    // Señales PBS en ambos accesos: la reserva que sigue debe atravesar el vano.
+    apply_command(
+        &mut state,
+        &Command::PlaceRailSignal(c(0), 0, 128, 128, SIGTYPE_PATH),
+    )
+    .expect("señal PBS oeste");
+    apply_command(
+        &mut state,
+        &Command::PlaceRailSignal(c(7), 0, 128, 128, SIGTYPE_PATH),
+    )
+    .expect("señal PBS este");
+
+    let mut westbound = Vehicle::new(1, VehicleKind::Train, west, c(8));
+    westbound.path = crate::find_path(&state.map, west, c(8), crate::PathNetwork::Rail)
+        .expect("ruta sobre el puente")
+        .into();
+    let mut eastbound = Vehicle::new(2, VehicleKind::Train, c(8), c(0));
+    eastbound.path = crate::find_path(&state.map, c(8), c(0), crate::PathNetwork::Rail)
+        .expect("ruta inversa sobre el puente")
+        .into();
+    state.vehicles = vec![westbound, eastbound];
+
+    let settings = crate::PathfindingSettings {
+        reserve_paths: true,
+        ..crate::PathfindingSettings::default()
+    };
+    assert!(try_path_reserve(
+        &mut state.map,
+        &mut state.vehicles,
+        0,
+        true,
+        settings
+    ));
+    assert!(
+        state.vehicles[0]
+            .reserved_steps
+            .iter()
+            .any(|step| step.tile == west)
+    );
+    assert!(
+        state.vehicles[0]
+            .reserved_steps
+            .iter()
+            .any(|step| step.tile == east),
+        "ruta: {:?}; reserva: {:?}",
+        state.vehicles[0].path,
+        state.vehicles[0].reserved_steps
+    );
+
+    let mut prev = HashSet::new();
+    let mut dirty = Vec::new();
+    sync_reservations_to_map(&mut state.map, &state.vehicles, &mut prev, &mut dirty);
+    assert!(rail_tile_has_pbs_reservation(
+        state.map.get(west).expect("rampa oeste").m2_hi
+    ));
+    assert!(rail_tile_has_pbs_reservation(
+        state.map.get(east).expect("rampa este").m2_hi
+    ));
+
+    assert!(try_path_reserve(
+        &mut state.map,
+        &mut state.vehicles,
+        1,
+        true,
+        settings
+    ));
+    assert!(
+        !state.vehicles[1]
+            .reserved_steps
+            .iter()
+            .any(|step| step.tile == west || step.tile == east),
+        "el segundo tren puede reservar su aproximación, pero no el puente ocupado"
+    );
+
+    free_train_track_reservation(
+        &mut state.map,
+        &mut state.vehicles[0],
+        &mut state.runtime.reservation_tile_dirty,
+    );
+    assert!(!rail_tile_has_pbs_reservation(
+        state.map.get(west).expect("rampa oeste").m2_hi
+    ));
+    assert!(!rail_tile_has_pbs_reservation(
+        state.map.get(east).expect("rampa este").m2_hi
+    ));
+    // Sale físicamente de la rampa antes de que el tren opuesto reintente.
+    state.vehicles[0].pos = c(0);
+    state.vehicles[0].running = false;
+    assert!(try_path_reserve(
+        &mut state.map,
+        &mut state.vehicles,
+        1,
+        true,
+        settings
+    ));
+    assert!(
+        state.vehicles[1]
+            .reserved_steps
+            .iter()
+            .any(|step| step.tile == west || step.tile == east),
+        "tras liberar, el segundo tren debe poder reservar el puente"
+    );
 }
 
 #[test]

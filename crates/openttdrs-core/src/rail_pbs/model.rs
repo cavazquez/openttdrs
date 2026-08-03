@@ -1,6 +1,6 @@
 //! Tipos de datos y helpers de codificación PBS.
 
-use crate::map::{Map, TileCoord};
+use crate::map::{Map, RAIL_TB_X, RAIL_TB_Y, TileCoord};
 use crate::map::{opposite_diag_dir as opposite_dir, rail_traversal_bits};
 use crate::rail_signals::dir_from_to;
 use crate::train_movement::track_bit_for_movement;
@@ -87,6 +87,11 @@ pub fn rail_tile_has_pbs_reservation(m2_hi: u8) -> bool {
 /// Pista usada en `tile` al avanzar `from` → `to`.
 #[must_use]
 pub fn track_for_rail_step(map: &Map, from: TileCoord, to: TileCoord) -> Option<u8> {
+    if crate::rail_bridge_other_end(map, from) == Some(to)
+        || crate::rail_bridge_other_end(map, to) == Some(from)
+    {
+        return Some(if from.y == to.y { RAIL_TB_X } else { RAIL_TB_Y });
+    }
     let exit_dir = dir_from_to(from, to)?;
     let entry = opposite_dir(exit_dir);
     let tb = rail_traversal_bits(map, to);
@@ -96,6 +101,9 @@ pub fn track_for_rail_step(map: &Map, from: TileCoord, to: TileCoord) -> Option<
 /// Pista usada en `from` al salir hacia `to`.
 #[must_use]
 pub fn track_on_departure_tile(map: &Map, from: TileCoord, to: TileCoord) -> Option<u8> {
+    if crate::rail_bridge_other_end(map, from) == Some(to) {
+        return Some(if from.y == to.y { RAIL_TB_X } else { RAIL_TB_Y });
+    }
     let exit_dir = dir_from_to(from, to)?;
     let entry = opposite_dir(exit_dir);
     let tb = rail_traversal_bits(map, from);

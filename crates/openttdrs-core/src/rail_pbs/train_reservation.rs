@@ -118,7 +118,8 @@ pub fn compute_train_reservation_with_wormholes(
     let mut alt_res = reserve_along_path(map, vehicles, vehicle, &alt, already_reserved);
     append_platform_reservation(map, vehicles, vehicle, already_reserved, &mut alt_res);
     if alt_res.len() > along_path.len()
-        || reservation_ends_at_safe_wait_steps(map, vehicle.pos, &alt, &alt_res)
+        || (alt_res.len() >= along_path.len()
+            && reservation_ends_at_safe_wait_steps(map, vehicle.pos, &alt, &alt_res))
     {
         alt_res
     } else {
@@ -176,7 +177,13 @@ fn reserve_along_path(
         }
         return out;
     };
-    out.push(ReservedRailStep::new(cur, pos_track));
+    let start_step = ReservedRailStep::new(cur, pos_track);
+    if already_reserved.contains(&start_step)
+        || tile_occupied_by_other_train(map, vehicles, vehicle.id, cur, pos_track)
+    {
+        return out;
+    }
+    out.push(start_step);
     extend_reservation_along_path(
         map,
         vehicles,

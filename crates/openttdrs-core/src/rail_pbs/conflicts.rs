@@ -57,7 +57,7 @@ pub fn tile_track_reserved_by_map(map: &Map, tile: TileCoord, track: u8) -> bool
     let Some(t) = map.get(tile) else {
         return false;
     };
-    if t.kind != TileKind::Rail {
+    if !matches!(t.kind, TileKind::Rail | TileKind::RailBridge) {
         return false;
     }
     let reserved = decode_rail_reservation_m2_hi(t.m2_hi);

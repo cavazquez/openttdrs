@@ -3960,6 +3960,37 @@ mod tests {
         ]);
     }
 
+    #[test]
+    fn industry_tile_animation_properties_are_parsed_separately() {
+        let tile = [
+            0x00,
+            ACTION0_FEATURE_INDUSTRYTILES,
+            0x06,
+            0x01,
+            0x00,
+            0x08,
+            0x00,
+            0x0E,
+            0x03,
+            0x0F,
+            0x05,
+            0x01,
+            0x10,
+            0x02,
+            0x11,
+            0x04,
+            0x12,
+            0x01,
+        ];
+        let meta = parse_action0_industry_tile_meta(&tile).unwrap();
+        assert_eq!(meta.callback_mask, 0x03);
+        assert_eq!(meta.animation_frames, 5);
+        assert_eq!(meta.animation_status, 1);
+        assert_eq!(meta.animation_speed, 2);
+        assert_eq!(meta.animation_triggers, 4);
+        assert_eq!(meta.animation_special_flags, 1);
+    }
+
     /// #231: Action3 elige sprite de airport tile; sin Action3 cae a subst.
     #[test]
     fn airport_tiles_ac_action3_sprite_fallback() {

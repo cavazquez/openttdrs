@@ -356,6 +356,9 @@ pub struct GameState {
     /// Specs `NewGRF` de teselas de industria (gfx ≥175).
     #[serde(default)]
     pub industry_tile_spec_catalog: Vec<crate::industry_tile::IndustryTileSpecDef>,
+    /// Equivalente persistido de `AnimatedTileList` para animaciones NewGRF de industria.
+    #[serde(default)]
+    pub newgrf_animated_industry_tiles: std::collections::HashSet<TileCoord>,
     /// Overrides vanilla gfx → `NewGRF` (`GetTranslatedIndustryTileID`).
     #[serde(default = "crate::industry_tile::empty_industry_tile_overrides")]
     pub industry_tile_overrides: Vec<u16>,
@@ -607,6 +610,7 @@ impl GameState {
             road_stop_spec_catalog: Vec::new(),
             engine_catalog: crate::engine::vanilla_engine_catalog(),
             industry_tile_spec_catalog: Vec::new(),
+            newgrf_animated_industry_tiles: std::collections::HashSet::new(),
             industry_tile_overrides: crate::industry_tile::empty_industry_tile_overrides(),
             industry_spec_catalog: Vec::new(),
             industry_overrides: crate::industry_spec::empty_industry_overrides(),
@@ -724,6 +728,7 @@ impl GameState {
             road_stop_spec_catalog: Vec::new(),
             engine_catalog: crate::engine::vanilla_engine_catalog(),
             industry_tile_spec_catalog: Vec::new(),
+            newgrf_animated_industry_tiles: std::collections::HashSet::new(),
             industry_tile_overrides: crate::industry_tile::empty_industry_tile_overrides(),
             industry_spec_catalog: Vec::new(),
             industry_overrides: crate::industry_spec::empty_industry_overrides(),

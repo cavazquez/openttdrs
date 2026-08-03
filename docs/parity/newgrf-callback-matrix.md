@@ -17,7 +17,8 @@ Estados:
 API común: `TrainSpriteGraphics::resolve_callback` / `resolve_callback_ctx`,
 `resolve_vehicle_callback`, `writeback_*_persistent_registers`,
 `apply_industry_location_callback`, `apply_house_construction_callback`,
-`apply_station_availability_callback`, `resolve_industry_tile_random_trigger`
+`apply_station_availability_callback`, `resolve_industry_tile_animation_callback`,
+`resolve_industry_tile_random_trigger`
 (`crates/openttdrs-core/src/newgrf_callback.rs`).
 
 ## Por feature
@@ -31,8 +32,8 @@ API común: `TrainSpriteGraphics::resolve_callback` / `resolve_callback_ctx`,
 | Vehicles | `0x10`–`0x12`, `0x15`–`0x16`, `0x19`, `0x1D`, `0x23`, `0x2D`, `0x32`–`0x36`, … | **OOS** | Evaluador Action2 listo; sin call sites |
 | Houses (`07`) | `0x17` `CBID_HOUSE_ALLOW_CONSTRUCTION` | **soportado** (#266) | `apply_house_construction_callback` (tests sintéticos + API) |
 | Houses | resto `0x1A`–`0x1C`, `0x1E`–`0x21`, … | **almacenado** | `HouseSpecDef.callback_mask` |
-| Industry tiles (`09`) | `0x25` `CBID_INDTILE_ANIM_NEXT_FRAME` | **soportado** (#266) | `apply_industry_tile_anim_callback`; FAILED sin runtime |
-| Industry tiles | resto `0x26`–`0x27`, `0x2B`–`0x2C`, … | **almacenado** | `IndustryTileSpecDef.callback_mask` |
+| Industry tiles (`09`) | `0x25` trigger, `0x26` next frame, `0x27` speed | **soportado** (#293) | `phase_tile_animation` ejecuta los tres con coordenada real, `param2=IndustryTick`, máscara Action0 y fallback `CALLBACK_FAILED` |
+| Industry tiles | `0x2B`–`0x2C`, … | **almacenado** | `IndustryTileSpecDef.callback_mask` |
 | Industries (`0A`) | `0x28` `CBID_INDUSTRY_LOCATION` | **soportado** (#266) | Call site: `place_industry_spec_def_sandbox` |
 | Industries | `0x22`, `0x29`, `0x35`, `0x37`–`0x3B`, `0x3D`, `0x14A`+, … | **almacenado** | `IndustrySpecDef.callback_mask` |
 | Airport tiles (`11`) / Airports (`0D`) | anim / FTA-related | **almacenado** / **OOS** | Máscaras; FTA bloqueado (#260) |
@@ -65,7 +66,7 @@ API común: `TrainSpriteGraphics::resolve_callback` / `resolve_callback_ctx`,
 3. Industries CB28 — location al colocar NewGRF (`place_industry_spec_def_sandbox`).
 4. Houses CB17 — allow construction (API + tests sintéticos).
 5. Stations CB13 — availability (+ storage estación).
-6. Industry tiles CB25 — anim next frame (FAILED observable).
+6. Industry tiles CB25/CB26/CB27 — trigger, next frame y velocidad en `phase_tile_animation` (FAILED observable).
 7. Industry tile trigger → Action2 random group (`resolve_industry_tile_random_trigger`).
 
 ## Residual explícito (no bloquea cierre MVP #266)

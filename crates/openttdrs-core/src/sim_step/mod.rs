@@ -224,6 +224,33 @@ fn phase_tile_animation(state: &mut GameState, t: u64) {
         state.world_seed,
         &state.industries,
     );
+    let animation_coords: Vec<_> = state
+        .industries
+        .iter()
+        .flat_map(|industry| {
+            if industry.tiles.is_empty() {
+                vec![industry.pos]
+            } else {
+                industry.tiles.clone()
+            }
+        })
+        .collect();
+    state
+        .runtime
+        .industry_tile_dirty
+        .extend(crate::map::advance_newgrf_industry_animated_tiles(
+            &mut state.map,
+            t,
+            &animation_coords,
+            &state.industry_tile_spec_catalog,
+            state.world_seed,
+            &mut state.newgrf_animated_industry_tiles,
+        ));
+    state
+        .runtime
+        .industry_tile_dirty
+        .sort_by_key(|coord| (coord.x, coord.y));
+    state.runtime.industry_tile_dirty.dedup();
     for at in bubble_spawns {
         state
             .runtime

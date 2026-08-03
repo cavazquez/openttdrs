@@ -10,10 +10,11 @@ use crate::engine::EngineDef;
 use crate::house_spec::HouseSpecDef;
 use crate::industry_spec::IndustrySpecDef;
 use crate::industry_tile::IndustryTileSpecDef;
+use crate::map::TileCoord;
 use crate::newgrf_sprites::{
     Action2EvalCtx, Action2RandomEntry, CALLBACK_FAILED, CBID_HOUSE_ALLOW_CONSTRUCTION,
-    CBID_INDTILE_ANIM_NEXT_FRAME, CBID_INDUSTRY_LOCATION, CBID_STATION_AVAILABILITY,
-    CBID_VEHICLE_START_STOP_CHECK, TrainSpriteGraphics,
+    CBID_INDUSTRY_LOCATION, CBID_STATION_AVAILABILITY, CBID_VEHICLE_START_STOP_CHECK,
+    TrainSpriteGraphics,
 };
 use crate::station::Station;
 use crate::vehicle::Vehicle;
@@ -192,13 +193,41 @@ fn eval_random_entry(entry: &Action2RandomEntry, ctx: &mut Action2EvalCtx) -> u1
     entry.sets[idx]
 }
 
-/// Call site industry tile anim (CB `0x25`); FAILED observable sin runtime.
+/// Resuelve un callback de animación de tesela de industria con contexto estable.
+///
+/// Los parámetros siguen el contrato de OpenTTD: `param1` son random bits y
+/// `param2` el trigger. Además se exponen las coordenadas reales en `0x40`/`0x41`
+/// para que Action2 no dependa de una coordenada ficticia del helper.
 #[must_use]
-pub fn apply_industry_tile_anim_callback(def: &IndustryTileSpecDef) -> u16 {
+pub fn resolve_industry_tile_animation_callback(
+    def: &IndustryTileSpecDef,
+    callback: u16,
+    coord: TileCoord,
+    param1: u32,
+    param2: u32,
+) -> u16 {
     let Some(runtime) = def.newgrf_runtime.as_ref() else {
         return CALLBACK_FAILED;
     };
-    runtime.resolve_callback(def.newgrf_local_id, CBID_INDTILE_ANIM_NEXT_FRAME, 0, 0)
+    let mut ctx = Action2EvalCtx {
+        random_bits: param1,
+        ..Action2EvalCtx::default()
+    };
+    ctx.vars.insert(0x40, coord.x.cast_unsigned());
+    ctx.vars.insert(0x41, coord.y.cast_unsigned());
+    runtime.resolve_callback_ctx(def.newgrf_local_id, callback, param1, param2, &mut ctx)
+}
+
+/// Compatibilidad con el helper anterior: consulta next-frame sin contexto.
+#[must_use]
+pub fn apply_industry_tile_anim_callback(def: &IndustryTileSpecDef) -> u16 {
+    resolve_industry_tile_animation_callback(
+        def,
+        crate::newgrf_sprites::CBID_INDTILE_ANIMATION_NEXT_FRAME,
+        TileCoord::new(0, 0),
+        0,
+        0,
+    )
 }
 
 #[cfg(test)]
@@ -504,6 +533,11 @@ mod tests {
             accepts_cargo_labels: Vec::new(),
             acceptance: Vec::new(),
             callback_mask: 0,
+            animation_frames: 0,
+            animation_status: 0,
+            animation_speed: 0,
+            animation_triggers: 0,
+            animation_special_flags: 0,
             newgrf_local_id: 0,
             newgrf_grfid: 1,
             newgrf_preview: None,
@@ -536,6 +570,11 @@ mod tests {
             accepts_cargo_labels: Vec::new(),
             acceptance: Vec::new(),
             callback_mask: 0,
+            animation_frames: 0,
+            animation_status: 0,
+            animation_speed: 0,
+            animation_triggers: 0,
+            animation_special_flags: 0,
             newgrf_local_id: 0,
             newgrf_grfid: 0,
             newgrf_preview: None,

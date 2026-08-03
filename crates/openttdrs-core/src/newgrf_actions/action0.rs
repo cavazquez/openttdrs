@@ -352,8 +352,17 @@ pub struct ParsedIndustryTileMeta {
     pub accepts_cargo_indices: Vec<u8>,
     /// Cantidades de aceptación (octavos; pueden ser negativas en `0x13`).
     pub acceptance: Vec<i8>,
-    /// Callback mask (`prop 0x0E`); almacenado sin ejecutar.
+    /// Callback mask (`prop 0x0E`): bit 0 = next frame, bit 1 = speed.
     pub callback_mask: u8,
+    /// `prop 0x0F`: frames y status de animación.
+    pub animation_frames: u8,
+    pub animation_status: u8,
+    /// `prop 0x10`: velocidad base de animación.
+    pub animation_speed: u8,
+    /// `prop 0x11`: triggers que llaman el callback 0x25.
+    pub animation_triggers: u8,
+    /// `prop 0x12`: flags especiales (`NextFrameRandomBits` bit 0).
+    pub animation_special_flags: u8,
 }
 
 /// Tesela de layout aeropuerto (`prop 0x0A`); `local_tile` si gfx era `0xFE`.
@@ -1168,6 +1177,11 @@ pub fn parse_action0_industry_tile_meta(payload: &[u8]) -> Option<ParsedIndustry
     let mut accepts = [0xFFu8; 3];
     let mut acceptance = [0i8; 3];
     let mut callback_mask = 0u8;
+    let mut animation_frames = 0u8;
+    let mut animation_status = 0u8;
+    let mut animation_speed = 0u8;
+    let mut animation_triggers = 0u8;
+    let mut animation_special_flags = 0u8;
     for _ in 0..header.num_props {
         if i >= payload.len() {
             break;
@@ -1212,7 +1226,7 @@ pub fn parse_action0_industry_tile_meta(payload: &[u8]) -> Option<ParsedIndustry
                 callback_mask = payload[i];
                 i += 1;
             }
-            0x0D | 0x10 | 0x11 | 0x12 => {
+            0x0D => {
                 if i >= payload.len() {
                     break;
                 }
@@ -1222,7 +1236,30 @@ pub fn parse_action0_industry_tile_meta(payload: &[u8]) -> Option<ParsedIndustry
                 if i + 2 > payload.len() {
                     break;
                 }
+                animation_frames = payload[i];
+                animation_status = payload[i + 1];
                 i += 2;
+            }
+            0x10 => {
+                if i >= payload.len() {
+                    break;
+                }
+                animation_speed = payload[i];
+                i += 1;
+            }
+            0x11 => {
+                if i >= payload.len() {
+                    break;
+                }
+                animation_triggers = payload[i];
+                i += 1;
+            }
+            0x12 => {
+                if i >= payload.len() {
+                    break;
+                }
+                animation_special_flags = payload[i];
+                i += 1;
             }
             PROP_INDTILE_ACCEPT_LIST => {
                 if i >= payload.len() {
@@ -1282,6 +1319,11 @@ pub fn parse_action0_industry_tile_meta(payload: &[u8]) -> Option<ParsedIndustry
         accepts_cargo_indices,
         acceptance: acceptance_out,
         callback_mask,
+        animation_frames,
+        animation_status,
+        animation_speed,
+        animation_triggers,
+        animation_special_flags,
     })
 }
 

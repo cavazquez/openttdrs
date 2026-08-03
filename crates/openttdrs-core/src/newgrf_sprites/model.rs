@@ -284,8 +284,14 @@ pub const CBID_VEHICLE_START_STOP_CHECK: u16 = 0x31;
 pub const CBID_INDUSTRY_LOCATION: u16 = 0x28;
 /// Callback casas: permitir construcción (`CBID_HOUSE_ALLOW_CONSTRUCTION`).
 pub const CBID_HOUSE_ALLOW_CONSTRUCTION: u16 = 0x17;
-/// Callback teselas industria: decisión de animación / next frame (`CBID_INDTILE_ANIM_NEXT_FRAME`).
-pub const CBID_INDTILE_ANIM_NEXT_FRAME: u16 = 0x25;
+/// Callback teselas industria: trigger de animación (`CBID_INDTILE_ANIMATION_TRIGGER`).
+pub const CBID_INDTILE_ANIMATION_TRIGGER: u16 = 0x25;
+/// Callback teselas industria: siguiente frame (`CBID_INDTILE_ANIMATION_NEXT_FRAME`).
+pub const CBID_INDTILE_ANIMATION_NEXT_FRAME: u16 = 0x26;
+/// Callback teselas industria: velocidad de animación (`CBID_INDTILE_ANIMATION_SPEED`).
+pub const CBID_INDTILE_ANIMATION_SPEED: u16 = 0x27;
+/// Alias de compatibilidad para el nombre histórico del callback de siguiente frame.
+pub const CBID_INDTILE_ANIM_NEXT_FRAME: u16 = CBID_INDTILE_ANIMATION_NEXT_FRAME;
 /// Callback estaciones: disponibilidad de clase/spec (`CBID_STATION_AVAILABILITY`).
 pub const CBID_STATION_AVAILABILITY: u16 = 0x13;
 

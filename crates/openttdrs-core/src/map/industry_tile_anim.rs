@@ -10,6 +10,13 @@
 
 use super::tile_loop::TileLoopState;
 use super::{Map, Tile, TileCoord, TileKind};
+use crate::industry_tile::{IndustryTileSpecDef, industry_tile_spec_def};
+use crate::newgrf_callback::resolve_industry_tile_animation_callback;
+use crate::newgrf_sprites::{
+    CALLBACK_FAILED, CBID_INDTILE_ANIMATION_NEXT_FRAME, CBID_INDTILE_ANIMATION_SPEED,
+    CBID_INDTILE_ANIMATION_TRIGGER,
+};
+use std::collections::HashSet;
 
 /// `GFX_COAL_MINE_TOWER_NOT_ANIMATED`
 pub const GFX_COAL_MINE_TOWER_NOT_ANIMATED: u16 = 0;
@@ -62,6 +69,10 @@ const MINE_TOWER_GFX_PAIRS: [(u16, u16); 3] = [
 /// Escala tick de sim (≈37 Hz) al contador de animación por tick de OpenTTD.
 const OTTD_ANIM_SCALE: u64 = 1;
 const MINE_TOWER_QUIET_MASK: u64 = 0x400;
+const INDTILE_TRIGGER_INDUSTRY_TICK: u8 = 2;
+const INDTILE_CALLBACK_MASK_NEXT_FRAME: u8 = 1 << 0;
+const INDTILE_CALLBACK_MASK_SPEED: u8 = 1 << 1;
+const INDTILE_SPECIAL_NEXT_FRAME_RANDOM_BITS: u8 = 1 << 0;
 
 /// gfx de industria de 9 bits (`GetCleanIndustryGfx`).
 #[must_use]
@@ -401,6 +412,142 @@ pub fn advance_industry_animated_tiles(
     commit_industry_updates(map, coords, tick, apply_animate_industry)
 }
 
+/// Ejecuta callbacks NewGRF 0x25/0x26/0x27 en la ruta real de animación.
+///
+/// El frame completo queda en `m3hi`; la lista persistida de teselas activas
+/// separa esa información del frame, como el `AnimatedTileList` de OpenTTD.
+/// Así save/load y replay mantienen ambos estados, mientras `m3` continúa
+/// aportando random bits deterministas.
+pub fn advance_newgrf_industry_animated_tiles(
+    map: &mut Map,
+    tick: u64,
+    coords: &[TileCoord],
+    catalog: &[IndustryTileSpecDef],
+    world_seed: u64,
+    active_tiles: &mut HashSet<TileCoord>,
+) -> Vec<TileCoord> {
+    let mut dirty = Vec::new();
+    for &coord in coords {
+        let Some(mut tile) = map.get(coord) else {
+            continue;
+        };
+        if tile.kind != TileKind::Industry {
+            continue;
+        }
+        let Some(spec) = industry_tile_spec_def(catalog, industry_gfx(&tile)) else {
+            continue;
+        };
+        if !spec.from_newgrf || spec.newgrf_runtime.is_none() {
+            continue;
+        }
+
+        let before = tile.m3hi;
+        let trigger_mask = 1_u8 << INDTILE_TRIGGER_INDUSTRY_TICK;
+        if spec.animation_triggers & trigger_mask != 0 {
+            let random = u32::from(super::industry_tile_rng(
+                world_seed,
+                tick,
+                coord,
+                u64::from(CBID_INDTILE_ANIMATION_TRIGGER),
+            ));
+            let result = resolve_industry_tile_animation_callback(
+                spec,
+                CBID_INDTILE_ANIMATION_TRIGGER,
+                coord,
+                random,
+                u32::from(INDTILE_TRIGGER_INDUSTRY_TICK),
+            );
+            if result != CALLBACK_FAILED {
+                match (result & 0xFF) as u8 {
+                    0xFD => {}
+                    0xFE => {
+                        active_tiles.insert(coord);
+                    }
+                    0xFF => {
+                        active_tiles.remove(&coord);
+                    }
+                    frame => {
+                        tile.m3hi = frame;
+                        active_tiles.insert(coord);
+                    }
+                }
+            }
+        }
+
+        if active_tiles.contains(&coord) {
+            let mut speed = spec.animation_speed.min(16);
+            if spec.callback_mask & INDTILE_CALLBACK_MASK_SPEED != 0 {
+                let result = resolve_industry_tile_animation_callback(
+                    spec,
+                    CBID_INDTILE_ANIMATION_SPEED,
+                    coord,
+                    0,
+                    0,
+                );
+                if result != CALLBACK_FAILED {
+                    speed = (result as u8).min(16);
+                }
+            }
+
+            if tick.is_multiple_of(1_u64 << speed) {
+                let random =
+                    if spec.animation_special_flags & INDTILE_SPECIAL_NEXT_FRAME_RANDOM_BITS != 0 {
+                        u32::from(tile.m3)
+                    } else {
+                        0
+                    };
+                let result = if spec.callback_mask & INDTILE_CALLBACK_MASK_NEXT_FRAME != 0 {
+                    resolve_industry_tile_animation_callback(
+                        spec,
+                        CBID_INDTILE_ANIMATION_NEXT_FRAME,
+                        coord,
+                        random,
+                        0,
+                    )
+                } else {
+                    CALLBACK_FAILED
+                };
+                match (result & 0xFF) as u8 {
+                    0xFF if result != CALLBACK_FAILED => {
+                        active_tiles.remove(&coord);
+                    }
+                    0xFE if result != CALLBACK_FAILED => {
+                        if !advance_newgrf_industry_frame(&mut tile, spec) {
+                            active_tiles.remove(&coord);
+                        }
+                    }
+                    frame if result != CALLBACK_FAILED => {
+                        tile.m3hi = frame;
+                    }
+                    _ => {
+                        if !advance_newgrf_industry_frame(&mut tile, spec) {
+                            active_tiles.remove(&coord);
+                        }
+                    }
+                }
+            }
+        }
+
+        if tile.m3hi != before && map.set_tile(coord, tile).is_ok() {
+            dirty.push(coord);
+        }
+    }
+    dirty
+}
+
+fn advance_newgrf_industry_frame(tile: &mut Tile, spec: &IndustryTileSpecDef) -> bool {
+    let frame = tile.m3hi;
+    if frame < spec.animation_frames {
+        tile.m3hi = frame.saturating_add(1);
+        true
+    } else if spec.animation_status == 1 {
+        tile.m3hi = 0;
+        true
+    } else {
+        false
+    }
+}
+
 /// Compat tests / herramientas: TileLoop (franja) + Animate sobre industrias del mapa.
 pub fn advance_industry_tile_animations(
     map: &mut Map,
@@ -427,6 +574,11 @@ pub fn advance_industry_tile_animations(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::industry_tile::IndustryTileGfxId;
+    use crate::newgrf_sprites::{
+        Action2VarAdjust, Action2VarEntry, Action2VarTerm, TrainSpriteAssign, TrainSpriteGraphics,
+    };
+    use std::collections::HashSet;
 
     fn industry_tile(gfx: u16, m1: u8, m3hi: u8) -> Tile {
         let mut tile = Tile {
@@ -445,6 +597,137 @@ mod tests {
         };
         set_industry_gfx(&mut tile, gfx);
         tile
+    }
+
+    fn callback_literal(value: u8) -> Action2VarEntry {
+        Action2VarEntry {
+            first: Action2VarTerm {
+                variable: 0x1A,
+                param: None,
+                adjust: Action2VarAdjust {
+                    shift: 0,
+                    and_mask: value,
+                    ..Action2VarAdjust::default()
+                },
+            },
+            ops: Vec::new(),
+            ranges: Vec::new(),
+            default: 0,
+        }
+    }
+
+    /// Runtime sintético que devuelve resultados distintos para cada CBID de animación.
+    fn industry_animation_callbacks() -> TrainSpriteGraphics {
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 2,
+        });
+        gfx.action2_var.insert(
+            2,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x0C,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        shift: 0,
+                        and_mask: 0xFF,
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: vec![(4, 0x25, 0x25), (5, 0x26, 0x26), (6, 0x27, 0x27)],
+                default: 0,
+            },
+        );
+        // CB 0x25: activar sin alterar el frame; 0x26: frame exacto 3;
+        // 0x27: velocidad 16 para poder demostrar que también se invoca.
+        gfx.action2_var.insert(4, callback_literal(0xFE));
+        gfx.action2_var.insert(5, callback_literal(3));
+        gfx.action2_var.insert(6, callback_literal(16));
+        gfx
+    }
+
+    fn newgrf_animated_spec(callback_mask: u8) -> IndustryTileSpecDef {
+        IndustryTileSpecDef {
+            gfx: IndustryTileGfxId(175),
+            subst_id: 0,
+            from_newgrf: true,
+            accepts_cargo_indices: Vec::new(),
+            accepts_cargo_labels: Vec::new(),
+            acceptance: Vec::new(),
+            callback_mask,
+            animation_frames: 5,
+            animation_status: 1,
+            animation_speed: 0,
+            animation_triggers: 1 << INDTILE_TRIGGER_INDUSTRY_TICK,
+            animation_special_flags: INDTILE_SPECIAL_NEXT_FRAME_RANDOM_BITS,
+            newgrf_local_id: 0,
+            newgrf_grfid: 0x1234_5678,
+            newgrf_preview: None,
+            newgrf_views: Vec::new(),
+            newgrf_runtime: Some(Box::new(industry_animation_callbacks())),
+        }
+    }
+
+    #[test]
+    fn newgrf_animation_uses_distinct_trigger_and_next_frame_callback_ids() {
+        let coord = TileCoord::new(0, 0);
+        let mut map = Map::new_flat(1, 1, 0);
+        let mut tile = industry_tile(175, 0x80, 0);
+        tile.m3 = 0xA5;
+        map.set_tile(coord, tile).unwrap();
+
+        let dirty = advance_newgrf_industry_animated_tiles(
+            &mut map,
+            1,
+            &[coord],
+            &[newgrf_animated_spec(INDTILE_CALLBACK_MASK_NEXT_FRAME)],
+            0xCAFE_BABE,
+            &mut HashSet::new(),
+        );
+
+        assert_eq!(dirty, vec![coord]);
+        // 0x25 devuelve FE (activa); 0x26 devuelve 3. Si ambos CBID fueran 0x25,
+        // el frame sería el fallback 1 y esta aserción fallaría.
+        assert_eq!(map.get(coord).unwrap().m3hi, 3);
+    }
+
+    #[test]
+    fn newgrf_animation_speed_callback_gates_frame_and_state_survives_save_load() {
+        let coord = TileCoord::new(0, 0);
+        let mut map = Map::new_flat(1, 1, 0);
+        map.set_tile(coord, industry_tile(175, 0x80, 0)).unwrap();
+        let catalog = vec![newgrf_animated_spec(
+            INDTILE_CALLBACK_MASK_NEXT_FRAME | INDTILE_CALLBACK_MASK_SPEED,
+        )];
+        let mut active = HashSet::new();
+
+        advance_newgrf_industry_animated_tiles(&mut map, 1, &[coord], &catalog, 9, &mut active);
+        // CB 0x27 devuelve 16: el tick 1 no llega a invocar el avance de frame.
+        assert_eq!(map.get(coord).unwrap().m3hi, 0);
+        assert!(active.contains(&coord));
+
+        let mut state = crate::GameState::from_map(map.clone());
+        state.newgrf_animated_industry_tiles = active.clone();
+        let saved = state.save_json().unwrap();
+        let reloaded_state = crate::GameState::load_json(&saved).unwrap();
+        let mut reloaded = reloaded_state.map;
+        let mut reloaded_active = reloaded_state.newgrf_animated_industry_tiles;
+        advance_newgrf_industry_animated_tiles(&mut map, 2, &[coord], &catalog, 9, &mut active);
+        advance_newgrf_industry_animated_tiles(
+            &mut reloaded,
+            2,
+            &[coord],
+            &catalog,
+            9,
+            &mut reloaded_active,
+        );
+        assert_eq!(
+            reloaded.get(coord).unwrap().m3hi,
+            map.get(coord).unwrap().m3hi
+        );
+        assert_eq!(reloaded_active, active);
     }
 
     #[test]

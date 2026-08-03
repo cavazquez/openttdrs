@@ -40,9 +40,24 @@ pub struct IndustryTileSpecDef {
     /// Cantidades de aceptación (octavos; `0x0A`–`0x0C` / `0x13`).
     #[serde(default)]
     pub acceptance: Vec<i8>,
-    /// Callback mask (`prop 0x0E`); almacenado, sin ejecutar (#228).
+    /// Callback mask (`prop 0x0E`): bit 0 = next frame 0x26, bit 1 = speed 0x27.
     #[serde(default)]
     pub callback_mask: u8,
+    /// `prop 0x0F`: último frame de animación permitido.
+    #[serde(default)]
+    pub animation_frames: u8,
+    /// `prop 0x0F`: 1 = looping; otros valores finalizan al llegar al último frame.
+    #[serde(default)]
+    pub animation_status: u8,
+    /// `prop 0x10`: espera como potencia de dos de ticks.
+    #[serde(default)]
+    pub animation_speed: u8,
+    /// `prop 0x11`: triggers que invocan el callback 0x25.
+    #[serde(default)]
+    pub animation_triggers: u8,
+    /// `prop 0x12`: bit 0 pasa los random bits al callback 0x26.
+    #[serde(default)]
+    pub animation_special_flags: u8,
     /// Id local Action3 en el GRF.
     #[serde(default, skip)]
     pub newgrf_local_id: u8,
@@ -167,6 +182,11 @@ mod tests {
             accepts_cargo_labels: Vec::new(),
             acceptance: Vec::new(),
             callback_mask: 0,
+            animation_frames: 0,
+            animation_status: 0,
+            animation_speed: 0,
+            animation_triggers: 0,
+            animation_special_flags: 0,
             newgrf_local_id: 0,
             newgrf_grfid: 1,
             newgrf_preview: None,

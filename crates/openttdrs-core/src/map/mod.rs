@@ -58,8 +58,9 @@ pub use industry_tile_anim::{
     GFX_BUBBLE_GENERATOR, GFX_COAL_MINE_TOWER_ANIMATED, GFX_COPPER_MINE_TOWER_ANIMATED,
     GFX_GOLD_MINE_TOWER_ANIMATED, GFX_OILWELL_ANIMATED_1, GFX_OILWELL_ANIMATED_2,
     GFX_OILWELL_ANIMATED_3, advance_industry_animated_tiles, advance_industry_tile_animations,
-    advance_industry_tile_loop_events, bubble_generator_spawns_from_visits,
-    industry_animation_frame, industry_gfx, industry_tile_anim_state, set_industry_gfx,
+    advance_industry_tile_loop_events, advance_newgrf_industry_animated_tiles,
+    bubble_generator_spawns_from_visits, industry_animation_frame, industry_gfx,
+    industry_tile_anim_state, set_industry_gfx,
 };
 pub use level_crossing::is_road_level_crossing;
 pub use object::{

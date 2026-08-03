@@ -131,10 +131,13 @@ mod tests {
     fn helicopter_rotor_sprite_set_is_complete_and_positioned_above_shadow() {
         assert_eq!(AIRCRAFT_ROTOR_LAYERS.len(), 4);
         for layer in AIRCRAFT_ROTOR_LAYERS {
-            let asset_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("../..")
-                .join(layer.path);
-            assert!(asset_path.is_file(), "{}", asset_path.display());
+            let file_name = layer.path.rsplit('/').next().expect("path de sprite");
+            assert!(
+                crate::sprites::TILE_ATLAS_NAMES
+                    .binary_search_by(|(name, _)| (*name).cmp(file_name))
+                    .is_ok(),
+                "sprite ausente del atlas versionado: {file_name}"
+            );
             assert!(layer.w > 0.0 && layer.h > 0.0);
         }
 

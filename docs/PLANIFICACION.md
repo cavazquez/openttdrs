@@ -2,6 +2,8 @@
 
 Fuente viva de roadmaps, gaps de producto, sprints, checklists y herramientas de sonda. Estado de madurez técnica road/rail y oráculos: [PARIDAD.md](PARIDAD.md).
 
+**Corte canónico: 2026-08-03 · `main` `56db4f02abf9d70348ff84c6afa323081699c6df` · referencia OpenTTD 15.3 `14ec60f`.** Los hitos y fechas anteriores que aparecen más abajo son registro histórico; el estado vigente y los issues abiertos viven en [PARIDAD.md](PARIDAD.md#backlog-sucesor-activo).
+
 ## Índice
 
 - [Vista corta de gaps](#vista-corta-de-gaps)
@@ -53,7 +55,7 @@ Resumen vivo de **openttdrs** vs OpenTTD. Detalle por dominio:
 | Ciudades (rating, crecimiento) | 🟡 |
 | Órdenes y operación de flota | 🟡 |
 | Aviones (FTA, compatibilidad, crash en pista corta, ruido) | 🟡 (#212 cerrado) |
-| Barcos | 🔮 |
+| Barcos | 🟡 MVP navegable; faltan oráculos externos y water regions completas |
 | NewGRF Action0–14 + Action2 runtime | 🟡 (parse + sprites in-world; paridad total OOS) |
 | Multijugador I8 | 🟡 MVP ([#21](https://github.com/cavazquez/openttdrs/issues/21) ✅, host migration #171) |
 | IA rivales (TransCargo) / GameScript-lite / editor | 🟡 (Squirrel OOS) |
@@ -65,7 +67,7 @@ Resumen vivo de **openttdrs** vs OpenTTD. Detalle por dominio:
 | # | Área | Feature | openttdrs | Costo | Notas |
 |---|------|---------|-----------|-------|-------|
 | 1 | Construcción | Convertir tipo de vía | ✅ | S–M | `RailConvert` → tipo seleccionado (#195) |
-| 2 | Sim | Servicio en depósito | ❌ | M | |
+| 2 | Sim | Servicio en depósito | 🟡 | M | Core implementado; editor/UI completo pendiente |
 | 3 | Import/export | `.sav` roundtrip oficial | 🟡 | M | Export propio parcial — [ROADMAP_SAV_EXPORT.md](#export-sav) |
 | 4 | Ferrocarril | PBS golden vs OTTD | 🟡 | L | MVP interno; captura externa |
 | 5 | UI | Paridad ventanas flota/estación | 🟡 | M | [ROADMAP_PARIDAD_UI_GLOBAL.md](#paridad-ui-global) |
@@ -88,7 +90,7 @@ original es otro eje, auditado en [ROADMAP_PARIDAD_SIMULACION.md](#paridad-de-si
 (71 entradas, 2026-07-25): un bloque puede figurar aquí como ✅ y seguir teniendo divergencias de
 simulación abiertas.
 
-*Última actualización: 2026-07-25 — vista corta; no duplicar tablas largas aquí.*
+*Última actualización: 2026-08-03 — corte canónico y backlog sucesor; no duplicar tablas largas aquí.*
 
 ## Paridad de simulación (P0–P3)
 
@@ -2034,9 +2036,12 @@ cargo test -p openttdrs-core sav::write::
 python3 scripts/validate_sav_export.py
 python3 scripts/validate_sav_export.py --export ruta/export.sav
 
-## Smoke OpenTTD dedicated (#226; SKIP si no hay binario)
+## Smoke OpenTTD dedicated local (#226; SKIP si no hay binario)
 bash scripts/validate_sav_openttd.sh [ruta.sav]
 bash scripts/roundtrip_sav_openttd.sh   # o: ./scripts/check.sh openttd-smoke
+
+## Gate oficial de release OpenTTD 15.3 (#294; sin SKIP)
+./scripts/validate_sav_openttd_matrix.sh
 
 ## Suite habitual (incluye validate_sav_export.py)
 bash scripts/check.sh
@@ -2084,8 +2089,9 @@ python3 scripts/gen_demo_sav.py crates/openttdrs-core/tests/fixtures/demo_opentt
 | `crates/openttdrs-client/src/ui/save_window/systems.rs` | `confirm_save` / `confirm_load` |
 | `scripts/gen_demo_sav.py` | Generador OTTN de referencia |
 | `scripts/validate_sav_export.py` | Validación estructural de chunks (#66) |
-| `scripts/validate_sav_openttd.sh` | Smoke carga dedicated (#226; SKIP sin binario) |
-| `scripts/roundtrip_sav_openttd.sh` | Round-trip OpenTTD→openttdrs subconjunto |
+| `scripts/validate_sav_openttd.sh` | Smoke carga dedicated (#226; local permite SKIP, release usa modo estricto) |
+| `scripts/roundtrip_sav_openttd.sh` | Round-trip OpenTTD→openttdrs subconjunto; guarda SAV reescrito como artefacto si se solicita |
+| `scripts/validate_sav_openttd_matrix.sh` | Matriz oficial OpenTTD 15.3: load + roundtrip, resumen TSV y logs |
 | `./scripts/check.sh openttd-smoke` | Gate load+round-trip fixture rico |
 | `docs/MAPA_Y_FERROCARRIL.md` §16–17 | Formato chunks / import |
 
@@ -2148,7 +2154,7 @@ Por eso:
 
 - Para **horarios, grupos, shared orders** → seguir usando `.json`.
 - Para **mapa + estaciones + ciudades + flota tren/ROAD + industria** → `.sav` roundtrippea con `sav::load` y carga en OpenTTD 15.3 (`mvp_openttd_rich.sav`).
-- Smoke: `validate_sav_openttd.sh` / `roundtrip_sav_openttd.sh` (`./scripts/check.sh openttd-smoke`). Residual: ship/aircraft, CAPY/ECMY, settings/NewGRF completos.
+- Smoke local: `validate_sav_openttd.sh` / `roundtrip_sav_openttd.sh` (`./scripts/check.sh openttd-smoke`). El workflow de release ejecuta la matriz oficial sin `SKIP` (#294). Residual funcional: CAPY/ECMY, settings/NewGRF completos.
 
 Fecha de calendario en `DATE`: aproximación `year * 365 + (doy - 1)`; el tick monotónico se preserva exactamente.
 
@@ -2163,7 +2169,7 @@ Orden sugerido:
 3. ~~**`INDY`**~~ ✅  
 4. ~~**`ORDL` + `VEHS`**~~ ✅ tren + bus/camión ROAD + goto estación/waypoint/depósito/condicional + full_load  
 5. ~~Órdenes depósito / condicionales / flags full_load más fieles~~ ✅  
-6. ~~Validar export (#66/#226)~~ ✅ estructural + smoke dedicated (`validate_sav_openttd.sh`, `roundtrip_sav_openttd.sh`). Residual: CAPY/ECMY, ship/aircraft, GSET/NewGRF/ENGN.
+6. Validar export: ✅ estructural + smoke local; 🟡 gate oficial reproducible de OpenTTD 15.3 en #294. Residual funcional: CAPY/ECMY, settings/NewGRF/ENGN.
 
 Reglas:
 
@@ -2197,7 +2203,7 @@ Reglas:
 
 ---
 
-*Última actualización: 2026-07-13 — #66 validación estructural + smoke OpenTTD opcional.*
+*Última actualización: 2026-08-03 — smoke local opcional y gate oficial de release sin `SKIP`.*
 
 ## Carreteras drag (paused)
 

@@ -4,11 +4,13 @@ Madurez, mapeos C++↔Rust, gaps, UI, divergencias y oráculos. Roadmaps de prod
 
 ## Estado canónico actual
 
-**Fecha de corte: 2026-07-25. Referencia: OpenTTD 15.3, commit
+**Corte canónico: 2026-08-03 · `main` `56db4f02abf9d70348ff84c6afa323081699c6df`.
+Referencia: OpenTTD 15.3, commit
 `14ec60f248547d4d062a1160f0fc26d742319888`.** Esta tabla es la fuente de
 verdad para el estado vigente. Las tablas detalladas posteriores conservan el
-mapeo y la evidencia de auditorías anteriores; ante una contradicción prevalece
-este bloque y debe corregirse la fila antigua en el mismo cambio.
+mapeo y la evidencia de auditorías anteriores; fechas anteriores son contexto
+histórico. Ante una contradicción prevalece este bloque y debe corregirse la
+fila antigua en el mismo cambio.
 
 Leyenda: **alta** = jugable y ampliamente probado; **media** = funcional con
 semántica parcial; **inicial** = primer corte utilizable; **ausente** = todavía
@@ -26,7 +28,7 @@ no existe. Ningún nivel implica compatibilidad binaria o de red con OpenTTD.
 | Aviones | **Media** | Aeropuertos FTA, compra, vuelo, ruido y crashes; presentación y casos límite incompletos |
 | Barcos | **Parcial → media MVP (#268)** | Infra acuática + `ChooseShipTrack`-like (path A*/cache), `FindClosestShipDepot` BFS, arrival dock/depot (8,8) / buoy ≤3, ocupación esclusa (bitset), golden interno tick pos/dir/z/orden. Residual: YAPF ship/water regions completas, goldens externos vs OpenTTD 15.3 |
 | Guardado propio JSON | **Alta** | Formato versionado con migraciones y determinismo mid-run |
-| Compatibilidad `.sav` | **Inicial-media** | Import/export parcial; no es round-trip completo ni garantía de compatibilidad histórica |
+| Compatibilidad `.sav` | **Inicial-media** | Import/export parcial y matriz local; el gate oficial OpenTTD 15.3 sin `SKIP` sigue en [#294](https://github.com/cavazquez/openttdrs/issues/294) |
 | NewGRF | **Media de parseo / media de runtime (MVP callbacks #228/#266)** | Actions 0–14 + catálogos Action0/3/5; CB24/CB31 + CB28/CB17/CB13/CB25; storage vehículo+estación; trigger industry-tile → Action2 random. Residual: resto CBIDs, goldens vs OpenTTD; ver [`parity/newgrf-callback-matrix.md`](parity/newgrf-callback-matrix.md) |
 
 La cobertura declarada por feature y propiedad está en
@@ -36,7 +38,24 @@ bytes de una propiedad no cuenta allí como soporte runtime. CBIDs:
 | Multijugador | **Inicial** | Lockstep TCP, dedicated, late join y host migration; protocolo propio sin lobby, auth, cifrado ni interoperabilidad |
 | IA / GameScript / editor | **Inicial-media** | TransCargo/RoadHaul, GS-lite y editor propios; Squirrel compatible ausente |
 | Render/UI vanilla | **Media-alta visual / media funcional** | Cobertura OpenGFX amplia; no hay oracle visual total ni internacionalización completa |
-| Plataformas y release | **Preparada** | Checks Windows/macOS + paquetes reproducibles Linux x86_64, Windows x86_64 y macOS arm64; `0.1.0-alpha.1` aún sin tag/publicación |
+| Plataformas y release | **Preparada con gates** | `main` protegido y checks Windows/macOS; queda dry-run/smoke de `0.1.0-alpha.1` en [#296](https://github.com/cavazquez/openttdrs/issues/296) |
+
+## Backlog sucesor activo
+
+<!-- active-parity-backlog:start -->
+
+- [#293](https://github.com/cavazquez/openttdrs/issues/293) — callbacks 0x25/0x26 de industrias y tick.
+- [#294](https://github.com/cavazquez/openttdrs/issues/294) — validación SAV oficial OpenTTD 15.3 sin `SKIP`.
+- [#295](https://github.com/cavazquez/openttdrs/issues/295) — ventana operativa Town Authority.
+- [#296](https://github.com/cavazquez/openttdrs/issues/296) — dry-run multiplataforma y smoke de release.
+- [#297](https://github.com/cavazquez/openttdrs/issues/297) — oráculo y diff visual por familia de ventanas.
+
+<!-- active-parity-backlog:end -->
+
+Los issues #275–#289 son entregas cerradas y no son backlog activo. #290 y
+#291 también están cerrados: recuperaron CI/protección de `main` y endurecieron
+la carga MAPS respectivamente. El inventario que valida este bloque está en
+[`parity/active-backlog.json`](parity/active-backlog.json).
 
 ## Índice
 

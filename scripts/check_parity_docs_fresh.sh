@@ -44,6 +44,7 @@ require_pat() {
 
 require_pat '^## Estado canónico actual$' docs/PARIDAD.md
 require_pat 'OpenTTD 15\.3, commit' docs/PARIDAD.md
+python3 scripts/check_active_parity_backlog.py
 
 check_pat 'SIM_TICK_HZ = 5\.0'
 check_pat 'REFERENCE_PROGRESS_STEP = 51'

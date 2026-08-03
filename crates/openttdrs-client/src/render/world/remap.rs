@@ -207,7 +207,7 @@ pub(crate) fn apply_remap_map_visuals(
             spawn_bounds,
         );
         if !to_add.is_empty() || !to_remove.is_empty() || !refresh_chunks.is_empty() {
-            info!(
+            debug!(
                 "Mapa visual incremental: +{} −{} ↻{} chunks ({} teselas visibles)",
                 to_add.len(),
                 to_remove.len(),

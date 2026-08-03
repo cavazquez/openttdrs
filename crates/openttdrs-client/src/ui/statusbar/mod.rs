@@ -33,11 +33,14 @@ pub(crate) const POPUP_WIDTH: f32 = 460.0;
 
 pub(crate) const COMPANY_DISPLAY_NAME: &str = "Tu compañía";
 
-/// Las entregas repetidas se muestran, pero no deben competir sonoramente con
-/// los hitos de la partida. La primera entrega conserva su propio tipo y sí
-/// genera aviso audible.
+/// Las entregas repetidas y los avisos operativos se muestran, pero no deben
+/// competir sonoramente con hitos de la partida. La primera entrega conserva
+/// su propio tipo y sí genera aviso audible.
 pub(crate) const fn news_has_audible_alert(news_type: NewsType) -> bool {
-    !matches!(news_type, NewsType::CargoDelivered)
+    !matches!(
+        news_type,
+        NewsType::CargoDelivered | NewsType::VehicleAdvice
+    )
 }
 
 #[derive(Resource, Default)]
@@ -117,8 +120,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn only_recurrent_cargo_delivery_is_silent() {
+    fn recurrent_delivery_and_vehicle_advice_are_silent() {
         assert!(!news_has_audible_alert(NewsType::CargoDelivered));
+        assert!(!news_has_audible_alert(NewsType::VehicleAdvice));
         assert!(news_has_audible_alert(NewsType::FirstCargoDelivered));
         assert!(news_has_audible_alert(NewsType::FirstVehicleRunning));
         assert!(news_has_audible_alert(NewsType::Accident));

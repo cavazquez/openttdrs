@@ -56,16 +56,21 @@ pub(crate) fn do_town_action(
     let result = execute_town_action(
         &mut state.towns[idx],
         &mut state.stations,
-        &state.map,
+        &mut state.map,
         company,
         action,
         bribe_fails,
     );
     match result {
         Ok(suggested) => {
-            if action == TownAction::BuildStatue {
-                let _ = suggested.ok_or(CommandError::StatueNoPlace)?;
-                // Marca visual mínima: deja hierba (el bitset `statues` es la autoridad).
+            if matches!(action, TownAction::BuildStatue | TownAction::RoadRebuild) {
+                if action == TownAction::BuildStatue && suggested.is_none() {
+                    state.economy.money += cost;
+                    return Err(CommandError::StatueNoPlace);
+                }
+                if let Some(pos) = suggested {
+                    mark_town_action_tiles_dirty(state, pos);
+                }
             }
             if action == TownAction::FundBuildings {
                 state.runtime.pending_sim_events.push(
@@ -84,6 +89,27 @@ pub(crate) fn do_town_action(
         Err(TownActionError::NoStatuePlace) => {
             state.economy.money += cost;
             Err(CommandError::StatueNoPlace)
+        }
+    }
+}
+
+/// Las obras de autoridad no tienen una coordenada en `Command`, por lo que
+/// marcan explícitamente la tesela modificada y sus vecinas para el remapeo
+/// visual y para las conexiones de carretera.
+fn mark_town_action_tiles_dirty(state: &mut GameState, at: TileCoord) {
+    let (width, height) = state.map.dimensions();
+    let (Ok(width), Ok(height)) = (i32::try_from(width), i32::try_from(height)) else {
+        return;
+    };
+    for (dx, dy) in [(0, 0), (-1, 0), (1, 0), (0, -1), (0, 1)] {
+        let pos = TileCoord::new(at.x + dx, at.y + dy);
+        if pos.x >= 0
+            && pos.y >= 0
+            && pos.x < width
+            && pos.y < height
+            && !state.runtime.landscape_tile_dirty.contains(&pos)
+        {
+            state.runtime.landscape_tile_dirty.push(pos);
         }
     }
 }
@@ -198,10 +224,12 @@ fn town_index(state: &GameState, town_id: u32) -> Result<usize, CommandError> {
 mod tests {
     use super::*;
     use crate::cargo::CargoType;
-    use crate::company::CompanyId;
+    use crate::company::{CompanyId, OWNER_TOWN_M1};
+    use crate::map::object_type_from_tile;
     use crate::station::{StopKind, station_rating_for_cargo};
     use crate::town_action::{
         ADVERTISE_MEDIUM_BOOST, BUILD_STATUE_AUTHORITY_RATING_BOOST, EXCLUSIVE_RIGHTS_MONTHS,
+        ROAD_REBUILD_MONTHS,
     };
     use crate::{Command, GameState, apply_command, map::TileCoord};
 
@@ -379,6 +407,16 @@ mod tests {
         )
         .unwrap();
         assert!(s.towns[0].has_statue(CompanyId::PLAYER));
+        let statue_tile = s.map.get(TileCoord::new(10, 10)).expect("statue tile");
+        assert_eq!(
+            object_type_from_tile(&statue_tile),
+            Some(crate::OBJECT_TYPE_STATUE_COMPANY)
+        );
+        assert!(
+            s.runtime
+                .landscape_tile_dirty
+                .contains(&TileCoord::new(10, 10))
+        );
         let err = apply_command(
             &mut s,
             &Command::DoTownAction {
@@ -442,5 +480,32 @@ mod tests {
             s.towns[0].authority_rating(CompanyId::PLAYER),
             before + i16::from(BUILD_STATUE_AUTHORITY_RATING_BOOST)
         );
+    }
+
+    #[test]
+    fn road_rebuild_places_a_municipal_road_immediately() {
+        let mut s = GameState::new(32, 32);
+        s.economy.money = 50_000;
+        s.towns.push(Town {
+            id: 1,
+            pos: TileCoord::new(16, 16),
+            name: "Roads".into(),
+            ..Default::default()
+        });
+
+        apply_command(
+            &mut s,
+            &Command::DoTownAction {
+                town_id: 1,
+                action: TownAction::RoadRebuild,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(s.towns[0].road_build_months, ROAD_REBUILD_MONTHS);
+        assert!(s.runtime.landscape_tile_dirty.iter().any(|&c| {
+            s.map.get_kind(c) == Some(TileKind::Road)
+                && s.map.get(c).is_some_and(|tile| tile.m1 == OWNER_TOWN_M1)
+        }));
     }
 }

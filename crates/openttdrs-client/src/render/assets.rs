@@ -36,6 +36,7 @@ pub(crate) struct WorldAssets {
     pub(crate) shore_frames: Vec<Vec<AtlasSprite>>,
     pub(crate) lighthouse: AtlasSprite,
     pub(crate) transmitter: AtlasSprite,
+    pub(crate) company_statue: AtlasSprite,
     pub(crate) road_flat: Vec<AtlasSprite>,
     /// Set pavimentado (`SPR_ROAD_Y - 19` = 1313..1331), mismo orden que `road_flat`.
     pub(crate) road_paved: Vec<AtlasSprite>,
@@ -180,6 +181,7 @@ impl WorldAssets {
             .collect();
         let lighthouse = atlas.get("object_lighthouse.png");
         let transmitter = atlas.get("object_transmitter.png");
+        let company_statue = atlas.get("object_statue_company.png");
         let road_flat = (0..19)
             .map(|i| atlas.get(&format!("road_flat_{i:02}.png")))
             .collect();
@@ -510,6 +512,7 @@ impl WorldAssets {
             shore_frames,
             lighthouse,
             transmitter,
+            company_statue,
             road_flat,
             road_paved,
             road_streetlights,

@@ -229,11 +229,17 @@ pub fn command_effects(cmd: &Command) -> CommandEffects {
         }
 
         // ═══════════════════════════════════════════════════════════════════
-        // Comandos de ciudad (NO modifican mapa, solo flags)
+        // Comandos de ciudad. Estatua y reconstrucción vial materializan una
+        // obra; el resto sólo actualiza autoridad/economía.
         // ═══════════════════════════════════════════════════════════════════
-        Command::TownAdvertise(..)
-        | Command::TownFundBuildings(..)
-        | Command::DoTownAction { .. } => CommandEffects::none(),
+        Command::TownAdvertise(..) | Command::TownFundBuildings(..) => CommandEffects::none(),
+
+        Command::DoTownAction {
+            action: crate::TownAction::RoadRebuild | crate::TownAction::BuildStatue,
+            ..
+        } => CommandEffects::map_only(),
+
+        Command::DoTownAction { .. } => CommandEffects::none(),
 
         // ═══════════════════════════════════════════════════════════════════
         // Comandos de cheats (NO modifican mapa)

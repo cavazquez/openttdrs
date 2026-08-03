@@ -64,10 +64,11 @@ pub use industry_tile_anim::{
 };
 pub use level_crossing::is_road_level_crossing;
 pub use object::{
-    MP_OBJECT_MAPT, OBJECT_TYPE_LIGHTHOUSE, OBJECT_TYPE_OWNED_LAND, OBJECT_TYPE_TRANSMITTER,
-    OTTD_MP_OBJECT, is_map_object_tile, is_newgrf_object_type, is_owned_land_tile,
-    object_footprint_at, object_footprint_tiles, object_origin_from_tile, object_spec_id_from_tile,
-    object_tile_offset_byte, object_type_dims, object_type_from_tile, object_view_index_for_tile,
+    MP_OBJECT_MAPT, OBJECT_TYPE_LIGHTHOUSE, OBJECT_TYPE_OWNED_LAND, OBJECT_TYPE_STATUE_COMPANY,
+    OBJECT_TYPE_TRANSMITTER, OTTD_MP_OBJECT, is_map_object_tile, is_newgrf_object_type,
+    is_owned_land_tile, object_footprint_at, object_footprint_tiles, object_origin_from_tile,
+    object_spec_id_from_tile, object_tile_offset_byte, object_type_dims, object_type_from_tile,
+    object_view_index_for_tile,
 };
 pub use rail_bits::{
     OTTD_MP_RAILWAY, RAIL_TB_CROSS, RAIL_TB_HORZ, RAIL_TB_LEFT, RAIL_TB_LOWER, RAIL_TB_RIGHT,

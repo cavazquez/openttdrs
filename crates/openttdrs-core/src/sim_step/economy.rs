@@ -62,6 +62,24 @@ pub(super) fn process_monthly_economy(state: &mut GameState) {
     state.link_graph.rollover_month();
     // Flows desde totales del link graph (mapper ingenuo; sin MCF).
     state.rebuild_station_flows();
+    // La financiación vial continúa una vez por mes durante sus seis meses.
+    // Se hace antes de decrementar el contador dentro del procesamiento urbano.
+    let road_seed = u32::try_from(state.calendar.date).unwrap_or(0)
+        ^ u32::try_from(state.tick.get()).unwrap_or(0);
+    let mut road_dirty = Vec::new();
+    for town in &state.towns {
+        if town.road_build_months == 0 {
+            continue;
+        }
+        if let Some(pos) = crate::town_expand::fund_town_road_once(
+            &mut state.map,
+            town,
+            road_seed.wrapping_add(town.id.wrapping_mul(0x9E37_79B9)),
+        ) {
+            road_dirty.push(pos);
+        }
+    }
+    state.runtime.landscape_tile_dirty.extend(road_dirty);
     // Metas de crecimiento urbano + historiales de pueblos e industrias (UI-3).
     let company_count = state.companies.len();
     town::process_town_monthly_growth(

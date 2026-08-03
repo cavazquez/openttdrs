@@ -1,8 +1,7 @@
 //! Acciones de autoridad local (`TownAction` / `CmdDoTownAction`).
 
 use crate::company::CompanyId;
-use crate::map::Map;
-use crate::map::{TileCoord, TileKind};
+use crate::map::{MP_OBJECT_MAPT, Map, OBJECT_TYPE_STATUE_COMPANY, TileCoord, TileKind};
 use crate::station::{Station, modify_station_rating_around};
 use crate::town::{
     FUND_BUILDINGS_RATING_BOOST, MAX_TOWN_AUTHORITY_COMPANIES, Town, apply_fund_buildings_boost,
@@ -176,7 +175,7 @@ fn action_allowed(
 pub fn execute_town_action(
     town: &mut Town,
     stations: &mut [Station],
-    map: &Map,
+    map: &mut Map,
     company: CompanyId,
     action: TownAction,
     bribe_fails: bool,
@@ -212,12 +211,19 @@ pub fn execute_town_action(
         }
         TownAction::RoadRebuild => {
             town.road_build_months = ROAD_REBUILD_MONTHS;
+            // La aprobación debe tener un efecto visible ahora; los meses
+            // restantes continúan la obra desde el tick mensual.
+            let seed = town.id.wrapping_mul(0x9E37_79B9) ^ u32::from(ROAD_REBUILD_MONTHS);
+            return Ok(crate::town_expand::fund_town_road_once(map, town, seed));
         }
         TownAction::BuildStatue => {
             if town.has_statue(company) {
                 return Err(TownActionError::AlreadyHasStatue);
             }
             let tile = find_statue_tile(map, town.pos).ok_or(TownActionError::NoStatuePlace)?;
+            if !place_company_statue(map, tile, company) {
+                return Err(TownActionError::NoStatuePlace);
+            }
             town.set_statue(company, true);
             // Bonus de autoridad por estatua.
             let _ = town.adjust_rating(company, BUILD_STATUE_AUTHORITY_RATING_BOOST);
@@ -261,6 +267,29 @@ pub fn execute_town_action(
         }
     }
     Ok(None)
+}
+
+/// Materializa la estatua en el mapa. El bit de `Town::statues` mantiene la
+/// regla de negocio; esta tesela `MP_OBJECT` es el efecto visual persistente.
+fn place_company_statue(map: &mut Map, pos: TileCoord, company: CompanyId) -> bool {
+    let Some(mut tile) = map.get(pos) else {
+        return false;
+    };
+    if !statue_tile_is_clear(Some(tile.kind)) {
+        return false;
+    }
+    tile.kind = TileKind::Grass;
+    tile.mapt = MP_OBJECT_MAPT;
+    tile.m5 = OBJECT_TYPE_STATUE_COMPANY;
+    tile.m1 = company.0;
+    tile.m2 = 0;
+    tile.m2_hi = 0;
+    tile.m3 = 0;
+    tile.m3hi = 0;
+    tile.m6 = 0;
+    tile.m7 = 0;
+    tile.m8 = 0;
+    map.set_tile(pos, tile).is_ok()
 }
 
 /// Error de dominio de acciones de pueblo.

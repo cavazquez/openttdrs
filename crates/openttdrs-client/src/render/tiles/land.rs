@@ -3,8 +3,8 @@ use openttdrs_core::prelude::*;
 use openttdrs_core::{
     CLEAR_GROUND_DESERT, CLEAR_GROUND_GRASS, CLEAR_GROUND_ROCKY, CLEAR_GROUND_ROUGH,
     CLEAR_GROUND_SNOW, Climate, OBJECT_TYPE_LIGHTHOUSE, OBJECT_TYPE_OWNED_LAND,
-    OBJECT_TYPE_TRANSMITTER, ObjectSpecDef, effective_clear_ground, industry_uses_water_ground,
-    is_newgrf_object_type,
+    OBJECT_TYPE_STATUE_COMPANY, OBJECT_TYPE_TRANSMITTER, ObjectSpecDef, effective_clear_ground,
+    industry_uses_water_ground, is_newgrf_object_type,
 };
 
 use super::{
@@ -593,6 +593,13 @@ pub(crate) fn spawn_generic_land_tile(
             OBJECT_TYPE_TRANSMITTER => (Some(assets.transmitter.clone()), -26.0, -80.0, 54.0, 94.0),
             OBJECT_TYPE_LIGHTHOUSE => (Some(assets.lighthouse.clone()), -9.0, -52.0, 21.0, 64.0),
             OBJECT_TYPE_OWNED_LAND => (Some(assets.bought_land.clone()), -16.0, -40.0, 32.0, 48.0),
+            OBJECT_TYPE_STATUE_COMPANY => (
+                Some(assets.company_statue.clone()),
+                -30.0,
+                -42.0,
+                60.0,
+                45.0,
+            ),
             _ => (None, 0.0, 0.0, 0.0, 0.0),
         };
         if let Some(img) = obj_img {

@@ -39,6 +39,8 @@ struct TownActionSnapshot {
     money: i64,
     population: u32,
     houses: u16,
+    nearby_roads: usize,
+    nearby_statues: usize,
     road_build_months: u8,
     fund_buildings_months: u8,
 }
@@ -382,9 +384,43 @@ fn town_action_snapshot(
         money: state.economy.money,
         population: town.population,
         houses: town.num_houses,
+        nearby_roads: count_nearby_town_tiles(state, town, TileCountKind::Road),
+        nearby_statues: count_nearby_town_tiles(state, town, TileCountKind::CompanyStatue),
         road_build_months: town.road_build_months,
         fund_buildings_months: town.fund_buildings_months,
     }
+}
+
+#[derive(Clone, Copy)]
+enum TileCountKind {
+    Road,
+    CompanyStatue,
+}
+
+fn count_nearby_town_tiles(
+    state: &openttdrs_core::GameState,
+    town: &openttdrs_core::Town,
+    kind: TileCountKind,
+) -> usize {
+    const RADIUS: i32 = 24;
+    (-RADIUS..=RADIUS)
+        .flat_map(|dy| (-RADIUS..=RADIUS).map(move |dx| (dx, dy)))
+        .filter(|&(dx, dy)| {
+            let pos = openttdrs_core::TileCoord::new(town.pos.x + dx, town.pos.y + dy);
+            match kind {
+                TileCountKind::Road => {
+                    state.map.get_kind(pos) == Some(openttdrs_core::TileKind::Road)
+                }
+                TileCountKind::CompanyStatue => {
+                    state
+                        .map
+                        .get(pos)
+                        .and_then(|tile| openttdrs_core::map::object_type_from_tile(&tile))
+                        == Some(openttdrs_core::OBJECT_TYPE_STATUE_COMPANY)
+                }
+            }
+        })
+        .count()
 }
 
 fn log_town_action_success(
@@ -401,9 +437,22 @@ fn log_town_action_success(
         after.money,
     );
     match action {
-        TownAction::RoadRebuild => info!(
-            "autoridad: reconstrucción vial iniciada en \"{town_name}\": meses {} -> {}; el comando no colocó carreteras todavía",
-            before.road_build_months, after.road_build_months,
+        TownAction::RoadRebuild => {
+            if after.nearby_roads > before.nearby_roads {
+                info!(
+                    "autoridad: tramo municipal construido en \"{town_name}\": carreteras cercanas {} -> {}; financiación activa {} meses",
+                    before.nearby_roads, after.nearby_roads, after.road_build_months,
+                );
+            } else {
+                info!(
+                    "autoridad: reconstrucción vial iniciada en \"{town_name}\": no había parcela apta este mes; financiación activa {} meses",
+                    after.road_build_months,
+                );
+            }
+        }
+        TownAction::BuildStatue => info!(
+            "autoridad: estatua materializada en el mapa de \"{town_name}\": {} -> {} estatuas cercanas",
+            before.nearby_statues, after.nearby_statues,
         ),
         TownAction::FundBuildings => info!(
             "autoridad: expansión financiada en \"{town_name}\": población {} -> {}, casas {} -> {}, financiación {} meses",
@@ -438,6 +487,14 @@ pub(crate) fn observe_town_authority_effects(
                 current.population,
                 previous.houses,
                 current.houses,
+            );
+        }
+        if current.nearby_roads != previous.nearby_roads {
+            debug!(
+                "autoridad: obra vial confirmada pueblo=\"{}\" id={town_id}: carreteras cercanas {} -> {}",
+                town.name,
+                previous.nearby_roads,
+                current.nearby_roads,
             );
         }
         *previous = current;

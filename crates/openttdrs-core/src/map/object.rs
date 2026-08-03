@@ -16,6 +16,8 @@ pub const MP_OBJECT_MAPT: u8 = OTTD_MP_OBJECT << 4;
 pub const OBJECT_TYPE_TRANSMITTER: u8 = 0;
 pub const OBJECT_TYPE_LIGHTHOUSE: u8 = 1;
 pub const OBJECT_TYPE_OWNED_LAND: u8 = 2;
+/// Estatua de compañía construida por la autoridad local (`SPR_STATUE_COMPANY`).
+pub const OBJECT_TYPE_STATUE_COMPANY: u8 = 3;
 
 #[must_use]
 pub const fn is_map_object_tile(mapt: u8) -> bool {

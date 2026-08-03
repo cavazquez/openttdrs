@@ -115,6 +115,17 @@ pub fn expand_town_once(map: &mut Map, town: &mut Town, attempt_seed: u32) -> To
     expand_town_once_with_ctx(map, town, attempt_seed, TownExpandContext::default())
 }
 
+/// Coloca un tramo de la obra vial financiada por la autoridad local.
+///
+/// Se reutiliza exactamente la búsqueda municipal normal: primero prolonga una
+/// calle existente y, si el pueblo todavía no tiene red, siembra una cerca del
+/// centro. El caller decide la cadencia (al aprobar la acción y una vez por
+/// mes mientras dure la financiación).
+#[must_use]
+pub fn fund_town_road_once(map: &mut Map, town: &Town, seed: u32) -> Option<TileCoord> {
+    try_extend_or_seed_road(map, town, seed)
+}
+
 fn expand_town_once_with_ctx(
     map: &mut Map,
     town: &mut Town,

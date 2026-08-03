@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use openttdrs_core::prelude::*;
 use openttdrs_core::{
     BridgeType, bridge_above_axis_from_mapt, bridge_type_from_m6, calc_bridge_piece,
-    rail_type_from_tile,
+    rail_tile_has_pbs_reservation, rail_type_from_tile,
 };
 
 use crate::iso::{HEIGHT_PX, TILE_HALF_H, remap_tile_offset, tile_pos_half, tile_slope_and_min_z};
@@ -31,6 +31,8 @@ const TILE_HEIGHT_PX: f32 = 8.0;
 pub(crate) struct BridgeSpanInfo {
     pub deck_z: u8,
     pub rail: bool,
+    /// Reserva PBS en cualquiera de las rampas ferroviarias del puente.
+    pub pbs_reserved: bool,
     pub bridge_type: BridgeType,
     pub axis: usize,
     pub piece: openttdrs_core::BridgePiece,
@@ -183,6 +185,14 @@ pub(crate) fn bridge_span_at(
     let (tileh, min_z) = tile_slope_and_min_z(map, ramp_ref.x as u32, ramp_ref.y as u32);
     let deck_z = bridge_deck_z(tileh, min_z, axis);
     let rail = (ramp_tile_ref.m5 >> 2) & 0x3 == 0;
+    // La reserva del port queda asociada a la rampa recorrida por el tren. Un
+    // puente se dibuja desde cualquiera de sus teselas, por lo que consultamos
+    // ambos extremos y propagamos el estado a todo el tablero.
+    let pbs_reserved = rail
+        && [north, south].into_iter().any(|ramp| {
+            map.get(ramp)
+                .is_some_and(|ramp_tile| rail_tile_has_pbs_reservation(ramp_tile.m2_hi))
+        });
     let bridge_type = bridge_type_from_m6(ramp_tile_ref.m6);
 
     let north_len = tile_dist(coord, north, axis_y);
@@ -205,6 +215,7 @@ pub(crate) fn bridge_span_at(
     Some(BridgeSpanInfo {
         deck_z,
         rail,
+        pbs_reserved,
         bridge_type,
         axis,
         piece,
@@ -281,6 +292,7 @@ fn spawn_bridge_rail_overlay(
     assets: &WorldAssets,
     ctx: &TileRenderContext,
     span: &BridgeSpanInfo,
+    show_pbs_reservations: bool,
 ) {
     let sid = bridge_rail_track_sprite(span.axis);
     let Some(img) = assets.rail.get(&sid) else {
@@ -289,7 +301,11 @@ fn spawn_bridge_rail_overlay(
     commands.spawn((
         MapVisualLayer,
         ctx.map_tile_chunk(),
-        img.sprite_colored(Color::srgb(0.88, 0.88, 0.97)),
+        img.sprite_colored(if show_pbs_reservations && span.pbs_reserved {
+            Color::srgb(0.88, 0.88, 0.97).mix(&Color::srgb(0.95, 0.52, 0.42), 0.26)
+        } else {
+            Color::srgb(0.88, 0.88, 0.97)
+        }),
         Transform::from_translation(tile_pos_half(
             ctx.tx_i32(),
             ctx.ty_i32(),
@@ -360,6 +376,7 @@ pub(crate) fn spawn_bridge_deck(
     ctx: &TileRenderContext,
     span: &BridgeSpanInfo,
     draw_pillars: bool,
+    show_pbs_reservations: bool,
     catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     catenary_sprites: Option<&mut NewGrfCatenarySpriteCache>,
     bridge_decks_newgrf: &[Option<openttdrs_core::DecodedSprite>],
@@ -370,7 +387,7 @@ pub(crate) fn spawn_bridge_deck(
     if is_hidden(TransparencyOption::Bridges) {
         // Vía sobre el vano sigue visible; solo se oculta la estructura.
         if span.rail && bridge_draws_separate_rail_overlay(span.bridge_type) {
-            spawn_bridge_rail_overlay(commands, assets, ctx, span);
+            spawn_bridge_rail_overlay(commands, assets, ctx, span, show_pbs_reservations);
         }
         return;
     }
@@ -428,7 +445,7 @@ pub(crate) fn spawn_bridge_deck(
         ));
     }
     if span.rail && bridge_draws_separate_rail_overlay(span.bridge_type) {
-        spawn_bridge_rail_overlay(commands, assets, ctx, span);
+        spawn_bridge_rail_overlay(commands, assets, ctx, span, show_pbs_reservations);
     }
     // Overlay de tranvía sobre tablero de puente de carretera.
     if !span.rail

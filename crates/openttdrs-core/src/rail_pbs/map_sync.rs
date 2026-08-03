@@ -14,6 +14,10 @@ use super::model::{
     encode_rail_reservation_to_m2_hi,
 };
 
+fn is_rail_reservation_tile(kind: TileKind) -> bool {
+    matches!(kind, TileKind::Rail | TileKind::RailBridge)
+}
+
 /// Bit de reserva PBS en cruces a nivel (`HasCrossingReservation` / `m5` bit 4).
 pub const CROSSING_RESERVATION_M5_BIT: u8 = 1 << 4;
 
@@ -37,7 +41,9 @@ pub fn sync_reservations_to_map(
                 let Some(tile) = map.get(c) else {
                     continue;
                 };
-                if tile.kind == TileKind::Rail && decode_rail_reservation_m2_hi(tile.m2_hi) != 0 {
+                if is_rail_reservation_tile(tile.kind)
+                    && decode_rail_reservation_m2_hi(tile.m2_hi) != 0
+                {
                     prev_active.insert(c);
                 }
             }
@@ -51,7 +57,7 @@ pub fn sync_reservations_to_map(
         }
         for step in &v.reserved_steps {
             match map.get_kind(step.tile) {
-                Some(TileKind::Rail) => {
+                Some(TileKind::Rail | TileKind::RailBridge) => {
                     next_tracks
                         .entry(step.tile)
                         .and_modify(|bits| *bits |= step.track)
@@ -80,7 +86,7 @@ pub fn sync_reservations_to_map(
             continue;
         };
         let want = next_tracks.get(&c).copied().unwrap_or(0);
-        let changed = if tile.kind == TileKind::Rail {
+        let changed = if is_rail_reservation_tile(tile.kind) {
             let had = decode_rail_reservation_m2_hi(tile.m2_hi);
             // Liberación: PBS a rojo al quitar reserva (FreeTrainTrackReservation).
             if had != 0 && want == 0 {
@@ -128,7 +134,7 @@ pub fn free_train_track_reservation(
             continue;
         };
         let mut changed = false;
-        if tile.kind == TileKind::Rail {
+        if is_rail_reservation_tile(tile.kind) {
             let before_m3hi = tile.m3hi;
             if rail_tile_is_signals(tile.m5) {
                 let exit_dir = prev.and_then(|p| crate::rail_signals::dir_from_to(p, step.tile));

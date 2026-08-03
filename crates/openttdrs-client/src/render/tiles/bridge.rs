@@ -16,6 +16,7 @@ pub(crate) fn spawn_bridge_middle(
     dims: (u32, u32),
     assets: &WorldAssets,
     ctx: &TileRenderContext,
+    show_pbs_reservations: bool,
     catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     catenary_sprites: Option<&mut crate::render::NewGrfCatenarySpriteCache>,
     bridge_decks_newgrf: &[Option<openttdrs_core::DecodedSprite>],
@@ -37,6 +38,7 @@ pub(crate) fn spawn_bridge_middle(
         ctx,
         &span,
         true,
+        show_pbs_reservations,
         catenary_newgrf,
         catenary_sprites,
         bridge_decks_newgrf,
@@ -51,7 +53,8 @@ mod tests {
     use super::*;
 
     use openttdrs_core::{
-        BridgeType, bridge_above_axis_from_mapt, set_bridge_middle_mapt, set_bridge_type_m6,
+        BridgeType, bridge_above_axis_from_mapt, encode_rail_reservation_to_m2_hi,
+        set_bridge_middle_mapt, set_bridge_type_m6,
     };
 
     fn ramp_tile_template(m5: u8) -> Tile {
@@ -117,5 +120,28 @@ mod tests {
         assert_eq!(bridge_above_axis_from_mapt(0x64), Some(false));
         assert_eq!(bridge_above_axis_from_mapt(0x68), Some(true));
         assert_eq!(bridge_above_axis_from_mapt(0x60), None);
+    }
+
+    #[test]
+    fn span_at_propagates_pbs_reservation_from_rail_ramp() {
+        let mut map = Map::new_flat(8, 8, 0);
+        let c = |x: i32, y: i32| TileCoord::new(x, y);
+        let mut north = ramp_tile_template(0x80);
+        north.kind = TileKind::RailBridge;
+        north.m2_hi = encode_rail_reservation_to_m2_hi(0x01);
+        let mut south = ramp_tile_template(0x80);
+        south.kind = TileKind::RailBridge;
+        map.set_tile(c(1, 2), north).expect("rampa norte");
+        map.set_tile(c(4, 2), south).expect("rampa sur");
+        for x in 2..=3 {
+            let mut water = map.get(c(x, 2)).expect("agua");
+            water.kind = TileKind::Water;
+            water.mapt = set_bridge_middle_mapt(0x60, false);
+            map.set_tile(c(x, 2), water).expect("vano");
+        }
+
+        let span = bridge_span_at(&map, c(2, 2), map.dimensions()).expect("puente");
+        assert!(span.rail);
+        assert!(span.pbs_reserved);
     }
 }

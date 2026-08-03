@@ -113,4 +113,14 @@ mod tests {
         assert_eq!(mode_from_u8(99), NewsDisplayMode::Full);
         assert_eq!(mode_to_u8(NewsDisplayMode::Summary), DISPLAY_SUMMARY);
     }
+
+    #[test]
+    fn new_client_preferences_keep_recurrent_cargo_in_the_ticker() {
+        let prefs = ClientPreferences::default();
+        assert_eq!(prefs.news_cargo_delivered, DISPLAY_SUMMARY);
+        assert_eq!(
+            settings_from_client_prefs(&prefs).cargo_delivered,
+            NewsDisplayMode::Summary
+        );
+    }
 }

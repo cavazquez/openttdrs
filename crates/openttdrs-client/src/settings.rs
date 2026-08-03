@@ -102,7 +102,9 @@ impl Default for ClientPreferences {
             full_detail: true,
             transparency_opt: 0,
             invisibility_opt: 0,
-            news_cargo_delivered: crate::news_prefs::DISPLAY_FULL,
+            // Las entregas regulares son frecuentes: se informan en el ticker
+            // sin convertir cada descarga en un popup con sonido.
+            news_cargo_delivered: crate::news_prefs::DISPLAY_SUMMARY,
             news_first_cargo: crate::news_prefs::DISPLAY_FULL,
             news_first_vehicle: crate::news_prefs::DISPLAY_FULL,
             news_vehicle_advice: crate::news_prefs::DISPLAY_SUMMARY,

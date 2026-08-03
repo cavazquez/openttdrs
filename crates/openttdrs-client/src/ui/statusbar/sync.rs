@@ -11,6 +11,7 @@ use crate::ui::hud::{HudBuildFeedback, SelectedTileInfo};
 use super::{
     COMPANY_DISPLAY_NAME, NewsUiState, StatusBarDateText, StatusBarDefaultText, StatusBarMoneyText,
     StatusBarReminderDot, StatusBarTickerText, TICKER_SCROLL_MAX, TICKER_SCROLL_SPEED, TickerState,
+    news_has_audible_alert,
 };
 
 fn active_company_display_name(sim: &SimWorld) -> String {
@@ -140,14 +141,14 @@ pub(crate) fn drain_news_events(
     let events: Vec<_> = sim.state.runtime.pending_news_events.drain(..).collect();
     for event in events {
         let PendingNewsEvent::ItemAdded { id } = event;
-        let display = sim
+        let (display, news_type) = sim
             .state
             .news
             .items
             .iter()
             .find(|item| item.id == id)
-            .map(|item| news_prefs.0.display_for(item.news_type))
-            .unwrap_or(NewsDisplayMode::Full);
+            .map(|item| (news_prefs.0.display_for(item.news_type), item.news_type))
+            .unwrap_or((NewsDisplayMode::Full, NewsType::CompanyInfo));
         if let Some(item) = sim.state.news.items.iter_mut().find(|item| item.id == id) {
             item.display = display;
         }
@@ -159,7 +160,12 @@ pub(crate) fn drain_news_events(
             }
             NewsDisplayMode::Summary => {
                 news_ui.waiting_ticker.push_back(id);
-                feedback.pending_news_ticker = true;
+                if news_has_audible_alert(news_type) {
+                    feedback.pending_news_ticker = true;
+                    info!("noticias: id={id} tipo={news_type:?}; ticker con sonido");
+                } else {
+                    info!("noticias: id={id} entrega recurrente; ticker sin sonido");
+                }
             }
             NewsDisplayMode::Off => {
                 news_ui.reminder_until_secs = time.elapsed_secs() + 1.35;
@@ -377,15 +383,32 @@ fn spawn_news_popup(
     match item.news_type {
         NewsType::FirstCargoDelivered | NewsType::FirstVehicleRunning => {
             feedback.pending_news_applause = true;
+            info!(
+                "noticias: id={} tipo={:?}; popup con sonido",
+                item.id, item.news_type
+            );
         }
-        NewsType::CargoDelivered => feedback.pending_news_chime = true,
+        // Las descargas posteriores a la primera no deben encadenar repiques.
+        NewsType::CargoDelivered => {
+            info!(
+                "noticias: id={} entrega recurrente; popup sin sonido",
+                item.id
+            );
+        }
         NewsType::VehicleAdvice
         | NewsType::CompanyInfo
         | NewsType::IndustryClose
         | NewsType::Economy => {
             feedback.pending_news_ticker = true;
+            info!(
+                "noticias: id={} tipo={:?}; aviso sonoro",
+                item.id, item.news_type
+            );
         }
-        NewsType::Accident => feedback.pending_news_chime = true,
+        NewsType::Accident => {
+            feedback.pending_news_chime = true;
+            info!("noticias: id={} accidente; campanilla", item.id);
+        }
     }
 }
 
@@ -472,6 +495,9 @@ pub(crate) fn handle_status_bar_center_click(
         focus_news_reference(item.reference, &sim, &mut focus, &mut selected);
         news_ui.shown_full.remove(&item.id);
         news_ui.waiting_full.push_front(item.id);
-        feedback.pending_news_chime = true;
+        if news_has_audible_alert(item.news_type) {
+            feedback.pending_news_chime = true;
+            info!("noticias: id={} reabierta; campanilla", item.id);
+        }
     }
 }

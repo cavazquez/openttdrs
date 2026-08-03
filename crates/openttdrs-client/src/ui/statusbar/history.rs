@@ -12,8 +12,8 @@ use crate::ui::font::UiFontRole;
 use crate::ui::scrollbar::spawn_classic_scroll_area_with;
 use crate::ui::toolbar::BuildMenuUi;
 
-use super::NewsUiState;
 use super::sync::focus_news_reference;
+use super::{NewsUiState, news_has_audible_alert};
 
 const HISTORY_WIDTH: f32 = 420.0;
 const HISTORY_LIST_HEIGHT: f32 = 300.0;
@@ -207,7 +207,13 @@ pub(crate) fn handle_news_history_row_click(
         if item.display == NewsDisplayMode::Full {
             news_ui.shown_full.remove(&item.id);
             news_ui.waiting_full.push_front(item.id);
-            feedback.pending_news_chime = true;
+            if news_has_audible_alert(item.news_type) {
+                feedback.pending_news_chime = true;
+                info!(
+                    "noticias: id={} reabierta desde historial; campanilla",
+                    item.id
+                );
+            }
         }
     }
 }

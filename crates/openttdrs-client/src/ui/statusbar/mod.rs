@@ -17,6 +17,7 @@ pub(crate) use sync::{
 use std::collections::{HashSet, VecDeque};
 
 use bevy::prelude::*;
+use openttdrs_core::NewsType;
 
 /// Altura de la barra de estado (encima del borde inferior).
 pub(crate) const STATUS_BAR_HEIGHT: f32 = 34.0;
@@ -31,6 +32,13 @@ pub(crate) const POPUP_HOLD_MS: f32 = 10_000.0;
 pub(crate) const POPUP_WIDTH: f32 = 460.0;
 
 pub(crate) const COMPANY_DISPLAY_NAME: &str = "Tu compañía";
+
+/// Las entregas repetidas se muestran, pero no deben competir sonoramente con
+/// los hitos de la partida. La primera entrega conserva su propio tipo y sí
+/// genera aviso audible.
+pub(crate) const fn news_has_audible_alert(news_type: NewsType) -> bool {
+    !matches!(news_type, NewsType::CargoDelivered)
+}
 
 #[derive(Resource, Default)]
 pub(crate) struct NewsUiState {
@@ -103,3 +111,16 @@ pub(crate) struct NewsPopupCloseButton;
 
 #[derive(Component)]
 pub(crate) struct NewsPopupFocusButton;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_recurrent_cargo_delivery_is_silent() {
+        assert!(!news_has_audible_alert(NewsType::CargoDelivered));
+        assert!(news_has_audible_alert(NewsType::FirstCargoDelivered));
+        assert!(news_has_audible_alert(NewsType::FirstVehicleRunning));
+        assert!(news_has_audible_alert(NewsType::Accident));
+    }
+}

@@ -941,7 +941,10 @@ pub fn grow_town_if_served_with_ctx(
         }
         let mut counter = i32::from(town.grow_counter) - 1;
         if counter < 0 {
-            let funded = town.fund_buildings_months > 0 || town.growth_funded > 0;
+            // `growth_funded` es una estadística acumulada para la UI; sólo
+            // el programa activo de tres meses habilita crecimiento sin
+            // estación, igual que `Town::fund_buildings_months` en OpenTTD.
+            let funded = town.fund_buildings_months > 0;
             let has_station = !stations_near_town(town, stations).is_empty();
             if !funded && !has_station {
                 counter = i32::from(
@@ -987,7 +990,7 @@ pub fn try_expand_growing_town_with_ctx(
     house_overrides: &[u16],
     dirty: &mut Vec<TileCoord>,
 ) -> bool {
-    let funded = town.fund_buildings_months > 0 || town.growth_funded > 0;
+    let funded = town.fund_buildings_months > 0;
     let has_station = !stations_near_town(town, stations).is_empty();
     if !funded && !has_station {
         return false;
@@ -1156,15 +1159,14 @@ pub fn cap_grow_counter_after_fund(town: &mut Town) {
     town.grow_counter = town.grow_counter.min(cap);
 }
 
-/// Impulso inmediato al financiar edificios (feedback en UI + arranque del ciclo).
+/// Registra el programa de financiación de edificios.
+///
+/// La cadencia se recalcula después desde el comando, con acceso a mapa y
+/// estaciones. Hacerlo aquí con `growth_rate = 0` provocaba una expansión por
+/// tick hasta que corriera el siguiente ciclo mensual.
 pub fn apply_fund_buildings_boost(town: &mut Town) {
     town.growth_funded = town.growth_funded.saturating_add(1);
     town.fund_buildings_months = FUND_BUILDINGS_MONTHS;
-    town.is_growing = true;
-    town.population = town
-        .population
-        .saturating_add(TOWN_GROWTH_POPULATION_STEP + u32::from(FUND_BUILDINGS_MONTHS));
-    cap_grow_counter_after_fund(town);
 }
 
 #[must_use]
@@ -1488,7 +1490,6 @@ mod tests {
             name: "Funded".into(),
             population: 50,
             fund_buildings_months: 3,
-            growth_funded: 1,
             is_growing: true,
             grow_counter: 0,
             growth_rate: 70,
@@ -1500,7 +1501,29 @@ mod tests {
     }
 
     #[test]
-    fn apply_fund_boost_raises_population_immediately() {
+    fn historical_funding_count_does_not_keep_growth_forced() {
+        let mut map = Map::new_flat(16, 16, 0);
+        let mut towns = vec![Town {
+            id: 0,
+            pos: TileCoord::new(8, 8),
+            name: "Expired funding".into(),
+            population: 50,
+            growth_funded: 1,
+            is_growing: true,
+            grow_counter: 0,
+            growth_rate: 70,
+            ..Default::default()
+        }];
+
+        let dirty = grow_town_if_served(&mut map, &[], &[], &mut towns, 1);
+
+        assert!(dirty.is_empty());
+        assert_eq!(towns[0].population, 50);
+        assert_eq!(towns[0].grow_counter, TOWN_GROWTH_TICKS as u16 - 1);
+    }
+
+    #[test]
+    fn apply_fund_boost_starts_only_the_three_month_program() {
         let mut town = Town {
             id: 0,
             pos: TileCoord::new(0, 0),
@@ -1510,8 +1533,8 @@ mod tests {
         };
         apply_fund_buildings_boost(&mut town);
         assert_eq!(town.fund_buildings_months, FUND_BUILDINGS_MONTHS);
-        assert!(town.is_growing);
-        assert!(town.population > 40);
+        assert!(!town.is_growing);
+        assert_eq!(town.population, 40);
         assert_eq!(town.growth_funded, 1);
     }
 

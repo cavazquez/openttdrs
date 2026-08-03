@@ -2,7 +2,9 @@
 
 use crate::GameState;
 use crate::map::{TileCoord, TileKind, tile_slope_and_z};
-use crate::town::{Town, update_town_radius};
+use crate::town::{
+    Town, cap_grow_counter_after_fund, update_town_growth_state, update_town_radius,
+};
 use crate::town_action::{
     TownAction, TownActionError, TownAuthoritySettings, execute_town_action, mask_of_town_actions,
 };
@@ -73,6 +75,19 @@ pub(crate) fn do_town_action(
                 }
             }
             if action == TownAction::FundBuildings {
+                // OpenTTD recalcula la cadencia financiada antes de limitar
+                // el contador. Sin esta actualización `growth_rate` puede
+                // quedar en cero y hacer que el pueblo construya en cada tick.
+                update_town_growth_state(
+                    &mut state.towns[idx],
+                    &state.stations,
+                    &state.map,
+                    &state.industries,
+                    state.climate,
+                    state.world_seed,
+                    &mut state.random,
+                );
+                cap_grow_counter_after_fund(&mut state.towns[idx]);
                 state.runtime.pending_sim_events.push(
                     crate::sim_events::SimEvent::TownRatingChanged {
                         town_id,
@@ -285,6 +300,37 @@ mod tests {
         assert_eq!(
             station_rating_for_cargo(&s.stations[0], CargoType::Passengers),
             station_before.saturating_add(ADVERTISE_MEDIUM_BOOST)
+        );
+    }
+
+    #[test]
+    fn fund_buildings_initializes_funded_cadence_before_the_next_tick() {
+        let mut s = GameState::new(32, 32);
+        s.economy.money = 100_000;
+        s.towns.push(Town {
+            id: 1,
+            pos: TileCoord::new(10, 10),
+            name: "Cadence".into(),
+            ..Default::default()
+        });
+
+        apply_command(
+            &mut s,
+            &Command::DoTownAction {
+                town_id: 1,
+                action: TownAction::FundBuildings,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(s.towns[0].fund_buildings_months, 3);
+        assert_eq!(s.towns[0].growth_funded, 1);
+        assert!(s.towns[0].is_growing);
+        assert_eq!(s.towns[0].population, 0, "funding does not invent citizens");
+        assert_eq!(
+            s.towns[0].growth_rate,
+            crate::town::town_ticks_to_game_ticks(120),
+            "the first construction must schedule the next funded interval"
         );
     }
 

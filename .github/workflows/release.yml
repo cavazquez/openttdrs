@@ -12,6 +12,7 @@ concurrency:
 
 permissions:
   contents: read
+  checks: read
 
 env:
   CARGO_TERM_COLOR: always
@@ -36,6 +37,28 @@ jobs:
             exit 1
           fi
           cargo metadata --locked --no-deps --format-version 1 >/dev/null
+
+      - name: Exigir CI y Platform verdes para un tag
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          required_checks=(
+            "check"
+            "cargo check (macos-latest)"
+            "cargo check (windows-latest)"
+          )
+          check_runs="$(gh api \
+            "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/check-runs?per_page=100" \
+            --jq '.check_runs[] | [.name, .conclusion] | @tsv')"
+          printf '%s\n' "$check_runs"
+          for required in "${required_checks[@]}"; do
+            if ! printf '%s\n' "$check_runs" | grep -Fqx "${required}"$'\t'"success"; then
+              echo "El SHA ${GITHUB_SHA} no tiene el check verde requerido: ${required}" >&2
+              exit 1
+            fi
+          done
 
   runtime-assets:
     needs: validate

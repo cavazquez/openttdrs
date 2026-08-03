@@ -85,7 +85,8 @@ pub fn refittable_cargo_types(vehicle: &Vehicle) -> &'static [CargoType] {
     }
 }
 
-/// Refit según [`EngineDef::refit_mask`] (Action0 train `0x1D`) o listas vanilla.
+/// Refit según [`crate::engine::EngineDef`] y su campo `refit_mask`
+/// (Action0 train `0x1D`) o listas vanilla.
 #[must_use]
 pub fn refittable_cargo_types_for_engine(engine: &crate::engine::EngineDef) -> Vec<CargoType> {
     if engine.refit_mask != 0 {

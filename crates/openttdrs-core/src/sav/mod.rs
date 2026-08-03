@@ -114,6 +114,13 @@ pub enum SavError {
     ValueOutOfRange { field: &'static str, value: u32 },
     /// Payload descomprimido excede el límite de seguridad.
     DecompressedSizeExceeded { actual: u64, limit: u64 },
+    /// Dimensiones MAPS fuera de los límites admitidos por el formato.
+    InvalidMapDimensions { width: u64, height: u64 },
+    /// No se pudo reservar memoria para una estructura de tamaño ya validado.
+    AllocationFailed {
+        context: &'static str,
+        requested: usize,
+    },
 }
 
 impl std::fmt::Display for SavError {
@@ -134,6 +141,15 @@ impl std::fmt::Display for SavError {
                     f,
                     "payload descomprimido excede el límite: {actual} bytes > {limit} bytes"
                 )
+            }
+            Self::InvalidMapDimensions { width, height } => {
+                write!(
+                    f,
+                    "dimensiones MAPS inválidas: {width}×{height}; se admiten potencias de dos entre 1 y 4096"
+                )
+            }
+            Self::AllocationFailed { context, requested } => {
+                write!(f, "no se pudo reservar {requested} bytes para {context}")
             }
         }
     }

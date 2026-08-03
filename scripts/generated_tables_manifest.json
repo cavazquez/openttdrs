@@ -88,9 +88,9 @@
       "inputs": [],
       "check": "hash",
       "requires_opengfx": true,
-      "output_sha256": "17aef9d2237a05213bcf04a7af0831030b06b7e6a86bacd7f52be1fd65b7640e",
+      "output_sha256": "083d989cab13f0dca329c78952452e7c548479056b500c757e47ee644ecac1da",
       "license": "layout derivado de PNG OpenGFX locales",
-      "note": "Regenerado y verificado 2026-07-27 con agua, burbujas y rotor OpenGFX; CI solo hash del .rs."
+      "note": "Regenerado y verificado 2026-08-03 con el atlas OpenGFX local; CI valida hash del .rs."
     }
   ],
   "inventory": [

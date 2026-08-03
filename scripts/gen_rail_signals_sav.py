@@ -2,7 +2,7 @@
 """
 Save sintético OpenTTD (OTTN sin compresión) con señales block/entry/exit/combo/path/oneway.
 
-Mapa 16×16: fila y=8 con vía horizontal (TRACK_X) y señales en x=1..6 (tipos 0–5).
+Mapa 64×64: fila y=8 con vía horizontal (TRACK_X) y señales en x=1..6 (tipos 0–5).
 Cada señal mira al NE (sig_bit 2) sobre carril X, variante eléctrica.
 
 Uso:
@@ -17,7 +17,7 @@ import struct
 import sys
 from pathlib import Path
 
-W = H = 16
+W = H = 64
 N = W * H
 SAVE_VERSION = 350
 

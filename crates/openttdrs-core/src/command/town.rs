@@ -1,6 +1,7 @@
 //! Acciones de ciudad (`town_cmd.cpp` / `CmdDoTownAction`).
 
 use crate::GameState;
+use crate::map::tree_tile_loop::clear_ground_type;
 use crate::map::{TileCoord, TileKind, tile_slope_and_z};
 use crate::town::{
     Town, cap_grow_counter_after_fund, update_town_growth_state, update_town_radius,
@@ -9,6 +10,7 @@ use crate::town_action::{
     TownAction, TownActionError, TownAuthoritySettings, execute_town_action, mask_of_town_actions,
 };
 use crate::townname::generate_town_name;
+use crate::world_gen::CLEAR_GROUND_ROUGH;
 
 use super::error::CommandError;
 
@@ -147,10 +149,7 @@ pub(crate) fn found_town(state: &mut GameState, center: TileCoord) -> Result<(),
     }
 
     for &c in &roads {
-        if state.map.get_kind(c) != Some(TileKind::Grass) {
-            return Err(CommandError::CannotFoundTownHere);
-        }
-        if tile_slope_and_z(&state.map, c).is_none_or(|(h, _)| h != 0) {
+        if !is_suitable_town_ground(state, c) {
             return Err(CommandError::CannotFoundTownHere);
         }
     }
@@ -210,10 +209,7 @@ pub(crate) fn found_town(state: &mut GameState, center: TileCoord) -> Result<(),
 
 /// Validación de fundación (preview / comando).
 pub(crate) fn check_found_town(state: &GameState, center: TileCoord) -> Result<(), CommandError> {
-    if state.map.get_kind(center) != Some(TileKind::Grass) {
-        return Err(CommandError::CannotFoundTownHere);
-    }
-    if tile_slope_and_z(&state.map, center).is_none_or(|(h, _)| h != 0) {
+    if !is_suitable_town_ground(state, center) {
         return Err(CommandError::CannotFoundTownHere);
     }
     for t in &state.towns {
@@ -224,6 +220,18 @@ pub(crate) fn check_found_town(state: &GameState, center: TileCoord) -> Result<(
         }
     }
     Ok(())
+}
+
+/// El suelo rugoso es `MP_CLEAR`, pero OpenTTD no permite fundar un pueblo en
+/// él. Se comprueba el tipo almacenado en `m5`, no la densidad de hierba:
+/// ambos campos ocupan bits distintos y una densidad igual al identificador de
+/// terreno rugoso sigue siendo césped válido.
+fn is_suitable_town_ground(state: &GameState, pos: TileCoord) -> bool {
+    state.map.get(pos).is_some_and(|tile| {
+        tile.kind == TileKind::Grass
+            && clear_ground_type(tile.m5) != CLEAR_GROUND_ROUGH
+            && tile_slope_and_z(&state.map, pos).is_some_and(|(slope, _)| slope == 0)
+    })
 }
 
 fn town_index(state: &GameState, town_id: u32) -> Result<usize, CommandError> {
@@ -269,6 +277,53 @@ mod tests {
         apply_command(&mut s, &Command::FoundTown(TileCoord::new(10, 10))).unwrap();
         let err = apply_command(&mut s, &Command::FoundTown(TileCoord::new(16, 10))).unwrap_err();
         assert_eq!(err, CommandError::TownTooClose);
+    }
+
+    #[test]
+    fn found_town_checks_clear_ground_type_not_grass_density() {
+        use crate::world_gen::{CLEAR_GROUND_GRASS, CLEAR_GROUND_ROUGH, clear_ground_m5};
+
+        let center = TileCoord::new(16, 16);
+        let mut dense_grass = GameState::new(32, 32);
+        dense_grass.economy.money = 100_000;
+        // `CLEAR_GROUND_ROUGH == 1`: the same *density* must not make grass rough.
+        dense_grass
+            .map
+            .set_mapt_m5(
+                center,
+                0,
+                clear_ground_m5(CLEAR_GROUND_GRASS, CLEAR_GROUND_ROUGH),
+            )
+            .unwrap();
+        assert!(check_found_town(&dense_grass, center).is_ok());
+
+        let mut rough = GameState::new(32, 32);
+        rough.economy.money = 100_000;
+        rough
+            .map
+            .set_mapt_m5(center, 0, clear_ground_m5(CLEAR_GROUND_ROUGH, 3))
+            .unwrap();
+        assert_eq!(
+            check_found_town(&rough, center),
+            Err(CommandError::CannotFoundTownHere)
+        );
+
+        let mut rough_road = GameState::new(32, 32);
+        rough_road.economy.money = 100_000;
+        rough_road
+            .map
+            .set_mapt_m5(
+                TileCoord::new(center.x + 2, center.y),
+                0,
+                clear_ground_m5(CLEAR_GROUND_ROUGH, 3),
+            )
+            .unwrap();
+        assert_eq!(
+            apply_command(&mut rough_road, &Command::FoundTown(center)),
+            Err(CommandError::CannotFoundTownHere)
+        );
+        assert!(rough_road.towns.is_empty());
+        assert_eq!(rough_road.economy.money, 100_000);
     }
 
     #[test]

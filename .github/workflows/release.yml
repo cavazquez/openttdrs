@@ -69,7 +69,9 @@ jobs:
       - name: Dependencias del pipeline OpenGFX
         run: |
           sudo apt-get update
-          sudo apt-get install -y grfcodec python3-numpy python3-pil unzip
+          sudo apt-get install -y grfcodec unzip
+          python3 -m pip install --user --upgrade -r scripts/requirements-assets.txt
+          python3 -c 'from PIL import Image; assert hasattr(Image.Image, "get_flattened_data")'
 
       - name: Generar assets OpenGFX 8bpp redistribuibles
         run: ./scripts/descargar_assets.sh graficos --8bpp

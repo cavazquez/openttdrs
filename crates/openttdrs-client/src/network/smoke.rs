@@ -82,6 +82,7 @@ pub fn run_handshake_smoke(addr: &str) -> Result<(), String> {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::parse_handshake_smoke;
 

@@ -1376,18 +1376,21 @@ mod tests {
                 .expect("andén oeste"),
             "desde el depósito al este, FarEnd debe ser el extremo oeste del andén"
         );
-        let mut reached_stop = false;
+        let initial_order = state.vehicles[train_idx].current_order;
+        let mut completed_stop = false;
         for _ in 0..8_000 {
             state.step();
-            let pos = state.vehicles[train_idx].pos;
-            if pos == target {
-                reached_stop = true;
+            // La orden solo avanza con `pos == dest`; la inversión atómica del
+            // consist puede mover la locomotora del extremo `FarEnd` antes de
+            // que podamos observar esa posición al terminar este mismo tick.
+            if state.vehicles[train_idx].current_order != initial_order {
+                completed_stop = true;
                 break;
             }
         }
         assert!(
-            reached_stop,
-            "el tren debe alcanzar el extremo lejano del andén, no solo entrar: target={target:?}; {:#?}; \
+            completed_stop,
+            "el tren debe completar la parada en el extremo lejano del andén, no solo entrar: target={target:?}; {:#?}; \
              reservation_block={} signal_block={} traffic_block={}; heads={:?}",
             state.vehicles[train_idx],
             openttdrs_core::train_blocked_by_reservation(&state.map, &state.vehicles[train_idx]),

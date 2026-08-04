@@ -31,11 +31,19 @@ if [[ "$archive_kind" != "tar.gz" && "$archive_kind" != "zip" ]]; then
   exit 2
 fi
 
-python_cmd="python3"
-if ! command -v "$python_cmd" >/dev/null 2>&1; then
-  python_cmd="python"
+manifest_version="$(awk '
+  /^\[workspace\.package\]/ { in_workspace_package = 1; next }
+  /^\[/ { in_workspace_package = 0 }
+  in_workspace_package && $1 == "version" {
+    gsub(/"/, "", $3)
+    print $3
+    exit
+  }
+' Cargo.toml)"
+if [[ -z "$manifest_version" ]]; then
+  echo "No se pudo leer workspace.package.version de Cargo.toml." >&2
+  exit 1
 fi
-manifest_version="$("$python_cmd" -c 'import pathlib, tomllib; print(tomllib.loads(pathlib.Path("Cargo.toml").read_text())["workspace"]["package"]["version"])')"
 if [[ "$version" != "$manifest_version" ]]; then
   echo "La versión solicitada ($version) no coincide con Cargo.toml ($manifest_version)." >&2
   exit 1

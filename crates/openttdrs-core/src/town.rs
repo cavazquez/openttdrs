@@ -1519,7 +1519,10 @@ mod tests {
 
         assert!(dirty.is_empty());
         assert_eq!(towns[0].population, 50);
-        assert_eq!(towns[0].grow_counter, TOWN_GROWTH_TICKS as u16 - 1);
+        assert_eq!(
+            towns[0].grow_counter,
+            u16::try_from(TOWN_GROWTH_TICKS - 1).unwrap_or(u16::MAX)
+        );
     }
 
     #[test]

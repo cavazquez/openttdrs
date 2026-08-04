@@ -64,8 +64,7 @@ pub(super) fn process_monthly_economy(state: &mut GameState) {
     state.rebuild_station_flows();
     // La financiación vial continúa una vez por mes durante sus seis meses.
     // Se hace antes de decrementar el contador dentro del procesamiento urbano.
-    let road_seed = u32::try_from(state.calendar.date).unwrap_or(0)
-        ^ u32::try_from(state.tick.get()).unwrap_or(0);
+    let road_seed = state.calendar.date ^ u32::try_from(state.tick.get()).unwrap_or(0);
     let mut road_dirty = Vec::new();
     for town in &state.towns {
         if town.road_build_months == 0 {

@@ -245,6 +245,7 @@ fn sync_sets_m2_reservation_bits_on_rail_bridge_ramp() {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)] // Escenario end-to-end: puente, señales, reserva y liberación.
 fn pbs_reservation_crosses_bridge_blocks_second_train_and_releases() {
     let mut state = GameState::new(12, 8);
     let c = |x: i32| TileCoord::new(x, 4);

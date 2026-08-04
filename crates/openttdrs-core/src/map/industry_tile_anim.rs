@@ -17,6 +17,7 @@ use crate::newgrf_sprites::{
     CBID_INDTILE_ANIMATION_TRIGGER,
 };
 use std::collections::HashSet;
+use std::hash::BuildHasher;
 
 /// `GFX_COAL_MINE_TOWER_NOT_ANIMATED`
 pub const GFX_COAL_MINE_TOWER_NOT_ANIMATED: u16 = 0;
@@ -418,13 +419,14 @@ pub fn advance_industry_animated_tiles(
 /// separa esa información del frame, como el `AnimatedTileList` de OpenTTD.
 /// Así save/load y replay mantienen ambos estados, mientras `m3` continúa
 /// aportando random bits deterministas.
-pub fn advance_newgrf_industry_animated_tiles(
+#[allow(clippy::too_many_lines)] // Un tick conserva juntos trigger, velocidad y frame NewGRF.
+pub fn advance_newgrf_industry_animated_tiles<S: BuildHasher>(
     map: &mut Map,
     tick: u64,
     coords: &[TileCoord],
     catalog: &[IndustryTileSpecDef],
     world_seed: u64,
-    active_tiles: &mut HashSet<TileCoord>,
+    active_tiles: &mut HashSet<TileCoord, S>,
 ) -> Vec<TileCoord> {
     let mut dirty = Vec::new();
     for &coord in coords {
@@ -485,7 +487,7 @@ pub fn advance_newgrf_industry_animated_tiles(
                     0,
                 );
                 if result != CALLBACK_FAILED {
-                    speed = (result as u8).min(16);
+                    speed = u8::try_from(result.min(16)).unwrap_or(16);
                 }
             }
 

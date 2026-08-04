@@ -195,7 +195,7 @@ fn eval_random_entry(entry: &Action2RandomEntry, ctx: &mut Action2EvalCtx) -> u1
 
 /// Resuelve un callback de animación de tesela de industria con contexto estable.
 ///
-/// Los parámetros siguen el contrato de OpenTTD: `param1` son random bits y
+/// Los parámetros siguen el contrato de `OpenTTD`: `param1` son random bits y
 /// `param2` el trigger. Además se exponen las coordenadas reales en `0x40`/`0x41`
 /// para que Action2 no dependa de una coordenada ficticia del helper.
 #[must_use]

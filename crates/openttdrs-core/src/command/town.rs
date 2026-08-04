@@ -222,7 +222,7 @@ pub(crate) fn check_found_town(state: &GameState, center: TileCoord) -> Result<(
     Ok(())
 }
 
-/// El suelo rugoso es `MP_CLEAR`, pero OpenTTD no permite fundar un pueblo en
+/// El suelo rugoso es `MP_CLEAR`, pero `OpenTTD` no permite fundar un pueblo en
 /// él. Se comprueba el tipo almacenado en `m5`, no la densidad de hierba:
 /// ambos campos ocupan bits distintos y una densidad igual al identificador de
 /// terreno rugoso sigue siendo césped válido.

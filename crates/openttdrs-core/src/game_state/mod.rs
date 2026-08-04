@@ -356,7 +356,7 @@ pub struct GameState {
     /// Specs `NewGRF` de teselas de industria (gfx ≥175).
     #[serde(default)]
     pub industry_tile_spec_catalog: Vec<crate::industry_tile::IndustryTileSpecDef>,
-    /// Equivalente persistido de `AnimatedTileList` para animaciones NewGRF de industria.
+    /// Equivalente persistido de `AnimatedTileList` para animaciones `NewGRF` de industria.
     #[serde(default)]
     pub newgrf_animated_industry_tiles: std::collections::HashSet<TileCoord>,
     /// Overrides vanilla gfx → `NewGRF` (`GetTranslatedIndustryTileID`).

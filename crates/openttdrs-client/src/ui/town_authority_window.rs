@@ -662,8 +662,10 @@ mod tests {
 
     #[test]
     fn authority_ratings_list_each_known_company() {
-        let mut town = Town::default();
-        town.authority_ratings = vec![120, -50];
+        let town = Town {
+            authority_ratings: vec![120, -50],
+            ..Town::default()
+        };
         assert_eq!(
             authority_ratings_text(&town, 2),
             "  Compañía 1: 120\n  Compañía 2: -50"

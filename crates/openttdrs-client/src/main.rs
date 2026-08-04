@@ -73,6 +73,21 @@ fn main() {
         return;
     }
 
+    match network::parse_handshake_smoke(std::env::args()) {
+        Ok(Some(addr)) => {
+            if let Err(error) = network::run_handshake_smoke(&addr) {
+                eprintln!("error: {error}");
+                std::process::exit(1);
+            }
+            return;
+        }
+        Ok(None) => {}
+        Err(error) => {
+            eprintln!("error: {error}");
+            std::process::exit(2);
+        }
+    }
+
     let net = parse_net_cli(std::env::args());
     bevy_app::run(&asset_root_text, net);
 }

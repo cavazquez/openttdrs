@@ -39,18 +39,38 @@ def main() -> None:
     notices = (ROOT / "THIRD_PARTY_ASSETS.md").read_text(encoding="utf-8")
     workflow = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
     main_rs = (ROOT / "crates/openttdrs-client/src/main.rs").read_text(encoding="utf-8")
+    network_smoke = (
+        ROOT / "crates/openttdrs-client/src/network/smoke.rs"
+    ).read_text(encoding="utf-8")
 
     require(f"## [{version}]" in changelog, "falta la versión en CHANGELOG.md")
     require(f"# openttdrs {version}" in notes, "RELEASE_NOTES.md tiene otra versión")
     for asset in ("OpenGFX", "OpenSFX", "OpenMSX", "DejaVu"):
         require(asset in notices, f"falta atribución de {asset}")
-    for marker in ('tags:', '"v*"', "--prerelease", "package_release.sh"):
+    for marker in (
+        "tags:",
+        '"v*"',
+        "--prerelease",
+        "package_release.sh",
+        "smoke_release_package.sh",
+        "check_linux_glibc_floor.sh",
+        "write_release_report.py",
+    ):
         require(marker in workflow, f"release.yml no contiene {marker!r}")
-    require("--check-assets" in main_rs, "el binario no ofrece smoke de assets")
+    require("--check-assets" in main_rs, "el binario no ofrece smoke --check-assets")
+    require(
+        "parse_handshake_smoke" in main_rs and "--network-smoke" in network_smoke,
+        "el binario no ofrece smoke --network-smoke",
+    )
 
-    packager = ROOT / "scripts/package_release.sh"
-    require(os.access(packager, os.X_OK), "package_release.sh no es ejecutable")
-    subprocess.run(["bash", "-n", str(packager)], check=True, cwd=ROOT)
+    for script_name in (
+        "package_release.sh",
+        "smoke_release_package.sh",
+        "check_linux_glibc_floor.sh",
+    ):
+        script = ROOT / "scripts" / script_name
+        require(os.access(script, os.X_OK), f"{script_name} no es ejecutable")
+        subprocess.run(["bash", "-n", str(script)], check=True, cwd=ROOT)
     print(f"release metadata OK: v{version}")
 
 

@@ -43,6 +43,7 @@
     "scripts/run_ci_python.py",
     "scripts/test_ci_workflow_parity.py",
     "scripts/check_release_metadata.py",
+    "scripts/write_release_report.py",
     "scripts/window_visual_regression.py",
     "scripts/test_window_visual_regression.py"
   ],

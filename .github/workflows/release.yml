@@ -170,18 +170,22 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-24.04
+          # Ubuntu 22.04 fija un baseline redistribuible de GLIBC 2.35.
+          - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             platform: linux-x86_64
             archive: tar.gz
+            glibc_floor: "2.35"
           - os: windows-2025
             target: x86_64-pc-windows-msvc
             platform: windows-x86_64
             archive: zip
+            glibc_floor: ""
           - os: macos-15
             target: aarch64-apple-darwin
             platform: macos-arm64
             archive: tar.gz
+            glibc_floor: ""
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -223,14 +227,40 @@ jobs:
           "${{ matrix.platform }}"
           "${{ matrix.archive }}"
 
+      - name: Comprobar ABI GLIBC del paquete Linux
+        if: runner.os == 'Linux'
+        shell: bash
+        run: >-
+          ./scripts/check_linux_glibc_floor.sh
+          "${{ matrix.glibc_floor }}"
+          "dist/openttdrs-${{ needs.validate.outputs.version }}-${{ matrix.platform }}/openttdrs-client"
+          "dist/openttdrs-${{ needs.validate.outputs.version }}-${{ matrix.platform }}/openttdrs-dedicated"
+
       - name: Smoke del paquete extraído
+        shell: bash
+        run: >-
+          ./scripts/smoke_release_package.sh
+          "dist/openttdrs-${{ needs.validate.outputs.version }}-${{ matrix.platform }}.${{ matrix.archive }}"
+
+      - name: Escribir informe verificable por plataforma
         shell: bash
         run: |
           package="dist/openttdrs-${{ needs.validate.outputs.version }}-${{ matrix.platform }}"
           suffix=""
           if [[ "${{ matrix.target }}" == *windows* ]]; then suffix=".exe"; fi
-          "${package}/openttdrs-client${suffix}" --check-assets
-          (cd dist && sha256sum -c "openttdrs-${{ needs.validate.outputs.version }}-${{ matrix.platform }}.${{ matrix.archive }}.sha256")
+          python_cmd="python3"
+          if ! command -v "$python_cmd" >/dev/null 2>&1; then python_cmd="python"; fi
+          glibc_args=()
+          if [[ "${{ runner.os }}" == "Linux" ]]; then glibc_args=(--glibc-baseline "${{ matrix.glibc_floor }}"); fi
+          "$python_cmd" scripts/write_release_report.py \
+            --version "${{ needs.validate.outputs.version }}" \
+            --source-sha "$GITHUB_SHA" \
+            --platform "${{ matrix.platform }}" \
+            --archive "${package}.${{ matrix.archive }}" \
+            --client "${package}/openttdrs-client${suffix}" \
+            --dedicated "${package}/openttdrs-dedicated${suffix}" \
+            --output "dist/release-report-${{ needs.validate.outputs.version }}-${{ matrix.platform }}.json" \
+            "${glibc_args[@]}"
 
       - name: Subir paquete
         uses: actions/upload-artifact@v7
@@ -242,6 +272,7 @@ jobs:
             dist/*.tar.gz
             dist/*.zip
             dist/*.sha256
+            dist/release-report-*.json
 
   publish:
     if: github.ref_type == 'tag'

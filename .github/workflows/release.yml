@@ -76,8 +76,8 @@ jobs:
       - name: Recuperar referencia OpenTTD fijada
         run: ./scripts/fetch-openttd-reference.sh
 
-      - name: Generar assets OpenGFX 8bpp redistribuibles
-        run: ./scripts/descargar_assets.sh graficos --8bpp
+      - name: Generar assets OpenGFX 32bpp redistribuibles
+        run: ./scripts/descargar_assets.sh graficos --32bpp
 
       - name: Validar assets requeridos
         run: |

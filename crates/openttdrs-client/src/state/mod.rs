@@ -176,6 +176,7 @@ pub(crate) fn insert_test_order_pick_state(world: &mut World) {
 pub enum BootstrapLoadSource {
     Json,
     OttdMap,
+    Sav,
 }
 
 impl BootstrapLoadSource {
@@ -183,11 +184,12 @@ impl BootstrapLoadSource {
         match self {
             Self::Json => "OTTDJSON_LOAD",
             Self::OttdMap => "OTTDMAP_FILE",
+            Self::Sav => "OPENTTDRS_SAV_LOAD",
         }
     }
 }
 
-/// Error tipado al cargar un mundo solicitado vía `OTTDJSON_LOAD` / `OTTDMAP_FILE`.
+/// Error tipado al cargar un mundo solicitado por una variable de bootstrap.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BootstrapLoadError {
     pub source: BootstrapLoadSource,
@@ -203,6 +205,7 @@ impl std::fmt::Display for BootstrapLoadError {
             match self.source {
                 BootstrapLoadSource::Json => "JSON de simulación",
                 BootstrapLoadSource::OttdMap => "mapa .ottdmap",
+                BootstrapLoadSource::Sav => "save .sav de OpenTTD",
             },
             self.source.env_var(),
             self.path,
@@ -257,11 +260,22 @@ impl SimWorld {
         json_path: Option<String>,
         ottdmap_path: Option<String>,
     ) -> Result<Option<Self>, BootstrapLoadError> {
+        Self::load_requested_with_sav(json_path, ottdmap_path, None)
+    }
+
+    fn load_requested_with_sav(
+        json_path: Option<String>,
+        ottdmap_path: Option<String>,
+        sav_path: Option<String>,
+    ) -> Result<Option<Self>, BootstrapLoadError> {
         if let Some(path) = json_path {
             return Ok(Some(Self::load_json_file(&path)?));
         }
         if let Some(path) = ottdmap_path {
             return Ok(Some(Self::load_ottdmap_file(&path)?));
+        }
+        if let Some(path) = sav_path {
+            return Ok(Some(Self::load_sav_file(&path)?));
         }
         Ok(None)
     }
@@ -276,13 +290,24 @@ impl SimWorld {
         Self::load_ottdmap_path(path)
     }
 
-    /// Arranque: carga pedida por env (`OTTDJSON_LOAD` / `OTTDMAP_FILE`), o procedural.
+    /// Carga un save nativo de OpenTTD desde un path explícito.
+    pub fn load_sav_file(path: &str) -> Result<Self, BootstrapLoadError> {
+        Self::load_sav_path(path)
+    }
+
+    /// Arranque: carga pedida por env (`OTTDJSON_LOAD` / `OTTDMAP_FILE` /
+    /// `OPENTTDRS_SAV_LOAD`), o procedural.
     pub fn try_bootstrap(settings: &NewGameSettings) -> Result<Self, BootstrapLoadError> {
-        Self::try_bootstrap_with_loads(
-            settings,
-            std::env::var("OTTDJSON_LOAD").ok(),
-            std::env::var("OTTDMAP_FILE").ok(),
-        )
+        let json_path = std::env::var("OTTDJSON_LOAD").ok();
+        let ottdmap_path = std::env::var("OTTDMAP_FILE").ok();
+        let sav_path = std::env::var("OPENTTDRS_SAV_LOAD").ok();
+        if sav_path.is_none() {
+            return Self::try_bootstrap_with_loads(settings, json_path, ottdmap_path);
+        }
+        match Self::load_requested_with_sav(json_path, ottdmap_path, sav_path)? {
+            Some(world) => Ok(world),
+            None => Ok(Self::new_procedural(settings)),
+        }
     }
 
     /// Como [`Self::try_bootstrap`] con paths de carga inyectables (tests / headless).
@@ -353,6 +378,25 @@ impl SimWorld {
             ottdmap_extras: Some(extras),
         })
     }
+
+    fn load_sav_path(path: &str) -> Result<Self, BootstrapLoadError> {
+        let data = std::fs::read(path).map_err(|e| BootstrapLoadError {
+            source: BootstrapLoadSource::Sav,
+            path: path.to_owned(),
+            cause: e.to_string(),
+        })?;
+        let state = load_sav_state(&data).map_err(|cause| BootstrapLoadError {
+            source: BootstrapLoadSource::Sav,
+            path: path.to_owned(),
+            cause,
+        })?;
+        info!("Save OpenTTD cargado desde {path}");
+        Ok(Self {
+            state,
+            loaded_file: true,
+            ottdmap_extras: None,
+        })
+    }
 }
 
 impl Default for SimWorld {
@@ -389,6 +433,18 @@ mod sim_world_coverage_tests {
             .collect();
         assert!(names.contains(&"Valle de Sarnpool Bridge"), "{names:?}");
         assert!(names.contains(&"Sarnpool Bridge Norte"), "{names:?}");
+    }
+
+    #[test]
+    fn native_sav_bootstrap_marks_the_world_as_loaded() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../openttdrs-core/tests/fixtures/train_dual_pbs_curve_15_3.sav"
+        );
+        let world = SimWorld::load_sav_file(path).expect("load .sav fixture");
+        assert!(world.loaded_file);
+        assert!(world.ottdmap_extras.is_none());
+        assert_eq!(world.state.stations.len(), 2);
     }
 
     #[test]

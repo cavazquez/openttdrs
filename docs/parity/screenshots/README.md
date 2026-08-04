@@ -90,9 +90,70 @@ Las salidas quedan como `1280x720/window_<id>_<scale>x.png` y
 informa como error; antes de incorporar una referencia se debe usar una clave
 presente en la matriz. Las escalas aceptadas van de 0.5× a 4×.
 
-Las capturas por ventana son el insumo visual de #240. Mientras falte
-`1280x720/window_<id>_1x.png`, el reporte JSON y los tests de
-`windows_shot` citan el issue #240 (no toleran la ausencia en silencio).
-Las diferencias deben clasificarse en chrome/iconos (#241), lifecycle (#242),
-geometría (#243) o la familia funcional correspondiente (#244–#248), sin
-aceptar tolerancias anónimas.
+## Gate visual por familia (#297)
+
+La primera familia cubre `Vehicle`, `Orders`, `Timetable`, `Depot`, `Town` e
+`Industry`. Su manifiesto es [`window-regression.json`](window-regression.json)
+y cada uno de los cuatro perfiles vive en:
+
+```text
+window-regression/<id>/<resolución>-<escala>x/
+  reference.png   # OpenTTD 15.3, commit fijado
+  candidate.png   # openttdrs
+  diff.png        # RGBA, generado determinísticamente
+  sidecar.json    # hashes, geometría, métricas y tolerancia
+```
+
+El driver C++ versionado en
+[`patches/openttd-15.3-ui-capture/`](../../../patches/openttd-15.3-ui-capture/)
+abre la ventana del fixture `mvp_openttd_rich.sav`; no usa clics, estado de
+usuario ni configuraciones persistentes. Vehicle, Orders, Timetable y Town usan
+`mvp_openttd_rich.sav`; Depot e Industry usan `rail_signals_mixed.sav`, que
+contiene las entidades nativas que las dos vistas requieren. El candidato carga
+exactamente el mismo `.sav` mediante `OPENTTDRS_SAV_LOAD`, y ambos drivers
+congelan el tick de simulación antes de medir. Para generar/actualizar los cuatro
+artefactos de cada perfil se requieren `xvfb`, `xauth` y `weston`: OpenTTD se
+ejecuta en Xvfb y el cliente en Weston headless con renderer GL. Así ambos
+procesos reciben una superficie virtual de la resolución pedida y se rechaza
+un compositor que silenciosamente devuelva 1280×720 al solicitar 1920×1080.
+
+```bash
+sudo apt install xvfb xauth weston
+./patches/openttd-15.3-ui-capture/integrate.sh
+cmake -S reference/openttd-upstream -B /tmp/openttdrs-openttd-15.3-ui \
+  -DOPTION_USE_ASSERTS=OFF
+cmake --build /tmp/openttdrs-openttd-15.3-ui --target openttd
+OPENTTDRS_UI_CAPTURE_BIN=/tmp/openttdrs-openttd-15.3-ui/openttd \
+  bash scripts/capture_window_visual_baselines.sh
+```
+
+La comprobación no requiere Pillow ni ImageMagick y falla ante artefacto
+ausente, dimensión distinta, sidecar desactualizado o diff por encima de la
+tolerancia declarada:
+
+```bash
+python3 scripts/window_visual_regression.py
+```
+
+Durante la regeneración local puede limitarse a una ventana sin que las otras
+ausencias oculten el resultado:
+
+```bash
+OPENTTDRS_WINDOW_CAPTURE_IDS=Vehicle \
+  OPENTTDRS_UI_CAPTURE_BIN=/tmp/openttdrs-openttd-15.3-ui/openttd \
+  bash scripts/capture_window_visual_baselines.sh
+python3 scripts/window_visual_regression.py --window Vehicle
+```
+
+El reporte JSON etiqueta separadamente `absence`, `geometry`, `iconographic`
+y `chromatic`. Las diferencias aceptadas sólo pueden declararse con su categoría
+y un issue abierto; no hay tolerancias implícitas. La prueba de mutación y el
+gate del manifiesto canónico forman parte de los checks Python compartidos de
+CI: una captura ausente, una dimensión distinta, un hash/sidecar obsoleto o
+una diferencia fuera de tolerancia no pueden pasar silenciosamente.
+
+Las demás ventanas todavía son el inventario de #240. Su ausencia cita ese
+issue, mientras que las seis de esta fase citan #297 hasta que los artefactos
+versionados estén completos. La ampliación es por familias: finalizar las seis
+ventanas actuales, añadir construction, economy/reports, settings/dialogs y,
+por último, el resto de `WINDOW_PARITY_MATRIX` hasta sus 62 entradas.

@@ -1,0 +1,70 @@
+{
+  "accepted_differences": [
+    {
+      "category": "chromatic",
+      "issue": 297
+    }
+  ],
+  "artifacts": {
+    "candidate": {
+      "path": "docs/parity/screenshots/window-regression/Industry/1280x720-1x/candidate.png",
+      "sha256": "a574bf8ac68c5062006e7009637d24124d956c277e3d7e1cc338fcd55746c4a6"
+    },
+    "diff": {
+      "path": "docs/parity/screenshots/window-regression/Industry/1280x720-1x/diff.png",
+      "sha256": "9dd08f16088207d6cf8b03f659b8caf3538cdf085b7b3f0200034ccf064f1776"
+    },
+    "reference": {
+      "path": "docs/parity/screenshots/window-regression/Industry/1280x720-1x/reference.png",
+      "sha256": "8ec9f5ec128f52e24cfadb2c36687d6069cbe87cfb4598d3cb5b1f75b7806b9a"
+    }
+  },
+  "assessment": {
+    "category": "chromatic",
+    "within_tolerance": true
+  },
+  "family": "world",
+  "fixture": "crates/openttdrs-core/tests/fixtures/rail_signals_mixed.sav",
+  "geometry": {
+    "candidate_screen": [
+      1280,
+      720
+    ],
+    "expected_screen": [
+      1280,
+      720
+    ],
+    "reference_screen": [
+      1280,
+      720
+    ]
+  },
+  "metrics": {
+    "candidate_size": [
+      1280,
+      720
+    ],
+    "changed_pixels": 908344,
+    "changed_ratio": 0.9856163194444445,
+    "max_channel_delta": 255,
+    "mean_channel_delta": 38.59338297526042,
+    "reference_size": [
+      1280,
+      720
+    ]
+  },
+  "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+  "profile": {
+    "height": 720,
+    "ui_scale": 1,
+    "width": 1280
+  },
+  "schema_version": 1,
+  "tolerance": {
+    "max_changed_pixels": 2073600,
+    "max_changed_ratio": 1,
+    "max_channel_delta": 255,
+    "max_mean_channel_delta": 255
+  },
+  "window": "Industry"
+}

@@ -20,7 +20,7 @@ use openttdrs_core::prelude::*;
 use std::fmt::Write as _;
 
 use crate::bevy_app::UpdateSet;
-use crate::state::{ClientScreen, SimWorld};
+use crate::state::{ClientScreen, SimRunState, SimWorld};
 use crate::ui::ai_settings_window::AiSettingsWindowState;
 use crate::ui::audio_settings_window::SoundMusicWindowState;
 use crate::ui::autoreplace_window::AutoreplaceWindowState;
@@ -518,6 +518,10 @@ pub(crate) struct WindowKnownGap {
 ///   dialogs/settings (#248); sí al resto de clases aún singleton.
 #[must_use]
 pub(crate) fn window_known_gaps(id: FloatingWindowId) -> &'static [WindowKnownGap] {
+    const VISUAL_REGRESSION_CAPTURE: &[WindowKnownGap] = &[WindowKnownGap {
+        category: "capture",
+        issue: 297,
+    }];
     const CAPTURE_ONLY: &[WindowKnownGap] = &[WindowKnownGap {
         category: "capture",
         issue: 240,
@@ -546,6 +550,9 @@ pub(crate) fn window_known_gaps(id: FloatingWindowId) -> &'static [WindowKnownGa
             issue: 243,
         },
     ];
+    if VISUAL_REGRESSION_WINDOW_IDS.contains(&id) {
+        return VISUAL_REGRESSION_CAPTURE;
+    }
     if VEHICLE_FAMILY_WINDOW_IDS.contains(&id)
         || CONSTRUCTION_FAMILY_WINDOW_IDS.contains(&id)
         || WORLD_FAMILY_WINDOW_IDS.contains(&id)
@@ -587,11 +594,15 @@ pub(crate) fn window_descendant_ids(root: FloatingWindowId) -> Vec<FloatingWindo
     out
 }
 
-/// ¿La captura 1280×720 1× está pendiente? Ausencia → issue, no silencio (#240).
+/// ¿La captura 1280×720 1× está pendiente? Ausencia → issue, no silencio.
+///
+/// La primera familia del gate de píxel se sigue en #297; el resto conserva
+/// la deuda de inventario de #240 hasta que entre al mismo pipeline.
 #[must_use]
 pub(crate) fn capture_is_pending(id: FloatingWindowId) -> Option<u16> {
     match id {
         FloatingWindowId::Station => None,
+        id if VISUAL_REGRESSION_WINDOW_IDS.contains(&id) => Some(297),
         _ => Some(240),
     }
 }
@@ -664,6 +675,20 @@ pub(crate) const VEHICLE_FAMILY_WINDOW_IDS: &[FloatingWindowId] = &[
     FloatingWindowId::SharedOrders,
     FloatingWindowId::Autoreplace,
     FloatingWindowId::DestinationPicker,
+];
+
+/// Primera familia con referencia OpenTTD, candidato, diff y sidecar (#297).
+///
+/// El harness upstream abre exactamente estas seis ventanas sobre el fixture
+/// rico. Las demás entradas de la matriz continúan como backlog de #240 hasta
+/// que se añadan en fases posteriores.
+pub(crate) const VISUAL_REGRESSION_WINDOW_IDS: &[FloatingWindowId] = &[
+    FloatingWindowId::Vehicle,
+    FloatingWindowId::Orders,
+    FloatingWindowId::Timetable,
+    FloatingWindowId::Depot,
+    FloatingWindowId::Town,
+    FloatingWindowId::Industry,
 ];
 
 /// Inventario de pickers construction cubiertos por #246 y #270 (#270 greenfield).
@@ -1013,6 +1038,13 @@ impl Plugin for WindowsShotPlugin {
             app.add_systems(Startup, apply_shot_settings);
         }
         if std::env::var_os("OPENTTDRS_WINDOWS_SHOT").is_some() {
+            // La captura debe medir la misma partida, no un frame que depende de
+            // cuánto tarde en iniciar el renderer. `OnEnter` ocurre antes del
+            // primer `FixedUpdate` ya dentro de la partida.
+            app.add_systems(
+                OnEnter(ClientScreen::InGame),
+                pause_simulation_for_visual_capture,
+            );
             app.add_systems(
                 Update,
                 (
@@ -1039,17 +1071,8 @@ impl Plugin for WindowsShotPlugin {
     }
 }
 
-fn parse_shot_resolution() -> Option<(u32, u32)> {
-    let Ok(raw) = std::env::var("OPENTTDRS_SHOT_RES") else {
-        return None;
-    };
-    let (w, h) = raw.split_once('x').or_else(|| raw.split_once('X'))?;
-    let w = w.parse().ok()?;
-    let h = h.parse().ok()?;
-    if w < 320 || h < 240 {
-        return None;
-    }
-    Some((w, h))
+fn pause_simulation_for_visual_capture(mut next_simulation: ResMut<NextState<SimRunState>>) {
+    next_simulation.set(SimRunState::Paused);
 }
 
 fn parse_shot_ui_scale(raw: &str) -> Option<f32> {
@@ -1061,7 +1084,7 @@ fn apply_shot_settings(
     mut windows: Query<&mut Window, With<PrimaryWindow>>,
     mut ui_scale: ResMut<UiScale>,
 ) {
-    if let Some((w, h)) = parse_shot_resolution() {
+    if let Some((w, h)) = crate::bevy_app::capture_window_resolution() {
         for mut window in &mut windows {
             window.resolution.set(w as f32, h as f32);
             info!("shot: resolución {w}×{h}");
@@ -1654,8 +1677,8 @@ mod tests {
                     "captura de {id:?} existe pero sigue en pending"
                 );
             } else {
-                let issue =
-                    capture_is_pending(*id).expect("ausencia de captura debe citar issue (#240)");
+                let issue = capture_is_pending(*id)
+                    .expect("ausencia de captura debe citar un issue abierto de seguimiento");
                 assert!(issue >= 240, "issue de captura inválido: {issue}");
                 let gaps = window_known_gaps(*id);
                 assert!(
@@ -1756,6 +1779,22 @@ mod tests {
     }
 
     #[test]
+    fn visual_regression_family_replaces_the_legacy_capture_gap() {
+        assert_eq!(VISUAL_REGRESSION_WINDOW_IDS.len(), 6);
+        for id in VISUAL_REGRESSION_WINDOW_IDS {
+            assert!(VEHICLE_FAMILY_WINDOW_IDS.contains(id) || WORLD_FAMILY_WINDOW_IDS.contains(id));
+            assert_eq!(capture_is_pending(*id), Some(297));
+            assert_eq!(
+                window_known_gaps(*id),
+                &[WindowKnownGap {
+                    category: "capture",
+                    issue: 297,
+                }]
+            );
+        }
+    }
+
+    #[test]
     fn construction_family_inventory_is_in_parity_matrix() {
         for id in CONSTRUCTION_FAMILY_WINDOW_IDS {
             assert!(
@@ -1824,13 +1863,18 @@ mod tests {
     fn world_family_known_gaps_are_capture_only() {
         for id in WORLD_FAMILY_WINDOW_IDS {
             let gaps = window_known_gaps(*id);
+            let issue = if VISUAL_REGRESSION_WINDOW_IDS.contains(id) {
+                297
+            } else {
+                240
+            };
             assert_eq!(
                 gaps,
                 &[WindowKnownGap {
                     category: "capture",
-                    issue: 240,
+                    issue,
                 }],
-                "familia world debe ser solo capture→#240: {id:?}"
+                "familia world debe ser solo capture: {id:?}"
             );
             assert!(
                 gaps.iter()

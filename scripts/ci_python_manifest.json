@@ -42,13 +42,17 @@
     "scripts/test_pbs_trace_tools.py",
     "scripts/run_ci_python.py",
     "scripts/test_ci_workflow_parity.py",
-    "scripts/check_release_metadata.py"
+    "scripts/check_release_metadata.py",
+    "scripts/window_visual_regression.py",
+    "scripts/test_window_visual_regression.py"
   ],
   "runs": [
     "scripts/test_openttd_reference_manifest.py",
     "scripts/test_compare_snapshots_mutation.py",
     "scripts/test_pbs_trace_tools.py",
     "scripts/test_ci_workflow_parity.py",
-    "scripts/check_release_metadata.py"
+    "scripts/check_release_metadata.py",
+    "scripts/window_visual_regression.py",
+    "scripts/test_window_visual_regression.py"
   ]
 }

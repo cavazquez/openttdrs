@@ -1,0 +1,70 @@
+{
+  "accepted_differences": [
+    {
+      "category": "chromatic",
+      "issue": 297
+    }
+  ],
+  "artifacts": {
+    "candidate": {
+      "path": "docs/parity/screenshots/window-regression/Orders/1280x720-2x/candidate.png",
+      "sha256": "748426361373a00c26dfcf0f6d7b5e182ddbd5837f3ebe06521653e18e4186b2"
+    },
+    "diff": {
+      "path": "docs/parity/screenshots/window-regression/Orders/1280x720-2x/diff.png",
+      "sha256": "0050bf09018a9411bbe7236aaf0fe6bc1a1b24cfd545ad576bee5f3bcdd45d2d"
+    },
+    "reference": {
+      "path": "docs/parity/screenshots/window-regression/Orders/1280x720-2x/reference.png",
+      "sha256": "e665b5d8581ea1fc343b721d75a4704cddda12e095a091bf8ccde234e5e848c6"
+    }
+  },
+  "assessment": {
+    "category": "chromatic",
+    "within_tolerance": true
+  },
+  "family": "vehicles",
+  "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav",
+  "geometry": {
+    "candidate_screen": [
+      1280,
+      720
+    ],
+    "expected_screen": [
+      1280,
+      720
+    ],
+    "reference_screen": [
+      1280,
+      720
+    ]
+  },
+  "metrics": {
+    "candidate_size": [
+      1280,
+      720
+    ],
+    "changed_pixels": 921294,
+    "changed_ratio": 0.99966796875,
+    "max_channel_delta": 255,
+    "mean_channel_delta": 46.174560546875,
+    "reference_size": [
+      1280,
+      720
+    ]
+  },
+  "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+  "profile": {
+    "height": 720,
+    "ui_scale": 2,
+    "width": 1280
+  },
+  "schema_version": 1,
+  "tolerance": {
+    "max_changed_pixels": 2073600,
+    "max_changed_ratio": 1,
+    "max_channel_delta": 255,
+    "max_mean_channel_delta": 255
+  },
+  "window": "Orders"
+}

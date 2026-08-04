@@ -79,6 +79,28 @@ pub(crate) enum UpdateSet {
     Ui,
 }
 
+/// Resolución solicitada para un screenshot reproducible, si es válida.
+///
+/// Debe leerse antes de instalar [`WindowPlugin`]: cambiarla en `Startup` deja
+/// que el backend cree primero una superficie con el tamaño del compositor.
+pub(crate) fn capture_window_resolution() -> Option<(u32, u32)> {
+    let raw = std::env::var("OPENTTDRS_SHOT_RES").ok()?;
+    parse_capture_window_resolution(&raw)
+}
+
+fn parse_capture_window_resolution(raw: &str) -> Option<(u32, u32)> {
+    let (width, height) = raw.split_once('x').or_else(|| raw.split_once('X'))?;
+    let width = width.parse().ok()?;
+    let height = height.parse().ok()?;
+    (width >= 320 && height >= 240).then_some((width, height))
+}
+
+/// Los flujos de screenshot no deben heredar tamaño de preferencias locales.
+pub(crate) fn visual_capture_requested() -> bool {
+    std::env::var_os("OPENTTDRS_WINDOWS_SHOT").is_some()
+        || std::env::var_os("OPENTTDRS_MAP_SHOT").is_some()
+}
+
 /// `headless`: sin ventana primaria (tests / cobertura en CI); evita que el proceso termine al no
 /// haber ventanas (`ExitCondition::DontExit`).
 ///
@@ -97,11 +119,12 @@ pub(crate) fn build_client_app(
             close_when_requested: false,
         }
     } else {
+        let (width, height) = capture_window_resolution().unwrap_or((1280, 720));
         patch_window_plugin_for_settings(WindowPlugin {
             primary_window: Some(Window {
                 title: "openttdrs".into(),
                 name: Some("openttdrs".into()),
-                resolution: (1280_u32, 720_u32).into(),
+                resolution: (width, height).into(),
                 ..default()
             }),
             ..default()
@@ -231,6 +254,20 @@ mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
 
     use super::{FixedUpdateSet, StartupSet, UpdateSet};
+
+    #[test]
+    fn capture_resolution_accepts_only_usable_dimensions() {
+        assert_eq!(
+            super::parse_capture_window_resolution("1920x1080"),
+            Some((1920, 1080))
+        );
+        assert_eq!(
+            super::parse_capture_window_resolution("1280X720"),
+            Some((1280, 720))
+        );
+        assert_eq!(super::parse_capture_window_resolution("319x240"), None);
+        assert_eq!(super::parse_capture_window_resolution("1280"), None);
+    }
 
     #[test]
     fn update_set_places_render_refresh_after_camera() {

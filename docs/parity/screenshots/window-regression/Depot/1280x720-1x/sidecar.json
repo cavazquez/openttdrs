@@ -1,0 +1,70 @@
+{
+  "accepted_differences": [
+    {
+      "category": "chromatic",
+      "issue": 297
+    }
+  ],
+  "artifacts": {
+    "candidate": {
+      "path": "docs/parity/screenshots/window-regression/Depot/1280x720-1x/candidate.png",
+      "sha256": "d2a328876e45305fc37445bd27229435339e60d61e008cae652bb814c8df7bcb"
+    },
+    "diff": {
+      "path": "docs/parity/screenshots/window-regression/Depot/1280x720-1x/diff.png",
+      "sha256": "465da539e2450bfb69aa5ded0062d05d30d5bab66ed0835bb8d0d3778dc0008e"
+    },
+    "reference": {
+      "path": "docs/parity/screenshots/window-regression/Depot/1280x720-1x/reference.png",
+      "sha256": "f7ffb48a7b5189082d0c7f7a218920028051434d779497c95a283e558e9eb79d"
+    }
+  },
+  "assessment": {
+    "category": "chromatic",
+    "within_tolerance": true
+  },
+  "family": "vehicles",
+  "fixture": "crates/openttdrs-core/tests/fixtures/rail_signals_mixed.sav",
+  "geometry": {
+    "candidate_screen": [
+      1280,
+      720
+    ],
+    "expected_screen": [
+      1280,
+      720
+    ],
+    "reference_screen": [
+      1280,
+      720
+    ]
+  },
+  "metrics": {
+    "candidate_size": [
+      1280,
+      720
+    ],
+    "changed_pixels": 914847,
+    "changed_ratio": 0.9926725260416667,
+    "max_channel_delta": 255,
+    "mean_channel_delta": 39.58376953125,
+    "reference_size": [
+      1280,
+      720
+    ]
+  },
+  "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+  "profile": {
+    "height": 720,
+    "ui_scale": 1,
+    "width": 1280
+  },
+  "schema_version": 1,
+  "tolerance": {
+    "max_changed_pixels": 2073600,
+    "max_changed_ratio": 1,
+    "max_channel_delta": 255,
+    "max_mean_channel_delta": 255
+  },
+  "window": "Depot"
+}

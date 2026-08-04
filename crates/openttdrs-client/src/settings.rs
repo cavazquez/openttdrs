@@ -501,6 +501,10 @@ fn apply_window_resolution_from_preferences(
     if *applied || !hydrated.0 {
         return;
     }
+    if crate::bevy_app::visual_capture_requested() {
+        *applied = true;
+        return;
+    }
     let w = prefs.window_width.max(640);
     let h = prefs.window_height.max(480);
     if let Ok(mut window) = windows.single_mut() {

@@ -53,6 +53,9 @@ target-agent
 !tests/fixtures/**/*.json
 # Manifiesto pin OpenTTD (#109)
 !docs/parity/openttd-reference.json
+# Manifiesto de artefactos visuales por familia (#297).
+!docs/parity/screenshots/window-regression.json
+!docs/parity/screenshots/window-regression/**/sidecar.json
 !scripts/ci_python_manifest.json
 !scripts/generated_tables_manifest.json
 

@@ -62,6 +62,8 @@ GLITTER_WATER = [
 DARK_FRAME_COUNT = 5
 GLITTER_FRAME_COUNT = 15
 ANIMATED_INDICES = set(range(245, 255))
+DARK_WATER_INDICES = set(range(245, 250))
+GLITTER_WATER_INDICES = set(range(250, 255))
 
 REAL_RE = re.compile(
     r"^\s*(\d+)\s+(\S+?\.(?:32\.png|png|pcx))\s+(8bpp|32bpp)\s+"
@@ -109,17 +111,22 @@ def indexed_sources() -> list[tuple[str, Image.Image]]:
 
 
 def validate_palette_sources(sources: list[tuple[str, Image.Image]]) -> None:
-    """Falla si OpenGFX deja de cubrir los diez índices animables."""
+    """Falla si OpenGFX deja de cubrir los índices animables requeridos."""
     water_indices = set(sources[0][1].get_flattened_data()) & ANIMATED_INDICES
-    if water_indices != ANIMATED_INDICES:
-        missing = sorted(ANIMATED_INDICES - water_indices)
-        raise SystemExit(f"SPR_FLAT_WATER_TILE no cubre índices animables: faltan {missing}")
+    # En OpenGFX 8.0 el agua plana sólo contiene los cinco tonos oscuros;
+    # los cinco índices glitter aparecen en las costas. Exigir los diez aquí
+    # rechazaba un set válido antes de verificar el conjunto completo.
+    if not DARK_WATER_INDICES <= water_indices:
+        missing = sorted(DARK_WATER_INDICES - water_indices)
+        raise SystemExit(f"SPR_FLAT_WATER_TILE no cubre dark-water: faltan {missing}")
     all_indices: set[int] = set()
     for _name, image in sources:
         all_indices.update(set(image.get_flattened_data()) & ANIMATED_INDICES)
-    if all_indices != ANIMATED_INDICES:
-        missing = sorted(ANIMATED_INDICES - all_indices)
-        raise SystemExit(f"Set agua/orillas incompleto: faltan índices {missing}")
+    # OpenGFX no tiene por qué dibujar cada entrada de la paleta glitter (8.0,
+    # por ejemplo, usa 250, 251 y 254). Basta con que las costas aporten al
+    # menos una para preservar la animación y admitir variantes del set.
+    if not all_indices & GLITTER_WATER_INDICES:
+        raise SystemExit("Set agua/orillas no contiene índices glitter 250..254")
 
 
 def render_frame(base: Image.Image, dark_frame: int, glitter_frame: int) -> Image.Image:
@@ -182,7 +189,10 @@ def main() -> None:
     if not OUT_RS.is_file() or OUT_RS.read_text(encoding="utf-8") != rust:
         OUT_RS.write_text(rust, encoding="utf-8")
     print(f"Generados {total} frames indexados de agua/orilla en {TILES_DIR}")
-    print(f"Validada cobertura de índices NFO 245..254; escrito {OUT_RS.relative_to(REPO)}")
+    print(
+        "Validada cobertura NFO dark-water + glitter; "
+        f"escrito {OUT_RS.relative_to(REPO)}"
+    )
 
 
 if __name__ == "__main__":

@@ -1,20 +1,19 @@
 #!/usr/bin/env python3
-"""Extrae el set completo de orillas (SPR_SHORE_BASE, 18 sprites) del GRF extra.
+"""Extrae el set completo de orillas (SPR_SHORE_BASE, 18 sprites) de OpenGFX.
 
-OpenGFX no entrega la costa completa en el GRF base (ahí solo están los 8
-sprites originales de TTD, 4062..4069). El set completo llega por **Action5
-tipo 0x0D** en el GRF *extra* (`ogfx2e_extra_32ez.grf` / `ogfxe_extra.grf`):
+El GRF base conserva los ocho sprites originales de TTD (4062..4069), que
+OpenTTD relocaliza a SPR_SHORE_BASE. El GRF *extra*
+(`ogfx2e_extra_32ez.grf` / `ogfxe_extra.grf`) aporta por **Action5 tipo 0x0D**
+los diez restantes:
 
 - Un bloque de **10 sprites** ("missing shore sprites", `newgrf_act5.cpp`)
   que mapea en orden a SPR_SHORE_BASE + [0, 5, 7, 10, 11, 13, 14, 15, 16, 17]
   (STEEP_S, STEEP_W, WSE, STEEP_N, NWS, ENW, SEN, STEEP_E, EW, NS).
-- Un bloque de **16 sprites** (A5BLOCK_FIXED) que reemplaza
-  SPR_SHORE_BASE + 0..15 con el set redibujado.
 
-Ambos bloques aparecen una vez por clima, condicionados con Action7 sobre la
-variable de clima; el primero de cada tamaño es el de clima templado (valor 0).
-Cargados en orden de archivo (10 primero, 16 después) el resultado templado es:
-slots 0..15 del bloque de 16 y slots 16/17 (EW/NS) del bloque de 10.
+OpenGFX 8.0 usa ese esquema. Algunos sets históricos también incluyen un bloque
+de **16 sprites** (A5BLOCK_FIXED), que reemplaza SPR_SHORE_BASE + 0..15; se
+prefiere cuando está presente. Los bloques aparecen una vez por clima,
+condicionados con Action7; el primero de cada tamaño es el clima templado.
 
 Salidas:
 - `assets/opengfx/tiles/shore_full_{slot:02d}.png` (slots 0..17)
@@ -42,6 +41,17 @@ OUT_RS = REPO / "crates/openttdrs-client/src/sprites/shore_draw_data_generated.r
 SHORE_SPRITE_COUNT = 18
 # Orden del bloque de 10 ("missing shore sprites", newgrf_act5.cpp).
 MISSING_BLOCK_SLOTS = [0, 5, 7, 10, 11, 13, 14, 15, 16, 17]
+# ActivateOldShore (newgrf.cpp): sprite original base -> slot relocalizado.
+ORIGINAL_SHORE_SLOTS = {
+    4062: 4,
+    4063: 1,
+    4064: 2,
+    4065: 8,
+    4066: 6,
+    4067: 12,
+    4068: 3,
+    4069: 9,
+}
 # `tileh_to_shoresprite` (water_cmd.cpp), entradas 0..14 (sin empinadas).
 TILEH_TO_SHORE_SPRITE = [0, 1, 2, 3, 4, 16, 6, 7, 8, 9, 17, 11, 12, 13, 14]
 
@@ -71,6 +81,39 @@ def find_extra_nfo() -> Path:
     sys.exit("No se encontró el GRF extra de OpenGFX (corré descargar_graficos.sh)")
 
 
+def find_base_nfo(sprites_dir: Path) -> Path:
+    """Encuentra el NFO del GRF base junto al GRF extra ya seleccionado."""
+    for nfo in sorted(sprites_dir.glob("*base*.nfo")):
+        return nfo
+    sys.exit(f"No se encontró el NFO base de OpenGFX junto a {sprites_dir}")
+
+
+def parse_real_sprites(nfo: Path) -> list[tuple[int, int, str, tuple[int, ...]]]:
+    """Lee sprites reales como (línea, id, hoja, rect) desde un NFO."""
+    reals: list[tuple[int, int, str, tuple[int, ...]]] = []
+    for i, line in enumerate(nfo.read_text(errors="replace").splitlines()):
+        m = REAL_RE.match(line)
+        if m:
+            rect = tuple(int(m.group(k)) for k in range(3, 9))
+            reals.append((i, int(m.group(1)), Path(m.group(2)).name, rect))
+    return reals
+
+
+def parse_original_shores(base_nfo: Path) -> dict[int, tuple[Path, tuple[int, ...]]]:
+    """Devuelve los ocho sprites originales relocalizados como OpenTTD 15.3."""
+    by_sprite_id = {
+        sprite_id: (base_nfo.parent / sheet, rect)
+        for _line, sprite_id, sheet, rect in parse_real_sprites(base_nfo)
+    }
+    missing = sorted(set(ORIGINAL_SHORE_SLOTS) - set(by_sprite_id))
+    if missing:
+        sys.exit(f"Faltan sprites originales de orilla {missing} en {base_nfo.name}")
+    return {
+        slot: by_sprite_id[sprite_id]
+        for sprite_id, slot in ORIGINAL_SHORE_SLOTS.items()
+    }
+
+
 def parse_shore_blocks(nfo: Path) -> dict[int, tuple[Path, tuple[int, ...]]]:
     """Devuelve slot -> (sheet, (x, y, w, h, xrel, yrel)) para clima templado."""
     sprites_dir = nfo.parent
@@ -78,15 +121,10 @@ def parse_shore_blocks(nfo: Path) -> dict[int, tuple[Path, tuple[int, ...]]]:
 
     # Sprites reales en orden de archivo, con su índice de línea para poder
     # tomar "los N siguientes" a un pseudo-sprite Action5.
-    reals: list[tuple[int, str, tuple[int, ...]]] = []  # (line_idx, sheet, rect)
-    for i, line in enumerate(lines):
-        m = REAL_RE.match(line)
-        if m:
-            rect = tuple(int(m.group(k)) for k in range(3, 9))
-            reals.append((i, Path(m.group(2)).name, rect))
+    reals = parse_real_sprites(nfo)
 
     def take_after(line_idx: int, n: int) -> list[tuple[str, tuple[int, ...]]]:
-        out = [(sheet, rect) for li, sheet, rect in reals if li > line_idx][:n]
+        out = [(sheet, rect) for li, _sid, sheet, rect in reals if li > line_idx][:n]
         if len(out) != n:
             sys.exit(f"Action5 0D en línea {line_idx + 1}: esperaba {n} sprites")
         return out
@@ -115,6 +153,12 @@ def parse_shore_blocks(nfo: Path) -> dict[int, tuple[Path, tuple[int, ...]]]:
         elif count == 16:
             for slot, (sheet, rect) in enumerate(take_after(i, 16)):
                 slots[slot] = (sprites_dir / sheet, rect)
+    # OpenGFX 8.0 deja los ocho sprites clásicos en el GRF base y sólo define
+    # los diez restantes por Action5 en el GRF extra. Si existe el bloque fijo
+    # de 16, ya habrá cubierto todos los slots y no hace falta el GRF base.
+    if set(range(SHORE_SPRITE_COUNT)) - set(slots):
+        for slot, sprite in parse_original_shores(find_base_nfo(sprites_dir)).items():
+            slots.setdefault(slot, sprite)
     missing = sorted(set(range(SHORE_SPRITE_COUNT)) - set(slots))
     if missing:
         sys.exit(f"Faltan slots de orilla {missing} en {nfo.name}")
@@ -166,9 +210,10 @@ def main() -> None:
     lines = [
         "// Generado por scripts/gen_shore_full_set.py — NO EDITAR A MANO.",
         "//",
-        "// Set completo de orillas (SPR_SHORE_BASE + 0..17) del GRF extra de",
-        "// OpenGFX (Action5 tipo 0x0D, clima templado). `SHORE_META` son los",
-        "// offsets NFO (w, h, xrel, yrel) y `TILEH_TO_SHORE_SPRITE` es la tabla",
+        "// Set completo de orillas (SPR_SHORE_BASE + 0..17) de OpenGFX. El GRF",
+        "// extra aporta Action5 0x0D y el base los ocho sprites clásicos.",
+        "// `SHORE_META` son los offsets NFO (w, h, xrel, yrel) y",
+        "// `TILEH_TO_SHORE_SPRITE` es la tabla",
         "// `tileh_to_shoresprite` de `water_cmd.cpp` (pendientes 0..14).",
         "",
         "/// Sprites del set de orillas (`SHORE_SPRITE_COUNT` en upstream).",

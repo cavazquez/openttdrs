@@ -1,8 +1,9 @@
 // Generado por scripts/gen_shore_full_set.py — NO EDITAR A MANO.
 //
-// Set completo de orillas (SPR_SHORE_BASE + 0..17) del GRF extra de
-// OpenGFX (Action5 tipo 0x0D, clima templado). `SHORE_META` son los
-// offsets NFO (w, h, xrel, yrel) y `TILEH_TO_SHORE_SPRITE` es la tabla
+// Set completo de orillas (SPR_SHORE_BASE + 0..17) de OpenGFX. El GRF
+// extra aporta Action5 0x0D y el base los ocho sprites clásicos.
+// `SHORE_META` son los offsets NFO (w, h, xrel, yrel) y
+// `TILEH_TO_SHORE_SPRITE` es la tabla
 // `tileh_to_shoresprite` de `water_cmd.cpp` (pendientes 0..14).
 
 /// Sprites del set de orillas (`SHORE_SPRITE_COUNT` en upstream).

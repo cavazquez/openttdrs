@@ -144,7 +144,9 @@ ensure_opengfx_8bpp_tar() {
   tmp="$(mktemp -d)"
   unzip -q "${ZIP_CACHE_8BPP}" -d "${tmp}/opengfx"
   local candidate_tar
-  candidate_tar="$(rg --files "${tmp}/opengfx" | rg "opengfx-${VERSION}\\.tar$" | awk 'NR==1{print; exit}' || true)"
+  # `find` forma parte del entorno base de los runners; no exigir `rg` solo
+  # para localizar el tar dentro del zip de OpenGFX.
+  candidate_tar="$(find "${tmp}/opengfx" -type f -name "opengfx-${VERSION}.tar" -print -quit)"
   if [[ -z "${candidate_tar}" ]]; then
     rm -rf "${tmp}"
     echo "No encontré opengfx-${VERSION}.tar dentro del zip." >&2

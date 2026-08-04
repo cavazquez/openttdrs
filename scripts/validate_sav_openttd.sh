@@ -62,9 +62,12 @@ EOF
 fi
 
 # Dedicated + -g: carga completa (no solo LoadCheck de -q).
-# Si el load OK, el server sigue vivo → timeout (124) = éxito.
+# Si el load OK, el server sigue vivo → timeout (124) = éxito. Pedir TERM y
+# escalar a KILL solo tras una gracia preserva el status estándar de `timeout`;
+# usar `--signal=KILL` directamente devuelve 137 y confundía un smoke sano con
+# un fallo.
 set +e
-timeout --signal=KILL "$TIMEOUT_SECS" \
+timeout --kill-after=2 "$TIMEOUT_SECS" \
   "$OPENTTD_BIN" "${DEDICATED_ARGS[@]}" -g "$SAV" -c "$CFGDIR/openttd.cfg" -x \
   >"$LOG" 2>&1
 rc=$?

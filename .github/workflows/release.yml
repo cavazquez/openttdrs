@@ -199,7 +199,8 @@ jobs:
       - name: Caché Cargo
         uses: Swatinem/rust-cache@v2.9.1
         with:
-          shared-key: release-${{ matrix.target }}
+          # No mezclar artefactos nativos entre el baseline GLIBC 2.35 y 24.04.
+          shared-key: release-${{ matrix.os }}-${{ matrix.target }}
 
       - name: Dependencias Linux
         if: runner.os == 'Linux'

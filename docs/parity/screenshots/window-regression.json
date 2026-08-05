@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "description": "Fase 1 de #297: cada perfil conserva referencia OpenTTD, candidato, diff y sidecar.",
+  "description": "Fases 1 (#297) y 2 (#299): cada perfil conserva referencia OpenTTD, candidato, diff y sidecar.",
   "windows": [
     {
       "id": "Vehicle",
@@ -61,6 +61,160 @@
       "profiles": [{"width": 1280, "height": 720, "ui_scale": 1}, {"width": 1280, "height": 720, "ui_scale": 2}, {"width": 1920, "height": 1080, "ui_scale": 1}, {"width": 1920, "height": 1080, "ui_scale": 2}],
       "tolerance": {"max_changed_pixels": 2073600, "max_changed_ratio": 1, "max_channel_delta": 255, "max_mean_channel_delta": 255},
       "accepted_differences": [{"category": "chromatic", "issue": 297}]
+    },
+    {
+      "id": "RailStationPicker",
+      "family": "construction",
+      "capture_route": "rail-toolbar/station",
+      "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav",
+      "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+      "artifact_root": "docs/parity/screenshots/window-regression/RailStationPicker",
+      "profiles": [{"width": 1280, "height": 720, "ui_scale": 1}, {"width": 1280, "height": 720, "ui_scale": 2}, {"width": 1920, "height": 1080, "ui_scale": 1}, {"width": 1920, "height": 1080, "ui_scale": 2}],
+      "tolerance": {"max_changed_pixels": 2073600, "max_changed_ratio": 1, "max_channel_delta": 255, "max_mean_channel_delta": 255},
+      "accepted_differences": [{"category": "chromatic", "issue": 299}]
+    },
+    {
+      "id": "AirportPicker",
+      "family": "construction",
+      "capture_route": "airport-toolbar/picker",
+      "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav",
+      "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+      "artifact_root": "docs/parity/screenshots/window-regression/AirportPicker",
+      "profiles": [{"width": 1280, "height": 720, "ui_scale": 1}, {"width": 1280, "height": 720, "ui_scale": 2}, {"width": 1920, "height": 1080, "ui_scale": 1}, {"width": 1920, "height": 1080, "ui_scale": 2}],
+      "tolerance": {"max_changed_pixels": 2073600, "max_changed_ratio": 1, "max_channel_delta": 255, "max_mean_channel_delta": 255},
+      "accepted_differences": [{"category": "chromatic", "issue": 299}]
+    },
+    {
+      "id": "RoadStopPicker",
+      "family": "construction",
+      "capture_route": "road-toolbar/bus-stop",
+      "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav",
+      "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+      "artifact_root": "docs/parity/screenshots/window-regression/RoadStopPicker",
+      "profiles": [{"width": 1280, "height": 720, "ui_scale": 1}, {"width": 1280, "height": 720, "ui_scale": 2}, {"width": 1920, "height": 1080, "ui_scale": 1}, {"width": 1920, "height": 1080, "ui_scale": 2}],
+      "tolerance": {"max_changed_pixels": 2073600, "max_changed_ratio": 1, "max_channel_delta": 255, "max_mean_channel_delta": 255},
+      "accepted_differences": [{"category": "chromatic", "issue": 299}]
+    },
+    {
+      "id": "ObjectPicker",
+      "family": "construction",
+      "capture_route": "terraform-toolbar/object-tool-empty",
+      "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav",
+      "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+      "artifact_root": "docs/parity/screenshots/window-regression/ObjectPicker",
+      "profiles": [{"width": 1280, "height": 720, "ui_scale": 1}, {"width": 1280, "height": 720, "ui_scale": 2}, {"width": 1920, "height": 1080, "ui_scale": 1}, {"width": 1920, "height": 1080, "ui_scale": 2}],
+      "tolerance": {"max_changed_pixels": 2073600, "max_changed_ratio": 1, "max_channel_delta": 255, "max_mean_channel_delta": 255},
+      "accepted_differences": [{"category": "chromatic", "issue": 299}]
+    },
+    {
+      "id": "BridgePicker",
+      "family": "construction",
+      "capture_route": "bridge-chooser/two-tile-rail-span",
+      "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav",
+      "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+      "artifact_root": "docs/parity/screenshots/window-regression/BridgePicker",
+      "profiles": [{"width": 1280, "height": 720, "ui_scale": 1}, {"width": 1280, "height": 720, "ui_scale": 2}, {"width": 1920, "height": 1080, "ui_scale": 1}, {"width": 1920, "height": 1080, "ui_scale": 2}],
+      "tolerance": {"max_changed_pixels": 2073600, "max_changed_ratio": 1, "max_channel_delta": 255, "max_mean_channel_delta": 255},
+      "accepted_differences": [{"category": "chromatic", "issue": 299}]
+    },
+    {
+      "id": "DockPicker",
+      "family": "construction",
+      "capture_route": "docks-toolbar/station",
+      "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav",
+      "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+      "artifact_root": "docs/parity/screenshots/window-regression/DockPicker",
+      "profiles": [{"width": 1280, "height": 720, "ui_scale": 1}, {"width": 1280, "height": 720, "ui_scale": 2}, {"width": 1920, "height": 1080, "ui_scale": 1}, {"width": 1920, "height": 1080, "ui_scale": 2}],
+      "tolerance": {"max_changed_pixels": 2073600, "max_changed_ratio": 1, "max_channel_delta": 255, "max_mean_channel_delta": 255},
+      "accepted_differences": [{"category": "chromatic", "issue": 299}]
+    },
+    {
+      "id": "BuoyPicker",
+      "family": "construction",
+      "capture_route": "docks-toolbar/buoy-tool",
+      "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav",
+      "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+      "artifact_root": "docs/parity/screenshots/window-regression/BuoyPicker",
+      "profiles": [{"width": 1280, "height": 720, "ui_scale": 1}, {"width": 1280, "height": 720, "ui_scale": 2}, {"width": 1920, "height": 1080, "ui_scale": 1}, {"width": 1920, "height": 1080, "ui_scale": 2}],
+      "tolerance": {"max_changed_pixels": 2073600, "max_changed_ratio": 1, "max_channel_delta": 255, "max_mean_channel_delta": 255},
+      "accepted_differences": [{"category": "chromatic", "issue": 299}]
+    },
+    {
+      "id": "RailWaypointPicker",
+      "family": "construction",
+      "capture_route": "rail-toolbar/waypoint",
+      "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav",
+      "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+      "artifact_root": "docs/parity/screenshots/window-regression/RailWaypointPicker",
+      "profiles": [{"width": 1280, "height": 720, "ui_scale": 1}, {"width": 1280, "height": 720, "ui_scale": 2}, {"width": 1920, "height": 1080, "ui_scale": 1}, {"width": 1920, "height": 1080, "ui_scale": 2}],
+      "tolerance": {"max_changed_pixels": 2073600, "max_changed_ratio": 1, "max_channel_delta": 255, "max_mean_channel_delta": 255},
+      "accepted_differences": [{"category": "chromatic", "issue": 299}]
+    },
+    {
+      "id": "RoadWaypointPicker",
+      "family": "construction",
+      "capture_route": "road-toolbar/waypoint",
+      "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav",
+      "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+      "artifact_root": "docs/parity/screenshots/window-regression/RoadWaypointPicker",
+      "profiles": [{"width": 1280, "height": 720, "ui_scale": 1}, {"width": 1280, "height": 720, "ui_scale": 2}, {"width": 1920, "height": 1080, "ui_scale": 1}, {"width": 1920, "height": 1080, "ui_scale": 2}],
+      "tolerance": {"max_changed_pixels": 2073600, "max_changed_ratio": 1, "max_channel_delta": 255, "max_mean_channel_delta": 255},
+      "accepted_differences": [{"category": "chromatic", "issue": 299}]
+    },
+    {
+      "id": "TreePicker",
+      "family": "construction",
+      "capture_route": "tree-picker/direct",
+      "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav",
+      "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+      "artifact_root": "docs/parity/screenshots/window-regression/TreePicker",
+      "profiles": [{"width": 1280, "height": 720, "ui_scale": 1}, {"width": 1280, "height": 720, "ui_scale": 2}, {"width": 1920, "height": 1080, "ui_scale": 1}, {"width": 1920, "height": 1080, "ui_scale": 2}],
+      "tolerance": {"max_changed_pixels": 2073600, "max_changed_ratio": 1, "max_channel_delta": 255, "max_mean_channel_delta": 255},
+      "accepted_differences": [{"category": "chromatic", "issue": 299}]
+    },
+    {
+      "id": "TerraformPicker",
+      "family": "construction",
+      "capture_route": "terraform-toolbar/direct",
+      "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav",
+      "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+      "artifact_root": "docs/parity/screenshots/window-regression/TerraformPicker",
+      "profiles": [{"width": 1280, "height": 720, "ui_scale": 1}, {"width": 1280, "height": 720, "ui_scale": 2}, {"width": 1920, "height": 1080, "ui_scale": 1}, {"width": 1920, "height": 1080, "ui_scale": 2}],
+      "tolerance": {"max_changed_pixels": 2073600, "max_changed_ratio": 1, "max_channel_delta": 255, "max_mean_channel_delta": 255},
+      "accepted_differences": [{"category": "chromatic", "issue": 299}]
+    },
+    {
+      "id": "SignPicker",
+      "family": "construction",
+      "capture_route": "terraform-toolbar/sign-tool",
+      "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav",
+      "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+      "artifact_root": "docs/parity/screenshots/window-regression/SignPicker",
+      "profiles": [{"width": 1280, "height": 720, "ui_scale": 1}, {"width": 1280, "height": 720, "ui_scale": 2}, {"width": 1920, "height": 1080, "ui_scale": 1}, {"width": 1920, "height": 1080, "ui_scale": 2}],
+      "tolerance": {"max_changed_pixels": 2073600, "max_changed_ratio": 1, "max_channel_delta": 255, "max_mean_channel_delta": 255},
+      "accepted_differences": [{"category": "chromatic", "issue": 299}]
+    },
+    {
+      "id": "DepotBuildPicker",
+      "family": "construction",
+      "capture_route": "rail-toolbar/depot",
+      "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav",
+      "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+      "artifact_root": "docs/parity/screenshots/window-regression/DepotBuildPicker",
+      "profiles": [{"width": 1280, "height": 720, "ui_scale": 1}, {"width": 1280, "height": 720, "ui_scale": 2}, {"width": 1920, "height": 1080, "ui_scale": 1}, {"width": 1920, "height": 1080, "ui_scale": 2}],
+      "tolerance": {"max_changed_pixels": 2073600, "max_changed_ratio": 1, "max_channel_delta": 255, "max_mean_channel_delta": 255},
+      "accepted_differences": [{"category": "chromatic", "issue": 299}]
+    },
+    {
+      "id": "SignalPicker",
+      "family": "construction",
+      "capture_route": "rail-toolbar/signals",
+      "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav",
+      "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+      "artifact_root": "docs/parity/screenshots/window-regression/SignalPicker",
+      "profiles": [{"width": 1280, "height": 720, "ui_scale": 1}, {"width": 1280, "height": 720, "ui_scale": 2}, {"width": 1920, "height": 1080, "ui_scale": 1}, {"width": 1920, "height": 1080, "ui_scale": 2}],
+      "tolerance": {"max_changed_pixels": 2073600, "max_changed_ratio": 1, "max_channel_delta": 255, "max_mean_channel_delta": 255},
+      "accepted_differences": [{"category": "chromatic", "issue": 299}]
     }
   ]
 }

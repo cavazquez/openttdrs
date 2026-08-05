@@ -90,11 +90,13 @@ Las salidas quedan como `1280x720/window_<id>_<scale>x.png` y
 informa como error; antes de incorporar una referencia se debe usar una clave
 presente en la matriz. Las escalas aceptadas van de 0.5× a 4×.
 
-## Gate visual por familia (#297)
+## Gate visual por familia (#297, #299)
 
-La primera familia cubre `Vehicle`, `Orders`, `Timetable`, `Depot`, `Town` e
-`Industry`. Su manifiesto es [`window-regression.json`](window-regression.json)
-y cada uno de los cuatro perfiles vive en:
+La fase 1 cubre `Vehicle`, `Orders`, `Timetable`, `Depot`, `Town` e `Industry`.
+La fase 2 añade los pickers `RailStation`, `Airport`, `RoadStop`, `Object`,
+`Bridge`, `Dock`, `Buoy`, `RailWaypoint`, `RoadWaypoint`, `Tree`, `Terraform`,
+`Sign`, `DepotBuild` y `Signal`. Su manifiesto es
+[`window-regression.json`](window-regression.json); cada perfil vive en:
 
 ```text
 window-regression/<id>/<resolución>-<escala>x/
@@ -106,13 +108,15 @@ window-regression/<id>/<resolución>-<escala>x/
 
 El driver C++ versionado en
 [`patches/openttd-15.3-ui-capture/`](../../../patches/openttd-15.3-ui-capture/)
-abre la ventana del fixture `mvp_openttd_rich.sav`; no usa clics, estado de
-usuario ni configuraciones persistentes. Vehicle, Orders, Timetable y Town usan
-`mvp_openttd_rich.sav`; Depot e Industry usan `rail_signals_mixed.sav`, que
-contiene las entidades nativas que las dos vistas requieren. El candidato carga
-exactamente el mismo `.sav` mediante `OPENTTDRS_SAV_LOAD`, y ambos drivers
-congelan el tick de simulación antes de medir. Para generar/actualizar los cuatro
-artefactos de cada perfil se requieren `xvfb`, `xauth` y `weston`: OpenTTD se
+abre la ventana del fixture sin usar estado de usuario ni configuraciones
+persistentes. La fase 2 activa la ruta real de cada picker (toolbar, selector o
+chooser); `capture_route` queda en el manifiesto y el sidecar para hacer esa
+apertura auditable. Vehicle, Orders, Timetable y Town usan
+`mvp_openttd_rich.sav`; Depot e Industry usan `rail_signals_mixed.sav`; los
+pickers construction usan `mvp_openttd_rich.sav`. El candidato carga exactamente
+el mismo `.sav` mediante `OPENTTDRS_SAV_LOAD`, y ambos drivers congelan el tick
+de simulación antes de medir. Para generar/actualizar los cuatro artefactos de
+cada perfil se requieren `xvfb`, `xauth` y `weston`: OpenTTD se
 ejecuta en Xvfb y el cliente en Weston headless con renderer GL. Así ambos
 procesos reciben una superficie virtual de la resolución pedida y se rechaza
 un compositor que silenciosamente devuelva 1280×720 al solicitar 1920×1080.
@@ -152,8 +156,8 @@ gate del manifiesto canónico forman parte de los checks Python compartidos de
 CI: una captura ausente, una dimensión distinta, un hash/sidecar obsoleto o
 una diferencia fuera de tolerancia no pueden pasar silenciosamente.
 
-Las demás ventanas todavía son el inventario de #240. Su ausencia cita ese
-issue, mientras que las seis de esta fase citan #297 hasta que los artefactos
-versionados estén completos. La ampliación es por familias: finalizar las seis
-ventanas actuales, añadir construction, economy/reports, settings/dialogs y,
-por último, el resto de `WINDOW_PARITY_MATRIX` hasta sus 62 entradas.
+Las demás ventanas todavía son el inventario de #240. Las seis de la fase 1
+citan #297 y los 14 pickers construction de la fase 2 citan #299; así una
+ausencia no queda sin dueña. La ampliación continúa con economy/reports,
+settings/dialogs y, por último, el resto de `WINDOW_PARITY_MATRIX` hasta sus
+62 entradas.

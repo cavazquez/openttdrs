@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Gate reproducible de regresión visual para una familia de ventanas (#297).
+"""Gate reproducible de regresión visual para familias de ventanas (#297, #299).
 
 Cada perfil mantiene cuatro archivos versionados: referencia OpenTTD,
 candidato openttdrs, diff RGBA y sidecar JSON. El lector PNG es deliberadamente
@@ -246,7 +246,7 @@ def build_sidecar(
     entry: dict[str, Any], profile: dict[str, Any], paths: dict[str, Path], metrics: dict[str, Any], category: str
 ) -> dict[str, Any]:
     tolerance = entry["tolerance"]
-    return {
+    sidecar = {
         "schema_version": 1,
         "window": entry["id"],
         "family": entry["family"],
@@ -268,11 +268,16 @@ def build_sidecar(
         "tolerance": tolerance,
         "accepted_differences": entry.get("accepted_differences", []),
     }
+    if "capture_route" in entry:
+        sidecar["capture_route"] = entry["capture_route"]
+    return sidecar
 
 
 def validate_sidecar(sidecar: dict[str, Any], expected: dict[str, Any], paths: dict[str, Path]) -> list[str]:
     errors: list[str] = []
     expected_values = {"window": expected["id"], **{key: expected[key] for key in ("family", "profile", "openttd_commit", "fixture", "tolerance")}}
+    if "capture_route" in expected:
+        expected_values["capture_route"] = expected["capture_route"]
     for key, value in expected_values.items():
         if sidecar.get(key) != value:
             errors.append(f"sidecar.{key} no coincide con manifiesto")
@@ -380,8 +385,10 @@ def main(argv: list[str]) -> int:
                 continue
             if not isinstance(entry.get("tolerance"), dict):
                 raise GateError(f"{entry.get('id')}: falta tolerance")
-            if entry.get("family") not in {"vehicles", "world"}:
+            if entry.get("family") not in {"vehicles", "world", "construction"}:
                 raise GateError(f"{entry.get('id')}: familia no cubierta")
+            if entry.get("family") == "construction" and not isinstance(entry.get("capture_route"), str):
+                raise GateError(f"{entry.get('id')}: falta capture_route de construction")
             accepted = entry.get("accepted_differences", [])
             if not isinstance(accepted, list) or any(
                 not isinstance(item, dict)

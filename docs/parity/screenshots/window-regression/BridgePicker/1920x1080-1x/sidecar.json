@@ -1,0 +1,71 @@
+{
+  "accepted_differences": [
+    {
+      "category": "chromatic",
+      "issue": 299
+    }
+  ],
+  "artifacts": {
+    "candidate": {
+      "path": "docs/parity/screenshots/window-regression/BridgePicker/1920x1080-1x/candidate.png",
+      "sha256": "d0ba0772b60bbf633b4c19ddc0205048b6f71c31c62b721181903d2b3b861053"
+    },
+    "diff": {
+      "path": "docs/parity/screenshots/window-regression/BridgePicker/1920x1080-1x/diff.png",
+      "sha256": "a0bea5f84a8e09f7607be9d14d679d0f648f8828cead947cf612054b599261de"
+    },
+    "reference": {
+      "path": "docs/parity/screenshots/window-regression/BridgePicker/1920x1080-1x/reference.png",
+      "sha256": "8a43905cd0ddb8a931ca88f3b083145668d1f837b5d25f4785b67188c5e110d2"
+    }
+  },
+  "assessment": {
+    "category": "chromatic",
+    "within_tolerance": true
+  },
+  "capture_route": "bridge-chooser/two-tile-rail-span",
+  "family": "construction",
+  "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav",
+  "geometry": {
+    "candidate_screen": [
+      1920,
+      1080
+    ],
+    "expected_screen": [
+      1920,
+      1080
+    ],
+    "reference_screen": [
+      1920,
+      1080
+    ]
+  },
+  "metrics": {
+    "candidate_size": [
+      1920,
+      1080
+    ],
+    "changed_pixels": 2072453,
+    "changed_ratio": 0.9994468557098766,
+    "max_channel_delta": 255,
+    "mean_channel_delta": 53.66061197916667,
+    "reference_size": [
+      1920,
+      1080
+    ]
+  },
+  "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+  "profile": {
+    "height": 1080,
+    "ui_scale": 1,
+    "width": 1920
+  },
+  "schema_version": 1,
+  "tolerance": {
+    "max_changed_pixels": 2073600,
+    "max_changed_ratio": 1,
+    "max_channel_delta": 255,
+    "max_mean_channel_delta": 255
+  },
+  "window": "BridgePicker"
+}

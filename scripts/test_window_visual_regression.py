@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prueba de mutación del gate visual de ventanas (#297)."""
+"""Prueba de mutación del gate visual de ventanas (#297, #299)."""
 
 from __future__ import annotations
 
@@ -87,6 +87,17 @@ def main() -> int:
             print(unknown.stdout, unknown.stderr, file=sys.stderr)
             print("FAIL: una ventana no declarada debe rechazarse", file=sys.stderr)
             return 1
+
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+        data["windows"][0]["family"] = "construction"
+        manifest.write_text(json.dumps(data), encoding="utf-8")
+        missing_route = run(manifest)
+        if missing_route.returncode != 2 or "capture_route" not in missing_route.stderr:
+            print(missing_route.stdout, missing_route.stderr, file=sys.stderr)
+            print("FAIL: construction sin ruta de captura debe rechazarse", file=sys.stderr)
+            return 1
+        data["windows"][0]["family"] = "vehicles"
+        manifest.write_text(json.dumps(data), encoding="utf-8")
 
         changed = root / "artifacts" / "1280x720-1x" / "candidate.png"
         pixels = bytearray(visual.read_png(changed).rgba)

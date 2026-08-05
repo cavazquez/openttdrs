@@ -1,0 +1,71 @@
+{
+  "accepted_differences": [
+    {
+      "category": "chromatic",
+      "issue": 299
+    }
+  ],
+  "artifacts": {
+    "candidate": {
+      "path": "docs/parity/screenshots/window-regression/SignalPicker/1280x720-1x/candidate.png",
+      "sha256": "3e01268b2f20a8f43792611f23273731791cc896d1723ab6bc6ef6c12d5b2134"
+    },
+    "diff": {
+      "path": "docs/parity/screenshots/window-regression/SignalPicker/1280x720-1x/diff.png",
+      "sha256": "3a2bedce48aefbd43606eb32ee0c1a2c093796100c996f716868169649c6220e"
+    },
+    "reference": {
+      "path": "docs/parity/screenshots/window-regression/SignalPicker/1280x720-1x/reference.png",
+      "sha256": "8e05eeed93c6ea6941d5ab8a98a1f43085d62350677f6719e8849b2b4cf1e1ef"
+    }
+  },
+  "assessment": {
+    "category": "chromatic",
+    "within_tolerance": true
+  },
+  "capture_route": "rail-toolbar/signals",
+  "family": "construction",
+  "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav",
+  "geometry": {
+    "candidate_screen": [
+      1280,
+      720
+    ],
+    "expected_screen": [
+      1280,
+      720
+    ],
+    "reference_screen": [
+      1280,
+      720
+    ]
+  },
+  "metrics": {
+    "candidate_size": [
+      1280,
+      720
+    ],
+    "changed_pixels": 921002,
+    "changed_ratio": 0.9993511284722222,
+    "max_channel_delta": 255,
+    "mean_channel_delta": 49.97148980034722,
+    "reference_size": [
+      1280,
+      720
+    ]
+  },
+  "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+  "profile": {
+    "height": 720,
+    "ui_scale": 1,
+    "width": 1280
+  },
+  "schema_version": 1,
+  "tolerance": {
+    "max_changed_pixels": 2073600,
+    "max_changed_ratio": 1,
+    "max_channel_delta": 255,
+    "max_mean_channel_delta": 255
+  },
+  "window": "SignalPicker"
+}

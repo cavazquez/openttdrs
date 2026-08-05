@@ -1,0 +1,71 @@
+{
+  "accepted_differences": [
+    {
+      "category": "chromatic",
+      "issue": 299
+    }
+  ],
+  "artifacts": {
+    "candidate": {
+      "path": "docs/parity/screenshots/window-regression/BuoyPicker/1280x720-1x/candidate.png",
+      "sha256": "50a8d5c43283ba3a07319cab14ab90aa838a56cc3279d2e4f8728c55300c4e4b"
+    },
+    "diff": {
+      "path": "docs/parity/screenshots/window-regression/BuoyPicker/1280x720-1x/diff.png",
+      "sha256": "0a4a76b6b6cf8e816112b50fdb9f72b3864420dafef20c40fff2b78ce2c0eb90"
+    },
+    "reference": {
+      "path": "docs/parity/screenshots/window-regression/BuoyPicker/1280x720-1x/reference.png",
+      "sha256": "e2fd9dd4d2aaab74ba554f272075aa4b192eab6ef21682697adc171076c12a79"
+    }
+  },
+  "assessment": {
+    "category": "chromatic",
+    "within_tolerance": true
+  },
+  "capture_route": "docks-toolbar/buoy-tool",
+  "family": "construction",
+  "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav",
+  "geometry": {
+    "candidate_screen": [
+      1280,
+      720
+    ],
+    "expected_screen": [
+      1280,
+      720
+    ],
+    "reference_screen": [
+      1280,
+      720
+    ]
+  },
+  "metrics": {
+    "candidate_size": [
+      1280,
+      720
+    ],
+    "changed_pixels": 921017,
+    "changed_ratio": 0.9993674045138888,
+    "max_channel_delta": 255,
+    "mean_channel_delta": 48.87808919270833,
+    "reference_size": [
+      1280,
+      720
+    ]
+  },
+  "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+  "profile": {
+    "height": 720,
+    "ui_scale": 1,
+    "width": 1280
+  },
+  "schema_version": 1,
+  "tolerance": {
+    "max_changed_pixels": 2073600,
+    "max_changed_ratio": 1,
+    "max_channel_delta": 255,
+    "max_mean_channel_delta": 255
+  },
+  "window": "BuoyPicker"
+}

@@ -1,0 +1,71 @@
+{
+  "accepted_differences": [
+    {
+      "category": "chromatic",
+      "issue": 299
+    }
+  ],
+  "artifacts": {
+    "candidate": {
+      "path": "docs/parity/screenshots/window-regression/RailWaypointPicker/1280x720-2x/candidate.png",
+      "sha256": "d293c236c621c14a6aa74a38c0c11deed0f26c6f75295eec783b705b5fe49885"
+    },
+    "diff": {
+      "path": "docs/parity/screenshots/window-regression/RailWaypointPicker/1280x720-2x/diff.png",
+      "sha256": "fc71ba60f32537c11662417daad9342f932f077d205a3e4ebdec2b79f33dd1da"
+    },
+    "reference": {
+      "path": "docs/parity/screenshots/window-regression/RailWaypointPicker/1280x720-2x/reference.png",
+      "sha256": "3b9cedce37c6a717c6bf630e9593f03e5f952a426c6e37ea99e5499d714e3737"
+    }
+  },
+  "assessment": {
+    "category": "chromatic",
+    "within_tolerance": true
+  },
+  "capture_route": "rail-toolbar/waypoint",
+  "family": "construction",
+  "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav",
+  "geometry": {
+    "candidate_screen": [
+      1280,
+      720
+    ],
+    "expected_screen": [
+      1280,
+      720
+    ],
+    "reference_screen": [
+      1280,
+      720
+    ]
+  },
+  "metrics": {
+    "candidate_size": [
+      1280,
+      720
+    ],
+    "changed_pixels": 921240,
+    "changed_ratio": 0.999609375,
+    "max_channel_delta": 255,
+    "mean_channel_delta": 50.455996907552084,
+    "reference_size": [
+      1280,
+      720
+    ]
+  },
+  "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+  "profile": {
+    "height": 720,
+    "ui_scale": 2,
+    "width": 1280
+  },
+  "schema_version": 1,
+  "tolerance": {
+    "max_changed_pixels": 2073600,
+    "max_changed_ratio": 1,
+    "max_channel_delta": 255,
+    "max_mean_channel_delta": 255
+  },
+  "window": "RailWaypointPicker"
+}

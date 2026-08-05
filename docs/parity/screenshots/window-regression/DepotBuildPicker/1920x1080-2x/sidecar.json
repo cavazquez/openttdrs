@@ -1,0 +1,71 @@
+{
+  "accepted_differences": [
+    {
+      "category": "chromatic",
+      "issue": 299
+    }
+  ],
+  "artifacts": {
+    "candidate": {
+      "path": "docs/parity/screenshots/window-regression/DepotBuildPicker/1920x1080-2x/candidate.png",
+      "sha256": "861a37c5c2ec836c211be482f8296cdaecabaf8cafdf4730355fe1abee42389a"
+    },
+    "diff": {
+      "path": "docs/parity/screenshots/window-regression/DepotBuildPicker/1920x1080-2x/diff.png",
+      "sha256": "d372879743027dba22ac6b53f95f7eee780033333361dca9d5b83f892ef5c422"
+    },
+    "reference": {
+      "path": "docs/parity/screenshots/window-regression/DepotBuildPicker/1920x1080-2x/reference.png",
+      "sha256": "a73ce9fe896ff8298ec22b0e5be17719183fcf25531b331b05f22dc8eb376292"
+    }
+  },
+  "assessment": {
+    "category": "chromatic",
+    "within_tolerance": true
+  },
+  "capture_route": "rail-toolbar/depot",
+  "family": "construction",
+  "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav",
+  "geometry": {
+    "candidate_screen": [
+      1920,
+      1080
+    ],
+    "expected_screen": [
+      1920,
+      1080
+    ],
+    "reference_screen": [
+      1920,
+      1080
+    ]
+  },
+  "metrics": {
+    "candidate_size": [
+      1920,
+      1080
+    ],
+    "changed_pixels": 2072873,
+    "changed_ratio": 0.9996494020061728,
+    "max_channel_delta": 255,
+    "mean_channel_delta": 52.43562355324074,
+    "reference_size": [
+      1920,
+      1080
+    ]
+  },
+  "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+  "profile": {
+    "height": 1080,
+    "ui_scale": 2,
+    "width": 1920
+  },
+  "schema_version": 1,
+  "tolerance": {
+    "max_changed_pixels": 2073600,
+    "max_changed_ratio": 1,
+    "max_channel_delta": 255,
+    "max_mean_channel_delta": 255
+  },
+  "window": "DepotBuildPicker"
+}

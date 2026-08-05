@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Genera los artefactos de la primera familia visual de #297.
+# Genera los artefactos de las familias visuales versionadas (#297 y #299).
 #
 # Requiere el driver versionado de patches/openttd-15.3-ui-capture y un display
 # funcional. No acepta capturas parciales: verifica cada PNG y deja al gate
@@ -12,7 +12,13 @@ OPENTTD_BIN="${OPENTTDRS_UI_CAPTURE_BIN:-/tmp/openttdrs-openttd-15.3-ui/openttd}
 FIXTURE="${OPENTTDRS_UI_CAPTURE_FIXTURE:-${ROOT}/crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav}"
 DEPOT_INDUSTRY_FIXTURE="${OPENTTDRS_UI_CAPTURE_DEPOT_INDUSTRY_FIXTURE:-${ROOT}/crates/openttdrs-core/tests/fixtures/rail_signals_mixed.sav}"
 BASESET="${OPENTTDRS_OPENGFX_DIR:-${ROOT}/.deps/openttd-baseset/opengfx-8.0}"
-SELECTED="${OPENTTDRS_WINDOW_CAPTURE_IDS:-Vehicle,Orders,Timetable,Depot,Town,Industry}"
+WINDOW_IDS=(
+  Vehicle Orders Timetable Depot Town Industry
+  RailStationPicker AirportPicker RoadStopPicker ObjectPicker BridgePicker
+  DockPicker BuoyPicker RailWaypointPicker RoadWaypointPicker TreePicker
+  TerraformPicker SignPicker DepotBuildPicker SignalPicker
+)
+SELECTED="${OPENTTDRS_WINDOW_CAPTURE_IDS:-Vehicle,Orders,Timetable,Depot,Town,Industry,RailStationPicker,AirportPicker,RoadStopPicker,ObjectPicker,BridgePicker,DockPicker,BuoyPicker,RailWaypointPicker,RoadWaypointPicker,TreePicker,TerraformPicker,SignPicker,DepotBuildPicker,SignalPicker}"
 
 if [[ ! -x "$OPENTTD_BIN" ]]; then
   echo "error: no existe OpenTTD UI parcheado: $OPENTTD_BIN" >&2
@@ -102,7 +108,10 @@ capture_reference() {
 capture_candidate() {
   local id="$1" width="$2" height="$3" scale="$4" out="$5"
   local runtime="$WORK/candidate-${id}-${width}x${height}-${scale}x-runtime"
-  local socket="openttdrs-${id}-${width}x${height}-${scale}x"
+  # `sun_path` admite como máximo 108 bytes. El runtime temporal ya consume
+  # buena parte de ese presupuesto, y los IDs de construction son largos.
+  # Cada captura tiene su propio runtime, por lo que no hace falta incluir ID.
+  local socket="shot-${width}x${height}-${scale}"
   local fixture
   fixture="$(fixture_for_id "$id")"
   local weston_pid status=0
@@ -147,7 +156,7 @@ capture_candidate() {
 }
 
 gate_args=()
-for id in Vehicle Orders Timetable Depot Town Industry; do
+for id in "${WINDOW_IDS[@]}"; do
   contains_id "$id" || continue
   gate_args+=(--window "$id")
   for profile in '1280 720 1' '1280 720 2' '1920 1080 1' '1920 1080 2'; do
@@ -160,7 +169,7 @@ for id in Vehicle Orders Timetable Depot Town Industry; do
 done
 
 if [[ ${#gate_args[@]} -eq 0 ]]; then
-  echo "error: OPENTTDRS_WINDOW_CAPTURE_IDS no selecciona ninguna ventana de #297" >&2
+  echo "error: OPENTTDRS_WINDOW_CAPTURE_IDS no selecciona una ventana versionada (#297/#299)" >&2
   exit 1
 fi
 python3 "$ROOT/scripts/window_visual_regression.py" --manifest "$MANIFEST" --write-sidecars "${gate_args[@]}"

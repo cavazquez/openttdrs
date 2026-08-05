@@ -1,0 +1,71 @@
+{
+  "accepted_differences": [
+    {
+      "category": "chromatic",
+      "issue": 299
+    }
+  ],
+  "artifacts": {
+    "candidate": {
+      "path": "docs/parity/screenshots/window-regression/RoadStopPicker/1920x1080-1x/candidate.png",
+      "sha256": "dbfec415b41a5d27a4032c888f969f68f32b29414d7b63ae09fc752b6981d334"
+    },
+    "diff": {
+      "path": "docs/parity/screenshots/window-regression/RoadStopPicker/1920x1080-1x/diff.png",
+      "sha256": "759fbe5f046d4f1dbb2d64d235caebcba594d91041cc7a32a179fbe4e5b081e3"
+    },
+    "reference": {
+      "path": "docs/parity/screenshots/window-regression/RoadStopPicker/1920x1080-1x/reference.png",
+      "sha256": "7738f57026f29bb9ee3500c3379e2b701732680a29c6f5202853d7f3374f2a70"
+    }
+  },
+  "assessment": {
+    "category": "chromatic",
+    "within_tolerance": true
+  },
+  "capture_route": "road-toolbar/bus-stop",
+  "family": "construction",
+  "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav",
+  "geometry": {
+    "candidate_screen": [
+      1920,
+      1080
+    ],
+    "expected_screen": [
+      1920,
+      1080
+    ],
+    "reference_screen": [
+      1920,
+      1080
+    ]
+  },
+  "metrics": {
+    "candidate_size": [
+      1920,
+      1080
+    ],
+    "changed_pixels": 2072609,
+    "changed_ratio": 0.999522087191358,
+    "max_channel_delta": 255,
+    "mean_channel_delta": 52.76992416570216,
+    "reference_size": [
+      1920,
+      1080
+    ]
+  },
+  "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+  "profile": {
+    "height": 1080,
+    "ui_scale": 1,
+    "width": 1920
+  },
+  "schema_version": 1,
+  "tolerance": {
+    "max_changed_pixels": 2073600,
+    "max_changed_ratio": 1,
+    "max_channel_delta": 255,
+    "max_mean_channel_delta": 255
+  },
+  "window": "RoadStopPicker"
+}

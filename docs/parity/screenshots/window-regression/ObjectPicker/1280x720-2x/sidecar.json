@@ -1,0 +1,71 @@
+{
+  "accepted_differences": [
+    {
+      "category": "chromatic",
+      "issue": 299
+    }
+  ],
+  "artifacts": {
+    "candidate": {
+      "path": "docs/parity/screenshots/window-regression/ObjectPicker/1280x720-2x/candidate.png",
+      "sha256": "f3160a1bb6018178b1611eb38775b3d1b18ca6a33fbc1c603eda02af65cf7d39"
+    },
+    "diff": {
+      "path": "docs/parity/screenshots/window-regression/ObjectPicker/1280x720-2x/diff.png",
+      "sha256": "9d89a13becfbde8c08e01636be256703abd9dd89a286d46f6319a32f11344562"
+    },
+    "reference": {
+      "path": "docs/parity/screenshots/window-regression/ObjectPicker/1280x720-2x/reference.png",
+      "sha256": "3ad3273e5805d2826c26f9db34401a5a092937928ef7ff3a055373cf88f251c2"
+    }
+  },
+  "assessment": {
+    "category": "chromatic",
+    "within_tolerance": true
+  },
+  "capture_route": "terraform-toolbar/object-tool-empty",
+  "family": "construction",
+  "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav",
+  "geometry": {
+    "candidate_screen": [
+      1280,
+      720
+    ],
+    "expected_screen": [
+      1280,
+      720
+    ],
+    "reference_screen": [
+      1280,
+      720
+    ]
+  },
+  "metrics": {
+    "candidate_size": [
+      1280,
+      720
+    ],
+    "changed_pixels": 921442,
+    "changed_ratio": 0.9998285590277778,
+    "max_channel_delta": 255,
+    "mean_channel_delta": 51.51293267144097,
+    "reference_size": [
+      1280,
+      720
+    ]
+  },
+  "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+  "profile": {
+    "height": 720,
+    "ui_scale": 2,
+    "width": 1280
+  },
+  "schema_version": 1,
+  "tolerance": {
+    "max_changed_pixels": 2073600,
+    "max_changed_ratio": 1,
+    "max_channel_delta": 255,
+    "max_mean_channel_delta": 255
+  },
+  "window": "ObjectPicker"
+}

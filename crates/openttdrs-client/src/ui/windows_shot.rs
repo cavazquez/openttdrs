@@ -522,6 +522,10 @@ pub(crate) fn window_known_gaps(id: FloatingWindowId) -> &'static [WindowKnownGa
         category: "capture",
         issue: 297,
     }];
+    const CONSTRUCTION_VISUAL_REGRESSION_CAPTURE: &[WindowKnownGap] = &[WindowKnownGap {
+        category: "capture",
+        issue: 299,
+    }];
     const CAPTURE_ONLY: &[WindowKnownGap] = &[WindowKnownGap {
         category: "capture",
         issue: 240,
@@ -552,6 +556,9 @@ pub(crate) fn window_known_gaps(id: FloatingWindowId) -> &'static [WindowKnownGa
     ];
     if VISUAL_REGRESSION_WINDOW_IDS.contains(&id) {
         return VISUAL_REGRESSION_CAPTURE;
+    }
+    if CONSTRUCTION_VISUAL_REGRESSION_WINDOW_IDS.contains(&id) {
+        return CONSTRUCTION_VISUAL_REGRESSION_CAPTURE;
     }
     if VEHICLE_FAMILY_WINDOW_IDS.contains(&id)
         || CONSTRUCTION_FAMILY_WINDOW_IDS.contains(&id)
@@ -596,13 +603,15 @@ pub(crate) fn window_descendant_ids(root: FloatingWindowId) -> Vec<FloatingWindo
 
 /// ¿La captura 1280×720 1× está pendiente? Ausencia → issue, no silencio.
 ///
-/// La primera familia del gate de píxel se sigue en #297; el resto conserva
-/// la deuda de inventario de #240 hasta que entre al mismo pipeline.
+/// La primera familia del gate de píxel se sigue en #297 y los pickers de
+/// construcción de la segunda en #299. El resto conserva la deuda de
+/// inventario de #240 hasta que entre al mismo pipeline.
 #[must_use]
 pub(crate) fn capture_is_pending(id: FloatingWindowId) -> Option<u16> {
     match id {
         FloatingWindowId::Station => None,
         id if VISUAL_REGRESSION_WINDOW_IDS.contains(&id) => Some(297),
+        id if CONSTRUCTION_VISUAL_REGRESSION_WINDOW_IDS.contains(&id) => Some(299),
         _ => Some(240),
     }
 }
@@ -689,6 +698,28 @@ pub(crate) const VISUAL_REGRESSION_WINDOW_IDS: &[FloatingWindowId] = &[
     FloatingWindowId::Depot,
     FloatingWindowId::Town,
     FloatingWindowId::Industry,
+];
+
+/// Segunda familia con oráculo visual: los pickers de construcción (#299).
+///
+/// El driver OpenTTD abre cada destino por el mismo toolbar o selector que usa
+/// el juego. Así el artefacto no depende de una captura manual ni de una
+/// configuración persistida en el perfil local.
+pub(crate) const CONSTRUCTION_VISUAL_REGRESSION_WINDOW_IDS: &[FloatingWindowId] = &[
+    FloatingWindowId::RailStationPicker,
+    FloatingWindowId::AirportPicker,
+    FloatingWindowId::RoadStopPicker,
+    FloatingWindowId::ObjectPicker,
+    FloatingWindowId::BridgePicker,
+    FloatingWindowId::DockPicker,
+    FloatingWindowId::BuoyPicker,
+    FloatingWindowId::RailWaypointPicker,
+    FloatingWindowId::RoadWaypointPicker,
+    FloatingWindowId::TreePicker,
+    FloatingWindowId::TerraformPicker,
+    FloatingWindowId::SignPicker,
+    FloatingWindowId::DepotBuildPicker,
+    FloatingWindowId::SignalPicker,
 ];
 
 /// Inventario de pickers construction cubiertos por #246 y #270 (#270 greenfield).
@@ -1795,6 +1826,24 @@ mod tests {
     }
 
     #[test]
+    fn construction_visual_regression_family_replaces_its_legacy_capture_gap() {
+        assert_eq!(
+            CONSTRUCTION_VISUAL_REGRESSION_WINDOW_IDS,
+            CONSTRUCTION_FAMILY_WINDOW_IDS
+        );
+        for id in CONSTRUCTION_VISUAL_REGRESSION_WINDOW_IDS {
+            assert_eq!(capture_is_pending(*id), Some(299));
+            assert_eq!(
+                window_known_gaps(*id),
+                &[WindowKnownGap {
+                    category: "capture",
+                    issue: 299,
+                }]
+            );
+        }
+    }
+
+    #[test]
     fn construction_family_inventory_is_in_parity_matrix() {
         for id in CONSTRUCTION_FAMILY_WINDOW_IDS {
             assert!(
@@ -1823,9 +1872,9 @@ mod tests {
                 gaps,
                 &[WindowKnownGap {
                     category: "capture",
-                    issue: 240,
+                    issue: 299,
                 }],
-                "familia construction debe ser solo capture→#240: {id:?}"
+                "familia construction debe ser solo capture→#299: {id:?}"
             );
             assert!(
                 gaps.iter()

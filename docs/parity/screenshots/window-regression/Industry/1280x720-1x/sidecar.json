@@ -23,6 +23,7 @@
     "category": "chromatic",
     "within_tolerance": true
   },
+  "capture_route": "industry/view",
   "family": "world",
   "fixture": "crates/openttdrs-core/tests/fixtures/rail_signals_mixed.sav",
   "geometry": {

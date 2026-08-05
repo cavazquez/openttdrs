@@ -1,0 +1,71 @@
+{
+  "accepted_differences": [
+    {
+      "category": "chromatic",
+      "issue": 302
+    }
+  ],
+  "artifacts": {
+    "candidate": {
+      "path": "docs/parity/screenshots/window-regression/TownDirectory/1280x720-1x/candidate.png",
+      "sha256": "fe173da26dadbef93464968df553e0e2e35ae8c296abf71d4ad94288a93aa99b"
+    },
+    "diff": {
+      "path": "docs/parity/screenshots/window-regression/TownDirectory/1280x720-1x/diff.png",
+      "sha256": "9af117463631ee85fd449863847401cc1bc4957a3005cd3d8117bf666510e347"
+    },
+    "reference": {
+      "path": "docs/parity/screenshots/window-regression/TownDirectory/1280x720-1x/reference.png",
+      "sha256": "374996f0ce386dc5036e48d43c51de8b664f131b07ea08540c1af050f5ef37e7"
+    }
+  },
+  "assessment": {
+    "category": "chromatic",
+    "within_tolerance": true
+  },
+  "capture_route": "town-menu/directory",
+  "family": "world",
+  "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav",
+  "geometry": {
+    "candidate_screen": [
+      1280,
+      720
+    ],
+    "expected_screen": [
+      1280,
+      720
+    ],
+    "reference_screen": [
+      1280,
+      720
+    ]
+  },
+  "metrics": {
+    "candidate_size": [
+      1280,
+      720
+    ],
+    "changed_pixels": 921308,
+    "changed_ratio": 0.9996831597222222,
+    "max_channel_delta": 255,
+    "mean_channel_delta": 48.166392686631944,
+    "reference_size": [
+      1280,
+      720
+    ]
+  },
+  "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+  "profile": {
+    "height": 720,
+    "ui_scale": 1,
+    "width": 1280
+  },
+  "schema_version": 1,
+  "tolerance": {
+    "max_changed_pixels": 2073600,
+    "max_changed_ratio": 1,
+    "max_channel_delta": 255,
+    "max_mean_channel_delta": 255
+  },
+  "window": "TownDirectory"
+}

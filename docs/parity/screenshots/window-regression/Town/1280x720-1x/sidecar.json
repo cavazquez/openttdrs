@@ -23,6 +23,7 @@
     "category": "chromatic",
     "within_tolerance": true
   },
+  "capture_route": "town/view",
   "family": "world",
   "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav",
   "geometry": {

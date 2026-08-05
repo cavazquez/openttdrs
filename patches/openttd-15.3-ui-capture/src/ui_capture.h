@@ -1,5 +1,5 @@
 /*
- * UI capture driver for openttdrs visual parity (#297, #299, #300, #301).
+ * UI capture driver for openttdrs visual parity (#297, #299, #300, #301, #302).
  * Applied onto OpenTTD 15.3 at docs/parity/openttd-reference.json.
  */
 

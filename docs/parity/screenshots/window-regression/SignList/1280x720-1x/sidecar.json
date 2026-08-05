@@ -1,0 +1,71 @@
+{
+  "accepted_differences": [
+    {
+      "category": "chromatic",
+      "issue": 302
+    }
+  ],
+  "artifacts": {
+    "candidate": {
+      "path": "docs/parity/screenshots/window-regression/SignList/1280x720-1x/candidate.png",
+      "sha256": "b2d597c06d7a69e27a89c478cc631ec420b0e2ad9c27125fd3f1de18e07061e6"
+    },
+    "diff": {
+      "path": "docs/parity/screenshots/window-regression/SignList/1280x720-1x/diff.png",
+      "sha256": "5d54693f5697c3e5c93bc41f7253a8355fe99e4099cb23fea8ac8ff5b68c6830"
+    },
+    "reference": {
+      "path": "docs/parity/screenshots/window-regression/SignList/1280x720-1x/reference.png",
+      "sha256": "c9366f0b94a97955dd678ae353f48df67e75f02b762487a958520bd3a7aae885"
+    }
+  },
+  "assessment": {
+    "category": "chromatic",
+    "within_tolerance": true
+  },
+  "capture_route": "view-menu/sign-list",
+  "family": "world",
+  "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav",
+  "geometry": {
+    "candidate_screen": [
+      1280,
+      720
+    ],
+    "expected_screen": [
+      1280,
+      720
+    ],
+    "reference_screen": [
+      1280,
+      720
+    ]
+  },
+  "metrics": {
+    "candidate_size": [
+      1280,
+      720
+    ],
+    "changed_pixels": 921544,
+    "changed_ratio": 0.9999392361111111,
+    "max_channel_delta": 255,
+    "mean_channel_delta": 50.028987901475695,
+    "reference_size": [
+      1280,
+      720
+    ]
+  },
+  "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+  "profile": {
+    "height": 720,
+    "ui_scale": 1,
+    "width": 1280
+  },
+  "schema_version": 1,
+  "tolerance": {
+    "max_changed_pixels": 2073600,
+    "max_changed_ratio": 1,
+    "max_channel_delta": 255,
+    "max_mean_channel_delta": 255
+  },
+  "window": "SignList"
+}

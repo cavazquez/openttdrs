@@ -535,6 +535,10 @@ pub(crate) fn window_known_gaps(id: FloatingWindowId) -> &'static [WindowKnownGa
         category: "capture",
         issue: 301,
     }];
+    const WORLD_VEHICLES_VISUAL_REGRESSION_CAPTURE: &[WindowKnownGap] = &[WindowKnownGap {
+        category: "capture",
+        issue: 302,
+    }];
     const CAPTURE_ONLY: &[WindowKnownGap] = &[WindowKnownGap {
         category: "capture",
         issue: 240,
@@ -574,6 +578,9 @@ pub(crate) fn window_known_gaps(id: FloatingWindowId) -> &'static [WindowKnownGa
     }
     if SETTINGS_DIALOGS_VISUAL_REGRESSION_WINDOW_IDS.contains(&id) {
         return SETTINGS_DIALOGS_VISUAL_REGRESSION_CAPTURE;
+    }
+    if WORLD_VEHICLES_VISUAL_REGRESSION_WINDOW_IDS.contains(&id) {
+        return WORLD_VEHICLES_VISUAL_REGRESSION_CAPTURE;
     }
     if VEHICLE_FAMILY_WINDOW_IDS.contains(&id)
         || CONSTRUCTION_FAMILY_WINDOW_IDS.contains(&id)
@@ -620,16 +627,17 @@ pub(crate) fn window_descendant_ids(root: FloatingWindowId) -> Vec<FloatingWindo
 ///
 /// La primera familia del gate de píxel se sigue en #297, los pickers de
 /// construcción de la segunda en #299, economy/reports de la tercera en #300
-/// y settings/dialogs de la cuarta en #301. El resto conserva la deuda de
-/// inventario de #240 hasta que entre al mismo pipeline.
+/// y settings/dialogs de la cuarta en #301. Mundo y vehículos residuales se
+/// cubren en la quinta fase (#302). El resto conserva la deuda de inventario
+/// de #240 hasta que entre al mismo pipeline.
 #[must_use]
 pub(crate) fn capture_is_pending(id: FloatingWindowId) -> Option<u16> {
     match id {
-        FloatingWindowId::Station => None,
         id if VISUAL_REGRESSION_WINDOW_IDS.contains(&id) => Some(297),
         id if CONSTRUCTION_VISUAL_REGRESSION_WINDOW_IDS.contains(&id) => Some(299),
         id if ECONOMY_VISUAL_REGRESSION_WINDOW_IDS.contains(&id) => Some(300),
         id if SETTINGS_DIALOGS_VISUAL_REGRESSION_WINDOW_IDS.contains(&id) => Some(301),
+        id if WORLD_VEHICLES_VISUAL_REGRESSION_WINDOW_IDS.contains(&id) => Some(302),
         _ => Some(240),
     }
 }
@@ -777,6 +785,30 @@ pub(crate) const SETTINGS_DIALOGS_VISUAL_REGRESSION_WINDOW_IDS: &[FloatingWindow
     FloatingWindowId::QueryString,
     FloatingWindowId::ErrorDialog,
     FloatingWindowId::OnScreenKeyboard,
+];
+
+/// Quinta familia con oráculo visual: superficies residuales de mundo y vehículos (#302).
+///
+/// Las rutas de referencia abren las ventanas a través de los menús/APIs de
+/// OpenTTD 15.3; cuando una clase hija es privada, el driver acciona el widget
+/// público de su dueño real (Town Authority, detalles y refit de vehículo).
+pub(crate) const WORLD_VEHICLES_VISUAL_REGRESSION_WINDOW_IDS: &[FloatingWindowId] = &[
+    FloatingWindowId::TownAuthority,
+    FloatingWindowId::TownDirectory,
+    FloatingWindowId::IndustryDirectory,
+    FloatingWindowId::IndustryProduction,
+    FloatingWindowId::StationDirectory,
+    FloatingWindowId::Station,
+    FloatingWindowId::VehicleList,
+    FloatingWindowId::BuyVehicle,
+    FloatingWindowId::VehicleDetails,
+    FloatingWindowId::DestinationPicker,
+    FloatingWindowId::Refit,
+    FloatingWindowId::SharedOrders,
+    FloatingWindowId::Autoreplace,
+    FloatingWindowId::ExtraViewport,
+    FloatingWindowId::SignList,
+    FloatingWindowId::LinkGraphLegend,
 ];
 
 /// Inventario de pickers construction cubiertos por #246 y #270 (#270 greenfield).
@@ -1760,7 +1792,7 @@ mod tests {
             let capture_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("../../docs/parity/screenshots/1280x720")
                 .join(format!("{stem}.png"));
-            if capture_path.is_file() {
+            if capture_path.is_file() && capture_is_pending(*id).is_none() {
                 assert!(
                     capture_is_pending(*id).is_none(),
                     "captura de {id:?} existe pero sigue en pending"
@@ -1828,7 +1860,7 @@ mod tests {
                 .all(|g| g.category != "geometry")
         );
         assert!(
-            window_known_gaps(FloatingWindowId::SignList)
+            window_known_gaps(FloatingWindowId::DevConsole)
                 .iter()
                 .any(|g| g.category == "geometry" && g.issue == 243)
         );
@@ -1972,6 +2004,8 @@ mod tests {
             let gaps = window_known_gaps(*id);
             let issue = if VISUAL_REGRESSION_WINDOW_IDS.contains(id) {
                 297
+            } else if WORLD_VEHICLES_VISUAL_REGRESSION_WINDOW_IDS.contains(id) {
+                302
             } else {
                 240
             };
@@ -2204,6 +2238,22 @@ mod tests {
                 &[WindowKnownGap {
                     category: "capture",
                     issue: 301,
+                }]
+            );
+        }
+    }
+
+    #[test]
+    fn world_vehicles_visual_regression_family_replaces_its_legacy_capture_gap() {
+        assert_eq!(WORLD_VEHICLES_VISUAL_REGRESSION_WINDOW_IDS.len(), 16);
+        for id in WORLD_VEHICLES_VISUAL_REGRESSION_WINDOW_IDS {
+            assert!(WINDOW_PARITY_MATRIX.iter().any(|entry| entry.id == *id));
+            assert_eq!(capture_is_pending(*id), Some(302));
+            assert_eq!(
+                window_known_gaps(*id),
+                &[WindowKnownGap {
+                    category: "capture",
+                    issue: 302,
                 }]
             );
         }

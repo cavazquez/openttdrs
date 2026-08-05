@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prueba de mutación del gate visual de ventanas (#297, #299, #300, #301)."""
+"""Prueba de mutación del gate visual de ventanas (#297, #299, #300, #301, #302)."""
 
 from __future__ import annotations
 
@@ -26,6 +26,7 @@ def write_manifest(root: Path) -> Path:
             {
                 "id": "Vehicle",
                 "family": "vehicles",
+                "capture_route": "vehicle-view/main",
                 "fixture": "fixture.sav",
                 "openttd_commit": "0" * 40,
                 "artifact_root": str(root / "artifacts"),
@@ -90,16 +91,14 @@ def main() -> int:
 
         data = json.loads(manifest.read_text(encoding="utf-8"))
         data["windows"][0]["family"] = "construction"
+        del data["windows"][0]["capture_route"]
         manifest.write_text(json.dumps(data), encoding="utf-8")
         missing_route = run(manifest)
         if missing_route.returncode != 2 or "capture_route" not in missing_route.stderr:
             print(missing_route.stdout, missing_route.stderr, file=sys.stderr)
             print("FAIL: construction sin ruta de captura debe rechazarse", file=sys.stderr)
             return 1
-        data["windows"][0]["family"] = "vehicles"
-        manifest.write_text(json.dumps(data), encoding="utf-8")
-
-        for family in ("economy", "settings", "dialogs"):
+        for family in ("vehicles", "world", "economy", "settings", "dialogs"):
             data["windows"][0]["family"] = family
             manifest.write_text(json.dumps(data), encoding="utf-8")
             missing_route = run(manifest)
@@ -108,6 +107,7 @@ def main() -> int:
                 print(f"FAIL: {family} sin ruta de captura debe rechazarse", file=sys.stderr)
                 return 1
         data["windows"][0]["family"] = "vehicles"
+        data["windows"][0]["capture_route"] = "vehicle-view/main"
         manifest.write_text(json.dumps(data), encoding="utf-8")
 
         changed = root / "artifacts" / "1280x720-1x" / "candidate.png"

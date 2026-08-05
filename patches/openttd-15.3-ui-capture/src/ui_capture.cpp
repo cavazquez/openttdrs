@@ -1,5 +1,5 @@
 /*
- * UI capture driver for openttdrs visual parity (#297, #299, #300, #301).
+ * UI capture driver for openttdrs visual parity (#297, #299, #300, #301, #302).
  *
  * It is deliberately small and only drives the first visual-regression
  * family.  The save selected by the caller supplies the town, industry,
@@ -8,11 +8,13 @@
 
 #include "ui_capture.h"
 
+#include "autoreplace_gui.h"
 #include "depot_base.h"
 #include "depot_func.h"
 #include "depot_map.h"
 #include "cheat_func.h"
 #include "error.h"
+#include "gfx_func.h"
 #include "gui.h"
 #include "help_gui.h"
 #include "company_base.h"
@@ -28,6 +30,10 @@
 #include "rail_gui.h"
 #include "road_gui.h"
 #include "screenshot.h"
+#include "signs_func.h"
+#include "station_base.h"
+#include "station_func.h"
+#include "station_gui.h"
 #include "terraform_gui.h"
 #include "textbuf_gui.h"
 #include "strings_func.h"
@@ -39,12 +45,16 @@
 
 #include "ai/ai_gui.hpp"
 
+#include "linkgraph/linkgraph_gui.h"
+
 #include "widgets/airport_widget.h"
 #include "widgets/dock_widget.h"
 #include "widgets/rail_widget.h"
 #include "widgets/road_widget.h"
 #include "widgets/settings_widget.h"
 #include "widgets/terraform_widget.h"
+#include "widgets/town_widget.h"
+#include "widgets/vehicle_widget.h"
 
 #include "table/strings.h"
 
@@ -86,6 +96,34 @@ const Vehicle *FirstPrimaryVehicle()
 		if (vehicle->IsPrimaryVehicle() && vehicle->tile != INVALID_TILE) return vehicle;
 	}
 	return nullptr;
+}
+
+const Station *FirstStation()
+{
+	for (const Station *station : Station::Iterate()) {
+		return station;
+	}
+	return nullptr;
+}
+
+Town *FirstTown()
+{
+	for (Town *town : Town::Iterate()) {
+		return town;
+	}
+	return nullptr;
+}
+
+bool PrepareIndustriesForCapture()
+{
+	Town *town = FirstTown();
+	if (town == nullptr) return false;
+	for (Industry *industry : Industry::Iterate()) {
+		/* The compact fixture serializes one industry without its nearest-town pointer.
+		 * OpenTTD's directory dereferences that pointer while rendering its real list. */
+		if (industry->town == nullptr) industry->town = town;
+	}
+	return true;
 }
 
 Company *FirstCompany()
@@ -280,11 +318,116 @@ bool OpenSettingsOrDialogWindow(std::string_view id)
 	return false;
 }
 
+bool OpenWorldOrVehicleWindow(std::string_view id)
+{
+	if (id == "TownAuthority") {
+		for (const Town *town : Town::Iterate()) {
+			ShowTownViewWindow(town->index);
+			Window *town_view = FindWindowById(WC_TOWN_VIEW, town->index);
+			if (town_view == nullptr) return false;
+			town_view->OnClick({0, 0}, WID_TV_SHOW_AUTHORITY, 1);
+			return FindWindowById(WC_TOWN_AUTHORITY, town->index) != nullptr;
+		}
+		return false;
+	}
+	if (id == "TownDirectory") {
+		ShowTownDirectory();
+		return true;
+	}
+	if (id == "IndustryDirectory") {
+		if (!PrepareIndustriesForCapture()) return false;
+		ShowIndustryDirectory();
+		return true;
+	}
+	if (id == "IndustryProduction") {
+		if (!PrepareIndustriesForCapture()) return false;
+		for (const Industry *industry : Industry::Iterate()) {
+			ShowIndustryProductionGraph(industry->index);
+			return true;
+		}
+		return false;
+	}
+	if (id == "StationDirectory") {
+		Company *company = FirstCompany();
+		if (company == nullptr) return false;
+		ShowCompanyStations(company->index);
+		return true;
+	}
+	if (id == "Station") {
+		const Station *station = FirstStation();
+		if (station == nullptr) return false;
+		ShowStationViewWindow(station->index);
+		return true;
+	}
+	if (id == "VehicleList") {
+		const Vehicle *vehicle = FirstPrimaryVehicle();
+		if (vehicle == nullptr) return false;
+		ShowVehicleListWindow(vehicle->owner, vehicle->type);
+		return true;
+	}
+	if (id == "BuyVehicle") {
+		const Vehicle *vehicle = FirstPrimaryVehicle();
+		if (vehicle == nullptr) return false;
+		ShowBuildVehicleWindow(INVALID_TILE, vehicle->type);
+		return true;
+	}
+	if (id == "VehicleDetails" || id == "Refit") {
+		const Vehicle *vehicle = FirstPrimaryVehicle();
+		if (vehicle == nullptr) return false;
+		ShowVehicleViewWindow(vehicle);
+		Window *vehicle_view = FindWindowById(WC_VEHICLE_VIEW, vehicle->index);
+		if (vehicle_view == nullptr) return false;
+		const WidgetID widget = id == "VehicleDetails" ? WID_VV_SHOW_DETAILS : WID_VV_REFIT;
+		vehicle_view->OnClick({0, 0}, widget, 1);
+		return true;
+	}
+	if (id == "DestinationPicker") {
+		const Station *station = FirstStation();
+		if (station == nullptr) return false;
+		const bool ctrl_pressed = _ctrl_pressed;
+		_ctrl_pressed = true;
+		ShowSelectStationIfNeeded(
+			TileArea(station->xy, 1, 1),
+			[](bool test, StationID) { return test; }
+		);
+		_ctrl_pressed = ctrl_pressed;
+		return FindWindowById(WC_SELECT_STATION, 0) != nullptr;
+	}
+	if (id == "SharedOrders") {
+		const Vehicle *vehicle = FirstPrimaryVehicle();
+		if (vehicle == nullptr) return false;
+		ShowVehicleListWindow(vehicle);
+		return true;
+	}
+	if (id == "Autoreplace") {
+		const Vehicle *vehicle = FirstPrimaryVehicle();
+		if (vehicle == nullptr) return false;
+		ShowReplaceGroupVehicleWindow(DEFAULT_GROUP, vehicle->type);
+		return true;
+	}
+	if (id == "ExtraViewport") {
+		const Vehicle *vehicle = FirstPrimaryVehicle();
+		if (vehicle == nullptr) return false;
+		ShowExtraViewportWindow(vehicle->tile);
+		return true;
+	}
+	if (id == "SignList") {
+		ShowSignList();
+		return true;
+	}
+	if (id == "LinkGraphLegend") {
+		ShowLinkGraphLegend();
+		return true;
+	}
+	return false;
+}
+
 bool OpenCaptureWindow(std::string_view id)
 {
 	if (OpenConstructionPicker(id)) return true;
 	if (OpenEconomyWindow(id)) return true;
 	if (OpenSettingsOrDialogWindow(id)) return true;
+	if (OpenWorldOrVehicleWindow(id)) return true;
 
 	if (id == "Vehicle" || id == "Orders" || id == "Timetable") {
 		const Vehicle *vehicle = FirstPrimaryVehicle();

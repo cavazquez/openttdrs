@@ -1,0 +1,71 @@
+{
+  "accepted_differences": [
+    {
+      "category": "chromatic",
+      "issue": 302
+    }
+  ],
+  "artifacts": {
+    "candidate": {
+      "path": "docs/parity/screenshots/window-regression/BuyVehicle/1920x1080-1x/candidate.png",
+      "sha256": "4025c05a23992e26b2887ff4922162fc6c402bae32446050eb3f6ede75187ccc"
+    },
+    "diff": {
+      "path": "docs/parity/screenshots/window-regression/BuyVehicle/1920x1080-1x/diff.png",
+      "sha256": "66dad41a3877f566706a40266807251983c1d4edfeee84154b2ea53c3e35fb1c"
+    },
+    "reference": {
+      "path": "docs/parity/screenshots/window-regression/BuyVehicle/1920x1080-1x/reference.png",
+      "sha256": "a1a23ce4379af503af8269161d37eab7de66290a013681573d25825484c346aa"
+    }
+  },
+  "assessment": {
+    "category": "chromatic",
+    "within_tolerance": true
+  },
+  "capture_route": "depot/build-vehicle",
+  "family": "vehicles",
+  "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav",
+  "geometry": {
+    "candidate_screen": [
+      1920,
+      1080
+    ],
+    "expected_screen": [
+      1920,
+      1080
+    ],
+    "reference_screen": [
+      1920,
+      1080
+    ]
+  },
+  "metrics": {
+    "candidate_size": [
+      1920,
+      1080
+    ],
+    "changed_pixels": 2072659,
+    "changed_ratio": 0.999546199845679,
+    "max_channel_delta": 255,
+    "mean_channel_delta": 51.80335672260802,
+    "reference_size": [
+      1920,
+      1080
+    ]
+  },
+  "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+  "profile": {
+    "height": 1080,
+    "ui_scale": 1,
+    "width": 1920
+  },
+  "schema_version": 1,
+  "tolerance": {
+    "max_changed_pixels": 2073600,
+    "max_changed_ratio": 1,
+    "max_channel_delta": 255,
+    "max_mean_channel_delta": 255
+  },
+  "window": "BuyVehicle"
+}

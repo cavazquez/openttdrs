@@ -90,7 +90,7 @@ Las salidas quedan como `1280x720/window_<id>_<scale>x.png` y
 informa como error; antes de incorporar una referencia se debe usar una clave
 presente en la matriz. Las escalas aceptadas van de 0.5× a 4×.
 
-## Gate visual por familia (#297, #299, #300, #301)
+## Gate visual por familia (#297, #299, #300, #301, #302)
 
 La fase 1 cubre `Vehicle`, `Orders`, `Timetable`, `Depot`, `Town` e `Industry`.
 La fase 2 añade los pickers `RailStation`, `Airport`, `RoadStop`, `Object`,
@@ -110,7 +110,12 @@ CargoDist) en la pestaña Advanced de `Game Options`; esas entradas registran
 esa equivalencia semántica como `game-options/advanced`, sin declarar una clase
 upstream inexistente. `QueryString` y OSK usan el filtro real de esa pestaña
 como dueño temporal, y ErrorDialog se provoca con un error crítico estable. El
-manifiesto conjunto es
+La fase 5 añade `TownAuthority`, `TownDirectory`, `IndustryDirectory`,
+`IndustryProduction`, `StationDirectory`, `Station`, `VehicleList`,
+`BuyVehicle`, `VehicleDetails`, `DestinationPicker`, `Refit`, `SharedOrders`,
+`Autoreplace`, `ExtraViewport`, `SignList` y `LinkGraphLegend`. Sus subventanas
+se abren desde el widget dueño real; `DestinationPicker` usa la selección de
+estación con Ctrl y una sonda sin mutación. El manifiesto conjunto es
 [`window-regression.json`](window-regression.json); cada perfil vive en:
 
 ```text
@@ -128,7 +133,10 @@ persistentes. La fase 2 activa la ruta real de cada picker (toolbar, selector o
 chooser); `capture_route` queda en el manifiesto y el sidecar para hacer esa
 apertura auditable. Vehicle, Orders, Timetable y Town usan
 `mvp_openttd_rich.sav`; Depot e Industry usan `rail_signals_mixed.sav`; los
-pickers construction usan `mvp_openttd_rich.sav`. El candidato carga exactamente
+pickers construction usan `mvp_openttd_rich.sav`. El driver normaliza en
+memoria el puntero de ciudad ausente de la industria del fixture rico antes de
+abrir su directorio o gráfico de producción; no modifica el archivo de partida.
+El candidato carga exactamente
 el mismo `.sav` mediante `OPENTTDRS_SAV_LOAD`, y ambos drivers congelan el tick
 de simulación antes de medir. Para generar/actualizar los cuatro artefactos de
 cada perfil se requieren `xvfb`, `xauth` y `weston`: OpenTTD se
@@ -173,6 +181,8 @@ una diferencia fuera de tolerancia no pueden pasar silenciosamente.
 
 Las demás ventanas todavía son el inventario de #240. Las seis de la fase 1
 citan #297, los 14 pickers construction de la fase 2 citan #299, las diez
-entradas economy/reports de la fase 3 citan #300 y las once de settings/dialogs
-de la fase 4 citan #301; así una ausencia no queda sin dueña. La ampliación
-continúa con el resto de `WINDOW_PARITY_MATRIX` hasta sus 62 entradas.
+entradas economy/reports de la fase 3 citan #300, las once de settings/dialogs
+de la fase 4 citan #301 y las 16 de mundo/vehículos de la fase 5 citan #302;
+así una ausencia no queda sin dueña. Sólo `DevConsole`, `TileInspector`,
+`GenLand`, `Goals` y `Story` quedan pendientes para completar las 62 entradas
+de `WINDOW_PARITY_MATRIX`.

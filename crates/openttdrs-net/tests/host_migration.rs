@@ -8,8 +8,7 @@ use std::time::{Duration, Instant};
 
 use openttdrs_core::{Command, GameState, TileCoord, apply_command};
 use openttdrs_net::{
-    ClientSession, DEFAULT_PORT, ListenServer, NetError, SessionEvent, apply_session_event,
-    elect_new_host,
+    ClientSession, ListenServer, NetError, SessionEvent, apply_session_event, elect_new_host,
 };
 
 fn wait_event(client: &ClientSession, timeout: Duration) -> SessionEvent {
@@ -75,12 +74,11 @@ fn listen_server_failover_promotes_min_peer_and_preserves_hash() {
     let mut host = GameState::new(32, 32);
     let snapshot = host.save_json().unwrap();
 
-    let port_a = u16::try_from(46_000 + (std::process::id() % 1000)).unwrap_or(DEFAULT_PORT);
-    let bind_a = format!("127.0.0.1:{port_a}");
-    let server = match maybe_start_server(&bind_a, snapshot) {
+    let server = match maybe_start_server("127.0.0.1:0", snapshot) {
         Some(server) => server,
         None => return,
     };
+    let bind_a = server.local_addr().to_string();
     thread::sleep(Duration::from_millis(40));
 
     let client_lo = match maybe_connect_client(&bind_a) {
@@ -128,13 +126,13 @@ fn listen_server_failover_promotes_min_peer_and_preserves_hash() {
     drop(client_hi);
 
     // Nuevo listen-server; el peer ganador actúa como host local (sin ClientSession).
-    let port_b = port_a.saturating_add(1);
-    let bind_b = format!("127.0.0.1:{port_b}");
-    let new_server = match ListenServer::start_with_seq(&bind_b, failover_snapshot, next_seq) {
+    let new_server = match ListenServer::start_with_seq("127.0.0.1:0", failover_snapshot, next_seq)
+    {
         Ok(server) => server,
         Err(NetError::Io(error)) if error.kind() == ErrorKind::PermissionDenied => return,
         Err(error) => panic!("ListenServer::start_with_seq falló: {error}"),
     };
+    let bind_b = new_server.local_addr().to_string();
     thread::sleep(Duration::from_millis(40));
 
     let mut new_host_state = host;
@@ -174,12 +172,11 @@ fn host_announce_reaches_connected_clients_without_manual_orchestration() {
     let host = GameState::new(16, 16);
     let snapshot = host.save_json().unwrap();
 
-    let port = u16::try_from(47_000 + (std::process::id() % 1000)).unwrap_or(DEFAULT_PORT);
-    let bind = format!("127.0.0.1:{port}");
-    let server = match maybe_start_server(&bind, snapshot) {
+    let server = match maybe_start_server("127.0.0.1:0", snapshot) {
         Some(server) => server,
         None => return,
     };
+    let bind = server.local_addr().to_string();
     thread::sleep(Duration::from_millis(40));
 
     let client = match maybe_connect_client(&bind) {
@@ -188,7 +185,7 @@ fn host_announce_reaches_connected_clients_without_manual_orchestration() {
     };
     let (_, next_seq, peer_id) = wait_welcome(&client, Duration::from_secs(2));
 
-    let announce = format!("127.0.0.1:{}", port.saturating_add(1));
+    let announce = format!("127.0.0.1:{}", server.local_addr().port().saturating_add(1));
     server
         .broadcast_host_announce(announce.clone(), next_seq, peer_id)
         .unwrap();

@@ -25,6 +25,7 @@ use crate::ui::ai_settings_window::AiSettingsWindowState;
 use crate::ui::audio_settings_window::SoundMusicWindowState;
 use crate::ui::autoreplace_window::AutoreplaceWindowState;
 use crate::ui::buy_window::BuyVehicleWindowState;
+use crate::ui::cargo_dist_settings_window::CargoDistSettingsWindowState;
 use crate::ui::cargo_payment_window::CargoPaymentWindowState;
 use crate::ui::cheat_window::CheatWindowState;
 use crate::ui::company_view_window::CompanyViewWindowState;
@@ -530,6 +531,10 @@ pub(crate) fn window_known_gaps(id: FloatingWindowId) -> &'static [WindowKnownGa
         category: "capture",
         issue: 300,
     }];
+    const SETTINGS_DIALOGS_VISUAL_REGRESSION_CAPTURE: &[WindowKnownGap] = &[WindowKnownGap {
+        category: "capture",
+        issue: 301,
+    }];
     const CAPTURE_ONLY: &[WindowKnownGap] = &[WindowKnownGap {
         category: "capture",
         issue: 240,
@@ -566,6 +571,9 @@ pub(crate) fn window_known_gaps(id: FloatingWindowId) -> &'static [WindowKnownGa
     }
     if ECONOMY_VISUAL_REGRESSION_WINDOW_IDS.contains(&id) {
         return ECONOMY_VISUAL_REGRESSION_CAPTURE;
+    }
+    if SETTINGS_DIALOGS_VISUAL_REGRESSION_WINDOW_IDS.contains(&id) {
+        return SETTINGS_DIALOGS_VISUAL_REGRESSION_CAPTURE;
     }
     if VEHICLE_FAMILY_WINDOW_IDS.contains(&id)
         || CONSTRUCTION_FAMILY_WINDOW_IDS.contains(&id)
@@ -611,9 +619,9 @@ pub(crate) fn window_descendant_ids(root: FloatingWindowId) -> Vec<FloatingWindo
 /// ¿La captura 1280×720 1× está pendiente? Ausencia → issue, no silencio.
 ///
 /// La primera familia del gate de píxel se sigue en #297, los pickers de
-/// construcción de la segunda en #299 y economy/reports de la tercera en
-/// #300. El resto conserva la deuda de inventario de #240 hasta que entre al
-/// mismo pipeline.
+/// construcción de la segunda en #299, economy/reports de la tercera en #300
+/// y settings/dialogs de la cuarta en #301. El resto conserva la deuda de
+/// inventario de #240 hasta que entre al mismo pipeline.
 #[must_use]
 pub(crate) fn capture_is_pending(id: FloatingWindowId) -> Option<u16> {
     match id {
@@ -621,6 +629,7 @@ pub(crate) fn capture_is_pending(id: FloatingWindowId) -> Option<u16> {
         id if VISUAL_REGRESSION_WINDOW_IDS.contains(&id) => Some(297),
         id if CONSTRUCTION_VISUAL_REGRESSION_WINDOW_IDS.contains(&id) => Some(299),
         id if ECONOMY_VISUAL_REGRESSION_WINDOW_IDS.contains(&id) => Some(300),
+        id if SETTINGS_DIALOGS_VISUAL_REGRESSION_WINDOW_IDS.contains(&id) => Some(301),
         _ => Some(240),
     }
 }
@@ -747,6 +756,27 @@ pub(crate) const ECONOMY_VISUAL_REGRESSION_WINDOW_IDS: &[FloatingWindowId] = &[
     FloatingWindowId::League,
     FloatingWindowId::NewsHistory,
     FloatingWindowId::NewsSettings,
+];
+
+/// Cuarta familia con oráculo visual: settings y diálogos modales (#301).
+///
+/// `PathfindingSettings`, `CargoDistSettings` y `DisplayOptions` se comparan
+/// contra la pestaña Advanced de Game Options: OpenTTD 15.3 concentra allí esas
+/// preferencias mientras el port las expone como superficies independientes.
+/// Los dos diálogos de texto usan el filtro de esa ventana como dueño temporal;
+/// así QueryString y OSK se crean por las APIs upstream reales.
+pub(crate) const SETTINGS_DIALOGS_VISUAL_REGRESSION_WINDOW_IDS: &[FloatingWindowId] = &[
+    FloatingWindowId::NewGrf,
+    FloatingWindowId::SoundMusic,
+    FloatingWindowId::DisplayOptions,
+    FloatingWindowId::PathfindingSettings,
+    FloatingWindowId::CargoDistSettings,
+    FloatingWindowId::AiSettings,
+    FloatingWindowId::Help,
+    FloatingWindowId::CheatWindow,
+    FloatingWindowId::QueryString,
+    FloatingWindowId::ErrorDialog,
+    FloatingWindowId::OnScreenKeyboard,
 ];
 
 /// Inventario de pickers construction cubiertos por #246 y #270 (#270 greenfield).
@@ -1512,6 +1542,7 @@ fn open_all_windows_for_shot(world: &mut World, include_auxiliary: bool) {
     world.resource_mut::<NewsHistoryState>().open = true;
     world.resource_mut::<NewsSettingsWindowState>().open = true;
     world.resource_mut::<PathfindingSettingsWindowState>().open = true;
+    world.resource_mut::<CargoDistSettingsWindowState>().open = true;
     world.resource_mut::<AiSettingsWindowState>().open = true;
     world.resource_mut::<NewGrfWindowState>().open = true;
     world.resource_mut::<SoundMusicWindowState>().open = true;
@@ -2101,9 +2132,9 @@ mod tests {
                 gaps,
                 &[WindowKnownGap {
                     category: "capture",
-                    issue: 240,
+                    issue: 301,
                 }],
-                "familia settings debe ser solo capture→#240: {id:?}"
+                "familia settings debe ser solo capture→#301: {id:?}"
             );
             assert!(
                 gaps.iter()
@@ -2150,9 +2181,30 @@ mod tests {
                 gaps,
                 &[WindowKnownGap {
                     category: "capture",
-                    issue: 240,
+                    issue: 301,
                 }],
-                "familia dialogs debe ser solo capture→#240: {id:?}"
+                "familia dialogs debe ser solo capture→#301: {id:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn settings_dialogs_visual_regression_family_replaces_its_legacy_capture_gap() {
+        assert_eq!(
+            SETTINGS_DIALOGS_VISUAL_REGRESSION_WINDOW_IDS.len(),
+            SETTINGS_FAMILY_WINDOW_IDS.len() + DIALOGS_FAMILY_WINDOW_IDS.len()
+        );
+        for id in SETTINGS_DIALOGS_VISUAL_REGRESSION_WINDOW_IDS {
+            assert!(
+                SETTINGS_FAMILY_WINDOW_IDS.contains(id) || DIALOGS_FAMILY_WINDOW_IDS.contains(id)
+            );
+            assert_eq!(capture_is_pending(*id), Some(301));
+            assert_eq!(
+                window_known_gaps(*id),
+                &[WindowKnownGap {
+                    category: "capture",
+                    issue: 301,
+                }]
             );
         }
     }

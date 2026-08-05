@@ -1,5 +1,5 @@
 /*
- * UI capture driver for openttdrs visual parity (#297, #299, #300).
+ * UI capture driver for openttdrs visual parity (#297, #299, #300, #301).
  *
  * It is deliberately small and only drives the first visual-regression
  * family.  The save selected by the caller supplies the town, industry,
@@ -11,28 +11,39 @@
 #include "depot_base.h"
 #include "depot_func.h"
 #include "depot_map.h"
+#include "cheat_func.h"
+#include "error.h"
 #include "gui.h"
+#include "help_gui.h"
 #include "company_base.h"
 #include "company_gui.h"
 #include "graph_gui.h"
 #include "industry.h"
 #include "league_gui.h"
 #include "news_gui.h"
+#include "newgrf_config.h"
 #include "object.h"
 #include "openttd.h"
+#include "querystring_gui.h"
 #include "rail_gui.h"
 #include "road_gui.h"
 #include "screenshot.h"
 #include "terraform_gui.h"
+#include "textbuf_gui.h"
+#include "strings_func.h"
 #include "timetable.h"
 #include "town.h"
 #include "vehicle_base.h"
 #include "vehicle_gui.h"
+#include "window_func.h"
+
+#include "ai/ai_gui.hpp"
 
 #include "widgets/airport_widget.h"
 #include "widgets/dock_widget.h"
 #include "widgets/rail_widget.h"
 #include "widgets/road_widget.h"
+#include "widgets/settings_widget.h"
 #include "widgets/terraform_widget.h"
 
 #include "table/strings.h"
@@ -208,10 +219,72 @@ bool OpenEconomyWindow(std::string_view id)
 	return false;
 }
 
+Window *OpenAdvancedGameOptions()
+{
+	ShowGameOptions();
+	Window *options = FindWindowByClass(WC_GAME_OPTIONS);
+	if (options == nullptr) return nullptr;
+	/* `settings_gui.cpp` keeps GameOptionsWindow private, but the public widget
+	 * IDs and Window::OnClick let the driver select the real Advanced tab without
+	 * hard-coded screen coordinates. */
+	options->OnClick({0, 0}, WID_GO_TAB_ADVANCED, 1);
+	return options;
+}
+
+bool OpenSettingsOrDialogWindow(std::string_view id)
+{
+	if (id == "NewGrf") {
+		ShowNewGRFSettings(true, true, true, _grfconfig);
+		return true;
+	}
+	if (id == "SoundMusic") {
+		ShowMusicWindow();
+		return true;
+	}
+	if (id == "AiSettings") {
+		ShowAIConfigWindow();
+		return true;
+	}
+	if (id == "Help") {
+		ShowHelpWindow();
+		return true;
+	}
+	if (id == "CheatWindow") {
+		ShowCheatWindow();
+		return true;
+	}
+	if (id == "DisplayOptions" || id == "PathfindingSettings" || id == "CargoDistSettings") {
+		/* These are separate port surfaces. Their real 15.3 counterpart is the
+		 * Advanced Game Options tab, not a fictional dedicated WindowClass. */
+		return OpenAdvancedGameOptions() != nullptr;
+	}
+	if (id == "QueryString") {
+		Window *parent = OpenAdvancedGameOptions();
+		if (parent == nullptr) return false;
+		ShowQueryString("OpenTTDRS", STR_CONFIG_SETTING_FILTER_TITLE, 50, parent, CS_ALPHANUMERAL, {});
+		return true;
+	}
+	if (id == "OnScreenKeyboard") {
+		Window *parent = OpenAdvancedGameOptions();
+		if (parent == nullptr) return false;
+		/* The Advanced filter is an actual QueryString owner, so OSK receives a
+		 * valid text buffer instead of a synthetic, non-upstream stub. */
+		ShowOnScreenKeyboard(parent, WID_GO_FILTER);
+		return true;
+	}
+	if (id == "ErrorDialog") {
+		/* Critical errors remain open through the deterministic settle frames. */
+		ShowErrorMessage(GetEncodedString(STR_ERROR_CAN_T_BUILD_BRIDGE_HERE), {}, WL_CRITICAL);
+		return true;
+	}
+	return false;
+}
+
 bool OpenCaptureWindow(std::string_view id)
 {
 	if (OpenConstructionPicker(id)) return true;
 	if (OpenEconomyWindow(id)) return true;
+	if (OpenSettingsOrDialogWindow(id)) return true;
 
 	if (id == "Vehicle" || id == "Orders" || id == "Timetable") {
 		const Vehicle *vehicle = FirstPrimaryVehicle();

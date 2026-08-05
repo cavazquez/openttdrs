@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prueba de mutación del gate visual de ventanas (#297, #299)."""
+"""Prueba de mutación del gate visual de ventanas (#297, #299, #300, #301)."""
 
 from __future__ import annotations
 
@@ -99,13 +99,14 @@ def main() -> int:
         data["windows"][0]["family"] = "vehicles"
         manifest.write_text(json.dumps(data), encoding="utf-8")
 
-        data["windows"][0]["family"] = "economy"
-        manifest.write_text(json.dumps(data), encoding="utf-8")
-        missing_route = run(manifest)
-        if missing_route.returncode != 2 or "capture_route" not in missing_route.stderr:
-            print(missing_route.stdout, missing_route.stderr, file=sys.stderr)
-            print("FAIL: economy sin ruta de captura debe rechazarse", file=sys.stderr)
-            return 1
+        for family in ("economy", "settings", "dialogs"):
+            data["windows"][0]["family"] = family
+            manifest.write_text(json.dumps(data), encoding="utf-8")
+            missing_route = run(manifest)
+            if missing_route.returncode != 2 or "capture_route" not in missing_route.stderr:
+                print(missing_route.stdout, missing_route.stderr, file=sys.stderr)
+                print(f"FAIL: {family} sin ruta de captura debe rechazarse", file=sys.stderr)
+                return 1
         data["windows"][0]["family"] = "vehicles"
         manifest.write_text(json.dumps(data), encoding="utf-8")
 

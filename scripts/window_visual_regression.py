@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Gate reproducible de regresión visual para familias de ventanas (#297, #299, #300).
+"""Gate reproducible de regresión visual para familias de ventanas (#297, #299, #300, #301).
 
 Cada perfil mantiene cuatro archivos versionados: referencia OpenTTD,
 candidato openttdrs, diff RGBA y sidecar JSON. El lector PNG es deliberadamente
@@ -385,9 +385,9 @@ def main(argv: list[str]) -> int:
                 continue
             if not isinstance(entry.get("tolerance"), dict):
                 raise GateError(f"{entry.get('id')}: falta tolerance")
-            if entry.get("family") not in {"vehicles", "world", "construction", "economy"}:
+            if entry.get("family") not in {"vehicles", "world", "construction", "economy", "settings", "dialogs"}:
                 raise GateError(f"{entry.get('id')}: familia no cubierta")
-            if entry.get("family") in {"construction", "economy"} and not isinstance(entry.get("capture_route"), str):
+            if entry.get("family") in {"construction", "economy", "settings", "dialogs"} and not isinstance(entry.get("capture_route"), str):
                 raise GateError(f"{entry.get('id')}: falta capture_route de {entry['family']}")
             accepted = entry.get("accepted_differences", [])
             if not isinstance(accepted, list) or any(

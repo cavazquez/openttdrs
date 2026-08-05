@@ -1,0 +1,71 @@
+{
+  "accepted_differences": [
+    {
+      "category": "chromatic",
+      "issue": 301
+    }
+  ],
+  "artifacts": {
+    "candidate": {
+      "path": "docs/parity/screenshots/window-regression/SoundMusic/1920x1080-2x/candidate.png",
+      "sha256": "5a2eb7f1c66412a59445bba745bf73c9c45bec368067796a7a2f1643c35db421"
+    },
+    "diff": {
+      "path": "docs/parity/screenshots/window-regression/SoundMusic/1920x1080-2x/diff.png",
+      "sha256": "43f8858d3edfca3f94447a29d2ee18ee4620ee2fec55d489d20d44c21b79fcd0"
+    },
+    "reference": {
+      "path": "docs/parity/screenshots/window-regression/SoundMusic/1920x1080-2x/reference.png",
+      "sha256": "e1cbb1b5dd5188bd6017274019dfe44bbc8301f7abc01768eb9c5af0e32e886e"
+    }
+  },
+  "assessment": {
+    "category": "chromatic",
+    "within_tolerance": true
+  },
+  "capture_route": "toolbar/music",
+  "family": "settings",
+  "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav",
+  "geometry": {
+    "candidate_screen": [
+      1920,
+      1080
+    ],
+    "expected_screen": [
+      1920,
+      1080
+    ],
+    "reference_screen": [
+      1920,
+      1080
+    ]
+  },
+  "metrics": {
+    "candidate_size": [
+      1920,
+      1080
+    ],
+    "changed_pixels": 2073317,
+    "changed_ratio": 0.9998635223765432,
+    "max_channel_delta": 255,
+    "mean_channel_delta": 56.03017867476852,
+    "reference_size": [
+      1920,
+      1080
+    ]
+  },
+  "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+  "profile": {
+    "height": 1080,
+    "ui_scale": 2,
+    "width": 1920
+  },
+  "schema_version": 1,
+  "tolerance": {
+    "max_changed_pixels": 2073600,
+    "max_changed_ratio": 1,
+    "max_channel_delta": 255,
+    "max_mean_channel_delta": 255
+  },
+  "window": "SoundMusic"
+}

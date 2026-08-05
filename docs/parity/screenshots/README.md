@@ -90,7 +90,7 @@ Las salidas quedan como `1280x720/window_<id>_<scale>x.png` y
 informa como error; antes de incorporar una referencia se debe usar una clave
 presente en la matriz. Las escalas aceptadas van de 0.5× a 4×.
 
-## Gate visual por familia (#297, #299, #300)
+## Gate visual por familia (#297, #299, #300, #301)
 
 La fase 1 cubre `Vehicle`, `Orders`, `Timetable`, `Depot`, `Town` e `Industry`.
 La fase 2 añade los pickers `RailStation`, `Airport`, `RoadStop`, `Object`,
@@ -100,8 +100,17 @@ La fase 3 añade `Finances`, `CompanyView`, `GraphIncome`,
 `GraphOperatingProfit`, `GraphCompanyValue`, `CargoPaymentRates`,
 `SubsidyList`, `League`, `NewsHistory` y `NewsSettings`. En OpenTTD 15.3 la
 última no es una ventana separada: su referencia explícita es `Game Options`,
-registrada como `settings/game-options` en `capture_route`. El manifiesto
-conjunto es
+registrada como `settings/game-options` en `capture_route`.
+
+La fase 4 añade `NewGrf`, `SoundMusic`, `DisplayOptions`,
+`PathfindingSettings`, `CargoDistSettings`, `AiSettings`, `Help`,
+`CheatWindow`, `QueryString`, `ErrorDialog` y `OnScreenKeyboard`. OpenTTD 15.3
+concentra las tres preferencias separadas del port (`DisplayOptions`, PBS y
+CargoDist) en la pestaña Advanced de `Game Options`; esas entradas registran
+esa equivalencia semántica como `game-options/advanced`, sin declarar una clase
+upstream inexistente. `QueryString` y OSK usan el filtro real de esa pestaña
+como dueño temporal, y ErrorDialog se provoca con un error crítico estable. El
+manifiesto conjunto es
 [`window-regression.json`](window-regression.json); cada perfil vive en:
 
 ```text
@@ -163,7 +172,7 @@ CI: una captura ausente, una dimensión distinta, un hash/sidecar obsoleto o
 una diferencia fuera de tolerancia no pueden pasar silenciosamente.
 
 Las demás ventanas todavía son el inventario de #240. Las seis de la fase 1
-citan #297, los 14 pickers construction de la fase 2 citan #299 y las diez
-entradas economy/reports de la fase 3 citan #300; así una ausencia no queda sin
-dueña. La ampliación continúa con settings/dialogs y, por último, el resto de
-`WINDOW_PARITY_MATRIX` hasta sus 62 entradas.
+citan #297, los 14 pickers construction de la fase 2 citan #299, las diez
+entradas economy/reports de la fase 3 citan #300 y las once de settings/dialogs
+de la fase 4 citan #301; así una ausencia no queda sin dueña. La ampliación
+continúa con el resto de `WINDOW_PARITY_MATRIX` hasta sus 62 entradas.

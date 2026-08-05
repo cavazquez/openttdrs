@@ -1,7 +1,7 @@
 //! Sesiones listen-server y cliente (protocolo v2 / ADR 0004).
 
 use std::io::Read;
-use std::net::{TcpListener, TcpStream};
+use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
@@ -161,6 +161,7 @@ pub struct ListenServer {
     handle: ListenServerHandle,
     event_rx: Receiver<SessionEvent>,
     join: Option<JoinHandle<()>>,
+    local_addr: SocketAddr,
 }
 
 impl ListenServer {
@@ -180,6 +181,7 @@ impl ListenServer {
         initial_next_seq: u64,
     ) -> Result<Self, NetError> {
         let listener = crate::listen(bind)?;
+        let local_addr = listener.local_addr()?;
         let (cmd_tx, cmd_rx) = mpsc::channel();
         let (event_tx, event_rx) = mpsc::channel();
         let live: LiveSnapshot = Arc::new(Mutex::new(snapshot_json));
@@ -212,7 +214,14 @@ impl ListenServer {
             },
             event_rx,
             join: Some(join),
+            local_addr,
         })
+    }
+
+    /// Dirección efectiva del listener, útil cuando se eligió un puerto efímero.
+    #[must_use]
+    pub fn local_addr(&self) -> SocketAddr {
+        self.local_addr
     }
 
     #[must_use]

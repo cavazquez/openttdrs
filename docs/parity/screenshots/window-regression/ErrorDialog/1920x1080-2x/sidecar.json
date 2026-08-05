@@ -1,0 +1,71 @@
+{
+  "accepted_differences": [
+    {
+      "category": "chromatic",
+      "issue": 301
+    }
+  ],
+  "artifacts": {
+    "candidate": {
+      "path": "docs/parity/screenshots/window-regression/ErrorDialog/1920x1080-2x/candidate.png",
+      "sha256": "bbb1d18bcdc0486f3d49008b95ff4d6ed564f2070f0bee02a05de716110d5de3"
+    },
+    "diff": {
+      "path": "docs/parity/screenshots/window-regression/ErrorDialog/1920x1080-2x/diff.png",
+      "sha256": "8ebb2750a6790e687e5ef4a33f928cd3342fb674682da9f96f31b33f65fbecfa"
+    },
+    "reference": {
+      "path": "docs/parity/screenshots/window-regression/ErrorDialog/1920x1080-2x/reference.png",
+      "sha256": "ccdf05a1de527efcc95d7e6252ac1d8f3e7827818d40c4eb56bda3b0c2f4be94"
+    }
+  },
+  "assessment": {
+    "category": "chromatic",
+    "within_tolerance": true
+  },
+  "capture_route": "error/critical-bridge-build",
+  "family": "dialogs",
+  "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav",
+  "geometry": {
+    "candidate_screen": [
+      1920,
+      1080
+    ],
+    "expected_screen": [
+      1920,
+      1080
+    ],
+    "reference_screen": [
+      1920,
+      1080
+    ]
+  },
+  "metrics": {
+    "candidate_size": [
+      1920,
+      1080
+    ],
+    "changed_pixels": 2072494,
+    "changed_ratio": 0.9994666280864197,
+    "max_channel_delta": 255,
+    "mean_channel_delta": 53.81441707658179,
+    "reference_size": [
+      1920,
+      1080
+    ]
+  },
+  "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+  "profile": {
+    "height": 1080,
+    "ui_scale": 2,
+    "width": 1920
+  },
+  "schema_version": 1,
+  "tolerance": {
+    "max_changed_pixels": 2073600,
+    "max_changed_ratio": 1,
+    "max_channel_delta": 255,
+    "max_mean_channel_delta": 255
+  },
+  "window": "ErrorDialog"
+}

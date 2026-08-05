@@ -285,6 +285,83 @@
       "artifact_root": "docs/parity/screenshots/window-regression/NewsSettings",
       "profiles": [{"width": 1280, "height": 720, "ui_scale": 1}, {"width": 1280, "height": 720, "ui_scale": 2}, {"width": 1920, "height": 1080, "ui_scale": 1}, {"width": 1920, "height": 1080, "ui_scale": 2}],
       "tolerance": {"max_changed_pixels": 2073600, "max_changed_ratio": 1, "max_channel_delta": 255, "max_mean_channel_delta": 255}, "accepted_differences": [{"category": "chromatic", "issue": 300}]
+    },
+    {
+      "id": "NewGrf", "family": "settings", "capture_route": "options-menu/newgrf",
+      "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav", "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+      "artifact_root": "docs/parity/screenshots/window-regression/NewGrf",
+      "profiles": [{"width": 1280, "height": 720, "ui_scale": 1}, {"width": 1280, "height": 720, "ui_scale": 2}, {"width": 1920, "height": 1080, "ui_scale": 1}, {"width": 1920, "height": 1080, "ui_scale": 2}],
+      "tolerance": {"max_changed_pixels": 2073600, "max_changed_ratio": 1, "max_channel_delta": 255, "max_mean_channel_delta": 255}, "accepted_differences": [{"category": "chromatic", "issue": 301}]
+    },
+    {
+      "id": "SoundMusic", "family": "settings", "capture_route": "toolbar/music",
+      "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav", "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+      "artifact_root": "docs/parity/screenshots/window-regression/SoundMusic",
+      "profiles": [{"width": 1280, "height": 720, "ui_scale": 1}, {"width": 1280, "height": 720, "ui_scale": 2}, {"width": 1920, "height": 1080, "ui_scale": 1}, {"width": 1920, "height": 1080, "ui_scale": 2}],
+      "tolerance": {"max_changed_pixels": 2073600, "max_changed_ratio": 1, "max_channel_delta": 255, "max_mean_channel_delta": 255}, "accepted_differences": [{"category": "chromatic", "issue": 301}]
+    },
+    {
+      "id": "DisplayOptions", "family": "settings", "capture_route": "game-options/advanced",
+      "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav", "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+      "artifact_root": "docs/parity/screenshots/window-regression/DisplayOptions",
+      "profiles": [{"width": 1280, "height": 720, "ui_scale": 1}, {"width": 1280, "height": 720, "ui_scale": 2}, {"width": 1920, "height": 1080, "ui_scale": 1}, {"width": 1920, "height": 1080, "ui_scale": 2}],
+      "tolerance": {"max_changed_pixels": 2073600, "max_changed_ratio": 1, "max_channel_delta": 255, "max_mean_channel_delta": 255}, "accepted_differences": [{"category": "chromatic", "issue": 301}]
+    },
+    {
+      "id": "PathfindingSettings", "family": "settings", "capture_route": "game-options/advanced",
+      "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav", "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+      "artifact_root": "docs/parity/screenshots/window-regression/PathfindingSettings",
+      "profiles": [{"width": 1280, "height": 720, "ui_scale": 1}, {"width": 1280, "height": 720, "ui_scale": 2}, {"width": 1920, "height": 1080, "ui_scale": 1}, {"width": 1920, "height": 1080, "ui_scale": 2}],
+      "tolerance": {"max_changed_pixels": 2073600, "max_changed_ratio": 1, "max_channel_delta": 255, "max_mean_channel_delta": 255}, "accepted_differences": [{"category": "chromatic", "issue": 301}]
+    },
+    {
+      "id": "CargoDistSettings", "family": "settings", "capture_route": "game-options/advanced",
+      "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav", "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+      "artifact_root": "docs/parity/screenshots/window-regression/CargoDistSettings",
+      "profiles": [{"width": 1280, "height": 720, "ui_scale": 1}, {"width": 1280, "height": 720, "ui_scale": 2}, {"width": 1920, "height": 1080, "ui_scale": 1}, {"width": 1920, "height": 1080, "ui_scale": 2}],
+      "tolerance": {"max_changed_pixels": 2073600, "max_changed_ratio": 1, "max_channel_delta": 255, "max_mean_channel_delta": 255}, "accepted_differences": [{"category": "chromatic", "issue": 301}]
+    },
+    {
+      "id": "AiSettings", "family": "settings", "capture_route": "options-menu/ai",
+      "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav", "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+      "artifact_root": "docs/parity/screenshots/window-regression/AiSettings",
+      "profiles": [{"width": 1280, "height": 720, "ui_scale": 1}, {"width": 1280, "height": 720, "ui_scale": 2}, {"width": 1920, "height": 1080, "ui_scale": 1}, {"width": 1920, "height": 1080, "ui_scale": 2}],
+      "tolerance": {"max_changed_pixels": 2073600, "max_changed_ratio": 1, "max_channel_delta": 255, "max_mean_channel_delta": 255}, "accepted_differences": [{"category": "chromatic", "issue": 301}]
+    },
+    {
+      "id": "Help", "family": "settings", "capture_route": "help-menu/help",
+      "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav", "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+      "artifact_root": "docs/parity/screenshots/window-regression/Help",
+      "profiles": [{"width": 1280, "height": 720, "ui_scale": 1}, {"width": 1280, "height": 720, "ui_scale": 2}, {"width": 1920, "height": 1080, "ui_scale": 1}, {"width": 1920, "height": 1080, "ui_scale": 2}],
+      "tolerance": {"max_changed_pixels": 2073600, "max_changed_ratio": 1, "max_channel_delta": 255, "max_mean_channel_delta": 255}, "accepted_differences": [{"category": "chromatic", "issue": 301}]
+    },
+    {
+      "id": "CheatWindow", "family": "settings", "capture_route": "options-menu/cheats",
+      "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav", "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+      "artifact_root": "docs/parity/screenshots/window-regression/CheatWindow",
+      "profiles": [{"width": 1280, "height": 720, "ui_scale": 1}, {"width": 1280, "height": 720, "ui_scale": 2}, {"width": 1920, "height": 1080, "ui_scale": 1}, {"width": 1920, "height": 1080, "ui_scale": 2}],
+      "tolerance": {"max_changed_pixels": 2073600, "max_changed_ratio": 1, "max_channel_delta": 255, "max_mean_channel_delta": 255}, "accepted_differences": [{"category": "chromatic", "issue": 301}]
+    },
+    {
+      "id": "QueryString", "family": "dialogs", "capture_route": "game-options/advanced-filter/query",
+      "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav", "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+      "artifact_root": "docs/parity/screenshots/window-regression/QueryString",
+      "profiles": [{"width": 1280, "height": 720, "ui_scale": 1}, {"width": 1280, "height": 720, "ui_scale": 2}, {"width": 1920, "height": 1080, "ui_scale": 1}, {"width": 1920, "height": 1080, "ui_scale": 2}],
+      "tolerance": {"max_changed_pixels": 2073600, "max_changed_ratio": 1, "max_channel_delta": 255, "max_mean_channel_delta": 255}, "accepted_differences": [{"category": "chromatic", "issue": 301}]
+    },
+    {
+      "id": "ErrorDialog", "family": "dialogs", "capture_route": "error/critical-bridge-build",
+      "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav", "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+      "artifact_root": "docs/parity/screenshots/window-regression/ErrorDialog",
+      "profiles": [{"width": 1280, "height": 720, "ui_scale": 1}, {"width": 1280, "height": 720, "ui_scale": 2}, {"width": 1920, "height": 1080, "ui_scale": 1}, {"width": 1920, "height": 1080, "ui_scale": 2}],
+      "tolerance": {"max_changed_pixels": 2073600, "max_changed_ratio": 1, "max_channel_delta": 255, "max_mean_channel_delta": 255}, "accepted_differences": [{"category": "chromatic", "issue": 301}]
+    },
+    {
+      "id": "OnScreenKeyboard", "family": "dialogs", "capture_route": "game-options/advanced-filter/osk",
+      "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav", "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+      "artifact_root": "docs/parity/screenshots/window-regression/OnScreenKeyboard",
+      "profiles": [{"width": 1280, "height": 720, "ui_scale": 1}, {"width": 1280, "height": 720, "ui_scale": 2}, {"width": 1920, "height": 1080, "ui_scale": 1}, {"width": 1920, "height": 1080, "ui_scale": 2}],
+      "tolerance": {"max_changed_pixels": 2073600, "max_changed_ratio": 1, "max_channel_delta": 255, "max_mean_channel_delta": 255}, "accepted_differences": [{"category": "chromatic", "issue": 301}]
     }
   ]
 }

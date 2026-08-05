@@ -7,9 +7,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use openttdrs_core::{Command, GameState, TileCoord, apply_command};
-use openttdrs_net::{
-    ClientSession, DEFAULT_PORT, ListenServer, NetError, SessionEvent, apply_session_event,
-};
+use openttdrs_net::{ClientSession, ListenServer, NetError, SessionEvent, apply_session_event};
 
 fn wait_event(client: &ClientSession, timeout: Duration) -> SessionEvent {
     let start = Instant::now();
@@ -48,13 +46,11 @@ fn two_peers_same_log_same_hash_over_tcp() {
     let mut host = GameState::new(32, 32);
     let snapshot = host.save_json().unwrap();
 
-    // Puerto efímero para no chocar con un dedicated local.
-    let port = u16::try_from(40_000 + (std::process::id() % 2000)).unwrap_or(DEFAULT_PORT);
-    let bind = format!("127.0.0.1:{port}");
-    let server = match maybe_start_server(&bind, snapshot) {
+    let server = match maybe_start_server("127.0.0.1:0", snapshot) {
         Some(server) => server,
         None => return,
     };
+    let bind = server.local_addr().to_string();
     thread::sleep(Duration::from_millis(50));
 
     let client = match maybe_connect_client(&bind) {
@@ -91,12 +87,11 @@ fn two_peers_same_log_same_hash_over_tcp() {
 fn late_joiner_gets_live_snapshot_not_boot() {
     let mut host = GameState::new(32, 32);
     let boot = host.save_json().unwrap();
-    let port = u16::try_from(44_000 + (std::process::id() % 2000)).unwrap_or(DEFAULT_PORT);
-    let bind = format!("127.0.0.1:{port}");
-    let server = match maybe_start_server(&bind, boot) {
+    let server = match maybe_start_server("127.0.0.1:0", boot) {
         Some(server) => server,
         None => return,
     };
+    let bind = server.local_addr().to_string();
 
     apply_command(&mut host, &Command::PlaceRail(TileCoord::new(5, 5))).unwrap();
     for _ in 0..200 {
@@ -124,12 +119,11 @@ fn late_joiner_gets_live_snapshot_not_boot() {
 fn client_propose_reaches_host() {
     let host_state = GameState::new(24, 24);
     let snapshot = host_state.save_json().unwrap();
-    let port = u16::try_from(42_000 + (std::process::id() % 2000)).unwrap_or(DEFAULT_PORT);
-    let bind = format!("127.0.0.1:{port}");
-    let server = match maybe_start_server(&bind, snapshot) {
+    let server = match maybe_start_server("127.0.0.1:0", snapshot) {
         Some(server) => server,
         None => return,
     };
+    let bind = server.local_addr().to_string();
     thread::sleep(Duration::from_millis(50));
 
     let client = match maybe_connect_client(&bind) {

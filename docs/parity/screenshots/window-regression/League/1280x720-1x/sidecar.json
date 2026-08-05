@@ -1,0 +1,71 @@
+{
+  "accepted_differences": [
+    {
+      "category": "chromatic",
+      "issue": 300
+    }
+  ],
+  "artifacts": {
+    "candidate": {
+      "path": "docs/parity/screenshots/window-regression/League/1280x720-1x/candidate.png",
+      "sha256": "d5596354561d64b91f232314ea2363ff5d08ffc6387e04f2457b527882b579a4"
+    },
+    "diff": {
+      "path": "docs/parity/screenshots/window-regression/League/1280x720-1x/diff.png",
+      "sha256": "051a1436b034ad5fbb714702c0fe53672043bcad9fe8c9fee30c70ae99981946"
+    },
+    "reference": {
+      "path": "docs/parity/screenshots/window-regression/League/1280x720-1x/reference.png",
+      "sha256": "af11a026984c13b487b114f5e9313b319c2b6a10cb850de2da18e6cca069c81b"
+    }
+  },
+  "assessment": {
+    "category": "chromatic",
+    "within_tolerance": true
+  },
+  "capture_route": "graphs-menu/performance-league",
+  "family": "economy",
+  "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav",
+  "geometry": {
+    "candidate_screen": [
+      1280,
+      720
+    ],
+    "expected_screen": [
+      1280,
+      720
+    ],
+    "reference_screen": [
+      1280,
+      720
+    ]
+  },
+  "metrics": {
+    "candidate_size": [
+      1280,
+      720
+    ],
+    "changed_pixels": 921530,
+    "changed_ratio": 0.9999240451388889,
+    "max_channel_delta": 255,
+    "mean_channel_delta": 48.842374131944446,
+    "reference_size": [
+      1280,
+      720
+    ]
+  },
+  "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+  "profile": {
+    "height": 720,
+    "ui_scale": 1,
+    "width": 1280
+  },
+  "schema_version": 1,
+  "tolerance": {
+    "max_changed_pixels": 2073600,
+    "max_changed_ratio": 1,
+    "max_channel_delta": 255,
+    "max_mean_channel_delta": 255
+  },
+  "window": "League"
+}

@@ -1,0 +1,71 @@
+{
+  "accepted_differences": [
+    {
+      "category": "chromatic",
+      "issue": 300
+    }
+  ],
+  "artifacts": {
+    "candidate": {
+      "path": "docs/parity/screenshots/window-regression/NewsSettings/1920x1080-2x/candidate.png",
+      "sha256": "71c57ff46316d04e5c606a94d33957b8f2d1ead794dfb46d23538a332397adb5"
+    },
+    "diff": {
+      "path": "docs/parity/screenshots/window-regression/NewsSettings/1920x1080-2x/diff.png",
+      "sha256": "b3356a994fa38bce84a31d9724c93f3f18dd843f18be7bbd71c67c5aef278f5d"
+    },
+    "reference": {
+      "path": "docs/parity/screenshots/window-regression/NewsSettings/1920x1080-2x/reference.png",
+      "sha256": "477c6f93e78cc4f5b8a9c9a91706d06b4c3dd8d1eeceac0e037b0acac28ac81d"
+    }
+  },
+  "assessment": {
+    "category": "chromatic",
+    "within_tolerance": true
+  },
+  "capture_route": "settings/game-options",
+  "family": "economy",
+  "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav",
+  "geometry": {
+    "candidate_screen": [
+      1920,
+      1080
+    ],
+    "expected_screen": [
+      1920,
+      1080
+    ],
+    "reference_screen": [
+      1920,
+      1080
+    ]
+  },
+  "metrics": {
+    "candidate_size": [
+      1920,
+      1080
+    ],
+    "changed_pixels": 2073313,
+    "changed_ratio": 0.9998615933641976,
+    "max_channel_delta": 255,
+    "mean_channel_delta": 53.420898075810186,
+    "reference_size": [
+      1920,
+      1080
+    ]
+  },
+  "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+  "profile": {
+    "height": 1080,
+    "ui_scale": 2,
+    "width": 1920
+  },
+  "schema_version": 1,
+  "tolerance": {
+    "max_changed_pixels": 2073600,
+    "max_changed_ratio": 1,
+    "max_channel_delta": 255,
+    "max_mean_channel_delta": 255
+  },
+  "window": "NewsSettings"
+}

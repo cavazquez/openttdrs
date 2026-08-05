@@ -1,0 +1,71 @@
+{
+  "accepted_differences": [
+    {
+      "category": "chromatic",
+      "issue": 300
+    }
+  ],
+  "artifacts": {
+    "candidate": {
+      "path": "docs/parity/screenshots/window-regression/CompanyView/1920x1080-1x/candidate.png",
+      "sha256": "4ab3e4a1bb02081de551358cd5b8c02186f02d33ae75aca3b1c52379efdac723"
+    },
+    "diff": {
+      "path": "docs/parity/screenshots/window-regression/CompanyView/1920x1080-1x/diff.png",
+      "sha256": "bc3dd64bc8a63db0239bda0e495397f3d41d61ef1c601d3a58d341e632603069"
+    },
+    "reference": {
+      "path": "docs/parity/screenshots/window-regression/CompanyView/1920x1080-1x/reference.png",
+      "sha256": "c3cec4cf871fc77f63613bf19a13ca6c6bbed176fffda7d1e5122d6f722f5a94"
+    }
+  },
+  "assessment": {
+    "category": "chromatic",
+    "within_tolerance": true
+  },
+  "capture_route": "company-menu/company-view",
+  "family": "economy",
+  "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav",
+  "geometry": {
+    "candidate_screen": [
+      1920,
+      1080
+    ],
+    "expected_screen": [
+      1920,
+      1080
+    ],
+    "reference_screen": [
+      1920,
+      1080
+    ]
+  },
+  "metrics": {
+    "candidate_size": [
+      1920,
+      1080
+    ],
+    "changed_pixels": 2072658,
+    "changed_ratio": 0.9995457175925926,
+    "max_channel_delta": 255,
+    "mean_channel_delta": 52.581297501929015,
+    "reference_size": [
+      1920,
+      1080
+    ]
+  },
+  "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+  "profile": {
+    "height": 1080,
+    "ui_scale": 1,
+    "width": 1920
+  },
+  "schema_version": 1,
+  "tolerance": {
+    "max_changed_pixels": 2073600,
+    "max_changed_ratio": 1,
+    "max_channel_delta": 255,
+    "max_mean_channel_delta": 255
+  },
+  "window": "CompanyView"
+}

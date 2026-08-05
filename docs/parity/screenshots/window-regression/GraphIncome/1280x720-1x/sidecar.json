@@ -1,0 +1,71 @@
+{
+  "accepted_differences": [
+    {
+      "category": "chromatic",
+      "issue": 300
+    }
+  ],
+  "artifacts": {
+    "candidate": {
+      "path": "docs/parity/screenshots/window-regression/GraphIncome/1280x720-1x/candidate.png",
+      "sha256": "e3ee57eb41ab65e1ab67c3f6809d9ecbc4c39708f14c0141a20aa4668bd69bf8"
+    },
+    "diff": {
+      "path": "docs/parity/screenshots/window-regression/GraphIncome/1280x720-1x/diff.png",
+      "sha256": "5b150c1912732fb9f2ae0d0f4b042560a425e3516dc60d2ece38f0d6e395c90c"
+    },
+    "reference": {
+      "path": "docs/parity/screenshots/window-regression/GraphIncome/1280x720-1x/reference.png",
+      "sha256": "b2154f6dda8ce90e63dfb9cce603af505314b8321016bc64c99b4c831f9b8220"
+    }
+  },
+  "assessment": {
+    "category": "chromatic",
+    "within_tolerance": true
+  },
+  "capture_route": "graphs-menu/income",
+  "family": "economy",
+  "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav",
+  "geometry": {
+    "candidate_screen": [
+      1280,
+      720
+    ],
+    "expected_screen": [
+      1280,
+      720
+    ],
+    "reference_screen": [
+      1280,
+      720
+    ]
+  },
+  "metrics": {
+    "candidate_size": [
+      1280,
+      720
+    ],
+    "changed_pixels": 921058,
+    "changed_ratio": 0.9994118923611112,
+    "max_channel_delta": 255,
+    "mean_channel_delta": 48.05281087239583,
+    "reference_size": [
+      1280,
+      720
+    ]
+  },
+  "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+  "profile": {
+    "height": 720,
+    "ui_scale": 1,
+    "width": 1280
+  },
+  "schema_version": 1,
+  "tolerance": {
+    "max_changed_pixels": 2073600,
+    "max_changed_ratio": 1,
+    "max_channel_delta": 255,
+    "max_mean_channel_delta": 255
+  },
+  "window": "GraphIncome"
+}

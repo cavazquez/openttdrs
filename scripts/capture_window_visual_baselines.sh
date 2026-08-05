@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Genera los artefactos de las familias visuales versionadas (#297 y #299).
+# Genera los artefactos de las familias visuales versionadas (#297, #299 y #300).
 #
 # Requiere el driver versionado de patches/openttd-15.3-ui-capture y un display
 # funcional. No acepta capturas parciales: verifica cada PNG y deja al gate
@@ -17,8 +17,10 @@ WINDOW_IDS=(
   RailStationPicker AirportPicker RoadStopPicker ObjectPicker BridgePicker
   DockPicker BuoyPicker RailWaypointPicker RoadWaypointPicker TreePicker
   TerraformPicker SignPicker DepotBuildPicker SignalPicker
+  Finances CompanyView GraphIncome GraphOperatingProfit GraphCompanyValue
+  CargoPaymentRates SubsidyList League NewsHistory NewsSettings
 )
-SELECTED="${OPENTTDRS_WINDOW_CAPTURE_IDS:-Vehicle,Orders,Timetable,Depot,Town,Industry,RailStationPicker,AirportPicker,RoadStopPicker,ObjectPicker,BridgePicker,DockPicker,BuoyPicker,RailWaypointPicker,RoadWaypointPicker,TreePicker,TerraformPicker,SignPicker,DepotBuildPicker,SignalPicker}"
+SELECTED="${OPENTTDRS_WINDOW_CAPTURE_IDS:-Vehicle,Orders,Timetable,Depot,Town,Industry,RailStationPicker,AirportPicker,RoadStopPicker,ObjectPicker,BridgePicker,DockPicker,BuoyPicker,RailWaypointPicker,RoadWaypointPicker,TreePicker,TerraformPicker,SignPicker,DepotBuildPicker,SignalPicker,Finances,CompanyView,GraphIncome,GraphOperatingProfit,GraphCompanyValue,CargoPaymentRates,SubsidyList,League,NewsHistory,NewsSettings}"
 
 if [[ ! -x "$OPENTTD_BIN" ]]; then
   echo "error: no existe OpenTTD UI parcheado: $OPENTTD_BIN" >&2
@@ -169,7 +171,7 @@ for id in "${WINDOW_IDS[@]}"; do
 done
 
 if [[ ${#gate_args[@]} -eq 0 ]]; then
-  echo "error: OPENTTDRS_WINDOW_CAPTURE_IDS no selecciona una ventana versionada (#297/#299)" >&2
+  echo "error: OPENTTDRS_WINDOW_CAPTURE_IDS no selecciona una ventana versionada (#297/#299/#300)" >&2
   exit 1
 fi
 python3 "$ROOT/scripts/window_visual_regression.py" --manifest "$MANIFEST" --write-sidecars "${gate_args[@]}"

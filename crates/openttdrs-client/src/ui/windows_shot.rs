@@ -278,8 +278,8 @@ pub(crate) const WINDOW_PARITY_MATRIX: &[WindowParityEntry] = &[
     upstream_window!(
         NewsSettings,
         "reports",
-        "news_gui.cpp",
-        "WC_MESSAGE_OPTIONS"
+        "settings_gui.cpp",
+        "WC_GAME_OPTIONS"
     ),
     upstream_window!(
         PathfindingSettings,
@@ -526,6 +526,10 @@ pub(crate) fn window_known_gaps(id: FloatingWindowId) -> &'static [WindowKnownGa
         category: "capture",
         issue: 299,
     }];
+    const ECONOMY_VISUAL_REGRESSION_CAPTURE: &[WindowKnownGap] = &[WindowKnownGap {
+        category: "capture",
+        issue: 300,
+    }];
     const CAPTURE_ONLY: &[WindowKnownGap] = &[WindowKnownGap {
         category: "capture",
         issue: 240,
@@ -559,6 +563,9 @@ pub(crate) fn window_known_gaps(id: FloatingWindowId) -> &'static [WindowKnownGa
     }
     if CONSTRUCTION_VISUAL_REGRESSION_WINDOW_IDS.contains(&id) {
         return CONSTRUCTION_VISUAL_REGRESSION_CAPTURE;
+    }
+    if ECONOMY_VISUAL_REGRESSION_WINDOW_IDS.contains(&id) {
+        return ECONOMY_VISUAL_REGRESSION_CAPTURE;
     }
     if VEHICLE_FAMILY_WINDOW_IDS.contains(&id)
         || CONSTRUCTION_FAMILY_WINDOW_IDS.contains(&id)
@@ -603,15 +610,17 @@ pub(crate) fn window_descendant_ids(root: FloatingWindowId) -> Vec<FloatingWindo
 
 /// ¿La captura 1280×720 1× está pendiente? Ausencia → issue, no silencio.
 ///
-/// La primera familia del gate de píxel se sigue en #297 y los pickers de
-/// construcción de la segunda en #299. El resto conserva la deuda de
-/// inventario de #240 hasta que entre al mismo pipeline.
+/// La primera familia del gate de píxel se sigue en #297, los pickers de
+/// construcción de la segunda en #299 y economy/reports de la tercera en
+/// #300. El resto conserva la deuda de inventario de #240 hasta que entre al
+/// mismo pipeline.
 #[must_use]
 pub(crate) fn capture_is_pending(id: FloatingWindowId) -> Option<u16> {
     match id {
         FloatingWindowId::Station => None,
         id if VISUAL_REGRESSION_WINDOW_IDS.contains(&id) => Some(297),
         id if CONSTRUCTION_VISUAL_REGRESSION_WINDOW_IDS.contains(&id) => Some(299),
+        id if ECONOMY_VISUAL_REGRESSION_WINDOW_IDS.contains(&id) => Some(300),
         _ => Some(240),
     }
 }
@@ -720,6 +729,24 @@ pub(crate) const CONSTRUCTION_VISUAL_REGRESSION_WINDOW_IDS: &[FloatingWindowId] 
     FloatingWindowId::SignPicker,
     FloatingWindowId::DepotBuildPicker,
     FloatingWindowId::SignalPicker,
+];
+
+/// Tercera familia con oráculo visual: economy/reports (#300).
+///
+/// Las nueve pantallas económicas tienen una ruta directa de OpenTTD 15.3. La
+/// configuración de noticias se abre mediante Game Options, que es su
+/// superficie equivalente en 15.3 y no una inexistente `WC_MESSAGE_OPTIONS`.
+pub(crate) const ECONOMY_VISUAL_REGRESSION_WINDOW_IDS: &[FloatingWindowId] = &[
+    FloatingWindowId::Finances,
+    FloatingWindowId::CompanyView,
+    FloatingWindowId::GraphIncome,
+    FloatingWindowId::GraphOperatingProfit,
+    FloatingWindowId::GraphCompanyValue,
+    FloatingWindowId::CargoPaymentRates,
+    FloatingWindowId::SubsidyList,
+    FloatingWindowId::League,
+    FloatingWindowId::NewsHistory,
+    FloatingWindowId::NewsSettings,
 ];
 
 /// Inventario de pickers construction cubiertos por #246 y #270 (#270 greenfield).
@@ -2010,14 +2037,32 @@ mod tests {
                 gaps,
                 &[WindowKnownGap {
                     category: "capture",
-                    issue: 240,
+                    issue: 300,
                 }],
-                "familia economy debe ser solo capture→#240: {id:?}"
+                "familia economy debe ser solo capture→#300: {id:?}"
             );
             assert!(
                 gaps.iter()
                     .all(|g| g.category != "lifecycle" && g.category != "geometry"),
                 "sin lifecycle→#242 ni geometry→#243 para {id:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn economy_visual_regression_family_replaces_its_legacy_capture_gap() {
+        assert_eq!(
+            ECONOMY_VISUAL_REGRESSION_WINDOW_IDS,
+            ECONOMY_FAMILY_WINDOW_IDS
+        );
+        for id in ECONOMY_VISUAL_REGRESSION_WINDOW_IDS {
+            assert_eq!(capture_is_pending(*id), Some(300));
+            assert_eq!(
+                window_known_gaps(*id),
+                &[WindowKnownGap {
+                    category: "capture",
+                    issue: 300,
+                }]
             );
         }
     }

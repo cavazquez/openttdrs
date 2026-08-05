@@ -1,0 +1,71 @@
+{
+  "accepted_differences": [
+    {
+      "category": "chromatic",
+      "issue": 300
+    }
+  ],
+  "artifacts": {
+    "candidate": {
+      "path": "docs/parity/screenshots/window-regression/CargoPaymentRates/1280x720-1x/candidate.png",
+      "sha256": "ac5cb867b1f77ae374df67aac8128ff9c04130ff95856fba45574af57b323daa"
+    },
+    "diff": {
+      "path": "docs/parity/screenshots/window-regression/CargoPaymentRates/1280x720-1x/diff.png",
+      "sha256": "782873aae32580995733b9361d5c400646f673eca0a3100c6bd71058bcf7f90a"
+    },
+    "reference": {
+      "path": "docs/parity/screenshots/window-regression/CargoPaymentRates/1280x720-1x/reference.png",
+      "sha256": "3e23fbb53a1522d4d60a227d6a8f33e33a22af12b2a773e179a2e3a848d1cbde"
+    }
+  },
+  "assessment": {
+    "category": "chromatic",
+    "within_tolerance": true
+  },
+  "capture_route": "graphs-menu/cargo-payment-rates",
+  "family": "economy",
+  "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav",
+  "geometry": {
+    "candidate_screen": [
+      1280,
+      720
+    ],
+    "expected_screen": [
+      1280,
+      720
+    ],
+    "reference_screen": [
+      1280,
+      720
+    ]
+  },
+  "metrics": {
+    "candidate_size": [
+      1280,
+      720
+    ],
+    "changed_pixels": 921534,
+    "changed_ratio": 0.9999283854166666,
+    "max_channel_delta": 255,
+    "mean_channel_delta": 54.18399712456597,
+    "reference_size": [
+      1280,
+      720
+    ]
+  },
+  "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+  "profile": {
+    "height": 720,
+    "ui_scale": 1,
+    "width": 1280
+  },
+  "schema_version": 1,
+  "tolerance": {
+    "max_changed_pixels": 2073600,
+    "max_changed_ratio": 1,
+    "max_channel_delta": 255,
+    "max_mean_channel_delta": 255
+  },
+  "window": "CargoPaymentRates"
+}

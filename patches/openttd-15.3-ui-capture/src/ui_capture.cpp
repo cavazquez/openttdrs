@@ -1,5 +1,5 @@
 /*
- * UI capture driver for openttdrs visual parity (#297).
+ * UI capture driver for openttdrs visual parity (#297, #299, #300).
  *
  * It is deliberately small and only drives the first visual-regression
  * family.  The save selected by the caller supplies the town, industry,
@@ -12,7 +12,12 @@
 #include "depot_func.h"
 #include "depot_map.h"
 #include "gui.h"
+#include "company_base.h"
+#include "company_gui.h"
+#include "graph_gui.h"
 #include "industry.h"
+#include "league_gui.h"
+#include "news_gui.h"
 #include "object.h"
 #include "openttd.h"
 #include "rail_gui.h"
@@ -29,6 +34,8 @@
 #include "widgets/rail_widget.h"
 #include "widgets/road_widget.h"
 #include "widgets/terraform_widget.h"
+
+#include "table/strings.h"
 
 #include <cctype>
 #include <cstdio>
@@ -68,6 +75,26 @@ const Vehicle *FirstPrimaryVehicle()
 		if (vehicle->IsPrimaryVehicle() && vehicle->tile != INVALID_TILE) return vehicle;
 	}
 	return nullptr;
+}
+
+Company *FirstCompany()
+{
+	for (Company *company : Company::Iterate()) {
+		return company;
+	}
+	return nullptr;
+}
+
+void PrepareCompanyIdentityForCapture(Company *company)
+{
+	/* The compact fixture stores an obsolete generated company-name string.
+	 * Finance windows tolerate it, but CompanyWindow may dereference it while
+	 * laying out its title. Supply a deterministic, transient identity before
+	 * rendering; the paused capture exits without persisting the savegame. */
+	company->name_1 = STR_SV_UNNAMED;
+	company->name = "OpenTTDRS Transport";
+	company->president_name_1 = STR_SV_UNNAMED;
+	company->president_name = "OpenTTDRS Manager";
 }
 
 bool ClickPicker(Window *toolbar, WidgetID widget)
@@ -133,9 +160,58 @@ bool OpenConstructionPicker(std::string_view id)
 	return false;
 }
 
+bool OpenEconomyWindow(std::string_view id)
+{
+	if (id == "Finances" || id == "CompanyView") {
+		Company *company = FirstCompany();
+		if (company == nullptr) return false;
+		PrepareCompanyIdentityForCapture(company);
+		if (id == "Finances") ShowCompanyFinances(company->index);
+		if (id == "CompanyView") ShowCompany(company->index);
+		return true;
+	}
+	if (id == "GraphIncome") {
+		ShowIncomeGraph();
+		return true;
+	}
+	if (id == "GraphOperatingProfit") {
+		ShowOperatingProfitGraph();
+		return true;
+	}
+	if (id == "GraphCompanyValue") {
+		ShowCompanyValueGraph();
+		return true;
+	}
+	if (id == "CargoPaymentRates") {
+		ShowCargoPaymentRates();
+		return true;
+	}
+	if (id == "SubsidyList") {
+		ShowSubsidiesList();
+		return true;
+	}
+	if (id == "League") {
+		ShowPerformanceLeagueTable();
+		return true;
+	}
+	if (id == "NewsHistory") {
+		ShowMessageHistory();
+		return true;
+	}
+	if (id == "NewsSettings") {
+		/* OpenTTD 15.3 has no standalone news-preferences window. Its equivalent
+		 * configuration surface is the game-options window. Keep that distinction
+		 * explicit in the manifest capture_route. */
+		ShowGameOptions();
+		return true;
+	}
+	return false;
+}
+
 bool OpenCaptureWindow(std::string_view id)
 {
 	if (OpenConstructionPicker(id)) return true;
+	if (OpenEconomyWindow(id)) return true;
 
 	if (id == "Vehicle" || id == "Orders" || id == "Timetable") {
 		const Vehicle *vehicle = FirstPrimaryVehicle();

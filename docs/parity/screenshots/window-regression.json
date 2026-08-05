@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "description": "Fases 1 (#297) y 2 (#299): cada perfil conserva referencia OpenTTD, candidato, diff y sidecar.",
+  "description": "Fases 1 (#297), 2 (#299) y 3 (#300): cada perfil conserva referencia OpenTTD, candidato, diff y sidecar.",
   "windows": [
     {
       "id": "Vehicle",
@@ -215,6 +215,76 @@
       "profiles": [{"width": 1280, "height": 720, "ui_scale": 1}, {"width": 1280, "height": 720, "ui_scale": 2}, {"width": 1920, "height": 1080, "ui_scale": 1}, {"width": 1920, "height": 1080, "ui_scale": 2}],
       "tolerance": {"max_changed_pixels": 2073600, "max_changed_ratio": 1, "max_channel_delta": 255, "max_mean_channel_delta": 255},
       "accepted_differences": [{"category": "chromatic", "issue": 299}]
+    },
+    {
+      "id": "Finances", "family": "economy", "capture_route": "company-menu/finances",
+      "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav", "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+      "artifact_root": "docs/parity/screenshots/window-regression/Finances",
+      "profiles": [{"width": 1280, "height": 720, "ui_scale": 1}, {"width": 1280, "height": 720, "ui_scale": 2}, {"width": 1920, "height": 1080, "ui_scale": 1}, {"width": 1920, "height": 1080, "ui_scale": 2}],
+      "tolerance": {"max_changed_pixels": 2073600, "max_changed_ratio": 1, "max_channel_delta": 255, "max_mean_channel_delta": 255}, "accepted_differences": [{"category": "chromatic", "issue": 300}]
+    },
+    {
+      "id": "CompanyView", "family": "economy", "capture_route": "company-menu/company-view",
+      "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav", "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+      "artifact_root": "docs/parity/screenshots/window-regression/CompanyView",
+      "profiles": [{"width": 1280, "height": 720, "ui_scale": 1}, {"width": 1280, "height": 720, "ui_scale": 2}, {"width": 1920, "height": 1080, "ui_scale": 1}, {"width": 1920, "height": 1080, "ui_scale": 2}],
+      "tolerance": {"max_changed_pixels": 2073600, "max_changed_ratio": 1, "max_channel_delta": 255, "max_mean_channel_delta": 255}, "accepted_differences": [{"category": "chromatic", "issue": 300}]
+    },
+    {
+      "id": "GraphIncome", "family": "economy", "capture_route": "graphs-menu/income",
+      "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav", "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+      "artifact_root": "docs/parity/screenshots/window-regression/GraphIncome",
+      "profiles": [{"width": 1280, "height": 720, "ui_scale": 1}, {"width": 1280, "height": 720, "ui_scale": 2}, {"width": 1920, "height": 1080, "ui_scale": 1}, {"width": 1920, "height": 1080, "ui_scale": 2}],
+      "tolerance": {"max_changed_pixels": 2073600, "max_changed_ratio": 1, "max_channel_delta": 255, "max_mean_channel_delta": 255}, "accepted_differences": [{"category": "chromatic", "issue": 300}]
+    },
+    {
+      "id": "GraphOperatingProfit", "family": "economy", "capture_route": "graphs-menu/operating-profit",
+      "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav", "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+      "artifact_root": "docs/parity/screenshots/window-regression/GraphOperatingProfit",
+      "profiles": [{"width": 1280, "height": 720, "ui_scale": 1}, {"width": 1280, "height": 720, "ui_scale": 2}, {"width": 1920, "height": 1080, "ui_scale": 1}, {"width": 1920, "height": 1080, "ui_scale": 2}],
+      "tolerance": {"max_changed_pixels": 2073600, "max_changed_ratio": 1, "max_channel_delta": 255, "max_mean_channel_delta": 255}, "accepted_differences": [{"category": "chromatic", "issue": 300}]
+    },
+    {
+      "id": "GraphCompanyValue", "family": "economy", "capture_route": "graphs-menu/company-value",
+      "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav", "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+      "artifact_root": "docs/parity/screenshots/window-regression/GraphCompanyValue",
+      "profiles": [{"width": 1280, "height": 720, "ui_scale": 1}, {"width": 1280, "height": 720, "ui_scale": 2}, {"width": 1920, "height": 1080, "ui_scale": 1}, {"width": 1920, "height": 1080, "ui_scale": 2}],
+      "tolerance": {"max_changed_pixels": 2073600, "max_changed_ratio": 1, "max_channel_delta": 255, "max_mean_channel_delta": 255}, "accepted_differences": [{"category": "chromatic", "issue": 300}]
+    },
+    {
+      "id": "CargoPaymentRates", "family": "economy", "capture_route": "graphs-menu/cargo-payment-rates",
+      "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav", "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+      "artifact_root": "docs/parity/screenshots/window-regression/CargoPaymentRates",
+      "profiles": [{"width": 1280, "height": 720, "ui_scale": 1}, {"width": 1280, "height": 720, "ui_scale": 2}, {"width": 1920, "height": 1080, "ui_scale": 1}, {"width": 1920, "height": 1080, "ui_scale": 2}],
+      "tolerance": {"max_changed_pixels": 2073600, "max_changed_ratio": 1, "max_channel_delta": 255, "max_mean_channel_delta": 255}, "accepted_differences": [{"category": "chromatic", "issue": 300}]
+    },
+    {
+      "id": "SubsidyList", "family": "economy", "capture_route": "economy-menu/subsidies",
+      "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav", "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+      "artifact_root": "docs/parity/screenshots/window-regression/SubsidyList",
+      "profiles": [{"width": 1280, "height": 720, "ui_scale": 1}, {"width": 1280, "height": 720, "ui_scale": 2}, {"width": 1920, "height": 1080, "ui_scale": 1}, {"width": 1920, "height": 1080, "ui_scale": 2}],
+      "tolerance": {"max_changed_pixels": 2073600, "max_changed_ratio": 1, "max_channel_delta": 255, "max_mean_channel_delta": 255}, "accepted_differences": [{"category": "chromatic", "issue": 300}]
+    },
+    {
+      "id": "League", "family": "economy", "capture_route": "graphs-menu/performance-league",
+      "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav", "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+      "artifact_root": "docs/parity/screenshots/window-regression/League",
+      "profiles": [{"width": 1280, "height": 720, "ui_scale": 1}, {"width": 1280, "height": 720, "ui_scale": 2}, {"width": 1920, "height": 1080, "ui_scale": 1}, {"width": 1920, "height": 1080, "ui_scale": 2}],
+      "tolerance": {"max_changed_pixels": 2073600, "max_changed_ratio": 1, "max_channel_delta": 255, "max_mean_channel_delta": 255}, "accepted_differences": [{"category": "chromatic", "issue": 300}]
+    },
+    {
+      "id": "NewsHistory", "family": "economy", "capture_route": "message-menu/history",
+      "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav", "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+      "artifact_root": "docs/parity/screenshots/window-regression/NewsHistory",
+      "profiles": [{"width": 1280, "height": 720, "ui_scale": 1}, {"width": 1280, "height": 720, "ui_scale": 2}, {"width": 1920, "height": 1080, "ui_scale": 1}, {"width": 1920, "height": 1080, "ui_scale": 2}],
+      "tolerance": {"max_changed_pixels": 2073600, "max_changed_ratio": 1, "max_channel_delta": 255, "max_mean_channel_delta": 255}, "accepted_differences": [{"category": "chromatic", "issue": 300}]
+    },
+    {
+      "id": "NewsSettings", "family": "economy", "capture_route": "settings/game-options",
+      "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav", "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+      "artifact_root": "docs/parity/screenshots/window-regression/NewsSettings",
+      "profiles": [{"width": 1280, "height": 720, "ui_scale": 1}, {"width": 1280, "height": 720, "ui_scale": 2}, {"width": 1920, "height": 1080, "ui_scale": 1}, {"width": 1920, "height": 1080, "ui_scale": 2}],
+      "tolerance": {"max_changed_pixels": 2073600, "max_changed_ratio": 1, "max_channel_delta": 255, "max_mean_channel_delta": 255}, "accepted_differences": [{"category": "chromatic", "issue": 300}]
     }
   ]
 }

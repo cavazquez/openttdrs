@@ -1,0 +1,71 @@
+{
+  "accepted_differences": [
+    {
+      "category": "chromatic",
+      "issue": 300
+    }
+  ],
+  "artifacts": {
+    "candidate": {
+      "path": "docs/parity/screenshots/window-regression/Finances/1920x1080-2x/candidate.png",
+      "sha256": "5474d2123a234cd6364df24b05bee5f7679520a1b00b9dfb11237500cb3733a1"
+    },
+    "diff": {
+      "path": "docs/parity/screenshots/window-regression/Finances/1920x1080-2x/diff.png",
+      "sha256": "9ba32a18ec663f34703a99502d33e9b9447770a2b61410700d1f46e22e3052d6"
+    },
+    "reference": {
+      "path": "docs/parity/screenshots/window-regression/Finances/1920x1080-2x/reference.png",
+      "sha256": "acbe8de761918474ccdc25682393c8e9892f324eb3ddcc4597032bd54ae17c10"
+    }
+  },
+  "assessment": {
+    "category": "chromatic",
+    "within_tolerance": true
+  },
+  "capture_route": "company-menu/finances",
+  "family": "economy",
+  "fixture": "crates/openttdrs-core/tests/fixtures/mvp_openttd_rich.sav",
+  "geometry": {
+    "candidate_screen": [
+      1920,
+      1080
+    ],
+    "expected_screen": [
+      1920,
+      1080
+    ],
+    "reference_screen": [
+      1920,
+      1080
+    ]
+  },
+  "metrics": {
+    "candidate_size": [
+      1920,
+      1080
+    ],
+    "changed_pixels": 2072484,
+    "changed_ratio": 0.9994618055555555,
+    "max_channel_delta": 252,
+    "mean_channel_delta": 54.346396002121914,
+    "reference_size": [
+      1920,
+      1080
+    ]
+  },
+  "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+  "profile": {
+    "height": 1080,
+    "ui_scale": 2,
+    "width": 1920
+  },
+  "schema_version": 1,
+  "tolerance": {
+    "max_changed_pixels": 2073600,
+    "max_changed_ratio": 1,
+    "max_channel_delta": 255,
+    "max_mean_channel_delta": 255
+  },
+  "window": "Finances"
+}

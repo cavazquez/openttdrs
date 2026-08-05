@@ -99,6 +99,16 @@ def main() -> int:
         data["windows"][0]["family"] = "vehicles"
         manifest.write_text(json.dumps(data), encoding="utf-8")
 
+        data["windows"][0]["family"] = "economy"
+        manifest.write_text(json.dumps(data), encoding="utf-8")
+        missing_route = run(manifest)
+        if missing_route.returncode != 2 or "capture_route" not in missing_route.stderr:
+            print(missing_route.stdout, missing_route.stderr, file=sys.stderr)
+            print("FAIL: economy sin ruta de captura debe rechazarse", file=sys.stderr)
+            return 1
+        data["windows"][0]["family"] = "vehicles"
+        manifest.write_text(json.dumps(data), encoding="utf-8")
+
         changed = root / "artifacts" / "1280x720-1x" / "candidate.png"
         pixels = bytearray(visual.read_png(changed).rgba)
         pixels[:4] = bytes((255, 0, 0, 255))

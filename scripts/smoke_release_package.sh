@@ -73,7 +73,18 @@ fi
 
 "$client" --check-assets
 
-port="${OPENTTDRS_RELEASE_SMOKE_PORT:-49879}"
+if [[ -n "${OPENTTDRS_RELEASE_SMOKE_PORT:-}" ]]; then
+  port="$OPENTTDRS_RELEASE_SMOKE_PORT"
+else
+  python_cmd="python3"
+  if ! command -v "$python_cmd" >/dev/null 2>&1; then
+    python_cmd="python"
+  fi
+  # Los runners Windows reservan puertos efímeros de forma dinámica; un puerto
+  # fijo puede devolver WSAEACCES aun cuando no haya otro proceso escuchando.
+  # Pedimos uno al SO y lo usamos inmediatamente para el smoke de loopback.
+  port="$($python_cmd -c 'import socket; listener = socket.socket(); listener.bind(("127.0.0.1", 0)); print(listener.getsockname()[1]); listener.close()')"
+fi
 address="127.0.0.1:${port}"
 "$dedicated" --bind "$address" >"$server_log" 2>&1 &
 server_pid=$!

@@ -14,7 +14,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use crate::Climate;
 use crate::cargo::CargoType;
-use crate::link_graph::{LinkEdgeKey, LinkFlowSample, LinkGraphStats};
+use crate::link_graph::{LinkEdgeKey, LinkFlowSample, LinkGraphRuntimeChunk, LinkGraphStats};
 use crate::map::{TileCoord, coord_from_linear_index, coord_to_linear_index};
 
 use super::SavError;
@@ -83,7 +83,22 @@ pub(crate) fn link_graph_from_chunks(
         return LinkGraphStats::default();
     };
 
-    let mut out = LinkGraphStats::default();
+    let runtime_chunks = chunks
+        .iter()
+        .filter(|chunk| {
+            (chunk.name == *b"LGRJ" || chunk.name == *b"LGRS")
+                && chunk.ch_type == super::chunks::CH_TABLE
+        })
+        .map(|chunk| LinkGraphRuntimeChunk {
+            name: chunk.name,
+            ch_type: chunk.ch_type,
+            body: chunk.body.clone(),
+        })
+        .collect();
+    let mut out = LinkGraphStats {
+        runtime_chunks,
+        ..Default::default()
+    };
     for (_idx, record) in rows {
         let Some(cargo_id) = record_get(&record, "cargo").and_then(SlValue::as_u64) else {
             continue;
@@ -334,16 +349,19 @@ pub(crate) fn encode_linkgraph_chunks(
     let mut out = Vec::new();
     // Siempre emitir LGRP (puede estar vacío): OpenTTD lo tolera.
     out.extend_from_slice(&raw_table_chunk(*b"LGRP", &lgrp_table_header()?, &records)?);
-    // Jobs / schedule vacíos (SpawnAll regenera).
-    out.extend_from_slice(&raw_table_chunk(*b"LGRJ", &[0], &[])?);
-    out.extend_from_slice(&raw_table_chunk(
-        *b"LGRS",
-        &[
-            // schedule / running como listas vacías no modeladas: header vacío.
-            0,
-        ],
-        &[],
-    )?);
+    if stats.runtime_chunks.is_empty() {
+        // Jobs / schedule vacíos (SpawnAll regenera).
+        out.extend_from_slice(&raw_table_chunk(*b"LGRJ", &[0], &[])?);
+        out.extend_from_slice(&raw_table_chunk(*b"LGRS", &[0], &[])?);
+    } else {
+        // Preservación opaca: el cuerpo ya contiene header, registros y
+        // terminador gamma; no reinterpretar ni reconstruir sus referencias.
+        for chunk in &stats.runtime_chunks {
+            out.extend_from_slice(&chunk.name);
+            out.push(chunk.ch_type);
+            out.extend_from_slice(&chunk.body);
+        }
+    }
     Ok(out)
 }
 
@@ -471,5 +489,31 @@ mod tests {
         let stations = [crate::Station::new(a), crate::Station::new(b)];
         let got = lgrp_chunk_bytes(&stats, &stations, 256);
         assert_eq!(got, expected, "got={got:02x?} expected={expected:02x?}");
+    }
+
+    #[test]
+    fn runtime_chunks_survive_opaque_roundtrip() {
+        let mut stats = LinkGraphStats::default();
+        stats.runtime_chunks = vec![
+            LinkGraphRuntimeChunk {
+                name: *b"LGRJ",
+                ch_type: CH_TABLE,
+                body: vec![2, 0, 0],
+            },
+            LinkGraphRuntimeChunk {
+                name: *b"LGRS",
+                ch_type: CH_TABLE,
+                body: vec![2, 0, 0],
+            },
+        ];
+        let bytes = encode_linkgraph_chunks(&stats, &[], 32).expect("encode");
+        let chunks = crate::sav::chunks::parse_chunks(&bytes).expect("parse");
+        let runtime: Vec<_> = chunks
+            .iter()
+            .filter(|chunk| chunk.name == *b"LGRJ" || chunk.name == *b"LGRS")
+            .collect();
+        assert_eq!(runtime.len(), 2);
+        assert_eq!(runtime[0].body, vec![2, 0, 0]);
+        assert_eq!(runtime[1].body, vec![2, 0, 0]);
     }
 }

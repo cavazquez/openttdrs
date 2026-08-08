@@ -6,6 +6,15 @@ use std::collections::HashMap;
 use crate::cargo::CargoType;
 use crate::map::TileCoord;
 
+/// Chunk de runtime `LGRJ`/`LGRS` conservado de forma opaca durante un
+/// roundtrip `.sav`. No se interpreta ni se ejecuta en Rust.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct LinkGraphRuntimeChunk {
+    pub(crate) name: [u8; 4],
+    pub(crate) ch_type: u8,
+    pub(crate) body: Vec<u8>,
+}
+
 /// Clave de arista observada (origen de carga → destino de descarga/transfer).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct LinkEdgeKey {
@@ -45,6 +54,9 @@ impl LinkFlowSample {
 pub struct LinkGraphStats {
     #[serde(default)]
     pub edges: HashMap<LinkEdgeKey, LinkFlowSample>,
+    /// Runtime `LGRJ`/`LGRS` original, solo válido hasta mutar el grafo.
+    #[serde(skip)]
+    pub(crate) runtime_chunks: Vec<LinkGraphRuntimeChunk>,
 }
 
 impl LinkGraphStats {
@@ -66,6 +78,8 @@ impl LinkGraphStats {
         if from == to || (units == 0 && capacity == 0) {
             return;
         }
+        // Los jobs y la cola de OpenTTD quedan obsoletos al cambiar el grafo.
+        self.runtime_chunks.clear();
         let key = LinkEdgeKey { from, to, cargo };
         let sample = self.edges.entry(key).or_default();
         let u = u64::from(units);

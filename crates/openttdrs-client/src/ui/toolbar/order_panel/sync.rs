@@ -344,7 +344,19 @@ fn order_row_label(
             openttdrs_core::OrderUnloadType::Transfer => "transferir",
             openttdrs_core::OrderUnloadType::NoUnload => "no descargar",
         };
-        line.push_str(&format!(" · {load_label} · {unload_label}"));
+        let non_stop_label = if order.non_stop_destination() {
+            "sin paradas intermedias"
+        } else {
+            "paradas intermedias"
+        };
+        let stop_location_label = match order.stop_location() {
+            openttdrs_core::OrderStopLocation::NearEnd => "andén cercano",
+            openttdrs_core::OrderStopLocation::Middle => "andén central",
+            openttdrs_core::OrderStopLocation::FarEnd => "andén lejano",
+        };
+        line.push_str(&format!(
+            " · {load_label} · {unload_label} · {non_stop_label} · {stop_location_label}"
+        ));
         if wait_ticks > 0 {
             line.push_str(&format!(" · esp.{wait_ticks}"));
         }
@@ -447,6 +459,28 @@ mod tests {
         let label = order_row_label(0, order, &vehicle, &sim, false);
         assert!(label.contains("completar una carga"));
         assert!(label.contains("descarga forzada"));
+        assert!(label.contains("sin paradas intermedias"));
+        assert!(label.contains("andén central"));
+    }
+
+    #[test]
+    fn order_row_labels_intermediate_stops_and_platform_end() {
+        let sim = SimWorld::default();
+        let stop = TileCoord::new(2, 2);
+        let vehicle = Vehicle::new(1, VehicleKind::Train, stop, stop);
+        let Some(order) = VehicleOrder::station_with_types(
+            stop,
+            openttdrs_core::OrderLoadType::LoadIfPossible,
+            openttdrs_core::OrderUnloadType::UnloadIfPossible,
+            openttdrs_core::OrderNonStop::StopAtIntermediate,
+        )
+        .with_cycled_stop_location() else {
+            panic!("station order should support platform position");
+        };
+
+        let label = order_row_label(0, order, &vehicle, &sim, false);
+        assert!(label.contains("paradas intermedias"));
+        assert!(label.contains("andén lejano"));
     }
 
     #[test]

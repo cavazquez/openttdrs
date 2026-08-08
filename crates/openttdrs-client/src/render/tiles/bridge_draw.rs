@@ -226,10 +226,10 @@ pub(crate) fn bridge_span_at(
     })
 }
 
-/// El puente de madera tiene riel en la cabeza, pero el overlay explícito es
-/// más fiable para el vano (y coincide con el resto de puentes).
-fn bridge_draws_separate_rail_overlay(bridge_type: BridgeType, on_ramp: bool) -> bool {
-    bridge_type != BridgeType::Wooden || !on_ramp
+/// El overlay explícito garantiza que la vía llegue hasta la casilla vecina;
+/// el sprite de madera conserva además el detalle de riel de la cabeza.
+fn bridge_draws_separate_rail_overlay(_bridge_type: BridgeType, _on_ramp: bool) -> bool {
+    true
 }
 
 fn bridge_rail_track_sprite(axis: usize) -> u32 {

@@ -58,6 +58,60 @@ const SHOWCASE_BRIDGE_START: TileCoord = TileCoord::new(33, SHOWCASE_BRIDGE_Y);
 const SHOWCASE_BRIDGE_END: TileCoord = TileCoord::new(56, SHOWCASE_BRIDGE_Y);
 const SHOWCASE_JUNCTION_TOP_Y: i32 = 42;
 const SHOWCASE_JUNCTION_BOTTOM_Y: i32 = 43;
+// Galería completa de uniones: está al oeste del aeropuerto oriental (x=43)
+// y separada dos teselas entre muestras, para que cada geometría se lea sola.
+const SHOWCASE_JUNCTION_GALLERY: [(TileCoord, u8); 19] = [
+    // Ocho desvíos simples: las cuatro orientaciones sobre cada eje recto.
+    (TileCoord::new(33, 46), RAIL_TB_X | RAIL_TB_UPPER),
+    (TileCoord::new(35, 46), RAIL_TB_X | RAIL_TB_RIGHT),
+    (TileCoord::new(37, 46), RAIL_TB_X | RAIL_TB_LOWER),
+    (TileCoord::new(39, 46), RAIL_TB_X | RAIL_TB_LEFT),
+    (TileCoord::new(41, 46), RAIL_TB_Y | RAIL_TB_UPPER),
+    (TileCoord::new(33, 48), RAIL_TB_Y | RAIL_TB_LEFT),
+    (TileCoord::new(35, 48), RAIL_TB_Y | RAIL_TB_LOWER),
+    (TileCoord::new(37, 48), RAIL_TB_Y | RAIL_TB_RIGHT),
+    // Cuatro uniones de tres lados (T), incluida cada orientación espejo.
+    (
+        TileCoord::new(39, 48),
+        RAIL_TB_X | RAIL_TB_UPPER | RAIL_TB_LEFT,
+    ),
+    (
+        TileCoord::new(41, 48),
+        RAIL_TB_X | RAIL_TB_LOWER | RAIL_TB_RIGHT,
+    ),
+    (
+        TileCoord::new(33, 50),
+        RAIL_TB_Y | RAIL_TB_LOWER | RAIL_TB_LEFT,
+    ),
+    (
+        TileCoord::new(35, 50),
+        RAIL_TB_Y | RAIL_TB_UPPER | RAIL_TB_RIGHT,
+    ),
+    // Cuatro single-slip, uno por curva de enlace.
+    (
+        TileCoord::new(37, 50),
+        RAIL_TB_X | RAIL_TB_Y | RAIL_TB_UPPER,
+    ),
+    (
+        TileCoord::new(39, 50),
+        RAIL_TB_X | RAIL_TB_Y | RAIL_TB_LOWER,
+    ),
+    (TileCoord::new(41, 50), RAIL_TB_X | RAIL_TB_Y | RAIL_TB_LEFT),
+    (
+        TileCoord::new(33, 52),
+        RAIL_TB_X | RAIL_TB_Y | RAIL_TB_RIGHT,
+    ),
+    // Los dos cruces simples y el doble-slip.
+    (TileCoord::new(35, 52), RAIL_TB_X | RAIL_TB_Y),
+    (
+        TileCoord::new(37, 52),
+        RAIL_TB_UPPER | RAIL_TB_LOWER | RAIL_TB_LEFT | RAIL_TB_RIGHT,
+    ),
+    (
+        TileCoord::new(39, 52),
+        RAIL_TB_X | RAIL_TB_Y | RAIL_TB_UPPER | RAIL_TB_LOWER | RAIL_TB_LEFT | RAIL_TB_RIGHT,
+    ),
+];
 const SHOWCASE_TUNNEL_NE: TileCoord = TileCoord::new(16, 45);
 const SHOWCASE_TUNNEL_SW: TileCoord = TileCoord::new(14, 45);
 const SHOWCASE_TUNNEL_START: TileCoord = TileCoord::new(4, 45);
@@ -360,6 +414,13 @@ fn place_showcase_junction_lab(state: &mut GameState) {
         TileCoord::new(22, SHOWCASE_JUNCTION_BOTTOM_Y),
         RAIL_TB_UPPER | RAIL_TB_LOWER | RAIL_TB_LEFT | RAIL_TB_RIGHT,
     );
+
+    // Galería exhaustiva: todas las orientaciones de desvío, T y single-slip,
+    // más ambos cruces y el double-slip. Es estática para no añadir rutas
+    // ambiguas a los servicios que circulan en la demo.
+    for (coord, bits) in SHOWCASE_JUNCTION_GALLERY {
+        set_showcase_rail_bits(state, coord, bits);
+    }
 }
 
 fn place_showcase_rail_tunnel(state: &mut GameState) {
@@ -992,6 +1053,11 @@ mod tests {
                 & 0x3F,
             RAIL_TB_X | RAIL_TB_Y | RAIL_TB_UPPER | RAIL_TB_LOWER | RAIL_TB_LEFT | RAIL_TB_RIGHT
         );
+        for (coord, bits) in SHOWCASE_JUNCTION_GALLERY {
+            let tile = state.map.get(coord).expect("muestra de junction gallery");
+            assert_eq!(tile.kind, TileKind::Rail, "muestra en {coord:?}");
+            assert_eq!(tile.m5 & 0x3F, bits, "trackbits en {coord:?}");
+        }
         let carbonero = state
             .vehicles
             .iter()

@@ -42,8 +42,9 @@ use crate::ui::town_directory::{
     town_directory_search_keyboard,
 };
 use crate::ui::vehicle_list::{
-    VehicleListState, handle_vehicle_list_buttons, open_vehicle_list_from_routes,
-    setup_vehicle_list, sync_vehicle_list, vehicle_list_on_closed,
+    VehicleListState, handle_vehicle_group_rename_buttons, handle_vehicle_list_buttons,
+    open_vehicle_list_from_routes, setup_vehicle_list, sync_vehicle_group_rename_row,
+    sync_vehicle_list, vehicle_list_group_rename_keyboard, vehicle_list_on_closed,
 };
 
 pub(crate) struct NavigationUiPlugin;
@@ -126,14 +127,34 @@ impl Plugin for NavigationUiPlugin {
                     )
                         .chain()
                         .after(handle_toolbar_menu_entries),
-                    (
-                        open_vehicle_list_from_routes,
-                        handle_vehicle_list_buttons,
-                        vehicle_list_on_closed,
-                        sync_vehicle_list,
-                    )
-                        .chain()
-                        .after(handle_toolbar_menu_entries),
+                    open_vehicle_list_from_routes
+                        .after(handle_toolbar_menu_entries)
+                        .in_set(UpdateSet::Ui)
+                        .run_if(in_state(ClientScreen::InGame)),
+                    handle_vehicle_list_buttons
+                        .after(open_vehicle_list_from_routes)
+                        .in_set(UpdateSet::Ui)
+                        .run_if(in_state(ClientScreen::InGame)),
+                    vehicle_list_on_closed
+                        .after(handle_vehicle_list_buttons)
+                        .in_set(UpdateSet::Ui)
+                        .run_if(in_state(ClientScreen::InGame)),
+                    sync_vehicle_list
+                        .after(vehicle_list_on_closed)
+                        .in_set(UpdateSet::Ui)
+                        .run_if(in_state(ClientScreen::InGame)),
+                    handle_vehicle_group_rename_buttons
+                        .after(handle_vehicle_list_buttons)
+                        .in_set(UpdateSet::Ui)
+                        .run_if(in_state(ClientScreen::InGame)),
+                    vehicle_list_group_rename_keyboard
+                        .after(handle_vehicle_list_buttons)
+                        .in_set(UpdateSet::Ui)
+                        .run_if(in_state(ClientScreen::InGame)),
+                    sync_vehicle_group_rename_row
+                        .after(handle_vehicle_group_rename_buttons)
+                        .in_set(UpdateSet::Ui)
+                        .run_if(in_state(ClientScreen::InGame)),
                     (
                         open_subsidy_list_from_routes,
                         handle_subsidy_list_buttons,

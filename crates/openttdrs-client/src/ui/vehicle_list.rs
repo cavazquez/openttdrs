@@ -1,6 +1,9 @@
 //! Lista global de flota (tren / carretera / barco / avión).
 
+use bevy::input::ButtonState;
+use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::prelude::*;
+use bevy::text::{EditableText, TextEdit};
 use bevy::ui::widget::ImageNode;
 use openttdrs_core::Command;
 use openttdrs_core::prelude::*;
@@ -88,6 +91,9 @@ pub(crate) enum VehicleListAction {
     CreateGroup,
     AssignToGroup,
     ToggleGroupRunning,
+    RenameGroup,
+    ApplyGroupRename,
+    CancelGroupRename,
     ClearStationFilter,
 }
 
@@ -110,6 +116,7 @@ pub(crate) struct VehicleListState {
     pub(crate) company: VehicleCompanyFilter,
     /// `None` muestra toda la flota; `Some(id)` filtra por grupo.
     pub(crate) group_filter: Option<u32>,
+    pub(crate) group_rename_editing: bool,
 }
 
 impl VehicleListState {
@@ -166,6 +173,12 @@ pub(crate) struct VehicleListToggleLabel;
 
 #[derive(Component)]
 pub(crate) struct VehicleListGroupLabel;
+
+#[derive(Component)]
+pub(crate) struct VehicleListGroupRenameRow;
+
+#[derive(Component)]
+pub(crate) struct VehicleListGroupRenameInput;
 
 #[derive(Default)]
 pub(crate) struct VehicleListCache {
@@ -341,8 +354,56 @@ pub(crate) fn setup_vehicle_list(mut commands: Commands, asset_server: Res<Asset
             spawn_action_button(
                 row,
                 asset_server,
+                "Renombrar",
+                VehicleListAction::RenameGroup,
+                false,
+            );
+            spawn_action_button(
+                row,
+                asset_server,
                 "Quitar filtro",
                 VehicleListAction::ClearStationFilter,
+                false,
+            );
+        });
+        body.spawn((
+            VehicleListGroupRenameRow,
+            Node {
+                width: Val::Percent(100.0),
+                flex_direction: FlexDirection::Row,
+                column_gap: Val::Px(4.0),
+                margin: UiRect::bottom(Val::Px(4.0)),
+                display: Display::None,
+                ..default()
+            },
+        ))
+        .with_children(|row| {
+            row.spawn((
+                VehicleListGroupRenameInput,
+                EditableText::new(""),
+                window_text_font(asset_server, UiFontRole::Caption),
+                TextColor(WINDOW_TEXT),
+                Node {
+                    flex_grow: 1.0,
+                    height: Val::Px(24.0),
+                    padding: UiRect::horizontal(Val::Px(5.0)),
+                    border: UiRect::all(Val::Px(1.0)),
+                    ..default()
+                },
+                BorderColor::all(Color::srgb(0.66, 0.58, 0.38)),
+            ));
+            spawn_action_button(
+                row,
+                asset_server,
+                "Guardar",
+                VehicleListAction::ApplyGroupRename,
+                false,
+            );
+            spawn_action_button(
+                row,
+                asset_server,
+                "Cancelar",
+                VehicleListAction::CancelGroupRename,
                 false,
             );
         });
@@ -588,6 +649,9 @@ pub(crate) fn handle_vehicle_list_buttons(
                 }
             }
             VehicleListAction::ToggleGroupRunning => {}
+            VehicleListAction::RenameGroup
+            | VehicleListAction::ApplyGroupRename
+            | VehicleListAction::CancelGroupRename => {}
             VehicleListAction::ClearStationFilter => {}
         }
     }
@@ -847,6 +911,111 @@ pub(crate) fn sync_vehicle_list(
             );
         }
     });
+}
+
+/// Entrada de texto del nombre de grupo; el botón Guardar aplica el comando.
+pub(crate) fn handle_vehicle_group_rename_buttons(
+    mut buttons: Query<
+        (&Interaction, &VehicleListActionButton),
+        (Changed<Interaction>, With<Button>),
+    >,
+    mut state: ResMut<VehicleListState>,
+    mut input_q: Query<&mut EditableText, With<VehicleListGroupRenameInput>>,
+    mut sim: ResMut<SimWorld>,
+    mut pending: ResMut<RemapMapVisualsPending>,
+    mut hud_feedback: ResMut<HudBuildFeedback>,
+    time: Res<Time>,
+) {
+    for (interaction, action) in &mut buttons {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+        match action.0 {
+            VehicleListAction::RenameGroup => {
+                let Some(group_id) = state.group_filter else {
+                    continue;
+                };
+                let Some(group) = sim.state.vehicle_groups.iter().find(|g| g.id == group_id) else {
+                    continue;
+                };
+                if let Ok(mut input) = input_q.single_mut() {
+                    input.editor_mut().set_text(&group.name);
+                    state.group_rename_editing = true;
+                }
+            }
+            VehicleListAction::CancelGroupRename => state.group_rename_editing = false,
+            VehicleListAction::ApplyGroupRename => {
+                let Some(group_id) = state.group_filter else {
+                    state.group_rename_editing = false;
+                    continue;
+                };
+                let Some(input) = input_q.iter().next() else {
+                    continue;
+                };
+                let name = input.value().to_string().trim().to_string();
+                match crate::network::apply_player_command(
+                    &mut sim.state,
+                    &Command::RenameVehicleGroup { group_id, name },
+                ) {
+                    Ok(()) => {
+                        pending.pending = true;
+                        state.group_rename_editing = false;
+                    }
+                    Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+pub(crate) fn sync_vehicle_group_rename_row(
+    state: Res<VehicleListState>,
+    mut row_q: Query<&mut Node, With<VehicleListGroupRenameRow>>,
+) {
+    if let Ok(mut row) = row_q.single_mut() {
+        row.display = if state.group_rename_editing {
+            Display::Flex
+        } else {
+            Display::None
+        };
+    }
+}
+
+pub(crate) fn vehicle_list_group_rename_keyboard(
+    mut state: ResMut<VehicleListState>,
+    keys: Res<ButtonInput<KeyCode>>,
+    mut key_events: MessageReader<KeyboardInput>,
+    mut input_q: Query<&mut EditableText, With<VehicleListGroupRenameInput>>,
+) {
+    if !state.group_rename_editing {
+        return;
+    }
+    if keys.just_pressed(KeyCode::Escape) {
+        state.group_rename_editing = false;
+        return;
+    }
+    let Ok(mut input) = input_q.single_mut() else {
+        return;
+    };
+    for event in key_events.read() {
+        if event.state != ButtonState::Pressed {
+            continue;
+        }
+        if matches!(event.logical_key, Key::Backspace) {
+            input.queue_edit(TextEdit::Backspace);
+        } else if matches!(event.logical_key, Key::Delete) {
+            input.queue_edit(TextEdit::Delete);
+        } else if let Some(text) = &event.text {
+            for ch in text.chars() {
+                if !ch.is_control() && input.value().chars().count() < 32 {
+                    input.queue_edit(TextEdit::Insert(winit::keyboard::SmolStr::from(
+                        ch.to_string(),
+                    )));
+                }
+            }
+        }
+    }
 }
 
 fn spawn_vehicle_list_row(

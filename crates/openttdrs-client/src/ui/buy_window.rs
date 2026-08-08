@@ -916,3 +916,69 @@ pub(crate) fn buy_window_on_closed(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn toolbar_active_state_follows_catalog_sort() {
+        let mut state = BuyVehicleWindowState {
+            sort: EngineCatalogSort::Price,
+            ..Default::default()
+        };
+        assert!(toolbar_button_active(
+            &state,
+            BuyVehicleToolbarButton::SortPrice
+        ));
+        assert!(!toolbar_button_active(
+            &state,
+            BuyVehicleToolbarButton::SortName
+        ));
+
+        state.sort = EngineCatalogSort::Speed;
+        assert!(toolbar_button_active(
+            &state,
+            BuyVehicleToolbarButton::SortSpeed
+        ));
+        assert!(!toolbar_button_active(
+            &state,
+            BuyVehicleToolbarButton::SortPrice
+        ));
+    }
+
+    #[test]
+    fn toolbar_active_state_tracks_road_and_rail_filters() {
+        let mut state = BuyVehicleWindowState {
+            road_filter: RoadEngineFilter::BusOnly,
+            ..Default::default()
+        };
+        assert!(toolbar_button_active(
+            &state,
+            BuyVehicleToolbarButton::FilterBus
+        ));
+        assert!(!toolbar_button_active(
+            &state,
+            BuyVehicleToolbarButton::FilterTruck
+        ));
+        assert!(!toolbar_button_active(
+            &state,
+            BuyVehicleToolbarButton::FilterAll
+        ));
+
+        state.road_filter = RoadEngineFilter::All;
+        state.rail_filter = RailBuyFilter::WagonsOnly;
+        assert!(toolbar_button_active(
+            &state,
+            BuyVehicleToolbarButton::FilterWagons
+        ));
+        assert!(!toolbar_button_active(
+            &state,
+            BuyVehicleToolbarButton::FilterLocos
+        ));
+        assert!(!toolbar_button_active(
+            &state,
+            BuyVehicleToolbarButton::FilterAll
+        ));
+    }
+}

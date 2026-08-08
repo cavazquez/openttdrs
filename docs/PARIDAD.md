@@ -883,8 +883,8 @@ vagón) más Fases 2–3 de sim (packets, PBS).
    tocar core.
 2. Exponer en UI lo ya presente en core (full-load any/no-load, transfer,
    non-stop, stop-location y timetable-start) y completar unload forzado.
-3. Ventana de flota + grupos — MVP integrado: filtro, creación y asignación;
-   quedan renombrado de grupos y acciones masivas.
+3. Ventana de flota + grupos — MVP integrado: filtro, creación, asignación,
+   renombrado y start/stop masivo; queda ampliar acciones masivas avanzadas.
 4. Afinar stop-location y consist contra oráculos más largos; la estructura
    base de ambos ya existe.
 

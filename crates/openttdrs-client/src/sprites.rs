@@ -226,7 +226,7 @@ pub use field_draw_data_generated::{
 };
 
 pub use bridge_sprites_generated::{
-    BridgeDeckSpriteIds, bridge_deck_sprite_ids, bridge_sprite_meta,
+    BridgeDeckSpriteIds, bridge_deck_sprite_ids, bridge_sprite_meta, wooden_bridge_ramp_sprite_id,
 };
 /// Set completo de orillas (`SPR_SHORE_BASE + 0..17`, Action5 0x0D).
 /// Regenerar: `python3 scripts/gen_shore_full_set.py`.

@@ -43,6 +43,25 @@ impl BridgeDeckSpriteIds {
     }
 }
 
+/// Sprite de cabeza/rampa del puente de madera.
+/// `dir` es el valor de dirección almacenado en los bits bajos de m5.
+pub fn wooden_bridge_ramp_sprite_id(rail: bool, tileh: u8, dir: u8) -> u32 {
+    // GetBridgeRampDirectionBaseOffset: SW, SE, NE, NW.
+    let direction = [2usize, 1, 0, 3][usize::from(dir & 3)];
+    let table = if rail {
+        if tileh == 0 {
+            [2538, 2537, 2539, 2540]
+        } else {
+            [2542, 2541, 2544, 2543]
+        }
+    } else if tileh == 0 {
+        [2530, 2529, 2531, 2532]
+    } else {
+        [2534, 2533, 2536, 2535]
+    };
+    table[direction]
+}
+
 /// Offsets NFO (w, h, xrel, yrel) por sprite id.
 pub fn bridge_sprite_meta(sid: u32) -> Option<(f32, f32, f32, f32)> {
     match sid {
@@ -106,6 +125,22 @@ pub fn bridge_sprite_meta(sid: u32) -> Option<(f32, f32, f32, f32)> {
         2526 => Some((38.0, 27.0, -34.0, -6.0)),
         2527 => Some((38.0, 27.0, -2.0, -6.0)),
         2528 => Some((6.0, 11.0, -4.0, -5.0)),
+        2529 => Some((49.0, 21.0, -24.0, 2.0)),
+        2530 => Some((48.0, 21.0, -23.0, 2.0)),
+        2531 => Some((50.0, 37.0, -23.0, -8.0)),
+        2532 => Some((50.0, 37.0, -25.0, -8.0)),
+        2533 => Some((51.0, 32.0, -25.0, -6.0)),
+        2534 => Some((51.0, 32.0, -24.0, -6.0)),
+        2535 => Some((53.0, 28.0, -28.0, -7.0)),
+        2536 => Some((53.0, 28.0, -23.0, -7.0)),
+        2537 => Some((49.0, 21.0, -24.0, 3.0)),
+        2538 => Some((48.0, 21.0, -23.0, 2.0)),
+        2539 => Some((50.0, 37.0, -23.0, -8.0)),
+        2540 => Some((50.0, 37.0, -25.0, -8.0)),
+        2541 => Some((51.0, 32.0, -25.0, -6.0)),
+        2542 => Some((51.0, 32.0, -24.0, -6.0)),
+        2543 => Some((53.0, 28.0, -28.0, -7.0)),
+        2544 => Some((53.0, 28.0, -23.0, -7.0)),
         2545 => Some((50.0, 42.0, -23.0, -17.0)),
         2546 => Some((50.0, 42.0, -25.0, -17.0)),
         2547 => Some((50.0, 42.0, -23.0, -17.0)),

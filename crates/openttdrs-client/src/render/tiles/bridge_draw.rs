@@ -16,7 +16,7 @@ use crate::render::{
 use crate::sprites::{
     RAIL_SPRITE_TRACK_X, RAIL_SPRITE_TRACK_Y, bridge_deck_sprite_ids, bridge_sprite_meta,
     bridge_structure_palette, catenary_sprite_color, catenary_tile_location_group,
-    collect_catenary_bridge_draws,
+    collect_catenary_bridge_draws, wooden_bridge_ramp_sprite_id,
 };
 
 const DECK_LAYER_FRAC: f32 = 0.08;
@@ -392,9 +392,14 @@ pub(crate) fn spawn_bridge_deck(
         return;
     }
     let ids = bridge_deck_sprite_ids(span.bridge_type, span.piece);
-    let rear_id = ids.rear(span.rail, span.axis);
-    let front_id = ids.front[span.axis];
-    let pillar_id = ids.pillar[span.axis];
+    let on_ramp = ctx.tile.is_some_and(ramp_tile);
+    let ramp_id = ctx
+        .tile
+        .filter(|_| span.bridge_type == BridgeType::Wooden)
+        .map(|tile| wooden_bridge_ramp_sprite_id(span.rail, ctx.info.tileh, tile.m5));
+    let rear_id = ramp_id.unwrap_or_else(|| ids.rear(span.rail, span.axis));
+    let front_id = if on_ramp { 0 } else { ids.front[span.axis] };
+    let pillar_id = if on_ramp { 0 } else { ids.pillar[span.axis] };
     let z_draw_px = f32::from(span.deck_z) * HEIGHT_PX - BRIDGE_Z_START;
 
     let front_shift = if span.axis == 0 {
@@ -420,8 +425,9 @@ pub(crate) fn spawn_bridge_deck(
         span.bridge_type,
     );
     // Superficie Action5 `0x1B` (tablero NewGRF sobre la estructura OpenGFX).
-    if let Some(slot) =
-        openttdrs_core::bridge_decks_action5_slot(span.rail, span.rail_type, span.axis)
+    if !on_ramp
+        && let Some(slot) =
+            openttdrs_core::bridge_decks_action5_slot(span.rail, span.rail_type, span.axis)
         && let (Some(cache), Some(images)) = (action5_sprites.as_mut(), images.as_mut())
         && let Some(sprite) = cache.sprite_colored(
             openttdrs_core::ACTION5_TYPE_BRIDGE_DECKS,

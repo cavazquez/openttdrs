@@ -28,6 +28,14 @@ OUT_RS = REPO / "crates/openttdrs-client/src/sprites/bridge_sprites_generated.rs
 # (rear_rail_x, rear_rail_y, rear_road_x, rear_road_y, front_x, front_y, pillar_x, pillar_y)
 Deck = tuple[int, int, int, int, int, int, int, int]
 
+# Cabezas/rampas del puente de madera. Los cuatro primeros son la cabeza
+# inclinada sobre una ladera; los cuatro últimos son la subida/bajada desde
+# terreno plano. El orden coincide con BRIDGE_PIECE_HEAD de OpenTTD.
+WOOD_RAMP_IDS = {
+    2529, 2530, 2531, 2532, 2533, 2534, 2535, 2536,
+    2537, 2538, 2539, 2540, 2541, 2542, 2543, 2544,
+}
+
 # Piezas 0..5 = north, south, inner_n, inner_s, mid_odd, mid_even (índice OpenTTD).
 BRIDGE_TYPE_NAMES = [
     "wood",
@@ -210,6 +218,7 @@ def main() -> None:
     all_ids: set[int] = set()
     for d in BRIDGE_DECKS.values():
         all_ids.update(x for x in d if x != 0)
+    all_ids.update(WOOD_RAMP_IDS)
     # Alias wood legacy names
     legacy = {
         2545: "bridge_wood_rail_y.png",
@@ -280,6 +289,25 @@ def main() -> None:
         [
             "        }",
             "    }",
+            "}",
+            "",
+            "/// Sprite de cabeza/rampa del puente de madera.",
+            "/// `dir` es el valor de dirección almacenado en los bits bajos de m5.",
+            "pub fn wooden_bridge_ramp_sprite_id(rail: bool, tileh: u8, dir: u8) -> u32 {",
+            "    // GetBridgeRampDirectionBaseOffset: SW, SE, NE, NW.",
+            "    let direction = [2usize, 1, 0, 3][usize::from(dir & 3)];",
+            "    let table = if rail {",
+            "        if tileh == 0 {",
+            "            [2538, 2537, 2539, 2540]",
+            "        } else {",
+            "            [2542, 2541, 2544, 2543]",
+            "        }",
+            "    } else if tileh == 0 {",
+            "        [2530, 2529, 2531, 2532]",
+            "    } else {",
+            "        [2534, 2533, 2536, 2535]",
+            "    };",
+            "    table[direction]",
             "}",
             "",
             "/// Offsets NFO (w, h, xrel, yrel) por sprite id.",

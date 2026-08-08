@@ -493,19 +493,21 @@ mod tests {
 
     #[test]
     fn runtime_chunks_survive_opaque_roundtrip() {
-        let mut stats = LinkGraphStats::default();
-        stats.runtime_chunks = vec![
-            LinkGraphRuntimeChunk {
-                name: *b"LGRJ",
-                ch_type: CH_TABLE,
-                body: vec![2, 0, 0],
-            },
-            LinkGraphRuntimeChunk {
-                name: *b"LGRS",
-                ch_type: CH_TABLE,
-                body: vec![2, 0, 0],
-            },
-        ];
+        let stats = LinkGraphStats {
+            runtime_chunks: vec![
+                LinkGraphRuntimeChunk {
+                    name: *b"LGRJ",
+                    ch_type: CH_TABLE,
+                    body: vec![2, 0, 0],
+                },
+                LinkGraphRuntimeChunk {
+                    name: *b"LGRS",
+                    ch_type: CH_TABLE,
+                    body: vec![2, 0, 0],
+                },
+            ],
+            ..Default::default()
+        };
         let bytes = encode_linkgraph_chunks(&stats, &[], 32).expect("encode");
         let chunks = crate::sav::chunks::parse_chunks(&bytes).expect("parse");
         let runtime: Vec<_> = chunks
@@ -519,12 +521,14 @@ mod tests {
 
     #[test]
     fn runtime_chunks_load_and_reemit_unchanged() {
-        let mut stats = LinkGraphStats::default();
-        stats.runtime_chunks = vec![LinkGraphRuntimeChunk {
-            name: *b"LGRJ",
-            ch_type: CH_TABLE,
-            body: vec![2, 0, 0],
-        }];
+        let stats = LinkGraphStats {
+            runtime_chunks: vec![LinkGraphRuntimeChunk {
+                name: *b"LGRJ",
+                ch_type: CH_TABLE,
+                body: vec![2, 0, 0],
+            }],
+            ..Default::default()
+        };
         let bytes = encode_linkgraph_chunks(&stats, &[], 32).expect("encode");
         let chunks = crate::sav::chunks::parse_chunks(&bytes).expect("parse");
         let loaded = link_graph_from_chunks(&chunks, 32, &HashMap::new(), 350, Climate::Temperate);

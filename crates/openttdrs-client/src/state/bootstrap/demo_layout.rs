@@ -111,6 +111,13 @@ pub(crate) fn demo_preserve_rects() -> Vec<PreserveRect> {
             x1: 59,
             y1: 54,
         },
+        // Galería exhaustiva de 57 uniones ferroviarias (`TrackBits` 2..=6).
+        PreserveRect {
+            x0: 1,
+            y0: 55,
+            x1: 60,
+            y1: 63,
+        },
     ]
 }
 

@@ -58,60 +58,14 @@ const SHOWCASE_BRIDGE_START: TileCoord = TileCoord::new(33, SHOWCASE_BRIDGE_Y);
 const SHOWCASE_BRIDGE_END: TileCoord = TileCoord::new(56, SHOWCASE_BRIDGE_Y);
 const SHOWCASE_JUNCTION_TOP_Y: i32 = 42;
 const SHOWCASE_JUNCTION_BOTTOM_Y: i32 = 43;
-// Galería completa de uniones: está al oeste del aeropuerto oriental (x=43)
-// y separada dos teselas entre muestras, para que cada geometría se lea sola.
-const SHOWCASE_JUNCTION_GALLERY: [(TileCoord, u8); 19] = [
-    // Ocho desvíos simples: las cuatro orientaciones sobre cada eje recto.
-    (TileCoord::new(33, 46), RAIL_TB_X | RAIL_TB_UPPER),
-    (TileCoord::new(35, 46), RAIL_TB_X | RAIL_TB_RIGHT),
-    (TileCoord::new(37, 46), RAIL_TB_X | RAIL_TB_LOWER),
-    (TileCoord::new(39, 46), RAIL_TB_X | RAIL_TB_LEFT),
-    (TileCoord::new(41, 46), RAIL_TB_Y | RAIL_TB_UPPER),
-    (TileCoord::new(33, 48), RAIL_TB_Y | RAIL_TB_LEFT),
-    (TileCoord::new(35, 48), RAIL_TB_Y | RAIL_TB_LOWER),
-    (TileCoord::new(37, 48), RAIL_TB_Y | RAIL_TB_RIGHT),
-    // Cuatro uniones de tres lados (T), incluida cada orientación espejo.
-    (
-        TileCoord::new(39, 48),
-        RAIL_TB_X | RAIL_TB_UPPER | RAIL_TB_LEFT,
-    ),
-    (
-        TileCoord::new(41, 48),
-        RAIL_TB_X | RAIL_TB_LOWER | RAIL_TB_RIGHT,
-    ),
-    (
-        TileCoord::new(33, 50),
-        RAIL_TB_Y | RAIL_TB_LOWER | RAIL_TB_LEFT,
-    ),
-    (
-        TileCoord::new(35, 50),
-        RAIL_TB_Y | RAIL_TB_UPPER | RAIL_TB_RIGHT,
-    ),
-    // Cuatro single-slip, uno por curva de enlace.
-    (
-        TileCoord::new(37, 50),
-        RAIL_TB_X | RAIL_TB_Y | RAIL_TB_UPPER,
-    ),
-    (
-        TileCoord::new(39, 50),
-        RAIL_TB_X | RAIL_TB_Y | RAIL_TB_LOWER,
-    ),
-    (TileCoord::new(41, 50), RAIL_TB_X | RAIL_TB_Y | RAIL_TB_LEFT),
-    (
-        TileCoord::new(33, 52),
-        RAIL_TB_X | RAIL_TB_Y | RAIL_TB_RIGHT,
-    ),
-    // Los dos cruces simples y el doble-slip.
-    (TileCoord::new(35, 52), RAIL_TB_X | RAIL_TB_Y),
-    (
-        TileCoord::new(37, 52),
-        RAIL_TB_UPPER | RAIL_TB_LOWER | RAIL_TB_LEFT | RAIL_TB_RIGHT,
-    ),
-    (
-        TileCoord::new(39, 52),
-        RAIL_TB_X | RAIL_TB_Y | RAIL_TB_UPPER | RAIL_TB_LOWER | RAIL_TB_LEFT | RAIL_TB_RIGHT,
-    ),
-];
+/// La galería exhaustiva ordena las combinaciones de 2..=6 piezas de vía.
+/// Son `C(6,2)+…+C(6,6) = 57` topologías construibles sobre una tesela plana.
+const SHOWCASE_JUNCTION_GALLERY_X0: i32 = 2;
+const SHOWCASE_JUNCTION_GALLERY_Y0: i32 = 55;
+const SHOWCASE_JUNCTION_GALLERY_COL_STEP: i32 = 3;
+const SHOWCASE_JUNCTION_GALLERY_ROW_STEP: i32 = 2;
+#[cfg(test)]
+const SHOWCASE_JUNCTION_GALLERY_COUNT: usize = 57;
 const SHOWCASE_TUNNEL_NE: TileCoord = TileCoord::new(16, 45);
 const SHOWCASE_TUNNEL_SW: TileCoord = TileCoord::new(14, 45);
 const SHOWCASE_TUNNEL_START: TileCoord = TileCoord::new(4, 45);
@@ -137,6 +91,24 @@ const SHOWCASE_AIRPORT_WEST_ORIGIN: TileCoord = TileCoord::new(7, 49);
 const SHOWCASE_AIRPORT_EAST_ORIGIN: TileCoord = TileCoord::new(43, 49);
 
 const STATION_ENTRANCE_SOUTH: u8 = 1;
+
+/// Todas las topologías de junction que admite el `TrackBits` clásico.
+/// Cada fila agrupa máscaras con el mismo número de piezas, de dos a seis.
+fn showcase_junction_gallery_cells() -> impl Iterator<Item = (TileCoord, u8)> {
+    (2_u32..=6).flat_map(|piece_count| {
+        (1_u8..=0x3F)
+            .filter(move |bits| bits.count_ones() == piece_count)
+            .enumerate()
+            .map(move |(column, bits)| {
+                let x = SHOWCASE_JUNCTION_GALLERY_X0
+                    + i32::try_from(column).unwrap_or(0) * SHOWCASE_JUNCTION_GALLERY_COL_STEP;
+                let y = SHOWCASE_JUNCTION_GALLERY_Y0
+                    + i32::try_from(piece_count - 2).unwrap_or(0)
+                        * SHOWCASE_JUNCTION_GALLERY_ROW_STEP;
+                (TileCoord::new(x, y), bits)
+            })
+    })
+}
 
 /// Casas, buses, bosque, fábrica, hub, vía extendida y lab de pathfinding.
 pub(crate) fn place_gameplay_showcase(state: &mut GameState) {
@@ -415,10 +387,9 @@ fn place_showcase_junction_lab(state: &mut GameState) {
         RAIL_TB_UPPER | RAIL_TB_LOWER | RAIL_TB_LEFT | RAIL_TB_RIGHT,
     );
 
-    // Galería exhaustiva: todas las orientaciones de desvío, T y single-slip,
-    // más ambos cruces y el double-slip. Es estática para no añadir rutas
-    // ambiguas a los servicios que circulan en la demo.
-    for (coord, bits) in SHOWCASE_JUNCTION_GALLERY {
+    // Galería exhaustiva de las 57 máscaras de junction; es estática para no
+    // añadir rutas ambiguas a los servicios que circulan en la demo.
+    for (coord, bits) in showcase_junction_gallery_cells() {
         set_showcase_rail_bits(state, coord, bits);
     }
 }
@@ -864,7 +835,7 @@ pub(crate) fn log_gameplay_showcase_zones() {
          6 carboneros desde depósito ({},{}) entre mina ({},{}) y central ({},{}) \
          por doble vía y={SHOWCASE_RAIL_Y}/{SHOWCASE_RAIL_RETURN_Y} | \
          exhibiciones rail separadas: puente x={}..{} y={} (shuttle #9200), \
-         junctions x=4..30 y={}/{} y túnel x={}..{} y={} (shuttle #9201) | \
+         junctions x=4..30 y={}/{}, galería 57 variantes x={}..59 y={}..63, y túnel x={}..{} y={} (shuttle #9201) | \
          2 barcos ({},{})↔({},{}) | 2 aviones + 1 helicóptero Small | \
          lab pathfinding: carreteras y=12/13 unidas en x=22",
         SHOWCASE_BUS_A.x,
@@ -890,6 +861,8 @@ pub(crate) fn log_gameplay_showcase_zones() {
         SHOWCASE_BRIDGE_Y,
         SHOWCASE_JUNCTION_TOP_Y,
         SHOWCASE_JUNCTION_BOTTOM_Y,
+        SHOWCASE_JUNCTION_GALLERY_X0,
+        SHOWCASE_JUNCTION_GALLERY_Y0,
         SHOWCASE_TUNNEL_SW.x,
         SHOWCASE_TUNNEL_NE.x,
         SHOWCASE_TUNNEL_NE.y,
@@ -1053,7 +1026,9 @@ mod tests {
                 & 0x3F,
             RAIL_TB_X | RAIL_TB_Y | RAIL_TB_UPPER | RAIL_TB_LOWER | RAIL_TB_LEFT | RAIL_TB_RIGHT
         );
-        for (coord, bits) in SHOWCASE_JUNCTION_GALLERY {
+        let gallery: Vec<_> = showcase_junction_gallery_cells().collect();
+        assert_eq!(gallery.len(), SHOWCASE_JUNCTION_GALLERY_COUNT);
+        for (coord, bits) in gallery {
             let tile = state.map.get(coord).expect("muestra de junction gallery");
             assert_eq!(tile.kind, TileKind::Rail, "muestra en {coord:?}");
             assert_eq!(tile.m5 & 0x3F, bits, "trackbits en {coord:?}");

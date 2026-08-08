@@ -50,14 +50,14 @@ pub fn wooden_bridge_ramp_sprite_id(rail: bool, tileh: u8, dir: u8) -> u32 {
     let direction = [2usize, 1, 0, 3][usize::from(dir & 3)];
     let table = if rail {
         if tileh == 0 {
-            [2542, 2541, 2544, 2543]
-        } else {
             [2538, 2537, 2539, 2540]
+        } else {
+            [2542, 2541, 2544, 2543]
         }
     } else if tileh == 0 {
-        [2534, 2533, 2536, 2535]
-    } else {
         [2530, 2529, 2531, 2532]
+    } else {
+        [2534, 2533, 2536, 2535]
     };
     table[direction]
 }

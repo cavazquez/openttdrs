@@ -123,6 +123,28 @@ mod tests {
     }
 
     #[test]
+    fn wooden_flat_ramps_follow_upstream_head_table() {
+        // `_bridge_sprite_table_wood_heads`: con terreno plano OpenTTD usa
+        // las cuatro cabezas RAMP, indexadas SW, SE, NE, NW.
+        assert_eq!(
+            crate::sprites::wooden_bridge_ramp_sprite_id(true, 0, 2),
+            2538
+        );
+        assert_eq!(
+            crate::sprites::wooden_bridge_ramp_sprite_id(true, 0, 1),
+            2537
+        );
+        assert_eq!(
+            crate::sprites::wooden_bridge_ramp_sprite_id(true, 0, 0),
+            2539
+        );
+        assert_eq!(
+            crate::sprites::wooden_bridge_ramp_sprite_id(true, 0, 3),
+            2540
+        );
+    }
+
+    #[test]
     fn span_at_propagates_pbs_reservation_from_rail_ramp() {
         let mut map = Map::new_flat(8, 8, 0);
         let c = |x: i32, y: i32| TileCoord::new(x, y);

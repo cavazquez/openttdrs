@@ -85,6 +85,8 @@ pub(crate) enum VehicleListAction {
     GotoDepot,
     CenterCamera,
     CycleGroup,
+    CreateGroup,
+    AssignToGroup,
     ClearStationFilter,
 }
 
@@ -317,6 +319,20 @@ pub(crate) fn setup_vehicle_list(mut commands: Commands, asset_server: Res<Asset
             spawn_action_button(
                 row,
                 asset_server,
+                "Crear grupo",
+                VehicleListAction::CreateGroup,
+                false,
+            );
+            spawn_action_button(
+                row,
+                asset_server,
+                "Asignar",
+                VehicleListAction::AssignToGroup,
+                false,
+            );
+            spawn_action_button(
+                row,
+                asset_server,
                 "Quitar filtro",
                 VehicleListAction::ClearStationFilter,
                 false,
@@ -481,6 +497,17 @@ pub(crate) fn handle_vehicle_list_buttons(
             state.selected = None;
             continue;
         }
+        if matches!(action.0, VehicleListAction::CreateGroup) {
+            let name = format!("Grupo {}", sim.state.vehicle_groups.len() + 1);
+            match crate::network::apply_player_command(
+                &mut sim.state,
+                &Command::CreateVehicleGroup { name },
+            ) {
+                Ok(()) => pending.pending = true,
+                Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),
+            }
+            continue;
+        }
         let Some(vehicle_id) = state.selected.or(vehicle_window.vehicle_id) else {
             continue;
         };
@@ -517,6 +544,22 @@ pub(crate) fn handle_vehicle_list_buttons(
                 }
             }
             VehicleListAction::CycleGroup => {}
+            VehicleListAction::CreateGroup => {}
+            VehicleListAction::AssignToGroup => {
+                let Some(group_id) = state.group_filter else {
+                    continue;
+                };
+                match crate::network::apply_player_command(
+                    &mut sim.state,
+                    &Command::AssignVehicleToGroup {
+                        vehicle_id,
+                        group_id: Some(group_id),
+                    },
+                ) {
+                    Ok(()) => pending.pending = true,
+                    Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),
+                }
+            }
             VehicleListAction::ClearStationFilter => {}
         }
     }
@@ -625,6 +668,8 @@ pub(crate) fn sync_vehicle_list(
         let enabled = match action.0 {
             VehicleListAction::ClearStationFilter => has_station_filter,
             VehicleListAction::CycleGroup => !sim.state.vehicle_groups.is_empty(),
+            VehicleListAction::CreateGroup => true,
+            VehicleListAction::AssignToGroup => has_selection && state.group_filter.is_some(),
             _ => has_selection,
         };
         *bg = if !enabled {

@@ -1,6 +1,7 @@
 //! Despawn de entidades de sesión InGame (markers inventariables).
 
 use bevy::prelude::*;
+use std::collections::HashSet;
 
 use crate::audio::MusicPlayer;
 use crate::debug_gizmos::DiagnosticsOverlayRoot;
@@ -110,6 +111,22 @@ pub(super) fn despawn_ingame_entities(world: &mut World) {
     }
     to_despawn.sort_unstable();
     to_despawn.dedup();
+
+    // `despawn()` removes the complete hierarchy. Markers such as
+    // `FloatingWindow` and `TileInfoText` may therefore select both a root
+    // and one of its descendants; only enqueue the highest selected entity.
+    let selected: HashSet<Entity> = to_despawn.iter().copied().collect();
+    let mut parents = world.query::<&ChildOf>();
+    to_despawn.retain(|entity| {
+        let mut parent = parents.get(world, *entity).ok().map(ChildOf::parent);
+        while let Some(ancestor) = parent {
+            if selected.contains(&ancestor) {
+                return false;
+            }
+            parent = parents.get(world, ancestor).ok().map(ChildOf::parent);
+        }
+        true
+    });
 
     let mut commands = world.commands();
     for entity in to_despawn {

@@ -226,9 +226,10 @@ pub(crate) fn bridge_span_at(
     })
 }
 
-/// Puente de madera: riel integrado en el sprite rear. Resto: overlay aparte (upstream).
-fn bridge_draws_separate_rail_overlay(bridge_type: BridgeType) -> bool {
-    bridge_type != BridgeType::Wooden
+/// El puente de madera tiene riel en la cabeza, pero el overlay explícito es
+/// más fiable para el vano (y coincide con el resto de puentes).
+fn bridge_draws_separate_rail_overlay(bridge_type: BridgeType, on_ramp: bool) -> bool {
+    bridge_type != BridgeType::Wooden || !on_ramp
 }
 
 fn bridge_rail_track_sprite(axis: usize) -> u32 {
@@ -386,7 +387,9 @@ pub(crate) fn spawn_bridge_deck(
     use crate::sprites::{TransparencyOption, is_hidden};
     if is_hidden(TransparencyOption::Bridges) {
         // Vía sobre el vano sigue visible; solo se oculta la estructura.
-        if span.rail && bridge_draws_separate_rail_overlay(span.bridge_type) {
+        if span.rail
+            && bridge_draws_separate_rail_overlay(span.bridge_type, ctx.tile.is_some_and(ramp_tile))
+        {
             spawn_bridge_rail_overlay(commands, assets, ctx, span, show_pbs_reservations);
         }
         return;
@@ -397,7 +400,13 @@ pub(crate) fn spawn_bridge_deck(
         .tile
         .filter(|_| span.bridge_type == BridgeType::Wooden)
         .map(|tile| wooden_bridge_ramp_sprite_id(span.rail, ctx.info.tileh, tile.m5));
-    let rear_id = ramp_id.unwrap_or_else(|| ids.rear(span.rail, span.axis));
+    let rear_id = ramp_id.unwrap_or_else(|| {
+        // En el vano de madera dibujamos la vía como overlay para evitar que
+        // el riel integrado del sprite de estructura desaparezca según el
+        // atlas cargado.
+        let use_road_deck = span.bridge_type == BridgeType::Wooden && span.rail;
+        ids.rear(!use_road_deck && span.rail, span.axis)
+    });
     let front_id = if on_ramp { 0 } else { ids.front[span.axis] };
     let pillar_id = if on_ramp { 0 } else { ids.pillar[span.axis] };
     let z_draw_px = f32::from(span.deck_z) * HEIGHT_PX - BRIDGE_Z_START;
@@ -450,7 +459,7 @@ pub(crate) fn spawn_bridge_deck(
             )),
         ));
     }
-    if span.rail && bridge_draws_separate_rail_overlay(span.bridge_type) {
+    if span.rail && bridge_draws_separate_rail_overlay(span.bridge_type, on_ramp) {
         spawn_bridge_rail_overlay(commands, assets, ctx, span, show_pbs_reservations);
     }
     // Overlay de tranvía sobre tablero de puente de carretera.

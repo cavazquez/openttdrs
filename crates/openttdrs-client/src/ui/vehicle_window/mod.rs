@@ -191,4 +191,33 @@ mod tests {
         assert_eq!(state.open, vec![10, 20]);
         assert_eq!(state.vehicle_id, Some(10));
     }
+
+    #[test]
+    fn vehicle_window_sync_follows_chain_after_close() {
+        let mut state = VehicleWindowState::default();
+        let mut chain = VehicleChainRegistry::default();
+        state.open_or_focus(&mut chain, 42);
+        state.open_or_focus(&mut chain, 99);
+
+        chain.close_vehicle(99);
+        state.sync_from_chain(&chain);
+
+        assert_eq!(state.vehicle_id, Some(42));
+        assert_eq!(state.open, vec![42]);
+        assert!(!state.rename_editing);
+    }
+
+    #[test]
+    fn clearing_vehicle_window_resets_all_view_state() {
+        let mut state = VehicleWindowState::default();
+        let mut chain = VehicleChainRegistry::default();
+        state.open_or_focus(&mut chain, 42);
+        state.rename_editing = true;
+
+        state.clear_with_chain(&mut chain);
+
+        assert_eq!(state.vehicle_id, None);
+        assert!(state.open.is_empty());
+        assert!(!state.rename_editing);
+    }
 }

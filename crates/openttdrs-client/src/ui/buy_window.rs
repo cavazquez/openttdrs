@@ -931,6 +931,19 @@ mod tests {
         state
     }
 
+    fn rail_depot_state() -> GameState {
+        let mut state = GameState::new(8, 8);
+        let depot = TileCoord::new(2, 2);
+        apply_command(&mut state, &Command::PlaceRail(TileCoord::new(1, 2))).unwrap();
+        apply_command(&mut state, &Command::PlaceRailDepotDir(depot, 0)).unwrap();
+        apply_command(
+            &mut state,
+            &Command::BuildVehicleAtDepot(depot, openttdrs_core::ENGINE_TRAIN_KIRBY),
+        )
+        .unwrap();
+        state
+    }
+
     #[test]
     fn toolbar_active_state_follows_catalog_sort() {
         let mut state = BuyVehicleWindowState {
@@ -1020,5 +1033,41 @@ mod tests {
             Some(openttdrs_core::ENGINE_BUS_MPS)
         );
         assert!(world.resource::<RemapMapVisualsPending>().pending);
+    }
+
+    #[test]
+    fn buy_wagon_button_attaches_it_to_depot_locomotive() {
+        let depot = TileCoord::new(2, 2);
+        let mut world = World::new();
+        world.insert_resource(SimWorld {
+            state: rail_depot_state(),
+            ..SimWorld::default()
+        });
+        world.init_resource::<BuyVehicleWindowState>();
+        world.init_resource::<RemapMapVisualsPending>();
+        world.init_resource::<HudBuildFeedback>();
+        world.insert_resource(Time::<()>::default());
+        {
+            let mut buy = world.resource_mut::<BuyVehicleWindowState>();
+            buy.depot_pos = Some(depot);
+            buy.selected_engine = Some(openttdrs_core::ENGINE_WAGON_PASSENGER);
+        }
+        world.spawn((Button, BuyVehicleBuyButton, Interaction::Pressed));
+
+        world.run_system_once(handle_buy_window_buttons).unwrap();
+
+        let sim = world.resource::<SimWorld>();
+        assert_eq!(sim.state.vehicles.len(), 2);
+        let head_id = sim
+            .state
+            .vehicles
+            .iter()
+            .find(|vehicle| vehicle.engine_id == Some(openttdrs_core::ENGINE_TRAIN_KIRBY))
+            .unwrap()
+            .id;
+        assert_eq!(
+            openttdrs_core::consist_unit_ids(&sim.state.vehicles, head_id).len(),
+            2
+        );
     }
 }

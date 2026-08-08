@@ -1329,4 +1329,40 @@ mod tests {
         assert!(world.resource::<SimWorld>().state.vehicles.is_empty());
         assert!(world.resource::<RemapMapVisualsPending>().pending);
     }
+
+    #[test]
+    fn new_vehicles_button_opens_buy_window_for_depot() {
+        let (sim, depot, _) = world_with_bus();
+        let mut world = World::new();
+        insert_depot_resources(&mut world, sim, depot);
+        world.spawn((Button, DepotPanelButton::NewVehicles, Interaction::Pressed));
+
+        world.run_system_once(handle_depot_panel_buttons).unwrap();
+
+        assert_eq!(
+            world.resource::<BuyVehicleWindowState>().depot_pos,
+            Some(depot)
+        );
+    }
+
+    #[test]
+    fn running_button_toggles_vehicle_state() {
+        let (sim, depot, vehicle_id) = world_with_bus();
+        let mut world = World::new();
+        insert_depot_resources(&mut world, sim, depot);
+        world.spawn((Button, DepotRunningButton { slot: 0 }, Interaction::Pressed));
+
+        world.run_system_once(handle_depot_panel_buttons).unwrap();
+
+        assert!(
+            world
+                .resource::<SimWorld>()
+                .state
+                .vehicles
+                .iter()
+                .find(|vehicle| vehicle.id == vehicle_id)
+                .unwrap()
+                .running
+        );
+    }
 }

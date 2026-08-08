@@ -1073,7 +1073,7 @@ Reporte regenerable: [`parity/divergences_found.md`](parity/divergences_found.md
 **Estado:** implementado en `openttdrs-core::linkgraph_parity`  
 **MVP previo:** #49 (Manual + stub `CapacityScaled`)  
 **Seguimiento:** [#102](https://github.com/cavazquez/openttdrs/issues/102) ✅ cerrado  
-**LGRP MVP:** load/save del grafo observado (`sav/linkgraph.rs`) ✅ — `LGRJ`/`LGRS` vacíos (OOS consciente).  
+**LGRP MVP:** load/save del grafo observado (`sav/linkgraph.rs`) ✅ — `LGRJ`/`LGRS` se preservan opacamente durante un roundtrip si el grafo no cambia; al mutarlo se descartan porque los jobs quedan obsoletos (el scheduler asíncrono sigue OOS).
 **Overlay mapa:** ✅ gizmos al abrir Link Graph o con «Overlay Link Graph» en Opciones de visualización.  
 **Dumps C++ byte-igual (MCF):** fixtures JSON en `tests/fixtures/linkgraph/*.json` (`OPENTTD_DUMP_LINKGRAPH=1`).  
 **Dumps C++ byte-igual (LGRP wire):** `lgrp_empty.bin` / `lgrp_two_node_goods.bin` (`OPENTTD_DUMP_LGRP=1`).
@@ -1127,7 +1127,7 @@ OPENTTD_DUMP_LGRP=1 ./openttd_test "[linkgraph][lgrp]"
 ## Guardar hex → tests/fixtures/linkgraph/lgrp_*.bin
 ```
 
-Asserts en `sav/linkgraph.rs` (`lgrp_*_matches_openttd_dump`). `LGRJ`/`LGRS` quedan fuera del golden (chunks aparte; Rust los emite vacíos).
+Asserts en `sav/linkgraph.rs` (`lgrp_*_matches_openttd_dump`). `LGRJ`/`LGRS` quedan fuera del golden: Rust conserva su payload TABLE opaco cuando puede, pero no interpreta ni ejecuta jobs o scheduler.
 
 ### Manual
 

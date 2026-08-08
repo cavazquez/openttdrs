@@ -516,4 +516,30 @@ mod tests {
         assert_eq!(runtime[0].body, vec![2, 0, 0]);
         assert_eq!(runtime[1].body, vec![2, 0, 0]);
     }
+
+    #[test]
+    fn runtime_chunks_load_and_reemit_unchanged() {
+        let mut stats = LinkGraphStats::default();
+        stats.runtime_chunks = vec![LinkGraphRuntimeChunk {
+            name: *b"LGRJ",
+            ch_type: CH_TABLE,
+            body: vec![2, 0, 0],
+        }];
+        let bytes = encode_linkgraph_chunks(&stats, &[], 32).expect("encode");
+        let chunks = crate::sav::chunks::parse_chunks(&bytes).expect("parse");
+        let loaded = link_graph_from_chunks(&chunks, 32, &HashMap::new(), 350, Climate::Temperate);
+        assert_eq!(loaded.runtime_chunks, stats.runtime_chunks);
+
+        let reemitted = encode_linkgraph_chunks(&loaded, &[], 32).expect("re-encode");
+        let reparsed = crate::sav::chunks::parse_chunks(&reemitted).expect("reparse");
+        let original = chunks
+            .iter()
+            .find(|chunk| chunk.name == *b"LGRJ")
+            .expect("original LGRJ");
+        let roundtripped = reparsed
+            .iter()
+            .find(|chunk| chunk.name == *b"LGRJ")
+            .expect("roundtripped LGRJ");
+        assert_eq!(roundtripped.body, original.body);
+    }
 }

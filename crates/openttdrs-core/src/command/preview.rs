@@ -298,6 +298,7 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
         | Command::CreateVehicleGroup { .. }
         | Command::RenameVehicleGroup { .. }
         | Command::AssignVehicleToGroup { .. }
+        | Command::SetVehicleGroupRunning { .. }
         | Command::ClearVehicleTimetableLateness(..)
         | Command::SetVehicleOrderWaitTicks { .. }
         | Command::SetVehicleOrderTravelTicks { .. }

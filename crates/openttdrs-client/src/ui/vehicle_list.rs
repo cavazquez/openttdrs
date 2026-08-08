@@ -87,6 +87,7 @@ pub(crate) enum VehicleListAction {
     CycleGroup,
     CreateGroup,
     AssignToGroup,
+    ToggleGroupRunning,
     ClearStationFilter,
 }
 
@@ -333,6 +334,13 @@ pub(crate) fn setup_vehicle_list(mut commands: Commands, asset_server: Res<Asset
             spawn_action_button(
                 row,
                 asset_server,
+                "Iniciar grupo",
+                VehicleListAction::ToggleGroupRunning,
+                false,
+            );
+            spawn_action_button(
+                row,
+                asset_server,
                 "Quitar filtro",
                 VehicleListAction::ClearStationFilter,
                 false,
@@ -508,6 +516,25 @@ pub(crate) fn handle_vehicle_list_buttons(
             }
             continue;
         }
+        if matches!(action.0, VehicleListAction::ToggleGroupRunning) {
+            let Some(group_id) = state.group_filter else {
+                continue;
+            };
+            let running = sim
+                .state
+                .vehicles
+                .iter()
+                .filter(|vehicle| vehicle.group_id == Some(group_id))
+                .any(|vehicle| !vehicle.running);
+            match crate::network::apply_player_command(
+                &mut sim.state,
+                &Command::SetVehicleGroupRunning { group_id, running },
+            ) {
+                Ok(()) => pending.pending = true,
+                Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),
+            }
+            continue;
+        }
         let Some(vehicle_id) = state.selected.or(vehicle_window.vehicle_id) else {
             continue;
         };
@@ -560,6 +587,7 @@ pub(crate) fn handle_vehicle_list_buttons(
                     Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),
                 }
             }
+            VehicleListAction::ToggleGroupRunning => {}
             VehicleListAction::ClearStationFilter => {}
         }
     }
@@ -670,6 +698,7 @@ pub(crate) fn sync_vehicle_list(
             VehicleListAction::CycleGroup => !sim.state.vehicle_groups.is_empty(),
             VehicleListAction::CreateGroup => true,
             VehicleListAction::AssignToGroup => has_selection && state.group_filter.is_some(),
+            VehicleListAction::ToggleGroupRunning => state.group_filter.is_some(),
             _ => has_selection,
         };
         *bg = if !enabled {

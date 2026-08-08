@@ -63,6 +63,26 @@ pub(super) fn assign_vehicle_to_group(
     Ok(())
 }
 
+pub(super) fn set_vehicle_group_running(
+    state: &mut GameState,
+    group_id: u32,
+    running: bool,
+) -> Result<(), CommandError> {
+    if !state
+        .vehicle_groups
+        .iter()
+        .any(|group| group.id == group_id)
+    {
+        return Err(CommandError::VehicleGroupNotFound);
+    }
+    for vehicle in &mut state.vehicles {
+        if vehicle.group_id == Some(group_id) {
+            vehicle.running = running;
+        }
+    }
+    Ok(())
+}
+
 pub(super) fn clear_vehicle_timetable_lateness(
     state: &mut GameState,
     vehicle_id: u32,

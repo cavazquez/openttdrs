@@ -213,6 +213,9 @@ fn apply_vehicle_command(state: &mut GameState, cmd: &Command) -> Result<(), Com
             vehicle_id,
             group_id,
         } => super::vehicle_fleet::assign_vehicle_to_group(state, *vehicle_id, *group_id),
+        Command::SetVehicleGroupRunning { group_id, running } => {
+            super::vehicle_fleet::set_vehicle_group_running(state, *group_id, *running)
+        }
         Command::ClearVehicleTimetableLateness(id) => {
             super::vehicle_fleet::clear_vehicle_timetable_lateness(state, *id)
         }
@@ -441,6 +444,7 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
         | Command::CreateVehicleGroup { .. }
         | Command::RenameVehicleGroup { .. }
         | Command::AssignVehicleToGroup { .. }
+        | Command::SetVehicleGroupRunning { .. }
         | Command::ClearVehicleTimetableLateness(..)
         | Command::SetVehicleOrderWaitTicks { .. }
         | Command::SetVehicleOrderTravelTicks { .. }

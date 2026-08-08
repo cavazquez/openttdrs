@@ -259,6 +259,11 @@ pub enum Command {
         vehicle_id: u32,
         group_id: Option<u32>,
     },
+    /// Inicia o detiene todos los vehículos de un grupo.
+    SetVehicleGroupRunning {
+        group_id: u32,
+        running: bool,
+    },
     ClearVehicleTimetableLateness(u32),
     SetVehicleOrderWaitTicks {
         vehicle_id: u32,

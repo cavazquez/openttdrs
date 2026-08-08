@@ -194,6 +194,7 @@ pub fn command_effects(cmd: &Command) -> CommandEffects {
         | Command::CreateVehicleGroup { .. }
         | Command::RenameVehicleGroup { .. }
         | Command::AssignVehicleToGroup { .. }
+        | Command::SetVehicleGroupRunning { .. }
         | Command::ClearVehicleTimetableLateness(..)
         | Command::SetVehicleOrderWaitTicks { .. }
         | Command::SetVehicleOrderTravelTicks { .. }

@@ -891,10 +891,11 @@ vagón) más Fases 2–3 de sim (packets, PBS).
 
 Cubierto: labels de órdenes (`order_row_labels_depots`), sync del panel de
 órdenes, pick de destino, añadir estación a ruta, conversión km/h, drag de
-ventanas flotantes. Sin tests: `depot_panel`, `buy_window`,
+ventanas flotantes, acciones de `depot_panel` (compra, vagón, clonación, venta
+y start/stop) y filtros/compra de `buy_window`. Siguen pendientes tests de
 `destination_window`, `timetable_window` y los handlers de botones de la
-ventana de vehículo — si se encara el paquete A, agregar tests de sync/handler
-por ventana al estilo `setup_order_panel_then_sync_order_panel`.
+ventana de vehículo — agregar cobertura de sync/handler por ventana al estilo
+`setup_order_panel_then_sync_order_panel`.
 
 ## Inventario rutas UI
 

@@ -918,8 +918,18 @@ pub(crate) fn buy_window_on_closed(
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use bevy::ecs::system::RunSystemOnce;
+
+    fn road_depot_state() -> GameState {
+        let mut state = GameState::new(8, 8);
+        let depot = TileCoord::new(2, 2);
+        apply_command(&mut state, &Command::PlaceRoad(TileCoord::new(1, 2))).unwrap();
+        apply_command(&mut state, &Command::PlaceRoadDepotDir(depot, 0)).unwrap();
+        state
+    }
 
     #[test]
     fn toolbar_active_state_follows_catalog_sort() {
@@ -980,5 +990,35 @@ mod tests {
             &state,
             BuyVehicleToolbarButton::FilterAll
         ));
+    }
+
+    #[test]
+    fn buy_button_builds_selected_vehicle_at_depot() {
+        let depot = TileCoord::new(2, 2);
+        let mut world = World::new();
+        world.insert_resource(SimWorld {
+            state: road_depot_state(),
+            ..SimWorld::default()
+        });
+        world.init_resource::<BuyVehicleWindowState>();
+        world.init_resource::<RemapMapVisualsPending>();
+        world.init_resource::<HudBuildFeedback>();
+        world.insert_resource(Time::<()>::default());
+        {
+            let mut buy = world.resource_mut::<BuyVehicleWindowState>();
+            buy.depot_pos = Some(depot);
+            buy.selected_engine = Some(openttdrs_core::ENGINE_BUS_MPS);
+        }
+        world.spawn((Button, BuyVehicleBuyButton, Interaction::Pressed));
+
+        world.run_system_once(handle_buy_window_buttons).unwrap();
+
+        let sim = world.resource::<SimWorld>();
+        assert_eq!(sim.state.vehicles.len(), 1);
+        assert_eq!(
+            sim.state.vehicles[0].engine_id,
+            Some(openttdrs_core::ENGINE_BUS_MPS)
+        );
+        assert!(world.resource::<RemapMapVisualsPending>().pending);
     }
 }

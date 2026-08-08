@@ -1258,3 +1258,75 @@ pub(crate) fn handle_depot_panel_buttons(
         }
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use bevy::ecs::system::RunSystemOnce;
+
+    fn world_with_bus() -> (SimWorld, TileCoord, u32) {
+        let mut state = GameState::new(8, 8);
+        let depot = TileCoord::new(2, 2);
+        apply_command(&mut state, &Command::PlaceRoad(TileCoord::new(1, 2))).unwrap();
+        apply_command(&mut state, &Command::PlaceRoadDepotDir(depot, 0)).unwrap();
+        apply_command(
+            &mut state,
+            &Command::BuildVehicleAtDepot(depot, openttdrs_core::ENGINE_BUS_MPS),
+        )
+        .unwrap();
+        let vehicle_id = state.vehicles[0].id;
+        (
+            SimWorld {
+                state,
+                ..SimWorld::default()
+            },
+            depot,
+            vehicle_id,
+        )
+    }
+
+    fn insert_depot_resources(world: &mut World, sim: SimWorld, depot: TileCoord) {
+        world.insert_resource(sim);
+        world.init_resource::<DepotPanelState>();
+        world.init_resource::<OrderEditState>();
+        world.init_resource::<BuyVehicleWindowState>();
+        world.init_resource::<AutoreplaceWindowState>();
+        world.init_resource::<RemapMapVisualsPending>();
+        world.init_resource::<HudBuildFeedback>();
+        world.insert_resource(Time::<()>::default());
+        world.resource_mut::<DepotPanelState>().depot_pos = Some(depot);
+    }
+
+    #[test]
+    fn clone_button_duplicates_selected_depot_vehicle() {
+        let (sim, depot, source_id) = world_with_bus();
+        let mut world = World::new();
+        insert_depot_resources(&mut world, sim, depot);
+        world.resource_mut::<DepotPanelState>().selected_vehicle = Some(source_id);
+        world.spawn((Button, DepotPanelButton::CloneVehicle, Interaction::Pressed));
+
+        world.run_system_once(handle_depot_panel_buttons).unwrap();
+
+        let sim = world.resource::<SimWorld>();
+        assert_eq!(sim.state.vehicles.len(), 2);
+        assert_ne!(
+            world.resource::<DepotPanelState>().selected_vehicle,
+            Some(source_id)
+        );
+        assert!(world.resource::<RemapMapVisualsPending>().pending);
+    }
+
+    #[test]
+    fn sell_button_removes_vehicle_from_depot() {
+        let (sim, depot, _) = world_with_bus();
+        let mut world = World::new();
+        insert_depot_resources(&mut world, sim, depot);
+        world.spawn((Button, DepotSellButton { slot: 0 }, Interaction::Pressed));
+
+        world.run_system_once(handle_depot_panel_buttons).unwrap();
+
+        assert!(world.resource::<SimWorld>().state.vehicles.is_empty());
+        assert!(world.resource::<RemapMapVisualsPending>().pending);
+    }
+}

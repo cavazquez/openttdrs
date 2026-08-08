@@ -9,8 +9,10 @@ stdlib-only para que el gate no dependa de Pillow/ImageMagick en CI.
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ProcessPoolExecutor
 import hashlib
 import json
+import os
 import struct
 import sys
 import zlib
@@ -354,6 +356,11 @@ def assess_entry(entry: dict[str, Any], write_sidecars: bool) -> tuple[list[dict
     return errors, notices
 
 
+def assess_entry_worker(args: tuple[dict[str, Any], bool]) -> tuple[list[dict[str, str]], list[str]]:
+    """Evalúa una ventana en un proceso separado para evitar el GIL del diff RGBA."""
+    return assess_entry(*args)
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -365,8 +372,16 @@ def main(argv: list[str]) -> int:
         help="evalúa únicamente esta ventana (repetible); por defecto evalúa todas",
     )
     parser.add_argument("--write-sidecars", action="store_true", help="regenera diff + sidecar desde referencia y candidato")
+    parser.add_argument(
+        "--jobs",
+        type=int,
+        default=0,
+        help="procesos para comparar ventanas (por defecto: hasta 4; 1 desactiva el paralelismo)",
+    )
     args = parser.parse_args(argv)
     try:
+        if args.jobs < 0:
+            raise GateError("--jobs no puede ser negativo")
         manifest = load_manifest(args.manifest)
         windows = manifest["windows"]
         ids = [entry.get("id") for entry in windows if isinstance(entry, dict)]
@@ -378,6 +393,7 @@ def main(argv: list[str]) -> int:
             raise GateError(f"--window desconocida: {', '.join(sorted(unknown))}")
         all_errors: list[dict[str, str]] = []
         notices: list[str] = []
+        selected: list[dict[str, Any]] = []
         for entry in windows:
             if not isinstance(entry, dict):
                 raise GateError("entrada de ventana inválida")
@@ -398,7 +414,21 @@ def main(argv: list[str]) -> int:
                 for item in accepted
             ):
                 raise GateError(f"{entry.get('id')}: accepted_differences inválido")
-            errors, updated = assess_entry(entry, args.write_sidecars)
+            selected.append(entry)
+
+        jobs = args.jobs or min(4, os.cpu_count() or 1)
+        tasks = [(entry, args.write_sidecars) for entry in selected]
+        if jobs == 1 or len(tasks) <= 1:
+            results = (assess_entry_worker(task) for task in tasks)
+        else:
+            try:
+                with ProcessPoolExecutor(max_workers=jobs) as executor:
+                    results = list(executor.map(assess_entry_worker, tasks))
+            except (OSError, PermissionError):
+                # Algunos runners restringidos no permiten fork/spawn; conservar
+                # el gate funcional allí, aunque sin aceleración.
+                results = (assess_entry_worker(task) for task in tasks)
+        for errors, updated in results:
             all_errors.extend(errors)
             notices.extend(updated)
     except GateError as exc:

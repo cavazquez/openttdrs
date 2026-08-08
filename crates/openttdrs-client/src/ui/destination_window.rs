@@ -429,3 +429,36 @@ pub(crate) fn destination_picker_on_closed(
         picker_state.close_vehicle(&order_state, vehicle_id);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::DestinationPickerState;
+    use crate::ui::toolbar::OrderEditState;
+
+    #[test]
+    fn picker_open_close_tracks_chain_slot() {
+        let mut state = DestinationPickerState::default();
+        assert!(!state.any_open());
+
+        state.open_for_chain_slot(1);
+        assert!(state.any_open());
+        assert!(state.open[1]);
+
+        state.close_slot(1);
+        assert!(!state.any_open());
+    }
+
+    #[test]
+    fn closing_vehicle_closes_all_matching_picker_slots() {
+        let mut state = DestinationPickerState::default();
+        state.open_for_chain_slot(0);
+        state.open_for_chain_slot(1);
+
+        let mut orders = OrderEditState::default();
+        orders.slots[0].vehicle_id = Some(42);
+        orders.slots[1].vehicle_id = Some(42);
+        state.close_vehicle(&orders, 42);
+
+        assert!(!state.any_open());
+    }
+}

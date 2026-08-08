@@ -584,3 +584,32 @@ pub(crate) fn handle_timetable_window_buttons(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::TimetableWindowState;
+
+    #[test]
+    fn focused_vehicle_is_validated_against_open_slots() {
+        let mut state = TimetableWindowState::default();
+        state.slots[0] = Some(42);
+        state.focused = Some(42);
+        assert_eq!(state.vehicle_id(), Some(42));
+
+        state.focused = Some(99);
+        assert_eq!(state.vehicle_id(), None);
+    }
+
+    #[test]
+    fn closing_vehicle_selects_next_open_slot() {
+        let mut state = TimetableWindowState::default();
+        state.slots[0] = Some(42);
+        state.slots[1] = Some(99);
+        state.focused = Some(42);
+
+        state.close_vehicle(42);
+
+        assert_eq!(state.slots[0], None);
+        assert_eq!(state.focused, Some(99));
+    }
+}

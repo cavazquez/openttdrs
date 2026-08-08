@@ -84,6 +84,7 @@ pub(crate) enum VehicleListAction {
     ToggleRunning,
     GotoDepot,
     CenterCamera,
+    CycleGroup,
     ClearStationFilter,
 }
 
@@ -104,6 +105,8 @@ pub(crate) struct VehicleListState {
     /// Si está definido, solo muestra vehículos con orden a esa estación.
     pub(crate) station_filter: Option<TileCoord>,
     pub(crate) company: VehicleCompanyFilter,
+    /// `None` muestra toda la flota; `Some(id)` filtra por grupo.
+    pub(crate) group_filter: Option<u32>,
 }
 
 impl VehicleListState {
@@ -158,6 +161,9 @@ pub(crate) struct VehicleCompanyFilterButton(VehicleCompanyFilter);
 #[derive(Component)]
 pub(crate) struct VehicleListToggleLabel;
 
+#[derive(Component)]
+pub(crate) struct VehicleListGroupLabel;
+
 #[derive(Default)]
 pub(crate) struct VehicleListCache {
     kind: VehicleListKind,
@@ -166,6 +172,7 @@ pub(crate) struct VehicleListCache {
     selected: Option<u32>,
     station_filter: Option<TileCoord>,
     company: VehicleCompanyFilter,
+    group_filter: Option<u32>,
     rows: Vec<(u32, String, u32, u16, i32, i32, String)>,
 }
 
@@ -303,6 +310,13 @@ pub(crate) fn setup_vehicle_list(mut commands: Commands, asset_server: Res<Asset
             spawn_action_button(
                 row,
                 asset_server,
+                "Grupos",
+                VehicleListAction::CycleGroup,
+                false,
+            );
+            spawn_action_button(
+                row,
+                asset_server,
                 "Quitar filtro",
                 VehicleListAction::ClearStationFilter,
                 false,
@@ -344,6 +358,9 @@ fn spawn_action_button(
         ));
         if toggle_label {
             text.insert(VehicleListToggleLabel);
+        }
+        if matches!(action, VehicleListAction::CycleGroup) {
+            text.insert(VehicleListGroupLabel);
         }
     });
 }
@@ -453,6 +470,17 @@ pub(crate) fn handle_vehicle_list_buttons(
             state.station_filter = None;
             continue;
         }
+        if matches!(action.0, VehicleListAction::CycleGroup) {
+            let mut groups = vec![None];
+            groups.extend(sim.state.vehicle_groups.iter().map(|group| Some(group.id)));
+            let current = groups
+                .iter()
+                .position(|group| *group == state.group_filter)
+                .unwrap_or(0);
+            state.group_filter = groups[(current + 1) % groups.len()];
+            state.selected = None;
+            continue;
+        }
         let Some(vehicle_id) = state.selected.or(vehicle_window.vehicle_id) else {
             continue;
         };
@@ -488,6 +516,7 @@ pub(crate) fn handle_vehicle_list_buttons(
                     }
                 }
             }
+            VehicleListAction::CycleGroup => {}
             VehicleListAction::ClearStationFilter => {}
         }
     }
@@ -499,7 +528,13 @@ pub(crate) fn sync_vehicle_list(
     sim: Res<SimWorld>,
     trucks: Option<Res<TruckHandles>>,
     mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
-    mut title_q: Query<(&FloatingWindowTitleText, &mut Text), Without<VehicleListToggleLabel>>,
+    mut title_q: Query<
+        (&FloatingWindowTitleText, &mut Text),
+        (
+            Without<VehicleListToggleLabel>,
+            Without<VehicleListGroupLabel>,
+        ),
+    >,
     list_roots: Query<Entity, With<VehicleListRoot>>,
     children_q: Query<&Children>,
     mut commands: Commands,
@@ -534,6 +569,14 @@ pub(crate) fn sync_vehicle_list(
         (
             With<VehicleListToggleLabel>,
             Without<FloatingWindowTitleText>,
+        ),
+    >,
+    mut group_label_q: Query<
+        &mut Text,
+        (
+            With<VehicleListGroupLabel>,
+            Without<FloatingWindowTitleText>,
+            Without<VehicleListToggleLabel>,
         ),
     >,
     mut row_buttons: Query<
@@ -581,6 +624,7 @@ pub(crate) fn sync_vehicle_list(
     for (action, interaction, mut bg) in &mut action_buttons {
         let enabled = match action.0 {
             VehicleListAction::ClearStationFilter => has_station_filter,
+            VehicleListAction::CycleGroup => !sim.state.vehicle_groups.is_empty(),
             _ => has_selection,
         };
         *bg = if !enabled {
@@ -602,6 +646,15 @@ pub(crate) fn sync_vehicle_list(
             "Iniciar".to_string()
         };
     }
+    if let Ok(mut group_label) = group_label_q.single_mut() {
+        **group_label = state
+            .group_filter
+            .and_then(|id| sim.state.vehicle_groups.iter().find(|g| g.id == id))
+            .map_or_else(
+                || "Grupos".to_string(),
+                |group| format!("Grupo: {}", group.name),
+            );
+    }
 
     let tick = sim.state.tick.get();
     let company = sim.state.active_company;
@@ -613,6 +666,11 @@ pub(crate) fn sync_vehicle_list(
         .filter(|vehicle| match state.company {
             VehicleCompanyFilter::Active => vehicle.owner == company,
             VehicleCompanyFilter::All => true,
+        })
+        .filter(|vehicle| {
+            state
+                .group_filter
+                .is_none_or(|id| vehicle.group_id == Some(id))
         })
         .filter(|vehicle| state.kind.matches(vehicle.kind))
         .filter(|vehicle| {
@@ -665,6 +723,7 @@ pub(crate) fn sync_vehicle_list(
         && cache.sort_dir == state.sort_dir
         && cache.station_filter == state.station_filter
         && cache.company == state.company
+        && cache.group_filter == state.group_filter
         && cache.rows == rows
     {
         if cache.selected != state.selected {
@@ -684,6 +743,7 @@ pub(crate) fn sync_vehicle_list(
     cache.sort_dir = state.sort_dir;
     cache.station_filter = state.station_filter;
     cache.company = state.company;
+    cache.group_filter = state.group_filter;
     cache.selected = state.selected;
     cache.rows.clone_from(&rows);
 

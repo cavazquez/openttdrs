@@ -889,13 +889,13 @@ vagón) más Fases 2–3 de sim (packets, PBS).
 
 ### Tests hoy y huecos
 
-Cubierto: labels de órdenes (`order_row_labels_depots`), sync del panel de
-órdenes, pick de destino, añadir estación a ruta, conversión km/h, drag de
-ventanas flotantes, acciones de `depot_panel` (compra, vagón, clonación, venta
-y start/stop) y filtros/compra de `buy_window`. Siguen pendientes tests de
-`destination_window`, `timetable_window` y los handlers de botones de la
-ventana de vehículo — agregar cobertura de sync/handler por ventana al estilo
-`setup_order_panel_then_sync_order_panel`.
+Cubierto: labels de órdenes (`order_row_labels_depots`), modos de carga y
+descarga, paradas intermedias y posición de andén, sync del panel de órdenes,
+pick de destino, añadir estación a ruta, conversión km/h, drag de ventanas
+flotantes, acciones de `depot_panel` (compra, vagón, clonación, venta y
+start/stop), filtros/compra de `buy_window`, ciclo de vida de
+`destination_window`, `timetable_window` y `vehicle_window`. La suite cliente
+queda en 792 tests verdes; el siguiente hueco funcional de UI es flota/grupos.
 
 ## Inventario rutas UI
 

@@ -63,6 +63,12 @@ fn bridge_deck_z(ramp_tileh: u8, ramp_min_z: u8, axis: usize) -> u8 {
     ramp_min_z.saturating_add(if one_corner { 1 } else { 2 })
 }
 
+/// La cabeza contiene la subida en su propio sprite: se dibuja desde el suelo.
+/// El vano se dibuja a la altura elevada del tablero.
+fn bridge_surface_z(base_z: u8, deck_z: u8, on_ramp: bool) -> u8 {
+    if on_ramp { base_z } else { deck_z }
+}
+
 fn axis_step(axis: usize) -> (i32, i32) {
     if axis == 0 { (1, 0) } else { (0, 1) }
 }
@@ -310,7 +316,11 @@ fn spawn_bridge_rail_overlay(
         Transform::from_translation(tile_pos_half(
             ctx.tx_i32(),
             ctx.ty_i32(),
-            span.deck_z,
+            bridge_surface_z(
+                ctx.info.base_z,
+                span.deck_z,
+                ctx.tile.is_some_and(ramp_tile),
+            ),
             RAIL_ON_BRIDGE_LAYER_FRAC,
             TILE_HALF_H,
         )),
@@ -369,6 +379,17 @@ fn spawn_layer(
     ));
 }
 
+#[cfg(test)]
+mod tests {
+    use super::bridge_surface_z;
+
+    #[test]
+    fn bridge_ramp_uses_ground_height_while_span_uses_deck_height() {
+        assert_eq!(bridge_surface_z(1, 2, true), 1);
+        assert_eq!(bridge_surface_z(1, 2, false), 2);
+    }
+}
+
 /// Dibuja tablero + barandilla + pilares para rampa o vano.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_bridge_deck(
@@ -409,7 +430,8 @@ pub(crate) fn spawn_bridge_deck(
     });
     let front_id = if on_ramp { 0 } else { ids.front[span.axis] };
     let pillar_id = if on_ramp { 0 } else { ids.pillar[span.axis] };
-    let z_draw_px = f32::from(span.deck_z) * HEIGHT_PX - BRIDGE_Z_START;
+    let surface_z = bridge_surface_z(ctx.info.base_z, span.deck_z, on_ramp);
+    let z_draw_px = f32::from(surface_z) * HEIGHT_PX - BRIDGE_Z_START;
 
     let front_shift = if span.axis == 0 {
         remap_tile_offset(0.0, 12.0, 0.0) * 0.5
@@ -430,7 +452,7 @@ pub(crate) fn spawn_bridge_deck(
         Vec2::ZERO,
         z_draw_px,
         DECK_LAYER_FRAC,
-        span.deck_z,
+        surface_z,
         span.bridge_type,
     );
     // Superficie Action5 `0x1B` (tablero NewGRF sobre la estructura OpenGFX).
@@ -453,7 +475,7 @@ pub(crate) fn spawn_bridge_deck(
             Transform::from_translation(tile_pos_half(
                 ctx.tx_i32(),
                 ctx.ty_i32(),
-                span.deck_z,
+                surface_z,
                 DECK_LAYER_FRAC + 0.001,
                 TILE_HALF_H,
             )),
@@ -475,7 +497,7 @@ pub(crate) fn spawn_bridge_deck(
             Transform::from_translation(tile_pos_half(
                 ctx.tx_i32(),
                 ctx.ty_i32(),
-                span.deck_z,
+                surface_z,
                 RAIL_ON_BRIDGE_LAYER_FRAC,
                 TILE_HALF_H,
             )),
@@ -500,7 +522,7 @@ pub(crate) fn spawn_bridge_deck(
         front_shift,
         z_draw_px,
         FRONT_LAYER_FRAC,
-        span.deck_z,
+        surface_z,
         span.bridge_type,
     );
 

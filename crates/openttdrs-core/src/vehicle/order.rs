@@ -1142,6 +1142,38 @@ impl VehicleOrder {
         }
     }
 
+    /// Alterna entre parar en estaciones intermedias y seguir hasta el destino.
+    #[must_use]
+    pub const fn with_toggled_non_stop(self) -> Option<Self> {
+        match self {
+            Self::Station {
+                station,
+                load_type,
+                unload_type,
+                non_stop,
+                stop_location,
+                wait_ticks,
+                travel_ticks,
+                max_speed,
+                implicit,
+            } => Some(Self::Station {
+                station,
+                load_type,
+                unload_type,
+                non_stop: match non_stop {
+                    OrderNonStop::StopAtIntermediate => OrderNonStop::NonStopDestination,
+                    OrderNonStop::NonStopDestination => OrderNonStop::StopAtIntermediate,
+                },
+                stop_location,
+                wait_ticks,
+                travel_ticks,
+                max_speed,
+                implicit,
+            }),
+            _ => None,
+        }
+    }
+
     /// ¿Debe seguir esperando carga según `FullLoad` / `FullLoadAny`?
     #[must_use]
     pub const fn should_wait_for_loading(self, cargo: u32, capacity: u32) -> bool {

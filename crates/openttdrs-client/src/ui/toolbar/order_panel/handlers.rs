@@ -270,6 +270,26 @@ pub(crate) fn handle_order_panel_buttons(
                     |vehicle_id, index| Command::ToggleVehicleOrderNoUnload { vehicle_id, index },
                 );
             }
+            OrderPanelButton::ToggleNonStop => {
+                edit_selected_station_order(
+                    &mut order_state,
+                    &mut sim,
+                    &mut pending,
+                    &mut hud_feedback,
+                    time.elapsed_secs(),
+                    VehicleOrder::with_toggled_non_stop,
+                );
+            }
+            OrderPanelButton::CycleStopLocation => {
+                edit_selected_station_order(
+                    &mut order_state,
+                    &mut sim,
+                    &mut pending,
+                    &mut hud_feedback,
+                    time.elapsed_secs(),
+                    VehicleOrder::with_cycled_stop_location,
+                );
+            }
             OrderPanelButton::ToggleDepotStop => {
                 toggle_order_flag(
                     &mut order_state,
@@ -529,6 +549,47 @@ fn toggle_order_flag(
         return;
     };
     match crate::network::apply_player_command(&mut sim.state, &make_cmd(vehicle_id, index)) {
+        Ok(()) => {
+            pending.pending = true;
+            refresh_orders_from_sim(order_state, sim);
+        }
+        Err(e) => push_build_command_error(hud_feedback, e, elapsed_secs),
+    }
+}
+
+fn edit_selected_station_order(
+    order_state: &mut OrderEditState,
+    sim: &mut SimWorld,
+    pending: &mut RemapMapVisualsPending,
+    hud_feedback: &mut HudBuildFeedback,
+    elapsed_secs: f32,
+    edit: impl FnOnce(VehicleOrder) -> Option<VehicleOrder>,
+) {
+    let Some(vehicle_id) = order_state.vehicle_id() else {
+        return;
+    };
+    let Some(index) = order_state.selected_slot() else {
+        push_build_command_error(
+            hud_feedback,
+            CommandError::OrderIndexOutOfRange,
+            elapsed_secs,
+        );
+        return;
+    };
+    let Some(order) = order_state.orders().get(index).copied() else {
+        push_build_command_error(
+            hud_feedback,
+            CommandError::OrderIndexOutOfRange,
+            elapsed_secs,
+        );
+        return;
+    };
+    let Some(updated) = edit(order) else {
+        return;
+    };
+    let mut orders = order_state.orders().to_vec();
+    orders[index] = updated;
+    match apply_order_edit(&mut sim.state, vehicle_id, &orders) {
         Ok(()) => {
             pending.pending = true;
             refresh_orders_from_sim(order_state, sim);

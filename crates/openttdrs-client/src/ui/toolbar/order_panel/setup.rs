@@ -119,6 +119,20 @@ fn spawn_order_panel_content(
                     row,
                     asset_server,
                     chain,
+                    OrderPanelButton::ToggleNonStop,
+                    "Paradas intermedias",
+                );
+                spawn_order_button(
+                    row,
+                    asset_server,
+                    chain,
+                    OrderPanelButton::CycleStopLocation,
+                    "Posición andén",
+                );
+                spawn_order_button(
+                    row,
+                    asset_server,
+                    chain,
                     OrderPanelButton::ToggleDepotStop,
                     "Parar depósito",
                 );

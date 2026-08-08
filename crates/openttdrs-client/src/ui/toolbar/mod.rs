@@ -614,6 +614,10 @@ pub(crate) enum OrderPanelButton {
     SkipOrder,
     /// Cicla el tipo de carga en la fila seleccionada.
     ToggleFullLoad,
+    /// Alterna paradas intermedias en una orden de estación.
+    ToggleNonStop,
+    /// Cicla la posición de parada en el andén.
+    CycleStopLocation,
     /// Cicla el tipo de descarga en la fila seleccionada.
     ToggleNoUnload,
     /// Alterna «parar en depósito» en una orden de depósito.

@@ -9,8 +9,7 @@ mod station;
 mod water;
 
 pub(crate) use rail::{
-    bridge_collinear_rail_gaps, normalize_rail_trackbits_from_neighbors,
-    normalize_synthetic_rail_crossings,
+    normalize_rail_trackbits_from_neighbors, normalize_synthetic_rail_crossings,
 };
 pub use rail::{rail_bits_placement_target, rail_trackbits_from_neighbors};
 pub use road::{

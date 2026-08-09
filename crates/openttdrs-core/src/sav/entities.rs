@@ -408,6 +408,14 @@ pub enum SavVehicleKind {
 /// Vehículo decodificado del chunk `VEHS`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SavVehicle {
+    /// ID de la fila `VEHS` (referenciado por `Vehicle::next`).
+    pub sav_id: u32,
+    /// Siguiente unidad del mismo convoy en la tabla `VEHS`.
+    ///
+    /// `OpenTTD` no garantiza que las unidades del convoy estén consecutivas en
+    /// la tabla sparse; esta referencia es la fuente autoritativa para
+    /// reconstruir la cadena del tren.
+    pub next_sav_id: Option<u32>,
     pub kind: SavVehicleKind,
     /// Tesela utilizable por el motor. Para trenes/carretera es literal
     /// `Vehicle::tile`; para aviones se recalcula desde `x_pos`/`y_pos`
@@ -472,7 +480,7 @@ pub(crate) fn vehicles_from_chunks(
         return Vec::new();
     };
     let mut out = Vec::new();
-    for (_, record) in table_rows(vehs, save_version) {
+    for (sav_id, record) in table_rows(vehs, save_version) {
         let Some(vtype) = record_get(&record, "type").and_then(SlValue::as_u64) else {
             continue;
         };
@@ -489,6 +497,13 @@ pub(crate) fn vehicles_from_chunks(
         let Some(common) = nested_struct(sub, "common") else {
             continue;
         };
+        let next_sav_id = record_get(common, "next")
+            .and_then(SlValue::as_u64)
+            // `SLE_REF` codifica el id de la tabla + 1; el cero queda como
+            // puntero nulo. Decodificarlo literal conectaba, por ejemplo, el
+            // siguiente `33` con la fila 33 en vez de la 32.
+            .and_then(|next| next.checked_sub(1))
+            .and_then(|next| u32::try_from(next).ok());
         let subtype = record_get(common, "subtype")
             .and_then(SlValue::as_u64)
             .unwrap_or(0);
@@ -605,6 +620,8 @@ pub(crate) fn vehicles_from_chunks(
             .unwrap_or(u16::MAX);
         #[allow(clippy::cast_possible_truncation)]
         out.push(SavVehicle {
+            sav_id,
+            next_sav_id,
             kind,
             pos,
             raw_tile,

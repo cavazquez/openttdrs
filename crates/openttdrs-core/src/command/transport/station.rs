@@ -135,7 +135,7 @@ pub(in crate::command::transport) fn ottd_station_type_bits(stop_kind: StopKind)
         StopKind::Airport => 1,
         StopKind::TruckStop => 2,
         StopKind::BusStop => 3,
-        StopKind::Dock => 4,
+        StopKind::Dock => crate::station::STATION_TYPE_DOCK,
         StopKind::Buoy => 6,
         StopKind::RailWaypoint => 7,
         StopKind::RoadWaypoint => 8,

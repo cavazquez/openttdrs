@@ -17,6 +17,15 @@
 bool OpenttdrsMaybeExportSnapshot(const std::string &source_path);
 
 /**
+ * If OPENTTDRS_WORLD_RAW_OUT is set, writes a `world-raw` v2 JSONL stream
+ * with every live map byte after AfterLoadGame. This is the tile-level oracle
+ * for SAV rendering parity (#305).
+ * @param source_path Path of the loaded save (for metadata only).
+ * @return true on success or when the env var is unset; false on I/O error.
+ */
+bool OpenttdrsMaybeExportWorldRaw(const std::string &source_path);
+
+/**
  * Arms an optional PBS JSONL exporter once the requested save completed loading.
  *
  * The exporter is enabled only when OPENTTDRS_PBS_TRACE_OUT is set. Its rows

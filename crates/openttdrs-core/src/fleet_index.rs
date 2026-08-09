@@ -6,7 +6,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::map::TileCoord;
+use crate::map::{Map, TileCoord, TileKind};
 use crate::station::Station;
 use crate::vehicle::Vehicle;
 
@@ -90,12 +90,46 @@ pub struct TerminalSpatialIndex {
 }
 
 impl TerminalSpatialIndex {
-    pub fn rebuild(&mut self, stations: &[Station]) {
+    pub fn rebuild(&mut self, map: &Map, stations: &[Station]) {
         self.by_tile.clear();
+        let mut imported_station_slots = HashMap::new();
         for (slot, station) in stations.iter().enumerate() {
             self.insert(station.pos, slot);
             for &tile in station.airport_tiles.iter().chain(&station.joined_tiles) {
                 self.insert(tile, slot);
+            }
+            if let Some(station_id) = station.ottd_station_id {
+                imported_station_slots.insert(station_id, slot);
+            }
+        }
+
+        // En OpenTTD, MAP2 guarda el `StationID` de toda tesela
+        // `MP_STATION`. Importar sólo el ancla obligaba a buscar linealmente
+        // todas las estaciones cada vez que un vehículo paraba en un andén
+        // grande. Al poblar el índice desde MAP2 la consulta queda O(1).
+        if !imported_station_slots.is_empty() {
+            let (width, _) = map.dimensions();
+            let Ok(width) = usize::try_from(width) else {
+                return;
+            };
+            if width == 0 {
+                return;
+            }
+            for (dense_index, tile) in map.tiles().iter().enumerate() {
+                if !matches!(tile.kind, TileKind::Station | TileKind::Airport) {
+                    continue;
+                }
+                let station_id = u32::from(tile.m2) | (u32::from(tile.m2_hi) << 8);
+                let Some(&slot) = imported_station_slots.get(&station_id) else {
+                    continue;
+                };
+                let Ok(x) = i32::try_from(dense_index % width) else {
+                    continue;
+                };
+                let Ok(y) = i32::try_from(dense_index / width) else {
+                    continue;
+                };
+                self.insert(TileCoord::new(x, y), slot);
             }
         }
         self.rebuilds = self.rebuilds.saturating_add(1);
@@ -122,7 +156,7 @@ impl TerminalSpatialIndex {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Station, TileCoord, Vehicle, VehicleKind};
+    use crate::{Map, Station, TileCoord, Vehicle, VehicleKind};
 
     #[test]
     fn indexes_slots_and_consist_topology_in_one_rebuild() {
@@ -153,9 +187,28 @@ mod tests {
         station.joined_tiles.push(joined);
         station.airport_tiles.push(airport);
         let mut index = TerminalSpatialIndex::default();
-        index.rebuild(&[station]);
+        index.rebuild(&Map::new_flat(8, 8, 0), &[station]);
         assert_eq!(index.at(anchor), &[0]);
         assert_eq!(index.at(joined), &[0]);
         assert_eq!(index.at(airport), &[0]);
+    }
+
+    #[test]
+    fn terminal_index_covers_imported_station_tiles_by_ottd_id() {
+        let anchor = TileCoord::new(1, 1);
+        let platform = TileCoord::new(6, 4);
+        let mut station = Station::new(anchor);
+        station.ottd_station_id = Some(42);
+        let mut map = Map::new_flat(8, 8, 0);
+        let Some(mut tile) = map.get(platform) else {
+            panic!("platform in map");
+        };
+        tile.kind = TileKind::Station;
+        tile.m2 = 42;
+        assert!(map.set_tile(platform, tile).is_ok());
+
+        let mut index = TerminalSpatialIndex::default();
+        index.rebuild(&map, &[station]);
+        assert_eq!(index.at(platform), &[0]);
     }
 }

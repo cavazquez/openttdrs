@@ -77,6 +77,9 @@ fn settings_from_env() -> NewGameSettings {
 
 fn bootstrap_procedural_state(settings: &NewGameSettings) -> GameState {
     let mut state = build_procedural_demo_world(settings);
+    // También el mapa demo usa los sprites globales Action5 (cimientos,
+    // catenaria, etc.); la tabla no forma parte del estado serializado.
+    openttdrs_core::apply_newgrf_stack_catalogs_default_dirs(&mut state);
     if settings.preserve_demo {
         log_procedural_demo_zones();
         log_gameplay_showcase_zones();
@@ -339,6 +342,7 @@ impl SimWorld {
                 path: path.to_owned(),
                 cause: e.to_string(),
             })?;
+        openttdrs_core::apply_newgrf_stack_catalogs_default_dirs(&mut state);
         apply_test_company_colour(&mut state);
         info!("Estado de simulacion cargado desde JSON: {path}");
         log_detection_summary(&state, true, None);
@@ -369,6 +373,7 @@ impl SimWorld {
         place_stations(&mut state);
         place_stations_from_map_tiles(&mut state);
         place_stations_from_footer_stxy(&mut state, Some(&extras));
+        openttdrs_core::apply_newgrf_stack_catalogs_default_dirs(&mut state);
         apply_test_company_colour(&mut state);
         log_detection_summary(&state, true, Some(&extras));
         state.runtime.pending_sim_events.discard_all();
@@ -385,11 +390,12 @@ impl SimWorld {
             path: path.to_owned(),
             cause: e.to_string(),
         })?;
-        let state = load_sav_state(&data).map_err(|cause| BootstrapLoadError {
+        let mut state = load_sav_state(&data).map_err(|cause| BootstrapLoadError {
             source: BootstrapLoadSource::Sav,
             path: path.to_owned(),
             cause,
         })?;
+        openttdrs_core::apply_newgrf_stack_catalogs_default_dirs(&mut state);
         info!("Save OpenTTD cargado desde {path}");
         Ok(Self {
             state,

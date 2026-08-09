@@ -2,7 +2,7 @@
 //!
 //! El catálogo mutable [`BridgeSpecDef`] admite overrides Action0 `Bridges` (`0x06`).
 
-use crate::map::TileCoord;
+use crate::map::{Tile, TileCoord};
 use crate::rail_signals::calendar_year_at_tick;
 use crate::tick::GameTick;
 
@@ -432,7 +432,24 @@ pub fn bridge_above_axis_from_mapt(mapt: u8) -> Option<bool> {
     }
 }
 
-/// Otra rampa del puente `kind`, saltando el vano que conserva su terreno inferior.
+/// Reserva PBS de una rampa ferroviaria de túnel o puente.
+///
+/// A diferencia de una tesela `MP_RAILWAY` común, OpenTTD guarda este estado
+/// en el bit 4 de `m5` (`HasTunnelBridgeReservation`), no en el byte alto de
+/// `MAP2`. Mantenerlo aquí evita que los consumidores del `.sav` mezclen ambos
+/// formatos de reserva.
+#[must_use]
+pub fn tunnel_bridge_rail_reserved(tile: Tile) -> bool {
+    tile.is_tunnel_bridge_tile() && (tile.m5 & 0x0C) == 0 && (tile.m5 & 0x10) != 0
+}
+
+/// Otra rampa del puente `kind`, siguiendo la dirección persistida en `m5`.
+///
+/// OpenTTD no identifica el vano por el tipo de terreno inferior: un puente
+/// puede cruzar tierra, vías, agua o una ciudad. `GetOtherBridgeEnd` avanza en
+/// la dirección de la rampa hasta hallar una rampa de puente con dirección
+/// opuesta. El enfoque anterior (solo agua con `IsBridgeAbove`) hacía que
+/// puentes válidos parecieran cortados o conectados a una rampa lateral.
 #[must_use]
 fn bridge_other_end(
     map: &crate::map::Map,
@@ -440,31 +457,23 @@ fn bridge_other_end(
     kind: crate::map::TileKind,
 ) -> Option<TileCoord> {
     let tile = map.get(ramp)?;
-    if tile.kind != kind {
+    if tile.kind != kind || !tile.is_tunnel_bridge_tile() || tile.m5 & 0x80 == 0 {
         return None;
     }
     let (map_w, map_h) = map.dimensions();
-    let max_x = map_w.cast_signed();
-    let max_y = map_h.cast_signed();
-    for (step_x, step_y) in [(1_i32, 0), (-1, 0), (0, 1), (0, -1)] {
-        let mut cur_x = ramp.x + step_x;
-        let mut cur_y = ramp.y + step_y;
-        for _ in 0..64 {
-            if cur_x < 0 || cur_y < 0 || cur_x >= max_x || cur_y >= max_y {
-                break;
-            }
-            let pos = TileCoord::new(cur_x, cur_y);
-            let Some(probe) = map.get(pos) else { break };
-            match probe.kind {
-                bridge_kind if bridge_kind == kind => return Some(pos),
-                crate::map::TileKind::Water
-                    if bridge_above_axis_from_mapt(probe.mapt).is_some() =>
-                {
-                    cur_x += step_x;
-                    cur_y += step_y;
-                }
-                _ => break,
-            }
+    let (step_x, step_y) = crate::map::diag_dir_offset(tile.m5 & 0x03);
+    let reverse_direction = (tile.m5.wrapping_add(2)) & 0x03;
+    let mut pos = ramp;
+    // La longitud no puede exceder una dimensión del mapa; el límite también
+    // evita un loop infinito si un save corrupto tiene una rampa huérfana.
+    for _ in 0..map_w.max(map_h) {
+        pos = TileCoord::new(pos.x + step_x, pos.y + step_y);
+        let probe = map.get(pos)?;
+        if probe.is_tunnel_bridge_tile()
+            && probe.m5 & 0x80 != 0
+            && probe.m5 & 0x03 == reverse_direction
+        {
+            return Some(pos);
         }
     }
     None
@@ -538,6 +547,32 @@ mod tests {
     use crate::{GameState, TileKind};
 
     #[test]
+    fn rail_reservation_uses_tunnel_bridge_m5_bit_not_map2() {
+        let mut tile = Tile {
+            height: 0,
+            kind: TileKind::RailBridge,
+            mapt: 0x90,
+            m5: 0x80,
+            m1: 0,
+            m6: 0,
+            m8: 0,
+            m3: 0,
+            m2: 0,
+            m2_hi: 0x3F,
+            m7: 0,
+            m3hi: 0,
+        };
+        assert!(!tunnel_bridge_rail_reserved(tile));
+
+        tile.m5 |= 0x10;
+        assert!(tunnel_bridge_rail_reserved(tile));
+
+        tile.kind = TileKind::RoadBridge;
+        tile.m5 = 0x80 | 0x04 | 0x10;
+        assert!(!tunnel_bridge_rail_reserved(tile));
+    }
+
+    #[test]
     fn wooden_always_available() {
         assert!(bridge_available(BridgeType::Wooden, 1950, 0));
     }
@@ -581,6 +616,29 @@ mod tests {
             bridge_type_from_m6(s.map.get(c(1, 2)).unwrap().m6),
             BridgeType::CantileverRed
         );
+    }
+
+    #[test]
+    fn other_end_follows_encoded_direction_over_non_water_span() {
+        let mut map = crate::Map::new_flat(8, 4, 0);
+        let west = TileCoord::new(1, 1);
+        let east = TileCoord::new(5, 1);
+        let mut west_tile = map.get(west).unwrap();
+        west_tile.kind = TileKind::RoadBridge;
+        west_tile.mapt = 0x90;
+        // DiagDirection::SW: +X, transport road, bridge flag.
+        west_tile.m5 = 0x80 | 0x04 | 0x02;
+        map.set_tile(west, west_tile).unwrap();
+        let mut east_tile = map.get(east).unwrap();
+        east_tile.kind = TileKind::RoadBridge;
+        east_tile.mapt = 0x90;
+        // Dirección opuesta NE: -X.
+        east_tile.m5 = 0x80 | 0x04;
+        map.set_tile(east, east_tile).unwrap();
+
+        // El vano queda sobre tierra: no depende de `Water` ni de MAPT flags.
+        assert_eq!(road_bridge_other_end(&map, west), Some(east));
+        assert_eq!(road_bridge_other_end(&map, east), Some(west));
     }
 
     #[test]

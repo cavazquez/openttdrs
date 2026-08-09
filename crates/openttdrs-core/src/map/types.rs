@@ -60,7 +60,7 @@ pub enum TileKind {
 /// | `m3`  | M3LO (byte bajo de `m3`) | v4+: MP_HOUSE bit 7 = casa terminada; MP_ROAD bits 0–3 = tram track, 4–7 = owner tranvía |
 /// | `m2`  | MAP2 | v5+: índice town/station/industry según tipo de tesela |
 /// | `m7`  | MAP7 | v5+: reserva cruces, NewGRF en mapa, etc. |
-/// | `m3hi` | M3HI | v5+: byte **`m4()`** del mapa OpenTTD (`M3HI` en `map_sl.cpp`; señales: `GetSignalStates` en nibble alto) |
+/// | `m3hi` | M3HI | v5+: byte **`m4()`** del mapa OpenTTD (`M3HI` en `map_sl.cpp`; RoadType en bits 0–5, señales en nibble alto) |
 /// | `m2_hi` | MAP2 hi | v5+12: byte alto de **`m2()`** 16-bit por tesela (reserva PBS en bits altos del save) |
 ///
 /// Para `MP_RAILWAY`, TrackBits ocupa **bits 0-5** de m5 (6 bits); bits 6-7 son `RailTileType`.

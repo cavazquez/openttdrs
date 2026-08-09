@@ -16,8 +16,9 @@ pub use coords::{
 };
 #[allow(unused_imports)]
 pub use slope::{
-    SLOPE_HALF_H, compute_tileh, slope_label, tile_min_corner_height, tile_min_z,
-    tile_slope_and_min_z, tile_slope_bits_from_heights,
+    SLOPE_HALF_H, SLOPE_TO_SPRITE_OFFSET, compute_tileh, slope_half_h, slope_label,
+    slope_sprite_offset, tile_min_corner_height, tile_min_z, tile_slope_and_min_z,
+    tile_slope_bits_from_heights,
 };
 pub use util::wang_hash;
 #[allow(unused_imports)]
@@ -44,7 +45,7 @@ mod compute_tileh_tests {
     //! Regresión: `compute_tileh` debe coincidir con `GetTileSlopeZ` / `GetTileSlopeGivenHeight`
     //! (`tile_map.cpp` de OpenTTD): hnorth@(tx,ty), hwest@(tx+1,ty), heast@(tx,ty+1), hsouth@(tx+1,ty+1).
 
-    use super::compute_tileh;
+    use super::{compute_tileh, slope_half_h, slope_sprite_offset};
     use openttdrs_core::prelude::*;
 
     fn set_h(map: &mut Map, x: i32, y: i32, h: u8) {
@@ -97,11 +98,32 @@ mod compute_tileh_tests {
     }
 
     #[test]
+    fn steep_south_is_preserved_and_uses_steep_graphic_offset() {
+        let mut m = Map::new_flat(2, 2, 0);
+        // N=0, W=1, E=1, S=2: el patrón del árbol en Kale (54,41).
+        set_h(&mut m, 1, 0, 1);
+        set_h(&mut m, 0, 1, 1);
+        set_h(&mut m, 1, 1, 2);
+        assert_eq!(compute_tileh(&m, 0, 0), 23); // SLOPE_STEEP_S
+        assert_eq!(slope_sprite_offset(23), 16);
+        assert_eq!(slope_half_h(23), 7.5);
+    }
+
+    #[test]
+    fn all_steep_slopes_map_to_the_upstream_offsets() {
+        assert_eq!(slope_sprite_offset(23), 16); // S
+        assert_eq!(slope_sprite_offset(27), 17); // N
+        assert_eq!(slope_sprite_offset(29), 15); // W
+        assert_eq!(slope_sprite_offset(30), 18); // E
+    }
+
+    #[test]
     fn map_edge_1x1_void_corners_read_as_zero() {
         let mut m = Map::new_flat(1, 1, 0);
         set_h(&mut m, 0, 0, 2);
-        // Fuera del mapa → altura 0; solo hnorth=2 > min(0,0,0,0)
-        assert_eq!(compute_tileh(&m, 0, 0), 8);
+        // Fuera del mapa → altura 0; solo hnorth=2 > min(0,0,0,0).
+        // La diferencia de dos niveles conserva el bit STEEP de OpenTTD.
+        assert_eq!(compute_tileh(&m, 0, 0), 24); // SLOPE_STEEP_N
     }
 
     #[test]
@@ -141,6 +163,7 @@ mod water_coast_height_tests {
             m.set_kind(TileCoord::new(x, y), TileKind::Water).unwrap();
             m.set_height(TileCoord::new(x, y), 0).unwrap();
         }
+        m.set_legacy_zero_water_height_repair(true);
         let (tileh, min_z) = tile_slope_and_min_z(&m, 0, 0);
         assert_eq!(min_z, 5, "min_h no debe ser 0 por las celdas de agua");
         assert_eq!(tileh, 0);
@@ -162,6 +185,7 @@ mod water_coast_height_tests {
                 }
             }
         }
+        m.set_legacy_zero_water_height_repair(true);
         let (tileh, min_z) = tile_slope_and_min_z(&m, 1, 1);
         assert_eq!(min_z, 5);
         assert_eq!(tileh, 0);
@@ -183,6 +207,7 @@ mod water_coast_height_tests {
                 }
             }
         }
+        m.set_legacy_zero_water_height_repair(true);
         assert_eq!(compute_tileh(&m, 1, 1), 0);
     }
 
@@ -194,11 +219,11 @@ mod water_coast_height_tests {
         m.set_kind(TileCoord::new(0, 0), TileKind::Water).unwrap();
         m.set_height(TileCoord::new(0, 0), 1).unwrap();
         m.set_kind(TileCoord::new(1, 0), TileKind::Grass).unwrap();
-        m.set_height(TileCoord::new(1, 0), 3).unwrap();
+        m.set_height(TileCoord::new(1, 0), 2).unwrap();
         m.set_kind(TileCoord::new(0, 1), TileKind::Grass).unwrap();
         m.set_height(TileCoord::new(0, 1), 1).unwrap();
         m.set_kind(TileCoord::new(1, 1), TileKind::Grass).unwrap();
-        m.set_height(TileCoord::new(1, 1), 3).unwrap();
+        m.set_height(TileCoord::new(1, 1), 2).unwrap();
         assert_eq!(shore_tileh_for_draw_shore(&m, 0, 0, 2, 2), 3);
     }
 
@@ -215,6 +240,25 @@ mod water_coast_height_tests {
         }
         let got = water_void_effective_height_for_slope(&m, 1, 1, 3, 3, 7);
         assert_eq!(got, 7);
+    }
+
+    #[test]
+    fn raw_sav_water_height_keeps_real_steep_coast() {
+        // Caso real de Kale_TitleGame: dos esquinas a 2/1, una a 1 y agua MAPH
+        // cero. OpenTTD lo codifica como STEEP_W (29) a altura base cero; no es
+        // una costa corrupta aunque haya tierra de altura dos alrededor.
+        let mut m = Map::new_flat(2, 2, 0);
+        m.set_kind(TileCoord::new(0, 0), TileKind::Forest).unwrap();
+        m.set_height(TileCoord::new(0, 0), 2).unwrap(); // norte
+        m.set_kind(TileCoord::new(1, 0), TileKind::Grass).unwrap();
+        m.set_height(TileCoord::new(1, 0), 1).unwrap(); // oeste
+        m.set_kind(TileCoord::new(0, 1), TileKind::Grass).unwrap();
+        m.set_height(TileCoord::new(0, 1), 1).unwrap(); // este
+        m.set_kind(TileCoord::new(1, 1), TileKind::Water).unwrap();
+        m.set_height(TileCoord::new(1, 1), 0).unwrap(); // sur
+
+        assert!(!m.legacy_zero_water_height_repair());
+        assert_eq!(tile_slope_and_min_z(&m, 0, 0), (29, 0));
     }
 
     #[test]

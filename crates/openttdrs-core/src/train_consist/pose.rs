@@ -26,10 +26,26 @@ pub struct TrainUnitPose {
 #[must_use]
 pub fn consist_unit_poses(vehicles: &[Vehicle], head_id: u32) -> Vec<TrainUnitPose> {
     let ids = consist_unit_ids(vehicles, head_id);
-    let Some(head) = vehicles.iter().find(|v| v.id == head_id) else {
+    let slots: Vec<usize> = ids
+        .iter()
+        .filter_map(|id| vehicles.iter().position(|v| v.id == *id))
+        .collect();
+    consist_unit_poses_indexed(vehicles, &slots)
+}
+
+/// Variante para hot paths que ya disponen de slots del mismo consist.
+#[must_use]
+pub(crate) fn consist_unit_poses_indexed(
+    vehicles: &[Vehicle],
+    slots: &[usize],
+) -> Vec<TrainUnitPose> {
+    let Some(&head_slot) = slots.first() else {
         return Vec::new();
     };
-    let mut poses = Vec::with_capacity(ids.len());
+    let Some(head) = vehicles.get(head_slot) else {
+        return Vec::new();
+    };
+    let mut poses = Vec::with_capacity(slots.len());
     let (head_enter, head_exit) = route_directions_at(head, head.pos);
     let mut prev_pose = TrainUnitPose {
         tile: head.pos,
@@ -40,8 +56,8 @@ pub fn consist_unit_poses(vehicles: &[Vehicle], head_id: u32) -> Vec<TrainUnitPo
     poses.push(prev_pose);
 
     let mut prev_length = head.unit_length.max(1);
-    for id in ids.iter().copied().skip(1) {
-        let Some(unit) = vehicles.iter().find(|v| v.id == id) else {
+    for &slot in slots.iter().skip(1) {
+        let Some(unit) = vehicles.get(slot) else {
             continue;
         };
         let next_length = unit.unit_length.max(1);

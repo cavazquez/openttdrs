@@ -13,6 +13,13 @@ use super::search::{
     find_path_to_safe_wait_with_wormholes, is_safe_waiting_position, tile_has_any_pbs_signal,
 };
 
+/// Máximo de reservas que el tick incremental reconstruye por pasada.
+///
+/// Un save real puede traer cientos de trenes sin reserva efímera. Recalcularlos
+/// todos en un frame bloquea la simulación; los restantes conservan su reserva
+/// previa (o esperan una pasada posterior) sin ocupar rutas ajenas.
+pub const MAX_INCREMENTAL_PBS_REFRESHES: usize = 8;
+
 /// `true` si delante del tren hay (o habrá) un segmento PBS que exige reserva.
 ///
 /// Aproxima `UpdateSignalsOnSegment == SigSegState::Path`: cualquier path signal
@@ -406,6 +413,129 @@ pub fn update_train_reservations_with_wormholes(
         }
         vehicles[i].reserved_steps = reserved;
     }
+}
+
+/// Actualiza solo las reservas PBS vencidas o ausentes.
+///
+/// A diferencia de [`update_train_reservations_with_wormholes`], este camino
+/// conserva las reservas que aún cubren el siguiente paso del tren y limita el
+/// trabajo de recuperación tras cargar partidas grandes. Las reservas previas
+/// se cargan primero en el conjunto global para que una actualización parcial
+/// no permita solapamientos.
+pub fn update_train_reservations_incremental_with_wormholes(
+    map: &Map,
+    vehicles: &mut [Vehicle],
+    settings: crate::pathfinding_settings::PathfindingSettings,
+    wormholes: Option<&crate::pathfinder::TunnelWormholes>,
+) -> usize {
+    let mut global = HashSet::new();
+    for i in 0..vehicles.len() {
+        if vehicles[i].kind != VehicleKind::Train || !vehicles[i].is_consist_head() {
+            vehicles[i].reserved_steps.clear();
+            continue;
+        }
+        if map.get_kind(vehicles[i].pos) == Some(TileKind::RailDepot)
+            && !vehicles[i].depot_leave_cleared
+        {
+            vehicles[i].reserved_steps.clear();
+            continue;
+        }
+
+        /*
+         * Actualizar una reserva no puede significar conservar para siempre
+         * su extremo viejo: al cruzar una señal el `path` se acorta aunque el
+         * siguiente paso siga estando reservado. El barrido completo lo
+         * descartaba incidentalmente; el camino incremental debe podarlo de
+         * forma barata antes de usarlo como obstáculo global.
+         *
+         * Las teselas que la cola del consist aún ocupa se vuelven a añadir,
+         * porque no necesariamente aparecen en el path de la cabeza.
+         */
+        let head_id = vehicles[i].id;
+        let previous = std::mem::take(&mut vehicles[i].reserved_steps);
+        let retained =
+            prune_train_reservation_to_active_path(map, vehicles, head_id, &vehicles[i], previous);
+        global.extend(retained.iter().copied());
+        vehicles[i].reserved_steps = retained;
+    }
+
+    let mut refreshed = 0;
+    for i in 0..vehicles.len() {
+        if vehicles[i].kind != VehicleKind::Train || !vehicles[i].is_consist_head() {
+            vehicles[i].reserved_steps.clear();
+            continue;
+        }
+        if map.get_kind(vehicles[i].pos) == Some(TileKind::RailDepot)
+            && !vehicles[i].depot_leave_cleared
+        {
+            for step in &vehicles[i].reserved_steps {
+                global.remove(step);
+            }
+            vehicles[i].reserved_steps.clear();
+            continue;
+        }
+        if !train_reservation_needs_refresh(&vehicles[i])
+            || refreshed >= MAX_INCREMENTAL_PBS_REFRESHES
+        {
+            continue;
+        }
+
+        let head_id = vehicles[i].id;
+        let previous = vehicles[i].reserved_steps.clone();
+        for step in &previous {
+            global.remove(step);
+        }
+        let reserved = compute_train_reservation_with_wormholes(
+            map, vehicles, i, &global, settings, wormholes,
+        );
+        let reserved = follow_train_reservation(&previous, reserved, &vehicles[i]);
+        let reserved = merge_consist_footprint(map, vehicles, head_id, reserved);
+        global.extend(reserved.iter().copied());
+        vehicles[i].reserved_steps = reserved;
+        refreshed += 1;
+    }
+    refreshed
+}
+
+/// Elimina de una reserva incremental los pasos que ya no están en la ruta
+/// activa. Conserva la posición actual y la huella física del consist, porque
+/// la cola puede seguir usando una tesela que la cabeza ya quitó de `path`.
+fn prune_train_reservation_to_active_path(
+    map: &Map,
+    vehicles: &[Vehicle],
+    head_id: u32,
+    vehicle: &Vehicle,
+    previous: Vec<ReservedRailStep>,
+) -> Vec<ReservedRailStep> {
+    let path_tiles: HashSet<TileCoord> = vehicle.path.iter().copied().collect();
+    let occupied: HashSet<TileCoord> =
+        crate::train_consist::consist_occupied_tiles(vehicles, head_id)
+            .into_iter()
+            .collect();
+    let retained = previous
+        .into_iter()
+        .filter(|step| {
+            step.tile == vehicle.pos
+                || path_tiles.contains(&step.tile)
+                || occupied.contains(&step.tile)
+        })
+        .collect();
+    merge_consist_footprint(map, vehicles, head_id, retained)
+}
+
+fn train_reservation_needs_refresh(vehicle: &Vehicle) -> bool {
+    if !vehicle.running || vehicle.path.is_empty() {
+        return false;
+    }
+    if vehicle.reserved_steps.is_empty() {
+        // Un tren parado puede acelerar en este tick, pero no abandonará la
+        // tesela de inmediato. Esperar a que tenga velocidad evita recuperar
+        // cientos de reservas inactivas al abrir un SAV.
+        return vehicle.cur_speed > 0;
+    }
+    vehicle
+        .movement_target()
+        .is_some_and(|next| !vehicle.reserved_steps.iter().any(|step| step.tile == next))
 }
 
 /// `true` si el tren no puede avanzar al `movement_target` (sin reserva en esa pista).

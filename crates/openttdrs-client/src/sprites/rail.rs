@@ -3,8 +3,9 @@ use std::sync::OnceLock;
 use bevy::prelude::*;
 use openttdrs_core::prelude::*;
 use openttdrs_core::{
-    SignalTrack, diag_dir_offset, m2_for_signal, rail_type_from_tile, signal_type_for_track,
-    signal_variant_for_track, tile_slope_and_z,
+    SignalTrack, bridge_middle_length, bridge_surface_slope_and_z, diag_dir_offset, m2_for_signal,
+    rail_bridge_other_end, rail_type_from_tile, signal_type_for_track, signal_variant_for_track,
+    tile_slope_and_z,
 };
 
 pub use openttdrs_core::{
@@ -53,12 +54,16 @@ const WSO_X_SHORT_UP: u32 = 6;
 const WSO_Y_SHORT_DOWN: u32 = 7;
 const WSO_X_SW: u32 = 8;
 const WSO_Y_SE: u32 = 9;
+const WSO_EW_E: u32 = 10;
+const WSO_NS_S: u32 = 11;
 const WSO_X_SW_DOWN: u32 = 12;
 const WSO_Y_SE_UP: u32 = 13;
 const WSO_X_SW_UP: u32 = 14;
 const WSO_Y_SE_DOWN: u32 = 15;
 const WSO_X_NE: u32 = 16;
 const WSO_Y_NW: u32 = 17;
+const WSO_EW_W: u32 = 18;
+const WSO_NS_N: u32 = 19;
 const WSO_X_NE_DOWN: u32 = 20;
 const WSO_Y_NW_UP: u32 = 21;
 const WSO_X_NE_UP: u32 = 22;
@@ -67,6 +72,33 @@ const WSO_ENTRANCE_SW: u32 = 24;
 const WSO_ENTRANCE_NW: u32 = 25;
 const WSO_ENTRANCE_NE: u32 = 26;
 const WSO_ENTRANCE_SE: u32 = 27;
+
+/// Bases de los sprites Action5 que expone OpenTTD con OpenGFX por defecto.
+///
+/// El cliente conserva IDs locales para resolver los PNG extraídos, mientras
+/// que el exportador de OpenTTD ya informa los IDs globales resueltos.
+const OPENTTD_CATENARY_WIRE_BASE: u32 = 5632;
+const OPENTTD_CATENARY_PYLON_BASE: u32 = 5660;
+
+/// Convierte un ID local de catenaria al ID global de OpenTTD para trazas.
+///
+/// No se usa para buscar assets ni para dibujar: sólo permite comparar una
+/// escena OpenGFX por defecto con `world_draw_export` sin confundir la
+/// numeración local del atlas con una diferencia de selección de sprite.
+#[must_use]
+pub fn catenary_reference_sprite_id(sprite_id: u32) -> u32 {
+    if (WIRE_SPRITE_BASE..=WIRE_SPRITE_LAST).contains(&sprite_id) {
+        OPENTTD_CATENARY_WIRE_BASE + (sprite_id - WIRE_SPRITE_BASE)
+    } else if (CATENARY_ENTRANCE_SPRITE_BASE..=CATENARY_ENTRANCE_SPRITE_BASE + 3)
+        .contains(&sprite_id)
+    {
+        OPENTTD_CATENARY_WIRE_BASE + WSO_ENTRANCE_SW + (sprite_id - CATENARY_ENTRANCE_SPRITE_BASE)
+    } else if (PYLON_SPRITE_BASE..=PYLON_SPRITE_BASE + 7).contains(&sprite_id) {
+        OPENTTD_CATENARY_PYLON_BASE + (sprite_id - PYLON_SPRITE_BASE)
+    } else {
+        sprite_id
+    }
+}
 
 /// `Direction` OpenTTD: N=0 … NW=7.
 const DIR_N: u8 = 0;
@@ -235,14 +267,13 @@ fn push_rail_junction_overlays(t: u8, out: &mut Vec<u32>) {
 
 /// ¿Hay PNG tipado (mono/maglev) para este ID de vía?
 ///
-/// Incluye planos y pendientes (`1023..=1034` → `mono_track_*` / `mglv_track_*`).
-/// Nieve plana `1037`/`1038` no tiene set tipado en el atlas → se deja clásica.
+/// Incluye rectas, curvas simples, cruces, pendientes y las dos variantes de
+/// diagonal doble. `1095..=1099` / `1177..=1181` son precisamente las curvas
+/// compuestas que antes faltaban del atlas y hacían que maglev se viera como
+/// vía normal.
 #[must_use]
 pub fn rail_sprite_has_typed_asset(id: u32) -> bool {
-    matches!(
-        id,
-        1005..=1012 | 1018..=1035 // overlays, Y/X, pendientes, junction, HORZ
-    )
+    matches!(id, 1005..=1038)
 }
 
 /// Remapea un sprite de vía clásica al set mono/maglev si hay asset.
@@ -371,8 +402,9 @@ pub fn collect_catenary_sprites_from_map(
     }
     let home_tb = electrified_trackbits_at(map, pos, mw, mh, mp_rail);
     let wire_tb = if home_tb != 0 { home_tb } else { tb & 0x3F };
-    let pcp = compute_catenary_pcp_status(map, pos, mw, mh, mp_rail, wire_tb, tileh);
-    collect_catenary_sprites_with_pcp(wire_tb, tileh, pcp, out);
+    let effective_tileh = catenary_effective_tileh(map, pos, wire_tb, tileh);
+    let pcp = compute_catenary_pcp_status(map, pos, mw, mh, mp_rail, wire_tb, effective_tileh);
+    collect_catenary_sprites_with_effective_tileh(wire_tb, effective_tileh, pcp, out);
 }
 
 /// Postes PPP sueltos (`DrawRailCatenaryRailway` pylon loop).
@@ -385,6 +417,29 @@ pub fn collect_catenary_pylons_from_map(
     mp_rail: u8,
     tb: u8,
     tileh: u8,
+    out: &mut Vec<CatenarySpriteDraw>,
+) {
+    collect_catenary_pylons_from_map_with_pcp_override(
+        map, pos, mw, mh, mp_rail, tb, tileh, 0, out,
+    );
+}
+
+/// Igual que [`collect_catenary_pylons_from_map`], pero omite los PCP cuyo
+/// bit está en `pcp_override`.
+///
+/// `DrawRailCatenaryRailway` marca los dos extremos del eje cuando hay un
+/// puente bajo sobre la tesela. El cable se oculta bajo el tablero y esos
+/// PCP no deben generar postes que atraviesen visualmente el puente.
+#[allow(clippy::too_many_arguments)]
+pub fn collect_catenary_pylons_from_map_with_pcp_override(
+    map: &Map,
+    pos: TileCoord,
+    mw: u32,
+    mh: u32,
+    mp_rail: u8,
+    tb: u8,
+    tileh: u8,
+    pcp_override: u8,
     out: &mut Vec<CatenarySpriteDraw>,
 ) {
     out.clear();
@@ -401,9 +456,17 @@ pub fn collect_catenary_pylons_from_map(
     if wire_tb == 0 {
         return;
     }
-    let edges = compute_catenary_edge_state(map, pos, mw, mh, mp_rail, wire_tb, tileh);
+    let effective_tileh = catenary_effective_tileh(map, pos, wire_tb, tileh);
+    let edges = compute_catenary_edge_state(map, pos, mw, mh, mp_rail, wire_tb, effective_tileh);
+    let bridge_pylon_override = bridge_pylon_override(map, pos);
     let tlg = catenary_tile_location_group(pos.x, pos.y);
     for dir in 0..4u8 {
+        if pcp_override & (1 << dir) != 0 {
+            continue;
+        }
+        if bridge_pylon_override == Some(dir) {
+            continue;
+        }
         if edges.pcp & (1 << dir) == 0 {
             continue;
         }
@@ -442,6 +505,18 @@ pub fn collect_catenary_pylons_from_map(
     }
 }
 
+/// `GetRailTrackBitsUniversal(tile, &override_pcp)` para una cabeza de
+/// puente. Cuando existe vano central, el poste que mira al vano se dibuja
+/// por `DrawRailCatenaryOnBridge`, no por el algoritmo normal de la rampa.
+fn bridge_pylon_override(map: &Map, pos: TileCoord) -> Option<u8> {
+    let tile = map.get(pos)?;
+    if tile.kind != TileKind::RailBridge || tile.m5 & 0x80 == 0 {
+        return None;
+    }
+    let other = rail_bridge_other_end(map, pos)?;
+    (bridge_middle_length(pos, other) > 0).then_some(tile.m5 & 0x03)
+}
+
 /// Wire de portal de túnel (`DrawRailCatenaryOnTunnel`).
 /// `dir` = `DiagDirection` de la boca (NE=0..NW=3).
 #[must_use]
@@ -474,14 +549,18 @@ pub fn collect_catenary_bridge_draws(
     let wire_wso = if length % 2 == 1 && num == length {
         if axis_x { WSO_X_SHORT } else { WSO_Y_SHORT }
     } else {
-        // SW/NE o SE/NW según paridad de num (un poste cada dos teselas).
-        let alt = num % 2 == 1;
+        // Port literal de `DrawRailCatenaryOnBridge`:
+        // `WIRE_X_FLAT_SW + (num % 2)`. El enum interno de OpenTTD coloca
+        // `*_NE/NW` en el índice impar, aunque el sprite se llame "SW/SE" en
+        // el otro extremo. Invertirlo desplaza el remate blanco del cable una
+        // tesela: era visible en todos los vanos de dos piezas de Kale.
+        let odd = num % 2 == 1;
         if axis_x {
-            if alt { WSO_X_SW } else { WSO_X_NE }
-        } else if alt {
-            WSO_Y_SE
-        } else {
+            if odd { WSO_X_NE } else { WSO_X_SW }
+        } else if odd {
             WSO_Y_NW
+        } else {
+            WSO_Y_SE
         }
     };
     out.push(CatenarySpriteDraw {
@@ -541,12 +620,32 @@ fn collect_catenary_sprites_with_pcp(tb: u8, tileh: u8, pcp: u8, out: &mut Vec<u
     if t == 0 {
         return;
     }
-    let foundation = openttdrs_core::rail_foundation_for_trackbits(tileh, t);
-    let effective_tileh = if tileh == 0 || foundation == 1 {
+    let (surface_tileh, _) = openttdrs_core::rail_surface_slope_and_z(tileh, t);
+    // `DrawRailCatenaryRailway` aplana las pendientes de medio bloque antes
+    // de elegir wire/PCP; los demás cimientos ya quedaron aplicados arriba.
+    let effective_tileh = if surface_tileh & 0x20 != 0 {
         0
     } else {
-        tileh
+        surface_tileh
     };
+    collect_catenary_sprites_with_effective_tileh(t, effective_tileh, pcp, out);
+}
+
+/// Variante de [`collect_catenary_sprites_with_pcp`] para un `tileh` que ya
+/// pasó por `DrawFoundation` y, si corresponde, `AdjustTileh`. Las rampas de
+/// puente no son una vía normal en pendiente: aplicar otra vez
+/// `GetRailFoundation` sobre su pendiente ajustada cambiaba el wire elegido.
+fn collect_catenary_sprites_with_effective_tileh(
+    tb: u8,
+    effective_tileh: u8,
+    pcp: u8,
+    out: &mut Vec<u32>,
+) {
+    out.clear();
+    let t = tb & 0x3F;
+    if t == 0 {
+        return;
+    }
     let sel = catenary_tileh_selector(effective_tileh);
 
     for track_idx in 0..6u8 {
@@ -592,9 +691,13 @@ fn rail_wire_wso(sel: u8, track_idx: u8, pcp_config: u8) -> Option<u32> {
         (0, 1) => Some([0, WSO_Y_SE, WSO_Y_NW, WSO_Y_SHORT][cfg]),
         (2, 1) => Some([0, WSO_Y_SE_UP, WSO_Y_NW_UP, WSO_Y_SHORT_UP][cfg]),
         (3, 1) => Some([0, WSO_Y_SE_DOWN, WSO_Y_NW_DOWN, WSO_Y_SHORT_DOWN][cfg]),
-        // UPPER / LOWER / LEFT / RIGHT — solo plano; MVP usa SHORT (ambos).
-        (0, 2) | (0, 3) => Some(WSO_EW_SHORT),
-        (0, 4) | (0, 5) => Some(WSO_NS_SHORT),
+        // Curvas ortogonales. Los extremos no son intercambiables: el
+        // selector de OpenTTD usa un wire distinto para cada PCP activo.
+        // `_rail_wires[0][UPPER..RIGHT][cfg]` en `elrail_data.h`.
+        (0, 2) => Some([0, WSO_EW_W, WSO_EW_E, WSO_EW_SHORT][cfg]),
+        (0, 3) => Some([0, WSO_EW_E, WSO_EW_W, WSO_EW_SHORT][cfg]),
+        (0, 4) => Some([0, WSO_NS_S, WSO_NS_N, WSO_NS_SHORT][cfg]),
+        (0, 5) => Some([0, WSO_NS_N, WSO_NS_S, WSO_NS_SHORT][cfg]),
         _ => None,
     }
 }
@@ -637,7 +740,7 @@ fn catenary_pcp_from_parity(tb: u8, tx: i32, ty: i32) -> u8 {
     pcp
 }
 
-/// Track bits electrificados en una tesela (`GetRailTrackBitsUniversal` MVP: vía normal/señales).
+/// Track bits electrificados en una tesela (`GetRailTrackBitsUniversal`).
 fn electrified_trackbits_at(map: &Map, pos: TileCoord, mw: u32, mh: u32, mp_rail: u8) -> u8 {
     if pos.x < 0 || pos.y < 0 || pos.x >= mw as i32 || pos.y >= mh as i32 {
         return 0;
@@ -651,6 +754,34 @@ fn electrified_trackbits_at(map: &Map, pos: TileCoord, mw: u32, mh: u32, mp_rail
     match tile.kind {
         TileKind::Rail => {
             effective_rail_trackbits(tile.mapt, tile.m5, tile.kind, mp_rail).unwrap_or(0) & 0x3F
+        }
+        // Una rampa de puente es parte de la misma línea ferroviaria. Antes
+        // caía en `_ => 0`, de modo que el tramo exterior cortaba su
+        // catenaria justo al llegar al puente aunque ambos tiles fuesen
+        // eléctricos. La dirección de la rampa define el eje: NE/SW = X,
+        // SE/NW = Y (`GetTunnelBridgeDirection` / `DiagDirToAxis`).
+        TileKind::RailBridge | TileKind::RailTunnel => {
+            if tile.m5 & 1 == 0 {
+                RAIL_TB_X
+            } else {
+                RAIL_TB_Y
+            }
+        }
+        // `GetCrossingRailTrack`: el eje de la vía es el perpendicular al de
+        // la carretera, codificado en el bit 0 de `m5`.
+        TileKind::Road
+            if is_road_level_crossing(
+                tile.mapt,
+                tile.m5,
+                tile.kind,
+                openttdrs_core::OTTD_MP_ROAD,
+            ) =>
+        {
+            if tile.m5 & 1 == 0 {
+                RAIL_TB_Y
+            } else {
+                RAIL_TB_X
+            }
         }
         TileKind::Station
             if matches!(
@@ -666,6 +797,70 @@ fn electrified_trackbits_at(map: &Map, pos: TileCoord, mw: u32, mh: u32, mp_rail
         }
         _ => 0,
     }
+}
+
+/// Pendiente que usa `DrawRailCatenaryRailway` después de las fundaciones.
+///
+/// `DrawFoundation` ya modificó `TileInfo` para la tesela actual; al mirar
+/// una vecina OpenTTD reproduce explícitamente esa fundación y recién después
+/// llama a `AdjustTileh`. Aquí calculamos el mismo resultado desde el mapa,
+/// incluyendo rampas y bocas de túnel. Sin esto una rampa vecina inclinada se
+/// comparaba como vía normal y se conservaba un PCP que OpenTTD alterna.
+fn catenary_effective_tileh(map: &Map, pos: TileCoord, trackbits: u8, fallback: u8) -> u8 {
+    let Some(tile) = map.get(pos) else {
+        return fallback;
+    };
+    let raw_tileh = tile_slope_and_z(map, pos).map_or(fallback, |(tileh, _)| tileh);
+    match tile.kind {
+        TileKind::Rail => {
+            let (surface, _) = openttdrs_core::rail_surface_slope_and_z(raw_tileh, trackbits);
+            // `DrawRailCatenaryRailway` aplana los medios bloques antes de
+            // seleccionar wires y PCPs.
+            if surface & 0x20 != 0 { 0 } else { surface }
+        }
+        TileKind::RailBridge => {
+            let (foundation_tileh, _) = bridge_surface_slope_and_z(raw_tileh, tile.m5 & 1 == 0);
+            adjust_catenary_tunnel_bridge_tileh(foundation_tileh, tile.m5, false)
+        }
+        // `AdjustTileh` fuerza una pendiente empinada en bocas de túnel para
+        // que el algoritmo de PCP coloque el poste de entrada adecuado.
+        TileKind::RailTunnel => adjust_catenary_tunnel_bridge_tileh(raw_tileh, tile.m5, true),
+        // Las estaciones ferroviarias y los cruces a nivel son siempre
+        // planos para la decisión de catenaria.
+        TileKind::Station | TileKind::Road => 0,
+        _ => raw_tileh,
+    }
+}
+
+/// `AdjustTileh` de `elrail.cpp` para una tesela `TunnelBridge`.
+#[inline]
+fn adjust_catenary_tunnel_bridge_tileh(tileh: u8, m5: u8, is_tunnel: bool) -> u8 {
+    if is_tunnel {
+        openttdrs_core::SLOPE_STEEP
+    } else if tileh != 0 {
+        0
+    } else {
+        match m5 & 3 {
+            0 => openttdrs_core::SLOPE_NE,
+            1 => openttdrs_core::SLOPE_SE,
+            2 => openttdrs_core::SLOPE_SW,
+            _ => openttdrs_core::SLOPE_NW,
+        }
+    }
+}
+
+/// `IsBridgeTile(neighbour) && GetTunnelBridgeDirection(neighbour) ==
+/// ReverseDiagDir(i)` de `DrawRailCatenaryRailway`.
+///
+/// El cabezal que mira hacia el vano no debe reclamar un poste: OpenTTD lo
+/// dibuja desde el propio puente. Sin esta exclusión se acumulaba un poste
+/// `5662` en cada rampa eléctrica de Kale, aunque el cable fuera correcto.
+fn neighbour_is_far_bridge_head(map: &Map, pos: TileCoord, direction_from_home: u8) -> bool {
+    map.get(pos).is_some_and(|tile| {
+        tile.kind == TileKind::RailBridge
+            && tile.m5 & 0x80 != 0
+            && (tile.m5 & 0x03) == reverse_diag_dir(direction_from_home)
+    })
 }
 
 /// Calcula máscara PCP de 4 bits (`pcp_status` en `DrawRailCatenaryRailway`).
@@ -701,25 +896,24 @@ fn compute_catenary_edge_state(
         return state;
     }
     let home_flat = home_tb & (RAIL_TB_HORZ | RAIL_TB_VERT) != 0;
-    let home_foundation = openttdrs_core::rail_foundation_for_trackbits(home_tileh, home_tb);
-    let home_eff_h = if home_tileh == 0 || home_foundation == 1 {
-        0
-    } else {
-        home_tileh
-    };
+    // El caller entrega la pendiente posterior a fundación / `AdjustTileh`.
+    let home_eff_h = home_tileh;
     let tlg = catenary_tile_location_group(pos.x, pos.y);
 
     for dir in 0..4u8 {
         let (dx, dy) = diag_dir_offset(dir);
         let npos = TileCoord::new(pos.x + dx, pos.y + dy);
-        let neigh_tb = electrified_trackbits_at(map, npos, mw, mh, mp_rail);
-        let neigh_slope = tile_slope_and_z(map, npos).map(|(h, _)| h).unwrap_or(0);
-        let neigh_foundation = openttdrs_core::rail_foundation_for_trackbits(neigh_slope, neigh_tb);
-        let neigh_eff_h = if neigh_tb == 0 || neigh_slope == 0 || neigh_foundation == 1 {
-            0
-        } else {
-            neigh_slope
-        };
+        let mut neigh_tb = electrified_trackbits_at(map, npos, mw, mh, mp_rail);
+        // Una boca de túnel sólo se conecta por su dirección de salida; los
+        // otros tres bordes no deben participar en los PCP vecinos.
+        if map
+            .get(npos)
+            .is_some_and(|tile| tile.kind == TileKind::RailTunnel && dir != (tile.m5 & 0x03))
+        {
+            neigh_tb = 0;
+        }
+        let neighbour_is_far_bridge = neighbour_is_far_bridge_head(map, npos, dir);
+        let neigh_eff_h = catenary_effective_tileh(map, npos, neigh_tb, 0);
         let neigh_flat = neigh_tb & (RAIL_TB_HORZ | RAIL_TB_VERT) != 0;
 
         let mut preferred_mask: u8 = 0xFF;
@@ -728,6 +922,11 @@ fn compute_catenary_edge_state(
         for k in 0..6 {
             let track_bit = TRACKS_AT_PCP[dir as usize][k];
             let from_neigh = TRACK_SOURCE_NEIGHBOUR[dir as usize][k];
+            // El extremo lejano del cabezal de puente pertenece al vano;
+            // `DrawRailCatenaryOnBridge` es quien coloca ese poste.
+            if from_neigh && neighbour_is_far_bridge {
+                continue;
+            }
             let src_tb = if from_neigh { neigh_tb } else { home_tb };
             let pcp_pos = if from_neigh {
                 reverse_diag_dir(dir)
@@ -994,6 +1193,76 @@ pub fn level_crossing_has_rail_reservation(m5: u8) -> bool {
 }
 
 pub use openttdrs_core::rail_tile_has_pbs_reservation;
+
+/// Capas `PALETTE_CRASH` de una reserva PBS, siguiendo las mismas pasadas de
+/// fundación que `DrawTrackBits` / `DrawTrackBitsOverlay`.
+///
+/// Sólo X/Y usan `SPR_TRACKS_FOR_SLOPES_*` sobre una pendiente. Las cuatro
+/// pistas de esquina siempre usan el banco `SINGLE_N/S/E/W`; cuando hay una
+/// fundación de medio bloque, la segunda pasada conserva además esa regla.
+/// Esto evita convertir una reserva de una sola esquina en una vía diagonal
+/// completa (el origen de varios falsos "cortes" en pendientes).
+#[must_use]
+pub fn collect_rail_pbs_reservation_sprites(
+    track_bits: u8,
+    reservation_bits: u8,
+    tileh: u8,
+    rail_type: openttdrs_core::RailType,
+) -> Vec<u32> {
+    let mut out = Vec::with_capacity(6);
+    for pass in openttdrs_core::rail_track_draw_plan(tileh, track_bits & 0x3F)
+        .passes
+        .into_iter()
+        .flatten()
+    {
+        let pbs = reservation_bits & pass.track_bits & 0x3F;
+        for (track_bit, single_sprite) in [
+            (RAIL_TB_X, 1005),
+            (RAIL_TB_Y, 1006),
+            (RAIL_TB_UPPER, 1007),
+            (RAIL_TB_LOWER, 1008),
+            (RAIL_TB_LEFT, 1010),
+            (RAIL_TB_RIGHT, 1009),
+        ] {
+            if pbs & track_bit == 0 {
+                continue;
+            }
+
+            // `DrawTrackBits` sólo sustituye X/Y por el banco inclinado. La
+            // pasada alta de una fundación de medio bloque sigue usando el
+            // sprite de esquina (con su recorte/subaltura correspondiente).
+            let sprite = if pass.halftile_corner.is_none()
+                && matches!(track_bit, RAIL_TB_X | RAIL_TB_Y)
+                && !matches!(pass.sprite_tileh & 0x1F, 0 | 0x0F)
+            {
+                rail_pbs_sloped_sprite_id(pass.sprite_tileh, rail_type)
+                    .unwrap_or_else(|| remap_rail_sprite_id(single_sprite, rail_type))
+            } else {
+                remap_rail_sprite_id(single_sprite, rail_type)
+            };
+            out.push(sprite);
+        }
+    }
+    out
+}
+
+/// `SPR_TRACKS_FOR_SLOPES_{RAIL,MONO,MAGLEV}_BASE` para una X/Y compatible
+/// con la pendiente. Los demás valores de `_track_sloped_sprites` sólo se
+/// alcanzan con pistas de esquina, que usan `SINGLE_*` en el overlay PBS.
+fn rail_pbs_sloped_sprite_id(sprite_tileh: u8, rail_type: openttdrs_core::RailType) -> Option<u32> {
+    let tileh = sprite_tileh & 0x1F;
+    if !(1..=14).contains(&tileh) {
+        return None;
+    }
+    let slope_offset = RAIL_TRACK_SLOPED_OFFSETS[(tileh - 1) as usize];
+    let orientation = slope_offset.checked_sub(20)?;
+    let base = match rail_type {
+        openttdrs_core::RailType::Rail | openttdrs_core::RailType::Electric => 5401,
+        openttdrs_core::RailType::Monorail => 5405,
+        openttdrs_core::RailType::Maglev => 5409,
+    };
+    Some(base + u32::from(orientation))
+}
 
 // OpenTTD `Track` / `TrackBits` (`track_type.h`, `rail_cmd.cpp::DrawSignals`).
 const OTTD_TRACK_X: u8 = 0;
@@ -1307,13 +1576,16 @@ pub fn rail_sprite_ids_for_preload() -> Vec<u32> {
                     set.insert(id);
                 }
             }
-            // Mono / maglev planos (overlays + Y/X + junction + HORZ).
-            for id in [
-                1005u32, 1006, 1007, 1008, 1009, 1010, 1011, 1012, 1018, 1019, 1020, 1021, 1022,
-                1035,
-            ] {
+            // Mono / maglev: rectas, curvas, junctions, diagonales dobles y
+            // sus variantes de nieve plana. Todos tienen un sprite tipado.
+            for id in 1005u32..=1038 {
                 set.insert(id + MONO_RAIL_SPRITE_OFFSET);
                 set.insert(id + MAGLEV_RAIL_SPRITE_OFFSET);
+            }
+            // Overlays de reserva PBS de rampas planas de puente. A diferencia
+            // de la vía común, viven en el GRF extra (`5401..=5412`).
+            for id in 5401u32..=5412 {
+                set.insert(id);
             }
             for id in catenary_wire_sprite_ids() {
                 set.insert(id);
@@ -1384,20 +1656,24 @@ pub fn rail_trackbits_for_render(map: &Map, pos: TileCoord, mw: u32, mh: u32, mp
 }
 
 /// Índice del suelo de cruce (1018 + offset), igual que `GetJunctionGroundSpriteOffset`.
-/// Devuelve el sprite donde falta al menos un bit del patrón 3-vías NE/SW/NW/SE.
+///
+/// Cada máscara 3-vías describe las pistas que llegan a una esquina. OpenTTD
+/// pregunta si hay *alguna* de ellas (`TrackBits::Any`), no si está completo el
+/// patrón. Esto importa en empalmes de dos pistas: por ejemplo `X | RIGHT`
+/// cubre NE y SW por la pista X, pero no NW, así que usa el suelo con NW libre.
 #[inline]
 fn junction_ground_off(tb: u8) -> u8 {
     let t = tb & 0x3F;
-    if (t & RAIL_3WAY_NE) != RAIL_3WAY_NE {
+    if (t & RAIL_3WAY_NE) == 0 {
         return 0;
     }
-    if (t & RAIL_3WAY_SW) != RAIL_3WAY_SW {
+    if (t & RAIL_3WAY_SW) == 0 {
         return 1;
     }
-    if (t & RAIL_3WAY_NW) != RAIL_3WAY_NW {
+    if (t & RAIL_3WAY_NW) == 0 {
         return 2;
     }
-    if (t & RAIL_3WAY_SE) != RAIL_3WAY_SE {
+    if (t & RAIL_3WAY_SE) == 0 {
         return 3;
     }
     4
@@ -1433,6 +1709,33 @@ pub fn rail_ghost_overlay_offset(sprite_id: u32) -> Vec2 {
     let cy = yrel + h / 2.0;
     // Bevy: positivo en Y sube; el centro compuesto está en `-FULL_CENTER_Y` desde el vértice N.
     Vec2::new(cx - FULL_CENTER_X, FULL_CENTER_Y - cy)
+}
+
+/// Desplazamiento de un overlay PBS respecto al centro de la tesela.
+///
+/// Los `SINGLE_*` comparten sus anclas con los overlays ferroviarios comunes.
+/// Los doce sprites de pendiente se extraen directamente del GRF extra y son
+/// rectángulos pequeños: el atlas no guarda `xrel/yrel`, así que restauramos
+/// aquí su relación con el compuesto de 64×31 píxeles. Tener esta tabla junto
+/// a la selección de PBS mantiene coherentes vías, túneles y rampas.
+#[must_use]
+pub fn rail_pbs_reservation_offset(sprite_id: u32) -> Vec2 {
+    match sprite_id {
+        // `ogfx2e_extra_32ez.nfo`, sprites 5401..=5412.
+        5401 => Vec2::new(27.0, 0.5),
+        5402 => Vec2::new(0.0, -12.0),
+        5403 => Vec2::new(-27.0, 0.5),
+        5404 => Vec2::new(0.0, 13.0),
+        5405 => Vec2::new(13.0, 6.5),
+        5406 => Vec2::new(13.0, -6.5),
+        5407 => Vec2::new(-13.0, -6.5),
+        5408 => Vec2::new(-13.0, 6.5),
+        5409 => Vec2::new(23.0, 0.0),
+        5410 => Vec2::new(0.0, -10.0),
+        5411 => Vec2::new(-23.0, 0.0),
+        5412 => Vec2::new(0.0, 11.5),
+        other => rail_ghost_overlay_offset(other),
+    }
 }
 
 /// Índice `SignalPositions` para `(track, sig_bit)` — mismo orden que `DrawSignals`.
@@ -1544,7 +1847,7 @@ fn collect_rail_flat_sprites(t: u8, snow_ground: bool, out: &mut Vec<u32>) {
     let x_track = if snow_ground {
         RAIL_SPRITE_X_SNOW
     } else {
-        1012
+        RAIL_SPRITE_TRACK_X
     };
     match t {
         RAIL_TB_Y => out.push(y_track),
@@ -1565,7 +1868,8 @@ fn collect_rail_flat_sprites(t: u8, snow_ground: bool, out: &mut Vec<u32>) {
 
 /// Lista de sprites `OpenGFX` en orden de pintado (suelo de cruce y superposiciones).
 /// Con `snow_ground`, tramos planos Y/X usan `1037`/`1038`; en pendiente se suma
-/// [`RAIL_SPRITE_SNOW_OFFSET`] al sprite inclinado salvo cimiento nivelado (`GetRailFoundation` = 1).
+/// [`RAIL_SPRITE_SNOW_OFFSET`] al sprite inclinado tras aplicar la superficie
+/// efectiva del cimiento (`ApplyFoundationToSlope`).
 pub fn collect_rail_sprites(tb: u8, tileh: u8, snow_ground: bool, out: &mut Vec<u32>) {
     collect_rail_sprites_for_type(tb, tileh, snow_ground, openttdrs_core::RailType::Rail, out);
 }
@@ -1583,19 +1887,45 @@ pub fn collect_rail_sprites_for_type(
     if t == 0 {
         return;
     }
-    let foundation = openttdrs_core::rail_foundation_for_trackbits(tileh, t);
-    if tileh != 0 && foundation != 1 {
-        if let Some(sid) = rail_sloped_track_sprite_id(tileh, snow_ground) {
+    for pass in openttdrs_core::rail_track_draw_plan(tileh, t)
+        .passes
+        .into_iter()
+        .flatten()
+    {
+        collect_rail_sprites_for_surface(
+            pass.track_bits,
+            pass.sprite_tileh,
+            snow_ground,
+            rail_type,
+            out,
+        );
+    }
+}
+
+/// Selecciona los sprites de una pasada continua de [`rail_track_draw_plan`].
+///
+/// La división de fundaciones de medio bloque ya ocurrió en core; acá solo
+/// queda aplicar el selector clásico/plano y el set tipado mono/maglev.
+fn collect_rail_sprites_for_surface(
+    track_bits: u8,
+    sprite_tileh: u8,
+    snow_ground: bool,
+    rail_type: openttdrs_core::RailType,
+    out: &mut Vec<u32>,
+) {
+    if sprite_tileh != 0 {
+        if let Some(sid) = rail_sloped_track_sprite_id(sprite_tileh, snow_ground) {
             out.push(remap_rail_sprite_id(sid, rail_type));
         }
         return;
     }
-    collect_rail_flat_sprites(t, snow_ground, out);
+    let first = out.len();
+    collect_rail_flat_sprites(track_bits, snow_ground, out);
     if matches!(
         rail_type,
         openttdrs_core::RailType::Monorail | openttdrs_core::RailType::Maglev
     ) {
-        for sid in out.iter_mut() {
+        for sid in &mut out[first..] {
             *sid = remap_rail_sprite_id(*sid, rail_type);
         }
     }
@@ -1614,7 +1944,7 @@ mod tests {
         collect_rail_sprites(RAIL_TB_X, 5, false, &mut out);
         assert_eq!(out, vec![1012]);
         collect_rail_sprites(0x29, 5, false, &mut out);
-        assert_eq!(out, vec![1018, 1005, 1008, 1009]);
+        assert_eq!(out, vec![1020, 1005, 1008, 1009]);
     }
 
     #[test]
@@ -1622,7 +1952,7 @@ mod tests {
         let mut out = Vec::new();
         // Empalme depósito ↔ línea X (test `rail_depot_beside_x_line_connects_exit_tile`).
         collect_rail_sprites(0x29, 0, false, &mut out);
-        assert_eq!(out, vec![1018, 1005, 1008, 1009]);
+        assert_eq!(out, vec![1020, 1005, 1008, 1009]);
         // Salida depósito showcase (12,15): Y|LOWER|LEFT.
         collect_rail_sprites(0x1A, 0, false, &mut out);
         assert_eq!(out, vec![1018, 1006, 1008, 1010]);
@@ -1630,12 +1960,16 @@ mod tests {
 
     #[test]
     fn junction_ground_off_matches_openttd_get_junction_offset() {
-        assert_eq!(junction_ground_off(0x29), 0);
+        // `TrackBits::Any` en OpenTTD prueba intersección, no inclusión total.
+        assert_eq!(junction_ground_off(0x29), 2);
         assert_eq!(junction_ground_off(0x1A), 0);
-        assert_eq!(junction_ground_off(RAIL_3WAY_NE), 1);
-        assert_eq!(junction_ground_off(RAIL_3WAY_SW), 0);
-        assert_eq!(junction_ground_off(RAIL_3WAY_NW), 0);
-        assert_eq!(junction_ground_off(RAIL_3WAY_SE), 0);
+        assert_eq!(junction_ground_off(RAIL_TB_X | RAIL_TB_RIGHT), 2);
+        assert_eq!(junction_ground_off(RAIL_TB_X | RAIL_TB_LEFT), 3);
+        assert_eq!(junction_ground_off(RAIL_TB_X | RAIL_TB_LOWER), 2);
+        assert_eq!(junction_ground_off(RAIL_3WAY_NE), 4);
+        assert_eq!(junction_ground_off(RAIL_3WAY_SW), 4);
+        assert_eq!(junction_ground_off(RAIL_3WAY_NW), 4);
+        assert_eq!(junction_ground_off(RAIL_3WAY_SE), 4);
         assert_eq!(junction_ground_off(0x3F), 4);
     }
 
@@ -1672,6 +2006,50 @@ mod tests {
     }
 
     #[test]
+    fn mono_inclined_foundation_uses_the_post_foundation_slope_sprite() {
+        use openttdrs_core::RailType;
+
+        let mut out = Vec::new();
+        // SLOPE_E + TRACK_X → InclinedX → SLOPE_NE. OpenTTD selecciona
+        // `SPR_MONO_TRACK_Y + 20`, es decir 1113.
+        collect_rail_sprites_for_type(
+            RAIL_TB_X,
+            0x04, // SLOPE_E
+            false,
+            RailType::Monorail,
+            &mut out,
+        );
+        assert_eq!(out, vec![1113]);
+    }
+
+    #[test]
+    fn halftile_foundation_uses_the_upper_overlay_slope_for_all_railtypes() {
+        use openttdrs_core::RailType;
+
+        let mut out = Vec::new();
+        // Kale_TitleGame (158,65): SLOPE_N + UPPER → fake SLOPE_NWE → 1030.
+        collect_rail_sprites_for_type(RAIL_TB_UPPER, 8, false, RailType::Rail, &mut out);
+        assert_eq!(out, vec![1030]);
+
+        // (116,79): monorail, SLOPE_E + RIGHT → fake SLOPE_SEN.
+        collect_rail_sprites_for_type(RAIL_TB_RIGHT, 4, false, RailType::Monorail, &mut out);
+        assert_eq!(out, vec![1109]);
+
+        // La misma regla remapea el sprite inclinado de maglev, no lo deja
+        // caer al set de vía normal.
+        collect_rail_sprites_for_type(RAIL_TB_LOWER, 2, false, RailType::Maglev, &mut out);
+        assert_eq!(out, vec![1192]);
+    }
+
+    #[test]
+    fn steep_both_foundation_keeps_both_track_passes() {
+        let mut out = Vec::new();
+        // SLOPE_STEEP_W + LEFT|RIGHT: parte inferior W y overlay alto NWS.
+        collect_rail_sprites(RAIL_TB_VERT, 27, false, &mut out);
+        assert_eq!(out, vec![1025, 1029]);
+    }
+
+    #[test]
     fn collect_rail_sprites_remaps_mono_and_maglev_flat() {
         use openttdrs_core::RailType;
         let mut out = Vec::new();
@@ -1681,12 +2059,54 @@ mod tests {
         assert_eq!(out, vec![1176]);
         collect_rail_sprites_for_type(RAIL_TB_HORZ, 0, false, RailType::Monorail, &mut out);
         assert_eq!(out, vec![1117]);
-        // VERT sin asset tipado → se queda en clásico.
+        collect_rail_sprites_for_type(RAIL_TB_UPPER, 0, false, RailType::Maglev, &mut out);
+        assert_eq!(out, vec![1177]);
+        // Segunda diagonal doble (antes caía erróneamente al sprite clásico).
         collect_rail_sprites_for_type(RAIL_TB_VERT, 0, false, RailType::Monorail, &mut out);
-        assert_eq!(out, vec![1036]);
-        // Junction: suelo SW + overlays tipados.
+        assert_eq!(out, vec![1118]);
+        // Junction: suelo SW + overlays tipados. 1020 tiene PNG monorriel,
+        // por eso ya no debe caer al viejo 1018/1100 de vía clásica.
         collect_rail_sprites_for_type(0x29, 0, false, RailType::Monorail, &mut out);
-        assert_eq!(out, vec![1100, 1087, 1090, 1091]);
+        assert_eq!(out, vec![1102, 1087, 1090, 1091]);
+    }
+
+    #[test]
+    fn pbs_overlays_follow_track_passes_and_rail_type() {
+        use openttdrs_core::RailType;
+
+        assert_eq!(
+            collect_rail_pbs_reservation_sprites(
+                RAIL_TB_X | RAIL_TB_RIGHT,
+                RAIL_TB_X | RAIL_TB_RIGHT,
+                0,
+                RailType::Maglev,
+            ),
+            vec![1169, 1173]
+        );
+        assert_eq!(
+            collect_rail_pbs_reservation_sprites(
+                RAIL_TB_X | RAIL_TB_Y,
+                RAIL_TB_X,
+                0x0F,
+                RailType::Monorail,
+            ),
+            vec![1087]
+        );
+        assert_eq!(
+            collect_rail_pbs_reservation_sprites(RAIL_TB_Y, RAIL_TB_Y, 9, RailType::Rail,),
+            vec![5404],
+            "Kale_TitleGame (137,101): la Y reservada sigue la pendiente compatible"
+        );
+        assert_eq!(
+            collect_rail_pbs_reservation_sprites(RAIL_TB_LOWER, RAIL_TB_LOWER, 8, RailType::Rail,),
+            vec![1008],
+            "las pistas de esquina no usan el banco inclinado"
+        );
+        assert_eq!(
+            collect_rail_pbs_reservation_sprites(RAIL_TB_LEFT, RAIL_TB_LEFT, 3, RailType::Rail,),
+            vec![1010],
+            "una fundación de medio bloque mantiene la pieza izquierda"
+        );
     }
 
     #[test]
@@ -1716,6 +2136,9 @@ mod tests {
         assert!(ids.contains(&1175));
         assert!(ids.contains(&1087));
         assert!(ids.contains(&1169));
+        assert!(ids.contains(&5401));
+        assert!(ids.contains(&5408));
+        assert!(ids.contains(&5412));
         assert!(ids.contains(&1382));
         assert!(ids.contains(&1394));
         assert!(ids.contains(&WIRE_SPRITE_BASE));
@@ -1736,6 +2159,35 @@ mod tests {
         assert_eq!(out, vec![WIRE_SPRITE_BASE + WSO_NS_SHORT]);
         collect_catenary_sprites(0, 0, 0, 0, &mut out);
         assert!(out.is_empty());
+    }
+
+    #[test]
+    fn catenary_orthogonal_wire_uses_the_active_pcp_end() {
+        // `_rail_wires[0]`: las curvas usan sprites de extremo, no siempre
+        // el wire corto con postes a ambos lados.
+        assert_eq!(rail_wire_wso(0, 2, 1), Some(WSO_EW_W)); // UPPER, NW
+        assert_eq!(rail_wire_wso(0, 2, 2), Some(WSO_EW_E)); // UPPER, NE
+        assert_eq!(rail_wire_wso(0, 3, 1), Some(WSO_EW_E)); // LOWER, SE
+        assert_eq!(rail_wire_wso(0, 3, 2), Some(WSO_EW_W)); // LOWER, SW
+        assert_eq!(rail_wire_wso(0, 4, 1), Some(WSO_NS_S)); // LEFT, SW
+        assert_eq!(rail_wire_wso(0, 4, 2), Some(WSO_NS_N)); // LEFT, NW
+        assert_eq!(rail_wire_wso(0, 5, 1), Some(WSO_NS_N)); // RIGHT, NE
+        assert_eq!(rail_wire_wso(0, 5, 2), Some(WSO_NS_S)); // RIGHT, SE
+    }
+
+    #[test]
+    fn catenary_trace_ids_match_default_openttd_action5_ids() {
+        assert_eq!(catenary_reference_sprite_id(WIRE_SPRITE_BASE), 5632);
+        assert_eq!(
+            catenary_reference_sprite_id(WIRE_SPRITE_BASE + WSO_EW_E),
+            5642
+        );
+        assert_eq!(
+            catenary_reference_sprite_id(CATENARY_ENTRANCE_SPRITE_BASE + 2),
+            5658
+        );
+        assert_eq!(catenary_reference_sprite_id(PYLON_SPRITE_BASE + 1), 5661);
+        assert_eq!(catenary_reference_sprite_id(1011), 1011);
     }
 
     #[test]
@@ -1869,6 +2321,19 @@ mod tests {
     }
 
     #[test]
+    fn electric_bridge_ramp_is_an_electrified_rail_neighbour() {
+        let mut map = Map::new_flat(3, 3, 1);
+        let c = TileCoord::new(1, 1);
+        let mut bridge = electric_rail_tile(RAIL_TB_X);
+        bridge.kind = TileKind::RailBridge;
+        bridge.mapt = 0x90;
+        bridge.m5 = 0x82; // Rampa SW: eje X.
+        map.set_tile(c, bridge).unwrap();
+
+        assert_eq!(electrified_trackbits_at(&map, c, 3, 3, 1), RAIL_TB_X);
+    }
+
+    #[test]
     fn collect_catenary_pylons_isolated_x_places_owned_post() {
         let mut map = Map::new_flat(3, 3, 1);
         let c = TileCoord::new(1, 1);
@@ -1952,6 +2417,25 @@ mod tests {
             out.iter()
                 .any(|d| { (PYLON_SPRITE_BASE..PYLON_SPRITE_BASE + 8).contains(&d.sprite_id) })
         );
+    }
+
+    #[test]
+    fn bridge_catenary_long_wire_parity_matches_openttd_enum_order() {
+        // `elrail.cpp`: WIRE_X_FLAT_SW + (num % 2). El índice impar apunta al
+        // sprite NE/NW dentro de `_rail_catenary_sprite_data`.
+        let mut x_first = Vec::new();
+        let mut x_second = Vec::new();
+        let mut y_first = Vec::new();
+        let mut y_second = Vec::new();
+        collect_catenary_bridge_draws(true, 1, 2, 0, &mut x_first);
+        collect_catenary_bridge_draws(true, 2, 2, 0, &mut x_second);
+        collect_catenary_bridge_draws(false, 1, 2, 0, &mut y_first);
+        collect_catenary_bridge_draws(false, 2, 2, 0, &mut y_second);
+
+        assert_eq!(x_first[0].sprite_id, WIRE_SPRITE_BASE + WSO_X_NE);
+        assert_eq!(x_second[0].sprite_id, WIRE_SPRITE_BASE + WSO_X_SW);
+        assert_eq!(y_first[0].sprite_id, WIRE_SPRITE_BASE + WSO_Y_NW);
+        assert_eq!(y_second[0].sprite_id, WIRE_SPRITE_BASE + WSO_Y_SE);
     }
 
     #[test]

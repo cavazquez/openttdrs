@@ -16,7 +16,10 @@ use crate::road_movement::rvsb::{
     trackdir_for_entry_exit, trackdir_from_direction,
 };
 use crate::road_movement::slope::sync_road_slope_speed;
-use crate::road_movement::traffic::{apply_road_veh_close_to, is_road_vehicle_kind};
+use crate::road_movement::traffic::{
+    RoadTrafficIndex, apply_road_veh_close_to, apply_road_veh_close_to_indexed,
+    is_road_vehicle_kind,
+};
 use crate::vehicle::{RoadDepotPhase, Vehicle};
 
 /// Un sub-paso del controlador. `true` = avanzó; `false` = bloqueado.
@@ -35,15 +38,28 @@ pub fn individual_road_vehicle_controller_side(
     map: Option<&Map>,
     drive_on_right: bool,
 ) -> bool {
+    individual_road_vehicle_controller_side_indexed(vehicles, v_idx, map, drive_on_right, None)
+}
+
+/// Variante que consulta el índice vial incremental del tick.
+pub fn individual_road_vehicle_controller_side_indexed(
+    vehicles: &mut [Vehicle],
+    v_idx: usize,
+    map: Option<&Map>,
+    drive_on_right: bool,
+    traffic: Option<&RoadTrafficIndex>,
+) -> bool {
     if vehicles.get(v_idx).is_some_and(|v| v.crashed) {
         return false;
     }
 
     tick_overtaking(&mut vehicles[v_idx], map);
 
-    if !is_bay_road_state(vehicles[v_idx].road_state)
-        && apply_road_veh_close_to(vehicles, v_idx, map)
-    {
+    let blocked_by_traffic = match traffic {
+        Some(traffic) => apply_road_veh_close_to_indexed(vehicles, v_idx, map, traffic),
+        None => apply_road_veh_close_to(vehicles, v_idx, map),
+    };
+    if !is_bay_road_state(vehicles[v_idx].road_state) && blocked_by_traffic {
         return false;
     }
 
@@ -338,6 +354,31 @@ pub fn road_vehicle_tick_side(
     map: Option<&Map>,
     drive_on_right: bool,
 ) {
+    road_vehicle_tick_side_with_traffic(vehicles, v_idx, map, drive_on_right, None);
+}
+
+/// Tick de roadveh con búsqueda de tráfico indexada.
+pub fn road_vehicle_tick_side_indexed(
+    vehicles: &mut [Vehicle],
+    v_idx: usize,
+    map: Option<&Map>,
+    drive_on_right: bool,
+    traffic: &mut RoadTrafficIndex,
+) {
+    let previous = vehicles
+        .get(v_idx)
+        .map_or(crate::TileCoord::new(0, 0), |v| v.pos);
+    road_vehicle_tick_side_with_traffic(vehicles, v_idx, map, drive_on_right, Some(traffic));
+    traffic.update_vehicle(vehicles, v_idx, previous);
+}
+
+fn road_vehicle_tick_side_with_traffic(
+    vehicles: &mut [Vehicle],
+    v_idx: usize,
+    map: Option<&Map>,
+    drive_on_right: bool,
+    traffic: Option<&RoadTrafficIndex>,
+) {
     if !is_road_vehicle_kind(vehicles[v_idx].kind) {
         return;
     }
@@ -415,7 +456,13 @@ pub fn road_vehicle_tick_side(
     let mut blocked = false;
     while j >= adv_spd {
         j -= adv_spd;
-        if !individual_road_vehicle_controller_side(vehicles, v_idx, map, drive_on_right) {
+        if !individual_road_vehicle_controller_side_indexed(
+            vehicles,
+            v_idx,
+            map,
+            drive_on_right,
+            traffic,
+        ) {
             blocked = true;
             break;
         }

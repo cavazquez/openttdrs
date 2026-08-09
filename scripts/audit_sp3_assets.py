@@ -168,9 +168,10 @@ def collect_required_paths() -> list[tuple[str, str]]:
 
     add("assets/opengfx/tiles/grass.png", "terrain")
     add("assets/opengfx/tiles/grass_rough.png", "terrain")
-    for tileh in range(1, 15):
+    for tileh in range(1, 19):
         add(f"assets/opengfx/tiles/terrain_grass_slope_{tileh:02}.png", "terrain_slope")
         add(f"assets/opengfx/tiles/terrain_rough_slope_{tileh:02}.png", "terrain_slope")
+    for tileh in range(1, 15):
         add(f"assets/opengfx/tiles/foundation_{tileh:02}.png", "foundation")
     add("assets/opengfx/tiles/water.png", "water")
     for i in range(18):  # set completo SPR_SHORE_BASE (gen_shore_full_set.py)

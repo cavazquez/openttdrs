@@ -1,5 +1,6 @@
 //! Costes YAPF y predicates de tráfico / espera ante señales.
 
+use crate::fleet_index::FleetIndex;
 use crate::map::{Map, TileCoord, TileKind, opposite_diag_dir as opposite_dir};
 use crate::vehicle::{Vehicle, VehicleKind};
 
@@ -368,6 +369,21 @@ pub fn train_blocked_by_signal(map: &Map, vehicles: &[Vehicle], vehicle: &Vehicl
 /// `true` si otro tren ocupa la vía delante (misma dirección o frente a frente).
 #[must_use]
 pub fn train_blocked_by_traffic(map: &Map, vehicles: &[Vehicle], vehicle: &Vehicle) -> bool {
+    let mut fleet = FleetIndex::default();
+    fleet.rebuild(vehicles);
+    train_blocked_by_traffic_indexed(map, vehicles, vehicle, &fleet)
+}
+
+/// Variante de [`train_blocked_by_traffic`] que reutiliza la topología de
+/// consists ya construida para el tick. El wrapper público conserva el uso
+/// puntual de tests y callers externos.
+#[must_use]
+pub fn train_blocked_by_traffic_indexed(
+    map: &Map,
+    vehicles: &[Vehicle],
+    vehicle: &Vehicle,
+    fleet: &FleetIndex,
+) -> bool {
     if vehicle.kind != VehicleKind::Train || !vehicle.running {
         return false;
     }
@@ -380,9 +396,10 @@ pub fn train_blocked_by_traffic(map: &Map, vehicles: &[Vehicle], vehicle: &Vehic
     };
     let self_id = vehicle.id;
     let foreign = |v: &Vehicle| {
-        v.kind == VehicleKind::Train
-            && v.is_consist_head()
-            && !crate::train_consist::same_consist(vehicles, self_id, v.id)
+        // Ambos son cabezas: si sus IDs difieren, necesariamente son consists
+        // distintos. `same_consist` reconstruía la topología completa para
+        // cada comparación de tráfico.
+        v.kind == VehicleKind::Train && v.is_consist_head() && v.id != self_id
     };
 
     if vehicles.iter().any(|v| foreign(v) && v.pos == next) {
@@ -397,9 +414,9 @@ pub fn train_blocked_by_traffic(map: &Map, vehicles: &[Vehicle], vehicle: &Vehic
     }
 
     // Colisión con huella multi-tesela de otro consist.
-    let self_tiles = crate::train_consist::consist_occupied_tiles(vehicles, self_id);
+    let self_tiles = consist_occupied_tiles_indexed(vehicles, fleet, self_id);
     for other in vehicles.iter().filter(|v| foreign(v)) {
-        let other_tiles = crate::train_consist::consist_occupied_tiles(vehicles, other.id);
+        let other_tiles = consist_occupied_tiles_indexed(vehicles, fleet, other.id);
         if other_tiles.contains(&next) {
             return true;
         }
@@ -454,11 +471,8 @@ pub fn train_facing_head_on_traffic(map: &Map, vehicles: &[Vehicle], vehicle: &V
         return false;
     };
     let self_id = vehicle.id;
-    let foreign = |v: &Vehicle| {
-        v.kind == VehicleKind::Train
-            && v.is_consist_head()
-            && !crate::train_consist::same_consist(vehicles, self_id, v.id)
-    };
+    let foreign =
+        |v: &Vehicle| v.kind == VehicleKind::Train && v.is_consist_head() && v.id != self_id;
 
     let mut prev = vehicle.pos;
     let mut cur = next;
@@ -478,4 +492,37 @@ pub fn train_facing_head_on_traffic(map: &Map, vehicles: &[Vehicle], vehicle: &V
         cur = continuations[0];
     }
     false
+}
+
+fn consist_occupied_tiles_indexed(
+    vehicles: &[Vehicle],
+    fleet: &FleetIndex,
+    head_id: u32,
+) -> Vec<TileCoord> {
+    let Some(head_slot) = fleet.slot(head_id) else {
+        return Vec::new();
+    };
+    let head = &vehicles[head_slot];
+    let ids = fleet.consist(head_id);
+    let mut tiles = Vec::with_capacity(ids.len());
+    for &id in ids {
+        let Some(slot) = fleet.slot(id) else {
+            continue;
+        };
+        let pos = vehicles[slot].pos;
+        if !tiles.contains(&pos) {
+            tiles.push(pos);
+        }
+    }
+    if ids.len() <= 1 {
+        let span = u32::from(head.cached_total_length)
+            .div_ceil(u32::from(crate::train_consist::TILE_FRACTIONS))
+            .max(1) as usize;
+        for &tile in head.rail_tile_history.iter().take(span.saturating_sub(1)) {
+            if !tiles.contains(&tile) {
+                tiles.push(tile);
+            }
+        }
+    }
+    tiles
 }

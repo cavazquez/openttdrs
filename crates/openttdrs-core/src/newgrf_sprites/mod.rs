@@ -55,7 +55,7 @@ pub use action5::{
     SIGNAL_ACTION5_SLOT_COUNT, SPR_SIGNALS_ACTION5_BASE, TRAMWAY_ACTION5_SLOT_COUNT,
     TWOCC_ACTION5_SLOT_COUNT, action5_type_name, airport_preview_action5_slot,
     bridge_decks_action5_base, bridge_decks_action5_slot, catenary_action5_local_slot,
-    collect_action5_blocks, disallowed_road_directions, foundation_action5_slot_for_tileh,
+    collect_action5_blocks, disallowed_road_directions, foundation_action5_slot_for_sprite_id,
     merge_action5_offset_block, merge_airport_preview_action5_block,
     merge_bridge_decks_action5_block, merge_canals_action5_block, merge_catenary_action5_block,
     merge_foundation_action5_block, merge_oneway_action5_block, merge_openttd_gui_action5_block,

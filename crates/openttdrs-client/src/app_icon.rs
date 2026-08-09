@@ -131,4 +131,17 @@ mod tests {
             .join(APP_ICON_RELATIVE_PATH);
         assert!(load_window_icon(&path).is_some());
     }
+
+    #[test]
+    fn bundled_icon_has_a_transparent_outer_corner() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join(APP_ICON_RELATIVE_PATH);
+        let image = image::ImageReader::open(path)
+            .expect("bundled icon exists")
+            .decode()
+            .expect("bundled icon decodes")
+            .into_rgba8();
+        assert_eq!(image.get_pixel(0, 0)[3], 0);
+    }
 }

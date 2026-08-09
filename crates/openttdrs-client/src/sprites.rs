@@ -154,29 +154,31 @@ pub use rail::{
     RAIL_SPRITE_TRACK_X, RAIL_SPRITE_TRACK_Y, RAIL_TB_CROSS, RAIL_TB_HORZ, RAIL_TB_LEFT,
     RAIL_TB_LOWER, RAIL_TB_RIGHT, RAIL_TB_UPPER, RAIL_TB_VERT, RAIL_TB_X, RAIL_TB_Y,
     RAIL_TILE_DEPOT, RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS, SignalSpriteDraw, WIRE_SPRITE_BASE,
-    WIRE_SPRITE_LAST, catenary_pylon_sprite_ids, catenary_tile_location_group,
-    catenary_tileh_selector, catenary_tunnel_wire_sprite, catenary_wire_sprite_ids,
-    collect_catenary_bridge_draws, collect_catenary_pylons_from_map, collect_catenary_sprites,
+    WIRE_SPRITE_LAST, catenary_pylon_sprite_ids, catenary_reference_sprite_id,
+    catenary_tile_location_group, catenary_tileh_selector, catenary_tunnel_wire_sprite,
+    catenary_wire_sprite_ids, collect_catenary_bridge_draws, collect_catenary_pylons_from_map,
+    collect_catenary_pylons_from_map_with_pcp_override, collect_catenary_sprites,
     collect_catenary_sprites_from_map, collect_rail_ghost_sprites,
-    collect_rail_ghost_sprites_for_type, collect_rail_sprites, collect_rail_sprites_for_type,
-    collect_signal_sprite_draws, collect_signal_sprite_ids, is_typed_rail_track_sprite,
-    level_crossing_has_rail_reservation, level_crossing_rail_sprite_id,
-    level_crossing_rail_sprite_id_for_type, rail_depot_build_layers, rail_ghost_overlay_offset,
-    rail_signal_present_mask, rail_signal_state_mask, rail_signal_subtile_offset,
-    rail_signal_subtile_offset_for_side, rail_sprite_atlas_keys, rail_sprite_ids_for_preload,
-    rail_tile_has_pbs_reservation, rail_tile_is_signals, remap_rail_sprite_id, signal_draw_pos,
-    signal_screen_anchor_for_side, signal_screen_position, signal_screen_position_for_side,
-    signal_sprite_bases, signal_sprite_center_offset, signal_sprite_ids_for_preload,
-    signal_sprite_metadata, signal_sprite_texture_id,
+    collect_rail_ghost_sprites_for_type, collect_rail_pbs_reservation_sprites,
+    collect_rail_sprites, collect_rail_sprites_for_type, collect_signal_sprite_draws,
+    collect_signal_sprite_ids, is_typed_rail_track_sprite, level_crossing_has_rail_reservation,
+    level_crossing_rail_sprite_id, level_crossing_rail_sprite_id_for_type, rail_depot_build_layers,
+    rail_ghost_overlay_offset, rail_pbs_reservation_offset, rail_signal_present_mask,
+    rail_signal_state_mask, rail_signal_subtile_offset, rail_signal_subtile_offset_for_side,
+    rail_sprite_atlas_keys, rail_sprite_ids_for_preload, rail_tile_has_pbs_reservation,
+    rail_tile_is_signals, remap_rail_sprite_id, signal_draw_pos, signal_screen_anchor_for_side,
+    signal_screen_position, signal_screen_position_for_side, signal_sprite_bases,
+    signal_sprite_center_offset, signal_sprite_ids_for_preload, signal_sprite_metadata,
+    signal_sprite_texture_id,
 };
 #[allow(unused_imports)]
 pub use station::{
-    StationTileClass, rail_station_axis_y, rail_station_draw_layers,
+    StationTileClass, log_unknown_station_type_once, rail_station_axis_y, rail_station_draw_layers,
     rail_station_ground_track_sprite, rail_station_overlay_rel, rail_station_roof_glass_sprite,
     rail_station_sprite_layers, rail_station_sprite_meta, rail_waypoint_draw_layers,
     rail_waypoint_layer_meta, rail_waypoint_sprite_center, road_stop_build_layers,
-    road_stop_ground_index, road_stop_seq_gfx, station_tile_class, station_type_from_m6,
-    stop_kind_from_m6,
+    road_stop_drive_through_layers, road_stop_ground_index, road_stop_seq_gfx, station_tile_class,
+    station_type_from_m6, stop_kind_from_m6,
 };
 #[allow(unused_imports)]
 pub use transparency::{
@@ -226,15 +228,17 @@ pub use field_draw_data_generated::{
 };
 
 pub use bridge_sprites_generated::{
-    BridgeDeckSpriteIds, bridge_deck_sprite_ids, bridge_sprite_meta, wooden_bridge_ramp_sprite_id,
+    BridgeDeckSpriteIds, bridge_deck_sprite_ids, bridge_ramp_sprite_id, bridge_sprite_meta,
 };
 /// Set completo de orillas (`SPR_SHORE_BASE + 0..17`, Action5 0x0D).
 /// Regenerar: `python3 scripts/gen_shore_full_set.py`.
 pub(crate) use bridge_structure_palette::{BridgePaletteSprites, bridge_structure_palette};
 pub use shore_draw_data_generated::{SHORE_META, SHORE_SPRITE_COUNT, TILEH_TO_SHORE_SPRITE};
 pub use tunnel::{
-    tunnel_portal_translation, tunnel_rear_atlas_name, tunnel_rear_legacy_atlas_name,
-    tunnel_rear_sprite_id,
+    rail_tunnel_front_atlas_name, rail_tunnel_front_sprite_id, rail_tunnel_rear_atlas_name,
+    rail_tunnel_rear_sprite_id, tunnel_front_atlas_name, tunnel_front_sprite_id,
+    tunnel_front_trace_geometry, tunnel_portal_translation, tunnel_rear_atlas_name,
+    tunnel_rear_legacy_atlas_name, tunnel_rear_sprite_id,
 };
 
 /// Humo mina de cobre (`SPR_SMOKE_0..4`). Regenerar: `python3 scripts/gen_copper_mine_smoke.py`.
@@ -656,8 +660,8 @@ mod signal_sprite_collect_tests {
             .max()
             .unwrap_or(0);
         assert!(
-            mx < 5400,
-            "máx sprite id {mx}: el banco Action5 de señales llega a ~5327"
+            mx <= 5412,
+            "máx sprite id {mx}: señales Action5 (~5327) y PBS de puente terminan en 5412"
         );
         assert!(
             ids.iter().any(|&id| (5088..5328).contains(&id)),

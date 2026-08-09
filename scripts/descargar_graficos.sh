@@ -598,12 +598,13 @@ crop_by_id(3924, "terrain_bare.png")           # SPR_FLAT_BARE_LAND
 crop_by_id(3943, "terrain_grass_1_3.png")      # SPR_FLAT_1_THIRD_GRASS_TILE
 crop_by_id(3962, "terrain_grass_2_3.png")      # SPR_FLAT_2_THIRD_GRASS_TILE
 crop_by_id(3981, "terrain_grass.png")          # SPR_FLAT_GRASS_TILE
-# Pendientes de grass: SPR_FLAT_GRASS_TILE+1..+14 (tileh 1-14)
-for tileh in range(1, 15):
+# Pendientes de grass: offsets `SlopeToSpriteOffset` 1..18; 15..18 son
+# `SLOPE_STEEP_*` y no coinciden con los valores crudos 23/27/29/30.
+for tileh in range(1, 19):
     crop_by_id(3981 + tileh, f"terrain_grass_slope_{tileh:02d}.png")
 crop_by_id(4000, "terrain_rough.png")          # SPR_FLAT_ROUGH_LAND
-# Pendientes de rough: SPR_FLAT_ROUGH_LAND+1..+14
-for tileh in range(1, 15):
+# Pendientes de rough: mismos offsets 1..18 de `SlopeToSpriteOffset`.
+for tileh in range(1, 19):
     crop_by_id(4000 + tileh, f"terrain_rough_slope_{tileh:02d}.png")
 for i, sid in enumerate([4019, 4020, 4021, 4022]):
     crop_by_id(sid, f"terrain_rough_{i+1}.png")
@@ -793,15 +794,25 @@ for sid in range(1087, 1093):
     crop_by_id(sid, f"mono_single_{sid - 1087}.png")
 crop_by_id(1093, "mono_track_y.png")
 crop_by_id(1094, "mono_track_x.png")
+# Curvas simples y cruce combinados (TRACK_Y + 2..6).
+for sid in range(1095, 1100):
+    crop_by_id(sid, f"rail_{sid}.png")
 for sid in range(1100, 1118):
     crop_by_id(sid, f"mono_track_{sid - 1100}.png")
+# Segunda diagonal doble y rectas con nieve (`TRACK_N_S + 1`, snow offset).
+for sid in range(1118, 1121):
+    crop_by_id(sid, f"rail_{sid}.png")
 # Maglev
 for sid in range(1169, 1175):
     crop_by_id(sid, f"mglv_single_{sid - 1169}.png")
 crop_by_id(1175, "mglv_track_y.png")
 crop_by_id(1176, "mglv_track_x.png")
+for sid in range(1177, 1182):
+    crop_by_id(sid, f"rail_{sid}.png")
 for sid in range(1182, 1200):
     crop_by_id(sid, f"mglv_track_{sid - 1182}.png")
+for sid in range(1200, 1203):
+    crop_by_id(sid, f"rail_{sid}.png")
 # Alias rail_<id> para preload Bevy (además de mono_*/mglv_* nombrados)
 for sid, src_name in [
     *[(1087 + i, f"mono_single_{i}.png") for i in range(6)],
@@ -1032,14 +1043,22 @@ crop_by_id(2732, "dock_flat_y.png")
 # =============================================================================
 # TÚNELES Y PUENTES
 # =============================================================================
-# Portales por dirección (`SPR_TUNNEL_ENTRY_REAR_* + DiagDirection * 2`).
+# Portales por dirección. El generador posterior recorta también la capa
+# `front` (sprite inmediatamente posterior al rear) para que el túnel tenga
+# techo/boca además del suelo; estas líneas conservan los aliases históricos.
 crop_by_id(2365, "tunnel_rail_rear_ne.png")
 crop_by_id(2367, "tunnel_rail_rear_se.png")
 crop_by_id(2369, "tunnel_rail_rear_sw.png")
 crop_by_id(2371, "tunnel_rail_rear_nw.png")
 # Alias histórico (= NE)
 crop_by_id(2365, "tunnel_rail_rear.png")
+for i, sid in enumerate(range(2373, 2381, 2)):
+    crop_by_id(sid, f"tunnel_mono_rear_{['ne', 'se', 'sw', 'nw'][i]}.png")
+# Alias histórico (= NE), para instalaciones que todavía no regeneraron el atlas.
 crop_by_id(2373, "tunnel_mono_rear.png")
+for i, sid in enumerate(range(2381, 2389, 2)):
+    crop_by_id(sid, f"tunnel_mglv_rear_{['ne', 'se', 'sw', 'nw'][i]}.png")
+# Alias histórico (= NE), para instalaciones que todavía no regeneraron el atlas.
 crop_by_id(2381, "tunnel_mglv_rear.png")
 crop_by_id(2389, "tunnel_road_rear_ne.png")
 crop_by_id(2391, "tunnel_road_rear_se.png")
@@ -1379,13 +1398,19 @@ python3 "$(dirname "$0")/gen_rail_signal_sprites.py" || true
 # Banco Action5 tipo 04 (presignals/PBS) → rail_5088..5327 (`SPR_SIGNALS_BASE`).
 python3 "$(dirname "$0")/gen_rail_signal_action5_sprites.py" || true
 python3 "$(dirname "$0")/gen_rail_station_draw_data.py" || true
+# Portales de túnel: metadata NFO dependiente del modo gráfico (8bpp/32bpp).
+python3 "$(dirname "$0")/gen_tunnel_draw_data.py" || true
 # Sprites de puentes por tipo (tablero + pilares; ver gen_bridge_sprites.py).
 python3 "$(dirname "$0")/gen_bridge_sprites.py" || true
 python3 "$(dirname "$0")/gen_bridge_structure_palette.py" || true
+# Reservas PBS sobre rampas de puentes (rail / mono / maglev, GRF extra).
+python3 "$(dirname "$0")/extract_bridge_pbs_reservation_sprites.py"
 python3 "$(dirname "$0")/gen_effect_vehicle_sprites.py" || true
 python3 "$(dirname "$0")/gen_ufo_sprites.py" || true
 # Catenaria Action5 (wires + postes + entradas de túnel) desde ogfxe_extra.
 python3 "$(dirname "$0")/extract_elrail_catenary.py" || true
+# Paradas de carretera: capas de bahía y Action5 0x11 drive-through.
+python3 "$(dirname "$0")/gen_road_stop_gfx_data.py"
 
 # Assets requeridos en runtime: rotores de helicóptero y los siete pasos del
 # ciclo de paleta de refinería. Deben generarse antes del atlas y sin `|| true`:

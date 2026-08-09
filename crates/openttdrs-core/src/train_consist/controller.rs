@@ -6,7 +6,7 @@
 use crate::map::{Map, TileKind};
 use crate::vehicle::{Vehicle, VehicleKind, reverse_direction};
 
-use super::pose::consist_unit_poses;
+use super::pose::{consist_unit_poses, consist_unit_poses_indexed};
 use super::topology::consist_unit_ids;
 
 /// Persiste las poses unidad a unidad tras avanzar la cabeza.
@@ -84,6 +84,73 @@ pub fn propagate_consist_unit_poses_with_map(
     }
 }
 
+/// Variante de [`propagate_consist_unit_poses_with_map`] para el loop de
+/// movimiento, que reutiliza el `FleetIndex` construido al inicio del tick.
+pub fn propagate_consist_unit_poses_with_map_indexed(
+    vehicles: &mut [Vehicle],
+    fleet: &crate::fleet_index::FleetIndex,
+    head_id: u32,
+    map: Option<&Map>,
+) {
+    let slots: Vec<usize> = fleet
+        .consist(head_id)
+        .iter()
+        .filter_map(|&id| fleet.slot(id))
+        .collect();
+    let Some(&head_slot) = slots.first() else {
+        return;
+    };
+    let Some(head) = vehicles.get(head_slot) else {
+        return;
+    };
+    let head_pos = head.pos;
+    let head_dir = head.direction;
+    let head_history_empty = head.rail_tile_history.is_empty();
+    let running = head.running;
+    let stacked_on_head = slots
+        .iter()
+        .all(|&slot| vehicles.get(slot).is_some_and(|v| v.pos == head_pos));
+    if head_history_empty && stacked_on_head {
+        for &slot in slots.iter().skip(1) {
+            let unit = &mut vehicles[slot];
+            unit.direction = head_dir;
+            unit.curve_prev_direction = head_dir;
+            unit.running = running;
+            unit.path.clear();
+            unit.orders.clear();
+            unit.current_order = 0;
+        }
+        return;
+    }
+
+    let poses = consist_unit_poses_indexed(vehicles, &slots);
+    for (index, &slot) in slots.iter().enumerate().skip(1) {
+        let Some(pose) = poses.get(index).copied() else {
+            continue;
+        };
+        let unit = &mut vehicles[slot];
+        let hold_in_depot = !unit.depot_leave_cleared
+            && map.is_some_and(|m| m.get_kind(unit.pos) == Some(TileKind::RailDepot));
+        if hold_in_depot {
+            unit.direction = head_dir;
+            unit.curve_prev_direction = head_dir;
+            unit.running = running;
+            unit.path.clear();
+            unit.orders.clear();
+            unit.current_order = 0;
+            continue;
+        }
+        unit.pos = pose.tile;
+        unit.rail_pixel = pose.rail_pixel;
+        unit.direction = pose.direction;
+        unit.curve_prev_direction = pose.curve_prev_direction;
+        unit.running = running;
+        unit.path.clear();
+        unit.orders.clear();
+        unit.current_order = 0;
+    }
+}
+
 /// Invierte en reposo la orientación de todo el consist de forma atómica.
 ///
 /// Las unidades intercambian sus poses de extremo a extremo y todas invierten
@@ -94,6 +161,37 @@ pub fn reverse_consist_at_stop(vehicles: &mut [Vehicle], head_id: u32, _map: &Ma
     let Some(head_index) = vehicles.iter().position(|v| v.id == head_id) else {
         return false;
     };
+    let slots: Vec<usize> = ids
+        .iter()
+        .filter_map(|&id| vehicles.iter().position(|v| v.id == id))
+        .collect();
+    reverse_consist_at_stop_slots(vehicles, head_index, &slots)
+}
+
+/// Variante de [`reverse_consist_at_stop`] para el loop de simulación: usa la
+/// topología ya indexada del tick en vez de reconstruirla por cada tren.
+pub fn reverse_consist_at_stop_indexed(
+    vehicles: &mut [Vehicle],
+    fleet: &crate::fleet_index::FleetIndex,
+    head_id: u32,
+    _map: &Map,
+) -> bool {
+    let Some(head_index) = fleet.slot(head_id) else {
+        return false;
+    };
+    let slots: Vec<usize> = fleet
+        .consist(head_id)
+        .iter()
+        .filter_map(|&id| fleet.slot(id))
+        .collect();
+    reverse_consist_at_stop_slots(vehicles, head_index, &slots)
+}
+
+fn reverse_consist_at_stop_slots(
+    vehicles: &mut [Vehicle],
+    head_index: usize,
+    slots: &[usize],
+) -> bool {
     let head = &vehicles[head_index];
     if head.kind != VehicleKind::Train || !head.is_consist_head() || head.cur_speed != 0 {
         return false;
@@ -107,10 +205,10 @@ pub fn reverse_consist_at_stop(vehicles: &mut [Vehicle], head_id: u32, _map: &Ma
     }
     let original_path = head.path.clone();
 
-    let poses: Vec<_> = ids
+    let poses: Vec<_> = slots
         .iter()
-        .filter_map(|&id| {
-            vehicles.iter().find(|v| v.id == id).map(|unit| {
+        .filter_map(|&slot| {
+            vehicles.get(slot).map(|unit| {
                 (
                     unit.pos,
                     unit.rail_pixel,
@@ -121,12 +219,12 @@ pub fn reverse_consist_at_stop(vehicles: &mut [Vehicle], head_id: u32, _map: &Ma
             })
         })
         .collect();
-    if poses.len() != ids.len() {
+    if poses.len() != slots.len() {
         return false;
     }
 
-    for (index, id) in ids.iter().copied().enumerate() {
-        let Some(unit) = vehicles.iter_mut().find(|v| v.id == id) else {
+    for (index, &slot) in slots.iter().enumerate() {
+        let Some(unit) = vehicles.get_mut(slot) else {
             continue;
         };
         let (pos, rail_pixel, old_enter, old_exit, z_pos) = poses[poses.len() - 1 - index];

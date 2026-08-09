@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use openttdrs_core::prelude::*;
 use openttdrs_core::{IndustrySpec, industry_template};
 
-use crate::iso::{iso, overlay_pos, tile_pos, tile_slope_and_min_z};
+use crate::iso::{iso, overlay_pos, slope_sprite_offset, tile_pos, tile_slope_and_min_z};
 use crate::render::leveled_foundation_overlay_pos;
 use crate::sprites::{foundation_asset_path, foundation_gfx_for_tileh, industry_gfx_entry};
 use crate::ui::toolbar::BuildMenuAction;
@@ -73,8 +73,9 @@ pub(crate) fn spawn_industry_template_preview(
         let ground = if tileh == 0 {
             asset_server.load::<Image>("assets/opengfx/tiles/grass_rough.png")
         } else {
+            let offset = slope_sprite_offset(tileh);
             asset_server.load::<Image>(format!(
-                "assets/opengfx/tiles/terrain_rough_slope_{tileh:02}.png"
+                "assets/opengfx/tiles/terrain_rough_slope_{offset:02}.png"
             ))
         };
         commands.spawn((

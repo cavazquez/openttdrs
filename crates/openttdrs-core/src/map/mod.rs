@@ -75,7 +75,14 @@ pub use rail_bits::{
     RAIL_TB_UPPER, RAIL_TB_VERT, RAIL_TB_X, RAIL_TB_Y, RAIL_TILE_DEPOT, RAIL_TILE_NORMAL,
     RAIL_TILE_SIGNALS, effective_rail_trackbits, rail_tile_is_signals,
 };
-pub use rail_slope::{rail_foundation_for_trackbits, rail_trackbits_valid_on_slope};
+pub use rail_slope::{
+    FOUNDATION_ACTION5_SPRITE_BASE, FOUNDATION_INCLINED_X, FOUNDATION_INCLINED_Y,
+    FOUNDATION_LEVELED, FOUNDATION_ORIGINAL_SPRITE_BASE, RailFoundationDrawPlan,
+    RailFoundationSpriteDraw, RailTrackDrawPlan, RailTrackSpritePass, bridge_foundation_for_axis,
+    bridge_surface_slope_and_z, foundation_draw_plan, rail_foundation_draw_plan,
+    rail_foundation_for_trackbits, rail_surface_slope_and_z, rail_track_draw_plan,
+    rail_trackbits_valid_on_slope,
+};
 pub use rail_topology::{
     RAIL_TOUCHING_SIDE_NE, RAIL_TOUCHING_SIDE_NW, RAIL_TOUCHING_SIDE_SE, RAIL_TOUCHING_SIDE_SW,
     opposite_diag_dir, rail_bit_for_sides, rail_bits_touching_side, rail_signal_diag_dir_offset,
@@ -83,10 +90,10 @@ pub use rail_topology::{
 };
 pub use road_bits::{OTTD_MP_ROAD, OTTD_MP_TUNNELBRIDGE, effective_road_bits};
 pub use slope::{
-    SLOPE_NE, SLOPE_NW, SLOPE_SE, SLOPE_SW, TILE_PIXEL_HEIGHT, complement_slope, diag_dir_offset,
-    inclined_slope_direction, is_tunnel_entrance_slope, partial_pixel_z, resolve_tunnel_end,
-    slope_dz_at_subtile, slope_dz_on_tile, slope_pixel_z, tile_slope_and_z, tunnel_entrance_m5,
-    tunnel_path_tiles, tunnel_preview_path,
+    SLOPE_NE, SLOPE_NW, SLOPE_SE, SLOPE_STEEP, SLOPE_SW, TILE_PIXEL_HEIGHT, complement_slope,
+    diag_dir_offset, inclined_slope_direction, is_tunnel_entrance_slope, partial_pixel_z,
+    resolve_existing_tunnel_end, resolve_tunnel_end, slope_dz_at_subtile, slope_dz_on_tile,
+    slope_pixel_z, tile_slope_and_z, tunnel_entrance_m5, tunnel_path_tiles, tunnel_preview_path,
 };
 pub use station_tile_anim::{
     AIRPORT_RADAR_FRAMES, airport_radar_frame, is_airport_tower_tile, step_airport_tiles,
@@ -120,6 +127,12 @@ pub struct Map {
     width: u32,
     height: u32,
     tiles: Vec<Tile>,
+    /// Compatibilidad para exports `.ottdmap` heredados que escribieron cero en
+    /// `MAPH` de agua aunque conservaron tierra alta alrededor. No representa
+    /// una regla de OpenTTD: los `.sav` y mapas nuevos deben conservar el valor
+    /// crudo de `MAPH`.
+    #[serde(default)]
+    legacy_zero_water_height_repair: bool,
 }
 
 impl Map {
@@ -152,12 +165,32 @@ impl Map {
                 };
                 count
             ],
+            legacy_zero_water_height_repair: false,
         }
     }
 
     #[must_use]
     pub const fn dimensions(&self) -> (u32, u32) {
         (self.width, self.height)
+    }
+
+    /// Indica si el renderer debe reparar el antiguo export `.ottdmap` que
+    /// perdió alturas de agua a cero.
+    ///
+    /// Los datos de un save OpenTTD conservan `MAPH` y deben mantener este flag
+    /// apagado para que `GetTileSlopeZ` se reproduzca literalmente.
+    #[must_use]
+    pub const fn legacy_zero_water_height_repair(&self) -> bool {
+        self.legacy_zero_water_height_repair
+    }
+
+    /// Activa o desactiva la compatibilidad para exports `.ottdmap` heredados.
+    ///
+    /// Esta opción pertenece al origen del mapa, no a cada tesela. El cargador
+    /// `.sav` la apaga explícitamente después de reutilizar el decodificador
+    /// binario común.
+    pub fn set_legacy_zero_water_height_repair(&mut self, enabled: bool) {
+        self.legacy_zero_water_height_repair = enabled;
     }
 
     /// Vista densa de todas las teselas (orden fila-mayor: `y * width + x`).
@@ -398,6 +431,7 @@ mod ottdmap_binary_tests {
         let bytes = minimal_ottdmap_v1();
         let map = Map::from_ottd_binary(&bytes).expect("mapa válido");
         assert_eq!(map.dimensions(), (2, 2));
+        assert!(map.legacy_zero_water_height_repair());
         let t0 = map.get(TileCoord::new(0, 0)).expect("tile");
         assert_eq!(t0.kind, TileKind::House);
         assert_eq!(t0.m8, 42);

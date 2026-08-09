@@ -37,6 +37,7 @@ mod vehicles;
 mod viewport;
 mod water;
 mod world;
+pub(crate) mod world_draw_trace;
 
 pub(crate) use airport_radar_anim::{AirportRadarAnim, AirportRadarAnimPlugin};
 pub(crate) use animation_gate::palette_animations_should_run;

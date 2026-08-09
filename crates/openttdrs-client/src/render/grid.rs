@@ -14,8 +14,12 @@ fn water_tile_touches_land(map: &Map, tx: u32, ty: u32, mw: u32, mh: u32) -> boo
         if x < 0 || y < 0 || x >= mw as i32 || y >= mh as i32 {
             return false;
         }
-        map.get(TileCoord::new(x, y))
-            .is_some_and(|t| t.kind != TileKind::Water && t.kind != TileKind::Void)
+        map.get(TileCoord::new(x, y)).is_some_and(|t| {
+            !matches!(
+                t.kind,
+                TileKind::Water | TileKind::ShipDepot | TileKind::Void
+            )
+        })
     };
     let x = tx as i32;
     let y = ty as i32;

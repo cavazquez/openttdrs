@@ -36,8 +36,7 @@ pub use transport::{
     road_bits_for_autoroute, road_drag_line_tiles, road_locked_tool_axis,
 };
 pub(crate) use transport::{
-    bridge_collinear_rail_gaps, normalize_rail_trackbits_from_neighbors,
-    normalize_synthetic_rail_crossings,
+    normalize_rail_trackbits_from_neighbors, normalize_synthetic_rail_crossings,
 };
 pub use types::{Command, LevelMode};
 

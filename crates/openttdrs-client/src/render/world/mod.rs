@@ -16,6 +16,8 @@ pub(crate) use viewport::initial_map_camera_pose;
 #[cfg(test)]
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
+    use std::fs;
+
     use super::*;
     use bevy::app::ScheduleRunnerPlugin;
     use bevy::asset::AssetPlugin;
@@ -70,6 +72,51 @@ mod tests {
         world
             .run_system_once(remap::apply_remap_map_visuals)
             .unwrap();
+    }
+
+    /// Entrada automatizable del candidato para el contrato `world-draw`.
+    ///
+    /// No requiere ventana ni GPU: los stubs del atlas alcanzan porque la
+    /// traza se toma antes de convertir el ID lógico a una textura. Se deja
+    /// `ignore` para que el test normal no dependa de una partida local; el
+    /// script `export_openttdrs_world_draw.sh` lo invoca explícitamente.
+    #[test]
+    #[ignore = "requiere OPENTTDRS_WORLD_DRAW_SAV y OPENTTDRS_WORLD_DRAW_OUT"]
+    fn world_draw_trace_exports_requested_sav() {
+        let sav = std::env::var("OPENTTDRS_WORLD_DRAW_SAV")
+            .expect("OPENTTDRS_WORLD_DRAW_SAV debe apuntar a una partida .sav");
+        let out = std::env::var("OPENTTDRS_WORLD_DRAW_OUT")
+            .expect("OPENTTDRS_WORLD_DRAW_OUT debe indicar el JSONL de salida");
+
+        let mut app = with_assets_app();
+        let world = SimWorld::load_sav_file(&sav).expect("cargar partida .sav");
+        assert!(
+            world
+                .state
+                .runtime
+                .foundation_newgrf_sprites
+                .iter()
+                .any(Option::is_some),
+            "la carga directa del SAV debe rehidratar los cimientos Action5 base"
+        );
+        app.insert_resource(world);
+        app.world_mut()
+            .run_system_once(setup)
+            .expect("spawn headless del mapa");
+
+        let contents = fs::read_to_string(&out).expect("world-draw JSONL escrito");
+        assert!(
+            contents
+                .lines()
+                .next()
+                .is_some_and(|row| row.contains("world-draw"))
+        );
+        assert!(
+            contents
+                .lines()
+                .last()
+                .is_some_and(|row| row.contains("\"kind\":\"complete\""))
+        );
     }
 
     #[test]

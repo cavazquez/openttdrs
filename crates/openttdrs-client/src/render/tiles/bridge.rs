@@ -34,6 +34,8 @@ pub(crate) fn spawn_bridge_middle(
     };
     spawn_bridge_deck(
         commands,
+        map,
+        dims,
         assets,
         ctx,
         &span,
@@ -42,6 +44,7 @@ pub(crate) fn spawn_bridge_middle(
         catenary_newgrf,
         catenary_sprites,
         bridge_decks_newgrf,
+        &[],
         action5_sprites,
         images,
     );
@@ -53,8 +56,7 @@ mod tests {
     use super::*;
 
     use openttdrs_core::{
-        BridgeType, bridge_above_axis_from_mapt, encode_rail_reservation_to_m2_hi,
-        set_bridge_middle_mapt, set_bridge_type_m6,
+        BridgeType, bridge_above_axis_from_mapt, set_bridge_middle_mapt, set_bridge_type_m6,
     };
 
     fn ramp_tile_template(m5: u8) -> Tile {
@@ -113,6 +115,20 @@ mod tests {
             bridge_span_at(&map, c(5, 2), dims).unwrap().piece,
             openttdrs_core::BridgePiece::South
         );
+        // Las rampas no forman parte del cálculo de `CalcBridgePiece` de
+        // OpenTTD: el vano de tres teselas es North, MiddleOdd, South.
+        assert_eq!(
+            bridge_span_at(&map, c(2, 2), dims).unwrap().piece,
+            openttdrs_core::BridgePiece::North
+        );
+        assert_eq!(
+            bridge_span_at(&map, c(3, 2), dims).unwrap().piece,
+            openttdrs_core::BridgePiece::MiddleOdd
+        );
+        assert_eq!(
+            bridge_span_at(&map, c(4, 2), dims).unwrap().piece,
+            openttdrs_core::BridgePiece::South
+        );
     }
 
     #[test]
@@ -127,20 +143,84 @@ mod tests {
         // `_bridge_sprite_table_wood_heads`: con terreno plano OpenTTD usa
         // las cuatro cabezas RAMP, indexadas SW, SE, NE, NW.
         assert_eq!(
-            crate::sprites::wooden_bridge_ramp_sprite_id(true, 0, 2),
+            crate::sprites::bridge_ramp_sprite_id(
+                BridgeType::Wooden,
+                true,
+                openttdrs_core::RailType::Rail,
+                0,
+                2,
+            ),
             2538
         );
         assert_eq!(
-            crate::sprites::wooden_bridge_ramp_sprite_id(true, 0, 1),
+            crate::sprites::bridge_ramp_sprite_id(
+                BridgeType::Wooden,
+                true,
+                openttdrs_core::RailType::Rail,
+                0,
+                1,
+            ),
             2537
         );
         assert_eq!(
-            crate::sprites::wooden_bridge_ramp_sprite_id(true, 0, 0),
+            crate::sprites::bridge_ramp_sprite_id(
+                BridgeType::Wooden,
+                true,
+                openttdrs_core::RailType::Rail,
+                0,
+                0,
+            ),
             2539
         );
         assert_eq!(
-            crate::sprites::wooden_bridge_ramp_sprite_id(true, 0, 3),
+            crate::sprites::bridge_ramp_sprite_id(
+                BridgeType::Wooden,
+                true,
+                openttdrs_core::RailType::Rail,
+                0,
+                3,
+            ),
             2540
+        );
+    }
+
+    #[test]
+    fn every_bridge_type_uses_directional_head_sprites() {
+        use openttdrs_core::RailType;
+
+        // El cantilever rojo de la partida no debe recibir el sprite recto
+        // del vano (2508...), sino la cabecera genérica `BRIDGE_PIECE_HEAD`.
+        assert_eq!(
+            crate::sprites::bridge_ramp_sprite_id(
+                BridgeType::CantileverRed,
+                true,
+                RailType::Rail,
+                0,
+                2,
+            ),
+            2442
+        );
+        assert_eq!(
+            crate::sprites::bridge_ramp_sprite_id(
+                BridgeType::CantileverRed,
+                true,
+                RailType::Maglev,
+                0,
+                2,
+            ),
+            4371
+        );
+        // Una rampa de carretera sobre fundación nivelada se selecciona con
+        // la pendiente efectiva plana, no con el `tileh` crudo.
+        assert_eq!(
+            crate::sprites::bridge_ramp_sprite_id(
+                BridgeType::CantileverRed,
+                false,
+                RailType::Rail,
+                0,
+                2,
+            ),
+            2450
         );
     }
 
@@ -148,9 +228,12 @@ mod tests {
     fn span_at_propagates_pbs_reservation_from_rail_ramp() {
         let mut map = Map::new_flat(8, 8, 0);
         let c = |x: i32, y: i32| TileCoord::new(x, y);
-        let mut north = ramp_tile_template(0x80);
+        // Rampa oeste hacia el este (dir 2) y rampa este hacia el oeste
+        // (dir 0): la pareja debe respetar la dirección persistida, igual que
+        // un `.sav` real. Dos `0x80` sólo pasaban con el resolvedor por
+        // escaneo y podían emparejar cabezas vecinas no relacionadas.
+        let mut north = ramp_tile_template(0x92);
         north.kind = TileKind::RailBridge;
-        north.m2_hi = encode_rail_reservation_to_m2_hi(0x01);
         let mut south = ramp_tile_template(0x80);
         south.kind = TileKind::RailBridge;
         map.set_tile(c(1, 2), north).expect("rampa norte");

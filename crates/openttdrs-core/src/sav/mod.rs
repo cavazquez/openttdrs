@@ -74,7 +74,7 @@ pub mod write;
 use crate::airport::airport_spec_tiles;
 use crate::airport_class::{AirportSpecId, airport_spec_def};
 use crate::airport_fta::AirportHeading;
-use crate::command::{bridge_collinear_rail_gaps, normalize_rail_trackbits_from_neighbors};
+use crate::command::normalize_rail_trackbits_from_neighbors;
 use crate::game_state::GameState;
 use crate::link_graph::LinkGraphStats;
 use crate::map::{Map, TileCoord, TileKind};
@@ -83,6 +83,7 @@ use crate::pathfinder;
 use crate::station::{Station, StopKind};
 use crate::town::Town;
 use crate::vehicle::{AircraftPhase, Vehicle, VehicleKind};
+use std::collections::HashMap;
 
 pub use entities::{
     SavIndustry, SavStation, SavVehicle, SavVehicleKind, format_generated_station_name,
@@ -98,6 +99,7 @@ const FACIL_TRAIN: u8 = 0x01;
 const FACIL_TRUCK_STOP: u8 = 0x02;
 const FACIL_BUS_STOP: u8 = 0x04;
 const FACIL_AIRPORT: u8 = 0x08;
+const FACIL_DOCK: u8 = 0x10;
 
 /// Error al cargar o guardar un `.sav`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -187,6 +189,10 @@ pub struct SavGame {
     pub climate: crate::Climate,
 }
 
+/// `SLV_100`: desde esta versión OpenTTD persiste las reservas PBS de
+/// depósitos. `AfterLoadGame()` sólo limpia el bit en saves anteriores.
+const SLV_DEPOT_RESERVATION_PERSISTED: u16 = 100;
+
 /// Carga un savegame de `OpenTTD` desde sus bytes.
 ///
 /// # Errors
@@ -198,8 +204,12 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
     let (data, version) = container::decompress(raw)?;
     let chunk_list = chunks::parse_chunks(&data)?;
     let ottdmap = build::export_ottdmap(&chunk_list, version)?;
-    let (map, extras) = Map::from_ottd_binary_with_extras(&ottdmap)
+    let (mut map, extras) = Map::from_ottd_binary_with_extras(&ottdmap)
         .map_err(|e| SavError::BadFormat(format!("mapa reconstruido inválido: {e:?}")))?;
+    // `export_ottdmap` sólo es un transporte interno para el pipeline común;
+    // el MAPH original del `.sav` es autoritativo. No apliques la heurística de
+    // los viejos `.ottdmap`: cambia pendientes empinadas reales de costa.
+    map.set_legacy_zero_water_height_repair(false);
     let (map_w, _) = map.dimensions();
     let stations = entities::stations_from_chunks(&chunk_list, map_w, version);
     let mut towns = entities::towns_from_chunks(&chunk_list, map_w, version);
@@ -430,8 +440,10 @@ fn stop_kind_from_facilities(facilities: u8) -> StopKind {
         StopKind::BusStop
     } else if facilities & FACIL_AIRPORT != 0 {
         StopKind::Airport
+    } else if facilities & FACIL_DOCK != 0 {
+        StopKind::Dock
     } else {
-        // Camión por defecto (incluye FACIL_TRUCK_STOP y muelles).
+        // Camión por defecto.
         let _ = FACIL_TRUCK_STOP;
         StopKind::TruckStop
     }
@@ -492,11 +504,15 @@ impl GameState {
     #[must_use]
     #[allow(clippy::too_many_lines)]
     pub fn from_sav_game(sav: SavGame) -> Self {
+        let clear_legacy_depot_reservations = sav.version < SLV_DEPOT_RESERVATION_PERSISTED;
         let mut map = sav.map;
         normalize_rail_trackbits_from_neighbors(&mut map);
-        bridge_collinear_rail_gaps(&mut map);
-        // OpenTTD afterload: reservas de depósito no son autoritativas al cargar.
-        crate::depot::clear_all_depot_reservations(&mut map);
+        // `AfterLoadGame()` de OpenTTD sólo reconstruye estas reservas para
+        // saves anteriores a `SLV_100`; en una partida moderna el bit es parte
+        // del estado visible (overlay PBS del depósito).
+        if clear_legacy_depot_reservations {
+            crate::depot::clear_all_depot_reservations(&mut map);
+        }
         let mut state = Self::from_map(map);
         // OpenTTD ≥15 default `train_acceleration_model = 1` (realista).
         state.train_acceleration_model = crate::engine::TrainAccelerationModel::Realistic;
@@ -515,21 +531,64 @@ impl GameState {
         if let Some(colour) = sav.company_colour {
             state.company_colour = colour;
         }
+        // Indexar una sola vez las piezas de aeropuerto importadas. `m2` es
+        // el `StationID` y `m6` identifica el tipo de estación del tile.
+        let mut imported_airport_tiles: HashMap<u32, Vec<TileCoord>> = HashMap::new();
+        let (map_w, map_h) = state.map.dimensions();
+        for y in 0..map_h {
+            let Ok(y) = i32::try_from(y) else {
+                continue;
+            };
+            for x in 0..map_w {
+                let Ok(x) = i32::try_from(x) else {
+                    continue;
+                };
+                let c = TileCoord::new(x, y);
+                let Some(tile) = state.map.get(c) else {
+                    continue;
+                };
+                if tile.kind != TileKind::Station
+                    || crate::station::stop_kind_from_m6(tile.m6) != StopKind::Airport
+                {
+                    continue;
+                }
+                let station_id = u32::from(tile.m2) | (u32::from(tile.m2_hi) << 8);
+                imported_airport_tiles
+                    .entry(station_id)
+                    .or_default()
+                    .push(c);
+            }
+        }
         for st in sav.stations {
             let stop_kind = stop_kind_from_facilities(st.facilities);
             let mut station = Station::new_with_kind(st.pos, stop_kind);
+            station.ottd_station_id = Some(st.station_id);
             station.name = entities::resolve_sav_station_name(&st, &state.towns);
-            if stop_kind == StopKind::Airport {
+            // Una misma estación puede combinar tren, bus y aeropuerto. No
+            // deducir el aeropuerto del `StopKind`: éste sólo conserva una
+            // facilidad principal para la simulación simplificada.
+            if st.facilities & FACIL_AIRPORT != 0 {
                 let spec = AirportSpecId::from_ottd_airport_type(st.airport_type);
                 let axis_y = airport_axis_y_from_saved_footprint(spec, st.airport_w, st.airport_h);
                 station.airport_spec = spec;
                 station.airport_blocks = st.airport_blocks;
-                station.airport_tiles = airport_spec_tiles(st.pos, spec, axis_y)
-                    .map(|(c, _piece)| c)
-                    .collect();
-                // El chunk de mapa reconstruido tipa `MP_STATION` genérico
-                // (`TileKind::Station`); retaguear a `Airport` como haría el
-                // engine al construir, para que hangares/heliports se detecten.
+                // La huella real ya está en el mapa: `m2` es `StationID` y
+                // `m6` codifica `StationType::Airport`. Esto también cubre
+                // terminales combinadas tren + bus + avión, cuyo `pos` no es
+                // necesariamente el origen del aeropuerto.
+                station.airport_tiles = imported_airport_tiles
+                    .remove(&st.station_id)
+                    .unwrap_or_default();
+                // Fallback para fixtures antiguos que no preservan los bytes
+                // `m2`/`m6` de estación.
+                if station.airport_tiles.is_empty() {
+                    station.airport_tiles = airport_spec_tiles(st.pos, spec, axis_y)
+                        .map(|(c, _piece)| c)
+                        .collect();
+                }
+                // El chunk de mapa reconstruido tipa `MP_STATION` genérico;
+                // retaguear únicamente los tiles de aeropuerto reales. Se
+                // preservan `m5`/`m6`, necesarios para el `StationGfx` visual.
                 for &c in &station.airport_tiles {
                     if let Some(mut tile) = state.map.get(c)
                         && tile.kind == TileKind::Station
@@ -548,8 +607,7 @@ impl GameState {
         ) {
             state.rebuild_station_flows();
         }
-        let mut last_train_head: Option<u32> = None;
-        for (i, v) in sav.vehicles.iter().enumerate() {
+        for v in &sav.vehicles {
             let kind = match v.kind {
                 SavVehicleKind::Train => VehicleKind::Train,
                 // Pasajeros (cargo 0) → bus; el resto, camión.
@@ -558,8 +616,7 @@ impl GameState {
                 SavVehicleKind::Ship => VehicleKind::Ship,
                 SavVehicleKind::Aircraft => VehicleKind::Aircraft,
             };
-            #[allow(clippy::cast_possible_truncation)]
-            let id = i as u32;
+            let id = v.sav_id;
             if kind == VehicleKind::Aircraft {
                 let mut vehicle = Vehicle::new(id, kind, v.pos, v.pos);
                 vehicle.running = v.running;
@@ -620,10 +677,10 @@ impl GameState {
                         }
                     });
                 state.vehicles.push(vehicle);
-                last_train_head = None;
                 continue;
             }
             let mut vehicle = Vehicle::new(id, kind, v.pos, v.pos);
+            vehicle.running = v.running;
             vehicle.progress = v.progress;
             vehicle.cur_speed = v.cur_speed;
             vehicle.subspeed = v.subspeed;
@@ -643,9 +700,6 @@ impl GameState {
                     .map_or(25, |e| e.capacity);
                 vehicle.running = false;
                 state.vehicles.push(vehicle);
-                if let Some(head) = last_train_head {
-                    let _ = crate::train_consist::attach_wagon(&mut state.vehicles, head, id);
-                }
                 continue;
             }
             let map_w = state.map.dimensions().0;
@@ -656,8 +710,6 @@ impl GameState {
                 let last = vehicle.orders.len().saturating_sub(1);
                 vehicle.current_order = v.current_order.min(last);
                 vehicle.cur_implicit_order_index = v.cur_implicit_order_index.min(last);
-                // Saves reales suelen traer trenes parados en depósito; arrancar si hay órdenes.
-                vehicle.running = true;
                 reconcile_imported_vehicle_position(&state.map, &mut vehicle);
             }
             // `set_vehicle_orders` reinicia progreso para comandos nuevos, pero
@@ -667,12 +719,76 @@ impl GameState {
                 vehicle.rail_pixel = rail_pixel_from_openttd_pos(v.x_pos, v.y_pos, v.direction);
             }
             state.vehicles.push(vehicle);
-            if kind == VehicleKind::Train {
-                last_train_head = Some(id);
-                crate::train_consist::consist_changed(&mut state.vehicles, id);
-            } else {
-                last_train_head = None;
+        }
+
+        // La tabla sparse `VEHS` puede intercalar unidades de distintos
+        // vehículos. Reconstruir el consist por `Vehicle::next`, no por el
+        // orden de las filas: tratar un vagón huérfano como cabeza dispara PBS
+        // y routing como si fuesen cientos de trenes adicionales.
+        let slots_by_sav_id: HashMap<u32, usize> = state
+            .vehicles
+            .iter()
+            .enumerate()
+            .map(|(slot, vehicle)| (vehicle.id, slot))
+            .collect();
+        for v in &sav.vehicles {
+            if v.kind != SavVehicleKind::Train {
+                continue;
             }
+            let Some(next_sav_id) = v.next_sav_id else {
+                continue;
+            };
+            let (Some(&from), Some(&to)) = (
+                slots_by_sav_id.get(&v.sav_id),
+                slots_by_sav_id.get(&next_sav_id),
+            ) else {
+                continue;
+            };
+            if from == to
+                || state.vehicles[from].kind != VehicleKind::Train
+                || state.vehicles[to].kind != VehicleKind::Train
+                || state.vehicles[from].next_unit.is_some()
+                || state.vehicles[to].prev_unit.is_some()
+            {
+                continue;
+            }
+            let (from_id, to_id) = (state.vehicles[from].id, state.vehicles[to].id);
+            state.vehicles[from].next_unit = Some(to_id);
+            state.vehicles[to].prev_unit = Some(from_id);
+        }
+
+        // Fallback para saves antiguos que no traen la referencia `next`.
+        // Solo enlaza el bloque contiguo de trenes, sin inventar conexiones a
+        // través de una fila de otro vehículo.
+        let mut fallback_head: Option<u32> = None;
+        for v in &sav.vehicles {
+            if v.kind != SavVehicleKind::Train {
+                fallback_head = None;
+                continue;
+            }
+            let Some(&slot) = slots_by_sav_id.get(&v.sav_id) else {
+                continue;
+            };
+            if !v.is_wagon {
+                fallback_head = Some(v.sav_id);
+                continue;
+            }
+            if state.vehicles[slot].prev_unit.is_some() {
+                continue;
+            }
+            if let Some(head) = fallback_head {
+                let _ = crate::train_consist::attach_wagon(&mut state.vehicles, head, v.sav_id);
+            }
+        }
+
+        let train_heads: Vec<u32> = state
+            .vehicles
+            .iter()
+            .filter(|vehicle| vehicle.kind == VehicleKind::Train && vehicle.is_consist_head())
+            .map(|vehicle| vehicle.id)
+            .collect();
+        for head in train_heads {
+            crate::train_consist::consist_changed(&mut state.vehicles, head);
         }
         state
     }
@@ -683,6 +799,24 @@ impl GameState {
 mod tests {
     use super::*;
 
+    fn empty_sav(version: u16, map: Map) -> SavGame {
+        SavGame {
+            version,
+            map,
+            extras: OttdmapExtras::default(),
+            stations: Vec::new(),
+            towns: Vec::new(),
+            industries: Vec::new(),
+            vehicles: Vec::new(),
+            money: None,
+            company_colour: None,
+            station_index: HashMap::new(),
+            game_time: None,
+            link_graph: LinkGraphStats::default(),
+            climate: crate::Climate::Temperate,
+        }
+    }
+
     #[test]
     fn stop_kind_mapping() {
         assert_eq!(stop_kind_from_facilities(0x01), StopKind::RailStation);
@@ -690,6 +824,37 @@ mod tests {
         assert_eq!(stop_kind_from_facilities(0x04), StopKind::BusStop);
         assert_eq!(stop_kind_from_facilities(0x02), StopKind::TruckStop);
         assert_eq!(stop_kind_from_facilities(0x08), StopKind::Airport);
+        assert_eq!(stop_kind_from_facilities(0x10), StopKind::Dock);
+    }
+
+    #[test]
+    fn modern_sav_keeps_rail_depot_pbs_reservation() {
+        let pos = TileCoord::new(7, 9);
+        let mut map = Map::new_flat(64, 64, 0);
+        let mut depot = map.get(pos).expect("rail depot tile");
+        depot.kind = TileKind::RailDepot;
+        depot.mapt = 0x10;
+        depot.m5 = 0xD2;
+        map.set_tile(pos, depot).expect("set rail depot tile");
+
+        let state = GameState::from_sav_game(empty_sav(SLV_DEPOT_RESERVATION_PERSISTED, map));
+        assert_eq!(state.map.get(pos).map(|tile| tile.m5), Some(0xD2));
+        assert!(crate::depot::has_depot_reservation(&state.map, pos));
+    }
+
+    #[test]
+    fn legacy_sav_rebuilds_rail_depot_pbs_reservation() {
+        let pos = TileCoord::new(7, 9);
+        let mut map = Map::new_flat(64, 64, 0);
+        let mut depot = map.get(pos).expect("rail depot tile");
+        depot.kind = TileKind::RailDepot;
+        depot.mapt = 0x10;
+        depot.m5 = 0xD2;
+        map.set_tile(pos, depot).expect("set rail depot tile");
+
+        let state = GameState::from_sav_game(empty_sav(SLV_DEPOT_RESERVATION_PERSISTED - 1, map));
+        assert_eq!(state.map.get(pos).map(|tile| tile.m5), Some(0xC2));
+        assert!(!crate::depot::has_depot_reservation(&state.map, pos));
     }
 
     #[test]
@@ -706,24 +871,65 @@ mod tests {
     #[test]
     #[allow(clippy::too_many_lines)]
     fn from_sav_game_builds_state_with_entities() {
-        let map = Map::new_flat(64, 64, 0);
+        let mut map = Map::new_flat(64, 64, 0);
+        // Dos vías colineales separadas por bosque no forman un puente. El
+        // importador debe preservar el hueco tal cual venía en el save.
+        let forest_gap = crate::TileCoord::new(2, 1);
+        for c in [crate::TileCoord::new(1, 1), crate::TileCoord::new(3, 1)] {
+            let mut tile = map.get(c).expect("rail endpoint");
+            tile.kind = TileKind::Rail;
+            tile.mapt = 0x10;
+            tile.m5 = crate::map::RAIL_TB_X;
+            map.set_tile(c, tile).expect("set rail endpoint");
+        }
+        let mut forest = map.get(forest_gap).expect("forest gap");
+        forest.kind = TileKind::Forest;
+        forest.mapt = 0x40;
+        map.set_tile(forest_gap, forest).expect("set forest gap");
+        // Estación integrada: tren + buses + aeropuerto. El tile de avión no
+        // coincide con el ancla de la estación y conserva el `StationGfx`
+        // vanilla en `m5`.
+        let airport_tile = crate::TileCoord::new(12, 12);
+        let mut airport = map.get(airport_tile).expect("airport tile");
+        airport.kind = TileKind::Station;
+        airport.mapt = 0x50;
+        airport.m2 = 1;
+        airport.m6 = 1 << 3;
+        airport.m5 = 14;
+        map.set_tile(airport_tile, airport)
+            .expect("set airport tile");
         let sav = SavGame {
             version: 300,
             map,
             extras: OttdmapExtras::default(),
-            stations: vec![SavStation {
-                station_id: 0,
-                pos: crate::TileCoord::new(3, 3),
-                name: Some("Estación Norte".into()),
-                facilities: 0x01,
-                string_id: None,
-                town_id: None,
-                airport_type: 0,
-                airport_w: 0,
-                airport_h: 0,
-                airport_layout: 0,
-                airport_blocks: 0,
-            }],
+            stations: vec![
+                SavStation {
+                    station_id: 0,
+                    pos: crate::TileCoord::new(3, 3),
+                    name: Some("Estación Norte".into()),
+                    facilities: 0x01,
+                    string_id: None,
+                    town_id: None,
+                    airport_type: 0,
+                    airport_w: 0,
+                    airport_h: 0,
+                    airport_layout: 0,
+                    airport_blocks: 0,
+                },
+                SavStation {
+                    station_id: 1,
+                    pos: crate::TileCoord::new(10, 10),
+                    name: Some("Intermodal".into()),
+                    facilities: FACIL_TRAIN | FACIL_BUS_STOP | FACIL_AIRPORT,
+                    string_id: None,
+                    town_id: None,
+                    airport_type: 7,
+                    airport_w: 9,
+                    airport_h: 11,
+                    airport_layout: 0,
+                    airport_blocks: 0,
+                },
+            ],
             towns: vec![Town {
                 id: 0,
                 pos: crate::TileCoord::new(10, 10),
@@ -738,6 +944,10 @@ mod tests {
             link_graph: LinkGraphStats::default(),
             vehicles: vec![
                 SavVehicle {
+                    sav_id: 0,
+                    // Las unidades pueden estar separadas por filas de otros
+                    // tipos de vehículo en `VEHS`.
+                    next_sav_id: Some(3),
                     kind: SavVehicleKind::Train,
                     pos: crate::TileCoord::new(5, 5),
                     raw_tile: crate::TileCoord::new(5, 5),
@@ -762,6 +972,8 @@ mod tests {
                     airport_targetairport: 0,
                 },
                 SavVehicle {
+                    sav_id: 1,
+                    next_sav_id: None,
                     kind: SavVehicleKind::RoadVehicle,
                     pos: crate::TileCoord::new(6, 6),
                     raw_tile: crate::TileCoord::new(6, 6),
@@ -786,6 +998,8 @@ mod tests {
                     airport_targetairport: 0,
                 },
                 SavVehicle {
+                    sav_id: 2,
+                    next_sav_id: None,
                     kind: SavVehicleKind::RoadVehicle,
                     pos: crate::TileCoord::new(7, 7),
                     raw_tile: crate::TileCoord::new(7, 7),
@@ -809,6 +1023,32 @@ mod tests {
                     airport_state: 0,
                     airport_targetairport: 0,
                 },
+                SavVehicle {
+                    sav_id: 3,
+                    next_sav_id: None,
+                    kind: SavVehicleKind::Train,
+                    pos: crate::TileCoord::new(5, 5),
+                    raw_tile: crate::TileCoord::new(5, 5),
+                    progress: 0,
+                    x_pos: 5 * 16,
+                    y_pos: 5 * 16,
+                    z_pos: 0,
+                    cur_speed: 0,
+                    subspeed: 0,
+                    direction: 0,
+                    engine_type: 0,
+                    cargo_type: 9,
+                    orders: Vec::new(),
+                    current_order: 0,
+                    cur_implicit_order_index: 0,
+                    running: true,
+                    is_wagon: true,
+                    is_helicopter: false,
+                    airport_pos: 0,
+                    airport_previous_pos: 0,
+                    airport_state: 0,
+                    airport_targetairport: 0,
+                },
             ],
             money: Some(123_456),
             company_colour: Some(9),
@@ -817,16 +1057,28 @@ mod tests {
             climate: crate::Climate::Temperate,
         };
         let state = GameState::from_sav_game(sav);
-        assert_eq!(state.stations.len(), 1);
+        assert_eq!(state.stations.len(), 2);
         assert_eq!(state.stations[0].stop_kind, StopKind::RailStation);
         assert_eq!(state.stations[0].name.as_deref(), Some("Estación Norte"));
         assert_eq!(state.towns.len(), 1);
         assert_eq!(state.towns[0].name, "Springfield");
         assert_eq!(state.economy.money, 123_456);
         assert_eq!(state.company_colour, 9);
-        assert_eq!(state.vehicles.len(), 3);
+        assert_eq!(state.vehicles.len(), 4);
         assert_eq!(state.vehicles[0].kind, VehicleKind::Train);
         assert_eq!(state.vehicles[1].kind, VehicleKind::Bus);
         assert_eq!(state.vehicles[2].kind, VehicleKind::Truck);
+        assert_eq!(state.vehicles[0].next_unit, Some(3));
+        assert_eq!(state.vehicles[3].prev_unit, Some(0));
+        assert_eq!(state.map.get_kind(forest_gap), Some(TileKind::Forest));
+        let imported_airport = state
+            .stations
+            .iter()
+            .find(|station| station.ottd_station_id == Some(1))
+            .expect("integrated airport station");
+        assert_eq!(imported_airport.stop_kind, StopKind::RailStation);
+        assert_eq!(imported_airport.airport_tiles, vec![airport_tile]);
+        assert_eq!(state.map.get_kind(airport_tile), Some(TileKind::Airport));
+        assert_eq!(state.map.get(airport_tile).map(|tile| tile.m5), Some(14));
     }
 }

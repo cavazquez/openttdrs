@@ -43,6 +43,11 @@ fn place_dock_on_coast_and_serves_ship() {
     let money = s.economy.money;
     apply_command(&mut s, &Command::PlaceDock(dock, 0)).unwrap();
     assert_eq!(s.map.get_kind(dock), Some(TileKind::Station));
+    assert_eq!(
+        crate::station::station_type_from_m6(s.map.get(dock).unwrap().m6),
+        crate::station::STATION_TYPE_DOCK
+    );
+    assert!(crate::ship_movement::is_water_network_tile_at(&s.map, dock));
     assert_eq!(s.stations.len(), 1);
     assert_eq!(s.stations[0].stop_kind, StopKind::Dock);
     assert!(s.stations[0].can_service_vehicle(VehicleKind::Ship));

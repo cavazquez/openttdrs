@@ -308,6 +308,7 @@ fn spawn_road_rail_station_and_transport_cover_main_paths() {
                     &TileRenderContext::new(&m.0, &g.0, 4, 2),
                     &[],
                     4.0,
+                    true,
                     &[],
                     &[],
                     None,
@@ -332,7 +333,9 @@ fn spawn_road_rail_station_and_transport_cover_main_paths() {
                         &m.0,
                         (m.0.dimensions().0, m.0.dimensions().1),
                         &[],
+                        &[],
                         None,
+                        &[],
                         &[],
                         None,
                         None,
@@ -341,6 +344,61 @@ fn spawn_road_rail_station_and_transport_cover_main_paths() {
             },
         )
         .expect("spawn batch");
+}
+
+#[test]
+fn ship_depot_uses_water_and_all_vanilla_two_tile_parts() {
+    let assets = boot_assets_app();
+    let mut map = Map::new_flat(4, 4, 0);
+    let depot = |m5| Tile {
+        kind: TileKind::ShipDepot,
+        mapt: 0x60,
+        m5,
+        ..tile_template()
+    };
+    // WaterTileType::Depot = 3 (nibble alto); bits bajos: part + axis.
+    for (x, y, m5) in [(1, 1, 0x30), (2, 1, 0x31), (1, 2, 0x32), (2, 2, 0x33)] {
+        map.set_tile(TileCoord::new(x, y), depot(m5))
+            .expect("ship depot tile");
+    }
+    let grid = RenderGrid::from_map(&map, 4, 4);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+
+    world
+        .run_system_once(
+            |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                for (x, y) in [(1, 1), (2, 1), (1, 2), (2, 2)] {
+                    spawn_transport_object_tile(
+                        &mut commands,
+                        &a.0,
+                        None,
+                        None,
+                        &TileRenderContext::new(&m.0, &g.0, x as u32, y as u32),
+                        4.0,
+                        false,
+                        &m.0,
+                        m.0.dimensions(),
+                        &[],
+                        &[],
+                        None,
+                        &[],
+                        &[],
+                        None,
+                        None,
+                    );
+                }
+            },
+        )
+        .expect("ship depot spawn");
+
+    let mut water = world.query::<&crate::render::WaterTile>();
+    assert_eq!(water.iter(&world).count(), 4, "cada parte conserva agua");
+    let mut visuals = world.query::<&crate::render::MapVisualLayer>();
+    // 4 fondos de agua + 1/2/1/2 capas de edificio para las cuatro variantes.
+    assert_eq!(visuals.iter(&world).count(), 10);
 }
 
 #[test]
@@ -586,6 +644,7 @@ fn spawn_sloped_road_and_station_hit_slope_ground_branch() {
                     &TileRenderContext::new(&m.0, &g.0, 1, 1),
                     &[],
                     4.0,
+                    true,
                     &[],
                     &[],
                     None,
@@ -723,6 +782,65 @@ fn spawn_bridge_middle_draws_deck_over_marked_water() {
     // Tablero + barandilla frontal + 1 pilar (deck_z 1, suelo 0).
     let sprites = world.query::<&Sprite>().iter(&world).count();
     assert_eq!(sprites, 3, "vano dibuja tablero, barandilla y pilar");
+}
+
+#[test]
+fn rail_under_bridge_above_is_not_skipped() {
+    let assets = boot_assets_app();
+    let mut map = fresh_map8();
+    let coord = TileCoord::new(3, 3);
+    let rail_under_bridge = Tile {
+        kind: TileKind::Rail,
+        // MP_RAILWAY + `IsBridgeAbove` sobre eje X (bits 2--3 = 1).
+        // La vía inferior sigue siendo una vía X normal en m5.
+        mapt: 0x14,
+        m5: 0x01,
+        ..tile_template()
+    };
+    map.set_tile(coord, rail_under_bridge)
+        .expect("rail below bridge");
+
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world
+        .run_system_once(
+            |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                let mut rail_layers = Vec::new();
+                spawn_rail_tile(
+                    &mut commands,
+                    &m.0,
+                    m.0.dimensions(),
+                    &a.0,
+                    &TileRenderContext::new(&m.0, &g.0, 3, 3),
+                    4.0,
+                    &mut rail_layers,
+                    TEST_CLIMATE,
+                    false,
+                    false,
+                    false,
+                    &[],
+                    None,
+                    &[],
+                    None,
+                    &[],
+                    &[],
+                    None,
+                    None,
+                    0,
+                    &[],
+                );
+            },
+        )
+        .expect("spawn rail below bridge");
+
+    assert_eq!(
+        world.query::<&Sprite>().iter(&world).count(),
+        1,
+        "la vía inferior se pinta antes de sumar el tablero del puente"
+    );
 }
 
 #[test]

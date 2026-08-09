@@ -662,7 +662,7 @@ fn place_road_waypoint_rejects_crossing() {
 }
 
 #[test]
-fn place_road_writes_newgrf_road_type_m8() {
+fn place_road_writes_newgrf_road_type_m4() {
     use crate::{RoadTramType, RoadType, RoadTypeDef, road_type_from_tile};
     let mut s = GameState::new(8, 8);
     let ngrf = RoadType::from_u8(2);

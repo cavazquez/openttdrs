@@ -41,10 +41,11 @@ pub use conflicts::{
 
 // Reexports públicos desde train_reservation
 pub use train_reservation::{
-    compute_train_reservation, compute_train_reservation_with_settings,
-    compute_train_reservation_with_wormholes, follow_train_reservation,
-    train_blocked_by_reservation, update_train_reservations,
-    update_train_reservations_with_settings, update_train_reservations_with_wormholes,
+    MAX_INCREMENTAL_PBS_REFRESHES, compute_train_reservation,
+    compute_train_reservation_with_settings, compute_train_reservation_with_wormholes,
+    follow_train_reservation, train_blocked_by_reservation, update_train_reservations,
+    update_train_reservations_incremental_with_wormholes, update_train_reservations_with_settings,
+    update_train_reservations_with_wormholes,
 };
 
 // Reexports públicos desde try_reserve

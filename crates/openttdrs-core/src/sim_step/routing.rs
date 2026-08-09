@@ -1,7 +1,23 @@
 use std::collections::{HashSet, VecDeque};
+use std::time::Instant;
 
 use crate::vehicle::VehicleKind;
 use crate::{GameState, TileCoord, pathfinder, vehicle_ai};
+
+/// Máximo de rutas completas que se recalculan por tick.
+///
+/// Tras cargar una partida grande todas las rutas efímeras están vacías. Hacer
+/// cientos de A*/YAPF en el primer tick congela el cliente; este presupuesto
+/// reparte ese trabajo sin alterar rutas ya válidas.
+const MAX_ROUTE_RECOMPUTES_PER_TICK: usize = 1;
+
+#[derive(Debug, Clone, Copy, Default)]
+#[allow(clippy::struct_field_names)]
+pub(super) struct RoutingTimings {
+    pub order_sync_ns: u64,
+    pub station_route_ns: u64,
+    pub generic_route_ns: u64,
+}
 
 pub(super) fn drain_signal_globset_now(state: &mut GameState) {
     let wormholes = state.jgr_tunnel_wormholes();
@@ -29,6 +45,12 @@ pub(super) fn enqueue_signal_glob_flush(state: &mut GameState, tile: TileCoord) 
 }
 
 pub(super) fn recompute_vehicle_paths(state: &mut GameState) {
+    let _ = recompute_vehicle_paths_profiled(state);
+}
+
+#[allow(clippy::too_many_lines)]
+pub(super) fn recompute_vehicle_paths_profiled(state: &mut GameState) -> RoutingTimings {
+    let mut timings = RoutingTimings::default();
     state.runtime.path_cache.begin_tick(state.tick.get());
     let wormholes =
         pathfinder::TunnelWormholes::from_jgr_records(&state.map, &state.jgr_tunnels_from_footer);
@@ -38,11 +60,36 @@ pub(super) fn recompute_vehicle_paths(state: &mut GameState) {
         Some(&wormholes)
     };
 
-    let station_route_resolved = route_station_bound_trains(state, wh);
+    let p0 = Instant::now();
+    for vehicle in &mut state.vehicles {
+        // Una ruta de tren a estación puede elegir un andén concreto distinto
+        // del ancla de la orden. Al llegar, conservar ese `dest` evita volver
+        // a asignar el ancla y explorar todos los andenes en cada tick.
+        if vehicle.kind == VehicleKind::Train
+            && vehicle.is_consist_head()
+            && vehicle.pos == vehicle.dest
+        {
+            continue;
+        }
+        vehicle.sync_order_destination(&state.map);
+    }
+    timings.order_sync_ns = nanos(p0);
 
+    let mut remaining = MAX_ROUTE_RECOMPUTES_PER_TICK;
+    let p0 = Instant::now();
+    let station_route_resolved = route_station_bound_trains(state, wh, &mut remaining);
+    timings.station_route_ns = nanos(p0);
+
+    let p0 = Instant::now();
     for (i, station_route_resolved) in station_route_resolved.into_iter().enumerate() {
+        if !state.vehicles[i].running {
+            continue;
+        }
         if state.vehicles[i].orders.is_empty() {
             state.vehicles[i].no_network_route_to_order = false;
+            continue;
+        }
+        if state.vehicles[i].no_network_route_to_order {
             continue;
         }
         if station_route_resolved {
@@ -54,6 +101,9 @@ pub(super) fn recompute_vehicle_paths(state: &mut GameState) {
         }
         if state.vehicles[i].pos == state.vehicles[i].dest {
             state.vehicles[i].no_network_route_to_order = false;
+            continue;
+        }
+        if remaining == 0 {
             continue;
         }
         let from = state.vehicles[i].pos;
@@ -115,7 +165,10 @@ pub(super) fn recompute_vehicle_paths(state: &mut GameState) {
                 state.vehicles[i].no_network_route_to_order = has_orders;
             }
         }
+        remaining -= 1;
     }
+    timings.generic_route_ns = nanos(p0);
+    timings
 }
 
 /// Sincroniza destinos y adjudica primero los andenes a los trenes más cercanos.
@@ -124,10 +177,8 @@ pub(super) fn recompute_vehicle_paths(state: &mut GameState) {
 fn route_station_bound_trains(
     state: &mut GameState,
     wormholes: Option<&pathfinder::TunnelWormholes>,
+    remaining: &mut usize,
 ) -> Vec<bool> {
-    for vehicle in &mut state.vehicles {
-        vehicle.sync_order_destination(&state.map);
-    }
     let mut claimed_platform_tiles = HashSet::new();
     let mut station_route_resolved = vec![false; state.vehicles.len()];
     let mut train_priority: Vec<usize> = state
@@ -137,6 +188,13 @@ fn route_station_bound_trains(
         .filter(|(_, vehicle)| {
             vehicle.kind == VehicleKind::Train
                 && vehicle.is_consist_head()
+                && vehicle.running
+                && vehicle.path.is_empty()
+                && vehicle.pos != vehicle.dest
+                // Un fallo de ruta ya se registra en esta bandera. Reintentar
+                // la misma búsqueda YAPF en cada tick vuelve a congelar una
+                // partida importada hasta que cambie la red u órdenes.
+                && !vehicle.no_network_route_to_order
                 && matches!(
                     vehicle.current_order_ref(),
                     Some(crate::vehicle::VehicleOrder::Station { .. })
@@ -152,10 +210,33 @@ fn route_station_bound_trains(
         )
     });
     for index in train_priority {
+        if *remaining == 0 {
+            break;
+        }
+        let from = state.vehicles[index].pos;
+        let to = state.vehicles[index].dest;
+        // Un tren puede agotar un path de una sola tesela justo antes de
+        // entrar/salir de un andén. Resolver ese salto directamente evita
+        // iniciar YAPF sobre toda la red para un vecino ya conectado.
+        if crate::rail_pbs::track_on_departure_tile(&state.map, from, to).is_some()
+            && crate::rail_pbs::track_for_rail_step(&state.map, from, to).is_some()
+        {
+            let train = &mut state.vehicles[index];
+            train.path = VecDeque::from([to]);
+            train.no_network_route_to_order = false;
+            station_route_resolved[index] = true;
+            *remaining -= 1;
+            continue;
+        }
         station_route_resolved[index] =
             route_train_to_available_platform(state, index, wormholes, &mut claimed_platform_tiles);
+        *remaining -= 1;
     }
     station_route_resolved
+}
+
+fn nanos(start: Instant) -> u64 {
+    u64::try_from(start.elapsed().as_nanos()).unwrap_or(u64::MAX)
 }
 
 /// Asigna un andén libre de forma independiente. Devuelve `true` cuando la
@@ -187,6 +268,17 @@ fn route_train_to_available_platform(
     if candidates.is_empty() {
         state.vehicles[vehicle_idx].no_network_route_to_order = true;
         state.vehicles[vehicle_idx].path.clear();
+        return true;
+    }
+    // Si ya está sobre un andén válido de esta orden, conservarlo antes de
+    // explorar los otros. El orden de `candidates` no garantiza que el andén
+    // actual vaya primero y eso disparaba YAPF hacia plataformas remotas en
+    // cada tick aunque el tren ya hubiera llegado.
+    if candidates.contains(&from) {
+        let train = &mut state.vehicles[vehicle_idx];
+        train.dest = from;
+        train.path.clear();
+        train.no_network_route_to_order = false;
         return true;
     }
 

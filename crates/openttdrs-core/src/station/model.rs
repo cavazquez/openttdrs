@@ -147,6 +147,13 @@ impl CargoTimeSincePickup {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Station {
     pub pos: TileCoord,
+    /// `StationID` original del save de `OpenTTD`. Permite asociar en O(1) cada
+    /// tesela `MP_STATION` importada con su estación, aun cuando la estación
+    /// ocupe un andén grande o varias paradas unidas.
+    ///
+    /// Las estaciones creadas dentro del juego no tienen este identificador.
+    #[serde(default)]
+    pub ottd_station_id: Option<u32>,
     #[serde(default)]
     pub stop_kind: StopKind,
     /// Compañía propietaria (Fase 4; default jugador).
@@ -248,6 +255,7 @@ impl Station {
     pub fn new_with_kind(pos: TileCoord, stop_kind: StopKind) -> Self {
         Self {
             pos,
+            ottd_station_id: None,
             stop_kind,
             owner: CompanyId::PLAYER,
             name: None,

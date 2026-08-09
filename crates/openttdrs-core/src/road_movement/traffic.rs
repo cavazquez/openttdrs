@@ -1,11 +1,57 @@
 //! `RoadVehFindCloseTo` — sincronización de velocidad con el vehículo de delante.
 
+use std::collections::HashMap;
+
 use crate::map::{Map, TileCoord};
 use crate::road_movement::overtake::road_veh_check_overtake;
 use crate::vehicle::{Vehicle, VehicleKind};
 
 /// Umbral `OpenTTD`: tras tantos ticks bloqueado se atraviesa (`roadveh_cmd.cpp`).
 pub const BLOCKED_CTR_LIMIT: u16 = 1_480;
+
+/// Índice mutable de roadveh por tesela durante un tick.
+///
+/// `RoadVehFindCloseTo` sólo consulta la misma tesela y sus ocho vecinas. Sin
+/// este índice cada subpaso recorría toda la flota, lo que se vuelve prohibitivo
+/// al restaurar partidas con miles de vehículos de carretera.
+#[derive(Debug, Clone, Default)]
+pub struct RoadTrafficIndex {
+    by_tile: HashMap<TileCoord, Vec<usize>>,
+}
+
+impl RoadTrafficIndex {
+    pub fn rebuild(&mut self, vehicles: &[Vehicle]) {
+        self.by_tile.clear();
+        for (index, vehicle) in vehicles.iter().enumerate() {
+            if is_road_vehicle_kind(vehicle.kind) {
+                self.by_tile.entry(vehicle.pos).or_default().push(index);
+            }
+        }
+    }
+
+    /// Refleja la nueva posición después de procesar un roadveh en el orden
+    /// secuencial del tick. Los vehículos todavía no procesados conservan su
+    /// posición de inicio, igual que antes del índice.
+    pub fn update_vehicle(&mut self, vehicles: &[Vehicle], index: usize, previous: TileCoord) {
+        let Some(vehicle) = vehicles.get(index) else {
+            return;
+        };
+        if !is_road_vehicle_kind(vehicle.kind) || vehicle.pos == previous {
+            return;
+        }
+        if let Some(indices) = self.by_tile.get_mut(&previous) {
+            indices.retain(|&other| other != index);
+            if indices.is_empty() {
+                self.by_tile.remove(&previous);
+            }
+        }
+        self.by_tile.entry(vehicle.pos).or_default().push(index);
+    }
+
+    fn at(&self, pos: TileCoord) -> &[usize] {
+        self.by_tile.get(&pos).map_or(&[], Vec::as_slice)
+    }
+}
 
 #[must_use]
 pub fn is_road_vehicle_kind(kind: VehicleKind) -> bool {
@@ -80,11 +126,92 @@ pub fn road_veh_find_close_to(vehicles: &[Vehicle], v_idx: usize) -> Option<usiz
     best.map(|(_, idx)| idx)
 }
 
+/// Variante indexada de [`road_veh_find_close_to`] para el hot path del tick.
+#[must_use]
+pub fn road_veh_find_close_to_indexed(
+    vehicles: &[Vehicle],
+    v_idx: usize,
+    index: &RoadTrafficIndex,
+) -> Option<usize> {
+    let v = vehicles.get(v_idx)?;
+    if !is_road_vehicle_kind(v.kind) || !v.running {
+        return None;
+    }
+    if crate::road_movement::rvsb::is_bay_road_state(v.road_state)
+        || matches!(
+            v.road_depot_phase,
+            crate::vehicle::RoadDepotPhase::InDepot
+                | crate::vehicle::RoadDepotPhase::Entering { .. }
+                | crate::vehicle::RoadDepotPhase::Exiting { .. }
+        )
+        || v.blocked_ctr > BLOCKED_CTR_LIMIT
+    {
+        return None;
+    }
+
+    let mut best: Option<(u32, usize)> = None;
+    for y in (v.pos.y - 1)..=(v.pos.y + 1) {
+        for x in (v.pos.x - 1)..=(v.pos.x + 1) {
+            for &other_idx in index.at(TileCoord::new(x, y)) {
+                let Some(other) = vehicles.get(other_idx) else {
+                    continue;
+                };
+                if other_idx == v_idx
+                    || !other.running
+                    || crate::road_movement::rvsb::is_bay_road_state(other.road_state)
+                    || other.overtaking != v.overtaking
+                    || other.direction != v.direction
+                {
+                    continue;
+                }
+                let overlaps = v.pos == other.pos && v.frame == other.frame;
+                if overlaps && other.id > v.id
+                    || !overlaps && !is_ahead(v.pos, v.frame, other.pos, other.frame, v.direction)
+                {
+                    continue;
+                }
+                let dist = axial_distance(v.pos, v.frame, other.pos, other.frame, v.direction);
+                if best.is_none_or(|(best_dist, best_idx)| {
+                    dist < best_dist || dist == best_dist && other_idx < best_idx
+                }) {
+                    best = Some((dist, other_idx));
+                }
+            }
+        }
+    }
+    best.map(|(_, idx)| idx)
+}
+
 /// Aplica el resultado de `FindCloseTo`: overtake o sync velocidad + `blocked_ctr`.
 ///
 /// Si ya se adelanta (`overtaking != 0`) no bloquea. Si no, intenta
 /// `RoadVehCheckOvertake`; solo sincroniza velocidad si sigue sin adelantar.
 pub fn apply_road_veh_close_to(vehicles: &mut [Vehicle], v_idx: usize, map: Option<&Map>) -> bool {
+    apply_road_veh_close_to_with_blocker(
+        vehicles,
+        v_idx,
+        map,
+        road_veh_find_close_to(vehicles, v_idx),
+    )
+}
+
+/// Variante indexada de [`apply_road_veh_close_to`] para el hot path del tick.
+pub fn apply_road_veh_close_to_indexed(
+    vehicles: &mut [Vehicle],
+    v_idx: usize,
+    map: Option<&Map>,
+    index: &RoadTrafficIndex,
+) -> bool {
+    let blocker = road_veh_find_close_to_indexed(vehicles, v_idx, index);
+    apply_road_veh_close_to_with_blocker(vehicles, v_idx, map, blocker)
+}
+
+fn apply_road_veh_close_to_with_blocker(
+    vehicles: &mut [Vehicle],
+    v_idx: usize,
+    map: Option<&Map>,
+    blocker: Option<usize>,
+) -> bool {
     if vehicles
         .get(v_idx)
         .is_some_and(|v| v.overtaking != 0 || v.crashed)
@@ -92,7 +219,7 @@ pub fn apply_road_veh_close_to(vehicles: &mut [Vehicle], v_idx: usize, map: Opti
         vehicles[v_idx].blocked_ctr = 0;
         return false;
     }
-    let Some(blocker) = road_veh_find_close_to(vehicles, v_idx) else {
+    let Some(blocker) = blocker else {
         vehicles[v_idx].blocked_ctr = 0;
         return false;
     };

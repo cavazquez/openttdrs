@@ -29,6 +29,7 @@ pub(crate) use topology::{dir_from_to, rail_neighbors};
 pub use topology::{rail_block_ahead, rail_block_ahead_with_wormholes};
 
 pub(crate) use routing::rail_step_signal_allows;
+pub(crate) use routing::train_blocked_by_traffic_indexed;
 pub use routing::{
     YAPF_PBS_BEHIND_PENALTY, YAPF_RED_SIGNAL_PENALTY, YapfSignalRouting, train_blocked_by_pbs_path,
     train_blocked_by_signal, train_blocked_by_traffic, train_facing_head_on_traffic,

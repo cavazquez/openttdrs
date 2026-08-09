@@ -20,6 +20,10 @@ use openttdrs_core::prelude::*;
 use std::fmt::Write as _;
 
 use crate::bevy_app::UpdateSet;
+use crate::camera::{CameraVelocity, tile_camera_world_pos};
+use crate::render::{
+    MapPreviewCamera, PrimaryGameCamera, clamp_ortho_scale, large_map_viewport_cull_enabled,
+};
 use crate::state::{ClientScreen, SimRunState, SimWorld};
 use crate::ui::ai_settings_window::AiSettingsWindowState;
 use crate::ui::audio_settings_window::SoundMusicWindowState;
@@ -80,6 +84,13 @@ use crate::ui::vehicle_window::VehicleWindowState;
 const OPEN_FRAME: u32 = 30;
 const SHOT_FRAME: u32 = 60;
 const EXIT_FRAME: u32 = 120;
+/// Un `.sav` grande puede necesitar varios frames para materializar todos los
+/// chunks visibles tras mover la cámara. La captura de mapa espera más que la
+/// de ventanas y se puede extender sin recompilar.
+const MAP_SHOT_DEFAULT_SETTLE_FRAMES: u32 = 150;
+const MAP_SHOT_MIN_SETTLE_FRAMES: u32 = OPEN_FRAME + 10;
+const MAP_SHOT_MAX_SETTLE_FRAMES: u32 = 900;
+const MAP_SHOT_EXIT_GRACE_FRAMES: u32 = 30;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum TownAuthorityShotState {
@@ -1178,6 +1189,10 @@ impl Plugin for WindowsShotPlugin {
             );
         } else if std::env::var_os("OPENTTDRS_MAP_SHOT").is_some() {
             app.add_systems(
+                OnEnter(ClientScreen::InGame),
+                pause_simulation_for_visual_capture,
+            );
+            app.add_systems(
                 Update,
                 (
                     auto_start_game.run_if(in_state(ClientScreen::MainMenu)),
@@ -1263,6 +1278,12 @@ fn first_industry_tile(sim: &SimWorld) -> Option<TileCoord> {
 /// Con `OPENTTDRS_MAP_SHOT=/ruta.png`: captura el mapa sin abrir ventanas y sale.
 /// Con `OPENTTDRS_MAP_SHOT_TOOL=rail|rail_x|rail_y` activa además esa herramienta
 /// y fija el cursor al centro de la ventana para capturar el fantasma de obra.
+/// `OPENTTDRS_MAP_SHOT_CENTER=x,y` fija una tesela en el centro de la cámara y
+/// `OPENTTDRS_MAP_SHOT_SCALE=N` fija la escala ortográfica directa. Juntas hacen
+/// reproducibles los recortes de paridad con OpenTTD.
+/// `OPENTTDRS_MAP_SHOT_SETTLE_FRAMES=N` espera hasta el frame N (150 por
+/// defecto) antes de capturar, para que un mapa grande complete su remapeo y
+/// el culling del viewport.
 #[allow(clippy::too_many_arguments)] // sistema ECS Bevy
 fn map_shot_driver(
     mut commands: Commands,
@@ -1273,9 +1294,52 @@ fn map_shot_driver(
     mut station_state: ResMut<crate::ui::toolbar::StationBuildState>,
     mut sim: ResMut<SimWorld>,
     mut remap: ResMut<crate::render::RemapMapVisualsPending>,
+    mut camera_q: Query<
+        (&mut Transform, &mut Projection),
+        (With<PrimaryGameCamera>, Without<MapPreviewCamera>),
+    >,
+    mut camera_velocity: ResMut<CameraVelocity>,
     mut exit: MessageWriter<AppExit>,
 ) {
     *frame += 1;
+    let shot_frame = map_shot_capture_frame();
+    if *frame == OPEN_FRAME
+        && let Some(center) = map_shot_center_from_env()
+        && let Ok((mut transform, mut projection)) = camera_q.single_mut()
+    {
+        let target = tile_camera_world_pos(&sim.state.map, center);
+        transform.translation.x = target.x;
+        transform.translation.y = target.y;
+        camera_velocity.0 = Vec2::ZERO;
+        // La cámara puede cambiar el conjunto de chunks visibles. En mapas
+        // grandes basta un remapeo incremental; una reconstrucción completa
+        // primero desinstancia el viewport anterior y puede dejar al oráculo
+        // fotografiando esa transición. Sin culling ya están todas las
+        // teselas materializadas, por lo que no hace falta pedir nada.
+        let (map_width, map_height) = sim.state.map.dimensions();
+        let viewport_cull = large_map_viewport_cull_enabled(map_width, map_height);
+        if viewport_cull {
+            remap.pending = true;
+            remap.full = false;
+        }
+
+        if let Some(scale) = map_shot_scale_from_env()
+            && let Projection::Orthographic(ortho) = &mut *projection
+        {
+            let (window_width, window_height) = windows
+                .iter()
+                .next()
+                .map(|window| (window.width(), window.height()))
+                .unwrap_or((1280.0, 720.0));
+            ortho.scale = clamp_ortho_scale(scale, window_width, window_height, viewport_cull);
+        }
+        info!(
+            "map_shot: cámara centrada en ({}, {}) con escala {:?}",
+            center.x,
+            center.y,
+            map_shot_scale_from_env(),
+        );
+    }
     // `OPENTTDRS_MAP_SHOT_PLACE=x,y[;x,y…]`: aplica la herramienta en esas
     // teselas antes de la captura (p. ej. colocar vía/estación y ver el render).
     if *frame == OPEN_FRAME + 5
@@ -1343,7 +1407,7 @@ fn map_shot_driver(
             window.set_cursor_position(Some(center));
         }
     }
-    if *frame == SHOT_FRAME
+    if *frame == shot_frame
         && let Ok(path) = std::env::var("OPENTTDRS_MAP_SHOT")
     {
         if let Ok(window) = windows.single_mut() {
@@ -1358,9 +1422,46 @@ fn map_shot_driver(
             .spawn(Screenshot::primary_window())
             .observe(save_to_disk(path));
     }
-    if *frame == EXIT_FRAME {
+    if *frame == shot_frame + MAP_SHOT_EXIT_GRACE_FRAMES {
         exit.write(AppExit::Success);
     }
+}
+
+fn map_shot_center_from_env() -> Option<TileCoord> {
+    let spec = std::env::var("OPENTTDRS_MAP_SHOT_CENTER").ok()?;
+    parse_map_shot_center(&spec)
+}
+
+fn parse_map_shot_center(spec: &str) -> Option<TileCoord> {
+    let (x, y) = spec.split_once(',')?;
+    Some(TileCoord::new(
+        x.trim().parse().ok()?,
+        y.trim().parse().ok()?,
+    ))
+}
+
+fn map_shot_scale_from_env() -> Option<f32> {
+    parse_map_shot_scale(&std::env::var("OPENTTDRS_MAP_SHOT_SCALE").ok()?)
+}
+
+fn parse_map_shot_scale(spec: &str) -> Option<f32> {
+    spec.parse::<f32>()
+        .ok()
+        .filter(|scale| scale.is_finite() && *scale > 0.0)
+}
+
+fn map_shot_capture_frame() -> u32 {
+    std::env::var("OPENTTDRS_MAP_SHOT_SETTLE_FRAMES")
+        .ok()
+        .and_then(|spec| parse_map_shot_settle_frames(&spec))
+        .unwrap_or(MAP_SHOT_DEFAULT_SETTLE_FRAMES)
+}
+
+fn parse_map_shot_settle_frames(spec: &str) -> Option<u32> {
+    let frame = spec.trim().parse().ok()?;
+    (MAP_SHOT_MIN_SETTLE_FRAMES..=MAP_SHOT_MAX_SETTLE_FRAMES)
+        .contains(&frame)
+        .then_some(frame)
 }
 
 /// Abre todas las ventanas flotantes + paneles auxiliares para captura de paridad.
@@ -1633,6 +1734,22 @@ fn open_all_windows_for_shot(world: &mut World, include_auxiliary: bool) {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    #[test]
+    fn map_shot_camera_arguments_are_strict_and_reproducible() {
+        assert_eq!(
+            parse_map_shot_center(" 133 , 152 "),
+            Some(TileCoord::new(133, 152))
+        );
+        assert_eq!(parse_map_shot_center("133"), None);
+        assert_eq!(parse_map_shot_center("x,152"), None);
+        assert_eq!(parse_map_shot_scale("0.75"), Some(0.75));
+        assert_eq!(parse_map_shot_scale("0"), None);
+        assert_eq!(parse_map_shot_scale("nan"), None);
+        assert_eq!(parse_map_shot_settle_frames("150"), Some(150));
+        assert_eq!(parse_map_shot_settle_frames("39"), None);
+        assert_eq!(parse_map_shot_settle_frames("901"), None);
+    }
 
     #[test]
     fn windows_shot_covers_all_floating_ids() {

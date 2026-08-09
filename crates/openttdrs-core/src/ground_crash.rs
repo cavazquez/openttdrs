@@ -6,11 +6,51 @@ use crate::news::{NewsReference, NewsType, add_news_item, default_display_for_ty
 use crate::road_movement::traffic::is_road_vehicle_kind;
 use crate::sim_events::SimEvent;
 use crate::vehicle::{Vehicle, VehicleKind};
+use std::collections::HashMap;
 
 /// Tras este contador el vehículo estrellado se elimina (`roadveh_cmd.cpp`).
 pub const CRASHED_CTR_REMOVE: u16 = 2_220;
 /// Valor inicial al chocar (no inundación).
 pub const CRASHED_CTR_START: u16 = 1;
+
+/// Tren(es) presentes por tesela para el chequeo de pasos a nivel del tick.
+#[derive(Debug, Clone, Default)]
+pub struct TrainCrashIndex {
+    by_tile: HashMap<TileCoord, Vec<usize>>,
+}
+
+impl TrainCrashIndex {
+    pub fn rebuild(&mut self, vehicles: &[Vehicle]) {
+        self.by_tile.clear();
+        for (index, vehicle) in vehicles.iter().enumerate() {
+            if vehicle.kind == VehicleKind::Train {
+                self.by_tile.entry(vehicle.pos).or_default().push(index);
+            }
+        }
+    }
+
+    fn at(&self, pos: TileCoord) -> &[usize] {
+        self.by_tile.get(&pos).map_or(&[], Vec::as_slice)
+    }
+
+    /// Actualiza una unidad de tren luego de que la propagación del consist
+    /// modificó su tesela.
+    pub fn update_vehicle(&mut self, vehicles: &[Vehicle], index: usize, previous: TileCoord) {
+        let Some(vehicle) = vehicles.get(index) else {
+            return;
+        };
+        if vehicle.kind != VehicleKind::Train || vehicle.pos == previous {
+            return;
+        }
+        if let Some(indices) = self.by_tile.get_mut(&previous) {
+            indices.retain(|&other| other != index);
+            if indices.is_empty() {
+                self.by_tile.remove(&previous);
+            }
+        }
+        self.by_tile.entry(vehicle.pos).or_default().push(index);
+    }
+}
 
 /// Marca la cadena (cabeza road o tren) como estrellada.
 pub fn crash_vehicle(v: &mut Vehicle, flooded: bool) {
@@ -57,6 +97,75 @@ pub fn maybe_road_train_crash(state: &mut GameState, v_idx: usize) -> bool {
         if t.kind == VehicleKind::Train && t.pos == at && !t.crashed {
             crash_vehicle(t, false);
         }
+    }
+    state
+        .runtime
+        .pending_sim_events
+        .push(SimEvent::LevelCrossing { at });
+    state
+        .runtime
+        .pending_sim_events
+        .push(SimEvent::RoadVehCrash { vehicle_id, at });
+    let id = state.news.next_id;
+    state.news.next_id = state.news.next_id.saturating_add(1);
+    let item = crate::news::NewsItem::new(
+        id,
+        format!("Choque en paso a nivel (vehículo #{vehicle_id})"),
+        Some(format!(
+            "Un vehículo de carretera chocó con un tren en ({}, {}).",
+            at.x, at.y
+        )),
+        NewsType::Accident,
+        default_display_for_type(NewsType::Accident),
+        state.tick,
+        NewsReference::Tile(at),
+    );
+    add_news_item(state, item);
+    true
+}
+
+/// Variante indexada de [`maybe_road_train_crash`] para el barrido de movimiento.
+///
+/// Evita revisar toda la flota por cada roadveh: sólo se consulta si está sobre
+/// un paso a nivel y sólo compara las unidades de tren de esa tesela.
+pub fn maybe_road_train_crash_indexed(
+    state: &mut GameState,
+    v_idx: usize,
+    trains: &TrainCrashIndex,
+) -> bool {
+    let Some(v) = state.vehicles.get(v_idx) else {
+        return false;
+    };
+    if !is_road_vehicle_kind(v.kind) || v.crashed {
+        return false;
+    }
+    let at = v.pos;
+    let vz = v.z_pos.unwrap_or(0);
+    let Some(tile) = state.map.get(at) else {
+        return false;
+    };
+    if !is_road_level_crossing(tile.mapt, tile.m5, tile.kind) {
+        return false;
+    }
+    let collided: Vec<usize> = trains
+        .at(at)
+        .iter()
+        .copied()
+        .filter(|&index| {
+            state.vehicles.get(index).is_some_and(|train| {
+                train.kind == VehicleKind::Train
+                    && !train.crashed
+                    && (train.z_pos.unwrap_or(0) - vz).abs() <= 6
+            })
+        })
+        .collect();
+    if collided.is_empty() {
+        return false;
+    }
+    let vehicle_id = state.vehicles[v_idx].id;
+    crash_vehicle(&mut state.vehicles[v_idx], false);
+    for index in collided {
+        crash_vehicle(&mut state.vehicles[index], false);
     }
     state
         .runtime

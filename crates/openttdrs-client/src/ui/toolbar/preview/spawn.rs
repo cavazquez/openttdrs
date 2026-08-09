@@ -5,7 +5,7 @@ use openttdrs_core::Command;
 use openttdrs_core::prelude::*;
 use openttdrs_core::rail_station_footprint;
 
-use crate::iso::{SLOPE_HALF_H, TILE_HALF_H, tile_pos_half, tile_slope_and_min_z};
+use crate::iso::{TILE_HALF_H, slope_half_h, tile_pos_half, tile_slope_and_min_z};
 use crate::render::{CompanyColoredSprites, TileAtlas};
 use crate::state::SimWorld;
 use crate::ui::toolbar::StationBuildState;
@@ -270,7 +270,7 @@ fn spawn_rail_signal_drag_preview(
         let half_h = if tileh == 0 {
             TILE_HALF_H
         } else {
-            SLOPE_HALF_H[tileh as usize]
+            slope_half_h(tileh)
         };
         let pos = tile_pos_half(px, py, base_z, 0.05, half_h);
         commands.spawn((
@@ -303,7 +303,7 @@ fn spawn_tile_preview(
     let half_h = if tileh == 0 {
         TILE_HALF_H
     } else {
-        SLOPE_HALF_H[tileh as usize]
+        slope_half_h(tileh)
     };
     let tint = preview_tint(tile_plan.valid);
 

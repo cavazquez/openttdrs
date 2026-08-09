@@ -4,11 +4,13 @@
 //! El bloqueo preventivo evita la mayoría; `force_proceed` puede forzar solape.
 
 use crate::GameState;
+use crate::company::CompanyId;
+use crate::fleet_index::FleetIndex;
 use crate::map::{Map, TileCoord, TileKind};
 use crate::news::{NewsReference, NewsType, add_news_item, default_display_for_type};
 use crate::sim_events::SimEvent;
-use crate::train_consist::{consist_occupied_tiles, same_consist};
 use crate::vehicle::{Vehicle, VehicleKind};
+use std::collections::{HashMap, HashSet};
 
 /// Par de cabezas de consist que colisionan.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -22,42 +24,75 @@ pub struct TrainCollision {
 #[must_use]
 pub fn detect_train_collisions(map: &Map, vehicles: &[Vehicle]) -> Vec<TrainCollision> {
     let mut out = Vec::new();
-    let heads: Vec<&Vehicle> = vehicles
+    let mut fleet = FleetIndex::default();
+    fleet.rebuild(vehicles);
+    let mut occupants: HashMap<TileCoord, Vec<(u32, CompanyId)>> = HashMap::new();
+    let mut reported_pairs = HashSet::new();
+
+    for head in vehicles
         .iter()
         .filter(|v| v.kind == VehicleKind::Train && v.is_consist_head())
-        .collect();
-    for i in 0..heads.len() {
-        for j in (i + 1)..heads.len() {
-            let a = heads[i];
-            let b = heads[j];
-            if a.owner != b.owner {
-                continue;
-            }
-            if same_consist(vehicles, a.id, b.id) {
-                continue;
-            }
-            if map.get_kind(a.pos) == Some(TileKind::RailDepot)
-                || map.get_kind(b.pos) == Some(TileKind::RailDepot)
-            {
-                continue;
-            }
-            let tiles_a = consist_occupied_tiles(vehicles, a.id);
-            let tiles_b = consist_occupied_tiles(vehicles, b.id);
-            let Some(&at) = tiles_a.iter().find(|t| tiles_b.contains(t)) else {
-                continue;
-            };
+    {
+        if map.get_kind(head.pos) == Some(TileKind::RailDepot) {
+            continue;
+        }
+        for at in consist_occupied_tiles_indexed(vehicles, &fleet, head) {
             // Depósito compartido no es choque.
             if map.get_kind(at) == Some(TileKind::RailDepot) {
                 continue;
             }
-            out.push(TrainCollision {
-                a: a.id,
-                b: b.id,
-                at,
-            });
+            let entries = occupants.entry(at).or_default();
+            for &(other_id, other_owner) in entries.iter() {
+                if other_owner != head.owner {
+                    continue;
+                }
+                let pair = (other_id.min(head.id), other_id.max(head.id));
+                if reported_pairs.insert(pair) {
+                    out.push(TrainCollision {
+                        a: other_id,
+                        b: head.id,
+                        at,
+                    });
+                }
+            }
+            entries.push((head.id, head.owner));
         }
     }
     out
+}
+
+/// Huella del consist usando el índice ya construido para este tick.
+///
+/// El helper público reconstruye el índice en cada llamada para APIs aisladas;
+/// la detección de choques la invoca para toda la flota y debe compartirlo.
+fn consist_occupied_tiles_indexed(
+    vehicles: &[Vehicle],
+    fleet: &FleetIndex,
+    head: &Vehicle,
+) -> Vec<TileCoord> {
+    let ids = fleet.consist(head.id);
+    let mut tiles = Vec::with_capacity(ids.len());
+    for &id in ids {
+        let Some(slot) = fleet.slot(id) else {
+            continue;
+        };
+        let pos = vehicles[slot].pos;
+        if !tiles.contains(&pos) {
+            tiles.push(pos);
+        }
+    }
+    // Mantener la salvaguarda para escenarios antiguos sin cadena física.
+    if ids.len() <= 1 {
+        let span = u32::from(head.cached_total_length)
+            .div_ceil(u32::from(crate::train_consist::TILE_FRACTIONS))
+            .max(1) as usize;
+        for &tile in head.rail_tile_history.iter().take(span.saturating_sub(1)) {
+            if !tiles.contains(&tile) {
+                tiles.push(tile);
+            }
+        }
+    }
+    tiles
 }
 
 /// Destruye los consists involucrados, emite evento y noticia.
@@ -66,17 +101,17 @@ pub fn resolve_train_collisions(state: &mut GameState) {
     if collisions.is_empty() {
         return;
     }
-    let mut doomed = std::collections::HashSet::new();
+    let mut fleet = FleetIndex::default();
+    fleet.rebuild(&state.vehicles);
+    let mut doomed = HashSet::new();
     for c in &collisions {
-        doomed.insert(c.a);
-        doomed.insert(c.b);
-        // Incluir vagones del consist.
-        for v in &state.vehicles {
-            if same_consist(&state.vehicles, c.a, v.id) || same_consist(&state.vehicles, c.b, v.id)
-            {
-                doomed.insert(v.id);
-            }
-        }
+        let victims: HashSet<u32> = fleet
+            .consist(c.a)
+            .iter()
+            .chain(fleet.consist(c.b))
+            .copied()
+            .collect();
+        doomed.extend(victims.iter().copied());
         state
             .runtime
             .pending_sim_events
@@ -85,19 +120,7 @@ pub fn resolve_train_collisions(state: &mut GameState) {
                 vehicle_a: c.a,
                 vehicle_b: c.b,
             });
-        let victims = 2u32.saturating_add(
-            u32::try_from(
-                state
-                    .vehicles
-                    .iter()
-                    .filter(|v| {
-                        same_consist(&state.vehicles, c.a, v.id)
-                            || same_consist(&state.vehicles, c.b, v.id)
-                    })
-                    .count(),
-            )
-            .unwrap_or(0),
-        );
+        let victims = u32::try_from(victims.len()).unwrap_or(0);
         let id = state.news.next_id;
         state.news.next_id = state.news.next_id.saturating_add(1);
         let item = crate::news::NewsItem::new(

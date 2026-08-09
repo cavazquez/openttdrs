@@ -1,14 +1,24 @@
 //! Sprites de boca de túnel por dirección diagonal (`DrawTunnelTile` en OpenTTD).
 //!
-//! Cada tipo de transporte usa cuatro sprites «rear» separados por `DiagDirection`
-//! (`SPR_TUNNEL_ENTRY_REAR_* + direction * 2`).
+//! Cada tipo de transporte usa un par por `DiagDirection`: `rear` se dibuja
+//! como suelo y `front` (el ID siguiente) como techo/boca sortable.
 
 use bevy::prelude::*;
+use openttdrs_core::RailType;
 
 use crate::iso::{HEIGHT_PX, iso};
 
+include!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/src/sprites/tunnel_draw_data_generated.rs"
+));
+
 /// Sprite rear de ferrocarril por `DiagDirection` (0=NE … 3=NW).
 pub const RAIL_TUNNEL_REAR: [u32; 4] = [2365, 2367, 2369, 2371];
+/// Sprite rear de monorriel por `DiagDirection`.
+pub const MONO_TUNNEL_REAR: [u32; 4] = [2373, 2375, 2377, 2379];
+/// Sprite rear de maglev por `DiagDirection`.
+pub const MAGLEV_TUNNEL_REAR: [u32; 4] = [2381, 2383, 2385, 2387];
 /// Sprite rear de carretera por dirección.
 pub const ROAD_TUNNEL_REAR: [u32; 4] = [2389, 2391, 2393, 2395];
 
@@ -25,11 +35,64 @@ pub fn tunnel_rear_sprite_id(rail: bool, dir: u8) -> u32 {
     }
 }
 
+/// Id OpenGFX del portal de túnel ferroviario para su tipo de vía y dirección.
+#[must_use]
+pub fn rail_tunnel_rear_sprite_id(rail_type: RailType, dir: u8) -> u32 {
+    let d = dir as usize & 3;
+    match rail_type {
+        RailType::Monorail => MONO_TUNNEL_REAR[d],
+        RailType::Maglev => MAGLEV_TUNNEL_REAR[d],
+        RailType::Rail | RailType::Electric => RAIL_TUNNEL_REAR[d],
+    }
+}
+
+/// Id OpenGFX de la capa frontal/techo de un túnel de carretera o ferrocarril.
+/// OpenTTD la emite inmediatamente después de la capa `rear` de suelo.
+#[must_use]
+pub fn tunnel_front_sprite_id(rail: bool, dir: u8) -> u32 {
+    tunnel_rear_sprite_id(rail, dir) + 1
+}
+
+/// Id OpenGFX de la capa frontal/techo de un túnel ferroviario tipado.
+#[must_use]
+pub fn rail_tunnel_front_sprite_id(rail_type: RailType, dir: u8) -> u32 {
+    rail_tunnel_rear_sprite_id(rail_type, dir) + 1
+}
+
 /// Nombre en el atlas (`tunnel_rail_rear_sw.png`, …).
 #[must_use]
 pub fn tunnel_rear_atlas_name(rail: bool, dir: u8) -> String {
     let kind = if rail { "rail" } else { "road" };
     format!("tunnel_{kind}_rear_{}.png", DIR_SUFFIX[dir as usize & 3])
+}
+
+/// Nombre del atlas del portal ferroviario para el tipo de vía indicado.
+#[must_use]
+pub fn rail_tunnel_rear_atlas_name(rail_type: RailType, dir: u8) -> String {
+    let kind = match rail_type {
+        RailType::Monorail => "mono",
+        RailType::Maglev => "mglv",
+        RailType::Rail | RailType::Electric => "rail",
+    };
+    format!("tunnel_{kind}_rear_{}.png", DIR_SUFFIX[dir as usize & 3])
+}
+
+/// Nombre en el atlas de la capa frontal de carretera/ferrocarril.
+#[must_use]
+pub fn tunnel_front_atlas_name(rail: bool, dir: u8) -> String {
+    let kind = if rail { "rail" } else { "road" };
+    format!("tunnel_{kind}_front_{}.png", DIR_SUFFIX[dir as usize & 3])
+}
+
+/// Nombre en el atlas de la capa frontal de monorriel/maglev/riel.
+#[must_use]
+pub fn rail_tunnel_front_atlas_name(rail_type: RailType, dir: u8) -> String {
+    let kind = match rail_type {
+        RailType::Monorail => "mono",
+        RailType::Maglev => "mglv",
+        RailType::Rail | RailType::Electric => "rail",
+    };
+    format!("tunnel_{kind}_front_{}.png", DIR_SUFFIX[dir as usize & 3])
 }
 
 /// Alias histórico: portal NE (dir 0); fallback si faltan PNG direccionales.
@@ -45,11 +108,14 @@ pub fn tunnel_rear_legacy_atlas_name(rail: bool) -> &'static str {
 /// Offsets NFO (w, h, xrel, yrel) por sprite id.
 #[must_use]
 pub fn tunnel_sprite_meta(sid: u32) -> (f32, f32, f32, f32) {
-    match sid {
-        2365 | 2371 | 2389 | 2395 => (64.0, 39.0, -31.0, -8.0),
-        2367 | 2369 | 2391 | 2393 => (64.0, 23.0, -31.0, 0.0),
-        2392 | 2394 => (64.0, 22.0, -31.0, -29.0),
-        _ => (64.0, 39.0, -31.0, -8.0),
+    if let Some((_, w, h, xrel, yrel)) = TUNNEL_SPRITE_META
+        .iter()
+        .find(|(sprite_id, ..)| *sprite_id == sid)
+    {
+        (*w, *h, *xrel, *yrel)
+    } else {
+        // Portal clásico NE: conserva un fallback visible si falta un asset.
+        (64.0, 39.0, -31.0, -8.0)
     }
 }
 
@@ -66,6 +132,24 @@ pub fn tunnel_portal_translation(px: i32, py: i32, base_z: u8, sprite_id: u32, l
     )
 }
 
+/// Geometría lógica de la capa frontal del portal, tal como
+/// `DrawTile_TunnelBridge` la pasa a `AddSortableSpriteToDraw`.
+///
+/// Los offsets de píxel del NFO determinan la posición visual (ver
+/// [`tunnel_portal_translation`]); estos valores son la caja 3D usada por
+/// OpenTTD para ordenar el techo contra trenes, árboles y la vía vecina.
+#[must_use]
+pub const fn tunnel_front_trace_geometry(
+    dir: u8,
+) -> ((i32, i32, i32), (i32, i32, i32, i32, i32, i32)) {
+    match dir & 3 {
+        // NE / SW: `roof_bounds` ocupa el borde Y de la tesela.
+        0 | 2 => ((15, 14, -7), (0, 1, 7, 16, 15, 1)),
+        // SE / NW: rota la caja al borde X.
+        _ => ((14, 15, -7), (1, 0, 7, 15, 16, 1)),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -79,7 +163,58 @@ mod tests {
     }
 
     #[test]
+    fn tunnel_front_is_the_sprite_after_its_rear_layer() {
+        assert_eq!(tunnel_front_sprite_id(false, 1), 2392);
+        assert_eq!(rail_tunnel_front_sprite_id(RailType::Monorail, 2), 2378);
+        assert_eq!(
+            rail_tunnel_front_atlas_name(RailType::Maglev, 3),
+            "tunnel_mglv_front_nw.png"
+        );
+    }
+
+    #[test]
     fn atlas_names_use_diagonal_suffix() {
         assert_eq!(tunnel_rear_atlas_name(true, 2), "tunnel_rail_rear_sw.png");
+    }
+
+    #[test]
+    fn rail_tunnel_sprites_preserve_type_and_direction() {
+        assert_eq!(
+            rail_tunnel_rear_sprite_id(RailType::Monorail, 2),
+            MONO_TUNNEL_REAR[2]
+        );
+        assert_eq!(
+            rail_tunnel_rear_atlas_name(RailType::Maglev, 3),
+            "tunnel_mglv_rear_nw.png"
+        );
+    }
+
+    #[test]
+    fn generated_metadata_covers_every_tunnel_layer() {
+        for id in RAIL_TUNNEL_REAR
+            .into_iter()
+            .chain(MONO_TUNNEL_REAR)
+            .chain(MAGLEV_TUNNEL_REAR)
+            .chain(ROAD_TUNNEL_REAR)
+            .flat_map(|rear| [rear, rear + 1])
+        {
+            assert!(
+                TUNNEL_SPRITE_META
+                    .iter()
+                    .any(|(sprite_id, ..)| *sprite_id == id)
+            );
+        }
+    }
+
+    #[test]
+    fn front_geometry_matches_upstream_roof_bounds() {
+        assert_eq!(
+            tunnel_front_trace_geometry(2),
+            ((15, 14, -7), (0, 1, 7, 16, 15, 1))
+        );
+        assert_eq!(
+            tunnel_front_trace_geometry(1),
+            ((14, 15, -7), (1, 0, 7, 15, 16, 1))
+        );
     }
 }

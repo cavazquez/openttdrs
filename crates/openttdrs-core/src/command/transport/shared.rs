@@ -9,51 +9,12 @@ use super::super::{CommandError, in_bounds, require_tile_owned_by_active, tile_o
 #[allow(unused_imports)]
 use crate::command::transport::internal::{
     RAIL_DIAG_MASK, RAIL_PARALLEL_MASK, RAIL_TB_HORZ, RAIL_TB_VERT, RAIL_TB_X, RAIL_TB_Y,
-    check_rail_trackbits_on_tile, existing_rail_trackbits, is_rail_gap_fill_kind,
-    is_rail_path_endpoint, offset_along_horz_rail, offset_along_vert_rail, write_normal_rail_tile,
-    write_rail_gap_tile,
+    check_rail_trackbits_on_tile, existing_rail_trackbits, offset_along_horz_rail,
+    offset_along_vert_rail, write_normal_rail_tile,
 };
 
 pub(crate) fn check_in_bounds(map: &Map, c: TileCoord) -> Result<(), CommandError> {
     in_bounds(map, c)
-}
-
-pub(in crate::command::transport) fn bridge_line(
-    map: &mut Map,
-    horizontal: bool,
-    fixed: i32,
-    len: i32,
-) {
-    let coord = |i: i32| {
-        if horizontal {
-            TileCoord::new(i, fixed)
-        } else {
-            TileCoord::new(fixed, i)
-        }
-    };
-    let mut i = 0;
-    while i < len {
-        while i < len && !is_rail_path_endpoint(map, coord(i)) {
-            i += 1;
-        }
-        if i >= len {
-            break;
-        }
-        let start = i;
-        i += 1;
-        let gap_start = i;
-        while i < len && map.get_kind(coord(i)).is_some_and(is_rail_gap_fill_kind) {
-            i += 1;
-        }
-        if i < len && is_rail_path_endpoint(map, coord(i)) && gap_start < i {
-            for g in gap_start..i {
-                write_rail_gap_tile(map, coord(g), horizontal);
-            }
-        }
-        if i == start {
-            i += 1;
-        }
-    }
 }
 
 pub(in crate::command::transport) fn trackbits_to_signal_present(tb: u8) -> u8 {

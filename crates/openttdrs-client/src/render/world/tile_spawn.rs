@@ -5,12 +5,13 @@ use bevy::window::PrimaryWindow;
 use openttdrs_core::prelude::*;
 
 use crate::config::{env_flag, env_string};
-use crate::iso::{SLOPE_HALF_H, shore_png_index, shore_tileh_for_draw_shore};
+use crate::iso::{shore_png_index, shore_tileh_for_draw_shore, slope_half_h};
+use crate::render::world_draw_trace::WorldDrawTrace;
 use crate::render::{
     CompanyColoredSprites, MapSpriteBatches, RenderGrid, TileAtlas, TileRenderContext,
-    TileViewportBounds, WorldAssets, chunk_tile_bounds, flush_map_batches,
-    push_forest_tree, push_water_tile, spawn_bridge_middle, spawn_generic_land_tile,
-    spawn_house_tile, spawn_industry_tile, spawn_rail_tile, spawn_road_tile, spawn_station_tile,
+    TileViewportBounds, WorldAssets, chunk_tile_bounds, flush_map_batches, push_forest_tree,
+    push_water_tile, spawn_bridge_middle, spawn_generic_land_tile, spawn_house_tile,
+    spawn_industry_tile, spawn_rail_tile, spawn_road_tile, spawn_station_tile,
     spawn_transport_object_tile,
 };
 use crate::sprites::CompanyColour;
@@ -95,6 +96,13 @@ pub(crate) fn spawn_map_tiles_in_bounds(
     action5_sprites: &mut crate::render::NewGrfAction5SpriteCache,
 ) {
     let (mw, mh) = sim.state.map.dimensions();
+    let world_draw_trace = WorldDrawTrace::start(mw, mh, spawn_bounds);
+    // En modo world-draw la región solicitada es independiente de la cámara:
+    // permite inspeccionar una anomalía concreta en un mapa grande sin hacer
+    // pan manualmente ni desactivar el culling de viewport.
+    let spawn_bounds = world_draw_trace
+        .as_ref()
+        .map_or(spawn_bounds, WorldDrawTrace::render_bounds);
     let debug_coast = env_flag("OPENTTDRS_DEBUG_COAST");
     let trace_path = env_string("OPENTTDRS_RENDER_TRACE_OUT");
     let mut trace_rows: Vec<String> = Vec::new();
@@ -122,11 +130,18 @@ pub(crate) fn spawn_map_tiles_in_bounds(
         let kind = ctx.kind;
         let tileh = ctx.info.tileh;
 
+        if let Some(trace) = &world_draw_trace {
+            trace.begin_tile(&ctx);
+        }
+
         if kind == TileKind::Void {
+            if let Some(trace) = &world_draw_trace {
+                trace.end_tile();
+            }
             continue;
         }
 
-        let slope_half_ground = SLOPE_HALF_H[tileh as usize];
+        let slope_half_ground = slope_half_h(tileh);
         if trace_path.is_some() {
             let (mapt, m5) = ctx.tile.map_or((0u8, 0u8), |t| (t.mapt, t.m5));
             let (shore_tileh, shore_png) = if kind == TileKind::Water && ctx.info.use_shore {
@@ -215,9 +230,11 @@ pub(crate) fn spawn_map_tiles_in_bounds(
                     show_pbs_reservations,
                     map,
                     (mw, mh),
+                    &sim.state.stations,
                     &sim.state.runtime.catenary_newgrf_sprites,
                     Some(catenary_sprites),
                     &sim.state.runtime.bridge_decks_newgrf_sprites,
+                    &sim.state.runtime.foundation_newgrf_sprites,
                     Some(action5_sprites),
                     Some(images),
                 );
@@ -275,12 +292,18 @@ pub(crate) fn spawn_map_tiles_in_bounds(
             Some(action5_sprites),
             Some(images),
         );
+        if let Some(trace) = &world_draw_trace {
+            trace.end_tile();
+        }
     }
 
     flush_map_batches(commands, batches);
     for (tx, ty) in defer_overlay_tiles {
         let ctx = TileRenderContext::new(map, &render_grid, tx, ty);
-        let slope_half_ground = SLOPE_HALF_H[ctx.info.tileh as usize];
+        let slope_half_ground = slope_half_h(ctx.info.tileh);
+        if let Some(trace) = &world_draw_trace {
+            trace.begin_tile(&ctx);
+        }
         match ctx.kind {
             TileKind::Station => spawn_station_tile(
                 commands,
@@ -292,6 +315,7 @@ pub(crate) fn spawn_map_tiles_in_bounds(
                 &ctx,
                 &sim.state.stations,
                 slope_half_ground,
+                show_pbs_reservations,
                 &sim.state.station_spec_catalog,
                 &sim.state.road_stop_spec_catalog,
                 Some(station_sprites),
@@ -331,6 +355,9 @@ pub(crate) fn spawn_map_tiles_in_bounds(
             }
             _ => {}
         }
+        if let Some(trace) = &world_draw_trace {
+            trace.end_tile();
+        }
     }
     if let Some(path) = trace_path {
         if let Err(e) = std::fs::write(&path, trace_rows.join("\n")) {
@@ -338,6 +365,9 @@ pub(crate) fn spawn_map_tiles_in_bounds(
         } else {
             info!("Render trace escrito en {path}");
         }
+    }
+    if let Some(trace) = world_draw_trace {
+        trace.finish();
     }
 }
 

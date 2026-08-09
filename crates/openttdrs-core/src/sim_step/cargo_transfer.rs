@@ -1,5 +1,5 @@
 use crate::vehicle::{OrderUnloadType, VehicleKind};
-use crate::{CargoType, GameState, TileCoord, economy, station, town};
+use crate::{CargoType, GameState, TileCoord, TileKind, economy, station, town};
 
 fn vehicle_load_unload_speed(state: &GameState, vehicle_idx: usize, cargo: CargoType) -> u32 {
     let configured = state
@@ -31,16 +31,16 @@ pub(super) fn unload_vehicles(
         if *loaded_flag {
             continue;
         }
+        let vcargo = state.vehicles[i].cargo;
+        if vcargo == 0 {
+            continue;
+        }
         state.vehicles[i].ensure_packets_from_legacy();
         let vpos = state.vehicles[i].pos;
-        let vcargo = state.vehicles[i].cargo;
         let vcargo_type = state.vehicles[i].cargo_type;
         let Some(station_idx) = station_index_at_vehicle(state, &state.vehicles[i]) else {
             continue;
         };
-        if vcargo == 0 {
-            continue;
-        }
         if !vehicle_should_unload_at_station(&state.vehicles[i], state) {
             continue;
         }
@@ -342,7 +342,13 @@ pub(super) fn load_vehicles(
                 crate::engine::engine_by_id(engine_id)
                     .is_some_and(crate::engine::EngineDef::is_train_engine)
             })
-            && crate::consist_unit_ids(&state.vehicles, state.vehicles[i].id).len() <= 1;
+            && {
+                let vehicle_id = state.vehicles[i].id;
+                state.runtime.fleet_index.slot(vehicle_id).map_or_else(
+                    || crate::consist_unit_ids(&state.vehicles, vehicle_id).len(),
+                    |_| state.runtime.fleet_index.consist(vehicle_id).len(),
+                ) <= 1
+            };
         if state.vehicles[i].capacity == 0 || locomotive_without_wagon {
             state.vehicles[i].cargo_loading = false;
             continue;
@@ -793,6 +799,18 @@ fn station_index_at_vehicle(state: &GameState, vehicle: &crate::Vehicle) -> Opti
     {
         return Some(indexed);
     }
+    // En una partida importada todas las estaciones tienen el identificador
+    // OpenTTD y el índice cubre sus teselas. Fuera de `MP_STATION`/aeropuerto
+    // no hay nada que buscar. Los mapas nativos aún admiten paradas adyacentes
+    // (y estaciones en road tiles), de modo que conservan el fallback.
+    if stations_are_fully_map_indexed(state)
+        && !matches!(
+            state.map.get_kind(vehicle.pos),
+            Some(TileKind::Station | TileKind::Airport)
+        )
+    {
+        return None;
+    }
     state
         .stations
         .iter()
@@ -810,6 +828,10 @@ fn station_index_for_industry_load(state: &GameState, vehicle: &crate::Vehicle) 
         return Some(idx);
     }
     let vpos = vehicle.pos;
+    if stations_are_fully_map_indexed(state) && state.map.get_kind(vpos) != Some(TileKind::Industry)
+    {
+        return None;
+    }
     state
         .stations
         .iter()
@@ -832,6 +854,14 @@ fn station_index_for_industry_load(state: &GameState, vehicle: &crate::Vehicle) 
             })
         })
         .map(|(idx, _)| idx)
+}
+
+fn stations_are_fully_map_indexed(state: &GameState) -> bool {
+    !state.stations.is_empty()
+        && state
+            .stations
+            .iter()
+            .all(|station| station.ottd_station_id.is_some())
 }
 
 /// ¿La estación tiene en espera la carga que produce alguna industria de su cobertura?

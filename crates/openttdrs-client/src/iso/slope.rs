@@ -2,15 +2,18 @@ use openttdrs_core::prelude::*;
 
 // ── Pendientes (slopes) ───────────────────────────────────────────────────────
 
-/// `half_h` para `tile_pos_half` según el índice `tileh` (0–14).
+/// `half_h` para `tile_pos_half`, indexado por `SlopeToSpriteOffset`.
 ///
 /// Derivado de los campos `height` y `yrel` del NFO de OpenGFX:
 /// - Plano (tileh=0): 31 px, yrel=0 → half_h = 15.5
 /// - Pendiente con esquina N elevada (bit 3): yrel=-8, h varía → half_h menor
 ///
 /// Bitmask de `tileh` (idéntico al `Slope` de OpenTTD):
-/// `bit0=W, bit1=S, bit2=E, bit3=N`
-pub const SLOPE_HALF_H: [f32; 15] = [
+/// `bit0=W, bit1=S, bit2=E, bit3=N, bit4=STEEP`.
+///
+/// Las cuatro últimas filas son los offsets 15–18: las cuatro variantes
+/// empinadas que OpenTTD selecciona con `_slope_to_sprite_offset`.
+pub const SLOPE_HALF_H: [f32; 19] = [
     15.5, // 0:  flat
     15.5, // 1:  W
     11.5, // 2:  S
@@ -26,7 +29,38 @@ pub const SLOPE_HALF_H: [f32; 15] = [
     11.5, // 12: NE
     11.5, // 13: NWE
     7.5,  // 14: NSE
+    7.5,  // 15: STEEP_W
+    7.5,  // 16: STEEP_S
+    7.5,  // 17: STEEP_N
+    7.5,  // 18: STEEP_E
 ];
+
+/// `_slope_to_sprite_offset` de `landscape.cpp`.
+///
+/// Las pendientes empinadas no pueden indexar directamente los sprites de
+/// terreno: por ejemplo, `SLOPE_STEEP_S` vale 23 pero usa el offset gráfico
+/// 16. Mantener esta tabla separada evita degradarla a la pendiente normal
+/// `WSE` (7), que desplazaba los árboles cuatro píxeles y dibujaba el suelo
+/// equivocado en la partida Kale.
+pub const SLOPE_TO_SPRITE_OFFSET: [u8; 32] = [
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 0, 0, 0, 0, 0, 0, 0, 0, 16, 0, 0, 0, 17, 0,
+    15, 18, 0,
+];
+
+/// Offset del sprite de suelo para una pendiente OpenTTD.
+///
+/// Ignora la codificación temporal `SLOPE_HALFTILE` (bits altos), que nunca
+/// llega al suelo natural y no tiene entrada en la tabla de OpenTTD.
+#[must_use]
+pub const fn slope_sprite_offset(tileh: u8) -> u8 {
+    SLOPE_TO_SPRITE_OFFSET[(tileh & 0x1F) as usize]
+}
+
+/// Altura visual media del sprite de suelo para una pendiente OpenTTD.
+#[must_use]
+pub const fn slope_half_h(tileh: u8) -> f32 {
+    SLOPE_HALF_H[slope_sprite_offset(tileh) as usize]
+}
 
 /// Calcula el bitmask de pendiente (`tileh`) de la tesela `(tx, ty)` igual que
 /// OpenTTD `GetTileSlopeZ` / `GetTileSlopeGivenHeight` (`tile_map.cpp`):
@@ -44,6 +78,7 @@ pub const SLOPE_HALF_H: [f32; 15] = [
 #[inline]
 fn slope_bits_from_corner_vals(hnorth: u8, hwest: u8, heast: u8, hsouth: u8) -> (u8, u8) {
     let min_h = hnorth.min(hwest).min(heast).min(hsouth);
+    let max_h = hnorth.max(hwest).max(heast).max(hsouth);
     let mut tileh: u8 = 0;
     if hwest > min_h {
         tileh |= 1;
@@ -57,7 +92,12 @@ fn slope_bits_from_corner_vals(hnorth: u8, hwest: u8, heast: u8, hsouth: u8) -> 
     if hnorth > min_h {
         tileh |= 8;
     } // SLOPE_N
-    (tileh.min(14), min_h)
+    // `GetTileSlopeGivenHeight`: la diferencia máxima válida es dos niveles;
+    // ese segundo nivel codifica una de las cuatro pendientes `STEEP`.
+    if max_h.saturating_sub(min_h) == 2 {
+        tileh |= openttdrs_core::SLOPE_STEEP;
+    }
+    (tileh, min_h)
 }
 
 /// Pendiente y `min_h` **solo** desde las cuatro alturas de esquina (sin truco de UI
@@ -73,8 +113,9 @@ pub fn tile_slope_bits_from_heights(map: &Map, tx: u32, ty: u32) -> (u8, u8) {
     slope_bits_from_corner_vals(hnorth, hwest, heast, hsouth)
 }
 
-/// El resultado está limitado a 0–14 (pendientes simples; las empinadas (15)
-/// requieren sprites especiales y se omiten por ahora).
+/// Conserva la pendiente completa, incluso `SLOPE_STEEP`, igual que
+/// `GetTileSlopeZ`. Los consumidores de sprites deben pasarla por
+/// [`slope_sprite_offset`] o [`slope_half_h`], no indexarla directamente.
 #[must_use]
 pub fn tile_slope_and_min_z(map: &Map, tx: u32, ty: u32) -> (u8, u8) {
     let (mw, mh) = map.dimensions();
@@ -100,16 +141,12 @@ pub fn tile_slope_and_min_z(map: &Map, tx: u32, ty: u32) -> (u8, u8) {
 /// Altura usada en una esquina del 2×2 de [`tile_slope_and_min_z`], análoga a
 /// `GetTileSlopeZ` / `TileHeight` en OpenTTD.
 ///
-/// Algunos exports `.ottdmap` guardan **`height = 0`** en `MP_WATER` aunque la tierra
-/// lindera esté varios niveles más arriba ("costa hundida"); si usamos ese valor
-/// literal, `min_h` cae y el suelo “cuelga” sobre el agua. Para **`Water`** y
-/// **`Void`** inferimos un nivel con el **mínimo** de `Tile.height` en teselas de
-/// **tierra** en el vecindario de 8 celdas, pero **solo** si ese mínimo es ≥ 2:
-/// un escalón de 2+ niveles entre agua y toda la tierra vecina es imposible en un
-/// MAPH real (el mar comparte la esquina 0 con la costa), así que es la firma del
-/// export corrupto. En saves reales el mínimo vecino es 0 o 1 y se respeta el MAPH
-/// guardado — usar la inferencia ahí distorsionaba la pendiente de la mayoría de
-/// las teselas de costa (rombos dentados, orillas sin arena, sprites WE/NS espurios).
+/// Algunos exports `.ottdmap` heredados guardan **`height = 0`** en `MP_WATER` aunque
+/// la tierra lindera esté varios niveles más arriba ("costa hundida"). La reparación
+/// sólo se activa si el propio [`Map`] declara ese origen mediante
+/// `legacy_zero_water_height_repair`; un `.sav` mantiene siempre el `MAPH` literal.
+/// De otro modo, una esquina de agua válida puede convertir una pendiente `STEEP_W`
+/// real (29) en otra pendiente/base y desplazar todos los sprites de la tesela.
 #[inline]
 fn height_for_slope_corner_sample(map: &Map, cx: i32, cy: i32, mw: u32, mh: u32) -> u8 {
     if cx < 0 || cy < 0 {
@@ -127,7 +164,7 @@ fn height_for_slope_corner_sample(map: &Map, cx: i32, cy: i32, mw: u32, mh: u32)
     let Some(t) = map.get(TileCoord::new(cx, cy)) else {
         return 0;
     };
-    if matches!(t.kind, TileKind::Water | TileKind::Void) {
+    if matches!(t.kind, TileKind::Water | TileKind::Void) && map.legacy_zero_water_height_repair() {
         water_void_effective_height_for_slope(map, ux, uy, mw, mh, t.height)
     } else {
         t.height
@@ -226,11 +263,11 @@ pub fn tile_min_z(map: &Map, c: TileCoord) -> u8 {
     tile_min_corner_height(map, ux, uy)
 }
 
-/// Nombre corto del bitmask de pendiente OpenTTD (`Slope` / `tileh` 0–14).
+/// Nombre corto del bitmask de pendiente OpenTTD (`Slope` / `tileh` 0–31).
 /// Bits: W=1, S=2, E=4, N=8 (esquinas elevadas respecto al mínimo local).
 #[must_use]
 pub fn slope_label(tileh: u8) -> &'static str {
-    match tileh.min(14) {
+    match tileh & 0x1F {
         0 => "FLAT",
         1 => "W",
         2 => "S",
@@ -246,6 +283,10 @@ pub fn slope_label(tileh: u8) -> &'static str {
         12 => "NE",
         13 => "NWE",
         14 => "NSE",
+        23 => "STEEP_S",
+        27 => "STEEP_N",
+        29 => "STEEP_W",
+        30 => "STEEP_E",
         _ => "?",
     }
 }

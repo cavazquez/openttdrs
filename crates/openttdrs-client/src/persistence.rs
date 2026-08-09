@@ -6,10 +6,15 @@ use openttdrs_core::save;
 
 use crate::bevy_app::UpdateSet;
 use crate::render::{RemapMapVisualsPending, VehicleIndex};
-use crate::state::{ClientScreen, SimWorld};
+use crate::state::{ClientScreen, SimRunState, SimWorld};
 use crate::ui::{SaveWindowState, SimHudControls};
 
 pub(crate) struct PersistencePlugin;
+
+/// Señal de una carga que debe dejar la simulación detenida antes de recuperar
+/// rutas y reservas en ticks posteriores.
+#[derive(Resource)]
+pub(crate) struct PauseAfterLoad;
 
 impl Plugin for PersistencePlugin {
     fn build(&self, app: &mut App) {
@@ -18,7 +23,8 @@ impl Plugin for PersistencePlugin {
             handle_sim_json_hotkeys
                 .in_set(UpdateSet::Persistence)
                 .run_if(in_state(ClientScreen::InGame)),
-        );
+        )
+        .add_systems(Update, pause_after_load.in_set(UpdateSet::Persistence));
     }
 }
 
@@ -27,6 +33,7 @@ pub(crate) fn apply_loaded_state(
     sim: &mut SimWorld,
     vehicle_index: &mut VehicleIndex,
     remap: &mut RemapMapVisualsPending,
+    commands: &mut Commands,
     loaded: GameState,
 ) {
     let prev = sim.state.map.dimensions();
@@ -39,8 +46,25 @@ pub(crate) fn apply_loaded_state(
     vehicle_index.rebuild(&sim.state.vehicles);
     remap.pending = true;
     remap.sync_camera = true;
+    // La importación de un SAV grande restituye rutas y reservas de forma
+    // incremental. Detener el reloj evita que el primer frame de la UI quede
+    // esperando esa recuperación y deja el control al jugador.
+    commands.insert_resource(PauseAfterLoad);
     if prev != nw {
         info!("Mapa {prev:?} -> {nw:?}; recarga visual y camara.");
+    }
+}
+
+fn pause_after_load(
+    pause_requested: Option<Res<PauseAfterLoad>>,
+    mut commands: Commands,
+    mut next_run: Option<ResMut<NextState<SimRunState>>>,
+) {
+    if pause_requested.is_some()
+        && let Some(next_run) = next_run.as_deref_mut()
+    {
+        next_run.set(SimRunState::Paused);
+        commands.remove_resource::<PauseAfterLoad>();
     }
 }
 
@@ -49,6 +73,7 @@ pub(crate) fn handle_sim_json_hotkeys(
     mut sim: ResMut<SimWorld>,
     mut vehicle_index: ResMut<VehicleIndex>,
     mut remap: ResMut<RemapMapVisualsPending>,
+    mut commands: Commands,
     hud: Res<SimHudControls>,
     save_window: Option<Res<SaveWindowState>>,
 ) {
@@ -73,7 +98,13 @@ pub(crate) fn handle_sim_json_hotkeys(
         match std::fs::read_to_string(&save_path) {
             Ok(text) => match save::load_from_str(&text) {
                 Ok(loaded) => {
-                    apply_loaded_state(&mut sim, &mut vehicle_index, &mut remap, loaded);
+                    apply_loaded_state(
+                        &mut sim,
+                        &mut vehicle_index,
+                        &mut remap,
+                        &mut commands,
+                        loaded,
+                    );
                     info!("Estado cargado desde {save_path}; recarga visual.");
                 }
                 Err(e) => error!("Carga: JSON invalido ({save_path}): {e}"),
@@ -86,7 +117,7 @@ pub(crate) fn handle_sim_json_hotkeys(
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
-    use super::handle_sim_json_hotkeys;
+    use super::{PauseAfterLoad, handle_sim_json_hotkeys};
     use bevy::ecs::system::RunSystemOnce;
     use bevy::prelude::*;
 
@@ -124,6 +155,7 @@ mod tests {
         let remap = world.resource::<RemapMapVisualsPending>();
         assert!(remap.pending);
         assert!(remap.sync_camera);
+        assert!(world.contains_resource::<PauseAfterLoad>());
     }
 
     #[test]

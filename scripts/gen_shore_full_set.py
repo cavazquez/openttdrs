@@ -19,7 +19,7 @@ Salidas:
 - `assets/opengfx/tiles/shore_full_{slot:02d}.png` (slots 0..17)
 - `crates/openttdrs-client/src/sprites/shore_draw_data_generated.rs` con
   `SHORE_META` (w/h/xrel/yrel del NFO) y `TILEH_TO_SHORE_SPRITE`
-  (tabla `tileh_to_shoresprite` de `water_cmd.cpp`, pendientes 0..14).
+  (tabla completa `tileh_to_shoresprite` de `water_cmd.cpp`, incluido steep).
 
 Uso: python3 scripts/gen_shore_full_set.py
 """
@@ -52,8 +52,13 @@ ORIGINAL_SHORE_SLOTS = {
     4068: 3,
     4069: 9,
 }
-# `tileh_to_shoresprite` (water_cmd.cpp), entradas 0..14 (sin empinadas).
-TILEH_TO_SHORE_SPRITE = [0, 1, 2, 3, 4, 16, 6, 7, 8, 9, 17, 11, 12, 13, 14]
+# `tileh_to_shoresprite` (water_cmd.cpp). Los índices 23, 27, 29 y 30
+# representan las cuatro pendientes `SLOPE_STEEP_*`; no pueden degradarse a
+# `tileh.min(14)` porque sus siluetas costeras son distintas.
+TILEH_TO_SHORE_SPRITE = [
+    0, 1, 2, 3, 4, 16, 6, 7, 8, 9, 17, 11, 12, 13, 14, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 0, 10, 15, 0,
+]
 
 REAL_RE = re.compile(
     r"^\s*(\d+)\s+(\S+?\.(?:32\.png|png|pcx))\s+(?:8bpp|32bpp)\s+"
@@ -214,7 +219,7 @@ def main() -> None:
         "// extra aporta Action5 0x0D y el base los ocho sprites clásicos.",
         "// `SHORE_META` son los offsets NFO (w, h, xrel, yrel) y",
         "// `TILEH_TO_SHORE_SPRITE` es la tabla",
-        "// `tileh_to_shoresprite` de `water_cmd.cpp` (pendientes 0..14).",
+        "// `tileh_to_shoresprite` de `water_cmd.cpp` (tabla completa 0..31).",
         "",
         "/// Sprites del set de orillas (`SHORE_SPRITE_COUNT` en upstream).",
         f"pub const SHORE_SPRITE_COUNT: usize = {SHORE_SPRITE_COUNT};",
@@ -228,8 +233,8 @@ def main() -> None:
     lines += [
         "];",
         "",
-        "/// `tileh` (0..14) → slot de sprite de orilla (`tileh_to_shoresprite`).",
-        f"pub static TILEH_TO_SHORE_SPRITE: [u8; 15] = [{tileh}];",
+        "/// `tileh` (0..31) → slot de sprite de orilla (`tileh_to_shoresprite`).",
+        f"pub static TILEH_TO_SHORE_SPRITE: [u8; 32] = [{tileh}];",
         "",
     ]
     text = "\n".join(lines)

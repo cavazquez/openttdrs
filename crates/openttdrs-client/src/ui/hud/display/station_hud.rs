@@ -4,17 +4,19 @@ use openttdrs_core::{STATION_COVERAGE_RADIUS, station_coverage_at};
 use crate::sprites::{StationTileClass, station_type_from_m6};
 use crate::state::SimWorld;
 
-fn stop_kind_label(class: StationTileClass) -> &'static str {
+fn stop_kind_label(class: StationTileClass) -> String {
     match class {
-        StationTileClass::Bus => "parada bus",
-        StationTileClass::Truck => "parada camión",
-        StationTileClass::Rail => "estación tren",
-        StationTileClass::RailWaypoint => "waypoint",
-        StationTileClass::RoadWaypoint => "waypoint road",
-        StationTileClass::Airport => "aeropuerto",
-        StationTileClass::Dock => "muelle",
-        StationTileClass::Buoy => "boya",
-        StationTileClass::Other(_) => "estación",
+        StationTileClass::Bus => "parada bus".into(),
+        StationTileClass::Truck => "parada camión".into(),
+        StationTileClass::Rail => "estación tren".into(),
+        StationTileClass::RailWaypoint => "waypoint".into(),
+        StationTileClass::RoadWaypoint => "waypoint road".into(),
+        StationTileClass::Airport => "aeropuerto".into(),
+        StationTileClass::Dock => "muelle".into(),
+        StationTileClass::Buoy => "boya".into(),
+        StationTileClass::Other(station_type) => {
+            format!("⚠ estación sin renderer (tipo m6 {station_type})")
+        }
     }
 }
 
@@ -71,10 +73,11 @@ pub(crate) fn rail_depot_tile_details(m5: u8) -> String {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
-    use super::{road_depot_tile_details, station_details_text};
+    use super::{road_depot_tile_details, station_details_text, stop_kind_label};
     use openttdrs_core::prelude::*;
     use openttdrs_core::{Industry, IndustryKind};
 
+    use crate::sprites::StationTileClass;
     use crate::state::SimWorld;
 
     #[test]
@@ -106,5 +109,11 @@ mod tests {
         let text = station_details_text(&sim, pos, &tile);
         assert!(text.contains("parada camión"));
         assert!(text.contains("Carga/descarga"));
+    }
+
+    #[test]
+    fn unknown_station_type_is_labeled_as_a_warning() {
+        assert!(stop_kind_label(StationTileClass::Other(4)).contains("sin renderer"));
+        assert!(stop_kind_label(StationTileClass::Other(4)).contains("m6 4"));
     }
 }

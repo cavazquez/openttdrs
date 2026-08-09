@@ -50,6 +50,10 @@ pub(super) fn move_vehicles(state: &mut GameState) {
     let tick = state.tick.get();
     let vehicle_count = state.vehicles.len();
     let pf = state.pathfinding;
+    let mut road_traffic = crate::road_movement::RoadTrafficIndex::default();
+    road_traffic.rebuild(&state.vehicles);
+    let mut train_crashes = crate::ground_crash::TrainCrashIndex::default();
+    train_crashes.rebuild(&state.vehicles);
     for i in 0..vehicle_count {
         state.vehicles[i].sim_tick = tick;
         // Vagones: no se mueven solos; se sincronizan tras la cabeza.
@@ -58,11 +62,12 @@ pub(super) fn move_vehicles(state: &mut GameState) {
         }
         // Espera ~37 ticks + reserva/PBS de boca (`CheckTrainStayInDepot`).
         if state.vehicles[i].kind == VehicleKind::Train
-            && crate::depot_leave::tick_train_stay_in_depot(
+            && crate::depot_leave::tick_train_stay_in_depot_indexed(
                 &mut state.map,
                 &mut state.vehicles,
                 i,
                 pf,
+                &state.runtime.fleet_index,
             )
         {
             continue;
@@ -73,13 +78,16 @@ pub(super) fn move_vehicles(state: &mut GameState) {
             && state.vehicles[i].depot_leave_cleared
         {
             let head_id = state.vehicles[i].id;
-            crate::depot_leave::activate_depot_leave_units(
+            crate::depot_leave::activate_depot_leave_units_indexed(
                 &state.map,
                 &mut state.vehicles,
                 head_id,
+                &state.runtime.fleet_index,
             );
         }
+        let previous_road_pos = state.vehicles[i].pos;
         if tick_road_depot_movement(state, i) {
+            road_traffic.update_vehicle(&state.vehicles, i, previous_road_pos);
             continue;
         }
         if state.vehicles[i].crashed {
@@ -93,9 +101,15 @@ pub(super) fn move_vehicles(state: &mut GameState) {
             let drive_on_right = state.construction.road_drive_on_right();
             // Split borrow: tick road con flota completa para FindCloseTo.
             let mut vehicles = std::mem::take(&mut state.vehicles);
-            crate::road_movement::road_vehicle_tick_side(&mut vehicles, i, map, drive_on_right);
+            crate::road_movement::road_vehicle_tick_side_indexed(
+                &mut vehicles,
+                i,
+                map,
+                drive_on_right,
+                &mut road_traffic,
+            );
             state.vehicles = vehicles;
-            let _ = crate::ground_crash::maybe_road_train_crash(state, i);
+            let _ = crate::ground_crash::maybe_road_train_crash_indexed(state, i, &train_crashes);
             continue;
         }
         if state.vehicles[i].kind == VehicleKind::Train && state.vehicles[i].is_consist_head() {
@@ -108,8 +122,9 @@ pub(super) fn move_vehicles(state: &mut GameState) {
                 state.vehicles[i].sync_order_destination(&state.map);
             }
             let head_id = state.vehicles[i].id;
-            if crate::train_consist::reverse_consist_at_stop(
+            if crate::train_consist::reverse_consist_at_stop_indexed(
                 &mut state.vehicles,
+                &state.runtime.fleet_index,
                 head_id,
                 &state.map,
             ) {
@@ -132,8 +147,11 @@ pub(super) fn move_vehicles(state: &mut GameState) {
                         || crate::rail_signals::train_blocked_by_signal(
                             &state.map, vehicles, vehicle,
                         )
-                        || crate::rail_signals::train_blocked_by_traffic(
-                            &state.map, vehicles, vehicle,
+                        || crate::rail_signals::train_blocked_by_traffic_indexed(
+                            &state.map,
+                            vehicles,
+                            vehicle,
+                            &state.runtime.fleet_index,
                         )
                 }
             } else {
@@ -225,6 +243,24 @@ pub(super) fn move_vehicles(state: &mut GameState) {
         let vehicle_id = state.vehicles[i].id;
         let vehicle_kind = state.vehicles[i].kind;
         let vehicle_running = state.vehicles[i].running;
+        let train_previous_positions: Vec<(usize, crate::TileCoord)> =
+            if vehicle_kind == VehicleKind::Train {
+                state
+                    .runtime
+                    .fleet_index
+                    .consist(vehicle_id)
+                    .iter()
+                    .filter_map(|&unit_id| {
+                        state
+                            .runtime
+                            .fleet_index
+                            .slot(unit_id)
+                            .map(|slot| (slot, state.vehicles[slot].pos))
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            };
         let train_accel = state.train_acceleration_model;
         refresh_vehicle_track_speed_cap(state, i, vehicle_kind);
         state.vehicles[i].step_with_map_and_accel(Some(&state.map), train_accel);
@@ -249,11 +285,28 @@ pub(super) fn move_vehicles(state: &mut GameState) {
             state.vehicles[i].cur_speed = 0;
         }
         if vehicle_kind == VehicleKind::Train {
-            crate::train_consist::consist_changed_with_map(
-                &mut state.vehicles,
-                vehicle_id,
-                Some(&state.map),
-            );
+            // Escenarios/tests que crean `Vehicle::new(Train)` directamente
+            // todavía no tienen sus cachés de potencia/peso. Una vez armadas,
+            // el hot path sólo propaga poses de los seguidores.
+            if state.vehicles[i].cached_weight_t == 0 {
+                crate::train_consist::consist_changed_with_map(
+                    &mut state.vehicles,
+                    vehicle_id,
+                    Some(&state.map),
+                );
+            } else {
+                crate::train_consist::propagate_consist_unit_poses_with_map_indexed(
+                    &mut state.vehicles,
+                    &state.runtime.fleet_index,
+                    vehicle_id,
+                    Some(&state.map),
+                );
+            }
+            // La propagación puede desplazar vagones a otra tesela; la
+            // siguiente comprobación vial debe ver su posición actual.
+            for (slot, previous) in train_previous_positions {
+                train_crashes.update_vehicle(&state.vehicles, slot, previous);
+            }
         }
         if state.vehicles[i].pos != prev_pos && vehicle_kind == VehicleKind::Train {
             super::routing::enqueue_signal_glob_flush(state, prev_pos);

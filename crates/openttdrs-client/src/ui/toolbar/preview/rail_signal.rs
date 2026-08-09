@@ -10,7 +10,7 @@ use openttdrs_core::{
     tick::GameTick,
 };
 
-use crate::iso::{SLOPE_HALF_H, TILE_HALF_H, tile_pos_half, tile_slope_and_min_z};
+use crate::iso::{TILE_HALF_H, slope_half_h, tile_pos_half, tile_slope_and_min_z};
 use crate::render::TileAtlas;
 use crate::sprites::{
     RAIL_TILE_SIGNALS, collect_rail_ghost_sprites, collect_signal_sprite_draws,
@@ -79,7 +79,7 @@ fn build_rail_signal_ghost_plan(
     let half_h = if tileh == 0 {
         TILE_HALF_H
     } else {
-        SLOPE_HALF_H[tileh as usize]
+        slope_half_h(tileh)
     };
     let m5 = track.track_bit() | (RAIL_TILE_SIGNALS << 6);
     let sig_draws = collect_signal_sprite_draws(placement.m2, placement.m3, placement.m3hi, m5);
@@ -225,7 +225,7 @@ pub(crate) fn rail_signal_flash_position(
     let half_h = if tileh == 0 {
         TILE_HALF_H
     } else {
-        SLOPE_HALF_H[tileh as usize]
+        slope_half_h(tileh)
     };
     let preview_tex = collect_signal_sprite_draws(
         placement.m2,

@@ -357,14 +357,15 @@ define_action5_merge!(
     TRAMWAY_ACTION5_SLOT_COUNT
 );
 
-/// Slot Action5 foundations para `tileh` 1..=14 (cimientos nivelados del cliente).
+/// Slot Action5 foundations para un `SpriteID` de foundations extra.
+///
+/// Los 14 cimientos nivelados clásicos (`SPR_FOUNDATION_BASE` 989..1003) no
+/// pertenecen a esta tabla; Action5 comienza en `SPR_SLOPES_BASE` (5413).
 #[must_use]
-pub fn foundation_action5_slot_for_tileh(tileh: u8) -> Option<usize> {
-    if (1..=14).contains(&tileh) {
-        Some(usize::from(tileh - 1))
-    } else {
-        None
-    }
+pub fn foundation_action5_slot_for_sprite_id(sprite_id: u32) -> Option<usize> {
+    let base = crate::map::FOUNDATION_ACTION5_SPRITE_BASE;
+    let slot = sprite_id.checked_sub(base)?;
+    (slot < u32::try_from(FOUNDATION_ACTION5_SLOT_COUNT).ok()?).then_some(slot as usize)
 }
 
 /// Offset de pendiente norte (`SLOPE_NE`/`SLOPE_NW`) en la tabla one-way.

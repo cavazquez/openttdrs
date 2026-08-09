@@ -1,6 +1,8 @@
 //! Sprites y clasificación de teselas `MP_STATION` (OpenTTD `station_map.h`).
 
-use openttdrs_core::StopKind;
+use std::sync::{Mutex, OnceLock};
+
+use openttdrs_core::{STATION_TYPE_DOCK, StopKind};
 
 use super::rail::rail_sloped_track_sprite_id;
 
@@ -39,12 +41,35 @@ pub fn station_type_from_m6(m6: u8) -> StationTileClass {
         1 => StationTileClass::Airport,
         2 => StationTileClass::Truck,
         3 => StationTileClass::Bus,
-        4 => StationTileClass::Dock,
+        STATION_TYPE_DOCK => StationTileClass::Dock,
         6 => StationTileClass::Buoy,
         7 => StationTileClass::RailWaypoint,
         8 => StationTileClass::RoadWaypoint,
         v => StationTileClass::Other(v),
     }
+}
+
+/// Registra una vez por sesión cada tipo de estación sin renderer.
+///
+/// Es preferible mostrar una tesela de diagnóstico a degradarla a una parada
+/// de bus/camión: esa sustitución disimula errores de importación y hace mucho
+/// más difícil comparar una partida con OpenTTD.
+pub fn log_unknown_station_type_once(m6: u8) {
+    let StationTileClass::Other(station_type) = station_type_from_m6(m6) else {
+        return;
+    };
+    static LOGGED_TYPES: OnceLock<Mutex<[bool; 16]>> = OnceLock::new();
+    let Ok(mut logged) = LOGGED_TYPES.get_or_init(|| Mutex::new([false; 16])).lock() else {
+        return;
+    };
+    let index = usize::from(station_type);
+    if logged[index] {
+        return;
+    }
+    logged[index] = true;
+    bevy::log::warn!(
+        "Estación OpenTTD sin renderer: StationType={station_type} (m6=0x{m6:02X}); se muestra marcador magenta"
+    );
 }
 
 /// `StopKind` del simulador a partir de `m6` (`GetStationType`).
@@ -53,13 +78,21 @@ pub use openttdrs_core::stop_kind_from_m6;
 /// Clase visual: prioriza `StopKind` del simulador y tipo en `m6` del tile.
 #[must_use]
 pub fn station_tile_class(m6: u8, stop_kind: Option<StopKind>) -> StationTileClass {
+    let raw_class = station_type_from_m6(m6);
+    if matches!(raw_class, StationTileClass::Other(_)) {
+        return raw_class;
+    }
     if stop_kind == Some(StopKind::RailWaypoint) {
         return StationTileClass::RailWaypoint;
     }
     if stop_kind == Some(StopKind::RoadWaypoint) {
         return StationTileClass::RoadWaypoint;
     }
-    match station_type_from_m6(m6) {
+    match raw_class {
+        // `m6` es la fuente de verdad por tile. Una estación puede combinar
+        // tren, buses y aeropuerto; su `StopKind` simplificado no debe
+        // convertir los tiles de aeropuerto en una parada vial genérica.
+        StationTileClass::Airport => StationTileClass::Airport,
         StationTileClass::Rail
         | StationTileClass::RailWaypoint
         | StationTileClass::RoadWaypoint
@@ -67,21 +100,8 @@ pub fn station_tile_class(m6: u8, stop_kind: Option<StopKind>) -> StationTileCla
         | StationTileClass::Truck
         | StationTileClass::Dock
         | StationTileClass::Buoy => station_type_from_m6(m6),
-        StationTileClass::Airport | StationTileClass::Other(_) => {
-            if let Some(sk) = stop_kind {
-                match sk {
-                    StopKind::BusStop => StationTileClass::Bus,
-                    StopKind::TruckStop => StationTileClass::Truck,
-                    StopKind::Dock => StationTileClass::Dock,
-                    StopKind::Buoy => StationTileClass::Buoy,
-                    StopKind::Airport => StationTileClass::Airport,
-                    StopKind::RailWaypoint => StationTileClass::RailWaypoint,
-                    StopKind::RoadWaypoint => StationTileClass::RoadWaypoint,
-                    StopKind::RailStation => StationTileClass::Rail,
-                }
-            } else {
-                StationTileClass::Truck
-            }
+        StationTileClass::Other(_) => {
+            unreachable!("se filtró antes el tipo de estación desconocido")
         }
     }
 }
@@ -333,14 +353,46 @@ pub fn road_stop_build_layers(class: StationTileClass, dir: usize) -> &'static [
     }
 }
 
+/// Capas Action5 vanilla de una parada pasante (`m5` 4=X, 5=Y).
+///
+/// A diferencia de una bahía, la parada pasante se apoya en una carretera
+/// pavimentada y solo superpone dos tiras angostas con la señalización. No se
+/// debe degradar al suelo/edificio de las orientaciones 0/1.
+#[must_use]
+pub fn road_stop_drive_through_layers(
+    class: StationTileClass,
+    orientation: u8,
+) -> &'static [RoadStopLayerGfx] {
+    let axis = match orientation {
+        openttdrs_core::RSV_DRIVE_THROUGH_X => 0,
+        openttdrs_core::RSV_DRIVE_THROUGH_Y => 1,
+        _ => return &[],
+    };
+    match class {
+        StationTileClass::Bus => &BUS_STOP_DRIVE_THROUGH_LAYERS[axis],
+        StationTileClass::Truck => &TRUCK_STOP_DRIVE_THROUGH_LAYERS[axis],
+        StationTileClass::Rail
+        | StationTileClass::RailWaypoint
+        | StationTileClass::RoadWaypoint
+        | StationTileClass::Airport
+        | StationTileClass::Dock
+        | StationTileClass::Buoy
+        | StationTileClass::Other(_) => &[],
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn m6_decodes_bus_truck_rail_and_waypoint() {
+    fn m6_decodes_bus_truck_dock_rail_and_waypoint() {
         assert_eq!(station_type_from_m6(3 << 3), StationTileClass::Bus);
         assert_eq!(station_type_from_m6(2 << 3), StationTileClass::Truck);
+        assert_eq!(
+            station_type_from_m6(STATION_TYPE_DOCK << 3),
+            StationTileClass::Dock
+        );
         assert_eq!(station_type_from_m6(0), StationTileClass::Rail);
         assert_eq!(station_type_from_m6(7 << 3), StationTileClass::RailWaypoint);
     }
@@ -349,6 +401,7 @@ mod tests {
     fn stop_kind_from_m6_matches_tile_class() {
         assert_eq!(stop_kind_from_m6(2 << 3), StopKind::TruckStop);
         assert_eq!(stop_kind_from_m6(3 << 3), StopKind::BusStop);
+        assert_eq!(stop_kind_from_m6(STATION_TYPE_DOCK << 3), StopKind::Dock);
         assert_eq!(stop_kind_from_m6(0), StopKind::RailStation);
         assert_eq!(stop_kind_from_m6(7 << 3), StopKind::RailWaypoint);
     }
@@ -358,6 +411,23 @@ mod tests {
         assert_eq!(
             station_tile_class(0, Some(StopKind::TruckStop)),
             StationTileClass::Rail
+        );
+    }
+
+    #[test]
+    fn render_keeps_airport_m6_when_station_also_has_rail_or_bus() {
+        assert_eq!(
+            station_tile_class(1 << 3, Some(StopKind::RailStation)),
+            StationTileClass::Airport
+        );
+        assert_eq!(station_tile_class(1 << 3, None), StationTileClass::Airport);
+    }
+
+    #[test]
+    fn unsupported_m6_is_diagnostic_instead_of_bus_fallback() {
+        assert_eq!(
+            station_tile_class(4 << 3, Some(StopKind::BusStop)),
+            StationTileClass::Other(4)
         );
     }
 
@@ -562,6 +632,19 @@ mod tests {
             road_stop_build_layers(StationTileClass::Truck, 0)[0].dy,
             15.0
         );
+    }
+
+    #[test]
+    fn drive_through_stops_have_their_own_two_layer_layout() {
+        assert_eq!(
+            road_stop_drive_through_layers(StationTileClass::Bus, 4).len(),
+            2
+        );
+        assert_eq!(
+            road_stop_drive_through_layers(StationTileClass::Truck, 5).len(),
+            2
+        );
+        assert!(road_stop_drive_through_layers(StationTileClass::Bus, 0).is_empty());
     }
 
     #[test]

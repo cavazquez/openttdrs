@@ -11,16 +11,17 @@ use super::{
     helpers::FLAT_WATER_LAYER_FRAC, leveled_foundation_overlay_pos, sloped_or_flat_image,
     spawn_ground_sprite, spawn_leveled_foundation,
 };
-use crate::iso::{overlay_pos, remap_tile_offset, tile_pos, wang_hash};
+use crate::iso::{overlay_pos, remap_tile_offset, slope_sprite_offset, tile_pos, wang_hash};
 use crate::render::atlas::AtlasSprite;
+use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
 use crate::render::{
     CompanyColoredSprites, MapSpriteBatches, MapVisualLayer, TileRenderContext, WaterTile,
     WorldAssets, sprite_from_atlas_or_company_colour, sprite_from_atlas_or_industry_palette,
 };
 use crate::sprites::{
     CompanyColour, FENCE_MOD_BY_TILEH_NE, FENCE_MOD_BY_TILEH_NW, FENCE_MOD_BY_TILEH_SE,
-    FENCE_MOD_BY_TILEH_SW, FENCE_SPRITE_META, FIELD_STATES, HOUSE_DRAW_DATA, TREE_LAYOUT_SPRITE,
-    TREE_LAYOUT_XY, TREE_SPRITE_META, house_building_stage_from_tile,
+    FENCE_MOD_BY_TILEH_SW, FENCE_SPRITE_META, FIELD_STATES, HOUSE_DRAW_DATA, TILEH_TO_SHORE_SPRITE,
+    TREE_LAYOUT_SPRITE, TREE_LAYOUT_XY, TREE_SPRITE_META, house_building_stage_from_tile,
     industry_anim_layer_used_in_any_frame, industry_building_needs_client_anim,
     industry_effective_m4_for_draw, industry_gfx_entry_for_tile,
     industry_gfx_uses_fizzy_drink_anim, industry_gfx_uses_random_colour,
@@ -37,6 +38,21 @@ fn grass_flat_for_clear(assets: &WorldAssets, tile_m5: u8) -> &AtlasSprite {
         2 => &assets.grass_two_third,
         _ => &assets.grass,
     }
+}
+
+/// `GetTreeGround`: bits 6–8 de MAP2 (MAP2 es una palabra, no sólo `m2`).
+///
+/// Los bosques no heredan el suelo de `MP_CLEAR`: pueden conservar costa,
+/// terreno áspero o nieve aunque la tesela vecina sea césped. Reducir esto a
+/// `TileKind::Forest` era la causa de costas reemplazadas por hierba debajo de
+/// los árboles cargados desde `.sav`.
+const fn tree_ground_from_tile(tile: Tile) -> u8 {
+    let m2 = tile.m2 as u16 | ((tile.m2_hi as u16) << 8);
+    ((m2 >> 6) & 0x07) as u8
+}
+
+const fn tree_shore_sprite_id(tileh: u8) -> u32 {
+    5936 + TILEH_TO_SHORE_SPRITE[tileh as usize] as u32
 }
 
 pub(crate) fn spawn_house_tile(
@@ -510,7 +526,8 @@ pub(crate) fn spawn_generic_land_tile(
                 // `DrawTile_Clear` Fields: estado de cultivo en bits 0–3 de
                 // m3 + offset de pendiente; cercas como overlay.
                 let state = usize::from(ctx.tile.map_or(0, |t| t.m3 & 0x0F)).min(FIELD_STATES - 1);
-                let img = assets.fields[state * 15 + usize::from(tileh.min(14))].clone();
+                let img =
+                    assets.fields[state * 19 + usize::from(slope_sprite_offset(tileh))].clone();
                 spawn_field_fences(commands, assets, ctx);
                 (img, Color::WHITE)
             }
@@ -523,9 +540,27 @@ pub(crate) fn spawn_generic_land_tile(
             CLEAR_GROUND_DESERT => (rough_img(), desert_color),
             _ => (full_grass_img(), Color::WHITE),
         },
-        TileKind::Forest => match clear_ground {
-            CLEAR_GROUND_SNOW => (snow_img(), snow_color),
-            CLEAR_GROUND_DESERT => (rough_img(), desert_color),
+        TileKind::Forest => match ctx.tile.map(tree_ground_from_tile).unwrap_or(0) {
+            // `DrawTile_Trees`: la costa se decide desde MAP2, no desde el
+            // clima ni el terreno vecino. Por ejemplo Kale_TitleGame (79,142)
+            // guarda `ground=3`, `tileh=29` y OpenTTD selecciona 5936 + 10.
+            3 => {
+                let shore = usize::from(TILEH_TO_SHORE_SPRITE[usize::from(tileh)]);
+                WorldDrawTrace::record_sprite(
+                    "tree-ground",
+                    "ground",
+                    tree_shore_sprite_id(tileh),
+                    false,
+                );
+                (assets.shore[shore].clone(), Color::WHITE)
+            }
+            // `TreeGround::Rough` llama `DrawHillyLandTile`; el selector de
+            // pendiente ya coincide con `SPR_FLAT_ROUGH_LAND + offset`.
+            1 => (rough_img(), Color::WHITE),
+            // SnowOrDesert/RoughSnow. El atlas actual conserva el sprite plano
+            // de nieve; las pendientes dedicadas se rastrean como trabajo de
+            // paridad aparte, igual que el caso de rampas de puente.
+            2 | 4 => (snow_img(), snow_color),
             _ => (full_grass_img(), Color::WHITE),
         },
         TileKind::CoalField => (rough_img(), Color::srgb(0.55, 0.50, 0.45)),
@@ -730,6 +765,26 @@ fn spawn_field_fences(commands: &mut Commands, assets: &WorldAssets, ctx: &TileR
 /// 1–4 árboles según bits 6–7 de m5, posiciones de `_tree_layout_xy`, especie
 /// por árbol de `_tree_layout_sprite[tipo×4 + variante]` y etapa de
 /// crecimiento (bits 0–2 de m5) solo en el último árbol (el resto adulto +3).
+///
+/// OpenTTD selecciona repetidamente la entrada con menor `x + y` de la lista
+/// original. La ordenación estable conserva el mismo desempate por índice.
+fn sort_tree_layers_like_openttd(layers: &mut [(usize, u8, u8)]) {
+    layers.sort_by_key(|(_, dx, dy)| u16::from(*dx) + u16::from(*dy));
+}
+
+/// `DrawTile_Trees` eleva el objeto a media altura de la pendiente. La
+/// posición de terreno (`base_z`) sola deja árboles y sus bounds cuatro píxeles
+/// demasiado abajo en una pendiente normal (u ocho en una empinada).
+const fn tree_slope_z_offset(tileh: u8) -> i32 {
+    if tileh == 0 {
+        0
+    } else if tileh & 0x10 != 0 {
+        8
+    } else {
+        4
+    }
+}
+
 pub(crate) fn push_forest_tree(
     assets: &WorldAssets,
     ctx: &TileRenderContext,
@@ -762,14 +817,40 @@ pub(crate) fn push_forest_tree(
     let layout = ((tmp >> 2) & 0x3) as usize;
 
     let row = &TREE_LAYOUT_SPRITE[tree_type as usize * 4 + variant];
+    let mut layers = Vec::with_capacity(count);
     for i in 0..count {
         let stage = if i == count - 1 { growth } else { 3 };
-        let sprite_idx = row[i] as usize + stage;
-        let meta = &TREE_SPRITE_META[sprite_idx];
         let (dx, dy) = TREE_LAYOUT_XY[layout][i];
+        layers.push((row[i] as usize + stage, dx, dy));
+    }
+
+    // `DrawTile_Trees` no dibuja en el orden de la tabla: eso determina cuál
+    // árbol queda delante dentro de la misma tesela y evita invertir capas de
+    // copa como en el artefacto azul observado.
+    sort_tree_layers_like_openttd(&mut layers);
+
+    for (draw_order, (sprite_idx, dx, dy)) in layers.into_iter().enumerate() {
+        // `TREE_LAYOUT_SPRITE` contiene índices relativos a SPR_TREE_BASE
+        // (1576). Registrar el ID original antes de resolver el atlas permite
+        // contrastar el árbol azul/corrupto contra el draw proc de OpenTTD.
+        let slope_z_offset = tree_slope_z_offset(ctx.info.tileh);
+        WorldDrawTrace::record_sprite_with_geometry(
+            "tree",
+            if draw_order == 0 {
+                "sortable"
+            } else {
+                "combined"
+            },
+            1576 + sprite_idx as u32,
+            false,
+            (i32::from(dx), i32::from(dy), 0),
+            slope_z_offset,
+            Some(TraceSpriteBounds::new(0, 0, 0, 16, 16, 48)),
+        );
+        let meta = &TREE_SPRITE_META[sprite_idx];
         // Offset sub-tesela en pantalla (misma escala que iso(): remap × 0.5).
         let off = remap_tile_offset(f32::from(dx), f32::from(dy), 0.0) * 0.5;
-        let pos3 = overlay_pos(
+        let mut pos3 = overlay_pos(
             Vec2::new(ctx.iso_pos.x + off.x, ctx.iso_pos.y + off.y),
             meta.xrel,
             meta.yrel,
@@ -781,10 +862,45 @@ pub(crate) fn push_forest_tree(
             ctx.tx_i32(),
             ctx.ty_i32(),
         );
+        // `overlay_pos` recibe alturas enteras de TileZ; completar la media
+        // unidad de `GetSlopeMaxPixelZ(tileh) / 2` en píxeles y en la capa.
+        pos3.y += slope_z_offset as f32;
+        pos3.z += slope_z_offset as f32 * 0.000_125;
         batches.trees.push((
             ctx.map_tile_chunk(),
             assets.trees[sprite_idx].sprite_colored(tint),
             Transform::from_translation(pos3),
         ));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use openttdrs_core::{Map, TileCoord};
+
+    use super::{sort_tree_layers_like_openttd, tree_ground_from_tile, tree_shore_sprite_id};
+
+    #[test]
+    fn forest_layers_follow_openttd_subtile_order_and_ties() {
+        let mut layers = [(1593, 9, 3), (1611, 1, 8), (1700, 1, 8)];
+
+        sort_tree_layers_like_openttd(&mut layers);
+
+        assert_eq!(layers, [(1611, 1, 8), (1700, 1, 8), (1593, 9, 3)]);
+    }
+
+    #[test]
+    fn tree_ground_keeps_the_high_map2_bit_and_uses_the_shore_table() {
+        let mut tile = Map::new_flat(1, 1, 0)
+            .get(TileCoord::new(0, 0))
+            .expect("tile");
+        tile.m2 = 0xC0; // TreeGround::Shore = 3.
+        assert_eq!(tree_ground_from_tile(tile), 3);
+        assert_eq!(tree_shore_sprite_id(29), 5946);
+
+        // TreeGround::RoughSnow = 4 necesita MAP2 bit 8.
+        tile.m2 = 0;
+        tile.m2_hi = 1;
+        assert_eq!(tree_ground_from_tile(tile), 4);
     }
 }

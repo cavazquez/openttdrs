@@ -9,9 +9,9 @@
 use crate::depot::{
     has_depot_reservation, rail_depot_entrance_tile, rail_depot_mouth_dir, set_depot_reservation,
 };
+use crate::fleet_index::FleetIndex;
 use crate::map::{Map, TileCoord, TileKind};
 use crate::pathfinding_settings::PathfindingSettings;
-use crate::train_consist::consist_unit_ids;
 use crate::train_movement::{
     DELTACOORD_LEAVE_OFFSET, FRACTCOORDS_ENTER, calc_next_vehicle_offset, diag_dir_index,
     train_depot_facing, train_depot_subtile,
@@ -29,6 +29,20 @@ pub fn tick_train_stay_in_depot(
     index: usize,
     settings: PathfindingSettings,
 ) -> bool {
+    let mut fleet = FleetIndex::default();
+    fleet.rebuild(vehicles);
+    tick_train_stay_in_depot_indexed(map, vehicles, index, settings, &fleet)
+}
+
+/// Variante para el ciclo de simulación que reutiliza el `FleetIndex` del tick.
+#[allow(clippy::too_many_lines)]
+pub(crate) fn tick_train_stay_in_depot_indexed(
+    map: &mut Map,
+    vehicles: &mut [Vehicle],
+    index: usize,
+    settings: PathfindingSettings,
+    fleet: &FleetIndex,
+) -> bool {
     let Some(vehicle) = vehicles.get(index) else {
         return false;
     };
@@ -41,11 +55,12 @@ pub fn tick_train_stay_in_depot(
 
     if map.get_kind(head_pos) != Some(TileKind::RailDepot) {
         // Cabeza ya en vía: seguir activando vagones que queden en Track::Depot.
-        activate_depot_leave_units(map, vehicles, head_id);
-        maybe_clear_depot_reservation_after_exit(map, vehicles, head_id, head_pos);
+        activate_depot_leave_units_indexed(map, vehicles, head_id, fleet);
+        maybe_clear_depot_reservation_after_exit_indexed(map, vehicles, fleet, head_id, head_pos);
         // Reiniciar gate solo en unidades que ya abandonaron la tesela depósito.
-        for id in consist_unit_ids(vehicles, head_id) {
-            if let Some(v) = vehicles.iter_mut().find(|v| v.id == id)
+        for &id in fleet.consist(head_id) {
+            if let Some(slot) = fleet.slot(id)
+                && let Some(v) = vehicles.get_mut(slot)
                 && map.get_kind(v.pos) != Some(TileKind::RailDepot)
             {
                 v.depot_leave_cleared = false;
@@ -56,7 +71,7 @@ pub fn tick_train_stay_in_depot(
 
     // Ya autorizado: activar followers escalonados y no bloquear el avance.
     if vehicle.depot_leave_cleared {
-        activate_depot_leave_units(map, vehicles, head_id);
+        activate_depot_leave_units_indexed(map, vehicles, head_id, fleet);
         return false;
     }
 
@@ -67,9 +82,12 @@ pub fn tick_train_stay_in_depot(
         .and_then(crate::engine::engine_by_id)
         .map_or(0, |e| e.power_hp);
 
-    let unit_ids = consist_unit_ids(vehicles, head_id);
-    for id in &unit_ids {
-        let Some(u) = vehicles.iter().find(|v| v.id == *id) else {
+    let unit_ids = fleet.consist(head_id);
+    for &id in unit_ids {
+        let Some(slot) = fleet.slot(id) else {
+            return false;
+        };
+        let Some(u) = vehicles.get(slot) else {
             return false;
         };
         if u.pos != head_pos || map.get_kind(u.pos) != Some(TileKind::RailDepot) {
@@ -85,7 +103,7 @@ pub fn tick_train_stay_in_depot(
         return true;
     }
 
-    let exit_blocked = depot_exit_blocked(map, vehicles, index);
+    let exit_blocked = depot_exit_blocked_indexed(map, vehicles, index, fleet);
 
     if !force {
         let Some(vehicle) = vehicles.get_mut(index) else {
@@ -150,7 +168,7 @@ pub fn tick_train_stay_in_depot(
         v.pbs_stuck = false;
     }
     leave_unbunching_depot(vehicles, index);
-    activate_depot_leave_units(map, vehicles, head_id);
+    activate_depot_leave_units_indexed(map, vehicles, head_id, fleet);
     false
 }
 
@@ -226,43 +244,57 @@ fn leave_unbunching_depot(vehicles: &mut [Vehicle], index: usize) {
 
 /// Activa followers aún en `Track::Depot` cuando `TicksToLeaveDepot(prev) <= 0`.
 pub fn activate_depot_leave_units(map: &Map, vehicles: &mut [Vehicle], head_id: u32) {
-    let ids = consist_unit_ids(vehicles, head_id);
+    let mut fleet = FleetIndex::default();
+    fleet.rebuild(vehicles);
+    activate_depot_leave_units_indexed(map, vehicles, head_id, &fleet);
+}
+
+/// Variante que reutiliza la topología de consists ya preparada por el tick.
+pub(crate) fn activate_depot_leave_units_indexed(
+    map: &Map,
+    vehicles: &mut [Vehicle],
+    head_id: u32,
+    fleet: &FleetIndex,
+) {
+    let ids = fleet.consist(head_id);
     if ids.len() < 2 {
         return;
     }
     for i in 0..ids.len().saturating_sub(1) {
         let prev_id = ids[i];
         let next_id = ids[i + 1];
-        let Some(prev) = vehicles.iter().find(|v| v.id == prev_id) else {
+        let Some(prev_slot) = fleet.slot(prev_id) else {
             continue;
         };
-        let Some(next) = vehicles.iter().find(|v| v.id == next_id) else {
+        let Some(next_slot) = fleet.slot(next_id) else {
             continue;
         };
-        if next.depot_leave_cleared {
+        let Some(prev) = vehicles.get(prev_slot) else {
             continue;
-        }
-        if map.get_kind(next.pos) != Some(TileKind::RailDepot) {
+        };
+        let Some(next) = vehicles.get(next_slot) else {
+            continue;
+        };
+        let next_cleared = next.depot_leave_cleared;
+        let next_pos = next.pos;
+        let next_length = next.unit_length;
+        let prev_cleared = prev.depot_leave_cleared;
+        let prev_pos = prev.pos;
+        let prev_length = prev.unit_length;
+        if next_cleared || map.get_kind(next_pos) != Some(TileKind::RailDepot) {
             continue;
         }
         // La unidad previa ya salió de Track::Depot (flag o tesela de vía).
-        let prev_ready =
-            prev.depot_leave_cleared || map.get_kind(prev.pos) != Some(TileKind::RailDepot);
+        let prev_ready = prev_cleared || map.get_kind(prev_pos) != Some(TileKind::RailDepot);
         if !prev_ready {
             continue;
         }
-        let mouth = rail_depot_mouth_dir(map, next.pos).unwrap_or(0);
+        let mouth = rail_depot_mouth_dir(map, next_pos).unwrap_or(0);
         let (x, y) = unit_depot_fract(map, prev, mouth);
-        let ticks = ticks_to_leave_depot(
-            mouth,
-            x,
-            y,
-            prev.unit_length.max(1),
-            next.unit_length.max(1),
-            false,
-        );
+        let ticks =
+            ticks_to_leave_depot(mouth, x, y, prev_length.max(1), next_length.max(1), false);
         if ticks <= 0
-            && let Some(n) = vehicles.iter_mut().find(|v| v.id == next_id)
+            && let Some(n) = vehicles.get_mut(next_slot)
         {
             n.depot_leave_cleared = true;
         }
@@ -315,19 +347,19 @@ fn unit_depot_fract(map: &Map, unit: &Vehicle, mouth: u8) -> (u8, u8) {
     (u8::try_from(x).unwrap_or(0), u8::try_from(y).unwrap_or(0))
 }
 
-fn maybe_clear_depot_reservation_after_exit(
+fn maybe_clear_depot_reservation_after_exit_indexed(
     map: &mut Map,
     vehicles: &[Vehicle],
+    fleet: &FleetIndex,
     head_id: u32,
     head_pos: TileCoord,
 ) {
     // Si ningún miembro del consist queda en un depósito, liberar el bit de la
     // tesela de depósito que aún figure reservada y no tenga otro tren saliendo.
-    let ids = consist_unit_ids(vehicles, head_id);
-    let any_in_depot = ids.iter().any(|&id| {
-        vehicles
-            .iter()
-            .find(|v| v.id == id)
+    let any_in_depot = fleet.consist(head_id).iter().any(|&id| {
+        fleet
+            .slot(id)
+            .and_then(|slot| vehicles.get(slot))
             .is_some_and(|v| map.get_kind(v.pos) == Some(TileKind::RailDepot))
     });
     if any_in_depot {
@@ -338,7 +370,7 @@ fn maybe_clear_depot_reservation_after_exit(
     // siempre y bloqueaba todos los consists apilados. `origin` y el historial
     // conservan la boca realmente abandonada hasta mucho después de liberar la
     // última unidad.
-    let Some(head) = vehicles.iter().find(|vehicle| vehicle.id == head_id) else {
+    let Some(head) = fleet.slot(head_id).and_then(|slot| vehicles.get(slot)) else {
         return;
     };
     let mut candidates: Vec<TileCoord> = head
@@ -370,12 +402,17 @@ fn maybe_clear_depot_reservation_after_exit(
     }
 }
 
-fn depot_exit_blocked(map: &Map, vehicles: &[Vehicle], index: usize) -> bool {
+fn depot_exit_blocked_indexed(
+    map: &Map,
+    vehicles: &[Vehicle],
+    index: usize,
+    fleet: &FleetIndex,
+) -> bool {
     let Some(vehicle) = vehicles.get(index) else {
         return false;
     };
     if crate::rail_signals::train_blocked_by_signal(map, vehicles, vehicle)
-        || crate::rail_signals::train_blocked_by_traffic(map, vehicles, vehicle)
+        || crate::rail_signals::train_blocked_by_traffic_indexed(map, vehicles, vehicle, fleet)
     {
         return true;
     }
@@ -646,7 +683,15 @@ mod tests {
         wagon.prev_unit = Some(1);
         let vehicles = vec![head, wagon];
 
-        maybe_clear_depot_reservation_after_exit(&mut s.map, &vehicles, 1, TileCoord::new(12, 4));
+        let mut fleet = FleetIndex::default();
+        fleet.rebuild(&vehicles);
+        maybe_clear_depot_reservation_after_exit_indexed(
+            &mut s.map,
+            &vehicles,
+            &fleet,
+            1,
+            TileCoord::new(12, 4),
+        );
         assert!(
             !has_depot_reservation(&s.map, depot),
             "la reserva debe liberarse aunque la cabeza ya no sea vecina"

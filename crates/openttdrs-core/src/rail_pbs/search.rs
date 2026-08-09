@@ -20,6 +20,9 @@ use super::model::{
 const TRY_RESERVE_TILE_COST: u32 = YAPF_TILE_LENGTH;
 /// Sesgo si la tesela no está en el path de órdenes (prioriza YAPF sobre BFS ciego).
 const TRY_RESERVE_OFF_PATH_PENALTY: u32 = 50 * YAPF_TILE_LENGTH;
+/// Límite de expansión por `TryReservePath`. Evita que una red circular sin
+/// punto de espera convierta una única reserva en un barrido completo del mapa.
+const MAX_TRY_RESERVE_NODES: usize = 4_096;
 
 #[derive(Clone, Eq, PartialEq)]
 pub(super) struct TryReserveNode {
@@ -209,6 +212,7 @@ pub fn find_path_to_safe_wait_with_wormholes(
     let mut best_goal: Option<(u32, Vec<TileCoord>)> = None;
     let mut end_of_line: Option<(u32, Vec<TileCoord>)> = None;
 
+    let mut expanded = 0usize;
     while let Some(TryReserveNode {
         cost,
         cur,
@@ -216,6 +220,10 @@ pub fn find_path_to_safe_wait_with_wormholes(
         passed_path,
     }) = heap.pop()
     {
+        expanded += 1;
+        if expanded > MAX_TRY_RESERVE_NODES {
+            break;
+        }
         if best_g.get(&cur).is_some_and(|&g| cost > g) {
             continue;
         }

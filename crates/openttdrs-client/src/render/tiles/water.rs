@@ -4,7 +4,7 @@ use openttdrs_core::prelude::*;
 
 use super::{SHORE_LAYER_FRAC, push_water_sprite, spawn_coast_debug_label};
 use crate::iso::{
-    SLOPE_HALF_H, TILE_HALF_H, shore_png_index, shore_sprite_half_h, shore_tileh_for_draw_shore,
+    TILE_HALF_H, shore_png_index, shore_sprite_half_h, shore_tileh_for_draw_shore, slope_half_h,
     tile_pos_half, tile_slope_bits_from_heights,
 };
 use crate::render::shore_newgrf::{NEWGRF_SHORE_TILE_FLAG, NewGrfShoreSpriteCache};
@@ -80,7 +80,7 @@ pub(crate) fn push_water_tile(
             let half_h = if ctx.info.tileh == 0 {
                 TILE_HALF_H
             } else {
-                SLOPE_HALF_H[ctx.info.tileh as usize]
+                slope_half_h(ctx.info.tileh)
             };
             batches.water.push((
                 ctx.map_tile_chunk(),

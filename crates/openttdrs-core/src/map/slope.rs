@@ -40,7 +40,18 @@ fn slope_bits_from_corner_vals(hnorth: u8, hwest: u8, heast: u8, hsouth: u8) -> 
 
 #[inline]
 fn corner_height(map: &Map, cx: i32, cy: i32) -> u8 {
-    map.get(TileCoord::new(cx, cy)).map_or(0, |t| t.height)
+    // `GetTileSlopeZ` no lee una tesela virtual a altura 0 en los bordes:
+    // fija x+1/y+1 a `Map::MaxX/Y`. Usar `0` aquí convertía toda la última
+    // fila/columna en pendientes artificiales (y alteraba bocas de túnel).
+    let (width, height) = map.dimensions();
+    if width == 0 || height == 0 {
+        return 0;
+    }
+    let max_x = i32::try_from(width - 1).unwrap_or(i32::MAX);
+    let max_y = i32::try_from(height - 1).unwrap_or(i32::MAX);
+    let x = cx.clamp(0, max_x);
+    let y = cy.clamp(0, max_y);
+    map.get(TileCoord::new(x, y)).map_or(0, |tile| tile.height)
 }
 
 /// `(tileh, z)` con `z` = mínimo de las cuatro esquinas (= `GetTileZ` en terreno).
@@ -164,7 +175,11 @@ pub const fn diag_dir_offset(dir: u8) -> (i32, i32) {
     OFFSETS[dir as usize & 3]
 }
 
-/// Otra entrada del túnel si se construyera desde `start` (`GetOtherTunnelEnd`).
+/// Salida prospectiva de un túnel que se construiría desde `start`.
+///
+/// Esta función parte de la pendiente del terreno; no debe usarse para un
+/// túnel ya cargado, porque la primera tesela al mismo nivel no necesariamente
+/// es su portal opuesto.
 #[must_use]
 pub fn resolve_tunnel_end(map: &Map, start: TileCoord) -> Option<TileCoord> {
     let (start_tileh, start_z) = tile_slope_and_z(map, start)?;
@@ -179,6 +194,39 @@ pub fn resolve_tunnel_end(map: &Map, start: TileCoord) -> Option<TileCoord> {
             return Some(c);
         }
     }
+}
+
+/// Portal opuesto de un túnel ya persistido en el mapa.
+///
+/// Es la contraparte segura de `OpenTTD::GetOtherTunnelEnd`: sigue la dirección
+/// almacenada en `m5`, exige que el portal final sea una tesela túnel con la
+/// dirección inversa y conserve el mismo `GetTileZ`. No infiere la dirección
+/// desde la pendiente, porque una fundación o un borde del mapa pueden hacerla
+/// distinta de la codificación real del save.
+#[must_use]
+pub fn resolve_existing_tunnel_end(map: &Map, start: TileCoord) -> Option<TileCoord> {
+    let start_tile = map.get(start)?;
+    if !start_tile.is_tunnel_bridge_tile() || start_tile.m5 & 0x80 != 0 {
+        return None;
+    }
+    let (_, start_z) = tile_slope_and_z(map, start)?;
+    let direction = start_tile.m5 & 0x03;
+    let reverse_direction = direction.wrapping_add(2) & 0x03;
+    let (step_x, step_y) = diag_dir_offset(direction);
+    let (width, height) = map.dimensions();
+    let mut pos = start;
+    for _ in 0..width.max(height) {
+        pos = TileCoord::new(pos.x + step_x, pos.y + step_y);
+        let tile = map.get(pos)?;
+        if tile.is_tunnel_bridge_tile()
+            && tile.m5 & 0x80 == 0
+            && tile.m5 & 0x03 == reverse_direction
+            && tile_slope_and_z(map, pos).is_some_and(|(_, z)| z == start_z)
+        {
+            return Some(pos);
+        }
+    }
+    None
 }
 
 /// Teselas del túnel desde la entrada `start` hasta `end` (ambas inclusive).
@@ -304,6 +352,15 @@ mod tests {
     }
 
     #[test]
+    fn map_edges_clamp_corner_heights_like_openttd() {
+        let mut map = Map::new_flat(2, 2, 0);
+        map.set_height(TileCoord::new(1, 1), 5).unwrap();
+        let (tileh, z) = tile_slope_and_z(&map, TileCoord::new(1, 1)).unwrap();
+        assert_eq!(tileh, 0);
+        assert_eq!(z, 5);
+    }
+
+    #[test]
     fn tunnel_path_follows_diagonal() {
         let mut map = Map::new_flat(8, 8, 1);
         set_ne_slope(&mut map, 4, 4, 1);
@@ -314,5 +371,27 @@ mod tests {
         assert_eq!(path.len(), 3);
         assert_eq!(path[0], start);
         assert_eq!(path[2], end);
+    }
+
+    #[test]
+    fn existing_tunnel_uses_saved_direction_and_opposite_portal() {
+        let mut map = Map::new_flat(8, 4, 2);
+        let west = TileCoord::new(1, 1);
+        let east = TileCoord::new(5, 1);
+        let mut west_tile = map.get(west).unwrap();
+        west_tile.kind = crate::map::TileKind::RailTunnel;
+        west_tile.mapt = 0x90;
+        // DiagDirection::SW: +X, transport rail, tunnel flag clear.
+        west_tile.m5 = 0x02;
+        map.set_tile(west, west_tile).unwrap();
+        let mut east_tile = map.get(east).unwrap();
+        east_tile.kind = crate::map::TileKind::RailTunnel;
+        east_tile.mapt = 0x90;
+        // Dirección opuesta NE: -X.
+        east_tile.m5 = 0;
+        map.set_tile(east, east_tile).unwrap();
+
+        assert_eq!(resolve_existing_tunnel_end(&map, west), Some(east));
+        assert_eq!(resolve_existing_tunnel_end(&map, east), Some(west));
     }
 }

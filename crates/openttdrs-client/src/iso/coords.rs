@@ -6,7 +6,7 @@ use openttdrs_core::{
 
 use crate::sprites::{signal_draw_pos, signal_screen_position};
 
-use super::{HEIGHT_PX, ISO_HW, ISO_QH, SLOPE_HALF_H, TILE_HALF_H, tile_slope_and_min_z};
+use super::{HEIGHT_PX, ISO_HW, ISO_QH, TILE_HALF_H, slope_half_h, tile_slope_and_min_z};
 
 /// Convierte coordenadas de tesela a posición del vértice superior del rombo (Bevy Y-up).
 ///
@@ -38,7 +38,7 @@ fn pick_metric_raw(map: &Map, tx: i32, ty: i32, world_pos: Vec2) -> f32 {
     let tile_kind = map
         .get(TileCoord::new(tx, ty))
         .map_or(TileKind::Grass, |t| t.kind);
-    let half_h_base = SLOPE_HALF_H[tileh.min(14) as usize];
+    let half_h_base = slope_half_h(tileh);
     let half_h = if tileh == 0 && tile_kind == TileKind::Road {
         half_h_base.max(19.5)
     } else {
@@ -170,7 +170,7 @@ pub fn world_pos_to_tile_fract(world_pos: Vec2, map: &Map, tx: i32, ty: i32) -> 
     let half_h = if tileh == 0 {
         TILE_HALF_H
     } else {
-        SLOPE_HALF_H[tileh.min(14) as usize]
+        slope_half_h(tileh)
     };
     let elev = f32::from(base_z) * HEIGHT_PX;
     let top = iso(tx, ty);
@@ -198,7 +198,7 @@ fn rail_signal_anchor_world(map: &Map, tx: i32, ty: i32, draw_pos: u8, tex_id: u
     let half_h = if tileh == 0 {
         TILE_HALF_H
     } else {
-        SLOPE_HALF_H[tileh.min(14) as usize]
+        slope_half_h(tileh)
     };
     signal_screen_position(tx, ty, draw_pos, tex_id, half_h, base_z)
 }

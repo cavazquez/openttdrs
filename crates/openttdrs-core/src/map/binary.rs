@@ -149,6 +149,11 @@ fn ottd_tile_kind(ottd_type: u8, m5: u8) -> TileKind {
         3 => TileKind::House,
         4 => TileKind::Forest,
         5 => TileKind::Station,
+        // `MP_WATER`: `WaterTileType` vive en m5[4..=7]. Un depósito
+        // naval sigue siendo una tesela de agua en el save, pero necesita
+        // conservar su identidad para el renderer, los paneles y la red de
+        // navegación. Los bits bajos son `part` (bit 0) y `axis` (bit 1).
+        6 if (m5 >> 4) & 0x0F == 3 => TileKind::ShipDepot,
         6 => TileKind::Water,
         7 => TileKind::Void,
         8 => TileKind::Industry,
@@ -203,7 +208,7 @@ impl Map {
     /// | 3        | `MP_HOUSE`       | House            |
     /// | 4        | `MP_TREES`       | Forest           |
     /// | 5        | `MP_STATION`     | Station          |
-    /// | 6        | `MP_WATER`       | Water            |
+    /// | 6        | `MP_WATER`       | Water / ShipDepot (`m5[4..=7] == 3`) |
     /// | 7        | `MP_VOID`        | Void             |
     /// | 8        | `MP_INDUSTRY`    | Industry/Coal    |
     /// | 9        | `MP_TUNNELBRIDGE`| Road/Rail tunnel or bridge (m5) |
@@ -245,6 +250,11 @@ impl Map {
             width,
             height,
             tiles,
+            // El formato externo `.ottdmap` existió antes de que el exportador
+            // preservara MAPH de costa de forma fiable. Conservamos el arreglo
+            // de compatibilidad para ese origen; `sav::load` lo desactiva al
+            // reconstruir un save real de OpenTTD.
+            legacy_zero_water_height_repair: true,
         })
     }
 

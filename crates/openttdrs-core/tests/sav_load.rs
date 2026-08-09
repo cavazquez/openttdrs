@@ -284,6 +284,10 @@ fn loads_synthetic_sav_with_map_stations_and_towns() {
 
     assert_eq!(sav.version, 300);
     assert_eq!(sav.map.dimensions(), (MAP_W, MAP_H));
+    assert!(
+        !sav.map.legacy_zero_water_height_repair(),
+        "un .sav preserva MAPH y no usa el arreglo de .ottdmap heredado"
+    );
     assert_eq!(
         sav.map.get_kind(TileCoord::new(5, 2)),
         Some(TileKind::Station)

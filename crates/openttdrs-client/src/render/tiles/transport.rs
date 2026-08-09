@@ -1,28 +1,32 @@
 use bevy::prelude::*;
 use openttdrs_core::prelude::*;
-use openttdrs_core::{Climate, RoadTypeDef, bridge_above_axis_from_mapt};
+use openttdrs_core::{Climate, RoadTypeDef};
 
-use super::{TRAM_OVERLAY_LAYER_FRAC, spawn_ground_sprite, spawn_rail_foundation};
-use crate::iso::{SLOPE_HALF_H, TILE_HALF_H, overlay_pos, remap_tile_offset, tile_pos_half};
+use super::{
+    TRAM_OVERLAY_LAYER_FRAC, catenary_under_low_bridge, sloped_or_flat_image, spawn_ground_sprite,
+    spawn_rail_foundation,
+};
+use crate::iso::{TILE_HALF_H, overlay_pos, remap_tile_offset, slope_half_h, tile_pos_half};
 use crate::render::catenary_newgrf::catenary_sprite_colored;
 use crate::render::road_newgrf::{
     NewGrfRoadSpriteCache, newgrf_road_def_for_tile, newgrf_tram_def_for_tile,
     road_newgrf_view_index,
 };
+use crate::render::world_draw_trace::WorldDrawTrace;
 use crate::render::{MapVisualLayer, TileRenderContext, WorldAssets};
 use crate::sprites::{
     RAIL_GROUND_SNOW_OR_DESERT, ROAD_FLAT_HALF_H, ROAD_STREETLIGHT_META, ROADSIDE_LAMPS,
-    ROADSIDE_TREE_META, ROADSIDE_TREES, TRACK_FENCE_META, catenary_sprite_color,
-    collect_catenary_pylons_from_map, collect_catenary_sprites_from_map,
+    ROADSIDE_TREE_META, ROADSIDE_TREES, TRACK_FENCE_META, catenary_reference_sprite_id,
+    catenary_sprite_color, collect_catenary_pylons_from_map_with_pcp_override,
+    collect_catenary_sprites_from_map, collect_rail_pbs_reservation_sprites,
     collect_rail_sprites_for_type, collect_signal_sprite_draws, is_road_level_crossing,
     is_typed_rail_track_sprite, level_crossing_has_rail_reservation,
-    level_crossing_rail_sprite_id_for_type, rail_ghost_overlay_offset,
-    rail_tile_has_pbs_reservation, rail_tile_is_signals, rail_track_base_color,
-    rail_trackbits_for_render, road_bits_for_render, road_flat_sprite_color,
-    road_flat_sprite_index, road_tile_roadside, road_tile_snow_or_desert,
-    road_tile_tram_visual_active, roadside_is_paved, signal_screen_anchor_for_side,
-    signal_screen_position_for_side, signal_sprite_center_offset, track_fence_draws_for_tile,
-    tram_flat_sprite_index,
+    level_crossing_rail_sprite_id_for_type, rail_ghost_overlay_offset, rail_pbs_reservation_offset,
+    rail_tile_is_signals, rail_track_base_color, rail_trackbits_for_render, remap_rail_sprite_id,
+    road_bits_for_render, road_flat_sprite_color, road_flat_sprite_index, road_tile_roadside,
+    road_tile_snow_or_desert, road_tile_tram_visual_active, roadside_is_paved,
+    signal_screen_anchor_for_side, signal_screen_position_for_side, signal_sprite_center_offset,
+    track_fence_draws_for_tile, tram_flat_sprite_index,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -51,7 +55,7 @@ pub(crate) fn spawn_road_tile(
     let road_half_h = if tileh == 0 {
         ROAD_FLAT_HALF_H[fi]
     } else {
-        SLOPE_HALF_H[tileh as usize]
+        slope_half_h(tileh)
     };
     let road_paint = ctx.tile.map_or(Color::WHITE, |t| {
         // Ártico: tinte nieve suave; el suelo hierba/nieve lo decide `m5` vía land.rs.
@@ -72,7 +76,7 @@ pub(crate) fn spawn_road_tile(
     if tileh != 0 {
         spawn_ground_sprite(
             commands,
-            &assets.grass_slopes[tileh as usize - 1],
+            &sloped_or_flat_image(tileh, &assets.grass, &assets.grass_slopes),
             Color::WHITE,
             ctx,
             slope_half_ground,
@@ -183,7 +187,7 @@ pub(crate) fn spawn_road_tile(
         let tram_half_h = if tileh == 0 {
             ROAD_FLAT_HALF_H[tfi]
         } else {
-            SLOPE_HALF_H[tileh as usize]
+            slope_half_h(tileh)
         };
         let mut used_tram_newgrf = false;
         if let Some(tile) = ctx.tile
@@ -324,9 +328,6 @@ pub(crate) fn spawn_road_tile(
                 if openttdrs_core::rail_type_from_tile(t) == openttdrs_core::RailType::Electric {
                     c = c.mix(&Color::srgb(0.55, 0.75, 0.95), 0.18);
                 }
-                if show_pbs_reservations && level_crossing_has_rail_reservation(t.m5) {
-                    c = c.mix(&Color::srgb(0.95, 0.52, 0.42), 0.26);
-                }
                 if road_tile_tram_visual_active(t.m3, t.m8) {
                     c = c.mix(&Color::srgb(0.55, 0.88, 0.58), 0.12);
                 }
@@ -344,6 +345,40 @@ pub(crate) fn spawn_road_tile(
                     road_half_h,
                 )),
             ));
+        }
+        // `DrawRoadTile`: una reserva PBS de cruce tiene su propio
+        // SINGLE_X/Y con PALETTE_CRASH. Teñir la vía base hacía que todo el
+        // cruce pareciera reservado y omitía la selección tipada mono/maglev.
+        if show_pbs_reservations
+            && let Some(t) = ctx
+                .tile
+                .filter(|tile| level_crossing_has_rail_reservation(tile.m5))
+        {
+            let rail_axis = 1 - (t.m5 & 1);
+            let sid = remap_rail_sprite_id(
+                1005 + u32::from(rail_axis),
+                openttdrs_core::rail_type_from_tile(t),
+            );
+            WorldDrawTrace::record_sprite_with_palette_and_geometry(
+                "crossing-pbs-reservation",
+                "ground",
+                sid,
+                804,
+                !assets.rail.contains_key(&sid),
+                (0, 0, 0),
+                0,
+                None,
+            );
+            if let Some(img) = assets.rail.get(&sid) {
+                let base = tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.048, road_half_h);
+                let offset = rail_ghost_overlay_offset(sid);
+                commands.spawn((
+                    MapVisualLayer,
+                    ctx.map_tile_chunk(),
+                    img.sprite_colored(Color::srgb(0.95, 0.52, 0.42)),
+                    Transform::from_translation(base + Vec3::new(offset.x, offset.y, 0.0)),
+                ));
+            }
         }
     }
 }
@@ -373,53 +408,53 @@ pub(crate) fn spawn_rail_tile(
     newgrf_stack: &[openttdrs_core::NewGrfEntry],
 ) {
     let tileh = ctx.info.tileh;
-    // Vano con puente encima: la vía la dibuja `spawn_bridge_deck` a la altura del tablero.
-    if ctx
-        .tile
-        .is_some_and(|t| bridge_above_axis_from_mapt(t.mapt).is_some())
-    {
-        return;
-    }
+    // `IsBridgeAbove` no reemplaza el contenido de la tesela: OpenTTD pinta
+    // primero la vía inferior y después el tablero elevado. El tablero se
+    // agrega separadamente por `spawn_bridge_middle` en `tile_spawn.rs`.
+    // Saltar esta rama hacía desaparecer vías reales bajo puentes y dejaba
+    // sus reservas PBS, túneles y conexiones aparentemente cortados.
     if tileh != 0 {
         spawn_ground_sprite(
             commands,
-            &assets.grass_slopes[tileh as usize - 1],
+            &sloped_or_flat_image(tileh, &assets.grass, &assets.grass_slopes),
             Color::WHITE,
             ctx,
             slope_half_ground,
         );
     }
-    let tb = ctx.tile.map_or(0, |t| t.m5 & 0x3F);
+    let render_tb = rail_trackbits_for_render(map, ctx.coord, map_dims.0, map_dims.1);
     let snow_ground = ctx
         .tile
         .is_some_and(|t| (t.m3 & 0x0F) == RAIL_GROUND_SNOW_OR_DESERT)
         || climate.uses_snow_ground();
     let rail_base_z = spawn_rail_foundation(
         commands,
+        map,
+        map_dims,
         assets,
         ctx,
         tileh,
-        tb,
+        render_tb,
         foundation_newgrf,
         action5_sprites.as_deref_mut(),
         images.as_deref_mut(),
     );
-    let rail_half_h = if tileh == 0 {
+    let (surface_tileh, _) = openttdrs_core::rail_surface_slope_and_z(tileh, render_tb);
+    let render_tileh = if surface_tileh & 0x20 != 0 {
+        tileh
+    } else {
+        surface_tileh
+    };
+    let rail_half_h = if render_tileh == 0 {
         TILE_HALF_H
     } else {
-        SLOPE_HALF_H[tileh as usize]
+        slope_half_h(render_tileh)
     };
     let rail_type = ctx
         .tile
         .map(openttdrs_core::rail_type_from_tile)
         .unwrap_or_default();
-    collect_rail_sprites_for_type(
-        rail_trackbits_for_render(map, ctx.coord, map_dims.0, map_dims.1),
-        tileh,
-        snow_ground,
-        rail_type,
-        rail_layers,
-    );
+    collect_rail_sprites_for_type(render_tb, tileh, snow_ground, rail_type, rail_layers);
     let typed_layers = rail_layers
         .iter()
         .any(|&sid| is_typed_rail_track_sprite(sid));
@@ -438,15 +473,18 @@ pub(crate) fn spawn_rail_tile(
             }
             _ => {}
         }
-        if show_pbs_reservations && rail_tile_has_pbs_reservation(t.m2_hi) {
-            c = c.mix(&Color::srgb(0.95, 0.52, 0.42), 0.26);
-        }
         c
     });
     if ctx.tile.is_some_and(|t| rail_tile_is_signals(t.m5)) {
         rail_paint = rail_paint.mix(&Color::srgb(0.95, 0.88, 0.55), 0.22);
     }
     for (i, sid) in rail_layers.iter().copied().enumerate() {
+        WorldDrawTrace::record_sprite(
+            "rail-track",
+            "sortable",
+            sid,
+            !assets.rail.contains_key(&sid),
+        );
         let Some(img) = assets.rail.get(&sid) else {
             continue;
         };
@@ -460,30 +498,82 @@ pub(crate) fn spawn_rail_tile(
             Transform::from_translation(base + Vec3::new(offset.x, offset.y, 0.0)),
         ));
     }
+    // `DrawTrackBits`: una reserva PBS no recolorea toda la vía. OpenTTD
+    // superpone los SINGLE_* de las pistas reservadas con PALETTE_CRASH=804.
+    // La segunda capa es esencial para no confundir una reserva en un cruce
+    // o túnel con una vía de otro tipo.
+    if show_pbs_reservations {
+        let reservation_bits = ctx.tile.map_or(0, |tile| {
+            openttdrs_core::decode_rail_reservation_m2_hi(tile.m2_hi)
+        });
+        for (i, sid) in
+            collect_rail_pbs_reservation_sprites(render_tb, reservation_bits, tileh, rail_type)
+                .into_iter()
+                .enumerate()
+        {
+            WorldDrawTrace::record_sprite_with_palette_and_geometry(
+                "rail-pbs-reservation",
+                "ground",
+                sid,
+                804,
+                !assets.rail.contains_key(&sid),
+                (0, 0, 0),
+                0,
+                None,
+            );
+            let Some(img) = assets.rail.get(&sid) else {
+                continue;
+            };
+            let offset = rail_pbs_reservation_offset(sid);
+            let base = tile_pos_half(
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+                rail_base_z,
+                0.026 + i as f32 * 0.0004,
+                rail_half_h,
+            );
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                img.sprite_colored(rail_paint.mix(&Color::srgb(0.95, 0.52, 0.42), 0.26)),
+                Transform::from_translation(base + Vec3::new(offset.x, offset.y, 0.0)),
+            ));
+        }
+    }
     // Catenaria OpenGFX: wires (PCP) + postes PPP; TO_CATENARY vía env.
     if rail_type.has_catenary() {
         let trackbits = rail_trackbits_for_render(map, ctx.coord, map_dims.0, map_dims.1);
+        let low_bridge = catenary_under_low_bridge(map, ctx.coord, map_dims);
         let tint = catenary_sprite_color();
         let mut wires = Vec::new();
-        collect_catenary_sprites_from_map(
-            map,
-            ctx.coord,
-            map_dims.0,
-            map_dims.1,
-            crate::sprites::OTTD_MP_RAIL,
-            trackbits,
-            tileh,
-            &mut wires,
-        );
+        if !low_bridge.hide_wires {
+            collect_catenary_sprites_from_map(
+                map,
+                ctx.coord,
+                map_dims.0,
+                map_dims.1,
+                crate::sprites::OTTD_MP_RAIL,
+                trackbits,
+                tileh,
+                &mut wires,
+            );
+        }
         for (i, sid) in wires.iter().copied().enumerate() {
-            let Some(sprite) = catenary_sprite_colored(
+            let sprite = catenary_sprite_colored(
                 assets,
                 sid,
                 tint,
                 catenary_newgrf,
                 catenary_sprites.as_deref_mut(),
                 images.as_deref_mut(),
-            ) else {
+            );
+            WorldDrawTrace::record_sprite(
+                "catenary-wire",
+                "sortable",
+                catenary_reference_sprite_id(sid),
+                sprite.is_none(),
+            );
+            let Some(sprite) = sprite else {
                 continue;
             };
             let z = 0.035 + i as f32 * 0.0004;
@@ -496,7 +586,7 @@ pub(crate) fn spawn_rail_tile(
             ));
         }
         let mut pylons = Vec::new();
-        collect_catenary_pylons_from_map(
+        collect_catenary_pylons_from_map_with_pcp_override(
             map,
             ctx.coord,
             map_dims.0,
@@ -504,17 +594,25 @@ pub(crate) fn spawn_rail_tile(
             crate::sprites::OTTD_MP_RAIL,
             trackbits,
             tileh,
+            low_bridge.pylon_pcp_override,
             &mut pylons,
         );
         for draw in pylons {
-            let Some(sprite) = catenary_sprite_colored(
+            let sprite = catenary_sprite_colored(
                 assets,
                 draw.sprite_id,
                 tint,
                 catenary_newgrf,
                 catenary_sprites.as_deref_mut(),
                 images.as_deref_mut(),
-            ) else {
+            );
+            WorldDrawTrace::record_sprite(
+                "catenary-pylon",
+                "sortable",
+                catenary_reference_sprite_id(draw.sprite_id),
+                sprite.is_none(),
+            );
+            let Some(sprite) = sprite else {
                 continue;
             };
             let off = remap_tile_offset(draw.tile_dx, draw.tile_dy, 0.0) * 0.5;

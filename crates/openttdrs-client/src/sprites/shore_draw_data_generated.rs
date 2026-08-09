@@ -4,7 +4,7 @@
 // extra aporta Action5 0x0D y el base los ocho sprites clásicos.
 // `SHORE_META` son los offsets NFO (w, h, xrel, yrel) y
 // `TILEH_TO_SHORE_SPRITE` es la tabla
-// `tileh_to_shoresprite` de `water_cmd.cpp` (pendientes 0..14).
+// `tileh_to_shoresprite` de `water_cmd.cpp` (tabla completa 0..31).
 
 /// Sprites del set de orillas (`SHORE_SPRITE_COUNT` en upstream).
 pub const SHORE_SPRITE_COUNT: usize = 18;
@@ -31,5 +31,8 @@ pub static SHORE_META: [(f32, f32, f32, f32); 18] = [
     (64.0, 31.0, -31.0, -8.0),  // slot 17
 ];
 
-/// `tileh` (0..14) → slot de sprite de orilla (`tileh_to_shoresprite`).
-pub static TILEH_TO_SHORE_SPRITE: [u8; 15] = [0, 1, 2, 3, 4, 16, 6, 7, 8, 9, 17, 11, 12, 13, 14];
+/// `tileh` (0..31) → slot de sprite de orilla (`tileh_to_shoresprite`).
+pub static TILEH_TO_SHORE_SPRITE: [u8; 32] = [
+    0, 1, 2, 3, 4, 16, 6, 7, 8, 9, 17, 11, 12, 13, 14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 0,
+    10, 15, 0,
+];

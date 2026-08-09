@@ -15,7 +15,7 @@ use super::super::{CommandError, require_tile_owned_by_active};
 
 #[allow(unused_imports)]
 use crate::command::transport::internal::{
-    bridge_line, check_in_bounds, place_single_transport_tile, propagate_rail_diag_to_neighbors,
+    check_in_bounds, place_single_transport_tile, propagate_rail_diag_to_neighbors,
     refresh_track_junction_from_neighbor, trackbits_to_signal_present,
 };
 
@@ -192,49 +192,6 @@ pub(crate) fn normalize_rail_trackbits_from_neighbors(map: &mut Map) {
             t.m5 = (t.m5 & 0xC0) | bits;
             let _ = map.set_tile(c, t);
         }
-    }
-}
-
-pub(in crate::command::transport) fn is_rail_path_endpoint(map: &Map, c: TileCoord) -> bool {
-    let Some(t) = map.get(c) else {
-        return false;
-    };
-    match t.kind {
-        TileKind::Rail | TileKind::RailDepot | TileKind::RailTunnel | TileKind::RailBridge => true,
-        TileKind::Station => {
-            let st = crate::station::station_type_from_m6(t.m6);
-            st == 0 || st == crate::station::STATION_TYPE_RAIL_WAYPOINT
-        }
-        _ => false,
-    }
-}
-
-pub(in crate::command::transport) fn is_rail_gap_fill_kind(kind: TileKind) -> bool {
-    matches!(kind, TileKind::Grass | TileKind::Forest)
-}
-
-pub(in crate::command::transport) fn write_rail_gap_tile(
-    map: &mut Map,
-    c: TileCoord,
-    axis_x: bool,
-) {
-    let Some(mut t) = map.get(c) else {
-        return;
-    };
-    t.kind = TileKind::Rail;
-    t.mapt = MP_RAILWAY_MAPT;
-    let bits = if axis_x { RAIL_TB_X } else { RAIL_TB_Y };
-    t.m5 = (t.m5 & 0xC0) | bits;
-    let _ = map.set_tile(c, t);
-}
-
-pub(crate) fn bridge_collinear_rail_gaps(map: &mut Map) {
-    let (mw, mh) = map.dimensions();
-    for y in 0..mh.cast_signed() {
-        bridge_line(map, true, y, mw.cast_signed());
-    }
-    for x in 0..mw.cast_signed() {
-        bridge_line(map, false, x, mh.cast_signed());
     }
 }
 

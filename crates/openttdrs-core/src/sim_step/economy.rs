@@ -313,25 +313,45 @@ pub(super) fn rollover_vehicle_profit_year(state: &mut GameState) {
 }
 
 pub(super) fn apply_vehicle_running_costs(state: &mut GameState) {
+    // La topología puede haber cambiado por un choque o desacople durante el
+    // movimiento. Construirla una vez evita que cada unidad reconstruya un
+    // `FleetIndex` completo para calcular el coste de su cabeza.
+    state.runtime.fleet_index.rebuild(&state.vehicles);
     let len = state.vehicles.len();
     for i in 0..len {
         let head_id = state.vehicles[i].id;
-        let yearly = economy::consist_running_cost_year(&state.vehicles, head_id);
+        if !state.vehicles[i].is_consist_head()
+            || !economy::vehicle_counts_running_tick(&state.vehicles[i])
+        {
+            continue;
+        }
+        let yearly = state
+            .runtime
+            .fleet_index
+            .consist(head_id)
+            .iter()
+            .filter_map(|&unit_id| state.runtime.fleet_index.slot(unit_id))
+            .map(|slot| {
+                let unit = &state.vehicles[slot];
+                let mut cost = economy::engine_running_cost_year(unit.effective_engine());
+                if unit.other_multiheaded_part.is_some() {
+                    cost /= 2;
+                }
+                cost
+            })
+            .fold(0_i64, i64::saturating_add);
         let cost = economy::accumulate_running_cost_for_head(&mut state.vehicles[i], yearly);
         if cost <= 0 {
             continue;
         }
         let owner = state.vehicles[i].owner;
-        let vehicle_id = state.vehicles[i].id;
         state.debit_company(owner, cost);
         let cost_u = cost.cast_unsigned();
         state.stats.vehicle_running_costs += cost_u;
         if let Some(c) = state.companies.get_mut(owner.index()) {
             c.vehicle_running_costs += cost_u;
         }
-        let head_id = crate::consist_head_id(&state.vehicles, vehicle_id).unwrap_or(vehicle_id);
-        if let Some(head) = state.vehicles.iter_mut().find(|v| v.id == head_id) {
-            head.profit_this_year = head.profit_this_year.saturating_sub(cost);
-        }
+        state.vehicles[i].profit_this_year =
+            state.vehicles[i].profit_this_year.saturating_sub(cost);
     }
 }

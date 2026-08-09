@@ -28,6 +28,23 @@ from PIL import Image
 ROOT = Path(__file__).resolve().parents[1]
 TILES = ROOT / "assets" / "opengfx" / "tiles"
 
+# grfcodec serializa los índices 1..9 de la paleta DOS como magenta para
+# que sean fácilmente distinguibles al editar las hojas PNG. No son magenta
+# en el juego: OpenTTD los interpreta como los nueve grises iniciales de su
+# paleta. La catenaria los usa extensamente para los cables y postes, de modo
+# que convertir el PNG por RGB deja líneas violeta en vez de metal oscuro.
+DOS_LOW_GREYS: tuple[tuple[int, int, int], ...] = (
+    (16, 16, 16),
+    (32, 32, 32),
+    (48, 48, 48),
+    (65, 64, 65),
+    (82, 80, 82),
+    (98, 101, 98),
+    (115, 117, 115),
+    (131, 133, 131),
+    (148, 149, 148),
+)
+
 A5_PAT = re.compile(r"\*\s*5\s+05\s+05\s+FF\s+30")
 SPRITE_PAT = re.compile(
     r"^\s*(\d+)\s+(\S+)\s+(?:8bpp|32bpp)\s+"
@@ -55,18 +72,18 @@ def find_extra_nfo() -> Path | None:
 
 def dematte_palette0(img: Image.Image) -> Image.Image:
     if img.mode == "P":
-        pal = img.getpalette()
-        key = tuple(pal[0:3]) if pal else None
         rgba = img.convert("RGBA")
-        if key is None:
-            return rgba
+        indices = img.load()
         pix = rgba.load()
         w, h = rgba.size
         for y in range(h):
             for x in range(w):
-                r, g, b, a = pix[x, y]
-                if (r, g, b) == key or (r, g, b) == (0, 0, 255):
+                index = indices[x, y]
+                if index == 0:
                     pix[x, y] = (0, 0, 0, 0)
+                elif index <= len(DOS_LOW_GREYS):
+                    r, g, b = DOS_LOW_GREYS[index - 1]
+                    pix[x, y] = (r, g, b, 255)
         return rgba
     rgba = img.convert("RGBA")
     pix = rgba.load()

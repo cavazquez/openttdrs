@@ -107,15 +107,15 @@ pub fn infer_coast_tileh_when_flat(map: &Map, tx: u32, ty: u32, mw: u32, mh: u32
     8
 }
 
-/// Slot `0..18` para `shore_full_{i:02}.png` (set `SPR_SHORE_BASE + 0..17`).
+/// Slot `0..17` para `shore_full_{i:02}.png` (set `SPR_SHORE_BASE + 0..17`).
 ///
 /// OpenTTD dibuja costas con `DrawShoreTile` (`water_cmd.cpp`): un único sprite
 /// según la pendiente de la tesela, **no** máscara N/E/S/W sobre agua plana.
-/// Tabla `tileh_to_shoresprite` portada en `shore_draw_data_generated.rs`
-/// (WE→16, NS→17, el resto coincide con `tileh`).
+/// Tabla completa `tileh_to_shoresprite` portada en
+/// `shore_draw_data_generated.rs` (WE→16, NS→17 e índices steep 23/27/29/30).
 #[must_use]
 pub fn shore_png_index(tileh: u8) -> usize {
-    crate::sprites::TILEH_TO_SHORE_SPRITE[tileh.min(14) as usize] as usize
+    crate::sprites::TILEH_TO_SHORE_SPRITE[usize::from(tileh & 0x1F)] as usize
 }
 
 /// `half_h` visual para el sprite elegido por `DrawShoreTile`.
@@ -133,19 +133,29 @@ pub fn shore_sprite_half_h(tileh: u8) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::iso::SLOPE_HALF_H;
+    use crate::iso::slope_half_h;
 
     /// El ancla derivada del NFO (`h/2 + yrel`) debe coincidir con el centro
-    /// de las pendientes de terreno (`SLOPE_HALF_H[tileh]`).
+    /// de las pendientes de terreno (`slope_half_h(tileh)`).
     #[test]
     fn half_h_matches_slope_half_h() {
-        for tileh in 1..15u8 {
+        for tileh in [
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 23, 27, 29, 30,
+        ] {
             assert_eq!(
                 shore_sprite_half_h(tileh),
-                SLOPE_HALF_H[tileh as usize],
+                slope_half_h(tileh),
                 "tileh {tileh} (slot {})",
                 shore_png_index(tileh)
             );
         }
+    }
+
+    #[test]
+    fn steep_shores_use_the_upstream_slots() {
+        assert_eq!(shore_png_index(23), 0); // STEEP_S
+        assert_eq!(shore_png_index(27), 5); // STEEP_N
+        assert_eq!(shore_png_index(29), 10); // STEEP_W
+        assert_eq!(shore_png_index(30), 15); // STEEP_E
     }
 }

@@ -1,17 +1,17 @@
 //! Aplicación de bloques Action5 desde el `NewGRF` stack (IDs `OpenTTD` 15.3).
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 use crate::GameState;
 use crate::newgrf_sprites::{Action5Block, DecodedSprite, collect_action5_blocks};
 
-fn apply_action5_table(
-    state: &mut GameState,
+fn merge_action5_stack_into(
+    slots: &mut [Option<DecodedSprite>],
+    state: &GameState,
     search_dirs: &[&Path],
-    slot_count: usize,
     merge: fn(&mut [Option<DecodedSprite>], &Action5Block),
-) -> Vec<Option<DecodedSprite>> {
-    let mut slots = vec![None; slot_count];
+) {
     let stack = state.newgrf_stack.clone();
     for entry in &stack {
         if !entry.enabled {
@@ -31,10 +31,76 @@ fn apply_action5_table(
             continue;
         };
         for block in &blocks {
-            merge(&mut slots, block);
+            merge(slots, block);
         }
     }
+}
+
+fn apply_action5_table(
+    state: &mut GameState,
+    search_dirs: &[&Path],
+    slot_count: usize,
+    merge: fn(&mut [Option<DecodedSprite>], &Action5Block),
+) -> Vec<Option<DecodedSprite>> {
+    let mut slots = vec![None; slot_count];
+    merge_action5_stack_into(&mut slots, state, search_dirs, merge);
     slots
+}
+
+/// Carga los 90 sprites Action5 que forman parte del set gráfico base.
+///
+/// Los cimientos extra no pertenecen a `ogfx1_base`; OpenGFX los publica en
+/// el GRF *extra*. Se cargan antes del stack de la partida para que un NewGRF
+/// real pueda sobrescribirlos igual que en OpenTTD.
+fn load_default_foundation_action5_table() -> Vec<Option<DecodedSprite>> {
+    let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let asset_roots = [
+        PathBuf::from("assets/opengfx"),
+        workspace_root.join("assets/opengfx"),
+    ];
+    let mut candidates = Vec::new();
+    for root in &asset_roots {
+        candidates.push(root.join("opengfx2-32ez/ogfx2e_extra_32ez.grf"));
+        candidates.push(root.join(".signal-src-8bpp/ogfxe_extra.grf"));
+        if let Ok(entries) = std::fs::read_dir(root) {
+            let mut classic = entries
+                .filter_map(Result::ok)
+                .map(|entry| entry.path())
+                .filter(|path| {
+                    path.file_name()
+                        .and_then(|name| name.to_str())
+                        .is_some_and(|name| name.starts_with("opengfx-"))
+                })
+                .map(|path| path.join("ogfxe_extra.grf"))
+                .collect::<Vec<_>>();
+            classic.sort();
+            candidates.extend(classic);
+        }
+    }
+
+    for path in candidates {
+        let Ok(data) = std::fs::read(&path) else {
+            continue;
+        };
+        let Ok(blocks) = collect_action5_blocks(&data) else {
+            continue;
+        };
+        let mut slots = vec![None; crate::newgrf_sprites::FOUNDATION_ACTION5_SLOT_COUNT];
+        for block in &blocks {
+            crate::newgrf_sprites::merge_foundation_action5_block(&mut slots, block);
+        }
+        if slots.iter().any(Option::is_some) {
+            return slots;
+        }
+    }
+    vec![None; crate::newgrf_sprites::FOUNDATION_ACTION5_SLOT_COUNT]
+}
+
+fn default_foundation_action5_table() -> Vec<Option<DecodedSprite>> {
+    static BASE_FOUNDATIONS: OnceLock<Vec<Option<DecodedSprite>>> = OnceLock::new();
+    BASE_FOUNDATIONS
+        .get_or_init(load_default_foundation_action5_table)
+        .clone()
 }
 
 macro_rules! define_action5_apply {
@@ -72,13 +138,33 @@ define_action5_apply!(
     crate::newgrf_sprites::CATENARY_ACTION5_SLOT_COUNT,
     crate::newgrf_sprites::merge_catenary_action5_block
 );
-define_action5_apply!(
-    apply_newgrf_action5_foundations,
-    apply_newgrf_action5_foundations_default_dirs,
-    foundation_newgrf_sprites,
-    crate::newgrf_sprites::FOUNDATION_ACTION5_SLOT_COUNT,
-    crate::newgrf_sprites::merge_foundation_action5_block
-);
+/// Aplica únicamente los Action5 foundations del stack explícito.
+///
+/// Se conserva sin assets base implícitos para que los callers de bajo nivel y
+/// sus tests puedan inspeccionar sólo los reemplazos que aportó un NewGRF.
+pub fn apply_newgrf_action5_foundations(state: &mut GameState, search_dirs: &[&Path]) {
+    state.runtime.foundation_newgrf_sprites = apply_action5_table(
+        state,
+        search_dirs,
+        crate::newgrf_sprites::FOUNDATION_ACTION5_SLOT_COUNT,
+        crate::newgrf_sprites::merge_foundation_action5_block,
+    );
+}
+
+/// Aplica foundations del set gráfico base y después los reemplazos de la
+/// partida. Es la variante que usa el bootstrap normal del cliente.
+pub fn apply_newgrf_action5_foundations_default_dirs(state: &mut GameState) {
+    let owned = super::default_newgrf_search_dirs();
+    let refs: Vec<&Path> = owned.iter().map(AsRef::as_ref).collect();
+    let mut slots = default_foundation_action5_table();
+    merge_action5_stack_into(
+        &mut slots,
+        state,
+        &refs,
+        crate::newgrf_sprites::merge_foundation_action5_block,
+    );
+    state.runtime.foundation_newgrf_sprites = slots;
+}
 define_action5_apply!(
     apply_newgrf_action5_oneway,
     apply_newgrf_action5_oneway_default_dirs,

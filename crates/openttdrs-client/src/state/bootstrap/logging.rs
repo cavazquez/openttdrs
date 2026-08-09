@@ -13,6 +13,7 @@ pub(crate) fn log_detection_summary(
 ) {
     let (mw, mh) = state.map.dimensions();
     info!("Resumen deteccion: mapa {mw}x{mh} ({} teselas)", mw * mh);
+    log_station_renderer_fallbacks(state);
 
     let tile_count = mw.saturating_mul(mh);
     // En mapas enormes el conteo por tipo es O(N) y solo sirve de debug.
@@ -204,17 +205,74 @@ pub(crate) fn log_detection_summary(
     }
 }
 
+/// Cuenta los tipos `MP_STATION` que el renderer aún no sabe dibujar.
+///
+/// Se ejecuta una vez al cargar, no durante los ticks ni al remapear la vista.
+/// Así un tile raro no queda escondido por un fallback que parezca válido.
+fn station_renderer_fallback_counts(state: &GameState) -> BTreeMap<u8, u32> {
+    let (mw, mh) = state.map.dimensions();
+    let mut counts = BTreeMap::new();
+    for y in 0..mh {
+        for x in 0..mw {
+            let c = TileCoord::new(x as i32, y as i32);
+            let Some(tile) = state.map.get(c) else {
+                continue;
+            };
+            if tile.kind != TileKind::Station {
+                continue;
+            }
+            if let crate::sprites::StationTileClass::Other(station_type) =
+                crate::sprites::station_type_from_m6(tile.m6)
+            {
+                *counts.entry(station_type).or_insert(0) += 1;
+            }
+        }
+    }
+    counts
+}
+
+fn log_station_renderer_fallbacks(state: &GameState) {
+    let counts = station_renderer_fallback_counts(state);
+    let total: u32 = counts.values().sum();
+    if total == 0 {
+        info!("Renderer de estaciones: 0 teselas en fallback.");
+        return;
+    }
+
+    warn!("Renderer de estaciones: {total} tesela(s) en fallback; se marcan magenta en el mapa.");
+    for (station_type, count) in counts {
+        warn!("  - StationType {station_type}: {count} tesela(s) sin renderer");
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod logging_coverage_tests {
-    use super::log_detection_summary;
+    use super::{log_detection_summary, station_renderer_fallback_counts};
     use openttdrs_core::prelude::*;
     use openttdrs_core::{Industry, IndustryKind, OttdmapExtras};
+    use std::collections::BTreeMap;
 
     #[test]
     fn log_detection_summary_runs_on_tiny_map() {
         let state = GameState::new(4, 4);
         log_detection_summary(&state, false, None);
+    }
+
+    #[test]
+    fn station_renderer_fallback_counter_excludes_supported_dock() {
+        let mut state = GameState::new(4, 4);
+        for (pos, station_type) in [(TileCoord::new(0, 0), 4), (TileCoord::new(1, 0), 5)] {
+            state.map.set_kind(pos, TileKind::Station).unwrap();
+            let mut tile = state.map.get(pos).unwrap();
+            tile.m6 = station_type << 3;
+            state.map.set_tile(pos, tile).unwrap();
+        }
+
+        assert_eq!(
+            station_renderer_fallback_counts(&state),
+            BTreeMap::from([(4, 1)])
+        );
     }
 
     #[test]

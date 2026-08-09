@@ -38,6 +38,18 @@ def main() -> None:
     paths.update(PATH_RE.findall(rail_rs))
     # Excluir suelos neutros (sin PALETTE_MODIFIER_COLOUR en upstream).
     paths.discard("road_depot_ground.png")
+    # `DrawShipDepotSprite` usa PALETTE_MODIFIER_COLOUR para las seis capas
+    # vanilla del depósito naval; no están descriptas por una tabla Rust.
+    paths.update(
+        {
+            "ship_depot_se_front.png",
+            "ship_depot_sw_front.png",
+            "ship_depot_nw.png",
+            "ship_depot_ne.png",
+            "ship_depot_se_rear.png",
+            "ship_depot_sw_rear.png",
+        }
+    )
     ordered = sorted(paths)
     lines = [
         "// Generado por scripts/gen_company_palette_paths.py — NO EDITAR A MANO.",

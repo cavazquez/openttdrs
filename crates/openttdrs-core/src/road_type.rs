@@ -1,7 +1,8 @@
 //! Tipos de carretera / tranvía (`RoadType` en `OpenTTD`).
 //!
 //! En teselas `MP_ROAD`:
-//! - tipo de **carretera** en `Tile.m8` bits 0–5 (`GetRoadTypeRoad`);
+//! - tipo de **carretera** en `Tile.m3hi` / `m4()` bits 0–5
+//!   (`GetRoadTypeRoad`);
 //! - tipo de **tranvía** en `Tile.m8` bits 6–11 (`GetRoadTypeTram`);
 //! - trazado de carretera en `m5` bits 0–3;
 //! - trazado de tranvía en `m3` bits 0–3.
@@ -258,8 +259,8 @@ pub fn list_road_types<'a>(
         .collect()
 }
 
-/// Máscara de bits 0–5 de `m8` (tipo de carretera).
-const ROADTYPE_ROAD_M8_MASK: u16 = 0x003F;
+/// Máscara de bits 0–5 de `m4()` / `Tile.m3hi` (tipo de carretera).
+const ROADTYPE_ROAD_M4_MASK: u8 = 0x3F;
 /// Máscara de bits 6–11 de `m8` (tipo de tranvía).
 const ROADTYPE_TRAM_M8_MASK: u16 = 0x0FC0;
 
@@ -269,10 +270,10 @@ pub const fn tram_track_bits(tile: &Tile) -> u8 {
     tile.m3 & 0x0F
 }
 
-/// Tipo de carretera en `m8` bits 0–5.
+/// Tipo de carretera en `m4()` / `m3hi` bits 0–5.
 #[must_use]
 pub fn road_type_from_tile(tile: &Tile) -> RoadType {
-    RoadType::from_u8(u8::try_from(tile.m8 & ROADTYPE_ROAD_M8_MASK).unwrap_or(0))
+    RoadType::from_u8(tile.m3hi & ROADTYPE_ROAD_M4_MASK)
 }
 
 /// Tipo de tranvía en `m8` bits 6–11; `None` si no hay.
@@ -292,10 +293,10 @@ pub fn tile_has_tram_track(tile: &Tile) -> bool {
     tram_track_bits(tile) != 0 || tram_road_type_from_tile(tile).is_some()
 }
 
-/// Escribe el tipo de carretera en `m8` bits 0–5; conserva el resto.
+/// Escribe el tipo de carretera en `m4()` / `m3hi` bits 0–5.
 #[must_use]
 pub fn set_road_type_on_tile(mut tile: Tile, road: RoadType) -> Tile {
-    tile.m8 = (tile.m8 & !ROADTYPE_ROAD_M8_MASK) | u16::from(road.as_u8());
+    tile.m3hi = (tile.m3hi & !ROADTYPE_ROAD_M4_MASK) | road.as_u8();
     tile
 }
 

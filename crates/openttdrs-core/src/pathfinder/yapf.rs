@@ -105,18 +105,6 @@ fn rail_depot_mouth_pf(map: &Map, c: TileCoord) -> Option<u8> {
 }
 
 #[must_use]
-fn single_track_bits(tb: u8) -> Vec<u8> {
-    let mut out = Vec::new();
-    for i in 0..6 {
-        let bit = 1_u8 << i;
-        if tb & bit != 0 {
-            out.push(bit);
-        }
-    }
-    out
-}
-
-#[must_use]
 fn trackdir_valid(tb: u8, track: u8, entry: u8, exit: u8) -> bool {
     if tb & track == 0 {
         return false;
@@ -134,20 +122,46 @@ fn trackdir_valid(tb: u8, track: u8, entry: u8, exit: u8) -> bool {
         && rail_bits_touching_side(pf_exit) & track != 0
 }
 
-#[must_use]
-fn possible_trackdirs(tb: u8, entry: u8) -> Vec<RailTrackdir> {
-    let mut out = Vec::new();
-    for exit in 0..4u8 {
-        for track in single_track_bits(tb) {
-            if trackdir_valid(tb, track, entry, exit) {
-                out.push(RailTrackdir {
-                    track,
-                    exit_dir: exit,
-                });
+/// Iterador sin heap de los trackdirs válidos en una tesela. YAPF lo invoca
+/// por cada nodo expandido; devolver `Vec` aquí dominaba el coste de rutas
+/// largas en partidas importadas.
+struct PossibleTrackdirs {
+    tb: u8,
+    entry: u8,
+    exit: u8,
+    track_bit: u8,
+}
+
+impl Iterator for PossibleTrackdirs {
+    type Item = RailTrackdir;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while self.exit < 4 {
+            while self.track_bit < 6 {
+                let bit = 1_u8 << self.track_bit;
+                self.track_bit += 1;
+                if trackdir_valid(self.tb, bit, self.entry, self.exit) {
+                    return Some(RailTrackdir {
+                        track: bit,
+                        exit_dir: self.exit,
+                    });
+                }
             }
+            self.exit += 1;
+            self.track_bit = 0;
         }
+        None
     }
-    out
+}
+
+#[must_use]
+const fn possible_trackdirs(tb: u8, entry: u8) -> PossibleTrackdirs {
+    PossibleTrackdirs {
+        tb,
+        entry,
+        exit: 0,
+        track_bit: 0,
+    }
 }
 
 #[must_use]
@@ -268,7 +282,6 @@ fn start_states(map: &Map, from: TileCoord) -> Vec<(TileCoord, RailTrackdir)> {
         let mouth = pathfinder_dir_to_yapf(mouth_pf);
         let tb = yapf_traversal_bits(map, from);
         return possible_trackdirs(tb, ENTRY_ANY)
-            .into_iter()
             .filter(|td| td.exit_dir == mouth)
             .map(|td| (from, td))
             .collect();
@@ -289,7 +302,6 @@ fn start_states(map: &Map, from: TileCoord) -> Vec<(TileCoord, RailTrackdir)> {
     }
     let tb = yapf_traversal_bits(map, from);
     possible_trackdirs(tb, ENTRY_ANY)
-        .into_iter()
         .map(|td| (from, td))
         .collect()
 }

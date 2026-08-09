@@ -7,7 +7,8 @@ use crate::sprites::{
     BridgePaletteSprites, HOUSE_DRAW_DATA, INDUSTRY_GFX_DATA, ROAD_DEPOT_GROUND_PATH,
     StationTileClass, house_sprite_filename, rail_depot_build_layers, rail_sprite_ids_for_preload,
     rail_station_draw_layers, rail_station_ground_track_sprite, rail_waypoint_draw_layers,
-    road_depot_build_layers, road_stop_build_layers, signal_sprite_texture_id,
+    road_depot_build_layers, road_stop_build_layers, road_stop_drive_through_layers,
+    signal_sprite_texture_id,
 };
 
 #[derive(Clone, Resource)]
@@ -57,12 +58,18 @@ pub(crate) struct WorldAssets {
     pub(crate) bus_stop_grounds: Vec<AtlasSprite>,
     pub(crate) bus_stop_builds: [[AtlasSprite; 3]; 4],
     pub(crate) truck_stop_builds: [[AtlasSprite; 3]; 4],
+    /// Tiras de señalización de parada pasante: [eje X/Y][lado W/E].
+    pub(crate) bus_stop_drive_through: [[AtlasSprite; 2]; 2],
+    pub(crate) truck_stop_drive_through: [[AtlasSprite; 2]; 2],
     pub(crate) road_depot_ground: AtlasSprite,
     pub(crate) road_depot_builds: [Vec<AtlasSprite>; 4],
     /// Capas del depósito de vía por dirección (`m5 & 3`: NE/SE/SW/NW).
     pub(crate) rail_depot_builds: [Vec<AtlasSprite>; 4],
-    /// Depósito naval por dirección (`m5 & 3`).
-    pub(crate) ship_depot: [AtlasSprite; 4],
+    /// Capas del depósito naval vanilla, en orden de sprite OpenTTD 4070..4075.
+    ///
+    /// Cada depósito ocupa dos teselas: `m5 & 1` selecciona la parte norte/sur
+    /// y `m5 & 2` el eje. La parte sur suma una capa posterior pequeña.
+    pub(crate) ship_depot: [AtlasSprite; 6],
     /// Muelle plano: índice 0 = eje X, 1 = eje Y.
     pub(crate) dock_flat: [AtlasSprite; 2],
     /// Boya (`buoy.png`).
@@ -85,9 +92,16 @@ pub(crate) struct WorldAssets {
     pub(crate) airport_radar: [AtlasSprite; 12],
     /// Esclusa: [NS, EW] × [lower, middle, upper].
     pub(crate) water_lock: [[AtlasSprite; 3]; 2],
-    /// Portales de túnel por dirección diagonal (0=NE … 3=NW).
+    /// Capas traseras de túnel por dirección diagonal (0=NE … 3=NW): suelo.
     pub(crate) road_tunnels: [AtlasSprite; 4],
     pub(crate) rail_tunnels: [AtlasSprite; 4],
+    pub(crate) monorail_tunnels: [AtlasSprite; 4],
+    pub(crate) maglev_tunnels: [AtlasSprite; 4],
+    /// Capas frontales/techo del túnel; OpenTTD las dibuja como sortable.
+    pub(crate) road_tunnel_fronts: [AtlasSprite; 4],
+    pub(crate) rail_tunnel_fronts: [AtlasSprite; 4],
+    pub(crate) monorail_tunnel_fronts: [AtlasSprite; 4],
+    pub(crate) maglev_tunnel_fronts: [AtlasSprite; 4],
     /// Sprites de puente por id OpenGFX (`bridge_{id}.png` o alias madera).
     pub(crate) bridge_by_id: std::collections::HashMap<u32, AtlasSprite>,
     /// Variantes recoloreadas (`PALETTE_TO_STRUCT_*`) fuera del atlas.
@@ -95,7 +109,8 @@ pub(crate) struct WorldAssets {
     pub(crate) houses: HashMap<u32, AtlasSprite>,
     /// `tree_{NN}.png` (NN = sprite − 1576): 19 especies × 7 etapas.
     pub(crate) trees: Vec<AtlasSprite>,
-    /// `field_{estado}_{tileh:02}.png`: índice = estado × 15 + tileh (0..14).
+    /// `field_{estado}_{offset:02}.png`: índice = estado × 19 +
+    /// `SlopeToSpriteOffset` (0..18).
     pub(crate) fields: Vec<AtlasSprite>,
     /// `fence_{tipo}_{var}.png`: índice = tipo (0..5) × 6 + variante (0..5).
     pub(crate) fences: Vec<AtlasSprite>,
@@ -129,7 +144,9 @@ pub(crate) struct WorldAssets {
 fn industry_sprite_atlas_name(id: u32) -> String {
     match id {
         3981 => "grass.png".into(),
-        3982..=3995 => format!("terrain_grass_slope_{:02}.png", id - 3981),
+        3982..=3999 => format!("terrain_grass_slope_{:02}.png", id - 3981),
+        4000 => "terrain_rough.png".into(),
+        4001..=4018 => format!("terrain_rough_slope_{:02}.png", id - 4000),
         _ => format!("industry_{id}.png"),
     }
 }
@@ -149,10 +166,12 @@ impl WorldAssets {
         ];
         let snow = atlas.get("terrain_snow_full.png");
         let bought_land = atlas.get("object_bought_land.png");
-        let grass_slopes = (1u8..=14)
+        // `SlopeToSpriteOffset` puede devolver 15..18 para las cuatro
+        // pendientes empinadas. El vector se indexa por offset - 1.
+        let grass_slopes = (1u8..=18)
             .map(|tileh| atlas.get(&format!("terrain_grass_slope_{tileh:02}.png")))
             .collect();
-        let rough_slopes = (1u8..=14)
+        let rough_slopes = (1u8..=18)
             .map(|tileh| atlas.get(&format!("terrain_rough_slope_{tileh:02}.png")))
             .collect();
         let foundations = (1u8..=14)
@@ -262,6 +281,22 @@ impl WorldAssets {
                 atlas.get_path(road_stop_build_layers(StationTileClass::Truck, dir)[layer].path)
             })
         });
+        let bus_stop_drive_through = std::array::from_fn(|axis| {
+            std::array::from_fn(|layer| {
+                atlas.get_path(
+                    road_stop_drive_through_layers(StationTileClass::Bus, 4 + axis as u8)[layer]
+                        .path,
+                )
+            })
+        });
+        let truck_stop_drive_through = std::array::from_fn(|axis| {
+            std::array::from_fn(|layer| {
+                atlas.get_path(
+                    road_stop_drive_through_layers(StationTileClass::Truck, 4 + axis as u8)[layer]
+                        .path,
+                )
+            })
+        });
         let road_depot_ground = atlas.get_path(ROAD_DEPOT_GROUND_PATH);
         let road_depot_builds = std::array::from_fn(|dir| {
             road_depot_build_layers(dir)
@@ -276,10 +311,12 @@ impl WorldAssets {
                 .collect()
         });
         let ship_depot = [
-            atlas.get("ship_depot_ne.png"),
             atlas.get("ship_depot_se_front.png"),
             atlas.get("ship_depot_sw_front.png"),
             atlas.get("ship_depot_nw.png"),
+            atlas.get("ship_depot_ne.png"),
+            atlas.get("ship_depot_se_rear.png"),
+            atlas.get("ship_depot_sw_rear.png"),
         ];
         let dock_flat = [atlas.get("dock_flat_x.png"), atlas.get("dock_flat_y.png")];
         let buoy = atlas.get("buoy.png");
@@ -342,7 +379,10 @@ impl WorldAssets {
                 water_lock_sprite(lock_names[5]),
             ],
         ];
-        use crate::sprites::{tunnel_rear_atlas_name, tunnel_rear_legacy_atlas_name};
+        use crate::sprites::{
+            rail_tunnel_front_atlas_name, rail_tunnel_rear_atlas_name, tunnel_front_atlas_name,
+            tunnel_rear_atlas_name, tunnel_rear_legacy_atlas_name,
+        };
         let road_tunnels = std::array::from_fn(|dir| {
             atlas
                 .try_get(&tunnel_rear_atlas_name(false, dir as u8))
@@ -361,9 +401,61 @@ impl WorldAssets {
                     atlas.get("grass.png")
                 })
         });
+        let monorail_tunnels = std::array::from_fn(|dir| {
+            atlas
+                .try_get(&rail_tunnel_rear_atlas_name(
+                    openttdrs_core::RailType::Monorail,
+                    dir as u8,
+                ))
+                // Compatibilidad con atlas generados antes de los cuatro portales mono.
+                .or_else(|| atlas.try_get("tunnel_mono_rear.png"))
+                .unwrap_or_else(|| rail_tunnels[dir].clone())
+        });
+        let maglev_tunnels = std::array::from_fn(|dir| {
+            atlas
+                .try_get(&rail_tunnel_rear_atlas_name(
+                    openttdrs_core::RailType::Maglev,
+                    dir as u8,
+                ))
+                // Compatibilidad con atlas generados antes de los cuatro portales maglev.
+                .or_else(|| atlas.try_get("tunnel_mglv_rear.png"))
+                .unwrap_or_else(|| rail_tunnels[dir].clone())
+        });
+        let road_tunnel_fronts = std::array::from_fn(|dir| {
+            atlas
+                .try_get(&tunnel_front_atlas_name(false, dir as u8))
+                .unwrap_or_else(|| {
+                    error!("Sprite frontal de túnel carretera dir {dir} no encontrado");
+                    road_tunnels[dir].clone()
+                })
+        });
+        let rail_tunnel_fronts = std::array::from_fn(|dir| {
+            atlas
+                .try_get(&tunnel_front_atlas_name(true, dir as u8))
+                .unwrap_or_else(|| {
+                    error!("Sprite frontal de túnel ferrocarril dir {dir} no encontrado");
+                    rail_tunnels[dir].clone()
+                })
+        });
+        let monorail_tunnel_fronts = std::array::from_fn(|dir| {
+            atlas
+                .try_get(&rail_tunnel_front_atlas_name(
+                    openttdrs_core::RailType::Monorail,
+                    dir as u8,
+                ))
+                .unwrap_or_else(|| rail_tunnel_fronts[dir].clone())
+        });
+        let maglev_tunnel_fronts = std::array::from_fn(|dir| {
+            atlas
+                .try_get(&rail_tunnel_front_atlas_name(
+                    openttdrs_core::RailType::Maglev,
+                    dir as u8,
+                ))
+                .unwrap_or_else(|| rail_tunnel_fronts[dir].clone())
+        });
         let mut bridge_by_id = std::collections::HashMap::new();
-        use crate::sprites::{BridgeDeckSpriteIds, bridge_deck_sprite_ids};
-        use openttdrs_core::{BridgePiece, BridgeType};
+        use crate::sprites::{BridgeDeckSpriteIds, bridge_deck_sprite_ids, bridge_ramp_sprite_id};
+        use openttdrs_core::{BridgePiece, BridgeType, RailType};
         for bt in 0..13u8 {
             let Some(bridge_type) = BridgeType::from_u8(bt) else {
                 continue;
@@ -382,6 +474,8 @@ impl WorldAssets {
                     .rear_rail
                     .iter()
                     .chain(ids.rear_road.iter())
+                    .chain(ids.rear_mono.iter())
+                    .chain(ids.rear_maglev.iter())
                     .chain(ids.front.iter())
                     .chain(ids.pillar.iter())
                     .copied()
@@ -394,6 +488,33 @@ impl WorldAssets {
                             atlas.get("bridge_wood_road_x.png")
                         })
                     });
+                }
+            }
+            for rail in [false, true] {
+                for rail_type in [
+                    RailType::Rail,
+                    RailType::Electric,
+                    RailType::Monorail,
+                    RailType::Maglev,
+                ] {
+                    if !rail && rail_type != RailType::Rail {
+                        continue;
+                    }
+                    for tileh in [0, 1] {
+                        for dir in 0..4 {
+                            let sid =
+                                bridge_ramp_sprite_id(bridge_type, rail, rail_type, tileh, dir);
+                            bridge_by_id.entry(sid).or_insert_with(|| {
+                                let name = BridgeDeckSpriteIds::atlas_name(sid);
+                                atlas.try_get(&name).unwrap_or_else(|| {
+                                    error!(
+                                        "Sprite de rampa de puente no encontrado en atlas: {name}"
+                                    );
+                                    atlas.get("bridge_wood_road_x.png")
+                                })
+                            });
+                        }
+                    }
                 }
             }
         }
@@ -412,10 +533,10 @@ impl WorldAssets {
         let trees = (0..crate::sprites::TREE_SPRITE_COUNT)
             .map(|i| atlas.get(&format!("tree_{i:02}.png")))
             .collect();
-        let mut fields = Vec::with_capacity(crate::sprites::FIELD_STATES * 15);
+        let mut fields = Vec::with_capacity(crate::sprites::FIELD_STATES * 19);
         for state in 0..crate::sprites::FIELD_STATES {
-            for tileh in 0..15 {
-                fields.push(atlas.get(&format!("field_{state}_{tileh:02}.png")));
+            for offset in 0..19 {
+                fields.push(atlas.get(&format!("field_{state}_{offset:02}.png")));
             }
         }
         let mut fences = Vec::with_capacity(36);
@@ -526,6 +647,8 @@ impl WorldAssets {
             bus_stop_grounds,
             bus_stop_builds,
             truck_stop_builds,
+            bus_stop_drive_through,
+            truck_stop_drive_through,
             road_depot_ground,
             road_depot_builds,
             rail_depot_builds,
@@ -548,6 +671,12 @@ impl WorldAssets {
             water_lock,
             road_tunnels,
             rail_tunnels,
+            monorail_tunnels,
+            maglev_tunnels,
+            road_tunnel_fronts,
+            rail_tunnel_fronts,
+            monorail_tunnel_fronts,
+            maglev_tunnel_fronts,
             bridge_by_id,
             bridge_palettes,
             houses,
@@ -616,6 +745,50 @@ impl WorldAssets {
             &self.road_tunnels[d]
         }
     }
+
+    #[must_use]
+    pub(crate) fn rail_tunnel_portal_sprite(
+        &self,
+        rail_type: openttdrs_core::RailType,
+        dir: u8,
+    ) -> &AtlasSprite {
+        let d = dir as usize & 3;
+        match rail_type {
+            openttdrs_core::RailType::Monorail => &self.monorail_tunnels[d],
+            openttdrs_core::RailType::Maglev => &self.maglev_tunnels[d],
+            openttdrs_core::RailType::Rail | openttdrs_core::RailType::Electric => {
+                &self.rail_tunnels[d]
+            }
+        }
+    }
+
+    /// Capa frontal/techo de un túnel de carretera.
+    #[must_use]
+    pub(crate) fn tunnel_portal_front_sprite(&self, rail: bool, dir: u8) -> &AtlasSprite {
+        let d = dir as usize & 3;
+        if rail {
+            &self.rail_tunnel_fronts[d]
+        } else {
+            &self.road_tunnel_fronts[d]
+        }
+    }
+
+    /// Capa frontal/techo de un túnel de ferrocarril tipado.
+    #[must_use]
+    pub(crate) fn rail_tunnel_portal_front_sprite(
+        &self,
+        rail_type: openttdrs_core::RailType,
+        dir: u8,
+    ) -> &AtlasSprite {
+        let d = dir as usize & 3;
+        match rail_type {
+            openttdrs_core::RailType::Monorail => &self.monorail_tunnel_fronts[d],
+            openttdrs_core::RailType::Maglev => &self.maglev_tunnel_fronts[d],
+            openttdrs_core::RailType::Rail | openttdrs_core::RailType::Electric => {
+                &self.rail_tunnel_fronts[d]
+            }
+        }
+    }
 }
 
 /// Escribe stubs de las páginas del atlas (1 px); la tabla de rects es
@@ -648,6 +821,7 @@ mod world_assets_tests {
     use bevy::prelude::*;
 
     use super::{TileAtlas, WorldAssets, stub_opengfx_tiles_for_tests};
+    use openttdrs_core::RailType;
 
     #[test]
     fn world_assets_load_hits_all_paths() {
@@ -680,5 +854,17 @@ mod world_assets_tests {
                 .unwrap_or_else(|| panic!("faltan frames de fuego para {id}"));
             assert_eq!(frames.len(), 7, "sprite {id}");
         }
+        assert_eq!(
+            assets.rail_tunnel_portal_sprite(RailType::Monorail, 2),
+            &atlas.get("tunnel_mono_rear_sw.png")
+        );
+        assert_eq!(
+            assets.rail_tunnel_portal_sprite(RailType::Maglev, 3),
+            &atlas.get("tunnel_mglv_rear_nw.png")
+        );
+        assert_eq!(
+            assets.rail_tunnel_portal_front_sprite(RailType::Monorail, 2),
+            &atlas.get("tunnel_mono_front_sw.png")
+        );
     }
 }

@@ -31,9 +31,23 @@ pub struct TickPhaseTimings {
     pub tile_animation_ns: u64,
     pub tile_loop_ns: u64,
     pub path_recompute_ns: u64,
+    /// Subfase: actualizar los destinos a partir de órdenes.
+    pub path_order_sync_ns: u64,
+    /// Subfase: adjudicar andenes y rutear trenes de estación.
+    pub path_station_route_ns: u64,
+    /// Subfase: rutas de vehículos que no pasaron por la adjudicación de andén.
+    pub path_generic_route_ns: u64,
     pub vehicle_ops_pre_move_ns: u64,
     pub cargo_transfer_ns: u64,
     pub movement_ns: u64,
+    /// Subfase de avance de vehículos dentro de `movement`.
+    pub vehicle_move_ns: u64,
+    /// Subfase de detección/resolución de choques de tren dentro de `movement`.
+    pub train_collision_ns: u64,
+    /// Subfase de timers/eliminación de vehículos estrellados dentro de `movement`.
+    pub crashed_vehicle_ns: u64,
+    /// Subfase PBS posterior al movimiento dentro de `movement`.
+    pub pbs_post_move_ns: u64,
     pub landscape_ns: u64,
     pub post_tick_ns: u64,
     pub total_ns: u64,
@@ -60,9 +74,16 @@ impl TickPhaseTimings {
         self.tile_animation_ns += other.tile_animation_ns;
         self.tile_loop_ns += other.tile_loop_ns;
         self.path_recompute_ns += other.path_recompute_ns;
+        self.path_order_sync_ns += other.path_order_sync_ns;
+        self.path_station_route_ns += other.path_station_route_ns;
+        self.path_generic_route_ns += other.path_generic_route_ns;
         self.vehicle_ops_pre_move_ns += other.vehicle_ops_pre_move_ns;
         self.cargo_transfer_ns += other.cargo_transfer_ns;
         self.movement_ns += other.movement_ns;
+        self.vehicle_move_ns += other.vehicle_move_ns;
+        self.train_collision_ns += other.train_collision_ns;
+        self.crashed_vehicle_ns += other.crashed_vehicle_ns;
+        self.pbs_post_move_ns += other.pbs_post_move_ns;
         self.landscape_ns += other.landscape_ns;
         self.post_tick_ns += other.post_tick_ns;
         self.total_ns += other.total_ns;
@@ -79,9 +100,16 @@ impl TickPhaseTimings {
             tile_animation_ns: self.tile_animation_ns / n,
             tile_loop_ns: self.tile_loop_ns / n,
             path_recompute_ns: self.path_recompute_ns / n,
+            path_order_sync_ns: self.path_order_sync_ns / n,
+            path_station_route_ns: self.path_station_route_ns / n,
+            path_generic_route_ns: self.path_generic_route_ns / n,
             vehicle_ops_pre_move_ns: self.vehicle_ops_pre_move_ns / n,
             cargo_transfer_ns: self.cargo_transfer_ns / n,
             movement_ns: self.movement_ns / n,
+            vehicle_move_ns: self.vehicle_move_ns / n,
+            train_collision_ns: self.train_collision_ns / n,
+            crashed_vehicle_ns: self.crashed_vehicle_ns / n,
+            pbs_post_move_ns: self.pbs_post_move_ns / n,
             landscape_ns: self.landscape_ns / n,
             post_tick_ns: self.post_tick_ns / n,
             total_ns: self.total_ns / n,
@@ -96,7 +124,7 @@ pub(crate) fn step(state: &mut GameState) {
     state
         .runtime
         .terminal_spatial_index
-        .rebuild(&state.stations);
+        .rebuild(&state.map, &state.stations);
     state.tick.advance();
     state.advance_game_timers();
     let t = state.tick.get();
@@ -137,7 +165,7 @@ pub fn step_profiled(state: &mut GameState) -> TickPhaseTimings {
     state
         .runtime
         .terminal_spatial_index
-        .rebuild(&state.stations);
+        .rebuild(&state.map, &state.stations);
     state.tick.advance();
     state.advance_game_timers();
     let t = state.tick.get();
@@ -155,8 +183,11 @@ pub fn step_profiled(state: &mut GameState) -> TickPhaseTimings {
     timings.tile_loop_ns = nanos(p0);
 
     let p0 = Instant::now();
-    phase_path_recompute(state);
+    let routing = routing::recompute_vehicle_paths_profiled(state);
     timings.path_recompute_ns = nanos(p0);
+    timings.path_order_sync_ns = routing.order_sync_ns;
+    timings.path_station_route_ns = routing.station_route_ns;
+    timings.path_generic_route_ns = routing.generic_route_ns;
 
     let p0 = Instant::now();
     let mut loaded_this_tick = vec![false; state.vehicles.len()];
@@ -174,7 +205,18 @@ pub fn step_profiled(state: &mut GameState) -> TickPhaseTimings {
     timings.vehicle_ops_pre_move_ns = nanos(p0);
 
     let p0 = Instant::now();
-    phase_movement(state);
+    let vehicle_move = Instant::now();
+    movement::move_vehicles(state);
+    timings.vehicle_move_ns = nanos(vehicle_move);
+    let collisions = Instant::now();
+    crate::train_collision::resolve_train_collisions(state);
+    timings.train_collision_ns = nanos(collisions);
+    let crashed = Instant::now();
+    crate::ground_crash::tick_crashed_vehicles(state);
+    timings.crashed_vehicle_ns = nanos(crashed);
+    let pbs = Instant::now();
+    phase_pbs_reservations(state);
+    timings.pbs_post_move_ns = nanos(pbs);
     timings.movement_ns = nanos(p0);
 
     let p0 = Instant::now();
@@ -275,13 +317,6 @@ fn phase_tile_loop(state: &mut GameState, t: u64) {
 fn phase_path_recompute(state: &mut GameState) {
     crate::parity::release_staged_depot_trains(state);
     routing::recompute_vehicle_paths(state);
-
-    state.runtime.signal_tile_dirty.clear();
-    crate::rail_signals::enqueue_trains_for_signal_update(
-        &mut state.runtime.signal_globset,
-        &state.vehicles,
-    );
-    routing::drain_signal_globset_now(state);
 }
 
 /// Horarios, autoreemplazo, extensión de rutas, fases de aeronaves (antes del movimiento).
@@ -303,7 +338,8 @@ fn phase_pbs_reservations(state: &mut GameState) {
     } else {
         Some(&wormholes_pbs)
     };
-    crate::rail_pbs::update_train_reservations_with_wormholes(
+    let dirty_before = state.runtime.reservation_tile_dirty.len();
+    crate::rail_pbs::update_train_reservations_incremental_with_wormholes(
         &state.map,
         &mut state.vehicles,
         state.pathfinding,
@@ -315,11 +351,13 @@ fn phase_pbs_reservations(state: &mut GameState) {
         &mut state.runtime.reservation_tiles_active,
         &mut state.runtime.reservation_tile_dirty,
     );
-    crate::rail_signals::enqueue_pbs_reservations_for_signal_update(
-        &mut state.runtime.signal_globset,
-        &state.vehicles,
-    );
-    routing::drain_signal_globset_now(state);
+    if state.runtime.reservation_tile_dirty.len() > dirty_before {
+        crate::rail_signals::enqueue_pbs_reservations_for_signal_update(
+            &mut state.runtime.signal_globset,
+            &state.vehicles,
+        );
+        routing::drain_signal_globset_now(state);
+    }
 }
 
 /// Movimiento de vehículos, colisiones y PBS post-move.
@@ -335,11 +373,11 @@ fn phase_movement(state: &mut GameState) {
 fn phase_post_tick(state: &mut GameState) {
     vehicle_ops::apply_pending_depot_order_refits(state);
 
+    // También cubre cambios externos de la flota (tests, red, carga) que no
+    // pasan por el movimiento y por lo tanto no encolan su tesela anterior.
+    // Las reservas PBS sí se actualizan sólo al cambiar para evitar barrerlas
+    // completas cada tick.
     crate::rail_signals::enqueue_trains_for_signal_update(
-        &mut state.runtime.signal_globset,
-        &state.vehicles,
-    );
-    crate::rail_signals::enqueue_pbs_reservations_for_signal_update(
         &mut state.runtime.signal_globset,
         &state.vehicles,
     );

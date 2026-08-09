@@ -457,6 +457,8 @@ mod tests {
         assert!(paths.iter().any(|p| p.starts_with("truck_stop_")));
         assert!(paths.iter().any(|p| p.starts_with("road_depot_")));
         assert!(paths.iter().any(|p| p.starts_with("rail_depot_")));
+        assert!(paths.iter().any(|p| p == "ship_depot_ne.png"));
+        assert!(paths.iter().any(|p| p == "ship_depot_sw_front.png"));
         assert!(paths.iter().any(|p| p == "object_statue_company.png"));
     }
 }

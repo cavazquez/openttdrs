@@ -226,6 +226,7 @@ pub(crate) fn handle_save_window_buttons(
                         &mut sim,
                         &mut vehicle_index,
                         &mut remap,
+                        &mut commands,
                     ) && from_main_menu
                     {
                         loaded_from_menu = true;
@@ -302,6 +303,7 @@ fn confirm_load(
     sim: &mut SimWorld,
     vehicle_index: &mut VehicleIndex,
     remap: &mut RemapMapVisualsPending,
+    commands: &mut Commands,
 ) -> bool {
     let Some(idx) = state.selected else {
         state.status = "Elegí una partida para cargar.".into();
@@ -336,7 +338,7 @@ fn confirm_load(
             }
         },
     };
-    apply_loaded_state(sim, vehicle_index, remap, loaded);
+    apply_loaded_state(sim, vehicle_index, remap, commands, loaded);
     hud.json_save_path = entry.path.to_string_lossy().to_string();
     info!("Partida cargada desde {}", entry.path.display());
     state.close();

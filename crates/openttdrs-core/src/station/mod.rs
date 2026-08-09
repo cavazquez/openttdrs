@@ -38,8 +38,9 @@ pub use goods_entry::{GoodsEntry, INITIAL_STATION_RATING, STATION_RATING_MAX_STE
 pub use model::{CargoTimeSincePickup, Station, StopKind};
 pub use move_goods::{can_move_goods_to_station, move_goods_to_station, update_station_waiting};
 pub use tile_encoding::{
-    STATION_TILE_PYLONS, STATION_TILE_WIRES, STATION_TYPE_BUOY, STATION_TYPE_RAIL_WAYPOINT,
-    STATION_TYPE_ROAD_WAYPOINT, default_station_catenary_flags, is_rail_waypoint_at,
-    is_rail_waypoint_tile, station_tile_can_have_pylons, station_tile_can_have_wires,
-    station_type_from_m6, stop_kind_from_m6,
+    STATION_TILE_PYLONS, STATION_TILE_WIRES, STATION_TYPE_BUOY, STATION_TYPE_DOCK,
+    STATION_TYPE_OILRIG, STATION_TYPE_RAIL_WAYPOINT, STATION_TYPE_ROAD_WAYPOINT,
+    default_station_catenary_flags, is_rail_waypoint_at, is_rail_waypoint_tile,
+    station_tile_can_have_pylons, station_tile_can_have_wires, station_type_from_m6,
+    stop_kind_from_m6,
 };

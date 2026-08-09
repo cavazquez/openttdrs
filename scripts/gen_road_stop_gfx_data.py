@@ -19,8 +19,21 @@ except ImportError:
 DIRS = ("ne", "se", "sw", "nw")
 TRUCK_DATAS = (67, 68, 69, 70)
 BUS_DATAS = (71, 72, 73, 74)
+DRIVE_THROUGH_TRUCK_DATAS = (168, 169)
+DRIVE_THROUGH_BUS_DATAS = (170, 171)
 SPRITE_ID_MIN = 2692
 SPRITE_ID_MAX = 2723
+
+# Action5 0x11: bus Y_W/Y_E/X_W/X_E, seguido de truck Y_W/Y_E/X_W/X_E.
+DRIVE_THROUGH_NAMES = {
+    "bus": ("bus_stop_dt_y_w.png", "bus_stop_dt_y_e.png", "bus_stop_dt_x_w.png", "bus_stop_dt_x_e.png"),
+    "truck": (
+        "truck_stop_dt_y_w.png",
+        "truck_stop_dt_y_e.png",
+        "truck_stop_dt_x_w.png",
+        "truck_stop_dt_x_e.png",
+    ),
+}
 
 NfoEntry = tuple[str, int, int, int, int]  # bpp, nw, nh, x_offs, y_offs
 
@@ -43,12 +56,24 @@ def parse_tile_seq_blocks(path: Path) -> dict[int, list[tuple[int, int, int, int
     return out
 
 
-def find_nfo_files(repo: Path) -> list[Path]:
-    out: list[Path] = []
-    for root in (repo / "assets" / "opengfx", repo / ".downloads" / "openttd"):
-        if root.is_dir():
-            out.extend(root.rglob("*.nfo"))
-    return out
+def find_nfo_files(repo: Path, mode: str | None) -> list[Path]:
+    """NFO del set gráfico activo, sin mezclar IDs repetidos de side-caches."""
+    root = repo / "assets" / "opengfx"
+    if mode == "32bpp":
+        patterns = (
+            "opengfx2-*/sprites/ogfx21_base_32ez.nfo",
+            "opengfx2-*/sprites/ogfx2e_extra_32ez.nfo",
+        )
+    else:
+        patterns = (
+            "opengfx-*/sprites/ogfx1_base.nfo",
+            "opengfx-*/sprites/ogfxe_extra.nfo",
+        )
+    out = [p for pattern in patterns for p in sorted(root.glob(pattern)) if p.is_file()]
+    if out:
+        return out
+    # Diagnóstico/local sin set activo completo.
+    return sorted(root.rglob("*.nfo"))
 
 
 def detect_graphics_mode(repo: Path) -> str | None:
@@ -66,14 +91,14 @@ def detect_graphics_mode(repo: Path) -> str | None:
     return None
 
 
-def parse_sprite_offs(repo: Path) -> dict[int, list[NfoEntry]]:
+def parse_sprite_offs(repo: Path, mode: str | None) -> dict[int, list[NfoEntry]]:
     """Todas las filas 8bpp/32bpp por sprite ID (puede haber más de una por ID)."""
     pat = re.compile(
         r"^\s*(\d+)\s+\S+\s+(8bpp|32bpp)\s+"
         r"\d+\s+\d+\s+(\d+)\s+(\d+)\s+(-?\d+)\s+(-?\d+)"
     )
     out: dict[int, list[NfoEntry]] = {}
-    for nfo in find_nfo_files(repo):
+    for nfo in find_nfo_files(repo, mode):
         try:
             content = nfo.read_text(encoding="utf-8", errors="replace")
         except OSError:
@@ -83,8 +108,6 @@ def parse_sprite_offs(repo: Path) -> dict[int, list[NfoEntry]]:
             if not m:
                 continue
             sid = int(m.group(1))
-            if not SPRITE_ID_MIN <= sid <= SPRITE_ID_MAX:
-                continue
             entry: NfoEntry = (
                 m.group(2),
                 int(m.group(3)),
@@ -96,6 +119,86 @@ def parse_sprite_offs(repo: Path) -> dict[int, list[NfoEntry]]:
             if entry not in bucket:
                 bucket.append(entry)
     return out
+
+
+def roadstop_action5_sprite_ids(repo: Path, mode: str | None) -> tuple[Path, tuple[int, ...]] | None:
+    """Localiza las ocho imágenes reales inmediatamente anteriores a Action5 0x11.
+
+    OpenGFX conserva estos sprites en ``ogfxe_extra`` (no en el GRF base), por
+    lo que no los puede extraer ``descargar_graficos.sh`` con su tabla base.
+    """
+    root = repo / "assets" / "opengfx"
+    candidates: list[Path] = []
+    if mode == "32bpp":
+        candidates.extend(root.glob("opengfx2-*/sprites/ogfx2e_extra_32ez.nfo"))
+    else:
+        candidates.extend(root.glob("opengfx-*/sprites/ogfxe_extra.nfo"))
+    # Sirve también si solo quedó instalado el side-cache 8bpp.
+    candidates.extend(root.glob(".signal-src-8bpp/sprites/ogfxe_extra.nfo"))
+
+    action = re.compile(r"^\s*\d+\s+\*\s+5\s+05\s+11\s+FF\s+08\s+00\s*$")
+    real = re.compile(r"^\s*(\d+)\s+\S+\s+(?:8bpp|32bpp)\s+")
+    for nfo in candidates:
+        if not nfo.is_file():
+            continue
+        last_ids: list[int] = []
+        for line in nfo.read_text(encoding="utf-8", errors="replace").splitlines():
+            m = real.match(line)
+            if m:
+                sid = int(m.group(1))
+                if not last_ids or last_ids[-1] != sid:
+                    last_ids.append(sid)
+            if action.match(line) and len(last_ids) >= 8:
+                return nfo, tuple(last_ids[-8:])
+    return None
+
+
+def extract_drive_through_tiles(
+    tiles_dir: Path, nfo_path: Path, sprite_ids: tuple[int, ...]
+) -> None:
+    """Recorta los ocho sprites Action5 de paradas drive-through."""
+    if Image is None:
+        return
+    row = re.compile(
+        r"^\s*(\d+)\s+(\S+)\s+(8bpp|32bpp)\s+"
+        r"(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(-?\d+)\s+(-?\d+)"
+    )
+    sources: dict[int, tuple[Path, int, int, int, int]] = {}
+    # El renderer usa las hojas base 8bpp aun en OpenGFX2: mantiene el tamaño
+    # isométrico de 64×31 del resto de los tiles y evita coordenadas zi4.
+    for line in nfo_path.read_text(encoding="utf-8", errors="replace").splitlines():
+        m = row.match(line)
+        if not m:
+            continue
+        sid = int(m.group(1))
+        if sid not in sprite_ids or m.group(3) != "8bpp" or sid in sources:
+            continue
+        sources[sid] = (
+            nfo_path.parent / Path(m.group(2)).name,
+            int(m.group(4)),
+            int(m.group(5)),
+            int(m.group(6)),
+            int(m.group(7)),
+        )
+
+    names = (*DRIVE_THROUGH_NAMES["bus"], *DRIVE_THROUGH_NAMES["truck"])
+    for sid, name in zip(sprite_ids, names, strict=True):
+        source = sources.get(sid)
+        if source is None or not source[0].is_file():
+            print(f"  (omitido {name}: sprite Action5 {sid} sin hoja 8bpp)", file=sys.stderr)
+            continue
+        sheet, x, y, w, h = source
+        with Image.open(sheet) as image:
+            crop = image.crop((x, y, x + w, y + h)).convert("RGBA")
+        # El GRF extra usa azul puro como índice transparente en estas tiras;
+        # a diferencia de las hojas base, ese índice no llega marcado como
+        # alpha en el PNG de grfcodec.
+        pixels = crop.get_flattened_data()
+        crop.putdata(
+            [(0, 0, 0, 0) if pixel[:3] == (0, 0, 255) else pixel for pixel in pixels]
+        )
+        crop.save(tiles_dir / name)
+        print(f"  {name} ({w}×{h}) ← Action5 roadstop {sid} [{sheet.name}]")
 
 
 def png_size(tiles_dir: Path, name: str) -> tuple[int, int] | None:
@@ -226,6 +329,39 @@ def write_layers(
     return lines
 
 
+def write_drive_through_layers(
+    blocks: dict[int, list[tuple[int, int, int, int, int, int]]],
+    datas: tuple[int, int],
+    prefix: str,
+    sprite_ids: tuple[int, ...],
+    tiles_dir: Path,
+    nfo: dict[int, list[NfoEntry]],
+    prefer_bpp: str | None,
+) -> list[str]:
+    """Genera X/Y × W/E para las dos tiras que forman una parada pasante."""
+    # Action5 enumera Y antes de X; el cliente indexa [X, Y].
+    ids_by_axis = ((sprite_ids[2], sprite_ids[3]), (sprite_ids[0], sprite_ids[1]))
+    names = DRIVE_THROUGH_NAMES[prefix]
+    names_by_axis = ((names[2], names[3]), (names[0], names[1]))
+    flat: list[str] = []
+    for axis_i, data_id in enumerate(datas):
+        seq = blocks.get(data_id, [])[:2]
+        for layer_i, (dx, dy, dz, sx, _sy, sz) in enumerate(seq):
+            png = names_by_axis[axis_i][layer_i]
+            sid = ids_by_axis[axis_i][layer_i]
+            wh = png_size(tiles_dir, png)
+            w, h, xo, yo, _note = pick_sprite_meta(nfo.get(sid, []), wh, prefer_bpp)
+            if w <= 0.0 or h <= 0.0:
+                w, h = (float(sx * 2), float(sz * 2)) if wh is None else (float(wh[0]), float(wh[1]))
+            flat.append(
+                f"        RoadStopLayerGfx {{ dx: {dx}.0, dy: {dy}.0, dz: {dz}.0, "
+                f"z: {0.05 + layer_i * 0.01:.2f}, w: {w:.1f}, h: {h:.1f}, "
+                f"x_offs: {xo:.1f}, y_offs: {yo:.1f}, remap_x_adj: 0.0, "
+                f'path: "assets/opengfx/tiles/{png}" }},'
+            )
+    return flat
+
+
 def main() -> int:
     repo = Path(__file__).resolve().parents[1]
     upstream = repo / "third_party" / "openttd" / "station_land.h"
@@ -237,17 +373,54 @@ def main() -> int:
 
     blocks = parse_tile_seq_blocks(upstream)
     tiles_dir = repo / "assets" / "opengfx" / "tiles"
-    nfo = parse_sprite_offs(repo)
     prefer_bpp = detect_graphics_mode(repo)
+    action5 = roadstop_action5_sprite_ids(repo, prefer_bpp)
+    if action5 is None:
+        print("No encontré Action5 0x11 de roadstops; se omiten sprites drive-through.", file=sys.stderr)
+        # Mantiene el archivo Rust válido para inspecciones sin assets, pero la
+        # descarga normal siempre encontrará el set extra.
+        dt_sprite_ids = (0,) * 8
+    else:
+        action5_nfo, dt_sprite_ids = action5
+        extract_drive_through_tiles(tiles_dir, action5_nfo, dt_sprite_ids)
+
+    nfo = parse_sprite_offs(repo, prefer_bpp)
 
     bus_flat = write_layers(blocks, BUS_DATAS, "bus_stop", True, tiles_dir, nfo, prefer_bpp)
     truck_flat = write_layers(blocks, TRUCK_DATAS, "truck_stop", False, tiles_dir, nfo, prefer_bpp)
+    bus_drive_through = write_drive_through_layers(
+        blocks,
+        DRIVE_THROUGH_BUS_DATAS,
+        "bus",
+        dt_sprite_ids[:4],
+        tiles_dir,
+        nfo,
+        prefer_bpp,
+    )
+    truck_drive_through = write_drive_through_layers(
+        blocks,
+        DRIVE_THROUGH_TRUCK_DATAS,
+        "truck",
+        dt_sprite_ids[4:],
+        tiles_dir,
+        nfo,
+        prefer_bpp,
+    )
 
     def block(name: str, flat: list[str]) -> list[str]:
         rows = [f"pub const {name}: [[RoadStopLayerGfx; 3]; 4] = ["]
         for i in range(4):
             rows.append(f"    [ // {DIRS[i].upper()}")
             rows.extend(flat[i * 3 : (i + 1) * 3])
+            rows.append("    ],")
+        rows.append("];")
+        return rows
+
+    def drive_through_block(name: str, flat: list[str]) -> list[str]:
+        rows = [f"pub const {name}: [[RoadStopLayerGfx; 2]; 2] = ["]
+        for i, axis in enumerate(("X", "Y")):
+            rows.append(f"    [ // {axis}")
+            rows.extend(flat[i * 2 : (i + 1) * 2])
             rows.append("    ],")
         rows.append("];")
         return rows
@@ -262,7 +435,7 @@ def main() -> int:
     )
     lines = [
         "// @generated by scripts/gen_road_stop_gfx_data.py — no editar a mano.",
-        "// Fuente: OpenTTD station_land.h (_station_display_datas_67..74) + PNG/NFO.",
+        "// Fuente: OpenTTD station_land.h (_station_display_datas_67..74, 168..171) + PNG/NFO.",
         "// remap_x_adj: corrección fina por capa (±1 unidad TILE_SEQ ≈ 4 px); 0 = solo RemapCoords+NFO.",
         mode_comment,
         "",
@@ -283,6 +456,10 @@ def main() -> int:
         *block("BUS_STOP_BUILD_LAYERS", bus_flat),
         "",
         *block("TRUCK_STOP_BUILD_LAYERS", truck_flat),
+        "",
+        *drive_through_block("BUS_STOP_DRIVE_THROUGH_LAYERS", bus_drive_through),
+        "",
+        *drive_through_block("TRUCK_STOP_DRIVE_THROUGH_LAYERS", truck_drive_through),
         "",
     ]
     out_path.write_text("\n".join(lines), encoding="utf-8")

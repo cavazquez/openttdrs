@@ -562,6 +562,11 @@ mod tests {
         assert_eq!(m5_at(1), 0x11, "Coast (bits bajos preservados)");
         assert_eq!(m5_at(2), 0x22, "Lock");
         assert_eq!(m5_at(3), 0x31, "Depot");
+        assert_eq!(
+            map.get_kind(crate::TileCoord::new(3, 0)),
+            Some(crate::TileKind::ShipDepot),
+            "el WaterTileType::Depot importado conserva su semántica"
+        );
 
         // Con version ≥ 342 el m5 se respeta tal cual.
         let chunks_new = vec![

@@ -1,5 +1,5 @@
-name: Rust toolchain + caché + deps Linux
-description: Rust 1.97, rust-cache compartido y paquetes APT para Bevy (X11/Wayland/Vulkan/ALSA)
+name: Rust toolchain + cachés + deps Linux
+description: Rust 1.97, sccache + rust-cache compartidos y paquetes APT para Bevy (X11/Wayland/Vulkan/ALSA)
 inputs:
   components:
     description: Componentes rustup (p. ej. rustfmt, clippy)
@@ -21,6 +21,9 @@ runs:
       with:
         toolchain: 1.97.1
         components: ${{ inputs.components }}
+
+    - name: Caché de compilación sccache
+      uses: ./.github/composite/sccache
 
     - name: caché cargo
       uses: Swatinem/rust-cache@v2.9.1

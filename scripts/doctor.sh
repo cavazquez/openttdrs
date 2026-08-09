@@ -101,6 +101,13 @@ check_rust() {
     soft "cargo-nextest opcional (CI lo usa; check.sh cae a cargo test)"
     suggest "cargo install cargo-nextest --locked"
   fi
+
+  if have_cmd sccache; then
+    pass "sccache $(sccache --version 2>/dev/null | awk '{print $2}') (check.sh lo activa)"
+  else
+    soft "sccache opcional (acelera check.sh y builds repetidos)"
+    suggest "cargo install sccache --locked"
+  fi
 }
 
 # --- Paquetes APT (misma lista que CI) ---

@@ -29,6 +29,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Caché de compilación sccache
+        uses: ./.github/composite/sccache
+
       - name: Instalar nightly y cargo-fuzz
         run: |
           rustup toolchain install "${FUZZ_TOOLCHAIN}" --profile minimal

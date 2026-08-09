@@ -13,7 +13,7 @@
 
 Simulador de transporte inspirado en [OpenTTD](https://www.openttd.org/), escrito en **Rust** con cliente [Bevy](https://bevyengine.org/). El desarrollo es **incremental**: siempre hay algo jugable; la paridad total (NewGRF completo, red, saves idénticos al original) se aborda por cortes documentados, no de golpe.
 
-> Compilar Bevy puede saturar CPU/RAM. Si hace falta: `cargo build -j 1`, o dejá que [CI](.github/workflows/ci.yml) valide el build.
+> Compilar Bevy puede saturar CPU/RAM. Si hace falta: `cargo build -j 1`, o dejá que [CI](.github/workflows/ci.yml) valide el build. Las ejecuciones repetidas de `./scripts/check.sh` aprovechan `sccache` automáticamente cuando está instalado.
 
 **Gobierno:** [CONTRIBUTING.md](CONTRIBUTING.md) · [SECURITY.md](SECURITY.md) · [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [ADRs](docs/adr/)
 
@@ -123,6 +123,24 @@ cargo deny check       # licencias + advisories + sources + bans (deny.toml)
 # Actualizar excepciones: editar deny.toml [advisories].ignore con justificación
 ```
 
+### Caché de compilación (`sccache`)
+
+GitHub Actions activa `sccache` con el backend de caché de Actions en todos los
+jobs que compilan Rust. En local es opcional: `./scripts/check.sh` lo detecta y
+lo usa automáticamente, sin hacer que `cargo` directo dependa de una herramienta
+extra. Para activarlo también en un comando directo:
+
+```bash
+cargo install sccache --locked       # una vez
+RUSTC_WRAPPER=sccache cargo build
+sccache --show-stats
+```
+
+En PowerShell el equivalente es
+`$env:RUSTC_WRAPPER = 'sccache'; cargo build`. La caché local queda fuera del
+repositorio (por defecto bajo la caché de usuario); CI no comparte artefactos
+nativos entre plataformas ni entre compilaciones instrumentadas de cobertura.
+
 | Ruta | Responsabilidad |
 |------|-----------------|
 | `crates/openttdrs-core/` | Simulación, mapa, comandos, NewGRF parse, save/sav |
@@ -145,7 +163,7 @@ Detalle: [docs/PARIDAD.md](docs/PARIDAD.md).
 
 ## CI y calidad
 
-Un job en [.github/workflows/ci.yml](.github/workflows/ci.yml) (caché Cargo + APT):
+Un job en [.github/workflows/ci.yml](.github/workflows/ci.yml) (sccache + caché Cargo + APT):
 
 | Paso | Contenido |
 |------|-----------|

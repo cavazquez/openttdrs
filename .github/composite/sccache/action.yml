@@ -1,0 +1,15 @@
+name: sccache
+description: Instala sccache y activa su backend de GitHub Actions para compilaciones Rust
+runs:
+  using: composite
+  steps:
+    - name: Preparar sccache
+      uses: mozilla-actions/sccache-action@v0.0.11
+      env:
+        SCCACHE_GHA_ENABLED: "true"
+
+    - name: Activar sccache para Rust
+      shell: bash
+      run: |
+        echo "SCCACHE_GHA_ENABLED=true" >> "$GITHUB_ENV"
+        echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"

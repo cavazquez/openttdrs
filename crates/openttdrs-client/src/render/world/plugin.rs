@@ -6,7 +6,10 @@ use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
 use crate::bevy_app::UpdateSet;
-use crate::render::{MapTileChunk, TileViewportBounds, large_map_viewport_cull_enabled};
+use crate::render::{
+    MapTileChunk, TileViewportBounds, chunk_tile_bounds, chunks_in_bounds,
+    large_map_viewport_cull_enabled,
+};
 use crate::state::ClientScreen;
 
 use super::remap::apply_remap_map_visuals;
@@ -85,9 +88,79 @@ pub(crate) fn request_map_visual_remap(
 }
 
 /// Bloques 16×16 ya instanciados (solo mapas con culling por viewport).
+///
+/// `chunks` contiene únicamente bloques completos. Una carga inicial puede
+/// dibujar un rectángulo cuyo borde corta chunks; esos se guardan en
+/// `partial_chunks` y se completan antes de que el renderer los trate como
+/// reutilizables en un paneo posterior.
 #[derive(Resource, Default)]
 pub(crate) struct LoadedMapTileChunks {
     pub chunks: HashSet<(u32, u32)>,
+    pub partial_chunks: HashSet<(u32, u32)>,
+}
+
+/// Cambios de entidades necesarios para llevar un viewport a chunks completos.
+pub(crate) struct IncrementalChunkRemapPlan {
+    pub(crate) to_remove: HashSet<(u32, u32)>,
+    pub(crate) to_add: HashSet<(u32, u32)>,
+    pub(crate) to_despawn: HashSet<(u32, u32)>,
+}
+
+impl LoadedMapTileChunks {
+    #[must_use]
+    pub(crate) fn from_spawn_bounds(bounds: TileViewportBounds, mw: u32, mh: u32) -> Self {
+        let mut loaded = Self::default();
+        loaded.set_spawn_bounds(bounds, mw, mh);
+        loaded
+    }
+
+    pub(crate) fn set_spawn_bounds(&mut self, bounds: TileViewportBounds, mw: u32, mh: u32) {
+        self.chunks.clear();
+        self.partial_chunks.clear();
+        for (cx, cy) in chunks_in_bounds(bounds) {
+            if bounds.contains(chunk_tile_bounds(cx, cy, mw, mh)) {
+                self.chunks.insert((cx, cy));
+            } else {
+                self.partial_chunks.insert((cx, cy));
+            }
+        }
+    }
+
+    #[must_use]
+    pub(crate) fn is_empty(&self) -> bool {
+        self.chunks.is_empty() && self.partial_chunks.is_empty()
+    }
+
+    #[must_use]
+    pub(crate) fn all_chunks(&self) -> HashSet<(u32, u32)> {
+        self.chunks.union(&self.partial_chunks).copied().collect()
+    }
+
+    #[must_use]
+    pub(crate) fn plan_incremental_remap(
+        &self,
+        needed: &HashSet<(u32, u32)>,
+        refresh_chunks: &HashSet<(u32, u32)>,
+    ) -> IncrementalChunkRemapPlan {
+        let known = self.all_chunks();
+        let to_remove: HashSet<_> = known.difference(needed).copied().collect();
+        // Un parcial cuenta como ausente: se despawnea su fracción antigua y
+        // se genera el bloque 16×16 completo en esta pasada.
+        let to_add: HashSet<_> = needed.difference(&self.chunks).copied().collect();
+        let to_upgrade = self
+            .partial_chunks
+            .intersection(needed)
+            .copied()
+            .collect::<HashSet<_>>();
+        let mut to_despawn = to_remove.clone();
+        to_despawn.extend(to_upgrade);
+        to_despawn.extend(refresh_chunks.iter().copied());
+        IncrementalChunkRemapPlan {
+            to_remove,
+            to_add,
+            to_despawn,
+        }
+    }
 }
 
 /// Rectángulo de teselas para las que se generaron sprites (`MapVisualLayer`).
@@ -135,5 +208,61 @@ impl Plugin for WorldRenderPlugin {
                     .after(crate::camera::move_camera)
                     .run_if(in_state(ClientScreen::InGame)),
             );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashSet;
+
+    use super::LoadedMapTileChunks;
+    use crate::render::{TileViewportBounds, chunks_in_bounds};
+
+    #[test]
+    fn partial_boundary_chunks_are_not_marked_reusable() {
+        let bounds = TileViewportBounds {
+            tx0: 3,
+            ty0: 16,
+            tx1: 35,
+            ty1: 34,
+        };
+        let loaded = LoadedMapTileChunks::from_spawn_bounds(bounds, 256, 256);
+
+        // Sólo el bloque central 16×16 fue materializado por completo.
+        assert_eq!(loaded.chunks.len(), 1);
+        assert!(loaded.chunks.contains(&(1, 1)));
+        assert_eq!(loaded.partial_chunks.len(), 5);
+        assert!(loaded.partial_chunks.contains(&(0, 1)));
+        assert!(loaded.partial_chunks.contains(&(2, 2)));
+        assert_eq!(loaded.all_chunks().len(), 6);
+        assert!(!loaded.is_empty());
+    }
+
+    #[test]
+    fn incremental_plan_upgrades_a_partial_chunk_before_reuse() {
+        let loaded = LoadedMapTileChunks::from_spawn_bounds(
+            TileViewportBounds {
+                tx0: 3,
+                ty0: 16,
+                tx1: 35,
+                ty1: 34,
+            },
+            256,
+            256,
+        );
+        let needed = chunks_in_bounds(TileViewportBounds {
+            tx0: 0,
+            ty0: 16,
+            tx1: 48,
+            ty1: 48,
+        });
+        let plan = loaded.plan_incremental_remap(&needed, &HashSet::new());
+
+        // (0,1) ya tenía sprites para x=3..15, pero no para x=0..2.
+        // Debe reemplazarse por el chunk completo, no tratarse como cargado.
+        assert!(loaded.partial_chunks.contains(&(0, 1)));
+        assert!(plan.to_add.contains(&(0, 1)));
+        assert!(plan.to_despawn.contains(&(0, 1)));
+        assert!(!plan.to_remove.contains(&(0, 1)));
     }
 }

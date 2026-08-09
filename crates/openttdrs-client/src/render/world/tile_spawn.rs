@@ -8,7 +8,7 @@ use crate::config::{env_flag, env_string};
 use crate::iso::{SLOPE_HALF_H, shore_png_index, shore_tileh_for_draw_shore};
 use crate::render::{
     CompanyColoredSprites, MapSpriteBatches, RenderGrid, TileAtlas, TileRenderContext,
-    TileViewportBounds, WorldAssets, chunk_tile_bounds, chunks_in_bounds, flush_map_batches,
+    TileViewportBounds, WorldAssets, chunk_tile_bounds, flush_map_batches,
     push_forest_tree, push_water_tile, spawn_bridge_middle, spawn_generic_land_tile,
     spawn_house_tile, spawn_industry_tile, spawn_rail_tile, spawn_road_tile, spawn_station_tile,
     spawn_transport_object_tile,
@@ -464,6 +464,7 @@ pub(crate) fn setup(
     windows: Query<&Window, With<PrimaryWindow>>,
     prefs: Option<Res<crate::settings::ClientPreferences>>,
 ) {
+    let (mw, mh) = sim.state.map.dimensions();
     let (cam_pos, cam_scale) = initial_map_camera_pose(&sim);
 
     commands.spawn((
@@ -559,9 +560,7 @@ pub(crate) fn setup(
     commands.insert_resource(object_sprites);
     commands.insert_resource(action5_sprites);
     commands.insert_resource(atlas);
-    commands.insert_resource(LoadedMapTileChunks {
-        chunks: chunks_in_bounds(spawn_bounds),
-    });
+    commands.insert_resource(LoadedMapTileChunks::from_spawn_bounds(spawn_bounds, mw, mh));
 }
 
 /// Capa visual del mapa para el fondo del menú (sin vehículos ni etiquetas).
@@ -642,7 +641,5 @@ pub(crate) fn spawn_intro_map_render(
     commands.insert_resource(industry_sprites);
     commands.insert_resource(object_sprites);
     commands.insert_resource(atlas);
-    commands.insert_resource(LoadedMapTileChunks {
-        chunks: chunks_in_bounds(spawn_bounds),
-    });
+    commands.insert_resource(LoadedMapTileChunks::from_spawn_bounds(spawn_bounds, mw, mh));
 }

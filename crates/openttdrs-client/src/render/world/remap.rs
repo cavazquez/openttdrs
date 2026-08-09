@@ -1,7 +1,5 @@
 //! Orquestación de remap del mapa visual.
 
-use std::collections::HashSet;
-
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
@@ -99,9 +97,8 @@ pub(crate) fn apply_remap_map_visuals(
         last_ortho_scale: ortho_scale,
     });
 
-    let use_incremental = !full_rebuild
-        && large_map_viewport_cull_enabled(mw, mh)
-        && !loaded_chunks.chunks.is_empty();
+    let use_incremental =
+        !full_rebuild && large_map_viewport_cull_enabled(mw, mh) && !loaded_chunks.is_empty();
 
     let show_pbs = prefs.show_pbs_reservations;
     let show_full_detail = prefs.full_detail;
@@ -112,15 +109,14 @@ pub(crate) fn apply_remap_map_visuals(
         let needed = chunks_in_bounds(spawn_bounds);
         // Solo refrescar chunks dirty que siguen en el viewport (no todo el área visible).
         refresh_chunks.retain(|c| needed.contains(c));
-        let to_remove: HashSet<_> = loaded_chunks.chunks.difference(&needed).copied().collect();
-        let to_add: HashSet<_> = needed.difference(&loaded_chunks.chunks).copied().collect();
+        let plan = loaded_chunks.plan_incremental_remap(&needed, &refresh_chunks);
 
         for (entity, chunk) in &q_chunks {
-            if to_remove.contains(&(chunk.cx, chunk.cy)) {
+            if plan.to_despawn.contains(&(chunk.cx, chunk.cy)) {
                 commands.entity(entity).despawn();
             }
         }
-        for &(cx, cy) in &to_add {
+        for &(cx, cy) in &plan.to_add {
             if refresh_chunks.contains(&(cx, cy)) {
                 continue;
             }
@@ -143,15 +139,6 @@ pub(crate) fn apply_remap_map_visuals(
                 newgrf_sprites.object.as_mut(),
                 newgrf_sprites.action5.as_mut(),
             );
-        }
-        let mut refresh_despawn = Vec::new();
-        for (entity, chunk) in &q_chunks {
-            if refresh_chunks.contains(&(chunk.cx, chunk.cy)) {
-                refresh_despawn.push(entity);
-            }
-        }
-        for entity in refresh_despawn {
-            commands.entity(entity).despawn();
         }
         for &(cx, cy) in &refresh_chunks {
             if !needed.contains(&(cx, cy)) {
@@ -178,6 +165,7 @@ pub(crate) fn apply_remap_map_visuals(
             );
         }
         loaded_chunks.chunks = needed;
+        loaded_chunks.partial_chunks.clear();
         // Etiquetas no van en chunks: re-sincronizar al panear el viewport.
         let label_font = asset_server.load::<Font>(crate::ui::font::UI_FONT_PATH);
         let town_entities: Vec<Entity> = label_entities.towns.iter().collect();
@@ -206,11 +194,11 @@ pub(crate) fn apply_remap_map_visuals(
             &label_font,
             spawn_bounds,
         );
-        if !to_add.is_empty() || !to_remove.is_empty() || !refresh_chunks.is_empty() {
+        if !plan.to_add.is_empty() || !plan.to_remove.is_empty() || !refresh_chunks.is_empty() {
             debug!(
                 "Mapa visual incremental: +{} −{} ↻{} chunks ({} teselas visibles)",
-                to_add.len(),
-                to_remove.len(),
+                plan.to_add.len(),
+                plan.to_remove.len(),
                 refresh_chunks.len(),
                 spawn_bounds.tile_count()
             );
@@ -250,7 +238,7 @@ pub(crate) fn apply_remap_map_visuals(
             newgrf_sprites.object.as_mut(),
             newgrf_sprites.action5.as_mut(),
         );
-        loaded_chunks.chunks = chunks_in_bounds(spawn_bounds);
+        loaded_chunks.set_spawn_bounds(spawn_bounds, mw, mh);
     }
 
     if do_sync_camera {

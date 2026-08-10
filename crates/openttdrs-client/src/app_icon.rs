@@ -133,6 +133,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::expect_used)] // Fixture empaquetado: el mensaje identifica assets rotos.
     fn bundled_icon_has_a_transparent_outer_corner() {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../..")

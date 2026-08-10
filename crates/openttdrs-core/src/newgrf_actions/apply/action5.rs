@@ -49,9 +49,9 @@ fn apply_action5_table(
 
 /// Carga los 90 sprites Action5 que forman parte del set gráfico base.
 ///
-/// Los cimientos extra no pertenecen a `ogfx1_base`; OpenGFX los publica en
-/// el GRF *extra*. Se cargan antes del stack de la partida para que un NewGRF
-/// real pueda sobrescribirlos igual que en OpenTTD.
+/// Los cimientos extra no pertenecen a `ogfx1_base`; `OpenGFX` los publica en
+/// el GRF *extra*. Se cargan antes del stack de la partida para que un `NewGRF`
+/// real pueda sobrescribirlos igual que en `OpenTTD`.
 fn load_default_foundation_action5_table() -> Vec<Option<DecodedSprite>> {
     let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let asset_roots = [
@@ -141,7 +141,7 @@ define_action5_apply!(
 /// Aplica únicamente los Action5 foundations del stack explícito.
 ///
 /// Se conserva sin assets base implícitos para que los callers de bajo nivel y
-/// sus tests puedan inspeccionar sólo los reemplazos que aportó un NewGRF.
+/// sus tests puedan inspeccionar sólo los reemplazos que aportó un `NewGRF`.
 pub fn apply_newgrf_action5_foundations(state: &mut GameState, search_dirs: &[&Path]) {
     state.runtime.foundation_newgrf_sprites = apply_action5_table(
         state,

@@ -434,7 +434,7 @@ pub fn bridge_above_axis_from_mapt(mapt: u8) -> Option<bool> {
 
 /// Reserva PBS de una rampa ferroviaria de túnel o puente.
 ///
-/// A diferencia de una tesela `MP_RAILWAY` común, OpenTTD guarda este estado
+/// A diferencia de una tesela `MP_RAILWAY` común, `OpenTTD` guarda este estado
 /// en el bit 4 de `m5` (`HasTunnelBridgeReservation`), no en el byte alto de
 /// `MAP2`. Mantenerlo aquí evita que los consumidores del `.sav` mezclen ambos
 /// formatos de reserva.
@@ -445,7 +445,7 @@ pub fn tunnel_bridge_rail_reserved(tile: Tile) -> bool {
 
 /// Otra rampa del puente `kind`, siguiendo la dirección persistida en `m5`.
 ///
-/// OpenTTD no identifica el vano por el tipo de terreno inferior: un puente
+/// `OpenTTD` no identifica el vano por el tipo de terreno inferior: un puente
 /// puede cruzar tierra, vías, agua o una ciudad. `GetOtherBridgeEnd` avanza en
 /// la dirección de la rampa hasta hallar una rampa de puente con dirección
 /// opuesta. El enfoque anterior (solo agua con `IsBridgeAbove`) hacía que

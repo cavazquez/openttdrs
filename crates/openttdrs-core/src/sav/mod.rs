@@ -189,7 +189,7 @@ pub struct SavGame {
     pub climate: crate::Climate,
 }
 
-/// `SLV_100`: desde esta versión OpenTTD persiste las reservas PBS de
+/// `SLV_100`: desde esta versión `OpenTTD` persiste las reservas PBS de
 /// depósitos. `AfterLoadGame()` sólo limpia el bit en saves anteriores.
 const SLV_DEPOT_RESERVATION_PERSISTED: u16 = 100;
 

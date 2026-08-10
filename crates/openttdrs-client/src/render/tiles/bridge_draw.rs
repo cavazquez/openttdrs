@@ -998,6 +998,11 @@ fn record_bridge_structure_trace(
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::items_after_test_module,
+    clippy::unwrap_used
+)]
 mod tests {
     use bevy::prelude::{Rect, Vec2};
     use openttdrs_core::{
@@ -1302,7 +1307,7 @@ mod tests {
 }
 
 /// Dibuja tablero + barandilla + pilares para rampa o vano.
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::expect_used, clippy::too_many_arguments)]
 pub(crate) fn spawn_bridge_deck(
     commands: &mut Commands,
     map: &Map,

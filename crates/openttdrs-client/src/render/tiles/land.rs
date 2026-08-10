@@ -890,6 +890,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::expect_used)] // Fixture 1×1: el acceso es parte del precondition del test.
     fn tree_ground_keeps_the_high_map2_bit_and_uses_the_shore_table() {
         let mut tile = Map::new_flat(1, 1, 0)
             .get(TileCoord::new(0, 0))

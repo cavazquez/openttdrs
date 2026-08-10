@@ -151,11 +151,7 @@ pub struct WorldSemanticTile {
 }
 
 impl WorldSemanticTile {
-    fn from_map_tile(index: u64, x: u32, y: u32, map: &Map, tile: Tile) -> Self {
-        let coord = TileCoord::new(
-            i32::try_from(x).expect("world-semantic x fue validado como i32"),
-            i32::try_from(y).expect("world-semantic y fue validado como i32"),
-        );
+    fn from_map_tile(index: u64, x: u32, y: u32, coord: TileCoord, map: &Map, tile: Tile) -> Self {
         let raw = WorldSemanticRawTile::from(tile);
         let tile_type = tile.ottd_type_nibble();
         let (semantic_class, supported, unsupported_reason) = class_for_type(tile_type);
@@ -170,8 +166,7 @@ impl WorldSemanticTile {
             tileh,
             base_z,
             owner: owner_for_type(tile_type, tile),
-            bridge_above_axis: bridge_above_axis_from_mapt(tile.mapt)
-                .map(|axis_y| u8::from(axis_y)),
+            bridge_above_axis: bridge_above_axis_from_mapt(tile.mapt).map(u8::from),
             supported,
             unsupported_reason,
             raw,
@@ -231,7 +226,7 @@ pub fn write_world_semantic_jsonl<W: Write>(
             let index = u64::from(y) * u64::from(width) + u64::from(x);
             write_json_line(
                 writer,
-                &WorldSemanticTile::from_map_tile(index, x, y, map, tile),
+                &WorldSemanticTile::from_map_tile(index, x, y, coord, map, tile),
             )?;
             emitted += 1;
         }
@@ -335,7 +330,7 @@ fn road_details(tile: Tile) -> Value {
         // Esta llamada es intencional: compara el helper que consume el renderer,
         // no una segunda copia del layout de OpenTTD.
         "road_type": road_type_from_tile(&tile).as_u8(),
-        "tram_type": tram_road_type_from_tile(&tile).map(|kind| kind.as_u8()),
+        "tram_type": tram_road_type_from_tile(&tile).map(crate::road_type::RoadType::as_u8),
         "crossing_road_axis": (road_tile_type == 1).then_some(tile.m5 & 0x01),
         "crossing_rail_axis": (road_tile_type == 1).then_some((tile.m5 & 0x01) ^ 1),
         "depot_direction": (road_tile_type == 2).then_some(tile.m5 & 0x03),
@@ -450,7 +445,7 @@ fn tunnel_bridge_details(map: &Map, coord: TileCoord, tile: Tile) -> Value {
         "rail_type": (transport_type == 0).then_some(rail_type_from_tile(tile).as_u8()),
         "road_type": (transport_type != 0).then_some(road_type_from_tile(&tile).as_u8()),
         "tram_type": (transport_type != 0)
-            .then(|| tram_road_type_from_tile(&tile).map(|kind| kind.as_u8()))
+            .then(|| tram_road_type_from_tile(&tile).map(crate::road_type::RoadType::as_u8))
             .flatten(),
         "rail_reserved": (transport_type == 0).then_some(tunnel_bridge_rail_reserved(tile)),
     })

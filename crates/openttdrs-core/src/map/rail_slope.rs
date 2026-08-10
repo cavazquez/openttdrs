@@ -394,6 +394,11 @@ pub fn bridge_foundation_for_axis(tileh: u8, axis_x: bool) -> u8 {
 ///
 /// Devuelve la pendiente y el incremento de Z que recibiría el `TileInfo`
 /// antes de que se dibujen rampa, pilares o catenaria.
+///
+/// # Panics
+///
+/// Panics si se solicita una fundación inclinada para una pendiente sin una
+/// única esquina alta. `bridge_foundation_for_axis` no produce esa combinación.
 #[must_use]
 pub fn bridge_surface_slope_and_z(tileh: u8, axis_x: bool) -> (u8, u8) {
     let foundation = bridge_foundation_for_axis(tileh, axis_x);
@@ -565,6 +570,7 @@ fn push_foundation_sprite(plan: &mut RailFoundationDrawPlan, sprite_id: u32, z_d
 
 /// Emite los sprites de una única invocación de `DrawFoundation` y devuelve
 /// la pendiente/elevación que quedaría para la siguiente invocación.
+#[allow(clippy::too_many_lines)] // Espeja el árbol de casos de `DrawFoundation`.
 fn draw_foundation_step(
     plan: &mut RailFoundationDrawPlan,
     tileh: u8,

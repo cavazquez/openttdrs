@@ -64,7 +64,7 @@ fn parse_args() -> Result<Args, String> {
     })
 }
 
-fn run(args: Args) -> Result<(), String> {
+fn run(args: &Args) -> Result<(), String> {
     let data = std::fs::read(&args.grf)
         .map_err(|error| format!("no se pudo leer {}: {error}", args.grf.display()))?;
     let blocks = collect_action5_blocks(&data)
@@ -108,7 +108,7 @@ fn run(args: Args) -> Result<(), String> {
 }
 
 fn main() -> ExitCode {
-    match parse_args().and_then(run) {
+    match parse_args().and_then(|args| run(&args)) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("action5_dumper: {error}");

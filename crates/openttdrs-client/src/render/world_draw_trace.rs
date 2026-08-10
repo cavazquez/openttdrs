@@ -220,7 +220,7 @@ impl WorldDrawTrace {
                 // debe aparecer en la traza como `MP_CLEAR` (0).
                 tile_type: ctx.tile.map_or_else(
                     || openttd_tile_type(ctx.kind),
-                    |tile| tile.ottd_type_nibble(),
+                    openttdrs_core::Tile::ottd_type_nibble,
                 ),
                 tile_kind: tile_kind_name(ctx.kind),
                 tileh: ctx.info.tileh,
@@ -243,6 +243,7 @@ impl WorldDrawTrace {
     /// Guarda el mismo punto de decisión que `DrawFoundation` en OpenTTD.
     /// La pendiente y altura corresponden a la superficie después de aplicar
     /// la fundación, no al relieve crudo de la tesela.
+    #[allow(clippy::too_many_arguments)] // Espeja los campos de la decisión C++.
     pub(crate) fn record_foundation(
         source: &'static str,
         foundation: u8,
@@ -336,6 +337,7 @@ impl WorldDrawTrace {
     /// geometría. El renderer Bevy puede aplicar el recolor con otra textura,
     /// pero la traza sigue pudiendo verificar que eligió la misma paleta que
     /// el `draw_tile_proc` de referencia.
+    #[allow(clippy::too_many_arguments)] // Conserva la geometría completa del draw call.
     pub(crate) fn record_sprite_with_palette_and_geometry(
         role: &'static str,
         primitive: &'static str,
@@ -364,6 +366,7 @@ impl WorldDrawTrace {
     /// a 12 px y el trasero a 3 px *antes* de llamar a
     /// `AddSortableSpriteToDraw`; ese desplazamiento pertenece a `world`, no
     /// al offset interno del sprite.
+    #[allow(clippy::too_many_arguments)] // Conserva la geometría completa del draw call.
     pub(crate) fn record_sprite_with_world_geometry(
         role: &'static str,
         primitive: &'static str,
@@ -624,6 +627,7 @@ fn openttd_tile_type(kind: TileKind) -> u8 {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::parse_region;
 

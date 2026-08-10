@@ -1219,6 +1219,7 @@ fn rail_depot_reservation_track_visible(dir: usize, buildings_are_hidden: bool) 
     buildings_are_hidden || matches!(dir, 1 | 2)
 }
 
+#[allow(clippy::too_many_arguments)] // Parámetros del spawner comparten el contexto del tile.
 fn spawn_rail_depot_tile(
     commands: &mut Commands,
     assets: &WorldAssets,

@@ -43,6 +43,37 @@ fn tint_building_sprite(mut sprite: Sprite) -> Sprite {
     sprite
 }
 
+/// `DrawTile_Station` llama a `DrawFoundation(Leveled)` para toda estación
+/// ferroviaria inclinada antes de emitir el rail y su reserva PBS. La capa
+/// resultante es hija del cimiento con el mismo `OffsetGroundSprite` que el
+/// oráculo exporta en píxeles `ZOOM_BASE`.
+const fn station_rail_child_offset(tileh: u8) -> Option<(i32, i32, i32)> {
+    if tileh == 0 { None } else { Some((0, -32, 0)) }
+}
+
+fn record_station_pbs_trace(tileh: u8, sprite_id: u32, fallback: bool) {
+    if let Some(offset) = station_rail_child_offset(tileh) {
+        WorldDrawTrace::record_foundation_child_sprite_with_palette(
+            "station-pbs-reservation",
+            sprite_id,
+            804,
+            fallback,
+            offset,
+        );
+    } else {
+        WorldDrawTrace::record_sprite_with_palette_and_geometry(
+            "station-pbs-reservation",
+            "ground",
+            sprite_id,
+            804,
+            fallback,
+            (0, 0, 0),
+            0,
+            None,
+        );
+    }
+}
+
 fn spawn_airport_radar_overlay(
     commands: &mut Commands,
     assets: &WorldAssets,
@@ -157,16 +188,7 @@ pub(crate) fn spawn_station_tile(
                     .tile
                     .map_or(openttdrs_core::RailType::Rail, rail_type_from_tile);
                 let sid = remap_rail_sprite_id(1005 + u32::from(m5 & 1), rail_type);
-                WorldDrawTrace::record_sprite_with_palette_and_geometry(
-                    "station-pbs-reservation",
-                    "ground",
-                    sid,
-                    804,
-                    !assets.rail.contains_key(&sid),
-                    (0, 0, 0),
-                    0,
-                    None,
-                );
+                record_station_pbs_trace(tileh, sid, !assets.rail.contains_key(&sid));
                 if let Some(img) = assets.rail.get(&sid) {
                     let base =
                         tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), rail_base_z, 0.026, rail_half_h);
@@ -1320,7 +1342,7 @@ fn spawn_rail_depot_tile(
 
 #[cfg(test)]
 mod tests {
-    use super::rail_depot_reservation_track_visible;
+    use super::{rail_depot_reservation_track_visible, station_rail_child_offset};
 
     #[test]
     fn rail_depot_reservation_is_hidden_behind_visible_ne_and_nw_buildings() {
@@ -1330,5 +1352,12 @@ mod tests {
         assert!(!rail_depot_reservation_track_visible(3, false)); // NW
         assert!(rail_depot_reservation_track_visible(0, true));
         assert!(rail_depot_reservation_track_visible(3, true));
+    }
+
+    #[test]
+    fn sloped_rail_station_pbs_is_child_of_the_leveled_foundation() {
+        assert_eq!(station_rail_child_offset(0), None);
+        assert_eq!(station_rail_child_offset(6), Some((0, -32, 0)));
+        assert_eq!(station_rail_child_offset(12), Some((0, -32, 0)));
     }
 }

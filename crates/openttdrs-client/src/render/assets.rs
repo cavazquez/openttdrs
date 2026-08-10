@@ -14,20 +14,23 @@ use crate::sprites::{
 #[derive(Clone, Resource)]
 pub(crate) struct WorldAssets {
     pub(crate) grass: AtlasSprite,
-    /// Hierba parcial (`terrain_grass_1_3.png`, densidad m5 & 0x3 == 1).
-    pub(crate) grass_one_third: AtlasSprite,
-    /// Hierba parcial (`terrain_grass_2_3.png`, densidad m5 & 0x3 == 2).
-    pub(crate) grass_two_third: AtlasSprite,
-    /// Suelo desnudo (`terrain_bare.png`, densidad m5 & 0x3 == 0).
-    pub(crate) bare: AtlasSprite,
     pub(crate) rough: AtlasSprite,
+    /// Variantes planas que `DrawHillyLandTile` escoge con `TileHash(x, y)`.
+    /// La primera coincide con `terrain_rough.png` / `grass_rough.png`.
+    pub(crate) rough_flat: [AtlasSprite; 5],
     /// Variantes planas de suelo rocoso (`terrain_rocky_1/2.png`).
     pub(crate) rocky: [AtlasSprite; 2],
-    /// Suelo ártico plano (`terrain_snow_full.png`).
+    /// Alias del snow/desert completo para consumidores que no tienen densidad.
     pub(crate) snow: AtlasSprite,
     pub(crate) bought_land: AtlasSprite,
+    /// `DrawClearLandTile`: densidad 0..3 × `SlopeToSpriteOffset` 0..18.
+    /// También lo usa `DrawTile_Trees` para `TreeGround::Grass`.
+    pub(crate) grass_density: [[AtlasSprite; 19]; 4],
     pub(crate) grass_slopes: Vec<AtlasSprite>,
     pub(crate) rough_slopes: Vec<AtlasSprite>,
+    /// `_clear_land_sprites_snow_desert`: densidad 0..3 × pendiente 0..18.
+    /// `TreeGround::SnowDesert` y `TreeGround::RoughSnow` comparten este set.
+    pub(crate) snow_desert: [[AtlasSprite; 19]; 4],
     pub(crate) water: AtlasSprite,
     /// Set completo `SPR_SHORE_BASE + 0..17` (`shore_full_{i:02}.png`).
     pub(crate) shore: Vec<AtlasSprite>,
@@ -156,15 +159,29 @@ impl WorldAssets {
     /// el filesystem (la tabla de rects es metadata compilada).
     pub(crate) fn load(atlas: &TileAtlas, images: &mut Assets<Image>) -> Self {
         let grass = atlas.get("grass.png");
-        let grass_one_third = atlas.get("terrain_grass_1_3.png");
-        let grass_two_third = atlas.get("terrain_grass_2_3.png");
-        let bare = atlas.get("terrain_bare.png");
         let rough = atlas.get("grass_rough.png");
+        let rough_flat = std::array::from_fn(|variant| {
+            if variant == 0 {
+                atlas.get("terrain_rough.png")
+            } else {
+                atlas.get(&format!("terrain_rough_{variant}.png"))
+            }
+        });
         let rocky = [
             atlas.get("terrain_rocky_1.png"),
             atlas.get("terrain_rocky_2.png"),
         ];
-        let snow = atlas.get("terrain_snow_full.png");
+        let grass_density = std::array::from_fn(|density| {
+            std::array::from_fn(|offset| {
+                atlas.get(&format!("terrain_grass_density_{density}_{offset:02}.png"))
+            })
+        });
+        let snow_desert = std::array::from_fn(|density| {
+            std::array::from_fn(|offset| {
+                atlas.get(&format!("terrain_snow_desert_{density}_{offset:02}.png"))
+            })
+        });
+        let snow = snow_desert[3][0].clone();
         let bought_land = atlas.get("object_bought_land.png");
         // `SlopeToSpriteOffset` puede devolver 15..18 para las cuatro
         // pendientes empinadas. El vector se indexa por offset - 1.
@@ -618,15 +635,15 @@ impl WorldAssets {
 
         Self {
             grass,
-            grass_one_third,
-            grass_two_third,
-            bare,
             rough,
+            rough_flat,
             rocky,
             snow,
             bought_land,
+            grass_density,
             grass_slopes,
             rough_slopes,
+            snow_desert,
             water,
             shore,
             water_frames,

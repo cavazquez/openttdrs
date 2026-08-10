@@ -1417,17 +1417,7 @@ pub(crate) fn spawn_bridge_deck(
             foundation_base_z,
         );
         let ground_id = bridge_ramp_ground_sprite_id(ground_kind, foundation_tileh);
-        // Aún no extraemos las 18 pendientes de nieve/desierto. La traza
-        // conserva el ID canónico y denuncia explícitamente ese único hueco
-        // visual, en vez de ocultarlo detrás de una pendiente de césped.
-        let snow_slope_fallback =
-            matches!(ground_kind, BridgeRampGround::SnowOrDesert) && foundation_tileh != 0;
-        WorldDrawTrace::record_sprite(
-            "bridge-foundation-ground",
-            "child",
-            ground_id,
-            snow_slope_fallback,
-        );
+        WorldDrawTrace::record_sprite("bridge-foundation-ground", "child", ground_id, false);
         let ground = match ground_kind {
             BridgeRampGround::Grass => {
                 sloped_or_flat_image(foundation_tileh, &assets.grass, &assets.grass_slopes)
@@ -1436,7 +1426,10 @@ pub(crate) fn spawn_bridge_deck(
                 let shore = crate::sprites::TILEH_TO_SHORE_SPRITE[usize::from(foundation_tileh)];
                 assets.shore[usize::from(shore)].clone()
             }
-            BridgeRampGround::SnowOrDesert => assets.snow.clone(),
+            // `SPR_FLAT_SNOW_DESERT_TILE + SlopeToSpriteOffset(tileh)`.
+            BridgeRampGround::SnowOrDesert => {
+                assets.snow_desert[3][usize::from(slope_sprite_offset(foundation_tileh))].clone()
+            }
         };
         let half_h = if foundation_tileh == 0 {
             TILE_HALF_H

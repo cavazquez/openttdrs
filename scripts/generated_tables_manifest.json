@@ -88,9 +88,9 @@
       "inputs": [],
       "check": "hash",
       "requires_opengfx": true,
-      "output_sha256": "8faa958e593f7e802b37c4529824865db5efdb8cd2a6bf763db7cab0e6bd2a5c",
+      "output_sha256": "b0cd7056d7213bc83f25020816231725fc8889f84f623e5cf7a65512de41bf6a",
       "license": "layout derivado de PNG OpenGFX locales",
-      "note": "Regenerado y verificado 2026-08-03 con el atlas OpenGFX local; CI valida hash del .rs."
+      "note": "Regenerado y verificado 2026-08-10 con el atlas OpenGFX local; CI valida hash del .rs. El --check local valida además las páginas PNG píxel a píxel."
     }
   ],
   "inventory": [

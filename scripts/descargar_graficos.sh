@@ -615,6 +615,17 @@ crop_by_id(4493, "terrain_snow_1_4.png")
 crop_by_id(4512, "terrain_snow_2_4.png")
 crop_by_id(4531, "terrain_snow_3_4.png")
 crop_by_id(4550, "terrain_snow_full.png")
+# `DrawClearLandTile` y `DrawTile_Trees` combinan cuatro bases de densidad
+# con los 19 offsets de `SlopeToSpriteOffset`. Se mantienen los nombres
+# planos previos por compatibilidad y se exporta además la tabla uniforme que
+# consume el renderer. Para agregarla a un árbol ya descargado sin reextraer
+# todo OpenGFX: `python3 scripts/crop_tree_ground_sprites.py`.
+for density, base in enumerate([3924, 3943, 3962, 3981]):
+    for offset in range(19):
+        crop_by_id(base + offset, f"terrain_grass_density_{density}_{offset:02d}.png")
+for density, base in enumerate([4493, 4512, 4531, 4550]):
+    for offset in range(19):
+        crop_by_id(base + offset, f"terrain_snow_desert_{density}_{offset:02d}.png")
 
 # =============================================================================
 # AGUA (MP_WATER)

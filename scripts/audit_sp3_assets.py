@@ -171,6 +171,18 @@ def collect_required_paths() -> list[tuple[str, str]]:
     for tileh in range(1, 19):
         add(f"assets/opengfx/tiles/terrain_grass_slope_{tileh:02}.png", "terrain_slope")
         add(f"assets/opengfx/tiles/terrain_rough_slope_{tileh:02}.png", "terrain_slope")
+    # Tablas completas de `DrawTile_Trees` / `DrawClearLandTile`:
+    # 4 densidades por cada offset de `SlopeToSpriteOffset` (incluido plano).
+    for density in range(4):
+        for offset in range(19):
+            add(
+                f"assets/opengfx/tiles/terrain_grass_density_{density}_{offset:02}.png",
+                "tree_ground",
+            )
+            add(
+                f"assets/opengfx/tiles/terrain_snow_desert_{density}_{offset:02}.png",
+                "tree_ground",
+            )
     for tileh in range(1, 15):
         add(f"assets/opengfx/tiles/foundation_{tileh:02}.png", "foundation")
     add("assets/opengfx/tiles/water.png", "water")

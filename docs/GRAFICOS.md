@@ -201,26 +201,40 @@ let has_ty = is_road(pos + (0, ±1));   // vecinos en dirección ty
 
 ---
 
-### Sprites de árboles (clima templado)
+### Suelo y sprites de árboles
 
-Los árboles son **overlays** sobre la tesela de suelo (el suelo sigue siendo prado).
-Miden **35×43 px** con `xrel=-19, yrel=-36`.
+Una tesela `MP_TREES` no siempre está sobre prado. `DrawTile_Trees` primero dibuja
+su suelo y después compone de 1 a 4 árboles. Para una partida `.sav`, la fuente de
+verdad es `MAP2` completo (`m2 | m2_hi << 8`), no el clima ni los vecinos:
 
-| Archivo | Sprite ID | Descripción |
-|---------|-----------|-------------|
-| `tree_1.png` | 1621 | Árbol maduro variante 1 |
-| `tree_2.png` | 1622 | Árbol maduro variante 2 |
-| `tree_3.png` | 1623 | Árbol maduro variante 3 |
+| Bits de MAP2 | Dato | Uso en OpenTTD/openttdrs |
+|--------------|------|--------------------------|
+| 6–8 | `TreeGround` | Elige `Grass`, `Rough`, `SnowDesert`, `Shore` o `RoughSnow` |
+| 4–5 | `TreeDensity` | Elige una de las cuatro bandas de césped o nieve/desierto |
 
-Los sprites 1617-1624 son árboles en crecimiento (del más pequeño al más grande).
-Los 1625-1640 son otras especies de árbol.
+Los cinco suelos se componen con el offset `SlopeToSpriteOffset(tileh)` (0–18):
 
-En openttdrs se usa un hash de Wang para elegir variante y offset X determinista:
+| `TreeGround` | Suelo de referencia |
+|--------------|---------------------|
+| `Grass` | `3924 + densidad × 19 + pendiente` |
+| `Rough` | pendiente `4000 + pendiente`; plano con las cinco variantes de `TileHash` |
+| `SnowDesert` | `4493 + densidad × 19 + pendiente` |
+| `Shore` | tabla de costa `SPR_SHORE_BASE` según la pendiente |
+| `RoughSnow` | la misma tabla snow/desert que `SnowDesert` |
 
-```rust
-let h = wang_hash(tx, ty, 0xCAFE);
-let tree_idx = (h % 3) as usize;          // variante 1/2/3
-let ox = ((h >> 2) % 17) as f32 - 8.0;   // offset X ±8 px
+Los árboles usan la tabla original a partir de `SPR_TREE_BASE` (1576), posiciones
+sub-tesela y orden estable por `x + y`; eso conserva qué copa queda delante. Los
+bits de `m5` determinan especie, cantidad y crecimiento. El hash determinista sólo
+es un fallback para mapas generados sin datos de partida, no para un `MP_TREES`
+cargado.
+
+Los 152 suelos necesarios (4 densidades × 19 pendientes de césped y snow/desert)
+se extraen junto con el resto de OpenGFX mediante `descargar_graficos.sh`; para
+añadirlos a una instalación ya descargada:
+
+```bash
+python3 scripts/crop_tree_ground_sprites.py
+python3 scripts/gen_tile_atlas.py
 ```
 
 ---
@@ -496,6 +510,13 @@ git add assets/opengfx/atlas/ crates/openttdrs-client/src/sprites/tile_atlas_gen
 Los PNG sueltos en `tiles/` siguen ignorados; hace falta `descargar_graficos.sh` solo para
 regenerar el atlas o añadir sprites nuevos.
 
+La comprobación no destructiva también valida que cada página PNG versionada sea
+idéntica píxel a píxel al empaquetado reproducido desde `tiles/`:
+
+```bash
+python3 scripts/gen_tile_atlas.py --check
+```
+
 ---
 
 ### Scripts de utilidad
@@ -503,8 +524,9 @@ regenerar el atlas o añadir sprites nuevos.
 | Script | Descripción |
 |--------|-------------|
 | `scripts/descargar_graficos.sh` | Descarga OpenGFX y extrae sprites a `assets/opengfx/tiles/` |
+| `scripts/crop_tree_ground_sprites.py` | Extrae incrementalmente los 152 suelos que usa `DrawTile_Trees` |
 | `scripts/gen_effect_vehicle_sprites.py` | Humo tren, chispas, explosión, avería → `effect_vehicle_draw_data_generated.rs` |
-| `scripts/gen_tile_atlas.py` | Empaqueta `tiles/` en atlas + `tile_atlas_generated.rs` |
+| `scripts/gen_tile_atlas.py` | Empaqueta `tiles/` en atlas + `tile_atlas_generated.rs`; `--check` compara también los PNG píxel a píxel |
 | `scripts/descargar_sonidos.sh` | Descarga OpenSFX a `assets/opensfx/` |
 | `scripts/fetch-openttd-reference.sh` | Clona el código fuente de OpenTTD en `reference/` |
 

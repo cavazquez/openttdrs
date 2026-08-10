@@ -28,27 +28,123 @@ use crate::sprites::{
     industry_gfx_uses_refinery_fire_anim, industry_palette_colour_for_instance,
 };
 
-/// Sprite plano de hierba según densidad (`m5 & 0x3`) en teselas `MP_CLEAR`.
-/// `m5 == 0` se trata como hierba completa (valor por defecto histórico de `new_flat`).
-fn grass_flat_for_clear(assets: &WorldAssets, tile_m5: u8) -> &AtlasSprite {
-    let density = if tile_m5 == 0 { 3 } else { tile_m5 & 0x03 };
-    match density {
-        0 => &assets.bare,
-        1 => &assets.grass_one_third,
-        2 => &assets.grass_two_third,
-        _ => &assets.grass,
-    }
-}
-
 /// `GetTreeGround`: bits 6–8 de MAP2 (MAP2 es una palabra, no sólo `m2`).
 ///
 /// Los bosques no heredan el suelo de `MP_CLEAR`: pueden conservar costa,
 /// terreno áspero o nieve aunque la tesela vecina sea césped. Reducir esto a
 /// `TileKind::Forest` era la causa de costas reemplazadas por hierba debajo de
 /// los árboles cargados desde `.sav`.
-const fn tree_ground_from_tile(tile: Tile) -> u8 {
-    let m2 = tile.m2 as u16 | ((tile.m2_hi as u16) << 8);
-    ((m2 >> 6) & 0x07) as u8
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TreeGround {
+    Grass,
+    Rough,
+    SnowDesert,
+    Shore,
+    RoughSnow,
+    /// Valor reservado/corrupto: se dibuja un fallback explícito en la traza.
+    Other(u8),
+}
+
+const fn tree_map2(tile: Tile) -> u16 {
+    tile.m2 as u16 | ((tile.m2_hi as u16) << 8)
+}
+
+const fn tree_ground_from_tile(tile: Tile) -> TreeGround {
+    let ground = ((tree_map2(tile) >> 6) & 0x07) as u8;
+    match ground {
+        0 => TreeGround::Grass,
+        1 => TreeGround::Rough,
+        2 => TreeGround::SnowDesert,
+        3 => TreeGround::Shore,
+        4 => TreeGround::RoughSnow,
+        _ => TreeGround::Other(ground),
+    }
+}
+
+/// `GetTreeDensity`: bits 4–5 de MAP2. En `TreeGround::Grass` es la
+/// densidad de hierba; para nieve/desierto selecciona el grado de cobertura.
+const fn tree_density_from_tile(tile: Tile) -> usize {
+    ((tree_map2(tile) >> 4) & 0x03) as usize
+}
+
+/// `TileHash(x, y)` de OpenTTD aplicado a coordenadas de tesela. OpenTTD
+/// recibe coordenadas de mundo (`16 * tx`, `16 * ty`), por lo que los shifts
+/// 4 y 6 quedan como `tx`/`ty` y `tx >> 2`/`ty >> 2` respectivamente.
+const fn tree_rough_flat_variant(tx: u32, ty: u32) -> usize {
+    const ROUGH_BY_HASH: [usize; 8] = [0, 1, 2, 3, 4, 0, 1, 2];
+    let hash = (tx ^ (tx >> 2) ^ ty).wrapping_sub(ty >> 2);
+    ROUGH_BY_HASH[(hash & 0x07) as usize]
+}
+
+const TREE_SNOW_DESERT_BASE: [u32; 4] = [4493, 4512, 4531, 4550];
+
+/// Sprite que `DrawTile_Trees` entrega a `DrawGroundSprite` antes de
+/// componer los árboles. Mantenerlo en una función permite probar todos los
+/// `TreeGround` sin depender del atlas ni de una ventana Bevy.
+const fn tree_ground_sprite_id(
+    ground: TreeGround,
+    density: usize,
+    tileh: u8,
+    tx: u32,
+    ty: u32,
+) -> u32 {
+    let slope = slope_sprite_offset(tileh) as u32;
+    let density = if density > 3 { 3 } else { density };
+    match ground {
+        // DrawClearLandTile(ti, GetTreeDensity(tile)).
+        TreeGround::Grass => 3924 + slope + density as u32 * 19,
+        // DrawHillyLandTile(ti): las pendientes no se aleatorizan.
+        TreeGround::Rough if slope != 0 => 4000 + slope,
+        TreeGround::Rough => {
+            const ROUGH_IDS: [u32; 5] = [4000, 4019, 4020, 4021, 4022];
+            ROUGH_IDS[tree_rough_flat_variant(tx, ty)]
+        }
+        // DrawTile_Trees usa la misma tabla para SnowDesert y RoughSnow.
+        TreeGround::SnowDesert | TreeGround::RoughSnow => TREE_SNOW_DESERT_BASE[density] + slope,
+        TreeGround::Shore => tree_shore_sprite_id(tileh),
+        // Conserva una salida visible y trazable para MAP2 inválido.
+        TreeGround::Other(_) => 3981 + slope,
+    }
+}
+
+fn grass_density_image(assets: &WorldAssets, density: usize, tileh: u8) -> AtlasSprite {
+    assets.grass_density[density.min(3)][usize::from(slope_sprite_offset(tileh))].clone()
+}
+
+fn rough_tree_image(assets: &WorldAssets, tileh: u8, tx: u32, ty: u32) -> AtlasSprite {
+    sloped_or_flat_image(
+        tileh,
+        &assets.rough_flat[tree_rough_flat_variant(tx, ty)],
+        &assets.rough_slopes,
+    )
+}
+
+fn snow_desert_image(assets: &WorldAssets, density: usize, tileh: u8) -> AtlasSprite {
+    assets.snow_desert[density.min(3)][usize::from(slope_sprite_offset(tileh))].clone()
+}
+
+fn clear_grass_density(tile_m5: u8) -> usize {
+    // Los mapas procedurales históricos usan `m5 == 0` como su valor de
+    // inicio; conservar su césped pleno. Los MP_TREES usan
+    // `tree_density_from_tile` y nunca pasan por esta compatibilidad.
+    if tile_m5 == 0 {
+        3
+    } else {
+        usize::from(tile_m5 & 0x03)
+    }
+}
+
+fn record_tree_ground(sprite_id: u32, fallback: bool) {
+    WorldDrawTrace::record_sprite(
+        if fallback {
+            "tree-ground-fallback"
+        } else {
+            "tree-ground"
+        },
+        "ground",
+        sprite_id,
+        fallback,
+    );
 }
 
 const fn tree_shore_sprite_id(tileh: u8) -> u32 {
@@ -490,13 +586,7 @@ pub(crate) fn spawn_generic_land_tile(
 
     // MP_CLEAR (0): distinguir subtipo de suelo via m5 bits 2-4
     // MP_OBJECT (10): grass de base + overlay de objeto
-    let grass_img = || {
-        sloped_or_flat_image(
-            tileh,
-            grass_flat_for_clear(assets, tile_m5),
-            &assets.grass_slopes,
-        )
-    };
+    let grass_img = || grass_density_image(assets, clear_grass_density(tile_m5), tileh);
     let full_grass_img = || sloped_or_flat_image(tileh, &assets.grass, &assets.grass_slopes);
     let rough_img = || sloped_or_flat_image(tileh, &assets.rough, &assets.rough_slopes);
     let rocky_variant = wang_hash(ctx.tx, ctx.ty, world_seed.wrapping_add(0xB0C0_5EED) as u32)
@@ -540,29 +630,33 @@ pub(crate) fn spawn_generic_land_tile(
             CLEAR_GROUND_DESERT => (rough_img(), desert_color),
             _ => (full_grass_img(), Color::WHITE),
         },
-        TileKind::Forest => match ctx.tile.map(tree_ground_from_tile).unwrap_or(0) {
-            // `DrawTile_Trees`: la costa se decide desde MAP2, no desde el
-            // clima ni el terreno vecino. Por ejemplo Kale_TitleGame (79,142)
-            // guarda `ground=3`, `tileh=29` y OpenTTD selecciona 5936 + 10.
-            3 => {
-                let shore = usize::from(TILEH_TO_SHORE_SPRITE[usize::from(tileh)]);
-                WorldDrawTrace::record_sprite(
-                    "tree-ground",
-                    "ground",
-                    tree_shore_sprite_id(tileh),
-                    false,
-                );
-                (assets.shore[shore].clone(), Color::WHITE)
+        TileKind::Forest => {
+            let (ground, density) = ctx
+                .tile
+                .map(|tile| (tree_ground_from_tile(tile), tree_density_from_tile(tile)))
+                .unwrap_or((TreeGround::Grass, 3));
+            let sprite_id = tree_ground_sprite_id(ground, density, tileh, ctx.tx, ctx.ty);
+            let fallback = matches!(ground, TreeGround::Other(_));
+            record_tree_ground(sprite_id, fallback);
+            match ground {
+                // DrawClearLandTile(ti, GetTreeDensity(tile)).
+                TreeGround::Grass => (grass_density_image(assets, density, tileh), Color::WHITE),
+                // DrawHillyLandTile(ti), incluidas sus cinco variantes planas.
+                TreeGround::Rough => (
+                    rough_tree_image(assets, tileh, ctx.tx, ctx.ty),
+                    Color::WHITE,
+                ),
+                // `_clear_land_sprites_snow_desert[density] + SlopeToSpriteOffset(tileh)`.
+                TreeGround::SnowDesert | TreeGround::RoughSnow => {
+                    (snow_desert_image(assets, density, tileh), Color::WHITE)
+                }
+                TreeGround::Shore => {
+                    let shore = usize::from(TILEH_TO_SHORE_SPRITE[usize::from(tileh)]);
+                    (assets.shore[shore].clone(), Color::WHITE)
+                }
+                TreeGround::Other(_) => (full_grass_img(), Color::WHITE),
             }
-            // `TreeGround::Rough` llama `DrawHillyLandTile`; el selector de
-            // pendiente ya coincide con `SPR_FLAT_ROUGH_LAND + offset`.
-            1 => (rough_img(), Color::WHITE),
-            // SnowOrDesert/RoughSnow. El atlas actual conserva el sprite plano
-            // de nieve; las pendientes dedicadas se rastrean como trabajo de
-            // paridad aparte, igual que el caso de rampas de puente.
-            2 | 4 => (snow_img(), snow_color),
-            _ => (full_grass_img(), Color::WHITE),
-        },
+        }
         TileKind::CoalField => (rough_img(), Color::srgb(0.55, 0.50, 0.45)),
         TileKind::Unknown(_) => (grass_img(), Color::srgb(1.0, 0.0, 1.0)),
         TileKind::House
@@ -878,7 +972,10 @@ pub(crate) fn push_forest_tree(
 mod tests {
     use openttdrs_core::{Map, TileCoord};
 
-    use super::{sort_tree_layers_like_openttd, tree_ground_from_tile, tree_shore_sprite_id};
+    use super::{
+        TreeGround, sort_tree_layers_like_openttd, tree_density_from_tile, tree_ground_from_tile,
+        tree_ground_sprite_id, tree_shore_sprite_id,
+    };
 
     #[test]
     fn forest_layers_follow_openttd_subtile_order_and_ties() {
@@ -896,12 +993,45 @@ mod tests {
             .get(TileCoord::new(0, 0))
             .expect("tile");
         tile.m2 = 0xC0; // TreeGround::Shore = 3.
-        assert_eq!(tree_ground_from_tile(tile), 3);
+        assert_eq!(tree_ground_from_tile(tile), TreeGround::Shore);
         assert_eq!(tree_shore_sprite_id(29), 5946);
 
         // TreeGround::RoughSnow = 4 necesita MAP2 bit 8.
         tile.m2 = 0;
         tile.m2_hi = 1;
-        assert_eq!(tree_ground_from_tile(tile), 4);
+        assert_eq!(tree_ground_from_tile(tile), TreeGround::RoughSnow);
+    }
+
+    #[test]
+    fn tree_ground_selector_ports_all_drawtile_trees_branches() {
+        // DrawClearLandTile: base 3924 + densidad * 19 + pendiente.
+        assert_eq!(tree_ground_sprite_id(TreeGround::Grass, 0, 0, 0, 0), 3924);
+        assert_eq!(tree_ground_sprite_id(TreeGround::Grass, 3, 29, 0, 0), 3996);
+
+        // DrawHillyLandTile: plano hash-aleatorio, pendiente fija.
+        assert_eq!(tree_ground_sprite_id(TreeGround::Rough, 3, 0, 1, 0), 4019);
+        assert_eq!(tree_ground_sprite_id(TreeGround::Rough, 3, 29, 1, 0), 4015);
+
+        // SnowDesert y RoughSnow usan la misma tabla de cuatro densidades.
+        assert_eq!(
+            tree_ground_sprite_id(TreeGround::SnowDesert, 2, 29, 0, 0),
+            4546
+        );
+        assert_eq!(
+            tree_ground_sprite_id(TreeGround::RoughSnow, 2, 29, 0, 0),
+            4546
+        );
+        assert_eq!(tree_ground_sprite_id(TreeGround::Shore, 3, 29, 0, 0), 5946);
+    }
+
+    #[test]
+    #[allow(clippy::expect_used)] // Fixture mínima, acceso intencional.
+    fn tree_density_comes_from_map2_not_tree_count() {
+        let mut tile = Map::new_flat(1, 1, 0)
+            .get(TileCoord::new(0, 0))
+            .expect("tile");
+        tile.m2 = 0x30; // density=3; ground=Grass.
+        tile.m5 = 0; // no debe alterar GetTreeDensity.
+        assert_eq!(tree_density_from_tile(tile), 3);
     }
 }

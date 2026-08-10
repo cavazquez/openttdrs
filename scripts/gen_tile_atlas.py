@@ -13,7 +13,7 @@ Correr después de scripts/descargar_graficos.sh.
 
 Uso:
   python3 scripts/gen_tile_atlas.py
-  python3 scripts/gen_tile_atlas.py --check   # solo compara el .rs (no escribe)
+  python3 scripts/gen_tile_atlas.py --check   # compara metadata y píxeles de páginas (no escribe)
 """
 
 from __future__ import annotations
@@ -169,7 +169,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--check",
         action="store_true",
-        help="empaqueta en memoria y compara el .rs versionado (no escribe PNG ni .rs)",
+        help="empaqueta en memoria y compara metadata + páginas versionadas (no escribe)",
     )
     args = parser.parse_args(argv)
 
@@ -186,14 +186,28 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.check:
         current = OUT_RS.read_text(encoding="utf-8")
+        problems: list[str] = []
         if current != rs_text:
+            problems.append("tile_atlas_generated.rs no coincide con el generador")
+        for p, expected in enumerate(pages):
+            page_path = ATLAS_DIR / f"tiles_atlas_{p}.png"
+            if not page_path.is_file():
+                problems.append(f"falta {page_path.relative_to(ROOT)}")
+                continue
+            actual = Image.open(page_path).convert("RGBA")
+            if actual.size != expected.size or actual.tobytes() != expected.tobytes():
+                problems.append(f"{page_path.relative_to(ROOT)} no coincide píxel a píxel")
+        if problems:
             print(
-                "DRIFT: tile_atlas_generated.rs no coincide con el generador.",
+                "DRIFT: " + "; ".join(problems) + ".",
                 file=sys.stderr,
             )
             print("  Regenerá con: python3 scripts/gen_tile_atlas.py", file=sys.stderr)
             return 1
-        print(f"OK: {OUT_RS.relative_to(ROOT)} coincide ({len(files)} archivos)")
+        print(
+            f"OK: {OUT_RS.relative_to(ROOT)} y {len(pages)} página(s) coinciden "
+            f"píxel a píxel ({len(files)} archivos)"
+        )
         return 0
 
     ATLAS_DIR.mkdir(parents=True, exist_ok=True)

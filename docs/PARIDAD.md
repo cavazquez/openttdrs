@@ -1292,7 +1292,7 @@ Inventario y verificación de reproducibilidad de `*_generated.rs`.
 | `house_population` | `gen_house_population.py` | Regenera vs `town_land.h` del pin; si no hay upstream, `output_sha256` |
 | `house_draw_data` | `gen_house_draw_data.py` | Solo `output_sha256` (OpenGFX no vendorizado) |
 | `vehicle_gfx_data` | `gen_vehicle_gfx_data.py` | Solo `output_sha256`; `--check` local con PNG |
-| `tile_atlas` | `gen_tile_atlas.py` | Solo `output_sha256` del `.rs`; `--check` no escribe PNG |
+| `tile_atlas` | `gen_tile_atlas.py` | CI valida `output_sha256` del `.rs`; localmente `--check` también compara las páginas PNG píxel a píxel sin escribir |
 
 Los generadores OpenGFX tienen `--check` (exit 2 si faltan assets). Tras regenerar con el set local, actualizá `output_sha256` en el manifiesto (PR de datos de render).
 

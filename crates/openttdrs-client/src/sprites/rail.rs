@@ -1911,7 +1911,7 @@ pub fn collect_rail_sprites_for_type(
 ///
 /// La división de fundaciones de medio bloque ya ocurrió en core; acá solo
 /// queda aplicar el selector clásico/plano y el set tipado mono/maglev.
-fn collect_rail_sprites_for_surface(
+pub(crate) fn collect_rail_sprites_for_surface(
     track_bits: u8,
     sprite_tileh: u8,
     snow_ground: bool,

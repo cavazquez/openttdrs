@@ -19,7 +19,7 @@ use crate::sprites::{
     ROADSIDE_TREE_META, ROADSIDE_TREES, TRACK_FENCE_META, catenary_reference_sprite_id,
     catenary_sprite_color, collect_catenary_pylons_from_map_with_pcp_override,
     collect_catenary_sprites_from_map, collect_rail_pbs_reservation_sprites,
-    collect_rail_sprites_for_type, collect_signal_sprite_draws, is_road_level_crossing,
+    collect_rail_sprites_for_surface, collect_signal_sprite_draws, is_road_level_crossing,
     is_typed_rail_track_sprite, level_crossing_has_rail_reservation,
     level_crossing_rail_sprite_id_for_type, rail_ghost_overlay_offset, rail_pbs_reservation_offset,
     rail_tile_is_signals, rail_track_base_color, rail_trackbits_for_render, remap_rail_sprite_id,
@@ -28,6 +28,86 @@ use crate::sprites::{
     signal_screen_anchor_for_side, signal_screen_position_for_side, signal_sprite_center_offset,
     track_fence_draws_for_tile, tram_flat_sprite_index,
 };
+
+/// Contexto de `DrawGroundSprite` para una pasada de vía. Una fundación crea
+/// un padre sortable y las vías siguientes pasan a ser `child`; sin ella, el
+/// mismo draw proc emite una primitiva `ground` anclada al mundo.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RailTrackTraceMode {
+    Ground,
+    FoundationChild((i32, i32, i32)),
+}
+
+// Discriminantes de `Foundation` que todavía no forman parte de la API pública
+// de core. Se mantienen aquí porque solo describen la relación padre/hijo del
+// stream de trazas, no la selección ni el dibujo de los cimientos.
+const FOUNDATION_STEEP_LOWER: u8 = 4;
+const FOUNDATION_STEEP_BOTH: u8 = 5;
+const FOUNDATION_HALFTILE_W: u8 = 6;
+const FOUNDATION_HALFTILE_N: u8 = 9;
+const FOUNDATION_RAIL_W: u8 = 10;
+const FOUNDATION_RAIL_N: u8 = 13;
+
+/// Offset de `OffsetGroundSprite` para `HalftileFoundation(corner)`, ya
+/// normalizado por `ZOOM_BASE` como lo exporta el oráculo C++.
+const fn halftile_foundation_child_offset(corner: u8) -> (i32, i32, i32) {
+    match corner {
+        // Corner::W, ::S, ::E, ::N respectivamente.
+        0 => (64, -32, 0),
+        1 => (0, -64, 0),
+        2 => (-64, -32, 0),
+        _ => (0, 0, 0),
+    }
+}
+
+/// Replica el padre activo que deja cada llamada a `DrawFoundation` antes de
+/// una pasada de `DrawTrackBits`. En las fundaciones no continuas, la pasada
+/// baja se pinta antes de crear la fundación de media tesela y la alta después.
+const fn rail_track_trace_mode(foundation: u8, halftile_corner: Option<u8>) -> RailTrackTraceMode {
+    if let Some(corner) = halftile_corner {
+        return RailTrackTraceMode::FoundationChild(halftile_foundation_child_offset(corner));
+    }
+
+    match foundation {
+        // `DrawFoundation` no se invoca: DrawGroundSpriteAt conserva mundo.
+        0 | u8::MAX => RailTrackTraceMode::Ground,
+        // Leveled y SteepLower aplican OffsetGroundSprite(0, -TILE_HEIGHT).
+        openttdrs_core::FOUNDATION_LEVELED | FOUNDATION_STEEP_LOWER | FOUNDATION_STEEP_BOTH => {
+            RailTrackTraceMode::FoundationChild((0, -32, 0))
+        }
+        // En la pasada baja de una fundación de media tesela no se llamó aún
+        // a DrawFoundation. La superior entra por `halftile_corner` arriba.
+        FOUNDATION_HALFTILE_W..=FOUNDATION_HALFTILE_N => RailTrackTraceMode::Ground,
+        // InclinedX/Y y las fundaciones anti-zig-zag mantienen offset cero.
+        openttdrs_core::FOUNDATION_INCLINED_X
+        | openttdrs_core::FOUNDATION_INCLINED_Y
+        | FOUNDATION_RAIL_W..=FOUNDATION_RAIL_N => RailTrackTraceMode::FoundationChild((0, 0, 0)),
+        // Un valor nuevo/desconocido no debe inventar una relación padre.
+        _ => RailTrackTraceMode::Ground,
+    }
+}
+
+fn record_rail_track_trace(
+    role: &'static str,
+    sprite_id: u32,
+    fallback: bool,
+    mode: RailTrackTraceMode,
+) {
+    match mode {
+        RailTrackTraceMode::Ground => WorldDrawTrace::record_sprite_with_geometry(
+            role,
+            "ground",
+            sprite_id,
+            fallback,
+            (0, 0, 0),
+            0,
+            None,
+        ),
+        RailTrackTraceMode::FoundationChild(offset) => {
+            WorldDrawTrace::record_foundation_child_sprite(role, sprite_id, fallback, offset);
+        }
+    }
+}
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_road_tile(
@@ -454,7 +534,28 @@ pub(crate) fn spawn_rail_tile(
         .tile
         .map(openttdrs_core::rail_type_from_tile)
         .unwrap_or_default();
-    collect_rail_sprites_for_type(render_tb, tileh, snow_ground, rail_type, rail_layers);
+    // Conservamos el límite entre las dos pasadas de `DrawTrackBits`: para
+    // una media fundación cambia el padre activo entre la mitad baja y alta.
+    // Los dos arrays son de tamaño fijo porque core garantiza como máximo dos
+    // pasadas; así la traza no agrega una asignación por tesela.
+    let rail_foundation = openttdrs_core::rail_foundation_for_trackbits(tileh, render_tb);
+    let track_plan = openttdrs_core::rail_track_draw_plan(tileh, render_tb);
+    rail_layers.clear();
+    let mut pass_ends = [0_usize; 2];
+    let mut pass_modes = [RailTrackTraceMode::Ground; 2];
+    let mut pass_count = 0_usize;
+    for pass in track_plan.passes.into_iter().flatten() {
+        collect_rail_sprites_for_surface(
+            pass.track_bits,
+            pass.sprite_tileh,
+            snow_ground,
+            rail_type,
+            rail_layers,
+        );
+        pass_modes[pass_count] = rail_track_trace_mode(rail_foundation, pass.halftile_corner);
+        pass_ends[pass_count] = rail_layers.len();
+        pass_count += 1;
+    }
     let typed_layers = rail_layers
         .iter()
         .any(|&sid| is_typed_rail_track_sprite(sid));
@@ -485,7 +586,11 @@ pub(crate) fn spawn_rail_tile(
     if ctx.tile.is_some_and(|t| rail_tile_is_signals(t.m5)) {
         rail_paint = rail_paint.mix(&Color::srgb(0.95, 0.88, 0.55), 0.22);
     }
+    let mut pass_index = 0_usize;
     for (i, sid) in rail_layers.iter().copied().enumerate() {
+        while pass_index + 1 < pass_count && i >= pass_ends[pass_index] {
+            pass_index += 1;
+        }
         let missing_asset = !assets.rail.contains_key(&sid);
         let fallback = typed_selection_fallback || missing_asset;
         let role = if fallback {
@@ -498,7 +603,7 @@ pub(crate) fn spawn_rail_tile(
         } else {
             "rail-track"
         };
-        WorldDrawTrace::record_sprite(role, "sortable", sid, fallback);
+        record_rail_track_trace(role, sid, fallback, pass_modes[pass_index]);
         let Some(img) = assets.rail.get(&sid) else {
             continue;
         };
@@ -768,5 +873,48 @@ pub(crate) fn spawn_rail_tile(
                 Transform::from_translation(pos3),
             ));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{RailTrackTraceMode, rail_track_trace_mode};
+    use openttdrs_core::{FOUNDATION_INCLINED_X, FOUNDATION_LEVELED};
+
+    #[test]
+    fn rail_track_trace_mode_matches_draw_ground_sprite_foundation_context() {
+        // Sin cimiento (o con una combinación inválida) el proc C++ conserva
+        // una coordenada de mundo. El resto verifica las ramas de
+        // `DrawFoundation` que cambian el padre activo.
+        assert_eq!(rail_track_trace_mode(0, None), RailTrackTraceMode::Ground);
+        assert_eq!(
+            rail_track_trace_mode(u8::MAX, None),
+            RailTrackTraceMode::Ground
+        );
+        assert_eq!(
+            rail_track_trace_mode(FOUNDATION_LEVELED, None),
+            RailTrackTraceMode::FoundationChild((0, -32, 0))
+        );
+        assert_eq!(
+            rail_track_trace_mode(FOUNDATION_INCLINED_X, None),
+            RailTrackTraceMode::FoundationChild((0, 0, 0))
+        );
+
+        // Fundación de media tesela: baja sin padre, alta en el padre nuevo.
+        assert_eq!(rail_track_trace_mode(7, None), RailTrackTraceMode::Ground);
+        assert_eq!(
+            rail_track_trace_mode(7, Some(1)),
+            RailTrackTraceMode::FoundationChild((0, -64, 0))
+        );
+        // SteepBoth primero deja el padre SteepLower y después crea el
+        // padre de media tesela de la esquina alta.
+        assert_eq!(
+            rail_track_trace_mode(5, None),
+            RailTrackTraceMode::FoundationChild((0, -32, 0))
+        );
+        assert_eq!(
+            rail_track_trace_mode(5, Some(0)),
+            RailTrackTraceMode::FoundationChild((64, -32, 0))
+        );
     }
 }

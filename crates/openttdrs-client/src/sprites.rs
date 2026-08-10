@@ -147,6 +147,7 @@ pub use industry_draw_proc::{
     industry_draw_proc_anim_frame, industry_draw_proc_dynamic_layers, industry_draw_proc_extended,
     industry_draw_proc_for_tile,
 };
+pub(crate) use rail::collect_rail_sprites_for_surface;
 #[allow(unused_imports)]
 pub use rail::{
     CATENARY_ENTRANCE_SPRITE_BASE, CatenarySpriteDraw, MAGLEV_RAIL_SPRITE_OFFSET,

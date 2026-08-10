@@ -65,18 +65,27 @@ fn loads_stationlist_test_sav() {
 }
 
 #[test]
-fn stationlist_depot_row_connects_to_rail() {
+fn stationlist_depot_row_preserves_clear_gap() {
     use openttdrs_core::{PathNetwork, TileKind, pathfinder};
 
     let state = GameState::from_sav_game(sav::load(&stationlist_sav_bytes()).expect("load"));
-    // Save real: vía (21,39) — huecos — depósito (24,39); tras import debe haber continuidad.
+    // El oráculo world-raw de OpenTTD 15.3 confirma: Rail — Clear — Clear —
+    // RailDepot. El importador no debe inventar vías para cerrar el hueco.
     assert_eq!(
-        state.map.get_kind(openttdrs_core::TileCoord::new(22, 39)),
+        state.map.get_kind(openttdrs_core::TileCoord::new(21, 39)),
         Some(TileKind::Rail)
     );
     assert_eq!(
+        state.map.get_kind(openttdrs_core::TileCoord::new(22, 39)),
+        Some(TileKind::Grass)
+    );
+    assert_eq!(
         state.map.get_kind(openttdrs_core::TileCoord::new(23, 39)),
-        Some(TileKind::Rail)
+        Some(TileKind::Grass)
+    );
+    assert_eq!(
+        state.map.get_kind(openttdrs_core::TileCoord::new(24, 39)),
+        Some(TileKind::RailDepot)
     );
     let path = pathfinder::find_path(
         &state.map,
@@ -85,8 +94,8 @@ fn stationlist_depot_row_connects_to_rail() {
         PathNetwork::Rail,
     );
     assert!(
-        path.is_some(),
-        "depósito y vía colindante deberían quedar unidos"
+        path.is_none(),
+        "el hueco MP_CLEAR no debe convertirse en una conexión ferroviaria"
     );
 }
 

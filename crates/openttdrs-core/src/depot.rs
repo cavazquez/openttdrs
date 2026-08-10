@@ -226,15 +226,15 @@ pub fn nearest_reachable_depot_tile_indexed(
     } else {
         PathNetwork::Road
     };
-    index
-        .candidates(kind)
-        .iter()
-        .copied()
-        .filter(|&depot| {
-            let target = road_depot_entrance_tile(map, depot).unwrap_or(depot);
-            find_path(map, from, target, network).is_some()
-        })
-        .min_by_key(|c| (from.x.abs_diff(c.x) + from.y.abs_diff(c.y), c.y, c.x))
+    // El primer depósito alcanzable en este orden es precisamente el mínimo
+    // que devolvía el `filter(...).min_by_key(...)` anterior. Parar al
+    // encontrarlo evita correr A* contra todos los depósitos más lejanos.
+    let mut candidates: Vec<_> = index.candidates(kind).iter().copied().collect();
+    candidates.sort_by_key(|c| (from.x.abs_diff(c.x) + from.y.abs_diff(c.y), c.y, c.x));
+    candidates.into_iter().find(|&depot| {
+        let target = road_depot_entrance_tile(map, depot).unwrap_or(depot);
+        find_path(map, from, target, network).is_some()
+    })
 }
 
 /// Boca del depósito de vía (`m5 & 3`) si la tesela es un depósito ferroviario.

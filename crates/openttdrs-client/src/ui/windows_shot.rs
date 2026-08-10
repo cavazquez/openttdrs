@@ -1321,6 +1321,7 @@ fn map_shot_driver(
         if viewport_cull {
             remap.pending = true;
             remap.full = false;
+            remap.labels_dirty = true;
         }
 
         if let Some(scale) = map_shot_scale_from_env()

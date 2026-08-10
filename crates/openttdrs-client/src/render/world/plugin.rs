@@ -46,6 +46,13 @@ pub(crate) struct RemapMapVisualsPending {
     pub(crate) full: bool,
     /// Chunks a regenerar in-place (construcción dentro del viewport ya cargado).
     pub(crate) refresh_chunks: HashSet<(u32, u32)>,
+    /// Las etiquetas de pueblos, estaciones o carteles deben recalcularse aunque
+    /// el conjunto de chunks visibles no cambie.
+    ///
+    /// Las etiquetas viven fuera de los chunks. No se marca para cambios de
+    /// señales o reservas: esos cambios pueden ocurrir cada tick y no alteran
+    /// ninguna etiqueta.
+    pub(crate) labels_dirty: bool,
 }
 
 impl RemapMapVisualsPending {
@@ -66,6 +73,7 @@ impl Default for RemapMapVisualsPending {
             sync_camera: false,
             full: true,
             refresh_chunks: HashSet::new(),
+            labels_dirty: false,
         }
     }
 }
@@ -85,6 +93,18 @@ pub(crate) fn request_map_visual_remap(
     } else {
         pending.full = true;
     }
+}
+
+/// Igual que [`request_map_visual_remap`], pero para una modificación que puede
+/// crear, eliminar o renombrar una etiqueta del mapa.
+pub(crate) fn request_map_visual_remap_with_labels(
+    pending: &mut RemapMapVisualsPending,
+    mw: u32,
+    mh: u32,
+    tiles: &[(i32, i32)],
+) {
+    request_map_visual_remap(pending, mw, mh, tiles);
+    pending.labels_dirty = true;
 }
 
 /// Bloques 16×16 ya instanciados (solo mapas con culling por viewport).

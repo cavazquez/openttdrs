@@ -309,6 +309,16 @@ pub(super) fn load_vehicles(
     loaded_this_tick: &mut [bool],
     unloaded_this_tick: &[bool],
 ) {
+    // Si no existe ninguna fuente posible, ningún vehículo puede iniciar una
+    // carga este tick. Evitar el barrido de toda la flota es especialmente
+    // importante al importar un SAV que todavía no contiene `INDY`/stocks.
+    // Un vehículo que ya estaba en carga debe seguir pasando por la lógica
+    // normal para cerrar correctamente una orden `full_load` sin mercancía.
+    let has_loadable_supply = has_loadable_supply(state);
+    if !has_loadable_supply && !state.vehicles.iter().any(|vehicle| vehicle.cargo_loading) {
+        return;
+    }
+
     for (i, loaded_flag) in loaded_this_tick
         .iter_mut()
         .enumerate()
@@ -359,9 +369,10 @@ pub(super) fn load_vehicles(
         }
         let vehicle_kind = state.vehicles[i].kind;
         let Some(station_idx) = station_index_for_industry_load(state, &state.vehicles[i]) else {
-            if let Some(station_idx) = station_index_at_vehicle(state, &state.vehicles[i]) {
-                try_load_at_station(state, i, station_idx, loaded_flag, unloaded_this_tick[i]);
-            }
+            // `station_index_for_industry_load` ya consulta la estación física
+            // antes de contemplar el caso especial de una industria. Repetir
+            // `station_index_at_vehicle` aquí hacía una segunda búsqueda para
+            // cada vehículo que circula fuera de una estación.
             continue;
         };
         let Some(station) = state.stations.get(station_idx) else {
@@ -390,30 +401,15 @@ pub(super) fn load_vehicles(
     }
 }
 
-fn try_load_at_station(
-    state: &mut GameState,
-    vehicle_idx: usize,
-    station_idx: usize,
-    loaded_flag: &mut bool,
-    unloaded_this_tick: bool,
-) {
-    let vehicle = &state.vehicles[vehicle_idx];
-    let Some(station) = state.stations.get(station_idx) else {
-        return;
-    };
-    if !station.can_service_vehicle(vehicle.kind) {
-        return;
-    }
-    if !station_matches_current_order(vehicle, station.pos) {
-        return;
-    }
-    if try_load_from_industry(state, vehicle_idx, station_idx, loaded_flag) {
-        return;
-    }
-    if unloaded_this_tick {
-        return;
-    }
-    try_load_from_station_waiting_cargo(state, vehicle_idx, station_idx, loaded_flag);
+/// Sólo una industria con stock o una estación con paquetes en espera puede
+/// iniciar una carga. Las industrias que todavía no produjeron no obligan a
+/// visitar toda la flota: el siguiente tick las verá cuando tengan stock.
+fn has_loadable_supply(state: &GameState) -> bool {
+    state.industries.iter().any(|industry| industry.stock > 0)
+        || state
+            .stations
+            .iter()
+            .any(|station| station.cargo_stock != crate::CargoStock::default())
 }
 
 fn try_load_from_industry(
@@ -886,6 +882,17 @@ fn station_has_industry_waiting(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn load_supply_requires_stock_in_industry_or_station() {
+        let mut state = GameState::new(4, 4);
+        assert!(!has_loadable_supply(&state));
+
+        let mut station = crate::Station::new(TileCoord::new(1, 1));
+        station.cargo_stock.passengers = 1;
+        state.stations.push(station);
+        assert!(has_loadable_supply(&state));
+    }
 
     #[test]
     fn newgrf_load_amount_overrides_cargo_fallback() {

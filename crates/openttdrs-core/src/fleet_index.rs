@@ -4,7 +4,7 @@
 //! al comenzar cada tick. El recorrido de un consist usa `next_unit` con lookup
 //! O(1), evitando el `iter().find` por eslabón.
 
-use std::collections::{HashMap, HashSet};
+use ahash::{AHashMap, AHashSet};
 
 use crate::map::{Map, TileCoord, TileKind};
 use crate::station::Station;
@@ -12,9 +12,12 @@ use crate::vehicle::Vehicle;
 
 #[derive(Debug, Clone, Default)]
 pub struct FleetIndex {
-    slots: HashMap<u32, usize>,
-    heads: HashMap<u32, u32>,
-    consists: HashMap<u32, Vec<u32>>,
+    // Índice transitorio reconstruido al inicio del tick. `AHashMap` conserva
+    // una semilla aleatoria (no degrada ante IDs de un SAV hostil) y evita el
+    // coste de SipHash en los miles de consultas internas por tick.
+    slots: AHashMap<u32, usize>,
+    heads: AHashMap<u32, u32>,
+    consists: AHashMap<u32, Vec<u32>>,
     rebuilds: u64,
 }
 
@@ -29,7 +32,7 @@ impl FleetIndex {
             self.slots.insert(vehicle.id, slot);
         }
 
-        let mut visited = HashSet::with_capacity(vehicles.len());
+        let mut visited = AHashSet::with_capacity(vehicles.len());
         for vehicle in vehicles.iter().filter(|v| v.prev_unit.is_none()) {
             self.index_chain(vehicles, vehicle.id, &mut visited);
         }
@@ -42,7 +45,7 @@ impl FleetIndex {
         self.rebuilds = self.rebuilds.saturating_add(1);
     }
 
-    fn index_chain(&mut self, vehicles: &[Vehicle], head: u32, visited: &mut HashSet<u32>) {
+    fn index_chain(&mut self, vehicles: &[Vehicle], head: u32, visited: &mut AHashSet<u32>) {
         let mut ids = Vec::new();
         let mut current = Some(head);
         while let Some(id) = current {
@@ -85,14 +88,14 @@ impl FleetIndex {
 /// Tile de estación/terminal → slots de estación que lo poseen.
 #[derive(Debug, Clone, Default)]
 pub struct TerminalSpatialIndex {
-    by_tile: HashMap<TileCoord, Vec<usize>>,
+    by_tile: AHashMap<TileCoord, Vec<usize>>,
     rebuilds: u64,
 }
 
 impl TerminalSpatialIndex {
     pub fn rebuild(&mut self, map: &Map, stations: &[Station]) {
         self.by_tile.clear();
-        let mut imported_station_slots = HashMap::new();
+        let mut imported_station_slots = AHashMap::new();
         for (slot, station) in stations.iter().enumerate() {
             self.insert(station.pos, slot);
             for &tile in station.airport_tiles.iter().chain(&station.joined_tiles) {

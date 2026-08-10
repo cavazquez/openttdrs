@@ -76,12 +76,28 @@ pub fn consist_tile_span(vehicles: &[Vehicle], head_id: u32) -> u32 {
 /// tesela y la proyección «detrás» sacaría vagones a la boca).
 #[must_use]
 pub fn consist_occupied_tiles(vehicles: &[Vehicle], head_id: u32) -> Vec<TileCoord> {
-    let ids = super::topology::consist_unit_ids(vehicles, head_id);
+    let mut index = crate::fleet_index::FleetIndex::default();
+    index.rebuild(vehicles);
+    consist_occupied_tiles_indexed(vehicles, &index, head_id)
+}
+
+/// Como [`consist_occupied_tiles`], reutilizando el índice de flota del tick.
+///
+/// Los hot paths de PBS consultan muchas huellas sobre una misma topología; no
+/// deben reconstruir `FleetIndex` para cada tren o tesela.
+#[must_use]
+pub fn consist_occupied_tiles_indexed(
+    vehicles: &[Vehicle],
+    index: &crate::fleet_index::FleetIndex,
+    head_id: u32,
+) -> Vec<TileCoord> {
+    let ids = index.consist(head_id);
     let mut tiles = Vec::new();
-    for id in &ids {
-        let Some(unit) = vehicles.iter().find(|v| v.id == *id) else {
+    for &id in ids {
+        let Some(slot) = index.slot(id) else {
             continue;
         };
+        let unit = &vehicles[slot];
         if !tiles.contains(&unit.pos) {
             tiles.push(unit.pos);
         }
@@ -91,7 +107,8 @@ pub fn consist_occupied_tiles(vehicles: &[Vehicle], head_id: u32) -> Vec<TileCoo
     // reconstruya la topología física al cargar.
     if ids.len() <= 1 {
         let span = consist_tile_span(vehicles, head_id) as usize;
-        if let Some(head) = vehicles.iter().find(|v| v.id == head_id) {
+        if let Some(slot) = index.slot(head_id) {
+            let head = &vehicles[slot];
             for &tile in head.rail_tile_history.iter().take(span.saturating_sub(1)) {
                 if !tiles.contains(&tile) {
                     tiles.push(tile);

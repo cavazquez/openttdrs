@@ -192,7 +192,12 @@ pub(crate) fn handle_bridge_picker_buttons(
                         .into_iter()
                         .map(|c| (c.x, c.y))
                         .collect();
-                crate::render::request_map_visual_remap(&mut pending_remap, mw, mh, &tiles);
+                crate::render::request_map_visual_remap_with_labels(
+                    &mut pending_remap,
+                    mw,
+                    mh,
+                    &tiles,
+                );
                 bridge_state.pending = None;
             }
             Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),

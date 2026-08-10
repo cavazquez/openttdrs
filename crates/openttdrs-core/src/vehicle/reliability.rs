@@ -340,6 +340,11 @@ pub(crate) fn process_vehicle_economy_day(state: &mut crate::GameState) {
                 breakdown_level,
                 no_servicing,
             );
+            // `RunEconomyVehicleDayProc` llama `OnNewEconomyDay` para este
+            // slot; en road vehicles eso incluye `CheckIfRoadVehNeedsService`.
+            // Hacerlo aquí (y no para toda la flota al cambiar el día) mantiene
+            // el barrido `index % DAY_TICKS`, como OpenTTD.
+            check_road_vehicle_needs_service(state, i);
         }
         i = i.saturating_add(day_ticks);
     }
@@ -370,76 +375,64 @@ pub(crate) fn update_vehicle_servicing_flags(state: &mut crate::GameState) {
 /// Penalización máxima de desvío para depósito automático (simplificado de `roadveh_cmd.cpp`).
 const ROAD_SERVICE_MAX_PENALTY: u32 = 20;
 
-/// Inserta orden de depósito si un vehículo road necesita servicio (`CheckIfRoadVehNeedsService`).
-pub(crate) fn check_road_vehicles_need_service(state: &mut crate::GameState) {
+/// Inserta orden de depósito para el vehículo road de un slot de economía
+/// (`CheckIfRoadVehNeedsService`).
+///
+/// Se invoca desde [`process_vehicle_economy_day`], que reparte los vehículos
+/// entre los 74 ticks diarios. No debe convertirse en un barrido de la flota al
+/// iniciar el día: en una partida grande eso concentra miles de A* en un tick.
+fn check_road_vehicle_needs_service(state: &mut crate::GameState, idx: usize) {
     use crate::depot::nearest_reachable_depot_tile_indexed;
-    use crate::pathfinder::{PathNetwork, find_path};
     use crate::vehicle::VehicleKind;
     use crate::vehicle::order::VehicleOrder;
 
-    if !state.runtime.calendar_triggers.new_day {
+    let Some(vehicle) = state.vehicles.get(idx) else {
+        return;
+    };
+    if !matches!(
+        vehicle.kind,
+        VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram
+    ) || !vehicle.running
+        || vehicle.prev_unit.is_some()
+        || vehicle
+            .orders
+            .iter()
+            .any(|o| matches!(o, VehicleOrder::Depot { .. }))
+    {
         return;
     }
 
-    let tick = state.tick.get();
-
-    let candidates: Vec<usize> = state
-        .vehicles
-        .iter()
-        .enumerate()
-        .filter(|(_, v)| {
-            matches!(
-                v.kind,
-                VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram
-            ) && v.running
-                && v.prev_unit.is_none()
-                && !v
-                    .orders
-                    .iter()
-                    .any(|o| matches!(o, VehicleOrder::Depot { .. }))
-        })
-        .map(|(i, _)| i)
-        .collect();
-
-    for idx in candidates {
-        state.vehicles[idx].sim_tick = tick;
-        let needs = {
-            let state_ref: &crate::GameState = state;
-            state_ref.vehicles[idx].requires_service_with(state_ref)
-        };
-        if !needs {
-            continue;
-        }
-        let (pos, kind) = {
-            let v = &state.vehicles[idx];
-            (v.pos, v.kind)
-        };
-        let Some(depot) = nearest_reachable_depot_tile_indexed(
-            &state.map,
-            pos,
-            kind,
-            &mut state.runtime.depot_spatial_index,
-        ) else {
-            continue;
-        };
-        let path_target =
-            crate::depot::road_depot_entrance_tile(&state.map, depot).unwrap_or(depot);
-        if find_path(&state.map, pos, path_target, PathNetwork::Road).is_none() {
-            continue;
-        }
-        let dist = crate::economy::manhattan_distance(pos, depot);
-        if dist > ROAD_SERVICE_MAX_PENALTY {
-            continue;
-        }
-        let vehicle = &mut state.vehicles[idx];
-        vehicle.needs_servicing = true;
-        vehicle.orders.insert(
-            vehicle.current_order,
-            VehicleOrder::depot_pass_through(depot),
-        );
-        vehicle.path.clear();
-        vehicle.sync_order_destination(&state.map);
+    let needs = {
+        let state_ref: &crate::GameState = state;
+        state_ref.vehicles[idx].requires_service_with(state_ref)
+    };
+    if !needs {
+        return;
     }
+    let (pos, kind) = {
+        let v = &state.vehicles[idx];
+        (v.pos, v.kind)
+    };
+    let Some(depot) = nearest_reachable_depot_tile_indexed(
+        &state.map,
+        pos,
+        kind,
+        &mut state.runtime.depot_spatial_index,
+    ) else {
+        return;
+    };
+    let dist = crate::economy::manhattan_distance(pos, depot);
+    if dist > ROAD_SERVICE_MAX_PENALTY {
+        return;
+    }
+    let vehicle = &mut state.vehicles[idx];
+    vehicle.needs_servicing = true;
+    vehicle.orders.insert(
+        vehicle.current_order,
+        VehicleOrder::depot_pass_through(depot),
+    );
+    vehicle.path.clear();
+    vehicle.sync_order_destination(&state.map);
 }
 
 #[cfg(test)]
@@ -576,7 +569,7 @@ mod tests {
     }
 
     #[test]
-    fn road_vehicle_inserts_depot_order_when_service_due() {
+    fn road_vehicle_service_check_runs_in_its_economy_slot() {
         use crate::vehicle::order::VehicleOrder;
         use crate::{Command, GameState, apply_command};
 
@@ -591,17 +584,29 @@ mod tests {
             .unwrap();
         }
         apply_command(&mut state, &Command::PlaceRoadDepotDir(depot, 0)).unwrap();
-        let mut v = Vehicle::new(1, VehicleKind::Bus, road, TileCoord::new(6, 4));
-        v.running = true;
-        v.service_interval_days = 1;
-        v.last_service_day = 0;
-        v.orders = vec![VehicleOrder::station(TileCoord::new(8, 4))];
-        state.vehicles.push(v);
+        for id in [1, 2] {
+            let mut v = Vehicle::new(id, VehicleKind::Bus, road, TileCoord::new(6, 4));
+            v.running = true;
+            v.service_interval_days = 1;
+            v.last_service_day = 0;
+            v.orders = vec![VehicleOrder::station(TileCoord::new(8, 4))];
+            state.vehicles.push(v);
+        }
         state.tick = crate::GameTick::new(u64::from(crate::economy::TICKS_PER_DAY));
         state.sync_timers_from_tick();
-        state.runtime.calendar_triggers.new_day = true;
-        state.vehicles[0].sim_tick = state.tick.get();
-        check_road_vehicles_need_service(&mut state);
+        state.economy_timer.date_fract = 1;
+        process_vehicle_economy_day(&mut state);
+        assert!(matches!(
+            state.vehicles[1].orders[0],
+            VehicleOrder::Depot { stop: false, .. }
+        ));
+        assert!(matches!(
+            state.vehicles[0].orders[0],
+            VehicleOrder::Station { .. }
+        ));
+
+        state.economy_timer.date_fract = 0;
+        process_vehicle_economy_day(&mut state);
         assert!(matches!(
             state.vehicles[0].orders[0],
             VehicleOrder::Depot { stop: false, .. }

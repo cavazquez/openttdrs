@@ -208,6 +208,18 @@ impl SimulationRuntime {
         }
     }
 
+    /// Inicia el delta visual de un tick de simulación.
+    ///
+    /// Las listas de señales y reservas son consumidas por el cliente después
+    /// de `GameState::step`; por eso se limpian al comienzo del tick siguiente,
+    /// no al terminar el actual. `tile_loop_visited` y `signal_globset` no se
+    /// tocan aquí: el primero se consume en `AnimateAnimatedTiles` del próximo
+    /// tick y el segundo puede contener trabajo pendiente de señales.
+    pub fn begin_tick_visual_delta(&mut self) {
+        self.signal_tile_dirty.clear();
+        self.reservation_tile_dirty.clear();
+    }
+
     /// Limpia las estructuras efímeras manteniendo capacidades asignadas cuando sea apropiado.
     pub fn clear_transient(&mut self) {
         self.pending_income_popups.clear();
@@ -220,5 +232,39 @@ impl SimulationRuntime {
         self.reservation_tile_dirty.clear();
         self.pending_news_events.clear();
         self.pending_newgrf_sounds.clear();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SimulationRuntime;
+    use crate::map::{Map, TileCoord};
+    use crate::rail_signals::SignalGlobEntry;
+
+    #[test]
+    fn tick_visual_delta_preserves_cross_tick_work_and_clears_render_deltas() {
+        let mut runtime = SimulationRuntime::new();
+        let coord = TileCoord::new(3, 4);
+        let map = Map::new_flat(8, 8, 0);
+        let Some(tile) = map.get(coord) else {
+            panic!("la tesela de prueba debe pertenecer al mapa");
+        };
+        runtime.tile_loop_visited.push((coord, tile));
+        runtime
+            .signal_globset
+            .insert(SignalGlobEntry::any_dir(coord));
+        runtime.signal_tile_dirty.push(coord);
+        runtime.reservation_tile_dirty.push(coord);
+
+        runtime.begin_tick_visual_delta();
+
+        assert_eq!(runtime.tile_loop_visited.len(), 1);
+        assert!(
+            runtime
+                .signal_globset
+                .contains(&SignalGlobEntry::any_dir(coord))
+        );
+        assert!(runtime.signal_tile_dirty.is_empty());
+        assert!(runtime.reservation_tile_dirty.is_empty());
     }
 }

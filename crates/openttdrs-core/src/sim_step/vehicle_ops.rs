@@ -39,7 +39,6 @@ pub(super) fn run_autoreplace_in_depots(state: &mut GameState) {
 
 pub(super) fn update_servicing_and_road_depot_orders(state: &mut GameState) {
     crate::vehicle::update_vehicle_servicing_flags(state);
-    crate::vehicle::check_road_vehicles_need_service(state);
 }
 
 pub(super) fn apply_pending_depot_order_refits(state: &mut GameState) {

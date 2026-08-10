@@ -19,7 +19,8 @@ pub use couple::{
     attach_wagon, attach_wagon_chain, detach_unit, detach_unit_keep_tail, sell_chain_ids,
 };
 pub use metrics::{
-    consist_capacity, consist_occupied_tiles, consist_power_hp, consist_tile_span, consist_weight_t,
+    consist_capacity, consist_occupied_tiles, consist_occupied_tiles_indexed, consist_power_hp,
+    consist_tile_span, consist_weight_t,
 };
 pub use newgrf_vars::{action2_eval_ctx_for_unit, cargo_class_bits, cargo_type_a_id};
 pub use pose::{TrainUnitPose, consist_unit_poses};

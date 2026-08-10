@@ -74,7 +74,9 @@ Cada comando tiene un `ordinal` reiniciado por tesela:
 
 Primitivas posibles:
 
-- `ground`: llamado de suelo (`AddTileSpriteToDraw`).
+- `ground`: llamado de suelo (`AddTileSpriteToDraw`). `offset.x/y` conserva
+  sus `extra_offs_*` ya normalizados a `ZOOM_BASE`; por ejemplo, una reserva
+  PBS de una vía de esquina elevada puede quedar en `y=-32` aun sin cimiento.
 - `sortable`: sprite con bounding box propio.
 - `combined`: hijo lógico emitido durante `StartSpriteCombine`/`EndSpriteCombine`.
 - `child`: sprite de pantalla relativo a su padre/fundación.

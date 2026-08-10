@@ -1199,6 +1199,19 @@ pub fn level_crossing_has_rail_reservation(m5: u8) -> bool {
 
 pub use openttdrs_core::rail_tile_has_pbs_reservation;
 
+/// Una capa PBS con el contexto de la pasada de `DrawTrackBits` que la emitió.
+///
+/// El renderer visual solo necesita `sprite_id`, pero la traza canónica debe
+/// conocer la pista y pendiente efectiva para reproducir `DrawTrackSprite` y
+/// su offset relativo a un cimiento.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct RailPbsReservationSpriteDraw {
+    pub(crate) sprite_id: u32,
+    pub(crate) track_bit: u8,
+    pub(crate) sprite_tileh: u8,
+    pub(crate) halftile_corner: Option<u8>,
+}
+
 /// Capas `PALETTE_CRASH` de una reserva PBS, siguiendo las mismas pasadas de
 /// fundación que `DrawTrackBits` / `DrawTrackBitsOverlay`.
 ///
@@ -1208,12 +1221,12 @@ pub use openttdrs_core::rail_tile_has_pbs_reservation;
 /// Esto evita convertir una reserva de una sola esquina en una vía diagonal
 /// completa (el origen de varios falsos "cortes" en pendientes).
 #[must_use]
-pub fn collect_rail_pbs_reservation_sprites(
+pub(crate) fn collect_rail_pbs_reservation_draws(
     track_bits: u8,
     reservation_bits: u8,
     tileh: u8,
     rail_type: openttdrs_core::RailType,
-) -> Vec<u32> {
+) -> Vec<RailPbsReservationSpriteDraw> {
     let mut out = Vec::with_capacity(6);
     for pass in openttdrs_core::rail_track_draw_plan(tileh, track_bits & 0x3F)
         .passes
@@ -1245,10 +1258,33 @@ pub fn collect_rail_pbs_reservation_sprites(
             } else {
                 remap_rail_sprite_id(single_sprite, rail_type)
             };
-            out.push(sprite);
+            out.push(RailPbsReservationSpriteDraw {
+                sprite_id: sprite,
+                track_bit,
+                sprite_tileh: pass.sprite_tileh,
+                halftile_corner: pass.halftile_corner,
+            });
         }
     }
     out
+}
+
+/// Adaptador de IDs para las pruebas de selección de PBS.
+///
+/// La ruta de producción debe consumir [`collect_rail_pbs_reservation_draws`]
+/// para no perder la pendiente ni el contexto de fundación de cada capa.
+#[cfg(test)]
+#[must_use]
+fn collect_rail_pbs_reservation_sprites(
+    track_bits: u8,
+    reservation_bits: u8,
+    tileh: u8,
+    rail_type: openttdrs_core::RailType,
+) -> Vec<u32> {
+    collect_rail_pbs_reservation_draws(track_bits, reservation_bits, tileh, rail_type)
+        .into_iter()
+        .map(|draw| draw.sprite_id)
+        .collect()
 }
 
 /// `SPR_TRACKS_FOR_SLOPES_{RAIL,MONO,MAGLEV}_BASE` para una X/Y compatible

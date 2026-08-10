@@ -15,18 +15,19 @@ use crate::render::road_newgrf::{
 use crate::render::world_draw_trace::WorldDrawTrace;
 use crate::render::{MapVisualLayer, TileRenderContext, WorldAssets};
 use crate::sprites::{
-    RAIL_GROUND_SNOW_OR_DESERT, ROAD_FLAT_HALF_H, ROAD_STREETLIGHT_META, ROADSIDE_LAMPS,
-    ROADSIDE_TREE_META, ROADSIDE_TREES, TRACK_FENCE_META, catenary_reference_sprite_id,
-    catenary_sprite_color, collect_catenary_pylons_from_map_with_pcp_override,
-    collect_catenary_sprites_from_map, collect_rail_pbs_reservation_sprites,
-    collect_rail_sprites_for_surface, collect_signal_sprite_draws, is_road_level_crossing,
-    is_typed_rail_track_sprite, level_crossing_has_rail_reservation,
-    level_crossing_rail_sprite_id_for_type, rail_ghost_overlay_offset, rail_pbs_reservation_offset,
-    rail_tile_is_signals, rail_track_base_color, rail_trackbits_for_render, remap_rail_sprite_id,
-    road_bits_for_render, road_flat_sprite_color, road_flat_sprite_index, road_tile_roadside,
-    road_tile_snow_or_desert, road_tile_tram_visual_active, roadside_is_paved,
-    signal_screen_anchor_for_side, signal_screen_position_for_side, signal_sprite_center_offset,
-    track_fence_draws_for_tile, tram_flat_sprite_index,
+    RAIL_GROUND_SNOW_OR_DESERT, RAIL_TB_LEFT, RAIL_TB_LOWER, RAIL_TB_RIGHT, RAIL_TB_UPPER,
+    ROAD_FLAT_HALF_H, ROAD_STREETLIGHT_META, ROADSIDE_LAMPS, ROADSIDE_TREE_META, ROADSIDE_TREES,
+    TRACK_FENCE_META, catenary_reference_sprite_id, catenary_sprite_color,
+    collect_catenary_pylons_from_map_with_pcp_override, collect_catenary_sprites_from_map,
+    collect_rail_pbs_reservation_draws, collect_rail_sprites_for_surface,
+    collect_signal_sprite_draws, is_road_level_crossing, is_typed_rail_track_sprite,
+    level_crossing_has_rail_reservation, level_crossing_rail_sprite_id_for_type,
+    rail_ghost_overlay_offset, rail_pbs_reservation_offset, rail_tile_is_signals,
+    rail_track_base_color, rail_trackbits_for_render, remap_rail_sprite_id, road_bits_for_render,
+    road_flat_sprite_color, road_flat_sprite_index, road_tile_roadside, road_tile_snow_or_desert,
+    road_tile_tram_visual_active, roadside_is_paved, signal_screen_anchor_for_side,
+    signal_screen_position_for_side, signal_sprite_center_offset, track_fence_draws_for_tile,
+    tram_flat_sprite_index,
 };
 
 /// Contexto de `DrawGroundSprite` para una pasada de vía. Una fundación crea
@@ -105,6 +106,58 @@ fn record_rail_track_trace(
         ),
         RailTrackTraceMode::FoundationChild(offset) => {
             WorldDrawTrace::record_foundation_child_sprite(role, sprite_id, fallback, offset);
+        }
+    }
+}
+
+/// Offset extra de las pistas de esquina PBS en `DrawTrackBits`, ya
+/// multiplicado por `ZOOM_BASE`. X/Y usan el banco inclinado sin offset;
+/// `Upper/Lower/Right/Left` pasan `-TILE_HEIGHT` a `DrawGroundSprite` cuando
+/// la pendiente efectiva contiene su dirección.
+const fn pbs_track_sprite_extra_y(track_bit: u8, surface_tileh: u8) -> i32 {
+    let slope_bit = match track_bit {
+        RAIL_TB_UPPER => 0x08,
+        RAIL_TB_LOWER => 0x02,
+        RAIL_TB_RIGHT => 0x04,
+        RAIL_TB_LEFT => 0x01,
+        _ => 0,
+    };
+    if slope_bit != 0 && surface_tileh & slope_bit != 0 {
+        -32
+    } else {
+        0
+    }
+}
+
+/// Convierte el desplazamiento de pantalla de OpenTTD (Y hacia abajo) a la
+/// coordenada de Bevy (Y hacia arriba). Ambos ya están en píxeles del sprite
+/// OpenGFX, por lo que sólo cambia el signo.
+const fn pbs_extra_y_in_bevy(extra_y: i32) -> f32 {
+    -(extra_y as f32)
+}
+
+fn record_rail_pbs_trace(sprite_id: u32, fallback: bool, mode: RailTrackTraceMode, extra_y: i32) {
+    match mode {
+        RailTrackTraceMode::Ground => {
+            WorldDrawTrace::record_sprite_with_palette_and_geometry(
+                "rail-pbs-reservation",
+                "ground",
+                sprite_id,
+                804,
+                fallback,
+                (0, extra_y, 0),
+                0,
+                None,
+            );
+        }
+        RailTrackTraceMode::FoundationChild((x, y, z)) => {
+            WorldDrawTrace::record_foundation_child_sprite_with_palette(
+                "rail-pbs-reservation",
+                sprite_id,
+                804,
+                fallback,
+                (x, y + extra_y, z),
+            );
         }
     }
 }
@@ -625,25 +678,20 @@ pub(crate) fn spawn_rail_tile(
         let reservation_bits = ctx.tile.map_or(0, |tile| {
             openttdrs_core::decode_rail_reservation_m2_hi(tile.m2_hi)
         });
-        for (i, sid) in
-            collect_rail_pbs_reservation_sprites(render_tb, reservation_bits, tileh, rail_type)
+        for (i, draw) in
+            collect_rail_pbs_reservation_draws(render_tb, reservation_bits, tileh, rail_type)
                 .into_iter()
                 .enumerate()
         {
-            WorldDrawTrace::record_sprite_with_palette_and_geometry(
-                "rail-pbs-reservation",
-                "ground",
-                sid,
-                804,
-                !assets.rail.contains_key(&sid),
-                (0, 0, 0),
-                0,
-                None,
-            );
+            let sid = draw.sprite_id;
+            let mode = rail_track_trace_mode(rail_foundation, draw.halftile_corner);
+            let extra_y = pbs_track_sprite_extra_y(draw.track_bit, draw.sprite_tileh);
+            record_rail_pbs_trace(sid, !assets.rail.contains_key(&sid), mode, extra_y);
             let Some(img) = assets.rail.get(&sid) else {
                 continue;
             };
             let offset = rail_pbs_reservation_offset(sid);
+            let bevy_extra_y = pbs_extra_y_in_bevy(extra_y);
             let base = tile_pos_half(
                 ctx.tx_i32(),
                 ctx.ty_i32(),
@@ -655,7 +703,9 @@ pub(crate) fn spawn_rail_tile(
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
                 img.sprite_colored(rail_paint.mix(&Color::srgb(0.95, 0.52, 0.42), 0.26)),
-                Transform::from_translation(base + Vec3::new(offset.x, offset.y, 0.0)),
+                Transform::from_translation(
+                    base + Vec3::new(offset.x, offset.y + bevy_extra_y, 0.0),
+                ),
             ));
         }
     }
@@ -878,7 +928,10 @@ pub(crate) fn spawn_rail_tile(
 
 #[cfg(test)]
 mod tests {
-    use super::{RailTrackTraceMode, rail_track_trace_mode};
+    use super::{
+        RailTrackTraceMode, pbs_extra_y_in_bevy, pbs_track_sprite_extra_y, rail_track_trace_mode,
+    };
+    use crate::sprites::{RAIL_TB_LEFT, RAIL_TB_LOWER, RAIL_TB_RIGHT, RAIL_TB_UPPER};
     use openttdrs_core::{FOUNDATION_INCLINED_X, FOUNDATION_LEVELED};
 
     #[test]
@@ -916,5 +969,24 @@ mod tests {
             rail_track_trace_mode(5, Some(0)),
             RailTrackTraceMode::FoundationChild((64, -32, 0))
         );
+    }
+
+    #[test]
+    fn pbs_corner_tracks_follow_the_effective_surface_slope() {
+        // `DrawTrackBits` desplaza sólo la reserva de la esquina que está
+        // elevada. `sprite_tileh` ya es la pendiente posterior a
+        // `DrawFoundation`, no necesariamente el `tileh` almacenado en SAV.
+        assert_eq!(pbs_track_sprite_extra_y(RAIL_TB_LEFT, 0x0B), -32);
+        assert_eq!(pbs_track_sprite_extra_y(RAIL_TB_RIGHT, 0x0E), -32);
+        assert_eq!(pbs_track_sprite_extra_y(RAIL_TB_UPPER, 0x0D), -32);
+        assert_eq!(pbs_track_sprite_extra_y(RAIL_TB_LOWER, 0x07), -32);
+
+        assert_eq!(pbs_track_sprite_extra_y(RAIL_TB_LEFT, 0x0E), 0);
+        assert_eq!(pbs_track_sprite_extra_y(RAIL_TB_RIGHT, 0x0B), 0);
+        assert_eq!(pbs_track_sprite_extra_y(RAIL_TB_UPPER, 0x07), 0);
+        assert_eq!(pbs_track_sprite_extra_y(RAIL_TB_LOWER, 0x0D), 0);
+
+        assert_eq!(pbs_extra_y_in_bevy(-32), 32.0);
+        assert_eq!(pbs_extra_y_in_bevy(0), 0.0);
     }
 }

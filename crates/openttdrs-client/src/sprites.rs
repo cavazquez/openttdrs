@@ -147,7 +147,6 @@ pub use industry_draw_proc::{
     industry_draw_proc_anim_frame, industry_draw_proc_dynamic_layers, industry_draw_proc_extended,
     industry_draw_proc_for_tile,
 };
-pub(crate) use rail::collect_rail_sprites_for_surface;
 #[allow(unused_imports)]
 pub use rail::{
     CATENARY_ENTRANCE_SPRITE_BASE, CatenarySpriteDraw, MAGLEV_RAIL_SPRITE_OFFSET,
@@ -160,18 +159,18 @@ pub use rail::{
     catenary_wire_sprite_ids, collect_catenary_bridge_draws, collect_catenary_pylons_from_map,
     collect_catenary_pylons_from_map_with_pcp_override, collect_catenary_sprites,
     collect_catenary_sprites_from_map, collect_rail_ghost_sprites,
-    collect_rail_ghost_sprites_for_type, collect_rail_pbs_reservation_sprites,
-    collect_rail_sprites, collect_rail_sprites_for_type, collect_signal_sprite_draws,
-    collect_signal_sprite_ids, is_typed_rail_track_sprite, level_crossing_has_rail_reservation,
-    level_crossing_rail_sprite_id, level_crossing_rail_sprite_id_for_type, rail_depot_build_layers,
-    rail_ghost_overlay_offset, rail_pbs_reservation_offset, rail_signal_present_mask,
-    rail_signal_state_mask, rail_signal_subtile_offset, rail_signal_subtile_offset_for_side,
-    rail_sprite_atlas_keys, rail_sprite_ids_for_preload, rail_tile_has_pbs_reservation,
-    rail_tile_is_signals, remap_rail_sprite_id, signal_draw_pos, signal_screen_anchor_for_side,
-    signal_screen_position, signal_screen_position_for_side, signal_sprite_bases,
-    signal_sprite_center_offset, signal_sprite_ids_for_preload, signal_sprite_metadata,
-    signal_sprite_texture_id,
+    collect_rail_ghost_sprites_for_type, collect_rail_sprites, collect_rail_sprites_for_type,
+    collect_signal_sprite_draws, collect_signal_sprite_ids, is_typed_rail_track_sprite,
+    level_crossing_has_rail_reservation, level_crossing_rail_sprite_id,
+    level_crossing_rail_sprite_id_for_type, rail_depot_build_layers, rail_ghost_overlay_offset,
+    rail_pbs_reservation_offset, rail_signal_present_mask, rail_signal_state_mask,
+    rail_signal_subtile_offset, rail_signal_subtile_offset_for_side, rail_sprite_atlas_keys,
+    rail_sprite_ids_for_preload, rail_tile_has_pbs_reservation, rail_tile_is_signals,
+    remap_rail_sprite_id, signal_draw_pos, signal_screen_anchor_for_side, signal_screen_position,
+    signal_screen_position_for_side, signal_sprite_bases, signal_sprite_center_offset,
+    signal_sprite_ids_for_preload, signal_sprite_metadata, signal_sprite_texture_id,
 };
+pub(crate) use rail::{collect_rail_pbs_reservation_draws, collect_rail_sprites_for_surface};
 #[allow(unused_imports)]
 pub use station::{
     StationTileClass, log_unknown_station_type_once, rail_station_axis_y, rail_station_draw_layers,

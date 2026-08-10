@@ -368,6 +368,31 @@ impl WorldDrawTrace {
         );
     }
 
+    /// Como [`Self::record_foundation_child_sprite`], preservando la paleta
+    /// lógica del draw proc. Las reservas PBS usan `PALETTE_CRASH` aunque se
+    /// cuelguen de una fundación y por ello no tengan coordenada de mundo.
+    pub(crate) fn record_foundation_child_sprite_with_palette(
+        role: &'static str,
+        sprite_id: u32,
+        palette: u32,
+        fallback: bool,
+        offset: (i32, i32, i32),
+    ) {
+        Self::record_sprite_with_draw_state(
+            role,
+            "child",
+            sprite_id,
+            palette,
+            fallback,
+            offset,
+            (0, 0),
+            0,
+            None,
+            false,
+            true,
+        );
+    }
+
     /// Variante que conserva la paleta lógica de OpenTTD además de la
     /// geometría. El renderer Bevy puede aplicar el recolor con otra textura,
     /// pero la traza sigue pudiendo verificar que eligió la misma paleta que

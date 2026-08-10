@@ -91,6 +91,67 @@ Culling ≥1024 teselas. En zoom extremo el viewport ortográfico cubría ciento
 1. **Tope de zoom isométrico** (`MAX_SPAWN_SPAN_TILES = 192`, `clamp_ortho_scale`): el span en teselas es `scale·(w/(2·ISO_HW)+h/(2·ISO_QH))`; a 1280×720 el máximo es ~0,27×. No se recorta el spawn (eso dejaba franjas diagonales vacías).
 2. **Remap dirty** (#197): `refresh_chunks` se queda en dirty ∩ viewport (ya no se clona todo `needed`).
 
+### Perfil SAV real: `Kale_TitleGame.sav`
+
+Medición de estrés reproducible (2026-08-10) con la partida ignorada
+`save/Kale_TitleGame.sav`: mapa 256×256, 3.293 vehículos y 245 estaciones.
+No se versiona la partida; el perfil describe el caso, no es un golden de
+tiempo.
+
+```bash
+RUSTC_WRAPPER= CARGO_INCREMENTAL=0 CARGO_NET_OFFLINE=true \
+  cargo run -p openttdrs-core --release --bin sav_profile -- \
+  save/Kale_TitleGame.sav --ticks 148
+```
+
+`sav_profile` separa lectura, decode/import y cada subfase del tick, además de
+informar rutas pendientes, fuentes de carga y los deltas visuales core →
+cliente. El presupuesto sigue siendo 27.000 µs/tick (≈37 Hz).
+
+| Métrica | Resultado del perfil |
+|---|---:|
+| Decode / import | ~112 ms / ~231 ms |
+| Primer tick (rutas importadas pendientes) | ~47,8 ms |
+| Media de 148 ticks | **~22,4 ms** |
+| Pico periódico del día de tránsito | eliminado |
+| `cargo_load` medio | ~2 µs (sin fuentes de carga en este SAV) |
+
+El primer tick resuelve 1.637 rutas importadas pendientes; no se limita ni se
+detiene a los vehículos ya en marcha. Las búsquedas independientes se calculan
+en paralelo y se aplican en el orden estable de la flota. Los trenes de
+estación reutilizan el índice de ocupación de andenes y PBS reutiliza el índice
+de ocupación de consistes/reservas.
+
+El servicio automático de vehículos de carretera sigue ahora el reparto de
+`RunEconomyVehicleDayProc` de OpenTTD: cada slot `index % DAY_TICKS` revisa su
+fracción de la flota. Antes se lanzaba un barrido completo de depósitos y A*
+al comenzar el día, lo que concentraba un pico de ~2,48 s en Kale.
+
+El perfil también encontró que este import actual informa **0 industrias y 0
+estaciones con carga en espera**. En esas condiciones no hay nada que cargar,
+por lo que `load_vehicles` evita visitar la flota completa; si una industria
+tiene stock o una estación tiene carga, conserva la ruta normal. Esto es una
+optimización semánticamente segura, pero la ausencia de `INDY`/carga sigue
+siendo una limitación de paridad separada, no una afirmación de que Kale tenga
+cero industrias en OpenTTD.
+
+#### Deltas visuales y etiquetas
+
+Las listas `signal_tile_dirty` y `reservation_tile_dirty` son deltas de un solo
+tick: se vacían al iniciar el siguiente sin tocar las colas que deben cruzar
+ticks (`tile_loop_visited`, `signal_globset`). En Kale, al final de una ventana
+de 148 ticks quedan 2 señales y 14 reservas, en vez de acumular todo el
+historial desde la carga.
+
+El remap incremental de Bevy sólo vuelve a crear etiquetas de pueblo, estación
+y cartel cuando cambia el viewport (pan/zoom) o una construcción puede haber
+cambiado una etiqueta. Un cambio de señal, catenaria o reserva PBS refresca
+sus chunks, pero no hace despawn/spawn de todas las etiquetas. Si el overlay
+PBS está oculto, sus reservas tampoco provocan remap.
+
+El FPS final debe medirse en una sesión con GPU real mediante el título/HUD del
+cliente. Xvfb sin adaptador WGPU no es una medición válida de render.
+
 ### Comparación OpenTTD (Flatpak 15.3)
 
 | Mapa | Clima | openttdrs µs/tick | OpenTTD Game loop | Notas |

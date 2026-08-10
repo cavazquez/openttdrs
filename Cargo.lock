@@ -3755,9 +3755,11 @@ dependencies = [
 name = "openttdrs-core"
 version = "0.1.0-alpha.1"
 dependencies = [
+ "ahash",
  "criterion",
  "flate2",
  "lzma-rs",
+ "rayon",
  "serde",
  "serde_json",
  "sha2",

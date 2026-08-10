@@ -11,6 +11,7 @@ use crate::network::{NetworkRole, NetworkRuntime};
 use crate::render::{
     RemapMapVisualsPending, VehicleIndex, large_map_viewport_cull_enabled, request_map_visual_remap,
 };
+use crate::settings::ClientPreferences;
 use crate::state::{ClientScreen, SimRunState, SimWorld, sim_is_paused};
 use crate::ui::SimHudControls;
 
@@ -85,7 +86,11 @@ fn step_sim(
     vehicle_index.rebuild(&sim.state.vehicles);
 }
 
-fn flag_map_tile_dirty_remap(sim: Res<SimWorld>, mut pending: ResMut<RemapMapVisualsPending>) {
+fn flag_map_tile_dirty_remap(
+    sim: Res<SimWorld>,
+    prefs: Res<ClientPreferences>,
+    mut pending: ResMut<RemapMapVisualsPending>,
+) {
     let (mw, mh) = sim.state.map.dimensions();
     let mw_i = mw as i32;
     let mh_i = mh as i32;
@@ -98,19 +103,32 @@ fn flag_map_tile_dirty_remap(sim: Res<SimWorld>, mut pending: ResMut<RemapMapVis
         .iter()
         .chain(sim.state.runtime.landscape_tile_dirty.iter())
         .chain(sim.state.runtime.signal_tile_dirty.iter())
-        .chain(sim.state.runtime.reservation_tile_dirty.iter())
     {
         tiles.push((coord.x, coord.y));
+    }
+    // Las reservas sólo alteran sprites cuando está activo el overlay PBS.
+    // Evitar el remap cuando está oculto corta una fuente de trabajo por tick
+    // sin retrasar ni alterar la simulación ferroviaria.
+    if prefs.show_pbs_reservations {
+        tiles.extend(
+            sim.state
+                .runtime
+                .reservation_tile_dirty
+                .iter()
+                .map(|coord| (coord.x, coord.y)),
+        );
     }
 
     // Obra IA / comandos del tick: `SimEvent::Construction` se emite en `apply_command`
     // pero no marca landscape_tile_dirty (#186).
+    let mut labels_dirty = false;
     for event in sim.state.runtime.pending_sim_events.iter() {
         let at = match event {
             SimEvent::Construction { at, .. } | SimEvent::Demolition { at } => *at,
             SimEvent::Disaster { at, .. } => *at,
             _ => continue,
         };
+        labels_dirty = true;
         tiles.push((at.x, at.y));
         for (dx, dy) in [(-1_i32, 0), (1, 0), (0, -1), (0, 1)] {
             let nx = at.x + dx;
@@ -126,10 +144,11 @@ fn flag_map_tile_dirty_remap(sim: Res<SimWorld>, mut pending: ResMut<RemapMapVis
     }
 
     let force_full = (!sim.state.runtime.signal_tile_dirty.is_empty()
-        || !sim.state.runtime.reservation_tile_dirty.is_empty())
+        || (prefs.show_pbs_reservations && !sim.state.runtime.reservation_tile_dirty.is_empty()))
         && !large_map_viewport_cull_enabled(mw, mh);
 
     request_map_visual_remap(&mut pending, mw, mh, &tiles);
+    pending.labels_dirty |= labels_dirty;
     if force_full {
         pending.full = true;
     }
@@ -161,6 +180,7 @@ mod tests {
     use openttdrs_core::{ConstructionKind, SimEvent, TileCoord};
 
     use crate::render::{RemapMapVisualsPending, VehicleIndex};
+    use crate::settings::ClientPreferences;
     use crate::state::{ClientScreen, SimRunState, SimWorld};
     use crate::ui::SimHudControls;
 
@@ -172,6 +192,7 @@ mod tests {
         app.init_resource::<SimClock>();
         app.insert_resource(SimWorld::default());
         app.insert_resource(VehicleIndex::default());
+        app.insert_resource(ClientPreferences::default());
         app.insert_resource(SimHudControls::default());
         app.add_systems(Startup, init_sim_fixed_timestep);
         app.add_systems(OnEnter(SimRunState::Paused), super::pause_virtual_time);
@@ -258,6 +279,49 @@ mod tests {
         assert!(
             pending.pending,
             "Construction del tick debe encolar remap visual (#186)"
+        );
+        assert!(
+            pending.labels_dirty,
+            "Una construcción puede crear o eliminar etiquetas del mapa"
+        );
+    }
+
+    #[test]
+    fn hidden_pbs_overlay_does_not_remap_for_reservation_only() {
+        let mut app = sim_test_app();
+        app.insert_resource(RemapMapVisualsPending::default());
+        app.update();
+        {
+            let mut prefs = app.world_mut().resource_mut::<ClientPreferences>();
+            prefs.show_pbs_reservations = false;
+        }
+        {
+            let mut sim = app.world_mut().resource_mut::<SimWorld>();
+            // El mapa por defecto puede traer deltas de generación. El caso
+            // prueba exclusivamente una reserva con el overlay oculto.
+            sim.state.runtime.industry_tile_dirty.clear();
+            sim.state.runtime.landscape_tile_dirty.clear();
+            sim.state.runtime.signal_tile_dirty.clear();
+            sim.state.runtime.pending_sim_events.discard_all();
+            sim.state
+                .runtime
+                .reservation_tile_dirty
+                .push(TileCoord::new(4, 4));
+        }
+
+        app.world_mut()
+            .run_system_once(flag_map_tile_dirty_remap)
+            .unwrap();
+
+        assert!(
+            !app.world().resource::<RemapMapVisualsPending>().pending,
+            "Una reserva invisible no debe regenerar chunks del mapa"
+        );
+        assert!(
+            !app.world()
+                .resource::<RemapMapVisualsPending>()
+                .labels_dirty,
+            "Una reserva invisible tampoco altera etiquetas"
         );
     }
 }

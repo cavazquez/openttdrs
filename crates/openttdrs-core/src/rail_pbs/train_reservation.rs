@@ -5,12 +5,16 @@ use std::collections::HashSet;
 use crate::map::{Map, TileCoord, TileKind, rail_traversal_bits};
 use crate::vehicle::{Vehicle, VehicleKind};
 
-use super::conflicts::{append_platform_reservation, tile_occupied_by_other_train};
+use super::conflicts::{
+    TrainOccupancyIndex, append_platform_reservation, append_platform_reservation_indexed,
+    tile_occupied_by_other_train,
+};
 use super::model::{
     MAX_TRAIN_RESERVATION_LEN, ReservedRailStep, track_for_rail_step, track_on_departure_tile,
 };
 use super::search::{
-    find_path_to_safe_wait_with_wormholes, is_safe_waiting_position, tile_has_any_pbs_signal,
+    find_path_to_safe_wait_with_wormholes, find_path_to_safe_wait_with_wormholes_indexed,
+    is_safe_waiting_position, tile_has_any_pbs_signal,
 };
 
 /// Máximo de reservas que el tick incremental reconstruye por pasada.
@@ -88,6 +92,50 @@ pub fn compute_train_reservation_with_wormholes(
     settings: crate::pathfinding_settings::PathfindingSettings,
     wormholes: Option<&crate::pathfinder::TunnelWormholes>,
 ) -> Vec<ReservedRailStep> {
+    compute_train_reservation_with_wormholes_impl(
+        map,
+        vehicles,
+        vehicle_idx,
+        already_reserved,
+        settings,
+        wormholes,
+        None,
+    )
+}
+
+/// Variante interna que reutiliza la ocupación física indexada del pase PBS.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub(super) fn compute_train_reservation_with_wormholes_indexed(
+    map: &Map,
+    vehicles: &[Vehicle],
+    vehicle_idx: usize,
+    already_reserved: &HashSet<ReservedRailStep>,
+    settings: crate::pathfinding_settings::PathfindingSettings,
+    wormholes: Option<&crate::pathfinder::TunnelWormholes>,
+    occupancy: &TrainOccupancyIndex,
+) -> Vec<ReservedRailStep> {
+    compute_train_reservation_with_wormholes_impl(
+        map,
+        vehicles,
+        vehicle_idx,
+        already_reserved,
+        settings,
+        wormholes,
+        Some(occupancy),
+    )
+}
+
+#[allow(clippy::too_many_lines, clippy::too_many_arguments)]
+fn compute_train_reservation_with_wormholes_impl(
+    map: &Map,
+    vehicles: &[Vehicle],
+    vehicle_idx: usize,
+    already_reserved: &HashSet<ReservedRailStep>,
+    settings: crate::pathfinding_settings::PathfindingSettings,
+    wormholes: Option<&crate::pathfinder::TunnelWormholes>,
+    occupancy: Option<&TrainOccupancyIndex>,
+) -> Vec<ReservedRailStep> {
     let vehicle = &vehicles[vehicle_idx];
     if vehicle.kind != VehicleKind::Train || !vehicle.running {
         return Vec::new();
@@ -100,8 +148,19 @@ pub fn compute_train_reservation_with_wormholes(
     }
 
     let path: Vec<TileCoord> = vehicle.path.iter().copied().collect();
-    let mut along_path = reserve_along_path(map, vehicles, vehicle, &path, already_reserved);
-    append_platform_reservation(map, vehicles, vehicle, already_reserved, &mut along_path);
+    let mut along_path =
+        reserve_along_path(map, vehicles, vehicle, &path, already_reserved, occupancy);
+    if let Some(occupancy) = occupancy {
+        append_platform_reservation_indexed(
+            map,
+            occupancy,
+            vehicle,
+            already_reserved,
+            &mut along_path,
+        );
+    } else {
+        append_platform_reservation(map, vehicles, vehicle, already_reserved, &mut along_path);
+    }
     if reservation_ends_at_safe_wait_steps(map, vehicle.pos, &path, &along_path) {
         return along_path;
     }
@@ -111,19 +170,43 @@ pub fn compute_train_reservation_with_wormholes(
     if !settings.should_retry_reservation(vehicle.wait_counter) {
         return along_path;
     }
-    let Some(alt) = find_path_to_safe_wait_with_wormholes(
-        map,
-        vehicles,
-        vehicle.id,
-        vehicle.pos,
-        &path,
-        already_reserved,
-        wormholes,
-    ) else {
+    let alt = if let Some(occupancy) = occupancy {
+        find_path_to_safe_wait_with_wormholes_indexed(
+            map,
+            vehicles,
+            vehicle.id,
+            vehicle.pos,
+            &path,
+            already_reserved,
+            wormholes,
+            occupancy,
+        )
+    } else {
+        find_path_to_safe_wait_with_wormholes(
+            map,
+            vehicles,
+            vehicle.id,
+            vehicle.pos,
+            &path,
+            already_reserved,
+            wormholes,
+        )
+    };
+    let Some(alt) = alt else {
         return along_path;
     };
-    let mut alt_res = reserve_along_path(map, vehicles, vehicle, &alt, already_reserved);
-    append_platform_reservation(map, vehicles, vehicle, already_reserved, &mut alt_res);
+    let mut alt_res = reserve_along_path(map, vehicles, vehicle, &alt, already_reserved, occupancy);
+    if let Some(occupancy) = occupancy {
+        append_platform_reservation_indexed(
+            map,
+            occupancy,
+            vehicle,
+            already_reserved,
+            &mut alt_res,
+        );
+    } else {
+        append_platform_reservation(map, vehicles, vehicle, already_reserved, &mut alt_res);
+    }
     if alt_res.len() > along_path.len()
         || (alt_res.len() >= along_path.len()
             && reservation_ends_at_safe_wait_steps(map, vehicle.pos, &alt, &alt_res))
@@ -160,10 +243,18 @@ fn reserve_along_path(
     vehicle: &Vehicle,
     path: &[TileCoord],
     already_reserved: &HashSet<ReservedRailStep>,
+    occupancy: Option<&TrainOccupancyIndex>,
 ) -> Vec<ReservedRailStep> {
     // Desde depósito el follower PBS empieza en la boca (`path[0]`).
     if map.get_kind(vehicle.pos) == Some(TileKind::RailDepot) {
-        return reserve_along_path_from_depot(map, vehicles, vehicle, path, already_reserved);
+        return reserve_along_path_from_depot(
+            map,
+            vehicles,
+            vehicle,
+            path,
+            already_reserved,
+            occupancy,
+        );
     }
 
     let mut out = Vec::new();
@@ -186,7 +277,7 @@ fn reserve_along_path(
     };
     let start_step = ReservedRailStep::new(cur, pos_track);
     if already_reserved.contains(&start_step)
-        || tile_occupied_by_other_train(map, vehicles, vehicle.id, cur, pos_track)
+        || reservation_tile_occupied(map, vehicles, vehicle.id, cur, pos_track, occupancy)
     {
         return out;
     }
@@ -200,6 +291,7 @@ fn reserve_along_path(
         &mut out,
         &mut cur,
         0,
+        occupancy,
     );
     out
 }
@@ -210,6 +302,7 @@ fn reserve_along_path_from_depot(
     vehicle: &Vehicle,
     path: &[TileCoord],
     already_reserved: &HashSet<ReservedRailStep>,
+    occupancy: Option<&TrainOccupancyIndex>,
 ) -> Vec<ReservedRailStep> {
     let mut out = Vec::new();
     let Some(&entrance) = path.first() else {
@@ -230,7 +323,7 @@ fn reserve_along_path_from_depot(
     };
     let step = ReservedRailStep::new(entrance, track);
     if already_reserved.contains(&step)
-        || tile_occupied_by_other_train(map, vehicles, vehicle.id, entrance, track)
+        || reservation_tile_occupied(map, vehicles, vehicle.id, entrance, track, occupancy)
     {
         return out;
     }
@@ -248,6 +341,7 @@ fn reserve_along_path_from_depot(
         &mut out,
         &mut cur,
         1,
+        occupancy,
     );
     out
 }
@@ -262,6 +356,7 @@ fn extend_reservation_along_path(
     out: &mut Vec<ReservedRailStep>,
     cur: &mut TileCoord,
     path_skip: usize,
+    occupancy: Option<&TrainOccupancyIndex>,
 ) {
     let mut passed_path = tile_has_any_pbs_signal(map, *cur);
     for (i, &next) in path.iter().enumerate().skip(path_skip) {
@@ -281,7 +376,7 @@ fn extend_reservation_along_path(
         if already_reserved.contains(&step) {
             break;
         }
-        if tile_occupied_by_other_train(map, vehicles, vehicle_id, next, track) {
+        if reservation_tile_occupied(map, vehicles, vehicle_id, next, track, occupancy) {
             break;
         }
         out.push(step);
@@ -293,6 +388,20 @@ fn extend_reservation_along_path(
             break;
         }
     }
+}
+
+fn reservation_tile_occupied(
+    map: &Map,
+    vehicles: &[Vehicle],
+    self_id: u32,
+    tile: TileCoord,
+    track: u8,
+    occupancy: Option<&TrainOccupancyIndex>,
+) -> bool {
+    occupancy.map_or_else(
+        || tile_occupied_by_other_train(map, vehicles, self_id, tile, track),
+        |index| index.tile_occupied_by_other_train(map, self_id, tile, track),
+    )
 }
 
 /// Conserva pasos de una reserva previa aún válidos si `TryReserve` falla
@@ -329,10 +438,11 @@ pub fn follow_train_reservation(
 fn merge_consist_footprint(
     map: &Map,
     vehicles: &[Vehicle],
+    fleet: &crate::fleet_index::FleetIndex,
     head_id: u32,
     mut reserved: Vec<ReservedRailStep>,
 ) -> Vec<ReservedRailStep> {
-    let occupied = crate::train_consist::consist_occupied_tiles(vehicles, head_id);
+    let occupied = crate::train_consist::consist_occupied_tiles_indexed(vehicles, fleet, head_id);
     let existing: HashSet<TileCoord> = reserved.iter().map(|s| s.tile).collect();
     for tile in occupied {
         if existing.contains(&tile) {
@@ -384,6 +494,8 @@ pub fn update_train_reservations_with_wormholes(
     settings: crate::pathfinding_settings::PathfindingSettings,
     wormholes: Option<&crate::pathfinder::TunnelWormholes>,
 ) {
+    let mut fleet = crate::fleet_index::FleetIndex::default();
+    fleet.rebuild(vehicles);
     let mut global = HashSet::new();
     for i in 0..vehicles.len() {
         // Solo cabezas de consist reservan; vagones siguen la huella de la cabeza.
@@ -407,7 +519,7 @@ pub fn update_train_reservations_with_wormholes(
             map, vehicles, i, &global, settings, wormholes,
         );
         let reserved = follow_train_reservation(&previous, reserved, &vehicles[i]);
-        let reserved = merge_consist_footprint(map, vehicles, head_id, reserved);
+        let reserved = merge_consist_footprint(map, vehicles, &fleet, head_id, reserved);
         for step in &reserved {
             global.insert(*step);
         }
@@ -428,6 +540,9 @@ pub fn update_train_reservations_incremental_with_wormholes(
     settings: crate::pathfinding_settings::PathfindingSettings,
     wormholes: Option<&crate::pathfinder::TunnelWormholes>,
 ) -> usize {
+    let mut fleet = crate::fleet_index::FleetIndex::default();
+    fleet.rebuild(vehicles);
+    let occupancy = TrainOccupancyIndex::from_vehicles(map, vehicles, &fleet);
     let mut global = HashSet::new();
     for i in 0..vehicles.len() {
         if vehicles[i].kind != VehicleKind::Train || !vehicles[i].is_consist_head() {
@@ -453,8 +568,14 @@ pub fn update_train_reservations_incremental_with_wormholes(
          */
         let head_id = vehicles[i].id;
         let previous = std::mem::take(&mut vehicles[i].reserved_steps);
-        let retained =
-            prune_train_reservation_to_active_path(map, vehicles, head_id, &vehicles[i], previous);
+        let retained = prune_train_reservation_to_active_path(
+            map,
+            vehicles,
+            &fleet,
+            head_id,
+            &vehicles[i],
+            previous,
+        );
         global.extend(retained.iter().copied());
         vehicles[i].reserved_steps = retained;
     }
@@ -485,11 +606,11 @@ pub fn update_train_reservations_incremental_with_wormholes(
         for step in &previous {
             global.remove(step);
         }
-        let reserved = compute_train_reservation_with_wormholes(
-            map, vehicles, i, &global, settings, wormholes,
+        let reserved = compute_train_reservation_with_wormholes_indexed(
+            map, vehicles, i, &global, settings, wormholes, &occupancy,
         );
         let reserved = follow_train_reservation(&previous, reserved, &vehicles[i]);
-        let reserved = merge_consist_footprint(map, vehicles, head_id, reserved);
+        let reserved = merge_consist_footprint(map, vehicles, &fleet, head_id, reserved);
         global.extend(reserved.iter().copied());
         vehicles[i].reserved_steps = reserved;
         refreshed += 1;
@@ -503,13 +624,14 @@ pub fn update_train_reservations_incremental_with_wormholes(
 fn prune_train_reservation_to_active_path(
     map: &Map,
     vehicles: &[Vehicle],
+    fleet: &crate::fleet_index::FleetIndex,
     head_id: u32,
     vehicle: &Vehicle,
     previous: Vec<ReservedRailStep>,
 ) -> Vec<ReservedRailStep> {
     let path_tiles: HashSet<TileCoord> = vehicle.path.iter().copied().collect();
     let occupied: HashSet<TileCoord> =
-        crate::train_consist::consist_occupied_tiles(vehicles, head_id)
+        crate::train_consist::consist_occupied_tiles_indexed(vehicles, fleet, head_id)
             .into_iter()
             .collect();
     let retained = previous
@@ -520,7 +642,7 @@ fn prune_train_reservation_to_active_path(
                 || occupied.contains(&step.tile)
         })
         .collect();
-    merge_consist_footprint(map, vehicles, head_id, retained)
+    merge_consist_footprint(map, vehicles, fleet, head_id, retained)
 }
 
 fn train_reservation_needs_refresh(vehicle: &Vehicle) -> bool {

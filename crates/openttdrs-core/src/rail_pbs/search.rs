@@ -10,7 +10,7 @@ use crate::rail_signals::{
 };
 use crate::vehicle::Vehicle;
 
-use super::conflicts::tile_occupied_by_other_train;
+use super::conflicts::{TrainOccupancyIndex, tile_occupied_by_other_train};
 use super::model::{
     MAX_TRAIN_RESERVATION_LEN, ReservedRailStep, YAPF_RESERVATION_CROSS_PENALTY, YAPF_TILE_LENGTH,
     track_for_rail_step, track_on_departure_tile,
@@ -193,6 +193,54 @@ pub fn find_path_to_safe_wait_with_wormholes(
     already_reserved: &HashSet<ReservedRailStep>,
     wormholes: Option<&crate::pathfinder::TunnelWormholes>,
 ) -> Option<Vec<TileCoord>> {
+    find_path_to_safe_wait_with_wormholes_impl(
+        map,
+        vehicles,
+        self_id,
+        from,
+        preferred,
+        already_reserved,
+        wormholes,
+        None,
+    )
+}
+
+/// Variante interna que reutiliza la ocupación física indexada del pase PBS.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub(super) fn find_path_to_safe_wait_with_wormholes_indexed(
+    map: &Map,
+    vehicles: &[Vehicle],
+    self_id: u32,
+    from: TileCoord,
+    preferred: &[TileCoord],
+    already_reserved: &HashSet<ReservedRailStep>,
+    wormholes: Option<&crate::pathfinder::TunnelWormholes>,
+    occupancy: &TrainOccupancyIndex,
+) -> Option<Vec<TileCoord>> {
+    find_path_to_safe_wait_with_wormholes_impl(
+        map,
+        vehicles,
+        self_id,
+        from,
+        preferred,
+        already_reserved,
+        wormholes,
+        Some(occupancy),
+    )
+}
+
+#[allow(clippy::too_many_lines, clippy::too_many_arguments)]
+fn find_path_to_safe_wait_with_wormholes_impl(
+    map: &Map,
+    vehicles: &[Vehicle],
+    self_id: u32,
+    from: TileCoord,
+    preferred: &[TileCoord],
+    already_reserved: &HashSet<ReservedRailStep>,
+    wormholes: Option<&crate::pathfinder::TunnelWormholes>,
+    occupancy: Option<&TrainOccupancyIndex>,
+) -> Option<Vec<TileCoord>> {
     use super::conflicts::tile_track_reserved_by_map;
     use crate::rail_signals::rail_neighbors;
     use std::collections::BinaryHeap;
@@ -257,7 +305,11 @@ pub fn find_path_to_safe_wait_with_wormholes(
             if already_reserved.contains(&step) {
                 continue;
             }
-            if tile_occupied_by_other_train(map, vehicles, self_id, next, track) {
+            let occupied = occupancy.map_or_else(
+                || tile_occupied_by_other_train(map, vehicles, self_id, next, track),
+                |index| index.tile_occupied_by_other_train(map, self_id, next, track),
+            );
+            if occupied {
                 continue;
             }
             let mut step_cost = TRY_RESERVE_TILE_COST;

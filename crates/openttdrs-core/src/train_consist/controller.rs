@@ -84,8 +84,8 @@ pub fn propagate_consist_unit_poses_with_map(
     }
 }
 
-/// Variante de [`propagate_consist_unit_poses_with_map`] para el loop de
-/// movimiento, que reutiliza el `FleetIndex` construido al inicio del tick.
+/// Variante indexada para el loop de movimiento, que reutiliza el `FleetIndex`
+/// construido al inicio del tick.
 pub fn propagate_consist_unit_poses_with_map_indexed(
     vehicles: &mut [Vehicle],
     fleet: &crate::fleet_index::FleetIndex,

@@ -98,6 +98,10 @@ pub(crate) fn sync_map_tile_spawn_viewport(
         pending.pending = true;
         pending.sync_camera = false;
         pending.full = false;
+        // El borde del viewport puede cambiar dentro del mismo chunk de 16×16;
+        // en ese caso el plan incremental no agrega/quita chunks, pero sí hay
+        // que volver a filtrar las etiquetas por el nuevo viewport.
+        pending.labels_dirty = true;
     }
 }
 

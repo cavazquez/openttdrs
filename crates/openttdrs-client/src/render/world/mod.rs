@@ -8,7 +8,7 @@ mod viewport;
 // Re-exports públicos para que el resto del crate pueda seguir usando los mismos símbolos
 pub(crate) use plugin::{
     LoadedMapTileChunks, MapTileSpawnViewport, RemapMapVisualsPending, WorldRenderPlugin,
-    request_map_visual_remap,
+    request_map_visual_remap, request_map_visual_remap_with_labels,
 };
 pub(crate) use tile_spawn::spawn_intro_map_render;
 pub(crate) use viewport::initial_map_camera_pose;

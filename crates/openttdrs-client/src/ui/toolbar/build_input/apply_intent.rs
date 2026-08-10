@@ -5,7 +5,7 @@ use openttdrs_core::BridgeType;
 use openttdrs_core::Command;
 use openttdrs_core::prelude::*;
 
-use crate::render::{RemapMapVisualsPending, request_map_visual_remap};
+use crate::render::{RemapMapVisualsPending, request_map_visual_remap_with_labels};
 use crate::state::{OrderPickState, SimWorld};
 use crate::ui::hud::{
     HudBuildFeedback, SelectedTileInfo, enqueue_build_place_flash, push_build_command_error,
@@ -283,7 +283,7 @@ pub(crate) fn apply_intent(intent: MapClickIntent, ctx: &mut IntentApplyContext,
                     Ok(()) => {
                         ctx.station_state.join_keep = None;
                         let (mw, mh) = ctx.sim.state.map.dimensions();
-                        request_map_visual_remap(&mut ctx.pending, mw, mh, &[]);
+                        request_map_visual_remap_with_labels(&mut ctx.pending, mw, mh, &[]);
                     }
                     Err(e) => {
                         push_build_command_error(&mut ctx.hud_feedback, e, time_secs);
@@ -337,7 +337,7 @@ pub(crate) fn apply_intent(intent: MapClickIntent, ctx: &mut IntentApplyContext,
                     }
                     let (mw, mh) = ctx.sim.state.map.dimensions();
                     let tiles = tiles_for_visual_remap(Some(&ctx.sim.state.map), action, pos, &[]);
-                    request_map_visual_remap(&mut ctx.pending, mw, mh, &tiles);
+                    request_map_visual_remap_with_labels(&mut ctx.pending, mw, mh, &tiles);
                     if action == BuildMenuAction::RailSignals
                         && let Some(flash_pos) = rail_signal_flash_position(
                             &ctx.sim.state.map,
@@ -417,7 +417,7 @@ fn confirm_drag_placement(
     cancel_placement(drag_state);
     if changed {
         let (mw, mh) = sim.state.map.dimensions();
-        request_map_visual_remap(pending, mw, mh, &remap_tiles);
+        request_map_visual_remap_with_labels(pending, mw, mh, &remap_tiles);
     } else if let Some(e) = err {
         push_build_command_error(hud_feedback, e, time_secs);
     }

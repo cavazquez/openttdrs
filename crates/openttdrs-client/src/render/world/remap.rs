@@ -75,6 +75,7 @@ pub(crate) fn apply_remap_map_visuals(
     let do_sync_camera = pending.sync_camera;
     let full_rebuild = pending.full;
     let mut refresh_chunks = std::mem::take(&mut pending.refresh_chunks);
+    let labels_dirty = std::mem::take(&mut pending.labels_dirty);
     pending.pending = false;
     pending.sync_camera = false;
     pending.full = true;
@@ -166,34 +167,40 @@ pub(crate) fn apply_remap_map_visuals(
         }
         loaded_chunks.chunks = needed;
         loaded_chunks.partial_chunks.clear();
-        // Etiquetas no van en chunks: re-sincronizar al panear el viewport.
-        let label_font = asset_server.load::<Font>(crate::ui::font::UI_FONT_PATH);
-        let town_entities: Vec<Entity> = label_entities.towns.iter().collect();
-        crate::render::town_labels::resync_town_labels(
-            &mut commands,
-            town_entities,
-            &sim,
-            &label_font,
-            spawn_bounds,
-            show_town_labels,
-        );
-        let station_label_entities: Vec<Entity> = label_entities.stations.iter().collect();
-        crate::render::station_labels::resync_station_labels(
-            &mut commands,
-            station_label_entities,
-            &sim,
-            &label_font,
-            spawn_bounds,
-            show_station_labels,
-        );
-        let sign_entities: Vec<Entity> = label_entities.signs.iter().collect();
-        crate::render::sign_labels::resync_sign_labels(
-            &mut commands,
-            sign_entities,
-            &sim,
-            &label_font,
-            spawn_bounds,
-        );
+        // Etiquetas no van en chunks. Sólo se re-sincronizan tras un cambio de
+        // viewport o de una entidad que pueda tener etiqueta. Un refresco de
+        // catenaria, señal o reserva PBS no debe despawn/spawn de todas las
+        // etiquetas cada tick.
+        let viewport_chunks_changed = !plan.to_add.is_empty() || !plan.to_remove.is_empty();
+        if labels_dirty || viewport_chunks_changed {
+            let label_font = asset_server.load::<Font>(crate::ui::font::UI_FONT_PATH);
+            let town_entities: Vec<Entity> = label_entities.towns.iter().collect();
+            crate::render::town_labels::resync_town_labels(
+                &mut commands,
+                town_entities,
+                &sim,
+                &label_font,
+                spawn_bounds,
+                show_town_labels,
+            );
+            let station_label_entities: Vec<Entity> = label_entities.stations.iter().collect();
+            crate::render::station_labels::resync_station_labels(
+                &mut commands,
+                station_label_entities,
+                &sim,
+                &label_font,
+                spawn_bounds,
+                show_station_labels,
+            );
+            let sign_entities: Vec<Entity> = label_entities.signs.iter().collect();
+            crate::render::sign_labels::resync_sign_labels(
+                &mut commands,
+                sign_entities,
+                &sim,
+                &label_font,
+                spawn_bounds,
+            );
+        }
         if !plan.to_add.is_empty() || !plan.to_remove.is_empty() || !refresh_chunks.is_empty() {
             debug!(
                 "Mapa visual incremental: +{} −{} ↻{} chunks ({} teselas visibles)",

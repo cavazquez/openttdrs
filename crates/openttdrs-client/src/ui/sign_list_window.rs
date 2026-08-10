@@ -8,7 +8,8 @@ use openttdrs_core::MAX_SIGN_NAME_CHARS;
 
 use crate::iso::tile_pos;
 use crate::render::{
-    MapPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending, request_map_visual_remap,
+    MapPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending,
+    request_map_visual_remap_with_labels,
 };
 use crate::state::SimWorld;
 use crate::ui::floating_window::{
@@ -280,7 +281,7 @@ pub(crate) fn handle_sign_list_buttons(
                     state.selected = None;
                     state.rename_editing = false;
                     let (mw, mh) = sim.state.map.dimensions();
-                    request_map_visual_remap(&mut pending, mw, mh, &[]);
+                    request_map_visual_remap_with_labels(&mut pending, mw, mh, &[]);
                 }
             }
             SignListAction::ApplyRename => {
@@ -303,7 +304,7 @@ pub(crate) fn handle_sign_list_buttons(
                 {
                     state.rename_editing = false;
                     let (mw, mh) = sim.state.map.dimensions();
-                    request_map_visual_remap(&mut pending, mw, mh, &[]);
+                    request_map_visual_remap_with_labels(&mut pending, mw, mh, &[]);
                 }
             }
             SignListAction::CancelRename => {

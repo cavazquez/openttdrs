@@ -18,6 +18,12 @@ sha2 = "0.10"
 # Descompresión de savegames OpenTTD (.sav): OTTZ = zlib, OTTX = xz/lzma.
 flate2 = "1"
 lzma-rs = "0.3"
+# El lote de rutas independientes tras importar un SAV usa los núcleos libres
+# sin cambiar el orden en que se aplican los resultados.
+rayon = "1"
+# Índices efímeros de simulación: hash rápido con semilla aleatoria (vehículos,
+# estaciones y teselas se consultan miles de veces por tick).
+ahash = "0.8"
 
 [dev-dependencies]
 criterion = { version = "0.8", features = ["html_reports"] }

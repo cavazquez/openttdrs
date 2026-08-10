@@ -35,9 +35,38 @@ pub struct TickPhaseTimings {
     pub path_order_sync_ns: u64,
     /// Subfase: adjudicar andenes y rutear trenes de estación.
     pub path_station_route_ns: u64,
+    /// Trenes de estación que requirieron adjudicación de andén.
+    pub path_station_route_trains: u32,
+    /// Andenes candidatos considerados para esos trenes.
+    pub path_station_route_candidates: u32,
+    /// Búsquedas YAPF efectuadas durante la adjudicación de andén.
+    pub path_station_route_queries: u32,
+    /// Búsquedas YAPF que encontraron una ruta durante la adjudicación.
+    pub path_station_route_found: u32,
+    /// Tiempo acumulado de las búsquedas YAPF de adjudicación.
+    pub path_station_route_search_ns: u64,
+    /// Duración de la búsqueda YAPF más lenta de adjudicación.
+    pub path_station_route_search_max_ns: u64,
     /// Subfase: rutas de vehículos que no pasaron por la adjudicación de andén.
     pub path_generic_route_ns: u64,
     pub vehicle_ops_pre_move_ns: u64,
+    /// Horarios, servicio, autoreemplazo y aeronaves antes de mover.
+    pub vehicle_ops_only_ns: u64,
+    /// Intentos de autoreemplazo en depósitos dentro de `vehicle_ops`.
+    pub vehicle_ops_autoreplace_ns: u64,
+    /// Primera pasada de actualización de reservas PBS del tick.
+    pub pbs_pre_move_ns: u64,
+    /// Barrido diario de calendario repartido entre `DAY_TICKS` slots.
+    pub cargo_calendar_day_ns: u64,
+    /// Barrido diario de economía/servicio repartido entre `DAY_TICKS` slots.
+    pub cargo_economy_day_ns: u64,
+    /// Envejecimiento de paquetes de carga antes de descarga/carga.
+    pub cargo_aging_ns: u64,
+    /// Descarga de vehículos en estación.
+    pub cargo_unload_ns: u64,
+    /// Carga de vehículos desde industrias o estaciones.
+    pub cargo_load_ns: u64,
+    /// Total de las cinco subfases anteriores.
     pub cargo_transfer_ns: u64,
     pub movement_ns: u64,
     /// Subfase de avance de vehículos dentro de `movement`.
@@ -76,8 +105,24 @@ impl TickPhaseTimings {
         self.path_recompute_ns += other.path_recompute_ns;
         self.path_order_sync_ns += other.path_order_sync_ns;
         self.path_station_route_ns += other.path_station_route_ns;
+        self.path_station_route_trains += other.path_station_route_trains;
+        self.path_station_route_candidates += other.path_station_route_candidates;
+        self.path_station_route_queries += other.path_station_route_queries;
+        self.path_station_route_found += other.path_station_route_found;
+        self.path_station_route_search_ns += other.path_station_route_search_ns;
+        self.path_station_route_search_max_ns = self
+            .path_station_route_search_max_ns
+            .max(other.path_station_route_search_max_ns);
         self.path_generic_route_ns += other.path_generic_route_ns;
         self.vehicle_ops_pre_move_ns += other.vehicle_ops_pre_move_ns;
+        self.vehicle_ops_only_ns += other.vehicle_ops_only_ns;
+        self.vehicle_ops_autoreplace_ns += other.vehicle_ops_autoreplace_ns;
+        self.pbs_pre_move_ns += other.pbs_pre_move_ns;
+        self.cargo_calendar_day_ns += other.cargo_calendar_day_ns;
+        self.cargo_economy_day_ns += other.cargo_economy_day_ns;
+        self.cargo_aging_ns += other.cargo_aging_ns;
+        self.cargo_unload_ns += other.cargo_unload_ns;
+        self.cargo_load_ns += other.cargo_load_ns;
         self.cargo_transfer_ns += other.cargo_transfer_ns;
         self.movement_ns += other.movement_ns;
         self.vehicle_move_ns += other.vehicle_move_ns;
@@ -102,8 +147,26 @@ impl TickPhaseTimings {
             path_recompute_ns: self.path_recompute_ns / n,
             path_order_sync_ns: self.path_order_sync_ns / n,
             path_station_route_ns: self.path_station_route_ns / n,
+            path_station_route_trains: self.path_station_route_trains
+                / u32::try_from(n).unwrap_or(u32::MAX),
+            path_station_route_candidates: self.path_station_route_candidates
+                / u32::try_from(n).unwrap_or(u32::MAX),
+            path_station_route_queries: self.path_station_route_queries
+                / u32::try_from(n).unwrap_or(u32::MAX),
+            path_station_route_found: self.path_station_route_found
+                / u32::try_from(n).unwrap_or(u32::MAX),
+            path_station_route_search_ns: self.path_station_route_search_ns / n,
+            path_station_route_search_max_ns: self.path_station_route_search_max_ns,
             path_generic_route_ns: self.path_generic_route_ns / n,
             vehicle_ops_pre_move_ns: self.vehicle_ops_pre_move_ns / n,
+            vehicle_ops_only_ns: self.vehicle_ops_only_ns / n,
+            vehicle_ops_autoreplace_ns: self.vehicle_ops_autoreplace_ns / n,
+            pbs_pre_move_ns: self.pbs_pre_move_ns / n,
+            cargo_calendar_day_ns: self.cargo_calendar_day_ns / n,
+            cargo_economy_day_ns: self.cargo_economy_day_ns / n,
+            cargo_aging_ns: self.cargo_aging_ns / n,
+            cargo_unload_ns: self.cargo_unload_ns / n,
+            cargo_load_ns: self.cargo_load_ns / n,
             cargo_transfer_ns: self.cargo_transfer_ns / n,
             movement_ns: self.movement_ns / n,
             vehicle_move_ns: self.vehicle_move_ns / n,
@@ -119,6 +182,10 @@ impl TickPhaseTimings {
 
 /// Tick principal de la simulación (sin instrumentación).
 pub(crate) fn step(state: &mut GameState) {
+    // El cliente consume estas listas después de este `step`. Abrir aquí el
+    // delta siguiente impide que señales/reservas de ticks viejos fuercen
+    // remaps de chunks en cada frame.
+    state.runtime.begin_tick_visual_delta();
     state.ensure_companies();
     state.runtime.fleet_index.rebuild(&state.vehicles);
     state
@@ -144,7 +211,7 @@ pub(crate) fn step(state: &mut GameState) {
     cargo_transfer::unload_vehicles(state, t, &loaded_this_tick, &mut unloaded_this_tick);
     cargo_transfer::load_vehicles(state, &mut loaded_this_tick, &unloaded_this_tick);
     // Ops que pueden cambiar destino van tras la carga (p. ej. wander orderless).
-    phase_vehicle_ops_pre_move(state);
+    let _ = phase_vehicle_ops_pre_move(state);
     // PBS grueso tras la carga y antes del move (P2.2: ya no precede a LoadUnload).
     // ChooseTrainTrack (P2.7) elige vía + reserva atómica al entrar en tesela.
     phase_pbs_reservations(state);
@@ -160,6 +227,7 @@ pub fn step_profiled(state: &mut GameState) -> TickPhaseTimings {
     let wall0 = Instant::now();
     let mut timings = TickPhaseTimings::default();
 
+    state.runtime.begin_tick_visual_delta();
     state.ensure_companies();
     state.runtime.fleet_index.rebuild(&state.vehicles);
     state
@@ -187,21 +255,42 @@ pub fn step_profiled(state: &mut GameState) -> TickPhaseTimings {
     timings.path_recompute_ns = nanos(p0);
     timings.path_order_sync_ns = routing.order_sync_ns;
     timings.path_station_route_ns = routing.station_route_ns;
+    timings.path_station_route_trains = routing.station_route_trains;
+    timings.path_station_route_candidates = routing.station_route_candidates;
+    timings.path_station_route_queries = routing.station_route_path_queries;
+    timings.path_station_route_found = routing.station_route_path_found;
+    timings.path_station_route_search_ns = routing.station_route_path_ns;
+    timings.path_station_route_search_max_ns = routing.station_route_path_max_ns;
     timings.path_generic_route_ns = routing.generic_route_ns;
 
     let p0 = Instant::now();
     let mut loaded_this_tick = vec![false; state.vehicles.len()];
     let mut unloaded_this_tick = vec![false; state.vehicles.len()];
+    let cargo_phase = Instant::now();
     crate::vehicle::process_vehicle_calendar_day(state);
+    timings.cargo_calendar_day_ns = nanos(cargo_phase);
+    let cargo_phase = Instant::now();
     crate::vehicle::process_vehicle_economy_day(state);
+    timings.cargo_economy_day_ns = nanos(cargo_phase);
+    let cargo_phase = Instant::now();
     economy::age_vehicle_cargo(state);
+    timings.cargo_aging_ns = nanos(cargo_phase);
+    let cargo_phase = Instant::now();
     cargo_transfer::unload_vehicles(state, t, &loaded_this_tick, &mut unloaded_this_tick);
+    timings.cargo_unload_ns = nanos(cargo_phase);
+    let cargo_phase = Instant::now();
     cargo_transfer::load_vehicles(state, &mut loaded_this_tick, &unloaded_this_tick);
+    timings.cargo_load_ns = nanos(cargo_phase);
     timings.cargo_transfer_ns = nanos(p0);
 
     let p0 = Instant::now();
-    phase_vehicle_ops_pre_move(state);
+    let vehicle_ops = Instant::now();
+    let vehicle_ops_timings = phase_vehicle_ops_pre_move(state);
+    timings.vehicle_ops_only_ns = nanos(vehicle_ops);
+    timings.vehicle_ops_autoreplace_ns = vehicle_ops_timings.autoreplace_ns;
+    let pbs = Instant::now();
     phase_pbs_reservations(state);
+    timings.pbs_pre_move_ns = nanos(pbs);
     timings.vehicle_ops_pre_move_ns = nanos(p0);
 
     let p0 = Instant::now();
@@ -320,14 +409,23 @@ fn phase_path_recompute(state: &mut GameState) {
 }
 
 /// Horarios, autoreemplazo, extensión de rutas, fases de aeronaves (antes del movimiento).
-fn phase_vehicle_ops_pre_move(state: &mut GameState) {
+#[derive(Debug, Clone, Copy, Default)]
+struct VehicleOpsTimings {
+    autoreplace_ns: u64,
+}
+
+fn phase_vehicle_ops_pre_move(state: &mut GameState) -> VehicleOpsTimings {
+    let mut timings = VehicleOpsTimings::default();
     vehicle_ops::tick_vehicle_timetables(state);
     vehicle_ops::sync_autoreplace_depot_flags(state);
+    let p0 = Instant::now();
     vehicle_ops::run_autoreplace_in_depots(state);
+    timings.autoreplace_ns = nanos(p0);
     vehicle_ops::update_servicing_and_road_depot_orders(state);
     routing::extend_orderless_vehicle_paths(state);
     routing::assign_orderless_wander_destinations(state);
     movement::tick_aircraft_phases(state);
+    timings
 }
 
 /// Reservas PBS + sync a `m2_hi` (fase gruesa hasta B4).

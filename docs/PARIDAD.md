@@ -2,6 +2,9 @@
 
 Madurez, mapeos C++↔Rust, gaps, UI, divergencias y oráculos. Roadmaps de producto: [PLANIFICACION.md](PLANIFICACION.md). Pin JSON y capturas siguen en `docs/parity/`.
 
+Para investigar una discrepancia de render de una partida `.sav`, seguir la
+[metodología de paridad raw → semántica → draw](parity/METODOLOGIA_RENDER_SAV.md).
+
 ## Estado canónico actual
 
 **Corte canónico: 2026-08-03 · `main` `56db4f02abf9d70348ff84c6afa323081699c6df`.

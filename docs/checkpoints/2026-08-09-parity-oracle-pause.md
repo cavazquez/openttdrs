@@ -6,6 +6,9 @@ Esta rama conserva el lote de trabajo local de renderer, carga de SAV,
 simulación, assets y herramientas de paridad. Se mantiene fuera de `main` para
 poder retomarlo y separarlo en cambios revisables.
 
+La metodología, evidencia disponible y procedimiento reproducible están en
+[`METODOLOGIA_RENDER_SAV.md`](../parity/METODOLOGIA_RENDER_SAV.md).
+
 ## Validado
 
 - `cargo fmt --all -- --check`

@@ -8,6 +8,7 @@ Un archivo vivo por temática. Orden sugerido al entrar:
 4. [MAPA_Y_FERROCARRIL.md](MAPA_Y_FERROCARRIL.md) — saves, tiles, señales, vías
 5. [GRAFICOS.md](GRAFICOS.md) — OpenGFX y bugs visuales
 6. [RENDIMIENTO.md](RENDIMIENTO.md) — mapas grandes y benches
+7. [parity/METODOLOGIA_RENDER_SAV.md](parity/METODOLOGIA_RENDER_SAV.md) — método reproducible para investigar render de `.sav`
 
 **Issues de backlog:** [github.com/cavazquez/openttdrs/issues](https://github.com/cavazquez/openttdrs/issues).
 
@@ -22,6 +23,7 @@ Un archivo vivo por temática. Orden sugerido al entrar:
 | [MAPA_Y_FERROCARRIL.md](MAPA_Y_FERROCARRIL.md) | Flujo `.ottdmap`, MAPT/chunks, señales, autorail, waypoints |
 | [GRAFICOS.md](GRAFICOS.md) | Sprites OpenGFX + handoff terreno |
 | [RENDIMIENTO.md](RENDIMIENTO.md) | PERF mapas grandes + benchmarks |
+| [parity/METODOLOGIA_RENDER_SAV.md](parity/METODOLOGIA_RENDER_SAV.md) | Capas raw/semántica/draw, oráculo C++ y flujo de depuración de partidas `.sav` |
 | [REFERENCIAS_EXTERNAS.md](REFERENCIAS_EXTERNAS.md) | Proyectos locales de consulta (OpenLoco / FreeRCT) |
 
 ### Assets (no markdown)
@@ -55,4 +57,4 @@ Planes y roadmaps cerrados o absorbidos en esta consolidación:
 
 ---
 
-*Última actualización: 2026-08-03 (referencias externas; consolidación temática 2026-07-25)*
+*Última actualización: 2026-08-09 (metodología de paridad SAV; consolidación temática 2026-07-25)*

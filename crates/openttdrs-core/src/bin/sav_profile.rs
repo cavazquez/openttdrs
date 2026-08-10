@@ -54,6 +54,8 @@ struct CargoLoadSiteSummary {
     vehicles_on_indexed_terminal: usize,
     vehicles_on_industry_tile: usize,
     stations_with_waiting_cargo: usize,
+    station_packets: usize,
+    waiting_units: u32,
     vehicles_loading: usize,
     vehicles_awaiting_load_window: usize,
 }
@@ -206,6 +208,16 @@ fn summarize_cargo_load_sites(state: &GameState) -> CargoLoadSiteSummary {
         .iter()
         .filter(|station| station.cargo_stock != CargoStock::default())
         .count();
+    summary.station_packets = state
+        .stations
+        .iter()
+        .map(|station| station.cargo_packets.len())
+        .sum();
+    summary.waiting_units = state
+        .stations
+        .iter()
+        .map(|station| station.cargo_packets.total_count())
+        .fold(0, u32::saturating_add);
     summary
 }
 
@@ -327,6 +339,8 @@ fn run(args: &Args) -> Result<(), String> {
     let decode_time = decode_start.elapsed();
     let version = sav.version;
     let dimensions = sav.map.dimensions();
+    let decoded_industries = sav.industries.len();
+    let decoded_cargo_packets = sav.cargo_packets.len();
 
     let import_start = Instant::now();
     let mut state = GameState::from_sav_game(sav);
@@ -374,9 +388,13 @@ fn run(args: &Args) -> Result<(), String> {
     );
     println!("estaciones: {}", state.stations.len());
     println!(
-        "carga: {} industrias, {} estaciones con espera; vehículos en tesela terminal indexada {}, en tesela de industria {}; loading {}, ventana de carga {}",
+        "carga: {} industrias (INDY {}), {} estaciones con espera, {} paquetes / {} u. (CAPA {}); vehículos en tesela terminal indexada {}, en tesela de industria {}; loading {}, ventana de carga {}",
         state.industries.len(),
+        decoded_industries,
         cargo_load_sites.stations_with_waiting_cargo,
+        cargo_load_sites.station_packets,
+        cargo_load_sites.waiting_units,
+        decoded_cargo_packets,
         cargo_load_sites.vehicles_on_indexed_terminal,
         cargo_load_sites.vehicles_on_industry_tile,
         cargo_load_sites.vehicles_loading,

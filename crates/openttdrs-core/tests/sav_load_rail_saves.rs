@@ -69,7 +69,13 @@ fn demo_openttd_sav_has_train_orders_and_rail() {
         "demo: falta bus ROAD"
     );
     assert!(!sav.industries.is_empty(), "demo: falta INDY");
+    let decoded_industries = sav.industries.len();
     let state = GameState::from_sav_game(sav);
+    assert_eq!(
+        state.industries.len(),
+        decoded_industries,
+        "INDY debe hidratarse en core, no únicamente en el cliente"
+    );
     assert!(
         state
             .vehicles

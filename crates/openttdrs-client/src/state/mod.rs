@@ -18,7 +18,7 @@ use crate::config::{apply_test_company_colour, climate_from_env, env_u64, world_
 use crate::state::bootstrap::{
     MapSizePreset, NewGameSettings, START_YEARS, build_procedural_demo_world,
     log_detection_summary, log_gameplay_showcase_zones, log_procedural_demo_zones,
-    place_industries, place_industries_from_sav, place_stations, place_stations_from_footer_stxy,
+    place_industries, place_stations, place_stations_from_footer_stxy,
     place_stations_from_map_tiles,
 };
 
@@ -28,23 +28,17 @@ pub const MAP_W: u32 = 64;
 pub const MAP_H: u32 = 64;
 
 /// Carga un save de `OpenTTD` (`.sav`) y aplica el bootstrap de mapas reales:
-/// industrias del chunk `INDY` (o heurística en saves sin tablas), estaciones
-/// del chunk `STNN` (una entrada lógica por estación, no por tesela de andén),
-/// vehículos y dinero.
+/// industrias/carga del core (`INDY`/`STNN`/`CAPA`), estaciones del chunk
+/// `STNN` (una entrada lógica por estación, no por tesela de andén), vehículos
+/// y dinero.
 ///
 /// Si `STNN` ya aportó estaciones, **no** se inventan entradas extra desde
 /// `MP_STATION`/`STXY`: eso generaba etiquetas `Tren (x, y)` en cada andén.
 pub(crate) fn load_sav_state(bytes: &[u8]) -> Result<GameState, String> {
     let sav = openttdrs_core::sav::load(bytes).map_err(|e| e.to_string())?;
     let extras = sav.extras.clone();
-    let sav_industries = sav.industries.clone();
     let mut state = GameState::from_sav_game(sav);
     apply_test_company_colour(&mut state);
-    if sav_industries.is_empty() {
-        place_industries(&mut state, true, Some(&extras));
-    } else {
-        place_industries_from_sav(&mut state, &sav_industries);
-    }
     if state.stations.is_empty() {
         place_stations_from_map_tiles(&mut state);
         place_stations_from_footer_stxy(&mut state, Some(&extras));

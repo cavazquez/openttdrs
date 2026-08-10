@@ -19,7 +19,7 @@ pub(crate) use demo_layout::log_procedural_demo_zones;
 #[cfg(test)]
 pub(crate) use demo_layout::{DEMO_ECONOMY_DELIVER_STATION, DEMO_ECONOMY_LOAD_STATION};
 pub(crate) use gameplay_showcase::log_gameplay_showcase_zones;
-pub(crate) use industries::{industry_group_from_gfx, place_industries, place_industries_from_sav};
+pub(crate) use industries::{industry_group_from_gfx, place_industries};
 pub(crate) use logging::log_detection_summary;
 #[cfg(test)]
 pub(crate) use terrain::place_tunnel_demo_ridge;

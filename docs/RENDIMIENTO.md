@@ -110,11 +110,11 @@ cliente. El presupuesto sigue siendo 27.000 µs/tick (≈37 Hz).
 
 | Métrica | Resultado del perfil |
 |---|---:|
-| Decode / import | ~112 ms / ~231 ms |
+| Decode / import | ~149 ms / ~233 ms |
 | Primer tick (rutas importadas pendientes) | ~47,8 ms |
-| Media de 148 ticks | **~22,4 ms** |
+| Media de 148 ticks | **~26,0 ms** |
 | Pico periódico del día de tránsito | eliminado |
-| `cargo_load` medio | ~2 µs (sin fuentes de carga en este SAV) |
+| `cargo_load` medio | ~8,1 ms (carga real importada) |
 
 El primer tick resuelve 1.637 rutas importadas pendientes; no se limita ni se
 detiene a los vehículos ya en marcha. Las búsquedas independientes se calculan
@@ -127,13 +127,20 @@ El servicio automático de vehículos de carretera sigue ahora el reparto de
 fracción de la flota. Antes se lanzaba un barrido completo de depósitos y A*
 al comenzar el día, lo que concentraba un pico de ~2,48 s en Kale.
 
-El perfil también encontró que este import actual informa **0 industrias y 0
-estaciones con carga en espera**. En esas condiciones no hay nada que cargar,
-por lo que `load_vehicles` evita visitar la flota completa; si una industria
-tiene stock o una estación tiene carga, conserva la ruta normal. Esto es una
-optimización semánticamente segura, pero la ausencia de `INDY`/carga sigue
-siendo una limitación de paridad separada, no una afirmación de que Kale tenga
-cero industrias en OpenTTD.
+Desde #311 el perfil decodifica el pool denso de `INDY`/`CAPA` igual que
+`SlIterateArray()` de OpenTTD: las filas vacías (`length = 1`) avanzan el
+índice del pool y no abortan el chunk. Kale informa ahora **59 industrias
+(`INDY`)**, **218 estaciones con carga en espera**, **34.044 paquetes / 792.188
+unidades** enlazados desde `STNN.goods` y **48.096 paquetes físicos (`CAPA`)**
+decodificados. La diferencia corresponde a paquetes que no están referidos por
+una cola de estación importada.
+
+Con esa carga real, `load_vehicles` ya visita sus fuentes y el coste medio de
+`cargo_load` es ~8,1 ms; el total medio sigue dentro del presupuesto de
+27.000 µs/tick (≈37 Hz), aunque el primer tick conserva el pico de rutas
+pendientes. La importación semántica vive en core, de modo que cliente,
+herramientas y servidor parten de las mismas industrias, stock y paquetes de
+estación.
 
 #### Deltas visuales y etiquetas
 

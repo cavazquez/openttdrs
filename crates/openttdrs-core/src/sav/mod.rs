@@ -15,6 +15,7 @@ mod container;
 mod date;
 mod entities;
 pub(crate) mod house_population_generated;
+mod import;
 mod landscape;
 
 /// Población de un `HouseID` original (`HouseSpec::population`).
@@ -86,8 +87,13 @@ use crate::vehicle::{AircraftPhase, Vehicle, VehicleKind};
 use std::collections::HashMap;
 
 pub use entities::{
-    SavIndustry, SavStation, SavVehicle, SavVehicleKind, format_generated_station_name,
+    SavCargoPacket, SavIndustry, SavIndustryAcceptedCargo, SavIndustryProducedCargo, SavStation,
+    SavStationCargo, SavVehicle, SavVehicleKind, format_generated_station_name,
     resolve_sav_station_name,
+};
+pub use import::{
+    hydrate_industries_from_map_tiles, industry_group_from_gfx, industry_kind_from_gfx,
+    industry_kind_from_ottd_type, industry_random_colour_from_instance, industry_spec_from_gfx,
 };
 pub use write::{
     EXPORT_SAVE_VERSION, REQUIRED_EXPORT_CHUNKS, SavContainer, exported_chunk_names, save,
@@ -173,6 +179,8 @@ pub struct SavGame {
     pub towns: Vec<Town>,
     /// Industrias del chunk `INDY` (posición/tamaño/tipo reales).
     pub industries: Vec<SavIndustry>,
+    /// Paquetes de carga físicos del chunk `CAPA`.
+    pub cargo_packets: Vec<SavCargoPacket>,
     /// Vehículos del chunk `VEHS` (cabezas de convoy tren/carretera).
     pub vehicles: Vec<SavVehicle>,
     /// Dinero de la primera empresa (`PLYR`), si está presente.
@@ -215,6 +223,7 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
     let mut towns = entities::towns_from_chunks(&chunk_list, map_w, version);
     rebuild_town_populations(&map, &mut towns);
     let industries = entities::industries_from_chunks(&chunk_list, map_w, version);
+    let cargo_packets = entities::cargo_packets_from_chunks(&chunk_list, map_w, version);
     let order_import = orders::SavOrderImport::from_chunks(&chunk_list, version);
     let station_index = entities::station_index_from_chunks(&chunk_list, map_w, version);
     let vehicles = entities::vehicles_from_chunks(&chunk_list, map_w, &order_import, version);
@@ -231,6 +240,7 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
         stations,
         towns,
         industries,
+        cargo_packets,
         vehicles,
         money,
         company_colour,
@@ -494,13 +504,54 @@ fn vanilla_train_engine_id(openttd_id: u16) -> Option<u16> {
     Some(id)
 }
 
+/// Convierte las referencias `STNN.goods` + `CAPA` a la cola de packets core.
+///
+/// La reserva se conserva como total de estación porque el modelo actual de
+/// `StationCargoList` todavía no la separa por cargo. Los packets sí mantienen
+/// cargo, origen, edad y próximo hop individualmente.
+fn hydrate_sav_station_cargo(
+    station: &mut Station,
+    saved_cargo: &[entities::SavStationCargo],
+    packets_by_id: &HashMap<u32, &entities::SavCargoPacket>,
+    station_positions: &HashMap<u32, TileCoord>,
+    climate: crate::Climate,
+) {
+    let mut imported = Vec::new();
+    let mut reserved = 0_u32;
+    for entry in saved_cargo {
+        reserved = reserved.saturating_add(entry.reserved);
+        let Some(cargo) = crate::CargoType::from_climate_slot(climate, entry.cargo_slot) else {
+            continue;
+        };
+        for packet_id in &entry.packet_ids {
+            let Some(saved) = packets_by_id.get(packet_id) else {
+                continue;
+            };
+            let mut packet =
+                crate::CargoPacket::new(cargo, saved.count, saved.source_xy.unwrap_or(station.pos));
+            packet.source_xy = saved.source_xy;
+            packet.periods_in_transit = saved.periods_in_transit;
+            packet.feeder_share = saved.feeder_share;
+            packet.first_station = saved
+                .source_station_id
+                .and_then(|id| station_positions.get(&id).copied());
+            packet.next_hop = saved
+                .next_hop_station_id
+                .and_then(|id| station_positions.get(&id).copied());
+            imported.push(packet);
+        }
+    }
+    station.push_waiting_packets(imported);
+    station.cargo_packets.reserved = reserved.min(station.cargo_packets.total_count());
+}
+
 impl GameState {
     /// Estado jugable desde un save de `OpenTTD`: mapa, estaciones, ciudades,
     /// vehículos (cabezas de convoy) y dinero de la empresa.
     ///
-    /// Las industrias las añade el cliente (`place_industries`) usando
-    /// `SavGame::industries` cuando hay chunk `INDY` de tabla, o la heurística
-    /// de teselas con `SavGame::extras` en saves antiguos.
+    /// Industrias, stock de producción y paquetes de carga se hidratan en el
+    /// core desde `INDY`/`STNN`/`CAPA`, para que cliente, herramientas y
+    /// servidores partan del mismo estado importado.
     #[must_use]
     #[allow(clippy::too_many_lines)]
     pub fn from_sav_game(sav: SavGame) -> Self {
@@ -531,6 +582,16 @@ impl GameState {
         if let Some(colour) = sav.company_colour {
             state.company_colour = colour;
         }
+        let station_positions: HashMap<u32, TileCoord> = sav
+            .station_index
+            .iter()
+            .map(|(&station_id, index)| (station_id, index.pos))
+            .collect();
+        let cargo_packets_by_id: HashMap<u32, &entities::SavCargoPacket> = sav
+            .cargo_packets
+            .iter()
+            .map(|packet| (packet.packet_id, packet))
+            .collect();
         // Indexar una sola vez las piezas de aeropuerto importadas. `m2` es
         // el `StationID` y `m6` identifica el tipo de estación del tile.
         let mut imported_airport_tiles: HashMap<u32, Vec<TileCoord>> = HashMap::new();
@@ -598,8 +659,16 @@ impl GameState {
                     }
                 }
             }
+            hydrate_sav_station_cargo(
+                &mut station,
+                &st.cargo,
+                &cargo_packets_by_id,
+                &station_positions,
+                state.climate,
+            );
             state.stations.push(station);
         }
+        import::hydrate_sav_industries(&mut state, &sav.industries, &sav.extras);
         state.link_graph = sav.link_graph;
         if !matches!(
             state.cargo_dist.distribution,
@@ -807,6 +876,7 @@ mod tests {
             stations: Vec::new(),
             towns: Vec::new(),
             industries: Vec::new(),
+            cargo_packets: Vec::new(),
             vehicles: Vec::new(),
             money: None,
             company_colour: None,
@@ -825,6 +895,89 @@ mod tests {
         assert_eq!(stop_kind_from_facilities(0x02), StopKind::TruckStop);
         assert_eq!(stop_kind_from_facilities(0x08), StopKind::Airport);
         assert_eq!(stop_kind_from_facilities(0x10), StopKind::Dock);
+    }
+
+    #[test]
+    fn from_sav_game_imports_station_capa_packets_in_core() {
+        let source = TileCoord::new(1, 1);
+        let destination = TileCoord::new(5, 5);
+        let mut sav = empty_sav(352, Map::new_flat(8, 8, 0));
+        sav.stations = vec![
+            SavStation {
+                station_id: 0,
+                pos: source,
+                name: Some("Origen".to_string()),
+                facilities: FACIL_TRAIN,
+                string_id: None,
+                town_id: None,
+                airport_type: 0,
+                airport_w: 0,
+                airport_h: 0,
+                airport_layout: 0,
+                airport_blocks: 0,
+                cargo: vec![entities::SavStationCargo {
+                    cargo_slot: 1,
+                    packet_ids: vec![42],
+                    reserved: 2,
+                }],
+            },
+            SavStation {
+                station_id: 1,
+                pos: destination,
+                name: Some("Destino".to_string()),
+                facilities: FACIL_TRAIN,
+                string_id: None,
+                town_id: None,
+                airport_type: 0,
+                airport_w: 0,
+                airport_h: 0,
+                airport_layout: 0,
+                airport_blocks: 0,
+                cargo: Vec::new(),
+            },
+        ];
+        sav.cargo_packets = vec![entities::SavCargoPacket {
+            packet_id: 42,
+            source_station_id: Some(0),
+            source_xy: Some(TileCoord::new(2, 2)),
+            next_hop_station_id: Some(1),
+            count: 9,
+            periods_in_transit: 7,
+            feeder_share: 11,
+        }];
+        for (station_id, pos) in [(0, source), (1, destination)] {
+            sav.station_index.insert(
+                station_id,
+                entities::SavStationIndex {
+                    pos,
+                    is_waypoint: false,
+                    facilities: FACIL_TRAIN,
+                    name: None,
+                    string_id: None,
+                    town_id: None,
+                    airport_type: 0,
+                    airport_w: 0,
+                    airport_h: 0,
+                    airport_layout: 0,
+                    airport_blocks: 0,
+                },
+            );
+        }
+
+        let state = GameState::from_sav_game(sav);
+        let station = &state.stations[0];
+        assert_eq!(station.cargo_stock.coal, 9);
+        assert_eq!(station.cargo_packets.reserved, 2);
+        let packet = station
+            .cargo_packets
+            .packets()
+            .next()
+            .expect("imported packet");
+        assert_eq!(packet.source, TileCoord::new(2, 2));
+        assert_eq!(packet.first_station, Some(source));
+        assert_eq!(packet.next_hop, Some(destination));
+        assert_eq!(packet.periods_in_transit, 7);
+        assert_eq!(packet.feeder_share, 11);
     }
 
     #[test]
@@ -915,6 +1068,7 @@ mod tests {
                     airport_h: 0,
                     airport_layout: 0,
                     airport_blocks: 0,
+                    cargo: Vec::new(),
                 },
                 SavStation {
                     station_id: 1,
@@ -928,6 +1082,7 @@ mod tests {
                     airport_h: 11,
                     airport_layout: 0,
                     airport_blocks: 0,
+                    cargo: Vec::new(),
                 },
             ],
             towns: vec![Town {
@@ -941,6 +1096,7 @@ mod tests {
                 ..Default::default()
             }],
             industries: Vec::new(),
+            cargo_packets: Vec::new(),
             link_graph: LinkGraphStats::default(),
             vehicles: vec![
                 SavVehicle {

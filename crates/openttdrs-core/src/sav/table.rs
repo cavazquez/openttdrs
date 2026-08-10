@@ -125,7 +125,12 @@ fn scalar_size(base: u8) -> Result<usize, SavError> {
 fn read_scalar(base: u8, data: &[u8], off: &mut usize) -> Result<SlValue, SavError> {
     let size = scalar_size(base)?;
     if *off + size > data.len() {
-        return Err(SavError::BadFormat("registro truncado".into()));
+        return Err(SavError::BadFormat(format!(
+            "registro truncado (offset {}, tamaño {}, límite {})",
+            *off,
+            size,
+            data.len()
+        )));
     }
     let bytes = &data[*off..*off + size];
     *off += size;
@@ -171,7 +176,8 @@ fn read_record_fields(
 ) -> Result<SlRecord, SavError> {
     let mut record = Vec::with_capacity(fields.len());
     for field in fields {
-        let value = read_field(field, data, off)?;
+        let value = read_field(field, data, off)
+            .map_err(|error| SavError::BadFormat(format!("campo {}: {error}", field.name)))?;
         record.push((field.name.clone(), value));
     }
     Ok(record)
@@ -208,7 +214,19 @@ pub(crate) fn parse_table_chunk(
         if n == 0 {
             break;
         }
-        let record_end = off + n as usize - 1;
+        let record_len = n as usize - 1;
+        // `SlIterateArray()` de OpenTTD avanza el índice de una tabla densa
+        // aunque el slot esté vacío (`length == 1`, payload de cero bytes).
+        // Pools grandes como `INDY` y `CAPA` de Kale contienen muchos de
+        // estos huecos; tratarlos como un registro hace que el parser aborte
+        // al intentar leer el primer campo desde un slice vacío.
+        if record_len == 0 {
+            if !sparse {
+                auto_index += 1;
+            }
+            continue;
+        }
+        let record_end = off + record_len;
         if record_end > body.len() {
             return Err(SavError::BadFormat("registro de tabla truncado".into()));
         }
@@ -292,6 +310,23 @@ pub(crate) mod tests {
         assert_eq!(
             record_get(record, "facilities").and_then(SlValue::as_u64),
             Some(7)
+        );
+    }
+
+    #[test]
+    fn dense_table_skips_empty_pool_slots_and_keeps_index() {
+        // `SlIterateArray` representa un slot de pool vacío como `length = 1`.
+        // El siguiente registro denso debe conservar el índice 1, no abortar
+        // intentando leer el campo `v` desde un payload vacío.
+        let body = build_table_body(&[(2, "v")], &[Vec::new(), vec![9]]);
+
+        let rows = parse_table_chunk(&body, false).expect("parse table with empty slot");
+
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].0, 1);
+        assert_eq!(
+            record_get(&rows[0].1, "v").and_then(SlValue::as_u64),
+            Some(9)
         );
     }
 

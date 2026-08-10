@@ -3,6 +3,7 @@
 
 use crate::map::{TileCoord, coord_from_linear_index};
 use crate::town::Town;
+use std::collections::HashMap;
 
 use super::chunks::{RawChunk, find_chunk};
 use super::table::{SlRecord, SlValue, record_get};
@@ -34,6 +35,42 @@ pub struct SavStation {
     pub airport_layout: u8,
     /// `Station::airport.blocks` (guardado como `airport.flags`).
     pub airport_blocks: u64,
+    /// Paquetes de carga en espera, agrupados por slot de cargo de `OpenTTD`.
+    ///
+    /// La carga física vive en `CAPA`; `STNN.goods[].cargo[]` sólo conserva
+    /// referencias a esos paquetes. Se mantiene esta relación para hidratar
+    /// el estado core sin que el cliente tenga que releer chunks crudos.
+    pub cargo: Vec<SavStationCargo>,
+}
+
+/// Referencias de una entrada `Station::goods[cargo_slot]`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SavStationCargo {
+    /// Slot de cargo del landscape activo (`0..11` para vanilla).
+    pub cargo_slot: u8,
+    /// IDs de `CargoPacket` (`CAPA`) en el mismo orden FIFO que el save.
+    pub packet_ids: Vec<u32>,
+    /// Unidades reservadas para un vehículo que ya inició la carga.
+    pub reserved: u32,
+}
+
+/// `CargoPacket` decodificado del chunk `CAPA`.
+///
+/// `CAPA` no almacena el tipo de carga: lo aporta la entrada `goods` de la
+/// estación que lo referencia. Los IDs de estación se resuelven recién al
+/// convertir a [`crate::GameState`], cuando ya existe el índice de posiciones.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SavCargoPacket {
+    pub packet_id: u32,
+    /// `CargoPacket::first_station` (guardado bajo el nombre `source`).
+    pub source_station_id: Option<u32>,
+    /// Tesela geográfica de origen para el cálculo económico.
+    pub source_xy: Option<TileCoord>,
+    /// `CargoPacket::next_hop` (nombre histórico `loaded_at_xy`).
+    pub next_hop_station_id: Option<u32>,
+    pub count: u16,
+    pub periods_in_transit: u16,
+    pub feeder_share: i64,
 }
 
 /// Entrada del índice de estación (`StationID`) en `STNN`.
@@ -164,6 +201,7 @@ pub(crate) fn stations_from_chunks(
     map_w: u32,
     save_version: u16,
 ) -> Vec<SavStation> {
+    let mut cargo_by_station = station_cargo_from_chunks(chunks, save_version);
     let mut indexed: Vec<_> = station_index_from_chunks(chunks, map_w, save_version)
         .into_iter()
         .filter(|(_, st)| !st.is_waypoint)
@@ -185,8 +223,123 @@ pub(crate) fn stations_from_chunks(
             airport_h: st.airport_h,
             airport_layout: st.airport_layout,
             airport_blocks: st.airport_blocks,
+            cargo: cargo_by_station.remove(&station_id).unwrap_or_default(),
         })
         .collect()
+}
+
+/// Extrae las referencias `STNN.normal.goods[].cargo[]` por estación.
+///
+/// La lista de `goods` se serializa por slot de cargo, por eso el índice del
+/// struct-list es el `cargo_slot` a resolver según el landscape del save.
+fn station_cargo_from_chunks(
+    chunks: &[RawChunk],
+    save_version: u16,
+) -> HashMap<u32, Vec<SavStationCargo>> {
+    let Some(stnn) = find_chunk(chunks, "STNN") else {
+        return HashMap::new();
+    };
+    table_rows(stnn, save_version)
+        .into_iter()
+        .filter_map(|(station_id, record)| {
+            let cargo = station_cargo_from_record(&record);
+            (!cargo.is_empty()).then_some((station_id, cargo))
+        })
+        .collect()
+}
+
+fn station_cargo_from_record(record: &SlRecord) -> Vec<SavStationCargo> {
+    let goods = nested_struct(record, "normal")
+        .and_then(|normal| record_get(normal, "goods"))
+        .or_else(|| record_get(record, "goods"));
+    let Some(SlValue::Structs(goods)) = goods else {
+        return Vec::new();
+    };
+
+    goods
+        .iter()
+        .enumerate()
+        .filter_map(|(slot, entry)| {
+            let cargo_slot = u8::try_from(slot).ok()?;
+            let reserved = record_get(entry, "cargo.reserved_count")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u32::try_from(value).ok())
+                .unwrap_or(0);
+            let mut packet_ids = Vec::new();
+            if let Some(SlValue::Structs(destinations)) = record_get(entry, "cargo") {
+                for destination in destinations {
+                    let Some(SlValue::List(refs)) = record_get(destination, "second") else {
+                        continue;
+                    };
+                    // `SLE_REFLIST` codifica referencias como `index + 1`;
+                    // cero representa una referencia nula y no es un paquete.
+                    packet_ids.extend(refs.iter().filter_map(|value| {
+                        value
+                            .as_u64()
+                            .and_then(|reference| reference.checked_sub(1))
+                            .and_then(|id| u32::try_from(id).ok())
+                    }));
+                }
+            }
+            (!packet_ids.is_empty() || reserved != 0).then_some(SavStationCargo {
+                cargo_slot,
+                packet_ids,
+                reserved,
+            })
+        })
+        .collect()
+}
+
+/// Paquetes físicos del chunk `CAPA` (saves modernos con `CargoPackets`).
+#[must_use]
+pub(crate) fn cargo_packets_from_chunks(
+    chunks: &[RawChunk],
+    map_w: u32,
+    save_version: u16,
+) -> Vec<SavCargoPacket> {
+    let Some(capa) = find_chunk(chunks, "CAPA") else {
+        return Vec::new();
+    };
+    table_rows(capa, save_version)
+        .into_iter()
+        .filter_map(|(packet_id, record)| sav_cargo_packet_from_record(packet_id, &record, map_w))
+        .collect()
+}
+
+fn sav_cargo_packet_from_record(
+    packet_id: u32,
+    record: &SlRecord,
+    map_w: u32,
+) -> Option<SavCargoPacket> {
+    let count = record_get(record, "count")
+        .and_then(SlValue::as_u64)
+        .and_then(|value| u16::try_from(value).ok())?;
+    let source_xy = record_get(record, "source_xy")
+        .and_then(SlValue::as_u64)
+        .and_then(|tile| coord_from_linear_index(tile, map_w));
+    Some(SavCargoPacket {
+        packet_id,
+        source_station_id: station_id_from_scalar(record_get(record, "source")),
+        source_xy,
+        next_hop_station_id: station_id_from_scalar(record_get(record, "loaded_at_xy")),
+        count,
+        periods_in_transit: record_get(record, "periods_in_transit")
+            .and_then(SlValue::as_u64)
+            .and_then(|value| u16::try_from(value).ok())
+            .unwrap_or(0),
+        feeder_share: record_get(record, "feeder_share")
+            .and_then(SlValue::as_i64)
+            .unwrap_or(0),
+    })
+}
+
+/// `StationID` se guarda como `u16` directo (no como `SLE_REF`); `0xFFFF`
+/// es `INVALID_STATION`, mientras que el ID 0 es válido.
+fn station_id_from_scalar(value: Option<&SlValue>) -> Option<u32> {
+    value
+        .and_then(SlValue::as_u64)
+        .filter(|&id| id < u64::from(u16::MAX))
+        .and_then(|id| u32::try_from(id).ok())
 }
 
 /// `STR_SV_STNAME` … `STR_SV_STNAME_FALLBACK` (`table/strings.h` de `OpenTTD`).
@@ -302,6 +455,8 @@ pub(crate) fn towns_from_chunks(chunks: &[RawChunk], map_w: u32, save_version: u
 /// Industria decodificada del chunk `INDY` (saves con tablas).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SavIndustry {
+    /// `IndustryID` (índice de la fila `INDY`), correlacionable con `m2`.
+    pub industry_id: u32,
     /// Tesela de origen (`location.tile`).
     pub pos: TileCoord,
     /// Dimensiones del rectángulo (`location.w` × `location.h`).
@@ -311,6 +466,29 @@ pub struct SavIndustry {
     pub industry_type: u8,
     /// `Industry.random_colour` (`Colours`, 0–15) para `PALETTE_MODIFIER_COLOUR`.
     pub random_colour: u8,
+    /// Fase exacta del ciclo de producción (`Industry::counter`).
+    pub counter: u16,
+    /// Nivel de producción (`Industry::prod_level`).
+    pub prod_level: u8,
+    /// Salidas y stock en espera (`Industry::produced`).
+    pub produced: Vec<SavIndustryProducedCargo>,
+    /// Insumos recibidos y en espera (`Industry::accepted`).
+    pub accepted: Vec<SavIndustryAcceptedCargo>,
+}
+
+/// Entrada `Industry::produced` de `OpenTTD`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SavIndustryProducedCargo {
+    pub cargo_slot: u8,
+    pub waiting: u16,
+    pub rate: u8,
+}
+
+/// Entrada `Industry::accepted` de `OpenTTD`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SavIndustryAcceptedCargo {
+    pub cargo_slot: u8,
+    pub waiting: u16,
 }
 
 /// Industrias del chunk `INDY` (solo saves con tablas); best-effort.
@@ -324,8 +502,8 @@ pub(crate) fn industries_from_chunks(
         return Vec::new();
     };
     let mut out = Vec::new();
-    for (_, record) in table_rows(indy, save_version) {
-        if let Some(ind) = sav_industry_from_record(&record, map_w) {
+    for (industry_id, record) in table_rows(indy, save_version) {
+        if let Some(ind) = sav_industry_from_record(industry_id, &record, map_w) {
             out.push(ind);
         }
     }
@@ -333,11 +511,16 @@ pub(crate) fn industries_from_chunks(
         for &(index, industry_type) in &super::build::indy_pairs(chunks) {
             if let Some(pos) = coord_from_linear_index(u64::from(index), map_w) {
                 out.push(SavIndustry {
+                    industry_id: u32::from(index),
                     pos,
                     width: 1,
                     height: 1,
                     industry_type,
                     random_colour: 0,
+                    counter: 0,
+                    prod_level: crate::industry::PRODLEVEL_DEFAULT,
+                    produced: Vec::new(),
+                    accepted: Vec::new(),
                 });
             }
         }
@@ -345,7 +528,11 @@ pub(crate) fn industries_from_chunks(
     out
 }
 
-fn sav_industry_from_record(record: &SlRecord, map_w: u32) -> Option<SavIndustry> {
+fn sav_industry_from_record(
+    industry_id: u32,
+    record: &SlRecord,
+    map_w: u32,
+) -> Option<SavIndustry> {
     let tile = record_get(record, "location.tile").and_then(SlValue::as_u64)?;
     let pos = coord_from_linear_index(tile, map_w)?;
     let width = record_get(record, "location.w")
@@ -360,14 +547,76 @@ fn sav_industry_from_record(record: &SlRecord, map_w: u32) -> Option<SavIndustry
     let random_colour = record_get(record, "random_colour")
         .and_then(SlValue::as_u64)
         .unwrap_or(0);
+    let counter = record_get(record, "counter")
+        .and_then(SlValue::as_u64)
+        .and_then(|value| u16::try_from(value).ok())
+        .unwrap_or(0);
+    let prod_level = record_get(record, "prod_level")
+        .and_then(SlValue::as_u64)
+        .and_then(|value| u8::try_from(value).ok())
+        .unwrap_or(crate::industry::PRODLEVEL_DEFAULT);
     #[allow(clippy::cast_possible_truncation)]
     Some(SavIndustry {
+        industry_id,
         pos,
         width: width.min(255) as u8,
         height: height.min(255) as u8,
         industry_type: industry_type.min(255) as u8,
         random_colour: (random_colour % 16) as u8,
+        counter,
+        prod_level,
+        produced: industry_produced_from_record(record),
+        accepted: industry_accepted_from_record(record),
     })
+}
+
+fn industry_produced_from_record(record: &SlRecord) -> Vec<SavIndustryProducedCargo> {
+    let Some(SlValue::Structs(produced)) = record_get(record, "produced") else {
+        return Vec::new();
+    };
+    produced
+        .iter()
+        .filter_map(|entry| {
+            let cargo_slot = record_get(entry, "cargo")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok())?;
+            let waiting = record_get(entry, "waiting")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u16::try_from(value).ok())
+                .unwrap_or(0);
+            let rate = record_get(entry, "rate")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok())
+                .unwrap_or(0);
+            Some(SavIndustryProducedCargo {
+                cargo_slot,
+                waiting,
+                rate,
+            })
+        })
+        .collect()
+}
+
+fn industry_accepted_from_record(record: &SlRecord) -> Vec<SavIndustryAcceptedCargo> {
+    let Some(SlValue::Structs(accepted)) = record_get(record, "accepted") else {
+        return Vec::new();
+    };
+    accepted
+        .iter()
+        .filter_map(|entry| {
+            let cargo_slot = record_get(entry, "cargo")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok())?;
+            let waiting = record_get(entry, "waiting")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u16::try_from(value).ok())
+                .unwrap_or(0);
+            Some(SavIndustryAcceptedCargo {
+                cargo_slot,
+                waiting,
+            })
+        })
+        .collect()
 }
 
 /// Dinero de la primera empresa del chunk `PLYR` (la del jugador en partidas locales).
@@ -848,6 +1097,91 @@ mod tests {
         assert_eq!(industries[0].pos, TileCoord::new(10, 5));
         assert_eq!((industries[0].width, industries[0].height), (2, 3));
         assert_eq!(industries[0].industry_type, 7);
+    }
+
+    #[test]
+    fn decodes_industry_produced_stock_and_phase_from_nested_table() {
+        let record = vec![
+            ("location.tile".to_string(), SlValue::Uint(5 * 64 + 10)),
+            ("location.w".to_string(), SlValue::Uint(2)),
+            ("location.h".to_string(), SlValue::Uint(3)),
+            ("type".to_string(), SlValue::Uint(0)),
+            ("random_colour".to_string(), SlValue::Uint(14)),
+            ("counter".to_string(), SlValue::Uint(123)),
+            ("prod_level".to_string(), SlValue::Uint(32)),
+            (
+                "accepted".to_string(),
+                SlValue::Structs(vec![vec![
+                    ("cargo".to_string(), SlValue::Uint(6)),
+                    ("waiting".to_string(), SlValue::Uint(15)),
+                ]]),
+            ),
+            (
+                "produced".to_string(),
+                SlValue::Structs(vec![vec![
+                    ("cargo".to_string(), SlValue::Uint(1)),
+                    ("waiting".to_string(), SlValue::Uint(77)),
+                    ("rate".to_string(), SlValue::Uint(15)),
+                ]]),
+            ),
+        ];
+
+        let industry = sav_industry_from_record(9, &record, 64).expect("INDY record");
+
+        assert_eq!(industry.industry_id, 9);
+        assert_eq!(industry.counter, 123);
+        assert_eq!(industry.prod_level, 32);
+        assert_eq!(industry.produced.len(), 1);
+        assert_eq!(industry.produced[0].cargo_slot, 1);
+        assert_eq!(industry.produced[0].waiting, 77);
+        assert_eq!(industry.accepted[0].cargo_slot, 6);
+        assert_eq!(industry.accepted[0].waiting, 15);
+    }
+
+    #[test]
+    fn decodes_station_cargo_packet_references_and_capa_packet() {
+        let station_record = vec![(
+            "normal".to_string(),
+            SlValue::Structs(vec![vec![(
+                "goods".to_string(),
+                SlValue::Structs(vec![
+                    Vec::new(),
+                    vec![
+                        ("cargo.reserved_count".to_string(), SlValue::Uint(3)),
+                        (
+                            "cargo".to_string(),
+                            SlValue::Structs(vec![vec![(
+                                "second".to_string(),
+                                // `SLE_REFLIST`: IDs guardados como index + 1.
+                                SlValue::List(vec![SlValue::Uint(8), SlValue::Uint(12)]),
+                            )]]),
+                        ),
+                    ],
+                ]),
+            )]]),
+        )];
+        let entries = station_cargo_from_record(&station_record);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].cargo_slot, 1);
+        assert_eq!(entries[0].packet_ids, vec![7, 11]);
+        assert_eq!(entries[0].reserved, 3);
+
+        let packet_record = vec![
+            ("source".to_string(), SlValue::Uint(4)),
+            ("source_xy".to_string(), SlValue::Uint(2 * 64 + 5)),
+            ("loaded_at_xy".to_string(), SlValue::Uint(9)),
+            ("count".to_string(), SlValue::Uint(42)),
+            ("periods_in_transit".to_string(), SlValue::Uint(7)),
+            ("feeder_share".to_string(), SlValue::Int(-12)),
+        ];
+        let packet = sav_cargo_packet_from_record(7, &packet_record, 64).expect("CAPA record");
+        assert_eq!(packet.packet_id, 7);
+        assert_eq!(packet.source_station_id, Some(4));
+        assert_eq!(packet.source_xy, Some(TileCoord::new(5, 2)));
+        assert_eq!(packet.next_hop_station_id, Some(9));
+        assert_eq!(packet.count, 42);
+        assert_eq!(packet.periods_in_transit, 7);
+        assert_eq!(packet.feeder_share, -12);
     }
 
     #[test]

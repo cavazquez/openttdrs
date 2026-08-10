@@ -1902,7 +1902,7 @@ pub fn collect_rail_sprites_for_type(
     }
 }
 
-/// Selecciona los sprites de una pasada continua de [`rail_track_draw_plan`].
+/// Selecciona los sprites de una pasada continua de `rail_track_draw_plan`.
 ///
 /// La división de fundaciones de medio bloque ya ocurrió en core; acá solo
 /// queda aplicar el selector clásico/plano y el set tipado mono/maglev.

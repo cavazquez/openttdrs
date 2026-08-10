@@ -910,14 +910,15 @@ fn pillar_half_crop(
     Some((rect, x_shift))
 }
 
-/// Geometría que OpenTTD entrega a `AddSortableSpriteToDraw` para un tramo de
-/// pilar. Mantenerla en la traza hace visible si el error está en la cantidad
-/// de piezas, en el pilar delantero/trasero o en su altura; los PNG por sí
-/// solos no permiten distinguir esos tres casos.
+/// Geometría que OpenTTD entrega a `AddSortableSpriteToDraw` para una pieza
+/// estructural de puente. Mantenerla en la traza hace visible si el error está
+/// en la altura, el desplazamiento frontal/trasero o los límites de sorting;
+/// los PNG por sí solos no permiten distinguir esas causas.
 #[derive(Clone, Copy)]
-struct PillarTracePlacement {
+struct BridgeTracePlacement {
     world_xy_delta: (i32, i32),
     world_z_delta: i32,
+    offset: (i32, i32, i32),
     bounds: TraceSpriteBounds,
 }
 
@@ -926,7 +927,7 @@ fn pillar_trace_placement(
     axis: usize,
     back: bool,
     z_px: f32,
-) -> PillarTracePlacement {
+) -> BridgeTracePlacement {
     // `DrawBridgePillars`: el frente se desplaza 12 px sobre el eje que no
     // recorre el puente; el pilar trasero queda en 3 px (12 - 9). El sprite
     // usa además `DrawPillar(..., {origin={0,0,-5}, extent={w,h,6},
@@ -934,10 +935,54 @@ fn pillar_trace_placement(
     let along = if back { 3 } else { 12 };
     let (x, y) = if axis == 0 { (0, along) } else { (along, 0) };
     let (ex, ey) = if axis == 0 { (16, 2) } else { (2, 16) };
-    PillarTracePlacement {
+    BridgeTracePlacement {
         world_xy_delta: (x, y),
         world_z_delta: z_px.round() as i32 - i32::from(ctx.info.base_z) * 8,
+        offset: (0, 0, 5),
         bounds: TraceSpriteBounds::new(0, 0, -5, ex, ey, 6),
+    }
+}
+
+/// Geometría de las dos barandillas de `DrawBridgeMiddle`.
+///
+/// `psid[0]` se ancla en el borde lejano y `psid[1]` en el cercano. Ambos
+/// usan `bridge_z - BRIDGE_Z_START` como origen, una caja que comienza tres
+/// píxeles arriba y un offset de pantalla inverso. El frente avanza 12 px por
+/// el eje transversal antes de aplicar su offset interno de 3 px.
+fn bridge_middle_structure_trace_placement(
+    base_z: u8,
+    axis: usize,
+    front: bool,
+    z_px: f32,
+) -> BridgeTracePlacement {
+    let (world_xy_delta, bounds, offset) = match (axis, front) {
+        (0, false) => (
+            (0, 0),
+            TraceSpriteBounds::new(0, 0, 3, 16, 1, 40),
+            (0, 0, -3),
+        ),
+        (0, true) => (
+            (0, 12),
+            TraceSpriteBounds::new(0, 3, 3, 16, 1, 40),
+            (0, -3, -3),
+        ),
+        (1, false) => (
+            (0, 0),
+            TraceSpriteBounds::new(0, 0, 3, 1, 16, 40),
+            (0, 0, -3),
+        ),
+        (1, true) => (
+            (12, 0),
+            TraceSpriteBounds::new(3, 0, 3, 1, 16, 40),
+            (-3, 0, -3),
+        ),
+        _ => unreachable!("un puente sólo puede usar el eje X o Y"),
+    };
+    BridgeTracePlacement {
+        world_xy_delta,
+        world_z_delta: z_px.round() as i32 - i32::from(base_z) * 8,
+        offset,
+        bounds,
     }
 }
 
@@ -953,7 +998,7 @@ fn spawn_layer(
     deck_z: u8,
     bridge_type: BridgeType,
     trace_bounds: Option<TraceSpriteBounds>,
-    trace_placement: Option<PillarTracePlacement>,
+    trace_placement: Option<BridgeTracePlacement>,
     pillar_half: Option<(usize, PillarHalf)>,
 ) {
     if sprite_id == 0 {
@@ -1025,19 +1070,19 @@ fn record_bridge_structure_trace(
     fallback: bool,
     surface_z: u8,
     bounds: Option<TraceSpriteBounds>,
-    pillar: Option<PillarTracePlacement>,
+    placement: Option<BridgeTracePlacement>,
 ) {
-    if let Some(pillar) = pillar {
+    if let Some(placement) = placement {
         WorldDrawTrace::record_sprite_with_palette_and_world_geometry(
             "bridge-structure",
             "sortable",
             sprite_id,
             palette,
             fallback,
-            pillar.world_xy_delta,
-            pillar.world_z_delta,
-            (0, 0, 5),
-            Some(pillar.bounds),
+            placement.world_xy_delta,
+            placement.world_z_delta,
+            placement.offset,
+            Some(placement.bounds),
         );
         return;
     }
@@ -1069,10 +1114,11 @@ mod tests {
 
     use super::{
         BridgeRampGround, PILLAR_SLOPE_STEEP_W, PillarHalf, PillarSegment, RAIL_TB_X,
-        bridge_foundation_child_offset, bridge_pbs_reservation_offset,
-        bridge_pbs_reservation_sprite_id, bridge_pbs_trace_bounds, bridge_ramp_catenary_slope,
-        bridge_ramp_ground_kind, bridge_ramp_ground_sprite_id, bridge_span_at, bridge_surface_z,
-        catenary_under_low_bridge, pillar_ground_heights, pillar_half_crop, pillar_segments,
+        bridge_foundation_child_offset, bridge_middle_structure_trace_placement,
+        bridge_pbs_reservation_offset, bridge_pbs_reservation_sprite_id, bridge_pbs_trace_bounds,
+        bridge_ramp_catenary_slope, bridge_ramp_ground_kind, bridge_ramp_ground_sprite_id,
+        bridge_span_at, bridge_surface_z, catenary_under_low_bridge, pillar_ground_heights,
+        pillar_half_crop, pillar_segments,
     };
     use crate::sprites::bridge_deck_sprite_ids;
 
@@ -1239,6 +1285,43 @@ mod tests {
                 sloped_ramp.ez,
             ),
             (0, 0, 0, 16, 16, 8)
+        );
+    }
+
+    #[test]
+    fn bridge_middle_structure_trace_preserves_front_back_sorting_geometry() {
+        // `bridge_z = 16`, `z = bridge_z - BRIDGE_Z_START = 13`; con el
+        // terreno en z=8, el oráculo recibe delta de mundo +5.
+        let far_x = bridge_middle_structure_trace_placement(1, 0, false, 13.0);
+        assert_eq!(far_x.world_xy_delta, (0, 0));
+        assert_eq!(far_x.world_z_delta, 5);
+        assert_eq!(far_x.offset, (0, 0, -3));
+        assert_eq!(
+            (
+                far_x.bounds.ox,
+                far_x.bounds.oy,
+                far_x.bounds.oz,
+                far_x.bounds.ex,
+                far_x.bounds.ey,
+                far_x.bounds.ez,
+            ),
+            (0, 0, 3, 16, 1, 40)
+        );
+
+        let front_y = bridge_middle_structure_trace_placement(1, 1, true, 13.0);
+        assert_eq!(front_y.world_xy_delta, (12, 0));
+        assert_eq!(front_y.world_z_delta, 5);
+        assert_eq!(front_y.offset, (-3, 0, -3));
+        assert_eq!(
+            (
+                front_y.bounds.ox,
+                front_y.bounds.oy,
+                front_y.bounds.oz,
+                front_y.bounds.ex,
+                front_y.bounds.ey,
+                front_y.bounds.ez,
+            ),
+            (3, 0, 3, 1, 16, 40)
         );
     }
 
@@ -1627,7 +1710,9 @@ pub(crate) fn spawn_bridge_deck(
                 },
             )
         }),
-        None,
+        (!on_ramp).then(|| {
+            bridge_middle_structure_trace_placement(ctx.info.base_z, span.axis, false, z_draw_px)
+        }),
         None,
     );
     // Una superficie Action5 `0x1B` se compone sobre la estructura en un
@@ -1728,7 +1813,9 @@ pub(crate) fn spawn_bridge_deck(
         surface_z,
         span.bridge_type,
         None,
-        None,
+        (!on_ramp).then(|| {
+            bridge_middle_structure_trace_placement(ctx.info.base_z, span.axis, true, z_draw_px)
+        }),
         None,
     );
 

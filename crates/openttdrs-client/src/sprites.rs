@@ -232,7 +232,9 @@ pub use bridge_sprites_generated::{
 };
 /// Set completo de orillas (`SPR_SHORE_BASE + 0..17`, Action5 0x0D).
 /// Regenerar: `python3 scripts/gen_shore_full_set.py`.
-pub(crate) use bridge_structure_palette::{BridgePaletteSprites, bridge_structure_palette};
+pub(crate) use bridge_structure_palette::{
+    BridgePaletteSprites, bridge_structure_palette_for_sprite,
+};
 pub use shore_draw_data_generated::{SHORE_META, SHORE_SPRITE_COUNT, TILEH_TO_SHORE_SPRITE};
 pub use tunnel::{
     rail_tunnel_front_atlas_name, rail_tunnel_front_sprite_id, rail_tunnel_rear_atlas_name,

@@ -34,6 +34,21 @@ impl BridgeStructurePalette {
     pub const fn needs_recolor(self) -> bool {
         !matches!(self, Self::None)
     }
+
+    /// ID de paleta lógico que expone `DrawTile_TunnelBridge` en la traza de
+    /// OpenTTD. El cliente aplica el mismo recolor sobre una textura RGBA,
+    /// pero conservar este valor permite detectar si un puente parece tener
+    /// rail normal sólo porque se perdió su paleta estructural.
+    #[must_use]
+    pub const fn openttd_palette_id(self) -> u32 {
+        match self {
+            Self::None => 0,
+            Self::Brown => 796,    // PALETTE_TO_STRUCT_BROWN
+            Self::Red => 798,      // PALETTE_TO_STRUCT_RED
+            Self::Concrete => 800, // PALETTE_TO_STRUCT_CONCRETE
+            Self::Yellow => 801,   // PALETTE_TO_STRUCT_YELLOW
+        }
+    }
 }
 
 /// Paleta de estructura según tipo de puente (`_orig_bridge` + `DrawBridgeMiddle`).
@@ -49,6 +64,27 @@ pub const fn bridge_structure_palette(bt: BridgeType) -> BridgeStructurePalette 
         BridgeType::CantileverBrown => BridgeStructurePalette::Brown,
         BridgeType::CantileverRed => BridgeStructurePalette::Red,
         _ => BridgeStructurePalette::None,
+    }
+}
+
+/// Paleta de una pieza concreta de puente, tal como la tabla vanilla de
+/// OpenTTD la entrega a `DrawTile_TunnelBridge`.
+///
+/// Las cabezas genéricas `2437..=2444` ya contienen la vía rail/electric
+/// normal en el propio PNG y sus cuatro entradas usan `PAL_NONE`. Aplicarles
+/// el recolor de la estructura convertía una vía normal en la apariencia del
+/// puente (roja/amarilla/concreta) y hacía difícil distinguir su conexión con
+/// mono/maglev. Las cabezas de carretera, mono y maglev usan bloques distintos
+/// y sí reciben la paleta estructural.
+#[must_use]
+pub const fn bridge_structure_palette_for_sprite(
+    bt: BridgeType,
+    sprite_id: u32,
+) -> BridgeStructurePalette {
+    if sprite_id >= 2437 && sprite_id <= 2444 {
+        BridgeStructurePalette::None
+    } else {
+        bridge_structure_palette(bt)
     }
 }
 
@@ -151,9 +187,6 @@ pub fn bridge_sprite_ids_for_structure_recolor() -> Vec<u32> {
         let Some(bridge_type) = BridgeType::from_u8(bt) else {
             continue;
         };
-        if !bridge_structure_palette(bridge_type).needs_recolor() {
-            continue;
-        }
         for piece in [
             BridgePiece::North,
             BridgePiece::South,
@@ -170,7 +203,10 @@ pub fn bridge_sprite_ids_for_structure_recolor() -> Vec<u32> {
                 .chain(deck.front.iter())
                 .chain(deck.pillar.iter())
                 .copied()
-                .filter(|id| *id != 0)
+                .filter(|id| {
+                    *id != 0
+                        && bridge_structure_palette_for_sprite(bridge_type, *id).needs_recolor()
+                })
             {
                 ids.insert(sid);
             }
@@ -203,5 +239,28 @@ mod tests {
         let mut px = [64u8, 20, 8, 255];
         recolor_bridge_rgba8(&mut px, BridgeStructurePalette::Yellow);
         assert_eq!(&px[..3], &[32, 4, 0]);
+    }
+
+    #[test]
+    fn trace_palette_ids_match_openttd_constants() {
+        assert_eq!(BridgeStructurePalette::None.openttd_palette_id(), 0);
+        assert_eq!(BridgeStructurePalette::Concrete.openttd_palette_id(), 800);
+        assert_eq!(BridgeStructurePalette::Yellow.openttd_palette_id(), 801);
+    }
+
+    #[test]
+    fn generic_rail_heads_keep_their_own_palette() {
+        assert_eq!(
+            bridge_structure_palette_for_sprite(BridgeType::CantileverRed, 2440),
+            BridgeStructurePalette::None
+        );
+        assert_eq!(
+            bridge_structure_palette_for_sprite(BridgeType::TubularYellow, 2437),
+            BridgeStructurePalette::None
+        );
+        assert_eq!(
+            bridge_structure_palette_for_sprite(BridgeType::TubularYellow, 4367),
+            BridgeStructurePalette::Yellow
+        );
     }
 }

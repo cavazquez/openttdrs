@@ -362,15 +362,15 @@ impl WorldDrawTrace {
     }
 
     /// Variante para un sprite cuyo ancla de mundo no coincide con el origen
-    /// de la tesela. `DrawBridgePillars`, por ejemplo, mueve el pilar frontal
-    /// a 12 px y el trasero a 3 px *antes* de llamar a
-    /// `AddSortableSpriteToDraw`; ese desplazamiento pertenece a `world`, no
-    /// al offset interno del sprite.
-    #[allow(clippy::too_many_arguments)] // Conserva la geometría completa del draw call.
-    pub(crate) fn record_sprite_with_world_geometry(
+    /// de la tesela y que conserva una paleta explícita. Los puentes usan esta
+    /// forma: sus PNG pueden ser compartidos entre rail/mono/maglev, mientras que la paleta
+    /// (`PALETTE_TO_STRUCT_*`) determina su apariencia final.
+    #[allow(clippy::too_many_arguments)] // Espeja el draw call completo.
+    pub(crate) fn record_sprite_with_palette_and_world_geometry(
         role: &'static str,
         primitive: &'static str,
         sprite_id: u32,
+        palette: u32,
         fallback: bool,
         world_xy_delta: (i32, i32),
         world_z_delta: i32,
@@ -381,7 +381,7 @@ impl WorldDrawTrace {
             role,
             primitive,
             sprite_id,
-            0,
+            palette,
             fallback,
             offset,
             world_xy_delta,

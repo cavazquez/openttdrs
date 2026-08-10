@@ -20,7 +20,7 @@ use crate::render::{
 };
 use crate::sprites::{
     OTTD_MP_RAIL, RAIL_TB_X, RAIL_TB_Y, bridge_deck_sprite_ids, bridge_ramp_sprite_id,
-    bridge_sprite_meta, bridge_structure_palette, catenary_reference_sprite_id,
+    bridge_sprite_meta, bridge_structure_palette_for_sprite, catenary_reference_sprite_id,
     catenary_sprite_color, catenary_tile_location_group, collect_catenary_bridge_draws,
     collect_catenary_pylons_from_map, collect_catenary_sprites_from_map,
 };
@@ -918,7 +918,7 @@ fn spawn_layer(
         return;
     }
     use crate::sprites::{TransparencyOption, sprite_color};
-    let palette = bridge_structure_palette(bridge_type);
+    let palette = bridge_structure_palette_for_sprite(bridge_type, sprite_id);
     let mut sprite = if let Some(handle) = assets.bridge_palettes.handle(sprite_id, palette) {
         Sprite {
             image: handle.clone(),
@@ -927,10 +927,26 @@ fn spawn_layer(
     } else if let Some(img) = assets.bridge_sprite(sprite_id) {
         img.sprite()
     } else {
-        record_bridge_structure_trace(ctx, sprite_id, true, deck_z, trace_bounds, trace_placement);
+        record_bridge_structure_trace(
+            ctx,
+            sprite_id,
+            palette.openttd_palette_id(),
+            true,
+            deck_z,
+            trace_bounds,
+            trace_placement,
+        );
         return;
     };
-    record_bridge_structure_trace(ctx, sprite_id, false, deck_z, trace_bounds, trace_placement);
+    record_bridge_structure_trace(
+        ctx,
+        sprite_id,
+        palette.openttd_palette_id(),
+        false,
+        deck_z,
+        trace_bounds,
+        trace_placement,
+    );
     sprite.color = sprite_color(TransparencyOption::Bridges);
     let (w, h, xrel, yrel) = bridge_sprite_meta(sprite_id).unwrap_or((64.0, 32.0, -32.0, -16.0));
     let crop_x_shift = if let Some((axis, half)) = pillar_half {
@@ -963,16 +979,18 @@ fn spawn_layer(
 fn record_bridge_structure_trace(
     ctx: &TileRenderContext,
     sprite_id: u32,
+    palette: u32,
     fallback: bool,
     surface_z: u8,
     bounds: Option<TraceSpriteBounds>,
     pillar: Option<PillarTracePlacement>,
 ) {
     if let Some(pillar) = pillar {
-        WorldDrawTrace::record_sprite_with_world_geometry(
+        WorldDrawTrace::record_sprite_with_palette_and_world_geometry(
             "bridge-structure",
             "sortable",
             sprite_id,
+            palette,
             fallback,
             pillar.world_xy_delta,
             pillar.world_z_delta,
@@ -982,19 +1000,16 @@ fn record_bridge_structure_trace(
         return;
     }
     let world_z_delta = (i32::from(surface_z) - i32::from(ctx.info.base_z)) * 8;
-    if let Some(bounds) = bounds {
-        WorldDrawTrace::record_sprite_with_geometry(
-            "bridge-structure",
-            "sortable",
-            sprite_id,
-            fallback,
-            (0, 0, 0),
-            world_z_delta,
-            Some(bounds),
-        );
-    } else {
-        WorldDrawTrace::record_sprite("bridge-structure", "sortable", sprite_id, fallback);
-    }
+    WorldDrawTrace::record_sprite_with_palette_and_geometry(
+        "bridge-structure",
+        "sortable",
+        sprite_id,
+        palette,
+        fallback,
+        (0, 0, 0),
+        world_z_delta,
+        bounds,
+    );
 }
 
 #[cfg(test)]

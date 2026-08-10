@@ -458,6 +458,13 @@ pub(crate) fn spawn_rail_tile(
     let typed_layers = rail_layers
         .iter()
         .any(|&sid| is_typed_rail_track_sprite(sid));
+    // En mono/maglev todo el bloque de vía vanilla tiene una variante tipada.
+    // Si el selector no produjo ninguna, no debemos ocultarlo detrás de un
+    // sprite de rail normal: la traza lo marca con railtype y coordenada.
+    let typed_selection_fallback = matches!(
+        rail_type,
+        openttdrs_core::RailType::Monorail | openttdrs_core::RailType::Maglev
+    ) && !typed_layers;
     let mut rail_paint = ctx.tile.map_or(Color::srgb(0.88, 0.88, 0.97), |t| {
         let mut c = rail_track_base_color(t.mapt, ctx.kind, t.m5, t.m3);
         match openttdrs_core::rail_type_from_tile(t) {
@@ -479,12 +486,19 @@ pub(crate) fn spawn_rail_tile(
         rail_paint = rail_paint.mix(&Color::srgb(0.95, 0.88, 0.55), 0.22);
     }
     for (i, sid) in rail_layers.iter().copied().enumerate() {
-        WorldDrawTrace::record_sprite(
-            "rail-track",
-            "sortable",
-            sid,
-            !assets.rail.contains_key(&sid),
-        );
+        let missing_asset = !assets.rail.contains_key(&sid);
+        let fallback = typed_selection_fallback || missing_asset;
+        let role = if fallback {
+            match rail_type {
+                openttdrs_core::RailType::Rail => "rail-track-fallback-rail",
+                openttdrs_core::RailType::Electric => "rail-track-fallback-electric",
+                openttdrs_core::RailType::Monorail => "rail-track-fallback-monorail",
+                openttdrs_core::RailType::Maglev => "rail-track-fallback-maglev",
+            }
+        } else {
+            "rail-track"
+        };
+        WorldDrawTrace::record_sprite(role, "sortable", sid, fallback);
         let Some(img) = assets.rail.get(&sid) else {
             continue;
         };

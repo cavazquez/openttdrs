@@ -325,7 +325,12 @@ fn rail_sprite_named_alias(id: u32) -> Option<String> {
 /// ¿El ID pertenece al set tipado mono/maglev (no vía clásica)?
 #[must_use]
 pub fn is_typed_rail_track_sprite(id: u32) -> bool {
-    matches!(id, 1087..=1117 | 1169..=1199)
+    // Las dos últimas entradas de cada bloque son la segunda diagonal doble
+    // y sus variantes de nieve. Excluirlas no cambiaba el ID seleccionado,
+    // pero sí hacía que el renderer las tratara como una vía clásica y
+    // activara el tinte de fallback. Es justamente el caso visible de
+    // mono/maglev "convertido" en rail normal en diagonales.
+    matches!(id, 1087..=1120 | 1169..=1202)
 }
 
 /// IDs de sprites de vía férrea usados (cruce a nivel 1370–1373; nieve 1037/1038; pendiente 1023–1034).
@@ -2127,6 +2132,15 @@ mod tests {
         let keys = rail_sprite_atlas_keys(1093);
         assert!(keys.iter().any(|k| k == "mono_track_y.png"));
         assert!(keys.iter().any(|k| k == "rail_1093.png"));
+    }
+
+    #[test]
+    fn typed_sprite_range_keeps_double_diagonals_and_snow_variants_typed() {
+        // `RAIL_TB_VERT` usa 1036, que se remapea a 1118 / 1200. Los dos
+        // sprites siguientes son las variantes de nieve del mismo bloque.
+        for id in [1118, 1119, 1120, 1200, 1201, 1202] {
+            assert!(is_typed_rail_track_sprite(id), "sprite tipado {id}");
+        }
     }
 
     #[test]

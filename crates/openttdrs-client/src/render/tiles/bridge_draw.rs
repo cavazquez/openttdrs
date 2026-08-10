@@ -261,6 +261,29 @@ fn bridge_pbs_reservation_offset(sprite_id: u32) -> Vec2 {
     crate::sprites::rail_pbs_reservation_offset(sprite_id)
 }
 
+/// Caja de ordenación de la reserva PBS emitida por `DrawTile_TunnelBridge`.
+///
+/// La reserva no se agrega como otro sprite sortable independiente: el
+/// `StartSpriteCombine` de la cabeza o del vano la convierte en un `combined`
+/// hijo de la estructura. En rampas, `HasBridgeFlatRamp` vuelve a aplicar la
+/// fundación a la pendiente ya efectiva antes de escoger entre ambas cajas.
+fn bridge_pbs_trace_bounds(on_ramp: bool, foundation_tileh: u8, axis: usize) -> TraceSpriteBounds {
+    if !on_ramp {
+        // `DrawBridgeMiddle`: el tablero ya está en `deck_z` y la reserva
+        // ocupa la superficie plana de la tesela.
+        return TraceSpriteBounds::new(0, 0, 0, 16, 16, 0);
+    }
+
+    let (ramp_tileh, _) = openttdrs_core::bridge_surface_slope_and_z(foundation_tileh, axis == 0);
+    if ramp_tileh != 0 {
+        // `HasBridgeFlatRamp == true`: vía plana sobre una rampa del terreno.
+        TraceSpriteBounds::new(0, 0, 8, 16, 16, 0)
+    } else {
+        // Vía inclinada que parte de una superficie de fundación plana.
+        TraceSpriteBounds::new(0, 0, 0, 16, 16, 8)
+    }
+}
+
 fn spawn_bridge_pbs_reservation(
     commands: &mut Commands,
     assets: &WorldAssets,
@@ -280,15 +303,19 @@ fn spawn_bridge_pbs_reservation(
     );
     WorldDrawTrace::record_sprite_with_palette_and_geometry(
         "bridge-pbs-reservation",
-        "sortable",
+        "combined",
         sprite_id,
         // `PALETTE_CRASH`: la reserva PBS se pinta como overlay naranja/rojo
         // sobre el tablero, no como una vía adicional permanente.
         804,
         !assets.rail.contains_key(&sprite_id),
         (0, 0, 0),
-        0,
-        None,
+        (i32::from(surface_z) - i32::from(ctx.info.base_z)) * 8,
+        Some(bridge_pbs_trace_bounds(
+            on_ramp,
+            foundation_tileh,
+            span.axis,
+        )),
     );
     let Some(sprite) = assets.rail.get(&sprite_id) else {
         return;
@@ -1043,9 +1070,9 @@ mod tests {
     use super::{
         BridgeRampGround, PILLAR_SLOPE_STEEP_W, PillarHalf, PillarSegment, RAIL_TB_X,
         bridge_foundation_child_offset, bridge_pbs_reservation_offset,
-        bridge_pbs_reservation_sprite_id, bridge_ramp_catenary_slope, bridge_ramp_ground_kind,
-        bridge_ramp_ground_sprite_id, bridge_span_at, bridge_surface_z, catenary_under_low_bridge,
-        pillar_ground_heights, pillar_half_crop, pillar_segments,
+        bridge_pbs_reservation_sprite_id, bridge_pbs_trace_bounds, bridge_ramp_catenary_slope,
+        bridge_ramp_ground_kind, bridge_ramp_ground_sprite_id, bridge_span_at, bridge_surface_z,
+        catenary_under_low_bridge, pillar_ground_heights, pillar_half_crop, pillar_segments,
     };
     use crate::sprites::bridge_deck_sprite_ids;
 
@@ -1172,6 +1199,46 @@ mod tests {
         assert_eq!(
             bridge_pbs_reservation_sprite_id(RailType::Electric, 0, false, 0, 0),
             1005
+        );
+    }
+
+    #[test]
+    fn bridge_pbs_trace_uses_combined_bounds_from_the_effective_ramp() {
+        // Vano de Kale (160,47): `DrawBridgeMiddle` compone el overlay en la
+        // superficie del tablero, sin volumen vertical.
+        let span = bridge_pbs_trace_bounds(false, 0, 1);
+        assert_eq!(
+            (span.ox, span.oy, span.oz, span.ex, span.ey, span.ez),
+            (0, 0, 0, 16, 16, 0)
+        );
+
+        // Cabeza con pendiente efectiva 9: `HasBridgeFlatRamp` es true y la
+        // caja empieza a una altura de tesela (`origin.z = TILE_HEIGHT`).
+        let flat_ramp = bridge_pbs_trace_bounds(true, 9, 1);
+        assert_eq!(
+            (
+                flat_ramp.ox,
+                flat_ramp.oy,
+                flat_ramp.oz,
+                flat_ramp.ex,
+                flat_ramp.ey,
+                flat_ramp.ez,
+            ),
+            (0, 0, 8, 16, 16, 0)
+        );
+
+        // Cabeza plana: la vía asciende y ocupa el volumen vertical.
+        let sloped_ramp = bridge_pbs_trace_bounds(true, 0, 0);
+        assert_eq!(
+            (
+                sloped_ramp.ox,
+                sloped_ramp.oy,
+                sloped_ramp.oz,
+                sloped_ramp.ex,
+                sloped_ramp.ey,
+                sloped_ramp.ez,
+            ),
+            (0, 0, 0, 16, 16, 8)
         );
     }
 

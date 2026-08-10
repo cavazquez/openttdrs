@@ -33,6 +33,10 @@ use super::helpers::{
 const DECK_LAYER_FRAC: f32 = 0.08;
 /// Vía sobre tablero (`DrawBridgeMiddle`: overlay entre psid\[0] y psid\[1]).
 const RAIL_ON_BRIDGE_LAYER_FRAC: f32 = 0.084;
+/// El exportador de OpenTTD guarda los offsets de `AddChildSpriteScreen`
+/// multiplicados por `ZOOM_BASE` (=4). Una fundación nivelada llama
+/// `OffsetGroundSprite(0, -TILE_HEIGHT)`.
+const FOUNDATION_LEVELED_CHILD_OFFSET: (i32, i32, i32) = (0, -32, 0);
 const FRONT_LAYER_FRAC: f32 = 0.088;
 const PILLAR_BACK_LAYER_FRAC: f32 = 0.074;
 const PILLAR_LAYER_FRAC: f32 = 0.075;
@@ -139,6 +143,17 @@ pub(crate) fn catenary_under_low_bridge(
 
 fn ramp_tile(tile: Tile) -> bool {
     tile.is_tunnel_bridge_tile() && tile.m5 & 0x80 != 0
+}
+
+/// Offset normalizado de `DrawGroundSprite` cuando la rampa ya tiene padre
+/// de fundación. `GetBridgeFoundation` sólo produce Leveled o Inclined{X,Y};
+/// las inclinadas usan `(0, 0)`.
+const fn bridge_foundation_child_offset(foundation: u8) -> (i32, i32, i32) {
+    if foundation == openttdrs_core::FOUNDATION_LEVELED {
+        FOUNDATION_LEVELED_CHILD_OFFSET
+    } else {
+        (0, 0, 0)
+    }
 }
 
 fn bridge_ramp_ground_kind(
@@ -1027,10 +1042,10 @@ mod tests {
 
     use super::{
         BridgeRampGround, PILLAR_SLOPE_STEEP_W, PillarHalf, PillarSegment, RAIL_TB_X,
-        bridge_pbs_reservation_offset, bridge_pbs_reservation_sprite_id,
-        bridge_ramp_catenary_slope, bridge_ramp_ground_kind, bridge_ramp_ground_sprite_id,
-        bridge_span_at, bridge_surface_z, catenary_under_low_bridge, pillar_ground_heights,
-        pillar_half_crop, pillar_segments,
+        bridge_foundation_child_offset, bridge_pbs_reservation_offset,
+        bridge_pbs_reservation_sprite_id, bridge_ramp_catenary_slope, bridge_ramp_ground_kind,
+        bridge_ramp_ground_sprite_id, bridge_span_at, bridge_surface_z, catenary_under_low_bridge,
+        pillar_ground_heights, pillar_half_crop, pillar_segments,
     };
     use crate::sprites::bridge_deck_sprite_ids;
 
@@ -1038,6 +1053,26 @@ mod tests {
     fn bridge_ramp_uses_ground_height_while_span_uses_deck_height() {
         assert_eq!(bridge_surface_z(1, 2, true), 1);
         assert_eq!(bridge_surface_z(1, 2, false), 2);
+    }
+
+    #[test]
+    fn bridge_foundation_child_offset_matches_drawfoundation() {
+        // Kale (92,148): Foundation::Leveled llama
+        // OffsetGroundSprite(0, -TILE_HEIGHT), que el exportador serializa
+        // multiplicado por ZOOM_BASE = 4.
+        assert_eq!(
+            bridge_foundation_child_offset(openttdrs_core::FOUNDATION_LEVELED),
+            (0, -32, 0)
+        );
+        // Las únicas otras fundaciones de rampas son InclinedX/Y.
+        assert_eq!(
+            bridge_foundation_child_offset(openttdrs_core::FOUNDATION_INCLINED_X),
+            (0, 0, 0)
+        );
+        assert_eq!(
+            bridge_foundation_child_offset(openttdrs_core::FOUNDATION_INCLINED_Y),
+            (0, 0, 0)
+        );
     }
 
     #[test]
@@ -1417,7 +1452,28 @@ pub(crate) fn spawn_bridge_deck(
             foundation_base_z,
         );
         let ground_id = bridge_ramp_ground_sprite_id(ground_kind, foundation_tileh);
-        WorldDrawTrace::record_sprite("bridge-foundation-ground", "child", ground_id, false);
+        if decision.foundation == 0 {
+            // Sin `DrawFoundation`, OpenTTD emite un ground con ancla world.
+            WorldDrawTrace::record_sprite_with_geometry(
+                "bridge-ramp-ground",
+                "ground",
+                ground_id,
+                false,
+                (0, 0, 0),
+                0,
+                None,
+            );
+        } else {
+            // `DrawGroundSprite` se transforma en `AddChildSpriteScreen`.
+            // La posición Bevy ya equivale a la superficie efectiva; la traza
+            // conserva el offset relativo al padre para contrastarlo.
+            WorldDrawTrace::record_foundation_child_sprite(
+                "bridge-foundation-ground",
+                ground_id,
+                false,
+                bridge_foundation_child_offset(decision.foundation),
+            );
+        }
         let ground = match ground_kind {
             BridgeRampGround::Grass => {
                 sloped_or_flat_image(foundation_tileh, &assets.grass, &assets.grass_slopes)

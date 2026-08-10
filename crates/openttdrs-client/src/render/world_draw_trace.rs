@@ -63,6 +63,13 @@ struct TraceDraw {
     sprite_id: u32,
     palette: u32,
     fallback: bool,
+    /// Un hijo de fundación está anclado al padre en píxeles de pantalla, no
+    /// a una coordenada de mundo propia. Conservamos el `null` del draw proc
+    /// C++ para no fingir una posición absoluta.
+    has_world: bool,
+    /// Señala que `world`/`offset`/`bounds` son parte del contrato incluso
+    /// cuando `bounds` es `null` (como un child de fundación).
+    geometry_explicit: bool,
     offset: (i32, i32, i32),
     world_xy_delta: (i32, i32),
     world_z_delta: i32,
@@ -306,6 +313,8 @@ impl WorldDrawTrace {
             (0, 0),
             0,
             None,
+            true,
+            false,
         );
     }
 
@@ -330,6 +339,32 @@ impl WorldDrawTrace {
             (0, 0),
             world_z_delta,
             bounds,
+            true,
+            true,
+        );
+    }
+
+    /// Registra un `AddChildSpriteScreen` producido por `DrawGroundSprite`
+    /// después de `DrawFoundation`. Su offset ya está normalizado por
+    /// `ZOOM_BASE`, como el stream del oráculo C++.
+    pub(crate) fn record_foundation_child_sprite(
+        role: &'static str,
+        sprite_id: u32,
+        fallback: bool,
+        offset: (i32, i32, i32),
+    ) {
+        Self::record_sprite_with_draw_state(
+            role,
+            "child",
+            sprite_id,
+            0,
+            fallback,
+            offset,
+            (0, 0),
+            0,
+            None,
+            false,
+            true,
         );
     }
 
@@ -358,6 +393,8 @@ impl WorldDrawTrace {
             (0, 0),
             world_z_delta,
             bounds,
+            true,
+            true,
         );
     }
 
@@ -387,6 +424,8 @@ impl WorldDrawTrace {
             world_xy_delta,
             world_z_delta,
             bounds,
+            true,
+            true,
         );
     }
 
@@ -401,6 +440,8 @@ impl WorldDrawTrace {
         world_xy_delta: (i32, i32),
         world_z_delta: i32,
         bounds: Option<TraceSpriteBounds>,
+        has_world: bool,
+        geometry_explicit: bool,
     ) {
         ACTIVE_TRACE.with(|active| {
             let mut active = active.borrow_mut();
@@ -419,6 +460,8 @@ impl WorldDrawTrace {
                 sprite_id,
                 palette,
                 fallback,
+                has_world,
+                geometry_explicit,
                 offset,
                 world_xy_delta,
                 world_z_delta,
@@ -519,11 +562,11 @@ impl WorldDrawTrace {
                         },
                         "palette": draw.palette,
                         "resolved_palette": draw.palette,
-                        "world": {
+                        "world": draw.has_world.then(|| json!({
                             "x": i64::from(tile.tx) * 16 + i64::from(draw.world_xy_delta.0),
                             "y": i64::from(tile.ty) * 16 + i64::from(draw.world_xy_delta.1),
                             "z": i64::from(tile.base_z) * 8 + i64::from(draw.world_z_delta),
-                        },
+                        })),
                         "bounds": draw.bounds.map(|bounds| json!({
                             "ox": bounds.ox,
                             "oy": bounds.oy,
@@ -540,6 +583,7 @@ impl WorldDrawTrace {
                         "combine_group": serde_json::Value::Null,
                         "parent_ordinal": serde_json::Value::Null,
                         "transparent": false,
+                        "geometry_explicit": draw.geometry_explicit,
                         "fallback": draw.fallback,
                     })
                     .to_string(),

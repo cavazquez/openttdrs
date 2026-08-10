@@ -88,6 +88,15 @@ expone la sustitución a transparente cuando aplica. Las unidades de `world` y
 `bounds` son las nativas de OpenTTD (una tesela = 16), no píxeles ni atlas de
 Bevy.
 
+El candidato puede añadir `"geometry_explicit":true` cuando ya conoce la
+geometría exacta de un comando. Al usar `--geometry`, el comparador exige la
+misma tupla `primitive`, `world`, `offset` y `bounds` del oráculo. Esto es
+importante para `child`: un suelo dibujado después de una fundación no tiene
+posición de mundo ni bounds propios (`world:null`, `bounds:null`), sino un
+offset de pantalla relativo al padre. En ese caso debe conservar
+`primitive:"child"`; no puede declararse como `ground` aunque el ID del sprite
+sea el mismo.
+
 La implementación candidata debe conservar la misma identidad lógica antes
 de convertirla a `Handle<Image>`/índice de atlas. Las diferencias de página o
 packing del atlas no pertenecen al contrato.

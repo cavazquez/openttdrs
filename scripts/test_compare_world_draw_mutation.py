@@ -30,8 +30,16 @@ def tile() -> dict[str, object]:
     return {"kind": "tile", "index": 0, "x": 0, "y": 0, "tile_type": 9}
 
 
-def draw(sprite: int, primitive: str, *, fallback: bool = False) -> dict[str, object]:
-    return {
+def draw(
+    sprite: int,
+    primitive: str,
+    *,
+    fallback: bool = False,
+    geometry_explicit: bool = False,
+    world: object | None = None,
+    offset: dict[str, int] | None = None,
+) -> dict[str, object]:
+    row: dict[str, object] = {
         "kind": "draw",
         "x": 0,
         "y": 0,
@@ -41,6 +49,12 @@ def draw(sprite: int, primitive: str, *, fallback: bool = False) -> dict[str, ob
         "sprite": {"id": sprite},
         "fallback": fallback,
     }
+    if geometry_explicit:
+        row["geometry_explicit"] = True
+        row["world"] = world
+        row["offset"] = offset or {"x": 0, "y": 0, "z": 0}
+        row["bounds"] = None
+    return row
 
 
 def write(path: Path, rows: list[dict[str, object]]) -> None:
@@ -102,7 +116,67 @@ def main() -> int:
             print(fallback.stdout, fallback.stderr, file=sys.stderr)
             return 1
 
-    print("OK: compare_world_draw detecta selección inválida, fallback y separadores")
+        # Un suelo hijo de fundación no tiene `world`: sólo el offset relativo
+        # al padre. `geometry_explicit` debe hacer que el comparador lo exija
+        # aun con bounds nulo.
+        foundation_child = draw(
+            3981,
+            "child",
+            geometry_explicit=True,
+            world=None,
+            offset={"x": 0, "y": -32, "z": 0},
+        )
+        write(reference, stream("openttd", [foundation_child]))
+        write(candidate, stream("openttdrs", [foundation_child]))
+        child_ok = run(reference, candidate, "--geometry")
+        if child_ok.returncode != 0 or "Geometrías candidatas explícitas contenidas en OpenTTD: 1" not in child_ok.stdout:
+            print(child_ok.stdout, child_ok.stderr, file=sys.stderr)
+            return 1
+
+        write(
+            candidate,
+            stream(
+                "openttdrs",
+                [
+                    draw(
+                        3981,
+                        "child",
+                        geometry_explicit=True,
+                        world=None,
+                        offset={"x": 0, "y": 0, "z": 0},
+                    )
+                ],
+            ),
+        )
+        child_wrong_offset = run(reference, candidate, "--geometry")
+        if child_wrong_offset.returncode != 1 or "candidate_geometry_missing_in_reference" not in child_wrong_offset.stdout:
+            print(child_wrong_offset.stdout, child_wrong_offset.stderr, file=sys.stderr)
+            return 1
+
+        # No basta con que el ID, offset y `world=null` coincidan: un child
+        # de C++ no puede representarse como ground sin perder la relación con
+        # la fundación.
+        write(
+            candidate,
+            stream(
+                "openttdrs",
+                [
+                    draw(
+                        3981,
+                        "ground",
+                        geometry_explicit=True,
+                        world=None,
+                        offset={"x": 0, "y": -32, "z": 0},
+                    )
+                ],
+            ),
+        )
+        child_wrong_primitive = run(reference, candidate, "--geometry")
+        if child_wrong_primitive.returncode != 1 or "candidate_geometry_missing_in_reference" not in child_wrong_primitive.stdout:
+            print(child_wrong_primitive.stdout, child_wrong_primitive.stderr, file=sys.stderr)
+            return 1
+
+    print("OK: compare_world_draw detecta selección inválida, fallback, separadores y children")
     return 0
 
 

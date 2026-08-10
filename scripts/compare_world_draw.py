@@ -119,10 +119,20 @@ def sprite_id(row: Row) -> int | None:
     return sid if isinstance(sid, int) else None
 
 
-def geometry_signature(row: Row) -> tuple[Any, Any, Any]:
-    """Campos que distinguen un sprite correcto pero colocado incorrectamente."""
+def geometry_signature(row: Row) -> tuple[Any, Any, Any, Any]:
+    """Campos que distinguen un comando correcto pero colocado incorrectamente.
+
+    La primitiva es necesaria para los children: ``world=null`` y ``bounds=null``
+    por sí solos no permiten distinguir un ``AddChildSpriteScreen`` de un
+    ground mal trazado.
+    """
     value = row.value
-    return value.get("world"), value.get("offset"), value.get("bounds")
+    return (
+        value.get("primitive"),
+        value.get("world"),
+        value.get("offset"),
+        value.get("bounds"),
+    )
 
 
 def palette(row: Row) -> int:
@@ -132,8 +142,13 @@ def palette(row: Row) -> int:
 
 
 def has_explicit_geometry(row: Row) -> bool:
-    """El candidato sólo exige geometría donde ya la instrumentó."""
-    return isinstance(row.value.get("bounds"), dict)
+    """El candidato sólo exige geometría donde ya la instrumentó.
+
+    ``geometry_explicit`` cubre children de fundación: su geometría relevante
+    es ``world=null`` + offset de pantalla, por lo que no tienen bounds. Los
+    streams previos siguen siendo válidos mediante el fallback de ``bounds``.
+    """
+    return row.value.get("geometry_explicit") is True or isinstance(row.value.get("bounds"), dict)
 
 
 def visual_draws(rows: Iterable[Row]) -> list[Row]:

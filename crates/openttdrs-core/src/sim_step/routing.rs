@@ -4,13 +4,6 @@ use std::time::Instant;
 use crate::vehicle::VehicleKind;
 use crate::{GameState, TileCoord, pathfinder, vehicle_ai};
 
-/// Máximo de rutas completas que se recalculan por tick.
-///
-/// Tras cargar una partida grande todas las rutas efímeras están vacías. Hacer
-/// cientos de A*/YAPF en el primer tick congela el cliente; este presupuesto
-/// reparte ese trabajo sin alterar rutas ya válidas.
-const MAX_ROUTE_RECOMPUTES_PER_TICK: usize = 1;
-
 #[derive(Debug, Clone, Copy, Default)]
 #[allow(clippy::struct_field_names)]
 pub(super) struct RoutingTimings {
@@ -62,22 +55,16 @@ pub(super) fn recompute_vehicle_paths_profiled(state: &mut GameState) -> Routing
 
     let p0 = Instant::now();
     for vehicle in &mut state.vehicles {
-        // Una ruta de tren a estación puede elegir un andén concreto distinto
-        // del ancla de la orden. Al llegar, conservar ese `dest` evita volver
-        // a asignar el ancla y explorar todos los andenes en cada tick.
-        if vehicle.kind == VehicleKind::Train
-            && vehicle.is_consist_head()
-            && vehicle.pos == vehicle.dest
-        {
-            continue;
-        }
         vehicle.sync_order_destination(&state.map);
     }
     timings.order_sync_ns = nanos(p0);
 
-    let mut remaining = MAX_ROUTE_RECOMPUTES_PER_TICK;
     let p0 = Instant::now();
-    let station_route_resolved = route_station_bound_trains(state, wh, &mut remaining);
+    // La ruta es una precondición de movimiento. Diferir la de un vehículo
+    // activo lo hace frenar en seco y altera la simulación cargada desde SAV.
+    // El trabajo pesado deberá presupuestarse fuera del tick (o conservando un
+    // paso local válido); nunca omitiendo la ruta de un vehículo en marcha.
+    let station_route_resolved = route_station_bound_trains(state, wh);
     timings.station_route_ns = nanos(p0);
 
     let p0 = Instant::now();
@@ -101,9 +88,6 @@ pub(super) fn recompute_vehicle_paths_profiled(state: &mut GameState) -> Routing
         }
         if state.vehicles[i].pos == state.vehicles[i].dest {
             state.vehicles[i].no_network_route_to_order = false;
-            continue;
-        }
-        if remaining == 0 {
             continue;
         }
         let from = state.vehicles[i].pos;
@@ -165,7 +149,6 @@ pub(super) fn recompute_vehicle_paths_profiled(state: &mut GameState) -> Routing
                 state.vehicles[i].no_network_route_to_order = has_orders;
             }
         }
-        remaining -= 1;
     }
     timings.generic_route_ns = nanos(p0);
     timings
@@ -177,7 +160,6 @@ pub(super) fn recompute_vehicle_paths_profiled(state: &mut GameState) -> Routing
 fn route_station_bound_trains(
     state: &mut GameState,
     wormholes: Option<&pathfinder::TunnelWormholes>,
-    remaining: &mut usize,
 ) -> Vec<bool> {
     let mut claimed_platform_tiles = HashSet::new();
     let mut station_route_resolved = vec![false; state.vehicles.len()];
@@ -190,7 +172,6 @@ fn route_station_bound_trains(
                 && vehicle.is_consist_head()
                 && vehicle.running
                 && vehicle.path.is_empty()
-                && vehicle.pos != vehicle.dest
                 // Un fallo de ruta ya se registra en esta bandera. Reintentar
                 // la misma búsqueda YAPF en cada tick vuelve a congelar una
                 // partida importada hasta que cambie la red u órdenes.
@@ -210,9 +191,6 @@ fn route_station_bound_trains(
         )
     });
     for index in train_priority {
-        if *remaining == 0 {
-            break;
-        }
         let from = state.vehicles[index].pos;
         let to = state.vehicles[index].dest;
         // Un tren puede agotar un path de una sola tesela justo antes de
@@ -225,12 +203,10 @@ fn route_station_bound_trains(
             train.path = VecDeque::from([to]);
             train.no_network_route_to_order = false;
             station_route_resolved[index] = true;
-            *remaining -= 1;
             continue;
         }
         station_route_resolved[index] =
             route_train_to_available_platform(state, index, wormholes, &mut claimed_platform_tiles);
-        *remaining -= 1;
     }
     station_route_resolved
 }

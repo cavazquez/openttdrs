@@ -135,7 +135,7 @@ OPENTTDRS_OPENGFX_DIR=/ruta/a/opengfx \
   ./scripts/export_openttd_world_draw.sh "$SAV" /tmp/openttd-draw.jsonl "$OTTD_BIN" "$REGION"
 ./scripts/export_openttdrs_world_draw.sh "$SAV" /tmp/openttdrs-draw.jsonl "$REGION"
 python3 scripts/compare_world_draw.py /tmp/openttd-draw.jsonl /tmp/openttdrs-draw.jsonl \
-  --geometry --foundations --by-role
+  --geometry --foundations --order --by-role
 ```
 
 Cuando se comparte cache de compilación, ejecutar con
@@ -150,6 +150,9 @@ La configuración de compilación no debe cambiar la partida ni su traza.
   pendiente, extremos de túnel/puente, estación o depot.
 - **Semántica coincide y falla draw:** revisar selección de sprite, paleta,
   fundación, offset y altura; vecinos y PBS pueden importar.
+- **Orden relativo falla:** el candidato eligió comandos válidos, pero alteró
+  la composición de capas de OpenTTD; inspeccionar la tesela y los vecinos que
+  informa `candidate_order_missing_in_reference`.
 - **Draw contenido pasa pero la captura falla:** puede faltar instrumentación,
   orden/solapamiento, clipping/cámara, atlas o una primitiva fuera de traza.
   Extender la traza antes de adivinar.

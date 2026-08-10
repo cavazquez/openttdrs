@@ -90,6 +90,19 @@ def main() -> int:
             print(grouped.stdout, grouped.stderr, file=sys.stderr)
             return 1
 
+        ordered = run(reference, candidate, "--order")
+        if ordered.returncode != 0 or "Comandos candidatos en orden relativo de OpenTTD: 2" not in ordered.stdout:
+            print(ordered.stdout, ordered.stderr, file=sys.stderr)
+            return 1
+
+        # El chequeo base compara multiconjuntos de IDs. `--order` aporta la
+        # condición adicional que detecta dos capas correctas emitidas al revés.
+        write(candidate, stream("openttdrs", [draw(2392, "sortable"), draw(2391, "ground")]))
+        reversed_order = run(reference, candidate, "--order")
+        if reversed_order.returncode != 1 or "candidate_order_missing_in_reference" not in reversed_order.stdout:
+            print(reversed_order.stdout, reversed_order.stderr, file=sys.stderr)
+            return 1
+
         write(candidate, stream("openttdrs", [draw(2391, "ground"), draw(9999, "sortable")]))
         missing = run(reference, candidate)
         if missing.returncode != 1 or "candidate_sprite_missing_in_reference" not in missing.stdout:

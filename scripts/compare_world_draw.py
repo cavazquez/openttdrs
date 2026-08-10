@@ -151,6 +151,26 @@ def has_explicit_geometry(row: Row) -> bool:
     return row.value.get("geometry_explicit") is True or isinstance(row.value.get("bounds"), dict)
 
 
+def matches_ordered_draw(reference: Row, candidate: Row, geometry: bool) -> bool:
+    """Indica si un comando C++ puede justificar el siguiente comando Rust.
+
+    La cobertura candidata todavía es parcial, así que no se comparan los
+    ordinales absolutos: los comandos instrumentados deben aparecer como una
+    subsecuencia en el orden real del ``draw_tile_proc``. La primitiva sí es
+    parte de la identidad, pues un ``child`` y un ``ground`` con igual sprite
+    no son intercambiables.
+    """
+    if sprite_id(reference) != sprite_id(candidate):
+        return False
+    if reference.value.get("primitive") != candidate.value.get("primitive"):
+        return False
+    if palette(candidate) != 0 and palette(reference) != palette(candidate):
+        return False
+    return not (geometry and has_explicit_geometry(candidate)) or (
+        geometry_signature(reference) == geometry_signature(candidate)
+    )
+
+
 def visual_draws(rows: Iterable[Row]) -> list[Row]:
     return [
         row
@@ -231,6 +251,7 @@ def compare(
     strict_reference: bool,
     geometry: bool,
     foundations: bool,
+    order: bool,
 ) -> tuple[
     list[str],
     Counter[str],
@@ -354,6 +375,30 @@ def compare(
                         f"geometry={geometry_signature(row)!r}"
                     )
 
+        if order:
+            reference_index = 0
+            for row in candidate_here:
+                while (
+                    reference_index < len(reference_here)
+                    and not matches_ordered_draw(reference_here[reference_index], row, geometry)
+                ):
+                    reference_index += 1
+                role = str(row.value.get("role", "unknown"))
+                role_summary = by_role[role]
+                if reference_index == len(reference_here):
+                    role_summary["order_missing"] += 1
+                    failures.append(
+                        f"candidate_order_missing_in_reference en {format_coord(key)}: "
+                        f"{row.value.get('role')} sprite={sprite_id(row)} "
+                        f"primitive={row.value.get('primitive')}"
+                    )
+                    # El orden de los siguientes comandos ya no puede
+                    # diagnosticarse sin producir una cascada engañosa.
+                    break
+                reference_index += 1
+                role_summary["order_matched"] += 1
+                summary["candidate_order_matched"] += 1
+
         missing_from_candidate = ref_ids - cand_ids
         for sid, amount in missing_from_candidate.items():
             uncovered[f"sprite={sid}"] += amount
@@ -430,6 +475,11 @@ def main(argv: list[str] | None = None) -> int:
         help="comparar decisiones de fundación (pendiente, altura y bloque de paredes)",
     )
     parser.add_argument(
+        "--order",
+        action="store_true",
+        help="exigir que los comandos candidatos aparezcan en el orden relativo de OpenTTD",
+    )
+    parser.add_argument(
         "--by-role",
         action="store_true",
         help="desglosar por familia las selecciones, geometrías y paletas candidatas",
@@ -461,6 +511,7 @@ def main(argv: list[str] | None = None) -> int:
             args.strict_reference,
             args.geometry,
             args.foundations,
+            args.order,
         )
     except StreamError as error:
         print(f"error: {error}", file=sys.stderr)
@@ -488,6 +539,11 @@ def main(argv: list[str] | None = None) -> int:
             "Decisiones de fundación candidatas contenidas en OpenTTD: "
             f"{summary['candidate_foundations_matched']}"
         )
+    if args.order:
+        print(
+            "Comandos candidatos en orden relativo de OpenTTD: "
+            f"{summary['candidate_order_matched']}"
+        )
     if args.by_role:
         print("Cobertura candidata por familia:")
         for role, counts in sorted(
@@ -502,6 +558,8 @@ def main(argv: list[str] | None = None) -> int:
                     "geometrías="
                     f"{counts['geometry_matched']}/{counts['geometry_explicit']}"
                 )
+            if args.order:
+                fields.append(f"orden={counts['order_matched']}/{counts['selected']}")
             if counts["palette_explicit"]:
                 fields.append(
                     "paletas="

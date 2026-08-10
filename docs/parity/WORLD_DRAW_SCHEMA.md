@@ -116,3 +116,10 @@ elige un sprite inexistente en el `draw_tile_proc`, cae en fallback, o las
 teselas no coinciden. También informa comandos de OpenTTD todavía sin una
 familia equivalente instrumentada; esos no hacen fallar hasta completar la
 cobertura de todos los spawners.
+
+`--order` añade una comprobación de orden relativo: los comandos candidatos
+deben formar una subsecuencia de los comandos visuales C++ de la misma tesela.
+No compara ordinales absolutos porque el candidato todavía instrumenta sólo
+algunas familias; sí exige la misma primitiva, sprite y, cuando está explícita,
+paleta y geometría. Así una inversión de capas se detecta sin convertir los
+comandos C++ aún no instrumentados en falsos negativos.

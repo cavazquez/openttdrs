@@ -4,11 +4,11 @@ use bevy::prelude::*;
 
 use crate::render::atlas::{AtlasSprite, TileAtlas};
 use crate::sprites::{
-    BridgePaletteSprites, HOUSE_DRAW_DATA, INDUSTRY_GFX_DATA, ROAD_DEPOT_GROUND_PATH,
-    StationTileClass, house_sprite_filename, rail_depot_build_layers, rail_sprite_ids_for_preload,
-    rail_station_draw_layers, rail_station_ground_track_sprite, rail_waypoint_draw_layers,
-    road_depot_build_layers, road_stop_build_layers, road_stop_drive_through_layers,
-    signal_sprite_texture_id,
+    BridgePaletteSprites, HOUSE_DRAW_DATA, INDUSTRY_GFX_DATA, RAIL_DEPOT_VISUAL_TYPE_COUNT,
+    ROAD_DEPOT_GROUND_PATH, StationTileClass, house_sprite_filename, rail_depot_build_layers,
+    rail_sprite_ids_for_preload, rail_station_draw_layers, rail_station_ground_track_sprite,
+    rail_waypoint_draw_layers, road_depot_build_layers, road_stop_build_layers,
+    road_stop_drive_through_layers, signal_sprite_texture_id,
 };
 
 #[derive(Clone, Resource)]
@@ -66,8 +66,8 @@ pub(crate) struct WorldAssets {
     pub(crate) truck_stop_drive_through: [[AtlasSprite; 2]; 2],
     pub(crate) road_depot_ground: AtlasSprite,
     pub(crate) road_depot_builds: [Vec<AtlasSprite>; 4],
-    /// Capas del depósito de vía por dirección (`m5 & 3`: NE/SE/SW/NW).
-    pub(crate) rail_depot_builds: [Vec<AtlasSprite>; 4],
+    /// Capas del depósito de vía: [rail/electric, mono, maglev][dirección].
+    pub(crate) rail_depot_builds: [[Vec<AtlasSprite>; 4]; RAIL_DEPOT_VISUAL_TYPE_COUNT],
     /// Capas del depósito naval vanilla, en orden de sprite OpenTTD 4070..4075.
     ///
     /// Cada depósito ocupa dos teselas: `m5 & 1` selecciona la parte norte/sur
@@ -321,11 +321,18 @@ impl WorldAssets {
                 .map(|layer| atlas.get_path(layer.path))
                 .collect()
         });
-        let rail_depot_builds = std::array::from_fn(|dir| {
-            rail_depot_build_layers(dir)
-                .iter()
-                .map(|layer| atlas.get_path(layer.path))
-                .collect()
+        let rail_depot_builds = std::array::from_fn(|variant| {
+            let rail_type = match variant {
+                1 => openttdrs_core::RailType::Monorail,
+                2 => openttdrs_core::RailType::Maglev,
+                _ => openttdrs_core::RailType::Rail,
+            };
+            std::array::from_fn(|dir| {
+                rail_depot_build_layers(rail_type, dir)
+                    .iter()
+                    .map(|layer| atlas.get_path(layer.path))
+                    .collect()
+            })
         });
         let ship_depot = [
             atlas.get("ship_depot_se_front.png"),
@@ -883,5 +890,11 @@ mod world_assets_tests {
             assets.rail_tunnel_portal_front_sprite(RailType::Monorail, 2),
             &atlas.get("tunnel_mono_front_sw.png")
         );
+        // Los depósitos usan tres bloques de sprites distintos en OpenTTD.
+        // Así la precarga no puede volver a degradar mono/maglev al edificio
+        // de vía normal aun si el renderer selecciona la capa correcta.
+        assert_eq!(assets.rail_depot_builds[0][1].len(), 2); // rail SE
+        assert_eq!(assets.rail_depot_builds[1][2].len(), 2); // mono SW
+        assert_eq!(assets.rail_depot_builds[2][2].len(), 2); // maglev SW
     }
 }

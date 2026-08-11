@@ -192,6 +192,7 @@ fn dispatch_tile_kind(
     if action == BuildMenuAction::RailDepot {
         return Some(TilePreviewKind::RailDepot {
             dir: road_stop_preview_dir(ctx.station_state.orientation),
+            rail_type: game_state.current_rail_type,
         });
     }
 

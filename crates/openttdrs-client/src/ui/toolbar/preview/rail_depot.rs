@@ -1,10 +1,13 @@
 //! Fantasma de depósito de vía: vía de salida + capas BUILD (misma lógica que el mapa).
 
 use bevy::prelude::*;
+use openttdrs_core::RailType;
 
-use crate::iso::{iso, road_stop_build_sprite_center, tile_pos_half};
+use crate::iso::{iso, road_depot_build_sprite_center, tile_pos_half};
 use crate::render::{CompanyColoredSprites, sprite_from_company_or_asset};
-use crate::sprites::{RAIL_DEPOT_GROUND_TRACK, rail_depot_build_layers, road_depot_seq_gfx};
+use crate::sprites::{
+    RAIL_DEPOT_GROUND_TRACK, rail_depot_build_layers, rail_depot_seq_gfx, remap_rail_sprite_id,
+};
 use crate::ui::toolbar::preview::BuildGhostPreview;
 
 const PREVIEW_Z_BASE: f32 = 3.0;
@@ -16,6 +19,7 @@ pub(crate) struct RailDepotPreviewSpawn<'a> {
     pub base_z: u8,
     pub half_h: f32,
     pub dir: usize,
+    pub rail_type: RailType,
     pub tint: Color,
     pub asset_server: &'a AssetServer,
     pub company: Option<&'a CompanyColoredSprites>,
@@ -28,13 +32,16 @@ pub(crate) fn spawn_rail_depot_preview(commands: &mut Commands, spawn: RailDepot
         base_z,
         half_h,
         dir,
+        rail_type,
         tint,
         asset_server,
         company,
     } = spawn;
     let dir = dir.min(3);
 
-    if let Some(track_id) = RAIL_DEPOT_GROUND_TRACK[dir] {
+    if let Some(track_id) =
+        RAIL_DEPOT_GROUND_TRACK[dir].map(|id| remap_rail_sprite_id(id, rail_type))
+    {
         commands.spawn((
             BuildGhostPreview,
             Sprite {
@@ -54,15 +61,15 @@ pub(crate) fn spawn_rail_depot_preview(commands: &mut Commands, spawn: RailDepot
         ));
     }
 
-    for spec in rail_depot_build_layers(dir) {
+    for spec in rail_depot_build_layers(rail_type, dir) {
         let layer_z = PREVIEW_Z_BASE + spec.z;
-        let center = road_stop_build_sprite_center(
+        let center = road_depot_build_sprite_center(
             iso(px, py),
             px,
             py,
             base_z,
             layer_z,
-            road_depot_seq_gfx(spec),
+            rail_depot_seq_gfx(spec),
             spec.w,
             spec.h,
         );

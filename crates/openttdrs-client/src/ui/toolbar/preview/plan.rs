@@ -74,8 +74,11 @@ pub(crate) enum TilePreviewKind {
     },
     /// Depósito de carretera
     RoadDepot { dir: usize },
-    /// Depósito ferroviario
-    RailDepot { dir: usize },
+    /// Depósito ferroviario, con el set visual del tipo de vía seleccionado.
+    RailDepot {
+        dir: usize,
+        rail_type: openttdrs_core::RailType,
+    },
     /// Carretera/tranvía
     Road { path: String },
     /// Túnel (entrada)

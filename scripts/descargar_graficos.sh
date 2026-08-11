@@ -1414,6 +1414,8 @@ python3 "$(dirname "$0")/gen_tunnel_draw_data.py" || true
 # Sprites de puentes por tipo (tablero + pilares; ver gen_bridge_sprites.py).
 python3 "$(dirname "$0")/gen_bridge_sprites.py" || true
 python3 "$(dirname "$0")/gen_bridge_structure_palette.py" || true
+# Depósitos ferroviarios vanilla: edificio tipado + metadata TILE_SEQ/NFO.
+python3 "$(dirname "$0")/gen_rail_depot_gfx_data.py"
 # Reservas PBS sobre rampas de puentes (rail / mono / maglev, GRF extra).
 python3 "$(dirname "$0")/extract_bridge_pbs_reservation_sprites.py"
 python3 "$(dirname "$0")/gen_effect_vehicle_sprites.py" || true

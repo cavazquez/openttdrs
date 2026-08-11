@@ -14,7 +14,11 @@ pub use openttdrs_core::{
     rail_signal_present_mask, rail_signal_state_mask, rail_tile_is_signals,
 };
 
-use super::road::RoadDepotLayerGfx;
+#[path = "rail_depot_gfx_data_generated.rs"]
+mod rail_depot_gfx_data_generated;
+
+pub use rail_depot_gfx_data_generated::{RAIL_DEPOT_BUILD_LAYERS_BY_TYPE, RailDepotLayerGfx};
+
 use super::transparency::catenary_hidden;
 use crate::config;
 use crate::iso::remap_tile_offset;
@@ -1199,100 +1203,52 @@ pub const RAIL_SPRITE_X_SNOW: u32 = 1038;
 /// (1011) y SW `SPR_RAIL_TRACK_X` (1012) para mostrar la vía de salida.
 pub const RAIL_DEPOT_GROUND_TRACK: [Option<u32>; 4] = [None, Some(1011), Some(1012), None];
 
-/// Capas BUILD del depósito de vía (`_depot_gfx_NE..NW` en `track_land.h`,
-/// sprites 1063–1068). Indexado por `m5 & 3`: 0=NE, 1=SE, 2=SW, 3=NW.
-///
-/// Los offsets ya vienen *horneados* respecto al vértice norte de la tesela:
-/// `x_offs = 2·(dy−dx) + x_offs_NFO` y `y_offs = (dx+dy) + y_offs_NFO`, con los
-/// `dx`/`dy` TILE_SEQ de `track_land.h` y los offsets del NFO de OpenGFX (la
-/// cadena `remap_tile_offset` del cliente usa el doble de escala que
-/// `RemapCoords`, así que se evita pasando `dx = dy = 0`).
-pub const RAIL_DEPOT_BUILD_LAYERS: [&[RoadDepotLayerGfx]; 4] = [
-    // NE: edificio único con la entrada hacia el noreste.
-    &[RoadDepotLayerGfx {
-        dx: 0.0,
-        dy: 0.0,
-        dz: 0.0,
-        z: 0.05,
-        w: 51.0,
-        h: 38.0,
-        x_offs: -22.0,
-        y_offs: -12.0,
-        remap_x_adj: 0.0,
-        path: "assets/opengfx/tiles/rail_depot_ne.png",
-    }],
-    // SE: tope del muro trasero + fachada frontal sobre la vía.
-    &[
-        RoadDepotLayerGfx {
-            dx: 0.0,
-            dy: 0.0,
-            dz: 0.0,
-            z: 0.05,
-            w: 10.0,
-            h: 9.0,
-            x_offs: 14.0,
-            y_offs: 8.0,
-            remap_x_adj: 0.0,
-            path: "assets/opengfx/tiles/rail_depot_se_1.png",
-        },
-        RoadDepotLayerGfx {
-            dx: 0.0,
-            dy: 0.0,
-            dz: 0.0,
-            z: 0.06,
-            w: 51.0,
-            h: 38.0,
-            x_offs: -23.0,
-            y_offs: -11.0,
-            remap_x_adj: 0.0,
-            path: "assets/opengfx/tiles/rail_depot_se_2.png",
-        },
-    ],
-    // SW: tope del muro trasero + fachada frontal sobre la vía.
-    &[
-        RoadDepotLayerGfx {
-            dx: 0.0,
-            dy: 0.0,
-            dz: 0.0,
-            z: 0.05,
-            w: 10.0,
-            h: 9.0,
-            x_offs: -20.0,
-            y_offs: 8.0,
-            remap_x_adj: 0.0,
-            path: "assets/opengfx/tiles/rail_depot_sw_1.png",
-        },
-        RoadDepotLayerGfx {
-            dx: 0.0,
-            dy: 0.0,
-            dz: 0.0,
-            z: 0.06,
-            w: 51.0,
-            h: 38.0,
-            x_offs: -24.0,
-            y_offs: -11.0,
-            remap_x_adj: 0.0,
-            path: "assets/opengfx/tiles/rail_depot_sw_2.png",
-        },
-    ],
-    // NW: edificio único con la entrada hacia el noroeste.
-    &[RoadDepotLayerGfx {
-        dx: 0.0,
-        dy: 0.0,
-        dz: 0.0,
-        z: 0.05,
-        w: 51.0,
-        h: 38.0,
-        x_offs: -25.0,
-        y_offs: -12.0,
-        remap_x_adj: 0.0,
-        path: "assets/opengfx/tiles/rail_depot_nw.png",
-    }],
-];
+/// Cantidad de conjuntos visuales de depósitos: rail/electric, mono, maglev.
+pub const RAIL_DEPOT_VISUAL_TYPE_COUNT: usize = 3;
 
+/// Índice de [`RAIL_DEPOT_BUILD_LAYERS_BY_TYPE`] para un tipo de vía.
+///
+/// Igual que `RailTypeInfo::GetRailtypeSpriteOffset()`: la vía eléctrica usa
+/// las mismas capas de edificio que la vía normal; monorriel y maglev usan
+/// los bloques +82 y +164 respectivamente.
 #[must_use]
-pub fn rail_depot_build_layers(dir: usize) -> &'static [RoadDepotLayerGfx] {
-    RAIL_DEPOT_BUILD_LAYERS[dir.min(3)]
+pub const fn rail_depot_visual_type_index(rail_type: openttdrs_core::RailType) -> usize {
+    match rail_type {
+        openttdrs_core::RailType::Rail | openttdrs_core::RailType::Electric => 0,
+        openttdrs_core::RailType::Monorail => 1,
+        openttdrs_core::RailType::Maglev => 2,
+    }
+}
+
+/// Capas BUILD del depósito de vía (`_depot_gfx_NE..NW` en `track_land.h`).
+///
+/// El generador mantiene `dx`/`dy` de cada `TILE_SEQ_LINE` y los offsets NFO
+/// sin hornearlos; `road_depot_build_sprite_center` aplica la escala de
+/// `RemapCoords` de OpenTTD. Así las variantes mono/maglev conservan sus
+/// dimensiones y puertas propias, en vez de caer visualmente al depósito
+/// normal.
+#[must_use]
+pub fn rail_depot_build_layers(
+    rail_type: openttdrs_core::RailType,
+    dir: usize,
+) -> &'static [RailDepotLayerGfx] {
+    RAIL_DEPOT_BUILD_LAYERS_BY_TYPE[rail_depot_visual_type_index(rail_type)][dir.min(3)]
+}
+
+/// Convierte una capa de depósito ferroviario al contenedor de posición
+/// isométrica compartido. El renderer la pasa por
+/// `road_depot_build_sprite_center`, cuya escala local coincide con
+/// `RemapCoords` de OpenTTD para `TILE_SEQ_LINE`.
+#[must_use]
+pub const fn rail_depot_seq_gfx(layer: &RailDepotLayerGfx) -> crate::iso::RoadStopSeqGfx {
+    crate::iso::RoadStopSeqGfx {
+        dx: layer.dx,
+        dy: layer.dy,
+        dz: layer.dz,
+        x_offs: layer.x_offs,
+        y_offs: layer.y_offs,
+        remap_x_adj: 0.0,
+    }
 }
 
 /// Sprites de señal que la fórmula puede calcular pero el NFO recortado de OpenGFX no exporta (SP3.0 audit).
@@ -2135,6 +2091,68 @@ mod tests {
         // Salida depósito showcase (12,15): Y|LOWER|LEFT.
         collect_rail_sprites(0x1A, 0, false, &mut out);
         assert_eq!(out, vec![1018, 1006, 1008, 1010]);
+    }
+
+    #[test]
+    fn typed_rail_depot_layers_match_vanilla_sprite_blocks_and_geometry() {
+        use openttdrs_core::RailType;
+
+        assert_eq!(rail_depot_visual_type_index(RailType::Rail), 0);
+        assert_eq!(rail_depot_visual_type_index(RailType::Electric), 0);
+        assert_eq!(rail_depot_visual_type_index(RailType::Monorail), 1);
+        assert_eq!(rail_depot_visual_type_index(RailType::Maglev), 2);
+
+        // `track_land.h` / `_depot_gfx_table`: cada conjunto parte de
+        // 1063, 1145 y 1227, respectivamente. SE/SW tienen dos capas.
+        assert_eq!(
+            rail_depot_build_layers(RailType::Rail, 1)
+                .iter()
+                .map(|layer| layer.sprite_id)
+                .collect::<Vec<_>>(),
+            vec![1063, 1064]
+        );
+        assert_eq!(
+            rail_depot_build_layers(RailType::Monorail, 2)
+                .iter()
+                .map(|layer| layer.sprite_id)
+                .collect::<Vec<_>>(),
+            vec![1147, 1148]
+        );
+        assert_eq!(
+            rail_depot_build_layers(RailType::Maglev, 2)
+                .iter()
+                .map(|layer| layer.sprite_id)
+                .collect::<Vec<_>>(),
+            vec![1229, 1230]
+        );
+
+        // Debe conservar TILE_SEQ_LINE directamente, sin los offsets
+        // reducidos a la mitad que alejaban la puerta del carril de salida.
+        let normal_ne = rail_depot_build_layers(RailType::Rail, 0)[0];
+        assert_eq!(
+            (normal_ne.dx, normal_ne.dy, normal_ne.sx, normal_ne.sy),
+            (2.0, 13.0, 13, 1)
+        );
+        assert_eq!(
+            crate::iso::road_depot_overlay_rel(rail_depot_seq_gfx(&normal_ne)),
+            (-22.0, -11.0),
+            "TILE_SEQ + NFO debe colocar la fachada NE en la misma esquina que OpenTTD"
+        );
+        let maglev_sw_door = rail_depot_build_layers(RailType::Maglev, 2)[0];
+        assert_eq!(
+            (
+                maglev_sw_door.dx,
+                maglev_sw_door.dy,
+                maglev_sw_door.sx,
+                maglev_sw_door.sy,
+            ),
+            (2.0, 2.0, 13, 1)
+        );
+        assert_eq!(
+            crate::iso::road_depot_overlay_rel(rail_depot_seq_gfx(&maglev_sw_door)),
+            (-24.0, 8.0),
+            "la puerta maglev SW conserva su propio recorte y ancla NFO"
+        );
     }
 
     #[test]

@@ -370,7 +370,7 @@ fn spawn_tile_preview(
                 },
             );
         }
-        TilePreviewKind::RailDepot { dir } => {
+        TilePreviewKind::RailDepot { dir, rail_type } => {
             spawn_rail_depot_preview(
                 commands,
                 RailDepotPreviewSpawn {
@@ -379,6 +379,7 @@ fn spawn_tile_preview(
                     base_z,
                     half_h,
                     dir: *dir,
+                    rail_type: *rail_type,
                     tint,
                     asset_server,
                     company,

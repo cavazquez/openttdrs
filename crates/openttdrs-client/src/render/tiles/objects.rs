@@ -17,7 +17,7 @@ use crate::iso::{
 };
 use crate::render::catenary_newgrf::catenary_sprite_colored;
 use crate::render::station_newgrf::{NewGrfStationSpriteCache, newgrf_station_def_for_tile};
-use crate::render::world_draw_trace::WorldDrawTrace;
+use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
 use crate::render::{
     AirportRadarAnim, AtlasSprite, CompanyColoredSprites, MapVisualLayer, TileRenderContext,
     WaterTile, WorldAssets, sprite_from_atlas_or_company_white_colour,
@@ -26,13 +26,14 @@ use crate::sprites::{
     CompanyColour, StationTileClass, TransparencyOption, catenary_hidden,
     catenary_reference_sprite_id, catenary_sprite_color, catenary_tunnel_wire_sprite,
     collect_catenary_pylons_from_map_with_pcp_override, collect_catenary_wire_draws_from_map,
-    is_hidden, log_unknown_station_type_once, rail_ghost_overlay_offset,
-    rail_pbs_reservation_offset, rail_station_draw_layers, rail_station_ground_track_sprite,
-    rail_station_overlay_rel, rail_station_sprite_meta, rail_waypoint_draw_layers,
-    rail_waypoint_layer_meta, rail_waypoint_sprite_center, remap_rail_sprite_id,
-    road_depot_build_layers, road_depot_entrance_road_bits, road_depot_seq_gfx,
-    road_flat_sprite_index, road_stop_build_layers, road_stop_drive_through_layers,
-    road_stop_ground_index, road_stop_seq_gfx, station_tile_class, with_to_alpha,
+    is_hidden, log_unknown_station_type_once, rail_depot_build_layers, rail_depot_seq_gfx,
+    rail_depot_visual_type_index, rail_ghost_overlay_offset, rail_pbs_reservation_offset,
+    rail_station_draw_layers, rail_station_ground_track_sprite, rail_station_overlay_rel,
+    rail_station_sprite_meta, rail_waypoint_draw_layers, rail_waypoint_layer_meta,
+    rail_waypoint_sprite_center, remap_rail_sprite_id, road_depot_build_layers,
+    road_depot_entrance_road_bits, road_depot_seq_gfx, road_flat_sprite_index,
+    road_stop_build_layers, road_stop_drive_through_layers, road_stop_ground_index,
+    road_stop_seq_gfx, station_tile_class, with_to_alpha,
 };
 
 fn buildings_hidden() -> bool {
@@ -1400,23 +1401,63 @@ fn spawn_rail_depot_tile(
             ));
         }
     }
-    for (layer_i, spec) in crate::sprites::rail_depot_build_layers(dir)
-        .iter()
-        .enumerate()
-    {
+    let depot_variant = rail_depot_visual_type_index(rail_type);
+    let depot_builds = &assets.rail_depot_builds[depot_variant][dir];
+    // `DrawRailTileSeq`: cada fachada es un sortable con las bounds del
+    // TILE_SEQ_LINE y recolor de la compañía propietaria. En una pendiente
+    // la fundación altera la altura de mundo, no la caja local de la pieza.
+    let company_palette = 775 + u32::from(owner_colour.unwrap_or_default().as_u8());
+    let foundation_z_delta = (i32::from(base_z) - i32::from(ctx.info.base_z)) * 8;
+    for (layer_i, spec) in rail_depot_build_layers(rail_type, dir).iter().enumerate() {
         if buildings_hidden() {
             break;
         }
-        let Some(image) = assets.rail_depot_builds[dir].get(layer_i) else {
+        let Some(image) = depot_builds.get(layer_i) else {
+            WorldDrawTrace::record_sprite_with_palette_and_world_geometry(
+                "rail-depot-building",
+                "sortable",
+                spec.sprite_id,
+                company_palette,
+                true,
+                (0, 0),
+                foundation_z_delta,
+                (0, 0, 0),
+                Some(TraceSpriteBounds::new(
+                    spec.dx as i32,
+                    spec.dy as i32,
+                    spec.dz as i32,
+                    spec.sx,
+                    spec.sy,
+                    23,
+                )),
+            );
             continue;
         };
-        let center = road_stop_build_sprite_center(
+        WorldDrawTrace::record_sprite_with_palette_and_world_geometry(
+            "rail-depot-building",
+            "sortable",
+            spec.sprite_id,
+            company_palette,
+            false,
+            (0, 0),
+            foundation_z_delta,
+            (0, 0, 0),
+            Some(TraceSpriteBounds::new(
+                spec.dx as i32,
+                spec.dy as i32,
+                spec.dz as i32,
+                spec.sx,
+                spec.sy,
+                23,
+            )),
+        );
+        let center = road_depot_build_sprite_center(
             ctx.iso_pos,
             ctx.tx_i32(),
             ctx.ty_i32(),
             base_z,
             spec.z,
-            road_depot_seq_gfx(spec),
+            rail_depot_seq_gfx(spec),
             spec.w,
             spec.h,
         );
@@ -1427,7 +1468,7 @@ fn spawn_rail_depot_tile(
                 company,
                 owner_colour,
                 image,
-                &format!("rail_depot_{dir}_{layer_i}"),
+                spec.path,
             )),
             Transform::from_translation(center),
         ));

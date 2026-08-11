@@ -12,13 +12,14 @@ use crate::render::road_newgrf::{
     NewGrfRoadSpriteCache, newgrf_road_def_for_tile, newgrf_tram_def_for_tile,
     road_newgrf_view_index,
 };
-use crate::render::world_draw_trace::WorldDrawTrace;
+use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
 use crate::render::{MapVisualLayer, TileRenderContext, WorldAssets};
 use crate::sprites::{
     RAIL_GROUND_SNOW_OR_DESERT, RAIL_TB_LEFT, RAIL_TB_LOWER, RAIL_TB_RIGHT, RAIL_TB_UPPER,
     ROAD_FLAT_HALF_H, ROAD_STREETLIGHT_META, ROADSIDE_LAMPS, ROADSIDE_TREE_META, ROADSIDE_TREES,
-    TRACK_FENCE_META, catenary_reference_sprite_id, catenary_sprite_color,
-    collect_catenary_pylons_from_map_with_pcp_override, collect_catenary_sprites_from_map,
+    TRACK_FENCE_META, catenary_pylon_world_z_delta, catenary_reference_sprite_id,
+    catenary_sprite_color, catenary_wire_world_z_delta,
+    collect_catenary_pylons_from_map_with_pcp_override, collect_catenary_wire_draws_from_map,
     collect_rail_pbs_reservation_draws, collect_rail_sprites_for_surface,
     collect_signal_sprite_draws, is_road_level_crossing, is_typed_rail_track_sprite,
     level_crossing_has_rail_reservation, level_crossing_rail_sprite_id_for_type,
@@ -716,7 +717,7 @@ pub(crate) fn spawn_rail_tile(
         let tint = catenary_sprite_color();
         let mut wires = Vec::new();
         if !low_bridge.hide_wires {
-            collect_catenary_sprites_from_map(
+            collect_catenary_wire_draws_from_map(
                 map,
                 ctx.coord,
                 map_dims.0,
@@ -726,33 +727,6 @@ pub(crate) fn spawn_rail_tile(
                 tileh,
                 &mut wires,
             );
-        }
-        for (i, sid) in wires.iter().copied().enumerate() {
-            let sprite = catenary_sprite_colored(
-                assets,
-                sid,
-                tint,
-                catenary_newgrf,
-                catenary_sprites.as_deref_mut(),
-                images.as_deref_mut(),
-            );
-            WorldDrawTrace::record_sprite(
-                "catenary-wire",
-                "sortable",
-                catenary_reference_sprite_id(sid),
-                sprite.is_none(),
-            );
-            let Some(sprite) = sprite else {
-                continue;
-            };
-            let z = 0.035 + i as f32 * 0.0004;
-            let base = tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), rail_base_z, z, rail_half_h);
-            commands.spawn((
-                MapVisualLayer,
-                ctx.map_tile_chunk(),
-                sprite,
-                Transform::from_translation(base),
-            ));
         }
         let mut pylons = Vec::new();
         collect_catenary_pylons_from_map_with_pcp_override(
@@ -775,11 +749,18 @@ pub(crate) fn spawn_rail_tile(
                 catenary_sprites.as_deref_mut(),
                 images.as_deref_mut(),
             );
-            WorldDrawTrace::record_sprite(
+            WorldDrawTrace::record_sprite_with_palette_and_world_geometry(
                 "catenary-pylon",
                 "sortable",
                 catenary_reference_sprite_id(draw.sprite_id),
+                0,
                 sprite.is_none(),
+                (draw.tile_dx as i32, draw.tile_dy as i32),
+                draw.pcp_direction.map_or(0, |pcp| {
+                    catenary_pylon_world_z_delta(tileh, ctx.info.base_z, render_tb, pcp)
+                }),
+                (1, 1, 0),
+                Some(TraceSpriteBounds::new(-1, -1, 0, 1, 1, 6)),
             );
             let Some(sprite) = sprite else {
                 continue;
@@ -797,6 +778,43 @@ pub(crate) fn spawn_rail_tile(
                 ctx.map_tile_chunk(),
                 sprite,
                 Transform::from_translation(base + Vec3::new(off.x, off.y, 0.0)),
+            ));
+        }
+        // OpenTTD emite primero los postes PPP y después los cables PCP. El
+        // z visual mantiene al poste sobre el cable, pero preservar la misma
+        // secuencia también hace comparable el stream sortable del oráculo.
+        for (i, draw) in wires.iter().copied().enumerate() {
+            let sid = draw.sprite_id;
+            let sprite = catenary_sprite_colored(
+                assets,
+                sid,
+                tint,
+                catenary_newgrf,
+                catenary_sprites.as_deref_mut(),
+                images.as_deref_mut(),
+            );
+            let (ox, oy, oz) = draw.bounds_origin;
+            let (ex, ey, ez) = draw.bounds_extent;
+            WorldDrawTrace::record_sprite_with_palette_and_geometry(
+                "catenary-wire",
+                "sortable",
+                catenary_reference_sprite_id(sid),
+                0,
+                sprite.is_none(),
+                (0, 0, 0),
+                catenary_wire_world_z_delta(tileh, ctx.info.base_z, render_tb, draw),
+                Some(TraceSpriteBounds::new(ox, oy, oz, ex, ey, ez)),
+            );
+            let Some(sprite) = sprite else {
+                continue;
+            };
+            let z = 0.035 + i as f32 * 0.0004;
+            let base = tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), rail_base_z, z, rail_half_h);
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                sprite,
+                Transform::from_translation(base),
             ));
         }
     }

@@ -110,6 +110,11 @@ const TILE_HEIGHT_SUB: i32 = 8;
 pub const TILE_PIXEL_HEIGHT: i16 = 8;
 
 /// Altura sub-tesela en unidades `TILE_HEIGHT` (`GetPartialPixelZ` / `landscape.cpp`).
+///
+/// Además de las pendientes continuas, OpenTTD usa los bits altos de `Slope`
+/// para una fundación de media tesela. En esa mitad nivelada la altura salta
+/// directamente al máximo de la pendiente; luego se evalúa la pendiente base
+/// en la otra mitad. Esta función conserva ambas capas de la codificación.
 #[must_use]
 #[allow(
     clippy::cast_possible_truncation,
@@ -120,7 +125,29 @@ pub const TILE_PIXEL_HEIGHT: i16 = 8;
 pub fn partial_pixel_z(sub_x: f32, sub_y: f32, tileh: u8) -> u8 {
     let x = sub_x.clamp(0.0, 15.0).round() as i32;
     let y = sub_y.clamp(0.0, 15.0).round() as i32;
-    match tileh.min(14) {
+    // `IsHalftileSlope` + `GetHalftileSlopeCorner`. El máximo es de dos
+    // niveles únicamente en las pendientes empinadas.
+    if tileh & 0x20 != 0 {
+        let max_z = if tileh & SLOPE_STEEP != 0 {
+            TILE_HEIGHT_SUB * 2
+        } else {
+            TILE_HEIGHT_SUB
+        };
+        let leveled = match (tileh >> 6) & 3 {
+            // Corner::W, ::S, ::E, ::N.
+            0 => x > y,
+            1 => x + y >= TILE_SIZE_SUB,
+            2 => x <= y,
+            _ => x + y < TILE_SIZE_SUB,
+        };
+        if leveled {
+            return max_z as u8;
+        }
+    }
+
+    // `RemoveHalftileSlope`: conserva la pendiente de cinco bits, incluidos
+    // los cuatro casos `SLOPE_STEEP_*`.
+    match tileh & 0x1F {
         1 if x >= y => ((x - y) >> 1) as u8,
         2 if x + y >= TILE_SIZE_SUB => ((1 + x + y - TILE_SIZE_SUB) >> 1) as u8,
         3 => ((x + 1) >> 1) as u8,
@@ -128,21 +155,26 @@ pub fn partial_pixel_z(sub_x: f32, sub_y: f32, tileh: u8) -> u8 {
         5 if x >= y => ((x - y) >> 1) as u8,
         5 => ((1 + y - x) >> 1) as u8,
         6 => ((y + 1) >> 1) as u8,
-        7 if x < y => (TILE_HEIGHT_SUB - ((1 + y - x) >> 1)) as u8,
+        7 if x + y <= TILE_SIZE_SUB => (TILE_HEIGHT_SUB - ((TILE_SIZE_SUB - x - y) >> 1)) as u8,
         7 => TILE_HEIGHT_SUB as u8,
         8 if x + y <= TILE_SIZE_SUB => ((TILE_SIZE_SUB - x - y) >> 1) as u8,
         9 => ((TILE_SIZE_SUB - y) >> 1) as u8,
         10 if x + y < TILE_SIZE_SUB => ((TILE_SIZE_SUB - x - y) >> 1) as u8,
         10 => ((1 + x + y - TILE_SIZE_SUB) >> 1) as u8,
-        11 if y < x => (TILE_HEIGHT_SUB - ((x - y) >> 1)) as u8,
+        11 if x < y => (TILE_HEIGHT_SUB - ((1 + y - x) >> 1)) as u8,
         11 => TILE_HEIGHT_SUB as u8,
         12 => ((TILE_SIZE_SUB - x) >> 1) as u8,
-        13 if x + y >= TILE_SIZE_SUB => {
+        13 if y < x => (TILE_HEIGHT_SUB - ((x - y) >> 1)) as u8,
+        13 => TILE_HEIGHT_SUB as u8,
+        14 if x + y >= TILE_SIZE_SUB => {
             (TILE_HEIGHT_SUB - ((1 + x + y - TILE_SIZE_SUB) >> 1)) as u8
         }
-        13 => TILE_HEIGHT_SUB as u8,
-        14 if x + y <= TILE_SIZE_SUB => (TILE_HEIGHT_SUB - ((TILE_SIZE_SUB - x - y) >> 1)) as u8,
         14 => TILE_HEIGHT_SUB as u8,
+        // `SLOPE_STEEP_S`, `W`, `N`, `E`, respectivamente.
+        0x17 => ((1 + x + y) >> 1) as u8,
+        0x1B => ((TILE_SIZE_SUB + x - y) >> 1) as u8,
+        0x1D => ((TILE_SIZE_SUB - x + TILE_SIZE_SUB - y) >> 1) as u8,
+        0x1E => ((TILE_SIZE_SUB + 1 + y - x) >> 1) as u8,
         _ => 0,
     }
 }
@@ -344,6 +376,36 @@ mod tests {
     fn inclined_sw_slope_partial_z_matches_openrtd() {
         assert_eq!(partial_pixel_z(0.0, 9.0, SLOPE_SW), 0);
         assert_eq!(partial_pixel_z(15.0, 9.0, SLOPE_SW), 8);
+    }
+
+    #[test]
+    fn three_corner_partial_z_matches_upstream_table() {
+        // SLOPE_WSE = W | S | E. Antes se trataba erróneamente como una
+        // pendiente que cae hacia SE; esto desplazaba puntos PCP de catenaria.
+        const SLOPE_WSE: u8 = 0x07;
+        assert_eq!(partial_pixel_z(0.0, 0.0, SLOPE_WSE), 0);
+        assert_eq!(partial_pixel_z(8.0, 15.0, SLOPE_WSE), 8);
+
+        // Las otras tres variantes son rotaciones, no la misma fórmula
+        // aplicada a los ejes intercambiados.
+        const SLOPE_NWS: u8 = 0x0B;
+        const SLOPE_SEN: u8 = 0x0D;
+        const SLOPE_ENW: u8 = 0x0E;
+        assert_eq!(partial_pixel_z(8.0, 0.0, SLOPE_NWS), 8);
+        assert_eq!(partial_pixel_z(15.0, 8.0, SLOPE_SEN), 5);
+        assert_eq!(partial_pixel_z(15.0, 8.0, SLOPE_ENW), 4);
+    }
+
+    #[test]
+    fn halftile_and_steep_partial_z_preserve_open_ttd_encoding() {
+        // SLOPE_W con la mitad W nivelada: la mitad x > y queda al máximo.
+        const SLOPE_HALFTILE_W: u8 = 0x20 | 0x01;
+        assert_eq!(partial_pixel_z(15.0, 0.0, SLOPE_HALFTILE_W), 8);
+        assert_eq!(partial_pixel_z(0.0, 15.0, SLOPE_HALFTILE_W), 0);
+
+        // SLOPE_STEEP_S = SLOPE_STEEP | SLOPE_WSE.
+        assert_eq!(partial_pixel_z(0.0, 0.0, SLOPE_STEEP | 0x07), 0);
+        assert_eq!(partial_pixel_z(15.0, 15.0, SLOPE_STEEP | 0x07), 15);
     }
 
     #[test]

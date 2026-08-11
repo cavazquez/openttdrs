@@ -24,7 +24,7 @@ use crate::render::{
 use crate::sprites::{
     CompanyColour, StationTileClass, TransparencyOption, catenary_hidden,
     catenary_reference_sprite_id, catenary_sprite_color, catenary_tunnel_wire_sprite,
-    collect_catenary_pylons_from_map_with_pcp_override, collect_catenary_sprites_from_map,
+    collect_catenary_pylons_from_map_with_pcp_override, collect_catenary_wire_draws_from_map,
     is_hidden, log_unknown_station_type_once, rail_ghost_overlay_offset,
     rail_pbs_reservation_offset, rail_station_draw_layers, rail_station_ground_track_sprite,
     rail_station_overlay_rel, rail_station_sprite_meta, rail_waypoint_draw_layers,
@@ -349,7 +349,7 @@ pub(crate) fn spawn_station_tile(
                 let tint = catenary_sprite_color();
                 let mut wires = Vec::new();
                 if !low_bridge.hide_wires {
-                    collect_catenary_sprites_from_map(
+                    collect_catenary_wire_draws_from_map(
                         map,
                         ctx.coord,
                         dims.0,
@@ -360,7 +360,8 @@ pub(crate) fn spawn_station_tile(
                         &mut wires,
                     );
                 }
-                for (i, sid) in wires.into_iter().enumerate() {
+                for (i, draw) in wires.into_iter().enumerate() {
+                    let sid = draw.sprite_id;
                     let Some(sprite) = catenary_sprite_colored(
                         assets,
                         sid,

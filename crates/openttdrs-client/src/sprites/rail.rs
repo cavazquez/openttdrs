@@ -4,8 +4,8 @@ use bevy::prelude::*;
 use openttdrs_core::prelude::*;
 use openttdrs_core::{
     SignalTrack, bridge_middle_length, bridge_surface_slope_and_z, diag_dir_offset, m2_for_signal,
-    rail_bridge_other_end, rail_type_from_tile, signal_type_for_track, signal_variant_for_track,
-    tile_slope_and_z,
+    partial_pixel_z, rail_bridge_other_end, rail_type_from_tile, signal_type_for_track,
+    signal_variant_for_track, tile_slope_and_z,
 };
 
 pub use openttdrs_core::{
@@ -352,6 +352,21 @@ pub fn catenary_pylon_sprite_ids() -> impl Iterator<Item = u32> {
         .chain((0..4).map(|i| CATENARY_ENTRANCE_SPRITE_BASE + i))
 }
 
+/// Cable de catenaria y su caja sortable exacta de OpenTTD.
+///
+/// El mismo `WSO_*` puede representar dos trozos de vía distintos (por
+/// ejemplo, las curvas `UPPER` y `LOWER` comparten el sprite corto pero no la
+/// caja). Conservar la geometría junto al selector evita convertir esa
+/// ambigüedad en una falsa coincidencia del oráculo.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CatenaryWireDraw {
+    pub sprite_id: u32,
+    /// `SpriteBounds::origin` de `_rail_catenary_sprite_data`.
+    pub bounds_origin: (i32, i32, i32),
+    /// `SpriteBounds::extent` de `_rail_catenary_sprite_data`.
+    pub bounds_extent: (i32, i32, i32),
+}
+
 /// Dibujo de un sprite de catenaria con offset sub-tesela (PCP+PPP).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CatenarySpriteDraw {
@@ -360,6 +375,63 @@ pub struct CatenarySpriteDraw {
     pub tile_dx: f32,
     pub tile_dy: f32,
     pub z_layer: f32,
+    /// PCP que determina la elevación del poste normal. Los postes del vano
+    /// de puente ya reciben la altura del tablero y no necesitan este dato.
+    pub pcp_direction: Option<u8>,
+}
+
+/// Delta vertical del `AddSortableSpriteToDraw` de un cable normal.
+///
+/// `DrawRailCatenaryRailway` calcula el ancla con
+/// `GetSlopePixelZ(x + origin.x, y + origin.y)` y la redondea a un nivel de
+/// terreno completo. La caja, en cambio, conserva su `z_offset` propio.
+#[must_use]
+pub fn catenary_wire_world_z_delta(
+    tileh: u8,
+    base_z: u8,
+    trackbits: u8,
+    draw: CatenaryWireDraw,
+) -> i32 {
+    let (x, y, _) = draw.bounds_origin;
+    catenary_surface_z_delta(tileh, base_z, trackbits, x, y, 8)
+}
+
+/// Delta vertical del `GetPCPElevation` de OpenTTD para un poste normal.
+///
+/// Los PCP están sobre el borde y la consulta se limita a `TILE_SIZE - 1`
+/// antes de redondear al semiescalón de terreno, exactamente como
+/// `elrail.cpp`.
+#[must_use]
+pub fn catenary_pylon_world_z_delta(
+    tileh: u8,
+    base_z: u8,
+    trackbits: u8,
+    pcp_direction: u8,
+) -> i32 {
+    let index = usize::from(pcp_direction & 3);
+    let x = X_PCP_OFF[index].min(15);
+    let y = Y_PCP_OFF[index].min(15);
+    catenary_surface_z_delta(tileh, base_z, trackbits, i32::from(x), i32::from(y), 4)
+}
+
+/// `GetSlopePixelZ_Rail` aplicado a una coordenada local y redondeado para
+/// catenaria. A diferencia del relieve crudo, la consulta de OpenTTD usa la
+/// superficie posterior a `GetRailFoundation`.
+fn catenary_surface_z_delta(
+    tileh: u8,
+    base_z: u8,
+    trackbits: u8,
+    x: i32,
+    y: i32,
+    rounding: i32,
+) -> i32 {
+    let (surface_tileh, surface_z_delta) =
+        openttdrs_core::rail_surface_slope_and_z(tileh, trackbits);
+    let base_px = i32::from(base_z) * 8;
+    let slope_px = base_px
+        + i32::from(surface_z_delta) * 8
+        + i32::from(partial_pixel_z(x as f32, y as f32, surface_tileh));
+    ((slope_px + rounding / 2) / rounding) * rounding - base_px
 }
 
 /// Selector de pendiente para `_rail_wires` (`elrail.cpp`):
@@ -380,10 +452,14 @@ pub fn catenary_tile_location_group(tx: i32, ty: i32) -> u8 {
 #[cfg_attr(not(test), allow(dead_code))]
 pub fn collect_catenary_sprites(tb: u8, tileh: u8, tx: i32, ty: i32, out: &mut Vec<u32>) {
     let pcp = catenary_pcp_from_parity(tb, tx, ty);
-    collect_catenary_sprites_with_pcp(tb, tileh, pcp, out);
+    let mut draws = Vec::new();
+    collect_catenary_wire_draws_with_pcp(tb, tileh, pcp, &mut draws);
+    out.clear();
+    out.extend(draws.into_iter().map(|draw| draw.sprite_id));
 }
 
 /// Cables de catenaria con PCP real por vecinos (`DrawRailCatenaryRailway`).
+#[cfg_attr(not(test), allow(dead_code))]
 #[allow(clippy::too_many_arguments)]
 pub fn collect_catenary_sprites_from_map(
     map: &Map,
@@ -394,6 +470,25 @@ pub fn collect_catenary_sprites_from_map(
     tb: u8,
     tileh: u8,
     out: &mut Vec<u32>,
+) {
+    let mut draws = Vec::new();
+    collect_catenary_wire_draws_from_map(map, pos, mw, mh, mp_rail, tb, tileh, &mut draws);
+    out.clear();
+    out.extend(draws.into_iter().map(|draw| draw.sprite_id));
+}
+
+/// Igual que [`collect_catenary_sprites_from_map`], conservando la geometría
+/// sortable seleccionada por `DrawRailCatenaryRailway`.
+#[allow(clippy::too_many_arguments)]
+pub fn collect_catenary_wire_draws_from_map(
+    map: &Map,
+    pos: TileCoord,
+    mw: u32,
+    mh: u32,
+    mp_rail: u8,
+    tb: u8,
+    tileh: u8,
+    out: &mut Vec<CatenaryWireDraw>,
 ) {
     if catenary_hidden() {
         out.clear();
@@ -409,7 +504,7 @@ pub fn collect_catenary_sprites_from_map(
     let wire_tb = if home_tb != 0 { home_tb } else { tb & 0x3F };
     let effective_tileh = catenary_effective_tileh(map, pos, wire_tb, tileh);
     let pcp = compute_catenary_pcp_status(map, pos, mw, mh, mp_rail, wire_tb, effective_tileh);
-    collect_catenary_sprites_with_effective_tileh(wire_tb, effective_tileh, pcp, out);
+    collect_catenary_wire_draws_with_effective_tileh(wire_tb, effective_tileh, pcp, out);
 }
 
 /// Postes PPP sueltos (`DrawRailCatenaryRailway` pylon loop).
@@ -504,6 +599,7 @@ pub fn collect_catenary_pylons_from_map_with_pcp_override(
                 tile_dx,
                 tile_dy,
                 z_layer: 0.036,
+                pcp_direction: Some(dir),
             });
             break;
         }
@@ -573,6 +669,7 @@ pub fn collect_catenary_bridge_draws(
         tile_dx: 8.0,
         tile_dy: 8.0,
         z_layer: 0.09,
+        pcp_direction: None,
     });
     // Poste en extremo norte cada 2 teselas.
     if num % 2 == 1 {
@@ -587,6 +684,7 @@ pub fn collect_catenary_bridge_draws(
             tile_dx: f32::from(X_PCP_OFF[pcp as usize] + X_PPP_OFF[ppp as usize]),
             tile_dy: f32::from(Y_PCP_OFF[pcp as usize] + Y_PPP_OFF[ppp as usize]),
             z_layer: 0.091,
+            pcp_direction: Some(pcp),
         });
     }
     // Poste en extremo sur del último vano.
@@ -602,6 +700,7 @@ pub fn collect_catenary_bridge_draws(
             tile_dx: f32::from(X_PCP_OFF[pcp as usize] + X_PPP_OFF[ppp as usize]),
             tile_dy: f32::from(Y_PCP_OFF[pcp as usize] + Y_PPP_OFF[ppp as usize]),
             z_layer: 0.091,
+            pcp_direction: Some(pcp),
         });
     }
 }
@@ -619,7 +718,12 @@ struct CatenaryEdgeState {
 }
 
 /// Máscara de 4 bits: bit `d` = PCP activo en `DiagDirection` d.
-fn collect_catenary_sprites_with_pcp(tb: u8, tileh: u8, pcp: u8, out: &mut Vec<u32>) {
+fn collect_catenary_wire_draws_with_pcp(
+    tb: u8,
+    tileh: u8,
+    pcp: u8,
+    out: &mut Vec<CatenaryWireDraw>,
+) {
     out.clear();
     let t = tb & 0x3F;
     if t == 0 {
@@ -633,18 +737,18 @@ fn collect_catenary_sprites_with_pcp(tb: u8, tileh: u8, pcp: u8, out: &mut Vec<u
     } else {
         surface_tileh
     };
-    collect_catenary_sprites_with_effective_tileh(t, effective_tileh, pcp, out);
+    collect_catenary_wire_draws_with_effective_tileh(t, effective_tileh, pcp, out);
 }
 
-/// Variante de [`collect_catenary_sprites_with_pcp`] para un `tileh` que ya
+/// Variante de [`collect_catenary_wire_draws_with_pcp`] para un `tileh` que ya
 /// pasó por `DrawFoundation` y, si corresponde, `AdjustTileh`. Las rampas de
 /// puente no son una vía normal en pendiente: aplicar otra vez
 /// `GetRailFoundation` sobre su pendiente ajustada cambiaba el wire elegido.
-fn collect_catenary_sprites_with_effective_tileh(
+fn collect_catenary_wire_draws_with_effective_tileh(
     tb: u8,
     effective_tileh: u8,
     pcp: u8,
-    out: &mut Vec<u32>,
+    out: &mut Vec<CatenaryWireDraw>,
 ) {
     out.clear();
     let t = tb & 0x3F;
@@ -663,13 +767,47 @@ fn collect_catenary_sprites_with_effective_tileh(
             // Sin PCP en ningún extremo: forzar ambos (sprites BOTH / SHORT).
             cfg = 3;
         }
-        if let Some(wso) = rail_wire_wso(sel, track_idx, cfg) {
+        if let (Some(wso), Some((bounds_origin, bounds_extent))) = (
+            rail_wire_wso(sel, track_idx, cfg),
+            catenary_wire_trace_bounds(sel, track_idx),
+        ) {
             let sid = WIRE_SPRITE_BASE + wso;
-            // MVP sin offsets por track: evitar duplicar el mismo WSO (HORZ/VERT).
-            if !out.contains(&sid) {
-                out.push(sid);
+            // La selección visual actual no duplica un PNG compartido entre
+            // dos tracks. Conservamos esa decisión aquí, pero también la
+            // geometría del primer track que lo eligió para poder comparar la
+            // desviación contra OpenTTD sin adivinarla desde el WSO.
+            if !out.iter().any(|draw| draw.sprite_id == sid) {
+                out.push(CatenaryWireDraw {
+                    sprite_id: sid,
+                    bounds_origin,
+                    bounds_extent,
+                });
             }
         }
+    }
+}
+
+/// `SortableSpriteStruct` de `_rail_catenary_sprite_data`, sin depender del
+/// WSO: varios índices reutilizan el mismo sprite con geometría diferente.
+const fn catenary_wire_trace_bounds(
+    selector: u8,
+    track_idx: u8,
+) -> Option<((i32, i32, i32), (i32, i32, i32))> {
+    match (selector, track_idx) {
+        // X: plano, ascenso SW y descenso NE.
+        (0, 0) => Some(((0, 7, 10), (15, 1, 1))),
+        (1, 0) => Some(((0, 7, 19), (15, 8, 1))),
+        (4, 0) => Some(((0, 7, 9), (15, 8, 1))),
+        // Y: plano, ascenso SE y descenso NW.
+        (0, 1) => Some(((7, 0, 10), (1, 15, 1))),
+        (2, 1) => Some(((7, 0, 19), (8, 15, 1))),
+        (3, 1) => Some(((7, 0, 9), (8, 15, 1))),
+        // Curvas ortogonales: UPPER/LOWER y LEFT/RIGHT.
+        (0, 2) => Some(((7, 0, 10), (1, 1, 1))),
+        (0, 3) => Some(((15, 8, 10), (3, 3, 1))),
+        (0, 4) => Some(((8, 0, 10), (8, 8, 1))),
+        (0, 5) => Some(((0, 8, 10), (8, 8, 1))),
+        _ => None,
     }
 }
 
@@ -2238,6 +2376,46 @@ mod tests {
         );
         assert_eq!(catenary_reference_sprite_id(PYLON_SPRITE_BASE + 1), 5661);
         assert_eq!(catenary_reference_sprite_id(1011), 1011);
+    }
+
+    #[test]
+    fn catenary_wire_trace_bounds_keep_track_geometry_when_wso_is_shared() {
+        // `WSO_EW_SHORT` se reutiliza para UPPER y LOWER, pero OpenTTD le
+        // asigna dos SpriteBounds distintos en `_rail_catenary_sprite_data`.
+        assert_eq!(
+            catenary_wire_trace_bounds(0, 2),
+            Some(((7, 0, 10), (1, 1, 1)))
+        );
+        assert_eq!(
+            catenary_wire_trace_bounds(0, 3),
+            Some(((15, 8, 10), (3, 3, 1)))
+        );
+        assert_eq!(
+            catenary_wire_trace_bounds(0, 4),
+            Some(((8, 0, 10), (8, 8, 1)))
+        );
+        assert_eq!(
+            catenary_wire_trace_bounds(0, 5),
+            Some(((0, 8, 10), (8, 8, 1)))
+        );
+    }
+
+    #[test]
+    fn catenary_trace_heights_follow_wire_and_pcp_rounding() {
+        use openttdrs_core::SLOPE_NE;
+
+        let wire = CatenaryWireDraw {
+            sprite_id: WIRE_SPRITE_BASE + WSO_X_SHORT,
+            bounds_origin: (0, 7, 10),
+            bounds_extent: (15, 1, 1),
+        };
+        // En NE, el punto (0, 7) y el PCP NE quedan a +8 píxeles. El cable
+        // redondea a 8 y el poste al semiescalón más cercano, también 8.
+        assert_eq!(catenary_wire_world_z_delta(SLOPE_NE, 3, RAIL_TB_X, wire), 8);
+        assert_eq!(
+            catenary_pylon_world_z_delta(SLOPE_NE, 3, RAIL_TB_X, DIAGDIR_NE),
+            8
+        );
     }
 
     #[test]

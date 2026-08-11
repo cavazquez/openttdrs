@@ -32,6 +32,7 @@ pub(crate) enum UiCommandId {
     Help,
     ZoomIn,
     ZoomOut,
+    ToggleZoomMode,
     ExtraViewport,
     Screenshot,
     Cheats,
@@ -66,6 +67,7 @@ impl UiCommandId {
         Self::Help,
         Self::ZoomIn,
         Self::ZoomOut,
+        Self::ToggleZoomMode,
         Self::ExtraViewport,
         Self::Screenshot,
         Self::Cheats,
@@ -100,6 +102,7 @@ impl UiCommandId {
             Self::Help => "help",
             Self::ZoomIn => "zoom_in",
             Self::ZoomOut => "zoom_out",
+            Self::ToggleZoomMode => "toggle_zoom_mode",
             Self::ExtraViewport => "extra_viewport",
             Self::Screenshot => "screenshot",
             Self::Cheats => "cheats",
@@ -229,6 +232,7 @@ fn defaults() -> HashMap<UiCommandId, HotkeyBinding> {
         (C::Help, HotkeyBinding::shift(KeyCode::F12)),
         (C::ZoomIn, HotkeyBinding::plain(KeyCode::Equal)),
         (C::ZoomOut, HotkeyBinding::plain(KeyCode::Minus)),
+        (C::ToggleZoomMode, HotkeyBinding::ctrl_alt(KeyCode::KeyZ)),
         (C::ExtraViewport, HotkeyBinding::ctrl(KeyCode::KeyV)),
         (C::Screenshot, HotkeyBinding::ctrl(KeyCode::KeyS)),
         (C::Cheats, HotkeyBinding::ctrl_alt(KeyCode::KeyC)),
@@ -294,6 +298,7 @@ fn parse_key(key: &str) -> Option<KeyCode> {
         "r" => KeyCode::KeyR,
         "v" => KeyCode::KeyV,
         "s" => KeyCode::KeyS,
+        "z" => KeyCode::KeyZ,
         "=" | "+" => KeyCode::Equal,
         "-" => KeyCode::Minus,
         _ => return None,
@@ -323,6 +328,7 @@ fn key_label(key: KeyCode) -> &'static str {
         KeyCode::KeyR => "R",
         KeyCode::KeyV => "V",
         KeyCode::KeyS => "S",
+        KeyCode::KeyZ => "Z",
         KeyCode::Equal => "+",
         KeyCode::Minus => "−",
         _ => "?",
@@ -465,6 +471,7 @@ pub(crate) fn handle_zoom_hotkeys(
     hotkeys: Res<UiHotkeys>,
     sim: Option<Res<crate::state::SimWorld>>,
     windows: Query<&Window, With<bevy::window::PrimaryWindow>>,
+    mut zoom_mode: Option<ResMut<crate::camera::ZoomMode>>,
     mut cameras: Query<
         &mut Projection,
         (
@@ -473,16 +480,26 @@ pub(crate) fn handle_zoom_hotkeys(
         ),
     >,
 ) {
-    let factor = if hotkeys.fired(UiCommandId::ZoomIn) {
-        Some(0.85)
+    let mode_toggled = if hotkeys.fired(UiCommandId::ToggleZoomMode) {
+        if let Some(mode) = zoom_mode.as_deref_mut() {
+            *mode = (*mode).toggled();
+            true
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+    let zoom_in = if hotkeys.fired(UiCommandId::ZoomIn) {
+        Some(true)
     } else if hotkeys.fired(UiCommandId::ZoomOut) {
-        Some(1.15)
+        Some(false)
     } else {
         None
     };
-    let Some(factor) = factor else {
+    if !mode_toggled && zoom_in.is_none() {
         return;
-    };
+    }
     let Ok(mut projection) = cameras.single_mut() else {
         return;
     };
@@ -497,8 +514,22 @@ pub(crate) fn handle_zoom_hotkeys(
         .iter()
         .next()
         .map_or((1280.0, 720.0), |window| (window.width(), window.height()));
-    orthographic.scale =
-        crate::render::clamp_ortho_scale(orthographic.scale * factor, width, height, large);
+    let mode = zoom_mode
+        .as_deref()
+        .copied()
+        .unwrap_or(crate::camera::ZoomMode::Free);
+
+    if mode_toggled && mode == crate::camera::ZoomMode::Fixed {
+        orthographic.scale =
+            crate::camera::snap_fixed_ortho_scale(orthographic.scale, width, height, large);
+    }
+    if let Some(zoom_in) = zoom_in {
+        orthographic.scale =
+            crate::camera::zoom_step_scale(orthographic.scale, zoom_in, mode, width, height, large);
+    }
+    if mode_toggled {
+        info!("Modo de zoom: {}", mode.label());
+    }
 }
 
 #[cfg(test)]
@@ -527,6 +558,65 @@ mod tests {
         assert_ne!(
             hotkeys.bindings[&UiCommandId::Settings],
             HotkeyBinding::ctrl(KeyCode::F9)
+        );
+    }
+
+    #[test]
+    fn fixed_zoom_mode_hotkey_is_configurable_and_snaps_camera() {
+        assert_eq!(
+            defaults()[&UiCommandId::ToggleZoomMode].label(),
+            "Ctrl+Alt+Z"
+        );
+        assert_eq!(
+            parse_binding("Ctrl+Alt+Z"),
+            Some(HotkeyBinding::ctrl_alt(KeyCode::KeyZ))
+        );
+
+        let mut world = World::new();
+        let mut hotkeys = UiHotkeys::default();
+        hotkeys.fired.insert(UiCommandId::ToggleZoomMode);
+        world.insert_resource(hotkeys);
+        world.insert_resource(crate::camera::ZoomMode::Free);
+        world.spawn((Window::default(), bevy::window::PrimaryWindow));
+        world.spawn((
+            crate::render::PrimaryGameCamera,
+            Projection::Orthographic(OrthographicProjection {
+                scale: 0.78,
+                ..OrthographicProjection::default_2d()
+            }),
+        ));
+
+        world.run_system_once(handle_zoom_hotkeys).unwrap();
+
+        assert_eq!(
+            *world.resource::<crate::camera::ZoomMode>(),
+            crate::camera::ZoomMode::Fixed
+        );
+        let mut cameras =
+            world.query_filtered::<&Projection, With<crate::render::PrimaryGameCamera>>();
+        let Projection::Orthographic(projection) = cameras.single(&world).unwrap() else {
+            panic!("se esperaba cámara ortográfica");
+        };
+        assert_eq!(projection.scale, 1.0);
+    }
+
+    #[test]
+    fn ctrl_alt_z_dispatches_fixed_zoom_toggle() {
+        let mut world = World::new();
+        world.insert_resource(ClientPreferences::default());
+        world.insert_resource(UiHotkeys::default());
+        let mut keyboard = ButtonInput::<KeyCode>::default();
+        keyboard.press(KeyCode::ControlLeft);
+        keyboard.press(KeyCode::AltLeft);
+        keyboard.press(KeyCode::KeyZ);
+        world.insert_resource(keyboard);
+
+        world.run_system_once(dispatch_ui_hotkeys).unwrap();
+
+        assert!(
+            world
+                .resource::<UiHotkeys>()
+                .fired(UiCommandId::ToggleZoomMode)
         );
     }
 

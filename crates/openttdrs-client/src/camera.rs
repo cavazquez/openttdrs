@@ -18,6 +18,13 @@ const PAN_RMB_SCALE: f32 = 1.35;
 const ZOOM_KEY_RATE: f32 = 3.5;
 /// Zoom con rueda: multiplicador por unidad de `scroll.delta.y`.
 const ZOOM_WHEEL_SENS: f32 = 0.23;
+/// Niveles discretos de `ZoomLevel` en OpenTTD, expresados como
+/// [`OrthographicProjection::scale`].
+///
+/// OpenTTD define `In4x`, `In2x`, `Normal`, `Out2x`, `Out4x` y `Out8x`.
+/// En nuestra cámara ortográfica la escala crece al alejarse, de modo que se
+/// corresponden con 0.25, 0.5, 1, 2, 4 y 8 respectivamente.
+const OPENTTD_FIXED_ORTHO_SCALES: [f32; 6] = [0.25, 0.5, 1.0, 2.0, 4.0, 8.0];
 /// Velocidad de aceleración WASD (unidades/s²).
 const WASD_ACCEL: f32 = 2000.0;
 /// Factor de desaceleración por fricción (fracción de velocidad que se pierde por segundo).
@@ -29,6 +36,36 @@ const WASD_MAX_SPEED: f32 = 600.0;
 /// Velocidad de la cámara (inercia WASD).
 #[derive(Resource, Default)]
 pub struct CameraVelocity(pub Vec2);
+
+/// Política de zoom de la cámara principal.
+///
+/// El modo libre conserva el comportamiento continuo previo. El fijo ajusta
+/// el viewport a los niveles discretos que usa OpenTTD y descarta los niveles
+/// de alejamiento que excederían el presupuesto de culling del mapa actual.
+#[derive(Resource, Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum ZoomMode {
+    #[default]
+    Free,
+    Fixed,
+}
+
+impl ZoomMode {
+    #[must_use]
+    pub(crate) const fn toggled(self) -> Self {
+        match self {
+            Self::Free => Self::Fixed,
+            Self::Fixed => Self::Free,
+        }
+    }
+
+    #[must_use]
+    pub(crate) const fn label(self) -> &'static str {
+        match self {
+            Self::Free => "libre",
+            Self::Fixed => "fijo OpenTTD",
+        }
+    }
+}
 
 /// Petición de salto de cámara (p. ej. clic en noticia); scroll suave ~300 ms.
 #[derive(Resource, Default)]
@@ -50,6 +87,7 @@ pub(crate) struct CameraControlPlugin;
 impl Plugin for CameraControlPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<CameraVelocity>()
+            .init_resource::<ZoomMode>()
             .init_resource::<CameraFocusRequest>()
             .add_systems(
                 Update,
@@ -62,6 +100,72 @@ impl Plugin for CameraControlPlugin {
                     .run_if(in_state(ClientScreen::InGame)),
             );
     }
+}
+
+/// Niveles de zoom fijo que siguen siendo seguros para el viewport actual.
+fn available_fixed_zoom_levels(
+    window_width: f32,
+    window_height: f32,
+    large_map_cull: bool,
+) -> &'static [f32] {
+    // `clamp_ortho_scale` conoce tanto el máximo absoluto como el máximo
+    // dinámico del culling isométrico. Ningún nivel mayor puede usarse aquí.
+    let cap = clamp_ortho_scale(20.0, window_width, window_height, large_map_cull);
+    let count = OPENTTD_FIXED_ORTHO_SCALES
+        .iter()
+        .take_while(|&&scale| scale <= cap + 0.000_1)
+        .count()
+        .max(1);
+    &OPENTTD_FIXED_ORTHO_SCALES[..count]
+}
+
+/// Ajusta una escala libre al nivel OpenTTD permitido más cercano.
+#[must_use]
+pub(crate) fn snap_fixed_ortho_scale(
+    scale: f32,
+    window_width: f32,
+    window_height: f32,
+    large_map_cull: bool,
+) -> f32 {
+    let target = clamp_ortho_scale(scale, window_width, window_height, large_map_cull);
+    available_fixed_zoom_levels(window_width, window_height, large_map_cull)
+        .iter()
+        .copied()
+        .min_by(|left, right| (left - target).abs().total_cmp(&(right - target).abs()))
+        .unwrap_or(OPENTTD_FIXED_ORTHO_SCALES[0])
+}
+
+/// Aplica un paso de zoom respetando la política seleccionada.
+///
+/// En modo libre conserva los factores históricos de los botones/atajos. En
+/// modo fijo avanza exactamente un nivel OpenTTD, sin sobrepasar el tope de
+/// alejamiento que mantiene el culling acotado.
+#[must_use]
+pub(crate) fn zoom_step_scale(
+    scale: f32,
+    zoom_in: bool,
+    mode: ZoomMode,
+    window_width: f32,
+    window_height: f32,
+    large_map_cull: bool,
+) -> f32 {
+    if mode == ZoomMode::Free {
+        let factor = if zoom_in { 0.85 } else { 1.15 };
+        return clamp_ortho_scale(scale * factor, window_width, window_height, large_map_cull);
+    }
+
+    let levels = available_fixed_zoom_levels(window_width, window_height, large_map_cull);
+    let snapped = snap_fixed_ortho_scale(scale, window_width, window_height, large_map_cull);
+    let current = levels
+        .iter()
+        .position(|candidate| *candidate == snapped)
+        .unwrap_or(0);
+    let next = if zoom_in {
+        current.saturating_sub(1)
+    } else {
+        (current + 1).min(levels.len() - 1)
+    };
+    levels[next]
 }
 
 fn apply_camera_focus_request(
@@ -101,6 +205,7 @@ pub fn move_camera(
     scroll: Res<AccumulatedMouseScroll>,
     windows: Query<&Window, With<PrimaryWindow>>,
     sim: Res<SimWorld>,
+    zoom_mode: Option<Res<ZoomMode>>,
     mut cam_q: Query<
         (&mut Transform, &mut Projection),
         (With<PrimaryGameCamera>, Without<MapPreviewCamera>),
@@ -113,6 +218,7 @@ pub fn move_camera(
     let Projection::Orthographic(ref mut proj) = *projection else {
         return;
     };
+    let zoom_mode = zoom_mode.map_or(ZoomMode::Free, |mode| *mode);
 
     let (mw, mh) = sim.state.map.dimensions();
     let large_cull = large_map_viewport_cull_enabled(mw, mh);
@@ -166,13 +272,22 @@ pub fn move_camera(
     transform.translation.x += vel.0.x * dt;
     transform.translation.y += vel.0.y * dt;
 
-    // Zoom con teclado
-    let z = ZOOM_KEY_RATE * dt;
-    if kbd.pressed(KeyCode::Equal) || kbd.pressed(KeyCode::NumpadAdd) {
-        proj.scale = clamp_ortho_scale(proj.scale * (1.0 - z), win_w, win_h, large_cull);
-    }
-    if kbd.pressed(KeyCode::Minus) || kbd.pressed(KeyCode::NumpadSubtract) {
-        proj.scale = clamp_ortho_scale(proj.scale * (1.0 + z), win_w, win_h, large_cull);
+    // Zoom con teclado. En modo libre se conserva el ajuste continuo; el
+    // atajo configurable `+`/`-` se atiende también en `handle_zoom_hotkeys`.
+    // En modo fijo ese atajo da un solo paso discreto allí; aquí solo se
+    // mantienen los equivalentes del teclado numérico.
+    if zoom_mode == ZoomMode::Free {
+        let z = ZOOM_KEY_RATE * dt;
+        if kbd.pressed(KeyCode::Equal) || kbd.pressed(KeyCode::NumpadAdd) {
+            proj.scale = clamp_ortho_scale(proj.scale * (1.0 - z), win_w, win_h, large_cull);
+        }
+        if kbd.pressed(KeyCode::Minus) || kbd.pressed(KeyCode::NumpadSubtract) {
+            proj.scale = clamp_ortho_scale(proj.scale * (1.0 + z), win_w, win_h, large_cull);
+        }
+    } else if kbd.just_pressed(KeyCode::NumpadAdd) {
+        proj.scale = zoom_step_scale(proj.scale, true, zoom_mode, win_w, win_h, large_cull);
+    } else if kbd.just_pressed(KeyCode::NumpadSubtract) {
+        proj.scale = zoom_step_scale(proj.scale, false, zoom_mode, win_w, win_h, large_cull);
     }
 
     // Zoom con rueda del ratón hacia la posición del cursor
@@ -192,12 +307,29 @@ pub fn move_camera(
             + cursor_offset_world * proj.scale;
 
         let old_scale = proj.scale;
-        let new_scale = clamp_ortho_scale(
-            old_scale * (1.0 - scroll.delta.y * ZOOM_WHEEL_SENS),
-            window.width(),
-            window.height(),
-            large_cull,
-        );
+        let new_scale = if zoom_mode == ZoomMode::Free {
+            clamp_ortho_scale(
+                old_scale * (1.0 - scroll.delta.y * ZOOM_WHEEL_SENS),
+                window.width(),
+                window.height(),
+                large_cull,
+            )
+        } else {
+            // Una rueda/touchpad puede acumular más de una unidad en un frame.
+            // Cada unidad avanza un nivel, con un límite defensivo de seis
+            // pasos (la cantidad total de niveles OpenTTD).
+            let steps = scroll.delta.y.abs().ceil().clamp(1.0, 6.0) as usize;
+            (0..steps).fold(old_scale, |next, _| {
+                zoom_step_scale(
+                    next,
+                    scroll.delta.y > 0.0,
+                    zoom_mode,
+                    window.width(),
+                    window.height(),
+                    large_cull,
+                )
+            })
+        };
         proj.scale = new_scale;
 
         let new_cam_pos = world_pos - cursor_offset_world * new_scale;
@@ -205,7 +337,11 @@ pub fn move_camera(
         transform.translation.y = new_cam_pos.y;
     } else {
         // Mantener escala dentro del tope si cambió el tamaño de mapa / ventana.
-        proj.scale = clamp_ortho_scale(proj.scale, win_w, win_h, large_cull);
+        proj.scale = if zoom_mode == ZoomMode::Fixed {
+            snap_fixed_ortho_scale(proj.scale, win_w, win_h, large_cull)
+        } else {
+            clamp_ortho_scale(proj.scale, win_w, win_h, large_cull)
+        };
     }
 }
 
@@ -310,6 +446,26 @@ mod tests {
         assert!((zoom_display_magnification(1.0) - 1.0).abs() < 0.001);
         assert!((zoom_display_magnification(0.25) - 4.0).abs() < 0.001);
         assert!((zoom_display_magnification(20.0) - 0.05).abs() < 0.001);
+    }
+
+    #[test]
+    fn fixed_zoom_uses_openttd_levels_and_respects_culling_cap() {
+        assert_eq!(snap_fixed_ortho_scale(0.78, 1280.0, 720.0, false), 1.0);
+        assert_eq!(
+            zoom_step_scale(1.0, true, ZoomMode::Fixed, 1280.0, 720.0, false),
+            0.5
+        );
+        assert_eq!(
+            zoom_step_scale(1.0, false, ZoomMode::Fixed, 1280.0, 720.0, false),
+            2.0
+        );
+
+        // Un mapa con culling a 1280×720 no puede abrir el nivel 4×out:
+        // conserva el último nivel OpenTTD seguro (2×out).
+        assert_eq!(
+            zoom_step_scale(2.0, false, ZoomMode::Fixed, 1280.0, 720.0, true),
+            2.0
+        );
     }
 
     #[test]

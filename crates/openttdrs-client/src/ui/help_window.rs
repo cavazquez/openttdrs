@@ -26,6 +26,9 @@ Atajos de teclado\n\
   F2         Inspector de tile\n\
   F3 / `     Consola / Dev (FPS, comandos)\n\
   Ctrl+Alt+C Cheats (dinero, año, bulldozer, compañía)\n\
+  + / −      Acercar / alejar cámara\n\
+  Ctrl+Alt+Z Alternar zoom libre / fijo (niveles OpenTTD)\n\
+  Ctrl+H     Mostrar / ocultar HUD informativo\n\
   F4         Alternar ruta de guardado JSON\n\
   F5 / F9    Guardar / cargar partida rápida\n\
   Esc        Cerrar ventana superior / cancelar herramienta\n\

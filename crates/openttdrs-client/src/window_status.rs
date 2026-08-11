@@ -5,7 +5,7 @@ use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
 use crate::bevy_app::UpdateSet;
-use crate::camera::zoom_display_magnification;
+use crate::camera::{ZoomMode, zoom_display_magnification};
 use crate::render::{MapPreviewCamera, PrimaryGameCamera};
 use crate::state::{ClientScreen, SimWorld};
 
@@ -31,6 +31,7 @@ pub(crate) struct WindowTitleSync {
     last_deliveries: u64,
     last_indp_n: usize,
     last_fps: u32,
+    last_zoom_mode: ZoomMode,
 }
 
 pub(crate) fn sync_window_title(
@@ -38,6 +39,7 @@ pub(crate) fn sync_window_title(
     diagnostics: Res<DiagnosticsStore>,
     mut windows: Query<&mut Window, With<PrimaryWindow>>,
     cam_q: Query<&Projection, (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
+    zoom_mode: Option<Res<ZoomMode>>,
     mut state: Local<WindowTitleSync>,
 ) {
     let scale = cam_q
@@ -48,6 +50,7 @@ pub(crate) fn sync_window_title(
             _ => None,
         })
         .unwrap_or(1.0);
+    let zoom_mode = zoom_mode.map_or(ZoomMode::Free, |mode| *mode);
 
     let fps = diagnostics
         .get(&FrameTimeDiagnosticsPlugin::FPS)
@@ -70,8 +73,9 @@ pub(crate) fn sync_window_title(
         || deliveries != state.last_deliveries
         || indp_n != state.last_indp_n;
     let fps_changed = fps != state.last_fps;
+    let zoom_mode_changed = zoom_mode != state.last_zoom_mode;
 
-    if !scale_changed && !stats_changed && !fps_changed {
+    if !scale_changed && !stats_changed && !fps_changed && !zoom_mode_changed {
         return;
     }
 
@@ -81,6 +85,7 @@ pub(crate) fn sync_window_title(
     state.last_deliveries = deliveries;
     state.last_indp_n = indp_n;
     state.last_fps = fps;
+    state.last_zoom_mode = zoom_mode;
 
     if let Ok(mut window) = windows.single_mut() {
         let indp_tag = if indp_n > 0 {
@@ -89,8 +94,9 @@ pub(crate) fn sync_window_title(
             String::new()
         };
         window.title = format!(
-            "openttdrs - tick {tick} - cargas {pickups}/{deliveries}{indp_tag} - zoom {:.2}x - {fps} FPS",
+            "openttdrs - tick {tick} - cargas {pickups}/{deliveries}{indp_tag} - zoom {:.2}x ({}) - {fps} FPS",
             zoom_display_magnification(scale),
+            zoom_mode.label(),
         );
     }
 }
@@ -136,6 +142,23 @@ mod tests {
         let mut q = world.query_filtered::<&Window, With<PrimaryWindow>>();
         let title = q.single(world).unwrap().title.clone();
         assert!(title.contains("openttdrs - tick"));
+    }
+
+    #[test]
+    fn sync_window_title_labels_fixed_zoom_mode() {
+        let mut app = window_title_test_app();
+        app.world_mut().insert_resource(ZoomMode::Fixed);
+        app.world_mut().spawn((Window::default(), PrimaryWindow));
+        app.world_mut().spawn((
+            PrimaryGameCamera,
+            Projection::Orthographic(OrthographicProjection::default_2d()),
+        ));
+
+        app.update();
+
+        let world = app.world_mut();
+        let mut q = world.query_filtered::<&Window, With<PrimaryWindow>>();
+        assert!(q.single(world).unwrap().title.contains("fijo OpenTTD"));
     }
 
     #[test]

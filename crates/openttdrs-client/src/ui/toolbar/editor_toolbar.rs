@@ -11,10 +11,8 @@ use openttdrs_core::{
     list_road_types,
 };
 
-use crate::render::{
-    MapPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending, clamp_ortho_scale,
-    large_map_viewport_cull_enabled,
-};
+use crate::camera::{ZoomMode, zoom_step_scale};
+use crate::render::{MapPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending};
 use crate::state::ingame_lifecycle::InGameUi;
 use crate::state::{EditorSession, SimRunState, SimWorld, sim_is_paused, toggle_sim_run_state};
 use crate::ui::audio_settings_window::SoundMusicWindowState;
@@ -1070,12 +1068,14 @@ pub(crate) fn handle_editor_toolbar_control_buttons(
         (With<PrimaryGameCamera>, Without<MapPreviewCamera>),
     >,
     windows: Query<&Window, With<PrimaryWindow>>,
+    zoom_mode: Option<Res<ZoomMode>>,
     mut feedback: ResMut<HudBuildFeedback>,
     time: Res<Time>,
 ) {
     if !editor.active {
         return;
     }
+    let zoom_mode = zoom_mode.map_or(ZoomMode::Free, |mode| *mode);
     for (interaction, action) in &buttons {
         if *interaction != Interaction::Pressed {
             continue;
@@ -1109,18 +1109,20 @@ pub(crate) fn handle_editor_toolbar_control_buttons(
                         .as_ref()
                         .map(|s| s.state.map.dimensions())
                         .unwrap_or((64, 64));
-                    let large_cull = large_map_viewport_cull_enabled(mw, mh);
+                    let large_cull = crate::render::large_map_viewport_cull_enabled(mw, mh);
                     let (win_w, win_h) = windows
                         .iter()
                         .next()
                         .map(|w| (w.width(), w.height()))
                         .unwrap_or((1280.0, 720.0));
-                    let factor = if *action == EditorToolbarAction::ZoomIn {
-                        0.85
-                    } else {
-                        1.15
-                    };
-                    o.scale = clamp_ortho_scale(o.scale * factor, win_w, win_h, large_cull);
+                    o.scale = zoom_step_scale(
+                        o.scale,
+                        *action == EditorToolbarAction::ZoomIn,
+                        zoom_mode,
+                        win_w,
+                        win_h,
+                        large_cull,
+                    );
                 }
             }
             EditorToolbarAction::DateBackward | EditorToolbarAction::DateForward => {

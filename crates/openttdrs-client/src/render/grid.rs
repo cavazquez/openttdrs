@@ -155,6 +155,9 @@ pub(crate) struct TileRenderContext {
     pub(crate) ty: u32,
     pub(crate) coord: TileCoord,
     pub(crate) tile: Option<Tile>,
+    /// Tipo efectivo de `MP_OBJECT`, resuelto desde el pool importado `OBJS`
+    /// cuando existe. `m5` queda disponible como byte crudo del ObjectID.
+    pub(crate) object_type: Option<u16>,
     pub(crate) kind: TileKind,
     pub(crate) info: TileRenderInfo,
     pub(crate) iso_pos: Vec2,
@@ -164,12 +167,14 @@ impl TileRenderContext {
     pub(crate) fn new(map: &Map, grid: &RenderGrid, tx: u32, ty: u32) -> Self {
         let coord = TileCoord::new(tx as i32, ty as i32);
         let tile = map.get(coord);
+        let object_type = map.object_type_at(coord);
         let kind = tile.map_or(TileKind::Grass, |t| t.kind);
         Self {
             tx,
             ty,
             coord,
             tile,
+            object_type,
             kind,
             info: grid.get(tx, ty),
             iso_pos: iso(tx as i32, ty as i32),

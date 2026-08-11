@@ -28,7 +28,10 @@ use serde_json::{Value, json};
 use std::io::{self, Write};
 
 /// Versión del contrato `world-semantic`.
-pub const WORLD_SEMANTIC_SCHEMA_VERSION: u32 = 1;
+///
+/// La v2 añade `details.object_type`: `m5` de `MP_OBJECT` es parte del
+/// `ObjectID` crudo, por lo que el tipo visual debe venir del pool `OBJS`.
+pub const WORLD_SEMANTIC_SCHEMA_VERSION: u32 = 2;
 /// Nombre estable del contrato JSONL.
 pub const WORLD_SEMANTIC_CONTRACT: &str = "world-semantic";
 
@@ -286,7 +289,7 @@ fn semantic_details(map: &Map, coord: TileCoord, tile: Tile, tile_type: u8) -> V
         7 => json!({"family": "void"}),
         8 => industry_details(tile),
         9 => tunnel_bridge_details(map, coord, tile),
-        10 => object_details(tile),
+        10 => object_details(map, coord, tile),
         _ => json!({"family": "unknown"}),
     }
 }
@@ -451,10 +454,11 @@ fn tunnel_bridge_details(map: &Map, coord: TileCoord, tile: Tile) -> Value {
     })
 }
 
-fn object_details(tile: Tile) -> Value {
+fn object_details(map: &Map, coord: TileCoord, tile: Tile) -> Value {
     json!({
         "family": "object",
         "object_id": (u32::from(tile.m2) | (u32::from(tile.m2_hi) << 8)) | (u32::from(tile.m5) << 16),
+        "object_type": map.object_type_at(coord),
         "random": tile.m3,
     })
 }
@@ -491,7 +495,10 @@ fn emitted_tile_count(width: u32, height: u32, region: Option<WorldRawRegion>) -
 #[cfg(test)]
 #[allow(clippy::expect_used)]
 mod tests {
-    use super::{WorldSemanticContext, WorldSemanticMetadata, write_world_semantic_jsonl};
+    use super::{
+        WORLD_SEMANTIC_SCHEMA_VERSION, WorldSemanticContext, WorldSemanticMetadata,
+        write_world_semantic_jsonl,
+    };
     use crate::map::{Map, TileCoord, TileKind};
 
     #[test]
@@ -556,5 +563,42 @@ mod tests {
         assert_eq!(first["index"], 6);
         assert_eq!(first["x"], 2);
         assert_eq!(first["y"], 1);
+    }
+
+    #[test]
+    fn object_row_resolves_pool_type_without_rewriting_raw_m5() {
+        let mut map = Map::new_flat(1, 1, 0);
+        let coord = TileCoord::new(0, 0);
+        let mut tile = map.get(coord).expect("tile");
+        tile.mapt = crate::map::MP_OBJECT_MAPT;
+        tile.m2 = 17;
+        tile.m5 = 0;
+        map.set_tile(coord, tile).expect("set object");
+        map.set_imported_object_types_from_footer(&[(17, 1)]);
+
+        let context = WorldSemanticContext {
+            producer: "openttdrs".to_string(),
+            stage: "sav_map".to_string(),
+            tick: None,
+            climate: None,
+            openttd_commit: String::new(),
+            source_path: String::new(),
+            save_sha256: String::new(),
+            save_version: None,
+            region: None,
+        };
+        let metadata = WorldSemanticMetadata::for_map(&map, &context);
+        let mut out = Vec::new();
+        write_world_semantic_jsonl(&mut out, &metadata, &map).expect("dump");
+        let rows: Vec<serde_json::Value> = std::str::from_utf8(&out)
+            .expect("utf8")
+            .lines()
+            .map(|line| serde_json::from_str(line).expect("json"))
+            .collect();
+
+        assert_eq!(rows[0]["schema_version"], WORLD_SEMANTIC_SCHEMA_VERSION);
+        assert_eq!(rows[1]["raw"]["m5"], 0);
+        assert_eq!(rows[1]["details"]["object_id"], 17);
+        assert_eq!(rows[1]["details"]["object_type"], 1);
     }
 }

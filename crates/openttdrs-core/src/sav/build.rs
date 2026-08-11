@@ -18,7 +18,6 @@ const MP_ROAD: u8 = 2;
 const MP_STATION: u8 = 5;
 const MP_TUNNELBRIDGE: u8 = 9;
 const MP_WATER: u8 = 6;
-const MP_OBJECT: u8 = 10;
 const ROADTYPE_ROAD: u8 = 0;
 const ROADTYPE_TRAM: u8 = 1;
 const INVALID_ROADTYPE: u8 = 63;
@@ -204,8 +203,12 @@ fn indy_pairs_from_array(body: &[u8]) -> Vec<(u16, u8)> {
     out
 }
 
-/// `tile_index → ObjectType` desde el chunk `OBJS` (`CH_TABLE`).
-fn objs_types(chunks: &[RawChunk]) -> Vec<(u32, u8)> {
+/// `ObjectID → ObjectType` desde el pool denso `OBJS` (`CH_TABLE`).
+///
+/// El índice de fila es el `ObjectID` que `GetObjectIndex()` reconstruye desde
+/// `m2 | (m5 << 16)`. `location.tile` sólo identifica el ancla geométrica del
+/// objeto y no debe usarse como clave de la tesela ni sobrescribir `MAP5`.
+fn objs_types(chunks: &[RawChunk]) -> Vec<(u32, u16)> {
     let Some(objs) = find_chunk(chunks, "OBJS") else {
         return Vec::new();
     };
@@ -215,11 +218,10 @@ fn objs_types(chunks: &[RawChunk]) -> Vec<(u32, u8)> {
     parse_table_chunk(&objs.body, false)
         .map(|rows| {
             rows.iter()
-                .filter_map(|(_, record)| {
-                    let tile = record_get(record, "location.tile").and_then(SlValue::as_u64)?;
+                .filter_map(|(object_id, record)| {
                     let ty = record_get(record, "type").and_then(SlValue::as_u64)?;
-                    #[allow(clippy::cast_possible_truncation)]
-                    Some((tile as u32, ty as u8))
+                    let ty = u16::try_from(ty).ok()?;
+                    (ty != u16::MAX).then_some((*object_id, ty))
                 })
                 .collect()
         })
@@ -363,14 +365,6 @@ pub(crate) fn export_ottdmap(chunks: &[RawChunk], version: u16) -> Result<Vec<u8
 
     normalize_old_water_m5(version, mapt, &mut map5);
 
-    // ObjectType visible en m5 para MP_OBJECT (overlay del chunk OBJS).
-    for (tile, ty) in objs_types(chunks) {
-        let i = tile as usize;
-        if i < expected && (mapt[i] >> 4) & 0xF == MP_OBJECT && ty != 0xFF {
-            map5[i] = ty;
-        }
-    }
-
     let mut m8 = build_m8_le(version, mapt, &map8, &m3lo, &m3hi, expected);
     apply_slv_road_types(version, mapt, &map5, &map6, &mut map7, &mut m3hi, &mut m8);
 
@@ -408,6 +402,16 @@ pub(crate) fn export_ottdmap(chunks: &[RawChunk], version: u16) -> Result<Vec<u8
     for (i, t) in &pairs {
         body.extend_from_slice(&i.to_le_bytes());
         body.push(*t);
+    }
+
+    // Footer OBTY: `MAP5` se conserva crudo; el tipo visual pertenece al pool
+    // `OBJS` indexado por `ObjectID`.
+    let object_types = objs_types(chunks);
+    body.extend_from_slice(b"OBTY");
+    body.extend_from_slice(&(object_types.len() as u32).to_le_bytes());
+    for (object_id, object_type) in &object_types {
+        body.extend_from_slice(&object_id.to_le_bytes());
+        body.extend_from_slice(&object_type.to_le_bytes());
     }
 
     // Footer STNN (blob crudo).
@@ -493,6 +497,44 @@ mod tests {
         let body = export_ottdmap(&chunks, 300).expect("export");
         let (_, extras) = crate::Map::from_ottd_binary_with_extras(&body).expect("load");
         assert_eq!(extras.station_xy, vec![(1, 1)]);
+    }
+
+    #[test]
+    fn object_pool_preserves_raw_map5_and_resolves_type_by_object_id() {
+        use super::super::table::tests::build_table_body;
+
+        let w = 64u32;
+        let n = (w * w) as usize;
+        let tile_index = 1usize;
+        let object_id = 17u32;
+        let mut mapt = vec![0u8; n];
+        let mut map2 = vec![0u8; n * 2];
+        let mut records = vec![Vec::new(); object_id as usize];
+        let mut object_record = Vec::new();
+        object_record.extend_from_slice(&(tile_index as u32).to_be_bytes());
+        object_record.extend_from_slice(&1u16.to_be_bytes()); // OBJECT_LIGHTHOUSE
+        records.push(object_record);
+        mapt[tile_index] = crate::map::OTTD_MP_OBJECT << 4;
+        map2[tile_index * 2 + 1] = object_id as u8; // MAP2 del save es big-endian.
+
+        let chunks = vec![
+            maps_table_chunk(w, w),
+            riff(*b"MAPT", mapt),
+            riff(*b"MAP2", map2),
+            RawChunk {
+                name: *b"OBJS",
+                ch_type: CH_TABLE,
+                body: build_table_body(&[(6, "location.tile"), (4, "type")], &records),
+            },
+        ];
+        let body = export_ottdmap(&chunks, 350).expect("export");
+        let (map, extras) = crate::Map::from_ottd_binary_with_extras(&body).expect("load");
+        let coord = crate::TileCoord::new(1, 0);
+        let tile = map.get(coord).expect("object tile");
+
+        assert_eq!(tile.m5, 0, "MAP5 permanece como byte alto del ObjectID");
+        assert_eq!(extras.object_types, Some(vec![(object_id, 1)]));
+        assert_eq!(map.object_type_at(coord), Some(1));
     }
 
     #[test]

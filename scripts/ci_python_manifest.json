@@ -4,6 +4,7 @@
     "scripts/verify_parse_sav_reference.py",
     "scripts/verify_parse_sav_water_m5.py",
     "scripts/verify_parse_sav_rail_m5.py",
+    "scripts/verify_parse_sav_object_m5.py",
     "scripts/validate_sav_export.py"
   ],
   "py_compile": [
@@ -12,6 +13,7 @@
     "scripts/emit_parse_sav_golden.py",
     "scripts/verify_parse_sav_water_m5.py",
     "scripts/verify_parse_sav_rail_m5.py",
+    "scripts/verify_parse_sav_object_m5.py",
     "scripts/validate_sav_export.py",
     "scripts/gen_tnbp_fixture_ottdmap.py",
     "scripts/audit_sp3_assets.py",

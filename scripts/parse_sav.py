@@ -18,12 +18,13 @@ Formato de salida (.ottdmap) versionado:
   W*H bytes   – m2_hi (byte alto MAP2; reserva PBS / bits altos de `m2()`)
   W*H bytes   – m3 (M3LO)
   W*H bytes   – m3hi (chunk M3HI = **`m4()`** en `map_sl.cpp`, p.ej. estados de señal)
-  W*H bytes   – m5 (road bits, TrackBits 0-5, industry gfx bits 0-7, ObjectType en MP_OBJECT)
+  W*H bytes   – m5 (road bits, TrackBits 0-5, industry gfx bits 0-7; byte alto de ObjectID en MP_OBJECT)
   W*H bytes   – m6 (bit 2 = bit 8 del gfx industria; StationType en MP_STATION)
   W*H bytes   – m7 (MAP7)
   W*H*2 bytes – m8 LE (HouseID en MP_HOUSE; en MP_ROAD bits altos incluyen RoadType tram)
   Footers opcionales (magic ASCII + u32 LE length + payload):
     INDP  – industrias: count × (u16 industry_index, u8 industry_type)
+    OBTY  – objetos: count × (u32 object_id, u16 object_type); MAP5 queda crudo
     STNN  – blob crudo del chunk STNN (CH_TABLE o CH_ARRAY según versión del save)
     TNBP  – blob de chunk TNBP / TBUS / TUNN si existe (CH_ARRAY o CH_TABLE; p. ej. JGR `TUNN` es tabla Sl)
     STXY  – teselas MP_STATION: u32 count + count × (u16 x, u16 y) en coordenadas de mapa
@@ -302,6 +303,14 @@ def build_indp_footer(pairs: list[tuple[int, int]]) -> bytes:
     return b"".join(parts)
 
 
+def build_obty_footer(pairs: dict[int, int]) -> bytes:
+    """Pool ``ObjectID → ObjectType`` sin modificar el plano crudo MAP5."""
+    parts = [b"OBTY", struct.pack("<I", len(pairs))]
+    for object_id, object_type in pairs.items():
+        parts.append(struct.pack("<IH", object_id & 0xFFFFFFFF, object_type & 0xFFFF))
+    return b"".join(parts)
+
+
 def build_stxy_footer(tile_types: bytes, dim_x: int, dim_y: int) -> bytes:
     """Lista teselas con nibble alto MAPT = MP_STATION (5), orden i = y*dim_x + x."""
     expected = dim_x * dim_y
@@ -332,13 +341,21 @@ def parse_objs_table(data: bytes, offset: int) -> tuple[dict[int, int], int]:
         h += name_len
         fields.append((fname, ftype))
 
+    # OBJS es un pool denso: el índice de registro es ObjectID. OpenTTD arma
+    # ese ID desde MAP2 | (MAP5 << 16); ``location.tile`` sólo es el ancla del
+    # objeto y no debe utilizarse para reescribir MAP5.
     result: dict[int, int] = {}
+    object_id = 0
     while True:
         n, offset = read_gamma(data, offset)
         if n == 0:
             break
         elem = data[offset : offset + n - 1]
         offset += n - 1
+
+        if not elem:
+            object_id += 1
+            continue
 
         ep = 0
         vals: dict[str, int] = {}
@@ -362,10 +379,10 @@ def parse_objs_table(data: bytes, offset: int) -> tuple[dict[int, int], int]:
             else:
                 break
 
-        tile = vals.get("location.tile")
         obj_type = vals.get("type")
-        if tile is not None and obj_type is not None:
-            result[tile] = obj_type
+        if obj_type is not None and obj_type != 0xFFFF:
+            result[object_id] = obj_type
+        object_id += 1
 
     return result, offset
 
@@ -487,8 +504,8 @@ def export_ottdmap_from_chunks(chunks: dict, version: int) -> bytes:
     map7 = chunks.get("MAP7", b"")
     raw_obj_types = chunks.get("OBJS", {})
     # Algunas variantes de save codifican OBJS fuera de la tabla que entiende
-    # ``parse_objs_table``. En ese caso se conserva MAP5 en vez de tratar el
-    # blob crudo como un mapeo de tesela → tipo y abortar la exportación.
+    # ``parse_objs_table``. En ese caso se conserva MAP5 y no se emite una
+    # asociación inventada de ObjectID → tipo.
     obj_types: dict[int, int] = raw_obj_types if isinstance(raw_obj_types, dict) else {}
 
     if len(maph) < expected:
@@ -510,21 +527,20 @@ def export_ottdmap_from_chunks(chunks: dict, version: int) -> bytes:
     if len(map7) < expected:
         map7 = map7 + b"\x00" * (expected - len(map7))
 
-    m5_list = bytearray(map5[:expected])
-    if obj_types:
-        for i in range(expected):
-            if (mapt[i] >> 4) & 0xF == 10:
-                t = obj_types.get(i, 0xFF)
-                m5_list[i] = t if t != 0xFF else m5_list[i]
-    m5_data = bytes(m5_list)
+    # MAP5 es autoritativo y forma parte del ObjectID de MP_OBJECT. El tipo se
+    # transporta por OBTY para no perder paridad byte a byte con OpenTTD.
+    m5_data = map5[:expected]
 
     m8_buf = bytearray(
         build_m8_le_for_save(version, mapt[:expected], map8, m3lo, m3hi, expected)
     )
     m3_export = m3lo[:expected]
     if len(map2) >= 2 * expected:
-        m2_lo = bytes(map2[i * 2] for i in range(expected))
-        m2_hi_plane = bytes(map2[i * 2 + 1] for i in range(expected))
+        # MAP2 en el save es `SLE_UINT16` big-endian. El `.ottdmap` guarda
+        # planos bajo/alto, por lo que no se pueden copiar en el orden físico
+        # del chunk: [alto, bajo] → [m2, m2_hi].
+        m2_lo = bytes(map2[i * 2 + 1] for i in range(expected))
+        m2_hi_plane = bytes(map2[i * 2] for i in range(expected))
     else:
         m2_lo = (map2[:expected] if len(map2) >= expected else map2 + b"\x00" * expected)[:expected]
         m2_hi_plane = b"\x00" * expected
@@ -571,6 +587,7 @@ def export_ottdmap_from_chunks(chunks: dict, version: int) -> bytes:
     if "INDY" in chunks and isinstance(chunks["INDY"], list):
         indp_pairs = chunks["INDY"]  # type: ignore[assignment]
     body += build_indp_footer(indp_pairs)
+    body += build_obty_footer(obj_types)
 
     stnn_blob = chunks.get("STNN", b"")
     if isinstance(stnn_blob, (bytes, bytearray)) and stnn_blob:
@@ -796,13 +813,7 @@ def main() -> None:
     raw_obj_types = chunks.get("OBJS", {})
     obj_types: dict[int, int] = raw_obj_types if isinstance(raw_obj_types, dict) else {}
     if obj_types:
-        n_fixed = sum(
-            1
-            for i in range(expected)
-            if (mapt[i] >> 4) & 0xF == 10 and obj_types.get(i, 0xFF) != 0xFF
-        )
-        if n_fixed:
-            print(f"  Objetos con tipo resuelto desde OBJS: {n_fixed}")
+        print(f"  OBTY: {len(obj_types)} ObjectID → ObjectType desde OBJS")
 
     map2 = chunks.get("MAP2", b"")
     if len(map2) >= 2 * expected:

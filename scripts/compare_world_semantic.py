@@ -67,6 +67,7 @@ VARIANT_PATHS = (
     "details.tree_type",
     "details.house_type",
     "details.object_id",
+    "details.object_type",
 )
 
 ENTITY_PATHS = {

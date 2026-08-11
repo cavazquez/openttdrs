@@ -53,7 +53,7 @@ pub enum TileKind {
 ///
 /// | Campo | Fuente     | Uso principal |
 /// |-------|-----------|---------------|
-/// | `m5`  | MAP5 (`MAP5`)  | Road bits (0-3), TrackBits (0-5), gfx industria (0-7), ObjectType (MP_OBJECT) |
+/// | `m5`  | MAP5 (`MAP5`)  | Road bits (0-3), TrackBits (0-5), gfx industria (0-7), byte alto de `ObjectID` (MP_OBJECT) |
 /// | `m1`  | MAP1 (chunk `MAPO`)  | Owner/índice de industria |
 /// | `m6`  | MAP6 (`MAPE`)  | bit 2 = bit 8 del gfx de industria (9 bits totales); StationType en MP_STATION |
 /// | `m8`  | MAP8 (`MAP8`)  | HouseID en MP_HOUSE (12 bits); RoadType tram en bits 6–11 en MP_ROAD (`road_map.h`) |
@@ -65,7 +65,8 @@ pub enum TileKind {
 ///
 /// Para `MP_RAILWAY`, TrackBits ocupa **bits 0-5** de m5 (6 bits); bits 6-7 son `RailTileType`.
 /// Para `MP_INDUSTRY`, gfx = `m5 | ((m6 >> 2) & 1) << 8` (9 bits).
-/// Para `MP_OBJECT`, m5 contiene el `ObjectType` (precomputado por `parse_sav.py` desde OBJS).
+/// Para `MP_OBJECT`, m5 contiene el byte alto del `ObjectID`; el tipo se resuelve
+/// desde el pool `OBJS`/footer `OBTY` mediante [`super::Map::object_type_at`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Tile {
     pub height: u8,

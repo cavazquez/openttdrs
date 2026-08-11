@@ -4,7 +4,7 @@ use openttdrs_core::{
     CLEAR_GROUND_DESERT, CLEAR_GROUND_GRASS, CLEAR_GROUND_ROCKY, CLEAR_GROUND_ROUGH,
     CLEAR_GROUND_SNOW, Climate, OBJECT_TYPE_LIGHTHOUSE, OBJECT_TYPE_OWNED_LAND,
     OBJECT_TYPE_STATUE_COMPANY, OBJECT_TYPE_TRANSMITTER, ObjectSpecDef, effective_clear_ground,
-    industry_uses_water_ground, is_newgrf_object_type,
+    industry_uses_water_ground, is_newgrf_object_type_id,
 };
 
 use super::{
@@ -583,9 +583,11 @@ pub(crate) fn spawn_generic_land_tile(
     let tileh = ctx.info.tileh;
     let ottd_type = ctx.tile.map_or(0u8, |t| (t.mapt >> 4) & 0xF);
     let tile_m5 = ctx.tile.map_or(0u8, |t| t.m5);
+    let object_type = ctx.object_type.unwrap_or(u16::from(tile_m5));
 
-    // MP_CLEAR (0): distinguir subtipo de suelo via m5 bits 2-4
-    // MP_OBJECT (10): grass de base + overlay de objeto
+    // MP_CLEAR (0): distinguir subtipo de suelo vía m5 bits 2-4.
+    // MP_OBJECT (10): el suelo depende del ObjectType resuelto desde OBJS;
+    // m5 sólo es el byte alto crudo de ObjectID en una partida importada.
     let grass_img = || grass_density_image(assets, clear_grass_density(tile_m5), tileh);
     let full_grass_img = || sloped_or_flat_image(tileh, &assets.grass, &assets.grass_slopes);
     let rough_img = || sloped_or_flat_image(tileh, &assets.rough, &assets.rough_slopes);
@@ -624,6 +626,27 @@ pub(crate) fn spawn_generic_land_tile(
             CLEAR_GROUND_ROUGH => (rough_img(), Color::srgb(0.78, 0.73, 0.58)),
             CLEAR_GROUND_ROCKY => (rocky_img(), Color::WHITE),
             _ => (rough_img(), Color::srgb(0.78, 0.73, 0.58)),
+        },
+        // `table/object_land.h`: transmisor/faro usan 2/3 de césped, la
+        // estatua concreto y el terreno comprado suelo desnudo. Antes esta
+        // rama caía en césped pleno y escondía el error de interpretar MAP5
+        // como ObjectType.
+        TileKind::Grass if ottd_type == 10 => match object_type {
+            t if t == u16::from(OBJECT_TYPE_TRANSMITTER)
+                || t == u16::from(OBJECT_TYPE_LIGHTHOUSE) =>
+            {
+                (grass_density_image(assets, 2, tileh), Color::WHITE)
+            }
+            t if t == u16::from(OBJECT_TYPE_STATUE_COMPANY) => {
+                (assets.object_concrete.clone(), Color::WHITE)
+            }
+            t if t == u16::from(OBJECT_TYPE_OWNED_LAND) => {
+                (grass_density_image(assets, 0, tileh), Color::WHITE)
+            }
+            // `DrawNewObjectTile` decide su propio ground Action3. Mientras
+            // no exista una vista NewGRF decodificable, mantener una base
+            // explícita y no usar el ObjectID almacenado en MAP5 como tipo.
+            _ => (full_grass_img(), Color::WHITE),
         },
         TileKind::Grass => match clear_ground {
             CLEAR_GROUND_SNOW => (snow_img(), snow_color),
@@ -677,6 +700,21 @@ pub(crate) fn spawn_generic_land_tile(
     };
     spawn_ground_sprite(commands, &image, color, ctx, slope_half_ground);
 
+    // Los dos hitos originales requieren terreno plano y `DrawTile_Object`
+    // siempre les asigna `SPR_FLAT_2_THIRD_GRASS_TILE`. Registrar ambas
+    // capas permite que `world-draw` detecte una regresión en la resolución
+    // ObjectID -> ObjectType, aun cuando MAP5 sea el byte alto del ID y no el
+    // tipo (como en Kale).
+    if ottd_type == 10
+        && matches!(
+            object_type,
+            t if t == u16::from(OBJECT_TYPE_TRANSMITTER)
+                || t == u16::from(OBJECT_TYPE_LIGHTHOUSE)
+        )
+    {
+        WorldDrawTrace::record_sprite("object-landmark-ground", "ground", 3962, false);
+    }
+
     // MP_OBJECT: faro/transmisor vanilla o Action3 NewGRF `views[i % len]` por tesela.
     // ObjectType de OpenTTD: 0=Transmisor, 1=Faro; ≥5 = NewGRF.
     if ottd_type == 10 {
@@ -685,13 +723,54 @@ pub(crate) fn spawn_generic_land_tile(
             return;
         }
         let tint = sprite_color(TransparencyOption::Structures);
+        let landmark_trace = match object_type {
+            t if t == u16::from(OBJECT_TYPE_TRANSMITTER) => Some((
+                2601,
+                TraceSpriteBounds {
+                    ox: 7,
+                    oy: 7,
+                    oz: 0,
+                    ex: 2,
+                    ey: 2,
+                    ez: 70,
+                },
+            )),
+            t if t == u16::from(OBJECT_TYPE_LIGHTHOUSE) => Some((
+                2602,
+                TraceSpriteBounds {
+                    ox: 4,
+                    oy: 4,
+                    oz: 0,
+                    ex: 7,
+                    ey: 7,
+                    ez: 61,
+                },
+            )),
+            _ => None,
+        };
+        if let Some((sprite_id, bounds)) = landmark_trace {
+            WorldDrawTrace::record_sprite_with_palette_and_geometry(
+                "object-landmark",
+                "sortable",
+                sprite_id,
+                0,
+                false,
+                (0, 0, 0),
+                0,
+                Some(bounds),
+            );
+        }
         let view_idx = ctx
             .tile
-            .and_then(|t| openttdrs_core::object_view_index_for_tile(&t, object_catalog))
+            .and_then(|t| {
+                openttdrs_core::object_view_index_for_type(&t, object_type, object_catalog)
+            })
             .unwrap_or(0);
-        if is_newgrf_object_type(tile_m5)
-            && let Some(def) =
-                crate::render::object_newgrf::newgrf_object_def_for_m5(object_catalog, tile_m5)
+        if is_newgrf_object_type_id(object_type)
+            && let Some(def) = crate::render::object_newgrf::newgrf_object_def_for_type(
+                object_catalog,
+                object_type,
+            )
             && let Some(view) = def.view(view_idx)
             && let (Some(cache), Some(images)) = (object_sprites.as_mut(), images.as_mut())
         {
@@ -720,11 +799,17 @@ pub(crate) fn spawn_generic_land_tile(
             return;
         }
         // Offsets NFO OpenGFX2 32ez (`ogfx21_base_32ez.nfo` sprites 2601/2602).
-        let (obj_img, obj_xrel, obj_yrel, obj_w, obj_h) = match tile_m5 {
-            OBJECT_TYPE_TRANSMITTER => (Some(assets.transmitter.clone()), -26.0, -80.0, 54.0, 94.0),
-            OBJECT_TYPE_LIGHTHOUSE => (Some(assets.lighthouse.clone()), -9.0, -52.0, 21.0, 64.0),
-            OBJECT_TYPE_OWNED_LAND => (Some(assets.bought_land.clone()), -16.0, -40.0, 32.0, 48.0),
-            OBJECT_TYPE_STATUE_COMPANY => (
+        let (obj_img, obj_xrel, obj_yrel, obj_w, obj_h) = match object_type {
+            t if t == u16::from(OBJECT_TYPE_TRANSMITTER) => {
+                (Some(assets.transmitter.clone()), -26.0, -80.0, 54.0, 94.0)
+            }
+            t if t == u16::from(OBJECT_TYPE_LIGHTHOUSE) => {
+                (Some(assets.lighthouse.clone()), -9.0, -52.0, 21.0, 64.0)
+            }
+            t if t == u16::from(OBJECT_TYPE_OWNED_LAND) => {
+                (Some(assets.bought_land.clone()), -16.0, -40.0, 32.0, 48.0)
+            }
+            t if t == u16::from(OBJECT_TYPE_STATUE_COMPANY) => (
                 Some(assets.company_statue.clone()),
                 -30.0,
                 -42.0,
@@ -734,9 +819,9 @@ pub(crate) fn spawn_generic_land_tile(
             _ => (None, 0.0, 0.0, 0.0, 0.0),
         };
         if let Some(img) = obj_img {
-            let anim = tile_m5 == OBJECT_TYPE_LIGHTHOUSE
+            let anim = object_type == u16::from(OBJECT_TYPE_LIGHTHOUSE)
                 && assets.lighthouse_anim_frames.contains_key(&2602);
-            let mut sprite = if tile_m5 == OBJECT_TYPE_STATUE_COMPANY {
+            let mut sprite = if object_type == u16::from(OBJECT_TYPE_STATUE_COMPANY) {
                 sprite_from_atlas_or_company_colour(
                     company,
                     owner_colour,
@@ -750,7 +835,7 @@ pub(crate) fn spawn_generic_land_tile(
                 img.sprite()
             };
             // Owned land no es "structure" de faro/antena; no tintar si es bought land.
-            if tile_m5 != OBJECT_TYPE_OWNED_LAND {
+            if object_type != u16::from(OBJECT_TYPE_OWNED_LAND) {
                 sprite.color = tint;
             }
             let pos3 = overlay_pos(

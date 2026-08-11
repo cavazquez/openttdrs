@@ -324,6 +324,7 @@ mod logging_coverage_tests {
             stnn_blob: Some(vec![1, 2, 3]),
             tnbp_blob: Some(vec![9, 9, 9, 9]),
             station_xy: vec![(1, 0)],
+            ..OttdmapExtras::default()
         };
         log_detection_summary(&state, true, Some(&extras));
     }

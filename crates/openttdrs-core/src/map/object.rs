@@ -24,18 +24,68 @@ pub const fn is_map_object_tile(mapt: u8) -> bool {
     (mapt >> 4) & 0xF == OTTD_MP_OBJECT
 }
 
-/// `true` si `m5` es un id de objeto `NewGRF` (`≥` [`NEW_OBJECT_OFFSET`]).
+/// `true` si un tipo de objeto es un id `NewGRF` (`≥` [`NEW_OBJECT_OFFSET`]).
 #[must_use]
-pub const fn is_newgrf_object_type(m5: u8) -> bool {
-    (m5 as u16) >= NEW_OBJECT_OFFSET
+pub const fn is_newgrf_object_type_id(object_type: u16) -> bool {
+    object_type >= NEW_OBJECT_OFFSET
 }
 
+/// Compatibilidad para mapas locales históricos que guardan el tipo en `m5`.
+#[must_use]
+pub const fn is_newgrf_object_type(m5: u8) -> bool {
+    is_newgrf_object_type_id(m5 as u16)
+}
+
+/// `ObjectID` crudo de una tesela `MP_OBJECT`.
+///
+/// OpenTTD lo forma como `m2() | (m5() << 16)`. El tipo visual se consulta en
+/// el pool `OBJS`, no en `m5`.
+#[must_use]
+pub const fn object_id_from_tile(tile: &Tile) -> Option<u32> {
+    if is_map_object_tile(tile.mapt) {
+        Some((tile.m2 as u32) | ((tile.m2_hi as u32) << 8) | ((tile.m5 as u32) << 16))
+    } else {
+        None
+    }
+}
+
+/// Tipo codificado localmente en `m5`.
+///
+/// Los mapas creados por este proyecto conservaron este layout antes de que el
+/// importador recibiera el pool `OBJS`. Para una partida OpenTTD importada usar
+/// [`Map::object_type_at`], que consulta el `ObjectID` y el footer `OBTY`.
 #[must_use]
 pub const fn object_type_from_tile(tile: &Tile) -> Option<u8> {
     if is_map_object_tile(tile.mapt) {
         Some(tile.m5)
     } else {
         None
+    }
+}
+
+impl Map {
+    /// Instala el pool `ObjectID → ObjectType` leído del footer `OBTY`.
+    ///
+    /// Incluso un pool vacío es significativo: desactiva el fallback histórico
+    /// que interpreta `m5` como tipo y por tanto preserva la semántica cruda de
+    /// un save OpenTTD moderno.
+    pub(crate) fn set_imported_object_types_from_footer(&mut self, types: &[(u32, u16)]) {
+        self.imported_object_types = Some(types.iter().copied().collect());
+    }
+
+    /// Tipo visual efectivo de una tesela `MP_OBJECT`.
+    ///
+    /// En imports modernos usa el pool `OBJS` transportado por `OBTY`; para
+    /// mapas locales o exports históricos sin ese footer mantiene el formato
+    /// previo donde el tipo estaba en `m5`.
+    #[must_use]
+    pub fn object_type_at(&self, at: TileCoord) -> Option<u16> {
+        let tile = self.get(at)?;
+        let object_id = object_id_from_tile(&tile)?;
+        match &self.imported_object_types {
+            Some(types) => types.get(&object_id).copied(),
+            None => Some(u16::from(tile.m5)),
+        }
     }
 }
 
@@ -56,9 +106,14 @@ pub const fn is_owned_land_tile(tile: &Tile) -> bool {
 /// Dimensiones W×H del objeto (vanilla = 1×1).
 #[must_use]
 pub fn object_type_dims(object_type: u8, catalog: &[ObjectSpecDef]) -> (u8, u8) {
-    if is_newgrf_object_type(object_type) {
-        object_spec_def(catalog, u16::from(object_type))
-            .map_or((1, 1), |d| (d.size_width(), d.size_height()))
+    object_type_dims_id(u16::from(object_type), catalog)
+}
+
+/// Dimensiones W×H de un `ObjectType` completo (incluye IDs NewGRF > 255).
+#[must_use]
+pub fn object_type_dims_id(object_type: u16, catalog: &[ObjectSpecDef]) -> (u8, u8) {
+    if is_newgrf_object_type_id(object_type) {
+        object_spec_def(catalog, object_type).map_or((1, 1), |d| (d.size_width(), d.size_height()))
     } else {
         (1, 1)
     }
@@ -98,9 +153,9 @@ pub fn object_footprint_at(
     catalog: &[ObjectSpecDef],
 ) -> Option<Vec<TileCoord>> {
     let tile = map.get(at)?;
-    let object_type = object_type_from_tile(&tile)?;
+    let object_type = map.object_type_at(at)?;
     let origin = object_origin_from_tile(&tile, at)?;
-    let (w, h) = object_type_dims(object_type, catalog);
+    let (w, h) = object_type_dims_id(object_type, catalog);
     Some(object_footprint_tiles(origin, w, h))
 }
 
@@ -108,7 +163,18 @@ pub fn object_footprint_at(
 #[must_use]
 pub fn object_view_index_for_tile(tile: &Tile, catalog: &[ObjectSpecDef]) -> Option<usize> {
     let object_type = object_type_from_tile(tile)?;
-    let (w, _) = object_type_dims(object_type, catalog);
+    object_view_index_for_type(tile, u16::from(object_type), catalog)
+}
+
+/// Índice de vista Action3 para una tesela y su `ObjectType` ya resuelto.
+#[must_use]
+pub fn object_view_index_for_type(
+    tile: &Tile,
+    object_type: u16,
+    catalog: &[ObjectSpecDef],
+) -> Option<usize> {
+    object_id_from_tile(tile)?;
+    let (w, _) = object_type_dims_id(object_type, catalog);
     let (dx, dy) = decode_object_tile_offset(tile.m2);
     Some(object_footprint_tile_index(dx, dy, w))
 }
@@ -126,7 +192,7 @@ mod tests {
     use crate::sav;
 
     #[test]
-    fn dual_fixture_overlays_transmitter_and_lighthouse_types() {
+    fn dual_fixture_resolves_transmitter_and_lighthouse_from_object_pool() {
         let raw = std::fs::read(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/tests/fixtures/train_dual_pbs_curve_15_3.sav"
@@ -141,8 +207,16 @@ mod tests {
             .map
             .get(TileCoord::new(60, 55))
             .expect("lighthouse tile");
-        assert_eq!(object_type_from_tile(&tx), Some(OBJECT_TYPE_TRANSMITTER));
-        assert_eq!(object_type_from_tile(&lh), Some(OBJECT_TYPE_LIGHTHOUSE));
+        assert_eq!(
+            state.map.object_type_at(TileCoord::new(47, 33)),
+            Some(u16::from(OBJECT_TYPE_TRANSMITTER))
+        );
+        assert_eq!(
+            state.map.object_type_at(TileCoord::new(60, 55)),
+            Some(u16::from(OBJECT_TYPE_LIGHTHOUSE))
+        );
+        assert!(object_id_from_tile(&tx).is_some());
+        assert!(object_id_from_tile(&lh).is_some());
     }
 
     #[test]

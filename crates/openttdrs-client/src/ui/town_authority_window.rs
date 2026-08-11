@@ -412,11 +412,8 @@ fn count_nearby_town_tiles(
                     state.map.get_kind(pos) == Some(openttdrs_core::TileKind::Road)
                 }
                 TileCountKind::CompanyStatue => {
-                    state
-                        .map
-                        .get(pos)
-                        .and_then(|tile| openttdrs_core::map::object_type_from_tile(&tile))
-                        == Some(openttdrs_core::OBJECT_TYPE_STATUE_COMPANY)
+                    state.map.object_type_at(pos)
+                        == Some(u16::from(openttdrs_core::OBJECT_TYPE_STATUE_COMPANY))
                 }
             }
         })

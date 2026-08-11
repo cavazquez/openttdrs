@@ -6,9 +6,10 @@ es explicar por tesela y por decisión de dibujo por qué OpenTTD y `openttdrs`
 eligen un resultado distinto.
 
 La foto del lote es el [checkpoint de pausa](../checkpoints/2026-08-09-parity-oracle-pause.md).
-El `main` estable quedó en `5b0023b`; el trabajo experimental está en
-`checkpoint/pause-2026-08-09-parity-oracle` hasta que se separe en cambios
-revisables y vuelva a pasar toda la suite.
+Es un registro histórico: `main` continuó incorporando cambios revisables
+después de ese punto. El estado de una corrección se establece siempre con los
+exports y comparadores de este documento, no por asumir que aquel checkpoint
+sigue describiendo el árbol actual.
 
 ## Alcance y repositorios
 
@@ -72,25 +73,54 @@ Este inventario describe trabajo efectuado, no una afirmación de que todos los
 casos estén resueltos. El checkpoint mezcla renderer, simulación, assets y
 SAV; debe dividirse antes de una integración amplia.
 
-## Evidencia obtenida hasta la pausa
+## Evidencia y revalidación
 
-En la partida de estrés se obtuvo una exportación completa de 65.536 teselas
-con coincidencia exacta de `world-raw` y `world-semantic`. Eso reduce mucho la
-probabilidad de que los artefactos tratados sean una deserialización general
-del mapa.
+En la partida de estrés se obtuvo inicialmente una exportación completa de
+65.536 teselas con coincidencia exacta de `world-raw` y `world-semantic`. Eso
+reduce mucho la probabilidad de que los artefactos tratados sean una
+deserialización general del mapa, pero no sustituye volver a correr el contrato
+cuando cambie el importador.
 
 La referencia `world-draw` produjo 157.154 comandos C++ y el candidato 65.534
 selecciones instrumentadas. Para las familias cubiertas —árboles, vía,
-puentes, catenaria, túneles y depósito naval— las selecciones candidatas se
-encontraron en OpenTTD. En la región de control `171,109..171,110`, las siete
-selecciones Rust estuvieron contenidas entre diez comandos de referencia; las
-tres restantes son familias aún no instrumentadas en Rust.
+puentes, catenaria, túneles, depósito naval e hitos vanilla— las selecciones
+candidatas se encontraron en OpenTTD. En la región de control `171,109..171,110`,
+las siete selecciones Rust estuvieron contenidas entre diez comandos de
+referencia; las tres restantes son familias aún no instrumentadas en Rust.
 
 Esto **no** es igualdad total de sprites ni de píxeles. El comparador usa
 *selección contenida*: falla si Rust elige un sprite inexistente, cae en
 fallback, cambia tesela/paleta o geometría instrumentada. Los comandos C++ sin
 familia Rust equivalente se informan, pero todavía no hacen fallar. Sólo cuando
 todos los spawners estén cubiertos podrá usarse `--strict-reference` como gate.
+
+### Regresión `MP_OBJECT` descubierta al revalidar
+
+Una comparación completa posterior de `Kale_TitleGame.sav` encontró dos
+divergencias raw, en `(14,141)` y `(245,240)`: OpenTTD conservaba `MAP5 = 0`
+y el candidato escribía `1`. Ambas teselas eran `MP_OBJECT`; la alteración
+cambiaba también el `ObjectID` y por ende el sprite de objeto elegido.
+
+El origen era doble: se usaba `location.tile` como clave del pool `OBJS` y se
+sobrescribía `MAP5` con `ObjectType`. OpenTTD hace lo contrario: forma
+`ObjectID = m2 | (m5 << 16)` y consulta el tipo visual en el pool por ese ID.
+La corrección conserva `MAP5`, transporta `ObjectID → ObjectType` en el footer
+`OBTY` y añade `details.object_type` a `world-semantic` v2. El mismo análisis
+descubrió que el conversor Python separaba `MAP2` big-endian en orden inverso;
+se corrigió junto con la regresión.
+
+El guardarraíl permanente es
+`scripts/verify_parse_sav_object_m5.py`, incluido en el manifiesto de CI. Usa
+un fixture con transmisor y faro, exige igualdad de `MAP5` y `ObjectID`, y
+comprueba que cada objeto se resuelva desde `OBTY`. Así un arreglo visual no
+puede volver a ocultar una mutación de bytes del save.
+
+La revalidación final de `Kale_TitleGame.sav` volvió a comparar las 65.536
+teselas: `world-raw` y `world-semantic` terminaron sin diferencias. La
+traza `world-draw` incorpora además los hitos vanilla afectados por esta
+regresión; el fixture controlado compara transmisor `(47,33)` y faro `(60,55)`
+con `--strict-reference`, y en ambos casos coinciden terreno, sprite,
+geometría y orden de los dos comandos de OpenTTD.
 
 ## Procedimiento para investigar un caso nuevo
 

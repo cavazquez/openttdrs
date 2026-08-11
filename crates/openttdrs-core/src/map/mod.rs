@@ -66,9 +66,10 @@ pub use level_crossing::is_road_level_crossing;
 pub use object::{
     MP_OBJECT_MAPT, OBJECT_TYPE_LIGHTHOUSE, OBJECT_TYPE_OWNED_LAND, OBJECT_TYPE_STATUE_COMPANY,
     OBJECT_TYPE_TRANSMITTER, OTTD_MP_OBJECT, is_map_object_tile, is_newgrf_object_type,
-    is_owned_land_tile, object_footprint_at, object_footprint_tiles, object_origin_from_tile,
-    object_spec_id_from_tile, object_tile_offset_byte, object_type_dims, object_type_from_tile,
-    object_view_index_for_tile,
+    is_newgrf_object_type_id, is_owned_land_tile, object_footprint_at, object_footprint_tiles,
+    object_id_from_tile, object_origin_from_tile, object_spec_id_from_tile,
+    object_tile_offset_byte, object_type_dims, object_type_dims_id, object_type_from_tile,
+    object_view_index_for_tile, object_view_index_for_type,
 };
 pub use rail_bits::{
     OTTD_MP_RAILWAY, RAIL_TB_CROSS, RAIL_TB_HORZ, RAIL_TB_LEFT, RAIL_TB_LOWER, RAIL_TB_RIGHT,
@@ -133,6 +134,13 @@ pub struct Map {
     /// crudo de `MAPH`.
     #[serde(default)]
     legacy_zero_water_height_repair: bool,
+    /// Tipos de objetos importados desde el pool `OBJS` de OpenTTD.
+    ///
+    /// `m5` en un `MP_OBJECT` forma parte del `ObjectID`; sólo los mapas
+    /// locales heredados codifican el tipo visual directamente ahí. El `Option`
+    /// distingue ese formato viejo de un import moderno con un pool vacío.
+    #[serde(default)]
+    imported_object_types: Option<std::collections::BTreeMap<u32, u16>>,
 }
 
 impl Map {
@@ -166,6 +174,7 @@ impl Map {
                 count
             ],
             legacy_zero_water_height_repair: false,
+            imported_object_types: None,
         }
     }
 

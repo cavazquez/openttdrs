@@ -24,6 +24,7 @@ FORBIDDEN_INLINE = (
     "verify_parse_sav_reference.py",
     "verify_parse_sav_water_m5.py",
     "verify_parse_sav_rail_m5.py",
+    "verify_parse_sav_object_m5.py",
     "validate_sav_export.py",
     "python3 -m py_compile",
     "test_openttd_reference_manifest.py",

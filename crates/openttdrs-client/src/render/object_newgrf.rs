@@ -37,16 +37,16 @@ impl NewGrfObjectSpriteCache {
     }
 }
 
-/// Spec con vistas NewGRF para un `m5` de objeto.
+/// Spec con vistas NewGRF para un `ObjectType` ya resuelto.
 #[must_use]
-pub(crate) fn newgrf_object_def_for_m5(
+pub(crate) fn newgrf_object_def_for_type(
     catalog: &[ObjectSpecDef],
-    m5: u8,
+    object_type: u16,
 ) -> Option<&ObjectSpecDef> {
-    if !openttdrs_core::is_newgrf_object_type(m5) {
+    if !openttdrs_core::is_newgrf_object_type_id(object_type) {
         return None;
     }
-    let def = openttdrs_core::object_spec_def(catalog, u16::from(m5))?;
+    let def = openttdrs_core::object_spec_def(catalog, object_type)?;
     if def.has_views() { Some(def) } else { None }
 }
 

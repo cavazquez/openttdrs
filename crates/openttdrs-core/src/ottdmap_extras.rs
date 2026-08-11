@@ -1,4 +1,4 @@
-//! Footers opcionales tras los planos densos de `.ottdmap` v5 (`INDP`, `STNN`, `TNBP`).
+//! Footers opcionales tras los planos densos de `.ottdmap` v5 (`INDP`, `OBTY`, `STNN`, `TNBP`).
 //!
 //! Ver [`crate::tnbp_decode`] para interpretar el blob `TNBP` (tabla Sl / segmentos gamma).
 use crate::map::{OTTDMAP_HEADER_LEN_VERSIONED, OTTDMAP_MAGIC_VERSIONED};
@@ -24,6 +24,13 @@ pub fn dense_payload_end(data: &[u8], n: usize) -> usize {
 pub struct OttdmapExtras {
     /// Pares `(industry_index, industry_type)` del footer `INDP`.
     pub industry_types: Vec<(u16, u8)>,
+    /// Pool autoritativo `(ObjectID, ObjectType)` del footer `OBTY`.
+    ///
+    /// `None` significa que el export es anterior al footer y conserva la
+    /// compatibilidad histórica que codificaba el tipo directamente en `m5`.
+    /// `Some(vec![])` representa un save moderno sin objetos: desde ese punto
+    /// `MAP5` vuelve a ser siempre el byte alto crudo de `ObjectID`.
+    pub object_types: Option<Vec<(u32, u16)>>,
     pub stnn_blob: Option<Vec<u8>>,
     pub tnbp_blob: Option<Vec<u8>>,
     /// Teselas `MP_STATION` listadas por `parse_sav.py` (footer `STXY`); consumible sin decodificar `STNN`.
@@ -60,6 +67,33 @@ impl OttdmapExtras {
                         out.industry_types.push((idx, typ));
                         off += 3;
                     }
+                }
+                b"OBTY" => {
+                    if off + 4 > data.len() {
+                        break;
+                    }
+                    let count = usize::try_from(u32::from_le_bytes(
+                        data[off..off + 4].try_into().unwrap_or([0; 4]),
+                    ))
+                    .unwrap_or(0);
+                    off += 4;
+                    let need = count.saturating_mul(6);
+                    if off + need > data.len() {
+                        break;
+                    }
+                    let mut object_types = Vec::with_capacity(count.min(65_536));
+                    for _ in 0..count {
+                        let object_id = u32::from_le_bytes([
+                            data[off],
+                            data[off + 1],
+                            data[off + 2],
+                            data[off + 3],
+                        ]);
+                        let object_type = u16::from_le_bytes([data[off + 4], data[off + 5]]);
+                        object_types.push((object_id, object_type));
+                        off += 6;
+                    }
+                    out.object_types = Some(object_types);
                 }
                 b"STNN" | b"TNBP" => {
                     if off + 4 > data.len() {
@@ -231,6 +265,33 @@ mod tests {
         assert_eq!(end, 16 + 12 * n);
         let ex = OttdmapExtras::parse_footers(&v, end);
         assert_eq!(ex.station_xy, vec![(0, 0)]);
+    }
+
+    #[test]
+    fn parses_obty_footer_without_rewriting_map5() {
+        let w = 1u32;
+        let h = 1u32;
+        let n = 1usize;
+        let mut v = Vec::new();
+        push_map1_header(&mut v, w, h);
+        v.push(0xA0); // MAPT: MP_OBJECT
+        v.push(0); // MAPH
+        v.push(0); // m1
+        v.push(17); // m2 low: ObjectID 17
+        v.push(0); // m2 high
+        v.push(0); // m3
+        v.push(0); // m3hi
+        v.push(0); // m5: byte alto crudo de ObjectID
+        v.push(0); // m6
+        v.push(0); // m7
+        v.extend_from_slice(&0u16.to_le_bytes()); // m8
+        v.extend_from_slice(b"OBTY");
+        v.extend_from_slice(&1u32.to_le_bytes());
+        v.extend_from_slice(&17u32.to_le_bytes());
+        v.extend_from_slice(&1u16.to_le_bytes()); // lighthouse
+
+        let ex = OttdmapExtras::parse_footers(&v, dense_payload_end(&v, n));
+        assert_eq!(ex.object_types, Some(vec![(17, 1)]));
     }
 
     #[test]

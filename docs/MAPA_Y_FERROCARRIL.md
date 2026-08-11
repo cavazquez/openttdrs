@@ -261,7 +261,7 @@ Tras el header siguen secciones de `W×H` bytes/palabras en orden `i = y*width +
 |-------------|-------------|---------|--------------------------------------------------------|
 | `tile_type` | W×H bytes   | v1+     | Byte MAPT original (nibble alto = TileType)            |
 | `height`    | W×H bytes   | v1+     | Altura base de la tesela (0–255)                       |
-| `m5`        | W×H bytes   | v1+     | Ver secciones 5–11; modificado para MP_OBJECT (v3+)    |
+| `m5`        | W×H bytes   | v1+     | Ver secciones 5–11; se conserva crudo (en MP_OBJECT, alto de ObjectID) |
 | `m1`        | W×H bytes   | v2+     | Byte MAP1/MAPO: owner, índice de industria             |
 | `m6`        | W×H bytes   | v3+     | Byte MAP6/MAPE: bit 2 = bit 8 del gfx industria; StationType |
 | `m8`        | W×H×2 bytes | v3+     | Bytes MAP8 LE: HouseID en MP_HOUSE (u16)               |
@@ -272,7 +272,7 @@ Tras el header siguen secciones de `W×H` bytes/palabras en orden `i = y*width +
 
 #### Footers opcionales (v5+, tras los planos denses)
 
-Orden: **INDP** (si hay datos de industrias), **STNN** (si hay blob), **TNBP** (si hay blob de túnel/puente), **STXY** (lista de teselas `MP_STATION` derivada del mapa en `parse_sav.py`). Cada footer es: 4 bytes ASCII de magic + `u32` LE `len` + `len` bytes de payload (excepto **STXY**, donde `len` es el número de pares y el cuerpo es `len` × 4 bytes: `u16` x, `u16` y).
+Orden: **INDP** (índice/tipo de industria), **OBTY** (pool `ObjectID → ObjectType`), **STNN** (si hay blob), **TNBP** (si hay blob de túnel/puente), **STXY** (lista de teselas `MP_STATION` derivada del mapa en `parse_sav.py`). Cada footer es: 4 bytes ASCII de magic + `u32` LE `count` + registros de tamaño fijo, salvo **STNN/TNBP**, donde el entero es el largo del blob. **OBTY** contiene `count × (u32 object_id, u16 object_type)`; **STXY**, `count × (u16 x, u16 y)`.
 
 | Magic | Contenido |
 |-------|-----------|
@@ -329,8 +329,7 @@ En OpenTTD, en teselas `MP_WATER`, el byte `MAP5` (`m5`) codifica el subtipo en 
 | 3               | `Depot`       | Depósito naval                    |
 
 **Export `.ottdmap`:** `scripts/parse_sav.py` copia el chunk `MAP5` del save **tal
-cual** a la sección `m5` del binario (salvo la sustitución de `MP_OBJECT` con datos
-`OBJS`). En saves normales de OpenTTD, las teselas de costa suelen llevar **`Coast`
+cual** a la sección `m5` del binario. En saves normales de OpenTTD, las teselas de costa suelen llevar **`Coast`
 (`0x10` en bits 4–7, es decir `m5 & 0xF0 == 0x10`)** cuando el juego las guardó
 correctamente.
 
@@ -653,13 +652,15 @@ real (qué clase de objeto es: transmisor, faro, HQ…) está almacenado en el c
 Si se lee `m5` directamente para MP_OBJECT se obtiene un valor incorrecto que no corresponde
 a ningún tipo semántico útil.
 
-#### Estructura del chunk OBJS (CH_TABLE / CH_SPARSE_TABLE)
+#### Estructura del chunk OBJS
 
-`OBJS` es un array disperso donde cada elemento representa un objeto colocado en el mapa.
-Los campos relevantes parseados en `parse_sav.py`:
+`OBJS` es un pool indexado: el índice de fila densa es el `ObjectID`. Cada
+objeto puede abarcar varias teselas; `location.tile` sólo indica su ancla, no la
+clave con la que se recupera desde una tesela. Los campos relevantes son:
 
 | Campo            | Tipo  | Significado                              |
 |------------------|-------|------------------------------------------|
+| índice de fila    | U32   | `ObjectID` usado por `m2 | (m5 << 16)`   |
 | `location.tile`  | U32   | Índice lineal del tile base del objeto   |
 | `type`           | U16   | ObjectType (0 = Transmisor, 1 = Faro…)  |
 
@@ -671,25 +672,19 @@ Los campos relevantes parseados en `parse_sav.py`:
 | 1          | `OBJECT_LIGHTHOUSE`  (faro)   |
 | 2+         | HQ de empresa, estatuas, etc. |
 
-#### Cómo parse_sav.py resuelve el ObjectType
+#### Cómo se transporta el ObjectType
 
 ```python
 ## parse_sav.py
-obj_types: dict[int, int] = chunks.get('OBJS', {})  # {tile_index: object_type}
-
-m5_list = bytearray(map5[:expected])
-if obj_types:
-    for i in range(expected):
-        if (mapt[i] >> 4) & 0xF == 10:  # MP_OBJECT
-            t = obj_types.get(i, 0xFF)
-            if t != 0xFF:
-                m5_list[i] = t  # sobrescribir con ObjectType real
-m5_data = bytes(m5_list)
+obj_types: dict[int, int] = chunks.get('OBJS', {})  # {object_id: object_type}
+m5_data = map5[:expected]  # byte alto del ObjectID, sin alterar
+body += build_obty_footer(obj_types)
 ```
 
-Tras este paso, `m5` en el `.ottdmap` contiene el `ObjectType` real (no el `ObjectID`)
-para los tiles `MP_OBJECT`. Así el renderer puede distinguir transmisor de faro
-sin acceder al chunk OBJS en tiempo de ejecución.
+Al cargar, `Map::object_type_at(coord)` arma el `ObjectID` con `m2` y `m5` y
+consulta el footer **OBTY**. Así el renderer distingue transmisor, faro y
+objetos NewGRF sin perder paridad byte a byte del mapa original. Los exports
+históricos sin **OBTY** conservan el fallback legado donde `m5` llevaba el tipo.
 
 ---
 
@@ -1199,7 +1194,7 @@ pendiente pero válidas tras nivelar.
 #### Buy land (T3.4 / T4.1)
 
 Comando **`BuyLand`** / **`BuyLandArea`** en `command/buy_land.rs`. Marca la tesela como
-objeto de mapa (`mapt = MP_OBJECT`, `m5 = OBJECT_TYPE_OWNED_LAND` = 2), sprite
+objeto de mapa (`mapt = MP_OBJECT`, `m5 = OBJECT_TYPE_OWNED_LAND` = 3), sprite
 `object_bought_land.png` en el cliente.
 
 | Regla | Comportamiento |
@@ -1224,7 +1219,7 @@ No impide construir encima (paridad parcial con OpenTTD; reserva de terreno comp
 | Archivo | Rol |
 |---------|-----|
 | `scripts/descargar_graficos.sh` | Descarga OpenGFX y extrae sprites a `assets/opengfx/tiles/`; soporta `ogfx1_base00.png` y `ogfx1_base01.png` |
-| `scripts/parse_sav.py` | `.sav` → `.ottdmap` v3; resuelve OBJS para MP_OBJECT |
+| `scripts/parse_sav.py` | `.sav` → `.ottdmap`; conserva MAP5 y exporta `OBTY` para MP_OBJECT |
 | `crates/openttdrs-core/src/map.rs` | `Tile`, `Map`, `from_ottd_binary` |
 | `crates/openttdrs-client/src/iso.rs` | Proyección isométrica, `compute_tileh`, `SLOPE_HALF_H` |
 | `crates/openttdrs-client/src/sprites.rs` | `HOUSE_DRAW_DATA` (128 casas), `INDUSTRY_GFX_DATA`, road/rail bits |

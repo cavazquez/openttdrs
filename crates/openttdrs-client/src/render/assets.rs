@@ -23,6 +23,8 @@ pub(crate) struct WorldAssets {
     /// Alias del snow/desert completo para consumidores que no tienen densidad.
     pub(crate) snow: AtlasSprite,
     pub(crate) bought_land: AtlasSprite,
+    /// `SPR_CONCRETE_GROUND`, base de la estatua de compañía (`MP_OBJECT`).
+    pub(crate) object_concrete: AtlasSprite,
     /// `DrawClearLandTile`: densidad 0..3 × `SlopeToSpriteOffset` 0..18.
     /// También lo usa `DrawTile_Trees` para `TreeGround::Grass`.
     pub(crate) grass_density: [[AtlasSprite; 19]; 4],
@@ -183,6 +185,7 @@ impl WorldAssets {
         });
         let snow = snow_desert[3][0].clone();
         let bought_land = atlas.get("object_bought_land.png");
+        let object_concrete = atlas.get("object_concrete.png");
         // `SlopeToSpriteOffset` puede devolver 15..18 para las cuatro
         // pendientes empinadas. El vector se indexa por offset - 1.
         let grass_slopes = (1u8..=18)
@@ -647,6 +650,7 @@ impl WorldAssets {
             rocky,
             snow,
             bought_land,
+            object_concrete,
             grass_density,
             grass_slopes,
             rough_slopes,

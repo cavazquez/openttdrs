@@ -191,12 +191,12 @@ impl Map {
     /// - W×H bytes: m2_hi (MAP2 byte alto)
     /// - W×H bytes: m3 (M3LO; tram track bits 0–3 en carretera normal)
     /// - W×H bytes: m3hi (M3HI)
-    /// - W×H bytes: m5 (road bits, TrackBits, gfx industria bajo, ObjectType)
+    /// - W×H bytes: m5 (road bits, TrackBits, gfx industria bajo; en `MP_OBJECT`, byte alto del `ObjectID`)
     /// - W×H bytes: m6 (bit 2 = bit 8 del gfx industria; StationType)
     /// - W×H bytes: m7 (MAP7)
     /// - W×H×2 bytes: m8 LE (HouseID en MP_HOUSE; RoadType tram en bits 6–11 en MP_ROAD)
     ///
-    /// Tras los planos denses pueden seguir footers (`INDP`, `STNN`, `TNBP`, `STXY`); `from_ottd_binary` los ignora.
+    /// Tras los planos denses pueden seguir footers (`INDP`, `OBTY`, `STNN`, `TNBP`, `STXY`); `from_ottd_binary` los ignora.
     ///
     /// La correspondencia de tipos `OpenTTD` → `TileKind`:
     ///
@@ -255,6 +255,7 @@ impl Map {
             // de compatibilidad para ese origen; `sav::load` lo desactiva al
             // reconstruir un save real de OpenTTD.
             legacy_zero_water_height_repair: true,
+            imported_object_types: None,
         })
     }
 
@@ -263,10 +264,13 @@ impl Map {
     pub fn from_ottd_binary_with_extras(
         data: &[u8],
     ) -> Result<(Self, crate::ottdmap_extras::OttdmapExtras), MapError> {
-        let map = Self::from_ottd_binary(data)?;
+        let mut map = Self::from_ottd_binary(data)?;
         let n = (map.width as usize).saturating_mul(map.height as usize);
         let dense_end = crate::ottdmap_extras::dense_payload_end(data, n);
         let extras = crate::ottdmap_extras::OttdmapExtras::parse_footers(data, dense_end);
+        if let Some(object_types) = extras.object_types.as_deref() {
+            map.set_imported_object_types_from_footer(object_types);
+        }
         Ok((map, extras))
     }
 }

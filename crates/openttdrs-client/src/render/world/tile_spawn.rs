@@ -28,10 +28,8 @@ fn owner_colour_for_tile(
     kind: TileKind,
 ) -> Option<CompanyColour> {
     if kind == TileKind::Grass
-        && sim.state.map.get(coord).is_some_and(|tile| {
-            openttdrs_core::map::object_type_from_tile(&tile)
-                == Some(openttdrs_core::OBJECT_TYPE_STATUE_COMPANY)
-        })
+        && sim.state.map.object_type_at(coord)
+            == Some(u16::from(openttdrs_core::OBJECT_TYPE_STATUE_COMPANY))
     {
         let owner = sim.state.map.get(coord).map_or(0, |tile| tile.m1);
         return sim

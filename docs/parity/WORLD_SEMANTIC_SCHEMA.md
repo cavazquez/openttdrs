@@ -1,4 +1,4 @@
-# Contrato `world-semantic` v1
+# Contrato `world-semantic` v2
 
 `world-semantic` es el segundo nivel de diagnóstico de una partida `.sav`.
 `world-raw` responde si los bytes MAP* llegaron iguales; este contrato responde
@@ -14,7 +14,7 @@ motor para una rampa de túnel/puente.
 ```json
 {
   "kind": "metadata",
-  "schema_version": 1,
+  "schema_version": 2,
   "contract": "world-semantic",
   "producer": "openttd",
   "stage": "after_load_game",
@@ -83,12 +83,20 @@ absolutos e incluye límites inclusivos `min_x`, `min_y`, `max_x`, `max_y`.
 | `water` | `water_tile_type`, `water_class`, eje/parte/dirección de depósito naval, esclusa |
 | `industry` | ID, terminada, etapa de construcción, `gfx` limpio |
 | `tunnel_bridge` | túnel/puente, transporte, dirección, `other_end`, tipo de puente, vía/carretera/tranvía y reserva |
-| `object` | `object_id`, `random` |
+| `object` | `object_id`, `object_type` resuelto desde `OBJS`/`OBTY`, `random` |
 | `void` / `unknown` | `family` |
 
 Los campos que no aplican se escriben como `null`, no se omiten. Eso permite
 una comparación de estructura estable y evidencia si un fallback interpretó la
 familia equivocada.
+
+## Cambio v2
+
+La v2 añade `details.object_type`. En un `MP_OBJECT`, `raw.m5` no es el tipo:
+es el byte alto del `ObjectID` (`m2 | m5 << 16`). El exportador Rust conserva
+ese byte sin modificar y transporta el pool `ObjectID → ObjectType` en el
+footer `OBTY`; el oráculo C++ consulta el mismo pool de OpenTTD. Así una
+discrepancia de tipo de objeto se detecta antes de llegar a sus sprites.
 
 ## Topología intencionalmente comparada
 

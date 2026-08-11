@@ -16,7 +16,7 @@ COMPARE = ROOT / "scripts" / "compare_world_semantic.py"
 def metadata(producer: str, stage: str) -> dict[str, object]:
     return {
         "kind": "metadata",
-        "schema_version": 1,
+        "schema_version": 2,
         "contract": "world-semantic",
         "producer": producer,
         "stage": stage,

@@ -78,6 +78,10 @@ Por eso una diferencia puede señalar directamente casos como:
 - `m2`/`m8`: índice de estación, tile de aeropuerto, house ID o road/tram;
 - `height`: cimiento, pendiente o el orden vertical de capas.
 
+En `MP_OBJECT`, `m2 | (m5 << 16)` es el `ObjectID` crudo. El `ObjectType`
+visible no se deduce de `m5`: proviene del pool `OBJS` y se compara en la capa
+`world-semantic` como `details.object_type`.
+
 ## Flujo reproducible
 
 Primero integrar y compilar la referencia. El checkout oficial fijado a 15.3

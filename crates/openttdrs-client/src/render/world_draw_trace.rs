@@ -524,7 +524,8 @@ impl WorldDrawTrace {
                     "catenary",
                     "tunnel",
                     "bridge",
-                    "ship_depot"
+                    "ship_depot",
+                    "object_landmarks"
                 ],
             })
             .to_string(),

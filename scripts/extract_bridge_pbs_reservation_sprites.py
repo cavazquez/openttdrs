@@ -9,7 +9,10 @@ cuando una rampa ferroviaria tiene una reserva PBS visible:
   - 5409..5412: maglev.
 
 Están en el GRF *extra* (no en el NFO base donde vive el resto de la vía),
-por eso deben extraerse antes de regenerar el atlas.
+por eso deben extraerse antes de regenerar el atlas. En OpenGFX2 32bpp
+`grfcodec` conserva los IDs runtime 5401..5412; en OpenGFX 8bpp clásico el
+equivalente se declara como Action5 tipo 0x0F y sus filas NFO tienen IDs
+locales. Ambos formatos se normalizan a los mismos nombres de tile.
 
 Uso::
 
@@ -38,6 +41,11 @@ ENTRY_RE = re.compile(
     r"^\s*(?:(?P<sprite_id>\d+)|\|)\s+(?P<sheet>\S+)\s+"
     r"(?P<bpp>8bpp|32bpp)\s+(?P<x>\d+)\s+(?P<y>\d+)\s+"
     r"(?P<w>\d+)\s+(?P<h>\d+)\s+-?\d+\s+-?\d+"
+)
+# Action5 0x0F = `SPR_TRACKS_FOR_SLOPES_BASE`, que comienza en 5401 en
+# OpenTTD 15.3. El offset se omite en el GRF clásico cuando vale cero.
+A5_TRACKS_FOR_SLOPES_RE = re.compile(
+    r"^\s*\d+\s+\*\s+\d+\s+05 (?:0F|8F) FF ([0-9A-F]{2}) 00(?: FF ([0-9A-F]{2}) 00)?"
 )
 
 
@@ -88,6 +96,48 @@ def parse_rects(nfo_path: Path, bpp: str) -> dict[int, tuple[str, int, int, int,
     return rects
 
 
+def parse_action5_slope_rects(
+    nfo_path: Path, bpp: str
+) -> dict[int, tuple[str, int, int, int, int]]:
+    """Lee Action5 0x0F y lo indexa con los IDs runtime 5401..5412.
+
+    El NFO 8bpp de OpenGFX no numera estas filas con el ID global al que las
+    instala OpenTTD. La cabecera Action5 sí conserva el contrato: 12 sprites
+    desde offset cero, en orden rail/mono/maglev y cuatro direcciones cada uno.
+    """
+    lines = nfo_path.read_text(encoding="utf-8", errors="replace").splitlines()
+    rects: dict[int, tuple[str, int, int, int, int]] = {}
+    for i, line in enumerate(lines):
+        header = A5_TRACKS_FOR_SLOPES_RE.match(line)
+        if header is None:
+            continue
+        count = int(header.group(1), 16)
+        offset = int(header.group(2), 16) if header.group(2) is not None else 0
+        got = 0
+        for row_line in lines[i + 1 :]:
+            row = ENTRY_RE.match(row_line)
+            if row is not None:
+                if row["bpp"] == bpp and got < count:
+                    slot = offset + got
+                    if slot < len(SPRITE_IDS):
+                        rects[SPRITE_IDS[slot]] = (
+                            Path(row["sheet"]).name,
+                            int(row["x"]),
+                            int(row["y"]),
+                            int(row["w"]),
+                            int(row["h"]),
+                        )
+                    got += 1
+                    if got == count:
+                        break
+                continue
+            if got and re.search(r"\*\s+\d+\s+05 ", row_line):
+                break
+        if got:
+            return rects
+    return rects
+
+
 def load_rgba(path: Path) -> Image.Image:
     """Convierte el color transparente de grfcodec en alfa real."""
     image = Image.open(path)
@@ -122,6 +172,11 @@ def main() -> int:
 
     sprites_dir, nfo_path, bpp = source
     rects = parse_rects(nfo_path, bpp)
+    if any(sid not in rects for sid in SPRITE_IDS):
+        # OpenGFX clásico declara el bloque con Action5 0x0F; sus IDs NFO no
+        # coinciden con los IDs runtime. OpenGFX2 32bpp llega por la ruta
+        # directa anterior y conserva sus metadatos históricos sin cambios.
+        rects.update(parse_action5_slope_rects(nfo_path, bpp))
     missing = [sid for sid in SPRITE_IDS if sid not in rects]
     if missing:
         print(

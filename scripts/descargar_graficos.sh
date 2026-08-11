@@ -320,15 +320,42 @@ fi
 # Limpieza de layout legado: tars sueltos dentro de assets/.
 rm -f "${DEST}/opengfx-${VERSION}.tar" "${DEST}/opengfx2_32ez.tar"
 
+need_base_decode=0
 if [[ ! -f "${SPRITES_DIR}/${SHEET_PREFIX}00.png" && ! -f "${SPRITES_DIR}/${SHEET_PREFIX}00.pcx" && ! -f "${SPRITES_DIR}/${SHEET_PREFIX}00.32.png" ]]; then
+  need_base_decode=1
+fi
+
+# En el set clásico varios bloques que el renderer necesita (campos, cercas,
+# GUI y Action5) viven en `ogfxe_extra.grf`, no en el GRF base. Hasta ahora
+# `--8bpp` sólo decodificaba el base y el pipeline se interrumpía después al
+# buscar, por ejemplo, `SPR_FARMLAND_BARE` (4126). Mantener ambos NFO juntos
+# también hace que el perfil visual coincida con el OpenGFX que carga el
+# oráculo de OpenTTD.
+need_extra_decode=0
+if [[ "${GRAPHICS_MODE}" == "8bpp" && ! -f "${SPRITES_DIR}/ogfxe_extra.nfo" ]]; then
+  need_extra_decode=1
+fi
+
+if (( need_base_decode || need_extra_decode )); then
   if command -v grfcodec &>/dev/null; then
-    echo ""
-    echo "Decodificando $(basename "${BASE_GRF}") con grfcodec (salida PNG)..."
     mkdir -p "${SPRITES_DIR}"
-    if [[ "${GRAPHICS_MODE}" == "32bpp" ]]; then
-      grfcodec -d -o png "${BASE_GRF}" "${SPRITES_DIR}/" 2>/dev/null || true
-    else
-      grfcodec -d -o png -p 2 "${BASE_GRF}" "${SPRITES_DIR}/" 2>/dev/null || true
+    if (( need_base_decode )); then
+      echo ""
+      echo "Decodificando $(basename "${BASE_GRF}") con grfcodec (salida PNG)..."
+      if [[ "${GRAPHICS_MODE}" == "32bpp" ]]; then
+        grfcodec -d -o png "${BASE_GRF}" "${SPRITES_DIR}/" 2>/dev/null || true
+      else
+        grfcodec -d -o png -p 2 "${BASE_GRF}" "${SPRITES_DIR}/" 2>/dev/null || true
+      fi
+    fi
+    if (( need_extra_decode )); then
+      extra_grf="${BASE_DIR}/ogfxe_extra.grf"
+      if [[ ! -f "${extra_grf}" ]]; then
+        echo "ERROR: falta ${extra_grf}; OpenGFX 8bpp está incompleto." >&2
+        exit 1
+      fi
+      echo "Decodificando $(basename "${extra_grf}") con grfcodec (Action5/GUI 8bpp)..."
+      grfcodec -d -o png -p 2 "${extra_grf}" "${SPRITES_DIR}/" 2>/dev/null || true
     fi
   else
     echo ""
@@ -1386,16 +1413,8 @@ if [[ "${GRAPHICS_MODE}" == "32bpp" ]]; then
 fi
 python3 "$(dirname "$0")/gen_toolbar_rail_icons.py"
 python3 "$(dirname "$0")/gen_toolbar_water_icons.py"
-# Hoja fuente de los controles Action5 de ventana. El NFO decodificado no
-# conserva para éstos la numeración runtime `SPR_OPENTTD_BASE + offset`.
-UI_SOURCE_DIR="${DEST}/.ui-source"
-UI_SOURCE_SHEET="${UI_SOURCE_DIR}/icons_8px_32bpp.png"
-if [[ ! -s "${UI_SOURCE_SHEET}" ]]; then
-  mkdir -p "${UI_SOURCE_DIR}"
-  curl -fL \
-    "https://media.githubusercontent.com/media/OpenTTD/OpenGFX2/${OPENGFX2_TAG}/graphics/icons/1/icons_8px_32bpp.png" \
-    -o "${UI_SOURCE_SHEET}"
-fi
+# Los controles Action5 de ventana se resuelven desde el NFO activo por
+# crop_ui_terraform_icons.py. No descargar una hoja 32bpp ajena al perfil 8bpp.
 # Tiles in-world de esclusas (Action5 canals / SPR_LOCK_*) antes del atlas.
 python3 "$(dirname "$0")/gen_water_lock_tiles.py"
 python3 "$(dirname "$0")/crop_ui_terraform_icons.py"
@@ -1431,8 +1450,35 @@ python3 "$(dirname "$0")/gen_road_stop_gfx_data.py"
 python3 "$(dirname "$0")/extract_aircraft_vehicle_sprites.py"
 python3 "$(dirname "$0")/gen_oil_refinery_anim_frames.py"
 
+# Los recortes 8bpp de scripts auxiliares pueden recuperar el colorkey magenta
+# como RGB opaco. Normalizar el catálogo completo antes de deduplicar y atlas.
+if [[ "${GRAPHICS_MODE}" == "8bpp" ]]; then
+  python3 "$(dirname "$0")/sanitize_tile_colorkey.py"
+fi
+
 # Texture atlas: empaqueta tiles/*.png en páginas + metadata Rust (batching).
 python3 "$(dirname "$0")/gen_tile_atlas.py"
+
+# Varios generadores emiten tablas Rust deliberadamente compactas. Formatearlas
+# al final mantiene `cargo fmt --check` reproducible después de alternar
+# OpenGFX 8bpp/32bpp, sin tocar a mano outputs que provienen de los NFO.
+if command -v rustfmt >/dev/null 2>&1; then
+  GENERATED_RUST=(
+    "${ROOT}/crates/openttdrs-client/src/sprites/bridge_sprites_generated.rs"
+    "${ROOT}/crates/openttdrs-client/src/sprites/bridge_structure_palette_data_generated.rs"
+    "${ROOT}/crates/openttdrs-client/src/sprites/effect_vehicle_draw_data_generated.rs"
+    "${ROOT}/crates/openttdrs-client/src/sprites/field_draw_data_generated.rs"
+    "${ROOT}/crates/openttdrs-client/src/sprites/rail_depot_gfx_data_generated.rs"
+    "${ROOT}/crates/openttdrs-client/src/sprites/rail_station_draw_data_generated.rs"
+    "${ROOT}/crates/openttdrs-client/src/sprites/road_stop_gfx_data_generated.rs"
+    "${ROOT}/crates/openttdrs-client/src/sprites/shore_draw_data_generated.rs"
+    "${ROOT}/crates/openttdrs-client/src/sprites/tile_atlas_generated.rs"
+    "${ROOT}/crates/openttdrs-client/src/sprites/tunnel_draw_data_generated.rs"
+  )
+  rustfmt --edition 2024 "${GENERATED_RUST[@]}"
+else
+  echo "Aviso: rustfmt no está disponible; los archivos Rust generados podrían requerir formato."
+fi
 else
   echo ""
   echo "Hoja de sprites no disponible (faltan ${SPRITES_DIR}/${SHEET_PREFIX}00.(png|pcx|32.png) y/o hojas relacionadas)."

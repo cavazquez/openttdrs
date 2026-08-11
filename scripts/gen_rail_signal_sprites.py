@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Extrae sprites de señal ferroviaria (1275–1699) desde OpenGFX2 32bpp.
+"""Extrae sprites de señal ferroviaria (1275–1699) desde el perfil OpenGFX activo.
 
 OpenGFX2 guarda muchas señales en `ogfx2e_extra` como máscaras CC (~7×13) que
 OpenTTD recolorea en runtime. Este script las hornea a rojo/verde en el PNG.
@@ -7,7 +7,8 @@ OpenTTD recolorea en runtime. Este script las hornea a rojo/verde en el PNG.
 Cuando el extra no define una máscara, usa el recorte pequeño y colorido del NFO
 base (`ogfx21_base`), rechazando reutilizaciones grandes (p. ej. topadora 64×31).
 
-No requiere OpenGFX 8bpp.
+Nunca mezcla directorios de caché de NewGRF ni el perfil contrario: los IDs de
+señal se reutilizan en esos paquetes y el resultado sería visualmente falso.
 
 Salida: `assets/opengfx/tiles/rail_{id}.png`
 
@@ -48,11 +49,20 @@ SignalRow = tuple[str, int, int, int, int, int, int]
 
 
 def find_sprite_dirs() -> list[Path]:
-    out: list[Path] = []
-    for sprites_dir in sorted((REPO / "assets" / "opengfx").glob("*/sprites")):
-        if any(sprites_dir.glob("*.nfo")):
-            out.append(sprites_dir)
-    return out
+    mode = detect_graphics_mode(REPO) or "8bpp"
+    opengfx = REPO / "assets" / "opengfx"
+    if mode == "32bpp":
+        candidate = opengfx / "opengfx2-32ez" / "sprites"
+        return [candidate] if any(candidate.glob("*.nfo")) else []
+
+    # No usar `glob("*/sprites")`: también recoge .ogfx2_stations_decode y
+    # .signal-src-8bpp. Son cachés auxiliares, no el base set cargado por el
+    # cliente, y sus IDs físicos pueden coincidir accidentalmente.
+    return [
+        sprites_dir
+        for sprites_dir in sorted(opengfx.glob("opengfx-*/sprites"))
+        if any(sprites_dir.glob("*.nfo"))
+    ]
 
 
 def parse_rows(nfo: Path) -> dict[int, SignalRow]:
@@ -291,7 +301,10 @@ def main() -> None:
         if sid in (1275, 1276, 1416, 1417, 1418, 1419) and (w > 6 or h > 16):
             sys.exit(f"{path.name} mide {w}x{h}: esperaba señal 3×14, no topadora/máscara CC")
 
-    print(f"Señales listas: {ok}/{len(SIGNAL_RANGE)} en {TILES}/ (fuente: OpenGFX2 32bpp)")
+    print(
+        f"Señales listas: {ok}/{len(SIGNAL_RANGE)} en {TILES}/ "
+        f"(fuente: OpenGFX {mode}, {', '.join(str(path) for path in dirs)})"
+    )
 
 
 if __name__ == "__main__":

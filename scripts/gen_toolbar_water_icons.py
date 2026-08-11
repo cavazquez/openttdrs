@@ -15,12 +15,26 @@ from pathlib import Path
 
 from PIL import Image
 
+from nfo_sprite_meta import detect_graphics_mode
+
 REPO = Path(__file__).resolve().parents[1]
-SPRITES = REPO / "assets" / "opengfx" / "opengfx2-32ez" / "sprites"
 TILES = REPO / "assets" / "opengfx" / "tiles"
 
-BASE_NFO = SPRITES / "ogfx21_base_32ez.nfo"
-EXTRA_NFO = SPRITES / "ogfx2e_extra_32ez.nfo"
+
+def active_sprite_sources() -> tuple[Path, Path, Path]:
+    """Selecciona el set gráfico activo, incluido el OpenGFX clásico 8bpp."""
+    opengfx = REPO / "assets" / "opengfx"
+    if detect_graphics_mode(REPO) == "32bpp":
+        sprites = opengfx / "opengfx2-32ez" / "sprites"
+        return sprites, sprites / "ogfx21_base_32ez.nfo", sprites / "ogfx2e_extra_32ez.nfo"
+    candidates = sorted(opengfx.glob("opengfx-*/sprites"), reverse=True)
+    if not candidates:
+        raise SystemExit("no hay OpenGFX 8bpp decodificado; corré descargar_graficos.sh --8bpp")
+    sprites = candidates[0]
+    return sprites, sprites / "ogfx1_base.nfo", sprites / "ogfxe_extra.nfo"
+
+
+SPRITES, BASE_NFO, EXTRA_NFO = active_sprite_sources()
 
 # SPR_IMG_* en table/sprites.h
 BASE_ICONS = [
@@ -44,7 +58,7 @@ ROW_RE = re.compile(
 )
 A5_GUI_RE = re.compile(r"^\s*(\d+)\s+\*\s+\d+\s+05 95 FF ([0-9A-F]{2}) 00 FF ([0-9A-F]{2}) 00")
 A5_CANALS_RE = re.compile(
-    r"^\s*(\d+)\s+\*\s+\d+\s+05 88 FF ([0-9A-F]{2}) 00 FF ([0-9A-F]{2}) 00"
+    r"^\s*(\d+)\s+\*\s+\d+\s+05 (?:08|88) FF ([0-9A-F]{2}) 00(?: FF ([0-9A-F]{2}) 00)?"
 )
 
 
@@ -74,7 +88,9 @@ def gui_offset_map(nfo: Path) -> dict[int, int]:
             continue
         header_num = int(m.group(1))
         count = int(m.group(2), 16)
-        offset = int(m.group(3), 16)
+        # OpenGFX clásico usa `05 08 FF <count> 00` (offset implícito 0),
+        # mientras que algunas variantes 32bpp escriben el offset explícito.
+        offset = int(m.group(3), 16) if m.group(3) is not None else 0
         for i in range(count):
             out.setdefault(offset + i, header_num + 1 + i)
     return out
@@ -91,7 +107,9 @@ def canals_slot_map(nfo: Path) -> dict[int, re.Match[str]]:
             i += 1
             continue
         count = int(m.group(2), 16)
-        offset = int(m.group(3), 16)
+        # El OpenGFX 8bpp clásico omite el offset cuando el bloque comienza
+        # en cero; las variantes modernas lo escriben explícitamente.
+        offset = int(m.group(3), 16) if m.group(3) is not None else 0
         j = i + 1
         got = 0
         while j < len(lines) and got < count:
@@ -147,7 +165,7 @@ def crop_match(m: re.Match[str], out_name: str) -> None:
 def main() -> None:
     if not BASE_NFO.is_file() or not EXTRA_NFO.is_file():
         raise SystemExit(
-            f"faltan NFO 32ez en {SPRITES} — ejecutá ./scripts/descargar_graficos.sh --32bpp"
+            f"faltan NFO base/extra en {SPRITES} — ejecutá descargar_graficos.sh en el perfil activo"
         )
     TILES.mkdir(parents=True, exist_ok=True)
 

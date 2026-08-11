@@ -28,7 +28,7 @@ pub static SHORE_META: [(f32, f32, f32, f32); 18] = [
     (64.0, 31.0, -31.0, -8.0),  // slot 14
     (64.0, 31.0, -31.0, -8.0),  // slot 15
     (64.0, 31.0, -31.0, 0.0),   // slot 16
-    (64.0, 31.0, -31.0, -8.0),  // slot 17
+    (64.0, 31.0, -31.0, 0.0),   // slot 17
 ];
 
 /// `tileh` (0..31) → slot de sprite de orilla (`tileh_to_shoresprite`).

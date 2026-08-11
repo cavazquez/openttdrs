@@ -2133,10 +2133,15 @@ mod tests {
             (normal_ne.dx, normal_ne.dy, normal_ne.sx, normal_ne.sy),
             (2.0, 13.0, 13, 1)
         );
+        let normal_ne_offset =
+            crate::iso::remap_tile_offset(normal_ne.dx, normal_ne.dy, normal_ne.dz) * 0.5;
         assert_eq!(
             crate::iso::road_depot_overlay_rel(rail_depot_seq_gfx(&normal_ne)),
-            (-22.0, -11.0),
-            "TILE_SEQ + NFO debe colocar la fachada NE en la misma esquina que OpenTTD"
+            (
+                normal_ne_offset.x + normal_ne.x_offs,
+                normal_ne.y_offs - normal_ne_offset.y,
+            ),
+            "TILE_SEQ + NFO debe conservar el ancla de la fachada NE en cualquier OpenGFX"
         );
         let maglev_sw_door = rail_depot_build_layers(RailType::Maglev, 2)[0];
         assert_eq!(
@@ -2148,10 +2153,16 @@ mod tests {
             ),
             (2.0, 2.0, 13, 1)
         );
+        let maglev_sw_offset =
+            crate::iso::remap_tile_offset(maglev_sw_door.dx, maglev_sw_door.dy, maglev_sw_door.dz)
+                * 0.5;
         assert_eq!(
             crate::iso::road_depot_overlay_rel(rail_depot_seq_gfx(&maglev_sw_door)),
-            (-24.0, 8.0),
-            "la puerta maglev SW conserva su propio recorte y ancla NFO"
+            (
+                maglev_sw_offset.x + maglev_sw_door.x_offs,
+                maglev_sw_door.y_offs - maglev_sw_offset.y,
+            ),
+            "la puerta maglev SW conserva su propio recorte y ancla NFO en cualquier OpenGFX"
         );
     }
 

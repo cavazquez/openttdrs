@@ -26,12 +26,31 @@ from pathlib import Path
 
 from PIL import Image
 
+from nfo_sprite_meta import detect_graphics_mode
+
 REPO = Path(__file__).resolve().parents[1]
-SPRITES = REPO / "assets" / "opengfx" / "opengfx2-32ez" / "sprites"
 TILES = REPO / "assets" / "opengfx" / "tiles"
 
-BASE_NFO = SPRITES / "ogfx21_base_32ez.nfo"
-EXTRA_NFO = SPRITES / "ogfx2e_extra_32ez.nfo"
+
+def active_sprite_sources() -> tuple[Path, Path, Path]:
+    """Devuelve los NFO base/extra del perfil gráfico activo.
+
+    El perfil 8bpp comparte OpenGFX clásico con el oráculo de OpenTTD; el
+    anterior hardcode a `opengfx2-32ez` dejaba sin iconos el toolbar al
+    cambiarlo, aunque ambos GRF existen en el set clásico.
+    """
+    opengfx = REPO / "assets" / "opengfx"
+    if detect_graphics_mode(REPO) == "32bpp":
+        sprites = opengfx / "opengfx2-32ez" / "sprites"
+        return sprites, sprites / "ogfx21_base_32ez.nfo", sprites / "ogfx2e_extra_32ez.nfo"
+    candidates = sorted(opengfx.glob("opengfx-*/sprites"), reverse=True)
+    if not candidates:
+        raise SystemExit("no hay OpenGFX 8bpp decodificado; corré descargar_graficos.sh --8bpp")
+    sprites = candidates[0]
+    return sprites, sprites / "ogfx1_base.nfo", sprites / "ogfxe_extra.nfo"
+
+
+SPRITES, BASE_NFO, EXTRA_NFO = active_sprite_sources()
 
 # (sprite_id base, nombre de salida)
 BASE_ICONS = [
@@ -227,6 +246,12 @@ def crop_indexed_dos(
 
 
 def find_elrail_8bpp_nfo() -> Path | None:
+    for p in sorted(
+        (REPO / "assets" / "opengfx").glob("opengfx-*/sprites/ogfxe_extra.nfo"),
+        reverse=True,
+    ):
+        if p.is_file():
+            return p
     for p in ELRAIL_8BPP_NFOS:
         if p.is_file():
             return p
@@ -271,6 +296,10 @@ def write_electric_gui_from_8bpp(dos: list[tuple[int, int, int]]) -> None:
 
 
 def main() -> None:
+    if not BASE_NFO.is_file() or not EXTRA_NFO.is_file():
+        raise SystemExit(
+            f"faltan NFO base/extra en {SPRITES}; corré descargar_graficos.sh en el perfil activo"
+        )
     TILES.mkdir(parents=True, exist_ok=True)
     dos = load_dos_palette()
     base_rows = parse_rows(BASE_NFO)

@@ -695,41 +695,33 @@ mod world_pos_to_tile_tests {
     }
 
     #[test]
-    fn road_stop_generated_adj_exceptions() {
+    fn road_stop_generated_remap_exceptions_are_graphics_mode_independent() {
         let ne = crate::sprites::road_stop_build_layers(crate::sprites::StationTileClass::Bus, 0);
         assert_eq!(ne[0].remap_x_adj, 0.0);
         assert_eq!(ne[1].remap_x_adj, 7.0);
-        assert_eq!(ne[1].y_offs, -12.0);
         assert_eq!(ne[2].remap_x_adj, -13.0);
         let se_bus =
             crate::sprites::road_stop_build_layers(crate::sprites::StationTileClass::Bus, 1);
         assert_eq!(se_bus[0].remap_x_adj, -3.0);
         assert_eq!(se_bus[2].remap_x_adj, 5.0);
-        assert_eq!(se_bus[2].y_offs, -18.0);
         let sw_bus =
             crate::sprites::road_stop_build_layers(crate::sprites::StationTileClass::Bus, 2);
         assert_eq!(sw_bus[0].remap_x_adj, -8.0);
-        assert_eq!(sw_bus[0].y_offs, -13.0);
         let nw_bus =
             crate::sprites::road_stop_build_layers(crate::sprites::StationTileClass::Bus, 3);
         assert_eq!(nw_bus[0].remap_x_adj, 8.0);
-        assert_eq!(nw_bus[0].y_offs, -19.0);
         assert_eq!(nw_bus[1].remap_x_adj, -7.0);
-        assert_eq!(nw_bus[1].y_offs, -10.0);
         let se_truck =
             crate::sprites::road_stop_build_layers(crate::sprites::StationTileClass::Truck, 1);
         assert_eq!(se_truck[0].remap_x_adj, 8.0);
-        assert_eq!(se_truck[0].y_offs, -23.0);
         assert_eq!(se_truck[1].remap_x_adj, 0.0);
         assert_eq!(se_truck[2].remap_x_adj, -3.0);
         let ne_truck =
             crate::sprites::road_stop_build_layers(crate::sprites::StationTileClass::Truck, 0);
         assert_eq!(ne_truck[1].remap_x_adj, 7.0);
-        assert_eq!(ne_truck[1].y_offs, -13.0);
         let nw_truck =
             crate::sprites::road_stop_build_layers(crate::sprites::StationTileClass::Truck, 3);
         assert_eq!(nw_truck[1].remap_x_adj, -7.0);
-        assert_eq!(nw_truck[1].y_offs, -16.0);
     }
 
     #[test]

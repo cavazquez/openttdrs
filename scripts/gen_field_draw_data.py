@@ -51,16 +51,29 @@ def find_clear_land_h() -> Path:
     )
 
 SHEET_RE = re.compile(
-    r"^\s*(\d+)\s+(\S*?((?:ogfx1_base|ogfx21_base_32ez)\d+\.(?:32\.png|png|pcx)))\s+(?:8bpp|32bpp)\s+"
+    r"^\s*(\d+)\s+(\S*?((?:ogfx1_base|ogfxe_extra|ogfx21_base_32ez|ogfx2e_extra_32ez)\d+\.(?:32\.png|png|pcx)))\s+(?:8bpp|32bpp)\s+"
     r"(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(-?\d+)\s+(-?\d+)"
 )
 
 
-def find_sprites_dir() -> Path:
-    for cand in (REPO / "assets" / "opengfx").glob("*/sprites"):
-        if any(cand.glob("*.nfo")):
-            return cand
-    sys.exit("No se encontró el directorio de sprites decodificados (corré descargar_graficos.sh)")
+def find_sprites_dir(mode: str) -> Path:
+    """Resuelve el set activo, sin tomar caches auxiliares por orden de glob.
+
+    `.ogfx2_stations_decode/` también contiene un NFO y antes podía ganar la
+    búsqueda genérica en un perfil 8bpp. Eso dejaba vacío el catálogo de
+    campos aunque `ogfxe_extra.nfo` estuviera correctamente decodificado.
+    """
+    opengfx = REPO / "assets" / "opengfx"
+    if mode == "32bpp":
+        candidate = opengfx / "opengfx2-32ez" / "sprites"
+        if any(candidate.glob("*.nfo")):
+            return candidate
+    else:
+        candidates = sorted(opengfx.glob("opengfx-*/sprites"), reverse=True)
+        for candidate in candidates:
+            if any(candidate.glob("*.nfo")):
+                return candidate
+    sys.exit("No se encontró el set OpenGFX activo (corré descargar_graficos.sh)")
 
 
 def load_sheet(png_path: Path, mode: str) -> Image.Image:
@@ -90,7 +103,7 @@ def load_sheet(png_path: Path, mode: str) -> Image.Image:
 class Cropper:
     def __init__(self, mode: str) -> None:
         self.mode = mode
-        self.sprites_dir = find_sprites_dir()
+        self.sprites_dir = find_sprites_dir(mode)
         # Hay base + extra; `glob` no garantiza orden y el extra puede salir primero.
         self.rect: dict[int, tuple[int, int, int, int, str]] = {}
         for nfo in sorted(self.sprites_dir.glob("*.nfo")):

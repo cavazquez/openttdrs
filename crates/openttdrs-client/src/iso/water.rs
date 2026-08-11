@@ -121,9 +121,9 @@ pub fn shore_png_index(tileh: u8) -> usize {
 /// `half_h` visual para el sprite elegido por `DrawShoreTile`.
 ///
 /// Los `shore_full_*.png` no miden todos 64x31 (hay 64x23, 64x39 con
-/// `yrel=-8`, …); el ancla se deriva de los offsets NFO como `h/2 + yrel`,
-/// que coincide con el centro de las pendientes de terreno (`SLOPE_HALF_H`)
-/// — verificado en `half_h_matches_slope_half_h`.
+/// `yrel=-8`, …); el ancla se deriva de los offsets NFO como `h/2 + yrel`.
+/// Para las pendientes que OpenTTD admite en `DrawShoreTile`, coincide con el
+/// centro de la pendiente del terreno.
 #[must_use]
 pub fn shore_sprite_half_h(tileh: u8) -> f32 {
     let (_, h, _, yrel) = crate::sprites::SHORE_META[shore_png_index(tileh)];
@@ -135,13 +135,12 @@ mod tests {
     use super::*;
     use crate::iso::slope_half_h;
 
-    /// El ancla derivada del NFO (`h/2 + yrel`) debe coincidir con el centro
-    /// de las pendientes de terreno (`slope_half_h(tileh)`).
+    /// El ancla derivada del NFO (`h/2 + yrel`) coincide con el centro del
+    /// terreno para las pendientes que `DrawShoreTile` acepta. `SLOPE_EW`,
+    /// `SLOPE_NS` y `0x0F` no son costas válidas en OpenTTD.
     #[test]
-    fn half_h_matches_slope_half_h() {
-        for tileh in [
-            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 23, 27, 29, 30,
-        ] {
+    fn supported_shore_half_h_matches_slope_half_h() {
+        for tileh in [1, 2, 3, 4, 6, 7, 8, 9, 11, 12, 13, 14, 23, 27, 29, 30] {
             assert_eq!(
                 shore_sprite_half_h(tileh),
                 slope_half_h(tileh),

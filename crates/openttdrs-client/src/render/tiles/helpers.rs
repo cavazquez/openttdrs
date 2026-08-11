@@ -604,6 +604,94 @@ pub(crate) fn spawn_rail_foundation(
     ctx.info.base_z.saturating_add(plan.surface_z_delta)
 }
 
+/// Dibuja la fundación nivelada que OpenTTD fuerza para construcciones que no
+/// pueden conservar la pendiente de la tesela, como un depósito ferroviario.
+///
+/// A diferencia de una vía normal, la elección no depende de `TrackBits`:
+/// `DrawTile_Rail` llama explícitamente a `DrawFoundation(Leveled)`. Devuelve
+/// la Z de la superficie plana que deben usar las capas posteriores.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn spawn_forced_leveled_foundation(
+    commands: &mut Commands,
+    map: &Map,
+    map_dims: (u32, u32),
+    assets: &WorldAssets,
+    ctx: &TileRenderContext,
+    tileh: u8,
+    source: &'static str,
+    role: &'static str,
+    foundation_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
+    images: Option<&mut Assets<Image>>,
+) -> u8 {
+    if tileh == 0 {
+        return ctx.info.base_z;
+    }
+
+    // `ApplyPixelFoundationToSlope(Leveled)` eleva una unidad normal y dos
+    // cuando la pendiente es empinada. La superficie resultante siempre es
+    // plana, por lo que las capas posteriores se cuelgan del parent creado
+    // por `DrawFoundation` con `OffsetGroundSprite(0, -TILE_HEIGHT)`.
+    let z_delta = 1 + u8::from(tileh & SLOPE_STEEP != 0);
+    let decision = foundation_decision(
+        map,
+        ctx,
+        map_dims,
+        openttdrs_core::FOUNDATION_LEVELED,
+        0,
+        z_delta,
+    );
+    WorldDrawTrace::record_foundation(
+        source,
+        decision.foundation,
+        decision.surface_tileh,
+        decision.surface_base_z,
+        decision.sprite_block,
+        decision.nw_edge.visible,
+        decision.ne_edge.visible,
+        (
+            decision.nw_edge.here.0,
+            decision.nw_edge.here.1,
+            decision.nw_edge.neighbour.0,
+            decision.nw_edge.neighbour.1,
+        ),
+        (
+            decision.ne_edge.here.0,
+            decision.ne_edge.here.1,
+            decision.ne_edge.neighbour.0,
+            decision.ne_edge.neighbour.1,
+        ),
+    );
+
+    let plan = openttdrs_core::foundation_draw_plan(
+        tileh,
+        openttdrs_core::FOUNDATION_LEVELED,
+        decision.sprite_block,
+    );
+    debug_assert_eq!(plan.surface_tileh, decision.surface_tileh);
+    debug_assert_eq!(
+        plan.surface_z_delta,
+        decision.surface_base_z.saturating_sub(ctx.info.base_z)
+    );
+    let mut action5_sprites = action5_sprites;
+    let mut images = images;
+    for (index, draw) in plan.sprites.into_iter().flatten().enumerate() {
+        spawn_foundation_sprite(
+            commands,
+            assets,
+            ctx,
+            role,
+            draw,
+            0.36 + index as f32 * 0.0005,
+            foundation_newgrf,
+            action5_sprites.as_deref_mut(),
+            images.as_deref_mut(),
+        );
+    }
+    decision.surface_base_z
+}
+
 pub(crate) fn spawn_ground_sprite(
     commands: &mut Commands,
     image: &AtlasSprite,

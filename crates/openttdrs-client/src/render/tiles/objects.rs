@@ -7,8 +7,9 @@ use openttdrs_core::{
 
 use super::bridge_draw::{bridge_span_at, spawn_bridge_deck};
 use super::{
-    catenary_under_low_bridge, helpers::FLAT_WATER_LAYER_FRAC, sloped_or_flat_image,
-    spawn_ground_sprite, spawn_rail_foundation,
+    catenary_under_low_bridge,
+    helpers::{FLAT_WATER_LAYER_FRAC, spawn_forced_leveled_foundation},
+    sloped_or_flat_image, spawn_ground_sprite, spawn_rail_foundation,
 };
 use crate::iso::{
     TILE_HALF_H, overlay_pos, remap_tile_offset, road_depot_build_sprite_center,
@@ -822,8 +823,8 @@ pub(crate) fn spawn_transport_object_tile(
     catenary_sprites: Option<&mut crate::render::NewGrfCatenarySpriteCache>,
     bridge_decks_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     foundation_newgrf: &[Option<openttdrs_core::DecodedSprite>],
-    action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
-    images: Option<&mut Assets<Image>>,
+    mut action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
+    mut images: Option<&mut Assets<Image>>,
 ) {
     let tileh = ctx.info.tileh;
     let base_z = ctx.info.base_z;
@@ -845,7 +846,11 @@ pub(crate) fn spawn_transport_object_tile(
         ));
     } else if !matches!(
         ctx.kind,
-        TileKind::RoadTunnel | TileKind::RailTunnel | TileKind::RoadBridge | TileKind::RailBridge
+        TileKind::RoadTunnel
+            | TileKind::RailTunnel
+            | TileKind::RoadBridge
+            | TileKind::RailBridge
+            | TileKind::RailDepot
     ) {
         let ground = sloped_or_flat_image(tileh, &assets.grass, &assets.grass_slopes);
         spawn_ground_sprite(commands, &ground, Color::WHITE, ctx, slope_half_ground);
@@ -1027,19 +1032,31 @@ pub(crate) fn spawn_transport_object_tile(
             );
         }
         TileKind::RailDepot => {
-            let depot_half_h = if tileh == 0 {
-                TILE_HALF_H
-            } else {
-                slope_half_h(tileh)
-            };
+            // `DrawTile_Rail` nivela cualquier depósito inclinado antes de
+            // dibujar su suelo. No reutilizar el césped inclinado genérico:
+            // las capas de suelo pasan a ser children de la fundación.
+            let depot_base_z = spawn_forced_leveled_foundation(
+                commands,
+                map,
+                dims,
+                assets,
+                ctx,
+                tileh,
+                "rail-depot",
+                "rail-depot-foundation",
+                foundation_newgrf,
+                action5_sprites.as_deref_mut(),
+                images.as_deref_mut(),
+            );
             spawn_rail_depot_tile(
                 commands,
                 assets,
                 company,
                 owner_colour,
                 ctx,
-                base_z,
-                depot_half_h,
+                depot_base_z,
+                TILE_HALF_H,
+                tileh,
                 show_pbs_reservations,
             );
         }
@@ -1270,6 +1287,43 @@ fn rail_depot_reservation_track_visible(dir: usize, buildings_are_hidden: bool) 
     buildings_are_hidden || matches!(dir, 1 | 2)
 }
 
+/// `DrawFoundation(Leveled)` desplaza los `DrawGroundSprite` posteriores 8
+/// píxeles. El exportador los normaliza por `ZOOM_BASE`, de ahí -32.
+const fn rail_depot_foundation_child_offset(tileh: u8) -> Option<(i32, i32, i32)> {
+    if tileh == 0 { None } else { Some((0, -32, 0)) }
+}
+
+fn record_rail_depot_ground_trace(tileh: u8, role: &'static str, sprite_id: u32, fallback: bool) {
+    if let Some(offset) = rail_depot_foundation_child_offset(tileh) {
+        WorldDrawTrace::record_foundation_child_sprite(role, sprite_id, fallback, offset);
+    } else {
+        WorldDrawTrace::record_sprite(role, "ground", sprite_id, fallback);
+    }
+}
+
+fn record_rail_depot_reservation_trace(tileh: u8, sprite_id: u32, fallback: bool) {
+    if let Some(offset) = rail_depot_foundation_child_offset(tileh) {
+        WorldDrawTrace::record_foundation_child_sprite_with_palette(
+            "rail-depot-pbs-reservation",
+            sprite_id,
+            804,
+            fallback,
+            offset,
+        );
+    } else {
+        WorldDrawTrace::record_sprite_with_palette_and_geometry(
+            "rail-depot-pbs-reservation",
+            "ground",
+            sprite_id,
+            804,
+            fallback,
+            (0, 0, 0),
+            0,
+            None,
+        );
+    }
+}
+
 #[allow(clippy::too_many_arguments)] // Parámetros del spawner comparten el contexto del tile.
 fn spawn_rail_depot_tile(
     commands: &mut Commands,
@@ -1279,6 +1333,7 @@ fn spawn_rail_depot_tile(
     ctx: &TileRenderContext,
     base_z: u8,
     half_h: f32,
+    tileh: u8,
     show_pbs_reservations: bool,
 ) {
     let dir = ctx.tile.map_or(0, |t| t.m5 & 0x03).min(3) as usize;
@@ -1287,13 +1342,32 @@ fn spawn_rail_depot_tile(
         .map_or(openttdrs_core::RailType::Rail, rail_type_from_tile);
     if let Some(track_id) =
         crate::sprites::RAIL_DEPOT_GROUND_TRACK[dir].map(|id| remap_rail_sprite_id(id, rail_type))
-        && let Some(image) = assets.rail.get(&track_id)
     {
-        WorldDrawTrace::record_sprite("rail-depot-track", "ground", track_id, false);
+        let fallback = !assets.rail.contains_key(&track_id);
+        record_rail_depot_ground_trace(tileh, "rail-depot-track", track_id, fallback);
+        if let Some(image) = assets.rail.get(&track_id) {
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                image.sprite(),
+                Transform::from_translation(tile_pos_half(
+                    ctx.tx_i32(),
+                    ctx.ty_i32(),
+                    base_z,
+                    0.02,
+                    half_h,
+                )),
+            ));
+        }
+    } else {
+        // NE/NW usan `SPR_FLAT_GRASS_TILE` en `_depot_gfx_table`; no el
+        // relieve de la tesela original. En pendiente también es child del
+        // mismo parent de fundación que la vía de las salidas SE/SW.
+        record_rail_depot_ground_trace(tileh, "rail-depot-ground", 3981, false);
         commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
-            image.sprite(),
+            assets.grass.sprite(),
             Transform::from_translation(tile_pos_half(
                 ctx.tx_i32(),
                 ctx.ty_i32(),
@@ -1314,16 +1388,7 @@ fn spawn_rail_depot_tile(
         && ctx.tile.is_some_and(|tile| tile.m5 & 0x10 != 0)
     {
         let sid = remap_rail_sprite_id(1005 + u32::from(dir as u8 & 1), rail_type);
-        WorldDrawTrace::record_sprite_with_palette_and_geometry(
-            "rail-depot-pbs-reservation",
-            "ground",
-            sid,
-            804,
-            !assets.rail.contains_key(&sid),
-            (0, 0, 0),
-            0,
-            None,
-        );
+        record_rail_depot_reservation_trace(tileh, sid, !assets.rail.contains_key(&sid));
         if let Some(image) = assets.rail.get(&sid) {
             let base = tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.026, half_h);
             let offset = rail_pbs_reservation_offset(sid);
@@ -1372,8 +1437,8 @@ fn spawn_rail_depot_tile(
 #[cfg(test)]
 mod tests {
     use super::{
-        rail_depot_reservation_track_visible, station_rail_child_offset,
-        tunnel_catenary_trace_geometry,
+        rail_depot_foundation_child_offset, rail_depot_reservation_track_visible,
+        station_rail_child_offset, tunnel_catenary_trace_geometry,
     };
 
     #[test]
@@ -1391,6 +1456,13 @@ mod tests {
         assert_eq!(station_rail_child_offset(0), None);
         assert_eq!(station_rail_child_offset(6), Some((0, -32, 0)));
         assert_eq!(station_rail_child_offset(12), Some((0, -32, 0)));
+    }
+
+    #[test]
+    fn sloped_rail_depot_ground_is_child_of_the_leveled_foundation() {
+        assert_eq!(rail_depot_foundation_child_offset(0), None);
+        assert_eq!(rail_depot_foundation_child_offset(11), Some((0, -32, 0)));
+        assert_eq!(rail_depot_foundation_child_offset(0x17), Some((0, -32, 0)));
     }
 
     #[test]

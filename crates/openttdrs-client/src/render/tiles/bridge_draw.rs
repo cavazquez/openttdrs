@@ -590,6 +590,41 @@ fn bridge_ramp_catenary_slope(tileh: u8, dir: u8) -> u8 {
     }
 }
 
+/// Ancla vertical de la catenaria sobre una rampa de puente.
+///
+/// `DrawRailCatenaryRailway` escoge cable/poste a partir del `TileInfo` ya
+/// modificado por `DrawFoundation` y `AdjustTileh`, pero al registrarlo llama
+/// a `GetSlopePixelZ(tile, ..., true)`. Para `TunnelBridge` esa consulta no
+/// usa la pendiente de la vía normal: aplica de nuevo la fundación y, sobre
+/// una rampa que quedó plana, interpola la inclinación en la dirección del
+/// puente. Si la fundación dejó una pendiente, devuelve directamente un nivel
+/// de terreno por encima de ella. Esta es la traducción de
+/// `GetSlopePixelZ_TunnelBridge` más el redondeo específico de cables (8 px)
+/// o PCPs (4 px).
+fn bridge_ramp_catenary_world_z_delta(
+    foundation_tileh: u8,
+    foundation_base_z: u8,
+    raw_base_z: u8,
+    dir: u8,
+    x: i32,
+    y: i32,
+    rounding: i32,
+) -> i32 {
+    let raw_base_px = i32::from(raw_base_z) * 8;
+    let foundation_base_px = i32::from(foundation_base_z) * 8;
+    let slope_px = if foundation_tileh != 0 {
+        foundation_base_px + 8
+    } else {
+        foundation_base_px
+            + i32::from(openttdrs_core::partial_pixel_z(
+                x as f32,
+                y as f32,
+                bridge_ramp_catenary_slope(0, dir),
+            ))
+    };
+    ((slope_px + rounding / 2) / rounding) * rounding - raw_base_px
+}
+
 #[allow(clippy::too_many_arguments)]
 fn spawn_bridge_ramp_catenary(
     commands: &mut Commands,
@@ -631,39 +666,6 @@ fn spawn_bridge_ramp_catenary(
         ramp_slope,
         &mut wires,
     );
-    for (i, draw) in wires.into_iter().enumerate() {
-        let sid = draw.sprite_id;
-        let sprite = catenary_sprite_colored(
-            assets,
-            sid,
-            tint,
-            catenary_newgrf,
-            catenary_sprites.as_deref_mut(),
-            images.as_deref_mut(),
-        );
-        WorldDrawTrace::record_sprite(
-            "bridge-ramp-catenary-wire",
-            "sortable",
-            catenary_reference_sprite_id(sid),
-            sprite.is_none(),
-        );
-        let Some(sprite) = sprite else {
-            continue;
-        };
-        commands.spawn((
-            MapVisualLayer,
-            ctx.map_tile_chunk(),
-            sprite,
-            Transform::from_translation(tile_pos_half(
-                ctx.tx_i32(),
-                ctx.ty_i32(),
-                base_z,
-                0.09 + i as f32 * 0.0004,
-                half_h,
-            )),
-        ));
-    }
-
     let mut pylons = Vec::new();
     collect_catenary_pylons_from_map(
         map,
@@ -684,11 +686,27 @@ fn spawn_bridge_ramp_catenary(
             catenary_sprites.as_deref_mut(),
             images.as_deref_mut(),
         );
-        WorldDrawTrace::record_sprite(
+        WorldDrawTrace::record_sprite_with_palette_and_world_geometry(
             "bridge-ramp-catenary-pylon",
             "sortable",
             catenary_reference_sprite_id(draw.sprite_id),
+            0,
             sprite.is_none(),
+            (draw.tile_dx as i32, draw.tile_dy as i32),
+            draw.pcp_direction.map_or(0, |pcp| {
+                let index = usize::from(pcp & 3);
+                bridge_ramp_catenary_world_z_delta(
+                    foundation_tileh,
+                    foundation_base_z,
+                    ctx.info.base_z,
+                    tile.m5,
+                    [0, 8, 16, 8][index].min(15),
+                    [8, 16, 8, 0][index].min(15),
+                    4,
+                )
+            }),
+            (1, 1, 0),
+            Some(TraceSpriteBounds::new(-1, -1, 0, 1, 1, 6)),
         );
         let Some(sprite) = sprite else {
             continue;
@@ -707,6 +725,57 @@ fn spawn_bridge_ramp_catenary(
                     half_h,
                 ) + Vec3::new(off.x, off.y, 0.0),
             ),
+        ));
+    }
+
+    // Aunque `DrawRailCatenaryOnBridge` llama primero al cable, el stream
+    // sortable de OpenTTD coloca el PCP antes por su caja/ancla. Emitirlos en
+    // este orden conserva el stream observable y el orden visual ya queda
+    // protegido por las capas `z_layer` (poste por encima del cable).
+    for (i, draw) in wires.into_iter().enumerate() {
+        let sid = draw.sprite_id;
+        let sprite = catenary_sprite_colored(
+            assets,
+            sid,
+            tint,
+            catenary_newgrf,
+            catenary_sprites.as_deref_mut(),
+            images.as_deref_mut(),
+        );
+        let (ox, oy, oz) = draw.bounds_origin;
+        let (ex, ey, ez) = draw.bounds_extent;
+        WorldDrawTrace::record_sprite_with_palette_and_geometry(
+            "bridge-ramp-catenary-wire",
+            "sortable",
+            catenary_reference_sprite_id(sid),
+            0,
+            sprite.is_none(),
+            (0, 0, 0),
+            bridge_ramp_catenary_world_z_delta(
+                foundation_tileh,
+                foundation_base_z,
+                ctx.info.base_z,
+                tile.m5,
+                ox,
+                oy,
+                8,
+            ),
+            Some(TraceSpriteBounds::new(ox, oy, oz, ex, ey, ez)),
+        );
+        let Some(sprite) = sprite else {
+            continue;
+        };
+        commands.spawn((
+            MapVisualLayer,
+            ctx.map_tile_chunk(),
+            sprite,
+            Transform::from_translation(tile_pos_half(
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+                base_z,
+                0.09 + i as f32 * 0.0004,
+                half_h,
+            )),
         ));
     }
 }
@@ -1117,9 +1186,9 @@ mod tests {
         BridgeRampGround, PILLAR_SLOPE_STEEP_W, PillarHalf, PillarSegment, RAIL_TB_X,
         bridge_foundation_child_offset, bridge_middle_structure_trace_placement,
         bridge_pbs_reservation_offset, bridge_pbs_reservation_sprite_id, bridge_pbs_trace_bounds,
-        bridge_ramp_catenary_slope, bridge_ramp_ground_kind, bridge_ramp_ground_sprite_id,
-        bridge_span_at, bridge_surface_z, catenary_under_low_bridge, pillar_ground_heights,
-        pillar_half_crop, pillar_segments,
+        bridge_ramp_catenary_slope, bridge_ramp_catenary_world_z_delta, bridge_ramp_ground_kind,
+        bridge_ramp_ground_sprite_id, bridge_span_at, bridge_surface_z, catenary_under_low_bridge,
+        pillar_ground_heights, pillar_half_crop, pillar_segments,
     };
     use crate::sprites::bridge_deck_sprite_ids;
 
@@ -1127,6 +1196,25 @@ mod tests {
     fn bridge_ramp_uses_ground_height_while_span_uses_deck_height() {
         assert_eq!(bridge_surface_z(1, 2, true), 1);
         assert_eq!(bridge_surface_z(1, 2, false), 2);
+    }
+
+    #[test]
+    fn bridge_ramp_catenary_uses_tunnel_bridge_slope_query_and_rounding() {
+        // Rampa plana hacia NE: `GetSlopePixelZ_TunnelBridge` convierte la
+        // superficie plana en SLOPE_NE antes de ubicar cable/poste.
+        assert_eq!(bridge_ramp_catenary_world_z_delta(0, 0, 0, 0, 0, 0, 8), 8);
+        assert_eq!(bridge_ramp_catenary_world_z_delta(0, 0, 0, 0, 15, 0, 8), 0);
+        // Los PCP se redondean a media altura de tesela, no a una completa.
+        assert_eq!(bridge_ramp_catenary_world_z_delta(0, 0, 0, 0, 7, 0, 4), 4);
+
+        // Si la fundación efectiva conserva una pendiente, la callback de
+        // puente devuelve exactamente un nivel por encima de esa superficie.
+        assert_eq!(bridge_ramp_catenary_world_z_delta(9, 2, 1, 0, 0, 0, 8), 16);
+
+        // Una fundación nivelada (surface=flat, base elevada) aún asciende
+        // dentro de la rampa según la dirección del puente.
+        assert_eq!(bridge_ramp_catenary_world_z_delta(0, 2, 1, 2, 0, 0, 8), 8);
+        assert_eq!(bridge_ramp_catenary_world_z_delta(0, 2, 1, 2, 15, 0, 8), 16);
     }
 
     #[test]

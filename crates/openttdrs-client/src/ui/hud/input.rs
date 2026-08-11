@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use super::SimHudControls;
+use super::{HudVisibility, SimHudControls, TileInfoText};
 use crate::render::RemapMapVisualsPending;
 use crate::settings::ClientPreferences;
 use crate::state::{SimRunState, sim_is_paused, toggle_sim_run_state};
@@ -43,6 +43,34 @@ pub(crate) fn handle_pause_toggle(
             }
         );
     }
+}
+
+/// **Ctrl+H** alterna sólo el HUD informativo, sin esconder controles de juego.
+pub(crate) fn handle_hud_toggle(
+    hotkeys: Res<UiHotkeys>,
+    mut hud_visibility: ResMut<HudVisibility>,
+    mut text_q: Query<&mut Visibility, With<TileInfoText>>,
+) {
+    if !hotkeys.fired(UiCommandId::ToggleHud) {
+        return;
+    }
+    hud_visibility.visible = !hud_visibility.visible;
+    let visibility = if hud_visibility.visible {
+        Visibility::Visible
+    } else {
+        Visibility::Hidden
+    };
+    for mut text_visibility in &mut text_q {
+        *text_visibility = visibility;
+    }
+    info!(
+        "HUD informativo: {}",
+        if hud_visibility.visible {
+            "visible"
+        } else {
+            "oculto"
+        }
+    );
 }
 
 /// **F4** alterna entre dos rutas de archivo predefinidas para F5/F9.
@@ -95,15 +123,26 @@ mod tests {
     fn hud_hotkey_systems_cover_branches() {
         let mut world = World::new();
         world.insert_resource(SimHudControls::default());
+        world.insert_resource(HudVisibility::default());
         world.insert_resource(crate::settings::ClientPreferences::default());
         world.insert_resource(crate::render::RemapMapVisualsPending::default());
         world.insert_resource(UiToolState::default());
         world.insert_resource(UiHotkeys::default());
+        let hud_text = world.spawn((TileInfoText, Visibility::Visible)).id();
 
         crate::state::insert_test_sim_run_state(&mut world);
         press_keys(&mut world, &[KeyCode::F1]);
         world.run_system_once(dispatch_ui_hotkeys).unwrap();
         world.run_system_once(handle_pause_toggle).unwrap();
+        assert!(!world.resource::<HudVisibility>().visible);
+        press_keys(&mut world, &[KeyCode::ControlLeft, KeyCode::KeyH]);
+        world.run_system_once(dispatch_ui_hotkeys).unwrap();
+        world.run_system_once(handle_hud_toggle).unwrap();
+        assert!(world.resource::<HudVisibility>().visible);
+        assert!(matches!(
+            world.get::<Visibility>(hud_text),
+            Some(Visibility::Visible)
+        ));
         press_keys(&mut world, &[KeyCode::F4]);
         world.run_system_once(dispatch_ui_hotkeys).unwrap();
         world.run_system_once(handle_pause_toggle).unwrap();

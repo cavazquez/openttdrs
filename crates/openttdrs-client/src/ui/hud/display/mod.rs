@@ -3,6 +3,7 @@ use bevy::sprite::Anchor;
 use bevy::window::PrimaryWindow;
 use openttdrs_core::TileKind;
 
+use crate::audio::{ClientAssetStatus, MusicState};
 use crate::camera::zoom_display_magnification;
 use crate::config::{self, json_save_hud_label, truncate_hud_line};
 use crate::iso::{
@@ -16,7 +17,7 @@ use crate::sprites::{
 };
 use crate::state::{SimRunState, SimWorld, sim_is_paused};
 
-use super::{HudBuildFeedback, SelectedTileInfo, SimHudControls, TileInfoText};
+use super::{HudBuildFeedback, HudVisibility, SelectedTileInfo, SimHudControls, TileInfoText};
 use crate::settings::ClientPreferences;
 use crate::ui::toolbar::StationBuildState;
 use crate::ui::{BuildMenuAction, OrderEditState, UiToolState};
@@ -109,11 +110,63 @@ pub(crate) fn vehicle_hud_alert_line(state: &openttdrs_core::GameState) -> Strin
     parts.join(" | ")
 }
 
+/// Resumen de la pila NewGRF que está habilitada en la partida actual.
+///
+/// Se limita a dos nombres para que el HUD siga siendo legible, pero conserva
+/// el número total y la condición de diagnóstico para no ocultar un fallback o
+/// un GRF de jugador que no pudo aplicarse.
+#[must_use]
+pub(crate) fn newgrf_hud_label(state: &openttdrs_core::GameState) -> String {
+    let active: Vec<_> = state
+        .newgrf_stack
+        .iter()
+        .filter(|entry| entry.enabled)
+        .collect();
+    if active.is_empty() {
+        return "ninguno activo".into();
+    }
+
+    let mut labels: Vec<String> = active
+        .iter()
+        .take(2)
+        .map(|entry| {
+            let name = if entry.name.trim().is_empty() {
+                entry.filename.as_str()
+            } else {
+                entry.name.as_str()
+            };
+            let name = truncate_hud_line(name, 24);
+            let version = if entry.grf_version == 0 {
+                "v?".into()
+            } else {
+                format!("v{}", entry.grf_version)
+            };
+            if entry.is_static {
+                format!("{name} [base, {version}]")
+            } else {
+                format!("{name} [{version}]")
+            }
+        })
+        .collect();
+    if active.len() > labels.len() {
+        labels.push(format!("+{}", active.len() - labels.len()));
+    }
+    let diagnostics = state.runtime.newgrf_diagnostics.len();
+    let diagnostic_suffix = (diagnostics > 0).then(|| format!(" · !{diagnostics}"));
+    format!(
+        "{} · {} activo(s){}",
+        labels.join(", "),
+        active.len(),
+        diagnostic_suffix.unwrap_or_default()
+    )
+}
+
 /// Crea el texto de informacion del tile.
 pub(crate) fn setup_tile_info_ui(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     existing_font: Option<Res<crate::ui::font::HudUiFont>>,
+    hud_visibility: Option<Res<HudVisibility>>,
 ) {
     let font = if let Some(f) = existing_font {
         f.0.clone()
@@ -129,6 +182,11 @@ pub(crate) fn setup_tile_info_ui(
         TextColor(Color::srgb(0.96, 0.94, 0.82)),
         Transform::from_xyz(0.0, 0.0, 1000.0),
         Anchor::TOP_LEFT,
+        if hud_visibility.is_some_and(|visibility| !visibility.visible) {
+            Visibility::Hidden
+        } else {
+            Visibility::Visible
+        },
     ));
 }
 
@@ -172,6 +230,11 @@ pub(crate) struct TileInfoHudKey {
     catenary_mode: crate::sprites::TransparencyMode,
     signal_type: u8,
     signal_density: u8,
+    graphics_assets: String,
+    newgrf_assets: String,
+    sfx_assets: String,
+    music_assets: String,
+    music_playback: String,
 }
 
 /// Actualiza el texto de informacion del tile seleccionado.
@@ -186,6 +249,8 @@ pub(crate) fn update_tile_info_text(
     time: Res<Time>,
     tool_state: Res<UiToolState>,
     order_state: Res<OrderEditState>,
+    asset_status: Option<Res<ClientAssetStatus>>,
+    music: Option<Res<MusicState>>,
     run_state: Res<State<SimRunState>>,
     windows: Query<&Window, With<PrimaryWindow>>,
     cam_q: Query<(&Transform, &Projection), (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
@@ -220,6 +285,32 @@ pub(crate) fn update_tile_info_text(
     }
 
     let vehicle_alert = vehicle_hud_alert_line(&sim.state);
+    let graphics_assets = asset_status
+        .as_ref()
+        .map(|status| status.graphics_hud_label())
+        .unwrap_or_else(|| "sin estado de gráficos".into());
+    let sfx_assets = asset_status
+        .as_ref()
+        .map(|status| status.sfx_hud_label())
+        .unwrap_or_else(|| "sin estado de SFX".into());
+    let music_assets = asset_status
+        .as_ref()
+        .map(|status| status.music_hud_label())
+        .unwrap_or_else(|| "sin estado de música".into());
+    let music_playback = music
+        .as_ref()
+        .map(|music| {
+            let state = if music.playing { "on" } else { "off" };
+            format!(
+                "{} {} {} · {}",
+                state,
+                music.playlist.label(),
+                music.track_position_label(),
+                truncate_hud_line(music.current_track_title(), 24)
+            )
+        })
+        .unwrap_or_else(|| "sin reproductor".into());
+    let newgrf_assets = newgrf_hud_label(&sim.state);
     let tile_snapshot = selected.pos.and_then(|pos| {
         sim.state.map.get(pos).map(|tile| {
             (
@@ -273,6 +364,11 @@ pub(crate) fn update_tile_info_text(
         catenary_mode: prefs.transparency_mode(crate::sprites::TransparencyOption::Catenary),
         signal_type: station_state.signal_type,
         signal_density: station_state.signal_density,
+        graphics_assets: graphics_assets.clone(),
+        newgrf_assets: newgrf_assets.clone(),
+        sfx_assets: sfx_assets.clone(),
+        music_assets: music_assets.clone(),
+        music_playback: music_playback.clone(),
     };
     if cache.as_ref() == Some(&key) {
         return;
@@ -341,6 +437,9 @@ pub(crate) fn update_tile_info_text(
         veh_running,
     );
     let mut hud_lines = vec![hud_line1, hud_line2];
+    hud_lines.push(format!("Gfx: {graphics_assets} | NewGRF: {newgrf_assets}"));
+    hud_lines.push(format!("SFX: {sfx_assets}"));
+    hud_lines.push(format!("Música: {music_assets} · {music_playback}"));
     if !vehicle_alert.is_empty() || feedback_append.is_some() {
         let mut alert = vehicle_alert;
         if let Some(ref fb) = feedback_append {
@@ -622,8 +721,8 @@ pub(crate) fn update_tile_info_text(
 #[allow(clippy::expect_used)]
 mod tests {
     use super::{
-        TileInfoText, setup_tile_info_ui, station_details_text, update_tile_info_text,
-        vehicle_hud_alert_line,
+        TileInfoText, newgrf_hud_label, setup_tile_info_ui, station_details_text,
+        update_tile_info_text, vehicle_hud_alert_line,
     };
     use bevy::ecs::system::RunSystemOnce;
     use bevy::prelude::*;
@@ -631,7 +730,7 @@ mod tests {
     use bevy::window::{PrimaryWindow, WindowResolution};
     use openttdrs_core::Vehicle;
     use openttdrs_core::prelude::*;
-    use openttdrs_core::{Industry, IndustryKind};
+    use openttdrs_core::{Industry, IndustryKind, NewGrfEntry};
 
     use crate::render::PrimaryGameCamera;
     use crate::settings::ClientPreferences;
@@ -855,6 +954,25 @@ mod tests {
         let alert = vehicle_hud_alert_line(&state);
         assert!(alert.contains("sin ruta por red: vehículo 1"));
         assert!(alert.contains("sin órdenes: vehículo 2"));
+    }
+
+    #[test]
+    fn newgrf_hud_label_reports_active_entries_format_and_diagnostics() {
+        let mut state = GameState::new(4, 4);
+        let mut player_grf = NewGrfEntry::new("railset.grf", 0x1234_ABCD);
+        player_grf.name = "Rail Set Extended".into();
+        player_grf.grf_version = 8;
+        state.newgrf_stack.push(player_grf);
+        state
+            .runtime
+            .newgrf_diagnostics
+            .push("sprite omitido".into());
+
+        let label = newgrf_hud_label(&state);
+        assert!(label.contains("OpenGFX [base, v8]"));
+        assert!(label.contains("Rail Set Extended [v8]"));
+        assert!(label.contains("2 activo(s)"));
+        assert!(label.ends_with("!1"));
     }
 
     #[test]

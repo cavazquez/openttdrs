@@ -11,7 +11,9 @@ pub(crate) use feedback::push_build_command_error;
 
 pub(crate) use display::{setup_tile_info_ui, update_tile_info_text};
 pub(crate) use income_popup::{animate_income_popups, spawn_income_popups};
-pub(crate) use input::{cycle_json_save_path_hotkey, handle_pause_toggle, handle_tool_hotkeys};
+pub(crate) use input::{
+    cycle_json_save_path_hotkey, handle_hud_toggle, handle_pause_toggle, handle_tool_hotkeys,
+};
 pub(crate) use place_flash::{
     animate_build_place_flash, enqueue_build_place_flash, spawn_build_place_flash,
 };
@@ -33,6 +35,25 @@ pub(crate) struct SimHudControls {
     pub(crate) sound_confirm: bool,
     /// Beep al pulsar botones del toolbar (`sound.click_beep` en OpenTTD).
     pub(crate) sound_click_beep: bool,
+}
+
+/// Visibilidad del HUD informativo de la esquina superior izquierda.
+///
+/// No incluye toolbar, minimapa ni barra de estado: el objetivo es poder
+/// comparar el mapa sin el texto de diagnóstico, manteniendo los controles de
+/// juego disponibles. Arranca oculto; `OPENTTDRS_SHOW_HUD=1` lo muestra desde
+/// el arranque y `Ctrl+H` lo alterna durante la sesión.
+#[derive(Resource)]
+pub(crate) struct HudVisibility {
+    pub(crate) visible: bool,
+}
+
+impl Default for HudVisibility {
+    fn default() -> Self {
+        Self {
+            visible: crate::config::env_flag("OPENTTDRS_SHOW_HUD"),
+        }
+    }
 }
 
 impl Default for SimHudControls {

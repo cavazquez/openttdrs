@@ -7,7 +7,9 @@ use crate::state::ClientScreen;
 use crate::ui::hotkeys::{
     UiHotkeys, dispatch_ui_hotkeys, handle_toolbar_command_hotkeys, handle_zoom_hotkeys,
 };
-use crate::ui::hud::{cycle_json_save_path_hotkey, handle_pause_toggle, handle_tool_hotkeys};
+use crate::ui::hud::{
+    cycle_json_save_path_hotkey, handle_hud_toggle, handle_pause_toggle, handle_tool_hotkeys,
+};
 use crate::ui::industry_panel::{
     IndustryPanelState, industry_panel_center_interaction, industry_panel_on_closed,
     setup_industry_panel, sync_industry_panel,
@@ -155,6 +157,7 @@ impl Plugin for ToolbarUiPlugin {
                         save_window_editable_keyboard,
                         save_window_name_click_focus,
                         handle_pause_toggle,
+                        handle_hud_toggle,
                         cycle_json_save_path_hotkey,
                         handle_tool_hotkeys,
                         rotate_station_with_right_click,

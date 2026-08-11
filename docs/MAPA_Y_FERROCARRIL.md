@@ -45,6 +45,11 @@ Guía única que enlaza el pipeline principal del repo. Para detalle binario de 
 - **Arranque desde JSON:** `OTTDJSON_LOAD=estado.json cargo run -p openttdrs-client`.
 - **En ventana:** **F5** o **Ctrl+S** guardan; **F9** o **Ctrl+L** cargan y **redibujan** suelo/vías/vehículos. Ruta por defecto `save/openttdrs_sim.json` o `OPENTTDRS_JSON_SAVE`; **F4** alterna entre `save/openttdrs_sim.json` y `save/openttdrs_autosave.json`. La cámara no usa **S** para moverse cuando va **Ctrl+S**.
 - **P** pausa el avance de ticks de simulación.
+- **Ctrl+H** alterna el HUD informativo de la esquina superior izquierda (datos de
+  mapa, assets y diagnóstico); arranca oculto y no afecta toolbar, minimapa ni
+  barra de estado. Para arrancar mostrándolo: en bash
+  `OPENTTDRS_SHOW_HUD=1 cargo run -p openttdrs-client`; en fish
+  `env OPENTTDRS_SHOW_HUD=1 cargo run -p openttdrs-client`.
 
 ### 4. Qué simula el core hoy
 

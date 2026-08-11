@@ -5,7 +5,9 @@ mod music;
 mod sim_events;
 mod world_sfx;
 
-pub(crate) use asset_probe::{ClientAssetRoot, insert_asset_root, warn_missing_optional_assets};
+pub(crate) use asset_probe::{
+    ClientAssetRoot, ClientAssetStatus, insert_asset_root, warn_missing_optional_assets,
+};
 
 pub(crate) use music::MusicPlugin;
 pub(crate) use music::{

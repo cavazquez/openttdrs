@@ -5,7 +5,7 @@ use bevy::prelude::*;
 use crate::bevy_app::{StartupSet, UpdateSet};
 use crate::state::ClientScreen;
 use crate::ui::hud::{
-    HoveredTileCoord, HudBuildFeedback, HudSfxHandles, PlayHudSfx, SelectedTileInfo,
+    HoveredTileCoord, HudBuildFeedback, HudSfxHandles, HudVisibility, PlayHudSfx, SelectedTileInfo,
     SimHudControls, animate_build_place_flash, animate_income_popups, flush_hud_sfx, load_hud_sfx,
     play_hud_sfx, setup_tile_info_ui, spawn_build_place_flash, spawn_income_popups,
     update_tile_info_text,
@@ -28,6 +28,7 @@ impl Plugin for HudUiPlugin {
             .init_resource::<SelectedTileInfo>()
             .init_resource::<HoveredTileCoord>()
             .init_resource::<SimHudControls>()
+            .init_resource::<HudVisibility>()
             .init_resource::<HudBuildFeedback>()
             .init_resource::<HudSfxHandles>()
             .init_resource::<RailSignalGhostState>()

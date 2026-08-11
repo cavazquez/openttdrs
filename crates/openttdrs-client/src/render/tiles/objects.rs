@@ -74,6 +74,22 @@ fn record_station_pbs_trace(tileh: u8, sprite_id: u32, fallback: bool) {
     }
 }
 
+/// Geometría de `_rail_catenary_sprite_data_tunnel`.
+///
+/// `DrawRailCatenaryOnTunnel` inicia un `SpriteCombine`; el cable queda como
+/// padre sortable y el techo del túnel pasa a ser su hijo `combined`. Los
+/// valores conservan `BB_Z_SEPARATOR = 7` y
+/// `ELRAIL_TUNNEL_OFFSET = ELRAIL_ELEVATION - BB_Z_SEPARATOR = 3`.
+const fn tunnel_catenary_trace_geometry(
+    dir: u8,
+) -> ((i32, i32, i32), (i32, i32, i32, i32, i32, i32)) {
+    if dir & 1 == 0 {
+        ((0, 7, 3), (0, 0, 7, 16, 15, 1))
+    } else {
+        ((7, 0, 3), (0, 0, 7, 15, 16, 1))
+    }
+}
+
 fn spawn_airport_radar_overlay(
     commands: &mut Commands,
     assets: &WorldAssets,
@@ -917,11 +933,45 @@ pub(crate) fn spawn_transport_object_tile(
                     ));
                 }
             }
+            let draw_tunnel_catenary = rail && !catenary_hidden() && rail_type.has_catenary();
+            // El oráculo registra el cable antes del techo: es el padre del
+            // `SpriteCombine` que contiene ambos. La capa Bevy conserva su
+            // orden visual posterior, pero la traza modela el draw proc real.
+            let tunnel_catenary_sprite = if draw_tunnel_catenary {
+                let sid = catenary_tunnel_wire_sprite(dir);
+                let sprite = catenary_sprite_colored(
+                    assets,
+                    sid,
+                    catenary_sprite_color(),
+                    catenary_newgrf,
+                    catenary_sprites,
+                    images,
+                );
+                let (offset, (ox, oy, oz, ex, ey, ez)) = tunnel_catenary_trace_geometry(dir);
+                WorldDrawTrace::record_sprite_with_geometry(
+                    "tunnel-catenary",
+                    "sortable",
+                    catenary_reference_sprite_id(sid),
+                    sprite.is_none(),
+                    offset,
+                    0,
+                    Some(crate::render::world_draw_trace::TraceSpriteBounds::new(
+                        ox, oy, oz, ex, ey, ez,
+                    )),
+                );
+                sprite
+            } else {
+                None
+            };
             let (front_offset, (ox, oy, oz, ex, ey, ez)) =
                 crate::sprites::tunnel_front_trace_geometry(dir);
             WorldDrawTrace::record_sprite_with_geometry(
                 "tunnel-front",
-                "sortable",
+                if draw_tunnel_catenary {
+                    "combined"
+                } else {
+                    "sortable"
+                },
                 front_sprite_id,
                 false,
                 front_offset,
@@ -943,41 +993,19 @@ pub(crate) fn spawn_transport_object_tile(
                 )),
             ));
             // Wire de portal (`DrawRailCatenaryOnTunnel`) si la vía es eléctrica.
-            if rail
-                && !catenary_hidden()
-                && ctx
-                    .tile
-                    .is_some_and(|t| rail_type_from_tile(t).has_catenary())
-            {
-                let sid = catenary_tunnel_wire_sprite(dir);
-                let sprite = catenary_sprite_colored(
-                    assets,
-                    sid,
-                    catenary_sprite_color(),
-                    catenary_newgrf,
-                    catenary_sprites,
-                    images,
-                );
-                WorldDrawTrace::record_sprite(
-                    "tunnel-catenary",
-                    "sortable",
-                    catenary_reference_sprite_id(sid),
-                    sprite.is_none(),
-                );
-                if let Some(sprite) = sprite {
-                    commands.spawn((
-                        MapVisualLayer,
-                        ctx.map_tile_chunk(),
-                        sprite,
-                        Transform::from_translation(crate::sprites::tunnel_portal_translation(
-                            ctx.tx_i32(),
-                            ctx.ty_i32(),
-                            base_z,
-                            front_sprite_id,
-                            0.085,
-                        )),
-                    ));
-                }
+            if let Some(sprite) = tunnel_catenary_sprite {
+                commands.spawn((
+                    MapVisualLayer,
+                    ctx.map_tile_chunk(),
+                    sprite,
+                    Transform::from_translation(crate::sprites::tunnel_portal_translation(
+                        ctx.tx_i32(),
+                        ctx.ty_i32(),
+                        base_z,
+                        front_sprite_id,
+                        0.085,
+                    )),
+                ));
             }
         }
         TileKind::RoadDepot => {
@@ -1342,7 +1370,10 @@ fn spawn_rail_depot_tile(
 
 #[cfg(test)]
 mod tests {
-    use super::{rail_depot_reservation_track_visible, station_rail_child_offset};
+    use super::{
+        rail_depot_reservation_track_visible, station_rail_child_offset,
+        tunnel_catenary_trace_geometry,
+    };
 
     #[test]
     fn rail_depot_reservation_is_hidden_behind_visible_ne_and_nw_buildings() {
@@ -1359,5 +1390,19 @@ mod tests {
         assert_eq!(station_rail_child_offset(0), None);
         assert_eq!(station_rail_child_offset(6), Some((0, -32, 0)));
         assert_eq!(station_rail_child_offset(12), Some((0, -32, 0)));
+    }
+
+    #[test]
+    fn tunnel_catenary_trace_uses_the_upstream_combined_parent_bounds() {
+        // NE/SW: eje largo en X y cable desplazado 7 px en Y.
+        assert_eq!(
+            tunnel_catenary_trace_geometry(0),
+            ((0, 7, 3), (0, 0, 7, 16, 15, 1))
+        );
+        // SE/NW: eje largo en Y y cable desplazado 7 px en X.
+        assert_eq!(
+            tunnel_catenary_trace_geometry(1),
+            ((7, 0, 3), (0, 0, 7, 15, 16, 1))
+        );
     }
 }

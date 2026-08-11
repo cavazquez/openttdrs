@@ -519,6 +519,19 @@ pub(crate) fn bridge_span_at(
     })
 }
 
+/// Caja sortable de un cable recto de catenaria en el vano de un puente.
+///
+/// `DrawRailCatenaryOnBridge` sólo alterna el sprite largo/corto y el
+/// remate; ambos comparten estos bounds por eje en
+/// `_rail_catenary_sprite_data`.
+fn bridge_catenary_wire_trace_bounds(axis: usize) -> TraceSpriteBounds {
+    if axis == 0 {
+        TraceSpriteBounds::new(0, 7, 10, 15, 1, 1)
+    } else {
+        TraceSpriteBounds::new(7, 0, 10, 1, 15, 1)
+    }
+}
+
 fn spawn_bridge_catenary(
     commands: &mut Commands,
     assets: &WorldAssets,
@@ -547,12 +560,38 @@ fn spawn_bridge_catenary(
             catenary_sprites.as_deref_mut(),
             images.as_deref_mut(),
         );
-        WorldDrawTrace::record_sprite(
-            "bridge-catenary",
-            "sortable",
-            catenary_reference_sprite_id(draw.sprite_id),
-            sprite.is_none(),
-        );
+        let world_z_delta = (i32::from(span.deck_z) - i32::from(ctx.info.base_z)) * 8;
+        if draw.pcp_direction.is_some() {
+            // `DrawRailCatenaryOnBridge` ancla los postes directamente a la
+            // altura del tablero. A diferencia de una rampa no consulta la
+            // pendiente del terreno: el pilar vive completamente sobre el
+            // vano plano.
+            WorldDrawTrace::record_sprite_with_palette_and_world_geometry(
+                "bridge-catenary-pylon",
+                "sortable",
+                catenary_reference_sprite_id(draw.sprite_id),
+                0,
+                sprite.is_none(),
+                (draw.tile_dx as i32, draw.tile_dy as i32),
+                world_z_delta,
+                (1, 1, 0),
+                Some(TraceSpriteBounds::new(-1, -1, 0, 1, 1, 6)),
+            );
+        } else {
+            // Los cables del vano son siempre rectos. Los WSO largo/corto
+            // cambian el PNG y el remate, pero comparten la misma caja del
+            // eje correspondiente en `_rail_catenary_sprite_data`.
+            WorldDrawTrace::record_sprite_with_palette_and_geometry(
+                "bridge-catenary-wire",
+                "sortable",
+                catenary_reference_sprite_id(draw.sprite_id),
+                0,
+                sprite.is_none(),
+                (0, 0, 0),
+                world_z_delta,
+                Some(bridge_catenary_wire_trace_bounds(span.axis)),
+            );
+        }
         let Some(sprite) = sprite else {
             continue;
         };
@@ -1184,11 +1223,12 @@ mod tests {
 
     use super::{
         BridgeRampGround, PILLAR_SLOPE_STEEP_W, PillarHalf, PillarSegment, RAIL_TB_X,
-        bridge_foundation_child_offset, bridge_middle_structure_trace_placement,
-        bridge_pbs_reservation_offset, bridge_pbs_reservation_sprite_id, bridge_pbs_trace_bounds,
-        bridge_ramp_catenary_slope, bridge_ramp_catenary_world_z_delta, bridge_ramp_ground_kind,
-        bridge_ramp_ground_sprite_id, bridge_span_at, bridge_surface_z, catenary_under_low_bridge,
-        pillar_ground_heights, pillar_half_crop, pillar_segments,
+        bridge_catenary_wire_trace_bounds, bridge_foundation_child_offset,
+        bridge_middle_structure_trace_placement, bridge_pbs_reservation_offset,
+        bridge_pbs_reservation_sprite_id, bridge_pbs_trace_bounds, bridge_ramp_catenary_slope,
+        bridge_ramp_catenary_world_z_delta, bridge_ramp_ground_kind, bridge_ramp_ground_sprite_id,
+        bridge_span_at, bridge_surface_z, catenary_under_low_bridge, pillar_ground_heights,
+        pillar_half_crop, pillar_segments,
     };
     use crate::sprites::bridge_deck_sprite_ids;
 
@@ -1215,6 +1255,15 @@ mod tests {
         // dentro de la rampa según la dirección del puente.
         assert_eq!(bridge_ramp_catenary_world_z_delta(0, 2, 1, 2, 0, 0, 8), 8);
         assert_eq!(bridge_ramp_catenary_world_z_delta(0, 2, 1, 2, 15, 0, 8), 16);
+    }
+
+    #[test]
+    fn bridge_catenary_wire_bounds_follow_the_bridge_axis() {
+        let x = bridge_catenary_wire_trace_bounds(0);
+        assert_eq!((x.ox, x.oy, x.oz, x.ex, x.ey, x.ez), (0, 7, 10, 15, 1, 1));
+
+        let y = bridge_catenary_wire_trace_bounds(1);
+        assert_eq!((y.ox, y.oy, y.oz, y.ex, y.ey, y.ez), (7, 0, 10, 1, 15, 1));
     }
 
     #[test]

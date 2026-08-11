@@ -50,7 +50,7 @@ pub(crate) fn sync_window_title(
             _ => None,
         })
         .unwrap_or(1.0);
-    let zoom_mode = zoom_mode.map_or(ZoomMode::Free, |mode| *mode);
+    let zoom_mode = zoom_mode.map_or(ZoomMode::Fixed, |mode| *mode);
 
     let fps = diagnostics
         .get(&FrameTimeDiagnosticsPlugin::FPS)

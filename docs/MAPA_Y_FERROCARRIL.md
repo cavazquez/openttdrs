@@ -50,10 +50,11 @@ Guía única que enlaza el pipeline principal del repo. Para detalle binario de 
   barra de estado. Para arrancar mostrándolo: en bash
   `OPENTTDRS_SHOW_HUD=1 cargo run -p openttdrs-client`; en fish
   `env OPENTTDRS_SHOW_HUD=1 cargo run -p openttdrs-client`.
-- **Ctrl+Alt+Z** alterna el zoom **libre** y el zoom **fijo OpenTTD**. El modo
-  fijo usa los seis niveles discretos del original (4×, 2×, normal, ½×, ¼× y
-  ⅛×); en mapas grandes sólo deja disponibles los niveles que respetan el tope
-  de culling. `+`/`−` y la rueda avanzan por niveles en ese modo.
+- El cliente arranca con zoom **fijo OpenTTD**. **Ctrl+Alt+Z** alterna entre
+  ese modo y el zoom **libre**. El modo fijo usa los seis niveles discretos del
+  original (4×, 2×, normal, ½×, ¼× y ⅛×); en mapas grandes sólo deja
+  disponibles los niveles que respetan el tope de culling. `+`/`−` y la rueda
+  avanzan por niveles en ese modo.
   El atajo se puede reasignar con `toggle_zoom_mode=Ctrl+Alt+Z` dentro de
   `toolbar_hotkeys`.
 

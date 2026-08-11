@@ -39,13 +39,14 @@ pub struct CameraVelocity(pub Vec2);
 
 /// Política de zoom de la cámara principal.
 ///
-/// El modo libre conserva el comportamiento continuo previo. El fijo ajusta
-/// el viewport a los niveles discretos que usa OpenTTD y descarta los niveles
-/// de alejamiento que excederían el presupuesto de culling del mapa actual.
+/// El modo fijo es el valor inicial: ajusta el viewport a los niveles
+/// discretos que usa OpenTTD y descarta los niveles de alejamiento que
+/// excederían el presupuesto de culling del mapa actual. El modo libre
+/// conserva el comportamiento continuo previo.
 #[derive(Resource, Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub(crate) enum ZoomMode {
-    #[default]
     Free,
+    #[default]
     Fixed,
 }
 
@@ -218,7 +219,7 @@ pub fn move_camera(
     let Projection::Orthographic(ref mut proj) = *projection else {
         return;
     };
-    let zoom_mode = zoom_mode.map_or(ZoomMode::Free, |mode| *mode);
+    let zoom_mode = zoom_mode.map_or(ZoomMode::Fixed, |mode| *mode);
 
     let (mw, mh) = sim.state.map.dimensions();
     let large_cull = large_map_viewport_cull_enabled(mw, mh);
@@ -446,6 +447,11 @@ mod tests {
         assert!((zoom_display_magnification(1.0) - 1.0).abs() < 0.001);
         assert!((zoom_display_magnification(0.25) - 4.0).abs() < 0.001);
         assert!((zoom_display_magnification(20.0) - 0.05).abs() < 0.001);
+    }
+
+    #[test]
+    fn zoom_mode_defaults_to_fixed_openttd() {
+        assert_eq!(ZoomMode::default(), ZoomMode::Fixed);
     }
 
     #[test]

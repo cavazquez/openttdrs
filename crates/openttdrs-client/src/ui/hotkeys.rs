@@ -517,7 +517,7 @@ pub(crate) fn handle_zoom_hotkeys(
     let mode = zoom_mode
         .as_deref()
         .copied()
-        .unwrap_or(crate::camera::ZoomMode::Free);
+        .unwrap_or(crate::camera::ZoomMode::Fixed);
 
     if mode_toggled && mode == crate::camera::ZoomMode::Fixed {
         orthographic.scale =

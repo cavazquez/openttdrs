@@ -1075,7 +1075,7 @@ pub(crate) fn handle_editor_toolbar_control_buttons(
     if !editor.active {
         return;
     }
-    let zoom_mode = zoom_mode.map_or(ZoomMode::Free, |mode| *mode);
+    let zoom_mode = zoom_mode.map_or(ZoomMode::Fixed, |mode| *mode);
     for (interaction, action) in &buttons {
         if *interaction != Interaction::Pressed {
             continue;

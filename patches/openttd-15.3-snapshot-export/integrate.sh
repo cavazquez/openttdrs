@@ -10,7 +10,7 @@ DEST="${1:-${ROOT}/reference/openttd-upstream}"
 source "${ROOT}/scripts/lib/openttd_reference.sh"
 
 EXPECTED="$(openttd_manifest_get "$ROOT" commit)"
-if [[ ! -d "${DEST}/.git" ]]; then
+if [[ ! -e "${DEST}/.git" ]]; then
   echo "error: no hay clon en ${DEST}; corré ./scripts/fetch-openttd-reference.sh" >&2
   exit 1
 fi

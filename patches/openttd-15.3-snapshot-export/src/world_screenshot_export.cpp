@@ -16,6 +16,7 @@
 #include "video/video_driver.hpp"
 #include "window_func.h"
 
+#include <chrono>
 #include <charconv>
 #include <cstdint>
 #include <cstdio>
@@ -103,23 +104,37 @@ bool OpenttdrsMaybeCaptureWorldScreenshot()
 		 * the screenshot provider lookup fail. PNG is built into our reference
 		 * configuration and gives the comparison script a deterministic artifact. */
 		_screenshot_format_name = "png";
-		if (!MakeScreenshot(SC_DEFAULTZOOM, "openttdrs-world-reference", width, height)) {
+		/* MakeScreenshot only reports that its work was queued. Give each
+		 * request a fresh internal name so that a failed queued raster cannot
+		 * make us copy an older successful PNG from a previous invocation. */
+		const std::string screenshot_name = "openttdrs-world-reference-" +
+			std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+		if (!MakeScreenshot(SC_DEFAULTZOOM, screenshot_name, width, height)) {
 			std::fprintf(stderr, "openttdrs world-screenshot: no se pudo encolar la captura\n");
 			_exit_game = true;
 			return;
 		}
 
 		/* MakeScreenshot encola primero el raster. Esta segunda tarea queda
-		 * detrás de él, por lo que `_full_screenshot_path` ya es el PNG final. */
+		 * detrás de él, por lo que `_full_screenshot_path` ya corresponde a
+		 * esta captura. Si el raster falló no existe un archivo con el nombre
+		 * nuevo: abortar es preferible a copiar una referencia obsoleta. */
 		VideoDriver::GetInstance()->QueueOnMainThread([target] {
 			std::error_code error;
+			const std::filesystem::path source(_full_screenshot_path);
+			if (!std::filesystem::is_regular_file(source, error) || error ||
+					std::filesystem::file_size(source, error) == 0 || error) {
+				std::fprintf(stderr, "openttdrs world-screenshot: el raster no produjo PNG nuevo\n");
+				_exit_game = true;
+				return;
+			}
 			const std::filesystem::path destination(target);
 			if (!destination.parent_path().empty()) {
 				std::filesystem::create_directories(destination.parent_path(), error);
 			}
 			if (!error) {
 				std::filesystem::copy_file(
-					_full_screenshot_path,
+					source,
 					destination,
 					std::filesystem::copy_options::overwrite_existing,
 					error

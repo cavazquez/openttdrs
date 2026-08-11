@@ -1196,6 +1196,12 @@ impl Plugin for WindowsShotPlugin {
                 Update,
                 (
                     auto_start_game.run_if(in_state(ClientScreen::MainMenu)),
+                    // Los sistemas normales pueden volver a mostrar su UI durante
+                    // `UpdateSet::Ui`; este ocultamiento corre después y deja el
+                    // framebuffer del mapa libre para la comparación raster.
+                    hide_map_shot_ui
+                        .run_if(in_state(ClientScreen::InGame))
+                        .after(UpdateSet::Ui),
                     map_shot_driver
                         .run_if(in_state(ClientScreen::InGame))
                         // El fantasma de obra lee el cursor que fija el driver.
@@ -1275,6 +1281,29 @@ fn first_industry_tile(sim: &SimWorld) -> Option<TileCoord> {
     sim.state.industries.first().map(|i| i.pos)
 }
 
+/// Oculta el chrome propio al tomar un `OPENTTDRS_MAP_SHOT_CLEAN=1`, después de
+/// que los sync normales de UI pudieron actualizarlo en el frame actual.
+fn hide_map_shot_ui(
+    mut ui_roots: Query<
+        &mut Visibility,
+        Or<(
+            With<crate::state::ingame_lifecycle::InGameUi>,
+            With<crate::ui::statusbar::StatusBarRoot>,
+            With<crate::ui::statusbar::NewsPopupRoot>,
+            With<crate::ui::toolbar::MinimapRoot>,
+            With<crate::ui::hud::TileInfoText>,
+            With<FloatingWindow>,
+        )>,
+    >,
+) {
+    if std::env::var_os("OPENTTDRS_MAP_SHOT_CLEAN").is_none() {
+        return;
+    }
+    for mut visibility in &mut ui_roots {
+        *visibility = Visibility::Hidden;
+    }
+}
+
 /// Con `OPENTTDRS_MAP_SHOT=/ruta.png`: captura el mapa sin abrir ventanas y sale.
 /// Con `OPENTTDRS_MAP_SHOT_TOOL=rail|rail_x|rail_y` activa además esa herramienta
 /// y fija el cursor al centro de la ventana para capturar el fantasma de obra.
@@ -1284,6 +1313,9 @@ fn first_industry_tile(sim: &SimWorld) -> Option<TileCoord> {
 /// `OPENTTDRS_MAP_SHOT_SETTLE_FRAMES=N` espera hasta el frame N (150 por
 /// defecto) antes de capturar, para que un mapa grande complete su remapeo y
 /// el culling del viewport.
+/// `OPENTTDRS_MAP_SHOT_CLEAN=1` oculta el chrome propio (toolbar, minimapa,
+/// barra de estado y texto HUD) justo antes de capturar. Sirve para comparar
+/// solamente el mundo contra el raster de OpenTTD.
 #[allow(clippy::too_many_arguments)] // sistema ECS Bevy
 fn map_shot_driver(
     mut commands: Commands,

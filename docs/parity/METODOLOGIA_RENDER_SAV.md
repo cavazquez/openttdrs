@@ -145,13 +145,15 @@ barrido C++ para conservar el desempate incluso si dos valores `f32` coinciden.
 Las rampas/fundaciones conservan su orden local especial y no forman parte de
 este cambio.
 
-La siguiente divergencia instrumentada quedó aislada sin ambigüedad: la
-estación ferroviaria vanilla en `(226,42)` y `(227,42)`. Rust emite los
-sprites base 1011 y capas 1069–1086, mientras el `draw_tile_proc` de OpenTTD
-emite 1093/1151/1159/1162/1166 (y sus equivalentes en la tesela vecina). Es
-un desvío de selección de estación, no de campos, cercas ni composición del
-terreno; debe investigarse como siguiente frente con una región de dos
-teselas.
+La estación ferroviaria vanilla en `(226,42)` y `(227,42)` quedó explicada y
+cubierta por regresión. La tesela tiene `RailType=Monorail`; OpenTTD aplica
+`RailTypeInfo::GetRailtypeSpriteOffset()` (+82) tanto al suelo como a cada
+capa de `DrawRailTileSeq`. Por eso emite `1093/1159/1151/1162/1166`, no la
+familia rail/elrail `1011/1077/1069/1080/1084`. El cliente replica ese
+contrato para rail/elrail, monorail y maglev (+0/+82/+164), recorta las tres
+familias desde el NFO del perfil gráfico activo y conserva los offsets NFO
+propios de 8bpp o 32bpp. La caja `TILE_SEQ` de los pilares Y-rear (1077 y sus
+variantes) también quedó corregida a `5×16×2`, según `station_land.h`.
 
 ## Procedimiento para investigar un caso nuevo
 

@@ -28,12 +28,13 @@ use crate::sprites::{
     collect_catenary_pylons_from_map_with_pcp_override, collect_catenary_wire_draws_from_map,
     is_hidden, log_unknown_station_type_once, rail_depot_build_layers, rail_depot_seq_gfx,
     rail_depot_visual_type_index, rail_ghost_overlay_offset, rail_pbs_reservation_offset,
-    rail_station_draw_layers, rail_station_ground_track_sprite, rail_station_layer_bounds,
-    rail_station_overlay_rel, rail_station_sprite_meta, rail_waypoint_draw_layers,
-    rail_waypoint_layer_meta, rail_waypoint_sprite_center, remap_rail_sprite_id,
-    road_depot_build_layers, road_depot_entrance_road_bits, road_depot_seq_gfx,
-    road_flat_sprite_index, road_stop_build_layers, road_stop_drive_through_layers,
-    road_stop_ground_index, road_stop_seq_gfx, station_tile_class, with_to_alpha,
+    rail_station_draw_layers, rail_station_ground_track_sprite_for_type, rail_station_layer_bounds,
+    rail_station_layer_for_type, rail_station_overlay_rel, rail_station_sprite_meta,
+    rail_waypoint_draw_layers, rail_waypoint_layer_meta, rail_waypoint_sprite_center,
+    remap_rail_sprite_id, road_depot_build_layers, road_depot_entrance_road_bits,
+    road_depot_seq_gfx, road_flat_sprite_index, road_stop_build_layers,
+    road_stop_drive_through_layers, road_stop_ground_index, road_stop_seq_gfx, station_tile_class,
+    with_to_alpha,
 };
 
 fn buildings_hidden() -> bool {
@@ -217,6 +218,9 @@ pub(crate) fn spawn_station_tile(
     let m6 = ctx.tile.map_or(0, |t| t.m6);
     let m5 = ctx.tile.map_or(0, |t| t.m5);
     let class = station_tile_class(m6, stop_kind);
+    let rail_type = ctx
+        .tile
+        .map_or(openttdrs_core::RailType::Rail, rail_type_from_tile);
 
     let rail_half_h = if tileh == 0 {
         TILE_HALF_H
@@ -245,7 +249,7 @@ pub(crate) fn spawn_station_tile(
                 images.as_deref_mut(),
             );
             // OpenTTD: ground SPR_RAIL_TRACK_* bajo estación y waypoint (`station_land.h`).
-            let track_sid = rail_station_ground_track_sprite(m5, tileh);
+            let track_sid = rail_station_ground_track_sprite_for_type(m5, tileh, rail_type);
             if class == StationTileClass::Rail {
                 record_station_rail_ground_trace(
                     tileh,
@@ -272,9 +276,6 @@ pub(crate) fn spawn_station_tile(
             // con PALETTE_CRASH. El bit vive en m6, no en la reserva m2 de
             // una vía normal.
             if show_pbs_reservations && m6 & 0x04 != 0 {
-                let rail_type = ctx
-                    .tile
-                    .map_or(openttdrs_core::RailType::Rail, rail_type_from_tile);
                 let sid = remap_rail_sprite_id(1005 + u32::from(m5 & 1), rail_type);
                 record_station_pbs_trace(tileh, sid, !assets.has_exact_pbs_rail_sprite(sid));
                 if let Some(img) = assets.pbs_rail_sprite(sid) {
@@ -348,10 +349,18 @@ pub(crate) fn spawn_station_tile(
                 }
             }
             if !buildings_hidden() && !used_newgrf {
-                for layer in overlay_layers {
+                for base_layer in overlay_layers {
+                    // `DrawStationTile` deja los waypoints vanilla sin offset,
+                    // pero suma el desplazamiento de railtype a cada capa de
+                    // estación normal (`DrawRailTileSeq`).
+                    let layer = if class == StationTileClass::RailWaypoint {
+                        *base_layer
+                    } else {
+                        rail_station_layer_for_type(*base_layer, rail_type)
+                    };
                     if class == StationTileClass::Rail && tileh == 0 {
                         record_station_rail_layer_trace(
-                            layer,
+                            &layer,
                             owner_colour,
                             !assets.rail.contains_key(&layer.sprite_id),
                         );
@@ -371,7 +380,7 @@ pub(crate) fn spawn_station_tile(
                             ctx.ty_i32(),
                             rail_base_z,
                             layer.z,
-                            layer,
+                            &layer,
                             nfo_xrel,
                             nfo_yrel,
                             w,
@@ -383,7 +392,7 @@ pub(crate) fn spawn_station_tile(
                         else {
                             continue;
                         };
-                        let (xrel, yrel) = rail_station_overlay_rel(layer, nfo_xrel, nfo_yrel);
+                        let (xrel, yrel) = rail_station_overlay_rel(&layer, nfo_xrel, nfo_yrel);
                         crate::iso::overlay_pos(
                             ctx.iso_pos,
                             xrel,

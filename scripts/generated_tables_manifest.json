@@ -88,9 +88,9 @@
       "inputs": [],
       "check": "hash",
       "requires_opengfx": true,
-      "output_sha256": "69f29137e24bd06cbf997a82ab8f351f7eab8a327ea5d2ebba5800cbb9ea10c1",
+      "output_sha256": "c9f0c4b2b3dc3604440fb0b9d849c0695237126365c8f627d920e912816e8cc3",
       "license": "layout derivado de PNG OpenGFX locales",
-      "note": "Regenerado y verificado 2026-08-10 con el atlas OpenGFX local; CI valida hash del .rs. El --check local valida además las páginas PNG píxel a píxel."
+      "note": "Regenerado y verificado 2026-08-12 con el atlas OpenGFX local; incluye las familias de estación monorail/maglev. CI valida hash del .rs. El --check local valida además las páginas PNG píxel a píxel."
     },
     {
       "id": "bridge_structure_palette",

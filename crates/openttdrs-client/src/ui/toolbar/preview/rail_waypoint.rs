@@ -1,27 +1,27 @@
 //! Fantasma de colocación de waypoint ferroviario (postes reales, no `tile_select`).
 
 use bevy::prelude::*;
-use openttdrs_core::prelude::*;
+use openttdrs_core::{RailType, prelude::*};
 
 use crate::iso::{TILE_HALF_H, iso, tile_pos_half, tile_slope_and_min_z};
 use crate::render::{CompanyColoredSprites, TileAtlas};
 use crate::sprites::{
-    RAIL_TB_X, RAIL_TB_Y, rail_station_ground_track_sprite, rail_waypoint_draw_layers,
+    RAIL_TB_X, RAIL_TB_Y, rail_station_ground_track_sprite_for_type, rail_waypoint_draw_layers,
     rail_waypoint_layer_meta, rail_waypoint_sprite_center,
 };
 
 use super::BuildGhostPreview;
 
 /// Eje del waypoint en `m5` bajo (bit 0 = Y), o `None` si la vía no es recta.
-fn waypoint_m5_on_tile(map: &Map, coord: TileCoord) -> Option<u8> {
+fn waypoint_m5_on_tile(map: &Map, coord: TileCoord) -> Option<(u8, RailType)> {
     let tile = map.get(coord)?;
     match tile.kind {
         TileKind::Rail => match tile.m5 & 0x3F {
-            RAIL_TB_X => Some(0),
-            RAIL_TB_Y => Some(1),
+            RAIL_TB_X => Some((0, openttdrs_core::rail_type_from_tile(tile))),
+            RAIL_TB_Y => Some((1, openttdrs_core::rail_type_from_tile(tile))),
             _ => None,
         },
-        TileKind::Station => Some(tile.m5 & 0x0F),
+        TileKind::Station => Some((tile.m5 & 0x0F, openttdrs_core::rail_type_from_tile(tile))),
         _ => None,
     }
 }
@@ -37,7 +37,7 @@ pub(crate) fn spawn_rail_waypoint_preview(
     let Some(atlas) = atlas else {
         return;
     };
-    let Some(m5) = waypoint_m5_on_tile(map, coord) else {
+    let Some((m5, rail_type)) = waypoint_m5_on_tile(map, coord) else {
         return;
     };
     let (_, base_z) = tile_slope_and_min_z(map, coord.x as u32, coord.y as u32);
@@ -48,7 +48,7 @@ pub(crate) fn spawn_rail_waypoint_preview(
     };
 
     let origin = iso(coord.x, coord.y);
-    let track_sid = rail_station_ground_track_sprite(m5, 0);
+    let track_sid = rail_station_ground_track_sprite_for_type(m5, 0, rail_type);
     if let Some(img) = atlas.try_get(&format!("rail_{track_sid}.png")) {
         commands.spawn((
             BuildGhostPreview,

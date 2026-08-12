@@ -237,15 +237,26 @@ pub fn tile_filename(asset_path: &str) -> &str {
 #[must_use]
 pub fn rail_sprite_ids_for_company_palette() -> Vec<u32> {
     use super::rail::rail_sprite_ids_for_preload;
-    use super::station::{rail_station_draw_layers, rail_waypoint_draw_layers};
+    use super::station::{
+        rail_station_draw_layers, rail_station_ground_track_sprite_for_type,
+        rail_station_layer_for_type, rail_waypoint_draw_layers,
+    };
 
     let mut ids: BTreeSet<u32> = rail_sprite_ids_for_preload().into_iter().collect();
-    for gfx in 0..=7u8 {
-        ids.insert(super::station::rail_station_ground_track_sprite(gfx, 0));
-        for layer in rail_station_draw_layers(gfx) {
-            // Cristal: PALETTE_TO_TRANSPARENT, no company colour.
-            if !super::station::rail_station_roof_glass_sprite(layer.sprite_id) {
-                ids.insert(layer.sprite_id);
+    for rail_type in [
+        openttdrs_core::RailType::Rail,
+        openttdrs_core::RailType::Electric,
+        openttdrs_core::RailType::Monorail,
+        openttdrs_core::RailType::Maglev,
+    ] {
+        for gfx in 0..=7u8 {
+            ids.insert(rail_station_ground_track_sprite_for_type(gfx, 0, rail_type));
+            for layer in rail_station_draw_layers(gfx) {
+                let layer = rail_station_layer_for_type(*layer, rail_type);
+                // Cristal: PALETTE_TO_TRANSPARENT, no company colour.
+                if !super::station::rail_station_roof_glass_sprite(layer.sprite_id) {
+                    ids.insert(layer.sprite_id);
+                }
             }
         }
     }

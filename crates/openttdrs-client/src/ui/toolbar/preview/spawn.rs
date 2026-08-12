@@ -162,6 +162,7 @@ fn spawn_rail_station_area_preview(
         station_state.rail_axis_y,
         station_state.rail_platforms,
         station_state.rail_length,
+        sim.state.current_rail_type,
         valid,
     );
 }

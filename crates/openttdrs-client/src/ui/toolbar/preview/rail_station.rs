@@ -2,13 +2,13 @@
 
 use bevy::prelude::*;
 use openttdrs_core::prelude::*;
-use openttdrs_core::{rail_station_footprint, rail_station_layout};
+use openttdrs_core::{RailType, rail_station_footprint, rail_station_layout};
 
 use crate::iso::{TILE_HALF_H, iso, overlay_pos, tile_pos_half, tile_slope_and_min_z};
 use crate::render::{CompanyColoredSprites, TileAtlas};
 use crate::sprites::{
-    rail_station_draw_layers, rail_station_ground_track_sprite, rail_station_overlay_rel,
-    rail_station_sprite_meta,
+    rail_station_draw_layers, rail_station_ground_track_sprite_for_type,
+    rail_station_layer_for_type, rail_station_overlay_rel, rail_station_sprite_meta,
 };
 
 use super::BuildGhostPreview;
@@ -26,6 +26,7 @@ pub(crate) fn spawn_rail_station_area_sprite_preview(
     axis_y: bool,
     platforms: u8,
     length: u8,
+    rail_type: RailType,
     valid: bool,
 ) {
     let Some(atlas) = atlas else {
@@ -53,7 +54,7 @@ pub(crate) fn spawn_rail_station_area_sprite_preview(
             }
             let idx = usize::from(n) * usize::from(length) + usize::from(l);
             let m5 = layout[idx] + u8::from(axis_y);
-            spawn_one_tile(commands, atlas, company, map, c, m5, tint);
+            spawn_one_tile(commands, atlas, company, map, c, m5, rail_type, tint);
         }
     }
 }
@@ -65,11 +66,12 @@ fn spawn_one_tile(
     map: &Map,
     coord: TileCoord,
     m5: u8,
+    rail_type: RailType,
     tint: Color,
 ) {
     let (_, base_z) = tile_slope_and_min_z(map, coord.x as u32, coord.y as u32);
     let origin = iso(coord.x, coord.y);
-    let track_sid = rail_station_ground_track_sprite(m5, 0);
+    let track_sid = rail_station_ground_track_sprite_for_type(m5, 0, rail_type);
     if let Some(img) = atlas.try_get(&format!("rail_{track_sid}.png")) {
         commands.spawn((
             BuildGhostPreview,
@@ -84,14 +86,15 @@ fn spawn_one_tile(
             .with_scale(Vec3::splat(PREVIEW_SCALE)),
         ));
     }
-    for layer in rail_station_draw_layers(m5) {
+    for base_layer in rail_station_draw_layers(m5) {
+        let layer = rail_station_layer_for_type(*base_layer, rail_type);
         let Some(img) = atlas.try_get(&format!("rail_{}.png", layer.sprite_id)) else {
             continue;
         };
         let Some((w, h, nfo_xrel, nfo_yrel)) = rail_station_sprite_meta(layer.sprite_id) else {
             continue;
         };
-        let (xrel, yrel) = rail_station_overlay_rel(layer, nfo_xrel, nfo_yrel);
+        let (xrel, yrel) = rail_station_overlay_rel(&layer, nfo_xrel, nfo_yrel);
         let pos3 = overlay_pos(
             origin,
             xrel,

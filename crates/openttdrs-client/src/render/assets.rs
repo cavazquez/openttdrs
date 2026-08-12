@@ -7,8 +7,9 @@ use crate::sprites::{
     BridgePaletteSprites, HOUSE_DRAW_DATA, INDUSTRY_GFX_DATA, RAIL_DEPOT_VISUAL_TYPE_COUNT,
     ROAD_DEPOT_GROUND_PATH, StationTileClass, house_sprite_filename, rail_depot_build_layers,
     rail_pbs_sprite_ids_for_preload, rail_sprite_ids_for_preload, rail_station_draw_layers,
-    rail_station_ground_track_sprite, rail_waypoint_draw_layers, road_depot_build_layers,
-    road_stop_build_layers, road_stop_drive_through_layers, signal_sprite_texture_id,
+    rail_station_ground_track_sprite_for_type, rail_station_layer_for_type,
+    rail_waypoint_draw_layers, road_depot_build_layers, road_stop_build_layers,
+    road_stop_drive_through_layers, signal_sprite_texture_id,
 };
 
 #[derive(Clone, Resource)]
@@ -260,10 +261,17 @@ impl WorldAssets {
             .collect();
         let mut rail_ids: std::collections::BTreeSet<_> =
             rail_sprite_ids_for_preload().into_iter().collect();
-        for gfx in 0..=7 {
-            rail_ids.insert(rail_station_ground_track_sprite(gfx, 0));
-            for layer in rail_station_draw_layers(gfx) {
-                rail_ids.insert(layer.sprite_id);
+        for rail_type in [
+            openttdrs_core::RailType::Rail,
+            openttdrs_core::RailType::Electric,
+            openttdrs_core::RailType::Monorail,
+            openttdrs_core::RailType::Maglev,
+        ] {
+            for gfx in 0..=7 {
+                rail_ids.insert(rail_station_ground_track_sprite_for_type(gfx, 0, rail_type));
+                for layer in rail_station_draw_layers(gfx) {
+                    rail_ids.insert(rail_station_layer_for_type(*layer, rail_type).sprite_id);
+                }
             }
         }
         for axis_y in [false, true] {

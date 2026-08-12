@@ -791,6 +791,13 @@ for sid, src_name in [
 # Techos
 for sid in range(1079, 1087):
     crop_by_id(sid, f"rail_roof_{sid - 1079}.png")
+# Estaciones ferroviarias tipadas. `DrawRailTileSeq` suma el offset de
+# RailTypeInfo a cada plataforma, edificio y techo: mono 1151..1168 (+82),
+# maglev 1233..1250 (+164). No se pueden reutilizar los PNG rail normales.
+for sid in range(1151, 1169):
+    crop_by_id(sid, f"rail_{sid}.png")
+for sid in range(1233, 1251):
+    crop_by_id(sid, f"rail_{sid}.png")
 # Monorraíl
 for sid in range(1087, 1093):
     crop_by_id(sid, f"mono_single_{sid - 1087}.png")

@@ -155,8 +155,10 @@ pub(crate) use rail::{collect_rail_pbs_reservation_draws, collect_rail_sprites_f
 #[allow(unused_imports)]
 pub use station::{
     RailStationLayer, StationTileClass, log_unknown_station_type_once, rail_station_axis_y,
-    rail_station_draw_layers, rail_station_ground_track_sprite, rail_station_layer_bounds,
-    rail_station_overlay_rel, rail_station_roof_glass_sprite, rail_station_sprite_layers,
+    rail_station_draw_layers, rail_station_ground_track_sprite,
+    rail_station_ground_track_sprite_for_type, rail_station_layer_bounds,
+    rail_station_layer_for_type, rail_station_overlay_rel, rail_station_roof_glass_sprite,
+    rail_station_sprite_base_id, rail_station_sprite_id_for_type, rail_station_sprite_layers,
     rail_station_sprite_meta, rail_waypoint_draw_layers, rail_waypoint_layer_meta,
     rail_waypoint_sprite_center, road_stop_build_layers, road_stop_drive_through_layers,
     road_stop_ground_index, road_stop_seq_gfx, station_tile_class, station_type_from_m6,

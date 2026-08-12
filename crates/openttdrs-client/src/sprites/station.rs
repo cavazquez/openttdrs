@@ -2,9 +2,12 @@
 
 use std::sync::{Mutex, OnceLock};
 
-use openttdrs_core::{STATION_TYPE_DOCK, StopKind};
+use openttdrs_core::{RailType, STATION_TYPE_DOCK, StopKind};
 
-use super::rail::rail_sloped_track_sprite_id;
+use super::rail::{
+    MAGLEV_RAIL_SPRITE_OFFSET, MONO_RAIL_SPRITE_OFFSET, rail_sloped_track_sprite_id,
+    remap_rail_sprite_id,
+};
 
 /// `StationType` en bits 3–6 de `m6` (`GetStationType`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -34,19 +37,62 @@ pub struct RailStationLayer {
     pub z: f32,
 }
 
+/// Primer y último sprite de la disposición vanilla de estación ferroviaria.
+///
+/// OpenTTD coloca las tres familias contiguamente: rail/elrail en 1069–1086,
+/// monorraíl en 1151–1168 (+82) y maglev en 1233–1250 (+164). No son
+/// imágenes decorativas intercambiables: el desplazamiento se aplica a cada
+/// capa de `DrawRailTileSeq`, además de la vía de suelo.
+const RAIL_STATION_SPRITE_FIRST: u32 = 1069;
+const RAIL_STATION_SPRITE_LAST: u32 = 1086;
+
+/// Aplica `RailTypeInfo::GetRailtypeSpriteOffset()` a una capa vanilla de
+/// estación ferroviaria.
+#[must_use]
+pub const fn rail_station_sprite_id_for_type(sprite_id: u32, rail_type: RailType) -> u32 {
+    if sprite_id < RAIL_STATION_SPRITE_FIRST || sprite_id > RAIL_STATION_SPRITE_LAST {
+        return sprite_id;
+    }
+    match rail_type {
+        RailType::Monorail => sprite_id + MONO_RAIL_SPRITE_OFFSET,
+        RailType::Maglev => sprite_id + MAGLEV_RAIL_SPRITE_OFFSET,
+        RailType::Rail | RailType::Electric => sprite_id,
+    }
+}
+
+/// ID rail/elrail que describe la geometría de una capa, incluso si el
+/// sprite seleccionado es mono o maglev.
+#[must_use]
+pub const fn rail_station_sprite_base_id(sprite_id: u32) -> u32 {
+    match sprite_id {
+        1151..=1168 => sprite_id - MONO_RAIL_SPRITE_OFFSET,
+        1233..=1250 => sprite_id - MAGLEV_RAIL_SPRITE_OFFSET,
+        _ => sprite_id,
+    }
+}
+
+/// Copia una capa de la tabla vanilla y selecciona su variante de red.
+#[must_use]
+pub const fn rail_station_layer_for_type(
+    mut layer: RailStationLayer,
+    rail_type: RailType,
+) -> RailStationLayer {
+    layer.sprite_id = rail_station_sprite_id_for_type(layer.sprite_id, rail_type);
+    layer
+}
+
 /// Caja `TILE_SEQ` de cada capa vanilla de estación ferroviaria.
 ///
 /// Es la geometría que OpenTTD entrega a `AddSortableSpriteToDraw` en
 /// `station_land.h`; no deriva del tamaño del PNG.
 #[must_use]
 pub const fn rail_station_layer_bounds(sprite_id: u32) -> Option<(i32, i32, i32)> {
-    match sprite_id {
-        1069 | 1071 | 1075 => Some((5, 16, 2)),
+    match rail_station_sprite_base_id(sprite_id) {
+        1069 | 1071 | 1075 | 1077 => Some((5, 16, 2)),
         1070 | 1072 | 1078 => Some((16, 5, 2)),
         1073 => Some((16, 5, 15)),
         1074 => Some((5, 16, 15)),
         1076 => Some((16, 5, 7)),
-        1077 => Some((5, 16, 7)),
         1079..=1082 => Some((16, 16, 10)),
         _ => None,
     }
@@ -148,6 +194,16 @@ pub fn rail_station_ground_track_sprite(m5: u8, tileh: u8) -> u32 {
         return sid;
     }
     if rail_station_axis_y(m5) { 1011 } else { 1012 }
+}
+
+/// Vía de fondo de estación para el tipo de red de la tesela.
+///
+/// La disposición vanilla entrega `SPR_RAIL_TRACK_*`; OpenTTD le suma el
+/// mismo offset de railtype antes de dibujarla. En pendiente se conserva el
+/// sprite de vía inclinada y se remapea de la misma forma.
+#[must_use]
+pub fn rail_station_ground_track_sprite_for_type(m5: u8, tileh: u8, rail_type: RailType) -> u32 {
+    remap_rail_sprite_id(rail_station_ground_track_sprite(m5, tileh), rail_type)
 }
 
 #[inline]
@@ -264,7 +320,7 @@ static RAIL_STATION_SEQ_7: [RailStationLayer; 4] = [
 /// Cristal de techo (`SPR_RAIL_ROOF_GLASS_*`): tint translúcido, sin company colour.
 #[must_use]
 pub const fn rail_station_roof_glass_sprite(sprite_id: u32) -> bool {
-    matches!(sprite_id, 1083..=1086)
+    matches!(rail_station_sprite_base_id(sprite_id), 1083..=1086)
 }
 
 /// Cuerpo ogfx2 19/20 + toldos CC 21/22 (eje X).
@@ -493,6 +549,74 @@ mod tests {
     }
 
     #[test]
+    fn rail_station_variants_follow_upstream_railtype_offsets() {
+        // `DrawTile_Station` toma `GetRailtypeSpriteOffset()` (82 por
+        // fallback railtype) y `DrawRailTileSeq` lo suma a cada parent/child.
+        // El caso real Kale (226,42) es gfx=5 de monorail: 1077/1069/1080/
+        // 1084 -> 1159/1151/1162/1166.
+        assert_eq!(
+            rail_station_draw_layers(5)
+                .iter()
+                .map(|layer| rail_station_layer_for_type(*layer, RailType::Monorail).sprite_id)
+                .collect::<Vec<_>>(),
+            vec![1159, 1151, 1162, 1166]
+        );
+        assert_eq!(
+            rail_station_draw_layers(5)
+                .iter()
+                .map(|layer| rail_station_layer_for_type(*layer, RailType::Maglev).sprite_id)
+                .collect::<Vec<_>>(),
+            vec![1241, 1233, 1244, 1248]
+        );
+        assert_eq!(
+            rail_station_ground_track_sprite_for_type(5, 0, RailType::Monorail),
+            1093
+        );
+        assert_eq!(
+            rail_station_ground_track_sprite_for_type(5, 0, RailType::Maglev),
+            1175
+        );
+    }
+
+    #[test]
+    fn rail_station_typed_variants_keep_tile_seq_and_glass_contract() {
+        for rail_type in [
+            RailType::Rail,
+            RailType::Electric,
+            RailType::Monorail,
+            RailType::Maglev,
+        ] {
+            for gfx in 0..=7u8 {
+                for layer in rail_station_draw_layers(gfx) {
+                    let typed = rail_station_layer_for_type(*layer, rail_type);
+                    assert_eq!(
+                        rail_station_sprite_base_id(typed.sprite_id),
+                        layer.sprite_id,
+                        "{rail_type:?}, gfx={gfx}"
+                    );
+                    assert_eq!(
+                        rail_station_layer_bounds(typed.sprite_id),
+                        rail_station_layer_bounds(layer.sprite_id),
+                        "{rail_type:?}, gfx={gfx}, sprite={}",
+                        typed.sprite_id
+                    );
+                    assert_eq!(
+                        rail_station_roof_glass_sprite(typed.sprite_id),
+                        rail_station_roof_glass_sprite(layer.sprite_id),
+                        "{rail_type:?}, gfx={gfx}, sprite={}",
+                        typed.sprite_id
+                    );
+                    assert!(
+                        rail_station_sprite_meta(typed.sprite_id).is_some(),
+                        "sin meta NFO para {rail_type:?}, gfx={gfx}, sprite={}",
+                        typed.sprite_id
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
     fn rail_station_ground_track_uses_sloped_sprite_on_slope() {
         assert_eq!(rail_station_ground_track_sprite(0, 12), 1031);
         assert_eq!(rail_station_ground_track_sprite(1, 12), 1031);
@@ -503,6 +627,7 @@ mod tests {
     fn vanilla_station_layer_bounds_match_tile_seq_contract() {
         assert_eq!(rail_station_layer_bounds(1070), Some((16, 5, 2)));
         assert_eq!(rail_station_layer_bounds(1076), Some((16, 5, 7)));
+        assert_eq!(rail_station_layer_bounds(1077), Some((5, 16, 2)));
         assert_eq!(rail_station_layer_bounds(1073), Some((16, 5, 15)));
         assert_eq!(rail_station_layer_bounds(1079), Some((16, 16, 10)));
         assert_eq!(rail_station_layer_bounds(1083), None);

@@ -19,6 +19,11 @@ COMMIT="${OPENTTDRS_OPENTTD_COMMIT:-$(openttd_manifest_get "$ROOT" commit)}"
 BUILD_DIR="$(dirname "$BIN")"
 BASESET_SRC="${OPENTTDRS_OPENGFX_DIR:-${ROOT}/.deps/openttd-baseset/opengfx-8.0}"
 PREFIX="${OPENTTDRS_DEPS_PREFIX:-${ROOT}/.deps/openttd-prefix}"
+# Las regiones focalizadas terminan holgadamente en dos minutos, pero una
+# auditoría de Kale recorre 65.536 teselas y necesita más margen después de
+# cargar el save. Se mantiene el valor conservador para el uso diario y se
+# permite ampliar sólo la corrida que lo requiere.
+TIMEOUT_SECONDS="${OPENTTDRS_WORLD_DRAW_TIMEOUT_SECONDS:-120}"
 
 if [[ ! -f "$SAV" ]]; then
   echo "error: no existe $SAV" >&2
@@ -28,6 +33,10 @@ if [[ ! -x "$BIN" ]]; then
   echo "error: no hay binario OpenTTD en $BIN" >&2
   echo "  ./patches/openttd-15.3-snapshot-export/integrate.sh" >&2
   exit 1
+fi
+if ! [[ "$TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "error: OPENTTDRS_WORLD_DRAW_TIMEOUT_SECONDS debe ser un entero positivo" >&2
+  exit 2
 fi
 
 if [[ -d "$BASESET_SRC" ]]; then
@@ -58,10 +67,10 @@ if [[ -n "$REGION" ]]; then
   export OPENTTDRS_WORLD_DRAW_REGION="$REGION"
 fi
 
-echo "world-draw OpenTTD: bin=$BIN sav=$SAV out=$OUT region=${REGION:-full} commit=$COMMIT"
+echo "world-draw OpenTTD: bin=$BIN sav=$SAV out=$OUT region=${REGION:-full} timeout=${TIMEOUT_SECONDS}s commit=$COMMIT"
 cd "$BUILD_DIR"
 set +e
-timeout 120s "$BIN" -X -I opengfx -D -g "$SAV" >/tmp/openttdrs-world-draw-run.log 2>&1
+timeout "${TIMEOUT_SECONDS}s" "$BIN" -X -I opengfx -D -g "$SAV" >/tmp/openttdrs-world-draw-run.log 2>&1
 rc=$?
 set -e
 

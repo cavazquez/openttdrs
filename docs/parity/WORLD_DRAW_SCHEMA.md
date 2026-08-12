@@ -18,8 +18,11 @@ OPENTTDRS_WORLD_DRAW_OUT=/tmp/openttd-world-draw.jsonl
 OPENTTDRS_WORLD_DRAW_REGION=x0,y0,x1,y1  # inclusiva; opcional
 ```
 
-Sin región se recorre el mapa entero. Para investigación se recomienda una
-región pequeña alrededor del puente, túnel, estación o árbol afectado.
+Sin región se recorre el mapa entero en ambos lados. Para investigación se
+recomienda una región pequeña alrededor del puente, túnel, estación o árbol
+afectado. En particular, el exportador Rust ignora el culling del viewport
+cuando se activa `world-draw`: una auditoría no puede depender de dónde quedó
+centrada la cámara al abrir una partida grande.
 
 La primera línea es `metadata`:
 
@@ -125,3 +128,27 @@ No compara ordinales absolutos porque el candidato todavía instrumenta sólo
 algunas familias; sí exige la misma primitiva, sprite y, cuando está explícita,
 paleta y geometría. Así una inversión de capas se detecta sin convertir los
 comandos C++ aún no instrumentados en falsos negativos.
+
+## Auditoría global y backlog
+
+`scripts/audit_world_draw.py` consume las dos trazas completas y genera un
+backlog ordenado por familia. Primero exige la misma cobertura de teselas;
+luego cuenta cada selección divergente una única vez, aunque el mismo draw
+tenga a la vez ID, geometría, paleta y orden incorrectos. Las columnas
+individuales se conservan para saber qué corregir.
+
+```bash
+SAV=save/Kale_TitleGame.sav
+OTTD_BIN=/ruta/a/OpenTTD/build/openttd
+
+OPENTTDRS_WORLD_DRAW_TIMEOUT_SECONDS=480 \
+  ./scripts/export_openttd_world_draw.sh "$SAV" /tmp/kale-cpp.jsonl "$OTTD_BIN"
+RUSTC_WRAPPER='' ./scripts/export_openttdrs_world_draw.sh "$SAV" /tmp/kale-rust.jsonl
+python3 scripts/audit_world_draw.py /tmp/kale-cpp.jsonl /tmp/kale-rust.jsonl \
+  --json-out /tmp/kale-world-draw-audit.json \
+  --markdown-out /tmp/kale-world-draw-audit.md
+```
+
+El timeout del oráculo vale 120 s por defecto para regiones focalizadas. Se
+amplía explícitamente sólo para una auditoría completa; no modifica la
+partida ni la semántica del exportador.

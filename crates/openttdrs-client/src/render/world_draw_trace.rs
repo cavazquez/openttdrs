@@ -28,12 +28,12 @@ struct TraceRegion {
 }
 
 impl TraceRegion {
-    fn from_bounds(bounds: TileViewportBounds) -> Self {
+    const fn full(width: u32, height: u32) -> Self {
         Self {
-            tx0: bounds.tx0,
-            ty0: bounds.ty0,
-            tx1: bounds.tx1,
-            ty1: bounds.ty1,
+            tx0: 0,
+            ty0: 0,
+            tx1: width,
+            ty1: height,
         }
     }
 
@@ -165,7 +165,11 @@ impl WorldDrawTrace {
     /// renderiza exactamente ese rectángulo inclusivo. Es deliberadamente un
     /// modo de diagnóstico: evita depender del viewport/culling actual para
     /// poder compararlo con el oráculo C++.
-    pub(crate) fn start(width: u32, height: u32, spawn_bounds: TileViewportBounds) -> Option<Self> {
+    pub(crate) fn start(
+        width: u32,
+        height: u32,
+        _spawn_bounds: TileViewportBounds,
+    ) -> Option<Self> {
         let out = std::env::var_os(WORLD_DRAW_OUT_ENV)?;
         let requested_region = match std::env::var(WORLD_DRAW_REGION_ENV) {
             Ok(raw) => match parse_region(&raw, width, height) {
@@ -177,7 +181,12 @@ impl WorldDrawTrace {
             },
             Err(_) => None,
         };
-        let region = requested_region.unwrap_or_else(|| TraceRegion::from_bounds(spawn_bounds));
+        // Una traza sin región es una auditoría de mapa, no una foto del
+        // viewport inicial. El culling normal puede abarcar sólo una parte de
+        // un save grande (Kale: 29.929/65.536 teselas), y convertir esa
+        // muestra en "full" ocultaría justamente las divergencias alejadas de
+        // la cámara. La región explícita mantiene el flujo focalizado.
+        let region = requested_region.unwrap_or_else(|| TraceRegion::full(width, height));
         let state = TraceState {
             out: PathBuf::from(out),
             source: std::env::var(WORLD_DRAW_SOURCE_ENV).ok(),
@@ -700,7 +709,15 @@ fn openttd_tile_type(kind: TileKind) -> u8 {
 #[cfg(test)]
 #[allow(clippy::expect_used)]
 mod tests {
-    use super::parse_region;
+    use super::{TraceRegion, parse_region};
+
+    #[test]
+    fn missing_region_means_the_entire_map() {
+        assert_eq!(
+            TraceRegion::full(256, 128).as_bounds(),
+            crate::render::TileViewportBounds::full(256, 128)
+        );
+    }
 
     #[test]
     fn parses_inclusive_region_and_clamps_its_end() {

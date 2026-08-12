@@ -114,12 +114,6 @@ pub fn road_depot_seq_gfx(layer: &RoadDepotLayerGfx) -> crate::iso::RoadStopSeqG
     }
 }
 
-#[must_use]
-pub fn road_tile_has_tram_track(m8: u16) -> bool {
-    let t = (m8 >> 6) & 0x3F;
-    t != 0 && t != 0x3F
-}
-
 /// M3LO bits 0–3: trazado de tranvía en carretera normal (`road_map.h`), misma máscara que road bits.
 #[inline]
 #[must_use]
@@ -390,7 +384,6 @@ mod tests {
         assert_eq!(road_flat_index(bits, &ROAD_FLAT_OFFSET_TBL), 2);
         assert!(tram_flat_sprite_index(0, 0x03, &ROAD_FLAT_OFFSET_TBL).is_some());
         assert_eq!(road_flat_sprite_index(12, bits, &ROAD_FLAT_OFFSET_TBL), 11);
-        assert!(road_tile_has_tram_track(0x80));
     }
 
     #[test]

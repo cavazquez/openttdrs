@@ -86,12 +86,16 @@ impl ClientAssetStatus {
                 openttdrs_core::sound_id::SOUND_COUNT
             ),
             (world_available, ui_available) => {
-                let partial = (world_available < openttdrs_core::sound_id::SOUND_COUNT)
-                    .then_some(" parcial")
-                    .unwrap_or_default();
-                let ui = (ui_available > 0)
-                    .then(|| format!(" · UI {ui_available}"))
-                    .unwrap_or_default();
+                let partial = if world_available < openttdrs_core::sound_id::SOUND_COUNT {
+                    " parcial"
+                } else {
+                    ""
+                };
+                let ui = if ui_available > 0 {
+                    format!(" · UI {ui_available}")
+                } else {
+                    String::new()
+                };
                 format!(
                     "OpenSFX {} {}/{}{}{}",
                     sfx.quality,
@@ -136,7 +140,13 @@ fn first_dir_name_with_prefix(root: &Path, prefix: &str) -> Option<String> {
     let mut names: Vec<String> = fs::read_dir(root)
         .ok()?
         .filter_map(Result::ok)
-        .filter_map(|entry| entry.file_type().ok().filter(|t| t.is_dir()).map(|_| entry))
+        .filter_map(|entry| {
+            entry
+                .file_type()
+                .ok()
+                .filter(std::fs::FileType::is_dir)
+                .map(|_| entry)
+        })
         .filter_map(|entry| entry.file_name().into_string().ok())
         .filter(|name| name.starts_with(prefix))
         .collect();
@@ -196,7 +206,7 @@ fn files_with_extension(dir: &Path, extension: &str) -> Vec<PathBuf> {
 }
 
 fn format_rate_hz(rate: u32) -> String {
-    if rate % 1_000 == 0 {
+    if rate.is_multiple_of(1_000) {
         format!("{} kHz", rate / 1_000)
     } else {
         format!("{:.1} kHz", rate as f32 / 1_000.0)
@@ -345,7 +355,7 @@ pub(crate) fn warn_missing_optional_assets(root: &Path) {
 mod tests {
     use super::*;
 
-    fn write_wav(path: &Path, channels: u16, rate: u32, bits: u16) {
+    fn write_wav(path: &Path, channels: u16, rate: u32, bits: u16) -> std::io::Result<()> {
         let mut data = b"RIFF".to_vec();
         data.extend_from_slice(&36u32.to_le_bytes());
         data.extend_from_slice(b"WAVEfmt ");
@@ -353,38 +363,36 @@ mod tests {
         data.extend_from_slice(&1u16.to_le_bytes());
         data.extend_from_slice(&channels.to_le_bytes());
         data.extend_from_slice(&rate.to_le_bytes());
-        data.extend_from_slice(
-            &(u32::from(rate) * u32::from(channels) * u32::from(bits) / 8).to_le_bytes(),
-        );
+        data.extend_from_slice(&(rate * u32::from(channels) * u32::from(bits) / 8).to_le_bytes());
         data.extend_from_slice(&(channels * bits / 8).to_le_bytes());
         data.extend_from_slice(&bits.to_le_bytes());
         data.extend_from_slice(b"data");
         data.extend_from_slice(&0u32.to_le_bytes());
-        fs::write(path, data).expect("wav");
+        fs::write(path, data)
     }
 
-    fn write_vorbis_header(path: &Path, channels: u8, rate: u32) {
+    fn write_vorbis_header(path: &Path, channels: u8, rate: u32) -> std::io::Result<()> {
         let mut data = b"OggS\0\0".to_vec();
         data.extend_from_slice(b"\x01vorbis");
         data.extend_from_slice(&0u32.to_le_bytes());
         data.push(channels);
         data.extend_from_slice(&rate.to_le_bytes());
-        fs::write(path, data).expect("ogg");
+        fs::write(path, data)
     }
 
     #[test]
-    fn reports_installed_sets_and_audio_quality() {
-        let dir = tempfile::tempdir().expect("tempdir");
+    fn reports_installed_sets_and_audio_quality() -> Result<(), Box<dyn std::error::Error>> {
+        let dir = tempfile::tempdir()?;
         let root = dir.path();
         let opengfx = root.join("assets/opengfx");
         let sounds = root.join("assets/sounds");
         let music = root.join("assets/music");
-        fs::create_dir_all(opengfx.join("opengfx-8.0")).expect("gfx");
-        fs::create_dir_all(&sounds).expect("sounds");
-        fs::create_dir_all(&music).expect("music");
-        fs::write(opengfx.join(".graphics_mode"), "8bpp\n").expect("mode");
-        write_wav(&sounds.join("snd_00.wav"), 1, 44_100, 16);
-        write_vorbis_header(&music.join("theme.ogg"), 2, 44_100);
+        fs::create_dir_all(opengfx.join("opengfx-8.0"))?;
+        fs::create_dir_all(&sounds)?;
+        fs::create_dir_all(&music)?;
+        fs::write(opengfx.join(".graphics_mode"), "8bpp\n")?;
+        write_wav(&sounds.join("snd_00.wav"), 1, 44_100, 16)?;
+        write_vorbis_header(&music.join("theme.ogg"), 2, 44_100)?;
 
         let status = ClientAssetStatus::probe(root);
         assert_eq!(status.graphics_hud_label(), "OpenGFX 8.0 · 8bpp");
@@ -398,26 +406,29 @@ mod tests {
                 .music_hud_label()
                 .contains("OGG/Vorbis 44.1 kHz estéreo 1/31 parcial")
         );
+        Ok(())
     }
 
     #[test]
-    fn ui_wavs_are_not_reported_as_a_complete_opensfx_catalog() {
-        let dir = tempfile::tempdir().expect("tempdir");
+    fn ui_wavs_are_not_reported_as_a_complete_opensfx_catalog()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let dir = tempfile::tempdir()?;
         let sounds = dir.path().join("assets/sounds");
-        fs::create_dir_all(&sounds).expect("sounds");
-        write_wav(&sounds.join("hud_soft.wav"), 1, 22_050, 16);
-        write_wav(&sounds.join("construction_water.wav"), 1, 44_100, 16);
+        fs::create_dir_all(&sounds)?;
+        write_wav(&sounds.join("hud_soft.wav"), 1, 22_050, 16)?;
+        write_wav(&sounds.join("construction_water.wav"), 1, 44_100, 16)?;
 
         let status = ClientAssetStatus::probe(dir.path());
         let label = status.sfx_hud_label();
         assert!(label.starts_with("SFX UI WAV mixto"));
         assert!(label.contains("2 archivos; mundo 0/73"));
         assert!(!label.contains("OpenSFX"));
+        Ok(())
     }
 
     #[test]
-    fn unavailable_sets_do_not_claim_a_quality() {
-        let dir = tempfile::tempdir().expect("tempdir");
+    fn unavailable_sets_do_not_claim_a_quality() -> Result<(), Box<dyn std::error::Error>> {
+        let dir = tempfile::tempdir()?;
         let status = ClientAssetStatus::probe(dir.path());
         assert_eq!(
             status.graphics_hud_label(),
@@ -425,5 +436,6 @@ mod tests {
         );
         assert_eq!(status.sfx_hud_label(), "sin SFX");
         assert_eq!(status.music_hud_label(), "sin OpenMSX");
+        Ok(())
     }
 }

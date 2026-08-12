@@ -123,6 +123,21 @@ El archivo `ogfx1_base.nfo` tiene una línea por sprite:
 | `w`, `h` | Ancho y alto del sprite en píxeles |
 | `xrel`, `yrel` | Offsets en pantalla **respecto al punto de referencia** (coordenadas Y-down) |
 
+#### Espacios de IDs: base vs. extra
+
+El número de sprite dentro de un NFO es **local a su GRF**, no un identificador
+global entre `ogfx1_base.grf` y `ogfxe_extra.grf`. Las constantes `SPR_*` de
+OpenTTD se resuelven contra el baseset (`ogfx1_base.nfo` en 8bpp o
+`ogfx21_base_32ez.nfo` en 32bpp). Nunca hay que combinar ambos NFO en un único
+diccionario indexado por número: por ejemplo, el ID global de campo `4259` es
+un rombo de `64×31` en el base, mientras que el `4259` local del extra es un
+sprite distinto de `12×6`.
+
+`scripts/nfo_sprite_meta.py` y el `Cropper` compartido aplican esa regla. Los
+sprites que realmente pertenecen a `ogfxe_extra` se extraen sólo desde un
+bloque Action5 identificado explícitamente (catenaria, señales/PBS, iconos o
+paradas drive-through), sin reutilizar sus IDs locales como `SPR_*`.
+
 #### Conversión xrel/yrel → posición Bevy (Y-up)
 
 El punto de referencia de OpenTTD es el **vértice superior del rombo** de la tesela.

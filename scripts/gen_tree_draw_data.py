@@ -17,85 +17,22 @@ import re
 import sys
 from pathlib import Path
 
-from PIL import Image
-
+from gen_field_draw_data import Cropper, REPO, TILES_DIR
 from nfo_sprite_meta import detect_graphics_mode, parse_sprite_offs, sprite_dims_from_assets
-from opengfx_palette import dematte_legacy_colorkey, indexed_dos_to_rgba
 
 SPR_TREES_BASE = 1576
 TREE_SPRITE_COUNT = 133  # 19 especies × 7 etapas (0x628..0x6A6+6)
 TEMPERATE_LAYOUT_ROWS = 48  # 12 tipos (m3) × 4 variantes
 
-REPO = Path(__file__).resolve().parents[1]
-TILES_DIR = REPO / "assets" / "opengfx" / "tiles"
 TREE_LAND_H = REPO / "reference" / "openttd-upstream" / "src" / "table" / "tree_land.h"
 OUT_RS = REPO / "crates/openttdrs-client/src/sprites/tree_draw_data_generated.rs"
 
-SHEET_RE = re.compile(
-    r"^\s*(\d+)\s+(\S*?((?:ogfx1_base|ogfx21_base_32ez)\d+\.(?:32\.png|png|pcx)))\s+(?:8bpp|32bpp)\s+"
-    r"(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(-?\d+)\s+(-?\d+)"
-)
-
-
-def find_sprites_dir() -> Path:
-    for cand in (REPO / "assets" / "opengfx").glob("*/sprites"):
-        if any(cand.glob("*.nfo")):
-            return cand
-    sys.exit("No se encontró el directorio de sprites decodificados (corré descargar_graficos.sh)")
-
-
-def load_sheet(png_path: Path, mode: str) -> Image.Image:
-    """Réplica de `load_sheet` de descargar_graficos.sh para el modo activo."""
-    img = Image.open(png_path)
-    if mode == "32bpp":
-        if img.mode == "P":
-            pal = img.getpalette()
-            transparent_rgb = tuple(pal[0:3]) if pal else None
-            img_rgba = img.convert("RGBA")
-            if transparent_rgb is not None:
-                data = [
-                    (0, 0, 0, 0) if (r, g, b) == transparent_rgb else (r, g, b, a)
-                    for r, g, b, a in img_rgba.getdata()
-                ]
-                img_rgba.putdata(data)
-            return img_rgba
-        return img.convert("RGBA")
-    if img.mode == "P":
-        return indexed_dos_to_rgba(img)
-    return dematte_legacy_colorkey(img)
-
-
 def crop_tree_sprites(mode: str) -> None:
-    sprites_dir = find_sprites_dir()
-    # Hay base + extra; `glob` no garantiza orden y el extra puede salir primero.
-    sprite_rect: dict[int, tuple[int, int, int, int, str]] = {}
-    for nfo in sorted(sprites_dir.glob("*.nfo")):
-        for line in nfo.read_text(errors="replace").splitlines():
-            m = SHEET_RE.match(line)
-            if m:
-                sid = int(m.group(1))
-                sprite_rect[sid] = (
-                    int(m.group(4)),
-                    int(m.group(5)),
-                    int(m.group(6)),
-                    int(m.group(7)),
-                    Path(m.group(2)).name,
-                )
-
-    sheets: dict[str, Image.Image] = {}
+    cropper = Cropper(mode)
     written = 0
     for i in range(TREE_SPRITE_COUNT):
         sid = SPR_TREES_BASE + i
-        if sid not in sprite_rect:
-            sys.exit(f"sprite {sid} no está en el NFO")
-        x, y, w, h, sheet_name = sprite_rect[sid]
-        if sheet_name not in sheets:
-            p = sprites_dir / sheet_name
-            if not p.is_file():
-                p = p.with_suffix(".pcx")
-            sheets[sheet_name] = load_sheet(p, mode)
-        crop = sheets[sheet_name].crop((x, y, x + w, y + h))
-        crop.save(TILES_DIR / f"tree_{i:02d}.png")
+        cropper.crop(sid, f"tree_{i:02d}.png")
         written += 1
     print(f"Recortados {written} sprites de árbol en {TILES_DIR}")
 
@@ -154,6 +91,7 @@ def main() -> None:
         "//",
         "// Sprites de árboles templados de OpenTTD (SPR_TREES_BASE=1576, 19 especies",
         "// × 7 etapas) + tablas de layout de `table/tree_land.h`.",
+        "#![cfg_attr(rustfmt, rustfmt_skip)]",
         "",
         "/// Metadatos NFO de un sprite de árbol (`tree_{NN}.png`, NN = id − 1576).",
         "#[derive(Debug, Clone, Copy)]",

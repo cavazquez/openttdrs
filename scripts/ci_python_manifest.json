@@ -22,6 +22,8 @@
     "scripts/gen_house_population.py",
     "scripts/gen_tile_atlas.py",
     "scripts/opengfx_palette.py",
+    "scripts/gen_field_draw_data.py",
+    "scripts/gen_tree_draw_data.py",
     "scripts/extract_bridge_pbs_reservation_sprites.py",
     "scripts/extract_rail_pbs_palette_sprites.py",
     "scripts/nfo_sprite_meta.py",
@@ -56,7 +58,8 @@
     "scripts/write_release_report.py",
     "scripts/window_visual_regression.py",
     "scripts/test_window_visual_regression.py",
-    "scripts/test_opengfx_palette.py"
+    "scripts/test_opengfx_palette.py",
+    "scripts/test_global_sprite_namespace.py"
   ],
   "runs": [
     "scripts/test_openttd_reference_manifest.py",
@@ -68,6 +71,7 @@
     "scripts/check_release_metadata.py",
     "scripts/window_visual_regression.py",
     "scripts/test_window_visual_regression.py",
-    "scripts/test_opengfx_palette.py"
+    "scripts/test_opengfx_palette.py",
+    "scripts/test_global_sprite_namespace.py"
   ]
 }

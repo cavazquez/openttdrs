@@ -1,7 +1,7 @@
 //! Rampas RGB de color de compañía para máscaras `NewGRF`.
 //!
 //! Generado por `scripts/gen_company_palette_rust.py` desde la paleta DOS
-//! de OpenTTD. No editar a mano.
+//! de `OpenTTD`. No editar a mano.
 #![cfg_attr(rustfmt, rustfmt_skip)]
 
 /// RGB de cada rampa `[colour][shade]`.
@@ -139,5 +139,5 @@ pub static COMPANY_RAMP_RGB: [[u8; 3]; 16 * 8] = [
 pub const COMPANY_RAMP_SHADES: usize = 8;
 pub const COMPANY_COLOUR_COUNT: usize = 16;
 
-/// Primer índice DOS de la rampa «autor» (dark blue) usada por máscaras NewGRF.
+/// Primer índice DOS de la rampa «autor» (dark blue) usada por máscaras `NewGRF`.
 pub const AUTHOR_CC_PALETTE_FIRST: u8 = 0xC6;

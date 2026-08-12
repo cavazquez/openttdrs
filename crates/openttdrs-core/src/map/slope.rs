@@ -383,14 +383,15 @@ mod tests {
         // SLOPE_WSE = W | S | E. Antes se trataba erróneamente como una
         // pendiente que cae hacia SE; esto desplazaba puntos PCP de catenaria.
         const SLOPE_WSE: u8 = 0x07;
-        assert_eq!(partial_pixel_z(0.0, 0.0, SLOPE_WSE), 0);
-        assert_eq!(partial_pixel_z(8.0, 15.0, SLOPE_WSE), 8);
-
         // Las otras tres variantes son rotaciones, no la misma fórmula
         // aplicada a los ejes intercambiados.
         const SLOPE_NWS: u8 = 0x0B;
         const SLOPE_SEN: u8 = 0x0D;
         const SLOPE_ENW: u8 = 0x0E;
+
+        assert_eq!(partial_pixel_z(0.0, 0.0, SLOPE_WSE), 0);
+        assert_eq!(partial_pixel_z(8.0, 15.0, SLOPE_WSE), 8);
+
         assert_eq!(partial_pixel_z(8.0, 0.0, SLOPE_NWS), 8);
         assert_eq!(partial_pixel_z(15.0, 8.0, SLOPE_SEN), 5);
         assert_eq!(partial_pixel_z(15.0, 8.0, SLOPE_ENW), 4);

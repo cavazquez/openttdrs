@@ -13,14 +13,6 @@ except ImportError:
 NfoEntry = tuple[str, int, int, int, int]  # bpp, nw, nh, x_offs, y_offs
 
 
-def find_nfo_files(repo: Path) -> list[Path]:
-    out: list[Path] = []
-    for root in (repo / "assets" / "opengfx", repo / ".downloads" / "openttd"):
-        if root.is_dir():
-            out.extend(root.rglob("*.nfo"))
-    return out
-
-
 def detect_graphics_mode(repo: Path) -> str | None:
     marker = repo / "assets" / "opengfx" / ".graphics_mode"
     if marker.is_file():
@@ -35,14 +27,46 @@ def detect_graphics_mode(repo: Path) -> str | None:
     return None
 
 
-def parse_sprite_offs(repo: Path) -> dict[int, list[NfoEntry]]:
-    """Todas las filas 8bpp/32bpp por sprite ID."""
+def active_global_sprite_nfo(repo: Path, mode: str | None = None) -> Path | None:
+    """Devuelve el NFO del GRF base del perfil gráfico activo.
+
+    Los IDs numéricos dentro de un NFO son locales a cada GRF. Por eso una
+    constante global ``SPR_*`` de OpenTTD sólo se puede resolver contra
+    ``ogfx1_base``/``ogfx21_base_32ez``; ``ogfxe_extra`` se consume mediante
+    extractores Action5 específicos y nunca se mezcla aquí por número.
+    """
+    mode = mode or detect_graphics_mode(repo)
+    root = repo / "assets" / "opengfx"
+    if mode == "32bpp":
+        candidates = sorted(
+            root.glob("opengfx2-*/sprites/ogfx21_base_32ez.nfo"), reverse=True
+        )
+    elif mode == "8bpp":
+        candidates = sorted(root.glob("opengfx-*/sprites/ogfx1_base.nfo"), reverse=True)
+    else:
+        return None
+    return next((path for path in candidates if path.is_file()), None)
+
+
+def find_nfo_files(repo: Path, mode: str | None = None) -> list[Path]:
+    """Compatibilidad: el único NFO válido para IDs globales del perfil activo."""
+    path = active_global_sprite_nfo(repo, mode)
+    return [path] if path is not None else []
+
+
+def parse_sprite_offs(repo: Path, mode: str | None = None) -> dict[int, list[NfoEntry]]:
+    """Filas NFO de IDs globales OpenTTD del GRF base activo.
+
+    No se incluyen NFO ``extra`` ni side-caches: sus IDs se reinician por GRF
+    y una mezcla silenciosa puede sustituir un sprite de 64×31 por uno pequeño
+    e irrelevante de otro namespace.
+    """
     pat = re.compile(
         r"^\s*(\d+)\s+\S+\s+(8bpp|32bpp)\s+"
         r"\d+\s+\d+\s+(\d+)\s+(\d+)\s+(-?\d+)\s+(-?\d+)"
     )
     out: dict[int, list[NfoEntry]] = {}
-    for nfo in find_nfo_files(repo):
+    for nfo in find_nfo_files(repo, mode):
         try:
             content = nfo.read_text(encoding="utf-8", errors="replace")
         except OSError:

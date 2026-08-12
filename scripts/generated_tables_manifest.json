@@ -27,7 +27,7 @@
       ],
       "check": "hash",
       "requires_opengfx": true,
-      "output_sha256": "06f06a487373eb1bf46fa603e747f9080413b5cc7936e5bc99323bc3cbd3536d",
+      "output_sha256": "f21a17f6f2103ab4f64ddea7dbce2516269026393f9f0e6adcd91a30bdc4fb3b",
       "license": "GPL-2.0-only (OpenTTD) + offsets OpenGFX locales",
       "note": "Regenerado y verificado 2026-07-25 con OpenGFX local; CI solo hash. rustfmt_skip mantiene filas compactas."
     },
@@ -77,7 +77,7 @@
       ],
       "check": "hash",
       "requires_opengfx": true,
-      "output_sha256": "710e387147f6256bb52f5e9432de0d8371c366e089a058b607cbb05863e3c083",
+      "output_sha256": "5f37e3d655447fb540225fc5228ed2732ad114013c3da5e5e6a244692382ef2a",
       "license": "GPL-2.0-only (OpenTTD) + sprites OpenGFX locales",
       "note": "Incluye los 15 frames y metadatos NFO usados por EV_BUBBLE. CI valida hash."
     },
@@ -88,7 +88,7 @@
       "inputs": [],
       "check": "hash",
       "requires_opengfx": true,
-      "output_sha256": "b0cd7056d7213bc83f25020816231725fc8889f84f623e5cf7a65512de41bf6a",
+      "output_sha256": "69f29137e24bd06cbf997a82ab8f351f7eab8a327ea5d2ebba5800cbb9ea10c1",
       "license": "layout derivado de PNG OpenGFX locales",
       "note": "Regenerado y verificado 2026-08-10 con el atlas OpenGFX local; CI valida hash del .rs. El --check local valida además las páginas PNG píxel a píxel."
     }

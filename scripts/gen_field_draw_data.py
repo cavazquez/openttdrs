@@ -20,7 +20,12 @@ from pathlib import Path
 
 from PIL import Image
 
-from nfo_sprite_meta import detect_graphics_mode, parse_sprite_offs, sprite_dims_from_assets
+from nfo_sprite_meta import (
+    active_global_sprite_nfo,
+    detect_graphics_mode,
+    parse_sprite_offs,
+    sprite_dims_from_assets,
+)
 from opengfx_palette import dematte_legacy_colorkey, indexed_dos_to_rgba
 
 SPR_FARMLAND_BARE = 4126
@@ -51,30 +56,32 @@ def find_clear_land_h() -> Path:
         "o definí OPENTTD_SRC."
     )
 
-SHEET_RE = re.compile(
-    r"^\s*(\d+)\s+(\S*?((?:ogfx1_base|ogfxe_extra|ogfx21_base_32ez|ogfx2e_extra_32ez)\d+\.(?:32\.png|png|pcx)))\s+(?:8bpp|32bpp)\s+"
+GLOBAL_SHEET_RE = re.compile(
+    r"^\s*(\d+)\s+(\S*?((?:ogfx1_base|ogfx21_base_32ez)\d+\.(?:32\.png|png|pcx)))\s+(?:8bpp|32bpp)\s+"
     r"(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(-?\d+)\s+(-?\d+)"
 )
 
 
-def find_sprites_dir(mode: str) -> Path:
-    """Resuelve el set activo, sin tomar caches auxiliares por orden de glob.
+SpriteRect = tuple[int, int, int, int, str]
 
-    `.ogfx2_stations_decode/` también contiene un NFO y antes podía ganar la
-    búsqueda genérica en un perfil 8bpp. Eso dejaba vacío el catálogo de
-    campos aunque `ogfxe_extra.nfo` estuviera correctamente decodificado.
-    """
-    opengfx = REPO / "assets" / "opengfx"
-    if mode == "32bpp":
-        candidate = opengfx / "opengfx2-32ez" / "sprites"
-        if any(candidate.glob("*.nfo")):
-            return candidate
-    else:
-        candidates = sorted(opengfx.glob("opengfx-*/sprites"), reverse=True)
-        for candidate in candidates:
-            if any(candidate.glob("*.nfo")):
-                return candidate
-    sys.exit("No se encontró el set OpenGFX activo (corré descargar_graficos.sh)")
+
+def parse_global_sprite_rects(nfo_path: Path) -> dict[int, SpriteRect]:
+    """Lee rectángulos de un NFO *base* sin mezclar el namespace de ``extra``."""
+    if nfo_path.name not in {"ogfx1_base.nfo", "ogfx21_base_32ez.nfo"}:
+        raise ValueError(f"se esperaba NFO base, se recibió {nfo_path.name}")
+
+    rect: dict[int, SpriteRect] = {}
+    for line in nfo_path.read_text(errors="replace").splitlines():
+        match = GLOBAL_SHEET_RE.match(line)
+        if match:
+            rect[int(match.group(1))] = (
+                int(match.group(4)),
+                int(match.group(5)),
+                int(match.group(6)),
+                int(match.group(7)),
+                Path(match.group(2)).name,
+            )
+    return rect
 
 
 def load_sheet(png_path: Path, mode: str) -> Image.Image:
@@ -98,22 +105,15 @@ def load_sheet(png_path: Path, mode: str) -> Image.Image:
 
 
 class Cropper:
+    """Recorta un ``SpriteID`` global de OpenTTD desde el GRF base activo."""
+
     def __init__(self, mode: str) -> None:
         self.mode = mode
-        self.sprites_dir = find_sprites_dir(mode)
-        # Hay base + extra; `glob` no garantiza orden y el extra puede salir primero.
-        self.rect: dict[int, tuple[int, int, int, int, str]] = {}
-        for nfo in sorted(self.sprites_dir.glob("*.nfo")):
-            for line in nfo.read_text(errors="replace").splitlines():
-                m = SHEET_RE.match(line)
-                if m:
-                    self.rect[int(m.group(1))] = (
-                        int(m.group(4)),
-                        int(m.group(5)),
-                        int(m.group(6)),
-                        int(m.group(7)),
-                        Path(m.group(2)).name,
-                    )
+        nfo_path = active_global_sprite_nfo(REPO, mode)
+        if nfo_path is None:
+            sys.exit("No se encontró el NFO OpenGFX base activo (corré descargar_graficos.sh)")
+        self.sprites_dir = nfo_path.parent
+        self.rect = parse_global_sprite_rects(nfo_path)
         self.sheets: dict[str, Image.Image] = {}
 
     def crop(self, sid: int, out_name: str) -> None:
@@ -178,6 +178,7 @@ def main() -> None:
         "//",
         "// Campos de cultivo (`SPR_FARMLAND_*`, 9 estados × 19 pendientes) y",
         "// cercas (`SPR_HEDGE_*`, 6 tipos × 6 variantes) de `table/clear_land.h`.",
+        "#![cfg_attr(rustfmt, rustfmt_skip)]",
         "",
         "/// Metadatos NFO de un sprite de cerca (`fence_{tipo}_{var}.png`).",
         "#[derive(Debug, Clone, Copy)]",

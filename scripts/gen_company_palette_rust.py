@@ -117,11 +117,11 @@ def render_core(ramps: list[list[tuple[int, int, int]]]) -> str:
         "//! Rampas RGB de color de compañía para máscaras `NewGRF`.",
         "//!",
         "//! Generado por `scripts/gen_company_palette_rust.py` desde la paleta DOS",
-        "//! de OpenTTD. No editar a mano.",
+        "//! de `OpenTTD`. No editar a mano.",
         "#![cfg_attr(rustfmt, rustfmt_skip)]",
         "",
         *render_ramp_table(ramps),
-        "/// Primer índice DOS de la rampa «autor» (dark blue) usada por máscaras NewGRF.",
+        "/// Primer índice DOS de la rampa «autor» (dark blue) usada por máscaras `NewGRF`.",
         "pub const AUTHOR_CC_PALETTE_FIRST: u8 = 0xC6;",
         "",
     ]

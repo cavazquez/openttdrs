@@ -508,19 +508,19 @@ mod tests {
         let tile_index = 1usize;
         let object_id = 17u32;
         let mut mapt = vec![0u8; n];
-        let mut map2 = vec![0u8; n * 2];
+        let mut map2_bytes = vec![0u8; n * 2];
         let mut records = vec![Vec::new(); object_id as usize];
         let mut object_record = Vec::new();
         object_record.extend_from_slice(&(tile_index as u32).to_be_bytes());
         object_record.extend_from_slice(&1u16.to_be_bytes()); // OBJECT_LIGHTHOUSE
         records.push(object_record);
         mapt[tile_index] = crate::map::OTTD_MP_OBJECT << 4;
-        map2[tile_index * 2 + 1] = object_id as u8; // MAP2 del save es big-endian.
+        map2_bytes[tile_index * 2 + 1] = object_id as u8; // MAP2 del save es big-endian.
 
         let chunks = vec![
             maps_table_chunk(w, w),
             riff(*b"MAPT", mapt),
-            riff(*b"MAP2", map2),
+            riff(*b"MAP2", map2_bytes),
             RawChunk {
                 name: *b"OBJS",
                 ch_type: CH_TABLE,

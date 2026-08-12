@@ -1381,6 +1381,7 @@ python3 "$(dirname "$0")/gen_tile_select.py"
 python3 "$(dirname "$0")/gen_shore_full_set.py"
 python3 "$(dirname "$0")/gen_water_anim_frames.py"
 python3 "$(dirname "$0")/gen_field_draw_data.py"
+python3 "$(dirname "$0")/gen_tree_draw_data.py"
 # Iconos eléctricos / catenaria: Action5 elrail aún viene de OpenGFX 8bpp.
 if [[ "${GRAPHICS_MODE}" == "32bpp" ]]; then
   ensure_signal_src_8bpp
@@ -1415,6 +1416,8 @@ python3 "$(dirname "$0")/extract_bridge_pbs_reservation_sprites.py"
 # ejecutarse después de extraer las rampas y antes del atlas.
 python3 "$(dirname "$0")/extract_rail_pbs_palette_sprites.py"
 python3 "$(dirname "$0")/gen_effect_vehicle_sprites.py" || true
+python3 "$(dirname "$0")/gen_chimney_smoke.py" || true
+python3 "$(dirname "$0")/gen_copper_mine_smoke.py" || true
 python3 "$(dirname "$0")/gen_ufo_sprites.py" || true
 # Catenaria Action5 (wires + postes + entradas de túnel) desde ogfxe_extra.
 python3 "$(dirname "$0")/extract_elrail_catenary.py" || true

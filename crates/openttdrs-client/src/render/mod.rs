@@ -92,7 +92,7 @@ pub(crate) use tiles::{
     spawn_rail_tile, spawn_road_tile, spawn_station_tile, spawn_transport_object_tile,
 };
 pub(crate) use vehicles::{
-    NewGrfTrainSpriteCache, TruckHandles, VehicleIndex, VehicleRenderPlugin,
+    NewGrfTrainSpriteCache, TruckHandles, VehicleCargoLabel, VehicleIndex, VehicleRenderPlugin,
     pick_vehicle_id_at_world, vehicle_sprite_pos_at, vehicle_world_position,
 };
 pub(crate) use viewport::{

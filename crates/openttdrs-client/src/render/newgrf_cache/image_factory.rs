@@ -5,7 +5,6 @@ use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use openttdrs_core::{DecodedSprite, bake_sprite_company_mask};
 
 use crate::sprites::CompanyColour;
-use crate::sprites::company_palette::recolor_rgba8;
 
 /// Política de bake/recolor al subir un sprite NewGRF a textura.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -14,7 +13,7 @@ pub(crate) enum DecodedSpriteImagePolicy {
     Raw,
     /// Máscara de compañía sin recolor post-bake (vehículos / buy window).
     Masked { colour: CompanyColour },
-    /// Máscara + `recolor_rgba8` opcional (industria / estación).
+    /// Máscara opcional con el color de compañía (industria / estación).
     MaskedAndRecolored { colour: Option<CompanyColour> },
 }
 
@@ -32,16 +31,12 @@ pub(crate) fn decoded_sprite_image(
             }
         }
         DecodedSpriteImagePolicy::MaskedAndRecolored { colour } => {
-            let mut rgba = if sprite.mask.is_empty() {
+            if sprite.mask.is_empty() {
                 sprite.rgba.clone()
             } else {
                 let c = colour.map(CompanyColour::as_u8).unwrap_or(0);
                 bake_sprite_company_mask(sprite, c)
-            };
-            if let Some(c) = colour {
-                recolor_rgba8(&mut rgba, c);
             }
-            rgba
         }
     };
     Image::new(
@@ -87,5 +82,19 @@ mod tests {
             DecodedSpriteImagePolicy::MaskedAndRecolored { colour: None },
         );
         assert_eq!(img.data.as_deref(), Some(&[1, 2, 3, 255][..]));
+    }
+
+    #[test]
+    fn masked_and_recolored_without_mask_does_not_guess_company_colour_from_rgb() {
+        // Dark blue is a meaningful ordinary RGB value in 32bpp sprites.
+        // Sólo la máscara NewGRF autoriza su recolor.
+        let sprite = sprite_with_rgba(vec![8, 24, 88, 255]);
+        let img = decoded_sprite_image(
+            &sprite,
+            DecodedSpriteImagePolicy::MaskedAndRecolored {
+                colour: Some(CompanyColour::Green),
+            },
+        );
+        assert_eq!(img.data.as_deref(), Some(&[8, 24, 88, 255][..]));
     }
 }

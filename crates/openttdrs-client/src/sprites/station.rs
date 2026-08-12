@@ -34,6 +34,24 @@ pub struct RailStationLayer {
     pub z: f32,
 }
 
+/// Caja `TILE_SEQ` de cada capa vanilla de estación ferroviaria.
+///
+/// Es la geometría que OpenTTD entrega a `AddSortableSpriteToDraw` en
+/// `station_land.h`; no deriva del tamaño del PNG.
+#[must_use]
+pub const fn rail_station_layer_bounds(sprite_id: u32) -> Option<(i32, i32, i32)> {
+    match sprite_id {
+        1069 | 1071 | 1075 => Some((5, 16, 2)),
+        1070 | 1072 | 1078 => Some((16, 5, 2)),
+        1073 => Some((16, 5, 15)),
+        1074 => Some((5, 16, 15)),
+        1076 => Some((16, 5, 7)),
+        1077 => Some((5, 16, 7)),
+        1079..=1082 => Some((16, 16, 10)),
+        _ => None,
+    }
+}
+
 #[must_use]
 pub fn station_type_from_m6(m6: u8) -> StationTileClass {
     match (m6 >> 3) & 0x0F {
@@ -479,6 +497,15 @@ mod tests {
         assert_eq!(rail_station_ground_track_sprite(0, 12), 1031);
         assert_eq!(rail_station_ground_track_sprite(1, 12), 1031);
         assert_eq!(rail_station_ground_track_sprite(3, 6), 1032);
+    }
+
+    #[test]
+    fn vanilla_station_layer_bounds_match_tile_seq_contract() {
+        assert_eq!(rail_station_layer_bounds(1070), Some((16, 5, 2)));
+        assert_eq!(rail_station_layer_bounds(1076), Some((16, 5, 7)));
+        assert_eq!(rail_station_layer_bounds(1073), Some((16, 5, 15)));
+        assert_eq!(rail_station_layer_bounds(1079), Some((16, 16, 10)));
+        assert_eq!(rail_station_layer_bounds(1083), None);
     }
 
     #[test]

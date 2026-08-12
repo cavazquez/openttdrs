@@ -20,6 +20,7 @@ from nfo_sprite_meta import (
     pick_sprite_meta,
     sprite_dims_from_assets,
 )
+from opengfx_palette import dematte_legacy_colorkey, indexed_dos_to_rgba
 
 REPO = Path(__file__).resolve().parents[1]
 TILES = REPO / "assets" / "opengfx" / "tiles"
@@ -190,6 +191,8 @@ def parse_rows(nfo_path: Path, sprites_dir: Path) -> dict[int, tuple[str, int, i
 def load_sheet(path: Path, mode: str) -> Image.Image:
     img = Image.open(path)
     if img.mode == "P":
+        if mode != "32bpp":
+            return indexed_dos_to_rgba(img)
         pal = img.getpalette()
         key = tuple(pal[0:3]) if pal else None
         out = img.convert("RGBA")
@@ -199,14 +202,7 @@ def load_sheet(path: Path, mode: str) -> Image.Image:
             ]
             out.putdata(data)
         return out
-    out = img.convert("RGBA")
-    if mode != "32bpp":
-        data = [
-            (0, 0, 0, 0) if px[:3] == (0, 0, 255) else px
-            for px in out.get_flattened_data()
-        ]
-        out.putdata(data)
-    return out
+    return img.convert("RGBA") if mode == "32bpp" else dematte_legacy_colorkey(img)
 
 
 def crop_sprite(

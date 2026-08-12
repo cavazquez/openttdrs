@@ -22,7 +22,8 @@ use std::fmt::Write as _;
 use crate::bevy_app::UpdateSet;
 use crate::camera::{CameraVelocity, tile_camera_world_pos};
 use crate::render::{
-    MapPreviewCamera, PrimaryGameCamera, clamp_ortho_scale, large_map_viewport_cull_enabled,
+    MapPreviewCamera, MapVisualLayer, PrimaryGameCamera, ShoreTile, VehicleCargoLabel, WaterTile,
+    clamp_ortho_scale, large_map_viewport_cull_enabled,
 };
 use crate::state::{ClientScreen, SimRunState, SimWorld};
 use crate::ui::ai_settings_window::AiSettingsWindowState;
@@ -52,7 +53,7 @@ use crate::ui::industry_directory::IndustryDirectoryState;
 use crate::ui::industry_panel::IndustryPanelState;
 use crate::ui::industry_production_window::IndustryProductionWindowState;
 use crate::ui::league_window::LeagueWindowState;
-use crate::ui::main_menu::{MainMenuCamera, MainMenuUi};
+use crate::ui::main_menu::{MainMenuCamera, MainMenuUi, leave_main_menu};
 use crate::ui::modal_stack::ModalStack;
 use crate::ui::newgrf_window::NewGrfWindowState;
 use crate::ui::news_settings_window::NewsSettingsWindowState;
@@ -1246,15 +1247,19 @@ fn auto_start_game(
     mut commands: Commands,
     q_menu: Query<Entity, With<MainMenuUi>>,
     q_menu_cam: Query<Entity, With<MainMenuCamera>>,
+    intro_layers: Query<Entity, Or<(With<MapVisualLayer>, With<WaterTile>, With<ShoreTile>)>>,
     mut next_screen: ResMut<NextState<ClientScreen>>,
 ) {
-    for e in &q_menu {
-        commands.entity(e).despawn();
-    }
-    for cam in &q_menu_cam {
-        commands.entity(cam).despawn();
-    }
-    next_screen.set(ClientScreen::InGame);
+    // El menú tiene un mapa procedural propio. Reutilizar su salida normal
+    // evita que las capas de ese fondo queden por debajo de la captura del
+    // save real cuando OPENTTDRS_MAP_SHOT arranca sin interacción humana.
+    leave_main_menu(
+        &mut commands,
+        &q_menu,
+        &q_menu_cam,
+        &intro_layers,
+        &mut next_screen,
+    );
 }
 
 fn first_depot(sim: &SimWorld) -> Option<TileCoord> {
@@ -1286,20 +1291,30 @@ fn first_industry_tile(sim: &SimWorld) -> Option<TileCoord> {
 fn hide_map_shot_ui(
     mut ui_roots: Query<
         &mut Visibility,
-        Or<(
-            With<crate::state::ingame_lifecycle::InGameUi>,
-            With<crate::ui::statusbar::StatusBarRoot>,
-            With<crate::ui::statusbar::NewsPopupRoot>,
-            With<crate::ui::toolbar::MinimapRoot>,
-            With<crate::ui::hud::TileInfoText>,
-            With<FloatingWindow>,
-        )>,
+        (
+            Or<(
+                With<crate::state::ingame_lifecycle::InGameUi>,
+                With<crate::ui::statusbar::StatusBarRoot>,
+                With<crate::ui::statusbar::NewsPopupRoot>,
+                With<crate::ui::toolbar::MinimapRoot>,
+                With<crate::ui::hud::TileInfoText>,
+                With<FloatingWindow>,
+            )>,
+            Without<VehicleCargoLabel>,
+        ),
     >,
+    mut cargo_labels: Query<&mut Visibility, With<VehicleCargoLabel>>,
 ) {
     if std::env::var_os("OPENTTDRS_MAP_SHOT_CLEAN").is_none() {
         return;
     }
     for mut visibility in &mut ui_roots {
+        *visibility = Visibility::Hidden;
+    }
+    // Son texto de depuración propio, no parte del framebuffer de OpenTTD.
+    // Se actualizan junto con los vehículos, por eso se ocultan de nuevo en
+    // cada frame de la captura limpia, después de `UpdateSet::Ui`.
+    for mut visibility in &mut cargo_labels {
         *visibility = Visibility::Hidden;
     }
 }
@@ -1314,8 +1329,9 @@ fn hide_map_shot_ui(
 /// defecto) antes de capturar, para que un mapa grande complete su remapeo y
 /// el culling del viewport.
 /// `OPENTTDRS_MAP_SHOT_CLEAN=1` oculta el chrome propio (toolbar, minimapa,
-/// barra de estado y texto HUD) justo antes de capturar. Sirve para comparar
-/// solamente el mundo contra el raster de OpenTTD.
+/// barra de estado, texto HUD y etiquetas de carga de vehículos) justo antes
+/// de capturar. Sirve para comparar solamente el mundo contra el raster de
+/// OpenTTD.
 #[allow(clippy::too_many_arguments)] // sistema ECS Bevy
 fn map_shot_driver(
     mut commands: Commands,

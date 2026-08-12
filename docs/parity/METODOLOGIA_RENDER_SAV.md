@@ -67,6 +67,8 @@ cuando el tile ya se decodificó mal.
 | Catenaria | Wire/pylon y altura efectiva de puente/túnel para que el tendido no flote ni se corte. | Instrumentada; faltan más regresiones. |
 | Monorriel y maglev | Selección diagonal tipada por railtype para no usar rail convencional. | En checkpoint; validar por región. |
 | Depósitos y estaciones especiales | Geometría de depósito naval, reserva visual de depósito rail y distinción de tiles especiales para no disfrazar un fallback como parada de buses. | En checkpoint; los fallbacks deben ser explícitos. |
+| Paleta de compañía 8bpp y estación rail vanilla | Se corrigió el desplazamiento de un índice DOS en las rampas y se dejó de inferir recolor por RGB ajeno a la rampa autora. La región `120,111..128,113` de Kale compara 118/118 comandos de estación (sprite, paleta, geometría y orden). | Validada por `world-draw`; la composición raster amplia sigue teniendo familias ajenas a esta corrección. |
+| Reservas PBS 8bpp | Los overlays `PALETTE_CRASH=804` se hornean desde índices DOS con la misma pseudo-sprite de recolor que usa OpenTTD; se eliminó el tinte RGBA naranja aproximado. Incluye `SINGLE_*` rail/mono/maglev y las doce rampas PBS. | Validar en captura focalizada; la traza conserva paleta 804 y ahora distingue la ausencia del asset exacto como fallback. |
 | Iconos y assets | Regeneración de iconos y datos de atlas asociados. | En checkpoint; revisión visual pendiente. |
 
 Este inventario describe trabajo efectuado, no una afirmación de que todos los
@@ -166,6 +168,16 @@ OPENTTDRS_OPENGFX_DIR=/ruta/a/opengfx \
 ./scripts/export_openttdrs_world_draw.sh "$SAV" /tmp/openttdrs-draw.jsonl "$REGION"
 python3 scripts/compare_world_draw.py /tmp/openttd-draw.jsonl /tmp/openttdrs-draw.jsonl \
   --geometry --foundations --order --by-role
+```
+
+Para el caso de regresión de la estación vanilla de Kale:
+
+```bash
+REGION=120,111,128,113
+./scripts/export_openttd_world_draw.sh "$SAV" /tmp/kale-ottd-station.jsonl "$OTTD_BIN" "$REGION"
+./scripts/export_openttdrs_world_draw.sh "$SAV" /tmp/kale-rust-station.jsonl "$REGION"
+python3 scripts/compare_world_draw.py /tmp/kale-ottd-station.jsonl /tmp/kale-rust-station.jsonl \
+  --geometry --order --by-role
 ```
 
 Cuando se comparte cache de compilación, ejecutar con

@@ -1,21 +1,29 @@
 #!/usr/bin/env python3
-"""Genera tablas RGB de rampas de compañía OpenTTD para el cliente.
+"""Genera tablas RGB de rampas de compañía OpenTTD.
 
 Fuente: `table/palettes.h` (paleta DOS) + índices de
 https://grf.farm/misc/company_colour_indexes.html
 
-Salida: `crates/openttdrs-client/src/sprites/company_palette_data_generated.rs`
+Salidas:
 
-Uso: python3 scripts/gen_company_palette_rust.py
+- `crates/openttdrs-client/src/sprites/company_palette_data_generated.rs`
+- `crates/openttdrs-core/src/newgrf_company_ramp.rs`
+
+Uso:
+  python3 scripts/gen_company_palette_rust.py
+  python3 scripts/gen_company_palette_rust.py --check
 """
 from __future__ import annotations
 
+import argparse
 import re
+import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 PALETTES_H = REPO / "third_party" / "openttd" / "table" / "palettes.h"
-OUT_RS = REPO / "crates/openttdrs-client/src/sprites/company_palette_data_generated.rs"
+CLIENT_OUT_RS = REPO / "crates/openttdrs-client/src/sprites/company_palette_data_generated.rs"
+CORE_OUT_RS = REPO / "crates/openttdrs-core/src/newgrf_company_ramp.rs"
 
 COMPANY_RAMP_INDICES: list[list[int]] = [
     [0xC6, 0xC7, 0xC8, 0xC9, 0xCA, 0xCB, 0xCC, 0xCD],
@@ -70,22 +78,16 @@ def load_dos_palette() -> list[tuple[int, int, int]]:
     colours = [
         tuple(map(int, m)) for m in re.findall(r"M\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)", block)
     ]
-    if len(colours) < 206:
-        raise SystemExit(f"paleta DOS incompleta ({len(colours)} entradas)")
-    return colours
+    # `_palette` enumera los 255 colores opacos; el índice DOS 0 (transparente)
+    # no aparece como `M(...)`. Conservarlo es importante: los índices de
+    # COLOUR_DARK_BLUE empiezan exactamente en 0xC6, no en 0xC7.
+    if len(colours) != 255:
+        raise SystemExit(f"paleta DOS incompleta ({len(colours)} entradas; esperaba 255)")
+    return [(0, 0, 0), *colours]
 
 
-def main() -> None:
-    dos = load_dos_palette()
-    ramps = [[dos[i] for i in idxs] for idxs in COMPANY_RAMP_INDICES]
-
-    lines = [
-        "// Generado por scripts/gen_company_palette_rust.py — NO EDITAR A MANO.",
-        "// Rampas de 8 tonos por `Colours` (PALETTE_CC_* / grf.farm).",
-        "",
-        "/// RGB de cada rampa `[colour][shade]`.",
-        f"pub static COMPANY_RAMP_RGB: [[u8; 3]; 16 * 8] = [",
-    ]
+def render_ramp_table(ramps: list[list[tuple[int, int, int]]]) -> list[str]:
+    lines = ["/// RGB de cada rampa `[colour][shade]`.", "pub static COMPANY_RAMP_RGB: [[u8; 3]; 16 * 8] = ["]
     for ci, name in enumerate(NAMES):
         for si, (r, g, b) in enumerate(ramps[ci]):
             lines.append(f"    [{r}, {g}, {b}], // {name}[{si}]")
@@ -96,9 +98,65 @@ def main() -> None:
         "pub const COMPANY_COLOUR_COUNT: usize = 16;",
         "",
     ]
-    OUT_RS.write_text("\n".join(lines), encoding="utf-8")
-    print(f"Escrito {OUT_RS.relative_to(REPO)}")
+    return lines
+
+
+def render_client(ramps: list[list[tuple[int, int, int]]]) -> str:
+    lines = [
+        "// Generado por scripts/gen_company_palette_rust.py — NO EDITAR A MANO.",
+        "// Rampas de 8 tonos por `Colours` (PALETTE_CC_* / grf.farm).",
+        "#![cfg_attr(rustfmt, rustfmt_skip)]",
+        "",
+        *render_ramp_table(ramps),
+    ]
+    return "\n".join(lines)
+
+
+def render_core(ramps: list[list[tuple[int, int, int]]]) -> str:
+    lines = [
+        "//! Rampas RGB de color de compañía para máscaras `NewGRF`.",
+        "//!",
+        "//! Generado por `scripts/gen_company_palette_rust.py` desde la paleta DOS",
+        "//! de OpenTTD. No editar a mano.",
+        "#![cfg_attr(rustfmt, rustfmt_skip)]",
+        "",
+        *render_ramp_table(ramps),
+        "/// Primer índice DOS de la rampa «autor» (dark blue) usada por máscaras NewGRF.",
+        "pub const AUTHOR_CC_PALETTE_FIRST: u8 = 0xC6;",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def build_outputs() -> dict[Path, str]:
+    dos = load_dos_palette()
+    ramps = [[dos[i] for i in idxs] for idxs in COMPANY_RAMP_INDICES]
+    return {
+        CLIENT_OUT_RS: render_client(ramps),
+        CORE_OUT_RS: render_core(ramps),
+    }
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--check", action="store_true", help="falla si una salida generada difiere")
+    args = parser.parse_args(argv)
+
+    outputs = build_outputs()
+    drift = False
+    for output, content in outputs.items():
+        current = output.read_text(encoding="utf-8") if output.is_file() else None
+        if args.check:
+            if current != content:
+                print(f"DRIFT {output.relative_to(REPO)}", file=sys.stderr)
+                drift = True
+            else:
+                print(f"OK {output.relative_to(REPO)}")
+            continue
+        output.write_text(content, encoding="utf-8")
+        print(f"Escrito {output.relative_to(REPO)}")
+    return int(drift)
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

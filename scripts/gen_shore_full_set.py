@@ -33,6 +33,7 @@ from pathlib import Path
 from PIL import Image
 
 from nfo_sprite_meta import detect_graphics_mode
+from opengfx_palette import dematte_legacy_colorkey, indexed_dos_to_rgba
 
 REPO = Path(__file__).resolve().parents[1]
 TILES_DIR = REPO / "assets" / "opengfx" / "tiles"
@@ -173,6 +174,8 @@ def parse_shore_blocks(nfo: Path) -> dict[int, tuple[Path, tuple[int, ...]]]:
 def load_sheet(png_path: Path, mode: str) -> Image.Image:
     img = Image.open(png_path)
     if img.mode == "P":
+        if mode != "32bpp":
+            return indexed_dos_to_rgba(img)
         pal = img.getpalette()
         transparent_rgb = tuple(pal[0:3]) if pal else None
         img_rgba = img.convert("RGBA")
@@ -183,14 +186,7 @@ def load_sheet(png_path: Path, mode: str) -> Image.Image:
             ]
             img_rgba.putdata(data)
         return img_rgba
-    img_rgba = img.convert("RGBA")
-    if mode != "32bpp":
-        data = [
-            (0, 0, 0, 0) if (r, g, b) == (0, 0, 255) else (r, g, b, a)
-            for r, g, b, a in img_rgba.getdata()
-        ]
-        img_rgba.putdata(data)
-    return img_rgba
+    return img.convert("RGBA") if mode == "32bpp" else dematte_legacy_colorkey(img)
 
 
 def main() -> None:

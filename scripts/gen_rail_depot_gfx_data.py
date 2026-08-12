@@ -22,6 +22,7 @@ from pathlib import Path
 from PIL import Image
 
 from nfo_sprite_meta import detect_graphics_mode
+from opengfx_palette import dematte_legacy_colorkey, indexed_dos_to_rgba
 
 
 REPO = Path(__file__).resolve().parents[1]
@@ -99,6 +100,8 @@ def load_sheet(path: Path, mode: str | None) -> Image.Image:
     """Abre una hoja respetando el color transparente del paquete OpenGFX."""
     image = Image.open(path)
     if image.mode == "P":
+        if mode != "32bpp":
+            return indexed_dos_to_rgba(image)
         palette = image.getpalette()
         transparent = tuple(palette[:3]) if palette else None
         rgba = image.convert("RGBA")
@@ -110,17 +113,7 @@ def load_sheet(path: Path, mode: str | None) -> Image.Image:
                 ]
             )
         return rgba
-    rgba = image.convert("RGBA")
-    if mode != "32bpp":
-        # Las hojas 8bpp convertidas por grfcodec pueden conservar el azul
-        # puro de índice cero como píxel opaco.
-        rgba.putdata(
-            [
-                (0, 0, 0, 0) if pixel[:3] == (0, 0, 255) else pixel
-                for pixel in rgba.get_flattened_data()
-            ]
-        )
-    return rgba
+    return image.convert("RGBA") if mode == "32bpp" else dematte_legacy_colorkey(image)
 
 
 def extract_png(

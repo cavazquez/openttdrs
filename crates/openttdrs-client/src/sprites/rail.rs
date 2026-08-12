@@ -1744,6 +1744,22 @@ pub fn rail_sprite_ids_for_preload() -> Vec<u32> {
         .clone()
 }
 
+/// IDs cuyo uso con `PALETTE_CRASH=804` requiere una copia ya remapeada.
+///
+/// La paleta de choque se define por índice, no por RGB. El atlas conserva
+/// RGBA, por lo que el pipeline genera `rail_pbs_<id>.png` desde las hojas
+/// paletizadas antes de construirlo. Esta lista es el contrato entre esa
+/// generación y el renderer.
+#[must_use]
+pub fn rail_pbs_sprite_ids_for_preload() -> Vec<u32> {
+    let mut ids = Vec::with_capacity(30);
+    ids.extend(1005u32..=1010);
+    ids.extend(1087u32..=1092);
+    ids.extend(1169u32..=1174);
+    ids.extend(5401u32..=5412);
+    ids
+}
+
 pub fn effective_rail_trackbits(mapt: u8, m5: u8, kind: TileKind, mp_rail: u8) -> Option<u8> {
     openttdrs_core::effective_rail_trackbits(mapt, m5, kind, mp_rail)
 }
@@ -2315,6 +2331,15 @@ mod tests {
             vec![1010],
             "una fundación de medio bloque mantiene la pieza izquierda"
         );
+    }
+
+    #[test]
+    fn pbs_asset_contract_covers_every_typed_single_and_slope() {
+        let ids = rail_pbs_sprite_ids_for_preload();
+        assert_eq!(ids.len(), 30);
+        for id in [1005, 1010, 1087, 1092, 1169, 1174, 5401, 5412] {
+            assert!(ids.contains(&id), "falta PBS {id}");
+        }
     }
 
     #[test]

@@ -1,9 +1,10 @@
 //! Remapeo de paleta de compañía OpenTTD (`PALETTE_MODIFIER_COLOUR`).
 //!
-//! Los PNG 8bpp se hornean con la rampa `COLOUR_DARK_BLUE` (compañía 0).
-//! Para otro color de compañía, cada píxel que coincide con el tono `shade`
-//! de *cualquier* rampa de compañía se sustituye por el tono `shade` del color
-//! destino — igual que las tablas `recolour_sprite` del baseset.
+//! Los PNG 8bpp se hornean con la rampa autora `COLOUR_DARK_BLUE` (compañía
+//! 0). Al perder los índices de paleta durante la conversión a RGBA sólo se
+//! puede reconocer esa rampa exacta; inferir que cualquier RGB perteneciente
+//! a *alguna* rampa es company-colour recoloreaba píxeles ordinarios de
+//! OpenGFX (techos, plataformas y edificios).
 
 use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
@@ -146,17 +147,19 @@ pub fn company_colour_tooltip(colour: u8) -> &'static str {
     COMPANY_COLOUR_TOOLTIPS[colour as usize % COMPANY_COLOUR_COUNT]
 }
 
-/// Tabla RGB → RGB para remapear al color de compañía `target`.
+/// Tabla RGB → RGB para remapear la rampa autora a `target`.
+///
+/// OpenGFX codifica los píxeles `PALETTE_MODIFIER_COLOUR` de estos PNG con
+/// `COLOUR_DARK_BLUE` (índices DOS `0xC6..=0xCD`). Las demás rampas son
+/// destinos posibles, no detectores de píxeles que deban recolorearse.
 #[must_use]
 pub fn build_remap_table(target: CompanyColour) -> HashMap<[u8; 3], [u8; 3]> {
     let mut map = HashMap::new();
     let dst = target.as_u8() as usize;
     for shade in 0..COMPANY_RAMP_SHADES {
         let out = COMPANY_RAMP_RGB[ramp_index(dst, shade)];
-        for src_colour in 0..COMPANY_COLOUR_COUNT {
-            let key = COMPANY_RAMP_RGB[ramp_index(src_colour, shade)];
-            map.insert(key, out);
-        }
+        let key = COMPANY_RAMP_RGB[ramp_index(CompanyColour::DarkBlue.as_u8() as usize, shade)];
+        map.insert(key, out);
     }
     map
 }
@@ -401,12 +404,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn dark_blue_remaps_foreign_company_ramp_to_baked_default() {
+    fn foreign_company_ramp_is_not_inferred_from_rgb() {
         let src = COMPANY_RAMP_RGB[ramp_index(CompanyColour::Purple.as_u8() as usize, 2)];
         let mut px = [src[0], src[1], src[2], 255];
-        recolor_rgba8(&mut px, CompanyColour::DarkBlue);
-        let expected = COMPANY_RAMP_RGB[ramp_index(CompanyColour::DarkBlue.as_u8() as usize, 2)];
-        assert_eq!(&px[..3], expected);
+        recolor_rgba8(&mut px, CompanyColour::Green);
+        assert_eq!(&px[..3], &src);
     }
 
     #[test]
@@ -434,6 +436,15 @@ mod tests {
                 COMPANY_RAMP_RGB[ramp_index(CompanyColour::Green.as_u8() as usize, shade)];
             assert_eq!(table.get(&key), Some(&expected));
         }
+    }
+
+    #[test]
+    fn ordinary_grey_that_looks_like_a_company_shade_is_not_recolored() {
+        // Índice DOS 5: gris ordinario, también usado como un tono de la
+        // rampa GREY. No es `COLOUR_DARK_BLUE` y debe permanecer intacto.
+        let mut px = [82u8, 80, 82, 255];
+        recolor_rgba8(&mut px, CompanyColour::Green);
+        assert_eq!(px, [82, 80, 82, 255]);
     }
 
     #[test]

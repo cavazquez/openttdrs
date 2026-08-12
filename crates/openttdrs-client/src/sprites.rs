@@ -84,27 +84,6 @@ pub fn road_flat_sprite_color(mapt: u8, kind: TileKind, m7: u8) -> Color {
     }
 }
 
-/// Color base de raíles (vía + nieve en suelo cuando `m3` bajo coincide con `RAIL_GROUND_SNOW_OR_DESERT`).
-#[must_use]
-pub fn rail_track_base_color(mapt: u8, kind: TileKind, m5: u8, m3: u8) -> Color {
-    const BASE: Color = Color::srgb(0.88, 0.88, 0.97);
-    if kind != TileKind::Rail {
-        return BASE;
-    }
-    if (mapt >> 4) & 0xF != OTTD_MP_RAIL {
-        return BASE;
-    }
-    let subtype = (m5 >> 6) & 0x3;
-    if subtype > RAIL_TILE_SIGNALS {
-        return BASE;
-    }
-    if (m3 & 0x0F) == RAIL_GROUND_SNOW_OR_DESERT {
-        Color::srgb(0.72, 0.80, 0.94)
-    } else {
-        BASE
-    }
-}
-
 pub use road::{
     ROAD_DEPOT_GROUND_PATH, ROAD_FLAT_OFFSET_TBL, ROAD_STREETLIGHT_META, ROADSIDE_LAMPS,
     ROADSIDE_TREE_META, ROADSIDE_TREES, road_depot_build_layers, road_depot_entrance_road_bits,
@@ -165,22 +144,23 @@ pub use rail::{
     is_typed_rail_track_sprite, level_crossing_has_rail_reservation, level_crossing_rail_sprite_id,
     level_crossing_rail_sprite_id_for_type, rail_depot_build_layers, rail_depot_seq_gfx,
     rail_depot_visual_type_index, rail_ghost_overlay_offset, rail_pbs_reservation_offset,
-    rail_signal_present_mask, rail_signal_state_mask, rail_signal_subtile_offset,
-    rail_signal_subtile_offset_for_side, rail_sprite_atlas_keys, rail_sprite_ids_for_preload,
-    rail_tile_has_pbs_reservation, rail_tile_is_signals, remap_rail_sprite_id, signal_draw_pos,
-    signal_screen_anchor_for_side, signal_screen_position, signal_screen_position_for_side,
-    signal_sprite_bases, signal_sprite_center_offset, signal_sprite_ids_for_preload,
-    signal_sprite_metadata, signal_sprite_texture_id,
+    rail_pbs_sprite_ids_for_preload, rail_signal_present_mask, rail_signal_state_mask,
+    rail_signal_subtile_offset, rail_signal_subtile_offset_for_side, rail_sprite_atlas_keys,
+    rail_sprite_ids_for_preload, rail_tile_has_pbs_reservation, rail_tile_is_signals,
+    remap_rail_sprite_id, signal_draw_pos, signal_screen_anchor_for_side, signal_screen_position,
+    signal_screen_position_for_side, signal_sprite_bases, signal_sprite_center_offset,
+    signal_sprite_ids_for_preload, signal_sprite_metadata, signal_sprite_texture_id,
 };
 pub(crate) use rail::{collect_rail_pbs_reservation_draws, collect_rail_sprites_for_surface};
 #[allow(unused_imports)]
 pub use station::{
-    StationTileClass, log_unknown_station_type_once, rail_station_axis_y, rail_station_draw_layers,
-    rail_station_ground_track_sprite, rail_station_overlay_rel, rail_station_roof_glass_sprite,
-    rail_station_sprite_layers, rail_station_sprite_meta, rail_waypoint_draw_layers,
-    rail_waypoint_layer_meta, rail_waypoint_sprite_center, road_stop_build_layers,
-    road_stop_drive_through_layers, road_stop_ground_index, road_stop_seq_gfx, station_tile_class,
-    station_type_from_m6, stop_kind_from_m6,
+    RailStationLayer, StationTileClass, log_unknown_station_type_once, rail_station_axis_y,
+    rail_station_draw_layers, rail_station_ground_track_sprite, rail_station_layer_bounds,
+    rail_station_overlay_rel, rail_station_roof_glass_sprite, rail_station_sprite_layers,
+    rail_station_sprite_meta, rail_waypoint_draw_layers, rail_waypoint_layer_meta,
+    rail_waypoint_sprite_center, road_stop_build_layers, road_stop_drive_through_layers,
+    road_stop_ground_index, road_stop_seq_gfx, station_tile_class, station_type_from_m6,
+    stop_kind_from_m6,
 };
 #[allow(unused_imports)]
 pub use transparency::{
@@ -191,7 +171,9 @@ pub use transparency::{
 
 /// Especificación de dibujo de una casa (stage completado).
 ///
-/// `s1` es el sprite de suelo/base del tile (0 = omitir, se usa grass).
+/// `s1` es el sprite de suelo/base que OpenTTD pasa a `DrawGroundSprite`.
+/// No debe confundirse con un overlay ni sustituirse por césped: 3924 es
+/// `SPR_FLAT_BARE_LAND` y 3981 es `SPR_FLAT_GRASS_TILE`.
 /// `s2` es el sprite del edificio principal (0 = sin overlay).
 /// `draw_proc` es el último campo `p` de `M(...)` en `town_land.h` (`1` = ascensor).
 pub struct HouseDrawSpec {
@@ -213,7 +195,8 @@ pub struct HouseDrawSpec {
 /// OpenTTD: `house_id * 16 + TileHash2Bit(x,y) * 4 + GetHouseBuildingStage()`.
 /// Regenerar: `python3 scripts/gen_house_draw_data.py`.
 ///
-/// `s1 = 0` → solo hierba base; sprites en `house_s{id}.png`.
+/// Los sprites de ambas capas viven en `house_s{id}.png`; los dos suelos
+/// comunes 3924/3981 se resuelven como aliases de `terrain_bare`/`grass`.
 pub use house_draw_data_generated::HOUSE_DRAW_DATA;
 
 /// Árboles templados (`tree_land.h`): sprites, layout y metadatos NFO.
@@ -486,11 +469,19 @@ mod house_draw_index_tests {
     }
 
     #[test]
-    fn park_row_may_use_grass_only_without_building_overlay() {
-        // Parques / suelo-only: s1=0 (hierba) y s2=0 es intencional en town_land.h, no un bug.
+    fn park_row_keeps_its_bare_ground_without_building_overlay() {
+        // Parques / suelo-only: `s2=0` es intencional, pero `s1` sigue siendo
+        // el suelo real (`SPR_FLAT_BARE_LAND`), no una señal para reemplazarlo
+        // por césped en el cliente.
         let spec = &HOUSE_DRAW_DATA[144];
-        assert_eq!(spec.s1, 0);
+        assert_eq!(spec.s1, 3924);
         assert_eq!(spec.s2, 0);
+    }
+
+    #[test]
+    fn first_house_row_keeps_openttd_bare_ground_sprite() {
+        assert_eq!(HOUSE_DRAW_DATA[0].s1, 3924);
+        assert_eq!(HOUSE_DRAW_DATA[0].s2, 1421);
     }
 
     #[test]

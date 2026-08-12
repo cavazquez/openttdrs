@@ -189,6 +189,10 @@
       "generator": "scripts/gen_company_palette_rust.py"
     },
     {
+      "output": "crates/openttdrs-core/src/newgrf_company_ramp.rs",
+      "generator": "scripts/gen_company_palette_rust.py"
+    },
+    {
       "output": "crates/openttdrs-client/src/sprites/company_palette_paths_generated.rs",
       "generator": "scripts/gen_company_palette_paths.py"
     }

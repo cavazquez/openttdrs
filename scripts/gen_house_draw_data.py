@@ -21,7 +21,6 @@ from nfo_sprite_meta import detect_graphics_mode, parse_sprite_offs, sprite_dims
 
 ORIGINAL_HOUSE_COUNT = 110
 ROWS = ORIGINAL_HOUSE_COUNT * 16
-GRASS_GROUND = {0, 0xF54, 3924, 3981}
 FALLBACK = (64.0, 48.0, -32.0, -32.0)
 
 
@@ -80,10 +79,6 @@ def parse_macro_rows(
     return out
 
 
-def map_ground(s1: int) -> int:
-    return 0 if s1 in GRASS_GROUND else s1
-
-
 def spec_line(
     s1: int,
     s1_dims: tuple[float, float, float, float],
@@ -119,7 +114,14 @@ def build_content(repo: Path, upstream: Path) -> tuple[str, int, int, int, list[
     sprite_ids: set[int] = set()
 
     for s1_raw, s2_raw, dx, dy, sx, sy, draw_proc in rows_macro[:ROWS]:
-        s1 = map_ground(parse_atom(s1_raw, spr))
+        # `DrawTile_Town` entrega siempre `ground.sprite` a
+        # `DrawGroundSprite`. En particular, `SPR_FLAT_BARE_LAND` (3924) no
+        # significa «usar césped»: es un sprite de suelo real y tiene que
+        # mantenerse para que el renderer pueda distinguirlo de 3981
+        # (`SPR_FLAT_GRASS_TILE`). Antes se colapsaban ambos a 0, lo que
+        # convertía las parcelas de casas vanilla en césped y hacía imposible
+        # contrastar la traza contra OpenTTD.
+        s1 = parse_atom(s1_raw, spr)
         s2 = parse_atom(s2_raw, spr)
         if s1:
             sprite_ids.add(s1)

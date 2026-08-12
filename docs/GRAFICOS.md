@@ -48,7 +48,7 @@ Para generar la carpeta `sprites/` hay que decodificar el GRF con
 
 ```bash
 sudo apt install grfcodec
-grfcodec -d -p 2 assets/opengfx/opengfx-8.0/ogfx1_base.grf \
+grfcodec -d -p 1 assets/opengfx/opengfx-8.0/ogfx1_base.grf \
          -o assets/opengfx/opengfx-8.0/sprites/
 ```
 
@@ -77,9 +77,25 @@ Consumidores actuales:
 | `gen_toolbar_rail_icons.py` | `toolbar_rail_electric_{rail_*,tunnel}.png` (slots A5 36..39, 44) |
 | `extract_elrail_catenary.py` | wires / postes / entradas de túnel |
 | `gen_bridge_structure_palette.py` | tablas `PALETTE_TO_STRUCT_*` (pseudo-sprites 795–801 de `ogfx1_base`) |
+| `extract_rail_pbs_palette_sprites.py` | overlays de reserva PBS ya remapeados con la pseudo-sprite `PALETTE_CRASH=804` |
 
 Ese directorio **no** se borra en la limpieza de `opengfx-*` / `opengfx2-*` de cada
 corrida; se reutiliza si el NFO ya está.
+
+#### Paleta DOS 8bpp y reservas PBS
+
+El baseset clásico declara `palette = DOS`. Las hojas que genera `grfcodec`
+contienen índices DOS aunque el PNG pueda traer una paleta de trabajo distinta;
+por eso los extractores 8bpp deben usar `scripts/opengfx_palette.py` y no
+`Pillow.convert("RGBA")` directamente.
+
+En particular, OpenTTD dibuja una reserva PBS con `PALETTE_CRASH = 804`, una
+pseudo-sprite de recolor por **índice**, no con un tinte naranja. El pipeline
+genera `rail_pbs_<id>.png` mediante
+`scripts/extract_rail_pbs_palette_sprites.py` antes del atlas. Así se preservan
+los casos donde dos píxeles comparten RGB pero la tabla 804 les asigna salidas
+distintas. Si esos archivos no están en el atlas, el HUD/traza marca fallback
+en vez de declarar una coincidencia visual falsa.
 
 **Cuando implementen el equivalente 32bpp nativo** (Action5 elrail usable en
 `ogfx2e_extra_32ez` o sucesor):
@@ -123,10 +139,19 @@ Donde `(ref_x, ref_y)` es la salida de `iso(tx, ty)` en el código Rust.
 
 ### Transparencia en los sprites 8bpp
 
-La hoja `ogfx1_base00.png` es un PNG con paleta de 256 colores. El color de índice 0
-(azul puro `RGB(0, 0, 255)`) es el color transparente de OpenTTD.
+La hoja `ogfx1_base00.png` es un PNG con paleta de 256 colores. OpenGFX clásico
+declara `palette = DOS` en `opengfx.obg`, por lo que debe decodificarse con
+`grfcodec -p 1` (no `-p 2`, que sólo cambia el RGB embebido a paleta Windows).
+El índice 0 (azul puro `RGB(0, 0, 255)` en la hoja) es transparente.
 
-Al convertir con PIL hay que sustituirlo manualmente por `(0, 0, 0, 0)`:
+No hay que inferir los demás colores por RGB: el índice 1..9 es metal/asfalto
+y 215..226 es padding transparente. `scripts/opengfx_palette.py` lee la
+paleta DOS canónica desde `third_party/openttd/table/palettes.h` y realiza la
+conversión por índice; los extractores deben usarlo antes de recortar sprites.
+
+Para una herramienta puntual que reciba una imagen ya RGBA, la limpieza de
+colorkey sigue siendo un fallback aceptable. No debe usarse sobre la hoja
+indexada original:
 
 ```python
 img = Image.open("ogfx1_base00.png")
@@ -138,6 +163,28 @@ data = [(0,0,0,0) if (r,g,b)==transparent_rgb else (r,g,b,a)
         for r,g,b,a in data]
 img_rgba.putdata(data)
 ```
+
+#### Recolor de compañía en 8bpp
+
+Los sprites vanilla que OpenTTD dibuja con `PALETTE_MODIFIER_COLOUR` vienen
+autorizados por sus índices DOS, no porque cualquier RGB coincida con un tono
+de una rampa. Después de convertir a RGBA, el cliente sólo reconoce la rampa
+autora `COLOUR_DARK_BLUE` (`0xC6..=0xCD`) y la transforma al color de la
+compañía. Es importante no buscar coincidencias en las 16 rampas: tonos de
+techos, acero y asfalto comparten esos RGB y terminarían recoloreados por
+accidente.
+
+`scripts/gen_company_palette_rust.py` genera desde la paleta DOS canónica las
+dos tablas que deben mantenerse idénticas:
+
+```bash
+python3 scripts/gen_company_palette_rust.py
+python3 scripts/gen_company_palette_rust.py --check
+```
+
+La segunda tabla (`openttdrs-core/src/newgrf_company_ramp.rs`) se usa al
+hornear máscaras explícitas de sprites NewGRF. En ese camino la máscara, no el
+RGB resultante, es la autorización para recolorear.
 
 ---
 

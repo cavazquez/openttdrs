@@ -18,8 +18,12 @@
     "scripts/gen_tnbp_fixture_ottdmap.py",
     "scripts/audit_sp3_assets.py",
     "scripts/gen_house_draw_data.py",
+    "scripts/gen_company_palette_rust.py",
     "scripts/gen_house_population.py",
     "scripts/gen_tile_atlas.py",
+    "scripts/opengfx_palette.py",
+    "scripts/extract_bridge_pbs_reservation_sprites.py",
+    "scripts/extract_rail_pbs_palette_sprites.py",
     "scripts/nfo_sprite_meta.py",
     "scripts/gen_rail_signal_sprites.py",
     "scripts/gen_rail_signal_action5_sprites.py",
@@ -51,7 +55,8 @@
     "scripts/check_release_metadata.py",
     "scripts/write_release_report.py",
     "scripts/window_visual_regression.py",
-    "scripts/test_window_visual_regression.py"
+    "scripts/test_window_visual_regression.py",
+    "scripts/test_opengfx_palette.py"
   ],
   "runs": [
     "scripts/test_openttd_reference_manifest.py",
@@ -62,6 +67,7 @@
     "scripts/test_ci_workflow_parity.py",
     "scripts/check_release_metadata.py",
     "scripts/window_visual_regression.py",
-    "scripts/test_window_visual_regression.py"
+    "scripts/test_window_visual_regression.py",
+    "scripts/test_opengfx_palette.py"
   ]
 }

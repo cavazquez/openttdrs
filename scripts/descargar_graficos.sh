@@ -212,7 +212,7 @@ ensure_signal_src_8bpp() {
     fi
     cp -a "${grf}" "${signal_src}/${grf_name}"
     echo "Decodificando ${grf_name} (8bpp) en ${signal_src}/sprites/..."
-    if ! grfcodec -d -o png -p 2 "${signal_src}/${grf_name}" "${signal_src}/sprites/" >/dev/null; then
+    if ! grfcodec -d -o png -p 1 "${signal_src}/${grf_name}" "${signal_src}/sprites/" >/dev/null; then
       rm -rf "${tmp}"
       echo "ERROR: grfcodec falló al decodificar ${grf_name}" >&2
       exit 1
@@ -345,7 +345,9 @@ if (( need_base_decode || need_extra_decode )); then
       if [[ "${GRAPHICS_MODE}" == "32bpp" ]]; then
         grfcodec -d -o png "${BASE_GRF}" "${SPRITES_DIR}/" 2>/dev/null || true
       else
-        grfcodec -d -o png -p 2 "${BASE_GRF}" "${SPRITES_DIR}/" 2>/dev/null || true
+        # OpenGFX clásico declara palette = DOS. -p 2 (Windows) cambia sólo
+        # el RGB embebido, pero deja mal interpretados los índices 1..9.
+        grfcodec -d -o png -p 1 "${BASE_GRF}" "${SPRITES_DIR}/" 2>/dev/null || true
       fi
     fi
     if (( need_extra_decode )); then
@@ -355,7 +357,7 @@ if (( need_base_decode || need_extra_decode )); then
         exit 1
       fi
       echo "Decodificando $(basename "${extra_grf}") con grfcodec (Action5/GUI 8bpp)..."
-      grfcodec -d -o png -p 2 "${extra_grf}" "${SPRITES_DIR}/" 2>/dev/null || true
+      grfcodec -d -o png -p 1 "${extra_grf}" "${SPRITES_DIR}/" 2>/dev/null || true
     fi
   else
     echo ""
@@ -376,6 +378,9 @@ from collections import Counter
 from pathlib import Path
 from PIL import Image
 
+sys.path.insert(0, str(Path(os.environ["OPENTTDRS_REPO_ROOT"]) / "scripts"))
+from opengfx_palette import dematte_legacy_colorkey, indexed_dos_to_rgba
+
 sprites_dir = Path(os.environ["SPRITES_DIR"])
 tiles_dir   = Path(os.environ["TILES_DIR"])
 nfo_name    = os.environ["NFO_NAME"]
@@ -389,10 +394,10 @@ def write_rail_placeholder(out_path: Path) -> None:
     img.save(out_path)
 
 def load_sheet(png_path: Path) -> Image.Image:
+    img = Image.open(png_path)
     if graphics_mode == "32bpp":
         # En 32bpp no aplicar heurística magenta. Pero si el sheet viene en
         # paleta (8bpp fallback), mantener transparencia por índice 0.
-        img = Image.open(png_path)
         if img.mode == "P":
             pal = img.getpalette()
             transparent_rgb = tuple(pal[0:3]) if pal else None
@@ -408,40 +413,9 @@ def load_sheet(png_path: Path) -> Image.Image:
             return img_rgba
         return img.convert("RGBA")
 
-    def is_magenta_key(r: int, g: int, b: int) -> bool:
-        # Detecta variantes de colorkey magenta típicas de conversión 8bpp->RGBA.
-        # Mantiene una ventana amplia para capturar ruido de cuantización.
-        return (
-            r >= 220
-            and b >= 220
-            and g <= 40
-            and abs(r - b) <= 24
-        )
-
-    img = Image.open(png_path)
     if img.mode == "P":
-        pal = img.getpalette()
-        transparent_rgb = tuple(pal[0:3])
-        img_rgba = img.convert("RGBA")
-        data = []
-        for r, g, b, a in img_rgba.getdata():
-            # Transparencia por índice de paleta 0 y por colorkey magenta.
-            if (r, g, b) == transparent_rgb or is_magenta_key(r, g, b):
-                data.append((0, 0, 0, 0))
-            else:
-                data.append((r, g, b, a))
-        img_rgba.putdata(data)
-        return img_rgba
-    img_rgba = img.convert("RGBA")
-    # Fallback: también limpiar colorkey magenta en imágenes no palettizadas.
-    data = []
-    for r, g, b, a in img_rgba.getdata():
-        if is_magenta_key(r, g, b):
-            data.append((0, 0, 0, 0))
-        else:
-            data.append((r, g, b, a))
-    img_rgba.putdata(data)
-    return img_rgba
+        return indexed_dos_to_rgba(img)
+    return dematte_legacy_colorkey(img)
 
 def cleanup_speckles(img: Image.Image) -> Image.Image:
     src = img.convert("RGBA")
@@ -1437,6 +1411,9 @@ python3 "$(dirname "$0")/gen_bridge_structure_palette.py" || true
 python3 "$(dirname "$0")/gen_rail_depot_gfx_data.py"
 # Reservas PBS sobre rampas de puentes (rail / mono / maglev, GRF extra).
 python3 "$(dirname "$0")/extract_bridge_pbs_reservation_sprites.py"
+# `PALETTE_CRASH=804` se aplica por índice DOS, no como un tinte RGBA. Debe
+# ejecutarse después de extraer las rampas y antes del atlas.
+python3 "$(dirname "$0")/extract_rail_pbs_palette_sprites.py"
 python3 "$(dirname "$0")/gen_effect_vehicle_sprites.py" || true
 python3 "$(dirname "$0")/gen_ufo_sprites.py" || true
 # Catenaria Action5 (wires + postes + entradas de túnel) desde ogfxe_extra.

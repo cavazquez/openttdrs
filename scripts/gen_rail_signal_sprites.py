@@ -23,6 +23,7 @@ from pathlib import Path
 from PIL import Image
 
 from nfo_sprite_meta import detect_graphics_mode
+from opengfx_palette import dematte_legacy_colorkey, indexed_dos_to_rgba
 
 REPO = Path(__file__).resolve().parents[1]
 TILES = REPO / "assets" / "opengfx" / "tiles"
@@ -110,16 +111,15 @@ def _key_color_transparent(img_rgba: Image.Image, key_rgb: tuple[int, int, int])
 def load_sheet(path: Path, mode: str) -> Image.Image:
     img = Image.open(path)
     if img.mode == "P":
+        if mode != "32bpp":
+            return indexed_dos_to_rgba(img)
         pal = img.getpalette()
         transparent_rgb = tuple(pal[0:3]) if pal else None
         img_rgba = img.convert("RGBA")
         if transparent_rgb is not None:
             _key_color_transparent(img_rgba, transparent_rgb)
         return img_rgba
-    img_rgba = img.convert("RGBA")
-    if mode != "32bpp":
-        _key_color_transparent(img_rgba, (0, 0, 255))
-    return img_rgba
+    return img.convert("RGBA") if mode == "32bpp" else dematte_legacy_colorkey(img)
 
 
 def dematte_sprite(img: Image.Image) -> Image.Image:

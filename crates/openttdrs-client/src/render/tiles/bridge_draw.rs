@@ -305,10 +305,10 @@ fn spawn_bridge_pbs_reservation(
         "bridge-pbs-reservation",
         "combined",
         sprite_id,
-        // `PALETTE_CRASH`: la reserva PBS se pinta como overlay naranja/rojo
-        // sobre el tablero, no como una vía adicional permanente.
+        // `PALETTE_CRASH`: el overlay se remapea por índice con la tabla 804
+        // de OpenTTD; no es una mezcla de color sobre el tablero.
         804,
-        !assets.rail.contains_key(&sprite_id),
+        !assets.has_exact_pbs_rail_sprite(sprite_id),
         (0, 0, 0),
         (i32::from(surface_z) - i32::from(ctx.info.base_z)) * 8,
         Some(bridge_pbs_trace_bounds(
@@ -317,16 +317,14 @@ fn spawn_bridge_pbs_reservation(
             span.axis,
         )),
     );
-    let Some(sprite) = assets.rail.get(&sprite_id) else {
+    let Some(sprite) = assets.pbs_rail_sprite(sprite_id) else {
         return;
     };
     let offset = bridge_pbs_reservation_offset(sprite_id);
     commands.spawn((
         MapVisualLayer,
         ctx.map_tile_chunk(),
-        sprite.sprite_colored(
-            Color::srgb(0.88, 0.88, 0.97).mix(&Color::srgb(0.95, 0.52, 0.42), 0.26),
-        ),
+        sprite.sprite(),
         Transform::from_translation(
             tile_pos_half(
                 ctx.tx_i32(),

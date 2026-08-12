@@ -155,15 +155,13 @@ pub(crate) fn spawn_house_tile(
     commands: &mut Commands,
     assets: &WorldAssets,
     ctx: &TileRenderContext,
-    slope_half_ground: f32,
+    _slope_half_ground: f32,
     house_catalog: &[openttdrs_core::HouseSpecDef],
 ) {
     let tileh = ctx.info.tileh;
     let base_z = ctx.info.base_z;
     // GetCleanHouseType: GB(m8, 0, 12) — el resto es datos NewGRF
     let clean_house_id = ctx.tile.map_or(0u16, |t| t.m8 & 0xFFF);
-    let house_base = sloped_or_flat_image(tileh, &assets.grass, &assets.grass_slopes);
-    spawn_ground_sprite(commands, &house_base, Color::WHITE, ctx, slope_half_ground);
     let (m5, m3) = ctx.tile.map_or((0u8, 0x80u8), |t| (t.m5, t.m3));
     let building_stage = house_building_stage_from_tile(m5, m3);
     let spec_idx = crate::sprites::house_draw_data_index_for_tile_with_catalog(
@@ -174,35 +172,103 @@ pub(crate) fn spawn_house_tile(
         house_catalog,
     );
     let spec = &HOUSE_DRAW_DATA[spec_idx];
+
+    // `DrawTile_Town`: si la tesela no es plana, `DrawFoundation(Leveled)`
+    // muta la superficie antes de dibujar *ambas* capas de la casa. El suelo
+    // `s1` no es el césped natural que había debajo: es exactamente el
+    // `ground.sprite` de `town_land.h`.
+    let leveled = tileh != 0;
+    if leveled {
+        spawn_leveled_foundation(commands, assets, ctx, tileh, &[], None, None);
+    }
+    let house_pos = |xrel: f32, yrel: f32, w: f32, h: f32, layer: f32| {
+        if leveled {
+            leveled_foundation_overlay_pos(
+                ctx.iso_pos,
+                xrel,
+                yrel,
+                w,
+                h,
+                base_z,
+                layer,
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+            )
+        } else {
+            overlay_pos(
+                ctx.iso_pos,
+                xrel,
+                yrel,
+                w,
+                h,
+                base_z,
+                layer,
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+            )
+        }
+    };
+    if spec.s1 != 0 {
+        let (ground, fallback) = assets.houses.get(&spec.s1).map_or_else(
+            || (&assets.grass_density[0][0], true),
+            |image| (image, false),
+        );
+        if leveled {
+            // `DrawGroundSprite` queda colgado de la fundación mediante
+            // `OffsetGroundSprite(0, -TILE_HEIGHT)`. La posición Bevy
+            // equivalente usa la superficie plana efectiva, pero la traza
+            // conserva la semántica child del oráculo.
+            WorldDrawTrace::record_foundation_child_sprite(
+                "house-foundation-ground",
+                spec.s1,
+                fallback,
+                (0, -32, 0),
+            );
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                ground.sprite(),
+                Transform::from_translation(house_pos(
+                    spec.s1_xrel,
+                    spec.s1_yrel,
+                    spec.s1_w,
+                    spec.s1_h,
+                    0.4,
+                )),
+            ));
+        } else {
+            WorldDrawTrace::record_sprite("house-ground", "ground", spec.s1, fallback);
+            // Los sprites de ground de `town_land.h` no siempre miden 64×31
+            // (los patios de oficinas llegan a 64×37): se anclan con sus
+            // propios offsets NFO, no con el centro del rombo natural.
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                ground.sprite(),
+                Transform::from_translation(house_pos(
+                    spec.s1_xrel,
+                    spec.s1_yrel,
+                    spec.s1_w,
+                    spec.s1_h,
+                    0.4,
+                )),
+            ));
+        }
+    }
+
+    // La invisibilidad de casas sólo afecta la parte superior. OpenTTD ya
+    // dibujó `s1` y la fundación al llegar a este punto.
     use crate::sprites::{TransparencyOption, is_hidden, sprite_color};
     if is_hidden(TransparencyOption::Houses) {
         return;
     }
     let tint = sprite_color(TransparencyOption::Houses);
-    if spec.s1 != 0
-        && let Some(img) = assets.houses.get(&spec.s1)
-    {
-        let pos3 = overlay_pos(
-            ctx.iso_pos,
-            spec.s1_xrel,
-            spec.s1_yrel,
-            spec.s1_w,
-            spec.s1_h,
-            base_z,
-            0.4,
-            ctx.tx_i32(),
-            ctx.ty_i32(),
-        );
-        commands.spawn((
-            MapVisualLayer,
-            ctx.map_tile_chunk(),
-            img.sprite_colored(tint),
-            Transform::from_translation(pos3),
-        ));
-    }
-    if spec.s2 != 0
-        && let Some(img) = assets.houses.get(&spec.s2)
-    {
+    if spec.s2 != 0 {
+        let Some(img) = assets.houses.get(&spec.s2) else {
+            WorldDrawTrace::record_sprite("house-building", "sortable", spec.s2, true);
+            return;
+        };
+        WorldDrawTrace::record_sprite("house-building", "sortable", spec.s2, false);
         let anim = (1483..=1486).contains(&spec.s2)
             && assets.lighthouse_anim_frames.contains_key(&spec.s2);
         let mut sprite = if anim {
@@ -211,17 +277,7 @@ pub(crate) fn spawn_house_tile(
             img.sprite()
         };
         sprite.color = tint;
-        let pos3 = overlay_pos(
-            ctx.iso_pos,
-            spec.s2_xrel,
-            spec.s2_yrel,
-            spec.s2_w,
-            spec.s2_h,
-            base_z,
-            0.5,
-            ctx.tx_i32(),
-            ctx.ty_i32(),
-        );
+        let pos3 = house_pos(spec.s2_xrel, spec.s2_yrel, spec.s2_w, spec.s2_h, 0.5);
         let mut entity = commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
@@ -245,16 +301,12 @@ pub(crate) fn spawn_house_tile(
         // OpenTTD: `AddChildSpriteScreen(SPR_LIFT, …, 14, 60 - pos)` — offsets de
         // **pantalla** relativos al edificio, no unidades TILE_SEQ.
         // `remap_tile_offset(14, 60)` los trataba como tesela y desplazaba ~3 tiles.
-        let pos3 = overlay_pos(
-            ctx.iso_pos,
+        let pos3 = house_pos(
             spec.s2_xrel + crate::render::HOUSE_LIFT_SCREEN_X,
             spec.s2_yrel + crate::render::HOUSE_LIFT_SCREEN_Y,
             lift_w,
             lift_h,
-            base_z,
             0.55,
-            ctx.tx_i32(),
-            ctx.ty_i32(),
         );
         let mut sprite = assets.house_lift.sprite();
         sprite.color = tint;

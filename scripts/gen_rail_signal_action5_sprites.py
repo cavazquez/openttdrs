@@ -20,6 +20,8 @@ from pathlib import Path
 
 from PIL import Image
 
+from opengfx_palette import dematte_legacy_colorkey, indexed_dos_to_rgba
+
 REPO = Path(__file__).resolve().parents[1]
 TILES = REPO / "assets" / "opengfx" / "tiles"
 SPR_SIGNALS_BASE = 5088
@@ -74,19 +76,10 @@ def load_sheet(path: Path, cache: dict[str, Image.Image]) -> Image.Image:
         return cache[key]
     img = Image.open(path)
     if img.mode == "P":
-        pal = img.getpalette()
-        key_rgb = tuple(pal[0:3]) if pal else None
-        rgba = img.convert("RGBA")
-        if key_rgb is not None:
-            rgba.putdata(
-                [(0, 0, 0, 0) if px[:3] == key_rgb else px for px in rgba.get_flattened_data()]
-            )
+        rgba = indexed_dos_to_rgba(img)
         cache[key] = rgba
         return rgba
-    rgba = img.convert("RGBA")
-    rgba.putdata(
-        [(0, 0, 0, 0) if px[:3] == (0, 0, 255) else px for px in rgba.get_flattened_data()]
-    )
+    rgba = dematte_legacy_colorkey(img)
     cache[key] = rgba
     return rgba
 

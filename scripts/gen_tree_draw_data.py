@@ -20,6 +20,7 @@ from pathlib import Path
 from PIL import Image
 
 from nfo_sprite_meta import detect_graphics_mode, parse_sprite_offs, sprite_dims_from_assets
+from opengfx_palette import dematte_legacy_colorkey, indexed_dos_to_rgba
 
 SPR_TREES_BASE = 1576
 TREE_SPRITE_COUNT = 133  # 19 especies × 7 etapas (0x628..0x6A6+6)
@@ -59,14 +60,9 @@ def load_sheet(png_path: Path, mode: str) -> Image.Image:
                 img_rgba.putdata(data)
             return img_rgba
         return img.convert("RGBA")
-    # 8bpp clásico: azul índice 0 → transparente (heurística del script base).
-    img_rgba = img.convert("RGBA")
-    data = [
-        (0, 0, 0, 0) if (r, g, b) == (0, 0, 255) else (r, g, b, a)
-        for r, g, b, a in img_rgba.getdata()
-    ]
-    img_rgba.putdata(data)
-    return img_rgba
+    if img.mode == "P":
+        return indexed_dos_to_rgba(img)
+    return dematte_legacy_colorkey(img)
 
 
 def crop_tree_sprites(mode: str) -> None:

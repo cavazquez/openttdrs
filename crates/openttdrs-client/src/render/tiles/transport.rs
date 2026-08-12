@@ -24,11 +24,10 @@ use crate::sprites::{
     collect_signal_sprite_draws, is_road_level_crossing, is_typed_rail_track_sprite,
     level_crossing_has_rail_reservation, level_crossing_rail_sprite_id_for_type,
     rail_ghost_overlay_offset, rail_pbs_reservation_offset, rail_tile_is_signals,
-    rail_track_base_color, rail_trackbits_for_render, remap_rail_sprite_id, road_bits_for_render,
-    road_flat_sprite_color, road_flat_sprite_index, road_tile_roadside, road_tile_snow_or_desert,
-    road_tile_tram_visual_active, roadside_is_paved, signal_screen_anchor_for_side,
-    signal_screen_position_for_side, signal_sprite_center_offset, track_fence_draws_for_tile,
-    tram_flat_sprite_index,
+    rail_trackbits_for_render, remap_rail_sprite_id, road_bits_for_render, road_flat_sprite_color,
+    road_flat_sprite_index, road_tile_roadside, road_tile_snow_or_desert, roadside_is_paved,
+    signal_screen_anchor_for_side, signal_screen_position_for_side, signal_sprite_center_offset,
+    track_fence_draws_for_tile, tram_flat_sprite_index,
 };
 
 /// Contexto de `DrawGroundSprite` para una pasada de vía. Una fundación crea
@@ -456,17 +455,10 @@ pub(crate) fn spawn_road_tile(
             })
             .unwrap_or(1370);
         if let Some(img) = assets.rail.get(&sid) {
-            let crossing_paint = ctx.tile.map_or(Color::srgb(0.88, 0.88, 0.97), |t| {
-                let mut c = rail_track_base_color(t.mapt, TileKind::Rail, t.m5, t.m3);
-                // Electric sigue con tinte; mono/maglev usan sprite tipado.
-                if openttdrs_core::rail_type_from_tile(t) == openttdrs_core::RailType::Electric {
-                    c = c.mix(&Color::srgb(0.55, 0.75, 0.95), 0.18);
-                }
-                if road_tile_tram_visual_active(t.m3, t.m8) {
-                    c = c.mix(&Color::srgb(0.55, 0.88, 0.58), 0.12);
-                }
-                c
-            });
+            // `DrawRoadTile` pinta el bloque de vía del cruce con `PAL_NONE`.
+            // La identidad visual (rail/electric/mono/maglev/tram) ya viene en
+            // el sprite seleccionado; recolorearlo lo alejaba de OpenTTD.
+            let crossing_paint = Color::WHITE;
             commands.spawn((
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
@@ -498,18 +490,18 @@ pub(crate) fn spawn_road_tile(
                 "ground",
                 sid,
                 804,
-                !assets.rail.contains_key(&sid),
+                !assets.has_exact_pbs_rail_sprite(sid),
                 (0, 0, 0),
                 0,
                 None,
             );
-            if let Some(img) = assets.rail.get(&sid) {
+            if let Some(img) = assets.pbs_rail_sprite(sid) {
                 let base = tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.048, road_half_h);
                 let offset = rail_ghost_overlay_offset(sid);
                 commands.spawn((
                     MapVisualLayer,
                     ctx.map_tile_chunk(),
-                    img.sprite_colored(Color::srgb(0.95, 0.52, 0.42)),
+                    img.sprite(),
                     Transform::from_translation(base + Vec3::new(offset.x, offset.y, 0.0)),
                 ));
             }
@@ -620,26 +612,10 @@ pub(crate) fn spawn_rail_tile(
         rail_type,
         openttdrs_core::RailType::Monorail | openttdrs_core::RailType::Maglev
     ) && !typed_layers;
-    let mut rail_paint = ctx.tile.map_or(Color::srgb(0.88, 0.88, 0.97), |t| {
-        let mut c = rail_track_base_color(t.mapt, ctx.kind, t.m5, t.m3);
-        match openttdrs_core::rail_type_from_tile(t) {
-            openttdrs_core::RailType::Electric => {
-                c = c.mix(&Color::srgb(0.55, 0.75, 0.95), 0.18);
-            }
-            // Mono/maglev: tinte solo si caímos al sprite clásico (pendiente / sin asset).
-            openttdrs_core::RailType::Monorail if !typed_layers => {
-                c = c.mix(&Color::srgb(0.75, 0.55, 0.90), 0.22);
-            }
-            openttdrs_core::RailType::Maglev if !typed_layers => {
-                c = c.mix(&Color::srgb(0.45, 0.90, 0.85), 0.22);
-            }
-            _ => {}
-        }
-        c
-    });
-    if ctx.tile.is_some_and(|t| rail_tile_is_signals(t.m5)) {
-        rail_paint = rail_paint.mix(&Color::srgb(0.95, 0.88, 0.55), 0.22);
-    }
+    // `DrawTrackBits` usa `PAL_NONE` para la vía base, inclusive en vías
+    // electrificadas, mono/maglev y teselas con señales. El tipo está en el
+    // ID del sprite: el tinte sintético lo ocultaba tras azul/violeta.
+    let rail_paint = Color::WHITE;
     let mut pass_index = 0_usize;
     for (i, sid) in rail_layers.iter().copied().enumerate() {
         while pass_index + 1 < pass_count && i >= pass_ends[pass_index] {
@@ -687,8 +663,8 @@ pub(crate) fn spawn_rail_tile(
             let sid = draw.sprite_id;
             let mode = rail_track_trace_mode(rail_foundation, draw.halftile_corner);
             let extra_y = pbs_track_sprite_extra_y(draw.track_bit, draw.sprite_tileh);
-            record_rail_pbs_trace(sid, !assets.rail.contains_key(&sid), mode, extra_y);
-            let Some(img) = assets.rail.get(&sid) else {
+            record_rail_pbs_trace(sid, !assets.has_exact_pbs_rail_sprite(sid), mode, extra_y);
+            let Some(img) = assets.pbs_rail_sprite(sid) else {
                 continue;
             };
             let offset = rail_pbs_reservation_offset(sid);
@@ -703,7 +679,7 @@ pub(crate) fn spawn_rail_tile(
             commands.spawn((
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
-                img.sprite_colored(rail_paint.mix(&Color::srgb(0.95, 0.52, 0.42), 0.26)),
+                img.sprite(),
                 Transform::from_translation(
                     base + Vec3::new(offset.x, offset.y + bevy_extra_y, 0.0),
                 ),

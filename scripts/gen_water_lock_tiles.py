@@ -17,6 +17,7 @@ from pathlib import Path
 from PIL import Image
 
 from nfo_sprite_meta import detect_graphics_mode
+from opengfx_palette import dematte_legacy_colorkey, indexed_dos_to_rgba
 
 REPO = Path(__file__).resolve().parents[1]
 TILES = REPO / "assets" / "opengfx" / "tiles"
@@ -86,12 +87,14 @@ def canals_slot_map(nfo: Path) -> dict[int, re.Match[str]]:
 
 
 def dematte_blue(img: Image.Image) -> Image.Image:
-    img = img.convert("RGBA")
+    if img.mode == "P" and detect_graphics_mode(REPO) != "32bpp":
+        return indexed_dos_to_rgba(img)
+    img = dematte_legacy_colorkey(img)
     px = img.load()
     for j in range(img.height):
         for i in range(img.width):
             r, g, b, _a = px[i, j]
-            if (r, g, b) in ((0, 0, 255), (255, 0, 255)):
+            if (r, g, b) == (0, 0, 255):
                 px[i, j] = (0, 0, 0, 0)
     return img
 

@@ -27,6 +27,7 @@ from pathlib import Path
 from PIL import Image
 
 from nfo_sprite_meta import detect_graphics_mode
+from opengfx_palette import dematte_legacy_colorkey, indexed_dos_to_rgba
 
 REPO = Path(__file__).resolve().parents[1]
 TILES = REPO / "assets" / "opengfx" / "tiles"
@@ -132,29 +133,12 @@ ELRAIL_8BPP_NFOS = [
     / "sprites"
     / "ogfxe_extra.nfo",
 ]
-PALETTES_H = REPO / "third_party" / "openttd" / "table" / "palettes.h"
 A5_ELRAIL_RE = re.compile(r"\*\s*5\s+05\s+05\s+FF\s+30")
 
 ROW_RE = re.compile(
     r"^\s*(\d+)\s+(\S+?\.png)\s+(8bpp)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(-?\d+)\s+(-?\d+)"
 )
 A5_GUI_RE = re.compile(r"^\s*(\d+)\s+\*\s+\d+\s+05 95 FF ([0-9A-F]{2}) 00 FF ([0-9A-F]{2}) 00")
-
-
-def load_dos_palette() -> list[tuple[int, int, int]]:
-    text = PALETTES_H.read_text(encoding="utf-8", errors="replace")
-    start = text.index("static const Palette _palette")
-    end = text.index("};", start)
-    colours = [
-        tuple(map(int, m))
-        for m in re.findall(r"M\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)", text[start:end])
-    ]
-    if len(colours) < 206:
-        raise SystemExit(f"paleta DOS incompleta ({len(colours)} entradas)")
-    # Completar a 256 por si el archivo trae menos (índices altos raros).
-    while len(colours) < 256:
-        colours.append((0, 0, 0))
-    return colours
 
 
 def parse_rows(nfo: Path) -> dict[int, tuple[str, int, int, int, int]]:
@@ -191,7 +175,7 @@ def gui_offset_map(nfo: Path) -> dict[int, int]:
 
 
 def dematte_blue(img: Image.Image) -> Image.Image:
-    img = img.convert("RGBA")
+    img = dematte_legacy_colorkey(img)
     px = img.load()
     for j in range(img.height):
         for i in range(img.width):
@@ -220,29 +204,16 @@ def crop(rows: dict[int, tuple[str, int, int, int, int]], sid: int, out_name: st
 
 def crop_indexed_dos(
     sheet: Image.Image,
-    dos: list[tuple[int, int, int]],
     x: int,
     y: int,
     w: int,
     h: int,
 ) -> Image.Image:
-    """Recorta 8bpp y aplica paleta DOS (la paleta embebida del PNG miente)."""
+    """Recorta 8bpp y aplica la paleta DOS canónica por índice."""
     crop_img = sheet.crop((x, y, x + w, y + h))
     if crop_img.mode != "P":
         return dematte_blue(crop_img)
-    # Pillow 10+: get_flattened_data; getdata() queda deprecado (Pillow 14).
-    idx = list(crop_img.get_flattened_data())
-    out = Image.new("RGBA", (w, h))
-    px = out.load()
-    for row in range(h):
-        for col in range(w):
-            p = idx[row * w + col]
-            if p == 0:
-                px[col, row] = (0, 0, 0, 0)
-            else:
-                r, g, b = dos[p]
-                px[col, row] = (r, g, b, 255)
-    return out
+    return indexed_dos_to_rgba(crop_img)
 
 
 def find_elrail_8bpp_nfo() -> Path | None:
@@ -258,7 +229,7 @@ def find_elrail_8bpp_nfo() -> Path | None:
     return None
 
 
-def write_electric_gui_from_8bpp(dos: list[tuple[int, int, int]]) -> None:
+def write_electric_gui_from_8bpp() -> None:
     nfo = find_elrail_8bpp_nfo()
     if nfo is None:
         raise SystemExit(
@@ -289,7 +260,7 @@ def write_electric_gui_from_8bpp(dos: list[tuple[int, int, int]]) -> None:
         if sheet_name not in sheets:
             sheets[sheet_name] = Image.open(sheet_dir / sheet_name)
         x, y, w, h = map(int, m.group(4, 5, 6, 7))
-        rgba = crop_indexed_dos(sheets[sheet_name], dos, x, y, w, h)
+        rgba = crop_indexed_dos(sheets[sheet_name], x, y, w, h)
         out_name = f"toolbar_rail_electric_{name}.png"
         to_toolbar_canvas(rgba).save(TILES / out_name)
         print(f"  {out_name} <- {sheet_name} A5[{slot}] DOS ({w}x{h})")
@@ -301,7 +272,6 @@ def main() -> None:
             f"faltan NFO base/extra en {SPRITES}; corré descargar_graficos.sh en el perfil activo"
         )
     TILES.mkdir(parents=True, exist_ok=True)
-    dos = load_dos_palette()
     base_rows = parse_rows(BASE_NFO)
     for sid, name in BASE_ICONS:
         crop(base_rows, sid, f"toolbar_rail_{name}.png")
@@ -314,7 +284,7 @@ def main() -> None:
             raise SystemExit(f"icono extra GUI offset {off:#x} ({name}) no encontrado")
         crop(extra_rows, sid, f"toolbar_rail_{name}.png")
 
-    write_electric_gui_from_8bpp(dos)
+    write_electric_gui_from_8bpp()
     for name, off in TYPED_EXTRA["electric"].items():
         sid = offsets.get(off)
         if sid is None or sid not in extra_rows:

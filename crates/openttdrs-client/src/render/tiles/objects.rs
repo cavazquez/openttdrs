@@ -28,12 +28,12 @@ use crate::sprites::{
     collect_catenary_pylons_from_map_with_pcp_override, collect_catenary_wire_draws_from_map,
     is_hidden, log_unknown_station_type_once, rail_depot_build_layers, rail_depot_seq_gfx,
     rail_depot_visual_type_index, rail_ghost_overlay_offset, rail_pbs_reservation_offset,
-    rail_station_draw_layers, rail_station_ground_track_sprite, rail_station_overlay_rel,
-    rail_station_sprite_meta, rail_waypoint_draw_layers, rail_waypoint_layer_meta,
-    rail_waypoint_sprite_center, remap_rail_sprite_id, road_depot_build_layers,
-    road_depot_entrance_road_bits, road_depot_seq_gfx, road_flat_sprite_index,
-    road_stop_build_layers, road_stop_drive_through_layers, road_stop_ground_index,
-    road_stop_seq_gfx, station_tile_class, with_to_alpha,
+    rail_station_draw_layers, rail_station_ground_track_sprite, rail_station_layer_bounds,
+    rail_station_overlay_rel, rail_station_sprite_meta, rail_waypoint_draw_layers,
+    rail_waypoint_layer_meta, rail_waypoint_sprite_center, remap_rail_sprite_id,
+    road_depot_build_layers, road_depot_entrance_road_bits, road_depot_seq_gfx,
+    road_flat_sprite_index, road_stop_build_layers, road_stop_drive_through_layers,
+    road_stop_ground_index, road_stop_seq_gfx, station_tile_class, with_to_alpha,
 };
 
 fn buildings_hidden() -> bool {
@@ -74,6 +74,69 @@ fn record_station_pbs_trace(tileh: u8, sprite_id: u32, fallback: bool) {
             None,
         );
     }
+}
+
+fn station_company_palette(owner_colour: Option<CompanyColour>) -> u32 {
+    775 + u32::from(owner_colour.unwrap_or_default().as_u8())
+}
+
+fn record_station_rail_ground_trace(tileh: u8, sprite_id: u32, fallback: bool) {
+    if let Some(offset) = station_rail_child_offset(tileh) {
+        WorldDrawTrace::record_foundation_child_sprite(
+            "station-rail-track",
+            sprite_id,
+            fallback,
+            offset,
+        );
+    } else {
+        WorldDrawTrace::record_sprite_with_palette_and_geometry(
+            "station-rail-track",
+            "ground",
+            sprite_id,
+            0,
+            fallback,
+            (0, 0, 0),
+            0,
+            None,
+        );
+    }
+}
+
+fn record_station_rail_layer_trace(
+    layer: &crate::sprites::RailStationLayer,
+    owner_colour: Option<CompanyColour>,
+    fallback: bool,
+) {
+    if crate::sprites::rail_station_roof_glass_sprite(layer.sprite_id) {
+        WorldDrawTrace::record_foundation_child_sprite_with_palette(
+            "station-rail-glass",
+            layer.sprite_id,
+            802,
+            fallback,
+            (0, 0, 0),
+        );
+        return;
+    }
+    let bounds = rail_station_layer_bounds(layer.sprite_id).map(|(ex, ey, ez)| {
+        TraceSpriteBounds::new(
+            layer.dx as i32,
+            layer.dy as i32,
+            layer.dz as i32,
+            ex,
+            ey,
+            ez,
+        )
+    });
+    WorldDrawTrace::record_sprite_with_palette_and_geometry(
+        "station-rail-layer",
+        "sortable",
+        layer.sprite_id,
+        station_company_palette(owner_colour),
+        fallback,
+        (0, 0, 0),
+        0,
+        bounds,
+    );
 }
 
 /// Geometría de `_rail_catenary_sprite_data_tunnel`.
@@ -183,11 +246,18 @@ pub(crate) fn spawn_station_tile(
             );
             // OpenTTD: ground SPR_RAIL_TRACK_* bajo estación y waypoint (`station_land.h`).
             let track_sid = rail_station_ground_track_sprite(m5, tileh);
+            if class == StationTileClass::Rail {
+                record_station_rail_ground_trace(
+                    tileh,
+                    track_sid,
+                    !assets.rail.contains_key(&track_sid),
+                );
+            }
             if let Some(img) = assets.rail.get(&track_sid) {
                 commands.spawn((
                     MapVisualLayer,
                     ctx.map_tile_chunk(),
-                    img.sprite_colored(Color::srgb(0.88, 0.88, 0.97)),
+                    img.sprite(),
                     Transform::from_translation(tile_pos_half(
                         ctx.tx_i32(),
                         ctx.ty_i32(),
@@ -206,15 +276,15 @@ pub(crate) fn spawn_station_tile(
                     .tile
                     .map_or(openttdrs_core::RailType::Rail, rail_type_from_tile);
                 let sid = remap_rail_sprite_id(1005 + u32::from(m5 & 1), rail_type);
-                record_station_pbs_trace(tileh, sid, !assets.rail.contains_key(&sid));
-                if let Some(img) = assets.rail.get(&sid) {
+                record_station_pbs_trace(tileh, sid, !assets.has_exact_pbs_rail_sprite(sid));
+                if let Some(img) = assets.pbs_rail_sprite(sid) {
                     let base =
                         tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), rail_base_z, 0.026, rail_half_h);
                     let offset = rail_ghost_overlay_offset(sid);
                     commands.spawn((
                         MapVisualLayer,
                         ctx.map_tile_chunk(),
-                        img.sprite_colored(Color::srgb(0.95, 0.52, 0.42)),
+                        img.sprite(),
                         Transform::from_translation(base + Vec3::new(offset.x, offset.y, 0.0)),
                     ));
                 }
@@ -279,6 +349,13 @@ pub(crate) fn spawn_station_tile(
             }
             if !buildings_hidden() && !used_newgrf {
                 for layer in overlay_layers {
+                    if class == StationTileClass::Rail && tileh == 0 {
+                        record_station_rail_layer_trace(
+                            layer,
+                            owner_colour,
+                            !assets.rail.contains_key(&layer.sprite_id),
+                        );
+                    }
                     let Some(img) = assets.rail.get(&layer.sprite_id) else {
                         continue;
                     };
@@ -923,19 +1000,19 @@ pub(crate) fn spawn_transport_object_tile(
                     "ground",
                     sid,
                     804,
-                    !assets.rail.contains_key(&sid),
+                    !assets.has_exact_pbs_rail_sprite(sid),
                     (0, 0, 0),
                     0,
                     None,
                 );
-                if let Some(img) = assets.rail.get(&sid) {
+                if let Some(img) = assets.pbs_rail_sprite(sid) {
                     let base =
                         tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.025, slope_half_ground);
                     let offset = rail_ghost_overlay_offset(sid);
                     commands.spawn((
                         MapVisualLayer,
                         ctx.map_tile_chunk(),
-                        img.sprite_colored(Color::srgb(0.95, 0.52, 0.42)),
+                        img.sprite(),
                         Transform::from_translation(base + Vec3::new(offset.x, offset.y, 0.0)),
                     ));
                 }
@@ -1389,14 +1466,14 @@ fn spawn_rail_depot_tile(
         && ctx.tile.is_some_and(|tile| tile.m5 & 0x10 != 0)
     {
         let sid = remap_rail_sprite_id(1005 + u32::from(dir as u8 & 1), rail_type);
-        record_rail_depot_reservation_trace(tileh, sid, !assets.rail.contains_key(&sid));
-        if let Some(image) = assets.rail.get(&sid) {
+        record_rail_depot_reservation_trace(tileh, sid, !assets.has_exact_pbs_rail_sprite(sid));
+        if let Some(image) = assets.pbs_rail_sprite(sid) {
             let base = tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.026, half_h);
             let offset = rail_pbs_reservation_offset(sid);
             commands.spawn((
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
-                image.sprite_colored(Color::srgb(0.95, 0.52, 0.42)),
+                image.sprite(),
                 Transform::from_translation(base + Vec3::new(offset.x, offset.y, 0.0)),
             ));
         }

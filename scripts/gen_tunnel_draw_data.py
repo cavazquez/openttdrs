@@ -25,6 +25,7 @@ from pathlib import Path
 from PIL import Image
 
 from nfo_sprite_meta import detect_graphics_mode
+from opengfx_palette import dematte_legacy_colorkey, indexed_dos_to_rgba
 
 REPO = Path(__file__).resolve().parents[1]
 TILES_DIR = REPO / "assets" / "opengfx" / "tiles"
@@ -77,14 +78,9 @@ def load_sheet(path: Path, mode: str) -> Image.Image:
             return rgba
         return img.convert("RGBA")
 
-    rgba = img.convert("RGBA")
-    rgba.putdata(
-        [
-            (0, 0, 0, 0) if (r, g, b) == (0, 0, 255) else (r, g, b, a)
-            for r, g, b, a in rgba.getdata()
-        ]
-    )
-    return rgba
+    if img.mode == "P":
+        return indexed_dos_to_rgba(img)
+    return dematte_legacy_colorkey(img)
 
 
 def parse_rects(nfo: Path) -> dict[int, tuple[Path, int, int, int, int, int, int]]:

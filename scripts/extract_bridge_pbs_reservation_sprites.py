@@ -28,6 +28,7 @@ from pathlib import Path
 from PIL import Image
 
 from nfo_sprite_meta import detect_graphics_mode
+from opengfx_palette import indexed_dos_to_rgba
 
 ROOT = Path(__file__).resolve().parents[1]
 OPENGFX = ROOT / "assets" / "opengfx"
@@ -138,9 +139,18 @@ def parse_action5_slope_rects(
     return rects
 
 
-def load_rgba(path: Path) -> Image.Image:
-    """Convierte el color transparente de grfcodec en alfa real."""
+def load_rgba(path: Path, bpp: str) -> Image.Image:
+    """Convierte una hoja a RGBA sin perder los índices DOS de 8bpp.
+
+    ``grfcodec`` conserva los índices DOS en las hojas paletizadas, pero les
+    adjunta una paleta PNG de trabajo que no es la paleta de OpenTTD. Convertir
+    esa imagen con Pillow directamente da colores azul/magenta espurios. En
+    8bpp se debe traducir cada índice con la paleta DOS canónica; 32bpp ya trae
+    sus píxeles RGBA finales.
+    """
     image = Image.open(path)
+    if image.mode == "P" and bpp == "8bpp":
+        return indexed_dos_to_rgba(image)
     if image.mode == "P":
         rgba = image.convert("RGBA")
         source = image.load()
@@ -195,7 +205,7 @@ def main() -> int:
             if not sheet_path.is_file():
                 print(f"Falta hoja {sheet_path.relative_to(ROOT)}", file=sys.stderr)
                 return 1
-            sheet = load_rgba(sheet_path)
+            sheet = load_rgba(sheet_path, bpp)
             sheets[sheet_name] = sheet
         sheet.crop((x, y, x + width, y + height)).save(TILES / f"rail_{sid}.png")
 

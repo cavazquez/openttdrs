@@ -6,9 +6,9 @@ use crate::render::atlas::{AtlasSprite, TileAtlas};
 use crate::sprites::{
     BridgePaletteSprites, HOUSE_DRAW_DATA, INDUSTRY_GFX_DATA, RAIL_DEPOT_VISUAL_TYPE_COUNT,
     ROAD_DEPOT_GROUND_PATH, StationTileClass, house_sprite_filename, rail_depot_build_layers,
-    rail_sprite_ids_for_preload, rail_station_draw_layers, rail_station_ground_track_sprite,
-    rail_waypoint_draw_layers, road_depot_build_layers, road_stop_build_layers,
-    road_stop_drive_through_layers, signal_sprite_texture_id,
+    rail_pbs_sprite_ids_for_preload, rail_sprite_ids_for_preload, rail_station_draw_layers,
+    rail_station_ground_track_sprite, rail_waypoint_draw_layers, road_depot_build_layers,
+    road_stop_build_layers, road_stop_drive_through_layers, signal_sprite_texture_id,
 };
 
 #[derive(Clone, Resource)]
@@ -59,6 +59,11 @@ pub(crate) struct WorldAssets {
     /// OpenGFX `tram_flat_*` (SPR_TRAMWAY_OVERLAY+0..18); mismo índice que `road_flat_*`.
     pub(crate) tram_flat: Vec<AtlasSprite>,
     pub(crate) rail: HashMap<u32, AtlasSprite>,
+    /// Copias de vía remapeadas exactamente con `PALETTE_CRASH=804`.
+    ///
+    /// El atlas es RGBA y ya no conoce los índices DOS originales, por eso no
+    /// se puede reproducir este recolor con un `Color` de Bevy.
+    rail_pbs: HashMap<u32, AtlasSprite>,
     pub(crate) station_grounds: Vec<AtlasSprite>,
     pub(crate) bus_stop_grounds: Vec<AtlasSprite>,
     pub(crate) bus_stop_builds: [[AtlasSprite; 3]; 4],
@@ -279,6 +284,14 @@ impl WorldAssets {
                 rail.insert(id, sprite);
             }
         }
+        let rail_pbs = rail_pbs_sprite_ids_for_preload()
+            .into_iter()
+            .filter_map(|id| {
+                atlas
+                    .try_get(&format!("rail_pbs_{id}.png"))
+                    .map(|sprite| (id, sprite))
+            })
+            .collect();
         let station_grounds = (0..4)
             .map(|i| atlas.get(&format!("truck_stop_ground_{i}.png")))
             .collect();
@@ -550,9 +563,18 @@ impl WorldAssets {
         for spec in &HOUSE_DRAW_DATA {
             for &sid in &[spec.s1, spec.s2] {
                 if sid != 0 {
-                    houses
-                        .entry(sid)
-                        .or_insert_with(|| atlas.get(&house_sprite_filename(sid)));
+                    // Los dos suelos que aparecen más veces en
+                    // `_town_draw_tile_data` son sprites generales de
+                    // terreno, no assets exclusivos de casas. Resolverlos
+                    // por su nombre canónico evita que el extractor los
+                    // trate como un overlay `house_s*` y mantiene el atlas
+                    // válido aun antes de una regeneración completa.
+                    let name = match sid {
+                        3924 => "terrain_bare.png".to_owned(),
+                        3981 => "grass.png".to_owned(),
+                        _ => house_sprite_filename(sid),
+                    };
+                    houses.entry(sid).or_insert_with(|| atlas.get(&name));
                 }
             }
         }
@@ -671,6 +693,7 @@ impl WorldAssets {
             house_lift,
             tram_flat,
             rail,
+            rail_pbs,
             station_grounds,
             bus_stop_grounds,
             bus_stop_builds,
@@ -762,6 +785,18 @@ impl WorldAssets {
     #[must_use]
     pub(crate) fn bridge_sprite(&self, id: u32) -> Option<&AtlasSprite> {
         self.bridge_by_id.get(&id)
+    }
+
+    /// Sprite de reserva PBS. Ante assets antiguos conserva una vía visible,
+    /// pero la traza lo marca como fallback porque no tiene el remapeo exacto.
+    #[must_use]
+    pub(crate) fn pbs_rail_sprite(&self, id: u32) -> Option<&AtlasSprite> {
+        self.rail_pbs.get(&id).or_else(|| self.rail.get(&id))
+    }
+
+    #[must_use]
+    pub(crate) fn has_exact_pbs_rail_sprite(&self, id: u32) -> bool {
+        self.rail_pbs.contains_key(&id)
     }
 
     #[must_use]
@@ -900,5 +935,11 @@ mod world_assets_tests {
         assert_eq!(assets.rail_depot_builds[0][1].len(), 2); // rail SE
         assert_eq!(assets.rail_depot_builds[1][2].len(), 2); // mono SW
         assert_eq!(assets.rail_depot_builds[2][2].len(), 2); // maglev SW
+        for id in crate::sprites::rail_pbs_sprite_ids_for_preload() {
+            assert!(
+                assets.has_exact_pbs_rail_sprite(id),
+                "falta copia PALETTE_CRASH para rail_{id}"
+            );
+        }
     }
 }

@@ -69,6 +69,7 @@ cuando el tile ya se decodificó mal.
 | Depósitos y estaciones especiales | Geometría de depósito naval, reserva visual de depósito rail y distinción de tiles especiales para no disfrazar un fallback como parada de buses. | En checkpoint; los fallbacks deben ser explícitos. |
 | Paleta de compañía 8bpp y estación rail vanilla | Se corrigió el desplazamiento de un índice DOS en las rampas y se dejó de inferir recolor por RGB ajeno a la rampa autora. La región `120,111..128,113` de Kale compara 118/118 comandos de estación (sprite, paleta, geometría y orden). | Validada por `world-draw`; la composición raster amplia sigue teniendo familias ajenas a esta corrección. |
 | Reservas PBS 8bpp | Los overlays `PALETTE_CRASH=804` se hornean desde índices DOS con la misma pseudo-sprite de recolor que usa OpenTTD; se eliminó el tinte RGBA naranja aproximado. Incluye `SINGLE_*` rail/mono/maglev y las doce rampas PBS. | Validar en captura focalizada; la traza conserva paleta 804 y ahora distingue la ausencia del asset exacto como fallback. |
+| Campos y cercas 8bpp de Kale | Se instrumentó `DrawTile_Clear` para campos y sus cuatro cercas, se corrigió la altura de esquina de pendientes empinadas y el suelo natural deja de usar la elevación como profundidad. El spawn recorre las teselas en el mismo barrido diagonal de `ViewportAddLandscape`. | La región `225,25..251,61` valida 647 suelos y 476 cercas: ID, geometría y orden relativo 100 % contenidos en OpenTTD. Falta una captura local de aceptación tras el cambio. |
 | Iconos y assets | Regeneración de iconos y datos de atlas asociados. | En checkpoint; revisión visual pendiente. |
 
 Este inventario describe trabajo efectuado, no una afirmación de que todos los
@@ -124,6 +125,31 @@ regresión; el fixture controlado compara transmisor `(47,33)` y faro `(60,55)`
 con `--strict-reference`, y en ambos casos coinciden terreno, sprite,
 geometría y orden de los dos comandos de OpenTTD.
 
+### Revalidación 8bpp: campos y cercas de Kale
+
+La región de cultivo `225,25..251,61` se comparó usando el mismo baseset
+OpenGFX 8bpp para OpenTTD y para el atlas de `openttdrs`. El oráculo C++ emitió
+1.957 comandos y el candidato 1.740 selecciones instrumentadas. Dentro de esa
+región, los 647 `field-ground` y las 476 `field-fence` coincidieron al 100 %
+en ID de sprite, geometría explícita y orden relativo.
+
+El defecto visual que quedaba no era de importación ni de selección: el
+renderer Rust sumaba `height * 0.001` a la profundidad de todo suelo. OpenTTD
+inserta `DrawGroundSprite` en un pase separado, barrido por `x + y` y luego
+`y - x`; la altura sólo cambia la posición en pantalla. Ahora el suelo natural
+usa esa profundidad diagonal, y `TileViewportBounds::iter_coords` reproduce el
+barrido C++ para conservar el desempate incluso si dos valores `f32` coinciden.
+Las rampas/fundaciones conservan su orden local especial y no forman parte de
+este cambio.
+
+La siguiente divergencia instrumentada quedó aislada sin ambigüedad: la
+estación ferroviaria vanilla en `(226,42)` y `(227,42)`. Rust emite los
+sprites base 1011 y capas 1069–1086, mientras el `draw_tile_proc` de OpenTTD
+emite 1093/1151/1159/1162/1166 (y sus equivalentes en la tesela vecina). Es
+un desvío de selección de estación, no de campos, cercas ni composición del
+terreno; debe investigarse como siguiente frente con una región de dos
+teselas.
+
 ## Procedimiento para investigar un caso nuevo
 
 1. Reproducirlo con una partida inmutable y elegir una región mínima: los dos
@@ -177,6 +203,16 @@ REGION=120,111,128,113
 ./scripts/export_openttd_world_draw.sh "$SAV" /tmp/kale-ottd-station.jsonl "$OTTD_BIN" "$REGION"
 ./scripts/export_openttdrs_world_draw.sh "$SAV" /tmp/kale-rust-station.jsonl "$REGION"
 python3 scripts/compare_world_draw.py /tmp/kale-ottd-station.jsonl /tmp/kale-rust-station.jsonl \
+  --geometry --order --by-role
+```
+
+Para repetir la regresión de campos/cercas en 8bpp:
+
+```bash
+REGION=225,25,251,61
+./scripts/export_openttd_world_draw.sh "$SAV" /tmp/kale-ottd-fields.jsonl "$OTTD_BIN" "$REGION"
+RUSTC_WRAPPER='' ./scripts/export_openttdrs_world_draw.sh "$SAV" /tmp/kale-rust-fields.jsonl "$REGION"
+python3 scripts/compare_world_draw.py /tmp/kale-ottd-fields.jsonl /tmp/kale-rust-fields.jsonl \
   --geometry --order --by-role
 ```
 

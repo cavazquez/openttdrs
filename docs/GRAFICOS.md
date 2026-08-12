@@ -525,6 +525,15 @@ z = (tx + ty) as f32 * 0.01 + layer
 Donde `layer` diferencia entre suelo (0.0), overlays naturales (0.3), edificios (0.6)
 y vehículos (1.0).
 
+El suelo natural no usa la elevación como parte de esa profundidad. OpenTTD lo
+emite primero como `DrawGroundSprite` y conserva el orden de inserción del
+barrido diagonal `row = tx + ty`, `column = ty - tx`; la altura sólo cambia su
+coordenada Y de pantalla. `ground_tile_pos_half` y
+`TileViewportBounds::iter_coords` conservan ese contrato para evitar que una
+parcela elevada pinte sobre una fila posterior. Las fundaciones y overlays
+especiales siguen usando su orden local, porque OpenTTD los asocia a un sprite
+padre/sortable en vez del pase genérico de suelo.
+
 ---
 
 ### Pendiente de terreno y cimientos (foundations)

@@ -1,7 +1,8 @@
 use bevy::prelude::*;
 
 use crate::iso::{
-    HEIGHT_PX, TILE_HALF_H, overlay_pos, slope_sprite_offset, tile_pos, tile_pos_half,
+    HEIGHT_PX, TILE_HALF_H, ground_tile_pos_half, overlay_pos, slope_sprite_offset, tile_pos,
+    tile_pos_half,
 };
 use crate::render::world_draw_trace::WorldDrawTrace;
 use crate::render::{
@@ -699,13 +700,27 @@ pub(crate) fn spawn_ground_sprite(
     ctx: &TileRenderContext,
     half_h: f32,
 ) {
-    spawn_ground_sprite_at(commands, image, color, ctx, ctx.info.base_z, 0.0, half_h);
+    commands.spawn((
+        MapVisualLayer,
+        ctx.map_tile_chunk(),
+        image.sprite_colored(color),
+        Transform::from_translation(ground_tile_pos_half(
+            ctx.tx_i32(),
+            ctx.ty_i32(),
+            ctx.info.base_z,
+            0.0,
+            half_h,
+        )),
+    ));
 }
 
-/// Variante de [`spawn_ground_sprite`] para una superficie que fue modificada
-/// por `DrawFoundation`. OpenTTD muta `TileInfo::z` / `tileh` antes de dibujar
-/// el suelo hijo; separar ambos valores evita volver a usar el relieve crudo
-/// en una rampa de puente nivelada.
+/// Variante para una superficie modificada por `DrawFoundation`.
+///
+/// El suelo de una rampa de puente comparte el orden local del deck y puede
+/// llevar una capa explícita. Se conserva su profundidad histórica de overlay:
+/// el pase diagonal sin altura de [`spawn_ground_sprite`] es para suelo natural
+/// independiente (campos, césped y terreno bajo tiles), no para ese hijo de
+/// fundación.
 pub(crate) fn spawn_ground_sprite_at(
     commands: &mut Commands,
     image: &AtlasSprite,

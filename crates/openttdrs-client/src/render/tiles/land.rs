@@ -151,6 +151,117 @@ const fn tree_shore_sprite_id(tileh: u8) -> u32 {
     5936 + TILEH_TO_SHORE_SPRITE[tileh as usize] as u32
 }
 
+/// Primer sprite de los nueve estados de cultivo de OpenTTD.
+///
+/// `table/sprites.h`: `SPR_FARMLAND_BARE = 4126`; los estados siguientes
+/// ocupan bloques consecutivos de 19 pendientes. Centralizar el cálculo
+/// impide que la selección del atlas y la traza de paridad diverjan.
+const SPR_FARMLAND_BARE: u32 = 4126;
+
+/// Primer sprite de los seis tipos de cerca de un campo.
+///
+/// `table/sprites.h`: `SPR_HEDGE_BUSHES = 4090`; cada tipo tiene seis
+/// variantes de pendiente.
+const SPR_HEDGE_BUSHES: u32 = 4090;
+
+const FIELD_SLOPE_SPRITE_COUNT: usize = 19;
+
+/// ID que `DrawTile_Clear` entrega a `DrawGroundSprite` para un campo.
+const fn field_ground_sprite_id(state: usize, tileh: u8) -> u32 {
+    let state = if state >= FIELD_STATES {
+        FIELD_STATES - 1
+    } else {
+        state
+    };
+    SPR_FARMLAND_BARE
+        + (state * FIELD_SLOPE_SPRITE_COUNT + slope_sprite_offset(tileh) as usize) as u32
+}
+
+/// `GetSlopeMaxPixelZ(tileh)` de OpenTTD para una pendiente natural.
+///
+/// Las pendientes normales alcanzan una altura de tesela (8 px); las cuatro
+/// pendientes empinadas (`bit STEEP`) alcanzan dos (16 px).
+const fn field_slope_max_pixel_z(tileh: u8) -> i32 {
+    let tileh = tileh & 0x1F;
+    if tileh & 0x10 != 0 {
+        16
+    } else if tileh & 0x0F != 0 {
+        8
+    } else {
+        0
+    }
+}
+
+/// `GetSlopePixelZInCorner(tileh, corner)` de `landscape.cpp`.
+///
+/// En una pendiente empinada la esquina alta queda a dos niveles. El antiguo
+/// renderer sólo comprobaba el bit de la esquina y la dejaba un nivel (8 px)
+/// por debajo de OpenTTD; eso desanclaba cercas en las parcelas inclinadas de
+/// Kale.
+const fn field_slope_pixel_z_in_corner(tileh: u8, corner_bit: u8) -> i32 {
+    let tileh = tileh & 0x1F;
+    let raised = if tileh & corner_bit != 0 { 8 } else { 0 };
+    let steep_for_corner = match corner_bit {
+        // SLOPE_STEEP_W/S/E/N en `slope_type.h`.
+        0x1 => 27,
+        0x2 => 23,
+        0x4 => 30,
+        0x8 => 29,
+        _ => 0,
+    };
+    raised + if tileh == steep_for_corner { 8 } else { 0 }
+}
+
+/// Una cerca ya resuelta desde los bytes de la tesela, antes de crear el
+/// sprite de Bevy. Esta forma intermedia se usa por el render y por la traza
+/// para que ambos mantengan el contrato de `DrawClearLandFence`.
+#[derive(Clone, Copy, Debug)]
+struct FieldFenceDraw {
+    fence_type: usize,
+    variant: usize,
+    sprite_id: u32,
+    /// Offset y altura en unidades de mundo de OpenTTD (no píxeles Bevy).
+    offset: (i32, i32, i32),
+    layer: f32,
+}
+
+/// Resuelve NW, NE, SW y SE con el mismo orden que `DrawClearLandFence`.
+///
+/// `Tile::m3hi` es el byte serializado como `m4` de OpenTTD; por eso SW/SE
+/// salen de este campo y no de `m3`.
+fn field_fence_draws(t: &Tile, tileh: u8) -> [Option<FieldFenceDraw>; 4] {
+    let tileh = usize::from(tileh & 0x1F);
+    // (tipo codificado, tabla de variantes, dx, dy, esquina de referencia,
+    // capa visual local). NW usa W, NE E, SW/SE S como el C++.
+    let sides: [(u8, &[u8; 32], i32, i32, u8, f32); 4] = [
+        ((t.m6 >> 2) & 0x7, &FENCE_MOD_BY_TILEH_NW, 0, -16, 0x1, 0.06),
+        ((t.m3 >> 5) & 0x7, &FENCE_MOD_BY_TILEH_NE, -16, 0, 0x4, 0.06),
+        ((t.m3hi >> 5) & 0x7, &FENCE_MOD_BY_TILEH_SW, 0, 0, 0x2, 0.26),
+        ((t.m3hi >> 2) & 0x7, &FENCE_MOD_BY_TILEH_SE, 0, 0, 0x2, 0.26),
+    ];
+
+    let mut draws = [None; 4];
+    for (index, (fence, mods, dx, dy, corner_bit, layer)) in sides.into_iter().enumerate() {
+        if fence == 0 {
+            continue;
+        }
+        let fence_type = usize::from(fence - 1).min(5);
+        let variant = usize::from(mods[tileh]).min(5);
+        draws[index] = Some(FieldFenceDraw {
+            fence_type,
+            variant,
+            sprite_id: SPR_HEDGE_BUSHES + (fence_type * 6 + variant) as u32,
+            offset: (
+                dx,
+                dy,
+                field_slope_pixel_z_in_corner(tileh as u8, corner_bit),
+            ),
+            layer,
+        });
+    }
+    draws
+}
+
 pub(crate) fn spawn_house_tile(
     commands: &mut Commands,
     assets: &WorldAssets,
@@ -670,6 +781,15 @@ pub(crate) fn spawn_generic_land_tile(
                 // `DrawTile_Clear` Fields: estado de cultivo en bits 0–3 de
                 // m3 + offset de pendiente; cercas como overlay.
                 let state = usize::from(ctx.tile.map_or(0, |t| t.m3 & 0x0F)).min(FIELD_STATES - 1);
+                WorldDrawTrace::record_sprite_with_geometry(
+                    "field-ground",
+                    "ground",
+                    field_ground_sprite_id(state, tileh),
+                    false,
+                    (0, 0, 0),
+                    0,
+                    None,
+                );
                 let img =
                     assets.fields[state * 19 + usize::from(slope_sprite_offset(tileh))].clone();
                 spawn_field_fences(commands, assets, ctx);
@@ -921,57 +1041,30 @@ fn spawn_field_fences(commands: &mut Commands, assets: &WorldAssets, ctx: &TileR
     let Some(t) = ctx.tile else {
         return;
     };
-    let tileh = usize::from(ctx.info.tileh & 0x1F);
-    // (tipo, tabla de variantes, dx, dy, bit de esquina para z, capa)
-    // NW usa CORNER_W (bit 1), NE CORNER_E (bit 4), SW/SE CORNER_S (bit 2).
-    let sides: [(u8, &[u8; 32], f32, f32, u8, f32); 4] = [
-        (
-            (t.m6 >> 2) & 0x7,
-            &FENCE_MOD_BY_TILEH_NW,
-            0.0,
-            -16.0,
-            0x1,
-            0.06,
-        ),
-        (
-            (t.m3 >> 5) & 0x7,
-            &FENCE_MOD_BY_TILEH_NE,
-            -16.0,
-            0.0,
-            0x4,
-            0.06,
-        ),
-        (
-            (t.m3hi >> 5) & 0x7,
-            &FENCE_MOD_BY_TILEH_SW,
-            0.0,
-            0.0,
-            0x2,
-            0.26,
-        ),
-        (
-            (t.m3hi >> 2) & 0x7,
-            &FENCE_MOD_BY_TILEH_SE,
-            0.0,
-            0.0,
-            0x2,
-            0.26,
-        ),
-    ];
-    for (fence, mods, dx, dy, corner_bit, layer) in sides {
-        if fence == 0 {
-            continue;
-        }
-        let ftype = usize::from(fence - 1).min(5);
-        let variant = usize::from(mods[tileh]).min(5);
-        let meta = FENCE_SPRITE_META[ftype][variant];
-        // `GetSlopePixelZInCorner`: esquina elevada = TILE_HEIGHT (8 unidades).
-        let dz = if ctx.info.tileh & corner_bit != 0 {
-            8.0
-        } else {
-            0.0
-        };
-        let off = remap_tile_offset(dx, dy, dz) * 0.5;
+    let bounds =
+        TraceSpriteBounds::new(0, 0, 0, 16, 16, 4 + field_slope_max_pixel_z(ctx.info.tileh));
+    let mut combined = false;
+    for draw in field_fence_draws(&t, ctx.info.tileh).into_iter().flatten() {
+        // `StartSpriteCombine`: la primera cerca es sortable y las demás se
+        // agregan al mismo objeto. La traza mantiene este orden y geometría
+        // exactos para poder contrastarlos contra `DrawClearLandFence`.
+        WorldDrawTrace::record_sprite_with_geometry(
+            "field-fence",
+            if combined { "combined" } else { "sortable" },
+            draw.sprite_id,
+            false,
+            draw.offset,
+            0,
+            Some(bounds),
+        );
+        combined = true;
+
+        let meta = FENCE_SPRITE_META[draw.fence_type][draw.variant];
+        let off = remap_tile_offset(
+            draw.offset.0 as f32,
+            draw.offset.1 as f32,
+            draw.offset.2 as f32,
+        ) * 0.5;
         let pos3 = overlay_pos(
             Vec2::new(ctx.iso_pos.x + off.x, ctx.iso_pos.y + off.y),
             meta.xrel,
@@ -979,14 +1072,14 @@ fn spawn_field_fences(commands: &mut Commands, assets: &WorldAssets, ctx: &TileR
             meta.w,
             meta.h,
             ctx.info.base_z,
-            layer,
+            draw.layer,
             ctx.tx_i32(),
             ctx.ty_i32(),
         );
         commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
-            assets.fences[ftype * 6 + variant].sprite(),
+            assets.fences[draw.fence_type * 6 + draw.variant].sprite(),
             Transform::from_translation(pos3),
         ));
     }
@@ -1110,8 +1203,9 @@ mod tests {
     use openttdrs_core::{Map, TileCoord};
 
     use super::{
-        TreeGround, sort_tree_layers_like_openttd, tree_density_from_tile, tree_ground_from_tile,
-        tree_ground_sprite_id, tree_shore_sprite_id,
+        TreeGround, field_fence_draws, field_ground_sprite_id, field_slope_max_pixel_z,
+        field_slope_pixel_z_in_corner, sort_tree_layers_like_openttd, tree_density_from_tile,
+        tree_ground_from_tile, tree_ground_sprite_id, tree_shore_sprite_id,
     };
 
     #[test]
@@ -1159,6 +1253,48 @@ mod tests {
             4546
         );
         assert_eq!(tree_ground_sprite_id(TreeGround::Shore, 3, 29, 0, 0), 5946);
+    }
+
+    #[test]
+    fn field_ground_and_fences_match_openttd_clear_land_sprite_contract() {
+        // Valores de `table/sprites.h` y `DrawClearLandFence`:
+        // field state 4 + SLOPE_STEEP_E (tileh 30) = 4202 + 18 = 4220.
+        assert_eq!(field_ground_sprite_id(4, 30), 4220);
+
+        let mut field = Map::new_flat(1, 1, 0)
+            .get(TileCoord::new(0, 0))
+            .expect("tile");
+        // NW=fence (type 3), NE=bushes (type 1), SW=stone (type 6),
+        // SE=gate (type 2). El almacenamiento m3hi es MAP4 de OpenTTD.
+        field.m6 = 3 << 2;
+        field.m3 = 1 << 5;
+        field.m3hi = (6 << 5) | (2 << 2);
+        let draws = field_fence_draws(&field, 30);
+
+        let nw = draws[0].expect("NW");
+        assert_eq!((nw.sprite_id, nw.offset), (4105, (0, -16, 0)));
+        let ne = draws[1].expect("NE");
+        assert_eq!((ne.sprite_id, ne.offset), (4094, (-16, 0, 16)));
+        let sw = draws[2].expect("SW");
+        assert_eq!((sw.sprite_id, sw.offset), (4124, (0, 0, 8)));
+        let se = draws[3].expect("SE");
+        assert_eq!((se.sprite_id, se.offset), (4099, (0, 0, 8)));
+    }
+
+    #[test]
+    fn field_fence_steep_corner_height_matches_get_slope_pixel_z_in_corner() {
+        // `landscape.cpp`: la esquina máxima de una pendiente STEEP está a
+        // dos TILE_HEIGHT (16 px), no a una. Cubrir las cuatro constantes de
+        // `slope_type.h` evita que una futura simplificación vuelva a dejar
+        // las cercas flotando un nivel por debajo.
+        assert_eq!(field_slope_max_pixel_z(0), 0);
+        assert_eq!(field_slope_max_pixel_z(0x04), 8);
+        assert_eq!(field_slope_max_pixel_z(23), 16); // SLOPE_STEEP_S
+        assert_eq!(field_slope_pixel_z_in_corner(27, 0x01), 16); // W
+        assert_eq!(field_slope_pixel_z_in_corner(23, 0x02), 16); // S
+        assert_eq!(field_slope_pixel_z_in_corner(30, 0x04), 16); // E
+        assert_eq!(field_slope_pixel_z_in_corner(29, 0x08), 16); // N
+        assert_eq!(field_slope_pixel_z_in_corner(30, 0x01), 0);
     }
 
     #[test]

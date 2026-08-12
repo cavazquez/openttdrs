@@ -455,7 +455,52 @@ mod rail_signal_pick_tests {
     }
 }
 
-/// Vec3 para teselas de suelo con soporte de altura isométrica.
+/// Paso principal de profundidad por fila diagonal de tiles.
+///
+/// `ViewportAddLandscape` de OpenTTD recorre `row = x + y` ascendente y
+/// `ViewportDrawTileSprites` conserva exactamente ese orden para todos los
+/// `DrawGroundSprite`. Una fila posterior se debe pintar encima de la
+/// anterior, independientemente de la altura de la tesela.
+const GROUND_ROW_Z_STEP: f32 = 0.01;
+
+/// Desempate dentro de una misma fila diagonal.
+///
+/// La segunda coordenada del bucle C++ es `column = y - x`, también
+/// ascendente. El margen total queda estrictamente dentro de un paso de fila
+/// aun para el mapa máximo 4096×4096; así no puede invertir filas contiguas.
+/// Si la precisión de `f32` empata dos columnas lejanas, el orden de inserción
+/// de [`crate::render::viewport::TileViewportBounds::iter_coords`] conserva el
+/// mismo desempate diagonal del C++.
+const GROUND_COLUMN_Z_STEP: f32 = 0.000_001;
+
+/// Profundidad para el pase de suelo de OpenTTD.
+///
+/// No incorpora `height`: la elevación cambia la posición de pantalla, pero
+/// no el orden de `TileSpriteToDrawVector`. Antes se añadía `height * 0.001`,
+/// lo que permitía que suelo elevado cubriera una fila posterior y producía
+/// bandas aparentes sobre campos inclinados de Kale.
+#[inline]
+pub fn ground_draw_z(tx: i32, ty: i32, layer: f32) -> f32 {
+    (tx + ty) as f32 * GROUND_ROW_Z_STEP + (ty - tx) as f32 * GROUND_COLUMN_Z_STEP + layer
+}
+
+/// Vec3 para teselas que OpenTTD emite mediante `DrawGroundSprite`.
+///
+/// La pantalla conserva la elevación isométrica, mientras la profundidad no
+/// incorpora altura. Se usa para el suelo natural que no participa del orden
+/// local de una fundación; los sprites `sortable` y las superficies especiales
+/// continúan con [`tile_pos_half`] / [`overlay_pos`] y su propia profundidad.
+#[inline]
+pub fn ground_tile_pos_half(tx: i32, ty: i32, height: u8, layer: f32, half_h: f32) -> Vec3 {
+    let p = iso(tx, ty);
+    let elev = f32::from(height) * HEIGHT_PX;
+    Vec3::new(p.x, p.y - half_h + elev, ground_draw_z(tx, ty, layer))
+}
+
+/// Vec3 para sprites ordenables y overlays con soporte de altura isométrica.
+///
+/// A diferencia de [`ground_tile_pos_half`], estos sprites pertenecen al pase
+/// sortable del renderer y por eso conservan su sesgo de altura local.
 #[inline]
 pub fn tile_pos_half(tx: i32, ty: i32, height: u8, layer: f32, half_h: f32) -> Vec3 {
     let p = iso(tx, ty);
@@ -624,6 +669,38 @@ pub fn overlay_pos(
         ref_pos.y - yrel - h / 2.0 + elev,
         (tx + ty) as f32 * 0.01 + f32::from(height) * 0.001 + layer,
     )
+}
+
+#[cfg(test)]
+mod ground_draw_order_tests {
+    use super::{TILE_HALF_H, ground_tile_pos_half, tile_pos_half};
+
+    #[test]
+    fn ground_depth_matches_openttd_diagonal_scan_and_ignores_elevation() {
+        // `ViewportAddLandscape`: misma fila `x+y=10`, columna `y-x`
+        // ascendente: (6,4) → (5,5) → (4,6).
+        let left = ground_tile_pos_half(6, 4, 0, 0.0, TILE_HALF_H).z;
+        let middle = ground_tile_pos_half(5, 5, 0, 0.0, TILE_HALF_H).z;
+        let right = ground_tile_pos_half(4, 6, 0, 0.0, TILE_HALF_H).z;
+        assert!(left < middle && middle < right);
+
+        // La fila 11 empieza después de completar la fila 10, aun si la
+        // tesela anterior está en altura máxima razonable de un mapa.
+        let next_row = ground_tile_pos_half(6, 5, 0, 0.0, TILE_HALF_H).z;
+        assert!(right < next_row);
+        assert_eq!(
+            ground_tile_pos_half(4, 6, 0, 0.0, TILE_HALF_H).z,
+            ground_tile_pos_half(4, 6, 31, 0.0, TILE_HALF_H).z,
+            "la altura sólo desplaza el sprite en pantalla; no reordena ground tiles"
+        );
+
+        // Esta era la inversión concreta: la profundidad anterior sumaba
+        // `height * 0.001`; una tesela elevada de la fila 10 saltaba delante
+        // de la fila 11 y dejaba bandas diagonales en los campos de Kale.
+        let legacy_high = tile_pos_half(4, 6, 31, 0.0, TILE_HALF_H).z;
+        let legacy_next_row = tile_pos_half(6, 5, 0, 0.0, TILE_HALF_H).z;
+        assert!(legacy_high > legacy_next_row);
+    }
 }
 
 /// Dibuja el contorno de un rombo isométrico.

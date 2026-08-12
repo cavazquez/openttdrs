@@ -1057,11 +1057,21 @@ fn paved_roadside_uses_paved_set_and_streetlights_spawn_lamps() {
 #[test]
 fn spawn_field_tile_draws_crop_ground_and_fences() {
     let assets = boot_assets_app();
+    // Oráculo directo de `DrawTile_Clear` / `DrawClearLandFence`:
+    // SPR_FARMLAND_STATE_4 = 4202; las cuatro cercas salen de las tablas
+    // `_fence_mod_by_tileh_*` planas de `clear_land.h`.
+    let expected_field = assets.fields[4 * 19].clone();
+    let expected_fences = [
+        assets.fences[2 * 6 + 1].clone(), // NW: fence type 3, variant 1 = 4103.
+        assets.fences[0].clone(),         // NE: bushes, variant 0 = 4090.
+        assets.fences[5 * 6].clone(),     // SW: stone, variant 0 = 4120.
+        assets.fences[6 + 1].clone(),     // SE: gate, variant 1 = 4097.
+    ];
     let mut map = fresh_map8();
     let c = |x: i32, y: i32| TileCoord::new(x, y);
 
     // MP_CLEAR Fields (m5 bits 2-4 = 3), estado 4, cercas NE (m3 5-7),
-    // NW (m6 2-4), SW (m3hi 5-7) y SE (m3hi 2-4).
+    // NW (m6 2-4), SW (MAP4/m3hi 5-7) y SE (MAP4/m3hi 2-4).
     let mut field = tile_template();
     field.m5 = 3 << 2;
     field.m3 = 0x24; // NE = tipo 1 (bushes) + estado 4
@@ -1073,6 +1083,13 @@ fn spawn_field_tile_draws_crop_ground_and_fences() {
     let mut bare = tile_template();
     bare.m5 = 3 << 2;
     map.set_tile(c(3, 2), bare).expect("bare field");
+
+    // Meseta plana: el suelo de campo queda visualmente 9 niveles más alto,
+    // pero `DrawGroundSprite` no puede cambiar su orden de composición por
+    // esa altura. Las cuatro muestras son N, W, E y S de (2, 2).
+    for coord in [c(2, 2), c(3, 2), c(2, 3), c(3, 3)] {
+        map.set_height(coord, 9).expect("field plateau");
+    }
 
     let grid = RenderGrid::from_map(&map, 8, 8);
     let mut world = World::new();
@@ -1101,6 +1118,44 @@ fn spawn_field_tile_draws_crop_ground_and_fences() {
         .expect("field tile");
     let with_fences = world.query::<&Sprite>().iter(&world).count();
     assert_eq!(with_fences, 5, "suelo de cultivo + 4 cercas");
+    let rendered: Vec<_> = world.query::<&Sprite>().iter(&world).collect();
+    assert_eq!(
+        rendered
+            .iter()
+            .filter(|sprite| expected_field.matches(sprite))
+            .count(),
+        1,
+        "estado 4 debe seleccionar SPR_FARMLAND_STATE_4 plano (4202)"
+    );
+    for (side, expected) in ["NW", "NE", "SW", "SE"].into_iter().zip(expected_fences) {
+        assert_eq!(
+            rendered
+                .iter()
+                .filter(|sprite| expected.matches(sprite))
+                .count(),
+            1,
+            "la cerca {side} debe conservar el sprite que selecciona OpenTTD"
+        );
+    }
+    let field_ground_z = world
+        .query::<(&Sprite, &Transform)>()
+        .iter(&world)
+        .find_map(|(sprite, transform)| {
+            expected_field
+                .matches(sprite)
+                .then_some(transform.translation.z)
+        })
+        .expect("sprite de suelo de campo");
+    assert_eq!(
+        field_ground_z,
+        crate::iso::ground_tile_pos_half(2, 2, 9, 0.0, 4.0).z,
+        "el suelo debe usar el pase Ground de OpenTTD"
+    );
+    assert_ne!(
+        field_ground_z,
+        crate::iso::tile_pos_half(2, 2, 9, 0.0, 4.0).z,
+        "la elevación no puede formar parte de la profundidad del campo"
+    );
 
     world
         .run_system_once(

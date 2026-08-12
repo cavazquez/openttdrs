@@ -51,8 +51,84 @@ impl TileViewportBounds {
         u64::from(self.tx1.saturating_sub(self.tx0)) * u64::from(self.ty1.saturating_sub(self.ty0))
     }
 
+    /// Recorre las teselas en el mismo barrido diagonal que
+    /// `ViewportAddLandscape` de OpenTTD.
+    ///
+    /// OpenTTD incrementa primero `row = x + y` y, dentro de cada fila,
+    /// `column = y - x`. Como `column` ascendente equivale a `x` descendente,
+    /// este orden conserva la inserción de `DrawGroundSprite` aun cuando dos
+    /// claves de profundidad `f32` muy próximas empatan.
     pub fn iter_coords(self) -> impl Iterator<Item = (u32, u32)> {
-        (self.ty0..self.ty1).flat_map(move |ty| (self.tx0..self.tx1).map(move |tx| (tx, ty)))
+        DiagonalTileCoords::new(self)
+    }
+}
+
+/// Iterador de coordenadas para el barrido de tiles de OpenTTD.
+///
+/// Mantenerlo separado del culling evita que el renderer dependa de un orden
+/// incidental fila-a-fila (`ty`, luego `tx`) al crear entidades de Bevy.
+#[derive(Clone, Copy, Debug)]
+struct DiagonalTileCoords {
+    bounds: TileViewportBounds,
+    row: u32,
+    last_row: u32,
+    min_tx: u32,
+    next_tx: Option<u32>,
+}
+
+impl DiagonalTileCoords {
+    fn new(bounds: TileViewportBounds) -> Self {
+        if bounds.tx0 >= bounds.tx1 || bounds.ty0 >= bounds.ty1 {
+            return Self {
+                bounds,
+                row: 0,
+                last_row: 0,
+                min_tx: 0,
+                next_tx: None,
+            };
+        }
+
+        let row = bounds.tx0.saturating_add(bounds.ty0);
+        let mut out = Self {
+            bounds,
+            row,
+            last_row: bounds
+                .tx1
+                .saturating_sub(1)
+                .saturating_add(bounds.ty1.saturating_sub(1)),
+            min_tx: 0,
+            next_tx: None,
+        };
+        out.set_row(row);
+        out
+    }
+
+    fn set_row(&mut self, row: u32) {
+        self.row = row;
+        let last_tx = self.bounds.tx1.saturating_sub(1);
+        let last_ty = self.bounds.ty1.saturating_sub(1);
+        self.min_tx = self.bounds.tx0.max(row.saturating_sub(last_ty));
+        let max_tx = last_tx.min(row.saturating_sub(self.bounds.ty0));
+        self.next_tx = (self.min_tx <= max_tx).then_some(max_tx);
+    }
+}
+
+impl Iterator for DiagonalTileCoords {
+    type Item = (u32, u32);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let tx = self.next_tx?;
+        let ty = self.row.saturating_sub(tx);
+
+        if tx > self.min_tx {
+            self.next_tx = Some(tx - 1);
+        } else if self.row < self.last_row {
+            self.set_row(self.row + 1);
+        } else {
+            self.next_tx = None;
+        }
+
+        Some((tx, ty))
     }
 }
 
@@ -243,6 +319,44 @@ mod tests {
         };
         assert!(full.contains(inner));
         assert!(!inner.contains(full));
+    }
+
+    #[test]
+    fn iter_coords_matches_openttd_diagonal_row_and_column_scan() {
+        let bounds = TileViewportBounds {
+            tx0: 2,
+            ty0: 3,
+            tx1: 5,
+            ty1: 6,
+        };
+
+        // `ViewportAddLandscape`: row = x + y ascendente; para cada row,
+        // column = y - x ascendente, es decir x descendente.
+        assert_eq!(
+            bounds.iter_coords().collect::<Vec<_>>(),
+            vec![
+                (2, 3),
+                (3, 3),
+                (2, 4),
+                (4, 3),
+                (3, 4),
+                (2, 5),
+                (4, 4),
+                (3, 5),
+                (4, 5),
+            ]
+        );
+    }
+
+    #[test]
+    fn iter_coords_is_empty_for_an_empty_viewport() {
+        let bounds = TileViewportBounds {
+            tx0: 4,
+            ty0: 3,
+            tx1: 4,
+            ty1: 6,
+        };
+        assert!(bounds.iter_coords().next().is_none());
     }
 
     #[test]

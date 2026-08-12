@@ -23,6 +23,7 @@ from PIL import Image
 from nfo_sprite_meta import (
     active_global_sprite_nfo,
     detect_graphics_mode,
+    parse_global_sprite_rects,
     parse_sprite_offs,
     sprite_dims_from_assets,
 )
@@ -56,34 +57,6 @@ def find_clear_land_h() -> Path:
         "o definí OPENTTD_SRC."
     )
 
-GLOBAL_SHEET_RE = re.compile(
-    r"^\s*(\d+)\s+(\S*?((?:ogfx1_base|ogfx21_base_32ez)\d+\.(?:32\.png|png|pcx)))\s+(?:8bpp|32bpp)\s+"
-    r"(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(-?\d+)\s+(-?\d+)"
-)
-
-
-SpriteRect = tuple[int, int, int, int, str]
-
-
-def parse_global_sprite_rects(nfo_path: Path) -> dict[int, SpriteRect]:
-    """Lee rectángulos de un NFO *base* sin mezclar el namespace de ``extra``."""
-    if nfo_path.name not in {"ogfx1_base.nfo", "ogfx21_base_32ez.nfo"}:
-        raise ValueError(f"se esperaba NFO base, se recibió {nfo_path.name}")
-
-    rect: dict[int, SpriteRect] = {}
-    for line in nfo_path.read_text(errors="replace").splitlines():
-        match = GLOBAL_SHEET_RE.match(line)
-        if match:
-            rect[int(match.group(1))] = (
-                int(match.group(4)),
-                int(match.group(5)),
-                int(match.group(6)),
-                int(match.group(7)),
-                Path(match.group(2)).name,
-            )
-    return rect
-
-
 def load_sheet(png_path: Path, mode: str) -> Image.Image:
     img = Image.open(png_path)
     if mode == "32bpp":
@@ -113,19 +86,21 @@ class Cropper:
         if nfo_path is None:
             sys.exit("No se encontró el NFO OpenGFX base activo (corré descargar_graficos.sh)")
         self.sprites_dir = nfo_path.parent
-        self.rect = parse_global_sprite_rects(nfo_path)
+        self.rect = parse_global_sprite_rects(nfo_path, mode)
         self.sheets: dict[str, Image.Image] = {}
 
     def crop(self, sid: int, out_name: str) -> None:
         if sid not in self.rect:
             sys.exit(f"sprite {sid} no está en el NFO")
-        x, y, w, h, sheet_name = self.rect[sid]
-        if sheet_name not in self.sheets:
-            p = self.sprites_dir / sheet_name
+        rect = self.rect[sid]
+        if rect.sheet not in self.sheets:
+            p = self.sprites_dir / rect.sheet
             if not p.is_file():
                 p = p.with_suffix(".pcx")
-            self.sheets[sheet_name] = load_sheet(p, self.mode)
-        self.sheets[sheet_name].crop((x, y, x + w, y + h)).save(TILES_DIR / out_name)
+            self.sheets[rect.sheet] = load_sheet(p, self.mode)
+        self.sheets[rect.sheet].crop(
+            (rect.x, rect.y, rect.x + rect.w, rect.y + rect.h)
+        ).save(TILES_DIR / out_name)
 
 
 def parse_fence_mods(text: str) -> dict[str, list[int]]:

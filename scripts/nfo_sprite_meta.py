@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import NamedTuple
 
 try:
     from PIL import Image
@@ -11,6 +12,87 @@ except ImportError:
     Image = None  # type: ignore[misc, assignment]
 
 NfoEntry = tuple[str, int, int, int, int]  # bpp, nw, nh, x_offs, y_offs
+
+
+class NfoSpriteRow(NamedTuple):
+    """Una alternativa de sprite normal leída de un NFO de baseset.
+
+    OpenGFX2 expresa el mismo SpriteID como una fila 8bpp y continuaciones
+    ``|`` 32bpp (más sus variantes de zoom). Conservar el ID anterior al
+    parsear una continuación es imprescindible: la coordenada de la hoja
+    32bpp no coincide necesariamente con la de la hoja indexada.
+    """
+
+    sprite_id: int
+    sheet: str
+    bpp: str
+    x: int
+    y: int
+    w: int
+    h: int
+    xrel: int
+    yrel: int
+    zoom: str
+
+
+class SpriteRect(NamedTuple):
+    """Rectángulo y ancla de una variante normal de SpriteID."""
+
+    x: int
+    y: int
+    w: int
+    h: int
+    xrel: int
+    yrel: int
+    sheet: str
+
+
+NFO_SPRITE_ROW_RE = re.compile(
+    r"^\s*(?:(?P<sprite_id>\d+)|\|)\s+"
+    r"(?P<sheet>\S+)\s+(?P<bpp>8bpp|32bpp)\s+"
+    r"(?P<x>\d+)\s+(?P<y>\d+)\s+(?P<w>\d+)\s+(?P<h>\d+)\s+"
+    r"(?P<xrel>-?\d+)\s+(?P<yrel>-?\d+)\s+(?P<zoom>\S+)"
+)
+
+
+def _normal_sprite_rows(nfo_path: Path) -> list[NfoSpriteRow]:
+    """Devuelve alternativas 8/32bpp de zoom normal por SpriteID.
+
+    Las variantes ``zi*``/``zo*`` sirven a los zooms discretos de OpenTTD,
+    pero el atlas actual de openttdrs representa el tamaño lógico normal de
+    tesela. Incluirlas en sus metadatos haría que un PNG de 64×31 heredase la
+    geometría 256×127 de ``zi4``.
+    """
+
+    rows: list[NfoSpriteRow] = []
+    current_id: int | None = None
+    for line in nfo_path.read_text(encoding="utf-8", errors="replace").splitlines():
+        match = NFO_SPRITE_ROW_RE.match(line)
+        if match is None:
+            continue
+        raw_id = match["sprite_id"]
+        if raw_id is not None:
+            current_id = int(raw_id)
+        if current_id is None:
+            continue
+        zoom = match["zoom"]
+        if zoom != "normal":
+            continue
+        rows.append(
+            NfoSpriteRow(
+                current_id,
+                match["sheet"],
+                match["bpp"],
+                int(match["x"]),
+                int(match["y"]),
+                int(match["w"]),
+                int(match["h"]),
+                int(match["xrel"]),
+                int(match["yrel"]),
+                zoom,
+            )
+        )
+    return rows
 
 
 def detect_graphics_mode(repo: Path) -> str | None:
@@ -55,38 +137,59 @@ def find_nfo_files(repo: Path, mode: str | None = None) -> list[Path]:
 
 
 def parse_sprite_offs(repo: Path, mode: str | None = None) -> dict[int, list[NfoEntry]]:
-    """Filas NFO de IDs globales OpenTTD del GRF base activo.
+    """Filas NFO de zoom normal de IDs globales del GRF base activo.
 
     No se incluyen NFO ``extra`` ni side-caches: sus IDs se reinician por GRF
     y una mezcla silenciosa puede sustituir un sprite de 64×31 por uno pequeño
-    e irrelevante de otro namespace.
+    e irrelevante de otro namespace. Para OpenGFX2 se mantienen las dos
+    alternativas normales (8bpp y 32bpp), para que el consumidor elija la que
+    corresponde al PNG activo sin confundirla con una variante ``zi4``.
     """
-    pat = re.compile(
-        r"^\s*(\d+)\s+\S+\s+(8bpp|32bpp)\s+"
-        r"\d+\s+\d+\s+(\d+)\s+(\d+)\s+(-?\d+)\s+(-?\d+)"
-    )
     out: dict[int, list[NfoEntry]] = {}
     for nfo in find_nfo_files(repo, mode):
-        try:
-            content = nfo.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            continue
-        for line in content.splitlines():
-            m = pat.match(line)
-            if not m:
-                continue
-            sid = int(m.group(1))
+        for row in _normal_sprite_rows(nfo):
             entry: NfoEntry = (
-                m.group(2),
-                int(m.group(3)),
-                int(m.group(4)),
-                int(m.group(5)),
-                int(m.group(6)),
+                row.bpp,
+                row.w,
+                row.h,
+                row.xrel,
+                row.yrel,
             )
-            bucket = out.setdefault(sid, [])
+            bucket = out.setdefault(row.sprite_id, [])
             if entry not in bucket:
                 bucket.append(entry)
     return out
+
+
+def parse_global_sprite_rects(
+    nfo_path: Path, prefer_bpp: str | None = None
+) -> dict[int, SpriteRect]:
+    """Rectángulo normal de cada SpriteID global del baseset.
+
+    En OpenGFX2 una continuación ``|`` describe la alternativa 32bpp del
+    SpriteID de la fila anterior. Elegirla junto con sus propias coordenadas
+    evita el antiguo error de recortar una hoja ``.32.png`` con el rectángulo
+    8bpp. Si un sprite aún no tiene alternativa 32bpp, se conserva la primera
+    fila normal disponible como fallback explícito.
+    """
+
+    variants: dict[int, list[NfoSpriteRow]] = {}
+    for row in _normal_sprite_rows(nfo_path):
+        variants.setdefault(row.sprite_id, []).append(row)
+
+    rects: dict[int, SpriteRect] = {}
+    for sprite_id, rows in variants.items():
+        selected = next((row for row in rows if row.bpp == prefer_bpp), rows[0])
+        rects[sprite_id] = SpriteRect(
+            selected.x,
+            selected.y,
+            selected.w,
+            selected.h,
+            selected.xrel,
+            selected.yrel,
+            Path(selected.sheet).name,
+        )
+    return rects
 
 
 def png_size(tiles_dir: Path, png_name: str) -> tuple[int, int] | None:

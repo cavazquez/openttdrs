@@ -379,6 +379,7 @@ from pathlib import Path
 from PIL import Image
 
 sys.path.insert(0, str(Path(os.environ["OPENTTDRS_REPO_ROOT"]) / "scripts"))
+from nfo_sprite_meta import parse_global_sprite_rects
 from opengfx_palette import dematte_legacy_colorkey, indexed_dos_to_rgba
 
 sprites_dir = Path(os.environ["SPRITES_DIR"])
@@ -505,22 +506,11 @@ for p in sorted(sprites_dir.glob(f"{sheet_prefix}*.pcx")):
         print(f"  (omitido sheet {p.name}: {e})", file=sys.stderr)
         continue
 
-# Parsear NFO para todos los sheets del set.
+# Parsear el NFO base para todos los sheets del set. OpenGFX2 codifica la
+# alternativa 32bpp de un SpriteID como continuación `|`; el helper elige la
+# fila normal del perfil activo junto con su propia hoja y coordenadas.
 nfo_path = sprites_dir / nfo_name
-sprite_rect: dict[int, tuple] = {}  # sid -> (x, y, w, h, xr, yr, sheet_name)
-if nfo_path.is_file():
-    pat = re.compile(
-        r"^\s*(\d+)\s+(\S*?((?:ogfx1_base|ogfx21_base_32ez)\d+\.(?:32\.png|png|pcx)))\s+(?:8bpp|32bpp)\s+"
-        r"(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(-?\d+)\s+(-?\d+)"
-    )
-    for line in nfo_path.read_text(errors="replace").splitlines():
-        m = pat.match(line)
-        if m:
-            sid = int(m.group(1))
-            sheet = Path(m.group(2)).name
-            sprite_rect[sid] = (int(m.group(4)), int(m.group(5)),
-                                 int(m.group(6)), int(m.group(7)),
-                                 int(m.group(8)), int(m.group(9)), sheet)
+sprite_rect = parse_global_sprite_rects(nfo_path, graphics_mode) if nfo_path.is_file() else {}
 
 
 def crop_by_id(sid: int, out_name: str) -> None:
@@ -533,9 +523,9 @@ def crop_by_id(sid: int, out_name: str) -> None:
         return
     x, y, w, h, xr, yr, sheet = sprite_rect[sid]
     sheet_key = sheet
-    # Nota: no forzar ".32.png" aquí. Las coordenadas del NFO generado por
-    # grfcodec en este flujo refieren al atlas base; usar .32 directo produce
-    # recortes fuera de lugar (huecos celestes masivos en el mapa).
+    # `sprite_rect` ya emparejó hoja y coordenadas de la misma alternativa
+    # normal (8bpp o 32bpp). No sustituir sólo la extensión: las hojas .32
+    # tienen su propio packing y eso deja recortes fuera de lugar.
     if sheet_key not in sheets:
         # grfcodec suele generar PCX aunque el NFO refiera PNG.
         alt = Path(sheet).with_suffix(".pcx").name

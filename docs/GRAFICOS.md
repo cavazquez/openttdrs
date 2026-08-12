@@ -534,6 +534,12 @@ parcela elevada pinte sobre una fila posterior. Las fundaciones y overlays
 especiales siguen usando su orden local, porque OpenTTD los asocia a un sprite
 padre/sortable en vez del pase genérico de suelo.
 
+Este orden es independiente del baseset: se aplica igual con OpenGFX 8bpp y
+OpenGFX2 32bpp. En este último, un mismo SpriteID tiene fila indexada y una
+continuación `|` RGBA en el NFO; `parse_global_sprite_rects` selecciona la
+alternativa `32bpp` de zoom normal con **sus propias** coordenadas y hoja
+`.32.png`. Nunca se puede combinar el rectángulo 8bpp con la hoja 32bpp.
+
 ---
 
 ### Pendiente de terreno y cimientos (foundations)

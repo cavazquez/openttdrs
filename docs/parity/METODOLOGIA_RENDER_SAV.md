@@ -69,7 +69,7 @@ cuando el tile ya se decodificó mal.
 | Depósitos y estaciones especiales | Geometría de depósito naval, reserva visual de depósito rail y distinción de tiles especiales para no disfrazar un fallback como parada de buses. | En checkpoint; los fallbacks deben ser explícitos. |
 | Paleta de compañía 8bpp y estación rail vanilla | Se corrigió el desplazamiento de un índice DOS en las rampas y se dejó de inferir recolor por RGB ajeno a la rampa autora. La región `120,111..128,113` de Kale compara 118/118 comandos de estación (sprite, paleta, geometría y orden). | Validada por `world-draw`; la composición raster amplia sigue teniendo familias ajenas a esta corrección. |
 | Reservas PBS 8bpp | Los overlays `PALETTE_CRASH=804` se hornean desde índices DOS con la misma pseudo-sprite de recolor que usa OpenTTD; se eliminó el tinte RGBA naranja aproximado. Incluye `SINGLE_*` rail/mono/maglev y las doce rampas PBS. | Validar en captura focalizada; la traza conserva paleta 804 y ahora distingue la ausencia del asset exacto como fallback. |
-| Campos y cercas 8bpp de Kale | Se instrumentó `DrawTile_Clear` para campos y sus cuatro cercas, se corrigió la altura de esquina de pendientes empinadas y el suelo natural deja de usar la elevación como profundidad. El spawn recorre las teselas en el mismo barrido diagonal de `ViewportAddLandscape`. | La región `225,25..251,61` valida 647 suelos y 476 cercas: ID, geometría y orden relativo 100 % contenidos en OpenTTD. Falta una captura local de aceptación tras el cambio. |
+| Campos y cercas de Kale (8bpp y 32bpp) | Se instrumentó `DrawTile_Clear` para campos y sus cuatro cercas, se corrigió la altura de esquina de pendientes empinadas y el suelo natural deja de usar la elevación como profundidad. El spawn recorre las teselas en el mismo barrido diagonal de `ViewportAddLandscape`; OpenGFX2 selecciona su variante RGBA normal sin mezclar coordenadas 8bpp. | La región `225,25..251,61` valida en 8bpp 647 suelos y 476 cercas: ID, geometría y orden relativo 100 % contenidos en OpenTTD. La regresión de selección cubre los dos perfiles de baseset. Falta una captura local de aceptación tras el cambio. |
 | Iconos y assets | Regeneración de iconos y datos de atlas asociados. | En checkpoint; revisión visual pendiente. |
 
 Este inventario describe trabajo efectuado, no una afirmación de que todos los
@@ -125,13 +125,16 @@ regresión; el fixture controlado compara transmisor `(47,33)` y faro `(60,55)`
 con `--strict-reference`, y en ambos casos coinciden terreno, sprite,
 geometría y orden de los dos comandos de OpenTTD.
 
-### Revalidación 8bpp: campos y cercas de Kale
+### Revalidación: campos y cercas de Kale (8bpp y 32bpp)
 
 La región de cultivo `225,25..251,61` se comparó usando el mismo baseset
 OpenGFX 8bpp para OpenTTD y para el atlas de `openttdrs`. El oráculo C++ emitió
 1.957 comandos y el candidato 1.740 selecciones instrumentadas. Dentro de esa
 región, los 647 `field-ground` y las 476 `field-fence` coincidieron al 100 %
-en ID de sprite, geometría explícita y orden relativo.
+en ID de sprite, geometría explícita y orden relativo. La regla de composición
+no depende de la profundidad de color; para OpenGFX2, la regresión de NFO
+verifica que cada campo/cerca use la continuación `32bpp` de zoom normal y no
+la fila 8bpp ni una variante `zi4`.
 
 El defecto visual que quedaba no era de importación ni de selección: el
 renderer Rust sumaba `height * 0.001` a la profundidad de todo suelo. OpenTTD

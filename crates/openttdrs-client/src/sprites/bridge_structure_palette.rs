@@ -3,14 +3,16 @@
 //! Varios tipos comparten los mismos sprite IDs; el tono (marrón, amarillo, rojo…)
 //! se aplica en runtime con las tablas recolor 795–801 del baseset.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap};
 use std::path::Path;
 use std::sync::OnceLock;
 
 use bevy::prelude::*;
-use openttdrs_core::{BridgePiece, BridgeType};
+use openttdrs_core::{BridgePiece, BridgeType, RailType};
 
-use super::bridge_sprites_generated::{BridgeDeckSpriteIds, bridge_deck_sprite_ids};
+use super::bridge_sprites_generated::{
+    BridgeDeckSpriteIds, bridge_deck_sprite_ids, bridge_ramp_sprite_id,
+};
 use super::company_palette::{rgba_to_bevy_image, tiles_assets_dir};
 
 #[path = "bridge_structure_palette_data_generated.rs"]
@@ -55,6 +57,9 @@ impl BridgeStructurePalette {
 #[must_use]
 pub const fn bridge_structure_palette(bt: BridgeType) -> BridgeStructurePalette {
     match bt {
+        // `_bridge_sprite_table_concrete_*` usa PALETTE_TO_STRUCT_RED: el
+        // nombre del puente no coincide con el nombre de la rampa de paleta.
+        BridgeType::Concrete | BridgeType::CantileverRed => BridgeStructurePalette::Red,
         BridgeType::SuspensionConcrete | BridgeType::TubularSilicon => {
             BridgeStructurePalette::Concrete
         }
@@ -62,7 +67,6 @@ pub const fn bridge_structure_palette(bt: BridgeType) -> BridgeStructurePalette 
             BridgeStructurePalette::Yellow
         }
         BridgeType::CantileverBrown => BridgeStructurePalette::Brown,
-        BridgeType::CantileverRed => BridgeStructurePalette::Red,
         _ => BridgeStructurePalette::None,
     }
 }
@@ -81,7 +85,11 @@ pub const fn bridge_structure_palette_for_sprite(
     bt: BridgeType,
     sprite_id: u32,
 ) -> BridgeStructurePalette {
-    if sprite_id >= 2437 && sprite_id <= 2444 {
+    if (sprite_id >= 2437 && sprite_id <= 2444)
+        // El puente de concreto remapea tablero y frente, pero sus pilares
+        // `SPR_BTCON_{X,Y}_PILLAR` son PAL_NONE en `bridge_land.h`.
+        || (matches!(bt, BridgeType::Concrete) && (sprite_id == 2505 || sprite_id == 2506))
+    {
         BridgeStructurePalette::None
     } else {
         bridge_structure_palette(bt)
@@ -109,6 +117,11 @@ fn remap_table_cached(palette: BridgeStructurePalette) -> &'static HashMap<[u8; 
 }
 
 /// Recolorea un buffer RGBA8 in-place con la paleta de estructura indicada.
+///
+/// Las tablas de OpenTTD son tablas indexadas: el destino `0` no se escribe
+/// (`if (m != 0) *dst = m` en el blitter 8bpp). En una textura RGBA el
+/// equivalente es volver transparente el píxel. Dejarlo negro opaco crea
+/// una banda/pared artificial en las estructuras recoloreadas.
 pub fn recolor_bridge_rgba8(buf: &mut [u8], palette: BridgeStructurePalette) {
     if !palette.needs_recolor() {
         return;
@@ -120,9 +133,13 @@ pub fn recolor_bridge_rgba8(buf: &mut [u8], palette: BridgeStructurePalette) {
         }
         let key = [px[0], px[1], px[2]];
         if let Some(&rgb) = table.get(&key) {
-            px[0] = rgb[0];
-            px[1] = rgb[1];
-            px[2] = rgb[2];
+            if rgb == [0, 0, 0] {
+                px.copy_from_slice(&[0, 0, 0, 0]);
+            } else {
+                px[0] = rgb[0];
+                px[1] = rgb[1];
+                px[2] = rgb[2];
+            }
         }
     }
 }
@@ -182,7 +199,7 @@ fn load_recolored_bridge_png(
 /// IDs de sprite usados por tipos con recolor de estructura.
 #[must_use]
 pub fn bridge_sprite_ids_for_structure_recolor() -> Vec<u32> {
-    let mut ids = HashSet::new();
+    let mut ids = BTreeSet::new();
     for bt in 0..13u8 {
         let Some(bridge_type) = BridgeType::from_u8(bt) else {
             continue;
@@ -200,6 +217,8 @@ pub fn bridge_sprite_ids_for_structure_recolor() -> Vec<u32> {
                 .rear_rail
                 .iter()
                 .chain(deck.rear_road.iter())
+                .chain(deck.rear_mono.iter())
+                .chain(deck.rear_maglev.iter())
                 .chain(deck.front.iter())
                 .chain(deck.pillar.iter())
                 .copied()
@@ -209,6 +228,25 @@ pub fn bridge_sprite_ids_for_structure_recolor() -> Vec<u32> {
                 })
             {
                 ids.insert(sid);
+            }
+        }
+        // Las rampas de carretera, monorriel y maglev también llevan la
+        // paleta estructural. Antes sólo se cacheaban los vanos: al llegar a
+        // una rampa esos medios caían al PNG sin recolor y parecían vía rail
+        // normal o una desconexión visual.
+        for (rail, rail_type) in [
+            (false, RailType::Rail),
+            (true, RailType::Rail),
+            (true, RailType::Monorail),
+            (true, RailType::Maglev),
+        ] {
+            for tileh in [0, 1] {
+                for dir in 0..4 {
+                    let sid = bridge_ramp_sprite_id(bridge_type, rail, rail_type, tileh, dir);
+                    if bridge_structure_palette_for_sprite(bridge_type, sid).needs_recolor() {
+                        ids.insert(sid);
+                    }
+                }
             }
         }
     }
@@ -222,7 +260,9 @@ mod tests {
     #[test]
     fn yellow_palette_maps_brown_structure_to_gold() {
         let table = build_structure_remap_table(BridgeStructurePalette::Yellow);
-        assert_eq!(table.get(&[64, 20, 8]), Some(&[32, 4, 0]));
+        // Índice DOS 71 → 60 en `PALETTE_TO_STRUCT_YELLOW`. El slot cero
+        // transparente debe conservarse antes de leer los `M(...)` de C++.
+        assert_eq!(table.get(&[64, 20, 8]), Some(&[68, 24, 0]));
         assert_eq!(table.get(&[196, 128, 108]), Some(&[252, 212, 0]));
     }
 
@@ -238,7 +278,26 @@ mod tests {
     fn recolor_changes_brown_pixel() {
         let mut px = [64u8, 20, 8, 255];
         recolor_bridge_rgba8(&mut px, BridgeStructurePalette::Yellow);
-        assert_eq!(&px[..3], &[32, 4, 0]);
+        assert_eq!(&px[..3], &[68, 24, 0]);
+    }
+
+    #[test]
+    fn red_palette_matches_the_openttd_dos_indices() {
+        let table = build_structure_remap_table(BridgeStructurePalette::Red);
+        // `ogfx1_base.nfo` pseudo-sprite 798: índices 1, 72 y 76.
+        assert_eq!(table.get(&[16, 16, 16]), Some(&[0, 0, 0]));
+        assert_eq!(table.get(&[84, 28, 16]), Some(&[60, 0, 0]));
+        assert_eq!(table.get(&[168, 92, 76]), Some(&[172, 52, 52]));
+    }
+
+    #[test]
+    fn zero_remap_becomes_transparent_like_the_openttd_blitter() {
+        // El pseudo-sprite 798 remapea el índice DOS 1 a 0. Tanto el
+        // blitter 8bpp como el 32bpp de OpenTTD omiten ese píxel; RGBA debe
+        // conservar la misma silueta en vez de convertirlo en negro opaco.
+        let mut px = [16u8, 16, 16, 255];
+        recolor_bridge_rgba8(&mut px, BridgeStructurePalette::Red);
+        assert_eq!(px, [0, 0, 0, 0]);
     }
 
     #[test]
@@ -262,5 +321,50 @@ mod tests {
             bridge_structure_palette_for_sprite(BridgeType::TubularYellow, 4367),
             BridgeStructurePalette::Yellow
         );
+    }
+
+    #[test]
+    fn structure_palette_selection_matches_bridge_land_tables() {
+        // `bridge_land.h`: el concreto base es STRUCT_RED, aunque el puente
+        // de suspensión concreta use STRUCT_CONCRETE.
+        assert_eq!(
+            bridge_structure_palette_for_sprite(BridgeType::Concrete, 2493),
+            BridgeStructurePalette::Red
+        );
+        assert_eq!(
+            bridge_structure_palette_for_sprite(BridgeType::Concrete, 2497),
+            BridgeStructurePalette::Red
+        );
+        assert_eq!(
+            bridge_structure_palette_for_sprite(BridgeType::Concrete, 2505),
+            BridgeStructurePalette::None
+        );
+        assert_eq!(
+            bridge_structure_palette_for_sprite(BridgeType::SuspensionConcrete, 2481),
+            BridgeStructurePalette::Concrete
+        );
+        assert_eq!(
+            bridge_structure_palette_for_sprite(BridgeType::CantileverRed, 2523),
+            BridgeStructurePalette::Red
+        );
+    }
+
+    #[test]
+    fn recolor_inventory_covers_typed_bridge_decks_and_ramps() {
+        let ids = bridge_sprite_ids_for_structure_recolor();
+        // C++ generic bridge heads: road, monorail and maglev have palette;
+        // rail/electric does not. Cubrimos las cuatro direcciones de cada uno.
+        for sid in [2445, 2452, 4326, 4333, 4366, 4373] {
+            assert!(ids.contains(&sid), "falta rampa recoloreada {sid}");
+        }
+        for sid in [4347, 4350, 4387, 4390] {
+            assert!(ids.contains(&sid), "falta tablero tipado {sid}");
+        }
+        for sid in [2437, 2444, 2505, 2506] {
+            assert!(
+                !ids.contains(&sid),
+                "{sid} es PAL_NONE en bridge_land.h y no debe recolorearse"
+            );
+        }
     }
 }

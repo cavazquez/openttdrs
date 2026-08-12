@@ -1359,6 +1359,34 @@ mod tests {
     }
 
     #[test]
+    fn cantilever_red_rows_match_the_openttd_bridge_table() {
+        // `_bridge_sprite_table_cantilever_red_{north,middle,south}`. Kale
+        // usa el eje Y (índice 1), pero comprobamos ambos ejes y los tres
+        // medios ferroviarios para que una variante no vuelva a degradarse a
+        // rail normal o a perder el frente/pilar.
+        let north = bridge_deck_sprite_ids(BridgeType::CantileverRed, BridgePiece::North);
+        assert_eq!(north.rear_rail, [2509, 2510]);
+        assert_eq!(north.rear_mono, [4348, 4349]);
+        assert_eq!(north.rear_maglev, [4388, 4389]);
+        assert_eq!(north.front, [2521, 2522]);
+        assert_eq!(north.pillar, [0, 0]);
+
+        let middle = bridge_deck_sprite_ids(BridgeType::CantileverRed, BridgePiece::MiddleOdd);
+        assert_eq!(middle.rear_rail, [2508, 2511]);
+        assert_eq!(middle.rear_mono, [4347, 4350]);
+        assert_eq!(middle.rear_maglev, [4387, 4390]);
+        assert_eq!(middle.front, [2520, 2523]);
+        assert_eq!(middle.pillar, [2526, 2527]);
+
+        let south = bridge_deck_sprite_ids(BridgeType::CantileverRed, BridgePiece::South);
+        assert_eq!(south.rear_rail, [2507, 2512]);
+        assert_eq!(south.rear_mono, [4346, 4351]);
+        assert_eq!(south.rear_maglev, [4386, 4391]);
+        assert_eq!(south.front, [2519, 2524]);
+        assert_eq!(south.pillar, [2525, 2528]);
+    }
+
+    #[test]
     fn bridge_pbs_reservation_uses_the_upstream_sprite_layout() {
         // Kale (127,123): monorriel X sobre rampa con terreno efectivo 12;
         // `HasBridgeFlatRamp` es true y OpenTTD compone SPR_MONO_SINGLE_X,

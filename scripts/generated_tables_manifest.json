@@ -91,6 +91,19 @@
       "output_sha256": "69f29137e24bd06cbf997a82ab8f351f7eab8a327ea5d2ebba5800cbb9ea10c1",
       "license": "layout derivado de PNG OpenGFX locales",
       "note": "Regenerado y verificado 2026-08-10 con el atlas OpenGFX local; CI valida hash del .rs. El --check local valida además las páginas PNG píxel a píxel."
+    },
+    {
+      "id": "bridge_structure_palette",
+      "generator": "scripts/gen_bridge_structure_palette.py",
+      "output": "crates/openttdrs-client/src/sprites/bridge_structure_palette_data_generated.rs",
+      "inputs": [
+        "third_party/openttd/table/palettes.h"
+      ],
+      "check": "regenerate_or_hash",
+      "requires_opengfx": true,
+      "output_sha256": "31b5a02c19eec3a95e5bc7fdf3f2a1b67e8ed1cb7fc7b9d3fa7b8f5fb85eaec6",
+      "license": "pseudo-sprites OpenGFX locales + paleta DOS OpenTTD (GPL-2.0-only)",
+      "note": "CI valida el hash; localmente --check regenera desde ogfx1_base.nfo 8bpp y conserva el índice DOS transparente 0."
     }
   ],
   "inventory": [
@@ -125,6 +138,11 @@
       "pilot": true
     },
     {
+      "output": "crates/openttdrs-client/src/sprites/bridge_structure_palette_data_generated.rs",
+      "generator": "scripts/gen_bridge_structure_palette.py",
+      "pilot": true
+    },
+    {
       "output": "crates/openttdrs-client/src/sprites/field_draw_data_generated.rs",
       "generator": "scripts/gen_field_draw_data.py"
     },
@@ -143,10 +161,6 @@
     {
       "output": "crates/openttdrs-client/src/sprites/bridge_sprites_generated.rs",
       "generator": "scripts/gen_bridge_sprites.py"
-    },
-    {
-      "output": "crates/openttdrs-client/src/sprites/bridge_structure_palette_data_generated.rs",
-      "generator": "scripts/gen_bridge_structure_palette.py"
     },
     {
       "output": "crates/openttdrs-client/src/sprites/rail_station_draw_data_generated.rs",

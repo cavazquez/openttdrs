@@ -21,6 +21,7 @@
     "scripts/gen_company_palette_rust.py",
     "scripts/gen_house_population.py",
     "scripts/gen_tile_atlas.py",
+    "scripts/gen_bridge_structure_palette.py",
     "scripts/opengfx_palette.py",
     "scripts/gen_field_draw_data.py",
     "scripts/gen_tree_draw_data.py",

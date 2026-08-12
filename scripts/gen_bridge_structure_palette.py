@@ -8,11 +8,14 @@ Uso: python3 scripts/gen_bridge_structure_palette.py
 """
 from __future__ import annotations
 
+import argparse
 import re
+import sys
 from pathlib import Path
 
+from opengfx_palette import dos_palette
+
 REPO = Path(__file__).resolve().parents[1]
-PALETTES_H = REPO / "third_party" / "openttd" / "table" / "palettes.h"
 OUT_RS = (
     REPO / "crates/openttdrs-client/src/sprites/bridge_structure_palette_data_generated.rs"
 )
@@ -49,14 +52,13 @@ PALETTE_IDS: list[tuple[str, int]] = [
 
 
 def load_dos_palette() -> list[tuple[int, int, int]]:
-    text = PALETTES_H.read_text(encoding="utf-8", errors="replace")
-    colours = [
-        tuple(map(int, m))
-        for m in re.findall(r"M\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)", text)
-    ]
-    if len(colours) < 256:
-        raise SystemExit(f"paleta DOS incompleta ({len(colours)} entradas)")
-    return colours
+    """Paleta DOS con el índice transparente 0 explícito.
+
+    ``palettes.h`` contiene sólo los 255 ``M(...)`` opacos. Leerlos
+    directamente corría todos los índices una posición y hacía que
+    ``PALETTE_TO_STRUCT_*`` recoloreara el tono vecino del que usa OpenTTD.
+    """
+    return list(dos_palette())
 
 
 def parse_recolor_block(lines: list[str]) -> list[int]:
@@ -130,10 +132,10 @@ def rgb_remap(pal: list[tuple[int, int, int]], table: list[int]) -> list[tuple[t
     return out
 
 
-def main() -> None:
+def build_output() -> str:
     nfo = find_ogfx1_base_nfo()
     if nfo is None:
-        raise SystemExit(
+        raise FileNotFoundError(
             "Falta ogfx1_base.nfo 8bpp para paletas de puente "
             "(assets/opengfx/.signal-src-8bpp/sprites/ o opengfx-*/sprites/). "
             "Ejecutá ./scripts/descargar_graficos.sh --32bpp (o --8bpp)."
@@ -156,9 +158,32 @@ def main() -> None:
         lines.append("];")
         lines.append("")
 
-    OUT_RS.write_text("\n".join(lines), encoding="utf-8")
+    return "\n".join(lines)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--check", action="store_true", help="falla si la tabla versionada difiere")
+    args = parser.parse_args(argv)
+
+    try:
+        output = build_output()
+    except FileNotFoundError as exc:
+        print(exc, file=sys.stderr)
+        return 2
+
+    current = OUT_RS.read_text(encoding="utf-8") if OUT_RS.is_file() else None
+    if args.check:
+        if current == output:
+            print(f"OK {OUT_RS.relative_to(REPO)}")
+            return 0
+        print(f"DRIFT {OUT_RS.relative_to(REPO)}", file=sys.stderr)
+        return 1
+
+    OUT_RS.write_text(output, encoding="utf-8")
     print(f"Escrito {OUT_RS.relative_to(REPO)} ({len(PALETTE_IDS)} tablas)")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

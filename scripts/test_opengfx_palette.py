@@ -8,6 +8,7 @@ import unittest
 from PIL import Image
 
 from extract_rail_pbs_palette_sprites import remap_indexed_crash
+from gen_bridge_structure_palette import load_dos_palette as load_bridge_dos_palette
 from gen_company_palette_rust import COMPANY_RAMP_INDICES, build_outputs, load_dos_palette
 from opengfx_palette import indexed_dos_to_rgba
 
@@ -45,6 +46,15 @@ class OpenGfxPaletteTest(unittest.TestCase):
                 (100, 172, 224),
             ],
         )
+
+    def test_bridge_structure_generator_keeps_the_transparent_dos_slot(self) -> None:
+        """Evita correr los índices al convertir pseudo-sprites 795–801."""
+        palette = load_bridge_dos_palette()
+        self.assertEqual(len(palette), 256)
+        self.assertEqual(palette[0], (0, 0, 0))
+        self.assertEqual(palette[1], (16, 16, 16))
+        self.assertEqual(palette[71], (64, 20, 8))
+        self.assertEqual(palette[72], (84, 28, 16))
 
     def test_company_palette_outputs_are_current(self) -> None:
         for output, expected in build_outputs().items():

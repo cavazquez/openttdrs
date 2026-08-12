@@ -225,6 +225,69 @@ mod tests {
     }
 
     #[test]
+    fn generic_bridge_heads_match_openttd_for_all_directions_and_transports() {
+        use openttdrs_core::RailType;
+
+        // `_bridge_sprite_table_generic_*_heads` de `bridge_land.h`, ya
+        // convertida de su orden SW/SE/NE/NW a los bits m5 de la partida.
+        // Esto protege las cuatro rampas: una tabla rotada parece una vía que
+        // se corta justo en el ingreso al puente.
+        let cases = [
+            (
+                true,
+                RailType::Rail,
+                [2437, 2440, 2438, 2439],
+                [2441, 2444, 2442, 2443],
+            ),
+            (
+                false,
+                RailType::Rail,
+                [2445, 2448, 2446, 2447],
+                [2449, 2452, 2450, 2451],
+            ),
+            (
+                true,
+                RailType::Monorail,
+                [4326, 4329, 4327, 4328],
+                [4330, 4333, 4331, 4332],
+            ),
+            (
+                true,
+                RailType::Maglev,
+                [4366, 4369, 4367, 4368],
+                [4370, 4373, 4371, 4372],
+            ),
+        ];
+
+        for (rail, rail_type, sloped, flat) in cases {
+            for (dir, (&slope_id, &flat_id)) in sloped.iter().zip(flat.iter()).enumerate() {
+                assert_eq!(
+                    crate::sprites::bridge_ramp_sprite_id(
+                        BridgeType::CantileverRed,
+                        rail,
+                        rail_type,
+                        1,
+                        dir as u8,
+                    ),
+                    slope_id,
+                    "rampa inclinada dir {dir}, {rail_type:?}"
+                );
+                assert_eq!(
+                    crate::sprites::bridge_ramp_sprite_id(
+                        BridgeType::CantileverRed,
+                        rail,
+                        rail_type,
+                        0,
+                        dir as u8,
+                    ),
+                    flat_id,
+                    "rampa plana dir {dir}, {rail_type:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn span_at_propagates_pbs_reservation_from_rail_ramp() {
         let mut map = Map::new_flat(8, 8, 0);
         let c = |x: i32, y: i32| TileCoord::new(x, y);

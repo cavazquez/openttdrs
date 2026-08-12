@@ -1,6 +1,9 @@
 use crate::bridge_spec::{BridgeType, bridge_build_cost};
 use crate::command::{Command, CommandError, apply_command, command_would_fail};
-use crate::{GameState, TileCoord, TileKind};
+use crate::{
+    GameState, PathNetwork, RAIL_TB_X, RAIL_TB_Y, TileCoord, TileKind, bridge_above_axis_from_mapt,
+    rail_bridge_other_end,
+};
 
 #[test]
 fn bridge_cost_scales_with_line_length() {
@@ -69,4 +72,69 @@ fn bridge_accepts_span_over_water() {
         )
         .is_none()
     );
+}
+
+fn assert_rail_bridge_connects_axis(axis_y: bool) {
+    let mut state = GameState::new(12, 12);
+    let c = TileCoord::new;
+    let (start, end, before, after, expected_dir, expected_reverse, expected_track, middle) =
+        if axis_y {
+            let start = c(5, 2);
+            let end = c(5, 7);
+            for y in 3..=6 {
+                state.map.set_kind(c(5, y), TileKind::Water).unwrap();
+            }
+            (start, end, c(5, 1), c(5, 8), 1, 3, RAIL_TB_Y, c(5, 4))
+        } else {
+            let start = c(2, 5);
+            let end = c(7, 5);
+            for x in 3..=6 {
+                state.map.set_kind(c(x, 5), TileKind::Water).unwrap();
+            }
+            (start, end, c(1, 5), c(8, 5), 2, 0, RAIL_TB_X, c(4, 5))
+        };
+
+    apply_command(
+        &mut state,
+        &Command::PlaceRailBridge(start, end, BridgeType::Wooden),
+    )
+    .unwrap();
+    for access in [before, after] {
+        apply_command(&mut state, &Command::PlaceRail(access)).unwrap();
+    }
+
+    // `axis_to_diag_dir` / `ReverseDiagDir` de OpenTTD codifican las dos
+    // rampas opuestas; de esto dependen el sprite y el salto lógico del vano.
+    assert_eq!(state.map.get(start).unwrap().m5 & 0x03, expected_dir);
+    assert_eq!(state.map.get(end).unwrap().m5 & 0x03, expected_reverse);
+    assert_eq!(rail_bridge_other_end(&state.map, start), Some(end));
+    assert_eq!(rail_bridge_other_end(&state.map, end), Some(start));
+    assert_eq!(
+        bridge_above_axis_from_mapt(state.map.get(middle).unwrap().mapt),
+        Some(axis_y)
+    );
+    assert_eq!(
+        crate::rail_pbs::track_for_rail_step(&state.map, start, end),
+        Some(expected_track)
+    );
+    assert_eq!(
+        crate::rail_pbs::track_for_rail_step(&state.map, end, start),
+        Some(expected_track)
+    );
+
+    for (from, to) in [(before, after), (after, before)] {
+        let Some(path) = crate::find_path(&state.map, from, to, PathNetwork::Rail) else {
+            panic!("las vías deben cruzar el puente de {from:?} a {to:?}");
+        };
+        assert!(path.contains(&start), "ruta sin rampa inicial: {path:?}");
+        assert!(path.contains(&end), "ruta sin rampa final: {path:?}");
+    }
+}
+
+#[test]
+fn rail_bridge_routes_through_both_axes_and_both_ramps() {
+    // Regresión de los puentes visualmente desconectados: el mismo m5 que
+    // selecciona la rampa debe producir continuidad real para X e Y.
+    assert_rail_bridge_connects_axis(false);
+    assert_rail_bridge_connects_axis(true);
 }

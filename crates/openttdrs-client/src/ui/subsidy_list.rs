@@ -243,6 +243,7 @@ pub(crate) fn handle_subsidy_list_buttons(
                 industry_panel.open = true;
                 industry_panel.focus_tile = Some(subsidy.source_industry_pos);
                 station_panel.station_pos = Some(subsidy.dest_station_pos);
+                station_panel.selected_tile = Some(subsidy.dest_station_pos);
                 center_on_tile(&sim, &mut cam_q, subsidy.dest_station_pos);
             }
         }

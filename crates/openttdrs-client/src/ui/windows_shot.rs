@@ -1641,6 +1641,7 @@ fn open_all_windows_for_shot(world: &mut World, include_auxiliary: bool) {
         }
         let mut panel = world.resource_mut::<StationCargoPanelState>();
         panel.station_pos = Some(focused);
+        panel.selected_tile = Some(focused);
         panel.rename_editing = false;
     }
     {
@@ -1705,7 +1706,11 @@ fn open_all_windows_for_shot(world: &mut World, include_auxiliary: bool) {
             .resource_mut::<AutoreplaceWindowState>()
             .open_for_depot(pos);
     }
-    world.resource_mut::<StationCargoPanelState>().station_pos = station_pos;
+    {
+        let mut panel = world.resource_mut::<StationCargoPanelState>();
+        panel.station_pos = station_pos;
+        panel.selected_tile = station_pos;
+    }
     if let Some(pos) = industry_pos {
         let mut panel = world.resource_mut::<IndustryPanelState>();
         panel.open = true;

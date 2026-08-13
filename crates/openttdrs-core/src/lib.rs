@@ -111,7 +111,9 @@ pub use aircraft_movement::{aircraft_requires_path, straight_line_path};
 pub use airport::{
     AIRPORT_SMALL_H, AIRPORT_SMALL_W, AirportPiece, airport_loading_tile, airport_loading_tile_at,
     airport_m6_airport, airport_runway_tile, airport_small_footprint, airport_small_tiles,
-    airport_spec_footprint, airport_spec_tiles, airport_tile_is_hangar, airport_tile_is_heliport,
+    airport_spec_footprint, airport_spec_tiles, airport_station_gfx_animation_frames,
+    airport_tile_is_hangar, airport_tile_is_heliport, is_airport_flag_station_gfx,
+    is_airport_radar_station_gfx,
 };
 pub use airport_class::{
     AIRPORT_ACTION3_PURCHASE, AirportClassDef, AirportClassId, AirportFtaFlags, AirportLayoutTile,

@@ -37,7 +37,7 @@ impl AirportPiece {
     /// tiles `MP_STATION/Airport`.
     ///
     /// A diferencia de [`Self::from_m5`], esta tabla cubre los índices reales
-    /// de `_station_display_datas_airport` (0..=72), incluidos los helipads
+    /// de `_station_display_datas_airport` (0..=73), incluidos los helipads
     /// embebidos de commuter/metropolitan/international.
     #[must_use]
     pub const fn from_station_gfx(gfx: u8) -> Self {
@@ -52,8 +52,10 @@ impl AirportPiece {
             19 | 21..=23 | 27..=28 | 33..=35 | 63..=64 | 69 => Self::Terminal,
             // Hangares grande/chico.
             24 | 43 => Self::Hangar,
-            // Torre, radar, radio tower y flags animados.
-            20 | 31..=32 | 39 | 47 | 51..=52 | 72 => Self::Tower,
+            // Torre, radar y radio tower. Las banderas y las mitades de
+            // apron son StationGfx distintos: no deben disparar la animación
+            // genérica de una torre procedimental.
+            20 | 31..=32 | 47 | 51..=52 => Self::Tower,
             // Helipuerto simple y helipads embebidos.
             44 | 53..=55 | 61 | 66..=68 => Self::Heliport,
             // Apron, grass y cercas restantes.
@@ -80,13 +82,43 @@ impl AirportPiece {
     }
 }
 
+/// `StationGfx` que OpenTTD anima como radar de aeropuerto.
+#[must_use]
+pub const fn is_airport_radar_station_gfx(gfx: u8) -> bool {
+    matches!(gfx, 31 | 51 | 52)
+}
+
+/// `StationGfx` que OpenTTD anima como manga de viento.
+#[must_use]
+pub const fn is_airport_flag_station_gfx(gfx: u8) -> bool {
+    matches!(gfx, 39 | 73)
+}
+
+/// Cantidad de frames de la animación vanilla de un `StationGfx` airport.
+///
+/// Derivado de `_origin_airporttile_specs` (`airporttiles.h`): los radares
+/// usan doce frames y las mangas de viento cuatro.
+#[must_use]
+pub const fn airport_station_gfx_animation_frames(gfx: u8) -> Option<u8> {
+    if is_airport_radar_station_gfx(gfx) {
+        Some(12)
+    } else if is_airport_flag_station_gfx(gfx) {
+        Some(4)
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 mod station_gfx_tests {
-    use super::AirportPiece;
+    use super::{
+        AirportPiece, airport_station_gfx_animation_frames, is_airport_flag_station_gfx,
+        is_airport_radar_station_gfx,
+    };
 
     #[test]
     fn classifies_all_vanilla_station_gfx_without_falling_back_to_heliport() {
-        for gfx in 0..=72 {
+        for gfx in 0..=73 {
             let piece = AirportPiece::from_station_gfx(gfx);
             if matches!(gfx, 44 | 53..=55 | 61 | 66..=68) {
                 assert_eq!(piece, AirportPiece::Heliport, "gfx={gfx}");
@@ -103,6 +135,22 @@ mod station_gfx_tests {
         assert_eq!(AirportPiece::from_station_gfx(33), AirportPiece::Terminal);
         assert_eq!(AirportPiece::from_station_gfx(51), AirportPiece::Tower);
         assert_eq!(AirportPiece::from_station_gfx(66), AirportPiece::Heliport);
+        assert_eq!(AirportPiece::from_station_gfx(39), AirportPiece::Apron);
+        assert_eq!(AirportPiece::from_station_gfx(72), AirportPiece::Apron);
+    }
+
+    #[test]
+    fn station_gfx_animation_contract_matches_openttd_airporttiles_table() {
+        for gfx in 0..=73 {
+            let frames = airport_station_gfx_animation_frames(gfx);
+            match gfx {
+                31 | 51 | 52 => assert_eq!(frames, Some(12), "gfx={gfx}"),
+                39 | 73 => assert_eq!(frames, Some(4), "gfx={gfx}"),
+                _ => assert_eq!(frames, None, "gfx={gfx}"),
+            }
+        }
+        assert!(is_airport_radar_station_gfx(31));
+        assert!(is_airport_flag_station_gfx(39));
     }
 }
 

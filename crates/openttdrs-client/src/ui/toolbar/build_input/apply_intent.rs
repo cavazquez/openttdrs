@@ -190,7 +190,10 @@ pub(crate) fn apply_intent(intent: MapClickIntent, ctx: &mut IntentApplyContext,
                 vehicle_id,
             );
         }
-        MapClickIntent::OpenStationPanel(station_pos) => {
+        MapClickIntent::OpenStationPanel {
+            station_pos,
+            selected_tile,
+        } => {
             selection::open_station_panel(
                 &mut ctx.station_panel,
                 &mut ctx.depot_state,
@@ -201,6 +204,7 @@ pub(crate) fn apply_intent(intent: MapClickIntent, ctx: &mut IntentApplyContext,
                 &mut ctx.vehicle_chain,
                 &mut ctx.station_pool,
                 station_pos,
+                selected_tile,
             );
         }
         MapClickIntent::StartDrag {

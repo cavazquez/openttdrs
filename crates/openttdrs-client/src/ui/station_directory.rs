@@ -358,6 +358,7 @@ pub(crate) fn handle_station_directory_buttons(
             continue;
         }
         station_panel.station_pos = Some(row.pos);
+        station_panel.selected_tile = Some(row.pos);
         let height = sim.state.map.get(row.pos).map_or(0, |tile| tile.height);
         let center = tile_pos(row.pos.x, row.pos.y, height, 0.0);
         if let Ok(mut transform) = cam_q.single_mut() {

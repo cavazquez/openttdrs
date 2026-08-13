@@ -4,8 +4,9 @@ use bevy::prelude::*;
 
 use crate::render::atlas::{AtlasSprite, TileAtlas};
 use crate::sprites::{
-    BridgePaletteSprites, HOUSE_DRAW_DATA, INDUSTRY_GFX_DATA, RAIL_DEPOT_VISUAL_TYPE_COUNT,
-    ROAD_DEPOT_GROUND_PATH, StationTileClass, house_sprite_filename, rail_depot_build_layers,
+    AIRPORT_STATION_SPRITES, BridgePaletteSprites, HOUSE_DRAW_DATA, INDUSTRY_GFX_DATA,
+    RAIL_DEPOT_VISUAL_TYPE_COUNT, ROAD_DEPOT_GROUND_PATH, StationTileClass,
+    airport_station_base_for_gfx, house_sprite_filename, rail_depot_build_layers,
     rail_pbs_sprite_ids_for_preload, rail_sprite_ids_for_preload, rail_station_draw_layers,
     rail_station_ground_track_sprite_for_type, rail_station_layer_for_type,
     rail_waypoint_draw_layers, road_depot_build_layers, road_stop_build_layers,
@@ -99,11 +100,17 @@ pub(crate) struct WorldAssets {
     pub(crate) airport_runways: [AtlasSprite; 5],
     pub(crate) airport_taxiways: [AtlasSprite; 9],
     pub(crate) airport_concourse: AtlasSprite,
-    /// Capas `TILE_SEQ` de los piers airport 27/28.
+    /// Capas `TILE_SEQ` de los piers airport 27/28 y cercas de apron.
     pub(crate) airport_jetway_3: AtlasSprite,
     pub(crate) airport_passenger_tunnel: AtlasSprite,
+    pub(crate) airport_fence_x: AtlasSprite,
+    pub(crate) airport_fence_y: AtlasSprite,
     /// Radar vanilla: `airport_radar_00` … `_11`.
     pub(crate) airport_radar: [AtlasSprite; 12],
+    /// Todos los sprites que usa el `StationGfx` airport vanilla, indexados
+    /// por el ID lógico de OpenTTD. Incluye Action5 (helipads) y los frames
+    /// de radar/bandera, para que un save no vuelva al icono genérico.
+    airport_station_sprites: HashMap<u32, AtlasSprite>,
     /// Esclusa: [NS, EW] × [lower, middle, upper].
     pub(crate) water_lock: [[AtlasSprite; 3]; 2],
     /// Capas traseras de túnel por dirección diagonal (0=NE … 3=NW): suelo.
@@ -389,8 +396,17 @@ impl WorldAssets {
         let airport_concourse = atlas.get("airport_concourse.png");
         let airport_jetway_3 = atlas.get("airport_jetway_3.png");
         let airport_passenger_tunnel = atlas.get("airport_passenger_tunnel.png");
+        let airport_fence_x = atlas.get("airport_fence_x.png");
+        let airport_fence_y = atlas.get("airport_fence_y.png");
         let airport_radar: [AtlasSprite; 12] =
             std::array::from_fn(|i| atlas.get(&format!("airport_radar_{i:02}.png")));
+        let airport_station_sprites = AIRPORT_STATION_SPRITES
+            .iter()
+            .filter_map(|spec| {
+                let name = spec.path.rsplit('/').next().unwrap_or(spec.path);
+                atlas.try_get(name).map(|sprite| (spec.sprite_id, sprite))
+            })
+            .collect();
         // Esclusas: `scripts/gen_water_lock_tiles.py` (Action5 canals SPR_LOCK_*).
         // Fallback a agua plana si faltan PNGs / atlas desactualizado.
         let water_lock_fallback = atlas
@@ -733,7 +749,10 @@ impl WorldAssets {
             airport_concourse,
             airport_jetway_3,
             airport_passenger_tunnel,
+            airport_fence_x,
+            airport_fence_y,
             airport_radar,
+            airport_station_sprites,
             water_lock,
             road_tunnels,
             rail_tunnels,
@@ -781,22 +800,20 @@ impl WorldAssets {
     /// Sprite más específico disponible para un `StationGfx` vanilla.
     #[must_use]
     pub(crate) fn airport_station_gfx_sprite(&self, gfx: u8) -> &AtlasSprite {
-        use openttdrs_core::AirportPiece;
-        match gfx {
-            // `APT_APRON_W` .. cruces y `APT_APRON_HOR`.
-            4..=12 => &self.airport_taxiways[usize::from(gfx - 4)],
-            // `APT_RUNWAY_1..4` y `APT_RUNWAY_5`.
-            14..=17 => &self.airport_runways[usize::from(gfx - 14) + 1],
-            46 => &self.airport_runways[2],
-            // Terminal A, concourse, terminal B/C. Los piers 27/28 parten
-            // de apron y sus capas `TILE_SEQ` se emiten en `objects.rs`.
-            19 => &self.airport_terminals[0],
-            21 => &self.airport_concourse,
-            27..=28 => &self.airport_apron,
-            22 => &self.airport_terminals[1],
-            23 => &self.airport_terminals[2],
-            _ => self.airport_piece_sprite(AirportPiece::from_station_gfx(gfx)),
+        if let Some(base) = airport_station_base_for_gfx(gfx)
+            && let Some(sprite) = self.airport_station_sprite(base.sprite_id)
+        {
+            return sprite;
         }
+        self.airport_piece_sprite(openttdrs_core::AirportPiece::from_station_gfx(gfx))
+    }
+
+    /// Sprite exacto de la tabla airport o `None` si el atlas no contiene el
+    /// recurso solicitado. El renderer usa esto para señalar un fallback sin
+    /// fingir que el sprite de otra tesela es equivalente.
+    #[must_use]
+    pub(crate) fn airport_station_sprite(&self, sprite_id: u32) -> Option<&AtlasSprite> {
+        self.airport_station_sprites.get(&sprite_id)
     }
 
     #[must_use]
@@ -960,6 +977,30 @@ mod world_assets_tests {
             assets.airport_station_gfx_sprite(28),
             &atlas.get("airport_concourse.png")
         );
+        // La tabla vanilla no es el enum abreviado `AirportPiece`: los 74
+        // StationGfx deben resolver su base exacta, incluidos helipads y
+        // mitades Action5. Este test usa el atlas mínimo y evita que una
+        // precarga incompleta vuelva al icono genérico.
+        for gfx in 0..=73 {
+            let base = crate::sprites::airport_station_base_for_gfx(gfx)
+                .unwrap_or_else(|| panic!("falta base airport gfx={gfx}"));
+            assert_eq!(
+                assets.airport_station_gfx_sprite(gfx),
+                assets
+                    .airport_station_sprite(base.sprite_id)
+                    .unwrap_or_else(|| panic!("falta sprite airport={}", base.sprite_id)),
+                "gfx={gfx}"
+            );
+        }
+        for sprite_id in [2095, 2601, 2633, 2650, 2662, 2668, 4982, 5966, 5967, 5968]
+            .into_iter()
+            .chain(2676..=2691)
+        {
+            assert!(
+                assets.airport_station_sprite(sprite_id).is_some(),
+                "falta sprite airport={sprite_id}"
+            );
+        }
         // Los depósitos usan tres bloques de sprites distintos en OpenTTD.
         // Así la precarga no puede volver a degradar mono/maglev al edificio
         // de vía normal aun si el renderer selecciona la capa correcta.

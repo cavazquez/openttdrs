@@ -216,8 +216,12 @@ pub use field_draw_data_generated::{
     FENCE_SPRITE_META, FIELD_STATES,
 };
 
+#[allow(unused_imports)]
 pub use airport_station_draw_data_generated::{
-    AirportStationLayer, airport_station_layers_for_gfx,
+    AIRPORT_STATION_SPRITES, AirportStationBase, AirportStationLayer, AirportStationSprite,
+    airport_station_base_for_gfx, airport_station_ground_layers_for_gfx,
+    airport_station_ground_sprite_id_for_gfx, airport_station_layers_for_gfx,
+    airport_station_sprite_for_id,
 };
 pub use bridge_sprites_generated::{
     BridgeDeckSpriteIds, bridge_deck_sprite_ids, bridge_ramp_sprite_id, bridge_sprite_meta,
@@ -235,15 +239,39 @@ pub(crate) use bridge_structure_palette::{
 /// renderer usa media escala de `RemapCoords`, igual que las estaciones rail.
 #[must_use]
 pub fn airport_station_overlay_rel(layer: &AirportStationLayer) -> (f32, f32) {
+    airport_station_overlay_rel_for_sprite(
+        layer,
+        &AirportStationSprite {
+            sprite_id: layer.sprite_id,
+            w: layer.w,
+            h: layer.h,
+            x_offs: layer.x_offs,
+            y_offs: layer.y_offs,
+            path: layer.path,
+        },
+    )
+}
+
+/// Variante de [`airport_station_overlay_rel`] para una capa animada.
+///
+/// El `TILE_SEQ_LINE` conserva su caja lógica, pero los frames de radar y
+/// bandera tienen offsets NFO distintos. OpenTTD cambia la tabla completa por
+/// frame; reutilizar el offset del frame 0 desplaza visualmente las aspas.
+#[must_use]
+pub fn airport_station_overlay_rel_for_sprite(
+    layer: &AirportStationLayer,
+    sprite: &AirportStationSprite,
+) -> (f32, f32) {
     let off = crate::iso::remap_tile_offset(layer.dx, layer.dy, layer.dz) * 0.5;
-    (off.x + layer.x_offs, layer.y_offs - off.y)
+    (off.x + sprite.x_offs, sprite.y_offs - off.y)
 }
 pub use shore_draw_data_generated::{SHORE_META, SHORE_SPRITE_COUNT, TILEH_TO_SHORE_SPRITE};
 pub use tunnel::{
     rail_tunnel_front_atlas_name, rail_tunnel_front_sprite_id, rail_tunnel_rear_atlas_name,
-    rail_tunnel_rear_sprite_id, tunnel_front_atlas_name, tunnel_front_sprite_id,
-    tunnel_front_trace_geometry, tunnel_portal_translation, tunnel_rear_atlas_name,
-    tunnel_rear_legacy_atlas_name, tunnel_rear_sprite_id,
+    rail_tunnel_rear_sprite_id, tunnel_catenary_translation, tunnel_front_atlas_name,
+    tunnel_front_sprite_id, tunnel_front_trace_geometry, tunnel_front_translation,
+    tunnel_portal_translation, tunnel_rear_atlas_name, tunnel_rear_legacy_atlas_name,
+    tunnel_rear_sprite_id,
 };
 
 /// Humo mina de cobre (`SPR_SMOKE_0..4`). Regenerar: `python3 scripts/gen_copper_mine_smoke.py`.
@@ -586,7 +614,11 @@ mod tram_road_overlay_tests {
 
 #[cfg(test)]
 mod airport_station_draw_tests {
-    use super::{airport_station_layers_for_gfx, airport_station_overlay_rel};
+    use super::{
+        airport_station_base_for_gfx, airport_station_ground_layers_for_gfx,
+        airport_station_ground_sprite_id_for_gfx, airport_station_layers_for_gfx,
+        airport_station_overlay_rel, airport_station_sprite_for_id,
+    };
 
     #[test]
     fn airport_pier_tile_seq_matches_openttd_station_land_contract() {
@@ -607,8 +639,53 @@ mod airport_station_draw_tests {
         // RemapCoords × 0.5 para dy=8: (+16, -8); NFO = (-29, -10).
         // El resultado no puede volver a ser el centro del tile.
         assert_eq!(airport_station_overlay_rel(&tunnel[0]), (-13.0, -2.0));
-        assert!(airport_station_layers_for_gfx(26).is_empty());
+        let jetway_2 = airport_station_layers_for_gfx(26);
+        assert_eq!(jetway_2.len(), 1);
+        assert_eq!(jetway_2[0].sprite_id, 2660);
         assert!(airport_station_layers_for_gfx(29).is_empty());
+    }
+
+    #[test]
+    fn airport_apron_fences_keep_the_ground_sequence_from_openttd() {
+        // `station_land.h`: APT_APRON_FENCE_NW usa FENCE_X en (0,0),
+        // APT_APRON_FENCE_SW usa FENCE_Y en (15,0). Ambas capas pertenecen
+        // a DrawGroundSpriteAt, no a la pila sortable del terminal.
+        assert_eq!(airport_station_ground_sprite_id_for_gfx(1), Some(2634));
+        assert_eq!(airport_station_ground_sprite_id_for_gfx(2), Some(2634));
+        assert_eq!(airport_station_ground_sprite_id_for_gfx(27), Some(2634));
+
+        let north_west = airport_station_ground_layers_for_gfx(1);
+        assert_eq!(north_west.len(), 1);
+        assert_eq!(north_west[0].sprite_id, 2664);
+        assert_eq!((north_west[0].dx, north_west[0].dy), (0.0, 0.0));
+
+        let south_west = airport_station_ground_layers_for_gfx(2);
+        assert_eq!(south_west.len(), 1);
+        assert_eq!(south_west[0].sprite_id, 2663);
+        assert_eq!((south_west[0].dx, south_west[0].dy), (15.0, 0.0));
+
+        let dual = airport_station_ground_layers_for_gfx(56);
+        assert_eq!(dual.len(), 2);
+        assert_eq!(dual[0].sprite_id, 2663);
+        assert_eq!(dual[1].sprite_id, 2663);
+        assert_eq!((dual[1].dx, dual[1].dy), (15.0, 0.0));
+    }
+
+    #[test]
+    fn airport_table_covers_every_vanilla_station_gfx_and_dynamic_frames() {
+        for gfx in 0..=73 {
+            assert!(airport_station_base_for_gfx(gfx).is_some(), "gfx={gfx}");
+        }
+        assert_eq!(airport_station_layers_for_gfx(44)[0].sprite_id, 2633);
+        assert_eq!(airport_station_layers_for_gfx(47)[0].sprite_id, 2651);
+        assert_eq!(airport_station_layers_for_gfx(71)[0].sprite_id, 5968);
+        assert_eq!(airport_station_layers_for_gfx(72)[0].sprite_id, 5967);
+        for sprite_id in 2676..=2691 {
+            assert!(
+                airport_station_sprite_for_id(sprite_id).is_some(),
+                "sprite={sprite_id}"
+            );
+        }
     }
 }
 

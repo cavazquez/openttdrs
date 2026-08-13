@@ -325,14 +325,19 @@ if [[ ! -f "${SPRITES_DIR}/${SHEET_PREFIX}00.png" && ! -f "${SPRITES_DIR}/${SHEE
   need_base_decode=1
 fi
 
-# En el set clásico varios bloques que el renderer necesita (campos, cercas,
-# GUI y Action5) viven en `ogfxe_extra.grf`, no en el GRF base. Hasta ahora
-# `--8bpp` sólo decodificaba el base y el pipeline se interrumpía después al
-# buscar, por ejemplo, `SPR_FARMLAND_BARE` (4126). Mantener ambos NFO juntos
-# también hace que el perfil visual coincida con el OpenGFX que carga el
-# oráculo de OpenTTD.
+# Varios bloques que el renderer necesita (campos, cercas, GUI y Action5)
+# viven en el GRF extra. El aeropuerto usa Action5 para helipads y mitades de
+# apron: hay que decodificarlo en ambos perfiles para que 8bpp y 32bpp usen
+# su propio NFO, no una mezcla de assets.
+if [[ "${GRAPHICS_MODE}" == "32bpp" ]]; then
+  EXTRA_GRF="${BASE_DIR}/ogfx2e_extra_32ez.grf"
+  EXTRA_NFO="${SPRITES_DIR}/ogfx2e_extra_32ez.nfo"
+else
+  EXTRA_GRF="${BASE_DIR}/ogfxe_extra.grf"
+  EXTRA_NFO="${SPRITES_DIR}/ogfxe_extra.nfo"
+fi
 need_extra_decode=0
-if [[ "${GRAPHICS_MODE}" == "8bpp" && ! -f "${SPRITES_DIR}/ogfxe_extra.nfo" ]]; then
+if [[ ! -f "${EXTRA_NFO}" ]]; then
   need_extra_decode=1
 fi
 
@@ -351,13 +356,16 @@ if (( need_base_decode || need_extra_decode )); then
       fi
     fi
     if (( need_extra_decode )); then
-      extra_grf="${BASE_DIR}/ogfxe_extra.grf"
-      if [[ ! -f "${extra_grf}" ]]; then
-        echo "ERROR: falta ${extra_grf}; OpenGFX 8bpp está incompleto." >&2
+      if [[ ! -f "${EXTRA_GRF}" ]]; then
+        echo "ERROR: falta ${EXTRA_GRF}; OpenGFX ${GRAPHICS_MODE} está incompleto." >&2
         exit 1
       fi
-      echo "Decodificando $(basename "${extra_grf}") con grfcodec (Action5/GUI 8bpp)..."
-      grfcodec -d -o png -p 1 "${extra_grf}" "${SPRITES_DIR}/" 2>/dev/null || true
+      echo "Decodificando $(basename "${EXTRA_GRF}") con grfcodec (Action5/GUI ${GRAPHICS_MODE})..."
+      if [[ "${GRAPHICS_MODE}" == "32bpp" ]]; then
+        grfcodec -d -o png "${EXTRA_GRF}" "${SPRITES_DIR}/" 2>/dev/null || true
+      else
+        grfcodec -d -o png -p 1 "${EXTRA_GRF}" "${SPRITES_DIR}/" 2>/dev/null || true
+      fi
     fi
   else
     echo ""

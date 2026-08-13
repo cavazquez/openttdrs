@@ -64,8 +64,15 @@ pub(crate) enum MapClickIntent {
         depot_pos: TileCoord,
         vehicle_id: Option<u32>,
     },
-    /// Abrir panel de estación.
-    OpenStationPanel(TileCoord),
+    /// Abrir panel de estación conservando la tesela física bajo el cursor.
+    ///
+    /// Una estación puede mezclar tren, aeropuerto y muelle. El panel se
+    /// vincula al ancla de la estación, pero su título debe describir la
+    /// tesela que se clickeó, igual que OpenTTD.
+    OpenStationPanel {
+        station_pos: TileCoord,
+        selected_tile: TileCoord,
+    },
     /// Iniciar drag de construcción.
     StartDrag {
         action: BuildMenuAction,
@@ -149,11 +156,17 @@ pub(crate) fn resolve_click_intent(ctx: &MapClickContext) -> MapClickIntent {
                     };
                 }
                 Some(TileKind::Airport) => {
-                    return MapClickIntent::OpenStationPanel(ctx.tile_pos);
+                    return MapClickIntent::OpenStationPanel {
+                        station_pos: ctx.station_pos_at_tile.unwrap_or(ctx.tile_pos),
+                        selected_tile: ctx.tile_pos,
+                    };
                 }
                 Some(TileKind::Station) => {
                     let station_pos = ctx.station_pos_at_tile.unwrap_or(ctx.tile_pos);
-                    return MapClickIntent::OpenStationPanel(station_pos);
+                    return MapClickIntent::OpenStationPanel {
+                        station_pos,
+                        selected_tile: ctx.tile_pos,
+                    };
                 }
                 Some(TileKind::House) => {
                     if let Some(town_id) = ctx.town_label_under_cursor {
@@ -335,6 +348,23 @@ mod tests {
             MapClickIntent::OpenDepotPanel {
                 depot_pos: TileCoord::new(10, 10),
                 vehicle_id: Some(7),
+            }
+        );
+    }
+
+    #[test]
+    fn airport_click_preserves_the_clicked_tile_while_focusing_its_station() {
+        let mut ctx = default_ctx();
+        ctx.mouse_left_pressed = true;
+        ctx.tile_kind = Some(TileKind::Station);
+        ctx.tile_pos = TileCoord::new(189, 126);
+        ctx.station_pos_at_tile = Some(TileCoord::new(175, 125));
+
+        assert_eq!(
+            resolve_click_intent(&ctx),
+            MapClickIntent::OpenStationPanel {
+                station_pos: TileCoord::new(175, 125),
+                selected_tile: TileCoord::new(189, 126),
             }
         );
     }

@@ -393,6 +393,11 @@ fn phase_tile_animation(state: &mut GameState, t: u64) {
     }
     let airport_dirty = crate::map::step_airport_tiles(&mut state.map, t, &state.stations);
     state.runtime.industry_tile_dirty.extend(airport_dirty);
+    state
+        .runtime
+        .industry_tile_dirty
+        .sort_by_key(|coord| (coord.x, coord.y));
+    state.runtime.industry_tile_dirty.dedup();
 }
 
 /// `RunTileLoop`: LFSR de Galois.

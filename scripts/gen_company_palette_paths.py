@@ -43,10 +43,34 @@ def main() -> None:
     # vanilla del depósito naval; no están descriptas por una tabla Rust.
     paths.update(
         {
-            # `APT_PIER_NW_NE` / `APT_PIER`: ambas capas TILE_SEQ usan
-            # `PALETTE_MODIFIER_COLOUR` (station_land.h).
+            # Capas airport vanilla que llevan `PALETTE_MODIFIER_COLOUR`.
+            # La tabla de StationGfx incluye terminales, hangares, helipads,
+            # cercas, piers y las cuatro variantes de la manga de viento.
+            # No incluir los suelos, radar ni transmisor: son neutros en
+            # `station_land.h` y recolorearlos sería otra discrepancia.
+            "airport_terminal_a.png",
+            "airport_tower.png",
+            "airport_concourse.png",
+            "airport_terminal_b.png",
+            "airport_terminal_c.png",
+            "airport_hangar_front.png",
+            "airport_hangar_rear.png",
+            "airport_airfield_hangar_front.png",
+            "airport_airfield_hangar_rear.png",
+            "airport_jetway_1.png",
+            "airport_jetway_2.png",
             "airport_jetway_3.png",
             "airport_passenger_tunnel.png",
+            "airport_fence_x.png",
+            "airport_fence_y.png",
+            "airport_airfield_terminal_c_ground.png",
+            "airport_airfield_terminal_c_build.png",
+            "airport_heliport.png",
+            "airport_helidepot_office.png",
+            "airport_wind_0.png",
+            "airport_wind_1.png",
+            "airport_wind_2.png",
+            "airport_wind_3.png",
             "ship_depot_se_front.png",
             "ship_depot_sw_front.png",
             "ship_depot_nw.png",

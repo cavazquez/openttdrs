@@ -542,6 +542,85 @@ fn airport_pier_tile_seq_layers_spawn_for_both_import_paths() {
 }
 
 #[test]
+fn imported_airport_uses_full_station_gfx_not_airport_piece_fallbacks() {
+    let assets = boot_assets_app();
+    let mut map = fresh_map8();
+    let coords = [
+        (TileCoord::new(1, 1), 19_u8, 2650_u32), // terminal A
+        (TileCoord::new(2, 1), 24, 2655),        // hangar front
+        (TileCoord::new(3, 1), 44, 2633),        // heliport
+        (TileCoord::new(4, 1), 47, 2651),        // tower static
+        (TileCoord::new(5, 1), 71, 5968),        // Action5 half-apron
+    ];
+    let mut station = Station::new_with_kind(coords[0].0, StopKind::RailStation);
+    station.ottd_station_id = Some(23);
+    station.airport_tiles = coords.iter().map(|(coord, _, _)| *coord).collect();
+    for (coord, gfx, _) in coords {
+        map.set_tile(
+            coord,
+            Tile {
+                kind: TileKind::Airport,
+                mapt: 0x50,
+                m2: 23,
+                m5: gfx,
+                ..tile_template()
+            },
+        )
+        .expect("airport tile");
+    }
+
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets.clone()));
+    world
+        .run_system_once(
+            move |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                for (coord, _, _) in coords {
+                    spawn_transport_object_tile(
+                        &mut commands,
+                        &a.0,
+                        None,
+                        None,
+                        &TileRenderContext::new(
+                            &m.0,
+                            &g.0,
+                            u32::try_from(coord.x).expect("positive x"),
+                            u32::try_from(coord.y).expect("positive y"),
+                        ),
+                        4.0,
+                        false,
+                        &m.0,
+                        m.0.dimensions(),
+                        &[station.clone()],
+                        &[],
+                        None,
+                        &[],
+                        &[],
+                        None,
+                        None,
+                    );
+                }
+            },
+        )
+        .expect("airport spawn");
+
+    for (_, _, sprite_id) in coords {
+        let expected = assets
+            .airport_station_sprite(sprite_id)
+            .unwrap_or_else(|| panic!("airport sprite {sprite_id}"));
+        assert!(
+            world
+                .query::<&Sprite>()
+                .iter(&world)
+                .any(|sprite| expected.matches(sprite)),
+            "falta capa StationGfx con sprite {sprite_id}"
+        );
+    }
+}
+
+#[test]
 fn spawn_land_house_industry_generics_and_batches() {
     let assets = boot_assets_app();
     let mut map = fresh_map8();

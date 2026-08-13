@@ -88,9 +88,9 @@
       "inputs": [],
       "check": "hash",
       "requires_opengfx": true,
-      "output_sha256": "fb46e602aa450415fe96eb5420d6d7b62826def684ea71769d529900817f8265",
+      "output_sha256": "579ccc8320ff0517cac5d7676a5b96c93ec547b58941d5a88cf31c32d69c81ab",
       "license": "layout derivado de PNG OpenGFX locales",
-      "note": "Regenerado y verificado 2026-08-13 con el atlas OpenGFX local; incluye las familias de estación monorail/maglev y los piers de aeropuerto. CI valida hash del .rs. El --check local valida además las páginas PNG píxel a píxel."
+      "note": "Regenerado y verificado 2026-08-13 con el atlas OpenGFX local; incluye las familias de estación monorail/maglev y los 74 StationGfx de aeropuerto. CI valida hash del .rs. El --check local valida además las páginas PNG píxel a píxel."
     },
     {
       "id": "airport_station_draw_data",
@@ -101,9 +101,9 @@
       ],
       "check": "hash",
       "requires_opengfx": true,
-      "output_sha256": "b8a8a4d4c80069d2a40eeb2280d1d0ebf934b55aadd9e7cfbb47d8230cb306ca",
+      "output_sha256": "29b16d49e14f7165e44d84a45ffbc580b89cf323dc94d73f338712d8f4ebd1eb",
       "license": "GPL-2.0-only (OpenTTD station_land.h) + metadatos NFO OpenGFX locales",
-      "note": "TILE_SEQ de APT_PIER_NW_NE/APT_PIER; la regresión Python contrasta la tabla fuente OpenTTD y las variantes 8bpp/32bpp."
+      "note": "Las 74 entradas StationGfx, sus TILE_SEQ, Action5 y cinco variantes animadas; la regresión Python contrasta la tabla fuente OpenTTD y las variantes 8bpp/32bpp."
     },
     {
       "id": "bridge_structure_palette",

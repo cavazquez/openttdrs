@@ -12,8 +12,9 @@ use super::{
     sloped_or_flat_image, spawn_ground_sprite, spawn_rail_foundation,
 };
 use crate::iso::{
-    TILE_HALF_H, overlay_pos, remap_tile_offset, road_depot_build_sprite_center,
-    road_stop_build_sprite_center, slope_half_h, tile_pos, tile_pos_half,
+    TILE_HALF_H, ground_draw_z, ground_tile_pos_half, overlay_pos, remap_tile_offset,
+    road_depot_build_sprite_center, road_stop_build_sprite_center, slope_half_h, tile_pos,
+    tile_pos_half,
 };
 use crate::render::catenary_newgrf::catenary_sprite_colored;
 use crate::render::station_newgrf::{NewGrfStationSpriteCache, newgrf_station_def_for_tile};
@@ -23,13 +24,14 @@ use crate::render::{
     WaterTile, WorldAssets, sprite_from_atlas_or_company_white_colour,
 };
 use crate::sprites::{
-    CompanyColour, StationTileClass, TransparencyOption, airport_station_overlay_rel,
-    catenary_hidden, catenary_reference_sprite_id, catenary_sprite_color,
-    catenary_tunnel_wire_sprite, collect_catenary_pylons_from_map_with_pcp_override,
-    collect_catenary_wire_draws_from_map, is_hidden, log_unknown_station_type_once,
-    rail_depot_build_layers, rail_depot_seq_gfx, rail_depot_visual_type_index,
-    rail_ghost_overlay_offset, rail_pbs_reservation_offset, rail_station_draw_layers,
-    rail_station_ground_track_sprite_for_type, rail_station_layer_bounds,
+    CompanyColour, StationTileClass, TransparencyOption, airport_station_base_for_gfx,
+    airport_station_ground_layers_for_gfx, airport_station_layers_for_gfx,
+    airport_station_overlay_rel_for_sprite, airport_station_sprite_for_id, catenary_hidden,
+    catenary_reference_sprite_id, catenary_sprite_color, catenary_tunnel_wire_sprite,
+    collect_catenary_pylons_from_map_with_pcp_override, collect_catenary_wire_draws_from_map,
+    is_hidden, log_unknown_station_type_once, rail_depot_build_layers, rail_depot_seq_gfx,
+    rail_depot_visual_type_index, rail_ghost_overlay_offset, rail_pbs_reservation_offset,
+    rail_station_draw_layers, rail_station_ground_track_sprite_for_type, rail_station_layer_bounds,
     rail_station_layer_for_type, rail_station_overlay_rel, rail_station_sprite_meta,
     rail_waypoint_draw_layers, rail_waypoint_layer_meta, rail_waypoint_sprite_center,
     remap_rail_sprite_id, road_depot_build_layers, road_depot_entrance_road_bits,
@@ -184,12 +186,55 @@ fn spawn_airport_radar_overlay(
     ));
 }
 
-/// Capas de `APT_PIER_NW_NE` / `APT_PIER` de `station_land.h`.
+/// OpenTTD sustituye la entrada completa de `StationGfx` por su variante de
+/// animación antes de recorrer `DrawTileSeq`. No alcanza con animar una torre
+/// genérica: las banderas tienen cuatro PNG y los radares doce, cada uno con
+/// su propio ancla NFO.
+#[must_use]
+fn airport_station_animation_sprite_id(gfx: u8, m7: u8, sprite_id: u32) -> u32 {
+    match (gfx, sprite_id) {
+        (31 | 51 | 52, 2680) => 2680 + u32::from(openttdrs_core::airport_radar_frame(m7)),
+        (39 | 73, 2676) => 2676 + u32::from(m7 % 4),
+        _ => sprite_id,
+    }
+}
+
+fn record_airport_station_layer_trace(
+    sprite_id: u32,
+    layer: &crate::sprites::AirportStationLayer,
+    owner_colour: Option<CompanyColour>,
+    fallback: bool,
+) {
+    let palette = if layer.company_coloured {
+        station_company_palette(owner_colour)
+    } else {
+        0
+    };
+    WorldDrawTrace::record_sprite_with_palette_and_geometry(
+        "station-airport-layer",
+        "sortable",
+        sprite_id,
+        palette,
+        fallback,
+        (0, 0, 0),
+        0,
+        Some(TraceSpriteBounds::new(
+            layer.dx as i32,
+            layer.dy as i32,
+            layer.dz as i32,
+            layer.sx,
+            layer.sy,
+            layer.sz,
+        )),
+    );
+}
+
+/// Capas `TILE_SEQ_LINE` de cualquier `StationGfx` airport vanilla.
 ///
-/// El sprite de suelo se emite primero mediante
-/// [`WorldAssets::airport_station_gfx_sprite`]. Estas capas usan el origen
-/// TILE_SEQ, las dimensiones NFO y la paleta del propietario; centrarlas en
-/// la tesela convertía el túnel peatonal del aeropuerto en una pieza corrida.
+/// El sprite de suelo se emite primero mediante la tabla `StationGfx`. Estas
+/// capas usan el origen TILE_SEQ, las dimensiones NFO y la paleta del
+/// propietario; centrarlas en la tesela convertía el túnel peatonal y los
+/// hangares del aeropuerto en piezas corridas.
 fn spawn_airport_station_overlays(
     commands: &mut Commands,
     assets: &WorldAssets,
@@ -199,53 +244,195 @@ fn spawn_airport_station_overlays(
     base_z: u8,
     gfx: u8,
 ) {
-    for layer in crate::sprites::airport_station_layers_for_gfx(gfx) {
-        let image = match layer.sprite_id {
-            2661 => &assets.airport_jetway_3,
-            2662 => &assets.airport_passenger_tunnel,
-            _ => continue,
+    let m7 = ctx.tile.map_or(0, |tile| tile.m7);
+    for layer in airport_station_layers_for_gfx(gfx) {
+        let sprite_id = airport_station_animation_sprite_id(gfx, m7, layer.sprite_id);
+        let Some(sprite_meta) = airport_station_sprite_for_id(sprite_id) else {
+            record_airport_station_layer_trace(sprite_id, layer, owner_colour, true);
+            continue;
         };
-        let (xrel, yrel) = airport_station_overlay_rel(layer);
+        let Some(image) = assets.airport_station_sprite(sprite_id) else {
+            record_airport_station_layer_trace(sprite_id, layer, owner_colour, true);
+            continue;
+        };
+        let (xrel, yrel) = airport_station_overlay_rel_for_sprite(layer, sprite_meta);
         let pos = overlay_pos(
             ctx.iso_pos,
             xrel,
             yrel,
-            layer.w,
-            layer.h,
+            sprite_meta.w,
+            sprite_meta.h,
             base_z,
             layer.z,
             ctx.tx_i32(),
             ctx.ty_i32(),
         );
+        record_airport_station_layer_trace(sprite_id, layer, owner_colour, false);
+        let sprite = if layer.company_coloured {
+            sprite_from_atlas_or_company_white_colour(
+                company,
+                owner_colour,
+                image,
+                sprite_meta.path,
+            )
+        } else {
+            image.sprite()
+        };
+        commands.spawn((
+            MapVisualLayer,
+            ctx.map_tile_chunk(),
+            tint_building_sprite(sprite),
+            Transform::from_translation(pos),
+        ));
+    }
+}
+
+/// Emite la base y las cercas `TILE_SEQ_GROUND` de un airport `StationGfx`.
+///
+/// `DrawTile_Station` no trata estas cercas como un edificio. Cada una se
+/// ancla con `DrawGroundSpriteAt`, que conserva tanto el desplazamiento local
+/// como el orden del pase de suelo. Dibujarlas como `tile_pos_half` dejaba el
+/// apron de Kale sin borde y hacía que el portal vecino pareciera pertenecer a
+/// otra tesela.
+#[allow(clippy::too_many_arguments)]
+fn spawn_airport_station_ground_layers(
+    commands: &mut Commands,
+    assets: &WorldAssets,
+    company: Option<&CompanyColoredSprites>,
+    owner_colour: Option<CompanyColour>,
+    ctx: &TileRenderContext,
+    base_z: u8,
+    half_h: f32,
+    gfx: u8,
+) -> bool {
+    let Some(base) = airport_station_base_for_gfx(gfx) else {
+        return false;
+    };
+    let Some(image) = assets.airport_station_sprite(base.sprite_id) else {
         WorldDrawTrace::record_sprite_with_palette_and_geometry(
-            "station-airport-layer",
-            "sortable",
-            layer.sprite_id,
-            station_company_palette(owner_colour),
-            false,
+            "station-airport-ground",
+            "ground",
+            base.sprite_id,
+            if base.company_coloured {
+                station_company_palette(owner_colour)
+            } else {
+                0
+            },
+            true,
             (0, 0, 0),
             0,
-            Some(TraceSpriteBounds::new(
-                layer.dx as i32,
-                layer.dy as i32,
-                layer.dz as i32,
-                layer.sx,
-                layer.sy,
-                layer.sz,
-            )),
+            None,
+        );
+        return false;
+    };
+    let base_palette = if base.company_coloured {
+        station_company_palette(owner_colour)
+    } else {
+        0
+    };
+    WorldDrawTrace::record_sprite_with_palette_and_geometry(
+        "station-airport-ground",
+        "ground",
+        base.sprite_id,
+        base_palette,
+        false,
+        (0, 0, 0),
+        0,
+        None,
+    );
+    let sprite = if base.company_coloured {
+        let Some(meta) = airport_station_sprite_for_id(base.sprite_id) else {
+            return false;
+        };
+        sprite_from_atlas_or_company_white_colour(company, owner_colour, image, meta.path)
+    } else {
+        image.sprite()
+    };
+    commands.spawn((
+        MapVisualLayer,
+        ctx.map_tile_chunk(),
+        tint_building_sprite(sprite),
+        Transform::from_translation(ground_tile_pos_half(
+            ctx.tx_i32(),
+            ctx.ty_i32(),
+            base_z,
+            0.030,
+            half_h,
+        )),
+    ));
+
+    for (index, layer) in airport_station_ground_layers_for_gfx(gfx)
+        .iter()
+        .enumerate()
+    {
+        let Some(image) = assets.airport_station_sprite(layer.sprite_id) else {
+            WorldDrawTrace::record_sprite_with_palette_and_geometry(
+                "station-airport-ground-layer",
+                "ground",
+                layer.sprite_id,
+                if layer.company_coloured {
+                    station_company_palette(owner_colour)
+                } else {
+                    0
+                },
+                true,
+                (
+                    ((layer.dy - layer.dx) * 8.0) as i32,
+                    ((layer.dx + layer.dy - layer.dz) * 4.0) as i32,
+                    0,
+                ),
+                0,
+                None,
+            );
+            continue;
+        };
+        // `TILE_SEQ_GROUND(dx, dy, dz, sprite)` se entrega a OpenTTD como
+        // `DrawGroundSpriteAt(RemapCoords(...))`. `overlay_pos` conserva el
+        // ancla NFO del PNG; sólo reemplazamos su profundidad por el pase
+        // ground para no convertir la cerca en un objeto sortable.
+        let local = remap_tile_offset(layer.dx, layer.dy, layer.dz) * 0.5;
+        let mut pos = overlay_pos(
+            ctx.iso_pos + local,
+            layer.x_offs,
+            layer.y_offs,
+            layer.w,
+            layer.h,
+            base_z,
+            0.0,
+            ctx.tx_i32(),
+            ctx.ty_i32(),
+        );
+        pos.z = ground_draw_z(ctx.tx_i32(), ctx.ty_i32(), 0.031 + index as f32 * 0.001);
+        WorldDrawTrace::record_sprite_with_palette_and_geometry(
+            "station-airport-ground-layer",
+            "ground",
+            layer.sprite_id,
+            if layer.company_coloured {
+                station_company_palette(owner_colour)
+            } else {
+                0
+            },
+            false,
+            (
+                ((layer.dy - layer.dx) * 8.0) as i32,
+                ((layer.dx + layer.dy - layer.dz) * 4.0) as i32,
+                0,
+            ),
+            0,
+            None,
         );
         commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
-            tint_building_sprite(sprite_from_atlas_or_company_white_colour(
-                company,
-                owner_colour,
-                image,
-                layer.path,
-            )),
+            tint_building_sprite(if layer.company_coloured {
+                sprite_from_atlas_or_company_white_colour(company, owner_colour, image, layer.path)
+            } else {
+                image.sprite()
+            }),
             Transform::from_translation(pos),
         ));
     }
+    true
 }
 
 #[allow(clippy::too_many_arguments, clippy::needless_option_as_deref)]
@@ -710,14 +897,24 @@ pub(crate) fn spawn_station_tile(
             };
             // Los tiles `MP_STATION` importados conservan el índice
             // `StationGfx` vanilla completo, no el enum interno 0..7.
-            let piece = openttdrs_core::AirportPiece::from_station_gfx(m5);
-            let tower_pos = tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.04, half_h);
-            commands.spawn((
-                MapVisualLayer,
-                ctx.map_tile_chunk(),
-                tint_building_sprite(assets.airport_station_gfx_sprite(m5).sprite()),
-                Transform::from_translation(tower_pos),
-            ));
+            if !spawn_airport_station_ground_layers(
+                commands,
+                assets,
+                company,
+                owner_colour,
+                ctx,
+                base_z,
+                half_h,
+                m5,
+            ) {
+                let tower_pos = tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.04, half_h);
+                commands.spawn((
+                    MapVisualLayer,
+                    ctx.map_tile_chunk(),
+                    tint_building_sprite(assets.airport_station_gfx_sprite(m5).sprite()),
+                    Transform::from_translation(tower_pos),
+                ));
+            }
             spawn_airport_station_overlays(
                 commands,
                 assets,
@@ -727,9 +924,6 @@ pub(crate) fn spawn_station_tile(
                 base_z,
                 m5,
             );
-            if piece == openttdrs_core::AirportPiece::Tower {
-                spawn_airport_radar_overlay(commands, assets, ctx, base_z, half_h);
-            }
         }
         StationTileClass::Other(_) => {
             // No dibujar una parada vial plausible cuando `m6` contiene un
@@ -1151,7 +1345,7 @@ pub(crate) fn spawn_transport_object_tile(
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
                 front_image.sprite(),
-                Transform::from_translation(crate::sprites::tunnel_portal_translation(
+                Transform::from_translation(crate::sprites::tunnel_front_translation(
                     ctx.tx_i32(),
                     ctx.ty_i32(),
                     base_z,
@@ -1165,11 +1359,11 @@ pub(crate) fn spawn_transport_object_tile(
                     MapVisualLayer,
                     ctx.map_tile_chunk(),
                     sprite,
-                    Transform::from_translation(crate::sprites::tunnel_portal_translation(
+                    Transform::from_translation(crate::sprites::tunnel_catenary_translation(
                         ctx.tx_i32(),
                         ctx.ty_i32(),
                         base_z,
-                        front_sprite_id,
+                        catenary_tunnel_wire_sprite(dir),
                         0.085,
                     )),
                 ));
@@ -1243,23 +1437,36 @@ pub(crate) fn spawn_transport_object_tile(
             } else {
                 openttdrs_core::AirportPiece::from_m5(m5)
             };
-            let sprite = if imported_station_gfx {
-                assets.airport_station_gfx_sprite(m5).sprite()
-            } else {
-                assets.airport_piece_sprite(piece).sprite()
-            };
-            commands.spawn((
-                MapVisualLayer,
-                ctx.map_tile_chunk(),
-                sprite,
-                Transform::from_translation(tile_pos_half(
-                    ctx.tx_i32(),
-                    ctx.ty_i32(),
+            let spawned_ground = imported_station_gfx
+                && spawn_airport_station_ground_layers(
+                    commands,
+                    assets,
+                    company,
+                    owner_colour,
+                    ctx,
                     base_z,
-                    0.04,
                     half_h,
-                )),
-            ));
+                    m5,
+                );
+            if !spawned_ground {
+                let sprite = if imported_station_gfx {
+                    assets.airport_station_gfx_sprite(m5).sprite()
+                } else {
+                    assets.airport_piece_sprite(piece).sprite()
+                };
+                commands.spawn((
+                    MapVisualLayer,
+                    ctx.map_tile_chunk(),
+                    sprite,
+                    Transform::from_translation(tile_pos_half(
+                        ctx.tx_i32(),
+                        ctx.ty_i32(),
+                        base_z,
+                        0.04,
+                        half_h,
+                    )),
+                ));
+            }
             if imported_station_gfx {
                 spawn_airport_station_overlays(
                     commands,
@@ -1271,7 +1478,7 @@ pub(crate) fn spawn_transport_object_tile(
                     m5,
                 );
             }
-            if piece == openttdrs_core::AirportPiece::Tower {
+            if !imported_station_gfx && piece == openttdrs_core::AirportPiece::Tower {
                 spawn_airport_radar_overlay(commands, assets, ctx, base_z, half_h);
             }
         }

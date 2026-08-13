@@ -12,6 +12,7 @@ use openttdrs_core::{
 
 use crate::iso::tile_pos;
 use crate::render::{MapPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending};
+use crate::sprites::{StationTileClass, station_type_from_m6};
 use crate::state::{OrderPickState, SimWorld};
 use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, FloatingWindowTitleText, TITLE_CREAM,
@@ -58,6 +59,9 @@ impl StationCargoFilter {
 #[derive(Resource, Default)]
 pub(crate) struct StationCargoPanelState {
     pub(crate) station_pos: Option<TileCoord>,
+    /// Tesela concreta bajo el último clic. Puede ser un aeropuerto dentro de
+    /// una estación que también contiene andenes de tren.
+    pub(crate) selected_tile: Option<TileCoord>,
     pub(crate) rename_editing: bool,
     pub(crate) cargo_filter: StationCargoFilter,
 }
@@ -335,19 +339,12 @@ pub(crate) fn try_append_station_order(
     apply_order_edit(state, vehicle_id, orders)
 }
 
-fn station_display_name(station: &openttdrs_core::Station) -> String {
+fn station_display_name(station: &openttdrs_core::Station, kind_label: &str) -> String {
     station
         .name
         .clone()
         .filter(|name| !name.is_empty())
-        .unwrap_or_else(|| {
-            format!(
-                "{} ({}, {})",
-                station_kind_label(station.stop_kind),
-                station.pos.x,
-                station.pos.y
-            )
-        })
+        .unwrap_or_else(|| format!("{} ({}, {})", kind_label, station.pos.x, station.pos.y))
 }
 
 fn station_kind_label(kind: openttdrs_core::StopKind) -> &'static str {
@@ -360,6 +357,31 @@ fn station_kind_label(kind: openttdrs_core::StopKind) -> &'static str {
         openttdrs_core::StopKind::Airport => "Aeropuerto",
         openttdrs_core::StopKind::RailWaypoint => "Waypoint",
         openttdrs_core::StopKind::RoadWaypoint => "Waypoint road",
+    }
+}
+
+fn station_tile_kind_label(
+    map: &Map,
+    selected_tile: Option<TileCoord>,
+    fallback: openttdrs_core::StopKind,
+) -> &'static str {
+    let Some(tile) = selected_tile.and_then(|pos| map.get(pos)) else {
+        return station_kind_label(fallback);
+    };
+    match tile.kind {
+        TileKind::Airport => "Aeropuerto",
+        TileKind::Station => match station_type_from_m6(tile.m6) {
+            StationTileClass::Rail => "Estación de tren",
+            StationTileClass::RailWaypoint => "Waypoint",
+            StationTileClass::RoadWaypoint => "Waypoint road",
+            StationTileClass::Airport => "Aeropuerto",
+            StationTileClass::Truck => "Parada de camión",
+            StationTileClass::Bus => "Parada de bus",
+            StationTileClass::Dock => "Muelle",
+            StationTileClass::Buoy => "Boya",
+            StationTileClass::Other(_) => station_kind_label(fallback),
+        },
+        _ => station_kind_label(fallback),
     }
 }
 
@@ -445,6 +467,11 @@ pub(crate) fn sync_station_cargo_panel(
     else {
         return;
     };
+    let focused_kind_label = station_tile_kind_label(
+        &sim.state.map,
+        station_panel.selected_tile,
+        station.stop_kind,
+    );
 
     if let Some((_, mut row)) = rename_row_q.iter_mut().find(|(entity, _)| {
         window_key_for_descendant(*entity, &windows, &parents)
@@ -477,7 +504,12 @@ pub(crate) fn sync_station_cargo_panel(
         }) else {
             continue;
         };
-        **title = station_display_name(slot_station);
+        let kind_label = if position == station_pos {
+            focused_kind_label
+        } else {
+            station_kind_label(slot_station.stop_kind)
+        };
+        **title = station_display_name(slot_station, kind_label);
     }
     let owner_name = sim
         .state
@@ -531,7 +563,7 @@ pub(crate) fn sync_station_cargo_panel(
         let active = active_vehicle.map_or_else(|| "-".to_string(), |id| format!("#{id}"));
         format!(
             "{} · ({}, {})\nRating {}/255 · ingresos ${}\n{}: {}\nVehículos {} · activo {}",
-            station_kind_label(station.stop_kind),
+            focused_kind_label,
             station_pos.x,
             station_pos.y,
             station.rating,
@@ -601,8 +633,10 @@ pub(crate) fn station_view_on_closed(
                 }
                 pool.focused = pool.slots.iter().flatten().next().copied();
                 station_panel.station_pos = pool.focused;
+                station_panel.selected_tile = pool.focused;
             } else {
                 station_panel.station_pos = None;
+                station_panel.selected_tile = None;
             }
             station_panel.rename_editing = false;
         }
@@ -669,6 +703,7 @@ pub(crate) fn handle_station_cargo_panel_buttons(
             continue;
         };
         station_panel.station_pos = Some(station_pos);
+        station_panel.selected_tile = Some(station_pos);
         if let Some(pool) = window_ctx.station_pool.as_deref_mut() {
             pool.focused = Some(station_pos);
         }
@@ -680,8 +715,10 @@ pub(crate) fn handle_station_cargo_panel_buttons(
                     }
                     pool.focused = pool.slots.iter().flatten().next().copied();
                     station_panel.station_pos = pool.focused;
+                    station_panel.selected_tile = pool.focused;
                 } else {
                     station_panel.station_pos = None;
+                    station_panel.selected_tile = None;
                 }
                 station_panel.rename_editing = false;
             }
@@ -917,6 +954,7 @@ mod tests {
         });
         world.insert_resource(StationCargoPanelState {
             station_pos: Some(pos),
+            selected_tile: Some(pos),
             rename_editing: false,
             cargo_filter: StationCargoFilter::All,
         });
@@ -952,6 +990,7 @@ mod tests {
         });
         world.insert_resource(StationCargoPanelState {
             station_pos: Some(pos),
+            selected_tile: Some(pos),
             rename_editing: false,
             cargo_filter: StationCargoFilter::All,
         });
@@ -984,6 +1023,7 @@ mod tests {
         });
         world.insert_resource(StationCargoPanelState {
             station_pos: Some(pos),
+            selected_tile: Some(pos),
             rename_editing: true,
             cargo_filter: StationCargoFilter::All,
         });
@@ -1015,6 +1055,7 @@ mod tests {
         let mut world = World::new();
         world.insert_resource(StationCargoPanelState {
             station_pos: Some(TileCoord::new(3, 4)),
+            selected_tile: Some(TileCoord::new(3, 4)),
             rename_editing: true,
             cargo_filter: StationCargoFilter::All,
         });
@@ -1034,6 +1075,7 @@ mod tests {
         let pos = TileCoord::new(1, 2);
         world.insert_resource(StationCargoPanelState {
             station_pos: Some(pos),
+            selected_tile: Some(pos),
             rename_editing: false,
             cargo_filter: StationCargoFilter::All,
         });
@@ -1045,6 +1087,44 @@ mod tests {
         assert_eq!(
             world.resource::<StationCargoPanelState>().station_pos,
             Some(pos)
+        );
+    }
+
+    #[test]
+    fn airport_station_tile_uses_airport_label_over_mixed_station_kind() {
+        let pos = TileCoord::new(189, 126);
+        let mut map = Map::new_flat(256, 256, 0);
+        map.set_tile(
+            pos,
+            Tile {
+                kind: TileKind::Station,
+                // StationType::Airport vive en los bits 3..6 de m6.
+                m6: 1 << 3,
+                height: 0,
+                mapt: 0,
+                m5: 0,
+                m1: 0,
+                m8: 0,
+                m3: 0,
+                m2: 0,
+                m2_hi: 0,
+                m7: 0,
+                m3hi: 0,
+            },
+        )
+        .expect("airport station tile");
+
+        assert_eq!(
+            station_tile_kind_label(&map, Some(pos), openttdrs_core::StopKind::RailStation,),
+            "Aeropuerto"
+        );
+        assert_eq!(
+            station_tile_kind_label(
+                &map,
+                Some(TileCoord::new(1, 1)),
+                openttdrs_core::StopKind::RailStation,
+            ),
+            "Estación de tren"
         );
     }
 
@@ -1063,6 +1143,7 @@ mod tests {
         let b = TileCoord::new(8, 9);
         world.insert_resource(StationCargoPanelState {
             station_pos: Some(b),
+            selected_tile: Some(b),
             rename_editing: false,
             cargo_filter: StationCargoFilter::All,
         });

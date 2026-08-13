@@ -1092,6 +1092,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::expect_used)] // Fixture de mapa: insertar la tesela es la precondición.
     fn airport_station_tile_uses_airport_label_over_mixed_station_kind() {
         let pos = TileCoord::new(189, 126);
         let mut map = Map::new_flat(256, 256, 0);

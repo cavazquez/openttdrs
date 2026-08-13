@@ -733,16 +733,6 @@ def render_output(
             "        _ => &[],",
             "    }",
             "}",
-            "",
-            "/// Alias histórico: SpriteID de la base `DrawGroundSprite`.",
-            "#[must_use]",
-            "pub const fn airport_station_ground_sprite_id_for_gfx(gfx: u8) -> Option<u32> {",
-            "    match gfx {",
-            *[f"        {gfx} => Some({sprite_id})," for gfx, _label, sprite_id, _cc in AIRPORT_STATION_BASES],
-            "        _ => None,",
-            "    }",
-            "}",
-            "",
         ]
     )
     return "\n".join(lines)

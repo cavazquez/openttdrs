@@ -82,13 +82,13 @@ impl AirportPiece {
     }
 }
 
-/// `StationGfx` que OpenTTD anima como radar de aeropuerto.
+/// `StationGfx` que `OpenTTD` anima como radar de aeropuerto.
 #[must_use]
 pub const fn is_airport_radar_station_gfx(gfx: u8) -> bool {
     matches!(gfx, 31 | 51 | 52)
 }
 
-/// `StationGfx` que OpenTTD anima como manga de viento.
+/// `StationGfx` que `OpenTTD` anima como manga de viento.
 #[must_use]
 pub const fn is_airport_flag_station_gfx(gfx: u8) -> bool {
     matches!(gfx, 39 | 73)

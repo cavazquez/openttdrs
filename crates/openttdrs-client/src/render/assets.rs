@@ -95,16 +95,6 @@ pub(crate) struct WorldAssets {
     pub(crate) airport_taxiway: AtlasSprite,
     pub(crate) airport_tower: AtlasSprite,
     pub(crate) airport_stand: AtlasSprite,
-    /// Variantes reales usadas por `StationGfx` vanilla.
-    pub(crate) airport_terminals: [AtlasSprite; 3],
-    pub(crate) airport_runways: [AtlasSprite; 5],
-    pub(crate) airport_taxiways: [AtlasSprite; 9],
-    pub(crate) airport_concourse: AtlasSprite,
-    /// Capas `TILE_SEQ` de los piers airport 27/28 y cercas de apron.
-    pub(crate) airport_jetway_3: AtlasSprite,
-    pub(crate) airport_passenger_tunnel: AtlasSprite,
-    pub(crate) airport_fence_x: AtlasSprite,
-    pub(crate) airport_fence_y: AtlasSprite,
     /// Radar vanilla: `airport_radar_00` … `_11`.
     pub(crate) airport_radar: [AtlasSprite; 12],
     /// Todos los sprites que usa el `StationGfx` airport vanilla, indexados
@@ -386,18 +376,6 @@ impl WorldAssets {
         let airport_taxiway = atlas.get("airport_taxiway_0.png");
         let airport_tower = atlas.get("airport_tower.png");
         let airport_stand = atlas.get("airport_stand.png");
-        let airport_terminals = std::array::from_fn(|i| {
-            atlas.get(&format!("airport_terminal_{}.png", ['a', 'b', 'c'][i]))
-        });
-        let airport_runways =
-            std::array::from_fn(|i| atlas.get(&format!("airport_runway_{i}.png")));
-        let airport_taxiways =
-            std::array::from_fn(|i| atlas.get(&format!("airport_taxiway_{i}.png")));
-        let airport_concourse = atlas.get("airport_concourse.png");
-        let airport_jetway_3 = atlas.get("airport_jetway_3.png");
-        let airport_passenger_tunnel = atlas.get("airport_passenger_tunnel.png");
-        let airport_fence_x = atlas.get("airport_fence_x.png");
-        let airport_fence_y = atlas.get("airport_fence_y.png");
         let airport_radar: [AtlasSprite; 12] =
             std::array::from_fn(|i| atlas.get(&format!("airport_radar_{i:02}.png")));
         let airport_station_sprites = AIRPORT_STATION_SPRITES
@@ -743,14 +721,6 @@ impl WorldAssets {
             airport_taxiway,
             airport_tower,
             airport_stand,
-            airport_terminals,
-            airport_runways,
-            airport_taxiways,
-            airport_concourse,
-            airport_jetway_3,
-            airport_passenger_tunnel,
-            airport_fence_x,
-            airport_fence_y,
             airport_radar,
             airport_station_sprites,
             water_lock,

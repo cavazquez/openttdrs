@@ -1285,6 +1285,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::expect_used)] // Fixture y cuatro entradas contractuales del test.
     fn field_ground_and_fences_match_openttd_clear_land_sprite_contract() {
         // Valores de `table/sprites.h` y `DrawClearLandFence`:
         // field state 4 + SLOPE_STEEP_E (tileh 30) = 4202 + 18 = 4220.

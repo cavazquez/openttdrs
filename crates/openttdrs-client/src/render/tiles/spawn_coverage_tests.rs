@@ -475,8 +475,14 @@ fn ship_depot_uses_water_and_all_vanilla_two_tile_parts() {
 fn airport_pier_tile_seq_layers_spawn_for_both_import_paths() {
     let assets = boot_assets_app();
     let expected_apron = assets.airport_apron.clone();
-    let expected_jetway = assets.airport_jetway_3.clone();
-    let expected_tunnel = assets.airport_passenger_tunnel.clone();
+    let expected_jetway = assets
+        .airport_station_sprite(2661)
+        .expect("sprite jetway airport")
+        .clone();
+    let expected_tunnel = assets
+        .airport_station_sprite(2662)
+        .expect("sprite túnel aeropuerto")
+        .clone();
     let mut map = fresh_map8();
     let station_coord = TileCoord::new(2, 2);
     let imported_coord = TileCoord::new(4, 2);
@@ -523,7 +529,9 @@ fn airport_pier_tile_seq_layers_spawn_for_both_import_paths() {
             u32::try_from(coord.y).expect("positive y"),
         );
         let layer = crate::sprites::airport_station_layers_for_gfx(gfx)[0];
-        let (xrel, yrel) = crate::sprites::airport_station_overlay_rel(&layer);
+        let sprite = crate::sprites::airport_station_sprite_for_id(layer.sprite_id)
+            .expect("sprite de capa airport");
+        let (xrel, yrel) = crate::sprites::airport_station_overlay_rel_for_sprite(&layer, sprite);
         crate::iso::overlay_pos(
             ctx.iso_pos,
             xrel,

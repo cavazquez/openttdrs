@@ -220,8 +220,7 @@ pub use field_draw_data_generated::{
 pub use airport_station_draw_data_generated::{
     AIRPORT_STATION_SPRITES, AirportStationBase, AirportStationLayer, AirportStationSprite,
     airport_station_base_for_gfx, airport_station_ground_layers_for_gfx,
-    airport_station_ground_sprite_id_for_gfx, airport_station_layers_for_gfx,
-    airport_station_sprite_for_id,
+    airport_station_layers_for_gfx, airport_station_sprite_for_id,
 };
 pub use bridge_sprites_generated::{
     BridgeDeckSpriteIds, bridge_deck_sprite_ids, bridge_ramp_sprite_id, bridge_sprite_meta,
@@ -232,27 +231,7 @@ pub(crate) use bridge_structure_palette::{
     BridgePaletteSprites, bridge_structure_palette_for_sprite,
 };
 
-/// `xrel`/`yrel` para una capa aeroportuaria `TILE_SEQ`.
-///
-/// OpenTTD posiciona `APT_PIER_NW_NE` y `APT_PIER` con el origen local de
-/// `DrawTileSeq` y los offsets NFO del sprite, no con el centro del tile. El
-/// renderer usa media escala de `RemapCoords`, igual que las estaciones rail.
-#[must_use]
-pub fn airport_station_overlay_rel(layer: &AirportStationLayer) -> (f32, f32) {
-    airport_station_overlay_rel_for_sprite(
-        layer,
-        &AirportStationSprite {
-            sprite_id: layer.sprite_id,
-            w: layer.w,
-            h: layer.h,
-            x_offs: layer.x_offs,
-            y_offs: layer.y_offs,
-            path: layer.path,
-        },
-    )
-}
-
-/// Variante de [`airport_station_overlay_rel`] para una capa animada.
+/// Variante para una capa aeroportuaria animada.
 ///
 /// El `TILE_SEQ_LINE` conserva su caja lógica, pero los frames de radar y
 /// bandera tienen offsets NFO distintos. OpenTTD cambia la tabla completa por
@@ -616,11 +595,12 @@ mod tram_road_overlay_tests {
 mod airport_station_draw_tests {
     use super::{
         airport_station_base_for_gfx, airport_station_ground_layers_for_gfx,
-        airport_station_ground_sprite_id_for_gfx, airport_station_layers_for_gfx,
-        airport_station_overlay_rel, airport_station_sprite_for_id,
+        airport_station_layers_for_gfx, airport_station_overlay_rel_for_sprite,
+        airport_station_sprite_for_id,
     };
 
     #[test]
+    #[allow(clippy::expect_used)] // La tabla debe contener el sprite referenciado por su capa.
     fn airport_pier_tile_seq_matches_openttd_station_land_contract() {
         // `station_land.h`: APT_PIER_NW_NE usa (3, 2, 0, 3, 3, 14, 2661)
         // y APT_PIER usa (0, 8, 0, 14, 3, 14, 2662). Estos son los bounds
@@ -638,7 +618,11 @@ mod airport_station_draw_tests {
         assert_eq!((tunnel[0].sx, tunnel[0].sy, tunnel[0].sz), (14, 3, 14));
         // RemapCoords × 0.5 para dy=8: (+16, -8); NFO = (-29, -10).
         // El resultado no puede volver a ser el centro del tile.
-        assert_eq!(airport_station_overlay_rel(&tunnel[0]), (-13.0, -2.0));
+        let tunnel_sprite = airport_station_sprite_for_id(tunnel[0].sprite_id).expect("sprite");
+        assert_eq!(
+            airport_station_overlay_rel_for_sprite(&tunnel[0], tunnel_sprite),
+            (-13.0, -2.0)
+        );
         let jetway_2 = airport_station_layers_for_gfx(26);
         assert_eq!(jetway_2.len(), 1);
         assert_eq!(jetway_2[0].sprite_id, 2660);
@@ -650,9 +634,18 @@ mod airport_station_draw_tests {
         // `station_land.h`: APT_APRON_FENCE_NW usa FENCE_X en (0,0),
         // APT_APRON_FENCE_SW usa FENCE_Y en (15,0). Ambas capas pertenecen
         // a DrawGroundSpriteAt, no a la pila sortable del terminal.
-        assert_eq!(airport_station_ground_sprite_id_for_gfx(1), Some(2634));
-        assert_eq!(airport_station_ground_sprite_id_for_gfx(2), Some(2634));
-        assert_eq!(airport_station_ground_sprite_id_for_gfx(27), Some(2634));
+        assert_eq!(
+            airport_station_base_for_gfx(1).map(|base| base.sprite_id),
+            Some(2634)
+        );
+        assert_eq!(
+            airport_station_base_for_gfx(2).map(|base| base.sprite_id),
+            Some(2634)
+        );
+        assert_eq!(
+            airport_station_base_for_gfx(27).map(|base| base.sprite_id),
+            Some(2634)
+        );
 
         let north_west = airport_station_ground_layers_for_gfx(1);
         assert_eq!(north_west.len(), 1);

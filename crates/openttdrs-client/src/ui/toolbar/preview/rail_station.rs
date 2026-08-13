@@ -59,6 +59,7 @@ pub(crate) fn spawn_rail_station_area_sprite_preview(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn spawn_one_tile(
     commands: &mut Commands,
     atlas: &TileAtlas,

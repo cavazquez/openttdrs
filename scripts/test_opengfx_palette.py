@@ -8,7 +8,10 @@ import unittest
 from PIL import Image
 
 from extract_rail_pbs_palette_sprites import remap_indexed_crash
-from gen_bridge_structure_palette import load_dos_palette as load_bridge_dos_palette
+from gen_bridge_structure_palette import (
+    load_dos_palette as load_bridge_dos_palette,
+    parse_recolour_table,
+)
 from gen_company_palette_rust import COMPANY_RAMP_INDICES, build_outputs, load_dos_palette
 from opengfx_palette import indexed_dos_to_rgba
 
@@ -55,6 +58,16 @@ class OpenGfxPaletteTest(unittest.TestCase):
         self.assertEqual(palette[1], (16, 16, 16))
         self.assertEqual(palette[71], (64, 20, 8))
         self.assertEqual(palette[72], (84, 28, 16))
+
+    def test_bridge_recolour_parser_skips_the_nfo_action_zero(self) -> None:
+        """Pseudo-sprite 798 comienza con Action0, no con la entrada cero."""
+        values = list(range(256))
+        values[71] = 178
+        payload = "00 " + " ".join(f"{value:02X}" for value in values)
+        table = parse_recolour_table([f"798 * 257 {payload}"], 798)
+        self.assertEqual(len(table), 256)
+        self.assertEqual(table[0], 0)
+        self.assertEqual(table[71], 178)
 
     def test_company_palette_outputs_are_current(self) -> None:
         for output, expected in build_outputs().items():

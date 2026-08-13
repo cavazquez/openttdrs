@@ -118,10 +118,9 @@ fn remap_table_cached(palette: BridgeStructurePalette) -> &'static HashMap<[u8; 
 
 /// Recolorea un buffer RGBA8 in-place con la paleta de estructura indicada.
 ///
-/// Las tablas de OpenTTD son tablas indexadas: el destino `0` no se escribe
-/// (`if (m != 0) *dst = m` en el blitter 8bpp). En una textura RGBA el
-/// equivalente es volver transparente el píxel. Dejarlo negro opaco crea
-/// una banda/pared artificial en las estructuras recoloreadas.
+/// Los tiles se extraen con la misma paleta DOS que el blitter. La tabla
+/// generada conserva el índice NFO correcto; en especial no consume la Action0
+/// de la pseudo-sprite como si fuera un color de estructura.
 pub fn recolor_bridge_rgba8(buf: &mut [u8], palette: BridgeStructurePalette) {
     if !palette.needs_recolor() {
         return;
@@ -260,10 +259,10 @@ mod tests {
     #[test]
     fn yellow_palette_maps_brown_structure_to_gold() {
         let table = build_structure_remap_table(BridgeStructurePalette::Yellow);
-        // Índice DOS 71 → 60 en `PALETTE_TO_STRUCT_YELLOW`. El slot cero
-        // transparente debe conservarse antes de leer los `M(...)` de C++.
-        assert_eq!(table.get(&[64, 20, 8]), Some(&[68, 24, 0]));
-        assert_eq!(table.get(&[196, 128, 108]), Some(&[252, 212, 0]));
+        // Índice DOS 71 → 68 en `PALETTE_TO_STRUCT_YELLOW`. Es importante
+        // que Action0 no desplace este índice a la entrada anterior.
+        assert_eq!(table.get(&[64, 20, 8]), Some(&[96, 44, 4]));
+        assert_eq!(table.get(&[196, 128, 108]), Some(&[252, 248, 128]));
     }
 
     #[test]
@@ -278,24 +277,23 @@ mod tests {
     fn recolor_changes_brown_pixel() {
         let mut px = [64u8, 20, 8, 255];
         recolor_bridge_rgba8(&mut px, BridgeStructurePalette::Yellow);
-        assert_eq!(&px[..3], &[68, 24, 0]);
+        assert_eq!(&px[..3], &[96, 44, 4]);
     }
 
     #[test]
     fn red_palette_matches_the_openttd_dos_indices() {
         let table = build_structure_remap_table(BridgeStructurePalette::Red);
-        // `ogfx1_base.nfo` pseudo-sprite 798: índices 1, 72 y 76.
-        assert_eq!(table.get(&[16, 16, 16]), Some(&[0, 0, 0]));
-        assert_eq!(table.get(&[84, 28, 16]), Some(&[60, 0, 0]));
-        assert_eq!(table.get(&[168, 92, 76]), Some(&[172, 52, 52]));
+        // `ogfx1_base.nfo` pseudo-sprite 798: índices 71, 72 y 76.
+        assert_eq!(table.get(&[64, 20, 8]), Some(&[60, 0, 0]));
+        assert_eq!(table.get(&[84, 28, 16]), Some(&[92, 0, 0]));
+        assert_eq!(table.get(&[168, 92, 76]), Some(&[212, 52, 52]));
     }
 
     #[test]
-    fn zero_remap_becomes_transparent_like_the_openttd_blitter() {
-        // El pseudo-sprite 798 remapea el índice DOS 1 a 0. Tanto el
-        // blitter 8bpp como el 32bpp de OpenTTD omiten ese píxel; RGBA debe
-        // conservar la misma silueta en vez de convertirlo en negro opaco.
-        let mut px = [16u8, 16, 16, 255];
+    fn transparent_pixels_stay_transparent_when_recolored() {
+        // El índice 0 ya fue convertido a alpha cero al extraer OpenGFX. El
+        // remapeo de estructura no debe volverlo opaco.
+        let mut px = [0u8, 0, 0, 0];
         recolor_bridge_rgba8(&mut px, BridgeStructurePalette::Red);
         assert_eq!(px, [0, 0, 0, 0]);
     }

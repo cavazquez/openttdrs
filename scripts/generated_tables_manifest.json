@@ -101,7 +101,7 @@
       ],
       "check": "regenerate_or_hash",
       "requires_opengfx": true,
-      "output_sha256": "31b5a02c19eec3a95e5bc7fdf3f2a1b67e8ed1cb7fc7b9d3fa7b8f5fb85eaec6",
+      "output_sha256": "7704186ae71f358484ff649bcd86e43b7b50085a72a94270b5f5d50fad4a9cdd",
       "license": "pseudo-sprites OpenGFX locales + paleta DOS OpenTTD (GPL-2.0-only)",
       "note": "CI valida el hash; localmente --check regenera desde ogfx1_base.nfo 8bpp y conserva el índice DOS transparente 0."
     }

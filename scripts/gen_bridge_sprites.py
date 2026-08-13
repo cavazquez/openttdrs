@@ -8,14 +8,15 @@ Uso: python3 scripts/gen_bridge_sprites.py
 """
 from __future__ import annotations
 
-import re
 import sys
 from pathlib import Path
 
 from PIL import Image
 
 from nfo_sprite_meta import (
+    SpriteRect,
     detect_graphics_mode,
+    parse_global_sprite_rects,
     parse_sprite_offs,
     pick_sprite_meta,
     sprite_dims_from_assets,
@@ -145,12 +146,6 @@ for bt in (10, 11, 12):
     for p in (2, 3, 4, 5):
         BRIDGE_DECKS[(bt, p)] = TUB_MID
 
-ROW_RE = re.compile(
-    r"^\s*(\d+)\s+(\S*?((?:ogfx1_base|ogfx21_base_32ez)\d+\.(?:32\.png|png|pcx)))\s+(?:8bpp|32bpp)\s+"
-    r"(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(-?\d+)\s+(-?\d+)"
-)
-
-
 def opengfx_paths(repo: Path) -> tuple[Path, Path, str]:
     """Directorio de sprites + NFO base (puentes viven en ogfx1 / ogfx21, no en *extra*)."""
     mode = detect_graphics_mode(repo) or "8bpp"
@@ -168,24 +163,6 @@ def opengfx_paths(repo: Path) -> tuple[Path, Path, str]:
         )
     base = version_dirs[0]
     return base / "sprites", base / "sprites" / "ogfx1_base.nfo", mode
-
-
-def parse_rows(nfo_path: Path, sprites_dir: Path) -> dict[int, tuple[str, int, int, int, int]]:
-    rows: dict[int, tuple[str, int, int, int, int]] = {}
-    for line in nfo_path.read_text(errors="replace").splitlines():
-        m = ROW_RE.match(line)
-        if not m:
-            continue
-        sid = int(m.group(1))
-        sheet = (sprites_dir / Path(m.group(2)).name).as_posix()
-        rows[sid] = (
-            sheet,
-            int(m.group(4)),
-            int(m.group(5)),
-            int(m.group(6)),
-            int(m.group(7)),
-        )
-    return rows
 
 
 def load_sheet(path: Path, mode: str) -> Image.Image:
@@ -207,23 +184,24 @@ def load_sheet(path: Path, mode: str) -> Image.Image:
 
 def crop_sprite(
     sid: int,
-    rows: dict[int, tuple[str, int, int, int, int]],
+    rects: dict[int, SpriteRect],
+    sprites_dir: Path,
     sheets: dict[str, Image.Image],
     mode: str,
 ) -> Image.Image | None:
-    if sid == 0 or sid not in rows:
+    if sid == 0 or sid not in rects:
         return None
-    sheet_path, x, y, w, h = rows[sid]
-    if w <= 0 or h <= 0:
+    rect = rects[sid]
+    if rect.w <= 0 or rect.h <= 0:
         return None
-    if sheet_path not in sheets:
-        p = Path(sheet_path)
+    if rect.sheet not in sheets:
+        p = sprites_dir / rect.sheet
         alt = p.with_suffix(".pcx")
         load_path = alt if alt.is_file() else p
         if not load_path.is_file():
             return None
-        sheets[sheet_path] = load_sheet(load_path, mode)
-    crop = sheets[sheet_path].crop((x, y, x + w, y + h))
+        sheets[rect.sheet] = load_sheet(load_path, mode)
+    crop = sheets[rect.sheet].crop((rect.x, rect.y, rect.x + rect.w, rect.y + rect.h))
     return crop
 
 
@@ -249,7 +227,7 @@ def main() -> None:
         2552: "bridge_wood_x_pillar.png",
     }
 
-    rows = parse_rows(nfo_path, sprites_dir)
+    rects = parse_global_sprite_rects(nfo_path, mode)
     prefer = mode
 
     sheets: dict[str, Image.Image] = {}
@@ -257,7 +235,7 @@ def main() -> None:
 
     for sid in sorted(all_ids):
         out_name = legacy.get(sid, f"bridge_{sid}.png")
-        crop = crop_sprite(sid, rows, sheets, mode)
+        crop = crop_sprite(sid, rects, sprites_dir, sheets, mode)
         if crop is None:
             print(f"  (omitido sprite {sid})", file=sys.stderr)
             continue

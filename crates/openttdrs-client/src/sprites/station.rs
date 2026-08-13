@@ -2,7 +2,7 @@
 
 use std::sync::{Mutex, OnceLock};
 
-use openttdrs_core::{RailType, STATION_TYPE_DOCK, StopKind};
+use openttdrs_core::{RailType, STATION_TYPE_DOCK, STATION_TYPE_OILRIG, StopKind};
 
 use super::rail::{
     MAGLEV_RAIL_SPRITE_OFFSET, MONO_RAIL_SPRITE_OFFSET, rail_sloped_track_sprite_id,
@@ -18,6 +18,9 @@ pub enum StationTileClass {
     Airport,
     Truck,
     Bus,
+    /// Plataforma petrolera: `StationType::Oilrig` no usa los sprites ni el
+    /// suelo de un aeropuerto aunque pueda aceptar helicópteros.
+    Oilrig,
     Dock,
     Buoy,
     Other(u8),
@@ -105,6 +108,7 @@ pub fn station_type_from_m6(m6: u8) -> StationTileClass {
         1 => StationTileClass::Airport,
         2 => StationTileClass::Truck,
         3 => StationTileClass::Bus,
+        STATION_TYPE_OILRIG => StationTileClass::Oilrig,
         STATION_TYPE_DOCK => StationTileClass::Dock,
         6 => StationTileClass::Buoy,
         7 => StationTileClass::RailWaypoint,
@@ -156,7 +160,7 @@ pub fn station_tile_class(m6: u8, stop_kind: Option<StopKind>) -> StationTileCla
         // `m6` es la fuente de verdad por tile. Una estación puede combinar
         // tren, buses y aeropuerto; su `StopKind` simplificado no debe
         // convertir los tiles de aeropuerto en una parada vial genérica.
-        StationTileClass::Airport => StationTileClass::Airport,
+        StationTileClass::Airport | StationTileClass::Oilrig => raw_class,
         StationTileClass::Rail
         | StationTileClass::RailWaypoint
         | StationTileClass::RoadWaypoint
@@ -421,6 +425,7 @@ pub fn road_stop_build_layers(class: StationTileClass, dir: usize) -> &'static [
         | StationTileClass::RailWaypoint
         | StationTileClass::RoadWaypoint
         | StationTileClass::Airport
+        | StationTileClass::Oilrig
         | StationTileClass::Dock
         | StationTileClass::Buoy
         | StationTileClass::Other(_) => &[],
@@ -449,6 +454,7 @@ pub fn road_stop_drive_through_layers(
         | StationTileClass::RailWaypoint
         | StationTileClass::RoadWaypoint
         | StationTileClass::Airport
+        | StationTileClass::Oilrig
         | StationTileClass::Dock
         | StationTileClass::Buoy
         | StationTileClass::Other(_) => &[],
@@ -460,9 +466,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn m6_decodes_bus_truck_dock_rail_and_waypoint() {
+    fn m6_decodes_bus_truck_oilrig_dock_rail_and_waypoint() {
         assert_eq!(station_type_from_m6(3 << 3), StationTileClass::Bus);
         assert_eq!(station_type_from_m6(2 << 3), StationTileClass::Truck);
+        assert_eq!(
+            station_type_from_m6(STATION_TYPE_OILRIG << 3),
+            StationTileClass::Oilrig
+        );
         assert_eq!(
             station_type_from_m6(STATION_TYPE_DOCK << 3),
             StationTileClass::Dock
@@ -498,10 +508,10 @@ mod tests {
     }
 
     #[test]
-    fn unsupported_m6_is_diagnostic_instead_of_bus_fallback() {
+    fn oilrig_m6_wins_over_the_station_airport_capability() {
         assert_eq!(
-            station_tile_class(4 << 3, Some(StopKind::BusStop)),
-            StationTileClass::Other(4)
+            station_tile_class(STATION_TYPE_OILRIG << 3, Some(StopKind::Airport)),
+            StationTileClass::Oilrig
         );
     }
 

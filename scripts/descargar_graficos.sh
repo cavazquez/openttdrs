@@ -1387,6 +1387,9 @@ python3 "$(dirname "$0")/gen_shore_full_set.py"
 python3 "$(dirname "$0")/gen_water_anim_frames.py"
 python3 "$(dirname "$0")/gen_field_draw_data.py"
 python3 "$(dirname "$0")/gen_tree_draw_data.py"
+# Industria: anclas NFO y PNG dependen del perfil activo (8bpp/32bpp).
+# Debe regenerarse tras escribir .graphics_mode para no mezclar ambos perfiles.
+python3 "$(dirname "$0")/gen_industry_gfx_data.py"
 # Iconos eléctricos / catenaria: Action5 elrail aún viene de OpenGFX 8bpp.
 if [[ "${GRAPHICS_MODE}" == "32bpp" ]]; then
   ensure_signal_src_8bpp

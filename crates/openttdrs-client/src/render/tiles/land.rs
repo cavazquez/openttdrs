@@ -608,6 +608,35 @@ pub(crate) fn spawn_industry_tile(
         }
     }
     if let Some(s) = entry {
+        // La tabla copia tanto las capas como la caja de `M()` de
+        // `industry_land.h`. Registrar el contrato antes de convertirlo a
+        // sprites Bevy permite confrontar las industrias vanilla tile por
+        // tile contra `DrawTile_Industry` de OpenTTD. El agua sigue siendo
+        // `SPR_FLAT_WATER_TILE` (4061) aunque se dibuje desde WaterTile.
+        if s.ground_sprite_id != 0 {
+            WorldDrawTrace::record_sprite_with_geometry(
+                "industry-ground",
+                "ground",
+                s.ground_sprite_id,
+                !use_water && !assets.industries.contains_key(&s.ground_sprite_id),
+                (0, 0, 0),
+                0,
+                None,
+            );
+        }
+        if s.sprite_id != 0 {
+            WorldDrawTrace::record_sprite_with_geometry(
+                "industry-building",
+                "sortable",
+                s.sprite_id,
+                !assets.industries.contains_key(&s.sprite_id),
+                (0, 0, 0),
+                0,
+                Some(TraceSpriteBounds::new(
+                    s.sort_ox, s.sort_oy, s.sort_oz, s.sort_ex, s.sort_ey, s.sort_ez,
+                )),
+            );
+        }
         let anim_base = |ground: bool| {
             crate::render::IndustryBuildingAnim::new(gfx, m1, phase, ground, overlay_ctx)
         };

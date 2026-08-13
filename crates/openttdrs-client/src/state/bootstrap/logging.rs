@@ -260,7 +260,7 @@ mod logging_coverage_tests {
     }
 
     #[test]
-    fn station_renderer_fallback_counter_excludes_supported_dock() {
+    fn station_renderer_fallback_counter_excludes_supported_oilrig_and_dock() {
         let mut state = GameState::new(4, 4);
         for (pos, station_type) in [(TileCoord::new(0, 0), 4), (TileCoord::new(1, 0), 5)] {
             state.map.set_kind(pos, TileKind::Station).unwrap();
@@ -269,10 +269,7 @@ mod logging_coverage_tests {
             state.map.set_tile(pos, tile).unwrap();
         }
 
-        assert_eq!(
-            station_renderer_fallback_counts(&state),
-            BTreeMap::from([(4, 1)])
-        );
+        assert_eq!(station_renderer_fallback_counts(&state), BTreeMap::new());
     }
 
     #[test]

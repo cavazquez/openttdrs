@@ -423,6 +423,12 @@ cruzar el `sprite_id` con la tabla `_industry_draw_tile_data[]` en
 
 Esa tabla usa IDs **en hexadecimal**. Ejemplo: `0x7db = 2011`.
 
+Los datos generados de industria no son independientes del perfil gráfico:
+`gen_industry_gfx_data.py` toma dimensiones y anclas del NFO **activo** y la
+caja 3D `M(dx,dy,sx,sy,sz)` de OpenTTD. Por eso se debe cambiar el perfil con
+`scripts/descargar_graficos.sh --8bpp` o `--32bpp` (que regenera la tabla),
+nunca editando `.graphics_mode` a mano.
+
 #### Orden de industrias templadas y rango de sprites
 
 | IT | Nombre | Sprite building (aprox.) |

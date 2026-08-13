@@ -106,6 +106,19 @@
       "note": "Las 74 entradas StationGfx, sus TILE_SEQ, Action5 y cinco variantes animadas; la regresión Python contrasta la tabla fuente OpenTTD y las variantes 8bpp/32bpp."
     },
     {
+      "id": "industry_gfx_data",
+      "generator": "scripts/gen_industry_gfx_data.py",
+      "output": "crates/openttdrs-client/src/sprites/industry_gfx_data_generated.rs",
+      "inputs": [
+        "third_party/openttd/industry_land.h"
+      ],
+      "check": "regenerate_or_hash",
+      "requires_opengfx": true,
+      "output_sha256": "128334a0580a612d17076abe40a8b9f94d9c566da8b295136074b6e847315449",
+      "license": "GPL-2.0-only (OpenTTD industry_land.h) + metadatos NFO OpenGFX locales",
+      "note": "La tabla conserva M(dx,dy,sx,sy,sz) para la traza world-draw y toma dimensiones/anclas del NFO del perfil activo. test_industry_sprite_variants.py cubre 8bpp y 32bpp."
+    },
+    {
       "id": "bridge_structure_palette",
       "generator": "scripts/gen_bridge_structure_palette.py",
       "output": "crates/openttdrs-client/src/sprites/bridge_structure_palette_data_generated.rs",
@@ -194,7 +207,8 @@
     },
     {
       "output": "crates/openttdrs-client/src/sprites/industry_gfx_data_generated.rs",
-      "generator": "scripts/gen_industry_gfx_data.py"
+      "generator": "scripts/gen_industry_gfx_data.py",
+      "pilot": true
     },
     {
       "output": "crates/openttdrs-client/src/sprites/industry_draw_proc_generated.rs",

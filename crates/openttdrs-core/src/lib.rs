@@ -555,8 +555,8 @@ pub use sound_id::SoundId;
 pub use station::{
     CargoTimeSincePickup, GoodsEntry, INITIAL_STATION_RATING, MAX_TIME_SINCE_PICKUP_DAYS,
     STATION_COVERAGE_RADIUS, STATION_RATING_MAX_STEP, STATION_TILE_PYLONS, STATION_TILE_WIRES,
-    STATION_TYPE_DOCK, STATION_TYPE_RAIL_WAYPOINT, Station, StationCoverage, StationGoods,
-    StationMapCoherenceReport, StationVisit, StopKind, TOWN_CARGO_MIN_OWNER_RATING,
+    STATION_TYPE_DOCK, STATION_TYPE_OILRIG, STATION_TYPE_RAIL_WAYPOINT, Station, StationCoverage,
+    StationGoods, StationMapCoherenceReport, StationVisit, StopKind, TOWN_CARGO_MIN_OWNER_RATING,
     can_move_goods_to_station, default_station_catenary_flags, industry_in_station_coverage,
     is_rail_waypoint_at, is_rail_waypoint_tile, load_amount_for_rating, move_goods_to_station,
     note_station_load_attempt, on_station_cargo_pickup, pick_stop_tile, platform_past_stop_tiles,

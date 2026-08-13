@@ -1,11 +1,19 @@
 #!/usr/bin/env python3
-"""Genera INDUSTRY_GFX_DATA para openttdrs desde OpenTTD src/table/industry_land.h.
+"""Genera ``INDUSTRY_GFX_DATA`` desde ``industry_land.h`` de OpenTTD.
 
-OpenTTD: `_industry_draw_tile_data[gfx * 4 + construction_stage]` (estadios 0–3).
-Offsets w/h/xrel/yrel por capa desde NFO + PNG (`industry_<id>.png`).
+OpenTTD indexa ``_industry_draw_tile_data[gfx * 4 + construction_stage]``
+(estadios 0–3). Cada fila ``M()`` conserva dos contratos distintos:
+
+* dimensiones/anclas de pantalla, obtenidas del NFO y PNG del perfil gráfico
+  activo (8bpp o 32bpp);
+* caja 3D ``dx, dy, sx, sy, sz`` usada por ``AddSortableSpriteToDraw``.
+
+Mantener ambos evita mezclar las anclas 32bpp con recortes 8bpp y permite que
+la traza ``world-draw`` compare el orden espacial contra OpenTTD.
 """
 from __future__ import annotations
 
+import argparse
 import re
 import sys
 from pathlib import Path
@@ -27,13 +35,13 @@ def parse_atom(a: str) -> int:
     return int(a, 16) if a.startswith("0x") else int(a)
 
 
-def parse_macro_rows(path: Path) -> list[tuple[int, int, int, int, int, int]]:
-    """s1, s2, dx, dy, sx, sy por cada fila M()."""
+def parse_macro_rows(path: Path) -> list[tuple[int, int, int, int, int, int, int]]:
+    """``s1, s2, dx, dy, sx, sy, sz`` por cada fila ``M()``."""
     pat = re.compile(
         r"^\s*M\(\s*([^,]+),\s*[^,]+,\s*([^,]+),\s*[^,]+,\s*"
-        r"(-?\d+),\s*(-?\d+),\s*(-?\d+),\s*(-?\d+),"
+        r"(-?\d+),\s*(-?\d+),\s*(-?\d+),\s*(-?\d+),\s*(-?\d+),"
     )
-    out: list[tuple[int, int, int, int, int, int]] = []
+    out: list[tuple[int, int, int, int, int, int, int]] = []
     for line in path.read_text(encoding="utf-8").splitlines():
         m = pat.match(line)
         if not m:
@@ -47,6 +55,7 @@ def parse_macro_rows(path: Path) -> list[tuple[int, int, int, int, int, int]]:
                     int(m.group(4)),
                     int(m.group(5)),
                     int(m.group(6)),
+                    int(m.group(7)),
                 )
             )
         except ValueError:
@@ -65,12 +74,20 @@ def industry_row_line(
     gh: float,
     gx: float,
     gy: float,
+    sort_ox: int,
+    sort_oy: int,
+    sort_oz: int,
+    sort_ex: int,
+    sort_ey: int,
+    sort_ez: int,
 ) -> str:
     return (
         f"    IndustryGfxSprite {{ sprite_id: {s2}, ground_sprite_id: {gid}, "
         f"w: {bw:.1f}, h: {bh:.1f}, xrel: {bx:.1f}, yrel: {by:.1f}, "
         f"ground_w: {gw:.1f}, ground_h: {gh:.1f}, "
-        f"ground_xrel: {gx:.1f}, ground_yrel: {gy:.1f} }},"
+        f"ground_xrel: {gx:.1f}, ground_yrel: {gy:.1f}, "
+        f"sort_ox: {sort_ox}, sort_oy: {sort_oy}, sort_oz: {sort_oz}, "
+        f"sort_ex: {sort_ex}, sort_ey: {sort_ey}, sort_ez: {sort_ez} }},"
     )
 
 
@@ -118,28 +135,14 @@ def dims_for_macro_row(
     return (gw, gh, gx, gy), (bw, bh, bx, by), gnote, bnote
 
 
-def main() -> int:
-    repo = Path(__file__).resolve().parents[1]
-    upstream = repo / "third_party" / "openttd" / "industry_land.h"
-    if len(sys.argv) >= 2:
-        upstream = Path(sys.argv[1])
-    if not upstream.is_file():
-        print(
-            f"Falta {upstream}. Copiá industry_land.h desde OpenTTD o pasá ruta como argv[1].",
-            file=sys.stderr,
-        )
-        return 1
-
+def build_content(repo: Path, upstream: Path) -> tuple[str, tuple[int, int, int, int]]:
+    """Construye la tabla sin escribirla; facilita ``--check`` y regresiones."""
     rows_macro = parse_macro_rows(upstream)
     need = GFX_COUNT * STAGES
     if len(rows_macro) < need:
-        print(f"Entries insuficientes: {len(rows_macro)} < {need}", file=sys.stderr)
-        return 1
+        raise ValueError(f"Entries insuficientes: {len(rows_macro)} < {need}")
 
     tiles_dir = repo / "assets" / "opengfx" / "tiles"
-    out_path = (
-        repo / "crates" / "openttdrs-client" / "src" / "sprites" / "industry_gfx_data_generated.rs"
-    )
     nfo = parse_sprite_offs(repo)
     prefer_bpp = detect_graphics_mode(repo)
 
@@ -148,7 +151,7 @@ def main() -> int:
     for gfx in range(GFX_COUNT):
         for stage in range(STAGES):
             idx = gfx * STAGES + stage
-            s1, s2, dx, dy, sx, sy = rows_macro[idx]
+            s1, s2, dx, dy, sx, sy, sz = rows_macro[idx]
             (gw, gh, gx, gy), (bw, bh, bx, by), gnote, bnote = dims_for_macro_row(
                 repo, tiles_dir, nfo, prefer_bpp, s1, s2, dx, dy, sx, sy
             )
@@ -174,13 +177,33 @@ def main() -> int:
                     macro_cal += 1
 
             gid = 0 if s1 == GRASS_S1 else s1
-            body_rows.append(industry_row_line(s2, gid, bw, bh, bx, by, gw, gh, gx, gy))
+            body_rows.append(
+                industry_row_line(
+                    s2,
+                    gid,
+                    bw,
+                    bh,
+                    bx,
+                    by,
+                    gw,
+                    gh,
+                    gx,
+                    gy,
+                    dx,
+                    dy,
+                    0,
+                    sx,
+                    sy,
+                    sz,
+                )
+            )
 
     total = GFX_COUNT * STAGES
     lines = [
         "// @generated by scripts/gen_industry_gfx_data.py — no editar a mano.",
         "// Fuente: OpenTTD _industry_draw_tile_data (gfx*4+stage, stage 0..3).",
-        "// Offsets: NFO + PNG por capa (suelo / edificio).",
+        "// Offsets: NFO + PNG por capa (suelo / edificio) del perfil gráfico activo.",
+        "// Bounds: M(dx, dy, sx, sy, sz) de OpenTTD para AddSortableSpriteToDraw.",
         "",
         f"#[allow(clippy::large_const_arrays)]\n"
         f"pub const INDUSTRY_GFX_DATA: [IndustryGfxSprite; {total}] = [\n"
@@ -188,9 +211,42 @@ def main() -> int:
         + "\n];",
         "",
     ]
-    out_path.write_text("\n".join(lines), encoding="utf-8")
+    return "\n".join(lines), (nfo_bld, nfo_gnd, macro_cal, fallback_cal)
+
+
+def main(argv: list[str] | None = None) -> int:
+    repo = Path(__file__).resolve().parents[1]
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("upstream", nargs="?", help="ruta alternativa a industry_land.h")
+    parser.add_argument("--check", action="store_true", help="verificar sin escribir")
+    args = parser.parse_args(argv)
+    upstream = Path(args.upstream) if args.upstream else repo / "third_party" / "openttd" / "industry_land.h"
+    if not upstream.is_file():
+        print(
+            f"Falta {upstream}. Copiá industry_land.h desde OpenTTD o pasá una ruta.",
+            file=sys.stderr,
+        )
+        return 1
+
+    try:
+        content, (nfo_bld, nfo_gnd, macro_cal, fallback_cal) = build_content(repo, upstream)
+    except (OSError, ValueError) as error:
+        print(f"No se pudo generar INDUSTRY_GFX_DATA: {error}", file=sys.stderr)
+        return 1
+
+    out_path = (
+        repo / "crates" / "openttdrs-client" / "src" / "sprites" / "industry_gfx_data_generated.rs"
+    )
+    if args.check:
+        if out_path.is_file() and out_path.read_text(encoding="utf-8") == content:
+            print(f"OK {out_path} ({GFX_COUNT * STAGES} filas)")
+            return 0
+        print(f"DRIFT {out_path}: ejecutá scripts/gen_industry_gfx_data.py", file=sys.stderr)
+        return 1
+
+    out_path.write_text(content, encoding="utf-8")
     print(
-        f"Escrito {out_path} ({total} filas, nfo_bld={nfo_bld} nfo_gnd={nfo_gnd} "
+        f"Escrito {out_path} ({GFX_COUNT * STAGES} filas, nfo_bld={nfo_bld} nfo_gnd={nfo_gnd} "
         f"macro={macro_cal} fallback={fallback_cal})"
     )
     return 0

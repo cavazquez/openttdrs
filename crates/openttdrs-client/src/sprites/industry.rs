@@ -32,6 +32,17 @@ pub struct IndustryGfxSprite {
     pub ground_h: f32,
     pub ground_xrel: f32,
     pub ground_yrel: f32,
+    /// Caja 3D de ``M(dx, dy, sx, sy, sz)`` en ``industry_land.h``.
+    ///
+    /// OpenTTD la entrega a `AddSortableSpriteToDraw`; conservarla permite
+    /// verificar orden y ancla contra el oráculo aunque Bevy componga el
+    /// overlay por pantalla.
+    pub sort_ox: i32,
+    pub sort_oy: i32,
+    pub sort_oz: i32,
+    pub sort_ex: i32,
+    pub sort_ey: i32,
+    pub sort_ez: i32,
 }
 
 include!(concat!(
@@ -375,25 +386,46 @@ mod industry_coverage_tests {
     }
 
     #[test]
-    fn coal_mine_gfx0_has_calibrated_dims() {
+    fn coal_mine_gfx0_has_calibrated_sprite_and_bounds() {
         let e = industry_gfx_entry(0).expect("gfx 0");
         assert_eq!(e.sprite_id, 2013);
         assert_eq!(e.ground_sprite_id, 2022);
         assert!((e.w - 58.0).abs() < 0.1);
         assert!((e.h - 50.0).abs() < 0.1);
-        assert!((e.xrel - (-14.0)).abs() < 0.1);
-        assert!((e.yrel - (-35.0)).abs() < 0.1);
         assert!((e.ground_w - 64.0).abs() < 0.1);
         assert!((e.ground_xrel - (-31.0)).abs() < 0.1);
+        assert_eq!(
+            (
+                e.sort_ox, e.sort_oy, e.sort_oz, e.sort_ex, e.sort_ey, e.sort_ez
+            ),
+            (7, 0, 0, 9, 9, 30)
+        );
         assert!(!industry_gfx_uses_generic_fallback(e));
     }
 
     #[test]
-    fn power_station_gfx7_uses_nfo_offsets() {
+    fn power_station_gfx7_uses_open_ttd_sprite_and_bounds() {
         let e = industry_gfx_entry(7).expect("gfx 7");
         assert_eq!(e.sprite_id, 2047);
-        assert!((e.xrel - (-21.0)).abs() < 0.1);
-        assert!((e.yrel - (-35.0)).abs() < 0.1);
+        assert_eq!(
+            (
+                e.sort_ox, e.sort_oy, e.sort_oz, e.sort_ex, e.sort_ey, e.sort_ez
+            ),
+            (1, 1, 0, 14, 14, 44)
+        );
+    }
+
+    #[test]
+    fn oil_rig_gfx26_preserves_open_ttd_sortable_bounds() {
+        let e = industry_gfx_entry_staged(26, 3).expect("oil rig terminada");
+        assert_eq!(e.sprite_id, 2096);
+        assert_eq!(e.ground_sprite_id, 4061);
+        assert_eq!(
+            (
+                e.sort_ox, e.sort_oy, e.sort_oz, e.sort_ex, e.sort_ey, e.sort_ez
+            ),
+            (0, 0, 0, 16, 16, 20)
+        );
     }
 
     #[test]

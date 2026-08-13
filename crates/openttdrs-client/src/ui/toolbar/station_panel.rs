@@ -375,6 +375,7 @@ fn station_tile_kind_label(
             StationTileClass::RailWaypoint => "Waypoint",
             StationTileClass::RoadWaypoint => "Waypoint road",
             StationTileClass::Airport => "Aeropuerto",
+            StationTileClass::Oilrig => "Plataforma petrolera",
             StationTileClass::Truck => "Parada de camión",
             StationTileClass::Bus => "Parada de bus",
             StationTileClass::Dock => "Muelle",

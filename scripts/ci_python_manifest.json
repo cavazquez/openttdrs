@@ -33,6 +33,7 @@
     "scripts/gen_rail_signal_action5_sprites.py",
     "scripts/gen_rail_station_draw_data.py",
     "scripts/gen_airport_station_draw_data.py",
+    "scripts/gen_industry_gfx_data.py",
     "scripts/gen_signal_sprite_meta.py",
     "scripts/gen_water_anim_frames.py",
     "scripts/gen_effect_vehicle_sprites.py",
@@ -69,6 +70,7 @@
     "scripts/test_telegram_commits_workflow.py",
     "scripts/test_rail_station_sprite_variants.py",
     "scripts/test_airport_station_sprite_variants.py",
+    "scripts/test_industry_sprite_variants.py",
     "scripts/test_airport_station_source_contract.py",
     "scripts/test_global_sprite_namespace.py"
   ],
@@ -88,6 +90,7 @@
     "scripts/test_telegram_commits_workflow.py",
     "scripts/test_rail_station_sprite_variants.py",
     "scripts/test_airport_station_sprite_variants.py",
+    "scripts/test_industry_sprite_variants.py",
     "scripts/test_airport_station_source_contract.py",
     "scripts/test_global_sprite_namespace.py"
   ]

@@ -130,6 +130,11 @@ struct TraceTile {
     ty: u32,
     tile_type: u8,
     tile_kind: &'static str,
+    /// Bytes crudos del save que deciden subtipos de estaciones, vías y agua.
+    /// No forman parte del contrato C++ de dibujo, pero permiten diagnosticar
+    /// que la selección candidata use exactamente la tesela que se importó.
+    m5: u8,
+    m6: u8,
     tileh: u8,
     base_z: u8,
     foundations: Vec<TraceFoundation>,
@@ -239,6 +244,8 @@ impl WorldDrawTrace {
                     openttdrs_core::Tile::ottd_type_nibble,
                 ),
                 tile_kind: tile_kind_name(ctx.kind),
+                m5: ctx.tile.map_or(0, |tile| tile.m5),
+                m6: ctx.tile.map_or(0, |tile| tile.m6),
                 tileh: ctx.info.tileh,
                 base_z: ctx.info.base_z,
                 foundations: Vec::new(),
@@ -534,6 +541,7 @@ impl WorldDrawTrace {
                     "tunnel",
                     "bridge",
                     "ship_depot",
+                    "industries",
                     "object_landmarks",
                     "clear_fields"
                 ],
@@ -551,6 +559,8 @@ impl WorldDrawTrace {
                     "y": tile.ty,
                     "tile_type": tile.tile_type,
                     "tile_kind": tile.tile_kind,
+                    "m5": tile.m5,
+                    "m6": tile.m6,
                     "tileh": tile.tileh,
                     "base_z": tile.base_z,
                 })

@@ -641,18 +641,23 @@ impl GameState {
                     .remove(&st.station_id)
                     .unwrap_or_default();
                 // Fallback para fixtures antiguos que no preservan los bytes
-                // `m2`/`m6` de estación.
+                // `m2`/`m6` de estación. Oilrig también es una facilidad
+                // aérea, por lo que conserva esta huella para el FTA; sólo su
+                // tipo visual se mantiene como estación marítima más abajo.
                 if station.airport_tiles.is_empty() {
                     station.airport_tiles = airport_spec_tiles(st.pos, spec, axis_y)
                         .map(|(c, _piece)| c)
                         .collect();
                 }
                 // El chunk de mapa reconstruido tipa `MP_STATION` genérico;
-                // retaguear únicamente los tiles de aeropuerto reales. Se
-                // preservan `m5`/`m6`, necesarios para el `StationGfx` visual.
+                // retaguear únicamente los tiles `StationType::Airport`
+                // reales. Oilrig comparte la facilidad aérea, pero sus
+                // teselas `MP_STATION` deben seguir siendo marítimas para que
+                // OpenTTD y el renderer las dibujen sobre agua.
                 for &c in &station.airport_tiles {
                     if let Some(mut tile) = state.map.get(c)
                         && tile.kind == TileKind::Station
+                        && crate::station::station_type_from_m6(tile.m6) == 1
                     {
                         tile.kind = TileKind::Airport;
                         let _ = state.map.set_tile(c, tile);
@@ -895,6 +900,54 @@ mod tests {
         assert_eq!(stop_kind_from_facilities(0x02), StopKind::TruckStop);
         assert_eq!(stop_kind_from_facilities(0x08), StopKind::Airport);
         assert_eq!(stop_kind_from_facilities(0x10), StopKind::Dock);
+    }
+
+    #[test]
+    fn airport_fallback_does_not_retag_oilrig_station_tiles() {
+        let oilrig = TileCoord::new(3, 3);
+        let mut sav = empty_sav(352, Map::new_flat(8, 8, 0));
+        sav.map
+            .set_tile(
+                oilrig,
+                crate::Tile {
+                    height: 0,
+                    kind: TileKind::Station,
+                    mapt: 0x50,
+                    m5: 0,
+                    m1: 0,
+                    m6: crate::station::STATION_TYPE_OILRIG << 3,
+                    m8: 0,
+                    m3: 0,
+                    m2: 0,
+                    m2_hi: 0,
+                    m7: 0,
+                    m3hi: 0,
+                },
+            )
+            .expect("oilrig tile");
+        sav.stations.push(SavStation {
+            station_id: 7,
+            pos: oilrig,
+            name: Some("Plataforma".to_string()),
+            facilities: FACIL_AIRPORT,
+            string_id: None,
+            town_id: None,
+            airport_type: 9,
+            airport_w: 1,
+            airport_h: 1,
+            airport_layout: 0,
+            airport_blocks: 0,
+            cargo: Vec::new(),
+        });
+
+        let state = GameState::from_sav_game(sav);
+        let station = state.stations.first().expect("station");
+        assert_eq!(station.airport_tiles, vec![oilrig]);
+        assert_eq!(state.map.get_kind(oilrig), Some(TileKind::Station));
+        assert_eq!(
+            state.map.get(oilrig).map(|tile| tile.m6),
+            Some(crate::station::STATION_TYPE_OILRIG << 3)
+        );
     }
 
     #[test]

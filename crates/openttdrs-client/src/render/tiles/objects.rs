@@ -841,6 +841,31 @@ pub(crate) fn spawn_station_tile(
                 spawn_stop_ground_sprite(commands, img, ctx, base_z, 0.03);
             }
         }
+        StationTileClass::Oilrig => {
+            // `DrawTile_Station`: Oilrig usa `SPR_FLAT_WATER_TILE` como
+            // suelo. Aunque su estación pueda tener servicio aéreo, su m6
+            // no es `StationType::Airport`; interpretar la capacidad como
+            // aeropuerto dibujaba un apron gris sobre la plataforma y hacía
+            // parecer que la industria se salía del mapa.
+            //
+            // OpenTTD exige que un oilrig esté sobre agua plana. La aserción
+            // deja visible un save corrupto en debug sin sustituirlo por un
+            // aeropuerto en builds de usuario.
+            debug_assert_eq!(tileh, 0, "Oilrig fuera de agua plana");
+            WorldDrawTrace::record_sprite("station-oilrig-water", "ground", 4061, false);
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                WaterTile::ANIMATED,
+                assets.water.sprite(),
+                Transform::from_translation(tile_pos(
+                    ctx.tx_i32(),
+                    ctx.ty_i32(),
+                    base_z,
+                    FLAT_WATER_LAYER_FRAC,
+                )),
+            ));
+        }
         StationTileClass::Dock => {
             if buildings_hidden() {
                 return;

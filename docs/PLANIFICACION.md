@@ -1663,7 +1663,8 @@ Hoy openttdrs: **nivel A ✅**; **B ✅** (P2–P4); **C ✅** (P5–P7); **D MV
 | **Etapa de obra** | `m1` bit 7 = terminada; bits 0–1 = stage 0–2 | `industry_construction_stage_from_tile(m1)` |
 | **Índice de tabla** | `gfx * 4 + subíndice` | `industry_gfx_draw_index(gfx, stage)` |
 | **Capas estáticas** | suelo `s1` + edificio `s2` | `ground_sprite_id` + `sprite_id` |
-| **Offsets** | macro `M(dx,dy,sx,sy,...)` | `gen_industry_gfx_data.py` → NFO + PNG |
+| **Offsets / perfil** | NFO normal del baseset activo | `gen_industry_gfx_data.py` → PNG + NFO 8bpp/32bpp coincidente |
+| **Caja de orden** | `M(dx,dy,sx,sy,sz)` → `AddSortableSpriteToDraw` | `sort_o*` / `sort_e*` en tabla y traza `world-draw` |
 | **Terminadas gfx 0–174** | fila stage 3 | **175** tipos en tabla (`INDUSTRY_GFX_DATA` 700 filas) |
 | **Sin arte** | omitir capa con `sprite == 0` | omitir capa; rough bajo `MP_INDUSTRY` |
 | **Avisos** | (implícito: sin sprite) | `log_industry_gfx_once`, HUD `⚠gfx≥175` / `⚠sin sprite` |

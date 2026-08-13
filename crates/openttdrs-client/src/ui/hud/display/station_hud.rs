@@ -12,6 +12,7 @@ fn stop_kind_label(class: StationTileClass) -> String {
         StationTileClass::RailWaypoint => "waypoint".into(),
         StationTileClass::RoadWaypoint => "waypoint road".into(),
         StationTileClass::Airport => "aeropuerto".into(),
+        StationTileClass::Oilrig => "plataforma petrolera".into(),
         StationTileClass::Dock => "muelle".into(),
         StationTileClass::Buoy => "boya".into(),
         StationTileClass::Other(station_type) => {

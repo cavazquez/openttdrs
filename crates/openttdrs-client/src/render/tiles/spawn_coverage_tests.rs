@@ -147,6 +147,76 @@ fn water_surface_markers_cover_flat_locks_and_industry_water() {
 }
 
 #[test]
+fn oilrig_station_uses_water_even_when_its_station_has_airport_service() {
+    let assets = boot_assets_app();
+    let airport_apron = assets.airport_apron.clone();
+    let oilrig = TileCoord::new(3, 3);
+    let mut map = fresh_map8();
+    map.set_tile(
+        oilrig,
+        Tile {
+            kind: TileKind::Station,
+            mapt: 0x50,
+            m6: openttdrs_core::STATION_TYPE_OILRIG << 3,
+            ..tile_template()
+        },
+    )
+    .expect("oilrig station tile");
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let mut station = Station::new_with_kind(oilrig, StopKind::Airport);
+    station.airport_tiles.push(oilrig);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+
+    world
+        .run_system_once(
+            move |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                spawn_station_tile(
+                    &mut commands,
+                    &m.0,
+                    m.0.dimensions(),
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, 3, 3),
+                    std::slice::from_ref(&station),
+                    4.0,
+                    true,
+                    &[],
+                    &[],
+                    None,
+                    None,
+                    &[],
+                    None,
+                    &[],
+                    None,
+                    &[],
+                    TEST_CLIMATE,
+                    &[],
+                );
+            },
+        )
+        .expect("oilrig spawn");
+
+    let water: Vec<_> = world
+        .query::<&crate::render::WaterTile>()
+        .iter(&world)
+        .copied()
+        .collect();
+    assert_eq!(water.len(), 1, "oilrig debe conservar el suelo de agua");
+    assert!(water[0].is_palette_animated());
+    assert!(
+        world
+            .query::<&Sprite>()
+            .iter(&world)
+            .all(|sprite| !airport_apron.matches(sprite)),
+        "un Oilrig no puede degradarse al apron de aeropuerto"
+    );
+}
+
+#[test]
 fn spawn_road_rail_station_and_transport_cover_main_paths() {
     let assets = boot_assets_app();
     let mut map = fresh_map8();

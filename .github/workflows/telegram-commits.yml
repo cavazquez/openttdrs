@@ -1,0 +1,60 @@
+name: Telegram commits
+
+on:
+  push:
+    branches:
+      - "**"
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    name: Notificar commits
+    runs-on: ubuntu-latest
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      PUSH_BEFORE: ${{ github.event.before }}
+      PUSH_AFTER: ${{ github.sha }}
+      PUSH_REPOSITORY: ${{ github.repository }}
+      PUSH_BRANCH: ${{ github.ref_name }}
+      PUSH_DELETED: ${{ github.event.deleted }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Enviar cada commit a Telegram
+        # Sin los dos secrets, el workflow termina correctamente y no hace
+        # ninguna petición. Así los forks y PRs no requieren credenciales.
+        if: ${{ env.PUSH_DELETED != 'true' && env.TELEGRAM_BOT_TOKEN != '' && env.TELEGRAM_CHAT_ID != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          zero_sha='0000000000000000000000000000000000000000'
+          if [[ "$PUSH_BEFORE" == "$zero_sha" ]]; then
+            commit_range="$PUSH_AFTER"
+          else
+            commit_range="$PUSH_BEFORE..$PUSH_AFTER"
+          fi
+
+          while IFS= read -r sha; do
+            subject="$(git log -1 --format=%s "$sha")"
+            author="$(git log -1 --format='%an' "$sha")"
+            short_sha="${sha:0:7}"
+            text=$(printf 'openttdrs · %s\n%s · %s\n%s\n%s/commit/%s' \
+              "$PUSH_BRANCH" "$short_sha" "$author" "$subject" "$PUSH_REPOSITORY" "$sha")
+
+            curl --fail --silent --show-error --retry 3 --retry-all-errors \
+              --request POST \
+              --data-urlencode "chat_id=$TELEGRAM_CHAT_ID" \
+              --data-urlencode "text=$text" \
+              --data-urlencode "disable_web_page_preview=true" \
+              "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage"
+          done < <(git rev-list --reverse "$commit_range")
+
+      - name: Explicar configuración ausente
+        if: ${{ env.PUSH_DELETED != 'true' && (env.TELEGRAM_BOT_TOKEN == '' || env.TELEGRAM_CHAT_ID == '') }}
+        run: echo "Telegram no configurado; faltan TELEGRAM_BOT_TOKEN y/o TELEGRAM_CHAT_ID."

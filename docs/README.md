@@ -9,6 +9,7 @@ Un archivo vivo por temática. Orden sugerido al entrar:
 5. [GRAFICOS.md](GRAFICOS.md) — OpenGFX y bugs visuales
 6. [RENDIMIENTO.md](RENDIMIENTO.md) — mapas grandes y benches
 7. [parity/METODOLOGIA_RENDER_SAV.md](parity/METODOLOGIA_RENDER_SAV.md) — método reproducible para investigar render de `.sav`
+8. [TELEGRAM_CI.md](TELEGRAM_CI.md) — notificación opcional de commits por Telegram
 
 **Issues de backlog:** [github.com/cavazquez/openttdrs/issues](https://github.com/cavazquez/openttdrs/issues).
 
@@ -25,6 +26,7 @@ Un archivo vivo por temática. Orden sugerido al entrar:
 | [RENDIMIENTO.md](RENDIMIENTO.md) | PERF mapas grandes + benchmarks |
 | [parity/METODOLOGIA_RENDER_SAV.md](parity/METODOLOGIA_RENDER_SAV.md) | Capas raw/semántica/draw, oráculo C++ y flujo de depuración de partidas `.sav` |
 | [REFERENCIAS_EXTERNAS.md](REFERENCIAS_EXTERNAS.md) | Proyectos locales de consulta (OpenLoco / FreeRCT) |
+| [TELEGRAM_CI.md](TELEGRAM_CI.md) | Secrets y comportamiento de avisos por Telegram en GitHub Actions |
 
 ### Assets (no markdown)
 

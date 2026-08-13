@@ -65,6 +65,7 @@
     "scripts/test_window_visual_regression.py",
     "scripts/test_opengfx_palette.py",
     "scripts/test_bridge_sprite_variants.py",
+    "scripts/test_telegram_commits_workflow.py",
     "scripts/test_rail_station_sprite_variants.py",
     "scripts/test_global_sprite_namespace.py"
   ],
@@ -81,6 +82,7 @@
     "scripts/test_window_visual_regression.py",
     "scripts/test_opengfx_palette.py",
     "scripts/test_bridge_sprite_variants.py",
+    "scripts/test_telegram_commits_workflow.py",
     "scripts/test_rail_station_sprite_variants.py",
     "scripts/test_global_sprite_namespace.py"
   ]

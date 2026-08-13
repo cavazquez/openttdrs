@@ -16,7 +16,10 @@ pub(crate) use pose::{
     vehicle_draw_anchor_from_pose, vehicle_sprite_pos_at, vehicle_world_position,
 };
 pub(crate) use spawn::spawn_initial_vehicles;
-pub(crate) use sync::{VehicleCargoLabel, VehicleIndex};
+pub(crate) use sync::{
+    AircraftRotorSprite, AircraftShadowSprite, ConsistUnitSprite, VehicleCargoLabel, VehicleIndex,
+    VehicleSprite,
+};
 
 fn engine_in_sim(sim: &SimWorld, engine_id: u16) -> Option<&EngineDef> {
     openttdrs_core::engine_in_catalog(&sim.state.engine_catalog, engine_id)

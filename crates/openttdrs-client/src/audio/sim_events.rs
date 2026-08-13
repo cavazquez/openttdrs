@@ -23,6 +23,10 @@ impl Plugin for SimEventsPlugin {
         app.init_resource::<PendingSimEvents>()
             .init_resource::<FxSpawnQueue>()
             .init_resource::<BubbleSpawnQueue>()
+            // Este puente conserva los eventos de render aunque el flujo sea
+            // una captura silenciosa y `WorldSfxPlugin` no esté instalado.
+            // En una partida normal el mismo registro lo consume el mixer.
+            .add_message::<PlayWorldSfx>()
             .add_systems(
                 OnEnter(ClientScreen::InGame),
                 discard_bootstrap_sim_events_on_enter,

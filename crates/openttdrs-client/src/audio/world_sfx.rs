@@ -82,7 +82,6 @@ impl Plugin for WorldSfxPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<WorldSfxHandles>()
             .init_resource::<SfxMixer>()
-            .add_message::<PlayWorldSfx>()
             .add_systems(Startup, load_world_sfx)
             .add_systems(
                 Update,

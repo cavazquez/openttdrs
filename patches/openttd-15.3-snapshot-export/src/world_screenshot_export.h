@@ -15,7 +15,11 @@
  *
  * - OPENTTDRS_WORLD_SCREENSHOT_CENTER=x,y
  * - OPENTTDRS_WORLD_SCREENSHOT_RES=widthxheight
+ * - OPENTTDRS_WORLD_SCREENSHOT_CLEAN=1 (pausa y oculta rótulos/animación)
  */
 bool OpenttdrsMaybeCaptureWorldScreenshot();
+
+/** `true` while the opt-in clean raster capture excludes dynamic vehicles. */
+bool OpenttdrsWorldScreenshotHideVehicles();
 
 #endif /* OPENTTDRS_WORLD_SCREENSHOT_EXPORT_H */

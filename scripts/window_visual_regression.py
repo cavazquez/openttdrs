@@ -53,6 +53,8 @@ def read_png(path: Path) -> PngImage:
     pos = len(PNG_SIGNATURE)
     width = height = bit_depth = color_type = None
     chunks: list[bytes] = []
+    palette: bytes | None = None
+    transparency: bytes | None = None
     while pos < len(data):
         if pos + 12 > len(data):
             raise GateError(f"{path}: chunk PNG truncado")
@@ -72,15 +74,26 @@ def read_png(path: Path) -> PngImage:
                 raise GateError(f"{path}: PNG comprimido/entrelazado no soportado")
         elif kind == b"IDAT":
             chunks.append(payload)
+        elif kind == b"PLTE":
+            palette = payload
+        elif kind == b"tRNS":
+            transparency = payload
         elif kind == b"IEND":
             break
         pos = end + 4
 
-    if width is None or height is None or bit_depth != 8 or color_type not in (2, 6):
-        raise GateError(f"{path}: se requiere PNG RGB/RGBA de 8 bits no entrelazado")
+    if width is None or height is None or bit_depth != 8 or color_type not in (2, 3, 6):
+        raise GateError(f"{path}: se requiere PNG RGB/RGBA/indexado de 8 bits no entrelazado")
     if width <= 0 or height <= 0:
         raise GateError(f"{path}: dimensiones PNG inválidas")
-    channels = 3 if color_type == 2 else 4
+    if color_type == 3:
+        if palette is None or not palette or len(palette) % 3:
+            raise GateError(f"{path}: PNG indexado sin paleta RGB válida")
+        if len(palette) // 3 > 256:
+            raise GateError(f"{path}: paleta PNG con más de 256 entradas")
+        if transparency is not None and len(transparency) > len(palette) // 3:
+            raise GateError(f"{path}: transparencia PNG excede la paleta")
+    channels = 1 if color_type == 3 else 3 if color_type == 2 else 4
     row_len = width * channels
     try:
         raw = zlib.decompress(b"".join(chunks))
@@ -118,8 +131,20 @@ def read_png(path: Path) -> PngImage:
         previous = row
         for x in range(width):
             pixel = row[x * channels : (x + 1) * channels]
-            out[target : target + 3] = pixel[:3]
-            out[target + 3] = pixel[3] if channels == 4 else 255
+            if color_type == 3:
+                palette_index = pixel[0]
+                palette_start = palette_index * 3
+                if palette_start >= len(palette):
+                    raise GateError(f"{path}: índice de paleta fuera de rango")
+                out[target : target + 3] = palette[palette_start : palette_start + 3]
+                out[target + 3] = (
+                    transparency[palette_index]
+                    if transparency is not None and palette_index < len(transparency)
+                    else 255
+                )
+            else:
+                out[target : target + 3] = pixel[:3]
+                out[target + 3] = pixel[3] if channels == 4 else 255
             target += 4
     return PngImage(width, height, bytes(out))
 

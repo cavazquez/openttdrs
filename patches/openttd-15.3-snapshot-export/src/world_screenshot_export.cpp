@@ -12,6 +12,7 @@
 #include "map_func.h"
 #include "openttd.h"
 #include "screenshot.h"
+#include "transparency.h"
 #include "viewport_func.h"
 #include "video/video_driver.hpp"
 #include "window_func.h"
@@ -56,12 +57,39 @@ bool ParseResolution(const char *raw, uint32_t &width, uint32_t &height)
 	return width > 0 && height > 0;
 }
 
+bool EnvEnabled(const char *name)
+{
+	const char *raw = std::getenv(name);
+	if (raw == nullptr || raw[0] == '\0') return false;
+	const std::string_view value(raw);
+	return value != "0" && value != "false" && value != "no" && value != "off";
+}
+
+/**
+ * Normaliza las capas que son inherentemente temporales o configurables para
+ * que una captura de paridad mida terreno e infraestructura, no nombres de
+ * pueblos/estaciones ni la carrera entre dos loops de simulación.
+ */
+void PrepareCleanWorldScreenshot()
+{
+	_pause_mode.Set(PauseMode::Normal);
+	ClrBit(_display_opt, DO_SHOW_TOWN_NAMES);
+	ClrBit(_display_opt, DO_SHOW_STATION_NAMES);
+	ClrBit(_display_opt, DO_SHOW_WAYPOINT_NAMES);
+	ClrBit(_display_opt, DO_SHOW_SIGNS);
+	ClrBit(_display_opt, DO_SHOW_COMPETITOR_SIGNS);
+	ClrBit(_display_opt, DO_FULL_ANIMATION);
+}
+
 } // namespace
 
 bool OpenttdrsMaybeCaptureWorldScreenshot()
 {
 	const char *output = std::getenv("OPENTTDRS_WORLD_SCREENSHOT_OUT");
 	if (output == nullptr || output[0] == '\0') return true;
+	if (EnvEnabled("OPENTTDRS_WORLD_SCREENSHOT_CLEAN")) {
+		PrepareCleanWorldScreenshot();
+	}
 
 	uint32_t width = 1280;
 	uint32_t height = 720;
@@ -150,4 +178,9 @@ bool OpenttdrsMaybeCaptureWorldScreenshot()
 		});
 	});
 	return true;
+}
+
+bool OpenttdrsWorldScreenshotHideVehicles()
+{
+	return EnvEnabled("OPENTTDRS_WORLD_SCREENSHOT_CLEAN");
 }

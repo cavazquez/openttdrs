@@ -201,6 +201,25 @@ python3 scripts/compare_world_draw.py /tmp/openttd-draw.jsonl /tmp/openttdrs-dra
   --geometry --foundations --order --by-role
 ```
 
+### Nivel 4: raster focalizado
+
+Cuando raw, semántica y draw explican las decisiones pero la composición aún
+parece distinta, capturar ambos viewports exactamente en la misma tesela. El
+orquestador fija zoom normal/escala 1, pausa ambos motores, oculta UI/rótulos/
+vehículos y usa el mismo perfil OpenGFX 8bpp; deja referencia, candidata, diff
+y reporte hashable en un directorio. Para investigar una capa dinámica se
+puede desactivar sólo esa limpieza con `OPENTTDRS_WORLD_SCREENSHOT_CLEAN=0`.
+
+```bash
+./scripts/compare_focused_world_screenshot.sh \
+  "$SAV" /tmp/kale-raster-189-126 189,126 1280x720 1
+```
+
+El reporte incluye un registro de cámara de hasta ocho píxeles. Un
+desplazamiento distinto de cero es una señal a investigar, no una corrección
+que permita dar por buena la paridad. Ver el
+[contrato raster](WORLD_SCREENSHOT_SCHEMA.md) para la semántica completa.
+
 Para el caso de regresión de la estación vanilla de Kale:
 
 ```bash

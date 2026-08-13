@@ -16,6 +16,7 @@ OUT="$(realpath -m "$2")"
 BIN="${3:-${OPENTTD_BIN:-${ROOT}/reference/openttd-upstream/build/openttd}}"
 CENTER="${4:-${OPENTTDRS_WORLD_SCREENSHOT_CENTER:-}}"
 RESOLUTION="${5:-${OPENTTDRS_WORLD_SCREENSHOT_RES:-1280x720}}"
+CLEAN="${OPENTTDRS_WORLD_SCREENSHOT_CLEAN:-1}"
 BUILD_DIR="$(dirname "$BIN")"
 BASESET_SRC="${OPENTTDRS_OPENGFX_DIR:-${ROOT}/.deps/openttd-baseset/opengfx-8.0}"
 GRAPHICS_SET="${OPENTTDRS_GRAPHICS_SET:-opengfx}"
@@ -31,6 +32,10 @@ if [[ ! -x "$BIN" ]]; then
   echo "  ./patches/openttd-15.3-snapshot-export/integrate.sh" >&2
   exit 1
 fi
+# El exportador cambia al directorio del build para que OpenTTD encuentre su
+# baseset. Convertir antes el argumento evita que un binario relativo termine
+# buscándose como `build/reference/...` desde ese directorio.
+BIN="$(realpath "$BIN")"
 if [[ -z "$CENTER" ]]; then
   echo "error: indicá el centro x,y (cuarto argumento o OPENTTDRS_WORLD_SCREENSHOT_CENTER)" >&2
   exit 2
@@ -51,8 +56,9 @@ export LD_LIBRARY_PATH="${PREFIX}/usr/lib/x86_64-linux-gnu:${PREFIX}/usr/lib${LD
 export OPENTTDRS_WORLD_SCREENSHOT_OUT="$OUT"
 export OPENTTDRS_WORLD_SCREENSHOT_CENTER="$CENTER"
 export OPENTTDRS_WORLD_SCREENSHOT_RES="$RESOLUTION"
+export OPENTTDRS_WORLD_SCREENSHOT_CLEAN="$CLEAN"
 
-echo "world-screenshot OpenTTD: bin=$BIN sav=$SAV out=$OUT center=$CENTER res=$RESOLUTION gfx=$GRAPHICS_SET blitter=$BLITTER"
+echo "world-screenshot OpenTTD: bin=$BIN sav=$SAV out=$OUT center=$CENTER res=$RESOLUTION clean=$CLEAN gfx=$GRAPHICS_SET blitter=$BLITTER"
 cd "$BUILD_DIR"
 set +e
 # El exportador se ejecuta contra un build dedicado con el blitter 8bpp simple

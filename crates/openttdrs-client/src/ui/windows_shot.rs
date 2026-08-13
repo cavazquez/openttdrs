@@ -22,8 +22,9 @@ use std::fmt::Write as _;
 use crate::bevy_app::UpdateSet;
 use crate::camera::{CameraVelocity, tile_camera_world_pos};
 use crate::render::{
-    MapPreviewCamera, MapVisualLayer, PrimaryGameCamera, ShoreTile, VehicleCargoLabel, WaterTile,
-    clamp_ortho_scale, large_map_viewport_cull_enabled,
+    AircraftRotorSprite, AircraftShadowSprite, ConsistUnitSprite, MapPreviewCamera, MapVisualLayer,
+    PrimaryGameCamera, ShoreTile, SignLabel, StationLabel, TownLabel, VehicleCargoLabel,
+    VehicleSprite, WaterTile, clamp_ortho_scale, large_map_viewport_cull_enabled,
 };
 use crate::state::{ClientScreen, SimRunState, SimWorld};
 use crate::ui::ai_settings_window::AiSettingsWindowState;
@@ -92,6 +93,14 @@ const MAP_SHOT_DEFAULT_SETTLE_FRAMES: u32 = 150;
 const MAP_SHOT_MIN_SETTLE_FRAMES: u32 = OPEN_FRAME + 10;
 const MAP_SHOT_MAX_SETTLE_FRAMES: u32 = 900;
 const MAP_SHOT_EXIT_GRACE_FRAMES: u32 = 30;
+
+/// Contador compartido entre la preparación del mapa y la toma del raster.
+/// Separarlos permite fijar cursor/herramienta antes de UI y capturar después
+/// del último ocultamiento de UI, sin introducir un ciclo de schedules.
+#[derive(Resource, Default)]
+struct MapShotProgress {
+    frame: u32,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum TownAuthorityShotState {
@@ -1189,6 +1198,7 @@ impl Plugin for WindowsShotPlugin {
                 ),
             );
         } else if std::env::var_os("OPENTTDRS_MAP_SHOT").is_some() {
+            app.init_resource::<MapShotProgress>();
             app.add_systems(
                 OnEnter(ClientScreen::InGame),
                 pause_simulation_for_visual_capture,
@@ -1207,6 +1217,12 @@ impl Plugin for WindowsShotPlugin {
                         .run_if(in_state(ClientScreen::InGame))
                         // El fantasma de obra lee el cursor que fija el driver.
                         .before(crate::ui::toolbar::update_build_ghost_preview),
+                    // La captura se encola después del último ocultamiento,
+                    // no en paralelo con él: así no queda una barra de estado
+                    // de un frame anterior en el PNG.
+                    map_shot_capture_driver
+                        .run_if(in_state(ClientScreen::InGame))
+                        .after(hide_map_shot_ui),
                 ),
             );
         }
@@ -1215,6 +1231,21 @@ impl Plugin for WindowsShotPlugin {
 
 fn pause_simulation_for_visual_capture(mut next_simulation: ResMut<NextState<SimRunState>>) {
     next_simulation.set(SimRunState::Paused);
+}
+
+fn map_shot_clean_requested() -> bool {
+    parse_map_shot_clean(std::env::var("OPENTTDRS_MAP_SHOT_CLEAN").ok().as_deref())
+}
+
+/// `0`, `false` y una variable vacía preservan la captura dinámica. El resto
+/// de valores no vacíos mantiene el comportamiento histórico de `CLEAN=1`.
+fn parse_map_shot_clean(raw: Option<&str>) -> bool {
+    raw.is_some_and(|value| {
+        !matches!(
+            value.trim().to_ascii_lowercase().as_str(),
+            "" | "0" | "false" | "no" | "off"
+        )
+    })
 }
 
 fn parse_shot_ui_scale(raw: &str) -> Option<f32> {
@@ -1286,35 +1317,54 @@ fn first_industry_tile(sim: &SimWorld) -> Option<TileCoord> {
     sim.state.industries.first().map(|i| i.pos)
 }
 
-/// Oculta el chrome propio al tomar un `OPENTTDRS_MAP_SHOT_CLEAN=1`, después de
-/// que los sync normales de UI pudieron actualizarlo en el frame actual.
-fn hide_map_shot_ui(
-    mut ui_roots: Query<
-        &mut Visibility,
-        (
-            Or<(
-                With<crate::state::ingame_lifecycle::InGameUi>,
-                With<crate::ui::statusbar::StatusBarRoot>,
-                With<crate::ui::statusbar::NewsPopupRoot>,
-                With<crate::ui::toolbar::MinimapRoot>,
-                With<crate::ui::hud::TileInfoText>,
-                With<FloatingWindow>,
-            )>,
-            Without<VehicleCargoLabel>,
-        ),
-    >,
-    mut cargo_labels: Query<&mut Visibility, With<VehicleCargoLabel>>,
-) {
-    if std::env::var_os("OPENTTDRS_MAP_SHOT_CLEAN").is_none() {
+/// Oculta las capas que no forman parte de la geografía estática al tomar un
+/// `OPENTTDRS_MAP_SHOT_CLEAN=1`, después de que los sync normales pudieron
+/// actualizarlas en el frame actual.
+fn hide_map_shot_ui(world: &mut World) {
+    if !map_shot_clean_requested() {
         return;
     }
-    for mut visibility in &mut ui_roots {
+    // Son rótulos propios del cliente, no parte del raster estático que se
+    // contrasta. Se actualizan junto con mapa/vehículos, por eso se ocultan de
+    // nuevo en cada frame de la captura limpia, después de `UpdateSet::Ui`.
+    // El estado del save ya queda pausado al entrar en juego, pero los dos
+    // renderers pueden componer el primer frame en instantes distintos. La
+    // captura "clean" excluye vehículos para que sirva de oráculo de terreno,
+    // infraestructura y edificios; una captura sin CLEAN sigue disponible
+    // para investigar la familia de sprites de vehículos específicamente.
+    let mut chrome =
+        world.query_filtered::<&mut Visibility, With<crate::ui::toolbar::BuildMenuUi>>();
+    for mut visibility in chrome.iter_mut(world) {
         *visibility = Visibility::Hidden;
     }
-    // Son texto de depuración propio, no parte del framebuffer de OpenTTD.
-    // Se actualizan junto con los vehículos, por eso se ocultan de nuevo en
-    // cada frame de la captura limpia, después de `UpdateSet::Ui`.
-    for mut visibility in &mut cargo_labels {
+    // `sync_status_bar` vuelve visible explícitamente su texto central cada
+    // frame. No lleva `BuildMenuUi`, así que ocultar sólo el contenedor no
+    // basta para un raster limpio: el estado "Pausado" seguiría apareciendo
+    // encima del mundo aun sin toolbar. Ocultamos sus capas finales también.
+    let mut status_bar_layers = world.query_filtered::<&mut Visibility, Or<(
+        With<crate::ui::statusbar::StatusBarDateText>,
+        With<crate::ui::statusbar::StatusBarTickerText>,
+        With<crate::ui::statusbar::StatusBarDefaultText>,
+        With<crate::ui::statusbar::StatusBarMoneyText>,
+        With<crate::ui::statusbar::StatusBarReminderDot>,
+        With<crate::ui::statusbar::NewsPopupDateText>,
+        With<crate::ui::statusbar::NewsPopupHeadlineText>,
+        With<crate::ui::statusbar::NewsPopupBodyText>,
+    )>>();
+    for mut visibility in status_bar_layers.iter_mut(world) {
+        *visibility = Visibility::Hidden;
+    }
+    let mut dynamic_layers = world.query_filtered::<&mut Visibility, Or<(
+        With<VehicleCargoLabel>,
+        With<TownLabel>,
+        With<StationLabel>,
+        With<SignLabel>,
+        With<VehicleSprite>,
+        With<ConsistUnitSprite>,
+        With<AircraftShadowSprite>,
+        With<AircraftRotorSprite>,
+    )>>();
+    for mut visibility in dynamic_layers.iter_mut(world) {
         *visibility = Visibility::Hidden;
     }
 }
@@ -1329,13 +1379,13 @@ fn hide_map_shot_ui(
 /// defecto) antes de capturar, para que un mapa grande complete su remapeo y
 /// el culling del viewport.
 /// `OPENTTDRS_MAP_SHOT_CLEAN=1` oculta el chrome propio (toolbar, minimapa,
-/// barra de estado, texto HUD y etiquetas de carga de vehículos) justo antes
-/// de capturar. Sirve para comparar solamente el mundo contra el raster de
-/// OpenTTD.
+/// barra de estado, texto HUD, rótulos de pueblos/estaciones/carteles y
+/// vehículos) justo antes de capturar. Sirve para comparar el mundo estático
+/// contra el raster de OpenTTD; con CLEAN ausente también se puede investigar
+/// una capa dinámica de forma aislada.
 #[allow(clippy::too_many_arguments)] // sistema ECS Bevy
 fn map_shot_driver(
-    mut commands: Commands,
-    mut frame: Local<u32>,
+    mut progress: ResMut<MapShotProgress>,
     mut windows: Query<&mut Window, With<bevy::window::PrimaryWindow>>,
     mut tool_state: ResMut<crate::ui::toolbar::UiToolState>,
     mut toolbar_state: ResMut<crate::ui::toolbar::ToolbarState>,
@@ -1347,11 +1397,10 @@ fn map_shot_driver(
         (With<PrimaryGameCamera>, Without<MapPreviewCamera>),
     >,
     mut camera_velocity: ResMut<CameraVelocity>,
-    mut exit: MessageWriter<AppExit>,
 ) {
-    *frame += 1;
+    progress.frame += 1;
     let shot_frame = map_shot_capture_frame();
-    if *frame == OPEN_FRAME
+    if progress.frame == OPEN_FRAME
         && let Some(center) = map_shot_center_from_env()
         && let Ok((mut transform, mut projection)) = camera_q.single_mut()
     {
@@ -1391,7 +1440,7 @@ fn map_shot_driver(
     }
     // `OPENTTDRS_MAP_SHOT_PLACE=x,y[;x,y…]`: aplica la herramienta en esas
     // teselas antes de la captura (p. ej. colocar vía/estación y ver el render).
-    if *frame == OPEN_FRAME + 5
+    if progress.frame == OPEN_FRAME + 5
         && let Ok(spec) = std::env::var("OPENTTDRS_MAP_SHOT_PLACE")
         && let Some(action) = tool_state.active_tool
     {
@@ -1421,7 +1470,7 @@ fn map_shot_driver(
         }
         remap.pending = true;
     }
-    if *frame >= OPEN_FRAME
+    if progress.frame >= OPEN_FRAME
         && let Ok(tool) = std::env::var("OPENTTDRS_MAP_SHOT_TOOL")
     {
         use crate::ui::toolbar::{BuildMenuAction, ToolbarGroup};
@@ -1456,22 +1505,35 @@ fn map_shot_driver(
             window.set_cursor_position(Some(center));
         }
     }
-    if *frame == shot_frame
+    if progress.frame == shot_frame
+        && let Ok(window) = windows.single_mut()
+    {
+        info!(
+            "map_shot: tool_activa={} cursor={:?}",
+            tool_state.active_tool.is_some(),
+            window.cursor_position()
+        );
+    }
+}
+
+/// Encola el screenshot tras `hide_map_shot_ui`. El driver de mapa queda antes
+/// de las herramientas normales para preparar cursor/fantasma, mientras que
+/// éste corre al final para observar el framebuffer ya limpio.
+fn map_shot_capture_driver(
+    mut commands: Commands,
+    progress: Res<MapShotProgress>,
+    mut exit: MessageWriter<AppExit>,
+) {
+    let shot_frame = map_shot_capture_frame();
+    if progress.frame == shot_frame
         && let Ok(path) = std::env::var("OPENTTDRS_MAP_SHOT")
     {
-        if let Ok(window) = windows.single_mut() {
-            info!(
-                "map_shot: tool_activa={} cursor={:?}",
-                tool_state.active_tool.is_some(),
-                window.cursor_position()
-            );
-        }
-        info!("map_shot: guardando captura en {path}");
+        info!("map_shot: guardando captura limpia en {path}");
         commands
             .spawn(Screenshot::primary_window())
             .observe(save_to_disk(path));
     }
-    if *frame == shot_frame + MAP_SHOT_EXIT_GRACE_FRAMES {
+    if progress.frame == shot_frame + MAP_SHOT_EXIT_GRACE_FRAMES {
         exit.write(AppExit::Success);
     }
 }
@@ -1803,6 +1865,11 @@ mod tests {
         assert_eq!(parse_map_shot_settle_frames("150"), Some(150));
         assert_eq!(parse_map_shot_settle_frames("39"), None);
         assert_eq!(parse_map_shot_settle_frames("901"), None);
+        assert!(parse_map_shot_clean(Some("1")));
+        assert!(parse_map_shot_clean(Some("yes")));
+        assert!(!parse_map_shot_clean(Some("0")));
+        assert!(!parse_map_shot_clean(Some(" false ")));
+        assert!(!parse_map_shot_clean(None));
     }
 
     #[test]

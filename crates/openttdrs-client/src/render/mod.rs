@@ -70,12 +70,14 @@ pub(crate) use industry_anim::{
 pub(crate) use industry_draw_proc::{IndustryDrawProcPlugin, spawn_industry_draw_proc_overlays};
 pub(crate) use lighthouse_anim::{LighthouseAnim, LighthouseAnimPlugin};
 pub(crate) use refinery_fire::{RefineryFireAnim, RefineryFireAnimPlugin};
+pub(crate) use sign_labels::SignLabel;
 pub(crate) use smoke::{
     ChimneySmokeFrames, CopperMineSmokeFrames, GFX_COPPER_MINE_CHIMNEY, GFX_POWERPLANT_CHIMNEY,
     IndustrySmokePlugin, spawn_chimney_smoke, spawn_copper_mine_smoke,
 };
+pub(crate) use station_labels::StationLabel;
 pub(crate) use tile_anims::TileAnimPlugin;
-pub(crate) use town_labels::town_id_at_label_pos;
+pub(crate) use town_labels::{TownLabel, town_id_at_label_pos};
 pub(crate) use train_smoke::TrainSmokePlugin;
 
 pub(crate) use action5_newgrf::NewGrfAction5SpriteCache;
@@ -92,7 +94,8 @@ pub(crate) use tiles::{
     spawn_rail_tile, spawn_road_tile, spawn_station_tile, spawn_transport_object_tile,
 };
 pub(crate) use vehicles::{
-    NewGrfTrainSpriteCache, TruckHandles, VehicleCargoLabel, VehicleIndex, VehicleRenderPlugin,
+    AircraftRotorSprite, AircraftShadowSprite, ConsistUnitSprite, NewGrfTrainSpriteCache,
+    TruckHandles, VehicleCargoLabel, VehicleIndex, VehicleRenderPlugin, VehicleSprite,
     pick_vehicle_id_at_world, vehicle_sprite_pos_at, vehicle_world_position,
 };
 pub(crate) use viewport::{

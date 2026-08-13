@@ -4,6 +4,8 @@ Madurez, mapeos C++↔Rust, gaps, UI, divergencias y oráculos. Roadmaps de prod
 
 Para investigar una discrepancia de render de una partida `.sav`, seguir la
 [metodología de paridad raw → semántica → draw](parity/METODOLOGIA_RENDER_SAV.md).
+Cuando esa evidencia ya coincide pero el resultado compuesto difiere, usar el
+[contrato de captura raster focalizada](parity/WORLD_SCREENSHOT_SCHEMA.md).
 
 ## Estado canónico actual
 
@@ -88,6 +90,7 @@ Fases Rail 0–4 implementadas. Checklist histórico: [archive/RAIL_REVIEW_HANDO
 
 - Manifiesto pin: [`parity/openttd-reference.json`](parity/openttd-reference.json)
 - Screenshots: [`parity/screenshots/`](parity/screenshots/)
+- Raster focalizado: [`parity/WORLD_SCREENSHOT_SCHEMA.md`](parity/WORLD_SCREENSHOT_SCHEMA.md)
 - Trazas HTML (p. ej. PBS): archivos `parity/*.html`
 
 ## Madurez road / tick

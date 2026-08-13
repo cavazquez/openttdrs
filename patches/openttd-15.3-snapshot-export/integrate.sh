@@ -86,6 +86,11 @@ def integrate_world_draw_viewport(dest: Path) -> None:
         if anchor not in text:
             raise SystemExit("no encuentro include viewport_func.h")
         text = text.replace(anchor, anchor + '#include "world_draw_export.h"\n', 1)
+    if '#include "world_screenshot_export.h"' not in text:
+        anchor = '#include "viewport_func.h"\n'
+        if anchor not in text:
+            raise SystemExit("no encuentro include viewport_func.h para world-screenshot")
+        text = text.replace(anchor, anchor + '#include "world_screenshot_export.h"\n', 1)
 
     tile_marker = (
         "static void AddTileSpriteToDraw(SpriteID image, PaletteID pal, int32_t x, int32_t y, int z, const SubSprite *sub = nullptr, int extra_offs_x = 0, int extra_offs_y = 0)\n"
@@ -153,6 +158,16 @@ def integrate_world_draw_viewport(dest: Path) -> None:
             "\tassert((image & SPRITE_MASK) < MAX_SPRITES);"
         )
         text = text.replace(child_marker, replacement, 1)
+
+    vehicle_marker = "\tViewportAddVehicles(&_vd.dpi);\n"
+    if "OpenttdrsWorldScreenshotHideVehicles" not in text:
+        if vehicle_marker not in text:
+            raise SystemExit("no encuentro ViewportAddVehicles para la captura limpia")
+        text = text.replace(
+            vehicle_marker,
+            "\tif (!OpenttdrsWorldScreenshotHideVehicles()) ViewportAddVehicles(&_vd.dpi);\n",
+            1,
+        )
 
     start_marker = "void StartSpriteCombine()\n{\n\tassert(_vd.combine_sprites == SPRITE_COMBINE_NONE);"
     if "OpenttdrsWorldDrawRecordCombineStart" not in text:
@@ -272,18 +287,18 @@ def integrate_world_draw_foundation(dest: Path) -> None:
         "\t * cliente pueda contrastar orientación y fundamento de cada vecino. */\n"
         "\tint nw_w_here = z;\n"
         "\tint nw_n_here = z;\n"
-        "\tGetSlopePixelZOnEdge(slope, DiagDirection::NW, nw_w_here, nw_n_here);\n"
+        "\tGetSlopePixelZOnEdge(slope, DIAGDIR_NW, nw_w_here, nw_n_here);\n"
         "\tauto [nw_slope, nw_z] = GetFoundationPixelSlope(TileAddXY(ti->tile, 0, -1));\n"
         "\tint nw_w_neighbour = nw_z;\n"
         "\tint nw_n_neighbour = nw_z;\n"
-        "\tGetSlopePixelZOnEdge(nw_slope, DiagDirection::SE, nw_w_neighbour, nw_n_neighbour);\n"
+        "\tGetSlopePixelZOnEdge(nw_slope, DIAGDIR_SE, nw_w_neighbour, nw_n_neighbour);\n"
         "\tint ne_e_here = z;\n"
         "\tint ne_n_here = z;\n"
-        "\tGetSlopePixelZOnEdge(slope, DiagDirection::NE, ne_e_here, ne_n_here);\n"
+        "\tGetSlopePixelZOnEdge(slope, DIAGDIR_NE, ne_e_here, ne_n_here);\n"
         "\tauto [ne_slope, ne_z] = GetFoundationPixelSlope(TileAddXY(ti->tile, -1, 0));\n"
         "\tint ne_e_neighbour = ne_z;\n"
         "\tint ne_n_neighbour = ne_z;\n"
-        "\tGetSlopePixelZOnEdge(ne_slope, DiagDirection::SW, ne_e_neighbour, ne_n_neighbour);\n"
+        "\tGetSlopePixelZOnEdge(ne_slope, DIAGDIR_SW, ne_e_neighbour, ne_n_neighbour);\n"
         "\n"
         "\t/* Select the needed block of foundations sprites\n"
         "\t * Block 0: Walls at NW and NE edge\n"
@@ -658,7 +673,7 @@ PY
 
 echo "Integrado en ${DEST}"
 echo "Build dedicated (ejemplo):"
-echo "  cmake -B ${DEST}/build -S ${DEST} -DOPTION_DEDICATED=ON && cmake --build ${DEST}/build -j"
+echo "  cmake -B ${DEST}/build -S ${DEST} -DOPTION_DEDICATED=ON -DOPENTTDRS_HEADLESS_RASTER=ON && cmake --build ${DEST}/build -j"
 echo "Export:"
 echo "  OPENTTDRS_SNAPSHOT_OUT=/tmp/openttd.json OPENTTDRS_OPENTTD_COMMIT=${EXPECTED} \\"
 echo "    ${DEST}/build/openttd -D -g path/to/game.sav"

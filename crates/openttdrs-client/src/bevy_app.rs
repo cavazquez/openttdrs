@@ -26,7 +26,7 @@ use bevy::window::ExitCondition;
 use bevy::winit::WinitPlugin;
 
 use crate::app_icon::AppIconPlugin;
-use crate::audio::{MusicPlugin, SimEventsPlugin, WorldSfxPlugin};
+use crate::audio::{ClientAudioEnabled, MusicPlugin, MusicState, SimEventsPlugin, WorldSfxPlugin};
 use crate::camera::CameraControlPlugin;
 use crate::debug_gizmos::DebugGizmosPlugin;
 use crate::network::{NetCli, NetworkPlugin};
@@ -101,6 +101,14 @@ pub(crate) fn visual_capture_requested() -> bool {
         || std::env::var_os("OPENTTDRS_MAP_SHOT").is_some()
 }
 
+/// Los oráculos visuales no necesitan un dispositivo de audio. Desactivarlo
+/// evita que un backend sin salida (o un underrun de `rodio`) ensucie la
+/// evidencia del renderer. La variable también permite un smoke gráfico
+/// silencioso fuera del flujo de capturas.
+fn audio_disabled_for_run(headless: bool, visual_capture: bool, env_disabled: bool) -> bool {
+    headless || visual_capture || env_disabled
+}
+
 /// `headless`: sin ventana primaria (tests / cobertura en CI); evita que el proceso termine al no
 /// haber ventanas (`ExitCondition::DontExit`).
 ///
@@ -111,6 +119,12 @@ pub(crate) fn build_client_app(
     headless: bool,
     net_cli: NetCli,
 ) -> Result<App, BootstrapLoadError> {
+    let visual_capture = visual_capture_requested();
+    let audio_disabled = audio_disabled_for_run(
+        headless,
+        visual_capture,
+        std::env::var_os("OPENTTDRS_DISABLE_AUDIO").is_some(),
+    );
     let window_plugin = if headless {
         WindowPlugin {
             primary_window: None,
@@ -145,10 +159,12 @@ pub(crate) fn build_client_app(
         // desactive el plugin y se use un runner de schedules (igual que `MinimalPlugins`).
         default_plugins = default_plugins
             .disable::<WinitPlugin>()
-            .disable::<AudioPlugin>()
             .add_after::<TaskPoolPlugin>(ScheduleRunnerPlugin::run_loop(Duration::from_secs_f64(
                 1.0 / 60.0,
             )));
+    }
+    if audio_disabled {
+        default_plugins = default_plugins.disable::<AudioPlugin>();
     }
 
     let mut app = App::new();
@@ -189,7 +205,13 @@ pub(crate) fn build_client_app(
     app.insert_resource(sim_world);
     app.init_resource::<SuspendedGameSession>();
     app.init_resource::<EditorSession>();
+    app.insert_resource(ClientAudioEnabled(!audio_disabled));
     crate::audio::insert_asset_root(&mut app, asset_root);
+    // La UI de sonido consulta este estado incluso durante una captura
+    // silenciosa. El plugin de música añade los sistemas de reproducción sólo
+    // cuando existe un backend de audio, pero el modelo de la jukebox sigue
+    // siendo seguro para que la UI no dependa del dispositivo local.
+    app.init_resource::<MusicState>();
     app.insert_resource(RemSize(14.0));
     app.add_plugins(NetworkPlugin { cli: net_cli });
     app.add_plugins((
@@ -201,10 +223,8 @@ pub(crate) fn build_client_app(
             ClientUiPlugin,
             SimulationPlugin,
             SimEventsPlugin,
-            WorldSfxPlugin,
         ),
         (
-            MusicPlugin,
             PersistencePlugin,
             WindowStatusPlugin,
             WaterAnimationPlugin,
@@ -226,6 +246,9 @@ pub(crate) fn build_client_app(
             RenderTracePlugin,
         ),
     ));
+    if !audio_disabled {
+        app.add_plugins((WorldSfxPlugin, MusicPlugin));
+    }
     app.add_plugins((DebugGizmosPlugin, CameraControlPlugin));
     if !headless {
         app.add_plugins(AppIconPlugin::new(asset_root));
@@ -267,6 +290,14 @@ mod tests {
         );
         assert_eq!(super::parse_capture_window_resolution("319x240"), None);
         assert_eq!(super::parse_capture_window_resolution("1280"), None);
+    }
+
+    #[test]
+    fn visual_capture_and_explicit_switch_disable_audio_only_for_that_run() {
+        assert!(super::audio_disabled_for_run(true, false, false));
+        assert!(super::audio_disabled_for_run(false, true, false));
+        assert!(super::audio_disabled_for_run(false, false, true));
+        assert!(!super::audio_disabled_for_run(false, false, false));
     }
 
     #[test]

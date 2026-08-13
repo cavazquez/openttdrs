@@ -2,6 +2,8 @@
 
 use bevy::prelude::*;
 
+use crate::audio::ClientAudioEnabled;
+
 /// Tipo de efecto corto del HUD.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum HudSfxKind {
@@ -52,11 +54,12 @@ pub(crate) fn flush_hud_sfx(
 }
 
 pub(crate) fn load_hud_sfx(
+    audio_enabled: Res<ClientAudioEnabled>,
     mut handles: ResMut<HudSfxHandles>,
     asset_server: Res<AssetServer>,
     mut done: Local<bool>,
 ) {
-    if *done {
+    if *done || !audio_enabled.0 {
         return;
     }
     handles.error = Some(asset_server.load("assets/sounds/hud_soft.wav"));
@@ -81,7 +84,14 @@ pub(crate) fn play_hud_sfx(
     mut reader: MessageReader<PlayHudSfx>,
     sound: Res<HudSfxHandles>,
     hud: Res<super::SimHudControls>,
+    audio_enabled: Res<ClientAudioEnabled>,
 ) {
+    if !audio_enabled.0 {
+        // Drenar los mensajes para que una captura larga no acumule eventos
+        // de UI que nunca se reproducirán.
+        for _ in reader.read() {}
+        return;
+    }
     let volume = hud.sfx_volume.clamp(0.0, 1.0);
     for PlayHudSfx(kind) in reader.read() {
         let handle = match kind {

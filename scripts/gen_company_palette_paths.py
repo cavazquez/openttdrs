@@ -29,6 +29,7 @@ def main() -> None:
         SPRITES / "vehicle_gfx_data_generated.rs",
         SPRITES / "road_stop_gfx_data_generated.rs",
         SPRITES / "road_depot_gfx_data_generated.rs",
+        SPRITES / "rail_depot_gfx_data_generated.rs",
     ]
     paths: set[str] = set()
     for src in sources:
@@ -42,6 +43,10 @@ def main() -> None:
     # vanilla del depósito naval; no están descriptas por una tabla Rust.
     paths.update(
         {
+            # `APT_PIER_NW_NE` / `APT_PIER`: ambas capas TILE_SEQ usan
+            # `PALETTE_MODIFIER_COLOUR` (station_land.h).
+            "airport_jetway_3.png",
+            "airport_passenger_tunnel.png",
             "ship_depot_se_front.png",
             "ship_depot_sw_front.png",
             "ship_depot_nw.png",

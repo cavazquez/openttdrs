@@ -402,6 +402,146 @@ fn ship_depot_uses_water_and_all_vanilla_two_tile_parts() {
 }
 
 #[test]
+fn airport_pier_tile_seq_layers_spawn_for_both_import_paths() {
+    let assets = boot_assets_app();
+    let expected_apron = assets.airport_apron.clone();
+    let expected_jetway = assets.airport_jetway_3.clone();
+    let expected_tunnel = assets.airport_passenger_tunnel.clone();
+    let mut map = fresh_map8();
+    let station_coord = TileCoord::new(2, 2);
+    let imported_coord = TileCoord::new(4, 2);
+
+    // MP_STATION crudo: StationType::Airport (bits 3..6 = 1) y
+    // StationGfx 27 = APT_PIER_NW_NE.
+    map.set_tile(
+        station_coord,
+        Tile {
+            kind: TileKind::Station,
+            mapt: 0x50,
+            m5: 27,
+            m6: 1 << 3,
+            ..tile_template()
+        },
+    )
+    .expect("station airport pier");
+
+    // El importador también conserva algunos aeropuertos como TileKind::Airport.
+    // La asociación STATION (MAP2 + airport_tiles) debe habilitar el mismo
+    // StationGfx 28 = APT_PIER, no reducirlo al AirportPiece interno.
+    map.set_tile(
+        imported_coord,
+        Tile {
+            kind: TileKind::Airport,
+            mapt: 0x50,
+            m5: 28,
+            m2: 17,
+            ..tile_template()
+        },
+    )
+    .expect("imported airport pier");
+    let mut imported_station = Station::new_with_kind(imported_coord, StopKind::Airport);
+    imported_station.ottd_station_id = Some(17);
+    imported_station.airport_tiles.push(imported_coord);
+    let imported_stations = vec![imported_station];
+
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let expected_pos = |coord: TileCoord, gfx: u8| {
+        let ctx = TileRenderContext::new(
+            &map,
+            &grid,
+            u32::try_from(coord.x).expect("positive x"),
+            u32::try_from(coord.y).expect("positive y"),
+        );
+        let layer = crate::sprites::airport_station_layers_for_gfx(gfx)[0];
+        let (xrel, yrel) = crate::sprites::airport_station_overlay_rel(&layer);
+        crate::iso::overlay_pos(
+            ctx.iso_pos,
+            xrel,
+            yrel,
+            layer.w,
+            layer.h,
+            ctx.info.base_z,
+            layer.z,
+            ctx.tx_i32(),
+            ctx.ty_i32(),
+        )
+    };
+    let expected_jetway_pos = expected_pos(station_coord, 27);
+    let expected_tunnel_pos = expected_pos(imported_coord, 28);
+
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world
+        .run_system_once(
+            move |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                let dims = m.0.dimensions();
+                spawn_station_tile(
+                    &mut commands,
+                    &m.0,
+                    dims,
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, 2, 2),
+                    &[],
+                    4.0,
+                    true,
+                    &[],
+                    &[],
+                    None,
+                    None,
+                    &[],
+                    None,
+                    &[],
+                    None,
+                    &[],
+                    TEST_CLIMATE,
+                    &[],
+                );
+                spawn_transport_object_tile(
+                    &mut commands,
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, 4, 2),
+                    4.0,
+                    false,
+                    &m.0,
+                    dims,
+                    &imported_stations,
+                    &[],
+                    None,
+                    &[],
+                    &[],
+                    None,
+                    None,
+                );
+            },
+        )
+        .expect("airport pier spawn");
+
+    let mut aprons = 0;
+    let mut jetways = Vec::new();
+    let mut tunnels = Vec::new();
+    for (sprite, transform) in world.query::<(&Sprite, &Transform)>().iter(&world) {
+        if expected_apron.matches(sprite) {
+            aprons += 1;
+        }
+        if expected_jetway.matches(sprite) {
+            jetways.push(transform.translation);
+        }
+        if expected_tunnel.matches(sprite) {
+            tunnels.push(transform.translation);
+        }
+    }
+    assert_eq!(aprons, 2, "cada pier comienza con SPR_AIRPORT_APRON");
+    assert_eq!(jetways, vec![expected_jetway_pos]);
+    assert_eq!(tunnels, vec![expected_tunnel_pos]);
+}
+
+#[test]
 fn spawn_land_house_industry_generics_and_batches() {
     let assets = boot_assets_app();
     let mut map = fresh_map8();

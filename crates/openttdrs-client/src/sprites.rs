@@ -3,6 +3,8 @@
 use bevy::prelude::Color;
 use openttdrs_core::prelude::*;
 
+#[path = "sprites/airport_station_draw_data_generated.rs"]
+mod airport_station_draw_data_generated;
 #[path = "sprites/bridge_draw_data_generated.rs"]
 #[allow(dead_code)]
 mod bridge_draw_data_generated;
@@ -214,6 +216,9 @@ pub use field_draw_data_generated::{
     FENCE_SPRITE_META, FIELD_STATES,
 };
 
+pub use airport_station_draw_data_generated::{
+    AirportStationLayer, airport_station_layers_for_gfx,
+};
 pub use bridge_sprites_generated::{
     BridgeDeckSpriteIds, bridge_deck_sprite_ids, bridge_ramp_sprite_id, bridge_sprite_meta,
 };
@@ -222,6 +227,17 @@ pub use bridge_sprites_generated::{
 pub(crate) use bridge_structure_palette::{
     BridgePaletteSprites, bridge_structure_palette_for_sprite,
 };
+
+/// `xrel`/`yrel` para una capa aeroportuaria `TILE_SEQ`.
+///
+/// OpenTTD posiciona `APT_PIER_NW_NE` y `APT_PIER` con el origen local de
+/// `DrawTileSeq` y los offsets NFO del sprite, no con el centro del tile. El
+/// renderer usa media escala de `RemapCoords`, igual que las estaciones rail.
+#[must_use]
+pub fn airport_station_overlay_rel(layer: &AirportStationLayer) -> (f32, f32) {
+    let off = crate::iso::remap_tile_offset(layer.dx, layer.dy, layer.dz) * 0.5;
+    (off.x + layer.x_offs, layer.y_offs - off.y)
+}
 pub use shore_draw_data_generated::{SHORE_META, SHORE_SPRITE_COUNT, TILEH_TO_SHORE_SPRITE};
 pub use tunnel::{
     rail_tunnel_front_atlas_name, rail_tunnel_front_sprite_id, rail_tunnel_rear_atlas_name,
@@ -565,6 +581,34 @@ mod tram_road_overlay_tests {
             tram_flat_sprite_index(12, 0x0A),
             Some(road_flat_sprite_index(12, 0x0A))
         );
+    }
+}
+
+#[cfg(test)]
+mod airport_station_draw_tests {
+    use super::{airport_station_layers_for_gfx, airport_station_overlay_rel};
+
+    #[test]
+    fn airport_pier_tile_seq_matches_openttd_station_land_contract() {
+        // `station_land.h`: APT_PIER_NW_NE usa (3, 2, 0, 3, 3, 14, 2661)
+        // y APT_PIER usa (0, 8, 0, 14, 3, 14, 2662). Estos son los bounds
+        // que OpenTTD entrega a AddSortableSpriteToDraw.
+        let jetway = airport_station_layers_for_gfx(27);
+        assert_eq!(jetway.len(), 1);
+        assert_eq!(jetway[0].sprite_id, 2661);
+        assert_eq!((jetway[0].dx, jetway[0].dy, jetway[0].dz), (3.0, 2.0, 0.0));
+        assert_eq!((jetway[0].sx, jetway[0].sy, jetway[0].sz), (3, 3, 14));
+
+        let tunnel = airport_station_layers_for_gfx(28);
+        assert_eq!(tunnel.len(), 1);
+        assert_eq!(tunnel[0].sprite_id, 2662);
+        assert_eq!((tunnel[0].dx, tunnel[0].dy, tunnel[0].dz), (0.0, 8.0, 0.0));
+        assert_eq!((tunnel[0].sx, tunnel[0].sy, tunnel[0].sz), (14, 3, 14));
+        // RemapCoords × 0.5 para dy=8: (+16, -8); NFO = (-29, -10).
+        // El resultado no puede volver a ser el centro del tile.
+        assert_eq!(airport_station_overlay_rel(&tunnel[0]), (-13.0, -2.0));
+        assert!(airport_station_layers_for_gfx(26).is_empty());
+        assert!(airport_station_layers_for_gfx(29).is_empty());
     }
 }
 

@@ -99,6 +99,9 @@ pub(crate) struct WorldAssets {
     pub(crate) airport_runways: [AtlasSprite; 5],
     pub(crate) airport_taxiways: [AtlasSprite; 9],
     pub(crate) airport_concourse: AtlasSprite,
+    /// Capas `TILE_SEQ` de los piers airport 27/28.
+    pub(crate) airport_jetway_3: AtlasSprite,
+    pub(crate) airport_passenger_tunnel: AtlasSprite,
     /// Radar vanilla: `airport_radar_00` … `_11`.
     pub(crate) airport_radar: [AtlasSprite; 12],
     /// Esclusa: [NS, EW] × [lower, middle, upper].
@@ -384,6 +387,8 @@ impl WorldAssets {
         let airport_taxiways =
             std::array::from_fn(|i| atlas.get(&format!("airport_taxiway_{i}.png")));
         let airport_concourse = atlas.get("airport_concourse.png");
+        let airport_jetway_3 = atlas.get("airport_jetway_3.png");
+        let airport_passenger_tunnel = atlas.get("airport_passenger_tunnel.png");
         let airport_radar: [AtlasSprite; 12] =
             std::array::from_fn(|i| atlas.get(&format!("airport_radar_{i:02}.png")));
         // Esclusas: `scripts/gen_water_lock_tiles.py` (Action5 canals SPR_LOCK_*).
@@ -726,6 +731,8 @@ impl WorldAssets {
             airport_runways,
             airport_taxiways,
             airport_concourse,
+            airport_jetway_3,
+            airport_passenger_tunnel,
             airport_radar,
             water_lock,
             road_tunnels,
@@ -781,9 +788,11 @@ impl WorldAssets {
             // `APT_RUNWAY_1..4` y `APT_RUNWAY_5`.
             14..=17 => &self.airport_runways[usize::from(gfx - 14) + 1],
             46 => &self.airport_runways[2],
-            // Terminal A, concourse, terminal B/C.
+            // Terminal A, concourse, terminal B/C. Los piers 27/28 parten
+            // de apron y sus capas `TILE_SEQ` se emiten en `objects.rs`.
             19 => &self.airport_terminals[0],
-            21 | 27..=28 => &self.airport_concourse,
+            21 => &self.airport_concourse,
+            27..=28 => &self.airport_apron,
             22 => &self.airport_terminals[1],
             23 => &self.airport_terminals[2],
             _ => self.airport_piece_sprite(AirportPiece::from_station_gfx(gfx)),
@@ -936,6 +945,20 @@ mod world_assets_tests {
         assert_eq!(
             assets.rail_tunnel_portal_front_sprite(RailType::Monorail, 2),
             &atlas.get("tunnel_mono_front_sw.png")
+        );
+        // `station_land.h`: los StationGfx 27/28 parten de SPR_AIRPORT_APRON;
+        // el jetway/túnel se añaden como capas TILE_SEQ en objects.rs.
+        assert_eq!(
+            assets.airport_station_gfx_sprite(27),
+            &atlas.get("airport_apron.png")
+        );
+        assert_eq!(
+            assets.airport_station_gfx_sprite(28),
+            &atlas.get("airport_apron.png")
+        );
+        assert_ne!(
+            assets.airport_station_gfx_sprite(28),
+            &atlas.get("airport_concourse.png")
         );
         // Los depósitos usan tres bloques de sprites distintos en OpenTTD.
         // Así la precarga no puede volver a degradar mono/maglev al edificio

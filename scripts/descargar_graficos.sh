@@ -1400,6 +1400,8 @@ python3 "$(dirname "$0")/gen_rail_signal_sprites.py" || true
 # Banco Action5 tipo 04 (presignals/PBS) → rail_5088..5327 (`SPR_SIGNALS_BASE`).
 python3 "$(dirname "$0")/gen_rail_signal_action5_sprites.py" || true
 python3 "$(dirname "$0")/gen_rail_station_draw_data.py" || true
+# Piers del aeropuerto: base apron + jetway/túnel peatonal con TILE_SEQ/NFO.
+python3 "$(dirname "$0")/gen_airport_station_draw_data.py"
 # Portales de túnel: metadata NFO dependiente del modo gráfico (8bpp/32bpp).
 python3 "$(dirname "$0")/gen_tunnel_draw_data.py" || true
 # Sprites de puentes por tipo (tablero + pilares; ver gen_bridge_sprites.py).

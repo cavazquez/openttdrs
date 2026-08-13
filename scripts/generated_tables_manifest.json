@@ -88,9 +88,22 @@
       "inputs": [],
       "check": "hash",
       "requires_opengfx": true,
-      "output_sha256": "c9f0c4b2b3dc3604440fb0b9d849c0695237126365c8f627d920e912816e8cc3",
+      "output_sha256": "fb46e602aa450415fe96eb5420d6d7b62826def684ea71769d529900817f8265",
       "license": "layout derivado de PNG OpenGFX locales",
-      "note": "Regenerado y verificado 2026-08-12 con el atlas OpenGFX local; incluye las familias de estación monorail/maglev. CI valida hash del .rs. El --check local valida además las páginas PNG píxel a píxel."
+      "note": "Regenerado y verificado 2026-08-13 con el atlas OpenGFX local; incluye las familias de estación monorail/maglev y los piers de aeropuerto. CI valida hash del .rs. El --check local valida además las páginas PNG píxel a píxel."
+    },
+    {
+      "id": "airport_station_draw_data",
+      "generator": "scripts/gen_airport_station_draw_data.py",
+      "output": "crates/openttdrs-client/src/sprites/airport_station_draw_data_generated.rs",
+      "inputs": [
+        "reference/openttd-upstream/src/table/station_land.h"
+      ],
+      "check": "hash",
+      "requires_opengfx": true,
+      "output_sha256": "b8a8a4d4c80069d2a40eeb2280d1d0ebf934b55aadd9e7cfbb47d8230cb306ca",
+      "license": "GPL-2.0-only (OpenTTD station_land.h) + metadatos NFO OpenGFX locales",
+      "note": "TILE_SEQ de APT_PIER_NW_NE/APT_PIER; la regresión Python contrasta la tabla fuente OpenTTD y las variantes 8bpp/32bpp."
     },
     {
       "id": "bridge_structure_palette",
@@ -165,6 +178,11 @@
     {
       "output": "crates/openttdrs-client/src/sprites/rail_station_draw_data_generated.rs",
       "generator": "scripts/gen_rail_station_draw_data.py"
+    },
+    {
+      "output": "crates/openttdrs-client/src/sprites/airport_station_draw_data_generated.rs",
+      "generator": "scripts/gen_airport_station_draw_data.py",
+      "pilot": true
     },
     {
       "output": "crates/openttdrs-client/src/sprites/road_stop_gfx_data_generated.rs",

@@ -1,6 +1,8 @@
 // Generado por scripts/gen_company_palette_paths.py — NO EDITAR A MANO.
 
-pub static COMPANY_PALETTE_STATIC_PATHS: [&str; 202] = [
+pub static COMPANY_PALETTE_STATIC_PATHS: [&str; 216] = [
+    "airport_jetway_3.png",
+    "airport_passenger_tunnel.png",
     "bus_stop_dt_x_e.png",
     "bus_stop_dt_x_w.png",
     "bus_stop_dt_y_e.png",
@@ -19,6 +21,18 @@ pub static COMPANY_PALETTE_STATIC_PATHS: [&str; 202] = [
     "bus_stop_sw_build_c.png",
     "rail_1412.png",
     "rail_1413.png",
+    "rail_depot_maglev_ne.png",
+    "rail_depot_maglev_nw.png",
+    "rail_depot_maglev_se_1.png",
+    "rail_depot_maglev_se_2.png",
+    "rail_depot_maglev_sw_1.png",
+    "rail_depot_maglev_sw_2.png",
+    "rail_depot_mono_ne.png",
+    "rail_depot_mono_nw.png",
+    "rail_depot_mono_se_1.png",
+    "rail_depot_mono_se_2.png",
+    "rail_depot_mono_sw_1.png",
+    "rail_depot_mono_sw_2.png",
     "rail_depot_ne.png",
     "rail_depot_nw.png",
     "rail_depot_se_1.png",

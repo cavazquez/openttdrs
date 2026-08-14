@@ -65,6 +65,52 @@ bool EnvEnabled(const char *name)
 	return value != "0" && value != "false" && value != "no" && value != "off";
 }
 
+int WorldScreenshotMinCall()
+{
+	const char *raw = std::getenv("OPENTTDRS_WORLD_SCREENSHOT_MIN_CALL");
+	if (raw == nullptr || raw[0] == '\0') return 2;
+	const int requested = std::atoi(raw);
+	return requested > 0 ? requested : 2;
+}
+
+/**
+ * `SC_DEFAULTZOOM` reusa la esquina virtual del viewport principal, pero le
+ * puede pedir al raster un tamaño distinto al de la ventana headless. Si no
+ * corregimos esa esquina, `ScrollMainWindowToTile` centra la tesela en el
+ * viewport original y la captura recortada queda desplazada. Mantener el
+ * centro virtual evita que el oráculo compare regiones distintas al cambiar
+ * la resolución.
+ */
+void CenterScreenshotViewportOnMainWindow(Window &window, uint32_t width, uint32_t height)
+{
+	ViewportData &viewport = *window.viewport;
+	const uint32_t zoom_factor = 1U << to_underlying(ZoomLevel::Viewport);
+	const int requested_virtual_width = static_cast<int>(width * zoom_factor);
+	const int requested_virtual_height = static_cast<int>(height * zoom_factor);
+	const int delta_x = (viewport.virtual_width - requested_virtual_width) / 2;
+	const int delta_y = (viewport.virtual_height - requested_virtual_height) / 2;
+	/* `UpdateViewportPosition` deriva virtual_left/top de scrollpos. Ajustar
+	 * solamente los campos virtuales duraría hasta el siguiente tick; mover
+	 * ambas posiciones de scroll conserva el recorte hasta que MakeScreenshot
+	 * consume el viewport en la tarea encolada. */
+	viewport.scrollpos_x += delta_x;
+	viewport.dest_scrollpos_x += delta_x;
+	viewport.scrollpos_y += delta_y;
+	viewport.dest_scrollpos_y += delta_y;
+}
+
+void LogScreenshotViewport(const Window &window, uint32_t width, uint32_t height)
+{
+	if (!EnvEnabled("OPENTTDRS_WORLD_SCREENSHOT_DEBUG")) return;
+	const ViewportData &viewport = *window.viewport;
+	std::fprintf(stderr,
+		"openttdrs world-screenshot: scroll=(%d,%d) dest=(%d,%d) virtual=(%d,%d %dx%d) capture=%ux%u\n",
+		viewport.scrollpos_x, viewport.scrollpos_y,
+		viewport.dest_scrollpos_x, viewport.dest_scrollpos_y,
+		viewport.virtual_left, viewport.virtual_top,
+		viewport.virtual_width, viewport.virtual_height, width, height);
+}
+
 /**
  * Normaliza las capas que son inherentemente temporales o configurables para
  * que una captura de paridad mida terreno e infraestructura, no nombres de
@@ -87,6 +133,14 @@ bool OpenttdrsMaybeCaptureWorldScreenshot()
 {
 	const char *output = std::getenv("OPENTTDRS_WORLD_SCREENSHOT_OUT");
 	if (output == nullptr || output[0] == '\0') return true;
+
+	/* Dedicated + -g primero carga una partida temporal. Igual que los
+	 * exportadores raw/semantic/draw, ignorar ese primer AfterLoadGame evita
+	 * que el PNG pertenezca al mapa de arranque en lugar del .sav solicitado. */
+	static int call_count = 0;
+	call_count++;
+	if (call_count < WorldScreenshotMinCall()) return true;
+
 	if (EnvEnabled("OPENTTDRS_WORLD_SCREENSHOT_CLEAN")) {
 		PrepareCleanWorldScreenshot();
 	}
@@ -117,13 +171,20 @@ bool OpenttdrsMaybeCaptureWorldScreenshot()
 	VideoDriver::GetInstance()->QueueOnMainThread([center, width, height, target] {
 		VideoDriver::GetInstance()->QueueOnMainThread([center, width, height, target] {
 		if (center.has_value()) {
-			ScrollMainWindowToTile(*center, true);
+			const bool moved = ScrollMainWindowToTile(*center, true);
+			if (EnvEnabled("OPENTTDRS_WORLD_SCREENSHOT_DEBUG")) {
+				std::fprintf(stderr, "openttdrs world-screenshot: focus=(%u,%u) moved=%d\n",
+					TileX(*center), TileY(*center), moved);
+			}
 			/* El scroll instantáneo actualiza scrollpos, pero la captura de
 			 * viewport consume virtual_left/virtual_top. En una ejecución
 			 * headless no esperamos el siguiente DrawOverlappedWindow; forzamos
 			 * la misma actualización que haría ese frame antes de capturar. */
 			if (Window *main_window = GetMainWindow(); main_window != nullptr) {
 				UpdateViewportPosition(main_window, 0);
+				CenterScreenshotViewportOnMainWindow(*main_window, width, height);
+				UpdateViewportPosition(main_window, 0);
+				LogScreenshotViewport(*main_window, width, height);
 			}
 		}
 

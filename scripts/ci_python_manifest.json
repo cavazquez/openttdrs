@@ -83,6 +83,7 @@
     "scripts/test_industry_sprite_variants.py",
     "scripts/test_airport_station_source_contract.py",
     "scripts/test_world_draw_export_source_contract.py",
+    "scripts/test_world_screenshot_export_source_contract.py",
     "scripts/test_global_sprite_namespace.py",
     "scripts/compare_world_screenshots.py",
     "scripts/test_compare_world_screenshots.py"
@@ -113,6 +114,7 @@
     "scripts/test_industry_sprite_variants.py",
     "scripts/test_airport_station_source_contract.py",
     "scripts/test_world_draw_export_source_contract.py",
+    "scripts/test_world_screenshot_export_source_contract.py",
     "scripts/test_global_sprite_namespace.py",
     "scripts/test_compare_world_screenshots.py"
   ]

@@ -16,6 +16,8 @@
  * - OPENTTDRS_WORLD_SCREENSHOT_CENTER=x,y
  * - OPENTTDRS_WORLD_SCREENSHOT_RES=widthxheight
  * - OPENTTDRS_WORLD_SCREENSHOT_CLEAN=1 (pausa y oculta rótulos/animación)
+ * - OPENTTDRS_WORLD_SCREENSHOT_MIN_CALL=N (por defecto 2; omite la partida
+ *   temporal que el dedicado carga antes del .sav indicado con -g)
  */
 bool OpenttdrsMaybeCaptureWorldScreenshot();
 

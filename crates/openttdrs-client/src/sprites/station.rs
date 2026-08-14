@@ -23,6 +23,125 @@ pub enum StationTileClass {
     Other(u8),
 }
 
+/// Capa `TILE_SEQ_LINE` de un muelle vanilla (`_station_display_datas_dock`).
+///
+/// Los cuatro primeros `StationGfx` son la parte de tierra sobre una pendiente;
+/// los dos siguientes son la pieza plana que queda sobre el agua. OpenTTD no
+/// los intercambia: además del PNG, cada uno tiene un ancla NFO y una caja de
+/// ordenamiento diferente.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DockTileLayer {
+    pub sprite_id: u32,
+    pub path: &'static str,
+    pub dx: f32,
+    pub dy: f32,
+    pub dz: f32,
+    pub sx: i32,
+    pub sy: i32,
+    pub sz: i32,
+    pub w: f32,
+    pub h: f32,
+    pub x_offs: f32,
+    pub y_offs: f32,
+}
+
+const fn dock_layer(
+    sprite_id: u32,
+    path: &'static str,
+    origin: (f32, f32),
+    extent: (i32, i32),
+    nfo: (f32, f32, f32, f32),
+) -> DockTileLayer {
+    DockTileLayer {
+        sprite_id,
+        path,
+        dx: origin.0,
+        dy: origin.1,
+        dz: 0.0,
+        sx: extent.0,
+        sy: extent.1,
+        sz: 8,
+        w: nfo.0,
+        h: nfo.1,
+        x_offs: nfo.2,
+        y_offs: nfo.3,
+    }
+}
+
+/// Tabla de `station_land.h` + metadata NFO de OpenGFX para `2727..=2732`.
+const DOCK_TILE_LAYERS: [DockTileLayer; 6] = [
+    // StationGfx 0..=3: parte de tierra, indexada por DiagDirection.
+    dock_layer(
+        2727,
+        "assets/opengfx/tiles/dock_slope_ne.png",
+        (0.0, 4.0),
+        (16, 8),
+        (63.0, 31.0, -38.0, -12.0),
+    ),
+    dock_layer(
+        2728,
+        "assets/opengfx/tiles/dock_slope_se.png",
+        (4.0, 0.0),
+        (8, 16),
+        (64.0, 39.0, -23.0, -12.0),
+    ),
+    dock_layer(
+        2729,
+        "assets/opengfx/tiles/dock_slope_sw.png",
+        (0.0, 4.0),
+        (16, 8),
+        (64.0, 40.0, -39.0, -13.0),
+    ),
+    dock_layer(
+        2730,
+        "assets/opengfx/tiles/dock_slope_nw.png",
+        (4.0, 0.0),
+        (8, 16),
+        (63.0, 34.0, -23.0, -15.0),
+    ),
+    // StationGfx 4..=5: parte plana sobre el agua, por eje X/Y.
+    dock_layer(
+        2731,
+        "assets/opengfx/tiles/dock_flat_x.png",
+        (0.0, 4.0),
+        (16, 8),
+        (64.0, 55.0, -39.0, -28.0),
+    ),
+    dock_layer(
+        2732,
+        "assets/opengfx/tiles/dock_flat_y.png",
+        (4.0, 0.0),
+        (8, 16),
+        (64.0, 58.0, -23.0, -31.0),
+    ),
+];
+
+/// Normaliza un `StationGfx` de muelle igual que `GetStationTileLayout`.
+///
+/// Los saves válidos usan 0..=5. El fallback `gfx &= 1` conserva el
+/// comportamiento upstream ante un valor fuera de tabla, sin degradarlo al
+/// muelle plano de agua.
+#[must_use]
+pub const fn dock_tile_gfx(m5: u8) -> usize {
+    if m5 < DOCK_TILE_LAYERS.len() as u8 {
+        m5 as usize
+    } else {
+        (m5 & 1) as usize
+    }
+}
+
+/// Datos visuales completos de la variante de muelle almacenada en `m5`.
+#[must_use]
+pub const fn dock_tile_layer(m5: u8) -> DockTileLayer {
+    DOCK_TILE_LAYERS[dock_tile_gfx(m5)]
+}
+
+/// Indica si la variante es la mitad plana del muelle que está sobre el agua.
+#[must_use]
+pub const fn dock_tile_is_water_part(m5: u8) -> bool {
+    dock_tile_gfx(m5) >= 4
+}
+
 /// Capa de sprite de estación de tren (`TILE_SEQ_LINE` de `station_land.h`).
 ///
 /// `dx`/`dy`/`dz` son el origen del bounding box en unidades de mundo OTTD
@@ -531,6 +650,61 @@ mod tests {
             station_tile_class(STATION_TYPE_OILRIG << 3, Some(StopKind::Airport)),
             StationTileClass::Oilrig
         );
+    }
+
+    #[test]
+    fn dock_layouts_keep_the_upstream_slope_water_split_and_tile_seq_boxes() {
+        // `station_land.h`: 0..=3 son la parte en tierra por DiagDirection;
+        // 4/5 son las piezas de agua por eje. Kale usa, entre otros, 2/4 en
+        // (137,2)/(138,2), de modo que intercambiarlos deja el muelle cortado.
+        let slope_ne = dock_tile_layer(0);
+        assert_eq!(slope_ne.sprite_id, 2727);
+        assert_eq!(
+            (
+                slope_ne.dx,
+                slope_ne.dy,
+                slope_ne.sx,
+                slope_ne.sy,
+                slope_ne.sz
+            ),
+            (0.0, 4.0, 16, 8, 8)
+        );
+        assert_eq!(
+            (slope_ne.w, slope_ne.h, slope_ne.x_offs, slope_ne.y_offs),
+            (63.0, 31.0, -38.0, -12.0)
+        );
+
+        let slope_sw = dock_tile_layer(2);
+        assert_eq!(slope_sw.sprite_id, 2729);
+        assert_eq!(
+            (slope_sw.dx, slope_sw.dy, slope_sw.sx, slope_sw.sy),
+            (0.0, 4.0, 16, 8)
+        );
+        assert!(!dock_tile_is_water_part(2));
+
+        let water_x = dock_tile_layer(4);
+        assert_eq!(water_x.sprite_id, 2731);
+        assert_eq!(
+            (water_x.dx, water_x.dy, water_x.sx, water_x.sy),
+            (0.0, 4.0, 16, 8)
+        );
+        assert_eq!(
+            (water_x.w, water_x.h, water_x.x_offs, water_x.y_offs),
+            (64.0, 55.0, -39.0, -28.0)
+        );
+        assert!(dock_tile_is_water_part(4));
+
+        let water_y = dock_tile_layer(5);
+        assert_eq!(water_y.sprite_id, 2732);
+        assert_eq!(
+            (water_y.dx, water_y.dy, water_y.sx, water_y.sy),
+            (4.0, 0.0, 8, 16)
+        );
+        assert!(dock_tile_is_water_part(5));
+
+        // `GetStationTileLayout`: gfx fuera del rango vuelve a `gfx & 1`.
+        assert_eq!(dock_tile_gfx(6), 0);
+        assert_eq!(dock_tile_gfx(7), 1);
     }
 
     #[test]

@@ -5,8 +5,8 @@ use bevy::asset::AssetPlugin;
 use bevy::ecs::system::RunSystemOnce;
 use bevy::image::ImagePlugin;
 use bevy::prelude::*;
-use openttdrs_core::Climate;
 use openttdrs_core::prelude::*;
+use openttdrs_core::{Climate, WaterClass, set_water_class_m1};
 
 const TEST_CLIMATE: Climate = Climate::Temperate;
 const TEST_WORLD_SEED: u64 = 0;
@@ -17,7 +17,9 @@ use crate::render::tiles::{
     spawn_generic_land_tile, spawn_house_tile, spawn_industry_tile, spawn_rail_tile,
     spawn_road_tile, spawn_station_tile, spawn_transport_object_tile,
 };
-use crate::render::{CompanyColoredSprites, MapSpriteBatches, RenderGrid, TileRenderContext};
+use crate::render::{
+    CompanyColoredSprites, MapSpriteBatches, MapVisualLayer, RenderGrid, TileRenderContext,
+};
 use crate::sprites::{RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS};
 
 #[derive(Resource)]
@@ -214,6 +216,150 @@ fn oilrig_station_uses_water_even_when_its_station_has_airport_service() {
             .all(|sprite| !airport_apron.matches(sprite)),
         "un Oilrig no puede degradarse al apron de aeropuerto"
     );
+}
+
+/// Un muelle vanilla son dos teselas distintas: la de tierra conserva una
+/// pendiente y la de agua es plana. En Kale, (137,2)/(138,2) son precisamente
+/// la pareja `m5=2/4`; intercambiar sus layouts deja el muelle aparentemente
+/// cortado y omitir el suelo hace desaparecer la costa.
+#[test]
+fn dock_station_keeps_vanilla_slope_and_water_halves() {
+    let assets = boot_assets_app();
+    let slope_dock = assets.dock_slope[2].clone(); // SPR_DOCK_SLOPE_SW = 2729.
+    let water_dock = assets.dock_flat[0].clone(); // SPR_DOCK_FLAT_X = 2731.
+    let shore = assets.shore[crate::iso::shore_png_index(12)].clone();
+    let land = TileCoord::new(2, 2);
+    let water = TileCoord::new(3, 2);
+    let mut map = Map::new_flat(5, 5, 0);
+
+    map.set_tile(
+        land,
+        Tile {
+            kind: TileKind::Station,
+            mapt: 0x50,
+            m5: 2,
+            m6: openttdrs_core::STATION_TYPE_DOCK << 3,
+            ..tile_template()
+        },
+    )
+    .expect("dock land tile");
+    map.set_tile(
+        water,
+        Tile {
+            kind: TileKind::Station,
+            mapt: 0x50,
+            m1: set_water_class_m1(0, WaterClass::Sea),
+            m5: 4,
+            m6: openttdrs_core::STATION_TYPE_DOCK << 3,
+            ..tile_template()
+        },
+    )
+    .expect("dock water tile");
+    // SLOPE_NE: N y E elevadas. `set_tile` reemplaza también la altura, por
+    // eso la pendiente debe escribirse una vez fijadas ambas mitades. El
+    // `DiagDirection` de m5=2 es SW: su agua queda a +X en `(3,2)`.
+    map.set_height(TileCoord::new(2, 2), 1)
+        .expect("north height");
+    map.set_height(TileCoord::new(2, 3), 1)
+        .expect("east height");
+
+    let grid = RenderGrid::from_map(&map, 5, 5);
+    let land_ctx = TileRenderContext::new(&map, &grid, 2, 2);
+    let water_ctx = TileRenderContext::new(&map, &grid, 3, 2);
+    assert_eq!(land_ctx.info.tileh, 12, "la mitad terrestre debe ser NE");
+    assert_eq!(water_ctx.info.tileh, 0, "la mitad de agua debe ser plana");
+
+    let expected_layer_pos = |ctx: &TileRenderContext, m5: u8| {
+        let layer = crate::sprites::dock_tile_layer(m5);
+        let local = crate::iso::remap_tile_offset(layer.dx, layer.dy, layer.dz) * 0.5;
+        crate::iso::overlay_pos(
+            ctx.iso_pos + local,
+            layer.x_offs,
+            layer.y_offs,
+            layer.w,
+            layer.h,
+            ctx.info.base_z,
+            0.04,
+            ctx.tx_i32(),
+            ctx.ty_i32(),
+        )
+    };
+    let expected_slope_pos = expected_layer_pos(&land_ctx, 2);
+    let expected_water_pos = expected_layer_pos(&water_ctx, 4);
+
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world
+        .run_system_once(
+            move |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                for coord in [land, water] {
+                    spawn_station_tile(
+                        &mut commands,
+                        &m.0,
+                        m.0.dimensions(),
+                        &a.0,
+                        None,
+                        None,
+                        &TileRenderContext::new(
+                            &m.0,
+                            &g.0,
+                            u32::try_from(coord.x).expect("positive x"),
+                            u32::try_from(coord.y).expect("positive y"),
+                        ),
+                        &[],
+                        4.0,
+                        true,
+                        &[],
+                        &[],
+                        None,
+                        None,
+                        &[],
+                        None,
+                        &[],
+                        None,
+                        &[],
+                        TEST_CLIMATE,
+                        &[],
+                    );
+                }
+            },
+        )
+        .expect("dock spawn");
+
+    assert_eq!(
+        world.query::<&MapVisualLayer>().iter(&world).count(),
+        4,
+        "cada mitad aporta exactamente suelo y una capa TILE_SEQ; no césped genérico extra"
+    );
+    assert_eq!(
+        world
+            .query::<&crate::render::WaterTile>()
+            .iter(&world)
+            .count(),
+        1,
+        "la mitad plana conserva su agua animada"
+    );
+    let rendered: Vec<_> = world
+        .query::<(&Sprite, &Transform)>()
+        .iter(&world)
+        .collect();
+    assert!(
+        rendered.iter().any(|(sprite, _)| shore.matches(sprite)),
+        "la mitad inclinada frente al mar debe usar la costa OpenTTD"
+    );
+
+    let slope_pos = rendered
+        .iter()
+        .find_map(|(sprite, transform)| slope_dock.matches(sprite).then_some(transform.translation))
+        .expect("pieza de muelle SW");
+    let water_pos = rendered
+        .iter()
+        .find_map(|(sprite, transform)| water_dock.matches(sprite).then_some(transform.translation))
+        .expect("pieza de muelle plana X");
+    assert_eq!(slope_pos, expected_slope_pos);
+    assert_eq!(water_pos, expected_water_pos);
 }
 
 /// Una bahía vial normal ya contiene todo el suelo en su layout de estación.

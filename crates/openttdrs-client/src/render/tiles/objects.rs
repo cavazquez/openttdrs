@@ -8,13 +8,13 @@ use openttdrs_core::{
 use super::bridge_draw::{bridge_span_at, spawn_bridge_deck};
 use super::{
     catenary_under_low_bridge,
-    helpers::{FLAT_WATER_LAYER_FRAC, spawn_forced_leveled_foundation},
+    helpers::{FLAT_WATER_LAYER_FRAC, SHORE_LAYER_FRAC, spawn_forced_leveled_foundation},
     sloped_or_flat_image, spawn_ground_sprite,
 };
 use crate::iso::{
     TILE_HALF_H, ground_draw_z, ground_tile_pos_half, overlay_pos, remap_tile_offset,
-    road_depot_build_sprite_center, road_stop_build_sprite_center, slope_half_h, tile_pos,
-    tile_pos_half,
+    road_depot_build_sprite_center, road_stop_build_sprite_center, shore_png_index,
+    shore_sprite_half_h, slope_half_h, slope_sprite_offset, tile_pos, tile_pos_half,
 };
 use crate::render::catenary_newgrf::catenary_sprite_colored;
 use crate::render::station_newgrf::{NewGrfStationSpriteCache, newgrf_station_def_for_tile};
@@ -24,16 +24,16 @@ use crate::render::{
     WaterTile, WorldAssets, sprite_from_atlas_or_company_white_colour,
 };
 use crate::sprites::{
-    CompanyColour, ROAD_DEPOT_GROUND_SPRITE_ID, RoadStopLayerGfx, StationTileClass,
+    CompanyColour, DockTileLayer, ROAD_DEPOT_GROUND_SPRITE_ID, RoadStopLayerGfx, StationTileClass,
     TransparencyOption, airport_station_base_for_gfx, airport_station_ground_layers_for_gfx,
     airport_station_layers_for_gfx, airport_station_overlay_rel_for_sprite,
     airport_station_sprite_for_id, catenary_hidden, catenary_pylon_world_z_delta,
     catenary_reference_sprite_id, catenary_sprite_color, catenary_tunnel_wire_sprite,
     catenary_wire_world_z_delta, collect_catenary_pylons_from_map_with_pcp_override,
-    collect_catenary_wire_draws_from_map, is_hidden, log_unknown_station_type_once,
-    rail_depot_build_layers, rail_depot_seq_gfx, rail_depot_visual_type_index,
-    rail_ghost_overlay_offset, rail_pbs_reservation_offset, rail_station_draw_layers,
-    rail_station_ground_track_sprite_for_type, rail_station_layer_bounds,
+    collect_catenary_wire_draws_from_map, dock_tile_gfx, dock_tile_is_water_part, dock_tile_layer,
+    is_hidden, log_unknown_station_type_once, rail_depot_build_layers, rail_depot_seq_gfx,
+    rail_depot_visual_type_index, rail_ghost_overlay_offset, rail_pbs_reservation_offset,
+    rail_station_draw_layers, rail_station_ground_track_sprite_for_type, rail_station_layer_bounds,
     rail_station_layer_for_type, rail_station_overlay_rel, rail_station_sprite_meta,
     rail_waypoint_draw_layers, rail_waypoint_layer_meta, rail_waypoint_sprite_center,
     remap_rail_sprite_id, road_depot_build_layers, road_depot_seq_gfx, road_flat_sprite_index,
@@ -84,6 +84,167 @@ fn record_station_pbs_trace(tileh: u8, sprite_id: u32, fallback: bool) {
 
 fn station_company_palette(owner_colour: Option<CompanyColour>) -> u32 {
     775 + u32::from(owner_colour.unwrap_or_default().as_u8())
+}
+
+/// `SPR_FLAT_BARE_LAND`; `DrawClearLandTile(ti, 3)` suma tres bloques de 19
+/// sprites y el offset de pendiente a esta base.
+const SPR_FLAT_BARE_LAND: u32 = 3924;
+/// `SPR_FLAT_WATER_TILE`, la base que `DrawWaterClassGround` usa para mar.
+const SPR_FLAT_WATER_TILE: u32 = 4061;
+/// `SPR_SHORE_BASE`, resuelto por Action5 del baseset OpenGFX.
+const SPR_SHORE_BASE: u32 = 5936;
+
+fn dock_clear_land_sprite_id(tileh: u8) -> u32 {
+    SPR_FLAT_BARE_LAND + 3 * 19 + u32::from(slope_sprite_offset(tileh))
+}
+
+/// La mitad en tierra guarda el `DiagDirection` en `StationGfx`; el agua que
+/// decide si OpenTTD usa `DrawShoreTile` está exactamente en ese vecino.
+fn dock_water_neighbour_is_sea(map: &Map, coord: TileCoord, m5: u8) -> bool {
+    let (dx, dy) = openttdrs_core::diag_dir_offset(dock_tile_gfx(m5) as u8);
+    map.get(TileCoord::new(coord.x + dx, coord.y + dy))
+        .is_some_and(|tile| {
+            openttdrs_core::water_class(tile) == Some(openttdrs_core::WaterClass::Sea)
+        })
+}
+
+fn record_dock_layer_trace(layer: DockTileLayer, owner_colour: Option<CompanyColour>) {
+    WorldDrawTrace::record_sprite_with_palette_and_geometry(
+        "station-dock-layer",
+        "sortable",
+        layer.sprite_id,
+        station_company_palette(owner_colour),
+        false,
+        (0, 0, 0),
+        0,
+        Some(TraceSpriteBounds::new(
+            layer.dx as i32,
+            layer.dy as i32,
+            layer.dz as i32,
+            layer.sx,
+            layer.sy,
+            layer.sz,
+        )),
+    );
+}
+
+/// Dibuja el suelo que `DrawTile_Station` selecciona antes de `DrawRailTileSeq`.
+///
+/// Un muelle nunca recibe `FOUNDATION_LEVELED`: la pieza sobre tierra conserva
+/// la pendiente y usa costa sólo si la otra mitad pertenece al mar; la mitad
+/// plana usa el agua de su propia clase. Reducir las seis variantes a un PNG
+/// plano era la causa de los muelles recortados de Kale.
+fn spawn_dock_ground(
+    commands: &mut Commands,
+    map: &Map,
+    assets: &WorldAssets,
+    ctx: &TileRenderContext,
+    m5: u8,
+) {
+    let tileh = ctx.info.tileh;
+    let base_z = ctx.info.base_z;
+    if dock_tile_is_water_part(m5) {
+        WorldDrawTrace::record_sprite("station-dock-water", "ground", SPR_FLAT_WATER_TILE, false);
+        commands.spawn((
+            MapVisualLayer,
+            ctx.map_tile_chunk(),
+            WaterTile::ANIMATED,
+            assets.water.sprite(),
+            Transform::from_translation(tile_pos(
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+                base_z,
+                FLAT_WATER_LAYER_FRAC,
+            )),
+        ));
+        return;
+    }
+
+    if dock_water_neighbour_is_sea(map, ctx.coord, m5) {
+        let shore = shore_png_index(tileh);
+        WorldDrawTrace::record_sprite(
+            "station-dock-shore",
+            "ground",
+            SPR_SHORE_BASE + shore as u32,
+            false,
+        );
+        commands.spawn((
+            MapVisualLayer,
+            ctx.map_tile_chunk(),
+            assets.shore[shore].sprite(),
+            Transform::from_translation(tile_pos_half(
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+                base_z,
+                SHORE_LAYER_FRAC,
+                shore_sprite_half_h(tileh),
+            )),
+        ));
+    } else {
+        let slope = usize::from(slope_sprite_offset(tileh));
+        WorldDrawTrace::record_sprite(
+            "station-dock-land",
+            "ground",
+            dock_clear_land_sprite_id(tileh),
+            false,
+        );
+        spawn_ground_sprite(
+            commands,
+            &assets.grass_density[3][slope],
+            Color::WHITE,
+            ctx,
+            slope_half_h(tileh),
+        );
+    }
+}
+
+/// Emite la capa `TILE_SEQ_LINE` del muelle con el ancla NFO y la caja de
+/// ordenamiento de `station_land.h`. A diferencia del suelo, esta pieza se
+/// oculta junto a edificios cuando aplica la transparencia global.
+fn spawn_dock_layer(
+    commands: &mut Commands,
+    assets: &WorldAssets,
+    company: Option<&CompanyColoredSprites>,
+    owner_colour: Option<CompanyColour>,
+    ctx: &TileRenderContext,
+    m5: u8,
+) {
+    if buildings_hidden() {
+        return;
+    }
+
+    let gfx = dock_tile_gfx(m5);
+    let layer = dock_tile_layer(m5);
+    let image = if dock_tile_is_water_part(m5) {
+        &assets.dock_flat[gfx - 4]
+    } else {
+        &assets.dock_slope[gfx]
+    };
+    record_dock_layer_trace(layer, owner_colour);
+
+    let local = remap_tile_offset(layer.dx, layer.dy, layer.dz) * 0.5;
+    let pos = overlay_pos(
+        ctx.iso_pos + local,
+        layer.x_offs,
+        layer.y_offs,
+        layer.w,
+        layer.h,
+        ctx.info.base_z,
+        0.04,
+        ctx.tx_i32(),
+        ctx.ty_i32(),
+    );
+    commands.spawn((
+        MapVisualLayer,
+        ctx.map_tile_chunk(),
+        tint_building_sprite(sprite_from_atlas_or_company_white_colour(
+            company,
+            owner_colour,
+            image,
+            layer.path,
+        )),
+        Transform::from_translation(pos),
+    ));
 }
 
 /// `DrawTile_Station` nivela las paradas viales inclinadas antes de emitir el
@@ -722,6 +883,7 @@ pub(crate) fn spawn_station_tile(
                 | StationTileClass::RailWaypoint
                 | StationTileClass::Bus
                 | StationTileClass::Truck
+                | StationTileClass::Dock
         )
     {
         let grass = sloped_or_flat_image(tileh, &assets.grass, &assets.grass_slopes);
@@ -1087,27 +1249,8 @@ pub(crate) fn spawn_station_tile(
             ));
         }
         StationTileClass::Dock => {
-            if buildings_hidden() {
-                return;
-            }
-            let dock_half_h = if tileh == 0 {
-                TILE_HALF_H
-            } else {
-                slope_half_h(tileh)
-            };
-            let axis = usize::from(m5 & 1);
-            commands.spawn((
-                MapVisualLayer,
-                ctx.map_tile_chunk(),
-                tint_building_sprite(assets.dock_flat[axis].sprite()),
-                Transform::from_translation(tile_pos_half(
-                    ctx.tx_i32(),
-                    ctx.ty_i32(),
-                    base_z,
-                    0.03,
-                    dock_half_h,
-                )),
-            ));
+            spawn_dock_ground(commands, map, assets, ctx, m5);
+            spawn_dock_layer(commands, assets, company, owner_colour, ctx, m5);
         }
         StationTileClass::Buoy => {
             if buildings_hidden() {
@@ -2166,13 +2309,52 @@ fn spawn_rail_depot_tile(
 #[cfg(test)]
 mod tests {
     use super::{
-        airport_station_ground_layer_trace_offset, rail_depot_foundation_child_offset,
+        airport_station_ground_layer_trace_offset, dock_clear_land_sprite_id,
+        dock_water_neighbour_is_sea, rail_depot_foundation_child_offset,
         rail_depot_reservation_track_visible, road_depot_foundation_child_offset,
         road_stop_foundation_child_offset, station_catenary_wire_trace_geometry,
         station_rail_child_offset, station_rail_foundation_world_z_delta,
         tunnel_catenary_trace_geometry,
     };
+    use openttdrs_core::{Map, TileCoord, TileKind, WaterClass, set_water_class_m1};
+
     use crate::sprites::{CatenaryWireDraw, airport_station_ground_layers_for_gfx};
+
+    #[test]
+    fn dock_land_ground_uses_its_facing_water_class_and_full_clear_grass() {
+        let land = TileCoord::new(2, 2);
+        for (m5, water) in [
+            (0, TileCoord::new(1, 2)), // NE
+            (1, TileCoord::new(2, 3)), // SE
+            (2, TileCoord::new(3, 2)), // SW
+            (3, TileCoord::new(2, 1)), // NW
+        ] {
+            let mut map = Map::new_flat(5, 5, 0);
+            assert!(map.set_kind(water, TileKind::Water).is_ok());
+            assert!(
+                map.set_m1(water, set_water_class_m1(0, WaterClass::Sea))
+                    .is_ok()
+            );
+            assert!(
+                dock_water_neighbour_is_sea(&map, land, m5),
+                "m5={m5} debe consultar su mitad de agua"
+            );
+
+            assert!(
+                map.set_m1(water, set_water_class_m1(0, WaterClass::Canal))
+                    .is_ok()
+            );
+            assert!(
+                !dock_water_neighbour_is_sea(&map, land, m5),
+                "m5={m5} sobre canal/río usa DrawClearLandTile"
+            );
+        }
+
+        // `DrawClearLandTile(ti, 3)`: bare land + 3 × 19 + slope offset.
+        assert_eq!(dock_clear_land_sprite_id(0), 3981);
+        assert_eq!(dock_clear_land_sprite_id(12), 3993);
+        assert_eq!(dock_clear_land_sprite_id(29), 3996); // steep W → offset 15.
+    }
 
     #[test]
     fn rail_depot_reservation_is_hidden_behind_visible_ne_and_nw_buildings() {

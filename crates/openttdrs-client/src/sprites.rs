@@ -165,8 +165,9 @@ pub use rail::{
 pub(crate) use rail::{collect_rail_pbs_reservation_draws, collect_rail_sprites_for_surface};
 #[allow(unused_imports)]
 pub use station::{
-    RailStationLayer, RoadStopLayerGfx, StationTileClass, log_unknown_station_type_once,
-    rail_station_axis_y, rail_station_draw_layers, rail_station_ground_track_sprite,
+    DockTileLayer, RailStationLayer, RoadStopLayerGfx, StationTileClass, dock_tile_gfx,
+    dock_tile_is_water_part, dock_tile_layer, log_unknown_station_type_once, rail_station_axis_y,
+    rail_station_draw_layers, rail_station_ground_track_sprite,
     rail_station_ground_track_sprite_for_type, rail_station_layer_bounds,
     rail_station_layer_for_type, rail_station_overlay_rel, rail_station_roof_glass_sprite,
     rail_station_sprite_base_id, rail_station_sprite_id_for_type, rail_station_sprite_layers,

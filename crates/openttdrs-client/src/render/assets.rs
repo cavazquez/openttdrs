@@ -86,7 +86,9 @@ pub(crate) struct WorldAssets {
     /// Cada depósito ocupa dos teselas: `m5 & 1` selecciona la parte norte/sur
     /// y `m5 & 2` el eje. La parte sur suma una capa posterior pequeña.
     pub(crate) ship_depot: [AtlasSprite; 6],
-    /// Muelle plano: índice 0 = eje X, 1 = eje Y.
+    /// Muelle: las cuatro piezas de tierra se indexan por `DiagDirection`
+    /// (NE, SE, SW, NW); las dos planas quedan sobre agua por eje X/Y.
+    pub(crate) dock_slope: [AtlasSprite; 4],
     pub(crate) dock_flat: [AtlasSprite; 2],
     /// Boya (`buoy.png`).
     pub(crate) buoy: AtlasSprite,
@@ -374,6 +376,12 @@ impl WorldAssets {
             atlas.get("ship_depot_ne.png"),
             atlas.get("ship_depot_se_rear.png"),
             atlas.get("ship_depot_sw_rear.png"),
+        ];
+        let dock_slope = [
+            atlas.get("dock_slope_ne.png"),
+            atlas.get("dock_slope_se.png"),
+            atlas.get("dock_slope_sw.png"),
+            atlas.get("dock_slope_nw.png"),
         ];
         let dock_flat = [atlas.get("dock_flat_x.png"), atlas.get("dock_flat_y.png")];
         let buoy = atlas.get("buoy.png");
@@ -718,6 +726,7 @@ impl WorldAssets {
             road_depot_builds,
             rail_depot_builds,
             ship_depot,
+            dock_slope,
             dock_flat,
             buoy,
             airport_heliport,

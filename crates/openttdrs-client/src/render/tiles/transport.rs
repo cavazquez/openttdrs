@@ -30,9 +30,10 @@ use crate::sprites::{
     rail_ghost_overlay_offset, rail_pbs_reservation_offset, rail_tile_is_signals,
     rail_trackbits_for_render, remap_rail_sprite_id, road_bits_for_render, road_flat_sprite_color,
     road_flat_sprite_index, road_ground_sprite_id, road_streetlight_sprite_id, road_tile_roadside,
-    road_tile_snow_or_desert, roadside_is_paved, signal_screen_anchor_for_side,
-    signal_screen_position_for_side, signal_sprite_center_offset, track_fence_draws_for_tile,
-    track_fence_height_px, track_fence_sprite_meta, tram_flat_sprite_index,
+    road_tile_snow_or_desert, roadside_is_paved, signal_safe_slope_position_for_side,
+    signal_screen_anchor_for_side, signal_screen_position_for_side, signal_sprite_center_offset,
+    signal_world_position_for_side, track_fence_draws_for_tile, track_fence_height_px,
+    track_fence_sprite_meta, tram_flat_sprite_index,
 };
 
 /// Contexto de `DrawGroundSprite` para una pasada de vía. Una fundación crea
@@ -237,6 +238,40 @@ fn record_rail_pbs_trace(sprite_id: u32, fallback: bool, mode: RailTrackTraceMod
             );
         }
     }
+}
+
+/// Geometría que recibe `AddSortableSpriteToDraw` para una señal.
+///
+/// `DrawSingleSignal` conserva el punto visual de `SignalPositions`, pero
+/// evalúa el Z con `GetSafeSlopeZ`: en una media fundación los carriles
+/// ortogonales deben leer la esquina estable y no la posición del poste.
+fn signal_trace_geometry(
+    tileh: u8,
+    raw_base_z: u8,
+    trackbits: u8,
+    pos: u8,
+    track: u8,
+    signals_on_right: bool,
+) -> ((i32, i32), i32, TraceSpriteBounds) {
+    let (world_x, world_y) = signal_world_position_for_side(pos, signals_on_right);
+    let (slope_x, slope_y) = signal_safe_slope_position_for_side(pos, track, signals_on_right);
+    // `GetSafeSlopeZ` delega en `GetSlopePixelZ_Rail`, que aplica
+    // `GetRailFoundation` antes de evaluar `GetPartialPixelZ`. Usar la
+    // pendiente cruda aquí baja los postes sobre una fundación nivelada o de
+    // media tesela, aunque `DrawTrackBits` ya haya elegido el sprite correcto.
+    let (surface_tileh, surface_z_delta) =
+        openttdrs_core::rail_surface_slope_and_z(tileh, trackbits);
+    let safe_z = (i32::from(raw_base_z) + i32::from(surface_z_delta)) * 8
+        + i32::from(partial_pixel_z(
+            f32::from(slope_x),
+            f32::from(slope_y),
+            surface_tileh,
+        ));
+    (
+        (i32::from(world_x), i32::from(world_y)),
+        safe_z - i32::from(raw_base_z) * 8,
+        TraceSpriteBounds::new(0, 0, 0, 1, 1, 6),
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1140,6 +1175,14 @@ pub(crate) fn spawn_rail_tile(
             .get(usize::from(rail_type.as_u8()))
             .and_then(Option::as_ref);
         for (si, draw) in sig_draws.iter().copied().enumerate() {
+            let (world_xy, signal_z_delta, signal_bounds) = signal_trace_geometry(
+                ctx.info.tileh,
+                ctx.info.base_z,
+                render_tb,
+                draw.pos,
+                draw.track,
+                signals_on_right,
+            );
             let custom = if let (Some(spec), Some(cache), Some(images)) = (
                 signal_spec,
                 signal_sprites.as_deref_mut(),
@@ -1169,7 +1212,7 @@ pub(crate) fn spawn_rail_tile(
             } else {
                 None
             };
-            let (sprite, signal_xy) = if let Some(custom) = custom {
+            let (sprite, mut signal_xy) = if let Some(custom) = custom {
                 let anchor = signal_screen_anchor_for_side(
                     ctx.tx_i32(),
                     ctx.ty_i32(),
@@ -1201,6 +1244,17 @@ pub(crate) fn spawn_rail_tile(
                 (sprite, anchor + offset)
             } else {
                 let Some(img) = assets.rail.get(&draw.sprite_id) else {
+                    WorldDrawTrace::record_sprite_with_palette_and_world_geometry(
+                        "rail-signal",
+                        "sortable",
+                        draw.sprite_id,
+                        0,
+                        true,
+                        world_xy,
+                        signal_z_delta,
+                        (0, 0, 0),
+                        Some(signal_bounds),
+                    );
                     continue;
                 };
                 (
@@ -1216,6 +1270,22 @@ pub(crate) fn spawn_rail_tile(
                     ),
                 )
             };
+            WorldDrawTrace::record_sprite_with_palette_and_world_geometry(
+                "rail-signal",
+                "sortable",
+                draw.sprite_id,
+                0,
+                false,
+                world_xy,
+                signal_z_delta,
+                (0, 0, 0),
+                Some(signal_bounds),
+            );
+            // `signal_xy` ya contiene la elevación de la superficie de vía.
+            // Agregar únicamente la diferencia de `GetSafeSlopeZ` preserva
+            // los cimientos y sube el poste sobre la pendiente exacta.
+            signal_xy.y +=
+                (signal_z_delta - (i32::from(rail_base_z) - i32::from(ctx.info.base_z)) * 8) as f32;
             // Misma profundidad que el fantasma de colocación (`tile_pos_half`), no z≈0.
             let layer = 0.04 + si as f32 * 0.0015;
             let depth = tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), rail_base_z, layer, rail_half_h);
@@ -1236,7 +1306,7 @@ mod tests {
     use super::{
         RailTrackTraceMode, halftile_foundation_child_visual_offset, pbs_extra_y_in_bevy,
         pbs_track_sprite_extra_y, rail_foundation_after_pass, rail_track_trace_mode,
-        road_detail_world_z_delta, road_foundation_child_offset,
+        road_detail_world_z_delta, road_foundation_child_offset, signal_trace_geometry,
     };
     use crate::sprites::{RAIL_TB_LEFT, RAIL_TB_LOWER, RAIL_TB_RIGHT, RAIL_TB_UPPER};
     use openttdrs_core::{FOUNDATION_INCLINED_X, FOUNDATION_LEVELED};
@@ -1347,5 +1417,35 @@ mod tests {
         // Con fundación nivelada el detalle sube toda la altura de tesela aun
         // cuando la superficie posterior sea plana.
         assert_eq!(road_detail_world_z_delta(0, 1, 0, 8.0, 8.0), 8);
+    }
+
+    #[test]
+    fn signal_trace_keeps_kale_anchor_and_uses_safe_slope_z() {
+        // Kale (85,7): la señal X usa `pos=8` con señales a la derecha:
+        // `DrawSingleSignal` ancla el sortable en (11,13), no en el centro
+        // de la tesela, y su caja es siempre 1×1×6.
+        let (world_xy, z_delta, bounds) = signal_trace_geometry(
+            0, 1, 1, 8, 0, // Track::X
+            true,
+        );
+        assert_eq!(world_xy, (11, 13));
+        assert_eq!(z_delta, 0);
+        assert_eq!(
+            (
+                bounds.ox, bounds.oy, bounds.oz, bounds.ex, bounds.ey, bounds.ez
+            ),
+            (0, 0, 0, 1, 1, 6)
+        );
+
+        // Kale (183,28): la vía X sobre SLOPE_SE requiere fundación
+        // nivelada. La señal usa `pos=9` en el lado derecho;
+        // `GetSlopePixelZ_Rail` sube primero la superficie una altura de
+        // tesela. Medir la pendiente cruda daba Z=2 en vez de Z=8.
+        assert_eq!(signal_trace_geometry(0x06, 0, 0x01, 9, 0, true).1, 8);
+
+        // En una media fundación la esquina segura elegida por el carril
+        // importa: UPPER sobre SLOPE_N queda en la mitad elevada (Z=8), aun
+        // cuando el poste no esté justo en (0,0).
+        assert_eq!(signal_trace_geometry(0x08, 0, 0x04, 4, 4, true).1, 8);
     }
 }

@@ -37,6 +37,9 @@ pub(crate) struct WorldAssets {
     /// `TreeGround::SnowDesert` y `TreeGround::RoughSnow` comparten este set.
     pub(crate) snow_desert: [[AtlasSprite; 19]; 4],
     pub(crate) water: AtlasSprite,
+    /// `SPR_FLAT_WATER_TILE + SlopeToSpriteOffset`, usado por los bordes
+    /// `Void` cuando `construction.freeform_edges` está desactivado.
+    pub(crate) water_slopes: [AtlasSprite; 19],
     /// Set completo `SPR_SHORE_BASE + 0..17` (`shore_full_{i:02}.png`).
     pub(crate) shore: Vec<AtlasSprite>,
     /// 5 fases dark × 15 glitter (`water_anim_d{d}_g{g}.png`).
@@ -208,6 +211,8 @@ impl WorldAssets {
             .map(|tileh| atlas.get(&format!("foundation_{tileh:02}.png")))
             .collect();
         let water = atlas.get("water.png");
+        let water_slopes =
+            std::array::from_fn(|offset| atlas.get(&format!("terrain_water_{offset:02}.png")));
         let shore: Vec<AtlasSprite> = (0..crate::sprites::SHORE_SPRITE_COUNT)
             .map(|i| atlas.get(&format!("shore_full_{i:02}.png")))
             .collect();
@@ -686,6 +691,7 @@ impl WorldAssets {
             rough_slopes,
             snow_desert,
             water,
+            water_slopes,
             shore,
             water_frames,
             shore_frames,

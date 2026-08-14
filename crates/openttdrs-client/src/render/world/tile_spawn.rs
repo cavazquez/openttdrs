@@ -12,7 +12,7 @@ use crate::render::{
     TileRenderContext, TileViewportBounds, WorldAssets, chunk_tile_bounds, flush_map_batches,
     push_forest_tree, push_water_tile, spawn_bridge_middle, spawn_generic_land_tile,
     spawn_house_tile, spawn_industry_tile, spawn_rail_tile, spawn_road_tile, spawn_station_tile,
-    spawn_transport_object_tile,
+    spawn_transport_object_tile, spawn_void_tile,
 };
 use crate::sprites::CompanyColour;
 use crate::state::SimWorld;
@@ -130,13 +130,6 @@ pub(crate) fn spawn_map_tiles_in_bounds(
 
         if let Some(trace) = &world_draw_trace {
             trace.begin_tile(&ctx);
-        }
-
-        if kind == TileKind::Void {
-            if let Some(trace) = &world_draw_trace {
-                trace.end_tile();
-            }
-            continue;
         }
 
         let slope_half_ground = slope_half_h(tileh);
@@ -257,6 +250,15 @@ pub(crate) fn spawn_map_tiles_in_bounds(
                     Some(images),
                 );
             }
+            TileKind::Void => {
+                spawn_void_tile(
+                    commands,
+                    assets,
+                    &ctx,
+                    slope_half_ground,
+                    sim.state.construction.freeform_edges,
+                );
+            }
             TileKind::Grass | TileKind::Forest | TileKind::CoalField | TileKind::Unknown(_) => {
                 spawn_generic_land_tile(
                     commands,
@@ -272,7 +274,6 @@ pub(crate) fn spawn_map_tiles_in_bounds(
                     Some(images),
                 );
             }
-            TileKind::Void => unreachable!(),
         }
 
         if kind == TileKind::Forest {

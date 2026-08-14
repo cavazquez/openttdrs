@@ -1752,6 +1752,32 @@ fn signal_subtile_xy(pos: u8, signals_on_right: bool) -> (i8, i8) {
     SIGNAL_SUBTILE_XY[usize::from(signals_on_right)][pos.min(11) as usize]
 }
 
+/// Posición local OpenTTD de una señal dentro de su tesela.
+///
+/// Es el punto que `DrawSingleSignal` entrega a `AddSortableSpriteToDraw`;
+/// no incluye la corrección de pendiente específica del carril.
+#[must_use]
+pub fn signal_world_position_for_side(pos: u8, signals_on_right: bool) -> (i8, i8) {
+    signal_subtile_xy(pos, signals_on_right)
+}
+
+/// Punto seguro para evaluar la pendiente de una señal.
+///
+/// Replica `GetSafeSlopeZ`: los cuatro carriles ortogonales se anclan a la
+/// esquina estable de su fundación de media tesela; X/Y conservan la posición
+/// concreta del poste.
+#[must_use]
+pub fn signal_safe_slope_position_for_side(pos: u8, track: u8, signals_on_right: bool) -> (i8, i8) {
+    let (x, y) = signal_world_position_for_side(pos, signals_on_right);
+    match track {
+        OTTD_TRACK_UPPER => (0, 0),
+        OTTD_TRACK_LOWER => (15, 15),
+        OTTD_TRACK_LEFT => (15, 0),
+        OTTD_TRACK_RIGHT => (0, 15),
+        _ => (x, y),
+    }
+}
+
 /// PNG a cargar para un ID lógico de señal (`DrawSingleSignal` → atlas).
 /// OpenGFX2 reutiliza el NFO base en 1416–1419 (topadora u otro gráfico); el bloque
 /// eléctrico clásico exportado vive en 1275–1278 (`sid - 141`).
@@ -1898,11 +1924,10 @@ pub fn collect_signal_sprite_draws(m2: u8, m3: u8, m3hi: u8, m5: u8) -> Vec<Sign
                 push_if(0, 4, OTTD_TRACK_LOWER, 7);
             }
         } else {
-            // La lógica usa el trackdir de salida (bit 2 para +X y bit 3 para
-            // −X). Orientar el sprite según ese avance evita que el poste se
-            // vea apuntando a contramano.
-            push_if(2, 0, OTTD_TRACK_X, 8); // +X / SW visual
-            push_if(3, 1, OTTD_TRACK_X, 9); // −X / NE visual
+            // `DrawSignals`: el bit 3 mira al sudoeste y el bit 2 al
+            // nordeste. El orden importa también para los sortables.
+            push_if(3, 0, OTTD_TRACK_X, 8); // SW
+            push_if(2, 1, OTTD_TRACK_X, 9); // NE
         }
     } else {
         push_if(3, 2, OTTD_TRACK_Y, 10); // SE
@@ -2180,7 +2205,7 @@ pub fn signal_draw_pos(ottd_track: u8, sig_bit: u8) -> u8 {
             }
         }
         OTTD_TRACK_X => {
-            if sig_bit == 2 {
+            if sig_bit == 3 {
                 8
             } else {
                 9
@@ -2206,7 +2231,7 @@ pub fn rail_signal_subtile_offset(pos: u8) -> Vec2 {
 /// Sub-tesela para el lado configurado de las señales.
 #[must_use]
 pub fn rail_signal_subtile_offset_for_side(pos: u8, signals_on_right: bool) -> Vec2 {
-    let (ox, oy) = signal_subtile_xy(pos, signals_on_right);
+    let (ox, oy) = signal_world_position_for_side(pos, signals_on_right);
     let dx = f32::from(ox) - 8.0;
     let dy = f32::from(oy) - 8.0;
     // `iso(tx, ty)` usa `RemapCoords(16·tx, 16·ty) / 2`.
@@ -3094,15 +3119,30 @@ mod tests {
     }
 
     #[test]
-    fn collect_signal_draws_maps_electric_ids_to_classic_textures() {
+    fn collect_signal_draws_matches_openttd_x_trackdir_mapping() {
         let m5 = (RAIL_TILE_SIGNALS << 6) | RAIL_TB_X;
-        let m3 = 1 << (4 + 2); // autoriza +X y se dibuja en el lado SW
-        let m3hi = m3;
         // OpenTTD: SIG_ELECTRIC = 0 → `SPR_ORIGINAL_SIGNALS_BASE` (1275).
         let m2 = m2_for_signal_encoding(0, 0, OTTD_TRACK_X);
-        let draws = collect_signal_sprite_draws(m2, m3, m3hi, m5);
-        assert_eq!(draws.len(), 1);
-        assert_eq!(draws[0].sprite_id, 1276, "block eléctrico verde → 1276");
+
+        // `rail_cmd.cpp::DrawSignals`: bit 3 → SOUTHWEST, imagen 0, pos 8.
+        let southwest = collect_signal_sprite_draws(m2, 1 << (4 + 3), 0, m5);
+        assert_eq!(southwest.len(), 1);
+        assert_eq!(southwest[0].pos, 8);
+        assert_eq!(southwest[0].image, 0);
+        assert_eq!(
+            southwest[0].sprite_id, 1275,
+            "block eléctrico rojo hacia SW → 1275"
+        );
+
+        // Bit 2 → NORTHEAST, imagen 1, pos 9. Está verde en `m3hi`.
+        let northeast = collect_signal_sprite_draws(m2, 1 << (4 + 2), 1 << (4 + 2), m5);
+        assert_eq!(northeast.len(), 1);
+        assert_eq!(northeast[0].pos, 9);
+        assert_eq!(northeast[0].image, 1);
+        assert_eq!(
+            northeast[0].sprite_id, 1278,
+            "block eléctrico verde hacia NE → 1278"
+        );
     }
 
     #[test]
@@ -3170,12 +3210,50 @@ mod tests {
         for pos in 0u8..12 {
             assert_eq!(signal_subtile_xy(pos, false), LEFT[usize::from(pos)]);
             assert_eq!(signal_subtile_xy(pos, true), RIGHT[usize::from(pos)]);
+            assert_eq!(
+                signal_world_position_for_side(pos, false),
+                LEFT[usize::from(pos)]
+            );
+            assert_eq!(
+                signal_world_position_for_side(pos, true),
+                RIGHT[usize::from(pos)]
+            );
             assert_ne!(
                 rail_signal_subtile_offset_for_side(pos, false),
                 rail_signal_subtile_offset_for_side(pos, true),
                 "pos {pos}"
             );
         }
+    }
+
+    #[test]
+    fn signal_safe_slope_position_matches_get_safe_slope_z() {
+        // `GetSafeSlopeZ` cambia sólo el punto de lectura de altura de los
+        // cuatro carriles ortogonales; X/Y usan la posición real del poste.
+        assert_eq!(
+            signal_safe_slope_position_for_side(8, OTTD_TRACK_X, true),
+            (11, 13)
+        );
+        assert_eq!(
+            signal_safe_slope_position_for_side(10, OTTD_TRACK_Y, true),
+            (13, 4)
+        );
+        assert_eq!(
+            signal_safe_slope_position_for_side(0, OTTD_TRACK_UPPER, true),
+            (0, 0)
+        );
+        assert_eq!(
+            signal_safe_slope_position_for_side(0, OTTD_TRACK_LOWER, true),
+            (15, 15)
+        );
+        assert_eq!(
+            signal_safe_slope_position_for_side(0, OTTD_TRACK_LEFT, true),
+            (15, 0)
+        );
+        assert_eq!(
+            signal_safe_slope_position_for_side(0, OTTD_TRACK_RIGHT, true),
+            (0, 15)
+        );
     }
 
     #[test]
@@ -3198,7 +3276,8 @@ mod tests {
 
     #[test]
     fn signal_draw_pos_matches_draw_signals_order() {
-        assert_eq!(signal_draw_pos(OTTD_TRACK_X, 2), 8);
+        assert_eq!(signal_draw_pos(OTTD_TRACK_X, 3), 8);
+        assert_eq!(signal_draw_pos(OTTD_TRACK_X, 2), 9);
         assert_eq!(signal_draw_pos(OTTD_TRACK_Y, 2), 11);
         assert_eq!(signal_draw_pos(OTTD_TRACK_UPPER, 3), 4);
     }
@@ -3369,15 +3448,16 @@ mod tests {
     #[test]
     fn golden_rail_signal_sprite_texture_ids() {
         // Paridad con `crates/openttdrs-core/tests/fixtures/parity/rail_signals_golden.json`
-        // (TRACK_X, cara lógica +X, SIG_ELECTRIC=0, verde). Visualmente esa
-        // cara ocupa el lado SW. Banco alt = Action5 (`SPR_SIGNALS_BASE-16`).
+        // (TRACK_X, cara lógica NE, SIG_ELECTRIC=0, verde). El bit 2 usa
+        // `SIGNAL_TO_NORTHEAST` (imagen 1); banco alt = Action5
+        // (`SPR_SIGNALS_BASE-16`).
         const ROWS: &[(u8, u8, u8, u8, u32, &str)] = &[
-            (0, 64, 64, 65, 1276, "block"),
-            (1, 64, 64, 65, 5089, "entry"),
-            (2, 64, 64, 65, 5105, "exit"),
-            (3, 64, 64, 65, 5121, "combo"),
-            (4, 64, 64, 65, 5201, "path"),
-            (5, 64, 64, 65, 5217, "path_oneway"),
+            (0, 64, 64, 65, 1278, "block"),
+            (1, 64, 64, 65, 5091, "entry"),
+            (2, 64, 64, 65, 5107, "exit"),
+            (3, 64, 64, 65, 5123, "combo"),
+            (4, 64, 64, 65, 5203, "path"),
+            (5, 64, 64, 65, 5219, "path_oneway"),
         ];
         for &(m2, m3, m3hi, m5, tex_id, label) in ROWS {
             let ids = collect_signal_sprite_ids(m2, m3, m3hi, m5);

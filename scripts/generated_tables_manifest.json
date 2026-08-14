@@ -27,9 +27,9 @@
       ],
       "check": "hash",
       "requires_opengfx": true,
-      "output_sha256": "f21a17f6f2103ab4f64ddea7dbce2516269026393f9f0e6adcd91a30bdc4fb3b",
+      "output_sha256": "fc0f473e97961b1d47e213c0cbe05a0a4717d8c639356060928ac337a0ac294d",
       "license": "GPL-2.0-only (OpenTTD) + offsets OpenGFX locales",
-      "note": "Regenerado y verificado 2026-07-25 con OpenGFX local; CI solo hash. rustfmt_skip mantiene filas compactas."
+      "note": "Regenerado y verificado 2026-08-14 con OpenGFX local; CI solo hash. rustfmt_skip mantiene filas compactas."
     },
     {
       "id": "vehicle_gfx_data",
@@ -99,9 +99,9 @@
       "inputs": [],
       "check": "hash",
       "requires_opengfx": true,
-      "output_sha256": "579ccc8320ff0517cac5d7676a5b96c93ec547b58941d5a88cf31c32d69c81ab",
+      "output_sha256": "5e601705219d29cb29bc5119902a38125672a92cc09466d329d4e1fb9884549e",
       "license": "layout derivado de PNG OpenGFX locales",
-      "note": "Regenerado y verificado 2026-08-13 con el atlas OpenGFX local; incluye las familias de estación monorail/maglev y los 74 StationGfx de aeropuerto. CI valida hash del .rs. El --check local valida además las páginas PNG píxel a píxel."
+      "note": "Regenerado y verificado 2026-08-14 con el atlas OpenGFX local; incluye las familias de estación monorail/maglev, los 74 StationGfx de aeropuerto y las 19 pendientes de agua para bordes Void. CI valida hash del .rs. El --check local valida además las páginas PNG píxel a píxel."
     },
     {
       "id": "airport_station_draw_data",
@@ -112,9 +112,9 @@
       ],
       "check": "hash",
       "requires_opengfx": true,
-      "output_sha256": "29b16d49e14f7165e44d84a45ffbc580b89cf323dc94d73f338712d8f4ebd1eb",
+      "output_sha256": "47da3dfc1bd9ec31b610b35bf26fa2a61e72dbf966a5f75a21d30884fd0e962a",
       "license": "GPL-2.0-only (OpenTTD station_land.h) + metadatos NFO OpenGFX locales",
-      "note": "Las 74 entradas StationGfx, sus TILE_SEQ, Action5 y cinco variantes animadas; la regresión Python contrasta la tabla fuente OpenTTD y las variantes 8bpp/32bpp."
+      "note": "Verificado 2026-08-14: las 74 entradas StationGfx, sus TILE_SEQ, Action5 y cinco variantes animadas; la regresión Python contrasta la tabla fuente OpenTTD y las variantes 8bpp/32bpp."
     },
     {
       "id": "industry_gfx_data",
@@ -138,9 +138,9 @@
       ],
       "check": "regenerate_or_hash",
       "requires_opengfx": true,
-      "output_sha256": "7704186ae71f358484ff649bcd86e43b7b50085a72a94270b5f5d50fad4a9cdd",
+      "output_sha256": "60ee0f597d6e4566c22c4c29ea746cf80585a59dd949426d3734e32e55e94499",
       "license": "pseudo-sprites OpenGFX locales + paleta DOS OpenTTD (GPL-2.0-only)",
-      "note": "CI valida el hash; localmente --check regenera desde ogfx1_base.nfo 8bpp y conserva el índice DOS transparente 0."
+      "note": "Verificado 2026-08-14: CI valida el hash; localmente --check regenera desde ogfx1_base.nfo 8bpp y conserva el índice DOS transparente 0."
     }
   ],
   "inventory": [

@@ -20,12 +20,32 @@ pub enum TrainSignalSide {
 }
 
 /// Ajustes persistentes de construcción/conducción.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ConstructionSettings {
     #[serde(default)]
     pub train_signal_side: TrainSignalSide,
     #[serde(default)]
     pub road_vehicle_driving_side: RoadVehicleDrivingSide,
+    /// Bordes libres del mapa (`construction.freeform_edges`).
+    ///
+    /// `OpenTTD` lo habilita por defecto: las teselas `Void` se dibujan como
+    /// terreno desnudo con la paleta negra, no como agua infinita.
+    #[serde(default = "default_freeform_edges")]
+    pub freeform_edges: bool,
+}
+
+const fn default_freeform_edges() -> bool {
+    true
+}
+
+impl Default for ConstructionSettings {
+    fn default() -> Self {
+        Self {
+            train_signal_side: TrainSignalSide::default(),
+            road_vehicle_driving_side: RoadVehicleDrivingSide::default(),
+            freeform_edges: default_freeform_edges(),
+        }
+    }
 }
 
 impl ConstructionSettings {
@@ -69,5 +89,10 @@ mod tests {
         assert!(!settings.road_drive_on_right());
         settings.road_vehicle_driving_side = RoadVehicleDrivingSide::Right;
         assert!(settings.road_drive_on_right());
+    }
+
+    #[test]
+    fn freeform_edges_follow_openttd_default() {
+        assert!(ConstructionSettings::default().freeform_edges);
     }
 }

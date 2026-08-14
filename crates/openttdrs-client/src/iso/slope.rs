@@ -149,23 +149,22 @@ pub fn tile_slope_and_min_z(map: &Map, tx: u32, ty: u32) -> (u8, u8) {
 /// real (29) en otra pendiente/base y desplazar todos los sprites de la tesela.
 #[inline]
 fn height_for_slope_corner_sample(map: &Map, cx: i32, cy: i32, mw: u32, mh: u32) -> u8 {
-    if cx < 0 || cy < 0 {
+    if mw == 0 || mh == 0 {
         return 0;
     }
-    let Ok(ux) = u32::try_from(cx) else {
-        return 0;
-    };
-    let Ok(uy) = u32::try_from(cy) else {
-        return 0;
-    };
-    if ux >= mw || uy >= mh {
-        return 0;
-    }
-    let Some(t) = map.get(TileCoord::new(cx, cy)) else {
+    // `GetTileSlopeZ` usa `min(x + 1, Map::MaxX())` y análogamente en Y.
+    // La fila/columna final no abre una esquina virtual a altura cero: repite
+    // la altura del borde. Devolver 0 aquí alteraba el sprite y la Z de las
+    // 262 teselas `Void` del borde sur de Kale.
+    let max_x = mw.saturating_sub(1).min(i32::MAX as u32) as i32;
+    let max_y = mh.saturating_sub(1).min(i32::MAX as u32) as i32;
+    let x = cx.clamp(0, max_x);
+    let y = cy.clamp(0, max_y);
+    let Some(t) = map.get(TileCoord::new(x, y)) else {
         return 0;
     };
     if matches!(t.kind, TileKind::Water | TileKind::Void) && map.legacy_zero_water_height_repair() {
-        water_void_effective_height_for_slope(map, ux, uy, mw, mh, t.height)
+        water_void_effective_height_for_slope(map, x as u32, y as u32, mw, mh, t.height)
     } else {
         t.height
     }

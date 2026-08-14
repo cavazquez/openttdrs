@@ -64,7 +64,8 @@ cuando el tile ya se decodificó mal.
 | Viewport de mapas grandes | Completado de chunks parciales. | Corrección aislada publicada en `main` (`5b0023b`). |
 | Terreno, pendientes y árboles | Revisión de altura isométrica y sprites de ladera para eliminar artefactos que parecían vías o dejaban colores extraños. | En checkpoint; requiere captura focalizada. |
 | Puentes rail y conexiones | Fundaciones, pilares, rampas y altura efectiva; la traza conserva sprites y geometría de las transiciones. | En checkpoint; sin declarar paridad total. |
-| Catenaria | Wire/pylon y altura efectiva de puente/túnel para que el tendido no flote ni se corte. Las estaciones ferroviarias emiten ahora sus postes/cables antes de las capas `TILE_SEQ`, igual que `DrawTile_Station`. | Kale completo: 556 cables y 148 postes de estación se comparan en ID, geometría y orden; faltan otras familias de estación y señales. |
+| Catenaria | Wire/pylon y altura efectiva de puente/túnel para que el tendido no flote ni se corte. Las estaciones ferroviarias emiten ahora sus postes/cables antes de las capas `TILE_SEQ`, igual que `DrawTile_Station`. | Kale completo: 556 cables y 148 postes de estación se comparan en ID, geometría y orden. |
+| Señales ferroviarias | El importador lee `vehicle.road_side` y `construction.train_signal_side` de `PATS`/`OPTS`; el renderer replica el orden de `DrawSignals` y la altura de `GetSafeSlopeZ` sobre la fundación ferroviaria efectiva. | Kale completo: las 729 señales coinciden en ID, ancla de mundo, geometría y orden relativo. |
 | Monorriel y maglev | Selección diagonal tipada por railtype para no usar rail convencional. | En checkpoint; validar por región. |
 | Depósitos y estaciones especiales | Geometría de depósito naval, reserva visual de depósito rail y distinción de tiles especiales para no disfrazar un fallback como parada de buses. | En checkpoint; los fallbacks deben ser explícitos. |
 | Paleta de compañía 8bpp y estación rail vanilla | Se corrigió el desplazamiento de un índice DOS en las rampas y se dejó de inferir recolor por RGB ajeno a la rampa autora. La región `120,111..128,113` de Kale compara 118/118 comandos de estación (sprite, paleta, geometría y orden). | Validada por `world-draw`; la composición raster amplia sigue teniendo familias ajenas a esta corrección. |
@@ -217,6 +218,51 @@ el ordinal 1, entre la vía `1011` y las capas `1077/1069/1080`, exactamente
 como OpenTTD. Kale completo recupera 556 cables y 148 postes de estación sin
 una selección, geometría u orden candidatos fuera del oráculo; el test unitario
 mantiene ese ejemplo como regresión.
+
+### Revalidación: señales ferroviarias de Kale
+
+Las posiciones de señal no son una preferencia visual local: OpenTTD resuelve
+`IsTrainSignalSideRight()` desde los settings persistidos. Kale guarda
+`vehicle.road_side=Right` y
+`construction.train_signal_side=RoadVehicleDrivingSide` en `PATS`; usar el
+default izquierdo cambiaba de lado los 729 postes aunque los bytes de cada
+tesela y sus sprites fueran correctos.
+
+También se siguió `rail_cmd.cpp` hasta el draw call. En una vía X, `DrawSignals`
+emite bit 3 hacia sudoeste (`pos=8`) y luego bit 2 hacia nordeste (`pos=9`).
+Finalmente `GetSafeSlopeZ` consulta `GetSlopePixelZ_Rail`, que aplica
+`GetRailFoundation` antes de evaluar la pendiente. En `(183,28)`, por ejemplo,
+la fundación nivelada transforma la lectura de Z=2 del terreno crudo en Z=8,
+que es la cota del poste de OpenTTD.
+
+La regresión cubre el parseo sintético de `PATS`, ambos sentidos X y las
+esquinas seguras de `GetSafeSlopeZ`. La exportación completa de Kale confirma
+729/729 selecciones, IDs, geometrías y órdenes de señales contenidos en el
+oráculo C++.
+
+### Revalidación: bordes `Void` de Kale
+
+Las teselas `MP_VOID` no son ausencia de dibujo. `void_cmd.cpp` siempre llama
+a `DrawGroundSprite`: con `construction.freeform_edges=true` usa
+`SPR_FLAT_BARE_LAND + SlopeToSpriteOffset(tileh)` y
+`PALETTE_ALL_BLACK`; con bordes libres desactivados usa la familia equivalente
+de agua. El importador ahora lee ese ajuste desde `PATS`/`OPTS` y conserva el
+default moderno de OpenTTD (`true`).
+
+Kale tiene 1.020 teselas `Void`, que antes se omitían por completo. Al
+instrumentarlas apareció un segundo defecto específico del borde sur: el
+renderer muestreaba `y + 1` fuera del mapa a altura cero. `GetTileSlopeZ`
+real, en cambio, lo fija en `Map::MaxY()` (y hace lo mismo en X), por lo que
+las 262 pendientes y cotas de ese borde quedaban incorrectas. La muestra de
+esquina ahora se clampa como el código C++ y una regresión cubre mapas 1×1 y
+2×1.
+
+La comparación completa vuelve a contener las 1.020 decisiones del borde:
+ID, paleta (`6140` para el negro), cota y orden relativo coinciden con el
+oráculo. El hueco de cobertura de Kale baja de 2.067 a 1.047 comandos de
+referencia. Para el modo sin bordes libres se añadieron las 19 pendientes de
+agua al atlas y al extractor; su prueba sintética exige el recorte correcto
+tanto en OpenGFX 8bpp como en OpenGFX2 32bpp.
 
 ## Procedimiento para investigar un caso nuevo
 

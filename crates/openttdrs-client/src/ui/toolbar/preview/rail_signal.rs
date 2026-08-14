@@ -336,7 +336,7 @@ mod tests {
     }
 
     #[test]
-    fn preview_face_zero_draws_in_authorized_positive_x_direction() {
+    fn preview_face_zero_uses_openttd_northeast_x_signal() {
         let map = flat_rail_x_map();
         let draws = signal_draws_for_face(&map, 0);
         assert!(
@@ -352,19 +352,19 @@ mod tests {
             "sprite de señal no debe coincidir con ui_demolish (1565)"
         );
         assert_eq!(
-            draws[0].sprite_id, 1276,
-            "salida +X debe verse SW (1276), no apuntar a contramano"
+            draws[0].sprite_id, 1278,
+            "salida +X debe verse NE (1278), como el bit 2 de DrawSignals"
         );
     }
 
     #[test]
-    fn preview_face_two_draws_in_authorized_negative_x_direction() {
+    fn preview_face_two_uses_openttd_southwest_x_signal() {
         let map = flat_rail_x_map();
         let draws = signal_draws_for_face(&map, 2);
         assert!(!draws.is_empty());
         assert_eq!(
-            draws[0].sprite_id, 1278,
-            "salida -X debe verse NE (1278), no apuntar a contramano"
+            draws[0].sprite_id, 1276,
+            "salida -X debe verse SW (1276), como el bit 3 de DrawSignals"
         );
     }
 }

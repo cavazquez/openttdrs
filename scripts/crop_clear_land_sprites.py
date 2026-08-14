@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
-"""Recorta el set incremental de roca usado por ``DrawTile_Clear``.
+"""Recorta terreno incremental usado por ``DrawTile_Clear`` y ``DrawTile_Void``.
 
 OpenTTD puede habilitar una segunda base con el misc bit
 ``SecondRockyTileSet`` y después suma ``SlopeToSpriteOffset``. OpenGFX y
 OpenGFX2 usan la primera serie, pero el renderer conserva ambas variantes
 completas de 19 sprites para no degradar una pendiente al cambiar de baseset.
+
+El mismo offset se aplica a ``SPR_FLAT_WATER_TILE`` cuando se desactivan los
+bordes libres. Conservar las 19 piezas evita que una tesela `Void` inclinada
+se degrade a agua plana en cualquiera de los dos perfiles gráficos.
 
 Uso:
   python3 scripts/crop_clear_land_sprites.py
@@ -23,10 +27,13 @@ from nfo_sprite_meta import parse_global_sprite_rects
 
 
 ROCKY_BASES = (4023, 4042)
+WATER_BASE = 4061
 SPRITES: tuple[tuple[int, str], ...] = tuple(
     (base + offset, f"terrain_rocky_{variant}_{offset:02}.png")
     for variant, base in enumerate(ROCKY_BASES, start=1)
     for offset in range(19)
+) + tuple(
+    (WATER_BASE + offset, f"terrain_water_{offset:02}.png") for offset in range(19)
 )
 
 
@@ -77,10 +84,10 @@ def main() -> int:
         print(error, file=sys.stderr)
         return 1
     if count == 0:
-        print(f"Las {len(SPRITES)} variantes rocosas ya existen.")
+        print(f"Los {len(SPRITES)} sprites de roca/agua ya existen.")
         return 0
     mode = (repo / "assets" / "opengfx" / ".graphics_mode").read_text(encoding="utf-8").strip()
-    print(f"Modo {mode}; recortando {count} sprites rocosos…")
+    print(f"Modo {mode}; recortando {count} sprites de roca/agua…")
     if failures:
         print("No se pudieron recortar: " + ", ".join(failures), file=sys.stderr)
         return 1

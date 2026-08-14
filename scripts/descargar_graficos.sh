@@ -639,6 +639,11 @@ for density, base in enumerate([4493, 4512, 4531, 4550]):
 for tileh in range(1, 15):
     crop_by_id(989 + tileh, f"foundation_{tileh:02d}.png")
 crop_by_id(4061, "water_flat.png")             # SPR_FLAT_WATER_TILE
+# `DrawTile_Void` suma `SlopeToSpriteOffset` a esta base cuando el mapa usa
+# bordes no libres. Exportar las 19 variantes evita degradar el borde inclinado
+# a agua plana; los mismos nombres son consumidos por `WorldAssets`.
+for offset in range(19):
+    crop_by_id(4061 + offset, f"terrain_water_{offset:02d}.png")
 # Costas: el set completo (SPR_SHORE_BASE + 0..17) vive en el GRF *extra*
 # (Action5 0x0D) y lo extrae scripts/gen_shore_full_set.py, no este NFO base.
 # Ship depot

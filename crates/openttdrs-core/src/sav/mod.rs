@@ -17,6 +17,7 @@ mod entities;
 pub(crate) mod house_population_generated;
 mod import;
 mod landscape;
+mod settings;
 
 /// Población de un `HouseID` original (`HouseSpec::population`).
 #[must_use]
@@ -195,6 +196,8 @@ pub struct SavGame {
     pub link_graph: LinkGraphStats,
     /// Landscape del save (`game_creation.landscape`); default temperate.
     pub climate: crate::Climate,
+    /// Lado de conducción y señales de `PATS` / `OPTS`.
+    pub construction: crate::ConstructionSettings,
 }
 
 /// `SLV_100`: desde esta versión `OpenTTD` persiste las reservas PBS de
@@ -231,6 +234,7 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
     let money = entities::company_money_from_chunks(&chunk_list, version);
     let company_colour = entities::company_colour_from_chunks(&chunk_list, version);
     let climate = landscape::climate_from_chunks(&chunk_list).unwrap_or_default();
+    let construction = settings::construction_settings_from_chunks(&chunk_list);
     let link_graph =
         linkgraph::link_graph_from_chunks(&chunk_list, map_w, &station_index, version, climate);
     Ok(SavGame {
@@ -248,6 +252,7 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
         game_time,
         link_graph,
         climate,
+        construction,
     })
 }
 
@@ -568,6 +573,7 @@ impl GameState {
         // OpenTTD ≥15 default `train_acceleration_model = 1` (realista).
         state.train_acceleration_model = crate::engine::TrainAccelerationModel::Realistic;
         state.climate = sav.climate;
+        state.construction = sav.construction;
         if let Some(time) = sav.game_time {
             state.tick = date::game_tick_from_sav_time(time);
         }
@@ -889,6 +895,7 @@ mod tests {
             game_time: None,
             link_graph: LinkGraphStats::default(),
             climate: crate::Climate::Temperate,
+            construction: crate::ConstructionSettings::default(),
         }
     }
 
@@ -900,6 +907,16 @@ mod tests {
         assert_eq!(stop_kind_from_facilities(0x02), StopKind::TruckStop);
         assert_eq!(stop_kind_from_facilities(0x08), StopKind::Airport);
         assert_eq!(stop_kind_from_facilities(0x10), StopKind::Dock);
+    }
+
+    #[test]
+    fn from_sav_game_preserves_signal_side_settings() {
+        let mut sav = empty_sav(352, Map::new_flat(4, 4, 0));
+        sav.construction.road_vehicle_driving_side = crate::RoadVehicleDrivingSide::Right;
+        sav.construction.train_signal_side = crate::TrainSignalSide::RoadVehicleDrivingSide;
+
+        let state = GameState::from_sav_game(sav);
+        assert!(state.construction.signals_on_right());
     }
 
     #[test]
@@ -1264,6 +1281,7 @@ mod tests {
             station_index: std::collections::HashMap::new(),
             game_time: None,
             climate: crate::Climate::Temperate,
+            construction: crate::ConstructionSettings::default(),
         };
         let state = GameState::from_sav_game(sav);
         assert_eq!(state.stations.len(), 2);

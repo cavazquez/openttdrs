@@ -593,6 +593,7 @@ impl WorldDrawTrace {
                     "industries",
                     "object_landmarks",
                     "clear_land",
+                    "void",
                     "water"
                 ],
             })

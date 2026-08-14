@@ -37,6 +37,16 @@ SPR_MAIN = 1275
 SPR_ALT = 5072  # SPR_SIGNALS_BASE - 16 (Action5 tipo 04)
 SIGTYPE_LAST_NOPBS = 3
 
+# `DrawTile_Void` conserva literalmente `SPR_FLAT_WATER_TILE +
+# SlopeToSpriteOffset(tileh)`. Los offsets 15 y 17 apuntan a los SpriteID
+# 4076/4078 del baseset clásico, cuyas entradas NFO normales son realmente
+# imágenes transparentes de 1×1; no son placeholders creados por el script de
+# descarga. La auditoría debe seguir denunciando todo otro 1×1.
+INTENTIONAL_1X1_ASSETS = {
+    "assets/opengfx/tiles/terrain_water_15.png",
+    "assets/opengfx/tiles/terrain_water_17.png",
+}
+
 
 @dataclass
 class AssetEntry:
@@ -186,6 +196,8 @@ def collect_required_paths() -> list[tuple[str, str]]:
     for tileh in range(1, 15):
         add(f"assets/opengfx/tiles/foundation_{tileh:02}.png", "foundation")
     add("assets/opengfx/tiles/water.png", "water")
+    for offset in range(19):
+        add(f"assets/opengfx/tiles/terrain_water_{offset:02}.png", "water")
     for i in range(18):  # set completo SPR_SHORE_BASE (gen_shore_full_set.py)
         add(f"assets/opengfx/tiles/shore_full_{i:02d}.png", "water")
     add("assets/opengfx/tiles/object_lighthouse.png", "object")
@@ -248,7 +260,9 @@ def png_size(path: Path) -> tuple[int, int] | None:
         return img.size
 
 
-def is_placeholder(path: Path) -> bool:
+def is_placeholder(path: Path, rel: str) -> bool:
+    if rel in INTENTIONAL_1X1_ASSETS:
+        return False
     size = png_size(path)
     if size is None:
         # Sin Pillow: heurística por tamaño de archivo mínimo
@@ -265,7 +279,7 @@ def audit() -> dict:
     for rel, cat in required:
         full = REPO_ROOT / rel
         present = full.is_file()
-        ph = is_placeholder(full) if present else False
+        ph = is_placeholder(full, rel) if present else False
         w = h = None
         if present and png_size(full):
             w, h = png_size(full)

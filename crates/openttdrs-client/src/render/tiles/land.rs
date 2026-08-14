@@ -85,6 +85,9 @@ const TREE_SNOW_DESERT_BASE: [u32; 4] = [4493, 4512, 4531, 4550];
 const SPR_FLAT_BARE_LAND: u32 = 3924;
 const SPR_FLAT_ROUGH_LAND: u32 = 4000;
 const SPR_FLAT_ROCKY_LAND_1: u32 = 4023;
+const SPR_FLAT_WATER_TILE: u32 = 4061;
+/// `PaletteID::PALETTE_ALL_BLACK` en el namespace de sprites vanilla.
+const PALETTE_ALL_BLACK: u32 = 6140;
 
 /// Sprite de suelo que selecciona `DrawTile_Clear`, salvo campos (que además
 /// llevan cercas). Mantener esta decisión pura evita que el nombre del PNG,
@@ -113,6 +116,44 @@ const fn clear_ground_sprite_id(ground: u8, density: usize, tileh: u8, tx: u32, 
         // visible sólo protege saves corruptos con un valor de suelo ajeno.
         _ => SPR_FLAT_ROUGH_LAND + slope,
     }
+}
+
+/// Decisión exacta de `DrawTile_Void`.
+///
+/// Con bordes libres, OpenTTD conserva la silueta de la tesela con el suelo
+/// desnudo, pero aplica `PALETTE_ALL_BLACK`. Con la opción desactivada usa el
+/// conjunto completo de agua, incluida la pendiente.
+const fn void_ground_sprite_and_palette(tileh: u8, freeform_edges: bool) -> (u32, u32) {
+    let slope = slope_sprite_offset(tileh) as u32;
+    if freeform_edges {
+        (SPR_FLAT_BARE_LAND + slope, PALETTE_ALL_BLACK)
+    } else {
+        (SPR_FLAT_WATER_TILE + slope, 0)
+    }
+}
+
+/// Dibuja la tesela de borde que OpenTTD llama `Void`.
+///
+/// No se puede omitir aunque no sea construible: cada borde de un mapa
+/// freeform sigue siendo un `DrawGroundSprite`, y su ausencia dejaba 1.020
+/// comandos sin contrapartida en la traza de Kale.
+pub(crate) fn spawn_void_tile(
+    commands: &mut Commands,
+    assets: &WorldAssets,
+    ctx: &TileRenderContext,
+    slope_half_ground: f32,
+    freeform_edges: bool,
+) {
+    let slope = usize::from(slope_sprite_offset(ctx.info.tileh));
+    let (sprite_id, palette) = void_ground_sprite_and_palette(ctx.info.tileh, freeform_edges);
+    WorldDrawTrace::record_sprite_with_palette("ground", "ground", sprite_id, palette, false);
+
+    let (image, color) = if freeform_edges {
+        (&assets.grass_density[0][slope], Color::BLACK)
+    } else {
+        (&assets.water_slopes[slope], Color::WHITE)
+    };
+    spawn_ground_sprite(commands, image, color, ctx, slope_half_ground);
 }
 
 /// Sprite que `DrawTile_Trees` entrega a `DrawGroundSprite` antes de
@@ -1411,6 +1452,7 @@ mod tests {
         field_slope_max_pixel_z, field_slope_pixel_z_in_corner, house_lift_screen_offset,
         openttd_tile_hash, rough_flat_variant, sort_tree_layers_like_openttd,
         tree_density_from_tile, tree_ground_from_tile, tree_ground_sprite_id, tree_shore_sprite_id,
+        void_ground_sprite_and_palette,
     };
 
     #[test]
@@ -1447,6 +1489,17 @@ mod tests {
             clear_ground_sprite_id(CLEAR_GROUND_DESERT, 2, 29, 0, 0),
             4546
         );
+    }
+
+    #[test]
+    fn void_ground_selector_matches_openttd_drawtile_void() {
+        // `void_cmd.cpp`: bare land + PALETTE_ALL_BLACK with freeform edges.
+        assert_eq!(void_ground_sprite_and_palette(0, true), (3924, 6140));
+        assert_eq!(void_ground_sprite_and_palette(29, true), (3939, 6140));
+
+        // Otherwise OpenTTD draws the matching water slope with PAL_NONE.
+        assert_eq!(void_ground_sprite_and_palette(0, false), (4061, 0));
+        assert_eq!(void_ground_sprite_and_palette(29, false), (4076, 0));
     }
 
     #[test]

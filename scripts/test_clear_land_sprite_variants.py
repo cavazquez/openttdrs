@@ -10,14 +10,19 @@ from pathlib import Path
 from PIL import Image
 
 import crop_clear_land_sprites as generator
+import audit_sp3_assets as audit
 
 
 SPRITES = ((4023, "terrain_rocky_1_00.png"), (4024, "terrain_rocky_1_01.png"))
+WATER_SPRITES = tuple(
+    (generator.WATER_BASE + offset, f"terrain_water_{offset:02}.png")
+    for offset in range(19)
+)
 
 
-def nfo_rows(mode: str, prefix: str) -> str:
+def nfo_rows(mode: str, prefix: str, sprites: tuple[tuple[int, str], ...]) -> str:
     lines: list[str] = []
-    for index, (sprite_id, _name) in enumerate(SPRITES):
+    for index, (sprite_id, _name) in enumerate(sprites):
         lines.append(
             f"{sprite_id} {prefix}00.png 8bpp {index * 2} 0 2 1 {-index - 7} {-index - 8} normal\n"
         )
@@ -30,7 +35,7 @@ def nfo_rows(mode: str, prefix: str) -> str:
 
 
 class ClearLandSpriteVariantsTest(unittest.TestCase):
-    def make_repo(self, mode: str) -> Path:
+    def make_repo(self, mode: str, sprites_to_crop: tuple[tuple[int, str], ...]) -> Path:
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         repo = Path(temporary.name)
@@ -44,15 +49,17 @@ class ClearLandSpriteVariantsTest(unittest.TestCase):
         )
         sprites.mkdir(parents=True)
         prefix = "ogfx1_base" if mode == "8bpp" else "ogfx21_base_32ez"
-        (sprites / f"{prefix}.nfo").write_text(nfo_rows(mode, prefix), encoding="utf-8")
+        (sprites / f"{prefix}.nfo").write_text(
+            nfo_rows(mode, prefix, sprites_to_crop), encoding="utf-8"
+        )
 
-        image8 = Image.new("RGBA", (len(SPRITES) * 2, 1), (0, 0, 0, 0))
-        for index in range(len(SPRITES)):
+        image8 = Image.new("RGBA", (len(sprites_to_crop) * 2, 1), (0, 0, 0, 0))
+        for index in range(len(sprites_to_crop)):
             image8.paste((index + 8, 20, 30, 255), (index * 2, 0, index * 2 + 2, 1))
         image8.save(sprites / f"{prefix}00.png")
         if mode == "32bpp":
-            image32 = Image.new("RGBA", (len(SPRITES) * 3, 11), (0, 0, 0, 0))
-            for index in range(len(SPRITES)):
+            image32 = Image.new("RGBA", (len(sprites_to_crop) * 3, 11), (0, 0, 0, 0))
+            for index in range(len(sprites_to_crop)):
                 image32.paste(
                     (index + 32, 120, 130, 255),
                     (index * 3, 0, index * 3 + 3, 2),
@@ -68,7 +75,7 @@ class ClearLandSpriteVariantsTest(unittest.TestCase):
             ("8bpp", (2, 1), (8, 20, 30, 255)),
             ("32bpp", (3, 2), (32, 120, 130, 255)),
         ):
-            repo = self.make_repo(mode)
+            repo = self.make_repo(mode, SPRITES)
             count, failures = generator.crop_clear_land_sprites(repo, force=True)
             self.assertEqual(count, len(SPRITES), mode)
             self.assertEqual(failures, [], mode)
@@ -80,6 +87,47 @@ class ClearLandSpriteVariantsTest(unittest.TestCase):
                         (index + expected_pixel[0], expected_pixel[1], expected_pixel[2], 255),
                         f"{mode} {name}",
                     )
+
+    def test_void_water_crops_use_the_active_normal_variant(self) -> None:
+        original = generator.SPRITES
+        self.addCleanup(setattr, generator, "SPRITES", original)
+        generator.SPRITES = WATER_SPRITES
+        for mode, expected_size, expected_pixel in (
+            ("8bpp", (2, 1), (8, 20, 30, 255)),
+            ("32bpp", (3, 2), (32, 120, 130, 255)),
+        ):
+            repo = self.make_repo(mode, WATER_SPRITES)
+            count, failures = generator.crop_clear_land_sprites(repo, force=True)
+            self.assertEqual(count, len(WATER_SPRITES), mode)
+            self.assertEqual(failures, [], mode)
+            for index, (_sprite_id, name) in enumerate(WATER_SPRITES):
+                with Image.open(repo / "assets" / "opengfx" / "tiles" / name) as crop:
+                    self.assertEqual(crop.size, expected_size, f"{mode} {name}")
+                    self.assertEqual(
+                        crop.convert("RGBA").getpixel((0, 0)),
+                        (index + expected_pixel[0], expected_pixel[1], expected_pixel[2], 255),
+                        f"{mode} {name}",
+                    )
+
+    def test_void_transparent_slope_entries_are_not_download_placeholders(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            png = Path(temporary) / "sprite.png"
+            Image.new("RGBA", (1, 1), (0, 0, 0, 0)).save(png)
+            self.assertFalse(
+                audit.is_placeholder(
+                    png, "assets/opengfx/tiles/terrain_water_15.png"
+                )
+            )
+            self.assertFalse(
+                audit.is_placeholder(
+                    png, "assets/opengfx/tiles/terrain_water_17.png"
+                )
+            )
+            self.assertTrue(
+                audit.is_placeholder(
+                    png, "assets/opengfx/tiles/terrain_water_00.png"
+                )
+            )
 
 
 if __name__ == "__main__":

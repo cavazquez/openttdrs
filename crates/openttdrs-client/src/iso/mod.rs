@@ -45,7 +45,7 @@ mod compute_tileh_tests {
     //! Regresión: `compute_tileh` debe coincidir con `GetTileSlopeZ` / `GetTileSlopeGivenHeight`
     //! (`tile_map.cpp` de OpenTTD): hnorth@(tx,ty), hwest@(tx+1,ty), heast@(tx,ty+1), hsouth@(tx+1,ty+1).
 
-    use super::{compute_tileh, slope_half_h, slope_sprite_offset};
+    use super::{compute_tileh, slope_half_h, slope_sprite_offset, tile_min_corner_height};
     use openttdrs_core::prelude::*;
 
     fn set_h(map: &mut Map, x: i32, y: i32, h: u8) {
@@ -118,22 +118,23 @@ mod compute_tileh_tests {
     }
 
     #[test]
-    fn map_edge_1x1_void_corners_read_as_zero() {
+    fn map_edge_1x1_corners_clamp_like_openttd() {
         let mut m = Map::new_flat(1, 1, 0);
         set_h(&mut m, 0, 0, 2);
-        // Fuera del mapa → altura 0; solo hnorth=2 > min(0,0,0,0).
-        // La diferencia de dos niveles conserva el bit STEEP de OpenTTD.
-        assert_eq!(compute_tileh(&m, 0, 0), 24); // SLOPE_STEEP_N
+        // `GetTileSlopeZ` fija x+1/y+1 en Map::MaxX/Y, por lo que las cuatro
+        // esquinas leen la misma tesela y el borde es plano a Z=2.
+        assert_eq!(compute_tileh(&m, 0, 0), 0);
+        assert_eq!(tile_min_corner_height(&m, 0, 0), 2);
     }
 
     #[test]
     fn thin_map_2x1_row() {
         let mut m = Map::new_flat(2, 1, 0);
         set_h(&mut m, 1, 0, 1);
-        // (0,0): hnorth=0, hwest=1, heast/hsouth fuera → 0; min=0 → solo W
-        assert_eq!(compute_tileh(&m, 0, 0), 1);
-        // (1,0): hnorth=1, hwest fuera 0, heast/hsouth 0 → min=0 → N
-        assert_eq!(compute_tileh(&m, 1, 0), 8);
+        // En el borde sur se repite y=0: (0,0) lee N/E=0 y W/S=1.
+        assert_eq!(compute_tileh(&m, 0, 0), 3); // SLOPE_SW
+        // Las cuatro esquinas de la última columna leen altura 1.
+        assert_eq!(compute_tileh(&m, 1, 0), 0);
     }
 
     #[test]

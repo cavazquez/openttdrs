@@ -4,10 +4,7 @@ use std::sync::{Mutex, OnceLock};
 
 use openttdrs_core::{RailType, STATION_TYPE_DOCK, STATION_TYPE_OILRIG, StopKind};
 
-use super::rail::{
-    MAGLEV_RAIL_SPRITE_OFFSET, MONO_RAIL_SPRITE_OFFSET, rail_sloped_track_sprite_id,
-    remap_rail_sprite_id,
-};
+use super::rail::{MAGLEV_RAIL_SPRITE_OFFSET, MONO_RAIL_SPRITE_OFFSET, remap_rail_sprite_id};
 
 /// `StationType` en bits 3–6 de `m6` (`GetStationType`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -188,23 +185,22 @@ pub fn rail_station_axis_y(m5: u8) -> bool {
 
 /// Vía de fondo (`SPR_RAIL_TRACK_X` / `SPR_RAIL_TRACK_Y`) antes de las plataformas.
 ///
-/// En pendiente OpenTTD usa el sprite inclinado (`DrawRailTile` / `_track_sloped_sprites`), sin
-/// distinguir eje X/Y.
+/// Una estación ferroviaria inclinada se aplana antes en
+/// `DrawTile_Station` con `DrawFoundation(FOUNDATION_LEVELED)`. Por eso el
+/// suelo de `_station_display_datas_rail` sigue siendo siempre X/Y: se
+/// vuelve hijo de la fundación, pero **no** cambia al sprite inclinado de una
+/// vía normal. Usar `_track_sloped_sprites` aquí sustituía plataforma por una
+/// rampa y dejaba visible una discontinuidad (Kale: `(169,101)`).
 #[must_use]
-pub fn rail_station_ground_track_sprite(m5: u8, tileh: u8) -> u32 {
-    if tileh != 0
-        && let Some(sid) = rail_sloped_track_sprite_id(tileh, false)
-    {
-        return sid;
-    }
+pub fn rail_station_ground_track_sprite(m5: u8, _tileh: u8) -> u32 {
     if rail_station_axis_y(m5) { 1011 } else { 1012 }
 }
 
 /// Vía de fondo de estación para el tipo de red de la tesela.
 ///
 /// La disposición vanilla entrega `SPR_RAIL_TRACK_*`; OpenTTD le suma el
-/// mismo offset de railtype antes de dibujarla. En pendiente se conserva el
-/// sprite de vía inclinada y se remapea de la misma forma.
+/// mismo offset de railtype antes de dibujarla. La pendiente ya quedó
+/// resuelta por la fundación nivelada de la estación.
 #[must_use]
 pub fn rail_station_ground_track_sprite_for_type(m5: u8, tileh: u8, rail_type: RailType) -> u32 {
     remap_rail_sprite_id(rail_station_ground_track_sprite(m5, tileh), rail_type)
@@ -627,10 +623,21 @@ mod tests {
     }
 
     #[test]
-    fn rail_station_ground_track_uses_sloped_sprite_on_slope() {
-        assert_eq!(rail_station_ground_track_sprite(0, 12), 1031);
-        assert_eq!(rail_station_ground_track_sprite(1, 12), 1031);
-        assert_eq!(rail_station_ground_track_sprite(3, 6), 1032);
+    fn sloped_rail_station_ground_stays_flat_on_its_leveled_foundation() {
+        // `DrawTile_Station` aplica `FOUNDATION_LEVELED` antes de tomar el
+        // `ground` de `_station_display_datas_rail`. La pendiente sólo
+        // cambia el padre/fundación; el hijo conserva el eje de la estación.
+        assert_eq!(rail_station_ground_track_sprite(0, 12), 1012);
+        assert_eq!(rail_station_ground_track_sprite(1, 12), 1011);
+        assert_eq!(rail_station_ground_track_sprite(3, 6), 1011);
+        assert_eq!(
+            rail_station_ground_track_sprite_for_type(0, 12, RailType::Monorail),
+            1094
+        );
+        assert_eq!(
+            rail_station_ground_track_sprite_for_type(1, 6, RailType::Maglev),
+            1175
+        );
     }
 
     #[test]

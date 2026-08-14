@@ -68,6 +68,7 @@ cuando el tile ya se decodificó mal.
 | Monorriel y maglev | Selección diagonal tipada por railtype para no usar rail convencional. | En checkpoint; validar por región. |
 | Depósitos y estaciones especiales | Geometría de depósito naval, reserva visual de depósito rail y distinción de tiles especiales para no disfrazar un fallback como parada de buses. | En checkpoint; los fallbacks deben ser explícitos. |
 | Paleta de compañía 8bpp y estación rail vanilla | Se corrigió el desplazamiento de un índice DOS en las rampas y se dejó de inferir recolor por RGB ajeno a la rampa autora. La región `120,111..128,113` de Kale compara 118/118 comandos de estación (sprite, paleta, geometría y orden). | Validada por `world-draw`; la composición raster amplia sigue teniendo familias ajenas a esta corrección. |
+| Paradas viales vanilla (bus/camión) | `DrawTile_Station` nivela las paradas inclinadas, dibuja el suelo de bahía o la base pavimentada pasante y luego sus `TILE_SEQ_LINE`. El renderer registra los IDs globales de cada capa, sus cajas, paleta de compañía y el child de la fundación; deja de añadir césped o una carretera heurística bajo una bahía. | Kale completo 8bpp: las 457 paradas comparan exactamente contra OpenTTD en ID, paleta, geometría, fundación y orden. La regresión sintética verifica metadata 8bpp/32bpp y evita confundir los IDs Action5 locales 2009–2018 con `SPR_ROADSTOP_BASE` 5978–5985. |
 | Paletas de casas vanilla | `HOUSE_DRAW_DATA` conserva ahora `p1`/`p2` de cada `M(...)` de `town_land.h`; la caché aplica paleta de compañía (775–790), estructura (795–801) e iglesia (1438–1439) a las capas de suelo y edificio. La traza registra la paleta incluso cuando la geometría no es explícita. | En Kale 8bpp, 740 draws de casa no nulos coinciden exactamente con el comando C++ del mismo sprite/tesela/paleta; las pruebas exigen que todos los pares generados tengan asset recoloreado. La captura global sigue marcada como diferente por familias ajenas. |
 | Reservas PBS 8bpp | Los overlays `PALETTE_CRASH=804` se hornean desde índices DOS con la misma pseudo-sprite de recolor que usa OpenTTD; se eliminó el tinte RGBA naranja aproximado. Incluye `SINGLE_*` rail/mono/maglev y las doce rampas PBS. | Validar en captura focalizada; la traza conserva paleta 804 y ahora distingue la ausencia del asset exacto como fallback. |
 | Campos y cercas de Kale (8bpp y 32bpp) | Se instrumentó `DrawTile_Clear` para campos y sus cuatro cercas, se corrigió la altura de esquina de pendientes empinadas y el suelo natural deja de usar la elevación como profundidad. El spawn recorre las teselas en el mismo barrido diagonal de `ViewportAddLandscape`; OpenGFX2 selecciona su variante RGBA normal sin mezclar coordenadas 8bpp. | La región `225,25..251,61` valida en 8bpp 647 suelos y 476 cercas: ID, geometría y orden relativo 100 % contenidos en OpenTTD. La regresión de selección cubre los dos perfiles de baseset. Falta una captura local de aceptación tras el cambio. |
@@ -158,6 +159,27 @@ contrato para rail/elrail, monorail y maglev (+0/+82/+164), recorta las tres
 familias desde el NFO del perfil gráfico activo y conserva los offsets NFO
 propios de 8bpp o 32bpp. La caja `TILE_SEQ` de los pilares Y-rear (1077 y sus
 variantes) también quedó corregida a `5×16×2`, según `station_land.h`.
+
+### Revalidación: paradas viales vanilla de Kale
+
+El siguiente hueco de instrumentación no era una familia de terreno: eran las
+paradas de bus/camión. OpenTTD usa los suelos de
+`_station_display_datas_{bus,truck}` para las bahías y
+`SPR_ROAD_PAVED_STRAIGHT_{X,Y}` para las pasantes; después agrega las capas
+`TILE_SEQ_LINE` con paleta de compañía. En una pendiente, toda esa secuencia
+se cuelga de `DrawFoundation(Foundation::Leveled)`. El cliente antes dibujaba
+césped y una carretera basada en `m3` además de la bahía, y no declaraba esas
+capas en `world-draw`, por lo que el auditor no podía distinguir la omisión de
+una selección correcta.
+
+La traza completa de `Kale_TitleGame.sav` identifica 457 teselas de parada y
+las compara exactamente contra la referencia: 234 bases 1313 y 222 bases
+1314; una bahía bus NE (`2692`, `2696`, `2700`, `2704`); y las tiras pasantes
+`5978/5979 ×192`, `5980/5981 ×157`, `5982/5983 ×42` y `5984/5985 ×65`.
+Cada subconjunto coincide en sprite, paleta, mundo, bbox, fundación y orden
+relativo. La prueba Rust conserva la ausencia de la carretera heurística, y
+`scripts/test_road_stop_sprite_variants.py` sintetiza ambos perfiles de
+baseset para exigir los mismos IDs lógicos y cajas en 8bpp y 32bpp.
 
 ## Procedimiento para investigar un caso nuevo
 

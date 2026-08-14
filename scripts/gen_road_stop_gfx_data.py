@@ -23,6 +23,9 @@ DRIVE_THROUGH_TRUCK_DATAS = (168, 169)
 DRIVE_THROUGH_BUS_DATAS = (170, 171)
 SPRITE_ID_MIN = 2692
 SPRITE_ID_MAX = 2723
+# `SPR_ROADSTOP_BASE` calculado por OpenTTD para Action5 0x11. Estos ocho
+# IDs son globales del draw proc, no los índices locales del NFO extra.
+ROADSTOP_GLOBAL_BASE = 5978
 
 # Action5 0x11: bus Y_W/Y_E/X_W/X_E, seguido de truck Y_W/Y_E/X_W/X_E.
 DRIVE_THROUGH_NAMES = {
@@ -321,7 +324,8 @@ def write_layers(
             )
             yo += yo_delta
             lines.append(
-                f"        RoadStopLayerGfx {{ dx: {dx}.0, dy: {dy}.0, dz: {dz}.0, "
+                f"        RoadStopLayerGfx {{ sprite_id: {sid}, bounds: ({sx}, {sy}, {sz}), "
+                f"dx: {dx}.0, dy: {dy}.0, dz: {dz}.0, "
                 f"z: {z:.2f}, w: {w:.1f}, h: {h:.1f}, x_offs: {xo:.1f}, y_offs: {yo:.1f}, "
                 f"remap_x_adj: {adj:.1f}, "
                 f'path: "assets/opengfx/tiles/{png}" }},'
@@ -341,20 +345,26 @@ def write_drive_through_layers(
     """Genera X/Y × W/E para las dos tiras que forman una parada pasante."""
     # Action5 enumera Y antes de X; el cliente indexa [X, Y].
     ids_by_axis = ((sprite_ids[2], sprite_ids[3]), (sprite_ids[0], sprite_ids[1]))
+    # La Action5 enumera Y antes de X. El ID que recibe DrawTileSeq es el
+    # bloque global `SPR_ROADSTOP_BASE`, independiente del ID local del NFO.
+    slots_by_axis = ((2, 3), (0, 1))
+    class_offset = 4 if prefix == "truck" else 0
     names = DRIVE_THROUGH_NAMES[prefix]
     names_by_axis = ((names[2], names[3]), (names[0], names[1]))
     flat: list[str] = []
     for axis_i, data_id in enumerate(datas):
         seq = blocks.get(data_id, [])[:2]
-        for layer_i, (dx, dy, dz, sx, _sy, sz) in enumerate(seq):
+        for layer_i, (dx, dy, dz, sx, sy, sz) in enumerate(seq):
             png = names_by_axis[axis_i][layer_i]
             sid = ids_by_axis[axis_i][layer_i]
+            logical_sprite_id = ROADSTOP_GLOBAL_BASE + class_offset + slots_by_axis[axis_i][layer_i]
             wh = png_size(tiles_dir, png)
             w, h, xo, yo, _note = pick_sprite_meta(nfo.get(sid, []), wh, prefer_bpp)
             if w <= 0.0 or h <= 0.0:
                 w, h = (float(sx * 2), float(sz * 2)) if wh is None else (float(wh[0]), float(wh[1]))
             flat.append(
-                f"        RoadStopLayerGfx {{ dx: {dx}.0, dy: {dy}.0, dz: {dz}.0, "
+                f"        RoadStopLayerGfx {{ sprite_id: {logical_sprite_id}, bounds: ({sx}, {sy}, {sz}), "
+                f"dx: {dx}.0, dy: {dy}.0, dz: {dz}.0, "
                 f"z: {0.05 + layer_i * 0.01:.2f}, w: {w:.1f}, h: {h:.1f}, "
                 f"x_offs: {xo:.1f}, y_offs: {yo:.1f}, remap_x_adj: 0.0, "
                 f'path: "assets/opengfx/tiles/{png}" }},'
@@ -441,6 +451,10 @@ def main() -> int:
         "",
         "#[derive(Debug, Clone, Copy)]",
         "pub struct RoadStopLayerGfx {",
+        "    /// ID global que recibe OpenTTD en `DrawTileSeq`.",
+        "    pub sprite_id: u32,",
+        "    /// Caja `TILE_SEQ_LINE(ex, ey, ez)`, no el tamaño del PNG.",
+        "    pub bounds: (i32, i32, i32),",
         "    pub dx: f32,",
         "    pub dy: f32,",
         "    pub dz: f32,",

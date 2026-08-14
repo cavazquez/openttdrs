@@ -387,6 +387,28 @@ pub fn road_stop_ground_index(m5: u8) -> usize {
     }
 }
 
+/// Sprite de suelo de una bahía vial vanilla (`_station_display_datas_bus` /
+/// `_station_display_datas_truck`). Los cuatro IDs son consecutivos por
+/// dirección; las paradas pasantes usan en cambio los paved roads 1313/1314.
+#[must_use]
+pub const fn road_stop_ground_sprite_id(class: StationTileClass, dir: usize) -> Option<u32> {
+    if dir > 3 {
+        return None;
+    }
+    match class {
+        StationTileClass::Bus => Some(2692 + dir as u32),
+        StationTileClass::Truck => Some(2708 + dir as u32),
+        StationTileClass::Rail
+        | StationTileClass::RailWaypoint
+        | StationTileClass::RoadWaypoint
+        | StationTileClass::Airport
+        | StationTileClass::Oilrig
+        | StationTileClass::Dock
+        | StationTileClass::Buoy
+        | StationTileClass::Other(_) => None,
+    }
+}
+
 include!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/src/sprites/road_stop_gfx_data_generated.rs"
@@ -814,6 +836,50 @@ mod tests {
             2
         );
         assert!(road_stop_drive_through_layers(StationTileClass::Bus, 0).is_empty());
+    }
+
+    /// Contrato literal de `station_land.h`: evita que un ID local de Action5
+    /// (2009..2018) vuelva a filtrarse al stream lógico que dibuja OpenTTD
+    /// (5978..5985), o que una caja TILE_SEQ se infiera desde el PNG.
+    #[test]
+    fn road_stop_vanilla_sprite_ids_and_bounds_match_upstream() {
+        assert_eq!(
+            road_stop_ground_sprite_id(StationTileClass::Bus, 0),
+            Some(2692)
+        );
+        assert_eq!(
+            road_stop_ground_sprite_id(StationTileClass::Truck, 3),
+            Some(2711)
+        );
+        assert_eq!(road_stop_ground_sprite_id(StationTileClass::Bus, 4), None);
+
+        let bus_ne = road_stop_build_layers(StationTileClass::Bus, 0);
+        assert_eq!(
+            [
+                bus_ne[0].sprite_id,
+                bus_ne[1].sprite_id,
+                bus_ne[2].sprite_id
+            ],
+            [2696, 2700, 2704]
+        );
+        assert_eq!(
+            [bus_ne[0].bounds, bus_ne[1].bounds, bus_ne[2].bounds],
+            [(11, 1, 10), (3, 16, 10), (13, 3, 10)]
+        );
+
+        let bus_x = road_stop_drive_through_layers(StationTileClass::Bus, 4);
+        assert_eq!([bus_x[0].sprite_id, bus_x[1].sprite_id], [5980, 5981]);
+        assert_eq!(
+            [bus_x[0].bounds, bus_x[1].bounds],
+            [(16, 3, 16), (16, 3, 16)]
+        );
+
+        let truck_y = road_stop_drive_through_layers(StationTileClass::Truck, 5);
+        assert_eq!([truck_y[0].sprite_id, truck_y[1].sprite_id], [5982, 5983]);
+        assert_eq!(
+            [truck_y[0].bounds, truck_y[1].bounds],
+            [(3, 16, 16), (3, 16, 16)]
+        );
     }
 
     #[test]

@@ -39,6 +39,22 @@ def main() -> None:
     paths.update(PATH_RE.findall(rail_rs))
     # Excluir suelos neutros (sin PALETTE_MODIFIER_COLOUR en upstream).
     paths.discard("road_depot_ground.png")
+    # Los suelos de bahías bus/camión sí llevan `PALETTE_MODIFIER_COLOUR`
+    # (`_station_display_datas_{bus,truck}` en station_land.h), aunque no
+    # aparezcan en la tabla BUILD generada. Sin ellos el edificio se colorea
+    # pero el andén queda siempre azul oscuro.
+    paths.update(
+        {
+            "bus_stop_ne_ground.png",
+            "bus_stop_se_ground.png",
+            "bus_stop_sw_ground.png",
+            "bus_stop_nw_ground.png",
+            "truck_stop_ground_0.png",
+            "truck_stop_ground_1.png",
+            "truck_stop_ground_2.png",
+            "truck_stop_ground_3.png",
+        }
+    )
     # `DrawShipDepotSprite` usa PALETTE_MODIFIER_COLOUR para las seis capas
     # vanilla del depósito naval; no están descriptas por una tabla Rust.
     paths.update(

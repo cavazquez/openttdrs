@@ -1,6 +1,6 @@
 // Generado por scripts/gen_company_palette_paths.py — NO EDITAR A MANO.
 
-pub static COMPANY_PALETTE_STATIC_PATHS: [&str; 237] = [
+pub static COMPANY_PALETTE_STATIC_PATHS: [&str; 245] = [
     "airport_airfield_hangar_front.png",
     "airport_airfield_hangar_rear.png",
     "airport_airfield_terminal_c_build.png",
@@ -31,15 +31,19 @@ pub static COMPANY_PALETTE_STATIC_PATHS: [&str; 237] = [
     "bus_stop_ne_build_a.png",
     "bus_stop_ne_build_b.png",
     "bus_stop_ne_build_c.png",
+    "bus_stop_ne_ground.png",
     "bus_stop_nw_build_a.png",
     "bus_stop_nw_build_b.png",
     "bus_stop_nw_build_c.png",
+    "bus_stop_nw_ground.png",
     "bus_stop_se_build_a.png",
     "bus_stop_se_build_b.png",
     "bus_stop_se_build_c.png",
+    "bus_stop_se_ground.png",
     "bus_stop_sw_build_a.png",
     "bus_stop_sw_build_b.png",
     "bus_stop_sw_build_c.png",
+    "bus_stop_sw_ground.png",
     "rail_1412.png",
     "rail_1413.png",
     "rail_depot_maglev_ne.png",
@@ -74,6 +78,10 @@ pub static COMPANY_PALETTE_STATIC_PATHS: [&str; 237] = [
     "truck_stop_dt_x_w.png",
     "truck_stop_dt_y_e.png",
     "truck_stop_dt_y_w.png",
+    "truck_stop_ground_0.png",
+    "truck_stop_ground_1.png",
+    "truck_stop_ground_2.png",
+    "truck_stop_ground_3.png",
     "truck_stop_ne_build_a.png",
     "truck_stop_ne_build_b.png",
     "truck_stop_ne_build_c.png",

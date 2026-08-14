@@ -24,10 +24,11 @@ use crate::render::{
     WaterTile, WorldAssets, sprite_from_atlas_or_company_white_colour,
 };
 use crate::sprites::{
-    CompanyColour, StationTileClass, TransparencyOption, airport_station_base_for_gfx,
-    airport_station_ground_layers_for_gfx, airport_station_layers_for_gfx,
-    airport_station_overlay_rel_for_sprite, airport_station_sprite_for_id, catenary_hidden,
-    catenary_reference_sprite_id, catenary_sprite_color, catenary_tunnel_wire_sprite,
+    CompanyColour, RoadStopLayerGfx, StationTileClass, TransparencyOption,
+    airport_station_base_for_gfx, airport_station_ground_layers_for_gfx,
+    airport_station_layers_for_gfx, airport_station_overlay_rel_for_sprite,
+    airport_station_sprite_for_id, catenary_hidden, catenary_reference_sprite_id,
+    catenary_sprite_color, catenary_tunnel_wire_sprite,
     collect_catenary_pylons_from_map_with_pcp_override, collect_catenary_wire_draws_from_map,
     is_hidden, log_unknown_station_type_once, rail_depot_build_layers, rail_depot_seq_gfx,
     rail_depot_visual_type_index, rail_ghost_overlay_offset, rail_pbs_reservation_offset,
@@ -35,9 +36,9 @@ use crate::sprites::{
     rail_station_layer_for_type, rail_station_overlay_rel, rail_station_sprite_meta,
     rail_waypoint_draw_layers, rail_waypoint_layer_meta, rail_waypoint_sprite_center,
     remap_rail_sprite_id, road_depot_build_layers, road_depot_entrance_road_bits,
-    road_depot_seq_gfx, road_flat_sprite_index, road_stop_build_layers,
-    road_stop_drive_through_layers, road_stop_ground_index, road_stop_seq_gfx, station_tile_class,
-    with_to_alpha,
+    road_depot_seq_gfx, road_flat_sprite_index, road_ground_sprite_id, road_stop_build_layers,
+    road_stop_drive_through_layers, road_stop_ground_index, road_stop_ground_sprite_id,
+    road_stop_seq_gfx, station_tile_class, with_to_alpha,
 };
 
 fn buildings_hidden() -> bool {
@@ -82,6 +83,85 @@ fn record_station_pbs_trace(tileh: u8, sprite_id: u32, fallback: bool) {
 
 fn station_company_palette(owner_colour: Option<CompanyColour>) -> u32 {
     775 + u32::from(owner_colour.unwrap_or_default().as_u8())
+}
+
+/// `DrawTile_Station` nivela las paradas viales inclinadas antes de emitir el
+/// suelo. Como para una estación ferroviaria o un depósito, el `DrawGroundSprite`
+/// posterior queda colgado del cimiento con este offset de pantalla normalizado.
+const fn road_stop_foundation_child_offset(tileh: u8) -> Option<(i32, i32, i32)> {
+    if tileh == 0 { None } else { Some((0, -32, 0)) }
+}
+
+fn record_road_stop_ground_trace(tileh: u8, sprite_id: u32, palette: u32, fallback: bool) {
+    if let Some(offset) = road_stop_foundation_child_offset(tileh) {
+        WorldDrawTrace::record_foundation_child_sprite_with_palette(
+            "station-road-stop-ground",
+            sprite_id,
+            palette,
+            fallback,
+            offset,
+        );
+    } else {
+        WorldDrawTrace::record_sprite_with_palette(
+            "station-road-stop-ground",
+            "ground",
+            sprite_id,
+            palette,
+            fallback,
+        );
+    }
+}
+
+/// Registra cada `TILE_SEQ_LINE` de una parada vial con la caja de mundo del
+/// oráculo. En una pendiente, `DrawFoundation(Leveled)` actualiza `ti->z` y
+/// por eso el drawable sortable suma la elevación de la superficie plana.
+fn record_road_stop_layer_trace(
+    layer: &RoadStopLayerGfx,
+    owner_colour: Option<CompanyColour>,
+    fallback: bool,
+    world_z_delta: i32,
+) {
+    let (ex, ey, ez) = layer.bounds;
+    WorldDrawTrace::record_sprite_with_palette_and_geometry(
+        "station-road-stop-layer",
+        "sortable",
+        layer.sprite_id,
+        station_company_palette(owner_colour),
+        fallback,
+        (0, 0, 0),
+        world_z_delta,
+        Some(TraceSpriteBounds::new(
+            layer.dx as i32,
+            layer.dy as i32,
+            layer.dz as i32,
+            ex,
+            ey,
+            ez,
+        )),
+    );
+}
+
+/// PNG del suelo `PALETTE_MODIFIER_COLOUR` de las cuatro orientaciones
+/// vanilla. Se mantiene junto a la selección de sprite para que el atlas y
+/// el caché de recolor no vuelvan a divergir del layout de OpenTTD.
+fn road_stop_ground_asset_path(class: StationTileClass, dir: usize) -> &'static str {
+    const BUS: [&str; 4] = [
+        "assets/opengfx/tiles/bus_stop_ne_ground.png",
+        "assets/opengfx/tiles/bus_stop_se_ground.png",
+        "assets/opengfx/tiles/bus_stop_sw_ground.png",
+        "assets/opengfx/tiles/bus_stop_nw_ground.png",
+    ];
+    const TRUCK: [&str; 4] = [
+        "assets/opengfx/tiles/truck_stop_ground_0.png",
+        "assets/opengfx/tiles/truck_stop_ground_1.png",
+        "assets/opengfx/tiles/truck_stop_ground_2.png",
+        "assets/opengfx/tiles/truck_stop_ground_3.png",
+    ];
+    match class {
+        StationTileClass::Bus => BUS[dir.min(3)],
+        StationTileClass::Truck => TRUCK[dir.min(3)],
+        _ => unreachable!("sólo las paradas bus/camión tienen suelo vial vanilla"),
+    }
 }
 
 fn record_station_rail_ground_trace(tileh: u8, sprite_id: u32, fallback: bool) {
@@ -463,15 +543,19 @@ pub(crate) fn spawn_station_tile(
 ) {
     let tileh = ctx.info.tileh;
     let base_z = ctx.info.base_z;
-    if tileh != 0 {
-        let grass = sloped_or_flat_image(tileh, &assets.grass, &assets.grass_slopes);
-        spawn_ground_sprite(commands, &grass, Color::WHITE, ctx, slope_half_ground);
-    }
-
     let stop_kind = station_at_tile(map, stations, ctx.coord).map(|s| s.stop_kind);
     let m6 = ctx.tile.map_or(0, |t| t.m6);
     let m5 = ctx.tile.map_or(0, |t| t.m5);
     let class = station_tile_class(m6, stop_kind);
+    // Las paradas de bus/camión ya tienen un suelo completo en
+    // `_station_display_datas_{bus,truck}`. OpenTTD no dibuja césped bajo
+    // ellas, ni siquiera en una pendiente: primero nivela y luego cuelga ese
+    // suelo de la fundación. El césped genérico hacía visible una capa extra
+    // alrededor de los andenes y ocultaba el desvío en la traza.
+    if tileh != 0 && !matches!(class, StationTileClass::Bus | StationTileClass::Truck) {
+        let grass = sloped_or_flat_image(tileh, &assets.grass, &assets.grass_slopes);
+        spawn_ground_sprite(commands, &grass, Color::WHITE, ctx, slope_half_ground);
+    }
     let rail_type = ctx
         .tile
         .map_or(openttdrs_core::RailType::Rail, rail_type_from_tile);
@@ -771,11 +855,23 @@ pub(crate) fn spawn_station_tile(
         }
         StationTileClass::Bus | StationTileClass::Truck => {
             let is_drive_through = openttdrs_core::is_drive_through_orientation(m5);
-            if tileh == 0 && !is_drive_through {
-                let grass = sloped_or_flat_image(0, &assets.grass, &assets.grass_slopes);
-                spawn_ground_sprite(commands, &grass, Color::WHITE, ctx, slope_half_ground);
-            }
-            let stub = ctx.tile.map_or(0, |t| t.m3 & 0x0F);
+            // Igual que `DrawTile_Station`: toda parada vial inclinada usa
+            // una fundación nivelada, independiente de los road bits. La
+            // superficie resultante es plana y las capas BUILD se ordenan a
+            // su altura, no a la del relieve crudo.
+            let road_stop_base_z = spawn_forced_leveled_foundation(
+                commands,
+                map,
+                dims,
+                assets,
+                ctx,
+                tileh,
+                "road-stop",
+                "road-stop-foundation",
+                foundation_newgrf,
+                action5_sprites.as_deref_mut(),
+                images.as_deref_mut(),
+            );
             if is_drive_through {
                 let road_bits = if m5 == openttdrs_core::RSV_DRIVE_THROUGH_X {
                     0x0A
@@ -786,13 +882,10 @@ pub(crate) fn spawn_station_tile(
                     commands,
                     assets,
                     ctx,
-                    base_z,
-                    rail_half_h,
+                    road_stop_base_z,
                     tileh,
                     road_bits,
                 );
-            } else if stub != 0 {
-                spawn_road_stop_link(commands, assets, ctx, base_z, rail_half_h, tileh, stub);
             }
             let view_idx = usize::from(m5.min(5));
             if !is_drive_through {
@@ -801,16 +894,33 @@ pub(crate) fn spawn_station_tile(
                     assets
                         .bus_stop_grounds
                         .get(ground_dir)
-                        .cloned()
-                        .unwrap_or_else(|| assets.bus_stop_grounds[0].clone())
+                        .unwrap_or(&assets.bus_stop_grounds[0])
                 } else {
                     assets
                         .station_grounds
                         .get(ground_dir)
-                        .cloned()
-                        .unwrap_or_else(|| assets.station_grounds[0].clone())
+                        .unwrap_or(&assets.station_grounds[0])
                 };
-                spawn_stop_ground_sprite(commands, &image, ctx, base_z, 0.04);
+                if let Some(sprite_id) = road_stop_ground_sprite_id(class, ground_dir) {
+                    spawn_road_stop_ground_sprite(
+                        commands,
+                        image,
+                        company,
+                        owner_colour,
+                        ctx,
+                        road_stop_base_z,
+                        tileh,
+                        sprite_id,
+                        road_stop_ground_asset_path(class, ground_dir),
+                    );
+                } else {
+                    // La rama sólo admite Bus/Truck y `ground_dir` ya está
+                    // acotado a 0..=3; conservar una degradación explícita
+                    // evita que un dato malformado bloquee sus capas BUILD.
+                    bevy::log::warn!(
+                        "Parada vial sin ground vanilla: clase={class:?}, dirección={ground_dir}"
+                    );
+                }
             }
             spawn_road_stop_buildings(
                 commands,
@@ -820,7 +930,7 @@ pub(crate) fn spawn_station_tile(
                 map,
                 stations,
                 ctx,
-                base_z,
+                road_stop_base_z,
                 class,
                 view_idx,
                 road_stop_catalog,
@@ -1009,11 +1119,14 @@ fn spawn_paved_road_stop_link(
     assets: &WorldAssets,
     ctx: &TileRenderContext,
     base_z: u8,
-    half_h: f32,
     tileh: u8,
     road_bits: u8,
 ) {
-    let fi = road_flat_sprite_index(tileh, road_bits);
+    // El layout vanilla siempre selecciona `SPR_ROAD_PAVED_STRAIGHT_*`.
+    // Cuando había pendiente ya fue absorbida por `Foundation::Leveled`; no
+    // debemos indexar una rampa de carretera con el `tileh` original.
+    let fi = road_flat_sprite_index(0, road_bits);
+    record_road_stop_ground_trace(tileh, road_ground_sprite_id(fi, true, false), 0, false);
     commands.spawn((
         MapVisualLayer,
         ctx.map_tile_chunk(),
@@ -1023,7 +1136,7 @@ fn spawn_paved_road_stop_link(
             ctx.ty_i32(),
             base_z,
             0.025,
-            half_h,
+            TILE_HALF_H,
         )),
     ));
 }
@@ -1087,6 +1200,7 @@ fn spawn_road_stop_buildings(
     }
     let orientation = u8::try_from(dir).unwrap_or_default();
     let drive_through = road_stop_drive_through_layers(class, orientation);
+    let world_z_delta = i32::from(base_z.saturating_sub(ctx.info.base_z)) * 8;
     if !drive_through.is_empty() {
         let handles = match class {
             StationTileClass::Bus => &assets.bus_stop_drive_through,
@@ -1095,6 +1209,7 @@ fn spawn_road_stop_buildings(
         };
         let axis = usize::from(orientation - openttdrs_core::RSV_DRIVE_THROUGH_X);
         for (layer_i, spec) in drive_through.iter().enumerate() {
+            record_road_stop_layer_trace(spec, owner_colour, false, world_z_delta);
             let center = road_stop_build_sprite_center(
                 ctx.iso_pos,
                 ctx.tx_i32(),
@@ -1129,6 +1244,7 @@ fn spawn_road_stop_buildings(
     // OpenGFX / Action5 solo tienen bahía 0..3; DT 4/5 cae al eje.
     let build_dir = road_stop_ground_index(u8::try_from(dir).unwrap_or(0)).min(3);
     for (layer_i, spec) in road_stop_build_layers(class, build_dir).iter().enumerate() {
+        record_road_stop_layer_trace(spec, owner_colour, false, world_z_delta);
         let center = road_stop_build_sprite_center(
             ctx.iso_pos,
             ctx.tx_i32(),
@@ -1172,6 +1288,36 @@ fn spawn_road_stop_buildings(
             Transform::from_translation(center),
         ));
     }
+}
+
+/// Suelo de una bahía bus/camión. El `ground` vanilla lleva
+/// `PALETTE_MODIFIER_COLOUR`, pero no participa de la transparencia de
+/// edificios; oscurecerlo como una capa BUILD dejaba una loseta negra al
+/// alternar la transparencia.
+#[allow(clippy::too_many_arguments)]
+fn spawn_road_stop_ground_sprite(
+    commands: &mut Commands,
+    image: &AtlasSprite,
+    company: Option<&CompanyColoredSprites>,
+    owner_colour: Option<CompanyColour>,
+    ctx: &TileRenderContext,
+    base_z: u8,
+    original_tileh: u8,
+    sprite_id: u32,
+    asset_path: &str,
+) {
+    record_road_stop_ground_trace(
+        original_tileh,
+        sprite_id,
+        station_company_palette(owner_colour),
+        false,
+    );
+    commands.spawn((
+        MapVisualLayer,
+        ctx.map_tile_chunk(),
+        sprite_from_atlas_or_company_white_colour(company, owner_colour, image, asset_path),
+        Transform::from_translation(tile_pos(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.04)),
+    ));
 }
 
 fn spawn_stop_ground_sprite(
@@ -1884,8 +2030,8 @@ fn spawn_rail_depot_tile(
 mod tests {
     use super::{
         airport_station_ground_layer_trace_offset, rail_depot_foundation_child_offset,
-        rail_depot_reservation_track_visible, station_rail_child_offset,
-        tunnel_catenary_trace_geometry,
+        rail_depot_reservation_track_visible, road_stop_foundation_child_offset,
+        station_rail_child_offset, tunnel_catenary_trace_geometry,
     };
     use crate::sprites::airport_station_ground_layers_for_gfx;
 
@@ -1911,6 +2057,13 @@ mod tests {
         assert_eq!(rail_depot_foundation_child_offset(0), None);
         assert_eq!(rail_depot_foundation_child_offset(11), Some((0, -32, 0)));
         assert_eq!(rail_depot_foundation_child_offset(0x17), Some((0, -32, 0)));
+    }
+
+    #[test]
+    fn sloped_road_stop_ground_is_child_of_the_leveled_foundation() {
+        assert_eq!(road_stop_foundation_child_offset(0), None);
+        assert_eq!(road_stop_foundation_child_offset(6), Some((0, -32, 0)));
+        assert_eq!(road_stop_foundation_child_offset(0x17), Some((0, -32, 0)));
     }
 
     #[test]

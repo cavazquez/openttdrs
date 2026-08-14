@@ -216,6 +216,78 @@ fn oilrig_station_uses_water_even_when_its_station_has_airport_service() {
     );
 }
 
+/// Una bahía vial normal ya contiene todo el suelo en su layout de estación.
+/// `m3` conserva los road bits importados, pero no habilita una segunda
+/// carretera genérica: OpenTTD sólo la superpone para roadtypes con overlay,
+/// que este renderer todavía no modela como una variante distinta.
+#[test]
+fn road_stop_bay_uses_only_its_vanilla_ground_and_build_layers() {
+    let assets = boot_assets_app();
+    let bus_ground = assets.bus_stop_grounds[0].clone();
+    let mut map = fresh_map8();
+    let stop = TileCoord::new(3, 3);
+    map.set_tile(
+        stop,
+        Tile {
+            kind: TileKind::Station,
+            mapt: 0x50,
+            // StationType::Bus, StationGfx::NE. Los bits de carretera no
+            // deben crear un segundo suelo bajo la bahía.
+            m3: 0x0A,
+            m5: 0,
+            m6: 3 << 3,
+            ..tile_template()
+        },
+    )
+    .expect("bus stop tile");
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+
+    world
+        .run_system_once(
+            |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                spawn_station_tile(
+                    &mut commands,
+                    &m.0,
+                    m.0.dimensions(),
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, 3, 3),
+                    &[],
+                    4.0,
+                    true,
+                    &[],
+                    &[],
+                    None,
+                    None,
+                    &[],
+                    None,
+                    &[],
+                    None,
+                    &[],
+                    TEST_CLIMATE,
+                    &[],
+                );
+            },
+        )
+        .expect("bus stop spawn");
+
+    let sprites: Vec<_> = world.query::<&Sprite>().iter(&world).collect();
+    assert_eq!(
+        sprites.len(),
+        4,
+        "bahía vanilla = ground + BUILD_A/B/C; ni césped ni carretera heurística"
+    );
+    assert!(
+        sprites.iter().any(|sprite| bus_ground.matches(sprite)),
+        "debe conservar el suelo de la bahía NE"
+    );
+}
+
 #[test]
 fn spawn_road_rail_station_and_transport_cover_main_paths() {
     let assets = boot_assets_app();

@@ -132,6 +132,106 @@ class AirportStationSpriteVariantsTest(unittest.TestCase):
                     )
                 self.assertEqual(rect.xrel, expected_xrel - index, f"{mode} sprite={sprite_id}")
 
+    def test_32bpp_action5_falls_back_to_official_indexed_sprite(self) -> None:
+        repo = self.make_repo("32bpp")
+        root = repo / "assets" / "opengfx"
+        active_sprites = root / "opengfx2-32ez" / "sprites"
+        (active_sprites / "ogfx2e_extra_32ez.nfo").write_text(
+            "1 * 8 05 95 FF 01 00 FF 56 00\n"
+            "2 active.png 8bpp 0 0 1 1 0 0 normal\n",
+            encoding="utf-8",
+        )
+
+        fallback_sprites = root / ".signal-src-8bpp" / "sprites"
+        fallback_sprites.mkdir(parents=True)
+        (fallback_sprites / "ogfxe_extra.nfo").write_text(
+            "10 * 8 05 95 FF 01 00 FF 56 00\n"
+            "11 fallback.png 8bpp 0 0 2 1 -3 -4 normal\n",
+            encoding="utf-8",
+        )
+        fallback_sheet = Image.new("P", (2, 1))
+        fallback_sheet.putpalette([0, 0, 0, 16, 16, 16, 32, 32, 32] + [0] * (256 * 3 - 9))
+        fallback_sheet.putdata([1, 2])
+        fallback_sheet.save(fallback_sprites / "fallback.png")
+
+        saved = {
+            "REPO": generator.REPO,
+            "TILES_DIR": generator.TILES_DIR,
+            "ACTION5_SPRITES": generator.ACTION5_SPRITES,
+        }
+        try:
+            generator.REPO = repo
+            generator.TILES_DIR = root / "tiles"
+            generator.ACTION5_SPRITES = ((4982, "airport_helipad.png"),)
+            cropper = generator.AirportStationSpriteCropper("32bpp")
+            source_dir, rect, source_mode = cropper.source_with_mode(4982)
+            self.assertEqual(source_dir, fallback_sprites)
+            self.assertEqual(source_mode, "8bpp")
+            self.assertEqual(rect, generator.SpriteRect(0, 0, 2, 1, -3, -4, "fallback.png"))
+
+            cropper.crop(4982, "airport_helipad.png")
+            with Image.open(fallback_sprites / "fallback.png") as source:
+                expected_pixels = list(
+                    generator.indexed_dos_to_rgba(source).get_flattened_data()
+                )
+            with Image.open(root / "tiles" / "airport_helipad.png") as rendered:
+                self.assertEqual(rendered.size, (2, 1))
+                self.assertEqual(
+                    list(rendered.convert("RGBA").get_flattened_data()),
+                    expected_pixels,
+                )
+        finally:
+            for name, value in saved.items():
+                setattr(generator, name, value)
+
+    def test_32bpp_action5_prefers_native_variant_over_fallback(self) -> None:
+        repo = self.make_repo("32bpp")
+        root = repo / "assets" / "opengfx"
+        active_sprites = root / "opengfx2-32ez" / "sprites"
+        (active_sprites / "ogfx2e_extra_32ez.nfo").write_text(
+            "1 * 8 05 95 FF 01 00 FF 56 00\n"
+            "2 active.png 8bpp 0 0 1 1 0 0 normal\n"
+            "| active.32.png 32bpp 0 0 3 2 -5 -6 normal\n",
+            encoding="utf-8",
+        )
+        active_sheet = Image.new("RGBA", (3, 2), (12, 34, 56, 255))
+        active_sheet.save(active_sprites / "active.32.png")
+
+        fallback_sprites = root / ".signal-src-8bpp" / "sprites"
+        fallback_sprites.mkdir(parents=True)
+        (fallback_sprites / "ogfxe_extra.nfo").write_text(
+            "10 * 8 05 95 FF 01 00 FF 56 00\n"
+            "11 fallback.png 8bpp 0 0 2 1 -3 -4 normal\n",
+            encoding="utf-8",
+        )
+        fallback_sheet = Image.new("P", (2, 1))
+        fallback_sheet.putpalette([0, 0, 0, 16, 16, 16, 32, 32, 32] + [0] * (256 * 3 - 9))
+        fallback_sheet.putdata([1, 2])
+        fallback_sheet.save(fallback_sprites / "fallback.png")
+
+        saved = {
+            "REPO": generator.REPO,
+            "TILES_DIR": generator.TILES_DIR,
+            "ACTION5_SPRITES": generator.ACTION5_SPRITES,
+        }
+        try:
+            generator.REPO = repo
+            generator.TILES_DIR = root / "tiles"
+            generator.ACTION5_SPRITES = ((4982, "airport_helipad.png"),)
+            cropper = generator.AirportStationSpriteCropper("32bpp")
+            source_dir, rect, source_mode = cropper.source_with_mode(4982)
+            self.assertEqual(source_dir, active_sprites)
+            self.assertEqual(source_mode, "32bpp")
+            self.assertEqual(rect, generator.SpriteRect(0, 0, 3, 2, -5, -6, "active.32.png"))
+
+            cropper.crop(4982, "airport_helipad.png")
+            with Image.open(root / "tiles" / "airport_helipad.png") as rendered:
+                self.assertEqual(rendered.size, (3, 2))
+                self.assertEqual(rendered.convert("RGBA").getpixel((0, 0)), (12, 34, 56, 255))
+        finally:
+            for name, value in saved.items():
+                setattr(generator, name, value)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -57,6 +57,8 @@ grfcodec -d -p 1 assets/opengfx/opengfx-8.0/ogfx1_base.grf \
 Con `./scripts/descargar_graficos.sh --32bpp` el renderer usa OpenGFX2 High Def
 (`opengfx2-32ez`). Ese set **aún no** expone el bloque Action5 tipo 05 (elrail)
 con iconos GUI de vía eléctrica ni la catenaria indexada como en OpenGFX clásico.
+También declara los Action5 de helipad/apron de aeropuerto, pero sin una fila
+`32bpp normal`; OpenTTD los sigue consumiendo como sprites indexados.
 
 Por eso el pipeline, en `--32bpp`, descarga además OpenGFX 8.x (caché en
 `.downloads/openttd/`) y deja un mínimo decodificado en:
@@ -76,6 +78,7 @@ Consumidores actuales:
 |--------|-------------------------|
 | `gen_toolbar_rail_icons.py` | `toolbar_rail_electric_{rail_*,tunnel}.png` (slots A5 36..39, 44) |
 | `extract_elrail_catenary.py` | wires / postes / entradas de túnel |
+| `gen_airport_station_draw_data.py` | Action5 4982, 5966–5968 (helipad y mitades de apron) si falta su variante 32bpp |
 | `gen_bridge_structure_palette.py` | tablas `PALETTE_TO_STRUCT_*` (pseudo-sprites 795–801 de `ogfx1_base`) |
 | `extract_rail_pbs_palette_sprites.py` | overlays de reserva PBS ya remapeados con la pseudo-sprite `PALETTE_CRASH=804` |
 
@@ -97,11 +100,12 @@ los casos donde dos píxeles comparten RGB pero la tabla 804 les asigna salidas
 distintas. Si esos archivos no están en el atlas, el HUD/traza marca fallback
 en vez de declarar una coincidencia visual falsa.
 
-**Cuando implementen el equivalente 32bpp nativo** (Action5 elrail usable en
-`ogfx2e_extra_32ez` o sucesor):
+**Cuando implementen los equivalentes 32bpp nativos** (Action5 elrail y
+aeropuerto utilizables en `ogfx2e_extra_32ez` o sucesor):
 
-1. Hacer que `gen_toolbar_rail_icons.py` y `extract_elrail_catenary.py` lean el
-   GRF extra 32bpp (buscar `TODO(32bpp-nativo)` en esos scripts).
+1. Hacer que `gen_toolbar_rail_icons.py`, `extract_elrail_catenary.py` y
+   `gen_airport_station_draw_data.py` lean el GRF extra 32bpp (buscar
+   `TODO(32bpp-nativo)` en esos scripts).
 2. Quitar `ensure_signal_src_8bpp` de `descargar_graficos.sh` y dejar de
    descargar OpenGFX 8.x en modo `--32bpp`.
 3. Borrar esta subsección y el directorio `.signal-src-8bpp/`.

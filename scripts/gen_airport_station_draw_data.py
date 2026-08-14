@@ -9,7 +9,9 @@ secuencia ``TILE_SEQ_LINE`` o ``TILE_SEQ_GROUND`` adicional.
 Este generador copia esa tabla de ``station_land.h`` en una representación
 Rust con las dimensiones/offsets del NFO OpenGFX activo. También resuelve los
 sprites Action5 necesarios para helipads y mitades de apron. Así 8bpp y 32bpp
-usan siempre rects del mismo perfil gráfico, nunca una hoja del perfil opuesto.
+usan los rects del perfil activo. OpenGFX2 conserva cuatro de esos Action5 sólo
+en 8bpp; el perfil 32bpp los toma de un fallback oficial y acotado del
+side-cache, conservando la paleta DOS por índice.
 
 Salidas:
 
@@ -357,6 +359,28 @@ def active_extra_sprite_nfo(mode: str) -> Path | None:
     return next((path for path in candidates if path.is_file()), None)
 
 
+def fallback_extra_sprite_nfo(mode: str) -> Path | None:
+    """Devuelve el extra OpenGFX 8bpp que respalda Action5 ausentes en 32bpp.
+
+    OpenGFX2 declara los Action5 de helipad/apron, pero no les adjunta una fila
+    ``32bpp normal``. El side-cache se construye desde el mismo OpenGFX oficial
+    que OpenTTD usa para esos sprites indexados. Se limita a 32bpp para que el
+    perfil clásico nunca mezcle basesets.
+    """
+
+    if mode != "32bpp":
+        return None
+    path = (
+        REPO
+        / "assets"
+        / "opengfx"
+        / ".signal-src-8bpp"
+        / "sprites"
+        / "ogfxe_extra.nfo"
+    )
+    return path if path.is_file() else None
+
+
 def selected_extra_rects(nfo_path: Path, mode: str) -> dict[int, SpriteRect]:
     """Rect de cada ID físico del NFO extra en la variante activa normal."""
 
@@ -447,39 +471,65 @@ class AirportStationSpriteCropper:
         self.global_rects = parse_global_sprite_rects(global_nfo, mode)
         self.extra_dir: Path | None = None
         self.extra_rects: dict[int, SpriteRect] = {}
+        self.fallback_extra_dir: Path | None = None
+        self.fallback_extra_rects: dict[int, SpriteRect] = {}
         extra_nfo = active_extra_sprite_nfo(mode)
         if extra_nfo is not None:
             self.extra_dir = extra_nfo.parent
             self.extra_rects = action5_rects(extra_nfo, mode)
-        self.sheets: dict[Path, Image.Image] = {}
+        fallback_nfo = fallback_extra_sprite_nfo(mode)
+        if fallback_nfo is not None:
+            fallback_rects = action5_rects(fallback_nfo, "8bpp")
+            self.fallback_extra_dir = fallback_nfo.parent
+            self.fallback_extra_rects = {
+                sprite_id: fallback_rects[sprite_id]
+                for sprite_id, _name in ACTION5_SPRITES
+                if sprite_id in fallback_rects
+            }
+        self.sheets: dict[tuple[Path, str], Image.Image] = {}
 
-    def source(self, sprite_id: int) -> tuple[Path, SpriteRect]:
+    def source_with_mode(self, sprite_id: int) -> tuple[Path, SpriteRect, str]:
+        """Resuelve fuente, rect y perfil de paleta del sprite solicitado."""
+
         if sprite_id in self.extra_rects and self.extra_dir is not None:
-            return self.extra_dir, self.extra_rects[sprite_id]
+            return self.extra_dir, self.extra_rects[sprite_id], self.mode
+        if sprite_id in self.fallback_extra_rects and self.fallback_extra_dir is not None:
+            return (
+                self.fallback_extra_dir,
+                self.fallback_extra_rects[sprite_id],
+                "8bpp",
+            )
         try:
-            return self.global_dir, self.global_rects[sprite_id]
+            return self.global_dir, self.global_rects[sprite_id], self.mode
         except KeyError as error:
             hint = ""
             if sprite_id in dict(ACTION5_SPRITES):
                 hint = "; falta el Action5 del GRF extra para el perfil activo"
+                if self.mode == "32bpp":
+                    hint += " y su fallback oficial 8bpp"
             raise RuntimeError(
                 f"sprite de aeropuerto {sprite_id} no está disponible{hint}"
             ) from error
+
+    def source(self, sprite_id: int) -> tuple[Path, SpriteRect]:
+        source_dir, rect, _source_mode = self.source_with_mode(sprite_id)
+        return source_dir, rect
 
     def rect(self, sprite_id: int) -> SpriteRect:
         return self.source(sprite_id)[1]
 
     def crop(self, sprite_id: int, output_name: str) -> SpriteRect:
-        source_dir, rect = self.source(sprite_id)
+        source_dir, rect, source_mode = self.source_with_mode(sprite_id)
         source = source_dir / rect.sheet
         if not source.is_file():
             source = source.with_suffix(".pcx")
         if not source.is_file():
             raise FileNotFoundError(f"no existe hoja OpenGFX {source}")
-        if source not in self.sheets:
-            self.sheets[source] = load_sheet(source, self.mode)
+        sheet_key = (source, source_mode)
+        if sheet_key not in self.sheets:
+            self.sheets[sheet_key] = load_sheet(source, source_mode)
         TILES_DIR.mkdir(parents=True, exist_ok=True)
-        self.sheets[source].crop((rect.x, rect.y, rect.x + rect.w, rect.y + rect.h)).save(
+        self.sheets[sheet_key].crop((rect.x, rect.y, rect.x + rect.w, rect.y + rect.h)).save(
             TILES_DIR / output_name
         )
         return rect

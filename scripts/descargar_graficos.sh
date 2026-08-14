@@ -9,9 +9,9 @@
 #   - --32bpp : OpenGFX2 High Def.
 #
 # En --32bpp también prepara un side-cache mínimo de OpenGFX 8bpp en
-# assets/opengfx/.signal-src-8bpp/ (ogfxe_extra Action5 elrail): hace falta
-# para iconos de vía eléctrica y catenaria hasta que exista equivalente nativo
-# 32bpp en OpenGFX2. Ver docs/GRAFICOS.md § «Side-cache 8bpp».
+# assets/opengfx/.signal-src-8bpp/ (ogfxe_extra Action5): hace falta para
+# iconos/catenaria eléctrica y cuatro sprites de aeropuerto que OpenGFX2 aún
+# declara sólo como 8bpp. Ver docs/GRAFICOS.md § «Side-cache 8bpp».
 #
 # Uso:
 #   ./scripts/descargar_graficos.sh --8bpp
@@ -38,8 +38,8 @@ Notas:
   - Si --32bpp falla con \"tar: Fin de archivo inesperada\", borrá el .tar en
     .downloads/openttd/ y volvé a ejecutar (el script también detecta tars inválidos).
   - --32bpp deja OpenGFX clásico en assets/opengfx/.signal-src-8bpp/ solo para
-    GUI/catenaria eléctrica (Action5 elrail). Cuando OpenGFX2 tenga esos
-    sprites nativos en 32bpp, ese side-cache se puede eliminar.
+    GUI/catenaria eléctrica y Action5 de aeropuerto sin variante nativa. Cuando
+    OpenGFX2 tenga esos sprites nativos en 32bpp, ese side-cache se puede eliminar.
 EOF
 }
 
@@ -155,7 +155,7 @@ for d in "${DEST}"/opengfx-* "${DEST}"/opengfx2-*; do
   rm -rf "$d"
 done
 shopt -u nullglob
-# Conservamos .signal-src-8bpp/ (side-cache elrail); se reutiliza o regenera abajo.
+# Conservamos .signal-src-8bpp/ (side-cache Action5); se reutiliza o regenera abajo.
 
 ensure_opengfx_8bpp_tar() {
   if [[ -f "${TAR_CACHE_8BPP}" ]]; then
@@ -186,11 +186,10 @@ ensure_opengfx_8bpp_tar() {
   rm -rf "${tmp}"
 }
 
-# Side-cache OpenGFX 8bpp: ogfxe_extra (Action5 elrail) + ogfx1_base (paletas puente).
-# TODO(32bpp-nativo): cuando OpenGFX2 ofrezca GUI/catenaria eléctrica Action5 y
-# tablas PALETTE_TO_STRUCT_* en 32bpp, borrar esta función y .signal-src-8bpp;
-# gen_toolbar_rail_icons / extract_elrail_catenary / gen_bridge_structure_palette
-# deben leer solo el set 32bpp.
+# Side-cache OpenGFX 8bpp: ogfxe_extra (Action5 elrail + aeropuerto) + ogfx1_base
+# (paletas puente). TODO(32bpp-nativo): cuando OpenGFX2 ofrezca GUI/catenaria
+# eléctrica, Action5 de aeropuerto y tablas PALETTE_TO_STRUCT_* en 32bpp, borrar
+# esta función y .signal-src-8bpp; los extractores deben leer sólo el set 32bpp.
 ensure_signal_src_8bpp() {
   local signal_src="${DEST}/.signal-src-8bpp"
   local extra_nfo="${signal_src}/sprites/ogfxe_extra.nfo"

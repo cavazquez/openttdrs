@@ -44,7 +44,7 @@ pub const fn road_streetlight_sprite_id(lamp: usize) -> u32 {
 mod road_depot_gfx_data_generated;
 
 pub use road_depot_gfx_data_generated::{
-    ROAD_DEPOT_BUILD_LAYERS, ROAD_DEPOT_GROUND_PATH, RoadDepotLayerGfx,
+    ROAD_DEPOT_BUILD_LAYERS, ROAD_DEPOT_GROUND_PATH, ROAD_DEPOT_GROUND_SPRITE_ID, RoadDepotLayerGfx,
 };
 
 /// Road bits en la tesela del depósito (`DiagDirToRoadBits` en `road_func.h`).
@@ -466,6 +466,37 @@ mod tests {
     }
 
     #[test]
+    fn road_depot_draw_ids_and_tile_seq_bounds_match_road_land() {
+        // `road_land.h`: SPR_AIRPORT_APRON + `_road_depot_NE..NW`.
+        assert_eq!(ROAD_DEPOT_GROUND_SPRITE_ID, 2634);
+        let layouts: Vec<Vec<(u32, i32, i32, i32, i32)>> = (0..4)
+            .map(|dir| {
+                road_depot_build_layers(dir)
+                    .iter()
+                    .map(|layer| {
+                        (
+                            layer.sprite_id,
+                            layer.dx as i32,
+                            layer.dy as i32,
+                            layer.sx,
+                            layer.sy,
+                        )
+                    })
+                    .collect()
+            })
+            .collect();
+        assert_eq!(
+            layouts,
+            vec![
+                vec![(1412, 0, 15, 16, 1)],
+                vec![(1408, 0, 0, 1, 16), (1409, 15, 0, 1, 16)],
+                vec![(1410, 0, 0, 16, 1), (1411, 0, 15, 16, 1)],
+                vec![(1413, 15, 0, 1, 16)],
+            ]
+        );
+    }
+
+    #[test]
     fn road_depot_generated_offsets_from_nfo() {
         let ne = road_depot_build_layers(0)[0];
         assert_eq!(ne.path, "assets/opengfx/tiles/rail_1412.png");
@@ -476,7 +507,9 @@ mod tests {
         assert_eq!(ne.remap_x_adj, 0.0);
 
         let se_mouth = road_depot_build_layers(1)[0];
-        assert!((se_mouth.x_offs - 18.0).abs() < 0.1);
+        // El ancla del sprite 1408 difiere un píxel entre OpenGFX clásico y
+        // OpenGFX2; ambos son correctos para el perfil gráfico activo.
+        assert!((se_mouth.x_offs - 18.0).abs() < 0.1 || (se_mouth.x_offs - 19.0).abs() < 0.1);
         assert!((se_mouth.y_offs - 5.0).abs() < 0.1);
         assert_eq!(se_mouth.remap_x_adj, 0.0);
 
@@ -491,5 +524,8 @@ mod tests {
         assert!((nw.x_offs - 1.0).abs() < 0.1);
         assert!((nw.y_offs - (-32.0)).abs() < 0.1);
         assert_eq!(nw.remap_x_adj, 0.0);
+
+        let sw_mouth = road_depot_build_layers(2)[0];
+        assert!((sw_mouth.x_offs - (-28.0)).abs() < 0.1 || (sw_mouth.x_offs - (-29.0)).abs() < 0.1);
     }
 }

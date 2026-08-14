@@ -62,8 +62,8 @@ def write_layers(
                 w, h = (float(sx * 2), float(sy * 2)) if wh is None else (float(wh[0]), float(wh[1]))
             z = 0.05 + layer_i * 0.01
             layer_lines.append(
-                f"        RoadDepotLayerGfx {{ dx: {dx}.0, dy: {dy}.0, dz: {dz}.0, "
-                f"z: {z:.2f}, w: {w:.1f}, h: {h:.1f}, x_offs: {xo:.1f}, y_offs: {yo:.1f}, "
+                f"        RoadDepotLayerGfx {{ sprite_id: {sid}, dx: {dx}.0, dy: {dy}.0, dz: {dz}.0, "
+                f"sx: {sx}, sy: {sy}, z: {z:.2f}, w: {w:.1f}, h: {h:.1f}, x_offs: {xo:.1f}, y_offs: {yo:.1f}, "
                 f"remap_x_adj: 0.0, "
                 f'path: "assets/opengfx/tiles/{png}" }},'
             )
@@ -105,9 +105,14 @@ def main() -> int:
         "",
         "#[derive(Debug, Clone, Copy)]",
         "pub struct RoadDepotLayerGfx {",
+        "    /// Sprite global de OpenTTD emitido por `DrawRailTileSeq`.",
+        "    pub sprite_id: u32,",
         "    pub dx: f32,",
         "    pub dy: f32,",
         "    pub dz: f32,",
+        "    /// Caja de ordenación `TILE_SEQ_LINE` (unidades de mapa, no píxeles PNG).",
+        "    pub sx: i32,",
+        "    pub sy: i32,",
         "    pub z: f32,",
         "    pub w: f32,",
         "    pub h: f32,",
@@ -116,6 +121,9 @@ def main() -> int:
         "    pub remap_x_adj: f32,",
         "    pub path: &'static str,",
         "}",
+        "",
+        "/// `SPR_AIRPORT_APRON` / suelo de `_road_depot` en `road_land.h`.",
+        "pub const ROAD_DEPOT_GROUND_SPRITE_ID: u32 = 2634;",
         "",
         f'pub const ROAD_DEPOT_GROUND_PATH: &str = "assets/opengfx/tiles/{ground_png}";',
         "",

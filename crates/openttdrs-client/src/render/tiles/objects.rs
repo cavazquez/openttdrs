@@ -24,8 +24,8 @@ use crate::render::{
     WaterTile, WorldAssets, sprite_from_atlas_or_company_white_colour,
 };
 use crate::sprites::{
-    CompanyColour, RoadStopLayerGfx, StationTileClass, TransparencyOption,
-    airport_station_base_for_gfx, airport_station_ground_layers_for_gfx,
+    CompanyColour, ROAD_DEPOT_GROUND_SPRITE_ID, RoadStopLayerGfx, StationTileClass,
+    TransparencyOption, airport_station_base_for_gfx, airport_station_ground_layers_for_gfx,
     airport_station_layers_for_gfx, airport_station_overlay_rel_for_sprite,
     airport_station_sprite_for_id, catenary_hidden, catenary_pylon_world_z_delta,
     catenary_reference_sprite_id, catenary_sprite_color, catenary_tunnel_wire_sprite,
@@ -36,10 +36,10 @@ use crate::sprites::{
     rail_station_ground_track_sprite_for_type, rail_station_layer_bounds,
     rail_station_layer_for_type, rail_station_overlay_rel, rail_station_sprite_meta,
     rail_waypoint_draw_layers, rail_waypoint_layer_meta, rail_waypoint_sprite_center,
-    remap_rail_sprite_id, road_depot_build_layers, road_depot_entrance_road_bits,
-    road_depot_seq_gfx, road_flat_sprite_index, road_ground_sprite_id, road_stop_build_layers,
-    road_stop_drive_through_layers, road_stop_ground_index, road_stop_ground_sprite_id,
-    road_stop_seq_gfx, station_tile_class, with_to_alpha,
+    remap_rail_sprite_id, road_depot_build_layers, road_depot_seq_gfx, road_flat_sprite_index,
+    road_ground_sprite_id, road_stop_build_layers, road_stop_drive_through_layers,
+    road_stop_ground_index, road_stop_ground_sprite_id, road_stop_seq_gfx, station_tile_class,
+    with_to_alpha,
 };
 
 fn buildings_hidden() -> bool {
@@ -1173,30 +1173,6 @@ pub(crate) fn spawn_station_tile(
     }
 }
 
-fn spawn_road_stop_link(
-    commands: &mut Commands,
-    assets: &WorldAssets,
-    ctx: &TileRenderContext,
-    base_z: u8,
-    half_h: f32,
-    tileh: u8,
-    road_bits: u8,
-) {
-    let fi = road_flat_sprite_index(tileh, road_bits);
-    commands.spawn((
-        MapVisualLayer,
-        ctx.map_tile_chunk(),
-        assets.road_flat[fi].sprite(),
-        Transform::from_translation(tile_pos_half(
-            ctx.tx_i32(),
-            ctx.ty_i32(),
-            base_z,
-            0.025,
-            half_h,
-        )),
-    ));
-}
-
 /// Base de una parada pasante: OpenTTD usa `SPR_ROAD_PAVED_STRAIGHT_*`, no el
 /// suelo de hierba/andén de una bahía convencional.
 fn spawn_paved_road_stop_link(
@@ -1463,6 +1439,7 @@ pub(crate) fn spawn_transport_object_tile(
             | TileKind::RailTunnel
             | TileKind::RoadBridge
             | TileKind::RailBridge
+            | TileKind::RoadDepot
             | TileKind::RailDepot
     ) {
         let ground = sloped_or_flat_image(tileh, &assets.grass, &assets.grass_slopes);
@@ -1628,19 +1605,30 @@ pub(crate) fn spawn_transport_object_tile(
             }
         }
         TileKind::RoadDepot => {
-            let depot_half_h = if tileh == 0 {
-                TILE_HALF_H
-            } else {
-                slope_half_h(tileh)
-            };
+            // `DrawTile_Road` nivela los depósitos viales antes del suelo
+            // 2634 y de sus capas BUILD. Dejar el césped inclinado debajo
+            // desplazaba la losa y hacía que la boca pareciera desconectada.
+            let depot_base_z = spawn_forced_leveled_foundation(
+                commands,
+                map,
+                dims,
+                assets,
+                ctx,
+                tileh,
+                "road-depot",
+                "road-depot-foundation",
+                foundation_newgrf,
+                action5_sprites.as_deref_mut(),
+                images.as_deref_mut(),
+            );
             spawn_road_depot_tile(
                 commands,
                 assets,
                 company,
                 owner_colour,
                 ctx,
-                base_z,
-                depot_half_h,
+                depot_base_z,
+                TILE_HALF_H,
                 tileh,
             );
         }
@@ -1866,6 +1854,7 @@ fn spawn_road_depot_tile(
     tileh: u8,
 ) {
     let dir = ctx.tile.map_or(0, |t| t.m5 & 0x03).min(3) as usize;
+    record_road_depot_ground_trace(tileh);
     commands.spawn((
         MapVisualLayer,
         ctx.map_tile_chunk(),
@@ -1878,20 +1867,35 @@ fn spawn_road_depot_tile(
             half_h,
         )),
     ));
-    spawn_road_stop_link(
-        commands,
-        assets,
-        ctx,
-        base_z,
-        half_h,
-        tileh,
-        road_depot_entrance_road_bits(dir as u8),
-    );
+    // En OpenTTD, el depósito vial vanilla dibuja la losa `SPR_AIRPORT_APRON`
+    // y las capas BUILD; no añade un `road_flat` normal. Ese overlay sólo
+    // aparece para ciertos tipos custom/tranvías y no estaba resuelto aquí.
+    // Dibujarlo siempre agregaba una vía que el oráculo no emite.
+    let foundation_z_delta = (i32::from(base_z) - i32::from(ctx.info.base_z)) * 8;
     for (layer_i, spec) in road_depot_build_layers(dir).iter().enumerate() {
         if buildings_hidden() {
             break;
         }
-        let Some(image) = assets.road_depot_builds[dir].get(layer_i) else {
+        let image = assets.road_depot_builds[dir].get(layer_i);
+        WorldDrawTrace::record_sprite_with_palette_and_world_geometry(
+            "road-depot-building",
+            "sortable",
+            spec.sprite_id,
+            station_company_palette(owner_colour),
+            image.is_none(),
+            (0, 0),
+            foundation_z_delta,
+            (0, 0, 0),
+            Some(TraceSpriteBounds::new(
+                spec.dx as i32,
+                spec.dy as i32,
+                spec.dz as i32,
+                spec.sx,
+                spec.sy,
+                20,
+            )),
+        );
+        let Some(image) = image else {
             continue;
         };
         let center = road_depot_build_sprite_center(
@@ -1915,6 +1919,31 @@ fn spawn_road_depot_tile(
             )),
             Transform::from_translation(center),
         ));
+    }
+}
+
+/// `DrawFoundation(Leveled)` hace hijo el suelo del depósito mediante
+/// `OffsetGroundSprite(0, -TILE_HEIGHT)`. El exportador del oráculo lo expresa
+/// en píxeles de pantalla a zoom base.
+const fn road_depot_foundation_child_offset(tileh: u8) -> Option<(i32, i32, i32)> {
+    if tileh == 0 { None } else { Some((0, -32, 0)) }
+}
+
+fn record_road_depot_ground_trace(tileh: u8) {
+    if let Some(offset) = road_depot_foundation_child_offset(tileh) {
+        WorldDrawTrace::record_foundation_child_sprite(
+            "road-depot-ground",
+            ROAD_DEPOT_GROUND_SPRITE_ID,
+            false,
+            offset,
+        );
+    } else {
+        WorldDrawTrace::record_sprite(
+            "road-depot-ground",
+            "ground",
+            ROAD_DEPOT_GROUND_SPRITE_ID,
+            false,
+        );
     }
 }
 
@@ -2115,9 +2144,9 @@ fn spawn_rail_depot_tile(
 mod tests {
     use super::{
         airport_station_ground_layer_trace_offset, rail_depot_foundation_child_offset,
-        rail_depot_reservation_track_visible, road_stop_foundation_child_offset,
-        station_catenary_wire_trace_geometry, station_rail_child_offset,
-        tunnel_catenary_trace_geometry,
+        rail_depot_reservation_track_visible, road_depot_foundation_child_offset,
+        road_stop_foundation_child_offset, station_catenary_wire_trace_geometry,
+        station_rail_child_offset, tunnel_catenary_trace_geometry,
     };
     use crate::sprites::{CatenaryWireDraw, airport_station_ground_layers_for_gfx};
 
@@ -2150,6 +2179,13 @@ mod tests {
         assert_eq!(road_stop_foundation_child_offset(0), None);
         assert_eq!(road_stop_foundation_child_offset(6), Some((0, -32, 0)));
         assert_eq!(road_stop_foundation_child_offset(0x17), Some((0, -32, 0)));
+    }
+
+    #[test]
+    fn sloped_road_depot_ground_is_child_of_the_leveled_foundation() {
+        assert_eq!(road_depot_foundation_child_offset(0), None);
+        assert_eq!(road_depot_foundation_child_offset(6), Some((0, -32, 0)));
+        assert_eq!(road_depot_foundation_child_offset(0x17), Some((0, -32, 0)));
     }
 
     #[test]

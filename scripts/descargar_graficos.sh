@@ -1445,6 +1445,8 @@ python3 "$(dirname "$0")/gen_ufo_sprites.py" || true
 python3 "$(dirname "$0")/extract_elrail_catenary.py" || true
 # Paradas de carretera: capas de bahía y Action5 0x11 drive-through.
 python3 "$(dirname "$0")/gen_road_stop_gfx_data.py"
+# Depósitos viales: anclas NFO y PNG cambian entre OpenGFX 8bpp y OpenGFX2.
+python3 "$(dirname "$0")/gen_road_depot_gfx_data.py"
 
 # Assets requeridos en runtime: rotores de helicóptero y los siete pasos del
 # ciclo de paleta de refinería. Deben generarse antes del atlas y sin `|| true`:
@@ -1475,6 +1477,7 @@ if command -v rustfmt >/dev/null 2>&1; then
     "${ROOT}/crates/openttdrs-client/src/sprites/field_draw_data_generated.rs"
     "${ROOT}/crates/openttdrs-client/src/sprites/rail_depot_gfx_data_generated.rs"
     "${ROOT}/crates/openttdrs-client/src/sprites/rail_station_draw_data_generated.rs"
+    "${ROOT}/crates/openttdrs-client/src/sprites/road_depot_gfx_data_generated.rs"
     "${ROOT}/crates/openttdrs-client/src/sprites/road_stop_gfx_data_generated.rs"
     "${ROOT}/crates/openttdrs-client/src/sprites/shore_draw_data_generated.rs"
     "${ROOT}/crates/openttdrs-client/src/sprites/tile_atlas_generated.rs"

@@ -139,9 +139,9 @@
       ],
       "check": "regenerate_or_hash",
       "requires_opengfx": true,
-      "output_sha256": "128334a0580a612d17076abe40a8b9f94d9c566da8b295136074b6e847315449",
+      "output_sha256": "05f0db69a6214f49a23990a4daee006057d62ffab8bfd38864068a1e75acecd4",
       "license": "GPL-2.0-only (OpenTTD industry_land.h) + metadatos NFO OpenGFX locales",
-      "note": "La tabla conserva M(dx,dy,sx,sy,sz) para la traza world-draw y toma dimensiones/anclas del NFO del perfil activo. test_industry_sprite_variants.py cubre 8bpp y 32bpp."
+      "note": "La tabla conserva M(dx,dy,sx,sy,sz), incluido s1=3924 (SPR_FLAT_BARE_LAND), para la traza world-draw y toma dimensiones/anclas del NFO del perfil activo. test_industry_sprite_variants.py cubre 8bpp y 32bpp."
     },
     {
       "id": "bridge_structure_palette",

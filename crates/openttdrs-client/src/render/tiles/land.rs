@@ -688,8 +688,11 @@ pub(crate) fn spawn_industry_tile(
                 FLAT_WATER_LAYER_FRAC,
             )),
         ));
-    } else {
-        // Terreno natural bajo la industria; en pendiente se añade cimiento nivelado (P4).
+    } else if ground_sid == 0 || !assets.industries.contains_key(&ground_sid) {
+        // La tabla vanilla trae el suelo exacto (`s1`) y lo pinta más abajo.
+        // Sólo conservar el terreno áspero como red de seguridad para una
+        // fila realmente vacía o un asset que todavía no está disponible;
+        // de otro modo se filtraba bajo `SPR_FLAT_BARE_LAND` (3924).
         let terrain_img = sloped_or_flat_image(tileh, &assets.rough, &assets.rough_slopes);
         let terrain_color = Color::srgb(0.55, 0.50, 0.45);
         spawn_ground_sprite(

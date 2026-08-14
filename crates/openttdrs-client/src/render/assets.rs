@@ -168,6 +168,7 @@ pub(crate) struct WorldAssets {
 #[must_use]
 fn industry_sprite_atlas_name(id: u32) -> String {
     match id {
+        3924 => "terrain_bare.png".into(),
         3981 => "grass.png".into(),
         3982..=3999 => format!("terrain_grass_slope_{:02}.png", id - 3981),
         4000 => "terrain_rough.png".into(),
@@ -911,7 +912,7 @@ mod world_assets_tests {
     use bevy::image::ImagePlugin;
     use bevy::prelude::*;
 
-    use super::{TileAtlas, WorldAssets, stub_opengfx_tiles_for_tests};
+    use super::{TileAtlas, WorldAssets, industry_sprite_atlas_name, stub_opengfx_tiles_for_tests};
     use openttdrs_core::RailType;
 
     #[test]
@@ -937,6 +938,12 @@ mod world_assets_tests {
         };
         let mut images = app.world_mut().resource_mut::<Assets<Image>>();
         let assets = WorldAssets::load(&atlas, &mut images);
+        assert_eq!(industry_sprite_atlas_name(3924), "terrain_bare.png");
+        assert_eq!(
+            assets.industries.get(&3924),
+            Some(&atlas.get("terrain_bare.png")),
+            "el suelo base de industria debe reutilizar el asset de tierra desnuda"
+        );
         // Torres terminadas (2083/2086/2089) deben tener ciclo oil_refinery.
         for id in [2083u32, 2086, 2089, 2120] {
             let frames = assets

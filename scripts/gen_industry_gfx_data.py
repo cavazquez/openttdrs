@@ -24,7 +24,11 @@ from nfo_sprite_meta import (
     sprite_dims_from_assets,
 )
 
-GRASS_S1 = 0xF54
+# `0xF54` es `SPR_FLAT_BARE_LAND` (3924), no un centinela. La tabla
+# `_industry_draw_tile_data` lo usa como el suelo real de gran parte de las
+# industrias vanilla; convertirlo a cero omitía el `DrawGroundSprite` que el
+# draw proc C++ sí emite.
+SPR_FLAT_BARE_LAND = 0xF54
 STAGES = 4
 GFX_COUNT = 175
 FALLBACK = (64.0, 48.0, -32.0, -32.0)
@@ -33,6 +37,21 @@ FALLBACK = (64.0, 48.0, -32.0, -32.0)
 def parse_atom(a: str) -> int:
     a = a.split("|")[0].strip()
     return int(a, 16) if a.startswith("0x") else int(a)
+
+
+def industry_asset_name(sprite_id: int) -> str:
+    """Nombre del atlas para una capa de industria o terreno compartido."""
+    if sprite_id == SPR_FLAT_BARE_LAND:
+        return "terrain_bare.png"
+    if sprite_id == 3981:
+        return "grass.png"
+    if 3982 <= sprite_id <= 3999:
+        return f"terrain_grass_slope_{sprite_id - 3981:02d}.png"
+    if sprite_id == 4000:
+        return "terrain_rough.png"
+    if 4001 <= sprite_id <= 4018:
+        return f"terrain_rough_slope_{sprite_id - 4000:02d}.png"
+    return f"industry_{sprite_id}.png"
 
 
 def parse_macro_rows(path: Path) -> list[tuple[int, int, int, int, int, int, int]]:
@@ -103,13 +122,13 @@ def dims_for_macro_row(
     sx: int,
     sy: int,
 ) -> tuple[tuple[float, float, float, float], tuple[float, float, float, float], str, str]:
-    gid = 0 if s1 == GRASS_S1 else s1
+    gid = s1
     gw, gh, gx, gy, gnote = sprite_dims_from_assets(
         repo,
         tiles_dir,
         nfo,
         gid,
-        f"industry_{gid}.png",
+        industry_asset_name(gid),
         prefer_bpp,
         macro_dx=dx,
         macro_dy=dy,
@@ -122,7 +141,7 @@ def dims_for_macro_row(
         tiles_dir,
         nfo,
         s2,
-        f"industry_{s2}.png",
+        industry_asset_name(s2),
         prefer_bpp,
         macro_dx=dx,
         macro_dy=dy,
@@ -156,14 +175,14 @@ def build_content(repo: Path, upstream: Path) -> tuple[str, tuple[int, int, int,
                 repo, tiles_dir, nfo, prefer_bpp, s1, s2, dx, dy, sx, sy
             )
 
-            if s2 == 0 and (s1 == GRASS_S1 or s1 == 0):
+            if s2 == 0 and s1 == 0:
                 fallback_cal += 1
             elif s2 == 0:
                 if gnote.startswith("nfo"):
                     nfo_gnd += 1
                 elif gnote == "macro":
                     macro_cal += 1
-            elif s1 == GRASS_S1 or s1 == 0:
+            elif s1 == 0:
                 if bnote.startswith("nfo"):
                     nfo_bld += 1
                 elif bnote == "macro":
@@ -176,7 +195,7 @@ def build_content(repo: Path, upstream: Path) -> tuple[str, tuple[int, int, int,
                 if bnote == "macro" or gnote == "macro":
                     macro_cal += 1
 
-            gid = 0 if s1 == GRASS_S1 else s1
+            gid = s1
             body_rows.append(
                 industry_row_line(
                     s2,

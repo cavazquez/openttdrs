@@ -294,7 +294,11 @@ pub fn industry_gfx_uses_generic_fallback(entry: &IndustryGfxSprite) -> bool {
         && entry.yrel == -32.0
 }
 
-/// Fila vacía en etapa de obra cuando upstream también omite overlay (`s2 = 0`).
+/// Etapa de obra sin overlay de edificio cuando upstream también omite `s2`.
+///
+/// Una fila así puede conservar un suelo válido en `s1` (por ejemplo
+/// `SPR_FLAT_BARE_LAND` / 3924); no debe confundirse con una tesela sin nada
+/// que dibujar.
 #[must_use]
 pub fn industry_gfx_empty_row_is_expected(gfx: u16, stage: usize) -> bool {
     if stage >= INDUSTRY_GFX_STAGES - 1 {
@@ -303,13 +307,13 @@ pub fn industry_gfx_empty_row_is_expected(gfx: u16, stage: usize) -> bool {
     let Some(under) = industry_gfx_entry_staged(gfx, stage) else {
         return false;
     };
-    if under.sprite_id != 0 || under.ground_sprite_id != 0 {
+    if under.sprite_id != 0 {
         return false;
     }
     let Some(done) = industry_gfx_entry_staged(gfx, 3) else {
         return false;
     };
-    done.sprite_id != 0 || done.ground_sprite_id != 0
+    done.sprite_id != 0
 }
 
 /// Registra una vez por sesión los `gfx` problemáticos (debug + warn en release).
@@ -407,6 +411,10 @@ mod industry_coverage_tests {
     fn power_station_gfx7_uses_open_ttd_sprite_and_bounds() {
         let e = industry_gfx_entry(7).expect("gfx 7");
         assert_eq!(e.sprite_id, 2047);
+        // `s1 = 0xF54` en industry_land.h es tierra desnuda (3924), no
+        // ausencia de fondo. Kale lo usa en (246,2) y OpenTTD emite el
+        // DrawGroundSprite antes del edificio.
+        assert_eq!(e.ground_sprite_id, 3924);
         assert_eq!(
             (
                 e.sort_ox, e.sort_oy, e.sort_oz, e.sort_ex, e.sort_ey, e.sort_ez
@@ -574,6 +582,13 @@ mod industry_coverage_tests {
                 assert!(
                     industry_gfx_empty_row_is_expected(gfx, stage),
                     "gfx {gfx} stage {stage}"
+                );
+                assert_ne!(
+                    industry_gfx_entry_staged(gfx, stage)
+                        .expect("etapa de aserradero")
+                        .ground_sprite_id,
+                    0,
+                    "gfx {gfx} stage {stage}: el suelo se conserva aunque falte el edificio"
                 );
             }
             assert!(!industry_gfx_empty_row_is_expected(gfx, 3));

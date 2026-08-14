@@ -1363,6 +1363,70 @@ fn spawn_industry_on_slope_spawns_foundation_layer() {
         .expect("industry slope");
 }
 
+/// `industry_land.h`: GFX 7 usa `s1=0xF54` / `SPR_FLAT_BARE_LAND` y el
+/// edificio 2047. La omisión histórica de esa capa dejaba tierra áspera bajo
+/// la planta y 36 comandos 3924 sin equivalente al contrastar Kale.
+#[test]
+fn industry_bare_land_ground_is_drawn_before_power_plant() {
+    let assets = boot_assets_app();
+    let expected_ground = assets.industries[&3924].clone();
+    let expected_building = assets.industries[&2047].clone();
+    let mut map = fresh_map8();
+    let c = TileCoord::new(2, 2);
+    let mut tile = tile_template();
+    tile.kind = TileKind::Industry;
+    tile.mapt = 0x80;
+    tile.m5 = 7; // power plant, fila terminada de industry_land.h.
+    tile.m1 = 0x80;
+    map.set_tile(c, tile).expect("power plant");
+
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world
+        .run_system_once(
+            |mut commands: Commands,
+             m: Res<TsMap>,
+             g: Res<TsGrid>,
+             a: Res<TsAssets>,
+             mut company: Local<CompanyColoredSprites>,
+             mut images: Local<Assets<Image>>| {
+                spawn_industry_tile(
+                    &mut commands,
+                    &a.0,
+                    &m.0,
+                    &TileRenderContext::new(&m.0, &g.0, 2, 2),
+                    4.0,
+                    &[],
+                    &mut company,
+                    &mut images,
+                    &[],
+                    &openttdrs_core::empty_industry_tile_overrides(),
+                    None,
+                    &[],
+                    None,
+                    &[],
+                );
+            },
+        )
+        .expect("spawn power plant");
+
+    let sprites: Vec<_> = world.query::<&Sprite>().iter(&world).collect();
+    assert_eq!(
+        sprites.len(),
+        2,
+        "suelo 3924 + edificio 2047, sin rough extra"
+    );
+    assert!(sprites.iter().any(|sprite| expected_ground.matches(sprite)));
+    assert!(
+        sprites
+            .iter()
+            .any(|sprite| expected_building.matches(sprite))
+    );
+}
+
 #[test]
 fn spawn_bridge_middle_draws_deck_over_marked_water() {
     let assets = boot_assets_app();

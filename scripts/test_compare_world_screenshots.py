@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "compare_world_screenshots.py"
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from compare_world_screenshots import best_candidate_translation, image_metrics
+from compare_world_screenshots import best_candidate_translation, image_metrics, raster_hotspots
 from window_visual_regression import PNG_SIGNATURE, PngImage, read_png, write_png
 
 
@@ -77,6 +77,21 @@ def main() -> int:
         )
         return 1
 
+    altered = bytearray(reference.rgba)
+    for y in range(2, 5):
+        for x in range(3, 7):
+            altered[(y * reference.width + x) * 4] ^= 0xFF
+    hotspot_report = raster_hotspots(reference, PngImage(40, 32, bytes(altered)), 0, 0, 8, 3)
+    first_hotspot = hotspot_report["reported_cells"][0]
+    if (
+        hotspot_report["cells_with_difference"] != 1
+        or first_hotspot["bounds"] != [0, 0, 8, 8]
+        or first_hotspot["changed_pixels"] != 12
+        or first_hotspot["total_pixels"] != 64
+    ):
+        print(f"FAIL: hotspots raster inesperados: {hotspot_report}", file=sys.stderr)
+        return 1
+
     with tempfile.TemporaryDirectory() as temp:
         root = Path(temp)
         reference_path = root / "reference.png"
@@ -123,6 +138,9 @@ def main() -> int:
             return 1
         if report["capture"]["profile"] != "clean-static":
             print(f"FAIL: perfil de captura inesperado: {report}", file=sys.stderr)
+            return 1
+        if report["hotspots"]["cell_size_px"] != 64 or not report["hotspots"]["reported_cells"]:
+            print(f"FAIL: reporte sin hotspots raster: {report}", file=sys.stderr)
             return 1
 
         bad_resolution = run(

@@ -26,6 +26,8 @@ from window_visual_regression import GateError, PngImage, read_png, write_png
 
 ROOT = Path(__file__).resolve().parents[1]
 MAX_ALIGNMENT_RADIUS = 64
+DEFAULT_HOTSPOT_CELL_SIZE = 64
+DEFAULT_HOTSPOT_LIMIT = 24
 
 
 def relative(path: Path) -> str:
@@ -100,6 +102,90 @@ def image_metrics(reference: PngImage, candidate: PngImage, dx: int = 0, dy: int
         },
         PngImage(width, height, bytes(diff)),
     )
+
+
+def raster_hotspots(
+    reference: PngImage,
+    candidate: PngImage,
+    dx: int,
+    dy: int,
+    cell_size: int,
+    limit: int,
+) -> dict[str, Any]:
+    """Resume las celdas de pantalla con más píxeles divergentes.
+
+    El diff por píxel resulta muy útil visualmente, pero no dice dónde
+    empezar a investigar. Agruparlo en una grilla fija conserva las
+    coordenadas reproducibles de la captura sin inferir erróneamente una
+    tesela: una estructura alta puede invadir varias teselas de suelo.
+    """
+    width, height = reference.width, reference.height
+    columns = (width + cell_size - 1) // cell_size
+    rows = (height + cell_size - 1) // cell_size
+    cells = [
+        {"changed_pixels": 0, "total_channel_delta": 0, "max_channel_delta": 0}
+        for _ in range(columns * rows)
+    ]
+
+    for y in range(height):
+        source_y = y - dy
+        for x in range(width):
+            source_x = x - dx
+            cell = cells[(y // cell_size) * columns + x // cell_size]
+            if not (0 <= source_x < candidate.width and 0 <= source_y < candidate.height):
+                cell["changed_pixels"] += 1
+                cell["total_channel_delta"] += 255 * 4
+                cell["max_channel_delta"] = 255
+                continue
+
+            target = (y * width + x) * 4
+            source = (source_y * candidate.width + source_x) * 4
+            deltas = [
+                abs(reference.rgba[target + channel] - candidate.rgba[source + channel])
+                for channel in range(4)
+            ]
+            if max(deltas):
+                cell["changed_pixels"] += 1
+                cell["total_channel_delta"] += sum(deltas)
+                cell["max_channel_delta"] = max(cell["max_channel_delta"], max(deltas))
+
+    hotspots: list[dict[str, Any]] = []
+    for index, cell in enumerate(cells):
+        if cell["changed_pixels"] == 0:
+            continue
+        row, column = divmod(index, columns)
+        left, top = column * cell_size, row * cell_size
+        right, bottom = min(width, left + cell_size), min(height, top + cell_size)
+        total_pixels = (right - left) * (bottom - top)
+        hotspots.append(
+            {
+                "bounds": [left, top, right, bottom],
+                "changed_pixels": cell["changed_pixels"],
+                "total_pixels": total_pixels,
+                "changed_ratio": cell["changed_pixels"] / total_pixels,
+                "max_channel_delta": cell["max_channel_delta"],
+                "mean_channel_delta": cell["total_channel_delta"] / (total_pixels * 4),
+            }
+        )
+
+    hotspots.sort(
+        key=lambda hotspot: (
+            -hotspot["changed_pixels"],
+            -hotspot["mean_channel_delta"],
+            hotspot["bounds"][1],
+            hotspot["bounds"][0],
+        )
+    )
+    return {
+        "cell_size_px": cell_size,
+        "cells_with_difference": len(hotspots),
+        "reported_cells": hotspots[:limit],
+        "truncated": len(hotspots) > limit,
+        "meaning": (
+            "regiones de pantalla ordenadas por píxeles distintos; no implican una "
+            "tesela única porque sprites altos pueden cubrir varias teselas"
+        ),
+    }
 
 
 def sampled_error(reference: PngImage, candidate: PngImage, dx: int, dy: int, stride: int) -> int:
@@ -183,6 +269,18 @@ def main(argv: list[str]) -> int:
     )
     parser.add_argument("--alignment-radius", type=int, default=8, help="máximo corrimiento a investigar (px)")
     parser.add_argument("--alignment-stride", type=int, default=8, help="muestreo para buscar corrimiento (px)")
+    parser.add_argument(
+        "--hotspot-cell-size",
+        type=int,
+        default=DEFAULT_HOTSPOT_CELL_SIZE,
+        help="lado de la celda para priorizar diferencias raster (px)",
+    )
+    parser.add_argument(
+        "--hotspot-limit",
+        type=int,
+        default=DEFAULT_HOTSPOT_LIMIT,
+        help="máximo de celdas divergentes incluidas en el reporte",
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -190,6 +288,10 @@ def main(argv: list[str]) -> int:
             raise GateError(f"--alignment-radius debe estar entre 0 y {MAX_ALIGNMENT_RADIUS}")
         if args.alignment_stride <= 0:
             raise GateError("--alignment-stride debe ser positivo")
+        if args.hotspot_cell_size <= 0:
+            raise GateError("--hotspot-cell-size debe ser positivo")
+        if args.hotspot_limit <= 0:
+            raise GateError("--hotspot-limit debe ser positivo")
         if not args.openttdrs_scale > 0:
             raise GateError("--openttdrs-scale debe ser positivo")
         center = parse_center(args.center)
@@ -235,6 +337,14 @@ def main(argv: list[str]) -> int:
                 "diff": artifact(args.diff),
             },
             "metrics": {"raw": raw_metrics, "aligned": aligned_metrics},
+            "hotspots": raster_hotspots(
+                reference,
+                candidate,
+                dx,
+                dy,
+                args.hotspot_cell_size,
+                args.hotspot_limit,
+            ),
             "alignment": {
                 "search_radius_px": args.alignment_radius,
                 "sample_stride_px": args.alignment_stride,

@@ -97,14 +97,21 @@ def integrate_world_draw_viewport(dest: Path) -> None:
         "{\n"
         "\tassert((image & SPRITE_MASK) < MAX_SPRITES);"
     )
-    if "OpenttdrsWorldDrawRecordTileSprite" not in text:
+    tile_trace_call = "\t\tOpenttdrsWorldDrawRecordTileSprite(image, pal, x, y, z, extra_offs_x, extra_offs_y);\n"
+    old_tile_trace_call = "\t\tOpenttdrsWorldDrawRecordTileSprite(image, pal, x, y, z);\n"
+    if old_tile_trace_call in text:
+        # Migra un árbol ya integrado: las versiones anteriores del oráculo
+        # descartaban los offsets que `TILE_SEQ_GROUND` entrega al suelo.
+        text = text.replace(old_tile_trace_call, tile_trace_call, 1)
+        print("viewport: offsets ground del world-draw actualizados")
+    elif "OpenttdrsWorldDrawRecordTileSprite" not in text:
         if tile_marker not in text:
             raise SystemExit("no encuentro AddTileSpriteToDraw")
         replacement = (
             "static void AddTileSpriteToDraw(SpriteID image, PaletteID pal, int32_t x, int32_t y, int z, const SubSprite *sub = nullptr, int extra_offs_x = 0, int extra_offs_y = 0)\n"
             "{\n"
             "\tif (OpenttdrsWorldDrawCaptureActive()) {\n"
-            "\t\tOpenttdrsWorldDrawRecordTileSprite(image, pal, x, y, z);\n"
+            f"{tile_trace_call}"
             "\t\treturn;\n"
             "\t}\n"
             "\tassert((image & SPRITE_MASK) < MAX_SPRITES);"

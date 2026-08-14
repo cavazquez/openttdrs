@@ -229,6 +229,16 @@ fn record_airport_station_layer_trace(
     );
 }
 
+/// Convierte el desplazamiento `TILE_SEQ_GROUND` a los píxeles de pantalla
+/// que OpenTTD pasa como `extra_offs_*` a `AddTileSpriteToDraw`.
+///
+/// La coordenada `world` de la traza permanece en el origen de la tesela; el
+/// offset no debe aplanarse, porque una cerca puede pertenecer visualmente al
+/// borde de una tesela vecina.
+fn airport_station_ground_layer_trace_offset(dx: f32, dy: f32, dz: f32) -> (i32, i32, i32) {
+    (((dy - dx) * 8.0) as i32, ((dx + dy - dz) * 4.0) as i32, 0)
+}
+
 /// Capas `TILE_SEQ_LINE` de cualquier `StationGfx` airport vanilla.
 ///
 /// El sprite de suelo se emite primero mediante la tabla `StationGfx`. Estas
@@ -376,11 +386,7 @@ fn spawn_airport_station_ground_layers(
                     0
                 },
                 true,
-                (
-                    ((layer.dy - layer.dx) * 8.0) as i32,
-                    ((layer.dx + layer.dy - layer.dz) * 4.0) as i32,
-                    0,
-                ),
+                airport_station_ground_layer_trace_offset(layer.dx, layer.dy, layer.dz),
                 0,
                 None,
             );
@@ -413,11 +419,7 @@ fn spawn_airport_station_ground_layers(
                 0
             },
             false,
-            (
-                ((layer.dy - layer.dx) * 8.0) as i32,
-                ((layer.dx + layer.dy - layer.dz) * 4.0) as i32,
-                0,
-            ),
+            airport_station_ground_layer_trace_offset(layer.dx, layer.dy, layer.dz),
             0,
             None,
         );
@@ -1881,9 +1883,11 @@ fn spawn_rail_depot_tile(
 #[cfg(test)]
 mod tests {
     use super::{
-        rail_depot_foundation_child_offset, rail_depot_reservation_track_visible,
-        station_rail_child_offset, tunnel_catenary_trace_geometry,
+        airport_station_ground_layer_trace_offset, rail_depot_foundation_child_offset,
+        rail_depot_reservation_track_visible, station_rail_child_offset,
+        tunnel_catenary_trace_geometry,
     };
+    use crate::sprites::airport_station_ground_layers_for_gfx;
 
     #[test]
     fn rail_depot_reservation_is_hidden_behind_visible_ne_and_nw_buildings() {
@@ -1920,6 +1924,47 @@ mod tests {
         assert_eq!(
             tunnel_catenary_trace_geometry(1),
             ((7, 0, 3), (0, 0, 7, 15, 16, 1))
+        );
+    }
+
+    #[test]
+    fn airport_ground_trace_preserves_tile_seq_ground_screen_offsets() {
+        let south_west = airport_station_ground_layers_for_gfx(2);
+        assert_eq!(
+            airport_station_ground_layer_trace_offset(
+                south_west[0].dx,
+                south_west[0].dy,
+                south_west[0].dz,
+            ),
+            (-120, 60, 0)
+        );
+
+        let south_east = airport_station_ground_layers_for_gfx(15);
+        assert_eq!(
+            airport_station_ground_layer_trace_offset(
+                south_east[0].dx,
+                south_east[0].dy,
+                south_east[0].dz,
+            ),
+            (120, 60, 0)
+        );
+
+        let north_west_and_south_west = airport_station_ground_layers_for_gfx(57);
+        assert_eq!(
+            airport_station_ground_layer_trace_offset(
+                north_west_and_south_west[0].dx,
+                north_west_and_south_west[0].dy,
+                north_west_and_south_west[0].dz,
+            ),
+            (0, 0, 0)
+        );
+        assert_eq!(
+            airport_station_ground_layer_trace_offset(
+                north_west_and_south_west[1].dx,
+                north_west_and_south_west[1].dy,
+                north_west_and_south_west[1].dz,
+            ),
+            (-120, 60, 0)
         );
     }
 }

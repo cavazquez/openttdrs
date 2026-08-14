@@ -67,7 +67,21 @@ void OpenttdrsWorldDrawRecordFoundation(
 	int32_t ne_n_neighbour
 );
 
-void OpenttdrsWorldDrawRecordTileSprite(uint32_t image, uint32_t palette, int32_t x, int32_t y, int32_t z);
+/**
+ * `offset_x/y` conserva el desplazamiento final de pantalla que recibe
+ * `AddTileSpriteToDraw`. Es relevante para `TILE_SEQ_GROUND`: el mundo sigue
+ * siendo el origen de la tesela y el desplazamiento queda separado en la
+ * traza, igual que para los sprites sortable.
+ */
+void OpenttdrsWorldDrawRecordTileSprite(
+	uint32_t image,
+	uint32_t palette,
+	int32_t x,
+	int32_t y,
+	int32_t z,
+	int32_t offset_x,
+	int32_t offset_y
+);
 void OpenttdrsWorldDrawRecordSortable(
 	uint32_t image,
 	uint32_t palette,

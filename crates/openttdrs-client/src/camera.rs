@@ -6,7 +6,7 @@ use bevy::window::PrimaryWindow;
 use openttdrs_core::prelude::*;
 
 use crate::bevy_app::UpdateSet;
-use crate::iso::tile_pos;
+use crate::iso::{HEIGHT_PX, ISO_QH, iso};
 use crate::render::{
     MapPreviewCamera, PrimaryGameCamera, clamp_ortho_scale, large_map_viewport_cull_enabled,
 };
@@ -79,8 +79,14 @@ pub struct CameraFocusRequest {
 #[must_use]
 pub fn tile_camera_world_pos(map: &Map, coord: TileCoord) -> Vec2 {
     let height = map.get(coord).map_or(0, |tile| tile.height);
-    let pos = tile_pos(coord.x, coord.y, height, 0.0);
-    Vec2::new(pos.x, pos.y)
+    let pos = iso(coord.x, coord.y);
+    // La cámara de OpenTTD se desplaza al centro geométrico del tile:
+    // `TileX * 16 + 8`, `TileY * 16 + 8`. Su proyección equivale a media
+    // altura lógica de 16 px. `TILE_HALF_H` (15,5 px) es, en cambio, el
+    // ancla visual del sprite 8bpp de terreno; usarlo aquí corría la captura
+    // limpia un píxel tras el redondeo. Mantener ambos conceptos separados
+    // preserva el anclaje de sprites y alinea el viewport con OpenTTD.
+    Vec2::new(pos.x, pos.y - ISO_QH + f32::from(height) * HEIGHT_PX)
 }
 
 pub(crate) struct CameraControlPlugin;
@@ -447,6 +453,21 @@ mod tests {
         assert!((zoom_display_magnification(1.0) - 1.0).abs() < 0.001);
         assert!((zoom_display_magnification(0.25) - 4.0).abs() < 0.001);
         assert!((zoom_display_magnification(20.0) - 0.05).abs() < 0.001);
+    }
+
+    #[test]
+    fn tile_camera_uses_geometric_tile_center_not_sprite_anchor() {
+        let map = Map::new_flat(8, 8, 3);
+        let coord = TileCoord::new(2, 5);
+
+        let actual = tile_camera_world_pos(&map, coord);
+        let top = iso(coord.x, coord.y);
+        let expected = Vec2::new(top.x, top.y - ISO_QH + 3.0 * HEIGHT_PX);
+
+        assert_eq!(actual, expected);
+        // La diferencia de medio píxel respecto al ancla visual del sprite
+        // es intencional: el scroll de OpenTTD centra el rombo lógico 64×32.
+        assert_eq!(actual.y, top.y - 16.0 + 24.0);
     }
 
     #[test]

@@ -88,8 +88,9 @@ pub fn road_flat_sprite_color(mapt: u8, kind: TileKind, m7: u8) -> Color {
 
 pub use road::{
     ROAD_DEPOT_GROUND_PATH, ROAD_FLAT_OFFSET_TBL, ROAD_STREETLIGHT_META, ROADSIDE_LAMPS,
-    ROADSIDE_TREE_META, ROADSIDE_TREES, road_depot_build_layers, road_depot_entrance_road_bits,
-    road_depot_seq_gfx, road_tile_roadside, roadside_is_paved,
+    ROADSIDE_TREE_META, ROADSIDE_TREES, SPR_ROADSIDE_TREE, road_depot_build_layers,
+    road_depot_entrance_road_bits, road_depot_seq_gfx, road_ground_sprite_id,
+    road_streetlight_sprite_id, road_tile_roadside, roadside_is_paved,
 };
 pub use track_fence::{TRACK_FENCE_META, track_fence_draws_for_tile};
 
@@ -143,7 +144,8 @@ pub use rail::{
     collect_catenary_sprites_from_map, collect_catenary_wire_draws_from_map,
     collect_rail_ghost_sprites, collect_rail_ghost_sprites_for_type, collect_rail_sprites,
     collect_rail_sprites_for_type, collect_signal_sprite_draws, collect_signal_sprite_ids,
-    is_typed_rail_track_sprite, level_crossing_has_rail_reservation, level_crossing_rail_sprite_id,
+    is_typed_rail_track_sprite, level_crossing_ground_sprite_id_for_type,
+    level_crossing_has_rail_reservation, level_crossing_rail_sprite_id,
     level_crossing_rail_sprite_id_for_type, rail_depot_build_layers, rail_depot_seq_gfx,
     rail_depot_visual_type_index, rail_ghost_overlay_offset, rail_pbs_reservation_offset,
     rail_pbs_sprite_ids_for_preload, rail_signal_present_mask, rail_signal_state_mask,

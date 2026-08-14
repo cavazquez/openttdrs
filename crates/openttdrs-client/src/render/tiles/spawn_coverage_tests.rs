@@ -301,6 +301,7 @@ fn spawn_road_rail_station_and_transport_cover_main_paths() {
                     None,
                     &[],
                     &[],
+                    &[],
                     None,
                 );
                 spawn_road_tile(
@@ -317,6 +318,7 @@ fn spawn_road_rail_station_and_transport_cover_main_paths() {
                     &[],
                     None,
                     None,
+                    &[],
                     &[],
                     &[],
                     None,
@@ -929,6 +931,7 @@ fn spawn_sloped_road_and_station_hit_slope_ground_branch() {
                     None,
                     &[],
                     &[],
+                    &[],
                     None,
                 );
                 spawn_station_tile(
@@ -1303,6 +1306,7 @@ fn paved_roadside_uses_paved_set_and_streetlights_spawn_lamps() {
                     None,
                     &[],
                     &[],
+                    &[],
                     None,
                 );
             },
@@ -1341,6 +1345,7 @@ fn paved_roadside_uses_paved_set_and_streetlights_spawn_lamps() {
                     None,
                     &[],
                     &[],
+                    &[],
                     None,
                 );
             },
@@ -1349,6 +1354,75 @@ fn paved_roadside_uses_paved_set_and_streetlights_spawn_lamps() {
     let total = world.query::<&Sprite>().iter(&world).count();
     // `_roadside_lamps[5]`: dos faroles además del suelo pavimentado.
     assert_eq!(total - 1, 3, "suelo pavimentado + 2 faroles");
+}
+
+#[test]
+fn level_crossing_uses_only_the_paved_crossing_ground() {
+    let mut assets = boot_assets_app();
+    // El atlas mínimo de tests sólo precarga la variante base. Conservamos su
+    // imagen bajo el ID pavimentado para ejercitar exactamente la selección de
+    // `DrawTile_Road`, que en la partida real se carga desde OpenGFX completo.
+    let expected = assets
+        .rail
+        .get(&1371)
+        .expect("crossing rail Y base")
+        .clone();
+    assets.rail.insert(1375, expected.clone());
+    let mut map = fresh_map8();
+    let crossing = Tile {
+        kind: TileKind::Road,
+        mapt: 0x20,
+        // `RoadTileType::Crossing`, road axis X → rail axis Y.
+        m5: 0x40,
+        // `Roadside::Paved`: `DrawTile_Road` suma el bloque +4.
+        m6: 2 << 3,
+        ..tile_template()
+    };
+    map.set_tile(TileCoord::new(3, 3), crossing)
+        .expect("crossing tile");
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+
+    world
+        .run_system_once(
+            |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                let (mw, mh) = m.0.dimensions();
+                spawn_road_tile(
+                    &mut commands,
+                    &m.0,
+                    mw,
+                    mh,
+                    &a.0,
+                    &TileRenderContext::new(&m.0, &g.0, 3, 3),
+                    4.0,
+                    TEST_CLIMATE,
+                    true,
+                    true,
+                    &[],
+                    None,
+                    None,
+                    &[],
+                    &[],
+                    &[],
+                    None,
+                );
+            },
+        )
+        .expect("crossing tile");
+
+    let sprites: Vec<Sprite> = world.query::<&Sprite>().iter(&world).cloned().collect();
+    assert_eq!(
+        sprites.len(),
+        1,
+        "el cruce no dibuja asfalto normal adicional"
+    );
+    assert!(
+        expected.matches(&sprites[0]),
+        "debe usar crossing paved 1375"
+    );
 }
 
 #[test]

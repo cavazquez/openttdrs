@@ -555,6 +555,8 @@ impl WorldDrawTrace {
                     "catenary",
                     "tunnel",
                     "bridge",
+                    "road_ground",
+                    "roadside_details",
                     "ship_depot",
                     "industries",
                     "object_landmarks",

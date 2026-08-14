@@ -6,6 +6,40 @@ use openttdrs_core::prelude::*;
 /// Sprite final = `SPR_ROAD_Y` (1332) + entrada; índices 11–14 son variantes en pendiente NE/SE/SW/NW.
 pub const ROAD_FLAT_OFFSET_TBL: [u8; 16] = [0, 18, 17, 7, 16, 0, 10, 5, 15, 8, 1, 4, 9, 3, 6, 2];
 
+/// `SPR_ROAD_Y`: primer sprite de carretera vanilla sobre césped.
+pub const SPR_ROAD_GROUND_BASE: u32 = 1332;
+/// `SPR_ROAD_PAVED_STRAIGHT_Y`: primer sprite con acera pavimentada.
+pub const SPR_ROAD_PAVED_GROUND_BASE: u32 = 1313;
+/// `SPR_ROAD_Y_SNOW`: primer sprite de carretera sobre nieve/desierto.
+pub const SPR_ROAD_SNOW_GROUND_BASE: u32 = 1351;
+/// `SPR_ROAD_PAVED_STRAIGHT_Y` / `X`: faroles de `_roadside_lamps`.
+pub const SPR_ROAD_STREETLIGHT_BASE: u32 = 1406;
+/// `0x1212`: árbol usado por `_roadside_trees`.
+pub const SPR_ROADSIDE_TREE: u32 = 4626;
+
+/// ID lógico del suelo vanilla que selecciona `GetRoadGroundSprite`.
+///
+/// `offset` es el índice de `GetRoadSpriteOffset` (0..18), no el patrón de
+/// bits de la carretera. Mantenerlo aquí evita que la traza de paridad use el
+/// orden del atlas por accidente.
+#[must_use]
+pub const fn road_ground_sprite_id(offset: usize, paved: bool, snow_or_desert: bool) -> u32 {
+    let offset = offset as u32;
+    if snow_or_desert {
+        SPR_ROAD_SNOW_GROUND_BASE + offset
+    } else if paved {
+        SPR_ROAD_PAVED_GROUND_BASE + offset
+    } else {
+        SPR_ROAD_GROUND_BASE + offset
+    }
+}
+
+/// ID lógico del farol `lamp` (0 = vertical, 1 = horizontal).
+#[must_use]
+pub const fn road_streetlight_sprite_id(lamp: usize) -> u32 {
+    SPR_ROAD_STREETLIGHT_BASE + if lamp == 0 { 0 } else { 1 }
+}
+
 #[path = "road_depot_gfx_data_generated.rs"]
 mod road_depot_gfx_data_generated;
 
@@ -21,11 +55,13 @@ pub fn road_depot_entrance_road_bits(dir: u8) -> u8 {
 
 // ── Roadside (decoración del borde: pasto / acera / faroles) ─────────────────
 
-/// `GetRoadside` (`road_map.h`): bits 3–5 de `m6` en carretera **normal**
-/// (`RoadTileType::Normal`, bits 6–7 de `m5` = 0). En cruces y depósitos no aplica.
+/// `GetRoadside` (`road_map.h`): bits 3–5 de `m6` en carretera normal y
+/// cruce a nivel. `DrawTile_Road` también consulta este valor al seleccionar
+/// la variante pavimentada/nieve del sprite de cruce; depósitos y otros
+/// subtipos no lo usan como roadside.
 #[must_use]
 pub fn road_tile_roadside(m5: u8, m6: u8) -> Option<u8> {
-    if (m5 >> 6) & 0x3 == 0 {
+    if (m5 >> 6) & 0x3 <= 1 {
         Some((m6 >> 3) & 0x7)
     } else {
         None
@@ -234,6 +270,33 @@ mod tests {
         (0x0E, 6),
         (0x0F, 2),
     ];
+
+    #[test]
+    fn vanilla_road_ground_ids_match_openttd_bases() {
+        assert_eq!(road_ground_sprite_id(0, false, false), 1332);
+        assert_eq!(road_ground_sprite_id(18, false, false), 1350);
+        assert_eq!(road_ground_sprite_id(0, true, false), 1313);
+        assert_eq!(road_ground_sprite_id(18, true, false), 1331);
+        assert_eq!(road_ground_sprite_id(0, false, true), 1351);
+        assert_eq!(road_ground_sprite_id(18, true, true), 1369);
+    }
+
+    #[test]
+    fn roadside_detail_ids_match_openttd_sprite_table() {
+        assert_eq!(road_streetlight_sprite_id(0), 1406);
+        assert_eq!(road_streetlight_sprite_id(1), 1407);
+        assert_eq!(SPR_ROADSIDE_TREE, 4626);
+    }
+
+    #[test]
+    fn crossings_keep_their_roadside_for_ground_variant_selection() {
+        // `DrawTile_Road(Crossing)` consulta `GetRoadside` antes de elegir el
+        // bloque pavimentado/nieve del sprite de cruce.
+        assert_eq!(road_tile_roadside(0x40, 3 << 3), Some(3));
+        assert_eq!(road_tile_roadside(0x40, 2 << 3), Some(2));
+        // Un depósito reutiliza MAP6 para otra semántica y no es roadside.
+        assert_eq!(road_tile_roadside(0x80, 3 << 3), None);
+    }
 
     #[test]
     fn flat_road_bits_1_to_15_match_openttd_offset_table() {

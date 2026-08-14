@@ -11,8 +11,8 @@ use crate::render::{
 use crate::sprites::{foundation_gfx_for_tileh, rail_trackbits_for_render};
 use openttdrs_core::{
     FOUNDATION_ORIGINAL_SPRITE_BASE, Map, RailFoundationSpriteDraw, TileCoord, TileKind,
-    rail_foundation_draw_plan, rail_foundation_for_trackbits, rail_surface_slope_and_z,
-    tile_slope_and_z,
+    foundation_draw_plan, rail_foundation_draw_plan, rail_foundation_for_trackbits,
+    rail_surface_slope_and_z, tile_slope_and_z,
 };
 
 /// Sesgo en la componente Z de **solo** el agua animada (sin sprite `shore_*`).
@@ -106,10 +106,6 @@ const SLOPE_W: u8 = 0x01;
 const SLOPE_S: u8 = 0x02;
 const SLOPE_E: u8 = 0x04;
 const SLOPE_N: u8 = 0x08;
-const SLOPE_SW: u8 = SLOPE_W | SLOPE_S;
-const SLOPE_SE: u8 = SLOPE_S | SLOPE_E;
-const SLOPE_NE: u8 = SLOPE_N | SLOPE_E;
-const SLOPE_NW: u8 = SLOPE_N | SLOPE_W;
 const SLOPE_STEEP_W: u8 = SLOPE_STEEP | SLOPE_N | SLOPE_W | SLOPE_S;
 const SLOPE_STEEP_S: u8 = SLOPE_STEEP | SLOPE_W | SLOPE_S | SLOPE_E;
 const SLOPE_STEEP_E: u8 = SLOPE_STEEP | SLOPE_S | SLOPE_E | SLOPE_N;
@@ -241,12 +237,15 @@ fn highest_slope_corner_mask(tileh: u8) -> Option<u8> {
     }
 }
 
-/// Réplica de `GetRoadFoundation` + `ApplyFoundationToSlope` para una vía
-/// normal. `road_bits` debe incluir carretera y tranvía (`GetAllRoadBits`).
-fn road_foundation_surface(tileh: u8, road_bits: u8) -> (u8, u8) {
+/// Réplica de `GetRoadFoundation` para una vía normal.
+///
+/// `road_bits` debe incluir carretera y tranvía (`GetAllRoadBits`). Mantener
+/// esta selección separada de la superficie efectiva permite que el renderer
+/// dibuje el mismo `DrawFoundation` que OpenTTD, no sólo su resultado lógico.
+pub(crate) fn road_foundation_kind(tileh: u8, road_bits: u8) -> u8 {
     let road_bits = road_bits & 0x0F;
     if tileh == 0 || road_bits == 0 {
-        return (tileh, 0);
+        return 0;
     }
 
     // Para decidir el tipo de fundación OpenTTD reduce una pendiente empinada
@@ -258,28 +257,29 @@ fn road_foundation_surface(tileh: u8, road_bits: u8) -> (u8, u8) {
     };
     let index = usize::from(rule_tileh.min(14));
     if road_bits & ROAD_INVALID_ON_LEVELED[index] == 0 {
-        return flattening_foundation_surface(tileh);
+        return openttdrs_core::FOUNDATION_LEVELED;
     }
     if highest_slope_corner_mask(rule_tileh).is_none()
         && road_bits & ROAD_INVALID_STRAIGHT[index] == 0
     {
-        return (tileh, 0);
+        return 0;
     }
 
-    let highest = highest_slope_corner_mask(tileh).unwrap_or(SLOPE_N);
-    let steep_z = u8::from(tileh & SLOPE_STEEP != 0);
-    let surface = if road_bits == ROAD_X {
-        if matches!(highest, SLOPE_W | SLOPE_S) {
-            SLOPE_SW
-        } else {
-            SLOPE_NE
-        }
-    } else if matches!(highest, SLOPE_S | SLOPE_E) {
-        SLOPE_SE
+    if road_bits == ROAD_X {
+        openttdrs_core::FOUNDATION_INCLINED_X
     } else {
-        SLOPE_NW
-    };
-    (surface, steep_z)
+        // Cualquier combinación que no sea la recta X se trata como la recta
+        // Y en `GetRoadFoundation`.
+        openttdrs_core::FOUNDATION_INCLINED_Y
+    }
+}
+
+/// Réplica de `GetRoadFoundation` + `ApplyFoundationToSlope` para una vía
+/// normal. La misma rutina genérica de core que usa `DrawFoundation` evita
+/// que la pendiente efectiva diverja de los sprites de fundación.
+pub(crate) fn road_foundation_surface(tileh: u8, road_bits: u8) -> (u8, u8) {
+    let plan = foundation_draw_plan(tileh, road_foundation_kind(tileh, road_bits), 0);
+    (plan.surface_tileh, plan.surface_z_delta)
 }
 
 /// `FlatteningFoundation(tileh)` + `ApplyFoundationToSlope`.
@@ -438,6 +438,22 @@ fn rail_foundation_decision(
         surface,
         z_delta,
     )
+}
+
+/// Decisión de `DrawFoundation(GetRoadFoundation(...))` para una carretera
+/// normal. `DrawRoadBits` modifica el `TileInfo` antes de elegir los sprites
+/// de carretera, tranvía, flechas y detalles; por eso este resultado se
+/// comparte entre el cimiento y todas las capas posteriores.
+pub(crate) fn road_foundation_decision(
+    map: &Map,
+    ctx: &TileRenderContext,
+    map_dims: (u32, u32),
+    tileh: u8,
+    road_bits: u8,
+) -> FoundationDecision {
+    let foundation = road_foundation_kind(tileh, road_bits);
+    let (surface, z_delta) = road_foundation_surface(tileh, road_bits);
+    foundation_decision(map, ctx, map_dims, foundation, surface, z_delta)
 }
 
 /// Decisión de `DrawFoundation(GetBridgeFoundation(...))` para una rampa.
@@ -603,6 +619,87 @@ pub(crate) fn spawn_rail_foundation(
         );
     }
     ctx.info.base_z.saturating_add(plan.surface_z_delta)
+}
+
+/// Superficie que deja `DrawFoundation(GetRoadFoundation(...))` para una
+/// carretera. Además del tipo de fundación conserva la pendiente y Z
+/// efectivas que deben usar los draws posteriores de `DrawRoadBits`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct RoadFoundationRender {
+    pub(crate) foundation: u8,
+    pub(crate) surface_tileh: u8,
+    pub(crate) surface_base_z: u8,
+}
+
+/// Dibuja el cimiento de una carretera normal y devuelve su superficie
+/// efectiva. Es el análogo vial de [`spawn_rail_foundation`].
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn spawn_road_foundation(
+    commands: &mut Commands,
+    map: &Map,
+    map_dims: (u32, u32),
+    assets: &WorldAssets,
+    ctx: &TileRenderContext,
+    tileh: u8,
+    road_bits: u8,
+    foundation_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
+    images: Option<&mut Assets<Image>>,
+) -> RoadFoundationRender {
+    let decision = road_foundation_decision(map, ctx, map_dims, tileh, road_bits);
+    let plan = foundation_draw_plan(tileh, decision.foundation, decision.sprite_block);
+    debug_assert_eq!(plan.surface_tileh, decision.surface_tileh);
+    debug_assert_eq!(
+        plan.surface_z_delta,
+        decision.surface_base_z.saturating_sub(ctx.info.base_z)
+    );
+
+    if decision.foundation != 0 {
+        WorldDrawTrace::record_foundation(
+            "road",
+            decision.foundation,
+            decision.surface_tileh,
+            decision.surface_base_z,
+            decision.sprite_block,
+            decision.nw_edge.visible,
+            decision.ne_edge.visible,
+            (
+                decision.nw_edge.here.0,
+                decision.nw_edge.here.1,
+                decision.nw_edge.neighbour.0,
+                decision.nw_edge.neighbour.1,
+            ),
+            (
+                decision.ne_edge.here.0,
+                decision.ne_edge.here.1,
+                decision.ne_edge.neighbour.0,
+                decision.ne_edge.neighbour.1,
+            ),
+        );
+    }
+
+    let mut action5_sprites = action5_sprites;
+    let mut images = images;
+    for (index, draw) in plan.sprites.into_iter().flatten().enumerate() {
+        spawn_foundation_sprite(
+            commands,
+            assets,
+            ctx,
+            "road-foundation",
+            draw,
+            0.36 + index as f32 * 0.0005,
+            foundation_newgrf,
+            action5_sprites.as_deref_mut(),
+            images.as_deref_mut(),
+        );
+    }
+
+    RoadFoundationRender {
+        foundation: decision.foundation,
+        surface_tileh: plan.surface_tileh,
+        surface_base_z: decision.surface_base_z,
+    }
 }
 
 /// Dibuja la fundación nivelada que OpenTTD fuerza para construcciones que no
@@ -790,11 +887,12 @@ pub(crate) fn spawn_coast_debug_label(
 #[cfg(test)]
 mod tests {
     use bevy::prelude::Vec2;
-    use openttdrs_core::FOUNDATION_LEVELED;
+    use openttdrs_core::{FOUNDATION_INCLINED_X, FOUNDATION_INCLINED_Y, FOUNDATION_LEVELED};
 
     use super::{
         FLAT_WATER_LAYER_FRAC, SHORE_LAYER_FRAC, bridge_foundation_kind, bridge_foundation_surface,
-        flattening_foundation_surface, leveled_foundation_overlay_pos, road_foundation_surface,
+        flattening_foundation_surface, leveled_foundation_overlay_pos, road_foundation_kind,
+        road_foundation_surface,
     };
     use crate::iso::{TILE_HALF_H, overlay_pos, tile_pos, tile_pos_half};
 
@@ -851,12 +949,16 @@ mod tests {
     #[test]
     fn road_foundation_surface_matches_get_road_foundation() {
         // Kale_TitleGame (108,79): ROAD_Y sobre SLOPE_S → InclinedY → SE.
+        assert_eq!(road_foundation_kind(0x02, 0x05), FOUNDATION_INCLINED_Y);
         assert_eq!(road_foundation_surface(0x02, 0x05), (0x06, 0));
         // ROAD_X es la única recta que usa InclinedX.
+        assert_eq!(road_foundation_kind(0x01, 0x0A), FOUNDATION_INCLINED_X);
         assert_eq!(road_foundation_surface(0x01, 0x0A), (0x03, 0));
         // Una combinación compatible cabe sobre una fundación nivelada.
+        assert_eq!(road_foundation_kind(0x05, 0x0A), FOUNDATION_LEVELED);
         assert_eq!(road_foundation_surface(0x05, 0x0A), (0, 1));
         // En una pendiente diagonal, la recta compatible no necesita muro.
+        assert_eq!(road_foundation_kind(0x03, 0x0A), 0);
         assert_eq!(road_foundation_surface(0x03, 0x0A), (0x03, 0));
     }
 }

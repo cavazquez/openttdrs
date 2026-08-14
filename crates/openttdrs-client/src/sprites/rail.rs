@@ -1521,6 +1521,28 @@ pub fn level_crossing_rail_sprite_id_for_type(m5: u8, rail_type: openttdrs_core:
     sid
 }
 
+/// Sprite base completo de un cruce vanilla sin `RailType` overlay.
+///
+/// Después de elegir eje y barrera, `DrawTile_Road` aplica las cuatro
+/// variantes pavimentadas o las ocho de nieve/desierto. Es una decisión del
+/// roadside de la carretera, no de la vía, por lo que el renderer debe pasar
+/// ambas banderas ya resueltas desde la tesela de cruce.
+#[must_use]
+pub fn level_crossing_ground_sprite_id_for_type(
+    m5: u8,
+    rail_type: openttdrs_core::RailType,
+    paved: bool,
+    snow_or_desert: bool,
+) -> u32 {
+    let mut sid = level_crossing_rail_sprite_id_for_type(m5, rail_type);
+    if snow_or_desert {
+        sid += 8;
+    } else if paved {
+        sid += 4;
+    }
+    sid
+}
+
 /// Reserva PBS en el cruce (bit 4 de `m5`, `HasCrossingReservation`).
 #[must_use]
 pub fn level_crossing_has_rail_reservation(m5: u8) -> bool {
@@ -2598,6 +2620,28 @@ mod tests {
         assert_eq!(
             level_crossing_rail_sprite_id_for_type(0x41, RailType::Maglev),
             1394
+        );
+    }
+
+    #[test]
+    fn level_crossing_ground_applies_roadside_and_snow_variants() {
+        use openttdrs_core::RailType;
+
+        // Kale (108,36): rail crossing barred sobre acera; el tipo de vía
+        // escoge 1373 y `DrawTile_Road` suma el bloque pavimentado (+4).
+        assert_eq!(
+            level_crossing_ground_sprite_id_for_type(0x70, RailType::Rail, true, false),
+            1377
+        );
+        // Kale (204,30): la misma regla aplica al bloque monorail.
+        assert_eq!(
+            level_crossing_ground_sprite_id_for_type(0x40, RailType::Monorail, true, false),
+            1387
+        );
+        // Nieve/desierto tiene prioridad sobre pavimento y ocupa +8.
+        assert_eq!(
+            level_crossing_ground_sprite_id_for_type(0x41, RailType::Rail, true, true),
+            1378
         );
     }
 

@@ -141,6 +141,42 @@ pub(crate) fn catenary_under_low_bridge(
     }
 }
 
+/// Decide si un detalle lateral de una carretera puede verse bajo el tablero
+/// elevado. Replica el bloque de `DrawRoadBits`: faroles requieren dos niveles
+/// de despeje sobre el máximo del terreno y árboles, tres.
+///
+/// Los detalles no deben consultar la pendiente de la rampa del puente: como
+/// `GetBridgeHeight(GetNorthernBridgeEnd(...))`, se comparan contra el tablero
+/// completo y el `GetTileMaxZ` de la tesela inferior actual.
+pub(crate) fn roadside_detail_visible_under_bridge(
+    map: &Map,
+    coord: TileCoord,
+    dims: (u32, u32),
+    trees: bool,
+) -> bool {
+    let Some(tile) = map.get(coord) else {
+        return true;
+    };
+    if bridge_above_axis_from_mapt(tile.mapt).is_none() {
+        return true;
+    }
+    let Some(span) = bridge_span_at(map, coord, dims) else {
+        return true;
+    };
+    let (tileh, base_z) = tile_slope_and_min_z(map, coord.x as u32, coord.y as u32);
+    let terrain_max_z = base_z.saturating_add(if tileh & 0x10 != 0 {
+        2
+    } else if tileh & 0x0F != 0 {
+        1
+    } else {
+        0
+    });
+    let minimum_deck_z = terrain_max_z
+        .saturating_add(2)
+        .saturating_add(u8::from(trees));
+    span.deck_z >= minimum_deck_z
+}
+
 fn ramp_tile(tile: Tile) -> bool {
     tile.is_tunnel_bridge_tile() && tile.m5 & 0x80 != 0
 }
@@ -1226,7 +1262,7 @@ mod tests {
         bridge_pbs_reservation_sprite_id, bridge_pbs_trace_bounds, bridge_ramp_catenary_slope,
         bridge_ramp_catenary_world_z_delta, bridge_ramp_ground_kind, bridge_ramp_ground_sprite_id,
         bridge_span_at, bridge_surface_z, catenary_under_low_bridge, pillar_ground_heights,
-        pillar_half_crop, pillar_segments,
+        pillar_half_crop, pillar_segments, roadside_detail_visible_under_bridge,
     };
     use crate::sprites::bridge_deck_sprite_ids;
 
@@ -1662,11 +1698,34 @@ mod tests {
         assert!(decision.hide_wires);
         assert_eq!(decision.pylon_pcp_override, 0b0101);
 
+        // `DrawRoadBits` requiere una altura aún mayor que la catenaria: el
+        // mismo tablero a z=1 oculta faroles y árboles de la carretera
+        // inferior. Este era el origen de árboles/faroles atravesando puentes
+        // bajos en la paridad de Kale.
+        assert!(!roadside_detail_visible_under_bridge(
+            &map,
+            c(2, 3),
+            map.dimensions(),
+            false,
+        ));
+        assert!(!roadside_detail_visible_under_bridge(
+            &map,
+            c(2, 3),
+            map.dimensions(),
+            true,
+        ));
+
         // Sin puente elevado no se cambia la decisión de catenaria.
         assert_eq!(
             catenary_under_low_bridge(&map, c(0, 0), map.dimensions()),
             super::CatenaryUnderLowBridge::default()
         );
+        assert!(roadside_detail_visible_under_bridge(
+            &map,
+            c(0, 0),
+            map.dimensions(),
+            false,
+        ));
     }
 }
 

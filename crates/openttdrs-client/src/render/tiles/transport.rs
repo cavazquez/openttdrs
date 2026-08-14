@@ -1,10 +1,11 @@
 use bevy::prelude::*;
 use openttdrs_core::prelude::*;
-use openttdrs_core::{Climate, RoadTypeDef};
+use openttdrs_core::{Climate, RoadTypeDef, partial_pixel_z};
 
 use super::{
-    TRAM_OVERLAY_LAYER_FRAC, catenary_under_low_bridge, sloped_or_flat_image, spawn_ground_sprite,
-    spawn_rail_foundation,
+    TRAM_OVERLAY_LAYER_FRAC, catenary_under_low_bridge, roadside_detail_visible_under_bridge,
+    sloped_or_flat_image, spawn_forced_leveled_foundation, spawn_ground_sprite,
+    spawn_rail_foundation, spawn_road_foundation,
 };
 use crate::iso::{TILE_HALF_H, overlay_pos, remap_tile_offset, slope_half_h, tile_pos_half};
 use crate::render::catenary_newgrf::catenary_sprite_colored;
@@ -17,17 +18,18 @@ use crate::render::{MapVisualLayer, TileRenderContext, WorldAssets};
 use crate::sprites::{
     RAIL_GROUND_SNOW_OR_DESERT, RAIL_TB_LEFT, RAIL_TB_LOWER, RAIL_TB_RIGHT, RAIL_TB_UPPER,
     ROAD_FLAT_HALF_H, ROAD_STREETLIGHT_META, ROADSIDE_LAMPS, ROADSIDE_TREE_META, ROADSIDE_TREES,
-    TRACK_FENCE_META, catenary_pylon_world_z_delta, catenary_reference_sprite_id,
-    catenary_sprite_color, catenary_wire_world_z_delta,
+    SPR_ROADSIDE_TREE, TRACK_FENCE_META, catenary_pylon_world_z_delta,
+    catenary_reference_sprite_id, catenary_sprite_color, catenary_wire_world_z_delta,
     collect_catenary_pylons_from_map_with_pcp_override, collect_catenary_wire_draws_from_map,
     collect_rail_pbs_reservation_draws, collect_rail_sprites_for_surface,
     collect_signal_sprite_draws, is_road_level_crossing, is_typed_rail_track_sprite,
-    level_crossing_has_rail_reservation, level_crossing_rail_sprite_id_for_type,
+    level_crossing_ground_sprite_id_for_type, level_crossing_has_rail_reservation,
     rail_ghost_overlay_offset, rail_pbs_reservation_offset, rail_tile_is_signals,
     rail_trackbits_for_render, remap_rail_sprite_id, road_bits_for_render, road_flat_sprite_color,
-    road_flat_sprite_index, road_tile_roadside, road_tile_snow_or_desert, roadside_is_paved,
-    signal_screen_anchor_for_side, signal_screen_position_for_side, signal_sprite_center_offset,
-    track_fence_draws_for_tile, tram_flat_sprite_index,
+    road_flat_sprite_index, road_ground_sprite_id, road_streetlight_sprite_id, road_tile_roadside,
+    road_tile_snow_or_desert, roadside_is_paved, signal_screen_anchor_for_side,
+    signal_screen_position_for_side, signal_sprite_center_offset, track_fence_draws_for_tile,
+    tram_flat_sprite_index,
 };
 
 /// Contexto de `DrawGroundSprite` para una pasada de vía. Una fundación crea
@@ -137,6 +139,51 @@ fn record_rail_track_trace(
     }
 }
 
+/// `DrawRoadBits` dibuja el suelo después de `DrawFoundation`. Las
+/// fundaciones viales posibles son las mismas tres continuas de una rampa de
+/// puente: nivelada usa `OffsetGroundSprite(0, -TILE_HEIGHT)` e inclinadas
+/// conservan el offset cero.
+const fn road_foundation_child_offset(foundation: u8) -> Option<(i32, i32, i32)> {
+    match foundation {
+        0 => None,
+        openttdrs_core::FOUNDATION_LEVELED => Some((0, -32, 0)),
+        openttdrs_core::FOUNDATION_INCLINED_X | openttdrs_core::FOUNDATION_INCLINED_Y => {
+            Some((0, 0, 0))
+        }
+        _ => None,
+    }
+}
+
+fn record_road_ground_trace(role: &'static str, sprite_id: u32, foundation: u8) {
+    if let Some(offset) = road_foundation_child_offset(foundation) {
+        WorldDrawTrace::record_foundation_child_sprite(role, sprite_id, false, offset);
+    } else {
+        WorldDrawTrace::record_sprite_with_geometry(
+            role,
+            "ground",
+            sprite_id,
+            false,
+            (0, 0, 0),
+            0,
+            None,
+        );
+    }
+}
+
+/// Altura de mundo del `DrawRoadDetail` respecto de la base cruda de la
+/// tesela. Después de una fundación `ti->z` y `ti->tileh` ya son los
+/// efectivos, por lo que ambos componentes son necesarios.
+fn road_detail_world_z_delta(
+    raw_base_z: u8,
+    surface_base_z: u8,
+    surface_tileh: u8,
+    dx: f32,
+    dy: f32,
+) -> i32 {
+    (i32::from(surface_base_z) - i32::from(raw_base_z)) * 8
+        + i32::from(partial_pixel_z(dx, dy, surface_tileh))
+}
+
 /// Offset extra de las pistas de esquina PBS en `DrawTrackBits`, ya
 /// multiplicado por `ZOOM_BASE`. X/Y usan el banco inclinado sin offset;
 /// `Upper/Lower/Right/Left` pasan `-TILE_HEIGHT` a `DrawGroundSprite` cuando
@@ -206,11 +253,73 @@ pub(crate) fn spawn_road_tile(
     mut images: Option<&mut Assets<Image>>,
     newgrf_stack: &[openttdrs_core::NewGrfEntry],
     oneway_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    foundation_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     mut action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
 ) {
-    let tileh = ctx.info.tileh;
-    let base_z = ctx.info.base_z;
+    let raw_tileh = ctx.info.tileh;
+    let raw_base_z = ctx.info.base_z;
     let rb = road_bits_for_render(map, ctx.coord, mw, mh);
+    let is_level_crossing = ctx
+        .tile
+        .is_some_and(|tile| is_road_level_crossing(tile.mapt, tile.m5, ctx.kind));
+    // OpenTTD primero conserva el terreno original y luego deja que
+    // `DrawFoundation` reemplace el TileInfo para todos los dibujos de la
+    // carretera. Hacerlo en ese orden impide que los muros oculten el suelo
+    // vecino y, a la vez, usa el sprite correcto sobre la superficie nivelada.
+    if raw_tileh != 0 {
+        spawn_ground_sprite(
+            commands,
+            &sloped_or_flat_image(raw_tileh, &assets.grass, &assets.grass_slopes),
+            Color::WHITE,
+            ctx,
+            slope_half_ground,
+        );
+    }
+    // El cruce a nivel no entra por `DrawRoadBits`: `DrawTile_Road` fuerza
+    // una fundación nivelada y usa un único sprite de cruce, mientras que una
+    // carretera normal decide su fundación a partir de RoadBits.
+    let (tileh, base_z, road_foundation) = if is_level_crossing {
+        let crossing_base_z = spawn_forced_leveled_foundation(
+            commands,
+            map,
+            (mw, mh),
+            assets,
+            ctx,
+            raw_tileh,
+            "road-crossing",
+            "road-crossing-foundation",
+            foundation_newgrf,
+            action5_sprites.as_deref_mut(),
+            images.as_deref_mut(),
+        );
+        (
+            0,
+            crossing_base_z,
+            if raw_tileh == 0 {
+                0
+            } else {
+                openttdrs_core::FOUNDATION_LEVELED
+            },
+        )
+    } else {
+        let road_surface = spawn_road_foundation(
+            commands,
+            map,
+            (mw, mh),
+            assets,
+            ctx,
+            raw_tileh,
+            rb,
+            foundation_newgrf,
+            action5_sprites.as_deref_mut(),
+            images.as_deref_mut(),
+        );
+        (
+            road_surface.surface_tileh,
+            road_surface.surface_base_z,
+            road_surface.foundation,
+        )
+    };
     let fi = road_flat_sprite_index(tileh, rb);
     let road_half_h = if tileh == 0 {
         ROAD_FLAT_HALF_H[fi]
@@ -233,21 +342,13 @@ pub(crate) fn spawn_road_tile(
         .is_some_and(|t| road_tile_snow_or_desert(t.mapt, ctx.kind, t.m7))
         || climate.uses_snow_ground();
     let paved = roadside.is_some_and(roadside_is_paved) && !snow_or_desert;
-    if tileh != 0 {
-        spawn_ground_sprite(
-            commands,
-            &sloped_or_flat_image(tileh, &assets.grass, &assets.grass_slopes),
-            Color::WHITE,
-            ctx,
-            slope_half_ground,
-        );
-    }
 
     // NewGRF: sustituir el sprite de suelo road por la vista OpenGFX
     // (`road_flat_sprite_index`, incl. pendientes 11–14).
-    let mut used_newgrf = false;
+    let mut used_newgrf = is_level_crossing;
     let view_idx = road_newgrf_view_index(tileh, rb);
-    if let Some(tile) = ctx.tile
+    if !is_level_crossing
+        && let Some(tile) = ctx.tile
         && let Some(def) = newgrf_road_def_for_tile(road_catalog, tile)
         && let Some(view) = def.newgrf_view(view_idx)
         && let (Some(cache), Some(images)) = (road_sprites.as_mut(), images.as_mut())
@@ -300,6 +401,15 @@ pub(crate) fn spawn_road_tile(
         } else {
             &assets.road_flat
         };
+        // `DrawRoadGroundSprites` ocurre después de `DrawFoundation`; el
+        // contrato es hijo del cimiento cuando éste existe, no un nuevo suelo
+        // absoluto. La traza conserva esa relación para que el oráculo detecte
+        // tanto el sprite como la transición de pendiente.
+        record_road_ground_trace(
+            "road-ground",
+            road_ground_sprite_id(fi, paved, snow_or_desert),
+            road_foundation,
+        );
         commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
@@ -315,7 +425,7 @@ pub(crate) fn spawn_road_tile(
     }
 
     // Overlay one-way (`SPR_ONEWAY_BASE` / Action5 `0x09`).
-    if let Some(tile) = ctx.tile {
+    if !is_level_crossing && let Some(tile) = ctx.tile {
         let drd = openttdrs_core::disallowed_road_directions(tile.m5);
         let road_x = (rb & 0x0F) == 0x0A;
         if let Some(slot) = openttdrs_core::oneway_action5_slot(tileh, road_x, drd)
@@ -343,7 +453,9 @@ pub(crate) fn spawn_road_tile(
         }
     }
 
-    if let Some(tfi) = ctx.tile.and_then(|t| tram_flat_sprite_index(tileh, t.m3)) {
+    if !is_level_crossing
+        && let Some(tfi) = ctx.tile.and_then(|t| tram_flat_sprite_index(tileh, t.m3))
+    {
         let tram_half_h = if tileh == 0 {
             ROAD_FLAT_HALF_H[tfi]
         } else {
@@ -421,10 +533,25 @@ pub(crate) fn spawn_road_tile(
     // `Roadside::StreetLights` (3): faroles de `_roadside_lamps` en sus
     // subcoordenadas de mundo. Igual que upstream, solo con 2+ road bits
     // y `FullDetail` activo.
-    if show_full_detail && roadside == Some(3) && rb.count_ones() > 1 {
+    if !is_level_crossing
+        && show_full_detail
+        && roadside == Some(3)
+        && rb.count_ones() > 1
+        && roadside_detail_visible_under_bridge(map, ctx.coord, (mw, mh), false)
+    {
         for &(lamp, dx, dy) in ROADSIDE_LAMPS[usize::from(rb & 0xF)] {
             let (w, h, xrel, yrel) = ROAD_STREETLIGHT_META[lamp];
-            let off = remap_tile_offset(dx, dy, 0.0) * 0.5;
+            let detail_z = f32::from(partial_pixel_z(dx, dy, tileh));
+            WorldDrawTrace::record_sprite_with_geometry(
+                "roadside-streetlight",
+                "sortable",
+                road_streetlight_sprite_id(lamp),
+                false,
+                (0, 0, 0),
+                road_detail_world_z_delta(raw_base_z, base_z, tileh, dx, dy),
+                Some(TraceSpriteBounds::new(dx as i32, dy as i32, 0, 2, 2, 16)),
+            );
+            let off = remap_tile_offset(dx, dy, detail_z) * 0.5;
             let pos3 = overlay_pos(
                 Vec2::new(ctx.iso_pos.x + off.x, ctx.iso_pos.y + off.y),
                 xrel,
@@ -446,10 +573,25 @@ pub(crate) fn spawn_road_tile(
     }
 
     // `Roadside::Trees` (5): árboles de `_roadside_trees` (sprite 0x1212).
-    if show_full_detail && roadside == Some(5) && rb.count_ones() > 1 {
+    if !is_level_crossing
+        && show_full_detail
+        && roadside == Some(5)
+        && rb.count_ones() > 1
+        && roadside_detail_visible_under_bridge(map, ctx.coord, (mw, mh), true)
+    {
         let (w, h, xrel, yrel) = ROADSIDE_TREE_META;
         for &(dx, dy) in ROADSIDE_TREES[usize::from(rb & 0xF)] {
-            let off = remap_tile_offset(dx, dy, 0.0) * 0.5;
+            let detail_z = f32::from(partial_pixel_z(dx, dy, tileh));
+            WorldDrawTrace::record_sprite_with_geometry(
+                "roadside-tree",
+                "sortable",
+                SPR_ROADSIDE_TREE,
+                false,
+                (0, 0, 0),
+                road_detail_world_z_delta(raw_base_z, base_z, tileh, dx, dy),
+                Some(TraceSpriteBounds::new(dx as i32, dy as i32, 0, 2, 2, 16)),
+            );
+            let off = remap_tile_offset(dx, dy, detail_z) * 0.5;
             let pos3 = overlay_pos(
                 Vec2::new(ctx.iso_pos.x + off.x, ctx.iso_pos.y + off.y),
                 xrel,
@@ -471,14 +613,16 @@ pub(crate) fn spawn_road_tile(
     }
 
     // Cruce a nivel: carretera + sprite de vía encima (`base_sprites.crossing + rail_axis`).
-    if ctx
-        .tile
-        .is_some_and(|t| is_road_level_crossing(t.mapt, t.m5, ctx.kind))
-    {
+    if is_level_crossing {
         let sid = ctx
             .tile
             .map(|t| {
-                level_crossing_rail_sprite_id_for_type(t.m5, openttdrs_core::rail_type_from_tile(t))
+                level_crossing_ground_sprite_id_for_type(
+                    t.m5,
+                    openttdrs_core::rail_type_from_tile(t),
+                    paved,
+                    snow_or_desert,
+                )
             })
             .unwrap_or(1370);
         if let Some(img) = assets.rail.get(&sid) {
@@ -486,6 +630,7 @@ pub(crate) fn spawn_road_tile(
             // La identidad visual (rail/electric/mono/maglev/tram) ya viene en
             // el sprite seleccionado; recolorearlo lo alejaba de OpenTTD.
             let crossing_paint = Color::WHITE;
+            record_road_ground_trace("crossing-ground", sid, road_foundation);
             commands.spawn((
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
@@ -1018,6 +1163,7 @@ mod tests {
     use super::{
         RailTrackTraceMode, halftile_foundation_child_visual_offset, pbs_extra_y_in_bevy,
         pbs_track_sprite_extra_y, rail_foundation_after_pass, rail_track_trace_mode,
+        road_detail_world_z_delta, road_foundation_child_offset,
     };
     use crate::sprites::{RAIL_TB_LEFT, RAIL_TB_LOWER, RAIL_TB_RIGHT, RAIL_TB_UPPER};
     use openttdrs_core::{FOUNDATION_INCLINED_X, FOUNDATION_LEVELED};
@@ -1096,5 +1242,37 @@ mod tests {
             Vec2::new(16.0, 8.0)
         );
         assert_eq!(halftile_foundation_child_visual_offset(None), Vec2::ZERO);
+    }
+
+    #[test]
+    fn road_foundation_ground_relation_matches_draw_foundation() {
+        // La carretera posterior a una fundación nivelada es child del muro;
+        // las dos fundaciones inclinadas conservan el mismo origen de padre.
+        assert_eq!(road_foundation_child_offset(0), None);
+        assert_eq!(
+            road_foundation_child_offset(FOUNDATION_LEVELED),
+            Some((0, -32, 0))
+        );
+        assert_eq!(
+            road_foundation_child_offset(FOUNDATION_INCLINED_X),
+            Some((0, 0, 0))
+        );
+    }
+
+    #[test]
+    fn road_details_follow_effective_slope_and_foundation_height() {
+        // Valores capturados por el oráculo en Kale: h=9, base Z=2, faroles
+        // en (1,8)/(14,8) se dibujan a Z=20 (delta=4), no en la base Z=16.
+        assert_eq!(road_detail_world_z_delta(2, 2, 0x09, 1.0, 8.0), 4);
+        assert_eq!(road_detail_world_z_delta(2, 2, 0x09, 14.0, 8.0), 4);
+
+        // Árboles en la misma pendiente pero con base Z=1: las posiciones
+        // (0,2) y (0,10) dan 7 y 3 píxeles por encima de la base.
+        assert_eq!(road_detail_world_z_delta(1, 1, 0x09, 0.0, 2.0), 7);
+        assert_eq!(road_detail_world_z_delta(1, 1, 0x09, 0.0, 10.0), 3);
+
+        // Con fundación nivelada el detalle sube toda la altura de tesela aun
+        // cuando la superficie posterior sea plana.
+        assert_eq!(road_detail_world_z_delta(0, 1, 0, 8.0, 8.0), 8);
     }
 }

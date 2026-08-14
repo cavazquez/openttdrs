@@ -27,12 +27,13 @@ use crate::sprites::{
     CompanyColour, RoadStopLayerGfx, StationTileClass, TransparencyOption,
     airport_station_base_for_gfx, airport_station_ground_layers_for_gfx,
     airport_station_layers_for_gfx, airport_station_overlay_rel_for_sprite,
-    airport_station_sprite_for_id, catenary_hidden, catenary_reference_sprite_id,
-    catenary_sprite_color, catenary_tunnel_wire_sprite,
-    collect_catenary_pylons_from_map_with_pcp_override, collect_catenary_wire_draws_from_map,
-    is_hidden, log_unknown_station_type_once, rail_depot_build_layers, rail_depot_seq_gfx,
-    rail_depot_visual_type_index, rail_ghost_overlay_offset, rail_pbs_reservation_offset,
-    rail_station_draw_layers, rail_station_ground_track_sprite_for_type, rail_station_layer_bounds,
+    airport_station_sprite_for_id, catenary_hidden, catenary_pylon_world_z_delta,
+    catenary_reference_sprite_id, catenary_sprite_color, catenary_tunnel_wire_sprite,
+    catenary_wire_world_z_delta, collect_catenary_pylons_from_map_with_pcp_override,
+    collect_catenary_wire_draws_from_map, is_hidden, log_unknown_station_type_once,
+    rail_depot_build_layers, rail_depot_seq_gfx, rail_depot_visual_type_index,
+    rail_ghost_overlay_offset, rail_pbs_reservation_offset, rail_station_draw_layers,
+    rail_station_ground_track_sprite_for_type, rail_station_layer_bounds,
     rail_station_layer_for_type, rail_station_overlay_rel, rail_station_sprite_meta,
     rail_waypoint_draw_layers, rail_waypoint_layer_meta, rail_waypoint_sprite_center,
     remap_rail_sprite_id, road_depot_build_layers, road_depot_entrance_road_bits,
@@ -517,6 +518,158 @@ fn spawn_airport_station_ground_layers(
     true
 }
 
+/// Geometría del cable de una plataforma ferroviaria para `world-draw`.
+///
+/// Las estaciones son planas para `DrawRailCatenaryRailway`, pero conservan
+/// la misma `SortableSpriteStruct` y altura relativa que una vía normal.
+fn station_catenary_wire_trace_geometry(
+    tileh: u8,
+    base_z: u8,
+    station_tb: u8,
+    draw: crate::sprites::CatenaryWireDraw,
+) -> (i32, TraceSpriteBounds) {
+    let (ox, oy, oz) = draw.bounds_origin;
+    let (ex, ey, ez) = draw.bounds_extent;
+    (
+        catenary_wire_world_z_delta(tileh, base_z, station_tb, draw),
+        TraceSpriteBounds::new(ox, oy, oz, ex, ey, ez),
+    )
+}
+
+/// `DrawRailCatenary` dentro de `DrawTile_Station`.
+///
+/// OpenTTD emite postes y cables después del suelo/reserva de la plataforma,
+/// pero antes de `DrawRailTileSeq` (techo, edificio y demás capas de estación).
+/// Mantener ese orden evita que la catenaria quede visualmente por encima de
+/// un andén y permite que `world-draw` compare los comandos reales.
+#[allow(clippy::too_many_arguments)]
+fn spawn_station_rail_catenary(
+    commands: &mut Commands,
+    map: &Map,
+    dims: (u32, u32),
+    assets: &WorldAssets,
+    ctx: &TileRenderContext,
+    tile: Tile,
+    station_tb: u8,
+    tileh: u8,
+    rail_base_z: u8,
+    rail_half_h: f32,
+    catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    catenary_sprites: &mut Option<&mut crate::render::NewGrfCatenarySpriteCache>,
+    images: &mut Option<&mut Assets<Image>>,
+) {
+    if !rail_type_from_tile(tile).has_catenary() || catenary_hidden() {
+        return;
+    }
+
+    let low_bridge = catenary_under_low_bridge(map, ctx.coord, dims);
+    let tint = catenary_sprite_color();
+
+    // `DrawRailCatenaryRailway` coloca primero los PPP. A diferencia de los
+    // cables, una estación puede prohibir wire y aun así autorizar postes.
+    let mut pylons = Vec::new();
+    collect_catenary_pylons_from_map_with_pcp_override(
+        map,
+        ctx.coord,
+        dims.0,
+        dims.1,
+        crate::sprites::OTTD_MP_RAIL,
+        station_tb,
+        tileh,
+        low_bridge.pylon_pcp_override,
+        &mut pylons,
+    );
+    for draw in pylons {
+        let sprite = catenary_sprite_colored(
+            assets,
+            draw.sprite_id,
+            tint,
+            catenary_newgrf,
+            catenary_sprites.as_deref_mut(),
+            images.as_deref_mut(),
+        );
+        WorldDrawTrace::record_sprite_with_palette_and_world_geometry(
+            "station-catenary-pylon",
+            "sortable",
+            catenary_reference_sprite_id(draw.sprite_id),
+            0,
+            sprite.is_none(),
+            (draw.tile_dx as i32, draw.tile_dy as i32),
+            draw.pcp_direction.map_or(0, |pcp| {
+                catenary_pylon_world_z_delta(tileh, ctx.info.base_z, station_tb, pcp)
+            }),
+            (1, 1, 0),
+            Some(TraceSpriteBounds::new(-1, -1, 0, 1, 1, 6)),
+        );
+        let Some(sprite) = sprite else {
+            continue;
+        };
+        let off = remap_tile_offset(draw.tile_dx, draw.tile_dy, 0.0) * 0.5;
+        let base = tile_pos_half(
+            ctx.tx_i32(),
+            ctx.ty_i32(),
+            rail_base_z,
+            draw.z_layer,
+            rail_half_h,
+        );
+        commands.spawn((
+            MapVisualLayer,
+            ctx.map_tile_chunk(),
+            sprite,
+            Transform::from_translation(base + Vec3::new(off.x, off.y, 0.0)),
+        ));
+    }
+
+    if !openttdrs_core::station_tile_can_have_wires(tile.m3) || low_bridge.hide_wires {
+        return;
+    }
+    let mut wires = Vec::new();
+    collect_catenary_wire_draws_from_map(
+        map,
+        ctx.coord,
+        dims.0,
+        dims.1,
+        crate::sprites::OTTD_MP_RAIL,
+        station_tb,
+        tileh,
+        &mut wires,
+    );
+    for (i, draw) in wires.iter().copied().enumerate() {
+        let sid = draw.sprite_id;
+        let sprite = catenary_sprite_colored(
+            assets,
+            sid,
+            tint,
+            catenary_newgrf,
+            catenary_sprites.as_deref_mut(),
+            images.as_deref_mut(),
+        );
+        let (world_z_delta, bounds) =
+            station_catenary_wire_trace_geometry(tileh, ctx.info.base_z, station_tb, draw);
+        WorldDrawTrace::record_sprite_with_palette_and_geometry(
+            "station-catenary-wire",
+            "sortable",
+            catenary_reference_sprite_id(sid),
+            0,
+            sprite.is_none(),
+            (0, 0, 0),
+            world_z_delta,
+            Some(bounds),
+        );
+        let Some(sprite) = sprite else {
+            continue;
+        };
+        let z = 0.035 + i as f32 * 0.0004;
+        let base = tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), rail_base_z, z, rail_half_h);
+        commands.spawn((
+            MapVisualLayer,
+            ctx.map_tile_chunk(),
+            sprite,
+            Transform::from_translation(base),
+        ));
+    }
+}
+
 #[allow(clippy::too_many_arguments, clippy::needless_option_as_deref)]
 pub(crate) fn spawn_station_tile(
     commands: &mut Commands,
@@ -627,6 +780,23 @@ pub(crate) fn spawn_station_tile(
                         Transform::from_translation(base + Vec3::new(offset.x, offset.y, 0.0)),
                     ));
                 }
+            }
+            if let Some(tile) = ctx.tile {
+                spawn_station_rail_catenary(
+                    commands,
+                    map,
+                    dims,
+                    assets,
+                    ctx,
+                    tile,
+                    station_tb,
+                    tileh,
+                    rail_base_z,
+                    rail_half_h,
+                    catenary_newgrf,
+                    &mut catenary_sprites,
+                    &mut images,
+                );
             }
             let overlay_layers = if class == StationTileClass::RailWaypoint {
                 rail_waypoint_draw_layers(m5)
@@ -765,91 +935,6 @@ pub(crate) fn spawn_station_tile(
                         sprite,
                         Transform::from_translation(pos3),
                     ));
-                }
-            }
-            if let Some(tile) = ctx.tile.filter(|t| {
-                rail_type_from_tile(*t).has_catenary()
-                    && openttdrs_core::station_tile_can_have_wires(t.m3)
-            }) {
-                let low_bridge = catenary_under_low_bridge(map, ctx.coord, dims);
-                let tint = catenary_sprite_color();
-                let mut wires = Vec::new();
-                if !low_bridge.hide_wires {
-                    collect_catenary_wire_draws_from_map(
-                        map,
-                        ctx.coord,
-                        dims.0,
-                        dims.1,
-                        crate::sprites::OTTD_MP_RAIL,
-                        station_tb,
-                        tileh,
-                        &mut wires,
-                    );
-                }
-                for (i, draw) in wires.into_iter().enumerate() {
-                    let sid = draw.sprite_id;
-                    let Some(sprite) = catenary_sprite_colored(
-                        assets,
-                        sid,
-                        tint,
-                        catenary_newgrf,
-                        catenary_sprites.as_deref_mut(),
-                        images.as_deref_mut(),
-                    ) else {
-                        continue;
-                    };
-                    commands.spawn((
-                        MapVisualLayer,
-                        ctx.map_tile_chunk(),
-                        sprite,
-                        Transform::from_translation(tile_pos_half(
-                            ctx.tx_i32(),
-                            ctx.ty_i32(),
-                            rail_base_z,
-                            0.035 + i as f32 * 0.0004,
-                            rail_half_h,
-                        )),
-                    ));
-                }
-                if openttdrs_core::station_tile_can_have_pylons(tile.m3) {
-                    let mut pylons = Vec::new();
-                    collect_catenary_pylons_from_map_with_pcp_override(
-                        map,
-                        ctx.coord,
-                        dims.0,
-                        dims.1,
-                        crate::sprites::OTTD_MP_RAIL,
-                        station_tb,
-                        tileh,
-                        low_bridge.pylon_pcp_override,
-                        &mut pylons,
-                    );
-                    for draw in pylons {
-                        let Some(sprite) = catenary_sprite_colored(
-                            assets,
-                            draw.sprite_id,
-                            tint,
-                            catenary_newgrf,
-                            catenary_sprites.as_deref_mut(),
-                            images.as_deref_mut(),
-                        ) else {
-                            continue;
-                        };
-                        let off = remap_tile_offset(draw.tile_dx, draw.tile_dy, 0.0) * 0.5;
-                        let base = tile_pos_half(
-                            ctx.tx_i32(),
-                            ctx.ty_i32(),
-                            rail_base_z,
-                            draw.z_layer,
-                            rail_half_h,
-                        );
-                        commands.spawn((
-                            MapVisualLayer,
-                            ctx.map_tile_chunk(),
-                            sprite,
-                            Transform::from_translation(base + Vec3::new(off.x, off.y, 0.0)),
-                        ));
-                    }
                 }
             }
         }
@@ -2031,9 +2116,10 @@ mod tests {
     use super::{
         airport_station_ground_layer_trace_offset, rail_depot_foundation_child_offset,
         rail_depot_reservation_track_visible, road_stop_foundation_child_offset,
-        station_rail_child_offset, tunnel_catenary_trace_geometry,
+        station_catenary_wire_trace_geometry, station_rail_child_offset,
+        tunnel_catenary_trace_geometry,
     };
-    use crate::sprites::airport_station_ground_layers_for_gfx;
+    use crate::sprites::{CatenaryWireDraw, airport_station_ground_layers_for_gfx};
 
     #[test]
     fn rail_depot_reservation_is_hidden_behind_visible_ne_and_nw_buildings() {
@@ -2077,6 +2163,30 @@ mod tests {
         assert_eq!(
             tunnel_catenary_trace_geometry(1),
             ((7, 0, 3), (0, 0, 7, 15, 16, 1))
+        );
+    }
+
+    #[test]
+    fn station_catenary_trace_matches_kale_platform_wire() {
+        // Kale (194,22): plataforma Y eléctrica. OpenTTD inserta el wire
+        // global 5649 entre el suelo y las capas de la estación, con la
+        // `SortableSpriteStruct` de Y plano.
+        let draw = CatenaryWireDraw {
+            sprite_id: 1056,
+            bounds_origin: (7, 0, 10),
+            bounds_extent: (1, 15, 1),
+        };
+        assert_eq!(
+            crate::sprites::catenary_reference_sprite_id(draw.sprite_id),
+            5649
+        );
+        let (world_z_delta, bounds) = station_catenary_wire_trace_geometry(0, 1, 0x02, draw);
+        assert_eq!(world_z_delta, 0);
+        assert_eq!(
+            (
+                bounds.ox, bounds.oy, bounds.oz, bounds.ex, bounds.ey, bounds.ez
+            ),
+            (7, 0, 10, 1, 15, 1)
         );
     }
 

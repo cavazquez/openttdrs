@@ -64,7 +64,7 @@ cuando el tile ya se decodificó mal.
 | Viewport de mapas grandes | Completado de chunks parciales. | Corrección aislada publicada en `main` (`5b0023b`). |
 | Terreno, pendientes y árboles | Revisión de altura isométrica y sprites de ladera para eliminar artefactos que parecían vías o dejaban colores extraños. | En checkpoint; requiere captura focalizada. |
 | Puentes rail y conexiones | Fundaciones, pilares, rampas y altura efectiva; la traza conserva sprites y geometría de las transiciones. | En checkpoint; sin declarar paridad total. |
-| Catenaria | Wire/pylon y altura efectiva de puente/túnel para que el tendido no flote ni se corte. | Instrumentada; faltan más regresiones. |
+| Catenaria | Wire/pylon y altura efectiva de puente/túnel para que el tendido no flote ni se corte. Las estaciones ferroviarias emiten ahora sus postes/cables antes de las capas `TILE_SEQ`, igual que `DrawTile_Station`. | Kale completo: 556 cables y 148 postes de estación se comparan en ID, geometría y orden; faltan otras familias de estación y señales. |
 | Monorriel y maglev | Selección diagonal tipada por railtype para no usar rail convencional. | En checkpoint; validar por región. |
 | Depósitos y estaciones especiales | Geometría de depósito naval, reserva visual de depósito rail y distinción de tiles especiales para no disfrazar un fallback como parada de buses. | En checkpoint; los fallbacks deben ser explícitos. |
 | Paleta de compañía 8bpp y estación rail vanilla | Se corrigió el desplazamiento de un índice DOS en las rampas y se dejó de inferir recolor por RGB ajeno a la rampa autora. La región `120,111..128,113` de Kale compara 118/118 comandos de estación (sprite, paleta, geometría y orden). | Validada por `world-draw`; la composición raster amplia sigue teniendo familias ajenas a esta corrección. |
@@ -201,6 +201,22 @@ pantalla conserva, por ejemplo, `(14,48)` cuando `GetLiftPosition()==12`.
 La comparación completa deja en cero los 2.131 comandos de casas antes no
 seleccionados por el candidato, manteniendo ID, fundación, geometría explícita
 y orden relativo contenidos en el oráculo.
+
+### Revalidación: catenaria de estaciones ferroviarias de Kale
+
+`DrawTile_Station` llama a `DrawRailCatenary` después del suelo y de la
+reserva PBS, pero antes de `DrawRailTileSeq`. La ruta Bevy ya creaba esos
+sprites, aunque los insertaba después de las capas del andén y no los emitía
+en `world-draw`; la comparación no podía confirmar ni su posición ni su orden.
+
+La ruta común ahora conserva el orden C++: postes PPP, cables PCP y recién
+después las capas de estación. También separa los permisos de cables y
+postes: una estación puede prohibir wire y permitir el pylon correspondiente.
+En `(194,22)`, el cable `5649` tiene `bounds=(7,0,10; 1,15,1)` y aparece como
+el ordinal 1, entre la vía `1011` y las capas `1077/1069/1080`, exactamente
+como OpenTTD. Kale completo recupera 556 cables y 148 postes de estación sin
+una selección, geometría u orden candidatos fuera del oráculo; el test unitario
+mantiene ese ejemplo como regresión.
 
 ## Procedimiento para investigar un caso nuevo
 

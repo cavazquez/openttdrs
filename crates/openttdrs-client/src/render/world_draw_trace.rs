@@ -587,7 +587,8 @@ impl WorldDrawTrace {
                     "ship_depot",
                     "industries",
                     "object_landmarks",
-                    "clear_land"
+                    "clear_land",
+                    "water"
                 ],
             })
             .to_string(),

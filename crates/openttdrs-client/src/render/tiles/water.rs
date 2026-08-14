@@ -8,7 +8,17 @@ use crate::iso::{
     tile_pos_half, tile_slope_bits_from_heights,
 };
 use crate::render::shore_newgrf::{NEWGRF_SHORE_TILE_FLAG, NewGrfShoreSpriteCache};
+use crate::render::world_draw_trace::WorldDrawTrace;
 use crate::render::{MapSpriteBatches, TileRenderContext, WorldAssets};
+
+/// `SPR_FLAT_WATER_TILE` de `table/sprites.h`.
+const SPR_FLAT_WATER_TILE: u32 = 4061;
+/// `SPR_SHORE_BASE` resuelto por Action5 canals en OpenGFX/OpenGFX2.
+const SPR_SHORE_BASE: u32 = 5936;
+
+fn shore_sprite_id(tileh: u8) -> u32 {
+    SPR_SHORE_BASE + shore_png_index(tileh) as u32
+}
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn push_water_tile(
@@ -29,6 +39,11 @@ pub(crate) fn push_water_tile(
         let th = shore_tileh_for_draw_shore(map, ctx.tx, ctx.ty, map_dims.0, map_dims.1);
         if th != 0 {
             let si = shore_png_index(th);
+            // `DrawShoreTile` siempre entrega el slot Action5 global
+            // `SPR_SHORE_BASE + tileh_to_shoresprite[tileh]`. Aunque el
+            // cache lo materialice como NewGRF, éste continúa siendo el ID
+            // lógico que expone el oráculo C++.
+            WorldDrawTrace::record_sprite("water-shore", "ground", shore_sprite_id(th), false);
             let transform = Transform::from_translation(tile_pos_half(
                 ctx.tx_i32(),
                 ctx.ty_i32(),
@@ -69,6 +84,12 @@ pub(crate) fn push_water_tile(
             }
         } else {
             // Datos inválidos: OpenTTD asertea que Coast no es flat. Evitamos un hueco.
+            WorldDrawTrace::record_sprite(
+                "water-ground-fallback",
+                "ground",
+                SPR_FLAT_WATER_TILE,
+                true,
+            );
             push_water_sprite(&mut batches.water, &assets.water, ctx);
         }
     } else {
@@ -95,7 +116,25 @@ pub(crate) fn push_water_tile(
                 )),
             ));
         } else {
+            // `DrawSeaWater` usa directamente `SPR_FLAT_WATER_TILE`. Las
+            // clases canal/río entran por aquí en el renderer actual: la
+            // auditoría dirá si su selección C++ requiere una rama propia.
+            WorldDrawTrace::record_sprite("water-ground", "ground", SPR_FLAT_WATER_TILE, false);
             push_water_sprite(&mut batches.water, &assets.water, ctx);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{SPR_FLAT_WATER_TILE, shore_sprite_id};
+
+    #[test]
+    fn water_trace_sprite_ids_follow_openttd_water_and_shore_tables() {
+        assert_eq!(SPR_FLAT_WATER_TILE, 4061);
+        assert_eq!(shore_sprite_id(1), 5937); // SLOPE_W.
+        assert_eq!(shore_sprite_id(23), 5936); // SLOPE_STEEP_S -> slot 0.
+        assert_eq!(shore_sprite_id(27), 5941); // SLOPE_STEEP_N -> slot 5.
+        assert_eq!(shore_sprite_id(30), 5951); // SLOPE_STEEP_E -> slot 15.
     }
 }

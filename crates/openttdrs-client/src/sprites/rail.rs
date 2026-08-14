@@ -261,11 +261,11 @@ fn push_rail_junction_overlays(t: u8, out: &mut Vec<u32>) {
     if t & RAIL_TB_LOWER != 0 {
         out.push(1008);
     }
-    if t & RAIL_TB_RIGHT != 0 {
-        out.push(1009);
-    }
     if t & RAIL_TB_LEFT != 0 {
         out.push(1010);
+    }
+    if t & RAIL_TB_RIGHT != 0 {
+        out.push(1009);
     }
 }
 
@@ -2107,6 +2107,16 @@ mod tests {
         // Salida depósito showcase (12,15): Y|LOWER|LEFT.
         collect_rail_sprites(0x1A, 0, false, &mut out);
         assert_eq!(out, vec![1018, 1006, 1008, 1010]);
+    }
+
+    #[test]
+    fn junction_overlay_order_matches_openttd_left_before_right() {
+        let mut out = Vec::new();
+        // Kale_TitleGame (10,51), m5=0x31. `DrawTrackBits` dibuja X, luego
+        // LEFT y por último RIGHT; invertir los dos últimos ramales cambia
+        // cuál queda por encima en el cruce.
+        collect_rail_sprites(RAIL_TB_X | RAIL_TB_LEFT | RAIL_TB_RIGHT, 0, false, &mut out);
+        assert_eq!(out, vec![1022, 1005, 1010, 1009]);
     }
 
     #[test]

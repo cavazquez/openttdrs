@@ -3,11 +3,14 @@ use openttdrs_core::prelude::*;
 use openttdrs_core::{Climate, RoadTypeDef, partial_pixel_z};
 
 use super::{
-    TRAM_OVERLAY_LAYER_FRAC, catenary_under_low_bridge, roadside_detail_visible_under_bridge,
-    sloped_or_flat_image, spawn_forced_leveled_foundation, spawn_ground_sprite,
-    spawn_rail_foundation, spawn_road_foundation,
+    FLAT_WATER_LAYER_FRAC, SHORE_LAYER_FRAC, TRAM_OVERLAY_LAYER_FRAC, catenary_under_low_bridge,
+    roadside_detail_visible_under_bridge, sloped_or_flat_image, spawn_forced_leveled_foundation,
+    spawn_ground_sprite, spawn_ground_sprite_at, spawn_rail_foundation, spawn_road_foundation,
 };
-use crate::iso::{TILE_HALF_H, overlay_pos, remap_tile_offset, slope_half_h, tile_pos_half};
+use crate::iso::{
+    TILE_HALF_H, ground_tile_pos_half, overlay_pos, remap_tile_offset, shore_png_index,
+    shore_sprite_half_h, slope_half_h, slope_sprite_offset, tile_pos, tile_pos_half,
+};
 use crate::render::catenary_newgrf::catenary_sprite_colored;
 use crate::render::road_newgrf::{
     NewGrfRoadSpriteCache, newgrf_road_def_for_tile, newgrf_tram_def_for_tile,
@@ -15,26 +18,27 @@ use crate::render::road_newgrf::{
 };
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
 use crate::render::{
-    CompanyColoredSprites, MapVisualLayer, TileRenderContext, WorldAssets,
+    CompanyColoredSprites, MapVisualLayer, TileRenderContext, WaterTile, WorldAssets,
     sprite_from_atlas_or_company_white_colour,
 };
 use crate::sprites::{
-    CompanyColour, ONEWAY_ROAD_SPRITE_META, RAIL_GROUND_SNOW_OR_DESERT, RAIL_TB_LEFT,
-    RAIL_TB_LOWER, RAIL_TB_RIGHT, RAIL_TB_UPPER, ROAD_FLAT_HALF_H, ROAD_STREETLIGHT_META,
-    ROADSIDE_LAMPS, ROADSIDE_TREE_META, ROADSIDE_TREES, SPR_ROADSIDE_TREE,
-    catenary_pylon_world_z_delta, catenary_reference_sprite_id, catenary_sprite_color,
-    catenary_wire_world_z_delta, collect_catenary_pylons_from_map_with_pcp_override,
-    collect_catenary_wire_draws_from_map, collect_rail_pbs_reservation_draws,
-    collect_rail_sprites_for_surface, collect_signal_sprite_draws, is_road_level_crossing,
-    is_typed_rail_track_sprite, level_crossing_ground_sprite_id_for_type,
-    level_crossing_has_rail_reservation, oneway_road_sprite_id, rail_ghost_overlay_offset,
-    rail_pbs_reservation_offset, rail_tile_is_signals, rail_trackbits_for_render,
-    remap_rail_sprite_id, road_bits_for_render, road_flat_sprite_color, road_flat_sprite_index,
-    road_ground_sprite_id, road_streetlight_sprite_id, road_tile_roadside,
-    road_tile_snow_or_desert, roadside_is_paved, signal_safe_slope_position_for_side,
-    signal_screen_anchor_for_side, signal_screen_position_for_side, signal_sprite_center_offset,
-    signal_world_position_for_side, track_fence_draws_for_tile, track_fence_height_px,
-    track_fence_sprite_meta, tram_flat_sprite_index,
+    CompanyColour, ONEWAY_ROAD_SPRITE_META, RAIL_GROUND_HALF_TILE_SNOW,
+    RAIL_GROUND_HALF_TILE_WATER, RAIL_GROUND_SNOW_OR_DESERT, RAIL_TB_LEFT, RAIL_TB_LOWER,
+    RAIL_TB_RIGHT, RAIL_TB_UPPER, ROAD_FLAT_HALF_H, ROAD_STREETLIGHT_META, ROADSIDE_LAMPS,
+    ROADSIDE_TREE_META, ROADSIDE_TREES, SPR_ROADSIDE_TREE, catenary_pylon_world_z_delta,
+    catenary_reference_sprite_id, catenary_sprite_color, catenary_wire_world_z_delta,
+    collect_catenary_pylons_from_map_with_pcp_override, collect_catenary_wire_draws_from_map,
+    collect_rail_pbs_reservation_draws, collect_rail_sprites_for_surface,
+    collect_signal_sprite_draws, is_road_level_crossing, is_typed_rail_track_sprite,
+    level_crossing_ground_sprite_id_for_type, level_crossing_has_rail_reservation,
+    oneway_road_sprite_id, rail_ghost_overlay_offset, rail_pbs_reservation_offset,
+    rail_tile_is_signals, rail_trackbits_for_render, remap_rail_sprite_id, road_bits_for_render,
+    road_flat_sprite_color, road_flat_sprite_index, road_ground_sprite_id,
+    road_streetlight_sprite_id, road_tile_roadside, road_tile_snow_or_desert, roadside_is_paved,
+    signal_safe_slope_position_for_side, signal_screen_anchor_for_side,
+    signal_screen_position_for_side, signal_sprite_center_offset, signal_world_position_for_side,
+    track_fence_draws_for_tile, track_fence_height_px, track_fence_sprite_meta,
+    tram_flat_sprite_index,
 };
 
 /// Contexto de `DrawGroundSprite` para una pasada de vía. Una fundación crea
@@ -55,6 +59,287 @@ const FOUNDATION_HALFTILE_W: u8 = 6;
 const FOUNDATION_HALFTILE_N: u8 = 9;
 const FOUNDATION_RAIL_W: u8 = 10;
 const FOUNDATION_RAIL_N: u8 = 13;
+
+/// Bases de `DrawTrackBits` / `DrawTrackBitsOverlay` en `rail_cmd.cpp`.
+///
+/// Estos IDs son de la semántica OpenTTD; la imagen concreta sigue saliendo
+/// del atlas activo, por lo que el selector se comparte entre OpenGFX 8bpp y
+/// OpenGFX2 32bpp.
+const SPR_FLAT_BARE_LAND: u32 = 3924;
+const SPR_FLAT_GRASS_TILE: u32 = 3981;
+const SPR_FLAT_WATER_TILE: u32 = 4061;
+const SPR_FLAT_SNOW_DESERT_TILE: u32 = 4550;
+const SPR_SHORE_BASE: u32 = 5936;
+const RAIL_SLOPE_STEEP: u8 = 0x10;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RailGroundKind {
+    Barren,
+    Grass,
+    SnowOrDesert,
+    Water,
+    Shore,
+}
+
+/// Una llamada explícita a `DrawGroundSprite` que acompaña a una vía.
+///
+/// Las vías clásicas normalmente ya llevan su suelo incluido en el sprite de
+/// riel. Sólo un railtype con `Underlay` Action3 usa
+/// `DrawTrackBitsOverlay`, que dibuja el suelo antes del overlay; las vías
+/// junto a `HalfTileWater` también requieren costa o agua independientes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct RailGroundDraw {
+    kind: RailGroundKind,
+    tileh: u8,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct RailInitialGroundDraw {
+    draw: RailGroundDraw,
+    trace_mode: RailTrackTraceMode,
+    surface_z_delta: u8,
+}
+
+const fn rail_ground_kind_for_land(ground_type: u8, upper_halftile: bool) -> RailGroundKind {
+    match ground_type {
+        0 => RailGroundKind::Barren,
+        RAIL_GROUND_SNOW_OR_DESERT => RailGroundKind::SnowOrDesert,
+        // `DrawTrackBitsOverlay` trata HalfTileSnow como nieve sólo en la
+        // segunda pasada de una fundación no continua.
+        RAIL_GROUND_HALF_TILE_SNOW if upper_halftile => RailGroundKind::SnowOrDesert,
+        _ => RailGroundKind::Grass,
+    }
+}
+
+fn rail_ground_sprite_id(draw: RailGroundDraw) -> u32 {
+    match draw.kind {
+        RailGroundKind::Barren => SPR_FLAT_BARE_LAND + u32::from(slope_sprite_offset(draw.tileh)),
+        RailGroundKind::Grass => SPR_FLAT_GRASS_TILE + u32::from(slope_sprite_offset(draw.tileh)),
+        RailGroundKind::SnowOrDesert => {
+            SPR_FLAT_SNOW_DESERT_TILE + u32::from(slope_sprite_offset(draw.tileh))
+        }
+        RailGroundKind::Water => SPR_FLAT_WATER_TILE,
+        RailGroundKind::Shore => SPR_SHORE_BASE + shore_png_index(draw.tileh) as u32,
+    }
+}
+
+/// Track bits de la primera llamada a `DrawTrackBits`.
+///
+/// `RailTrackDrawPlan` omite deliberadamente una pasada sin vías. Para la
+/// paridad del suelo esa ausencia importa: OpenTTD todavía pinta agua o
+/// terreno antes de crear la fundación de la mitad elevada.
+const fn rail_initial_track_bits(track_plan: openttdrs_core::RailTrackDrawPlan) -> u8 {
+    match track_plan.passes[0] {
+        Some(pass) if pass.halftile_corner.is_none() => pass.track_bits,
+        _ => 0,
+    }
+}
+
+/// Fundación aplicada antes del primer suelo de `DrawTrackBits`.
+///
+/// Las fundaciones de media tesela se difieren; `SteepBoth` aplica primero
+/// solamente `SteepLower`. Así no se adelanta visualmente la mitad elevada.
+const fn rail_initial_foundation(foundation: u8) -> u8 {
+    match foundation {
+        FOUNDATION_STEEP_BOTH => FOUNDATION_STEEP_LOWER,
+        FOUNDATION_HALFTILE_W..=FOUNDATION_HALFTILE_N => 0,
+        _ => foundation,
+    }
+}
+
+/// En `SteepLower` no se crea un parent sortable: `OffsetGroundSprite` sólo
+/// modifica la posición de un eventual parent, que sigue inexistente. Por
+/// eso el primer `DrawGroundSprite` mantiene coordenadas de mundo.
+const fn rail_initial_ground_trace_mode(foundation: u8) -> RailTrackTraceMode {
+    match rail_initial_foundation(foundation) {
+        openttdrs_core::FOUNDATION_LEVELED => RailTrackTraceMode::FoundationChild((0, -32, 0)),
+        openttdrs_core::FOUNDATION_INCLINED_X
+        | openttdrs_core::FOUNDATION_INCLINED_Y
+        | FOUNDATION_RAIL_W..=FOUNDATION_RAIL_N => RailTrackTraceMode::FoundationChild((0, 0, 0)),
+        _ => RailTrackTraceMode::Ground,
+    }
+}
+
+fn rail_initial_ground_draw(
+    tileh: u8,
+    foundation: u8,
+    track_plan: openttdrs_core::RailTrackDrawPlan,
+    rail_uses_overlay: bool,
+    ground_type: u8,
+) -> Option<RailInitialGroundDraw> {
+    let initial_track = rail_initial_track_bits(track_plan);
+    let initial_foundation = rail_initial_foundation(foundation);
+    let surface = openttdrs_core::foundation_draw_plan(tileh, initial_foundation, 0);
+    let surface_tileh = surface.surface_tileh;
+
+    let kind = if rail_uses_overlay {
+        // `DrawTrackBitsOverlay` siempre emite una base, incluso con vía
+        // plana. Para HalfTileWater el primer pase usa costa si contiene vía
+        // o si la pendiente es empinada; de otro modo conserva agua plana.
+        if ground_type == RAIL_GROUND_HALF_TILE_WATER {
+            if initial_track != 0 || surface_tileh & RAIL_SLOPE_STEEP != 0 {
+                RailGroundKind::Shore
+            } else {
+                RailGroundKind::Water
+            }
+        } else {
+            rail_ground_kind_for_land(ground_type, false)
+        }
+    } else if ground_type == RAIL_GROUND_HALF_TILE_WATER {
+        // La vía clásica sólo añade un suelo separado para HalfTileWater.
+        // Con vía presente es costa; la mitad inferior vacía conserva agua
+        // plana salvo la pendiente empinada.
+        if initial_track != 0 || surface_tileh & RAIL_SLOPE_STEEP != 0 {
+            RailGroundKind::Shore
+        } else {
+            RailGroundKind::Water
+        }
+    } else if initial_track == 0 {
+        // Caso aislado por el oráculo en Kale (158,65): la mitad baja sin
+        // riel sigue necesitando su `DrawGroundSprite` antes de Foundation.
+        rail_ground_kind_for_land(ground_type, false)
+    } else {
+        return None;
+    };
+
+    Some(RailInitialGroundDraw {
+        draw: RailGroundDraw {
+            kind,
+            tileh: surface_tileh,
+        },
+        trace_mode: rail_initial_ground_trace_mode(foundation),
+        surface_z_delta: surface.surface_z_delta,
+    })
+}
+
+fn rail_upper_halftile_ground_draw(
+    rail_uses_overlay: bool,
+    ground_type: u8,
+    upper_tileh: u8,
+) -> Option<RailGroundDraw> {
+    rail_uses_overlay.then_some(RailGroundDraw {
+        kind: rail_ground_kind_for_land(ground_type, true),
+        tileh: upper_tileh,
+    })
+}
+
+fn record_rail_ground_trace(draw: RailGroundDraw, mode: RailTrackTraceMode, world_z_delta: i32) {
+    let sprite_id = rail_ground_sprite_id(draw);
+    match mode {
+        RailTrackTraceMode::Ground => WorldDrawTrace::record_sprite_with_geometry(
+            "rail-ground",
+            "ground",
+            sprite_id,
+            false,
+            (0, 0, 0),
+            world_z_delta,
+            None,
+        ),
+        RailTrackTraceMode::FoundationChild(offset) => {
+            WorldDrawTrace::record_foundation_child_sprite("rail-ground", sprite_id, false, offset);
+        }
+    }
+}
+
+/// Materializa una base ferroviaria que OpenTTD dibuja como suelo separado.
+///
+/// Las variantes se resuelven desde [`WorldAssets`], no desde PNGs fijos,
+/// para que la misma selección semántica use 8bpp o 32bpp según el baseset
+/// activo. Las medias teselas altas se trazan pero no se redibujan completas:
+/// OpenTTD las recorta con `SubSprite`, mientras que el suelo ya existente
+/// mantiene la parte baja visible en el renderer actual.
+fn spawn_rail_ground_draw(
+    commands: &mut Commands,
+    assets: &WorldAssets,
+    ctx: &TileRenderContext,
+    draw: RailGroundDraw,
+    base_z: u8,
+    child_of_foundation: bool,
+) {
+    let slope = usize::from(slope_sprite_offset(draw.tileh));
+    let image = match draw.kind {
+        RailGroundKind::Barren => &assets.grass_density[0][slope],
+        RailGroundKind::Grass => &assets.grass_density[3][slope],
+        RailGroundKind::SnowOrDesert => &assets.snow_desert[3][slope],
+        RailGroundKind::Water => &assets.water,
+        RailGroundKind::Shore => &assets.shore[shore_png_index(draw.tileh)],
+    };
+
+    if child_of_foundation {
+        // Los hijos de Foundation conservan el orden local de su padre. No
+        // aparece agua hija en Kale hoy, pero conservar WaterTile evita que
+        // un SAV posterior con esa rama pierda su animación.
+        if draw.kind == RailGroundKind::Water {
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                WaterTile::ANIMATED,
+                image.sprite(),
+                Transform::from_translation(tile_pos(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.001)),
+            ));
+            return;
+        }
+        let half_h = if draw.kind == RailGroundKind::Shore {
+            shore_sprite_half_h(draw.tileh)
+        } else if draw.tileh == 0 {
+            TILE_HALF_H
+        } else {
+            slope_half_h(draw.tileh)
+        };
+        spawn_ground_sprite_at(commands, image, Color::WHITE, ctx, base_z, 0.001, half_h);
+        return;
+    }
+
+    match draw.kind {
+        RailGroundKind::Water => {
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                WaterTile::ANIMATED,
+                image.sprite(),
+                Transform::from_translation(tile_pos(
+                    ctx.tx_i32(),
+                    ctx.ty_i32(),
+                    base_z,
+                    FLAT_WATER_LAYER_FRAC,
+                )),
+            ));
+        }
+        RailGroundKind::Shore => {
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                image.sprite(),
+                Transform::from_translation(tile_pos_half(
+                    ctx.tx_i32(),
+                    ctx.ty_i32(),
+                    base_z,
+                    SHORE_LAYER_FRAC,
+                    shore_sprite_half_h(draw.tileh),
+                )),
+            ));
+        }
+        RailGroundKind::Barren | RailGroundKind::Grass | RailGroundKind::SnowOrDesert => {
+            let half_h = if draw.tileh == 0 {
+                TILE_HALF_H
+            } else {
+                slope_half_h(draw.tileh)
+            };
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                image.sprite(),
+                Transform::from_translation(ground_tile_pos_half(
+                    ctx.tx_i32(),
+                    ctx.ty_i32(),
+                    base_z,
+                    0.0,
+                    half_h,
+                )),
+            ));
+        }
+    }
+}
 
 /// Offset de `OffsetGroundSprite` para `HalftileFoundation(corner)`, ya
 /// normalizado por `ZOOM_BASE` como lo exporta el oráculo C++.
@@ -817,6 +1102,7 @@ pub(crate) fn spawn_rail_tile(
     catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     mut catenary_sprites: Option<&mut crate::render::NewGrfCatenarySpriteCache>,
     rail_signal_newgrf: &[Option<openttdrs_core::RailSignalSpriteSpec>],
+    rail_type_underlay_newgrf: &[Option<openttdrs_core::RailSignalSpriteSpec>],
     mut signal_sprites: Option<&mut crate::render::NewGrfSignalSpriteCache>,
     signal_action5: &[Option<openttdrs_core::DecodedSprite>],
     foundation_newgrf: &[Option<openttdrs_core::DecodedSprite>],
@@ -826,12 +1112,69 @@ pub(crate) fn spawn_rail_tile(
     newgrf_stack: &[openttdrs_core::NewGrfEntry],
 ) {
     let tileh = ctx.info.tileh;
+    let render_tb = rail_trackbits_for_render(map, ctx.coord, map_dims.0, map_dims.1);
+    let rail_type = ctx
+        .tile
+        .map(openttdrs_core::rail_type_from_tile)
+        .unwrap_or_default();
+    // `RailTypeInfo::UsesOverlay()` no depende de que el tipo sea mono o
+    // maglev: sólo es true cuando hay un grupo Action3 `Underlay` (selector
+    // 0) activo. Los tipos vanilla siguen `DrawTrackBits`, incluso mono y
+    // maglev. Inferirlo del enum agregaba un segundo suelo inexistente en
+    // Kale (116,79).
+    let rail_uses_overlay = rail_type_underlay_newgrf
+        .get(usize::from(rail_type.as_u8()))
+        .is_some_and(Option::is_some);
+    // `GetRailGroundType` lee los cuatro bits bajos de m4. En el mapa Rust
+    // m4 se llama `m3hi`; leer `m3` confundía el tipo de vía/señales con
+    // nieve y dejaba el suelo de mono/maglev desalineado del oráculo.
+    let rail_ground_type = ctx.tile.map_or_else(
+        || {
+            if climate.uses_snow_ground() {
+                RAIL_GROUND_SNOW_OR_DESERT
+            } else {
+                0
+            }
+        },
+        |t| t.m3hi & 0x0F,
+    );
+    let snow_ground = rail_ground_type == RAIL_GROUND_SNOW_OR_DESERT;
+    let rail_foundation = openttdrs_core::rail_foundation_for_trackbits(tileh, render_tb);
+    let track_plan = openttdrs_core::rail_track_draw_plan(tileh, render_tb);
+    let initial_ground = rail_initial_ground_draw(
+        tileh,
+        rail_foundation,
+        track_plan,
+        rail_uses_overlay,
+        rail_ground_type,
+    );
+
     // `IsBridgeAbove` no reemplaza el contenido de la tesela: OpenTTD pinta
     // primero la vía inferior y después el tablero elevado. El tablero se
     // agrega separadamente por `spawn_bridge_middle` en `tile_spawn.rs`.
     // Saltar esta rama hacía desaparecer vías reales bajo puentes y dejaba
     // sus reservas PBS, túneles y conexiones aparentemente cortados.
-    if tileh != 0 {
+    if let Some(initial) = initial_ground
+        && initial.trace_mode == RailTrackTraceMode::Ground
+    {
+        record_rail_ground_trace(
+            initial.draw,
+            initial.trace_mode,
+            i32::from(initial.surface_z_delta) * 8,
+        );
+        spawn_rail_ground_draw(
+            commands,
+            assets,
+            ctx,
+            initial.draw,
+            ctx.info.base_z.saturating_add(initial.surface_z_delta),
+            false,
+        );
+    } else if tileh != 0 {
+        // El sprite de vía clásica ya incluye suelo; esta base visual antigua
+        // llena sus transparencias inclinadas. Las ramas con suelo explícito
+        // (water/shore, mono/maglev y mitad vacía) se manejan arriba con su
+        // selección exacta, para no dejarlas cubiertas por pasto.
         spawn_ground_sprite(
             commands,
             &sloped_or_flat_image(tileh, &assets.grass, &assets.grass_slopes),
@@ -840,13 +1183,6 @@ pub(crate) fn spawn_rail_tile(
             slope_half_ground,
         );
     }
-    let render_tb = rail_trackbits_for_render(map, ctx.coord, map_dims.0, map_dims.1);
-    let snow_ground = ctx
-        .tile
-        .is_some_and(|t| (t.m3 & 0x0F) == RAIL_GROUND_SNOW_OR_DESERT)
-        || climate.uses_snow_ground();
-    let rail_foundation = openttdrs_core::rail_foundation_for_trackbits(tileh, render_tb);
-    let track_plan = openttdrs_core::rail_track_draw_plan(tileh, render_tb);
     let foundation_after_pass = rail_foundation_after_pass(track_plan);
     // En una fundación no continua el primer `DrawFoundation` es NONE o
     // STEEP_LOWER; el cimiento visible se crea recién entre las dos pasadas.
@@ -869,6 +1205,14 @@ pub(crate) fn spawn_rail_tile(
             images.as_deref_mut(),
         )
     };
+    if let Some(initial) = initial_ground
+        && let RailTrackTraceMode::FoundationChild(_) = initial.trace_mode
+    {
+        // La fundación ya dejó el parent sortable activo. Emitir después el
+        // suelo coincide con `DrawFoundation` seguido de `DrawGroundSprite`.
+        record_rail_ground_trace(initial.draw, initial.trace_mode, 0);
+        spawn_rail_ground_draw(commands, assets, ctx, initial.draw, rail_base_z, true);
+    }
     let (surface_tileh, _) = openttdrs_core::rail_surface_slope_and_z(tileh, render_tb);
     let render_tileh = if surface_tileh & 0x20 != 0 {
         tileh
@@ -880,10 +1224,6 @@ pub(crate) fn spawn_rail_tile(
     } else {
         slope_half_h(render_tileh)
     };
-    let rail_type = ctx
-        .tile
-        .map(openttdrs_core::rail_type_from_tile)
-        .unwrap_or_default();
     // Conservamos el límite entre las dos pasadas de `DrawTrackBits`: para
     // una media fundación cambia el padre activo entre la mitad baja y alta.
     // Los dos arrays son de tamaño fijo porque core garantiza como máximo dos
@@ -894,6 +1234,7 @@ pub(crate) fn spawn_rail_tile(
     let mut pass_base_z = [rail_base_z; 2];
     let mut pass_half_h = [rail_half_h; 2];
     let mut pass_halftile_corner = [None; 2];
+    let mut pass_tileh = [render_tileh; 2];
     let mut pass_count = 0_usize;
     for pass in track_plan.passes.into_iter().flatten() {
         collect_rail_sprites_for_surface(
@@ -911,6 +1252,7 @@ pub(crate) fn spawn_rail_tile(
             slope_half_h(pass.sprite_tileh)
         };
         pass_halftile_corner[pass_count] = pass.halftile_corner;
+        pass_tileh[pass_count] = pass.sprite_tileh;
         pass_ends[pass_count] = rail_layers.len();
         pass_count += 1;
     }
@@ -937,6 +1279,19 @@ pub(crate) fn spawn_rail_tile(
     let mut track_layer_index = 0_usize;
     let mut pbs_layer_index = 0_usize;
     for pass_index in 0..pass_count {
+        if let Some(upper_ground) = rail_upper_halftile_ground_draw(
+            rail_uses_overlay,
+            rail_ground_type,
+            pass_tileh[pass_index],
+        )
+        .filter(|_| pass_halftile_corner[pass_index].is_some())
+        {
+            // `DrawTrackBitsOverlay` recorta este suelo al triángulo alto con
+            // SubSprite. La traza conserva la selección y su relación con la
+            // fundación; visualmente ya mantenemos el backing de pendiente
+            // para no dibujar un rombo completo sobre la mitad baja.
+            record_rail_ground_trace(upper_ground, pass_modes[pass_index], 0);
+        }
         let start = if pass_index == 0 {
             0
         } else {
@@ -1384,11 +1739,16 @@ mod tests {
     use bevy::prelude::Vec2;
 
     use super::{
-        RailTrackTraceMode, halftile_foundation_child_visual_offset, pbs_extra_y_in_bevy,
-        pbs_track_sprite_extra_y, rail_foundation_after_pass, rail_track_trace_mode,
-        road_detail_world_z_delta, road_foundation_child_offset, signal_trace_geometry,
+        RailGroundKind, RailTrackTraceMode, halftile_foundation_child_visual_offset,
+        pbs_extra_y_in_bevy, pbs_track_sprite_extra_y, rail_foundation_after_pass,
+        rail_ground_sprite_id, rail_initial_ground_draw, rail_track_trace_mode,
+        rail_upper_halftile_ground_draw, road_detail_world_z_delta, road_foundation_child_offset,
+        signal_trace_geometry,
     };
-    use crate::sprites::{RAIL_TB_LEFT, RAIL_TB_LOWER, RAIL_TB_RIGHT, RAIL_TB_UPPER};
+    use crate::sprites::{
+        RAIL_GROUND_HALF_TILE_SNOW, RAIL_GROUND_HALF_TILE_WATER, RAIL_TB_LEFT, RAIL_TB_LOWER,
+        RAIL_TB_RIGHT, RAIL_TB_UPPER,
+    };
     use openttdrs_core::{FOUNDATION_INCLINED_X, FOUNDATION_LEVELED};
 
     #[test]
@@ -1426,6 +1786,85 @@ mod tests {
             rail_track_trace_mode(5, Some(0)),
             RailTrackTraceMode::FoundationChild((64, -32, 0))
         );
+    }
+
+    #[allow(clippy::expect_used)] // Fixture del oráculo: el fallo debe mostrar el caso exacto.
+    #[test]
+    fn rail_ground_selection_matches_kale_openttd_oracle_cases() {
+        // Estos cinco casos se exportaron con `world_draw_export` del C++ de
+        // referencia. Los m5 son TrackBits ya normalizados por el mapa Kale.
+        // Así se protege tanto la selección de m4 como la relación ground /
+        // child que dejó DrawFoundation.
+        let case = |tileh, bits, ground_type| {
+            let foundation = openttdrs_core::rail_foundation_for_trackbits(tileh, bits);
+            rail_initial_ground_draw(
+                tileh,
+                foundation,
+                openttdrs_core::rail_track_draw_plan(tileh, bits),
+                false, // RailTypeInfo::UsesOverlay() = false en los vanilla.
+                ground_type,
+            )
+            .expect("el oráculo emitió un suelo ferroviario")
+        };
+
+        // Kale (182,28): HalfTileWater sin vía baja → agua plana 4061.
+        let water = case(0x02, 0x08, RAIL_GROUND_HALF_TILE_WATER);
+        assert_eq!(water.draw.kind, RailGroundKind::Water);
+        assert_eq!(rail_ground_sprite_id(water.draw), 4061);
+        assert_eq!(water.trace_mode, RailTrackTraceMode::Ground);
+
+        // Kale (116,79): monorail vanilla no usa Overlay; la mitad baja
+        // vacía sigue siendo pasto 3985, antes de Foundation(8).
+        let mono = case(0x04, 0x20, 9);
+        assert_eq!(mono.draw.kind, RailGroundKind::Grass);
+        assert_eq!(rail_ground_sprite_id(mono.draw), 3985);
+        assert_eq!(mono.trace_mode, RailTrackTraceMode::Ground);
+
+        // Kale (158,65): la misma rama clásica para Foundation(9).
+        let grass = case(0x08, 0x04, 1);
+        assert_eq!(rail_ground_sprite_id(grass.draw), 3989);
+        assert_eq!(grass.trace_mode, RailTrackTraceMode::Ground);
+
+        // Kale (191,137): vía eléctrica sobre HalfTileWater → costa 5949.
+        let shore = case(0x0D, 0x04, RAIL_GROUND_HALF_TILE_WATER);
+        assert_eq!(shore.draw.kind, RailGroundKind::Shore);
+        assert_eq!(rail_ground_sprite_id(shore.draw), 5949);
+        assert_eq!(shore.trace_mode, RailTrackTraceMode::Ground);
+
+        // Kale (229,149): la anti-zig-zag Foundation(10) modifica la
+        // pendiente a 11; la costa se convierte en child 5947 del muro.
+        let child_shore = case(0x09, 0x10, RAIL_GROUND_HALF_TILE_WATER);
+        assert_eq!(child_shore.draw.kind, RailGroundKind::Shore);
+        assert_eq!(child_shore.draw.tileh, 0x0B);
+        assert_eq!(rail_ground_sprite_id(child_shore.draw), 5947);
+        assert_eq!(
+            child_shore.trace_mode,
+            RailTrackTraceMode::FoundationChild((0, 0, 0))
+        );
+    }
+
+    #[allow(clippy::expect_used)] // Fixture del oráculo: el fallo debe mostrar el caso exacto.
+    #[test]
+    fn rail_underlay_ground_is_opt_in_and_half_tile_snow_is_upper_only() {
+        // `RailTypeInfo::UsesOverlay()` depende del grupo Action3 Underlay,
+        // no del enum monorail/maglev. Un baseset vanilla debe conservar la
+        // rama clásica sin un segundo rombo de suelo.
+        assert!(rail_upper_halftile_ground_draw(false, 1, 0x0B).is_none());
+
+        let upper = rail_upper_halftile_ground_draw(true, RAIL_GROUND_HALF_TILE_SNOW, 0x0B)
+            .expect("un Underlay NewGRF dibuja el suelo elevado");
+        assert_eq!(upper.kind, RailGroundKind::SnowOrDesert);
+        assert_eq!(rail_ground_sprite_id(upper), 4561);
+
+        let lower = rail_initial_ground_draw(
+            0x04,
+            0,
+            openttdrs_core::rail_track_draw_plan(0x04, 0x20),
+            true,
+            RAIL_GROUND_HALF_TILE_SNOW,
+        )
+        .expect("DrawTrackBitsOverlay siempre dibuja base");
+        assert_eq!(lower.draw.kind, RailGroundKind::Grass);
     }
 
     #[test]

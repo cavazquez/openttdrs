@@ -71,8 +71,12 @@ pub(crate) use water_palette_generated::{
 /// Tipos de tesela `OpenTTD` (nibble alto del byte MAPT).
 pub use openttdrs_core::{OTTD_MP_RAILWAY as OTTD_MP_RAIL, OTTD_MP_ROAD, OTTD_MP_TUNNELBRIDGE};
 
-/// `RailGroundType::SnowOrDesert` en los 4 bits bajos de `m4`/`m3` en vía normal (`rail_map.h`).
+/// `RailGroundType::SnowOrDesert` en los 4 bits bajos de `m4`/`m3hi` en vía normal (`rail_map.h`).
 pub const RAIL_GROUND_SNOW_OR_DESERT: u8 = 12;
+/// `RailGroundType::HalfTileWater`: la mitad sin vía conserva agua o costa.
+pub const RAIL_GROUND_HALF_TILE_WATER: u8 = 13;
+/// `RailGroundType::HalfTileSnow`: sólo la mitad elevada de mono/maglev usa nieve.
+pub const RAIL_GROUND_HALF_TILE_SNOW: u8 = 14;
 
 /// `IsOnSnowOrDesert` (`road_map.h`): bit 5 de **MAP7** en teselas `MP_ROAD`.
 #[must_use]

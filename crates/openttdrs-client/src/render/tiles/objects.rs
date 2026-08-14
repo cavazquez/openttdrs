@@ -9,7 +9,7 @@ use super::bridge_draw::{bridge_span_at, spawn_bridge_deck};
 use super::{
     catenary_under_low_bridge,
     helpers::{FLAT_WATER_LAYER_FRAC, spawn_forced_leveled_foundation},
-    sloped_or_flat_image, spawn_ground_sprite, spawn_rail_foundation,
+    sloped_or_flat_image, spawn_ground_sprite,
 };
 use crate::iso::{
     TILE_HALF_H, ground_draw_z, ground_tile_pos_half, overlay_pos, remap_tile_offset,
@@ -191,6 +191,7 @@ fn record_station_rail_layer_trace(
     layer: &crate::sprites::RailStationLayer,
     owner_colour: Option<CompanyColour>,
     fallback: bool,
+    world_z_delta: i32,
 ) {
     if crate::sprites::rail_station_roof_glass_sprite(layer.sprite_id) {
         WorldDrawTrace::record_foundation_child_sprite_with_palette(
@@ -219,9 +220,18 @@ fn record_station_rail_layer_trace(
         station_company_palette(owner_colour),
         fallback,
         (0, 0, 0),
-        0,
+        world_z_delta,
         bounds,
     );
+}
+
+/// Altura de mundo de una capa BUILD de estación respecto del relieve crudo.
+///
+/// `DrawFoundation(FOUNDATION_LEVELED)` actualiza `ti->z` antes de
+/// `DrawRailTileSeq`; los parent sprites de plataforma no son children del
+/// suelo, así que deben conservar esa elevación explícita en `world-draw`.
+const fn station_rail_foundation_world_z_delta(raw_base_z: u8, surface_base_z: u8) -> i32 {
+    surface_base_z.saturating_sub(raw_base_z) as i32 * 8
 }
 
 /// Geometría de `_rail_catenary_sprite_data_tunnel`.
@@ -705,7 +715,15 @@ pub(crate) fn spawn_station_tile(
     // ellas, ni siquiera en una pendiente: primero nivela y luego cuelga ese
     // suelo de la fundación. El césped genérico hacía visible una capa extra
     // alrededor de los andenes y ocultaba el desvío en la traza.
-    if tileh != 0 && !matches!(class, StationTileClass::Bus | StationTileClass::Truck) {
+    if tileh != 0
+        && !matches!(
+            class,
+            StationTileClass::Rail
+                | StationTileClass::RailWaypoint
+                | StationTileClass::Bus
+                | StationTileClass::Truck
+        )
+    {
         let grass = sloped_or_flat_image(tileh, &assets.grass, &assets.grass_slopes);
         spawn_ground_sprite(commands, &grass, Color::WHITE, ctx, slope_half_ground);
     }
@@ -713,32 +731,36 @@ pub(crate) fn spawn_station_tile(
         .tile
         .map_or(openttdrs_core::RailType::Rail, rail_type_from_tile);
 
-    let rail_half_h = if tileh == 0 {
-        TILE_HALF_H
-    } else {
-        slope_half_h(tileh)
-    };
-
     match class {
         StationTileClass::Rail | StationTileClass::RailWaypoint => {
             if tileh == 0 {
                 let grass = sloped_or_flat_image(0, &assets.grass, &assets.grass_slopes);
                 spawn_ground_sprite(commands, &grass, Color::WHITE, ctx, slope_half_ground);
             }
-            // En pendiente el suelo ya se pintó arriba (evita hierba duplicada).
+            // `DrawTile_Station` nivela cualquier estación ferroviaria antes
+            // de emitir el suelo y las capas `TILE_SEQ`. No es la fundación
+            // que deriva de TrackBits: para una estación OpenTTD fuerza
+            // `FOUNDATION_LEVELED`, deja el sprite de vía como child en
+            // `(0, -32)` y pinta las plataformas sobre una superficie plana.
+            // El césped inclinado previo desplazaba el andén y podía asomar
+            // bajo su cimiento en las pendientes de Kale.
             let station_tb = if m5 & 1 != 0 { 0x02 } else { 0x01 };
-            let rail_base_z = spawn_rail_foundation(
+            let rail_base_z = spawn_forced_leveled_foundation(
                 commands,
                 map,
                 dims,
                 assets,
                 ctx,
                 tileh,
-                station_tb,
+                "station-rail",
+                "station-rail-foundation",
                 foundation_newgrf,
                 action5_sprites.as_deref_mut(),
                 images.as_deref_mut(),
             );
+            let rail_half_h = TILE_HALF_H;
+            let rail_foundation_z_delta =
+                station_rail_foundation_world_z_delta(ctx.info.base_z, rail_base_z);
             // OpenTTD: ground SPR_RAIL_TRACK_* bajo estación y waypoint (`station_land.h`).
             let track_sid = rail_station_ground_track_sprite_for_type(m5, tileh, rail_type);
             if class == StationTileClass::Rail {
@@ -866,11 +888,12 @@ pub(crate) fn spawn_station_tile(
                     } else {
                         rail_station_layer_for_type(*base_layer, rail_type)
                     };
-                    if class == StationTileClass::Rail && tileh == 0 {
+                    if class == StationTileClass::Rail {
                         record_station_rail_layer_trace(
                             &layer,
                             owner_colour,
                             !assets.rail.contains_key(&layer.sprite_id),
+                            rail_foundation_z_delta,
                         );
                     }
                     let Some(img) = assets.rail.get(&layer.sprite_id) else {
@@ -2146,7 +2169,8 @@ mod tests {
         airport_station_ground_layer_trace_offset, rail_depot_foundation_child_offset,
         rail_depot_reservation_track_visible, road_depot_foundation_child_offset,
         road_stop_foundation_child_offset, station_catenary_wire_trace_geometry,
-        station_rail_child_offset, tunnel_catenary_trace_geometry,
+        station_rail_child_offset, station_rail_foundation_world_z_delta,
+        tunnel_catenary_trace_geometry,
     };
     use crate::sprites::{CatenaryWireDraw, airport_station_ground_layers_for_gfx};
 
@@ -2165,6 +2189,15 @@ mod tests {
         assert_eq!(station_rail_child_offset(0), None);
         assert_eq!(station_rail_child_offset(6), Some((0, -32, 0)));
         assert_eq!(station_rail_child_offset(12), Some((0, -32, 0)));
+    }
+
+    #[test]
+    fn sloped_rail_station_layers_use_the_leveled_foundation_height() {
+        // Kale (16,39): raw z=1, `FOUNDATION_LEVELED` deja z=2 y los
+        // sprites 1070/1072 se ordenan en z=16, no en el relieve z=8.
+        assert_eq!(station_rail_foundation_world_z_delta(1, 2), 8);
+        assert_eq!(station_rail_foundation_world_z_delta(0, 2), 16);
+        assert_eq!(station_rail_foundation_world_z_delta(4, 4), 0);
     }
 
     #[test]

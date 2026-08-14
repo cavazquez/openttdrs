@@ -1045,6 +1045,125 @@ fn spawn_sloped_road_and_station_hit_slope_ground_branch() {
 }
 
 #[test]
+fn sloped_rail_station_levels_platform_without_sloped_grass() {
+    let assets = boot_assets_app();
+    let mut map = Map::new_flat(3, 3, 0);
+    let c = |x: i32, y: i32| TileCoord::new(x, y);
+    // Pendiente simple: la estación debe convertirla en una superficie plana
+    // igual que `DrawTile_Station` en OpenTTD, no conservar el suelo inclinado
+    // bajo la plataforma.
+    map.set_height(c(1, 1), 5).expect("h");
+    for (x, y) in [(0, 0), (2, 0), (0, 2), (2, 2)] {
+        map.set_height(c(x, y), 4).expect("h");
+    }
+    map.set_tile(
+        c(1, 1),
+        Tile {
+            kind: TileKind::Station,
+            mapt: 0x50,
+            m5: 0, // plataforma X: 1070 + 1072
+            m6: 0, // StationType::Rail
+            ..tile_template()
+        },
+    )
+    .expect("station");
+
+    let grid = RenderGrid::from_map(&map, 3, 3);
+    let ctx = TileRenderContext::new(&map, &grid, 1, 1);
+    assert_ne!(ctx.info.tileh, 0, "el caso debe permanecer inclinado");
+    let expected_track = assets.rail.get(&1012).expect("track X").clone();
+    let expected_platform = [
+        assets.rail.get(&1070).expect("platform A").clone(),
+        assets.rail.get(&1072).expect("platform B").clone(),
+    ];
+    let plan =
+        openttdrs_core::foundation_draw_plan(ctx.info.tileh, openttdrs_core::FOUNDATION_LEVELED, 0);
+    let surface_z = ctx.info.base_z.saturating_add(plan.surface_z_delta);
+    let expected_track_pos =
+        crate::iso::tile_pos_half(1, 1, surface_z, 0.02, crate::iso::TILE_HALF_H);
+
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world
+        .run_system_once(
+            |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                spawn_station_tile(
+                    &mut commands,
+                    &m.0,
+                    m.0.dimensions(),
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    &[],
+                    4.0,
+                    true,
+                    &[],
+                    &[],
+                    None,
+                    None,
+                    &[],
+                    None,
+                    &[],
+                    None,
+                    &[],
+                    TEST_CLIMATE,
+                    &[],
+                );
+            },
+        )
+        .expect("sloped rail station");
+
+    let rendered: Vec<_> = world
+        .query::<(&Sprite, &Transform)>()
+        .iter(&world)
+        .collect();
+    assert!(
+        rendered.iter().all(|(sprite, _)| {
+            !world
+                .resource::<TsAssets>()
+                .0
+                .grass_slopes
+                .iter()
+                .any(|grass| grass.matches(sprite))
+        }),
+        "una estación ferroviaria inclinada no puede conservar césped inclinado debajo"
+    );
+    assert_eq!(
+        rendered
+            .iter()
+            .filter(|(sprite, _)| expected_track.matches(sprite))
+            .count(),
+        1,
+        "la vía plana debe seguir a la fundación"
+    );
+    for platform in expected_platform {
+        assert_eq!(
+            rendered
+                .iter()
+                .filter(|(sprite, _)| platform.matches(sprite))
+                .count(),
+            1,
+            "las dos capas de plataforma deben seguir presentes en pendiente"
+        );
+    }
+    let track_pos = rendered
+        .iter()
+        .find_map(|(sprite, transform)| {
+            expected_track
+                .matches(sprite)
+                .then_some(transform.translation)
+        })
+        .expect("vía de estación");
+    assert_eq!(
+        track_pos, expected_track_pos,
+        "la vía debe usar la superficie nivelada, no la proyección de pendiente"
+    );
+}
+
+#[test]
 fn spawn_industry_on_slope_spawns_foundation_layer() {
     let assets = boot_assets_app();
     let mut map = Map::new_flat(4, 4, 0);

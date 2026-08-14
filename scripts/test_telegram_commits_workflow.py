@@ -12,14 +12,28 @@ WORKFLOW = ROOT / ".github" / "workflows" / "telegram-commits.yml"
 
 
 class TelegramCommitsWorkflowTest(unittest.TestCase):
-    def test_sends_each_commit_without_exposing_secrets(self) -> None:
+    def test_sends_a_torusocean_style_push_summary_without_exposing_secrets(
+        self,
+    ) -> None:
         workflow = WORKFLOW.read_text(encoding="utf-8")
         for marker in (
             "push:",
             'branches:\n      - "**"',
             "TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}",
             "TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}",
-            "git rev-list --reverse",
+            "PUSH_COMPARE: ${{ github.event.compare }}",
+            "PUSH_PROJECT_LABEL: OpenTTDRS",
+            "(.commits // []) | length",
+            ".head_commit.author.username // .pusher.name",
+            "🚀 %s · push recibido",
+            "Repositorio: %s",
+            "Ref: %s",
+            "Commit: %s",
+            "Autor: %s",
+            "Commits recibidos: %s",
+            "Mensaje: %s",
+            'short_sha="${PUSH_AFTER:0:12}"',
+            'compare_url="$PUSH_COMPARE"',
             "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage",
             '"chat_id=$TELEGRAM_CHAT_ID"',
             "--data-urlencode \"text=$text\"",
@@ -27,6 +41,8 @@ class TelegramCommitsWorkflowTest(unittest.TestCase):
             "env.PUSH_DELETED != 'true'",
         ):
             self.assertIn(marker, workflow)
+        self.assertNotIn("git rev-list --reverse", workflow)
+        self.assertNotIn("actions/checkout", workflow)
         self.assertNotIn("echo $TELEGRAM_BOT_TOKEN", workflow)
         self.assertNotIn("echo $TELEGRAM_CHAT_ID", workflow)
 

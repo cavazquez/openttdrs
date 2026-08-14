@@ -402,11 +402,26 @@ impl WorldDrawTrace {
         fallback: bool,
         offset: (i32, i32, i32),
     ) {
+        Self::record_child_sprite_screen(role, sprite_id, 0, fallback, offset);
+    }
+
+    /// Registra un `AddChildSpriteScreen` relativo al último sortable.
+    ///
+    /// Se usa tanto para el suelo después de una fundación como para overlays
+    /// propios del draw proc, por ejemplo el ascensor de `TownDrawHouseLift`.
+    /// El offset ya está en píxeles de pantalla normalizados por `ZOOM_BASE`.
+    pub(crate) fn record_child_sprite_screen(
+        role: &'static str,
+        sprite_id: u32,
+        palette: u32,
+        fallback: bool,
+        offset: (i32, i32, i32),
+    ) {
         Self::record_sprite_with_draw_state(
             role,
             "child",
             sprite_id,
-            0,
+            palette,
             fallback,
             offset,
             (0, 0),
@@ -427,19 +442,7 @@ impl WorldDrawTrace {
         fallback: bool,
         offset: (i32, i32, i32),
     ) {
-        Self::record_sprite_with_draw_state(
-            role,
-            "child",
-            sprite_id,
-            palette,
-            fallback,
-            offset,
-            (0, 0),
-            0,
-            None,
-            false,
-            true,
-        );
+        Self::record_child_sprite_screen(role, sprite_id, palette, fallback, offset);
     }
 
     /// Variante que conserva la paleta lógica de OpenTTD además de la

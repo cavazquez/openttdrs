@@ -51,7 +51,7 @@ pub(crate) fn leveled_foundation_overlay_pos(
     tx: i32,
     ty: i32,
 ) -> Vec3 {
-    let mut pos = overlay_pos(
+    foundation_surface_overlay_pos(
         ref_pos,
         xrel,
         yrel,
@@ -61,7 +61,29 @@ pub(crate) fn leveled_foundation_overlay_pos(
         layer,
         tx,
         ty,
-    );
+    )
+}
+
+/// Posición de una capa posterior a una fundación ya aplicada.
+///
+/// `DrawFoundation(Leveled)` sube una unidad en una pendiente normal y dos
+/// en una pendiente empinada. El helper histórico
+/// [`leveled_foundation_overlay_pos`] cubre el primer caso; los draw procs que
+/// ya conocen la superficie resultante usan ésta para no perder el segundo
+/// nivel de una pendiente empinada.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn foundation_surface_overlay_pos(
+    ref_pos: Vec2,
+    xrel: f32,
+    yrel: f32,
+    w: f32,
+    h: f32,
+    surface_base_z: u8,
+    layer: f32,
+    tx: i32,
+    ty: i32,
+) -> Vec3 {
+    let mut pos = overlay_pos(ref_pos, xrel, yrel, w, h, surface_base_z, layer, tx, ty);
     pos.y -= HEIGHT_PX;
     pos
 }
@@ -891,10 +913,10 @@ mod tests {
 
     use super::{
         FLAT_WATER_LAYER_FRAC, SHORE_LAYER_FRAC, bridge_foundation_kind, bridge_foundation_surface,
-        flattening_foundation_surface, leveled_foundation_overlay_pos, road_foundation_kind,
-        road_foundation_surface,
+        flattening_foundation_surface, foundation_surface_overlay_pos,
+        leveled_foundation_overlay_pos, road_foundation_kind, road_foundation_surface,
     };
-    use crate::iso::{TILE_HALF_H, overlay_pos, tile_pos, tile_pos_half};
+    use crate::iso::{HEIGHT_PX, TILE_HALF_H, overlay_pos, tile_pos, tile_pos_half};
 
     #[test]
     fn leveled_overlay_matches_flat_elevation() {
@@ -902,6 +924,16 @@ mod tests {
         let leveled =
             leveled_foundation_overlay_pos(Vec2::ZERO, 0.0, 0.0, 64.0, 40.0, 2, 0.5, 3, 4);
         assert!((flat.y - leveled.y).abs() < 0.01);
+    }
+
+    #[test]
+    fn explicit_foundation_surface_keeps_the_extra_steep_level() {
+        // `DrawFoundation(Leveled)` sobre SLOPE_STEEP deja `ti->z + 2`;
+        // `OffsetGroundSprite(0, -TILE_HEIGHT)` sólo compensa uno de esos
+        // niveles. Las casas altas de Kale ejercitan exactamente esta ruta.
+        let normal = foundation_surface_overlay_pos(Vec2::ZERO, 0.0, 0.0, 64.0, 40.0, 3, 0.5, 3, 4);
+        let steep = foundation_surface_overlay_pos(Vec2::ZERO, 0.0, 0.0, 64.0, 40.0, 4, 0.5, 3, 4);
+        assert!((steep.y - normal.y - HEIGHT_PX).abs() < 0.01);
     }
 
     #[test]

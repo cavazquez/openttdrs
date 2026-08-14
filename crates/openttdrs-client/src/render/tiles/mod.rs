@@ -22,7 +22,8 @@ pub(crate) use helpers::{
     spawn_ground_sprite, spawn_leveled_foundation, spawn_rail_foundation, spawn_road_foundation,
 };
 pub(crate) use land::{
-    push_forest_tree, spawn_generic_land_tile, spawn_house_tile, spawn_industry_tile,
+    HouseSpawnResources, push_forest_tree, spawn_generic_land_tile, spawn_house_tile,
+    spawn_industry_tile,
 };
 pub(crate) use objects::{spawn_station_tile, spawn_transport_object_tile};
 pub(crate) use transport::{spawn_rail_tile, spawn_road_tile};

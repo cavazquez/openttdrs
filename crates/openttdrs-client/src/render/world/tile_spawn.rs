@@ -8,10 +8,10 @@ use crate::config::{env_flag, env_string};
 use crate::iso::{shore_png_index, shore_tileh_for_draw_shore, slope_half_h};
 use crate::render::world_draw_trace::WorldDrawTrace;
 use crate::render::{
-    CompanyColoredSprites, MapSpriteBatches, RenderGrid, TileAtlas, TileRenderContext,
-    TileViewportBounds, WorldAssets, chunk_tile_bounds, flush_map_batches, push_forest_tree,
-    push_water_tile, spawn_bridge_middle, spawn_generic_land_tile, spawn_house_tile,
-    spawn_industry_tile, spawn_rail_tile, spawn_road_tile, spawn_station_tile,
+    CompanyColoredSprites, HouseSpawnResources, MapSpriteBatches, RenderGrid, TileAtlas,
+    TileRenderContext, TileViewportBounds, WorldAssets, chunk_tile_bounds, flush_map_batches,
+    push_forest_tree, push_water_tile, spawn_bridge_middle, spawn_generic_land_tile,
+    spawn_house_tile, spawn_industry_tile, spawn_rail_tile, spawn_road_tile, spawn_station_tile,
     spawn_transport_object_tile,
 };
 use crate::sprites::CompanyColour;
@@ -333,8 +333,14 @@ pub(crate) fn spawn_map_tiles_in_bounds(
                 commands,
                 assets,
                 &ctx,
-                slope_half_ground,
-                &sim.state.house_spec_catalog,
+                HouseSpawnResources {
+                    map,
+                    map_dims: (mw, mh),
+                    house_catalog: &sim.state.house_spec_catalog,
+                    foundation_newgrf: &sim.state.runtime.foundation_newgrf_sprites,
+                    action5_sprites: Some(action5_sprites),
+                    images: Some(images),
+                },
             ),
             TileKind::Industry => {
                 spawn_industry_tile(

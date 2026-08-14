@@ -8,7 +8,8 @@ use openttdrs_core::{
 };
 
 use super::{
-    helpers::FLAT_WATER_LAYER_FRAC, leveled_foundation_overlay_pos, sloped_or_flat_image,
+    helpers::{FLAT_WATER_LAYER_FRAC, foundation_surface_overlay_pos},
+    leveled_foundation_overlay_pos, sloped_or_flat_image, spawn_forced_leveled_foundation,
     spawn_ground_sprite, spawn_leveled_foundation,
 };
 use crate::iso::{overlay_pos, remap_tile_offset, slope_sprite_offset, tile_pos, wang_hash};
@@ -302,12 +303,36 @@ fn field_fence_draws(t: &Tile, tileh: u8) -> [Option<FieldFenceDraw>; 4] {
     draws
 }
 
+/// Offset de `TownDrawHouseLift`: child de pantalla, no coordenada TILE_SEQ.
+const fn house_lift_screen_offset(position: u8) -> (i32, i32, i32) {
+    let clamped = if position > openttdrs_core::map::LIFT_MAX_POSITION {
+        openttdrs_core::map::LIFT_MAX_POSITION
+    } else {
+        position
+    };
+    (14, 60 - clamped as i32, 0)
+}
+
+/// Recursos prestados que sólo necesita la ruta de casas.
+///
+/// Las fundaciones Action5 requieren el mapa y sus vecinos, mientras que los
+/// sprites de casas siguen viniendo de `WorldAssets`. Agrupar esta parte evita
+/// que el contrato del spawner crezca cada vez que se acerca más a
+/// `DrawTile_Town` de OpenTTD.
+pub(crate) struct HouseSpawnResources<'a> {
+    pub(crate) map: &'a Map,
+    pub(crate) map_dims: (u32, u32),
+    pub(crate) house_catalog: &'a [openttdrs_core::HouseSpecDef],
+    pub(crate) foundation_newgrf: &'a [Option<openttdrs_core::DecodedSprite>],
+    pub(crate) action5_sprites: Option<&'a mut crate::render::NewGrfAction5SpriteCache>,
+    pub(crate) images: Option<&'a mut Assets<Image>>,
+}
+
 pub(crate) fn spawn_house_tile(
     commands: &mut Commands,
     assets: &WorldAssets,
     ctx: &TileRenderContext,
-    _slope_half_ground: f32,
-    house_catalog: &[openttdrs_core::HouseSpecDef],
+    resources: HouseSpawnResources<'_>,
 ) {
     let tileh = ctx.info.tileh;
     let base_z = ctx.info.base_z;
@@ -320,7 +345,7 @@ pub(crate) fn spawn_house_tile(
         ctx.tx_i32(),
         ctx.ty_i32(),
         building_stage,
-        house_catalog,
+        resources.house_catalog,
     );
     let spec = &HOUSE_DRAW_DATA[spec_idx];
 
@@ -329,18 +354,37 @@ pub(crate) fn spawn_house_tile(
     // `s1` no es el césped natural que había debajo: es exactamente el
     // `ground.sprite` de `town_land.h`.
     let leveled = tileh != 0;
-    if leveled {
-        spawn_leveled_foundation(commands, assets, ctx, tileh, &[], None, None);
-    }
+    // No alcanza con `foundation_{tileh}`: `DrawFoundation` escoge el bloque
+    // 0..3 según las dos paredes visibles frente a sus vecinos. Para casas en
+    // pendientes, el atajo histórico usaba siempre el bloque original y
+    // producía muros equivocados (o faltantes) en Kale. Reutilizamos el mismo
+    // plan genérico que ya valida vías, puentes y estaciones.
+    let foundation_surface_base_z = if leveled {
+        spawn_forced_leveled_foundation(
+            commands,
+            resources.map,
+            resources.map_dims,
+            assets,
+            ctx,
+            tileh,
+            "house",
+            "house-foundation",
+            resources.foundation_newgrf,
+            resources.action5_sprites,
+            resources.images,
+        )
+    } else {
+        base_z
+    };
     let house_pos = |xrel: f32, yrel: f32, w: f32, h: f32, layer: f32| {
         if leveled {
-            leveled_foundation_overlay_pos(
+            foundation_surface_overlay_pos(
                 ctx.iso_pos,
                 xrel,
                 yrel,
                 w,
                 h,
-                base_z,
+                foundation_surface_base_z,
                 layer,
                 ctx.tx_i32(),
                 ctx.ty_i32(),
@@ -489,12 +533,31 @@ pub(crate) fn spawn_house_tile(
         // OpenTTD: `AddChildSpriteScreen(SPR_LIFT, …, 14, 60 - pos)` — offsets de
         // **pantalla** relativos al edificio, no unidades TILE_SEQ.
         // `remap_tile_offset(14, 60)` los trataba como tesela y desplazaba ~3 tiles.
-        let pos3 = house_pos(
+        let lift_position = ctx
+            .tile
+            .map(openttdrs_core::lift_position)
+            .unwrap_or(0)
+            .min(openttdrs_core::map::LIFT_MAX_POSITION);
+        WorldDrawTrace::record_child_sprite_screen(
+            "house-lift",
+            1443,
+            0,
+            false,
+            house_lift_screen_offset(lift_position),
+        );
+        let lift_base = house_pos(
             spec.s2_xrel + crate::render::HOUSE_LIFT_SCREEN_X,
             spec.s2_yrel + crate::render::HOUSE_LIFT_SCREEN_Y,
             lift_w,
             lift_h,
             0.55,
+        );
+        // Dejar la entidad ya en la posición de la partida evita un frame en
+        // el que el ascensor aparece en el piso cero antes del primer update.
+        let pos3 = Vec3::new(
+            lift_base.x,
+            lift_base.y + f32::from(lift_position),
+            lift_base.z,
         );
         let mut sprite = assets.house_lift.sprite();
         sprite.color = tint;
@@ -504,7 +567,7 @@ pub(crate) fn spawn_house_tile(
             sprite,
             Transform::from_translation(pos3),
             crate::render::HouseLiftAnim {
-                base: pos3,
+                base: lift_base,
                 coord: ctx.coord,
             },
         ));
@@ -1345,9 +1408,9 @@ mod tests {
 
     use super::{
         TreeGround, clear_ground_sprite_id, field_fence_draws, field_ground_sprite_id,
-        field_slope_max_pixel_z, field_slope_pixel_z_in_corner, openttd_tile_hash,
-        rough_flat_variant, sort_tree_layers_like_openttd, tree_density_from_tile,
-        tree_ground_from_tile, tree_ground_sprite_id, tree_shore_sprite_id,
+        field_slope_max_pixel_z, field_slope_pixel_z_in_corner, house_lift_screen_offset,
+        openttd_tile_hash, rough_flat_variant, sort_tree_layers_like_openttd,
+        tree_density_from_tile, tree_ground_from_tile, tree_ground_sprite_id, tree_shore_sprite_id,
     };
 
     #[test]
@@ -1474,6 +1537,39 @@ mod tests {
         assert_eq!(field_slope_pixel_z_in_corner(30, 0x04), 16); // E
         assert_eq!(field_slope_pixel_z_in_corner(29, 0x08), 16); // N
         assert_eq!(field_slope_pixel_z_in_corner(30, 0x01), 0);
+    }
+
+    #[test]
+    fn house_foundation_and_lift_match_kale_drawfoundation_examples() {
+        // Kale (9,4): SLOPE_SW, fundación leveled con sólo pared NW visible.
+        // `DrawFoundation` debe usar el bloque Action5 1, no `992` del
+        // bloque clásico que usaba la ruta histórica de casas.
+        let normal = openttdrs_core::foundation_draw_plan(0x03, 1, 1);
+        assert_eq!(normal.sprites[0].map(|draw| draw.sprite_id), Some(5423));
+        assert_eq!(normal.surface_z_delta, 1);
+
+        // Kale (164,12): pendiente doble normal, bloque 3 y una elevación.
+        let block_three = openttdrs_core::foundation_draw_plan(0x0C, 1, 3);
+        assert_eq!(
+            block_three.sprites[0].map(|draw| draw.sprite_id),
+            Some(5476)
+        );
+        assert_eq!(block_three.surface_z_delta, 1);
+
+        // Una pendiente STEEP sí emite el muro inferior y el medio tile
+        // superior; la superficie efectiva queda dos niveles arriba. Así se
+        // protege el dato que usa `foundation_surface_overlay_pos` para el
+        // suelo y edificio de cualquier casa empinada.
+        let steep = openttdrs_core::foundation_draw_plan(0x1B, 1, 3);
+        assert_eq!(steep.sprites[0].map(|draw| draw.sprite_id), Some(5475));
+        assert_eq!(steep.sprites[1].map(|draw| draw.sprite_id), Some(5465));
+        assert_eq!(steep.surface_z_delta, 2);
+
+        // TownDrawHouseLift: (14, 60 - GetLiftPosition()). El valor real de
+        // Kale en la primera muestra era 12, por eso OpenTTD emitió y=48.
+        assert_eq!(house_lift_screen_offset(0), (14, 60, 0));
+        assert_eq!(house_lift_screen_offset(12), (14, 48, 0));
+        assert_eq!(house_lift_screen_offset(63), (14, 24, 0));
     }
 
     #[test]

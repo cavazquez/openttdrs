@@ -13,7 +13,7 @@ const TEST_WORLD_SEED: u64 = 0;
 
 use crate::render::assets::{WorldAssets, stub_opengfx_tiles_for_tests};
 use crate::render::tiles::{
-    flush_map_batches, push_forest_tree, push_water_tile, spawn_bridge_middle,
+    HouseSpawnResources, flush_map_batches, push_forest_tree, push_water_tile, spawn_bridge_middle,
     spawn_generic_land_tile, spawn_house_tile, spawn_industry_tile, spawn_rail_tile,
     spawn_road_tile, spawn_station_tile, spawn_transport_object_tile,
 };
@@ -912,8 +912,14 @@ fn spawn_land_house_industry_generics_and_batches() {
                     &mut commands,
                     &a.0,
                     &TileRenderContext::new(&m.0, &g.0, 0, 1),
-                    4.0,
-                    &[],
+                    HouseSpawnResources {
+                        map: &m.0,
+                        map_dims: (mw, mh),
+                        house_catalog: &[],
+                        foundation_newgrf: &[],
+                        action5_sprites: None,
+                        images: None,
+                    },
                 );
                 spawn_industry_tile(
                     &mut commands,

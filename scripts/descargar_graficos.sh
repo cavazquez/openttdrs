@@ -609,6 +609,13 @@ for i, sid in enumerate([4019, 4020, 4021, 4022]):
     crop_by_id(sid, f"terrain_rough_{i+1}.png")
 crop_by_id(4023, "terrain_rocky_1.png")        # SPR_FLAT_ROCKY_LAND_1
 crop_by_id(4042, "terrain_rocky_2.png")        # SPR_FLAT_ROCKY_LAND_2
+# Terreno rocoso completo: `DrawTile_Clear` suma `SlopeToSpriteOffset` a
+# cada base; reutilizar `terrain_rough_slope_*` en estas teselas altera el
+# relieve de cualquier partida importada. Los aliases planos anteriores se
+# conservan para herramientas externas, pero el renderer usa esta tabla.
+for variant, base in enumerate([4023, 4042], start=1):
+    for offset in range(19):
+        crop_by_id(base + offset, f"terrain_rocky_{variant}_{offset:02d}.png")
 # Nieve/desierto
 crop_by_id(4493, "terrain_snow_1_4.png")
 crop_by_id(4512, "terrain_snow_2_4.png")

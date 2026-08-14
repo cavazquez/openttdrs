@@ -189,7 +189,13 @@ mod tests {
     #[test]
     fn known_tiles_resolve() {
         let (atlas, _layouts) = test_atlas();
-        for name in ["grass.png", "water.png", "rail_1011.png"] {
+        for name in [
+            "grass.png",
+            "water.png",
+            "rail_1011.png",
+            "terrain_rocky_1_00.png",
+            "terrain_rocky_1_18.png",
+        ] {
             assert!(atlas.try_get(name).is_some(), "falta {name}");
         }
         assert!(atlas.try_get("no_existe.png").is_none());

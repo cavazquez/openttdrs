@@ -20,10 +20,11 @@ pub(crate) struct WorldAssets {
     /// Variantes planas que `DrawHillyLandTile` escoge con `TileHash(x, y)`.
     /// La primera coincide con `terrain_rough.png` / `grass_rough.png`.
     pub(crate) rough_flat: [AtlasSprite; 5],
-    /// Variantes planas de suelo rocoso (`terrain_rocky_1/2.png`).
-    pub(crate) rocky: [AtlasSprite; 2],
-    /// Alias del snow/desert completo para consumidores que no tienen densidad.
-    pub(crate) snow: AtlasSprite,
+    /// Las dos series completas `SPR_FLAT_ROCKY_LAND_{1,2}` × los 19 offsets
+    /// de `SlopeToSpriteOffset`. OpenGFX y OpenGFX2 usan hoy la primera,
+    /// pero el atlas conserva ambas para que un futuro baseset que active
+    /// `SecondRockyTileSet` no vuelva a degradar una ladera a rough.
+    pub(crate) rocky: [[AtlasSprite; 19]; 2],
     pub(crate) bought_land: AtlasSprite,
     /// `SPR_CONCRETE_GROUND`, base de la estatua de compañía (`MP_OBJECT`).
     pub(crate) object_concrete: AtlasSprite,
@@ -178,10 +179,11 @@ impl WorldAssets {
                 atlas.get(&format!("terrain_rough_{variant}.png"))
             }
         });
-        let rocky = [
-            atlas.get("terrain_rocky_1.png"),
-            atlas.get("terrain_rocky_2.png"),
-        ];
+        let rocky = std::array::from_fn(|variant| {
+            std::array::from_fn(|offset| {
+                atlas.get(&format!("terrain_rocky_{}_{}.png", variant + 1, offset))
+            })
+        });
         let grass_density = std::array::from_fn(|density| {
             std::array::from_fn(|offset| {
                 atlas.get(&format!("terrain_grass_density_{density}_{offset:02}.png"))
@@ -192,7 +194,6 @@ impl WorldAssets {
                 atlas.get(&format!("terrain_snow_desert_{density}_{offset:02}.png"))
             })
         });
-        let snow = snow_desert[3][0].clone();
         let bought_land = atlas.get("object_bought_land.png");
         let object_concrete = atlas.get("object_concrete.png");
         // `SlopeToSpriteOffset` puede devolver 15..18 para las cuatro
@@ -678,7 +679,6 @@ impl WorldAssets {
             rough,
             rough_flat,
             rocky,
-            snow,
             bought_land,
             object_concrete,
             grass_density,

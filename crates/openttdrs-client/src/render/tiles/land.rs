@@ -70,13 +70,49 @@ const fn tree_density_from_tile(tile: Tile) -> usize {
 /// `TileHash(x, y)` de OpenTTD aplicado a coordenadas de tesela. OpenTTD
 /// recibe coordenadas de mundo (`16 * tx`, `16 * ty`), por lo que los shifts
 /// 4 y 6 quedan como `tx`/`ty` y `tx >> 2`/`ty >> 2` respectivamente.
-const fn tree_rough_flat_variant(tx: u32, ty: u32) -> usize {
+const fn openttd_tile_hash(tx: u32, ty: u32) -> u32 {
+    (tx ^ (tx >> 2) ^ ty).wrapping_sub(ty >> 2)
+}
+
+/// Índice de `_landscape_clear_sprites_rough` para suelo áspero plano.
+const fn rough_flat_variant(tx: u32, ty: u32) -> usize {
     const ROUGH_BY_HASH: [usize; 8] = [0, 1, 2, 3, 4, 0, 1, 2];
-    let hash = (tx ^ (tx >> 2) ^ ty).wrapping_sub(ty >> 2);
-    ROUGH_BY_HASH[(hash & 0x07) as usize]
+    ROUGH_BY_HASH[(openttd_tile_hash(tx, ty) & 0x07) as usize]
 }
 
 const TREE_SNOW_DESERT_BASE: [u32; 4] = [4493, 4512, 4531, 4550];
+const SPR_FLAT_BARE_LAND: u32 = 3924;
+const SPR_FLAT_ROUGH_LAND: u32 = 4000;
+const SPR_FLAT_ROCKY_LAND_1: u32 = 4023;
+
+/// Sprite de suelo que selecciona `DrawTile_Clear`, salvo campos (que además
+/// llevan cercas). Mantener esta decisión pura evita que el nombre del PNG,
+/// la traza `world-draw` y el selector visual diverjan.
+const fn clear_ground_sprite_id(ground: u8, density: usize, tileh: u8, tx: u32, ty: u32) -> u32 {
+    let slope = slope_sprite_offset(tileh) as u32;
+    let density = if density > 3 { 3 } else { density } as u32;
+    match ground {
+        // DrawClearLandTile(ti, GetClearDensity(tile)).
+        CLEAR_GROUND_GRASS => SPR_FLAT_BARE_LAND + density * 19 + slope,
+        // DrawHillyLandTile(ti): sólo el caso plano usa TileHash.
+        CLEAR_GROUND_ROUGH if slope != 0 => SPR_FLAT_ROUGH_LAND + slope,
+        CLEAR_GROUND_ROUGH => {
+            const ROUGH_IDS: [u32; 5] = [4000, 4019, 4020, 4021, 4022];
+            ROUGH_IDS[rough_flat_variant(tx, ty)]
+        }
+        // OpenGFX 8bpp y OpenGFX2 High Def no anuncian
+        // `SecondRockyTileSet` (misc bit 6), por lo que `DrawHillyLandTile`
+        // usa siempre la primera serie 4023..4041. El segundo set queda
+        // disponible en el atlas para un baseset que sí lo habilite.
+        CLEAR_GROUND_ROCKY => SPR_FLAT_ROCKY_LAND_1 + slope,
+        // La tabla `_clear_land_sprites_snow_desert` se comparte entre nieve
+        // y desierto; la densidad está en los dos bits bajos de MAP5.
+        CLEAR_GROUND_SNOW | CLEAR_GROUND_DESERT => TREE_SNOW_DESERT_BASE[density as usize] + slope,
+        // El caller separa Fields para dibujar sus cercas. Mantener una salida
+        // visible sólo protege saves corruptos con un valor de suelo ajeno.
+        _ => SPR_FLAT_ROUGH_LAND + slope,
+    }
+}
 
 /// Sprite que `DrawTile_Trees` entrega a `DrawGroundSprite` antes de
 /// componer los árboles. Mantenerlo en una función permite probar todos los
@@ -97,7 +133,7 @@ const fn tree_ground_sprite_id(
         TreeGround::Rough if slope != 0 => 4000 + slope,
         TreeGround::Rough => {
             const ROUGH_IDS: [u32; 5] = [4000, 4019, 4020, 4021, 4022];
-            ROUGH_IDS[tree_rough_flat_variant(tx, ty)]
+            ROUGH_IDS[rough_flat_variant(tx, ty)]
         }
         // DrawTile_Trees usa la misma tabla para SnowDesert y RoughSnow.
         TreeGround::SnowDesert | TreeGround::RoughSnow => TREE_SNOW_DESERT_BASE[density] + slope,
@@ -114,13 +150,17 @@ fn grass_density_image(assets: &WorldAssets, density: usize, tileh: u8) -> Atlas
 fn rough_tree_image(assets: &WorldAssets, tileh: u8, tx: u32, ty: u32) -> AtlasSprite {
     sloped_or_flat_image(
         tileh,
-        &assets.rough_flat[tree_rough_flat_variant(tx, ty)],
+        &assets.rough_flat[rough_flat_variant(tx, ty)],
         &assets.rough_slopes,
     )
 }
 
 fn snow_desert_image(assets: &WorldAssets, density: usize, tileh: u8) -> AtlasSprite {
     assets.snow_desert[density.min(3)][usize::from(slope_sprite_offset(tileh))].clone()
+}
+
+fn rocky_image(assets: &WorldAssets, tileh: u8) -> AtlasSprite {
+    assets.rocky[0][usize::from(slope_sprite_offset(tileh))].clone()
 }
 
 fn clear_grass_density(tile_m5: u8) -> usize {
@@ -819,30 +859,51 @@ pub(crate) fn spawn_generic_land_tile(
     // m5 sólo es el byte alto crudo de ObjectID en una partida importada.
     let grass_img = || grass_density_image(assets, clear_grass_density(tile_m5), tileh);
     let full_grass_img = || sloped_or_flat_image(tileh, &assets.grass, &assets.grass_slopes);
-    let rough_img = || sloped_or_flat_image(tileh, &assets.rough, &assets.rough_slopes);
-    let rocky_variant = wang_hash(ctx.tx, ctx.ty, world_seed.wrapping_add(0xB0C0_5EED) as u32)
-        as usize
-        % assets.rocky.len();
-    let rocky_img =
-        || sloped_or_flat_image(tileh, &assets.rocky[rocky_variant], &assets.rough_slopes);
-    let snow_img = || {
-        if tileh == 0 {
-            assets.snow.clone()
-        } else {
-            sloped_or_flat_image(tileh, &assets.grass, &assets.grass_slopes)
-        }
-    };
-    let snow_color = Color::srgb(0.94, 0.97, 1.0);
-    let desert_color = Color::srgb(0.92, 0.82, 0.62);
+    let rough_img = || rough_tree_image(assets, tileh, ctx.tx, ctx.ty);
+    let rocky_img = || rocky_image(assets, tileh);
+    let snow_desert_img = || snow_desert_image(assets, usize::from(tile_m5 & 0x03), tileh);
 
     let clear_ground =
         effective_clear_ground(climate, tile_m5, ctx.tx_i32(), ctx.ty_i32(), world_seed);
 
     let (image, color) = match ctx.kind {
         TileKind::Grass if ottd_type == 0 => match clear_ground {
-            CLEAR_GROUND_GRASS => (grass_img(), Color::WHITE),
-            CLEAR_GROUND_SNOW => (snow_img(), snow_color),
-            CLEAR_GROUND_DESERT => (rough_img(), desert_color),
+            CLEAR_GROUND_GRASS => {
+                WorldDrawTrace::record_sprite(
+                    "clear-ground",
+                    "ground",
+                    clear_ground_sprite_id(
+                        clear_ground,
+                        clear_grass_density(tile_m5),
+                        tileh,
+                        ctx.tx,
+                        ctx.ty,
+                    ),
+                    false,
+                );
+                (grass_img(), Color::WHITE)
+            }
+            CLEAR_GROUND_SNOW | CLEAR_GROUND_DESERT | CLEAR_GROUND_ROUGH | CLEAR_GROUND_ROCKY => {
+                WorldDrawTrace::record_sprite(
+                    "clear-ground",
+                    "ground",
+                    clear_ground_sprite_id(
+                        clear_ground,
+                        usize::from(tile_m5 & 0x03),
+                        tileh,
+                        ctx.tx,
+                        ctx.ty,
+                    ),
+                    false,
+                );
+                let image = match clear_ground {
+                    CLEAR_GROUND_SNOW | CLEAR_GROUND_DESERT => snow_desert_img(),
+                    CLEAR_GROUND_ROUGH => rough_img(),
+                    CLEAR_GROUND_ROCKY => rocky_img(),
+                    _ => unreachable!(),
+                };
+                (image, Color::WHITE)
+            }
             3 => {
                 // `DrawTile_Clear` Fields: estado de cultivo en bits 0–3 de
                 // m3 + offset de pendiente; cercas como overlay.
@@ -861,9 +922,21 @@ pub(crate) fn spawn_generic_land_tile(
                 spawn_field_fences(commands, assets, ctx);
                 (img, Color::WHITE)
             }
-            CLEAR_GROUND_ROUGH => (rough_img(), Color::srgb(0.78, 0.73, 0.58)),
-            CLEAR_GROUND_ROCKY => (rocky_img(), Color::WHITE),
-            _ => (rough_img(), Color::srgb(0.78, 0.73, 0.58)),
+            _ => {
+                WorldDrawTrace::record_sprite(
+                    "clear-ground-fallback",
+                    "ground",
+                    clear_ground_sprite_id(
+                        clear_ground,
+                        usize::from(tile_m5 & 0x03),
+                        tileh,
+                        ctx.tx,
+                        ctx.ty,
+                    ),
+                    true,
+                );
+                (rough_img(), Color::WHITE)
+            }
         },
         // `table/object_land.h`: transmisor/faro usan 2/3 de césped, la
         // estatua concreto y el terreno comprado suelo desnudo. Antes esta
@@ -887,8 +960,7 @@ pub(crate) fn spawn_generic_land_tile(
             _ => (full_grass_img(), Color::WHITE),
         },
         TileKind::Grass => match clear_ground {
-            CLEAR_GROUND_SNOW => (snow_img(), snow_color),
-            CLEAR_GROUND_DESERT => (rough_img(), desert_color),
+            CLEAR_GROUND_SNOW | CLEAR_GROUND_DESERT => (snow_desert_img(), Color::WHITE),
             _ => (full_grass_img(), Color::WHITE),
         },
         TileKind::Forest => {
@@ -1266,13 +1338,53 @@ pub(crate) fn push_forest_tree(
 
 #[cfg(test)]
 mod tests {
-    use openttdrs_core::{Map, TileCoord};
+    use openttdrs_core::{
+        CLEAR_GROUND_DESERT, CLEAR_GROUND_GRASS, CLEAR_GROUND_ROCKY, CLEAR_GROUND_ROUGH,
+        CLEAR_GROUND_SNOW, Map, TileCoord,
+    };
 
     use super::{
-        TreeGround, field_fence_draws, field_ground_sprite_id, field_slope_max_pixel_z,
-        field_slope_pixel_z_in_corner, sort_tree_layers_like_openttd, tree_density_from_tile,
+        TreeGround, clear_ground_sprite_id, field_fence_draws, field_ground_sprite_id,
+        field_slope_max_pixel_z, field_slope_pixel_z_in_corner, openttd_tile_hash,
+        rough_flat_variant, sort_tree_layers_like_openttd, tree_density_from_tile,
         tree_ground_from_tile, tree_ground_sprite_id, tree_shore_sprite_id,
     };
+
+    #[test]
+    fn clear_ground_selector_matches_openttd_drawtile_clear() {
+        // DrawClearLandTile: base + density * 19 + SlopeToSpriteOffset.
+        assert_eq!(clear_ground_sprite_id(CLEAR_GROUND_GRASS, 3, 0, 0, 0), 3981);
+        assert_eq!(
+            clear_ground_sprite_id(CLEAR_GROUND_GRASS, 3, 29, 0, 0),
+            3996
+        );
+
+        // DrawHillyLandTile: TileHash sólo en plano; 1,0 produce hash 1.
+        assert_eq!(openttd_tile_hash(1, 0), 1);
+        assert_eq!(rough_flat_variant(1, 0), 1);
+        assert_eq!(clear_ground_sprite_id(CLEAR_GROUND_ROUGH, 0, 0, 1, 0), 4019);
+        assert_eq!(
+            clear_ground_sprite_id(CLEAR_GROUND_ROUGH, 0, 29, 1, 0),
+            4015
+        );
+
+        // OpenGFX y OpenGFX2 no activan `SecondRockyTileSet`: incluso donde
+        // TileHash es impar se conserva la primera serie. Las pendientes
+        // 4024..4041 no se pueden sustituir por rough.
+        assert_eq!(clear_ground_sprite_id(CLEAR_GROUND_ROCKY, 0, 0, 0, 0), 4023);
+        assert_eq!(clear_ground_sprite_id(CLEAR_GROUND_ROCKY, 0, 0, 1, 0), 4023);
+        assert_eq!(
+            clear_ground_sprite_id(CLEAR_GROUND_ROCKY, 0, 29, 0, 0),
+            4038
+        );
+
+        // Nieve y desierto comparten `_clear_land_sprites_snow_desert`.
+        assert_eq!(clear_ground_sprite_id(CLEAR_GROUND_SNOW, 2, 29, 0, 0), 4546);
+        assert_eq!(
+            clear_ground_sprite_id(CLEAR_GROUND_DESERT, 2, 29, 0, 0),
+            4546
+        );
+    }
 
     #[test]
     fn forest_layers_follow_openttd_subtile_order_and_ties() {

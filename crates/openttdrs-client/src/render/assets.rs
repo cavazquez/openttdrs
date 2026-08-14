@@ -52,6 +52,11 @@ pub(crate) struct WorldAssets {
     pub(crate) road_flat: Vec<AtlasSprite>,
     /// Set pavimentado (`SPR_ROAD_Y - 19` = 1313..1331), mismo orden que `road_flat`.
     pub(crate) road_paved: Vec<AtlasSprite>,
+    /// Flechas base `Action5 0x09` de `openttd.grf` (`SPR_ONEWAY_BASE` + slot).
+    ///
+    /// Son parte del fallback oficial de OpenTTD, no de un `NewGRF` de la
+    /// partida; un Action5 real puede reemplazarlas en runtime.
+    pub(crate) oneway_roads: [AtlasSprite; crate::sprites::ONEWAY_ROAD_SPRITE_COUNT],
     /// Faroles de `Roadside::StreetLights` (sprites 0x57E/0x57F).
     pub(crate) road_streetlights: [AtlasSprite; 2],
     /// Árbol de acera (`Roadside::Trees`, sprite 0x1212).
@@ -244,6 +249,7 @@ impl WorldAssets {
         let road_paved = (0..19)
             .map(|i| atlas.get(&format!("road_paved_{i:02}.png")))
             .collect();
+        let oneway_roads = std::array::from_fn(|i| atlas.get(&format!("oneway_{i:02}.png")));
         let road_streetlights = [
             atlas.get("road_streetlight_0.png"),
             atlas.get("road_streetlight_1.png"),
@@ -708,6 +714,7 @@ impl WorldAssets {
             company_statue,
             road_flat,
             road_paved,
+            oneway_roads,
             road_streetlights,
             roadside_tree,
             track_fences,

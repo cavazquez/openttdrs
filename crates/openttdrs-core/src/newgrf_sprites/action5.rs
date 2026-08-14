@@ -463,6 +463,10 @@ mod slot_helper_tests {
     fn oneway_and_roadstop_and_bridge_slots() {
         assert_eq!(disallowed_road_directions(0x15), 1); // bits + ROAD_Y
         assert_eq!(oneway_action5_slot(0, true, 1), Some(0));
+        // Kale_TitleGame (118,29)/(119,29): ROAD_Y, southbound / northbound
+        // → `SPR_ONEWAY_BASE + 3/+4` = 6108/6109 en OpenTTD 15.3.
+        assert_eq!(oneway_action5_slot(0, false, 1), Some(3));
+        assert_eq!(oneway_action5_slot(0, false, 2), Some(4));
         assert_eq!(oneway_action5_slot(SLOPE_NE, false, 2), Some(6 + 3 + 1));
         assert_eq!(oneway_action5_slot(SLOPE_SE, true, 3), Some(12 + 2));
         assert_eq!(roadstop_action5_slot(false, 2), Some(2));

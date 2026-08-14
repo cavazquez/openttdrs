@@ -85,6 +85,11 @@ VERSION="${OPENGFX_VERSION:-8.0}"
 DEST="${ROOT}/assets/opengfx"
 DOWNLOADS_DIR="${ROOT}/.downloads/openttd"
 OPENGFX2_TAG="${OPENGFX2_TAG:-0.8.1}"
+# `openttd.grf` es el fallback que OpenTTD carga además de cualquier baseset.
+# Mantenerlo en la misma revisión que el oráculo evita que Action5 0x09
+# (flechas de calles de sentido único) dependa por accidente de OpenGFX.
+OPENTTD_EXTRA_REF="${OPENTTD_EXTRA_REF:-15.3}"
+OPENTTD_EXTRA_CACHE="${DOWNLOADS_DIR}/openttd-extra-${OPENTTD_EXTRA_REF}"
 CDN_8BPP="https://cdn.openttd.org/opengfx-releases/${VERSION}/opengfx-${VERSION}-all.zip"
 if [[ "${OPENGFX2_TAG}" == v0.1 ]]; then
   CDN_32BPP="https://github.com/OpenTTD/OpenGFX2/releases/download/${OPENGFX2_TAG}/opengfx2_32ez.tar"
@@ -117,6 +122,31 @@ require_py_mod PIL
 
 mkdir -p "${DEST}"
 mkdir -p "${DOWNLOADS_DIR}"
+
+# Obtiene las dos fuentes mínimas del GRF extra oficial. OpenTTD usa este GRF
+# paletizado incluso con OpenGFX2 32bpp, por lo que las flechas Action5 no
+# deben extraerse de un baseset ni de su side-cache de señales.
+ensure_openttd_oneway_source() {
+  local reference_dir="${ROOT}/reference/openttd-upstream/media/baseset/openttd"
+  if [[ -f "${reference_dir}/oneway.nfo" && -f "${reference_dir}/oneway.png" ]]; then
+    OPENTTD_ONEWAY_SOURCE_DIR="${reference_dir}"
+    echo "Fallback one-way: usando pin OpenTTD local (${OPENTTD_ONEWAY_SOURCE_DIR})"
+    return 0
+  fi
+
+  mkdir -p "${OPENTTD_EXTRA_CACHE}"
+  for file in oneway.nfo oneway.png; do
+    local cached="${OPENTTD_EXTRA_CACHE}/${file}"
+    if [[ -f "${cached}" ]]; then
+      continue
+    fi
+    local url="https://raw.githubusercontent.com/OpenTTD/OpenTTD/${OPENTTD_EXTRA_REF}/media/baseset/openttd/${file}"
+    echo "Descargando fallback OpenTTD ${file} (${OPENTTD_EXTRA_REF})..."
+    curl -fL "${url}" -o "${cached}.part"
+    mv "${cached}.part" "${cached}"
+  done
+  OPENTTD_ONEWAY_SOURCE_DIR="${OPENTTD_EXTRA_CACHE}"
+}
 
 echo "Limpiando salida gráfica en ${DEST}/ (tiles PNG y carpetas opengfx-*/opengfx2-*)…"
 rm -rf "${DEST}/tiles"
@@ -1443,6 +1473,12 @@ python3 "$(dirname "$0")/gen_copper_mine_smoke.py" || true
 python3 "$(dirname "$0")/gen_ufo_sprites.py" || true
 # Catenaria Action5 (wires + postes + entradas de túnel) desde ogfxe_extra.
 python3 "$(dirname "$0")/extract_elrail_catenary.py" || true
+# Flechas de calles de sentido único: Action5 0x09 del `openttd.grf` oficial.
+# Es un fallback propio de OpenTTD (paletizado también con base 32bpp), no un
+# bloque de OpenGFX ni un NewGRF declarado por la partida.
+ensure_openttd_oneway_source
+python3 "$(dirname "$0")/extract_oneway_road_sprites.py" \
+  --source-dir "${OPENTTD_ONEWAY_SOURCE_DIR}"
 # Paradas de carretera: capas de bahía y Action5 0x11 drive-through.
 python3 "$(dirname "$0")/gen_road_stop_gfx_data.py"
 # Depósitos viales: anclas NFO y PNG cambian entre OpenGFX 8bpp y OpenGFX2.

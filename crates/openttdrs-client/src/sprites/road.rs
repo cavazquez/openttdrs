@@ -43,6 +43,12 @@ pub const fn road_streetlight_sprite_id(lamp: usize) -> u32 {
 #[path = "road_depot_gfx_data_generated.rs"]
 mod road_depot_gfx_data_generated;
 
+#[path = "oneway_road_sprites_generated.rs"]
+mod oneway_road_sprites_generated;
+
+pub use oneway_road_sprites_generated::{
+    ONEWAY_ROAD_SPRITE_COUNT, ONEWAY_ROAD_SPRITE_META, oneway_road_sprite_id,
+};
 pub use road_depot_gfx_data_generated::{
     ROAD_DEPOT_BUILD_LAYERS, ROAD_DEPOT_GROUND_PATH, ROAD_DEPOT_GROUND_SPRITE_ID, RoadDepotLayerGfx,
 };

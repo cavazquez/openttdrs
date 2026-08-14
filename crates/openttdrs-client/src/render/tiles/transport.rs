@@ -19,17 +19,18 @@ use crate::render::{
     sprite_from_atlas_or_company_white_colour,
 };
 use crate::sprites::{
-    CompanyColour, RAIL_GROUND_SNOW_OR_DESERT, RAIL_TB_LEFT, RAIL_TB_LOWER, RAIL_TB_RIGHT,
-    RAIL_TB_UPPER, ROAD_FLAT_HALF_H, ROAD_STREETLIGHT_META, ROADSIDE_LAMPS, ROADSIDE_TREE_META,
-    ROADSIDE_TREES, SPR_ROADSIDE_TREE, catenary_pylon_world_z_delta, catenary_reference_sprite_id,
-    catenary_sprite_color, catenary_wire_world_z_delta,
-    collect_catenary_pylons_from_map_with_pcp_override, collect_catenary_wire_draws_from_map,
-    collect_rail_pbs_reservation_draws, collect_rail_sprites_for_surface,
-    collect_signal_sprite_draws, is_road_level_crossing, is_typed_rail_track_sprite,
-    level_crossing_ground_sprite_id_for_type, level_crossing_has_rail_reservation,
-    rail_ghost_overlay_offset, rail_pbs_reservation_offset, rail_tile_is_signals,
-    rail_trackbits_for_render, remap_rail_sprite_id, road_bits_for_render, road_flat_sprite_color,
-    road_flat_sprite_index, road_ground_sprite_id, road_streetlight_sprite_id, road_tile_roadside,
+    CompanyColour, ONEWAY_ROAD_SPRITE_META, RAIL_GROUND_SNOW_OR_DESERT, RAIL_TB_LEFT,
+    RAIL_TB_LOWER, RAIL_TB_RIGHT, RAIL_TB_UPPER, ROAD_FLAT_HALF_H, ROAD_STREETLIGHT_META,
+    ROADSIDE_LAMPS, ROADSIDE_TREE_META, ROADSIDE_TREES, SPR_ROADSIDE_TREE,
+    catenary_pylon_world_z_delta, catenary_reference_sprite_id, catenary_sprite_color,
+    catenary_wire_world_z_delta, collect_catenary_pylons_from_map_with_pcp_override,
+    collect_catenary_wire_draws_from_map, collect_rail_pbs_reservation_draws,
+    collect_rail_sprites_for_surface, collect_signal_sprite_draws, is_road_level_crossing,
+    is_typed_rail_track_sprite, level_crossing_ground_sprite_id_for_type,
+    level_crossing_has_rail_reservation, oneway_road_sprite_id, rail_ghost_overlay_offset,
+    rail_pbs_reservation_offset, rail_tile_is_signals, rail_trackbits_for_render,
+    remap_rail_sprite_id, road_bits_for_render, road_flat_sprite_color, road_flat_sprite_index,
+    road_ground_sprite_id, road_streetlight_sprite_id, road_tile_roadside,
     road_tile_snow_or_desert, roadside_is_paved, signal_safe_slope_position_for_side,
     signal_screen_anchor_for_side, signal_screen_position_for_side, signal_sprite_center_offset,
     signal_world_position_for_side, track_fence_draws_for_tile, track_fence_height_px,
@@ -172,6 +173,60 @@ fn record_road_ground_trace(role: &'static str, sprite_id: u32, foundation: u8) 
             None,
         );
     }
+}
+
+/// Traza de `DrawGroundSpriteAt(oneway, ..., 8, 8, GetPartialPixelZ(...))`.
+///
+/// Las flechas no son un nuevo roadtype: son el bloque Action5 0x09 que
+/// OpenTTD carga siempre desde `openttd.grf`. En una fundación el viewport C++
+/// las cuelga del mismo padre que el asfalto; el punto `(8, 8)` añade 64 px
+/// normalizados y cada unidad de Z resta `ZOOM_BASE` (=4) px de pantalla.
+fn record_road_oneway_trace(sprite_id: u32, tileh: u8, foundation: u8) {
+    let local_z = i32::from(partial_pixel_z(8.0, 8.0, tileh));
+    if let Some((x, y, z)) = road_foundation_child_offset(foundation) {
+        WorldDrawTrace::record_foundation_child_sprite(
+            "road-oneway",
+            sprite_id,
+            false,
+            (x, y + 64 - local_z * 4, z),
+        );
+    } else {
+        WorldDrawTrace::record_sprite_with_palette_and_world_geometry(
+            "road-oneway",
+            "ground",
+            sprite_id,
+            0,
+            false,
+            (8, 8),
+            local_z,
+            (0, 0, 0),
+            None,
+        );
+    }
+}
+
+/// Centro Bevy de la flecha Action5. Conserva el ancla NFO y el subpunto
+/// `(8, 8)` que usa `DrawRoadBits`, en vez de centrar el PNG 24×16 sobre toda
+/// la tesela (que la desplazaba visiblemente en pendientes).
+fn road_oneway_overlay_pos(
+    ctx: &TileRenderContext,
+    tileh: u8,
+    base_z: u8,
+    (w, h, xrel, yrel): (f32, f32, f32, f32),
+) -> Vec3 {
+    let local_z = f32::from(partial_pixel_z(8.0, 8.0, tileh));
+    let local = remap_tile_offset(8.0, 8.0, local_z) * 0.5;
+    overlay_pos(
+        ctx.iso_pos + local,
+        xrel,
+        yrel,
+        w,
+        h,
+        base_z,
+        0.025,
+        ctx.tx_i32(),
+        ctx.ty_i32(),
+    )
 }
 
 /// Altura de mundo del `DrawRoadDetail` respecto de la base cruda de la
@@ -462,31 +517,56 @@ pub(crate) fn spawn_road_tile(
         ));
     }
 
-    // Overlay one-way (`SPR_ONEWAY_BASE` / Action5 `0x09`).
+    // Overlay one-way (`SPR_ONEWAY_BASE` / Action5 `0x09`). El bloque base
+    // vive en `openttd.grf`; no depende de que la partida tenga NewGRFs.
     if !is_level_crossing && let Some(tile) = ctx.tile {
         let drd = openttdrs_core::disallowed_road_directions(tile.m5);
         let road_x = (rb & 0x0F) == 0x0A;
         if let Some(slot) = openttdrs_core::oneway_action5_slot(tileh, road_x, drd)
-            && let (Some(cache), Some(images)) = (action5_sprites.as_mut(), images.as_mut())
-            && let Some(sprite) = cache.sprite_colored(
-                openttdrs_core::ACTION5_TYPE_ONEWAY,
-                slot,
-                oneway_newgrf,
-                Color::WHITE,
-                images,
-            )
+            && let Some(sprite_id) = oneway_road_sprite_id(slot)
         {
+            record_road_oneway_trace(sprite_id, tileh, road_foundation);
+            // Un Action5 de un NewGRF puede reemplazar el fallback oficial
+            // con otro recorte y otras anclas. La imagen y su metadata deben
+            // viajar juntas: usar los 24x16/-12,-8 del fallback para un
+            // reemplazo lo desplazaría aunque el ID de la traza sea correcto.
+            let (sprite, meta) = oneway_newgrf
+                .get(slot)
+                .and_then(Option::as_ref)
+                .and_then(|decoded| {
+                    let cache = action5_sprites.as_mut()?;
+                    let images = images.as_mut()?;
+                    let slot = u16::try_from(slot).ok()?;
+                    Some((
+                        Sprite {
+                            image: cache.handle_for(
+                                openttdrs_core::ACTION5_TYPE_ONEWAY,
+                                slot,
+                                decoded,
+                                images,
+                            ),
+                            color: Color::WHITE,
+                            ..default()
+                        },
+                        (
+                            f32::from(decoded.width),
+                            f32::from(decoded.height),
+                            f32::from(decoded.x_offs),
+                            f32::from(decoded.y_offs),
+                        ),
+                    ))
+                })
+                .unwrap_or_else(|| {
+                    (
+                        assets.oneway_roads[slot].sprite(),
+                        ONEWAY_ROAD_SPRITE_META[slot],
+                    )
+                });
             commands.spawn((
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
                 sprite,
-                Transform::from_translation(tile_pos_half(
-                    ctx.tx_i32(),
-                    ctx.ty_i32(),
-                    base_z,
-                    0.025,
-                    road_half_h,
-                )),
+                Transform::from_translation(road_oneway_overlay_pos(ctx, tileh, base_z, meta)),
             ));
         }
     }

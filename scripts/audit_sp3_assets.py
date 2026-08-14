@@ -206,6 +206,8 @@ def collect_required_paths() -> list[tuple[str, str]]:
         add(f"assets/opengfx/tiles/road_flat_{i:02}.png", "road")
         add(f"assets/opengfx/tiles/road_paved_{i:02}.png", "road")
         add(f"assets/opengfx/tiles/tram_flat_{i:02}.png", "tram")
+    for i in range(18):  # `SPR_ONEWAY_BASE` Action5 0x09 de openttd.grf.
+        add(f"assets/opengfx/tiles/oneway_{i:02}.png", "road")
     for i in range(2):
         add(f"assets/opengfx/tiles/road_streetlight_{i}.png", "road")
     for rid in sorted(rail_sprite_ids_for_preload()):

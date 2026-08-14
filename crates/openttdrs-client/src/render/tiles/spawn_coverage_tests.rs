@@ -1705,6 +1705,91 @@ fn paved_roadside_uses_paved_set_and_streetlights_spawn_lamps() {
     assert_eq!(total - 1, 3, "suelo pavimentado + 2 faroles");
 }
 
+/// `SPR_ONEWAY_BASE` (Action5 0x09) pertenece al `openttd.grf` oficial, no
+/// al stack de NewGRFs de una partida. Kale (118,29)/(119,29) usa exactamente
+/// estas dos variantes: ROAD_Y con una dirección prohibida produce slots 3 y
+/// 4 (sprites 6108/6109). Si se vuelve a condicionar al stack NewGRF, las
+/// flechas desaparecen de saves vanilla y la traza deja huecos.
+#[test]
+fn vanilla_oneway_roads_draw_builtin_action5_overlays_without_newgrf() {
+    let assets = boot_assets_app();
+    let expected_southbound = assets.oneway_roads[3].clone();
+    let expected_northbound = assets.oneway_roads[4].clone();
+    let mut map = fresh_map8();
+    let left = TileCoord::new(2, 2);
+    let right = TileCoord::new(3, 2);
+
+    map.set_tile(
+        left,
+        Tile {
+            kind: TileKind::Road,
+            mapt: 0x20,
+            m5: 0x15, // ROAD_Y (0x5) + DRD=1.
+            ..tile_template()
+        },
+    )
+    .expect("oneway southbound");
+    map.set_tile(
+        right,
+        Tile {
+            kind: TileKind::Road,
+            mapt: 0x20,
+            m5: 0x25, // ROAD_Y (0x5) + DRD=2.
+            ..tile_template()
+        },
+    )
+    .expect("oneway northbound");
+
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world
+        .run_system_once(
+            |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                let (mw, mh) = m.0.dimensions();
+                for (x, y) in [(2, 2), (3, 2)] {
+                    spawn_road_tile(
+                        &mut commands,
+                        &m.0,
+                        mw,
+                        mh,
+                        &a.0,
+                        &TileRenderContext::new(&m.0, &g.0, x, y),
+                        4.0,
+                        TEST_CLIMATE,
+                        true,
+                        true,
+                        &[],
+                        None,
+                        None,
+                        &[],
+                        &[],
+                        &[],
+                        None,
+                    );
+                }
+            },
+        )
+        .expect("oneway road tiles");
+
+    let sprites: Vec<_> = world.query::<&Sprite>().iter(&world).collect();
+    assert_eq!(sprites.len(), 4, "cada carretera aporta suelo + flecha");
+    assert!(
+        sprites
+            .iter()
+            .any(|sprite| expected_southbound.matches(sprite)),
+        "DRD=1 debe usar el slot Action5 3 / sprite 6108"
+    );
+    assert!(
+        sprites
+            .iter()
+            .any(|sprite| expected_northbound.matches(sprite)),
+        "DRD=2 debe usar el slot Action5 4 / sprite 6109"
+    );
+}
+
 #[test]
 fn level_crossing_uses_only_the_paved_crossing_ground() {
     let mut assets = boot_assets_app();

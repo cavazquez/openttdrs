@@ -64,10 +64,10 @@ cuando el tile ya se decodificó mal.
 | Viewport de mapas grandes | Completado de chunks parciales. | Corrección aislada publicada en `main` (`5b0023b`). |
 | Terreno, pendientes y árboles | Revisión de altura isométrica y sprites de ladera para eliminar artefactos que parecían vías o dejaban colores extraños. | En checkpoint; requiere captura focalizada. |
 | Puentes rail y conexiones | Fundaciones, pilares, rampas y altura efectiva; la traza conserva sprites y geometría de las transiciones. | En checkpoint; sin declarar paridad total. |
-| Catenaria | Wire/pylon y altura efectiva de puente/túnel para que el tendido no flote ni se corte. Las estaciones ferroviarias emiten ahora sus postes/cables antes de las capas `TILE_SEQ`, igual que `DrawTile_Station`. | Kale completo: 556 cables y 148 postes de estación se comparan en ID, geometría y orden. |
+| Catenaria | La ruta común cubre vía normal, cruces a nivel eléctricos, postes de la boca de túnel, cable especial de portal y cable de entrada de depósito. Conserva el orden PPP → PCP antes de las capas `TILE_SEQ` y la altura posterior a fundación. | Kale completo 8bpp: la comparación estricta no deja comandos, geometrías, paletas ni órdenes fuera de OpenTTD. |
 | Señales ferroviarias | El importador lee `vehicle.road_side` y `construction.train_signal_side` de `PATS`/`OPTS`; el renderer replica el orden de `DrawSignals` y la altura de `GetSafeSlopeZ` sobre la fundación ferroviaria efectiva. | Kale completo: las 729 señales coinciden en ID, ancla de mundo, geometría y orden relativo. |
 | Monorriel y maglev | Selección diagonal tipada por railtype para no usar rail convencional. | En checkpoint; validar por región. |
-| Depósitos y estaciones especiales | Geometría de depósito naval, reserva visual de depósito rail y distinción de tiles especiales para no disfrazar un fallback como parada de buses. | En checkpoint; los fallbacks deben ser explícitos. |
+| Depósitos y estaciones especiales | Geometría de depósito naval, reserva visual de depósito rail, cable eléctrico de entrada y boya con su suelo de agua explícito; los fallbacks siguen siendo distinguibles. | La traza de Kale cubre el suelo 4061 + boya 9282 y los cables de depósito en su orden y altura de OpenTTD. |
 | Paleta de compañía 8bpp y estación rail vanilla | Se corrigió el desplazamiento de un índice DOS en las rampas y se dejó de inferir recolor por RGB ajeno a la rampa autora. La región `120,111..128,113` de Kale compara 118/118 comandos de estación (sprite, paleta, geometría y orden). | Validada por `world-draw`; la composición raster amplia sigue teniendo familias ajenas a esta corrección. |
 | Paradas viales vanilla (bus/camión) | `DrawTile_Station` nivela las paradas inclinadas, dibuja el suelo de bahía o la base pavimentada pasante y luego sus `TILE_SEQ_LINE`. El renderer registra los IDs globales de cada capa, sus cajas, paleta de compañía y el child de la fundación; deja de añadir césped o una carretera heurística bajo una bahía. | Kale completo 8bpp: las 457 paradas comparan exactamente contra OpenTTD en ID, paleta, geometría, fundación y orden. La regresión sintética verifica metadata 8bpp/32bpp y evita confundir los IDs Action5 locales 2009–2018 con `SPR_ROADSTOP_BASE` 5978–5985. |
 | Paletas de casas vanilla | `HOUSE_DRAW_DATA` conserva ahora `p1`/`p2` de cada `M(...)` de `town_land.h`; la caché aplica paleta de compañía (775–790), estructura (795–801) e iglesia (1438–1439) a las capas de suelo y edificio. La traza registra la paleta incluso cuando la geometría no es explícita. | En Kale 8bpp, 740 draws de casa no nulos coinciden exactamente con el comando C++ del mismo sprite/tesela/paleta; las pruebas exigen que todos los pares generados tengan asset recoloreado. La captura global sigue marcada como diferente por familias ajenas. |
@@ -91,18 +91,17 @@ reduce mucho la probabilidad de que los artefactos tratados sean una
 deserialización general del mapa, pero no sustituye volver a correr el contrato
 cuando cambie el importador.
 
-La referencia `world-draw` produjo 157.154 comandos C++ y el candidato 65.534
-selecciones instrumentadas. Para las familias cubiertas —árboles, vía,
-puentes, catenaria, túneles, depósito naval e hitos vanilla— las selecciones
-candidatas se encontraron en OpenTTD. En la región de control `171,109..171,110`,
-las siete selecciones Rust estuvieron contenidas entre diez comandos de
-referencia; las tres restantes son familias aún no instrumentadas en Rust.
+La revalidación completa de `Kale_TitleGame.sav` con OpenGFX 8bpp produjo
+157.142 comandos visuales tanto en OpenTTD como en el candidato. El comando
+`compare_world_draw.py --geometry --foundations --order --strict-reference`
+termina correctamente: todas las selecciones, geometrías explícitas, paletas,
+fundaciones y órdenes relativos del contrato instrumentado están contenidos
+en el `draw_tile_proc` de OpenTTD.
 
-Esto **no** es igualdad total de sprites ni de píxeles. El comparador usa
-*selección contenida*: falla si Rust elige un sprite inexistente, cae en
-fallback, cambia tesela/paleta o geometría instrumentada. Los comandos C++ sin
-familia Rust equivalente se informan, pero todavía no hacen fallar. Sólo cuando
-todos los spawners estén cubiertos podrá usarse `--strict-reference` como gate.
+Esto **no** es igualdad raster total ni una garantía para otros basesets o
+NewGRF. El contrato verifica selección, paleta, geometría, fundación y orden
+antes del atlas; la aceptación visual aún requiere capturas focalizadas y la
+misma corrida con OpenGFX2 32bpp.
 
 ### Regresión `MP_OBJECT` descubierta al revalidar
 
@@ -218,6 +217,22 @@ el ordinal 1, entre la vía `1011` y las capas `1077/1069/1080`, exactamente
 como OpenTTD. Kale completo recupera 556 cables y 148 postes de estación sin
 una selección, geometría u orden candidatos fuera del oráculo; el test unitario
 mantiene ese ejemplo como regresión.
+
+### Revalidación: catenaria especial, cruces y boyas
+
+El tramo restante no reutiliza exactamente el mismo camino que una vía normal:
+`DrawRailCatenary` usa una tabla propia para los depósitos, mientras que una
+boca de túnel sólo puede reclamar el PCP de su borde exterior y combina su
+cable con el techo. Reusar sin filtro el colector genérico producía postes
+interiores adicionales en Kale, por ejemplo en `(170,81)` y `(180,127)`.
+
+La implementación conserva el cable de depósito antes de las capas BUILD y a
+la altura de `GetTileMaxPixelZ`; para un túnel filtra el PPP al lado opuesto a
+la dirección de `m5`. Los cruces a nivel precargan el bloque completo
+`1370..=1405`, para no omitir el suelo según railtype y superficie. Finalmente,
+una boya emite primero el agua `4061` y luego el `TILE_SEQ_LINE` de `9282`.
+Las regresiones unitarias cubren los cuatro sentidos de la boca/deposito y el
+contrato de región `null` de una auditoría completa.
 
 ### Revalidación: señales ferroviarias de Kale
 
@@ -372,16 +387,11 @@ La configuración de compilación no debe cambiar la partida ni su traza.
 
 ## Límites y próximo hito
 
-La cobertura `world-draw` es intencionalmente parcial. El siguiente hito es
-instrumentar los spawners genéricos de suelo, casas, estaciones, carreteras y
-otros objetos hasta poder exigir `--strict-reference` por región.
-
-Antes de extraer cambios del checkpoint deben resolverse también los fallos de
-`cargo test --workspace --no-fail-fast`:
-
-1. `newgrf_actions::tests::truncated_badge_list_emits_diagnostics_and_inspect_warning`.
-2. `pbs_dual_curve_oracle::rust_matches_openttd_oracle_for_forty_ticks`.
-3. `sav_load_stationlist::stationlist_depot_row_connects_to_rail`.
+La cobertura `world-draw` ya permite usar `--strict-reference` como gate para
+la exportación completa actual de Kale/OpenGFX 8bpp. El siguiente hito es una
+comparación de capturas focalizadas y repetir la auditoría con OpenGFX2 32bpp,
+NewGRF reales y otras partidas, donde una misma selección lógica puede revelar
+diferencias de atlas, anclaje o composición raster.
 
 El estado exacto y la validación de la pausa se mantienen en el
 [checkpoint](../checkpoints/2026-08-09-parity-oracle-pause.md). Los esquemas

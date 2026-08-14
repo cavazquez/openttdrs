@@ -6,6 +6,7 @@ use openttdrs_core::{
 };
 
 use super::bridge_draw::{bridge_span_at, spawn_bridge_deck};
+use super::transport::spawn_rail_catenary_for_surface;
 use super::{
     catenary_under_low_bridge,
     helpers::{FLAT_WATER_LAYER_FRAC, SHORE_LAYER_FRAC, spawn_forced_leveled_foundation},
@@ -27,11 +28,12 @@ use crate::sprites::{
     CompanyColour, DockTileLayer, ROAD_DEPOT_GROUND_SPRITE_ID, RoadStopLayerGfx, StationTileClass,
     TransparencyOption, airport_station_base_for_gfx, airport_station_ground_layers_for_gfx,
     airport_station_layers_for_gfx, airport_station_overlay_rel_for_sprite,
-    airport_station_sprite_for_id, catenary_hidden, catenary_pylon_world_z_delta,
-    catenary_reference_sprite_id, catenary_sprite_color, catenary_tunnel_wire_sprite,
-    catenary_wire_world_z_delta, collect_catenary_pylons_from_map_with_pcp_override,
-    collect_catenary_wire_draws_from_map, dock_tile_gfx, dock_tile_is_water_part, dock_tile_layer,
-    is_hidden, log_unknown_station_type_once, rail_depot_build_layers, rail_depot_seq_gfx,
+    airport_station_sprite_for_id, catenary_depot_wire_draw, catenary_hidden,
+    catenary_pylon_world_z_delta, catenary_reference_sprite_id, catenary_sprite_color,
+    catenary_tunnel_wire_sprite, catenary_wire_world_z_delta,
+    collect_catenary_pylons_from_map_with_pcp_override, collect_catenary_wire_draws_from_map,
+    dock_tile_gfx, dock_tile_is_water_part, dock_tile_layer, is_hidden,
+    log_unknown_station_type_once, rail_depot_build_layers, rail_depot_seq_gfx,
     rail_depot_visual_type_index, rail_ghost_overlay_offset, rail_pbs_reservation_offset,
     rail_station_draw_layers, rail_station_ground_track_sprite_for_type, rail_station_layer_bounds,
     rail_station_layer_for_type, rail_station_overlay_rel, rail_station_sprite_meta,
@@ -93,6 +95,18 @@ const SPR_FLAT_BARE_LAND: u32 = 3924;
 const SPR_FLAT_WATER_TILE: u32 = 4061;
 /// `SPR_SHORE_BASE`, resuelto por Action5 del baseset OpenGFX.
 const SPR_SHORE_BASE: u32 = 5936;
+/// `SPR_IMG_BUOY` resuelto por el OpenGFX por defecto de la partida.
+///
+/// El atlas usa el nombre semántico `buoy.png`, pero el contrato world-draw
+/// compara el ID global que entrega OpenTTD después de resolver el baseset.
+const SPR_BUOY: u32 = 9282;
+
+/// Caja `TILE_SEQ_LINE(4, -1, 0, 0, 0, 0, SPR_IMG_BUOY)` de
+/// `station_land.h`. Las boyas no usan una caja de volumen: deben poder
+/// quedar visualmente por debajo de los barcos.
+const fn buoy_trace_bounds() -> TraceSpriteBounds {
+    TraceSpriteBounds::new(4, -1, 0, 0, 0, 0)
+}
 
 fn dock_clear_land_sprite_id(tileh: u8) -> u32 {
     SPR_FLAT_BARE_LAND + 3 * 19 + u32::from(slope_sprite_offset(tileh))
@@ -1253,6 +1267,28 @@ pub(crate) fn spawn_station_tile(
             spawn_dock_layer(commands, assets, company, owner_colour, ctx, m5);
         }
         StationTileClass::Buoy => {
+            // `DrawTile_Station` siempre llama primero a
+            // `DrawWaterClassGround` para una boya. La rama anterior sólo
+            // emitía el PNG de la boya; por eso sobre tierra/agua del mapa
+            // veía el fondo equivocado y la auditoría Kale perdía 4061.
+            WorldDrawTrace::record_sprite(
+                "station-buoy-water",
+                "ground",
+                SPR_FLAT_WATER_TILE,
+                false,
+            );
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                WaterTile::ANIMATED,
+                assets.water.sprite(),
+                Transform::from_translation(tile_pos(
+                    ctx.tx_i32(),
+                    ctx.ty_i32(),
+                    base_z,
+                    FLAT_WATER_LAYER_FRAC,
+                )),
+            ));
             if buildings_hidden() {
                 return;
             }
@@ -1261,6 +1297,15 @@ pub(crate) fn spawn_station_tile(
             } else {
                 slope_half_h(tileh)
             };
+            WorldDrawTrace::record_sprite_with_geometry(
+                "station-buoy",
+                "sortable",
+                SPR_BUOY,
+                false,
+                (0, 0, 0),
+                0,
+                Some(buoy_trace_bounds()),
+            );
             commands.spawn((
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
@@ -1575,7 +1620,7 @@ pub(crate) fn spawn_transport_object_tile(
     dims: (u32, u32),
     stations: &[Station],
     catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
-    catenary_sprites: Option<&mut crate::render::NewGrfCatenarySpriteCache>,
+    mut catenary_sprites: Option<&mut crate::render::NewGrfCatenarySpriteCache>,
     bridge_decks_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     foundation_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     mut action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
@@ -1695,6 +1740,31 @@ pub(crate) fn spawn_transport_object_tile(
                     ));
                 }
             }
+            // `DrawTile_TunnelBridge` llama a `DrawRailCatenary` antes del
+            // cable especial que se combina con el techo. Esa pasada común
+            // sólo aporta los postes de la boca; pedir `draw_wires=false`
+            // evita dibujar encima el cable recto que OpenTTD reemplaza por
+            // `_rail_catenary_sprite_data_tunnel`.
+            if rail {
+                let render_tb =
+                    crate::sprites::rail_trackbits_for_render(map, ctx.coord, dims.0, dims.1);
+                spawn_rail_catenary_for_surface(
+                    commands,
+                    map,
+                    dims,
+                    assets,
+                    ctx,
+                    rail_type,
+                    render_tb,
+                    tileh,
+                    base_z,
+                    slope_half_ground,
+                    false,
+                    catenary_newgrf,
+                    &mut catenary_sprites,
+                    &mut images,
+                );
+            }
             let draw_tunnel_catenary = rail && !catenary_hidden() && rail_type.has_catenary();
             // El oráculo registra el cable antes del techo: es el padre del
             // `SpriteCombine` que contiene ambos. La capa Bevy conserva su
@@ -1706,8 +1776,8 @@ pub(crate) fn spawn_transport_object_tile(
                     sid,
                     catenary_sprite_color(),
                     catenary_newgrf,
-                    catenary_sprites,
-                    images,
+                    catenary_sprites.as_deref_mut(),
+                    images.as_deref_mut(),
                 );
                 let (offset, (ox, oy, oz, ex, ey, ez)) = tunnel_catenary_trace_geometry(dir);
                 WorldDrawTrace::record_sprite_with_geometry(
@@ -1825,6 +1895,9 @@ pub(crate) fn spawn_transport_object_tile(
                 TILE_HALF_H,
                 tileh,
                 show_pbs_reservations,
+                catenary_newgrf,
+                &mut catenary_sprites,
+                &mut images,
             );
         }
         TileKind::ShipDepot => {
@@ -2156,6 +2229,72 @@ fn record_rail_depot_reservation_trace(tileh: u8, sprite_id: u32, fallback: bool
     }
 }
 
+/// Cable de entrada del depósito eléctrico (`DrawRailCatenary` especial).
+///
+/// Esta rama va después del suelo/reserva pero antes de las capas BUILD del
+/// depósito. Emitirla después de la fachada hacía que el cable apareciera
+/// visualmente por delante y rompía el orden del oráculo (Kale 195,17).
+#[allow(clippy::too_many_arguments)] // Comparte el contexto de recursos del draw proc del depósito.
+fn spawn_rail_depot_catenary(
+    commands: &mut Commands,
+    assets: &WorldAssets,
+    ctx: &TileRenderContext,
+    base_z: u8,
+    half_h: f32,
+    catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    catenary_sprites: &mut Option<&mut crate::render::NewGrfCatenarySpriteCache>,
+    images: &mut Option<&mut Assets<Image>>,
+) {
+    let Some(tile) = ctx.tile else {
+        return;
+    };
+    if !rail_type_from_tile(tile).has_catenary() || catenary_hidden() {
+        return;
+    }
+
+    let draw = catenary_depot_wire_draw(tile.m5 & 0x03);
+    let sprite = catenary_sprite_colored(
+        assets,
+        draw.sprite_id,
+        catenary_sprite_color(),
+        catenary_newgrf,
+        catenary_sprites.as_deref_mut(),
+        images.as_deref_mut(),
+    );
+    let (ox, oy, oz) = draw.bounds_origin;
+    let (ex, ey, ez) = draw.bounds_extent;
+    // `DrawRailCatenary` usa `GetTileMaxPixelZ()`: cuando el depósito recibe
+    // una fundación nivelada el cable queda sobre la superficie elevada, no
+    // sobre el mínimo crudo de la tesela. La transformación ya usa `base_z`;
+    // conservar el mismo delta en la traza evita informar un falso desvío.
+    WorldDrawTrace::record_sprite_with_palette_and_world_geometry(
+        "rail-depot-catenary",
+        "sortable",
+        catenary_reference_sprite_id(draw.sprite_id),
+        0,
+        sprite.is_none(),
+        (0, 0),
+        (i32::from(base_z) - i32::from(ctx.info.base_z)) * 8,
+        (0, 0, 0),
+        Some(TraceSpriteBounds::new(ox, oy, oz, ex, ey, ez)),
+    );
+    let Some(sprite) = sprite else {
+        return;
+    };
+    commands.spawn((
+        MapVisualLayer,
+        ctx.map_tile_chunk(),
+        sprite,
+        Transform::from_translation(tile_pos_half(
+            ctx.tx_i32(),
+            ctx.ty_i32(),
+            base_z,
+            0.035,
+            half_h,
+        )),
+    ));
+}
+
 #[allow(clippy::too_many_arguments)] // Parámetros del spawner comparten el contexto del tile.
 fn spawn_rail_depot_tile(
     commands: &mut Commands,
@@ -2167,6 +2306,9 @@ fn spawn_rail_depot_tile(
     half_h: f32,
     tileh: u8,
     show_pbs_reservations: bool,
+    catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    catenary_sprites: &mut Option<&mut crate::render::NewGrfCatenarySpriteCache>,
+    images: &mut Option<&mut Assets<Image>>,
 ) {
     let dir = ctx.tile.map_or(0, |t| t.m5 & 0x03).min(3) as usize;
     let rail_type = ctx
@@ -2232,6 +2374,16 @@ fn spawn_rail_depot_tile(
             ));
         }
     }
+    spawn_rail_depot_catenary(
+        commands,
+        assets,
+        ctx,
+        base_z,
+        half_h,
+        catenary_newgrf,
+        catenary_sprites,
+        images,
+    );
     let depot_variant = rail_depot_visual_type_index(rail_type);
     let depot_builds = &assets.rail_depot_builds[depot_variant][dir];
     // `DrawRailTileSeq`: cada fachada es un sortable con las bounds del
@@ -2309,7 +2461,7 @@ fn spawn_rail_depot_tile(
 #[cfg(test)]
 mod tests {
     use super::{
-        airport_station_ground_layer_trace_offset, dock_clear_land_sprite_id,
+        airport_station_ground_layer_trace_offset, buoy_trace_bounds, dock_clear_land_sprite_id,
         dock_water_neighbour_is_sea, rail_depot_foundation_child_offset,
         rail_depot_reservation_track_visible, road_depot_foundation_child_offset,
         road_stop_foundation_child_offset, station_catenary_wire_trace_geometry,
@@ -2354,6 +2506,19 @@ mod tests {
         assert_eq!(dock_clear_land_sprite_id(0), 3981);
         assert_eq!(dock_clear_land_sprite_id(12), 3993);
         assert_eq!(dock_clear_land_sprite_id(29), 3996); // steep W → offset 15.
+    }
+
+    #[test]
+    fn buoy_trace_matches_the_upstream_tile_sequence() {
+        // Kale (194,149): StationType::Buoy. OpenTTD emite primero 4061 y
+        // luego la línea de `station_land.h` con esta caja sin volumen.
+        let bounds = buoy_trace_bounds();
+        assert_eq!(
+            (
+                bounds.ox, bounds.oy, bounds.oz, bounds.ex, bounds.ey, bounds.ez
+            ),
+            (4, -1, 0, 0, 0, 0)
+        );
     }
 
     #[test]

@@ -56,6 +56,18 @@ impl TraceRegion {
     }
 }
 
+/// Valor del contrato `world-draw` para la región exportada.
+///
+/// OpenTTD distingue una auditoría completa (`null`) de una región que fue
+/// solicitada explícitamente, incluso si ésta cubre accidentalmente todo el
+/// mapa. El candidato mantiene el rectángulo completo internamente para
+/// recorrer las teselas, pero no debe serializarlo como si fuera un recorte.
+fn metadata_region(region: Option<TraceRegion>) -> serde_json::Value {
+    region
+        .map(TraceRegion::json)
+        .unwrap_or(serde_json::Value::Null)
+}
+
 #[derive(Debug)]
 struct TraceDraw {
     role: &'static str,
@@ -575,8 +587,8 @@ impl WorldDrawTrace {
                 "height": state.height,
                 "source": state.source,
                 "save_sha256": state.save_sha256,
-                "region": state.region.json(),
-                "requested_region": state.requested_region.map(TraceRegion::json),
+                "region": metadata_region(state.requested_region),
+                "requested_region": metadata_region(state.requested_region),
                 "clipping": "trace-region",
                 "coverage": [
                     "tile_context",
@@ -770,13 +782,29 @@ fn openttd_tile_type(kind: TileKind) -> u8 {
 #[cfg(test)]
 #[allow(clippy::expect_used)]
 mod tests {
-    use super::{TraceRegion, parse_region};
+    use super::{TraceRegion, metadata_region, parse_region};
+    use serde_json::json;
 
     #[test]
     fn missing_region_means_the_entire_map() {
         assert_eq!(
             TraceRegion::full(256, 128).as_bounds(),
             crate::render::TileViewportBounds::full(256, 128)
+        );
+        // Es la representación contractual que emite el oráculo C++.
+        assert_eq!(metadata_region(None), json!(null));
+    }
+
+    #[test]
+    fn requested_region_is_serialized_as_an_inclusive_rect() {
+        assert_eq!(
+            metadata_region(Some(TraceRegion {
+                tx0: 4,
+                ty0: 5,
+                tx1: 9,
+                ty1: 11,
+            })),
+            json!({"min_x": 4, "min_y": 5, "max_x": 8, "max_y": 10})
         );
     }
 

@@ -174,6 +174,8 @@ pub(crate) fn spawn_map_tiles_in_bounds(
                     &sim.state.runtime.oneway_newgrf_sprites,
                     &sim.state.runtime.foundation_newgrf_sprites,
                     Some(action5_sprites),
+                    &sim.state.runtime.catenary_newgrf_sprites,
+                    Some(catenary_sprites),
                 );
             }
             TileKind::Rail => {

@@ -669,6 +669,42 @@ pub fn catenary_tunnel_wire_sprite(dir: u8) -> u32 {
     CATENARY_ENTRANCE_SPRITE_BASE + (wso - WSO_ENTRANCE_SW)
 }
 
+/// Borde PCP visible de una boca de túnel ferroviario.
+///
+/// `GetRailTrackBitsUniversal()` deja que la boca participe sólo por el
+/// extremo exterior: el borde que apunta hacia el interior del túnel nunca
+/// puede reclamar un PPP. El `DiagDirection` persistido en `m5` apunta hacia
+/// el túnel, por lo que el extremo visible es su opuesto.
+#[must_use]
+pub const fn catenary_tunnel_exterior_pcp(dir: u8) -> u8 {
+    (dir & 3) ^ 2
+}
+
+/// Cable especial de una salida de depósito ferroviario eléctrico.
+///
+/// `DrawRailCatenary` no entra por el algoritmo PCP/PPP para depósitos:
+/// toma directamente `_rail_catenary_sprite_data_depot[dir]`. Conservar sus
+/// bounds junto al sprite evita tratar la boca como una vía recta y colocar
+/// el cable en el lado opuesto del edificio.
+#[must_use]
+pub fn catenary_depot_wire_draw(dir: u8) -> CatenaryWireDraw {
+    let (wso, bounds_origin, bounds_extent) = match dir & 3 {
+        // NE: WSO_ENTRANCE_NE, cable X.
+        DIAGDIR_NE => (WSO_ENTRANCE_NE, (0, 7, 10), (15, 1, 1)),
+        // SE: WSO_ENTRANCE_SE, cable Y.
+        DIAGDIR_SE => (WSO_ENTRANCE_SE, (7, 0, 10), (1, 15, 1)),
+        // SW: WSO_ENTRANCE_SW, cable X.
+        DIAGDIR_SW => (WSO_ENTRANCE_SW, (0, 7, 10), (15, 1, 1)),
+        // NW: WSO_ENTRANCE_NW, cable Y.
+        _ => (WSO_ENTRANCE_NW, (7, 0, 10), (1, 15, 1)),
+    };
+    CatenaryWireDraw {
+        sprite_id: CATENARY_ENTRANCE_SPRITE_BASE + (wso - WSO_ENTRANCE_SW),
+        bounds_origin,
+        bounds_extent,
+    }
+}
+
 /// Catenaria en vano de puente (`DrawRailCatenaryOnBridge` simplificado).
 ///
 /// `axis_x`: eje X del puente; `num`: índice 1-based desde el extremo norte;
@@ -2010,12 +2046,13 @@ pub fn rail_sprite_ids_for_preload() -> Vec<u32> {
             for id in catenary_pylon_sprite_ids() {
                 set.insert(id);
             }
-            // Cruces tipados (eje + barrado).
-            for base in [1382u32, 1394] {
-                for d in 0..4 {
-                    set.insert(base + d);
-                }
-            }
+            // Cruces a nivel: cada railtype tiene cuatro orientaciones
+            // (eje + barrera) y tres superficies (normal, pavimento,
+            // nieve/desierto). El selector de `DrawTile_Road` puede llegar
+            // a todo el bloque 1370..=1405. Antes sólo se precargaban las
+            // cuatro bases mono/maglev y el renderer omitía el ground aunque
+            // hubiese elegido correctamente el sprite (Kale 108,36).
+            set.extend(1370u32..=1405);
             for id in signal_sprite_ids_for_preload() {
                 if !SIGNAL_SPRITE_OPENGFX_GAPS.contains(&id) {
                     set.insert(id);
@@ -3087,6 +3124,28 @@ mod tests {
     }
 
     #[test]
+    fn catenary_tunnel_pylons_only_use_the_exterior_pcp() {
+        assert_eq!(catenary_tunnel_exterior_pcp(DIAGDIR_NE), DIAGDIR_SW);
+        assert_eq!(catenary_tunnel_exterior_pcp(DIAGDIR_SE), DIAGDIR_NW);
+        assert_eq!(catenary_tunnel_exterior_pcp(DIAGDIR_SW), DIAGDIR_NE);
+        assert_eq!(catenary_tunnel_exterior_pcp(DIAGDIR_NW), DIAGDIR_SE);
+    }
+
+    #[test]
+    fn catenary_depot_wire_keeps_upstream_directional_bounds() {
+        // `_rail_catenary_sprite_data_depot`, Kale (195,17) = depósito SE.
+        let se = catenary_depot_wire_draw(DIAGDIR_SE);
+        assert_eq!(catenary_reference_sprite_id(se.sprite_id), 5659);
+        assert_eq!(se.bounds_origin, (7, 0, 10));
+        assert_eq!(se.bounds_extent, (1, 15, 1));
+
+        let ne = catenary_depot_wire_draw(DIAGDIR_NE);
+        assert_eq!(catenary_reference_sprite_id(ne.sprite_id), 5658);
+        assert_eq!(ne.bounds_origin, (0, 7, 10));
+        assert_eq!(ne.bounds_extent, (15, 1, 1));
+    }
+
+    #[test]
     fn collect_catenary_bridge_draws_odd_span_uses_short_and_end_pylon() {
         let mut out = Vec::new();
         collect_catenary_bridge_draws(true, 3, 3, 0, &mut out);
@@ -3510,5 +3569,14 @@ mod tests {
             );
         }
         assert!(ids.contains(&1279));
+    }
+
+    #[test]
+    fn level_crossing_preload_covers_all_railtype_and_ground_variants() {
+        let ids: std::collections::BTreeSet<_> =
+            rail_sprite_ids_for_preload().into_iter().collect();
+        for id in 1370u32..=1405 {
+            assert!(ids.contains(&id), "falta el sprite de cruce {id}");
+        }
     }
 }

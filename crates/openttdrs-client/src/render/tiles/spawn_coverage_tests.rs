@@ -521,6 +521,8 @@ fn spawn_road_rail_station_and_transport_cover_main_paths() {
                     &[],
                     &[],
                     None,
+                    &[],
+                    None,
                 );
                 spawn_road_tile(
                     &mut commands,
@@ -538,6 +540,8 @@ fn spawn_road_rail_station_and_transport_cover_main_paths() {
                     None,
                     &[],
                     &[],
+                    &[],
+                    None,
                     &[],
                     None,
                 );
@@ -1163,6 +1167,8 @@ fn spawn_sloped_road_and_station_hit_slope_ground_branch() {
                     &[],
                     &[],
                     None,
+                    &[],
+                    None,
                 );
                 spawn_station_tile(
                     &mut commands,
@@ -1724,6 +1730,8 @@ fn paved_roadside_uses_paved_set_and_streetlights_spawn_lamps() {
                     &[],
                     &[],
                     None,
+                    &[],
+                    None,
                 );
             },
         )
@@ -1761,6 +1769,8 @@ fn paved_roadside_uses_paved_set_and_streetlights_spawn_lamps() {
                     None,
                     &[],
                     &[],
+                    &[],
+                    None,
                     &[],
                     None,
                 );
@@ -1835,6 +1845,8 @@ fn vanilla_oneway_roads_draw_builtin_action5_overlays_without_newgrf() {
                         &[],
                         &[],
                         None,
+                        &[],
+                        None,
                     );
                 }
             },
@@ -1859,16 +1871,14 @@ fn vanilla_oneway_roads_draw_builtin_action5_overlays_without_newgrf() {
 
 #[test]
 fn level_crossing_uses_only_the_paved_crossing_ground() {
-    let mut assets = boot_assets_app();
-    // El atlas mínimo de tests sólo precarga la variante base. Conservamos su
-    // imagen bajo el ID pavimentado para ejercitar exactamente la selección de
-    // `DrawTile_Road`, que en la partida real se carga desde OpenGFX completo.
+    let assets = boot_assets_app();
+    // La variante pavimentada debe estar precargada de verdad. Sustituirla en
+    // el test ocultaba la regresión que dejaba los cruces de Kale sin suelo.
     let expected = assets
         .rail
-        .get(&1371)
-        .expect("crossing rail Y base")
+        .get(&1375)
+        .expect("crossing rail Y paved")
         .clone();
-    assets.rail.insert(1375, expected.clone());
     let mut map = fresh_map8();
     let crossing = Tile {
         kind: TileKind::Road,
@@ -1907,6 +1917,8 @@ fn level_crossing_uses_only_the_paved_crossing_ground() {
                     None,
                     &[],
                     &[],
+                    &[],
+                    None,
                     &[],
                     None,
                 );

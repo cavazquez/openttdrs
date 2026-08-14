@@ -26,19 +26,19 @@ use crate::sprites::{
     RAIL_GROUND_HALF_TILE_WATER, RAIL_GROUND_SNOW_OR_DESERT, RAIL_TB_LEFT, RAIL_TB_LOWER,
     RAIL_TB_RIGHT, RAIL_TB_UPPER, ROAD_FLAT_HALF_H, ROAD_STREETLIGHT_META, ROADSIDE_LAMPS,
     ROADSIDE_TREE_META, ROADSIDE_TREES, SPR_ROADSIDE_TREE, catenary_pylon_world_z_delta,
-    catenary_reference_sprite_id, catenary_sprite_color, catenary_wire_world_z_delta,
-    collect_catenary_pylons_from_map_with_pcp_override, collect_catenary_wire_draws_from_map,
-    collect_rail_pbs_reservation_draws, collect_rail_sprites_for_surface,
-    collect_signal_sprite_draws, is_road_level_crossing, is_typed_rail_track_sprite,
-    level_crossing_ground_sprite_id_for_type, level_crossing_has_rail_reservation,
-    oneway_road_sprite_id, rail_ghost_overlay_offset, rail_pbs_reservation_offset,
-    rail_tile_is_signals, rail_trackbits_for_render, remap_rail_sprite_id, road_bits_for_render,
-    road_flat_sprite_color, road_flat_sprite_index, road_ground_sprite_id,
-    road_streetlight_sprite_id, road_tile_roadside, road_tile_snow_or_desert, roadside_is_paved,
-    signal_safe_slope_position_for_side, signal_screen_anchor_for_side,
-    signal_screen_position_for_side, signal_sprite_center_offset, signal_world_position_for_side,
-    track_fence_draws_for_tile, track_fence_height_px, track_fence_sprite_meta,
-    tram_flat_sprite_index,
+    catenary_reference_sprite_id, catenary_sprite_color, catenary_tunnel_exterior_pcp,
+    catenary_wire_world_z_delta, collect_catenary_pylons_from_map_with_pcp_override,
+    collect_catenary_wire_draws_from_map, collect_rail_pbs_reservation_draws,
+    collect_rail_sprites_for_surface, collect_signal_sprite_draws, is_road_level_crossing,
+    is_typed_rail_track_sprite, level_crossing_ground_sprite_id_for_type,
+    level_crossing_has_rail_reservation, oneway_road_sprite_id, rail_ghost_overlay_offset,
+    rail_pbs_reservation_offset, rail_tile_is_signals, rail_trackbits_for_render,
+    remap_rail_sprite_id, road_bits_for_render, road_flat_sprite_color, road_flat_sprite_index,
+    road_ground_sprite_id, road_streetlight_sprite_id, road_tile_roadside,
+    road_tile_snow_or_desert, roadside_is_paved, signal_safe_slope_position_for_side,
+    signal_screen_anchor_for_side, signal_screen_position_for_side, signal_sprite_center_offset,
+    signal_world_position_for_side, track_fence_draws_for_tile, track_fence_height_px,
+    track_fence_sprite_meta, tram_flat_sprite_index,
 };
 
 /// Contexto de `DrawGroundSprite` para una pasada de vía. Una fundación crea
@@ -633,6 +633,8 @@ pub(crate) fn spawn_road_tile(
     oneway_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     foundation_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     mut action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
+    catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    mut catenary_sprites: Option<&mut crate::render::NewGrfCatenarySpriteCache>,
 ) {
     let raw_tileh = ctx.info.tileh;
     let raw_base_z = ctx.info.base_z;
@@ -1081,6 +1083,184 @@ pub(crate) fn spawn_road_tile(
                 ));
             }
         }
+
+        // `DrawTile_Road` termina el cruce con `DrawRailCatenary`. Aunque la
+        // tesela sea MP_ROAD, `GetRailTrackBitsUniversal` la trata como una
+        // vía especial: conserva el cable y los postes del railtype, no la
+        // catenaria vial. Reusar el selector PCP/PPP también cubre mono y
+        // maglev que tengan un railtype electrificado definido por NewGRF.
+        if let Some(tile) = ctx.tile {
+            let rail_type = openttdrs_core::rail_type_from_tile(tile);
+            let render_tb = rail_trackbits_for_render(map, ctx.coord, mw, mh);
+            spawn_rail_catenary_for_surface(
+                commands,
+                map,
+                (mw, mh),
+                assets,
+                ctx,
+                rail_type,
+                render_tb,
+                tileh,
+                base_z,
+                road_half_h,
+                true,
+                catenary_newgrf,
+                &mut catenary_sprites,
+                &mut images,
+            );
+        }
+    }
+}
+
+/// Emite la catenaria ferroviaria común de `DrawRailCatenaryRailway`.
+///
+/// Las vías normales, los cruces a nivel y las bocas de túnel comparten el
+/// algoritmo de PCP/PPP de OpenTTD. El último caso usa su cable de entrada
+/// especial, por lo que puede pedir sólo los postes con `draw_wires=false`.
+/// Centralizar la rama evita que un cruce eléctrico vuelva a verse como un
+/// simple cruce sin cable mientras la misma topología sí funciona en vía
+/// normal.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn spawn_rail_catenary_for_surface(
+    commands: &mut Commands,
+    map: &Map,
+    map_dims: (u32, u32),
+    assets: &WorldAssets,
+    ctx: &TileRenderContext,
+    rail_type: openttdrs_core::RailType,
+    render_tb: u8,
+    tileh: u8,
+    surface_base_z: u8,
+    surface_half_h: f32,
+    draw_wires: bool,
+    catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    catenary_sprites: &mut Option<&mut crate::render::NewGrfCatenarySpriteCache>,
+    images: &mut Option<&mut Assets<Image>>,
+) {
+    if !rail_type.has_catenary() {
+        return;
+    }
+
+    let low_bridge = catenary_under_low_bridge(map, ctx.coord, map_dims);
+    let tint = catenary_sprite_color();
+    let mut wires = Vec::new();
+    if draw_wires && !low_bridge.hide_wires {
+        collect_catenary_wire_draws_from_map(
+            map,
+            ctx.coord,
+            map_dims.0,
+            map_dims.1,
+            crate::sprites::OTTD_MP_RAIL,
+            render_tb,
+            tileh,
+            &mut wires,
+        );
+    }
+    let mut pylons = Vec::new();
+    collect_catenary_pylons_from_map_with_pcp_override(
+        map,
+        ctx.coord,
+        map_dims.0,
+        map_dims.1,
+        crate::sprites::OTTD_MP_RAIL,
+        render_tb,
+        tileh,
+        low_bridge.pylon_pcp_override,
+        &mut pylons,
+    );
+    // Para una boca de túnel el algoritmo C++ considera el borde que mira
+    // hacia el interior como `TRACK_BIT_NONE`. El colector genérico conserva
+    // ambos extremos para vías y cruces, así que filtramos aquí —único
+    // consumidor de túneles— el PPP opuesto a `m5`. Sin esto aparecían postes
+    // dobles dentro de la boca (Kale: 170,81; 180,127).
+    if let Some(exterior_pcp) = ctx
+        .tile
+        .filter(|tile| tile.kind == TileKind::RailTunnel)
+        .map(|tile| catenary_tunnel_exterior_pcp(tile.m5))
+    {
+        pylons.retain(|draw| draw.pcp_direction == Some(exterior_pcp));
+    }
+    for draw in pylons {
+        let sprite = catenary_sprite_colored(
+            assets,
+            draw.sprite_id,
+            tint,
+            catenary_newgrf,
+            catenary_sprites.as_deref_mut(),
+            images.as_deref_mut(),
+        );
+        WorldDrawTrace::record_sprite_with_palette_and_world_geometry(
+            "catenary-pylon",
+            "sortable",
+            catenary_reference_sprite_id(draw.sprite_id),
+            0,
+            sprite.is_none(),
+            (draw.tile_dx as i32, draw.tile_dy as i32),
+            draw.pcp_direction.map_or(0, |pcp| {
+                catenary_pylon_world_z_delta(tileh, ctx.info.base_z, render_tb, pcp)
+            }),
+            (1, 1, 0),
+            Some(TraceSpriteBounds::new(-1, -1, 0, 1, 1, 6)),
+        );
+        let Some(sprite) = sprite else {
+            continue;
+        };
+        let off = remap_tile_offset(draw.tile_dx, draw.tile_dy, 0.0) * 0.5;
+        let base = tile_pos_half(
+            ctx.tx_i32(),
+            ctx.ty_i32(),
+            surface_base_z,
+            draw.z_layer,
+            surface_half_h,
+        );
+        commands.spawn((
+            MapVisualLayer,
+            ctx.map_tile_chunk(),
+            sprite,
+            Transform::from_translation(base + Vec3::new(off.x, off.y, 0.0)),
+        ));
+    }
+    // OpenTTD emite primero los postes PPP y después los cables PCP. El
+    // orden estable también permite comparar el stream sortable del oráculo.
+    for (i, draw) in wires.iter().copied().enumerate() {
+        let sid = draw.sprite_id;
+        let sprite = catenary_sprite_colored(
+            assets,
+            sid,
+            tint,
+            catenary_newgrf,
+            catenary_sprites.as_deref_mut(),
+            images.as_deref_mut(),
+        );
+        let (ox, oy, oz) = draw.bounds_origin;
+        let (ex, ey, ez) = draw.bounds_extent;
+        WorldDrawTrace::record_sprite_with_palette_and_geometry(
+            "catenary-wire",
+            "sortable",
+            catenary_reference_sprite_id(sid),
+            0,
+            sprite.is_none(),
+            (0, 0, 0),
+            catenary_wire_world_z_delta(tileh, ctx.info.base_z, render_tb, draw),
+            Some(TraceSpriteBounds::new(ox, oy, oz, ex, ey, ez)),
+        );
+        let Some(sprite) = sprite else {
+            continue;
+        };
+        let z = 0.035 + i as f32 * 0.0004;
+        let base = tile_pos_half(
+            ctx.tx_i32(),
+            ctx.ty_i32(),
+            surface_base_z,
+            z,
+            surface_half_h,
+        );
+        commands.spawn((
+            MapVisualLayer,
+            ctx.map_tile_chunk(),
+            sprite,
+            Transform::from_translation(base),
+        ));
     }
 }
 
@@ -1495,114 +1675,22 @@ pub(crate) fn spawn_rail_tile(
     // superpone los SINGLE_* de las pistas reservadas con PALETTE_CRASH=804.
     // La segunda capa es esencial para no confundir una reserva en un cruce
     // o túnel con una vía de otro tipo.
-    // Catenaria OpenGFX: wires (PCP) + postes PPP; TO_CATENARY vía env.
-    if rail_type.has_catenary() {
-        let trackbits = rail_trackbits_for_render(map, ctx.coord, map_dims.0, map_dims.1);
-        let low_bridge = catenary_under_low_bridge(map, ctx.coord, map_dims);
-        let tint = catenary_sprite_color();
-        let mut wires = Vec::new();
-        if !low_bridge.hide_wires {
-            collect_catenary_wire_draws_from_map(
-                map,
-                ctx.coord,
-                map_dims.0,
-                map_dims.1,
-                crate::sprites::OTTD_MP_RAIL,
-                trackbits,
-                tileh,
-                &mut wires,
-            );
-        }
-        let mut pylons = Vec::new();
-        collect_catenary_pylons_from_map_with_pcp_override(
-            map,
-            ctx.coord,
-            map_dims.0,
-            map_dims.1,
-            crate::sprites::OTTD_MP_RAIL,
-            trackbits,
-            tileh,
-            low_bridge.pylon_pcp_override,
-            &mut pylons,
-        );
-        for draw in pylons {
-            let sprite = catenary_sprite_colored(
-                assets,
-                draw.sprite_id,
-                tint,
-                catenary_newgrf,
-                catenary_sprites.as_deref_mut(),
-                images.as_deref_mut(),
-            );
-            WorldDrawTrace::record_sprite_with_palette_and_world_geometry(
-                "catenary-pylon",
-                "sortable",
-                catenary_reference_sprite_id(draw.sprite_id),
-                0,
-                sprite.is_none(),
-                (draw.tile_dx as i32, draw.tile_dy as i32),
-                draw.pcp_direction.map_or(0, |pcp| {
-                    catenary_pylon_world_z_delta(tileh, ctx.info.base_z, render_tb, pcp)
-                }),
-                (1, 1, 0),
-                Some(TraceSpriteBounds::new(-1, -1, 0, 1, 1, 6)),
-            );
-            let Some(sprite) = sprite else {
-                continue;
-            };
-            let off = remap_tile_offset(draw.tile_dx, draw.tile_dy, 0.0) * 0.5;
-            let base = tile_pos_half(
-                ctx.tx_i32(),
-                ctx.ty_i32(),
-                rail_base_z,
-                draw.z_layer,
-                rail_half_h,
-            );
-            commands.spawn((
-                MapVisualLayer,
-                ctx.map_tile_chunk(),
-                sprite,
-                Transform::from_translation(base + Vec3::new(off.x, off.y, 0.0)),
-            ));
-        }
-        // OpenTTD emite primero los postes PPP y después los cables PCP. El
-        // z visual mantiene al poste sobre el cable, pero preservar la misma
-        // secuencia también hace comparable el stream sortable del oráculo.
-        for (i, draw) in wires.iter().copied().enumerate() {
-            let sid = draw.sprite_id;
-            let sprite = catenary_sprite_colored(
-                assets,
-                sid,
-                tint,
-                catenary_newgrf,
-                catenary_sprites.as_deref_mut(),
-                images.as_deref_mut(),
-            );
-            let (ox, oy, oz) = draw.bounds_origin;
-            let (ex, ey, ez) = draw.bounds_extent;
-            WorldDrawTrace::record_sprite_with_palette_and_geometry(
-                "catenary-wire",
-                "sortable",
-                catenary_reference_sprite_id(sid),
-                0,
-                sprite.is_none(),
-                (0, 0, 0),
-                catenary_wire_world_z_delta(tileh, ctx.info.base_z, render_tb, draw),
-                Some(TraceSpriteBounds::new(ox, oy, oz, ex, ey, ez)),
-            );
-            let Some(sprite) = sprite else {
-                continue;
-            };
-            let z = 0.035 + i as f32 * 0.0004;
-            let base = tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), rail_base_z, z, rail_half_h);
-            commands.spawn((
-                MapVisualLayer,
-                ctx.map_tile_chunk(),
-                sprite,
-                Transform::from_translation(base),
-            ));
-        }
-    }
+    spawn_rail_catenary_for_surface(
+        commands,
+        map,
+        map_dims,
+        assets,
+        ctx,
+        rail_type,
+        render_tb,
+        tileh,
+        rail_base_z,
+        rail_half_h,
+        true,
+        catenary_newgrf,
+        &mut catenary_sprites,
+        &mut images,
+    );
     if let Some(t) = ctx.tile.filter(|t| rail_tile_is_signals(t.m5)) {
         let sig_draws = collect_signal_sprite_draws(t.m2, t.m3, t.m3hi, t.m5);
         let rail_type = openttdrs_core::rail_type_from_tile(t);

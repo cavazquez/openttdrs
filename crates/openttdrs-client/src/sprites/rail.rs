@@ -809,17 +809,16 @@ fn collect_catenary_wire_draws_with_effective_tileh(
             catenary_wire_trace_bounds(sel, track_idx),
         ) {
             let sid = WIRE_SPRITE_BASE + wso;
-            // La selección visual actual no duplica un PNG compartido entre
-            // dos tracks. Conservamos esa decisión aquí, pero también la
-            // geometría del primer track que lo eligió para poder comparar la
-            // desviación contra OpenTTD sin adivinarla desde el WSO.
-            if !out.iter().any(|draw| draw.sprite_id == sid) {
-                out.push(CatenaryWireDraw {
-                    sprite_id: sid,
-                    bounds_origin,
-                    bounds_extent,
-                });
-            }
+            // `DrawRailCatenaryRailway` itera cada TrackBit y emite un
+            // `AddSortableSpriteToDraw` por cada uno. Dos curvas pueden
+            // reutilizar el mismo PNG corto, pero tienen cajas distintas y
+            // siguen siendo dos comandos: deduplicarlas quitaba cables de
+            // uniones dobles de Kale (por ejemplo, 168,58: 5643 × 2).
+            out.push(CatenaryWireDraw {
+                sprite_id: sid,
+                bounds_origin,
+                bounds_extent,
+            });
         }
     }
 }
@@ -2711,9 +2710,21 @@ mod tests {
         collect_catenary_sprites(RAIL_TB_Y, 0, 0, 0, &mut out);
         assert_eq!(out, vec![WIRE_SPRITE_BASE + WSO_Y_SE]);
         collect_catenary_sprites(RAIL_TB_HORZ, 0, 0, 0, &mut out);
-        assert_eq!(out, vec![WIRE_SPRITE_BASE + WSO_EW_SHORT]);
+        assert_eq!(
+            out,
+            vec![
+                WIRE_SPRITE_BASE + WSO_EW_SHORT,
+                WIRE_SPRITE_BASE + WSO_EW_SHORT
+            ]
+        );
         collect_catenary_sprites(RAIL_TB_VERT, 0, 0, 0, &mut out);
-        assert_eq!(out, vec![WIRE_SPRITE_BASE + WSO_NS_SHORT]);
+        assert_eq!(
+            out,
+            vec![
+                WIRE_SPRITE_BASE + WSO_NS_SHORT,
+                WIRE_SPRITE_BASE + WSO_NS_SHORT
+            ]
+        );
         collect_catenary_sprites(0, 0, 0, 0, &mut out);
         assert!(out.is_empty());
     }
@@ -2766,6 +2777,28 @@ mod tests {
         assert_eq!(
             catenary_wire_trace_bounds(0, 5),
             Some(((0, 8, 10), (8, 8, 1)))
+        );
+    }
+
+    #[test]
+    fn catenary_wire_draws_keep_shared_short_sprite_for_each_track() {
+        let mut draws = Vec::new();
+        collect_catenary_wire_draws_with_effective_tileh(RAIL_TB_HORZ, 0, 0b1111, &mut draws);
+        assert_eq!(
+            draws,
+            vec![
+                CatenaryWireDraw {
+                    sprite_id: WIRE_SPRITE_BASE + WSO_EW_SHORT,
+                    bounds_origin: (7, 0, 10),
+                    bounds_extent: (1, 1, 1),
+                },
+                CatenaryWireDraw {
+                    sprite_id: WIRE_SPRITE_BASE + WSO_EW_SHORT,
+                    bounds_origin: (15, 8, 10),
+                    bounds_extent: (3, 3, 1),
+                },
+            ],
+            "OpenTTD emite ambas curvas aunque compartan PNG corto"
         );
     }
 

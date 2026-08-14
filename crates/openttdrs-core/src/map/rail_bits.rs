@@ -42,11 +42,10 @@ pub fn effective_rail_trackbits(mapt: u8, m5: u8, kind: TileKind, mp_rail: u8) -
         RAIL_TILE_NORMAL | RAIL_TILE_SIGNALS => Some(m5 & 0x3F),
         RAIL_TILE_DEPOT => {
             let d = m5 & 0x3;
-            Some(if d == 1 || d == 3 {
-                RAIL_TB_X
-            } else {
-                RAIL_TB_Y
-            })
+            // `DiagDirToDiagTrack(d)` = `d & 1`: NE/SW usan X y SE/NW
+            // usan Y. Invertirlo hacía que un depósito vecino pareciera no
+            // conectar con su rama de catenaria (`MaskWireBits`, Kale).
+            Some(if d & 1 == 0 { RAIL_TB_X } else { RAIL_TB_Y })
         }
         _ => None,
     }
@@ -75,8 +74,8 @@ mod tests {
     #[test]
     fn depot_maps_direction_to_axis() {
         let mapt = OTTD_MP_RAILWAY << 4;
-        let m5_x = (RAIL_TILE_DEPOT << 6) | 1;
-        let m5_y = RAIL_TILE_DEPOT << 6;
+        let m5_x = RAIL_TILE_DEPOT << 6;
+        let m5_y = (RAIL_TILE_DEPOT << 6) | 1;
         assert_eq!(
             effective_rail_trackbits(mapt, m5_x, TileKind::Rail, OTTD_MP_RAILWAY),
             Some(RAIL_TB_X)

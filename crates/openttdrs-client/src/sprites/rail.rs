@@ -504,10 +504,29 @@ pub fn collect_catenary_wire_draws_from_map(
         out.clear();
         return;
     }
-    let home_tb = electrified_trackbits_at(map, pos, mw, mh, mp_rail);
-    let wire_tb = if home_tb != 0 { home_tb } else { tb & 0x3F };
-    let effective_tileh = catenary_effective_tileh(map, pos, wire_tb, tileh);
-    let pcp = compute_catenary_pcp_status(map, pos, mw, mh, mp_rail, wire_tb, effective_tileh);
+    // `DrawRailCatenaryRailway` conserva dos configuraciones: los tracks
+    // eléctricos físicos y los tracks que efectivamente deben llevar cable.
+    // En una unión, `MaskWireBits` puede retirar sólo la rama que termina en
+    // una vía no electrificada; usar una sola máscara dibujaba un cable y un
+    // poste de más (Kale: 35,164).
+    let home_track_tb = electrified_trackbits_at(map, pos, mw, mh, mp_rail);
+    let home_track_tb = if home_track_tb != 0 {
+        home_track_tb
+    } else {
+        tb & 0x3F
+    };
+    let wire_tb = mask_catenary_wire_bits(map, pos, mw, mh, mp_rail, home_track_tb);
+    let effective_tileh = catenary_effective_tileh(map, pos, home_track_tb, tileh);
+    let pcp = compute_catenary_pcp_status(
+        map,
+        pos,
+        mw,
+        mh,
+        mp_rail,
+        home_track_tb,
+        wire_tb,
+        effective_tileh,
+    );
     collect_catenary_wire_draws_with_effective_tileh(wire_tb, effective_tileh, pcp, out);
 }
 
@@ -555,13 +574,27 @@ pub fn collect_catenary_pylons_from_map_with_pcp_override(
     }) {
         return;
     }
-    let home_tb = electrified_trackbits_at(map, pos, mw, mh, mp_rail);
-    let wire_tb = if home_tb != 0 { home_tb } else { tb & 0x3F };
+    let home_track_tb = electrified_trackbits_at(map, pos, mw, mh, mp_rail);
+    let home_track_tb = if home_track_tb != 0 {
+        home_track_tb
+    } else {
+        tb & 0x3F
+    };
+    let wire_tb = mask_catenary_wire_bits(map, pos, mw, mh, mp_rail, home_track_tb);
     if wire_tb == 0 {
         return;
     }
-    let effective_tileh = catenary_effective_tileh(map, pos, wire_tb, tileh);
-    let edges = compute_catenary_edge_state(map, pos, mw, mh, mp_rail, wire_tb, effective_tileh);
+    let effective_tileh = catenary_effective_tileh(map, pos, home_track_tb, tileh);
+    let edges = compute_catenary_edge_state(
+        map,
+        pos,
+        mw,
+        mh,
+        mp_rail,
+        home_track_tb,
+        wire_tb,
+        effective_tileh,
+    );
     let bridge_pylon_override = bridge_pylon_override(map, pos);
     let tlg = catenary_tile_location_group(pos.x, pos.y);
     for dir in 0..4u8 {
@@ -887,20 +920,54 @@ fn catenary_pcp_from_parity(tb: u8, tx: i32, ty: i32) -> u8 {
     pcp
 }
 
-/// Track bits electrificados en una tesela (`GetRailTrackBitsUniversal`).
-fn electrified_trackbits_at(map: &Map, pos: TileCoord, mw: u32, mh: u32, mp_rail: u8) -> u8 {
+/// ¿La tesela puede transportar trenes y, por tanto, tiene un `RailType`?
+///
+/// Es el subconjunto de [`GetTileRailType`] que necesita `MaskWireBits`.
+/// No basta con leer `m8`: en una tesela de terreno ese byte puede contener
+/// datos no relacionados con el tipo de vía.
+fn rail_type_at(map: &Map, pos: TileCoord, mw: u32, mh: u32) -> Option<openttdrs_core::RailType> {
+    if pos.x < 0 || pos.y < 0 || pos.x >= mw as i32 || pos.y >= mh as i32 {
+        return None;
+    }
+    let tile = map.get(pos)?;
+    let has_rail = match tile.kind {
+        TileKind::Rail | TileKind::RailDepot | TileKind::RailBridge | TileKind::RailTunnel => true,
+        TileKind::Road => {
+            is_road_level_crossing(tile.mapt, tile.m5, tile.kind, openttdrs_core::OTTD_MP_ROAD)
+        }
+        TileKind::Station => matches!(
+            openttdrs_core::stop_kind_from_m6(tile.m6),
+            openttdrs_core::StopKind::RailStation | openttdrs_core::StopKind::RailWaypoint
+        ),
+        _ => false,
+    };
+    has_rail.then(|| rail_type_from_tile(tile))
+}
+
+/// `TrackStatusToTrackBits(GetTileTrackStatus(..., TRANSPORT_RAIL, 0))`.
+///
+/// `MaskWireBits` pregunta la conectividad física incluso si la vía vecina no
+/// es eléctrica. Por eso esta función no filtra por `RailType`.
+fn rail_track_status_bits_at(map: &Map, pos: TileCoord, mw: u32, mh: u32, mp_rail: u8) -> u8 {
     if pos.x < 0 || pos.y < 0 || pos.x >= mw as i32 || pos.y >= mh as i32 {
         return 0;
     }
     let Some(tile) = map.get(pos) else {
         return 0;
     };
-    if !rail_type_from_tile(tile).has_catenary() {
-        return 0;
-    }
     match tile.kind {
         TileKind::Rail => {
             effective_rail_trackbits(tile.mapt, tile.m5, tile.kind, mp_rail).unwrap_or(0) & 0x3F
+        }
+        // `GetTileTrackStatus_Track` permite el único eje de salida del
+        // depósito. `GetRailTrackBitsUniversal` no lo usa para catenaria
+        // propia, pero `MaskWireBits` sí lo consulta como vecino.
+        TileKind::RailDepot => {
+            if tile.m5 & 1 == 0 {
+                RAIL_TB_X
+            } else {
+                RAIL_TB_Y
+            }
         }
         // Una rampa de puente es parte de la misma línea ferroviaria. Antes
         // caía en `_ => 0`, de modo que el tramo exterior cortaba su
@@ -934,7 +1001,7 @@ fn electrified_trackbits_at(map: &Map, pos: TileCoord, mw: u32, mh: u32, mp_rail
             if matches!(
                 openttdrs_core::stop_kind_from_m6(tile.m6),
                 openttdrs_core::StopKind::RailStation | openttdrs_core::StopKind::RailWaypoint
-            ) && openttdrs_core::station_tile_can_have_wires(tile.m3) =>
+            ) && tile.m3 & 1 == 0 =>
         {
             if tile.m5 & 1 != 0 {
                 RAIL_TB_Y
@@ -944,6 +1011,139 @@ fn electrified_trackbits_at(map: &Map, pos: TileCoord, mw: u32, mh: u32, mp_rail
         }
         _ => 0,
     }
+}
+
+/// Track bits electrificados en una tesela (`GetRailTrackBitsUniversal`).
+fn electrified_trackbits_at(map: &Map, pos: TileCoord, mw: u32, mh: u32, mp_rail: u8) -> u8 {
+    if !rail_type_at(map, pos, mw, mh).is_some_and(openttdrs_core::RailType::has_catenary) {
+        return 0;
+    }
+    // El equivalente C++ devuelve NONE para depósitos: su cable se dibuja en
+    // el camino especial de `DrawRailCatenary`, no como una vía normal.
+    if map
+        .get(pos)
+        .is_some_and(|tile| tile.kind == TileKind::RailDepot)
+    {
+        return 0;
+    }
+    rail_track_status_bits_at(map, pos, mw, mh, mp_rail)
+}
+
+/// `IsPlainRailTile`: riel normal o con señales, pero no depósito.
+fn is_plain_rail_tile(map: &Map, pos: TileCoord, mp_rail: u8) -> bool {
+    map.get(pos).is_some_and(|tile| {
+        tile.kind == TileKind::Rail
+            && (tile.mapt >> 4) & 0x0F == mp_rail
+            && matches!((tile.m5 >> 6) & 0x03, RAIL_TILE_NORMAL | RAIL_TILE_SIGNALS)
+    })
+}
+
+/// Máscaras de [`DiagdirReachesTrackdirs`] y `DiagdirReachesTracks`.
+///
+/// Los bits 0..5 son un sentido de cada track y 8..13 el inverso, igual que
+/// `TrackdirBits` en `track_type.h`.
+const DIAGDIR_REACHES_TRACKDIRS: [u16; 4] = [0x1009, 0x0016, 0x0520, 0x2A00];
+const DIAGDIR_REACHES_TRACKS: [u8; 4] = [0x19, 0x16, 0x25, 0x2A];
+const TRACKDIR_BIT_X_NE: u16 = 1 << 0;
+const TRACKDIR_BIT_X_SW: u16 = 1 << 8;
+const TRACKDIR_BIT_Y_SE: u16 = 1 << 1;
+const TRACKDIR_BIT_Y_NW: u16 = 1 << 9;
+
+#[inline]
+const fn trackdir_bits_to_trackbits(bits: u16) -> u8 {
+    ((bits | (bits >> 8)) & 0x003F) as u8
+}
+
+#[inline]
+const fn tracks_overlap(trackbits: u8) -> bool {
+    let trackbits = trackbits & 0x3F;
+    trackbits != 0
+        && trackbits & (trackbits - 1) != 0
+        && trackbits != RAIL_TB_HORZ
+        && trackbits != RAIL_TB_VERT
+}
+
+/// La excepción de `MaskWireBits` para plataformas bloqueadas: aunque no
+/// ofrezcan `TrackStatus`, mantienen el cable si tienen el eje y flag correctos.
+fn station_preserves_catenary_wire(map: &Map, pos: TileCoord, direction: u8) -> bool {
+    map.get(pos).is_some_and(|tile| {
+        tile.kind == TileKind::Station
+            && matches!(
+                openttdrs_core::stop_kind_from_m6(tile.m6),
+                openttdrs_core::StopKind::RailStation | openttdrs_core::StopKind::RailWaypoint
+            )
+            && (tile.m5 & 1 != 0) == (direction & 1 != 0)
+            && openttdrs_core::station_tile_can_have_wires(tile.m3)
+    })
+}
+
+/// Port de `MaskWireBits` de `elrail.cpp`.
+///
+/// Las uniones con más de un track no deben tender cable por ramas que acaban
+/// en una vía no electrificada o sin conexión. El track se conserva si
+/// enmascararlo dejaría la tesela sin ningún cable, como en OpenTTD.
+fn mask_catenary_wire_bits(
+    map: &Map,
+    pos: TileCoord,
+    mw: u32,
+    mh: u32,
+    mp_rail: u8,
+    trackbits: u8,
+) -> u8 {
+    let trackbits = trackbits & 0x3F;
+    if trackbits.count_ones() <= 1 || !is_plain_rail_tile(map, pos, mp_rail) {
+        return trackbits;
+    }
+
+    let mut neighbour_trackdirs = 0_u16;
+    for direction in 0..4_u8 {
+        let (dx, dy) = diag_dir_offset(direction);
+        let neighbour = TileCoord::new(pos.x + dx, pos.y + dy);
+        let electrically_powered = rail_type_at(map, neighbour, mw, mh)
+            .is_some_and(openttdrs_core::RailType::has_catenary);
+        let reachable = rail_track_status_bits_at(map, neighbour, mw, mh, mp_rail)
+            & DIAGDIR_REACHES_TRACKS[direction as usize]
+            != 0;
+        if !electrically_powered
+            || (!reachable && !station_preserves_catenary_wire(map, neighbour, direction))
+        {
+            neighbour_trackdirs |= DIAGDIR_REACHES_TRACKDIRS[reverse_diag_dir(direction) as usize];
+        }
+    }
+
+    let mut mask = if trackbits == RAIL_TB_CROSS || !tracks_overlap(trackbits) {
+        let mut mask =
+            !trackdir_bits_to_trackbits(neighbour_trackdirs & (neighbour_trackdirs >> 8));
+        if trackbits != RAIL_TB_CROSS && mask & 0x3F == 0x3F {
+            mask = !trackdir_bits_to_trackbits(neighbour_trackdirs);
+        }
+        mask
+    } else {
+        let mut mask = !trackdir_bits_to_trackbits(neighbour_trackdirs);
+        if trackbits & mask == 0 {
+            if neighbour_trackdirs & TRACKDIR_BIT_X_NE == 0
+                || neighbour_trackdirs & TRACKDIR_BIT_X_SW == 0
+            {
+                mask |= RAIL_TB_X;
+            }
+            if neighbour_trackdirs & TRACKDIR_BIT_Y_SE == 0
+                || neighbour_trackdirs & TRACKDIR_BIT_Y_NW == 0
+            {
+                mask |= RAIL_TB_Y;
+            }
+            if trackbits & mask == 0 {
+                mask =
+                    !trackdir_bits_to_trackbits(neighbour_trackdirs & (neighbour_trackdirs >> 8));
+            }
+        }
+        mask
+    };
+
+    // El `mask` anterior conserva el tipo de entero del C++; limitarlo deja
+    // explícito que sólo hay seis tracks representables en el save.
+    mask &= 0x3F;
+    let masked = trackbits & mask;
+    if masked != 0 { masked } else { trackbits }
 }
 
 /// Pendiente que usa `DrawRailCatenaryRailway` después de las fundaciones.
@@ -1011,38 +1211,53 @@ fn neighbour_is_far_bridge_head(map: &Map, pos: TileCoord, direction_from_home: 
 }
 
 /// Calcula máscara PCP de 4 bits (`pcp_status` en `DrawRailCatenaryRailway`).
+#[allow(clippy::too_many_arguments)]
 fn compute_catenary_pcp_status(
     map: &Map,
     pos: TileCoord,
     mw: u32,
     mh: u32,
     mp_rail: u8,
-    home_tb: u8,
+    home_track_tb: u8,
+    home_wire_tb: u8,
     home_tileh: u8,
 ) -> u8 {
-    compute_catenary_edge_state(map, pos, mw, mh, mp_rail, home_tb, home_tileh).pcp
+    compute_catenary_edge_state(
+        map,
+        pos,
+        mw,
+        mh,
+        mp_rail,
+        home_track_tb,
+        home_wire_tb,
+        home_tileh,
+    )
+    .pcp
 }
 
 /// PCP + preferred/allowed PPP por borde (`DrawRailCatenaryRailway`).
+#[allow(clippy::too_many_arguments)]
 fn compute_catenary_edge_state(
     map: &Map,
     pos: TileCoord,
     mw: u32,
     mh: u32,
     mp_rail: u8,
-    home_tb: u8,
+    home_track_tb: u8,
+    home_wire_tb: u8,
     home_tileh: u8,
 ) -> CatenaryEdgeState {
-    let home_tb = home_tb & 0x3F;
+    let home_track_tb = home_track_tb & 0x3F;
+    let home_wire_tb = home_wire_tb & 0x3F;
     let mut state = CatenaryEdgeState {
         pcp: 0,
         preferred: [0; 4],
         allowed: [0; 4],
     };
-    if home_tb == 0 {
+    if home_track_tb == 0 {
         return state;
     }
-    let home_flat = home_tb & (RAIL_TB_HORZ | RAIL_TB_VERT) != 0;
+    let home_flat = home_track_tb & (RAIL_TB_HORZ | RAIL_TB_VERT) != 0;
     // El caller entrega la pendiente posterior a fundación / `AdjustTileh`.
     let home_eff_h = home_tileh;
     let tlg = catenary_tile_location_group(pos.x, pos.y);
@@ -1050,18 +1265,36 @@ fn compute_catenary_edge_state(
     for dir in 0..4u8 {
         let (dx, dy) = diag_dir_offset(dir);
         let npos = TileCoord::new(pos.x + dx, pos.y + dy);
-        let mut neigh_tb = electrified_trackbits_at(map, npos, mw, mh, mp_rail);
+        let mut neigh_track_tb = electrified_trackbits_at(map, npos, mw, mh, mp_rail);
+        let mut neigh_wire_tb = mask_catenary_wire_bits(map, npos, mw, mh, mp_rail, neigh_track_tb);
         // Una boca de túnel sólo se conecta por su dirección de salida; los
         // otros tres bordes no deben participar en los PCP vecinos.
         if map
             .get(npos)
             .is_some_and(|tile| tile.kind == TileKind::RailTunnel && dir != (tile.m5 & 0x03))
         {
-            neigh_tb = 0;
+            neigh_track_tb = 0;
+            neigh_wire_tb = 0;
+        }
+        // Igual que `DrawRailCatenaryRailway`: una plataforma ferroviaria
+        // que no admite ni cables ni postes no participa de este borde. Las
+        // plataformas bloqueadas que sí conservan cables se tratan arriba en
+        // `station_preserves_catenary_wire`.
+        if map.get(npos).is_some_and(|tile| {
+            tile.kind == TileKind::Station
+                && matches!(
+                    openttdrs_core::stop_kind_from_m6(tile.m6),
+                    openttdrs_core::StopKind::RailStation | openttdrs_core::StopKind::RailWaypoint
+                )
+                && !openttdrs_core::station_tile_can_have_pylons(tile.m3)
+                && !openttdrs_core::station_tile_can_have_wires(tile.m3)
+        }) {
+            neigh_track_tb = 0;
+            neigh_wire_tb = 0;
         }
         let neighbour_is_far_bridge = neighbour_is_far_bridge_head(map, npos, dir);
-        let neigh_eff_h = catenary_effective_tileh(map, npos, neigh_tb, 0);
-        let neigh_flat = neigh_tb & (RAIL_TB_HORZ | RAIL_TB_VERT) != 0;
+        let neigh_eff_h = catenary_effective_tileh(map, npos, neigh_track_tb, 0);
+        let neigh_flat = neigh_track_tb & (RAIL_TB_HORZ | RAIL_TB_VERT) != 0;
 
         let mut preferred_mask: u8 = 0xFF;
         let mut allowed_mask = ALLOWED_PPP[dir as usize];
@@ -1074,23 +1307,26 @@ fn compute_catenary_edge_state(
             if from_neigh && neighbour_is_far_bridge {
                 continue;
             }
-            let src_tb = if from_neigh { neigh_tb } else { home_tb };
+            let wire_src = if from_neigh {
+                neigh_wire_tb
+            } else {
+                home_wire_tb
+            };
             let pcp_pos = if from_neigh {
                 reverse_diag_dir(dir)
             } else {
                 dir
             };
             // Wire presente → preferred + PCP activo.
-            if src_tb & track_bit != 0 {
+            if wire_src & track_bit != 0 {
                 used = true;
                 preferred_mask &= preferred_ppp_mask(track_bit, pcp_pos);
             }
             // Track (aunque sin wire en máscara) → disallowed PPP.
             let track_src = if from_neigh {
-                // Vecino: usar trackbits electrificados (MVP = wire_config ≈ track).
-                neigh_tb
+                neigh_track_tb
             } else {
-                home_tb
+                home_track_tb
             };
             if track_src & track_bit != 0 {
                 allowed_mask &= !disallowed_ppp_mask(track_bit, pcp_pos);
@@ -2610,6 +2846,57 @@ mod tests {
         collect_catenary_sprites_from_map(&map, a, 3, 3, 1, RAIL_TB_X, 0, &mut out);
         // Vecino sin catenaria → ambos PCP del tramo eléctrico aislado.
         assert_eq!(out, vec![WIRE_SPRITE_BASE + WSO_X_SHORT]);
+    }
+
+    #[test]
+    fn mask_wire_bits_keeps_the_electrified_branch_of_a_mixed_junction() {
+        use openttdrs_core::{RailType, set_rail_type_on_tile};
+
+        // Misma topología que Kale_TitleGame (35,164): X llega por NE a una
+        // vía eléctrica y acaba por SW en vía normal; RIGHT sigue hacia SE
+        // por una rama eléctrica. `MaskWireBits` debe retirar sólo X.
+        let mut map = Map::new_flat(3, 3, 1);
+        let home = TileCoord::new(1, 1);
+        map.set_tile(home, electric_rail_tile(RAIL_TB_X | RAIL_TB_RIGHT))
+            .unwrap();
+        map.set_tile(TileCoord::new(0, 1), electric_rail_tile(RAIL_TB_X))
+            .unwrap();
+        map.set_tile(
+            TileCoord::new(1, 2),
+            electric_rail_tile(RAIL_TB_LEFT | RAIL_TB_RIGHT),
+        )
+        .unwrap();
+        let plain_x = set_rail_type_on_tile(electric_rail_tile(RAIL_TB_X), RailType::Rail);
+        map.set_tile(TileCoord::new(2, 1), plain_x).unwrap();
+
+        assert_eq!(
+            mask_catenary_wire_bits(&map, home, 3, 3, 1, RAIL_TB_X | RAIL_TB_RIGHT),
+            RAIL_TB_RIGHT
+        );
+    }
+
+    #[test]
+    fn catenary_mask_keeps_branch_that_reaches_an_electric_rail_depot() {
+        // Entorno de Kale_TitleGame (133,166), reducido a las cuatro
+        // vecinas que consulta `DrawRailCatenaryRailway`.
+        let mut map = Map::new_flat(3, 3, 1);
+        let home = TileCoord::new(1, 1);
+        map.set_tile(home, electric_rail_tile(RAIL_TB_Y | RAIL_TB_LOWER))
+            .unwrap();
+        let mut southeast = electric_rail_tile(RAIL_TB_CROSS);
+        southeast.kind = TileKind::RailDepot;
+        southeast.m5 = 0xC3; // Depósito NW: `DiagDirToDiagTrack` = Y.
+        map.set_tile(TileCoord::new(1, 2), southeast).unwrap();
+        map.set_tile(TileCoord::new(2, 1), electric_rail_tile(RAIL_TB_UPPER))
+            .unwrap();
+        let mut northwest = electric_rail_tile(RAIL_TB_Y);
+        northwest.m5 = 0x42; // RailTileType::Signals + Y.
+        map.set_tile(TileCoord::new(1, 0), northwest).unwrap();
+
+        let tracks = electrified_trackbits_at(&map, home, 3, 3, 1);
+        let wires = mask_catenary_wire_bits(&map, home, 3, 3, 1, tracks);
+        assert_eq!(tracks, RAIL_TB_Y | RAIL_TB_LOWER);
+        assert_eq!(wires, RAIL_TB_Y | RAIL_TB_LOWER);
     }
 
     #[test]

@@ -148,6 +148,86 @@ fn water_surface_markers_cover_flat_locks_and_industry_water() {
     );
 }
 
+/// `DrawGroundSprite` y `DrawShoreTile` usan `xrel=-31` para un PNG de 64 px
+/// de ancho. El centro de Bevy debe quedar en `+1`, no en el centro geométrico
+/// que desplazaría ambos fondos un píxel hacia la izquierda.
+#[test]
+fn water_and_shore_keep_openttd_ground_xrel_center() {
+    let assets = boot_assets_app();
+    let flat = TileCoord::new(1, 1);
+    let coast = TileCoord::new(3, 2);
+    let mut map = Map::new_flat(5, 5, 0);
+    for x in 0..5 {
+        for y in 0..5 {
+            map.set_kind(TileCoord::new(x, y), TileKind::Water)
+                .expect("water");
+        }
+    }
+    // Una única tesela de tierra convierte `(3,2)` en costa, sin afectar el
+    // agua interior de `(1,1)`.
+    map.set_kind(TileCoord::new(4, 2), TileKind::Grass)
+        .expect("coast neighbour");
+    let grid = RenderGrid::from_map(&map, 5, 5);
+    let flat_ctx = TileRenderContext::new(&map, &grid, flat.x as u32, flat.y as u32);
+    let coast_ctx = TileRenderContext::new(&map, &grid, coast.x as u32, coast.y as u32);
+    assert!(!flat_ctx.info.use_shore, "agua interior no debe usar shore");
+    assert!(coast_ctx.info.use_shore, "agua lindera debe usar shore");
+    let coast_tileh = crate::iso::shore_tileh_for_draw_shore(&map, 3, 2, 5, 5);
+    let coast_sprite = assets.shore[crate::iso::shore_png_index(coast_tileh)].clone();
+    let water_sprite = assets.water.clone();
+
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world
+        .run_system_once(
+            move |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                let mut batches = MapSpriteBatches::default();
+                for coord in [flat, coast] {
+                    push_water_tile(
+                        &mut commands,
+                        &m.0,
+                        m.0.dimensions(),
+                        &a.0,
+                        &TileRenderContext::new(&m.0, &g.0, coord.x as u32, coord.y as u32),
+                        false,
+                        &mut batches,
+                        &[],
+                        None,
+                        None,
+                    );
+                }
+                flush_map_batches(&mut commands, batches);
+            },
+        )
+        .expect("water and shore spawn");
+
+    let rendered: Vec<_> = world
+        .query::<(&Sprite, &Transform)>()
+        .iter(&world)
+        .collect();
+    let water_x = rendered
+        .iter()
+        .find_map(|(sprite, transform)| {
+            water_sprite
+                .matches(sprite)
+                .then_some(transform.translation.x)
+        })
+        .expect("flat water sprite");
+    let shore_x = rendered
+        .iter()
+        .find_map(|(sprite, transform)| {
+            coast_sprite
+                .matches(sprite)
+                .then_some(transform.translation.x)
+        })
+        .expect("shore sprite");
+    let offset = crate::iso::GROUND_SPRITE_CENTER_X_OFFSET;
+    assert_eq!(water_x, crate::iso::iso(flat.x, flat.y).x + offset);
+    assert_eq!(shore_x, crate::iso::iso(coast.x, coast.y).x + offset);
+}
+
 #[test]
 fn oilrig_station_uses_water_even_when_its_station_has_airport_service() {
     let assets = boot_assets_app();

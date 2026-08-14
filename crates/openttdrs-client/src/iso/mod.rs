@@ -37,6 +37,13 @@ pub const ISO_HW: f32 = 32.0;
 pub const ISO_QH: f32 = 16.0;
 /// La mitad de la altura de los sprites de tesela (64×31 → 15.5 px).
 pub const TILE_HALF_H: f32 = 15.5;
+/// Centro X de un ground sprite OpenGFX 64×31 respecto a su tesela.
+///
+/// El sprite fuente declara `xrel = -31`, por lo que su centro geométrico es
+/// `-31 + 64 / 2 = +1`. Un [`bevy::prelude::Sprite`] centrado en el origen lo
+/// situaría en `-32`; conservar este píxel evita que suelo/agua se desplacen
+/// a la izquierda frente al raster de OpenTTD.
+pub const GROUND_SPRITE_CENTER_X_OFFSET: f32 = 1.0;
 /// Píxeles de elevación en Y por cada unidad de altura de `OpenTTD`.
 pub const HEIGHT_PX: f32 = 8.0;
 

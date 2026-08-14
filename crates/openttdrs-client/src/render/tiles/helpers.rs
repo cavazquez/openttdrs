@@ -1,8 +1,8 @@
 use bevy::prelude::*;
 
 use crate::iso::{
-    HEIGHT_PX, TILE_HALF_H, ground_tile_pos_half, overlay_pos, slope_sprite_offset, tile_pos,
-    tile_pos_half,
+    GROUND_SPRITE_CENTER_X_OFFSET, HEIGHT_PX, TILE_HALF_H, ground_tile_pos_half, overlay_pos,
+    slope_sprite_offset, tile_pos, tile_pos_half,
 };
 use crate::render::world_draw_trace::WorldDrawTrace;
 use crate::render::{
@@ -868,16 +868,21 @@ pub(crate) fn push_water_sprite(
     h_water: &AtlasSprite,
     ctx: &TileRenderContext,
 ) {
+    let mut pos = tile_pos(
+        ctx.tx_i32(),
+        ctx.ty_i32(),
+        ctx.info.base_z,
+        FLAT_WATER_LAYER_FRAC,
+    );
+    // `SPR_FLAT_WATER_TILE` es DrawGroundSprite y conserva xrel=-31. La
+    // posición sortable mantiene la profundidad histórica del agua, pero el
+    // centro horizontal debe seguir el mismo origen que el suelo normal.
+    pos.x += GROUND_SPRITE_CENTER_X_OFFSET;
     batch_water.push((
         ctx.map_tile_chunk(),
         WaterTile::ANIMATED,
         h_water.sprite(),
-        Transform::from_translation(tile_pos(
-            ctx.tx_i32(),
-            ctx.ty_i32(),
-            ctx.info.base_z,
-            FLAT_WATER_LAYER_FRAC,
-        )),
+        Transform::from_translation(pos),
     ));
 }
 

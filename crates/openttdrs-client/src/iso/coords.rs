@@ -6,7 +6,10 @@ use openttdrs_core::{
 
 use crate::sprites::{signal_draw_pos, signal_screen_position};
 
-use super::{HEIGHT_PX, ISO_HW, ISO_QH, TILE_HALF_H, slope_half_h, tile_slope_and_min_z};
+use super::{
+    GROUND_SPRITE_CENTER_X_OFFSET, HEIGHT_PX, ISO_HW, ISO_QH, TILE_HALF_H, slope_half_h,
+    tile_slope_and_min_z,
+};
 
 /// Convierte coordenadas de tesela a posición del vértice superior del rombo (Bevy Y-up).
 ///
@@ -494,7 +497,11 @@ pub fn ground_draw_z(tx: i32, ty: i32, layer: f32) -> f32 {
 pub fn ground_tile_pos_half(tx: i32, ty: i32, height: u8, layer: f32, half_h: f32) -> Vec3 {
     let p = iso(tx, ty);
     let elev = f32::from(height) * HEIGHT_PX;
-    Vec3::new(p.x, p.y - half_h + elev, ground_draw_z(tx, ty, layer))
+    Vec3::new(
+        p.x + GROUND_SPRITE_CENTER_X_OFFSET,
+        p.y - half_h + elev,
+        ground_draw_z(tx, ty, layer),
+    )
 }
 
 /// Vec3 para sprites ordenables y overlays con soporte de altura isométrica.
@@ -673,7 +680,7 @@ pub fn overlay_pos(
 
 #[cfg(test)]
 mod ground_draw_order_tests {
-    use super::{TILE_HALF_H, ground_tile_pos_half, tile_pos_half};
+    use super::{GROUND_SPRITE_CENTER_X_OFFSET, TILE_HALF_H, ground_tile_pos_half, tile_pos_half};
 
     #[test]
     fn ground_depth_matches_openttd_diagonal_scan_and_ignores_elevation() {
@@ -700,6 +707,14 @@ mod ground_draw_order_tests {
         let legacy_high = tile_pos_half(4, 6, 31, 0.0, TILE_HALF_H).z;
         let legacy_next_row = tile_pos_half(6, 5, 0, 0.0, TILE_HALF_H).z;
         assert!(legacy_high > legacy_next_row);
+    }
+
+    #[test]
+    fn ground_sprite_center_preserves_openttd_xrel_minus_31() {
+        let ground = ground_tile_pos_half(7, 3, 0, 0.0, TILE_HALF_H);
+        let sortable = tile_pos_half(7, 3, 0, 0.0, TILE_HALF_H);
+        assert_eq!(ground.x, sortable.x + GROUND_SPRITE_CENTER_X_OFFSET);
+        assert_eq!(GROUND_SPRITE_CENTER_X_OFFSET, 1.0);
     }
 }
 

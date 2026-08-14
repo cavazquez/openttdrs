@@ -4,8 +4,8 @@ use openttdrs_core::prelude::*;
 
 use super::{SHORE_LAYER_FRAC, push_water_sprite, spawn_coast_debug_label};
 use crate::iso::{
-    TILE_HALF_H, shore_png_index, shore_sprite_half_h, shore_tileh_for_draw_shore, slope_half_h,
-    tile_pos_half, tile_slope_bits_from_heights,
+    GROUND_SPRITE_CENTER_X_OFFSET, TILE_HALF_H, shore_png_index, shore_sprite_half_h,
+    shore_tileh_for_draw_shore, slope_half_h, tile_pos_half, tile_slope_bits_from_heights,
 };
 use crate::render::shore_newgrf::{NEWGRF_SHORE_TILE_FLAG, NewGrfShoreSpriteCache};
 use crate::render::world_draw_trace::WorldDrawTrace;
@@ -44,13 +44,17 @@ pub(crate) fn push_water_tile(
             // cache lo materialice como NewGRF, éste continúa siendo el ID
             // lógico que expone el oráculo C++.
             WorldDrawTrace::record_sprite("water-shore", "ground", shore_sprite_id(th), false);
-            let transform = Transform::from_translation(tile_pos_half(
+            let mut position = tile_pos_half(
                 ctx.tx_i32(),
                 ctx.ty_i32(),
                 ctx.info.base_z,
                 SHORE_LAYER_FRAC,
                 shore_sprite_half_h(th),
-            ));
+            );
+            // `DrawShoreTile` comparte el xrel=-31 de los ground sprites;
+            // no hereda el centro geométrico -32 del Sprite de Bevy.
+            position.x += GROUND_SPRITE_CENTER_X_OFFSET;
+            let transform = Transform::from_translation(position);
             let mut used_newgrf = false;
             let sprite = if let (Some(cache), Some(images), Some(decoded)) = (
                 shore_sprites,

@@ -9,8 +9,8 @@ use openttdrs_core::{
 };
 
 use crate::iso::{
-    HEIGHT_PX, TILE_HALF_H, remap_tile_offset, slope_half_h, slope_sprite_offset, tile_pos_half,
-    tile_slope_and_min_z,
+    HEIGHT_PX, TILE_HALF_H, full_tile_sprite_pos_half, remap_tile_offset, slope_half_h,
+    slope_sprite_offset, tile_pos_half, tile_slope_and_min_z,
 };
 use crate::render::catenary_newgrf::catenary_sprite_colored;
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
@@ -362,7 +362,7 @@ fn spawn_bridge_pbs_reservation(
         ctx.map_tile_chunk(),
         sprite.sprite(),
         Transform::from_translation(
-            tile_pos_half(
+            full_tile_sprite_pos_half(
                 ctx.tx_i32(),
                 ctx.ty_i32(),
                 surface_z,

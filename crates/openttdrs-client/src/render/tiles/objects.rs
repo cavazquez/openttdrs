@@ -13,9 +13,10 @@ use super::{
     sloped_or_flat_image, spawn_ground_sprite,
 };
 use crate::iso::{
-    TILE_HALF_H, ground_draw_z, ground_tile_pos_half, overlay_pos, remap_tile_offset,
-    road_depot_build_sprite_center, road_stop_build_sprite_center, shore_png_index,
-    shore_sprite_half_h, slope_half_h, slope_sprite_offset, tile_pos, tile_pos_half,
+    TILE_HALF_H, full_tile_sprite_pos_half, ground_draw_z, ground_tile_pos_half, overlay_pos,
+    remap_tile_offset, road_depot_build_sprite_center, road_stop_build_sprite_center,
+    shore_png_index, shore_sprite_half_h, slope_half_h, slope_sprite_offset, tile_pos,
+    tile_pos_half,
 };
 use crate::render::catenary_newgrf::catenary_sprite_colored;
 use crate::render::station_newgrf::{NewGrfStationSpriteCache, newgrf_station_def_for_tile};
@@ -951,7 +952,7 @@ pub(crate) fn spawn_station_tile(
                     MapVisualLayer,
                     ctx.map_tile_chunk(),
                     img.sprite(),
-                    Transform::from_translation(tile_pos_half(
+                    Transform::from_translation(full_tile_sprite_pos_half(
                         ctx.tx_i32(),
                         ctx.ty_i32(),
                         rail_base_z,
@@ -968,8 +969,13 @@ pub(crate) fn spawn_station_tile(
                 let sid = remap_rail_sprite_id(1005 + u32::from(m5 & 1), rail_type);
                 record_station_pbs_trace(tileh, sid, !assets.has_exact_pbs_rail_sprite(sid));
                 if let Some(img) = assets.pbs_rail_sprite(sid) {
-                    let base =
-                        tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), rail_base_z, 0.026, rail_half_h);
+                    let base = full_tile_sprite_pos_half(
+                        ctx.tx_i32(),
+                        ctx.ty_i32(),
+                        rail_base_z,
+                        0.026,
+                        rail_half_h,
+                    );
                     let offset = rail_ghost_overlay_offset(sid);
                     commands.spawn((
                         MapVisualLayer,
@@ -1729,8 +1735,13 @@ pub(crate) fn spawn_transport_object_tile(
                     None,
                 );
                 if let Some(img) = assets.pbs_rail_sprite(sid) {
-                    let base =
-                        tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.025, slope_half_ground);
+                    let base = full_tile_sprite_pos_half(
+                        ctx.tx_i32(),
+                        ctx.ty_i32(),
+                        base_z,
+                        0.025,
+                        slope_half_ground,
+                    );
                     let offset = rail_ghost_overlay_offset(sid);
                     commands.spawn((
                         MapVisualLayer,
@@ -2324,7 +2335,7 @@ fn spawn_rail_depot_tile(
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
                 image.sprite(),
-                Transform::from_translation(tile_pos_half(
+                Transform::from_translation(full_tile_sprite_pos_half(
                     ctx.tx_i32(),
                     ctx.ty_i32(),
                     base_z,
@@ -2342,7 +2353,7 @@ fn spawn_rail_depot_tile(
             MapVisualLayer,
             ctx.map_tile_chunk(),
             assets.grass.sprite(),
-            Transform::from_translation(tile_pos_half(
+            Transform::from_translation(full_tile_sprite_pos_half(
                 ctx.tx_i32(),
                 ctx.ty_i32(),
                 base_z,
@@ -2364,7 +2375,7 @@ fn spawn_rail_depot_tile(
         let sid = remap_rail_sprite_id(1005 + u32::from(dir as u8 & 1), rail_type);
         record_rail_depot_reservation_trace(tileh, sid, !assets.has_exact_pbs_rail_sprite(sid));
         if let Some(image) = assets.pbs_rail_sprite(sid) {
-            let base = tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.026, half_h);
+            let base = full_tile_sprite_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.026, half_h);
             let offset = rail_pbs_reservation_offset(sid);
             commands.spawn((
                 MapVisualLayer,

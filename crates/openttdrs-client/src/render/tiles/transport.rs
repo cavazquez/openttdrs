@@ -8,8 +8,9 @@ use super::{
     spawn_ground_sprite, spawn_ground_sprite_at, spawn_rail_foundation, spawn_road_foundation,
 };
 use crate::iso::{
-    TILE_HALF_H, ground_tile_pos_half, overlay_pos, remap_tile_offset, shore_png_index,
-    shore_sprite_half_h, slope_half_h, slope_sprite_offset, tile_pos, tile_pos_half,
+    TILE_HALF_H, full_tile_sprite_pos, full_tile_sprite_pos_half, ground_tile_pos_half,
+    overlay_pos, remap_tile_offset, shore_png_index, shore_sprite_half_h, slope_half_h,
+    slope_sprite_offset, tile_pos_half,
 };
 use crate::render::catenary_newgrf::catenary_sprite_colored;
 use crate::render::road_newgrf::{
@@ -275,7 +276,12 @@ fn spawn_rail_ground_draw(
                 ctx.map_tile_chunk(),
                 WaterTile::ANIMATED,
                 image.sprite(),
-                Transform::from_translation(tile_pos(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.001)),
+                Transform::from_translation(full_tile_sprite_pos(
+                    ctx.tx_i32(),
+                    ctx.ty_i32(),
+                    base_z,
+                    0.001,
+                )),
             ));
             return;
         }
@@ -297,7 +303,7 @@ fn spawn_rail_ground_draw(
                 ctx.map_tile_chunk(),
                 WaterTile::ANIMATED,
                 image.sprite(),
-                Transform::from_translation(tile_pos(
+                Transform::from_translation(full_tile_sprite_pos(
                     ctx.tx_i32(),
                     ctx.ty_i32(),
                     base_z,
@@ -310,7 +316,7 @@ fn spawn_rail_ground_draw(
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
                 image.sprite(),
-                Transform::from_translation(tile_pos_half(
+                Transform::from_translation(full_tile_sprite_pos_half(
                     ctx.tx_i32(),
                     ctx.ty_i32(),
                     base_z,
@@ -1040,7 +1046,7 @@ pub(crate) fn spawn_road_tile(
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
                 img.sprite_colored(crossing_paint),
-                Transform::from_translation(tile_pos_half(
+                Transform::from_translation(full_tile_sprite_pos_half(
                     ctx.tx_i32(),
                     ctx.ty_i32(),
                     base_z,
@@ -1073,7 +1079,13 @@ pub(crate) fn spawn_road_tile(
                 None,
             );
             if let Some(img) = assets.pbs_rail_sprite(sid) {
-                let base = tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.048, road_half_h);
+                let base = full_tile_sprite_pos_half(
+                    ctx.tx_i32(),
+                    ctx.ty_i32(),
+                    base_z,
+                    0.048,
+                    road_half_h,
+                );
                 let offset = rail_ghost_overlay_offset(sid);
                 commands.spawn((
                     MapVisualLayer,
@@ -1500,7 +1512,7 @@ pub(crate) fn spawn_rail_tile(
             };
             let z = 0.02 + track_layer_index as f32 * 0.0004;
             let offset = rail_ghost_overlay_offset(sid);
-            let base = tile_pos_half(
+            let base = full_tile_sprite_pos_half(
                 ctx.tx_i32(),
                 ctx.ty_i32(),
                 pass_base_z[pass_index],
@@ -1536,7 +1548,7 @@ pub(crate) fn spawn_rail_tile(
                 };
                 let offset = rail_pbs_reservation_offset(sid);
                 let bevy_extra_y = pbs_extra_y_in_bevy(extra_y);
-                let base = tile_pos_half(
+                let base = full_tile_sprite_pos_half(
                     ctx.tx_i32(),
                     ctx.ty_i32(),
                     pass_base_z[pass_index],
@@ -1874,6 +1886,17 @@ mod tests {
             rail_track_trace_mode(5, Some(0)),
             RailTrackTraceMode::FoundationChild((64, -32, 0))
         );
+    }
+
+    #[test]
+    fn rail_full_sprite_center_preserves_opengfx_xrel_minus_31() {
+        let pos = crate::iso::full_tile_sprite_pos_half(7, 3, 0, 0.02, crate::iso::TILE_HALF_H);
+        let flat = crate::iso::full_tile_sprite_pos(7, 3, 0, 0.02);
+        assert_eq!(
+            pos.x,
+            crate::iso::iso(7, 3).x + crate::iso::GROUND_SPRITE_CENTER_X_OFFSET
+        );
+        assert_eq!(flat.x, pos.x);
     }
 
     #[allow(clippy::expect_used)] // Fixture del oráculo: el fallo debe mostrar el caso exacto.

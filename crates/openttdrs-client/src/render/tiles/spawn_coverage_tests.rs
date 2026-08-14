@@ -1314,7 +1314,7 @@ fn sloped_rail_station_levels_platform_without_sloped_grass() {
         openttdrs_core::foundation_draw_plan(ctx.info.tileh, openttdrs_core::FOUNDATION_LEVELED, 0);
     let surface_z = ctx.info.base_z.saturating_add(plan.surface_z_delta);
     let expected_track_pos =
-        crate::iso::tile_pos_half(1, 1, surface_z, 0.02, crate::iso::TILE_HALF_H);
+        crate::iso::full_tile_sprite_pos_half(1, 1, surface_z, 0.02, crate::iso::TILE_HALF_H);
 
     let mut world = World::new();
     world.insert_resource(TsMap(map));

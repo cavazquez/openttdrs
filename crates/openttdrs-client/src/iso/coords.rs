@@ -519,10 +519,29 @@ pub fn tile_pos_half(tx: i32, ty: i32, height: u8, layer: f32, half_h: f32) -> V
     )
 }
 
+/// [`tile_pos_half`] para sprites compuestos de una tesela OpenGFX.
+///
+/// Los sprites 64×31 de suelo y de vía declaran `xrel=-31`; por eso su
+/// centro efectivo está un píxel a la derecha de la coordenada geométrica de
+/// la tesela. A diferencia de [`ground_tile_pos_half`], mantiene la
+/// profundidad sortable de una superficie ferroviaria, vial o de estación.
+#[inline]
+pub fn full_tile_sprite_pos_half(tx: i32, ty: i32, height: u8, layer: f32, half_h: f32) -> Vec3 {
+    let mut pos = tile_pos_half(tx, ty, height, layer, half_h);
+    pos.x += GROUND_SPRITE_CENTER_X_OFFSET;
+    pos
+}
+
 /// [`tile_pos_half`] con la altura estándar de tesela 64×31.
 #[inline]
 pub fn tile_pos(tx: i32, ty: i32, height: u8, layer: f32) -> Vec3 {
     tile_pos_half(tx, ty, height, layer, TILE_HALF_H)
+}
+
+/// [`full_tile_sprite_pos_half`] con la altura estándar de tesela 64×31.
+#[inline]
+pub fn full_tile_sprite_pos(tx: i32, ty: i32, height: u8, layer: f32) -> Vec3 {
+    full_tile_sprite_pos_half(tx, ty, height, layer, TILE_HALF_H)
 }
 
 /// Posición en pantalla de `(x_pos, y_pos)` de un vehículo OpenTTD.

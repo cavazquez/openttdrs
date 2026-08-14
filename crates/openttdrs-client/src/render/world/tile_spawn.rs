@@ -511,6 +511,11 @@ pub(crate) fn setup(
     commands.spawn((
         Camera2d,
         crate::render::PrimaryGameCamera,
+        // El blitter 8bpp de OpenTTD compone píxeles sin suavizado de bordes.
+        // El MSAA ×4 por defecto de Bevy mezcla los bordes de quads incluso
+        // cuando los PNG y el sampler son estrictamente nearest, creando
+        // colores que no existen en la paleta OpenGFX.
+        Msaa::Off,
         Camera {
             clear_color: ClearColorConfig::Custom(Color::srgb(0.22, 0.38, 0.52)),
             ..default()

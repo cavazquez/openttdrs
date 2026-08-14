@@ -74,6 +74,16 @@ mod tests {
             .unwrap();
     }
 
+    #[test]
+    fn primary_world_camera_disables_msaa_for_pixel_exact_composition() {
+        let mut app = with_assets_app();
+        let world = app.world_mut();
+        world.run_system_once(setup).unwrap();
+
+        let mut cameras = world.query_filtered::<&Msaa, With<PrimaryGameCamera>>();
+        assert_eq!(cameras.single(world).expect("cámara principal"), &Msaa::Off);
+    }
+
     /// Entrada automatizable del candidato para el contrato `world-draw`.
     ///
     /// No requiere ventana ni GPU: los stubs del atlas alcanzan porque la

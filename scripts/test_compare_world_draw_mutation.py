@@ -90,6 +90,21 @@ def main() -> int:
             print(grouped.stdout, grouped.stderr, file=sys.stderr)
             return 1
 
+        json_report = root / "draw-report.json"
+        reported = run(reference, candidate, "--json-report", str(json_report))
+        if reported.returncode != 0:
+            print(reported.stdout, reported.stderr, file=sys.stderr)
+            return 1
+        report = json.loads(json_report.read_text(encoding="utf-8"))
+        if (
+            report["kind"] != "world-draw-compare"
+            or report["status"] != "equivalent"
+            or report["summary"].get("candidate_ids_contained") != 2
+            or report["first_divergence"] is not None
+        ):
+            print(json.dumps(report, indent=2), file=sys.stderr)
+            return 1
+
         ordered = run(reference, candidate, "--order")
         if ordered.returncode != 0 or "Comandos candidatos en orden relativo de OpenTTD: 2" not in ordered.stdout:
             print(ordered.stdout, ordered.stderr, file=sys.stderr)
@@ -107,6 +122,19 @@ def main() -> int:
         missing = run(reference, candidate)
         if missing.returncode != 1 or "candidate_sprite_missing_in_reference" not in missing.stdout:
             print(missing.stdout, missing.stderr, file=sys.stderr)
+            return 1
+        missing_report = root / "draw-missing-report.json"
+        missing_with_report = run(
+            reference, candidate, "--json-report", str(missing_report)
+        )
+        report = json.loads(missing_report.read_text(encoding="utf-8"))
+        if (
+            missing_with_report.returncode != 1
+            or report["status"] != "different"
+            or "candidate_sprite_missing_in_reference" not in report["first_divergence"]
+        ):
+            print(missing_with_report.stdout, missing_with_report.stderr, file=sys.stderr)
+            print(json.dumps(report, indent=2), file=sys.stderr)
             return 1
 
         # La comparación es por multiconjunto: una segunda capa con el mismo

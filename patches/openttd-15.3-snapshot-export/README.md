@@ -9,10 +9,11 @@ Además exporta `world-raw` v2, un JSONL por tesela con `type`, `height` y
 monorriel/maglev, estaciones y objetos de una partida real. El contrato está en
 [`docs/parity/WORLD_RAW_SCHEMA.md`](../../docs/parity/WORLD_RAW_SCHEMA.md).
 
-`world-semantic` v1 toma esos mismos bytes y emite la interpretación de ambos
+`world-semantic` v2 toma esos mismos bytes y emite la interpretación de ambos
 motores: pendiente/base Z, familia de tesela, tipos de vía, orientaciones,
 estaciones, agua/depósitos y la otra punta de cada túnel o puente. Es el paso
-siguiente cuando `world-raw` coincide. Contrato:
+siguiente cuando `world-raw` coincide. La v2 también resuelve `object_type`
+desde el pool vivo de objetos, en vez de confundirlo con bytes MAP*. Contrato:
 [`docs/parity/WORLD_SEMANTIC_SCHEMA.md`](../../docs/parity/WORLD_SEMANTIC_SCHEMA.md).
 
 ## Integrar en el clon local

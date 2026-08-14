@@ -8,7 +8,7 @@
 #include <string>
 
 /**
- * If OPENTTDRS_WORLD_SEMANTIC_OUT is set, writes a `world-semantic` v1
+ * If OPENTTDRS_WORLD_SEMANTIC_OUT is set, writes a `world-semantic` v2
  * JSONL stream after AfterLoadGame.
  * @return true on success or when the env var is unset; false on I/O error.
  */

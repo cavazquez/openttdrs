@@ -301,6 +301,34 @@ Los scripts reciben una región inclusiva `x0,y0,x1,y1`. Ajustar las rutas al
 entorno local. El binario C++ debe venir de la rama `openttdrs/oracle-parity`
 del fork, no de su `main` oficial.
 
+#### Oráculo integrado (recomendado)
+
+Para un caso nuevo, usar primero un único comando. Exporta ambos lados en el
+orden correcto (`raw → semantic → draw`), se detiene en la primera frontera
+que diverge y deja JSONL, log y `report.json` por etapa. El código de salida
+`1` significa una divergencia ya diagnosticable; `2` o mayor indica que no se
+pudo producir la evidencia.
+
+```bash
+SAV=save/Kale_TitleGame.sav
+./scripts/compare_sav_world.sh "$SAV" /tmp/kale-oracle \
+  --tile 189,126 --radius 1 --max-diffs 20
+```
+
+`--tile X,Y --radius N` construye una región inclusiva; `--region
+X0,Y0,X1,Y1` sirve para un rectángulo ya conocido. `--kind raw`, `semantic` o
+`draw` permite repetir sólo una frontera después de haber confirmado sus
+predecesoras. Por ejemplo, la salida de dibujo queda en
+`/tmp/kale-oracle/draw/report.json` y contiene selección, geometría, paletas,
+fundaciones, orden relativo y la primera diferencia.
+
+Usar `--dry-run` para comprobar el alcance antes de ejecutar OpenTTD:
+
+```bash
+./scripts/compare_sav_world.sh "$SAV" /tmp/kale-oracle \
+  --tile 189,126 --radius 1 --dry-run
+```
+
 ```bash
 SAV=save/Kale_TitleGame.sav
 OTTD_BIN=/ruta/a/OpenTTD/build/openttd

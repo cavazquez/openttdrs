@@ -457,6 +457,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("candidate", type=Path, help="JSONL de openttdrs")
     parser.add_argument("--where", action="append", default=[], metavar="X,Y")
     parser.add_argument("--max-diffs", type=int, default=20)
+    parser.add_argument(
+        "--json-report",
+        type=Path,
+        help="escribe un informe JSON de selección, geometría, paletas y primer desvío",
+    )
     parser.add_argument("--strict-reference", action="store_true")
     parser.add_argument(
         "--report-unmatched",
@@ -516,6 +521,46 @@ def main(argv: list[str] | None = None) -> int:
     except StreamError as error:
         print(f"error: {error}", file=sys.stderr)
         return 2
+
+    report = {
+        "schema_version": 1,
+        "kind": "world-draw-compare",
+        "status": "equivalent" if not failures else "different",
+        "reference": {
+            "path": str(args.reference),
+            "metadata": reference.metadata.value,
+        },
+        "candidate": {
+            "path": str(args.candidate),
+            "metadata": candidate.metadata.value,
+        },
+        "options": {
+            "where": [
+                {"x": x, "y": y} for x, y in sorted(where, key=lambda item: (item[1], item[0]))
+            ],
+            "strict_reference": args.strict_reference,
+            "geometry": args.geometry,
+            "foundations": args.foundations,
+            "order": args.order,
+        },
+        "summary": dict(sorted(summary.items())),
+        "failures": failures,
+        "first_divergence": failures[0] if failures else None,
+        "uncovered_reference": dict(sorted(uncovered.items())),
+        "unmatched_candidate": dict(sorted(unmatched_candidate.items())),
+        "unmatched_candidate_example": dict(sorted(unmatched_candidate_example.items())),
+        "unmatched_geometry": dict(sorted(unmatched_geometry.items())),
+        "unmatched_geometry_example": dict(sorted(unmatched_geometry_example.items())),
+        "by_role": {
+            role: dict(sorted(counts.items())) for role, counts in sorted(by_role.items())
+        },
+    }
+    if args.json_report:
+        args.json_report.parent.mkdir(parents=True, exist_ok=True)
+        args.json_report.write_text(
+            json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
 
     print(
         "world-draw: "

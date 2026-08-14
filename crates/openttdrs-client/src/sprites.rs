@@ -25,6 +25,8 @@ mod field_draw_data_generated;
 mod foundation;
 #[path = "sprites/house_draw_data_generated.rs"]
 mod house_draw_data_generated;
+#[path = "sprites/house_palette.rs"]
+pub(crate) mod house_palette;
 #[path = "sprites/industry.rs"]
 mod industry;
 #[path = "sprites/industry_draw_proc.rs"]
@@ -180,15 +182,20 @@ pub use transparency::{
 /// `s1` es el sprite de suelo/base que OpenTTD pasa a `DrawGroundSprite`.
 /// No debe confundirse con un overlay ni sustituirse por césped: 3924 es
 /// `SPR_FLAT_BARE_LAND` y 3981 es `SPR_FLAT_GRASS_TILE`.
+/// `s1_palette` y `s2_palette` son las `PaletteID` de la entrada `M(...)`.
+/// Los PNG de casas comparten rampas de color, por lo que descartar estas
+/// paletas hace que bloques completos aparezcan con el tono equivocado.
 /// `s2` es el sprite del edificio principal (0 = sin overlay).
 /// `draw_proc` es el último campo `p` de `M(...)` en `town_land.h` (`1` = ascensor).
 pub struct HouseDrawSpec {
     pub s1: u32,
+    pub s1_palette: u32,
     pub s1_w: f32,
     pub s1_h: f32,
     pub s1_xrel: f32,
     pub s1_yrel: f32,
     pub s2: u32,
+    pub s2_palette: u32,
     pub s2_w: f32,
     pub s2_h: f32,
     pub s2_xrel: f32,
@@ -232,6 +239,7 @@ pub use bridge_sprites_generated::{
 pub(crate) use bridge_structure_palette::{
     BridgePaletteSprites, bridge_structure_palette_for_sprite,
 };
+pub(crate) use house_palette::HousePaletteSprites;
 
 /// Variante para una capa aeroportuaria animada.
 ///
@@ -272,6 +280,20 @@ pub use effect_vehicle_draw_data_generated::{
 /// Usa el naming genérico `house_s{id}.png` para todos los sprites extraídos.
 pub fn house_sprite_filename(sprite_id: u32) -> String {
     format!("house_s{sprite_id}.png")
+}
+
+/// Nombre canónico en el atlas para un sprite de una entrada de casa.
+///
+/// Los dos sprites de suelo frecuentes no son archivos ``house_s*``: se
+/// comparten con el terreno general. Centralizar esta excepción evita que el
+/// atlas y las copias recoloreadas busquen archivos diferentes.
+#[must_use]
+pub(crate) fn house_sprite_asset_filename(sprite_id: u32) -> String {
+    match sprite_id {
+        3924 => "terrain_bare.png".to_owned(),
+        3981 => "grass.png".to_owned(),
+        _ => house_sprite_filename(sprite_id),
+    }
 }
 
 /// Etapa de obra para dibujo (`GetHouseBuildingStage` en `town_map.h`).
@@ -489,6 +511,22 @@ mod house_draw_index_tests {
     fn first_house_row_keeps_openttd_bare_ground_sprite() {
         assert_eq!(HOUSE_DRAW_DATA[0].s1, 3924);
         assert_eq!(HOUSE_DRAW_DATA[0].s2, 1421);
+    }
+
+    #[test]
+    fn house_draw_rows_keep_both_openttd_palette_fields() {
+        // `town_land.h` filas 36 y 40: el mismo `0x58d` se dibuja blanco y
+        // concreto según `p2`. Si el generador vuelve a descartar p1/p2, la
+        // traza puede coincidir en sprite ID pero la ciudad ya no coincide
+        // visualmente con OpenTTD.
+        assert_eq!(HOUSE_DRAW_DATA[8].s2, 1421);
+        assert_eq!(HOUSE_DRAW_DATA[8].s2_palette, 797);
+        assert_eq!(HOUSE_DRAW_DATA[12].s2, 1421);
+        assert_eq!(HOUSE_DRAW_DATA[12].s2_palette, 800);
+        // Una entrada posterior aplica la paleta a ambas capas (`p1` y
+        // `p2`), no sólo al edificio sortable.
+        assert_eq!(HOUSE_DRAW_DATA[469].s1_palette, 797);
+        assert_eq!(HOUSE_DRAW_DATA[469].s2_palette, 797);
     }
 
     #[test]

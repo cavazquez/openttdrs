@@ -340,6 +340,33 @@ impl WorldDrawTrace {
         );
     }
 
+    /// Igual que [`Self::record_sprite`], pero preserva la `PaletteID` que
+    /// OpenTTD entregó al blitter. Se usa para capas sin geometría explícita
+    /// (por ejemplo las casas): marcar una geometría inventada convertiría el
+    /// audit de traza en un falso desvío, mientras que perder la paleta lo
+    /// convertía en un falso positivo visual.
+    pub(crate) fn record_sprite_with_palette(
+        role: &'static str,
+        primitive: &'static str,
+        sprite_id: u32,
+        palette: u32,
+        fallback: bool,
+    ) {
+        Self::record_sprite_with_draw_state(
+            role,
+            primitive,
+            sprite_id,
+            palette,
+            fallback,
+            (0, 0, 0),
+            (0, 0),
+            0,
+            None,
+            true,
+            false,
+        );
+    }
+
     /// Variante de [`Self::record_sprite`] para sprites con posición interna o
     /// bounds propios, como árboles, señales y piezas de puentes.
     pub(crate) fn record_sprite_with_geometry(

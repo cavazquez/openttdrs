@@ -320,25 +320,34 @@ pub(crate) fn spawn_house_tile(
         }
     };
     if spec.s1 != 0 {
-        let (ground, fallback) = assets.houses.get(&spec.s1).map_or_else(
-            || (&assets.grass_density[0][0], true),
-            |image| (image, false),
+        let ground = assets.houses.get(&spec.s1);
+        let palette_image = (spec.s1_palette != 0)
+            .then(|| assets.house_palettes.handle(spec.s1, spec.s1_palette))
+            .flatten();
+        let fallback = ground.is_none() || (spec.s1_palette != 0 && palette_image.is_none());
+        let ground_sprite = palette_image.map_or_else(
+            || ground.unwrap_or(&assets.grass_density[0][0]).sprite(),
+            |image| Sprite {
+                image: image.clone(),
+                ..default()
+            },
         );
         if leveled {
             // `DrawGroundSprite` queda colgado de la fundación mediante
             // `OffsetGroundSprite(0, -TILE_HEIGHT)`. La posición Bevy
             // equivalente usa la superficie plana efectiva, pero la traza
             // conserva la semántica child del oráculo.
-            WorldDrawTrace::record_foundation_child_sprite(
+            WorldDrawTrace::record_foundation_child_sprite_with_palette(
                 "house-foundation-ground",
                 spec.s1,
+                spec.s1_palette,
                 fallback,
                 (0, -32, 0),
             );
             commands.spawn((
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
-                ground.sprite(),
+                ground_sprite,
                 Transform::from_translation(house_pos(
                     spec.s1_xrel,
                     spec.s1_yrel,
@@ -348,14 +357,20 @@ pub(crate) fn spawn_house_tile(
                 )),
             ));
         } else {
-            WorldDrawTrace::record_sprite("house-ground", "ground", spec.s1, fallback);
+            WorldDrawTrace::record_sprite_with_palette(
+                "house-ground",
+                "ground",
+                spec.s1,
+                spec.s1_palette,
+                fallback,
+            );
             // Los sprites de ground de `town_land.h` no siempre miden 64×31
             // (los patios de oficinas llegan a 64×37): se anclan con sus
             // propios offsets NFO, no con el centro del rombo natural.
             commands.spawn((
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
-                ground.sprite(),
+                ground_sprite,
                 Transform::from_translation(house_pos(
                     spec.s1_xrel,
                     spec.s1_yrel,
@@ -376,13 +391,35 @@ pub(crate) fn spawn_house_tile(
     let tint = sprite_color(TransparencyOption::Houses);
     if spec.s2 != 0 {
         let Some(img) = assets.houses.get(&spec.s2) else {
-            WorldDrawTrace::record_sprite("house-building", "sortable", spec.s2, true);
+            WorldDrawTrace::record_sprite_with_palette(
+                "house-building",
+                "sortable",
+                spec.s2,
+                spec.s2_palette,
+                true,
+            );
             return;
         };
-        WorldDrawTrace::record_sprite("house-building", "sortable", spec.s2, false);
-        let anim = (1483..=1486).contains(&spec.s2)
+        let palette_image = (spec.s2_palette != 0)
+            .then(|| assets.house_palettes.handle(spec.s2, spec.s2_palette))
+            .flatten();
+        let fallback = spec.s2_palette != 0 && palette_image.is_none();
+        WorldDrawTrace::record_sprite_with_palette(
+            "house-building",
+            "sortable",
+            spec.s2,
+            spec.s2_palette,
+            fallback,
+        );
+        let anim = spec.s2_palette == 0
+            && (1483..=1486).contains(&spec.s2)
             && assets.lighthouse_anim_frames.contains_key(&spec.s2);
-        let mut sprite = if anim {
+        let mut sprite = if let Some(image) = palette_image {
+            Sprite {
+                image: image.clone(),
+                ..default()
+            }
+        } else if anim {
             assets.lighthouse_anim_frames[&spec.s2][0].sprite()
         } else {
             img.sprite()

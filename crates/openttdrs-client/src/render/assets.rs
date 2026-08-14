@@ -4,9 +4,9 @@ use bevy::prelude::*;
 
 use crate::render::atlas::{AtlasSprite, TileAtlas};
 use crate::sprites::{
-    AIRPORT_STATION_SPRITES, BridgePaletteSprites, HOUSE_DRAW_DATA, INDUSTRY_GFX_DATA,
-    RAIL_DEPOT_VISUAL_TYPE_COUNT, ROAD_DEPOT_GROUND_PATH, StationTileClass,
-    airport_station_base_for_gfx, house_sprite_filename, rail_depot_build_layers,
+    AIRPORT_STATION_SPRITES, BridgePaletteSprites, HOUSE_DRAW_DATA, HousePaletteSprites,
+    INDUSTRY_GFX_DATA, RAIL_DEPOT_VISUAL_TYPE_COUNT, ROAD_DEPOT_GROUND_PATH, StationTileClass,
+    airport_station_base_for_gfx, house_sprite_asset_filename, rail_depot_build_layers,
     rail_pbs_sprite_ids_for_preload, rail_sprite_ids_for_preload, rail_station_draw_layers,
     rail_station_ground_track_sprite_for_type, rail_station_layer_for_type,
     rail_waypoint_draw_layers, road_depot_build_layers, road_stop_build_layers,
@@ -117,6 +117,9 @@ pub(crate) struct WorldAssets {
     pub(crate) bridge_by_id: std::collections::HashMap<u32, AtlasSprite>,
     /// Variantes recoloreadas (`PALETTE_TO_STRUCT_*`) fuera del atlas.
     pub(crate) bridge_palettes: BridgePaletteSprites,
+    /// Variantes de casas con `PaletteID` vanilla (estructura, iglesia o
+    /// compañía) aplicada fuera del atlas RGBA.
+    pub(crate) house_palettes: HousePaletteSprites,
     pub(crate) houses: HashMap<u32, AtlasSprite>,
     /// `tree_{NN}.png` (NN = sprite − 1576): 19 especies × 7 etapas.
     pub(crate) trees: Vec<AtlasSprite>,
@@ -576,11 +579,7 @@ impl WorldAssets {
                     // por su nombre canónico evita que el extractor los
                     // trate como un overlay `house_s*` y mantiene el atlas
                     // válido aun antes de una regeneración completa.
-                    let name = match sid {
-                        3924 => "terrain_bare.png".to_owned(),
-                        3981 => "grass.png".to_owned(),
-                        _ => house_sprite_filename(sid),
-                    };
+                    let name = house_sprite_asset_filename(sid);
                     houses.entry(sid).or_insert_with(|| atlas.get(&name));
                 }
             }
@@ -671,6 +670,8 @@ impl WorldAssets {
 
         let mut bridge_palettes = BridgePaletteSprites::default();
         bridge_palettes.build_all(images);
+        let mut house_palettes = HousePaletteSprites::default();
+        house_palettes.build_all(images);
 
         Self {
             grass,
@@ -734,6 +735,7 @@ impl WorldAssets {
             maglev_tunnel_fronts,
             bridge_by_id,
             bridge_palettes,
+            house_palettes,
             houses,
             trees,
             fields,
@@ -983,5 +985,9 @@ mod world_assets_tests {
                 "falta copia PALETTE_CRASH para rail_{id}"
             );
         }
+        assert!(
+            assets.house_palettes.covers_all_generated_pairs(),
+            "falta una copia recoloreada de casa vanilla; verificar assets 8/32 bpp y PaletteID"
+        );
     }
 }

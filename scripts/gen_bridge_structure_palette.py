@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Genera tablas indexadas de recolor de puentes (`PALETTE_TO_STRUCT_*`).
+"""Genera tablas indexadas de recolor de estructuras vanilla.
 
-Parsea pseudo-sprites 795–801 de `ogfx1_base.nfo` y escribe las 256 entradas
+Parsea pseudo-sprites de estructura/iglesia de `ogfx1_base.nfo` y escribe las 256 entradas
 fuente→destino que usa OpenTTD. El remapeo debe conservar el índice original:
 dos entradas DOS pueden compartir RGB y aun así tener destinos distintos. Hacer
 la conversión a RGB antes del remapeo recorta o recolorea incorrectamente la
@@ -47,10 +47,15 @@ def find_ogfx1_base_nfo() -> Path | None:
     return None
 
 PALETTE_IDS: list[tuple[str, int]] = [
+    ("BLUE", 795),
     ("BROWN", 796),
+    ("WHITE", 797),
     ("RED", 798),
+    ("GREEN", 799),
     ("CONCRETE", 800),
     ("YELLOW", 801),
+    ("CHURCH_RED", 1438),
+    ("CHURCH_CREAM", 1439),
 ]
 
 
@@ -171,7 +176,7 @@ def build_output() -> str:
 
     lines = [
         "// Generado por scripts/gen_bridge_structure_palette.py — NO EDITAR A MANO.",
-        "// Remapeos RGB de `PALETTE_TO_STRUCT_*` (pseudo-sprites 795–801).",
+        "// Remapeos RGB de estructura/iglesia de OpenTTD (pseudo-sprites 795–801, 1438–1439).",
         "",
     ]
     for name, sid in PALETTE_IDS:

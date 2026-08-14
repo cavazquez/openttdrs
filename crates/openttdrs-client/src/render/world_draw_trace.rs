@@ -74,6 +74,10 @@ struct TraceDraw {
     world_xy_delta: (i32, i32),
     world_z_delta: i32,
     bounds: Option<TraceSpriteBounds>,
+    /// Último `sortable` de la tesela al que OpenTTD colgaría un `child`.
+    /// Los `DrawGroundSprite` posteriores a `DrawFoundation` no conservan
+    /// coordenadas de mundo propias: el vínculo es parte del contrato visual.
+    parent_ordinal: Option<usize>,
 }
 
 /// Decisión previa a elegir un sprite de fundación. Es deliberadamente un
@@ -139,6 +143,7 @@ struct TraceTile {
     base_z: u8,
     foundations: Vec<TraceFoundation>,
     draws: Vec<TraceDraw>,
+    last_parent: Option<usize>,
 }
 
 #[derive(Debug)]
@@ -250,6 +255,7 @@ impl WorldDrawTrace {
                 base_z: ctx.info.base_z,
                 foundations: Vec::new(),
                 draws: Vec::new(),
+                last_parent: None,
             });
             state.current = Some(key);
         });
@@ -495,6 +501,8 @@ impl WorldDrawTrace {
             let Some(tile) = state.tiles.get_mut(&key) else {
                 return;
             };
+            let ordinal = tile.draws.len();
+            let parent_ordinal = (primitive == "child").then_some(tile.last_parent).flatten();
             tile.draws.push(TraceDraw {
                 role,
                 primitive,
@@ -507,7 +515,14 @@ impl WorldDrawTrace {
                 world_xy_delta,
                 world_z_delta,
                 bounds,
+                parent_ordinal,
             });
+            // `AddSortableSpriteToDraw` deja el padre activo para los
+            // `AddChildSpriteScreen` que siguen. El stream candidato no
+            // modela todavía SpriteCombine, pero sí todos los cimientos.
+            if primitive == "sortable" {
+                tile.last_parent = Some(ordinal);
+            }
         });
     }
 
@@ -627,7 +642,7 @@ impl WorldDrawTrace {
                             "z": draw.offset.2,
                         },
                         "combine_group": serde_json::Value::Null,
-                        "parent_ordinal": serde_json::Value::Null,
+                        "parent_ordinal": draw.parent_ordinal,
                         "transparent": false,
                         "geometry_explicit": draw.geometry_explicit,
                         "fallback": draw.fallback,

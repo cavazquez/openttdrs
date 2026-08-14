@@ -877,6 +877,34 @@ mod tests {
     }
 
     #[test]
+    fn halftile_track_plan_preserves_the_lower_pass_before_the_high_one() {
+        // Kale_TitleGame (160,65): SLOPE_S con UPPER|LOWER. `DrawTrackBits`
+        // primero conserva UPPER sobre la pendiente cruda, y sólo después de
+        // `DrawFoundation(Halftile(S))` dibuja LOWER sobre SLOPE_WSE. Unir
+        // ambas en una sola pasada hacía que la fundación quedara delante del
+        // tramo bajo y rompía el orden observable del draw proc.
+        assert_eq!(
+            rail_track_draw_plan(SLOPE_S, TRACK_BIT_HORZ),
+            RailTrackDrawPlan {
+                passes: [
+                    Some(RailTrackSpritePass {
+                        track_bits: TRACK_BIT_UPPER,
+                        sprite_tileh: SLOPE_S,
+                        z_delta: 0,
+                        halftile_corner: None,
+                    }),
+                    Some(RailTrackSpritePass {
+                        track_bits: TRACK_BIT_LOWER,
+                        sprite_tileh: SLOPE_W | SLOPE_S | SLOPE_E,
+                        z_delta: 0,
+                        halftile_corner: Some(CORNER_S),
+                    }),
+                ],
+            }
+        );
+    }
+
+    #[test]
     fn steep_both_track_plan_keeps_lower_and_upper_passes() {
         // SLOPE_STEEP_W + TRACK_VERT: la vía LEFT queda en la mitad alta y
         // RIGHT se dibuja sobre la pasada SteepLower. `DrawFoundation` eleva

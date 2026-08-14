@@ -61,6 +61,33 @@ const fn halftile_foundation_child_offset(corner: u8) -> (i32, i32, i32) {
     }
 }
 
+/// Convierte el mismo desplazamiento de `OffsetGroundSprite` a las
+/// coordenadas del renderer. El oráculo lo serializa multiplicado por
+/// `ZOOM_BASE=4`, mientras que nuestras teselas 8bpp ya usan píxeles finales
+/// de 64×31 y Bevy tiene Y hacia arriba.
+const fn halftile_foundation_child_visual_offset(corner: Option<u8>) -> Vec2 {
+    match corner {
+        Some(corner) => {
+            let (x, y, _) = halftile_foundation_child_offset(corner);
+            Vec2::new(x as f32 / 4.0, -(y as f32) / 4.0)
+        }
+        None => Vec2::ZERO,
+    }
+}
+
+/// `DrawTrackBits` sólo difiere la fundación cuando hay una pasada baja y una
+/// alta. La primera debe quedar antes del cimiento; la segunda, después. Si
+/// sólo existe la pasada alta, el cimiento sigue yendo al comienzo.
+const fn rail_foundation_after_pass(
+    track_plan: openttdrs_core::RailTrackDrawPlan,
+) -> Option<usize> {
+    if track_plan.passes[1].is_some() {
+        Some(0)
+    } else {
+        None
+    }
+}
+
 /// Replica el padre activo que deja cada llamada a `DrawFoundation` antes de
 /// una pasada de `DrawTrackBits`. En las fundaciones no continuas, la pasada
 /// baja se pinta antes de crear la fundación de media tesela y la alta después.
@@ -553,18 +580,30 @@ pub(crate) fn spawn_rail_tile(
         .tile
         .is_some_and(|t| (t.m3 & 0x0F) == RAIL_GROUND_SNOW_OR_DESERT)
         || climate.uses_snow_ground();
-    let rail_base_z = spawn_rail_foundation(
-        commands,
-        map,
-        map_dims,
-        assets,
-        ctx,
-        tileh,
-        render_tb,
-        foundation_newgrf,
-        action5_sprites.as_deref_mut(),
-        images.as_deref_mut(),
-    );
+    let rail_foundation = openttdrs_core::rail_foundation_for_trackbits(tileh, render_tb);
+    let track_plan = openttdrs_core::rail_track_draw_plan(tileh, render_tb);
+    let foundation_after_pass = rail_foundation_after_pass(track_plan);
+    // En una fundación no continua el primer `DrawFoundation` es NONE o
+    // STEEP_LOWER; el cimiento visible se crea recién entre las dos pasadas.
+    // Aun así catenaria y señales posteriores necesitan conocer desde ahora
+    // la altura final de la superficie.
+    let rail_base_z = if foundation_after_pass.is_some() {
+        let (_, z_delta) = openttdrs_core::rail_surface_slope_and_z(tileh, render_tb);
+        ctx.info.base_z.saturating_add(z_delta)
+    } else {
+        spawn_rail_foundation(
+            commands,
+            map,
+            map_dims,
+            assets,
+            ctx,
+            tileh,
+            render_tb,
+            foundation_newgrf,
+            action5_sprites.as_deref_mut(),
+            images.as_deref_mut(),
+        )
+    };
     let (surface_tileh, _) = openttdrs_core::rail_surface_slope_and_z(tileh, render_tb);
     let render_tileh = if surface_tileh & 0x20 != 0 {
         tileh
@@ -584,11 +623,12 @@ pub(crate) fn spawn_rail_tile(
     // una media fundación cambia el padre activo entre la mitad baja y alta.
     // Los dos arrays son de tamaño fijo porque core garantiza como máximo dos
     // pasadas; así la traza no agrega una asignación por tesela.
-    let rail_foundation = openttdrs_core::rail_foundation_for_trackbits(tileh, render_tb);
-    let track_plan = openttdrs_core::rail_track_draw_plan(tileh, render_tb);
     rail_layers.clear();
     let mut pass_ends = [0_usize; 2];
     let mut pass_modes = [RailTrackTraceMode::Ground; 2];
+    let mut pass_base_z = [rail_base_z; 2];
+    let mut pass_half_h = [rail_half_h; 2];
+    let mut pass_halftile_corner = [None; 2];
     let mut pass_count = 0_usize;
     for pass in track_plan.passes.into_iter().flatten() {
         collect_rail_sprites_for_surface(
@@ -599,6 +639,13 @@ pub(crate) fn spawn_rail_tile(
             rail_layers,
         );
         pass_modes[pass_count] = rail_track_trace_mode(rail_foundation, pass.halftile_corner);
+        pass_base_z[pass_count] = ctx.info.base_z.saturating_add(pass.z_delta);
+        pass_half_h[pass_count] = if pass.sprite_tileh == 0 {
+            TILE_HALF_H
+        } else {
+            slope_half_h(pass.sprite_tileh)
+        };
+        pass_halftile_corner[pass_count] = pass.halftile_corner;
         pass_ends[pass_count] = rail_layers.len();
         pass_count += 1;
     }
@@ -616,76 +663,120 @@ pub(crate) fn spawn_rail_tile(
     // electrificadas, mono/maglev y teselas con señales. El tipo está en el
     // ID del sprite: el tinte sintético lo ocultaba tras azul/violeta.
     let rail_paint = Color::WHITE;
-    let mut pass_index = 0_usize;
-    for (i, sid) in rail_layers.iter().copied().enumerate() {
-        while pass_index + 1 < pass_count && i >= pass_ends[pass_index] {
-            pass_index += 1;
-        }
-        let missing_asset = !assets.rail.contains_key(&sid);
-        let fallback = typed_selection_fallback || missing_asset;
-        let role = if fallback {
-            match rail_type {
-                openttdrs_core::RailType::Rail => "rail-track-fallback-rail",
-                openttdrs_core::RailType::Electric => "rail-track-fallback-electric",
-                openttdrs_core::RailType::Monorail => "rail-track-fallback-monorail",
-                openttdrs_core::RailType::Maglev => "rail-track-fallback-maglev",
-            }
+    let reservation_draws = show_pbs_reservations.then(|| {
+        let reservation_bits = ctx.tile.map_or(0, |tile| {
+            openttdrs_core::decode_rail_reservation_m2_hi(tile.m2_hi)
+        });
+        collect_rail_pbs_reservation_draws(render_tb, reservation_bits, tileh, rail_type)
+    });
+    let mut track_layer_index = 0_usize;
+    let mut pbs_layer_index = 0_usize;
+    for pass_index in 0..pass_count {
+        let start = if pass_index == 0 {
+            0
         } else {
-            "rail-track"
+            pass_ends[pass_index - 1]
         };
-        record_rail_track_trace(role, sid, fallback, pass_modes[pass_index]);
-        let Some(img) = assets.rail.get(&sid) else {
-            continue;
-        };
-        let z = 0.02 + i as f32 * 0.0004;
-        let offset = rail_ghost_overlay_offset(sid);
-        let base = tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), rail_base_z, z, rail_half_h);
-        commands.spawn((
-            MapVisualLayer,
-            ctx.map_tile_chunk(),
-            img.sprite_colored(rail_paint),
-            Transform::from_translation(base + Vec3::new(offset.x, offset.y, 0.0)),
-        ));
+        let end = pass_ends[pass_index];
+        let halftile_offset =
+            halftile_foundation_child_visual_offset(pass_halftile_corner[pass_index]);
+        for sid in rail_layers[start..end].iter().copied() {
+            let missing_asset = !assets.rail.contains_key(&sid);
+            let fallback = typed_selection_fallback || missing_asset;
+            let role = if fallback {
+                match rail_type {
+                    openttdrs_core::RailType::Rail => "rail-track-fallback-rail",
+                    openttdrs_core::RailType::Electric => "rail-track-fallback-electric",
+                    openttdrs_core::RailType::Monorail => "rail-track-fallback-monorail",
+                    openttdrs_core::RailType::Maglev => "rail-track-fallback-maglev",
+                }
+            } else {
+                "rail-track"
+            };
+            record_rail_track_trace(role, sid, fallback, pass_modes[pass_index]);
+            let Some(img) = assets.rail.get(&sid) else {
+                track_layer_index += 1;
+                continue;
+            };
+            let z = 0.02 + track_layer_index as f32 * 0.0004;
+            let offset = rail_ghost_overlay_offset(sid);
+            let base = tile_pos_half(
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+                pass_base_z[pass_index],
+                z,
+                pass_half_h[pass_index],
+            );
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                img.sprite_colored(rail_paint),
+                Transform::from_translation(
+                    base + Vec3::new(
+                        offset.x + halftile_offset.x,
+                        offset.y + halftile_offset.y,
+                        0.0,
+                    ),
+                ),
+            ));
+            track_layer_index += 1;
+        }
+        if let Some(draws) = reservation_draws.as_ref() {
+            for draw in draws
+                .iter()
+                .filter(|draw| draw.halftile_corner == pass_halftile_corner[pass_index])
+            {
+                let sid = draw.sprite_id;
+                let mode = rail_track_trace_mode(rail_foundation, draw.halftile_corner);
+                let extra_y = pbs_track_sprite_extra_y(draw.track_bit, draw.sprite_tileh);
+                record_rail_pbs_trace(sid, !assets.has_exact_pbs_rail_sprite(sid), mode, extra_y);
+                let Some(img) = assets.pbs_rail_sprite(sid) else {
+                    pbs_layer_index += 1;
+                    continue;
+                };
+                let offset = rail_pbs_reservation_offset(sid);
+                let bevy_extra_y = pbs_extra_y_in_bevy(extra_y);
+                let base = tile_pos_half(
+                    ctx.tx_i32(),
+                    ctx.ty_i32(),
+                    pass_base_z[pass_index],
+                    0.026 + pbs_layer_index as f32 * 0.0004,
+                    pass_half_h[pass_index],
+                );
+                commands.spawn((
+                    MapVisualLayer,
+                    ctx.map_tile_chunk(),
+                    img.sprite(),
+                    Transform::from_translation(
+                        base + Vec3::new(
+                            offset.x + halftile_offset.x,
+                            offset.y + bevy_extra_y + halftile_offset.y,
+                            0.0,
+                        ),
+                    ),
+                ));
+                pbs_layer_index += 1;
+            }
+        }
+        if foundation_after_pass == Some(pass_index) {
+            let _ = spawn_rail_foundation(
+                commands,
+                map,
+                map_dims,
+                assets,
+                ctx,
+                tileh,
+                render_tb,
+                foundation_newgrf,
+                action5_sprites.as_deref_mut(),
+                images.as_deref_mut(),
+            );
+        }
     }
     // `DrawTrackBits`: una reserva PBS no recolorea toda la vía. OpenTTD
     // superpone los SINGLE_* de las pistas reservadas con PALETTE_CRASH=804.
     // La segunda capa es esencial para no confundir una reserva en un cruce
     // o túnel con una vía de otro tipo.
-    if show_pbs_reservations {
-        let reservation_bits = ctx.tile.map_or(0, |tile| {
-            openttdrs_core::decode_rail_reservation_m2_hi(tile.m2_hi)
-        });
-        for (i, draw) in
-            collect_rail_pbs_reservation_draws(render_tb, reservation_bits, tileh, rail_type)
-                .into_iter()
-                .enumerate()
-        {
-            let sid = draw.sprite_id;
-            let mode = rail_track_trace_mode(rail_foundation, draw.halftile_corner);
-            let extra_y = pbs_track_sprite_extra_y(draw.track_bit, draw.sprite_tileh);
-            record_rail_pbs_trace(sid, !assets.has_exact_pbs_rail_sprite(sid), mode, extra_y);
-            let Some(img) = assets.pbs_rail_sprite(sid) else {
-                continue;
-            };
-            let offset = rail_pbs_reservation_offset(sid);
-            let bevy_extra_y = pbs_extra_y_in_bevy(extra_y);
-            let base = tile_pos_half(
-                ctx.tx_i32(),
-                ctx.ty_i32(),
-                rail_base_z,
-                0.026 + i as f32 * 0.0004,
-                rail_half_h,
-            );
-            commands.spawn((
-                MapVisualLayer,
-                ctx.map_tile_chunk(),
-                img.sprite(),
-                Transform::from_translation(
-                    base + Vec3::new(offset.x, offset.y + bevy_extra_y, 0.0),
-                ),
-            ));
-        }
-    }
     // Catenaria OpenGFX: wires (PCP) + postes PPP; TO_CATENARY vía env.
     if rail_type.has_catenary() {
         let trackbits = rail_trackbits_for_render(map, ctx.coord, map_dims.0, map_dims.1);
@@ -922,8 +1013,11 @@ pub(crate) fn spawn_rail_tile(
 
 #[cfg(test)]
 mod tests {
+    use bevy::prelude::Vec2;
+
     use super::{
-        RailTrackTraceMode, pbs_extra_y_in_bevy, pbs_track_sprite_extra_y, rail_track_trace_mode,
+        RailTrackTraceMode, halftile_foundation_child_visual_offset, pbs_extra_y_in_bevy,
+        pbs_track_sprite_extra_y, rail_foundation_after_pass, rail_track_trace_mode,
     };
     use crate::sprites::{RAIL_TB_LEFT, RAIL_TB_LOWER, RAIL_TB_RIGHT, RAIL_TB_UPPER};
     use openttdrs_core::{FOUNDATION_INCLINED_X, FOUNDATION_LEVELED};
@@ -982,5 +1076,25 @@ mod tests {
 
         assert_eq!(pbs_extra_y_in_bevy(-32), 32.0);
         assert_eq!(pbs_extra_y_in_bevy(0), 0.0);
+    }
+
+    #[test]
+    fn halftile_rail_passes_defer_the_foundation_and_keep_its_screen_offset() {
+        // Kale_TitleGame (160,65): hay una pasada baja y otra alta; el
+        // cimiento Action5 debe emitirse entre ambas, no antes de las dos.
+        let plan = openttdrs_core::rail_track_draw_plan(0x02, 0x0C);
+        assert_eq!(rail_foundation_after_pass(plan), Some(0));
+
+        // `OffsetGroundSprite(0, -16)` se serializa como (0,-64) en el
+        // oráculo (ZOOM_BASE=4). El renderer usa Y positivo hacia arriba.
+        assert_eq!(
+            halftile_foundation_child_visual_offset(Some(1)),
+            Vec2::new(0.0, 16.0)
+        );
+        assert_eq!(
+            halftile_foundation_child_visual_offset(Some(0)),
+            Vec2::new(16.0, 8.0)
+        );
+        assert_eq!(halftile_foundation_child_visual_offset(None), Vec2::ZERO);
     }
 }

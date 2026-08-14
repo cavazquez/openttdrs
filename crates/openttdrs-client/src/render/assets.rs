@@ -177,6 +177,17 @@ fn industry_sprite_atlas_name(id: u32) -> String {
     }
 }
 
+/// Nombre de atlas de una variante de suelo rocoso vanilla.
+///
+/// Los offsets usan siempre dos dígitos (`00`..`18`), tal como los genera
+/// `gen_tile_atlas.py`. Sin el padding, las pendientes 0..9 caen en el
+/// fallback del atlas aun cuando el plan de dibujo eligió el sprite lógico
+/// correcto.
+#[must_use]
+fn rocky_terrain_atlas_name(variant: usize, offset: usize) -> String {
+    format!("terrain_rocky_{}_{offset:02}.png", variant + 1)
+}
+
 impl WorldAssets {
     /// Resuelve todos los sprites del mapa contra el [`TileAtlas`]; no toca
     /// el filesystem (la tabla de rects es metadata compilada).
@@ -191,9 +202,7 @@ impl WorldAssets {
             }
         });
         let rocky = std::array::from_fn(|variant| {
-            std::array::from_fn(|offset| {
-                atlas.get(&format!("terrain_rocky_{}_{}.png", variant + 1, offset))
-            })
+            std::array::from_fn(|offset| atlas.get(&rocky_terrain_atlas_name(variant, offset)))
         });
         let grass_density = std::array::from_fn(|density| {
             std::array::from_fn(|offset| {
@@ -912,7 +921,10 @@ mod world_assets_tests {
     use bevy::image::ImagePlugin;
     use bevy::prelude::*;
 
-    use super::{TileAtlas, WorldAssets, industry_sprite_atlas_name, stub_opengfx_tiles_for_tests};
+    use super::{
+        TileAtlas, WorldAssets, industry_sprite_atlas_name, rocky_terrain_atlas_name,
+        stub_opengfx_tiles_for_tests,
+    };
     use openttdrs_core::RailType;
 
     #[test]
@@ -939,6 +951,16 @@ mod world_assets_tests {
         let mut images = app.world_mut().resource_mut::<Assets<Image>>();
         let assets = WorldAssets::load(&atlas, &mut images);
         assert_eq!(industry_sprite_atlas_name(3924), "terrain_bare.png");
+        for variant in 0..2 {
+            for offset in 0..=18 {
+                let name = rocky_terrain_atlas_name(variant, offset);
+                assert_eq!(
+                    assets.rocky[variant][offset],
+                    atlas.get(&name),
+                    "la variante rocosa {variant}/{offset} debe resolver {name}"
+                );
+            }
+        }
         assert_eq!(
             assets.industries.get(&3924),
             Some(&atlas.get("terrain_bare.png")),

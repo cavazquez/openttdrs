@@ -1030,7 +1030,7 @@ pub(crate) fn spawn_road_tile(
                 )
             })
             .unwrap_or(1370);
-        if let Some(img) = assets.rail.get(&sid) {
+        if let Some(img) = assets.level_crossing_ground_sprite(sid) {
             // `DrawRoadTile` pinta el bloque de vía del cruce con `PAL_NONE`.
             // La identidad visual (rail/electric/mono/maglev/tram) ya viene en
             // el sprite seleccionado; recolorearlo lo alejaba de OpenTTD.

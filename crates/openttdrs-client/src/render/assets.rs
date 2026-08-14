@@ -6,11 +6,11 @@ use crate::render::atlas::{AtlasSprite, TileAtlas};
 use crate::sprites::{
     AIRPORT_STATION_SPRITES, BridgePaletteSprites, HOUSE_DRAW_DATA, HousePaletteSprites,
     INDUSTRY_GFX_DATA, RAIL_DEPOT_VISUAL_TYPE_COUNT, ROAD_DEPOT_GROUND_PATH, StationTileClass,
-    airport_station_base_for_gfx, house_sprite_asset_filename, rail_depot_build_layers,
-    rail_pbs_sprite_ids_for_preload, rail_sprite_ids_for_preload, rail_station_draw_layers,
-    rail_station_ground_track_sprite_for_type, rail_station_layer_for_type,
-    rail_waypoint_draw_layers, road_depot_build_layers, road_stop_build_layers,
-    road_stop_drive_through_layers, signal_sprite_texture_id,
+    airport_station_base_for_gfx, house_sprite_asset_filename, level_crossing_sprite_atlas_key,
+    rail_depot_build_layers, rail_pbs_sprite_ids_for_preload, rail_sprite_ids_for_preload,
+    rail_station_draw_layers, rail_station_ground_track_sprite_for_type,
+    rail_station_layer_for_type, rail_waypoint_draw_layers, road_depot_build_layers,
+    road_stop_build_layers, road_stop_drive_through_layers, signal_sprite_texture_id,
 };
 
 #[derive(Clone, Resource)]
@@ -70,6 +70,9 @@ pub(crate) struct WorldAssets {
     /// OpenGFX `tram_flat_*` (SPR_TRAMWAY_OVERLAY+0..18); mismo índice que `road_flat_*`.
     pub(crate) tram_flat: Vec<AtlasSprite>,
     pub(crate) rail: HashMap<u32, AtlasSprite>,
+    /// Suelo de cruce de nivel, separado de `rail`: los IDs lógicos se solapan
+    /// con señales Action5 y por tanto no pueden usar `rail_<id>.png`.
+    level_crossing_grounds: HashMap<u32, AtlasSprite>,
     /// Copias de vía remapeadas exactamente con `PALETTE_CRASH=804`.
     ///
     /// El atlas es RGBA y ya no conoce los índices DOS originales, por eso no
@@ -319,6 +322,9 @@ impl WorldAssets {
                 rail.insert(id, sprite);
             }
         }
+        let level_crossing_grounds = (1370u32..=1405)
+            .filter_map(|id| level_crossing_sprite_atlas_key(id).map(|key| (id, atlas.get(&key))))
+            .collect();
         let rail_pbs = rail_pbs_sprite_ids_for_preload()
             .into_iter()
             .filter_map(|id| {
@@ -732,6 +738,7 @@ impl WorldAssets {
             house_lift,
             tram_flat,
             rail,
+            level_crossing_grounds,
             rail_pbs,
             station_grounds,
             bus_stop_grounds,
@@ -823,6 +830,12 @@ impl WorldAssets {
     #[must_use]
     pub(crate) fn bridge_sprite(&self, id: u32) -> Option<&AtlasSprite> {
         self.bridge_by_id.get(&id)
+    }
+
+    /// Sprite de suelo de un cruce a nivel, en su namespace semántico.
+    #[must_use]
+    pub(crate) fn level_crossing_ground_sprite(&self, id: u32) -> Option<&AtlasSprite> {
+        self.level_crossing_grounds.get(&id)
     }
 
     /// Sprite de reserva PBS. Ante assets antiguos conserva una vía visible,
@@ -965,6 +978,21 @@ mod world_assets_tests {
             assets.industries.get(&3924),
             Some(&atlas.get("terrain_bare.png")),
             "el suelo base de industria debe reutilizar el asset de tierra desnuda"
+        );
+        assert_eq!(assets.level_crossing_grounds.len(), 36);
+        for id in 1370u32..=1405 {
+            let key = crate::sprites::level_crossing_sprite_atlas_key(id)
+                .unwrap_or_else(|| panic!("falta clave para cruce {id}"));
+            assert_eq!(
+                assets.level_crossing_ground_sprite(id),
+                Some(&atlas.get(&key)),
+                "el cruce {id} debe cargar su asset semántico"
+            );
+        }
+        assert_ne!(
+            assets.level_crossing_ground_sprite(1376),
+            assets.rail.get(&1376),
+            "el suelo de cruce 1376 no puede reutilizar la señal Action5 homónima"
         );
         // Torres terminadas (2083/2086/2089) deben tener ciclo oil_refinery.
         for id in [2083u32, 2086, 2089, 2120] {

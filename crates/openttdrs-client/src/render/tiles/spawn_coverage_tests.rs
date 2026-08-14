@@ -1875,8 +1875,7 @@ fn level_crossing_uses_only_the_paved_crossing_ground() {
     // La variante pavimentada debe estar precargada de verdad. Sustituirla en
     // el test ocultaba la regresión que dejaba los cruces de Kale sin suelo.
     let expected = assets
-        .rail
-        .get(&1375)
+        .level_crossing_ground_sprite(1375)
         .expect("crossing rail Y paved")
         .clone();
     let mut map = fresh_map8();

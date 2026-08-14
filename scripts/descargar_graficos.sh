@@ -587,6 +587,7 @@ def crop_by_id(sid: int, out_name: str) -> None:
         or out_name.startswith("grass")
         or out_name.startswith("tree_")
         or out_name.startswith("rail_")
+        or out_name.startswith("crossing_")
         or out_name.startswith("road_")
         or out_name.startswith("tram_")
     ):
@@ -895,7 +896,22 @@ for sid, src_name in [
 # Vallas de vía
 for sid in range(1301, 1309):
     crop_by_id(sid, f"track_fence_{sid - 1301}.png")
-# Cruces a nivel
+# Cruces a nivel. Los 36 sprites (3 tipos × 4 estados de eje/barrera ×
+# 3 superficies) tienen IDs que se solapan con señales Action5. Por eso se
+# extraen a un namespace propio y el renderer jamás los busca como rail_<id>.
+for crossing_base, crossing_family in [
+    (1370, "rail"),
+    (1382, "mono"),
+    (1394, "mglv"),
+]:
+    for crossing_offset in range(12):
+        crop_by_id(
+            crossing_base + crossing_offset,
+            f"crossing_{crossing_family}_{crossing_offset:02}.png",
+        )
+
+# Nombres históricos usados por herramientas externas; conservan el primer
+# estado de cada familia sin participar en la resolución del renderer.
 crop_by_id(1370, "crossing_rail_x.png")
 crop_by_id(1382, "crossing_mono_x.png")
 crop_by_id(1394, "crossing_mglv_x.png")

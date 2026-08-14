@@ -193,12 +193,32 @@ mod tests {
             "grass.png",
             "water.png",
             "rail_1011.png",
+            "crossing_rail_06.png",
+            "crossing_mono_11.png",
+            "crossing_mglv_00.png",
             "terrain_rocky_1_00.png",
             "terrain_rocky_1_18.png",
         ] {
             assert!(atlas.try_get(name).is_some(), "falta {name}");
         }
         assert!(atlas.try_get("no_existe.png").is_none());
+    }
+
+    #[test]
+    fn level_crossing_assets_are_full_ground_sprites_not_signal_aliases() {
+        for id in 1370u32..=1405 {
+            let key = crate::sprites::level_crossing_sprite_atlas_key(id)
+                .unwrap_or_else(|| panic!("falta clave semántica para cruce {id}"));
+            let name_index = TILE_ATLAS_NAMES
+                .binary_search_by(|(name, _)| (*name).cmp(key.as_str()))
+                .unwrap_or_else(|_| panic!("falta {key} en el atlas"));
+            let rect_index = TILE_ATLAS_NAMES[name_index].1 as usize;
+            let (_, _, _, width, height) = TILE_ATLAS_RECTS[rect_index];
+            assert!(
+                width >= 64 && height >= 31,
+                "{key} debe ser un suelo de cruce completo, no un sprite de señal {width}×{height}"
+            );
+        }
     }
 
     #[test]

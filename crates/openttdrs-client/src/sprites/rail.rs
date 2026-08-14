@@ -1578,6 +1578,25 @@ pub fn level_crossing_ground_sprite_id_for_type(
     sid
 }
 
+/// Nombre de atlas exclusivo para un sprite de suelo de cruce a nivel.
+///
+/// Los IDs lógicos 1370..=1405 comparten espacio numérico con sprites de
+/// señales Action5. El renderer no puede usar el alias genérico
+/// `rail_<id>.png`: según el tipo de gráfico activo ese alias puede resolver
+/// una señal de 7×13 en lugar de una tesela de cruce de 64×31. Mantener este
+/// namespace semántico separado conserva la decisión de `DrawTile_Road` sin
+/// confundirla con la de `DrawSignal`.
+#[must_use]
+pub fn level_crossing_sprite_atlas_key(id: u32) -> Option<String> {
+    let (family, offset) = match id {
+        1370..=1381 => ("rail", id - 1370),
+        1382..=1393 => ("mono", id - 1382),
+        1394..=1405 => ("mglv", id - 1394),
+        _ => return None,
+    };
+    Some(format!("crossing_{family}_{offset:02}.png"))
+}
+
 /// Reserva PBS en el cruce (bit 4 de `m5`, `HasCrossingReservation`).
 #[must_use]
 pub fn level_crossing_has_rail_reservation(m5: u8) -> bool {
@@ -2704,6 +2723,28 @@ mod tests {
             level_crossing_ground_sprite_id_for_type(0x41, RailType::Rail, true, true),
             1378
         );
+    }
+
+    #[test]
+    fn level_crossing_assets_have_a_dedicated_namespace_for_every_variant() {
+        let families = [(1370, "rail"), (1382, "mono"), (1394, "mglv")];
+        let mut keys = std::collections::BTreeSet::new();
+        for (base, family) in families {
+            for offset in 0..12 {
+                let id = base + offset;
+                let key = level_crossing_sprite_atlas_key(id)
+                    .unwrap_or_else(|| panic!("falta clave para cruce {id}"));
+                assert_eq!(key, format!("crossing_{family}_{offset:02}.png"));
+                assert!(
+                    !key.starts_with("rail_"),
+                    "el cruce {id} no puede resolver el namespace de señales"
+                );
+                assert!(keys.insert(key), "clave duplicada para cruce {id}");
+            }
+        }
+        assert_eq!(keys.len(), 36);
+        assert_eq!(level_crossing_sprite_atlas_key(1369), None);
+        assert_eq!(level_crossing_sprite_atlas_key(1406), None);
     }
 
     #[test]

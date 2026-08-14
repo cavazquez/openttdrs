@@ -54,6 +54,17 @@
       "note": "BBox/offset del recorte exacto usado para señales clásicas y Action5; CI valida hash."
     },
     {
+      "id": "track_fence_meta",
+      "generator": "scripts/gen_track_fence_meta.py",
+      "output": "crates/openttdrs-client/src/sprites/track_fence_meta_generated.rs",
+      "inputs": [],
+      "check": "regenerate_or_hash",
+      "requires_opengfx": true,
+      "output_sha256": "1c0a3049be4c95cbe06f756b3068ae5b752033e5248ec4a34877646c95901a47",
+      "license": "metadatos NFO OpenGFX locales (GPL-2.0+)",
+      "note": "Anclas de SPR_TRACK_FENCE_* del perfil gráfico activo; el generador y su regresión prueban la variante normal 8bpp/32bpp."
+    },
+    {
       "id": "water_palette",
       "generator": "scripts/gen_water_anim_frames.py",
       "output": "crates/openttdrs-client/src/sprites/water_palette_generated.rs",
@@ -151,6 +162,11 @@
     {
       "output": "crates/openttdrs-client/src/sprites/signal_sprite_meta_generated.rs",
       "generator": "scripts/gen_signal_sprite_meta.py",
+      "pilot": true
+    },
+    {
+      "output": "crates/openttdrs-client/src/sprites/track_fence_meta_generated.rs",
+      "generator": "scripts/gen_track_fence_meta.py",
       "pilot": true
     },
     {

@@ -189,6 +189,8 @@ pub(crate) fn spawn_map_tiles_in_bounds(
                     map,
                     (mw, mh),
                     assets,
+                    Some(company),
+                    owner_colour_for_tile(sim, ctx.coord, TileKind::Rail),
                     &ctx,
                     slope_half_ground,
                     &mut rail_layers,

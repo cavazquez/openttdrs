@@ -278,6 +278,9 @@ pub fn company_palette_tile_filenames() -> Vec<String> {
     // `OBJECT_STATUE` usa `PALETTE_MODIFIER_COLOUR` en OpenTTD, pero no forma
     // parte de las tablas de vehículos/depósitos que generan la lista base.
     names.insert("object_statue_company.png".into());
+    for index in 0..8 {
+        names.insert(format!("track_fence_{index}.png"));
+    }
     for id in rail_sprite_ids_for_company_palette() {
         names.insert(format!("rail_{id}.png"));
     }
@@ -484,5 +487,12 @@ mod tests {
         assert!(paths.iter().any(|p| p == "ship_depot_ne.png"));
         assert!(paths.iter().any(|p| p == "ship_depot_sw_front.png"));
         assert!(paths.iter().any(|p| p == "object_statue_company.png"));
+        for index in 0..8 {
+            assert!(
+                paths
+                    .iter()
+                    .any(|p| p == &format!("track_fence_{index}.png"))
+            );
+        }
     }
 }

@@ -14,12 +14,15 @@ use crate::render::road_newgrf::{
     road_newgrf_view_index,
 };
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
-use crate::render::{MapVisualLayer, TileRenderContext, WorldAssets};
+use crate::render::{
+    CompanyColoredSprites, MapVisualLayer, TileRenderContext, WorldAssets,
+    sprite_from_atlas_or_company_white_colour,
+};
 use crate::sprites::{
-    RAIL_GROUND_SNOW_OR_DESERT, RAIL_TB_LEFT, RAIL_TB_LOWER, RAIL_TB_RIGHT, RAIL_TB_UPPER,
-    ROAD_FLAT_HALF_H, ROAD_STREETLIGHT_META, ROADSIDE_LAMPS, ROADSIDE_TREE_META, ROADSIDE_TREES,
-    SPR_ROADSIDE_TREE, TRACK_FENCE_META, catenary_pylon_world_z_delta,
-    catenary_reference_sprite_id, catenary_sprite_color, catenary_wire_world_z_delta,
+    CompanyColour, RAIL_GROUND_SNOW_OR_DESERT, RAIL_TB_LEFT, RAIL_TB_LOWER, RAIL_TB_RIGHT,
+    RAIL_TB_UPPER, ROAD_FLAT_HALF_H, ROAD_STREETLIGHT_META, ROADSIDE_LAMPS, ROADSIDE_TREE_META,
+    ROADSIDE_TREES, SPR_ROADSIDE_TREE, catenary_pylon_world_z_delta, catenary_reference_sprite_id,
+    catenary_sprite_color, catenary_wire_world_z_delta,
     collect_catenary_pylons_from_map_with_pcp_override, collect_catenary_wire_draws_from_map,
     collect_rail_pbs_reservation_draws, collect_rail_sprites_for_surface,
     collect_signal_sprite_draws, is_road_level_crossing, is_typed_rail_track_sprite,
@@ -29,7 +32,7 @@ use crate::sprites::{
     road_flat_sprite_index, road_ground_sprite_id, road_streetlight_sprite_id, road_tile_roadside,
     road_tile_snow_or_desert, roadside_is_paved, signal_screen_anchor_for_side,
     signal_screen_position_for_side, signal_sprite_center_offset, track_fence_draws_for_tile,
-    tram_flat_sprite_index,
+    track_fence_height_px, track_fence_sprite_meta, tram_flat_sprite_index,
 };
 
 /// Contexto de `DrawGroundSprite` para una pasada de vía. Una fundación crea
@@ -687,6 +690,8 @@ pub(crate) fn spawn_rail_tile(
     map: &Map,
     map_dims: (u32, u32),
     assets: &WorldAssets,
+    company: Option<&CompanyColoredSprites>,
+    owner_colour: Option<CompanyColour>,
     ctx: &TileRenderContext,
     slope_half_ground: f32,
     rail_layers: &mut Vec<u32>,
@@ -918,6 +923,104 @@ pub(crate) fn spawn_rail_tile(
             );
         }
     }
+    // `DrawTrackDetails` se emite inmediatamente después de `DrawTrackBits`,
+    // antes de catenaria y señales. Usar la pendiente/altura que dejó la
+    // fundación es esencial: este bloque incluye los sprites 1305..1308 de
+    // las laderas y las cercas verticales que se apoyan en una esquina.
+    if show_full_detail {
+        let m3hi = ctx.tile.map_or(0, |t| t.m3hi);
+        let palette = 775 + u32::from(owner_colour.unwrap_or_default().as_u8());
+        let base_z_delta = (i32::from(rail_base_z) - i32::from(ctx.info.base_z)) * 8;
+        for (index, draw) in track_fence_draws_for_tile(m3hi, surface_tileh)
+            .into_iter()
+            .enumerate()
+        {
+            let sprite_id = 1301 + draw.sprite_index as u32;
+            let corner_z = track_fence_height_px(draw, surface_tileh);
+            let Some(meta) = track_fence_sprite_meta(draw.sprite_index) else {
+                WorldDrawTrace::record_sprite_with_palette_and_geometry(
+                    "rail-track-fence",
+                    "sortable",
+                    sprite_id,
+                    palette,
+                    true,
+                    (0, 0, 0),
+                    base_z_delta + corner_z,
+                    Some(TraceSpriteBounds::new(
+                        draw.bounds_origin.0,
+                        draw.bounds_origin.1,
+                        draw.bounds_origin.2,
+                        draw.bounds_extent.0,
+                        draw.bounds_extent.1,
+                        draw.bounds_extent.2,
+                    )),
+                );
+                continue;
+            };
+            let Some(img) = assets.track_fences.get(draw.sprite_index) else {
+                WorldDrawTrace::record_sprite_with_palette_and_geometry(
+                    "rail-track-fence",
+                    "sortable",
+                    sprite_id,
+                    palette,
+                    true,
+                    (0, 0, 0),
+                    base_z_delta + corner_z,
+                    Some(TraceSpriteBounds::new(
+                        draw.bounds_origin.0,
+                        draw.bounds_origin.1,
+                        draw.bounds_origin.2,
+                        draw.bounds_extent.0,
+                        draw.bounds_extent.1,
+                        draw.bounds_extent.2,
+                    )),
+                );
+                continue;
+            };
+            WorldDrawTrace::record_sprite_with_palette_and_geometry(
+                "rail-track-fence",
+                "sortable",
+                sprite_id,
+                palette,
+                false,
+                (0, 0, 0),
+                base_z_delta + corner_z,
+                Some(TraceSpriteBounds::new(
+                    draw.bounds_origin.0,
+                    draw.bounds_origin.1,
+                    draw.bounds_origin.2,
+                    draw.bounds_extent.0,
+                    draw.bounds_extent.1,
+                    draw.bounds_extent.2,
+                )),
+            );
+
+            let filename = format!("track_fence_{}.png", draw.sprite_index);
+            let mut pos3 = overlay_pos(
+                ctx.iso_pos,
+                f32::from(meta.xrel),
+                f32::from(meta.yrel),
+                f32::from(meta.width),
+                f32::from(meta.height),
+                rail_base_z,
+                0.03 + index as f32 * 0.0001,
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+            );
+            // `DrawTrackFence` desplaza únicamente las cercas con referencia
+            // de esquina. El pequeño ajuste de profundidad evita que una
+            // cerca elevada quede detrás de la misma tesela en Bevy.
+            pos3.y += corner_z as f32;
+            pos3.z += corner_z as f32 * 0.0001;
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                sprite_from_atlas_or_company_white_colour(company, owner_colour, img, &filename),
+                Transform::from_translation(pos3),
+            ));
+        }
+    }
+
     // `DrawTrackBits`: una reserva PBS no recolorea toda la vía. OpenTTD
     // superpone los SINGLE_* de las pistas reservadas con PALETTE_CRASH=804.
     // La segunda capa es esencial para no confundir una reserva en un cruce
@@ -1121,36 +1224,6 @@ pub(crate) fn spawn_rail_tile(
                 ctx.map_tile_chunk(),
                 sprite,
                 Transform::from_translation(Vec3::new(signal_xy.x, signal_xy.y, depth.z)),
-            ));
-        }
-    }
-
-    // `DrawTrackDetails`: cercas de borde (FullDetail).
-    if show_full_detail && tileh == 0 {
-        let track_bits = ctx.tile.map_or(0, |t| t.m5 & 0x3F);
-        let m3hi = ctx.tile.map_or(0, |t| t.m3hi);
-        let (w, h, xrel, yrel) = TRACK_FENCE_META;
-        for (sprite_i, dx, dy) in track_fence_draws_for_tile(map, ctx.coord, track_bits, m3hi) {
-            let Some(img) = assets.track_fences.get(sprite_i) else {
-                continue;
-            };
-            let off = remap_tile_offset(dx, dy, 0.0) * 0.5;
-            let pos3 = overlay_pos(
-                Vec2::new(ctx.iso_pos.x + off.x, ctx.iso_pos.y + off.y),
-                xrel,
-                yrel,
-                w,
-                h,
-                rail_base_z,
-                0.03,
-                ctx.tx_i32(),
-                ctx.ty_i32(),
-            );
-            commands.spawn((
-                MapVisualLayer,
-                ctx.map_tile_chunk(),
-                img.sprite(),
-                Transform::from_translation(pos3),
             ));
         }
     }

@@ -47,6 +47,8 @@ pub(crate) mod station;
 mod tile_atlas_generated;
 #[path = "sprites/track_fence.rs"]
 mod track_fence;
+#[path = "sprites/track_fence_meta_generated.rs"]
+mod track_fence_meta_generated;
 #[path = "sprites/transparency.rs"]
 mod transparency;
 #[path = "sprites/tree_draw_data_generated.rs"]
@@ -94,7 +96,9 @@ pub use road::{
     road_depot_entrance_road_bits, road_depot_seq_gfx, road_ground_sprite_id,
     road_streetlight_sprite_id, road_tile_roadside, roadside_is_paved,
 };
-pub use track_fence::{TRACK_FENCE_META, track_fence_draws_for_tile};
+pub(crate) use track_fence::{
+    track_fence_draws_for_tile, track_fence_height_px, track_fence_sprite_meta,
+};
 
 /// Mitad de la altura en px de cada variante `road_flat_XX`.
 pub const ROAD_FLAT_HALF_H: [f32; 19] = [

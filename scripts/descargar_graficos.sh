@@ -1453,6 +1453,9 @@ if [[ "${GRAPHICS_MODE}" == "8bpp" ]]; then
   python3 "$(dirname "$0")/sanitize_tile_colorkey.py"
 fi
 
+# Anclas NFO de las ocho cercas ferroviarias: cambian entre 8bpp y 32bpp.
+python3 "$(dirname "$0")/gen_track_fence_meta.py"
+
 # Texture atlas: empaqueta tiles/*.png en páginas + metadata Rust (batching).
 python3 "$(dirname "$0")/gen_tile_atlas.py"
 
@@ -1470,6 +1473,7 @@ if command -v rustfmt >/dev/null 2>&1; then
     "${ROOT}/crates/openttdrs-client/src/sprites/road_stop_gfx_data_generated.rs"
     "${ROOT}/crates/openttdrs-client/src/sprites/shore_draw_data_generated.rs"
     "${ROOT}/crates/openttdrs-client/src/sprites/tile_atlas_generated.rs"
+    "${ROOT}/crates/openttdrs-client/src/sprites/track_fence_meta_generated.rs"
     "${ROOT}/crates/openttdrs-client/src/sprites/tunnel_draw_data_generated.rs"
   )
   rustfmt --edition 2024 "${GENERATED_RUST[@]}"

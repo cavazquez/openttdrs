@@ -579,6 +579,7 @@ impl WorldDrawTrace {
                     "tile_context",
                     "trees",
                     "rail",
+                    "track_fences",
                     "catenary",
                     "tunnel",
                     "bridge",

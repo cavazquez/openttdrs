@@ -12,7 +12,9 @@ use super::{
     leveled_foundation_overlay_pos, sloped_or_flat_image, spawn_forced_leveled_foundation,
     spawn_ground_sprite, spawn_leveled_foundation,
 };
-use crate::iso::{overlay_pos, remap_tile_offset, slope_sprite_offset, tile_pos, wang_hash};
+use crate::iso::{
+    full_tile_sprite_pos, overlay_pos, remap_tile_offset, slope_sprite_offset, wang_hash,
+};
 use crate::render::atlas::AtlasSprite;
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
 use crate::render::{
@@ -681,7 +683,7 @@ pub(crate) fn spawn_industry_tile(
             chunk,
             WaterTile::ANIMATED,
             assets.water.sprite(),
-            Transform::from_translation(tile_pos(
+            Transform::from_translation(full_tile_sprite_pos(
                 ctx.tx_i32(),
                 ctx.ty_i32(),
                 base_z,

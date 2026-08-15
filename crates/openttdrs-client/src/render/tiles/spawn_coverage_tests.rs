@@ -72,7 +72,7 @@ fn water_surface_markers_cover_flat_locks_and_industry_water() {
     let lock = TileCoord::new(2, 2);
     map.set_mapt_m5(lock, 0x60, 0x20).expect("lock");
 
-    let oil_rig = TileCoord::new(3, 3);
+    let oil_rig = TileCoord::new(3, 2);
     let mut oil_tile = tile_template();
     oil_tile.kind = TileKind::Industry;
     oil_tile.mapt = 0x80;
@@ -120,7 +120,7 @@ fn water_surface_markers_cover_flat_locks_and_industry_water() {
                     &mut commands,
                     &a.0,
                     &m.0,
-                    &TileRenderContext::new(&m.0, &g.0, 3, 3),
+                    &TileRenderContext::new(&m.0, &g.0, 3, 2),
                     4.0,
                     &[],
                     &mut company,
@@ -145,6 +145,17 @@ fn water_surface_markers_cover_flat_locks_and_industry_water() {
             .filter(|marker| marker.is_palette_animated())
             .count(),
         2
+    );
+    let expected_industry_water_x =
+        crate::iso::iso(oil_rig.x, oil_rig.y).x + crate::iso::GROUND_SPRITE_CENTER_X_OFFSET;
+    assert!(
+        world
+            .query::<(&crate::render::WaterTile, &Transform)>()
+            .iter(&world)
+            .any(|(marker, transform)| {
+                marker.is_palette_animated() && transform.translation.x == expected_industry_water_x
+            }),
+        "la industria sobre agua debe conservar el xrel=-31 de SPR_FLAT_WATER_TILE"
     );
 }
 
@@ -289,12 +300,93 @@ fn oilrig_station_uses_water_even_when_its_station_has_airport_service() {
         .collect();
     assert_eq!(water.len(), 1, "oilrig debe conservar el suelo de agua");
     assert!(water[0].is_palette_animated());
+    let oilrig_water_x = world
+        .query::<(&crate::render::WaterTile, &Transform)>()
+        .iter(&world)
+        .find_map(|(marker, transform)| {
+            marker
+                .is_palette_animated()
+                .then_some(transform.translation.x)
+        })
+        .expect("agua de oilrig");
+    assert_eq!(
+        oilrig_water_x,
+        crate::iso::iso(oilrig.x, oilrig.y).x + crate::iso::GROUND_SPRITE_CENTER_X_OFFSET,
+        "el agua de Oilrig usa el mismo xrel=-31 que DrawGroundSprite"
+    );
     assert!(
         world
             .query::<&Sprite>()
             .iter(&world)
             .all(|sprite| !airport_apron.matches(sprite)),
         "un Oilrig no puede degradarse al apron de aeropuerto"
+    );
+}
+
+#[test]
+fn buoy_station_water_keeps_openttd_ground_xrel_center() {
+    let assets = boot_assets_app();
+    let buoy = TileCoord::new(3, 3);
+    let mut map = fresh_map8();
+    map.set_tile(
+        buoy,
+        Tile {
+            kind: TileKind::Station,
+            mapt: 0x50,
+            m6: openttdrs_core::station::STATION_TYPE_BUOY << 3,
+            ..tile_template()
+        },
+    )
+    .expect("buoy station tile");
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+
+    world
+        .run_system_once(
+            move |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                spawn_station_tile(
+                    &mut commands,
+                    &m.0,
+                    m.0.dimensions(),
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, 3, 3),
+                    &[],
+                    4.0,
+                    true,
+                    &[],
+                    &[],
+                    None,
+                    None,
+                    &[],
+                    None,
+                    &[],
+                    None,
+                    &[],
+                    TEST_CLIMATE,
+                    &[],
+                );
+            },
+        )
+        .expect("buoy spawn");
+
+    let buoy_water_x = world
+        .query::<(&crate::render::WaterTile, &Transform)>()
+        .iter(&world)
+        .find_map(|(marker, transform)| {
+            marker
+                .is_palette_animated()
+                .then_some(transform.translation.x)
+        })
+        .expect("agua de boya");
+    assert_eq!(
+        buoy_water_x,
+        crate::iso::iso(buoy.x, buoy.y).x + crate::iso::GROUND_SPRITE_CENTER_X_OFFSET,
+        "la boya debe conservar el xrel=-31 de su DrawWaterClassGround"
     );
 }
 
@@ -307,6 +399,7 @@ fn dock_station_keeps_vanilla_slope_and_water_halves() {
     let assets = boot_assets_app();
     let slope_dock = assets.dock_slope[2].clone(); // SPR_DOCK_SLOPE_SW = 2729.
     let water_dock = assets.dock_flat[0].clone(); // SPR_DOCK_FLAT_X = 2731.
+    let flat_water = assets.water.clone();
     let shore = assets.shore[crate::iso::shore_png_index(12)].clone();
     let land = TileCoord::new(2, 2);
     let water = TileCoord::new(3, 2);
@@ -440,6 +533,21 @@ fn dock_station_keeps_vanilla_slope_and_water_halves() {
         .expect("pieza de muelle plana X");
     assert_eq!(slope_pos, expected_slope_pos);
     assert_eq!(water_pos, expected_water_pos);
+    let dock_water_x = rendered
+        .iter()
+        .find_map(|(sprite, transform)| {
+            flat_water
+                .matches(sprite)
+                .then_some(transform.translation.x)
+        })
+        .expect("agua de la mitad plana del muelle");
+    let dock_shore_x = rendered
+        .iter()
+        .find_map(|(sprite, transform)| shore.matches(sprite).then_some(transform.translation.x))
+        .expect("costa de la mitad terrestre del muelle");
+    let offset = crate::iso::GROUND_SPRITE_CENTER_X_OFFSET;
+    assert_eq!(dock_water_x, crate::iso::iso(water.x, water.y).x + offset);
+    assert_eq!(dock_shore_x, crate::iso::iso(land.x, land.y).x + offset);
 }
 
 /// Una bahía vial normal ya contiene todo el suelo en su layout de estación.
@@ -776,6 +884,21 @@ fn ship_depot_uses_water_and_all_vanilla_two_tile_parts() {
 
     let mut water = world.query::<&crate::render::WaterTile>();
     assert_eq!(water.iter(&world).count(), 4, "cada parte conserva agua");
+    let mut water_x: Vec<_> = world
+        .query::<(&crate::render::WaterTile, &Transform)>()
+        .iter(&world)
+        .map(|(_, transform)| transform.translation.x)
+        .collect();
+    let mut expected_water_x: Vec<_> = [(1, 1), (2, 1), (1, 2), (2, 2)]
+        .into_iter()
+        .map(|(x, y)| crate::iso::iso(x, y).x + crate::iso::GROUND_SPRITE_CENTER_X_OFFSET)
+        .collect();
+    water_x.sort_by(f32::total_cmp);
+    expected_water_x.sort_by(f32::total_cmp);
+    assert_eq!(
+        water_x, expected_water_x,
+        "cada parte del depósito naval conserva el xrel=-31 de agua plana"
+    );
     let mut visuals = world.query::<&crate::render::MapVisualLayer>();
     // 4 fondos de agua + 1/2/1/2 capas de edificio para las cuatro variantes.
     assert_eq!(visuals.iter(&world).count(), 10);

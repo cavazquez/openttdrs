@@ -13,10 +13,10 @@ use super::{
     sloped_or_flat_image, spawn_ground_sprite,
 };
 use crate::iso::{
-    TILE_HALF_H, full_tile_sprite_pos_half, ground_draw_z, ground_tile_pos_half, overlay_pos,
-    remap_tile_offset, road_depot_build_sprite_center, road_stop_build_sprite_center,
-    shore_png_index, shore_sprite_half_h, slope_half_h, slope_sprite_offset, tile_pos,
-    tile_pos_half,
+    TILE_HALF_H, full_tile_sprite_pos, full_tile_sprite_pos_half, ground_draw_z,
+    ground_tile_pos_half, overlay_pos, remap_tile_offset, road_depot_build_sprite_center,
+    road_stop_build_sprite_center, shore_png_index, shore_sprite_half_h, slope_half_h,
+    slope_sprite_offset, tile_pos, tile_pos_half,
 };
 use crate::render::catenary_newgrf::catenary_sprite_colored;
 use crate::render::station_newgrf::{NewGrfStationSpriteCache, newgrf_station_def_for_tile};
@@ -165,7 +165,7 @@ fn spawn_dock_ground(
             ctx.map_tile_chunk(),
             WaterTile::ANIMATED,
             assets.water.sprite(),
-            Transform::from_translation(tile_pos(
+            Transform::from_translation(full_tile_sprite_pos(
                 ctx.tx_i32(),
                 ctx.ty_i32(),
                 base_z,
@@ -187,7 +187,7 @@ fn spawn_dock_ground(
             MapVisualLayer,
             ctx.map_tile_chunk(),
             assets.shore[shore].sprite(),
-            Transform::from_translation(tile_pos_half(
+            Transform::from_translation(full_tile_sprite_pos_half(
                 ctx.tx_i32(),
                 ctx.ty_i32(),
                 base_z,
@@ -1260,7 +1260,7 @@ pub(crate) fn spawn_station_tile(
                 ctx.map_tile_chunk(),
                 WaterTile::ANIMATED,
                 assets.water.sprite(),
-                Transform::from_translation(tile_pos(
+                Transform::from_translation(full_tile_sprite_pos(
                     ctx.tx_i32(),
                     ctx.ty_i32(),
                     base_z,
@@ -1288,7 +1288,7 @@ pub(crate) fn spawn_station_tile(
                 ctx.map_tile_chunk(),
                 WaterTile::ANIMATED,
                 assets.water.sprite(),
-                Transform::from_translation(tile_pos(
+                Transform::from_translation(full_tile_sprite_pos(
                     ctx.tx_i32(),
                     ctx.ty_i32(),
                     base_z,
@@ -1643,7 +1643,7 @@ pub(crate) fn spawn_transport_object_tile(
             ctx.map_tile_chunk(),
             WaterTile::ANIMATED,
             assets.water.sprite(),
-            Transform::from_translation(tile_pos(
+            Transform::from_translation(full_tile_sprite_pos(
                 ctx.tx_i32(),
                 ctx.ty_i32(),
                 base_z,

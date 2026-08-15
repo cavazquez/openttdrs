@@ -1,8 +1,8 @@
 use bevy::prelude::*;
 
 use crate::iso::{
-    GROUND_SPRITE_CENTER_X_OFFSET, HEIGHT_PX, TILE_HALF_H, ground_tile_pos_half, overlay_pos,
-    slope_sprite_offset, tile_pos, tile_pos_half,
+    GROUND_SPRITE_CENTER_X_OFFSET, HEIGHT_PX, TILE_HALF_H, full_tile_sprite_pos_half,
+    ground_tile_pos_half, overlay_pos, slope_sprite_offset, tile_pos,
 };
 use crate::render::world_draw_trace::WorldDrawTrace;
 use crate::render::{
@@ -853,7 +853,7 @@ pub(crate) fn spawn_ground_sprite_at(
         MapVisualLayer,
         ctx.map_tile_chunk(),
         image.sprite_colored(color),
-        Transform::from_translation(tile_pos_half(
+        Transform::from_translation(full_tile_sprite_pos_half(
             ctx.tx_i32(),
             ctx.ty_i32(),
             base_z,
@@ -921,7 +921,24 @@ mod tests {
         flattening_foundation_surface, foundation_surface_overlay_pos,
         leveled_foundation_overlay_pos, road_foundation_kind, road_foundation_surface,
     };
-    use crate::iso::{HEIGHT_PX, TILE_HALF_H, overlay_pos, tile_pos, tile_pos_half};
+    use crate::iso::{
+        GROUND_SPRITE_CENTER_X_OFFSET, HEIGHT_PX, TILE_HALF_H, full_tile_sprite_pos_half,
+        overlay_pos, tile_pos, tile_pos_half,
+    };
+
+    #[test]
+    fn sortable_foundation_ground_keeps_opengfx_xrel_minus_31() {
+        let legacy = tile_pos_half(7, 3, 2, 0.001, TILE_HALF_H);
+        let anchored = full_tile_sprite_pos_half(7, 3, 2, 0.001, TILE_HALF_H);
+
+        assert_eq!(
+            anchored.x,
+            legacy.x + GROUND_SPRITE_CENTER_X_OFFSET,
+            "el suelo hijo de Foundation conserva el centro OpenGFX de 64x31"
+        );
+        assert_eq!(anchored.y, legacy.y);
+        assert_eq!(anchored.z, legacy.z);
+    }
 
     #[test]
     fn leveled_overlay_matches_flat_elevation() {

@@ -800,7 +800,7 @@ pub(crate) fn spawn_road_tile(
             MapVisualLayer,
             ctx.map_tile_chunk(),
             road_set[fi].sprite_colored(road_paint),
-            Transform::from_translation(tile_pos_half(
+            Transform::from_translation(full_tile_sprite_pos_half(
                 ctx.tx_i32(),
                 ctx.ty_i32(),
                 base_z,

@@ -16,7 +16,7 @@ use crate::iso::{
     TILE_HALF_H, full_tile_sprite_pos, full_tile_sprite_pos_half, ground_draw_z,
     ground_tile_pos_half, overlay_pos, remap_tile_offset, road_depot_build_sprite_center,
     road_stop_build_sprite_center, shore_png_index, shore_sprite_half_h, slope_half_h,
-    slope_sprite_offset, tile_pos, tile_pos_half,
+    slope_sprite_offset, tile_pos_half,
 };
 use crate::render::catenary_newgrf::catenary_sprite_colored;
 use crate::render::station_newgrf::{NewGrfStationSpriteCache, newgrf_station_def_for_tile};
@@ -1409,7 +1409,7 @@ fn spawn_paved_road_stop_link(
         MapVisualLayer,
         ctx.map_tile_chunk(),
         assets.road_paved[fi].sprite(),
-        Transform::from_translation(tile_pos_half(
+        Transform::from_translation(full_tile_sprite_pos_half(
             ctx.tx_i32(),
             ctx.ty_i32(),
             base_z,
@@ -1594,7 +1594,12 @@ fn spawn_road_stop_ground_sprite(
         MapVisualLayer,
         ctx.map_tile_chunk(),
         sprite_from_atlas_or_company_white_colour(company, owner_colour, image, asset_path),
-        Transform::from_translation(tile_pos(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.04)),
+        Transform::from_translation(full_tile_sprite_pos(
+            ctx.tx_i32(),
+            ctx.ty_i32(),
+            base_z,
+            0.04,
+        )),
     ));
 }
 
@@ -1609,7 +1614,12 @@ fn spawn_stop_ground_sprite(
         MapVisualLayer,
         ctx.map_tile_chunk(),
         image.sprite(),
-        Transform::from_translation(tile_pos(ctx.tx_i32(), ctx.ty_i32(), base_z, layer)),
+        Transform::from_translation(full_tile_sprite_pos(
+            ctx.tx_i32(),
+            ctx.ty_i32(),
+            base_z,
+            layer,
+        )),
     ));
 }
 
@@ -2109,7 +2119,7 @@ fn spawn_road_depot_tile(
         MapVisualLayer,
         ctx.map_tile_chunk(),
         assets.road_depot_ground.sprite(),
-        Transform::from_translation(tile_pos_half(
+        Transform::from_translation(full_tile_sprite_pos_half(
             ctx.tx_i32(),
             ctx.ty_i32(),
             base_z,

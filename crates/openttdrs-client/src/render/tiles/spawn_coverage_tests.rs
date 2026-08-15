@@ -620,6 +620,162 @@ fn road_stop_bay_uses_only_its_vanilla_ground_and_build_layers() {
         sprites.iter().any(|sprite| bus_ground.matches(sprite)),
         "debe conservar el suelo de la bahía NE"
     );
+    let bay_ground_x = world
+        .query::<(&Sprite, &Transform)>()
+        .iter(&world)
+        .find_map(|(sprite, transform)| {
+            bus_ground
+                .matches(sprite)
+                .then_some(transform.translation.x)
+        })
+        .expect("suelo de bahía bus");
+    assert_eq!(
+        bay_ground_x,
+        crate::iso::iso(stop.x, stop.y).x + crate::iso::GROUND_SPRITE_CENTER_X_OFFSET,
+        "la bahía usa el xrel=-31 del ground OpenGFX"
+    );
+}
+
+#[test]
+fn drive_through_waypoint_and_road_depot_grounds_keep_opengfx_xrel_center() {
+    let assets = boot_assets_app();
+    let drive_through_ground =
+        assets.road_paved[crate::sprites::road_flat_sprite_index(0, 0x0A)].clone();
+    let waypoint_ground = assets.road_flat[10].clone();
+    let depot_ground = assets.road_depot_ground.clone();
+    let drive_through = TileCoord::new(2, 2);
+    let waypoint = TileCoord::new(4, 2);
+    let depot = TileCoord::new(6, 2);
+    let mut map = fresh_map8();
+    map.set_tile(
+        drive_through,
+        Tile {
+            kind: TileKind::Station,
+            mapt: 0x50,
+            m5: openttdrs_core::RSV_DRIVE_THROUGH_X,
+            m6: 3 << 3, // StationType::Bus.
+            ..tile_template()
+        },
+    )
+    .expect("drive-through bus stop");
+    map.set_tile(
+        waypoint,
+        Tile {
+            kind: TileKind::Station,
+            mapt: 0x50,
+            m3: 0x0A,
+            m6: openttdrs_core::station::STATION_TYPE_ROAD_WAYPOINT << 3,
+            ..tile_template()
+        },
+    )
+    .expect("road waypoint");
+    map.set_tile(
+        depot,
+        Tile {
+            kind: TileKind::RoadDepot,
+            mapt: 0x20,
+            ..tile_template()
+        },
+    )
+    .expect("road depot");
+
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world
+        .run_system_once(
+            move |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                for coord in [drive_through, waypoint] {
+                    spawn_station_tile(
+                        &mut commands,
+                        &m.0,
+                        m.0.dimensions(),
+                        &a.0,
+                        None,
+                        None,
+                        &TileRenderContext::new(
+                            &m.0,
+                            &g.0,
+                            u32::try_from(coord.x).expect("positive x"),
+                            u32::try_from(coord.y).expect("positive y"),
+                        ),
+                        &[],
+                        4.0,
+                        true,
+                        &[],
+                        &[],
+                        None,
+                        None,
+                        &[],
+                        None,
+                        &[],
+                        None,
+                        &[],
+                        TEST_CLIMATE,
+                        &[],
+                    );
+                }
+                spawn_transport_object_tile(
+                    &mut commands,
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, 6, 2),
+                    4.0,
+                    false,
+                    &m.0,
+                    m.0.dimensions(),
+                    &[],
+                    &[],
+                    None,
+                    &[],
+                    &[],
+                    None,
+                    None,
+                );
+            },
+        )
+        .expect("road ground variants spawn");
+
+    let drive_through_x = world
+        .query::<(&Sprite, &Transform)>()
+        .iter(&world)
+        .find_map(|(sprite, transform)| {
+            drive_through_ground
+                .matches(sprite)
+                .then_some(transform.translation.x)
+        })
+        .expect("ground drive-through");
+    let waypoint_x = world
+        .query::<(&Sprite, &Transform)>()
+        .iter(&world)
+        .find_map(|(sprite, transform)| {
+            waypoint_ground
+                .matches(sprite)
+                .then_some(transform.translation.x)
+        })
+        .expect("ground waypoint");
+    let depot_x = world
+        .query::<(&Sprite, &Transform)>()
+        .iter(&world)
+        .find_map(|(sprite, transform)| {
+            depot_ground
+                .matches(sprite)
+                .then_some(transform.translation.x)
+        })
+        .expect("ground depot");
+    let offset = crate::iso::GROUND_SPRITE_CENTER_X_OFFSET;
+    assert_eq!(
+        drive_through_x,
+        crate::iso::iso(drive_through.x, drive_through.y).x + offset
+    );
+    assert_eq!(
+        waypoint_x,
+        crate::iso::iso(waypoint.x, waypoint.y).x + offset
+    );
+    assert_eq!(depot_x, crate::iso::iso(depot.x, depot.y).x + offset);
 }
 
 #[test]
@@ -1945,11 +2101,25 @@ fn paved_roadside_uses_paved_set_and_streetlights_spawn_lamps() {
         1,
         "carretera pavimentada: solo el suelo"
     );
-    let a = world.resource::<TsAssets>();
     let fi = crate::sprites::ROAD_FLAT_OFFSET_TBL[5] as usize;
+    let expected_paved = world.resource::<TsAssets>().0.road_paved[fi].clone();
     assert!(
-        a.0.road_paved[fi].matches(&paved_sprites[0]),
+        expected_paved.matches(&paved_sprites[0]),
         "debe usar el set pavimentado (1313..)"
+    );
+    let paved_ground_x = world
+        .query::<(&Sprite, &Transform)>()
+        .iter(&world)
+        .find_map(|(sprite, transform)| {
+            expected_paved
+                .matches(sprite)
+                .then_some(transform.translation.x)
+        })
+        .expect("suelo de carretera pavimentada");
+    assert_eq!(
+        paved_ground_x,
+        crate::iso::iso(2, 2).x + crate::iso::GROUND_SPRITE_CENTER_X_OFFSET,
+        "road_paved conserva el xrel=-31 del sprite completo"
     );
 
     world
@@ -2137,6 +2307,16 @@ fn level_crossing_uses_only_the_paved_crossing_ground() {
     assert!(
         expected.matches(&sprites[0]),
         "debe usar crossing paved 1375"
+    );
+    let crossing_x = world
+        .query::<(&Sprite, &Transform)>()
+        .iter(&world)
+        .find_map(|(sprite, transform)| expected.matches(sprite).then_some(transform.translation.x))
+        .expect("suelo de cruce");
+    assert_eq!(
+        crossing_x,
+        crate::iso::iso(3, 3).x + crate::iso::GROUND_SPRITE_CENTER_X_OFFSET,
+        "crossing completo conserva el xrel=-31"
     );
 }
 

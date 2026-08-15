@@ -589,22 +589,25 @@ pub fn road_stop_sprite_pos(
 ) -> Vec3 {
     let anchor = iso(tx, ty);
     let elev = f32::from(base_z) * HEIGHT_PX;
-    const PX_PER_X_UNIT: f32 = 4.0;
-    let off = remap_tile_offset(seq.dx, seq.dy, seq.dz);
+    let (xrel, yrel) = road_stop_overlay_rel(seq);
     Vec3::new(
-        anchor.x + off.x + seq.x_offs + seq.remap_x_adj * PX_PER_X_UNIT,
-        anchor.y + off.y - seq.y_offs + elev,
+        anchor.x + xrel,
+        anchor.y - yrel + elev,
         (tx + ty) as f32 * 0.01 + f32::from(base_z) * 0.001 + layer_z,
     )
 }
 
 /// `xrel`/`yrel` para [`overlay_pos`] (ancla esquina norte + `RemapCoords` + offsets NFO).
+///
+/// `iso(tx, ty)` ya equivale a `RemapCoords(16 * tx, 16 * ty)` en la escala
+/// del cliente. Por ello los valores locales de `TILE_SEQ` (0..15) deben usar
+/// medio `remap_tile_offset`: usarlo completo duplicaría el avance de las
+/// piezas BUILD y puede sacarlas visualmente del borde del mapa.
 #[must_use]
 pub fn road_stop_overlay_rel(seq: RoadStopSeqGfx) -> (f32, f32) {
-    const PX_PER_X_UNIT: f32 = 4.0;
-    let off = remap_tile_offset(seq.dx, seq.dy, seq.dz);
+    let off = remap_tile_offset(seq.dx, seq.dy, seq.dz) * 0.5;
     (
-        off.x + seq.x_offs + seq.remap_x_adj * PX_PER_X_UNIT,
+        off.x + seq.x_offs + seq.remap_x_adj * 2.0,
         -off.y + seq.y_offs,
     )
 }

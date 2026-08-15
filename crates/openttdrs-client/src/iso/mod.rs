@@ -617,8 +617,8 @@ mod world_pos_to_tile_tests {
             remap_x_adj: 0.0,
         };
         let (xrel, yrel) = super::road_stop_overlay_rel(seq);
-        assert_eq!(xrel, -8.0);
-        assert_eq!(yrel, 4.0);
+        assert_eq!(xrel, -4.0);
+        assert_eq!(yrel, 2.0);
     }
 
     #[test]
@@ -633,7 +633,23 @@ mod world_pos_to_tile_tests {
         };
         let (xrel, yrel) = super::road_stop_overlay_rel(seq);
         assert_eq!(xrel, 0.0);
-        assert_eq!(yrel, 26.0);
+        assert_eq!(yrel, 13.0);
+    }
+
+    #[test]
+    fn road_stop_drive_through_y_layer_uses_openttd_tile_seq_scale() {
+        use crate::sprites::{StationTileClass, road_stop_drive_through_layers, road_stop_seq_gfx};
+
+        // Kale (253..254, 135..136) usa la variante Y de camiones. OpenTTD
+        // remapea su origen BUILD (13, 0, 0) a (-26, +13) px; en Bevy Y-up
+        // eso es `remap_tile_offset(..) * 0.5 == (-26, -13)`.
+        let spec = &road_stop_drive_through_layers(StationTileClass::Truck, 5)[0];
+        let (xrel, yrel) = super::road_stop_overlay_rel(road_stop_seq_gfx(spec));
+        assert_eq!((xrel, yrel), (-40.0, 6.0));
+
+        // El cálculo anterior omitía el 0.5 y producía (-66, 19), desplazando
+        // el muro occidental 26 px hacia fuera y 13 px hacia arriba.
+        assert_ne!((xrel, yrel), (-66.0, 19.0));
     }
 
     #[test]
@@ -654,14 +670,8 @@ mod world_pos_to_tile_tests {
         let h = 20.0;
         let c = super::road_stop_build_sprite_center(origin, tx, ty, 0, 0.05, seq, w, h);
         let top_left = super::road_stop_sprite_pos(tx, ty, 0, 0.05, seq);
-        let bottom_right = Vec2::new(top_left.x + w, top_left.y - h);
-        assert!(
-            top_left.x <= ground.x
-                && ground.x <= bottom_right.x
-                && bottom_right.y <= ground.y
-                && ground.y <= top_left.y,
-            "truck SE build_a debe cubrir el centro de la tesela de parada"
-        );
+        assert_eq!(top_left.x - origin.x, -11.0);
+        assert_eq!(top_left.y - origin.y, 5.0);
         let south = iso(tx, ty + 1);
         let ground_south = Vec2::new(south.x, south.y - super::TILE_HALF_H);
         let dist_station = (c.x - ground.x).hypot(c.y - ground.y);

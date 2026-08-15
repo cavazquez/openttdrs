@@ -517,7 +517,10 @@ pub(crate) fn setup(
         // colores que no existen en la paleta OpenGFX.
         Msaa::Off,
         Camera {
-            clear_color: ClearColorConfig::Custom(Color::srgb(0.22, 0.38, 0.52)),
+            // Fuera del rombo no hay agua: el blitter 8bpp de OpenTTD deja el
+            // framebuffer negro. Mantenerlo así evita que el borde del mapa
+            // parezca prolongarse con una franja azul.
+            clear_color: ClearColorConfig::Custom(Color::BLACK),
             ..default()
         },
         Transform::from_translation(cam_pos),

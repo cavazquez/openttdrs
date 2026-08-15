@@ -84,6 +84,19 @@ mod tests {
         assert_eq!(cameras.single(world).expect("cámara principal"), &Msaa::Off);
     }
 
+    #[test]
+    fn primary_world_camera_keeps_openttd_black_outside_map() {
+        let mut app = with_assets_app();
+        let world = app.world_mut();
+        world.run_system_once(setup).unwrap();
+
+        let mut cameras = world.query_filtered::<&Camera, With<PrimaryGameCamera>>();
+        let camera = cameras.single(world).expect("cámara principal");
+        assert!(
+            matches!(camera.clear_color, ClearColorConfig::Custom(color) if color == Color::BLACK)
+        );
+    }
+
     /// Entrada automatizable del candidato para el contrato `world-draw`.
     ///
     /// No requiere ventana ni GPU: los stubs del atlas alcanzan porque la

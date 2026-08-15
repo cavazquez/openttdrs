@@ -147,6 +147,7 @@ jobs:
           tar -xJf "$HOME/.cache/openttdrs/${OPENTTD_ARCHIVE}" -C "$RUNNER_TEMP/openttd-validation" --strip-components=1
           mkdir -p "$RUNNER_TEMP/openttd-validation/opengfx"
           unzip -q "$HOME/.cache/openttdrs/${OPENGFX_ARCHIVE}" -d "$RUNNER_TEMP/openttd-validation/opengfx"
+          mkdir -p "$RUNNER_TEMP/openttd-validation/baseset"
           tar -xf "$RUNNER_TEMP/openttd-validation/opengfx/opengfx-7.1.tar" -C "$RUNNER_TEMP/openttd-validation/baseset" --strip-components=1
           test -x "$RUNNER_TEMP/openttd-validation/openttd"
           test -f "$RUNNER_TEMP/openttd-validation/baseset/opengfx.obg"

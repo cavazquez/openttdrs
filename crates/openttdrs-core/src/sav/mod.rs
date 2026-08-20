@@ -13,6 +13,7 @@ mod build;
 mod chunks;
 mod container;
 mod date;
+mod economy;
 mod entities;
 mod fleet;
 pub(crate) mod house_population_generated;
@@ -207,6 +208,8 @@ pub struct SavGame {
     pub station_noise_level: bool,
     /// Nivel de averías persistido en `PATS` / `OPTS`.
     pub vehicle_breakdowns: u8,
+    /// Estado económico global del chunk `ECMY`.
+    pub global_economy: crate::economy::GlobalEconomy,
     /// Grupos de vehículos del chunk `GRPS` (nombres/índices básicos).
     pub vehicle_groups: Vec<crate::vehicle_group::VehicleGroup>,
     /// Reglas de autoreemplazo del chunk `ERNW`.
@@ -254,6 +257,7 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
         station_noise_level,
         vehicle_breakdowns,
     ) = settings::settings_from_chunks(&chunk_list);
+    let global_economy = economy::global_economy_from_chunks(&chunk_list);
     let vehicle_groups = fleet::vehicle_groups_from_chunks(&chunk_list);
     let autoreplace_rules = fleet::autoreplace_rules_from_chunks(&chunk_list);
     let link_graph =
@@ -278,6 +282,7 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
         train_acceleration_model,
         station_noise_level,
         vehicle_breakdowns,
+        global_economy,
         vehicle_groups,
         autoreplace_rules,
     })
@@ -598,6 +603,8 @@ impl GameState {
         }
         let mut state = Self::from_map(map);
         state.climate = sav.climate;
+        state.global_economy = sav.global_economy;
+        state.sync_scaled_max_loan();
         state.construction = sav.construction;
         state.pathfinding = sav.pathfinding;
         state.train_acceleration_model = sav.train_acceleration_model;
@@ -933,6 +940,7 @@ mod tests {
             train_acceleration_model: crate::engine::TrainAccelerationModel::Realistic,
             station_noise_level: false,
             vehicle_breakdowns: 2,
+            global_economy: crate::economy::GlobalEconomy::new(),
             vehicle_groups: Vec::new(),
             autoreplace_rules: Vec::new(),
         }
@@ -1329,6 +1337,7 @@ mod tests {
             train_acceleration_model: crate::engine::TrainAccelerationModel::Realistic,
             station_noise_level: false,
             vehicle_breakdowns: 2,
+            global_economy: crate::economy::GlobalEconomy::new(),
             vehicle_groups: Vec::new(),
             autoreplace_rules: Vec::new(),
         };

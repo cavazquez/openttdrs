@@ -77,3 +77,30 @@ pub(super) fn pats_chunk(state: &GameState) -> Result<Vec<u8>, SavError> {
         ]],
     )
 }
+
+/// Serializa el registro global `ECMY` que OpenTTD usa para reanudar inflación,
+/// recesiones y el reparto diario de cambios de industria.
+pub(super) fn ecmy_chunk(state: &GameState) -> Result<Vec<u8>, SavError> {
+    let economy = &state.global_economy;
+    let mut record = Vec::with_capacity(30);
+    record.extend_from_slice(&economy.inflation_prices.to_be_bytes());
+    record.extend_from_slice(&economy.inflation_payment.to_be_bytes());
+    record.extend_from_slice(&economy.fluct.to_be_bytes());
+    record.push(economy.interest_rate);
+    record.push(economy.infl_amount);
+    record.push(economy.infl_amount_pr);
+    record.extend_from_slice(&economy.industry_daily_change_counter.to_be_bytes());
+    table_chunk(
+        *b"ECMY",
+        &[
+            (8, "inflation_prices"),
+            (8, "inflation_payment"),
+            (3, "fluct"),
+            (2, "interest_rate"),
+            (2, "infl_amount"),
+            (2, "infl_amount_pr"),
+            (6, "industry_daily_change_counter"),
+        ],
+        &[record],
+    )
+}

@@ -61,6 +61,13 @@ pub struct GlobalEconomy {
     /// Interés anual % sobre préstamo y caja negativa.
     #[serde(default = "default_interest_rate")]
     pub interest_rate: u8,
+    /// Acumulador fraccionario de cambios diarios de industrias (`ECMY`).
+    ///
+    /// OpenTTD guarda este contador para reanudar exactamente el reparto de
+    /// cambios de producción después de cargar una partida. El incremento
+    /// derivado no se serializa y se recalcula en el runtime.
+    #[serde(default)]
+    pub industry_daily_change_counter: u32,
 }
 
 const fn default_inflation_frac_one() -> u64 {
@@ -113,6 +120,7 @@ impl GlobalEconomy {
             construction_cost: DEFAULT_DIFFICULTY_MOD,
             vehicle_costs: DEFAULT_DIFFICULTY_MOD,
             interest_rate: DEFAULT_INTEREST_RATE,
+            industry_daily_change_counter: 0,
         }
     }
 

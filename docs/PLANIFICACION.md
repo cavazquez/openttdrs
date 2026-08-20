@@ -2161,7 +2161,7 @@ resumen se limita a lo que emite el writer: `MAP*`, `DATE`, `PLYR`, `STNN`,
 `CITY`, `INDY`, `LGRP`, `ORDL` y `VEHS`; incluye tren, bus/camión, barco y
 avión de ala fija.
 
-No escribe todavía `CAPY`/`ECMY`, pools completos de compañías, `OBJS`,
+No escribe todavía `CAPY`, pools completos de compañías, `OBJS`,
 `PATS`/`OPTS`/`GSET`/`ENGN`/`SRND`, ni configuración NewGRF. El historial de
 noticias propio queda en JSON (no es un pool nativo de OpenTTD `.sav`). `ORDL`
 preserva los campos básicos por orden —incluidos wait/travel/max-speed—, pero

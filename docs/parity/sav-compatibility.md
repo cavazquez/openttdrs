@@ -18,7 +18,7 @@ preserva. Importar un dato no implica que el exportador lo escriba.
 |---|---|---|---|
 | Mapa y tiles | ✅ planos MAP*, túneles/puentes y metadatos de mapa | ✅ `MAPS` + planos RIFF | [`sav/build.rs`](../../crates/openttdrs-core/src/sav/build.rs), [`sav/write/map.rs`](../../crates/openttdrs-core/src/sav/write/map.rs) |
 | Mundo base | ✅ ciudades, estaciones/waypoints, industrias, fecha y primera compañía best-effort | ✅ `CITY`, `STNN`, `INDY`, `DATE`, `PLYR` básicos | No equivale a estado completo de compañías o de economía |
-| Link graph y carga | 🟡 lee `LGRP` y `CAPA` cuando están presentes | 🟡 escribe `LGRP` observado; no `CAPY`/`ECMY` ni estado completo de packets | [`sav/linkgraph.rs`](../../crates/openttdrs-core/src/sav/linkgraph.rs), [`sav/entities.rs`](../../crates/openttdrs-core/src/sav/entities.rs) |
+| Link graph y carga | 🟡 lee `LGRP` y `CAPA` cuando están presentes | 🟡 escribe `LGRP` observado y `ECMY`; no `CAPY` ni estado completo de pagos/packets | [`sav/linkgraph.rs`](../../crates/openttdrs-core/src/sav/linkgraph.rs), [`sav/entities.rs`](../../crates/openttdrs-core/src/sav/entities.rs) |
 | Tren y consist | 🟡 lee cabezas, vagones y `next`; recompone el consist best-effort | 🟡 escribe trenes, pero no conserva el consist/topología completos | Motores, runtime y geometría no son equivalentes; el writer serializa unidades simplificadas |
 | Road y tranvía | 🟡 road se convierte a bus/camión; no identifica tranvía | 🟡 bus/camión sobre road/depot válido; no tranvía | [`sav/mod.rs`](../../crates/openttdrs-core/src/sav/mod.rs), [`sav/write/vehicles.rs`](../../crates/openttdrs-core/src/sav/write/vehicles.rs) |
 | Barcos | 🟡 `VEH_SHIP` se hidrata como `Ship` | 🟡 sólo sobre agua o ship depot | Motor y estado dinámico son best-effort |

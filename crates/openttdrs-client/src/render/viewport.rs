@@ -148,6 +148,11 @@ pub const MIN_ORTHO_SCALE: f32 = 0.25;
 /// Techo absoluto de alejamiento (mapas pequeños / sin culling).
 pub const ABSOLUTE_MAX_ORTHO_SCALE: f32 = 20.0;
 
+/// A partir de este nivel se usa la representación agregada de overview.
+/// OpenTTD conserva `Out4x` y `Out8x` aun en mapas grandes; el cliente no
+/// puede materializar cada sprite de detalle a esas escalas.
+pub const OVERVIEW_MIN_ORTHO_SCALE: f32 = 4.0;
+
 /// Margen extra (teselas) alrededor del rectángulo visible (rombos isométricos).
 pub const VIEWPORT_MARGIN_TILES: u32 = 10;
 
@@ -193,16 +198,24 @@ pub fn max_ortho_scale_for_window(window_width: f32, window_height: f32) -> f32 
 #[must_use]
 pub fn clamp_ortho_scale(
     scale: f32,
-    window_width: f32,
-    window_height: f32,
-    large_map_cull: bool,
+    _window_width: f32,
+    _window_height: f32,
+    _large_map_cull: bool,
 ) -> f32 {
-    let max = if large_map_cull {
-        max_ortho_scale_for_window(window_width, window_height)
+    // El culling dinámico sigue siendo útil hasta `Out2x`; desde `Out4x` el
+    // renderer entra en overview y deja de crear cientos de miles de sprites.
+    scale.clamp(MIN_ORTHO_SCALE, ABSOLUTE_MAX_ORTHO_SCALE)
+}
+
+#[must_use]
+pub const fn overview_stride_for_scale(scale: f32) -> Option<u32> {
+    if scale >= 8.0 {
+        Some(8)
+    } else if scale >= OVERVIEW_MIN_ORTHO_SCALE {
+        Some(4)
     } else {
-        ABSOLUTE_MAX_ORTHO_SCALE
-    };
-    scale.clamp(MIN_ORTHO_SCALE, max)
+        None
+    }
 }
 
 /// Zoom ortográfico inicial: mapas pequeños encuadran todo el mapa; mapas grandes
@@ -444,8 +457,15 @@ mod tests {
     fn clamp_ortho_scale_respects_large_map_cap() {
         assert_eq!(
             clamp_ortho_scale(20.0, 1280.0, 720.0, true),
-            max_ortho_scale_for_window(1280.0, 720.0)
+            ABSOLUTE_MAX_ORTHO_SCALE
         );
         assert_eq!(clamp_ortho_scale(20.0, 1280.0, 720.0, false), 20.0);
+    }
+
+    #[test]
+    fn overview_stride_matches_openttd_out_levels() {
+        assert_eq!(overview_stride_for_scale(2.0), None);
+        assert_eq!(overview_stride_for_scale(4.0), Some(4));
+        assert_eq!(overview_stride_for_scale(8.0), Some(8));
     }
 }

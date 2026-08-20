@@ -16,7 +16,7 @@ use super::plugin::{
     RemapMapVisualsPending,
 };
 use super::tile_spawn::{spawn_map_chunk, spawn_world_layer};
-use super::viewport::{resolve_spawn_viewport, sync_camera_for_sim};
+use super::viewport::{overview_stride_for_scale, resolve_spawn_viewport, sync_camera_for_sim};
 
 /// Materializa chunks en un orden canónico, nunca en el orden aleatorio de un
 /// `HashSet`.
@@ -107,13 +107,16 @@ pub(crate) fn apply_remap_map_visuals(
             }
         })
         .unwrap_or(1.0);
+    let overview_stride = overview_stride_for_scale(ortho_scale);
     commands.insert_resource(MapTileSpawnViewport {
         bounds: spawn_bounds,
         last_ortho_scale: ortho_scale,
     });
 
-    let use_incremental =
-        !full_rebuild && large_map_viewport_cull_enabled(mw, mh) && !loaded_chunks.is_empty();
+    let use_incremental = !full_rebuild
+        && overview_stride.is_none()
+        && large_map_viewport_cull_enabled(mw, mh)
+        && !loaded_chunks.is_empty();
 
     let show_pbs = prefs.show_pbs_reservations;
     let show_full_detail = prefs.full_detail;
@@ -250,6 +253,7 @@ pub(crate) fn apply_remap_map_visuals(
             show_full_detail,
             show_town_labels,
             show_station_labels,
+            overview_stride,
             newgrf_sprites.road.as_mut(),
             newgrf_sprites.station.as_mut(),
             newgrf_sprites.shore.as_mut(),

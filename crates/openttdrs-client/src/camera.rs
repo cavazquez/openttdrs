@@ -39,10 +39,9 @@ pub struct CameraVelocity(pub Vec2);
 
 /// Política de zoom de la cámara principal.
 ///
-/// El modo fijo es el valor inicial: ajusta el viewport a los niveles
-/// discretos que usa OpenTTD y descarta los niveles de alejamiento que
-/// excederían el presupuesto de culling del mapa actual. El modo libre
-/// conserva el comportamiento continuo previo.
+/// El modo fijo es el valor inicial y sigue los niveles discretos de OpenTTD.
+/// Desde `Out4x` el world renderer cambia a una representación agregada; el
+/// modo libre conserva el comportamiento continuo previo.
 #[derive(Resource, Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub(crate) enum ZoomMode {
     Free,
@@ -111,19 +110,13 @@ impl Plugin for CameraControlPlugin {
 
 /// Niveles de zoom fijo que siguen siendo seguros para el viewport actual.
 fn available_fixed_zoom_levels(
-    window_width: f32,
-    window_height: f32,
-    large_map_cull: bool,
+    _window_width: f32,
+    _window_height: f32,
+    _large_map_cull: bool,
 ) -> &'static [f32] {
-    // `clamp_ortho_scale` conoce tanto el máximo absoluto como el máximo
-    // dinámico del culling isométrico. Ningún nivel mayor puede usarse aquí.
-    let cap = clamp_ortho_scale(20.0, window_width, window_height, large_map_cull);
-    let count = OPENTTD_FIXED_ORTHO_SCALES
-        .iter()
-        .take_while(|&&scale| scale <= cap + 0.000_1)
-        .count()
-        .max(1);
-    &OPENTTD_FIXED_ORTHO_SCALES[..count]
+    // Out4x/Out8x se sirven con la capa agregada de overview, así que no se
+    // eliminan de la secuencia fija sólo porque el mapa use culling.
+    &OPENTTD_FIXED_ORTHO_SCALES
 }
 
 /// Ajusta una escala libre al nivel OpenTTD permitido más cercano.
@@ -134,7 +127,10 @@ pub(crate) fn snap_fixed_ortho_scale(
     window_height: f32,
     large_map_cull: bool,
 ) -> f32 {
-    let target = clamp_ortho_scale(scale, window_width, window_height, large_map_cull);
+    let target = scale.clamp(
+        crate::render::MIN_ORTHO_SCALE,
+        crate::render::ABSOLUTE_MAX_ORTHO_SCALE,
+    );
     available_fixed_zoom_levels(window_width, window_height, large_map_cull)
         .iter()
         .copied()
@@ -145,8 +141,7 @@ pub(crate) fn snap_fixed_ortho_scale(
 /// Aplica un paso de zoom respetando la política seleccionada.
 ///
 /// En modo libre conserva los factores históricos de los botones/atajos. En
-/// modo fijo avanza exactamente un nivel OpenTTD, sin sobrepasar el tope de
-/// alejamiento que mantiene el culling acotado.
+/// modo fijo avanza exactamente un nivel OpenTTD, incluyendo `Out8x`.
 #[must_use]
 pub(crate) fn zoom_step_scale(
     scale: f32,
@@ -476,7 +471,7 @@ mod tests {
     }
 
     #[test]
-    fn fixed_zoom_uses_openttd_levels_and_respects_culling_cap() {
+    fn fixed_zoom_uses_all_openttd_levels_on_large_maps() {
         assert_eq!(snap_fixed_ortho_scale(0.78, 1280.0, 720.0, false), 1.0);
         assert_eq!(
             zoom_step_scale(1.0, true, ZoomMode::Fixed, 1280.0, 720.0, false),
@@ -487,11 +482,11 @@ mod tests {
             2.0
         );
 
-        // Un mapa con culling a 1280×720 no puede abrir el nivel 4×out:
-        // conserva el último nivel OpenTTD seguro (2×out).
+        // Out4x se dibuja mediante overview, por lo que sigue disponible en
+        // mapas con culling y no dispara el camino de sprites completos.
         assert_eq!(
             zoom_step_scale(2.0, false, ZoomMode::Fixed, 1280.0, 720.0, true),
-            2.0
+            4.0
         );
     }
 

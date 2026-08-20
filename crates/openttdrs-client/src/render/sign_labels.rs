@@ -3,8 +3,8 @@
 use bevy::prelude::*;
 
 use crate::iso::{tile_pos, tile_slope_and_min_z};
-use crate::render::MapVisualLayer;
 use crate::render::viewport::TileViewportBounds;
+use crate::render::{MapLabelLod, MapVisualLayer};
 use crate::state::SimWorld;
 
 const LABEL_Z: f32 = 901.0;
@@ -46,9 +46,15 @@ pub(crate) fn spawn_sign_labels(
             ground.y + LABEL_RAISE + f32::from(tileh & 0xF) * 2.0,
         );
         let width = sign.name.chars().count() as f32 * CHAR_ADVANCE + 6.0;
+        let lod = MapLabelLod {
+            kind: 1,
+            id: u64::from(sign.id),
+            size: Vec2::new(width, FONT_SIZE + 4.0),
+        };
         commands.spawn((
             MapVisualLayer,
             SignLabel,
+            lod,
             Sprite {
                 color: with_to_alpha(
                     Color::srgba(0.12, 0.1, 0.06, 0.72),
@@ -62,6 +68,7 @@ pub(crate) fn spawn_sign_labels(
         commands.spawn((
             MapVisualLayer,
             SignLabel,
+            lod,
             Text2d::new(sign.name.clone()),
             TextFont {
                 font: font.clone().into(),

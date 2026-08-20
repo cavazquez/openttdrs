@@ -54,9 +54,9 @@ pub(crate) use company_recolor::{
     sprite_from_company_or_asset,
 };
 pub(crate) use components::{
-    FizzyDrinkAnimFrames, IndustryPreviewCamera, LighthouseAnimFrames, MapPreviewCamera,
-    MapSpriteBatches, MapTileChunk, MapVisualLayer, PrimaryGameCamera, RefineryFireAnimFrames,
-    ShoreTile, WaterAnimFrames, WaterAtlasAnimation, WaterTile,
+    FizzyDrinkAnimFrames, IndustryPreviewCamera, LighthouseAnimFrames, MapLabelLod,
+    MapPreviewCamera, MapSpriteBatches, MapTileChunk, MapVisualLayer, PrimaryGameCamera,
+    RefineryFireAnimFrames, ShoreTile, WaterAnimFrames, WaterAtlasAnimation, WaterTile,
 };
 pub(crate) use disaster_craft::DisasterCraftPlugin;
 pub(crate) use effect_fx::EffectVehiclePlugin;
@@ -104,8 +104,8 @@ pub(crate) use vehicles::{
     pick_vehicle_id_at_world, vehicle_sprite_pos_at, vehicle_world_position,
 };
 pub(crate) use viewport::{
-    TileViewportBounds, chunk_tile_bounds, chunks_in_bounds, clamp_ortho_scale,
-    large_map_viewport_cull_enabled,
+    ABSOLUTE_MAX_ORTHO_SCALE, MIN_ORTHO_SCALE, TileViewportBounds, chunk_tile_bounds,
+    chunks_in_bounds, clamp_ortho_scale, large_map_viewport_cull_enabled,
 };
 pub(crate) use water::WaterAnimationPlugin;
 pub(crate) use water::water_anim_frames_from_assets;

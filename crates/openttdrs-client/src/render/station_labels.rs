@@ -4,8 +4,8 @@ use bevy::prelude::*;
 use openttdrs_core::prelude::*;
 
 use crate::iso::{tile_pos, tile_slope_and_min_z};
-use crate::render::MapVisualLayer;
 use crate::render::viewport::TileViewportBounds;
+use crate::render::{MapLabelLod, MapVisualLayer};
 use crate::state::SimWorld;
 
 const LABEL_Z: f32 = 901.0;
@@ -61,6 +61,12 @@ fn station_label_rect(map: &openttdrs_core::Map, station: &Station) -> (Vec2, Ve
     (center, size)
 }
 
+fn station_label_id(station: &Station) -> u64 {
+    // Las estaciones creadas localmente no tienen StationID persistente. La
+    // posición es estable durante su vida y evita depender del orden Vec.
+    (station.pos.x.max(0) as u64) << 32 | station.pos.y.max(0) as u64
+}
+
 fn station_label_in_bounds(station: &Station, bounds: TileViewportBounds) -> bool {
     let tx = station.pos.x;
     let ty = station.pos.y;
@@ -98,6 +104,11 @@ pub(crate) fn spawn_station_labels(
         commands.spawn((
             MapVisualLayer,
             StationLabel,
+            MapLabelLod {
+                kind: 2,
+                id: station_label_id(station),
+                size: bg_size,
+            },
             Sprite {
                 color: Color::srgba(0.12, 0.18, 0.10, 0.70),
                 custom_size: Some(bg_size),
@@ -108,6 +119,11 @@ pub(crate) fn spawn_station_labels(
         commands.spawn((
             MapVisualLayer,
             StationLabel,
+            MapLabelLod {
+                kind: 2,
+                id: station_label_id(station),
+                size: bg_size,
+            },
             Text2d::new(label),
             TextFont {
                 font: font.clone().into(),

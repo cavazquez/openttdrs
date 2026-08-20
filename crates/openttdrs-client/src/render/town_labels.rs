@@ -4,8 +4,8 @@
 use bevy::prelude::*;
 
 use crate::iso::{tile_pos, tile_slope_and_min_z};
-use crate::render::MapVisualLayer;
 use crate::render::viewport::TileViewportBounds;
+use crate::render::{MapLabelLod, MapVisualLayer};
 use crate::state::SimWorld;
 
 /// Z fija por encima de todos los sprites del mapa (cámara en ~1000).
@@ -90,6 +90,11 @@ pub(crate) fn spawn_town_labels(
         commands.spawn((
             MapVisualLayer,
             TownLabel,
+            MapLabelLod {
+                kind: 0,
+                id: u64::from(town.id),
+                size: bg_size,
+            },
             Sprite {
                 color: Color::srgba(0.08, 0.10, 0.14, 0.65),
                 custom_size: Some(bg_size),
@@ -100,6 +105,11 @@ pub(crate) fn spawn_town_labels(
         commands.spawn((
             MapVisualLayer,
             TownLabel,
+            MapLabelLod {
+                kind: 0,
+                id: u64::from(town.id),
+                size: bg_size,
+            },
             Text2d::new(label),
             TextFont {
                 font: font.clone().into(),

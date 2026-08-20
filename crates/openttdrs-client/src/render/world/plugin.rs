@@ -16,6 +16,98 @@ use super::remap::apply_remap_map_visuals;
 use super::tile_spawn::setup;
 use super::viewport::sync_map_tile_spawn_viewport;
 
+const LABEL_LOD_ZOOM: f32 = 4.0;
+
+fn label_rects_overlap(a_center: Vec2, a_size: Vec2, b_center: Vec2, b_size: Vec2) -> bool {
+    (a_center.x - b_center.x).abs() * 2.0 < a_size.x + b_size.x
+        && (a_center.y - b_center.y).abs() * 2.0 < a_size.y + b_size.y
+}
+
+/// Mantiene los carteles legibles al alejar la cámara y aplica una selección
+/// espacial determinista en `Out4x`/`Out8x`.
+///
+/// Los dos nodos de cada cartel (fondo y texto) comparten `MapLabelLod`, de
+/// modo que una colisión oculta ambos y no deja rectángulos huérfanos. La
+/// escala compensa el `OrthographicProjection`: el tamaño en pantalla deja de
+/// caer a un píxel cuando el mapa entra en vista general.
+pub(crate) fn sync_map_label_lod(
+    cam_q: Query<
+        &Projection,
+        (
+            With<crate::render::PrimaryGameCamera>,
+            Without<crate::render::MapPreviewCamera>,
+        ),
+    >,
+    mut labels: Query<(
+        Entity,
+        &crate::render::MapLabelLod,
+        &mut Transform,
+        &mut Visibility,
+    )>,
+) {
+    let scale = cam_q
+        .single()
+        .ok()
+        .and_then(|projection| match projection {
+            Projection::Orthographic(orthographic) => Some(orthographic.scale),
+            _ => None,
+        })
+        .unwrap_or(1.0)
+        .max(1.0);
+    let overview = scale >= LABEL_LOD_ZOOM;
+
+    let mut records = Vec::new();
+    for (entity, lod, mut transform, _) in &mut labels {
+        transform.scale = Vec3::splat(scale);
+        records.push((
+            entity,
+            lod.kind,
+            lod.id,
+            transform.translation.truncate(),
+            lod.size,
+        ));
+    }
+    if !overview {
+        return;
+    }
+
+    // OpenTTD da prioridad a pueblos, luego signs y finalmente estaciones.
+    // La clave estable evita que el orden de la query ECS cambie qué etiqueta
+    // gana una colisión entre dos ejecuciones del mismo save.
+    records.sort_unstable_by_key(|(_, kind, id, _, _)| (*kind, *id));
+    let mut accepted = Vec::new();
+    let mut accepted_keys = std::collections::HashSet::new();
+    let mut visible = std::collections::HashSet::new();
+    for (_, kind, id, center, size) in records.iter().copied() {
+        let key = (kind, id);
+        if accepted_keys.contains(&key) {
+            visible.insert(key);
+            continue;
+        }
+        let screen_size = size * scale;
+        if accepted
+            .iter()
+            .all(|(other_center, other_size): &(Vec2, Vec2)| {
+                !label_rects_overlap(center, screen_size, *other_center, *other_size)
+            })
+        {
+            accepted.push((center, screen_size));
+            accepted_keys.insert(key);
+            visible.insert(key);
+        }
+    }
+
+    for (entity, kind, id, _, _) in records {
+        if let Ok((_, _, _, mut visibility)) = labels.get_mut(entity) {
+            *visibility = if visible.contains(&(kind, id)) {
+                Visibility::Visible
+            } else {
+                Visibility::Hidden
+            };
+        }
+    }
+}
+
 /// Queries de etiquetas del mapa (agrupadas para no superar el límite de params Bevy).
 #[derive(SystemParam)]
 pub(crate) struct MapLabelEntities<'w, 's> {
@@ -222,6 +314,7 @@ impl Plugin for WorldRenderPlugin {
                     sync_map_tile_spawn_viewport,
                     super::remap::sync_company_colored_sprites,
                     apply_remap_map_visuals,
+                    sync_map_label_lod,
                 )
                     .chain()
                     .in_set(UpdateSet::RenderRefresh)

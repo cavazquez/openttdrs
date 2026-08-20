@@ -5,7 +5,10 @@ use bevy::window::PrimaryWindow;
 use openttdrs_core::prelude::*;
 
 use crate::config::{env_flag, env_string};
-use crate::iso::{shore_png_index, shore_tileh_for_draw_shore, slope_half_h};
+use crate::iso::{
+    GROUND_SPRITE_CENTER_X_OFFSET, HEIGHT_PX, TILE_HALF_H, ground_draw_z, iso, shore_png_index,
+    shore_tileh_for_draw_shore, slope_half_h, slope_sprite_offset,
+};
 use crate::render::world_draw_trace::WorldDrawTrace;
 use crate::render::{
     CompanyColoredSprites, HouseSpawnResources, MapSpriteBatches, RenderGrid, TileAtlas,
@@ -18,7 +21,9 @@ use crate::sprites::CompanyColour;
 use crate::state::SimWorld;
 
 use super::plugin::{LoadedMapTileChunks, MapTileSpawnViewport};
-use super::viewport::{initial_map_camera_pose, resolve_spawn_viewport_at};
+use super::viewport::{
+    initial_map_camera_pose, overview_stride_for_scale, resolve_spawn_viewport_at,
+};
 
 use crate::render::vehicles::{NewGrfTrainSpriteCache, TruckHandles, spawn_initial_vehicles};
 
@@ -382,6 +387,91 @@ pub(crate) fn spawn_map_tiles_in_bounds(
     }
 }
 
+/// Render agregado para `Out4x`/`Out8x`.
+///
+/// Un bloque cuadrado de teselas se representa con un único rombo escalado y
+/// el terreno de su tesela superior izquierda. Así el viewport puede abarcar
+/// cientos de teselas sin crear una entidad por sprite de detalle. Las capas
+/// de infraestructura y edificios se reservan para el zoom normal, mientras
+/// que el color de la muestra conserva la lectura macro de tierra/agua.
+fn spawn_overview_tiles_in_bounds(
+    commands: &mut Commands,
+    assets: &WorldAssets,
+    sim: &SimWorld,
+    bounds: TileViewportBounds,
+    stride: u32,
+) {
+    let (mw, mh) = sim.state.map.dimensions();
+    let grid_bounds = bounds.expand(1, mw, mh);
+    let render_grid = RenderGrid::from_bounds(&sim.state.map, mw, mh, grid_bounds);
+    let stride = stride.max(2);
+
+    for ty in (bounds.ty0..bounds.ty1).step_by(stride as usize) {
+        for tx in (bounds.tx0..bounds.tx1).step_by(stride as usize) {
+            let block_w = stride.min(bounds.tx1.saturating_sub(tx));
+            let block_h = stride.min(bounds.ty1.saturating_sub(ty));
+            if block_w == 0 || block_h == 0 {
+                continue;
+            }
+            let ctx = TileRenderContext::new(&sim.state.map, &render_grid, tx, ty);
+            let slope = usize::from(slope_sprite_offset(ctx.info.tileh)).min(18);
+            let image = match ctx.kind {
+                TileKind::Water | TileKind::ShipDepot => assets.water.clone(),
+                TileKind::Forest => assets
+                    .rough_slopes
+                    .get(slope)
+                    .cloned()
+                    .unwrap_or_else(|| assets.grass_density[0][slope].clone()),
+                _ => assets.grass_density[0][slope].clone(),
+            };
+            let color = match ctx.kind {
+                TileKind::Water | TileKind::ShipDepot => Color::WHITE,
+                TileKind::Road
+                | TileKind::RoadDepot
+                | TileKind::RoadBridge
+                | TileKind::RoadTunnel => Color::srgba(0.82, 0.72, 0.56, 1.0),
+                TileKind::Rail
+                | TileKind::RailDepot
+                | TileKind::RailBridge
+                | TileKind::RailTunnel => Color::srgba(0.78, 0.78, 0.72, 1.0),
+                TileKind::House | TileKind::Station | TileKind::Industry | TileKind::Airport => {
+                    Color::srgba(0.84, 0.68, 0.36, 1.0)
+                }
+                TileKind::Forest => Color::srgba(0.72, 0.92, 0.70, 1.0),
+                _ => Color::WHITE,
+            };
+            let footprint = (block_w + block_h) as f32;
+            let top = iso(tx as i32, ty as i32);
+            let half_h = TILE_HALF_H * footprint * 0.5;
+            let elev = f32::from(ctx.info.base_z) * HEIGHT_PX;
+            let mut sprite = image.sprite_colored(color);
+            sprite.custom_size = Some(Vec2::new(32.0 * footprint, 15.5 * footprint));
+            let pos = Vec3::new(
+                top.x + GROUND_SPRITE_CENTER_X_OFFSET * footprint * 0.5,
+                top.y - half_h + elev,
+                ground_draw_z(tx as i32, ty as i32, 0.0),
+            );
+            let chunk = crate::render::MapTileChunk::from_tile(tx, ty);
+            if matches!(ctx.kind, TileKind::Water | TileKind::ShipDepot) {
+                commands.spawn((
+                    crate::render::MapVisualLayer,
+                    chunk,
+                    crate::render::WaterTile::STATIC,
+                    sprite,
+                    Transform::from_translation(pos),
+                ));
+            } else {
+                commands.spawn((
+                    crate::render::MapVisualLayer,
+                    chunk,
+                    sprite,
+                    Transform::from_translation(pos),
+                ));
+            }
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_world_layer(
     commands: &mut Commands,
@@ -396,6 +486,7 @@ pub(crate) fn spawn_world_layer(
     show_full_detail: bool,
     show_town_labels: bool,
     show_station_labels: bool,
+    overview_stride: Option<u32>,
     road_sprites: &mut crate::render::NewGrfRoadSpriteCache,
     station_sprites: &mut crate::render::NewGrfStationSpriteCache,
     shore_sprites: &mut crate::render::NewGrfShoreSpriteCache,
@@ -408,14 +499,16 @@ pub(crate) fn spawn_world_layer(
     if include_world_extras {
         let truck_handles = TruckHandles::load(asset_server);
         let mut newgrf_train_sprites = NewGrfTrainSpriteCache::default();
-        spawn_initial_vehicles(
-            commands,
-            sim,
-            &truck_handles,
-            company,
-            &mut newgrf_train_sprites,
-            images,
-        );
+        if overview_stride.is_none() {
+            spawn_initial_vehicles(
+                commands,
+                sim,
+                &truck_handles,
+                company,
+                &mut newgrf_train_sprites,
+                images,
+            );
+        }
         commands.insert_resource(truck_handles);
         commands.insert_resource(newgrf_train_sprites);
         let label_font = asset_server.load::<Font>(crate::ui::font::UI_FONT_PATH);
@@ -435,24 +528,28 @@ pub(crate) fn spawn_world_layer(
         );
         crate::render::sign_labels::spawn_sign_labels(commands, sim, &label_font, spawn_bounds);
     }
-    spawn_map_tiles_in_bounds(
-        commands,
-        assets,
-        company,
-        images,
-        sim,
-        spawn_bounds,
-        show_pbs_reservations,
-        show_full_detail,
-        road_sprites,
-        station_sprites,
-        shore_sprites,
-        catenary_sprites,
-        signal_sprites,
-        industry_sprites,
-        object_sprites,
-        action5_sprites,
-    );
+    if let Some(stride) = overview_stride {
+        spawn_overview_tiles_in_bounds(commands, assets, sim, spawn_bounds, stride);
+    } else {
+        spawn_map_tiles_in_bounds(
+            commands,
+            assets,
+            company,
+            images,
+            sim,
+            spawn_bounds,
+            show_pbs_reservations,
+            show_full_detail,
+            road_sprites,
+            station_sprites,
+            shore_sprites,
+            catenary_sprites,
+            signal_sprites,
+            industry_sprites,
+            object_sprites,
+            action5_sprites,
+        );
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -591,6 +688,7 @@ pub(crate) fn setup(
         show_full_detail,
         show_town_labels,
         show_station_labels,
+        overview_stride_for_scale(cam_scale),
         &mut road_sprites,
         &mut station_sprites,
         &mut shore_sprites,
@@ -672,6 +770,7 @@ pub(crate) fn spawn_intro_map_render(
         true,
         true,
         true,
+        None,
         &mut road_sprites,
         &mut station_sprites,
         &mut shore_sprites,

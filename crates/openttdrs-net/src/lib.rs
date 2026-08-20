@@ -1,6 +1,6 @@
 //! Transporte TCP mínimo para multijugador lockstep ([#21](https://github.com/cavazquez/openttdrs/issues/21)).
 //!
-//! Protocolo v2: frames `u32` LE + JSON [`NetMessage`]. El servidor es autoritativo:
+//! Protocolo v3: frames `u32` LE + JSON [`NetMessage`]. El servidor es autoritativo:
 //! asigna `seq`, retransmite [`NetMessage::Commit`] y avanza ticks.
 //! Host migration listen-server: [`elect_new_host`] / ADR 0004.
 //! Ver `docs/adr/0001-multiplayer-v1.md` y `docs/adr/0004-host-migration-post-v1.md`.
@@ -21,5 +21,5 @@ pub use peer::{DEFAULT_PORT, connect, failover_connect_addr, failover_listen_bin
 pub use protocol::{NetError, NetMessage, PROTOCOL_VERSION};
 pub use session::{
     ClientSession, ClientSessionHandle, ListenServer, ListenServerHandle, SessionEvent,
-    apply_session_event, elect_new_host,
+    apply_command_as_company, apply_session_event, elect_new_host,
 };

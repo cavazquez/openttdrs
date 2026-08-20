@@ -14,7 +14,7 @@ use openttdrs_core::prelude::*;
 use openttdrs_core::{
     Climate, IndustryKind, IndustrySpec, WorldGenConfig, apply_world_gen, tile_slope_and_z,
 };
-use openttdrs_net::{DEFAULT_PORT, ListenServer, SessionEvent};
+use openttdrs_net::{DEFAULT_PORT, ListenServer, SessionEvent, apply_command_as_company};
 
 fn main() {
     let opts = parse_args(env::args().skip(1));
@@ -54,8 +54,12 @@ fn main() {
     loop {
         while let Some(event) = server.try_recv() {
             match event {
-                SessionEvent::Commit { command, seq } => {
-                    if let Err(e) = apply_command(&mut state, &command) {
+                SessionEvent::Commit {
+                    command,
+                    company_id,
+                    seq,
+                } => {
+                    if let Err(e) = apply_command_as_company(&mut state, company_id, &command) {
                         eprintln!("dedicated: reject commit seq={seq}: {e}");
                     } else {
                         eprintln!("dedicated: applied commit seq={seq}");

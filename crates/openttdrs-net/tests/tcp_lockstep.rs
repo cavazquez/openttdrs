@@ -6,7 +6,7 @@ use std::io::ErrorKind;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use openttdrs_core::{Command, GameState, TileCoord, apply_command};
+use openttdrs_core::{Command, CompanyId, GameState, TileCoord, apply_command};
 use openttdrs_net::{ClientSession, ListenServer, NetError, SessionEvent, apply_session_event};
 
 fn wait_event(client: &ClientSession, timeout: Duration) -> SessionEvent {
@@ -146,6 +146,46 @@ fn client_propose_reaches_host() {
         thread::sleep(Duration::from_millis(5));
     }
     assert_eq!(got, Some(Command::PlaceRail(TileCoord::new(3, 3))));
+}
+
+#[test]
+fn peers_receive_exclusive_company_identity_and_commit_issuer() {
+    let host_state = GameState::new(24, 24);
+    let snapshot = host_state.save_json().unwrap();
+    let server = match maybe_start_server("127.0.0.1:0", snapshot) {
+        Some(server) => server,
+        None => return,
+    };
+    let bind = server.local_addr().to_string();
+    thread::sleep(Duration::from_millis(50));
+
+    let first = match maybe_connect_client(&bind) {
+        Some(client) => client,
+        None => return,
+    };
+    let second = match maybe_connect_client(&bind) {
+        Some(client) => client,
+        None => return,
+    };
+    let _ = wait_event(&first, Duration::from_secs(2));
+    let _ = wait_event(&second, Duration::from_secs(2));
+    let first_company = first.handle().company_id();
+    let second_company = second.handle().company_id();
+    assert_ne!(first_company, CompanyId::PLAYER);
+    assert_ne!(first_company, second_company);
+
+    first
+        .propose(Command::PlaceRail(TileCoord::new(3, 3)))
+        .unwrap();
+    let start = Instant::now();
+    while start.elapsed() < Duration::from_secs(2) {
+        if let Some(SessionEvent::Commit { company_id, .. }) = server.try_recv() {
+            assert_eq!(company_id, first_company);
+            return;
+        }
+        thread::sleep(Duration::from_millis(5));
+    }
+    panic!("timeout esperando commit con issuer");
 }
 
 #[test]

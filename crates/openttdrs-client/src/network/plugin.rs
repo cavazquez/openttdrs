@@ -4,7 +4,7 @@ use std::sync::Mutex;
 
 use bevy::prelude::*;
 use openttdrs_core::prelude::*;
-use openttdrs_net::{ClientSession, ListenServer, SessionEvent};
+use openttdrs_net::{ClientSession, ListenServer, SessionEvent, apply_command_as_company};
 
 use crate::bevy_app::{FixedUpdateSet, UpdateSet};
 use crate::network::banner::sync_failover_banner;
@@ -406,8 +406,12 @@ fn handle_event(
             }
             Ok(EventOutcome::Ok)
         }
-        SessionEvent::Commit { command, seq } => {
-            apply_command(&mut sim.state, command).map_err(|e| e.to_string())?;
+        SessionEvent::Commit {
+            command,
+            company_id,
+            seq,
+        } => {
+            apply_command_as_company(&mut sim.state, *company_id, command)?;
             vehicle_index.rebuild(&sim.state.vehicles);
             if let Some(fo) = failover {
                 fo.next_seq = seq.saturating_add(1);

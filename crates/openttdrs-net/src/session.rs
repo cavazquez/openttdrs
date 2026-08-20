@@ -1,4 +1,4 @@
-//! Sesiones listen-server y cliente (protocolo v2 / ADR 0004).
+//! Sesiones listen-server y cliente (protocolo v3 / ADR 0004).
 
 use std::io::Read;
 use std::net::{SocketAddr, TcpListener, TcpStream};
@@ -7,8 +7,8 @@ use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-use openttdrs_core::Command;
 use openttdrs_core::prelude::*;
+use openttdrs_core::{Command, CompanyId};
 
 use crate::codec::{read_message, write_message};
 use crate::protocol::{NetError, NetMessage, PROTOCOL_VERSION};
@@ -29,7 +29,11 @@ pub enum SessionEvent {
         peer_id: u64,
     },
     /// Comando autorizado a aplicar.
-    Commit { seq: u64, command: Command },
+    Commit {
+        seq: u64,
+        company_id: CompanyId,
+        command: Command,
+    },
     /// Avanzar ticks.
     AdvanceTicks { count: u32 },
     /// Comprobar hash; si diverge, emitir desync.
@@ -57,7 +61,10 @@ pub enum SessionEvent {
 }
 
 enum ServerCmd {
-    LocalCommit(Command),
+    LocalCommit {
+        company_id: CompanyId,
+        command: Command,
+    },
     Advance(u32),
     HashCheck {
         tick: u64,
@@ -90,8 +97,20 @@ pub struct ListenServerHandle {
 
 impl ListenServerHandle {
     pub fn broadcast_commit(&self, command: Command) -> Result<(), NetError> {
+        self.broadcast_commit_for_company(CompanyId::PLAYER, command)
+    }
+
+    /// Publica un comando originado por una compañía concreta del host.
+    pub fn broadcast_commit_for_company(
+        &self,
+        company_id: CompanyId,
+        command: Command,
+    ) -> Result<(), NetError> {
         self.cmd_tx
-            .send(ServerCmd::LocalCommit(command))
+            .send(ServerCmd::LocalCommit {
+                company_id,
+                command,
+            })
             .map_err(|_| NetError::Closed)
     }
 
@@ -237,6 +256,16 @@ impl ListenServer {
         self.handle.broadcast_commit(command)
     }
 
+    /// Publica un comando originado por una compañía concreta del host.
+    pub fn broadcast_commit_for_company(
+        &self,
+        company_id: CompanyId,
+        command: Command,
+    ) -> Result<(), NetError> {
+        self.handle
+            .broadcast_commit_for_company(company_id, command)
+    }
+
     pub fn broadcast_advance(&self, count: u32) -> Result<(), NetError> {
         self.handle.broadcast_advance(count)
     }
@@ -297,6 +326,7 @@ impl Drop for ListenServer {
 struct ClientSlot {
     stream: TcpStream,
     peer_id: u64,
+    company_id: CompanyId,
 }
 
 #[allow(clippy::too_many_lines)]
@@ -356,7 +386,8 @@ fn server_thread(
                     .clone();
                 let peer_id = next_peer_id;
                 next_peer_id = next_peer_id.saturating_add(1);
-                match handshake_server(&mut stream, &snapshot, next_seq, peer_id) {
+                let company_id = allocate_company_id(&clients);
+                match handshake_server(&mut stream, &snapshot, next_seq, peer_id, company_id) {
                     Ok(()) => {
                         // Si el host avanzó durante el handshake, reenviar snapshot vivo.
                         let fresh = live_snapshot
@@ -371,6 +402,7 @@ fn server_thread(
                                     snapshot_json: fresh,
                                     next_seq,
                                     peer_id,
+                                    company_id,
                                 },
                             )
                         {
@@ -381,7 +413,11 @@ fn server_thread(
                             .lock()
                             .unwrap_or_else(std::sync::PoisonError::into_inner)
                             .push(peer_id);
-                        clients.push(ClientSlot { stream, peer_id });
+                        clients.push(ClientSlot {
+                            stream,
+                            peer_id,
+                            company_id,
+                        });
                         broadcast_peer_list(&mut clients, &shared_peer_ids);
                     }
                     Err(e) => eprintln!("openttdrs-net: handshake failed: {e}"),
@@ -400,9 +436,28 @@ fn server_thread(
         let mut i = 0;
         while i < clients.len() {
             match try_read_client(&mut clients[i].stream) {
-                Ok(Some(NetMessage::Propose { command })) => {
+                Ok(Some(NetMessage::Propose {
+                    company_id,
+                    command,
+                })) => {
+                    let assigned_company = clients[i].company_id;
+                    if company_id != assigned_company {
+                        let message = format!(
+                            "peer {} no puede emitir como compañía {} (asignada {})",
+                            clients[i].peer_id, company_id.0, assigned_company.0
+                        );
+                        let _ = write_message(
+                            &mut clients[i].stream,
+                            &NetMessage::Reject {
+                                message: message.clone(),
+                            },
+                        );
+                        let _ = event_tx.send(SessionEvent::CommandRejected { message });
+                        i += 1;
+                        continue;
+                    }
                     if let Some(state) = authority_state.as_mut()
-                        && let Err(error) = apply_command(state, &command)
+                        && let Err(error) = apply_command_as_company(state, company_id, &command)
                     {
                         let message = error.to_string();
                         let _ = write_message(
@@ -425,10 +480,15 @@ fn server_thread(
                     };
                     let commit = NetMessage::Commit {
                         seq,
+                        company_id,
                         command: command.clone(),
                     };
                     broadcast_raw(&mut clients, &shared_peer_ids, &commit);
-                    let _ = event_tx.send(SessionEvent::Commit { seq, command });
+                    let _ = event_tx.send(SessionEvent::Commit {
+                        seq,
+                        company_id,
+                        command,
+                    });
                     i += 1;
                 }
                 Ok(Some(NetMessage::Desync {
@@ -475,12 +535,15 @@ fn server_thread(
         }
 
         match cmd_rx.try_recv() {
-            Ok(ServerCmd::LocalCommit(command)) => {
+            Ok(ServerCmd::LocalCommit {
+                company_id,
+                command,
+            }) => {
                 if let Some(state) = authority_state.as_mut() {
                     // El host ya aplicó la mutación en su hilo de simulación;
                     // esta copia sólo necesita avanzar para validar propuestas
                     // posteriores. Un error aquí indica snapshot atrasado.
-                    let _ = apply_command(state, &command);
+                    let _ = apply_command_as_company(state, company_id, &command);
                 }
                 let seq = {
                     let mut guard = shared_next_seq
@@ -492,6 +555,7 @@ fn server_thread(
                 };
                 let commit = NetMessage::Commit {
                     seq,
+                    company_id,
                     command: command.clone(),
                 };
                 broadcast_raw(&mut clients, &shared_peer_ids, &commit);
@@ -552,6 +616,16 @@ fn remove_peer_id(shared: &SharedPeerIds, peer_id: u64) {
     guard.retain(|id| *id != peer_id);
 }
 
+/// Asigna una compañía exclusiva a cada peer conectado. La compañía 0 queda
+/// reservada al host; los clientes reciben el primer id libre del pool de
+/// OpenTTD (0..15).
+fn allocate_company_id(clients: &[ClientSlot]) -> CompanyId {
+    (1..=15)
+        .map(CompanyId)
+        .find(|candidate| clients.iter().all(|slot| slot.company_id != *candidate))
+        .unwrap_or(CompanyId::PLAYER)
+}
+
 fn broadcast_peer_list(clients: &mut Vec<ClientSlot>, shared_peer_ids: &SharedPeerIds) {
     let peer_ids = shared_peer_ids
         .lock()
@@ -565,6 +639,7 @@ fn handshake_server(
     snapshot_json: &str,
     next_seq: u64,
     peer_id: u64,
+    company_id: CompanyId,
 ) -> Result<(), NetError> {
     let hello = read_message(stream)?;
     match hello {
@@ -585,6 +660,7 @@ fn handshake_server(
             snapshot_json: snapshot_json.to_string(),
             next_seq,
             peer_id,
+            company_id,
         },
     )?;
     Ok(())
@@ -634,7 +710,10 @@ fn configure_stream(stream: &TcpStream) -> Result<(), NetError> {
 }
 
 enum ClientCmd {
-    Propose(Command),
+    Propose {
+        company_id: CompanyId,
+        command: Command,
+    },
     ReportDesync {
         tick: u64,
         expected_hash: u64,
@@ -647,13 +726,30 @@ enum ClientCmd {
 #[derive(Clone)]
 pub struct ClientSessionHandle {
     cmd_tx: Sender<ClientCmd>,
+    company_id: std::sync::Arc<std::sync::Mutex<CompanyId>>,
 }
 
 impl ClientSessionHandle {
     pub fn propose(&self, command: Command) -> Result<(), NetError> {
+        let company_id = *self
+            .company_id
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         self.cmd_tx
-            .send(ClientCmd::Propose(command))
+            .send(ClientCmd::Propose {
+                company_id,
+                command,
+            })
             .map_err(|_| NetError::Closed)
+    }
+
+    /// Compañía asignada por el servidor durante el handshake.
+    #[must_use]
+    pub fn company_id(&self) -> CompanyId {
+        *self
+            .company_id
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     /// Informa al servidor de una divergencia detectada por este peer.
@@ -685,17 +781,19 @@ impl ClientSession {
         let stream = crate::connect(addr)?;
         let (cmd_tx, cmd_rx) = mpsc::channel();
         let (event_tx, event_rx) = mpsc::channel();
+        let company_id = std::sync::Arc::new(std::sync::Mutex::new(CompanyId::PLAYER));
+        let company_id_thread = std::sync::Arc::clone(&company_id);
         let addr_owned = addr.to_string();
         let join = thread::Builder::new()
             .name("openttdrs-client-net".into())
             .spawn(move || {
-                if let Err(e) = client_thread(stream, cmd_rx, event_tx) {
+                if let Err(e) = client_thread(stream, cmd_rx, event_tx, company_id_thread) {
                     eprintln!("openttdrs-net: client ended ({addr_owned}): {e}");
                 }
             })
             .map_err(NetError::Io)?;
         Ok(Self {
-            handle: ClientSessionHandle { cmd_tx },
+            handle: ClientSessionHandle { cmd_tx, company_id },
             event_rx,
             join: Some(join),
         })
@@ -744,6 +842,7 @@ fn client_thread(
     mut stream: TcpStream,
     cmd_rx: Receiver<ClientCmd>,
     event_tx: Sender<SessionEvent>,
+    company_id: std::sync::Arc<std::sync::Mutex<CompanyId>>,
 ) -> Result<(), NetError> {
     write_message(
         &mut stream,
@@ -758,7 +857,11 @@ fn client_thread(
             snapshot_json,
             next_seq,
             peer_id,
+            company_id: assigned_company,
         } if protocol == PROTOCOL_VERSION => {
+            *company_id
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = assigned_company;
             let _ = event_tx.send(SessionEvent::Welcome {
                 snapshot_json,
                 next_seq,
@@ -780,9 +883,18 @@ fn client_thread(
     stream.set_nonblocking(true)?;
     loop {
         match cmd_rx.try_recv() {
-            Ok(ClientCmd::Propose(command)) => {
+            Ok(ClientCmd::Propose {
+                company_id,
+                command,
+            }) => {
                 stream.set_nonblocking(false)?;
-                write_message(&mut stream, &NetMessage::Propose { command })?;
+                write_message(
+                    &mut stream,
+                    &NetMessage::Propose {
+                        company_id,
+                        command,
+                    },
+                )?;
                 stream.set_nonblocking(true)?;
             }
             Ok(ClientCmd::ReportDesync {
@@ -812,7 +924,11 @@ fn client_thread(
                 snapshot_json,
                 next_seq,
                 peer_id,
+                company_id: assigned_company,
             })) if protocol == PROTOCOL_VERSION => {
+                *company_id
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner) = assigned_company;
                 // Resync post-handshake (host avanzó durante el Welcome).
                 let _ = event_tx.send(SessionEvent::Welcome {
                     snapshot_json,
@@ -820,8 +936,16 @@ fn client_thread(
                     peer_id,
                 });
             }
-            Ok(Some(NetMessage::Commit { seq, command })) => {
-                let _ = event_tx.send(SessionEvent::Commit { seq, command });
+            Ok(Some(NetMessage::Commit {
+                seq,
+                company_id,
+                command,
+            })) => {
+                let _ = event_tx.send(SessionEvent::Commit {
+                    seq,
+                    company_id,
+                    command,
+                });
             }
             Ok(Some(NetMessage::AdvanceTicks { count })) => {
                 let _ = event_tx.send(SessionEvent::AdvanceTicks { count });
@@ -879,15 +1003,61 @@ fn client_thread(
 }
 
 /// Aplica commits y ticks a un [`GameState`] (útil en tests / dedicated).
+///
+/// La compañía del commit es contexto de autoridad y no forma parte del
+/// `GameState` persistido como una selección local de UI.
+pub fn apply_command_as_company(
+    state: &mut GameState,
+    company_id: CompanyId,
+    command: &Command,
+) -> Result<(), String> {
+    ensure_company_slot(state, company_id)?;
+    let previous = state.active_company;
+    if previous != company_id && !state.set_active_company(company_id) {
+        return Err(format!("compañía inexistente: {}", company_id.0));
+    }
+    let result = apply_command(state, command).map_err(|error| error.to_string());
+    if previous != company_id {
+        let _ = state.set_active_company(previous);
+    }
+    result
+}
+
+/// Materializa slots de compañía asignados por la sesión si el snapshot era
+/// un mapa mínimo que todavía sólo contenía al jugador. Los slots creados por
+/// peers son empresas humanas, no IA, y quedan dentro del estado replicado.
+fn ensure_company_slot(state: &mut GameState, company_id: CompanyId) -> Result<(), String> {
+    const MAX_COMPANIES: usize = 15;
+    let index = company_id.index();
+    if index >= MAX_COMPANIES {
+        return Err(format!("compañía fuera de rango: {}", company_id.0));
+    }
+    state.ensure_companies();
+    while state.companies.len() <= index {
+        let id =
+            CompanyId(u8::try_from(state.companies.len()).map_err(|_| "pool de compañías lleno")?);
+        let colour = openttdrs_core::company::first_free_company_colour(&state.companies);
+        let mut company =
+            openttdrs_core::Company::player(openttdrs_core::CompanyEconomy::default(), colour);
+        company.id = id;
+        company.name = format!("Compañía {}", u16::from(id.0) + 1);
+        state.companies.push(company);
+    }
+    Ok(())
+}
+
+/// Aplica commits y ticks a un [`GameState`] (útil en tests / dedicated).
 pub fn apply_session_event(state: &mut GameState, event: &SessionEvent) -> Result<(), String> {
     match event {
         SessionEvent::Welcome { snapshot_json, .. } => {
             *state = GameState::load_json(snapshot_json).map_err(|e| e.to_string())?;
             Ok(())
         }
-        SessionEvent::Commit { command, .. } => {
-            apply_command(state, command).map_err(|e| e.to_string())
-        }
+        SessionEvent::Commit {
+            company_id,
+            command,
+            ..
+        } => apply_command_as_company(state, *company_id, command),
         SessionEvent::AdvanceTicks { count } => {
             for _ in 0..*count {
                 state.step();
@@ -925,12 +1095,30 @@ pub fn apply_session_event(state: &mut GameState, event: &SessionEvent) -> Resul
 
 #[cfg(test)]
 mod tests {
-    use super::elect_new_host;
+    use super::{apply_command_as_company, elect_new_host};
+    use openttdrs_core::{Command, CompanyId, GameState, TileCoord};
 
     #[test]
     fn elect_new_host_picks_minimum_peer_id() {
         assert_eq!(elect_new_host(&[3, 1, 7]), Some(1));
         assert_eq!(elect_new_host(&[]), None);
         assert_eq!(elect_new_host(&[9]), Some(9));
+    }
+
+    #[test]
+    fn command_runs_under_issuer_without_changing_local_selection() {
+        let mut state = GameState::new(16, 16);
+        assert_eq!(state.active_company, CompanyId::PLAYER);
+        apply_command_as_company(
+            &mut state,
+            CompanyId(1),
+            &Command::PlaceRail(TileCoord::new(3, 3)),
+        )
+        .expect("issuer company should be accepted");
+        assert_eq!(state.active_company, CompanyId::PLAYER);
+        assert_eq!(
+            state.map.get(TileCoord::new(3, 3)).map(|tile| tile.m1),
+            Some(1)
+        );
     }
 }

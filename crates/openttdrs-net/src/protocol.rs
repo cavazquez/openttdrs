@@ -1,10 +1,10 @@
 //! Mensajes del protocolo lockstep v2 (host migration: ADR 0004).
 
-use openttdrs_core::Command;
+use openttdrs_core::{Command, CompanyId};
 use serde::{Deserialize, Serialize};
 
 /// Versión del framing JSON. Subir si cambia el esquema de [`NetMessage`].
-pub const PROTOCOL_VERSION: u16 = 2;
+pub const PROTOCOL_VERSION: u16 = 3;
 
 /// Mensaje de red (serializado como JSON dentro de un frame length-prefixed).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -19,11 +19,20 @@ pub enum NetMessage {
         next_seq: u64,
         /// Identidad estable del peer en esta partida (elección de host).
         peer_id: u64,
+        /// Compañía asignada por la autoridad a este peer.
+        company_id: CompanyId,
     },
     /// Cliente → servidor: propone un comando.
-    Propose { command: Command },
+    Propose {
+        company_id: CompanyId,
+        command: Command,
+    },
     /// Servidor → todos: comando autorizado con secuencia monótona.
-    Commit { seq: u64, command: Command },
+    Commit {
+        seq: u64,
+        company_id: CompanyId,
+        command: Command,
+    },
     /// Servidor → clientes: avanzar N ticks de simulación.
     AdvanceTicks { count: u32 },
     /// Servidor → clientes: hash canónico en un tick (desync check).

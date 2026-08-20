@@ -550,6 +550,11 @@ continuación `|` RGBA en el NFO; `parse_global_sprite_rects` selecciona la
 alternativa `32bpp` de zoom normal con **sus propias** coordenadas y hoja
 `.32.png`. Nunca se puede combinar el rectángulo 8bpp con la hoja 32bpp.
 
+Estas reglas describen la implementación y sus contratos locales; no prueban
+el orden final de toda la escena ni la igualdad de framebuffer. El estado
+canónico de composición raster está en
+[PARIDAD.md](PARIDAD.md#evidencia-visual-raster-vigente).
+
 ---
 
 ### Pendiente de terreno y cimientos (foundations)

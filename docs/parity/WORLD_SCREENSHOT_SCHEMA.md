@@ -58,8 +58,9 @@ resultado.
 
 ## Uso correcto
 
-El diff raster es un localizador, no un gate de píxeles global. Antes de tocar
-sprites hay que conservar el orden de evidencia:
+El diff raster es el control de composición, no una autorización para inferir
+la causa sin las capas anteriores. Antes de tocar sprites hay que conservar el
+orden de evidencia:
 
 1. `world-raw` para bytes del `.sav`.
 2. `world-semantic` para tipo, orientación, railtype y vecinos.
@@ -69,3 +70,8 @@ sprites hay que conservar el orden de evidencia:
 Conservar `report.json` junto con un issue o una regresión: el SHA-256 de la
 partida y de ambas imágenes permite repetir el mismo diagnóstico aunque el
 save de trabajo cambie después.
+
+El estado cuantitativo de la última corrida comparable se publica sólo en
+[PARIDAD.md](../PARIDAD.md#evidencia-visual-raster-vigente). Un `world-draw`
+contenido no puede sustituir esta captura: ambos contratos miden etapas
+distintas.

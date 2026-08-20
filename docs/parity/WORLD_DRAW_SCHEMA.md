@@ -132,6 +132,14 @@ algunas familias; sí exige la misma primitiva, sprite y, cuando está explícit
 paleta y geometría. Así una inversión de capas se detecta sin convertir los
 comandos C++ aún no instrumentados en falsos negativos.
 
+Este contrato **no** ordena ni rasteriza la escena completa. Incluso con
+`--strict-reference`, no compara el sort entre teselas o sprites padre, el
+clipping final, el anclaje/pivote que aplica Bevy, las páginas del atlas ni los
+píxeles del framebuffer. Una traza contenida sólo demuestra que las decisiones
+instrumentadas son compatibles; la aceptación de composición se hace con el
+[contrato raster](WORLD_SCREENSHOT_SCHEMA.md) y su estado se mantiene en
+[PARIDAD.md](../PARIDAD.md#evidencia-visual-raster-vigente).
+
 ## Auditoría global y backlog
 
 `scripts/audit_world_draw.py` consume las dos trazas completas y genera un

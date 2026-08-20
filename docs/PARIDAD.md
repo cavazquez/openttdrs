@@ -13,7 +13,7 @@ Cuando esa evidencia ya coincide pero el resultado compuesto difiere, usar el
 
 ## Estado canónico actual
 
-**Corte canónico: 2026-08-14 · `main` `7ca1092125cc864738e404640c5e557a30a93bb5`.
+**Corte canónico: 2026-08-20 · `main` `a32f1be508bc3afb4bbdcdb09ea53012b76a0dcb`.
 Referencia: OpenTTD 15.3, commit
 `14ec60f248547d4d062a1160f0fc26d742319888`.** Esta tabla es la fuente de
 verdad para el estado vigente. Las tablas detalladas posteriores conservan el
@@ -45,7 +45,7 @@ no existe. Ningún nivel implica compatibilidad binaria o de red con OpenTTD.
 | NewGRF | **Media de parseo / media de runtime** | Catálogos Action0/3/5 amplios; call sites reales limitados a CB24/CB13, CB31, CB17, CB28 y CB25–27. Residual: resto CBIDs/scopes/storage y validación diferencial; ver las [matrices Action0/3/5](parity/newgrf-action0-matrix.md) y de [callbacks](parity/newgrf-callback-matrix.md) |
 | Multijugador | **Inicial** | Lockstep TCP, dedicated, late join y host migration; protocolo propio sin lobby, auth, cifrado ni interoperabilidad |
 | IA / GameScript / editor | **Inicial-media** | TransCargo/RoadHaul, GS-lite y editor propios; Squirrel compatible ausente |
-| Render/UI vanilla | **Media-alta visual / media funcional** | Cobertura OpenGFX amplia; no hay oracle visual total ni internacionalización completa |
+| Render/UI vanilla | **Media funcional / baja de composición raster** | Hay cobertura OpenGFX y evidencia `world-draw` por tesela, pero no paridad global de framebuffer; la captura limpia vigente de Kale sigue siendo diferente. Véase [evidencia visual raster](#evidencia-visual-raster-vigente) |
 | Plataformas y release | **Preparada con gates** | `main` protegido y checks Windows/macOS; queda dry-run/smoke de `0.1.0-alpha.1` en [#296](https://github.com/cavazquez/openttdrs/issues/296) |
 
 ### Propiedad de cada estado (evitar trabajo duplicado)
@@ -56,10 +56,34 @@ no existe. Ningún nivel implica compatibilidad binaria o de red con OpenTTD.
 | Compatibilidad `.sav` | [`parity/sav-compatibility.md`](parity/sav-compatibility.md) | Matrices de import/export en `PLANIFICACION.md`, `MAPA_Y_FERROCARRIL.md` y README |
 | NewGRF Action0/3/5 | [`parity/newgrf-action0-matrix.md`](parity/newgrf-action0-matrix.md) | El estado de ejecución de callbacks |
 | NewGRF callbacks | [`parity/newgrf-callback-matrix.md`](parity/newgrf-callback-matrix.md) | Propiedades de catálogos Action0/3/5 |
+| Composición raster vanilla | [Evidencia visual raster](#evidencia-visual-raster-vigente) y [`parity/WORLD_SCREENSHOT_SCHEMA.md`](parity/WORLD_SCREENSHOT_SCHEMA.md) | Porcentajes globales o afirmar que `world-draw` prueba el framebuffer |
 
 Una modificación sólo actualiza su fuente canónica y este resumen si cambia la
 madurez global. Las listas antiguas inferiores son evidencia histórica, no
 backlog de implementación.
+
+### Evidencia visual raster vigente
+
+La corrida de referencia de `Kale_TitleGame.sav`, centro `189,126`,
+`1280x720`, OpenGFX 8bpp y perfil `clean-static` (sin UI, rótulos, vehículos
+ni capas de diagnóstico) quedó **alineado en `[0, 0]`** y aun así registró
+**213.552 de 921.600 píxeles distintos (23,171875 %)**. Es una medición
+anterior al ajuste local de catenaria; hasta repetir exactamente el baseline
+no corresponde atribuirle una mejora cuantificada ni declarar paridad raster.
+
+La contención `--strict-reference` de `world-draw` sigue siendo útil, pero
+compara decisiones y orden relativo por tesela antes de atlas/composición. No
+comprueba el sort global entre teselas o padres, clipping, anclajes finales ni
+el framebuffer de Bevy. Por eso una traza contenida puede coexistir con este
+diff amplio. El siguiente trabajo debe partir de esa captura y aislar el
+ordenamiento global y las familias visibles (puentes/catenaria, estaciones,
+aeropuertos, objetos y edificios), no rebajar el baseline ni extrapolar el
+resultado de una región a paridad general.
+
+El perfil `CLEAN` normaliza la UI, las preferencias persistidas y los overrides
+de transparencia conocidos, pero no convierte al renderer actual en un gate
+pixel-perfect: mientras el orden global de composición siga divergente, la
+captura debe servir para localizar y medir, no para certificar paridad.
 
 ## Backlog sucesor activo
 

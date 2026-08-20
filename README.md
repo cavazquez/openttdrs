@@ -212,7 +212,7 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ / 🔮 backlog (issues en GitHub)
 | PBS / path signals | 🟡 | Implementado para escenarios acotados; fidelidad global en [PARIDAD.md](docs/PARIDAD.md#estado-canónico-actual) |
 | Economía + 11 cargas temperate + packets | 🟡 | CargoDist MCF, transfer/deliver y ratings; climas/NewGRF incompletos |
 | Import/export `.sav` | 🟡 | Subconjunto interoperable; matriz única de import vs export en [sav-compatibility.md](docs/parity/sav-compatibility.md) |
-| Render OpenGFX vanilla | 🟡 | Cobertura amplia, sin oracle visual total; industrias NewGRF ≥175 MVP (#71) |
+| Render OpenGFX vanilla | 🟠 | Cobertura amplia, pero la composición raster global no tiene paridad demostrada; baseline y límites en [PARIDAD.md](docs/PARIDAD.md#evidencia-visual-raster-vigente) |
 | UI solitario (menús, listas, noticias) | 🟡 | Jugable; varias opciones del core todavía no están expuestas |
 | Multi-compañía | 🟡 | Mínima + ownership; segunda humana OOS |
 | NewGRF | 🟡 | Estado por propiedad en la [matriz Action0/3/5](docs/parity/newgrf-action0-matrix.md) y ejecución real en la [matriz de callbacks](docs/parity/newgrf-callback-matrix.md) |

@@ -48,7 +48,7 @@ Resumen vivo de **openttdrs** vs OpenTTD. Detalle por dominio:
 | Bloque | Estado |
 |--------|--------|
 | Carretera + ferrocarril (construcción, sim básica) | ✅ alto |
-| Paridad visual OpenGFX vanilla | 🟡 ~85–90 % |
+| Composición raster OpenGFX vanilla | 🟠 Diferente en el baseline vigente; estado y evidencia en [PARIDAD.md](PARIDAD.md#evidencia-visual-raster-vigente) |
 | Audio espacial + música OGG (subset) | 🟡 |
 | Economía (préstamos, subsidios, averías, packets) | 🟡 |
 | CargoDist MCF nivel 2 | 🟡 (MVP; jobs async OOS) |
@@ -1174,7 +1174,9 @@ S2 y S3 pueden ir en paralelo.
 - [ ] Señales bloque básicas
 - [ ] Import `.sav` con vehículos que se mueven
 - [ ] `check.sh` + CI verdes
-- [ ] Paridad visual SP3 ≥ 90 % (`archive/ROADMAP_PARIDAD_VISUAL.md`)
+- [ ] Validar composición raster focalizada contra el baseline vigente (sin
+  convertir la cobertura SP3 en un porcentaje de paridad global; ver
+  [PARIDAD.md](PARIDAD.md#evidencia-visual-raster-vigente))
 
 ---
 
@@ -2511,7 +2513,14 @@ Pulido jul 2026: `--client` sin bootstrap local; dedicated isla 64² con pueblos
 | **SP4** Pulido | ✅ Cerrado 2026-06-22 | ROADMAP_SPRINTS S1 |
 | **SP1** Ciclo jugable | 🟡 En curso | [SP1_CHECKLIST.md](#checklist-sp1-ciclo-jugable), ROADMAP S4 |
 
-**SP3 visual vanilla:** cerrado en código (junctions slope, culling teselas+labels, industrias gfx 0–174). QA manual opcional del checklist y=3/5/7. Waypoints: posicionamiento corregido jul 2026 ([HANDOFF_WAYPOINTS_RAIL.md](MAPA_Y_FERROCARRIL.md#waypoints-rail-handoff)). Preview estación multi-tesela: sprites reales (jul 2026). Fuera de SP3: NewGRF gfx≥175.
+**SP3 visual vanilla:** cerrado sólo para aquel alcance de código (junctions
+slope, culling teselas+labels, industrias gfx 0–174); no certifica composición
+raster global. El baseline y la prioridad vigente están en
+[PARIDAD.md](PARIDAD.md#evidencia-visual-raster-vigente). QA manual opcional
+del checklist y=3/5/7. Waypoints: posicionamiento corregido jul 2026
+([HANDOFF_WAYPOINTS_RAIL.md](MAPA_Y_FERROCARRIL.md#waypoints-rail-handoff)).
+Preview estación multi-tesela: sprites reales (jul 2026). Fuera de SP3: NewGRF
+gfx≥175.
 
 **Terraform (paisaje):** T1–T3 implementados; gen procedural T4 MVP en `world_gen.rs` — [archive/ROADMAP_TERRAFORM.md](archive/ROADMAP_TERRAFORM.md).
 

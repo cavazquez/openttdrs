@@ -33,7 +33,7 @@ la paridad se comprueba por capas, de menor a mayor distancia del píxel final.
 |---|---|---|---|
 | 1 | [`world-raw`](WORLD_RAW_SCHEMA.md) | ¿Los bytes de mapa de cada tesela son los mismos? | No explica su significado. |
 | 2 | [`world-semantic`](WORLD_SEMANTIC_SCHEMA.md) | ¿Ambos clasifican igual vía, puente, túnel, estación, pendiente y orientación? | No garantiza el sprite final. |
-| 3 | [`world-draw`](WORLD_DRAW_SCHEMA.md) | ¿Rust selecciona sprite, paleta y geometría permitidos por el `draw_tile_proc` C++? | La cobertura Rust aún no incluye todas las familias. |
+| 3 | [`world-draw`](WORLD_DRAW_SCHEMA.md) | ¿Rust selecciona sprite, paleta y geometría permitidos por el `draw_tile_proc` C++? | La cobertura Rust aún no incluye todas las familias ni prueba el sort global o el framebuffer. |
 | 4 | Captura enfocada | ¿La composición completa se ve correcta en el contexto real? | Es aceptación visual, no la única evidencia. |
 
 La regla es encontrar la primera capa que diverge antes de editar. De ese modo
@@ -370,7 +370,10 @@ puede desactivar sólo esa limpieza con `OPENTTDRS_WORLD_SCREENSHOT_CLEAN=0`.
 El reporte incluye un registro de cámara de hasta ocho píxeles. Un
 desplazamiento distinto de cero es una señal a investigar, no una corrección
 que permita dar por buena la paridad. Ver el
-[contrato raster](WORLD_SCREENSHOT_SCHEMA.md) para la semántica completa.
+[contrato raster](WORLD_SCREENSHOT_SCHEMA.md) para la semántica completa. El
+resultado cuantitativo vigente se conserva únicamente en
+[PARIDAD.md](../PARIDAD.md#evidencia-visual-raster-vigente); este documento no
+lo duplica para que el método y el estado no diverjan.
 
 Para el caso de regresión de la estación vanilla de Kale:
 
@@ -415,11 +418,14 @@ La configuración de compilación no debe cambiar la partida ni su traza.
 
 ## Límites y próximo hito
 
-La cobertura `world-draw` ya permite usar `--strict-reference` como gate para
-la exportación completa actual de Kale/OpenGFX 8bpp. El siguiente hito es una
-comparación de capturas focalizadas y repetir la auditoría con OpenGFX2 32bpp,
-NewGRF reales y otras partidas, donde una misma selección lógica puede revelar
-diferencias de atlas, anclaje o composición raster.
+La cobertura `world-draw` permite usar `--strict-reference` como gate
+estructural de la exportación completa actual de Kale/OpenGFX 8bpp; no es un
+gate de composición ni una aceptación visual. La captura focalizada ya
+encontró una diferencia global reproducible, cuyo estado canónico está en
+[PARIDAD.md](../PARIDAD.md#evidencia-visual-raster-vigente). El próximo hito es
+aislar y corregir el sort global y las familias de capas afectadas, repetir ese
+baseline y luego ampliar la auditoría a OpenGFX2 32bpp, NewGRF reales y otras
+partidas.
 
 El estado exacto y la validación de la pausa se mantienen en el
 [checkpoint](../checkpoints/2026-08-09-parity-oracle-pause.md). Los esquemas

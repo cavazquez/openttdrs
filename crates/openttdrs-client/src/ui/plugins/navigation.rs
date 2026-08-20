@@ -21,7 +21,8 @@ use crate::ui::navigation::{
     OpenUiRoute, ToolbarContext, ToolbarMenuState, dismiss_toolbar_menu_on_outside_click,
     handle_toolbar_menu_entries, handle_toolbar_menu_keyboard, handle_toolbar_navigation_button,
     open_file_actions_from_routes, open_help_windows_from_routes, open_message_windows_from_routes,
-    open_settings_windows_from_routes, refresh_toolbar_context, sync_toolbar_navigation_menu,
+    open_settings_windows_from_routes, refresh_toolbar_context, sync_toolbar_localized_labels,
+    sync_toolbar_navigation_menu,
 };
 use crate::ui::station_directory::{
     StationDirectoryState, handle_station_directory_buttons, open_station_directory_from_routes,
@@ -99,6 +100,7 @@ impl Plugin for NavigationUiPlugin {
                         handle_toolbar_menu_keyboard,
                         dismiss_toolbar_menu_on_outside_click,
                         sync_toolbar_navigation_menu,
+                        sync_toolbar_localized_labels,
                     )
                         .chain(),
                     (

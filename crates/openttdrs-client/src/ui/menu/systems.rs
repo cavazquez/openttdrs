@@ -315,6 +315,21 @@ pub(crate) fn sync_toolbar_navigation_menu(
     }
 }
 
+/// Actualiza las etiquetas visibles de los menús cuando cambia el locale
+/// persistido. Las claves viven en el catálogo declarativo, no en el `Text`.
+pub(crate) fn sync_toolbar_localized_labels(
+    prefs: Res<ClientPreferences>,
+    mut labels: Query<(&super::chrome::ToolbarLocalizedText, &mut Text)>,
+) {
+    let locale = prefs.locale();
+    for (key, mut text) in &mut labels {
+        let translated = crate::i18n::text(locale, key.0);
+        if **text != translated {
+            **text = translated.to_owned();
+        }
+    }
+}
+
 fn command_for_menu_action(action: MenuAction) -> Option<UiCommandId> {
     use crate::ui::navigation::UiRoute;
     Some(match action {

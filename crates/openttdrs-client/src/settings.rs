@@ -71,7 +71,7 @@ pub(crate) struct ClientPreferences {
     pub(crate) window_width: u32,
     /// Alto de ventana primaria.
     pub(crate) window_height: u32,
-    /// Código de idioma (`es` por ahora; placeholder i18n).
+    /// Código de idioma persistido (`es` o `en`; otros códigos hacen fallback a español).
     pub(crate) language: String,
 }
 
@@ -122,6 +122,11 @@ impl Default for ClientPreferences {
 }
 
 impl ClientPreferences {
+    #[must_use]
+    pub(crate) fn locale(&self) -> crate::i18n::Locale {
+        crate::i18n::Locale::from_code(&self.language)
+    }
+
     #[must_use]
     pub(crate) fn transparency_mode(
         &self,

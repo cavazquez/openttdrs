@@ -156,6 +156,9 @@ pub(crate) struct MainMenuResolutionButton {
     pub height: u32,
 }
 
+#[derive(Component, Clone, Copy)]
+pub(crate) struct MainMenuLanguageButton(pub(crate) crate::i18n::Locale);
+
 #[derive(Component)]
 pub(crate) struct MainMenuLanguageLabel;
 

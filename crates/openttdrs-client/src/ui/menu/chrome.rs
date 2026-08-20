@@ -53,6 +53,11 @@ pub(crate) struct ToolbarMenuEntry {
 #[derive(Component)]
 pub(crate) struct ToolbarMenuEntryLabel;
 
+/// Clave fuente del texto, separada del `Text` para cambiar de locale sin
+/// reconstruir el popover ni alterar las acciones declarativas.
+#[derive(Component, Clone, Copy)]
+pub(crate) struct ToolbarLocalizedText(pub(crate) &'static str);
+
 #[derive(Component)]
 pub(crate) struct ToolbarMenuEntryCheck;
 
@@ -255,6 +260,7 @@ fn spawn_menu_entry(
             ));
             row.spawn((
                 ToolbarMenuEntryLabel,
+                ToolbarLocalizedText(entry.label),
                 Text::new(entry.label),
                 window_text_font(asset_server, UiFontRole::Caption),
                 TextColor(text_color),

@@ -2,8 +2,9 @@ use bevy::prelude::*;
 
 use super::super::widgets::{hover_secondary, option_button_bg};
 use super::super::{
-    MainMenuHighscoresButton, MainMenuHighscoresText, MainMenuPanel, MainMenuPreferencesButton,
-    MainMenuResolutionButton, MainMenuSoundButton,
+    MainMenuHighscoresButton, MainMenuHighscoresText, MainMenuLanguageButton,
+    MainMenuLanguageLabel, MainMenuPanel, MainMenuPreferencesButton, MainMenuResolutionButton,
+    MainMenuSoundButton,
 };
 
 pub(crate) fn main_menu_highscores_interaction(
@@ -75,6 +76,7 @@ pub(crate) fn main_menu_preferences_interaction(
             Changed<Interaction>,
             With<MainMenuPreferencesButton>,
             Without<MainMenuResolutionButton>,
+            Without<MainMenuLanguageButton>,
         ),
     >,
     mut res_btn: Query<
@@ -83,7 +85,17 @@ pub(crate) fn main_menu_preferences_interaction(
             &MainMenuResolutionButton,
             &mut BackgroundColor,
         ),
-        Without<MainMenuPreferencesButton>,
+        (
+            Without<MainMenuPreferencesButton>,
+            Without<MainMenuLanguageButton>,
+        ),
+    >,
+    mut lang_btn: Query<
+        (&Interaction, &MainMenuLanguageButton, &mut BackgroundColor),
+        (
+            Without<MainMenuPreferencesButton>,
+            Without<MainMenuResolutionButton>,
+        ),
     >,
 ) {
     if *panel == MainMenuPanel::Root {
@@ -114,6 +126,13 @@ pub(crate) fn main_menu_preferences_interaction(
             *interaction,
         );
     }
+    for (interaction, btn, mut bg) in &mut lang_btn {
+        if *interaction == Interaction::Pressed {
+            prefs.language = btn.0.code().to_owned();
+            prefs.set_changed();
+        }
+        *bg = option_button_bg(prefs.locale() == btn.0, *interaction);
+    }
 }
 
 pub(crate) fn sync_main_menu_preferences(
@@ -124,6 +143,8 @@ pub(crate) fn sync_main_menu_preferences(
         &mut BackgroundColor,
         &Interaction,
     )>,
+    mut lang_btn: Query<(&MainMenuLanguageButton, &mut BackgroundColor, &Interaction)>,
+    mut lang_label: Query<&mut Text, With<MainMenuLanguageLabel>>,
 ) {
     if *panel != MainMenuPanel::Preferences {
         return;
@@ -131,6 +152,12 @@ pub(crate) fn sync_main_menu_preferences(
     for (btn, mut bg, interaction) in &mut res_btn {
         let selected = prefs.window_width == btn.width && prefs.window_height == btn.height;
         *bg = option_button_bg(selected, *interaction);
+    }
+    for (btn, mut bg, interaction) in &mut lang_btn {
+        *bg = option_button_bg(prefs.locale() == btn.0, *interaction);
+    }
+    for mut text in &mut lang_label {
+        **text = format!("Idioma: {}", prefs.locale().label());
     }
 }
 

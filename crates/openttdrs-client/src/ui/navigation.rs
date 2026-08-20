@@ -9,7 +9,7 @@ pub(crate) use crate::ui::menu::{
     MenuId, ToolbarContext, ToolbarMenuState, dismiss_toolbar_menu_on_outside_click,
     handle_toolbar_menu_entries, handle_toolbar_menu_keyboard, handle_toolbar_navigation_button,
     refresh_toolbar_context, spawn_menu_anchor_button, spawn_menu_anchor_button_sized,
-    sync_toolbar_navigation_menu,
+    sync_toolbar_localized_labels, sync_toolbar_navigation_menu,
 };
 
 /// Destinos navegables desde toolbar/menús.

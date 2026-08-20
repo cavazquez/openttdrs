@@ -16,13 +16,13 @@ use super::widgets::{
 use super::{
     MainMenuBackButton, MainMenuContinueButton, MainMenuContinueWrap, MainMenuDemoButton,
     MainMenuDensityTarget, MainMenuEditorButton, MainMenuHeightmapSlot, MainMenuHighscoresButton,
-    MainMenuHighscoresText, MainMenuHintsText, MainMenuLanguageLabel, MainMenuLoadButton,
-    MainMenuMapSizeButton, MainMenuNewGameButton, MainMenuOpenHeightmapsDirButton,
-    MainMenuOpenScenariosDirButton, MainMenuPanel, MainMenuPreferencesButton, MainMenuQuitButton,
-    MainMenuQuitConfirmNo, MainMenuQuitConfirmYes, MainMenuResolutionButton,
-    MainMenuScenariosButton, MainMenuSeedDecButton, MainMenuSeedIncButton, MainMenuSoundButton,
-    MainMenuStartButton, MainMenuSubPanel, MainMenuSummaryText, MainMenuTitleText, MainMenuToggle,
-    MainMenuUi,
+    MainMenuHighscoresText, MainMenuHintsText, MainMenuLanguageButton, MainMenuLanguageLabel,
+    MainMenuLoadButton, MainMenuMapSizeButton, MainMenuNewGameButton,
+    MainMenuOpenHeightmapsDirButton, MainMenuOpenScenariosDirButton, MainMenuPanel,
+    MainMenuPreferencesButton, MainMenuQuitButton, MainMenuQuitConfirmNo, MainMenuQuitConfirmYes,
+    MainMenuResolutionButton, MainMenuScenariosButton, MainMenuSeedDecButton,
+    MainMenuSeedIncButton, MainMenuSoundButton, MainMenuStartButton, MainMenuSubPanel,
+    MainMenuSummaryText, MainMenuTitleText, MainMenuToggle, MainMenuUi,
 };
 
 pub(crate) fn setup_main_menu(
@@ -619,13 +619,49 @@ fn spawn_preferences_panel(parent: &mut ChildSpawnerCommands) {
                 });
             panel.spawn((
                 MainMenuLanguageLabel,
-                Text::new("Idioma: Espanol (unico por ahora)"),
+                Text::new("Idioma: Español"),
                 TextFont {
                     font_size: FontSize::Rem(UiFontRole::Caption.rem_size()),
                     ..default()
                 },
                 TextColor(Color::srgb(0.78, 0.74, 0.58)),
             ));
+            panel
+                .spawn((Node {
+                    flex_direction: FlexDirection::Row,
+                    column_gap: Val::Px(6.0),
+                    justify_content: JustifyContent::Center,
+                    width: Val::Px(260.0),
+                    ..default()
+                },))
+                .with_children(|row| {
+                    for locale in crate::i18n::Locale::ALL {
+                        row.spawn((
+                            Button,
+                            crate::ui::hud::UiClickBeep,
+                            MainMenuLanguageButton(locale),
+                            Node {
+                                width: Val::Px(112.0),
+                                height: Val::Px(32.0),
+                                justify_content: JustifyContent::Center,
+                                align_items: AlignItems::Center,
+                                border: UiRect::all(Val::Px(1.0)),
+                                ..default()
+                            },
+                            BackgroundColor(Color::srgb(0.26, 0.24, 0.19)),
+                            BorderColor::all(Color::srgb(0.58, 0.54, 0.42)),
+                            Interaction::default(),
+                            children![(
+                                Text::new(locale.label()),
+                                TextFont {
+                                    font_size: FontSize::Rem(UiFontRole::Caption.rem_size()),
+                                    ..default()
+                                },
+                                TextColor(Color::srgb(0.9, 0.86, 0.72)),
+                            )],
+                        ));
+                    }
+                });
             panel.spawn(secondary_button(MainMenuBackButton, "Volver", 42.0));
         });
 }

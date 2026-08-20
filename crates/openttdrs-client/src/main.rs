@@ -36,6 +36,7 @@ mod bevy_app;
 mod camera;
 mod config;
 mod debug_gizmos;
+mod i18n;
 mod iso;
 mod news_prefs;
 mod persistence;

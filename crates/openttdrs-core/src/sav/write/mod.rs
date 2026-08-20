@@ -16,6 +16,7 @@
 mod chunks;
 pub(crate) mod codec;
 mod entities;
+mod fleet;
 mod map;
 mod meta;
 mod vehicles;
@@ -128,7 +129,7 @@ fn scan_chunk_names(payload: &[u8]) -> Vec<String> {
     // Tras CH_TABLE el tamaño del header no basta: completar con búsqueda de fourcc.
     for &want in REQUIRED_EXPORT_CHUNKS.iter().chain(
         [
-            "STNN", "CITY", "INDY", "ORDL", "VEHS", "LGRP", "LGRJ", "LGRS", "PATS",
+            "STNN", "CITY", "INDY", "ORDL", "VEHS", "LGRP", "LGRJ", "LGRS", "PATS", "GRPS", "ERNW",
         ]
         .iter(),
     ) {
@@ -253,6 +254,7 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
     )?);
 
     data.extend_from_slice(&meta::pats_chunk(state)?);
+    data.extend_from_slice(&fleet::fleet_chunks(state)?);
 
     data.extend_from_slice(&chunks::table_chunk(
         *b"DATE",
@@ -358,6 +360,27 @@ mod tests {
                 .iter()
                 .any(|name| name == "PATS")
         );
+    }
+
+    #[test]
+    fn ottn_roundtrip_preserves_group_names_and_autoreplace_rules() {
+        let mut state = tiny_state();
+        state.vehicle_groups = vec![crate::VehicleGroup::new(7, "Carga")];
+        state.autoreplace_rules.push(crate::AutoReplaceRule {
+            from_engine_id: 100,
+            to_engine_id: 101,
+            enabled: true,
+            only_when_old: true,
+            group_id: Some(7),
+        });
+
+        let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
+        let sav_game = sav::load(&bytes).expect("load");
+        assert_eq!(sav_game.vehicle_groups, state.vehicle_groups);
+        assert_eq!(sav_game.autoreplace_rules, state.autoreplace_rules);
+        let names = exported_chunk_names(&state).expect("chunk names");
+        assert!(names.iter().any(|name| name == "GRPS"));
+        assert!(names.iter().any(|name| name == "ERNW"));
     }
 
     #[test]

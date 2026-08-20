@@ -14,6 +14,7 @@ mod chunks;
 mod container;
 mod date;
 mod entities;
+mod fleet;
 pub(crate) mod house_population_generated;
 mod import;
 mod landscape;
@@ -198,6 +199,10 @@ pub struct SavGame {
     pub climate: crate::Climate,
     /// Lado de conducción y señales de `PATS` / `OPTS`.
     pub construction: crate::ConstructionSettings,
+    /// Grupos de vehículos del chunk `GRPS` (nombres/índices básicos).
+    pub vehicle_groups: Vec<crate::vehicle_group::VehicleGroup>,
+    /// Reglas de autoreemplazo del chunk `ERNW`.
+    pub autoreplace_rules: Vec<crate::autoreplace::AutoReplaceRule>,
 }
 
 /// `SLV_100`: desde esta versión `OpenTTD` persiste las reservas PBS de
@@ -235,6 +240,8 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
     let company_colour = entities::company_colour_from_chunks(&chunk_list, version);
     let climate = landscape::climate_from_chunks(&chunk_list).unwrap_or_default();
     let construction = settings::construction_settings_from_chunks(&chunk_list);
+    let vehicle_groups = fleet::vehicle_groups_from_chunks(&chunk_list);
+    let autoreplace_rules = fleet::autoreplace_rules_from_chunks(&chunk_list);
     let link_graph =
         linkgraph::link_graph_from_chunks(&chunk_list, map_w, &station_index, version, climate);
     Ok(SavGame {
@@ -253,6 +260,8 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
         link_graph,
         climate,
         construction,
+        vehicle_groups,
+        autoreplace_rules,
     })
 }
 
@@ -574,6 +583,8 @@ impl GameState {
         state.train_acceleration_model = crate::engine::TrainAccelerationModel::Realistic;
         state.climate = sav.climate;
         state.construction = sav.construction;
+        state.vehicle_groups = sav.vehicle_groups;
+        state.autoreplace_rules = sav.autoreplace_rules;
         if let Some(time) = sav.game_time {
             state.tick = date::game_tick_from_sav_time(time);
         }
@@ -896,6 +907,8 @@ mod tests {
             link_graph: LinkGraphStats::default(),
             climate: crate::Climate::Temperate,
             construction: crate::ConstructionSettings::default(),
+            vehicle_groups: Vec::new(),
+            autoreplace_rules: Vec::new(),
         }
     }
 
@@ -1282,6 +1295,8 @@ mod tests {
             game_time: None,
             climate: crate::Climate::Temperate,
             construction: crate::ConstructionSettings::default(),
+            vehicle_groups: Vec::new(),
+            autoreplace_rules: Vec::new(),
         };
         let state = GameState::from_sav_game(sav);
         assert_eq!(state.stations.len(), 2);

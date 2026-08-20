@@ -35,6 +35,10 @@ mod town_labels;
 mod train_smoke;
 mod vehicles;
 mod viewport;
+// La captura de bounds/children de todos los spawners se integra por etapas;
+// el port puro ya se prueba contra la semántica de `ViewportSortParentSprites`.
+#[allow(dead_code)]
+pub(crate) mod viewport_sort;
 mod water;
 mod world;
 pub(crate) mod world_draw_trace;

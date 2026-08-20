@@ -101,6 +101,30 @@ pub(crate) fn visual_capture_requested() -> bool {
         || std::env::var_os("OPENTTDRS_MAP_SHOT").is_some()
 }
 
+/// Indica si la captura de mapa debe excluir todo overlay que no pertenezca al
+/// raster estático de OpenTTD.
+///
+/// Es deliberadamente independiente de las preferencias persistidas: un
+/// perfil de desarrollo o una variable de entorno no puede contaminar un
+/// oráculo raster reproducible. Las capturas dinámicas siguen disponibles con
+/// `OPENTTDRS_MAP_SHOT_CLEAN=0`.
+pub(crate) fn clean_map_capture_requested() -> bool {
+    clean_map_capture_requested_from(
+        std::env::var_os("OPENTTDRS_MAP_SHOT").is_some(),
+        std::env::var("OPENTTDRS_MAP_SHOT_CLEAN").ok().as_deref(),
+    )
+}
+
+fn clean_map_capture_requested_from(map_capture: bool, clean: Option<&str>) -> bool {
+    map_capture
+        && clean.is_some_and(|value| {
+            !matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "" | "0" | "false" | "no" | "off"
+            )
+        })
+}
+
 /// Los oráculos visuales no necesitan un dispositivo de audio. Desactivarlo
 /// evita que un backend sin salida (o un underrun de `rodio`) ensucie la
 /// evidencia del renderer. La variable también permite un smoke gráfico
@@ -298,6 +322,19 @@ mod tests {
         assert!(super::audio_disabled_for_run(false, true, false));
         assert!(super::audio_disabled_for_run(false, false, true));
         assert!(!super::audio_disabled_for_run(false, false, false));
+    }
+
+    #[test]
+    fn clean_map_capture_requires_both_a_map_shot_and_an_enabled_clean_flag() {
+        assert!(super::clean_map_capture_requested_from(true, Some("1")));
+        assert!(super::clean_map_capture_requested_from(true, Some("yes")));
+        assert!(!super::clean_map_capture_requested_from(true, Some("0")));
+        assert!(!super::clean_map_capture_requested_from(
+            true,
+            Some(" false ")
+        ));
+        assert!(!super::clean_map_capture_requested_from(true, None));
+        assert!(!super::clean_map_capture_requested_from(false, Some("1")));
     }
 
     #[test]

@@ -49,7 +49,7 @@ use crate::ui::genland_window::GenLandWindowState;
 use crate::ui::goal_list_window::GoalListWindowState;
 use crate::ui::graph_window::GraphWindowState;
 use crate::ui::help_window::HelpWindowState;
-use crate::ui::hud::SimHudControls;
+use crate::ui::hud::{SimHudControls, TileInfoText};
 use crate::ui::industry_directory::IndustryDirectoryState;
 use crate::ui::industry_panel::IndustryPanelState;
 use crate::ui::industry_production_window::IndustryProductionWindowState;
@@ -1234,18 +1234,7 @@ fn pause_simulation_for_visual_capture(mut next_simulation: ResMut<NextState<Sim
 }
 
 fn map_shot_clean_requested() -> bool {
-    parse_map_shot_clean(std::env::var("OPENTTDRS_MAP_SHOT_CLEAN").ok().as_deref())
-}
-
-/// `0`, `false` y una variable vacía preservan la captura dinámica. El resto
-/// de valores no vacíos mantiene el comportamiento histórico de `CLEAN=1`.
-fn parse_map_shot_clean(raw: Option<&str>) -> bool {
-    raw.is_some_and(|value| {
-        !matches!(
-            value.trim().to_ascii_lowercase().as_str(),
-            "" | "0" | "false" | "no" | "off"
-        )
-    })
+    crate::bevy_app::clean_map_capture_requested()
 }
 
 fn parse_shot_ui_scale(raw: &str) -> Option<f32> {
@@ -1319,7 +1308,8 @@ fn first_industry_tile(sim: &SimWorld) -> Option<TileCoord> {
 
 /// Oculta las capas que no forman parte de la geografía estática al tomar un
 /// `OPENTTDRS_MAP_SHOT_CLEAN=1`, después de que los sync normales pudieron
-/// actualizarlas en el frame actual.
+/// actualizarlas en el frame actual. Incluye HUD y diagnóstico: las
+/// preferencias locales nunca forman parte de un oráculo raster.
 fn hide_map_shot_ui(world: &mut World) {
     if !map_shot_clean_requested() {
         return;
@@ -1335,6 +1325,15 @@ fn hide_map_shot_ui(world: &mut World) {
     let mut chrome =
         world.query_filtered::<&mut Visibility, With<crate::ui::toolbar::BuildMenuUi>>();
     for mut visibility in chrome.iter_mut(world) {
+        *visibility = Visibility::Hidden;
+    }
+    let mut hud_text = world.query_filtered::<&mut Visibility, With<TileInfoText>>();
+    for mut visibility in hud_text.iter_mut(world) {
+        *visibility = Visibility::Hidden;
+    }
+    let mut diagnostics = world
+        .query_filtered::<&mut Visibility, With<crate::debug_gizmos::DiagnosticsOverlayRoot>>();
+    for mut visibility in diagnostics.iter_mut(world) {
         *visibility = Visibility::Hidden;
     }
     // `sync_status_bar` vuelve visible explícitamente su texto central cada
@@ -1865,11 +1864,6 @@ mod tests {
         assert_eq!(parse_map_shot_settle_frames("150"), Some(150));
         assert_eq!(parse_map_shot_settle_frames("39"), None);
         assert_eq!(parse_map_shot_settle_frames("901"), None);
-        assert!(parse_map_shot_clean(Some("1")));
-        assert!(parse_map_shot_clean(Some("yes")));
-        assert!(!parse_map_shot_clean(Some("0")));
-        assert!(!parse_map_shot_clean(Some(" false ")));
-        assert!(!parse_map_shot_clean(None));
     }
 
     #[test]

@@ -41,11 +41,22 @@ pub(crate) struct DiagnosticsOverlayRoot;
 struct DiagnosticsOverlayText;
 
 fn show_debug_gizmos(prefs: &ClientPreferences) -> bool {
-    prefs.show_debug_gizmos || config::env_flag("OPENTTDRS_GIZMOS")
+    debug_overlay_enabled(prefs.show_debug_gizmos || config::env_flag("OPENTTDRS_GIZMOS"))
 }
 
 fn show_diagnostics_overlay(prefs: &ClientPreferences) -> bool {
-    prefs.show_diagnostics_overlay || config::env_flag("OPENTTDRS_DEBUG")
+    debug_overlay_enabled(prefs.show_diagnostics_overlay || config::env_flag("OPENTTDRS_DEBUG"))
+}
+
+/// Los oráculos raster limpios no deben heredar overlays de un perfil Dev ni
+/// de variables de entorno. Fuera de ese modo, los toggles conservan la
+/// semántica interactiva normal.
+fn debug_overlay_enabled(enabled: bool) -> bool {
+    debug_overlay_enabled_for_capture(enabled, crate::bevy_app::clean_map_capture_requested())
+}
+
+fn debug_overlay_enabled_for_capture(enabled: bool, clean_map_capture: bool) -> bool {
+    enabled && !clean_map_capture
 }
 
 fn spawn_diagnostics_overlay(mut commands: Commands) {
@@ -206,7 +217,11 @@ fn station_bar_width(income: u64) -> Option<f32> {
 const LINK_GRAPH_OVERLAY_MAX_EDGES: usize = 64;
 
 fn show_link_graph_overlay(prefs: &ClientPreferences, link: &LinkGraphWindowState) -> bool {
-    prefs.show_link_graph_overlay || link.open || config::env_flag("OPENTTDRS_LINKGRAPH_OVERLAY")
+    debug_overlay_enabled(
+        prefs.show_link_graph_overlay
+            || link.open
+            || config::env_flag("OPENTTDRS_LINKGRAPH_OVERLAY"),
+    )
 }
 
 /// Intensidad 0..1 → verde (bajo) / amarillo / rojo (alto), estilo tráfico.
@@ -301,6 +316,10 @@ mod tests {
         assert!(!show_debug_gizmos(&prefs));
         prefs.show_debug_gizmos = true;
         assert!(show_debug_gizmos(&prefs));
+        assert!(debug_overlay_enabled(true));
+        assert!(!debug_overlay_enabled(false));
+        assert!(!debug_overlay_enabled_for_capture(true, true));
+        assert!(debug_overlay_enabled_for_capture(true, false));
     }
 
     #[test]

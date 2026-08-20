@@ -119,7 +119,9 @@ pub(crate) fn draw_selected_tile_bounds(
     prefs: Res<ClientPreferences>,
     mut gizmos: Gizmos,
 ) {
-    if !(prefs.show_debug_gizmos || config::env_flag("OPENTTDRS_GIZMOS")) {
+    if crate::bevy_app::clean_map_capture_requested()
+        || !(prefs.show_debug_gizmos || config::env_flag("OPENTTDRS_GIZMOS"))
+    {
         return;
     }
     let Some(pos) = selected.pos else {

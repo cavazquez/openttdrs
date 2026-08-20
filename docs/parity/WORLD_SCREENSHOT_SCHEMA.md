@@ -34,6 +34,11 @@ candidata 32bpp por defecto: comparar perfiles distintos no demuestra un fallo
 de render. `OPENTTDRS_WORLD_SCREENSHOT_ALLOW_GFX_MISMATCH=1` sólo habilita una
 exploración explícitamente no comparable.
 
+En `clean-static`, el candidato también suprime HUD, diagnóstico, gizmos de
+industria/estación y Link Graph aunque estén activados en preferencias locales
+o mediante variables de entorno. Esas capas sirven para depurar, no son parte
+del raster comparable.
+
 ## Métricas y registro
 
 El comparador calcula primero el diff sin corrección y luego busca una

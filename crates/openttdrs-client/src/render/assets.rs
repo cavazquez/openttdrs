@@ -87,7 +87,7 @@ pub(crate) struct WorldAssets {
     pub(crate) truck_stop_drive_through: [[AtlasSprite; 2]; 2],
     pub(crate) road_depot_ground: AtlasSprite,
     pub(crate) road_depot_builds: [Vec<AtlasSprite>; 4],
-    /// Capas del depósito de vía: [rail/electric, mono, maglev][dirección].
+    /// Capas del depósito de vía: rail/electric, mono y maglev, por dirección.
     pub(crate) rail_depot_builds: [[Vec<AtlasSprite>; 4]; RAIL_DEPOT_VISUAL_TYPE_COUNT],
     /// Capas del depósito naval vanilla, en orden de sprite OpenTTD 4070..4075.
     ///

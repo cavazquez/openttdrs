@@ -957,7 +957,7 @@ fn catenary_pcp_from_parity(tb: u8, tx: i32, ty: i32) -> u8 {
 
 /// ¿La tesela puede transportar trenes y, por tanto, tiene un `RailType`?
 ///
-/// Es el subconjunto de [`GetTileRailType`] que necesita `MaskWireBits`.
+/// Es el subconjunto de `GetTileRailType` que necesita `MaskWireBits`.
 /// No basta con leer `m8`: en una tesela de terreno ese byte puede contener
 /// datos no relacionados con el tipo de vía.
 fn rail_type_at(map: &Map, pos: TileCoord, mw: u32, mh: u32) -> Option<openttdrs_core::RailType> {
@@ -1073,7 +1073,7 @@ fn is_plain_rail_tile(map: &Map, pos: TileCoord, mp_rail: u8) -> bool {
     })
 }
 
-/// Máscaras de [`DiagdirReachesTrackdirs`] y `DiagdirReachesTracks`.
+/// Máscaras de `DiagdirReachesTrackdirs` y `DiagdirReachesTracks`.
 ///
 /// Los bits 0..5 son un sentido de cada track y 8..13 el inverso, igual que
 /// `TrackdirBits` en `track_type.h`.

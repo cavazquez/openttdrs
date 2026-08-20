@@ -472,7 +472,7 @@ const GROUND_ROW_Z_STEP: f32 = 0.01;
 /// ascendente. El margen total queda estrictamente dentro de un paso de fila
 /// aun para el mapa máximo 4096×4096; así no puede invertir filas contiguas.
 /// Si la precisión de `f32` empata dos columnas lejanas, el orden de inserción
-/// de [`crate::render::viewport::TileViewportBounds::iter_coords`] conserva el
+/// de `TileViewportBounds::iter_coords` conserva el
 /// mismo desempate diagonal del C++.
 const GROUND_COLUMN_Z_STEP: f32 = 0.000_001;
 

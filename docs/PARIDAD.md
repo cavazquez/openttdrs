@@ -13,7 +13,7 @@ Cuando esa evidencia ya coincide pero el resultado compuesto difiere, usar el
 
 ## Estado canónico actual
 
-**Corte canónico: 2026-08-20 · `main` `a32f1be508bc3afb4bbdcdb09ea53012b76a0dcb`.
+**Corte canónico: 2026-08-20 · `main` `4402d12d57535d13fd3002b7bb4ec368f06e6329`.
 Referencia: OpenTTD 15.3, commit
 `14ec60f248547d4d062a1160f0fc26d742319888`.** Esta tabla es la fuente de
 verdad para el estado vigente. Las tablas detalladas posteriores conservan el
@@ -84,6 +84,13 @@ El perfil `CLEAN` normaliza la UI, las preferencias persistidas y los overrides
 de transparencia conocidos, pero no convierte al renderer actual en un gate
 pixel-perfect: mientras el orden global de composición siga divergente, la
 captura debe servir para localizar y medir, no para certificar paridad.
+
+Ya existe un port puro y testeado de `ViewportSortParentSprites` en
+`render/viewport_sort.rs`, incluidos parents vacíos y children. Todavía no se
+conecta al renderer: faltan bounds/identidad de parent completos en varias
+familias de spawn. Su mera presencia no es evidencia de composición aplicada;
+la siguiente entrega debe alimentar ese modelo y asignar el orden resultante a
+las entidades Bevy.
 
 ## Backlog sucesor activo
 

@@ -458,6 +458,10 @@ fn handle_event(
             debug!("network: heartbeat tick={tick}");
             Ok(EventOutcome::Ok)
         }
+        SessionEvent::CommandRejected { message } => {
+            status.label = format!("command rejected: {message}");
+            Ok(EventOutcome::Ok)
+        }
         SessionEvent::HostAnnounce {
             bind,
             next_seq,

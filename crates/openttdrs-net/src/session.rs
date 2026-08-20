@@ -50,6 +50,8 @@ pub enum SessionEvent {
     PeerList { peer_ids: Vec<u64> },
     /// Keep-alive del host.
     Heartbeat { tick: u64 },
+    /// La autoridad rechazó una propuesta antes de incorporarla al log.
+    CommandRejected { message: String },
     /// Peer desconectado o error fatal.
     Disconnected { reason: String },
 }
@@ -315,9 +317,27 @@ fn server_thread(
     }
     let mut clients: Vec<ClientSlot> = Vec::new();
     let mut next_peer_id: u64 = 1;
+    // Copia autoritativa para validar propuestas antes de asignarles secuencia.
+    // El host publica snapshots; cuando cambian, esta copia se realinea para
+    // incluir ticks y mutaciones locales.
+    let mut authority_snapshot = live_snapshot
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clone();
+    let mut authority_state = GameState::load_json(&authority_snapshot).ok();
     eprintln!("openttdrs-net: listen-server on {bind}");
 
     loop {
+        let current_snapshot = live_snapshot
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone();
+        if current_snapshot != authority_snapshot {
+            if let Ok(state) = GameState::load_json(&current_snapshot) {
+                authority_state = Some(state);
+                authority_snapshot = current_snapshot;
+            }
+        }
         let next_seq = *shared_next_seq
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -381,6 +401,20 @@ fn server_thread(
         while i < clients.len() {
             match try_read_client(&mut clients[i].stream) {
                 Ok(Some(NetMessage::Propose { command })) => {
+                    if let Some(state) = authority_state.as_mut()
+                        && let Err(error) = apply_command(state, &command)
+                    {
+                        let message = error.to_string();
+                        let _ = write_message(
+                            &mut clients[i].stream,
+                            &NetMessage::Reject {
+                                message: message.clone(),
+                            },
+                        );
+                        let _ = event_tx.send(SessionEvent::CommandRejected { message });
+                        i += 1;
+                        continue;
+                    }
                     let seq = {
                         let mut guard = shared_next_seq
                             .lock()
@@ -442,6 +476,12 @@ fn server_thread(
 
         match cmd_rx.try_recv() {
             Ok(ServerCmd::LocalCommit(command)) => {
+                if let Some(state) = authority_state.as_mut() {
+                    // El host ya aplicó la mutación en su hilo de simulación;
+                    // esta copia sólo necesita avanzar para validar propuestas
+                    // posteriores. Un error aquí indica snapshot atrasado.
+                    let _ = apply_command(state, &command);
+                }
                 let seq = {
                     let mut guard = shared_next_seq
                         .lock()
@@ -457,6 +497,11 @@ fn server_thread(
                 broadcast_raw(&mut clients, &shared_peer_ids, &commit);
             }
             Ok(ServerCmd::Advance(count)) => {
+                if let Some(state) = authority_state.as_mut() {
+                    for _ in 0..count {
+                        state.step();
+                    }
+                }
                 broadcast_raw(
                     &mut clients,
                     &shared_peer_ids,
@@ -801,6 +846,9 @@ fn client_thread(
             Ok(Some(NetMessage::Heartbeat { tick })) => {
                 let _ = event_tx.send(SessionEvent::Heartbeat { tick });
             }
+            Ok(Some(NetMessage::Reject { message })) => {
+                let _ = event_tx.send(SessionEvent::CommandRejected { message });
+            }
             Ok(Some(NetMessage::Desync {
                 tick,
                 expected_hash,
@@ -863,6 +911,7 @@ pub fn apply_session_event(state: &mut GameState, event: &SessionEvent) -> Resul
         SessionEvent::HostAnnounce { .. }
         | SessionEvent::PeerList { .. }
         | SessionEvent::Heartbeat { .. } => Ok(()),
+        SessionEvent::CommandRejected { message } => Err(message.clone()),
         SessionEvent::Desync {
             tick,
             expected_hash,

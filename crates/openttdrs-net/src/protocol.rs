@@ -44,6 +44,8 @@ pub enum NetMessage {
     PeerList { peer_ids: Vec<u64> },
     /// Servidor → clientes: keep-alive (detección de host caído).
     Heartbeat { tick: u64 },
+    /// Servidor → el cliente que propuso: el comando no pasó validación.
+    Reject { message: String },
     /// Error de protocolo / aplicación.
     Error { message: String },
 }

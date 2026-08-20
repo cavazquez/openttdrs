@@ -149,6 +149,44 @@ fn client_propose_reaches_host() {
 }
 
 #[test]
+fn invalid_client_propose_is_rejected_before_commit() {
+    let host_state = GameState::new(24, 24);
+    let snapshot = host_state.save_json().unwrap();
+    let server = match maybe_start_server("127.0.0.1:0", snapshot) {
+        Some(server) => server,
+        None => return,
+    };
+    let bind = server.local_addr().to_string();
+    thread::sleep(Duration::from_millis(50));
+
+    let client = match maybe_connect_client(&bind) {
+        Some(client) => client,
+        None => return,
+    };
+    let _welcome = wait_event(&client, Duration::from_secs(2));
+
+    client
+        .propose(Command::PlaceRail(TileCoord::new(99, 99)))
+        .unwrap();
+
+    let event = wait_event(&client, Duration::from_secs(2));
+    match event {
+        SessionEvent::CommandRejected { message } => {
+            assert!(!message.is_empty());
+        }
+        other => panic!("se esperaba rechazo, llegó {other:?}"),
+    }
+    let start = Instant::now();
+    while start.elapsed() < Duration::from_millis(100) {
+        assert!(
+            !matches!(server.try_recv(), Some(SessionEvent::Commit { .. })),
+            "una propuesta inválida no debe entrar al log"
+        );
+        thread::sleep(Duration::from_millis(5));
+    }
+}
+
+#[test]
 fn client_desync_report_reaches_host_and_peers() {
     let host_state = GameState::new(24, 24);
     let snapshot = host_state.save_json().unwrap();

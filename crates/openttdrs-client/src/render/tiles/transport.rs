@@ -534,6 +534,23 @@ fn road_detail_world_z_delta(
         + i32::from(partial_pixel_z(dx, dy, surface_tileh))
 }
 
+/// Convierte el ancla Z absoluta que informa `AddSortableSpriteToDraw` en el
+/// desplazamiento local que falta después de posicionar la superficie Bevy.
+///
+/// Los helpers de catenaria devuelven el delta respecto de `TileInfo::z`
+/// crudo, pero [`tile_pos_half`] ya incorpora `surface_base_z`. Aplicar el
+/// delta crudo dos veces sobre una fundación elevada mueve el poste/cable una
+/// tesela de altura de más; omitirlo los deja pegados al mínimo de una
+/// pendiente. El resultado se pasa como `dz` a [`remap_tile_offset`].
+#[inline]
+pub(crate) const fn catenary_local_z_delta(
+    world_z_delta: i32,
+    raw_base_z: u8,
+    surface_base_z: u8,
+) -> i32 {
+    world_z_delta - (surface_base_z as i32 - raw_base_z as i32) * 8
+}
+
 /// Offset extra de las pistas de esquina PBS en `DrawTrackBits`, ya
 /// multiplicado por `ZOOM_BASE`. X/Y usan el banco inclinado sin offset;
 /// `Upper/Lower/Right/Left` pasan `-TILE_HEIGHT` a `DrawGroundSprite` cuando
@@ -1201,6 +1218,9 @@ pub(crate) fn spawn_rail_catenary_for_surface(
             catenary_sprites.as_deref_mut(),
             images.as_deref_mut(),
         );
+        let world_z_delta = draw.pcp_direction.map_or(0, |pcp| {
+            catenary_pylon_world_z_delta(tileh, ctx.info.base_z, render_tb, pcp)
+        });
         WorldDrawTrace::record_sprite_with_palette_and_world_geometry(
             "catenary-pylon",
             "sortable",
@@ -1208,16 +1228,15 @@ pub(crate) fn spawn_rail_catenary_for_surface(
             0,
             sprite.is_none(),
             (draw.tile_dx as i32, draw.tile_dy as i32),
-            draw.pcp_direction.map_or(0, |pcp| {
-                catenary_pylon_world_z_delta(tileh, ctx.info.base_z, render_tb, pcp)
-            }),
+            world_z_delta,
             (1, 1, 0),
             Some(TraceSpriteBounds::new(-1, -1, 0, 1, 1, 6)),
         );
         let Some(sprite) = sprite else {
             continue;
         };
-        let off = remap_tile_offset(draw.tile_dx, draw.tile_dy, 0.0) * 0.5;
+        let local_z = catenary_local_z_delta(world_z_delta, ctx.info.base_z, surface_base_z);
+        let off = remap_tile_offset(draw.tile_dx, draw.tile_dy, local_z as f32) * 0.5;
         let base = tile_pos_half(
             ctx.tx_i32(),
             ctx.ty_i32(),
@@ -1246,6 +1265,7 @@ pub(crate) fn spawn_rail_catenary_for_surface(
         );
         let (ox, oy, oz) = draw.bounds_origin;
         let (ex, ey, ez) = draw.bounds_extent;
+        let world_z_delta = catenary_wire_world_z_delta(tileh, ctx.info.base_z, render_tb, draw);
         WorldDrawTrace::record_sprite_with_palette_and_geometry(
             "catenary-wire",
             "sortable",
@@ -1253,7 +1273,7 @@ pub(crate) fn spawn_rail_catenary_for_surface(
             0,
             sprite.is_none(),
             (0, 0, 0),
-            catenary_wire_world_z_delta(tileh, ctx.info.base_z, render_tb, draw),
+            world_z_delta,
             Some(TraceSpriteBounds::new(ox, oy, oz, ex, ey, ez)),
         );
         let Some(sprite) = sprite else {
@@ -1267,11 +1287,13 @@ pub(crate) fn spawn_rail_catenary_for_surface(
             z,
             surface_half_h,
         );
+        let local_z = catenary_local_z_delta(world_z_delta, ctx.info.base_z, surface_base_z);
+        let off = remap_tile_offset(0.0, 0.0, local_z as f32) * 0.5;
         commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
             sprite,
-            Transform::from_translation(base),
+            Transform::from_translation(base + Vec3::new(off.x, off.y, 0.0)),
         ));
     }
 }
@@ -1839,11 +1861,11 @@ mod tests {
     use bevy::prelude::Vec2;
 
     use super::{
-        RailGroundKind, RailTrackTraceMode, halftile_foundation_child_visual_offset,
-        pbs_extra_y_in_bevy, pbs_track_sprite_extra_y, rail_foundation_after_pass,
-        rail_ground_sprite_id, rail_initial_ground_draw, rail_track_trace_mode,
-        rail_upper_halftile_ground_draw, road_detail_world_z_delta, road_foundation_child_offset,
-        signal_trace_geometry,
+        RailGroundKind, RailTrackTraceMode, catenary_local_z_delta,
+        halftile_foundation_child_visual_offset, pbs_extra_y_in_bevy, pbs_track_sprite_extra_y,
+        rail_foundation_after_pass, rail_ground_sprite_id, rail_initial_ground_draw,
+        rail_track_trace_mode, rail_upper_halftile_ground_draw, road_detail_world_z_delta,
+        road_foundation_child_offset, signal_trace_geometry,
     };
     use crate::sprites::{
         RAIL_GROUND_HALF_TILE_SNOW, RAIL_GROUND_HALF_TILE_WATER, RAIL_TB_LEFT, RAIL_TB_LOWER,
@@ -2047,6 +2069,29 @@ mod tests {
         // Con fundación nivelada el detalle sube toda la altura de tesela aun
         // cuando la superficie posterior sea plana.
         assert_eq!(road_detail_world_z_delta(0, 1, 0, 8.0, 8.0), 8);
+    }
+
+    #[test]
+    fn catenary_local_z_keeps_the_upstream_anchor_after_surface_placement() {
+        // El ancla de un PCP/cable es absoluta respecto de TileInfo::z
+        // crudo. En una pendiente sin fundación debe subir los 8 px completos
+        // dentro de la tesela.
+        assert_eq!(catenary_local_z_delta(8, 3, 3), 8);
+
+        // Si `tile_pos_half` ya quedó sobre una fundación nivelada (z=2 en
+        // lugar de z=1), sólo queda el tramo local: anchor absoluto 16 menos
+        // los 8 px que ya aportó la base = 8. Esto impide contar dos veces la
+        // elevación de la fundación.
+        assert_eq!(catenary_local_z_delta(16, 1, 2), 8);
+
+        // El caso complementario aparece en estaciones niveladas: el ancla
+        // C++ sigue en z crudo, por lo que debe compensar la base visual
+        // elevada en vez de quedarse suspendido otros 8 px.
+        assert_eq!(catenary_local_z_delta(8, 1, 2), 0);
+
+        let screen_delta =
+            crate::iso::remap_tile_offset(0.0, 0.0, catenary_local_z_delta(16, 1, 2) as f32) * 0.5;
+        assert_eq!(screen_delta, Vec2::new(0.0, 8.0));
     }
 
     #[test]

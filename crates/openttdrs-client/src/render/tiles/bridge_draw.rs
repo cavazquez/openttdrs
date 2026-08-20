@@ -29,6 +29,7 @@ use super::helpers::{
     bridge_foundation_decision, foundation_surface_at, sloped_or_flat_image,
     spawn_foundation_sprite, spawn_ground_sprite_at,
 };
+use super::transport::catenary_local_z_delta;
 
 const DECK_LAYER_FRAC: f32 = 0.08;
 /// Vía sobre tablero (`DrawBridgeMiddle`: overlay entre psid\[0] y psid\[1]).
@@ -759,6 +760,18 @@ fn spawn_bridge_ramp_catenary(
             catenary_sprites.as_deref_mut(),
             images.as_deref_mut(),
         );
+        let world_z_delta = draw.pcp_direction.map_or(0, |pcp| {
+            let index = usize::from(pcp & 3);
+            bridge_ramp_catenary_world_z_delta(
+                foundation_tileh,
+                foundation_base_z,
+                ctx.info.base_z,
+                tile.m5,
+                [0, 8, 16, 8][index].min(15),
+                [8, 16, 8, 0][index].min(15),
+                4,
+            )
+        });
         WorldDrawTrace::record_sprite_with_palette_and_world_geometry(
             "bridge-ramp-catenary-pylon",
             "sortable",
@@ -766,25 +779,15 @@ fn spawn_bridge_ramp_catenary(
             0,
             sprite.is_none(),
             (draw.tile_dx as i32, draw.tile_dy as i32),
-            draw.pcp_direction.map_or(0, |pcp| {
-                let index = usize::from(pcp & 3);
-                bridge_ramp_catenary_world_z_delta(
-                    foundation_tileh,
-                    foundation_base_z,
-                    ctx.info.base_z,
-                    tile.m5,
-                    [0, 8, 16, 8][index].min(15),
-                    [8, 16, 8, 0][index].min(15),
-                    4,
-                )
-            }),
+            world_z_delta,
             (1, 1, 0),
             Some(TraceSpriteBounds::new(-1, -1, 0, 1, 1, 6)),
         );
         let Some(sprite) = sprite else {
             continue;
         };
-        let off = remap_tile_offset(draw.tile_dx, draw.tile_dy, 0.0) * 0.5;
+        let local_z = catenary_local_z_delta(world_z_delta, ctx.info.base_z, base_z);
+        let off = remap_tile_offset(draw.tile_dx, draw.tile_dy, local_z as f32) * 0.5;
         commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
@@ -817,6 +820,15 @@ fn spawn_bridge_ramp_catenary(
         );
         let (ox, oy, oz) = draw.bounds_origin;
         let (ex, ey, ez) = draw.bounds_extent;
+        let world_z_delta = bridge_ramp_catenary_world_z_delta(
+            foundation_tileh,
+            foundation_base_z,
+            ctx.info.base_z,
+            tile.m5,
+            ox,
+            oy,
+            8,
+        );
         WorldDrawTrace::record_sprite_with_palette_and_geometry(
             "bridge-ramp-catenary-wire",
             "sortable",
@@ -824,31 +836,27 @@ fn spawn_bridge_ramp_catenary(
             0,
             sprite.is_none(),
             (0, 0, 0),
-            bridge_ramp_catenary_world_z_delta(
-                foundation_tileh,
-                foundation_base_z,
-                ctx.info.base_z,
-                tile.m5,
-                ox,
-                oy,
-                8,
-            ),
+            world_z_delta,
             Some(TraceSpriteBounds::new(ox, oy, oz, ex, ey, ez)),
         );
         let Some(sprite) = sprite else {
             continue;
         };
+        let local_z = catenary_local_z_delta(world_z_delta, ctx.info.base_z, base_z);
+        let off = remap_tile_offset(0.0, 0.0, local_z as f32) * 0.5;
         commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
             sprite,
-            Transform::from_translation(tile_pos_half(
-                ctx.tx_i32(),
-                ctx.ty_i32(),
-                base_z,
-                0.09 + i as f32 * 0.0004,
-                half_h,
-            )),
+            Transform::from_translation(
+                tile_pos_half(
+                    ctx.tx_i32(),
+                    ctx.ty_i32(),
+                    base_z,
+                    0.09 + i as f32 * 0.0004,
+                    half_h,
+                ) + Vec3::new(off.x, off.y, 0.0),
+            ),
         ));
     }
 }

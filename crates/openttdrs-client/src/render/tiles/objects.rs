@@ -6,7 +6,7 @@ use openttdrs_core::{
 };
 
 use super::bridge_draw::{bridge_span_at, spawn_bridge_deck};
-use super::transport::spawn_rail_catenary_for_surface;
+use super::transport::{catenary_local_z_delta, spawn_rail_catenary_for_surface};
 use super::{
     catenary_under_low_bridge,
     helpers::{FLAT_WATER_LAYER_FRAC, SHORE_LAYER_FRAC, spawn_forced_leveled_foundation},
@@ -774,6 +774,9 @@ fn spawn_station_rail_catenary(
             catenary_sprites.as_deref_mut(),
             images.as_deref_mut(),
         );
+        let world_z_delta = draw.pcp_direction.map_or(0, |pcp| {
+            catenary_pylon_world_z_delta(tileh, ctx.info.base_z, station_tb, pcp)
+        });
         WorldDrawTrace::record_sprite_with_palette_and_world_geometry(
             "station-catenary-pylon",
             "sortable",
@@ -781,16 +784,15 @@ fn spawn_station_rail_catenary(
             0,
             sprite.is_none(),
             (draw.tile_dx as i32, draw.tile_dy as i32),
-            draw.pcp_direction.map_or(0, |pcp| {
-                catenary_pylon_world_z_delta(tileh, ctx.info.base_z, station_tb, pcp)
-            }),
+            world_z_delta,
             (1, 1, 0),
             Some(TraceSpriteBounds::new(-1, -1, 0, 1, 1, 6)),
         );
         let Some(sprite) = sprite else {
             continue;
         };
-        let off = remap_tile_offset(draw.tile_dx, draw.tile_dy, 0.0) * 0.5;
+        let local_z = catenary_local_z_delta(world_z_delta, ctx.info.base_z, rail_base_z);
+        let off = remap_tile_offset(draw.tile_dx, draw.tile_dy, local_z as f32) * 0.5;
         let base = tile_pos_half(
             ctx.tx_i32(),
             ctx.ty_i32(),
@@ -847,11 +849,13 @@ fn spawn_station_rail_catenary(
         };
         let z = 0.035 + i as f32 * 0.0004;
         let base = tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), rail_base_z, z, rail_half_h);
+        let local_z = catenary_local_z_delta(world_z_delta, ctx.info.base_z, rail_base_z);
+        let off = remap_tile_offset(0.0, 0.0, local_z as f32) * 0.5;
         commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
             sprite,
-            Transform::from_translation(base),
+            Transform::from_translation(base + Vec3::new(off.x, off.y, 0.0)),
         ));
     }
 }

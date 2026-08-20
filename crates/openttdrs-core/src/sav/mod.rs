@@ -710,6 +710,7 @@ impl GameState {
             let id = v.sav_id;
             if kind == VehicleKind::Aircraft {
                 let mut vehicle = Vehicle::new(id, kind, v.pos, v.pos);
+                vehicle.group_id = v.group_id;
                 vehicle.running = v.running;
                 vehicle.cur_speed = v.cur_speed;
                 vehicle.subspeed = v.subspeed;
@@ -771,6 +772,7 @@ impl GameState {
                 continue;
             }
             let mut vehicle = Vehicle::new(id, kind, v.pos, v.pos);
+            vehicle.group_id = v.group_id;
             vehicle.running = v.running;
             vehicle.progress = v.progress;
             vehicle.cur_speed = v.cur_speed;
@@ -1187,6 +1189,7 @@ mod tests {
                     // Las unidades pueden estar separadas por filas de otros
                     // tipos de vehículo en `VEHS`.
                     next_sav_id: Some(3),
+                    group_id: None,
                     kind: SavVehicleKind::Train,
                     pos: crate::TileCoord::new(5, 5),
                     raw_tile: crate::TileCoord::new(5, 5),
@@ -1213,6 +1216,7 @@ mod tests {
                 SavVehicle {
                     sav_id: 1,
                     next_sav_id: None,
+                    group_id: None,
                     kind: SavVehicleKind::RoadVehicle,
                     pos: crate::TileCoord::new(6, 6),
                     raw_tile: crate::TileCoord::new(6, 6),
@@ -1239,6 +1243,7 @@ mod tests {
                 SavVehicle {
                     sav_id: 2,
                     next_sav_id: None,
+                    group_id: None,
                     kind: SavVehicleKind::RoadVehicle,
                     pos: crate::TileCoord::new(7, 7),
                     raw_tile: crate::TileCoord::new(7, 7),
@@ -1265,6 +1270,7 @@ mod tests {
                 SavVehicle {
                     sav_id: 3,
                     next_sav_id: None,
+                    group_id: None,
                     kind: SavVehicleKind::Train,
                     pos: crate::TileCoord::new(5, 5),
                     raw_tile: crate::TileCoord::new(5, 5),

@@ -366,6 +366,10 @@ mod tests {
     fn ottn_roundtrip_preserves_group_names_and_autoreplace_rules() {
         let mut state = tiny_state();
         state.vehicle_groups = vec![crate::VehicleGroup::new(7, "Carga")];
+        let vehicle_pos = TileCoord::new(10, 20);
+        let mut grouped = Vehicle::new(42, VehicleKind::Train, vehicle_pos, vehicle_pos);
+        grouped.group_id = Some(7);
+        state.vehicles = vec![grouped];
         state.autoreplace_rules.push(crate::AutoReplaceRule {
             from_engine_id: 100,
             to_engine_id: 101,
@@ -378,6 +382,11 @@ mod tests {
         let sav_game = sav::load(&bytes).expect("load");
         assert_eq!(sav_game.vehicle_groups, state.vehicle_groups);
         assert_eq!(sav_game.autoreplace_rules, state.autoreplace_rules);
+        assert_eq!(sav_game.vehicles.len(), 1);
+        assert_eq!(sav_game.vehicles[0].group_id, Some(7));
+        let loaded = GameState::from_sav_game(sav_game);
+        assert_eq!(loaded.vehicles.len(), 1);
+        assert_eq!(loaded.vehicles[0].group_id, Some(7));
         let names = exported_chunk_names(&state).expect("chunk names");
         assert!(names.iter().any(|name| name == "GRPS"));
         assert!(names.iter().any(|name| name == "ERNW"));

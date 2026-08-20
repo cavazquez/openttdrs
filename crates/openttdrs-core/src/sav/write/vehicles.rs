@@ -203,6 +203,8 @@ struct CommonWire {
     cur_order: u8,
     /// `REF_VEHICLE`: 0 = null, resto = índice sparse + 1.
     next_ref: u32,
+    /// Grupo de flota (`DEFAULT_GROUP` si no está asignado).
+    group_id: u16,
 }
 
 fn write_vehs_common(buf: &mut Vec<u8>, c: &CommonWire) {
@@ -219,6 +221,7 @@ fn write_vehs_common(buf: &mut Vec<u8>, c: &CommonWire) {
     buf.extend_from_slice(&c.order_list_ref.to_be_bytes());
     buf.push(c.cur_order);
     buf.extend_from_slice(&c.next_ref.to_be_bytes());
+    buf.extend_from_slice(&c.group_id.to_be_bytes());
 }
 
 fn push_order_list(
@@ -270,6 +273,7 @@ fn common_wire_for(
     let x_pos = v.pos.x * TILE_SIZE + i32::from(v.rail_pixel.min(15));
     let y_pos = v.pos.y * TILE_SIZE + TILE_SIZE / 2;
     let z_pos = i32::from(v.z_pos.unwrap_or(0));
+    let group_id = v.group_id.unwrap_or(0xFFFE).min(u32::from(u16::MAX)) as u16;
     CommonWire {
         subtype,
         owner: v.owner.0,
@@ -284,6 +288,7 @@ fn common_wire_for(
         order_list_ref,
         cur_order,
         next_ref,
+        group_id,
     }
 }
 
@@ -449,6 +454,7 @@ pub(super) fn ordl_and_vehs_records(
                     order_list_ref: 0,
                     cur_order: 0,
                     next_ref: 0,
+                    group_id: 0xFFFE,
                 },
                 None,
             )?;
@@ -578,6 +584,7 @@ fn append_vehs_common_fields(header: &mut Vec<u8>) -> Result<(), SavError> {
     append_field(header, 6, "orders")?; // REF_ORDERLIST → U32
     append_field(header, 2, "cur_real_order_index")?;
     append_field(header, 6, "next")?; // REF_VEHICLE → U32
+    append_field(header, 4, "group_id")?; // Vehicle::group_id → U16
     header.push(0);
     Ok(())
 }

@@ -665,6 +665,8 @@ pub struct SavVehicle {
     /// la tabla sparse; esta referencia es la fuente autoritativa para
     /// reconstruir la cadena del tren.
     pub next_sav_id: Option<u32>,
+    /// Grupo de flota (`Vehicle::group_id`) o `None` para el grupo por defecto.
+    pub group_id: Option<u32>,
     pub kind: SavVehicleKind,
     /// Tesela utilizable por el motor. Para trenes/carretera es literal
     /// `Vehicle::tile`; para aviones se recalcula desde `x_pos`/`y_pos`
@@ -753,6 +755,13 @@ pub(crate) fn vehicles_from_chunks(
             // siguiente `33` con la fila 33 en vez de la 32.
             .and_then(|next| next.checked_sub(1))
             .and_then(|next| u32::try_from(next).ok());
+        // OpenTTD usa DEFAULT_GROUP/ALL_GROUP como sentinelas, no como grupos
+        // persistibles. Mantenerlos como `None` evita crear grupos fantasma al
+        // hidratar un save nativo.
+        let group_id = record_get(common, "group_id")
+            .and_then(SlValue::as_u64)
+            .and_then(|value| u32::try_from(value).ok())
+            .filter(|value| *value != 0xFFFE && *value != 0xFFFD);
         let subtype = record_get(common, "subtype")
             .and_then(SlValue::as_u64)
             .unwrap_or(0);
@@ -871,6 +880,7 @@ pub(crate) fn vehicles_from_chunks(
         out.push(SavVehicle {
             sav_id,
             next_sav_id,
+            group_id,
             kind,
             pos,
             raw_tile,

@@ -26,6 +26,7 @@ use crate::render::{
     PrimaryGameCamera, ShoreTile, SignLabel, StationLabel, TownLabel, VehicleCargoLabel,
     VehicleSprite, WaterTile, clamp_ortho_scale, large_map_viewport_cull_enabled,
 };
+use crate::settings::ClientPreferences;
 use crate::state::{ClientScreen, SimRunState, SimWorld};
 use crate::ui::ai_settings_window::AiSettingsWindowState;
 use crate::ui::audio_settings_window::SoundMusicWindowState;
@@ -100,6 +101,51 @@ const MAP_SHOT_EXIT_GRACE_FRAMES: u32 = 30;
 #[derive(Resource, Default)]
 struct MapShotProgress {
     frame: u32,
+}
+
+/// Guarda las preferencias reales mientras una captura limpia usa un perfil
+/// visual fijo. El proceso de captura no debe convertir sus valores efímeros
+/// en una preferencia del usuario.
+#[derive(Resource, Default)]
+struct MapShotPreferenceGuard {
+    original: Option<ClientPreferences>,
+}
+
+impl MapShotPreferenceGuard {
+    fn apply_clean_profile(&mut self, prefs: &mut ClientPreferences) -> bool {
+        if self.original.is_some() {
+            return false;
+        }
+        self.original = Some(prefs.clone());
+        normalize_clean_map_shot_preferences(prefs);
+        true
+    }
+
+    fn restore(&mut self, prefs: &mut ClientPreferences) -> bool {
+        let Some(original) = self.original.take() else {
+            return false;
+        };
+        *prefs = original;
+        true
+    }
+}
+
+/// Perfil reproducible para el raster estático. Se parece a un arranque
+/// limpio de OpenTTD, salvo que las etiquetas y el humo se excluyen de forma
+/// deliberada porque la captura CLEAN compara sólo mundo estático.
+fn normalize_clean_map_shot_preferences(prefs: &mut ClientPreferences) {
+    prefs.show_debug_gizmos = false;
+    prefs.show_diagnostics_overlay = false;
+    prefs.show_link_graph_overlay = false;
+    // `gui.show_track_reservation` arranca en true en OpenTTD; conservarlo
+    // evita que una preferencia local cambie los overlays PBS del oráculo.
+    prefs.show_pbs_reservations = true;
+    prefs.show_town_labels = false;
+    prefs.show_station_labels = false;
+    prefs.smoke_amount = 0;
+    prefs.full_detail = true;
+    prefs.transparency_opt = 0;
+    prefs.invisibility_opt = 0;
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1198,10 +1244,15 @@ impl Plugin for WindowsShotPlugin {
                 ),
             );
         } else if std::env::var_os("OPENTTDRS_MAP_SHOT").is_some() {
-            app.init_resource::<MapShotProgress>();
+            app.init_resource::<MapShotProgress>()
+                .init_resource::<MapShotPreferenceGuard>();
             app.add_systems(
                 OnEnter(ClientScreen::InGame),
-                pause_simulation_for_visual_capture,
+                (
+                    pause_simulation_for_visual_capture,
+                    apply_clean_map_shot_preferences,
+                )
+                    .chain(),
             );
             app.add_systems(
                 Update,
@@ -1223,6 +1274,13 @@ impl Plugin for WindowsShotPlugin {
                     map_shot_capture_driver
                         .run_if(in_state(ClientScreen::InGame))
                         .after(hide_map_shot_ui),
+                    // La salida se retrasa varios frames para dar tiempo al
+                    // readback del screenshot. Restaurar al final mantiene el
+                    // perfil limpio hasta entonces sin dejar valores mutados
+                    // en el recurso de preferencias.
+                    restore_clean_map_shot_preferences
+                        .run_if(in_state(ClientScreen::InGame))
+                        .after(map_shot_capture_driver),
                 ),
             );
         }
@@ -1235,6 +1293,43 @@ fn pause_simulation_for_visual_capture(mut next_simulation: ResMut<NextState<Sim
 
 fn map_shot_clean_requested() -> bool {
     crate::bevy_app::clean_map_capture_requested()
+}
+
+/// Aplica el perfil sólo dentro del proceso de captura y pide reconstruir las
+/// capas que ya pudieron nacer con la configuración local durante `OnEnter`.
+fn apply_clean_map_shot_preferences(
+    mut guard: ResMut<MapShotPreferenceGuard>,
+    mut prefs: ResMut<ClientPreferences>,
+    mut remap: ResMut<crate::render::RemapMapVisualsPending>,
+) {
+    if !map_shot_clean_requested() || !guard.apply_clean_profile(&mut prefs) {
+        return;
+    }
+    crate::sprites::set_transparency_preferences(prefs.transparency_opt, prefs.invisibility_opt);
+    remap.pending = true;
+    remap.full = true;
+    remap.sync_camera = false;
+    remap.labels_dirty = true;
+    info!("map_shot: perfil visual limpio temporal aplicado");
+}
+
+/// Devuelve los valores originales antes de que el proceso de captura emita
+/// `AppExit`. No pide remapeo: ya no habrá otro frame del mundo que renderizar.
+fn restore_clean_map_shot_preferences(
+    progress: Res<MapShotProgress>,
+    mut guard: ResMut<MapShotPreferenceGuard>,
+    mut prefs: ResMut<ClientPreferences>,
+) {
+    if progress.frame != map_shot_capture_frame() + MAP_SHOT_EXIT_GRACE_FRAMES {
+        return;
+    }
+    if guard.restore(&mut prefs) {
+        crate::sprites::set_transparency_preferences(
+            prefs.transparency_opt,
+            prefs.invisibility_opt,
+        );
+        info!("map_shot: preferencias visuales restauradas antes de salir");
+    }
 }
 
 fn parse_shot_ui_scale(raw: &str) -> Option<f32> {
@@ -1864,6 +1959,45 @@ mod tests {
         assert_eq!(parse_map_shot_settle_frames("150"), Some(150));
         assert_eq!(parse_map_shot_settle_frames("39"), None);
         assert_eq!(parse_map_shot_settle_frames("901"), None);
+    }
+
+    #[test]
+    fn clean_map_shot_profile_is_temporary_and_deterministic() {
+        let mut prefs = ClientPreferences {
+            show_debug_gizmos: true,
+            show_diagnostics_overlay: true,
+            show_pbs_reservations: false,
+            show_link_graph_overlay: true,
+            show_town_labels: true,
+            show_station_labels: true,
+            smoke_amount: 2,
+            full_detail: false,
+            transparency_opt: 0x55,
+            invisibility_opt: 0xaa,
+            full_animation: false,
+            ..ClientPreferences::default()
+        };
+        let original = prefs.clone();
+        let mut guard = MapShotPreferenceGuard::default();
+
+        assert!(guard.apply_clean_profile(&mut prefs));
+        assert!(!prefs.show_debug_gizmos);
+        assert!(!prefs.show_diagnostics_overlay);
+        assert!(prefs.show_pbs_reservations);
+        assert!(!prefs.show_link_graph_overlay);
+        assert!(!prefs.show_town_labels);
+        assert!(!prefs.show_station_labels);
+        assert_eq!(prefs.smoke_amount, 0);
+        assert!(prefs.full_detail);
+        assert_eq!(prefs.transparency_opt, 0);
+        assert_eq!(prefs.invisibility_opt, 0);
+        // La pausa de la captura, no este perfil, congela las animaciones.
+        assert!(!prefs.full_animation);
+        assert!(!guard.apply_clean_profile(&mut prefs));
+
+        assert!(guard.restore(&mut prefs));
+        assert_eq!(prefs, original);
+        assert!(!guard.restore(&mut prefs));
     }
 
     #[test]

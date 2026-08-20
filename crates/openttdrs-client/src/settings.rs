@@ -13,7 +13,7 @@ use crate::config::{self, DEFAULT_JSON_SAVE_PATH};
 use crate::ui::SimHudControls;
 
 /// Ruta de guardado JSON, minimapa, velocidad inicial, audio y flags de debug.
-#[derive(Resource, SettingsGroup, Reflect, Clone)]
+#[derive(Resource, SettingsGroup, Reflect, Clone, Debug, PartialEq)]
 #[reflect(Resource, SettingsGroup, Default)]
 pub(crate) struct ClientPreferences {
     pub(crate) json_save_path: String,
@@ -464,6 +464,9 @@ fn sync_preferences_from_hud(
 }
 
 fn queue_save_preferences(prefs: Res<ClientPreferences>, mut commands: Commands) {
+    if preferences_are_ephemeral_for_clean_map_capture() {
+        return;
+    }
     if prefs.is_changed() {
         commands.queue(SaveSettingsDeferred(Duration::from_secs_f32(0.5)));
     }
@@ -474,9 +477,22 @@ fn save_preferences_on_exit(
     mut commands: Commands,
 ) {
     if close.read().next().is_some() {
-        commands.queue(SaveSettingsSync::IfChanged);
+        if !preferences_are_ephemeral_for_clean_map_capture() {
+            commands.queue(SaveSettingsSync::IfChanged);
+        }
         commands.write_message(AppExit::Success);
     }
+}
+
+/// La captura limpia usa un perfil temporal de render. Nunca debe alcanzar el
+/// archivo TOML del usuario: `OPENTTDRS_MAP_SHOT` corre en un proceso efímero
+/// precisamente para producir un raster reproducible.
+fn preferences_are_ephemeral_for_clean_map_capture() -> bool {
+    !preferences_should_persist_for_capture(crate::bevy_app::clean_map_capture_requested())
+}
+
+fn preferences_should_persist_for_capture(clean_map_capture: bool) -> bool {
+    !clean_map_capture
 }
 
 /// Configura `ExitCondition::DontExit` para interceptar cierre y guardar prefs.
@@ -535,6 +551,14 @@ mod tests {
         let prefs = ClientPreferences::default();
         assert!(!prefs.show_debug_gizmos);
         assert!(!prefs.show_diagnostics_overlay);
+    }
+
+    #[test]
+    fn clean_map_capture_never_queues_user_preference_persistence() {
+        // La condición se prueba sin tocar variables de entorno globales, que
+        // los tests paralelos comparten.
+        assert!(!preferences_should_persist_for_capture(true));
+        assert!(preferences_should_persist_for_capture(false));
     }
 
     #[test]

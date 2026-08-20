@@ -201,16 +201,60 @@ pub fn set_catenary_preferences(hidden: bool, transparent: bool) {
 
 #[must_use]
 pub fn catenary_hidden() -> bool {
-    is_hidden(TransparencyOption::Catenary) || crate::config::env_flag("OPENTTDRS_HIDE_CATENARY")
+    let (hide_from_env, transparent_from_env) = catenary_environment_overrides();
+    catenary_visibility(
+        mode(TransparencyOption::Catenary),
+        hide_from_env,
+        transparent_from_env,
+    )
+    .0
 }
 
 #[must_use]
 pub fn catenary_transparent() -> bool {
-    if crate::config::env_flag("OPENTTDRS_HIDE_CATENARY") {
-        return false;
+    let (hide_from_env, transparent_from_env) = catenary_environment_overrides();
+    catenary_visibility(
+        mode(TransparencyOption::Catenary),
+        hide_from_env,
+        transparent_from_env,
+    )
+    .1
+}
+
+/// Los overrides de conveniencia sirven al cliente interactivo, pero no al
+/// oráculo raster: una captura CLEAN debe ser independiente del entorno del
+/// desarrollador igual que lo es de sus preferencias persistidas.
+fn catenary_environment_overrides() -> (bool, bool) {
+    catenary_environment_overrides_for_capture(
+        crate::bevy_app::clean_map_capture_requested(),
+        crate::config::env_flag("OPENTTDRS_HIDE_CATENARY"),
+        crate::config::env_flag("OPENTTDRS_TRANSPARENT_CATENARY"),
+    )
+}
+
+fn catenary_environment_overrides_for_capture(
+    clean_map_capture: bool,
+    hide_from_env: bool,
+    transparent_from_env: bool,
+) -> (bool, bool) {
+    if clean_map_capture {
+        (false, false)
+    } else {
+        (hide_from_env, transparent_from_env)
     }
-    is_transparent(TransparencyOption::Catenary)
-        || crate::config::env_flag("OPENTTDRS_TRANSPARENT_CATENARY")
+}
+
+/// Devuelve `(oculta, transparente)` y conserva la precedencia legacy del
+/// override de ocultar: éste anula el override de transparencia.
+fn catenary_visibility(
+    preference: TransparencyMode,
+    hide_from_env: bool,
+    transparent_from_env: bool,
+) -> (bool, bool) {
+    let hidden = preference == TransparencyMode::Hidden || hide_from_env;
+    let transparent =
+        !hide_from_env && (preference == TransparencyMode::Transparent || transparent_from_env);
+    (hidden, transparent)
 }
 
 #[must_use]
@@ -263,5 +307,33 @@ mod tests {
         assert!(catenary_hidden());
         set_catenary_preferences(false, false);
         assert!(!catenary_hidden() && !catenary_transparent());
+    }
+
+    #[test]
+    fn clean_capture_ignores_catenary_environment_overrides() {
+        assert_eq!(
+            catenary_environment_overrides_for_capture(true, true, true),
+            (false, false)
+        );
+        assert_eq!(
+            catenary_environment_overrides_for_capture(false, true, true),
+            (true, true)
+        );
+        assert_eq!(
+            catenary_visibility(TransparencyMode::Visible, false, false),
+            (false, false)
+        );
+    }
+
+    #[test]
+    fn hidden_environment_override_keeps_legacy_precedence() {
+        assert_eq!(
+            catenary_visibility(TransparencyMode::Visible, true, true),
+            (true, false)
+        );
+        assert_eq!(
+            catenary_visibility(TransparencyMode::Hidden, false, true),
+            (true, true)
+        );
     }
 }

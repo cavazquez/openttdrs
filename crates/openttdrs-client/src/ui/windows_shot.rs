@@ -1266,6 +1266,12 @@ impl Plugin for WindowsShotPlugin {
                         .after(UpdateSet::Ui),
                     map_shot_driver
                         .run_if(in_state(ClientScreen::InGame))
+                        // El driver fija cámara/zoom y pide remap. Debe correr
+                        // después del control normal de cámara, pero antes de
+                        // `RenderRefresh`; de otro modo el culling puede
+                        // materializar un frame con la cámara anterior.
+                        .in_set(UpdateSet::Camera)
+                        .after(crate::camera::move_camera)
                         // El fantasma de obra lee el cursor que fija el driver.
                         .before(crate::ui::toolbar::update_build_ghost_preview),
                     // La captura se encola después del último ocultamiento,

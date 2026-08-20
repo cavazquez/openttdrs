@@ -18,6 +18,20 @@ use super::plugin::{
 use super::tile_spawn::{spawn_map_chunk, spawn_world_layer};
 use super::viewport::{resolve_spawn_viewport, sync_camera_for_sim};
 
+/// Materializa chunks en un orden canónico, nunca en el orden aleatorio de un
+/// `HashSet`.
+///
+/// El culling puede reconstruir varios chunks después de mover la cámara. En
+/// ese camino, el orden de `Commands::spawn` desempata sprites que comparten
+/// profundidad en el renderer 2D, así que iterar directamente un `HashSet`
+/// hacía que el mismo save dependiera del seed del proceso. El orden es
+/// deliberadamente geométrico (fila, columna), no del hash ni de los IDs ECS.
+fn canonical_chunk_order(chunks: &std::collections::HashSet<(u32, u32)>) -> Vec<(u32, u32)> {
+    let mut ordered: Vec<_> = chunks.iter().copied().collect();
+    ordered.sort_unstable_by_key(|&(cx, cy)| (cy, cx));
+    ordered
+}
+
 pub(crate) fn sync_company_colored_sprites(
     sim: Res<SimWorld>,
     mut company: ResMut<CompanyColoredSprites>,
@@ -117,7 +131,7 @@ pub(crate) fn apply_remap_map_visuals(
                 commands.entity(entity).despawn();
             }
         }
-        for &(cx, cy) in &plan.to_add {
+        for (cx, cy) in canonical_chunk_order(&plan.to_add) {
             if refresh_chunks.contains(&(cx, cy)) {
                 continue;
             }
@@ -141,7 +155,7 @@ pub(crate) fn apply_remap_map_visuals(
                 newgrf_sprites.action5.as_mut(),
             );
         }
-        for &(cx, cy) in &refresh_chunks {
+        for (cx, cy) in canonical_chunk_order(&refresh_chunks) {
             if !needed.contains(&(cx, cy)) {
                 continue;
             }
@@ -250,5 +264,28 @@ pub(crate) fn apply_remap_map_visuals(
 
     if do_sync_camera {
         sync_camera_for_sim(&mut q_cam, &sim);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashSet;
+
+    use super::canonical_chunk_order;
+
+    #[test]
+    fn canonical_chunk_order_does_not_depend_on_hashset_insertion_order() {
+        let mut first = HashSet::new();
+        let mut second = HashSet::new();
+        for chunk in [(2, 1), (0, 0), (1, 0), (0, 1)] {
+            first.insert(chunk);
+        }
+        for chunk in [(0, 1), (1, 0), (0, 0), (2, 1)] {
+            second.insert(chunk);
+        }
+
+        let expected = vec![(0, 0), (1, 0), (0, 1), (2, 1)];
+        assert_eq!(canonical_chunk_order(&first), expected);
+        assert_eq!(canonical_chunk_order(&second), expected);
     }
 }

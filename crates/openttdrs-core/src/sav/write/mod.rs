@@ -7,7 +7,8 @@
 //! (SAVEBYTE + structs) + `VEHS`/`ORDL` (tren + ROAD + ship + aircraft ala fija)
 //! + `INDY` + `DATE`/`PLYR` cargable por `OpenTTD` ≥15.3 dedicated.
 //!
-//! Residual: tram, rotor heli, `CAPY`/`ECMY` packets, `PATS`/`OPTS`/`GSET`/`ENGN`/`SRND`/`NewGRF`/`PLYR` completo.
+//! Residual: tram, rotor heli, `CAPY`/`ECMY` packets, settings fuera de los
+//! tres campos de `PATS`, `GSET`/`ENGN`/`SRND`/`NewGRF`/`PLYR` completo.
 //! Limitaciones: `docs/PARIDAD.md` y `docs/archive/merged-2026-07/ROADMAP_SAV_EXPORT.md`.
 
 #![allow(clippy::cast_possible_truncation)]
@@ -127,7 +128,7 @@ fn scan_chunk_names(payload: &[u8]) -> Vec<String> {
     // Tras CH_TABLE el tamaño del header no basta: completar con búsqueda de fourcc.
     for &want in REQUIRED_EXPORT_CHUNKS.iter().chain(
         [
-            "STNN", "CITY", "INDY", "ORDL", "VEHS", "LGRP", "LGRJ", "LGRS",
+            "STNN", "CITY", "INDY", "ORDL", "VEHS", "LGRP", "LGRJ", "LGRS", "PATS",
         ]
         .iter(),
     ) {
@@ -251,6 +252,8 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
         w,
     )?);
 
+    data.extend_from_slice(&meta::pats_chunk(state)?);
+
     data.extend_from_slice(&chunks::table_chunk(
         *b"DATE",
         &[(5, "date"), (8, "tick_counter")],
@@ -336,6 +339,24 @@ mod tests {
                 .iter()
                 .any(|s| s.name.as_deref() == Some("Central Demo")
                     && s.stop_kind == StopKind::RailStation)
+        );
+    }
+
+    #[test]
+    fn ottn_roundtrip_preserves_construction_settings_in_pats() {
+        let mut state = tiny_state();
+        state.construction.road_vehicle_driving_side = crate::RoadVehicleDrivingSide::Right;
+        state.construction.train_signal_side = crate::TrainSignalSide::Right;
+        state.construction.freeform_edges = false;
+
+        let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
+        let sav_game = sav::load(&bytes).expect("load");
+        assert_eq!(sav_game.construction, state.construction);
+        assert!(
+            exported_chunk_names(&state)
+                .expect("chunk names")
+                .iter()
+                .any(|name| name == "PATS")
         );
     }
 

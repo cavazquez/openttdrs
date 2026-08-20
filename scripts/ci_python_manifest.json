@@ -88,7 +88,9 @@
     "scripts/test_world_screenshot_export_source_contract.py",
     "scripts/test_global_sprite_namespace.py",
     "scripts/compare_world_screenshots.py",
-    "scripts/test_compare_world_screenshots.py"
+    "scripts/test_compare_world_screenshots.py",
+    "scripts/test_fuzz_regression_corpus.py",
+    "scripts/test_fuzz_replay_workflow.py"
   ],
   "runs": [
     "scripts/test_openttd_reference_manifest.py",
@@ -120,6 +122,8 @@
     "scripts/test_world_draw_export_source_contract.py",
     "scripts/test_world_screenshot_export_source_contract.py",
     "scripts/test_global_sprite_namespace.py",
-    "scripts/test_compare_world_screenshots.py"
+    "scripts/test_compare_world_screenshots.py",
+    "scripts/test_fuzz_regression_corpus.py",
+    "scripts/test_fuzz_replay_workflow.py"
   ]
 }

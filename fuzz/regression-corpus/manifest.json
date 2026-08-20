@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "toolchain": "nightly-2026-07-31",
+  "generator": "libFuzzer -merge=1 over fuzz/corpus; generated 2026-08-20",
+  "targets": {
+    "sav_load": {
+      "files": 333,
+      "bytes": 103951,
+      "sha256": "48e7452e7a012f630ca43d0947e992f2ab690357cb0f54b68a5b7f4f944f6ee9"
+    },
+    "newgrf_parse": {
+      "files": 23,
+      "bytes": 1330,
+      "sha256": "bb3d04e7708e856af6486baba5c416ee91b808f5b610d0894a22674c5d891ca8"
+    },
+    "net_message": {
+      "files": 444,
+      "bytes": 16944,
+      "sha256": "b0f07fe6a1e3a9a5185f39627b632da8dd5d739892291fef6ad344ae1f5a1766"
+    }
+  }
+}

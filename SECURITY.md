@@ -33,9 +33,12 @@ Incluí:
 
 CI ejecuta `cargo audit` y `cargo deny check` (versiones fijadas en el workflow). Excepciones justificadas viven en `deny.toml`.
 
-El workflow semanal `fuzz.yml` ejecuta libFuzzer sobre el loader `.sav`, el
-parser de contenedores NewGRF y el framing JSON de red. Los casos que produzcan
-crash deben conservarse como corpus de regresión después de minimizarse.
+El replay `fuzz-replay.yml` ejecuta en cada PR el corpus versionado de libFuzzer
+para el loader `.sav`, el parser NewGRF y el framing JSON de red. El workflow
+semanal `fuzz.yml` parte de ese mismo corpus y busca casos nuevos. Los crashes
+minimizados deben pasar de `fuzz/corpus/` (área local) a
+[`fuzz/regression-corpus/`](fuzz/README.md), nunca quedar sólo como artefacto
+temporal.
 
 ## Divulgación
 

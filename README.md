@@ -108,6 +108,7 @@ cargo test --workspace
 cargo +nightly fuzz run sav_load
 cargo +nightly fuzz run newgrf_parse
 cargo +nightly fuzz run net_message
+FUZZ_TOOLCHAIN=nightly-2026-07-31 ./scripts/replay_fuzz_regressions.sh  # corpus de PR
 
 # Verificar un paquete extraído sin abrir la ventana
 ./openttdrs-client --check-assets
@@ -170,12 +171,12 @@ Un job en [.github/workflows/ci.yml](.github/workflows/ci.yml) (sccache + caché
 | `rustfmt` | `cargo fmt --all -- --check` |
 | `clippy` | workspace, `-D warnings`, perfil `ci` |
 | `rustdoc` | `cargo doc` con `-D warnings` (validar enlaces intra-doc) |
-| `cargo audit` | Vulnerabilidades RustSec (pinned 0.22.1) |
-| `cargo deny` | Licencias + advisories + sources + bans (pinned 0.20.2, `deny.toml`) |
+| `cargo audit` | Vulnerabilidades RustSec, incluido el lockfile de fuzz (pinned 0.22.1) |
+| `cargo deny` | Licencias + advisories + sources + bans, también para fuzz (pinned 0.20.2, `deny.toml`) |
 | tests | PRs: `nextest`; push a `main`: `llvm-cov nextest` → Codecov, piso 68% de líneas |
 | extras | `tnbp` + `ci-python` (#120) + `generated-tables-ci` (#119) |
 | plataformas | `cargo check` en macOS y Windows |
-| fuzz semanal | `.sav`, NewGRF y frames de red con libFuzzer |
+| fuzz | replay determinista en PR + exploración semanal de `.sav`, NewGRF y frames de red |
 | release | tag SemVer exacto → Linux x86_64, Windows x86_64 y macOS arm64 + SHA-256 |
 
 `check.sh ci` replica fmt/clippy/rustdoc/tests/TNBP/Python/tablas (hash; regen si hay upstream). Solo en GHA: audit, deny, cobertura en `main` y fetch OpenTTD para regen.

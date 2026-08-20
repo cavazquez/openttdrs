@@ -3,6 +3,8 @@ name = "openttdrs-fuzz"
 version = "0.0.0"
 publish = false
 edition = "2024"
+license = "GPL-2.0-only"
+repository = "https://github.com/cavazquez/openttdrs"
 
 [package.metadata]
 cargo-fuzz = true

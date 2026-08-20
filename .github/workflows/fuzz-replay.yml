@@ -1,0 +1,46 @@
+name: Fuzz replay
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fuzz-replay-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FUZZ_TOOLCHAIN: nightly-2026-07-31
+  CARGO_FUZZ_VERSION: 0.13.2
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Caché de compilación sccache
+        uses: ./.github/composite/sccache
+
+      - name: Instalar nightly y cargo-fuzz
+        run: |
+          rustup toolchain install "${FUZZ_TOOLCHAIN}" --profile minimal
+          cargo +"${FUZZ_TOOLCHAIN}" install cargo-fuzz --version "${CARGO_FUZZ_VERSION}" --locked
+
+      - name: Replay determinista del corpus de regresión
+        run: ./scripts/replay_fuzz_regressions.sh
+
+      - name: Conservar crashes del replay
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: fuzz-replay-artifacts
+          retention-days: 14
+          if-no-files-found: ignore
+          path: fuzz/artifacts/

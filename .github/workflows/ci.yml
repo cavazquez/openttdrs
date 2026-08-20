@@ -70,7 +70,14 @@ jobs:
       - name: cargo audit (vulnerabilidades)
         run: cargo audit
 
+      - name: cargo audit (workspace de fuzz)
+        run: cargo audit --file fuzz/Cargo.lock
+
       - name: cargo deny check (licencias, advisories, sources, bans)
+        run: cargo deny check
+
+      - name: cargo deny check (workspace de fuzz)
+        working-directory: fuzz
         run: cargo deny check
 
       - name: Instalar cargo-llvm-cov

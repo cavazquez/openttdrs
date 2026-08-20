@@ -68,8 +68,12 @@ def main() -> int:
         errors.append("ci.yml perdió el step rustdoc (excepción documentada GHA-only)")
     if "cargo audit" not in yml:
         errors.append("ci.yml perdió cargo audit (excepción documentada GHA-only)")
+    if "cargo audit --file fuzz/Cargo.lock" not in yml:
+        errors.append("ci.yml no audita el lockfile independiente de fuzz")
     if "cargo deny check" not in yml:
         errors.append("ci.yml perdió cargo deny (excepción documentada GHA-only)")
+    if "working-directory: fuzz" not in yml:
+        errors.append("ci.yml no valida licencias/advisories del workspace de fuzz")
 
     if errors:
         print("FAIL: drift CI local/remoto (#120)", file=sys.stderr)

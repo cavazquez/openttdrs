@@ -58,6 +58,8 @@ target-agent
 !docs/parity/screenshots/window-regression/**/sidecar.json
 !scripts/ci_python_manifest.json
 !scripts/generated_tables_manifest.json
+# Inventario verificable del corpus de regresión de fuzz.
+!fuzz/regression-corpus/manifest.json
 
 # Prefijo local de deps / baseset para build dedicated OpenTTD (#110)
 /.deps/

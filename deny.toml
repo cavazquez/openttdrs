@@ -120,6 +120,9 @@ exceptions = [
     # Each entry is the crate and version constraint, and its specific allow
     # list
     #{ allow = ["Zlib"], crate = "adler32" },
+    # libFuzzer se distribuye como (MIT OR Apache-2.0) AND NCSA. La parte
+    # NCSA aplica sólo al runtime de los harnesses de fuzz, no al producto.
+    { allow = ["NCSA"], crate = "libfuzzer-sys" },
 ]
 
 # Some crates don't have (easily) machine readable licensing information,

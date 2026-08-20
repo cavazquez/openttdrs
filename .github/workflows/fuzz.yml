@@ -41,7 +41,8 @@ jobs:
         working-directory: fuzz
         run: |
           mkdir -p "artifacts/${{ matrix.target }}"
-          cargo +"${FUZZ_TOOLCHAIN}" fuzz run "${{ matrix.target }}" -- \
+          cargo +"${FUZZ_TOOLCHAIN}" fuzz run "${{ matrix.target }}" \
+            "regression-corpus/${{ matrix.target }}" -- \
             -max_total_time="${{ matrix.max_total_time }}" \
             -timeout=10 \
             -rss_limit_mb=1024 \

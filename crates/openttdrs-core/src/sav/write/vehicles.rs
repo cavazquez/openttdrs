@@ -19,9 +19,13 @@ use super::codec::{write_gamma, write_str};
 use crate::game_state::GameState;
 use crate::map::{TileCoord, TileKind, coord_to_linear_index};
 use crate::vehicle::{DIR_NE, DIR_NW, DIR_SE, DIR_SW, Vehicle, VehicleKind, VehicleOrder};
+use std::collections::HashMap;
 
 /// Cabeza de convoy + motor (`GVSF_FRONT | GVSF_ENGINE`).
 const TRAIN_SUBTYPE_FRONT_ENGINE: u8 = 0x01 | 0x08;
+
+/// `GroundVehicleSubtypeFlags::GVSF_WAGON` (unidad remolcada del consist).
+const TRAIN_SUBTYPE_WAGON: u8 = 1 << 2;
 
 /// `AirVehicleSubType::AIR_AIRCRAFT` (ala fija; no requiere rotor).
 const AIR_AIRCRAFT: u8 = 2;
@@ -217,14 +221,14 @@ fn write_vehs_common(buf: &mut Vec<u8>, c: &CommonWire) {
     buf.extend_from_slice(&c.next_ref.to_be_bytes());
 }
 
-fn push_orders(
-    v: &Vehicle,
+fn push_order_list(
+    orders: &[VehicleOrder],
     state: &GameState,
     map_w: u32,
     ordl: &mut SavRecordList,
 ) -> Result<u32, SavError> {
     let mut order_bytes = Vec::new();
-    for order in &v.orders {
+    for order in orders {
         if let Some(enc) = encode_goto_order(order, state, map_w) {
             order_bytes.push(enc);
         }
@@ -240,6 +244,15 @@ fn push_orders(
     }
     ordl.push(rec);
     Ok(list_idx + 1)
+}
+
+fn push_orders(
+    v: &Vehicle,
+    state: &GameState,
+    map_w: u32,
+    ordl: &mut SavRecordList,
+) -> Result<u32, SavError> {
+    push_order_list(&v.orders, state, map_w, ordl)
 }
 
 fn common_wire_for(
@@ -316,27 +329,75 @@ pub(super) fn ordl_and_vehs_records(
 ) -> Result<(SavRecordList, SavRecordList), SavError> {
     let mut ordl = Vec::new();
     let mut vehs = Vec::new();
-    let mut sparse_idx = 0u32;
 
-    for v in &state.vehicles {
+    // Primero construimos la tabla sparse que realmente se va a emitir. La
+    // referencia `next` de VEHS no apunta al id de nuestro JSON sino al índice
+    // de la tabla sparse + 1; sin esta pasada los consist cuyo orden en el
+    // vector no coincide con su cadena `next_unit` quedaban truncados.
+    let eligible: Vec<usize> = state
+        .vehicles
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, v)| {
+            let is_train = v.kind == VehicleKind::Train;
+            let is_road = matches!(v.kind, VehicleKind::Bus | VehicleKind::Truck);
+            let is_ship = v.kind == VehicleKind::Ship;
+            let is_air = v.kind == VehicleKind::Aircraft;
+            if !is_train && !is_road && !is_ship && !is_air {
+                return None;
+            }
+            if is_road && !road_tile_ok(state, v.pos) {
+                return None;
+            }
+            if is_ship && !water_tile_ok(state, v.pos) {
+                return None;
+            }
+            coord_to_linear_index(v.pos, map_w).map(|_| idx)
+        })
+        .collect();
+    let mut sparse_by_vehicle_id = HashMap::with_capacity(eligible.len());
+    let mut sparse_idx = 0u32;
+    for &vehicle_idx in &eligible {
+        let v = &state.vehicles[vehicle_idx];
+        sparse_by_vehicle_id.insert(v.id, sparse_idx);
+        sparse_idx = sparse_idx.saturating_add(if v.kind == VehicleKind::Aircraft {
+            2
+        } else {
+            1
+        });
+    }
+
+    // GRUPOS/ORDL aún no tienen un chunk GRPS en este escritor, pero cuando
+    // varios vehículos apuntan a la misma lista compartida sí debemos emitir
+    // una sola ORDL y conservar su identidad en el campo `orders` de VEHS.
+    let mut shared_order_refs = HashMap::<u32, u32>::new();
+    sparse_idx = 0;
+
+    for &vehicle_idx in &eligible {
+        let v = &state.vehicles[vehicle_idx];
         let is_train = v.kind == VehicleKind::Train;
         let is_road = matches!(v.kind, VehicleKind::Bus | VehicleKind::Truck);
-        let is_ship = v.kind == VehicleKind::Ship;
         let is_air = v.kind == VehicleKind::Aircraft;
-        if !is_train && !is_road && !is_ship && !is_air {
-            continue;
-        }
-        if is_road && !road_tile_ok(state, v.pos) {
-            continue;
-        }
-        if is_ship && !water_tile_ok(state, v.pos) {
-            continue;
-        }
         let Some(tile_idx) = coord_to_linear_index(v.pos, map_w) else {
             continue;
         };
 
-        let order_list_ref = push_orders(v, state, map_w, &mut ordl)?;
+        let order_list_ref = if let Some(shared_id) = v.shared_order_id {
+            if let Some(existing) = shared_order_refs.get(&shared_id) {
+                *existing
+            } else if let Some(shared) = state.shared_order_lists.iter().find(|l| l.id == shared_id)
+            {
+                let list_ref = push_order_list(&shared.orders, state, map_w, &mut ordl)?;
+                shared_order_refs.insert(shared_id, list_ref);
+                list_ref
+            } else {
+                // Unlinked/malformed ids are tolerated for old JSON saves;
+                // preserve the vehicle-local orders rather than dropping them.
+                push_orders(v, state, map_w, &mut ordl)?
+            }
+        } else {
+            push_orders(v, state, map_w, &mut ordl)?
+        };
         let direction = if is_train {
             let track = track_bits_for(state, v.pos);
             train_direction(track, v.direction)
@@ -402,6 +463,15 @@ pub(super) fn ordl_and_vehs_records(
         if is_train {
             let track = track_bits_for(state, v.pos);
             let engine_type = openttd_train_engine_type(v);
+            let subtype = if v.prev_unit.is_none() {
+                TRAIN_SUBTYPE_FRONT_ENGINE
+            } else {
+                TRAIN_SUBTYPE_WAGON
+            };
+            let next_ref = v
+                .next_unit
+                .and_then(|next_id| sparse_by_vehicle_id.get(&next_id).copied())
+                .map_or(0, |idx| idx.saturating_add(1));
             push_typed_vehicle(
                 &mut rec,
                 VEH_TRAIN,
@@ -411,8 +481,8 @@ pub(super) fn ordl_and_vehs_records(
                     direction,
                     engine_type,
                     order_list_ref,
-                    TRAIN_SUBTYPE_FRONT_ENGINE,
-                    0,
+                    subtype,
+                    next_ref,
                 ),
                 Some(track),
             )?;
@@ -721,6 +791,135 @@ mod tests {
             record_get(shadow_common, "subtype").and_then(SlValue::as_u64),
             Some(u64::from(AIR_SHADOW))
         );
+    }
+
+    #[test]
+    fn vehs_preserves_train_consist_next_refs_and_wagon_subtypes() {
+        use crate::sav::chunks::{find_chunk, parse_chunks};
+        use crate::sav::table::{SlRecord, SlValue, parse_table_chunk, record_get};
+
+        let mut state = GameState::new(64, 64);
+        let head_pos = TileCoord::new(20, 40);
+        let middle_pos = TileCoord::new(21, 40);
+        let rear_pos = TileCoord::new(22, 40);
+
+        // Deliberadamente dejamos la unidad trasera antes de la intermedia en
+        // `state.vehicles`: las referencias deben seguir `next_unit`, no el
+        // orden incidental del vector JSON.
+        let mut head = Vehicle::new(10, VehicleKind::Train, head_pos, head_pos);
+        head.next_unit = Some(30);
+        let mut rear = Vehicle::new(20, VehicleKind::Train, rear_pos, rear_pos);
+        rear.prev_unit = Some(30);
+        let mut middle = Vehicle::new(30, VehicleKind::Train, middle_pos, middle_pos);
+        middle.prev_unit = Some(10);
+        middle.next_unit = Some(20);
+        state.vehicles = vec![head, rear, middle];
+
+        let (_, vehs) = ordl_and_vehs_records(&state, 64).unwrap();
+        let chunk = vehs_chunk(&vehs).unwrap();
+        let chunks = parse_chunks(&chunk).unwrap();
+        let raw = find_chunk(&chunks, "VEHS").expect("VEHS");
+        let rows = parse_table_chunk(&raw.body, true).expect("parse VEHS");
+        assert_eq!(rows.len(), 3);
+
+        fn train_common(row: &SlRecord) -> &SlRecord {
+            let train = match record_get(row, "train") {
+                Some(SlValue::Structs(items)) => items.first().expect("train"),
+                other => panic!("train ausente: {other:?}"),
+            };
+            match record_get(train, "common") {
+                Some(SlValue::Structs(items)) => items.first().expect("common"),
+                other => panic!("common ausente: {other:?}"),
+            }
+        }
+
+        // Filas: cabeza (sparse 0), trasera (sparse 1), intermedia (sparse 2).
+        let head_common = train_common(&rows[0].1);
+        assert_eq!(
+            record_get(head_common, "next").and_then(SlValue::as_u64),
+            Some(3)
+        );
+        assert_eq!(
+            record_get(head_common, "subtype").and_then(SlValue::as_u64),
+            Some(u64::from(TRAIN_SUBTYPE_FRONT_ENGINE))
+        );
+
+        let rear_common = train_common(&rows[1].1);
+        assert_eq!(
+            record_get(rear_common, "next").and_then(SlValue::as_u64),
+            Some(0)
+        );
+        assert_eq!(
+            record_get(rear_common, "subtype").and_then(SlValue::as_u64),
+            Some(u64::from(TRAIN_SUBTYPE_WAGON))
+        );
+
+        let middle_common = train_common(&rows[2].1);
+        assert_eq!(
+            record_get(middle_common, "next").and_then(SlValue::as_u64),
+            Some(2)
+        );
+        assert_eq!(
+            record_get(middle_common, "subtype").and_then(SlValue::as_u64),
+            Some(u64::from(TRAIN_SUBTYPE_WAGON))
+        );
+    }
+
+    #[test]
+    fn vehs_reuses_ordl_ref_for_shared_order_list() {
+        use crate::sav::chunks::{find_chunk, parse_chunks};
+        use crate::sav::table::{SlValue, parse_table_chunk, record_get};
+        use crate::shared_orders::SharedOrderList;
+
+        let mut state = GameState::new(64, 64);
+        let station_pos = TileCoord::new(28, 39);
+        state.stations = vec![Station::new_with_kind(station_pos, StopKind::RailStation)];
+        let shared_orders = vec![VehicleOrder::station(station_pos)];
+        state.shared_order_lists = vec![SharedOrderList {
+            id: 77,
+            orders: shared_orders.clone(),
+        }];
+
+        let mut first = Vehicle::new(
+            1,
+            VehicleKind::Train,
+            TileCoord::new(20, 40),
+            TileCoord::new(20, 40),
+        );
+        first.shared_order_id = Some(77);
+        first.set_vehicle_orders(shared_orders.clone());
+        let mut second = Vehicle::new(
+            2,
+            VehicleKind::Train,
+            TileCoord::new(21, 40),
+            TileCoord::new(21, 40),
+        );
+        second.shared_order_id = Some(77);
+        second.set_vehicle_orders(shared_orders);
+        state.vehicles = vec![first, second];
+
+        let (ordl, vehs) = ordl_and_vehs_records(&state, 64).unwrap();
+        assert_eq!(ordl.len(), 1, "una sola lista ORDL compartida");
+        let chunk = vehs_chunk(&vehs).unwrap();
+        let chunks = parse_chunks(&chunk).unwrap();
+        let raw = find_chunk(&chunks, "VEHS").expect("VEHS");
+        let rows = parse_table_chunk(&raw.body, true).expect("parse VEHS");
+        assert_eq!(rows.len(), 2);
+        for (_, row) in rows {
+            let train = match record_get(&row, "train") {
+                Some(SlValue::Structs(items)) => items.first().expect("train"),
+                other => panic!("train ausente: {other:?}"),
+            };
+            let common = match record_get(train, "common") {
+                Some(SlValue::Structs(items)) => items.first().expect("common"),
+                other => panic!("common ausente: {other:?}"),
+            };
+            assert_eq!(
+                record_get(common, "orders").and_then(SlValue::as_u64),
+                Some(1),
+                "ambos vehículos deben referenciar ORDL[0]"
+            );
+        }
     }
 
     #[test]

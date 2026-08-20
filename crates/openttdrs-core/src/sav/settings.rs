@@ -5,7 +5,8 @@
 //! de todos los postes de señal y hace que la misma partida se renderice de
 //! forma distinta a `OpenTTD`.
 
-use crate::{ConstructionSettings, RoadVehicleDrivingSide, TrainSignalSide};
+use crate::engine::TrainAccelerationModel;
+use crate::{ConstructionSettings, PathfindingSettings, RoadVehicleDrivingSide, TrainSignalSide};
 
 use super::chunks::{RawChunk, find_chunk};
 use super::table::{SlValue, parse_table_chunk, record_get};
@@ -35,13 +36,22 @@ fn bool_from_u64(value: u64) -> Option<bool> {
     }
 }
 
-/// Lee los ajustes que determinan el lado de los vehículos y las señales.
-///
-/// `PATS` es el chunk moderno del savegame; `OPTS` cubre variantes antiguas.
-/// Si el campo falta o tiene una enumeración desconocida se conserva el valor
-/// por defecto, igual que `OpenTTD` al cargar un save anterior al ajuste.
-#[must_use]
-pub(crate) fn construction_settings_from_chunks(chunks: &[RawChunk]) -> ConstructionSettings {
+/// Lee el subconjunto de ajustes de PATS que el core ejecuta durante la
+/// simulación. Los campos desconocidos se ignoran y conservan sus defaults.
+pub(crate) fn settings_from_chunks(
+    chunks: &[RawChunk],
+) -> (
+    ConstructionSettings,
+    PathfindingSettings,
+    TrainAccelerationModel,
+    bool,
+    u8,
+) {
+    let mut settings = ConstructionSettings::default();
+    let mut pathfinding = PathfindingSettings::default();
+    let mut train_acceleration_model = TrainAccelerationModel::Realistic;
+    let mut station_noise_level = false;
+    let mut vehicle_breakdowns = 2;
     for name in ["PATS", "OPTS"] {
         let Some(chunk) = find_chunk(chunks, name) else {
             continue;
@@ -49,7 +59,6 @@ pub(crate) fn construction_settings_from_chunks(chunks: &[RawChunk]) -> Construc
         let Ok(rows) = parse_table_chunk(&chunk.body, false) else {
             continue;
         };
-        let mut settings = ConstructionSettings::default();
         let mut found = false;
         for (_, record) in rows {
             if let Some(value) = record_get(&record, "vehicle.road_side")
@@ -75,12 +84,75 @@ pub(crate) fn construction_settings_from_chunks(chunks: &[RawChunk]) -> Construc
                 settings.freeform_edges = value;
                 found = true;
             }
+            if let Some(value) = record_get(&record, "pf.wait_for_pbs_path")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok())
+            {
+                pathfinding.wait_for_pbs_path = value;
+            }
+            if let Some(value) = record_get(&record, "pf.path_backoff_interval")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok())
+            {
+                pathfinding.path_backoff_interval = value;
+            }
+            if let Some(value) = record_get(&record, "pf.reverse_at_signals")
+                .and_then(SlValue::as_u64)
+                .and_then(bool_from_u64)
+            {
+                pathfinding.reverse_at_signals = value;
+            }
+            if let Some(value) = record_get(&record, "pf.wait_oneway_signal")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok())
+            {
+                pathfinding.wait_oneway_signal = value;
+            }
+            if let Some(value) = record_get(&record, "pf.wait_twoway_signal")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok())
+            {
+                pathfinding.wait_twoway_signal = value;
+            }
+            if let Some(value) = record_get(&record, "pf.reserve_paths")
+                .and_then(SlValue::as_u64)
+                .and_then(bool_from_u64)
+            {
+                pathfinding.reserve_paths = value;
+            }
+            if let Some(value) =
+                record_get(&record, "vehicle.train_acceleration_model").and_then(SlValue::as_u64)
+            {
+                train_acceleration_model = match value {
+                    0 => TrainAccelerationModel::Original,
+                    1 => TrainAccelerationModel::Realistic,
+                    _ => train_acceleration_model,
+                };
+            }
+            if let Some(value) = record_get(&record, "economy.station_noise_level")
+                .and_then(SlValue::as_u64)
+                .and_then(bool_from_u64)
+            {
+                station_noise_level = value;
+            }
+            if let Some(value) = record_get(&record, "difficulty.vehicle_breakdowns")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok())
+            {
+                vehicle_breakdowns = value.min(2);
+            }
         }
         if found {
-            return settings;
+            break;
         }
     }
-    ConstructionSettings::default()
+    (
+        settings,
+        pathfinding,
+        train_acceleration_model,
+        station_noise_level,
+        vehicle_breakdowns,
+    )
 }
 
 #[cfg(test)]
@@ -106,7 +178,7 @@ mod tests {
 
     #[test]
     fn reads_right_side_settings_from_modern_save_table() {
-        let settings = construction_settings_from_chunks(&[pats([1, 1, 1])]);
+        let settings = settings_from_chunks(&[pats([1, 1, 1])]).0;
         assert_eq!(
             settings.road_vehicle_driving_side,
             RoadVehicleDrivingSide::Right
@@ -121,13 +193,46 @@ mod tests {
 
     #[test]
     fn reads_disabled_freeform_edges_from_save_table() {
-        let settings = construction_settings_from_chunks(&[pats([0, 0, 0])]);
+        let settings = settings_from_chunks(&[pats([0, 0, 0])]).0;
         assert!(!settings.freeform_edges);
     }
 
     #[test]
     fn invalid_saved_enums_keep_safe_defaults() {
-        let settings = construction_settings_from_chunks(&[pats([9, 7, 2])]);
+        let settings = settings_from_chunks(&[pats([9, 7, 2])]).0;
         assert_eq!(settings, ConstructionSettings::default());
+    }
+
+    #[test]
+    fn reads_simulation_settings_from_pats() {
+        let body = build_table_body(
+            &[
+                (2, "pf.wait_for_pbs_path"),
+                (2, "pf.path_backoff_interval"),
+                (2, "pf.reverse_at_signals"),
+                (2, "pf.wait_oneway_signal"),
+                (2, "pf.wait_twoway_signal"),
+                (2, "pf.reserve_paths"),
+                (2, "vehicle.train_acceleration_model"),
+                (2, "economy.station_noise_level"),
+                (2, "difficulty.vehicle_breakdowns"),
+            ],
+            &[vec![2, 3, 0, 4, 5, 1, 0, 1, 2]],
+        );
+        let chunk = RawChunk {
+            name: *b"PATS",
+            ch_type: CH_TABLE,
+            body,
+        };
+        let (_, pathfinding, acceleration, noise, breakdowns) = settings_from_chunks(&[chunk]);
+        assert_eq!(pathfinding.wait_for_pbs_path, 2);
+        assert_eq!(pathfinding.path_backoff_interval, 3);
+        assert!(!pathfinding.reverse_at_signals);
+        assert_eq!(pathfinding.wait_oneway_signal, 4);
+        assert_eq!(pathfinding.wait_twoway_signal, 5);
+        assert!(pathfinding.reserve_paths);
+        assert_eq!(acceleration, TrainAccelerationModel::Original);
+        assert!(noise);
+        assert_eq!(breakdowns, 2);
     }
 }

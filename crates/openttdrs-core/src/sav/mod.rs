@@ -199,6 +199,14 @@ pub struct SavGame {
     pub climate: crate::Climate,
     /// Lado de conducción y señales de `PATS` / `OPTS`.
     pub construction: crate::ConstructionSettings,
+    /// Ajustes PBS/pathfinding persistidos en `PATS` / `OPTS`.
+    pub pathfinding: crate::PathfindingSettings,
+    /// Modelo de aceleración de tren persistido en `PATS` / `OPTS`.
+    pub train_acceleration_model: crate::engine::TrainAccelerationModel,
+    /// Límite de ruido de aeropuerto persistido en `PATS` / `OPTS`.
+    pub station_noise_level: bool,
+    /// Nivel de averías persistido en `PATS` / `OPTS`.
+    pub vehicle_breakdowns: u8,
     /// Grupos de vehículos del chunk `GRPS` (nombres/índices básicos).
     pub vehicle_groups: Vec<crate::vehicle_group::VehicleGroup>,
     /// Reglas de autoreemplazo del chunk `ERNW`.
@@ -239,7 +247,13 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
     let money = entities::company_money_from_chunks(&chunk_list, version);
     let company_colour = entities::company_colour_from_chunks(&chunk_list, version);
     let climate = landscape::climate_from_chunks(&chunk_list).unwrap_or_default();
-    let construction = settings::construction_settings_from_chunks(&chunk_list);
+    let (
+        construction,
+        pathfinding,
+        train_acceleration_model,
+        station_noise_level,
+        vehicle_breakdowns,
+    ) = settings::settings_from_chunks(&chunk_list);
     let vehicle_groups = fleet::vehicle_groups_from_chunks(&chunk_list);
     let autoreplace_rules = fleet::autoreplace_rules_from_chunks(&chunk_list);
     let link_graph =
@@ -260,6 +274,10 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
         link_graph,
         climate,
         construction,
+        pathfinding,
+        train_acceleration_model,
+        station_noise_level,
+        vehicle_breakdowns,
         vehicle_groups,
         autoreplace_rules,
     })
@@ -579,10 +597,12 @@ impl GameState {
             crate::depot::clear_all_depot_reservations(&mut map);
         }
         let mut state = Self::from_map(map);
-        // OpenTTD ≥15 default `train_acceleration_model = 1` (realista).
-        state.train_acceleration_model = crate::engine::TrainAccelerationModel::Realistic;
         state.climate = sav.climate;
         state.construction = sav.construction;
+        state.pathfinding = sav.pathfinding;
+        state.train_acceleration_model = sav.train_acceleration_model;
+        state.station_noise_level = sav.station_noise_level;
+        state.vehicle_breakdowns = sav.vehicle_breakdowns;
         state.vehicle_groups = sav.vehicle_groups;
         state.autoreplace_rules = sav.autoreplace_rules;
         if let Some(time) = sav.game_time {
@@ -909,6 +929,10 @@ mod tests {
             link_graph: LinkGraphStats::default(),
             climate: crate::Climate::Temperate,
             construction: crate::ConstructionSettings::default(),
+            pathfinding: crate::PathfindingSettings::default(),
+            train_acceleration_model: crate::engine::TrainAccelerationModel::Realistic,
+            station_noise_level: false,
+            vehicle_breakdowns: 2,
             vehicle_groups: Vec::new(),
             autoreplace_rules: Vec::new(),
         }
@@ -1301,6 +1325,10 @@ mod tests {
             game_time: None,
             climate: crate::Climate::Temperate,
             construction: crate::ConstructionSettings::default(),
+            pathfinding: crate::PathfindingSettings::default(),
+            train_acceleration_model: crate::engine::TrainAccelerationModel::Realistic,
+            station_noise_level: false,
+            vehicle_breakdowns: 2,
             vehicle_groups: Vec::new(),
             autoreplace_rules: Vec::new(),
         };

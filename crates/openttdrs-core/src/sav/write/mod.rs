@@ -347,13 +347,31 @@ mod tests {
     #[test]
     fn ottn_roundtrip_preserves_construction_settings_in_pats() {
         let mut state = tiny_state();
+        state.climate = crate::Climate::SubTropical;
         state.construction.road_vehicle_driving_side = crate::RoadVehicleDrivingSide::Right;
         state.construction.train_signal_side = crate::TrainSignalSide::Right;
         state.construction.freeform_edges = false;
+        state.pathfinding.wait_for_pbs_path = 7;
+        state.pathfinding.path_backoff_interval = 8;
+        state.pathfinding.reverse_at_signals = false;
+        state.pathfinding.wait_oneway_signal = 9;
+        state.pathfinding.wait_twoway_signal = 10;
+        state.pathfinding.reserve_paths = true;
+        state.train_acceleration_model = crate::engine::TrainAccelerationModel::Original;
+        state.station_noise_level = true;
+        state.vehicle_breakdowns = 0;
 
         let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
         let sav_game = sav::load(&bytes).expect("load");
+        assert_eq!(sav_game.climate, state.climate);
         assert_eq!(sav_game.construction, state.construction);
+        assert_eq!(sav_game.pathfinding, state.pathfinding);
+        assert_eq!(
+            sav_game.train_acceleration_model,
+            state.train_acceleration_model
+        );
+        assert_eq!(sav_game.station_noise_level, state.station_noise_level);
+        assert_eq!(sav_game.vehicle_breakdowns, state.vehicle_breakdowns);
         assert!(
             exported_chunk_names(&state)
                 .expect("chunk names")

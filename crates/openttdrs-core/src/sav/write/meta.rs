@@ -27,10 +27,16 @@ pub(super) fn plyr_record(state: &GameState) -> Vec<u8> {
     rec
 }
 
-/// Ajustes de construcción que afectan cómo OpenTTD interpreta el mapa al
-/// cargarlo. El header deliberadamente contiene sólo campos que el core
-/// modela; los demás settings de PATS conservan los defaults del juego.
+/// Ajustes de partida que afectan cómo OpenTTD interpreta y simula el mapa al
+/// cargarlo. El header contiene el subconjunto que el core modela; los demás
+/// settings de PATS conservan los defaults del juego.
 pub(super) fn pats_chunk(state: &GameState) -> Result<Vec<u8>, SavError> {
+    let landscape = match state.climate {
+        crate::Climate::Temperate => 0,
+        crate::Climate::SubArctic => 1,
+        crate::Climate::SubTropical => 2,
+        crate::Climate::Toyland => 3,
+    };
     let road_side = u8::from(state.construction.road_drive_on_right());
     let signal_side = match state.construction.train_signal_side {
         crate::TrainSignalSide::Left => 0,
@@ -40,14 +46,34 @@ pub(super) fn pats_chunk(state: &GameState) -> Result<Vec<u8>, SavError> {
     table_chunk(
         *b"PATS",
         &[
+            (2, "game_creation.landscape"),
             (2, "vehicle.road_side"),
             (2, "construction.train_signal_side"),
             (2, "construction.freeform_edges"),
+            (2, "pf.wait_for_pbs_path"),
+            (2, "pf.path_backoff_interval"),
+            (2, "pf.reverse_at_signals"),
+            (2, "pf.wait_oneway_signal"),
+            (2, "pf.wait_twoway_signal"),
+            (2, "pf.reserve_paths"),
+            (2, "vehicle.train_acceleration_model"),
+            (2, "economy.station_noise_level"),
+            (2, "difficulty.vehicle_breakdowns"),
         ],
         &[vec![
+            landscape,
             road_side,
             signal_side,
             u8::from(state.construction.freeform_edges),
+            state.pathfinding.wait_for_pbs_path,
+            state.pathfinding.path_backoff_interval,
+            u8::from(state.pathfinding.reverse_at_signals),
+            state.pathfinding.wait_oneway_signal,
+            state.pathfinding.wait_twoway_signal,
+            u8::from(state.pathfinding.reserve_paths),
+            state.train_acceleration_model as u8,
+            u8::from(state.station_noise_level),
+            state.vehicle_breakdowns.min(2),
         ]],
     )
 }

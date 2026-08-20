@@ -17,7 +17,11 @@ pub(crate) fn vehicle_groups_from_chunks(chunks: &[RawChunk]) -> Vec<VehicleGrou
     };
     rows.into_iter()
         .map(|(index, record)| {
-            let id = record_get(&record, "number")
+            // GRPS es una tabla densa indexada por el `GroupID` de pool. El
+            // campo `number` sólo es el número visible por empresa y no puede
+            // usarse para enlazar `VEHS.group_id`.
+            let id = index;
+            let number = record_get(&record, "number")
                 .and_then(SlValue::as_u64)
                 .and_then(|value| u32::try_from(value).ok())
                 .unwrap_or(index);
@@ -25,7 +29,37 @@ pub(crate) fn vehicle_groups_from_chunks(chunks: &[RawChunk]) -> Vec<VehicleGrou
                 .and_then(SlValue::as_str)
                 .unwrap_or("Grupo")
                 .to_owned();
-            VehicleGroup::new(id, name)
+            let mut group = VehicleGroup::new(id, name);
+            group.number = number;
+            group.owner = record_get(&record, "owner")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok())
+                .unwrap_or(group.owner);
+            group.vehicle_type = record_get(&record, "vehicle_type")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok())
+                .unwrap_or(group.vehicle_type);
+            group.flags = record_get(&record, "flags")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok())
+                .unwrap_or(group.flags);
+            group.livery_in_use = record_get(&record, "livery.in_use")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok())
+                .unwrap_or(group.livery_in_use);
+            group.livery_colour1 = record_get(&record, "livery.colour1")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok())
+                .unwrap_or(group.livery_colour1);
+            group.livery_colour2 = record_get(&record, "livery.colour2")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok())
+                .unwrap_or(group.livery_colour2);
+            group.parent = record_get(&record, "parent")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u32::try_from(value).ok())
+                .filter(|value| *value != u32::from(u16::MAX));
+            group
         })
         .collect()
 }
@@ -84,9 +118,8 @@ mod tests {
             ch_type: CH_TABLE,
             body,
         }];
-        assert_eq!(
-            vehicle_groups_from_chunks(&chunks),
-            vec![VehicleGroup::new(7, "Carga")]
-        );
+        let mut expected = VehicleGroup::new(0, "Carga");
+        expected.number = 7;
+        assert_eq!(vehicle_groups_from_chunks(&chunks), vec![expected]);
     }
 }

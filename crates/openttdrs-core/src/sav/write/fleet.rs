@@ -22,18 +22,40 @@ pub(super) fn groups_chunk(groups: &[VehicleGroup]) -> Result<Option<Vec<u8>>, S
     append_field(&mut header, 2, "owner")?;
     append_field(&mut header, 2, "vehicle_type")?;
     append_field(&mut header, 2, "flags")?;
+    append_field(&mut header, 2, "livery.in_use")?;
+    append_field(&mut header, 2, "livery.colour1")?;
+    append_field(&mut header, 2, "livery.colour2")?;
     append_field(&mut header, 4, "parent")?;
     append_field(&mut header, 4, "number")?;
     header.push(0);
 
-    let mut records = Vec::with_capacity(groups.len());
+    // GRPS es CH_TABLE denso: la posición de la fila es el GroupID de pool.
+    // Conservar huecos permite round-trippear IDs no consecutivos y evita
+    // confundirlos con `number`, que es sólo el ordinal visible por empresa.
+    let max_id = groups.iter().map(|group| group.id).max().unwrap_or(0);
+    let max_id = usize::try_from(max_id.min(u32::from(u16::MAX))).unwrap_or(0);
+    let mut records = vec![Vec::new(); max_id.saturating_add(1)];
     for group in groups {
         let mut record = Vec::new();
         write_str(&group.name, &mut record)?;
-        record.extend_from_slice(&[0, 0, 0]);
-        record.extend_from_slice(&0xFFFF_u16.to_be_bytes());
-        record.extend_from_slice(&(group.id.min(u32::from(u16::MAX)) as u16).to_be_bytes());
-        records.push(record);
+        record.push(group.owner);
+        record.push(group.vehicle_type);
+        record.push(group.flags);
+        record.push(group.livery_in_use);
+        record.push(group.livery_colour1);
+        record.push(group.livery_colour2);
+        let parent = group
+            .parent
+            .unwrap_or(u32::from(u16::MAX))
+            .min(u32::from(u16::MAX)) as u16;
+        record.extend_from_slice(&parent.to_be_bytes());
+        let number = group.number.min(u32::from(u16::MAX)) as u16;
+        record.extend_from_slice(&number.to_be_bytes());
+        if let Ok(index) = usize::try_from(group.id)
+            && index < records.len()
+        {
+            records[index] = record;
+        }
     }
     Ok(Some(raw_table_chunk(
         *b"GRPS", &header, &records, CH_TABLE,

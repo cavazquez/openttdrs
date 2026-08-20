@@ -365,7 +365,16 @@ mod tests {
     #[test]
     fn ottn_roundtrip_preserves_group_names_and_autoreplace_rules() {
         let mut state = tiny_state();
-        state.vehicle_groups = vec![crate::VehicleGroup::new(7, "Carga")];
+        let mut group = crate::VehicleGroup::new(7, "Carga");
+        group.owner = 3;
+        group.vehicle_type = 1;
+        group.flags = 2;
+        group.livery_in_use = 3;
+        group.livery_colour1 = 4;
+        group.livery_colour2 = 5;
+        group.parent = Some(2);
+        group.number = 11;
+        state.vehicle_groups = vec![group];
         let vehicle_pos = TileCoord::new(10, 20);
         let mut grouped = Vehicle::new(42, VehicleKind::Train, vehicle_pos, vehicle_pos);
         grouped.group_id = Some(7);

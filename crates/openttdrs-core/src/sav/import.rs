@@ -17,7 +17,7 @@ use super::entities::SavIndustry;
 
 /// Mapea los tipos vanilla de `IndustryType` a nuestro modelo económico
 /// reducido. El gfx de tesela, cuando está disponible, es más específico y
-/// por eso tiene prioridad en [`hydrate_sav_industries`].
+/// por eso tiene prioridad mediante [`industry_kind_from_gfx`].
 #[must_use]
 pub fn industry_kind_from_ottd_type(industry_type: u8) -> IndustryKind {
     match industry_type {

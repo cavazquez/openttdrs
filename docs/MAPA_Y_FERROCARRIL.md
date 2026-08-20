@@ -1046,31 +1046,28 @@ asumiendo mapa cuadrado de potencia de 2 desde el tamaño de `MAPT`.
 ### 17. Import nativo en openttdrs (`openttdrs-core/src/sav/`)
 
 Además de `parse_sav.py` → `.ottdmap`, el cliente puede cargar `.sav` directamente
-(`sav::load` → `GameState::from_sav_game`). Esto importa mapa, estaciones, industrias,
-ciudades, vehículos con órdenes y reloj (`DATE`).
+(`sav::load` → `GameState::from_sav_game`). La capacidad vigente de ambos sentidos
+está centralizada en [la matriz SAV](parity/sav-compatibility.md); esta sección
+describe sólo el pipeline y las normalizaciones del mapa.
 
-**Export:** `sav::save` / `sav::save_to_bytes` escriben un `.sav` mínimo (OTTZ,
-versión 350: planos de mapa + `DATE` + `PLYR`). La UI guarda `.sav` por defecto;
-usar sufijo `.json` para el save nativo completo. Detalle y handoff:
-[ROADMAP_SAV_EXPORT.md](PLANIFICACION.md#export-sav).
+**Export:** `sav::save` / `sav::save_to_bytes` escriben el subconjunto
+interoperable documentado por esa matriz (OTTZ, versión 350). La UI guarda `.sav`
+por defecto; usar sufijo `.json` para el save nativo completo. Wire format y
+handoff: [PLANIFICACION.md](PLANIFICACION.md#export-sav).
 
-#### Qué se importa hoy
+#### Pipeline local
 
-| Chunk / dato | Estado |
-|--------------|--------|
-| MAP* (mapa completo) | ✅ |
-| STNN (estaciones, waypoints) | ✅ |
-| CITY, INDY, PLYR, DATE | ✅ |
-| VEHS (tren/bus/camión cabeza) | ✅ |
-| ORDL / ORDR (órdenes goto estación/waypoint) | ✅ |
-| Flags **carga completa** / **no descargar** en órdenes | ✅ (bits `Order::flags`) |
-| Barcos, aviones, efectos | ❌ omitidos |
-| Tipos de señal en MAP* (`m2`, `m3`, `m3hi`, `RAIL_TILE_SIGNALS`) | ✅ block/entry/exit/combo/path/oneway |
-| Reservas PBS en runtime tras import | ❌ no se reconstruyen (solo bits en mapa) |
-| Lógica presignal completa (`UpdateSignalsOnSegment`) | ❌ parcial |
-| Condicionales, depósito en órdenes, refit | ❌ omitidos |
-| Dinero `PLYR` en saves muy antiguos (v211) | ⚠️ puede salir `0` |
-| Vehículos en depósito sin vía contigua | ⚠️ se fuerzan `running` y snap a red cercana |
+No mantener una segunda matriz aquí: el alcance por chunk, entidad y sentido
+(import/export) está en la [matriz SAV](parity/sav-compatibility.md). Este
+pipeline sólo define cómo el lector proyecta los datos ya soportados hacia la
+simulación y cómo normaliza el mapa.
+
+| Etapa | Comportamiento local |
+|---|---|
+| Decodificación | `sav::load` lee el stream y `GameState::from_sav_game` hidrata únicamente los campos mapeados por la matriz; los demás se descartan o degradan |
+| Mapa y entidades | `MAP*` se reconstruye antes de aplicar estaciones, ciudades, industrias y vehículos; el formato exacto está en los apartados de chunks anteriores |
+| Señales/PBS | El encoding de señales se conserva; las reservas activas se recalculan y presignals se estabilizan con cobertura acotada |
+| Compatibilidad antigua | `PLYR` muy antiguo puede dar dinero `0`; vehículos en depósito sin vía contigua se marcan `running` y se acercan a una red válida |
 
 #### Post-import (normalización)
 
@@ -1105,9 +1102,9 @@ regenerar con `scripts/gen_rail_signals_sav.py`). Golden de encoding/sprites:
 #### Limitaciones conocidas (señales al importar)
 
 - Los **tipos** (`SignalType` 0–5) y máscaras presente/estado se leen del mapa; el **render** del cliente los respeta.
-- Las **reservas PBS** guardadas en `m2_hi` (bits 8–11 del `m2()` de 16 bits) **no** se aplican como estado de simulación al cargar; `update_train_reservations` las recalcula en juego.
-- **Presignals** (entry/exit/combo): el tipo se importa, pero la lógica de segmento upstream no replica aún `UpdateSignalsOnSegment` de OpenTTD.
-- Colocación vía `PlaceRailSignal` solo expone block/path/path oneway; entry/exit/combo en saves vienen del `.sav`, no del menú de construcción.
+- Las **reservas PBS** guardadas en `m2_hi` (bits 8–11 del `m2()` de 16 bits) no se conservan como estado autoritativo: `update_train_reservations` las recalcula en juego.
+- **Presignals** (entry/exit/combo) se importan y se estabilizan en la sim; quedan políticas de reserva/espera y topologías grandes sin equivalencia externa exhaustiva.
+- `PlaceRailSignal` y la toolbar exponen block, entry, exit, combo, path y path oneway; el encoding importado conserva esos tipos.
 
 - Saves sin red conectada a destinos de órdenes: trenes no se mueven (esperado).
 - `stationlist-test.sav`: casi sin vía; sirve para buses/órdenes, no para trenes en vía.

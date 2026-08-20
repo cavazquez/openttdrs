@@ -1,0 +1,29 @@
+name: Parity docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "README.md"
+      - "docs/**"
+      - "scripts/check.sh"
+      - "scripts/check_parity_docs_fresh.sh"
+      - "scripts/check_active_parity_backlog.py"
+      - ".github/workflows/parity-docs.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "README.md"
+      - "docs/**"
+      - "scripts/check.sh"
+      - "scripts/check_parity_docs_fresh.sh"
+      - "scripts/check_active_parity_backlog.py"
+      - ".github/workflows/parity-docs.yml"
+
+jobs:
+  freshness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Validar fuentes canónicas de paridad
+        run: ./scripts/check.sh parity-docs

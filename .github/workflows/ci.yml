@@ -111,3 +111,6 @@ jobs:
 
       - name: Tablas generadas reproducibles (#119)
         run: ./scripts/check.sh generated-tables-ci
+
+      - name: Frescura de documentación de paridad
+        run: ./scripts/check.sh parity-docs

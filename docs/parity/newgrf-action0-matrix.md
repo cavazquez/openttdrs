@@ -6,6 +6,12 @@ Referencia fijada: commit `14ec60f248547d4d062a1160f0fc26d742319888`, en
 Callbacks (CBID) y storage/triggers: ver
 [`newgrf-callback-matrix.md`](newgrf-callback-matrix.md) (#228).
 
+> Esta matriz mide propiedades de catálogo, compra, construcción y render. La
+> única fuente para afirmar que un callback se **ejecuta** es la matriz de
+> callbacks: que aquí una máscara figure como runtime o almacenada no declara
+> un call site. En particular, CB17, CB28 y CB25–27 ya tienen call sites; los
+> demás callbacks de esas features siguen siendo parciales u OOS.
+
 Estados:
 
 - **runtime**: la propiedad modifica un catálogo usado por compra, construcción o render.
@@ -256,7 +262,8 @@ Fuente: `newgrf_act0_houses.cpp` / GRFSpecs Action0/Houses.
 Catálogo runtime `house_spec_catalog` (ids ≥ `NEW_HOUSE_OFFSET` = 110). El pool de
 crecimiento (`pick_town_house_id_with_catalog`) combina vanilla + NewGRF 1×1/norte
 multitile filtrando zona+clima+año; `callback_mask` (`0x14`/`0x1D`) se almacena
-sin ejecutar callbacks (residual #228; ver `newgrf-callback-matrix.md`). Action3 adjunta `newgrf_views`; dibujo usa vistas
+y CB17 se ejecuta al decidir construcción. Los demás callbacks de casas siguen
+sin call site (ver `newgrf-callback-matrix.md`). Action3 adjunta `newgrf_views`; dibujo usa vistas
 o fallback `subst_id` / `% 110` (`resolve_house_draw_id`). Overrides `0x15` →
 `house_overrides[vanilla]`. Multitile: footprint N/E/W/S con ids consecutivos.
 
@@ -270,11 +277,11 @@ o fallback `subst_id` / `% 110` (`resolve_house_draw_id`). Overrides `0x15` →
 | `0D`–`0F` acceptance BYTE | consumidas |
 | `10` WORD / `11` BYTE / `12` WORD | consumidas |
 | `13` availability mask WORD | **runtime** (zonas+climas) |
-| `14` callback lo BYTE | **runtime** (almacenado; sin ejecutar) |
+| `14` callback lo BYTE | almacenado; CB17 se ejecuta al construir, resto sin call site |
 | `15` override BYTE | **runtime** (`house_overrides`) |
 | `16`–`17`, `19`–`1C` | consumidas |
 | `18` probability BYTE | **runtime** |
-| `1D` callback hi BYTE | **runtime** (almacenado; sin ejecutar) |
+| `1D` callback hi BYTE | almacenado; CB17 se ejecuta al construir, resto sin call site |
 | `1E` DWORD / `1F` BYTE | consumidas |
 | `20` watch list / `23` tile acceptance | consumidas (listas) |
 | `21`/`22` long years WORD | **runtime** |
@@ -307,7 +314,8 @@ Fuente: `newgrf_act0_industries.cpp` (`IndustrytilesChangeInfo`).
 
 Catálogo runtime `industry_tile_spec_catalog` (gfx ≥ `NEW_INDUSTRYTILEOFFSET` = 175).
 Overrides `0x09` → `industry_tile_overrides[vanilla]`. Acceptance y
-`callback_mask` se almacenan; callbacks de industria residuales (#228). Cargos vía
+`callback_mask` se almacenan; CB25/CB26/CB27 se ejecutan en tick de tiles y los
+demás callbacks de industria siguen residuales (#228). Cargos vía
 `GetCargoTranslation` / `cargo_spec` (#224). Action3 adjunta `newgrf_views`;
 dibujo NewGRF o fallback `subst_id` (`resolve_industry_tile_draw_gfx`).
 
@@ -317,7 +325,7 @@ dibujo NewGRF o fallback `subst_id` (`resolve_industry_tile_draw_gfx`).
 | `09` override BYTE | **runtime** (`industry_tile_overrides`) |
 | `0A`–`0C` acceptance WORD | **runtime** (índice+amt; labels vía `cargo_spec`) |
 | `0D` land shape flags BYTE | consumida |
-| `0E` callback mask BYTE | **runtime** (almacenado; sin ejecutar) |
+| `0E` callback mask BYTE | almacenado; CB25/CB26/CB27 ejecutados, resto sin call site |
 | `0F` anim info WORD | consumida |
 | `10`–`12` anim/special BYTE | consumidas |
 | `13` acceptance list | **runtime** (variable; labels vía `cargo_spec`) |
@@ -332,7 +340,7 @@ Catálogo runtime `industry_spec_catalog` (ids ≥ `NEW_INDUSTRYOFFSET` = 37).
 Apply: tiles (`09`) antes que industries. Layouts `0x0A` resuelven `gfx==0xFE`
 → tile local del mismo GRF a gfx global. Produced/accepted (`0x10`/`0x11` o
 `0x25`/`0x26`) como índices+labels vía `cargo_spec`. `callback_mask`
-(`0x21`/`0x22`) almacenado (#228). Place: `place_industry_spec_def_sandbox`
+(`0x21`/`0x22`) almacenado; CB28 se ejecuta al colocar (#228). Place: `place_industry_spec_def_sandbox`
 escribe footprint con gfx NewGRF; producción/aceptación leen def cuando existe.
 
 | Props | Estado |
@@ -354,7 +362,7 @@ escribe footprint con gfx NewGRF; producción/aceptación leen def cuando existe
 | `1B`/`1F`/`24` string WORD | consumidas |
 | `1C`–`1E` input multipliers DWORD | **runtime** (almacenados) |
 | `20` prospecting DWORD | consumida |
-| `21`/`22` callback mask BYTE | **runtime** (almacenado; sin ejecutar) |
+| `21`/`22` callback mask BYTE | almacenado; CB28 ejecutado al colocar, resto sin call site |
 | `23` removal cost DWORD | consumida |
 | `25`/`26` cargo lists variables | **runtime** (índices+labels) |
 | `27` production rates list | **runtime** |

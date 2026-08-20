@@ -8,10 +8,16 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-# Narrativa consolidada + artefactos regenerables en parity/
+# Narrativa consolidada. No incluye docs/archive/: conserva snapshots históricos.
 SCAN_PATHS=(
   docs/PARIDAD.md
   docs/PLANIFICACION.md
+  docs/MAPA_Y_FERROCARRIL.md
+  docs/ARCHITECTURE.md
+  docs/README.md
+  docs/parity/sav-compatibility.md
+  docs/parity/newgrf-action0-matrix.md
+  docs/parity/newgrf-callback-matrix.md
   README.md
   docs/parity/divergences_found.md
   docs/parity/train_line_divergences.md
@@ -44,6 +50,7 @@ require_pat() {
 
 require_pat '^## Estado canónico actual$' docs/PARIDAD.md
 require_pat 'OpenTTD 15\.3, commit' docs/PARIDAD.md
+require_pat '^# Compatibilidad `.sav` OpenTTD ↔ openttdrs$' docs/parity/sav-compatibility.md
 python3 scripts/check_active_parity_backlog.py
 
 check_pat 'SIM_TICK_HZ = 5\.0'
@@ -67,6 +74,14 @@ check_pat 'no hay servicio en la sim'
 check_pat 'transfer necesita feeder share'
 check_pat '\*\*Non-stop / go via\*\* \| No existe'
 check_pat '\*\*Stop location de trenes.*\| No existe'
+check_pat '\| Barcos / aviones \| ❌ omitidos'
+check_pat '\| Barcos, aviones, efectos \| ❌ omitidos'
+check_pat 'La sim actual no considera tráfico en carretera'
+check_pat 'ENTRY ignorado al bloquear'
+check_pat 'EXIT y COMBO se tratan como BLOCK'
+check_pat 'lógica de segmento upstream no replica'
+check_pat 'sin ejecutar callbacks'
+check_pat 'compatibilidad con `.sav` OpenTTD \(sigue siendo `parse_sav`'
 
 if [[ "$FAIL" -ne 0 ]]; then
   err "docs de paridad desactualizadas (#125)"

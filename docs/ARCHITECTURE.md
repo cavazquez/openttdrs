@@ -93,7 +93,7 @@ El [informe de arquitectura](#informe-de-arquitectura-openttd-upstream) resume e
 | Órdenes `Order`, listas compartidas | `order_base.h` | **I4:** cola mínima “ir a estación”; órdenes compartidas más tarde. |
 | YAPF (siguiente tramo, cachés, regiones agua) | `pathfinder/yapf/` | **I5:** BFS que devuelve **`Vec` de teselas** es deliberado y más simple; migrar a heurística tipo A* si el mapa crece. |
 | Registro masivo de comandos `*_cmd` | `command.cpp` | **I6:** mismo patrón abstracto (`Command` + `apply`), sin el árbol enorme del upstream. |
-| `SaveLoadVersion` (`SLV_*`) | `saveload/saveload.h` | **I7:** formato propio versionado; **parcial:** `scripts/parse_sav.py` lee `.sav` → `.ottdmap` (solo mapa, no economía). |
+| `SaveLoadVersion` (`SLV_*`) | `saveload/saveload.h` | **I7:** formato propio versionado; compatibilidad `.sav` nativa parcial de import/export. Alcance exacto: [matriz SAV](parity/sav-compatibility.md). |
 | Red = replay de comandos + hash estado | `network/` / `openttdrs-net` | **I8 MVP (jul 2026):** lockstep TCP, dedicated, host migration — [ADR 0001](adr/0001-multiplayer-v1.md), [ADR 0004](adr/0004-host-migration-post-v1.md). |
 
 ---
@@ -104,7 +104,7 @@ Los incrementos **I0–I7** y el **MVP de I8** están en `main`. El hito **0.1**
 
 | Capa | Qué hay hoy |
 |------|-------------|
-| `openttdrs-core` | Mapa TNBP/JGR, comandos road/rail, PBS/YAPF parcial, economía multi-compañía, NewGRF parse/Action2, IA TransCargo, save JSON + `.sav` parcial. |
+| `openttdrs-core` | Mapa TNBP/JGR, comandos road/rail, PBS/YAPF parcial, economía multi-compañía, NewGRF parse/Action2, IA TransCargo, save JSON + `.sav` parcial ([matriz](parity/sav-compatibility.md)). |
 | `openttdrs-client` | Vista isométrica OpenGFX, toolbar, menús, noticias, `--server` / `--client`. |
 | `openttdrs-net` | TCP lockstep + `openttdrs-dedicated`. |
 | Scripts | `parse_sav.py`, `descargar_assets.sh`, `doctor.sh`, validación TNBP en CI. |
@@ -401,7 +401,9 @@ save.rs
 **Cliente Bevy:**
 - **Hecho:** `F5` / **Ctrl+S** guardan y `F9` / **Ctrl+L** cargan (ruta configurable); formato versionado en `openttdrs_core::save`.
 
-**Fuera:** migraciones entre versiones de save; compatibilidad con `.sav` OpenTTD (sigue siendo `parse_sav` → `.ottdmap`).
+**Estado actual:** el formato nativo JSON conserva el estado propio completo.
+La compatibilidad `.sav` ya tiene import/export nativo parcial; el alcance y lo
+que no round-trippea están en la [matriz SAV](parity/sav-compatibility.md).
 
 **Referencia upstream:** `SaveLoadVersion` inmutable y tablas por subsistema (`saveload/saveload.h`, `*_sl.cpp`). MVP: campo `version` en el JSON del envoltorio (`save.rs`).
 

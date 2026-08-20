@@ -13,6 +13,20 @@ Un archivo vivo por temática. Orden sugerido al entrar:
 
 **Issues de backlog:** [github.com/cavazquez/openttdrs/issues](https://github.com/cavazquez/openttdrs/issues).
 
+## Propiedad del estado (no duplicar trabajo)
+
+| Tema | Fuente canónica | Documentos de apoyo |
+|---|---|---|
+| Madurez global, road y rail | [PARIDAD.md](PARIDAD.md) | Roadmaps y guía de mapa sólo enlazan este estado |
+| Compatibilidad `.sav` import/export | [parity/sav-compatibility.md](parity/sav-compatibility.md) | [PLANIFICACION.md](PLANIFICACION.md#export-sav) explica el writer; [MAPA_Y_FERROCARRIL.md](MAPA_Y_FERROCARRIL.md) el formato/pipeline |
+| NewGRF Action0/3/5 | [parity/newgrf-action0-matrix.md](parity/newgrf-action0-matrix.md) | Propiedades de catálogos y render |
+| NewGRF callbacks | [parity/newgrf-callback-matrix.md](parity/newgrf-callback-matrix.md) | Call sites, storage y residual |
+
+Al cambiar una capacidad, editar su fuente canónica y el resumen de
+`PARIDAD.md` sólo si modifica la madurez global. Los roadmaps, README y guías
+técnicas no deben duplicar listas de soporte ni usar inventarios históricos como
+backlog.
+
 ---
 
 | Documento | Uso |
@@ -21,6 +35,9 @@ Un archivo vivo por temática. Orden sugerido al entrar:
 | [adr/](adr/) | Decisiones inmutables (multiplayer, tick 37 Hz, determinismo, host migration) |
 | [PLANIFICACION.md](PLANIFICACION.md) | Roadmaps P0–P3 / UI / sprints / industrias / SAV / drag; SP1; dev bot |
 | [PARIDAD.md](PARIDAD.md) | Status road/rail, mappings, gaps UI, snapshots, PBS/Airport oracles |
+| [parity/sav-compatibility.md](parity/sav-compatibility.md) | Matriz única de importación/exportación `.sav` |
+| [parity/newgrf-action0-matrix.md](parity/newgrf-action0-matrix.md) | Propiedades y runtime Action0/3/5 |
+| [parity/newgrf-callback-matrix.md](parity/newgrf-callback-matrix.md) | Ejecución real de callbacks NewGRF |
 | [MAPA_Y_FERROCARRIL.md](MAPA_Y_FERROCARRIL.md) | Flujo `.ottdmap`, MAPT/chunks, señales, autorail, waypoints |
 | [GRAFICOS.md](GRAFICOS.md) | Sprites OpenGFX + handoff terreno |
 | [RENDIMIENTO.md](RENDIMIENTO.md) | PERF mapas grandes + benchmarks |
@@ -59,4 +76,4 @@ Planes y roadmaps cerrados o absorbidos en esta consolidación:
 
 ---
 
-*Última actualización: 2026-08-09 (metodología de paridad SAV; consolidación temática 2026-07-25)*
+*Última actualización: 2026-08-14 (propiedad explícita de estado SAV/NewGRF/road/rail)*

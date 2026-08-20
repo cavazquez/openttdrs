@@ -17,7 +17,7 @@ Simulador de transporte inspirado en [OpenTTD](https://www.openttd.org/), escrit
 
 **Gobierno:** [CONTRIBUTING.md](CONTRIBUTING.md) · [SECURITY.md](SECURITY.md) · [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [ADRs](docs/adr/)
 
-**Última actualización:** 2026-07-25
+**Última actualización:** 2026-08-14
 
 ---
 
@@ -25,10 +25,10 @@ Simulador de transporte inspirado en [OpenTTD](https://www.openttd.org/), escrit
 
 | Capa | Qué hay |
 |------|---------|
-| **Core** (`openttdrs-core`) | Mapa, tick, comandos, simulación road/rail, señales/PBS parcial, economía, saves JSON + import/export `.sav` / `.ottdmap` |
+| **Core** (`openttdrs-core`) | Mapa, tick, comandos, simulación road/rail, señales/PBS parcial, economía, saves JSON + import/export `.sav` / `.ottdmap`; alcance `.sav` en la [matriz canónica](docs/parity/sav-compatibility.md) |
 | **Cliente** (`openttdrs-client`) | Vista isométrica OpenGFX, menú de inicio, toolbar, listas UI, noticias; `--server` / `--client` (I8) |
 | **Red** (`openttdrs-net`) | TCP lockstep + bin `openttdrs-dedicated` ([ADR 0001](docs/adr/0001-multiplayer-v1.md)) |
-| **NewGRF** | Action0–14 parse; Action1/2/3/5 con sprites in-world (trenes, stations, roadtypes, shore, catenary); vars de tesela/vehículo en runtime |
+| **NewGRF** | Catálogos Action0/3/5 y runtime parcial; las matrices de [propiedades](docs/parity/newgrf-action0-matrix.md) y [callbacks](docs/parity/newgrf-callback-matrix.md) distinguen parseado, almacenado y ejecutado |
 | **Hito 0.1** | `0.1.0-alpha.1` preparada; solitario jugable. **I8 red** MVP ([#21](https://github.com/cavazquez/openttdrs/issues/21) ✅) + host migration ([#171](https://github.com/cavazquez/openttdrs/issues/171), [ADR 0004](docs/adr/0004-host-migration-post-v1.md)) |
 
 **Trabajo reciente (jul 2026):** Action2 variational (trains/stations/road), procedure `7E` / `\2psto`, vars de vehículo y de tesela al dibujar. Issues de backlog: [issues abiertas](https://github.com/cavazquez/openttdrs/issues).
@@ -209,14 +209,13 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ / 🔮 backlog (issues en GitHub)
 | Área | Estado | Notas |
 |------|--------|-------|
 | Construcción road + rail + terraform | ✅ | Waypoints, señales, `RailConvert` (tipo seleccionado) |
-| PBS / path signals | 🟡 | Reserva básica; afinado en issues |
+| PBS / path signals | 🟡 | Implementado para escenarios acotados; fidelidad global en [PARIDAD.md](docs/PARIDAD.md#estado-canónico-actual) |
 | Economía + 11 cargas temperate + packets | 🟡 | CargoDist MCF, transfer/deliver y ratings; climas/NewGRF incompletos |
-| Import `.sav` → mapa + flota | 🟡 | Roundtrip propio; OpenTTD oficial incompleto |
-| Export `.sav` | 🟡 | Mapa+STNN+CITY+INDY y subconjunto VEHS/órdenes; sin round-trip completo |
+| Import/export `.sav` | 🟡 | Subconjunto interoperable; matriz única de import vs export en [sav-compatibility.md](docs/parity/sav-compatibility.md) |
 | Render OpenGFX vanilla | 🟡 | Cobertura amplia, sin oracle visual total; industrias NewGRF ≥175 MVP (#71) |
 | UI solitario (menús, listas, noticias) | 🟡 | Jugable; varias opciones del core todavía no están expuestas |
 | Multi-compañía | 🟡 | Mínima + ownership; segunda humana OOS |
-| NewGRF Action0–14 + Action2 runtime | 🟡 | Parseo amplio; Action1/2/3/5 parcial, callbacks/semántica incompletos |
+| NewGRF | 🟡 | Estado por propiedad en la [matriz Action0/3/5](docs/parity/newgrf-action0-matrix.md) y ejecución real en la [matriz de callbacks](docs/parity/newgrf-callback-matrix.md) |
 | Barcos | 🟡 | Depósitos, docks, boyas, locks y A*; movimiento/órdenes simplificados |
 | Aviones | 🟡 | Airport FTA, compra/vuelo/ruido/crash; render y casos límite incompletos |
 | Multijugador (I8) | 🟡 | MVP lockstep + dedicated + host migration; desync/UI OOS |
@@ -231,9 +230,10 @@ Backlog vivo: [issues del repo](https://github.com/cavazquez/openttdrs/issues) (
 | Documento | Uso |
 |-----------|-----|
 | [docs/README.md](docs/README.md) | Índice (un archivo por temática) |
-| [docs/PLANIFICACION.md](docs/PLANIFICACION.md) | Roadmaps, gaps, sprints, UI/NewGRF |
-| [docs/PARIDAD.md](docs/PARIDAD.md) | Madurez, mapeos, oráculos |
-| [docs/MAPA_Y_FERROCARRIL.md](docs/MAPA_Y_FERROCARRIL.md) | Saves, `.ottdmap`, tiles, señales |
+| [docs/PLANIFICACION.md](docs/PLANIFICACION.md) | Roadmaps, sprints y guías de implementación |
+| [docs/PARIDAD.md](docs/PARIDAD.md) | Madurez vigente, mapeos, road/rail y oráculos |
+| [docs/parity/sav-compatibility.md](docs/parity/sav-compatibility.md) | Fuente única de compatibilidad `.sav` import/export |
+| [docs/MAPA_Y_FERROCARRIL.md](docs/MAPA_Y_FERROCARRIL.md) | Formato de mapa, `.ottdmap`, tiles y señales |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Capas + diseño I0–I8 |
 | [docs/GRAFICOS.md](docs/GRAFICOS.md) | OpenGFX |
 | [docs/RENDIMIENTO.md](docs/RENDIMIENTO.md) | Benches y mapas grandes |

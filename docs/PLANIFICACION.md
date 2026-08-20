@@ -1,8 +1,8 @@
 # Planificación y roadmaps
 
-Fuente viva de roadmaps, gaps de producto, sprints, checklists y herramientas de sonda. Estado de madurez técnica road/rail y oráculos: [PARIDAD.md](PARIDAD.md).
+Fuente viva de roadmaps, gaps de producto, sprints, checklists y herramientas de sonda. Estado de madurez técnica road/rail y oráculos: [PARIDAD.md](PARIDAD.md). Alcance de import/export `.sav`: [parity/sav-compatibility.md](parity/sav-compatibility.md). Cobertura NewGRF: sus [matrices](parity/newgrf-action0-matrix.md).
 
-**Corte canónico: 2026-08-03 · `main` `56db4f02abf9d70348ff84c6afa323081699c6df` · referencia OpenTTD 15.3 `14ec60f`.** Los hitos y fechas anteriores que aparecen más abajo son registro histórico; el estado vigente y los issues abiertos viven en [PARIDAD.md](PARIDAD.md#backlog-sucesor-activo).
+**Corte canónico: 2026-08-14 · `main` `7ca1092125cc864738e404640c5e557a30a93bb5` · referencia OpenTTD 15.3 `14ec60f`.** Los hitos y fechas anteriores que aparecen más abajo son registro histórico; el estado vigente y los issues abiertos viven en [PARIDAD.md](PARIDAD.md#backlog-sucesor-activo).
 
 ## Índice
 
@@ -72,7 +72,7 @@ Resumen vivo de **openttdrs** vs OpenTTD. Detalle por dominio:
 | 4 | Ferrocarril | PBS golden vs OTTD | 🟡 | L | MVP interno; captura externa |
 | 5 | UI | Paridad ventanas flota/estación | 🟡 | M | [ROADMAP_PARIDAD_UI_GLOBAL.md](#paridad-ui-global) |
 | 6 | Mundo | Industrias por clima / gen | 🟡 | L | T1–T3 hechos; T4 parcial |
-| 7 | Transporte | Barcos | 🔮 | L | Aviones cerrados (#212) |
+| 7 | Transporte | Barcos | 🟡 | L | MVP navegable; quedan oráculos externos y water regions completas |
 | 8 | Modding | NewGRF paridad total | 🟡 | XXL | Fase 7 MVP en estructural |
 | 9 | Red | Desync UI / lobby | 🟡 | XL | Core lockstep hecho |
 | 10 | IA | Pathfind construcción / multi-rival | 🟡 | M–L | TransCargo = L Manhattan |
@@ -90,7 +90,7 @@ original es otro eje, auditado en [ROADMAP_PARIDAD_SIMULACION.md](#paridad-de-si
 (71 entradas, 2026-07-25): un bloque puede figurar aquí como ✅ y seguir teniendo divergencias de
 simulación abiertas.
 
-*Última actualización: 2026-08-03 — corte canónico y backlog sucesor; no duplicar tablas largas aquí.*
+*Última actualización: 2026-08-14 — corte canónico y backlog sucesor; no duplicar tablas largas aquí.*
 
 ## Paridad de simulación (P0–P3)
 
@@ -681,8 +681,8 @@ wallclock).
 **P2.5 · hecho** — `process_vehicle_calendar_day` / `process_vehicle_economy_day` recorren
 `index % DAY_TICKS == date_fract` cada tick (`vehicle/reliability.rs`); cadencia OpenTTD 1/74.
 
-**P2.2 · hecho** — `sim_step`: animación → tile loop → paths (sin PBS) → load/unload → move →
-PBS post-move → landscape. El routing PBS completo ya no precede a la carga.
+**P2.2 · hecho** — `sim_step`: animación → tile loop → paths → load/unload → move →
+actualización PBS/señales post-move → landscape. El routing/reserva no precede a la carga.
 
 **P2.4 · hecho** — `call_landscape_tick`: town → trees → station → industry → companies →
 linkgraph (P2.21 cablea el planificador).
@@ -880,7 +880,14 @@ implementadas jul 2026. Fase 7 = hito 0.6 (MVP parcial + runtime completo pendie
 - `GameState.newgrf_stack`; save **v17** + migración desde v16.
 - UI Ajustes → «NewGRF…» (lista de solo lectura).
 
-**Pendiente (runtime completo):** Action0–14, callbacks, gfx ≥175, edición/reorden del stack, chunk `NGRF` en `.sav`.
+**Estado vivo:** la cobertura de propiedades Action0/3/5 está en
+[`parity/newgrf-action0-matrix.md`](parity/newgrf-action0-matrix.md) y los
+callbacks que realmente se invocan, en
+[`parity/newgrf-callback-matrix.md`](parity/newgrf-callback-matrix.md). No
+interpretar «parseado/almacenado» como callback ejecutado. El residual es la
+mayoría de CBIDs, scopes y storage persistente, callbacks de aeropuertos,
+objetos, cargos y road stops, FTA NewGRF, edición/reorden del stack y el chunk
+`NGRF` completo en `.sav`.
 
 ### UI continua
 
@@ -1083,9 +1090,11 @@ Objetivo histórico: cerrar el **vertical slice en solitario**.
 
 ---
 
-### Sprint 5 — Señales v1 (bloque simple) + audio
+### Sprint 5 — Señales v1 (bloque simple) + audio *(histórico, superado)*
 
-**Objetivo:** primer paso hacia ferrocarril “serio” sin PBS completo.
+**Objetivo histórico:** primer paso hacia ferrocarril “serio”. PBS, path signals
+y presignals tienen implementación posterior; el estado actual vive en
+[PARIDAD.md](PARIDAD.md#estado-canónico-actual).
 
 | Tarea | Costo | Entregable |
 |-------|-------|------------|
@@ -1095,7 +1104,7 @@ Objetivo histórico: cerrar el **vertical slice en solitario**.
 | Preview fantasma señal | S | Como autorail |
 | Música ambiente (1 track, opcional) | S | Toggle en menú |
 
-**Fuera de alcance S5:** presignals, path signals, PBS, YAPF.
+**Fuera de alcance de aquel sprint:** presignals, path signals, PBS y YAPF.
 
 Referencia detallada (tipos oficiales, codificación `m2`/`m3`, fases A–E):
 [SENALES_FERROVIARIAS.md](MAPA_Y_FERROCARRIL.md#señales-ferroviarias).
@@ -1999,13 +2008,17 @@ Extraídas de [Junctionary — Tips](https://wiki.openttd.org/en/Community/Junct
 
 <!-- fuente: ROADMAP_SAV_EXPORT.md -->
 
-Documento de reproducción: cómo guardar y cargar el mismo formato `.sav` en
-openttdrs, qué está implementado, qué falta, y cómo extenderlo sin romper el
-import existente.
+Documento de reproducción del writer: cómo guardar y cargar el formato `.sav`
+sin romper el import existente. La capacidad actual y los límites de
+round-trip tienen una única fuente:
+[`parity/sav-compatibility.md`](parity/sav-compatibility.md). Esta sección sólo
+describe el wire format y los puntos de extensión del writer.
 
-**Estado (2026-07-15):** export operativo (mapa + `STNN` + `CITY` + `INDY` + `ORDL` + `VEHS` + `LGRP`/`LGRJ`/`LGRS` + `DATE` + `PLYR`).
-`LGRP` persiste capacity/usage/travel_time del link graph observado (#102); jobs vacíos.
-El JSON propio sigue siendo el formato más completo (horarios, grupos, shared orders, etc.).
+**Estado del writer:** emite mapa, `STNN`, `CITY`, `INDY`, `ORDL`, `VEHS`,
+`LGRP`/`LGRJ`/`LGRS`, `DATE` y `PLYR`. `LGRP` persiste
+capacity/usage/travel_time del link graph observado; los jobs quedan vacíos.
+JSON sigue siendo el formato nativo completo para el estado que el subconjunto
+`.sav` no preserva.
 
 ---
 
@@ -2020,8 +2033,9 @@ El JSON propio sigue siendo el formato más completo (horarios, grupos, shared o
 La UI de partidas (`ui/save_window/`):
 
 - Nombre sin extensión → escribe `{nombre}.sav`.
-- Sufijo `.sav` → export OpenTTD (mapa + entidades mínimas).
-- Sufijo `.json` → save nativo (horarios, grupos, shared orders, etc.).
+- Sufijo `.sav` → export OpenTTD del subconjunto documentado en la
+  [matriz SAV](parity/sav-compatibility.md).
+- Sufijo `.json` → save nativo completo.
 
 ---
 
@@ -2120,8 +2134,8 @@ payload (zlib si OTTZ; raw si OTTN)
 3. `STNN` — `CH_TABLE` moderno (SAVEBYTE + structs; #226) desde `GameState.stations`
 4. `CITY` — `CH_TABLE` `xy` / `name` / `cache.population` / townname* desde `GameState.towns`
 5. `INDY` — `CH_TABLE` `location.tile` / `w` / `h` / `type` desde `GameState.industries`
-6. `ORDL` — `CH_TABLE` con struct `orders` (goto estación/waypoint); una lista por vehículo con órdenes
-7. `VEHS` — `CH_SPARSE_TABLE` cabezas tren/bus/camión + ref a ORDL
+6. `ORDL` — `CH_TABLE` con struct `orders` (estación/waypoint/depósito/condicional); una lista por vehículo con órdenes
+7. `VEHS` — `CH_SPARSE_TABLE` de tren, bus/camión, barco y avión de ala fija + ref a ORDL
 8. `DATE` — `CH_TABLE` `date` (i32) + `tick_counter` (u64)
 9. `PLYR` — `CH_TABLE` `money` (i64) + `colour` (u8)
 10. Terminador `00 00 00 00`
@@ -2138,24 +2152,25 @@ Endianness crítica (debe coincidir con `build.rs` al importar):
 
 ---
 
-### 5. Limitaciones (no romper expectativas)
+### 5. Contrato del writer (no romper expectativas)
 
-| Chunk / dato | Estado |
-|--------------|--------|
-| Planos + DATE + PLYR | ✅ |
-| `STNN` | ✅ nombres + facilities |
-| `CITY` | ✅ nombre + pos; población se recalcula al load |
-| `INDY` | ✅ tile/w/h/type (mapeo `IndustrySpec` → tipo OTTD best-effort) |
-| `VEHS` / `ORDL` | ✅ tren/bus/camión + goto estación/waypoint/depósito/condicional + full_load |
-| Barcos / aviones | ❌ omitidos |
-| Horarios / grupos / shared orders / autoreplace | ❌ solo en `.json` |
-| `OBJS`, `NEWS`, settings, NewGRF | ❌ |
+La [matriz SAV](parity/sav-compatibility.md) es la fuente de capacidad. Este
+resumen se limita a lo que emite el writer: `MAP*`, `DATE`, `PLYR`, `STNN`,
+`CITY`, `INDY`, `LGRP`, `ORDL` y `VEHS`; incluye tren, bus/camión, barco y
+avión de ala fija.
 
-Por eso:
+No escribe todavía `CAPY`/`ECMY`, pools completos de compañías, `OBJS`,
+`PATS`/`OPTS`/`GSET`/`ENGN`/`SRND`, ni configuración NewGRF. El historial de
+noticias propio queda en JSON (no es un pool nativo de OpenTTD `.sav`). `ORDL`
+preserva los campos básicos por orden —incluidos wait/travel/max-speed—, pero
+no la identidad de shared orders ni el estado completo de horarios. Tranvías y
+rotores de helicóptero no se exportan.
 
-- Para **horarios, grupos, shared orders** → seguir usando `.json`.
-- Para **mapa + estaciones + ciudades + flota tren/ROAD + industria** → `.sav` roundtrippea con `sav::load` y carga en OpenTTD 15.3 (`mvp_openttd_rich.sav`).
-- Smoke local: `validate_sav_openttd.sh` / `roundtrip_sav_openttd.sh` (`./scripts/check.sh openttd-smoke`). El workflow de release ejecuta la matriz oficial sin `SKIP` (#294). Residual funcional: CAPY/ECMY, settings/NewGRF completos.
+Para un estado nativo completo elegir `.json`. Para el subconjunto interoperable
+usar `.sav` y ejecutar `./scripts/check.sh openttd-smoke` cuando haya binario
+de referencia. El workflow de release ya ejecuta la matriz oficial sin `SKIP`;
+[#294](https://github.com/cavazquez/openttdrs/issues/294) conserva su
+seguimiento de aceptación.
 
 Fecha de calendario en `DATE`: aproximación `year * 365 + (doy - 1)`; el tick monotónico se preserva exactamente.
 
@@ -2168,9 +2183,9 @@ Orden sugerido:
 1. ~~**`STNN`**~~ ✅  
 2. ~~**`CITY`**~~ ✅  
 3. ~~**`INDY`**~~ ✅  
-4. ~~**`ORDL` + `VEHS`**~~ ✅ tren + bus/camión ROAD + goto estación/waypoint/depósito/condicional + full_load  
-5. ~~Órdenes depósito / condicionales / flags full_load más fieles~~ ✅  
-6. Validar export: ✅ estructural + smoke local; 🟡 gate oficial reproducible de OpenTTD 15.3 en #294. Residual funcional: CAPY/ECMY, settings/NewGRF/ENGN.
+4. ~~**`ORDL` + `VEHS`**~~ ✅ tren + bus/camión ROAD + barco + avión de ala fija; estación/waypoint/depósito/condicional
+5. ~~Órdenes depósito / condicionales / flags full_load más fieles~~ ✅; wait/travel/max-speed por orden 🟡
+6. Validar export: ✅ estructural + smoke local + matriz oficial de release OpenTTD 15.3. Residual: ver [matriz SAV](parity/sav-compatibility.md).
 
 Reglas:
 
@@ -2197,14 +2212,15 @@ Reglas:
 
 ### 8. Relación con otros docs
 
-- Import detallado: [TILES_Y_SAVEGAMES_OPENTTD.md](MAPA_Y_FERROCARRIL.md#tiles-y-savegames-openttd) §16–17  
-- Paridad producto: [PARIDAD_OPENTTD.md](#vista-corta-de-gaps) (fila Save)  
+- Compatibilidad import/export: [matriz SAV](parity/sav-compatibility.md)
+- Formato binario y pipeline de mapa: [TILES_Y_SAVEGAMES_OPENTTD.md](MAPA_Y_FERROCARRIL.md#tiles-y-savegames-openttd) §16–17
+- Paridad producto: [PARIDAD.md](PARIDAD.md#estado-canónico-actual)
 - Menú / cargar: [archive/ROADMAP_MAIN_MENU.md](archive/ROADMAP_MAIN_MENU.md)  
 - Fixture demo: `scripts/gen_demo_sav.py`
 
 ---
 
-*Última actualización: 2026-08-03 — smoke local opcional y gate oficial de release sin `SKIP`.*
+*Última actualización: 2026-08-14 — contrato del writer separado de la matriz SAV y gate oficial de release sin `SKIP`.*
 
 ## Carreteras drag (paused)
 
@@ -2504,8 +2520,9 @@ Pulido jul 2026: `--client` sin bootstrap local; dedicated isla 64² con pueblos
 **Carreteras — drag / orientación (handoff IA):** fixes parciales junio 2026; usuario pidió
 dejarlo — ver [ROADMAP_CARRETERAS_DRAG.md](#carreteras-drag-paused).
 
-**Export `.sav` (handoff IA):** mapa+STNN+CITY+INDY+ORDL+VEHS+DATE+PLYR; horarios/grupos solo en JSON —
-ver [ROADMAP_SAV_EXPORT.md](#export-sav).
+**Export `.sav` (handoff IA):** contrato técnico del writer en esta sección;
+capacidad vigente y diferencias import/export en la
+[matriz SAV](parity/sav-compatibility.md). JSON es el formato nativo completo.
 
 **Señales — pick en diagonal:** ✅ fix jul 2026 (tap ancla press + seed preferido) —
 [SENALES_FERROVIARIAS.md §11](MAPA_Y_FERROCARRIL.md#señales-ferroviarias).

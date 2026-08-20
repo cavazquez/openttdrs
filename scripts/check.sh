@@ -222,6 +222,7 @@ do_ci() {
     do_tnbp
     do_ci_python
     do_generated_tables
+    do_parity_docs
     # Smoke OpenTTD: obligatorio en local si hay binario; en GHA suele SKIP.
     do_openttd_smoke
     echo

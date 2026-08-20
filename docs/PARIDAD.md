@@ -1,6 +1,10 @@
 # Paridad OpenTTD ↔ openttdrs
 
-Madurez, mapeos C++↔Rust, gaps, UI, divergencias y oráculos. Roadmaps de producto: [PLANIFICACION.md](PLANIFICACION.md). Pin JSON y capturas siguen en `docs/parity/`.
+Madurez, mapeos C++↔Rust, gaps, UI, divergencias y oráculos. Roadmaps de
+producto: [PLANIFICACION.md](PLANIFICACION.md). La matriz única de
+compatibilidad `.sav` está en
+[`parity/sav-compatibility.md`](parity/sav-compatibility.md); pin JSON y
+capturas siguen en `docs/parity/`.
 
 Para investigar una discrepancia de render de una partida `.sav`, seguir la
 [metodología de paridad raw → semántica → draw](parity/METODOLOGIA_RENDER_SAV.md).
@@ -9,13 +13,17 @@ Cuando esa evidencia ya coincide pero el resultado compuesto difiere, usar el
 
 ## Estado canónico actual
 
-**Corte canónico: 2026-08-03 · `main` `56db4f02abf9d70348ff84c6afa323081699c6df`.
+**Corte canónico: 2026-08-14 · `main` `7ca1092125cc864738e404640c5e557a30a93bb5`.
 Referencia: OpenTTD 15.3, commit
 `14ec60f248547d4d062a1160f0fc26d742319888`.** Esta tabla es la fuente de
 verdad para el estado vigente. Las tablas detalladas posteriores conservan el
 mapeo y la evidencia de auditorías anteriores; fechas anteriores son contexto
 histórico. Ante una contradicción prevalece este bloque y debe corregirse la
 fila antigua en el mismo cambio.
+
+El pin es la referencia de evidencia: un checkout local de OpenTTD con otro
+commit o cambios sin confirmar sirve para investigar, pero no para declarar
+paridad hasta regenerar la evidencia contra este pin.
 
 Leyenda: **alta** = jugable y ampliamente probado; **media** = funcional con
 semántica parcial; **inicial** = primer corte utilizable; **ausente** = todavía
@@ -24,8 +32,8 @@ no existe. Ningún nivel implica compatibilidad binaria o de red con OpenTTD.
 | Área | Estado vigente | Evidencia y límite principal |
 |---|---|---|
 | Tick y determinismo | **Alta** | Tick de 27 ms, RNG/orden autoritativo, hash canónico, replay y save/load deterministas |
-| Carretera | **Alta funcional / media exacta** | Construcción, depósitos, paradas, overtaking y tablas de movimiento; quedan RVSB/dársenas y escala |
-| Ferrocarril | **Alta funcional / media exacta** | Consists, railtypes, señales, PBS/YAPF, túneles/puentes y plataformas; los oráculos externos cubren escenarios acotados |
+| Carretera | **Alta funcional / media exacta** | Construcción, paradas bahía/drive-through, circulación izquierda/derecha, seguimiento y adelantamiento. Falta fidelidad exhaustiva de tráfico/YAPF, tranvías y articulados |
+| Ferrocarril | **Alta funcional / media exacta** | Consists, railtypes, ENTRY/EXIT/COMBO, PBS/YAPF, túneles/puentes y plataformas. Los oráculos externos aún cubren escenarios acotados |
 | Economía y carga | **Media** | Catálogo multi-clima (#224/#273): pagos Oil/Wood tropic, Farm dual-output, packets/transfer/CargoDist; NewGRF/cargos custom incompletos |
 | Pueblos e industrias | **Media** | I/O por clima (#224/#273): UI fundación Arctic/Tropic/Toyland; layouts/gráficos aún parciales |
 | Órdenes y horarios | **Media-alta en core / media en UI** | Full-load all/any, no-load/no-unload, transfer, non-stop/go-via, stop-location, refit de depósito, condicionales y timetable-start; la UI no expone todo |
@@ -33,27 +41,35 @@ no existe. Ningún nivel implica compatibilidad binaria o de red con OpenTTD.
 | Aviones | **Media** | Aeropuertos FTA, compra, vuelo, ruido y crashes; presentación y casos límite incompletos |
 | Barcos | **Parcial → media MVP (#268)** | Infra acuática + `ChooseShipTrack`-like (path A*/cache), `FindClosestShipDepot` BFS, arrival dock/depot (8,8) / buoy ≤3, ocupación esclusa (bitset), golden interno tick pos/dir/z/orden. Residual: YAPF ship/water regions completas, goldens externos vs OpenTTD 15.3 |
 | Guardado propio JSON | **Alta** | Formato versionado con migraciones y determinismo mid-run |
-| Compatibilidad `.sav` | **Inicial-media** | Import/export parcial y matriz local; el gate oficial OpenTTD 15.3 sin `SKIP` sigue en [#294](https://github.com/cavazquez/openttdrs/issues/294) |
-| NewGRF | **Media de parseo / media de runtime (MVP callbacks #228/#266)** | Actions 0–14 + catálogos Action0/3/5; CB24/CB31 + CB28/CB17/CB13/CB25; storage vehículo+estación; trigger industry-tile → Action2 random. Residual: resto CBIDs, goldens vs OpenTTD; ver [`parity/newgrf-callback-matrix.md`](parity/newgrf-callback-matrix.md) |
-
-La cobertura declarada por feature y propiedad está en
-[`parity/newgrf-action0-matrix.md`](parity/newgrf-action0-matrix.md); consumir los
-bytes de una propiedad no cuenta allí como soporte runtime. CBIDs:
-[`parity/newgrf-callback-matrix.md`](parity/newgrf-callback-matrix.md).
+| Compatibilidad `.sav` | **Inicial-media** | Import/export interoperable de un subconjunto. La cobertura exacta, incluyendo la diferencia import vs export, está en [`parity/sav-compatibility.md`](parity/sav-compatibility.md); release ejecuta la matriz OpenTTD 15.3 sin `SKIP` |
+| NewGRF | **Media de parseo / media de runtime** | Catálogos Action0/3/5 amplios; call sites reales limitados a CB24/CB13, CB31, CB17, CB28 y CB25–27. Residual: resto CBIDs/scopes/storage y validación diferencial; ver las [matrices Action0/3/5](parity/newgrf-action0-matrix.md) y de [callbacks](parity/newgrf-callback-matrix.md) |
 | Multijugador | **Inicial** | Lockstep TCP, dedicated, late join y host migration; protocolo propio sin lobby, auth, cifrado ni interoperabilidad |
 | IA / GameScript / editor | **Inicial-media** | TransCargo/RoadHaul, GS-lite y editor propios; Squirrel compatible ausente |
 | Render/UI vanilla | **Media-alta visual / media funcional** | Cobertura OpenGFX amplia; no hay oracle visual total ni internacionalización completa |
 | Plataformas y release | **Preparada con gates** | `main` protegido y checks Windows/macOS; queda dry-run/smoke de `0.1.0-alpha.1` en [#296](https://github.com/cavazquez/openttdrs/issues/296) |
 
+### Propiedad de cada estado (evitar trabajo duplicado)
+
+| Área | Fuente canónica | Qué no debe duplicarse |
+|---|---|---|
+| Estado global, road y rail | Este documento | Las guías de mapa y los roadmaps sólo enlazan el estado vigente |
+| Compatibilidad `.sav` | [`parity/sav-compatibility.md`](parity/sav-compatibility.md) | Matrices de import/export en `PLANIFICACION.md`, `MAPA_Y_FERROCARRIL.md` y README |
+| NewGRF Action0/3/5 | [`parity/newgrf-action0-matrix.md`](parity/newgrf-action0-matrix.md) | El estado de ejecución de callbacks |
+| NewGRF callbacks | [`parity/newgrf-callback-matrix.md`](parity/newgrf-callback-matrix.md) | Propiedades de catálogos Action0/3/5 |
+
+Una modificación sólo actualiza su fuente canónica y este resumen si cambia la
+madurez global. Las listas antiguas inferiores son evidencia histórica, no
+backlog de implementación.
+
 ## Backlog sucesor activo
 
 <!-- active-parity-backlog:start -->
 
-- [#293](https://github.com/cavazquez/openttdrs/issues/293) — callbacks 0x25/0x26 de industrias y tick.
-- [#294](https://github.com/cavazquez/openttdrs/issues/294) — validación SAV oficial OpenTTD 15.3 sin `SKIP`.
-- [#295](https://github.com/cavazquez/openttdrs/issues/295) — ventana operativa Town Authority.
-- [#296](https://github.com/cavazquez/openttdrs/issues/296) — dry-run multiplataforma y smoke de release.
-- [#297](https://github.com/cavazquez/openttdrs/issues/297) — oráculo y diff visual por familia de ventanas.
+- [#293](https://github.com/cavazquez/openttdrs/issues/293) — callbacks industriales 0x25/0x26/0x27: implementación integrada; falta aceptación/cierre del issue.
+- [#294](https://github.com/cavazquez/openttdrs/issues/294) — matriz SAV oficial OpenTTD 15.3: gate de release integrado; queda seguimiento/cierre del issue.
+- [#295](https://github.com/cavazquez/openttdrs/issues/295) — ventana operativa Town Authority y cierre de alcance.
+- [#296](https://github.com/cavazquez/openttdrs/issues/296) — dry-run multiplataforma y smoke de release: seguimiento de aceptación.
+- [#297](https://github.com/cavazquez/openttdrs/issues/297) — oráculo y diff visual por familia de ventanas: ampliar evidencia y cierre.
 
 <!-- active-parity-backlog:end -->
 
@@ -196,12 +212,12 @@ aproximadas (Fases 2–3 del roadmap estructural).
 |---|---|---|---|---|---|
 | Track bits (6 piezas X/Y/UPPER/LOWER/LEFT/RIGHT) | `command/transport/rail.rs` (`RAIL_TB_*`, autorail, merges, refresco de vecinos) | `rail_map.h:136-150` (`GetTrackBits`), `track_type.h:19-52` | 2 · probado (~20 tests de colocación/merge/cruces) | `command/tests/rail.rs` (`autorail_crossing_*`, `parallel_*`, `set_rail_bits_*`) | Bajo: misma semántica de bits en `m5` |
 | Pendientes + fundaciones de vía | `map/rail_slope.rs` (`rail_trackbits_valid_on_slope`), `command/terraform.rs` (autoslope) | `rail_cmd.cpp` (foundations), `slope_func.h` | 3 · validado parcial (`computed_tileh_matches_openrtd_sw`) | tests de `map/rail_slope.rs` | Bajo |
-| Señales — colocación y encoding | `rail_signals.rs` (`signal_placement_for_track`, `m2`/`m3`/`m3hi`) | `rail_map.h:287-526`, `signal_type.h` | 2 · probado (encoding compatible con saves OpenTTD) | tests de `rail_signals.rs` (`signal_placement_is_single_bit`, `cycle_signal_side_*`) | Medio: ENTRY/EXIT/COMBO degradados a BLOCK (Rail 3D) |
-| Señales — bloqueo | `rail_signals.rs` (`rail_block_ahead`, `train_blocked_by_signal`, `update_rail_signal_states`) + `sim_step.rs` | `signal.cpp:280-660` (`UpdateSignalsOnSegment`) | 3 · validado (Rail 3D: bloque v1 + escenario `train_signal`) | `sim_train_waits_until_block_ahead_clears`, `train_signal_divergences_are_absent_after_rail_3d`, `signal_wait_events_emitted_with_two_trains` | Alto: sin presignals reales ni PBS; timing sin golden contra OpenTTD |
-| Reservas de camino (PBS) | `rail_pbs.rs` (TryReserve, `follow_train_reservation`, path signals, plataforma) | `pbs.cpp` (`TryReserveRailTrack`, `FollowTrainReservation`) | 5 · equivalente (fixture PBS 15.3, 40 ticks) | `pbs_openttd_oracle.rs`, `golden_pbs.rs`, `follow_train_reservation_*` | Bajo en el escenario del oráculo; multi-tren / consist largo aún no golden externo |
+| Señales — colocación y encoding | `rail_signals.rs` (`signal_placement_for_track`, `m2`/`m3`/`m3hi`) | `rail_map.h:287-526`, `signal_type.h` | 2 · probado (encoding compatible con saves OpenTTD) | tests de `rail_signals.rs` (`signal_placement_is_single_bit`, `cycle_signal_side_*`) | Medio: ENTRY/EXIT/COMBO implementados; falta validación amplia de topologías complejas |
+| Señales — bloqueo | `rail_signals.rs` (`rail_block_ahead`, `train_blocked_by_signal`, `update_rail_signal_states`) + `sim_step.rs` | `signal.cpp:280-660` (`UpdateSignalsOnSegment`) | 3 · validado en escenarios acotados | tests de `rail_signals/presignal.rs`, `sim_train_waits_until_block_ahead_clears`, `signal_wait_events_emitted_with_two_trains` | Alto: políticas de reserva/espera y timing sin golden amplio contra OpenTTD |
+| Reservas de camino (PBS) | `rail_pbs.rs` (TryReserve, `follow_train_reservation`, path signals, plataforma) | `pbs.cpp` (`TryReserveRailTrack`, `FollowTrainReservation`) | 5 · equivalente sólo en fixture PBS 15.3 de 40 ticks | `pbs_openttd_oracle.rs`, `golden_pbs.rs`, `follow_train_reservation_*` | Medio fuera del escenario del oráculo: multi-tren / consist largo sin golden externo |
 | Estaciones rail (plataformas 1..=7, waypoints) | `command/transport/station.rs` (`place_rail_station_area`, `rail_station_layout`), `station.rs` | `station_cmd.cpp:1416-1433`, `CmdBuildRailStation` | 2 · probado (layout + flags catenaria m3 compatibles; entrada exige vía adyacente) | `place_rail_station_area_*`, `place_rail_waypoint_*`, `station_*catenary*` | Medio |
 | Depósitos rail | `depot.rs` (`Has/SetDepotReservation`), `depot_leave.rs` (`CheckTrainStayInDepot` + `TryPathReserve` + `TicksToLeaveDepot`) | `rail_map.h:256-272`, `train_cmd.cpp:2354-2427`, `rail_cmd.cpp:2999-3044` | 4 · paridad PBS leave | `depot_leave::*`, `two_trains_leave_same_rail_depot_sequentially` | Medio: sin enum `Track` completo; `depot_leave_cleared` es el proxy |
-| Túneles/puentes rail | `command/transport/bridge.rs` (compartido con road), `map/slope.rs` | `tunnelbridge_cmd.cpp:1959-2087` | 1 · implementado (colocación validada; **0 tests específicos rail**, solo road) | tests solo `PlaceRoadBridge` en `command/tests/bridge.rs` | Medio: sin ocultamiento del tren (`_tunnel_visibility_frame`) ni límite de velocidad de puente |
+| Túneles/puentes rail | `command/transport/bridge.rs` (compartido con road), `map/slope.rs` | `tunnelbridge_cmd.cpp:1959-2087` | 2 · probado | `tunnel_hides_train_matches_visibility_frame`, `train_on_wooden_bridge_is_speed_capped` | Medio: wormhole y validación externa de casos complejos siguen simplificados |
 | Pathfinding rail | `pathfinder/yapf.rs` (trackdir + señales/reservas) | `pathfinder/yapf/yapf_rail.cpp`, `follow_track.hpp` | 2 · probado (+ golden rutas estáticas) | `yapf_*`, `golden_yapf.rs` | Medio: sin golden tick-a-tick vs OpenTTD; desempates difieren |
 | Ocupación/anticolisión | `rail_signals.rs` (`train_blocked_by_traffic`) | (OpenTTD lo resuelve con reservas + señales) | 2 · probado (tile ocupado, frente a frente, tren parado delante) | `trains_block_head_on_without_signal` | Alto: modelo distinto al de OpenTTD (que usa PBS) |
 | Railtypes / electrificación / conversión | `rail_type.rs` + `ConvertRail` + catenaria | `rail.h`, `elrail.cpp` / `elrail_data.h` | 2 · probado (Fase 5–6 + catenaria) | `convert_rail_*`, `collect_catenary_*`, `*_engine_requires_*` | Medio: wires PCP + postes PPP + estación/túnel/puente; TO_CATENARY persistente + env; tranvía = RoadType |
@@ -254,10 +270,10 @@ aproximadas (Fases 2–3 del roadmap estructural).
 4. ~~**Sin consist**~~ **Mitigado (Fase 1 estructural)** — cadena
    loco+vagones, longitud cacheada, ocupación multi-tesela básica; falta
    paridad fina de geometría/PBS (Fase 3).
-5. ~~**Sin PBS y salida de depósito instantánea**~~ **Mitigado** — hay PBS
-   parcial con oráculos externos y espera/salida de depósito de 37 ticks. La
-   divergencia vigente es la semántica completa ENTRY/EXIT/COMBO, los costes
-   YAPF y la geometría fina fuera de los fixtures cubiertos.
+5. ~~**Sin PBS y salida de depósito instantánea**~~ **Superado en el corte
+   cubierto** — hay PBS y espera/salida de depósito de 37 ticks. El residual
+   vigente son políticas complejas de reserva/espera, costes y desempates YAPF
+   y geometría fina fuera de los fixtures cubiertos.
 
 ### Cómo regenerar la evidencia
 
@@ -307,7 +323,7 @@ los módulos Rust, con el mecanismo de validación disponible para cada pieza.
 
 | Concepto OpenTTD | Referencia C++ | Equivalente Rust | Validación |
 |---|---|---|---|
-| Bahía (bay stop) bus/camión — el vehículo ENTRA a la tesela | `roadveh_cmd.cpp:1311-1330`, tablas `_rv_station_left_*` (`roadveh_movement.h:458-737`, punteros `:1052-1067`) | destino = tesela de bahía; estado `RVSB_IN_ROAD_STOP`, dársenas `far/near`, exclusión de boca y una única tabla para entrada/salida. Pendiente: `_rv_station_right_*` (conducción por la derecha) | golden punto a punto; tests de llegada, asignación 2+1 y salida |
+| Bahía (bay stop) bus/camión — el vehículo ENTRA a la tesela | `roadveh_cmd.cpp:1311-1330`, tablas `_rv_station_left_*` / `_rv_station_right_*` (`roadveh_movement.h:458-737`, punteros `:1052-1067`) | destino = tesela de bahía; estado `RVSB_IN_ROAD_STOP`, dársenas `far/near`, exclusión de boca y tablas por lado de conducción para entrada/salida | golden punto a punto; tests de llegada, asignación 2+1, salida y lado derecho |
 | Frame exacto de parada en bahía | `_road_stop_stop_frame` (`roadveh_movement.h:1087-1093`, valores 11–20) + chequeo `roadveh_cmd.cpp:1496-1502` | `BayStationTable::stop` por tabla (copiado del upstream); el vehículo se detiene y carga en ese punto | golden verifica valor y que sea el vértice del lazo |
 | `StationType` en `m6` (bits 3–6) | `station_map.h` | `station.rs::station_type_from_m6`, `stop_kind_from_m6` | tests `station.rs` |
 | Orientación de la boca de la parada (`m5 & 3`) | `station_map.h` (`GetBayRoadStopDir`) | `command/transport/station.rs::road_stop_m5` + `road_stop_approach_tile` | tests de comandos |
@@ -374,8 +390,8 @@ cada pieza.
 | Concepto OpenTTD | Referencia C++ | Equivalente Rust | Validación |
 |---|---|---|---|
 | Señales por track en `m2`/`m3`/`m3hi` (presencia, estado, tipo, variante) | `rail_map.h:287-526`, `signal_type.h` | `rail_signals.rs` (`signal_placement_for_track`, `signal_on_track_mask`, `signal_is_green`) — mismo encoding | tests de `rail_signals.rs` |
-| `UpdateSignalsOnSegment` (propagación por segmento) | `signal.cpp:280-660` | `update_rail_signal_states` + `rail_block_ahead` (modelo de bloque simplificado «v1») | `block_ahead_stops_at_next_signal`, `sim_train_waits_until_block_ahead_clears`, `train_signal_divergences_are_absent_after_rail_3d` |
-| Semántica ENTRY/EXIT/COMBO (presignals) | `signal_type.h`, `signal.cpp` | **Decidido (Rail 3D)**: encoding en saves; ENTRY ignorado al bloquear; EXIT/COMBO sin propagación | `entry_signal_does_not_block_train`, escenario `train_signal` |
+| `UpdateSignalsOnSegment` (propagación por segmento) | `signal.cpp:280-660` | `update_rail_signal_states` + estabilización de presignals por segmento; implementación acotada frente a la red completa de OpenTTD | tests de `rail_signals/presignal.rs`, `block_ahead_stops_at_next_signal`, `sim_train_waits_until_block_ahead_clears` |
+| Semántica ENTRY/EXIT/COMBO (presignals) | `signal_type.h`, `signal.cpp` | ENTRY/EXIT/COMBO se evalúan y estabilizan; quedan políticas complejas de reserva/espera y validación en redes grandes | tests de `rail_signals/presignal.rs` y escenario `train_signal` |
 | Señal roja detiene el tren (`cur_speed=0`, `progress=255`) | `train_cmd.cpp:3454-3456` | `sim_step.rs` (tren bloqueado → `cur_speed = 0`, no avanza) | tests de integración de `rail_signals.rs` |
 | PBS: `TryReserveRailTrack`, `FollowTrainReservation`, señales `Path` | `pbs.cpp/h` | Implementación parcial en `pathfinder/yapf.rs`, reservas por track y señales path; no cubre toda la semántica/escala de OpenTTD | `pbs_openttd_oracle`, `pbs_dual_curve_oracle`, oráculo consist+PBS v2 |
 
@@ -413,6 +429,30 @@ cada pieza.
 
 ## Gaps desconocidos (road)
 
+El ancla se conserva por enlaces existentes; la lista vigente está aquí, no en
+el inventario de Fase 1 que sigue plegado al final de la sección.
+
+### Estado vigente
+
+Ya existen circulación izquierda/derecha, seguimiento, adelantamiento,
+colisiones de paso a nivel, paradas bahía y drive-through, semántica de parada,
+límites de tramo/pendiente y reversa forzada. No deben abrirse tareas que
+vuelvan a implementar esas capacidades sólo porque aparecen como ausentes en
+la auditoría histórica.
+
+**Residual activo:** equivalencia de tráfico compleja contra un oráculo externo,
+costes y desempates YAPF, `AM_REALISTIC`, tablas/controlador de tranvías y
+vehículos articulados. También falta validar exhaustivamente mapas grandes y
+las combinaciones de carril/parada poco frecuentes.
+
+La evidencia de implementación vive en `road_movement/traffic.rs`,
+`road_movement/overtake.rs`, `road_movement/controller.rs` y sus tests. Al
+cambiar estos límites, actualizar esta síntesis y el reporte de divergencias;
+no duplicarla en el roadmap ni en la guía de mapa.
+
+<details>
+<summary>Inventario histórico de Fase 1 — no es backlog vigente</summary>
+
 <!-- fuente: parity/unknown_features.md -->
 
 **Madurez canónica:** [status.md](#madurez-road--tick). Índice de mapeos: [MAPPING.md](#).
@@ -433,11 +473,9 @@ vehículos de carretera. Muchos ítems ya están ~~tachados~~ (implementados).
 2. ~~**Entrada a la tesela de la bahía**~~ — **IMPLEMENTADA en la Fase 2**:
    `resolve_order_destination` apunta a la bahía, el pathfinder entra por la
    boca (`m3`) y el vehículo carga dentro (`bay_stop_position` «no observada»).
-   Las 8 tablas `_rv_station_left_*` (lado izquierdo, el que usa el port) están
-   copiadas en `road_movement.rs::bay_station_table` y validadas punto a punto
-   por el golden `bay_station_tables_match_rust_copies`. El controlador usa
-   las variantes `far/near`; siguen pendientes las 8 `_rv_station_right_*`
-   para conducción por la derecha.
+   Las tablas `_rv_station_left_*` y `_rv_station_right_*` están copiadas en
+   `road_movement` y validadas punto a punto. El controlador usa las variantes
+   `far/near` para ambos lados de conducción.
 3. ~~**Frame de parada `_road_stop_stop_frame` exacto**~~ — **IMPLEMENTADO**:
    el controlador no inicia la carga al cruzar la tesela; espera el stop frame
    upstream (15–20 para las tablas left far/near) y el render usa ese mismo
@@ -454,25 +492,24 @@ vehículos de carretera. Muchos ítems ya están ~~tachados~~ (implementados).
 6. ~~**Ocupación/bloqueo de bahías (`RoadStop::Enter/Leave`)**~~ —
    **IMPLEMENTADA**: asignación `far` y luego `near`, exclusión de la boca al
    entrar/salir y espera del tercer vehículo en el acceso.
-7. **Adelantamiento (`overtaking`)** — `roadveh_cmd.cpp:821-860`: los
-   vehículos se adelantan en rectas (con aceleración 512 en vez de 256).
-8. **Colisión/seguimiento entre vehículos de carretera**
-   (`RoadVehFindCloseTo`, `roadveh_cmd.cpp:1454`): frenado detrás de otro
-   vehículo. La sim actual no considera tráfico en carretera.
-9. **`GetCurrentMaxSpeed` con límites por tramo** (`roadveh_cmd.cpp`):
-   velocidad máxima reducida dentro de bahías/curvas cerradas y por
-   `RoadZPosAffectSpeed` (pendientes).
-10. **Drive-through stops** — estado `RVSB_IN_DT_ROAD_STOP`, frame de parada
-    `RVC_DRIVE_THROUGH_STOP_FRAME`; hoy solo hay bahías 1×1 con acceso.
-11. **`last_station_visited` / `ShouldStopAtStation`** — evita re-parar en la
-    misma estación y regula paradas de paso; el equivalente Rust usa
-    comparación de orden actual solamente.
+7. ~~**Adelantamiento (`overtaking`)**~~ — implementado para tráfico en recta;
+   queda fidelidad exhaustiva frente a OpenTTD.
+8. ~~**Colisión/seguimiento entre vehículos de carretera**~~ — implementado:
+   seguimiento/frenado y casos de choque de paso a nivel. Falta oráculo externo
+   exhaustivo de tráfico complejo.
+9. ~~**`GetCurrentMaxSpeed` con límites por tramo**~~ — implementado para
+   bahías, curvas y pendientes; quedan comprobaciones diferenciales amplias.
+10. ~~**Drive-through stops**~~ — implementado con estado y frame de parada;
+    quedan combinaciones poco frecuentes y equivalencia exacta.
+11. ~~**`last_station_visited` / `ShouldStopAtStation`**~~ — semántica de
+    parada implementada en el controlador actual; validar casos límite.
 
 ### Prioridad baja (para fases posteriores)
 
 12. ~~**Averías (`HandleBreakdown`)** y humo/efectos asociados.~~ Implementadas;
     `vehicle_breakdowns` respeta normal/reducidas/ninguna y la UI permite ciclarlo.
-13. **`reverse_ctr` y giros en U forzados** fuera de paradas.
+13. ~~**`reverse_ctr` y giros en U forzados**~~ — reversa forzada implementada;
+    quedan ajustes de fidelidad.
 14. **Tranvías** (tablas `_roadveh_tram_turn_*`, `roadveh_movement.h:1095+`).
 15. **Articulados** (`HasArticulatedPart`): trailers que siguen al frontal.
 16. **Aceleración realista (AM_REALISTIC)** — modelo alternativo por potencia y
@@ -492,7 +529,31 @@ vehículos de carretera. Muchos ítems ya están ~~tachados~~ (implementados).
 - Para features de esta lista: al implementarlas, añadir el evento
   correspondiente a `parity/record.rs` y un chequeo en `parity/report.rs`.
 
+</details>
+
 ## Gaps desconocidos (rail)
+
+El ancla se conserva por enlaces existentes. Este es el estado vigente;
+el inventario Rail 0 plegado abajo es evidencia histórica y no debe generar
+trabajo nuevo sin contrastarlo con código y fixtures actuales.
+
+### Estado vigente
+
+ENTRY/EXIT/COMBO, PBS/TryReserve, YAPF y ocupación/posiciones por unidad del
+consist están implementados y tienen fixtures puntuales. La diferencia actual
+no es de ausencia: es de fidelidad y de cobertura frente a OpenTTD.
+
+**Residual activo:** políticas complejas de reserva, elección y espera;
+equivalencia demostrada en redes grandes y con múltiples trenes; costes y
+desempates YAPF; geometría/píxel exacta; curvas por railtype; estaciones y
+depósitos; y consist NewGRF articulado. Las matrices y oráculos externos siguen
+siendo acotados, por lo que una prueba local no acredita paridad global.
+
+Al cambiar ese estado, actualizar esta síntesis y el reporte ferroviario. Las
+guías de formato de mapa sólo deben enlazarla.
+
+<details>
+<summary>Inventario histórico Rail 0–4 — no es backlog vigente</summary>
 
 <!-- fuente: parity/rail_unknown_features.md -->
 
@@ -531,11 +592,9 @@ parcialmente resueltos; se mantienen tachados o anotados.
 7. ~~**Reservas de camino (PBS)**~~ — **MVP (Fase 3 + #54)**:
    `rail_pbs.rs` + `follow_train_reservation` + traza/golden interno
    `train_pbs_golden.json`. Pendiente: golden tick-a-tick vs OpenTTD (ítem 11).
-8. ~~**Semántica de presignals ENTRY/EXIT/COMBO**~~ — **Decidido (Rail 3D)**:
-   se codifican en saves pero **no tienen semántica de presignal** en la sim
-   v1. `SIGTYPE_ENTRY` se ignora al bloquear (`train_blocked_by_signal`);
-   EXIT y COMBO se tratan como BLOCK sin propagación por segmento
-   (`entry_signal_does_not_block_train`). Path/PBS: ver ítem 7.
+8. ~~**Semántica de presignals ENTRY/EXIT/COMBO**~~ — superado: se evalúan y
+   estabilizan por segmento. El residual es paridad de políticas complejas de
+   reserva/espera y topologías grandes; Path/PBS: ver ítem 7.
 9. ~~**Túneles/puentes en tránsito**~~ ✅ Ocultamiento
    (`tunnel_hides_train_at_progress` + `vehicle_hidden_in_tunnel` / cliente) y
    tope de puente (`bridge_max_speed_for_tile` en `update_movement_speed`).
@@ -612,6 +671,8 @@ parcialmente resueltos; se mantienen tachados o anotados.
   [`RAIL_REVIEW_HANDOFF.md`](archive/RAIL_REVIEW_HANDOFF.md) (stub → archive) antes de
   abrir la siguiente oleada ferroviaria.
 
+</details>
+
 ## Evaluación render rail
 
 <!-- fuente: parity/rail_render_evaluation.md -->
@@ -634,7 +695,7 @@ gaps frente a `_vehicle_subcoord` y `_tunnel_visibility_frame`.
 | Sprite del tren | `dir` lógico | Capa según pose extrapolada | **Alineado** — `sprite_selection_uses_extrapolated_pose_for_train` |
 | CSV de render | — | Columnas `logical_subtile_*` / `extrap_subtile_*` añadidas | **Listo** para diff manual vs JSONL |
 | Track por pieza | Golden 3A (`vehicle_subcoord_matches_rust_copy`) | Reconstruye el track de la ruta y recorre recta/Bézier de borde a borde | **Alineado topológicamente** en empalmes; geometría curva continua propia |
-| Ocultamiento en túnel | Constante `{12,8,8,12}` portada | Sin ocultar sprite en túnel | **Pendiente** — `tunnel_hides_train_at_progress` solo evalúa umbral |
+| Ocultamiento en túnel | Constante `{12,8,8,12}` portada | `vehicle_hidden_in_tunnel` aplica el umbral al render | **Implementado** — `tunnel_hides_train_matches_visibility_frame`; falta diff visual externo amplio |
 
 ### Cómo reproducir
 

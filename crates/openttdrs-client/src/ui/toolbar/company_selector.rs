@@ -3,6 +3,7 @@
 use bevy::prelude::*;
 use openttdrs_core::CompanyId;
 
+use crate::network::{NetworkRole, NetworkRuntime};
 use crate::state::SimWorld;
 use crate::ui::toolbar::{BuildMenuUi, ToolbarTooltipTarget};
 
@@ -59,7 +60,17 @@ pub(crate) fn spawn_company_selector(parent: &mut ChildSpawnerCommands) {
 pub(crate) fn handle_company_selector_buttons(
     buttons: Query<(&Interaction, &CompanySelectorButton), (Changed<Interaction>, With<Button>)>,
     mut sim: ResMut<SimWorld>,
+    net: Option<Res<NetworkRuntime>>,
 ) {
+    if net
+        .as_deref()
+        .is_some_and(|runtime| runtime.role() == NetworkRole::Client)
+    {
+        // `active_company` is part of the canonical GameState. A network
+        // client must not mutate it locally until company ownership is part
+        // of an authoritative protocol command.
+        return;
+    }
     for (interaction, button) in &buttons {
         if *interaction != Interaction::Pressed {
             continue;

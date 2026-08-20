@@ -126,6 +126,14 @@ impl NetworkRuntime {
             let _ = g.broadcast_heartbeat(tick);
         }
     }
+
+    pub(crate) fn report_desync(&self, tick: u64, expected_hash: u64, actual_hash: u64) {
+        if let Some(client) = &self.client
+            && let Ok(g) = client.lock()
+        {
+            let _ = g.report_desync(tick, expected_hash, actual_hash);
+        }
+    }
 }
 
 pub struct NetworkPlugin {
@@ -298,6 +306,9 @@ fn poll_network(
             Ok(EventOutcome::Ok) => {}
             Err(msg) => {
                 status.desync = Some(msg.clone());
+                if let Some((tick, expected_hash, actual_hash)) = parse_desync_message(&msg) {
+                    net.report_desync(tick, expected_hash, actual_hash);
+                }
                 error!("network: {msg}");
             }
         }
@@ -376,6 +387,7 @@ fn handle_event(
             peer_id,
         } => {
             sim.state = GameState::load_json(snapshot_json).map_err(|e| e.to_string())?;
+            status.desync = None;
             vehicle_index.rebuild(&sim.state.vehicles);
             if let Some(fo) = failover {
                 fo.peer_id = Some(*peer_id);
@@ -422,6 +434,7 @@ fn handle_event(
                 status.desync = Some(msg.clone());
                 return Err(msg);
             }
+            status.desync = None;
             Ok(EventOutcome::Ok)
         }
         SessionEvent::Desync {
@@ -503,4 +516,34 @@ fn connect_addr_from_announce(server_addr: &str, announce_bind: &str) -> Option<
         return None;
     }
     Some(format!("{host}:{port}"))
+}
+
+fn parse_desync_message(message: &str) -> Option<(u64, u64, u64)> {
+    let mut fields = message.strip_prefix("desync tick=")?.split_whitespace();
+    let tick = fields.next()?.parse().ok()?;
+    let expected = fields.next()?.strip_prefix("expected=")?;
+    let actual = fields.next()?.strip_prefix("actual=")?;
+    Some((
+        tick,
+        u64::from_str_radix(expected.trim_start_matches("0x"), 16).ok()?,
+        u64::from_str_radix(actual.trim_start_matches("0x"), 16).ok()?,
+    ))
+}
+
+#[cfg(test)]
+mod desync_message_tests {
+    use super::parse_desync_message;
+
+    #[test]
+    fn parses_hash_mismatch_for_reporting() {
+        assert_eq!(
+            parse_desync_message("desync tick=37 expected=0x10 actual=0x2a"),
+            Some((37, 0x10, 0x2a))
+        );
+    }
+
+    #[test]
+    fn ignores_non_desync_errors() {
+        assert_eq!(parse_desync_message("network timeout"), None);
+    }
 }

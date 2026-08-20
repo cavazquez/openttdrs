@@ -397,6 +397,27 @@ fn server_thread(
                     let _ = event_tx.send(SessionEvent::Commit { seq, command });
                     i += 1;
                 }
+                Ok(Some(NetMessage::Desync {
+                    tick,
+                    expected_hash,
+                    actual_hash,
+                })) => {
+                    // El servidor no puede reparar el estado por sí solo todavía,
+                    // pero sí debe propagar el diagnóstico para que todos los peers
+                    // detengan/reconcilien la partida en vez de ocultar la divergencia.
+                    let report = NetMessage::Desync {
+                        tick,
+                        expected_hash,
+                        actual_hash,
+                    };
+                    broadcast_raw(&mut clients, &shared_peer_ids, &report);
+                    let _ = event_tx.send(SessionEvent::Desync {
+                        tick,
+                        expected_hash,
+                        actual_hash,
+                    });
+                    i += 1;
+                }
                 Ok(None | Some(NetMessage::Hello { .. })) => i += 1,
                 Ok(Some(other)) => {
                     eprintln!("openttdrs-net: unexpected from client: {other:?}");
@@ -569,6 +590,11 @@ fn configure_stream(stream: &TcpStream) -> Result<(), NetError> {
 
 enum ClientCmd {
     Propose(Command),
+    ReportDesync {
+        tick: u64,
+        expected_hash: u64,
+        actual_hash: u64,
+    },
     Shutdown,
 }
 
@@ -582,6 +608,22 @@ impl ClientSessionHandle {
     pub fn propose(&self, command: Command) -> Result<(), NetError> {
         self.cmd_tx
             .send(ClientCmd::Propose(command))
+            .map_err(|_| NetError::Closed)
+    }
+
+    /// Informa al servidor de una divergencia detectada por este peer.
+    pub fn report_desync(
+        &self,
+        tick: u64,
+        expected_hash: u64,
+        actual_hash: u64,
+    ) -> Result<(), NetError> {
+        self.cmd_tx
+            .send(ClientCmd::ReportDesync {
+                tick,
+                expected_hash,
+                actual_hash,
+            })
             .map_err(|_| NetError::Closed)
     }
 }
@@ -621,6 +663,15 @@ impl ClientSession {
 
     pub fn propose(&self, command: Command) -> Result<(), NetError> {
         self.handle.propose(command)
+    }
+
+    pub fn report_desync(
+        &self,
+        tick: u64,
+        expected_hash: u64,
+        actual_hash: u64,
+    ) -> Result<(), NetError> {
+        self.handle.report_desync(tick, expected_hash, actual_hash)
     }
 
     pub fn try_recv(&self) -> Option<SessionEvent> {
@@ -687,6 +738,22 @@ fn client_thread(
             Ok(ClientCmd::Propose(command)) => {
                 stream.set_nonblocking(false)?;
                 write_message(&mut stream, &NetMessage::Propose { command })?;
+                stream.set_nonblocking(true)?;
+            }
+            Ok(ClientCmd::ReportDesync {
+                tick,
+                expected_hash,
+                actual_hash,
+            }) => {
+                stream.set_nonblocking(false)?;
+                write_message(
+                    &mut stream,
+                    &NetMessage::Desync {
+                        tick,
+                        expected_hash,
+                        actual_hash,
+                    },
+                )?;
                 stream.set_nonblocking(true)?;
             }
             Ok(ClientCmd::Shutdown) | Err(TryRecvError::Disconnected) => return Ok(()),

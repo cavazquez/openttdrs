@@ -25,6 +25,14 @@ fn phase_message(phase: &FailoverUiPhase) -> Option<String> {
     }
 }
 
+fn status_message(status: &NetworkStatus) -> Option<String> {
+    status
+        .desync
+        .as_ref()
+        .map(|message| format!("Desincronización detectada: {message}"))
+        .or_else(|| phase_message(&status.failover_phase))
+}
+
 /// Spawnea / actualiza / despawnea el overlay según [`NetworkStatus::failover_phase`].
 pub(crate) fn sync_failover_banner(
     mut commands: Commands,
@@ -33,7 +41,7 @@ pub(crate) fn sync_failover_banner(
     mut q_banner: Query<(Entity, &mut Text), With<NetworkFailoverBannerText>>,
     q_root: Query<Entity, With<NetworkFailoverBanner>>,
 ) {
-    let Some(message) = phase_message(&status.failover_phase) else {
+    let Some(message) = status_message(&status) else {
         for entity in &q_root {
             commands.entity(entity).despawn();
         }

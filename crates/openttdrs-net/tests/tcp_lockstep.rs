@@ -147,3 +147,55 @@ fn client_propose_reaches_host() {
     }
     assert_eq!(got, Some(Command::PlaceRail(TileCoord::new(3, 3))));
 }
+
+#[test]
+fn client_desync_report_reaches_host_and_peers() {
+    let host_state = GameState::new(24, 24);
+    let snapshot = host_state.save_json().unwrap();
+    let server = match maybe_start_server("127.0.0.1:0", snapshot) {
+        Some(server) => server,
+        None => return,
+    };
+    let bind = server.local_addr().to_string();
+    thread::sleep(Duration::from_millis(50));
+
+    let reporter = match maybe_connect_client(&bind) {
+        Some(client) => client,
+        None => return,
+    };
+    let _welcome = wait_event(&reporter, Duration::from_secs(2));
+    let peer = match maybe_connect_client(&bind) {
+        Some(client) => client,
+        None => return,
+    };
+    let _welcome = wait_event(&peer, Duration::from_secs(2));
+
+    reporter.report_desync(37, 0x10, 0x2a).unwrap();
+
+    let start = Instant::now();
+    let mut host_report = false;
+    while start.elapsed() < Duration::from_secs(2) {
+        if let Some(SessionEvent::Desync {
+            tick,
+            expected_hash,
+            actual_hash,
+        }) = server.try_recv()
+        {
+            assert_eq!((tick, expected_hash, actual_hash), (37, 0x10, 0x2a));
+            host_report = true;
+            break;
+        }
+        thread::sleep(Duration::from_millis(5));
+    }
+    assert!(host_report, "el servidor debe recibir el diagnóstico");
+
+    let peer_report = wait_event(&peer, Duration::from_secs(2));
+    assert!(matches!(
+        peer_report,
+        SessionEvent::Desync {
+            tick: 37,
+            expected_hash: 0x10,
+            actual_hash: 0x2a,
+        }
+    ));
+}

@@ -198,13 +198,21 @@ pub fn max_ortho_scale_for_window(window_width: f32, window_height: f32) -> f32 
 #[must_use]
 pub fn clamp_ortho_scale(
     scale: f32,
-    _window_width: f32,
-    _window_height: f32,
-    _large_map_cull: bool,
+    window_width: f32,
+    window_height: f32,
+    large_map_cull: bool,
 ) -> f32 {
-    // El culling dinámico sigue siendo útil hasta `Out2x`; desde `Out4x` el
-    // renderer entra en overview y deja de crear cientos de miles de sprites.
-    scale.clamp(MIN_ORTHO_SCALE, ABSOLUTE_MAX_ORTHO_SCALE)
+    let scale = scale.clamp(MIN_ORTHO_SCALE, ABSOLUTE_MAX_ORTHO_SCALE);
+    if !large_map_cull || scale >= OVERVIEW_MIN_ORTHO_SCALE {
+        return scale;
+    }
+
+    // Antes de `Out4x` el renderer materializa sprites individuales y debe
+    // respetar el presupuesto de chunks. Al entrar en `Out4x`/`Out8x` cambia a
+    // `spawn_overview_tiles_in_bounds`, que usa una muestra agregada; no
+    // limitar esos niveles es lo que permite el alejamiento máximo de
+    // OpenTTD en mapas grandes.
+    scale.min(max_ortho_scale_for_window(window_width, window_height))
 }
 
 #[must_use]
@@ -454,7 +462,9 @@ mod tests {
     }
 
     #[test]
-    fn clamp_ortho_scale_respects_large_map_cap() {
+    fn clamp_ortho_scale_caps_detail_but_keeps_overview_levels() {
+        let detail_cap = max_ortho_scale_for_window(1280.0, 720.0);
+        assert_eq!(clamp_ortho_scale(3.95, 1280.0, 720.0, true), detail_cap);
         assert_eq!(
             clamp_ortho_scale(20.0, 1280.0, 720.0, true),
             ABSOLUTE_MAX_ORTHO_SCALE

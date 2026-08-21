@@ -7,7 +7,7 @@
 [![CI](https://github.com/cavazquez/openttdrs/actions/workflows/ci.yml/badge.svg)](https://github.com/cavazquez/openttdrs/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/cavazquez/openttdrs/graph/badge.svg)](https://codecov.io/gh/cavazquez/openttdrs)
 [![Licencia GPL-2.0-only](https://img.shields.io/badge/licencia-GPL--2.0--only-blue.svg)](LICENSE)
-[![Rust MSRV](https://img.shields.io/badge/rust-1.97%2B-orange.svg)](https://doc.rust-lang.org/stable/releases.html)
+[![Rust MSRV](https://img.shields.io/badge/rust-1.98%2B-orange.svg)](https://doc.rust-lang.org/stable/releases.html)
 [![Bevy](https://img.shields.io/badge/Bevy-0.19.0-C659D4.svg)](https://bevyengine.org/)
 [![Inspiración OpenTTD](https://img.shields.io/badge/inspiración-OpenTTD-5a3.svg)](https://www.openttd.org/)
 
@@ -254,7 +254,7 @@ Detalle de planos/chunks: [docs/MAPA_Y_FERROCARRIL.md](docs/MAPA_Y_FERROCARRIL.m
 
 | Tecnología | Rol |
 |------------|-----|
-| Rust 2024 (MSRV **1.97**) | Workspace `openttdrs-core` + `openttdrs-client` + `openttdrs-net` |
+| Rust 2024 (MSRV **1.98**) | Workspace `openttdrs-core` + `openttdrs-client` + `openttdrs-net` |
 | Bevy **0.19** | ECS, ventana, render 2D, UI |
 | serde / JSON | Save/load del core |
 | Python 3 + Pillow | `parse_sav`, goldens, recorte OpenGFX |

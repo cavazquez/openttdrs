@@ -538,7 +538,7 @@ fn apply_window_resolution_from_preferences(
 #[allow(clippy::unwrap_used)]
 mod tests {
     use bevy::ecs::system::RunSystemOnce;
-    use bevy::prelude::*;
+    use bevy::ecs::world::World;
 
     use super::*;
 

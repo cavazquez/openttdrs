@@ -166,7 +166,8 @@ fn load_tray_ksni_icon(path: &Path) -> Option<ksni::Icon> {
     let (width, height) = image.dimensions();
     let mut data = image.into_raw();
     // StatusNotifierItem espera ARGB; `image` entrega RGBA.
-    for pixel in data.chunks_exact_mut(4) {
+    let (pixels, _) = data.as_chunks_mut::<4>();
+    for pixel in pixels {
         pixel.rotate_right(1);
     }
     Some(ksni::Icon {

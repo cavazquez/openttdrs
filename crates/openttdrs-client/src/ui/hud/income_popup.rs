@@ -18,7 +18,7 @@ pub(crate) fn spawn_income_popups(
     hud_font: Res<HudUiFont>,
     mut commands: Commands,
 ) {
-    let popups: Vec<_> = sim.state.runtime.pending_income_popups.drain(..).collect();
+    let popups = std::mem::take(&mut sim.state.runtime.pending_income_popups);
     // SFX de ingreso vía SimEvent::Income (SimEventsPlugin), no pending_income_ping.
     let map = &sim.state.map;
     for popup in popups {

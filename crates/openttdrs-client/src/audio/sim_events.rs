@@ -372,7 +372,7 @@ mod tests {
             at: TileCoord::new(0, 0),
         });
         assert_eq!(pending.0.len(), 1);
-        let drained: Vec<_> = pending.0.drain(..).collect();
+        let drained = std::mem::take(&mut pending.0);
         assert_eq!(drained.len(), 1);
         assert!(pending.0.is_empty());
     }

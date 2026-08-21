@@ -3461,9 +3461,7 @@ mod tests {
         assert!(!def.matches_zones(centre_toy));
 
         // Sin vanilla en el pool: overrides ocupan todos los ids 0..109.
-        for slot in &mut state.house_overrides {
-            *slot = def_id;
-        }
+        state.house_overrides.fill(def_id);
         let town = Town {
             pos: crate::map::TileCoord::new(10, 10),
             num_houses: 48,

@@ -167,7 +167,8 @@ pub fn recolor_structure_rgba8(buf: &mut [u8], palette: BridgeStructurePalette) 
         return;
     }
     let table = remap_table_cached(palette);
-    for px in buf.chunks_exact_mut(4) {
+    let (pixels, _) = buf.as_chunks_mut::<4>();
+    for px in pixels {
         if px[3] == 0 {
             continue;
         }

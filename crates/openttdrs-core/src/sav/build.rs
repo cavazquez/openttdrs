@@ -146,7 +146,8 @@ fn map2_planes(
         // tipo/variante de señal en MP_RAILWAY): byte alto primero.
         let mut lo = zeroed_buffer(expected, "plano bajo MAP2")?;
         let mut hi = zeroed_buffer(expected, "plano alto MAP2")?;
-        for (index, bytes) in data[..expected_twice].chunks_exact(2).enumerate() {
+        let (pairs, _) = data[..expected_twice].as_chunks::<2>();
+        for (index, bytes) in pairs.iter().enumerate() {
             hi[index] = bytes[0];
             lo[index] = bytes[1];
         }

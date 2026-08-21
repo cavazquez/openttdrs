@@ -197,7 +197,7 @@ jobs:
       - name: Instalar Rust fijado
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.97.1
+          toolchain: 1.98.0
           targets: ${{ matrix.target }}
 
       - name: Caché de compilación sccache

@@ -167,7 +167,8 @@ pub fn build_remap_table(target: CompanyColour) -> HashMap<[u8; 3], [u8; 3]> {
 /// Recolorea un buffer RGBA8 in-place.
 pub fn recolor_rgba8(buf: &mut [u8], target: CompanyColour) {
     let table = remap_table_cached(target);
-    for px in buf.chunks_exact_mut(4) {
+    let (pixels, _) = buf.as_chunks_mut::<4>();
+    for px in pixels {
         if px[3] == 0 {
             continue;
         }

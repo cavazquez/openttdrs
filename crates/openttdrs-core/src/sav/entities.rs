@@ -710,6 +710,13 @@ pub struct SavVehicle {
     pub current_order_time: u32,
     /// Retraso acumulado del horario (`lateness_counter`).
     pub timetable_lateness: i32,
+    /// Bits `Vehicle::vehicle_flags` relevantes para el runtime de horarios.
+    ///
+    /// `OpenTTD` conserva, entre otros, `TimetableStarted` (bit 3) y
+    /// `AutofillTimetable` (bit 4) en el mismo struct común de `VEHS`.
+    /// Mantener el bitset crudo permite round-trippear flags futuros sin
+    /// confundirlos con los tiempos numéricos del horario.
+    pub vehicle_flags: u16,
     /// Índice de la lista `ORDL` referenciada por `VEHS.common.orders`.
     ///
     /// Se conserva para reconstruir shared orders al hidratar el `GameState`.
@@ -919,6 +926,10 @@ pub(crate) fn vehicles_from_chunks(
                     .and_then(|v| i32::try_from(v).ok())
                     .unwrap_or(0)
             });
+        let vehicle_flags = record_get(common, "vehicle_flags")
+            .and_then(SlValue::as_u64)
+            .and_then(|value| u16::try_from(value).ok())
+            .unwrap_or(0);
         let vehstatus = record_get(common, "vehstatus")
             .and_then(SlValue::as_u64)
             .unwrap_or(0);
@@ -953,6 +964,7 @@ pub(crate) fn vehicles_from_chunks(
             timetable_start,
             current_order_time,
             timetable_lateness,
+            vehicle_flags,
             order_list_id,
             kind,
             pos,

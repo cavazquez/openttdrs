@@ -622,7 +622,7 @@ Veintidós entradas, **todas cerradas** (P1.1 —con P0.3— a P1.22).
   `autofill_sets_travel_ticks_on_arrival`, `lateness_increases_when_late`,
   `timetable_start_offsets_lateness_on_first_arrival`.
 - **Pendiente** — reparto automático entre vehículos de órdenes compartidas (`timetable_all`);
-  import de `timetable_start` desde chunk `VEHS`.
+  muestras de autofill/espera activa y flags de servicio/unbunching del chunk `VEHS`.
 
 #### P1.22 — Rama asintótica del factor de tiempo y fluctuaciones · hecho
 
@@ -2171,9 +2171,10 @@ subconjunto ejecutado por el core (construcción, pathfinding, averías,
 subsidios, desastres, autoridad, inflación/recesiones y unidades de tiempo). El historial de
 noticias propio queda en JSON (no es un pool nativo de OpenTTD `.sav`). `ORDL`
 preserva los campos básicos por orden —incluidos wait/travel/max-speed— y
-`VEHS.common` conserva inicio/tiempo/atraso de timetable además de la identidad
-de shared orders; todavía falta el estado nativo completo de autofill/flags de
-horarios. Tranvías y
+`VEHS.common` conserva inicio/tiempo/atraso de timetable, los bits modelados de
+`TimetableStarted`/`AutofillTimetable` y la identidad de shared orders; todavía
+falta el estado nativo completo de autofill (muestras), espera activa y flags de
+servicio/unbunching. Tranvías y
 rotores de helicóptero no se exportan.
 
 Para un estado nativo completo elegir `.json`. Para el subconjunto interoperable

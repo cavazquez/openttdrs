@@ -843,10 +843,12 @@ impl GameState {
             if kind == VehicleKind::Aircraft {
                 let mut vehicle = Vehicle::new(id, kind, v.pos, v.pos);
                 vehicle.group_id = v.group_id;
-                vehicle.timetable_start = u32::try_from(v.timetable_start.min(u64::from(u32::MAX)))
-                    .unwrap_or(u32::MAX);
+                vehicle.timetable_start =
+                    u32::try_from(v.timetable_start.min(u64::from(u32::MAX))).unwrap_or(u32::MAX);
                 vehicle.current_order_time = v.current_order_time;
                 vehicle.timetable_lateness = v.timetable_lateness;
+                vehicle.timetable_started = v.vehicle_flags & (1 << 3) != 0;
+                vehicle.timetable_autofill = v.vehicle_flags & (1 << 4) != 0;
                 vehicle.running = v.running;
                 vehicle.cur_speed = v.cur_speed;
                 vehicle.subspeed = v.subspeed;
@@ -915,10 +917,12 @@ impl GameState {
             }
             let mut vehicle = Vehicle::new(id, kind, v.pos, v.pos);
             vehicle.group_id = v.group_id;
-            vehicle.timetable_start = u32::try_from(v.timetable_start.min(u64::from(u32::MAX)))
-                .unwrap_or(u32::MAX);
+            vehicle.timetable_start =
+                u32::try_from(v.timetable_start.min(u64::from(u32::MAX))).unwrap_or(u32::MAX);
             vehicle.current_order_time = v.current_order_time;
             vehicle.timetable_lateness = v.timetable_lateness;
+            vehicle.timetable_started = v.vehicle_flags & (1 << 3) != 0;
+            vehicle.timetable_autofill = v.vehicle_flags & (1 << 4) != 0;
             vehicle.running = v.running;
             vehicle.progress = v.progress;
             vehicle.cur_speed = v.cur_speed;
@@ -1401,6 +1405,7 @@ mod tests {
                     timetable_start: 0,
                     current_order_time: 0,
                     timetable_lateness: 0,
+                    vehicle_flags: 0b1_1000,
                     order_list_id: None,
                     kind: SavVehicleKind::Train,
                     pos: crate::TileCoord::new(5, 5),
@@ -1432,6 +1437,7 @@ mod tests {
                     timetable_start: 0,
                     current_order_time: 0,
                     timetable_lateness: 0,
+                    vehicle_flags: 0,
                     order_list_id: None,
                     kind: SavVehicleKind::RoadVehicle,
                     pos: crate::TileCoord::new(6, 6),
@@ -1463,6 +1469,7 @@ mod tests {
                     timetable_start: 0,
                     current_order_time: 0,
                     timetable_lateness: 0,
+                    vehicle_flags: 0,
                     order_list_id: None,
                     kind: SavVehicleKind::RoadVehicle,
                     pos: crate::TileCoord::new(7, 7),
@@ -1494,6 +1501,7 @@ mod tests {
                     timetable_start: 0,
                     current_order_time: 0,
                     timetable_lateness: 0,
+                    vehicle_flags: 0,
                     order_list_id: None,
                     kind: SavVehicleKind::Train,
                     pos: crate::TileCoord::new(5, 5),
@@ -1556,6 +1564,8 @@ mod tests {
         assert_eq!(state.vehicles[1].kind, VehicleKind::Bus);
         assert_eq!(state.vehicles[2].kind, VehicleKind::Truck);
         assert_eq!(state.vehicles[0].next_unit, Some(3));
+        assert!(state.vehicles[0].timetable_started);
+        assert!(state.vehicles[0].timetable_autofill);
         assert_eq!(state.vehicles[3].prev_unit, Some(0));
         assert_eq!(state.map.get_kind(forest_gap), Some(TileKind::Forest));
         let imported_airport = state

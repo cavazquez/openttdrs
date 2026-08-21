@@ -353,13 +353,16 @@ fn interpolated_noise(x: f64, y: f64, prime: i32, seed: u32) -> f64 {
 
 fn perlin_coast_noise_2d(x: f64, y: f64, p: f64, prime: i32, seed: u32) -> f64 {
     const OCTAVES: i32 = 6;
-    const INITIAL_FREQUENCY: f64 = (1 << OCTAVES) as f64;
     let mut total = 0.0;
     let mut max_value = 0.0;
-    let mut frequency = 1.0 / INITIAL_FREQUENCY;
+    // `tgp.cpp` starts at frequency 1 and divides the coordinates by 64;
+    // no se debe aplicar ambas escalas (la versión anterior hacía ruido
+    // 64× demasiado suave en las costas).
+    let mut frequency = 1.0;
     let mut amplitude = 1.0;
     for _ in 0..OCTAVES {
-        total += interpolated_noise(x * frequency, y * frequency, prime, seed) * amplitude;
+        total += interpolated_noise((x * frequency) / 64.0, (y * frequency) / 64.0, prime, seed)
+            * amplitude;
         max_value += amplitude;
         frequency *= 2.0;
         amplitude *= p;
@@ -368,31 +371,44 @@ fn perlin_coast_noise_2d(x: f64, y: f64, p: f64, prime: i32, seed: u32) -> f64 {
 }
 
 fn height_map_coast_lines(hm: &mut HeightMap, water_borders: BorderFlags, seed: u32) {
-    let smallest = hm.size_x.min(hm.size_y);
-    let map_ratio = hm.size_x.max(hm.size_y) / smallest.max(1);
-    let jagged_distance = (12 + (smallest * smallest / 4096) + map_ratio.min(16)).min(64);
-    let smooth_distance = (smallest / 32).min(32);
-
-    let get_depth = |x: i32, p1: i32, p2: i32, p3: i32| -> i32 {
-        let xf = f64::from(x);
-        2 + (smooth_distance as f64 * (1.0 + perlin_coast_noise_2d(xf, xf, 0.2, p1, seed))) as i32
-            + (jagged_distance as f64 * perlin_coast_noise_2d(xf, xf, 0.5, p2, seed).abs()) as i32
-            + (8.0 * perlin_coast_noise_2d(xf, xf, 0.8, p3, seed).abs()) as i32
-    };
-
+    // OpenTTD usa el exponente `map_x/map_y` (6 para un mapa 64×64), no la
+    // cantidad de teselas, para calcular la profundidad mínima de costa.
+    let smallest = map_log2(hm.size_x.min(hm.size_y)) as i32;
+    let margin = 4.0;
+    let base = (smallest * smallest / 64) as f64;
     for y in 0..=hm.size_y {
         if water_borders.test(BorderFlags::NORTH_EAST) {
-            let depth = get_depth(y, 67, 179, 53);
-            for x in 0..depth {
+            let mut max_x =
+                ((perlin_coast_noise_2d(f64::from(hm.size_y - y), f64::from(y), 0.9, 53, seed)
+                    + 0.25)
+                    * 5.0
+                    + (perlin_coast_noise_2d(f64::from(y), f64::from(y), 0.35, 179, seed) + 1.0)
+                        * 12.0)
+                    .abs();
+            max_x = (base + max_x).max(base + margin - max_x);
+            if smallest < 8 && max_x > 5.0 {
+                max_x /= 1.5;
+            }
+            for x in 0..max_x as i32 {
                 if x <= hm.size_x {
                     *hm.height_mut(x, y) = 0;
                 }
             }
         }
         if water_borders.test(BorderFlags::SOUTH_WEST) {
-            let depth = get_depth(y, 199, 67, 101);
+            let mut max_x =
+                ((perlin_coast_noise_2d(f64::from(hm.size_y - y), f64::from(y), 0.85, 101, seed)
+                    + 0.3)
+                    * 6.0
+                    + (perlin_coast_noise_2d(f64::from(y), f64::from(y), 0.45, 67, seed) + 0.75)
+                        * 8.0)
+                    .abs();
+            max_x = (base + max_x).max(base + margin - max_x);
+            if smallest < 8 && max_x > 5.0 {
+                max_x /= 1.5;
+            }
             let mut x = hm.size_x;
-            while x > (hm.size_x - 1 - depth) {
+            while f64::from(x) > f64::from(hm.size_x - 1) - max_x {
                 *hm.height_mut(x, y) = 0;
                 if x == 0 {
                     break;
@@ -404,17 +420,49 @@ fn height_map_coast_lines(hm: &mut HeightMap, water_borders: BorderFlags, seed: 
 
     for x in 0..=hm.size_x {
         if water_borders.test(BorderFlags::NORTH_WEST) {
-            let depth = get_depth(x, 179, 211, 167);
-            for y in 0..depth {
+            let mut max_y =
+                ((perlin_coast_noise_2d(f64::from(x), f64::from(hm.size_y / 2), 0.9, 167, seed)
+                    + 0.4)
+                    * 5.0
+                    + (perlin_coast_noise_2d(
+                        f64::from(x),
+                        f64::from(hm.size_y / 3),
+                        0.4,
+                        211,
+                        seed,
+                    ) + 0.7)
+                        * 9.0)
+                    .abs();
+            max_y = (base + max_y).max(base + margin - max_y);
+            if smallest < 8 && max_y > 5.0 {
+                max_y /= 1.5;
+            }
+            for y in 0..max_y as i32 {
                 if y <= hm.size_y {
                     *hm.height_mut(x, y) = 0;
                 }
             }
         }
         if water_borders.test(BorderFlags::SOUTH_EAST) {
-            let depth = get_depth(x, 101, 193, 71);
+            let mut max_y =
+                ((perlin_coast_noise_2d(f64::from(x), f64::from(hm.size_y / 3), 0.85, 71, seed)
+                    + 0.25)
+                    * 6.0
+                    + (perlin_coast_noise_2d(
+                        f64::from(x),
+                        f64::from(hm.size_y / 3),
+                        0.35,
+                        193,
+                        seed,
+                    ) + 0.75)
+                        * 12.0)
+                    .abs();
+            max_y = (base + max_y).max(base + margin - max_y);
+            if smallest < 8 && max_y > 5.0 {
+                max_y /= 1.5;
+            }
             let mut y = hm.size_y;
-            while y > (hm.size_y - 1 - depth) {
+            while f64::from(y) > f64::from(hm.size_y - 1) - max_y {
                 *hm.height_mut(x, y) = 0;
                 if y == 0 {
                     break;
@@ -432,7 +480,8 @@ fn height_map_smooth_coast_in_direction(
     dir_x: i32,
     dir_y: i32,
 ) {
-    const MAX_COAST_DIST_FROM_EDGE: i32 = 100;
+    // Igual que `HeightMapSmoothCoastInDirection` en OpenTTD/tgp.cpp.
+    const MAX_COAST_DIST_FROM_EDGE: i32 = 35;
     const MAX_COAST_SMOOTH_DEPTH: i32 = 35;
 
     let mut x = org_x;
@@ -628,10 +677,11 @@ fn height_map_normalize(hm: &mut HeightMap, cfg: &WorldGenConfig, rng: &mut Rand
 
     height_map_adjust_water_level(hm, water_percent, h_max_new);
 
-    let water_borders = if cfg.island {
-        BorderFlags::ALL
-    } else {
-        BorderFlags::NONE
+    let water_borders = match cfg.water_borders {
+        Some(0x10) => BorderFlags((rng.next() & 0x0F) as u8),
+        Some(mask) => BorderFlags(mask & 0x0F),
+        None if cfg.island => BorderFlags::ALL,
+        None => BorderFlags::NONE,
     };
     let seed = cfg.seed as u32;
 
@@ -655,6 +705,12 @@ fn height_map_normalize(hm: &mut HeightMap, cfg: &WorldGenConfig, rng: &mut Rand
 pub(super) fn generate_tgp_heights(map_w: i32, map_h: i32, config: &WorldGenConfig) -> Vec<u8> {
     let mut hm = HeightMap::new(map_w, map_h);
     let mut rng = Randomizer::new(config.seed as u32);
+    for _ in 0..config.startup_rng_draws {
+        // `_GenerateWorld` llama a `StartupEconomy` tras sembrar `_random`;
+        // esa rutina consume exactamente un `Random()` antes de entrar en
+        // `GenerateTerrainPerlin`.
+        let _ = rng.next();
+    }
     height_map_generate(&mut hm, config, &mut rng);
     height_map_normalize(&mut hm, config, &mut rng);
 

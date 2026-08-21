@@ -228,6 +228,13 @@ pub struct WorldGenConfig {
     pub sea_level: u8,
     /// Bordes del mapa con costa esculpida (modo isla / `water_borders` = todos).
     pub island: bool,
+    /// Máscara explícita de `water_borders` de `OpenTTD`.
+    ///
+    /// `None` conserva la semántica histórica de `island` (todos o ningún
+    /// borde). Cuando se especifica, los cuatro bits bajos representan
+    /// `NE|SE|SW|NW`; el valor `0x10` solicita el modo `Random` de `OpenTTD` y
+    /// consume el siguiente número del RNG de generación.
+    pub water_borders: Option<u8>,
     /// Amplitud legado (cliente 3/6/10); se sincroniza con [`Self::terrain_type`].
     pub height_span: u8,
     /// Relieve TGP (`difficulty.terrain_type`).
@@ -242,6 +249,12 @@ pub struct WorldGenConfig {
     pub snow_coverage: u8,
     /// % de tierra con desierto en trópico (`game_creation.desert_coverage`).
     pub desert_coverage: u8,
+    /// Cantidad de ríos (`game_creation.amount_of_rivers`, 0..=3).
+    pub amount_of_rivers: u8,
+    /// Cantidad de sorteos consumidos antes de TGP, como una partida nueva de
+    /// `OpenTTD` (`StartupEconomy` consume uno). Se deja en cero por defecto
+    /// para conservar la API histórica del generador embebido.
+    pub startup_rng_draws: u8,
 }
 
 impl Default for WorldGenConfig {
@@ -251,6 +264,7 @@ impl Default for WorldGenConfig {
             seed: 0,
             sea_level: 1,
             island: false,
+            water_borders: None,
             height_span: TerrainType::Hilly.to_height_span(),
             terrain_type: TerrainType::Hilly,
             quantity_sea_lakes: QuantitySeaLakes::VeryLow,
@@ -258,6 +272,8 @@ impl Default for WorldGenConfig {
             variety: 0,
             snow_coverage: DEF_SNOW_COVERAGE,
             desert_coverage: DEF_DESERT_COVERAGE,
+            amount_of_rivers: 2,
+            startup_rng_draws: 0,
         }
     }
 }

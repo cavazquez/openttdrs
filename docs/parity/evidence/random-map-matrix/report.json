@@ -26,9 +26,11 @@
     "exact_cases": 0,
     "divergent_cases": 15,
     "error_cases": 0,
-    "every_case_changed_all_tiles": true,
-    "every_case_changed_all_blocks4": true,
-    "status": "open-product-gap"
+    "min_changed_tiles": 3916,
+    "max_changed_tiles": 260588,
+    "changed_blocks4_cases": 15,
+    "status": "open-product-gap",
+    "note": "La generación Rust ya incluye población inicial; aún divergen ríos, secuencia de población, objetos, árboles y m1..m8."
   },
   "comparison": {
     "fields": ["height", "type", "m1", "m2", "m3", "m4", "m5", "m6", "m7", "m8"],

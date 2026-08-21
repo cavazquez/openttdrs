@@ -134,6 +134,28 @@ pub fn apply_world_gen(
 
     mark_water_coasts(map, map_w, map_h, 0, preserve);
     carve_rivers(map, config, map_w, map_h, preserve)?;
+
+    // OpenTTD materializa MP_VOID en los cuatro bordes cuando
+    // `freeform_edges` está habilitado (el valor predeterminado de una
+    // partida nueva). Antes de este paso el generador Rust dejaba agua/suelo
+    // válido en esos índices, haciendo divergir incluso los mapas planos.
+    let last_x = map_w.saturating_sub(1);
+    let last_y = map_h.saturating_sub(1);
+    for y in 0..map_h {
+        for x in 0..map_w {
+            if preserve.iter().any(|r| r.contains(x, y)) {
+                continue;
+            }
+            if x == 0 || y == 0 || x == last_x || y == last_y {
+                let c = TileCoord::new(x, y);
+                map.set_height(c, 0)?;
+                map.set_kind(c, TileKind::Void)?;
+                map.set_mapt_m5(c, 0x70, 0)?;
+                map.set_m1(c, 0)?;
+                map.set_m2(c, 0)?;
+            }
+        }
+    }
     Ok(())
 }
 

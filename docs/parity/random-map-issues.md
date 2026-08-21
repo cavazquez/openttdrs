@@ -10,7 +10,13 @@ tiene un criterio verificable y apunta a la evidencia; no se declaran como
 | **RMAP-001** | Generar una matriz progresiva de mapas aleatorios (64² → 512²) con semillas deterministas y artefactos aislados. | **Cerrado** | `scripts/random_map_parity.py`, matriz 64:8/128:4/256:2/512:1 y tests en `scripts/test_random_map_parity.py`. La corrida contiene 15 casos sin errores. |
 | **RMAP-002** | Comparar el mapa generado por OpenTTD con el mapa que abre `openttdrs`, tesela por tesela y por bloques 4×4. | **Cerrado** | Hook `OPENTTDRS_RANDOM_MAP_*` + `world_raw_dumper` sobre el `.sav` real: 15/15 exactos, 0 teselas distintas y 0 bloques 4×4 distintos. |
 | **RMAP-003** | Evitar que una imagen raster enorme o el escalado oculte divergencias del mapa. | **Cerrado** | La comparación primaria no rasteriza: valida 10 campos por tesela, cuenta diferencias y localiza bloques 4×4. La captura queda sólo como diagnóstico secundario. |
-| **RMAP-004** | Reproducir el mapa aleatorio de OpenTTD con el mismo seed desde el generador procedural Rust. | **Abierto (P1)** | En la matriz actual 0/15 casos son exactos; 15/15 cambian 100% de teselas y 100% de bloques 4×4. Requiere portar/alinear el algoritmo de `genworld`, parámetros, RNG, costas, alturas, agua y campos `m1..m8`; no se puede cerrar con ajustes de renderer o del lector SAV. |
+| **RMAP-004** | Reproducir el mapa aleatorio de OpenTTD con el mismo seed desde el generador procedural Rust. | **Abierto (P1, avance parcial)** | La portabilidad de TGP/RNG, costas, `water_borders`, bordes `MP_VOID`, conteo de ríos y la etapa pueblos/industrias ya está en el generador. En la corrida local de 15 casos, el cargador sigue exacto 15/15; el generador mismo-seed queda 0/15 exacto, con 3.916–260.588 teselas distintas por caso y todos los bloques 4×4 afectados. El residual es la secuencia/algoritmo de ríos y la paridad de `GenerateTowns`, `GenerateIndustries`, `GenerateObjects`, `GenerateTrees` y los campos `m1..m8`; no se cierra con ajustes de renderer o del lector SAV. |
+
+El avance de código de RMAP-004 deja un contrato reproducible para aislar
+terreno: `OPENTTDRS_GENERATE_POPULATION=0` omite pueblos/industrias y
+`OPENTTDRS_WATER_BORDERS` permite fijar la máscara de costas. La comparación
+completa continúa usando la configuración de partida nueva (población
+activada por defecto), para no confundir un mapa jugable con un heightmap.
 
 ## Nota sobre issues remotos
 

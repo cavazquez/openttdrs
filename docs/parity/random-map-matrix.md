@@ -63,19 +63,23 @@ convertirse en gate de release.
 | 128×128 | 4 | 16.384 | 1.024 | **4/4 exactos** | 0/4 exactos; 4/4 divergen |
 | 256×256 | 2 | 65.536 | 4.096 | **2/2 exactos** | 0/2 exactos; 2/2 divergen |
 | 512×512 | 1 | 262.144 | 16.384 | **1/1 exacto** | 0/1 exacto; 1/1 diverge |
-| **Total** | **15** | — | — | **15/15; 0 teselas y 0 bloques cambiados** | **0/15; 15/15 cambian el 100% de las teselas y bloques** |
+| **Total** | **15** | — | — | **15/15; 0 teselas y 0 bloques cambiados** | **0/15; 15/15 divergen; 3.916–260.588 teselas distintas por caso; 15/15 bloques completos afectados** |
 
 La divergencia del generador aparece ya en la primera tesela del caso 64×64
 (altura y tipo distintos) y no es un problema de resolución de la imagen:
-afecta al estado lógico del mapa. El generador actual (`world_gen` TGP/Perlin)
-es una implementación propia; aún no es una reproducción bit a bit de
-`GenerateLandscape`/`genworld` de OpenTTD.
+afecta al estado lógico del mapa. El generador Rust ahora porta la escala TGP,
+el RNG previo a la normalización, las costas de OpenTTD, `water_borders`, los
+bordes `MP_VOID`, el conteo de ríos y la etapa inicial de pueblos/industrias.
+Eso corrigió la causa gruesa (el resultado ya no es un heightmap sin población),
+pero aún no es una reproducción bit a bit de `GenerateLandscape`/`genworld`:
+quedan los ríos y la secuencia exacta de pueblos, industrias, objetos, árboles
+y sus bytes `m1..m8`.
 
 ## Estado e issues
 
 El registro de trabajo, con criterios de cierre y estado actual, está en
 [`random-map-issues.md`](random-map-issues.md). La infraestructura de
-generación, exportación, carga y comparación ya está completada. El único gap
-de producto descubierto por esta matriz es la **equivalencia del generador con
-el mismo seed**; no se debe marcar como resuelto mientras el resultado lógico
+generación, exportación, carga y comparación ya está completada. RMAP-004 sigue
+siendo el único gap de producto de esta matriz: la **equivalencia del generador
+con el mismo seed**. No se marca como resuelto mientras el resultado lógico
 siga divergente.

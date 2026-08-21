@@ -9,7 +9,10 @@ use openttdrs_core::sav;
 use openttdrs_core::world_raw::{
     WorldRawContext, WorldRawMetadata, WorldRawRegion, sha256_hex, write_world_raw_jsonl,
 };
-use openttdrs_core::{Climate, GameState, Map, TerrainType, WorldGenConfig, apply_world_gen};
+use openttdrs_core::{
+    Climate, GameState, Map, PopulationGenConfig, TerrainType, WorldGenConfig,
+    apply_population_gen, apply_world_gen,
+};
 
 #[derive(Debug, Clone, Copy)]
 enum Stage {
@@ -59,6 +62,8 @@ fn print_usage() {
            --tile x,y [--radius N]          tesela, opcionalmente con contexto\n\
            --openttd-commit SHA             manifiesto del oráculo para metadata\n\
          \n\
+         `--generate` incluye pueblos e industrias por defecto; usar\n\
+         `OPENTTDRS_GENERATE_POPULATION=0` para comparar sólo terreno.\n\
          Sin filtro exporta el mapa completo en orden y * width + x."
     );
 }
@@ -296,14 +301,48 @@ fn run(args: &Args) -> Result<(), String> {
             seed,
             sea_level: 1,
             // Defaults equivalentes al generador TGP de OpenTTD: relieve
-            // Flat (1), costas de agua en los cuatro bordes cuando no se
-            // habilitan bordes libres y nivel de mar muy bajo.
-            island: true,
+            // Flat (1), nivel de mar muy bajo y `water_borders=Random`.
+            // Los bordes void se materializan en `apply_world_gen`, como hace
+            // `freeform_edges` al inicializar el mapa C++.
+            island: false,
+            water_borders: Some(
+                std::env::var("OPENTTDRS_WATER_BORDERS")
+                    .ok()
+                    .and_then(|value| value.parse().ok())
+                    .unwrap_or(0x10),
+            ),
+            startup_rng_draws: std::env::var("OPENTTDRS_STARTUP_RNG_DRAWS")
+                .ok()
+                .and_then(|value| value.parse().ok())
+                .unwrap_or(1),
             ..WorldGenConfig::default().with_terrain_type(TerrainType::Flat)
         };
         apply_world_gen(&mut map, &config, &[]).map_err(|error| {
             format!("falló la generación {width}x{height}, seed={seed}: {error:?}")
         })?;
+        // Una partida nueva de OpenTTD continúa con pueblos e industrias
+        // después del paisaje. Mantener esta etapa activada por defecto hace
+        // que `--generate` represente un mapa jugable; `...=0` conserva el
+        // contrato útil para aislar únicamente el terreno.
+        if std::env::var("OPENTTDRS_GENERATE_POPULATION")
+            .ok()
+            .and_then(|value| value.parse::<u8>().ok())
+            .unwrap_or(1)
+            != 0
+        {
+            let mut state = GameState::from_map(map);
+            state.world_seed = seed;
+            state.climate = Climate::Temperate;
+            apply_population_gen(
+                &mut state,
+                &PopulationGenConfig {
+                    seed,
+                    ..PopulationGenConfig::default()
+                },
+                &[],
+            );
+            map = state.map;
+        }
         let source = format!("generated:{width}x{height}:seed={seed}");
         let emitted = dump_map(
             &map,

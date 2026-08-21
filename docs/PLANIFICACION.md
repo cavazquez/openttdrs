@@ -2162,15 +2162,18 @@ resumen se limita a lo que emite el writer: `MAP*`, `DATE`, `PLYR`, `STNN`,
 avión de ala fija.
 
 Preserva `CAPY` al importar/exportar, pero todavía no crea pagos activos desde
-el runtime; faltan pools completos de compañías, `OBJS`,
+el runtime; `PLYR` conserva dinero/color por compañía, aunque faltan nombres,
+historial y flags completos; también faltan `OBJS`,
 `GSET`/`ENGN`/`SRND` completos ni ejecución de configuración NewGRF. Los chunks
 nativos `NGRF`/`ENGN`/`OBJS`/`SRND` y mappings asociados se conservan como
 passthrough al reexportar. `PATS`/`OPTS` ya conserva el
 subconjunto ejecutado por el core (construcción, pathfinding, averías,
 subsidios, desastres, autoridad, inflación/recesiones y unidades de tiempo). El historial de
 noticias propio queda en JSON (no es un pool nativo de OpenTTD `.sav`). `ORDL`
-preserva los campos básicos por orden —incluidos wait/travel/max-speed—, pero
-no la identidad de shared orders ni el estado completo de horarios. Tranvías y
+preserva los campos básicos por orden —incluidos wait/travel/max-speed— y
+`VEHS.common` conserva inicio/tiempo/atraso de timetable además de la identidad
+de shared orders; todavía falta el estado nativo completo de autofill/flags de
+horarios. Tranvías y
 rotores de helicóptero no se exportan.
 
 Para un estado nativo completo elegir `.json`. Para el subconjunto interoperable

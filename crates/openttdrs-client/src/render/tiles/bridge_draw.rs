@@ -1201,7 +1201,7 @@ fn spawn_layer(
     let pos = Vec3::new(
         ctx.iso_pos.x + shift.x + xrel + w / 2.0 + crop_x_shift,
         ctx.iso_pos.y + shift.y - yrel - h / 2.0 + z_px,
-        (ctx.tx_i32() + ctx.ty_i32()) as f32 * 0.01 + f32::from(deck_z) * 0.001 + layer,
+        crate::iso::sortable_draw_z(ctx.tx_i32(), ctx.ty_i32(), deck_z, layer),
     );
     commands.spawn((
         MapVisualLayer,

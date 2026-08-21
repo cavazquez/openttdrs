@@ -476,6 +476,40 @@ const GROUND_ROW_Z_STEP: f32 = 0.01;
 /// mismo desempate diagonal del C++.
 const GROUND_COLUMN_Z_STEP: f32 = 0.000_001;
 
+/// Las capas de un mismo `SortableSpriteStruct` son locales a su tesela. Se
+/// comprimen para que una casa, estación o fundación no salte por encima de
+/// la fila diagonal siguiente sólo porque su `layer` vale `0.4`/`0.5`.
+const LOCAL_LAYER_Z_SCALE: f32 = 0.001;
+
+/// Altura de superficie dentro del margen de una fila diagonal. El valor
+/// anterior (`0.001`) podía invertir una fila al combinar una pendiente alta
+/// con una capa urbana.
+const SORTABLE_HEIGHT_Z_SCALE: f32 = 0.000_1;
+
+#[inline]
+fn local_layer_z(layer: f32) -> f32 {
+    // Las capas negativas de agua/costa son una excepción intencional: se
+    // usan para colocar el borde entre dos filas vecinas. Las capas positivas
+    // son siempre desempates locales y se mantienen dentro de una fila.
+    if layer.is_sign_negative() {
+        layer
+    } else {
+        layer * LOCAL_LAYER_Z_SCALE
+    }
+}
+
+#[inline]
+fn diagonal_tile_z(tx: i32, ty: i32) -> f32 {
+    (tx + ty) as f32 * GROUND_ROW_Z_STEP + (ty - tx) as f32 * GROUND_COLUMN_Z_STEP
+}
+
+/// Profundidad compartida por las rutas `sortable` de terreno, edificios e
+/// infraestructura.
+#[inline]
+pub fn sortable_draw_z(tx: i32, ty: i32, height: u8, layer: f32) -> f32 {
+    diagonal_tile_z(tx, ty) + f32::from(height) * SORTABLE_HEIGHT_Z_SCALE + local_layer_z(layer)
+}
+
 /// Profundidad para el pase de suelo de OpenTTD.
 ///
 /// No incorpora `height`: la elevación cambia la posición de pantalla, pero
@@ -484,7 +518,7 @@ const GROUND_COLUMN_Z_STEP: f32 = 0.000_001;
 /// bandas aparentes sobre campos inclinados de Kale.
 #[inline]
 pub fn ground_draw_z(tx: i32, ty: i32, layer: f32) -> f32 {
-    (tx + ty) as f32 * GROUND_ROW_Z_STEP + (ty - tx) as f32 * GROUND_COLUMN_Z_STEP + layer
+    diagonal_tile_z(tx, ty) + local_layer_z(layer)
 }
 
 /// Vec3 para teselas que OpenTTD emite mediante `DrawGroundSprite`.
@@ -515,7 +549,7 @@ pub fn tile_pos_half(tx: i32, ty: i32, height: u8, layer: f32, half_h: f32) -> V
     Vec3::new(
         p.x,
         p.y - half_h + elev,
-        (tx + ty) as f32 * 0.01 + f32::from(height) * 0.001 + layer,
+        sortable_draw_z(tx, ty, height, layer),
     )
 }
 
@@ -593,7 +627,7 @@ pub fn road_stop_sprite_pos(
     Vec3::new(
         anchor.x + xrel,
         anchor.y - yrel + elev,
-        (tx + ty) as f32 * 0.01 + f32::from(base_z) * 0.001 + layer_z,
+        sortable_draw_z(tx, ty, base_z, layer_z),
     )
 }
 
@@ -696,13 +730,18 @@ pub fn overlay_pos(
     Vec3::new(
         ref_pos.x + xrel + w / 2.0,
         ref_pos.y - yrel - h / 2.0 + elev,
-        (tx + ty) as f32 * 0.01 + f32::from(height) * 0.001 + layer,
+        sortable_draw_z(tx, ty, height, layer),
     )
 }
 
 #[cfg(test)]
 mod ground_draw_order_tests {
-    use super::{GROUND_SPRITE_CENTER_X_OFFSET, TILE_HALF_H, ground_tile_pos_half, tile_pos_half};
+    use bevy::prelude::Vec2;
+
+    use super::{
+        GROUND_SPRITE_CENTER_X_OFFSET, TILE_HALF_H, ground_tile_pos_half, overlay_pos,
+        sortable_draw_z, tile_pos_half,
+    };
 
     #[test]
     fn ground_depth_matches_openttd_diagonal_scan_and_ignores_elevation() {
@@ -723,12 +762,23 @@ mod ground_draw_order_tests {
             "la altura sólo desplaza el sprite en pantalla; no reordena ground tiles"
         );
 
-        // Esta era la inversión concreta: la profundidad anterior sumaba
-        // `height * 0.001`; una tesela elevada de la fila 10 saltaba delante
-        // de la fila 11 y dejaba bandas diagonales en los campos de Kale.
-        let legacy_high = tile_pos_half(4, 6, 31, 0.0, TILE_HALF_H).z;
-        let legacy_next_row = tile_pos_half(6, 5, 0, 0.0, TILE_HALF_H).z;
-        assert!(legacy_high > legacy_next_row);
+        // La misma garantía se aplica al pase sortable: una pendiente alta
+        // no puede saltar por delante de la fila siguiente.
+        let high = tile_pos_half(4, 6, 31, 0.0, TILE_HALF_H).z;
+        let next_row_sortable = tile_pos_half(6, 5, 0, 0.0, TILE_HALF_H).z;
+        assert!(high < next_row_sortable);
+    }
+
+    #[test]
+    fn urban_layers_stay_inside_their_diagonal_row() {
+        let base = sortable_draw_z(10, 10, 0, 0.0);
+        let house = sortable_draw_z(10, 10, 0, 0.5);
+        let next_row = sortable_draw_z(11, 10, 0, 0.0);
+        assert!(base < house && house < next_row);
+
+        let lower = overlay_pos(Vec2::ZERO, 0.0, 0.0, 64.0, 32.0, 0, 0.4, 10, 10);
+        let upper = overlay_pos(Vec2::ZERO, 0.0, 0.0, 64.0, 32.0, 0, 0.5, 10, 10);
+        assert!(lower.z < upper.z);
     }
 
     #[test]

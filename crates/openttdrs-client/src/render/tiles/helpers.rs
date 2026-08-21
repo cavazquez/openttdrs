@@ -906,7 +906,7 @@ pub(crate) fn spawn_coast_debug_label(
         Transform::from_translation(Vec3::new(
             ctx.iso_pos.x - 18.0,
             ctx.iso_pos.y - TILE_HALF_H + f32::from(ctx.info.base_z) * 8.0 - 3.0,
-            (ctx.tx + ctx.ty) as f32 * 0.01 + f32::from(ctx.info.base_z) * 0.001 + 0.95,
+            crate::iso::sortable_draw_z(ctx.tx as i32, ctx.ty as i32, ctx.info.base_z, 0.95),
         )),
     ));
 }

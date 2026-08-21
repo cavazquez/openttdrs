@@ -157,7 +157,7 @@ fn tunnel_translation_from_meta(
     Vec3::new(
         iso_pos.x + xrel + w / 2.0,
         iso_pos.y - yrel - h / 2.0 + z_px,
-        (px + py) as f32 * 0.01 + f32::from(base_z) * 0.001 + layer,
+        crate::iso::sortable_draw_z(px, py, base_z, layer),
     )
 }
 
@@ -307,7 +307,7 @@ mod tests {
         let wire = tunnel_catenary_translation(190, 127, 0, 910_063, 0.085);
         assert_eq!(wire.x, -2037.0);
         assert_eq!(wire.y, -5082.0);
-        assert!((wire.z - 3.255).abs() < 0.000_01);
+        assert!((wire.z - crate::iso::sortable_draw_z(190, 127, 0, 0.085)).abs() < 0.000_01);
         assert_ne!(wire, tunnel_portal_translation(190, 127, 0, 910_063, 0.085));
         assert_eq!(
             tunnel_catenary_sprite_meta(CATENARY_ENTRANCE_SPRITE_BASE + 3),

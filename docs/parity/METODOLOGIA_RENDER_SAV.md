@@ -148,8 +148,13 @@ inserta `DrawGroundSprite` en un pase separado, barrido por `x + y` y luego
 `y - x`; la altura sólo cambia la posición en pantalla. Ahora el suelo natural
 usa esa profundidad diagonal, y `TileViewportBounds::iter_coords` reproduce el
 barrido C++ para conservar el desempate incluso si dos valores `f32` coinciden.
-Las rampas/fundaciones conservan su orden local especial y no forman parte de
-este cambio.
+Las rampas/fundaciones conservan su orden local especial. Además, las rutas
+`tile_pos_half`/`overlay_pos` comprimen sus capas positivas y la altura en el
+margen de una fila; así una casa, estación o puente no puede invertir la fila
+diagonal vecina por usar una capa local `0.4`/`0.5`. Las capas negativas de
+agua/costa siguen siendo excepciones intencionales para colocar el borde entre
+filas. La regresión `urban_layers_stay_inside_their_diagonal_row` cubre este
+contrato.
 
 La estación ferroviaria vanilla en `(226,42)` y `(227,42)` quedó explicada y
 cubierta por regresión. La tesela tiene `RailType=Monorail`; OpenTTD aplica

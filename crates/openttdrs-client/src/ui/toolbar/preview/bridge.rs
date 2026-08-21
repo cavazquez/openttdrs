@@ -51,7 +51,7 @@ fn bridge_ghost_translation(
     Vec3::new(
         iso_pos.x + shift.x + xrel + w / 2.0,
         iso_pos.y + shift.y - yrel - h / 2.0 + z_px,
-        (px + py) as f32 * 0.01 + f32::from(base_z) * 0.001 + layer,
+        crate::iso::sortable_draw_z(px, py, base_z, layer),
     )
 }
 

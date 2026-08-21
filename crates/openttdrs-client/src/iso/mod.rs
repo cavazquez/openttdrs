@@ -11,8 +11,9 @@ pub use coords::{
     RoadStopSeqGfx, full_tile_sprite_pos, full_tile_sprite_pos_half, gizmo_diamond, ground_draw_z,
     ground_tile_pos_half, iso, overlay_pos, remap_tile_offset, road_depot_build_sprite_center,
     road_depot_overlay_rel, road_depot_sprite_pos, road_stop_build_sprite_center,
-    road_stop_overlay_rel, road_stop_sprite_pos, road_vehicle_tile_anchor, tile_pos, tile_pos_half,
-    world_pos_to_rail_signal_pick, world_pos_to_tile_coord, world_pos_to_tile_fract, world_to_tile,
+    road_stop_overlay_rel, road_stop_sprite_pos, road_vehicle_tile_anchor, sortable_draw_z,
+    tile_pos, tile_pos_half, world_pos_to_rail_signal_pick, world_pos_to_tile_coord,
+    world_pos_to_tile_fract, world_to_tile,
 };
 #[allow(unused_imports)]
 pub use slope::{

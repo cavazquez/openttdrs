@@ -81,7 +81,19 @@ pub(crate) struct MapVisualLayer;
 pub(crate) struct MapLabelLod {
     pub(crate) kind: u8,
     pub(crate) id: u64,
+    /// Caja del texto normal (Out2x e inferiores).
     pub(crate) size: Vec2,
+    /// Caja de la variante pequeña (Out4x/Out8x), como en `ViewportSign`.
+    pub(crate) small_size: Vec2,
+}
+
+/// Texto normal y reducido de un cartel. OpenTTD cambia a la cadena pequeña
+/// desde `Out4x`; mantener ambas evita que el LOD sólo escale visualmente un
+/// texto largo y termine ocultando casi todos los nombres por colisión.
+#[derive(Component, Clone, Debug, PartialEq, Eq)]
+pub(crate) struct MapLabelText {
+    pub(crate) normal: String,
+    pub(crate) small: String,
 }
 
 /// Bloque espacial del mapa (16×16 teselas) para culling incremental al hacer pan.

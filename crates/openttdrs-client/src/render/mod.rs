@@ -54,7 +54,7 @@ pub(crate) use company_recolor::{
     sprite_from_company_or_asset,
 };
 pub(crate) use components::{
-    FizzyDrinkAnimFrames, IndustryPreviewCamera, LighthouseAnimFrames, MapLabelLod,
+    FizzyDrinkAnimFrames, IndustryPreviewCamera, LighthouseAnimFrames, MapLabelLod, MapLabelText,
     MapPreviewCamera, MapSpriteBatches, MapTileChunk, MapVisualLayer, PrimaryGameCamera,
     RefineryFireAnimFrames, ShoreTile, WaterAnimFrames, WaterAtlasAnimation, WaterTile,
 };

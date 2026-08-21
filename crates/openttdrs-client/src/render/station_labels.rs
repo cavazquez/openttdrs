@@ -5,11 +5,12 @@ use openttdrs_core::prelude::*;
 
 use crate::iso::{tile_pos, tile_slope_and_min_z};
 use crate::render::viewport::TileViewportBounds;
-use crate::render::{MapLabelLod, MapVisualLayer};
+use crate::render::{MapLabelLod, MapLabelText, MapVisualLayer};
 use crate::state::SimWorld;
 
 const LABEL_Z: f32 = 901.0;
 const FONT_SIZE: f32 = 9.0;
+const SMALL_FONT_SIZE: f32 = 7.0;
 const CHAR_ADVANCE: f32 = FONT_SIZE * 0.602;
 const LABEL_RAISE: f32 = 14.0;
 
@@ -100,7 +101,12 @@ pub(crate) fn spawn_station_labels(
             continue;
         }
         let (center, bg_size) = station_label_rect(map, station);
-        let label = station_display_name(station);
+        let normal_label = station_display_name(station);
+        let small_label = normal_label.clone();
+        let small_size = Vec2::new(
+            small_label.chars().count() as f32 * (SMALL_FONT_SIZE * 0.602) + 5.0,
+            SMALL_FONT_SIZE + 4.0,
+        );
         commands.spawn((
             MapVisualLayer,
             StationLabel,
@@ -108,6 +114,7 @@ pub(crate) fn spawn_station_labels(
                 kind: 2,
                 id: station_label_id(station),
                 size: bg_size,
+                small_size,
             },
             Sprite {
                 color: Color::srgba(0.12, 0.18, 0.10, 0.70),
@@ -123,8 +130,13 @@ pub(crate) fn spawn_station_labels(
                 kind: 2,
                 id: station_label_id(station),
                 size: bg_size,
+                small_size,
             },
-            Text2d::new(label),
+            MapLabelText {
+                normal: normal_label.clone(),
+                small: small_label,
+            },
+            Text2d::new(normal_label),
             TextFont {
                 font: font.clone().into(),
                 font_size: FontSize::Px(FONT_SIZE),

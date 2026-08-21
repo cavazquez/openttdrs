@@ -17,6 +17,14 @@ use super::tile_spawn::setup;
 use super::viewport::sync_map_tile_spawn_viewport;
 
 const LABEL_LOD_ZOOM: f32 = 4.0;
+/// OpenTTD usa `FS_SMALL` desde Out4x. La fuente Bevy es la misma familia,
+/// por lo que este factor reproduce su altura sin rasterizar otra textura.
+const SMALL_LABEL_SCALE: f32 = 0.70;
+
+#[must_use]
+fn label_visual_scale(camera_scale: f32, overview: bool) -> f32 {
+    camera_scale * if overview { SMALL_LABEL_SCALE } else { 1.0 }
+}
 
 fn label_rects_overlap(a_center: Vec2, a_size: Vec2, b_center: Vec2, b_size: Vec2) -> bool {
     (a_center.x - b_center.x).abs() * 2.0 < a_size.x + b_size.x
@@ -43,6 +51,9 @@ pub(crate) fn sync_map_label_lod(
         &crate::render::MapLabelLod,
         &mut Transform,
         &mut Visibility,
+        Option<&mut Text2d>,
+        Option<&crate::render::MapLabelText>,
+        Option<&mut Sprite>,
     )>,
 ) {
     let scale = cam_q
@@ -57,14 +68,26 @@ pub(crate) fn sync_map_label_lod(
     let overview = scale >= LABEL_LOD_ZOOM;
 
     let mut records = Vec::new();
-    for (entity, lod, mut transform, _) in &mut labels {
-        transform.scale = Vec3::splat(scale);
+    for (entity, lod, mut transform, _, text, text_meta, sprite) in &mut labels {
+        let visual_scale = label_visual_scale(scale, overview);
+        let base_size = if overview { lod.small_size } else { lod.size };
+        transform.scale = Vec3::splat(visual_scale);
+        if let Some(mut sprite) = sprite {
+            sprite.custom_size = Some(base_size);
+        }
+        if let (Some(mut text), Some(meta)) = (text, text_meta) {
+            let value = if overview { &meta.small } else { &meta.normal };
+            if text.0 != *value {
+                text.0.clone_from(value);
+            }
+        }
         records.push((
             entity,
             lod.kind,
             lod.id,
             transform.translation.truncate(),
-            lod.size,
+            base_size,
+            visual_scale,
         ));
     }
     if !overview {
@@ -74,17 +97,17 @@ pub(crate) fn sync_map_label_lod(
     // OpenTTD da prioridad a pueblos, luego signs y finalmente estaciones.
     // La clave estable evita que el orden de la query ECS cambie qué etiqueta
     // gana una colisión entre dos ejecuciones del mismo save.
-    records.sort_unstable_by_key(|(_, kind, id, _, _)| (*kind, *id));
+    records.sort_unstable_by_key(|(_, kind, id, _, _, _)| (*kind, *id));
     let mut accepted = Vec::new();
     let mut accepted_keys = std::collections::HashSet::new();
     let mut visible = std::collections::HashSet::new();
-    for (_, kind, id, center, size) in records.iter().copied() {
+    for (_, kind, id, center, size, visual_scale) in records.iter().copied() {
         let key = (kind, id);
         if accepted_keys.contains(&key) {
             visible.insert(key);
             continue;
         }
-        let screen_size = size * scale;
+        let screen_size = size * visual_scale;
         if accepted
             .iter()
             .all(|(other_center, other_size): &(Vec2, Vec2)| {
@@ -97,8 +120,8 @@ pub(crate) fn sync_map_label_lod(
         }
     }
 
-    for (entity, kind, id, _, _) in records {
-        if let Ok((_, _, _, mut visibility)) = labels.get_mut(entity) {
+    for (entity, kind, id, _, _, _) in records {
+        if let Ok((_, _, _, mut visibility, _, _, _)) = labels.get_mut(entity) {
             *visibility = if visible.contains(&(kind, id)) {
                 Visibility::Visible
             } else {
@@ -330,6 +353,12 @@ mod tests {
 
     use super::LoadedMapTileChunks;
     use crate::render::{TileViewportBounds, chunks_in_bounds};
+
+    #[test]
+    fn small_label_scale_matches_out_levels() {
+        assert_eq!(super::label_visual_scale(2.0, false), 2.0);
+        assert!((super::label_visual_scale(8.0, true) - 5.6).abs() < f32::EPSILON);
+    }
 
     #[test]
     fn partial_boundary_chunks_are_not_marked_reusable() {

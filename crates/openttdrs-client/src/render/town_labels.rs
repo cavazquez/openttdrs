@@ -5,12 +5,13 @@ use bevy::prelude::*;
 
 use crate::iso::{tile_pos, tile_slope_and_min_z};
 use crate::render::viewport::TileViewportBounds;
-use crate::render::{MapLabelLod, MapVisualLayer};
+use crate::render::{MapLabelLod, MapLabelText, MapVisualLayer};
 use crate::state::SimWorld;
 
 /// Z fija por encima de todos los sprites del mapa (cámara en ~1000).
 const LABEL_Z: f32 = 900.0;
 const FONT_SIZE: f32 = 10.0;
+const SMALL_FONT_SIZE: f32 = 7.0;
 /// Avance horizontal aproximado por carácter de `DejaVuSansMono` (0.602 em).
 const CHAR_ADVANCE: f32 = FONT_SIZE * 0.602;
 /// Altura del cartel sobre el suelo de la tesela, en píxeles de pantalla.
@@ -32,12 +33,16 @@ pub(crate) fn town_label_rect(
         ground.x,
         ground.y + LABEL_RAISE + f32::from(tileh & 0xF) * 2.0,
     );
-    let label = format!("{} ({})", town.name, town.population);
+    let normal_label = format!("{} ({})", town.name, town.population);
     let size = Vec2::new(
-        label.chars().count() as f32 * CHAR_ADVANCE + 6.0,
+        normal_label.chars().count() as f32 * CHAR_ADVANCE + 6.0,
         FONT_SIZE + 4.0,
     );
-    (center, size)
+    let small_size = Vec2::new(
+        town.name.chars().count() as f32 * (SMALL_FONT_SIZE * 0.602) + 5.0,
+        SMALL_FONT_SIZE + 4.0,
+    );
+    (center, size.max(small_size))
 }
 
 /// `true` si la tesela de la ciudad cae dentro del rectángulo de spawn del mapa.
@@ -84,7 +89,12 @@ pub(crate) fn spawn_town_labels(
             continue;
         }
         let (center, bg_size) = town_label_rect(map, town);
-        let label = format!("{} ({})", town.name, town.population);
+        let normal_label = format!("{} ({})", town.name, town.population);
+        let small_label = town.name.clone();
+        let small_size = Vec2::new(
+            small_label.chars().count() as f32 * (SMALL_FONT_SIZE * 0.602) + 5.0,
+            SMALL_FONT_SIZE + 4.0,
+        );
 
         // Fondo translúcido oscuro (sign con fondo, como el cliente oficial).
         commands.spawn((
@@ -94,6 +104,7 @@ pub(crate) fn spawn_town_labels(
                 kind: 0,
                 id: u64::from(town.id),
                 size: bg_size,
+                small_size,
             },
             Sprite {
                 color: Color::srgba(0.08, 0.10, 0.14, 0.65),
@@ -109,8 +120,13 @@ pub(crate) fn spawn_town_labels(
                 kind: 0,
                 id: u64::from(town.id),
                 size: bg_size,
+                small_size,
             },
-            Text2d::new(label),
+            MapLabelText {
+                normal: normal_label.clone(),
+                small: small_label,
+            },
+            Text2d::new(normal_label),
             TextFont {
                 font: font.clone().into(),
                 font_size: FontSize::Px(FONT_SIZE),

@@ -630,6 +630,16 @@ pub struct SavCompany {
     pub name: Option<String>,
     /// Marca de compañía controlada por IA, si está presente en el save.
     pub is_ai: Option<bool>,
+    /// Opciones de autorrenovación/servicio de `PLYR.settings`.
+    pub engine_renew: Option<bool>,
+    pub engine_renew_months: Option<i16>,
+    pub engine_renew_money: Option<u32>,
+    pub renew_keep_length: Option<bool>,
+    pub servint_ispercent: Option<bool>,
+    pub servint_trains: Option<u16>,
+    pub servint_roadveh: Option<u16>,
+    pub servint_aircraft: Option<u16>,
+    pub servint_ships: Option<u16>,
 }
 
 /// Empresas presentes en `PLYR`, conservando dinero y color por `CompanyID`.
@@ -657,12 +667,56 @@ pub(crate) fn companies_from_chunks(chunks: &[RawChunk], save_version: u16) -> V
             let is_ai = record_get(&record, "is_ai")
                 .and_then(SlValue::as_u64)
                 .map(|value| value != 0);
+            let settings = nested_struct(&record, "settings");
+            let setting = |name: &str, legacy: &str| {
+                settings
+                    .and_then(|settings| record_get(settings, name))
+                    .or_else(|| settings.and_then(|settings| record_get(settings, legacy)))
+            };
+            let engine_renew = setting("settings.engine_renew", "engine_renew")
+                .and_then(SlValue::as_u64)
+                .map(|value| value != 0);
+            let engine_renew_months =
+                setting("settings.engine_renew_months", "engine_renew_months")
+                    .and_then(SlValue::as_i64)
+                    .and_then(|value| i16::try_from(value).ok());
+            let engine_renew_money = setting("settings.engine_renew_money", "engine_renew_money")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u32::try_from(value).ok());
+            let renew_keep_length = setting("settings.renew_keep_length", "renew_keep_length")
+                .and_then(SlValue::as_u64)
+                .map(|value| value != 0);
+            let servint_ispercent =
+                setting("settings.vehicle.servint_ispercent", "servint_ispercent")
+                    .and_then(SlValue::as_u64)
+                    .map(|value| value != 0);
+            let servint_trains = setting("settings.vehicle.servint_trains", "servint_trains")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u16::try_from(value).ok());
+            let servint_roadveh = setting("settings.vehicle.servint_roadveh", "servint_roadveh")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u16::try_from(value).ok());
+            let servint_aircraft = setting("settings.vehicle.servint_aircraft", "servint_aircraft")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u16::try_from(value).ok());
+            let servint_ships = setting("settings.vehicle.servint_ships", "servint_ships")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u16::try_from(value).ok());
             Some(SavCompany {
                 id,
                 money,
                 colour,
                 name,
                 is_ai,
+                engine_renew,
+                engine_renew_months,
+                engine_renew_money,
+                renew_keep_length,
+                servint_ispercent,
+                servint_trains,
+                servint_roadveh,
+                servint_aircraft,
+                servint_ships,
             })
         })
         .collect()

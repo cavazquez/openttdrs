@@ -4,8 +4,9 @@ use crate::game_state::GameState;
 use crate::news::{CALENDAR_BASE_YEAR, calendar_day_index, calendar_year_day};
 
 use super::super::SavError;
-use super::chunks::table_chunk;
-use super::codec::write_str;
+use super::super::chunks::CH_TABLE;
+use super::chunks::{raw_table_chunk, table_chunk};
+use super::codec::{write_gamma, write_str};
 
 /// Fecha `OpenTTD` aproximada (días desde año 0) + tick monotónico.
 pub(super) fn date_record(state: &GameState) -> Vec<u8> {
@@ -21,13 +22,40 @@ pub(super) fn date_record(state: &GameState) -> Vec<u8> {
     rec
 }
 
-pub(super) fn plyr_records(state: &GameState) -> Result<Vec<Vec<u8>>, SavError> {
+fn append_company_settings(
+    record: &mut Vec<u8>,
+    company: &crate::company::Company,
+) -> Result<(), SavError> {
+    // `settings` es un struct de una sola entrada. OpenTTD aplana los nombres
+    // de sus subcampos (`settings.vehicle.*`) en ese header.
+    write_gamma(1, record)?;
+    record.push(u8::from(company.engine_renew));
+    record.extend_from_slice(&company.engine_renew_months.to_be_bytes());
+    let money = u32::try_from(company.engine_renew_money.max(0)).unwrap_or(u32::MAX);
+    record.extend_from_slice(&money.to_be_bytes());
+    record.push(u8::from(company.renew_keep_length));
+    record.push(u8::from(company.servint_ispercent));
+    record.extend_from_slice(&company.servint_trains.to_be_bytes());
+    record.extend_from_slice(&company.servint_roadveh.to_be_bytes());
+    record.extend_from_slice(&company.servint_aircraft.to_be_bytes());
+    record.extend_from_slice(&company.servint_ships.to_be_bytes());
+    Ok(())
+}
+
+fn plyr_records(state: &GameState) -> Result<Vec<Vec<u8>>, SavError> {
     if state.companies.is_empty() {
         let mut rec = Vec::with_capacity(32);
         write_str("Jugador", &mut rec)?;
         rec.extend_from_slice(&state.economy.money.to_be_bytes());
         rec.push(state.company_colour);
         rec.push(0);
+        append_company_settings(
+            &mut rec,
+            &crate::company::Company::player(
+                crate::game_state::CompanyEconomy::default(),
+                state.company_colour,
+            ),
+        )?;
         return Ok(vec![rec]);
     }
     state
@@ -44,9 +72,50 @@ pub(super) fn plyr_records(state: &GameState) -> Result<Vec<Vec<u8>>, SavError> 
             rec.extend_from_slice(&money.to_be_bytes());
             rec.push(colour);
             rec.push(u8::from(company.is_ai));
+            append_company_settings(&mut rec, company)?;
             Ok(rec)
         })
         .collect()
+}
+
+/// Serializa `PLYR` con el subconjunto de `CompanySettings` que ejecuta el
+/// core. La estructura anidada es importante: `OpenTTD` usa los nombres de
+/// `settings.*` para aplicar compatibilidad entre versiones del save.
+pub(super) fn plyr_chunk(state: &GameState) -> Result<Vec<u8>, SavError> {
+    let mut header = Vec::new();
+    header.push(0x0A | 0x10);
+    write_str("name", &mut header)?;
+    header.push(7);
+    write_str("money", &mut header)?;
+    header.push(2);
+    write_str("colour", &mut header)?;
+    header.push(1);
+    write_str("is_ai", &mut header)?;
+    header.push(0x1B);
+    write_str("settings", &mut header)?;
+    header.push(0);
+
+    header.push(1);
+    write_str("settings.engine_renew", &mut header)?;
+    header.push(3);
+    write_str("settings.engine_renew_months", &mut header)?;
+    header.push(6);
+    write_str("settings.engine_renew_money", &mut header)?;
+    header.push(1);
+    write_str("settings.renew_keep_length", &mut header)?;
+    header.push(1);
+    write_str("settings.vehicle.servint_ispercent", &mut header)?;
+    header.push(4);
+    write_str("settings.vehicle.servint_trains", &mut header)?;
+    header.push(4);
+    write_str("settings.vehicle.servint_roadveh", &mut header)?;
+    header.push(4);
+    write_str("settings.vehicle.servint_aircraft", &mut header)?;
+    header.push(4);
+    write_str("settings.vehicle.servint_ships", &mut header)?;
+    header.push(0);
+
+    raw_table_chunk(*b"PLYR", &header, &plyr_records(state)?, CH_TABLE)
 }
 
 /// Ajustes de partida que afectan cómo `OpenTTD` interpreta y simula el mapa al

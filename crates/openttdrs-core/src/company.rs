@@ -99,6 +99,16 @@ pub struct Company {
     /// Intervalo de servicio en % en lugar de días (`settings.vehicle.servint_ispercent`).
     #[serde(default)]
     pub servint_ispercent: bool,
+    /// Intervalos de servicio por tipo de vehículo (`settings.vehicle.*`).
+    /// `0` conserva la semántica de `OpenTTD`: usar el valor del tipo de vehículo.
+    #[serde(default)]
+    pub servint_trains: u16,
+    #[serde(default)]
+    pub servint_roadveh: u16,
+    #[serde(default)]
+    pub servint_aircraft: u16,
+    #[serde(default)]
+    pub servint_ships: u16,
 }
 
 const fn default_engine_renew() -> bool {
@@ -133,6 +143,10 @@ impl Company {
             engine_renew_money: 100_000,
             renew_keep_length: false,
             servint_ispercent: false,
+            servint_trains: 0,
+            servint_roadveh: 0,
+            servint_aircraft: 0,
+            servint_ships: 0,
         }
     }
 
@@ -155,6 +169,10 @@ impl Company {
             engine_renew_money: 100_000,
             renew_keep_length: false,
             servint_ispercent: false,
+            servint_trains: 0,
+            servint_roadveh: 0,
+            servint_aircraft: 0,
+            servint_ships: 0,
         }
     }
 
@@ -177,6 +195,10 @@ impl Company {
             engine_renew_money: 100_000,
             renew_keep_length: false,
             servint_ispercent: false,
+            servint_trains: 0,
+            servint_roadveh: 0,
+            servint_aircraft: 0,
+            servint_ships: 0,
         }
     }
 }

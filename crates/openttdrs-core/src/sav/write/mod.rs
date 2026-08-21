@@ -271,16 +271,7 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
         &[(5, "date"), (8, "tick_counter")],
         &[meta::date_record(state)],
     )?);
-    data.extend_from_slice(&chunks::table_chunk(
-        *b"PLYR",
-        &[
-            (0x0A | 0x10, "name"),
-            (7, "money"),
-            (2, "colour"),
-            (1, "is_ai"),
-        ],
-        &meta::plyr_records(state)?,
-    )?);
+    data.extend_from_slice(&meta::plyr_chunk(state)?);
 
     data.extend_from_slice(&[0, 0, 0, 0]);
     Ok(data)
@@ -686,6 +677,15 @@ mod tests {
             .expect("rival company");
         rival.economy.money = 456_789;
         rival.colour = 11;
+        rival.engine_renew = false;
+        rival.engine_renew_months = -3;
+        rival.engine_renew_money = 765_432;
+        rival.renew_keep_length = true;
+        rival.servint_ispercent = true;
+        rival.servint_trains = 88;
+        rival.servint_roadveh = 77;
+        rival.servint_aircraft = 66;
+        rival.servint_ships = 55;
 
         let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
         let sav_game = sav::load(&bytes).expect("load");
@@ -694,6 +694,15 @@ mod tests {
         assert_eq!(sav_game.companies[1].colour, 11);
         assert_eq!(sav_game.companies[1].name.as_deref(), Some("TransCargo"));
         assert_eq!(sav_game.companies[1].is_ai, Some(true));
+        assert_eq!(sav_game.companies[1].engine_renew, Some(false));
+        assert_eq!(sav_game.companies[1].engine_renew_months, Some(-3));
+        assert_eq!(sav_game.companies[1].engine_renew_money, Some(765_432));
+        assert_eq!(sav_game.companies[1].renew_keep_length, Some(true));
+        assert_eq!(sav_game.companies[1].servint_ispercent, Some(true));
+        assert_eq!(sav_game.companies[1].servint_trains, Some(88));
+        assert_eq!(sav_game.companies[1].servint_roadveh, Some(77));
+        assert_eq!(sav_game.companies[1].servint_aircraft, Some(66));
+        assert_eq!(sav_game.companies[1].servint_ships, Some(55));
 
         let loaded = GameState::from_sav_game(sav_game);
         let loaded_rival = loaded
@@ -705,6 +714,15 @@ mod tests {
         assert_eq!(loaded_rival.colour, 11);
         assert_eq!(loaded_rival.name, "TransCargo");
         assert!(loaded_rival.is_ai);
+        assert!(!loaded_rival.engine_renew);
+        assert_eq!(loaded_rival.engine_renew_months, -3);
+        assert_eq!(loaded_rival.engine_renew_money, 765_432);
+        assert!(loaded_rival.renew_keep_length);
+        assert!(loaded_rival.servint_ispercent);
+        assert_eq!(loaded_rival.servint_trains, 88);
+        assert_eq!(loaded_rival.servint_roadveh, 77);
+        assert_eq!(loaded_rival.servint_aircraft, 66);
+        assert_eq!(loaded_rival.servint_ships, 55);
     }
 
     #[test]

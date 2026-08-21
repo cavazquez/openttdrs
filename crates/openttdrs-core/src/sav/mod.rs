@@ -727,6 +727,33 @@ impl GameState {
                 if let Some(is_ai) = company.is_ai {
                     target.is_ai = is_ai;
                 }
+                if let Some(value) = company.engine_renew {
+                    target.engine_renew = value;
+                }
+                if let Some(value) = company.engine_renew_months {
+                    target.engine_renew_months = value;
+                }
+                if let Some(value) = company.engine_renew_money {
+                    target.engine_renew_money = i64::from(value);
+                }
+                if let Some(value) = company.renew_keep_length {
+                    target.renew_keep_length = value;
+                }
+                if let Some(value) = company.servint_ispercent {
+                    target.servint_ispercent = value;
+                }
+                if let Some(value) = company.servint_trains {
+                    target.servint_trains = value;
+                }
+                if let Some(value) = company.servint_roadveh {
+                    target.servint_roadveh = value;
+                }
+                if let Some(value) = company.servint_aircraft {
+                    target.servint_aircraft = value;
+                }
+                if let Some(value) = company.servint_ships {
+                    target.servint_ships = value;
+                }
             }
         }
         if has_company_rows {

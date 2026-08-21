@@ -26,8 +26,8 @@
     "exact_cases": 0,
     "divergent_cases": 15,
     "error_cases": 0,
-    "min_changed_tiles": 3916,
-    "max_changed_tiles": 260588,
+    "min_changed_tiles": 3846,
+    "max_changed_tiles": 260108,
     "changed_blocks4_cases": 15,
     "status": "open-product-gap",
     "note": "La generación Rust ya incluye población inicial; aún divergen ríos, secuencia de población, objetos, árboles y m1..m8."

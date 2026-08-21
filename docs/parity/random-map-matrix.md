@@ -63,7 +63,7 @@ convertirse en gate de release.
 | 128×128 | 4 | 16.384 | 1.024 | **4/4 exactos** | 0/4 exactos; 4/4 divergen |
 | 256×256 | 2 | 65.536 | 4.096 | **2/2 exactos** | 0/2 exactos; 2/2 divergen |
 | 512×512 | 1 | 262.144 | 16.384 | **1/1 exacto** | 0/1 exacto; 1/1 diverge |
-| **Total** | **15** | — | — | **15/15; 0 teselas y 0 bloques cambiados** | **0/15; 15/15 divergen; 3.916–260.588 teselas distintas por caso; 15/15 bloques completos afectados** |
+| **Total** | **15** | — | — | **15/15; 0 teselas y 0 bloques cambiados** | **0/15; 15/15 divergen; 3.846–260.108 teselas distintas por caso; 15/15 bloques completos afectados** |
 
 La divergencia del generador aparece ya en la primera tesela del caso 64×64
 (altura y tipo distintos) y no es un problema de resolución de la imagen:

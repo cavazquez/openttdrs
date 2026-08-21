@@ -619,6 +619,39 @@ fn industry_accepted_from_record(record: &SlRecord) -> Vec<SavIndustryAcceptedCa
         .collect()
 }
 
+/// Empresa mínima decodificada del chunk `PLYR`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SavCompany {
+    /// Índice del pool `CompanyID` (`PLYR` es una tabla densa).
+    pub id: u32,
+    pub money: i64,
+    pub colour: u8,
+}
+
+/// Empresas presentes en `PLYR`, conservando dinero y color por `CompanyID`.
+#[must_use]
+pub(crate) fn companies_from_chunks(chunks: &[RawChunk], save_version: u16) -> Vec<SavCompany> {
+    let Some(plyr) = find_chunk(chunks, "PLYR") else {
+        return Vec::new();
+    };
+    table_rows(plyr, save_version)
+        .into_iter()
+        .filter_map(|(id, record)| {
+            let money = record_get(&record, "money")
+                .and_then(SlValue::as_i64)
+                .or_else(|| {
+                    record_get(&record, "money")
+                        .and_then(SlValue::as_u64)
+                        .and_then(|value| i64::try_from(value).ok())
+                })?;
+            let colour = record_get(&record, "colour")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value % 16).ok())?;
+            Some(SavCompany { id, money, colour })
+        })
+        .collect()
+}
+
 /// Dinero de la primera empresa del chunk `PLYR` (la del jugador en partidas locales).
 #[must_use]
 pub(crate) fn company_money_from_chunks(chunks: &[RawChunk], save_version: u16) -> Option<i64> {

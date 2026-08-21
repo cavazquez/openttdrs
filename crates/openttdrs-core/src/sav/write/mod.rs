@@ -274,7 +274,7 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
     data.extend_from_slice(&chunks::table_chunk(
         *b"PLYR",
         &[(7, "money"), (2, "colour")],
-        &[meta::plyr_record(state)],
+        &meta::plyr_records(state),
     )?);
 
     data.extend_from_slice(&[0, 0, 0, 0]);
@@ -668,6 +668,34 @@ mod tests {
         assert_eq!(tile.m3, 0x11);
         assert_eq!(tile.m3hi, 0x22);
         assert_eq!(tile.m8, 0x1234);
+    }
+
+    #[test]
+    fn ottn_roundtrip_preserves_company_pool_money_and_colour() {
+        let mut state = tiny_state();
+        state.ensure_rival_transcargo();
+        let rival = state
+            .companies
+            .iter_mut()
+            .find(|company| company.is_ai)
+            .expect("rival company");
+        rival.economy.money = 456_789;
+        rival.colour = 11;
+
+        let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
+        let sav_game = sav::load(&bytes).expect("load");
+        assert_eq!(sav_game.companies.len(), 2);
+        assert_eq!(sav_game.companies[1].money, 456_789);
+        assert_eq!(sav_game.companies[1].colour, 11);
+
+        let loaded = GameState::from_sav_game(sav_game);
+        let loaded_rival = loaded
+            .companies
+            .iter()
+            .find(|company| company.id.0 == 1)
+            .expect("rival after load");
+        assert_eq!(loaded_rival.economy.money, 456_789);
+        assert_eq!(loaded_rival.colour, 11);
     }
 
     #[test]

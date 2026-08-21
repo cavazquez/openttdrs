@@ -218,6 +218,8 @@ pub struct SavGame {
     pub cargo_payments: Vec<crate::CargoPaymentState>,
     /// Vehículos del chunk `VEHS` (cabezas de convoy tren/carretera).
     pub vehicles: Vec<SavVehicle>,
+    /// Empresas del pool `PLYR` (dinero y color por `CompanyID`).
+    pub companies: Vec<entities::SavCompany>,
     /// Dinero de la primera empresa (`PLYR`), si está presente.
     pub money: Option<i64>,
     /// Color de compañía (`Colours`) de la primera empresa (`PLYR`), si está presente.
@@ -297,6 +299,7 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
     let order_import = orders::SavOrderImport::from_chunks(&chunk_list, version);
     let station_index = entities::station_index_from_chunks(&chunk_list, map_w, version);
     let vehicles = entities::vehicles_from_chunks(&chunk_list, map_w, &order_import, version);
+    let companies = entities::companies_from_chunks(&chunk_list, version);
     let game_time = date::game_time_from_chunks(&chunk_list, version);
     let money = entities::company_money_from_chunks(&chunk_list, version);
     let company_colour = entities::company_colour_from_chunks(&chunk_list, version);
@@ -320,6 +323,7 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
         cargo_packets,
         cargo_payments,
         vehicles,
+        companies,
         money,
         company_colour,
         station_index,
@@ -698,6 +702,35 @@ impl GameState {
         if let Some(colour) = sav.company_colour {
             state.company_colour = colour;
         }
+        let has_company_rows = !sav.companies.is_empty();
+        for company in sav.companies {
+            let Ok(id) = u8::try_from(company.id) else {
+                continue;
+            };
+            let index = usize::from(id);
+            while state.companies.len() <= index {
+                let next_id = u8::try_from(state.companies.len()).unwrap_or(u8::MAX);
+                let mut created = crate::company::Company::player(
+                    crate::game_state::CompanyEconomy::default(),
+                    crate::company::first_free_company_colour(&state.companies),
+                );
+                created.id = crate::CompanyId(next_id);
+                created.name = format!("Compañía {}", u16::from(next_id) + 1);
+                state.companies.push(created);
+            }
+            if let Some(target) = state.companies.get_mut(index) {
+                target.economy.money = company.money;
+                target.colour = company.colour;
+            }
+        }
+        if has_company_rows {
+            state.sync_mirrors_from_active();
+        } else {
+            // Los saves sintéticos/legacy sólo traen los espejos PLYR
+            // `money`/`colour`; absorberlos en la compañía evita que el pool
+            // por defecto (100 000) los pise.
+            state.sync_active_from_mirrors();
+        }
         let station_positions: HashMap<u32, TileCoord> = sav
             .station_index
             .iter()
@@ -1061,6 +1094,7 @@ mod tests {
             cargo_packets: Vec::new(),
             cargo_payments: Vec::new(),
             vehicles: Vec::new(),
+            companies: Vec::new(),
             money: None,
             company_colour: None,
             station_index: HashMap::new(),
@@ -1485,6 +1519,7 @@ mod tests {
                     airport_targetairport: 0,
                 },
             ],
+            companies: Vec::new(),
             money: Some(123_456),
             company_colour: Some(9),
             station_index: std::collections::HashMap::new(),

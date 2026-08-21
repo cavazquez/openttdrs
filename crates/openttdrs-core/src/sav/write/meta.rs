@@ -20,11 +20,28 @@ pub(super) fn date_record(state: &GameState) -> Vec<u8> {
     rec
 }
 
-pub(super) fn plyr_record(state: &GameState) -> Vec<u8> {
-    let mut rec = Vec::with_capacity(9);
-    rec.extend_from_slice(&state.economy.money.to_be_bytes());
-    rec.push(state.company_colour);
-    rec
+pub(super) fn plyr_records(state: &GameState) -> Vec<Vec<u8>> {
+    if state.companies.is_empty() {
+        let mut rec = Vec::with_capacity(9);
+        rec.extend_from_slice(&state.economy.money.to_be_bytes());
+        rec.push(state.company_colour);
+        return vec![rec];
+    }
+    state
+        .companies
+        .iter()
+        .map(|company| {
+            let mut rec = Vec::with_capacity(9);
+            let (money, colour) = if company.id == state.active_company {
+                (state.economy.money, state.company_colour)
+            } else {
+                (company.economy.money, company.colour)
+            };
+            rec.extend_from_slice(&money.to_be_bytes());
+            rec.push(colour);
+            rec
+        })
+        .collect()
 }
 
 /// Ajustes de partida que afectan cómo `OpenTTD` interpreta y simula el mapa al

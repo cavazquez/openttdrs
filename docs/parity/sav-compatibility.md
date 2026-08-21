@@ -29,7 +29,7 @@ preserva. Importar un dato no implica que el exportador lo escriba.
 | Grupos y autoreplace | 🟡 lee campos modelados de `GRPS` / `ERNW` | 🟡 escribe grupos, referencias `VEHS.group_id` y reglas de renovación | Livery/cadenas nativas avanzadas y semántica completa de autoreplace siguen reducidas |
 | Objetos | 🟡 usa `OBJS` para traducir tipos de objeto del mapa y conserva el chunk nativo | 🟡 reemite `OBJS`/`OBID` como passthrough cuando provienen del save | El runtime no ejecuta todavía todas las specs/callbacks de objetos |
 | Ajustes | 🟡 lee el subconjunto ejecutado por el core de `PATS`/`OPTS`: construcción, pathfinding, averías, subsidios, desastres, autoridad, inflación/recesiones y unidades de tiempo | 🟡 escribe ese subconjunto en `PATS` y conserva `ENGN`/`SRND` nativos como passthrough | [`sav/settings.rs`](../../crates/openttdrs-core/src/sav/settings.rs), [`sav/landscape.rs`](../../crates/openttdrs-core/src/sav/landscape.rs) |
-| Compañías y noticias | 🟡 dinero/color básico de `PLYR`; no pools completos | 🟡 `PLYR` básico | El historial de noticias no es persistencia nativa de OpenTTD `.sav`; la cola propia completa queda en JSON |
+| Compañías y noticias | 🟡 dinero/color/nombre/indicador AI de `PLYR`; no pools completos | 🟡 `PLYR` con dinero, color, nombre e indicador AI | El historial de noticias no es persistencia nativa de OpenTTD `.sav`; la cola propia completa queda en JSON |
 | NewGRF | 🟡 conserva `NGRF`, `ENGN`, `EIDS` y storage/mappings nativos como chunks opacos | 🟡 reemite esos chunks sin interpretar | El runtime todavía no ejecuta todos los callbacks ni valida que los `.grf` estén instalados |
 
 ## Qué usar en cada caso

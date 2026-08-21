@@ -626,6 +626,10 @@ pub struct SavCompany {
     pub id: u32,
     pub money: i64,
     pub colour: u8,
+    /// Nombre personalizado, si el save usa el campo moderno `PLYR.name`.
+    pub name: Option<String>,
+    /// Marca de compañía controlada por IA, si está presente en el save.
+    pub is_ai: Option<bool>,
 }
 
 /// Empresas presentes en `PLYR`, conservando dinero y color por `CompanyID`.
@@ -647,7 +651,19 @@ pub(crate) fn companies_from_chunks(chunks: &[RawChunk], save_version: u16) -> V
             let colour = record_get(&record, "colour")
                 .and_then(SlValue::as_u64)
                 .and_then(|value| u8::try_from(value % 16).ok())?;
-            Some(SavCompany { id, money, colour })
+            let name = record_get(&record, "name")
+                .and_then(SlValue::as_str)
+                .map(str::to_owned);
+            let is_ai = record_get(&record, "is_ai")
+                .and_then(SlValue::as_u64)
+                .map(|value| value != 0);
+            Some(SavCompany {
+                id,
+                money,
+                colour,
+                name,
+                is_ai,
+            })
         })
         .collect()
 }
@@ -914,10 +930,14 @@ pub(crate) fn vehicles_from_chunks(
             .and_then(SlValue::as_u64)
             .unwrap_or(0);
         let current_order_time = record_get(common, "current_order_time")
-            .and_then(SlValue::as_u64)
-            .unwrap_or(0)
-            .try_into()
-            .unwrap_or(u32::MAX);
+            .and_then(SlValue::as_i64)
+            .and_then(|value| u32::try_from(value).ok())
+            .or_else(|| {
+                record_get(common, "current_order_time")
+                    .and_then(SlValue::as_u64)
+                    .and_then(|value| u32::try_from(value).ok())
+            })
+            .unwrap_or(0);
         let timetable_lateness = record_get(common, "lateness_counter")
             .and_then(SlValue::as_i64)
             .unwrap_or(0)

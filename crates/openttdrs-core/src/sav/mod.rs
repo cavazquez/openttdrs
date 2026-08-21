@@ -721,6 +721,12 @@ impl GameState {
             if let Some(target) = state.companies.get_mut(index) {
                 target.economy.money = company.money;
                 target.colour = company.colour;
+                if let Some(name) = company.name {
+                    target.name = name;
+                }
+                if let Some(is_ai) = company.is_ai {
+                    target.is_ai = is_ai;
+                }
             }
         }
         if has_company_rows {

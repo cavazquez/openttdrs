@@ -5,6 +5,7 @@ use crate::news::{CALENDAR_BASE_YEAR, calendar_day_index, calendar_year_day};
 
 use super::super::SavError;
 use super::chunks::table_chunk;
+use super::codec::write_str;
 
 /// Fecha `OpenTTD` aproximada (días desde año 0) + tick monotónico.
 pub(super) fn date_record(state: &GameState) -> Vec<u8> {
@@ -20,26 +21,30 @@ pub(super) fn date_record(state: &GameState) -> Vec<u8> {
     rec
 }
 
-pub(super) fn plyr_records(state: &GameState) -> Vec<Vec<u8>> {
+pub(super) fn plyr_records(state: &GameState) -> Result<Vec<Vec<u8>>, SavError> {
     if state.companies.is_empty() {
-        let mut rec = Vec::with_capacity(9);
+        let mut rec = Vec::with_capacity(32);
+        write_str("Jugador", &mut rec)?;
         rec.extend_from_slice(&state.economy.money.to_be_bytes());
         rec.push(state.company_colour);
-        return vec![rec];
+        rec.push(0);
+        return Ok(vec![rec]);
     }
     state
         .companies
         .iter()
         .map(|company| {
-            let mut rec = Vec::with_capacity(9);
+            let mut rec = Vec::with_capacity(32);
             let (money, colour) = if company.id == state.active_company {
                 (state.economy.money, state.company_colour)
             } else {
                 (company.economy.money, company.colour)
             };
+            write_str(&company.name, &mut rec)?;
             rec.extend_from_slice(&money.to_be_bytes());
             rec.push(colour);
-            rec
+            rec.push(u8::from(company.is_ai));
+            Ok(rec)
         })
         .collect()
 }
@@ -66,24 +71,24 @@ pub(super) fn pats_chunk(state: &GameState) -> Result<Vec<u8>, SavError> {
             (2, "game_creation.landscape"),
             (2, "vehicle.road_side"),
             (2, "construction.train_signal_side"),
-            (2, "construction.freeform_edges"),
+            (1, "construction.freeform_edges"),
             (2, "pf.wait_for_pbs_path"),
             (2, "pf.path_backoff_interval"),
-            (2, "pf.reverse_at_signals"),
+            (1, "pf.reverse_at_signals"),
             (2, "pf.wait_oneway_signal"),
             (2, "pf.wait_twoway_signal"),
-            (2, "pf.reserve_paths"),
+            (1, "pf.reserve_paths"),
             (2, "vehicle.train_acceleration_model"),
-            (2, "economy.station_noise_level"),
+            (1, "economy.station_noise_level"),
             (2, "difficulty.vehicle_breakdowns"),
-            (2, "order.no_servicing_if_no_breakdowns"),
+            (1, "order.no_servicing_if_no_breakdowns"),
             (4, "difficulty.subsidy_duration"),
             (2, "difficulty.subsidy_multiplier"),
-            (2, "difficulty.disasters"),
+            (1, "difficulty.disasters"),
             (2, "difficulty.town_council_tolerance"),
             (2, "economy.timekeeping_units"),
-            (2, "economy.inflation"),
-            (2, "difficulty.economy"),
+            (1, "economy.inflation"),
+            (1, "difficulty.economy"),
         ],
         &[{
             let mut record = vec![

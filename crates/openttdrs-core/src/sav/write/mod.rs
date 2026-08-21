@@ -273,8 +273,13 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
     )?);
     data.extend_from_slice(&chunks::table_chunk(
         *b"PLYR",
-        &[(7, "money"), (2, "colour")],
-        &meta::plyr_records(state),
+        &[
+            (0x0A | 0x10, "name"),
+            (7, "money"),
+            (2, "colour"),
+            (1, "is_ai"),
+        ],
+        &meta::plyr_records(state)?,
     )?);
 
     data.extend_from_slice(&[0, 0, 0, 0]);
@@ -687,6 +692,8 @@ mod tests {
         assert_eq!(sav_game.companies.len(), 2);
         assert_eq!(sav_game.companies[1].money, 456_789);
         assert_eq!(sav_game.companies[1].colour, 11);
+        assert_eq!(sav_game.companies[1].name.as_deref(), Some("TransCargo"));
+        assert_eq!(sav_game.companies[1].is_ai, Some(true));
 
         let loaded = GameState::from_sav_game(sav_game);
         let loaded_rival = loaded
@@ -696,6 +703,8 @@ mod tests {
             .expect("rival after load");
         assert_eq!(loaded_rival.economy.money, 456_789);
         assert_eq!(loaded_rival.colour, 11);
+        assert_eq!(loaded_rival.name, "TransCargo");
+        assert!(loaded_rival.is_ai);
     }
 
     #[test]

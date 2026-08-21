@@ -622,8 +622,8 @@ fn append_vehs_common_fields(header: &mut Vec<u8>) -> Result<(), SavError> {
     append_field(header, 2, "cur_real_order_index")?;
     append_field(header, 6, "next")?; // REF_VEHICLE → U32
     append_field(header, 4, "group_id")?; // Vehicle::group_id → U16
-    append_field(header, 7, "timetable_start")?; // SLE_UINT64
-    append_field(header, 6, "current_order_time")?; // SLE_UINT32
+    append_field(header, 8, "timetable_start")?; // SLE_UINT64
+    append_field(header, 5, "current_order_time")?; // SLE_INT32
     append_field(header, 5, "lateness_counter")?; // SLE_INT32
     append_field(header, 4, "vehicle_flags")?; // SLE_UINT16
     append_field(header, 4, "service_interval")?; // SLE_UINT16
@@ -1073,7 +1073,7 @@ mod tests {
             Some(1_234)
         );
         assert_eq!(
-            record_get(common, "current_order_time").and_then(SlValue::as_u64),
+            record_get(common, "current_order_time").and_then(SlValue::as_i64),
             Some(55)
         );
         assert_eq!(

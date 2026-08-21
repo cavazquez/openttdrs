@@ -2141,7 +2141,7 @@ payload (zlib si OTTZ; raw si OTTN)
 6. `ORDL` — `CH_TABLE` con struct `orders` (estación/waypoint/depósito/condicional); una lista por vehículo con órdenes
 7. `VEHS` — `CH_SPARSE_TABLE` de tren, bus/camión, barco y avión de ala fija + ref a ORDL
 8. `DATE` — `CH_TABLE` `date` (i32) + `tick_counter` (u64)
-9. `PLYR` — `CH_TABLE` `money` (i64) + `colour` (u8)
+9. `PLYR` — `CH_TABLE` `name` (string) + `money` (i64) + `colour` (u8) + `is_ai` (u8)
 10. Terminador `00 00 00 00`
 
 #### Mapeo `Tile` → planos
@@ -2164,7 +2164,7 @@ resumen se limita a lo que emite el writer: `MAP*`, `DATE`, `PLYR`, `STNN`,
 avión de ala fija.
 
 Preserva `CAPY` al importar/exportar, pero todavía no crea pagos activos desde
-el runtime; `PLYR` conserva dinero/color por compañía, aunque faltan nombres,
+el runtime; `PLYR` conserva dinero/color/nombre/indicador AI por compañía, aunque faltan
 historial y flags completos; también faltan `OBJS`,
 `GSET`/`ENGN`/`SRND` completos ni ejecución de configuración NewGRF. Los chunks
 nativos `NGRF`/`ENGN`/`OBJS`/`SRND` y mappings asociados se conservan como

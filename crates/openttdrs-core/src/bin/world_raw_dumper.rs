@@ -311,6 +311,10 @@ fn run(args: &Args) -> Result<(), String> {
                     .and_then(|value| value.parse().ok())
                     .unwrap_or(0x10),
             ),
+            amount_of_rivers: std::env::var("OPENTTDRS_AMOUNT_OF_RIVERS")
+                .ok()
+                .and_then(|value| value.parse().ok())
+                .unwrap_or(2),
             startup_rng_draws: std::env::var("OPENTTDRS_STARTUP_RNG_DRAWS")
                 .ok()
                 .and_then(|value| value.parse().ok())

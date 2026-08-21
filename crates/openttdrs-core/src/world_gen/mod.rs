@@ -148,7 +148,6 @@ pub fn apply_world_gen(
             }
             if x == 0 || y == 0 || x == last_x || y == last_y {
                 let c = TileCoord::new(x, y);
-                map.set_height(c, 0)?;
                 map.set_kind(c, TileKind::Void)?;
                 map.set_mapt_m5(c, 0x70, 0)?;
                 map.set_m1(c, 0)?;

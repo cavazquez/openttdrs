@@ -21,7 +21,7 @@ pub(super) fn carve_rivers(
     // alturas que ya coinciden con TGP.
     let amount = u32::from(config.amount_of_rivers.min(3));
     let wells = super::population::scale_by_size(4u32 << amount, map_w as u32, map_h as u32);
-    let river_count = wells.max(1) as usize;
+    let river_count = if amount == 0 { 0 } else { wells.max(1) } as usize;
     for i in 0..river_count {
         let Some(start) = pick_river_source(map, config, map_w, map_h, preserve, i as u64) else {
             continue;

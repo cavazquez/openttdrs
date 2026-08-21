@@ -13,7 +13,7 @@ Cuando esa evidencia ya coincide pero el resultado compuesto difiere, usar el
 
 ## Estado canónico actual
 
-**Corte canónico: 2026-08-20 · `main` `4402d12d57535d13fd3002b7bb4ec368f06e6329`.
+**Corte canónico: 2026-08-21 · `main` `29f5d7a0`.
 Referencia: OpenTTD 15.3, commit
 `14ec60f248547d4d062a1160f0fc26d742319888`.** Esta tabla es la fuente de
 verdad para el estado vigente. Las tablas detalladas posteriores conservan el
@@ -96,11 +96,16 @@ las entidades Bevy.
 
 <!-- active-parity-backlog:start -->
 
-- [#293](https://github.com/cavazquez/openttdrs/issues/293) — callbacks industriales 0x25/0x26/0x27: implementación integrada; falta aceptación/cierre del issue.
-- [#294](https://github.com/cavazquez/openttdrs/issues/294) — matriz SAV oficial OpenTTD 15.3: gate de release integrado; queda seguimiento/cierre del issue.
-- [#295](https://github.com/cavazquez/openttdrs/issues/295) — ventana operativa Town Authority y cierre de alcance.
-- [#296](https://github.com/cavazquez/openttdrs/issues/296) — dry-run multiplataforma y smoke de release: seguimiento de aceptación.
-- [#297](https://github.com/cavazquez/openttdrs/issues/297) — oráculo y diff visual por familia de ventanas: ampliar evidencia y cierre.
+- [#313](https://github.com/cavazquez/openttdrs/issues/313) — calibrar cámara y composición tras el draw-plan exacto.
+- [#322](https://github.com/cavazquez/openttdrs/issues/322) — integrar profundidad global de overlays urbanos.
+- [#323](https://github.com/cavazquez/openttdrs/issues/323) — exportar el orden final del sorter de sprites.
+- [#326](https://github.com/cavazquez/openttdrs/issues/326) — integrar composición global y cerrar paridad de framebuffer.
+- [#327](https://github.com/cavazquez/openttdrs/issues/327) — autoridad multiempresa y reconciliación de desync.
+- [#328](https://github.com/cavazquez/openttdrs/issues/328) — interoperabilidad residual de VEHS, ORDL, GRPS y ERNW.
+- [#329](https://github.com/cavazquez/openttdrs/issues/329) — callbacks runtime y persistencia NewGRF residual.
+- [#330](https://github.com/cavazquez/openttdrs/issues/330) — ampliar oráculos externos de movimiento y composición.
+- [#331](https://github.com/cavazquez/openttdrs/issues/331) — catálogo de idiomas y selección de locale.
+- [#332](https://github.com/cavazquez/openttdrs/issues/332) — zoom Out8x y labels LOD en mapas grandes.
 
 <!-- active-parity-backlog:end -->
 

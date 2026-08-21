@@ -650,6 +650,36 @@ void OpenttdrsMaybeStartPbsTrace(const std::string &source_path)
 
 void OpenttdrsMaybeExportPbsTraceTick()
 {
+	/* A random new game does not pass through AfterLoadGame, so the regular
+	 * world-raw hook cannot observe it.  Reuse that writer on the first game
+	 * tick when the matrix runner asks for a random-map export. */
+	const char *random_map_out = std::getenv("OPENTTDRS_RANDOM_MAP_RAW_OUT");
+	if (random_map_out != nullptr && random_map_out[0] != '\0') {
+		static bool random_map_exported = false;
+		if (!random_map_exported) {
+			random_map_exported = true;
+			const char *source = std::getenv("OPENTTDRS_RANDOM_MAP_SOURCE");
+			const char *save_out = std::getenv("OPENTTDRS_RANDOM_MAP_SAVE_OUT");
+			if (save_out != nullptr && save_out[0] != '\0') {
+				if (SaveOrLoad(save_out, SLO_SAVE, DFT_GAME_FILE, NO_DIRECTORY, false) != SL_OK) {
+					std::fprintf(stderr, "openttdrs random-map save failed: %s\n", save_out);
+				}
+			}
+#if defined(_WIN32)
+			_putenv_s("OPENTTDRS_WORLD_RAW_OUT", random_map_out);
+			_putenv_s("OPENTTDRS_WORLD_RAW_MIN_CALL", "1");
+			_putenv_s("OPENTTDRS_WORLD_RAW_SOURCE", source != nullptr ? source : "random-new-game");
+#else
+			setenv("OPENTTDRS_WORLD_RAW_OUT", random_map_out, 1);
+			setenv("OPENTTDRS_WORLD_RAW_MIN_CALL", "1", 1);
+			setenv("OPENTTDRS_WORLD_RAW_SOURCE", source != nullptr ? source : "random-new-game", 1);
+#endif
+			if (!OpenttdrsMaybeExportWorldRaw("")) {
+				std::fprintf(stderr, "openttdrs random-map world-raw export failed\n");
+			}
+		}
+	}
+
 	if (!_openttdrs_pbs_trace.armed) return;
 
 	WritePbsTraceRow("tick");

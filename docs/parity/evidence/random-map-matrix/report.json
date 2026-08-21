@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "contract": "random-map-parity-evidence",
+  "reference": {
+    "tag": "15.3",
+    "checkout_commit": "c2661164bcb6cbf5ab97b56ccbee7506a3b26833",
+    "canonical_pin": "14ec60f248547d4d062a1160f0fc26d742319888",
+    "status": "diagnostic-local-checkout-not-canonical-pin"
+  },
+  "matrix": [
+    { "size": "64x64", "maps": 8, "tiles_per_map": 4096, "blocks4_per_map": 256 },
+    { "size": "128x128", "maps": 4, "tiles_per_map": 16384, "blocks4_per_map": 1024 },
+    { "size": "256x256", "maps": 2, "tiles_per_map": 65536, "blocks4_per_map": 4096 },
+    { "size": "512x512", "maps": 1, "tiles_per_map": 262144, "blocks4_per_map": 16384 }
+  ],
+  "loader_from_openttd_sav": {
+    "cases": 15,
+    "exact_cases": 15,
+    "divergent_cases": 0,
+    "error_cases": 0,
+    "changed_tiles": 0,
+    "changed_blocks4": 0
+  },
+  "same_seed_generator": {
+    "cases": 15,
+    "exact_cases": 0,
+    "divergent_cases": 15,
+    "error_cases": 0,
+    "every_case_changed_all_tiles": true,
+    "every_case_changed_all_blocks4": true,
+    "status": "open-product-gap"
+  },
+  "comparison": {
+    "fields": ["height", "type", "m1", "m2", "m3", "m4", "m5", "m6", "m7", "m8"],
+    "block_size": 4,
+    "raster_is_secondary": true
+  }
+}

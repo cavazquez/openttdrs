@@ -9,7 +9,7 @@ use openttdrs_core::sav;
 use openttdrs_core::world_raw::{
     WorldRawContext, WorldRawMetadata, WorldRawRegion, sha256_hex, write_world_raw_jsonl,
 };
-use openttdrs_core::{Climate, GameState};
+use openttdrs_core::{Climate, GameState, Map, TerrainType, WorldGenConfig, apply_world_gen};
 
 #[derive(Debug, Clone, Copy)]
 enum Stage {
@@ -37,8 +37,10 @@ impl Stage {
 }
 
 struct Args {
-    save: PathBuf,
+    save: Option<PathBuf>,
     out: PathBuf,
+    generate: Option<(u32, u32)>,
+    seed: Option<u64>,
     stage: Stage,
     region: Option<WorldRawRegion>,
     openttd_commit: String,
@@ -47,8 +49,11 @@ struct Args {
 fn print_usage() {
     eprintln!(
         "uso: world_raw_dumper <partida.sav> <salida.jsonl> [opciones]\n\
+         o:   world_raw_dumper --generate WIDTHxHEIGHT --seed N <salida.jsonl> [opciones]\n\
          \n\
          Opciones:\n\
+           --generate WIDTHxHEIGHT          genera el mapa procedural openttdrs (sin guardar .sav)\n\
+           --seed N                          semilla para --generate\n\
            --stage sav_map|game_state_map  etapa a exportar (default: sav_map)\n\
            --region x0,y0,x1,y1            rectángulo inclusivo de teselas\n\
            --tile x,y [--radius N]          tesela, opcionalmente con contexto\n\
@@ -83,6 +88,29 @@ fn parse_pair(value: &str, label: &str) -> Result<(u32, u32), String> {
     Ok((parse_u32(x, label)?, parse_u32(y, label)?))
 }
 
+fn parse_dimensions(value: &str) -> Result<(u32, u32), String> {
+    let mut values = value.split('x');
+    let width = values
+        .next()
+        .ok_or_else(|| "--generate debe tener formato WIDTHxHEIGHT".to_string())?;
+    let height = values
+        .next()
+        .ok_or_else(|| "--generate debe tener formato WIDTHxHEIGHT".to_string())?;
+    if values.next().is_some() {
+        return Err("--generate debe tener exactamente WIDTHxHEIGHT".to_string());
+    }
+    let width = parse_u32(width, "--generate")?;
+    let height = parse_u32(height, "--generate")?;
+    if !(64..=4096).contains(&width)
+        || !(64..=4096).contains(&height)
+        || !width.is_power_of_two()
+        || !height.is_power_of_two()
+    {
+        return Err("--generate admite dimensiones potencia de dos entre 64 y 4096".to_string());
+    }
+    Ok((width, height))
+}
+
 fn parse_region(value: &str) -> Result<WorldRawRegion, String> {
     let mut values = value.split(',');
     let min_x = values
@@ -111,6 +139,8 @@ fn parse_region(value: &str) -> Result<WorldRawRegion, String> {
 
 fn parse_args() -> Result<Args, String> {
     let mut positional = Vec::new();
+    let mut generate = None;
+    let mut seed = None;
     let mut stage = Stage::SavMap;
     let mut region = None;
     let mut tile = None;
@@ -123,6 +153,22 @@ fn parse_args() -> Result<Args, String> {
             "--help" | "-h" => {
                 print_usage();
                 std::process::exit(0);
+            }
+            "--generate" => {
+                if generate.is_some() {
+                    return Err("--generate fue indicado más de una vez".to_string());
+                }
+                generate = Some(parse_dimensions(&next_value(&mut args, "--generate")?)?);
+            }
+            "--seed" => {
+                if seed.is_some() {
+                    return Err("--seed fue indicado más de una vez".to_string());
+                }
+                seed = Some(
+                    next_value(&mut args, "--seed")?
+                        .parse::<u64>()
+                        .map_err(|error| format!("--seed inválido: {error}"))?,
+                );
             }
             "--stage" => stage = Stage::parse(&next_value(&mut args, "--stage")?)?,
             "--region" => {
@@ -151,8 +197,17 @@ fn parse_args() -> Result<Args, String> {
         }
     }
 
-    if positional.len() != 2 {
+    if generate.is_some() {
+        if positional.len() != 1 {
+            return Err("--generate requiere sólo <salida.jsonl>".to_string());
+        }
+        if seed.is_none() {
+            return Err("--generate requiere --seed N".to_string());
+        }
+    } else if positional.len() != 2 {
         return Err("se requieren <partida.sav> y <salida.jsonl>".to_string());
+    } else if seed.is_some() {
+        return Err("--seed sólo se puede usar con --generate".to_string());
     }
     if region.is_some() && tile.is_some() {
         return Err("--region y --tile no pueden usarse juntos".to_string());
@@ -173,8 +228,10 @@ fn parse_args() -> Result<Args, String> {
     };
 
     Ok(Args {
-        save: positional.remove(0),
+        save: (generate.is_none()).then(|| positional.remove(0)),
         out: positional.remove(0),
+        generate,
+        seed,
         stage,
         region,
         openttd_commit: openttd_commit
@@ -229,15 +286,67 @@ fn dump_map(
 }
 
 fn run(args: &Args) -> Result<(), String> {
-    let raw = std::fs::read(&args.save)
-        .map_err(|error| format!("no se pudo leer {}: {error}", args.save.display()))?;
+    if let Some((width, height)) = args.generate {
+        let Some(seed) = args.seed else {
+            return Err("--generate requiere --seed N".to_string());
+        };
+        let mut map = Map::new_flat(width, height, 0);
+        let config = WorldGenConfig {
+            climate: Climate::Temperate,
+            seed,
+            sea_level: 1,
+            // Defaults equivalentes al generador TGP de OpenTTD: relieve
+            // Flat (1), costas de agua en los cuatro bordes cuando no se
+            // habilitan bordes libres y nivel de mar muy bajo.
+            island: true,
+            ..WorldGenConfig::default().with_terrain_type(TerrainType::Flat)
+        };
+        apply_world_gen(&mut map, &config, &[]).map_err(|error| {
+            format!("falló la generación {width}x{height}, seed={seed}: {error:?}")
+        })?;
+        let source = format!("generated:{width}x{height}:seed={seed}");
+        let emitted = dump_map(
+            &map,
+            args,
+            source.clone(),
+            sha256_hex(source.as_bytes()),
+            0,
+            None,
+            0,
+        )?;
+        println!(
+            "world-raw {}: {} teselas ({source}) → {}",
+            args.stage.as_str(),
+            emitted,
+            args.out.display()
+        );
+        return Ok(());
+    }
+    let Some(save) = args.save.as_ref() else {
+        return Err("se requiere <partida.sav> cuando no se usa --generate".to_string());
+    };
+    let raw = std::fs::read(save)
+        .map_err(|error| format!("no se pudo leer {}: {error}", save.display()))?;
     let save_sha256 = sha256_hex(&raw);
-    let sav = sav::load(&raw)
-        .map_err(|error| format!("save inválido {}: {error}", args.save.display()))?;
+    let source_path = canonical_source_path(save).display().to_string();
+    if raw.starts_with(b"MAP1") {
+        let map = Map::from_ottd_binary(&raw)
+            .map_err(|error| format!("ottdmap inválido {}: {error:?}", save.display()))?;
+        let emitted = dump_map(&map, args, source_path, save_sha256, 0, None, 0)?;
+        println!(
+            "world-raw {}: {} teselas ({}) → {}",
+            args.stage.as_str(),
+            emitted,
+            save.display(),
+            args.out.display()
+        );
+        return Ok(());
+    }
+    let sav =
+        sav::load(&raw).map_err(|error| format!("save inválido {}: {error}", save.display()))?;
     let save_version = sav.version;
     let tick = sav.game_time.map(|time| time.tick);
     let climate = climate_code(sav.climate);
-    let source_path = canonical_source_path(&args.save).display().to_string();
     let emitted = match args.stage {
         Stage::SavMap => dump_map(
             &sav.map,
@@ -265,7 +374,7 @@ fn run(args: &Args) -> Result<(), String> {
         "world-raw {}: {} teselas ({}) → {}",
         args.stage.as_str(),
         emitted,
-        args.save.display(),
+        save.display(),
         args.out.display()
     );
     Ok(())
@@ -286,5 +395,18 @@ fn main() -> ExitCode {
             eprintln!("error: {error}");
             ExitCode::FAILURE
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_dimensions;
+
+    #[test]
+    fn generated_dimensions_accept_openttd_sizes() {
+        assert_eq!(parse_dimensions("64x128"), Ok((64, 128)));
+        assert!(parse_dimensions("32x64").is_err());
+        assert!(parse_dimensions("96x64").is_err());
+        assert!(parse_dimensions("64x64x64").is_err());
     }
 }

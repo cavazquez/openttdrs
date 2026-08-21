@@ -72,6 +72,25 @@ python3 scripts/compare_world_raw.py \
   /tmp/openttd-world-raw.jsonl /tmp/openttdrs-world-raw.jsonl
 ```
 
+## Matriz de mapas aleatorios
+
+Para generar una partida nueva de OpenTTD y conservar tanto el `.sav` como el
+stream `world-raw` se pueden definir estos overrides al ejecutar el binario
+dedicated:
+
+```bash
+OPENTTDRS_RANDOM_MAP_RAW_OUT=/tmp/random.reference.jsonl \
+OPENTTDRS_RANDOM_MAP_SAVE_OUT=/tmp/random.reference.sav \
+OPENTTDRS_RANDOM_MAP_SOURCE=random:64x64:seed=123 \
+./reference/openttd-upstream/build/openttd -X -c /tmp/map.cfg \
+  -I opengfx -v null -s null -m null -b null -D -G 123 -g
+```
+
+La matriz completa y la comparación por tesela/bloques 4×4 se ejecutan con
+[`scripts/random_map_parity.py`](../../scripts/random_map_parity.py); el hook
+se activa en el primer tick de una partida nueva, no sólo después de cargar un
+`.sav` existente.
+
 Para un checkout de OpenTTD que no sea el pin 15.3 se requiere declarar la
 decisión explícitamente:
 

@@ -11,6 +11,11 @@ Para investigar una discrepancia de render de una partida `.sav`, seguir la
 Cuando esa evidencia ya coincide pero el resultado compuesto difiere, usar el
 [contrato de captura raster focalizada](parity/WORLD_SCREENSHOT_SCHEMA.md).
 
+La paridad de mapas aleatorios se audita por estado lógico, no por capturas
+gigantes: [`parity/random-map-matrix.md`](parity/random-map-matrix.md) separa
+la apertura de `.sav` (15/15 exactos en la última matriz) de la generación con
+el mismo seed (brecha de producto aún abierta).
+
 ## Estado canónico actual
 
 **Corte canónico: 2026-08-21 · `main` `29f5d7a0`.

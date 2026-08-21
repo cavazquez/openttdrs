@@ -948,6 +948,45 @@ impl GameState {
         for head in train_heads {
             crate::train_consist::consist_changed(&mut state.vehicles, head);
         }
+
+        // En saves modernos `VEHS.common.orders` es una referencia al pool
+        // `ORDL`, no una copia inline. Agrupar por ese índice vuelve a
+        // materializar la identidad de shared orders que el parser ya había
+        // usado para obtener el contenido de la lista.
+        let mut shared_vehicle_ids: HashMap<u32, Vec<u32>> = HashMap::new();
+        for vehicle in &sav.vehicles {
+            if let Some(order_list_id) = vehicle.order_list_id {
+                shared_vehicle_ids
+                    .entry(order_list_id)
+                    .or_default()
+                    .push(vehicle.sav_id);
+            }
+        }
+        for (order_list_id, sav_ids) in shared_vehicle_ids {
+            let Some(first_id) = sav_ids.first().copied() else {
+                continue;
+            };
+            let Some(orders) = state
+                .vehicles
+                .iter()
+                .find(|vehicle| vehicle.id == first_id)
+                .filter(|vehicle| !vehicle.orders.is_empty())
+                .map(|vehicle| vehicle.orders.clone())
+            else {
+                continue;
+            };
+            state
+                .shared_order_lists
+                .push(crate::shared_orders::SharedOrderList {
+                    id: order_list_id,
+                    orders,
+                });
+            for vehicle in &mut state.vehicles {
+                if sav_ids.contains(&vehicle.id) {
+                    vehicle.shared_order_id = Some(order_list_id);
+                }
+            }
+        }
         state
     }
 }
@@ -1270,6 +1309,7 @@ mod tests {
                     // tipos de vehículo en `VEHS`.
                     next_sav_id: Some(3),
                     group_id: None,
+                    order_list_id: None,
                     kind: SavVehicleKind::Train,
                     pos: crate::TileCoord::new(5, 5),
                     raw_tile: crate::TileCoord::new(5, 5),
@@ -1297,6 +1337,7 @@ mod tests {
                     sav_id: 1,
                     next_sav_id: None,
                     group_id: None,
+                    order_list_id: None,
                     kind: SavVehicleKind::RoadVehicle,
                     pos: crate::TileCoord::new(6, 6),
                     raw_tile: crate::TileCoord::new(6, 6),
@@ -1324,6 +1365,7 @@ mod tests {
                     sav_id: 2,
                     next_sav_id: None,
                     group_id: None,
+                    order_list_id: None,
                     kind: SavVehicleKind::RoadVehicle,
                     pos: crate::TileCoord::new(7, 7),
                     raw_tile: crate::TileCoord::new(7, 7),
@@ -1351,6 +1393,7 @@ mod tests {
                     sav_id: 3,
                     next_sav_id: None,
                     group_id: None,
+                    order_list_id: None,
                     kind: SavVehicleKind::Train,
                     pos: crate::TileCoord::new(5, 5),
                     raw_tile: crate::TileCoord::new(5, 5),

@@ -289,7 +289,7 @@ mod tests {
     use crate::station::{Station, StopKind};
     use crate::tick::GameTick;
     use crate::town::Town;
-    use crate::vehicle::{Vehicle, VehicleKind};
+    use crate::vehicle::{Vehicle, VehicleKind, VehicleOrder};
 
     fn tiny_state() -> GameState {
         let mut state = GameState::new(64, 64);
@@ -478,6 +478,44 @@ mod tests {
         let names = exported_chunk_names(&state).expect("chunk names");
         assert!(names.iter().any(|name| name == "GRPS"));
         assert!(names.iter().any(|name| name == "ERNW"));
+    }
+
+    #[test]
+    fn ottn_roundtrip_rehydrates_shared_order_identity() {
+        let mut state = tiny_state();
+        let station_pos = TileCoord::new(28, 39);
+        state.stations = vec![Station::new_with_kind(station_pos, StopKind::RailStation)];
+        let orders = vec![VehicleOrder::station(station_pos)];
+        state.shared_order_lists = vec![crate::SharedOrderList {
+            id: 77,
+            orders: orders.clone(),
+        }];
+        let mut first = Vehicle::new(
+            40,
+            VehicleKind::Train,
+            TileCoord::new(10, 20),
+            TileCoord::new(10, 20),
+        );
+        first.shared_order_id = Some(77);
+        first.set_vehicle_orders(orders.clone());
+        let mut second = Vehicle::new(
+            41,
+            VehicleKind::Train,
+            TileCoord::new(11, 20),
+            TileCoord::new(11, 20),
+        );
+        second.shared_order_id = Some(77);
+        second.set_vehicle_orders(orders);
+        state.vehicles = vec![first, second];
+
+        let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
+        let loaded = GameState::from_sav_game(sav::load(&bytes).expect("load"));
+        assert_eq!(loaded.shared_order_lists.len(), 1);
+        assert_eq!(loaded.shared_order_lists[0].id, 0);
+        assert_eq!(loaded.shared_order_lists[0].orders.len(), 1);
+        assert_eq!(loaded.vehicles.len(), 2);
+        assert_eq!(loaded.vehicles[0].shared_order_id, Some(0));
+        assert_eq!(loaded.vehicles[1].shared_order_id, Some(0));
     }
 
     #[test]

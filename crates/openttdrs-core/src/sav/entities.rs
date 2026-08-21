@@ -667,6 +667,11 @@ pub struct SavVehicle {
     pub next_sav_id: Option<u32>,
     /// Grupo de flota (`Vehicle::group_id`) o `None` para el grupo por defecto.
     pub group_id: Option<u32>,
+    /// Índice de la lista `ORDL` referenciada por `VEHS.common.orders`.
+    ///
+    /// Se conserva para reconstruir shared orders al hidratar el `GameState`.
+    /// `None` cubre listas legacy (`ORDR`) y vehículos sin órdenes.
+    pub order_list_id: Option<u32>,
     pub kind: SavVehicleKind,
     /// Tesela utilizable por el motor. Para trenes/carretera es literal
     /// `Vehicle::tile`; para aviones se recalcula desde `x_pos`/`y_pos`
@@ -837,6 +842,9 @@ pub(crate) fn vehicles_from_chunks(
         let order_list_ref = record_get(common, "orders")
             .and_then(SlValue::as_u64)
             .unwrap_or(0);
+        let order_list_id = (save_version >= super::orders::SLV_105 && order_list_ref != 0)
+            .then(|| u32::try_from(order_list_ref - 1).ok())
+            .flatten();
         let orders = if is_wagon {
             Vec::new()
         } else {
@@ -881,6 +889,7 @@ pub(crate) fn vehicles_from_chunks(
             sav_id,
             next_sav_id,
             group_id,
+            order_list_id,
             kind,
             pos,
             raw_tile,

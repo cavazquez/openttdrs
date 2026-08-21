@@ -12,7 +12,7 @@ pub use super::orders_codec::SavOrder;
 pub(crate) use super::orders_codec::vehicle_orders_from_sav;
 
 /// `SLV_105` — listas de órdenes como pool `OrderList` (`ORDL`).
-const SLV_105: u16 = 105;
+pub(crate) const SLV_105: u16 = 105;
 /// `SLV_ORDERS_OWNED_BY_ORDERLIST` — órdenes inline en `ORDL`.
 const SLV_ORDERS_OWNED_BY_ORDERLIST: u16 = 354;
 

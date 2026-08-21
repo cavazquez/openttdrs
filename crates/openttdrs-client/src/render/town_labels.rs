@@ -101,8 +101,6 @@ pub(crate) fn spawn_town_labels(
             MapVisualLayer,
             TownLabel,
             MapLabelLod {
-                kind: 0,
-                id: u64::from(town.id),
                 size: bg_size,
                 small_size,
             },
@@ -117,8 +115,6 @@ pub(crate) fn spawn_town_labels(
             MapVisualLayer,
             TownLabel,
             MapLabelLod {
-                kind: 0,
-                id: u64::from(town.id),
                 size: bg_size,
                 small_size,
             },

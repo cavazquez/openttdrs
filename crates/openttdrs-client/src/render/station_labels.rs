@@ -8,7 +8,10 @@ use crate::render::viewport::TileViewportBounds;
 use crate::render::{MapLabelLod, MapLabelText, MapVisualLayer};
 use crate::state::SimWorld;
 
-const LABEL_Z: f32 = 901.0;
+// OpenTTD compone town → sign → station labels en ese orden. Mantener la
+// estación por encima de los carteles evita que el orden de spawn ECS decida
+// cuál de los dos queda visible cuando se superponen en Out4x/Out8x.
+const LABEL_Z: f32 = 902.0;
 const FONT_SIZE: f32 = 9.0;
 const SMALL_FONT_SIZE: f32 = 7.0;
 const CHAR_ADVANCE: f32 = FONT_SIZE * 0.602;
@@ -62,12 +65,6 @@ fn station_label_rect(map: &openttdrs_core::Map, station: &Station) -> (Vec2, Ve
     (center, size)
 }
 
-fn station_label_id(station: &Station) -> u64 {
-    // Las estaciones creadas localmente no tienen StationID persistente. La
-    // posición es estable durante su vida y evita depender del orden Vec.
-    (station.pos.x.max(0) as u64) << 32 | station.pos.y.max(0) as u64
-}
-
 fn station_label_in_bounds(station: &Station, bounds: TileViewportBounds) -> bool {
     let tx = station.pos.x;
     let ty = station.pos.y;
@@ -111,8 +108,6 @@ pub(crate) fn spawn_station_labels(
             MapVisualLayer,
             StationLabel,
             MapLabelLod {
-                kind: 2,
-                id: station_label_id(station),
                 size: bg_size,
                 small_size,
             },
@@ -127,8 +122,6 @@ pub(crate) fn spawn_station_labels(
             MapVisualLayer,
             StationLabel,
             MapLabelLod {
-                kind: 2,
-                id: station_label_id(station),
                 size: bg_size,
                 small_size,
             },

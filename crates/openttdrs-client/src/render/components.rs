@@ -74,13 +74,11 @@ pub(crate) struct MapVisualLayer;
 
 /// Metadatos comunes a los dos nodos de cada cartel (fondo y texto).
 ///
-/// OpenTTD mantiene los carteles legibles en zooms alejados y descarta los
-/// que colisionan. Guardar el tamaño base y una clave estable en ambos nodos
-/// permite aplicar esa política sin depender del orden ECS de cada frame.
+/// OpenTTD mantiene los carteles legibles en zooms alejados. Guardar el tamaño
+/// base de ambas variantes permite cambiar a `FS_SMALL` sin depender del orden
+/// ECS de cada frame.
 #[derive(Component, Clone, Copy, Debug)]
 pub(crate) struct MapLabelLod {
-    pub(crate) kind: u8,
-    pub(crate) id: u64,
     /// Caja del texto normal (Out2x e inferiores).
     pub(crate) size: Vec2,
     /// Caja de la variante pequeña (Out4x/Out8x), como en `ViewportSign`.

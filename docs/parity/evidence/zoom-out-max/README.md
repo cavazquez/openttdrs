@@ -9,10 +9,13 @@ niveles los vehículos y las capas de infraestructura detalladas se omiten a
 propósito; el color del bloque conserva la lectura macro de terreno, agua y
 redes.
 
-Las etiquetas compensan la escala ortográfica para seguir siendo legibles y
-aplican colisión determinista con prioridad pueblos → carteles → estaciones.
-Todavía falta validar rastermente la captura 1832×960 contra OpenTTD y portar
-la selección espacial/ownership exacta del índice de labels de OpenTTD.
+Las etiquetas compensan la escala ortográfica para seguir siendo legibles y se
+componen en el mismo orden de OpenTTD: pueblos → carteles → estaciones. No se
+eliminan por colisión; el viewport oficial agrega todos los signos dentro del
+rectángulo y por eso pueden superponerse densamente en `Out8x`, como en la
+captura de referencia. Todavía falta validar rastermente la captura 1832×960
+contra OpenTTD y portar la selección espacial/ownership exacta del índice de
+labels de OpenTTD.
 
 La captura candidata se tomó con `Kale_TitleGame.sav`, 1832×960, centro
 `128,128`, OpenGFX 8bpp, UI visible y `OPENTTDRS_MAP_SHOT_SCALE=8`.

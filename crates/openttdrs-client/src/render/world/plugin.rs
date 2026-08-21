@@ -26,18 +26,12 @@ fn label_visual_scale(camera_scale: f32, overview: bool) -> f32 {
     camera_scale * if overview { SMALL_LABEL_SCALE } else { 1.0 }
 }
 
-fn label_rects_overlap(a_center: Vec2, a_size: Vec2, b_center: Vec2, b_size: Vec2) -> bool {
-    (a_center.x - b_center.x).abs() * 2.0 < a_size.x + b_size.x
-        && (a_center.y - b_center.y).abs() * 2.0 < a_size.y + b_size.y
-}
-
-/// Mantiene los carteles legibles al alejar la cámara y aplica una selección
-/// espacial determinista en `Out4x`/`Out8x`.
+/// Mantiene los carteles legibles al alejar la cámara.
 ///
 /// Los dos nodos de cada cartel (fondo y texto) comparten `MapLabelLod`, de
-/// modo que una colisión oculta ambos y no deja rectángulos huérfanos. La
-/// escala compensa el `OrthographicProjection`: el tamaño en pantalla deja de
-/// caer a un píxel cuando el mapa entra en vista general.
+/// modo que el fondo y el texto cambian de variante juntos. La escala compensa
+/// el `OrthographicProjection`: el tamaño en pantalla deja de caer a un píxel
+/// cuando el mapa entra en vista general.
 pub(crate) fn sync_map_label_lod(
     cam_q: Query<
         &Projection,
@@ -67,8 +61,12 @@ pub(crate) fn sync_map_label_lod(
         .max(1.0);
     let overview = scale >= LABEL_LOD_ZOOM;
 
-    let mut records = Vec::new();
-    for (entity, lod, mut transform, _, text, text_meta, sprite) in &mut labels {
+    for (_, lod, mut transform, mut visibility, text, text_meta, sprite) in &mut labels {
+        // OpenTTD no elimina carteles por colisión: en Out4x/Out8x todos los
+        // signos dentro del rectángulo de viewport se agregan al pase de
+        // texto y pueden superponerse (visible en mapas densos). Restaurar la
+        // visibilidad también corrige el retorno desde una captura anterior.
+        *visibility = Visibility::Visible;
         let visual_scale = label_visual_scale(scale, overview);
         let base_size = if overview { lod.small_size } else { lod.size };
         transform.scale = Vec3::splat(visual_scale);
@@ -80,53 +78,6 @@ pub(crate) fn sync_map_label_lod(
             if text.0 != *value {
                 text.0.clone_from(value);
             }
-        }
-        records.push((
-            entity,
-            lod.kind,
-            lod.id,
-            transform.translation.truncate(),
-            base_size,
-            visual_scale,
-        ));
-    }
-    if !overview {
-        return;
-    }
-
-    // OpenTTD da prioridad a pueblos, luego signs y finalmente estaciones.
-    // La clave estable evita que el orden de la query ECS cambie qué etiqueta
-    // gana una colisión entre dos ejecuciones del mismo save.
-    records.sort_unstable_by_key(|(_, kind, id, _, _, _)| (*kind, *id));
-    let mut accepted = Vec::new();
-    let mut accepted_keys = std::collections::HashSet::new();
-    let mut visible = std::collections::HashSet::new();
-    for (_, kind, id, center, size, visual_scale) in records.iter().copied() {
-        let key = (kind, id);
-        if accepted_keys.contains(&key) {
-            visible.insert(key);
-            continue;
-        }
-        let screen_size = size * visual_scale;
-        if accepted
-            .iter()
-            .all(|(other_center, other_size): &(Vec2, Vec2)| {
-                !label_rects_overlap(center, screen_size, *other_center, *other_size)
-            })
-        {
-            accepted.push((center, screen_size));
-            accepted_keys.insert(key);
-            visible.insert(key);
-        }
-    }
-
-    for (entity, kind, id, _, _, _) in records {
-        if let Ok((_, _, _, mut visibility, _, _, _)) = labels.get_mut(entity) {
-            *visibility = if visible.contains(&(kind, id)) {
-                Visibility::Visible
-            } else {
-                Visibility::Hidden
-            };
         }
     }
 }

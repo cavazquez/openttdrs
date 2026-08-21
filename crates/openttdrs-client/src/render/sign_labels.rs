@@ -52,8 +52,6 @@ pub(crate) fn spawn_sign_labels(
             SMALL_FONT_SIZE + 4.0,
         );
         let lod = MapLabelLod {
-            kind: 1,
-            id: u64::from(sign.id),
             size: Vec2::new(width, FONT_SIZE + 4.0),
             small_size,
         };

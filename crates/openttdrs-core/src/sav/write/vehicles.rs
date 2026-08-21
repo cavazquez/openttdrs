@@ -205,6 +205,12 @@ struct CommonWire {
     next_ref: u32,
     /// Grupo de flota (`DEFAULT_GROUP` si no está asignado).
     group_id: u16,
+    /// Inicio del horario en ticks (`Vehicle::timetable_start`).
+    timetable_start: u64,
+    /// Tiempo transcurrido en la orden actual.
+    current_order_time: u32,
+    /// Retraso acumulado del horario (`lateness_counter`).
+    timetable_lateness: i32,
 }
 
 fn write_vehs_common(buf: &mut Vec<u8>, c: &CommonWire) {
@@ -222,6 +228,9 @@ fn write_vehs_common(buf: &mut Vec<u8>, c: &CommonWire) {
     buf.push(c.cur_order);
     buf.extend_from_slice(&c.next_ref.to_be_bytes());
     buf.extend_from_slice(&c.group_id.to_be_bytes());
+    buf.extend_from_slice(&c.timetable_start.to_be_bytes());
+    buf.extend_from_slice(&c.current_order_time.to_be_bytes());
+    buf.extend_from_slice(&c.timetable_lateness.to_be_bytes());
 }
 
 fn push_order_list(
@@ -289,6 +298,9 @@ fn common_wire_for(
         cur_order,
         next_ref,
         group_id,
+        timetable_start: u64::from(v.timetable_start),
+        current_order_time: v.current_order_time,
+        timetable_lateness: v.timetable_lateness,
     }
 }
 
@@ -455,6 +467,9 @@ pub(super) fn ordl_and_vehs_records(
                     cur_order: 0,
                     next_ref: 0,
                     group_id: 0xFFFE,
+                    timetable_start: 0,
+                    current_order_time: 0,
+                    timetable_lateness: 0,
                 },
                 None,
             )?;
@@ -585,6 +600,9 @@ fn append_vehs_common_fields(header: &mut Vec<u8>) -> Result<(), SavError> {
     append_field(header, 2, "cur_real_order_index")?;
     append_field(header, 6, "next")?; // REF_VEHICLE → U32
     append_field(header, 4, "group_id")?; // Vehicle::group_id → U16
+    append_field(header, 7, "timetable_start")?; // SLE_UINT64
+    append_field(header, 6, "current_order_time")?; // SLE_UINT32
+    append_field(header, 5, "lateness_counter")?; // SLE_INT32
     header.push(0);
     Ok(())
 }
@@ -981,6 +999,58 @@ mod tests {
         assert_eq!(
             record_get(train, "track").and_then(SlValue::as_u64),
             Some(u64::from(TRACK_BIT_X))
+        );
+    }
+
+    #[test]
+    fn vehs_record_preserves_timetable_runtime_fields() {
+        use crate::sav::chunks::{find_chunk, parse_chunks};
+        use crate::sav::table::{SlValue, parse_table_chunk, record_get};
+
+        let mut state = GameState::new(64, 64);
+        let station_pos = TileCoord::new(28, 39);
+        state.stations = vec![Station::new_with_kind(station_pos, StopKind::RailStation)];
+        let order = VehicleOrder::station(station_pos)
+            .with_wait_ticks(12)
+            .expect("station supports timetable wait")
+            .with_travel_ticks(34)
+            .with_max_speed(90);
+        let mut train = Vehicle::new(
+            0,
+            VehicleKind::Train,
+            TileCoord::new(20, 40),
+            TileCoord::new(20, 40),
+        );
+        train.set_vehicle_orders(vec![order]);
+        train.timetable_start = 1_234;
+        train.current_order_time = 55;
+        train.timetable_lateness = -7;
+        state.vehicles = vec![train];
+
+        let (_, vehs) = ordl_and_vehs_records(&state, 64).unwrap();
+        let chunk = vehs_chunk(&vehs).unwrap();
+        let chunks = parse_chunks(&chunk).unwrap();
+        let raw = find_chunk(&chunks, "VEHS").expect("VEHS");
+        let rows = parse_table_chunk(&raw.body, true).expect("parse VEHS");
+        let train = match record_get(&rows[0].1, "train") {
+            Some(SlValue::Structs(items)) => items.first().expect("train struct"),
+            other => panic!("train ausente: {other:?}"),
+        };
+        let common = match record_get(train, "common") {
+            Some(SlValue::Structs(items)) => items.first().expect("common struct"),
+            other => panic!("common ausente: {other:?}"),
+        };
+        assert_eq!(
+            record_get(common, "timetable_start").and_then(SlValue::as_u64),
+            Some(1_234)
+        );
+        assert_eq!(
+            record_get(common, "current_order_time").and_then(SlValue::as_u64),
+            Some(55)
+        );
+        assert_eq!(
+            record_get(common, "lateness_counter").and_then(SlValue::as_i64),
+            Some(-7)
         );
     }
 

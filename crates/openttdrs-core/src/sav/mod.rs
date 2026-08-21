@@ -810,6 +810,10 @@ impl GameState {
             if kind == VehicleKind::Aircraft {
                 let mut vehicle = Vehicle::new(id, kind, v.pos, v.pos);
                 vehicle.group_id = v.group_id;
+                vehicle.timetable_start = u32::try_from(v.timetable_start.min(u64::from(u32::MAX)))
+                    .unwrap_or(u32::MAX);
+                vehicle.current_order_time = v.current_order_time;
+                vehicle.timetable_lateness = v.timetable_lateness;
                 vehicle.running = v.running;
                 vehicle.cur_speed = v.cur_speed;
                 vehicle.subspeed = v.subspeed;
@@ -831,6 +835,12 @@ impl GameState {
                     vehicle.current_order = v.current_order.min(last);
                     vehicle.cur_implicit_order_index = v.cur_implicit_order_index.min(last);
                 }
+                vehicle.timetable_active = v.timetable_start != 0
+                    || vehicle.orders.iter().any(|order| {
+                        order.wait_ticks() != 0
+                            || order.travel_ticks() != 0
+                            || order.max_speed_limit() != 0
+                    });
                 if let Some(target) = sav.station_index.get(&u32::from(v.airport_targetairport)) {
                     vehicle.dest = target.pos;
                 }
@@ -872,6 +882,10 @@ impl GameState {
             }
             let mut vehicle = Vehicle::new(id, kind, v.pos, v.pos);
             vehicle.group_id = v.group_id;
+            vehicle.timetable_start = u32::try_from(v.timetable_start.min(u64::from(u32::MAX)))
+                .unwrap_or(u32::MAX);
+            vehicle.current_order_time = v.current_order_time;
+            vehicle.timetable_lateness = v.timetable_lateness;
             vehicle.running = v.running;
             vehicle.progress = v.progress;
             vehicle.cur_speed = v.cur_speed;
@@ -904,6 +918,12 @@ impl GameState {
                 vehicle.cur_implicit_order_index = v.cur_implicit_order_index.min(last);
                 reconcile_imported_vehicle_position(&state.map, &mut vehicle);
             }
+            vehicle.timetable_active = v.timetable_start != 0
+                || vehicle.orders.iter().any(|order| {
+                    order.wait_ticks() != 0
+                        || order.travel_ticks() != 0
+                        || order.max_speed_limit() != 0
+                });
             // `set_vehicle_orders` reinicia progreso para comandos nuevos, pero
             // al importar debe conservar exactamente el estado sub-tesela del save.
             vehicle.progress = v.progress;
@@ -1344,6 +1364,9 @@ mod tests {
                     // tipos de vehículo en `VEHS`.
                     next_sav_id: Some(3),
                     group_id: None,
+                    timetable_start: 0,
+                    current_order_time: 0,
+                    timetable_lateness: 0,
                     order_list_id: None,
                     kind: SavVehicleKind::Train,
                     pos: crate::TileCoord::new(5, 5),
@@ -1372,6 +1395,9 @@ mod tests {
                     sav_id: 1,
                     next_sav_id: None,
                     group_id: None,
+                    timetable_start: 0,
+                    current_order_time: 0,
+                    timetable_lateness: 0,
                     order_list_id: None,
                     kind: SavVehicleKind::RoadVehicle,
                     pos: crate::TileCoord::new(6, 6),
@@ -1400,6 +1426,9 @@ mod tests {
                     sav_id: 2,
                     next_sav_id: None,
                     group_id: None,
+                    timetable_start: 0,
+                    current_order_time: 0,
+                    timetable_lateness: 0,
                     order_list_id: None,
                     kind: SavVehicleKind::RoadVehicle,
                     pos: crate::TileCoord::new(7, 7),
@@ -1428,6 +1457,9 @@ mod tests {
                     sav_id: 3,
                     next_sav_id: None,
                     group_id: None,
+                    timetable_start: 0,
+                    current_order_time: 0,
+                    timetable_lateness: 0,
                     order_list_id: None,
                     kind: SavVehicleKind::Train,
                     pos: crate::TileCoord::new(5, 5),

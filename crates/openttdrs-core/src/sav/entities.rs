@@ -667,6 +667,16 @@ pub struct SavVehicle {
     pub next_sav_id: Option<u32>,
     /// Grupo de flota (`Vehicle::group_id`) o `None` para el grupo por defecto.
     pub group_id: Option<u32>,
+    /// Inicio del ciclo de horario (`Vehicle::timetable_start`) en ticks.
+    ///
+    /// El campo existe en `VEHS.common` desde SLV 129. Se conserva aunque el
+    /// importador no pueda reconstruir todos los flags de timetable de
+    /// `OpenTTD`, para que un round-trip no pierda el inicio escalonado.
+    pub timetable_start: u64,
+    /// Tiempo transcurrido en la orden actual (`current_order_time`).
+    pub current_order_time: u32,
+    /// Retraso acumulado del horario (`lateness_counter`).
+    pub timetable_lateness: i32,
     /// Índice de la lista `ORDL` referenciada por `VEHS.common.orders`.
     ///
     /// Se conserva para reconstruir shared orders al hidratar el `GameState`.
@@ -858,6 +868,24 @@ pub(crate) fn vehicles_from_chunks(
             .and_then(SlValue::as_u64)
             .and_then(|v| usize::try_from(v).ok())
             .unwrap_or(current_order);
+        let timetable_start = record_get(common, "timetable_start")
+            .and_then(SlValue::as_u64)
+            .unwrap_or(0);
+        let current_order_time = record_get(common, "current_order_time")
+            .and_then(SlValue::as_u64)
+            .unwrap_or(0)
+            .try_into()
+            .unwrap_or(u32::MAX);
+        let timetable_lateness = record_get(common, "lateness_counter")
+            .and_then(SlValue::as_i64)
+            .unwrap_or(0)
+            .try_into()
+            .unwrap_or_else(|_| {
+                record_get(common, "lateness_counter")
+                    .and_then(SlValue::as_u64)
+                    .and_then(|v| i32::try_from(v).ok())
+                    .unwrap_or(0)
+            });
         let vehstatus = record_get(common, "vehstatus")
             .and_then(SlValue::as_u64)
             .unwrap_or(0);
@@ -889,6 +917,9 @@ pub(crate) fn vehicles_from_chunks(
             sav_id,
             next_sav_id,
             group_id,
+            timetable_start,
+            current_order_time,
+            timetable_lateness,
             order_list_id,
             kind,
             pos,

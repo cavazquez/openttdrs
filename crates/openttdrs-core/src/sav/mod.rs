@@ -170,6 +170,7 @@ impl std::error::Error for SavError {}
 
 /// Contenido decodificado de un `.sav`.
 #[derive(Debug, Clone)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct SavGame {
     /// Versión del savegame (`SLV_*`).
     pub version: u16,
@@ -210,6 +211,22 @@ pub struct SavGame {
     pub station_noise_level: bool,
     /// Nivel de averías persistido en `PATS` / `OPTS`.
     pub vehicle_breakdowns: u8,
+    /// No mandar vehículos a servicio sin averías (`PATS` / `OPTS`).
+    pub no_servicing_if_no_breakdowns: bool,
+    /// Duración de subsidios en años (`PATS` / `OPTS`).
+    pub subsidy_duration: u16,
+    /// Multiplicador de subsidios (`PATS` / `OPTS`).
+    pub subsidy_multiplier: u8,
+    /// Desastres activos (`PATS` / `OPTS`).
+    pub disasters_enabled: bool,
+    /// Tolerancia de la autoridad municipal (`PATS` / `OPTS`).
+    pub town_council_tolerance: crate::town::TownCouncilTolerance,
+    /// Unidades de tiempo de economía en modo wallclock (`PATS` / `OPTS`).
+    pub using_wallclock_units: bool,
+    /// Inflación compuesta habilitada (`PATS` / `OPTS`).
+    pub inflation_enabled: bool,
+    /// Recesiones habilitadas (`PATS` / `OPTS`).
+    pub recessions_enabled: bool,
     /// Estado económico global del chunk `ECMY`.
     pub global_economy: crate::economy::GlobalEconomy,
     /// Grupos de vehículos del chunk `GRPS` (nombres/índices básicos).
@@ -253,14 +270,10 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
     let money = entities::company_money_from_chunks(&chunk_list, version);
     let company_colour = entities::company_colour_from_chunks(&chunk_list, version);
     let climate = landscape::climate_from_chunks(&chunk_list).unwrap_or_default();
-    let (
-        construction,
-        pathfinding,
-        train_acceleration_model,
-        station_noise_level,
-        vehicle_breakdowns,
-    ) = settings::settings_from_chunks(&chunk_list);
-    let global_economy = economy::global_economy_from_chunks(&chunk_list);
+    let parsed_settings = settings::settings_from_chunks(&chunk_list);
+    let mut global_economy = economy::global_economy_from_chunks(&chunk_list);
+    global_economy.inflation_enabled = parsed_settings.inflation_enabled;
+    global_economy.recessions_enabled = parsed_settings.recessions_enabled;
     let vehicle_groups = fleet::vehicle_groups_from_chunks(&chunk_list);
     let autoreplace_rules = fleet::autoreplace_rules_from_chunks(&chunk_list);
     let link_graph =
@@ -281,11 +294,19 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
         game_time,
         link_graph,
         climate,
-        construction,
-        pathfinding,
-        train_acceleration_model,
-        station_noise_level,
-        vehicle_breakdowns,
+        construction: parsed_settings.construction,
+        pathfinding: parsed_settings.pathfinding,
+        train_acceleration_model: parsed_settings.train_acceleration_model,
+        station_noise_level: parsed_settings.station_noise_level,
+        vehicle_breakdowns: parsed_settings.vehicle_breakdowns,
+        no_servicing_if_no_breakdowns: parsed_settings.no_servicing_if_no_breakdowns,
+        subsidy_duration: parsed_settings.subsidy_duration,
+        subsidy_multiplier: parsed_settings.subsidy_multiplier,
+        disasters_enabled: parsed_settings.disasters_enabled,
+        town_council_tolerance: parsed_settings.town_council_tolerance,
+        using_wallclock_units: parsed_settings.using_wallclock_units,
+        inflation_enabled: parsed_settings.inflation_enabled,
+        recessions_enabled: parsed_settings.recessions_enabled,
         global_economy,
         vehicle_groups,
         autoreplace_rules,
@@ -608,6 +629,8 @@ impl GameState {
         let mut state = Self::from_map(map);
         state.climate = sav.climate;
         state.global_economy = sav.global_economy;
+        state.global_economy.inflation_enabled = sav.inflation_enabled;
+        state.global_economy.recessions_enabled = sav.recessions_enabled;
         state.sync_scaled_max_loan();
         state.cargo_payments = sav.cargo_payments;
         state.construction = sav.construction;
@@ -615,11 +638,21 @@ impl GameState {
         state.train_acceleration_model = sav.train_acceleration_model;
         state.station_noise_level = sav.station_noise_level;
         state.vehicle_breakdowns = sav.vehicle_breakdowns;
+        state.no_servicing_if_no_breakdowns = sav.no_servicing_if_no_breakdowns;
+        state.subsidy_duration = sav.subsidy_duration;
+        state.subsidy_multiplier = sav.subsidy_multiplier;
+        state.disasters_enabled = sav.disasters_enabled;
+        state.town_council_tolerance = sav.town_council_tolerance;
+        state.using_wallclock_units = sav.using_wallclock_units;
         state.vehicle_groups = sav.vehicle_groups;
         state.autoreplace_rules = sav.autoreplace_rules;
         if let Some(time) = sav.game_time {
             state.tick = date::game_tick_from_sav_time(time);
         }
+        // El modo de tiempo y el tick deben configurar el mismo reloj
+        // económico antes de hidratar vehículos/órdenes; de lo contrario un
+        // save wallclock vuelve a calendario al primer mes simulado.
+        state.sync_timers_from_tick();
         state.jgr_tunnels_from_footer = sav.extras.jgr_tunnels_from_tnbp();
         state.towns = sav.towns;
         for town in &mut state.towns {
@@ -946,6 +979,14 @@ mod tests {
             train_acceleration_model: crate::engine::TrainAccelerationModel::Realistic,
             station_noise_level: false,
             vehicle_breakdowns: 2,
+            no_servicing_if_no_breakdowns: true,
+            subsidy_duration: 1,
+            subsidy_multiplier: 1,
+            disasters_enabled: true,
+            town_council_tolerance: crate::town::TownCouncilTolerance::default(),
+            using_wallclock_units: false,
+            inflation_enabled: true,
+            recessions_enabled: false,
             global_economy: crate::economy::GlobalEconomy::new(),
             vehicle_groups: Vec::new(),
             autoreplace_rules: Vec::new(),
@@ -1344,6 +1385,14 @@ mod tests {
             train_acceleration_model: crate::engine::TrainAccelerationModel::Realistic,
             station_noise_level: false,
             vehicle_breakdowns: 2,
+            no_servicing_if_no_breakdowns: true,
+            subsidy_duration: 1,
+            subsidy_multiplier: 1,
+            disasters_enabled: true,
+            town_council_tolerance: crate::town::TownCouncilTolerance::default(),
+            using_wallclock_units: false,
+            inflation_enabled: true,
+            recessions_enabled: false,
             global_economy: crate::economy::GlobalEconomy::new(),
             vehicle_groups: Vec::new(),
             autoreplace_rules: Vec::new(),

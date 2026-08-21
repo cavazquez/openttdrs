@@ -27,7 +27,7 @@ pub(super) fn plyr_record(state: &GameState) -> Vec<u8> {
     rec
 }
 
-/// Ajustes de partida que afectan cómo OpenTTD interpreta y simula el mapa al
+/// Ajustes de partida que afectan cómo `OpenTTD` interpreta y simula el mapa al
 /// cargarlo. El header contiene el subconjunto que el core modela; los demás
 /// settings de PATS conservan los defaults del juego.
 pub(super) fn pats_chunk(state: &GameState) -> Result<Vec<u8>, SavError> {
@@ -59,26 +59,47 @@ pub(super) fn pats_chunk(state: &GameState) -> Result<Vec<u8>, SavError> {
             (2, "vehicle.train_acceleration_model"),
             (2, "economy.station_noise_level"),
             (2, "difficulty.vehicle_breakdowns"),
+            (2, "order.no_servicing_if_no_breakdowns"),
+            (4, "difficulty.subsidy_duration"),
+            (2, "difficulty.subsidy_multiplier"),
+            (2, "difficulty.disasters"),
+            (2, "difficulty.town_council_tolerance"),
+            (2, "economy.timekeeping_units"),
+            (2, "economy.inflation"),
+            (2, "difficulty.economy"),
         ],
-        &[vec![
-            landscape,
-            road_side,
-            signal_side,
-            u8::from(state.construction.freeform_edges),
-            state.pathfinding.wait_for_pbs_path,
-            state.pathfinding.path_backoff_interval,
-            u8::from(state.pathfinding.reverse_at_signals),
-            state.pathfinding.wait_oneway_signal,
-            state.pathfinding.wait_twoway_signal,
-            u8::from(state.pathfinding.reserve_paths),
-            state.train_acceleration_model as u8,
-            u8::from(state.station_noise_level),
-            state.vehicle_breakdowns.min(2),
-        ]],
+        &[{
+            let mut record = vec![
+                landscape,
+                road_side,
+                signal_side,
+                u8::from(state.construction.freeform_edges),
+                state.pathfinding.wait_for_pbs_path,
+                state.pathfinding.path_backoff_interval,
+                u8::from(state.pathfinding.reverse_at_signals),
+                state.pathfinding.wait_oneway_signal,
+                state.pathfinding.wait_twoway_signal,
+                u8::from(state.pathfinding.reserve_paths),
+                state.train_acceleration_model as u8,
+                u8::from(state.station_noise_level),
+                state.vehicle_breakdowns.min(2),
+                u8::from(state.no_servicing_if_no_breakdowns),
+            ];
+            record.extend_from_slice(&state.subsidy_duration.to_be_bytes());
+            record.extend_from_slice(&[
+                state.subsidy_multiplier.min(3),
+                u8::from(state.disasters_enabled),
+                state.town_council_tolerance as u8,
+                u8::from(state.using_wallclock_units),
+                u8::from(state.global_economy.inflation_enabled),
+                u8::from(state.global_economy.recessions_enabled),
+            ]);
+            record
+        }],
     )
 }
 
-/// Serializa el registro global `ECMY` que OpenTTD usa para reanudar inflación,
+/// Serializa el registro global `ECMY` que `OpenTTD` usa para reanudar inflación,
 /// recesiones y el reparto diario de cambios de industria.
 pub(super) fn ecmy_chunk(state: &GameState) -> Result<Vec<u8>, SavError> {
     let economy = &state.global_economy;

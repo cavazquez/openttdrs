@@ -10,13 +10,13 @@ pub struct VehicleGroup {
     /// Empresa propietaria (`INVALID_OWNER` se representa como `0xFF`).
     #[serde(default)]
     pub owner: u8,
-    /// Tipo de vehículo (`VehicleType` de OpenTTD).
+    /// Tipo de vehículo (`VehicleType` de `OpenTTD`).
     #[serde(default)]
     pub vehicle_type: u8,
     /// Flags persistentes de autoreemplazo del grupo.
     #[serde(default)]
     pub flags: u8,
-    /// Estado de librea persistido por OpenTTD.
+    /// Estado de librea persistido por `OpenTTD`.
     #[serde(default)]
     pub livery_in_use: u8,
     #[serde(default)]

@@ -1,4 +1,4 @@
-//! Estado económico global (`ECMY`) de un savegame de OpenTTD.
+//! Estado económico global (`ECMY`) de un savegame de `OpenTTD`.
 
 use crate::economy::GlobalEconomy;
 
@@ -7,7 +7,7 @@ use super::table::{SlValue, parse_table_chunk, record_get};
 
 /// Lee el registro global `ECMY` de saves modernos.
 ///
-/// El chunk sólo contiene los campos que OpenTTD conserva en la versión
+/// El chunk sólo contiene los campos que `OpenTTD` conserva en la versión
 /// actual. Los flags de dificultad que no forman parte de `ECMY` permanecen
 /// con sus defaults y se hidratan desde `PATS`/`OPTS` cuando existen.
 #[must_use]

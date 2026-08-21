@@ -801,6 +801,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::items_after_statements)]
     fn vehs_preserves_train_consist_next_refs_and_wagon_subtypes() {
         use crate::sav::chunks::{find_chunk, parse_chunks};
         use crate::sav::table::{SlRecord, SlValue, parse_table_chunk, record_get};

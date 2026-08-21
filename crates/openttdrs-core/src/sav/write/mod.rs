@@ -7,8 +7,8 @@
 //! (SAVEBYTE + structs) + `VEHS`/`ORDL` (tren + ROAD + ship + aircraft ala fija)
 //! + `INDY` + `ECMY` + `DATE`/`PLYR` cargable por `OpenTTD` ≥15.3 dedicated.
 //!
-//! Residual: tram, rotor heli, creación de nuevos `CAPY` packets, settings fuera de los
-//! tres campos de `PATS`, `GSET`/`ENGN`/`SRND`/`NewGRF`/`PLYR` completo.
+//! Residual: tram, rotor heli, creación de nuevos `CAPY` packets, settings fuera del
+//! subconjunto modelado de `PATS`, `GSET`/`ENGN`/`SRND`/`NewGRF`/`PLYR` completo.
 //! Limitaciones: `docs/PARIDAD.md` y `docs/archive/merged-2026-07/ROADMAP_SAV_EXPORT.md`.
 
 #![allow(clippy::cast_possible_truncation)]
@@ -365,6 +365,14 @@ mod tests {
         state.train_acceleration_model = crate::engine::TrainAccelerationModel::Original;
         state.station_noise_level = true;
         state.vehicle_breakdowns = 0;
+        state.no_servicing_if_no_breakdowns = false;
+        state.subsidy_duration = 5_000;
+        state.subsidy_multiplier = 3;
+        state.disasters_enabled = false;
+        state.town_council_tolerance = crate::town::TownCouncilTolerance::Permissive;
+        state.using_wallclock_units = true;
+        state.global_economy.inflation_enabled = false;
+        state.global_economy.recessions_enabled = true;
         state.global_economy.inflation_prices = 123_456;
         state.global_economy.inflation_payment = 234_567;
         state.global_economy.fluct = -7;
@@ -391,6 +399,26 @@ mod tests {
         );
         assert_eq!(sav_game.station_noise_level, state.station_noise_level);
         assert_eq!(sav_game.vehicle_breakdowns, state.vehicle_breakdowns);
+        assert_eq!(
+            sav_game.no_servicing_if_no_breakdowns,
+            state.no_servicing_if_no_breakdowns
+        );
+        assert_eq!(sav_game.subsidy_duration, state.subsidy_duration);
+        assert_eq!(sav_game.subsidy_multiplier, state.subsidy_multiplier);
+        assert_eq!(sav_game.disasters_enabled, state.disasters_enabled);
+        assert_eq!(
+            sav_game.town_council_tolerance,
+            state.town_council_tolerance
+        );
+        assert_eq!(sav_game.using_wallclock_units, state.using_wallclock_units);
+        assert_eq!(
+            sav_game.global_economy.inflation_enabled,
+            state.global_economy.inflation_enabled
+        );
+        assert_eq!(
+            sav_game.global_economy.recessions_enabled,
+            state.global_economy.recessions_enabled
+        );
         assert_eq!(sav_game.global_economy, state.global_economy);
         assert_eq!(sav_game.cargo_payments, state.cargo_payments);
         assert!(

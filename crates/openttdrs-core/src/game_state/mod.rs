@@ -48,7 +48,7 @@ pub struct SimStats {
     pub economy_history: EconomyHistory,
 }
 
-/// Entrada persistente del pool `CAPY` de OpenTTD.
+/// Entrada persistente del pool `CAPY` de `OpenTTD`.
 ///
 /// `front_vehicle_ref` es el índice de pool serializado por `REF_VEHICLE`
 /// (no el id lógico del vehículo). El runtime todavía no crea pagos activos,
@@ -545,7 +545,7 @@ pub struct GameState {
     pub vehicle_breakdowns: u8,
     /// Años de bonificación de subsidio adjudicado (`difficulty.subsidy_duration`).
     #[serde(default = "default_subsidy_duration")]
-    pub subsidy_duration: u8,
+    pub subsidy_duration: u16,
     /// Índice de multiplicador de subsidio (`difficulty.subsidy_multiplier`: 0..=3).
     #[serde(default = "default_subsidy_multiplier")]
     pub subsidy_multiplier: u8,
@@ -570,7 +570,7 @@ const fn default_vehicle_breakdowns() -> u8 {
     2
 }
 
-const fn default_subsidy_duration() -> u8 {
+const fn default_subsidy_duration() -> u16 {
     1
 }
 

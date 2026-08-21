@@ -2163,7 +2163,9 @@ avión de ala fija.
 
 Preserva `CAPY` al importar/exportar, pero todavía no crea pagos activos desde
 el runtime; faltan pools completos de compañías, `OBJS`,
-`PATS`/`OPTS`/`GSET`/`ENGN`/`SRND`, ni configuración NewGRF. El historial de
+`GSET`/`ENGN`/`SRND`, ni configuración NewGRF. `PATS`/`OPTS` ya conserva el
+subconjunto ejecutado por el core (construcción, pathfinding, averías,
+subsidios, desastres, autoridad, inflación/recesiones y unidades de tiempo). El historial de
 noticias propio queda en JSON (no es un pool nativo de OpenTTD `.sav`). `ORDL`
 preserva los campos básicos por orden —incluidos wait/travel/max-speed—, pero
 no la identidad de shared orders ni el estado completo de horarios. Tranvías y

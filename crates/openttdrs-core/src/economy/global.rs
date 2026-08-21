@@ -63,7 +63,7 @@ pub struct GlobalEconomy {
     pub interest_rate: u8,
     /// Acumulador fraccionario de cambios diarios de industrias (`ECMY`).
     ///
-    /// OpenTTD guarda este contador para reanudar exactamente el reparto de
+    /// `OpenTTD` guarda este contador para reanudar exactamente el reparto de
     /// cambios de producción después de cargar una partida. El incremento
     /// derivado no se serializa y se recalcula en el runtime.
     #[serde(default)]

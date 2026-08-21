@@ -61,6 +61,38 @@ pub(crate) fn global_economy_from_chunks(chunks: &[RawChunk]) -> GlobalEconomy {
     economy
 }
 
+/// Lee el pool `CAPY` sin intentar ejecutar pagos durante la simulación.
+#[must_use]
+pub(crate) fn cargo_payments_from_chunks(chunks: &[RawChunk]) -> Vec<crate::CargoPaymentState> {
+    let Some(chunk) = find_chunk(chunks, "CAPY") else {
+        return Vec::new();
+    };
+    let Ok(rows) = parse_table_chunk(&chunk.body, false) else {
+        return Vec::new();
+    };
+    rows.into_iter()
+        .map(|(id, record)| crate::CargoPaymentState {
+            id,
+            front_vehicle_ref: record_get(&record, "front")
+                .and_then(SlValue::as_u64)
+                .and_then(|reference| {
+                    (reference != 0)
+                        .then(|| u32::try_from(reference - 1).ok())
+                        .flatten()
+                }),
+            route_profit: record_get(&record, "route_profit")
+                .and_then(SlValue::as_i64)
+                .unwrap_or(0),
+            visual_profit: record_get(&record, "visual_profit")
+                .and_then(SlValue::as_i64)
+                .unwrap_or(0),
+            visual_transfer: record_get(&record, "visual_transfer")
+                .and_then(SlValue::as_i64)
+                .unwrap_or(0),
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -101,5 +133,36 @@ mod tests {
         assert_eq!(economy.infl_amount, 4);
         assert_eq!(economy.infl_amount_pr, 3);
         assert_eq!(economy.industry_daily_change_counter, 77);
+    }
+
+    #[test]
+    fn reads_capy_sparse_pool_and_decodes_vehicle_reference() {
+        let chunk = RawChunk {
+            name: *b"CAPY",
+            ch_type: CH_TABLE,
+            body: build_table_body(
+                &[
+                    (6, "front"),
+                    (7, "route_profit"),
+                    (7, "visual_profit"),
+                    (7, "visual_transfer"),
+                ],
+                &[Vec::new(), {
+                    let mut record = Vec::new();
+                    record.extend_from_slice(&8u32.to_be_bytes());
+                    record.extend_from_slice(&(-11i64).to_be_bytes());
+                    record.extend_from_slice(&(-7i64).to_be_bytes());
+                    record.extend_from_slice(&3i64.to_be_bytes());
+                    record
+                }],
+            ),
+        };
+        let payments = cargo_payments_from_chunks(&[chunk]);
+        assert_eq!(payments.len(), 1);
+        assert_eq!(payments[0].id, 1);
+        assert_eq!(payments[0].front_vehicle_ref, Some(7));
+        assert_eq!(payments[0].route_profit, -11);
+        assert_eq!(payments[0].visual_profit, -7);
+        assert_eq!(payments[0].visual_transfer, 3);
     }
 }

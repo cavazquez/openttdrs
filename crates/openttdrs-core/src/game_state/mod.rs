@@ -48,6 +48,25 @@ pub struct SimStats {
     pub economy_history: EconomyHistory,
 }
 
+/// Entrada persistente del pool `CAPY` de OpenTTD.
+///
+/// `front_vehicle_ref` es el índice de pool serializado por `REF_VEHICLE`
+/// (no el id lógico del vehículo). El runtime todavía no crea pagos activos,
+/// pero conservarlos permite un round-trip `.sav` sin perder el estado de una
+/// partida que estaba guardando una liquidación.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct CargoPaymentState {
+    pub id: u32,
+    #[serde(default)]
+    pub front_vehicle_ref: Option<u32>,
+    #[serde(default)]
+    pub route_profit: i64,
+    #[serde(default)]
+    pub visual_profit: i64,
+    #[serde(default)]
+    pub visual_transfer: i64,
+}
+
 /// Número de meses retenidos en gráficos económicos.
 pub const ECONOMY_HISTORY_MONTHS: usize = 36;
 
@@ -302,6 +321,9 @@ pub struct GameState {
     #[serde(default)]
     pub towns: Vec<crate::town::Town>,
     pub stats: SimStats,
+    /// Pool de pagos activos preservado desde/hacia `CAPY`.
+    #[serde(default)]
+    pub cargo_payments: Vec<CargoPaymentState>,
     /// Espejo de la compañía activa (jugador). Fuente de verdad: [`Self::companies`].
     #[serde(default)]
     pub economy: CompanyEconomy,
@@ -589,6 +611,7 @@ impl GameState {
             stations: Vec::new(),
             towns: Vec::new(),
             stats: SimStats::default(),
+            cargo_payments: Vec::new(),
             economy: CompanyEconomy::default(),
             company_colour: 0,
             companies: vec![crate::company::Company::player(
@@ -707,6 +730,7 @@ impl GameState {
             stations: Vec::new(),
             towns: Vec::new(),
             stats: SimStats::default(),
+            cargo_payments: Vec::new(),
             economy: CompanyEconomy::default(),
             company_colour: 0,
             companies: vec![crate::company::Company::player(

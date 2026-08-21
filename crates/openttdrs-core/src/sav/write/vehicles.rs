@@ -9,7 +9,7 @@
 //! (`m4`/`M3HI`; 0 = `ROADTYPE_ROAD`). Ship: agua (`MP_WATER`). Aircraft:
 //! primario + sombra encadenada (`next` REF) — `OpenTTD` exige shadow.
 //!
-//! Residual: tram, CAPY packets, rotor heli (solo ala fija en export).
+//! Residual: tram, creación runtime de pagos `CAPY`, rotor heli (solo ala fija en export).
 
 use super::super::SavError;
 use super::super::chunks::{CH_SPARSE_TABLE, CH_TABLE};

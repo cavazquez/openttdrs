@@ -257,11 +257,11 @@ pub mod mcf {
 pub use game_state::CARGO_DELIVERY_PAYMENT;
 pub use game_state::IncomePopup;
 pub use game_state::{
-    BRIDGE_BUILD_COST_PER_TILE, BUY_LAND_BASE_PRICE, CLEAR_TILE_COST, CompanyEconomy,
-    DEPOT_BUILD_COST, ECONOMY_HISTORY_MONTHS, EconomyHistory, GameState, MonthlyEconomySample,
-    RAIL_BUILD_COST, ROAD_BUILD_COST, STATION_BUILD_COST, SimStats, SimulationRuntime,
-    TERRAFORM_BASE_PRICE, TERRAFORM_COST, TUNNEL_BUILD_COST_PER_TILE, WAYPOINT_BUILD_COST,
-    company_net_value,
+    BRIDGE_BUILD_COST_PER_TILE, BUY_LAND_BASE_PRICE, CLEAR_TILE_COST, CargoPaymentState,
+    CompanyEconomy, DEPOT_BUILD_COST, ECONOMY_HISTORY_MONTHS, EconomyHistory, GameState,
+    MonthlyEconomySample, RAIL_BUILD_COST, ROAD_BUILD_COST, STATION_BUILD_COST, SimStats,
+    SimulationRuntime, TERRAFORM_BASE_PRICE, TERRAFORM_COST, TUNNEL_BUILD_COST_PER_TILE,
+    WAYPOINT_BUILD_COST, company_net_value,
 };
 pub use gs::{
     GsGoal, GsGoalKind, GsLeagueRow, GsState, GsStoryPage, league_rows, seed_gs_demo, tick_gs,

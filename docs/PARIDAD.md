@@ -1362,7 +1362,7 @@ En saves &lt; 214, OpenTTD mueve el RoadType desde bits 6–7 de `m7` a `m4` (ro
 
 ### Notas
 
-- Export MVP (#226/#267): `MAPS` `CH_TABLE` + `CITY` (≥1) + `STNN` moderno + `VEHS`/`ORDL` (tren + ROAD + **ship** + **aircraft** ala fija+sombra) + `INDY` + `ECMY` + DATE/PLYR; planos RIFF. Cargamentos: goods×64 vacíos en STNN (sin CAPY). Fixtures smoke `validate_sav_openttd.sh`: `mvp_openttd_load.sav`, `mvp_openttd_stations.sav`, `mvp_openttd_train.sav`, `mvp_openttd_rich.sav`, `mvp_openttd_ship.sav` (#267), `demo_openttd.sav`. Round-trip OpenTTD→openttdrs: `scripts/roundtrip_sav_openttd.sh`. Residual: tram, rotor heli, **CAPY packets**, PATS/OPTS/GSET/ENGN/SRND/NewGRF/PLYR completo.
+- Export MVP (#226/#267): `MAPS` `CH_TABLE` + `CITY` (≥1) + `STNN` moderno + `VEHS`/`ORDL` (tren + ROAD + **ship** + **aircraft** ala fija+sombra) + `INDY` + `ECMY` + `CAPY` preservado + DATE/PLYR; planos RIFF. Cargamentos nuevos siguen goods×64 vacíos en STNN y el runtime no crea pagos `CAPY`. Fixtures smoke `validate_sav_openttd.sh`: `mvp_openttd_load.sav`, `mvp_openttd_stations.sav`, `mvp_openttd_train.sav`, `mvp_openttd_rich.sav`, `mvp_openttd_ship.sav` (#267), `demo_openttd.sav`. Round-trip OpenTTD→openttdrs: `scripts/roundtrip_sav_openttd.sh`. Residual: tram, rotor heli, **generación runtime de CAPY**, PATS/OPTS/GSET/ENGN/SRND/NewGRF/PLYR completo.
 - Dedicated + `-g` dispara dos `AfterLoadGame` (new-game luego load); el export usa `OPENTTDRS_SNAPSHOT_MIN_CALL=2`.
 - El oráculo **no** invoca `parse_sav.py` ni `snapshot_dumper`.
 

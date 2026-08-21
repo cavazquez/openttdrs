@@ -7,7 +7,7 @@
 //! (SAVEBYTE + structs) + `VEHS`/`ORDL` (tren + ROAD + ship + aircraft ala fija)
 //! + `INDY` + `ECMY` + `DATE`/`PLYR` cargable por `OpenTTD` ≥15.3 dedicated.
 //!
-//! Residual: tram, rotor heli, `CAPY` packets, settings fuera de los
+//! Residual: tram, rotor heli, creación de nuevos `CAPY` packets, settings fuera de los
 //! tres campos de `PATS`, `GSET`/`ENGN`/`SRND`/`NewGRF`/`PLYR` completo.
 //! Limitaciones: `docs/PARIDAD.md` y `docs/archive/merged-2026-07/ROADMAP_SAV_EXPORT.md`.
 
@@ -129,8 +129,8 @@ fn scan_chunk_names(payload: &[u8]) -> Vec<String> {
     // Tras CH_TABLE el tamaño del header no basta: completar con búsqueda de fourcc.
     for &want in REQUIRED_EXPORT_CHUNKS.iter().chain(
         [
-            "STNN", "CITY", "INDY", "ORDL", "VEHS", "LGRP", "LGRJ", "LGRS", "PATS", "ECMY", "GRPS",
-            "ERNW",
+            "STNN", "CITY", "INDY", "ORDL", "VEHS", "LGRP", "LGRJ", "LGRS", "PATS", "ECMY", "CAPY",
+            "GRPS", "ERNW",
         ]
         .iter(),
     ) {
@@ -256,6 +256,9 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
 
     data.extend_from_slice(&meta::pats_chunk(state)?);
     data.extend_from_slice(&meta::ecmy_chunk(state)?);
+    if let Some(capy) = meta::capy_chunk(state)? {
+        data.extend_from_slice(&capy);
+    }
     data.extend_from_slice(&fleet::fleet_chunks(state)?);
 
     data.extend_from_slice(&chunks::table_chunk(
@@ -369,6 +372,13 @@ mod tests {
         state.global_economy.infl_amount = 4;
         state.global_economy.infl_amount_pr = 3;
         state.global_economy.industry_daily_change_counter = 77;
+        state.cargo_payments = vec![crate::CargoPaymentState {
+            id: 1,
+            front_vehicle_ref: Some(7),
+            route_profit: -11,
+            visual_profit: -7,
+            visual_transfer: 3,
+        }];
 
         let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
         let sav_game = sav::load(&bytes).expect("load");
@@ -382,6 +392,7 @@ mod tests {
         assert_eq!(sav_game.station_noise_level, state.station_noise_level);
         assert_eq!(sav_game.vehicle_breakdowns, state.vehicle_breakdowns);
         assert_eq!(sav_game.global_economy, state.global_economy);
+        assert_eq!(sav_game.cargo_payments, state.cargo_payments);
         assert!(
             exported_chunk_names(&state)
                 .expect("chunk names")
@@ -393,6 +404,12 @@ mod tests {
                 .expect("chunk names")
                 .iter()
                 .any(|name| name == "ECMY")
+        );
+        assert!(
+            exported_chunk_names(&state)
+                .expect("chunk names")
+                .iter()
+                .any(|name| name == "CAPY")
         );
     }
 

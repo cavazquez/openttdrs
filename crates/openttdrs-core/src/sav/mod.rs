@@ -184,6 +184,8 @@ pub struct SavGame {
     pub industries: Vec<SavIndustry>,
     /// Paquetes de carga físicos del chunk `CAPA`.
     pub cargo_packets: Vec<SavCargoPacket>,
+    /// Pagos activos del pool `CAPY` (preservados, sin ejecución de runtime).
+    pub cargo_payments: Vec<crate::CargoPaymentState>,
     /// Vehículos del chunk `VEHS` (cabezas de convoy tren/carretera).
     pub vehicles: Vec<SavVehicle>,
     /// Dinero de la primera empresa (`PLYR`), si está presente.
@@ -243,6 +245,7 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
     rebuild_town_populations(&map, &mut towns);
     let industries = entities::industries_from_chunks(&chunk_list, map_w, version);
     let cargo_packets = entities::cargo_packets_from_chunks(&chunk_list, map_w, version);
+    let cargo_payments = economy::cargo_payments_from_chunks(&chunk_list);
     let order_import = orders::SavOrderImport::from_chunks(&chunk_list, version);
     let station_index = entities::station_index_from_chunks(&chunk_list, map_w, version);
     let vehicles = entities::vehicles_from_chunks(&chunk_list, map_w, &order_import, version);
@@ -270,6 +273,7 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
         towns,
         industries,
         cargo_packets,
+        cargo_payments,
         vehicles,
         money,
         company_colour,
@@ -605,6 +609,7 @@ impl GameState {
         state.climate = sav.climate;
         state.global_economy = sav.global_economy;
         state.sync_scaled_max_loan();
+        state.cargo_payments = sav.cargo_payments;
         state.construction = sav.construction;
         state.pathfinding = sav.pathfinding;
         state.train_acceleration_model = sav.train_acceleration_model;
@@ -928,6 +933,7 @@ mod tests {
             towns: Vec::new(),
             industries: Vec::new(),
             cargo_packets: Vec::new(),
+            cargo_payments: Vec::new(),
             vehicles: Vec::new(),
             money: None,
             company_colour: None,
@@ -1214,6 +1220,7 @@ mod tests {
             }],
             industries: Vec::new(),
             cargo_packets: Vec::new(),
+            cargo_payments: Vec::new(),
             link_graph: LinkGraphStats::default(),
             vehicles: vec![
                 SavVehicle {

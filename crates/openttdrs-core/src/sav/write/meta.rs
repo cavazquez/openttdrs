@@ -104,3 +104,51 @@ pub(super) fn ecmy_chunk(state: &GameState) -> Result<Vec<u8>, SavError> {
         &[record],
     )
 }
+
+/// Serializa el pool `CAPY` preservado desde un save. El runtime no crea
+/// nuevos pagos activos, por lo que un estado recién iniciado simplemente no
+/// emite este chunk.
+pub(super) fn capy_chunk(state: &GameState) -> Result<Option<Vec<u8>>, SavError> {
+    if state.cargo_payments.is_empty() {
+        return Ok(None);
+    }
+    let max_id = state
+        .cargo_payments
+        .iter()
+        .map(|payment| payment.id)
+        .max()
+        .unwrap_or(0);
+    let Some(record_count) = usize::try_from(max_id)
+        .ok()
+        .and_then(|id| id.checked_add(1))
+    else {
+        return Err(SavError::BadFormat("pool CAPY demasiado grande".into()));
+    };
+    let mut records = vec![Vec::new(); record_count];
+    for payment in &state.cargo_payments {
+        let Ok(id) = usize::try_from(payment.id) else {
+            return Err(SavError::BadFormat("índice CAPY fuera de rango".into()));
+        };
+        let Some(record) = records.get_mut(id) else {
+            return Err(SavError::BadFormat("índice CAPY fuera de rango".into()));
+        };
+        let front = payment
+            .front_vehicle_ref
+            .map_or(0, |reference| reference.saturating_add(1));
+        record.extend_from_slice(&front.to_be_bytes());
+        record.extend_from_slice(&payment.route_profit.to_be_bytes());
+        record.extend_from_slice(&payment.visual_profit.to_be_bytes());
+        record.extend_from_slice(&payment.visual_transfer.to_be_bytes());
+    }
+    table_chunk(
+        *b"CAPY",
+        &[
+            (6, "front"),
+            (7, "route_profit"),
+            (7, "visual_profit"),
+            (7, "visual_transfer"),
+        ],
+        &records,
+    )
+    .map(Some)
+}

@@ -157,7 +157,11 @@ pub(crate) fn sync_main_menu_preferences(
         *bg = option_button_bg(prefs.locale() == btn.0, *interaction);
     }
     for mut text in &mut lang_label {
-        **text = format!("Idioma: {}", prefs.locale().label());
+        **text = format!(
+            "{}: {}",
+            crate::i18n::text(prefs.locale(), "Idioma"),
+            prefs.locale().label()
+        );
     }
 }
 

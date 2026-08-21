@@ -7,8 +7,9 @@ use crate::ui::hud::UiClickBeep;
 
 use super::labels::climate_label;
 use super::{
-    MainMenuClimateButton, MainMenuDensityButton, MainMenuDensityTarget, MainMenuMapSizeButton,
-    MainMenuRoughnessButton, MainMenuStartYearButton, MainMenuStartingMoneyButton, MainMenuToggle,
+    MainMenuClimateButton, MainMenuDensityButton, MainMenuDensityTarget, MainMenuLocalizedText,
+    MainMenuMapSizeButton, MainMenuRoughnessButton, MainMenuStartYearButton,
+    MainMenuStartingMoneyButton, MainMenuToggle,
 };
 
 pub(super) fn density_button(
@@ -243,7 +244,11 @@ pub(super) fn toggle_button(toggle: MainMenuToggle, label: &'static str) -> impl
     )
 }
 
-pub(super) fn primary_button(marker: impl Component, label: &str, height: f32) -> impl Bundle {
+pub(super) fn primary_button(
+    marker: impl Component,
+    label: &'static str,
+    height: f32,
+) -> impl Bundle {
     (
         Button,
         UiClickBeep,
@@ -260,6 +265,7 @@ pub(super) fn primary_button(marker: impl Component, label: &str, height: f32) -
         BorderColor::all(Color::srgb(0.7, 0.66, 0.5)),
         Interaction::default(),
         children![(
+            MainMenuLocalizedText(label),
             Text::new(label),
             TextFont {
                 font_size: FontSize::Rem(UiFontRole::Hud.rem_size()),
@@ -270,7 +276,11 @@ pub(super) fn primary_button(marker: impl Component, label: &str, height: f32) -
     )
 }
 
-pub(super) fn secondary_button(marker: impl Component, label: &str, height: f32) -> impl Bundle {
+pub(super) fn secondary_button(
+    marker: impl Component,
+    label: &'static str,
+    height: f32,
+) -> impl Bundle {
     (
         Button,
         UiClickBeep,
@@ -287,6 +297,7 @@ pub(super) fn secondary_button(marker: impl Component, label: &str, height: f32)
         BorderColor::all(Color::srgb(0.58, 0.54, 0.4)),
         Interaction::default(),
         children![(
+            MainMenuLocalizedText(label),
             Text::new(label),
             TextFont {
                 font_size: FontSize::Rem(UiFontRole::Body.rem_size()),

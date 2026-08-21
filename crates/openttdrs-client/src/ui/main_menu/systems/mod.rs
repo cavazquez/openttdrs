@@ -6,7 +6,8 @@ mod session;
 
 pub(crate) use navigation::{
     main_menu_continue_interaction, main_menu_editor_interaction, main_menu_interaction,
-    sync_main_menu_continue_button, sync_main_menu_panel_visibility,
+    sync_main_menu_continue_button, sync_main_menu_localized_labels,
+    sync_main_menu_panel_visibility,
 };
 pub(crate) use new_game_options::{
     main_menu_options_interaction, main_menu_roughness_interaction, sync_main_menu_summary,

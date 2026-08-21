@@ -17,7 +17,7 @@ use super::{
     MainMenuBackButton, MainMenuContinueButton, MainMenuContinueWrap, MainMenuDemoButton,
     MainMenuDensityTarget, MainMenuEditorButton, MainMenuHeightmapSlot, MainMenuHighscoresButton,
     MainMenuHighscoresText, MainMenuHintsText, MainMenuLanguageButton, MainMenuLanguageLabel,
-    MainMenuLoadButton, MainMenuMapSizeButton, MainMenuNewGameButton,
+    MainMenuLoadButton, MainMenuLocalizedText, MainMenuMapSizeButton, MainMenuNewGameButton,
     MainMenuOpenHeightmapsDirButton, MainMenuOpenScenariosDirButton, MainMenuPanel,
     MainMenuPreferencesButton, MainMenuQuitButton, MainMenuQuitConfirmNo, MainMenuQuitConfirmYes,
     MainMenuResolutionButton, MainMenuScenariosButton, MainMenuSeedDecButton,
@@ -145,6 +145,7 @@ fn spawn_client_connecting_menu(commands: &mut Commands, addr: &str, status_labe
             .with_children(|panel| {
                 panel.spawn((
                     MainMenuTitleText,
+                    MainMenuLocalizedText("Multijugador"),
                     Text::new("Multijugador"),
                     TextFont {
                         font_size: FontSize::Rem(UiFontRole::Title.rem_size()),

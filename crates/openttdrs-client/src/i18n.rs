@@ -54,6 +54,21 @@ pub(crate) fn text(locale: Locale, source: &'static str) -> &'static str {
         "Ajustes" => "Settings",
         "Mensajes" => "Messages",
         "Ayuda" => "Help",
+        "Idioma" => "Language",
+        "Multijugador" => "Multiplayer",
+        "Continuar partida" => "Continue game",
+        "Nueva partida" => "New game",
+        "Escenarios / heightmap" => "Scenarios / heightmap",
+        "Editor de escenarios" => "Scenario editor",
+        "Demo completa (mapa plano)" => "Full demo (flat map)",
+        "Mejores puntuaciones" => "High scores",
+        "Preferencias" => "Preferences",
+        "Sonido / musica" => "Sound / music",
+        "Salir" => "Exit",
+        "Iniciar partida" => "Start game",
+        "Volver" => "Back",
+        "Si, salir" => "Yes, exit",
+        "Cancelar" => "Cancel",
         "Minimapa" => "Minimap",
         "Mapa ampliado" => "Expanded map",
         "Opciones de visualización" => "Display options",
@@ -115,6 +130,8 @@ mod tests {
     fn catalog_translates_toolbar_text_without_changing_spanish() {
         assert_eq!(text(Locale::Es, "Guardar partida"), "Guardar partida");
         assert_eq!(text(Locale::En, "Guardar partida"), "Save game");
+        assert_eq!(text(Locale::En, "Nueva partida"), "New game");
+        assert_eq!(text(Locale::En, "Idioma"), "Language");
         assert_eq!(text(Locale::En, "untranslated"), "untranslated");
     }
 }

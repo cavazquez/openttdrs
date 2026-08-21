@@ -17,8 +17,9 @@ use super::super::widgets::{hover_primary, hover_secondary};
 use super::super::{
     MainMenuBackButton, MainMenuCamera, MainMenuContinueButton, MainMenuContinueWrap,
     MainMenuDemoButton, MainMenuEditorButton, MainMenuHintsText, MainMenuLoadButton,
-    MainMenuNewGameButton, MainMenuPanel, MainMenuQuitButton, MainMenuQuitConfirmNo,
-    MainMenuQuitConfirmYes, MainMenuStartButton, MainMenuSubPanel, MainMenuTitleText, MainMenuUi,
+    MainMenuLocalizedText, MainMenuNewGameButton, MainMenuPanel, MainMenuQuitButton,
+    MainMenuQuitConfirmNo, MainMenuQuitConfirmYes, MainMenuStartButton, MainMenuSubPanel,
+    MainMenuTitleText, MainMenuUi,
 };
 use super::session::{enter_editor, enter_new_game, resume_suspended_game};
 
@@ -57,6 +58,20 @@ pub(crate) fn sync_main_menu_panel_visibility(
     }
     if let Ok(mut hints) = hints_q.single_mut() {
         hints.0 = panel_hints(*panel).to_string();
+    }
+}
+
+/// Actualiza los textos de los botones que se crean en todos los subpaneles.
+pub(crate) fn sync_main_menu_localized_labels(
+    prefs: Res<crate::settings::ClientPreferences>,
+    mut labels: Query<(&MainMenuLocalizedText, &mut Text)>,
+) {
+    let locale = prefs.locale();
+    for (key, mut text) in &mut labels {
+        let translated = crate::i18n::text(locale, key.0);
+        if **text != translated {
+            **text = translated.to_owned();
+        }
     }
 }
 

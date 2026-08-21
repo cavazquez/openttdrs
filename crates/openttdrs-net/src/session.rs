@@ -362,11 +362,11 @@ fn server_thread(
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone();
-        if current_snapshot != authority_snapshot {
-            if let Ok(state) = GameState::load_json(&current_snapshot) {
-                authority_state = Some(state);
-                authority_snapshot = current_snapshot;
-            }
+        if current_snapshot != authority_snapshot
+            && let Ok(state) = GameState::load_json(&current_snapshot)
+        {
+            authority_state = Some(state);
+            authority_snapshot = current_snapshot;
         }
         let next_seq = *shared_next_seq
             .lock()
@@ -459,7 +459,7 @@ fn server_thread(
                     if let Some(state) = authority_state.as_mut()
                         && let Err(error) = apply_command_as_company(state, company_id, &command)
                     {
-                        let message = error.to_string();
+                        let message = error;
                         let _ = write_message(
                             &mut clients[i].stream,
                             &NetMessage::Reject {
@@ -618,7 +618,7 @@ fn remove_peer_id(shared: &SharedPeerIds, peer_id: u64) {
 
 /// Asigna una compañía exclusiva a cada peer conectado. La compañía 0 queda
 /// reservada al host; los clientes reciben el primer id libre del pool de
-/// OpenTTD (0..15).
+/// `OpenTTD` (0..15).
 fn allocate_company_id(clients: &[ClientSlot]) -> CompanyId {
     (1..=15)
         .map(CompanyId)
@@ -1109,12 +1109,15 @@ mod tests {
     fn command_runs_under_issuer_without_changing_local_selection() {
         let mut state = GameState::new(16, 16);
         assert_eq!(state.active_company, CompanyId::PLAYER);
-        apply_command_as_company(
-            &mut state,
-            CompanyId(1),
-            &Command::PlaceRail(TileCoord::new(3, 3)),
-        )
-        .expect("issuer company should be accepted");
+        assert!(
+            apply_command_as_company(
+                &mut state,
+                CompanyId(1),
+                &Command::PlaceRail(TileCoord::new(3, 3)),
+            )
+            .is_ok(),
+            "issuer company should be accepted"
+        );
         assert_eq!(state.active_company, CompanyId::PLAYER);
         assert_eq!(
             state.map.get(TileCoord::new(3, 3)).map(|tile| tile.m1),

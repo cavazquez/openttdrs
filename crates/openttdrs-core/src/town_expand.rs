@@ -6,6 +6,7 @@ use crate::house_spec::{
     vanilla_or_newgrf_house,
 };
 use crate::map::{Map, TileCoord, TileKind, effective_road_bits, tile_slope_and_z};
+use crate::newgrf_callback::apply_house_construction_callback;
 use crate::town::{Town, TownLayout, update_town_radius};
 use crate::world_gen::Climate;
 
@@ -335,6 +336,14 @@ fn try_build_town_house(
     ) else {
         return false;
     };
+    // OpenTTD evalúa CB 0x17 después de elegir el spec y antes de reservar
+    // el footprint. Un resultado distinto de FAILED/0x400/0xFF rechaza la
+    // construcción sin dejar teselas parcialmente colocadas.
+    if let Some(def) = house_spec_def(ctx.house_catalog, house_id)
+        && !apply_house_construction_callback(def)
+    {
+        return false;
+    }
     let flags = house_spec_def(ctx.house_catalog, house_id)
         .map(|d| d.building_flags)
         .or_else(|| HouseSpec::get(house_id).map(|hs| hs.building_flags))

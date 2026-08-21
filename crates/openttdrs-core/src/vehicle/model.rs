@@ -334,6 +334,11 @@ pub struct Vehicle {
     /// El vehículo ya completó la primera llegada del horario.
     #[serde(default)]
     pub timetable_started: bool,
+    /// Bits nativos de `VehicleFlags` que todavía no tienen un campo de
+    /// runtime dedicado. Los bits de horario se mantienen sincronizados con
+    /// `timetable_started`/`timetable_autofill` al exportar.
+    #[serde(default)]
+    pub vehicle_flags: u16,
     /// Autoreemplazo ya intentado en esta parada en depósito.
     #[serde(default)]
     pub autoreplace_attempted_this_stop: bool,
@@ -566,6 +571,7 @@ impl Vehicle {
             current_order_time: 0,
             timetable_start: 0,
             timetable_started: false,
+            vehicle_flags: 0,
             autoreplace_attempted_this_stop: false,
             build_tick: 0,
             group_id: None,

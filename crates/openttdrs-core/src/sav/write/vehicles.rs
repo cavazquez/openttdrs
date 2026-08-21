@@ -213,6 +213,8 @@ struct CommonWire {
     timetable_lateness: i32,
     /// `Vehicle::vehicle_flags` (`OpenTTD` `VehicleFlags`).
     vehicle_flags: u16,
+    /// Intervalo de servicio (`Vehicle::service_interval`).
+    service_interval: u16,
 }
 
 fn write_vehs_common(buf: &mut Vec<u8>, c: &CommonWire) {
@@ -234,11 +236,12 @@ fn write_vehs_common(buf: &mut Vec<u8>, c: &CommonWire) {
     buf.extend_from_slice(&c.current_order_time.to_be_bytes());
     buf.extend_from_slice(&c.timetable_lateness.to_be_bytes());
     buf.extend_from_slice(&c.vehicle_flags.to_be_bytes());
+    buf.extend_from_slice(&c.service_interval.to_be_bytes());
 }
 
 /// Bits de `VehicleFlags` que el core modela hoy.
 fn vehicle_flags_for(v: &Vehicle) -> u16 {
-    let mut flags = 0u16;
+    let mut flags = v.vehicle_flags;
     if v.timetable_started {
         flags |= 1 << 3; // VehicleFlag::TimetableStarted
     }
@@ -317,6 +320,7 @@ fn common_wire_for(
         current_order_time: v.current_order_time,
         timetable_lateness: v.timetable_lateness,
         vehicle_flags: vehicle_flags_for(v),
+        service_interval: v.service_interval_days,
     }
 }
 
@@ -487,6 +491,7 @@ pub(super) fn ordl_and_vehs_records(
                     current_order_time: 0,
                     timetable_lateness: 0,
                     vehicle_flags: 0,
+                    service_interval: 0,
                 },
                 None,
             )?;
@@ -621,6 +626,7 @@ fn append_vehs_common_fields(header: &mut Vec<u8>) -> Result<(), SavError> {
     append_field(header, 6, "current_order_time")?; // SLE_UINT32
     append_field(header, 5, "lateness_counter")?; // SLE_INT32
     append_field(header, 4, "vehicle_flags")?; // SLE_UINT16
+    append_field(header, 4, "service_interval")?; // SLE_UINT16
     header.push(0);
     Ok(())
 }
@@ -1045,6 +1051,8 @@ mod tests {
         train.timetable_lateness = -7;
         train.timetable_started = true;
         train.timetable_autofill = true;
+        train.vehicle_flags = 1 << 7;
+        train.service_interval_days = 87;
         state.vehicles = vec![train];
 
         let (_, vehs) = ordl_and_vehs_records(&state, 64).unwrap();
@@ -1074,7 +1082,11 @@ mod tests {
         );
         assert_eq!(
             record_get(common, "vehicle_flags").and_then(SlValue::as_u64),
-            Some(0b1_1000)
+            Some(u64::from((1u16 << 7) | 0b1_1000))
+        );
+        assert_eq!(
+            record_get(common, "service_interval").and_then(SlValue::as_u64),
+            Some(87)
         );
     }
 

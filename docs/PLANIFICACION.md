@@ -621,8 +621,10 @@ Veintidós entradas, **todas cerradas** (P1.1 —con P0.3— a P1.22).
   `SetVehicleTimetableStart`. Tests `timetable_clock_increments_current_order_time`,
   `autofill_sets_travel_ticks_on_arrival`, `lateness_increases_when_late`,
   `timetable_start_offsets_lateness_on_first_arrival`.
-- **Pendiente** — reparto automático entre vehículos de órdenes compartidas (`timetable_all`);
-  muestras de autofill/espera activa y flags de servicio/unbunching del chunk `VEHS`.
+- **Pendiente** — reparto automático entre vehículos de órdenes compartidas (`timetable_all`)
+  y la espera activa efímera del tick de guardado. `VEHS` ya conserva el bitset nativo,
+  intervalo de servicio y las muestras derivadas de `ORDL`; la semántica completa de
+  unbunching/livery todavía es reducida.
 
 #### P1.22 — Rama asintótica del factor de tiempo y fluctuaciones · hecho
 
@@ -2171,10 +2173,10 @@ subconjunto ejecutado por el core (construcción, pathfinding, averías,
 subsidios, desastres, autoridad, inflación/recesiones y unidades de tiempo). El historial de
 noticias propio queda en JSON (no es un pool nativo de OpenTTD `.sav`). `ORDL`
 preserva los campos básicos por orden —incluidos wait/travel/max-speed— y
-`VEHS.common` conserva inicio/tiempo/atraso de timetable, los bits modelados de
-`TimetableStarted`/`AutofillTimetable` y la identidad de shared orders; todavía
-falta el estado nativo completo de autofill (muestras), espera activa y flags de
-servicio/unbunching. Tranvías y
+`VEHS.common` conserva inicio/tiempo/atraso de timetable, las muestras derivadas de
+`ORDL`, el intervalo de servicio, el bitset nativo (incluidos
+`TimetableStarted`/`AutofillTimetable`) y la identidad de shared orders; la espera
+activa es efímera y la semántica completa de unbunching/livery sigue reducida. Tranvías y
 rotores de helicóptero no se exportan.
 
 Para un estado nativo completo elegir `.json`. Para el subconjunto interoperable

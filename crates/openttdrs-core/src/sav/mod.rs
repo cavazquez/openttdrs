@@ -847,6 +847,8 @@ impl GameState {
                     u32::try_from(v.timetable_start.min(u64::from(u32::MAX))).unwrap_or(u32::MAX);
                 vehicle.current_order_time = v.current_order_time;
                 vehicle.timetable_lateness = v.timetable_lateness;
+                vehicle.vehicle_flags = v.vehicle_flags;
+                vehicle.service_interval_days = v.service_interval;
                 vehicle.timetable_started = v.vehicle_flags & (1 << 3) != 0;
                 vehicle.timetable_autofill = v.vehicle_flags & (1 << 4) != 0;
                 vehicle.running = v.running;
@@ -870,6 +872,11 @@ impl GameState {
                     vehicle.current_order = v.current_order.min(last);
                     vehicle.cur_implicit_order_index = v.cur_implicit_order_index.min(last);
                 }
+                vehicle.timetable_autofill_samples = vehicle
+                    .orders
+                    .iter()
+                    .map(|order| (order.wait_ticks(), order.travel_ticks()))
+                    .collect();
                 vehicle.timetable_active = v.timetable_start != 0
                     || vehicle.orders.iter().any(|order| {
                         order.wait_ticks() != 0
@@ -921,6 +928,8 @@ impl GameState {
                 u32::try_from(v.timetable_start.min(u64::from(u32::MAX))).unwrap_or(u32::MAX);
             vehicle.current_order_time = v.current_order_time;
             vehicle.timetable_lateness = v.timetable_lateness;
+            vehicle.vehicle_flags = v.vehicle_flags;
+            vehicle.service_interval_days = v.service_interval;
             vehicle.timetable_started = v.vehicle_flags & (1 << 3) != 0;
             vehicle.timetable_autofill = v.vehicle_flags & (1 << 4) != 0;
             vehicle.running = v.running;
@@ -955,6 +964,11 @@ impl GameState {
                 vehicle.cur_implicit_order_index = v.cur_implicit_order_index.min(last);
                 reconcile_imported_vehicle_position(&state.map, &mut vehicle);
             }
+            vehicle.timetable_autofill_samples = vehicle
+                .orders
+                .iter()
+                .map(|order| (order.wait_ticks(), order.travel_ticks()))
+                .collect();
             vehicle.timetable_active = v.timetable_start != 0
                 || vehicle.orders.iter().any(|order| {
                     order.wait_ticks() != 0
@@ -1406,6 +1420,7 @@ mod tests {
                     current_order_time: 0,
                     timetable_lateness: 0,
                     vehicle_flags: 0b1_1000,
+                    service_interval: 150,
                     order_list_id: None,
                     kind: SavVehicleKind::Train,
                     pos: crate::TileCoord::new(5, 5),
@@ -1438,6 +1453,7 @@ mod tests {
                     current_order_time: 0,
                     timetable_lateness: 0,
                     vehicle_flags: 0,
+                    service_interval: 150,
                     order_list_id: None,
                     kind: SavVehicleKind::RoadVehicle,
                     pos: crate::TileCoord::new(6, 6),
@@ -1470,6 +1486,7 @@ mod tests {
                     current_order_time: 0,
                     timetable_lateness: 0,
                     vehicle_flags: 0,
+                    service_interval: 150,
                     order_list_id: None,
                     kind: SavVehicleKind::RoadVehicle,
                     pos: crate::TileCoord::new(7, 7),
@@ -1502,6 +1519,7 @@ mod tests {
                     current_order_time: 0,
                     timetable_lateness: 0,
                     vehicle_flags: 0,
+                    service_interval: 150,
                     order_list_id: None,
                     kind: SavVehicleKind::Train,
                     pos: crate::TileCoord::new(5, 5),
@@ -1566,6 +1584,8 @@ mod tests {
         assert_eq!(state.vehicles[0].next_unit, Some(3));
         assert!(state.vehicles[0].timetable_started);
         assert!(state.vehicles[0].timetable_autofill);
+        assert_eq!(state.vehicles[0].vehicle_flags, 0b1_1000);
+        assert_eq!(state.vehicles[0].service_interval_days, 150);
         assert_eq!(state.vehicles[3].prev_unit, Some(0));
         assert_eq!(state.map.get_kind(forest_gap), Some(TileKind::Forest));
         let imported_airport = state

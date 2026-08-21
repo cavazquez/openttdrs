@@ -717,6 +717,8 @@ pub struct SavVehicle {
     /// Mantener el bitset crudo permite round-trippear flags futuros sin
     /// confundirlos con los tiempos numéricos del horario.
     pub vehicle_flags: u16,
+    /// Intervalo de servicio nativo (`Vehicle::service_interval`).
+    pub service_interval: u16,
     /// Índice de la lista `ORDL` referenciada por `VEHS.common.orders`.
     ///
     /// Se conserva para reconstruir shared orders al hidratar el `GameState`.
@@ -930,6 +932,10 @@ pub(crate) fn vehicles_from_chunks(
             .and_then(SlValue::as_u64)
             .and_then(|value| u16::try_from(value).ok())
             .unwrap_or(0);
+        let service_interval = record_get(common, "service_interval")
+            .and_then(SlValue::as_u64)
+            .and_then(|value| u16::try_from(value).ok())
+            .unwrap_or(crate::DEFAULT_SERVICE_INTERVAL_DAYS);
         let vehstatus = record_get(common, "vehstatus")
             .and_then(SlValue::as_u64)
             .unwrap_or(0);
@@ -965,6 +971,7 @@ pub(crate) fn vehicles_from_chunks(
             current_order_time,
             timetable_lateness,
             vehicle_flags,
+            service_interval,
             order_list_id,
             kind,
             pos,

@@ -103,8 +103,9 @@ pub(crate) use road_type_selector::{
 pub(crate) use settings::{
     handle_cheats_menu_button, handle_company_colour_swatches,
     handle_road_driving_side_menu_button, handle_settings_menu_buttons,
-    handle_vehicle_breakdowns_menu_button, sync_company_colour_swatch_visuals,
-    sync_road_driving_side_button_label, sync_vehicle_breakdowns_button_label,
+    handle_settings_zoom_buttons, handle_vehicle_breakdowns_menu_button,
+    sync_company_colour_swatch_visuals, sync_road_driving_side_button_label,
+    sync_vehicle_breakdowns_button_label,
 };
 pub(crate) use signal_picker_window::{
     handle_signal_picker_buttons, setup_signal_picker, signal_picker_on_closed, sync_signal_picker,
@@ -686,6 +687,12 @@ pub(crate) enum SaveMenuAction {
     EndGame,
     ReturnToMainMenu,
 }
+
+/// Marca los botones de zoom de la toolbar para que usen los niveles fijos de
+/// OpenTTD. Los tests de `handle_settings_menu_buttons` pueden seguir creando
+/// acciones sin este marcador y conservan la ruta histórica de factores.
+#[derive(Component)]
+pub(crate) struct ZoomButton;
 
 #[allow(dead_code)] // inventarios UI-0 consumidos en tests
 impl SaveMenuAction {

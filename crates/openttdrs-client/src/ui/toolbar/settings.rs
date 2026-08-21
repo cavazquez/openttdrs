@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
+use crate::camera::{ZoomMode, zoom_step_scale};
 use crate::render::RemapMapVisualsPending;
 use crate::render::{
     MapPreviewCamera, PrimaryGameCamera, clamp_ortho_scale, large_map_viewport_cull_enabled,
@@ -15,11 +16,14 @@ use crate::ui::hud::SimHudControls;
 use crate::ui::main_menu::return_to_main_menu;
 use crate::ui::save_window::{SaveWindowMode, SaveWindowState, save_dir_from};
 
-use super::{CompanyColourSwatch, SaveMenuAction};
+use super::{CompanyColourSwatch, SaveMenuAction, ZoomButton};
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn handle_settings_menu_buttons(
-    mut q: Query<(&Interaction, &SaveMenuAction), (Changed<Interaction>, With<Button>)>,
+    mut q: Query<
+        (&Interaction, &SaveMenuAction),
+        (Changed<Interaction>, With<Button>, Without<ZoomButton>),
+    >,
     mut hud: ResMut<SimHudControls>,
     mut save_window: ResMut<SaveWindowState>,
     mut news_settings: ResMut<crate::ui::news_settings_window::NewsSettingsWindowState>,
@@ -194,6 +198,53 @@ pub(crate) fn handle_settings_menu_buttons(
             SaveMenuAction::ReturnToMainMenu => {
                 return_to_main_menu(&mut next_screen, &mut suspended);
             }
+        }
+    }
+}
+
+/// Aplica a los botones visibles de zoom la secuencia discreta de OpenTTD.
+///
+/// Se mantiene separado de `handle_settings_menu_buttons` porque ese sistema
+/// ya está en el límite de `SystemParam` de Bevy. El marcador también evita
+/// que ambos handlers procesen el mismo clic.
+pub(crate) fn handle_settings_zoom_buttons(
+    buttons: Query<
+        (&Interaction, &SaveMenuAction),
+        (Changed<Interaction>, With<Button>, With<ZoomButton>),
+    >,
+    sim: Option<Res<SimWorld>>,
+    windows: Query<&Window, With<PrimaryWindow>>,
+    zoom_mode: Option<Res<ZoomMode>>,
+    mut cam_q: Query<
+        (&mut Transform, &mut Projection),
+        (With<PrimaryGameCamera>, Without<MapPreviewCamera>),
+    >,
+) {
+    let mode = zoom_mode.map_or(ZoomMode::Fixed, |value| *value);
+    let (mw, mh) = sim
+        .as_deref()
+        .map(|world| world.state.map.dimensions())
+        .unwrap_or((64, 64));
+    let large_cull = large_map_viewport_cull_enabled(mw, mh);
+    let (win_w, win_h) = windows
+        .iter()
+        .next()
+        .map(|window| (window.width(), window.height()))
+        .unwrap_or((1280.0, 720.0));
+
+    for (interaction, action) in &buttons {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+        let zoom_in = match action {
+            SaveMenuAction::ZoomIn => true,
+            SaveMenuAction::ZoomOut => false,
+            _ => continue,
+        };
+        if let Ok((_transform, mut projection)) = cam_q.single_mut()
+            && let Projection::Orthographic(ortho) = &mut *projection
+        {
+            ortho.scale = zoom_step_scale(ortho.scale, zoom_in, mode, win_w, win_h, large_cull);
         }
     }
 }
@@ -418,16 +469,42 @@ mod tests {
     use bevy::ecs::system::RunSystemOnce;
     use bevy::prelude::*;
 
+    use crate::render::PrimaryGameCamera;
     use crate::state::{ClientScreen, SimWorld, SuspendedGameSession};
     use crate::ui::hud::SimHudControls;
     use crate::ui::news_settings_window::NewsSettingsWindowState;
     use crate::ui::save_window::{SaveWindowMode, SaveWindowState};
-    use crate::ui::toolbar::{CompanyColourSwatch, SaveMenuAction};
+    use crate::ui::toolbar::{CompanyColourSwatch, SaveMenuAction, ZoomButton};
 
     use super::{
-        handle_company_colour_swatches, handle_settings_menu_buttons,
+        handle_company_colour_swatches, handle_settings_menu_buttons, handle_settings_zoom_buttons,
         handle_vehicle_breakdowns_menu_button,
     };
+
+    #[test]
+    fn toolbar_zoom_buttons_use_fixed_openttd_levels() {
+        let mut world = World::new();
+        world.insert_resource(SimWorld::default());
+        world.insert_resource(crate::camera::ZoomMode::Fixed);
+        world.spawn((
+            PrimaryGameCamera,
+            Transform::default(),
+            Projection::Orthographic(OrthographicProjection::default_2d()),
+        ));
+        world.spawn((
+            Button,
+            ZoomButton,
+            SaveMenuAction::ZoomOut,
+            Interaction::Pressed,
+        ));
+
+        world.run_system_once(handle_settings_zoom_buttons).unwrap();
+        let mut projections = world.query_filtered::<&Projection, With<PrimaryGameCamera>>();
+        let Projection::Orthographic(projection) = projections.single(&world).unwrap() else {
+            panic!("expected orthographic projection");
+        };
+        assert_eq!(projection.scale, 2.0);
+    }
 
     #[test]
     fn save_and_load_buttons_open_save_window() {

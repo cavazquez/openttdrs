@@ -2,7 +2,7 @@ use bevy::prelude::*;
 
 use super::super::{
     BuildMenuAction, BuildMenuUi, CompanyColourSwatch, SaveMenuAction, ToolSelectButton,
-    ToolbarCloseButton, ToolbarTooltipTarget,
+    ToolbarCloseButton, ToolbarTooltipTarget, ZoomButton,
 };
 use crate::sprites::{company_colour_swatch_color, company_colour_tooltip};
 
@@ -293,7 +293,7 @@ fn spawn_settings_text_button(
     tip: &'static str,
     action: SaveMenuAction,
 ) {
-    parent.spawn((
+    let mut entity = parent.spawn((
         Button,
         action,
         ToolbarTooltipTarget { text: tip },
@@ -318,6 +318,9 @@ fn spawn_settings_text_button(
             TextColor(Color::srgb(0.08, 0.07, 0.05)),
         )],
     ));
+    if matches!(action, SaveMenuAction::ZoomIn | SaveMenuAction::ZoomOut) {
+        entity.insert(ZoomButton);
+    }
 }
 
 fn spawn_company_colour_picker(buttons: &mut ChildSpawnerCommands) {

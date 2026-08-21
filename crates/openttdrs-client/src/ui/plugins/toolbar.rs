@@ -40,7 +40,7 @@ use crate::ui::toolbar::{
     handle_rail_station_picker_buttons, handle_rail_type_select_buttons,
     handle_road_driving_side_menu_button, handle_road_stop_picker_buttons,
     handle_road_type_class_buttons, handle_road_type_select_buttons, handle_settings_menu_buttons,
-    handle_signal_picker_buttons, handle_station_cargo_panel_buttons,
+    handle_settings_zoom_buttons, handle_signal_picker_buttons, handle_station_cargo_panel_buttons,
     handle_station_catalog_open_buttons, handle_station_class_select_buttons,
     handle_station_rename_buttons, handle_station_spec_select_buttons, handle_tile_click,
     handle_toolbar_switch, handle_vehicle_breakdowns_menu_button, hide_tool_when_panel_closed,
@@ -207,6 +207,13 @@ impl Plugin for ToolbarUiPlugin {
                     sync_company_colour_swatch_visuals,
                     sync_company_selector,
                 )
+                    .in_set(UpdateSet::Ui)
+                    .run_if(in_state(ClientScreen::InGame)),
+            )
+            .add_systems(
+                Update,
+                handle_settings_zoom_buttons
+                    .after(handle_settings_menu_buttons)
                     .in_set(UpdateSet::Ui)
                     .run_if(in_state(ClientScreen::InGame)),
             )

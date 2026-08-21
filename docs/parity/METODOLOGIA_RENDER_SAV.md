@@ -148,6 +148,10 @@ inserta `DrawGroundSprite` en un pase separado, barrido por `x + y` y luego
 `y - x`; la altura sólo cambia la posición en pantalla. Ahora el suelo natural
 usa esa profundidad diagonal, y `TileViewportBounds::iter_coords` reproduce el
 barrido C++ para conservar el desempate incluso si dos valores `f32` coinciden.
+El pase de suelo usa además una banda Z separada, por debajo de los padres
+sortables, porque OpenTTD termina `DrawGroundSprite` antes de
+`ViewportSortParentSprites`; esto evita que Bevy intercale ambos pases por
+profundidad.
 Las rampas/fundaciones conservan su orden local especial. Además, las rutas
 `tile_pos_half`/`overlay_pos` comprimen sus capas positivas y la altura en el
 margen de una fila; así una casa, estación o puente no puede invertir la fila

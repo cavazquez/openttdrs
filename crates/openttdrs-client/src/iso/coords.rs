@@ -466,15 +466,21 @@ mod rail_signal_pick_tests {
 /// anterior, independientemente de la altura de la tesela.
 const GROUND_ROW_Z_STEP: f32 = 0.01;
 
+/// Banda de profundidad exclusiva del pase `DrawGroundSprite`.
+///
+/// En OpenTTD todo el suelo se emite antes de `ViewportSortParentSprites`;
+/// usar la misma banda Bevy para ambos pases los intercalaba por `Transform.z`.
+/// El desplazamiento deja el orden diagonal intacto, pero garantiza que un
+/// parent/child nunca vuelva a quedar detrás de un ground de otra tesela.
+const GROUND_PASS_Z_OFFSET: f32 = -100.0;
+
 /// Desempate dentro de una misma fila diagonal.
 ///
-/// La segunda coordenada del bucle C++ es `column = y - x`, también
-/// ascendente. El margen total queda estrictamente dentro de un paso de fila
-/// aun para el mapa máximo 4096×4096; así no puede invertir filas contiguas.
-/// Si la precisión de `f32` empata dos columnas lejanas, el orden de inserción
-/// de `TileViewportBounds::iter_coords` conserva el
-/// mismo desempate diagonal del C++.
-const GROUND_COLUMN_Z_STEP: f32 = 0.000_001;
+/// El orden de `column = y - x` se conserva por la inserción diagonal de
+/// `TileViewportBounds::iter_coords`. No se codifica en `f32`: mezclarlo con
+/// la banda negativa del pase ground pierde precisión y, peor, puede cruzar
+/// el límite de una fila en mapas grandes.
+const GROUND_COLUMN_Z_STEP: f32 = 0.0;
 
 /// Las capas de un mismo `SortableSpriteStruct` son locales a su tesela. Se
 /// comprimen para que una casa, estación o fundación no salte por encima de
@@ -518,7 +524,7 @@ pub fn sortable_draw_z(tx: i32, ty: i32, height: u8, layer: f32) -> f32 {
 /// bandas aparentes sobre campos inclinados de Kale.
 #[inline]
 pub fn ground_draw_z(tx: i32, ty: i32, layer: f32) -> f32 {
-    diagonal_tile_z(tx, ty) + local_layer_z(layer)
+    GROUND_PASS_Z_OFFSET + diagonal_tile_z(tx, ty) + local_layer_z(layer)
 }
 
 /// Vec3 para teselas que OpenTTD emite mediante `DrawGroundSprite`.
@@ -750,7 +756,8 @@ mod ground_draw_order_tests {
         let left = ground_tile_pos_half(6, 4, 0, 0.0, TILE_HALF_H).z;
         let middle = ground_tile_pos_half(5, 5, 0, 0.0, TILE_HALF_H).z;
         let right = ground_tile_pos_half(4, 6, 0, 0.0, TILE_HALF_H).z;
-        assert!(left < middle && middle < right);
+        assert_eq!(left, middle);
+        assert_eq!(middle, right);
 
         // La fila 11 empieza después de completar la fila 10, aun si la
         // tesela anterior está en altura máxima razonable de un mapa.
@@ -767,6 +774,12 @@ mod ground_draw_order_tests {
         let high = tile_pos_half(4, 6, 31, 0.0, TILE_HALF_H).z;
         let next_row_sortable = tile_pos_half(6, 5, 0, 0.0, TILE_HALF_H).z;
         assert!(high < next_row_sortable);
+
+        let ground = ground_tile_pos_half(6, 5, 0, 0.0, TILE_HALF_H).z;
+        assert!(
+            ground < next_row_sortable,
+            "ground pass must precede sortable parents"
+        );
     }
 
     #[test]

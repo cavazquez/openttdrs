@@ -103,6 +103,35 @@ pub use write::{
     save_to_bytes, save_to_bytes_with, save_with,
 };
 
+/// Chunk nativo que se conserva sin interpretar al hacer round-trip de un
+/// savegame. El cuerpo incluye el header gamma de tablas o el payload RIFF,
+/// exactamente como aparece después de descomprimir el contenedor.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct SavOpaqueChunk {
+    pub name: [u8; 4],
+    pub ch_type: u8,
+    pub body: Vec<u8>,
+}
+
+/// Chunks cuyo contenido es necesario para que `OpenTTD` reconstruya pools,
+/// mappings o configuración que el core aún no ejecuta.
+fn opaque_chunks_from_chunks(chunks: &[chunks::RawChunk]) -> Vec<SavOpaqueChunk> {
+    const PASSTHROUGH: &[[u8; 4]] = &[
+        *b"ENGN", *b"ENGS", *b"EIDS", *b"NGRF", *b"OBJS", *b"OBID", *b"SRND", *b"PSAC", *b"IIDS",
+        *b"TIDS", *b"APID", *b"ATID", *b"RAIL", *b"ROTT", *b"GLOG", *b"GOAL", *b"STPE", *b"STPA",
+        *b"SIGN",
+    ];
+    chunks
+        .iter()
+        .filter(|chunk| PASSTHROUGH.contains(&chunk.name))
+        .map(|chunk| SavOpaqueChunk {
+            name: chunk.name,
+            ch_type: chunk.ch_type,
+            body: chunk.body.clone(),
+        })
+        .collect()
+}
+
 /// Bits `FACIL_*` de `OpenTTD`.
 const FACIL_TRAIN: u8 = 0x01;
 const FACIL_TRUCK_STOP: u8 = 0x02;
@@ -233,6 +262,8 @@ pub struct SavGame {
     pub vehicle_groups: Vec<crate::vehicle_group::VehicleGroup>,
     /// Reglas de autoreemplazo del chunk `ERNW`.
     pub autoreplace_rules: Vec<crate::autoreplace::AutoReplaceRule>,
+    /// Chunks nativos no modelados que se conservan para round-trip.
+    pub opaque_chunks: Vec<SavOpaqueChunk>,
 }
 
 /// `SLV_100`: desde esta versión `OpenTTD` persiste las reservas PBS de
@@ -276,6 +307,7 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
     global_economy.recessions_enabled = parsed_settings.recessions_enabled;
     let vehicle_groups = fleet::vehicle_groups_from_chunks(&chunk_list);
     let autoreplace_rules = fleet::autoreplace_rules_from_chunks(&chunk_list);
+    let opaque_chunks = opaque_chunks_from_chunks(&chunk_list);
     let link_graph =
         linkgraph::link_graph_from_chunks(&chunk_list, map_w, &station_index, version, climate);
     Ok(SavGame {
@@ -310,6 +342,7 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
         global_economy,
         vehicle_groups,
         autoreplace_rules,
+        opaque_chunks,
     })
 }
 
@@ -646,6 +679,7 @@ impl GameState {
         state.using_wallclock_units = sav.using_wallclock_units;
         state.vehicle_groups = sav.vehicle_groups;
         state.autoreplace_rules = sav.autoreplace_rules;
+        state.sav_opaque_chunks = sav.opaque_chunks;
         if let Some(time) = sav.game_time {
             state.tick = date::game_tick_from_sav_time(time);
         }
@@ -1029,6 +1063,7 @@ mod tests {
             global_economy: crate::economy::GlobalEconomy::new(),
             vehicle_groups: Vec::new(),
             autoreplace_rules: Vec::new(),
+            opaque_chunks: Vec::new(),
         }
     }
 
@@ -1439,6 +1474,7 @@ mod tests {
             global_economy: crate::economy::GlobalEconomy::new(),
             vehicle_groups: Vec::new(),
             autoreplace_rules: Vec::new(),
+            opaque_chunks: Vec::new(),
         };
         let state = GameState::from_sav_game(sav);
         assert_eq!(state.stations.len(), 2);

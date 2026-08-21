@@ -17,6 +17,18 @@ pub(super) fn riff_chunk(name: [u8; 4], payload: &[u8]) -> Vec<u8> {
     out
 }
 
+/// Reemite un chunk ya validado sin interpretar su header interno.
+pub(super) fn raw_chunk(name: [u8; 4], ch_type: u8, body: &[u8]) -> Vec<u8> {
+    if ch_type == CH_RIFF {
+        return riff_chunk(name, body);
+    }
+    let mut out = Vec::with_capacity(5 + body.len());
+    out.extend_from_slice(&name);
+    out.push(ch_type);
+    out.extend_from_slice(body);
+    out
+}
+
 /// Chunk TABLE simple: fourcc + header con campos + records gamma.
 ///
 /// # Errors

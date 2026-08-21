@@ -8,7 +8,8 @@
 //! + `INDY` + `ECMY` + `DATE`/`PLYR` cargable por `OpenTTD` ≥15.3 dedicated.
 //!
 //! Residual: tram, rotor heli, creación de nuevos `CAPY` packets, settings fuera del
-//! subconjunto modelado de `PATS`, `GSET`/`ENGN`/`SRND`/`NewGRF`/`PLYR` completo.
+//! subconjunto modelado de `PATS`, ejecución de `ENGN`/`SRND`/`NewGRF` y `PLYR` completo.
+//! Los chunks nativos no modelados se conservan como passthrough al reexportar.
 //! Limitaciones: `docs/PARIDAD.md` y `docs/archive/merged-2026-07/ROADMAP_SAV_EXPORT.md`.
 
 #![allow(clippy::cast_possible_truncation)]
@@ -130,7 +131,8 @@ fn scan_chunk_names(payload: &[u8]) -> Vec<String> {
     for &want in REQUIRED_EXPORT_CHUNKS.iter().chain(
         [
             "STNN", "CITY", "INDY", "ORDL", "VEHS", "LGRP", "LGRJ", "LGRS", "PATS", "ECMY", "CAPY",
-            "GRPS", "ERNW",
+            "GRPS", "ERNW", "ENGN", "ENGS", "EIDS", "NGRF", "OBJS", "OBID", "SRND", "PSAC", "IIDS",
+            "TIDS", "APID", "ATID", "RAIL", "ROTT", "GLOG", "GOAL", "STPE", "STPA", "SIGN",
         ]
         .iter(),
     ) {
@@ -260,6 +262,9 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
         data.extend_from_slice(&capy);
     }
     data.extend_from_slice(&fleet::fleet_chunks(state)?);
+    for chunk in &state.sav_opaque_chunks {
+        data.extend_from_slice(&chunks::raw_chunk(chunk.name, chunk.ch_type, &chunk.body));
+    }
 
     data.extend_from_slice(&chunks::table_chunk(
         *b"DATE",
@@ -516,6 +521,29 @@ mod tests {
         assert_eq!(loaded.vehicles.len(), 2);
         assert_eq!(loaded.vehicles[0].shared_order_id, Some(0));
         assert_eq!(loaded.vehicles[1].shared_order_id, Some(0));
+    }
+
+    #[test]
+    fn ottn_roundtrip_preserves_opaque_newgrf_chunk() {
+        let mut state = tiny_state();
+        let body = crate::sav::table::tests::build_table_body(&[(2, "grfid")], &[vec![7]]);
+        state.sav_opaque_chunks = vec![crate::SavOpaqueChunk {
+            name: *b"NGRF",
+            ch_type: crate::sav::chunks::CH_TABLE,
+            body,
+        }];
+
+        let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
+        let sav_game = sav::load(&bytes).expect("load");
+        assert_eq!(sav_game.opaque_chunks, state.sav_opaque_chunks);
+        let loaded = GameState::from_sav_game(sav_game);
+        assert_eq!(loaded.sav_opaque_chunks, state.sav_opaque_chunks);
+        assert!(
+            exported_chunk_names(&state)
+                .expect("chunk names")
+                .iter()
+                .any(|name| name == "NGRF")
+        );
     }
 
     #[test]

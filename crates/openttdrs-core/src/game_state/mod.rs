@@ -504,6 +504,12 @@ pub struct GameState {
     /// Stack `NewGRF` activo (Fase 7 MVP; sin ejecución Action0–14).
     #[serde(default = "crate::newgrf_config::default_vanilla_stack")]
     pub newgrf_stack: Vec<crate::newgrf_config::NewGrfEntry>,
+    /// Chunks nativos de `.sav` que todavía no tienen modelo de runtime.
+    ///
+    /// Se mantienen como passthrough para no perder configuración/pools
+    /// `NewGRF`, motores y objetos al exportar nuevamente a `OpenTTD`.
+    #[serde(default)]
+    pub sav_opaque_chunks: Vec<crate::sav::SavOpaqueChunk>,
     /// Carteles del mapa (`Sign` en `OpenTTD`).
     #[serde(default)]
     pub signs: Vec<crate::sign::Sign>,
@@ -678,6 +684,7 @@ impl GameState {
             cheats: crate::cheats::CheatsState::default(),
             order: crate::cargo::OrderSettings::default(),
             newgrf_stack: crate::newgrf_config::default_vanilla_stack(),
+            sav_opaque_chunks: Vec::new(),
             signs: Vec::new(),
             next_sign_id: 1,
             bankruptcy_streak: 0,
@@ -797,6 +804,7 @@ impl GameState {
             cheats: crate::cheats::CheatsState::default(),
             order: crate::cargo::OrderSettings::default(),
             newgrf_stack: crate::newgrf_config::default_vanilla_stack(),
+            sav_opaque_chunks: Vec::new(),
             signs: Vec::new(),
             next_sign_id: 1,
             bankruptcy_streak: 0,

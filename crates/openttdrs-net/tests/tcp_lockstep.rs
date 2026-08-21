@@ -276,4 +276,23 @@ fn client_desync_report_reaches_host_and_peers() {
             actual_hash: 0x2a,
         }
     ));
+
+    // El peer que reporta recibe primero el diagnóstico difundido y luego el
+    // Welcome con el snapshot autoritativo para reparar su estado sin
+    // reconectar manualmente.
+    let reporter_report = wait_event(&reporter, Duration::from_secs(2));
+    assert!(matches!(
+        reporter_report,
+        SessionEvent::Desync {
+            tick: 37,
+            expected_hash: 0x10,
+            actual_hash: 0x2a,
+        }
+    ));
+    let reporter_resync = wait_event(&reporter, Duration::from_secs(2));
+    let SessionEvent::Welcome { snapshot_json, .. } = reporter_resync else {
+        panic!("el emisor del desync debe recibir snapshot de reconciliación");
+    };
+    let repaired = GameState::load_json(&snapshot_json).expect("snapshot reparable");
+    assert_eq!(repaired.canonical_hash(), host_state.canonical_hash());
 }

@@ -496,15 +496,33 @@ fn server_thread(
                     expected_hash,
                     actual_hash,
                 })) => {
-                    // El servidor no puede reparar el estado por sí solo todavía,
-                    // pero sí debe propagar el diagnóstico para que todos los peers
-                    // detengan/reconcilien la partida en vez de ocultar la divergencia.
+                    // Propagar el diagnóstico para que todos los peers lo hagan
+                    // visible y, además, reparar al emisor con el último snapshot
+                    // autoritativo. Antes sólo se registraba el hash: el cliente
+                    // quedaba divergido hasta reconectar manualmente.
                     let report = NetMessage::Desync {
                         tick,
                         expected_hash,
                         actual_hash,
                     };
                     broadcast_raw(&mut clients, &shared_peer_ids, &report);
+                    let snapshot = live_snapshot
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .clone();
+                    let resync = NetMessage::Welcome {
+                        protocol: PROTOCOL_VERSION,
+                        snapshot_json: snapshot,
+                        next_seq,
+                        peer_id: clients[i].peer_id,
+                        company_id: clients[i].company_id,
+                    };
+                    if let Err(error) = write_message(&mut clients[i].stream, &resync) {
+                        eprintln!(
+                            "openttdrs-net: desync resync failed peer_id={}: {error}",
+                            clients[i].peer_id
+                        );
+                    }
                     let _ = event_tx.send(SessionEvent::Desync {
                         tick,
                         expected_hash,

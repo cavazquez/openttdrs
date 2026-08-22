@@ -34,7 +34,7 @@ la paridad se comprueba por capas, de menor a mayor distancia del píxel final.
 | 1 | [`world-raw`](WORLD_RAW_SCHEMA.md) | ¿Los bytes de mapa de cada tesela son los mismos? | No explica su significado. |
 | 2 | [`world-semantic`](WORLD_SEMANTIC_SCHEMA.md) | ¿Ambos clasifican igual vía, puente, túnel, estación, pendiente y orientación? | No garantiza el sprite final. |
 | 3 | [`world-draw`](WORLD_DRAW_SCHEMA.md) | ¿Rust selecciona sprite, paleta y geometría permitidos por el `draw_tile_proc` C++? | La cobertura Rust aún no incluye todas las familias ni prueba el sort global o el framebuffer. |
-| 3b | [`world-sort`](WORLD_DRAW_SCHEMA.md#orden-global-de-parents-world-sort) | ¿Los parents candidatos se emiten en el orden final de `ViewportSortParentSprites`? | Ya alimenta los slots locales de las paradas viales vanilla; aún no aplica por sí mismo el sort global, pivote ni clipping de las demás familias. |
+| 3b | [`world-sort`](WORLD_DRAW_SCHEMA.md#orden-global-de-parents-world-sort) | ¿Los parents candidatos se emiten en el orden final de `ViewportSortParentSprites`? | Ya alimenta los slots locales de paradas viales, depósitos viales y bundles cable/fachada de depósito ferroviario; aún no aplica por sí mismo el sort global, pivote ni clipping de las demás familias. |
 | 4 | Captura enfocada | ¿La composición completa se ve correcta en el contexto real? | Es aceptación visual, no la única evidencia. |
 
 La regla es encontrar la primera capa que diverge antes de editar. De ese modo
@@ -68,7 +68,7 @@ cuando el tile ya se decodificó mal.
 | Catenaria | La ruta común cubre vía normal, cruces a nivel eléctricos, postes de la boca de túnel, cable especial de portal y cable de entrada de depósito. Conserva el orden PPP → PCP antes de las capas `TILE_SEQ` y la altura posterior a fundación. | Kale completo 8bpp: la comparación estricta no deja comandos, geometrías, paletas ni órdenes fuera de OpenTTD. |
 | Señales ferroviarias | El importador lee `vehicle.road_side` y `construction.train_signal_side` de `PATS`/`OPTS`; el renderer replica el orden de `DrawSignals` y la altura de `GetSafeSlopeZ` sobre la fundación ferroviaria efectiva. | Kale completo: las 729 señales coinciden en ID, ancla de mundo, geometría y orden relativo. |
 | Monorriel y maglev | Selección diagonal tipada por railtype para no usar rail convencional. | En checkpoint; validar por región. |
-| Depósitos y estaciones especiales | Geometría de depósito naval, reserva visual de depósito rail, cable eléctrico de entrada y boya con su suelo de agua explícito; los fallbacks siguen siendo distinguibles. | La traza de Kale cubre el suelo 4061 + boya 9282 y los cables de depósito en su orden y altura de OpenTTD. |
+| Depósitos y estaciones especiales | Geometría de depósito naval, reserva visual de depósito rail, cable eléctrico de entrada y boya con su suelo de agua explícito; los fallbacks siguen siendo distinguibles. El runtime reordena localmente los parents BUILD viales y el bundle cable/fachada del depósito rail según sus bounds. | La traza de Kale cubre el suelo 4061 + boya 9282 y los cables de depósito en su orden y altura de OpenTTD; `(195,17)` conserva el orden final `1063 → 5659 → 1064` sin declarar composición global. |
 | Paleta de compañía 8bpp y estación rail vanilla | Se corrigió el desplazamiento de un índice DOS en las rampas y se dejó de inferir recolor por RGB ajeno a la rampa autora. La región `120,111..128,113` de Kale compara 118/118 comandos de estación (sprite, paleta, geometría y orden). | Validada por `world-draw`; la composición raster amplia sigue teniendo familias ajenas a esta corrección. |
 | Paradas viales vanilla (bus/camión) | `DrawTile_Station` nivela las paradas inclinadas, dibuja el suelo de bahía o la base pavimentada pasante y luego sus `TILE_SEQ_LINE`. El renderer registra los IDs globales de cada capa, sus cajas, paleta de compañía y el child de la fundación; deja de añadir césped o una carretera heurística bajo una bahía. | Kale completo 8bpp: las 457 paradas comparan exactamente contra OpenTTD en ID, paleta, geometría, fundación y orden. La regresión sintética verifica metadata 8bpp/32bpp y evita confundir los IDs Action5 locales 2009–2018 con `SPR_ROADSTOP_BASE` 5978–5985. |
 | Paletas de casas vanilla | `HOUSE_DRAW_DATA` conserva ahora `p1`/`p2` de cada `M(...)` de `town_land.h`; la caché aplica paleta de compañía (775–790), estructura (795–801) e iglesia (1438–1439) a las capas de suelo y edificio. La traza registra la paleta incluso cuando la geometría no es explícita. | En Kale 8bpp, 740 draws de casa no nulos coinciden exactamente con el comando C++ del mismo sprite/tesela/paleta; las pruebas exigen que todos los pares generados tengan asset recoloreado. La captura global sigue marcada como diferente por familias ajenas. |
@@ -236,9 +236,11 @@ boca de túnel sólo puede reclamar el PCP de su borde exterior y combina su
 cable con el techo. Reusar sin filtro el colector genérico producía postes
 interiores adicionales en Kale, por ejemplo en `(170,81)` y `(180,127)`.
 
-La implementación conserva el cable de depósito antes de las capas BUILD y a
-la altura de `GetTileMaxPixelZ`; para un túnel filtra el PPP al lado opuesto a
-la dirección de `m5`. Los cruces a nivel precargan el bloque completo
+La traza conserva el cable de depósito antes de las capas BUILD y a la altura
+de `GetTileMaxPixelZ`; en runtime, sus bounds y los de las fachadas entran en
+el mismo vector local de `ViewportSortParentSprites` antes de asignar slots de
+profundidad. Para un túnel filtra el PPP al lado opuesto a la dirección de
+`m5`. Los cruces a nivel precargan el bloque completo
 `1370..=1405`, para no omitir el suelo según railtype y superficie. Finalmente,
 una boya emite primero el agua `4061` y luego el `TILE_SEQ_LINE` de `9282`.
 Las regresiones unitarias cubren los cuatro sentidos de la boca/deposito y el

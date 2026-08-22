@@ -29,8 +29,9 @@ use crate::render::{
     WaterTile, WorldAssets, sprite_from_atlas_or_company_white_colour,
 };
 use crate::sprites::{
-    CompanyColour, DockTileLayer, ROAD_DEPOT_GROUND_SPRITE_ID, RoadStopLayerGfx, StationTileClass,
-    TransparencyOption, airport_station_base_for_gfx, airport_station_ground_layers_for_gfx,
+    CompanyColour, DockTileLayer, ROAD_DEPOT_GROUND_SPRITE_ID, RailDepotLayerGfx,
+    RoadDepotLayerGfx, RoadStopLayerGfx, StationTileClass, TransparencyOption,
+    airport_station_base_for_gfx, airport_station_ground_layers_for_gfx,
     airport_station_layers_for_gfx, airport_station_overlay_rel_for_sprite,
     airport_station_sprite_for_id, catenary_depot_wire_draw, catenary_hidden,
     catenary_pylon_world_z_delta, catenary_reference_sprite_id, catenary_sprite_color,
@@ -321,9 +322,44 @@ fn record_road_stop_layer_trace(
     );
 }
 
+/// Construye un padre sortable a partir de una línea `TILE_SEQ_LINE`.
+///
+/// Los extents de OpenTTD describen cantidad de unidades y el exportador C++
+/// los presenta como máximos inclusivos: una extensión 3 cubre
+/// `origin..origin + 2`.
+#[allow(clippy::too_many_arguments)]
+fn tile_seq_parent_sprite(
+    id: u64,
+    sprite_id: u32,
+    tx: i32,
+    ty: i32,
+    base_z: u8,
+    dx: i32,
+    dy: i32,
+    dz: i32,
+    ex: i32,
+    ey: i32,
+    ez: i32,
+) -> ParentSprite {
+    let xmin = tx * 16 + dx;
+    let ymin = ty * 16 + dy;
+    let zmin = i32::from(base_z) * 8 + dz;
+    ParentSprite::sprite(
+        id,
+        sprite_id,
+        ParentSpriteBounds::new(
+            xmin,
+            ymin,
+            zmin,
+            xmin + ex - 1,
+            ymin + ey - 1,
+            zmin + ez - 1,
+        ),
+    )
+}
+
 /// Construye las cajas que entrega `AddSortableSpriteToDraw` para las capas
-/// BUILD de una parada vial. Los extents de `TILE_SEQ_LINE` son inclusivos en
-/// el exportador C++: una extensión 3 cubre `origin..origin + 2`.
+/// BUILD de una parada vial.
 fn road_stop_parent_sprites(
     tx: i32,
     ty: i32,
@@ -334,21 +370,19 @@ fn road_stop_parent_sprites(
         .iter()
         .enumerate()
         .map(|(index, layer)| {
-            let xmin = tx * 16 + layer.dx as i32;
-            let ymin = ty * 16 + layer.dy as i32;
-            let zmin = i32::from(base_z) * 8 + layer.dz as i32;
             let (ex, ey, ez) = layer.bounds;
-            ParentSprite::sprite(
+            tile_seq_parent_sprite(
                 index as u64,
                 layer.sprite_id,
-                ParentSpriteBounds::new(
-                    xmin,
-                    ymin,
-                    zmin,
-                    xmin + ex - 1,
-                    ymin + ey - 1,
-                    zmin + ez - 1,
-                ),
+                tx,
+                ty,
+                base_z,
+                layer.dx as i32,
+                layer.dy as i32,
+                layer.dz as i32,
+                ex,
+                ey,
+                ez,
             )
         })
         .collect()
@@ -2172,6 +2206,67 @@ fn spawn_ship_depot_tile(
     }
 }
 
+/// Padres BUILD del depósito vial. Aunque las cuatro variantes vanilla de
+/// Kale conservan su inserción local, pasan por el mismo sorter que OpenTTD
+/// para que los bounds —no el índice del PNG— sigan siendo el contrato.
+fn road_depot_parent_sprites(
+    tx: i32,
+    ty: i32,
+    base_z: u8,
+    layers: &[RoadDepotLayerGfx],
+) -> Vec<ParentSprite> {
+    layers
+        .iter()
+        .enumerate()
+        .map(|(index, layer)| {
+            tile_seq_parent_sprite(
+                index as u64,
+                layer.sprite_id,
+                tx,
+                ty,
+                base_z,
+                layer.dx as i32,
+                layer.dy as i32,
+                layer.dz as i32,
+                layer.sx,
+                layer.sy,
+                20,
+            )
+        })
+        .collect()
+}
+
+fn road_depot_sorted_layer_centers(
+    ctx: &TileRenderContext,
+    base_z: u8,
+    layers: &[RoadDepotLayerGfx],
+) -> Vec<Vec3> {
+    let mut centers: Vec<_> = layers
+        .iter()
+        .map(|layer| {
+            road_depot_build_sprite_center(
+                ctx.iso_pos,
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+                base_z,
+                layer.z,
+                road_depot_seq_gfx(layer),
+                layer.w,
+                layer.h,
+            )
+        })
+        .collect();
+    let parents = road_depot_parent_sprites(ctx.tx_i32(), ctx.ty_i32(), base_z, layers);
+    let depths: Vec<_> = centers.iter().map(|center| center.z).collect();
+    for (center, depth) in centers
+        .iter_mut()
+        .zip(depths_in_viewport_sort_order(&parents, &depths))
+    {
+        center.z = depth;
+    }
+    centers
+}
+
 #[allow(clippy::too_many_arguments)]
 fn spawn_road_depot_tile(
     commands: &mut Commands,
@@ -2202,7 +2297,9 @@ fn spawn_road_depot_tile(
     // aparece para ciertos tipos custom/tranvías y no estaba resuelto aquí.
     // Dibujarlo siempre agregaba una vía que el oráculo no emite.
     let foundation_z_delta = (i32::from(base_z) - i32::from(ctx.info.base_z)) * 8;
-    for (layer_i, spec) in road_depot_build_layers(dir).iter().enumerate() {
+    let build_layers = road_depot_build_layers(dir);
+    let build_centers = road_depot_sorted_layer_centers(ctx, base_z, build_layers);
+    for (layer_i, spec) in build_layers.iter().enumerate() {
         if buildings_hidden() {
             break;
         }
@@ -2228,16 +2325,7 @@ fn spawn_road_depot_tile(
         let Some(image) = image else {
             continue;
         };
-        let center = road_depot_build_sprite_center(
-            ctx.iso_pos,
-            ctx.tx_i32(),
-            ctx.ty_i32(),
-            base_z,
-            spec.z,
-            road_depot_seq_gfx(spec),
-            spec.w,
-            spec.h,
-        );
+        let center = build_centers[layer_i];
         commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
@@ -2320,6 +2408,128 @@ fn record_rail_depot_reservation_trace(tileh: u8, sprite_id: u32, fallback: bool
     }
 }
 
+fn rail_depot_catenary_visible(ctx: &TileRenderContext) -> bool {
+    ctx.tile
+        .is_some_and(|tile| rail_type_from_tile(tile).has_catenary())
+        && !catenary_hidden()
+}
+
+fn rail_depot_catenary_parent_sprite(
+    id: u64,
+    tx: i32,
+    ty: i32,
+    base_z: u8,
+    dir: usize,
+) -> ParentSprite {
+    let draw = catenary_depot_wire_draw(dir as u8);
+    let (dx, dy, dz) = draw.bounds_origin;
+    let (ex, ey, ez) = draw.bounds_extent;
+    tile_seq_parent_sprite(
+        id,
+        catenary_reference_sprite_id(draw.sprite_id),
+        tx,
+        ty,
+        base_z,
+        dx,
+        dy,
+        dz,
+        ex,
+        ey,
+        ez,
+    )
+}
+
+fn rail_depot_build_parent_sprites(
+    tx: i32,
+    ty: i32,
+    base_z: u8,
+    first_id: u64,
+    layers: &[RailDepotLayerGfx],
+) -> Vec<ParentSprite> {
+    layers
+        .iter()
+        .enumerate()
+        .map(|(index, layer)| {
+            tile_seq_parent_sprite(
+                first_id + index as u64,
+                layer.sprite_id,
+                tx,
+                ty,
+                base_z,
+                layer.dx as i32,
+                layer.dy as i32,
+                layer.dz as i32,
+                layer.sx,
+                layer.sy,
+                23,
+            )
+        })
+        .collect()
+}
+
+/// Reasigna sólo los slots locales de un depósito ferroviario según el orden
+/// final de OpenTTD. El cable de entrada participa como un parent más: en
+/// Kale `(195,17)` el sorter deja la puerta 1063 detrás/delante del cable
+/// según sus prismas, algo que no se puede reproducir ordenando sólo las dos
+/// fachadas BUILD.
+fn rail_depot_sorted_layer_centers(
+    ctx: &TileRenderContext,
+    base_z: u8,
+    half_h: f32,
+    rail_type: openttdrs_core::RailType,
+    dir: usize,
+    include_catenary: bool,
+) -> (Option<f32>, Vec<Vec3>) {
+    let layers = rail_depot_build_layers(rail_type, dir);
+    let mut centers: Vec<_> = layers
+        .iter()
+        .map(|layer| {
+            road_depot_build_sprite_center(
+                ctx.iso_pos,
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+                base_z,
+                layer.z,
+                rail_depot_seq_gfx(layer),
+                layer.w,
+                layer.h,
+            )
+        })
+        .collect();
+
+    let mut parents = Vec::with_capacity(layers.len() + usize::from(include_catenary));
+    let mut source_depths = Vec::with_capacity(layers.len() + usize::from(include_catenary));
+    if include_catenary {
+        parents.push(rail_depot_catenary_parent_sprite(
+            0,
+            ctx.tx_i32(),
+            ctx.ty_i32(),
+            base_z,
+            dir,
+        ));
+        source_depths.push(tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.035, half_h).z);
+    }
+    parents.extend(rail_depot_build_parent_sprites(
+        ctx.tx_i32(),
+        ctx.ty_i32(),
+        base_z,
+        parents.len() as u64,
+        layers,
+    ));
+    source_depths.extend(centers.iter().map(|center| center.z));
+
+    let mut sorted_depths = depths_in_viewport_sort_order(&parents, &source_depths).into_iter();
+    let catenary_depth = include_catenary.then(|| sorted_depths.next()).flatten();
+    debug_assert!(
+        !include_catenary || catenary_depth.is_some(),
+        "el parent de catenaria debe tener un slot de profundidad"
+    );
+    for (center, depth) in centers.iter_mut().zip(sorted_depths) {
+        center.z = depth;
+    }
+    (catenary_depth, centers)
+}
+
 /// Cable de entrada del depósito eléctrico (`DrawRailCatenary` especial).
 ///
 /// Esta rama va después del suelo/reserva pero antes de las capas BUILD del
@@ -2332,6 +2542,7 @@ fn spawn_rail_depot_catenary(
     ctx: &TileRenderContext,
     base_z: u8,
     half_h: f32,
+    sorted_depth: Option<f32>,
     catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     catenary_sprites: &mut Option<&mut crate::render::NewGrfCatenarySpriteCache>,
     images: &mut Option<&mut Assets<Image>>,
@@ -2339,7 +2550,7 @@ fn spawn_rail_depot_catenary(
     let Some(tile) = ctx.tile else {
         return;
     };
-    if !rail_type_from_tile(tile).has_catenary() || catenary_hidden() {
+    if !rail_depot_catenary_visible(ctx) {
         return;
     }
 
@@ -2372,17 +2583,15 @@ fn spawn_rail_depot_catenary(
     let Some(sprite) = sprite else {
         return;
     };
+    let mut position = tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.035, half_h);
+    if let Some(depth) = sorted_depth {
+        position.z = depth;
+    }
     commands.spawn((
         MapVisualLayer,
         ctx.map_tile_chunk(),
         sprite,
-        Transform::from_translation(tile_pos_half(
-            ctx.tx_i32(),
-            ctx.ty_i32(),
-            base_z,
-            0.035,
-            half_h,
-        )),
+        Transform::from_translation(position),
     ));
 }
 
@@ -2465,12 +2674,17 @@ fn spawn_rail_depot_tile(
             ));
         }
     }
+    let buildings_are_hidden = buildings_hidden();
+    let catenary_participates = rail_depot_catenary_visible(ctx) && !buildings_are_hidden;
+    let (catenary_depth, build_centers) =
+        rail_depot_sorted_layer_centers(ctx, base_z, half_h, rail_type, dir, catenary_participates);
     spawn_rail_depot_catenary(
         commands,
         assets,
         ctx,
         base_z,
         half_h,
+        catenary_depth,
         catenary_newgrf,
         catenary_sprites,
         images,
@@ -2483,7 +2697,7 @@ fn spawn_rail_depot_tile(
     let company_palette = 775 + u32::from(owner_colour.unwrap_or_default().as_u8());
     let foundation_z_delta = (i32::from(base_z) - i32::from(ctx.info.base_z)) * 8;
     for (layer_i, spec) in rail_depot_build_layers(rail_type, dir).iter().enumerate() {
-        if buildings_hidden() {
+        if buildings_are_hidden {
             break;
         }
         let Some(image) = depot_builds.get(layer_i) else {
@@ -2525,16 +2739,7 @@ fn spawn_rail_depot_tile(
                 23,
             )),
         );
-        let center = road_depot_build_sprite_center(
-            ctx.iso_pos,
-            ctx.tx_i32(),
-            ctx.ty_i32(),
-            base_z,
-            spec.z,
-            rail_depot_seq_gfx(spec),
-            spec.w,
-            spec.h,
-        );
+        let center = build_centers[layer_i];
         commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
@@ -2553,9 +2758,10 @@ fn spawn_rail_depot_tile(
 mod tests {
     use super::{
         airport_station_ground_layer_trace_offset, buoy_trace_bounds, dock_clear_land_sprite_id,
-        dock_water_neighbour_is_sea, rail_depot_foundation_child_offset,
+        dock_water_neighbour_is_sea, rail_depot_build_parent_sprites,
+        rail_depot_catenary_parent_sprite, rail_depot_foundation_child_offset,
         rail_depot_reservation_track_visible, road_depot_foundation_child_offset,
-        road_stop_foundation_child_offset, road_stop_parent_sprites,
+        road_depot_parent_sprites, road_stop_foundation_child_offset, road_stop_parent_sprites,
         station_catenary_wire_trace_geometry, station_rail_child_offset,
         station_rail_foundation_world_z_delta, tunnel_catenary_trace_geometry,
     };
@@ -2563,7 +2769,7 @@ mod tests {
 
     use crate::sprites::{
         CatenaryWireDraw, StationTileClass, airport_station_ground_layers_for_gfx,
-        road_stop_drive_through_layers,
+        rail_depot_build_layers, road_depot_build_layers, road_stop_drive_through_layers,
     };
 
     #[test]
@@ -2695,6 +2901,76 @@ mod tests {
         assert_eq!(
             crate::render::viewport_sort::viewport_sort_parent_sprites(&parents),
             vec![1, 0]
+        );
+    }
+
+    #[test]
+    fn road_depot_build_parents_keep_kale_post_sort_order() {
+        // Kale `(120,8)`: el depósito SW emite 1410 y 1411. No hay
+        // inversión local, pero las cajas siguen pasando por el mismo
+        // contrato en vez de depender del índice de capa del atlas.
+        let parents = road_depot_parent_sprites(120, 8, 1, road_depot_build_layers(2));
+        assert_eq!(parents.len(), 2);
+        assert_eq!(
+            parents[0].kind,
+            crate::render::viewport_sort::ParentSpriteKind::Sprite { sprite_id: 1410 }
+        );
+        assert_eq!(
+            (
+                parents[0].bounds.xmin,
+                parents[0].bounds.ymin,
+                parents[0].bounds.zmin,
+                parents[0].bounds.xmax,
+                parents[0].bounds.ymax,
+                parents[0].bounds.zmax,
+            ),
+            (1920, 128, 8, 1935, 128, 27)
+        );
+        assert_eq!(
+            crate::render::viewport_sort::viewport_sort_parent_sprites(&parents),
+            vec![0, 1]
+        );
+    }
+
+    #[test]
+    fn electric_rail_depot_orders_catenary_with_its_build_layers() {
+        // Kale `(195,17)`: el C++ inserta 5659, 1063, 1064, pero el
+        // `ViewportSortParentSprites` final los deja 1063, 5659, 1064.
+        // El cable no puede quedar fuera del vector local de parents.
+        let mut parents = vec![rail_depot_catenary_parent_sprite(0, 195, 17, 1, 1)];
+        parents.extend(rail_depot_build_parent_sprites(
+            195,
+            17,
+            1,
+            1,
+            rail_depot_build_layers(openttdrs_core::RailType::Electric, 1),
+        ));
+        assert_eq!(parents.len(), 3);
+        assert_eq!(
+            parents[0].kind,
+            crate::render::viewport_sort::ParentSpriteKind::Sprite { sprite_id: 5659 }
+        );
+        assert_eq!(
+            (
+                parents[0].bounds.xmin,
+                parents[0].bounds.ymin,
+                parents[0].bounds.zmin,
+                parents[0].bounds.xmax,
+                parents[0].bounds.ymax,
+                parents[0].bounds.zmax,
+            ),
+            (3127, 272, 18, 3127, 286, 18)
+        );
+        assert_eq!(
+            crate::render::viewport_sort::viewport_sort_parent_sprites(&parents),
+            vec![1, 0, 2]
+        );
+        assert_eq!(
+            crate::render::viewport_sort::depths_in_viewport_sort_order(
+                &parents,
+                &[0.035, 0.05, 0.06],
+            ),
+            vec![0.05, 0.035, 0.06]
         );
     }
 

@@ -639,7 +639,7 @@ pub use world_gen::{
     HeightmapData, IndustryDensity, NUM_INITIAL_INDUSTRIES, NUM_INITIAL_TOWNS, PopulationGenConfig,
     PreserveRect, QuantitySeaLakes, TerrainType, TgenSmoothness, TownDensity, WorldGenConfig,
     apply_heightmap, apply_population_gen, apply_world_gen, ceil_div, clear_ground_m5,
-    effective_clear_ground, generate_industries, generate_towns, house_beside_road,
+    effective_clear_ground, generate_industries, generate_towns, generate_trees, house_beside_road,
     industry_target_count, initial_clear_ground, parse_hmap, road_tiles_are_flat, scale_by_size,
     serialize_heightmap, town_target_count,
 };

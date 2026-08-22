@@ -17,6 +17,7 @@ pub(crate) use landcover::desert_patch;
 mod population;
 mod rivers;
 mod tgp;
+mod trees;
 
 pub use config::{
     CLEAR_GROUND_DESERT, CLEAR_GROUND_FIELDS, CLEAR_GROUND_GRASS, CLEAR_GROUND_ROCKY,
@@ -31,17 +32,17 @@ pub use population::{
     apply_population_gen, ceil_div, generate_industries, generate_towns, house_beside_road,
     industry_target_count, road_tiles_are_flat, scale_by_size, town_target_count,
 };
+pub use trees::generate_trees;
 
 use crate::company::{OWNER_NONE_M1, OWNER_WATER_M1};
 use crate::map::{
     Map, MapError, TileCoord, TileKind, WaterClass, set_water_class_m1, tile_slope_and_z,
 };
 
-use landcover::forest_patch;
 use rivers::{carve_rivers, mark_water_coasts};
 use tgp::{calculate_coverage_line, generate_tgp_heights};
 
-/// Genera colinas, lagos y bosques sobre un mapa ya inicializado (backend TGP / Perlin).
+/// Genera colinas y lagos sobre un mapa ya inicializado (backend TGP / Perlin).
 ///
 /// Las teselas dentro de `preserve` conservan tipo y altura actuales.
 /// El heightmap externo sigue disponible vía [`apply_heightmap`].
@@ -118,29 +119,9 @@ pub fn apply_world_gen(
             // antes era un atajo visual, pero diverge del mapa nuevo de
             // OpenTTD incluso antes de que corra `GenerateClearTile`.
             let m5 = clear_ground_m5(ground, 3);
-            if forest_patch(x, y, config.seed, config.climate) && ground != CLEAR_GROUND_DESERT {
-                // MP_TREES: m5 = (count-1)<<6 | growth; adulto por defecto (OpenTTD Grown).
-                let count_m1 = ((config
-                    .seed
-                    .wrapping_mul(x as u64 + 1)
-                    .wrapping_add(y as u64 * 17))
-                    & 3) as u8;
-                let tree_m5 = (count_m1 << 6) | 3; // TreeGrowthStage::Grown
-                // `PlaceTree` conserva la densidad de la tesela base; en un
-                // mapa nuevo esa base es `MakeClear(..., 3)`.
-                let tree_m2 = 3 << 4; // TreeGround::Grass
-                map.set_kind(c, TileKind::Forest)?;
-                map.set_mapt_m5(c, 0x40, tree_m5)?;
-                map.set_m2(c, tree_m2)?;
-                // `MakeTree` writes OWNER_NONE and WaterClass::Invalid in
-                // M1; dejar sólo 0x10 hace que cada bosque difiera del raw
-                // OpenTTD aunque el tipo de tesela coincida.
-                map.set_m1(c, set_water_class_m1(OWNER_NONE_M1, WaterClass::Invalid))?;
-            } else {
-                map.set_kind(c, TileKind::Grass)?;
-                map.set_mapt_m5(c, 0, m5)?;
-                map.set_m1(c, OWNER_NONE_M1)?;
-            }
+            map.set_kind(c, TileKind::Grass)?;
+            map.set_mapt_m5(c, 0, m5)?;
+            map.set_m1(c, OWNER_NONE_M1)?;
         }
     }
 
@@ -173,6 +154,8 @@ pub fn apply_world_gen(
 
 #[cfg(test)]
 mod tests {
+    use crate::company::OWNER_NONE_M1;
+
     use super::*;
 
     #[test]
@@ -330,6 +313,7 @@ mod tests {
             ..WorldGenConfig::default()
         };
         apply_world_gen(&mut map, &cfg, &[]).expect("generate map");
+        generate_trees(&mut map, cfg.climate, cfg.seed, &[]);
 
         let mut clear = 0;
         let mut water = 0;
@@ -395,6 +379,7 @@ mod tests {
             &[],
         )
         .expect("generate map");
+        generate_trees(&mut map, Climate::Temperate, 1_330_928_978, &[]);
         let trees = map
             .tiles()
             .iter()

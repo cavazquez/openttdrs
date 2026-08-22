@@ -11,7 +11,7 @@ use openttdrs_core::world_raw::{
 };
 use openttdrs_core::{
     Climate, GameState, Map, PopulationGenConfig, TerrainType, WorldGenConfig,
-    apply_population_gen, apply_world_gen,
+    apply_population_gen, apply_world_gen, generate_trees,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -354,6 +354,12 @@ fn run(args: &Args) -> Result<(), String> {
                 },
                 &[],
             );
+        } else {
+            // Incluso en el modo de diagnóstico "sólo terreno", OpenTTD
+            // ejecuta `GenerateTrees` antes de entregar el mundo nuevo. La
+            // separación conserva la posibilidad de aislar pueblos/industrias
+            // sin convertir el raw en un mapa artificialmente pelado.
+            generate_trees(&mut state.map, state.climate, seed, &[]);
         }
         for _ in 0..startup_ticks {
             state.step();

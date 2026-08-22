@@ -1,7 +1,5 @@
 //! Cobertura de terreno: densidad de hierba, bosques y desiertos.
 
-use super::config::Climate;
-
 fn hash_u64(mut x: u64) -> u64 {
     x ^= x >> 30;
     x = x.wrapping_mul(0xBF58_476D_1CE4_E5B9);
@@ -24,13 +22,6 @@ pub(super) fn grass_density(x: i32, y: i32, seed: u64) -> u8 {
         2..=4 => 2,
         _ => 3,
     }
-}
-
-pub fn forest_patch(x: i32, y: i32, seed: u64, climate: Climate) -> bool {
-    if !matches!(climate, Climate::Temperate | Climate::SubArctic) {
-        return false;
-    }
-    hash_u64(seed.wrapping_add(i64_pair_hash(x.wrapping_mul(7), y.wrapping_mul(11)))) % 9 == 0
 }
 
 pub fn desert_patch(x: i32, y: i32, seed: u64) -> bool {

@@ -208,6 +208,11 @@ pub fn apply_population_gen(
         industry_target_count(cfg.industry_density, mw, mh),
         &town_centers,
     );
+    // OpenTTD's new-game order is terrain → towns → industries → objects →
+    // trees. Objects are not yet part of this procedural backend, but trees
+    // must still run after industry footprints so fields/industry tiles can
+    // win their tile before `GenerateTrees` samples the map.
+    super::generate_trees(&mut ctx.state.map, ctx.state.climate, seed, preserve);
 }
 
 /// Variación de estilo dentro de un mismo pueblo (índice en la tabla 1×1).

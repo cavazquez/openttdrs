@@ -1,7 +1,7 @@
 # Compatibilidad `.sav` OpenTTD ↔ openttdrs
 
 Estado vigente de compatibilidad del formato `.sav`. Corte: **2026-08-21**,
-`main` `c8128766`; referencia: **OpenTTD
+`main` `2ca10ba9`; referencia: **OpenTTD
 15.3**, commit `14ec60f248547d4d062a1160f0fc26d742319888`.
 
 Esta es la única matriz de capacidad para importación y exportación `.sav`.

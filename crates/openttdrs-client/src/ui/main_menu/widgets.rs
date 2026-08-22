@@ -7,8 +7,8 @@ use crate::ui::hud::UiClickBeep;
 
 use super::labels::climate_label;
 use super::{
-    MainMenuClimateButton, MainMenuDensityButton, MainMenuDensityTarget, MainMenuLocalizedText,
-    MainMenuMapSizeButton, MainMenuRoughnessButton, MainMenuStartYearButton,
+    MainMenuClimateButton, MainMenuDensityButton, MainMenuDensityTarget, MainMenuDynamicText,
+    MainMenuLocalizedText, MainMenuMapSizeButton, MainMenuRoughnessButton, MainMenuStartYearButton,
     MainMenuStartingMoneyButton, MainMenuToggle,
 };
 
@@ -32,6 +32,7 @@ pub(super) fn density_button(
         BorderColor::all(Color::srgb(0.58, 0.54, 0.42)),
         Interaction::default(),
         children![(
+            MainMenuDynamicText::Density(density),
             Text::new(density.menu_label()),
             TextFont {
                 font_size: FontSize::Rem(UiFontRole::Caption.rem_size()),
@@ -93,6 +94,7 @@ pub(super) fn roughness_button(roughness: TerrainRoughness) -> impl Bundle {
         BorderColor::all(Color::srgb(0.58, 0.54, 0.42)),
         Interaction::default(),
         children![(
+            MainMenuDynamicText::Roughness(roughness),
             Text::new(roughness.menu_label()),
             TextFont {
                 font_size: FontSize::Rem(UiFontRole::Caption.rem_size()),
@@ -207,6 +209,7 @@ pub(super) fn climate_button(climate: Climate) -> impl Bundle {
         BorderColor::all(Color::srgb(0.62, 0.58, 0.44)),
         Interaction::default(),
         children![(
+            MainMenuDynamicText::Climate(climate),
             Text::new(climate_label(climate)),
             TextFont {
                 font_size: FontSize::Rem(UiFontRole::Caption.rem_size()),
@@ -234,6 +237,7 @@ pub(super) fn toggle_button(toggle: MainMenuToggle, label: &'static str) -> impl
         BorderColor::all(Color::srgb(0.55, 0.5, 0.38)),
         Interaction::default(),
         children![(
+            MainMenuLocalizedText(label),
             Text::new(label),
             TextFont {
                 font_size: FontSize::Rem(UiFontRole::Caption.rem_size()),

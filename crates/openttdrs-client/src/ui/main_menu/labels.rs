@@ -20,13 +20,38 @@ pub(super) fn climate_label(climate: Climate) -> &'static str {
     }
 }
 
+pub(super) fn localized_climate_label(
+    locale: crate::i18n::Locale,
+    climate: Climate,
+) -> &'static str {
+    crate::i18n::text(locale, climate_label(climate))
+}
+
+pub(super) fn localized_density_label(
+    locale: crate::i18n::Locale,
+    density: PopulationDensity,
+) -> &'static str {
+    crate::i18n::text(locale, density.menu_label())
+}
+
+pub(super) fn localized_roughness_label(
+    locale: crate::i18n::Locale,
+    roughness: TerrainRoughness,
+) -> &'static str {
+    crate::i18n::text(locale, roughness.menu_label())
+}
+
 pub(super) fn map_size_label(size: MapSizePreset) -> String {
     size.menu_label()
 }
 
 pub(crate) fn summary_text(settings: NewGameSettings) -> String {
+    summary_text_for(crate::i18n::Locale::Es, settings)
+}
+
+pub(crate) fn summary_text_for(locale: crate::i18n::Locale, settings: NewGameSettings) -> String {
     let settings = settings.sanitized();
-    let mode = if settings.world_gen {
+    let mode_source = if settings.world_gen {
         if settings.island {
             "isla procedural + lagos"
         } else {
@@ -37,28 +62,37 @@ pub(crate) fn summary_text(settings: NewGameSettings) -> String {
     } else {
         "mapa plano"
     };
+    let yes = crate::i18n::text(locale, "sí");
+    let no = crate::i18n::text(locale, "no");
+    let seed = if settings.seed == 0 {
+        crate::i18n::text(locale, "auto").to_owned()
+    } else {
+        settings.seed.to_string()
+    };
     format!(
-        "Mapa {} · clima {} · inicio {} · {} · semilla={}\n\
-         Pueblos {} · industrias {} · capital {} · relieve {} · rival {} · desastres {}",
+        "{} {} · {} {} · {} {} · {} · {}={}\n\
+         {} {} · {} {} · {} {} · {} {} · {} {} · {} {}",
+        crate::i18n::text(locale, "Mapa"),
         map_size_label(settings.map_size),
-        climate_label(settings.climate),
+        crate::i18n::text(locale, "clima"),
+        localized_climate_label(locale, settings.climate),
+        crate::i18n::text(locale, "inicio"),
         settings.start_year,
-        mode,
-        if settings.seed == 0 {
-            "auto".to_string()
-        } else {
-            settings.seed.to_string()
-        },
-        settings.town_density.menu_label(),
-        settings.industry_density.menu_label(),
+        crate::i18n::text(locale, mode_source),
+        crate::i18n::text(locale, "semilla"),
+        seed,
+        crate::i18n::text(locale, "Pueblos"),
+        localized_density_label(locale, settings.town_density),
+        crate::i18n::text(locale, "industrias"),
+        localized_density_label(locale, settings.industry_density),
+        crate::i18n::text(locale, "capital"),
         format_money(settings.starting_money),
-        settings.terrain_roughness.menu_label(),
-        if settings.rival_ai { "sí" } else { "no" },
-        if settings.disasters_enabled {
-            "sí"
-        } else {
-            "no"
-        },
+        crate::i18n::text(locale, "relieve"),
+        localized_roughness_label(locale, settings.terrain_roughness),
+        crate::i18n::text(locale, "rival"),
+        if settings.rival_ai { yes } else { no },
+        crate::i18n::text(locale, "desastres"),
+        if settings.disasters_enabled { yes } else { no },
     )
 }
 

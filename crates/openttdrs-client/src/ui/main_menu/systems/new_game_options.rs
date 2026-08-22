@@ -4,7 +4,7 @@ use openttdrs_core::Climate;
 use crate::state::bootstrap::MapSizePreset;
 use crate::state::new_game::NewGameSettingsResource;
 
-use super::super::labels::{adjust_seed, cycle_density, summary_text};
+use super::super::labels::{adjust_seed, cycle_density, summary_text_for};
 use super::super::widgets::{option_button_bg, seed_button_bg, toggle_button_bg};
 use super::super::{
     MainMenuClimateButton, MainMenuDensityButton, MainMenuDensityTarget, MainMenuMapSizeButton,
@@ -15,16 +15,17 @@ use super::super::{
 pub(crate) fn sync_main_menu_summary(
     settings: Res<NewGameSettingsResource>,
     panel: Res<MainMenuPanel>,
+    prefs: Res<crate::settings::ClientPreferences>,
     mut q: Query<&mut Text, With<MainMenuSummaryText>>,
 ) {
-    if !settings.is_changed() && !panel.is_changed() {
+    if !settings.is_changed() && !panel.is_changed() && !prefs.is_changed() {
         return;
     }
     if *panel != MainMenuPanel::NewGame {
         return;
     }
     for mut text in &mut q {
-        text.0 = summary_text(settings.settings());
+        text.0 = summary_text_for(prefs.locale(), settings.settings());
     }
 }
 

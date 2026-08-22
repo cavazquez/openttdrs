@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used)]
 
-use super::labels::{adjust_seed, cycle_density, summary_text};
+use super::labels::{adjust_seed, cycle_density, summary_text, summary_text_for};
 use super::{MainMenuPanel, setup_main_menu};
 use crate::network::{NetCli, NetworkStatus};
 use crate::state::bootstrap::{
@@ -37,6 +37,23 @@ fn summary_text_includes_density_and_money() {
     assert!(text.contains("Baja"));
     assert!(text.contains("$1.0M"));
     assert!(text.contains("lagos"));
+}
+
+#[test]
+fn english_summary_translates_dynamic_options() {
+    let text = summary_text_for(
+        crate::i18n::Locale::En,
+        NewGameSettings {
+            climate: Climate::SubArctic,
+            town_density: PopulationDensity::Sparse,
+            industry_density: PopulationDensity::Dense,
+            ..NewGameSettings::default()
+        },
+    );
+    assert!(text.contains("Arctic"));
+    assert!(text.contains("Sparse"));
+    assert!(text.contains("Dense"));
+    assert!(text.contains("climate"));
 }
 
 #[test]

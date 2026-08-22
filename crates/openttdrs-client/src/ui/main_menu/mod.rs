@@ -51,6 +51,14 @@ pub(crate) struct MainMenuTitleText;
 #[derive(Component, Clone, Copy)]
 pub(crate) struct MainMenuLocalizedText(pub &'static str);
 
+/// Texto cuyo valor visible depende del locale y del estado de la opción.
+#[derive(Component, Clone, Copy)]
+pub(crate) enum MainMenuDynamicText {
+    Climate(Climate),
+    Density(PopulationDensity),
+    Roughness(TerrainRoughness),
+}
+
 #[derive(Component)]
 pub(crate) struct MainMenuHintsText;
 

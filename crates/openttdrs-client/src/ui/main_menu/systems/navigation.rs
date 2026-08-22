@@ -11,15 +11,17 @@ use crate::state::{ClientScreen, SuspendedGameSession, new_game::NewGameSettings
 use crate::ui::SimHudControls;
 use crate::ui::save_window::{SaveWindowMode, SaveWindowState, save_dir_from};
 
-use super::super::labels::panel_hints;
-use super::super::labels::panel_title;
+use super::super::labels::{
+    localized_climate_label, localized_density_label, localized_roughness_label, panel_hints,
+    panel_title,
+};
 use super::super::widgets::{hover_primary, hover_secondary};
 use super::super::{
     MainMenuBackButton, MainMenuCamera, MainMenuContinueButton, MainMenuContinueWrap,
-    MainMenuDemoButton, MainMenuEditorButton, MainMenuHintsText, MainMenuLoadButton,
-    MainMenuLocalizedText, MainMenuNewGameButton, MainMenuPanel, MainMenuQuitButton,
-    MainMenuQuitConfirmNo, MainMenuQuitConfirmYes, MainMenuStartButton, MainMenuSubPanel,
-    MainMenuTitleText, MainMenuUi,
+    MainMenuDemoButton, MainMenuDynamicText, MainMenuEditorButton, MainMenuHintsText,
+    MainMenuLoadButton, MainMenuLocalizedText, MainMenuNewGameButton, MainMenuPanel,
+    MainMenuQuitButton, MainMenuQuitConfirmNo, MainMenuQuitConfirmYes, MainMenuStartButton,
+    MainMenuSubPanel, MainMenuTitleText, MainMenuUi,
 };
 use super::session::{enter_editor, enter_new_game, resume_suspended_game};
 
@@ -68,10 +70,21 @@ pub(crate) fn sync_main_menu_panel_visibility(
 pub(crate) fn sync_main_menu_localized_labels(
     prefs: Res<crate::settings::ClientPreferences>,
     mut labels: Query<(&MainMenuLocalizedText, &mut Text)>,
+    mut dynamic_labels: Query<(&MainMenuDynamicText, &mut Text)>,
 ) {
     let locale = prefs.locale();
     for (key, mut text) in &mut labels {
         let translated = crate::i18n::text(locale, key.0);
+        if **text != translated {
+            **text = translated.to_owned();
+        }
+    }
+    for (key, mut text) in &mut dynamic_labels {
+        let translated = match key {
+            MainMenuDynamicText::Climate(value) => localized_climate_label(locale, *value),
+            MainMenuDynamicText::Density(value) => localized_density_label(locale, *value),
+            MainMenuDynamicText::Roughness(value) => localized_roughness_label(locale, *value),
+        };
         if **text != translated {
             **text = translated.to_owned();
         }

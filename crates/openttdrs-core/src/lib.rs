@@ -541,7 +541,7 @@ pub use ship_movement::{
     ship_move_up_down_on_lock, ship_requires_path, ship_subcoord, try_claim_ship_lock,
     water_tile_is_lock, water_tiles_connected,
 };
-pub use sign::{MAX_SIGN_NAME_CHARS, Sign};
+pub use sign::{MAX_SIGN_NAME_CHARS, Sign, SignOwner};
 pub use sim_events::{
     ConstructionKind, DisasterKind, SimEvent, SimEventQueue, TrainSmokeKind, VehicleRunningPhase,
 };

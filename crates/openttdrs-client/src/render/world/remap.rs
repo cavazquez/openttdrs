@@ -55,7 +55,7 @@ pub(crate) fn apply_remap_map_visuals(
     mut pending: ResMut<RemapMapVisualsPending>,
     q_vis: Query<Entity, With<MapVisualLayer>>,
     q_chunks: Query<(Entity, &MapTileChunk), With<MapVisualLayer>>,
-    label_entities: MapLabelEntities,
+    mut label_entities: MapLabelEntities,
     windows: Query<&Window, With<PrimaryWindow>>,
     mut q_cam: Query<
         (&mut Transform, &mut Projection),
@@ -95,6 +95,9 @@ pub(crate) fn apply_remap_map_visuals(
     pending.full = true;
 
     let (mw, mh) = sim.state.map.dimensions();
+    if full_rebuild || labels_dirty {
+        label_entities.spatial_index.rebuild(&sim.state);
+    }
     let spawn_bounds = resolve_spawn_viewport(&sim, &windows, &q_cam);
     let ortho_scale = q_cam
         .single()
@@ -122,6 +125,8 @@ pub(crate) fn apply_remap_map_visuals(
     let show_full_detail = prefs.full_detail;
     let show_town_labels = prefs.show_town_labels;
     let show_station_labels = prefs.show_station_labels;
+    let show_waypoint_labels = prefs.show_waypoint_labels;
+    let show_competitor_labels = prefs.show_competitor_labels;
 
     if use_incremental {
         let needed = chunks_in_bounds(spawn_bounds);
@@ -191,13 +196,14 @@ pub(crate) fn apply_remap_map_visuals(
         let viewport_chunks_changed = !plan.to_add.is_empty() || !plan.to_remove.is_empty();
         if labels_dirty || viewport_chunks_changed {
             let label_font = asset_server.load::<Font>(crate::ui::font::UI_FONT_PATH);
+            let label_candidates = label_entities.spatial_index.candidates(spawn_bounds);
             let town_entities: Vec<Entity> = label_entities.towns.iter().collect();
             crate::render::town_labels::resync_town_labels(
                 &mut commands,
                 town_entities,
                 &sim,
                 &label_font,
-                spawn_bounds,
+                &label_candidates,
                 show_town_labels,
             );
             let station_label_entities: Vec<Entity> = label_entities.stations.iter().collect();
@@ -206,8 +212,10 @@ pub(crate) fn apply_remap_map_visuals(
                 station_label_entities,
                 &sim,
                 &label_font,
-                spawn_bounds,
+                &label_candidates,
                 show_station_labels,
+                show_waypoint_labels,
+                show_competitor_labels,
             );
             let sign_entities: Vec<Entity> = label_entities.signs.iter().collect();
             crate::render::sign_labels::resync_sign_labels(
@@ -215,7 +223,8 @@ pub(crate) fn apply_remap_map_visuals(
                 sign_entities,
                 &sim,
                 &label_font,
-                spawn_bounds,
+                &label_candidates,
+                show_competitor_labels,
             );
         }
         if !plan.to_add.is_empty() || !plan.to_remove.is_empty() || !refresh_chunks.is_empty() {
@@ -247,12 +256,15 @@ pub(crate) fn apply_remap_map_visuals(
             company.as_mut(),
             images.as_mut(),
             &sim,
+            &label_entities.spatial_index,
             spawn_bounds,
             true,
             show_pbs,
             show_full_detail,
             show_town_labels,
             show_station_labels,
+            show_waypoint_labels,
+            show_competitor_labels,
             overview_stride,
             newgrf_sprites.road.as_mut(),
             newgrf_sprites.station.as_mut(),

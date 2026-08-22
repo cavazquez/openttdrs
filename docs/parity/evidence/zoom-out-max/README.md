@@ -25,12 +25,27 @@ Las etiquetas compensan la escala ortográfica para seguir siendo legibles y se
 componen en el mismo orden de OpenTTD: pueblos → carteles → estaciones. No se
 eliminan por colisión; el viewport oficial agrega todos los signos dentro del
 rectángulo y por eso pueden superponerse densamente en `Out8x`, como en la
-captura de referencia. Todavía falta validar rastermente la captura 1832×960
-contra OpenTTD y portar la selección espacial/ownership exacta del índice de
-labels de OpenTTD.
+captura de referencia.
+
+El cliente mantiene `MapLabelSpatialIndex`, un índice por celdas de 32×32
+teselas. Al panear consulta sólo las celdas que cruzan el viewport ampliado por
+el margen del cartel y vuelve a filtrar el ancla dentro de ese rectángulo; no
+recorre linealmente los pools completos ni agrega etiquetas de una celda vecina
+que no intersecten. El resultado se estabiliza por orden de pool y se dibuja
+por capas canónicas. Las preferencias separan pueblos, estaciones, waypoints y
+competidores. Los carteles y estaciones locales usan el color de su compañía,
+los `OWNER_NONE` se mantienen en gris, y los carteles `OWNER_DEITY` no reciben
+marco, igual que `ViewportAddKdtreeSigns`.
+
+Las anotaciones textuales de carga sobre vehículos no forman parte del viewport
+de OpenTTD y ya no se crean normalmente. Quedan disponibles sólo para
+diagnóstico con `OPENTTDRS_DEBUG_VEHICLE_CARGO_LABELS=1`, para que no compitan
+con las etiquetas del mapa en la comparación raster.
 
 La captura candidata se tomó con `Kale_TitleGame.sav`, 1832×960, centro
 `128,128`, OpenGFX 8bpp, UI visible y `OPENTTDRS_MAP_SHOT_SCALE=8`.
+
+![Candidata final de labels Out8x](openttdrs-labels-out8-1832x960.png)
 
 Antes del port, el valor solicitado se acotaba dentro del cliente por
 `clamp_ortho_scale`: para 1832×960 el presupuesto de spawn
@@ -46,12 +61,20 @@ La matriz aleatoria de 1024×1024 con semilla `1331024978` conserva el contrato
 `world-raw` tesela a tesela frente al generador de OpenTTD: `tiles=0` y
 `blocks4=0/65536`. Sobre ese mismo `.sav`, las capturas limpias a 1280×720 en
 `Out1x`, `Out2x`, `Out4x` y `Out8x`, y la captura con UI/labels a 1832×960 en
-`Out8x`, conservaron sprites detallados y no mostraron huecos diagonales. Esto
-verifica el camino del cliente; no sustituye la comparación raster directa con
-la captura de OpenTTD que sigue pendiente en el issue.
+`Out8x`, conservaron sprites detallados y no mostraron huecos diagonales. La
+revisión adicional de `Kale_TitleGame.sav` en los cuatro zooms confirmó que no
+se reintroducen textos de carga ni fondos verdes genéricos. La captura de
+OpenTTD a `Out1x` se generó con el mismo centro para comprobar la selección,
+color y orden de los carteles de estación.
 
-La imagen original es la captura aportada por el usuario en la solicitud del
-issue (OpenTTD 15.3, `Out8x`, con labels visibles). El cliente no expone esa
-imagen del chat como un archivo local reutilizable; el issue conserva la
-descripción y la candidata versionada para que la referencia se adjunte allí
-sin inventar una captura distinta.
+Esto verifica el camino del cliente, pero no certifica composición raster
+global: el sorter final de parent sprites sigue siendo una entrega separada
+(`#323` → `#322` → `#326`). Tampoco inventa pools ausentes del `.sav`: los
+carteles nativos `SIGN` y sus propietarios continúan en el alcance de
+compatibilidad `.sav`, no de este renderer.
+
+La imagen original de `Out8x` es la captura aportada por el usuario en la
+solicitud del issue. El cliente no expone esa imagen del chat como un archivo
+local reutilizable; el issue conserva la descripción y esta candidata
+versionada para que la referencia se adjunte allí sin inventar una captura
+distinta.

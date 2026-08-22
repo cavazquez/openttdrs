@@ -31,7 +31,9 @@ pub(crate) fn place_sign(
         Some(n) => n,
         None => format!("Cartel {id}"),
     };
-    state.signs.push(Sign::new(id, pos, label));
+    state
+        .signs
+        .push(Sign::new_owned(id, pos, label, state.active_company));
     Ok(())
 }
 
@@ -70,6 +72,7 @@ mod tests {
     use super::*;
     use crate::GameState;
     use crate::command::{Command, apply_command};
+    use crate::company::CompanyId;
 
     #[test]
     fn place_rename_remove_sign_roundtrip() {
@@ -79,6 +82,10 @@ mod tests {
         assert_eq!(state.signs.len(), 1);
         let id = state.signs[0].id;
         assert_eq!(state.signs[0].name, format!("Cartel {id}"));
+        assert_eq!(
+            state.signs[0].owner,
+            crate::SignOwner::Company(CompanyId::PLAYER)
+        );
         apply_command(
             &mut state,
             &Command::RenameSign {
@@ -90,6 +97,25 @@ mod tests {
         assert_eq!(state.signs[0].name, "Mirador");
         apply_command(&mut state, &Command::RemoveSign { sign_id: id }).unwrap();
         assert!(state.signs.is_empty());
+    }
+
+    #[test]
+    fn placing_sign_records_active_company_as_owner() {
+        let mut state = GameState::new(8, 8);
+        state.ensure_rival_transcargo();
+        state.set_active_company(CompanyId(1));
+        apply_command(
+            &mut state,
+            &Command::PlaceSign {
+                pos: TileCoord::new(2, 2),
+                name: Some("Rival".into()),
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            state.signs[0].owner,
+            crate::SignOwner::Company(CompanyId(1))
+        );
     }
 
     #[test]

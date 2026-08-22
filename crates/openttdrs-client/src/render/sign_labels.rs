@@ -1,10 +1,10 @@
 //! Etiquetas de carteles del jugador en el viewport.
 
 use bevy::prelude::*;
+use openttdrs_core::{CompanyId, Sign, SignOwner};
 
 use crate::iso::{tile_pos, tile_slope_and_min_z};
-use crate::render::viewport::TileViewportBounds;
-use crate::render::{MapLabelLod, MapLabelText, MapVisualLayer};
+use crate::render::{MapLabelCandidates, MapLabelLod, MapLabelText, MapVisualLayer};
 use crate::state::SimWorld;
 
 const LABEL_Z: f32 = 901.0;
@@ -12,31 +12,60 @@ const FONT_SIZE: f32 = 10.0;
 const SMALL_FONT_SIZE: f32 = 7.0;
 const CHAR_ADVANCE: f32 = FONT_SIZE * 0.602;
 const LABEL_RAISE: f32 = 22.0;
+const LABEL_BACKGROUND_ALPHA: f32 = 1.0;
+const UNOWNED_LABEL_COLOUR: Color = Color::srgb(0.42, 0.42, 0.42);
 
 #[derive(Component)]
 pub(crate) struct SignLabel;
 
-fn sign_in_bounds(pos: openttdrs_core::TileCoord, bounds: TileViewportBounds) -> bool {
-    pos.x >= 0
-        && pos.y >= 0
-        && (pos.x as u32) >= bounds.tx0
-        && (pos.y as u32) >= bounds.ty0
-        && (pos.x as u32) < bounds.tx1
-        && (pos.y as u32) < bounds.ty1
+/// `true` si el cartel pasa el filtro de competidores de OpenTTD.
+#[must_use]
+pub(crate) fn sign_label_visible(
+    sign: &Sign,
+    local_company: CompanyId,
+    show_competitors: bool,
+) -> bool {
+    sign.owner.visible_to(local_company, show_competitors)
+}
+
+fn label_background_colour(sim: &SimWorld, sign: &Sign) -> Option<Color> {
+    let base = match sign.owner {
+        SignOwner::Company(owner) => sim
+            .state
+            .companies
+            .iter()
+            .find(|company| company.id == owner)
+            .map(|company| crate::sprites::company_colour_swatch_color(company.colour))
+            .unwrap_or(UNOWNED_LABEL_COLOUR),
+        SignOwner::Unowned => UNOWNED_LABEL_COLOUR,
+        // Los carteles de GameScript usan `INVALID_COLOUR` y no llevan marco.
+        SignOwner::Deity => return None,
+    };
+    let colour = base.to_srgba();
+    Some(Color::srgba(
+        colour.red,
+        colour.green,
+        colour.blue,
+        LABEL_BACKGROUND_ALPHA,
+    ))
 }
 
 pub(crate) fn spawn_sign_labels(
     commands: &mut Commands,
     sim: &SimWorld,
     font: &Handle<Font>,
-    bounds: TileViewportBounds,
+    candidates: &MapLabelCandidates,
+    show_competitors: bool,
 ) {
     use crate::sprites::{TransparencyOption, is_hidden, text_color, with_to_alpha};
     if is_hidden(TransparencyOption::Signs) {
         return;
     }
-    for sign in &sim.state.signs {
-        if !sign_in_bounds(sign.pos, bounds) {
+    for &index in &candidates.signs {
+        let Some(sign) = sim.state.signs.get(index) else {
+            continue;
+        };
+        if !sign_label_visible(sign, sim.state.active_company, show_competitors) {
             continue;
         }
         let (tx, ty) = (sign.pos.x, sign.pos.y);
@@ -55,20 +84,19 @@ pub(crate) fn spawn_sign_labels(
             size: Vec2::new(width, FONT_SIZE + 4.0),
             small_size,
         };
-        commands.spawn((
-            MapVisualLayer,
-            SignLabel,
-            lod,
-            Sprite {
-                color: with_to_alpha(
-                    Color::srgba(0.12, 0.1, 0.06, 0.72),
-                    TransparencyOption::Signs,
-                ),
-                custom_size: Some(Vec2::new(width, FONT_SIZE + 4.0)),
-                ..default()
-            },
-            Transform::from_translation(center.extend(LABEL_Z)),
-        ));
+        if let Some(background) = label_background_colour(sim, sign) {
+            commands.spawn((
+                MapVisualLayer,
+                SignLabel,
+                lod,
+                Sprite {
+                    color: with_to_alpha(background, TransparencyOption::Signs),
+                    custom_size: Some(Vec2::new(width, FONT_SIZE + 4.0)),
+                    ..default()
+                },
+                Transform::from_translation(center.extend(LABEL_Z)),
+            ));
+        }
         commands.spawn((
             MapVisualLayer,
             SignLabel,
@@ -85,7 +113,7 @@ pub(crate) fn spawn_sign_labels(
             },
             TextColor(text_color(
                 TransparencyOption::Signs,
-                Color::srgb(1.0, 0.92, 0.55),
+                Color::srgb(0.05, 0.05, 0.05),
             )),
             Transform::from_translation(center.extend(LABEL_Z + 0.1)),
         ));
@@ -97,10 +125,28 @@ pub(crate) fn resync_sign_labels(
     label_entities: impl IntoIterator<Item = Entity>,
     sim: &SimWorld,
     font: &Handle<Font>,
-    bounds: TileViewportBounds,
+    candidates: &MapLabelCandidates,
+    show_competitors: bool,
 ) {
     for entity in label_entities {
         commands.entity(entity).despawn();
     }
-    spawn_sign_labels(commands, sim, font, bounds);
+    spawn_sign_labels(commands, sim, font, candidates, show_competitors);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn competitor_filter_keeps_local_and_deity_signs() {
+        let local = CompanyId::PLAYER;
+        let mut rival = Sign::new(1, openttdrs_core::TileCoord::new(2, 2), "Rival");
+        rival.owner = SignOwner::Company(CompanyId(1));
+        assert!(!sign_label_visible(&rival, local, false));
+        assert!(sign_label_visible(&rival, local, true));
+
+        rival.owner = SignOwner::Deity;
+        assert!(sign_label_visible(&rival, local, false));
+    }
 }

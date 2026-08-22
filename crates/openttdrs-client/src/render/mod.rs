@@ -18,6 +18,7 @@ mod house_lift_anim;
 mod industry_anim;
 mod industry_draw_proc;
 pub(crate) mod industry_newgrf;
+mod label_spatial_index;
 mod lighthouse_anim;
 pub(crate) mod newgrf_cache;
 pub(crate) mod object_newgrf;
@@ -72,6 +73,7 @@ pub(crate) use industry_anim::{
     spawn_industry_anim_layer,
 };
 pub(crate) use industry_draw_proc::{IndustryDrawProcPlugin, spawn_industry_draw_proc_overlays};
+pub(crate) use label_spatial_index::{MapLabelCandidates, MapLabelSpatialIndex};
 pub(crate) use lighthouse_anim::{LighthouseAnim, LighthouseAnimPlugin};
 pub(crate) use refinery_fire::{RefineryFireAnim, RefineryFireAnimPlugin};
 pub(crate) use sign_labels::SignLabel;

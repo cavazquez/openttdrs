@@ -4,8 +4,7 @@ use bevy::prelude::*;
 use openttdrs_core::prelude::*;
 
 use crate::iso::{tile_pos, tile_slope_and_min_z};
-use crate::render::viewport::TileViewportBounds;
-use crate::render::{MapLabelLod, MapLabelText, MapVisualLayer};
+use crate::render::{MapLabelCandidates, MapLabelLod, MapLabelText, MapVisualLayer};
 use crate::state::SimWorld;
 
 // OpenTTD compone town → sign → station labels en ese orden. Mantener la
@@ -16,6 +15,8 @@ const FONT_SIZE: f32 = 9.0;
 const SMALL_FONT_SIZE: f32 = 7.0;
 const CHAR_ADVANCE: f32 = FONT_SIZE * 0.602;
 const LABEL_RAISE: f32 = 14.0;
+const LABEL_BACKGROUND_ALPHA: f32 = 1.0;
+const UNOWNED_LABEL_COLOUR: Color = Color::srgb(0.42, 0.42, 0.42);
 
 #[derive(Component)]
 pub(crate) struct StationLabel;
@@ -65,36 +66,66 @@ fn station_label_rect(map: &openttdrs_core::Map, station: &Station) -> (Vec2, Ve
     (center, size)
 }
 
-fn station_label_in_bounds(station: &Station, bounds: TileViewportBounds) -> bool {
-    let tx = station.pos.x;
-    let ty = station.pos.y;
-    tx >= 0
-        && ty >= 0
-        && (tx as u32) >= bounds.tx0
-        && (ty as u32) >= bounds.ty0
-        && (tx as u32) < bounds.tx1
-        && (ty as u32) < bounds.ty1
+/// `true` si el nombre de estación/waypoint pasa los filtros del viewport.
+#[must_use]
+pub(crate) fn station_label_visible(
+    station: &Station,
+    local_company: CompanyId,
+    show_waypoints: bool,
+    show_competitors: bool,
+) -> bool {
+    let waypoint = matches!(
+        station.stop_kind,
+        StopKind::RailWaypoint | StopKind::RoadWaypoint
+    );
+    // `OWNER_NONE` no pertenece a ningún rival: el viewport oficial siempre
+    // conserva estos carteles (boyas, estaciones fantasma o tras una quiebra)
+    // aun cuando se ocultan las compañías competidoras.
+    let owner_is_none = station.owner.0 == openttdrs_core::company::OWNER_NONE_M1;
+    (!waypoint || show_waypoints)
+        && (show_competitors || station.owner == local_company || owner_is_none)
+}
+
+fn station_background_colour(sim: &SimWorld, station: &Station) -> Color {
+    let base = sim
+        .state
+        .companies
+        .iter()
+        .find(|company| company.id == station.owner)
+        .map(|company| crate::sprites::company_colour_swatch_color(company.colour))
+        .unwrap_or(UNOWNED_LABEL_COLOUR);
+    let colour = base.to_srgba();
+    Color::srgba(
+        colour.red,
+        colour.green,
+        colour.blue,
+        LABEL_BACKGROUND_ALPHA,
+    )
 }
 
 pub(crate) fn spawn_station_labels(
     commands: &mut Commands,
     sim: &SimWorld,
     font: &Handle<Font>,
-    bounds: TileViewportBounds,
+    candidates: &MapLabelCandidates,
     show: bool,
+    show_waypoints: bool,
+    show_competitors: bool,
 ) {
     if !show {
         return;
     }
     let map = &sim.state.map;
-    for station in &sim.state.stations {
-        if matches!(
-            station.stop_kind,
-            StopKind::RailWaypoint | StopKind::RoadWaypoint
-        ) {
+    for &index in &candidates.stations {
+        let Some(station) = sim.state.stations.get(index) else {
             continue;
-        }
-        if !station_label_in_bounds(station, bounds) {
+        };
+        if !station_label_visible(
+            station,
+            sim.state.active_company,
+            show_waypoints,
+            show_competitors,
+        ) {
             continue;
         }
         let (center, bg_size) = station_label_rect(map, station);
@@ -112,7 +143,7 @@ pub(crate) fn spawn_station_labels(
                 small_size,
             },
             Sprite {
-                color: Color::srgba(0.12, 0.18, 0.10, 0.70),
+                color: station_background_colour(sim, station),
                 custom_size: Some(bg_size),
                 ..default()
             },
@@ -135,24 +166,35 @@ pub(crate) fn spawn_station_labels(
                 font_size: FontSize::Px(FONT_SIZE),
                 ..default()
             },
-            TextColor(Color::srgb(0.95, 0.96, 0.82)),
+            TextColor(Color::srgb(0.05, 0.05, 0.05)),
             Transform::from_translation(center.extend(LABEL_Z + 0.1)),
         ));
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn resync_station_labels(
     commands: &mut Commands,
     label_entities: impl IntoIterator<Item = Entity>,
     sim: &SimWorld,
     font: &Handle<Font>,
-    bounds: TileViewportBounds,
+    candidates: &MapLabelCandidates,
     show: bool,
+    show_waypoints: bool,
+    show_competitors: bool,
 ) {
     for entity in label_entities {
         commands.entity(entity).despawn();
     }
-    spawn_station_labels(commands, sim, font, bounds, show);
+    spawn_station_labels(
+        commands,
+        sim,
+        font,
+        candidates,
+        show,
+        show_waypoints,
+        show_competitors,
+    );
 }
 
 #[cfg(test)]
@@ -172,5 +214,22 @@ mod tests {
     fn waypoint_skipped_from_kind_short() {
         assert_eq!(station_kind_short(StopKind::RailWaypoint), "WP");
         assert_eq!(station_kind_short(StopKind::RailStation), "Tren");
+    }
+
+    #[test]
+    fn competitor_and_waypoint_filters_match_viewport_policy() {
+        let local = CompanyId::PLAYER;
+        let mut rival = Station::new_with_kind(TileCoord::new(2, 3), StopKind::RailStation);
+        rival.owner = CompanyId(1);
+        assert!(!station_label_visible(&rival, local, true, false));
+        assert!(station_label_visible(&rival, local, true, true));
+
+        let waypoint = Station::new_with_kind(TileCoord::new(2, 3), StopKind::RailWaypoint);
+        assert!(!station_label_visible(&waypoint, local, false, true));
+        assert!(station_label_visible(&waypoint, local, true, true));
+
+        let mut unowned = Station::new_with_kind(TileCoord::new(2, 3), StopKind::Buoy);
+        unowned.owner = CompanyId(openttdrs_core::company::OWNER_NONE_M1);
+        assert!(station_label_visible(&unowned, local, true, false));
     }
 }

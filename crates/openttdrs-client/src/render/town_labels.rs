@@ -4,9 +4,11 @@
 use bevy::prelude::*;
 
 use crate::iso::{tile_pos, tile_slope_and_min_z};
-use crate::render::viewport::TileViewportBounds;
-use crate::render::{MapLabelLod, MapLabelText, MapVisualLayer};
+use crate::render::{MapLabelCandidates, MapLabelLod, MapLabelText, MapVisualLayer};
 use crate::state::SimWorld;
+
+#[cfg(test)]
+use crate::render::viewport::TileViewportBounds;
 
 /// Z fija por encima de todos los sprites del mapa (cámara en ~1000).
 const LABEL_Z: f32 = 900.0;
@@ -47,6 +49,7 @@ pub(crate) fn town_label_rect(
 
 /// `true` si la tesela de la ciudad cae dentro del rectángulo de spawn del mapa.
 #[must_use]
+#[cfg(test)]
 pub(crate) fn town_label_in_bounds(
     town: &openttdrs_core::Town,
     bounds: TileViewportBounds,
@@ -71,23 +74,23 @@ pub(crate) fn town_id_at_label_pos(sim: &SimWorld, world_pos: Vec2) -> Option<u3
     })
 }
 
-/// Crea los carteles de las ciudades dentro de `bounds`.
+/// Crea las etiquetas de ciudades seleccionadas por el índice espacial.
 /// Se llama al construir la capa de mundo y al panear en mapas con culling.
 pub(crate) fn spawn_town_labels(
     commands: &mut Commands,
     sim: &SimWorld,
     font: &Handle<Font>,
-    bounds: TileViewportBounds,
+    candidates: &MapLabelCandidates,
     show_town_labels: bool,
 ) {
     if !show_town_labels {
         return;
     }
     let map = &sim.state.map;
-    for town in &sim.state.towns {
-        if !town_label_in_bounds(town, bounds) {
+    for &index in &candidates.towns {
+        let Some(town) = sim.state.towns.get(index) else {
             continue;
-        }
+        };
         let (center, bg_size) = town_label_rect(map, town);
         let normal_label = format!("{} ({})", town.name, town.population);
         let small_label = town.name.clone();
@@ -96,21 +99,9 @@ pub(crate) fn spawn_town_labels(
             SMALL_FONT_SIZE + 4.0,
         );
 
-        // Fondo translúcido oscuro (sign con fondo, como el cliente oficial).
-        commands.spawn((
-            MapVisualLayer,
-            TownLabel,
-            MapLabelLod {
-                size: bg_size,
-                small_size,
-            },
-            Sprite {
-                color: Color::srgba(0.08, 0.10, 0.14, 0.65),
-                custom_size: Some(bg_size),
-                ..default()
-            },
-            Transform::from_translation(center.extend(LABEL_Z)),
-        ));
+        // `ViewportAddTownStrings` usa `INVALID_COLOUR`: los pueblos no
+        // llevan panel de color, sólo texto. Mantenerlo sin fondo evita que
+        // una caja oscura parezca un cartel de compañía al alejar la cámara.
         commands.spawn((
             MapVisualLayer,
             TownLabel,
@@ -140,13 +131,13 @@ pub(crate) fn resync_town_labels(
     label_entities: impl IntoIterator<Item = Entity>,
     sim: &SimWorld,
     font: &Handle<Font>,
-    bounds: TileViewportBounds,
+    candidates: &MapLabelCandidates,
     show_town_labels: bool,
 ) {
     for entity in label_entities {
         commands.entity(entity).despawn();
     }
-    spawn_town_labels(commands, sim, font, bounds, show_town_labels);
+    spawn_town_labels(commands, sim, font, candidates, show_town_labels);
 }
 
 #[cfg(test)]
@@ -183,8 +174,8 @@ mod tests {
     }
 
     #[test]
-    fn spawns_text_and_background_per_town_in_bounds() {
-        let mut state = GameState::new(8, 8);
+    fn spawns_text_without_company_panel_for_selected_town() {
+        let mut state = GameState::new(16, 16);
         state.towns.push(openttdrs_core::Town {
             id: 1,
             pos: TileCoord::new(3, 3),
@@ -194,27 +185,28 @@ mod tests {
         });
         state.towns.push(openttdrs_core::Town {
             id: 2,
-            pos: TileCoord::new(7, 7),
+            pos: TileCoord::new(14, 14),
             name: "Farville".to_string(),
             population: 100,
             ..Default::default()
         });
-        let sim = SimWorld {
-            state,
-            ..Default::default()
-        };
         let bounds = TileViewportBounds {
             tx0: 0,
             ty0: 0,
             tx1: 5,
             ty1: 5,
         };
+        let candidates = crate::render::MapLabelSpatialIndex::from_state(&state).candidates(bounds);
+        let sim = SimWorld {
+            state,
+            ..Default::default()
+        };
 
         let mut world = World::new();
         world.insert_resource(sim);
         world
             .run_system_once(move |mut commands: Commands, sim: Res<SimWorld>| {
-                spawn_town_labels(&mut commands, &sim, &Handle::default(), bounds, true);
+                spawn_town_labels(&mut commands, &sim, &Handle::default(), &candidates, true);
             })
             .expect("spawn labels");
 
@@ -228,6 +220,6 @@ mod tests {
             .query_filtered::<&Sprite, With<TownLabel>>()
             .iter(&world)
             .count();
-        assert_eq!(bg, 1, "un fondo por ciudad visible");
+        assert_eq!(bg, 0, "las etiquetas de pueblo no llevan panel");
     }
 }

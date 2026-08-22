@@ -42,6 +42,10 @@ pub(crate) struct ClientPreferences {
     pub(crate) show_town_labels: bool,
     /// Mostrar nombres de estaciones en el mapa.
     pub(crate) show_station_labels: bool,
+    /// Mostrar nombres de puntos de paso rail/road en el mapa.
+    pub(crate) show_waypoint_labels: bool,
+    /// Mostrar carteles y estaciones de compañías rivales.
+    pub(crate) show_competitor_labels: bool,
     /// Ciclos de paleta (agua, refinería, burbujas…). Off o pausa → congelados.
     pub(crate) full_animation: bool,
     /// Densidad de humo de locomotoras (`vehicle.smoke_amount`): 0=off, 1=bajo, 2=normal.
@@ -97,6 +101,8 @@ impl Default for ClientPreferences {
             show_link_graph_overlay: false,
             show_town_labels: true,
             show_station_labels: true,
+            show_waypoint_labels: true,
+            show_competitor_labels: true,
             full_animation: true,
             smoke_amount: 2,
             full_detail: true,
@@ -293,6 +299,8 @@ impl ClientPreferences {
                 self.full_detail = true;
                 self.show_town_labels = true;
                 self.show_station_labels = true;
+                self.show_waypoint_labels = true;
+                self.show_competitor_labels = true;
                 self.show_pbs_reservations = true;
                 self.show_link_graph_overlay = false;
                 self.show_debug_gizmos = false;
@@ -306,6 +314,8 @@ impl ClientPreferences {
                 self.full_detail = false;
                 self.show_town_labels = false;
                 self.show_station_labels = false;
+                self.show_waypoint_labels = false;
+                self.show_competitor_labels = false;
                 self.show_pbs_reservations = false;
                 self.show_link_graph_overlay = false;
                 self.show_debug_gizmos = false;
@@ -319,6 +329,8 @@ impl ClientPreferences {
                 self.full_detail = true;
                 self.show_town_labels = true;
                 self.show_station_labels = true;
+                self.show_waypoint_labels = true;
+                self.show_competitor_labels = true;
                 self.show_pbs_reservations = true;
                 self.show_link_graph_overlay = true;
                 self.show_debug_gizmos = true;

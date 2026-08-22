@@ -12,11 +12,11 @@ use crate::iso::{
 };
 use crate::render::world_draw_trace::WorldDrawTrace;
 use crate::render::{
-    CompanyColoredSprites, HouseSpawnResources, MapSpriteBatches, RenderGrid, TileAtlas,
-    TileRenderContext, TileViewportBounds, WorldAssets, chunk_tile_bounds, flush_map_batches,
-    push_forest_tree, push_water_tile, spawn_bridge_middle, spawn_generic_land_tile,
-    spawn_house_tile, spawn_industry_tile, spawn_rail_tile, spawn_road_tile, spawn_station_tile,
-    spawn_transport_object_tile, spawn_void_tile,
+    CompanyColoredSprites, HouseSpawnResources, MapLabelSpatialIndex, MapSpriteBatches, RenderGrid,
+    TileAtlas, TileRenderContext, TileViewportBounds, WorldAssets, chunk_tile_bounds,
+    flush_map_batches, push_forest_tree, push_water_tile, spawn_bridge_middle,
+    spawn_generic_land_tile, spawn_house_tile, spawn_industry_tile, spawn_rail_tile,
+    spawn_road_tile, spawn_station_tile, spawn_transport_object_tile, spawn_void_tile,
 };
 use crate::sprites::CompanyColour;
 use crate::state::SimWorld;
@@ -580,12 +580,15 @@ pub(crate) fn spawn_world_layer(
     company: &mut CompanyColoredSprites,
     images: &mut Assets<Image>,
     sim: &SimWorld,
+    label_index: &MapLabelSpatialIndex,
     spawn_bounds: TileViewportBounds,
     include_world_extras: bool,
     show_pbs_reservations: bool,
     show_full_detail: bool,
     show_town_labels: bool,
     show_station_labels: bool,
+    show_waypoint_labels: bool,
+    show_competitor_labels: bool,
     overview_stride: Option<u32>,
     road_sprites: &mut crate::render::NewGrfRoadSpriteCache,
     station_sprites: &mut crate::render::NewGrfStationSpriteCache,
@@ -612,21 +615,30 @@ pub(crate) fn spawn_world_layer(
         commands.insert_resource(truck_handles);
         commands.insert_resource(newgrf_train_sprites);
         let label_font = asset_server.load::<Font>(crate::ui::font::UI_FONT_PATH);
+        let label_candidates = label_index.candidates(spawn_bounds);
         crate::render::town_labels::spawn_town_labels(
             commands,
             sim,
             &label_font,
-            spawn_bounds,
+            &label_candidates,
             show_town_labels,
         );
         crate::render::station_labels::spawn_station_labels(
             commands,
             sim,
             &label_font,
-            spawn_bounds,
+            &label_candidates,
             show_station_labels,
+            show_waypoint_labels,
+            show_competitor_labels,
         );
-        crate::render::sign_labels::spawn_sign_labels(commands, sim, &label_font, spawn_bounds);
+        crate::render::sign_labels::spawn_sign_labels(
+            commands,
+            sim,
+            &label_font,
+            &label_candidates,
+            show_competitor_labels,
+        );
     }
     if let Some(stride) = overview_stride {
         spawn_overview_tiles_in_bounds(commands, assets, sim, spawn_bounds, stride);
@@ -783,7 +795,16 @@ pub(crate) fn setup(
         .as_ref()
         .map(|p| p.show_station_labels)
         .unwrap_or(true);
+    let show_waypoint_labels = prefs
+        .as_ref()
+        .map(|p| p.show_waypoint_labels)
+        .unwrap_or(true);
+    let show_competitor_labels = prefs
+        .as_ref()
+        .map(|p| p.show_competitor_labels)
+        .unwrap_or(true);
     let show_full_detail = prefs.as_ref().map(|p| p.full_detail).unwrap_or(true);
+    let label_index = MapLabelSpatialIndex::from_state(&sim.state);
     let mut road_sprites = crate::render::NewGrfRoadSpriteCache::default();
     let mut station_sprites = crate::render::NewGrfStationSpriteCache::default();
     let mut shore_sprites = crate::render::NewGrfShoreSpriteCache::default();
@@ -799,12 +820,15 @@ pub(crate) fn setup(
         &mut company_sprites,
         &mut asset_stores.images,
         &sim,
+        &label_index,
         spawn_bounds,
         true,
         true,
         show_full_detail,
         show_town_labels,
         show_station_labels,
+        show_waypoint_labels,
+        show_competitor_labels,
         overview_stride_for_viewport(cam_scale, spawn_bounds),
         &mut road_sprites,
         &mut station_sprites,
@@ -823,6 +847,7 @@ pub(crate) fn setup(
     commands.insert_resource(industry_sprites);
     commands.insert_resource(object_sprites);
     commands.insert_resource(action5_sprites);
+    commands.insert_resource(label_index);
     commands.insert_resource(atlas);
     commands.insert_resource(LoadedMapTileChunks::from_spawn_bounds(spawn_bounds, mw, mh));
 }
@@ -874,6 +899,7 @@ pub(crate) fn spawn_intro_map_render(
     let mut industry_sprites = crate::render::NewGrfIndustrySpriteCache::default();
     let mut object_sprites = crate::render::NewGrfObjectSpriteCache::default();
     let mut action5_sprites = crate::render::NewGrfAction5SpriteCache::default();
+    let label_index = MapLabelSpatialIndex::from_state(&sim.state);
     spawn_world_layer(
         commands,
         asset_server,
@@ -881,8 +907,11 @@ pub(crate) fn spawn_intro_map_render(
         &mut company_sprites,
         images,
         sim,
+        &label_index,
         spawn_bounds,
         false,
+        true,
+        true,
         true,
         true,
         true,

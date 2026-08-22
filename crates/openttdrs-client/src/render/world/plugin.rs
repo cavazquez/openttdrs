@@ -88,6 +88,7 @@ pub(crate) struct MapLabelEntities<'w, 's> {
     pub towns: Query<'w, 's, Entity, With<crate::render::town_labels::TownLabel>>,
     pub stations: Query<'w, 's, Entity, With<crate::render::station_labels::StationLabel>>,
     pub signs: Query<'w, 's, Entity, With<crate::render::sign_labels::SignLabel>>,
+    pub spatial_index: ResMut<'w, crate::render::MapLabelSpatialIndex>,
 }
 
 /// Agrupa cachés NewGRF in-world para no superar el límite de 16 `SystemParam`.
@@ -272,6 +273,7 @@ impl Plugin for WorldRenderPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<RemapMapVisualsPending>()
             .init_resource::<MapTileSpawnViewport>()
+            .init_resource::<crate::render::MapLabelSpatialIndex>()
             .init_resource::<LoadedMapTileChunks>()
             .init_resource::<crate::render::NewGrfRoadSpriteCache>()
             .init_resource::<crate::render::NewGrfStationSpriteCache>()

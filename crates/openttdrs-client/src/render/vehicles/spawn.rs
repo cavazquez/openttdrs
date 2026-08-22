@@ -152,7 +152,12 @@ pub(crate) fn spawn_initial_vehicles(
                 &fleet_index,
             );
         }
-        if !crate::sprites::is_hidden(crate::sprites::TransparencyOption::Text) {
+        // OpenTTD no dibuja texto libre de carga sobre cada vehículo en el
+        // viewport. Mantenerlo sólo como ayuda explícita de diagnóstico evita
+        // que esos textos compitan con carteles y estaciones en zoom lejano.
+        if crate::config::env_flag("OPENTTDRS_DEBUG_VEHICLE_CARGO_LABELS")
+            && !crate::sprites::is_hidden(crate::sprites::TransparencyOption::Text)
+        {
             commands.spawn((
                 MapVisualLayer,
                 VehicleCargoLabel(vehicle.id),

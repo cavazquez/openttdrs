@@ -27,6 +27,8 @@ pub(crate) enum DisplayOptionsToggle {
     Minimap,
     TownLabels,
     StationLabels,
+    WaypointLabels,
+    CompetitorLabels,
     FullAnimation,
     FullDetail,
     PbsOverlay,
@@ -68,6 +70,14 @@ pub(crate) fn setup_display_options_window(mut commands: Commands, asset_server:
             ("Minimapa", DisplayOptionsToggle::Minimap),
             ("Nombres de pueblos", DisplayOptionsToggle::TownLabels),
             ("Nombres de estaciones", DisplayOptionsToggle::StationLabels),
+            (
+                "Nombres de puntos de paso",
+                DisplayOptionsToggle::WaypointLabels,
+            ),
+            (
+                "Nombres de competidores",
+                DisplayOptionsToggle::CompetitorLabels,
+            ),
             ("Animación completa", DisplayOptionsToggle::FullAnimation),
             ("Detalle completo", DisplayOptionsToggle::FullDetail),
             ("Reservas PBS", DisplayOptionsToggle::PbsOverlay),
@@ -317,6 +327,14 @@ pub(crate) fn handle_display_options_buttons(
                 prefs.show_station_labels = !prefs.show_station_labels;
                 request_full_remap(pending_remap.as_deref_mut());
             }
+            DisplayOptionsToggle::WaypointLabels => {
+                prefs.show_waypoint_labels = !prefs.show_waypoint_labels;
+                request_full_remap(pending_remap.as_deref_mut());
+            }
+            DisplayOptionsToggle::CompetitorLabels => {
+                prefs.show_competitor_labels = !prefs.show_competitor_labels;
+                request_full_remap(pending_remap.as_deref_mut());
+            }
             DisplayOptionsToggle::FullAnimation => {
                 prefs.full_animation = !prefs.full_animation;
             }
@@ -387,6 +405,14 @@ pub(crate) fn sync_display_options_window(
                 prefs.show_station_labels,
                 bool_label(prefs.show_station_labels),
             ),
+            DisplayOptionsToggle::WaypointLabels => (
+                prefs.show_waypoint_labels,
+                bool_label(prefs.show_waypoint_labels),
+            ),
+            DisplayOptionsToggle::CompetitorLabels => (
+                prefs.show_competitor_labels,
+                bool_label(prefs.show_competitor_labels),
+            ),
             DisplayOptionsToggle::FullAnimation => {
                 (prefs.full_animation, bool_label(prefs.full_animation))
             }
@@ -416,6 +442,8 @@ pub(crate) fn sync_display_options_window(
             DisplayOptionsToggle::Minimap
                 | DisplayOptionsToggle::TownLabels
                 | DisplayOptionsToggle::StationLabels
+                | DisplayOptionsToggle::WaypointLabels
+                | DisplayOptionsToggle::CompetitorLabels
                 | DisplayOptionsToggle::FullAnimation
                 | DisplayOptionsToggle::FullDetail
                 | DisplayOptionsToggle::PbsOverlay

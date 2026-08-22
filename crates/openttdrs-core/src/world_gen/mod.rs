@@ -36,7 +36,7 @@ use crate::map::{
     Map, MapError, TileCoord, TileKind, WaterClass, set_water_class_m1, tile_slope_and_z,
 };
 
-use landcover::{forest_patch, grass_density};
+use landcover::forest_patch;
 use rivers::{carve_rivers, mark_water_coasts};
 use tgp::{calculate_coverage_line, generate_tgp_heights};
 
@@ -112,7 +112,11 @@ pub fn apply_world_gen(
                 snow_line,
                 desert_line,
             );
-            let m5 = clear_ground_m5(ground, grass_density(x, y, config.seed));
+            // `InitializeLandscape`/`MakeClear` arranca todas las teselas de
+            // suelo con densidad 3. La densidad variable que usamos aquí
+            // antes era un atajo visual, pero diverge del mapa nuevo de
+            // OpenTTD incluso antes de que corra `GenerateClearTile`.
+            let m5 = clear_ground_m5(ground, 3);
             if forest_patch(x, y, config.seed, config.climate) && ground != CLEAR_GROUND_DESERT {
                 // MP_TREES: m5 = (count-1)<<6 | growth; adulto por defecto (OpenTTD Grown).
                 let count_m1 = ((config
@@ -121,8 +125,9 @@ pub fn apply_world_gen(
                     .wrapping_add(y as u64 * 17))
                     & 3) as u8;
                 let tree_m5 = (count_m1 << 6) | 3; // TreeGrowthStage::Grown
-                let density = grass_density(x, y, config.seed) & 3;
-                let tree_m2 = density << 4; // TreeGround::Grass
+                // `PlaceTree` conserva la densidad de la tesela base; en un
+                // mapa nuevo esa base es `MakeClear(..., 3)`.
+                let tree_m2 = 3 << 4; // TreeGround::Grass
                 map.set_kind(c, TileKind::Forest)?;
                 map.set_mapt_m5(c, 0x40, tree_m5)?;
                 map.set_m2(c, tree_m2)?;
@@ -158,6 +163,7 @@ pub fn apply_world_gen(
             }
         }
     }
+
     Ok(())
 }
 
@@ -341,6 +347,28 @@ mod tests {
         }
         assert!(clear > 0);
         assert!(water > 0);
+    }
+
+    #[test]
+    fn generated_clear_tiles_start_at_full_density() {
+        let mut map = Map::new_flat(64, 64, 0);
+        apply_world_gen(
+            &mut map,
+            &WorldGenConfig {
+                seed: 1_330_928_978,
+                amount_of_rivers: 0,
+                ..WorldGenConfig::default()
+            },
+            &[],
+        )
+        .expect("generate map");
+        let grass = map
+            .tiles()
+            .iter()
+            .filter(|tile| tile.kind == TileKind::Grass)
+            .collect::<Vec<_>>();
+        assert!(!grass.is_empty());
+        assert!(grass.iter().all(|tile| tile.m5 & 0x03 == 3));
     }
 
     #[test]

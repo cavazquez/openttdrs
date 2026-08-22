@@ -64,6 +64,8 @@ fn print_usage() {
          \n\
          `--generate` incluye pueblos e industrias por defecto; usar\n\
          `OPENTTDRS_GENERATE_POPULATION=0` para comparar sólo terreno.\n\
+         `OPENTTDRS_GENERATE_STARTUP_TICKS=N` reproduce N ciclos de\n\
+         `RunTileLoop` posteriores a la generación (OpenTTD usa 1280).\n\
          Sin filtro exporta el mapa completo en orden y * width + x."
     );
 }
@@ -328,15 +330,22 @@ fn run(args: &Args) -> Result<(), String> {
         // después del paisaje. Mantener esta etapa activada por defecto hace
         // que `--generate` represente un mapa jugable; `...=0` conserva el
         // contrato útil para aislar únicamente el terreno.
-        if std::env::var("OPENTTDRS_GENERATE_POPULATION")
+        let generate_population = std::env::var("OPENTTDRS_GENERATE_POPULATION")
             .ok()
             .and_then(|value| value.parse::<u8>().ok())
             .unwrap_or(1)
-            != 0
-        {
-            let mut state = GameState::from_map(map);
-            state.world_seed = seed;
-            state.climate = Climate::Temperate;
+            != 0;
+        let startup_ticks = std::env::var("OPENTTDRS_GENERATE_STARTUP_TICKS")
+            .ok()
+            .and_then(|value| value.parse::<u32>().ok())
+            .unwrap_or(0);
+        let mut state = GameState::from_map(map);
+        state.world_seed = seed;
+        state.climate = Climate::Temperate;
+        if generate_population {
+            // OpenTTD ejecuta GenerateTowns/GenerateIndustries antes del
+            // primer ciclo de RunTileLoop. Mantenerlo opcional permite
+            // aislar el relieve en la matriz de diagnóstico.
             apply_population_gen(
                 &mut state,
                 &PopulationGenConfig {
@@ -345,8 +354,11 @@ fn run(args: &Args) -> Result<(), String> {
                 },
                 &[],
             );
-            map = state.map;
         }
+        for _ in 0..startup_ticks {
+            state.step();
+        }
+        map = state.map;
         let source = format!("generated:{width}x{height}:seed={seed}");
         let emitted = dump_map(
             &map,
@@ -354,7 +366,7 @@ fn run(args: &Args) -> Result<(), String> {
             source.clone(),
             sha256_hex(source.as_bytes()),
             0,
-            None,
+            (startup_ticks != 0).then_some(u64::from(startup_ticks) + 1),
             0,
         )?;
         println!(

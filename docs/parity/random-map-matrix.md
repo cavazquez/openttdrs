@@ -47,6 +47,10 @@ Sin `--compare-generator` la herramienta sólo valida la apertura del `.sav` y
 termina con código cero cuando no hay diferencias. Con esa opción el código de
 salida es no cero si el generador procedural Rust no reproduce el mapa de
 OpenTTD; eso es una señal de brecha de producto, no un fallo del cargador.
+Para que la comparación use el mismo punto de observación que el hook de
+OpenTTD, el harness ejecuta `OPENTTDRS_GENERATE_STARTUP_TICKS=1280` en el
+generador Rust: `genworld.cpp` corre `0x500` ciclos de `RunTileLoop` antes de
+entregar la partida nueva.
 
 ## Resultado observado (15 mapas)
 
@@ -74,6 +78,11 @@ Eso corrigió la causa gruesa (el resultado ya no es un heightmap sin población
 pero aún no es una reproducción bit a bit de `GenerateLandscape`/`genworld`:
 quedan los ríos y la secuencia exacta de pueblos, industrias, objetos, árboles
 y sus bytes `m1..m8`.
+
+La última sonda reproducible sobre 64×64, seed `1330928978`, bajó de 3121 a
+2073 teselas distintas al corregir la densidad inicial `MakeClear(..., 3)` y
+comparar después de esos 1280 ciclos. Sigue siendo evidencia diagnóstica
+local (checkout de referencia `c2661164`), no un cierre de RMAP-004.
 
 ## Estado e issues
 

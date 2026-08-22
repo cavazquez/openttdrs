@@ -40,9 +40,9 @@ pub struct CameraVelocity(pub Vec2);
 /// Política de zoom de la cámara principal.
 ///
 /// El modo fijo es el valor inicial y sigue los niveles discretos de OpenTTD.
-/// En `Out4x`/`Out8x` los mapas medianos conservan sus sprites detallados y
-/// los mapas muy grandes usan un resumen de protección; el modo libre conserva
-/// el comportamiento continuo previo.
+/// En `Out4x`/`Out8x` los viewports que caben en el presupuesto conservan sus
+/// sprites detallados; sólo los recortes realmente grandes usan un resumen de
+/// protección. El modo libre conserva el comportamiento continuo previo.
 #[derive(Resource, Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub(crate) enum ZoomMode {
     Free,
@@ -115,9 +115,9 @@ fn available_fixed_zoom_levels(
     _window_height: f32,
     _large_map_cull: bool,
 ) -> &'static [f32] {
-    // Out4x/Out8x siguen siendo seguros: mapas medianos conservan detalle y
-    // los muy grandes usan el resumen de protección. Por eso culling no los
-    // elimina de la secuencia fija.
+    // Out4x/Out8x siguen siendo seguros: los viewports dentro del presupuesto
+    // conservan detalle y los que lo exceden usan el resumen de protección.
+    // Por eso culling no los elimina de la secuencia fija.
     &OPENTTD_FIXED_ORTHO_SCALES
 }
 
@@ -484,8 +484,8 @@ mod tests {
             2.0
         );
 
-        // Out4x sigue disponible con culling: en mapas medianos conserva
-        // sprites completos y en los grandes se limita al resumen protegido.
+        // Out4x sigue disponible con culling: los viewports dentro del
+        // presupuesto conservan sprites completos y el resto usa el resumen.
         assert_eq!(
             zoom_step_scale(2.0, false, ZoomMode::Fixed, 1280.0, 720.0, true),
             4.0

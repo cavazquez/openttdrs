@@ -154,12 +154,14 @@ pub const ABSOLUTE_MAX_ORTHO_SCALE: f32 = 20.0;
 /// de miles de sprites de una sola vez.
 pub const OVERVIEW_MIN_ORTHO_SCALE: f32 = 4.0;
 
-/// Hasta este tamaño el render detallado sigue siendo viable incluso en
-/// `Out8x` y es necesario para conservar la paridad visual de OpenTTD
-/// (infraestructura, edificios y vehículos siguen visibles en esos niveles).
-/// Los mapas mayores pueden entrar al camino agregado para no crear cientos de
-/// miles de entidades al encuadrar una región amplia.
-pub const OVERVIEW_DETAIL_MAX_TILES: u64 = 256 * 256;
+/// Máximo de teselas materializadas con detalle en `Out4x`/`Out8x`.
+///
+/// El presupuesto corresponde al viewport, no al tamaño completo del mapa:
+/// al panear un 1024×1024 sólo se instancian las teselas que realmente caben
+/// en pantalla. Conservar hasta 512² teselas mantiene infraestructura,
+/// edificios y vehículos en esos niveles sin volver a construir un mapa
+/// 4096² entero.
+pub const OVERVIEW_DETAIL_MAX_VIEWPORT_TILES: u64 = 512 * 512;
 
 /// Margen extra (teselas) alrededor del rectángulo visible (rombos isométricos).
 pub const VIEWPORT_MARGIN_TILES: u32 = 10;
@@ -234,16 +236,16 @@ pub const fn overview_stride_for_scale(scale: f32) -> Option<u32> {
     }
 }
 
-/// Selecciona overview sólo cuando el mapa supera el presupuesto de detalle.
+/// Selecciona overview sólo cuando el viewport supera el presupuesto de detalle.
 ///
-/// La escala por sí sola no basta: un mapa de 256×256 tiene 65.536 teselas y
-/// OpenTTD todavía muestra toda su infraestructura en Out8x. Mantener esas
-/// partidas en el camino detallado evita reemplazar el mundo por rombos de
-/// color. En mapas mayores se conserva la reducción 4×4/8×8 como protección
-/// contra un spawn masivo.
+/// La escala ni el tamaño total del mapa bastan: un mapa 1024×1024 puede tener
+/// un viewport de sólo 512² teselas. Mantener ese recorte en el camino
+/// detallado evita reemplazar infraestructura por rombos de color al alejar la
+/// cámara. La reducción 4×4/8×8 queda reservada para viewports realmente
+/// mayores, como protección contra un spawn masivo.
 #[must_use]
-pub const fn overview_stride_for_map(scale: f32, map_width: u32, map_height: u32) -> Option<u32> {
-    if (map_width as u64) * (map_height as u64) <= OVERVIEW_DETAIL_MAX_TILES {
+pub fn overview_stride_for_viewport(scale: f32, bounds: TileViewportBounds) -> Option<u32> {
+    if bounds.tile_count() <= OVERVIEW_DETAIL_MAX_VIEWPORT_TILES {
         None
     } else {
         overview_stride_for_scale(scale)
@@ -504,9 +506,42 @@ mod tests {
     }
 
     #[test]
-    fn overview_keeps_detail_for_maps_up_to_256_squared() {
-        assert_eq!(overview_stride_for_map(8.0, 256, 256), None);
-        assert_eq!(overview_stride_for_map(4.0, 256, 512), Some(4));
-        assert_eq!(overview_stride_for_map(8.0, 512, 512), Some(8));
+    fn overview_keeps_detail_while_viewport_fits_budget() {
+        assert_eq!(
+            overview_stride_for_viewport(8.0, TileViewportBounds::full(512, 512)),
+            None
+        );
+        assert_eq!(
+            overview_stride_for_viewport(
+                8.0,
+                TileViewportBounds {
+                    tx0: 200,
+                    ty0: 300,
+                    tx1: 712,
+                    ty1: 812,
+                },
+            ),
+            None
+        );
+        assert_eq!(
+            overview_stride_for_viewport(
+                8.0,
+                TileViewportBounds {
+                    tx0: 0,
+                    ty0: 0,
+                    tx1: 513,
+                    ty1: 512,
+                },
+            ),
+            Some(8)
+        );
+        assert_eq!(
+            overview_stride_for_viewport(4.0, TileViewportBounds::full(1024, 1024)),
+            Some(4)
+        );
+        assert_eq!(
+            overview_stride_for_viewport(8.0, TileViewportBounds::full(1024, 1024)),
+            Some(8)
+        );
     }
 }

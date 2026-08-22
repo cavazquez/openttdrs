@@ -31,7 +31,7 @@ pub(super) const WORLD_CAMERA_FAR: f32 = 2000.0;
 
 use super::plugin::{LoadedMapTileChunks, MapTileSpawnViewport};
 use super::viewport::{
-    initial_map_camera_pose, overview_stride_for_map, resolve_spawn_viewport_at,
+    initial_map_camera_pose, overview_stride_for_viewport, resolve_spawn_viewport_at,
 };
 
 use crate::render::vehicles::{NewGrfTrainSpriteCache, TruckHandles, spawn_initial_vehicles};
@@ -805,7 +805,7 @@ pub(crate) fn setup(
         show_full_detail,
         show_town_labels,
         show_station_labels,
-        overview_stride_for_map(cam_scale, mw, mh),
+        overview_stride_for_viewport(cam_scale, spawn_bounds),
         &mut road_sprites,
         &mut station_sprites,
         &mut shore_sprites,

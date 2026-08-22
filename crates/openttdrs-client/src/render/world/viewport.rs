@@ -10,7 +10,7 @@ use crate::render::viewport::{
     large_map_viewport_cull_enabled, ortho_visible_tile_bounds,
 };
 
-pub(crate) use crate::render::viewport::overview_stride_for_map;
+pub(crate) use crate::render::viewport::overview_stride_for_viewport;
 use crate::render::{MapPreviewCamera, PrimaryGameCamera};
 use crate::state::SimWorld;
 
@@ -60,8 +60,10 @@ pub(crate) fn resolve_spawn_viewport_at(
         mh,
         VIEWPORT_MARGIN_TILES,
     );
-    // El zoom (`clamp_ortho_scale`) ya garantiza que este rectángulo ≤ MAX_SPAWN_SPAN.
-    // No recortar aquí: un AABB isométrico cortado a cuadrado deja franjas vacías en pantalla.
+    // Hasta Out2x, `clamp_ortho_scale` conserva este rectángulo dentro de
+    // MAX_SPAWN_SPAN. En Out4x/Out8x puede ser mayor y la política de overview
+    // decide si se mantiene el detalle o se agrega; no recortar aquí, porque un
+    // AABB isométrico cortado a cuadrado deja franjas vacías en pantalla.
     visible.expand(VIEWPORT_REBUILD_LEAD_TILES, mw, mh)
 }
 

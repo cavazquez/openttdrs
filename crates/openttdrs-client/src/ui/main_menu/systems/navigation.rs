@@ -25,6 +25,7 @@ use super::session::{enter_editor, enter_new_game, resume_suspended_game};
 
 pub(crate) fn sync_main_menu_panel_visibility(
     panel: Res<MainMenuPanel>,
+    prefs: Res<crate::settings::ClientPreferences>,
     mut subpanels: Query<(&MainMenuSubPanel, &mut Node, &mut Visibility)>,
     mut title_q: Query<&mut Text, (With<MainMenuTitleText>, Without<MainMenuHintsText>)>,
     mut hints_q: Query<
@@ -36,7 +37,6 @@ pub(crate) fn sync_main_menu_panel_visibility(
         ),
     >,
 ) {
-    let panel_changed = panel.is_changed();
     for (sub, mut node, mut vis) in &mut subpanels {
         let active = sub.0 == *panel;
         node.display = if active {
@@ -50,14 +50,17 @@ pub(crate) fn sync_main_menu_panel_visibility(
             Visibility::Hidden
         };
     }
-    if !panel_changed {
-        return;
-    }
     if let Ok(mut title) = title_q.single_mut() {
-        title.0 = panel_title(*panel).to_string();
+        let translated = crate::i18n::text(prefs.locale(), panel_title(*panel));
+        if **title != translated {
+            **title = translated.to_owned();
+        }
     }
     if let Ok(mut hints) = hints_q.single_mut() {
-        hints.0 = panel_hints(*panel).to_string();
+        let translated = crate::i18n::text(prefs.locale(), panel_hints(*panel));
+        if **hints != translated {
+            **hints = translated.to_owned();
+        }
     }
 }
 

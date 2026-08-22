@@ -40,10 +40,10 @@ impl CompanyId {
     }
 }
 
-/// Valores de propietario que OpenTTD serializa en `MAPO` (`m1`).
+/// Valores de propietario que `OpenTTD` serializa en `MAPO` (`m1`).
 ///
 /// No son identificadores de compañías Rust: son los valores reservados del
-/// enum `Owner` de OpenTTD (`OWNER_TOWN=0x0F`, `OWNER_NONE=0x10` y
+/// enum `Owner` de `OpenTTD` (`OWNER_TOWN=0x0F`, `OWNER_NONE=0x10` y
 /// `OWNER_WATER=0x11`). Mantenerlos separados evita que un mapa recién
 /// generado parezca construido por la compañía 0.
 pub const OWNER_TOWN_M1: u8 = 0x0F;

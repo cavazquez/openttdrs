@@ -110,6 +110,32 @@ pub(crate) fn text(locale: Locale, source: &'static str) -> &'static str {
         "Inspector de tile" => "Tile inspector",
         "Historial de noticias" => "News history",
         "Preferencias de noticias" => "News preferences",
+        "Clima" => "Climate",
+        "Tamano del mapa (demo)" => "Map size (demo)",
+        "Ancho (teselas)" => "Width (tiles)",
+        "Alto (teselas)" => "Height (tiles)",
+        "Ano de inicio" => "Start year",
+        "Densidad de pueblos" => "Town density",
+        "Densidad de industrias" => "Industry density",
+        "Dinero inicial" => "Starting money",
+        "Relieve" => "Terrain relief",
+        "Terreno" => "Terrain",
+        "Semilla" => "Seed",
+        "Resolucion (reinicio al cambiar)" => "Resolution (restart to change)",
+        "Escenarios: save/scenarios/ · Heightmaps: save/heightmaps/*.hmap" => {
+            "Scenarios: save/scenarios/ · Heightmaps: save/heightmaps/*.hmap"
+        }
+        "Abrir escenarios (.json/.sav)" => "Open scenarios (.json/.sav)",
+        "Abrir carpeta heightmaps" => "Open heightmaps folder",
+        "Heightmaps detectados (clic para jugar)" => "Detected heightmaps (click to play)",
+        "Abrir partida" => "Open game",
+        "Abrir escenario" => "Open scenario",
+        "Esc salir · raton para elegir" => "Esc quit · mouse to choose",
+        "Enter iniciar · Esc volver · 1-4 clima · [ ] semilla · z/x densidad" => {
+            "Enter start · Esc back · 1-4 climate · [ ] seed · z/x density"
+        }
+        "Esc volver" => "Esc back",
+        "Esc cancelar" => "Esc cancel",
         _ => source,
     }
 }
@@ -132,6 +158,8 @@ mod tests {
         assert_eq!(text(Locale::En, "Guardar partida"), "Save game");
         assert_eq!(text(Locale::En, "Nueva partida"), "New game");
         assert_eq!(text(Locale::En, "Idioma"), "Language");
+        assert_eq!(text(Locale::En, "Densidad de pueblos"), "Town density");
+        assert_eq!(text(Locale::En, "Esc cancelar"), "Esc cancel");
         assert_eq!(text(Locale::En, "untranslated"), "untranslated");
     }
 }

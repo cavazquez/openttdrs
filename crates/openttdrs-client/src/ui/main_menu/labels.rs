@@ -5,7 +5,7 @@ use crate::state::bootstrap::{
 };
 use crate::ui::font::UiFontRole;
 
-use super::MainMenuPanel;
+use super::{MainMenuLocalizedText, MainMenuPanel};
 
 pub(super) fn dev_mode() -> bool {
     std::env::var_os("OPENTTDRS_DEV").is_some()
@@ -62,9 +62,10 @@ pub(crate) fn summary_text(settings: NewGameSettings) -> String {
     )
 }
 
-pub(super) fn option_section_label(text: &str) -> impl bevy::prelude::Bundle {
+pub(super) fn option_section_label(text: &'static str) -> impl bevy::prelude::Bundle {
     use bevy::prelude::*;
     (
+        MainMenuLocalizedText(text),
         Text::new(text),
         TextFont {
             font_size: FontSize::Rem(UiFontRole::Caption.rem_size()),

@@ -131,16 +131,17 @@ mod tests {
         assert!(
             matches!(camera.clear_color, ClearColorConfig::Custom(color) if color == Color::BLACK)
         );
-        let camera_near = {
+        let (camera_near, camera_far) = {
             let mut projections = world.query_filtered::<&Projection, With<PrimaryGameCamera>>();
             let Projection::Orthographic(projection) =
                 projections.single(world).expect("proyección")
             else {
                 panic!("la cámara del mundo debe ser ortográfica");
             };
-            projection.near
+            (projection.near, projection.far)
         };
         assert_eq!(camera_near, super::tile_spawn::WORLD_CAMERA_NEAR);
+        assert_eq!(camera_far, super::tile_spawn::WORLD_CAMERA_FAR);
         let mut cameras = world.query_filtered::<&Transform, With<PrimaryGameCamera>>();
         let camera_z = cameras
             .single(world)
@@ -148,8 +149,12 @@ mod tests {
             .translation
             .z;
         assert!(
-            ground_draw_z(0, 0, 0.0) >= camera_z + camera_near,
-            "el pase de suelo quedó fuera del plano cercano"
+            ground_draw_z(0, 0, 0.0) >= camera_z - camera_far,
+            "el pase de suelo quedó fuera del plano delantero"
+        );
+        assert!(
+            ground_draw_z(0, 0, 0.0) <= camera_z - camera_near,
+            "el pase de suelo quedó fuera del plano trasero"
         );
     }
 

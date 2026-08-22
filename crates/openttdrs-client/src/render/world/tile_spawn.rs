@@ -21,9 +21,12 @@ use crate::sprites::CompanyColour;
 use crate::state::SimWorld;
 
 /// El pase `DrawGroundSprite` usa una banda de profundidad negativa para
-/// mantenerse antes de los parents. La cámara 2D vive cerca de z=1000, por
-/// lo que el plano cercano por defecto (-1000) recortaría esa banda.
+/// mantenerse antes de los parents. La cámara 2D vive cerca de z=1000 y Bevy
+/// invierte los argumentos de profundidad de la proyección 2D: el campo
+/// `far=1000` termina recortando el lado delantero en `z≈-1000`, antes de que
+/// el suelo (z≈-100) llegue al framebuffer.
 pub(super) const WORLD_CAMERA_NEAR: f32 = -2000.0;
+pub(super) const WORLD_CAMERA_FAR: f32 = 2000.0;
 
 use super::plugin::{LoadedMapTileChunks, MapTileSpawnViewport};
 use super::viewport::{
@@ -685,6 +688,7 @@ pub(crate) fn setup(
         Projection::Orthographic(OrthographicProjection {
             scale: cam_scale,
             near: WORLD_CAMERA_NEAR,
+            far: WORLD_CAMERA_FAR,
             ..OrthographicProjection::default_2d()
         }),
     ));

@@ -19,10 +19,11 @@ mod rivers;
 mod tgp;
 
 pub use config::{
-    CLEAR_GROUND_DESERT, CLEAR_GROUND_GRASS, CLEAR_GROUND_ROCKY, CLEAR_GROUND_ROUGH,
-    CLEAR_GROUND_SNOW, Climate, DEF_DESERT_COVERAGE, DEF_SNOW_COVERAGE, DEF_SNOW_LINE_HEIGHT,
-    PreserveRect, QuantitySeaLakes, TerrainType, TgenSmoothness, WorldGenConfig, clear_ground_m5,
-    effective_clear_ground, initial_clear_ground, initial_clear_ground_with_lines,
+    CLEAR_GROUND_DESERT, CLEAR_GROUND_FIELDS, CLEAR_GROUND_GRASS, CLEAR_GROUND_ROCKY,
+    CLEAR_GROUND_ROUGH, CLEAR_GROUND_SNOW, Climate, DEF_DESERT_COVERAGE, DEF_SNOW_COVERAGE,
+    DEF_SNOW_LINE_HEIGHT, PreserveRect, QuantitySeaLakes, TerrainType, TgenSmoothness,
+    WorldGenConfig, clear_ground_m5, effective_clear_ground, initial_clear_ground,
+    initial_clear_ground_with_lines,
 };
 pub use heightmap::{HeightmapData, apply_heightmap, parse_hmap, serialize_heightmap};
 pub use population::{

@@ -143,6 +143,8 @@ impl TgenSmoothness {
 pub const CLEAR_GROUND_GRASS: u8 = 0;
 pub const CLEAR_GROUND_ROUGH: u8 = 1;
 pub const CLEAR_GROUND_ROCKY: u8 = 2;
+/// Campo de granja (`CLEAR_FIELDS` en `clear_map.h`).
+pub const CLEAR_GROUND_FIELDS: u8 = 3;
 pub const CLEAR_GROUND_SNOW: u8 = 4;
 pub const CLEAR_GROUND_DESERT: u8 = 5;
 

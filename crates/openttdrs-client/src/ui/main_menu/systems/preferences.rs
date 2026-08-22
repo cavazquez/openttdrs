@@ -138,12 +138,18 @@ pub(crate) fn main_menu_preferences_interaction(
 pub(crate) fn sync_main_menu_preferences(
     panel: Res<MainMenuPanel>,
     prefs: Res<crate::settings::ClientPreferences>,
-    mut res_btn: Query<(
-        &MainMenuResolutionButton,
-        &mut BackgroundColor,
-        &Interaction,
-    )>,
-    mut lang_btn: Query<(&MainMenuLanguageButton, &mut BackgroundColor, &Interaction)>,
+    mut res_btn: Query<
+        (
+            &MainMenuResolutionButton,
+            &mut BackgroundColor,
+            &Interaction,
+        ),
+        Without<MainMenuLanguageButton>,
+    >,
+    mut lang_btn: Query<
+        (&MainMenuLanguageButton, &mut BackgroundColor, &Interaction),
+        Without<MainMenuResolutionButton>,
+    >,
     mut lang_label: Query<&mut Text, With<MainMenuLanguageLabel>>,
 ) {
     if *panel != MainMenuPanel::Preferences {

@@ -78,11 +78,11 @@ pub use rail_bits::{
 };
 pub use rail_slope::{
     FOUNDATION_ACTION5_SPRITE_BASE, FOUNDATION_INCLINED_X, FOUNDATION_INCLINED_Y,
-    FOUNDATION_LEVELED, FOUNDATION_ORIGINAL_SPRITE_BASE, RailFoundationDrawPlan,
-    RailFoundationSpriteDraw, RailTrackDrawPlan, RailTrackSpritePass, bridge_foundation_for_axis,
-    bridge_surface_slope_and_z, foundation_draw_plan, rail_foundation_draw_plan,
-    rail_foundation_for_trackbits, rail_surface_slope_and_z, rail_track_draw_plan,
-    rail_trackbits_valid_on_slope,
+    FOUNDATION_LEVELED, FOUNDATION_ORIGINAL_SPRITE_BASE, FoundationSpriteBounds,
+    RailFoundationDrawPlan, RailFoundationSpriteDraw, RailTrackDrawPlan, RailTrackSpritePass,
+    bridge_foundation_for_axis, bridge_surface_slope_and_z, foundation_draw_plan,
+    rail_foundation_draw_plan, rail_foundation_for_trackbits, rail_surface_slope_and_z,
+    rail_track_draw_plan, rail_trackbits_valid_on_slope,
 };
 pub use rail_topology::{
     RAIL_TOUCHING_SIDE_NE, RAIL_TOUCHING_SIDE_NW, RAIL_TOUCHING_SIDE_SE, RAIL_TOUCHING_SIDE_SW,

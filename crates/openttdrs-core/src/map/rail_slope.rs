@@ -57,6 +57,44 @@ const FOUNDATION_HALFTILE_BLOCK_SIZE: u32 = 4;
 pub struct RailFoundationSpriteDraw {
     pub sprite_id: u32,
     pub z_delta: u8,
+    /// Caja de ordenación que recibe `AddSortableSpriteToDraw` en OpenTTD.
+    ///
+    /// Los valores están expresados en píxeles de mundo y conservan la
+    /// semántica de `SpriteBounds`: `o*` es el origen y `e*` el tamaño, no la
+    /// coordenada final inclusiva. `z_delta` sitúa esa caja respecto de la
+    /// base de la tesela; `bounds.oz` conserva los desplazamientos internos
+    /// de las fundaciones en pendientes empinadas.
+    pub bounds: FoundationSpriteBounds,
+}
+
+/// Caja de ordenación de un sprite de fundación, equivalente a
+/// `SpriteBounds` de `DrawFoundation`.
+///
+/// Se mantiene en `core` porque la selección de fundaciones no depende del
+/// renderer: el cliente la utiliza tanto para la traza del oráculo como para
+/// futuros ordenadores de viewport.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FoundationSpriteBounds {
+    pub ox: i8,
+    pub oy: i8,
+    pub oz: i8,
+    pub ex: i8,
+    pub ey: i8,
+    pub ez: i8,
+}
+
+impl FoundationSpriteBounds {
+    #[must_use]
+    pub const fn new(ox: i8, oy: i8, oz: i8, ex: i8, ey: i8, ez: i8) -> Self {
+        Self {
+            ox,
+            oy,
+            oz,
+            ex,
+            ey,
+            ez,
+        }
+    }
 }
 
 /// Selección visual completa de `DrawTrackBits` + `DrawFoundation`.
@@ -556,9 +594,47 @@ fn foundation_sprite_bases(sprite_block: u8) -> (u32, u32, u32) {
     (leveled, inclined, halftile)
 }
 
+const FOUNDATION_FULL_BOUNDS: FoundationSpriteBounds =
+    FoundationSpriteBounds::new(0, 0, 0, 16, 16, 7);
+const FOUNDATION_STEEP_LEVELED_BOUNDS: FoundationSpriteBounds =
+    FoundationSpriteBounds::new(0, 0, -8, 16, 16, 7);
+const FOUNDATION_INCLINED_X_BOUNDS: FoundationSpriteBounds =
+    FoundationSpriteBounds::new(0, 0, 0, 16, 1, 8);
+const FOUNDATION_INCLINED_Y_BOUNDS: FoundationSpriteBounds =
+    FoundationSpriteBounds::new(0, 0, 0, 1, 16, 8);
+
+/// `SpriteBounds` de una fundación de media tesela.
+///
+/// `DrawFoundation` ubica la mitad en función de la esquina de la fundación
+/// (o de la esquina alta para una pendiente empinada), no de la orientación
+/// del sprite Action5 elegido.
 #[inline]
-fn push_foundation_sprite(plan: &mut RailFoundationDrawPlan, sprite_id: u32, z_delta: u8) {
-    let draw = RailFoundationSpriteDraw { sprite_id, z_delta };
+const fn halftile_foundation_bounds(corner: u8, oz: i8) -> FoundationSpriteBounds {
+    let ox = if corner == CORNER_W || corner == CORNER_S {
+        8
+    } else {
+        0
+    };
+    let oy = if corner == CORNER_S || corner == CORNER_E {
+        8
+    } else {
+        0
+    };
+    FoundationSpriteBounds::new(ox, oy, oz, 8, 8, 7)
+}
+
+#[inline]
+fn push_foundation_sprite(
+    plan: &mut RailFoundationDrawPlan,
+    sprite_id: u32,
+    z_delta: u8,
+    bounds: FoundationSpriteBounds,
+) {
+    let draw = RailFoundationSpriteDraw {
+        sprite_id,
+        z_delta,
+        bounds,
+    };
     if plan.sprites[0].is_none() {
         plan.sprites[0] = Some(draw);
     } else if plan.sprites[1].is_none() {
@@ -589,6 +665,7 @@ fn draw_foundation_step(
                 plan,
                 leveled_base + u32::from(tileh & !SLOPE_STEEP),
                 z_before,
+                FOUNDATION_FULL_BOUNDS,
             );
         }
 
@@ -632,18 +709,29 @@ fn draw_foundation_step(
             FOUNDATION_INCLINED_X | FOUNDATION_INCLINED_Y => {
                 let inclined =
                     u32::from(highest) * 2 + u32::from(foundation == FOUNDATION_INCLINED_Y);
-                push_foundation_sprite(plan, inclined_base + inclined, z_after);
+                let bounds = if foundation == FOUNDATION_INCLINED_X {
+                    FOUNDATION_INCLINED_X_BOUNDS
+                } else {
+                    FOUNDATION_INCLINED_Y_BOUNDS
+                };
+                push_foundation_sprite(plan, inclined_base + inclined, z_after, bounds);
             }
             FOUNDATION_LEVELED => {
                 push_foundation_sprite(
                     plan,
                     leveled_base + u32::from(slope_with_one_corner_raised(highest)),
                     z_after,
+                    FOUNDATION_STEEP_LEVELED_BOUNDS,
                 );
             }
             FOUNDATION_STEEP_LOWER => {}
             FOUNDATION_HALFTILE_W..=FOUNDATION_HALFTILE_N => {
-                push_foundation_sprite(plan, halftile_base + u32::from(highest), z_after);
+                push_foundation_sprite(
+                    plan,
+                    halftile_base + u32::from(highest),
+                    z_after,
+                    halftile_foundation_bounds(highest, 8),
+                );
             }
             _ => {}
         }
@@ -652,11 +740,21 @@ fn draw_foundation_step(
 
     match foundation {
         FOUNDATION_LEVELED => {
-            push_foundation_sprite(plan, leveled_base + u32::from(tileh), z_before);
+            push_foundation_sprite(
+                plan,
+                leveled_base + u32::from(tileh),
+                z_before,
+                FOUNDATION_FULL_BOUNDS,
+            );
         }
         FOUNDATION_HALFTILE_W..=FOUNDATION_HALFTILE_N => {
             let corner = foundation - FOUNDATION_HALFTILE_W;
-            push_foundation_sprite(plan, halftile_base + u32::from(corner), z_before);
+            push_foundation_sprite(
+                plan,
+                halftile_base + u32::from(corner),
+                z_before,
+                halftile_foundation_bounds(corner, 0),
+            );
         }
         foundation if is_special_rail_foundation(foundation) => {
             let corner = foundation - FOUNDATION_RAIL_W;
@@ -666,12 +764,17 @@ fn draw_foundation_step(
                 let along_x = tileh == (SLOPE_S | SLOPE_W) || tileh == (SLOPE_N | SLOPE_E);
                 inclined_base + u32::from(corner) * 2 + u32::from(along_x)
             };
-            push_foundation_sprite(plan, sprite_id, z_before);
+            push_foundation_sprite(plan, sprite_id, z_before, FOUNDATION_FULL_BOUNDS);
         }
         FOUNDATION_INCLINED_X | FOUNDATION_INCLINED_Y => {
             let highest = highest_slope_corner(tileh);
             let inclined = u32::from(highest) * 2 + u32::from(foundation == FOUNDATION_INCLINED_Y);
-            push_foundation_sprite(plan, inclined_base + inclined, z_before);
+            let bounds = if foundation == FOUNDATION_INCLINED_X {
+                FOUNDATION_INCLINED_X_BOUNDS
+            } else {
+                FOUNDATION_INCLINED_Y_BOUNDS
+            };
+            push_foundation_sprite(plan, inclined_base + inclined, z_before, bounds);
         }
         _ => {}
     }
@@ -945,6 +1048,7 @@ mod tests {
                 Some(RailFoundationSpriteDraw {
                     sprite_id: 5461,
                     z_delta: 0,
+                    bounds: FOUNDATION_INCLINED_X_BOUNDS,
                 }),
                 None,
             ]
@@ -960,6 +1064,7 @@ mod tests {
             Some(RailFoundationSpriteDraw {
                 sprite_id: FOUNDATION_ORIGINAL_SPRITE_BASE + u32::from(SLOPE_W | SLOPE_E),
                 z_delta: 0,
+                bounds: FOUNDATION_FULL_BOUNDS,
             })
         );
         assert_eq!(plan.surface_tileh, 0);
@@ -978,12 +1083,59 @@ mod tests {
                 Some(RailFoundationSpriteDraw {
                     sprite_id: 5478,
                     z_delta: 0,
+                    bounds: FOUNDATION_FULL_BOUNDS,
                 }),
                 None,
             ]
         );
         assert_eq!(plan.surface_tileh, 0);
         assert_eq!(plan.surface_z_delta, 1);
+    }
+
+    #[test]
+    fn foundation_bounds_follow_drawfoundation_for_steep_and_halftile_cases() {
+        // `DrawFoundation` usa dos parents para una nivelación empinada: la
+        // parte baja ocupa toda la tesela y el parent alto se ancla ocho
+        // píxeles por debajo de su `ti->z` ya elevado.
+        let steep_leveled = foundation_draw_plan(SLOPE_STEEP_W, FOUNDATION_LEVELED, 0);
+        assert_eq!(
+            steep_leveled.sprites,
+            [
+                Some(RailFoundationSpriteDraw {
+                    sprite_id: FOUNDATION_ORIGINAL_SPRITE_BASE
+                        + u32::from(SLOPE_STEEP_W & !SLOPE_STEEP),
+                    z_delta: 0,
+                    bounds: FOUNDATION_FULL_BOUNDS,
+                }),
+                Some(RailFoundationSpriteDraw {
+                    sprite_id: FOUNDATION_ORIGINAL_SPRITE_BASE + u32::from(SLOPE_W),
+                    z_delta: 2,
+                    bounds: FOUNDATION_STEEP_LEVELED_BOUNDS,
+                }),
+            ]
+        );
+
+        // En cambio, la mitad de una pendiente empinada se ubica a partir de
+        // su esquina alta y agrega el offset vertical dentro de la propia
+        // caja, exactamente como el `SpriteBounds` de OpenTTD.
+        let steep_halftile = foundation_draw_plan(SLOPE_STEEP_W, FOUNDATION_HALFTILE_W, 0);
+        assert_eq!(
+            steep_halftile.sprites,
+            [
+                Some(RailFoundationSpriteDraw {
+                    sprite_id: FOUNDATION_ACTION5_SPRITE_BASE + FOUNDATION_HALFTILE_OFFSET,
+                    z_delta: 0,
+                    bounds: halftile_foundation_bounds(CORNER_W, 8),
+                }),
+                None,
+            ]
+        );
+
+        let flat_halftile = foundation_draw_plan(SLOPE_E, FOUNDATION_HALFTILE_W, 0);
+        assert_eq!(
+            flat_halftile.sprites[0].map(|draw| draw.bounds),
+            Some(halftile_foundation_bounds(CORNER_W, 0))
+        );
     }
 
     #[test]

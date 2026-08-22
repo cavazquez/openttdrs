@@ -4,14 +4,14 @@ use crate::iso::{
     GROUND_SPRITE_CENTER_X_OFFSET, HEIGHT_PX, TILE_HALF_H, full_tile_sprite_pos_half,
     ground_tile_pos_half, overlay_pos, slope_sprite_offset, tile_pos,
 };
-use crate::render::world_draw_trace::WorldDrawTrace;
+use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
 use crate::render::{
     AtlasSprite, MapTileChunk, MapVisualLayer, TileRenderContext, WaterTile, WorldAssets,
 };
 use crate::sprites::{foundation_gfx_for_tileh, rail_trackbits_for_render};
 use openttdrs_core::{
-    FOUNDATION_ORIGINAL_SPRITE_BASE, Map, RailFoundationSpriteDraw, TileCoord, TileKind,
-    foundation_draw_plan, rail_foundation_draw_plan, rail_foundation_for_trackbits,
+    FOUNDATION_ORIGINAL_SPRITE_BASE, Map, RailFoundationSpriteDraw, TILE_PIXEL_HEIGHT, TileCoord,
+    TileKind, foundation_draw_plan, rail_foundation_draw_plan, rail_foundation_for_trackbits,
     rail_surface_slope_and_z, tile_slope_and_z,
 };
 
@@ -505,6 +505,25 @@ pub(crate) fn spawn_foundation_sprite(
     action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
     images: Option<&mut Assets<Image>>,
 ) {
+    let trace_bounds = TraceSpriteBounds::new(
+        i32::from(draw.bounds.ox),
+        i32::from(draw.bounds.oy),
+        i32::from(draw.bounds.oz),
+        i32::from(draw.bounds.ex),
+        i32::from(draw.bounds.ey),
+        i32::from(draw.bounds.ez),
+    );
+    let record_trace = |fallback| {
+        WorldDrawTrace::record_sprite_with_geometry(
+            role,
+            "sortable",
+            draw.sprite_id,
+            fallback,
+            (0, 0, 0),
+            i32::from(draw.z_delta) * i32::from(TILE_PIXEL_HEIGHT),
+            Some(trace_bounds),
+        );
+    };
     if let Some(tileh) = draw
         .sprite_id
         .checked_sub(FOUNDATION_ORIGINAL_SPRITE_BASE)
@@ -513,7 +532,7 @@ pub(crate) fn spawn_foundation_sprite(
     {
         let missing = foundation_gfx_for_tileh(tileh).is_none()
             || assets.foundations.get(usize::from(tileh - 1)).is_none();
-        WorldDrawTrace::record_sprite(role, "sortable", draw.sprite_id, missing);
+        record_trace(missing);
         let (Some(gfx), Some(image)) = (
             foundation_gfx_for_tileh(tileh),
             assets.foundations.get(usize::from(tileh - 1)),
@@ -541,11 +560,11 @@ pub(crate) fn spawn_foundation_sprite(
     }
 
     let Some(slot) = openttdrs_core::foundation_action5_slot_for_sprite_id(draw.sprite_id) else {
-        WorldDrawTrace::record_sprite(role, "sortable", draw.sprite_id, true);
+        record_trace(true);
         return;
     };
     let Some(decoded) = foundation_newgrf.get(slot).and_then(Option::as_ref) else {
-        WorldDrawTrace::record_sprite(role, "sortable", draw.sprite_id, true);
+        record_trace(true);
         return;
     };
     let pos = overlay_pos(
@@ -568,7 +587,7 @@ pub(crate) fn spawn_foundation_sprite(
             images,
         )
     });
-    WorldDrawTrace::record_sprite(role, "sortable", draw.sprite_id, sprite.is_none());
+    record_trace(sprite.is_none());
     let Some(sprite) = sprite else {
         return;
     };

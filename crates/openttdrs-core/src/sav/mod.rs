@@ -117,9 +117,9 @@ pub struct SavOpaqueChunk {
 /// mappings o configuración que el core aún no ejecuta.
 fn opaque_chunks_from_chunks(chunks: &[chunks::RawChunk]) -> Vec<SavOpaqueChunk> {
     const PASSTHROUGH: &[[u8; 4]] = &[
-        *b"ENGN", *b"ENGS", *b"EIDS", *b"NGRF", *b"OBJS", *b"OBID", *b"SRND", *b"PSAC", *b"IIDS",
-        *b"TIDS", *b"APID", *b"ATID", *b"RAIL", *b"ROTT", *b"GLOG", *b"GOAL", *b"STPE", *b"STPA",
-        *b"SIGN",
+        *b"ENGN", *b"ENGS", *b"EIDS", *b"GSET", *b"NGRF", *b"OBJS", *b"OBID", *b"SRND", *b"PSAC",
+        *b"IIDS", *b"TIDS", *b"APID", *b"ATID", *b"RAIL", *b"ROTT", *b"GLOG", *b"GOAL", *b"STPE",
+        *b"STPA", *b"SIGN",
     ];
     chunks
         .iter()

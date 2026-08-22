@@ -131,8 +131,8 @@ fn scan_chunk_names(payload: &[u8]) -> Vec<String> {
     for &want in REQUIRED_EXPORT_CHUNKS.iter().chain(
         [
             "STNN", "CITY", "INDY", "ORDL", "VEHS", "LGRP", "LGRJ", "LGRS", "PATS", "ECMY", "CAPY",
-            "GRPS", "ERNW", "ENGN", "ENGS", "EIDS", "NGRF", "OBJS", "OBID", "SRND", "PSAC", "IIDS",
-            "TIDS", "APID", "ATID", "RAIL", "ROTT", "GLOG", "GOAL", "STPE", "STPA", "SIGN",
+            "GRPS", "ERNW", "ENGN", "ENGS", "EIDS", "GSET", "NGRF", "OBJS", "OBID", "SRND", "PSAC",
+            "IIDS", "TIDS", "APID", "ATID", "RAIL", "ROTT", "GLOG", "GOAL", "STPE", "STPA", "SIGN",
         ]
         .iter(),
     ) {
@@ -520,26 +520,27 @@ mod tests {
     }
 
     #[test]
-    fn ottn_roundtrip_preserves_opaque_newgrf_chunk() {
+    fn ottn_roundtrip_preserves_opaque_runtime_chunks() {
         let mut state = tiny_state();
         let body = crate::sav::table::tests::build_table_body(&[(2, "grfid")], &[vec![7]]);
-        state.sav_opaque_chunks = vec![crate::SavOpaqueChunk {
-            name: *b"NGRF",
-            ch_type: crate::sav::chunks::CH_TABLE,
-            body,
-        }];
+        state.sav_opaque_chunks = [*b"GSET", *b"NGRF", *b"ENGN", *b"SRND"]
+            .into_iter()
+            .map(|name| crate::SavOpaqueChunk {
+                name,
+                ch_type: crate::sav::chunks::CH_TABLE,
+                body: body.clone(),
+            })
+            .collect();
 
         let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
         let sav_game = sav::load(&bytes).expect("load");
         assert_eq!(sav_game.opaque_chunks, state.sav_opaque_chunks);
         let loaded = GameState::from_sav_game(sav_game);
         assert_eq!(loaded.sav_opaque_chunks, state.sav_opaque_chunks);
-        assert!(
-            exported_chunk_names(&state)
-                .expect("chunk names")
-                .iter()
-                .any(|name| name == "NGRF")
-        );
+        let names = exported_chunk_names(&state).expect("chunk names");
+        for expected in ["GSET", "NGRF", "ENGN", "SRND"] {
+            assert!(names.iter().any(|name| name == expected), "{names:?}");
+        }
     }
 
     #[test]

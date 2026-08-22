@@ -69,8 +69,8 @@ pub(crate) fn sync_main_menu_panel_visibility(
 /// Actualiza los textos de los botones que se crean en todos los subpaneles.
 pub(crate) fn sync_main_menu_localized_labels(
     prefs: Res<crate::settings::ClientPreferences>,
-    mut labels: Query<(&MainMenuLocalizedText, &mut Text)>,
-    mut dynamic_labels: Query<(&MainMenuDynamicText, &mut Text)>,
+    mut labels: Query<(&MainMenuLocalizedText, &mut Text), Without<MainMenuDynamicText>>,
+    mut dynamic_labels: Query<(&MainMenuDynamicText, &mut Text), Without<MainMenuLocalizedText>>,
 ) {
     let locale = prefs.locale();
     for (key, mut text) in &mut labels {

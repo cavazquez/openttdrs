@@ -1,14 +1,14 @@
 #![allow(clippy::unwrap_used)]
 
 use super::labels::{adjust_seed, cycle_density, summary_text, summary_text_for};
-use super::{MainMenuPanel, setup_main_menu};
+use super::{MainMenuDynamicText, MainMenuLocalizedText, MainMenuPanel, setup_main_menu};
 use crate::network::{NetCli, NetworkStatus};
 use crate::state::bootstrap::{
     MapSizePreset, NewGameSettings, PopulationDensity, STARTING_MONEY_OPTIONS,
 };
 use crate::state::new_game::NewGameSettingsResource;
 use bevy::ecs::system::RunSystemOnce;
-use bevy::prelude::World;
+use bevy::prelude::{Text, World};
 use openttdrs_core::Climate;
 
 #[test]
@@ -19,6 +19,21 @@ fn setup_main_menu_and_camera_run() {
     world.insert_resource(NetworkStatus::default());
     world.run_system_once(setup_main_menu).unwrap();
     assert_eq!(world.resource::<MainMenuPanel>(), &MainMenuPanel::Root);
+}
+
+#[test]
+fn localized_label_sync_runs_with_static_and_dynamic_labels() {
+    let mut world = World::new();
+    world.insert_resource(crate::settings::ClientPreferences::default());
+    world.spawn((MainMenuLocalizedText("Nueva partida"), Text::new("")));
+    world.spawn((
+        MainMenuDynamicText::Climate(Climate::Temperate),
+        Text::new(""),
+    ));
+
+    world
+        .run_system_once(super::systems::sync_main_menu_localized_labels)
+        .unwrap();
 }
 
 #[test]

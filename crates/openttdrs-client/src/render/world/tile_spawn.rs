@@ -849,6 +849,7 @@ pub(crate) fn spawn_intro_map_render(
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)] // El fixture usa coordenadas fijas que deben estar dentro del mapa.
 mod tests {
     use super::{OverviewBlockSummary, overview_block_summary};
     use openttdrs_core::prelude::{Map, TileCoord, TileKind};

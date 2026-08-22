@@ -184,9 +184,10 @@ Es deliberadamente un diagnóstico de selección/orden de parents, no de
 framebuffer. La traza candidata conserva el orden de emisión previo al sort
 para poder contrastarlo con C++; en runtime, las capas BUILD de paradas y
 depósitos viales, más el bundle cable/fachadas de un depósito ferroviario
-eléctrico y los faroles de acera, ya reasignan sus slots locales de profundidad
-con ese vector final. Aplicar el vector global a las demás entidades, children
-y overlays sigue siendo trabajo de composición posterior. Atlas, pivotes,
+eléctrico, los faroles de acera y la secuencia PPP/cable/capas BUILD de las
+estaciones rail vanilla ya reasignan sus slots locales de profundidad con ese
+vector final. Aplicar el vector global a las demás entidades, children y
+overlays sigue siendo trabajo de composición posterior. Atlas, pivotes,
 clipping, transparencias y píxeles siguen perteneciendo al contrato raster.
 
 ## Auditoría global y backlog

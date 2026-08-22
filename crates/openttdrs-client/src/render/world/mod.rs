@@ -95,6 +95,12 @@ mod tests {
         assert!(
             matches!(camera.clear_color, ClearColorConfig::Custom(color) if color == Color::BLACK)
         );
+        let mut projections = world.query_filtered::<&Projection, With<PrimaryGameCamera>>();
+        let Projection::Orthographic(projection) = projections.single(world).expect("proyección")
+        else {
+            panic!("la cámara del mundo debe ser ortográfica");
+        };
+        assert_eq!(projection.near, super::tile_spawn::WORLD_CAMERA_NEAR);
     }
 
     /// Entrada automatizable del candidato para el contrato `world-draw`.

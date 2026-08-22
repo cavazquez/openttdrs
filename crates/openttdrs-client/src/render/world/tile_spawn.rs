@@ -20,6 +20,11 @@ use crate::render::{
 use crate::sprites::CompanyColour;
 use crate::state::SimWorld;
 
+/// El pase `DrawGroundSprite` usa una banda de profundidad negativa para
+/// mantenerse antes de los parents. La cámara 2D vive cerca de z=1000, por
+/// lo que el plano cercano por defecto (-1000) recortaría esa banda.
+pub(super) const WORLD_CAMERA_NEAR: f32 = -2000.0;
+
 use super::plugin::{LoadedMapTileChunks, MapTileSpawnViewport};
 use super::viewport::{
     initial_map_camera_pose, overview_stride_for_scale, resolve_spawn_viewport_at,
@@ -679,6 +684,7 @@ pub(crate) fn setup(
         Transform::from_translation(cam_pos),
         Projection::Orthographic(OrthographicProjection {
             scale: cam_scale,
+            near: WORLD_CAMERA_NEAR,
             ..OrthographicProjection::default_2d()
         }),
     ));

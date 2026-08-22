@@ -34,7 +34,7 @@ la paridad se comprueba por capas, de menor a mayor distancia del píxel final.
 | 1 | [`world-raw`](WORLD_RAW_SCHEMA.md) | ¿Los bytes de mapa de cada tesela son los mismos? | No explica su significado. |
 | 2 | [`world-semantic`](WORLD_SEMANTIC_SCHEMA.md) | ¿Ambos clasifican igual vía, puente, túnel, estación, pendiente y orientación? | No garantiza el sprite final. |
 | 3 | [`world-draw`](WORLD_DRAW_SCHEMA.md) | ¿Rust selecciona sprite, paleta y geometría permitidos por el `draw_tile_proc` C++? | La cobertura Rust aún no incluye todas las familias ni prueba el sort global o el framebuffer. |
-| 3b | [`world-sort`](WORLD_DRAW_SCHEMA.md#orden-global-de-parents-world-sort) | ¿Los parents candidatos se emiten en el orden final de `ViewportSortParentSprites`? | Ya alimenta los slots locales de paradas viales, depósitos viales y bundles cable/fachada de depósito ferroviario; aún no aplica por sí mismo el sort global, pivote ni clipping de las demás familias. |
+| 3b | [`world-sort`](WORLD_DRAW_SCHEMA.md#orden-global-de-parents-world-sort) | ¿Los parents candidatos se emiten en el orden final de `ViewportSortParentSprites`? | Ya alimenta los slots locales de paradas, depósitos y faroles viales, más bundles cable/fachada de depósito ferroviario; aún no aplica por sí mismo el sort global, pivote ni clipping de las demás familias. |
 | 4 | Captura enfocada | ¿La composición completa se ve correcta en el contexto real? | Es aceptación visual, no la única evidencia. |
 
 La regla es encontrar la primera capa que diverge antes de editar. De ese modo

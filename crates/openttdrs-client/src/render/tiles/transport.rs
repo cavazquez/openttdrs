@@ -10,12 +10,15 @@ use super::{
 use crate::iso::{
     TILE_HALF_H, full_tile_sprite_pos, full_tile_sprite_pos_half, ground_tile_pos_half,
     overlay_pos, remap_tile_offset, shore_png_index, shore_sprite_half_h, slope_half_h,
-    slope_sprite_offset, tile_pos_half,
+    slope_sprite_offset, sortable_draw_z, tile_pos_half,
 };
 use crate::render::catenary_newgrf::catenary_sprite_colored;
 use crate::render::road_newgrf::{
     NewGrfRoadSpriteCache, newgrf_road_def_for_tile, newgrf_tram_def_for_tile,
     road_newgrf_view_index,
+};
+use crate::render::viewport_sort::{
+    ParentSprite, ParentSpriteBounds, depths_in_viewport_sort_order,
 };
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
 use crate::render::{
@@ -534,6 +537,77 @@ fn road_detail_world_z_delta(
         + i32::from(partial_pixel_z(dx, dy, surface_tileh))
 }
 
+/// Capa local histórica de los faroles de acera. OpenTTD los inserta como
+/// parents separados; Bevy necesita dos slots distintos para poder reflejar
+/// una inversión del sorter aunque ambos PNG compartan la misma capa visual.
+const ROADSIDE_STREETLIGHT_LAYER: f32 = 0.2;
+/// El salto se mantiene dentro de la franja local (`×0.001` en
+/// `sortable_draw_z`) y es mayor que el ULP de una fila incluso en mapas de
+/// 4096×4096. Nunca coincide con el modo `Roadside::Trees`, que usa 0.25.
+const ROADSIDE_STREETLIGHT_SLOT_STEP: f32 = 0.02;
+
+/// Parents que `DrawRoadDetail` entrega para los faroles de una misma tesela.
+///
+/// El ancla Z no siempre es `base_z * 8`: `GetSlopePixelZ` evalúa la esquina
+/// concreta del farol, y después de una fundación parte de la altura cruda.
+/// Usar esa misma altura es necesario para que la caja del sorter no convierta
+/// las pendientes en una coincidencia accidental.
+#[allow(clippy::too_many_arguments)]
+fn roadside_streetlight_parent_sprites(
+    tx: i32,
+    ty: i32,
+    raw_base_z: u8,
+    surface_base_z: u8,
+    surface_tileh: u8,
+    lamps: &[(usize, f32, f32)],
+) -> Vec<ParentSprite> {
+    lamps
+        .iter()
+        .enumerate()
+        .map(|(index, &(lamp, dx, dy))| {
+            let xmin = tx * 16 + dx as i32;
+            let ymin = ty * 16 + dy as i32;
+            let zmin = i32::from(raw_base_z) * 8
+                + road_detail_world_z_delta(raw_base_z, surface_base_z, surface_tileh, dx, dy);
+            ParentSprite::sprite(
+                index as u64,
+                road_streetlight_sprite_id(lamp),
+                ParentSpriteBounds::new(xmin, ymin, zmin, xmin + 1, ymin + 1, zmin + 15),
+            )
+        })
+        .collect()
+}
+
+#[allow(clippy::too_many_arguments)]
+fn roadside_streetlight_sorted_depths(
+    tx: i32,
+    ty: i32,
+    raw_base_z: u8,
+    surface_base_z: u8,
+    surface_tileh: u8,
+    lamps: &[(usize, f32, f32)],
+) -> Vec<f32> {
+    let parents = roadside_streetlight_parent_sprites(
+        tx,
+        ty,
+        raw_base_z,
+        surface_base_z,
+        surface_tileh,
+        lamps,
+    );
+    let source_depths: Vec<_> = (0..lamps.len())
+        .map(|index| {
+            sortable_draw_z(
+                tx,
+                ty,
+                surface_base_z,
+                ROADSIDE_STREETLIGHT_LAYER + index as f32 * ROADSIDE_STREETLIGHT_SLOT_STEP,
+            )
+        })
+        .collect();
+    depths_in_viewport_sort_order(&parents, &source_depths)
+}
+
 /// Convierte el ancla Z absoluta que informa `AddSortableSpriteToDraw` en el
 /// desplazamiento local que falta después de posicionar la superficie Bevy.
 ///
@@ -967,7 +1041,16 @@ pub(crate) fn spawn_road_tile(
         && rb.count_ones() > 1
         && roadside_detail_visible_under_bridge(map, ctx.coord, (mw, mh), false)
     {
-        for &(lamp, dx, dy) in ROADSIDE_LAMPS[usize::from(rb & 0xF)] {
+        let lamps = ROADSIDE_LAMPS[usize::from(rb & 0xF)];
+        let sorted_depths = roadside_streetlight_sorted_depths(
+            ctx.tx_i32(),
+            ctx.ty_i32(),
+            raw_base_z,
+            base_z,
+            tileh,
+            lamps,
+        );
+        for (lamp_index, &(lamp, dx, dy)) in lamps.iter().enumerate() {
             let (w, h, xrel, yrel) = ROAD_STREETLIGHT_META[lamp];
             let detail_z = f32::from(partial_pixel_z(dx, dy, tileh));
             WorldDrawTrace::record_sprite_with_geometry(
@@ -980,17 +1063,18 @@ pub(crate) fn spawn_road_tile(
                 Some(TraceSpriteBounds::new(dx as i32, dy as i32, 0, 2, 2, 16)),
             );
             let off = remap_tile_offset(dx, dy, detail_z) * 0.5;
-            let pos3 = overlay_pos(
+            let mut pos3 = overlay_pos(
                 Vec2::new(ctx.iso_pos.x + off.x, ctx.iso_pos.y + off.y),
                 xrel,
                 yrel,
                 w,
                 h,
                 base_z,
-                0.2,
+                ROADSIDE_STREETLIGHT_LAYER + lamp_index as f32 * ROADSIDE_STREETLIGHT_SLOT_STEP,
                 ctx.tx_i32(),
                 ctx.ty_i32(),
             );
+            pos3.z = sorted_depths[lamp_index];
             commands.spawn((
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
@@ -1865,11 +1949,12 @@ mod tests {
         halftile_foundation_child_visual_offset, pbs_extra_y_in_bevy, pbs_track_sprite_extra_y,
         rail_foundation_after_pass, rail_ground_sprite_id, rail_initial_ground_draw,
         rail_track_trace_mode, rail_upper_halftile_ground_draw, road_detail_world_z_delta,
-        road_foundation_child_offset, signal_trace_geometry,
+        road_foundation_child_offset, roadside_streetlight_parent_sprites,
+        roadside_streetlight_sorted_depths, signal_trace_geometry,
     };
     use crate::sprites::{
         RAIL_GROUND_HALF_TILE_SNOW, RAIL_GROUND_HALF_TILE_WATER, RAIL_TB_LEFT, RAIL_TB_LOWER,
-        RAIL_TB_RIGHT, RAIL_TB_UPPER,
+        RAIL_TB_RIGHT, RAIL_TB_UPPER, ROADSIDE_LAMPS,
     };
     use openttdrs_core::{FOUNDATION_INCLINED_X, FOUNDATION_LEVELED};
 
@@ -1907,6 +1992,43 @@ mod tests {
         assert_eq!(
             rail_track_trace_mode(5, Some(0)),
             RailTrackTraceMode::FoundationChild((64, -32, 0))
+        );
+    }
+
+    #[test]
+    fn roadside_streetlights_match_kale_post_sort_order() {
+        // Kale `(119,9)`, road bits 10: OpenTTD inserta 1407 y 1406, pero
+        // `ViewportSortParentSprites` los pinta como 1406 y luego 1407.
+        let lamps = ROADSIDE_LAMPS[10];
+        let parents = roadside_streetlight_parent_sprites(119, 9, 1, 1, 0, lamps);
+        assert_eq!(parents.len(), 2);
+        assert_eq!(
+            parents[0].kind,
+            crate::render::viewport_sort::ParentSpriteKind::Sprite { sprite_id: 1407 }
+        );
+        assert_eq!(
+            (
+                parents[0].bounds.xmin,
+                parents[0].bounds.ymin,
+                parents[0].bounds.zmin,
+                parents[0].bounds.xmax,
+                parents[0].bounds.ymax,
+                parents[0].bounds.zmax,
+            ),
+            (1912, 158, 8, 1913, 159, 23)
+        );
+        assert_eq!(
+            crate::render::viewport_sort::viewport_sort_parent_sprites(&parents),
+            vec![1, 0]
+        );
+
+        let depths = roadside_streetlight_sorted_depths(119, 9, 1, 1, 0, lamps);
+        assert_eq!(
+            depths,
+            vec![
+                crate::iso::sortable_draw_z(119, 9, 1, 0.22),
+                crate::iso::sortable_draw_z(119, 9, 1, 0.2),
+            ]
         );
     }
 

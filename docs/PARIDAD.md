@@ -97,11 +97,13 @@ encuentra esa primera inversión, aun cuando `world-draw` por tesela coincide.
 Eso prueba la brecha de composición de forma acotada; no declara paridad
 raster. El puente runtime ya aplica el vector final a las capas BUILD de
 paradas viales y depósitos viales, y al bundle local de depósito ferroviario
-eléctrico (cable de entrada + fachadas BUILD). En Kale `(225,2)` las cajas de
+eléctrico (cable de entrada + fachadas BUILD), además de faroles viales. En
+Kale `(225,2)` las cajas de
 `5982` y `5983` coinciden con el oráculo y Bevy recibe sus slots de Z en el
 orden final `5983 → 5982`; en `(195,17)`, OpenTTD transforma la inserción
 `5659 → 1063 → 1064` en `1063 → 5659 → 1064`, y el runtime conserva ese mismo
-intercambio de slots. La captura limpia del foco vial queda alineada en
+intercambio de slots. Para `(119,9)`, los faroles `1407 → 1406` pasan a
+`1406 → 1407` con sus bounds de pendiente. La captura limpia del foco vial queda alineada en
 `[0,0]` con 12.956 de 921.600 píxeles distintos (1,40581597 %); no existe una
 medición A/B aislada de estos cambios, así que no se atribuye una reducción
 cuantificada.
@@ -120,8 +122,9 @@ captura debe servir para localizar y medir, no para certificar paridad.
 Ya existe un port puro y testeado de `ViewportSortParentSprites` en
 `render/viewport_sort.rs`, incluidos parents vacíos y children. Las paradas
 viales vanilla, depósitos viales y los bundles de catenaria/fachada de
-depósitos ferroviarios ya alimentan sus bounds y reasignan sus slots locales
-de Bevy con el orden resultante. Las demás familias todavía carecen de bounds,
+depósitos ferroviarios, junto a los faroles viales, ya alimentan sus bounds y
+reasignan sus slots locales de Bevy con el orden resultante. Las demás familias
+todavía carecen de bounds,
 identidad de parent o vínculo de children completos; esa cobertura parcial no
 es evidencia de composición global aplicada.
 

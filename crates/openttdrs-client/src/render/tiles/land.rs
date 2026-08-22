@@ -407,6 +407,29 @@ fn house_building_parent_bounds(
     )
 }
 
+/// Bounds inclusivos del parent vanilla de `DrawTile_Industry`.
+///
+/// La tabla generada preserva el `M(dx, dy, sx, sy, sz)` de
+/// `industry_land.h`. Sólo se usa en la ruta plana y estática: una industria
+/// inclinada todavía tiene un cimiento legacy sin parent común y los layouts
+/// NewGRF/animados necesitan actualizar su propia caja antes de participar.
+fn industry_building_parent_bounds(
+    ctx: &TileRenderContext,
+    spec: &crate::sprites::IndustryGfxSprite,
+) -> ParentSpriteBounds {
+    let x = ctx.tx_i32() * 16 + spec.sort_ox;
+    let y = ctx.ty_i32() * 16 + spec.sort_oy;
+    let z = i32::from(ctx.info.base_z) * 8 + spec.sort_oz;
+    ParentSpriteBounds::new(
+        x,
+        y,
+        z,
+        x + spec.sort_ex - 1,
+        y + spec.sort_ey - 1,
+        z + spec.sort_ez - 1,
+    )
+}
+
 /// Recursos prestados que sólo necesita la ruta de casas.
 ///
 /// Las fundaciones Action5 requieren el mapa y sus vecinos, mientras que los
@@ -720,6 +743,7 @@ pub(crate) fn spawn_industry_tile(
     action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
     newgrf_stack: &[openttdrs_core::NewGrfEntry],
 ) {
+    let map_width = map.dimensions().0;
     let tileh = ctx.info.tileh;
     let base_z = ctx.info.base_z;
     // gfx limpio + traducción NewGRF (`GetIndustryGfx`).
@@ -999,13 +1023,32 @@ pub(crate) fn spawn_industry_tile(
                     img.sprite()
                 };
                 sprite.color = with_to_alpha(sprite.color, TransparencyOption::Industries);
-                let pos3 = overlay_at(s.xrel, s.yrel, s.w, s.h, 0.5);
+                let mut pos3 = overlay_at(s.xrel, s.yrel, s.w, s.h, 0.5);
+                // Sólo los buildings vanilla planos que no cambian de frame
+                // conservan una caja C++ inmutable. Los demás siguen en su
+                // ruta local hasta que tengan parent/children completos.
+                let sortable_parent = if !leveled && !client_anim && !refinery_fire && !fizzy_drink
+                {
+                    let source_depth = viewport_source_depth(pos3.z, ctx.tx, map_width);
+                    pos3.z = source_depth;
+                    Some(ViewportSortableParent {
+                        sprite_id: s.sprite_id,
+                        bounds: industry_building_parent_bounds(ctx, s),
+                        insertion_key: viewport_insertion_key(ctx.tx, ctx.ty, 2),
+                        source_depth,
+                    })
+                } else {
+                    None
+                };
                 let mut entity = commands.spawn((
                     MapVisualLayer,
                     chunk,
                     sprite,
                     Transform::from_translation(pos3),
                 ));
+                if let Some(parent) = sortable_parent {
+                    entity.insert(parent);
+                }
                 if refinery_fire {
                     entity.insert(crate::render::RefineryFireAnim {
                         sprite_id: s.sprite_id,
@@ -1533,19 +1576,41 @@ pub(crate) fn push_forest_tree(
 
 #[cfg(test)]
 mod tests {
-    use crate::sprites::HOUSE_DRAW_DATA;
+    use crate::render::TileRenderContext;
+    use crate::render::grid::TileRenderInfo;
+    use crate::render::viewport_sort::ParentSpriteBounds;
+    use crate::sprites::{HOUSE_DRAW_DATA, INDUSTRY_GFX_DATA};
+    use bevy::prelude::Vec2;
     use openttdrs_core::{
         CLEAR_GROUND_DESERT, CLEAR_GROUND_GRASS, CLEAR_GROUND_ROCKY, CLEAR_GROUND_ROUGH,
-        CLEAR_GROUND_SNOW, Map, TileCoord,
+        CLEAR_GROUND_SNOW, Map, TileCoord, TileKind,
     };
 
     use super::{
         TreeGround, clear_ground_sprite_id, field_fence_draws, field_ground_sprite_id,
         field_slope_max_pixel_z, field_slope_pixel_z_in_corner, house_building_trace_geometry,
-        house_lift_screen_offset, openttd_tile_hash, rough_flat_variant,
-        sort_tree_layers_like_openttd, tree_density_from_tile, tree_ground_from_tile,
-        tree_ground_sprite_id, tree_shore_sprite_id, void_ground_sprite_and_palette,
+        house_lift_screen_offset, industry_building_parent_bounds, openttd_tile_hash,
+        rough_flat_variant, sort_tree_layers_like_openttd, tree_density_from_tile,
+        tree_ground_from_tile, tree_ground_sprite_id, tree_shore_sprite_id,
+        void_ground_sprite_and_palette,
     };
+
+    fn industry_ctx_at(tx: u32, ty: u32, base_z: u8) -> TileRenderContext {
+        TileRenderContext {
+            tx,
+            ty,
+            coord: TileCoord::new(tx as i32, ty as i32),
+            tile: None,
+            object_type: None,
+            kind: TileKind::Industry,
+            info: TileRenderInfo {
+                tileh: 0,
+                base_z,
+                use_shore: false,
+            },
+            iso_pos: Vec2::ZERO,
+        }
+    }
 
     #[test]
     fn clear_ground_selector_matches_openttd_drawtile_clear() {
@@ -1750,6 +1815,20 @@ mod tests {
                 sloped_bounds.ez,
             ),
             (0, 0, 0, 14, 14, 60)
+        );
+    }
+
+    #[test]
+    fn industry_building_parent_bounds_match_kale_sortable_prism() {
+        // Kale `(186,1)`: OpenTTD emite `2119` con
+        // world=(2976,16,8), bounds=(0,0,0;16,16,20).
+        let spec = match INDUSTRY_GFX_DATA.iter().find(|spec| spec.sprite_id == 2119) {
+            Some(spec) => spec,
+            None => panic!("la tabla vanilla debe contener la fábrica 2119"),
+        };
+        assert_eq!(
+            industry_building_parent_bounds(&industry_ctx_at(186, 1, 1), spec),
+            ParentSpriteBounds::new(2976, 16, 8, 2991, 31, 27)
         );
     }
 

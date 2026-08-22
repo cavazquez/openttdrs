@@ -72,9 +72,9 @@ backlog de implementación.
 La corrida de referencia de `Kale_TitleGame.sav`, centro `189,126`,
 `1280x720`, OpenGFX 8bpp y perfil `clean-static` (sin UI, rótulos, vehículos
 ni capas de diagnóstico) quedó **alineado en `[0, 0]`** y aun así registró
-**194.200 de 921.600 píxeles distintos (21,0720486 %)**. La referencia
+**193.939 de 921.600 píxeles distintos (21,0437283 %)**. La referencia
 archivada anterior registraba 213.552 (23,171875 %), por lo que esta repetición
-reduce 19.352 píxeles distintos sin usar traslación global. El intervalo incluye
+reduce 19.613 píxeles distintos sin usar traslación global. El intervalo incluye
 varios cambios de renderer, así que no se atribuye esa mejora completa sólo al
 ajuste urbano #322 ni declara paridad raster.
 
@@ -103,6 +103,9 @@ BUILD) y a los parents de edificios de casas vanilla visibles. En Kale las
 8.497 casas tienen ahora caja y altura efectiva de `DrawFoundation` contenidas
 por el oráculo, y el runtime las ordena con la clave diagonal estable de
 `ViewportAddLandscape`; los 188 ascensores conservan el delta de su parent.
+También incorpora los edificios industriales vanilla planos y estáticos, cuya
+caja `M(...)` no cambia durante la composición; las pendientes, animaciones y
+layouts NewGRF permanecen fuera de ese subconjunto.
 En `(225,2)` las cajas de
 `5982` y `5983` coinciden con el oráculo y Bevy recibe sus slots de Z en el
 orden final `5983 → 5982`; en `(195,17)`, OpenTTD transforma la inserción
@@ -118,12 +121,14 @@ cuantificada.
 La integración sigue siendo parcial: las 3.014 fundaciones comunes de Kale
 (incluidas 1.943 de casas) ya exportan sus bounds C++ exactos y el auditor
 vincula 56.088 de 56.183 parents candidatos con el vector final. El runtime
-aplica ese sorter compartido a los sprites directos de fundación y a los
-buildings vanilla de casas, pero no al conjunto **global** de producers.
-Faltan children fuera del ascensor, clipping, anclajes finales y framebuffer.
-El siguiente trabajo debe extenderlo a puentes y las familias NewGRF de
-estación, aeropuertos y objetos, no rebajar el baseline ni extrapolar una
-región a paridad general.
+aplica ese sorter compartido a los sprites directos de fundación, buildings
+vanilla de casas y el subconjunto plano/estático de industria vanilla, pero no
+al conjunto **global** de producers. Los 383 comandos `industry-building` de
+Kale ya están contenidos por `world-draw`; eso no equivale a que sus variantes
+dinámicas o NewGRF tengan parent/children runtime. Faltan children fuera del
+ascensor, clipping, anclajes finales y framebuffer. El siguiente trabajo debe
+extenderlo a puentes y las familias NewGRF de estación, aeropuertos y objetos,
+no rebajar el baseline ni extrapolar una región a paridad general.
 
 El perfil `CLEAN` normaliza la UI, las preferencias persistidas y los overrides
 de transparencia conocidos, pero no convierte al renderer actual en un gate
@@ -134,9 +139,10 @@ Ya existe un port puro y testeado de `ViewportSortParentSprites` en
 `render/viewport_sort.rs`, incluidos parents vacíos y children. Las paradas
 viales vanilla, depósitos viales, los bundles de catenaria/fachada de
 depósitos ferroviarios, los faroles viales y la subsecuencia
-PPP/cable/plataforma de estaciones rail vanilla ya alimentan sus bounds y
-reasignan sus slots locales de Bevy con el orden resultante. Las demás familias
-todavía carecen de bounds,
+PPP/cable/plataforma de estaciones rail vanilla, casas vanilla y el subconjunto
+plano/estático de industrias vanilla ya alimentan sus bounds y reasignan sus
+slots locales de Bevy con el orden resultante. Las demás familias todavía
+carecen de bounds,
 identidad de parent o vínculo de children completos; esa cobertura parcial no
 es evidencia de composición global aplicada.
 

@@ -49,6 +49,8 @@ mod tests {
         app.add_plugins(ImagePlugin::default());
         // Las etiquetas de ciudades cargan la fuente Text2d en spawn_world_layer.
         app.init_asset::<Font>();
+        app.init_asset::<Mesh>();
+        app.init_asset::<ColorMaterial>();
         app.init_asset::<TextureAtlasLayout>();
         app.update();
         app.insert_resource(SimWorld::default());

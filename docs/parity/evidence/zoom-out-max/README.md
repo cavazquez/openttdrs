@@ -1,15 +1,21 @@
 # Zoom máximo y etiquetas del mapa
 
-## Estado tras el port de overview
+## Estado tras la corrección de zoom máximo
 
-Desde el port de overview el cliente ya no recorta los niveles fijos por el presupuesto
-de culling: `Out4x` usa bloques agregados de 4×4 y `Out8x` bloques de 8×8.
-Esto mantiene el mapa cubierto sin instanciar cada sprite de detalle. Cada
-bloque se reduce ahora por mayoría de teselas (agua tiene prioridad en empate,
-bosque exige mayoría estricta) y altura media, en vez de copiar la esquina
-superior izquierda. En esos niveles los vehículos y las capas de
-infraestructura detalladas se omiten a propósito; el color del bloque conserva
-la lectura macro de terreno y agua sin afirmar paridad raster completa.
+En mapas de hasta 256×256 teselas el cliente conserva el render detallado en
+`Out4x` y `Out8x`, igual que OpenTTD: siguen presentes rutas, vías, edificios,
+puentes, vehículos y el terreno completo. La captura de `Kale_TitleGame.sav`
+se ejecuta por este camino; antes de la corrección se sustituía por rombos
+agregados y quedaban grietas negras entre bloques.
+
+Para mapas mayores se mantiene un camino de protección: `Out4x` resume bloques
+de 4×4 y `Out8x` bloques de 8×8 por mayoría de teselas (agua tiene prioridad en
+empate, bosque exige mayoría estricta) y altura media. Ese modo evita crear
+cientos de miles de entidades al encuadrar mapas grandes, pero todavía omite
+las capas detalladas de infraestructura y vehículos; no se debe presentar como
+paridad raster completa. Cada bloque usa el rombo lógico de 64×32 píxeles y un
+respaldo opaco del color del terreno: así las esquinas transparentes del sprite
+OpenGFX no abren grietas negras entre bloques ampliados.
 
 Las etiquetas compensan la escala ortográfica para seguir siendo legibles y se
 componen en el mismo orden de OpenTTD: pueblos → carteles → estaciones. No se
@@ -26,8 +32,9 @@ Antes del port, el valor solicitado se acotaba dentro del cliente por
 `clamp_ortho_scale`: para 1832×960 el presupuesto de spawn
 (`MAX_SPAWN_SPAN_TILES=192`) dejaba una escala máxima aproximada de 2,66 y el
 modo fijo sólo alcanzaba `Out2x`. OpenTTD mantiene los seis niveles hasta
-`Out8x`; el camino agregado descrito arriba elimina ese límite de escala sin
-convertir el overview en un spawn masivo.
+`Out8x`; el render detallado para mapas medianos y el camino agregado para
+mapas mayores eliminan ese límite sin volver a materializar el mapa completo
+de 4096×4096.
 
 La imagen original es la captura aportada por el usuario en la solicitud del
 issue (OpenTTD 15.3, `Out8x`, con labels visibles). El cliente no expone esa

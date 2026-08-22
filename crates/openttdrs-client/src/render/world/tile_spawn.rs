@@ -1,12 +1,13 @@
 //! Construcción de tiles del mundo y setup inicial.
 
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use openttdrs_core::prelude::*;
 
 use crate::config::{env_flag, env_string};
 use crate::iso::{
-    GROUND_SPRITE_CENTER_X_OFFSET, HEIGHT_PX, TILE_HALF_H, ground_draw_z, iso, shore_png_index,
+    GROUND_SPRITE_CENTER_X_OFFSET, HEIGHT_PX, ISO_QH, ground_draw_z, iso, shore_png_index,
     shore_tileh_for_draw_shore, slope_half_h, slope_sprite_offset,
 };
 use crate::render::world_draw_trace::WorldDrawTrace;
@@ -30,7 +31,7 @@ pub(super) const WORLD_CAMERA_FAR: f32 = 2000.0;
 
 use super::plugin::{LoadedMapTileChunks, MapTileSpawnViewport};
 use super::viewport::{
-    initial_map_camera_pose, overview_stride_for_scale, resolve_spawn_viewport_at,
+    initial_map_camera_pose, overview_stride_for_map, resolve_spawn_viewport_at,
 };
 
 use crate::render::vehicles::{NewGrfTrainSpriteCache, TruckHandles, spawn_initial_vehicles};
@@ -506,16 +507,51 @@ fn spawn_overview_tiles_in_bounds(
             };
             let footprint = (block_w + block_h) as f32;
             let top = iso(tx as i32, ty as i32);
-            let half_h = TILE_HALF_H * footprint * 0.5;
+            // La textura vanilla mide 31 px de alto, pero la cuadrícula
+            // isométrica ocupa 32 px por tesela. Al ampliarla N veces, ese
+            // píxel de diferencia se convertía en una grieta negra de N px
+            // entre bloques. El rombo lógico debe conservar `ISO_QH`.
+            let half_h = ISO_QH * footprint * 0.5;
             let elev = f32::from(summary.average_height) * HEIGHT_PX;
+            let block_z = ground_draw_z(tx as i32, ty as i32, 0.0);
+            // El sprite fuente se amplía `stride` veces, por lo que una
+            // columna transparente termina ocupando varios píxeles del mundo.
+            // Este solapamiento equivale a dos píxeles de pantalla en Out8x.
+            const EDGE_OVERLAP_WORLD: f32 = 16.0;
+            let chunk = crate::render::MapTileChunk::from_tile(tx, ty);
+            if let Some(overview) = assets.overview.as_ref() {
+                let material = match summary.kind {
+                    TileKind::Water | TileKind::ShipDepot => &overview.water_material,
+                    TileKind::Forest => &overview.forest_material,
+                    _ => &overview.grass_material,
+                };
+                commands.spawn((
+                    crate::render::MapVisualLayer,
+                    chunk,
+                    Mesh2d(overview.diamond.clone()),
+                    MeshMaterial2d(material.clone()),
+                    Transform::from_translation(Vec3::new(
+                        top.x + GROUND_SPRITE_CENTER_X_OFFSET * footprint * 0.5,
+                        top.y - half_h + elev,
+                        block_z + 0.1,
+                    ))
+                    .with_scale(Vec3::new(
+                        32.0 * footprint + EDGE_OVERLAP_WORLD,
+                        16.0 * footprint + EDGE_OVERLAP_WORLD,
+                        1.0,
+                    )),
+                ));
+            }
             let mut sprite = image.sprite_colored(color);
-            sprite.custom_size = Some(Vec2::new(32.0 * footprint, 15.5 * footprint));
+            sprite.custom_size = Some(Vec2::new(
+                32.0 * footprint + EDGE_OVERLAP_WORLD,
+                16.0 * footprint + EDGE_OVERLAP_WORLD,
+            ));
             let pos = Vec3::new(
                 top.x + GROUND_SPRITE_CENTER_X_OFFSET * footprint * 0.5,
                 top.y - half_h + elev,
-                ground_draw_z(tx as i32, ty as i32, 0.0),
+                block_z + 0.2,
             );
-            let chunk = crate::render::MapTileChunk::from_tile(tx, ty);
             if matches!(summary.kind, TileKind::Water | TileKind::ShipDepot) {
                 commands.spawn((
                     crate::render::MapVisualLayer,
@@ -657,11 +693,22 @@ pub(crate) fn spawn_map_chunk(
     );
 }
 
+/// Almacenes de assets que el setup del mundo inicializa en conjunto.
+///
+/// Agruparlos evita que el sistema de arranque acumule parámetros ECS al
+/// incorporar la geometría opaca que respalda el overview de mapas grandes.
+#[derive(SystemParam)]
+pub(crate) struct WorldSetupAssetStores<'w> {
+    layout_assets: ResMut<'w, Assets<TextureAtlasLayout>>,
+    images: ResMut<'w, Assets<Image>>,
+    meshes: ResMut<'w, Assets<Mesh>>,
+    materials: ResMut<'w, Assets<ColorMaterial>>,
+}
+
 pub(crate) fn setup(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    mut layout_assets: ResMut<Assets<TextureAtlasLayout>>,
-    mut images: ResMut<Assets<Image>>,
+    mut asset_stores: WorldSetupAssetStores,
     sim: Res<SimWorld>,
     windows: Query<&Window, With<PrimaryWindow>>,
     prefs: Option<Res<crate::settings::ClientPreferences>>,
@@ -698,12 +745,16 @@ pub(crate) fn setup(
         bounds: spawn_bounds,
         last_ortho_scale: cam_scale,
     });
-    let atlas = TileAtlas::build(&asset_server, &mut layout_assets);
-    let assets = WorldAssets::load(&atlas, &mut images);
+    let atlas = TileAtlas::build(&asset_server, &mut asset_stores.layout_assets);
+    let mut assets = WorldAssets::load(&atlas, &mut asset_stores.images);
+    assets.overview = Some(crate::render::OverviewRenderAssets::new(
+        &mut asset_stores.meshes,
+        &mut asset_stores.materials,
+    ));
     commands.insert_resource(assets.clone());
     commands.insert_resource(crate::render::water_anim_frames_from_assets(
         &assets,
-        &layout_assets,
+        &asset_stores.layout_assets,
     ));
     commands.insert_resource(crate::render::RefineryFireAnimFrames {
         by_sprite: assets.refinery_fire_frames.clone(),
@@ -725,7 +776,7 @@ pub(crate) fn setup(
     ));
     let company_colour = CompanyColour::from_u8(sim.state.company_colour);
     let mut company_sprites = CompanyColoredSprites::new(company_colour);
-    company_sprites.build_all(&mut images);
+    company_sprites.build_all(&mut asset_stores.images);
     commands.insert_resource(company_sprites.clone());
     let show_town_labels = prefs.as_ref().map(|p| p.show_town_labels).unwrap_or(true);
     let show_station_labels = prefs
@@ -746,7 +797,7 @@ pub(crate) fn setup(
         &asset_server,
         &assets,
         &mut company_sprites,
-        &mut images,
+        &mut asset_stores.images,
         &sim,
         spawn_bounds,
         true,
@@ -754,7 +805,7 @@ pub(crate) fn setup(
         show_full_detail,
         show_town_labels,
         show_station_labels,
-        overview_stride_for_scale(cam_scale),
+        overview_stride_for_map(cam_scale, mw, mh),
         &mut road_sprites,
         &mut station_sprites,
         &mut shore_sprites,

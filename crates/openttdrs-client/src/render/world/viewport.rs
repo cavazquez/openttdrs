@@ -10,7 +10,7 @@ use crate::render::viewport::{
     large_map_viewport_cull_enabled, ortho_visible_tile_bounds,
 };
 
-pub(crate) use crate::render::viewport::overview_stride_for_scale;
+pub(crate) use crate::render::viewport::overview_stride_for_map;
 use crate::render::{MapPreviewCamera, PrimaryGameCamera};
 use crate::state::SimWorld;
 

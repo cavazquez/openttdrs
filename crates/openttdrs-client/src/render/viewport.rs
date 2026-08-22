@@ -148,10 +148,18 @@ pub const MIN_ORTHO_SCALE: f32 = 0.25;
 /// Techo absoluto de alejamiento (mapas pequeños / sin culling).
 pub const ABSOLUTE_MAX_ORTHO_SCALE: f32 = 20.0;
 
-/// A partir de este nivel se usa la representación agregada de overview.
-/// OpenTTD conserva `Out4x` y `Out8x` aun en mapas grandes; el cliente no
-/// puede materializar cada sprite de detalle a esas escalas.
+/// A partir de este nivel los mapas que superan el presupuesto de detalle usan
+/// la representación agregada de overview. OpenTTD conserva `Out4x` y `Out8x`
+/// también en mapas grandes, pero el cliente evita materializar allí cientos
+/// de miles de sprites de una sola vez.
 pub const OVERVIEW_MIN_ORTHO_SCALE: f32 = 4.0;
+
+/// Hasta este tamaño el render detallado sigue siendo viable incluso en
+/// `Out8x` y es necesario para conservar la paridad visual de OpenTTD
+/// (infraestructura, edificios y vehículos siguen visibles en esos niveles).
+/// Los mapas mayores pueden entrar al camino agregado para no crear cientos de
+/// miles de entidades al encuadrar una región amplia.
+pub const OVERVIEW_DETAIL_MAX_TILES: u64 = 256 * 256;
 
 /// Margen extra (teselas) alrededor del rectángulo visible (rombos isométricos).
 pub const VIEWPORT_MARGIN_TILES: u32 = 10;
@@ -208,10 +216,10 @@ pub fn clamp_ortho_scale(
     }
 
     // Antes de `Out4x` el renderer materializa sprites individuales y debe
-    // respetar el presupuesto de chunks. Al entrar en `Out4x`/`Out8x` cambia a
-    // `spawn_overview_tiles_in_bounds`, que usa una muestra agregada; no
-    // limitar esos niveles es lo que permite el alejamiento máximo de
-    // OpenTTD en mapas grandes.
+    // respetar el presupuesto de chunks. En `Out4x`/`Out8x`, los mapas grandes
+    // cambian a `spawn_overview_tiles_in_bounds`; los medianos mantienen
+    // detalle. Esta bifurcación permite el alejamiento máximo de OpenTTD sin
+    // un spawn masivo en mapas de gran tamaño.
     scale.min(max_ortho_scale_for_window(window_width, window_height))
 }
 
@@ -223,6 +231,22 @@ pub const fn overview_stride_for_scale(scale: f32) -> Option<u32> {
         Some(4)
     } else {
         None
+    }
+}
+
+/// Selecciona overview sólo cuando el mapa supera el presupuesto de detalle.
+///
+/// La escala por sí sola no basta: un mapa de 256×256 tiene 65.536 teselas y
+/// OpenTTD todavía muestra toda su infraestructura en Out8x. Mantener esas
+/// partidas en el camino detallado evita reemplazar el mundo por rombos de
+/// color. En mapas mayores se conserva la reducción 4×4/8×8 como protección
+/// contra un spawn masivo.
+#[must_use]
+pub const fn overview_stride_for_map(scale: f32, map_width: u32, map_height: u32) -> Option<u32> {
+    if (map_width as u64) * (map_height as u64) <= OVERVIEW_DETAIL_MAX_TILES {
+        None
+    } else {
+        overview_stride_for_scale(scale)
     }
 }
 
@@ -477,5 +501,12 @@ mod tests {
         assert_eq!(overview_stride_for_scale(2.0), None);
         assert_eq!(overview_stride_for_scale(4.0), Some(4));
         assert_eq!(overview_stride_for_scale(8.0), Some(8));
+    }
+
+    #[test]
+    fn overview_keeps_detail_for_maps_up_to_256_squared() {
+        assert_eq!(overview_stride_for_map(8.0, 256, 256), None);
+        assert_eq!(overview_stride_for_map(4.0, 256, 512), Some(4));
+        assert_eq!(overview_stride_for_map(8.0, 512, 512), Some(8));
     }
 }

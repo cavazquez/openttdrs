@@ -16,7 +16,7 @@ use super::plugin::{
     RemapMapVisualsPending,
 };
 use super::tile_spawn::{spawn_map_chunk, spawn_world_layer};
-use super::viewport::{overview_stride_for_scale, resolve_spawn_viewport, sync_camera_for_sim};
+use super::viewport::{overview_stride_for_map, resolve_spawn_viewport, sync_camera_for_sim};
 
 /// Materializa chunks en un orden canónico, nunca en el orden aleatorio de un
 /// `HashSet`.
@@ -107,7 +107,7 @@ pub(crate) fn apply_remap_map_visuals(
             }
         })
         .unwrap_or(1.0);
-    let overview_stride = overview_stride_for_scale(ortho_scale);
+    let overview_stride = overview_stride_for_map(ortho_scale, mw, mh);
     commands.insert_resource(MapTileSpawnViewport {
         bounds: spawn_bounds,
         last_ortho_scale: ortho_scale,

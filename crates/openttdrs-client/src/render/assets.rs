@@ -13,8 +13,40 @@ use crate::sprites::{
     road_stop_build_layers, road_stop_drive_through_layers, signal_sprite_texture_id,
 };
 
+/// Geometría opaca de respaldo para los bloques agregados de `Out4x`/`Out8x`.
+///
+/// Los sprites OpenGFX de terreno son rombos 64×31 con esquinas transparentes.
+/// Al ampliarlos para representar un bloque 4×4/8×8 esas esquinas dejan líneas
+/// negras entre bloques. Un rombo de color debajo conserva el recorte
+/// isométrico y tapa sólo esos huecos; la textura sigue aportando el detalle
+/// disponible en el centro del bloque.
+#[derive(Clone)]
+pub(crate) struct OverviewRenderAssets {
+    pub(crate) diamond: Handle<Mesh>,
+    pub(crate) grass_material: Handle<ColorMaterial>,
+    pub(crate) forest_material: Handle<ColorMaterial>,
+    pub(crate) water_material: Handle<ColorMaterial>,
+}
+
+impl OverviewRenderAssets {
+    pub(crate) fn new(meshes: &mut Assets<Mesh>, materials: &mut Assets<ColorMaterial>) -> Self {
+        Self {
+            diamond: meshes.add(Rhombus::new(1.0, 1.0)),
+            // Sólo se ve por los bordes transparentes de la textura: usar
+            // tonos próximos evita introducir un contorno de otro color.
+            grass_material: materials.add(ColorMaterial::from_color(Color::srgb(0.20, 0.16, 0.11))),
+            forest_material: materials
+                .add(ColorMaterial::from_color(Color::srgb(0.08, 0.22, 0.05))),
+            water_material: materials.add(ColorMaterial::from_color(Color::srgb(0.12, 0.25, 0.42))),
+        }
+    }
+}
+
 #[derive(Clone, Resource)]
 pub(crate) struct WorldAssets {
+    /// Geometría opcional creada por el plugin cuando hay renderer GPU.
+    /// Los tests de spawners sólo necesitan atlas y dejan este campo vacío.
+    pub(crate) overview: Option<OverviewRenderAssets>,
     pub(crate) grass: AtlasSprite,
     pub(crate) rough: AtlasSprite,
     /// Variantes planas que `DrawHillyLandTile` escoge con `TileHash(x, y)`.
@@ -710,6 +742,7 @@ impl WorldAssets {
         house_palettes.build_all(images);
 
         Self {
+            overview: None,
             grass,
             rough,
             rough_flat,

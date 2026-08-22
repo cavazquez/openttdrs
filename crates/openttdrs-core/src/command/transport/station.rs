@@ -102,6 +102,14 @@ pub(crate) fn check_road_stop_spec_restrictions(
     if def.tram_only() && rt_class != crate::road_type::RoadTramType::Tram {
         return Err(CommandError::RoadStopRoadTypeMismatch);
     }
+    if !crate::newgrf_callback::apply_road_stop_availability_callback(
+        def,
+        stop_kind,
+        state.current_road_type,
+        &state.road_type_catalog,
+    ) {
+        return Err(CommandError::NewGrfCallbackDenied);
+    }
     Ok(())
 }
 

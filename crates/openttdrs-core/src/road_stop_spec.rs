@@ -47,6 +47,19 @@ pub const ROADSTOP_DRAW_MODE_OVERLAY: u8 = 1 << 1;
 /// Default OTTD: `Road | Overlay`.
 pub const ROADSTOP_DRAW_MODE_DEFAULT: u8 = ROADSTOP_DRAW_MODE_ROAD | ROADSTOP_DRAW_MODE_OVERLAY;
 
+/// Bits de `RoadStopCallbackMask` (Action0 prop `0x11`).
+///
+/// El bit de disponibilidad usa `CBID_STATION_AVAILABILITY` (`0x13`) tanto
+/// en el picker como antes de ejecutar la construcción, igual que
+/// `RoadStopChangeInfo` / `CmdBuildRoadStop` de `OpenTTD`.
+pub const ROADSTOP_CALLBACK_MASK_AVAILABILITY: u8 = 1 << 0;
+/// El callback `CBID_STATION_ANIMATION_NEXT_FRAME` (`0x141`) está declarado
+/// por el GRF, pero su ciclo de animación aún no está implementado.
+pub const ROADSTOP_CALLBACK_MASK_ANIMATION_NEXT_FRAME: u8 = 1 << 1;
+/// El callback `CBID_STATION_ANIMATION_SPEED` (`0x142`) está declarado por el
+/// GRF, pero su ciclo de animación aún no está implementado.
+pub const ROADSTOP_CALLBACK_MASK_ANIMATION_SPEED: u8 = 1 << 2;
+
 /// Metadatos de una clase de road stop (`RoadStopClass`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RoadStopClassDef {
@@ -78,9 +91,22 @@ pub struct RoadStopSpecDef {
     /// Action0 `0x12` flags DWORD (`RoadStopSpecFlags`).
     #[serde(default)]
     pub flags: u32,
+    /// Action0 `0x11` (`RoadStopCallbackMask`). El bit de disponibilidad se
+    /// ejecuta al previsualizar y construir; los bits de animación se preservan
+    /// como metadato hasta contar con su scheduler.
+    #[serde(default)]
+    pub callback_mask: u8,
     /// Vistas Action1/3 (opcional; no se serializan — se rehidratan al re-aplicar).
     #[serde(default, skip)]
     pub newgrf_views: Vec<crate::newgrf_sprites::DecodedSprite>,
+    /// Grafo Action2 para callbacks / vistas dinámicas. No se serializa: se
+    /// rehidrata desde el stack `NewGRF` al cargar la partida.
+    #[serde(default, skip)]
+    pub newgrf_runtime: Option<Box<crate::newgrf_sprites::TrainSpriteGraphics>>,
+    /// Tablas Action0 `GlobalVar` del GRF para traducir la carretera/tranvía en
+    /// las variables `0x43`/`0x44` de callbacks.
+    #[serde(default, skip)]
+    pub newgrf_type_tables: Option<crate::newgrf_type_tables::GrfTypeTranslationTables>,
     /// Ids de badges asociados (catálogo `badge`).
     #[serde(default)]
     pub associated_badges: Vec<u16>,
@@ -135,6 +161,12 @@ impl RoadStopSpecDef {
     #[must_use]
     pub const fn tram_only(&self) -> bool {
         self.flags & ROADSTOP_FLAG_TRAM_ONLY != 0
+    }
+
+    /// `true` si el GRF declaró `CBID_STATION_AVAILABILITY` (`0x13`).
+    #[must_use]
+    pub const fn has_availability_callback(&self) -> bool {
+        self.callback_mask & ROADSTOP_CALLBACK_MASK_AVAILABILITY != 0
     }
 }
 
@@ -256,7 +288,10 @@ mod tests {
             newgrf_local_id: 0,
             draw_mode: ROADSTOP_DRAW_MODE_DEFAULT,
             flags,
+            callback_mask: 0,
             newgrf_views: Vec::new(),
+            newgrf_runtime: None,
+            newgrf_type_tables: None,
             associated_badges: Vec::new(),
         }
     }
@@ -288,7 +323,10 @@ mod tests {
                 newgrf_local_id: 0,
                 draw_mode: ROADSTOP_DRAW_MODE_DEFAULT,
                 flags: 0,
+                callback_mask: 0,
                 newgrf_views: Vec::new(),
+                newgrf_runtime: None,
+                newgrf_type_tables: None,
                 associated_badges: Vec::new(),
             },
             RoadStopSpecDef {
@@ -302,7 +340,10 @@ mod tests {
                 newgrf_local_id: 0,
                 draw_mode: ROADSTOP_DRAW_MODE_DEFAULT,
                 flags: 0,
+                callback_mask: 0,
                 newgrf_views: Vec::new(),
+                newgrf_runtime: None,
+                newgrf_type_tables: None,
                 associated_badges: Vec::new(),
             },
         ];

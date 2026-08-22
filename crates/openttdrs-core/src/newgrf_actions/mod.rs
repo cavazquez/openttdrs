@@ -592,7 +592,33 @@ pub fn build_action0_roadstop_payload_ex(
     draw_mode: u8,
     flags: u32,
 ) -> Vec<u8> {
-    let num_props = 5 + u8::from(!badge_labels.is_empty());
+    build_action0_roadstop_payload_with_callback_mask(
+        class_label,
+        stop_type,
+        name,
+        badge_labels,
+        draw_mode,
+        flags,
+        0,
+    )
+}
+
+/// Action0 `RoadStops` con máscara de callbacks `0x11`.
+///
+/// La máscara se emite incluso cuando sólo se usa el callback de disponibilidad
+/// (`bit 0` / `CBID_STATION_AVAILABILITY`) para que los fixtures cubran el
+/// camino Action0 → Action2/3 → construcción.
+#[must_use]
+pub fn build_action0_roadstop_payload_with_callback_mask(
+    class_label: &[u8; 4],
+    stop_type: u8,
+    name: &str,
+    badge_labels: &[[u8; 4]],
+    draw_mode: u8,
+    flags: u32,
+    callback_mask: u8,
+) -> Vec<u8> {
+    let num_props = 6 + u8::from(!badge_labels.is_empty());
     let mut p = vec![
         0x00,
         ACTION0_FEATURE_ROADSTOPS,
@@ -608,6 +634,8 @@ pub fn build_action0_roadstop_payload_ex(
     p.push(draw_mode);
     p.push(0x12); // PROP_ROADSTOP_FLAGS
     p.extend_from_slice(&flags.to_le_bytes());
+    p.push(0x11); // RoadStopCallbackMask
+    p.push(callback_mask);
     p.push(0xFE); // PROP_NAME_CSTRING
     p.extend_from_slice(name.as_bytes());
     p.push(0);
@@ -2028,6 +2056,7 @@ mod tests {
             meta.flags,
             crate::ROADSTOP_FLAG_DRIVE_THROUGH_ONLY | crate::ROADSTOP_FLAG_ROAD_ONLY
         );
+        assert_eq!(meta.callback_mask, 0);
         assert!(meta.badge_labels.is_empty());
 
         let bytes = build_grf_v2_with_action0_and_action8(&a0, [b'R', b'S', 0, 1], "rstop", "");
@@ -2053,8 +2082,68 @@ mod tests {
         assert_eq!(def.draw_mode, 0x03);
         assert!(def.drive_through_only());
         assert!(def.road_only());
+        assert_eq!(def.callback_mask, 0);
         assert!(def.newgrf_views.is_empty());
+        assert!(def.newgrf_runtime.is_none());
         assert!(def.associated_badges.is_empty());
+    }
+
+    /// El `CB13` de `RoadStops` no puede quedarse sólo como un bit parseado: el
+    /// mismo GRF que lo declara debe bloquear la query y el execute del comando.
+    #[test]
+    fn roadstop_availability_callback_is_loaded_and_blocks_construction() {
+        use crate::{Command, CommandError, apply_command, command_would_fail};
+
+        let a0 = build_action0_roadstop_payload_with_callback_mask(
+            b"CBRS",
+            0,
+            "Parada controlada",
+            &[],
+            crate::ROADSTOP_DRAW_MODE_DEFAULT,
+            0,
+            crate::ROADSTOP_CALLBACK_MASK_AVAILABILITY,
+        );
+        let action2 = crate::newgrf_sprites::build_action2_callback_literal_payload(
+            ACTION0_FEATURE_ROADSTOPS,
+            0x21,
+            0x10,
+        );
+        let bytes = crate::newgrf_sprites::build_grf_v2_feature_with_action2_chain(
+            &a0,
+            ACTION0_FEATURE_ROADSTOPS,
+            0,
+            0x21,
+            &action2,
+            1,
+            1,
+            &[1],
+            *b"CBRS",
+            "roadstop-callback",
+        );
+        let dir = tempfile_dir_with("roadstop-callback.grf", &bytes);
+        let mut state = GameState::new(8, 8);
+        state.newgrf_stack.push(crate::NewGrfEntry::new(
+            "roadstop-callback.grf",
+            crate::newgrf_config::grfid_from_bytes(*b"CBRS"),
+        ));
+        apply_newgrf_roadstops(&mut state, &[&dir]);
+
+        let spec = state.road_stop_spec_catalog[0].id;
+        assert!(state.road_stop_spec_catalog[0].has_availability_callback());
+        assert!(state.road_stop_spec_catalog[0].newgrf_runtime.is_some());
+        apply_command(&mut state, &Command::SetCurrentRoadStopSpec(spec)).unwrap();
+
+        let stop = crate::TileCoord::new(3, 3);
+        apply_command(&mut state, &Command::PlaceRoad(crate::TileCoord::new(3, 2))).unwrap();
+        assert_eq!(
+            command_would_fail(&state, &Command::PlaceBusStop(stop, 3)),
+            Some(CommandError::NewGrfCallbackDenied)
+        );
+        assert_eq!(
+            apply_command(&mut state, &Command::PlaceBusStop(stop, 3)),
+            Err(CommandError::NewGrfCallbackDenied)
+        );
+        assert_eq!(state.stations.len(), 0);
     }
 
     #[test]

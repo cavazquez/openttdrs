@@ -400,12 +400,13 @@ Fuente: `newgrf_act0_roadstops.cpp` / `newgrf_roadstop.h`.
 | `09` stop type BYTE (`0` bus / `1` truck / `2` all) | **runtime** (catálogo; validado en query+execute) |
 | `0C` draw_mode BYTE (`Road`/`Overlay`/`WaypGround`) | **runtime** (catálogo; bits en `road_stop_spec`) |
 | `12` flags DWORD (`DriveThroughOnly` bit3, `RoadOnly` bit5, `TramOnly` bit6, …) | **runtime** (validado en query+execute; resto almacenado) |
+| `11` callback mask BYTE | **runtime parcial**: bit `Avail` ejecuta CB13 en picker/query+execute; bits de animación quedan almacenados sin scheduler |
 | `FE` nombre C-string (extensión local) | **runtime** (catálogo) |
 | `FD` badge associations (extensión local: BYTE count + N× label 4 chars) | **runtime** (`associated_badges` + diagnósticos) |
 | Action1/3 views | **runtime** parcial (bahía `0..3`; DT `4`/`5` si hay vistas; si no Action5 `0x11` / OpenGFX) |
 | drive-through `m5`=`RSV_*` 4/5 | **runtime** (colocación + connect eje X/Y) |
 | `grfid` + `newgrf_local_id` | **runtime** (save/load + rebind tras re-apply multi-GRF) |
-| resto (`0x0A`–`0x0B`, `0x0D`–`0x11`, `0x13`–`0x16`) | consumidas (ancho fijo) / pendiente |
+| resto (`0x0A`–`0x0B`, `0x0D`–`0x10`, `0x13`–`0x16`) | consumidas (ancho fijo) / pendiente |
 
 ## Sound effects (`0C`)
 

@@ -716,7 +716,10 @@ fn place_bus_stop_persists_current_road_stop_spec() {
         newgrf_local_id: 0,
         draw_mode: crate::ROADSTOP_DRAW_MODE_DEFAULT,
         flags: 0,
+        callback_mask: 0,
         newgrf_views: Vec::new(),
+        newgrf_runtime: None,
+        newgrf_type_tables: None,
         associated_badges: Vec::new(),
     });
     apply_command(&mut s, &Command::SetCurrentRoadStopSpec(spec_id)).unwrap();
@@ -780,7 +783,10 @@ fn reject_bus_spec_on_truck_stop() {
         newgrf_local_id: 0,
         draw_mode: crate::ROADSTOP_DRAW_MODE_DEFAULT,
         flags: 0,
+        callback_mask: 0,
         newgrf_views: Vec::new(),
+        newgrf_runtime: None,
+        newgrf_type_tables: None,
         associated_badges: Vec::new(),
     });
     apply_command(&mut s, &Command::SetCurrentRoadStopSpec(0)).unwrap();
@@ -814,7 +820,10 @@ fn reject_drive_through_only_as_bay() {
         newgrf_local_id: 0,
         draw_mode: crate::ROADSTOP_DRAW_MODE_DEFAULT,
         flags: crate::ROADSTOP_FLAG_DRIVE_THROUGH_ONLY,
+        callback_mask: 0,
         newgrf_views: Vec::new(),
+        newgrf_runtime: None,
+        newgrf_type_tables: None,
         associated_badges: Vec::new(),
     });
     apply_command(&mut s, &Command::SetCurrentRoadStopSpec(0)).unwrap();
@@ -849,7 +858,10 @@ fn reject_road_only_spec_with_tram() {
         newgrf_local_id: 0,
         draw_mode: crate::ROADSTOP_DRAW_MODE_DEFAULT,
         flags: crate::ROADSTOP_FLAG_ROAD_ONLY,
+        callback_mask: 0,
         newgrf_views: Vec::new(),
+        newgrf_runtime: None,
+        newgrf_type_tables: None,
         associated_badges: Vec::new(),
     });
     apply_command(&mut s, &Command::SetCurrentRoadStopSpec(0)).unwrap();
@@ -882,7 +894,10 @@ fn road_stop_spec_json_roundtrip_keeps_station_link() {
         newgrf_local_id: 2,
         draw_mode: 0x03,
         flags: crate::ROADSTOP_FLAG_DRIVE_THROUGH_ONLY,
+        callback_mask: crate::ROADSTOP_CALLBACK_MASK_AVAILABILITY,
         newgrf_views: Vec::new(),
+        newgrf_runtime: None,
+        newgrf_type_tables: None,
         associated_badges: Vec::new(),
     });
     apply_command(&mut s, &Command::SetCurrentRoadStopSpec(7)).unwrap();
@@ -908,4 +923,8 @@ fn road_stop_spec_json_roundtrip_keeps_station_link() {
     assert_eq!(def.newgrf_local_id, 2);
     assert_eq!(def.flags, crate::ROADSTOP_FLAG_DRIVE_THROUGH_ONLY);
     assert_eq!(def.draw_mode, 0x03);
+    assert_eq!(
+        def.callback_mask,
+        crate::ROADSTOP_CALLBACK_MASK_AVAILABILITY
+    );
 }

@@ -17,8 +17,8 @@ Estados:
 API común: `TrainSpriteGraphics::resolve_callback` / `resolve_callback_ctx`,
 `resolve_vehicle_callback`, `writeback_*_persistent_registers`,
 `apply_industry_location_callback`, `apply_house_construction_callback`,
-`apply_station_availability_callback`, `resolve_industry_tile_animation_callback`,
-`resolve_industry_tile_random_trigger`
+`apply_station_availability_callback`, `apply_road_stop_availability_callback`,
+`resolve_industry_tile_animation_callback`, `resolve_industry_tile_random_trigger`
 (`crates/openttdrs-core/src/newgrf_callback.rs`).
 
 ## Por feature
@@ -38,7 +38,9 @@ API común: `TrainSpriteGraphics::resolve_callback` / `resolve_callback_ctx`,
 | Industries | `0x22`, `0x29`, `0x35`, `0x37`–`0x3B`, `0x3D`, `0x14A`+, … | **almacenado** | `IndustrySpecDef.callback_mask` |
 | Airport tiles (`11`) / Airports (`0D`) | anim / FTA-related | **almacenado** / **OOS** | Máscaras; FTA bloqueado (#260) |
 | Canals (`05`) | `0x147` sprite offset | **almacenado** | `CanalSpecDef.callback_mask` |
-| Objects / Cargoes / RoadStops / Types | varios | **OOS** | Sin ejecución de CB en este corte |
+| RoadStops (`14`) | `0x13` `CBID_STATION_AVAILABILITY` | **soportado** | Máscara Action0 `0x11`, Action2/3 y call site query+execute de `PlaceBusStop`/`PlaceTruckStop`; `CALLBACK_FAILED` permite como OpenTTD |
+| RoadStops | `0x140`–`0x142` animación | **almacenado** | Se conserva la máscara; no hay scheduler/callback de animación todavía |
+| Objects / Cargoes / Types | varios | **OOS** | Sin ejecución de CB en este corte |
 | Generic | `0x01` `CBID_RANDOM_TRIGGER` | **OOS** | Ver triggers abajo |
 
 ## Storage
@@ -68,10 +70,11 @@ API común: `TrainSpriteGraphics::resolve_callback` / `resolve_callback_ctx`,
 5. Stations CB13 — availability (+ storage estación).
 6. Industry tiles CB25/CB26/CB27 — trigger, next frame y velocidad en `phase_tile_animation` (FAILED observable).
 7. Industry tile trigger → Action2 random group (`resolve_industry_tile_random_trigger`).
+8. RoadStops CB13 — disponibilidad al previsualizar y ejecutar `PlaceBusStop`/`PlaceTruckStop`.
 
 ## Residual explícito (no bloquea cierre MVP #266)
 
-- Resto de CBs houses / airports / industries / objects.
+- Resto de CBs houses / airports / industries / objects / RoadStops (animación).
 - Scopes parent/relative completos.
 - Storage persistente en industria/casa (estación ya cubierta).
 - Goldens tick-a-tick vs OpenTTD 15.3 para todos los features.

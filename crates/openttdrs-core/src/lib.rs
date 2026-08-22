@@ -504,14 +504,16 @@ pub use road_movement::{
     vehicle_subtile_with_progress,
 };
 pub use road_stop_spec::{
-    ROADSTOP_DRAW_MODE_DEFAULT, ROADSTOP_DRAW_MODE_OVERLAY, ROADSTOP_DRAW_MODE_ROAD,
-    ROADSTOP_FLAG_DRIVE_THROUGH_ONLY, ROADSTOP_FLAG_ROAD_ONLY, ROADSTOP_FLAG_TRAM_ONLY,
-    ROADSTOP_TYPE_ALL, ROADSTOP_TYPE_BUS, ROADSTOP_TYPE_TRUCK, RSV_BAY_NE, RSV_BAY_NW, RSV_BAY_SE,
-    RSV_BAY_SW, RSV_DRIVE_THROUGH_X, RSV_DRIVE_THROUGH_Y, RoadStopClassDef, RoadStopSpecDef,
-    drive_through_axis_y, empty_road_stop_class_catalog, empty_road_stop_spec_catalog,
-    first_matching_road_stop_spec, is_drive_through_orientation, list_road_stop_classes,
-    list_road_stop_specs, next_free_road_stop_class_id, next_free_road_stop_spec_id,
-    road_stop_class_def, road_stop_spec_by_grf_local, road_stop_spec_def,
+    ROADSTOP_CALLBACK_MASK_ANIMATION_NEXT_FRAME, ROADSTOP_CALLBACK_MASK_ANIMATION_SPEED,
+    ROADSTOP_CALLBACK_MASK_AVAILABILITY, ROADSTOP_DRAW_MODE_DEFAULT, ROADSTOP_DRAW_MODE_OVERLAY,
+    ROADSTOP_DRAW_MODE_ROAD, ROADSTOP_FLAG_DRIVE_THROUGH_ONLY, ROADSTOP_FLAG_ROAD_ONLY,
+    ROADSTOP_FLAG_TRAM_ONLY, ROADSTOP_TYPE_ALL, ROADSTOP_TYPE_BUS, ROADSTOP_TYPE_TRUCK, RSV_BAY_NE,
+    RSV_BAY_NW, RSV_BAY_SE, RSV_BAY_SW, RSV_DRIVE_THROUGH_X, RSV_DRIVE_THROUGH_Y, RoadStopClassDef,
+    RoadStopSpecDef, drive_through_axis_y, empty_road_stop_class_catalog,
+    empty_road_stop_spec_catalog, first_matching_road_stop_spec, is_drive_through_orientation,
+    list_road_stop_classes, list_road_stop_specs, next_free_road_stop_class_id,
+    next_free_road_stop_spec_id, road_stop_class_def, road_stop_spec_by_grf_local,
+    road_stop_spec_def,
 };
 pub use road_type::{
     RoadTramType, RoadType, RoadTypeDef, all_road_type_defs, list_road_types,

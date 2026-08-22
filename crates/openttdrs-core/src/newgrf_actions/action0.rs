@@ -469,10 +469,69 @@ pub struct ParsedRoadStopMeta {
     pub draw_mode: u8,
     /// Action0 `0x12` flags DWORD.
     pub flags: u32,
+    /// Action0 `0x11` (`RoadStopCallbackMask`).
+    pub callback_mask: u8,
     /// Etiquetas de badge (`prop 0xFD`); se resuelven en apply.
     pub badge_labels: Vec<String>,
     /// Lista `0xFD` truncada / inválida (diagnóstico observable).
     pub badge_list_error: Option<String>,
+}
+
+struct RoadStopMetaParse {
+    class_short: String,
+    label: String,
+    stop_type: u8,
+    draw_mode: u8,
+    flags: u32,
+    callback_mask: u8,
+    badge_labels: Vec<String>,
+    badge_list_error: Option<String>,
+}
+
+impl Default for RoadStopMetaParse {
+    fn default() -> Self {
+        Self {
+            class_short: String::from("NGRF"),
+            label: String::new(),
+            stop_type: 0,
+            draw_mode: crate::road_stop_spec::ROADSTOP_DRAW_MODE_DEFAULT,
+            flags: 0,
+            callback_mask: 0,
+            badge_labels: Vec::new(),
+            badge_list_error: None,
+        }
+    }
+}
+
+impl RoadStopMetaParse {
+    fn finish(mut self) -> ParsedRoadStopMeta {
+        let short_label: String = self
+            .label
+            .chars()
+            .filter(char::is_ascii_alphanumeric)
+            .take(4)
+            .collect();
+        let short_label = if short_label.is_empty() {
+            String::from("Stop")
+        } else {
+            short_label
+        };
+        if self.label.is_empty() {
+            self.label.clone_from(&short_label);
+        }
+        ParsedRoadStopMeta {
+            class_label: self.class_short.clone(),
+            class_short_label: self.class_short,
+            short_label,
+            label: self.label,
+            stop_type: self.stop_type,
+            draw_mode: self.draw_mode,
+            flags: self.flags,
+            callback_mask: self.callback_mask,
+            badge_labels: self.badge_labels,
+            badge_list_error: self.badge_list_error,
+        }
+    }
 }
 
 /// Metadatos `Badges` Action0 (antes de asignar ID global).
@@ -1878,13 +1937,7 @@ pub fn parse_action0_roadstop_meta(payload: &[u8]) -> Option<ParsedRoadStopMeta>
         return None;
     }
     let mut i = 5usize;
-    let mut class_short = String::from("NGRF");
-    let mut label = String::new();
-    let mut stop_type = 0u8;
-    let mut draw_mode = crate::road_stop_spec::ROADSTOP_DRAW_MODE_DEFAULT;
-    let mut flags = 0u32;
-    let mut badge_labels = Vec::new();
-    let mut badge_list_error = None;
+    let mut meta = RoadStopMetaParse::default();
     for _ in 0..header.num_props {
         if i >= payload.len() {
             break;
@@ -1896,27 +1949,27 @@ pub fn parse_action0_roadstop_meta(payload: &[u8]) -> Option<ParsedRoadStopMeta>
                 let Some(s) = read_four_char_label(payload, &mut i, "NGRF") else {
                     break;
                 };
-                class_short = s;
+                meta.class_short = s;
             }
             PROP_ROADSTOP_STOP_TYPE => {
                 if i >= payload.len() {
                     break;
                 }
-                stop_type = payload[i];
+                meta.stop_type = payload[i];
                 i += 1;
             }
             PROP_ROADSTOP_DRAW_MODE => {
                 if i >= payload.len() {
                     break;
                 }
-                draw_mode = payload[i];
+                meta.draw_mode = payload[i];
                 i += 1;
             }
             PROP_ROADSTOP_FLAGS => {
                 if i + 4 > payload.len() {
                     break;
                 }
-                flags = u32::from_le_bytes([
+                meta.flags = u32::from_le_bytes([
                     payload[i],
                     payload[i + 1],
                     payload[i + 2],
@@ -1924,25 +1977,32 @@ pub fn parse_action0_roadstop_meta(payload: &[u8]) -> Option<ParsedRoadStopMeta>
                 ]);
                 i += 4;
             }
+            0x11 => {
+                if i >= payload.len() {
+                    break;
+                }
+                meta.callback_mask = payload[i];
+                i += 1;
+            }
             PROP_NAME_CSTRING => {
                 let Some(nul) = payload[i..].iter().position(|&b| b == 0) else {
                     break;
                 };
-                label = String::from_utf8_lossy(&payload[i..i + nul]).to_string();
+                meta.label = String::from_utf8_lossy(&payload[i..i + nul]).to_string();
                 i += nul + 1;
             }
             PROP_BADGE_ASSOCIATIONS => {
                 let Some(parsed) = read_badge_association_labels(payload, &mut i) else {
-                    badge_list_error = Some("lista de badges 0xFD sin BYTE count".into());
+                    meta.badge_list_error = Some("lista de badges 0xFD sin BYTE count".into());
                     break;
                 };
-                badge_labels = parsed.labels;
+                meta.badge_labels = parsed.labels;
                 if parsed.error.is_some() {
-                    badge_list_error = parsed.error;
+                    meta.badge_list_error = parsed.error;
                 }
             }
             // Anchos fijos OTTD (avanzar el bloque sin semántica).
-            0x0F | 0x11 => {
+            0x0F => {
                 if i >= payload.len() {
                     break;
                 }
@@ -1963,53 +2023,7 @@ pub fn parse_action0_roadstop_meta(payload: &[u8]) -> Option<ParsedRoadStopMeta>
             _ => break,
         }
     }
-    Some(finish_parsed_roadstop_meta(
-        class_short,
-        label,
-        stop_type,
-        draw_mode,
-        flags,
-        badge_labels,
-        badge_list_error,
-    ))
-}
-
-fn finish_parsed_roadstop_meta(
-    class_short: String,
-    mut label: String,
-    stop_type: u8,
-    draw_mode: u8,
-    flags: u32,
-    badge_labels: Vec<String>,
-    badge_list_error: Option<String>,
-) -> ParsedRoadStopMeta {
-    let short_label = {
-        let ascii: String = label
-            .chars()
-            .filter(char::is_ascii_alphanumeric)
-            .take(4)
-            .collect();
-        if ascii.is_empty() {
-            String::from("Stop")
-        } else {
-            ascii
-        }
-    };
-    if label.is_empty() {
-        label.clone_from(&short_label);
-    }
-    let class_label = class_short.clone();
-    ParsedRoadStopMeta {
-        class_short_label: class_short,
-        class_label,
-        short_label,
-        label,
-        stop_type,
-        draw_mode,
-        flags,
-        badge_labels,
-        badge_list_error,
-    }
+    Some(meta.finish())
 }
 
 #[must_use]

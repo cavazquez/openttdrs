@@ -18,6 +18,7 @@ use crate::newgrf_sprites::{
 };
 use crate::station::Station;
 use crate::vehicle::Vehicle;
+use crate::{RoadType, StopKind};
 
 /// Escribe `persistent_registers` del ctx al vehículo.
 ///
@@ -145,6 +146,67 @@ pub fn apply_station_availability_callback(
     let mut ctx = action2_eval_ctx_from_station(station);
     let result = gfx.resolve_callback_ctx(local_id, CBID_STATION_AVAILABILITY, 0, 0, &mut ctx);
     writeback_station_persistent_registers(station, &ctx);
+    callback_allows_placement(result)
+}
+
+/// Ejecuta la disponibilidad de un `RoadStop` `NewGRF` (`CBID 0x13`) antes de
+/// mostrar/aceptar la construcción.
+///
+/// `OpenTTD` construye este resolver sin estación ni tesela (`st = nullptr`,
+/// `tile = INVALID_TILE`) y suministra tipo de parada y carretera actuales.
+/// Este call site cubre esas variables estables (`0x40`, `0x41`, `0x43`,
+/// `0x44`) y conserva el comportamiento seguro de `CALLBACK_FAILED` = permitir.
+/// Los callbacks de animación y scopes vecinos siguen fuera de alcance.
+#[must_use]
+pub fn apply_road_stop_availability_callback(
+    def: &crate::road_stop_spec::RoadStopSpecDef,
+    stop_kind: StopKind,
+    road_type: RoadType,
+    road_type_catalog: &[crate::road_type::RoadTypeDef],
+) -> bool {
+    if !def.has_availability_callback() {
+        return true;
+    }
+    let Some(runtime) = def.newgrf_runtime.as_ref() else {
+        return true;
+    };
+
+    let mut ctx = Action2EvalCtx::default();
+    // `RoadStopScopeResolver::GetVariable` upstream:
+    // 0x40 view = 0 in construcción; 0x41 bus=0/truck=1/waypoint=2.
+    ctx.vars.insert(0x40, 0);
+    let stop_type = match stop_kind {
+        StopKind::BusStop => 0,
+        StopKind::TruckStop => 1,
+        _ => 2,
+    };
+    ctx.vars.insert(0x41, stop_type);
+    // En el picker no hay tesela: terreno es plano/default. La traducción de
+    // road/tram usa la tabla GlobalVar del mismo GRF, igual que
+    // `GetReverseRoadTypeTranslation` upstream.
+    ctx.vars.insert(0x42, 0);
+    let local_type = crate::newgrf_type_tables::reverse_road_type(
+        def.newgrf_type_tables.as_ref(),
+        road_type_catalog,
+        road_type,
+    );
+    match road_type.road_tram_type() {
+        crate::RoadTramType::Road => {
+            ctx.vars.insert(0x43, u32::from(local_type));
+            ctx.vars.insert(0x44, u32::MAX);
+        }
+        crate::RoadTramType::Tram => {
+            ctx.vars.insert(0x43, u32::MAX);
+            ctx.vars.insert(0x44, u32::from(local_type));
+        }
+    }
+    let result = runtime.resolve_callback_ctx(
+        def.newgrf_local_id,
+        CBID_STATION_AVAILABILITY,
+        0,
+        0,
+        &mut ctx,
+    );
     callback_allows_placement(result)
 }
 

@@ -70,6 +70,8 @@ pub fn apply_newgrf_roadstops(state: &mut GameState, search_dirs: &[&Path]) {
         let Ok(data) = std::fs::read(&path) else {
             continue;
         };
+        let type_tables = crate::newgrf_type_tables::collect_type_tables_from_grf(&data);
+        let type_tables = (!type_tables.is_empty()).then_some(type_tables);
         let gfx =
             crate::newgrf_sprites::collect_roadstop_sprite_graphics(&data).unwrap_or_default();
         let metas = collect_roadstop_metas_from_grf(&data);
@@ -85,6 +87,11 @@ pub fn apply_newgrf_roadstops(state: &mut GameState, search_dirs: &[&Path]) {
                 .views_for_local_id(local_id)
                 .map(<[crate::newgrf_sprites::DecodedSprite]>::to_vec)
                 .unwrap_or_default();
+            let newgrf_runtime = if gfx.needs_runtime_resolve() {
+                Some(Box::new(gfx.clone()))
+            } else {
+                None
+            };
             if let Some(err) = &meta.badge_list_error {
                 state.runtime.newgrf_diagnostics.push(format!(
                     "{}: roadstop '{}': {err}",
@@ -113,7 +120,10 @@ pub fn apply_newgrf_roadstops(state: &mut GameState, search_dirs: &[&Path]) {
                 newgrf_local_id: local_id,
                 draw_mode: meta.draw_mode,
                 flags: meta.flags,
+                callback_mask: meta.callback_mask,
                 newgrf_views: views,
+                newgrf_runtime,
+                newgrf_type_tables: type_tables.clone(),
                 associated_badges,
             });
         }

@@ -131,7 +131,10 @@ pub fn apply_world_gen(
                 map.set_kind(c, TileKind::Forest)?;
                 map.set_mapt_m5(c, 0x40, tree_m5)?;
                 map.set_m2(c, tree_m2)?;
-                map.set_m1(c, OWNER_NONE_M1)?;
+                // `MakeTree` writes OWNER_NONE and WaterClass::Invalid in
+                // M1; dejar sólo 0x10 hace que cada bosque difiera del raw
+                // OpenTTD aunque el tipo de tesela coincida.
+                map.set_m1(c, set_water_class_m1(OWNER_NONE_M1, WaterClass::Invalid))?;
             } else {
                 map.set_kind(c, TileKind::Grass)?;
                 map.set_mapt_m5(c, 0, m5)?;
@@ -333,9 +336,16 @@ mod tests {
             for x in 1..63 {
                 let tile = map.get(TileCoord::new(x, y)).expect("tile");
                 match tile.kind {
-                    TileKind::Grass | TileKind::Forest => {
+                    TileKind::Grass => {
                         clear += 1;
                         assert_eq!(tile.m1, OWNER_NONE_M1);
+                    }
+                    TileKind::Forest => {
+                        clear += 1;
+                        assert_eq!(
+                            tile.m1,
+                            set_water_class_m1(OWNER_NONE_M1, WaterClass::Invalid)
+                        );
                     }
                     TileKind::Water => {
                         water += 1;
@@ -369,6 +379,32 @@ mod tests {
             .collect::<Vec<_>>();
         assert!(!grass.is_empty());
         assert!(grass.iter().all(|tile| tile.m5 & 0x03 == 3));
+    }
+
+    #[test]
+    fn generated_tree_tiles_preserve_invalid_water_class() {
+        let mut map = Map::new_flat(64, 64, 0);
+        apply_world_gen(
+            &mut map,
+            &WorldGenConfig {
+                seed: 1_330_928_978,
+                amount_of_rivers: 0,
+                ..WorldGenConfig::default()
+            },
+            &[],
+        )
+        .expect("generate map");
+        let trees = map
+            .tiles()
+            .iter()
+            .filter(|tile| tile.kind == TileKind::Forest)
+            .collect::<Vec<_>>();
+        assert!(!trees.is_empty());
+        assert!(
+            trees
+                .iter()
+                .all(|tile| { tile.m1 == set_water_class_m1(OWNER_NONE_M1, WaterClass::Invalid) })
+        );
     }
 
     #[test]

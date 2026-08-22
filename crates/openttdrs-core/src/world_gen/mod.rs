@@ -9,6 +9,7 @@
     clippy::manual_is_multiple_of
 )]
 
+mod clear_tiles;
 mod config;
 mod height;
 mod heightmap;
@@ -19,6 +20,7 @@ mod rivers;
 mod tgp;
 mod trees;
 
+pub(crate) use clear_tiles::generate_clear_tiles;
 pub use config::{
     CLEAR_GROUND_DESERT, CLEAR_GROUND_FIELDS, CLEAR_GROUND_GRASS, CLEAR_GROUND_ROCKY,
     CLEAR_GROUND_ROUGH, CLEAR_GROUND_SNOW, Climate, DEF_DESERT_COVERAGE, DEF_SNOW_COVERAGE,
@@ -148,6 +150,11 @@ pub fn apply_world_gen(
             }
         }
     }
+
+    // `GenerateClearTile` runs after the landscape converter and before
+    // towns/industries. Its rough/rocky bits are part of the raw map contract,
+    // not a renderer-only decoration.
+    generate_clear_tiles(map, config.seed, preserve);
 
     Ok(())
 }

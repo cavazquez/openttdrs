@@ -169,11 +169,10 @@ pub(super) fn set_autoreplace_only_when_old(
     from_engine_id: u16,
     only_when_old: bool,
 ) -> Result<(), CommandError> {
-    let Some(rule) = state
-        .autoreplace_rules
-        .iter_mut()
-        .find(|r| r.from_engine_id == from_engine_id)
-    else {
+    let Some(rule) = state.autoreplace_rules.iter_mut().find(|r| {
+        r.from_engine_id == from_engine_id
+            && r.owner.unwrap_or(crate::CompanyId::PLAYER) == state.active_company
+    }) else {
         return Err(CommandError::AutoReplaceRuleNotFound);
     };
     rule.only_when_old = only_when_old;
@@ -190,14 +189,14 @@ pub(super) fn set_autoreplace_rule_group(
     {
         return Err(CommandError::VehicleGroupNotFound);
     }
-    let Some(rule) = state
-        .autoreplace_rules
-        .iter_mut()
-        .find(|r| r.from_engine_id == from_engine_id)
-    else {
+    let Some(rule) = state.autoreplace_rules.iter_mut().find(|r| {
+        r.from_engine_id == from_engine_id
+            && r.owner.unwrap_or(crate::CompanyId::PLAYER) == state.active_company
+    }) else {
         return Err(CommandError::AutoReplaceRuleNotFound);
     };
     rule.group_id = group_id;
+    rule.default_group_only = false;
     Ok(())
 }
 

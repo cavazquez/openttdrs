@@ -25,10 +25,15 @@ pub(super) fn date_record(state: &GameState) -> Vec<u8> {
 fn append_company_settings(
     record: &mut Vec<u8>,
     company: &crate::company::Company,
+    engine_renew_list_head: Option<u16>,
 ) -> Result<(), SavError> {
     // `settings` es un struct de una sola entrada. OpenTTD aplana los nombres
     // de sus subcampos (`settings.vehicle.*`) en ese header.
     write_gamma(1, record)?;
+    // `SLE_REF(..., REF_ENGINE_RENEWS)`: null = 0, los IDs del pool se
+    // serializan como `index + 1` y desde SLV_69 ocupan u32.
+    let renew_head = engine_renew_list_head.map_or(0, |id| u32::from(id) + 1);
+    record.extend_from_slice(&renew_head.to_be_bytes());
     record.push(u8::from(company.engine_renew));
     record.extend_from_slice(&company.engine_renew_months.to_be_bytes());
     let money = u32::try_from(company.engine_renew_money.max(0)).unwrap_or(u32::MAX);
@@ -42,7 +47,10 @@ fn append_company_settings(
     Ok(())
 }
 
-fn plyr_records(state: &GameState) -> Result<Vec<Vec<u8>>, SavError> {
+fn plyr_records(
+    state: &GameState,
+    autoreplace_export: &super::fleet::AutoreplaceExport,
+) -> Result<Vec<Vec<u8>>, SavError> {
     if state.companies.is_empty() {
         let mut rec = Vec::with_capacity(32);
         write_str("Jugador", &mut rec)?;
@@ -55,6 +63,7 @@ fn plyr_records(state: &GameState) -> Result<Vec<Vec<u8>>, SavError> {
                 crate::game_state::CompanyEconomy::default(),
                 state.company_colour,
             ),
+            autoreplace_export.company_head(crate::CompanyId::PLAYER),
         )?;
         return Ok(vec![rec]);
     }
@@ -72,7 +81,11 @@ fn plyr_records(state: &GameState) -> Result<Vec<Vec<u8>>, SavError> {
             rec.extend_from_slice(&money.to_be_bytes());
             rec.push(colour);
             rec.push(u8::from(company.is_ai));
-            append_company_settings(&mut rec, company)?;
+            append_company_settings(
+                &mut rec,
+                company,
+                autoreplace_export.company_head(company.id),
+            )?;
             Ok(rec)
         })
         .collect()
@@ -81,7 +94,10 @@ fn plyr_records(state: &GameState) -> Result<Vec<Vec<u8>>, SavError> {
 /// Serializa `PLYR` con el subconjunto de `CompanySettings` que ejecuta el
 /// core. La estructura anidada es importante: `OpenTTD` usa los nombres de
 /// `settings.*` para aplicar compatibilidad entre versiones del save.
-pub(super) fn plyr_chunk(state: &GameState) -> Result<Vec<u8>, SavError> {
+pub(super) fn plyr_chunk(
+    state: &GameState,
+    autoreplace_export: &super::fleet::AutoreplaceExport,
+) -> Result<Vec<u8>, SavError> {
     let mut header = Vec::new();
     header.push(0x0A | 0x10);
     write_str("name", &mut header)?;
@@ -95,6 +111,8 @@ pub(super) fn plyr_chunk(state: &GameState) -> Result<Vec<u8>, SavError> {
     write_str("settings", &mut header)?;
     header.push(0);
 
+    header.push(6);
+    write_str("engine_renew_list", &mut header)?;
     header.push(1);
     write_str("settings.engine_renew", &mut header)?;
     header.push(3);
@@ -115,7 +133,12 @@ pub(super) fn plyr_chunk(state: &GameState) -> Result<Vec<u8>, SavError> {
     write_str("settings.vehicle.servint_ships", &mut header)?;
     header.push(0);
 
-    raw_table_chunk(*b"PLYR", &header, &plyr_records(state)?, CH_TABLE)
+    raw_table_chunk(
+        *b"PLYR",
+        &header,
+        &plyr_records(state, autoreplace_export)?,
+        CH_TABLE,
+    )
 }
 
 /// Ajustes de partida que afectan cómo `OpenTTD` interpreta y simula el mapa al

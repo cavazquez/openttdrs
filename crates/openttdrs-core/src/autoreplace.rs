@@ -7,20 +7,37 @@ use crate::engine::{EngineDef, engine_available_in_year, engine_by_id};
 use crate::refit::{refittable_cargo_types, vehicle_in_depot};
 use crate::train_consist::{consist_changed, consist_unit_ids, detach_unit, engine_is_wagon};
 use crate::vehicle::{Vehicle, VehicleKind};
-use crate::{GameState, economy};
+use crate::{CompanyId, GameState, economy};
 
 /// Regla: al entrar en depósito, sustituir `from_engine_id` por `to_engine_id`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct AutoReplaceRule {
     pub from_engine_id: u16,
     pub to_engine_id: u16,
+    /// Compañía propietaria de la regla. Los JSON anteriores no lo tenían y
+    /// por compatibilidad se interpretan como reglas de la compañía jugadora.
+    #[serde(default)]
+    pub owner: Option<CompanyId>,
     #[serde(default = "default_rule_enabled")]
     pub enabled: bool,
     #[serde(default)]
     pub only_when_old: bool,
-    /// `None` = regla global; `Some(id)` = solo vehículos del grupo.
+    /// `None` = regla para todos los grupos; `Some(id)` = solo vehículos del
+    /// grupo concreto.
     #[serde(default)]
     pub group_id: Option<u32>,
+    /// Regla para el grupo implícito de vehículos sin grupo (`DEFAULT_GROUP`)
+    /// en vez de para todos (`ALL_GROUP`).
+    #[serde(default)]
+    pub default_group_only: bool,
+    /// Índice del pool denso `ERNW` de `OpenTTD`, si provino de un `.sav`.
+    /// Mantenerlo evita reordenar referencias externas al reexportar.
+    #[serde(default)]
+    pub sav_pool_id: Option<u16>,
+    /// Siguiente nodo de la lista `ERNW` de la compañía, en índices de pool
+    /// (no en la codificación de disco `index + 1`).
+    #[serde(default)]
+    pub sav_next_pool_id: Option<u16>,
 }
 
 const fn default_rule_enabled() -> bool {
@@ -30,12 +47,21 @@ const fn default_rule_enabled() -> bool {
 impl AutoReplaceRule {
     #[must_use]
     pub const fn new(from_engine_id: u16, to_engine_id: u16) -> Self {
+        Self::new_for_company(from_engine_id, to_engine_id, CompanyId::PLAYER)
+    }
+
+    #[must_use]
+    pub const fn new_for_company(from_engine_id: u16, to_engine_id: u16, owner: CompanyId) -> Self {
         Self {
             from_engine_id,
             to_engine_id,
+            owner: Some(owner),
             enabled: true,
             only_when_old: false,
             group_id: None,
+            default_group_only: false,
+            sav_pool_id: None,
+            sav_next_pool_id: None,
         }
     }
 }
@@ -46,16 +72,49 @@ pub fn resolve_rule(
     from_engine_id: u16,
     vehicle_group: Option<u32>,
 ) -> Option<&AutoReplaceRule> {
+    resolve_rule_for_company(rules, CompanyId::PLAYER, from_engine_id, vehicle_group)
+}
+
+/// Busca la regla de autoreemplazo para una compañía, respetando las dos
+/// pseudo-categorías de `OpenTTD`: grupo concreto, `DEFAULT_GROUP` (sin grupo)
+/// y el fallback `ALL_GROUP`.
+#[must_use]
+pub fn resolve_rule_for_company(
+    rules: &[AutoReplaceRule],
+    owner: CompanyId,
+    from_engine_id: u16,
+    vehicle_group: Option<u32>,
+) -> Option<&AutoReplaceRule> {
+    let applies_to_owner =
+        |rule: &&AutoReplaceRule| rule.owner.unwrap_or(CompanyId::PLAYER) == owner;
     if let Some(gid) = vehicle_group
-        && let Some(r) = rules
-            .iter()
-            .find(|r| r.enabled && r.from_engine_id == from_engine_id && r.group_id == Some(gid))
+        && let Some(r) = rules.iter().find(|r| {
+            applies_to_owner(r)
+                && r.enabled
+                && r.from_engine_id == from_engine_id
+                && r.group_id == Some(gid)
+        })
     {
         return Some(r);
     }
-    rules
-        .iter()
-        .find(|r| r.enabled && r.from_engine_id == from_engine_id && r.group_id.is_none())
+    if vehicle_group.is_none()
+        && let Some(r) = rules.iter().find(|r| {
+            applies_to_owner(r)
+                && r.enabled
+                && r.from_engine_id == from_engine_id
+                && r.group_id.is_none()
+                && r.default_group_only
+        })
+    {
+        return Some(r);
+    }
+    rules.iter().find(|r| {
+        applies_to_owner(r)
+            && r.enabled
+            && r.from_engine_id == from_engine_id
+            && r.group_id.is_none()
+            && !r.default_group_only
+    })
 }
 
 fn autoreplace_cost(vehicle: &Vehicle, new_engine: &EngineDef) -> i64 {
@@ -109,8 +168,12 @@ pub fn pending_autoreplace_for_service(state: &GameState, vehicle: &Vehicle) -> 
     let calendar_year = crate::rail_signals::calendar_year_at_tick(state.tick);
     let current_tick = state.tick.get();
 
-    if let Some(rule) = resolve_rule(&state.autoreplace_rules, from_engine_id, vehicle.group_id)
-        && rule.from_engine_id != rule.to_engine_id
+    if let Some(rule) = resolve_rule_for_company(
+        &state.autoreplace_rules,
+        vehicle.owner,
+        from_engine_id,
+        vehicle.group_id,
+    ) && rule.from_engine_id != rule.to_engine_id
     {
         if rule.only_when_old
             && !vehicle.needs_autorenewing(current_tick, company.engine_renew_months)
@@ -166,8 +229,13 @@ pub fn try_autoreplace_vehicle(
         return Ok(false);
     };
 
-    if let Some(rule) =
-        resolve_rule(&state.autoreplace_rules, from_engine_id, vehicle.group_id).copied()
+    if let Some(rule) = resolve_rule_for_company(
+        &state.autoreplace_rules,
+        owner,
+        from_engine_id,
+        vehicle.group_id,
+    )
+    .copied()
     {
         if rule.only_when_old
             && !vehicle.needs_autorenewing(current_tick, company.engine_renew_months)
@@ -284,7 +352,9 @@ fn replace_chain(
         let from = v
             .engine_id
             .unwrap_or(crate::engine::default_engine_id(v.kind));
-        let Some(rule) = resolve_rule(&state.autoreplace_rules, from, v.group_id).copied() else {
+        let Some(rule) =
+            resolve_rule_for_company(&state.autoreplace_rules, v.owner, from, v.group_id).copied()
+        else {
             continue;
         };
         if rule.from_engine_id == rule.to_engine_id {
@@ -431,16 +501,24 @@ mod tests {
             AutoReplaceRule {
                 from_engine_id: 10,
                 to_engine_id: 11,
+                owner: Some(CompanyId::PLAYER),
                 enabled: true,
                 only_when_old: false,
                 group_id: None,
+                default_group_only: false,
+                sav_pool_id: None,
+                sav_next_pool_id: None,
             },
             AutoReplaceRule {
                 from_engine_id: 10,
                 to_engine_id: 12,
+                owner: Some(CompanyId::PLAYER),
                 enabled: true,
                 only_when_old: false,
                 group_id: Some(1),
+                default_group_only: false,
+                sav_pool_id: None,
+                sav_next_pool_id: None,
             },
         ];
         assert_eq!(
@@ -450,6 +528,32 @@ mod tests {
         assert_eq!(
             resolve_rule(&rules, 10, None).map(|r| r.to_engine_id),
             Some(11)
+        );
+    }
+
+    #[test]
+    fn company_and_default_group_scopes_are_not_global() {
+        let mut all_groups = AutoReplaceRule::new_for_company(10, 11, CompanyId::PLAYER);
+        all_groups.sav_pool_id = Some(0);
+        let mut ungrouped = AutoReplaceRule::new_for_company(10, 12, CompanyId::PLAYER);
+        ungrouped.default_group_only = true;
+        ungrouped.sav_pool_id = Some(1);
+        let other_company = AutoReplaceRule::new_for_company(10, 13, CompanyId(1));
+        let rules = vec![all_groups, ungrouped, other_company];
+
+        assert_eq!(
+            resolve_rule_for_company(&rules, CompanyId::PLAYER, 10, None)
+                .map(|rule| rule.to_engine_id),
+            Some(12)
+        );
+        assert_eq!(
+            resolve_rule_for_company(&rules, CompanyId::PLAYER, 10, Some(7))
+                .map(|rule| rule.to_engine_id),
+            Some(11)
+        );
+        assert_eq!(
+            resolve_rule_for_company(&rules, CompanyId(1), 10, None).map(|rule| rule.to_engine_id),
+            Some(13)
         );
     }
 

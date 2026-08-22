@@ -631,6 +631,8 @@ pub struct SavCompany {
     /// Marca de compañía controlada por IA, si está presente en el save.
     pub is_ai: Option<bool>,
     /// Opciones de autorrenovación/servicio de `PLYR.settings`.
+    /// Cabeza `EngineRenew` de la compañía, como índice de pool (no `index + 1`).
+    pub engine_renew_list_head: Option<u16>,
     pub engine_renew: Option<bool>,
     pub engine_renew_months: Option<i16>,
     pub engine_renew_money: Option<u32>,
@@ -676,6 +678,13 @@ pub(crate) fn companies_from_chunks(chunks: &[RawChunk], save_version: u16) -> V
             let engine_renew = setting("settings.engine_renew", "engine_renew")
                 .and_then(SlValue::as_u64)
                 .map(|value| value != 0);
+            // `SLE_REF(..., REF_ENGINE_RENEWS)` se guarda como `index + 1`;
+            // cero es null. Desde SLV_69 ocupa u32 aunque el pool use IDs u16.
+            let engine_renew_list_head = setting("engine_renew_list", "engine_renew_list")
+                .and_then(SlValue::as_u64)
+                .and_then(|reference| reference.checked_sub(1))
+                .and_then(|id| u16::try_from(id).ok())
+                .filter(|id| *id < 64_000);
             let engine_renew_months =
                 setting("settings.engine_renew_months", "engine_renew_months")
                     .and_then(SlValue::as_i64)
@@ -708,6 +717,7 @@ pub(crate) fn companies_from_chunks(chunks: &[RawChunk], save_version: u16) -> V
                 colour,
                 name,
                 is_ai,
+                engine_renew_list_head,
                 engine_renew,
                 engine_renew_months,
                 engine_renew_money,

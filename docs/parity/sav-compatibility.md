@@ -26,7 +26,7 @@ preserva. Importar un dato no implica que el exportador lo escriba.
 | Órdenes | 🟡 estación, waypoint, depósito, condicionales y flags soportados | 🟡 mismo subconjunto, una lista `ORDL` por vehículo | Refit se escribe pero no se restaura al importar; destinos/contextos no soportados se degradan |
 | Horarios | 🟡 lee `wait_time`, `travel_time`, límite de velocidad por orden, inicio, tiempo de orden, lateness, muestras derivadas y flags nativos | 🟡 escribe esos campos por orden, `service_interval` y el bitset de `VehicleFlags` (con bits de horario sincronizados) | La espera activa es estado efímero; reparto `timetable_all`, livery y metadatos de órdenes avanzadas siguen reducidos |
 | Shared orders | ✅ reconstruye `shared_order_id` agrupando los vehículos por su índice `ORDL` | ✅ reutiliza una única `ORDL` para vehículos que comparten lista | Persisten limitaciones de horarios/órdenes avanzadas, pero la identidad compartida se conserva |
-| Grupos y autoreplace | 🟡 lee campos modelados de `GRPS` / `ERNW` | 🟡 escribe grupos, referencias `VEHS.group_id` y reglas de renovación | Livery/cadenas nativas avanzadas y semántica completa de autoreplace siguen reducidas |
+| Grupos y autoreplace | 🟡 lee `GRPS` y el pool `ERNW` con índice, enlaces, owner desde `PLYR` y scopes `ALL_GROUP`/`DEFAULT_GROUP` | 🟡 reemite `GRPS`, `VEHS.group_id` y cadenas `ERNW` densas con referencias `u32` y cabecera por compañía | Livery/historial de grupos y la edición UI completa siguen reducidos; el runtime no cubre todas las reglas avanzadas |
 | Objetos | 🟡 usa `OBJS` para traducir tipos de objeto del mapa y conserva el chunk nativo | 🟡 reemite `OBJS`/`OBID` como passthrough cuando provienen del save | El runtime no ejecuta todavía todas las specs/callbacks de objetos |
 | Ajustes | 🟡 lee el subconjunto ejecutado por el core de `PATS`/`OPTS`: construcción, pathfinding, averías, subsidios, desastres, autoridad, inflación/recesiones y unidades de tiempo | 🟡 escribe ese subconjunto en `PATS` y conserva `GSET`/`ENGN`/`SRND` nativos como passthrough | [`sav/settings.rs`](../../crates/openttdrs-core/src/sav/settings.rs), [`sav/landscape.rs`](../../crates/openttdrs-core/src/sav/landscape.rs) |
 | Compañías y noticias | 🟡 dinero/color/nombre/indicador AI y `settings.*` de `PLYR`; no pools/historial completos | 🟡 `PLYR` con dinero, color, nombre, indicador AI y ajustes de autorrenovación/servicio | El historial económico/liveries avanzados y la cola de noticias propia siguen reducidos; la cola propia completa queda en JSON |
@@ -48,6 +48,11 @@ El writer tiene pruebas de chunks, vehículos y órdenes en
 usa [`validate_sav_openttd_matrix.sh`](../../scripts/validate_sav_openttd_matrix.sh)
 contra OpenTTD 15.3 sin `SKIP`; el smoke local y el round-trip se ejecutan con
 `./scripts/check.sh openttd-smoke` cuando hay un binario de referencia.
+
+`ottn_roundtrip_preserves_ernw_chains_per_company` cubre IDs no consecutivos,
+enlaces y dos cabezas `PLYR`; el fixture que produce fue aceptado por el
+dedicated local de OpenTTD el 2026-08-22. Esto acredita ese contrato de pool,
+no la equivalencia completa del runtime de autoreplace.
 
 La matriz no garantiza compatibilidad binaria general, multijugador ni
 ejecución de NewGRF. Para runtime de NewGRF, usar las matrices de

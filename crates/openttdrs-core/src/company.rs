@@ -100,6 +100,13 @@ pub struct Company {
     /// Dinero mínimo a conservar al renovar (`settings.engine_renew_money`).
     #[serde(default = "default_engine_renew_money")]
     pub engine_renew_money: i64,
+    /// Cabeza de la lista `EngineRenew` de `OpenTTD` (`PLYR.settings.engine_renew_list`).
+    ///
+    /// Es un índice de pool, no la referencia serializada `index + 1`. El
+    /// writer lo mantiene para que las reglas `ERNW` importadas sigan ligadas
+    /// a la empresa correcta al volver a abrir el `.sav` en `OpenTTD`.
+    #[serde(default)]
+    pub engine_renew_list_head: Option<u16>,
     /// Quitar vagones al autoreemplazar si el consist crece (`renew_keep_length` / wagon removal).
     #[serde(default)]
     pub renew_keep_length: bool,
@@ -148,6 +155,7 @@ impl Company {
             engine_renew: true,
             engine_renew_months: 6,
             engine_renew_money: 100_000,
+            engine_renew_list_head: None,
             renew_keep_length: false,
             servint_ispercent: false,
             servint_trains: 0,
@@ -174,6 +182,7 @@ impl Company {
             engine_renew: true,
             engine_renew_months: 6,
             engine_renew_money: 100_000,
+            engine_renew_list_head: None,
             renew_keep_length: false,
             servint_ispercent: false,
             servint_trains: 0,
@@ -200,6 +209,7 @@ impl Company {
             engine_renew: true,
             engine_renew_months: 6,
             engine_renew_money: 100_000,
+            engine_renew_list_head: None,
             renew_keep_length: false,
             servint_ispercent: false,
             servint_trains: 0,

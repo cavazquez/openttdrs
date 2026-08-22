@@ -309,7 +309,8 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
     global_economy.inflation_enabled = parsed_settings.inflation_enabled;
     global_economy.recessions_enabled = parsed_settings.recessions_enabled;
     let vehicle_groups = fleet::vehicle_groups_from_chunks(&chunk_list);
-    let autoreplace_rules = fleet::autoreplace_rules_from_chunks(&chunk_list);
+    let mut autoreplace_rules = fleet::autoreplace_rules_from_chunks(&chunk_list);
+    fleet::assign_autoreplace_owners(&mut autoreplace_rules, &companies);
     let opaque_chunks = opaque_chunks_from_chunks(&chunk_list);
     let link_graph =
         linkgraph::link_graph_from_chunks(&chunk_list, map_w, &station_index, version, climate);
@@ -736,6 +737,7 @@ impl GameState {
                 if let Some(value) = company.engine_renew_money {
                     target.engine_renew_money = i64::from(value);
                 }
+                target.engine_renew_list_head = company.engine_renew_list_head;
                 if let Some(value) = company.renew_keep_length {
                     target.renew_keep_length = value;
                 }

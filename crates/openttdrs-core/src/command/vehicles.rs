@@ -1198,19 +1198,19 @@ pub(super) fn set_autoreplace_rule(
     if from.kind != to.kind {
         return Err(CommandError::AutoreplaceNotAllowed);
     }
-    if let Some(rule) = state
-        .autoreplace_rules
-        .iter_mut()
-        .find(|r| r.from_engine_id == from_engine_id)
-    {
+    if let Some(rule) = state.autoreplace_rules.iter_mut().find(|r| {
+        r.from_engine_id == from_engine_id
+            && r.owner.unwrap_or(crate::CompanyId::PLAYER) == state.active_company
+    }) {
         rule.to_engine_id = to_engine_id;
         rule.enabled = true;
     } else {
         state
             .autoreplace_rules
-            .push(crate::autoreplace::AutoReplaceRule::new(
+            .push(crate::autoreplace::AutoReplaceRule::new_for_company(
                 from_engine_id,
                 to_engine_id,
+                state.active_company,
             ));
     }
     Ok(())
@@ -1221,9 +1221,10 @@ pub(super) fn clear_autoreplace_rule(
     from_engine_id: u16,
 ) -> Result<(), CommandError> {
     let len_before = state.autoreplace_rules.len();
-    state
-        .autoreplace_rules
-        .retain(|r| r.from_engine_id != from_engine_id);
+    state.autoreplace_rules.retain(|r| {
+        r.from_engine_id != from_engine_id
+            || r.owner.unwrap_or(crate::CompanyId::PLAYER) != state.active_company
+    });
     if state.autoreplace_rules.len() == len_before {
         return Err(CommandError::AutoReplaceRuleNotFound);
     }
@@ -1234,11 +1235,10 @@ pub(super) fn toggle_autoreplace_rule(
     state: &mut GameState,
     from_engine_id: u16,
 ) -> Result<(), CommandError> {
-    let Some(rule) = state
-        .autoreplace_rules
-        .iter_mut()
-        .find(|r| r.from_engine_id == from_engine_id)
-    else {
+    let Some(rule) = state.autoreplace_rules.iter_mut().find(|r| {
+        r.from_engine_id == from_engine_id
+            && r.owner.unwrap_or(crate::CompanyId::PLAYER) == state.active_company
+    }) else {
         return Err(CommandError::AutoReplaceRuleNotFound);
     };
     rule.enabled = !rule.enabled;

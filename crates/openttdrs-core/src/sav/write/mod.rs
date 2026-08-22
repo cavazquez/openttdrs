@@ -185,6 +185,7 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
         .ok_or_else(|| SavError::BadFormat("dimensiones de mapa overflow".into()))?;
 
     let planes = map::collect_planes(&state.map, w, h, n);
+    let autoreplace_export = fleet::autoreplace_export(state)?;
 
     let mut data = Vec::new();
     // MAPS CH_TABLE (SLV ≥ 294): dim_x/dim_y SLE_FILE_U32 BE — ver map_sl.cpp.
@@ -261,7 +262,7 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
     if let Some(capy) = meta::capy_chunk(state)? {
         data.extend_from_slice(&capy);
     }
-    data.extend_from_slice(&fleet::fleet_chunks(state)?);
+    data.extend_from_slice(&fleet::fleet_chunks(state, &autoreplace_export)?);
     for chunk in &state.sav_opaque_chunks {
         data.extend_from_slice(&chunks::raw_chunk(chunk.name, chunk.ch_type, &chunk.body));
     }
@@ -271,7 +272,7 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
         &[(5, "date"), (8, "tick_counter")],
         &[meta::date_record(state)],
     )?);
-    data.extend_from_slice(&meta::plyr_chunk(state)?);
+    data.extend_from_slice(&meta::plyr_chunk(state, &autoreplace_export)?);
 
     data.extend_from_slice(&[0, 0, 0, 0]);
     Ok(data)
@@ -310,6 +311,15 @@ mod tests {
         tile.height = 2;
         state.map.set_tile(c, tile).expect("set");
         state
+    }
+
+    fn assert_table_field_type(body: &[u8], field_type: u8, field_name: &str) {
+        let mut encoded = vec![field_type];
+        codec::write_str(field_name, &mut encoded).expect("encode field name");
+        assert!(
+            body.windows(encoded.len()).any(|window| window == encoded),
+            "header no contiene {field_name} con tipo {field_type:#04x}"
+        );
     }
 
     #[test]
@@ -462,23 +472,94 @@ mod tests {
         state.autoreplace_rules.push(crate::AutoReplaceRule {
             from_engine_id: 100,
             to_engine_id: 101,
+            owner: Some(crate::CompanyId::PLAYER),
             enabled: true,
             only_when_old: true,
             group_id: Some(7),
+            default_group_only: false,
+            sav_pool_id: Some(2),
+            sav_next_pool_id: None,
         });
+        state.companies[0].engine_renew_list_head = Some(2);
 
         let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
+        let (payload, _) = crate::sav::container::decompress(&bytes).expect("decompress");
+        let chunks = crate::sav::chunks::parse_chunks(&payload).expect("chunks");
+        let ernw = crate::sav::chunks::find_chunk(&chunks, "ERNW").expect("ERNW chunk");
+        assert_table_field_type(&ernw.body, 6, "next");
+        assert_table_field_type(&ernw.body, 1, "replace_when_old");
+        let plyr = crate::sav::chunks::find_chunk(&chunks, "PLYR").expect("PLYR chunk");
+        assert_table_field_type(&plyr.body, 6, "engine_renew_list");
         let sav_game = sav::load(&bytes).expect("load");
         assert_eq!(sav_game.vehicle_groups, state.vehicle_groups);
         assert_eq!(sav_game.autoreplace_rules, state.autoreplace_rules);
+        assert_eq!(sav_game.companies[0].engine_renew_list_head, Some(2));
         assert_eq!(sav_game.vehicles.len(), 1);
         assert_eq!(sav_game.vehicles[0].group_id, Some(7));
         let loaded = GameState::from_sav_game(sav_game);
         assert_eq!(loaded.vehicles.len(), 1);
         assert_eq!(loaded.vehicles[0].group_id, Some(7));
+        assert_eq!(loaded.companies[0].engine_renew_list_head, Some(2));
         let names = exported_chunk_names(&state).expect("chunk names");
         assert!(names.iter().any(|name| name == "GRPS"));
         assert!(names.iter().any(|name| name == "ERNW"));
+    }
+
+    #[test]
+    fn ottn_roundtrip_preserves_ernw_chains_per_company() {
+        let mut state = tiny_state();
+        state.ensure_rival_transcargo();
+        state.autoreplace_rules = vec![
+            crate::AutoReplaceRule {
+                from_engine_id: 10,
+                to_engine_id: 11,
+                owner: Some(crate::CompanyId::PLAYER),
+                enabled: true,
+                only_when_old: false,
+                group_id: None,
+                default_group_only: false,
+                sav_pool_id: Some(2),
+                sav_next_pool_id: None,
+            },
+            crate::AutoReplaceRule {
+                from_engine_id: 20,
+                to_engine_id: 21,
+                owner: Some(crate::CompanyId(1)),
+                enabled: true,
+                only_when_old: true,
+                group_id: None,
+                default_group_only: false,
+                sav_pool_id: Some(4),
+                sav_next_pool_id: Some(7),
+            },
+            crate::AutoReplaceRule {
+                from_engine_id: 30,
+                to_engine_id: 31,
+                owner: Some(crate::CompanyId(1)),
+                enabled: true,
+                only_when_old: false,
+                group_id: None,
+                default_group_only: true,
+                sav_pool_id: Some(7),
+                sav_next_pool_id: None,
+            },
+        ];
+        state.companies[0].engine_renew_list_head = Some(2);
+        state.companies[1].engine_renew_list_head = Some(4);
+
+        let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
+        if let Ok(path) = std::env::var("OPENTTDRS_DUMP_ERNW_SAV") {
+            std::fs::write(&path, &bytes).expect("dump ERNW sav");
+        }
+        let sav_game = sav::load(&bytes).expect("load");
+        assert_eq!(sav_game.companies[0].engine_renew_list_head, Some(2));
+        assert_eq!(sav_game.companies[1].engine_renew_list_head, Some(4));
+        assert_eq!(sav_game.autoreplace_rules, state.autoreplace_rules);
+
+        let loaded = GameState::from_sav_game(sav_game);
+        assert_eq!(loaded.companies[0].engine_renew_list_head, Some(2));
+        assert_eq!(loaded.companies[1].engine_renew_list_head, Some(4));
+        assert_eq!(loaded.autoreplace_rules, state.autoreplace_rules);
     }
 
     #[test]

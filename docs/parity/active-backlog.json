@@ -6,6 +6,6 @@
     "openttd_tag": "15.3",
     "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888"
   },
-  "active_issues": [313, 322, 326, 327, 328, 329, 330, 331, 332],
+  "active_issues": [313, 326, 327, 328, 329, 330, 331, 332],
   "closed_delivery_range": [275, 291]
 }

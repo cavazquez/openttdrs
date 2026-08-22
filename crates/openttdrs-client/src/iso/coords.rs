@@ -715,7 +715,7 @@ pub fn road_depot_sprite_pos(
     Vec3::new(
         anchor.x + xrel,
         anchor.y - yrel + elev,
-        (tx + ty) as f32 * 0.01 + f32::from(base_z) * 0.001 + layer_z,
+        sortable_draw_z(tx, ty, base_z, layer_z),
     )
 }
 
@@ -745,8 +745,8 @@ mod ground_draw_order_tests {
     use bevy::prelude::Vec2;
 
     use super::{
-        GROUND_SPRITE_CENTER_X_OFFSET, TILE_HALF_H, ground_tile_pos_half, overlay_pos,
-        sortable_draw_z, tile_pos_half,
+        GROUND_SPRITE_CENTER_X_OFFSET, RoadStopSeqGfx, TILE_HALF_H, ground_tile_pos_half,
+        overlay_pos, road_depot_sprite_pos, sortable_draw_z, tile_pos_half,
     };
 
     #[test]
@@ -792,6 +792,31 @@ mod ground_draw_order_tests {
         let lower = overlay_pos(Vec2::ZERO, 0.0, 0.0, 64.0, 32.0, 0, 0.4, 10, 10);
         let upper = overlay_pos(Vec2::ZERO, 0.0, 0.0, 64.0, 32.0, 0, 0.5, 10, 10);
         assert!(lower.z < upper.z);
+    }
+
+    #[test]
+    fn road_depot_alignment_helper_keeps_its_layer_inside_the_tile_row() {
+        let depot = road_depot_sprite_pos(
+            10,
+            10,
+            31,
+            0.5,
+            RoadStopSeqGfx {
+                dx: 0.0,
+                dy: 0.0,
+                dz: 0.0,
+                x_offs: 0.0,
+                y_offs: 0.0,
+                remap_x_adj: 0.0,
+            },
+        );
+        let next_row = sortable_draw_z(11, 10, 0, 0.0);
+
+        assert_eq!(depot.z, sortable_draw_z(10, 10, 31, 0.5));
+        assert!(
+            depot.z < next_row,
+            "un depósito alto no puede adelantar la fila diagonal siguiente"
+        );
     }
 
     #[test]

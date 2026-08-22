@@ -72,9 +72,19 @@ backlog de implementación.
 La corrida de referencia de `Kale_TitleGame.sav`, centro `189,126`,
 `1280x720`, OpenGFX 8bpp y perfil `clean-static` (sin UI, rótulos, vehículos
 ni capas de diagnóstico) quedó **alineado en `[0, 0]`** y aun así registró
-**213.552 de 921.600 píxeles distintos (23,171875 %)**. Es una medición
-anterior al ajuste local de catenaria; hasta repetir exactamente el baseline
-no corresponde atribuirle una mejora cuantificada ni declarar paridad raster.
+**194.200 de 921.600 píxeles distintos (21,0720486 %)**. La referencia
+archivada anterior registraba 213.552 (23,171875 %), por lo que esta repetición
+reduce 19.352 píxeles distintos sin usar traslación global. El intervalo incluye
+varios cambios de renderer, así que no se atribuye esa mejora completa sólo al
+ajuste urbano #322 ni declara paridad raster.
+
+La profundidad local urbana de #322 ya mantiene las capas positivas de casas,
+estaciones, fundaciones y depósitos dentro de su fila diagonal; el helper de
+alineación de depósitos comparte ahora la misma codificación. El `world-draw`
+estricto de la casa/fuente `(189,116)` contiene sus dos comandos, y las
+capturas limpias en `0,25×`, `0,5×`, `1×`, `2×` y `4×` conservan el mapa visible.
+Es una garantía local de profundidad y de viewport, no la aplicación del sort
+global de parents: esa composición completa continúa en #326.
 
 La contención `--strict-reference` de `world-draw` sigue siendo útil, pero
 compara decisiones y orden relativo por tesela antes de atlas/composición. El
@@ -108,7 +118,6 @@ las entidades Bevy.
 <!-- active-parity-backlog:start -->
 
 - [#313](https://github.com/cavazquez/openttdrs/issues/313) — calibrar cámara y composición tras el draw-plan exacto.
-- [#322](https://github.com/cavazquez/openttdrs/issues/322) — integrar profundidad global de overlays urbanos.
 - [#326](https://github.com/cavazquez/openttdrs/issues/326) — integrar composición global y cerrar paridad de framebuffer.
 - [#327](https://github.com/cavazquez/openttdrs/issues/327) — autoridad multiempresa y reconciliación de desync.
 - [#328](https://github.com/cavazquez/openttdrs/issues/328) — interoperabilidad residual de VEHS, ORDL, GRPS y ERNW.

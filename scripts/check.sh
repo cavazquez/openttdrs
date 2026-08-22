@@ -18,6 +18,7 @@
 #   ./scripts/check.sh bench  # smoke Criterion (#116; no forma parte de `ci`)
 #   ./scripts/check.sh parity-docs  # frescura docs tick/carga (#125)
 #   ./scripts/check.sh openttd-smoke  # load+roundtrip #226 (SKIP si no hay binario)
+#   ./scripts/check.sh zoom-smoke  # render headless en niveles de zoom fijos
 #
 # Excepciones documentadas (solo en GitHub Actions, no en `ci` local):
 #   - cargo-audit / cargo-deny — #106
@@ -195,6 +196,14 @@ do_openttd_smoke() {
     info "openttd-smoke OK ✓"
 }
 
+do_zoom_smoke() {
+    info "Smoke de render por niveles de zoom..."
+    cargo test -p openttdrs-client --all-features \
+        render::world::tests::setup_and_apply_remap_covers_multiple_fixed_zoom_levels \
+        -- --exact
+    info "zoom-smoke OK ✓"
+}
+
 do_all() {
     do_fmt_check
     do_lint
@@ -250,10 +259,11 @@ case "${1:-all}" in
     bench)       do_bench ;;
     parity-docs) do_parity_docs ;;
     openttd-smoke) do_openttd_smoke ;;
+    zoom-smoke) do_zoom_smoke ;;
     ci)          do_ci ;;
     all)         do_all ;;
     *)
-        echo "Uso: $0 {fmt|fmt-check|lint|doc|test|tnbp|golden|py|ci-python|generated-tables|generated-tables-ci|openttd-ref|snapshot-oracle|audit|cov|build|doctor|bench|parity-docs|openttd-smoke|ci|all}"
+        echo "Uso: $0 {fmt|fmt-check|lint|doc|test|tnbp|golden|py|ci-python|generated-tables|generated-tables-ci|openttd-ref|snapshot-oracle|audit|cov|build|doctor|bench|parity-docs|openttd-smoke|zoom-smoke|ci|all}"
         exit 1
         ;;
 esac

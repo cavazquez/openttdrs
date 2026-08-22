@@ -26,12 +26,13 @@ mod tests {
     use bevy::prelude::*;
 
     use super::tile_spawn::setup;
+    use crate::iso::ground_draw_z;
     use crate::render::assets::stub_opengfx_tiles_for_tests;
     use crate::render::vehicles::VehicleIndex;
     use crate::render::viewport::{
         VIEWPORT_MARGIN_TILES, VIEWPORT_REBUILD_LEAD_TILES, ortho_visible_tile_bounds,
     };
-    use crate::render::{MapPreviewCamera, PrimaryGameCamera};
+    use crate::render::{MapPreviewCamera, MapTileChunk, MapVisualLayer, PrimaryGameCamera};
     use crate::state::SimWorld;
 
     fn with_assets_app() -> App {
@@ -75,6 +76,41 @@ mod tests {
     }
 
     #[test]
+    fn setup_and_apply_remap_covers_multiple_fixed_zoom_levels() {
+        let mut app = with_assets_app();
+        let world = app.world_mut();
+        world.run_system_once(setup).unwrap();
+
+        for scale in [1.0_f32, 2.0, 4.0, 8.0] {
+            {
+                let mut cameras =
+                    world.query_filtered::<&mut Projection, With<PrimaryGameCamera>>();
+                let mut projection = cameras.single_mut(world).expect("cámara principal");
+                let Projection::Orthographic(projection) = &mut *projection else {
+                    panic!("la cámara del mundo debe ser ortográfica");
+                };
+                projection.scale = scale;
+            }
+            {
+                let mut pending = world.resource_mut::<RemapMapVisualsPending>();
+                pending.pending = true;
+                pending.full = true;
+                pending.sync_camera = false;
+            }
+            world
+                .run_system_once(remap::apply_remap_map_visuals)
+                .unwrap();
+
+            let mut map_sprites =
+                world.query_filtered::<(&MapTileChunk, &Sprite), With<MapVisualLayer>>();
+            assert!(
+                map_sprites.iter(world).next().is_some(),
+                "el nivel de zoom {scale} no materializó sprites del mapa"
+            );
+        }
+    }
+
+    #[test]
     fn primary_world_camera_disables_msaa_for_pixel_exact_composition() {
         let mut app = with_assets_app();
         let world = app.world_mut();
@@ -95,12 +131,26 @@ mod tests {
         assert!(
             matches!(camera.clear_color, ClearColorConfig::Custom(color) if color == Color::BLACK)
         );
-        let mut projections = world.query_filtered::<&Projection, With<PrimaryGameCamera>>();
-        let Projection::Orthographic(projection) = projections.single(world).expect("proyección")
-        else {
-            panic!("la cámara del mundo debe ser ortográfica");
+        let camera_near = {
+            let mut projections = world.query_filtered::<&Projection, With<PrimaryGameCamera>>();
+            let Projection::Orthographic(projection) =
+                projections.single(world).expect("proyección")
+            else {
+                panic!("la cámara del mundo debe ser ortográfica");
+            };
+            projection.near
         };
-        assert_eq!(projection.near, super::tile_spawn::WORLD_CAMERA_NEAR);
+        assert_eq!(camera_near, super::tile_spawn::WORLD_CAMERA_NEAR);
+        let mut cameras = world.query_filtered::<&Transform, With<PrimaryGameCamera>>();
+        let camera_z = cameras
+            .single(world)
+            .expect("transformación de cámara")
+            .translation
+            .z;
+        assert!(
+            ground_draw_z(0, 0, 0.0) >= camera_z + camera_near,
+            "el pase de suelo quedó fuera del plano cercano"
+        );
     }
 
     /// Entrada automatizable del candidato para el contrato `world-draw`.

@@ -143,7 +143,6 @@ es evidencia de composición global aplicada.
 - [#329](https://github.com/cavazquez/openttdrs/issues/329) — callbacks runtime y persistencia NewGRF residual.
 - [#330](https://github.com/cavazquez/openttdrs/issues/330) — ampliar oráculos externos de movimiento y composición.
 - [#331](https://github.com/cavazquez/openttdrs/issues/331) — catálogo de idiomas y selección de locale.
-- [#332](https://github.com/cavazquez/openttdrs/issues/332) — zoom Out8x y labels LOD en mapas grandes.
 
 <!-- active-parity-backlog:end -->
 

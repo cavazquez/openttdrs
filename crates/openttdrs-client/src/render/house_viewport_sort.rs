@@ -1,10 +1,11 @@
-//! Puente de composición global para parents de casas vanilla.
+//! Puente incremental de composición global para parents con bounds exactos.
 //!
-//! `DrawTile_Town` emite un parent sortable por edificio. El renderer 2D
-//! conservaba sólo una profundidad por fila diagonal, de modo que edificios
-//! altos de la misma vista nunca llegaban a `ViewportSortParentSprites`.
-//! Esta capa mantiene su caja OpenTTD, su orden de inserción lógico y el
-//! slot de profundidad original para volver a asignarlo según el sorter.
+//! El renderer 2D conservaba sólo una profundidad por fila diagonal, de modo
+//! que edificios y fundaciones con cajas que se solapan nunca llegaban juntos
+//! a `ViewportSortParentSprites`. Esta capa mantiene sus cajas OpenTTD, orden
+//! de inserción lógico y slots Bevy originales para volver a asignarlos según
+//! el sorter. Otras familias se incorporan cuando ya tengan el mismo contrato
+//! de parent y children; no se inventa geometría desde el atlas.
 
 use bevy::prelude::*;
 
@@ -12,13 +13,13 @@ use crate::render::viewport_sort::{
     ParentSprite, ParentSpriteBounds, depths_in_viewport_sort_order,
 };
 
-/// Parent de una casa que participa en el sort global de la vista cargada.
+/// Parent con bounds exactos que participa en el sort de la vista cargada.
 ///
 /// `source_depth` no se recalcula después de ordenar: es el slot Bevy que la
-/// casa tenía al generarse y permite repetir el sort de forma idempotente
+/// parent tenía al generarse y permite repetir el sort de forma idempotente
 /// tras recargar o recortar chunks.
 #[derive(Component, Clone, Copy, Debug)]
-pub(crate) struct HouseViewportParent {
+pub(crate) struct ViewportSortableParent {
     pub(crate) sprite_id: u32,
     pub(crate) bounds: ParentSpriteBounds,
     pub(crate) insertion_key: u64,
@@ -32,18 +33,43 @@ pub(crate) struct HouseViewportParent {
 /// slots, el ascensor tiene que acompañarlo incluso cuando su animación
 /// actualiza la posición vertical en cada frame.
 #[derive(Component, Clone, Copy, Debug)]
-pub(crate) struct HouseViewportChild {
+pub(crate) struct ViewportSortableChild {
     pub(crate) parent: Entity,
     pub(crate) source_depth: f32,
 }
 
-/// Aplica el ordenador de OpenTTD a todos los edificios de casa visibles.
+/// Clave de inserción de `ViewportAddLandscape`: fila `x + y`, luego `x`
+/// descendente y finalmente el ordinal del parent dentro de su tesela.
+///
+/// El ordinal conserva, por ejemplo, `DrawFoundation` antes del edificio de
+/// una casa. No se usa el orden de entidades ECS para desempatar parents.
+pub(crate) const fn viewport_insertion_key(tx: u32, ty: u32, local_ordinal: u8) -> u64 {
+    ((tx as u64 + ty as u64) << 40) | ((u32::MAX - tx) as u64) << 8 | local_ordinal as u64
+}
+
+/// Micro-slot estable dentro de una fila diagonal.
+///
+/// Bevy necesita Z distintos para aplicar un intercambio de parents que
+/// originalmente compartían la misma fila. El rango queda por debajo de una
+/// fila siguiente (`0.01`) y se normaliza por el ancho del mapa para no
+/// agrandarse en mundos grandes.
+pub(crate) fn viewport_source_depth(base_depth: f32, tx: u32, map_width: u32) -> f32 {
+    const ROW_FRACTION: f32 = 0.005;
+    let max_column = map_width.saturating_sub(1);
+    if max_column == 0 {
+        return base_depth;
+    }
+    let rank = max_column.saturating_sub(tx).min(max_column);
+    base_depth + rank as f32 / max_column as f32 * ROW_FRACTION
+}
+
+/// Aplica el ordenador de OpenTTD a todos los parents instrumentados visibles.
 ///
 /// Sólo se ejecuta cuando se agregan, actualizan o eliminan parents; el coste
 /// del algoritmo se paga durante un remap/cambio de chunks, nunca por frame.
-pub(crate) fn sort_house_viewport_parents(
-    mut parents: Query<(Entity, Ref<HouseViewportParent>, &mut Transform)>,
-    mut removed: RemovedComponents<HouseViewportParent>,
+pub(crate) fn sort_viewport_sortable_parents(
+    mut parents: Query<(Entity, Ref<ViewportSortableParent>, &mut Transform)>,
+    mut removed: RemovedComponents<ViewportSortableParent>,
 ) {
     let mut needs_sort = removed.read().next().is_some();
     let mut input = Vec::new();
@@ -81,12 +107,12 @@ pub(crate) fn sort_house_viewport_parents(
 }
 
 /// Actualiza los children tras la animación de elevadores y el sort de padres.
-pub(crate) fn sync_house_viewport_children(
+pub(crate) fn sync_viewport_sortable_children(
     parents: Query<
-        (&HouseViewportParent, &Transform),
-        (With<HouseViewportParent>, Without<HouseViewportChild>),
+        (&ViewportSortableParent, &Transform),
+        (With<ViewportSortableParent>, Without<ViewportSortableChild>),
     >,
-    mut children: Query<(&HouseViewportChild, &mut Transform), With<HouseViewportChild>>,
+    mut children: Query<(&ViewportSortableChild, &mut Transform), With<ViewportSortableChild>>,
 ) {
     for (child, mut transform) in &mut children {
         let Ok((parent, parent_transform)) = parents.get(child.parent) else {
@@ -104,7 +130,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn house_parents_keep_the_viewport_sorter_order() {
+    fn sortable_parents_keep_the_viewport_sorter_order() {
         // Dos edificios que se solapan: el segundo aparece primero después
         // del mismo fast path que usa `ViewportSortParentSprites` en C++.
         let parents = [
@@ -118,12 +144,21 @@ mod tests {
     }
 
     #[test]
+    fn insertion_key_keeps_tile_scan_and_local_draw_order() {
+        // En una misma fila diagonal OpenTTD visita primero la mayor X; en
+        // una tesela, la fundación queda antes del edificio que la cubre.
+        assert!(viewport_insertion_key(8, 2, 0) < viewport_insertion_key(7, 3, 0));
+        assert!(viewport_insertion_key(7, 3, 0) < viewport_insertion_key(7, 3, 2));
+        assert!(viewport_insertion_key(7, 3, 2) < viewport_insertion_key(6, 4, 0));
+    }
+
+    #[test]
     #[allow(clippy::unwrap_used)] // Fixtures creados arriba dentro del mismo World.
     fn runtime_sort_moves_parent_and_screen_child_together() {
         let mut world = World::new();
         let first = world
             .spawn((
-                HouseViewportParent {
+                ViewportSortableParent {
                     sprite_id: 1422,
                     bounds: ParentSpriteBounds::new(16, 16, 0, 30, 30, 60),
                     insertion_key: 0,
@@ -134,7 +169,7 @@ mod tests {
             .id();
         let second = world
             .spawn((
-                HouseViewportParent {
+                ViewportSortableParent {
                     sprite_id: 1423,
                     bounds: ParentSpriteBounds::new(0, 0, 0, 20, 20, 60),
                     insertion_key: 1,
@@ -145,7 +180,7 @@ mod tests {
             .id();
         let child = world
             .spawn((
-                HouseViewportChild {
+                ViewportSortableChild {
                     parent: first,
                     source_depth: 1.000_05,
                 },
@@ -154,7 +189,13 @@ mod tests {
             .id();
 
         let mut schedule = Schedule::default();
-        schedule.add_systems((sort_house_viewport_parents, sync_house_viewport_children).chain());
+        schedule.add_systems(
+            (
+                sort_viewport_sortable_parents,
+                sync_viewport_sortable_children,
+            )
+                .chain(),
+        );
         schedule.run(&mut world);
 
         let first_depth = world

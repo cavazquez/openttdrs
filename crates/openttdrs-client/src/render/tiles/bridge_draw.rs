@@ -1817,6 +1817,8 @@ pub(crate) fn spawn_bridge_deck(
                     ctx,
                     "bridge-foundation",
                     draw,
+                    index as u8,
+                    dims.0,
                     0.36 + index as f32 * 0.0005,
                     foundation_newgrf,
                     action5_sprites.as_deref_mut(),

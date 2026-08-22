@@ -8,7 +8,8 @@ use bevy::prelude::*;
 use crate::bevy_app::UpdateSet;
 use crate::render::{
     MapTileChunk, TileViewportBounds, chunk_tile_bounds, chunks_in_bounds,
-    large_map_viewport_cull_enabled, sort_house_viewport_parents, sync_house_viewport_children,
+    large_map_viewport_cull_enabled, sort_viewport_sortable_parents,
+    sync_viewport_sortable_children,
 };
 use crate::state::ClientScreen;
 
@@ -290,8 +291,8 @@ impl Plugin for WorldRenderPlugin {
                     sync_map_tile_spawn_viewport,
                     super::remap::sync_company_colored_sprites,
                     apply_remap_map_visuals,
-                    sort_house_viewport_parents,
-                    sync_house_viewport_children,
+                    sort_viewport_sortable_parents,
+                    sync_viewport_sortable_children,
                     sync_map_label_lod,
                 )
                     .chain()

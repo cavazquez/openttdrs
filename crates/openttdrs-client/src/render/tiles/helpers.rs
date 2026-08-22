@@ -4,9 +4,11 @@ use crate::iso::{
     GROUND_SPRITE_CENTER_X_OFFSET, HEIGHT_PX, TILE_HALF_H, full_tile_sprite_pos_half,
     ground_tile_pos_half, overlay_pos, slope_sprite_offset, tile_pos,
 };
+use crate::render::viewport_sort::ParentSpriteBounds;
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
 use crate::render::{
-    AtlasSprite, MapTileChunk, MapVisualLayer, TileRenderContext, WaterTile, WorldAssets,
+    AtlasSprite, MapTileChunk, MapVisualLayer, TileRenderContext, ViewportSortableParent,
+    WaterTile, WorldAssets, viewport_insertion_key, viewport_source_depth,
 };
 use crate::sprites::{foundation_gfx_for_tileh, rail_trackbits_for_render};
 use openttdrs_core::{
@@ -500,6 +502,8 @@ pub(crate) fn spawn_foundation_sprite(
     ctx: &TileRenderContext,
     role: &'static str,
     draw: RailFoundationSpriteDraw,
+    draw_ordinal: u8,
+    map_width: u32,
     layer: f32,
     foundation_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
@@ -524,6 +528,12 @@ pub(crate) fn spawn_foundation_sprite(
             Some(trace_bounds),
         );
     };
+    let sortable_parent = |source_depth| ViewportSortableParent {
+        sprite_id: draw.sprite_id,
+        bounds: foundation_parent_bounds(ctx, draw),
+        insertion_key: viewport_insertion_key(ctx.tx, ctx.ty, draw_ordinal),
+        source_depth,
+    };
     if let Some(tileh) = draw
         .sprite_id
         .checked_sub(FOUNDATION_ORIGINAL_SPRITE_BASE)
@@ -539,7 +549,7 @@ pub(crate) fn spawn_foundation_sprite(
         ) else {
             return;
         };
-        let pos = overlay_pos(
+        let mut pos = overlay_pos(
             ctx.iso_pos,
             gfx.xrel,
             gfx.yrel,
@@ -550,11 +560,14 @@ pub(crate) fn spawn_foundation_sprite(
             ctx.tx_i32(),
             ctx.ty_i32(),
         );
+        let source_depth = viewport_source_depth(pos.z, ctx.tx, map_width);
+        pos.z = source_depth;
         commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
             image.sprite(),
             Transform::from_translation(pos),
+            sortable_parent(source_depth),
         ));
         return;
     }
@@ -567,7 +580,7 @@ pub(crate) fn spawn_foundation_sprite(
         record_trace(true);
         return;
     };
-    let pos = overlay_pos(
+    let mut pos = overlay_pos(
         ctx.iso_pos,
         f32::from(decoded.x_offs),
         f32::from(decoded.y_offs),
@@ -591,12 +604,39 @@ pub(crate) fn spawn_foundation_sprite(
     let Some(sprite) = sprite else {
         return;
     };
+    let source_depth = viewport_source_depth(pos.z, ctx.tx, map_width);
+    pos.z = source_depth;
     commands.spawn((
         MapVisualLayer,
         ctx.map_tile_chunk(),
         sprite,
         Transform::from_translation(pos),
+        sortable_parent(source_depth),
     ));
+}
+
+/// Bounds inclusivos del parent de `DrawFoundation` en coordenadas del mundo.
+///
+/// `RailFoundationSpriteDraw` preserva el `SpriteBounds` tal como lo recibe
+/// `AddSortableSpriteToDraw`; aquí sólo se convierte el extent en el máximo
+/// inclusivo que usa el port de `ViewportSortParentSprites`.
+fn foundation_parent_bounds(
+    ctx: &TileRenderContext,
+    draw: RailFoundationSpriteDraw,
+) -> ParentSpriteBounds {
+    let x = ctx.tx_i32() * 16 + i32::from(draw.bounds.ox);
+    let y = ctx.ty_i32() * 16 + i32::from(draw.bounds.oy);
+    let z = i32::from(ctx.info.base_z) * i32::from(TILE_PIXEL_HEIGHT)
+        + i32::from(draw.z_delta) * i32::from(TILE_PIXEL_HEIGHT)
+        + i32::from(draw.bounds.oz);
+    ParentSpriteBounds::new(
+        x,
+        y,
+        z,
+        x + i32::from(draw.bounds.ex) - 1,
+        y + i32::from(draw.bounds.ey) - 1,
+        z + i32::from(draw.bounds.ez) - 1,
+    )
 }
 
 /// Cimiento bajo vía/estación en pendiente. Replica la selección de sprites
@@ -653,6 +693,8 @@ pub(crate) fn spawn_rail_foundation(
             ctx,
             "rail-foundation",
             draw,
+            index as u8,
+            map_dims.0,
             0.36 + index as f32 * 0.0005,
             foundation_newgrf,
             action5_sprites.as_deref_mut(),
@@ -729,6 +771,8 @@ pub(crate) fn spawn_road_foundation(
             ctx,
             "road-foundation",
             draw,
+            index as u8,
+            map_dims.0,
             0.36 + index as f32 * 0.0005,
             foundation_newgrf,
             action5_sprites.as_deref_mut(),
@@ -822,6 +866,8 @@ pub(crate) fn spawn_forced_leveled_foundation(
             ctx,
             role,
             draw,
+            index as u8,
+            map_dims.0,
             0.36 + index as f32 * 0.0005,
             foundation_newgrf,
             action5_sprites.as_deref_mut(),
@@ -933,17 +979,54 @@ pub(crate) fn spawn_coast_debug_label(
 #[cfg(test)]
 mod tests {
     use bevy::prelude::Vec2;
-    use openttdrs_core::{FOUNDATION_INCLINED_X, FOUNDATION_INCLINED_Y, FOUNDATION_LEVELED};
+    use openttdrs_core::{
+        FOUNDATION_INCLINED_X, FOUNDATION_INCLINED_Y, FOUNDATION_LEVELED, TileCoord, TileKind,
+        foundation_draw_plan,
+    };
 
     use super::{
         FLAT_WATER_LAYER_FRAC, SHORE_LAYER_FRAC, bridge_foundation_kind, bridge_foundation_surface,
-        flattening_foundation_surface, foundation_surface_overlay_pos,
+        flattening_foundation_surface, foundation_parent_bounds, foundation_surface_overlay_pos,
         leveled_foundation_overlay_pos, road_foundation_kind, road_foundation_surface,
     };
     use crate::iso::{
         GROUND_SPRITE_CENTER_X_OFFSET, HEIGHT_PX, TILE_HALF_H, full_tile_sprite_pos_half,
         overlay_pos, tile_pos, tile_pos_half,
     };
+    use crate::render::TileRenderContext;
+    use crate::render::grid::TileRenderInfo;
+    use crate::render::viewport_sort::ParentSpriteBounds;
+
+    fn ctx_at(tx: u32, ty: u32, base_z: u8) -> TileRenderContext {
+        TileRenderContext {
+            tx,
+            ty,
+            coord: TileCoord::new(tx as i32, ty as i32),
+            tile: None,
+            object_type: None,
+            kind: TileKind::Grass,
+            info: TileRenderInfo {
+                tileh: 0,
+                base_z,
+                use_shore: false,
+            },
+            iso_pos: Vec2::ZERO,
+        }
+    }
+
+    #[test]
+    fn foundation_parent_bounds_match_upstream_sortable_prism() {
+        // Kale `(7,2)`: OpenTTD emite foundation 991 en
+        // world=(112,32,16), bounds=(0,0,0;16,16,7).
+        let draw = match foundation_draw_plan(0x02, FOUNDATION_LEVELED, 0).sprites[0] {
+            Some(draw) => draw,
+            None => panic!("la fixture debe generar una fundación nivelada"),
+        };
+        assert_eq!(
+            foundation_parent_bounds(&ctx_at(7, 2, 2), draw),
+            ParentSpriteBounds::new(112, 32, 16, 127, 47, 22)
+        );
+    }
 
     #[test]
     fn sortable_foundation_ground_keeps_opengfx_xrel_minus_31() {

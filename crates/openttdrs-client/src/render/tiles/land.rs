@@ -19,9 +19,10 @@ use crate::render::atlas::AtlasSprite;
 use crate::render::viewport_sort::ParentSpriteBounds;
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
 use crate::render::{
-    CompanyColoredSprites, HouseViewportChild, HouseViewportParent, MapSpriteBatches,
-    MapVisualLayer, TileRenderContext, WaterTile, WorldAssets, sprite_from_atlas_or_company_colour,
-    sprite_from_atlas_or_industry_palette,
+    CompanyColoredSprites, MapSpriteBatches, MapVisualLayer, TileRenderContext,
+    ViewportSortableChild, ViewportSortableParent, WaterTile, WorldAssets,
+    sprite_from_atlas_or_company_colour, sprite_from_atlas_or_industry_palette,
+    viewport_insertion_key, viewport_source_depth,
 };
 use crate::sprites::{
     CompanyColour, FENCE_MOD_BY_TILEH_NE, FENCE_MOD_BY_TILEH_NW, FENCE_MOD_BY_TILEH_SE,
@@ -406,28 +407,6 @@ fn house_building_parent_bounds(
     )
 }
 
-/// Clave de inserción de `ViewportAddLandscape`: fila `x + y` y luego `x`
-/// descendente. No se usa el orden de entidades ECS para desempatar parents.
-const fn house_viewport_insertion_key(tx: u32, ty: u32) -> u64 {
-    ((tx + ty) as u64) << 32 | (u32::MAX - tx) as u64
-}
-
-/// Micro-slot estable dentro de la fila diagonal de las casas.
-///
-/// Bevy necesita Z distintos para aplicar un intercambio de parents que
-/// originalmente compartían la misma fila. El rango queda por debajo de una
-/// fila siguiente (`0.01`) y se normaliza por el ancho del mapa para no
-/// agrandarse en mundos grandes.
-fn house_viewport_source_depth(base_depth: f32, tx: u32, map_width: u32) -> f32 {
-    const ROW_FRACTION: f32 = 0.005;
-    let max_column = map_width.saturating_sub(1);
-    if max_column == 0 {
-        return base_depth;
-    }
-    let rank = max_column.saturating_sub(tx).min(max_column);
-    base_depth + rank as f32 / max_column as f32 * ROW_FRACTION
-}
-
 /// Recursos prestados que sólo necesita la ruta de casas.
 ///
 /// Las fundaciones Action5 requieren el mapa y sus vecinos, mientras que los
@@ -634,7 +613,7 @@ pub(crate) fn spawn_house_tile(
         };
         sprite.color = tint;
         let mut pos3 = house_pos(spec.s2_xrel, spec.s2_yrel, spec.s2_w, spec.s2_h, 0.5);
-        let source_depth = house_viewport_source_depth(pos3.z, ctx.tx, resources.map_dims.0);
+        let source_depth = viewport_source_depth(pos3.z, ctx.tx, resources.map_dims.0);
         pos3.z = source_depth;
         let entity = commands
             .spawn((
@@ -642,7 +621,7 @@ pub(crate) fn spawn_house_tile(
                 ctx.map_tile_chunk(),
                 sprite,
                 Transform::from_translation(pos3),
-                HouseViewportParent {
+                ViewportSortableParent {
                     sprite_id: spec.s2,
                     bounds: house_building_parent_bounds(
                         ctx,
@@ -650,7 +629,7 @@ pub(crate) fn spawn_house_tile(
                         base_z,
                         foundation_surface_base_z,
                     ),
-                    insertion_key: house_viewport_insertion_key(ctx.tx, ctx.ty),
+                    insertion_key: viewport_insertion_key(ctx.tx, ctx.ty, 2),
                     source_depth,
                 },
             ))
@@ -697,8 +676,7 @@ pub(crate) fn spawn_house_tile(
         let Some(parent) = building_entity else {
             return;
         };
-        let lift_source_depth =
-            house_viewport_source_depth(lift_base.z, ctx.tx, resources.map_dims.0);
+        let lift_source_depth = viewport_source_depth(lift_base.z, ctx.tx, resources.map_dims.0);
         // Dejar la entidad ya en la posición de la partida evita un frame en
         // el que el ascensor aparece en el piso cero antes del primer update.
         let pos3 = Vec3::new(
@@ -717,7 +695,7 @@ pub(crate) fn spawn_house_tile(
                 base: lift_base,
                 coord: ctx.coord,
             },
-            HouseViewportChild {
+            ViewportSortableChild {
                 parent,
                 source_depth: lift_source_depth,
             },

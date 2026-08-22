@@ -117,12 +117,13 @@ cuantificada.
 
 La integración sigue siendo parcial: las 3.014 fundaciones comunes de Kale
 (incluidas 1.943 de casas) ya exportan sus bounds C++ exactos y el auditor
-vincula 56.088 de 56.183 parents candidatos con el vector final, pero el
-runtime aún no aplica ese orden **global** frente a los restantes producers.
-Faltan children, clipping, anclajes finales y framebuffer. El siguiente
-trabajo debe extenderlo a fundaciones, puentes, children de techo y layouts
-NewGRF de estación, aeropuertos y objetos, no rebajar el baseline ni
-extrapolar una región a paridad general.
+vincula 56.088 de 56.183 parents candidatos con el vector final. El runtime
+aplica ese sorter compartido a los sprites directos de fundación y a los
+buildings vanilla de casas, pero no al conjunto **global** de producers.
+Faltan children fuera del ascensor, clipping, anclajes finales y framebuffer.
+El siguiente trabajo debe extenderlo a puentes y las familias NewGRF de
+estación, aeropuertos y objetos, no rebajar el baseline ni extrapolar una
+región a paridad general.
 
 El perfil `CLEAN` normaliza la UI, las preferencias persistidas y los overrides
 de transparencia conocidos, pero no convierte al renderer actual en un gate

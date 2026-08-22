@@ -4,10 +4,12 @@
 
 Desde el port de overview el cliente ya no recorta los niveles fijos por el presupuesto
 de culling: `Out4x` usa bloques agregados de 4×4 y `Out8x` bloques de 8×8.
-Esto mantiene el mapa cubierto sin instanciar cada sprite de detalle. En esos
-niveles los vehículos y las capas de infraestructura detalladas se omiten a
-propósito; el color del bloque conserva la lectura macro de terreno, agua y
-redes.
+Esto mantiene el mapa cubierto sin instanciar cada sprite de detalle. Cada
+bloque se reduce ahora por mayoría de teselas (agua tiene prioridad en empate,
+bosque exige mayoría estricta) y altura media, en vez de copiar la esquina
+superior izquierda. En esos niveles los vehículos y las capas de
+infraestructura detalladas se omiten a propósito; el color del bloque conserva
+la lectura macro de terreno y agua sin afirmar paridad raster completa.
 
 Las etiquetas compensan la escala ortográfica para seguir siendo legibles y se
 componen en el mismo orden de OpenTTD: pueblos → carteles → estaciones. No se

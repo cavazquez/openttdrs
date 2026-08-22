@@ -387,13 +387,69 @@ pub(crate) fn spawn_map_tiles_in_bounds(
     }
 }
 
+/// Resumen estable de una celda de overview.
+///
+/// OpenTTD todavía compone el terreno de todas las teselas en `Out4x`/`Out8x`;
+/// nuestro camino agregado usa una sola entidad por bloque para no disparar el
+/// número de sprites. La antigua implementación tomaba la esquina superior
+/// izquierda, por lo que una costa o un bosque que ocupase el resto del bloque
+/// desaparecía. La reducción por mayoría conserva la cobertura dominante y la
+/// altura media sin depender del orden de iteración de ECS.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct OverviewBlockSummary {
+    kind: TileKind,
+    average_height: u8,
+    tile_count: u32,
+}
+
+fn overview_block_summary(
+    map: &Map,
+    tx: u32,
+    ty: u32,
+    block_w: u32,
+    block_h: u32,
+) -> OverviewBlockSummary {
+    let mut total = 0u32;
+    let mut water = 0u32;
+    let mut forest = 0u32;
+    let mut height_sum = 0u32;
+    for y in ty..ty.saturating_add(block_h) {
+        for x in tx..tx.saturating_add(block_w) {
+            let Some(tile) = map.get(TileCoord::new(x as i32, y as i32)) else {
+                continue;
+            };
+            total = total.saturating_add(1);
+            height_sum = height_sum.saturating_add(u32::from(tile.height));
+            match tile.kind {
+                TileKind::Water | TileKind::ShipDepot => water = water.saturating_add(1),
+                TileKind::Forest => forest = forest.saturating_add(1),
+                _ => {}
+            }
+        }
+    }
+    let tile_count = total.max(1);
+    // Water wins ties, matching the way OpenTTD keeps a coast readable when
+    // exactly half of a macro block is flooded. Forest wins only when it is a
+    // strict majority; otherwise the block is the base grass terrain.
+    let kind = if water.saturating_mul(2) >= tile_count {
+        TileKind::Water
+    } else if forest.saturating_mul(2) > tile_count {
+        TileKind::Forest
+    } else {
+        TileKind::Grass
+    };
+    OverviewBlockSummary {
+        kind,
+        average_height: u8::try_from((height_sum + tile_count / 2) / tile_count).unwrap_or(u8::MAX),
+        tile_count: total,
+    }
+}
+
 /// Render agregado para `Out4x`/`Out8x`.
 ///
-/// Un bloque cuadrado de teselas se representa con un único rombo escalado y
-/// el terreno de su tesela superior izquierda. Así el viewport puede abarcar
-/// cientos de teselas sin crear una entidad por sprite de detalle. Las capas
-/// de infraestructura y edificios se reservan para el zoom normal, mientras
-/// que el color de la muestra conserva la lectura macro de tierra/agua.
+/// Un bloque cuadrado de teselas se representa con un único rombo escalado.
+/// Las capas de infraestructura y edificios se reservan para el zoom normal;
+/// el resumen conserva la lectura macro de tierra/agua y relieve.
 fn spawn_overview_tiles_in_bounds(
     commands: &mut Commands,
     assets: &WorldAssets,
@@ -401,9 +457,6 @@ fn spawn_overview_tiles_in_bounds(
     bounds: TileViewportBounds,
     stride: u32,
 ) {
-    let (mw, mh) = sim.state.map.dimensions();
-    let grid_bounds = bounds.expand(1, mw, mh);
-    let render_grid = RenderGrid::from_bounds(&sim.state.map, mw, mh, grid_bounds);
     let stride = stride.max(2);
 
     for ty in (bounds.ty0..bounds.ty1).step_by(stride as usize) {
@@ -413,9 +466,12 @@ fn spawn_overview_tiles_in_bounds(
             if block_w == 0 || block_h == 0 {
                 continue;
             }
-            let ctx = TileRenderContext::new(&sim.state.map, &render_grid, tx, ty);
-            let slope = usize::from(slope_sprite_offset(ctx.info.tileh)).min(18);
-            let image = match ctx.kind {
+            let summary = overview_block_summary(&sim.state.map, tx, ty, block_w, block_h);
+            // A macro block has no single OpenTTD slope. Use the flat sprite;
+            // the average elevation below still keeps neighbouring blocks at
+            // the correct vertical level.
+            let slope = usize::from(slope_sprite_offset(0)).min(18);
+            let image = match summary.kind {
                 TileKind::Water | TileKind::ShipDepot => assets.water.clone(),
                 TileKind::Forest => assets
                     .rough_slopes
@@ -424,7 +480,7 @@ fn spawn_overview_tiles_in_bounds(
                     .unwrap_or_else(|| assets.grass_density[0][slope].clone()),
                 _ => assets.grass_density[0][slope].clone(),
             };
-            let color = match ctx.kind {
+            let color = match summary.kind {
                 TileKind::Water | TileKind::ShipDepot => Color::WHITE,
                 TileKind::Road
                 | TileKind::RoadDepot
@@ -443,7 +499,7 @@ fn spawn_overview_tiles_in_bounds(
             let footprint = (block_w + block_h) as f32;
             let top = iso(tx as i32, ty as i32);
             let half_h = TILE_HALF_H * footprint * 0.5;
-            let elev = f32::from(ctx.info.base_z) * HEIGHT_PX;
+            let elev = f32::from(summary.average_height) * HEIGHT_PX;
             let mut sprite = image.sprite_colored(color);
             sprite.custom_size = Some(Vec2::new(32.0 * footprint, 15.5 * footprint));
             let pos = Vec3::new(
@@ -452,7 +508,7 @@ fn spawn_overview_tiles_in_bounds(
                 ground_draw_z(tx as i32, ty as i32, 0.0),
             );
             let chunk = crate::render::MapTileChunk::from_tile(tx, ty);
-            if matches!(ctx.kind, TileKind::Water | TileKind::ShipDepot) {
+            if matches!(summary.kind, TileKind::Water | TileKind::ShipDepot) {
                 commands.spawn((
                     crate::render::MapVisualLayer,
                     chunk,
@@ -790,4 +846,59 @@ pub(crate) fn spawn_intro_map_render(
     commands.insert_resource(object_sprites);
     commands.insert_resource(atlas);
     commands.insert_resource(LoadedMapTileChunks::from_spawn_bounds(spawn_bounds, mw, mh));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{OverviewBlockSummary, overview_block_summary};
+    use openttdrs_core::prelude::{Map, TileCoord, TileKind};
+
+    #[test]
+    fn overview_uses_water_on_a_tie_and_rounds_height() {
+        let mut map = Map::new_flat(4, 4, 0);
+        for y in 0..2 {
+            for x in 0..4 {
+                map.set_kind(TileCoord::new(x, y), TileKind::Water)
+                    .expect("water in bounds");
+                map.set_height(TileCoord::new(x, y), 3)
+                    .expect("height in bounds");
+            }
+        }
+        for y in 2..4 {
+            for x in 0..4 {
+                map.set_height(TileCoord::new(x, y), 2)
+                    .expect("height in bounds");
+            }
+        }
+
+        assert_eq!(
+            overview_block_summary(&map, 0, 0, 4, 4),
+            OverviewBlockSummary {
+                kind: TileKind::Water,
+                average_height: 3,
+                tile_count: 16,
+            }
+        );
+    }
+
+    #[test]
+    fn overview_requires_a_strict_forest_majority() {
+        let mut map = Map::new_flat(4, 4, 0);
+        for y in 0..3 {
+            for x in 0..4 {
+                map.set_kind(TileCoord::new(x, y), TileKind::Forest)
+                    .expect("forest in bounds");
+            }
+        }
+        assert_eq!(
+            overview_block_summary(&map, 0, 0, 4, 4).kind,
+            TileKind::Forest
+        );
+        map.set_kind(TileCoord::new(0, 0), TileKind::Grass)
+            .expect("grass in bounds");
+        assert_eq!(
+            overview_block_summary(&map, 0, 0, 4, 4).kind,
+            TileKind::Forest
+        );
+    }
 }

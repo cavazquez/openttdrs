@@ -5,6 +5,8 @@ OpenTTD: `_town_draw_tile_data[house_id * 16 + TileHash2Bit * 4 + stage]`.
 110 casas originales (HouseID 0..109) → 1760 filas.
 
 Offsets w/h/xrel/yrel: NFO + PNG `house_s{id}.png` por capa s1/s2.
+Bounds `sort_*`: caja de mundo `dx/dy/sx/sy/sz` de cada `M(...)` para el
+`AddSortableSpriteToDraw` del edificio.
 
 Uso:
   python3 scripts/gen_house_draw_data.py
@@ -98,14 +100,17 @@ def spec_line(
     s2: int,
     s2_palette: int,
     s2_dims: tuple[float, float, float, float],
+    sort_bounds: tuple[int, int, int, int, int, int],
     draw_proc: int,
 ) -> str:
     sw, sh, sx, sy = s1_dims
     bw, bh, bx, by = s2_dims
+    sox, soy, soz, sex, sey, sez = sort_bounds
     return (
         f"    HouseDrawSpec {{ s1: {s1}, s1_palette: {s1_palette}, s1_w: {sw:.1f}, s1_h: {sh:.1f}, "
         f"s1_xrel: {sx:.1f}, s1_yrel: {sy:.1f}, s2: {s2}, s2_palette: {s2_palette}, s2_w: {bw:.1f}, "
         f"s2_h: {bh:.1f}, s2_xrel: {bx:.1f}, s2_yrel: {by:.1f}, "
+        f"sort_ox: {sox}, sort_oy: {soy}, sort_oz: {soz}, sort_ex: {sex}, sort_ey: {sey}, sort_ez: {sez}, "
         f"draw_proc: {draw_proc} }},"
     )
 
@@ -127,7 +132,7 @@ def build_content(repo: Path, upstream: Path) -> tuple[str, int, int, int, list[
     nfo_cal = macro_cal = fallback_cal = 0
     sprite_ids: set[int] = set()
 
-    for s1_raw, s1_palette_raw, s2_raw, s2_palette_raw, dx, dy, sx, sy, _sz, draw_proc in rows_macro[:ROWS]:
+    for s1_raw, s1_palette_raw, s2_raw, s2_palette_raw, dx, dy, sx, sy, sz, draw_proc in rows_macro[:ROWS]:
         # `DrawTile_Town` entrega siempre `ground.sprite` a
         # `DrawGroundSprite`. En particular, `SPR_FLAT_BARE_LAND` (3924) no
         # significa «usar césped»: es un sprite de suelo real y tiene que
@@ -191,7 +196,16 @@ def build_content(repo: Path, upstream: Path) -> tuple[str, int, int, int, list[
                 fallback_cal += 1
 
         body_rows.append(
-            spec_line(s1, s1_palette, s1_dims, s2, s2_palette, s2_dims, draw_proc)
+            spec_line(
+                s1,
+                s1_palette,
+                s1_dims,
+                s2,
+                s2_palette,
+                s2_dims,
+                (dx, dy, 0, sx, sy, sz),
+                draw_proc,
+            )
         )
 
     lines = [

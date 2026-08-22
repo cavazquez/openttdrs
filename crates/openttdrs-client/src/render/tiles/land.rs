@@ -16,19 +16,22 @@ use crate::iso::{
     full_tile_sprite_pos, overlay_pos, remap_tile_offset, slope_sprite_offset, wang_hash,
 };
 use crate::render::atlas::AtlasSprite;
+use crate::render::viewport_sort::ParentSpriteBounds;
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
 use crate::render::{
-    CompanyColoredSprites, MapSpriteBatches, MapVisualLayer, TileRenderContext, WaterTile,
-    WorldAssets, sprite_from_atlas_or_company_colour, sprite_from_atlas_or_industry_palette,
+    CompanyColoredSprites, HouseViewportChild, HouseViewportParent, MapSpriteBatches,
+    MapVisualLayer, TileRenderContext, WaterTile, WorldAssets, sprite_from_atlas_or_company_colour,
+    sprite_from_atlas_or_industry_palette,
 };
 use crate::sprites::{
     CompanyColour, FENCE_MOD_BY_TILEH_NE, FENCE_MOD_BY_TILEH_NW, FENCE_MOD_BY_TILEH_SE,
-    FENCE_MOD_BY_TILEH_SW, FENCE_SPRITE_META, FIELD_STATES, HOUSE_DRAW_DATA, TILEH_TO_SHORE_SPRITE,
-    TREE_LAYOUT_SPRITE, TREE_LAYOUT_XY, TREE_SPRITE_META, house_building_stage_from_tile,
-    industry_anim_layer_used_in_any_frame, industry_building_needs_client_anim,
-    industry_effective_m4_for_draw, industry_gfx_entry_for_tile,
-    industry_gfx_uses_fizzy_drink_anim, industry_gfx_uses_random_colour,
-    industry_gfx_uses_refinery_fire_anim, industry_palette_colour_for_instance,
+    FENCE_MOD_BY_TILEH_SW, FENCE_SPRITE_META, FIELD_STATES, HOUSE_DRAW_DATA, HouseDrawSpec,
+    TILEH_TO_SHORE_SPRITE, TREE_LAYOUT_SPRITE, TREE_LAYOUT_XY, TREE_SPRITE_META,
+    house_building_stage_from_tile, industry_anim_layer_used_in_any_frame,
+    industry_building_needs_client_anim, industry_effective_m4_for_draw,
+    industry_gfx_entry_for_tile, industry_gfx_uses_fizzy_drink_anim,
+    industry_gfx_uses_random_colour, industry_gfx_uses_refinery_fire_anim,
+    industry_palette_colour_for_instance,
 };
 
 /// `GetTreeGround`: bits 6–8 de MAP2 (MAP2 es una palabra, no sólo `m2`).
@@ -356,6 +359,75 @@ const fn house_lift_screen_offset(position: u8) -> (i32, i32, i32) {
     (14, 60 - clamped as i32, 0)
 }
 
+/// Geometría que `DrawTile_Town` entrega a `AddSortableSpriteToDraw`.
+///
+/// El `M(...)` de `town_land.h` contiene el prisma del edificio, no el de la
+/// capa de suelo. `DrawFoundation(Leveled)` puede modificar `ti->z` antes de
+/// esa llamada, por lo que el origen Z debe tomar la superficie resultante y
+/// no la altura cruda de la tesela.
+fn house_building_trace_geometry(
+    spec: &HouseDrawSpec,
+    base_z: u8,
+    foundation_surface_base_z: u8,
+) -> (i32, TraceSpriteBounds) {
+    let world_z_delta = (i32::from(foundation_surface_base_z) - i32::from(base_z)) * 8;
+    (
+        world_z_delta,
+        TraceSpriteBounds::new(
+            spec.sort_ox,
+            spec.sort_oy,
+            spec.sort_oz,
+            spec.sort_ex,
+            spec.sort_ey,
+            spec.sort_ez,
+        ),
+    )
+}
+
+/// Bounds inclusivos del parent que OpenTTD construye a partir de `M(...)`.
+fn house_building_parent_bounds(
+    ctx: &TileRenderContext,
+    spec: &HouseDrawSpec,
+    base_z: u8,
+    foundation_surface_base_z: u8,
+) -> ParentSpriteBounds {
+    let (world_z_delta, bounds) =
+        house_building_trace_geometry(spec, base_z, foundation_surface_base_z);
+    let x = ctx.tx_i32() * 16 + bounds.ox;
+    let y = ctx.ty_i32() * 16 + bounds.oy;
+    let z = i32::from(base_z) * 8 + world_z_delta + bounds.oz;
+    ParentSpriteBounds::new(
+        x,
+        y,
+        z,
+        x + bounds.ex - 1,
+        y + bounds.ey - 1,
+        z + bounds.ez - 1,
+    )
+}
+
+/// Clave de inserción de `ViewportAddLandscape`: fila `x + y` y luego `x`
+/// descendente. No se usa el orden de entidades ECS para desempatar parents.
+const fn house_viewport_insertion_key(tx: u32, ty: u32) -> u64 {
+    ((tx + ty) as u64) << 32 | (u32::MAX - tx) as u64
+}
+
+/// Micro-slot estable dentro de la fila diagonal de las casas.
+///
+/// Bevy necesita Z distintos para aplicar un intercambio de parents que
+/// originalmente compartían la misma fila. El rango queda por debajo de una
+/// fila siguiente (`0.01`) y se normaliza por el ancho del mapa para no
+/// agrandarse en mundos grandes.
+fn house_viewport_source_depth(base_depth: f32, tx: u32, map_width: u32) -> f32 {
+    const ROW_FRACTION: f32 = 0.005;
+    let max_column = map_width.saturating_sub(1);
+    if max_column == 0 {
+        return base_depth;
+    }
+    let rank = max_column.saturating_sub(tx).min(max_column);
+    base_depth + rank as f32 / max_column as f32 * ROW_FRACTION
+}
+
 /// Recursos prestados que sólo necesita la ruta de casas.
 ///
 /// Las fundaciones Action5 requieren el mapa y sus vecinos, mientras que los
@@ -516,14 +588,20 @@ pub(crate) fn spawn_house_tile(
         return;
     }
     let tint = sprite_color(TransparencyOption::Houses);
+    let mut building_entity = None;
     if spec.s2 != 0 {
+        let (building_world_z_delta, building_bounds) =
+            house_building_trace_geometry(spec, base_z, foundation_surface_base_z);
         let Some(img) = assets.houses.get(&spec.s2) else {
-            WorldDrawTrace::record_sprite_with_palette(
+            WorldDrawTrace::record_sprite_with_palette_and_geometry(
                 "house-building",
                 "sortable",
                 spec.s2,
                 spec.s2_palette,
                 true,
+                (0, 0, 0),
+                building_world_z_delta,
+                Some(building_bounds),
             );
             return;
         };
@@ -531,12 +609,15 @@ pub(crate) fn spawn_house_tile(
             .then(|| assets.house_palettes.handle(spec.s2, spec.s2_palette))
             .flatten();
         let fallback = spec.s2_palette != 0 && palette_image.is_none();
-        WorldDrawTrace::record_sprite_with_palette(
+        WorldDrawTrace::record_sprite_with_palette_and_geometry(
             "house-building",
             "sortable",
             spec.s2,
             spec.s2_palette,
             fallback,
+            (0, 0, 0),
+            building_world_z_delta,
+            Some(building_bounds),
         );
         let anim = spec.s2_palette == 0
             && (1483..=1486).contains(&spec.s2)
@@ -552,16 +633,34 @@ pub(crate) fn spawn_house_tile(
             img.sprite()
         };
         sprite.color = tint;
-        let pos3 = house_pos(spec.s2_xrel, spec.s2_yrel, spec.s2_w, spec.s2_h, 0.5);
-        let mut entity = commands.spawn((
-            MapVisualLayer,
-            ctx.map_tile_chunk(),
-            sprite,
-            Transform::from_translation(pos3),
-        ));
+        let mut pos3 = house_pos(spec.s2_xrel, spec.s2_yrel, spec.s2_w, spec.s2_h, 0.5);
+        let source_depth = house_viewport_source_depth(pos3.z, ctx.tx, resources.map_dims.0);
+        pos3.z = source_depth;
+        let entity = commands
+            .spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                sprite,
+                Transform::from_translation(pos3),
+                HouseViewportParent {
+                    sprite_id: spec.s2,
+                    bounds: house_building_parent_bounds(
+                        ctx,
+                        spec,
+                        base_z,
+                        foundation_surface_base_z,
+                    ),
+                    insertion_key: house_viewport_insertion_key(ctx.tx, ctx.ty),
+                    source_depth,
+                },
+            ))
+            .id();
         if anim {
-            entity.insert(crate::render::LighthouseAnim { sprite_id: spec.s2 });
+            commands
+                .entity(entity)
+                .insert(crate::render::LighthouseAnim { sprite_id: spec.s2 });
         }
+        building_entity = Some(entity);
     }
     // Ascensor Large Office: solo stage final (`draw_proc == 1` en `town_land.h`).
     // Stage 2 reusa el mismo s2 (1442/4569) con `draw_proc == 0` (obra sin lift).
@@ -595,12 +694,17 @@ pub(crate) fn spawn_house_tile(
             lift_h,
             0.55,
         );
+        let Some(parent) = building_entity else {
+            return;
+        };
+        let lift_source_depth =
+            house_viewport_source_depth(lift_base.z, ctx.tx, resources.map_dims.0);
         // Dejar la entidad ya en la posición de la partida evita un frame en
         // el que el ascensor aparece en el piso cero antes del primer update.
         let pos3 = Vec3::new(
             lift_base.x,
             lift_base.y + f32::from(lift_position),
-            lift_base.z,
+            lift_source_depth,
         );
         let mut sprite = assets.house_lift.sprite();
         sprite.color = tint;
@@ -612,6 +716,10 @@ pub(crate) fn spawn_house_tile(
             crate::render::HouseLiftAnim {
                 base: lift_base,
                 coord: ctx.coord,
+            },
+            HouseViewportChild {
+                parent,
+                source_depth: lift_source_depth,
             },
         ));
     }
@@ -1447,6 +1555,7 @@ pub(crate) fn push_forest_tree(
 
 #[cfg(test)]
 mod tests {
+    use crate::sprites::HOUSE_DRAW_DATA;
     use openttdrs_core::{
         CLEAR_GROUND_DESERT, CLEAR_GROUND_GRASS, CLEAR_GROUND_ROCKY, CLEAR_GROUND_ROUGH,
         CLEAR_GROUND_SNOW, Map, TileCoord,
@@ -1454,10 +1563,10 @@ mod tests {
 
     use super::{
         TreeGround, clear_ground_sprite_id, field_fence_draws, field_ground_sprite_id,
-        field_slope_max_pixel_z, field_slope_pixel_z_in_corner, house_lift_screen_offset,
-        openttd_tile_hash, rough_flat_variant, sort_tree_layers_like_openttd,
-        tree_density_from_tile, tree_ground_from_tile, tree_ground_sprite_id, tree_shore_sprite_id,
-        void_ground_sprite_and_palette,
+        field_slope_max_pixel_z, field_slope_pixel_z_in_corner, house_building_trace_geometry,
+        house_lift_screen_offset, openttd_tile_hash, rough_flat_variant,
+        sort_tree_layers_like_openttd, tree_density_from_tile, tree_ground_from_tile,
+        tree_ground_sprite_id, tree_shore_sprite_id, void_ground_sprite_and_palette,
     };
 
     #[test]
@@ -1628,6 +1737,42 @@ mod tests {
         assert_eq!(house_lift_screen_offset(0), (14, 60, 0));
         assert_eq!(house_lift_screen_offset(12), (14, 48, 0));
         assert_eq!(house_lift_screen_offset(63), (14, 24, 0));
+    }
+
+    #[test]
+    fn house_building_trace_keeps_macro_bounds_and_effective_foundation_z() {
+        // Primera entrada de `town_land.h`: M(..., 0, 0, 14, 14, 8, 0).
+        let (flat_delta, flat_bounds) = house_building_trace_geometry(&HOUSE_DRAW_DATA[0], 2, 2);
+        assert_eq!(flat_delta, 0);
+        assert_eq!(
+            (
+                flat_bounds.ox,
+                flat_bounds.oy,
+                flat_bounds.oz,
+                flat_bounds.ex,
+                flat_bounds.ey,
+                flat_bounds.ez,
+            ),
+            (0, 0, 0, 14, 14, 8)
+        );
+
+        // En una pendiente `DrawFoundation(Leveled)` cambia `ti->z` antes
+        // del edificio. La segunda entrada tiene una caja alta (60 px), y
+        // una superficie +1 debe reflejarse como +8 en mundo OpenTTD.
+        let (sloped_delta, sloped_bounds) =
+            house_building_trace_geometry(&HOUSE_DRAW_DATA[1], 2, 3);
+        assert_eq!(sloped_delta, 8);
+        assert_eq!(
+            (
+                sloped_bounds.ox,
+                sloped_bounds.oy,
+                sloped_bounds.oz,
+                sloped_bounds.ex,
+                sloped_bounds.ey,
+                sloped_bounds.ez,
+            ),
+            (0, 0, 0, 14, 14, 60)
+        );
     }
 
     #[test]

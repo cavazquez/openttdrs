@@ -97,9 +97,13 @@ encuentra esa primera inversión, aun cuando `world-draw` por tesela coincide.
 Eso prueba la brecha de composición de forma acotada; no declara paridad
 raster. El puente runtime ya aplica el vector final a las capas BUILD de
 paradas viales y depósitos viales, al bundle local de depósito ferroviario
-eléctrico (cable de entrada + fachadas BUILD), a los faroles viales y a la
+eléctrico (cable de entrada + fachadas BUILD), a los faroles viales, a la
 subsecuencia vanilla de estación ferroviaria eléctrica (postes, cable y capas
-BUILD). En Kale `(225,2)` las cajas de
+BUILD) y a los parents de edificios de casas vanilla visibles. En Kale las
+8.497 casas tienen ahora caja y altura efectiva de `DrawFoundation` contenidas
+por el oráculo, y el runtime las ordena con la clave diagonal estable de
+`ViewportAddLandscape`; los 188 ascensores conservan el delta de su parent.
+En `(225,2)` las cajas de
 `5982` y `5983` coinciden con el oráculo y Bevy recibe sus slots de Z en el
 orden final `5983 → 5982`; en `(195,17)`, OpenTTD transforma la inserción
 `5659 → 1063 → 1064` en `1063 → 5659 → 1064`, y el runtime conserva ese mismo
@@ -112,10 +116,11 @@ medición A/B aislada de estos cambios, así que no se atribuye una reducción
 cuantificada.
 
 La integración sigue siendo parcial: faltan aplicar ese orden **global** a
+los cimientos (incluidos 1.943 de casas de Kale que aún no exportan bounds),
 los restantes producers, children, clipping, anclajes finales y framebuffer.
-El siguiente trabajo debe extenderlo a puentes, children de techo y layouts
-NewGRF de estación, aeropuertos, objetos y edificios, no rebajar el baseline
-ni extrapolar una región a paridad general.
+El siguiente trabajo debe extenderlo a fundaciones, puentes, children de techo
+y layouts NewGRF de estación, aeropuertos y objetos, no rebajar el baseline ni
+extrapolar una región a paridad general.
 
 El perfil `CLEAN` normaliza la UI, las preferencias persistidas y los overrides
 de transparencia conocidos, pero no convierte al renderer actual en un gate

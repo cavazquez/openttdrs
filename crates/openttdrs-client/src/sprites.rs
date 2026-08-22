@@ -200,6 +200,9 @@ pub use transparency::{
 /// Los PNG de casas comparten rampas de color, por lo que descartar estas
 /// paletas hace que bloques completos aparezcan con el tono equivocado.
 /// `s2` es el sprite del edificio principal (0 = sin overlay).
+/// `sort_*` conserva la caja `dx/dy/sx/sy/sz` de `M(...)` que OpenTTD pasa
+/// a `AddSortableSpriteToDraw` para ese edificio. La capa s1 es ground y no
+/// usa esta caja.
 /// `draw_proc` es el último campo `p` de `M(...)` en `town_land.h` (`1` = ascensor).
 pub struct HouseDrawSpec {
     pub s1: u32,
@@ -214,6 +217,12 @@ pub struct HouseDrawSpec {
     pub s2_h: f32,
     pub s2_xrel: f32,
     pub s2_yrel: f32,
+    pub sort_ox: i32,
+    pub sort_oy: i32,
+    pub sort_oz: i32,
+    pub sort_ex: i32,
+    pub sort_ey: i32,
+    pub sort_ez: i32,
     pub draw_proc: u8,
 }
 

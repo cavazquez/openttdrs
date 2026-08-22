@@ -15,6 +15,7 @@ mod effect_vehicle;
 mod fizzy_drink;
 mod grid;
 mod house_lift_anim;
+mod house_viewport_sort;
 mod industry_anim;
 mod industry_draw_proc;
 pub(crate) mod industry_newgrf;
@@ -67,6 +68,10 @@ pub(crate) use grid::{RenderGrid, TileRenderContext};
 pub(crate) use house_lift_anim::{
     HOUSE_LIFT_SCREEN_X, HOUSE_LIFT_SCREEN_Y, HouseLiftAnim, HouseLiftAnimPlugin,
     house_sprite_has_lift,
+};
+pub(crate) use house_viewport_sort::{
+    HouseViewportChild, HouseViewportParent, sort_house_viewport_parents,
+    sync_house_viewport_children,
 };
 pub(crate) use industry_anim::{
     IndustryBuildingAnim, IndustryBuildingAnimPlugin, IndustryOverlayContext, industry_anim_phase,

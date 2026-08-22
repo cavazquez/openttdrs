@@ -95,11 +95,18 @@ el sorter invierte cada pareja de capas de parada vial (`5982 → 5983` pasa a
 encuentra esa primera inversión, aun cuando `world-draw` por tesela coincide.
 
 Eso prueba la brecha de composición de forma acotada; no declara paridad
-raster. El diagnóstico todavía precede a la profundidad real de las entidades
-Bevy: faltan aplicar ese orden global, children, clipping, anclajes finales y
-el framebuffer. El siguiente trabajo debe integrar ese resultado para las
-familias visibles (puentes/catenaria, estaciones, aeropuertos, objetos y
-edificios), no rebajar el baseline ni extrapolar una región a paridad general.
+raster. El primer puente runtime ya aplica el vector final a las capas BUILD
+de paradas viales: en Kale `(225,2)` las cajas de `5982` y `5983` coinciden
+con el oráculo y Bevy recibe sus slots de Z en el orden final `5983 → 5982`.
+La captura limpia de ese foco queda alineada en `[0,0]` con 12.956 de 921.600
+píxeles distintos (1,40581597 %); no existe una medición A/B aislada de ese
+cambio, así que no se atribuye una reducción cuantificada.
+
+La integración sigue siendo parcial: faltan aplicar ese orden **global** a
+los restantes producers, children, clipping, anclajes finales y framebuffer.
+El siguiente trabajo debe extenderlo a puentes/catenaria, estaciones,
+aeropuertos, objetos y edificios, no rebajar el baseline ni extrapolar una
+región a paridad general.
 
 El perfil `CLEAN` normaliza la UI, las preferencias persistidas y los overrides
 de transparencia conocidos, pero no convierte al renderer actual en un gate
@@ -107,11 +114,11 @@ pixel-perfect: mientras el orden global de composición siga divergente, la
 captura debe servir para localizar y medir, no para certificar paridad.
 
 Ya existe un port puro y testeado de `ViewportSortParentSprites` en
-`render/viewport_sort.rs`, incluidos parents vacíos y children. Todavía no se
-conecta al renderer: faltan bounds/identidad de parent completos en varias
-familias de spawn. Su mera presencia no es evidencia de composición aplicada;
-la siguiente entrega debe alimentar ese modelo y asignar el orden resultante a
-las entidades Bevy.
+`render/viewport_sort.rs`, incluidos parents vacíos y children. Las paradas
+viales vanilla ya alimentan sus bounds y reasignan sus slots locales de Bevy
+con el orden resultante. Las demás familias todavía carecen de bounds,
+identidad de parent o vínculo de children completos; esa cobertura parcial no
+es evidencia de composición global aplicada.
 
 ## Backlog sucesor activo
 

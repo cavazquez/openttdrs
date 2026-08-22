@@ -236,11 +236,48 @@ pub(crate) fn viewport_sort_parent_sprites(parents: &[ParentSprite]) -> Vec<usiz
     output
 }
 
+/// Reasigna los slots de profundidad ya reservados por el renderer al orden
+/// final de [`viewport_sort_parent_sprites`].
+///
+/// Bevy compone los `Sprite` 2D de menor a mayor `Transform.z`, mientras que
+/// OpenTTD devuelve los parents en el orden en que los pinta. Conservamos los
+/// mismos valores de profundidad (y por tanto su banda local respecto de
+/// ground/otros productores), pero los entregamos a los parents en el orden
+/// final del sorter. Esto es el puente incremental entre el port puro y los
+/// spawners: cada familia que ya conoce sus bounds puede aplicarlo sin volver
+/// a inventar un `layer` por sprite.
+#[must_use]
+pub(crate) fn depths_in_viewport_sort_order(
+    parents: &[ParentSprite],
+    source_depths: &[f32],
+) -> Vec<f32> {
+    assert_eq!(
+        parents.len(),
+        source_depths.len(),
+        "cada parent sortable necesita exactamente un slot de profundidad"
+    );
+    if parents.len() < 2 {
+        return source_depths.to_vec();
+    }
+
+    let mut slots = source_depths.to_vec();
+    slots.sort_by(f32::total_cmp);
+
+    let mut depths = source_depths.to_vec();
+    for (rank, parent_index) in viewport_sort_parent_sprites(parents)
+        .into_iter()
+        .enumerate()
+    {
+        depths[parent_index] = slots[rank];
+    }
+    depths
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
         ChildScreenSprite, ParentSprite, ParentSpriteBounds, ParentSpriteKind,
-        viewport_sort_parent_sprites,
+        depths_in_viewport_sort_order, viewport_sort_parent_sprites,
     };
 
     fn bounds(
@@ -346,5 +383,21 @@ mod tests {
             sorted_ids(&parents),
             vec![5983, 5982, 5983 + 10_000, 5982 + 10_000]
         );
+    }
+
+    #[test]
+    fn maps_bevy_depth_slots_to_kale_post_sort_order() {
+        let parents = [
+            ParentSprite::sprite(5982, 5982, bounds(3613, 32, 8, 3615, 47, 23)),
+            ParentSprite::sprite(5983, 5983, bounds(3600, 32, 8, 3602, 47, 23)),
+        ];
+
+        // Los slots del spawner preservan la banda de la tesela. El segundo
+        // parent debe recibir el menor Z (se pinta primero) y el primero el
+        // mayor Z, exactamente como el stream post-sort de OpenTTD.
+        let depths = depths_in_viewport_sort_order(&parents, &[4.000_05, 4.000_06]);
+        assert_eq!(depths, vec![4.000_06, 4.000_05]);
+        let order = viewport_sort_parent_sprites(&parents);
+        assert!(depths[order[0]] < depths[order[1]]);
     }
 }

@@ -181,11 +181,12 @@ los parents C++ aún no instrumentados se informan y sólo se vuelven gate con
 parents sin cobertura.
 
 Es deliberadamente un diagnóstico de selección/orden de parents, no de
-framebuffer. La traza candidata actual refleja el orden de emisión antes de
-asignar profundidad a las entidades Bevy; aplicar el vector final a esas
-entidades, children y overlays es el trabajo de composición posterior. Atlas,
-pivotes, clipping, transparencias y píxeles siguen perteneciendo al contrato
-raster.
+framebuffer. La traza candidata conserva el orden de emisión previo al sort
+para poder contrastarlo con C++; en runtime, las capas BUILD de paradas viales
+ya reasignan sus slots locales de profundidad con ese vector final. Aplicar el
+vector global a las demás entidades, children y overlays sigue siendo trabajo
+de composición posterior. Atlas, pivotes, clipping, transparencias y píxeles
+siguen perteneciendo al contrato raster.
 
 ## Auditoría global y backlog
 

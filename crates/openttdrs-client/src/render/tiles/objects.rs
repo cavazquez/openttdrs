@@ -20,6 +20,9 @@ use crate::iso::{
 };
 use crate::render::catenary_newgrf::catenary_sprite_colored;
 use crate::render::station_newgrf::{NewGrfStationSpriteCache, newgrf_station_def_for_tile};
+use crate::render::viewport_sort::{
+    ParentSprite, ParentSpriteBounds, depths_in_viewport_sort_order,
+};
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
 use crate::render::{
     AirportRadarAnim, AtlasSprite, CompanyColoredSprites, MapVisualLayer, TileRenderContext,
@@ -316,6 +319,76 @@ fn record_road_stop_layer_trace(
             ez,
         )),
     );
+}
+
+/// Construye las cajas que entrega `AddSortableSpriteToDraw` para las capas
+/// BUILD de una parada vial. Los extents de `TILE_SEQ_LINE` son inclusivos en
+/// el exportador C++: una extensión 3 cubre `origin..origin + 2`.
+fn road_stop_parent_sprites(
+    tx: i32,
+    ty: i32,
+    base_z: u8,
+    layers: &[RoadStopLayerGfx],
+) -> Vec<ParentSprite> {
+    layers
+        .iter()
+        .enumerate()
+        .map(|(index, layer)| {
+            let xmin = tx * 16 + layer.dx as i32;
+            let ymin = ty * 16 + layer.dy as i32;
+            let zmin = i32::from(base_z) * 8 + layer.dz as i32;
+            let (ex, ey, ez) = layer.bounds;
+            ParentSprite::sprite(
+                index as u64,
+                layer.sprite_id,
+                ParentSpriteBounds::new(
+                    xmin,
+                    ymin,
+                    zmin,
+                    xmin + ex - 1,
+                    ymin + ey - 1,
+                    zmin + ez - 1,
+                ),
+            )
+        })
+        .collect()
+}
+
+/// Centros de las capas BUILD con los mismos slots locales de Z, pero asignados
+/// en el orden final de `ViewportSortParentSprites`.
+///
+/// No cambia su ancla ni expande la banda de profundidad de la tesela: sólo
+/// corrige las inversiones como `5982 → 5983` de Kale, donde el C++ devuelve
+/// `5983 → 5982` después de comparar sus bounds.
+fn road_stop_sorted_layer_centers(
+    ctx: &TileRenderContext,
+    base_z: u8,
+    layers: &[RoadStopLayerGfx],
+) -> Vec<Vec3> {
+    let mut centers: Vec<_> = layers
+        .iter()
+        .map(|layer| {
+            road_stop_build_sprite_center(
+                ctx.iso_pos,
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+                base_z,
+                layer.z,
+                road_stop_seq_gfx(layer),
+                layer.w,
+                layer.h,
+            )
+        })
+        .collect();
+    let parents = road_stop_parent_sprites(ctx.tx_i32(), ctx.ty_i32(), base_z, layers);
+    let depths: Vec<_> = centers.iter().map(|center| center.z).collect();
+    for (center, depth) in centers
+        .iter_mut()
+        .zip(depths_in_viewport_sort_order(&parents, &depths))
+    {
+        center.z = depth;
+    }
+    centers
 }
 
 /// PNG del suelo `PALETTE_MODIFIER_COLOUR` de las cuatro orientaciones
@@ -1490,18 +1563,14 @@ fn spawn_road_stop_buildings(
             _ => return,
         };
         let axis = usize::from(orientation - openttdrs_core::RSV_DRIVE_THROUGH_X);
-        for (layer_i, spec) in drive_through.iter().enumerate() {
+        for spec in drive_through {
             record_road_stop_layer_trace(spec, owner_colour, false, world_z_delta);
-            let center = road_stop_build_sprite_center(
-                ctx.iso_pos,
-                ctx.tx_i32(),
-                ctx.ty_i32(),
-                base_z,
-                spec.z,
-                road_stop_seq_gfx(spec),
-                spec.w,
-                spec.h,
-            );
+        }
+        for (layer_i, center) in road_stop_sorted_layer_centers(ctx, base_z, drive_through)
+            .into_iter()
+            .enumerate()
+        {
+            let spec = &drive_through[layer_i];
             let image = &handles[axis][layer_i];
             commands.spawn((
                 MapVisualLayer,
@@ -1525,18 +1594,15 @@ fn spawn_road_stop_buildings(
     let is_truck = class == StationTileClass::Truck;
     // OpenGFX / Action5 solo tienen bahía 0..3; DT 4/5 cae al eje.
     let build_dir = road_stop_ground_index(u8::try_from(dir).unwrap_or(0)).min(3);
-    for (layer_i, spec) in road_stop_build_layers(class, build_dir).iter().enumerate() {
+    let build_layers = road_stop_build_layers(class, build_dir);
+    for spec in build_layers {
         record_road_stop_layer_trace(spec, owner_colour, false, world_z_delta);
-        let center = road_stop_build_sprite_center(
-            ctx.iso_pos,
-            ctx.tx_i32(),
-            ctx.ty_i32(),
-            base_z,
-            spec.z,
-            road_stop_seq_gfx(spec),
-            spec.w,
-            spec.h,
-        );
+    }
+    for (layer_i, center) in road_stop_sorted_layer_centers(ctx, base_z, build_layers)
+        .into_iter()
+        .enumerate()
+    {
+        let spec = &build_layers[layer_i];
         // Action5 `0x11`: sustituye la primera capa si hay sprite en el slot.
         if layer_i == 0
             && let Some(slot) = openttdrs_core::roadstop_action5_slot(is_truck, build_dir)
@@ -2489,13 +2555,16 @@ mod tests {
         airport_station_ground_layer_trace_offset, buoy_trace_bounds, dock_clear_land_sprite_id,
         dock_water_neighbour_is_sea, rail_depot_foundation_child_offset,
         rail_depot_reservation_track_visible, road_depot_foundation_child_offset,
-        road_stop_foundation_child_offset, station_catenary_wire_trace_geometry,
-        station_rail_child_offset, station_rail_foundation_world_z_delta,
-        tunnel_catenary_trace_geometry,
+        road_stop_foundation_child_offset, road_stop_parent_sprites,
+        station_catenary_wire_trace_geometry, station_rail_child_offset,
+        station_rail_foundation_world_z_delta, tunnel_catenary_trace_geometry,
     };
     use openttdrs_core::{Map, TileCoord, TileKind, WaterClass, set_water_class_m1};
 
-    use crate::sprites::{CatenaryWireDraw, airport_station_ground_layers_for_gfx};
+    use crate::sprites::{
+        CatenaryWireDraw, StationTileClass, airport_station_ground_layers_for_gfx,
+        road_stop_drive_through_layers,
+    };
 
     #[test]
     fn dock_land_ground_uses_its_facing_water_class_and_full_clear_grass() {
@@ -2584,6 +2653,49 @@ mod tests {
         assert_eq!(road_stop_foundation_child_offset(0), None);
         assert_eq!(road_stop_foundation_child_offset(6), Some((0, -32, 0)));
         assert_eq!(road_stop_foundation_child_offset(0x17), Some((0, -32, 0)));
+    }
+
+    #[test]
+    fn road_stop_y_parents_match_kale_post_sort_bounds() {
+        // Kale `(225,2)`: `DrawTile_Station` inserta 5982 y 5983 con las
+        // cajas que el oráculo world-sort publica antes de invertirlas.
+        let parents = road_stop_parent_sprites(
+            225,
+            2,
+            1,
+            road_stop_drive_through_layers(StationTileClass::Truck, 5),
+        );
+        assert_eq!(parents.len(), 2);
+        assert_eq!(
+            parents[0].kind,
+            crate::render::viewport_sort::ParentSpriteKind::Sprite { sprite_id: 5982 }
+        );
+        assert_eq!(
+            (
+                parents[0].bounds.xmin,
+                parents[0].bounds.ymin,
+                parents[0].bounds.zmin,
+                parents[0].bounds.xmax,
+                parents[0].bounds.ymax,
+                parents[0].bounds.zmax,
+            ),
+            (3613, 32, 8, 3615, 47, 23)
+        );
+        assert_eq!(
+            (
+                parents[1].bounds.xmin,
+                parents[1].bounds.ymin,
+                parents[1].bounds.zmin,
+                parents[1].bounds.xmax,
+                parents[1].bounds.ymax,
+                parents[1].bounds.zmax,
+            ),
+            (3600, 32, 8, 3602, 47, 23)
+        );
+        assert_eq!(
+            crate::render::viewport_sort::viewport_sort_parent_sprites(&parents),
+            vec![1, 0]
+        );
     }
 
     #[test]

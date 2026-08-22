@@ -18,7 +18,7 @@ el mismo seed (brecha de producto aún abierta).
 
 ## Estado canónico actual
 
-**Corte canónico: 2026-08-21 · `main` `29f5d7a0`.
+**Corte canónico: 2026-08-21 · `main` `55002e31`.
 Referencia: OpenTTD 15.3, commit
 `14ec60f248547d4d062a1160f0fc26d742319888`.** Esta tabla es la fuente de
 verdad para el estado vigente. Las tablas detalladas posteriores conservan el

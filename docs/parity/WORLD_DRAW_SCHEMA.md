@@ -1,4 +1,4 @@
-# `world-draw` v1
+# `world-draw` v1 y `world-sort` v1
 
 Traza JSONL de los comandos que el renderer decide antes de rasterizar. Es el
 tercer nivel de paridad para una partida `.sav`: después de bytes
@@ -139,6 +139,53 @@ píxeles del framebuffer. Una traza contenida sólo demuestra que las decisiones
 instrumentadas son compatibles; la aceptación de composición se hace con el
 [contrato raster](WORLD_SCREENSHOT_SCHEMA.md) y su estado se mantiene en
 [PARIDAD.md](../PARIDAD.md#evidencia-visual-raster-vigente).
+
+## Orden global de parents: `world-sort`
+
+`world-draw` conserva la inserción de cada `AddSortableSpriteToDraw`, pero no
+ejecuta el sorter global. Si además se define `OPENTTDRS_WORLD_SORT_OUT`, el
+fork de referencia escribe un segundo JSONL con el vector final de
+`ViewportSortParentSprites`, sin crear framebuffer ni modificar el resultado
+normal de OpenTTD cuando la variable no está definida.
+
+```text
+OPENTTDRS_WORLD_SORT_OUT=/tmp/openttd-sort.jsonl \
+  ./scripts/export_openttd_world_draw.sh save/Kale_TitleGame.sav \
+  /tmp/openttd-draw.jsonl /ruta/a/openttd 225,2,226,2
+./scripts/export_openttdrs_world_draw.sh save/Kale_TitleGame.sav \
+  /tmp/openttdrs-draw.jsonl 225,2,226,2
+python3 scripts/compare_world_sort.py \
+  /tmp/openttd-sort.jsonl /tmp/openttdrs-draw.jsonl
+```
+
+El stream empieza con `contract:"world-sort"`,
+`stage:"post_viewport_sprite_sorter"` y `sorter:"ViewportSortParentSprites"`.
+Luego emite `sort_begin`, una fila `parent` por posición final y los `child`
+colgados de ese padre. `parent_id` es el índice de
+`parent_sprites_to_draw`; enlaza el resultado con el `parent_id` que el
+`world-draw` de OpenTTD conserva para cada `sortable`, `empty_bounds` o
+`child`.
+
+```json
+{"kind":"parent","final_ordinal":0,"parent_id":1,
+ "sprite":{"id":5983},"palette":775,
+ "world_bounds":{"xmin":3600,"ymin":32,"zmin":8,
+                 "xmax":3602,"ymax":47,"zmax":23},"first_child":-1}
+```
+
+`compare_world_sort.py` deriva la misma caja inclusiva desde `world` y
+`bounds` del candidato, y comprueba que sus padres instrumentados formen una
+subsecuencia del orden final C++. Un padre candidato desconocido siempre falla;
+los parents C++ aún no instrumentados se informan y sólo se vuelven gate con
+`--strict-reference`. El reporte JSON deja el primer par invertido y los
+parents sin cobertura.
+
+Es deliberadamente un diagnóstico de selección/orden de parents, no de
+framebuffer. La traza candidata actual refleja el orden de emisión antes de
+asignar profundidad a las entidades Bevy; aplicar el vector final a esas
+entidades, children y overlays es el trabajo de composición posterior. Atlas,
+pivotes, clipping, transparencias y píxeles siguen perteneciendo al contrato
+raster.
 
 ## Auditoría global y backlog
 

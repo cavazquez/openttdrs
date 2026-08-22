@@ -77,13 +77,19 @@ anterior al ajuste local de catenaria; hasta repetir exactamente el baseline
 no corresponde atribuirle una mejora cuantificada ni declarar paridad raster.
 
 La contención `--strict-reference` de `world-draw` sigue siendo útil, pero
-compara decisiones y orden relativo por tesela antes de atlas/composición. No
-comprueba el sort global entre teselas o padres, clipping, anclajes finales ni
-el framebuffer de Bevy. Por eso una traza contenida puede coexistir con este
-diff amplio. El siguiente trabajo debe partir de esa captura y aislar el
-ordenamiento global y las familias visibles (puentes/catenaria, estaciones,
-aeropuertos, objetos y edificios), no rebajar el baseline ni extrapolar el
-resultado de una región a paridad general.
+compara decisiones y orden relativo por tesela antes de atlas/composición. El
+oráculo complementario `world-sort` sí captura ahora el vector final de
+`ViewportSortParentSprites`: en la región mínima de Kale `(225,2)..(226,2)`
+el sorter invierte cada pareja de capas de parada vial (`5982 → 5983` pasa a
+`5983 → 5982`). `compare_world_sort.py` vincula las mismas cajas candidatas y
+encuentra esa primera inversión, aun cuando `world-draw` por tesela coincide.
+
+Eso prueba la brecha de composición de forma acotada; no declara paridad
+raster. El diagnóstico todavía precede a la profundidad real de las entidades
+Bevy: faltan aplicar ese orden global, children, clipping, anclajes finales y
+el framebuffer. El siguiente trabajo debe integrar ese resultado para las
+familias visibles (puentes/catenaria, estaciones, aeropuertos, objetos y
+edificios), no rebajar el baseline ni extrapolar una región a paridad general.
 
 El perfil `CLEAN` normaliza la UI, las preferencias persistidas y los overrides
 de transparencia conocidos, pero no convierte al renderer actual en un gate
@@ -103,7 +109,6 @@ las entidades Bevy.
 
 - [#313](https://github.com/cavazquez/openttdrs/issues/313) — calibrar cámara y composición tras el draw-plan exacto.
 - [#322](https://github.com/cavazquez/openttdrs/issues/322) — integrar profundidad global de overlays urbanos.
-- [#323](https://github.com/cavazquez/openttdrs/issues/323) — exportar el orden final del sorter de sprites.
 - [#326](https://github.com/cavazquez/openttdrs/issues/326) — integrar composición global y cerrar paridad de framebuffer.
 - [#327](https://github.com/cavazquez/openttdrs/issues/327) — autoridad multiempresa y reconciliación de desync.
 - [#328](https://github.com/cavazquez/openttdrs/issues/328) — interoperabilidad residual de VEHS, ORDL, GRPS y ERNW.

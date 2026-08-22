@@ -39,6 +39,22 @@ class WorldDrawExportSourceContractTest(unittest.TestCase):
         )
         self.assertIn("old_tile_trace_call", integration)
 
+    def test_final_sort_stream_keeps_parent_identity_and_legacy_capture(self) -> None:
+        header = compact((PATCH / "src" / "world_draw_export.h").read_text(encoding="utf-8"))
+        source = compact((PATCH / "src" / "world_draw_export.cpp").read_text(encoding="utf-8"))
+        integration = (PATCH / "integrate.sh").read_text(encoding="utf-8")
+
+        self.assertIn("boolOpenttdrsWorldDrawFinalSortRequested();", header)
+        self.assertIn("voidOpenttdrsWorldDrawRecordFinalParent(", header)
+        self.assertIn("voidOpenttdrsWorldDrawRecordFinalChild(", header)
+        self.assertIn('getenv("OPENTTDRS_WORLD_SORT_OUT")', source)
+        self.assertIn('"contract","world-sort"', source)
+        self.assertIn('row["parent_id"]', source)
+        self.assertIn('"stage","post_viewport_sprite_sorter"', source)
+        self.assertIn("sortable_final_tail", integration)
+        self.assertIn("OpenttdrsWorldDrawFinalSortRequested", integration)
+        self.assertIn("ViewportSortParentSprites(&_vd.parent_sprites_to_sort);", integration)
+
 
 if __name__ == "__main__":
     unittest.main()

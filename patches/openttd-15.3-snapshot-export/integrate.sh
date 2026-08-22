@@ -92,6 +92,13 @@ def integrate_world_draw_viewport(dest: Path) -> None:
             raise SystemExit("no encuentro include viewport_func.h para world-screenshot")
         text = text.replace(anchor, anchor + '#include "world_screenshot_export.h"\n', 1)
 
+    sorter_forward = "static void ViewportSortParentSprites(ParentSpriteToSortVector *psdv);\n"
+    if sorter_forward not in text:
+        anchor = "static VpSpriteSorter _vp_sprite_sorter = nullptr;\n"
+        if anchor not in text:
+            raise SystemExit("no encuentro _vp_sprite_sorter")
+        text = text.replace(anchor, anchor + sorter_forward, 1)
+
     tile_marker = (
         "static void AddTileSpriteToDraw(SpriteID image, PaletteID pal, int32_t x, int32_t y, int z, const SubSprite *sub = nullptr, int extra_offs_x = 0, int extra_offs_y = 0)\n"
         "{\n"
@@ -123,6 +130,26 @@ def integrate_world_draw_viewport(dest: Path) -> None:
         "{\n"
         "\tint32_t left, right, top, bottom;"
     )
+    sortable_legacy_tail = (
+        "\t\tif (_vd.combine_sprites != SPRITE_COMBINE_ACTIVE) {\n"
+        "\t\t\t/* Mantener el mínimo estado que necesitan foundations y children; no rasterizamos. */\n"
+        "\t\t\t_vd.parent_sprites_to_draw.emplace_back();\n"
+        "\t\t\t_vd.last_child = LAST_CHILD_PARENT;\n"
+        "\t\t\tif (_vd.combine_sprites == SPRITE_COMBINE_PENDING) _vd.combine_sprites = SPRITE_COMBINE_ACTIVE;\n"
+        "\t\t}\n"
+        "\t\treturn;\n"
+    )
+    sortable_final_tail = (
+        "\t\tif (!OpenttdrsWorldDrawFinalSortRequested()) {\n"
+        "\t\t\tif (_vd.combine_sprites != SPRITE_COMBINE_ACTIVE) {\n"
+        "\t\t\t\t/* Mantener el mínimo estado que necesitan foundations y children; no rasterizamos. */\n"
+        "\t\t\t\t_vd.parent_sprites_to_draw.emplace_back();\n"
+        "\t\t\t\t_vd.last_child = LAST_CHILD_PARENT;\n"
+        "\t\t\t\tif (_vd.combine_sprites == SPRITE_COMBINE_PENDING) _vd.combine_sprites = SPRITE_COMBINE_ACTIVE;\n"
+        "\t\t\t}\n"
+        "\t\t\treturn;\n"
+        "\t\t}\n"
+    )
     if "OpenttdrsWorldDrawRecordSortable" not in text:
         if sortable_marker not in text:
             raise SystemExit("no encuentro AddSortableSpriteToDraw")
@@ -135,22 +162,32 @@ def integrate_world_draw_viewport(dest: Path) -> None:
             "\t\t\tbounds.origin.x, bounds.origin.y, bounds.origin.z,\n"
             "\t\t\tbounds.extent.x, bounds.extent.y, bounds.extent.z,\n"
             "\t\t\tbounds.offset.x, bounds.offset.y, bounds.offset.z, transparent, combine_mode);\n"
-            "\t\tif (_vd.combine_sprites != SPRITE_COMBINE_ACTIVE) {\n"
-            "\t\t\t/* Mantener el mínimo estado que necesitan foundations y children; no rasterizamos. */\n"
-            "\t\t\t_vd.parent_sprites_to_draw.emplace_back();\n"
-            "\t\t\t_vd.last_child = LAST_CHILD_PARENT;\n"
-            "\t\t\tif (_vd.combine_sprites == SPRITE_COMBINE_PENDING) _vd.combine_sprites = SPRITE_COMBINE_ACTIVE;\n"
-            "\t\t}\n"
-            "\t\treturn;\n"
-            "\t}\n"
-            "\tint32_t left, right, top, bottom;"
+            + sortable_final_tail
+            + "\t}\n"
+            + "\tint32_t left, right, top, bottom;"
         )
         text = text.replace(sortable_marker, replacement, 1)
+    elif "OpenttdrsWorldDrawFinalSortRequested" not in text:
+        if sortable_legacy_tail not in text:
+            raise SystemExit("no encuentro cola legacy de AddSortableSpriteToDraw")
+        text = text.replace(sortable_legacy_tail, sortable_final_tail, 1)
 
     child_marker = (
         "void AddChildSpriteScreen(SpriteID image, PaletteID pal, int x, int y, bool transparent, const SubSprite *sub, bool scale, bool relative)\n"
         "{\n"
         "\tassert((image & SPRITE_MASK) < MAX_SPRITES);"
+    )
+    child_legacy_block = (
+        "\tif (OpenttdrsWorldDrawCaptureActive()) {\n"
+        "\t\tOpenttdrsWorldDrawRecordChild(image, pal, x, y, transparent, scale, relative);\n"
+        "\t\treturn;\n"
+        "\t}\n"
+    )
+    child_final_block = (
+        "\tif (OpenttdrsWorldDrawCaptureActive()) {\n"
+        "\t\tOpenttdrsWorldDrawRecordChild(image, pal, x, y, transparent, scale, relative);\n"
+        "\t\tif (!OpenttdrsWorldDrawFinalSortRequested()) return;\n"
+        "\t}\n"
     )
     if "OpenttdrsWorldDrawRecordChild" not in text:
         if child_marker not in text:
@@ -158,13 +195,14 @@ def integrate_world_draw_viewport(dest: Path) -> None:
         replacement = (
             "void AddChildSpriteScreen(SpriteID image, PaletteID pal, int x, int y, bool transparent, const SubSprite *sub, bool scale, bool relative)\n"
             "{\n"
-            "\tif (OpenttdrsWorldDrawCaptureActive()) {\n"
-            "\t\tOpenttdrsWorldDrawRecordChild(image, pal, x, y, transparent, scale, relative);\n"
-            "\t\treturn;\n"
-            "\t}\n"
-            "\tassert((image & SPRITE_MASK) < MAX_SPRITES);"
+            + child_final_block
+            + "\tassert((image & SPRITE_MASK) < MAX_SPRITES);"
         )
         text = text.replace(child_marker, replacement, 1)
+    elif "OpenttdrsWorldDrawFinalSortRequested" not in text:
+        if child_legacy_block not in text:
+            raise SystemExit("no encuentro bloque legacy de AddChildSpriteScreen")
+        text = text.replace(child_legacy_block, child_final_block, 1)
 
     vehicle_marker = "\tViewportAddVehicles(&_vd.dpi);\n"
     if "OpenttdrsWorldScreenshotHideVehicles" not in text:
@@ -241,6 +279,43 @@ bool OpenttdrsCaptureWorldDraw()
 			_tile_type_procs[GetTileType(_cur_ti.tile)]->draw_tile_proc(&_cur_ti);
 			OpenttdrsWorldDrawEndTile();
 		}
+	}
+
+	if (OpenttdrsWorldDrawFinalSortRequested()) {
+		for (auto &parent : _vd.parent_sprites_to_draw) {
+			_vd.parent_sprites_to_sort.push_back(&parent);
+		}
+		/* El contrato usa el sorter escalar oficial: evita que la arquitectura
+		 * del host altere la traza, sin dibujar un framebuffer. */
+		ViewportSortParentSprites(&_vd.parent_sprites_to_sort);
+		OpenttdrsWorldDrawBeginFinalSort(
+			static_cast<uint64_t>(_vd.parent_sprites_to_sort.size()),
+			static_cast<uint64_t>(_vd.child_screen_sprites_to_draw.size())
+		);
+		for (size_t final_ordinal = 0; final_ordinal < _vd.parent_sprites_to_sort.size(); final_ordinal++) {
+			const ParentSpriteToDraw &parent = *_vd.parent_sprites_to_sort[final_ordinal];
+			const uint64_t parent_id = static_cast<uint64_t>(&parent - _vd.parent_sprites_to_draw.data());
+			OpenttdrsWorldDrawRecordFinalParent(
+				static_cast<uint64_t>(final_ordinal), parent_id,
+				static_cast<uint32_t>(parent.image), static_cast<uint32_t>(parent.pal),
+				parent.x, parent.y, parent.left, parent.top,
+				parent.xmin, parent.ymin, parent.zmin,
+				parent.xmax, parent.ymax, parent.zmax, parent.first_child
+			);
+			uint64_t child_ordinal = 0;
+			for (int child_index = parent.first_child; child_index >= 0; ) {
+				const ChildScreenSpriteToDraw &child = _vd.child_screen_sprites_to_draw[child_index];
+				const int next = child.next;
+				OpenttdrsWorldDrawRecordFinalChild(
+					static_cast<uint64_t>(final_ordinal), parent_id, child_ordinal,
+					child_index, static_cast<uint32_t>(child.image), static_cast<uint32_t>(child.pal),
+					child.x, child.y, child.relative, next
+				);
+				child_index = next;
+				child_ordinal++;
+			}
+		}
+		OpenttdrsWorldDrawFinishFinalSort();
 	}
 
 	_vd.tile_sprites_to_draw.clear();

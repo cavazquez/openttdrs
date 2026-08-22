@@ -26,6 +26,14 @@ bool OpenttdrsWorldDrawCaptureActive();
 bool OpenttdrsWorldDrawCaptureBounds(OpenttdrsWorldDrawBounds &bounds);
 
 /**
+ * `OPENTTDRS_WORLD_SORT_OUT` habilita un segundo stream opt-in con el orden
+ * final que produce `ViewportSortParentSprites`. Requiere también
+ * `OPENTTDRS_WORLD_DRAW_OUT`: el stream de draw-procs conserva el vínculo
+ * `parent_id` que hace diagnosticable cada entrada ordenada.
+ */
+bool OpenttdrsWorldDrawFinalSortRequested();
+
+/**
  * Abre una tesela del trace e incluye tanto su pendiente cruda como la
  * superficie efectiva que usa `GetFoundationSlope` para decidir muros.
  * Las alturas están en unidades de tile, no en píxeles de viewport.
@@ -111,6 +119,43 @@ void OpenttdrsWorldDrawRecordChild(
 );
 void OpenttdrsWorldDrawRecordCombineStart();
 void OpenttdrsWorldDrawRecordCombineEnd();
+
+/**
+ * Emite el resultado final del sorter de padres. `parent_id` es el índice
+ * estable en `parent_sprites_to_draw`, compartido con los draws del stream
+ * `world-draw`; `final_ordinal` es la posición efectiva de pintado.
+ */
+void OpenttdrsWorldDrawBeginFinalSort(uint64_t parent_count, uint64_t child_count);
+void OpenttdrsWorldDrawRecordFinalParent(
+	uint64_t final_ordinal,
+	uint64_t parent_id,
+	uint32_t image,
+	uint32_t palette,
+	int32_t screen_x,
+	int32_t screen_y,
+	int32_t left,
+	int32_t top,
+	int32_t xmin,
+	int32_t ymin,
+	int32_t zmin,
+	int32_t xmax,
+	int32_t ymax,
+	int32_t zmax,
+	int32_t first_child
+);
+void OpenttdrsWorldDrawRecordFinalChild(
+	uint64_t final_parent_ordinal,
+	uint64_t parent_id,
+	uint64_t child_ordinal,
+	int32_t child_index,
+	uint32_t image,
+	uint32_t palette,
+	int32_t x,
+	int32_t y,
+	bool relative,
+	int32_t next
+);
+void OpenttdrsWorldDrawFinishFinalSort();
 
 /** Flushes the trace and requests termination of the dedicated reference run. */
 bool OpenttdrsFinishWorldDraw();

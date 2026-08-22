@@ -34,6 +34,7 @@ la paridad se comprueba por capas, de menor a mayor distancia del píxel final.
 | 1 | [`world-raw`](WORLD_RAW_SCHEMA.md) | ¿Los bytes de mapa de cada tesela son los mismos? | No explica su significado. |
 | 2 | [`world-semantic`](WORLD_SEMANTIC_SCHEMA.md) | ¿Ambos clasifican igual vía, puente, túnel, estación, pendiente y orientación? | No garantiza el sprite final. |
 | 3 | [`world-draw`](WORLD_DRAW_SCHEMA.md) | ¿Rust selecciona sprite, paleta y geometría permitidos por el `draw_tile_proc` C++? | La cobertura Rust aún no incluye todas las familias ni prueba el sort global o el framebuffer. |
+| 3b | [`world-sort`](WORLD_DRAW_SCHEMA.md#orden-global-de-parents-world-sort) | ¿Los parents candidatos se emiten en el orden final de `ViewportSortParentSprites`? | Diagnostica la brecha antes de las entidades Bevy; no aplica por sí mismo profundidad, pivote ni clipping. |
 | 4 | Captura enfocada | ¿La composición completa se ve correcta en el contexto real? | Es aceptación visual, no la única evidencia. |
 
 La regla es encontrar la primera capa que diverge antes de editar. De ese modo
@@ -295,7 +296,9 @@ tanto en OpenGFX 8bpp como en OpenGFX2 32bpp.
 2. Comparar raw y semántica. Si alguno falla, arreglar importación o
    decodificación antes de tocar renderer.
 3. Exportar `world-draw` de ambos lados para la región. Comparar primero
-   sprite, rol, paleta, fundación y geometría.
+   sprite, rol, paleta, fundación y geometría. Si la selección coincide pero
+   hay solape visible, exportar también `world-sort` y ubicar el primer parent
+   que el sorter global mueve.
 4. Seguir en C++ el `draw_tile_proc` y sus auxiliares; contrastar en Rust los
    bytes del tile, vecinos, pendiente, eje, railtype, reserva y altura efectiva.
 5. Aplicar el cambio mínimo en la capa responsable, agregar una prueba/fixture
@@ -360,6 +363,11 @@ OPENTTDRS_OPENGFX_DIR=/ruta/a/opengfx \
 ./scripts/export_openttdrs_world_draw.sh "$SAV" /tmp/openttdrs-draw.jsonl "$REGION"
 python3 scripts/compare_world_draw.py /tmp/openttd-draw.jsonl /tmp/openttdrs-draw.jsonl \
   --geometry --foundations --order --by-role
+
+# Nivel 3b: ordenar los parents tras ViewportSortParentSprites.
+OPENTTDRS_WORLD_SORT_OUT=/tmp/openttd-sort.jsonl \
+  ./scripts/export_openttd_world_draw.sh "$SAV" /tmp/openttd-draw.jsonl "$OTTD_BIN" "$REGION"
+python3 scripts/compare_world_sort.py /tmp/openttd-sort.jsonl /tmp/openttdrs-draw.jsonl
 ```
 
 ### Nivel 4: raster focalizado

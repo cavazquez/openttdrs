@@ -328,4 +328,23 @@ mod tests {
 
         assert_eq!(sorted_ids(&parents), vec![10, 20]);
     }
+
+    #[test]
+    fn matches_kale_road_stop_pair_from_post_sort_oracle() {
+        // `Kale_TitleGame.sav`, región (225,2)..(226,2). `DrawTile_Station`
+        // inserta `5982` y luego `5983` para cada parada. El stream C++ de
+        // `ViewportSortParentSprites` deja primero el segundo padre: la caja
+        // comienza 13 unidades antes y se solapa con la de `5982`.
+        let parents = [
+            ParentSprite::sprite(5982, 5982, bounds(3613, 32, 8, 3615, 47, 23)),
+            ParentSprite::sprite(5983, 5983, bounds(3600, 32, 8, 3602, 47, 23)),
+            ParentSprite::sprite(5982 + 10_000, 5982, bounds(3629, 32, 8, 3631, 47, 23)),
+            ParentSprite::sprite(5983 + 10_000, 5983, bounds(3616, 32, 8, 3618, 47, 23)),
+        ];
+
+        assert_eq!(
+            sorted_ids(&parents),
+            vec![5983, 5982, 5983 + 10_000, 5982 + 10_000]
+        );
+    }
 }

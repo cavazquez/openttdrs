@@ -42,17 +42,25 @@ struct WorldDrawState {
 	bool active = false;
 	bool failed = false;
 	bool in_tile = false;
+	bool sort_enabled = false;
+	bool sort_emitted = false;
 	uint32_t width = 0;
 	WorldDrawRequestedBounds bounds;
 	std::ofstream out;
+	std::ofstream sort_out;
 	uint32_t tile_x = 0;
 	uint32_t tile_y = 0;
 	uint64_t ordinal = 0;
 	uint64_t tile_count = 0;
 	uint64_t draw_count = 0;
 	uint64_t combine_group = 0;
+	uint64_t next_parent_id = 0;
+	uint64_t sorted_parent_count = 0;
+	uint64_t sorted_child_count = 0;
 	std::optional<uint64_t> last_parent;
 	std::optional<uint64_t> combine_parent;
+	std::optional<uint64_t> last_parent_id;
+	std::optional<uint64_t> combine_parent_id;
 };
 
 WorldDrawState _openttdrs_world_draw;
@@ -119,6 +127,14 @@ void Emit(json row)
 	if (!state.out) state.failed = true;
 }
 
+void EmitSort(json row)
+{
+	auto &state = _openttdrs_world_draw;
+	if (!state.active || state.failed || !state.sort_enabled) return;
+	state.sort_out << row.dump() << '\n';
+	if (!state.sort_out) state.failed = true;
+}
+
 json SpriteJson(uint32_t image)
 {
 	return {
@@ -165,6 +181,15 @@ bool OpenttdrsMaybeStartWorldDraw(const std::string &source_path)
 	if (!ParseBounds(state.width, Map::SizeY(), state.bounds)) return false;
 	state.out.open(out_path, std::ios::out | std::ios::trunc);
 	if (!state.out) return false;
+	const char *sort_path = std::getenv("OPENTTDRS_WORLD_SORT_OUT");
+	state.sort_enabled = sort_path != nullptr && sort_path[0] != '\0';
+	if (state.sort_enabled) {
+		state.sort_out.open(sort_path, std::ios::out | std::ios::trunc);
+		if (!state.sort_out) {
+			state.out.close();
+			return false;
+		}
+	}
 	state.active = true;
 
 	const char *commit = std::getenv("OPENTTDRS_OPENTTD_COMMIT");
@@ -189,9 +214,30 @@ bool OpenttdrsMaybeStartWorldDraw(const std::string &source_path)
 	metadata["clipping"] = "disabled";
 	metadata["includes"] = {"ground", "sortable", "child", "combine"};
 	Emit(std::move(metadata));
+	if (state.sort_enabled) {
+		EmitSort({
+			{"kind", "metadata"},
+			{"schema_version", 1},
+			{"contract", "world-sort"},
+			{"producer", "openttd"},
+			{"stage", "post_viewport_sprite_sorter"},
+			{"sorter", "ViewportSortParentSprites"},
+			{"tick", static_cast<uint64_t>(TimerGameTick::counter)},
+			{"climate", static_cast<uint8_t>(_settings_game.game_creation.landscape)},
+			{"openttd_commit", commit != nullptr ? commit : ""},
+			{"source_path", raw_source != nullptr && raw_source[0] != '\0' ? raw_source : source_path},
+			{"save_sha256", save_hash != nullptr ? save_hash : ""},
+			{"save_version", static_cast<uint16_t>(_sl_version)},
+			{"width", Map::SizeX()},
+			{"height", Map::SizeY()},
+			{"region", RegionJson(state.bounds)},
+			{"parent_id", "index in parent_sprites_to_draw"},
+		});
+	}
 	/* Dejar una cabecera diagnosticable incluso si un draw proc posterior falla. */
 	state.out.flush();
-	if (!state.out) state.failed = true;
+	if (state.sort_enabled) state.sort_out.flush();
+	if (!state.out || (state.sort_enabled && !state.sort_out)) state.failed = true;
 	return !state.failed;
 }
 
@@ -205,6 +251,12 @@ bool OpenttdrsWorldDrawCaptureBounds(OpenttdrsWorldDrawBounds &bounds)
 	if (!OpenttdrsWorldDrawCaptureActive()) return false;
 	bounds = _openttdrs_world_draw.bounds;
 	return true;
+}
+
+bool OpenttdrsWorldDrawFinalSortRequested()
+{
+	const auto &state = _openttdrs_world_draw;
+	return state.active && !state.failed && state.sort_enabled;
 }
 
 void OpenttdrsWorldDrawBeginTile(
@@ -227,6 +279,8 @@ void OpenttdrsWorldDrawBeginTile(
 	state.combine_group = 0;
 	state.last_parent.reset();
 	state.combine_parent.reset();
+	state.last_parent_id.reset();
+	state.combine_parent_id.reset();
 	Emit({
 		{"kind", "tile"},
 		{"index", static_cast<uint64_t>(y) * state.width + x},
@@ -305,6 +359,7 @@ void OpenttdrsWorldDrawRecordTileSprite(
 	row["bounds"] = nullptr;
 	row["offset"] = {{"x", offset_x}, {"y", offset_y}, {"z", 0}};
 	row["parent_ordinal"] = nullptr;
+	row["parent_id"] = nullptr;
 	row["transparent"] = false;
 	Emit(std::move(row));
 }
@@ -342,11 +397,16 @@ void OpenttdrsWorldDrawRecordSortable(
 	const uint64_t ordinal = LastOrdinal();
 	if (combined) {
 		row["parent_ordinal"] = state.combine_parent ? json(*state.combine_parent) : json(nullptr);
+		row["parent_id"] = state.combine_parent_id ? json(*state.combine_parent_id) : json(nullptr);
 	} else {
 		row["parent_ordinal"] = nullptr;
 		state.last_parent = ordinal;
+		const uint64_t parent_id = state.next_parent_id++;
+		state.last_parent_id = parent_id;
+		row["parent_id"] = parent_id;
 		if (starts_combine) {
 			state.combine_parent = ordinal;
+			state.combine_parent_id = parent_id;
 		}
 	}
 	row["sprite"] = SpriteJson(image);
@@ -382,6 +442,7 @@ void OpenttdrsWorldDrawRecordChild(
 	row["bounds"] = nullptr;
 	row["offset"] = {{"x", x}, {"y", y}, {"z", 0}};
 	row["parent_ordinal"] = state.combine_parent ? json(*state.combine_parent) : state.last_parent ? json(*state.last_parent) : json(nullptr);
+	row["parent_id"] = state.combine_parent_id ? json(*state.combine_parent_id) : state.last_parent_id ? json(*state.last_parent_id) : json(nullptr);
 	row["transparent"] = transparent;
 	row["scale"] = scale;
 	row["relative"] = relative;
@@ -399,6 +460,7 @@ void OpenttdrsWorldDrawRecordCombineStart()
 	row["bounds"] = nullptr;
 	row["offset"] = {{"x", 0}, {"y", 0}, {"z", 0}};
 	row["parent_ordinal"] = nullptr;
+	row["parent_id"] = nullptr;
 	row["transparent"] = false;
 	Emit(std::move(row));
 }
@@ -414,15 +476,105 @@ void OpenttdrsWorldDrawRecordCombineEnd()
 	row["bounds"] = nullptr;
 	row["offset"] = {{"x", 0}, {"y", 0}, {"z", 0}};
 	row["parent_ordinal"] = state.combine_parent ? json(*state.combine_parent) : json(nullptr);
+	row["parent_id"] = state.combine_parent_id ? json(*state.combine_parent_id) : json(nullptr);
 	row["transparent"] = false;
 	Emit(std::move(row));
 	state.combine_parent.reset();
+	state.combine_parent_id.reset();
+}
+
+void OpenttdrsWorldDrawBeginFinalSort(uint64_t parent_count, uint64_t child_count)
+{
+	auto &state = _openttdrs_world_draw;
+	if (!OpenttdrsWorldDrawFinalSortRequested()) return;
+	state.sorted_parent_count = parent_count;
+	state.sorted_child_count = child_count;
+	EmitSort({
+		{"kind", "sort_begin"},
+		{"parents", parent_count},
+		{"children", child_count},
+	});
+}
+
+void OpenttdrsWorldDrawRecordFinalParent(
+	uint64_t final_ordinal,
+	uint64_t parent_id,
+	uint32_t image,
+	uint32_t palette,
+	int32_t screen_x,
+	int32_t screen_y,
+	int32_t left,
+	int32_t top,
+	int32_t xmin,
+	int32_t ymin,
+	int32_t zmin,
+	int32_t xmax,
+	int32_t ymax,
+	int32_t zmax,
+	int32_t first_child
+)
+{
+	if (!OpenttdrsWorldDrawFinalSortRequested()) return;
+	EmitSort({
+		{"kind", "parent"},
+		{"final_ordinal", final_ordinal},
+		{"parent_id", parent_id},
+		{"sprite", SpriteJson(image)},
+		{"palette", palette},
+		{"screen", {{"x", screen_x}, {"y", screen_y}, {"left", left}, {"top", top}}},
+		{"world_bounds", {
+			{"xmin", xmin}, {"ymin", ymin}, {"zmin", zmin},
+			{"xmax", xmax}, {"ymax", ymax}, {"zmax", zmax},
+		}},
+		{"first_child", first_child},
+	});
+}
+
+void OpenttdrsWorldDrawRecordFinalChild(
+	uint64_t final_parent_ordinal,
+	uint64_t parent_id,
+	uint64_t child_ordinal,
+	int32_t child_index,
+	uint32_t image,
+	uint32_t palette,
+	int32_t x,
+	int32_t y,
+	bool relative,
+	int32_t next
+)
+{
+	if (!OpenttdrsWorldDrawFinalSortRequested()) return;
+	EmitSort({
+		{"kind", "child"},
+		{"final_parent_ordinal", final_parent_ordinal},
+		{"parent_id", parent_id},
+		{"child_ordinal", child_ordinal},
+		{"child_index", child_index},
+		{"sprite", SpriteJson(image)},
+		{"palette", palette},
+		{"offset", {{"x", x}, {"y", y}}},
+		{"relative", relative},
+		{"next", next},
+	});
+}
+
+void OpenttdrsWorldDrawFinishFinalSort()
+{
+	auto &state = _openttdrs_world_draw;
+	if (!OpenttdrsWorldDrawFinalSortRequested()) return;
+	EmitSort({
+		{"kind", "complete"},
+		{"parents", state.sorted_parent_count},
+		{"children", state.sorted_child_count},
+	});
+	state.sort_emitted = !state.failed;
 }
 
 bool OpenttdrsFinishWorldDraw()
 {
 	auto &state = _openttdrs_world_draw;
 	if (!state.active) return true;
+	if (state.sort_enabled && !state.sort_emitted) state.failed = true;
 	if (!state.failed) {
 		Emit({
 			{"kind", "complete"},
@@ -431,8 +583,10 @@ bool OpenttdrsFinishWorldDraw()
 		});
 	}
 	state.out.flush();
-	const bool ok = !state.failed && static_cast<bool>(state.out);
+	if (state.sort_enabled) state.sort_out.flush();
+	const bool ok = !state.failed && static_cast<bool>(state.out) && (!state.sort_enabled || static_cast<bool>(state.sort_out));
 	state.out.close();
+	if (state.sort_enabled) state.sort_out.close();
 	state.active = false;
 	_exit_game = true;
 	return ok;

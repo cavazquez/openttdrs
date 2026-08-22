@@ -40,8 +40,15 @@ impl CompanyId {
     }
 }
 
-/// Owner municipal en byte `m1` (`OWNER_TOWN` = `MAX_COMPANIES` en `OpenTTD`).
-pub const OWNER_TOWN_M1: u8 = 14;
+/// Valores de propietario que OpenTTD serializa en `MAPO` (`m1`).
+///
+/// No son identificadores de compañías Rust: son los valores reservados del
+/// enum `Owner` de OpenTTD (`OWNER_TOWN=0x0F`, `OWNER_NONE=0x10` y
+/// `OWNER_WATER=0x11`). Mantenerlos separados evita que un mapa recién
+/// generado parezca construido por la compañía 0.
+pub const OWNER_TOWN_M1: u8 = 0x0F;
+pub const OWNER_NONE_M1: u8 = 0x10;
+pub const OWNER_WATER_M1: u8 = 0x11;
 
 /// Escribe el owner de infraestructura en `m1` (vía / carretera / depósitos).
 #[must_use]

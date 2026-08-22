@@ -31,6 +31,7 @@ pub use population::{
     industry_target_count, road_tiles_are_flat, scale_by_size, town_target_count,
 };
 
+use crate::company::{OWNER_NONE_M1, OWNER_WATER_M1};
 use crate::map::{
     Map, MapError, TileCoord, TileKind, WaterClass, set_water_class_m1, tile_slope_and_z,
 };
@@ -99,7 +100,7 @@ pub fn apply_world_gen(
             if z == 0 {
                 map.set_kind(c, TileKind::Water)?;
                 map.set_mapt_m5(c, 0x60, 0)?;
-                map.set_m1(c, set_water_class_m1(0, WaterClass::Sea))?;
+                map.set_m1(c, set_water_class_m1(OWNER_WATER_M1, WaterClass::Sea))?;
                 continue;
             }
             let ground = initial_clear_ground_with_lines(
@@ -125,9 +126,11 @@ pub fn apply_world_gen(
                 map.set_kind(c, TileKind::Forest)?;
                 map.set_mapt_m5(c, 0x40, tree_m5)?;
                 map.set_m2(c, tree_m2)?;
+                map.set_m1(c, OWNER_NONE_M1)?;
             } else {
                 map.set_kind(c, TileKind::Grass)?;
                 map.set_mapt_m5(c, 0, m5)?;
+                map.set_m1(c, OWNER_NONE_M1)?;
             }
         }
     }
@@ -305,6 +308,39 @@ mod tests {
             })
             .count();
         assert!(sea > rivers, "sea should dominate rivers");
+    }
+
+    #[test]
+    fn world_gen_uses_openttd_reserved_tile_owners() {
+        let mut map = Map::new_flat(64, 64, 0);
+        let cfg = WorldGenConfig {
+            seed: 1_330_928_978,
+            amount_of_rivers: 0,
+            water_borders: Some(0),
+            ..WorldGenConfig::default()
+        };
+        apply_world_gen(&mut map, &cfg, &[]).expect("generate map");
+
+        let mut clear = 0;
+        let mut water = 0;
+        for y in 1..63 {
+            for x in 1..63 {
+                let tile = map.get(TileCoord::new(x, y)).expect("tile");
+                match tile.kind {
+                    TileKind::Grass | TileKind::Forest => {
+                        clear += 1;
+                        assert_eq!(tile.m1, OWNER_NONE_M1);
+                    }
+                    TileKind::Water => {
+                        water += 1;
+                        assert_eq!(tile.m1, OWNER_WATER_M1);
+                    }
+                    _ => {}
+                }
+            }
+        }
+        assert!(clear > 0);
+        assert!(water > 0);
     }
 
     #[test]

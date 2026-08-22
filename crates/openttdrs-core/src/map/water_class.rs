@@ -92,6 +92,12 @@ pub fn make_water_tile(map: &mut Map, c: TileCoord, wc: WaterClass) -> Result<()
     let mut tile = map.get(c).ok_or(super::MapError::OutOfBounds)?;
     tile.kind = TileKind::Water;
     tile.mapt = 0x60;
+    // `MakeWater`/`MakeRiver` de OpenTTD asigna OWNER_WATER (0x11) a
+    // mares y ríos. Los canales conservan el dueño de la compañía que los
+    // construyó y por eso no deben pasar por este helper procedural.
+    if matches!(wc, WaterClass::Sea | WaterClass::River) {
+        tile.m1 = crate::company::OWNER_WATER_M1;
+    }
     tile.m5 = 0; // WaterTileType::Clear
     tile.m1 = set_water_class_m1(tile.m1, wc);
     map.set_tile(c, tile)

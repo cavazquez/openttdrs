@@ -48,7 +48,7 @@ no existe. Ningún nivel implica compatibilidad binaria o de red con OpenTTD.
 | Guardado propio JSON | **Alta** | Formato versionado con migraciones y determinismo mid-run |
 | Compatibilidad `.sav` | **Inicial-media** | Import/export interoperable de un subconjunto. La cobertura exacta, incluyendo la diferencia import vs export, está en [`parity/sav-compatibility.md`](parity/sav-compatibility.md); release ejecuta la matriz OpenTTD 15.3 sin `SKIP` |
 | NewGRF | **Media de parseo / media de runtime** | Catálogos Action0/3/5 amplios; call sites reales limitados a CB24/CB13, CB31, CB17, CB28 y CB25–27. Residual: resto CBIDs/scopes/storage y validación diferencial; ver las [matrices Action0/3/5](parity/newgrf-action0-matrix.md) y de [callbacks](parity/newgrf-callback-matrix.md) |
-| Multijugador | **Inicial** | Lockstep TCP, dedicated, late join y host migration; protocolo propio sin lobby, auth, cifrado ni interoperabilidad |
+| Multijugador | **Media propia** | Lockstep TCP, dedicated, late join y host migration; el servidor asigna empresa por peer, valida antes de secuenciar, rechaza issuer inválido y resincroniza desync por snapshot. Sigue siendo protocolo propio, sin lobby, auth, cifrado ni interoperabilidad OpenTTD |
 | IA / GameScript / editor | **Inicial-media** | TransCargo/RoadHaul, GS-lite y editor propios; Squirrel compatible ausente |
 | Render/UI vanilla | **Media funcional / baja de composición raster** | Hay cobertura OpenGFX y evidencia `world-draw` por tesela, pero no paridad global de framebuffer; la captura limpia vigente de Kale sigue siendo diferente. Véase [evidencia visual raster](#evidencia-visual-raster-vigente) |
 | Plataformas y release | **Preparada con gates** | `main` protegido y checks Windows/macOS; queda dry-run/smoke de `0.1.0-alpha.1` en [#296](https://github.com/cavazquez/openttdrs/issues/296) |
@@ -152,7 +152,6 @@ es evidencia de composición global aplicada.
 
 - [#313](https://github.com/cavazquez/openttdrs/issues/313) — calibrar cámara y composición tras el draw-plan exacto.
 - [#326](https://github.com/cavazquez/openttdrs/issues/326) — integrar composición global y cerrar paridad de framebuffer.
-- [#327](https://github.com/cavazquez/openttdrs/issues/327) — autoridad multiempresa y reconciliación de desync.
 - [#328](https://github.com/cavazquez/openttdrs/issues/328) — interoperabilidad residual de VEHS, ORDL, GRPS y ERNW.
 - [#329](https://github.com/cavazquez/openttdrs/issues/329) — callbacks runtime y persistencia NewGRF residual.
 - [#330](https://github.com/cavazquez/openttdrs/issues/330) — ampliar oráculos externos de movimiento y composición.

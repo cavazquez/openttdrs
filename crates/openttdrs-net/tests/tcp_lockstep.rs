@@ -3,11 +3,15 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use std::io::ErrorKind;
+use std::net::TcpStream;
 use std::thread;
 use std::time::{Duration, Instant};
 
 use openttdrs_core::{Command, CompanyId, GameState, TileCoord, apply_command};
-use openttdrs_net::{ClientSession, ListenServer, NetError, SessionEvent, apply_session_event};
+use openttdrs_net::{
+    ClientSession, ListenServer, NetError, NetMessage, PROTOCOL_VERSION, SessionEvent,
+    apply_session_event, read_message, write_message,
+};
 
 fn wait_event(client: &ClientSession, timeout: Duration) -> SessionEvent {
     let start = Instant::now();
@@ -221,6 +225,72 @@ fn invalid_client_propose_is_rejected_before_commit() {
         assert!(
             !matches!(server.try_recv(), Some(SessionEvent::Commit { .. })),
             "una propuesta inválida no debe entrar al log"
+        );
+        thread::sleep(Duration::from_millis(5));
+    }
+}
+
+#[test]
+fn server_rejects_a_spoofed_company_before_commit() {
+    let host_state = GameState::new(24, 24);
+    let snapshot = host_state.save_json().unwrap();
+    let server = match maybe_start_server("127.0.0.1:0", snapshot) {
+        Some(server) => server,
+        None => return,
+    };
+    let bind = server.local_addr().to_string();
+    thread::sleep(Duration::from_millis(50));
+
+    // Un peer que saltee `ClientSessionHandle` no puede elegir el issuer del
+    // commit: el servidor asigna la compañía durante el handshake y comprueba
+    // el campo de `Propose` antes de reservar una secuencia.
+    let mut peer = TcpStream::connect(&bind).unwrap();
+    write_message(
+        &mut peer,
+        &NetMessage::Hello {
+            protocol: PROTOCOL_VERSION,
+        },
+    )
+    .unwrap();
+    let welcome = read_message(&mut peer).unwrap();
+    let assigned_company = match welcome {
+        NetMessage::Welcome { company_id, .. } => company_id,
+        other => panic!("se esperaba Welcome, llegó {other:?}"),
+    };
+    assert_ne!(assigned_company, CompanyId::PLAYER);
+
+    write_message(
+        &mut peer,
+        &NetMessage::Propose {
+            company_id: CompanyId::PLAYER,
+            command: Command::PlaceRail(TileCoord::new(3, 3)),
+        },
+    )
+    .unwrap();
+
+    peer.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+    let mut rejected = false;
+    for _ in 0..3 {
+        match read_message(&mut peer).unwrap() {
+            NetMessage::Reject { message } => {
+                assert!(message.contains("no puede emitir"));
+                rejected = true;
+                break;
+            }
+            NetMessage::PeerList { .. } => {}
+            other => panic!("se esperaba Reject, llegó {other:?}"),
+        }
+    }
+    assert!(
+        rejected,
+        "la propuesta con issuer falsificado debe rechazarse"
+    );
+
+    let start = Instant::now();
+    while start.elapsed() < Duration::from_millis(100) {
+        assert!(
+            !matches!(server.try_recv(), Some(SessionEvent::Commit { .. })),
+            "un issuer falsificado no debe entrar al log"
         );
         thread::sleep(Duration::from_millis(5));
     }

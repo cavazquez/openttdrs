@@ -525,6 +525,9 @@ pub struct GameState {
     /// Modelo de aceleración de trenes (`vehicle.train_acceleration_model`).
     #[serde(default)]
     pub train_acceleration_model: crate::engine::TrainAccelerationModel,
+    /// Modelo de aceleración vial (`vehicle.roadveh_acceleration_model`).
+    #[serde(default)]
+    pub road_vehicle_acceleration_model: crate::engine::RoadVehicleAccelerationModel,
     /// Ajustes de IA rival (`TransCargo`; UI-8 / #44).
     #[serde(default)]
     pub ai: crate::ai::AiSettings,
@@ -639,6 +642,7 @@ fn default_interactive_random() -> crate::linkgraph_parity::Randomizer {
 
 impl GameState {
     #[must_use]
+    #[allow(clippy::too_many_lines)]
     pub fn new(map_width: u32, map_height: u32) -> Self {
         let mut state = Self {
             map: Map::new_flat(map_width, map_height, 1),
@@ -714,6 +718,7 @@ impl GameState {
             disaster_crafts: Vec::new(),
             pathfinding: crate::pathfinding_settings::PathfindingSettings::default(),
             train_acceleration_model: crate::engine::TrainAccelerationModel::Original,
+            road_vehicle_acceleration_model: crate::engine::RoadVehicleAccelerationModel::Original,
             ai: crate::ai::AiSettings::default(),
             cheats: crate::cheats::CheatsState::default(),
             order: crate::cargo::OrderSettings::default(),
@@ -765,6 +770,7 @@ impl GameState {
 
     /// Crea un estado a partir de un mapa ya construido (sin industrias ni vehículos).
     #[must_use]
+    #[allow(clippy::too_many_lines)]
     pub fn from_map(map: Map) -> Self {
         let mut state = Self {
             map,
@@ -840,6 +846,7 @@ impl GameState {
             disaster_crafts: Vec::new(),
             pathfinding: crate::pathfinding_settings::PathfindingSettings::default(),
             train_acceleration_model: crate::engine::TrainAccelerationModel::Original,
+            road_vehicle_acceleration_model: crate::engine::RoadVehicleAccelerationModel::Original,
             ai: crate::ai::AiSettings::default(),
             cheats: crate::cheats::CheatsState::default(),
             order: crate::cargo::OrderSettings::default(),

@@ -207,7 +207,8 @@ const RELIABILITY_MAGLEV: u8 = 95;
 #[allow(clippy::too_many_lines)]
 fn build_vanilla_engines() -> Vec<EngineDef> {
     vec![
-        // Carretera: buses (pesos del upstream en cuartos de tonelada, redondeados).
+        // Carretera: buses (pesos upstream en cuartos de tonelada, truncados
+        // como `RoadVehicle::GetWeight`: `weight / 4`).
         road!(
             ENGINE_BUS_MPS,
             VehicleKind::Bus,
@@ -218,7 +219,7 @@ fn build_vanilla_engines() -> Vec<EngineDef> {
             31,
             Some(CargoType::Passengers),
             90,
-            11,
+            10,
             1929
         ),
         road!(
@@ -245,7 +246,7 @@ fn build_vanilla_engines() -> Vec<EngineDef> {
             37,
             Some(CargoType::Passengers),
             150,
-            18,
+            17,
             1986
         ),
         road!(
@@ -272,7 +273,7 @@ fn build_vanilla_engines() -> Vec<EngineDef> {
             22,
             Some(CargoType::Mail),
             120,
-            10,
+            9,
             1935,
             55
         ),
@@ -286,7 +287,7 @@ fn build_vanilla_engines() -> Vec<EngineDef> {
             14,
             Some(CargoType::Goods),
             120,
-            10,
+            9,
             1935,
             55
         ),

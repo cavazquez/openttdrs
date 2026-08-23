@@ -1,6 +1,6 @@
 //! Aceleración, velocidad y progreso sub-tile.
 
-use crate::vehicle::VehicleDirection;
+use crate::vehicle::{VehicleDirection, VehicleKind};
 
 /// Paso sub-tile del bus MPS en diagonal a velocidad de crucero (`GetAdvanceSpeed` ×
 /// `255/192` sobre `GetAdvanceDistance` diagonal — `vehicle_base.h:439-455`).
@@ -15,6 +15,11 @@ pub const GROUND_ACCELERATION: u32 = 9800;
 /// Área frontal de tren fuera de túnel (`Train::GetAirDragArea`).
 pub const TRAIN_AIR_DRAG_AREA: u8 = 14;
 
+/// Área frontal de un vehículo vial (`RoadVehicle::GetAirDragArea`).
+pub const ROAD_AIR_DRAG_AREA: u8 = 6;
+/// Esfuerzo tractor de los road vehicles vanilla (`RoadVehInfo::tractive_effort`).
+pub const ROAD_TRACTIVE_EFFORT_DEFAULT: u8 = 76;
+
 const REFERENCE_MAX_SPEED: u16 = 112;
 const TILE_AXIAL_DISTANCE: u32 = 192;
 /// `TILE_CORNER_DISTANCE` de `OpenTTD` es 128; `GetAdvanceDistance` usa `* 2` → 256.
@@ -28,6 +33,22 @@ pub enum TrainAccelerationModel {
     #[default]
     Original = 0,
     /// `AM_REALISTIC`: `GetAcceleration()` por potencia/resistencia.
+    Realistic = 1,
+}
+
+/// Modelo de aceleración vial (`vehicle.roadveh_acceleration_model`).
+///
+/// La velocidad interna de los road vehicles duplica la velocidad que usa la
+/// fórmula física de `OpenTTD`. El modelo realista conserva esa conversión dentro
+/// de [`update_road_vehicle_speed`], en lugar de reutilizar por error la física
+/// ferroviaria.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[repr(u8)]
+pub enum RoadVehicleAccelerationModel {
+    /// `AM_ORIGINAL`: +256 por tick (+512 mientras adelanta).
+    #[default]
+    Original = 0,
+    /// `AM_REALISTIC`: potencia, masa, fricción, arrastre y esfuerzo tractor.
     Realistic = 1,
 }
 
@@ -185,6 +206,172 @@ pub fn train_max_te_n(weight_t: u16, tractive_effort: u8) -> u32 {
         .saturating_mul(u32::from(tractive_effort))
         .saturating_mul(GROUND_ACCELERATION)
         / 256
+}
+
+/// Esfuerzo tractor máximo vial en N (`GroundVehicle::PowerChanged`).
+#[must_use]
+pub fn road_max_te_n(weight_t: u16, tractive_effort: u8) -> u32 {
+    train_max_te_n(weight_t, tractive_effort)
+}
+
+/// Coeficiente de arrastre vial por defecto, ya con la escala de una sola
+/// parte (`RoadVehicle::PowerChanged`).
+///
+/// `EngineDef::max_speed` de carretera está en unidades internas; la fórmula
+/// upstream recibe la velocidad de display, por eso se divide por dos antes de
+/// aplicar `2048 / max_speed`.
+#[must_use]
+pub fn road_default_air_drag(internal_max_speed: u16) -> u32 {
+    let display_max_speed = internal_max_speed / 2;
+    let air_drag = if display_max_speed <= 10 {
+        192
+    } else {
+        std::cmp::max(2048 / u32::from(display_max_speed), 1)
+    };
+    air_drag + 3 * air_drag / 20
+}
+
+/// Arrastre vial efectivo: propiedad Action0 si existe; si no, fórmula
+/// vanilla por velocidad (`RoadVehicle::GetAirDrag` + `PowerChanged`).
+#[must_use]
+pub fn road_engine_air_drag(engine: &super::EngineDef) -> u32 {
+    if engine.air_drag == 0 {
+        return road_default_air_drag(engine.max_speed);
+    }
+    let air_drag = if engine.air_drag == 1 {
+        0
+    } else {
+        u32::from(engine.air_drag)
+    };
+    air_drag + 3 * air_drag / 20
+}
+
+/// Esfuerzo tractor vial: Action0 si existe, o 76 para el catálogo vanilla.
+#[must_use]
+pub fn road_engine_tractive_effort(engine: &super::EngineDef) -> u8 {
+    if engine.tractive_effort == 0 {
+        ROAD_TRACTIVE_EFFORT_DEFAULT
+    } else {
+        engine.tractive_effort
+    }
+}
+
+/// Coeficiente de fricción de rodadura vial (`RoadVehicle::GetRollingFriction`).
+#[must_use]
+pub fn road_rolling_friction(kind: VehicleKind, display_speed: u16) -> u32 {
+    let coeff = if kind == VehicleKind::Tram { 40 } else { 75 };
+    coeff * (128 + u32::from(display_speed)) / 128
+}
+
+/// `GroundVehicle::GetAcceleration` para carretera, en llano.
+///
+/// `cur_speed` usa la unidad interna de `RoadVehicle`; `OpenTTD` calcula la
+/// resistencia con `cur_speed / 2`. `slope_resistance` queda explícito para
+/// que el controlador pueda alimentar la fuerza de pendiente al disponer de
+/// la caché física del mapa.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn road_realistic_acceleration(
+    cur_speed: u16,
+    power_hp: u32,
+    weight_t: u16,
+    max_te_n: u32,
+    air_drag: u32,
+    kind: VehicleKind,
+    slope_resistance: i64,
+    braking: bool,
+) -> i32 {
+    let speed = i64::from(cur_speed / 2);
+    let mass = i64::from(weight_t.max(1));
+    let power = i64::from(power_hp) * 746;
+    let mut resistance = 10 * mass;
+    resistance += mass * i64::from(road_rolling_friction(kind, cur_speed / 2));
+    resistance += i64::from(ROAD_AIR_DRAG_AREA) * i64::from(air_drag) * speed * speed / 1000;
+    resistance += slope_resistance;
+
+    let force = if speed > 0 {
+        let force = power * 18 / (speed * 5);
+        if braking {
+            force
+        } else {
+            force.min(i64::from(max_te_n))
+        }
+    } else {
+        let kickoff = if braking {
+            power
+        } else {
+            power.min(i64::from(max_te_n))
+        };
+        kickoff.max(mass * 8 + resistance)
+    };
+
+    if braking {
+        return i32::try_from((-force - resistance).min(-10_000) / mass).unwrap_or(i32::MIN);
+    }
+    if force == resistance {
+        return 0;
+    }
+    let accel = (force - resistance) / (mass * 4);
+    if force < resistance {
+        i32::try_from(accel.min(-1)).unwrap_or(i32::MIN)
+    } else {
+        i32::try_from(accel.max(1)).unwrap_or(i32::MAX)
+    }
+}
+
+/// `RoadVehicle::UpdateSpeed` + `GroundVehicleBase::DoUpdateSpeed`.
+///
+/// Los parámetros ya son los caches físicos de una sola unidad vial. Para un
+/// road vehicle vanilla sin carga, por ejemplo MPS Regal: `90 HP`, `10 t`,
+/// `TE=76`, `drag=41`; el primer tick realista es `(speed, subspeed)=(4,194)`.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn update_road_vehicle_speed(
+    cur_speed: u16,
+    subspeed: u8,
+    prior_progress: u8,
+    model: RoadVehicleAccelerationModel,
+    power_hp: u32,
+    weight_t: u16,
+    max_te_n: u32,
+    air_drag: u32,
+    kind: VehicleKind,
+    max_speed: u16,
+    overtaking: bool,
+    braking: bool,
+) -> DoUpdateSpeedResult {
+    let accel = match model {
+        RoadVehicleAccelerationModel::Original => {
+            let base = if overtaking { 512 } else { ROAD_ACCEL_ORIGINAL };
+            if braking {
+                -i32::from(base)
+            } else {
+                i32::from(base)
+            }
+        }
+        RoadVehicleAccelerationModel::Realistic => {
+            let mut accel = road_realistic_acceleration(
+                cur_speed, power_hp, weight_t, max_te_n, air_drag, kind, 0, braking,
+            );
+            if overtaking && !braking {
+                accel += 256;
+            }
+            accel
+        }
+    };
+    let min_speed = if matches!(model, RoadVehicleAccelerationModel::Realistic) && !braking {
+        4
+    } else {
+        0
+    };
+    do_update_speed(
+        cur_speed,
+        subspeed,
+        accel,
+        min_speed,
+        max_speed,
+        prior_progress,
+    )
 }
 
 /// `Train::GetRollingFriction`.
@@ -538,6 +725,54 @@ mod tests {
         }
         assert_eq!(cur, max);
         assert!(ticks > 1);
+    }
+
+    #[test]
+    fn mps_realistic_road_acceleration_matches_openttd_15_3_oracle() {
+        // Snapshot OpenTTD 15.3: MPS Regal, 90 HP, 10 t, TE 76 and 41 drag.
+        let weight = 10;
+        let air_drag = road_default_air_drag(112);
+        let max_te = road_max_te_n(weight, ROAD_TRACTIVE_EFFORT_DEFAULT);
+        assert_eq!(air_drag, 41);
+        assert_eq!(max_te, 29_093);
+
+        let first = update_road_vehicle_speed(
+            0,
+            0,
+            0,
+            RoadVehicleAccelerationModel::Realistic,
+            90,
+            weight,
+            max_te,
+            air_drag,
+            VehicleKind::Bus,
+            112,
+            false,
+            false,
+        );
+        assert_eq!(
+            (first.cur_speed, first.subspeed, first.advance),
+            (4, 194, 3)
+        );
+
+        let second = update_road_vehicle_speed(
+            first.cur_speed,
+            first.subspeed,
+            u8::try_from(first.advance).unwrap(),
+            RoadVehicleAccelerationModel::Realistic,
+            90,
+            weight,
+            max_te,
+            air_drag,
+            VehicleKind::Bus,
+            112,
+            false,
+            false,
+        );
+        assert_eq!(
+            (second.cur_speed, second.subspeed, second.advance),
+            (7, 131, 8)
+        );
     }
 
     #[test]

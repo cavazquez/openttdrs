@@ -252,14 +252,15 @@ Cada subsistema se clasifica en cinco niveles acumulativos:
 4. **Visualmente parecido** — la comparación de videos/capturas no muestra
    diferencias evidentes.
 5. **Realmente equivalente** — traza determinística equivalente a la de OpenTTD
-   (mismo resultado tick a tick en las unidades acordadas). Hoy ningún
-   subsistema alcanza este nivel.
+   (mismo resultado tick a tick en las unidades acordadas). Se puede cerrar a
+   este nivel un **escenario acotado**; ningún subsistema global alcanza aún
+   esa condición.
 
 ### Tabla de estado
 
 | Subsistema | Módulo Rust | Referencia OpenTTD | Nivel alcanzado | Evidencia | Riesgo divergencia |
 |---|---|---|---|---|---|
-| Aceleración carretera (AM_ORIGINAL) | `openttdrs-core/src/engine.rs` (`update_road_speed`) | `src/ground_vehicle.hpp` `DoUpdateSpeed`, `src/roadveh_cmd.cpp:742` | 3 · validado (fórmula exacta portada; test `advance_constants_match_upstream`) | `tests/golden_roadveh.rs` | Medio: falta frenada al llegar a parada |
+| Aceleración carretera (`AM_ORIGINAL` / `AM_REALISTIC`) | `engine/physics.rs` (`update_road_vehicle_speed`) + `road_movement/controller.rs`; `PATS.vehicle.roadveh_acceleration_model` | `roadveh_cmd.cpp::RoadVehicle::UpdateSpeed`, `ground_vehicle.cpp::GetAcceleration` | 5 · equivalente en el fixture vial acotado de 40 ticks | `mps_realistic_road_acceleration_matches_openttd_15_3_oracle`; `sav_pbs_runner`; comparador externo `--scope road` | Medio fuera del fixture: fuerza de pendientes, articulados, NewGRF y tráfico complejo aún no tienen oráculo diferencial |
 | Penalización de curva −25 % (AM_ORIGINAL) | `vehicle.rs` (`set_direction_with_curve_penalty`) | `roadveh_cmd.cpp:1481` (`cur_speed -= cur_speed >> 2`; también :1353 y :1426) | 3 · validado (Fase 2; el chequeo `curve_speed_penalty` del reporte quedó como regresión) | test `road_vehicle_loses_quarter_speed_on_turn`; `divergences_found.md` («no observada») | Bajo |
 | Paso sub-tesela (`progress` 0–255) | `engine/physics.rs` (`progress_step_for_speed`), `vehicle` (`step`) | `vehicle_base.h:439-454` (`GetAdvanceSpeed`, `GetAdvanceDistance`) | 3 · validado (proporcional a `speed*3/4` con 192/256; `REFERENCE_PROGRESS_STEP=112`) | `tests/golden_roadveh.rs` | Bajo–medio: escala alineada a ~37 Hz |
 | Tablas de trayectoria sub-tesela (render) | `road_movement.rs` (`STRAIGHT`, `CURVE_*`, `U_TURN_*`) | `src/table/roadveh_movement.h` | 3 · validado (golden compara data_0/2/3 punto a punto) | `tests/golden_roadveh.rs`, fixture `tests/fixtures/parity/roadveh_movement_golden.json` | Bajo en recta/curva; alto en bahías (`_rv_station_*` no portadas) |
@@ -432,7 +433,7 @@ los módulos Rust, con el mecanismo de validación disponible para cada pieza.
 
 | Concepto OpenTTD | Referencia C++ | Equivalente Rust | Validación |
 |---|---|---|---|
-| `RoadVehicle::UpdateSpeed` (AM_ORIGINAL, accel 256) | `roadveh_cmd.cpp:742-748` | `engine.rs::update_road_speed` (`ROAD_ACCEL_ORIGINAL = 256`) | golden `advance_constants_match_upstream` + tests de `engine.rs` |
+| `RoadVehicle::UpdateSpeed` (`AM_ORIGINAL` / `AM_REALISTIC`) | `roadveh_cmd.cpp:742-748`, `ground_vehicle.cpp::GetAcceleration` | `engine/physics.rs::update_road_vehicle_speed`: `cur_speed / 2`, HP→W, masa/carga, TE=76, rozamiento/arrastre y `DoUpdateSpeed`; setting `PATS` llega al simulador | unidad MPS 15.3 + traza externa 40 ticks (`scripts/compare_pbs_traces.py --scope road`) |
 | `GroundVehicleBase::DoUpdateSpeed` (subspeed u8, tempmax) | `ground_vehicle.hpp` | `engine.rs::update_road_speed` (misma aritmética con truncado a u8) | tests `engine.rs` |
 | `GetAdvanceSpeed = speed * 3 / 4` | `vehicle_base.h:439-442` | `engine.rs::progress_step_for_speed` (numerador/denominador 3/4) | golden |
 | `GetAdvanceDistance` 192 diagonal / 256 cardinal | `vehicle_base.h:451-454` | `engine.rs::tile_progress_length` (`TILE_AXIAL_DISTANCE`/`TILE_CORNER_DISTANCE`) | golden |
@@ -635,8 +636,10 @@ vehículos de carretera. Muchos ítems ya están ~~tachados~~ (implementados).
     quedan ajustes de fidelidad.
 14. **Tranvías** (tablas `_roadveh_tram_turn_*`, `roadveh_movement.h:1095+`).
 15. **Articulados** (`HasArticulatedPart`): trailers que siguen al frontal.
-16. **Aceleración realista (AM_REALISTIC)** — modelo alternativo por potencia y
-    peso (`ground_vehicle.hpp::GetAcceleration`).
+16. ~~**Aceleración realista (`AM_REALISTIC`)**~~ — **implementada y acreditada
+    en llano** con potencia, peso, carga, TE, fricción y arrastre de
+    `GroundVehicle::GetAcceleration`; `PATS` preserva el selector. Quedan
+    pendiente/fuerza, articulados y oráculos de tráfico/vehículos NewGRF.
 17. **Días económicos** (`TimerGameEconomy`, `vehicle.cpp:951`): procesamiento
     de vehículos escalonado por `index % DAY_TICKS` (edad, costes, fiabilidad).
 18. **Pathfinder YAPF con penalizaciones** (curvas, slopes, drive-through):
@@ -1631,6 +1634,24 @@ conserva los campos v1 de velocidad/progreso.
 ```json
 {"kind":"initial","tick":4685,"trains":[{"vehicle":2,"x":46,"y":37,"progress":51,"speed":73,"subspeed":52,"direction":1,"units":[{"index":0,"x":46,"y":37,"rail_pixel":5,"direction":1},{"index":1,"x":47,"y":37,"rail_pixel":13,"direction":1},{"index":2,"x":47,"y":37,"rail_pixel":5,"direction":1}]}],"rail_reservations":[{"x":43,"y":37,"track_bits":1}]}
 ```
+
+El mismo schema v2 declara `road_vehicles[]`: `x`, `y`, `progress`, `speed`,
+`subspeed`, `direction`, `state`, `frame`, `blocked_ctr`, `overtaking`,
+`overtaking_ctr`, `crashed_ctr` y `reverse_ctr`. El exportador OpenTTD incluye
+además cachés físicos de diagnóstico (masa, potencia, TE, rozamiento y
+arrastre); no se comparan porque explican el oráculo, no son estado portable.
+Para aislar la dinámica vial sin exigir que un save con rail pase una
+comparación PBS todavía divergente, usar:
+
+```bash
+python3 scripts/compare_pbs_traces.py openttd.jsonl openttdrs.jsonl --scope road
+```
+
+El fixture `mvp_openttd_rich.sav` acredita 40 ticks (41 muestras contando
+`initial`) de un MPS Regal en `AM_REALISTIC`: el primer tick queda en
+`speed=4`, `subspeed=194`, `progress=3`, y toda la secuencia coincide con
+OpenTTD 15.3. No extrapolar esa evidencia a pendientes, articulados, tráfico
+denso, tranvías o vehículos NewGRF.
 
 ### Generación reproducible
 

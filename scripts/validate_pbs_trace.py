@@ -79,6 +79,27 @@ def main() -> None:
                         for field in ("index", "x", "y", "rail_pixel", "direction")
                     ):
                         fail("unidad PBS inválida")
+        for road in row.get("road_vehicles", []):
+            if not all(
+                isinstance(road.get(field), int)
+                for field in (
+                    "vehicle",
+                    "x",
+                    "y",
+                    "progress",
+                    "speed",
+                    "subspeed",
+                    "direction",
+                    "state",
+                    "frame",
+                    "blocked_ctr",
+                    "overtaking",
+                    "overtaking_ctr",
+                    "crashed_ctr",
+                    "reverse_ctr",
+                )
+            ):
+                fail("vehículo de carretera inválido")
         for reservation in row.get("rail_reservations", []):
             if not all(isinstance(reservation.get(field), int) for field in ("x", "y", "track_bits")):
                 fail("reserva PBS inválida")

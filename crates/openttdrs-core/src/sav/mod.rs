@@ -238,6 +238,8 @@ pub struct SavGame {
     pub pathfinding: crate::PathfindingSettings,
     /// Modelo de aceleración de tren persistido en `PATS` / `OPTS`.
     pub train_acceleration_model: crate::engine::TrainAccelerationModel,
+    /// Modelo de aceleración vial persistido en `PATS` / `OPTS`.
+    pub road_vehicle_acceleration_model: crate::engine::RoadVehicleAccelerationModel,
     /// Límite de ruido de aeropuerto persistido en `PATS` / `OPTS`.
     pub station_noise_level: bool,
     /// Nivel de averías persistido en `PATS` / `OPTS`.
@@ -334,6 +336,7 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
         construction: parsed_settings.construction,
         pathfinding: parsed_settings.pathfinding,
         train_acceleration_model: parsed_settings.train_acceleration_model,
+        road_vehicle_acceleration_model: parsed_settings.road_vehicle_acceleration_model,
         station_noise_level: parsed_settings.station_noise_level,
         vehicle_breakdowns: parsed_settings.vehicle_breakdowns,
         no_servicing_if_no_breakdowns: parsed_settings.no_servicing_if_no_breakdowns,
@@ -604,6 +607,35 @@ fn vanilla_train_engine_id(openttd_id: u16) -> Option<u16> {
     Some(id)
 }
 
+/// IDs vanilla de road vehicles que el catálogo del port puede ejecutar.
+///
+/// Los camiones por carga comparten chasis y dinámica en `OpenTTD`; se pliegan
+/// sobre el representative que tenemos en catálogo, manteniendo el `cargo_type`
+/// real del `VEHS` para la carga y la física.
+fn vanilla_road_engine_id(openttd_id: u16, kind: VehicleKind) -> Option<u16> {
+    let id = match kind {
+        VehicleKind::Bus => match openttd_id {
+            116 => crate::engine::ENGINE_BUS_MPS,
+            117 => crate::engine::ENGINE_BUS_HEREFORD,
+            118 => crate::engine::ENGINE_BUS_FOSTER,
+            _ => return None,
+        },
+        VehicleKind::Truck => match openttd_id {
+            126 => crate::engine::ENGINE_TRUCK_MPS,
+            // Balogh: coal, goods, steel, armoured, paper, water, fruit y rubber.
+            123 | 138 | 150 | 153 | 160 | 166 | 168 | 171 => {
+                crate::engine::ENGINE_TRUCK_BALOGH_GOODS
+            }
+            139 => crate::engine::ENGINE_TRUCK_CRAIGHEAD_GOODS,
+            // Goss: goods, grain y copper.
+            140 | 143 | 164 => crate::engine::ENGINE_TRUCK_GOSS_GOODS,
+            _ => return None,
+        },
+        _ => return None,
+    };
+    Some(id)
+}
+
 /// Convierte las referencias `STNN.goods` + `CAPA` a la cola de packets core.
 ///
 /// La reserva se conserva como total de estación porque el modelo actual de
@@ -731,6 +763,7 @@ impl GameState {
         state.construction = sav.construction;
         state.pathfinding = sav.pathfinding;
         state.train_acceleration_model = sav.train_acceleration_model;
+        state.road_vehicle_acceleration_model = sav.road_vehicle_acceleration_model;
         state.station_noise_level = sav.station_noise_level;
         state.vehicle_breakdowns = sav.vehicle_breakdowns;
         state.no_servicing_if_no_breakdowns = sav.no_servicing_if_no_breakdowns;
@@ -1063,7 +1096,30 @@ impl GameState {
             vehicle.cur_speed = v.cur_speed;
             vehicle.subspeed = v.subspeed;
             vehicle.direction = v.direction;
+            vehicle.cargo = u32::from(v.cargo);
+            if matches!(kind, VehicleKind::Bus | VehicleKind::Truck) {
+                vehicle.road_state = v.road_state;
+                vehicle.frame = v.road_frame;
+                vehicle.blocked_ctr = v.road_blocked_ctr;
+                vehicle.overtaking = v.road_overtaking;
+                vehicle.overtaking_ctr = v.road_overtaking_ctr;
+                vehicle.crashed_ctr = v.road_crashed_ctr;
+                vehicle.reverse_ctr = v.road_reverse_ctr;
+            }
             vehicle.cargo_type = crate::CargoType::from_climate_slot(sav.climate, v.cargo_type);
+            if matches!(kind, VehicleKind::Bus | VehicleKind::Truck)
+                && let Some(candidate) = vanilla_road_engine_id(v.engine_type, kind)
+                && let Some(engine) = crate::engine::engine_by_id(candidate)
+            {
+                vehicle.engine_id = Some(candidate);
+                if engine.capacity > 0 {
+                    vehicle.capacity = engine.capacity;
+                }
+                crate::vehicle::init_vehicle_reliability_from_engine(&mut vehicle, engine);
+            }
+            if v.cargo_capacity > 0 {
+                vehicle.capacity = u32::from(v.cargo_capacity);
+            }
             if kind == VehicleKind::Train {
                 vehicle.rail_pixel = rail_pixel_from_openttd_pos(v.x_pos, v.y_pos, v.direction);
                 if let Some(candidate) = vanilla_train_engine_id(v.engine_type)
@@ -1227,6 +1283,23 @@ impl GameState {
 mod tests {
     use super::*;
 
+    #[test]
+    fn maps_supported_vanilla_road_engine_ids_to_catalog_chassis() {
+        assert_eq!(
+            vanilla_road_engine_id(117, VehicleKind::Bus),
+            Some(crate::engine::ENGINE_BUS_HEREFORD)
+        );
+        assert_eq!(
+            vanilla_road_engine_id(138, VehicleKind::Truck),
+            Some(crate::engine::ENGINE_TRUCK_BALOGH_GOODS)
+        );
+        assert_eq!(
+            vanilla_road_engine_id(164, VehicleKind::Truck),
+            Some(crate::engine::ENGINE_TRUCK_GOSS_GOODS)
+        );
+        assert_eq!(vanilla_road_engine_id(116, VehicleKind::Truck), None);
+    }
+
     fn empty_sav(version: u16, map: Map) -> SavGame {
         SavGame {
             version,
@@ -1248,6 +1321,7 @@ mod tests {
             construction: crate::ConstructionSettings::default(),
             pathfinding: crate::PathfindingSettings::default(),
             train_acceleration_model: crate::engine::TrainAccelerationModel::Realistic,
+            road_vehicle_acceleration_model: crate::engine::RoadVehicleAccelerationModel::Realistic,
             station_noise_level: false,
             vehicle_breakdowns: 2,
             no_servicing_if_no_breakdowns: true,
@@ -1557,9 +1631,18 @@ mod tests {
                     z_pos: 0,
                     cur_speed: 0,
                     subspeed: 0,
+                    road_state: 0,
+                    road_frame: 0,
+                    road_blocked_ctr: 0,
+                    road_overtaking: 0,
+                    road_overtaking_ctr: 0,
+                    road_crashed_ctr: 0,
+                    road_reverse_ctr: 0,
                     direction: 0,
                     engine_type: 0,
                     cargo_type: 9,
+                    cargo: 0,
+                    cargo_capacity: 0,
                     orders: Vec::new(),
                     current_order: 0,
                     cur_implicit_order_index: 0,
@@ -1590,9 +1673,18 @@ mod tests {
                     z_pos: 0,
                     cur_speed: 0,
                     subspeed: 0,
+                    road_state: 0,
+                    road_frame: 0,
+                    road_blocked_ctr: 0,
+                    road_overtaking: 0,
+                    road_overtaking_ctr: 0,
+                    road_crashed_ctr: 0,
+                    road_reverse_ctr: 0,
                     direction: 0,
                     engine_type: 0,
                     cargo_type: 0,
+                    cargo: 0,
+                    cargo_capacity: 0,
                     orders: Vec::new(),
                     current_order: 0,
                     cur_implicit_order_index: 0,
@@ -1623,9 +1715,18 @@ mod tests {
                     z_pos: 0,
                     cur_speed: 0,
                     subspeed: 0,
+                    road_state: 0,
+                    road_frame: 0,
+                    road_blocked_ctr: 0,
+                    road_overtaking: 0,
+                    road_overtaking_ctr: 0,
+                    road_crashed_ctr: 0,
+                    road_reverse_ctr: 0,
                     direction: 0,
                     engine_type: 0,
                     cargo_type: 5,
+                    cargo: 0,
+                    cargo_capacity: 0,
                     orders: Vec::new(),
                     current_order: 0,
                     cur_implicit_order_index: 0,
@@ -1656,9 +1757,18 @@ mod tests {
                     z_pos: 0,
                     cur_speed: 0,
                     subspeed: 0,
+                    road_state: 0,
+                    road_frame: 0,
+                    road_blocked_ctr: 0,
+                    road_overtaking: 0,
+                    road_overtaking_ctr: 0,
+                    road_crashed_ctr: 0,
+                    road_reverse_ctr: 0,
                     direction: 0,
                     engine_type: 0,
                     cargo_type: 9,
+                    cargo: 0,
+                    cargo_capacity: 0,
                     orders: Vec::new(),
                     current_order: 0,
                     cur_implicit_order_index: 0,
@@ -1680,6 +1790,7 @@ mod tests {
             construction: crate::ConstructionSettings::default(),
             pathfinding: crate::PathfindingSettings::default(),
             train_acceleration_model: crate::engine::TrainAccelerationModel::Realistic,
+            road_vehicle_acceleration_model: crate::engine::RoadVehicleAccelerationModel::Realistic,
             station_noise_level: false,
             vehicle_breakdowns: 2,
             no_servicing_if_no_breakdowns: true,

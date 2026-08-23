@@ -18,6 +18,7 @@ pub use controller::{
 pub use couple::{
     attach_wagon, attach_wagon_chain, detach_unit, detach_unit_keep_tail, sell_chain_ids,
 };
+pub(crate) use metrics::cargo_weight_t;
 pub use metrics::{
     consist_capacity, consist_occupied_tiles, consist_occupied_tiles_indexed, consist_power_hp,
     consist_tile_span, consist_weight_t,

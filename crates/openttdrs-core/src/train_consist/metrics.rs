@@ -30,6 +30,17 @@ pub(crate) fn cargo_unit_weight_16ths(cargo: Option<CargoType>) -> u8 {
     }
 }
 
+/// Peso de una carga en toneladas enteras como `CargoSpec::WeightOfNUnits`.
+///
+/// Aunque nació junto a las métricas de consist, la misma conversión la usa
+/// `RoadVehicle::GetWeight`; centralizarla evita que trenes y carretera
+/// redondeen distinto un mismo `CargoSpec` vanilla.
+#[must_use]
+pub(crate) fn cargo_weight_t(cargo: u32, cargo_type: Option<CargoType>) -> u16 {
+    let sixteenths = u64::from(cargo) * u64::from(cargo_unit_weight_16ths(cargo_type));
+    u16::try_from(sixteenths / 16).unwrap_or(u16::MAX)
+}
+
 /// Capacidad total del consist (cabeza).
 #[must_use]
 pub fn consist_capacity(vehicles: &[Vehicle], head_id: u32) -> u32 {

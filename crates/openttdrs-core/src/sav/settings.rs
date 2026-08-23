@@ -5,7 +5,7 @@
 //! de todos los postes de señal y hace que la misma partida se renderice de
 //! forma distinta a `OpenTTD`.
 
-use crate::engine::TrainAccelerationModel;
+use crate::engine::{RoadVehicleAccelerationModel, TrainAccelerationModel};
 use crate::town::TownCouncilTolerance;
 use crate::{ConstructionSettings, PathfindingSettings, RoadVehicleDrivingSide, TrainSignalSide};
 
@@ -54,6 +54,7 @@ pub(crate) struct ParsedSettings {
     pub construction: ConstructionSettings,
     pub pathfinding: PathfindingSettings,
     pub train_acceleration_model: TrainAccelerationModel,
+    pub road_vehicle_acceleration_model: RoadVehicleAccelerationModel,
     pub station_noise_level: bool,
     pub vehicle_breakdowns: u8,
     pub no_servicing_if_no_breakdowns: bool,
@@ -72,6 +73,7 @@ impl Default for ParsedSettings {
             construction: ConstructionSettings::default(),
             pathfinding: PathfindingSettings::default(),
             train_acceleration_model: TrainAccelerationModel::Realistic,
+            road_vehicle_acceleration_model: RoadVehicleAccelerationModel::Realistic,
             station_noise_level: false,
             vehicle_breakdowns: 2,
             no_servicing_if_no_breakdowns: true,
@@ -175,6 +177,16 @@ pub(crate) fn settings_from_chunks(chunks: &[RawChunk]) -> ParsedSettings {
                     0 => TrainAccelerationModel::Original,
                     1 => TrainAccelerationModel::Realistic,
                     _ => parsed.train_acceleration_model,
+                };
+                found = true;
+            }
+            if let Some(value) =
+                record_get(&record, "vehicle.roadveh_acceleration_model").and_then(SlValue::as_u64)
+            {
+                parsed.road_vehicle_acceleration_model = match value {
+                    0 => RoadVehicleAccelerationModel::Original,
+                    1 => RoadVehicleAccelerationModel::Realistic,
+                    _ => parsed.road_vehicle_acceleration_model,
                 };
                 found = true;
             }
@@ -316,10 +328,11 @@ mod tests {
                 (2, "pf.wait_twoway_signal"),
                 (2, "pf.reserve_paths"),
                 (2, "vehicle.train_acceleration_model"),
+                (2, "vehicle.roadveh_acceleration_model"),
                 (2, "economy.station_noise_level"),
                 (2, "difficulty.vehicle_breakdowns"),
             ],
-            &[vec![2, 3, 0, 4, 5, 1, 0, 1, 2]],
+            &[vec![2, 3, 0, 4, 5, 1, 0, 0, 1, 2]],
         );
         let chunk = RawChunk {
             name: *b"PATS",
@@ -336,6 +349,10 @@ mod tests {
         assert_eq!(
             parsed.train_acceleration_model,
             TrainAccelerationModel::Original
+        );
+        assert_eq!(
+            parsed.road_vehicle_acceleration_model,
+            RoadVehicleAccelerationModel::Original
         );
         assert!(parsed.station_noise_level);
         assert_eq!(parsed.vehicle_breakdowns, 2);

@@ -78,10 +78,44 @@ def comparable_reservations(row: dict[str, object]) -> list[tuple[int, int, int]
     return sorted((entry["x"], entry["y"], entry["track_bits"]) for entry in reservations)
 
 
+def comparable_road_vehicles(
+    row: dict[str, object],
+) -> list[tuple[int, int, int, int, int, int, int, int, int, int, int, int, int]]:
+    """Estado vial persistible, sin el ID de pool que difiere entre motores."""
+    vehicles = row.get("road_vehicles", [])
+    assert isinstance(vehicles, list)
+    return sorted(
+        (
+            vehicle["x"],
+            vehicle["y"],
+            vehicle["progress"],
+            vehicle["speed"],
+            vehicle["subspeed"],
+            vehicle["direction"],
+            vehicle["state"],
+            vehicle["frame"],
+            vehicle["blocked_ctr"],
+            vehicle["overtaking"],
+            vehicle["overtaking_ctr"],
+            vehicle["crashed_ctr"],
+            vehicle["reverse_ctr"],
+        )
+        for vehicle in vehicles
+    )
+
+
 def main() -> None:
-    if len(sys.argv) != 3:
-        fail("uso: compare_pbs_traces.py <openttd.jsonl> <openttdrs.jsonl>")
-    expected_path, actual_path = map(Path, sys.argv[1:])
+    args = sys.argv[1:]
+    scope = "pbs"
+    if len(args) == 4 and args[2] == "--scope":
+        scope = args[3]
+        args = args[:2]
+    if len(args) != 2 or scope not in {"pbs", "road", "all"}:
+        fail(
+            "uso: compare_pbs_traces.py <openttd.jsonl> <openttdrs.jsonl> "
+            "[--scope pbs|road|all]"
+        )
+    expected_path, actual_path = map(Path, args)
     expected_meta, expected = read_trace(expected_path)
     actual_meta, actual = read_trace(actual_path)
     if expected_meta.get("producer") != "openttd":
@@ -103,26 +137,36 @@ def main() -> None:
             f"muestra {frame} {expected_row.get('kind')} "
             f"(tick OpenTTD={expected_tick}, openttdrs={actual_tick})"
         )
-        expected_trains = comparable_trains(expected_row)
-        actual_trains = comparable_trains(actual_row)
-        if expected_trains != actual_trains:
-            fail(f"{frame_label}: trenes OpenTTD={expected_trains} openttdrs={actual_trains}")
-        expected_units = comparable_units(expected_row)
-        if expected_units is not None:
-            actual_units = comparable_units(actual_row)
-            if actual_units is None:
-                fail(f"{frame_label}: el candidato no declara units[] (schema v2)")
-            if expected_units != actual_units:
-                fail(f"{frame_label}: units OpenTTD={expected_units} openttdrs={actual_units}")
-        expected_reservations = comparable_reservations(expected_row)
-        actual_reservations = comparable_reservations(actual_row)
-        if expected_reservations != actual_reservations:
-            fail(
-                f"{frame_label}: reservas OpenTTD={expected_reservations} "
-                f"openttdrs={actual_reservations}"
-            )
+        if scope in {"pbs", "all"}:
+            expected_trains = comparable_trains(expected_row)
+            actual_trains = comparable_trains(actual_row)
+            if expected_trains != actual_trains:
+                fail(f"{frame_label}: trenes OpenTTD={expected_trains} openttdrs={actual_trains}")
+            expected_units = comparable_units(expected_row)
+            if expected_units is not None:
+                actual_units = comparable_units(actual_row)
+                if actual_units is None:
+                    fail(f"{frame_label}: el candidato no declara units[] (schema v2)")
+                if expected_units != actual_units:
+                    fail(f"{frame_label}: units OpenTTD={expected_units} openttdrs={actual_units}")
+            expected_reservations = comparable_reservations(expected_row)
+            actual_reservations = comparable_reservations(actual_row)
+            if expected_reservations != actual_reservations:
+                fail(
+                    f"{frame_label}: reservas OpenTTD={expected_reservations} "
+                    f"openttdrs={actual_reservations}"
+                )
+        if scope in {"road", "all"}:
+            expected_road = comparable_road_vehicles(expected_row)
+            actual_road = comparable_road_vehicles(actual_row)
+            if expected_road != actual_road:
+                fail(
+                    f"{frame_label}: road vehicles OpenTTD={expected_road} "
+                    f"openttdrs={actual_road}"
+                )
 
-    print(f"OK: PBS externo sin divergencias ({len(expected)} ticks)")
+    label = {"pbs": "PBS", "road": "dinámica vial", "all": "PBS y dinámica vial"}[scope]
+    print(f"OK: {label} externa sin divergencias ({len(expected)} ticks)")
 
 
 if __name__ == "__main__":

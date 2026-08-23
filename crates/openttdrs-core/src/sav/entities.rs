@@ -993,12 +993,38 @@ pub struct SavVehicle {
     /// Velocidad y fracción interna al guardar (`cur_speed` / `subspeed`).
     pub cur_speed: u16,
     pub subspeed: u8,
+    /// Estado de conducción de carretera (`RoadVehicle::state`).
+    ///
+    /// Es `0` para los demás tipos y para saves antiguos cuyo descriptor no
+    /// contiene todavía el campo. Mantenerlo evita reiniciar la tabla
+    /// `_road_drive_data` al importar un vehículo en movimiento.
+    pub road_state: u8,
+    /// Frame de la tabla de conducción de carretera (`RoadVehicle::frame`).
+    pub road_frame: u8,
+    /// Contador de bloqueo vial (`RoadVehicle::blocked_ctr`).
+    pub road_blocked_ctr: u16,
+    /// Carril de adelantamiento (`RoadVehicle::overtaking`).
+    pub road_overtaking: u8,
+    /// Contador de adelantamiento (`RoadVehicle::overtaking_ctr`).
+    pub road_overtaking_ctr: u8,
+    /// Animación de choque vial (`RoadVehicle::crashed_ctr`).
+    pub road_crashed_ctr: u16,
+    /// Contador de reversa vial (`RoadVehicle::reverse_ctr`).
+    pub road_reverse_ctr: u8,
     /// Dirección visual/de movimiento (`Vehicle::direction`) al guardar.
     pub direction: u8,
     /// ID de motor vanilla de `OpenTTD` (`Vehicle::engine_type`).
     pub engine_type: u16,
     /// `CargoType` de `OpenTTD` (0 = pasajeros).
     pub cargo_type: u8,
+    /// Unidades de carga a bordo (`Vehicle::cargo.StoredCount()`).
+    ///
+    /// En saves modernos es la suma cacheada de `cargo.packets`; se conserva
+    /// también cuando el port todavía no reconstruye cada packet vehicular,
+    /// porque participa de la masa y aceleración realista de carretera.
+    pub cargo: u16,
+    /// Capacidad efectiva tras refit (`Vehicle::cargo_cap`).
+    pub cargo_capacity: u16,
     /// Órdenes de la lista referenciada (`ORDL`).
     pub orders: Vec<super::orders::SavOrder>,
     /// Índice de orden actual (`cur_real_order_index`).
@@ -1128,6 +1154,48 @@ pub(crate) fn vehicles_from_chunks(
             .unwrap_or(0)
             .try_into()
             .unwrap_or(u8::MAX);
+        let (
+            road_state,
+            road_frame,
+            road_blocked_ctr,
+            road_overtaking,
+            road_overtaking_ctr,
+            road_crashed_ctr,
+            road_reverse_ctr,
+        ) = if kind == SavVehicleKind::RoadVehicle {
+            (
+                record_get(sub, "state")
+                    .and_then(SlValue::as_u64)
+                    .and_then(|value| u8::try_from(value).ok())
+                    .unwrap_or(0),
+                record_get(sub, "frame")
+                    .and_then(SlValue::as_u64)
+                    .and_then(|value| u8::try_from(value).ok())
+                    .unwrap_or(0),
+                record_get(sub, "blocked_ctr")
+                    .and_then(SlValue::as_u64)
+                    .and_then(|value| u16::try_from(value).ok())
+                    .unwrap_or(0),
+                record_get(sub, "overtaking")
+                    .and_then(SlValue::as_u64)
+                    .and_then(|value| u8::try_from(value).ok())
+                    .unwrap_or(0),
+                record_get(sub, "overtaking_ctr")
+                    .and_then(SlValue::as_u64)
+                    .and_then(|value| u8::try_from(value).ok())
+                    .unwrap_or(0),
+                record_get(sub, "crashed_ctr")
+                    .and_then(SlValue::as_u64)
+                    .and_then(|value| u16::try_from(value).ok())
+                    .unwrap_or(0),
+                record_get(sub, "reverse_ctr")
+                    .and_then(SlValue::as_u64)
+                    .and_then(|value| u8::try_from(value).ok())
+                    .unwrap_or(0),
+            )
+        } else {
+            (0, 0, 0, 0, 0, 0, 0)
+        };
         let direction = record_get(common, "direction")
             .and_then(SlValue::as_u64)
             .unwrap_or(0)
@@ -1141,6 +1209,14 @@ pub(crate) fn vehicles_from_chunks(
         let cargo_type = record_get(common, "cargo_type")
             .and_then(SlValue::as_u64)
             .unwrap_or(0xFF);
+        let cargo = record_get(common, "cargo_count")
+            .and_then(SlValue::as_u64)
+            .and_then(|value| u16::try_from(value).ok())
+            .unwrap_or(0);
+        let cargo_capacity = record_get(common, "cargo_cap")
+            .and_then(SlValue::as_u64)
+            .and_then(|value| u16::try_from(value).ok())
+            .unwrap_or(0);
         let order_list_ref = record_get(common, "orders")
             .and_then(SlValue::as_u64)
             .unwrap_or(0);
@@ -1236,9 +1312,18 @@ pub(crate) fn vehicles_from_chunks(
             z_pos: i32::try_from(z_pos).unwrap_or(0),
             cur_speed,
             subspeed,
+            road_state,
+            road_frame,
+            road_blocked_ctr,
+            road_overtaking,
+            road_overtaking_ctr,
+            road_crashed_ctr,
+            road_reverse_ctr,
             direction,
             engine_type,
             cargo_type: cargo_type.min(255) as u8,
+            cargo,
+            cargo_capacity,
             orders,
             current_order,
             cur_implicit_order_index,

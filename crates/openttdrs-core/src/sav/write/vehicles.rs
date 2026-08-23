@@ -197,8 +197,13 @@ struct CommonWire {
     z_pos: i32,
     direction: u8,
     engine_type: u16,
+    cur_speed: u16,
+    subspeed: u8,
+    progress: u8,
     vehstatus: u8,
     cargo: u8,
+    cargo_capacity: u16,
+    cargo_count: u16,
     order_list_ref: u32,
     cur_order: u8,
     /// `REF_VEHICLE`: 0 = null, resto = índice sparse + 1.
@@ -226,8 +231,13 @@ fn write_vehs_common(buf: &mut Vec<u8>, c: &CommonWire) {
     buf.extend_from_slice(&c.z_pos.to_be_bytes());
     buf.push(c.direction);
     buf.extend_from_slice(&c.engine_type.to_be_bytes());
+    buf.extend_from_slice(&c.cur_speed.to_be_bytes());
+    buf.push(c.subspeed);
+    buf.push(c.progress);
     buf.push(c.vehstatus);
     buf.push(c.cargo);
+    buf.extend_from_slice(&c.cargo_capacity.to_be_bytes());
+    buf.extend_from_slice(&c.cargo_count.to_be_bytes());
     buf.extend_from_slice(&c.order_list_ref.to_be_bytes());
     buf.push(c.cur_order);
     buf.extend_from_slice(&c.next_ref.to_be_bytes());
@@ -310,8 +320,13 @@ fn common_wire_for(
         z_pos,
         direction,
         engine_type,
+        cur_speed: v.cur_speed,
+        subspeed: v.subspeed,
+        progress: v.progress,
         vehstatus,
         cargo,
+        cargo_capacity: u16::try_from(v.capacity).unwrap_or(u16::MAX),
+        cargo_count: u16::try_from(v.cargo).unwrap_or(u16::MAX),
         order_list_ref,
         cur_order,
         next_ref,
@@ -337,6 +352,7 @@ fn push_typed_vehicle(
     veh_type: u8,
     common: &CommonWire,
     train_track: Option<u8>,
+    road_runtime: Option<&Vehicle>,
 ) -> Result<(), SavError> {
     rec.push(veh_type);
     for t in VEH_TRAIN..=VEH_AIRCRAFT {
@@ -346,6 +362,15 @@ fn push_typed_vehicle(
             write_vehs_common(rec, common);
             if let Some(track) = train_track {
                 rec.push(track);
+            }
+            if let Some(road) = road_runtime {
+                rec.push(road.road_state);
+                rec.push(road.frame);
+                rec.extend_from_slice(&road.blocked_ctr.to_be_bytes());
+                rec.push(road.overtaking);
+                rec.push(road.overtaking_ctr);
+                rec.extend_from_slice(&road.crashed_ctr.to_be_bytes());
+                rec.push(road.reverse_ctr);
             }
         } else {
             write_gamma(0, rec)?;
@@ -463,6 +488,7 @@ pub(super) fn ordl_and_vehs_records(
                     next_ref,
                 ),
                 None,
+                None,
             )?;
             vehs.push(primary);
             sparse_idx += 1;
@@ -483,6 +509,8 @@ pub(super) fn ordl_and_vehs_records(
                     engine_type,
                     vehstatus: VEHSTATUS_STOPPED,
                     cargo: 0,
+                    cargo_capacity: 0,
+                    cargo_count: 0,
                     order_list_ref: 0,
                     cur_order: 0,
                     next_ref: 0,
@@ -492,7 +520,11 @@ pub(super) fn ordl_and_vehs_records(
                     timetable_lateness: 0,
                     vehicle_flags: 0,
                     service_interval: 0,
+                    cur_speed: 0,
+                    subspeed: 0,
+                    progress: 0,
                 },
+                None,
                 None,
             )?;
             vehs.push(shadow);
@@ -528,6 +560,7 @@ pub(super) fn ordl_and_vehs_records(
                     next_ref,
                 ),
                 Some(track),
+                None,
             )?;
         } else if is_road {
             let engine_type = openttd_road_engine_type(v);
@@ -544,6 +577,7 @@ pub(super) fn ordl_and_vehs_records(
                     0,
                 ),
                 None,
+                Some(v),
             )?;
         } else {
             // ship
@@ -560,6 +594,7 @@ pub(super) fn ordl_and_vehs_records(
                     TRAIN_SUBTYPE_FRONT_ENGINE,
                     0,
                 ),
+                None,
                 None,
             )?;
         }
@@ -590,8 +625,15 @@ fn append_vehs_header(header: &mut Vec<u8>) -> Result<(), SavError> {
     header.push(0);
     append_vehs_common_fields(header)?;
 
-    // roadveh → common
+    // roadveh → common + estado de la tabla de conducción.
     append_field(header, 0x1B, "common")?;
+    append_field(header, 2, "state")?;
+    append_field(header, 2, "frame")?;
+    append_field(header, 4, "blocked_ctr")?;
+    append_field(header, 2, "overtaking")?;
+    append_field(header, 2, "overtaking_ctr")?;
+    append_field(header, 4, "crashed_ctr")?;
+    append_field(header, 2, "reverse_ctr")?;
     header.push(0);
     append_vehs_common_fields(header)?;
 
@@ -616,8 +658,13 @@ fn append_vehs_common_fields(header: &mut Vec<u8>) -> Result<(), SavError> {
     append_field(header, 5, "z_pos")?; // SLE_FILE_I32
     append_field(header, 2, "direction")?;
     append_field(header, 4, "engine_type")?;
+    append_field(header, 4, "cur_speed")?;
+    append_field(header, 2, "subspeed")?;
+    append_field(header, 2, "progress")?;
     append_field(header, 2, "vehstatus")?;
     append_field(header, 2, "cargo_type")?;
+    append_field(header, 4, "cargo_cap")?;
+    append_field(header, 4, "cargo_count")?;
     append_field(header, 6, "orders")?; // REF_ORDERLIST → U32
     append_field(header, 2, "cur_real_order_index")?;
     append_field(header, 6, "next")?; // REF_VEHICLE → U32

@@ -15,7 +15,9 @@
 #include "map_func.h"
 #include "openttd.h"
 #include "rail_map.h"
+#include "roadveh.h"
 #include "saveload/saveload.h"
+#include "settings_type.h"
 #include "station_base.h"
 #include "table/sprites.h"
 #include "tile_map.h"
@@ -322,6 +324,7 @@ void WritePbsTraceRow(const char *kind)
 	row["kind"] = kind;
 	row["tick"] = TimerGameTick::counter;
 	row["trains"] = nlohmann::json::array();
+	row["road_vehicles"] = nlohmann::json::array();
 	row["rail_reservations"] = nlohmann::json::array();
 
 	for (const Vehicle *v : Vehicle::Iterate()) {
@@ -337,6 +340,40 @@ void WritePbsTraceRow(const char *kind)
 		train["direction"] = static_cast<uint8_t>(v->direction);
 		train["units"] = UnitsForTrain(train_v);
 		row["trains"].push_back(train);
+	}
+
+	for (const Vehicle *v : Vehicle::Iterate()) {
+		if (v->type != VEH_ROAD || !v->IsPrimaryVehicle() || v->tile == INVALID_TILE) continue;
+		const RoadVehicle *road_v = RoadVehicle::From(v);
+		nlohmann::json road;
+		road["vehicle"] = v->index.base();
+		road["x"] = TileX(v->tile);
+		road["y"] = TileY(v->tile);
+		road["progress"] = v->progress;
+		road["speed"] = v->cur_speed;
+		road["subspeed"] = v->subspeed;
+		road["direction"] = static_cast<uint8_t>(v->direction);
+		road["state"] = road_v->state;
+		road["frame"] = road_v->frame;
+		road["blocked_ctr"] = road_v->blocked_ctr;
+		road["overtaking"] = road_v->overtaking;
+		road["overtaking_ctr"] = road_v->overtaking_ctr;
+		road["crashed_ctr"] = road_v->crashed_ctr;
+		road["reverse_ctr"] = road_v->reverse_ctr;
+		/* Datos físicos del oráculo: permiten contrastar el modelo de
+		 * aceleración realista sin inferir cachés internos a partir de la
+		 * posición. Son campos de diagnóstico del contrato de traza, no del
+		 * formato SAV. */
+		road["engine_type"] = road_v->engine_type.base();
+		road["cargo_count"] = road_v->cargo.StoredCount();
+		road["cargo_capacity"] = road_v->cargo_cap;
+		road["cached_weight"] = road_v->gcache.cached_weight;
+		road["cached_power"] = road_v->gcache.cached_power;
+		road["cached_max_te"] = road_v->gcache.cached_max_te;
+		road["cached_axle_resistance"] = road_v->gcache.cached_axle_resistance;
+		road["cached_air_drag"] = road_v->gcache.cached_air_drag;
+		road["cached_slope_resistance"] = road_v->gcache.cached_slope_resistance;
+		row["road_vehicles"].push_back(road);
 	}
 
 	for (uint y = 0; y < Map::SizeY(); y++) {
@@ -637,6 +674,8 @@ void OpenttdrsMaybeStartPbsTrace(const std::string &source_path)
 	metadata["kind"] = "metadata";
 	metadata["schema_version"] = 2;
 	metadata["producer"] = "openttd";
+	metadata["trace"] = "pbs_and_road_vehicle_dynamics";
+	metadata["roadveh_acceleration_model"] = _settings_game.vehicle.roadveh_acceleration_model;
 	const char *commit = std::getenv("OPENTTDRS_OPENTTD_COMMIT");
 	metadata["openttd_commit"] = commit != nullptr ? commit : "";
 	metadata["source_path"] = _openttdrs_pbs_trace.source_path;

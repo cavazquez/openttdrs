@@ -18,6 +18,7 @@ pub use controller::{
     individual_road_vehicle_controller, individual_road_vehicle_controller_side,
     individual_road_vehicle_controller_side_indexed, road_vehicle_step_solo, road_vehicle_tick,
     road_vehicle_tick_side, road_vehicle_tick_side_indexed,
+    road_vehicle_tick_side_indexed_with_acceleration,
 };
 pub use curves::{straight_subtile, train_straight_subtile, turn_curve_points};
 pub use depot::{

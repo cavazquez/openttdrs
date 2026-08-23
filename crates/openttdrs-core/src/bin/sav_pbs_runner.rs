@@ -38,6 +38,24 @@ struct PbsTrain {
 }
 
 #[derive(Serialize)]
+struct PbsRoadVehicle {
+    vehicle: u32,
+    x: i32,
+    y: i32,
+    progress: u8,
+    speed: u16,
+    subspeed: u8,
+    direction: u8,
+    state: u8,
+    frame: u8,
+    blocked_ctr: u16,
+    overtaking: u8,
+    overtaking_ctr: u8,
+    crashed_ctr: u16,
+    reverse_ctr: u8,
+}
+
+#[derive(Serialize)]
 struct PbsReservation {
     x: i32,
     y: i32,
@@ -49,6 +67,7 @@ struct PbsTraceRow {
     kind: &'static str,
     tick: u64,
     trains: Vec<PbsTrain>,
+    road_vehicles: Vec<PbsRoadVehicle>,
     rail_reservations: Vec<PbsReservation>,
 }
 
@@ -117,6 +136,32 @@ fn trace_row(state: &GameState, kind: &'static str) -> PbsTraceRow {
             units: units_for_head(state, vehicle.id),
         })
         .collect();
+    let road_vehicles = state
+        .vehicles
+        .iter()
+        .filter(|vehicle| {
+            matches!(
+                vehicle.kind,
+                VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram
+            )
+        })
+        .map(|vehicle| PbsRoadVehicle {
+            vehicle: vehicle.id,
+            x: vehicle.pos.x,
+            y: vehicle.pos.y,
+            progress: vehicle.progress,
+            speed: vehicle.cur_speed,
+            subspeed: vehicle.subspeed,
+            direction: vehicle.direction,
+            state: vehicle.road_state,
+            frame: vehicle.frame,
+            blocked_ctr: vehicle.blocked_ctr,
+            overtaking: vehicle.overtaking,
+            overtaking_ctr: vehicle.overtaking_ctr,
+            crashed_ctr: vehicle.crashed_ctr,
+            reverse_ctr: vehicle.reverse_ctr,
+        })
+        .collect();
     let (width, height) = state.map.dimensions();
     let mut rail_reservations = Vec::new();
     for y in 0..height as i32 {
@@ -138,6 +183,7 @@ fn trace_row(state: &GameState, kind: &'static str) -> PbsTraceRow {
         kind,
         tick: state.tick.get(),
         trains,
+        road_vehicles,
         rail_reservations,
     }
 }
@@ -196,11 +242,13 @@ fn run(args: &Args) -> Result<(), String> {
         &serde_json::json!({
             "kind": "metadata",
             "schema_version": 2,
+            "trace": "pbs_and_road_vehicle_dynamics",
             "producer": "openttdrs",
             "source_path": args.save,
             "initial_sample_point": "after_sav_import",
             "tick_sample_point": "after_game_state_step",
             "max_ticks": args.ticks,
+            "roadveh_acceleration_model": state.road_vehicle_acceleration_model as u8,
         }),
     )?;
     write_row(&mut writer, &trace_row(&state, "initial"))?;

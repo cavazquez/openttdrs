@@ -376,6 +376,8 @@ mod tests {
         state.pathfinding.wait_twoway_signal = 10;
         state.pathfinding.reserve_paths = true;
         state.train_acceleration_model = crate::engine::TrainAccelerationModel::Original;
+        state.road_vehicle_acceleration_model =
+            crate::engine::RoadVehicleAccelerationModel::Original;
         state.station_noise_level = true;
         state.vehicle_breakdowns = 0;
         state.no_servicing_if_no_breakdowns = false;
@@ -409,6 +411,10 @@ mod tests {
         assert_eq!(
             sav_game.train_acceleration_model,
             state.train_acceleration_model
+        );
+        assert_eq!(
+            sav_game.road_vehicle_acceleration_model,
+            state.road_vehicle_acceleration_model
         );
         assert_eq!(sav_game.station_noise_level, state.station_noise_level);
         assert_eq!(sav_game.vehicle_breakdowns, state.vehicle_breakdowns);
@@ -1284,6 +1290,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn export_mvp_rich_emits_indy_road_vehs_and_stations() {
         use crate::sav::chunks::{find_chunk, parse_chunks};
         use crate::sav::table::{SlValue, parse_table_chunk, record_get};
@@ -1308,6 +1315,23 @@ mod tests {
         // La salida de smoke lleva una librea no trivial: el round-trip con
         // OpenTTD acredita que no se limita a escribir 23 defaults.
         state.companies[0].liveries[14] = custom_bus_livery;
+        let bus = state
+            .vehicles
+            .iter_mut()
+            .find(|vehicle| vehicle.kind == crate::VehicleKind::Bus)
+            .expect("bus MVP");
+        bus.progress = 173;
+        bus.cur_speed = 41;
+        bus.subspeed = 99;
+        bus.cargo = 17;
+        bus.capacity = 31;
+        bus.road_state = 8;
+        bus.frame = 6;
+        bus.blocked_ctr = 19;
+        bus.overtaking = crate::road_movement::rvsb::RVSB_DRIVE_SIDE;
+        bus.overtaking_ctr = 7;
+        bus.crashed_ctr = 23;
+        bus.reverse_ctr = 3;
         let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
         let payload = &bytes[8..];
         let chunks = parse_chunks(payload).expect("chunks");
@@ -1330,12 +1354,47 @@ mod tests {
         assert_eq!(sav_game.companies[0].max_loan, Some(450_000));
         assert_eq!(sav_game.vehicles.len(), 2, "tren + bus");
         assert_eq!(sav_game.companies[0].liveries[14], custom_bus_livery);
-        assert!(
-            sav_game
-                .vehicles
-                .iter()
-                .any(|v| v.kind == sav::SavVehicleKind::RoadVehicle)
+        let saved_bus = sav_game
+            .vehicles
+            .iter()
+            .find(|v| v.kind == sav::SavVehicleKind::RoadVehicle)
+            .expect("bus en VEHS");
+        assert_eq!(saved_bus.progress, 173);
+        assert_eq!(saved_bus.cur_speed, 41);
+        assert_eq!(saved_bus.subspeed, 99);
+        assert_eq!(saved_bus.cargo, 17);
+        assert_eq!(saved_bus.cargo_capacity, 31);
+        assert_eq!(saved_bus.road_state, 8);
+        assert_eq!(saved_bus.road_frame, 6);
+        assert_eq!(saved_bus.road_blocked_ctr, 19);
+        assert_eq!(
+            saved_bus.road_overtaking,
+            crate::road_movement::rvsb::RVSB_DRIVE_SIDE
         );
+        assert_eq!(saved_bus.road_overtaking_ctr, 7);
+        assert_eq!(saved_bus.road_crashed_ctr, 23);
+        assert_eq!(saved_bus.road_reverse_ctr, 3);
+        let imported = GameState::from_sav_game(sav_game);
+        let imported_bus = imported
+            .vehicles
+            .iter()
+            .find(|vehicle| vehicle.kind == crate::VehicleKind::Bus)
+            .expect("bus importado");
+        assert_eq!(imported_bus.progress, 173);
+        assert_eq!(imported_bus.cur_speed, 41);
+        assert_eq!(imported_bus.subspeed, 99);
+        assert_eq!(imported_bus.cargo, 17);
+        assert_eq!(imported_bus.capacity, 31);
+        assert_eq!(imported_bus.road_state, 8);
+        assert_eq!(imported_bus.frame, 6);
+        assert_eq!(imported_bus.blocked_ctr, 19);
+        assert_eq!(
+            imported_bus.overtaking,
+            crate::road_movement::rvsb::RVSB_DRIVE_SIDE
+        );
+        assert_eq!(imported_bus.overtaking_ctr, 7);
+        assert_eq!(imported_bus.crashed_ctr, 23);
+        assert_eq!(imported_bus.reverse_ctr, 3);
 
         let vehs = find_chunk(&chunks, "VEHS").expect("VEHS");
         let rows = parse_table_chunk(&vehs.body, true).expect("VEHS table");
@@ -1356,6 +1415,12 @@ mod tests {
             record_get(common, "engine_type").and_then(SlValue::as_u64),
             Some(116),
             "MPS Regal Bus"
+        );
+        assert_eq!(record_get(rv, "state").and_then(SlValue::as_u64), Some(8));
+        assert_eq!(record_get(rv, "frame").and_then(SlValue::as_u64), Some(6));
+        assert_eq!(
+            record_get(rv, "blocked_ctr").and_then(SlValue::as_u64),
+            Some(19)
         );
 
         // Smoke OpenTTD: OPENTTDRS_DUMP_MVP_RICH_SAV=/ruta/mvp_openttd_rich.sav

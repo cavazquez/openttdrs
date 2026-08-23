@@ -1,14 +1,15 @@
 //! `IndividualRoadVehicleController` — un sub-paso de frame/tesela.
 
-use crate::engine::{ROAD_ACCEL_ORIGINAL, do_update_speed, get_advance_distance};
+use crate::engine::{
+    RoadVehicleAccelerationModel, get_advance_distance, road_engine_air_drag,
+    road_engine_tractive_effort, road_max_te_n, update_road_vehicle_speed,
+};
 use crate::map::Map;
 use crate::road_movement::bay::{
     bay_direction_at_frame_side, bay_drive_entry_side, bay_stop_frame_side,
 };
 use crate::road_movement::drive_data::{RDE_NEXT_TILE, road_drive_entry};
-use crate::road_movement::overtake::{
-    ROAD_ACCEL_OVERTAKE, drive_state_with_overtake_and_side, tick_overtaking,
-};
+use crate::road_movement::overtake::{drive_state_with_overtake_and_side, tick_overtaking};
 use crate::road_movement::rvsb::{
     RVC_DEFAULT_START_FRAME, RVC_DRIVE_THROUGH_STOP_FRAME, RVC_TURN_AROUND_START_FRAME,
     RVSB_ENTERED_STOP, RVSB_IN_DEPOT, RVSB_IN_DT_ROAD_STOP, RVSB_IN_ROAD_STOP, RVSB_TRACKDIR_MASK,
@@ -354,7 +355,14 @@ pub fn road_vehicle_tick_side(
     map: Option<&Map>,
     drive_on_right: bool,
 ) {
-    road_vehicle_tick_side_with_traffic(vehicles, v_idx, map, drive_on_right, None);
+    road_vehicle_tick_side_with_traffic(
+        vehicles,
+        v_idx,
+        map,
+        drive_on_right,
+        RoadVehicleAccelerationModel::Original,
+        None,
+    );
 }
 
 /// Tick de roadveh con búsqueda de tráfico indexada.
@@ -365,18 +373,50 @@ pub fn road_vehicle_tick_side_indexed(
     drive_on_right: bool,
     traffic: &mut RoadTrafficIndex,
 ) {
+    road_vehicle_tick_side_indexed_with_acceleration(
+        vehicles,
+        v_idx,
+        map,
+        drive_on_right,
+        RoadVehicleAccelerationModel::Original,
+        traffic,
+    );
+}
+
+/// Tick de roadveh indexado con el modelo persistido en `PATS`.
+///
+/// La variante histórica mantiene `AM_ORIGINAL` para no cambiar los callers
+/// unitarios que no cuentan con un `GameState`; el simulador siempre llama a
+/// esta función con el setting importado del save.
+pub fn road_vehicle_tick_side_indexed_with_acceleration(
+    vehicles: &mut [Vehicle],
+    v_idx: usize,
+    map: Option<&Map>,
+    drive_on_right: bool,
+    acceleration_model: RoadVehicleAccelerationModel,
+    traffic: &mut RoadTrafficIndex,
+) {
     let previous = vehicles
         .get(v_idx)
         .map_or(crate::TileCoord::new(0, 0), |v| v.pos);
-    road_vehicle_tick_side_with_traffic(vehicles, v_idx, map, drive_on_right, Some(traffic));
+    road_vehicle_tick_side_with_traffic(
+        vehicles,
+        v_idx,
+        map,
+        drive_on_right,
+        acceleration_model,
+        Some(traffic),
+    );
     traffic.update_vehicle(vehicles, v_idx, previous);
 }
 
+#[allow(clippy::too_many_lines)]
 fn road_vehicle_tick_side_with_traffic(
     vehicles: &mut [Vehicle],
     v_idx: usize,
     map: Option<&Map>,
     drive_on_right: bool,
+    acceleration_model: RoadVehicleAccelerationModel,
     traffic: Option<&RoadTrafficIndex>,
 ) {
     if !is_road_vehicle_kind(vehicles[v_idx].kind) {
@@ -418,11 +458,11 @@ fn road_vehicle_tick_side_with_traffic(
 
     let max_speed = super::slope::current_road_max_speed(v, map);
 
-    let accel = if v.overtaking != 0 {
-        i32::from(ROAD_ACCEL_OVERTAKE)
-    } else {
-        i32::from(ROAD_ACCEL_ORIGINAL)
-    };
+    let engine = v.effective_engine();
+    let cargo_weight = crate::train_consist::cargo_weight_t(v.cargo, v.cargo_type);
+    let weight = engine.weight_t.saturating_add(cargo_weight).max(1);
+    let max_te = road_max_te_n(weight, road_engine_tractive_effort(engine));
+    let air_drag = road_engine_air_drag(engine);
 
     if is_bay_road_state(v.road_state)
         && v.road_state & RVSB_ENTERED_STOP != 0
@@ -433,11 +473,37 @@ fn road_vehicle_tick_side_with_traffic(
     }
 
     let result = if road_vehicle_has_motion_target(v) {
-        do_update_speed(v.cur_speed, v.subspeed, accel, 0, max_speed, v.progress)
+        update_road_vehicle_speed(
+            v.cur_speed,
+            v.subspeed,
+            v.progress,
+            acceleration_model,
+            engine.power_hp,
+            weight,
+            max_te,
+            air_drag,
+            v.kind,
+            max_speed,
+            v.overtaking != 0,
+            false,
+        )
     } else {
-        let (cur, sub) = crate::engine::decelerate_road_speed(v.cur_speed, v.subspeed);
-        v.cur_speed = cur;
-        v.subspeed = sub;
+        let result = update_road_vehicle_speed(
+            v.cur_speed,
+            v.subspeed,
+            0,
+            acceleration_model,
+            engine.power_hp,
+            weight,
+            max_te,
+            air_drag,
+            v.kind,
+            max_speed,
+            false,
+            true,
+        );
+        v.cur_speed = result.cur_speed;
+        v.subspeed = result.subspeed;
         if v.cur_speed == 0 && v.pos == v.dest && !is_bay_road_state(v.road_state) {
             v.advance_destination_after_arrival();
         }
@@ -633,8 +699,8 @@ mod tests {
 
     #[test]
     fn overtaking_uses_accel_512() {
-        assert_eq!(ROAD_ACCEL_OVERTAKE, 512);
-        assert_eq!(ROAD_ACCEL_ORIGINAL, 256);
+        assert_eq!(crate::road_movement::ROAD_ACCEL_OVERTAKE, 512);
+        assert_eq!(crate::engine::ROAD_ACCEL_ORIGINAL, 256);
     }
 
     #[test]

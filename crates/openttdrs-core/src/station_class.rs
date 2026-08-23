@@ -116,6 +116,10 @@ pub struct StationSpecDef {
     /// GRFID del `NewGRF` que definió este spec (0 = vanilla).
     #[serde(default, skip)]
     pub newgrf_grfid: u32,
+    /// Versión de formato Action8 del GRF dueño. Determina el fallback de la
+    /// tabla de traducción de cargos si el GRF no declaró `GlobalVar 0x09`.
+    #[serde(default, skip)]
+    pub newgrf_grf_version: u8,
     /// Tablas de traducción del GRF para vars Action2 (`42`, etc.).
     #[serde(default, skip)]
     pub newgrf_type_tables: Option<crate::newgrf_type_tables::GrfTypeTranslationTables>,
@@ -136,10 +140,60 @@ pub const STATION_CALLBACK_ANIMATION_SPEED_MASK: u8 = 1 << 3;
 pub const STATION_CALLBACK_SLOPE_CHECK_MASK: u8 = 1 << 4;
 /// Flag Action0 `0x13`: CB141 recibe bits aleatorios como `param1`.
 pub const STATION_FLAG_CB141_RANDOM_BITS: u8 = 1 << 2;
-/// `StationAnimationTrigger::Built`.
-pub const STATION_ANIMATION_TRIGGER_BUILT: u16 = 1 << 0;
-/// `StationAnimationTrigger::TileLoop`.
-pub const STATION_ANIMATION_TRIGGER_TILE_LOOP: u16 = 1 << 7;
+
+/// Disparadores de animación de estación / road stop de `OpenTTD`.
+///
+/// Action0 `0x18` almacena una máscara de estos valores, mientras CB140
+/// recibe el ordinal en el byte bajo de `var 18`. Mantener ambas operaciones
+/// en el tipo evita confundir `TileLoop = 7` con su máscara `1 << 7`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum StationAnimationTrigger {
+    Built = 0,
+    NewCargo = 1,
+    CargoTaken = 2,
+    VehicleArrives = 3,
+    VehicleDeparts = 4,
+    VehicleLoads = 5,
+    AcceptanceTick = 6,
+    TileLoop = 7,
+    PathReservation = 8,
+}
+
+impl StationAnimationTrigger {
+    /// Bit correspondiente en Action0 `0x18`.
+    #[must_use]
+    pub const fn mask(self) -> u16 {
+        1_u16 << (self as u8)
+    }
+
+    /// `param2` de CB140: ordinal del trigger y, si corresponde, cargo local
+    /// del GRF en bits 8..15 (`var 18`).
+    #[must_use]
+    pub const fn callback_param(self, cargo_local_id: Option<u8>) -> u32 {
+        let trigger = self as u32;
+        match cargo_local_id {
+            Some(cargo) => trigger | (cargo as u32) << 8,
+            None => trigger,
+        }
+    }
+}
+
+/// Máscaras Action0 `0x18`, conservadas como API para consumidores existentes.
+pub const STATION_ANIMATION_TRIGGER_BUILT: u16 = StationAnimationTrigger::Built.mask();
+pub const STATION_ANIMATION_TRIGGER_NEW_CARGO: u16 = StationAnimationTrigger::NewCargo.mask();
+pub const STATION_ANIMATION_TRIGGER_CARGO_TAKEN: u16 = StationAnimationTrigger::CargoTaken.mask();
+pub const STATION_ANIMATION_TRIGGER_VEHICLE_ARRIVES: u16 =
+    StationAnimationTrigger::VehicleArrives.mask();
+pub const STATION_ANIMATION_TRIGGER_VEHICLE_DEPARTS: u16 =
+    StationAnimationTrigger::VehicleDeparts.mask();
+pub const STATION_ANIMATION_TRIGGER_VEHICLE_LOADS: u16 =
+    StationAnimationTrigger::VehicleLoads.mask();
+pub const STATION_ANIMATION_TRIGGER_ACCEPTANCE_TICK: u16 =
+    StationAnimationTrigger::AcceptanceTick.mask();
+pub const STATION_ANIMATION_TRIGGER_TILE_LOOP: u16 = StationAnimationTrigger::TileLoop.mask();
+pub const STATION_ANIMATION_TRIGGER_PATH_RESERVATION: u16 =
+    StationAnimationTrigger::PathReservation.mask();
 
 const fn default_station_animation_status() -> u8 {
     0xFF
@@ -150,6 +204,17 @@ const fn default_station_animation_speed() -> u8 {
 }
 
 impl StationSpecDef {
+    /// Id local de un cargo para callbacks de este GRF (`var 18`, bits 8..15).
+    #[must_use]
+    pub fn newgrf_cargo_local_id(&self, cargo: crate::CargoType, climate: crate::Climate) -> u8 {
+        crate::newgrf_type_tables::local_cargo_id(
+            self.newgrf_type_tables.as_ref(),
+            self.newgrf_grf_version,
+            cargo,
+            climate,
+        )
+    }
+
     /// Preview `NewGRF` si el spec trae sprite Action1/3.
     #[must_use]
     pub fn newgrf_preview_sprite(&self) -> Option<&crate::newgrf_sprites::DecodedSprite> {
@@ -269,6 +334,7 @@ pub fn vanilla_station_spec_catalog() -> Vec<StationSpecDef> {
         newgrf_local_id: 0,
         newgrf_runtime: None,
         newgrf_grfid: 0,
+        newgrf_grf_version: 0,
         newgrf_type_tables: None,
         custom_layouts: std::collections::HashMap::new(),
     }]

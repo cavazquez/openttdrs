@@ -184,6 +184,7 @@ mod tests {
             newgrf_local_id: 0,
             newgrf_runtime: None,
             newgrf_grfid: 0,
+            newgrf_grf_version: 0,
             newgrf_type_tables: None,
             custom_layouts: Default::default(),
         };
@@ -249,6 +250,7 @@ mod tests {
             newgrf_local_id: 0,
             newgrf_runtime: Some(Box::new(gfx)),
             newgrf_grfid: 0,
+            newgrf_grf_version: 0,
             newgrf_type_tables: None,
             custom_layouts: Default::default(),
         };
@@ -324,6 +326,7 @@ mod tests {
             newgrf_local_id: 0,
             newgrf_runtime: Some(Box::new(gfx)),
             newgrf_grfid: 0,
+            newgrf_grf_version: 0,
             newgrf_type_tables: None,
             custom_layouts: Default::default(),
         };

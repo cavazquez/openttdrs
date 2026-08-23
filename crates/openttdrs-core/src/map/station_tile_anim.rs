@@ -4,6 +4,7 @@ use std::collections::HashSet;
 use std::hash::BuildHasher;
 
 use crate::airport::{AirportPiece, airport_station_gfx_animation_frames};
+use crate::cargo::CargoType;
 use crate::company::Company;
 use crate::map::{Map, TileCoord, TileKind};
 use crate::newgrf_callback::{
@@ -18,10 +19,11 @@ use crate::road_stop_spec::{
     ROADSTOP_ANIMATION_TRIGGER_TILE_LOOP, RoadStopSpecDef, road_stop_spec_def,
 };
 use crate::station::{
-    STATION_TYPE_RAIL_WAYPOINT, Station, StopKind, station_at_tile, station_type_from_m6,
+    STATION_TYPE_RAIL_WAYPOINT, Station, StopKind, station_at_tile, station_footprint_tiles,
+    station_type_from_m6,
 };
 use crate::station_action2::action2_eval_ctx_for_station_tile;
-use crate::station_class::{StationSpecDef, station_spec_def};
+use crate::station_class::{StationAnimationTrigger, StationSpecDef, station_spec_def};
 use crate::world_gen::Climate;
 
 /// Frames del radar vanilla (`SPR_AIRPORT_RADAR_1` … `_12`).
@@ -223,7 +225,7 @@ fn resolve_station_animation_callback(
 /// persistido del `AnimatedTileList` de OpenTTD para poder retomar el scheduler
 /// tras guardar/cargar JSON.
 #[allow(clippy::too_many_arguments)] // Firma explícita: el trigger muta mapa, estación y estado persistido.
-pub fn trigger_newgrf_station_animation<S: BuildHasher>(
+fn trigger_newgrf_station_animation_inner<S: BuildHasher>(
     map: &mut Map,
     tick: u64,
     stations: &mut [Station],
@@ -232,7 +234,8 @@ pub fn trigger_newgrf_station_animation<S: BuildHasher>(
     catalog: &[StationSpecDef],
     active_tiles: &mut HashSet<TileCoord, S>,
     coord: TileCoord,
-    trigger: u16,
+    trigger: StationAnimationTrigger,
+    cargo: Option<CargoType>,
 ) -> bool {
     let Some((station_index, mut ctx)) =
         station_animation_context(map, stations, companies, climate, catalog, coord)
@@ -245,7 +248,7 @@ pub fn trigger_newgrf_station_animation<S: BuildHasher>(
         active_tiles.remove(&coord);
         return false;
     };
-    if def.animation_triggers & trigger == 0 {
+    if def.animation_triggers & trigger.mask() == 0 {
         return false;
     }
     let Some(mut tile) = map.get(coord) else {
@@ -261,7 +264,7 @@ pub fn trigger_newgrf_station_animation<S: BuildHasher>(
         &mut ctx,
         CBID_STATION_ANIMATION_TRIGGER,
         random,
-        u32::from(trigger),
+        trigger.callback_param(cargo.map(|cargo| def.newgrf_cargo_local_id(cargo, climate))),
     );
     if result == CALLBACK_FAILED {
         return false;
@@ -283,6 +286,164 @@ pub fn trigger_newgrf_station_animation<S: BuildHasher>(
         let _ = map.set_tile(coord, tile);
     }
     tile.m7 != before_frame || was_active != active_tiles.contains(&coord)
+}
+
+/// Ejecuta CB140 sobre una tesela ferroviaria/waypoint `NewGRF`.
+///
+/// El trigger llega como ordinal tipado; Action0 `0x18` se compara usando su
+/// máscara dentro de la función. `Built` y `TileLoop` no llevan cargo.
+#[allow(clippy::too_many_arguments)] // Firma explícita: el trigger muta mapa, estación y estado persistido.
+pub fn trigger_newgrf_station_animation<S: BuildHasher>(
+    map: &mut Map,
+    tick: u64,
+    stations: &mut [Station],
+    companies: &[Company],
+    climate: Climate,
+    catalog: &[StationSpecDef],
+    active_tiles: &mut HashSet<TileCoord, S>,
+    coord: TileCoord,
+    trigger: StationAnimationTrigger,
+) -> bool {
+    trigger_newgrf_station_animation_inner(
+        map,
+        tick,
+        stations,
+        companies,
+        climate,
+        catalog,
+        active_tiles,
+        coord,
+        trigger,
+        None,
+    )
+}
+
+/// Teselas ferroviarias/waypoint que pertenecen a la estación lógica anclada.
+///
+/// OpenTTD aplica `NewCargo`, `CargoTaken` y `AcceptanceTick` sobre toda la
+/// estación, pero deja `Built`/`TileLoop` en una sola tesela. La asignación por
+/// ancla evita que dos estaciones contiguas compartan por accidente un CB140.
+fn station_animation_whole_tiles(
+    map: &Map,
+    stations: &[Station],
+    station_anchor: TileCoord,
+) -> Vec<TileCoord> {
+    let Some(station) = stations
+        .iter()
+        .find(|station| station.pos == station_anchor)
+    else {
+        return Vec::new();
+    };
+    if !matches!(
+        station.stop_kind,
+        StopKind::RailStation | StopKind::RailWaypoint
+    ) {
+        return Vec::new();
+    }
+    let mut tiles: Vec<_> = station_footprint_tiles(map, station_anchor)
+        .into_iter()
+        .filter(|coord| {
+            station_at_tile(map, stations, *coord)
+                .is_some_and(|candidate| candidate.pos == station_anchor)
+        })
+        .collect();
+    tiles.sort_by_key(|coord| (coord.x, coord.y));
+    tiles.dedup();
+    tiles
+}
+
+/// Ejecuta CB140 sobre todas las teselas de la estación (`TA_WHOLE`).
+///
+/// `cargo` se traduce al id local del GRF por cada spec antes de llenar los
+/// bits 8..15 de `var 18`.
+#[allow(clippy::too_many_arguments)] // La mutación toca mapa, estaciones y lista activa.
+pub fn trigger_newgrf_station_animation_for_station<S: BuildHasher>(
+    map: &mut Map,
+    tick: u64,
+    stations: &mut [Station],
+    companies: &[Company],
+    climate: Climate,
+    catalog: &[StationSpecDef],
+    active_tiles: &mut HashSet<TileCoord, S>,
+    station_anchor: TileCoord,
+    trigger: StationAnimationTrigger,
+    cargo: Option<CargoType>,
+) -> Vec<TileCoord> {
+    let tiles = station_animation_whole_tiles(map, stations, station_anchor);
+    let mut dirty = Vec::new();
+    for coord in tiles {
+        if trigger_newgrf_station_animation_inner(
+            map,
+            tick,
+            stations,
+            companies,
+            climate,
+            catalog,
+            active_tiles,
+            coord,
+            trigger,
+            cargo,
+        ) {
+            dirty.push(coord);
+        }
+    }
+    dirty
+}
+
+/// Ejecuta CB140 en la plataforma que contiene `trigger_tile` (`TA_PLATFORM`).
+///
+/// Es la semántica necesaria para eventos de carga/descarga de tren. Las
+/// plataformas vecinas pertenecientes a otra estación quedan filtradas por la
+/// misma asignación lógica usada en [`station_animation_whole_tiles`].
+#[allow(clippy::too_many_arguments)] // La mutación toca mapa, estaciones y lista activa.
+pub fn trigger_newgrf_station_animation_for_platform<S: BuildHasher>(
+    map: &mut Map,
+    tick: u64,
+    stations: &mut [Station],
+    companies: &[Company],
+    climate: Climate,
+    catalog: &[StationSpecDef],
+    active_tiles: &mut HashSet<TileCoord, S>,
+    station_anchor: TileCoord,
+    trigger_tile: TileCoord,
+    trigger: StationAnimationTrigger,
+) -> Vec<TileCoord> {
+    let Some(station) = stations
+        .iter()
+        .find(|station| station.pos == station_anchor)
+    else {
+        return Vec::new();
+    };
+    if station.stop_kind != StopKind::RailStation {
+        return Vec::new();
+    }
+    let mut tiles =
+        crate::station::rail_station_platform_track_tiles(map, station_anchor, trigger_tile);
+    tiles.retain(|coord| {
+        station_at_tile(map, stations, *coord)
+            .is_some_and(|candidate| candidate.pos == station_anchor)
+    });
+    tiles.sort_by_key(|coord| (coord.x, coord.y));
+    tiles.dedup();
+
+    let mut dirty = Vec::new();
+    for coord in tiles {
+        if trigger_newgrf_station_animation_inner(
+            map,
+            tick,
+            stations,
+            companies,
+            climate,
+            catalog,
+            active_tiles,
+            coord,
+            trigger,
+            None,
+        ) {
+            dirty.push(coord);
+        }
+    }
+    dirty
 }
 
 #[allow(clippy::too_many_arguments)] // Misma entidad mutada que el trigger público.
@@ -378,9 +539,8 @@ fn advance_newgrf_station_tile<S: BuildHasher>(
 
 /// Ejecuta el scheduler CB140–142 de estaciones ferroviarias y waypoints NewGRF.
 ///
-/// Los call sites actuales cubren `Built` y `TileLoop`; los disparadores de
-/// carga, vehículos, aceptación y reserva se conectan donde ocurren esos
-/// eventos, no se simulan desde este recorrido.
+/// El `TileLoop` se dispara aquí; carga, vehículos, aceptación y reserva se
+/// conectan desde los eventos reales de sus respectivos subsistemas.
 #[allow(clippy::too_many_arguments)] // Scheduler integrado: evita empaquetar préstamos mutables artificiales.
 pub fn step_newgrf_station_tiles<S: BuildHasher>(
     map: &mut Map,
@@ -403,7 +563,7 @@ pub fn step_newgrf_station_tiles<S: BuildHasher>(
             catalog,
             active_tiles,
             *coord,
-            crate::station_class::STATION_ANIMATION_TRIGGER_TILE_LOOP,
+            StationAnimationTrigger::TileLoop,
         ) {
             dirty.push(*coord);
         }
@@ -555,6 +715,34 @@ mod tests {
         gfx.action2_var.insert(4, callback_literal(0xFE));
         gfx.action2_var.insert(5, callback_literal(3));
         gfx.action2_var.insert(6, callback_literal(2));
+        gfx
+    }
+
+    /// Callback CB140 que devuelve un byte de `var 18`; permite verificar por
+    /// separado el ordinal del trigger (byte bajo) y el cargo local (alto).
+    fn station_trigger_parameter_callbacks(shift: u8) -> TrainSpriteGraphics {
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 2,
+        });
+        gfx.action2_var.insert(
+            2,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x18,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        shift,
+                        and_mask: 0xFF,
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
         gfx
     }
 
@@ -710,7 +898,7 @@ mod tests {
             &catalog,
             &mut active,
             coord,
-            crate::STATION_ANIMATION_TRIGGER_BUILT,
+            StationAnimationTrigger::Built,
         ));
         assert!(active.contains(&coord));
         assert_eq!(map.get(coord).unwrap().m7, 0);
@@ -753,5 +941,119 @@ mod tests {
         let loaded = crate::GameState::load_json(&json).unwrap();
         assert_eq!(loaded.map.get(coord).unwrap().m7, 3);
         assert!(loaded.newgrf_animated_station_tiles.contains(&coord));
+    }
+
+    #[test]
+    #[allow(clippy::too_many_lines)] // Comprueba de punta a punta el contrato CB140.
+    fn station_cb140_uses_ordinals_cargo_translation_and_trigger_areas() {
+        let first = TileCoord::new(1, 1);
+        let second = TileCoord::new(2, 1);
+        let mut map = Map::new_flat(5, 4, 0);
+        for coord in [first, second] {
+            let mut tile = map.get(coord).unwrap();
+            tile.kind = TileKind::Station;
+            tile.mapt = 0x50;
+            tile.m5 = 0; // andén sobre eje X, ambas teselas misma plataforma
+            tile.m6 = 0;
+            map.set_tile(coord, tile).unwrap();
+        }
+        let mut stations = vec![Station::new_with_kind(first, StopKind::RailStation)];
+        let mut catalog = crate::vanilla_station_spec_catalog();
+        let def = &mut catalog[0];
+        def.from_newgrf = true;
+        def.animation_triggers = crate::STATION_ANIMATION_TRIGGER_BUILT
+            | crate::STATION_ANIMATION_TRIGGER_NEW_CARGO
+            | crate::STATION_ANIMATION_TRIGGER_CARGO_TAKEN
+            | crate::STATION_ANIMATION_TRIGGER_VEHICLE_LOADS
+            | crate::STATION_ANIMATION_TRIGGER_TILE_LOOP;
+        def.newgrf_grf_version = 8;
+        def.newgrf_type_tables = Some(crate::newgrf_type_tables::GrfTypeTranslationTables {
+            cargo: vec![*b"PASS", *b"MAIL", *b"GOOD", *b"WOOD", *b"GRAI", *b"COAL"],
+            ..Default::default()
+        });
+        def.newgrf_runtime = Some(Box::new(station_trigger_parameter_callbacks(0)));
+        let companies = vec![crate::Company::player(crate::CompanyEconomy::default(), 0)];
+        let mut active = HashSet::new();
+
+        assert_eq!(StationAnimationTrigger::Built.callback_param(None), 0);
+        assert_eq!(StationAnimationTrigger::TileLoop.callback_param(None), 7);
+        assert_eq!(
+            StationAnimationTrigger::NewCargo.callback_param(Some(5)),
+            0x0501
+        );
+        assert_eq!(
+            StationAnimationTrigger::CargoTaken.callback_param(Some(5)),
+            0x0502
+        );
+
+        assert!(trigger_newgrf_station_animation(
+            &mut map,
+            1,
+            &mut stations,
+            &companies,
+            Climate::Temperate,
+            &catalog,
+            &mut active,
+            first,
+            StationAnimationTrigger::Built,
+        ));
+        assert_eq!(map.get(first).unwrap().m7, 0);
+
+        assert!(trigger_newgrf_station_animation(
+            &mut map,
+            2,
+            &mut stations,
+            &companies,
+            Climate::Temperate,
+            &catalog,
+            &mut active,
+            first,
+            StationAnimationTrigger::TileLoop,
+        ));
+        assert_eq!(
+            map.get(first).unwrap().m7,
+            7,
+            "CB140 recibe el ordinal TileLoop=7, no la máscara 128"
+        );
+
+        catalog[0].newgrf_runtime = Some(Box::new(station_trigger_parameter_callbacks(8)));
+        let dirty = trigger_newgrf_station_animation_for_station(
+            &mut map,
+            3,
+            &mut stations,
+            &companies,
+            Climate::Temperate,
+            &catalog,
+            &mut active,
+            first,
+            StationAnimationTrigger::NewCargo,
+            Some(CargoType::Coal),
+        );
+        assert_eq!(dirty, vec![first, second]);
+        assert_eq!(map.get(first).unwrap().m7, 5);
+        assert_eq!(map.get(second).unwrap().m7, 5);
+
+        catalog[0].newgrf_runtime = Some(Box::new(station_trigger_parameter_callbacks(0)));
+        active.clear();
+        for coord in [first, second] {
+            let mut tile = map.get(coord).unwrap();
+            tile.m7 = 0;
+            map.set_tile(coord, tile).unwrap();
+        }
+        let dirty = trigger_newgrf_station_animation_for_platform(
+            &mut map,
+            4,
+            &mut stations,
+            &companies,
+            Climate::Temperate,
+            &catalog,
+            &mut active,
+            first,
+            first,
+            StationAnimationTrigger::VehicleLoads,
+        );
+        assert_eq!(dirty, vec![first, second]);
+        assert_eq!(map.get(first).unwrap().m7, 5);
+        assert_eq!(map.get(second).unwrap().m7, 5);
     }
 }

@@ -421,7 +421,7 @@ pub(in crate::command) fn place_rail_station_area(
                 &state.station_spec_catalog,
                 &mut state.newgrf_animated_station_tiles,
                 c,
-                crate::station_class::STATION_ANIMATION_TRIGGER_BUILT,
+                crate::station_class::StationAnimationTrigger::Built,
             ) {
                 state.runtime.industry_tile_dirty.push(c);
             }
@@ -537,7 +537,7 @@ pub(in crate::command::transport) fn station_placement_on_tile(
             &state.station_spec_catalog,
             &mut state.newgrf_animated_station_tiles,
             c,
-            crate::station_class::STATION_ANIMATION_TRIGGER_BUILT,
+            crate::station_class::StationAnimationTrigger::Built,
         ) {
             state.runtime.industry_tile_dirty.push(c);
         }
@@ -634,7 +634,7 @@ pub(in crate::command) fn place_rail_waypoint(
         &state.station_spec_catalog,
         &mut state.newgrf_animated_station_tiles,
         c,
-        crate::station_class::STATION_ANIMATION_TRIGGER_BUILT,
+        crate::station_class::StationAnimationTrigger::Built,
     ) {
         state.runtime.industry_tile_dirty.push(c);
     }

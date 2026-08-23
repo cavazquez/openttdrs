@@ -360,6 +360,44 @@ impl CargoType {
         }
     }
 
+    /// Bit de cargo independiente del clima (`CargoSpec::bitnum`).
+    ///
+    /// A diferencia de [`Self::cargo_id`], los cargos que comparten el slot
+    /// clásico de un clima conservan aquí su identidad `NewGRF` v7+ (`WHEA` y
+    /// `MAIZ` comparten el 6; `PAPR` ocupa el 11, etc.).
+    #[must_use]
+    pub const fn bitnum(self) -> u8 {
+        match self {
+            Self::Passengers => 0,
+            Self::Coal => 1,
+            Self::Mail => 2,
+            Self::Oil => 3,
+            Self::Livestock => 4,
+            Self::Goods => 5,
+            Self::Grain | Self::Wheat | Self::Maize => 6,
+            Self::Wood => 7,
+            Self::IronOre => 8,
+            Self::Steel => 9,
+            Self::Valuables | Self::Gold | Self::Diamonds => 10,
+            Self::Paper => 11,
+            Self::Food => 12,
+            Self::Fruit => 13,
+            Self::CopperOre => 14,
+            Self::Water => 15,
+            Self::Rubber => 16,
+            Self::Sugar => 17,
+            Self::Toys => 18,
+            Self::Batteries => 19,
+            Self::Candy => 20,
+            Self::Toffee => 21,
+            Self::Cola => 22,
+            Self::CottonCandy => 23,
+            Self::Bubbles => 24,
+            Self::Plastic => 25,
+            Self::FizzyDrinks => 26,
+        }
+    }
+
     #[must_use]
     pub const fn from_cargo_id(id: u8) -> Option<Self> {
         match id {
@@ -699,6 +737,17 @@ mod tests {
             assert!(seen.insert(cargo.label_u32()), "dup {}", cargo.label());
             assert_eq!(CargoType::from_label(cargo.label()), Some(cargo));
         }
+    }
+
+    #[test]
+    fn newgrf_bitnums_match_openttd_cargo_specs() {
+        assert_eq!(CargoType::Paper.bitnum(), 11);
+        assert_eq!(CargoType::Food.bitnum(), 12);
+        assert_eq!(CargoType::Rubber.bitnum(), 16);
+        assert_eq!(CargoType::Sugar.bitnum(), 17);
+        assert_eq!(CargoType::Wheat.bitnum(), CargoType::Grain.bitnum());
+        assert_eq!(CargoType::Maize.bitnum(), CargoType::Grain.bitnum());
+        assert_eq!(CargoType::Gold.bitnum(), CargoType::Valuables.bitnum());
     }
 
     #[test]

@@ -109,6 +109,7 @@ pub fn apply_newgrf_stations(state: &mut GameState, search_dirs: &[&Path]) {
                 newgrf_local_id: local_id,
                 newgrf_runtime,
                 newgrf_grfid: entry.grfid,
+                newgrf_grf_version: entry.grf_version,
                 newgrf_type_tables: tables_opt.clone(),
                 custom_layouts,
             });

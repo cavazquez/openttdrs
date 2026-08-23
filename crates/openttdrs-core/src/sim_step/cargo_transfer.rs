@@ -1,6 +1,50 @@
 use crate::vehicle::{OrderUnloadType, VehicleKind};
 use crate::{CargoType, GameState, TileCoord, TileKind, economy, station, town};
 
+/// Ejecuta un trigger CB140 con área `TA_WHOLE` después de que la economía
+/// cambió de verdad la cola de carga de una estación.
+fn trigger_station_cargo_animation(
+    state: &mut GameState,
+    station_pos: TileCoord,
+    trigger: crate::StationAnimationTrigger,
+    cargo: CargoType,
+) {
+    let dirty = crate::map::trigger_newgrf_station_animation_for_station(
+        &mut state.map,
+        state.tick.get(),
+        &mut state.stations,
+        &state.companies,
+        state.climate,
+        &state.station_spec_catalog,
+        &mut state.newgrf_animated_station_tiles,
+        station_pos,
+        trigger,
+        Some(cargo),
+    );
+    state.runtime.industry_tile_dirty.extend(dirty);
+}
+
+/// Ejecuta el trigger de plataforma CB140 tras una carga/descarga de tren.
+fn trigger_station_vehicle_load_animation(
+    state: &mut GameState,
+    station_pos: TileCoord,
+    vehicle_pos: TileCoord,
+) {
+    let dirty = crate::map::trigger_newgrf_station_animation_for_platform(
+        &mut state.map,
+        state.tick.get(),
+        &mut state.stations,
+        &state.companies,
+        state.climate,
+        &state.station_spec_catalog,
+        &mut state.newgrf_animated_station_tiles,
+        station_pos,
+        vehicle_pos,
+        crate::StationAnimationTrigger::VehicleLoads,
+    );
+    state.runtime.industry_tile_dirty.extend(dirty);
+}
+
 fn vehicle_load_unload_speed(state: &GameState, vehicle_idx: usize, cargo: CargoType) -> u32 {
     let configured = state
         .vehicles
@@ -230,17 +274,32 @@ pub(super) fn unload_vehicles(
             );
         }
         let mut reinserted = Vec::new();
+        let mut reinserted_cargos = Vec::new();
         for (mut p, was_transfer) in taken.into_iter().zip(transfer_mask) {
             // El modelo actual usa las estaciones como hub para todo freight;
             // una transferencia forzada de pax/mail también debe quedar allí.
             if !town_cargo || was_transfer {
                 p.update_unloading_tile(station_pos);
                 p.next_hop = None;
+                if !reinserted_cargos.contains(&p.cargo) {
+                    reinserted_cargos.push(p.cargo);
+                }
                 reinserted.push(p);
             }
         }
         if !reinserted.is_empty() {
             state.stations[station_idx].push_waiting_packets(reinserted);
+            for cargo in reinserted_cargos {
+                trigger_station_cargo_animation(
+                    state,
+                    station_pos,
+                    crate::StationAnimationTrigger::NewCargo,
+                    cargo,
+                );
+            }
+        }
+        if state.vehicles[i].kind == VehicleKind::Train {
+            trigger_station_vehicle_load_animation(state, station_pos, vpos);
         }
         state.stations[station_idx].income += payment.cast_unsigned();
         state.credit_company(vehicle_owner, payment);
@@ -509,6 +568,10 @@ fn try_load_from_industry(
     state.industries[ind_idx].transported_total = state.industries[ind_idx]
         .transported_total
         .saturating_add(u64::from(count));
+    if state.vehicles[vehicle_idx].kind == VehicleKind::Train {
+        let vehicle_pos = state.vehicles[vehicle_idx].pos;
+        trigger_station_vehicle_load_animation(state, station_pos, vehicle_pos);
+    }
     *loaded_flag = true;
     if first_pickup {
         state.stats.cargo_pickups += 1;
@@ -674,6 +737,18 @@ fn try_load_from_station_waiting_cargo(
     state.vehicles[vehicle_idx].last_depart_tick = Some(state.tick.get());
     let visit = state.vehicles[vehicle_idx].station_visit(state.tick.get());
     station::on_station_cargo_pickup(&mut state.stations[station_idx], cargo, company, visit);
+    if state.stations[station_idx].cargo_stock.get(cargo) == 0 {
+        trigger_station_cargo_animation(
+            state,
+            station_pos,
+            crate::StationAnimationTrigger::CargoTaken,
+            cargo,
+        );
+    }
+    if state.vehicles[vehicle_idx].kind == VehicleKind::Train {
+        let vehicle_pos = state.vehicles[vehicle_idx].pos;
+        trigger_station_vehicle_load_animation(state, station_pos, vehicle_pos);
+    }
     *loaded_flag = true;
     if first_pickup {
         state.stats.cargo_pickups += 1;
@@ -896,8 +971,59 @@ fn station_has_industry_waiting(
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)] // Fixtures de mapa acotado construidos en cada prueba.
 mod tests {
     use super::*;
+
+    fn cb140_trigger_byte_runtime() -> crate::newgrf_sprites::TrainSpriteGraphics {
+        use crate::newgrf_sprites::{
+            Action2VarAdjust, Action2VarEntry, Action2VarTerm, TrainSpriteAssign,
+        };
+
+        let mut gfx = crate::newgrf_sprites::TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 2,
+        });
+        gfx.action2_var.insert(
+            2,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x18,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        shift: 0,
+                        and_mask: 0xFF,
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
+        gfx
+    }
+
+    fn state_with_newgrf_rail_station(trigger_mask: u16) -> (GameState, TileCoord) {
+        let pos = TileCoord::new(1, 1);
+        let mut state = GameState::new(4, 4);
+        let mut tile = state.map.get(pos).unwrap();
+        tile.kind = TileKind::Station;
+        tile.mapt = 0x50;
+        tile.m5 = 0;
+        tile.m6 = 0;
+        state.map.set_tile(pos, tile).unwrap();
+        state.stations.push(crate::Station::new_with_kind(
+            pos,
+            crate::StopKind::RailStation,
+        ));
+        let def = &mut state.station_spec_catalog[0];
+        def.from_newgrf = true;
+        def.animation_triggers = trigger_mask;
+        def.newgrf_runtime = Some(Box::new(cb140_trigger_byte_runtime()));
+        (state, pos)
+    }
 
     #[test]
     fn load_supply_requires_stock_in_industry_or_station() {
@@ -942,5 +1068,58 @@ mod tests {
             vehicle_load_unload_speed(&state, 0, CargoType::Passengers),
             3
         );
+    }
+
+    #[test]
+    fn unloading_freight_into_station_triggers_new_cargo_cb140() {
+        let (mut state, pos) =
+            state_with_newgrf_rail_station(crate::STATION_ANIMATION_TRIGGER_NEW_CARGO);
+        let source = TileCoord::new(0, 1);
+        let mut train = crate::Vehicle::new(7, VehicleKind::Train, pos, pos);
+        train
+            .cargo_packets
+            .push(crate::CargoPacket::new(CargoType::Coal, 1, source));
+        train.sync_cargo_from_packets();
+        train.last_pickup_station = Some(source);
+        state.vehicles.push(train);
+
+        let mut unloaded = vec![false];
+        unload_vehicles(&mut state, 1, &[false], &mut unloaded);
+
+        assert!(unloaded[0]);
+        assert_eq!(state.stations[0].cargo_stock.get(CargoType::Coal), 1);
+        assert_eq!(map_frame(&state, pos), 1, "NewCargo ordinal llega a CB140");
+        assert!(state.newgrf_animated_station_tiles.contains(&pos));
+    }
+
+    #[test]
+    fn loading_last_waiting_cargo_triggers_cargo_taken_cb140() {
+        let (mut state, pos) =
+            state_with_newgrf_rail_station(crate::STATION_ANIMATION_TRIGGER_CARGO_TAKEN);
+        state.stations[0].add_waiting_cargo(CargoType::Coal, 1);
+        let mut train = crate::Vehicle::new(8, VehicleKind::Train, pos, pos);
+        train.cargo_type = Some(CargoType::Coal);
+        state.vehicles.push(train);
+
+        let mut loaded = false;
+        assert!(try_load_from_station_waiting_cargo(
+            &mut state,
+            0,
+            0,
+            &mut loaded,
+        ));
+
+        assert!(loaded);
+        assert_eq!(state.stations[0].cargo_stock.get(CargoType::Coal), 0);
+        assert_eq!(
+            map_frame(&state, pos),
+            2,
+            "CargoTaken sólo ocurre al vaciar el cargo"
+        );
+        assert!(state.newgrf_animated_station_tiles.contains(&pos));
+    }
+
+    fn map_frame(state: &GameState, coord: TileCoord) -> u8 {
+        state.map.get(coord).map_or(0, |tile| tile.m7)
     }
 }

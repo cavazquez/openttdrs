@@ -1,13 +1,18 @@
-//! Tablas de traducción `NewGRF` rail/road/tram (Action0 `GlobalVar`).
+//! Tablas de traducción `NewGRF` cargo/rail/road/tram (Action0 `GlobalVar`).
 //!
-//! Feature `0x08`, props `0x12` (rail), `0x16` (road), `0x17` (tram).
-//! Vars Action2: estaciones `42` (rail), road `45` (`__RRttrr`).
+//! Feature `0x08`, props `0x09` (cargo), `0x12` (rail), `0x16` (road),
+//! `0x17` (tram). Vars Action2: estaciones `42` (rail) y CB140 `18`
+//! (cargo); road `45` (`__RRttrr`).
 
+use crate::cargo::CargoType;
 use crate::rail_type::RailType;
 use crate::road_type::{RoadTramType, RoadType, RoadTypeDef};
+use crate::world_gen::Climate;
 
 /// Feature Action0: variables globales (`GSF_GLOBALVAR`).
 pub const ACTION0_FEATURE_GLOBALVAR: u8 = 0x08;
+/// Prop tabla de traducción de cargos (`CargoLabel`).
+pub const PROP_CARGO_TRANSLATION: u8 = 0x09;
 /// Prop tabla de traducción railtype.
 pub const PROP_RAILTYPE_TRANSLATION: u8 = 0x12;
 /// Prop tabla de traducción roadtype.
@@ -21,6 +26,8 @@ pub type TypeLabel = [u8; 4];
 /// Tablas locales de un GRF (índice → etiqueta).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct GrfTypeTranslationTables {
+    /// Tabla Cargo Translation Table: id local → label (`PASS`, `COAL`, …).
+    pub cargo: Vec<TypeLabel>,
     pub rail: Vec<TypeLabel>,
     pub road: Vec<TypeLabel>,
     pub tram: Vec<TypeLabel>,
@@ -29,19 +36,35 @@ pub struct GrfTypeTranslationTables {
 impl GrfTypeTranslationTables {
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.rail.is_empty() && self.road.is_empty() && self.tram.is_empty()
+        self.cargo.is_empty()
+            && self.rail.is_empty()
+            && self.road.is_empty()
+            && self.tram.is_empty()
     }
 
-    /// Fusiona tablas no vacías de `other` (última definición gana por feature).
+    /// Fusiona tablas no vacías de `other` por rango; la última definición
+    /// gana sólo en los índices que realmente declaró. `GlobalVar` permite
+    /// instalar las tablas en varios bloques Action0.
     pub fn merge_from(&mut self, other: &Self) {
-        if !other.rail.is_empty() {
-            self.rail.clone_from(&other.rail);
-        }
-        if !other.road.is_empty() {
-            self.road.clone_from(&other.road);
-        }
-        if !other.tram.is_empty() {
-            self.tram.clone_from(&other.tram);
+        merge_table(&mut self.cargo, &other.cargo);
+        merge_table(&mut self.rail, &other.rail);
+        merge_table(&mut self.road, &other.road);
+        merge_table(&mut self.tram, &other.tram);
+    }
+}
+
+const INVALID_LABEL: TypeLabel = [0; 4];
+
+fn merge_table(dest: &mut Vec<TypeLabel>, source: &[TypeLabel]) {
+    if source.is_empty() {
+        return;
+    }
+    if dest.len() < source.len() {
+        dest.resize(source.len(), INVALID_LABEL);
+    }
+    for (idx, &label) in source.iter().enumerate() {
+        if label != INVALID_LABEL {
+            dest[idx] = label;
         }
     }
 }
@@ -85,6 +108,31 @@ fn reverse_in_table(table: &[TypeLabel], label: TypeLabel) -> u8 {
         .iter()
         .position(|l| *l == label)
         .map_or(0xFF, |i| u8::try_from(i).unwrap_or(0xFF))
+}
+
+/// Traducción `CargoType` global → slot local del GRF (`GRFFile::cargo_map`).
+///
+/// Un GRF con CTT explícita usa el índice del label. Sin ella, `OpenTTD` usa el
+/// slot del clima para formatos anteriores a v7 y el `bitnum` global a partir
+/// de v7. Una versión desconocida (`0`, común al crear fixtures antes de
+/// escanear Action8) se interpreta como v8, el formato vigente seguro.
+#[must_use]
+pub fn local_cargo_id(
+    tables: Option<&GrfTypeTranslationTables>,
+    grf_version: u8,
+    cargo: CargoType,
+    climate: Climate,
+) -> u8 {
+    if let Some(tables) = tables
+        && !tables.cargo.is_empty()
+    {
+        return reverse_in_table(&tables.cargo, cargo.label_u32().to_be_bytes());
+    }
+    if (1..7).contains(&grf_version) {
+        cargo.climate_slot(climate).unwrap_or(0xFF)
+    } else {
+        cargo.bitnum()
+    }
 }
 
 /// Traducción directa índice local GRF → `RailType` (`GetRailTypeTranslation`).
@@ -193,7 +241,7 @@ pub fn parse_action0_type_translation_tables(payload: &[u8]) -> Option<GrfTypeTr
     let num_props = payload[2];
     let num_ids = payload[3];
     let first_id = payload[4];
-    if feature != ACTION0_FEATURE_GLOBALVAR || num_ids == 0 || first_id != 0 {
+    if feature != ACTION0_FEATURE_GLOBALVAR || num_ids == 0 {
         return None;
     }
     let mut i = 5usize;
@@ -206,19 +254,23 @@ pub fn parse_action0_type_translation_tables(payload: &[u8]) -> Option<GrfTypeTr
         let prop = payload[i];
         i += 1;
         match prop {
-            PROP_RAILTYPE_TRANSLATION | PROP_ROADTYPE_TRANSLATION | PROP_TRAMTYPE_TRANSLATION => {
+            PROP_CARGO_TRANSLATION
+            | PROP_RAILTYPE_TRANSLATION
+            | PROP_ROADTYPE_TRANSLATION
+            | PROP_TRAMTYPE_TRANSLATION => {
                 let need = usize::from(num_ids).saturating_mul(4);
                 if i + need > payload.len() {
                     break;
                 }
-                let mut labels = Vec::with_capacity(usize::from(num_ids));
-                for _ in 0..num_ids {
+                let mut labels = vec![INVALID_LABEL; usize::from(first_id) + usize::from(num_ids)];
+                for offset in 0..num_ids {
                     let mut lab = [0u8; 4];
                     lab.copy_from_slice(&payload[i..i + 4]);
                     i += 4;
-                    labels.push(lab);
+                    labels[usize::from(first_id) + usize::from(offset)] = lab;
                 }
                 match prop {
+                    PROP_CARGO_TRANSLATION => out.cargo = labels,
                     PROP_RAILTYPE_TRANSLATION => out.rail = labels,
                     PROP_ROADTYPE_TRANSLATION => out.road = labels,
                     _ => out.tram = labels,
@@ -279,6 +331,69 @@ mod tests {
         assert_eq!(forward_rail_type(Some(&t), 1), Some(RailType::Rail));
         assert_eq!(forward_rail_type(Some(&t), 2), Some(RailType::Monorail));
         assert_eq!(forward_rail_type(Some(&t), 3), None);
+    }
+
+    #[test]
+    fn cargo_translation_uses_explicit_ctt_then_versioned_fallback() {
+        let payload = build_action0_type_translation_payload(
+            PROP_CARGO_TRANSLATION,
+            &[*b"MAIL", *b"GOOD", *b"COAL"],
+        );
+        let tables = parse_action0_type_translation_tables(&payload).unwrap();
+        assert_eq!(tables.cargo, vec![*b"MAIL", *b"GOOD", *b"COAL"]);
+        assert_eq!(
+            local_cargo_id(Some(&tables), 8, CargoType::Coal, Climate::Temperate),
+            2
+        );
+        assert_eq!(
+            local_cargo_id(Some(&tables), 8, CargoType::Passengers, Climate::Temperate),
+            0xFF
+        );
+        assert_eq!(
+            local_cargo_id(None, 8, CargoType::Paper, Climate::SubArctic),
+            11,
+            "v7+ usa bitnum, no CargoType::cargo_id"
+        );
+        assert_eq!(
+            local_cargo_id(None, 6, CargoType::Paper, Climate::SubArctic),
+            9,
+            "v6 conserva el slot clásico del clima"
+        );
+    }
+
+    #[test]
+    fn translation_ranges_merge_without_erasing_earlier_slots() {
+        let first = vec![
+            0x00,
+            ACTION0_FEATURE_GLOBALVAR,
+            0x01,
+            0x02,
+            0x00,
+            PROP_CARGO_TRANSLATION,
+            b'P',
+            b'A',
+            b'S',
+            b'S',
+            b'M',
+            b'A',
+            b'I',
+            b'L',
+        ];
+        let second = vec![
+            0x00,
+            ACTION0_FEATURE_GLOBALVAR,
+            0x01,
+            0x01,
+            0x02,
+            PROP_CARGO_TRANSLATION,
+            b'C',
+            b'O',
+            b'A',
+            b'L',
+        ];
+        let mut merged = parse_action0_type_translation_tables(&first).unwrap();
+        merged.merge_from(&parse_action0_type_translation_tables(&second).unwrap());
+        assert_eq!(merged.cargo, vec![*b"PASS", *b"MAIL", *b"COAL"]);
     }
 
     #[test]

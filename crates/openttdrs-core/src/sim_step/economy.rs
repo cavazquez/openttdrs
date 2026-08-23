@@ -1,4 +1,36 @@
-use crate::{GameState, TileCoord, economy, town};
+use crate::{ALL_CARGO_TYPES, GameState, TileCoord, economy, town};
+
+/// Dispara `NewCargo` sólo para las colas que crecieron durante una operación
+/// de producción/distribución. La economía puede repartir un lote entre varias
+/// estaciones; cada estación/cargo que recibió unidades obtiene su CB140 de
+/// área completa sin inventar eventos para las que sólo quedaron en cobertura.
+fn trigger_station_new_cargo_since(state: &mut GameState, before: &[crate::CargoStock]) {
+    let arrivals: Vec<_> = state
+        .stations
+        .iter()
+        .zip(before)
+        .flat_map(|(station, before)| {
+            ALL_CARGO_TYPES.iter().copied().filter_map(move |cargo| {
+                (station.cargo_stock.get(cargo) > before.get(cargo)).then_some((station.pos, cargo))
+            })
+        })
+        .collect();
+    for (station_pos, cargo) in arrivals {
+        let dirty = crate::map::trigger_newgrf_station_animation_for_station(
+            &mut state.map,
+            state.tick.get(),
+            &mut state.stations,
+            &state.companies,
+            state.climate,
+            &state.station_spec_catalog,
+            &mut state.newgrf_animated_station_tiles,
+            station_pos,
+            crate::StationAnimationTrigger::NewCargo,
+            Some(cargo),
+        );
+        state.runtime.industry_tile_dirty.extend(dirty);
+    }
+}
 
 pub(super) fn process_monthly_economy(state: &mut GameState) {
     apply_monthly_inflation_and_fluctuations(state);
@@ -247,15 +279,26 @@ pub(super) fn produce_industries(state: &mut GameState, tick: u64) {
 
         // La producción no se queda en la mina: se reparte a las estaciones de la cobertura
         // según su rating (`TransportIndustryGoods` / `MoveGoodsToStation`).
+        let station_stock_before: Vec<_> = state
+            .stations
+            .iter()
+            .map(|station| station.cargo_stock)
+            .collect();
         let _moved = crate::industry::transport_industry_goods(
             &mut state.industries[i],
             &mut state.stations,
             state.order.selectgoods,
         );
+        trigger_station_new_cargo_since(state, &station_stock_before);
     }
 }
 
 pub(super) fn produce_town_demand(state: &mut GameState, tick: u64) {
+    let station_stock_before: Vec<_> = state
+        .stations
+        .iter()
+        .map(|station| station.cargo_stock)
+        .collect();
     let (passengers, mail) = town::produce_town_cargo(
         &state.map,
         &state.industries,
@@ -264,6 +307,7 @@ pub(super) fn produce_town_demand(state: &mut GameState, tick: u64) {
         tick,
         state.order.selectgoods,
     );
+    trigger_station_new_cargo_since(state, &station_stock_before);
     state.stats.town_passengers_generated += passengers;
     state.stats.town_mail_generated += mail;
 }

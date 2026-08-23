@@ -332,8 +332,9 @@ pub use map::{
     step_newgrf_station_tiles, step_tree_and_field_growth, tick_tree_tile_loop, tick_water_flood,
     tile_adjacent_to_water, tile_has_water_class, tile_loop_clear_desert, tile_loop_water_at,
     tile_slope_and_z, tree_or_field_stage, trigger_industry_randomisation_at,
-    trigger_industry_tile_randomisation, trigger_newgrf_station_animation, tunnel_entrance_m5,
-    tunnel_preview_path, water_class, water_class_from_m1,
+    trigger_industry_tile_randomisation, trigger_newgrf_station_animation,
+    trigger_newgrf_station_animation_for_platform, trigger_newgrf_station_animation_for_station,
+    tunnel_entrance_m5, tunnel_preview_path, water_class, water_class_from_m1,
 };
 // Runtime NewGRF en raíz; builders/fixtures vía `newgrf_actions` / `newgrf_sprites::fixture` (#157).
 pub use house_spec::{
@@ -591,10 +592,14 @@ pub use station::{
 };
 pub use station_action2::action2_eval_ctx_for_station_tile;
 pub use station_class::{
-    STATION_ANIMATION_TRIGGER_BUILT, STATION_ANIMATION_TRIGGER_TILE_LOOP,
-    STATION_CALLBACK_ANIMATION_NEXT_FRAME_MASK, STATION_CALLBACK_ANIMATION_SPEED_MASK,
-    STATION_FLAG_CB141_RANDOM_BITS, StationClassDef, StationClassId, StationSpecDef, StationSpecId,
-    all_station_class_defs, all_station_spec_defs, apply_station_build_tile_layout_callback,
+    STATION_ANIMATION_TRIGGER_ACCEPTANCE_TICK, STATION_ANIMATION_TRIGGER_BUILT,
+    STATION_ANIMATION_TRIGGER_CARGO_TAKEN, STATION_ANIMATION_TRIGGER_NEW_CARGO,
+    STATION_ANIMATION_TRIGGER_PATH_RESERVATION, STATION_ANIMATION_TRIGGER_TILE_LOOP,
+    STATION_ANIMATION_TRIGGER_VEHICLE_ARRIVES, STATION_ANIMATION_TRIGGER_VEHICLE_DEPARTS,
+    STATION_ANIMATION_TRIGGER_VEHICLE_LOADS, STATION_CALLBACK_ANIMATION_NEXT_FRAME_MASK,
+    STATION_CALLBACK_ANIMATION_SPEED_MASK, STATION_FLAG_CB141_RANDOM_BITS, StationAnimationTrigger,
+    StationClassDef, StationClassId, StationSpecDef, StationSpecId, all_station_class_defs,
+    all_station_spec_defs, apply_station_build_tile_layout_callback,
     apply_station_draw_tile_layout_callback, list_station_classes, list_station_specs,
     next_free_station_class_id, next_free_station_spec_id, station_class_def,
     station_newgrf_view_index, station_platform_info, station_spec_def, station_spec_layout,

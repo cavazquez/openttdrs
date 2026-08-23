@@ -122,6 +122,7 @@ fn place_rail_station_area_persists_newgrf_station_spec() {
         newgrf_local_id: 0,
         newgrf_runtime: None,
         newgrf_grfid: 0,
+        newgrf_grf_version: 0,
         newgrf_type_tables: None,
         custom_layouts: std::collections::HashMap::new(),
     });
@@ -173,6 +174,7 @@ fn place_rail_station_area_rejects_disallowed_platforms_and_lengths() {
         newgrf_local_id: 0,
         newgrf_runtime: None,
         newgrf_grfid: 0,
+        newgrf_grf_version: 0,
         newgrf_type_tables: None,
         custom_layouts: std::collections::HashMap::new(),
     });
@@ -263,6 +265,7 @@ fn place_rail_station_0e_layout_writes_tiletypes_for_distinct_views() {
         newgrf_local_id: 0,
         newgrf_runtime: None,
         newgrf_grfid: 0,
+        newgrf_grf_version: 0,
         newgrf_type_tables: None,
         custom_layouts: layouts,
     });
@@ -357,6 +360,7 @@ fn place_rail_station_cb24_overrides_0e_tiletype() {
         newgrf_local_id: 0,
         newgrf_runtime: Some(Box::new(gfx)),
         newgrf_grfid: 1,
+        newgrf_grf_version: 0,
         newgrf_type_tables: None,
         custom_layouts: layouts,
     });

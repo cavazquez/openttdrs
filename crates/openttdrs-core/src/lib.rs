@@ -382,11 +382,12 @@ pub use newgrf_callback::{
     action2_eval_ctx_from_station, action2_eval_ctx_from_vehicle, advance_road_stop_animation,
     apply_house_construction_callback, apply_industry_location_callback,
     apply_industry_tile_anim_callback, apply_station_availability_callback,
-    apply_vehicle_start_stop_callback, callback_allows_8bit_boolean, callback_allows_location,
-    callback_allows_placement, resolve_callback_or_failed,
-    resolve_industry_tile_animation_callback, resolve_industry_tile_random_trigger,
-    resolve_vehicle_callback, trigger_road_stop_animation, vehicle_start_stop_callback_allows,
-    writeback_station_persistent_registers, writeback_vehicle_persistent_registers,
+    apply_station_availability_callback_for_build, apply_vehicle_start_stop_callback,
+    callback_allows_8bit_boolean, callback_allows_location, callback_allows_placement,
+    resolve_callback_or_failed, resolve_industry_tile_animation_callback,
+    resolve_industry_tile_random_trigger, resolve_vehicle_callback, trigger_road_stop_animation,
+    vehicle_start_stop_callback_allows, writeback_station_persistent_registers,
+    writeback_vehicle_persistent_registers,
 };
 pub use newgrf_config::{
     GrfContainerVersion, GrfFileInfo, GrfParsed, GrfScanError, GrfStackIssue, MAX_NEWGRF_PARAMS,

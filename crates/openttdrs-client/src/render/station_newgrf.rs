@@ -157,6 +157,7 @@ mod tests {
             short_label: "MULT".into(),
             disallowed_platforms: 0,
             disallowed_lengths: 0,
+            callback_mask: 0,
             from_newgrf: true,
             newgrf_preview: None,
             newgrf_views: vec![solid(255, 0, 0), solid(0, 255, 0), solid(0, 0, 255)],

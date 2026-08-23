@@ -97,6 +97,7 @@ pub fn apply_newgrf_stations(state: &mut GameState, search_dirs: &[&Path]) {
                 short_label: meta.short_label,
                 disallowed_platforms: meta.disallowed_platforms,
                 disallowed_lengths: meta.disallowed_lengths,
+                callback_mask: meta.callback_mask,
                 from_newgrf: true,
                 newgrf_preview: preview,
                 newgrf_views: views,

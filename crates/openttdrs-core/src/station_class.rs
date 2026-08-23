@@ -82,6 +82,9 @@ pub struct StationSpecDef {
     pub disallowed_platforms: u8,
     /// Bits 0..=6 = longitudes 1..=7 deshabilitadas; bit 7 = >7.
     pub disallowed_lengths: u8,
+    /// Máscara de callbacks Action0 propiedad `0x0B`.
+    #[serde(default)]
+    pub callback_mask: u8,
     pub from_newgrf: bool,
     /// Preview Action1/3 (primera vista); no se serializa en saves.
     #[serde(default, skip)]
@@ -105,6 +108,9 @@ pub struct StationSpecDef {
     #[serde(default, skip)]
     pub custom_layouts: std::collections::HashMap<(u8, u8), Vec<u8>>,
 }
+
+/// Bit `StationCallbackMask::Avail` de `OpenTTD`: CB `0x13`.
+pub const STATION_CALLBACK_AVAILABILITY_MASK: u8 = 1;
 
 impl StationSpecDef {
     /// Preview `NewGRF` si el spec trae sprite Action1/3.
@@ -149,6 +155,12 @@ impl StationSpecDef {
         let n = length.clamp(1, 7);
         (self.disallowed_lengths & (1 << (n - 1))) == 0
     }
+
+    /// El spec declaró CB `0x13` de disponibilidad en su máscara Action0.
+    #[must_use]
+    pub const fn has_availability_callback(&self) -> bool {
+        (self.callback_mask & STATION_CALLBACK_AVAILABILITY_MASK) != 0
+    }
 }
 
 /// Catálogo vanilla de clases.
@@ -172,6 +184,7 @@ pub fn vanilla_station_spec_catalog() -> Vec<StationSpecDef> {
         short_label: "Rail".into(),
         disallowed_platforms: 0,
         disallowed_lengths: 0,
+        callback_mask: 0,
         from_newgrf: false,
         newgrf_preview: None,
         newgrf_views: Vec::new(),

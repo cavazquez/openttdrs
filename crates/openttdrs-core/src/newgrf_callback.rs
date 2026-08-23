@@ -163,7 +163,30 @@ pub fn apply_house_construction_callback(def: &HouseSpecDef) -> bool {
     callback_allows_8bit_boolean(result)
 }
 
-/// Call site estación: CB `0x13` availability + writeback storage (#266).
+/// Call site de construcción de estación ferroviaria: CB `0x13` availability.
+///
+/// `OpenTTD` invoca este callback sin `Station` ni tesela creada. Por eso no hay
+/// writeback de `7C`: ese scope no existe todavía. `CALLBACK_FAILED` conserva
+/// el fallback y el resultado usa la semántica booleana de ocho bits.
+#[must_use]
+pub fn apply_station_availability_callback_for_build(
+    def: &crate::station_class::StationSpecDef,
+) -> bool {
+    if !def.has_availability_callback() {
+        return true;
+    }
+    let Some(runtime) = def.newgrf_runtime.as_ref() else {
+        return true;
+    };
+    let result = runtime.resolve_callback(def.newgrf_local_id, CBID_STATION_AVAILABILITY, 0, 0);
+    callback_allows_8bit_boolean(result)
+}
+
+/// Resolver stateful de estación para scopes que sí tienen una estación.
+///
+/// La construcción ferroviaria normal usa
+/// [`apply_station_availability_callback_for_build`], igual que `OpenTTD`, y no
+/// puede persistir registros porque aún no existe una estación.
 #[must_use]
 pub fn apply_station_availability_callback(
     gfx: &TrainSpriteGraphics,

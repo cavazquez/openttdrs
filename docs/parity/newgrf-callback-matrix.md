@@ -17,6 +17,7 @@ Estados:
 API común: `TrainSpriteGraphics::resolve_callback` / `resolve_callback_ctx`,
 `resolve_vehicle_callback`, `writeback_*_persistent_registers`,
 `apply_industry_location_callback`, `apply_house_construction_callback`,
+`apply_station_availability_callback_for_build`,
 `apply_station_availability_callback`, `apply_road_stop_availability_callback`,
 `trigger_road_stop_animation`, `advance_road_stop_animation`,
 `resolve_industry_tile_animation_callback`, `resolve_industry_tile_random_trigger`
@@ -27,7 +28,7 @@ API común: `TrainSpriteGraphics::resolve_callback` / `resolve_callback_ctx`,
 | Feature | CBID (ejemplos) | Estado | Notas |
 |---|---|---|---|
 | Stations (`04`) | `0x24` `CBID_STATION_BUILD_TILE_LAYOUT` | **soportado** | Call site: construcción `apply_station_build_tile_layout_callback` |
-| Stations | `0x13` `CBID_STATION_AVAILABILITY` | **soportado** (#266) | `apply_station_availability_callback` + writeback storage estación |
+| Stations | `0x13` `CBID_STATION_AVAILABILITY` | **soportado** | Máscara Action0 `0x0B`, Action3→Action2 y call site query+execute de `PlaceRailStation` / `PlaceRailStationArea`; scope de construcción sin estación/tesela, booleano de 8 bits |
 | Stations | `0x14` draw layout, `0x140`–`0x142` anim, `0x149` slope | **OOS** | Máscaras/consumidas en Action0; sin call sites |
 | Vehicles (`00`–`03`) | `0x31` `CBID_VEHICLE_START_STOP_CHECK` | **soportado** | Call site: `toggle_vehicle_running_checked`; deniega → `NewGrfCallbackDenied` |
 | Vehicles | `0x10`–`0x12`, `0x15`–`0x16`, `0x19`, `0x1D`, `0x23`, `0x2D`, `0x32`–`0x36`, … | **OOS** | Evaluador Action2 listo; sin call sites |
@@ -50,7 +51,7 @@ API común: `TrainSpriteGraphics::resolve_callback` / `resolve_callback_ctx`,
 |---|---|---|
 | Temporal (`7D` / `\2sto`) | Solo durante la evaluación Action2 | Descartado al terminar el ctx |
 | Persistente (`7C` / `\2psto`) | Vehículo: `Vehicle.newgrf_persistent_regs` | Writeback tras CB; round-trip JSON save |
-| Persistente estación | `Station.newgrf_persistent_regs` | **soportado** (#266); writeback + JSON roundtrip |
+| Persistente estación | `Station.newgrf_persistent_regs` | **parcial**: API stateful + JSON round-trip; CB13 de construcción no puede hacer writeback porque OpenTTD lo evalúa sin estación/tesela |
 | Persistente industria/casa/… | — | **OOS** (estación cubre el MVP no-vehículo) |
 
 ## Triggers / random
@@ -68,7 +69,7 @@ API común: `TrainSpriteGraphics::resolve_callback` / `resolve_callback_ctx`,
 2. Vehicles CB31 — start/stop check (+ writeback persistent regs).
 3. Industries CB28 — location al colocar NewGRF (`place_industry_spec_def_sandbox`).
 4. Houses CB17 — allow construction durante crecimiento físico (API + call site + tests sintéticos).
-5. Stations CB13 — availability (+ storage estación).
+5. Stations CB13 — availability en query+execute de construcción; sin storage en el scope nulo de OpenTTD.
 6. Industry tiles CB25/CB26/CB27 — trigger, next frame y velocidad en `phase_tile_animation` (FAILED observable).
 7. Industry tile trigger → Action2 random group (`resolve_industry_tile_random_trigger`).
 8. RoadStops CB13 — disponibilidad al previsualizar y ejecutar `PlaceBusStop`/`PlaceTruckStop`.
@@ -78,6 +79,6 @@ API común: `TrainSpriteGraphics::resolve_callback` / `resolve_callback_ctx`,
 
 - Resto de CBs houses / airports / industries / objects; RoadStops aún requiere triggers de carga/vehículo, randomización, scopes vecinos y sprite Action2 dinámico.
 - Scopes parent/relative completos.
-- Storage persistente en industria/casa (estación ya cubierta).
+- Storage persistente en industria/casa y callbacks de estación que sí tengan scope de estación.
 - Goldens tick-a-tick vs OpenTTD 15.3 para todos los features.
 - Textos GRF de string (`0x40F` / `regs100`) en CB31: denegación genérica `NewGrfCallbackDenied`.

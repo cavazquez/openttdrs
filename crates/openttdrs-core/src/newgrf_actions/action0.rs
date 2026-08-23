@@ -115,7 +115,7 @@ const PROP_OBJECT_CLIMATE: u8 = 0x0B;
 const PROP_OBJECT_SIZE: u8 = 0x0C;
 /// Objects: build cost multiplier BYTE (`OpenTTD` `0x0D`).
 const PROP_OBJECT_BUILD_COST: u8 = 0x0D;
-/// Stations: callback mask (`OpenTTD` 15.3; consumida).
+/// Stations: callback mask (`OpenTTD` 15.3).
 const PROP_STATION_CALLBACK_MASK: u8 = 0x0B;
 /// Stations: platforms disallowed bitmask (`OpenTTD` `0x0C`).
 const PROP_STATION_DISALLOWED_PLATFORMS: u8 = 0x0C;
@@ -177,6 +177,7 @@ pub struct ParsedStationMeta {
     pub label: String,
     pub disallowed_platforms: u8,
     pub disallowed_lengths: u8,
+    pub callback_mask: u8,
     /// Layouts prop `0x0E`: `(platforms, length)` → tiletypes.
     pub custom_layouts: std::collections::HashMap<(u8, u8), Vec<u8>>,
     /// Prop `0x0F`: copiar layouts desde este id local (si definido).
@@ -1117,6 +1118,7 @@ pub fn parse_action0_station_meta(payload: &[u8]) -> Option<ParsedStationMeta> {
     let mut label = String::new();
     let mut disallowed_platforms = 0u8;
     let mut disallowed_lengths = 0u8;
+    let mut callback_mask = 0u8;
     let mut custom_layouts = std::collections::HashMap::new();
     let mut copy_layout_from = None;
     for _ in 0..header.num_props {
@@ -1142,6 +1144,7 @@ pub fn parse_action0_station_meta(payload: &[u8]) -> Option<ParsedStationMeta> {
                 if i >= payload.len() {
                     break;
                 }
+                callback_mask = payload[i];
                 i += 1;
             }
             PROP_STATION_DISALLOWED_PLATFORMS => {
@@ -1183,6 +1186,7 @@ pub fn parse_action0_station_meta(payload: &[u8]) -> Option<ParsedStationMeta> {
         label,
         disallowed_platforms,
         disallowed_lengths,
+        callback_mask,
         custom_layouts,
         copy_layout_from,
     ))
@@ -1193,6 +1197,7 @@ fn finish_parsed_station_meta(
     mut label: String,
     disallowed_platforms: u8,
     disallowed_lengths: u8,
+    callback_mask: u8,
     custom_layouts: std::collections::HashMap<(u8, u8), Vec<u8>>,
     copy_layout_from: Option<u16>,
 ) -> ParsedStationMeta {
@@ -1223,6 +1228,7 @@ fn finish_parsed_station_meta(
         label,
         disallowed_platforms,
         disallowed_lengths,
+        callback_mask,
         custom_layouts,
         copy_layout_from,
     }

@@ -186,6 +186,7 @@ pub(in crate::command) fn place_rail_station(
     dir: u8,
 ) -> Result<(), CommandError> {
     check_station_placement(&state.map, &state.stations, c, dir, StopKind::RailStation)?;
+    check_rail_station_spec_restrictions(state, 1, 1)?;
     station_placement_on_tile(state, c, dir, StopKind::RailStation)
 }
 
@@ -257,6 +258,30 @@ pub(in crate::command) fn check_rail_station_area(
     Ok(())
 }
 
+/// Restricciones Action0 del spec ferroviario activo (query + execute).
+///
+/// El callback CB13 se evalúa antes de alterar el mapa, sin `Station` creada,
+/// como hace `OpenTTD`. Esto también cubre el comando 1×1, que antes ignoraba
+/// los límites de plataformas/longitud del spec seleccionado.
+pub(in crate::command) fn check_rail_station_spec_restrictions(
+    state: &GameState,
+    platforms: u8,
+    length: u8,
+) -> Result<(), CommandError> {
+    let spec_id = state.current_station_spec;
+    let Some(spec) = crate::station_class::station_spec_def(&state.station_spec_catalog, spec_id)
+    else {
+        return Ok(());
+    };
+    if !spec.allows_platforms(platforms) || !spec.allows_length(length) {
+        return Err(CommandError::StationSizeNotAllowed);
+    }
+    if !crate::newgrf_callback::apply_station_availability_callback_for_build(spec) {
+        return Err(CommandError::NewGrfCallbackDenied);
+    }
+    Ok(())
+}
+
 pub(in crate::command) fn place_rail_station_area(
     state: &mut GameState,
     origin: TileCoord,
@@ -267,11 +292,7 @@ pub(in crate::command) fn place_rail_station_area(
     let platforms = platforms.clamp(1, 7);
     let length = length.clamp(1, 7);
     let spec_id = state.current_station_spec;
-    if let Some(spec) = crate::station_class::station_spec_def(&state.station_spec_catalog, spec_id)
-        && (!spec.allows_platforms(platforms) || !spec.allows_length(length))
-    {
-        return Err(CommandError::StationSizeNotAllowed);
-    }
+    check_rail_station_spec_restrictions(state, platforms, length)?;
     let (w, h) = rail_station_footprint(axis_y, platforms, length);
     check_rail_station_area(state, origin, w, h)?;
     let anchor = TileCoord::new(origin.x + (w - 1) / 2, origin.y + (h - 1) / 2);

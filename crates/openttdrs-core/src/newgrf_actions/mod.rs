@@ -209,21 +209,46 @@ pub fn build_action0_roadtype_payload_with_speed(
 #[must_use]
 pub fn build_action0_station_payload(
     class_label: &[u8; 4],
-    _spec_short: &[u8; 4],
+    spec_short: &[u8; 4],
     disallowed_platforms: u8,
     disallowed_lengths: u8,
     name: &str,
 ) -> Vec<u8> {
+    build_action0_station_payload_with_callback_mask(
+        class_label,
+        spec_short,
+        disallowed_platforms,
+        disallowed_lengths,
+        0,
+        name,
+    )
+}
+
+/// Fixture Action0 `Stations` con la máscara de callbacks `0x0B` opcional.
+#[must_use]
+pub fn build_action0_station_payload_with_callback_mask(
+    class_label: &[u8; 4],
+    _spec_short: &[u8; 4],
+    disallowed_platforms: u8,
+    disallowed_lengths: u8,
+    callback_mask: u8,
+    name: &str,
+) -> Vec<u8> {
     // IDs OpenTTD 15.3: 0x0C/0x0D = disallowed; short label se deriva del nombre.
+    let num_props = 0x04 + u8::from(callback_mask != 0);
     let mut p = vec![
         0x00,
         ACTION0_FEATURE_STATIONS,
-        0x04,
+        num_props,
         0x01,
         0x00,
         0x08, // PROP_LABEL
     ];
     p.extend_from_slice(class_label);
+    if callback_mask != 0 {
+        p.push(0x0B); // PROP_STATION_CALLBACK_MASK
+        p.push(callback_mask);
+    }
     p.push(0x0C); // PROP_STATION_DISALLOWED_PLATFORMS
     p.push(disallowed_platforms);
     p.push(0x0D); // PROP_STATION_DISALLOWED_LENGTHS
@@ -1965,11 +1990,20 @@ mod tests {
 
     #[test]
     fn parse_station_disallowed_props_0c_0d() {
-        let a0 = build_action0_station_payload(b"MODN", b"XXXX", 0b0000_0010, 0b0000_0100, "Plat");
+        let a0 = build_action0_station_payload_with_callback_mask(
+            b"MODN",
+            b"XXXX",
+            0b0000_0010,
+            0b0000_0100,
+            1,
+            "Plat",
+        );
         let meta = parse_action0_station_meta(&a0).unwrap();
         assert_eq!(meta.disallowed_platforms, 0b0000_0010);
         assert_eq!(meta.disallowed_lengths, 0b0000_0100);
+        assert_eq!(meta.callback_mask, 1);
         assert_eq!(meta.short_label, "Plat");
+        assert!(a0.windows(2).any(|w| w == [0x0B, 1]));
         assert!(a0.windows(2).any(|w| w == [0x0C, 0b0000_0010]));
         assert!(a0.windows(2).any(|w| w == [0x0D, 0b0000_0100]));
     }
@@ -4236,6 +4270,95 @@ mod tests {
             Err(CommandError::NewGrfCallbackDenied)
         );
         assert!(state.industries.is_empty());
+    }
+
+    /// CB13 debe venir del Action2 de un GRF cargado y bloquear tanto query
+    /// como execute antes de crear una estación o modificar el mapa.
+    #[test]
+    fn station_availability_callback_runs_from_loaded_action2_graph() {
+        use crate::command::{Command, CommandError, apply_command, command_would_fail};
+        use crate::map::{TileCoord, TileKind};
+        use crate::newgrf_sprites::{
+            build_action2_callback_literal_payload, build_grf_v2_feature_with_action2_chain,
+        };
+
+        let action0 = build_action0_station_payload_with_callback_mask(
+            b"CBST",
+            b"Spec",
+            0,
+            0,
+            1,
+            "Station callback",
+        );
+        let action2 = build_action2_callback_literal_payload(
+            ACTION0_FEATURE_STATIONS,
+            7,
+            0, // Booleano de 8 bits cero: CB13 deniega la construcción.
+        );
+        let bytes = build_grf_v2_feature_with_action2_chain(
+            &action0,
+            ACTION0_FEATURE_STATIONS,
+            0,
+            7,
+            &action2,
+            1,
+            1,
+            &[174],
+            [b'C', b'S', 0, 1],
+            "station-cb",
+        );
+        let dir = tempfile_dir_with("station_cb.grf", &bytes);
+        let mut state = GameState::new(8, 8);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("station_cb.grf", 0x4353_0001));
+        apply_newgrf_stations(&mut state, &[&dir]);
+
+        let (class_id, spec_id) = {
+            let spec = state
+                .station_spec_catalog
+                .iter()
+                .find(|spec| spec.from_newgrf)
+                .unwrap();
+            assert_eq!(spec.callback_mask, 1);
+            assert!(spec.has_availability_callback());
+            assert!(spec.newgrf_runtime.is_some());
+            (spec.class, spec.id)
+        };
+        state.current_station_class = class_id;
+        state.current_station_spec = spec_id;
+
+        let area_origin = TileCoord::new(3, 3);
+        let area = Command::PlaceRailStationArea {
+            origin: area_origin,
+            axis_y: false,
+            platforms: 1,
+            length: 1,
+        };
+        assert_eq!(
+            command_would_fail(&state, &area),
+            Some(CommandError::NewGrfCallbackDenied)
+        );
+        assert_eq!(
+            apply_command(&mut state, &area),
+            Err(CommandError::NewGrfCallbackDenied)
+        );
+        assert!(state.stations.is_empty());
+        assert_eq!(state.map.get_kind(area_origin), Some(TileKind::Grass));
+
+        let single = TileCoord::new(2, 2);
+        apply_command(&mut state, &Command::PlaceRail(TileCoord::new(1, 2))).unwrap();
+        let one_tile = Command::PlaceRailStation(single, 0);
+        assert_eq!(
+            command_would_fail(&state, &one_tile),
+            Some(CommandError::NewGrfCallbackDenied)
+        );
+        assert_eq!(
+            apply_command(&mut state, &one_tile),
+            Err(CommandError::NewGrfCallbackDenied)
+        );
+        assert!(state.stations.is_empty());
+        assert_eq!(state.map.get_kind(single), Some(TileKind::Grass));
     }
 
     #[test]

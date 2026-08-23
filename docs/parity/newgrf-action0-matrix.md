@@ -144,7 +144,7 @@ Fuente: `newgrf_act0_stations.cpp`.
 |---|---|
 | `08` class label | **runtime** |
 | `0A` copy sprite layout | consumida (extended-byte id) |
-| `0B` callback mask | consumida |
+| `0B` callback mask | **runtime parcial**: se conserva en el spec y su bit `Avail` ejecuta CB13 al consultar/construir; resto sin call site |
 | `0C` disallowed platforms bitmask | **runtime** |
 | `0D` disallowed lengths bitmask | **runtime** |
 | `0E` custom tile layout | **runtime** |

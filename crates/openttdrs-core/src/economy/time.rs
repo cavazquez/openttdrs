@@ -21,6 +21,13 @@ pub const CARGO_AGING_TICKS: u32 = 185;
 /// Periodo de recálculo del rating de estación (`Ticks::STATION_RATING_TICKS`).
 pub const STATION_RATING_TICKS: u32 = 185;
 
+/// Periodo del trigger de aceptación de estación
+/// (`Ticks::STATION_ACCEPTANCE_TICKS`).
+///
+/// Es independiente del barrido de rating: `OpenTTD` lo ejecuta cada 250 ticks
+/// y lo escalona por índice de estación.
+pub const STATION_ACCEPTANCE_TICKS: u32 = 250;
+
 /// Mes de calendario 0..=11 a partir del índice de día (`calendar_day_index`).
 #[must_use]
 pub fn calendar_month_index(day_index: u64) -> u8 {

@@ -52,7 +52,7 @@ fn on_tick_water(state: &mut GameState) {
     crate::map::water_flood::tick_water_flood(state);
 }
 
-/// `OnTick_Station`: rating (ciclo 185 ticks ≈ `STATION_ACCEPTANCE_TICKS` del port).
+/// `OnTick_Station`: rating y trigger de aceptación de animación `NewGRF`.
 fn on_tick_station(state: &mut GameState, t: u64) {
     if t > 0 && t.is_multiple_of(u64::from(crate::economy::STATION_RATING_TICKS)) {
         station::update_station_ratings_with_cargo_callbacks(
@@ -61,6 +61,48 @@ fn on_tick_station(state: &mut GameState, t: u64) {
             state.order.selectgoods,
             &mut state.random,
         );
+    }
+
+    trigger_station_acceptance_animations(state, t);
+}
+
+/// Emite CB140 `AcceptanceTick` cada 250 ticks, escalonado por estación.
+///
+/// `Station::index` en `OpenTTD` es el ID del pool. Los saves importados ya
+/// conservan ese identificador en `ottd_station_id`; las estaciones nativas
+/// usan su posición estable en el vector como equivalente. El área es
+/// `TA_WHOLE`, por eso un solo disparo recorre todas las teselas de la misma
+/// estación lógica.
+fn trigger_station_acceptance_animations(state: &mut GameState, t: u64) {
+    let period = u64::from(crate::economy::STATION_ACCEPTANCE_TICKS);
+    let station_anchors: Vec<_> = state
+        .stations
+        .iter()
+        .enumerate()
+        .filter_map(|(index, station)| {
+            let station_index = station
+                .ottd_station_id
+                .map_or_else(|| u64::try_from(index).unwrap_or(u64::MAX), u64::from);
+            t.wrapping_add(station_index)
+                .is_multiple_of(period)
+                .then_some(station.pos)
+        })
+        .collect();
+
+    for station_anchor in station_anchors {
+        let dirty = crate::map::trigger_newgrf_station_animation_for_station(
+            &mut state.map,
+            t,
+            &mut state.stations,
+            &state.companies,
+            state.climate,
+            &state.station_spec_catalog,
+            &mut state.newgrf_animated_station_tiles,
+            station_anchor,
+            crate::StationAnimationTrigger::AcceptanceTick,
+            None,
+        );
+        state.runtime.industry_tile_dirty.extend(dirty);
     }
 }
 
@@ -118,5 +160,99 @@ fn on_tick_link_graph(state: &mut GameState) {
             }
         }
         state.runtime.station_flows = merged;
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use crate::map::TileKind;
+    use crate::newgrf_sprites::{
+        Action2VarAdjust, Action2VarEntry, Action2VarTerm, TrainSpriteAssign, TrainSpriteGraphics,
+    };
+    use crate::station::{Station, StopKind};
+    use crate::{STATION_ANIMATION_TRIGGER_ACCEPTANCE_TICK, TileCoord};
+
+    /// CB140 sintético: escribe en el frame el byte bajo de `var 18`.
+    fn acceptance_trigger_callbacks() -> TrainSpriteGraphics {
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 2,
+        });
+        gfx.action2_var.insert(
+            2,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x18,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        shift: 0,
+                        and_mask: 0xFF,
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
+        gfx
+    }
+
+    fn animated_station_state() -> (GameState, TileCoord, TileCoord) {
+        let first = TileCoord::new(1, 1);
+        let second = TileCoord::new(4, 1);
+        let mut state = GameState::new(6, 4);
+        for coord in [first, second] {
+            let mut tile = state.map.get(coord).unwrap();
+            tile.kind = TileKind::Station;
+            tile.mapt = 0x50;
+            tile.m5 = 0;
+            tile.m6 = 0;
+            state.map.set_tile(coord, tile).unwrap();
+        }
+        state.stations = vec![
+            Station::new_with_kind(first, StopKind::RailStation),
+            Station::new_with_kind(second, StopKind::RailStation),
+        ];
+        let spec = &mut state.station_spec_catalog[0];
+        spec.from_newgrf = true;
+        spec.animation_triggers = STATION_ANIMATION_TRIGGER_ACCEPTANCE_TICK;
+        spec.newgrf_runtime = Some(Box::new(acceptance_trigger_callbacks()));
+        (state, first, second)
+    }
+
+    #[test]
+    fn acceptance_animation_uses_250_ticks_and_staggers_native_stations() {
+        let (mut state, first, second) = animated_station_state();
+
+        on_tick_station(&mut state, 248);
+        assert_eq!(state.map.get(first).unwrap().m7, 0);
+        assert_eq!(state.map.get(second).unwrap().m7, 0);
+
+        // El índice 1 se dispara un tick antes que el índice 0.
+        on_tick_station(&mut state, 249);
+        assert_eq!(state.map.get(first).unwrap().m7, 0);
+        assert_eq!(state.map.get(second).unwrap().m7, 6);
+
+        on_tick_station(&mut state, 250);
+        assert_eq!(state.map.get(first).unwrap().m7, 6);
+        assert_eq!(state.map.get(second).unwrap().m7, 6);
+    }
+
+    #[test]
+    fn acceptance_animation_uses_imported_station_id_for_phase() {
+        let (mut state, first, second) = animated_station_state();
+        state.stations[0].ottd_station_id = Some(7);
+        state.stations[1].ottd_station_id = Some(8);
+
+        on_tick_station(&mut state, 242);
+        assert_eq!(state.map.get(first).unwrap().m7, 0);
+        assert_eq!(state.map.get(second).unwrap().m7, 6);
+
+        on_tick_station(&mut state, 243);
+        assert_eq!(state.map.get(first).unwrap().m7, 6);
     }
 }

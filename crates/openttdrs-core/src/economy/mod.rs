@@ -26,8 +26,9 @@ pub use payments::{
 };
 pub use pricebase::{PriceIndex, base_price_at, get_price, medium_default_price};
 pub use time::{
-    CARGO_AGING_TICKS, OTTD_MILLISECONDS_PER_TICK, SIM_TICKS_PER_SECOND, STATION_RATING_TICKS,
-    TICKS_PER_DAY, TICKS_PER_MONTH, TICKS_PER_YEAR, calendar_month_index, ticks_to_transit_periods,
+    CARGO_AGING_TICKS, OTTD_MILLISECONDS_PER_TICK, SIM_TICKS_PER_SECOND, STATION_ACCEPTANCE_TICKS,
+    STATION_RATING_TICKS, TICKS_PER_DAY, TICKS_PER_MONTH, TICKS_PER_YEAR, calendar_month_index,
+    ticks_to_transit_periods,
 };
 pub use vehicle_costs::{
     YEAR_TICKS, accumulate_running_cost_for_head, accumulate_vehicle_running_cost,

@@ -281,6 +281,7 @@ fn spawn_dock_layer(
     owner_colour: Option<CompanyColour>,
     ctx: &TileRenderContext,
     m5: u8,
+    map_width: u32,
 ) {
     if buildings_hidden() {
         return;
@@ -296,7 +297,7 @@ fn spawn_dock_layer(
     record_dock_layer_trace(layer, owner_colour);
 
     let local = remap_tile_offset(layer.dx, layer.dy, layer.dz) * 0.5;
-    let pos = overlay_pos(
+    let mut pos = overlay_pos(
         ctx.iso_pos + local,
         layer.x_offs,
         layer.y_offs,
@@ -307,6 +308,8 @@ fn spawn_dock_layer(
         ctx.tx_i32(),
         ctx.ty_i32(),
     );
+    let source_depth = viewport_source_depth(pos.z, ctx.tx, map_width);
+    pos.z = source_depth;
     commands.spawn((
         MapVisualLayer,
         ctx.map_tile_chunk(),
@@ -317,7 +320,35 @@ fn spawn_dock_layer(
             layer.path,
         )),
         Transform::from_translation(pos),
+        ViewportSortableParent {
+            sprite_id: layer.sprite_id,
+            bounds: dock_parent_bounds(ctx, layer),
+            insertion_key: viewport_insertion_key(ctx.tx, ctx.ty, 1),
+            source_depth,
+        },
     ));
+}
+
+/// Prisma `TILE_SEQ_LINE` de una mitad de muelle vanilla.
+///
+/// La posición NFO del PNG usa `dx`/`dy` por separado, pero el sorter recibe
+/// la caja de mundo de `StationGfx` con máximos inclusivos. Reutilizar la
+/// conversión común mantiene el mismo contrato que la traza `world-draw`.
+fn dock_parent_bounds(ctx: &TileRenderContext, layer: DockTileLayer) -> ParentSpriteBounds {
+    tile_seq_parent_sprite(
+        0,
+        layer.sprite_id,
+        ctx.tx_i32(),
+        ctx.ty_i32(),
+        ctx.info.base_z,
+        layer.dx as i32,
+        layer.dy as i32,
+        layer.dz as i32,
+        layer.sx,
+        layer.sy,
+        layer.sz,
+    )
+    .bounds
 }
 
 /// `DrawTile_Station` nivela las paradas viales inclinadas antes de emitir el
@@ -1675,7 +1706,7 @@ pub(crate) fn spawn_station_tile(
         }
         StationTileClass::Dock => {
             spawn_dock_ground(commands, map, assets, ctx, m5);
-            spawn_dock_layer(commands, assets, company, owner_colour, ctx, m5);
+            spawn_dock_layer(commands, assets, company, owner_colour, ctx, m5, dims.0);
         }
         StationTileClass::Buoy => {
             // `DrawTile_Station` siempre llama primero a

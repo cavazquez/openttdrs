@@ -446,7 +446,7 @@ fn dock_station_keeps_vanilla_slope_and_water_halves() {
     let expected_layer_pos = |ctx: &TileRenderContext, m5: u8| {
         let layer = crate::sprites::dock_tile_layer(m5);
         let local = crate::iso::remap_tile_offset(layer.dx, layer.dy, layer.dz) * 0.5;
-        crate::iso::overlay_pos(
+        let mut pos = crate::iso::overlay_pos(
             ctx.iso_pos + local,
             layer.x_offs,
             layer.y_offs,
@@ -456,7 +456,9 @@ fn dock_station_keeps_vanilla_slope_and_water_halves() {
             0.04,
             ctx.tx_i32(),
             ctx.ty_i32(),
-        )
+        );
+        pos.z = crate::render::viewport_source_depth(pos.z, ctx.tx, 5);
+        pos
     };
     let expected_slope_pos = expected_layer_pos(&land_ctx, 2);
     let expected_water_pos = expected_layer_pos(&water_ctx, 4);
@@ -549,6 +551,28 @@ fn dock_station_keeps_vanilla_slope_and_water_halves() {
     let offset = crate::iso::GROUND_SPRITE_CENTER_X_OFFSET;
     assert_eq!(dock_water_x, crate::iso::iso(water.x, water.y).x + offset);
     assert_eq!(dock_shore_x, crate::iso::iso(land.x, land.y).x + offset);
+
+    let mut parents: Vec<_> = world
+        .query::<&ViewportSortableParent>()
+        .iter(&world)
+        .map(|parent| {
+            (
+                parent.sprite_id,
+                parent.bounds.xmin,
+                parent.bounds.ymin,
+                parent.bounds.zmin,
+                parent.bounds.xmax,
+                parent.bounds.ymax,
+                parent.bounds.zmax,
+            )
+        })
+        .collect();
+    parents.sort_unstable();
+    assert_eq!(
+        parents,
+        vec![(2729, 32, 36, 0, 47, 43, 7), (2731, 48, 36, 0, 63, 43, 7),],
+        "las dos mitades del muelle entran al sorter con sus cajas StationGfx"
+    );
 }
 
 /// Una bahía vial normal ya contiene todo el suelo en su layout de estación.

@@ -140,17 +140,18 @@ entorno continúan componiéndose al cambiar el zoom, no una mejora A/B aislada
 ni paridad de framebuffer.
 
 El runtime aplica el sorter compartido a los sprites directos de fundación,
-buildings vanilla de casas, árboles `MP_TREES` con sus children combinados, el
-subconjunto plano/estático de industria vanilla y las seis capas `TILE_SEQ`
-del depósito naval, pero no al conjunto **global** de producers. El foco naval
-`138,7..140,10` vincula 7/7 parents candidatos al orden final C++; es
-evidencia del contrato de cajas y no una certificación raster. Los 383 comandos
-`industry-building` de Kale ya están contenidos por `world-draw`; eso no
-equivale a que sus variantes dinámicas o NewGRF tengan parent/children runtime.
-Faltan children fuera de ascensores y árboles, clipping, anclajes finales y
-framebuffer. El siguiente trabajo debe extenderlo a las piezas visibles de
-puentes y las familias NewGRF de estación, aeropuertos y objetos, no rebajar el
-baseline ni extrapolar una región a paridad general.
+buildings vanilla de casas, árboles `MP_TREES` con sus children combinados,
+mitades vanilla de muelle, el subconjunto plano/estático de industria vanilla y
+las seis capas `TILE_SEQ` del depósito naval, pero no al conjunto **global** de
+producers. Los focos naval `138,7..140,10` y de muelle `136,1..139,3` vinculan
+7/7 parents candidatos al orden final C++; es evidencia del contrato de cajas y
+no una certificación raster. Los 383 comandos `industry-building` de Kale ya
+están contenidos por `world-draw`; eso no equivale a que sus variantes dinámicas
+o NewGRF tengan parent/children runtime. Faltan children fuera de ascensores y
+árboles, clipping, anclajes finales y framebuffer. El siguiente trabajo debe
+extenderlo a las piezas visibles de puentes y las familias NewGRF de estación,
+aeropuertos y objetos, no rebajar el baseline ni extrapolar una región a
+paridad general.
 
 El perfil `CLEAN` normaliza la UI, las preferencias persistidas y los overrides
 de transparencia conocidos, pero no convierte al renderer actual en un gate
@@ -160,8 +161,8 @@ captura debe servir para localizar y medir, no para certificar paridad.
 Ya existe un port puro y testeado de `ViewportSortParentSprites` en
 `render/viewport_sort.rs`, incluidos parents vacíos y children. Las paradas
 viales vanilla, depósitos viales, árboles `MP_TREES` y sus copas combinadas,
-los seis layouts del depósito naval, los bundles de catenaria/fachada de
-depósitos ferroviarios, los faroles viales y la subsecuencia
+las seis mitades StationGfx de muelle, los seis layouts del depósito naval, los
+bundles de catenaria/fachada de depósitos ferroviarios, los faroles viales y la subsecuencia
 PPP/cable/plataforma de estaciones rail vanilla, casas vanilla y el subconjunto
 plano/estático de industrias vanilla ya alimentan sus bounds y reasignan sus
 slots locales de Bevy con el orden resultante. Las demás familias todavía

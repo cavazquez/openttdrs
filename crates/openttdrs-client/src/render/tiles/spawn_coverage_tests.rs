@@ -1410,6 +1410,82 @@ fn sloped_rail_track_attaches_to_its_foundation_parent() {
 }
 
 #[test]
+fn sloped_road_ground_attaches_to_its_foundation_parent() {
+    let assets = boot_assets_app();
+    let mut map = fresh_map8();
+    let c = |x: i32, y: i32| TileCoord::new(x, y);
+    let mut road = tile_template();
+    road.kind = TileKind::Road;
+    road.mapt = 0x20;
+    road.m5 = 0x0F;
+    map.set_tile(c(1, 1), road).expect("carretera inclinada");
+    // Tres esquinas altas fuerzan una fundación vial continua antes de
+    // `DrawRoadGroundSprites`.
+    for corner in [c(2, 1), c(1, 2), c(2, 2)] {
+        map.set_height(corner, 1)
+            .expect("esquina elevada de la carretera");
+    }
+
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world
+        .run_system_once(
+            |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                spawn_road_tile(
+                    &mut commands,
+                    &m.0,
+                    8,
+                    8,
+                    &a.0,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    4.0,
+                    TEST_CLIMATE,
+                    false,
+                    false,
+                    &[],
+                    None,
+                    None,
+                    &[],
+                    &[],
+                    &[],
+                    None,
+                    &[],
+                    None,
+                );
+            },
+        )
+        .expect("sloped road spawn");
+
+    let foundation_parents: std::collections::HashSet<_> = world
+        .query::<(Entity, &ViewportSortableParent)>()
+        .iter(&world)
+        .filter_map(|(entity, parent)| {
+            (FOUNDATION_ORIGINAL_SPRITE_BASE..=FOUNDATION_ORIGINAL_SPRITE_BASE.saturating_add(14))
+                .contains(&parent.sprite_id)
+                .then_some(entity)
+        })
+        .collect();
+    assert!(
+        !foundation_parents.is_empty(),
+        "la carretera inclinada debe materializar DrawFoundation"
+    );
+    let attached: Vec<_> = world
+        .query::<(&ViewportSortableChild, &Transform)>()
+        .iter(&world)
+        .filter(|(child, _)| foundation_parents.contains(&child.parent))
+        .collect();
+    assert_eq!(
+        attached.len(),
+        1,
+        "el asfalto posterior debe seguir al último parent de la fundación"
+    );
+    assert_eq!(attached[0].0.source_depth, attached[0].1.translation.z);
+}
+
+#[test]
 fn airport_pier_tile_seq_layers_spawn_for_both_import_paths() {
     let assets = boot_assets_app();
     let expected_apron = assets.airport_apron.clone();
@@ -1941,8 +2017,9 @@ fn sloped_rail_station_levels_platform_without_sloped_grass() {
     let plan =
         openttdrs_core::foundation_draw_plan(ctx.info.tileh, openttdrs_core::FOUNDATION_LEVELED, 0);
     let surface_z = ctx.info.base_z.saturating_add(plan.surface_z_delta);
-    let expected_track_pos =
+    let mut expected_track_pos =
         crate::iso::full_tile_sprite_pos_half(1, 1, surface_z, 0.02, crate::iso::TILE_HALF_H);
+    expected_track_pos.z = crate::render::viewport_source_depth(expected_track_pos.z, 1, 3);
 
     let mut world = World::new();
     world.insert_resource(TsMap(map));
@@ -2023,6 +2100,27 @@ fn sloped_rail_station_levels_platform_without_sloped_grass() {
         track_pos, expected_track_pos,
         "la vía debe usar la superficie nivelada, no la proyección de pendiente"
     );
+
+    let foundation_parents: std::collections::HashSet<_> = world
+        .query::<(Entity, &ViewportSortableParent)>()
+        .iter(&world)
+        .filter_map(|(entity, parent)| {
+            (FOUNDATION_ORIGINAL_SPRITE_BASE..=FOUNDATION_ORIGINAL_SPRITE_BASE.saturating_add(14))
+                .contains(&parent.sprite_id)
+                .then_some(entity)
+        })
+        .collect();
+    let attached: Vec<_> = world
+        .query::<(&ViewportSortableChild, &Transform)>()
+        .iter(&world)
+        .filter(|(child, _)| foundation_parents.contains(&child.parent))
+        .collect();
+    assert_eq!(
+        attached.len(),
+        1,
+        "la vía de una estación inclinada debe seguir al parent de DrawFoundation"
+    );
+    assert_eq!(attached[0].1.translation.z, expected_track_pos.z);
 }
 
 #[test]

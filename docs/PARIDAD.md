@@ -109,6 +109,9 @@ con fundación materializada aplican la misma regla: su suelo posterior es un
 child del último parent de `DrawFoundation`, no una capa diagonal independiente.
 La vía y el suelo explícito de rail posteriores a una fundación comparten ahora
 ese parent, por lo que el sorter desplaza muro, base y carril como un conjunto.
+Las variantes vanilla de asfalto/flecha de `DrawRoadGroundSprites` y la
+vía/reserva PBS de una estación ferroviaria inclinada se adjuntan igualmente
+al último parent de `DrawFoundation`; no conservan ya una Z independiente.
 También incorpora los edificios industriales vanilla planos y estáticos, cuya
 caja `M(...)` no cambia durante la composición; las pendientes, animaciones y
 layouts NewGRF permanecen fuera de ese subconjunto.

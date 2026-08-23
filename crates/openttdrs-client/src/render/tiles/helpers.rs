@@ -817,6 +817,10 @@ pub(crate) struct RoadFoundationRender {
     pub(crate) foundation: u8,
     pub(crate) surface_tileh: u8,
     pub(crate) surface_base_z: u8,
+    /// Último parent que dejó `DrawFoundation`. `DrawRoadGroundSprites` y
+    /// sus overlays posteriores entran como `AddChildSpriteScreen`, no como
+    /// otra capa de profundidad independiente.
+    pub(crate) child_parent: Option<Entity>,
 }
 
 /// Dibuja el cimiento de una carretera normal y devuelve su superficie
@@ -869,8 +873,9 @@ pub(crate) fn spawn_road_foundation(
 
     let mut action5_sprites = action5_sprites;
     let mut images = images;
+    let mut child_parent = None;
     for (index, draw) in plan.sprites.into_iter().flatten().enumerate() {
-        let _ = spawn_foundation_sprite(
+        if let Some(parent) = spawn_foundation_sprite(
             commands,
             assets,
             ctx,
@@ -882,13 +887,16 @@ pub(crate) fn spawn_road_foundation(
             foundation_newgrf,
             action5_sprites.as_deref_mut(),
             images.as_deref_mut(),
-        );
+        ) {
+            child_parent = Some(parent);
+        }
     }
 
     RoadFoundationRender {
         foundation: decision.foundation,
         surface_tileh: plan.surface_tileh,
         surface_base_z: decision.surface_base_z,
+        child_parent,
     }
 }
 

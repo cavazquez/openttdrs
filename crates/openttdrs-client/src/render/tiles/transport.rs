@@ -2,11 +2,14 @@ use bevy::prelude::*;
 use openttdrs_core::prelude::*;
 use openttdrs_core::{Climate, RoadTypeDef, partial_pixel_z};
 
-use super::helpers::{spawn_foundation_child_ground_sprite_at, spawn_foundation_child_sprite_at};
+use super::helpers::{
+    spawn_forced_leveled_foundation_with_child_parent, spawn_foundation_child_ground_sprite_at,
+    spawn_foundation_child_sprite_at,
+};
 use super::{
     FLAT_WATER_LAYER_FRAC, SHORE_LAYER_FRAC, TRAM_OVERLAY_LAYER_FRAC, catenary_under_low_bridge,
-    roadside_detail_visible_under_bridge, sloped_or_flat_image, spawn_forced_leveled_foundation,
-    spawn_ground_sprite, spawn_rail_foundation, spawn_road_foundation,
+    roadside_detail_visible_under_bridge, sloped_or_flat_image, spawn_ground_sprite,
+    spawn_rail_foundation, spawn_road_foundation,
 };
 use crate::iso::{
     GROUND_SPRITE_CENTER_X_OFFSET, TILE_HALF_H, full_tile_sprite_pos, full_tile_sprite_pos_half,
@@ -817,8 +820,8 @@ pub(crate) fn spawn_road_tile(
     // El cruce a nivel no entra por `DrawRoadBits`: `DrawTile_Road` fuerza
     // una fundación nivelada y usa un único sprite de cruce, mientras que una
     // carretera normal decide su fundación a partir de RoadBits.
-    let (tileh, base_z, road_foundation) = if is_level_crossing {
-        let crossing_base_z = spawn_forced_leveled_foundation(
+    let (tileh, base_z, road_foundation, foundation_child_parent) = if is_level_crossing {
+        let crossing_foundation = spawn_forced_leveled_foundation_with_child_parent(
             commands,
             map,
             (mw, mh),
@@ -833,12 +836,13 @@ pub(crate) fn spawn_road_tile(
         );
         (
             0,
-            crossing_base_z,
+            crossing_foundation.surface_base_z,
             if raw_tileh == 0 {
                 0
             } else {
                 openttdrs_core::FOUNDATION_LEVELED
             },
+            crossing_foundation.child_parent,
         )
     } else {
         let road_surface = spawn_road_foundation(
@@ -857,6 +861,7 @@ pub(crate) fn spawn_road_tile(
             road_surface.surface_tileh,
             road_surface.surface_base_z,
             road_surface.foundation,
+            road_surface.child_parent,
         )
     };
     let fi = road_flat_sprite_index(tileh, rb);
@@ -949,18 +954,19 @@ pub(crate) fn spawn_road_tile(
             road_ground_sprite_id(fi, paved, snow_or_desert),
             road_foundation,
         );
-        commands.spawn((
-            MapVisualLayer,
-            ctx.map_tile_chunk(),
-            road_set[fi].sprite_colored(road_paint),
-            Transform::from_translation(full_tile_sprite_pos_half(
-                ctx.tx_i32(),
-                ctx.ty_i32(),
-                base_z,
-                0.02,
-                road_half_h,
-            )),
-        ));
+        let sprite = road_set[fi].sprite_colored(road_paint);
+        let position =
+            full_tile_sprite_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.02, road_half_h);
+        if let Some(parent) = foundation_child_parent {
+            spawn_foundation_child_sprite_at(commands, sprite, ctx, position, mw, parent);
+        } else {
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                sprite,
+                Transform::from_translation(position),
+            ));
+        }
     }
 
     // Overlay one-way (`SPR_ONEWAY_BASE` / Action5 `0x09`). El bloque base
@@ -1008,12 +1014,17 @@ pub(crate) fn spawn_road_tile(
                         ONEWAY_ROAD_SPRITE_META[slot],
                     )
                 });
-            commands.spawn((
-                MapVisualLayer,
-                ctx.map_tile_chunk(),
-                sprite,
-                Transform::from_translation(road_oneway_overlay_pos(ctx, tileh, base_z, meta)),
-            ));
+            let position = road_oneway_overlay_pos(ctx, tileh, base_z, meta);
+            if let Some(parent) = foundation_child_parent {
+                spawn_foundation_child_sprite_at(commands, sprite, ctx, position, mw, parent);
+            } else {
+                commands.spawn((
+                    MapVisualLayer,
+                    ctx.map_tile_chunk(),
+                    sprite,
+                    Transform::from_translation(position),
+                ));
+            }
         }
     }
 
@@ -1205,18 +1216,19 @@ pub(crate) fn spawn_road_tile(
             // el sprite seleccionado; recolorearlo lo alejaba de OpenTTD.
             let crossing_paint = Color::WHITE;
             record_road_ground_trace("crossing-ground", sid, road_foundation);
-            commands.spawn((
-                MapVisualLayer,
-                ctx.map_tile_chunk(),
-                img.sprite_colored(crossing_paint),
-                Transform::from_translation(full_tile_sprite_pos_half(
-                    ctx.tx_i32(),
-                    ctx.ty_i32(),
-                    base_z,
-                    0.045,
-                    road_half_h,
-                )),
-            ));
+            let sprite = img.sprite_colored(crossing_paint);
+            let position =
+                full_tile_sprite_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.045, road_half_h);
+            if let Some(parent) = foundation_child_parent {
+                spawn_foundation_child_sprite_at(commands, sprite, ctx, position, mw, parent);
+            } else {
+                commands.spawn((
+                    MapVisualLayer,
+                    ctx.map_tile_chunk(),
+                    sprite,
+                    Transform::from_translation(position),
+                ));
+            }
         }
         // `DrawRoadTile`: una reserva PBS de cruce tiene su propio
         // SINGLE_X/Y con PALETTE_CRASH. Teñir la vía base hacía que todo el

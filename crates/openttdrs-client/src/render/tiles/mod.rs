@@ -19,8 +19,8 @@ pub(crate) use bridge_draw::{catenary_under_low_bridge, roadside_detail_visible_
 pub(crate) use helpers::{
     FLAT_WATER_LAYER_FRAC, SHORE_LAYER_FRAC, TRAM_OVERLAY_LAYER_FRAC,
     leveled_foundation_overlay_pos, push_water_sprite, sloped_or_flat_image,
-    spawn_coast_debug_label, spawn_forced_leveled_foundation, spawn_ground_sprite,
-    spawn_leveled_foundation, spawn_rail_foundation, spawn_road_foundation,
+    spawn_coast_debug_label, spawn_ground_sprite, spawn_leveled_foundation, spawn_rail_foundation,
+    spawn_road_foundation,
 };
 pub(crate) use land::{
     HouseSpawnResources, push_forest_tree, spawn_generic_land_tile, spawn_house_tile,

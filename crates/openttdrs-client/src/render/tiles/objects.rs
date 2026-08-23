@@ -11,7 +11,8 @@ use super::{
     catenary_under_low_bridge,
     helpers::{
         FLAT_WATER_LAYER_FRAC, SHORE_LAYER_FRAC, spawn_empty_bounding_box,
-        spawn_forced_leveled_foundation,
+        spawn_forced_leveled_foundation, spawn_forced_leveled_foundation_with_child_parent,
+        spawn_foundation_child_sprite_at,
     },
     sloped_or_flat_image, spawn_ground_sprite,
 };
@@ -1327,7 +1328,7 @@ pub(crate) fn spawn_station_tile(
             // El césped inclinado previo desplazaba el andén y podía asomar
             // bajo su cimiento en las pendientes de Kale.
             let station_tb = if m5 & 1 != 0 { 0x02 } else { 0x01 };
-            let rail_base_z = spawn_forced_leveled_foundation(
+            let station_foundation = spawn_forced_leveled_foundation_with_child_parent(
                 commands,
                 map,
                 dims,
@@ -1340,6 +1341,8 @@ pub(crate) fn spawn_station_tile(
                 action5_sprites.as_deref_mut(),
                 images.as_deref_mut(),
             );
+            let rail_base_z = station_foundation.surface_base_z;
+            let foundation_child_parent = station_foundation.child_parent;
             let rail_half_h = TILE_HALF_H;
             let rail_foundation_z_delta =
                 station_rail_foundation_world_z_delta(ctx.info.base_z, rail_base_z);
@@ -1353,18 +1356,30 @@ pub(crate) fn spawn_station_tile(
                 );
             }
             if let Some(img) = assets.rail.get(&track_sid) {
-                commands.spawn((
-                    MapVisualLayer,
-                    ctx.map_tile_chunk(),
-                    img.sprite(),
-                    Transform::from_translation(full_tile_sprite_pos_half(
-                        ctx.tx_i32(),
-                        ctx.ty_i32(),
-                        rail_base_z,
-                        0.02,
-                        rail_half_h,
-                    )),
-                ));
+                let position = full_tile_sprite_pos_half(
+                    ctx.tx_i32(),
+                    ctx.ty_i32(),
+                    rail_base_z,
+                    0.02,
+                    rail_half_h,
+                );
+                if let Some(parent) = foundation_child_parent {
+                    spawn_foundation_child_sprite_at(
+                        commands,
+                        img.sprite(),
+                        ctx,
+                        position,
+                        dims.0,
+                        parent,
+                    );
+                } else {
+                    commands.spawn((
+                        MapVisualLayer,
+                        ctx.map_tile_chunk(),
+                        img.sprite(),
+                        Transform::from_translation(position),
+                    ));
+                }
             }
             // `DrawStationTile`: una plataforma reservada no oscurece toda
             // la estación. OpenTTD vuelve a dibujar el SINGLE_X/Y de su eje
@@ -1382,12 +1397,24 @@ pub(crate) fn spawn_station_tile(
                         rail_half_h,
                     );
                     let offset = rail_ghost_overlay_offset(sid);
-                    commands.spawn((
-                        MapVisualLayer,
-                        ctx.map_tile_chunk(),
-                        img.sprite(),
-                        Transform::from_translation(base + Vec3::new(offset.x, offset.y, 0.0)),
-                    ));
+                    let position = base + Vec3::new(offset.x, offset.y, 0.0);
+                    if let Some(parent) = foundation_child_parent {
+                        spawn_foundation_child_sprite_at(
+                            commands,
+                            img.sprite(),
+                            ctx,
+                            position,
+                            dims.0,
+                            parent,
+                        );
+                    } else {
+                        commands.spawn((
+                            MapVisualLayer,
+                            ctx.map_tile_chunk(),
+                            img.sprite(),
+                            Transform::from_translation(position),
+                        ));
+                    }
                 }
             }
             let overlay_layers = if class == StationTileClass::RailWaypoint {

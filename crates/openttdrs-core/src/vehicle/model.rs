@@ -289,6 +289,10 @@ pub struct Vehicle {
     /// no avanza hasta que la fase de carga tuvo oportunidad de actuar).
     #[serde(default)]
     pub awaiting_load_window: bool,
+    /// Evento transitorio para CB140: la cabeza ferroviaria terminó una parada
+    /// y debe emitir `VehicleDeparts` antes de iniciar el movimiento siguiente.
+    #[serde(skip)]
+    pub(crate) station_departure_pending: bool,
     /// Ignorar señal roja en el próximo paso de simulación (trenes).
     #[serde(default)]
     pub force_proceed: bool,
@@ -556,6 +560,7 @@ impl Vehicle {
             cargo_unloading: false,
             depart_turn: 0,
             awaiting_load_window: false,
+            station_departure_pending: false,
             force_proceed: false,
             wait_counter: 0,
             depot_leave_cleared: true,

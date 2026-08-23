@@ -213,6 +213,7 @@ pub(crate) fn step(state: &mut GameState) {
     cargo_transfer::load_vehicles(state, &mut loaded_this_tick, &unloaded_this_tick);
     // Ops que pueden cambiar destino van tras la carga (p. ej. wander orderless).
     let _ = phase_vehicle_ops_pre_move(state);
+    trigger_pending_train_station_departures(state);
     // PBS grueso tras la carga y antes del move (P2.2: ya no precede a LoadUnload).
     // ChooseTrainTrack (P2.7) elige vía + reserva atómica al entrar en tesela.
     phase_pbs_reservations(state);
@@ -289,6 +290,7 @@ pub fn step_profiled(state: &mut GameState) -> TickPhaseTimings {
     let vehicle_ops_timings = phase_vehicle_ops_pre_move(state);
     timings.vehicle_ops_only_ns = nanos(vehicle_ops);
     timings.vehicle_ops_autoreplace_ns = vehicle_ops_timings.autoreplace_ns;
+    trigger_pending_train_station_departures(state);
     let pbs = Instant::now();
     phase_pbs_reservations(state);
     timings.pbs_pre_move_ns = nanos(pbs);
@@ -563,6 +565,36 @@ pub(super) fn trigger_station_platform_animation(
     state.runtime.industry_tile_dirty.extend(dirty);
 }
 
+/// Consume las salidas de estación que terminaron antes del movimiento
+/// (descarga/carga o espera de horario). Las salidas decididas dentro de
+/// `movement` usan la variante por índice inmediatamente antes de avanzar.
+fn trigger_pending_train_station_departures(state: &mut GameState) {
+    for vehicle_idx in 0..state.vehicles.len() {
+        trigger_pending_train_station_departure(state, vehicle_idx);
+    }
+}
+
+/// Ejecuta una salida ferroviaria pendiente conservando la tesela de la
+/// plataforma, antes de que el tren pueda mover un píxel. Equivale al bloque
+/// `Vehicle::LeaveStation` de `OpenTTD`.
+pub(super) fn trigger_pending_train_station_departure(state: &mut GameState, vehicle_idx: usize) {
+    let Some(trigger_tile) = state.vehicles.get_mut(vehicle_idx).and_then(|vehicle| {
+        let pending = vehicle.take_train_station_departure();
+        (pending
+            && vehicle.kind == crate::VehicleKind::Train
+            && vehicle.is_consist_head()
+            && !vehicle.crashed)
+            .then_some(vehicle.pos)
+    }) else {
+        return;
+    };
+    trigger_station_platform_animation(
+        state,
+        trigger_tile,
+        crate::StationAnimationTrigger::VehicleDeparts,
+    );
+}
+
 /// Movimiento de vehículos, colisiones y PBS post-move.
 fn phase_movement(state: &mut GameState) {
     movement::move_vehicles(state);
@@ -605,8 +637,8 @@ mod tests {
     };
     use crate::{
         GameState, PathNetwork, STATION_ANIMATION_TRIGGER_PATH_RESERVATION,
-        STATION_ANIMATION_TRIGGER_VEHICLE_ARRIVES, TileCoord, Vehicle, VehicleKind, VehicleOrder,
-        find_path,
+        STATION_ANIMATION_TRIGGER_VEHICLE_ARRIVES, STATION_ANIMATION_TRIGGER_VEHICLE_DEPARTS,
+        TileCoord, Vehicle, VehicleKind, VehicleOrder, find_path,
     };
 
     /// CB140 sintético: conserva en MAP7 el ordinal de `var 18`.
@@ -732,6 +764,129 @@ mod tests {
             state.map.get(station_tile).unwrap().m7,
             crate::StationAnimationTrigger::VehicleArrives as u8,
             "CB140 debe recibir VehicleArrives=3 al ejecutar BeginLoading"
+        );
+    }
+
+    #[test]
+    fn train_departure_after_load_window_triggers_station_cb140() {
+        let station_tile = TileCoord::new(4, 3);
+        let mut state = GameState::new(12, 8);
+        apply_command(
+            &mut state,
+            &Command::PlaceRailStationArea {
+                origin: station_tile,
+                axis_y: false,
+                platforms: 1,
+                length: 1,
+            },
+        )
+        .unwrap();
+
+        let mut train = Vehicle::new(1, VehicleKind::Train, station_tile, station_tile);
+        train.running = true;
+        train.progress = u8::MAX;
+        train.awaiting_load_window = true;
+        train.orders.push(VehicleOrder::station(station_tile));
+        state.vehicles = vec![train];
+        let spec = &mut state.station_spec_catalog[0];
+        spec.from_newgrf = true;
+        spec.animation_triggers = STATION_ANIMATION_TRIGGER_VEHICLE_DEPARTS;
+        spec.newgrf_runtime = Some(Box::new(path_reservation_callbacks()));
+
+        state.step();
+
+        assert_eq!(
+            state.map.get(station_tile).unwrap().m7,
+            crate::StationAnimationTrigger::VehicleDeparts as u8,
+            "CB140 debe recibir VehicleDeparts=4 antes de mover fuera de la plataforma"
+        );
+    }
+
+    #[test]
+    fn train_departure_after_cargo_unload_triggers_station_cb140() {
+        let station_tile = TileCoord::new(4, 3);
+        let source = TileCoord::new(2, 3);
+        let mut state = GameState::new(12, 8);
+        apply_command(
+            &mut state,
+            &Command::PlaceRailStationArea {
+                origin: station_tile,
+                axis_y: false,
+                platforms: 1,
+                length: 1,
+            },
+        )
+        .unwrap();
+
+        let mut train = Vehicle::new(1, VehicleKind::Train, station_tile, station_tile);
+        train.running = true;
+        train.orders.push(VehicleOrder::station(station_tile));
+        train
+            .cargo_packets
+            .push(crate::CargoPacket::new(crate::CargoType::Coal, 1, source));
+        train.sync_cargo_from_packets();
+        train.last_pickup_station = Some(source);
+        state.vehicles = vec![train];
+        let spec = &mut state.station_spec_catalog[0];
+        spec.from_newgrf = true;
+        spec.animation_triggers = STATION_ANIMATION_TRIGGER_VEHICLE_DEPARTS;
+        spec.newgrf_runtime = Some(Box::new(path_reservation_callbacks()));
+
+        state.step();
+
+        assert_eq!(
+            state.map.get(station_tile).unwrap().m7,
+            crate::StationAnimationTrigger::VehicleDeparts as u8,
+            "CB140 debe salir también cuando LoadUnloadStation avanzó la orden"
+        );
+    }
+
+    #[test]
+    fn train_departure_waits_for_timetable_before_triggering_station_cb140() {
+        let station_tile = TileCoord::new(4, 3);
+        let mut state = GameState::new(12, 8);
+        apply_command(
+            &mut state,
+            &Command::PlaceRailStationArea {
+                origin: station_tile,
+                axis_y: false,
+                platforms: 1,
+                length: 1,
+            },
+        )
+        .unwrap();
+
+        let mut train = Vehicle::new(1, VehicleKind::Train, station_tile, station_tile);
+        train.running = true;
+        train.progress = u8::MAX;
+        train.awaiting_load_window = true;
+        train.timetable_active = true;
+        train.orders = vec![
+            VehicleOrder::station(station_tile)
+                .with_cycled_wait()
+                .unwrap(),
+            VehicleOrder::Tile(TileCoord::new(6, 3)),
+        ];
+        state.vehicles = vec![train];
+        let spec = &mut state.station_spec_catalog[0];
+        spec.from_newgrf = true;
+        spec.animation_triggers = STATION_ANIMATION_TRIGGER_VEHICLE_DEPARTS;
+        spec.newgrf_runtime = Some(Box::new(path_reservation_callbacks()));
+
+        state.step();
+        assert_eq!(state.vehicles[0].timetable_wait_remaining, 30);
+        assert_eq!(
+            state.map.get(station_tile).unwrap().m7,
+            0,
+            "CB140 no puede salir mientras el tren todavía espera en la estación"
+        );
+
+        state.vehicles[0].timetable_wait_remaining = 1;
+        state.step();
+        assert_eq!(
+            state.map.get(station_tile).unwrap().m7,
+            crate::StationAnimationTrigger::VehicleDeparts as u8,
+            "CB140 sale al completar la espera y avanzar la orden"
         );
     }
 }

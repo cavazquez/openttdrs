@@ -275,6 +275,7 @@ impl super::model::Vehicle {
         self.path.clear();
         self.depart_turn = 0;
         self.progress = 255;
+        self.mark_train_station_departure();
         self.advance_to_next_order();
     }
 
@@ -300,6 +301,7 @@ impl super::model::Vehicle {
         self.path.clear();
         self.depart_turn = 0;
         self.progress = 255;
+        self.mark_train_station_departure();
         self.advance_to_next_order();
     }
 
@@ -318,6 +320,22 @@ impl super::model::Vehicle {
         {
             self.dest = order.destination();
         }
+    }
+
+    /// Registra la salida de una estación para que `sim_step` ejecute CB140
+    /// antes de que la locomotora abandone la plataforma. No se persiste: se
+    /// consume durante el mismo tick de la simulación.
+    fn mark_train_station_departure(&mut self) {
+        if self.kind == super::model::VehicleKind::Train && self.is_consist_head() {
+            self.station_departure_pending = true;
+        }
+    }
+
+    /// Consume el evento de salida ferroviaria que producen las rutas de
+    /// carga, descarga, espera de horario o cierre de `BeginLoading`.
+    #[must_use]
+    pub(crate) fn take_train_station_departure(&mut self) -> bool {
+        std::mem::take(&mut self.station_departure_pending)
     }
 
     pub(super) fn schedule_timetable_wait(
@@ -404,6 +422,7 @@ impl super::model::Vehicle {
         } else {
             self.progress = 255;
         }
+        self.mark_train_station_departure();
         self.advance_to_next_order();
     }
 }

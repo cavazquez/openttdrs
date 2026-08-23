@@ -118,6 +118,9 @@ pub(super) fn move_vehicles(state: &mut GameState) {
             // detenido y antes de evaluar tráfico o mover un solo píxel.
             let was_at_station = state.vehicles[i].awaiting_load_window;
             state.vehicles[i].complete_station_load_window();
+            // El cierre sin transferencia decide la salida dentro de la fase
+            // de movimiento; consumir el evento antes de re-rutear o avanzar.
+            super::trigger_pending_train_station_departure(state, i);
             if was_at_station && !state.vehicles[i].awaiting_load_window {
                 state.vehicles[i].sync_order_destination(&state.map);
             }

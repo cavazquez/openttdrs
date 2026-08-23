@@ -721,7 +721,14 @@ impl GameState {
             }
             if let Some(target) = state.companies.get_mut(index) {
                 target.economy.money = company.money;
-                target.colour = company.colour;
+                target.set_colour(company.colour);
+                if company.liveries.is_empty() {
+                    // OpenTTD llama `ResetCompanyLivery` para saves anteriores
+                    // al campo: ambos canales vuelven al color de compañía.
+                    target.reset_liveries();
+                } else {
+                    target.set_liveries(company.liveries);
+                }
                 if let Some(name) = company.name {
                     target.name = name;
                 }

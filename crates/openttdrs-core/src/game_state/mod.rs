@@ -1143,7 +1143,7 @@ impl GameState {
         let idx = self.active_company.index();
         if let Some(c) = self.companies.get_mut(idx) {
             c.economy = self.economy;
-            c.colour = self.company_colour;
+            c.set_colour(self.company_colour);
         }
     }
 

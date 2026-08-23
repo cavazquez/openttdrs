@@ -5,7 +5,9 @@
 
 #![allow(clippy::expect_used)]
 
-use openttdrs_core::{SavVehicleKind, sav};
+use openttdrs_core::{
+    COMPANY_LIVERY_FLAG_PRIMARY, COMPANY_LIVERY_FLAG_SECONDARY, CompanyLivery, SavVehicleKind, sav,
+};
 
 #[test]
 fn openttd_resaved_preserves_declared_subset() {
@@ -43,4 +45,31 @@ fn openttd_resaved_preserves_declared_subset() {
             "strict: ≥1 ROAD vehicle"
         );
     }
+}
+
+/// Contrato opcional usado por el smoke de `PLYR.liveries`: la entrada de
+/// prueba se exporta como bus de dos colores, `OpenTTD` la re-guarda y el
+/// importador debe verla sin degradarla.
+#[test]
+fn openttd_resaved_preserves_requested_company_livery() {
+    if std::env::var("OPENTTDRS_ROUNDTRIP_REQUIRE_COMPANY_LIVERY").as_deref() != Ok("1") {
+        return;
+    }
+    let path = std::env::var("OPENTTDRS_ROUNDTRIP_SAV")
+        .expect("OPENTTDRS_ROUNDTRIP_SAV requerido para el smoke de libreas");
+    let raw = std::fs::read(&path).unwrap_or_else(|e| panic!("leer {path}: {e}"));
+    let game = sav::load(&raw).unwrap_or_else(|e| panic!("import openttdrs: {e}"));
+    let livery = game
+        .companies
+        .first()
+        .and_then(|company| company.liveries.get(14))
+        .copied();
+    assert_eq!(
+        livery,
+        Some(CompanyLivery {
+            in_use: COMPANY_LIVERY_FLAG_PRIMARY | COMPANY_LIVERY_FLAG_SECONDARY,
+            colour1: 7,
+            colour2: 11,
+        })
+    );
 }

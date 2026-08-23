@@ -62,6 +62,52 @@ pub const RIVAL_NAME_TRANSCARGO: &str = "TransCargo";
 /// Nombre canónico del rival de carretera / buses.
 pub const RIVAL_NAME_ROADHAUL: &str = "RoadHaul";
 
+/// Cantidad de esquemas de librea de una compañía en `OpenTTD` (`LS_END`).
+///
+/// Incluye el esquema por defecto, ferrocarril, carretera, barcos, aeronaves
+/// y tranvías. Se mantiene como una lista para poder cargar saves antiguos
+/// que sólo serializaban una parte de los esquemas.
+pub const COMPANY_LIVERY_SCHEME_COUNT: usize = 23;
+
+/// Bit `Livery::Flag::Primary` de `OpenTTD`.
+pub const COMPANY_LIVERY_FLAG_PRIMARY: u8 = 1 << 0;
+/// Bit `Livery::Flag::Secondary` de `OpenTTD`.
+pub const COMPANY_LIVERY_FLAG_SECONDARY: u8 = 1 << 1;
+
+/// Colores y flags de un esquema de librea de compañía (`PLYR.liveries[]`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CompanyLivery {
+    /// Canales que dejan de heredar el color del esquema por defecto.
+    #[serde(default)]
+    pub in_use: u8,
+    /// Color primario (`Colours`).
+    #[serde(default)]
+    pub colour1: u8,
+    /// Color secundario (`Colours`).
+    #[serde(default)]
+    pub colour2: u8,
+}
+
+impl CompanyLivery {
+    #[must_use]
+    pub const fn with_company_colour(colour: u8) -> Self {
+        Self {
+            in_use: 0,
+            colour1: colour,
+            colour2: colour,
+        }
+    }
+}
+
+/// Esquemas por defecto equivalentes a `ResetCompanyLivery` de `OpenTTD`.
+#[must_use]
+pub fn default_company_liveries(colour: u8) -> Vec<CompanyLivery> {
+    vec![
+        CompanyLivery::with_company_colour(colour % COMPANY_COLOUR_SLOTS);
+        COMPANY_LIVERY_SCHEME_COUNT
+    ]
+}
+
 /// Compañía jugable o IA.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[allow(clippy::struct_excessive_bools)] // flags de settings OpenTTD (engine_renew, servint, …)
@@ -69,6 +115,12 @@ pub struct Company {
     pub id: CompanyId,
     pub name: String,
     pub colour: u8,
+    /// Esquemas nativos de color de vehículos (`PLYR.liveries`).
+    ///
+    /// Un JSON anterior a este campo se interpreta como la librea por defecto
+    /// de la compañía, por compatibilidad hacia atrás.
+    #[serde(default)]
+    pub liveries: Vec<CompanyLivery>,
     pub economy: CompanyEconomy,
     /// `true` = controlada por [`crate::ai::CompanyAi`].
     #[serde(default)]
@@ -144,6 +196,7 @@ impl Company {
             id: CompanyId::PLAYER,
             name: "Jugador".to_string(),
             colour,
+            liveries: default_company_liveries(colour),
             economy,
             is_ai: false,
             cargo_income_earned: 0,
@@ -171,6 +224,7 @@ impl Company {
             id: CompanyId(1),
             name: RIVAL_NAME_TRANSCARGO.to_string(),
             colour,
+            liveries: default_company_liveries(colour),
             economy,
             is_ai: true,
             cargo_income_earned: 0,
@@ -198,6 +252,7 @@ impl Company {
             id: CompanyId(2),
             name: RIVAL_NAME_ROADHAUL.to_string(),
             colour,
+            liveries: default_company_liveries(colour),
             economy,
             is_ai: true,
             cargo_income_earned: 0,
@@ -217,6 +272,52 @@ impl Company {
             servint_aircraft: 0,
             servint_ships: 0,
         }
+    }
+
+    /// Devuelve exactamente los 23 esquemas que `OpenTTD` escribirá en `PLYR`.
+    ///
+    /// Los saves antiguos pueden traer menos esquemas; los ausentes heredan
+    /// el color de compañía como hace `ResetCompanyLivery` de `OpenTTD`.
+    #[must_use]
+    pub fn effective_liveries(&self) -> Vec<CompanyLivery> {
+        let mut liveries = default_company_liveries(self.colour);
+        for (target, source) in liveries.iter_mut().zip(&self.liveries) {
+            *target = *source;
+        }
+        liveries
+    }
+
+    /// Reemplaza las libreas importadas, acotadas al contrato actual de
+    /// `OpenTTD` (`LS_END = 23`).
+    pub fn set_liveries(&mut self, liveries: Vec<CompanyLivery>) {
+        self.liveries = liveries
+            .into_iter()
+            .take(COMPANY_LIVERY_SCHEME_COUNT)
+            .collect();
+    }
+
+    /// Restablece todos los esquemas al color de compañía.
+    pub fn reset_liveries(&mut self) {
+        self.liveries = default_company_liveries(self.colour);
+    }
+
+    /// Cambia el color principal y actualiza sólo los canales que heredan el
+    /// esquema por defecto, igual que `UpdateCompanyLiveries` de `OpenTTD`.
+    pub fn set_colour(&mut self, colour: u8) {
+        let colour = colour % COMPANY_COLOUR_SLOTS;
+        let mut liveries = self.effective_liveries();
+        liveries[0].colour1 = colour;
+        let default_colour2 = liveries[0].colour2;
+        for livery in &mut liveries[1..] {
+            if livery.in_use & COMPANY_LIVERY_FLAG_PRIMARY == 0 {
+                livery.colour1 = colour;
+            }
+            if livery.in_use & COMPANY_LIVERY_FLAG_SECONDARY == 0 {
+                livery.colour2 = default_colour2;
+            }
+        }
+        self.colour = colour;
+        self.liveries = liveries;
     }
 }
 
@@ -354,6 +455,32 @@ mod tests {
             CompanyId::PLAYER,
             3
         ));
+    }
+
+    #[test]
+    fn changing_company_colour_preserves_custom_livery_channels() {
+        let mut company = Company::player(CompanyEconomy::default(), 3);
+        company.liveries[1] = CompanyLivery {
+            in_use: COMPANY_LIVERY_FLAG_PRIMARY,
+            colour1: 9,
+            colour2: 3,
+        };
+        company.liveries[2] = CompanyLivery {
+            in_use: COMPANY_LIVERY_FLAG_SECONDARY,
+            colour1: 3,
+            colour2: 12,
+        };
+
+        company.set_colour(6);
+
+        assert_eq!(company.colour, 6);
+        assert_eq!(company.liveries.len(), COMPANY_LIVERY_SCHEME_COUNT);
+        assert_eq!(company.liveries[0].colour1, 6);
+        assert_eq!(company.liveries[0].colour2, 3);
+        assert_eq!(company.liveries[1].colour1, 9);
+        assert_eq!(company.liveries[1].colour2, 3);
+        assert_eq!(company.liveries[2].colour1, 6);
+        assert_eq!(company.liveries[2].colour2, 12);
     }
 
     #[test]

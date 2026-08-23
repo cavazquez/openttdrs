@@ -234,6 +234,7 @@ mod tests {
             colour: 0,
             name: None,
             is_ai: None,
+            liveries: Vec::new(),
             engine_renew_list_head: Some(0),
             engine_renew: None,
             engine_renew_months: None,

@@ -8,7 +8,8 @@
 //! + `INDY` + `ECMY` + `DATE`/`PLYR` cargable por `OpenTTD` ≥15.3 dedicated.
 //!
 //! Residual: tram, rotor heli, creación de nuevos `CAPY` packets, settings fuera del
-//! subconjunto modelado de `PATS`, ejecución de `ENGN`/`SRND`/`NewGRF` y `PLYR` completo.
+//! subconjunto modelado de `PATS`, ejecución de `ENGN`/`SRND`/`NewGRF`, historial,
+//! rostro y flags completos de `PLYR`.
 //! Los chunks nativos no modelados se conservan como passthrough al reexportar.
 //! Limitaciones: `docs/PARIDAD.md` y `docs/archive/merged-2026-07/ROADMAP_SAV_EXPORT.md`.
 
@@ -751,25 +752,45 @@ mod tests {
     #[test]
     fn ottn_roundtrip_preserves_company_pool_money_and_colour() {
         let mut state = tiny_state();
+        state.sync_active_from_mirrors();
         state.ensure_rival_transcargo();
-        let rival = state
-            .companies
-            .iter_mut()
-            .find(|company| company.is_ai)
-            .expect("rival company");
-        rival.economy.money = 456_789;
-        rival.colour = 11;
-        rival.engine_renew = false;
-        rival.engine_renew_months = -3;
-        rival.engine_renew_money = 765_432;
-        rival.renew_keep_length = true;
-        rival.servint_ispercent = true;
-        rival.servint_trains = 88;
-        rival.servint_roadveh = 77;
-        rival.servint_aircraft = 66;
-        rival.servint_ships = 55;
+        let expected_rival_liveries = {
+            let rival = state
+                .companies
+                .iter_mut()
+                .find(|company| company.is_ai)
+                .expect("rival company");
+            rival.economy.money = 456_789;
+            rival.set_colour(11);
+            rival.liveries[1] = crate::CompanyLivery {
+                in_use: crate::COMPANY_LIVERY_FLAG_PRIMARY,
+                colour1: 7,
+                colour2: 11,
+            };
+            rival.liveries[crate::COMPANY_LIVERY_SCHEME_COUNT - 1] = crate::CompanyLivery {
+                in_use: crate::COMPANY_LIVERY_FLAG_SECONDARY,
+                colour1: 11,
+                colour2: 14,
+            };
+            rival.engine_renew = false;
+            rival.engine_renew_months = -3;
+            rival.engine_renew_money = 765_432;
+            rival.renew_keep_length = true;
+            rival.servint_ispercent = true;
+            rival.servint_trains = 88;
+            rival.servint_roadveh = 77;
+            rival.servint_aircraft = 66;
+            rival.servint_ships = 55;
+            rival.effective_liveries()
+        };
+
+        let expected_player_liveries = state.companies[0].effective_liveries();
 
         let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
+        let (payload, _) = crate::sav::container::decompress(&bytes).expect("decompress");
+        let chunks = crate::sav::chunks::parse_chunks(&payload).expect("chunks");
+        let plyr = crate::sav::chunks::find_chunk(&chunks, "PLYR").expect("PLYR chunk");
+        assert_table_field_type(&plyr.body, 0x1B, "liveries");
         let sav_game = sav::load(&bytes).expect("load");
         assert_eq!(sav_game.companies.len(), 2);
         assert_eq!(sav_game.companies[1].money, 456_789);
@@ -785,6 +806,8 @@ mod tests {
         assert_eq!(sav_game.companies[1].servint_roadveh, Some(77));
         assert_eq!(sav_game.companies[1].servint_aircraft, Some(66));
         assert_eq!(sav_game.companies[1].servint_ships, Some(55));
+        assert_eq!(sav_game.companies[0].liveries, expected_player_liveries);
+        assert_eq!(sav_game.companies[1].liveries, expected_rival_liveries);
 
         let loaded = GameState::from_sav_game(sav_game);
         let loaded_rival = loaded
@@ -805,6 +828,8 @@ mod tests {
         assert_eq!(loaded_rival.servint_roadveh, 77);
         assert_eq!(loaded_rival.servint_aircraft, 66);
         assert_eq!(loaded_rival.servint_ships, 55);
+        assert_eq!(loaded.companies[0].liveries, expected_player_liveries);
+        assert_eq!(loaded_rival.liveries, expected_rival_liveries);
     }
 
     #[test]
@@ -1124,7 +1149,17 @@ mod tests {
         use crate::sav::chunks::{find_chunk, parse_chunks};
         use crate::sav::table::{SlValue, parse_table_chunk, record_get};
 
-        let state = mvp_rich_state();
+        let mut state = mvp_rich_state();
+        state.sync_active_from_mirrors();
+        state.companies[0].reset_liveries();
+        let custom_bus_livery = crate::CompanyLivery {
+            in_use: crate::COMPANY_LIVERY_FLAG_PRIMARY | crate::COMPANY_LIVERY_FLAG_SECONDARY,
+            colour1: 7,
+            colour2: 11,
+        };
+        // La salida de smoke lleva una librea no trivial: el round-trip con
+        // OpenTTD acredita que no se limita a escribir 23 defaults.
+        state.companies[0].liveries[14] = custom_bus_livery;
         let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
         let payload = &bytes[8..];
         let chunks = parse_chunks(payload).expect("chunks");
@@ -1136,6 +1171,7 @@ mod tests {
         assert!(sav_game.stations.len() >= 2);
         assert_eq!(sav_game.industries.len(), 1);
         assert_eq!(sav_game.vehicles.len(), 2, "tren + bus");
+        assert_eq!(sav_game.companies[0].liveries[14], custom_bus_livery);
         assert!(
             sav_game
                 .vehicles

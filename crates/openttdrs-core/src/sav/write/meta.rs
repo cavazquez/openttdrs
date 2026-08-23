@@ -47,45 +47,71 @@ fn append_company_settings(
     Ok(())
 }
 
+fn append_company_liveries(
+    record: &mut Vec<u8>,
+    company: &crate::company::Company,
+) -> Result<(), SavError> {
+    let liveries = company.effective_liveries();
+    let count = u32::try_from(liveries.len())
+        .map_err(|_| SavError::BadFormat("demasiadas libreas de compañía".into()))?;
+    write_gamma(count, record)?;
+    for livery in liveries {
+        record.push(livery.in_use);
+        record.push(livery.colour1);
+        record.push(livery.colour2);
+    }
+    Ok(())
+}
+
 fn plyr_records(
     state: &GameState,
     autoreplace_export: &super::fleet::AutoreplaceExport,
 ) -> Result<Vec<Vec<u8>>, SavError> {
     if state.companies.is_empty() {
-        let mut rec = Vec::with_capacity(32);
+        let mut rec = Vec::with_capacity(112);
+        let company = crate::company::Company::player(
+            crate::game_state::CompanyEconomy::default(),
+            state.company_colour,
+        );
         write_str("Jugador", &mut rec)?;
         rec.extend_from_slice(&state.economy.money.to_be_bytes());
         rec.push(state.company_colour);
         rec.push(0);
         append_company_settings(
             &mut rec,
-            &crate::company::Company::player(
-                crate::game_state::CompanyEconomy::default(),
-                state.company_colour,
-            ),
+            &company,
             autoreplace_export.company_head(crate::CompanyId::PLAYER),
         )?;
+        append_company_liveries(&mut rec, &company)?;
         return Ok(vec![rec]);
     }
     state
         .companies
         .iter()
         .map(|company| {
-            let mut rec = Vec::with_capacity(32);
+            let mut rec = Vec::with_capacity(112);
             let (money, colour) = if company.id == state.active_company {
                 (state.economy.money, state.company_colour)
             } else {
                 (company.economy.money, company.colour)
             };
+            // El writer es inmutable; normalizar la copia evita emitir un
+            // `colour` espejo distinto del esquema por defecto en estados
+            // creados por JSON/tests anteriores a `Company::set_colour`.
+            let mut company_to_write = company.clone();
+            if company_to_write.colour != colour {
+                company_to_write.set_colour(colour);
+            }
             write_str(&company.name, &mut rec)?;
             rec.extend_from_slice(&money.to_be_bytes());
             rec.push(colour);
             rec.push(u8::from(company.is_ai));
             append_company_settings(
                 &mut rec,
-                company,
+                &company_to_write,
                 autoreplace_export.company_head(company.id),
             )?;
+            append_company_liveries(&mut rec, &company_to_write)?;
             Ok(rec)
         })
         .collect()
@@ -109,6 +135,8 @@ pub(super) fn plyr_chunk(
     write_str("is_ai", &mut header)?;
     header.push(0x1B);
     write_str("settings", &mut header)?;
+    header.push(0x1B);
+    write_str("liveries", &mut header)?;
     header.push(0);
 
     header.push(6);
@@ -131,6 +159,14 @@ pub(super) fn plyr_chunk(
     write_str("settings.vehicle.servint_aircraft", &mut header)?;
     header.push(4);
     write_str("settings.vehicle.servint_ships", &mut header)?;
+    header.push(0);
+
+    header.push(2);
+    write_str("in_use", &mut header)?;
+    header.push(2);
+    write_str("colour1", &mut header)?;
+    header.push(2);
+    write_str("colour2", &mut header)?;
     header.push(0);
 
     raw_table_chunk(

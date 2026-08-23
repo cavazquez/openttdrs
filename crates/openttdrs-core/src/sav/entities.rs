@@ -630,6 +630,8 @@ pub struct SavCompany {
     pub name: Option<String>,
     /// Marca de compañía controlada por IA, si está presente en el save.
     pub is_ai: Option<bool>,
+    /// Esquemas `PLYR.liveries` en orden `LiveryScheme`.
+    pub liveries: Vec<crate::company::CompanyLivery>,
     /// Opciones de autorrenovación/servicio de `PLYR.settings`.
     /// Cabeza `EngineRenew` de la compañía, como índice de pool (no `index + 1`).
     pub engine_renew_list_head: Option<u16>,
@@ -642,6 +644,80 @@ pub struct SavCompany {
     pub servint_roadveh: Option<u16>,
     pub servint_aircraft: Option<u16>,
     pub servint_ships: Option<u16>,
+}
+
+/// Migra la lista de libreas de `PLYR` al orden actual de `LiveryScheme`.
+///
+/// `OpenTTD` insertó dos esquemas de vagones en SLV 85 y los de tranvía en
+/// SLV 63; además, antes de SLV 205 un único flag activo significaba ambos
+/// canales. Repetir esas migraciones aquí evita reinterpretar colores al abrir
+/// un save histórico y volver a exportarlo como SLV moderno.
+fn company_liveries_from_record(
+    record: &SlRecord,
+    company_colour: u8,
+    save_version: u16,
+) -> Vec<crate::company::CompanyLivery> {
+    let Some(SlValue::Structs(entries)) = record_get(record, "liveries") else {
+        return Vec::new();
+    };
+    if entries.is_empty() {
+        return Vec::new();
+    }
+
+    let loaded_count = entries
+        .len()
+        .min(crate::company::COMPANY_LIVERY_SCHEME_COUNT);
+    let mut liveries = crate::company::default_company_liveries(company_colour);
+    for (target, entry) in liveries.iter_mut().zip(entries.iter()).take(loaded_count) {
+        *target = crate::company::CompanyLivery {
+            in_use: record_get(entry, "in_use")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok())
+                .unwrap_or(0),
+            colour1: record_get(entry, "colour1")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok())
+                .unwrap_or(0),
+            colour2: record_get(entry, "colour2")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok())
+                .unwrap_or(0),
+        };
+    }
+
+    // `SlCompanyLiveries::Load` normaliza los flags previos a las libreas de
+    // grupo: antes eran un selector binario, no dos canales independientes.
+    if save_version < 205 {
+        let default = liveries[0];
+        for livery in liveries.iter_mut().skip(1).take(loaded_count - 1) {
+            if livery.in_use
+                & (crate::company::COMPANY_LIVERY_FLAG_PRIMARY
+                    | crate::company::COMPANY_LIVERY_FLAG_SECONDARY)
+                == 0
+            {
+                livery.colour1 = default.colour1;
+                livery.colour2 = default.colour2;
+            } else {
+                livery.in_use = crate::company::COMPANY_LIVERY_FLAG_PRIMARY
+                    | crate::company::COMPANY_LIVERY_FLAG_SECONDARY;
+            }
+        }
+    }
+
+    if save_version < 85 {
+        // `std::move_backward(livery + LS_FREIGHT_WAGON - 2, end - 2, end)`
+        // de OpenTTD: abre lugar para Passenger Wagon Monorail/Maglev.
+        liveries.copy_within(11..21, 13);
+        liveries[11] = liveries[4];
+        liveries[12] = liveries[5];
+    }
+    if save_version < 63 {
+        // Los tranvías heredan bus/camión en saves anteriores a su introducción.
+        liveries[21] = liveries[14];
+        liveries[22] = liveries[15];
+    }
+
+    liveries
 }
 
 /// Empresas presentes en `PLYR`, conservando dinero y color por `CompanyID`.
@@ -669,6 +745,7 @@ pub(crate) fn companies_from_chunks(chunks: &[RawChunk], save_version: u16) -> V
             let is_ai = record_get(&record, "is_ai")
                 .and_then(SlValue::as_u64)
                 .map(|value| value != 0);
+            let liveries = company_liveries_from_record(&record, colour, save_version);
             let settings = nested_struct(&record, "settings");
             let setting = |name: &str, legacy: &str| {
                 settings
@@ -717,6 +794,7 @@ pub(crate) fn companies_from_chunks(chunks: &[RawChunk], save_version: u16) -> V
                 colour,
                 name,
                 is_ai,
+                liveries,
                 engine_renew_list_head,
                 engine_renew,
                 engine_renew_months,
@@ -1395,6 +1473,35 @@ mod tests {
             body: build_table_body(&[(7, "money")], &[c0, c1]),
         };
         assert_eq!(company_money_from_chunks(&[chunk], 300), Some(500_000));
+    }
+
+    #[test]
+    fn migrates_legacy_company_liveries_to_current_scheme_order() {
+        let entries = (0_u8..19)
+            .map(|index| {
+                let in_use = u64::from(matches!(index, 1 | 4 | 5 | 11 | 12 | 13));
+                vec![
+                    ("in_use".to_string(), SlValue::Uint(in_use)),
+                    ("colour1".to_string(), SlValue::Uint(u64::from(index))),
+                    ("colour2".to_string(), SlValue::Uint(u64::from(index) + 20)),
+                ]
+            })
+            .collect();
+        let record = vec![("liveries".to_string(), SlValue::Structs(entries))];
+
+        // SLV 62 no tiene las dos libreas de vagones Monorail/Maglev ni las
+        // de tranvía, y aún usa el flag binario previo a grupos.
+        let liveries = company_liveries_from_record(&record, 6, 62);
+
+        assert_eq!(liveries.len(), crate::company::COMPANY_LIVERY_SCHEME_COUNT);
+        assert_eq!(liveries[1].in_use, 3);
+        assert_eq!(liveries[11].colour1, 4);
+        assert_eq!(liveries[12].colour1, 5);
+        assert_eq!(liveries[13].colour1, 11);
+        assert_eq!(liveries[14].colour1, 12);
+        assert_eq!(liveries[15].colour1, 13);
+        assert_eq!(liveries[21], liveries[14]);
+        assert_eq!(liveries[22], liveries[15]);
     }
 
     /// Cuerpo VEHS (sparse) con un tren cabeza, un vagón y un bus.

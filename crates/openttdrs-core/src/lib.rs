@@ -180,9 +180,11 @@ pub use command::{
     road_locked_tool_axis,
 };
 pub use company::{
-    COMPANY_COLOUR_SLOTS, Company, CompanyId, FEEDER_SHARE_DEN, FEEDER_SHARE_NUM,
-    RIVAL_NAME_ROADHAUL, RIVAL_NAME_TRANSCARGO, company_colour_taken_by_other, company_id_by_name,
-    feeder_share_of, first_free_company_colour, tile_owner_colour, tile_with_owner,
+    COMPANY_COLOUR_SLOTS, COMPANY_LIVERY_FLAG_PRIMARY, COMPANY_LIVERY_FLAG_SECONDARY,
+    COMPANY_LIVERY_SCHEME_COUNT, Company, CompanyId, CompanyLivery, FEEDER_SHARE_DEN,
+    FEEDER_SHARE_NUM, RIVAL_NAME_ROADHAUL, RIVAL_NAME_TRANSCARGO, company_colour_taken_by_other,
+    company_id_by_name, default_company_liveries, feeder_share_of, first_free_company_colour,
+    tile_owner_colour, tile_with_owner,
 };
 pub use construction_settings::{ConstructionSettings, RoadVehicleDrivingSide, TrainSignalSide};
 pub use depot::{

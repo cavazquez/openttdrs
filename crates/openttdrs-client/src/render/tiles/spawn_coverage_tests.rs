@@ -1241,6 +1241,92 @@ fn sloped_house_ground_attaches_to_the_last_foundation_parent() {
 }
 
 #[test]
+fn sloped_bridge_ramp_ground_attaches_to_the_last_foundation_parent() {
+    let assets = boot_assets_app();
+    let mut map = fresh_map8();
+    let c = |x: i32, y: i32| TileCoord::new(x, y);
+
+    // Puente vial sobre el eje X. Elevar W/S/E de la rampa izquierda produce
+    // una pendiente de tres esquinas altas: GetBridgeFoundation la nivela y
+    // deja un sprite vanilla materializable antes de dibujar su ground.
+    let mut ramp = tile_template();
+    ramp.kind = TileKind::RoadBridge;
+    ramp.mapt = 0x90;
+    ramp.m5 = 0x86;
+    map.set_tile(c(1, 1), ramp).expect("rampa oeste");
+    ramp.m5 = 0x84;
+    map.set_tile(c(4, 1), ramp).expect("rampa este");
+    for x in 2..=3 {
+        let mut water = tile_template();
+        water.kind = TileKind::Water;
+        water.mapt = 0x64;
+        map.set_tile(c(x, 1), water).expect("vano de agua");
+    }
+    for corner in [c(2, 1), c(1, 2), c(2, 2)] {
+        map.set_height(corner, 1)
+            .expect("esquina elevada de la rampa");
+    }
+
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world
+        .run_system_once(
+            |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                let dims = m.0.dimensions();
+                spawn_transport_object_tile(
+                    &mut commands,
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    4.0,
+                    false,
+                    &m.0,
+                    dims,
+                    &[],
+                    &[],
+                    None,
+                    &[],
+                    &[],
+                    None,
+                    None,
+                );
+            },
+        )
+        .expect("sloped bridge ramp spawn");
+
+    let foundation_parents: std::collections::HashSet<_> = world
+        .query::<(Entity, &ViewportSortableParent)>()
+        .iter(&world)
+        .filter_map(|(entity, parent)| {
+            (FOUNDATION_ORIGINAL_SPRITE_BASE..=FOUNDATION_ORIGINAL_SPRITE_BASE.saturating_add(14))
+                .contains(&parent.sprite_id)
+                .then_some(entity)
+        })
+        .collect();
+    assert!(
+        !foundation_parents.is_empty(),
+        "la rampa inclinada debe materializar el parent de DrawFoundation"
+    );
+
+    let mut children = world.query::<(&ViewportSortableChild, &Transform)>();
+    let attached: Vec<_> = children
+        .iter(&world)
+        .filter(|(child, _)| foundation_parents.contains(&child.parent))
+        .collect();
+    assert_eq!(
+        attached.len(),
+        1,
+        "el ground de la rampa debe seguir al último parent de la fundación"
+    );
+    let (child, transform) = attached[0];
+    assert_eq!(child.source_depth, transform.translation.z);
+}
+
+#[test]
 fn airport_pier_tile_seq_layers_spawn_for_both_import_paths() {
     let assets = boot_assets_app();
     let expected_apron = assets.airport_apron.clone();

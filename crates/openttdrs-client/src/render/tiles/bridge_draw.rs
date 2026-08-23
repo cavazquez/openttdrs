@@ -27,7 +27,8 @@ use crate::sprites::{
 
 use super::helpers::{
     bridge_foundation_decision, foundation_surface_at, sloped_or_flat_image,
-    spawn_empty_bounding_box, spawn_foundation_sprite, spawn_ground_sprite_at,
+    spawn_empty_bounding_box, spawn_foundation_child_ground_sprite_at, spawn_foundation_sprite,
+    spawn_ground_sprite_at,
 };
 use super::transport::catenary_local_z_delta;
 
@@ -1799,6 +1800,7 @@ pub(crate) fn spawn_bridge_deck(
     // resultante como child y recién después compone la rampa. Antes sólo
     // cambiábamos el selector de la cabeza (2450) y conservábamos el pasto de
     // la pendiente cruda: faltaba la pared 5478 y quedaba un corte visible.
+    let mut foundation_child_parent = None;
     if let Some(decision) = foundation_decision {
         if decision.foundation != 0 {
             WorldDrawTrace::record_foundation(
@@ -1830,7 +1832,7 @@ pub(crate) fn spawn_bridge_deck(
                 decision.surface_base_z.saturating_sub(ctx.info.base_z)
             );
             for (index, draw) in plan.sprites.into_iter().flatten().enumerate() {
-                let _ = spawn_foundation_sprite(
+                if let Some(parent) = spawn_foundation_sprite(
                     commands,
                     assets,
                     ctx,
@@ -1842,7 +1844,11 @@ pub(crate) fn spawn_bridge_deck(
                     foundation_newgrf,
                     action5_sprites.as_deref_mut(),
                     images.as_deref_mut(),
-                );
+                ) {
+                    // DrawFoundation deja activo su último sortable; el
+                    // DrawGroundSprite siguiente debe ser su screen child.
+                    foundation_child_parent = Some(parent);
+                }
             }
         }
 
@@ -1894,15 +1900,29 @@ pub(crate) fn spawn_bridge_deck(
         } else {
             slope_half_h(foundation_tileh)
         };
-        spawn_ground_sprite_at(
-            commands,
-            &ground,
-            Color::WHITE,
-            ctx,
-            foundation_base_z,
-            DECK_LAYER_FRAC - 0.001,
-            half_h,
-        );
+        if let Some(parent) = foundation_child_parent {
+            spawn_foundation_child_ground_sprite_at(
+                commands,
+                &ground,
+                Color::WHITE,
+                ctx,
+                foundation_base_z,
+                DECK_LAYER_FRAC - 0.001,
+                half_h,
+                dims.0,
+                parent,
+            );
+        } else {
+            spawn_ground_sprite_at(
+                commands,
+                &ground,
+                Color::WHITE,
+                ctx,
+                foundation_base_z,
+                DECK_LAYER_FRAC - 0.001,
+                half_h,
+            );
+        }
     }
 
     // Aunque el usuario oculte los puentes, el suelo y la fundación siguen

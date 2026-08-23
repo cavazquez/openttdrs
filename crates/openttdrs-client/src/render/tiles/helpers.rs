@@ -8,7 +8,8 @@ use crate::render::viewport_sort::ParentSpriteBounds;
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
 use crate::render::{
     AtlasSprite, EMPTY_BOUNDING_BOX_SPRITE_ID, MapTileChunk, MapVisualLayer, TileRenderContext,
-    ViewportSortableParent, WaterTile, WorldAssets, viewport_insertion_key, viewport_source_depth,
+    ViewportSortableChild, ViewportSortableParent, WaterTile, WorldAssets, viewport_insertion_key,
+    viewport_source_depth,
 };
 use crate::sprites::{foundation_gfx_for_tileh, rail_trackbits_for_render};
 use openttdrs_core::{
@@ -1038,6 +1039,40 @@ pub(crate) fn spawn_ground_sprite_at(
             layer,
             half_h,
         )),
+    ));
+}
+
+/// Materializa el `DrawGroundSprite` que OpenTTD añade después de una
+/// `DrawFoundation` como `AddChildSpriteScreen`.
+///
+/// El sprite conserva su posición propia sobre la superficie efectiva, pero
+/// comparte los desplazamientos que el sorter global aplique al último parent
+/// de la fundación. Es distinto del suelo natural: éste no tiene parent y se
+/// ordena de forma independiente por tesela.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn spawn_foundation_child_ground_sprite_at(
+    commands: &mut Commands,
+    image: &AtlasSprite,
+    color: Color,
+    ctx: &TileRenderContext,
+    base_z: u8,
+    layer: f32,
+    half_h: f32,
+    map_width: u32,
+    parent: Entity,
+) {
+    let mut position = full_tile_sprite_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, layer, half_h);
+    let source_depth = viewport_source_depth(position.z, ctx.tx, map_width);
+    position.z = source_depth;
+    commands.spawn((
+        MapVisualLayer,
+        ctx.map_tile_chunk(),
+        image.sprite_colored(color),
+        Transform::from_translation(position),
+        ViewportSortableChild {
+            parent,
+            source_depth,
+        },
     ));
 }
 

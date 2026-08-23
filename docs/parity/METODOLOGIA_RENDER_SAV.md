@@ -34,7 +34,7 @@ la paridad se comprueba por capas, de menor a mayor distancia del píxel final.
 | 1 | [`world-raw`](WORLD_RAW_SCHEMA.md) | ¿Los bytes de mapa de cada tesela son los mismos? | No explica su significado. |
 | 2 | [`world-semantic`](WORLD_SEMANTIC_SCHEMA.md) | ¿Ambos clasifican igual vía, puente, túnel, estación, pendiente y orientación? | No garantiza el sprite final. |
 | 3 | [`world-draw`](WORLD_DRAW_SCHEMA.md) | ¿Rust selecciona sprite, paleta y geometría permitidos por el `draw_tile_proc` C++? | La cobertura Rust aún no incluye todas las familias ni prueba el sort global o el framebuffer. |
-| 3b | [`world-sort`](WORLD_DRAW_SCHEMA.md#orden-global-de-parents-world-sort) | ¿Los parents candidatos se emiten en el orden final de `ViewportSortParentSprites`? | El runtime aplica el sorter compartido a casas vanilla, árboles `MP_TREES` con sus capas combinadas, muelles vanilla, edificios industriales vanilla planos/estáticos, sprites directos de `DrawFoundation` y las seis capas `TILE_SEQ` del depósito naval; conserva además grupos locales de paradas, depósitos, faroles y estación rail. Restan producers, children, pivotes y clipping; no certifica el framebuffer global. |
+| 3b | [`world-sort`](WORLD_DRAW_SCHEMA.md#orden-global-de-parents-world-sort) | ¿Los parents candidatos se emiten en el orden final de `ViewportSortParentSprites`? | El runtime aplica el sorter compartido a casas vanilla, árboles `MP_TREES` con sus capas combinadas, muelles vanilla, edificios industriales vanilla planos/estáticos, sprites directos de `DrawFoundation` y las seis capas `TILE_SEQ` del depósito naval. El suelo posterior de casas inclinadas y rampas de puente queda vinculado al último parent de su fundación; conserva además grupos locales de paradas, depósitos, faroles y estación rail. Restan producers, otros children, pivotes y clipping; no certifica el framebuffer global. |
 | 4 | Captura enfocada | ¿La composición completa se ve correcta en el contexto real? | Es aceptación visual, no la única evidencia. |
 
 La regla es encontrar la primera capa que diverge antes de editar. De ese modo
@@ -64,7 +64,7 @@ cuando el tile ya se decodificó mal.
 |---|---|---|
 | Viewport de mapas grandes | Completado de chunks parciales. | Corrección aislada publicada en `main` (`5b0023b`). |
 | Terreno, pendientes y árboles | Revisión de altura isométrica y sprites de ladera para eliminar artefactos que parecían vías o dejaban colores extraños. El primer sprite de cada `MP_TREES` ahora registra el parent 16×16×48 de OpenTTD y sus copas `CombinedSprite` quedan vinculadas como children del mismo parent. | El foco Kale `138,7..140,10` contiene 7/7 parents candidatos en el `world-sort` C++; los árboles conservan la caja `(2208,112,4)..(2223,127,51)` de `(138,7)` aun con offset visual `(4,4)`. Capturas reales en 0,25×, 1× y 2× sin regresión visible; sigue pendiente el framebuffer global. |
-| Puentes rail, túneles y conexiones | Fundaciones, pilares, rampas y altura efectiva; la traza conserva sprites y geometría de las transiciones. `DrawBridgeMiddle` y las bocas sin catenaria materializan además sus `SPR_EMPTY_BOUNDING_BOX` como constraints sin raster del sorter runtime. | Kale completo: parents identificables contenidos por el oráculo; el orden que `world-draw` exporta sigue siendo pre-sort. En checkpoint, sin declarar paridad global de composición. |
+| Puentes rail, túneles y conexiones | Fundaciones, pilares, rampas y altura efectiva; la traza conserva sprites y geometría de las transiciones. El suelo posterior de una rampa con fundación se adjunta como child de pantalla al último parent de `DrawFoundation`, igual que `AddChildSpriteScreen`; `DrawBridgeMiddle` y las bocas sin catenaria materializan además sus `SPR_EMPTY_BOUNDING_BOX` como constraints sin raster del sorter runtime. | El foco Kale `(109,28)` contiene los 3/3 comandos C++ de la rampa por selección, geometría, fundación y orden relativo; la regresión Bevy verifica el vínculo runtime sobre una rampa inclinada. Kale completo: parents identificables contenidos por el oráculo; `world-draw` exporta pre-sort. En checkpoint, sin declarar paridad global de composición. |
 | Catenaria | La ruta común cubre vía normal, cruces a nivel eléctricos, postes de la boca de túnel, cable especial de portal y cable de entrada de depósito. Conserva el orden PPP → PCP antes de las capas `TILE_SEQ` y la altura posterior a fundación. | Kale completo 8bpp: la comparación estricta no deja comandos, geometrías, paletas ni órdenes fuera de OpenTTD. |
 | Señales ferroviarias | El importador lee `vehicle.road_side` y `construction.train_signal_side` de `PATS`/`OPTS`; el renderer replica el orden de `DrawSignals` y la altura de `GetSafeSlopeZ` sobre la fundación ferroviaria efectiva. | Kale completo: las 729 señales coinciden en ID, ancla de mundo, geometría y orden relativo. |
 | Monorriel y maglev | Selección diagonal tipada por railtype para no usar rail convencional. | En checkpoint; validar por región. |
@@ -211,7 +211,11 @@ pasos de fundación y su segundo nivel. También se incorporaron los 188
 pantalla conserva, por ejemplo, `(14,48)` cuando `GetLiftPosition()==12`.
 El suelo `s1` posterior a cada fundación inclinada ahora se adjunta al último
 parent que deja `DrawFoundation`, igual que el child `1447` de Kale `(7,2)`
-con offset `(0,-32)`; así el sorter global desplaza muro y suelo juntos.
+con offset `(0,-32)`; así el sorter global desplaza muro y suelo juntos. La
+misma materialización runtime cubre el ground de rampa de puente: en Kale
+`(109,28)` el foco C++/Rust contiene los 3 comandos, incluida la relación
+`bridge-foundation-ground`, por selección, geometría, fundación y orden
+relativo. No convierte los demás children de transporte o NewGRF en equivalentes.
 La comparación completa contiene selección y orden relativo de esos 2.131
 comandos de fundación/ascensor. Además, los 8.497 parents de edificio llevan
 la caja exacta de `M(...)` y la altura efectiva posterior a la fundación. El
@@ -230,8 +234,8 @@ reubican con el mismo sorter. El mismo puente incorpora además los edificios
 industriales vanilla planos sin animación: para el ejemplo de Kale `(186,1)`,
 el sprite `2119` usa exactamente el prisma `(2976,16,8)..(2991,31,27)` de
 `industry_land.h`. Es un subconjunto deliberado: la industria inclinada,
-animada o NewGRF, los producers restantes, los children no vinculados y
-clipping continúan como residual explícito de #326.
+animada o NewGRF, los producers restantes, los children no vinculados fuera de
+casas/rampas de puente y clipping continúan como residual explícito de #326.
 
 ### Revalidación: catenaria de estaciones ferroviarias de Kale
 

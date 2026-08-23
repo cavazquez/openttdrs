@@ -336,9 +336,9 @@ fn try_build_town_house(
     ) else {
         return false;
     };
-    // OpenTTD evalúa CB 0x17 después de elegir el spec y antes de reservar
-    // el footprint. Un resultado distinto de FAILED/0x400/0xFF rechaza la
-    // construcción sin dejar teselas parcialmente colocadas.
+    // `OpenTTD` evalúa CB 0x17 después de elegir el spec y antes de reservar
+    // el footprint. Es un booleano de ocho bits: `CALLBACK_FAILED` o byte bajo
+    // no nulo permite; cero rechaza sin dejar teselas parcialmente colocadas.
     if let Some(def) = house_spec_def(ctx.house_catalog, house_id)
         && !apply_house_construction_callback(def)
     {

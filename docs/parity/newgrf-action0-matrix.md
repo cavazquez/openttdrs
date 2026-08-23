@@ -277,11 +277,11 @@ o fallback `subst_id` / `% 110` (`resolve_house_draw_id`). Overrides `0x15` →
 | `0D`–`0F` acceptance BYTE | consumidas |
 | `10` WORD / `11` BYTE / `12` WORD | consumidas |
 | `13` availability mask WORD | **runtime** (zonas+climas) |
-| `14` callback lo BYTE | almacenado; CB17 se ejecuta al construir, resto sin call site |
+| `14` callback lo BYTE | **runtime parcial**: CB17 se ejecuta al construir; resto sin call site |
 | `15` override BYTE | **runtime** (`house_overrides`) |
 | `16`–`17`, `19`–`1C` | consumidas |
 | `18` probability BYTE | **runtime** |
-| `1D` callback hi BYTE | almacenado; CB17 se ejecuta al construir, resto sin call site |
+| `1D` callback hi BYTE | **runtime parcial**: CB17 se ejecuta al construir; resto sin call site |
 | `1E` DWORD / `1F` BYTE | consumidas |
 | `20` watch list / `23` tile acceptance | consumidas (listas) |
 | `21`/`22` long years WORD | **runtime** |

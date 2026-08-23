@@ -3803,6 +3803,84 @@ mod tests {
         );
     }
 
+    /// CB17 debe llegar desde Action0/2/3 cargado hasta el crecimiento físico
+    /// del pueblo; un cero rechaza sin reservar ninguna tesela de casa.
+    #[test]
+    fn houses_ac_construction_callback_runs_from_loaded_action2_graph() {
+        use crate::house_spec::BUILDING_FLAG_SIZE_1X1;
+        use crate::map::{Map, TileCoord, TileKind};
+        use crate::newgrf_sprites::{
+            build_action2_callback_literal_payload, build_grf_v2_feature_with_action2_chain,
+        };
+        use crate::town::Town;
+        use crate::town_expand::{TownExpandContext, place_house_with_spec};
+        use crate::world_gen::Climate;
+
+        let action0 = build_action0_house_payload_ex(
+            0,
+            0,
+            BUILDING_FLAG_SIZE_1X1,
+            0,
+            5000,
+            u16::MAX,
+            16,
+            None,
+            crate::house_spec::HOUSE_CALLBACK_ALLOW_CONSTRUCTION_MASK,
+            "House callback",
+        );
+        let action2 = build_action2_callback_literal_payload(
+            ACTION0_FEATURE_HOUSES,
+            7,
+            0, // Booleano de ocho bits cero: CB17 deniega la construcción.
+        );
+        let bytes = build_grf_v2_feature_with_action2_chain(
+            &action0,
+            ACTION0_FEATURE_HOUSES,
+            0,
+            7,
+            &action2,
+            1,
+            1,
+            &[174],
+            [b'H', b'C', 0, 1],
+            "house-cb",
+        );
+        let dir = tempfile_dir_with("house_cb.grf", &bytes);
+        let mut state = GameState::new(8, 8);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("house_cb.grf", 0x4843_0001));
+        apply_newgrf_houses(&mut state, &[&dir]);
+
+        let def = state.house_spec_catalog.first().unwrap();
+        assert!(def.has_construction_callback());
+        assert!(def.newgrf_runtime.is_some());
+        let mut overrides = state.house_overrides.clone();
+        overrides.fill(def.id);
+        let mut map = Map::new_flat(8, 8, 1);
+        let pos = TileCoord::new(4, 4);
+        let mut town = Town {
+            id: 1,
+            pos: TileCoord::new(3, 3),
+            name: "Callback Town".into(),
+            ..Town::default()
+        };
+        let ctx = TownExpandContext {
+            climate: Climate::Temperate,
+            calendar_year: 1980,
+            house_catalog: &state.house_spec_catalog,
+            house_overrides: &overrides,
+        };
+
+        assert_eq!(
+            place_house_with_spec(&mut map, &mut town, pos, ctx, 0),
+            None
+        );
+        assert_eq!(map.get_kind(pos), Some(TileKind::Grass));
+        assert_eq!(town.num_houses, 0);
+        assert_eq!(town.population, 0);
+    }
+
     #[test]
     fn houses_ac_override_and_two_grf() {
         use crate::house_spec::{

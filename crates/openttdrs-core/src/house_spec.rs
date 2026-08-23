@@ -132,7 +132,7 @@ pub struct HouseSpecDef {
     pub probability: u8,
     /// Override de casa vanilla (`prop 0x15`).
     pub override_id: Option<u8>,
-    /// Callback mask (`0x14` lo + `0x1D` hi); almacenado, sin ejecutar CBs (#228).
+    /// Callback mask (`0x14` lo + `0x1D` hi); CB17 se ejecuta al construir.
     pub callback_mask: u16,
     pub name: String,
     pub from_newgrf: bool,

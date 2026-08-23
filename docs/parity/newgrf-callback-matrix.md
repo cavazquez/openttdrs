@@ -68,7 +68,7 @@ API común: `TrainSpriteGraphics::resolve_callback` / `resolve_callback_ctx`,
 1. Stations CB24 — layout al construir.
 2. Vehicles CB31 — start/stop check (+ writeback persistent regs).
 3. Industries CB28 — location al colocar NewGRF (`place_industry_spec_def_sandbox`).
-4. Houses CB17 — allow construction durante crecimiento físico (API + call site + tests sintéticos).
+4. Houses CB17 — allow construction durante crecimiento físico (GRF Action0/2/3 cargado + call site).
 5. Stations CB13 — availability en query+execute de construcción; sin storage en el scope nulo de OpenTTD.
 6. Industry tiles CB25/CB26/CB27 — trigger, next frame y velocidad en `phase_tile_animation` (FAILED observable).
 7. Industry tile trigger → Action2 random group (`resolve_industry_tile_random_trigger`).

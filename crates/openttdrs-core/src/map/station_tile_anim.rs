@@ -1,12 +1,28 @@
 //! Animación de teselas de estación / aeropuerto (`AnimateTile_Airport`).
 
+use std::collections::HashSet;
+use std::hash::BuildHasher;
+
 use crate::airport::{AirportPiece, airport_station_gfx_animation_frames};
+use crate::company::Company;
 use crate::map::{Map, TileCoord, TileKind};
-use crate::newgrf_callback::{advance_road_stop_animation, trigger_road_stop_animation};
+use crate::newgrf_callback::{
+    advance_road_stop_animation, trigger_road_stop_animation,
+    writeback_station_persistent_registers,
+};
+use crate::newgrf_sprites::{
+    CALLBACK_FAILED, CBID_STATION_ANIMATION_NEXT_FRAME, CBID_STATION_ANIMATION_SPEED,
+    CBID_STATION_ANIMATION_TRIGGER,
+};
 use crate::road_stop_spec::{
     ROADSTOP_ANIMATION_TRIGGER_TILE_LOOP, RoadStopSpecDef, road_stop_spec_def,
 };
-use crate::station::{Station, StopKind};
+use crate::station::{
+    STATION_TYPE_RAIL_WAYPOINT, Station, StopKind, station_at_tile, station_type_from_m6,
+};
+use crate::station_action2::action2_eval_ctx_for_station_tile;
+use crate::station_class::{StationSpecDef, station_spec_def};
+use crate::world_gen::Climate;
 
 /// Frames del radar vanilla (`SPR_AIRPORT_RADAR_1` … `_12`).
 pub const AIRPORT_RADAR_FRAMES: u8 = 12;
@@ -117,6 +133,303 @@ pub fn step_newgrf_road_stop_tiles(
     dirty
 }
 
+/// Contexto y entidad para una tesela ferroviaria/waypoint `NewGRF` animable.
+///
+/// El frame reside en MAP7 (`m7`) como en `GetAnimationFrame`; los registros
+/// persistentes siguen perteneciendo a la estación lógica. El contexto sale
+/// de la misma ruta que usa el renderer, de modo que CB140–142 y Action2 ven
+/// `40`/`42`/`43`/`4A`/`5F` de la tesela real.
+fn station_animation_context(
+    map: &Map,
+    stations: &[Station],
+    companies: &[Company],
+    climate: Climate,
+    catalog: &[StationSpecDef],
+    coord: TileCoord,
+) -> Option<(usize, crate::newgrf_sprites::Action2EvalCtx)> {
+    let tile = map.get(coord)?;
+    if tile.kind != TileKind::Station
+        || !matches!(
+            station_type_from_m6(tile.m6),
+            0 | STATION_TYPE_RAIL_WAYPOINT
+        )
+    {
+        return None;
+    }
+    let station_index = station_at_tile(map, stations, coord).and_then(|station| {
+        stations
+            .iter()
+            .position(|candidate| candidate.pos == station.pos)
+    })?;
+    let station = &stations[station_index];
+    if !matches!(
+        station.stop_kind,
+        StopKind::RailStation | StopKind::RailWaypoint
+    ) {
+        return None;
+    }
+    let def = station_spec_def(catalog, station.station_spec)?;
+    if !def.from_newgrf || def.newgrf_runtime.is_none() {
+        return None;
+    }
+    let owner_colour = companies
+        .iter()
+        .find(|company| company.id == station.owner)
+        .map_or(0, |company| company.colour);
+    let mut ctx = action2_eval_ctx_for_station_tile(
+        map,
+        stations,
+        coord,
+        owner_colour,
+        climate,
+        def.newgrf_type_tables.as_ref(),
+    );
+    ctx.persistent_registers
+        .clone_from(&station.newgrf_persistent_regs);
+    Some((station_index, ctx))
+}
+
+fn station_animation_random_bits(station: &Station, coord: TileCoord, tick: u64) -> u32 {
+    let x = coord.x.cast_unsigned();
+    let y = coord.y.cast_unsigned();
+    let tick = u32::try_from(tick).unwrap_or(u32::MAX);
+    x.wrapping_mul(0x9E37_79B9)
+        ^ y.wrapping_mul(0x85EB_CA6B)
+        ^ tick.rotate_left(11)
+        ^ u32::from(station.newgrf_random_bits)
+}
+
+fn resolve_station_animation_callback(
+    def: &StationSpecDef,
+    station: &mut Station,
+    ctx: &mut crate::newgrf_sprites::Action2EvalCtx,
+    callback: u16,
+    param1: u32,
+    param2: u32,
+) -> u16 {
+    let Some(runtime) = def.newgrf_runtime.as_ref() else {
+        return CALLBACK_FAILED;
+    };
+    ctx.random_bits = param1;
+    let result = runtime.resolve_callback_ctx(def.newgrf_local_id, callback, param1, param2, ctx);
+    writeback_station_persistent_registers(station, ctx);
+    result
+}
+
+/// Ejecuta CB140 sobre una tesela ferroviaria/waypoint `NewGRF`.
+///
+/// `0xFD` conserva el estado, `0xFE` registra la tesela, `0xFF` la retira y
+/// cualquier otro byte fija MAP7 y la registra. El `HashSet` es el equivalente
+/// persistido del `AnimatedTileList` de OpenTTD para poder retomar el scheduler
+/// tras guardar/cargar JSON.
+#[allow(clippy::too_many_arguments)] // Firma explícita: el trigger muta mapa, estación y estado persistido.
+pub fn trigger_newgrf_station_animation<S: BuildHasher>(
+    map: &mut Map,
+    tick: u64,
+    stations: &mut [Station],
+    companies: &[Company],
+    climate: Climate,
+    catalog: &[StationSpecDef],
+    active_tiles: &mut HashSet<TileCoord, S>,
+    coord: TileCoord,
+    trigger: u16,
+) -> bool {
+    let Some((station_index, mut ctx)) =
+        station_animation_context(map, stations, companies, climate, catalog, coord)
+    else {
+        active_tiles.remove(&coord);
+        return false;
+    };
+    let spec_id = stations[station_index].station_spec;
+    let Some(def) = station_spec_def(catalog, spec_id) else {
+        active_tiles.remove(&coord);
+        return false;
+    };
+    if def.animation_triggers & trigger == 0 {
+        return false;
+    }
+    let Some(mut tile) = map.get(coord) else {
+        active_tiles.remove(&coord);
+        return false;
+    };
+    let before_frame = tile.m7;
+    let was_active = active_tiles.contains(&coord);
+    let random = station_animation_random_bits(&stations[station_index], coord, tick);
+    let result = resolve_station_animation_callback(
+        def,
+        &mut stations[station_index],
+        &mut ctx,
+        CBID_STATION_ANIMATION_TRIGGER,
+        random,
+        u32::from(trigger),
+    );
+    if result == CALLBACK_FAILED {
+        return false;
+    }
+    match (result & 0xFF) as u8 {
+        0xFD => {}
+        0xFE => {
+            active_tiles.insert(coord);
+        }
+        0xFF => {
+            active_tiles.remove(&coord);
+        }
+        frame => {
+            tile.m7 = frame;
+            active_tiles.insert(coord);
+        }
+    }
+    if tile.m7 != before_frame {
+        let _ = map.set_tile(coord, tile);
+    }
+    tile.m7 != before_frame || was_active != active_tiles.contains(&coord)
+}
+
+#[allow(clippy::too_many_arguments)] // Misma entidad mutada que el trigger público.
+fn advance_newgrf_station_tile<S: BuildHasher>(
+    map: &mut Map,
+    tick: u64,
+    stations: &mut [Station],
+    companies: &[Company],
+    climate: Climate,
+    catalog: &[StationSpecDef],
+    active_tiles: &mut HashSet<TileCoord, S>,
+    coord: TileCoord,
+) -> bool {
+    let Some((station_index, mut ctx)) =
+        station_animation_context(map, stations, companies, climate, catalog, coord)
+    else {
+        active_tiles.remove(&coord);
+        return false;
+    };
+    let spec_id = stations[station_index].station_spec;
+    let Some(def) = station_spec_def(catalog, spec_id) else {
+        active_tiles.remove(&coord);
+        return false;
+    };
+    let Some(mut tile) = map.get(coord) else {
+        active_tiles.remove(&coord);
+        return false;
+    };
+    let before_frame = tile.m7;
+    let was_active = active_tiles.contains(&coord);
+    let mut speed = def.animation_speed.min(16);
+    if def.has_animation_speed_callback() {
+        let result = resolve_station_animation_callback(
+            def,
+            &mut stations[station_index],
+            &mut ctx,
+            CBID_STATION_ANIMATION_SPEED,
+            0,
+            0,
+        );
+        if result != CALLBACK_FAILED {
+            speed = u8::try_from(result & 0xFF).unwrap_or(16).min(16);
+        }
+    }
+    if !tick.is_multiple_of(1_u64 << u32::from(speed)) {
+        return false;
+    }
+
+    let mut frame_set_by_callback = false;
+    if def.has_animation_next_frame_callback() {
+        let random = if def.animation_next_frame_uses_random_bits() {
+            station_animation_random_bits(&stations[station_index], coord, tick)
+        } else {
+            0
+        };
+        let result = resolve_station_animation_callback(
+            def,
+            &mut stations[station_index],
+            &mut ctx,
+            CBID_STATION_ANIMATION_NEXT_FRAME,
+            random,
+            0,
+        );
+        if result != CALLBACK_FAILED {
+            match (result & 0xFF) as u8 {
+                0xFF => {
+                    active_tiles.remove(&coord);
+                    frame_set_by_callback = true;
+                }
+                0xFE => {}
+                frame => {
+                    tile.m7 = frame;
+                    frame_set_by_callback = true;
+                }
+            }
+        }
+    }
+
+    if active_tiles.contains(&coord) && !frame_set_by_callback {
+        if tile.m7 < def.animation_frames {
+            tile.m7 = tile.m7.saturating_add(1);
+        } else if tile.m7 == def.animation_frames && def.animation_loops() {
+            tile.m7 = 0;
+        } else {
+            active_tiles.remove(&coord);
+        }
+    }
+    if tile.m7 != before_frame {
+        let _ = map.set_tile(coord, tile);
+    }
+    tile.m7 != before_frame || was_active != active_tiles.contains(&coord)
+}
+
+/// Ejecuta el scheduler CB140–142 de estaciones ferroviarias y waypoints NewGRF.
+///
+/// Los call sites actuales cubren `Built` y `TileLoop`; los disparadores de
+/// carga, vehículos, aceptación y reserva se conectan donde ocurren esos
+/// eventos, no se simulan desde este recorrido.
+#[allow(clippy::too_many_arguments)] // Scheduler integrado: evita empaquetar préstamos mutables artificiales.
+pub fn step_newgrf_station_tiles<S: BuildHasher>(
+    map: &mut Map,
+    tick: u64,
+    stations: &mut [Station],
+    companies: &[Company],
+    climate: Climate,
+    catalog: &[StationSpecDef],
+    active_tiles: &mut HashSet<TileCoord, S>,
+    tile_loop_visits: &[(TileCoord, crate::map::Tile)],
+) -> Vec<TileCoord> {
+    let mut dirty = Vec::new();
+    for (coord, _) in tile_loop_visits {
+        if trigger_newgrf_station_animation(
+            map,
+            tick,
+            stations,
+            companies,
+            climate,
+            catalog,
+            active_tiles,
+            *coord,
+            crate::station_class::STATION_ANIMATION_TRIGGER_TILE_LOOP,
+        ) {
+            dirty.push(*coord);
+        }
+    }
+
+    let mut active: Vec<_> = active_tiles.iter().copied().collect();
+    active.sort_by_key(|coord| (coord.x, coord.y));
+    for coord in active {
+        if advance_newgrf_station_tile(
+            map,
+            tick,
+            stations,
+            companies,
+            climate,
+            catalog,
+            active_tiles,
+            coord,
+        ) {
+            dirty.push(coord);
+        }
+    }
+    dirty.sort_by_key(|coord| (coord.x, coord.y));
+    dirty.dedup();
+    dirty
+}
+
 /// Frame de radar 0..11 desde `m7`.
 #[must_use]
 pub const fn airport_radar_frame(m7: u8) -> u8 {
@@ -212,6 +525,37 @@ mod tests {
             newgrf_type_tables: None,
             associated_badges: Vec::new(),
         }
+    }
+
+    /// Runtime sintético para CB140, CB141 y CB142 de estación ferroviaria.
+    fn station_animation_callbacks() -> TrainSpriteGraphics {
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 2,
+        });
+        gfx.action2_var.insert(
+            2,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x0C,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        shift: 0,
+                        and_mask: 0xFF,
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: vec![(4, 0x40, 0x40), (5, 0x41, 0x41), (6, 0x42, 0x42)],
+                default: 0,
+            },
+        );
+        // CB140 registra; CB141 fija frame 3; CB142 da espera 2^2 ticks.
+        gfx.action2_var.insert(4, callback_literal(0xFE));
+        gfx.action2_var.insert(5, callback_literal(3));
+        gfx.action2_var.insert(6, callback_literal(2));
+        gfx
     }
 
     #[test]
@@ -328,5 +672,86 @@ mod tests {
         let loaded = crate::GameState::load_json(&json).unwrap();
         assert_eq!(loaded.stations[0].road_stop_animation_frame, 3);
         assert!(loaded.stations[0].road_stop_animation_active);
+    }
+
+    #[test]
+    fn newgrf_station_animation_runs_built_tileloop_speed_next_frame_and_roundtrips() {
+        let coord = TileCoord::new(1, 1);
+        let mut map = Map::new_flat(4, 4, 0);
+        let mut tile = map.get(coord).unwrap();
+        tile.kind = TileKind::Station;
+        tile.mapt = 0x50;
+        tile.m5 = 0;
+        tile.m6 = 0; // estación ferroviaria
+        map.set_tile(coord, tile).unwrap();
+
+        let station = Station::new_with_kind(coord, StopKind::RailStation);
+        let mut stations = vec![station];
+        let mut catalog = crate::vanilla_station_spec_catalog();
+        let def = &mut catalog[0];
+        def.from_newgrf = true;
+        def.callback_mask = crate::STATION_CALLBACK_ANIMATION_NEXT_FRAME_MASK
+            | crate::STATION_CALLBACK_ANIMATION_SPEED_MASK;
+        def.animation_status = 1;
+        def.animation_frames = 5;
+        def.animation_speed = 0;
+        def.animation_triggers =
+            crate::STATION_ANIMATION_TRIGGER_BUILT | crate::STATION_ANIMATION_TRIGGER_TILE_LOOP;
+        def.newgrf_runtime = Some(Box::new(station_animation_callbacks()));
+        let companies = vec![crate::Company::player(crate::CompanyEconomy::default(), 0)];
+        let mut active = HashSet::new();
+
+        assert!(trigger_newgrf_station_animation(
+            &mut map,
+            1,
+            &mut stations,
+            &companies,
+            Climate::Temperate,
+            &catalog,
+            &mut active,
+            coord,
+            crate::STATION_ANIMATION_TRIGGER_BUILT,
+        ));
+        assert!(active.contains(&coord));
+        assert_eq!(map.get(coord).unwrap().m7, 0);
+
+        // TileLoop también llega a CB140; con CB142=2 aún no avanza frame.
+        active.clear();
+        let visit = map.get(coord).unwrap();
+        let dirty = step_newgrf_station_tiles(
+            &mut map,
+            1,
+            &mut stations,
+            &companies,
+            Climate::Temperate,
+            &catalog,
+            &mut active,
+            &[(coord, visit)],
+        );
+        assert_eq!(dirty, vec![coord]);
+        assert!(active.contains(&coord));
+        assert_eq!(map.get(coord).unwrap().m7, 0);
+
+        let dirty = step_newgrf_station_tiles(
+            &mut map,
+            4,
+            &mut stations,
+            &companies,
+            Climate::Temperate,
+            &catalog,
+            &mut active,
+            &[],
+        );
+        assert_eq!(dirty, vec![coord]);
+        assert_eq!(map.get(coord).unwrap().m7, 3, "CB141 fija el frame MAP7");
+
+        let mut state = crate::GameState::from_map(map);
+        state.stations = stations;
+        state.station_spec_catalog = catalog;
+        state.newgrf_animated_station_tiles = active;
+        let json = state.save_json().unwrap();
+        let loaded = crate::GameState::load_json(&json).unwrap();
+        assert_eq!(loaded.map.get(coord).unwrap().m7, 3);
+        assert!(loaded.newgrf_animated_station_tiles.contains(&coord));
     }
 }

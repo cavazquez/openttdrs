@@ -9,8 +9,8 @@ use crate::world_gen::Climate;
 
 /// Contexto Action2 para dibujar / resolver sprites de una tesela de estación.
 ///
-/// MVP: `40` (plataforma), `42` (terreno+rail), `43` (owner), `5F` (random),
-/// `10` (m5/tileh), `67` (land info tesela actual, param 0).
+/// MVP: `40` (plataforma), `42` (terreno+rail), `43` (owner), `4A` (frame),
+/// `5F` (random), `10` (m5/tileh), `67` (land info tesela actual, param 0).
 #[must_use]
 pub fn action2_eval_ctx_for_station_tile(
     map: &Map,
@@ -40,6 +40,9 @@ pub fn action2_eval_ctx_for_station_tile(
     // Var 10: info adicional (m5 + tileh) para selección de sprites.
     ctx.vars
         .insert(0x10, u32::from(m5) | (u32::from(tileh) << 8));
+    // `StationResolverObject::GetVariable(0x4A)`: frame persistido en MAP7.
+    // También alimenta la selección Action2 del renderer después de CB140–142.
+    ctx.vars.insert(0x4A, tile.map_or(0, |t| u32::from(t.m7)));
 
     ctx.vars
         .insert(0x40, platform_info_for_tile(map, stations, coord, m5));
@@ -220,17 +223,21 @@ mod tests {
         // que el resolver variational/callback (no un camino paralelo).
         let mut map = Map::new_flat(8, 8, 0);
         let c = TileCoord::new(3, 3);
-        map.set_tile(c, rail_station_tile(2)).unwrap();
+        let mut tile = rail_station_tile(2);
+        tile.m7 = 9;
+        map.set_tile(c, tile).unwrap();
         let mut st = Station::new_with_kind(c, StopKind::RailStation);
         st.newgrf_random_bits = 0x42;
         let ctx = action2_eval_ctx_for_station_tile(&map, &[st], c, 1, Climate::Temperate, None);
         assert!(ctx.vars.contains_key(&0x40));
         assert!(ctx.vars.contains_key(&0x42));
         assert!(ctx.vars.contains_key(&0x43));
+        assert!(ctx.vars.contains_key(&0x4A));
         assert!(ctx.vars.contains_key(&0x5F));
         assert!(ctx.vars.contains_key(&0x10));
         assert!(ctx.vars.contains_key(&0x67));
         assert_eq!(ctx.random_bits, 0x42);
+        assert_eq!(ctx.vars.get(&0x4A), Some(&9));
     }
 
     #[test]
@@ -252,6 +259,7 @@ mod tests {
         assert_eq!(v43 & 0xFF, 2);
         assert_eq!((v43 >> 24) & 0xFF, 0x44);
         assert_eq!(ctx.vars.get(&0x42), Some(&0)); // grass + rail 0
+        assert_eq!(ctx.vars.get(&0x4A), Some(&0)); // frame MAP7
     }
 
     #[test]

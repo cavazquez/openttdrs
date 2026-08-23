@@ -85,6 +85,21 @@ pub struct StationSpecDef {
     /// Máscara de callbacks Action0 propiedad `0x0B`.
     #[serde(default)]
     pub callback_mask: u8,
+    /// Action0 `0x13`: flags generales del spec (bit 2 = CB141 recibe random).
+    #[serde(default)]
+    pub flags: u8,
+    /// Action0 `0x16`: último frame de animación.
+    #[serde(default = "default_station_animation_status")]
+    pub animation_status: u8,
+    /// Action0 `0x16`: último frame alcanzable por la animación.
+    #[serde(default)]
+    pub animation_frames: u8,
+    /// Action0 `0x17`: espera `2^speed` ticks entre frames.
+    #[serde(default = "default_station_animation_speed")]
+    pub animation_speed: u8,
+    /// Action0 `0x18`: máscara de `StationAnimationTrigger`.
+    #[serde(default)]
+    pub animation_triggers: u16,
     pub from_newgrf: bool,
     /// Preview Action1/3 (primera vista); no se serializa en saves.
     #[serde(default, skip)]
@@ -113,8 +128,26 @@ pub struct StationSpecDef {
 pub const STATION_CALLBACK_AVAILABILITY_MASK: u8 = 1;
 /// Bit `StationCallbackMask::DrawTileLayout` de `OpenTTD`: CB `0x14`.
 pub const STATION_CALLBACK_DRAW_TILE_LAYOUT_MASK: u8 = 1 << 1;
+/// Bit `StationCallbackMask::AnimationNextFrame`: CB `0x141`.
+pub const STATION_CALLBACK_ANIMATION_NEXT_FRAME_MASK: u8 = 1 << 2;
+/// Bit `StationCallbackMask::AnimationSpeed`: CB `0x142`.
+pub const STATION_CALLBACK_ANIMATION_SPEED_MASK: u8 = 1 << 3;
 /// Bit `StationCallbackMask::SlopeCheck` de `OpenTTD`: CB `0x149`.
 pub const STATION_CALLBACK_SLOPE_CHECK_MASK: u8 = 1 << 4;
+/// Flag Action0 `0x13`: CB141 recibe bits aleatorios como `param1`.
+pub const STATION_FLAG_CB141_RANDOM_BITS: u8 = 1 << 2;
+/// `StationAnimationTrigger::Built`.
+pub const STATION_ANIMATION_TRIGGER_BUILT: u16 = 1 << 0;
+/// `StationAnimationTrigger::TileLoop`.
+pub const STATION_ANIMATION_TRIGGER_TILE_LOOP: u16 = 1 << 7;
+
+const fn default_station_animation_status() -> u8 {
+    0xFF
+}
+
+const fn default_station_animation_speed() -> u8 {
+    2
+}
 
 impl StationSpecDef {
     /// Preview `NewGRF` si el spec trae sprite Action1/3.
@@ -172,6 +205,30 @@ impl StationSpecDef {
         (self.callback_mask & STATION_CALLBACK_DRAW_TILE_LAYOUT_MASK) != 0
     }
 
+    /// El spec declaró CB `0x141` para elegir el siguiente frame.
+    #[must_use]
+    pub const fn has_animation_next_frame_callback(&self) -> bool {
+        (self.callback_mask & STATION_CALLBACK_ANIMATION_NEXT_FRAME_MASK) != 0
+    }
+
+    /// El spec declaró CB `0x142` para elegir la velocidad de animación.
+    #[must_use]
+    pub const fn has_animation_speed_callback(&self) -> bool {
+        (self.callback_mask & STATION_CALLBACK_ANIMATION_SPEED_MASK) != 0
+    }
+
+    /// La secuencia Action0 continúa al llegar al último frame.
+    #[must_use]
+    pub const fn animation_loops(&self) -> bool {
+        self.animation_status == 1
+    }
+
+    /// CB141 recibe random bits (`StationSpecFlag::Cb141RandomBits`).
+    #[must_use]
+    pub const fn animation_next_frame_uses_random_bits(&self) -> bool {
+        (self.flags & STATION_FLAG_CB141_RANDOM_BITS) != 0
+    }
+
     /// El spec declaró CB `0x149` de comprobación de pendiente en Action0.
     #[must_use]
     pub const fn has_slope_check_callback(&self) -> bool {
@@ -201,6 +258,11 @@ pub fn vanilla_station_spec_catalog() -> Vec<StationSpecDef> {
         disallowed_platforms: 0,
         disallowed_lengths: 0,
         callback_mask: 0,
+        flags: 0,
+        animation_status: default_station_animation_status(),
+        animation_frames: 0,
+        animation_speed: default_station_animation_speed(),
+        animation_triggers: 0,
         from_newgrf: false,
         newgrf_preview: None,
         newgrf_views: Vec::new(),

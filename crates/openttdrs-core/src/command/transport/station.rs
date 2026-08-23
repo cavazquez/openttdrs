@@ -388,6 +388,8 @@ pub(in crate::command) fn place_rail_station_area(
             tile.m3 = (tile.m3 & !0x06) | crate::default_station_catenary_flags(gfx);
             tile.m8 = crate::set_rail_type_on_tile(tile, state.current_rail_type).m8;
             tile.m6 = apply_station_m6(tile.m6, StopKind::RailStation);
+            // `GetAnimationFrame` usa MAP7: una estación nueva empieza en 0.
+            tile.m7 = 0;
             state
                 .map
                 .set_tile(c, tile)
@@ -401,6 +403,30 @@ pub(in crate::command) fn place_rail_station_area(
     st.owner = state.active_company;
     st.station_spec = spec_id;
     state.stations.push(st);
+    let tick = state.tick.get();
+    let climate = state.climate;
+    for n in 0..platforms {
+        for l in 0..length {
+            let c = if axis_y {
+                TileCoord::new(origin.x + i32::from(n), origin.y + i32::from(l))
+            } else {
+                TileCoord::new(origin.x + i32::from(l), origin.y + i32::from(n))
+            };
+            if crate::map::trigger_newgrf_station_animation(
+                &mut state.map,
+                tick,
+                &mut state.stations,
+                &state.companies,
+                climate,
+                &state.station_spec_catalog,
+                &mut state.newgrf_animated_station_tiles,
+                c,
+                crate::station_class::STATION_ANIMATION_TRIGGER_BUILT,
+            ) {
+                state.runtime.industry_tile_dirty.push(c);
+            }
+        }
+    }
     if let Some((town_id, delta)) =
         town::apply_station_build_rating_penalty(&mut state.towns, anchor, state.active_company)
     {
@@ -462,6 +488,7 @@ pub(in crate::command::transport) fn station_placement_on_tile(
     if stop_kind == StopKind::RailStation {
         tile.m3 = (tile.m3 & !0x06) | crate::default_station_catenary_flags(tile.m5);
         tile.m8 = crate::set_rail_type_on_tile(tile, state.current_rail_type).m8;
+        tile.m7 = 0;
     }
     tile.m6 = apply_station_m6(tile.m6, stop_kind);
     state
@@ -498,6 +525,23 @@ pub(in crate::command::transport) fn station_placement_on_tile(
         }
     }
     state.stations.push(st);
+    if stop_kind == StopKind::RailStation {
+        let tick = state.tick.get();
+        let climate = state.climate;
+        if crate::map::trigger_newgrf_station_animation(
+            &mut state.map,
+            tick,
+            &mut state.stations,
+            &state.companies,
+            climate,
+            &state.station_spec_catalog,
+            &mut state.newgrf_animated_station_tiles,
+            c,
+            crate::station_class::STATION_ANIMATION_TRIGGER_BUILT,
+        ) {
+            state.runtime.industry_tile_dirty.push(c);
+        }
+    }
     state.economy.money -= station_build_cost(&state.global_economy);
     if let Some((town_id, delta)) =
         town::apply_station_build_rating_penalty(&mut state.towns, c, state.active_company)
@@ -570,6 +614,7 @@ pub(in crate::command) fn place_rail_waypoint(
     out.m5 = u8::from(axis_y);
     out.m3 = (out.m3 & !0x06) | crate::default_station_catenary_flags(out.m5);
     out.m6 = apply_station_m6(out.m6, StopKind::RailWaypoint);
+    out.m7 = 0;
     state
         .map
         .set_tile(c, out)
@@ -578,6 +623,21 @@ pub(in crate::command) fn place_rail_waypoint(
     st.owner = state.active_company;
     st.station_spec = state.current_station_spec;
     state.stations.push(st);
+    let tick = state.tick.get();
+    let climate = state.climate;
+    if crate::map::trigger_newgrf_station_animation(
+        &mut state.map,
+        tick,
+        &mut state.stations,
+        &state.companies,
+        climate,
+        &state.station_spec_catalog,
+        &mut state.newgrf_animated_station_tiles,
+        c,
+        crate::station_class::STATION_ANIMATION_TRIGGER_BUILT,
+    ) {
+        state.runtime.industry_tile_dirty.push(c);
+    }
     state.economy.money -= waypoint_build_cost(&state.global_economy);
     Ok(())
 }

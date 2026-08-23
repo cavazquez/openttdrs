@@ -144,15 +144,19 @@ Fuente: `newgrf_act0_stations.cpp`.
 |---|---|
 | `08` class label | **runtime** |
 | `0A` copy sprite layout | consumida (extended-byte id) |
-| `0B` callback mask | **runtime parcial**: se conserva en el spec; `Avail` ejecuta CB13, `DrawTileLayout` ejecuta CB14 en el renderer y `SlopeCheck` ejecuta CB149 por tesela al consultar/construir. Restan otros bits, scopes/layouts dinámicos completos, strings y compatibilidad GRF <8 del CB149. |
+| `0B` callback mask | **runtime parcial**: se conserva en el spec; `Avail` ejecuta CB13, `DrawTileLayout` ejecuta CB14 en el renderer, `AnimationNextFrame`/`AnimationSpeed` habilitan CB141/CB142 y `SlopeCheck` ejecuta CB149 por tesela al consultar/construir. Restan otros bits, scopes/layouts dinámicos completos, strings y compatibilidad GRF <8 del CB149. |
 | `0C` disallowed platforms bitmask | **runtime** |
 | `0D` disallowed lengths bitmask | **runtime** |
 | `0E` custom tile layout | **runtime** |
 | `0F` copy custom layout | **runtime** |
+| `13` general flags | **runtime parcial**: se conserva `Cb141RandomBits` (bit 2) y entrega bits aleatorios a CB141; los demás flags no tienen consumidor todavía |
+| `16` animation info | **runtime parcial**: frames y estado de loop alimentan el scheduler CB140–142 por tesela (`m7`) |
+| `17` animation speed | **runtime parcial**: velocidad base `2^speed` del scheduler CB140–142 |
+| `18` animation triggers | **runtime parcial**: máscara CB140 para `Built` y `TileLoop`; faltan triggers de carga/vehículo/aceptación/reserva |
 | `09` sprite layouts | pendiente (variable; no bloquea AC de catálogo/construcción) |
 | short label del spec | derivado del nombre (no hay prop Action0 15.3) |
 | Action3 cargo group / default | **runtime** (`views_for_local_id_cargo_ctx`; fallback verificable) |
-| vars/CB dinámicas (`40`/`42`/`43`/`5F`/`10`/`67`, CB24) | **runtime** vía `Action2EvalCtx` compartido; CB24 call site (#228) |
+| vars/CB dinámicas (`40`/`42`/`43`/`4A`/`5F`/`10`/`67`, CB24) | **runtime** vía `Action2EvalCtx` compartido; `4A` lee el frame `m7`; CB24 call site (#228) |
 
 ## Rail types (`10`)
 

@@ -401,6 +401,17 @@ fn phase_tile_animation(state: &mut GameState, t: u64) {
         &visits,
     );
     state.runtime.industry_tile_dirty.extend(road_stop_dirty);
+    let station_dirty = crate::map::step_newgrf_station_tiles(
+        &mut state.map,
+        t,
+        &mut state.stations,
+        &state.companies,
+        state.climate,
+        &state.station_spec_catalog,
+        &mut state.newgrf_animated_station_tiles,
+        &visits,
+    );
+    state.runtime.industry_tile_dirty.extend(station_dirty);
     state
         .runtime
         .industry_tile_dirty

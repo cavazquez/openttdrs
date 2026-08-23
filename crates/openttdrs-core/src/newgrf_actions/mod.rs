@@ -259,6 +259,49 @@ pub fn build_action0_station_payload_with_callback_mask(
     p
 }
 
+/// Fixture Action0 `Stations` con propiedades de animación `0x13` y `0x16`–`0x18`.
+#[must_use]
+#[allow(clippy::too_many_arguments)] // Fixture: conserva explícitos los campos wire-format de Action0.
+pub fn build_action0_station_payload_with_animation(
+    class_label: &[u8; 4],
+    spec_short: &[u8; 4],
+    callback_mask: u8,
+    flags: u8,
+    animation_frames: u8,
+    animation_status: u8,
+    animation_speed: u8,
+    animation_triggers: u16,
+    name: &str,
+) -> Vec<u8> {
+    let mut p = build_action0_station_payload_with_callback_mask(
+        class_label,
+        spec_short,
+        0,
+        0,
+        callback_mask,
+        name,
+    );
+    // Mantener las propiedades antes de la cadena 0xFE para que el fixture
+    // siga el orden usual de Action0, aunque el parser admite ambos órdenes.
+    let name_property_len = name.len() + 2; // id 0xFE + C-string terminada en NUL
+    let insertion = p.len().saturating_sub(name_property_len);
+    let tail = p.split_off(insertion);
+    p[2] = p[2].saturating_add(4);
+    p.extend_from_slice(&[
+        0x13,
+        flags,
+        0x16,
+        animation_frames,
+        animation_status,
+        0x17,
+        animation_speed,
+        0x18,
+    ]);
+    p.extend_from_slice(&animation_triggers.to_le_bytes());
+    p.extend(tail);
+    p
+}
+
 #[must_use]
 pub fn build_action0_train_payload(
     intro_year: u16,
@@ -1997,6 +2040,91 @@ mod tests {
         p.push(0);
         let meta = parse_action0_station_meta(&p).unwrap();
         assert_eq!(meta.custom_layouts.get(&(1, 3)), Some(&vec![0, 2, 0]));
+    }
+
+    #[test]
+    fn parse_and_apply_station_animation_props_13_16_17_18() {
+        let callback_mask = crate::STATION_CALLBACK_ANIMATION_NEXT_FRAME_MASK
+            | crate::STATION_CALLBACK_ANIMATION_SPEED_MASK;
+        let triggers =
+            crate::STATION_ANIMATION_TRIGGER_BUILT | crate::STATION_ANIMATION_TRIGGER_TILE_LOOP;
+        let a0 = build_action0_station_payload_with_animation(
+            b"ANIM",
+            b"Spec",
+            callback_mask,
+            crate::STATION_FLAG_CB141_RANDOM_BITS,
+            7,
+            1,
+            3,
+            triggers,
+            "Andén animado",
+        );
+        let meta = parse_action0_station_meta(&a0).unwrap();
+        assert_eq!(meta.callback_mask, callback_mask);
+        assert_eq!(meta.flags, crate::STATION_FLAG_CB141_RANDOM_BITS);
+        assert_eq!(meta.animation_frames, 7);
+        assert_eq!(meta.animation_status, 1);
+        assert_eq!(meta.animation_speed, 3);
+        assert_eq!(meta.animation_triggers, triggers);
+
+        let bytes =
+            build_grf_v2_with_action0_and_action8(&a0, [b'A', b'N', 0, 1], "station-animation", "");
+        let dir = tempfile_dir_with("station_animation.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state.newgrf_stack.push(crate::NewGrfEntry::new(
+            "station_animation.grf",
+            0x414E_0001,
+        ));
+        apply_newgrf_stations(&mut state, &[&dir]);
+        let spec = state
+            .station_spec_catalog
+            .iter()
+            .find(|spec| spec.from_newgrf)
+            .unwrap();
+        assert_eq!(spec.animation_frames, 7);
+        assert!(spec.animation_loops());
+        assert!(spec.has_animation_next_frame_callback());
+        assert!(spec.has_animation_speed_callback());
+        assert!(spec.animation_next_frame_uses_random_bits());
+    }
+
+    #[test]
+    fn station_animation_props_survive_legacy_layout_and_intermediate_props() {
+        let a0_base = build_action0_station_payload_with_animation(
+            b"ANIM",
+            b"Spec",
+            crate::STATION_CALLBACK_ANIMATION_NEXT_FRAME_MASK,
+            0,
+            5,
+            1,
+            2,
+            crate::STATION_ANIMATION_TRIGGER_TILE_LOOP,
+            "Legacy layout",
+        );
+        let mut a0 = a0_base;
+        // Action0 suele declarar 0x09 antes de las props de animación. El
+        // layout de cuatro ceros es el atajo vanilla de OpenTTD para una
+        // tesela sin secuencia y permite comprobar que el parser lo salta.
+        let before_later_props = 5 + 1 + 4; // header + `0x08` + class label
+        let skipped_props = [
+            0x09, 0x01, 0, 0, 0, 0, // un legacy layout vacío
+            0x10, 0, 0, // cargo threshold WORD
+            0x11, 0, // pylons
+            0x12, 0, 0, 0, 0, // cargo triggers DWORD
+            0x14, 0, // overhead wires
+            0x15, 0, // blocked tiles
+        ];
+        a0[2] = a0[2].saturating_add(6);
+        a0.splice(before_later_props..before_later_props, skipped_props);
+
+        let meta = parse_action0_station_meta(&a0).unwrap();
+        assert_eq!(meta.animation_frames, 5);
+        assert_eq!(meta.animation_status, 1);
+        assert_eq!(meta.animation_speed, 2);
+        assert_eq!(
+            meta.animation_triggers,
+            crate::STATION_ANIMATION_TRIGGER_TILE_LOOP
+        );
     }
 
     #[test]

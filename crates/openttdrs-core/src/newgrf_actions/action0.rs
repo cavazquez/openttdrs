@@ -182,6 +182,15 @@ pub struct ParsedStationMeta {
     pub disallowed_platforms: u8,
     pub disallowed_lengths: u8,
     pub callback_mask: u8,
+    /// Action0 `0x13`: flags generales (`Cb141RandomBits` = bit 2).
+    pub flags: u8,
+    /// Action0 `0x16`: estado y último frame de animación.
+    pub animation_status: u8,
+    pub animation_frames: u8,
+    /// Action0 `0x17`: velocidad base de animación.
+    pub animation_speed: u8,
+    /// Action0 `0x18`: `StationAnimationTrigger` que invocan CB140.
+    pub animation_triggers: u16,
     /// Layouts prop `0x0E`: `(platforms, length)` → tiletypes.
     pub custom_layouts: std::collections::HashMap<(u8, u8), Vec<u8>>,
     /// Prop `0x0F`: copiar layouts desde este id local (si definido).
@@ -1111,7 +1120,72 @@ fn parse_station_copy_layout_id(payload: &[u8], i: &mut usize) -> Option<u16> {
     }
 }
 
+/// Lee el formato `extended byte` de Action0 (`BYTE`, o `0xFF` + WORD LE).
+fn read_station_extended_byte(payload: &[u8], i: &mut usize) -> Option<usize> {
+    let byte = *payload.get(*i)?;
+    *i += 1;
+    if byte != 0xFF {
+        return Some(usize::from(byte));
+    }
+    let bytes = payload.get(*i..*i + 2)?;
+    *i += 2;
+    Some(usize::from(u16::from_le_bytes([bytes[0], bytes[1]])))
+}
+
+/// Salta el layout clásico de estación Action0 `0x09`.
+///
+/// El renderer actual no usa esta representación (consume Action1/2/3), pero
+/// no debe impedir leer las props posteriores —en especial `0x13` y
+/// `0x16`–`0x18` de animación. La forma antigua consiste en `n` layouts,
+/// cada uno con un ground sprite de cuatro bytes y cero o más building
+/// sprites de 10 bytes terminados por `delta_x = 0x80`; `0,0,0,0` es el
+/// atajo vanilla sin secuencia.
+fn skip_station_legacy_sprite_layouts(payload: &[u8], i: &mut usize) -> bool {
+    let Some(layouts) = read_station_extended_byte(payload, i) else {
+        return false;
+    };
+    for _ in 0..layouts {
+        let Some(ground) = payload.get(*i..*i + 4) else {
+            return false;
+        };
+        *i += 4;
+        if ground == [0, 0, 0, 0] {
+            continue;
+        }
+        loop {
+            let Some(&delta_x) = payload.get(*i) else {
+                return false;
+            };
+            *i += 1;
+            if delta_x == 0x80 {
+                break;
+            }
+            let Some(next) = (*i).checked_add(9) else {
+                return false;
+            };
+            if next > payload.len() {
+                return false;
+            }
+            *i = next;
+        }
+    }
+    true
+}
+
+/// Salta una propiedad de ancho fijo cuyo runtime aún no está representado.
+fn skip_station_fixed_property(payload: &[u8], i: &mut usize, width: usize) -> bool {
+    let Some(next) = (*i).checked_add(width) else {
+        return false;
+    };
+    if next > payload.len() {
+        return false;
+    }
+    *i = next;
+    true
+}
+
 #[must_use]
+#[allow(clippy::too_many_lines)] // El wire format Action0 varía por propiedad.
 pub fn parse_action0_station_meta(payload: &[u8]) -> Option<ParsedStationMeta> {
     let header = parse_action0_header(payload)?;
     if header.feature != ACTION0_FEATURE_STATIONS || header.num_ids == 0 {
@@ -1126,6 +1200,11 @@ pub fn parse_action0_station_meta(payload: &[u8]) -> Option<ParsedStationMeta> {
     let mut disallowed_platforms = 0u8;
     let mut disallowed_lengths = 0u8;
     let mut callback_mask = 0u8;
+    let mut flags = 0u8;
+    let mut animation_status = 0xFFu8;
+    let mut animation_frames = 0u8;
+    let mut animation_speed = 2u8;
+    let mut animation_triggers = 0u16;
     let mut custom_layouts = std::collections::HashMap::new();
     let mut copy_layout_from = None;
     for _ in 0..header.num_props {
@@ -1140,6 +1219,13 @@ pub fn parse_action0_station_meta(payload: &[u8]) -> Option<ParsedStationMeta> {
                     break;
                 };
                 class_short = s;
+            }
+            // 0x09 layout clásico. Se consume para alcanzar las propiedades
+            // posteriores; sprites runtime siguen viniendo de Action1/2/3.
+            0x09 => {
+                if !skip_station_legacy_sprite_layouts(payload, &mut i) {
+                    break;
+                }
             }
             // 0x0A copy sprite layout: extended-byte id (consumida; gfx vía Action1/3).
             0x0A => {
@@ -1177,6 +1263,56 @@ pub fn parse_action0_station_meta(payload: &[u8]) -> Option<ParsedStationMeta> {
                 };
                 copy_layout_from = Some(id);
             }
+            // Props intermedias de ancho fijo que no cambian aún el modelo
+            // Rust, pero suelen preceder a la configuración de animación.
+            0x10 => {
+                if !skip_station_fixed_property(payload, &mut i, 2) {
+                    break;
+                }
+            }
+            0x11 | 0x14 | 0x15 => {
+                if !skip_station_fixed_property(payload, &mut i, 1) {
+                    break;
+                }
+            }
+            0x12 => {
+                if !skip_station_fixed_property(payload, &mut i, 4) {
+                    break;
+                }
+            }
+            // 0x13: flags generales; bit 2 indica random bits para CB141.
+            0x13 => {
+                if i >= payload.len() {
+                    break;
+                }
+                flags = payload[i];
+                i += 1;
+            }
+            // 0x16: último frame y estado (`0` no-loop, `1` loop, `0xFF` sin animación).
+            0x16 => {
+                let Some(bytes) = payload.get(i..i + 2) else {
+                    break;
+                };
+                animation_frames = bytes[0];
+                animation_status = bytes[1];
+                i += 2;
+            }
+            // 0x17: espera como potencia de dos de ticks.
+            0x17 => {
+                if i >= payload.len() {
+                    break;
+                }
+                animation_speed = payload[i];
+                i += 1;
+            }
+            // 0x18: máscara `StationAnimationTrigger` little-endian.
+            0x18 => {
+                let Some(bytes) = payload.get(i..i + 2) else {
+                    break;
+                };
+                animation_triggers = u16::from_le_bytes([bytes[0], bytes[1]]);
+                i += 2;
+            }
             PROP_NAME_CSTRING => {
                 let Some(nul) = payload[i..].iter().position(|&b| b == 0) else {
                     break;
@@ -1194,17 +1330,28 @@ pub fn parse_action0_station_meta(payload: &[u8]) -> Option<ParsedStationMeta> {
         disallowed_platforms,
         disallowed_lengths,
         callback_mask,
+        flags,
+        animation_status,
+        animation_frames,
+        animation_speed,
+        animation_triggers,
         custom_layouts,
         copy_layout_from,
     ))
 }
 
+#[allow(clippy::too_many_arguments)] // Agrupa exactamente los campos Action0 ya validados.
 fn finish_parsed_station_meta(
     class_short: String,
     mut label: String,
     disallowed_platforms: u8,
     disallowed_lengths: u8,
     callback_mask: u8,
+    flags: u8,
+    animation_status: u8,
+    animation_frames: u8,
+    animation_speed: u8,
+    animation_triggers: u16,
     custom_layouts: std::collections::HashMap<(u8, u8), Vec<u8>>,
     copy_layout_from: Option<u16>,
 ) -> ParsedStationMeta {
@@ -1236,6 +1383,11 @@ fn finish_parsed_station_meta(
         disallowed_platforms,
         disallowed_lengths,
         callback_mask,
+        flags,
+        animation_status,
+        animation_frames,
+        animation_speed,
+        animation_triggers,
         custom_layouts,
         copy_layout_from,
     }

@@ -20,6 +20,7 @@ mod movement;
 mod routing;
 mod vehicle_ops;
 
+use std::collections::HashSet;
 use std::time::Instant;
 
 use crate::GameState;
@@ -460,6 +461,7 @@ fn phase_pbs_reservations(state: &mut GameState) {
     } else {
         Some(&wormholes_pbs)
     };
+    let station_reservations_before = station_reservation_tiles(state);
     let dirty_before = state.runtime.reservation_tile_dirty.len();
     crate::rail_pbs::update_train_reservations_incremental_with_wormholes(
         &state.map,
@@ -467,6 +469,7 @@ fn phase_pbs_reservations(state: &mut GameState) {
         state.pathfinding,
         wh_pbs,
     );
+    trigger_station_path_reservation_animations(state, &station_reservations_before);
     crate::rail_pbs::sync_reservations_to_map(
         &mut state.map,
         &state.vehicles,
@@ -479,6 +482,69 @@ fn phase_pbs_reservations(state: &mut GameState) {
             &state.vehicles,
         );
         routing::drain_signal_globset_now(state);
+    }
+}
+
+/// Teselas rail de estación actualmente reservadas por una cabeza de tren.
+///
+/// `HasStationReservation` de `OpenTTD` es un bit por tesela, no por track;
+/// guardar sólo la coordenada preserva que CB140 se ejecute una vez cuando la
+/// estación pasa de no reservada a reservada.
+fn station_reservation_tiles(state: &GameState) -> HashSet<crate::TileCoord> {
+    state
+        .vehicles
+        .iter()
+        .filter(|vehicle| vehicle.kind == crate::VehicleKind::Train && vehicle.is_consist_head())
+        .flat_map(|vehicle| vehicle.reserved_steps.iter().map(|step| step.tile))
+        .filter(|&tile| state.map.get_kind(tile) == Some(crate::TileKind::Station))
+        .collect()
+}
+
+/// Emite CB140 `PathReservation` al reservar por primera vez una tesela rail
+/// de estación. El trigger usa `TA_PLATFORM`, igual que `pbs.cpp`.
+fn trigger_station_path_reservation_animations(
+    state: &mut GameState,
+    station_reservations_before: &HashSet<crate::TileCoord>,
+) {
+    let mut emitted = HashSet::new();
+    let mut newly_reserved_tiles = Vec::new();
+    for vehicle in state
+        .vehicles
+        .iter()
+        .filter(|vehicle| vehicle.kind == crate::VehicleKind::Train && vehicle.is_consist_head())
+    {
+        for step in &vehicle.reserved_steps {
+            let tile = step.tile;
+            if state.map.get_kind(tile) != Some(crate::TileKind::Station)
+                || station_reservations_before.contains(&tile)
+                || !emitted.insert(tile)
+            {
+                continue;
+            }
+            newly_reserved_tiles.push(tile);
+        }
+    }
+
+    for trigger_tile in newly_reserved_tiles {
+        let Some(station_anchor) =
+            crate::station::station_at_tile(&state.map, &state.stations, trigger_tile)
+                .map(|station| station.pos)
+        else {
+            continue;
+        };
+        let dirty = crate::map::trigger_newgrf_station_animation_for_platform(
+            &mut state.map,
+            state.tick.get(),
+            &mut state.stations,
+            &state.companies,
+            state.climate,
+            &state.station_spec_catalog,
+            &mut state.newgrf_animated_station_tiles,
+            station_anchor,
+            trigger_tile,
+            crate::StationAnimationTrigger::PathReservation,
+        );
+        state.runtime.industry_tile_dirty.extend(dirty);
     }
 }
 
@@ -510,4 +576,112 @@ fn phase_post_tick(state: &mut GameState) {
     crate::news::poll_vehicle_advice_news(state);
     crate::news::maybe_purge_old_news(state);
     crate::parity::record_tick(state);
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use std::collections::VecDeque;
+
+    use super::*;
+    use crate::command::{Command, apply_command};
+    use crate::newgrf_sprites::{
+        Action2VarAdjust, Action2VarEntry, Action2VarTerm, TrainSpriteAssign, TrainSpriteGraphics,
+    };
+    use crate::{
+        GameState, PathNetwork, STATION_ANIMATION_TRIGGER_PATH_RESERVATION, TileCoord, Vehicle,
+        VehicleKind, find_path,
+    };
+
+    /// CB140 sintético: conserva en MAP7 el ordinal de `var 18`.
+    fn path_reservation_callbacks() -> TrainSpriteGraphics {
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 2,
+        });
+        gfx.action2_var.insert(
+            2,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x18,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        shift: 0,
+                        and_mask: 0xFF,
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
+        gfx
+    }
+
+    #[test]
+    fn path_reservation_triggers_station_cb140_once_per_new_station_tile() {
+        let station_first = TileCoord::new(4, 3);
+        let station_second = TileCoord::new(5, 3);
+        let start = TileCoord::new(3, 3);
+        let exit = TileCoord::new(6, 3);
+        let mut state = GameState::new(12, 8);
+        apply_command(
+            &mut state,
+            &Command::PlaceRailStationArea {
+                origin: station_first,
+                axis_y: false,
+                platforms: 1,
+                length: 2,
+            },
+        )
+        .unwrap();
+        for tile in [start, exit] {
+            apply_command(&mut state, &Command::PlaceRail(tile)).unwrap();
+        }
+        let station_anchor = state.stations[0].pos;
+        let path = find_path(&state.map, start, exit, PathNetwork::Rail).unwrap();
+        assert_eq!(path, vec![station_first, station_second, exit]);
+
+        let mut train = Vehicle::new(1, VehicleKind::Train, start, exit);
+        train.running = true;
+        train.cur_speed = 1;
+        train.path = VecDeque::from(path);
+        state.vehicles = vec![train];
+        state.pathfinding.reserve_paths = true;
+        let spec = &mut state.station_spec_catalog[0];
+        spec.from_newgrf = true;
+        spec.animation_triggers = STATION_ANIMATION_TRIGGER_PATH_RESERVATION;
+        spec.newgrf_runtime = Some(Box::new(path_reservation_callbacks()));
+
+        phase_pbs_reservations(&mut state);
+        assert!(
+            state.vehicles[0]
+                .reserved_steps
+                .iter()
+                .any(|step| step.tile == station_first)
+        );
+        assert!(
+            state.vehicles[0]
+                .reserved_steps
+                .iter()
+                .any(|step| step.tile == station_second)
+        );
+        assert_eq!(state.map.get(station_first).unwrap().m7, 8);
+        assert_eq!(state.map.get(station_second).unwrap().m7, 8);
+
+        // Una reserva ya existente no vuelve a emitir CB140 durante el
+        // recálculo incremental posterior.
+        for tile in [station_first, station_second] {
+            let mut map_tile = state.map.get(tile).unwrap();
+            map_tile.m7 = 0;
+            state.map.set_tile(tile, map_tile).unwrap();
+            state.newgrf_animated_station_tiles.remove(&tile);
+        }
+        phase_pbs_reservations(&mut state);
+        assert_eq!(state.map.get(station_first).unwrap().m7, 0);
+        assert_eq!(state.map.get(station_second).unwrap().m7, 0);
+        assert_eq!(state.stations[0].pos, station_anchor);
+    }
 }

@@ -152,7 +152,7 @@ Fuente: `newgrf_act0_stations.cpp`.
 | `13` general flags | **runtime parcial**: se conserva `Cb141RandomBits` (bit 2) y entrega bits aleatorios a CB141; los demás flags no tienen consumidor todavía |
 | `16` animation info | **runtime parcial**: frames y estado de loop alimentan el scheduler CB140–142 por tesela (`m7`) |
 | `17` animation speed | **runtime parcial**: velocidad base `2^speed` del scheduler CB140–142 |
-| `18` animation triggers | **runtime parcial**: máscara CB140 para `Built`, `TileLoop`, `NewCargo`, `CargoTaken`, `VehicleLoads` de tren y `AcceptanceTick` (`TA_WHOLE`, cada 250 ticks escalonado por StationID). El disparador entrega el ordinal correcto en el byte bajo de `param2`; para carga, el byte alto usa la CTT Action0 GlobalVar `0x09` (o el bitnum/clima según versión GRF). Faltan `VehicleArrives`, `VehicleDeparts`, `PathReservation`, road stops y sonidos. |
+| `18` animation triggers | **runtime parcial**: máscara CB140 para `Built`, `TileLoop`, `NewCargo`, `CargoTaken`, `VehicleLoads` de tren, `AcceptanceTick` (`TA_WHOLE`, cada 250 ticks escalonado por StationID) y `PathReservation` (`TA_PLATFORM` al reservar por primera vez una tesela de estación). El disparador entrega el ordinal correcto en el byte bajo de `param2`; para carga, el byte alto usa la CTT Action0 GlobalVar `0x09` (o el bitnum/clima según versión GRF). Faltan `VehicleArrives`, `VehicleDeparts`, road stops y sonidos. |
 | `09` sprite layouts | pendiente (variable; no bloquea AC de catálogo/construcción) |
 | short label del spec | derivado del nombre (no hay prop Action0 15.3) |
 | Action3 cargo group / default | **runtime** (`views_for_local_id_cargo_ctx`; fallback verificable) |

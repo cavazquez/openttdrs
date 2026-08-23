@@ -111,6 +111,8 @@ pub struct StationSpecDef {
 
 /// Bit `StationCallbackMask::Avail` de `OpenTTD`: CB `0x13`.
 pub const STATION_CALLBACK_AVAILABILITY_MASK: u8 = 1;
+/// Bit `StationCallbackMask::SlopeCheck` de `OpenTTD`: CB `0x149`.
+pub const STATION_CALLBACK_SLOPE_CHECK_MASK: u8 = 1 << 4;
 
 impl StationSpecDef {
     /// Preview `NewGRF` si el spec trae sprite Action1/3.
@@ -160,6 +162,12 @@ impl StationSpecDef {
     #[must_use]
     pub const fn has_availability_callback(&self) -> bool {
         (self.callback_mask & STATION_CALLBACK_AVAILABILITY_MASK) != 0
+    }
+
+    /// El spec declaró CB `0x149` de comprobación de pendiente en Action0.
+    #[must_use]
+    pub const fn has_slope_check_callback(&self) -> bool {
+        (self.callback_mask & STATION_CALLBACK_SLOPE_CHECK_MASK) != 0
     }
 }
 

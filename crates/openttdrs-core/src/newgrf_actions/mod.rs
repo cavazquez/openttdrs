@@ -4682,6 +4682,95 @@ mod tests {
         assert_eq!(state.map.get_kind(single), Some(TileKind::Grass));
     }
 
+    /// CB149 debe conservar la cadena Action0/3→Action2 cargada y bloquear
+    /// tanto query como execute, para área y el comando ferroviario 1×1.
+    #[test]
+    fn station_slope_callback_runs_from_loaded_action2_graph() {
+        use crate::command::{Command, CommandError, apply_command, command_would_fail};
+        use crate::map::{TileCoord, TileKind};
+        use crate::newgrf_sprites::{
+            build_action2_callback_literal_payload, build_grf_v2_feature_with_action2_chain,
+        };
+
+        let action0 = build_action0_station_payload_with_callback_mask(
+            b"CBSL",
+            b"Spec",
+            0,
+            0,
+            1 << 4,
+            "Station slope callback",
+        );
+        let action2 = build_action2_callback_literal_payload(
+            ACTION0_FEATURE_STATIONS,
+            7,
+            0, // No es FAILED ni 0x400: CB149 rechaza la pendiente/sitio.
+        );
+        let bytes = build_grf_v2_feature_with_action2_chain(
+            &action0,
+            ACTION0_FEATURE_STATIONS,
+            0,
+            7,
+            &action2,
+            1,
+            1,
+            &[174],
+            [b'C', b'L', 0, 1],
+            "station-slope-cb",
+        );
+        let dir = tempfile_dir_with("station_slope_cb.grf", &bytes);
+        let mut state = GameState::new(8, 8);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("station_slope_cb.grf", 0x434C_0001));
+        apply_newgrf_stations(&mut state, &[&dir]);
+
+        let (class_id, spec_id) = {
+            let spec = state
+                .station_spec_catalog
+                .iter()
+                .find(|spec| spec.from_newgrf)
+                .unwrap();
+            assert_eq!(spec.callback_mask, 1 << 4);
+            assert!(spec.has_slope_check_callback());
+            assert!(spec.newgrf_runtime.is_some());
+            (spec.class, spec.id)
+        };
+        state.current_station_class = class_id;
+        state.current_station_spec = spec_id;
+
+        let area_origin = TileCoord::new(3, 3);
+        let area = Command::PlaceRailStationArea {
+            origin: area_origin,
+            axis_y: true,
+            platforms: 1,
+            length: 1,
+        };
+        assert_eq!(
+            command_would_fail(&state, &area),
+            Some(CommandError::NewGrfCallbackDenied)
+        );
+        assert_eq!(
+            apply_command(&mut state, &area),
+            Err(CommandError::NewGrfCallbackDenied)
+        );
+        assert!(state.stations.is_empty());
+        assert_eq!(state.map.get_kind(area_origin), Some(TileKind::Grass));
+
+        let single = TileCoord::new(2, 2);
+        apply_command(&mut state, &Command::PlaceRail(TileCoord::new(1, 2))).unwrap();
+        let one_tile = Command::PlaceRailStation(single, 0);
+        assert_eq!(
+            command_would_fail(&state, &one_tile),
+            Some(CommandError::NewGrfCallbackDenied)
+        );
+        assert_eq!(
+            apply_command(&mut state, &one_tile),
+            Err(CommandError::NewGrfCallbackDenied)
+        );
+        assert!(state.stations.is_empty());
+        assert_eq!(state.map.get_kind(single), Some(TileKind::Grass));
+    }
+
     #[test]
     fn industry_tile_animation_properties_are_parsed_separately() {
         let tile = [

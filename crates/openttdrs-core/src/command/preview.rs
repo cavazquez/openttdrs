@@ -14,11 +14,12 @@ use super::transport::{
     check_cycle_rail_signal_type, check_dock_placement, check_place_aqueduct, check_place_buoy,
     check_place_canal, check_place_lock, check_place_rail, check_place_rail_signal_oriented,
     check_place_rail_waypoint, check_place_river, check_place_road_bits, check_place_road_waypoint,
-    check_rail_depot_placement, check_rail_station_area, check_rail_station_spec_restrictions,
-    check_rail_trackbits_with_autoslope, check_remove_rail, check_remove_rail_signal,
-    check_road_depot_placement, check_road_stop_spec_restrictions, check_ship_depot_placement,
-    check_single_transport_tile, check_station_placement, check_tunnel,
-    merged_rail_trackbits_on_tile, rail_station_footprint, rail_trackbits_from_neighbors,
+    check_rail_depot_placement, check_rail_station_area, check_rail_station_slope_callbacks,
+    check_rail_station_spec_restrictions, check_rail_trackbits_with_autoslope, check_remove_rail,
+    check_remove_rail_signal, check_road_depot_placement, check_road_stop_spec_restrictions,
+    check_ship_depot_placement, check_single_transport_tile, check_station_placement, check_tunnel,
+    merged_rail_trackbits_on_tile, rail_station_footprint, rail_station_m5,
+    rail_trackbits_from_neighbors,
 };
 use super::types::Command;
 use super::util::require_tile_owned_by_active;
@@ -217,6 +218,10 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
         Command::PlaceRailStation(c, dir) => {
             preview_station_with_authority(state, *c, *dir, StopKind::RailStation)
                 .or_else(|| check_rail_station_spec_restrictions(state, 1, 1).err())
+                .or_else(|| {
+                    let axis_y = rail_station_m5(map, *c, *dir) & 1 != 0;
+                    check_rail_station_slope_callbacks(state, *c, axis_y, 1, 1).err()
+                })
         }
         Command::PlaceRailStationArea {
             origin,
@@ -230,6 +235,10 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
             check_rail_station_spec_restrictions(state, platforms, length)
                 .err()
                 .or_else(|| check_rail_station_area(state, *origin, w, h).err())
+                .or_else(|| {
+                    check_rail_station_slope_callbacks(state, *origin, *axis_y, platforms, length)
+                        .err()
+                })
                 .or_else(|| {
                     let anchor =
                         crate::map::TileCoord::new(origin.x + (w - 1) / 2, origin.y + (h - 1) / 2);

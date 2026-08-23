@@ -21,6 +21,7 @@ API común: `TrainSpriteGraphics::resolve_callback` / `resolve_callback_ctx`,
 `resolve_cargo_profit_callback`,
 `resolve_cargo_station_rating_callback`,
 `apply_station_availability_callback_for_build`,
+`apply_station_slope_callback_for_build`,
 `apply_station_availability_callback`, `apply_road_stop_availability_callback`,
 `trigger_road_stop_animation`, `advance_road_stop_animation`,
 `resolve_industry_tile_animation_callback`, `resolve_industry_tile_random_trigger`
@@ -32,7 +33,8 @@ API común: `TrainSpriteGraphics::resolve_callback` / `resolve_callback_ctx`,
 |---|---|---|---|
 | Stations (`04`) | `0x24` `CBID_STATION_BUILD_TILE_LAYOUT` | **soportado** | Call site: construcción `apply_station_build_tile_layout_callback` |
 | Stations | `0x13` `CBID_STATION_AVAILABILITY` | **soportado** | Máscara Action0 `0x0B`, Action3→Action2 y call site query+execute de `PlaceRailStation` / `PlaceRailStationArea`; scope de construcción sin estación/tesela, booleano de 8 bits |
-| Stations | `0x14` draw layout, `0x140`–`0x142` anim, `0x149` slope | **OOS** | Máscaras/consumidas en Action0; sin call sites |
+| Stations | `0x149` `CBID_STATION_LAND_SLOPE_CHECK` | **parcial runtime** | Bit `SlopeCheck` de Action0 `0x0B`; Action3→Action2 por tesela en query+execute de `PlaceRailStation` / `PlaceRailStationArea`, antes de mutar. `param1` conserva slope+orientación; `param2` andenes/longitud/offsets. `FAILED`/`0x400` permite. Faltan scope de estación/vecinos, strings GRF y la inversión del bit 10 para GRF <8. |
+| Stations | `0x14` draw layout, `0x140`–`0x142` anim | **OOS** | Máscaras/consumidas en Action0; sin call sites |
 | Vehicles (`00`–`03`) | `0x31` `CBID_VEHICLE_START_STOP_CHECK` | **soportado** | Call site: `toggle_vehicle_running_checked`; deniega → `NewGrfCallbackDenied` |
 | Vehicles | `0x10`–`0x12`, `0x15`–`0x16`, `0x19`, `0x1D`, `0x23`, `0x2D`, `0x32`–`0x36`, … | **OOS** | Evaluador Action2 listo; sin call sites |
 | Houses (`07`) | `0x17` `CBID_HOUSE_ALLOW_CONSTRUCTION` | **soportado** (#266) | Call site: crecimiento físico del pueblo (`try_build_town_house`), antes de reservar el footprint; respeta su máscara y booleano de 8 bits |
@@ -82,11 +84,12 @@ API común: `TrainSpriteGraphics::resolve_callback` / `resolve_callback_ctx`,
 10. Objects CB157 — pendiente por tesela de `BuildObject`, desde Action0 `0x15` y Action3→Action2 cargados; query y execute rechazan antes de mutar.
 11. Cargoes CB39 — cálculo de pago por packet durante `unload_vehicles`, desde Action0 `0x1A` y Action3→Action2 cargados; `CALLBACK_FAILED` conserva la fórmula base.
 12. Cargoes CB145 — target de rating durante el barrido `update_station_ratings`, desde Action0 `0x1A` y Action3→Action2 cargados; `CALLBACK_FAILED` conserva el algoritmo estándar.
+13. Stations CB149 — pendiente por tesela al construir, desde Action0 `0x0B` y Action3→Action2 cargados; query y execute rechazan antes de mutar.
 
 ## Residual explícito (no bloquea cierre MVP #266)
 
 - Resto de CBs houses / airports / industries / objects (excepto CB157), cargo (excepto CB39/CB145); RoadStops aún requiere triggers de carga/vehículo, randomización, scopes vecinos y sprite Action2 dinámico.
 - Scopes parent/relative completos.
-- Storage persistente en industria/casa y callbacks de estación que sí tengan scope de estación.
+- Storage persistente en industria/casa y callbacks de estación que sí tengan scope de estación; CB149 aún no aporta scope/vecinos, strings GRF ni la compatibilidad de bit 10 para GRF <8.
 - Goldens tick-a-tick vs OpenTTD 15.3 para todos los features.
 - Textos GRF de string (`0x40F` / `regs100`) en CB31: denegación genérica `NewGrfCallbackDenied`.

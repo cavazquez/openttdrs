@@ -1,5 +1,5 @@
 use crate::economy::{station_build_cost, waypoint_build_cost};
-use crate::map::{Map, TileCoord, TileKind};
+use crate::map::{Map, TileCoord, TileKind, tile_slope_and_z};
 use crate::pathfinder::{
     station_entrance_faces_rail, station_entrance_faces_road, station_site_tile_allows_build,
     station_site_tile_needs_clear,
@@ -158,7 +158,7 @@ pub(in crate::command::transport) fn rail_station_gfx_from_axis(axis_y: bool) ->
     if axis_y { 3 } else { 2 }
 }
 
-pub(in crate::command::transport) fn rail_station_m5(map: &Map, c: TileCoord, dir: u8) -> u8 {
+pub(in crate::command) fn rail_station_m5(map: &Map, c: TileCoord, dir: u8) -> u8 {
     // Preferir vecino con un solo eje; CROSS no impone andén (cae a `dir`).
     for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
         let n = TileCoord::new(c.x + dx, c.y + dy);
@@ -187,6 +187,8 @@ pub(in crate::command) fn place_rail_station(
 ) -> Result<(), CommandError> {
     check_station_placement(&state.map, &state.stations, c, dir, StopKind::RailStation)?;
     check_rail_station_spec_restrictions(state, 1, 1)?;
+    let axis_y = rail_station_m5(&state.map, c, dir) & 1 != 0;
+    check_rail_station_slope_callbacks(state, c, axis_y, 1, 1)?;
     station_placement_on_tile(state, c, dir, StopKind::RailStation)
 }
 
@@ -282,6 +284,51 @@ pub(in crate::command) fn check_rail_station_spec_restrictions(
     Ok(())
 }
 
+/// Ejecuta CB149 para cada tesela de la estación ferroviaria antes de mutar.
+///
+/// La posición relativa siempre es `platform << 8 | position`: la conversión
+/// a coordenadas de mapa depende del eje, pero no la codificación del callback.
+pub(in crate::command) fn check_rail_station_slope_callbacks(
+    state: &GameState,
+    origin: TileCoord,
+    axis_y: bool,
+    platforms: u8,
+    length: u8,
+) -> Result<(), CommandError> {
+    let Some(spec) = crate::station_class::station_spec_def(
+        &state.station_spec_catalog,
+        state.current_station_spec,
+    ) else {
+        return Ok(());
+    };
+    if !spec.has_slope_check_callback() {
+        return Ok(());
+    }
+
+    for platform in 0..platforms {
+        for position in 0..length {
+            let c = if axis_y {
+                TileCoord::new(
+                    origin.x + i32::from(platform),
+                    origin.y + i32::from(position),
+                )
+            } else {
+                TileCoord::new(
+                    origin.x + i32::from(position),
+                    origin.y + i32::from(platform),
+                )
+            };
+            let (slope, _) = tile_slope_and_z(&state.map, c).ok_or(CommandError::OutOfBounds)?;
+            if !crate::newgrf_callback::apply_station_slope_callback_for_build(
+                spec, slope, axis_y, platforms, length, platform, position,
+            ) {
+                return Err(CommandError::NewGrfCallbackDenied);
+            }
+        }
+    }
+    Ok(())
+}
+
 pub(in crate::command) fn place_rail_station_area(
     state: &mut GameState,
     origin: TileCoord,
@@ -295,6 +342,7 @@ pub(in crate::command) fn place_rail_station_area(
     check_rail_station_spec_restrictions(state, platforms, length)?;
     let (w, h) = rail_station_footprint(axis_y, platforms, length);
     check_rail_station_area(state, origin, w, h)?;
+    check_rail_station_slope_callbacks(state, origin, axis_y, platforms, length)?;
     let anchor = TileCoord::new(origin.x + (w - 1) / 2, origin.y + (h - 1) / 2);
     if !authority_allows_new_station(&state.towns, anchor, state.active_company) {
         return Err(CommandError::AuthorityRatingTooLow);

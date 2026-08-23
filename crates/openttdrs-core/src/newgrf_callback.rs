@@ -16,8 +16,8 @@ use crate::newgrf_sprites::{
     Action2EvalCtx, Action2RandomEntry, CALLBACK_FAILED, CBID_CARGO_PROFIT_CALC,
     CBID_CARGO_STATION_RATING_CALC, CBID_HOUSE_ALLOW_CONSTRUCTION, CBID_INDUSTRY_LOCATION,
     CBID_OBJECT_LAND_SLOPE_CHECK, CBID_STATION_ANIMATION_NEXT_FRAME, CBID_STATION_ANIMATION_SPEED,
-    CBID_STATION_ANIMATION_TRIGGER, CBID_STATION_AVAILABILITY, CBID_VEHICLE_START_STOP_CHECK,
-    TrainSpriteGraphics,
+    CBID_STATION_ANIMATION_TRIGGER, CBID_STATION_AVAILABILITY, CBID_STATION_LAND_SLOPE_CHECK,
+    CBID_VEHICLE_START_STOP_CHECK, TrainSpriteGraphics,
 };
 use crate::object_spec::ObjectSpecDef;
 use crate::station::Station;
@@ -303,6 +303,51 @@ pub fn apply_station_availability_callback_for_build(
     };
     let result = runtime.resolve_callback(def.newgrf_local_id, CBID_STATION_AVAILABILITY, 0, 0);
     callback_allows_8bit_boolean(result)
+}
+
+/// Call site de construcción ferroviaria: CB `0x149` de pendiente por tesela.
+///
+/// `OpenTTD` entrega el slope original y, para eje Y con esquinas W/E a distinta
+/// altura, una variante orientada en los nibbles alto/bajo de `param1`.
+/// `param2` empaqueta cantidad de andenes, longitud y los offsets de andén y
+/// posición. Se resuelve antes de que exista una estación; por eso este corte no
+/// aporta scope/registro persistente de estación ni la inversión de bit 10 de
+/// GRFs anteriores a versión 8.
+#[must_use]
+pub fn apply_station_slope_callback_for_build(
+    def: &crate::station_class::StationSpecDef,
+    slope: u8,
+    axis_y: bool,
+    platforms: u8,
+    length: u8,
+    platform: u8,
+    position: u8,
+) -> bool {
+    if !def.has_slope_check_callback() {
+        return true;
+    }
+    let Some(runtime) = def.newgrf_runtime.as_ref() else {
+        return true;
+    };
+
+    // `PerformStationTileSlopeCheck`: SLOPE_W=1, SLOPE_E=4, SLOPE_EW=5.
+    let axis_adjusted_slope = if axis_y && ((slope & 1 != 0) != (slope & 4 != 0)) {
+        slope ^ 5
+    } else {
+        slope
+    };
+    let param1 = (u32::from(slope) << 4) | u32::from(axis_adjusted_slope);
+    let param2 = (u32::from(platforms) << 24)
+        | (u32::from(length) << 16)
+        | (u32::from(platform) << 8)
+        | u32::from(position);
+    let result = runtime.resolve_callback(
+        def.newgrf_local_id,
+        CBID_STATION_LAND_SLOPE_CHECK,
+        param1,
+        param2,
+    );
+    callback_allows_location(result)
 }
 
 /// Resolver stateful de estación para scopes que sí tienen una estación.
@@ -709,6 +754,58 @@ mod tests {
         gfx
     }
 
+    /// Devuelve `0x400` sólo si un byte de variable coincide con `expected`.
+    /// Así los tests prueban que el call site empaqueta el parámetro correcto,
+    /// no sólo que invocó alguna cadena Action2.
+    fn gfx_callback_allow_if_byte(variable: u8, shift: u8, expected: u8) -> TrainSpriteGraphics {
+        let literal = |value| Action2VarTerm {
+            variable: 0x1A,
+            param: None,
+            adjust: Action2VarAdjust {
+                shift: 0,
+                and_mask: value,
+                ..Action2VarAdjust::default()
+            },
+        };
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 2,
+        });
+        gfx.action2_var.insert(
+            2,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        shift,
+                        and_mask: u8::MAX,
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                // Comparación exacta -> 1; 1 * 16 * 64 = 0x400 (allow).
+                ops: vec![
+                    Action2VarOp {
+                        operator: 0x12,
+                        rhs: literal(expected),
+                    },
+                    Action2VarOp {
+                        operator: 0x0A,
+                        rhs: literal(0x10),
+                    },
+                    Action2VarOp {
+                        operator: 0x0A,
+                        rhs: literal(0x40),
+                    },
+                ],
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
+        gfx
+    }
+
     /// `16 * 64 = 0x400` vía operador mul (`and_mask` es BYTE).
     fn gfx_callback_allow_400() -> TrainSpriteGraphics {
         let mut gfx = TrainSpriteGraphics::default();
@@ -1079,6 +1176,71 @@ mod tests {
         let mut st = Station::new(TileCoord::new(2, 2));
         assert!(apply_station_availability_callback(&gfx, 0, &mut st));
         assert_eq!(st.newgrf_persistent_regs.get(&5), Some(&7));
+    }
+
+    #[test]
+    fn callbacks_ac_station_slope_packs_upstream_parameters() {
+        let mut def = crate::station_class::vanilla_station_spec_catalog()
+            .pop()
+            .unwrap();
+        def.callback_mask = crate::station_class::STATION_CALLBACK_SLOPE_CHECK_MASK;
+
+        // slope=West, eje Y: param1 = (1 << 4) | (1 ^ SLOPE_EW) = 0x14.
+        def.newgrf_runtime = Some(Box::new(gfx_callback_allow_if_byte(0x10, 0, 0x14)));
+        assert!(apply_station_slope_callback_for_build(
+            &def, 1, true, 3, 5, 2, 4,
+        ));
+        assert!(!apply_station_slope_callback_for_build(
+            &def, 1, false, 3, 5, 2, 4,
+        ));
+
+        // param2 = tracks<<24 | length<<16 | platform<<8 | position.
+        def.newgrf_runtime = Some(Box::new(gfx_callback_allow_if_byte(0x18, 0, 4)));
+        assert!(apply_station_slope_callback_for_build(
+            &def, 1, true, 3, 5, 2, 4,
+        ));
+        assert!(!apply_station_slope_callback_for_build(
+            &def, 1, true, 3, 5, 2, 3,
+        ));
+
+        def.newgrf_runtime = Some(Box::new(gfx_callback_allow_if_byte(0x18, 8, 2)));
+        assert!(apply_station_slope_callback_for_build(
+            &def, 1, true, 3, 5, 2, 4,
+        ));
+        assert!(!apply_station_slope_callback_for_build(
+            &def, 1, true, 3, 5, 1, 4,
+        ));
+
+        def.newgrf_runtime = Some(Box::new(gfx_callback_allow_if_byte(0x18, 16, 5)));
+        assert!(apply_station_slope_callback_for_build(
+            &def, 1, true, 3, 5, 2, 4,
+        ));
+        assert!(!apply_station_slope_callback_for_build(
+            &def, 1, true, 3, 4, 2, 4,
+        ));
+
+        def.newgrf_runtime = Some(Box::new(gfx_callback_allow_if_byte(0x18, 24, 3)));
+        assert!(apply_station_slope_callback_for_build(
+            &def, 1, true, 3, 5, 2, 4,
+        ));
+        assert!(!apply_station_slope_callback_for_build(
+            &def, 1, true, 2, 5, 2, 4,
+        ));
+
+        // Sin runtime, callback fallido o máscara inactiva conserva el fallback.
+        def.newgrf_runtime = None;
+        assert!(apply_station_slope_callback_for_build(
+            &def, 1, true, 3, 5, 2, 4,
+        ));
+        def.newgrf_runtime = Some(Box::new(TrainSpriteGraphics::default()));
+        assert!(apply_station_slope_callback_for_build(
+            &def, 1, true, 3, 5, 2, 4,
+        ));
+        def.callback_mask = 0;
+        def.newgrf_runtime = Some(Box::new(gfx_callback_literal(0)));
+        assert!(apply_station_slope_callback_for_build(
+            &def, 1, true, 3, 5, 2, 4,
+        ));
     }
 
     #[test]

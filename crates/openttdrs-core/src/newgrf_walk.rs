@@ -126,10 +126,10 @@ fn next_entry_position(
 ///
 /// Procesa cada entrada (pseudo o real) y llama al callback `visit` con `GrfEntry`.
 /// Se detiene al encontrar una entrada de tamaño 0 o al final de la sección.
-pub fn walk_grf_entries(
-    data_section: &[u8],
+pub fn walk_grf_entries<'a>(
+    data_section: &'a [u8],
     container: GrfContainerVersion,
-    mut visit: impl FnMut(GrfEntry<'_>),
+    mut visit: impl FnMut(GrfEntry<'a>),
 ) {
     let mut i = 0usize;
     while i < data_section.len() {

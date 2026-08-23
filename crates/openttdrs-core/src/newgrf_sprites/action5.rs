@@ -1,5 +1,7 @@
 //! Action5: sprites de reemplazo global (IDs `OpenTTD` 15.3 / `newgrf_act5.cpp`).
 
+use std::collections::HashMap;
+
 use crate::newgrf_config::{GrfContainerVersion, GrfScanError, parse_grf_full};
 use crate::newgrf_walk::{GrfEntry, walk_grf_entries};
 
@@ -68,6 +70,44 @@ pub const CATENARY_WIRE_SPRITE_BASE: u32 = 1039;
 pub const CATENARY_ENTRANCE_SPRITE_BASE: u32 = 910_063;
 /// IDs virtuales de postes PPP en el cliente (`PSO_*`).
 pub const CATENARY_PYLON_SPRITE_BASE: u32 = 910_067;
+
+/// Contexto mínimo que necesitan las condiciones `Action7`/`Action9` al
+/// cargar reemplazos globales Action5.
+///
+/// Los assets base de `OpenGFX` eligen bancos distintos según el paisaje con
+/// una secuencia `ActionD` + `Action9`. Conservar los parámetros del GRF
+/// además del clima permite seguir esa misma rama para reemplazos de una
+/// partida, sin ejecutar callbacks de vehículos o estaciones en este paso.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Action5LoadContext {
+    /// `LandscapeType` de `OpenTTD`: 0 temperado, 1 subártico, 2 subtropical,
+    /// 3 toyland.
+    pub landscape: u8,
+    /// Parámetros iniciales configurados para el GRF (`param[]`).
+    pub parameters: Vec<u32>,
+}
+
+impl Action5LoadContext {
+    #[must_use]
+    pub const fn new(landscape: u8) -> Self {
+        Self {
+            landscape,
+            parameters: Vec::new(),
+        }
+    }
+
+    #[must_use]
+    pub fn with_parameters(mut self, parameters: Vec<u32>) -> Self {
+        self.parameters = parameters;
+        self
+    }
+}
+
+impl Default for Action5LoadContext {
+    fn default() -> Self {
+        Self::new(0)
+    }
+}
 
 /// Nombre corto de tipos Action5 conocidos (resto = `other`). IDs = `OpenTTD` 15.3.
 #[must_use]
@@ -189,6 +229,339 @@ pub fn collect_action5_blocks(data: &[u8]) -> Result<Vec<Action5Block>, GrfScanE
 
     if in_block {
         out.push(finish_action5_block(cur_type, cur_num, cur_offset, sprites));
+    }
+    Ok(out)
+}
+
+/// Estado de los parámetros que puede modificar `ActionD` mientras se carga
+/// un GRF. Es intencionalmente pequeño: Action5 sólo necesita el subconjunto
+/// de variables globales que condicionan bancos gráficos durante la carga.
+struct Action5ControlState {
+    landscape: u8,
+    parameters: Vec<u32>,
+}
+
+impl From<&Action5LoadContext> for Action5ControlState {
+    fn from(context: &Action5LoadContext) -> Self {
+        Self {
+            landscape: context.landscape,
+            parameters: context.parameters.clone(),
+        }
+    }
+}
+
+impl Action5ControlState {
+    fn global_value(&self, variable: u8) -> Option<u32> {
+        // `GetGlobalVariable` de OpenTTD. Estos son los valores estables que
+        // aparecen en los GRFs base y en los condicionantes de assets; una
+        // variable desconocida no toma una rama especulativa.
+        match variable {
+            0x03 => Some(u32::from(self.landscape)), // current climate
+            0x0D | 0x1D => Some(1),                  // Windows / OpenTTD
+            0x1A => Some(u32::MAX),                  // always -1
+            0x1B => Some(0x3F),                      // display options
+            _ => None,
+        }
+    }
+
+    fn value(&self, source: u8) -> Option<u32> {
+        if source < 0x80 {
+            return Some(
+                self.parameters
+                    .get(usize::from(source))
+                    .copied()
+                    .unwrap_or(0),
+            );
+        }
+        self.global_value(source.wrapping_sub(0x80))
+    }
+
+    fn set_parameter(&mut self, target: u8, value: u32) {
+        if target >= 0x80 {
+            return;
+        }
+        let target = usize::from(target);
+        if self.parameters.len() <= target {
+            self.parameters.resize(target + 1, 0);
+        }
+        self.parameters[target] = value;
+    }
+}
+
+fn decode_action5_sprite(
+    container: GrfContainerVersion,
+    sprite_index: &HashMap<u32, Vec<(u8, &[u8])>>,
+    info: u8,
+    payload: &[u8],
+) -> Option<DecodedSprite> {
+    if container == GrfContainerVersion::V2 && info == 0xFD {
+        let id = u32::from_le_bytes(payload.get(..4)?.try_into().ok()?);
+        return resolve_fd_sprite(sprite_index, id);
+    }
+    decode_real_sprite_entry(container, info, payload)
+}
+
+fn action5_condition(payload: &[u8], state: &Action5ControlState) -> Option<(bool, u8)> {
+    // `07/09 <param> <size> <condition> <value> [<mask>] <skip-or-label>`.
+    if payload.len() < 6 {
+        return None;
+    }
+    let param = payload[1];
+    let original_size = payload[2];
+    let condition = payload[3];
+    let size = if condition < 2 { 1 } else { original_size };
+    let (value, mask, next) = match size {
+        1 => (u32::from(*payload.get(4)?), 0xFF, 5),
+        2 => (
+            u32::from(u16::from_le_bytes(payload.get(4..6)?.try_into().ok()?)),
+            0xFFFF,
+            6,
+        ),
+        4 => (
+            u32::from_le_bytes(payload.get(4..8)?.try_into().ok()?),
+            u32::MAX,
+            8,
+        ),
+        8 => (
+            u32::from_le_bytes(payload.get(4..8)?.try_into().ok()?),
+            u32::from_le_bytes(payload.get(8..12)?.try_into().ok()?),
+            12,
+        ),
+        _ => return None,
+    };
+    let skip_target = *payload.get(next)?;
+    let actual = state.value(param)?;
+    let result = match condition {
+        0x00 => value < 32 && actual & (1_u32 << value) != 0,
+        0x01 => value < 32 && actual & (1_u32 << value) == 0,
+        0x02 => actual & mask == value,
+        0x03 => actual & mask != value,
+        0x04 => actual & mask < value,
+        0x05 => actual & mask > value,
+        // Las condiciones 06..12 requieren estado de otros GRFs, cargos o
+        // tipos. No ejecutar una rama ante información incompleta mantiene
+        // el banco previo en lugar de escoger una variante arbitraria.
+        _ => return None,
+    };
+    Some((result, skip_target))
+}
+
+fn apply_action5_param_set(payload: &[u8], state: &mut Action5ControlState) {
+    // `0D <target> <operation> <source1> <source2> [data:u32 LE]`.
+    if payload.len() < 5 || payload[0] != 0x0D {
+        return;
+    }
+    let target = payload[1];
+    let operation = payload[2];
+    let source1 = payload[3];
+    let source2 = payload[4];
+    let data = payload
+        .get(5..9)
+        .and_then(|bytes| bytes.try_into().ok())
+        .map_or(0, u32::from_le_bytes);
+    let conditional_set = operation & 0x80 != 0;
+    let operation = operation & 0x7F;
+    if conditional_set && target < 0x80 && usize::from(target) < state.parameters.len() {
+        return;
+    }
+    // Resource management (`source2 == FE`) requires a global allocation
+    // phase; no Action5 del baseset usa esa rama, así que no la simulamos.
+    if source2 == 0xFE {
+        return;
+    }
+    let source = |id| {
+        if id == 0xFF {
+            Some(data)
+        } else {
+            state.value(id)
+        }
+    };
+    let (Some(left), Some(right)) = (source(source1), source(source2)) else {
+        return;
+    };
+    let result = match operation {
+        0x00 => left,
+        0x01 => left.wrapping_add(right),
+        0x02 => left.wrapping_sub(right),
+        0x03 => left.wrapping_mul(right),
+        0x04 => left
+            .cast_signed()
+            .wrapping_mul(right.cast_signed())
+            .cast_unsigned(),
+        0x05 => {
+            if right.cast_signed().is_negative() {
+                left >> right.cast_signed().unsigned_abs()
+            } else {
+                left.wrapping_shl(right & 0x1F)
+            }
+        }
+        0x06 => {
+            if right.cast_signed().is_negative() {
+                (left.cast_signed() >> right.cast_signed().unsigned_abs()).cast_unsigned()
+            } else {
+                left.cast_signed()
+                    .wrapping_shl(right & 0x1F)
+                    .cast_unsigned()
+            }
+        }
+        0x07 => left & right,
+        0x08 => left | right,
+        0x09 => left.checked_div(right).unwrap_or(left),
+        0x0A => {
+            if right == 0 {
+                left
+            } else {
+                left.cast_signed()
+                    .wrapping_div(right.cast_signed())
+                    .cast_unsigned()
+            }
+        }
+        0x0B => {
+            if right == 0 {
+                left
+            } else {
+                left % right
+            }
+        }
+        0x0C => {
+            if right == 0 {
+                left
+            } else {
+                left.cast_signed()
+                    .wrapping_rem(right.cast_signed())
+                    .cast_unsigned()
+            }
+        }
+        _ => return,
+    };
+    state.set_parameter(target, result);
+}
+
+#[derive(Default)]
+struct PendingAction5Block {
+    type_id: u8,
+    num_sprites: u8,
+    offset: u16,
+    seen_real_sprites: u16,
+    sprites: Vec<DecodedSprite>,
+}
+
+impl PendingAction5Block {
+    fn from_header(type_id: u8, num_sprites: u8, offset: u16) -> Self {
+        Self {
+            type_id,
+            num_sprites,
+            offset,
+            ..Self::default()
+        }
+    }
+
+    fn finish(self) -> Action5Block {
+        finish_action5_block(self.type_id, self.num_sprites, self.offset, self.sprites)
+    }
+}
+
+fn next_action5_label(
+    labels: &HashMap<u8, Vec<usize>>,
+    label: u8,
+    current: usize,
+) -> Option<usize> {
+    let choices = labels.get(&label)?;
+    choices
+        .iter()
+        .copied()
+        .find(|&index| index > current)
+        .or_else(|| choices.first().copied())
+}
+
+/// Extrae únicamente los bloques Action5 alcanzables con el contexto de carga.
+///
+/// A diferencia de [`collect_action5_blocks`], ejecuta el subconjunto de
+/// `ActionD`, `Action7`, `Action9` y `Action10` que decide qué banco gráfico
+/// se activa. Esto es decisivo para `OpenGFX`: sus cuatro bancos de foundations
+/// comparten los mismos slots, pero están condicionados por el clima.
+///
+/// Las condiciones que requieren estado no disponible (otros GRFs, cargos,
+/// railtypes, etc.) no fuerzan un salto. Así se conserva la variante previa
+/// en vez de reemplazarla con una selección no verificable.
+///
+/// # Errors
+///
+/// Contenedor inválido.
+pub fn collect_active_action5_blocks(
+    data: &[u8],
+    context: &Action5LoadContext,
+) -> Result<Vec<Action5Block>, GrfScanError> {
+    let parsed = parse_grf_full(data)?;
+    let sprite_index = index_sprite_section(parsed.sprite_section);
+    let mut entries = Vec::new();
+    walk_grf_entries(parsed.data_section, parsed.container, |entry| {
+        entries.push(entry);
+    });
+
+    let mut labels: HashMap<u8, Vec<usize>> = HashMap::new();
+    for (index, entry) in entries.iter().enumerate() {
+        if let GrfEntry::Pseudo(payload) = entry
+            && payload.first() == Some(&0x10)
+            && let Some(&label) = payload.get(1)
+        {
+            labels.entry(label).or_default().push(index);
+        }
+    }
+
+    let mut state = Action5ControlState::from(context);
+    let mut active: Option<PendingAction5Block> = None;
+    let mut out = Vec::new();
+    let mut index = 0usize;
+    while index < entries.len() {
+        match entries[index] {
+            GrfEntry::Pseudo(payload) => {
+                if let Some(block) = active.take() {
+                    out.push(block.finish());
+                }
+                match payload.first().copied() {
+                    Some(0x0D) => apply_action5_param_set(payload, &mut state),
+                    Some(0x07 | 0x09) => {
+                        if let Some((true, label)) = action5_condition(payload, &state)
+                            && let Some(target) = next_action5_label(&labels, label, index)
+                        {
+                            index = target;
+                            continue;
+                        }
+                    }
+                    Some(0x05) => {
+                        if let Some((type_id, num_sprites, offset)) = parse_action5_header(payload)
+                        {
+                            active = Some(PendingAction5Block::from_header(
+                                type_id,
+                                num_sprites,
+                                offset,
+                            ));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            GrfEntry::Real { info, payload } => {
+                if let Some(block) = active.as_mut() {
+                    if let Some(sprite) =
+                        decode_action5_sprite(parsed.container, &sprite_index, info, payload)
+                    {
+                        block.sprites.push(sprite);
+                    }
+                    block.seen_real_sprites = block.seen_real_sprites.saturating_add(1);
+                    if block.seen_real_sprites >= u16::from(block.num_sprites)
+                        && let Some(block) = active.take()
+                    {
+                        out.push(block.finish());
+                    }
+                }
+            }
+        }
+        index += 1;
+    }
+    if let Some(block) = active {
+        out.push(block.finish());
     }
     Ok(out)
 }
@@ -456,8 +829,82 @@ mod slot_helper_tests {
     use super::*;
     use crate::airport_class::AirportSpecId;
     use crate::map::{SLOPE_NE, SLOPE_SE};
-    use crate::newgrf_sprites::{Action5Block, DecodedSprite};
+    use crate::newgrf_sprites::{
+        Action5Block, DecodedSprite, build_real_sprite_v1_uncompressed_payload,
+    };
     use crate::rail_type::RailType;
+
+    fn append_pseudo(data: &mut Vec<u8>, payload: &[u8]) {
+        data.extend_from_slice(&u32::try_from(payload.len()).unwrap_or(0).to_le_bytes());
+        data.push(0xFF);
+        data.extend_from_slice(payload);
+    }
+
+    fn append_real(data: &mut Vec<u8>, payload: &[u8]) {
+        data.extend_from_slice(&u32::try_from(payload.len()).unwrap_or(0).to_le_bytes());
+        data.push(0x01);
+        data.extend_from_slice(payload);
+    }
+
+    /// GRF mínimo con dos Action5, seleccionados por el mismo patrón
+    /// `ActionD(current climate)` + `Action9(label)` de `ogfxe_extra.grf`.
+    fn climate_selected_action5_fixture() -> Vec<u8> {
+        const SIG: [u8; 8] = [b'G', b'R', b'F', 0x82, 0x0D, 0x0A, 0x1A, 0x0A];
+        let mut data = Vec::new();
+        // param[0x7f] = global[0x03] & 0xff (climate).
+        append_pseudo(
+            &mut data,
+            &[0x0D, 0x7F, 0x07, 0x83, 0xFF, 0xFF, 0x00, 0x00, 0x00],
+        );
+        // Si no es temperado, salta al banco de clima 1 (label 0x10).
+        append_pseudo(
+            &mut data,
+            &[0x09, 0x7F, 0x04, 0x03, 0x00, 0x00, 0x00, 0x00, 0x10],
+        );
+        append_pseudo(&mut data, &[0x05, ACTION5_TYPE_FOUNDATIONS, 1, 0, 0]);
+        append_real(
+            &mut data,
+            &build_real_sprite_v1_uncompressed_payload(1, 1, 0, 0, &[10]),
+        );
+        // El banco temperado ya elegido salta al final, sin sobreescribirse.
+        append_pseudo(
+            &mut data,
+            &[0x09, 0x7F, 0x04, 0x02, 0x00, 0x00, 0x00, 0x00, 0x11],
+        );
+        append_pseudo(&mut data, &[0x10, 0x10]);
+        append_pseudo(&mut data, &[0x05, ACTION5_TYPE_FOUNDATIONS, 1, 0, 0]);
+        append_real(
+            &mut data,
+            &build_real_sprite_v1_uncompressed_payload(1, 1, 0, 0, &[20]),
+        );
+        append_pseudo(&mut data, &[0x10, 0x11]);
+        data.extend_from_slice(&0u32.to_le_bytes());
+
+        let sprite_offset = u32::try_from(1 + data.len()).unwrap_or(0);
+        let mut out = Vec::new();
+        out.extend_from_slice(&[0, 0]);
+        out.extend_from_slice(&SIG);
+        out.extend_from_slice(&sprite_offset.to_le_bytes());
+        out.push(0);
+        out.extend_from_slice(&data);
+        out.extend_from_slice(&0u32.to_le_bytes());
+        out
+    }
+
+    #[test]
+    fn active_action5_collection_honours_actiond_action9_climate_branch() {
+        let bytes = climate_selected_action5_fixture();
+        let all = collect_action5_blocks(&bytes).unwrap();
+        assert_eq!(all.len(), 2);
+
+        let temperate = collect_active_action5_blocks(&bytes, &Action5LoadContext::new(0)).unwrap();
+        let arctic = collect_active_action5_blocks(&bytes, &Action5LoadContext::new(1)).unwrap();
+        assert_eq!(temperate.len(), 1);
+        assert_eq!(arctic.len(), 1);
+        assert_eq!(temperate[0].sprites, all[0].sprites);
+        assert_eq!(arctic[0].sprites, all[1].sprites);
+        assert_ne!(temperate[0].sprites, arctic[0].sprites);
+    }
 
     #[test]
     fn oneway_and_roadstop_and_bridge_slots() {

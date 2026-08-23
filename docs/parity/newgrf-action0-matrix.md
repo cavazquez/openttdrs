@@ -458,7 +458,12 @@ aviones; cambiar/refitear la carga cambia también el grupo seleccionado.
 
 IDs y tamaños según `newgrf_act5.cpp` / `table/sprites.h` de OpenTTD 15.3.
 Un bloque soportado se recorta al rango de su propia tabla; nunca puede escribir
-en slots vecinos. Los tipos `A5BLOCK_INVALID` se inspeccionan, pero no se aplican.
+en slots vecinos. Antes de aplicar un bloque se siguen los saltos `ActionD` +
+`Action7`/`Action9` + `Action10` que dependen de `param[]` y del paisaje
+(`0=temp`, `1=arctic`, `2=tropic`, `3=toyland`); así los bancos alternativos
+de OpenGFX no se pisan entre sí. Las condiciones que exigen estado externo
+(otros GRFs, cargos o tipos) aún no fuerzan una rama. Los tipos
+`A5BLOCK_INVALID` se inspeccionan, pero no se aplican.
 
 | Tipo | Bloque 15.3 | Slots | Estado |
 |---:|---|---:|---|

@@ -4,7 +4,9 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 use crate::GameState;
-use crate::newgrf_sprites::{Action5Block, DecodedSprite, collect_action5_blocks};
+use crate::newgrf_sprites::{
+    Action5Block, Action5LoadContext, DecodedSprite, collect_active_action5_blocks,
+};
 
 fn merge_action5_stack_into(
     slots: &mut [Option<DecodedSprite>],
@@ -27,7 +29,9 @@ fn merge_action5_stack_into(
         let Ok(data) = std::fs::read(&path) else {
             continue;
         };
-        let Ok(blocks) = collect_action5_blocks(&data) else {
+        let context = Action5LoadContext::new(state.climate.newgrf_landscape_id())
+            .with_parameters(entry.params.clone());
+        let Ok(blocks) = collect_active_action5_blocks(&data, &context) else {
             continue;
         };
         for block in &blocks {
@@ -52,7 +56,7 @@ fn apply_action5_table(
 /// Los cimientos extra no pertenecen a `ogfx1_base`; `OpenGFX` los publica en
 /// el GRF *extra*. Se cargan antes del stack de la partida para que un `NewGRF`
 /// real pueda sobrescribirlos igual que en `OpenTTD`.
-fn load_default_foundation_action5_table() -> Vec<Option<DecodedSprite>> {
+fn load_default_foundation_action5_table(landscape: u8) -> Vec<Option<DecodedSprite>> {
     let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let asset_roots = [
         PathBuf::from("assets/opengfx"),
@@ -82,7 +86,8 @@ fn load_default_foundation_action5_table() -> Vec<Option<DecodedSprite>> {
         let Ok(data) = std::fs::read(&path) else {
             continue;
         };
-        let Ok(blocks) = collect_action5_blocks(&data) else {
+        let context = Action5LoadContext::new(landscape);
+        let Ok(blocks) = collect_active_action5_blocks(&data, &context) else {
             continue;
         };
         let mut slots = vec![None; crate::newgrf_sprites::FOUNDATION_ACTION5_SLOT_COUNT];
@@ -96,11 +101,14 @@ fn load_default_foundation_action5_table() -> Vec<Option<DecodedSprite>> {
     vec![None; crate::newgrf_sprites::FOUNDATION_ACTION5_SLOT_COUNT]
 }
 
-fn default_foundation_action5_table() -> Vec<Option<DecodedSprite>> {
-    static BASE_FOUNDATIONS: OnceLock<Vec<Option<DecodedSprite>>> = OnceLock::new();
-    BASE_FOUNDATIONS
-        .get_or_init(load_default_foundation_action5_table)
-        .clone()
+fn default_foundation_action5_table(climate: crate::Climate) -> Vec<Option<DecodedSprite>> {
+    static BASE_FOUNDATIONS: OnceLock<[Vec<Option<DecodedSprite>>; 4]> = OnceLock::new();
+    let tables = BASE_FOUNDATIONS.get_or_init(|| {
+        std::array::from_fn(|landscape| {
+            load_default_foundation_action5_table(u8::try_from(landscape).unwrap_or(0))
+        })
+    });
+    tables[usize::from(climate.newgrf_landscape_id())].clone()
 }
 
 macro_rules! define_action5_apply {
@@ -156,7 +164,7 @@ pub fn apply_newgrf_action5_foundations(state: &mut GameState, search_dirs: &[&P
 pub fn apply_newgrf_action5_foundations_default_dirs(state: &mut GameState) {
     let owned = super::default_newgrf_search_dirs();
     let refs: Vec<&Path> = owned.iter().map(AsRef::as_ref).collect();
-    let mut slots = default_foundation_action5_table();
+    let mut slots = default_foundation_action5_table(state.climate);
     merge_action5_stack_into(
         &mut slots,
         state,

@@ -124,6 +124,7 @@ mod tests {
         let ridx = state.companies.iter().position(|c| c.id == rival).unwrap();
         state.companies[ridx].economy.money = -2_000_000;
         state.companies[ridx].economy.max_loan = 200_000;
+        state.companies[ridx].economy.max_loan_override = Some(200_000);
         state.companies[ridx].economy.loan = 200_000;
 
         let pos = crate::map::TileCoord::new(3, 3);

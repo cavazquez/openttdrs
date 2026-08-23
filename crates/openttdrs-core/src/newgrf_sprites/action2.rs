@@ -55,7 +55,10 @@ fn read_action2_var(
             let idx = usize::from(term.param.unwrap_or(0));
             Some(ctx.grf_params.get(idx).copied().unwrap_or(0))
         }
-        v => ctx.vars.get(&v).copied(),
+        v => term
+            .param
+            .and_then(|parameter| ctx.parameterized_vars.get(&(v, parameter)).copied())
+            .or_else(|| ctx.vars.get(&v).copied()),
     }
 }
 

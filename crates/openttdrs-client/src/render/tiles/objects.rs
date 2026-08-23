@@ -1896,13 +1896,13 @@ fn spawn_road_stop_buildings(
         && let (Some(cache), Some(images)) = (action5_sprites.as_mut(), images.as_mut())
     {
         let view_u8 = u8::try_from(dir.min(5)).unwrap_or(0);
-        let mut a2 = openttdrs_core::action2_eval_ctx_for_road_stop_tile(
+        let mut a2 = openttdrs_core::action2_eval_ctx_for_road_stop_tile_with_catalog(
             map,
             stations,
+            road_stop_catalog,
             ctx.coord,
             view_u8,
             climate,
-            def.newgrf_type_tables.as_ref(),
         );
         a2.set_grf_params(openttdrs_core::stack_params_for_grfid(
             newgrf_stack,

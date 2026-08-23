@@ -415,7 +415,7 @@ Fuente: `newgrf_act0_roadstops.cpp` / `newgrf_roadstop.h`.
 | `10` animation triggers | **runtime parcial**: `Built`, `TileLoop`, `NewCargo`, `CargoTaken`, `VehicleLoads`, llegada/salida vial y `AcceptanceTick`; CB140 recibe el ordinal y el id CTT de cargo en `param2`. Una parada compuesta/importada todavía no conserva estado separado por tesela. |
 | `FE` nombre C-string (extensión local) | **runtime** (catálogo) |
 | `FD` badge associations (extensión local: BYTE count + N× label 4 chars) | **runtime** (`associated_badges` + diagnósticos) |
-| Action1/3 views | **runtime** parcial: bahía `0..3`; DT `4`/`5` si hay vistas; el renderer resuelve Action2 por parada con random/triggers, vista/tipo/terreno, road/tram, frame y `param[]`, y cachea por fingerprint; si no hay vista usa Action5 `0x11` / OpenGFX. Restan scopes vecinos y tipos viales externos. |
+| Action1/3 views | **runtime** parcial: bahía `0..3`; DT `4`/`5` si hay vistas; el renderer resuelve Action2 por parada con random/triggers, vista/tipo/terreno, road/tram, frame, `param[]` y los scopes vecinos `66`/`67`/`68`/`6A`/`6B`, y cachea también `(var,param)`; si no hay vista usa Action5 `0x11` / OpenGFX. Restan vars BaseStation `60`–`65`/`69`, tipos viales externos y sonidos. |
 | drive-through `m5`=`RSV_*` 4/5 | **runtime** (colocación + connect eje X/Y) |
 | `grfid` + `newgrf_local_id` | **runtime** (save/load + rebind tras re-apply multi-GRF) |
 | resto (`0x0A`–`0x0B`, `0x13`–`0x16`) | consumidas (ancho fijo) / pendiente |

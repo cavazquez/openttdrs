@@ -375,7 +375,9 @@ pub fn apply_station_availability_callback(
 /// `tile = INVALID_TILE`) y suministra tipo de parada y carretera actuales.
 /// Este call site cubre esas variables estables (`0x40`, `0x41`, `0x43`,
 /// `0x44`) y conserva el comportamiento seguro de `CALLBACK_FAILED` = permitir.
-/// Los callbacks de animación y scopes vecinos siguen fuera de alcance.
+/// El picker no tiene una tesela base; las consultas de vecindad sólo se
+/// resuelven al renderizar una parada ya colocada. Los callbacks de animación
+/// siguen usando el scope local del scheduler.
 #[must_use]
 pub fn apply_road_stop_availability_callback(
     def: &crate::road_stop_spec::RoadStopSpecDef,

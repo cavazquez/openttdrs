@@ -126,6 +126,14 @@ impl Action2RandomEntry {
 pub struct Action2EvalCtx {
     /// Valores de variables `NewGRF` (`variable` → raw).
     pub vars: HashMap<u8, u32>,
+    /// Valores de variables que dependen de su parámetro `60+x`.
+    ///
+    /// La mayoría de scopes sólo necesita un valor por variable y usa
+    /// [`Self::vars`]. Los scopes que consultan teselas vecinas, en cambio,
+    /// pueden evaluar la misma variable con varios offsets dentro del mismo
+    /// Action2 (por ejemplo `68[01]` y `68[0F]`). Esta tabla conserva esa
+    /// distinción sin alterar las variables especiales `7C`–`7F`.
+    pub parameterized_vars: HashMap<(u8, u8), u32>,
     /// Bits aleatorios del objeto (vehículo/estación/…).
     pub random_bits: u32,
     /// Bits de vehículos del consist indexados por offset (`0x84` nibble bajo).

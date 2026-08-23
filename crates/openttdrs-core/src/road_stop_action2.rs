@@ -2,12 +2,18 @@
 //!
 //! El resolver conserva los valores propios de una parada vial que ya están
 //! representados por el modelo: vista, tipo, terreno, road/tram, frame,
-//! random y triggers pendientes. Los scopes de teselas vecinas siguen fuera
-//! de alcance y por eso no se sintetizan valores para `66`–`6A`.
+//! random y triggers pendientes. Para el renderer que conoce el catálogo,
+//! también materializa las consultas parametrizadas a teselas vecinas
+//! (`66`, `67`, `68`, `6A`, `6B`) de `RoadStopScopeResolver`.
 
-use crate::map::{Map, Tile, TileCoord, tile_slope_and_z};
+use std::collections::BTreeSet;
+
+use crate::map::{
+    Map, TILE_PIXEL_HEIGHT, Tile, TileCoord, TileKind, tile_slope_and_z, water_class,
+};
 use crate::newgrf_sprites::Action2EvalCtx;
 use crate::newgrf_type_tables::{GrfTypeTranslationTables, reverse_road_type};
+use crate::road_stop_spec::{RoadStopSpecDef, road_stop_spec_def};
 use crate::road_type::{road_type_from_tile, tram_road_type_from_tile, vanilla_road_type_catalog};
 use crate::station::{Station, StopKind, station_at_tile};
 use crate::world_gen::Climate;
@@ -20,6 +26,11 @@ use crate::world_gen::Climate;
 /// traducción de road/tram usa los tipos vanilla disponibles en core; si el
 /// save contiene un tipo externo que no está en ese catálogo queda en
 /// `0xFF`, de forma observable y sin inventar una identidad local.
+///
+/// Esta variante conserva la API previa para callers que sólo tienen las
+/// tablas de tipo. Para resolver los offsets parametrizados de Action2 usar
+/// [`action2_eval_ctx_for_road_stop_tile_with_catalog`], que es la ruta del
+/// renderer.
 #[must_use]
 pub fn action2_eval_ctx_for_road_stop_tile(
     map: &Map,
@@ -28,6 +39,71 @@ pub fn action2_eval_ctx_for_road_stop_tile(
     view: u8,
     climate: Climate,
     type_tables: Option<&GrfTypeTranslationTables>,
+) -> Action2EvalCtx {
+    action2_eval_ctx_for_road_stop_tile_impl(
+        map,
+        stations,
+        RoadStopAction2Resolution {
+            road_stop_catalog: &[],
+            current_spec: None,
+            type_tables,
+        },
+        coord,
+        view,
+        climate,
+    )
+}
+
+/// Construye el contexto Action2 completo de una tesela `RoadStop`.
+///
+/// Además de las variables locales, inspecciona los Action2 del spec activo
+/// para llenar sólo los pares `(variable, parámetro)` de vecindad que el GRF
+/// realmente consulta. Así `68[01]` y `68[0F]` pueden coexistir en la misma
+/// evaluación sin convertir todos los 256 offsets posibles en trabajo por
+/// frame.
+#[must_use]
+pub fn action2_eval_ctx_for_road_stop_tile_with_catalog(
+    map: &Map,
+    stations: &[Station],
+    road_stop_catalog: &[RoadStopSpecDef],
+    coord: TileCoord,
+    view: u8,
+    climate: Climate,
+) -> Action2EvalCtx {
+    let current_spec = station_at_tile(map, stations, coord)
+        .and_then(|station| station.road_stop_spec_at(coord))
+        .and_then(|id| road_stop_spec_def(road_stop_catalog, id));
+    let type_tables = current_spec.and_then(|spec| spec.newgrf_type_tables.as_ref());
+    action2_eval_ctx_for_road_stop_tile_impl(
+        map,
+        stations,
+        RoadStopAction2Resolution {
+            road_stop_catalog,
+            current_spec,
+            type_tables,
+        },
+        coord,
+        view,
+        climate,
+    )
+}
+
+/// Datos opcionales que diferencian el contexto local legacy del renderer
+/// capaz de resolver `RoadStop` contra su catálogo activo.
+#[derive(Clone, Copy)]
+struct RoadStopAction2Resolution<'a> {
+    road_stop_catalog: &'a [RoadStopSpecDef],
+    current_spec: Option<&'a RoadStopSpecDef>,
+    type_tables: Option<&'a GrfTypeTranslationTables>,
+}
+
+fn action2_eval_ctx_for_road_stop_tile_impl(
+    map: &Map,
+    stations: &[Station],
+    resolution: RoadStopAction2Resolution<'_>,
+    coord: TileCoord,
+    view: u8,
+    climate: Climate,
 ) -> Action2EvalCtx {
     let mut ctx = Action2EvalCtx::default();
     let Some(station) = station_at_tile(map, stations, coord) else {
@@ -62,14 +138,18 @@ pub fn action2_eval_ctx_for_road_stop_tile(
     let vanilla_types = vanilla_road_type_catalog();
     let road_type = tile.map_or(u32::MAX, |tile| {
         u32::from(reverse_road_type(
-            type_tables,
+            resolution.type_tables,
             &vanilla_types,
             road_type_from_tile(&tile),
         ))
     });
     let tram_type = tile.map_or(u32::MAX, |tile| {
         tram_road_type_from_tile(&tile).map_or(u32::MAX, |tram| {
-            u32::from(reverse_road_type(type_tables, &vanilla_types, tram))
+            u32::from(reverse_road_type(
+                resolution.type_tables,
+                &vanilla_types,
+                tram,
+            ))
         })
     });
     ctx.vars.insert(0x43, road_type);
@@ -79,7 +159,275 @@ pub fn action2_eval_ctx_for_road_stop_tile(
     // Bit 4 de var 50 sólo se usa cuando no existe tesela (picker/callback de
     // disponibilidad); esta ruta siempre resuelve una instancia en el mapa.
     ctx.vars.insert(0x50, 0);
+    if let Some(spec) = resolution.current_spec {
+        RoadStopNeighbourScope {
+            map,
+            stations,
+            road_stop_catalog: resolution.road_stop_catalog,
+            station,
+            current_spec: spec,
+            coord,
+            climate,
+        }
+        .populate(&mut ctx);
+    }
     ctx
+}
+
+/// Datos invariantes de una evaluación Action2 de `RoadStop` con vecindad.
+///
+/// Agruparlos impide que las consultas `66`–`6B` mezclen mapa, catálogo o
+/// spec actual cuando el renderer materializa varios offsets en una pasada.
+struct RoadStopNeighbourScope<'a> {
+    map: &'a Map,
+    stations: &'a [Station],
+    road_stop_catalog: &'a [RoadStopSpecDef],
+    station: &'a Station,
+    current_spec: &'a RoadStopSpecDef,
+    coord: TileCoord,
+    climate: Climate,
+}
+
+impl RoadStopNeighbourScope<'_> {
+    fn populate(&self, ctx: &mut Action2EvalCtx) {
+        for (variable, parameter) in requested_nearby_road_stop_vars(self.current_spec) {
+            let nearby = nearby_tile(self.map, self.coord, parameter);
+            let value = match variable {
+                0x66 => {
+                    nearby_road_stop_animation_frame(self.map, self.stations, self.station, nearby)
+                }
+                0x67 => nearby_land_info(
+                    self.map,
+                    self.stations,
+                    nearby,
+                    self.climate,
+                    self.current_spec,
+                ),
+                0x68 => nearby_road_stop_info(
+                    self.map,
+                    self.stations,
+                    self.road_stop_catalog,
+                    self.station,
+                    self.current_spec,
+                    self.coord,
+                    nearby,
+                ),
+                0x6A => {
+                    nearby_road_stop_grfid(self.map, self.stations, self.road_stop_catalog, nearby)
+                }
+                0x6B => nearby_road_stop_local_id(
+                    self.map,
+                    self.stations,
+                    self.road_stop_catalog,
+                    self.current_spec,
+                    nearby,
+                ),
+                _ => continue,
+            };
+            ctx.parameterized_vars.insert((variable, parameter), value);
+        }
+    }
+}
+
+fn requested_nearby_road_stop_vars(spec: &RoadStopSpecDef) -> BTreeSet<(u8, u8)> {
+    let mut requested = BTreeSet::new();
+    let Some(runtime) = spec.newgrf_runtime.as_ref() else {
+        return requested;
+    };
+    for entry in runtime.action2_var.values() {
+        for term in std::iter::once(&entry.first).chain(entry.ops.iter().map(|op| &op.rhs)) {
+            if matches!(term.variable, 0x66 | 0x67 | 0x68 | 0x6A | 0x6B)
+                && let Some(parameter) = term.param
+            {
+                requested.insert((term.variable, parameter));
+            }
+        }
+    }
+    requested
+}
+
+fn signed_nibble(value: u8) -> i32 {
+    let value = i32::from(value & 0x0F);
+    if value >= 8 { value - 16 } else { value }
+}
+
+/// `GetNearbyTile` para el scope vial: offsets de nibbles firmados y wrap de mapa.
+fn nearby_tile(map: &Map, base: TileCoord, parameter: u8) -> TileCoord {
+    let (width, height) = map.dimensions();
+    let (Ok(width), Ok(height)) = (i32::try_from(width), i32::try_from(height)) else {
+        return base;
+    };
+    if width == 0 || height == 0 {
+        return base;
+    }
+    let dx = signed_nibble(parameter);
+    let dy = signed_nibble(parameter >> 4);
+    TileCoord::new(
+        base.x.saturating_add(dx).rem_euclid(width),
+        base.y.saturating_add(dy).rem_euclid(height),
+    )
+}
+
+fn is_road_stop_kind(kind: StopKind) -> bool {
+    matches!(
+        kind,
+        StopKind::BusStop | StopKind::TruckStop | StopKind::RoadWaypoint
+    )
+}
+
+fn road_stop_station_at<'a>(
+    map: &Map,
+    stations: &'a [Station],
+    coord: TileCoord,
+) -> Option<&'a Station> {
+    (map.get_kind(coord) == Some(TileKind::Station))
+        .then(|| station_at_tile(map, stations, coord))
+        .flatten()
+        .filter(|station| is_road_stop_kind(station.stop_kind))
+}
+
+fn same_station(left: &Station, right: &Station) -> bool {
+    left.pos == right.pos
+}
+
+fn nearby_road_stop_animation_frame(
+    map: &Map,
+    stations: &[Station],
+    source: &Station,
+    nearby: TileCoord,
+) -> u32 {
+    road_stop_station_at(map, stations, nearby).map_or(u32::MAX, |candidate| {
+        if same_station(source, candidate) {
+            u32::from(source.road_stop_animation_frame_at(nearby))
+        } else {
+            u32::MAX
+        }
+    })
+}
+
+fn nearby_land_info(
+    map: &Map,
+    stations: &[Station],
+    nearby: TileCoord,
+    climate: Climate,
+    current_spec: &RoadStopSpecDef,
+) -> u32 {
+    let Some(tile) = map.get(nearby) else {
+        return 0;
+    };
+    let (tileh, raw_z) = tile_slope_and_z(map, nearby).unwrap_or((0, 0));
+    let z = if current_spec.newgrf_grf_version >= 8 {
+        raw_z
+    } else {
+        raw_z.saturating_mul(u8::try_from(TILE_PIXEL_HEIGHT).unwrap_or(8))
+    };
+    let water_bits =
+        water_class(tile).map_or(0, |class| u32::from((class.as_u8() + 1) & 0x03) << 5);
+    let terrain = terrain_type_for_road_stop_tile(map, nearby, climate, Some(tile));
+    let tile_type = u32::from(tile_kind_as_ottd(map, stations, nearby, tile));
+    let terrain_bits = water_bits | (terrain << 2) | (u32::from(tile.kind == TileKind::Water) << 1);
+    tile_type << 24 | u32::from(z) << 16 | terrain_bits << 8 | u32::from(tileh)
+}
+
+fn tile_kind_as_ottd(map: &Map, stations: &[Station], coord: TileCoord, tile: Tile) -> u8 {
+    if tile.kind == TileKind::Station
+        && road_stop_station_at(map, stations, coord)
+            .is_some_and(|station| station.stop_kind == StopKind::RoadWaypoint)
+    {
+        return 2;
+    }
+    match tile.kind {
+        TileKind::Rail | TileKind::RailDepot | TileKind::RailTunnel | TileKind::RailBridge => 1,
+        TileKind::Road | TileKind::RoadDepot | TileKind::RoadTunnel | TileKind::RoadBridge => 2,
+        TileKind::House => 3,
+        TileKind::Forest => 4,
+        TileKind::Station | TileKind::Airport => 5,
+        TileKind::Water | TileKind::ShipDepot => 6,
+        TileKind::Void => 7,
+        TileKind::Industry => 8,
+        TileKind::Grass | TileKind::CoalField | TileKind::Unknown(_) => 0,
+    }
+}
+
+fn custom_road_stop_spec_at<'a>(
+    map: &Map,
+    stations: &[Station],
+    road_stop_catalog: &'a [RoadStopSpecDef],
+    coord: TileCoord,
+) -> Option<&'a RoadStopSpecDef> {
+    let station = road_stop_station_at(map, stations, coord)?;
+    let id = station.road_stop_spec_at(coord)?;
+    road_stop_spec_def(road_stop_catalog, id).filter(|spec| spec.from_newgrf)
+}
+
+fn nearby_road_stop_info(
+    map: &Map,
+    stations: &[Station],
+    road_stop_catalog: &[RoadStopSpecDef],
+    source: &Station,
+    current_spec: &RoadStopSpecDef,
+    source_coord: TileCoord,
+    nearby: TileCoord,
+) -> u32 {
+    let Some(candidate) = road_stop_station_at(map, stations, nearby) else {
+        return u32::MAX;
+    };
+    let Some(nearby_tile) = map.get(nearby) else {
+        return u32::MAX;
+    };
+    let source_gfx = map.get(source_coord).map_or(0, |tile| tile.m5);
+    let mut result = u32::from(nearby_tile.m5) << 12;
+    if source_gfx != nearby_tile.m5 {
+        result |= 1 << 11;
+    }
+    if same_station(source, candidate) {
+        result |= 1 << 10;
+    }
+    result |= match candidate.stop_kind {
+        StopKind::TruckStop => 1 << 16,
+        StopKind::RoadWaypoint => 2 << 16,
+        _ => 0,
+    };
+    if candidate.stop_kind == source.stop_kind {
+        result |= 1 << 20;
+    }
+    if let Some(spec) = custom_road_stop_spec_at(map, stations, road_stop_catalog, nearby) {
+        result |= 1
+            << if spec.grfid == current_spec.grfid {
+                8
+            } else {
+                9
+            };
+        result |= u32::from(spec.newgrf_local_id);
+    }
+    result
+}
+
+fn nearby_road_stop_grfid(
+    map: &Map,
+    stations: &[Station],
+    road_stop_catalog: &[RoadStopSpecDef],
+    nearby: TileCoord,
+) -> u32 {
+    if road_stop_station_at(map, stations, nearby).is_none() {
+        return u32::MAX;
+    }
+    custom_road_stop_spec_at(map, stations, road_stop_catalog, nearby).map_or(0, |spec| spec.grfid)
+}
+
+fn nearby_road_stop_local_id(
+    map: &Map,
+    stations: &[Station],
+    road_stop_catalog: &[RoadStopSpecDef],
+    current_spec: &RoadStopSpecDef,
+    nearby: TileCoord,
+) -> u32 {
+    if road_stop_station_at(map, stations, nearby).is_none() {
+        return u32::MAX;
+    }
+    custom_road_stop_spec_at(map, stations, road_stop_catalog, nearby)
+        .filter(|spec| spec.grfid == current_spec.grfid)
+        .map_or(0xFFFE, |spec| u32::from(spec.newgrf_local_id))
 }
 
 fn terrain_type_for_road_stop_tile(
@@ -116,6 +464,97 @@ mod tests {
     use super::*;
     use crate::StationRandomTrigger;
     use crate::map::{Tile, TileKind};
+    use crate::newgrf_sprites::{
+        Action2VarAdjust, Action2VarEntry, Action2VarTerm, TrainSpriteGraphics,
+    };
+    use crate::road_stop_spec::{ROADSTOP_DRAW_MODE_DEFAULT, ROADSTOP_TYPE_ALL};
+
+    fn road_stop_tile(m5: u8, m6: u8) -> Tile {
+        Tile {
+            height: 2,
+            kind: TileKind::Station,
+            mapt: 0x50,
+            m5,
+            m1: 0,
+            m6,
+            m8: 0,
+            m3: 0,
+            m2: 0,
+            m2_hi: 0,
+            m7: 0,
+            m3hi: 0,
+        }
+    }
+
+    fn road_stop_spec(
+        id: u16,
+        grfid: u32,
+        local_id: u8,
+        runtime: Option<TrainSpriteGraphics>,
+    ) -> RoadStopSpecDef {
+        RoadStopSpecDef {
+            id,
+            class: 0,
+            label: format!("Road stop {id}"),
+            short_label: format!("RS{id}"),
+            stop_type: ROADSTOP_TYPE_ALL,
+            from_newgrf: true,
+            grfid,
+            newgrf_local_id: local_id,
+            newgrf_grf_version: 8,
+            draw_mode: ROADSTOP_DRAW_MODE_DEFAULT,
+            random_cargo_triggers: 0,
+            flags: 0,
+            callback_mask: 0,
+            animation_status: 0xFF,
+            animation_frames: 0,
+            animation_speed: 2,
+            animation_triggers: 0,
+            newgrf_views: Vec::new(),
+            newgrf_runtime: runtime.map(Box::new),
+            newgrf_type_tables: None,
+            associated_badges: Vec::new(),
+        }
+    }
+
+    fn runtime_referencing_nearby_road_stop_vars() -> TrainSpriteGraphics {
+        let requested = [
+            (0x66, 0x00),
+            (0x66, 0x01),
+            (0x66, 0x02),
+            (0x66, 0x03),
+            (0x67, 0x01),
+            (0x68, 0x00),
+            (0x68, 0x01),
+            (0x68, 0x02),
+            (0x68, 0x03),
+            (0x6A, 0x00),
+            (0x6A, 0x01),
+            (0x6A, 0x02),
+            (0x6A, 0x03),
+            (0x6B, 0x00),
+            (0x6B, 0x01),
+            (0x6B, 0x02),
+            (0x6B, 0x03),
+        ];
+        let mut gfx = TrainSpriteGraphics::default();
+        for (index, (variable, parameter)) in requested.into_iter().enumerate() {
+            gfx.action2_var.insert(
+                u8::try_from(index).unwrap(),
+                Action2VarEntry {
+                    first: Action2VarTerm {
+                        variable,
+                        param: Some(parameter),
+                        adjust: Action2VarAdjust::default(),
+                    },
+                    ops: Vec::new(),
+                    ranges: Vec::new(),
+                    default: 0,
+                },
+            );
+        }
+        gfx
+    }
 
     #[test]
     fn road_stop_ctx_exposes_runtime_random_view_type_and_frame() {
@@ -171,5 +610,114 @@ mod tests {
         assert_eq!(ctx.vars.get(&0x44), Some(&u32::MAX));
         assert_eq!(ctx.vars.get(&0x49), Some(&7));
         assert_eq!(ctx.persistent_registers.get(&4), Some(&99));
+    }
+
+    #[test]
+    fn road_stop_ctx_resolves_requested_nearby_scope_values() {
+        let mut map = Map::new_flat(4, 4, 2);
+        let source = TileCoord::new(1, 1);
+        let same_station_tile = TileCoord::new(2, 1);
+        let other_station_tile = TileCoord::new(3, 1);
+        map.set_tile(source, road_stop_tile(4, 3 << 3)).unwrap();
+        map.set_tile(same_station_tile, road_stop_tile(5, 3 << 3))
+            .unwrap();
+        map.set_tile(other_station_tile, road_stop_tile(6, 2 << 3))
+            .unwrap();
+
+        let mut current_station = Station::new_with_kind(source, StopKind::BusStop);
+        current_station.joined_tiles.push(same_station_tile);
+        {
+            let state = current_station.ensure_road_stop_tile_state(source);
+            state.spec = Some(1);
+            state.animation_frame = 4;
+        }
+        {
+            let state = current_station.ensure_road_stop_tile_state(same_station_tile);
+            state.spec = Some(1);
+            state.animation_frame = 9;
+        }
+        current_station.sync_legacy_road_stop_anchor();
+
+        let mut neighbor_station = Station::new_with_kind(other_station_tile, StopKind::TruckStop);
+        {
+            let state = neighbor_station.ensure_road_stop_tile_state(other_station_tile);
+            state.spec = Some(2);
+            state.animation_frame = 12;
+        }
+        neighbor_station.sync_legacy_road_stop_anchor();
+
+        let catalog = vec![
+            road_stop_spec(
+                1,
+                0x1111_1111,
+                0x11,
+                Some(runtime_referencing_nearby_road_stop_vars()),
+            ),
+            road_stop_spec(2, 0x2222_2222, 0x22, None),
+        ];
+        let stations = vec![current_station, neighbor_station];
+        let ctx = action2_eval_ctx_for_road_stop_tile_with_catalog(
+            &map,
+            &stations,
+            &catalog,
+            source,
+            4,
+            Climate::Temperate,
+        );
+
+        assert_eq!(ctx.parameterized_vars.get(&(0x66, 0x00)), Some(&4));
+        assert_eq!(ctx.parameterized_vars.get(&(0x66, 0x01)), Some(&9));
+        assert_eq!(ctx.parameterized_vars.get(&(0x66, 0x02)), Some(&u32::MAX));
+        assert_eq!(ctx.parameterized_vars.get(&(0x66, 0x03)), Some(&u32::MAX));
+        // `05 02 20 00`: Station, z=2 (GRFv8), water-class sea+1, flat.
+        assert_eq!(
+            ctx.parameterized_vars.get(&(0x67, 0x01)),
+            Some(&0x0502_2000)
+        );
+        // gfx=5, orientación distinta, misma estación y spec del mismo GRF.
+        assert_eq!(
+            ctx.parameterized_vars.get(&(0x68, 0x01)),
+            Some(&0x0010_5D11)
+        );
+        assert_eq!(
+            ctx.parameterized_vars.get(&(0x68, 0x00)),
+            Some(&0x0010_4511)
+        );
+        // gfx=6, orientación distinta, truck, custom de otro GRF, local=0x22.
+        assert_eq!(
+            ctx.parameterized_vars.get(&(0x68, 0x02)),
+            Some(&0x0001_6A22)
+        );
+        assert_eq!(ctx.parameterized_vars.get(&(0x68, 0x03)), Some(&u32::MAX));
+        assert_eq!(
+            ctx.parameterized_vars.get(&(0x6A, 0x00)),
+            Some(&0x1111_1111)
+        );
+        assert_eq!(
+            ctx.parameterized_vars.get(&(0x6A, 0x01)),
+            Some(&0x1111_1111)
+        );
+        assert_eq!(
+            ctx.parameterized_vars.get(&(0x6A, 0x02)),
+            Some(&0x2222_2222)
+        );
+        assert_eq!(ctx.parameterized_vars.get(&(0x6A, 0x03)), Some(&u32::MAX));
+        assert_eq!(ctx.parameterized_vars.get(&(0x6B, 0x00)), Some(&0x11));
+        assert_eq!(ctx.parameterized_vars.get(&(0x6B, 0x01)), Some(&0x11));
+        assert_eq!(ctx.parameterized_vars.get(&(0x6B, 0x02)), Some(&0xFFFE));
+        assert_eq!(ctx.parameterized_vars.get(&(0x6B, 0x03)), Some(&u32::MAX));
+    }
+
+    #[test]
+    fn nearby_tile_uses_signed_offsets_and_map_wrap() {
+        let map = Map::new_flat(4, 4, 0);
+        assert_eq!(
+            nearby_tile(&map, TileCoord::new(0, 0), 0x0F),
+            TileCoord::new(3, 0)
+        );
+        assert_eq!(
+            nearby_tile(&map, TileCoord::new(0, 0), 0xF0),
+            TileCoord::new(0, 3)
+        );
     }
 }

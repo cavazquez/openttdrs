@@ -905,6 +905,40 @@ mod tests {
     }
 
     #[test]
+    fn resolve_parameterized_scope_value_before_generic_variable() {
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.action2_var.insert(
+            3,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x68,
+                    param: Some(0x01),
+                    adjust: Action2VarAdjust {
+                        shift: 0,
+                        and_mask: 0xFF,
+                        add_val: None,
+                        divide_val: None,
+                        modulo_val: None,
+                    },
+                },
+                ops: Vec::new(),
+                ranges: vec![(1, 9, 9)],
+                default: 2,
+            },
+        );
+        gfx.action2_to_action1.insert(1, 0);
+        gfx.action2_to_action1.insert(2, 1);
+
+        let mut ctx = Action2EvalCtx::default();
+        ctx.vars.insert(0x68, 3);
+        ctx.parameterized_vars.insert((0x68, 0x01), 9);
+        assert_eq!(gfx.resolve_action1_set_ctx(3, &mut ctx), 0);
+
+        ctx.parameterized_vars.clear();
+        assert_eq!(gfx.resolve_action1_set_ctx(3, &mut ctx), 1);
+    }
+
+    #[test]
     fn decode_v2_chunked_rgba_roundtrip() {
         let rgba = [10u8, 20, 30, 255, 40, 50, 60, 128, 0, 0, 0, 0, 1, 2, 3, 200];
         let entry = build_sprite_section_rgba_chunked_entry(11, 0, 2, 2, -1, -2, &rgba).unwrap();

@@ -27,6 +27,19 @@ pub(crate) fn runtime_fingerprint(
                 .wrapping_add(u32::from(var) << 16);
         }
     }
+    // Las variables `60+x` pueden consultar varios offsets del mismo scope
+    // dentro de un Action2. Ordenar la tabla evita que el orden aleatorio del
+    // `HashMap` haga inestable la clave de caché entre frames.
+    let mut parameterized: Vec<_> = ctx.parameterized_vars.iter().collect();
+    parameterized.sort_unstable_by_key(|entry| *entry.0);
+    for (key, value) in parameterized {
+        let (variable, parameter) = *key;
+        h = h
+            .wrapping_mul(31)
+            .wrapping_add(*value)
+            .wrapping_add(u32::from(variable) << 16)
+            .wrapping_add(u32::from(parameter) << 24);
+    }
     for (i, &p) in ctx.grf_params.iter().enumerate().take(16) {
         h = h
             .wrapping_mul(31)
@@ -66,5 +79,25 @@ mod tests {
         ctx.consist_random_bits = HashMap::from([(0u8, 99u32)]);
         let with = runtime_fingerprint(&ctx, vars::TRAIN, true);
         assert_ne!(without, with);
+    }
+
+    #[test]
+    fn parameterized_scope_changes_fingerprint_deterministically() {
+        let mut first = Action2EvalCtx::default();
+        first.parameterized_vars.insert((0x68, 0x01), 11);
+        first.parameterized_vars.insert((0x67, 0x0F), 22);
+        let mut second = Action2EvalCtx::default();
+        second.parameterized_vars.insert((0x67, 0x0F), 22);
+        second.parameterized_vars.insert((0x68, 0x01), 11);
+        assert_eq!(
+            runtime_fingerprint(&first, vars::ROAD_STOP, false),
+            runtime_fingerprint(&second, vars::ROAD_STOP, false)
+        );
+
+        second.parameterized_vars.insert((0x68, 0x01), 12);
+        assert_ne!(
+            runtime_fingerprint(&first, vars::ROAD_STOP, false),
+            runtime_fingerprint(&second, vars::ROAD_STOP, false)
+        );
     }
 }

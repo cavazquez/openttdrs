@@ -179,6 +179,49 @@ impl StationAnimationTrigger {
     }
 }
 
+/// Disparadores de re-randomización Action2 de estación / `RoadStop`.
+///
+/// No comparten los ordinales de [`StationAnimationTrigger`]: por ejemplo,
+/// `VehicleArrives` es `2` aquí y `3` en CB140. Separarlos evita usar por
+/// error la máscara de animación al evaluar un grupo Action2 random.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum StationRandomTrigger {
+    NewCargo = 0,
+    CargoTaken = 1,
+    VehicleArrives = 2,
+    VehicleDeparts = 3,
+    VehicleLoads = 4,
+    PathReservation = 5,
+}
+
+impl StationRandomTrigger {
+    /// Bit que recibe `ResolverObject::SetWaitingRandomTriggers`.
+    #[must_use]
+    pub const fn mask(self) -> u8 {
+        1_u8 << (self as u8)
+    }
+
+    /// Evento Action2 equivalente de un trigger de animación, si existe.
+    ///
+    /// `Built`, `AcceptanceTick` y `TileLoop` son contratos de CB140, no
+    /// eventos de randomización de `RoadStop` en `OpenTTD`.
+    #[must_use]
+    pub const fn from_animation_trigger(trigger: StationAnimationTrigger) -> Option<Self> {
+        match trigger {
+            StationAnimationTrigger::NewCargo => Some(Self::NewCargo),
+            StationAnimationTrigger::CargoTaken => Some(Self::CargoTaken),
+            StationAnimationTrigger::VehicleArrives => Some(Self::VehicleArrives),
+            StationAnimationTrigger::VehicleDeparts => Some(Self::VehicleDeparts),
+            StationAnimationTrigger::VehicleLoads => Some(Self::VehicleLoads),
+            StationAnimationTrigger::PathReservation => Some(Self::PathReservation),
+            StationAnimationTrigger::Built
+            | StationAnimationTrigger::AcceptanceTick
+            | StationAnimationTrigger::TileLoop => None,
+        }
+    }
+}
+
 /// Máscaras Action0 `0x18`, conservadas como API para consumidores existentes.
 pub const STATION_ANIMATION_TRIGGER_BUILT: u16 = StationAnimationTrigger::Built.mask();
 pub const STATION_ANIMATION_TRIGGER_NEW_CARGO: u16 = StationAnimationTrigger::NewCargo.mask();

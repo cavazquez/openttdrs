@@ -671,7 +671,9 @@ mod tests {
             from_newgrf: true,
             grfid: 0x414E_494D,
             newgrf_local_id: 0,
+            newgrf_grf_version: 0,
             draw_mode: ROADSTOP_DRAW_MODE_DEFAULT,
+            random_cargo_triggers: 0,
             flags: 0,
             callback_mask: ROADSTOP_CALLBACK_MASK_ANIMATION_NEXT_FRAME
                 | ROADSTOP_CALLBACK_MASK_ANIMATION_SPEED,

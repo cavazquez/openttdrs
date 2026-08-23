@@ -481,6 +481,8 @@ pub struct ParsedRoadStopMeta {
     pub stop_type: u8,
     /// Action0 `0x0C` draw modes.
     pub draw_mode: u8,
+    /// Action0 `0x0D`: máscara de cargos locales para randomización.
+    pub random_cargo_triggers: u32,
     /// Action0 `0x12` flags DWORD.
     pub flags: u32,
     /// Action0 `0x11` (`RoadStopCallbackMask`).
@@ -504,6 +506,7 @@ struct RoadStopMetaParse {
     label: String,
     stop_type: u8,
     draw_mode: u8,
+    random_cargo_triggers: u32,
     flags: u32,
     callback_mask: u8,
     animation_frames: u8,
@@ -521,6 +524,7 @@ impl Default for RoadStopMetaParse {
             label: String::new(),
             stop_type: 0,
             draw_mode: crate::road_stop_spec::ROADSTOP_DRAW_MODE_DEFAULT,
+            random_cargo_triggers: 0,
             flags: 0,
             callback_mask: 0,
             animation_frames: 0,
@@ -556,6 +560,7 @@ impl RoadStopMetaParse {
             label: self.label,
             stop_type: self.stop_type,
             draw_mode: self.draw_mode,
+            random_cargo_triggers: self.random_cargo_triggers,
             flags: self.flags,
             callback_mask: self.callback_mask,
             animation_frames: self.animation_frames,
@@ -2151,6 +2156,18 @@ pub fn parse_action0_roadstop_meta(payload: &[u8]) -> Option<ParsedRoadStopMeta>
                 meta.draw_mode = payload[i];
                 i += 1;
             }
+            0x0D => {
+                if i + 4 > payload.len() {
+                    break;
+                }
+                meta.random_cargo_triggers = u32::from_le_bytes([
+                    payload[i],
+                    payload[i + 1],
+                    payload[i + 2],
+                    payload[i + 3],
+                ]);
+                i += 4;
+            }
             PROP_ROADSTOP_FLAGS => {
                 if i + 4 > payload.len() {
                     break;
@@ -2215,12 +2232,6 @@ pub fn parse_action0_roadstop_meta(payload: &[u8]) -> Option<ParsedRoadStopMeta>
                     break;
                 }
                 i += 2;
-            }
-            0x0D => {
-                if i + 4 > payload.len() {
-                    break;
-                }
-                i += 4;
             }
             _ => break,
         }

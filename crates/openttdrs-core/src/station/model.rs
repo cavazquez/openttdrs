@@ -218,9 +218,23 @@ pub struct Station {
     /// La tesela está registrada en el scheduler de animación `NewGRF`.
     #[serde(default)]
     pub road_stop_animation_active: bool,
-    /// Bits aleatorios `NewGRF` de la estación (var `5F` / random Action2).
+    /// Bits aleatorios de estación `NewGRF` (bits bajos de `var 5F` / Action2).
+    ///
+    /// `OpenTTD` conserva 16 bits para la estación; los saves históricos de
+    /// openttdrs guardaban sólo un byte, que serde amplía sin pérdida.
     #[serde(default)]
-    pub newgrf_random_bits: u8,
+    pub newgrf_random_bits: u16,
+    /// Bits aleatorios propios de la tesela `RoadStop` (bits 16..23 de
+    /// `RoadStopScopeResolver::GetRandomBits`). Cada entidad actual modela
+    /// una parada vial; las paradas compuestas siguen siendo una limitación de
+    /// representación separada.
+    #[serde(default)]
+    pub road_stop_newgrf_random_bits: u8,
+    /// Máscara de eventos pendientes para grupos Action2 random (`var 5F`,
+    /// byte bajo). Se limpia sólo de los triggers consumidos, permitiendo
+    /// grupos `all` que esperan más de un evento.
+    #[serde(default)]
+    pub newgrf_waiting_random_triggers: u8,
     /// Registros persistentes `NewGRF` (`7C` / `\2psto`); writeback tras CB/Action2 (#266).
     #[serde(default)]
     pub newgrf_persistent_regs: std::collections::HashMap<u8, u32>,
@@ -230,10 +244,10 @@ const fn default_station_rating() -> u8 {
     super::goods_entry::INITIAL_STATION_RATING
 }
 
-fn seed_station_newgrf_random_bits(pos: TileCoord) -> u8 {
+fn seed_station_newgrf_random_bits(pos: TileCoord) -> u16 {
     let x = pos.x.cast_unsigned();
     let y = pos.y.cast_unsigned();
-    ((x.wrapping_mul(0x9E37_79B9) ^ y.wrapping_mul(0x85EB_CA6B)) >> 24) as u8
+    ((x.wrapping_mul(0x9E37_79B9) ^ y.wrapping_mul(0x85EB_CA6B)) >> 16) as u16
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
@@ -262,6 +276,7 @@ impl Station {
 
     #[must_use]
     pub fn new_with_kind(pos: TileCoord, stop_kind: StopKind) -> Self {
+        let newgrf_random_bits = seed_station_newgrf_random_bits(pos);
         Self {
             pos,
             ottd_station_id: None,
@@ -286,9 +301,17 @@ impl Station {
             road_stop_spec: None,
             road_stop_animation_frame: 0,
             road_stop_animation_active: false,
-            newgrf_random_bits: seed_station_newgrf_random_bits(pos),
+            newgrf_random_bits,
+            road_stop_newgrf_random_bits: newgrf_random_bits.to_le_bytes()[0],
+            newgrf_waiting_random_triggers: 0,
             newgrf_persistent_regs: std::collections::HashMap::new(),
         }
+    }
+
+    /// Bits random que expone el scope de una parada vial `NewGRF`.
+    #[must_use]
+    pub const fn road_stop_action2_random_bits(&self) -> u32 {
+        (self.newgrf_random_bits as u32) | ((self.road_stop_newgrf_random_bits as u32) << 16)
     }
 
     pub(super) fn company_pickup_slot_mut(

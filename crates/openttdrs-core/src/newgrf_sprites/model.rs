@@ -74,9 +74,51 @@ pub struct Action2RandomEntry {
     pub typ: u8,
     /// Solo `0x84`: conteo desde vehículo de control (nibble bajo = offset).
     pub consist_count: u8,
+    /// Bits 0..6: eventos; bit 7: comparar todos los eventos en vez de
+    /// cualquiera (`Action2` raw `triggers`). Se conserva crudo para no perder
+    /// la semántica `all` durante parse/reaplicación.
     pub triggers: u8,
     pub randbit: u8,
     pub sets: Vec<u16>,
+}
+
+impl Action2RandomEntry {
+    /// Máscara de eventos Action2, sin el flag `all` del bit 7.
+    #[must_use]
+    pub const fn trigger_mask(&self) -> u8 {
+        self.triggers & 0x7F
+    }
+
+    /// `true` si el bit 7 pide que todos los triggers del grupo estén activos.
+    #[must_use]
+    pub const fn requires_all_triggers(&self) -> bool {
+        self.triggers & 0x80 != 0
+    }
+
+    /// Eventos consumidos cuando este grupo debe re-randomizarse.
+    ///
+    /// Devuelve `None` si el conjunto `waiting` no satisface la condición.
+    /// En modo `all`, una máscara vacía es una condición válida, igual que
+    /// `VarSpriteGroup::ResolveRerandomisation` de `OpenTTD`.
+    #[must_use]
+    pub const fn matched_rerandomisation_triggers(&self, waiting: u8) -> Option<u8> {
+        let triggers = self.trigger_mask();
+        let matched = triggers & waiting;
+        if (self.requires_all_triggers() && matched == triggers)
+            || (!self.requires_all_triggers() && matched != 0)
+        {
+            Some(matched)
+        } else {
+            None
+        }
+    }
+
+    /// Bits que deben reseedearse si el grupo cambia de variante.
+    #[must_use]
+    pub fn rerandomisation_mask(&self) -> u32 {
+        let width = u32::try_from(self.sets.len().saturating_sub(1)).unwrap_or(u32::MAX);
+        width.checked_shl(u32::from(self.randbit)).unwrap_or(0)
+    }
 }
 
 /// Contexto para evaluar variational / random (preview o runtime).
@@ -167,6 +209,73 @@ impl TrainSpriteGraphics {
             .get(&u8::try_from(id).unwrap_or(u8::MAX))
             .copied()
             .unwrap_or(id)
+    }
+
+    /// Recorre el camino Action3/Action2 activo y acumula los bits que deben
+    /// re-randomizarse para `waiting_triggers`.
+    ///
+    /// Es la contraparte compacta de `ResolverObject::ResolveRerandomisation`:
+    /// evalúa ramas variationales con el contexto presente, respeta random
+    /// `any`/`all` y sólo visita la rama actualmente elegida por los bits
+    /// anteriores al reseed. El resultado es `(máscara_de_bits, triggers_usados)`.
+    #[must_use]
+    pub fn rerandomisation_for_local_id(
+        &self,
+        local_id: u8,
+        ctx: &mut Action2EvalCtx,
+        waiting_triggers: u8,
+    ) -> (u32, u8) {
+        let start = self
+            .assigns
+            .iter()
+            .find(|assign| assign.local_id == local_id)
+            .map(|assign| assign.set_id)
+            .or_else(|| (!self.sets.is_empty()).then_some(0));
+        start.map_or((0, 0), |set_id| {
+            self.rerandomisation_for_action2(set_id, ctx, waiting_triggers, 0)
+        })
+    }
+
+    fn rerandomisation_for_action2(
+        &self,
+        set_id: u16,
+        ctx: &mut Action2EvalCtx,
+        waiting_triggers: u8,
+        depth: u8,
+    ) -> (u32, u8) {
+        if depth >= 8 {
+            return (0, 0);
+        }
+        let a2 = u8::try_from(set_id).unwrap_or(u8::MAX);
+        if let Some(random) = self.action2_random.get(&a2) {
+            let (mut reseed, mut used) = random
+                .matched_rerandomisation_triggers(waiting_triggers)
+                .map_or((0, 0), |matched| (random.rerandomisation_mask(), matched));
+            let next = eval_action2_random(random, ctx);
+            if next & 0x8000 == 0 {
+                let (child_reseed, child_used) = self.rerandomisation_for_action2(
+                    next,
+                    ctx,
+                    waiting_triggers,
+                    depth.saturating_add(1),
+                );
+                reseed |= child_reseed;
+                used |= child_used;
+            }
+            return (reseed, used);
+        }
+        if let Some(var) = self.action2_var.get(&a2).cloned() {
+            let next = eval_action2_var(self, &var, ctx, depth);
+            if next & 0x8000 == 0 {
+                return self.rerandomisation_for_action2(
+                    next,
+                    ctx,
+                    waiting_triggers,
+                    depth.saturating_add(1),
+                );
+            }
+        }
+        (0, 0)
     }
 
     /// Todas las vistas del set asignado al id local (ctx por defecto).

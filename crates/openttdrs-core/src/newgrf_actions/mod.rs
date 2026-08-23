@@ -2305,7 +2305,7 @@ mod tests {
 
     #[test]
     fn parse_roadstop_meta_and_apply_from_bytes() {
-        let a0 = build_action0_roadstop_payload_ex(
+        let mut a0 = build_action0_roadstop_payload_ex(
             b"BUSC",
             0,
             "Parada bus",
@@ -2313,6 +2313,11 @@ mod tests {
             0x03,
             crate::ROADSTOP_FLAG_DRIVE_THROUGH_ONLY | crate::ROADSTOP_FLAG_ROAD_ONLY,
         );
+        // Action0 0x0D: PASS (0) y GOOD (5) son los cargos que habilitan la
+        // re-randomización del RoadStop.
+        a0[2] = a0[2].saturating_add(1);
+        a0.push(0x0D);
+        a0.extend_from_slice(&((1_u32 << 0) | (1_u32 << 5)).to_le_bytes());
         let meta = parse_action0_roadstop_meta(&a0).unwrap();
         assert_eq!(meta.class_short_label, "BUSC");
         assert_eq!(meta.stop_type, 0);
@@ -2324,14 +2329,15 @@ mod tests {
             crate::ROADSTOP_FLAG_DRIVE_THROUGH_ONLY | crate::ROADSTOP_FLAG_ROAD_ONLY
         );
         assert_eq!(meta.callback_mask, 0);
+        assert_eq!(meta.random_cargo_triggers, (1 << 0) | (1 << 5));
         assert!(meta.badge_labels.is_empty());
 
         let bytes = build_grf_v2_with_action0_and_action8(&a0, [b'R', b'S', 0, 1], "rstop", "");
         let dir = tempfile_dir_with("rstop.grf", &bytes);
         let mut state = GameState::new(4, 4);
-        state
-            .newgrf_stack
-            .push(crate::NewGrfEntry::new("rstop.grf", 20));
+        let mut entry = crate::NewGrfEntry::new("rstop.grf", 20);
+        entry.grf_version = 8;
+        state.newgrf_stack.push(entry);
         apply_newgrf_roadstops(&mut state, &[&dir]);
         assert_eq!(state.road_stop_spec_catalog.len(), 1);
         assert!(
@@ -2346,7 +2352,17 @@ mod tests {
         assert_eq!(def.stop_type, 0);
         assert_eq!(def.grfid, 20);
         assert_eq!(def.newgrf_local_id, 0);
+        assert_eq!(def.newgrf_grf_version, 8);
         assert_eq!(def.draw_mode, 0x03);
+        assert!(
+            def.cargo_triggers_randomisation(
+                crate::CargoType::Passengers,
+                crate::Climate::Temperate
+            )
+        );
+        assert!(
+            def.cargo_triggers_randomisation(crate::CargoType::Goods, crate::Climate::Temperate)
+        );
         assert!(def.drive_through_only());
         assert!(def.road_only());
         assert_eq!(def.callback_mask, 0);

@@ -105,9 +105,18 @@ pub struct RoadStopSpecDef {
     /// Id local Action0/Action3 en el GRF (identidad estable multi-GRF / save).
     #[serde(default)]
     pub newgrf_local_id: u8,
+    /// Versión de formato de Action8 del GRF dueño. Determina cómo se
+    /// traduce la máscara de cargos Action0 `0x0D` sin CTT explícita.
+    #[serde(default)]
+    pub newgrf_grf_version: u8,
     /// Action0 `0x0C` draw modes (`RoadStopDrawModes`).
     #[serde(default = "default_road_stop_draw_mode")]
     pub draw_mode: u8,
+    /// Action0 `0x0D`: máscara de slots de cargo locales que disparan la
+    /// randomización Action2. Se traduce al consultar, respetando CTT /
+    /// versión del GRF como `TranslateRefitMask` de `OpenTTD`.
+    #[serde(default)]
+    pub random_cargo_triggers: u32,
     /// Action0 `0x12` flags DWORD (`RoadStopSpecFlags`).
     #[serde(default)]
     pub flags: u32,
@@ -166,10 +175,27 @@ impl RoadStopSpecDef {
     pub fn newgrf_cargo_local_id(&self, cargo: crate::CargoType, climate: crate::Climate) -> u8 {
         crate::newgrf_type_tables::local_cargo_id(
             self.newgrf_type_tables.as_ref(),
-            0,
+            self.newgrf_grf_version,
             cargo,
             climate,
         )
+    }
+
+    /// `true` si este cargo dispara la re-randomización Action2 de la parada.
+    #[must_use]
+    pub fn cargo_triggers_randomisation(
+        &self,
+        cargo: crate::CargoType,
+        climate: crate::Climate,
+    ) -> bool {
+        let local_id = self.newgrf_cargo_local_id(cargo, climate);
+        local_id < 32 && self.random_cargo_triggers & (1_u32 << local_id) != 0
+    }
+
+    /// `true` si el spec declaró al menos un cargo que habilita randomización.
+    #[must_use]
+    pub const fn has_random_cargo_triggers(&self) -> bool {
+        self.random_cargo_triggers != 0
     }
 
     /// Vista Action1/3 para índice de gfx (`RSV_*`).
@@ -365,7 +391,9 @@ mod tests {
             from_newgrf: true,
             grfid: 1,
             newgrf_local_id: 0,
+            newgrf_grf_version: 0,
             draw_mode: ROADSTOP_DRAW_MODE_DEFAULT,
+            random_cargo_triggers: 0,
             flags,
             callback_mask: 0,
             animation_status: 0xFF,
@@ -404,7 +432,9 @@ mod tests {
                 from_newgrf: true,
                 grfid: 0,
                 newgrf_local_id: 0,
+                newgrf_grf_version: 0,
                 draw_mode: ROADSTOP_DRAW_MODE_DEFAULT,
+                random_cargo_triggers: 0,
                 flags: 0,
                 callback_mask: 0,
                 animation_status: 0xFF,
@@ -425,7 +455,9 @@ mod tests {
                 from_newgrf: true,
                 grfid: 0,
                 newgrf_local_id: 0,
+                newgrf_grf_version: 0,
                 draw_mode: ROADSTOP_DRAW_MODE_DEFAULT,
+                random_cargo_triggers: 0,
                 flags: 0,
                 callback_mask: 0,
                 animation_status: 0xFF,
@@ -458,6 +490,35 @@ mod tests {
         let def = sample_spec(ROADSTOP_TYPE_ALL, 0);
         assert!(def.matches_stop_kind(StopKind::BusStop));
         assert!(def.matches_stop_kind(StopKind::TruckStop));
+    }
+
+    #[test]
+    fn random_cargo_trigger_uses_ctt_and_grf_version() {
+        let mut def = sample_spec(ROADSTOP_TYPE_BUS, 0);
+        def.newgrf_grf_version = 8;
+        def.newgrf_type_tables = Some(crate::newgrf_type_tables::GrfTypeTranslationTables {
+            cargo: vec![*b"MAIL", *b"GOOD", *b"PASS"],
+            ..Default::default()
+        });
+        def.random_cargo_triggers = 1 << 1; // GOOD ocupa el slot local 1.
+        assert!(
+            def.cargo_triggers_randomisation(crate::CargoType::Goods, crate::Climate::Temperate)
+        );
+        assert!(
+            !def.cargo_triggers_randomisation(
+                crate::CargoType::Passengers,
+                crate::Climate::Temperate
+            )
+        );
+
+        // Sin CTT, un GRF antiguo traduce por el slot de clima (Paper=9 en
+        // SubArctic), no por el bitnum global de Paper (11).
+        def.newgrf_type_tables = None;
+        def.newgrf_grf_version = 6;
+        def.random_cargo_triggers = 1 << 9;
+        assert!(
+            def.cargo_triggers_randomisation(crate::CargoType::Paper, crate::Climate::SubArctic)
+        );
     }
 
     #[test]

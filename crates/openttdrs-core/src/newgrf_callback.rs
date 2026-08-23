@@ -21,9 +21,9 @@ use crate::newgrf_sprites::{
 };
 use crate::object_spec::ObjectSpecDef;
 use crate::station::Station;
-use crate::station_class::StationAnimationTrigger;
+use crate::station_class::{StationAnimationTrigger, StationRandomTrigger};
 use crate::vehicle::{Vehicle, VehicleKind};
-use crate::{RoadType, StopKind};
+use crate::{CargoType, RoadType, StopKind};
 
 /// Escribe `persistent_registers` del ctx al vehículo.
 ///
@@ -531,6 +531,98 @@ pub fn trigger_road_stop_animation(
         )
 }
 
+fn action2_eval_ctx_from_road_stop(station: &Station) -> Action2EvalCtx {
+    let mut ctx = action2_eval_ctx_from_station(station);
+    ctx.random_bits = station.road_stop_action2_random_bits();
+    ctx
+}
+
+fn road_stop_random_u16(world_seed: u64, tick: u64, pos: TileCoord, salt: u64) -> u16 {
+    let low = crate::map::industry_tile_rng(world_seed, tick, pos, salt);
+    let high = crate::map::industry_tile_rng(world_seed, tick, pos, salt ^ 0xA5A5_5A5A);
+    u16::from(low) | (u16::from(high) << 8)
+}
+
+/// Aplica la randomización Action2 de una tesela `RoadStop`.
+///
+/// Replica la ruta de `TriggerRoadStopRandomisation`: la propiedad Action0
+/// `0x0D` filtra cargos, los eventos se acumulan para grupos `all`, sólo se
+/// reseedean los bits de grupos Action2 alcanzables y los triggers consumidos
+/// se limpian del estado persistente. La fuente pseudoaleatoria es
+/// determinista por mundo/tick/tesela para preservar replay y tests.
+///
+/// Cada `Station` actual representa una parada vial; por eso este helper no
+/// puede todavía iterar datos random distintos por cada tesela de un stop
+/// compuesto importado.
+pub fn trigger_road_stop_randomisation(
+    def: &crate::road_stop_spec::RoadStopSpecDef,
+    station: &mut Station,
+    trigger: StationRandomTrigger,
+    cargo: Option<CargoType>,
+    climate: crate::Climate,
+    world_seed: u64,
+    tick: u64,
+) -> bool {
+    if !def.has_random_cargo_triggers() {
+        return false;
+    }
+    if cargo.is_some_and(|cargo| !def.cargo_triggers_randomisation(cargo, climate)) {
+        return false;
+    }
+    // `CargoTaken` sólo ocurre cuando *todos* los cargos que declaró este
+    // spec ya se vaciaron; no basta con que se haya retirado el cargo recibido.
+    if trigger == StationRandomTrigger::CargoTaken
+        && crate::ALL_CARGO_TYPES.iter().copied().any(|candidate| {
+            def.cargo_triggers_randomisation(candidate, climate)
+                && station.cargo_stock.get(candidate) != 0
+        })
+    {
+        return false;
+    }
+    let Some(runtime) = def.newgrf_runtime.as_ref() else {
+        return false;
+    };
+
+    station.newgrf_waiting_random_triggers |= trigger.mask();
+    let waiting = station.newgrf_waiting_random_triggers;
+    let mut ctx = action2_eval_ctx_from_road_stop(station);
+    ctx.vars.insert(
+        0x5F,
+        station.road_stop_action2_random_bits().wrapping_shl(8) | u32::from(waiting),
+    );
+    let (reseed, used) =
+        runtime.rerandomisation_for_local_id(def.newgrf_local_id, &mut ctx, waiting);
+    writeback_station_persistent_registers(station, &ctx);
+    station.newgrf_waiting_random_triggers &= !used;
+
+    let base_mask = u16::try_from(reseed & 0xFFFF).unwrap_or(0);
+    let tile_mask = u8::try_from((reseed >> 16) & 0xFF).unwrap_or(0);
+    let mut changed = false;
+    if base_mask != 0 {
+        let random = road_stop_random_u16(
+            world_seed,
+            tick,
+            station.pos,
+            u64::from(trigger as u8) | (u64::from(waiting) << 8),
+        );
+        let next = (station.newgrf_random_bits & !base_mask) | (random & base_mask);
+        changed |= next != station.newgrf_random_bits;
+        station.newgrf_random_bits = next;
+    }
+    if tile_mask != 0 {
+        let random = crate::map::industry_tile_rng(
+            world_seed,
+            tick,
+            station.pos,
+            0x524F_4144_u64 | (u64::from(trigger as u8) << 16) | u64::from(waiting),
+        );
+        let next = (station.road_stop_newgrf_random_bits & !tile_mask) | (random & tile_mask);
+        changed |= next != station.road_stop_newgrf_random_bits;
+        station.road_stop_newgrf_random_bits = next;
+    }
+    changed
+}
+
 /// Avanza el scheduler de una parada vial `NewGRF` (`CB141`/`CB142`).
 ///
 /// El frame y el bit activo pertenecen a la instancia de estación, no al
@@ -624,10 +716,12 @@ pub fn resolve_industry_tile_random_trigger(
     salt: u64,
 ) -> Option<u16> {
     let runtime = tile_spec.newgrf_runtime.as_ref()?;
-    let (set_id, entry) = runtime
-        .action2_random
-        .iter()
-        .find(|(_, e)| e.triggers == 0 || (e.triggers & waiting_triggers) != 0)?;
+    let (set_id, entry) = runtime.action2_random.iter().find(|(_, entry)| {
+        entry.trigger_mask() == 0
+            || entry
+                .matched_rerandomisation_triggers(waiting_triggers)
+                .is_some()
+    })?;
     let _ = set_id;
     // Reseed bits (como industry_tile_rng) antes de evaluar el grupo.
     *random_bits = crate::map::industry_tile_rng(
@@ -1246,14 +1340,24 @@ mod tests {
     }
 
     #[test]
-    fn callbacks_ac_station_persistent_json_roundtrip() {
+    fn callbacks_ac_station_and_road_stop_persistent_json_roundtrip() {
         let mut state = crate::GameState::new(4, 4);
         let mut st = Station::new(TileCoord::new(1, 1));
         st.newgrf_persistent_regs.insert(2, 99);
+        st.newgrf_random_bits = 0xCAFE;
+        st.road_stop_newgrf_random_bits = 0x55;
+        st.newgrf_waiting_random_triggers = StationRandomTrigger::NewCargo.mask();
         state.stations.push(st);
         let json = state.save_json().unwrap();
         let loaded = crate::GameState::load_json(&json).unwrap();
-        assert_eq!(loaded.stations[0].newgrf_persistent_regs.get(&2), Some(&99));
+        let station = &loaded.stations[0];
+        assert_eq!(station.newgrf_persistent_regs.get(&2), Some(&99));
+        assert_eq!(station.newgrf_random_bits, 0xCAFE);
+        assert_eq!(station.road_stop_newgrf_random_bits, 0x55);
+        assert_eq!(
+            station.newgrf_waiting_random_triggers,
+            StationRandomTrigger::NewCargo.mask()
+        );
     }
 
     #[test]
@@ -1267,7 +1371,9 @@ mod tests {
             from_newgrf: true,
             grfid: 1,
             newgrf_local_id: 0,
+            newgrf_grf_version: 0,
             draw_mode: crate::ROADSTOP_DRAW_MODE_DEFAULT,
+            random_cargo_triggers: 0,
             flags: 0,
             callback_mask: 0,
             animation_status: 1,
@@ -1315,6 +1421,106 @@ mod tests {
             3,
         ));
         assert_eq!(station.road_stop_animation_frame, 5);
+    }
+
+    #[test]
+    fn callbacks_ac_road_stop_randomisation_filters_cargo_and_keeps_all_waiting() {
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 7,
+        });
+        gfx.action2_random.insert(
+            7,
+            Action2RandomEntry {
+                typ: 0x80,
+                consist_count: 0,
+                // NewCargo + VehicleArrives, bit 7 = ambos deben llegar.
+                triggers: 0x80
+                    | crate::StationRandomTrigger::NewCargo.mask()
+                    | crate::StationRandomTrigger::VehicleArrives.mask(),
+                randbit: 16,
+                sets: vec![1, 2],
+            },
+        );
+        let def = crate::RoadStopSpecDef {
+            id: 1,
+            class: 0,
+            label: "random".into(),
+            short_label: "RAND".into(),
+            stop_type: crate::ROADSTOP_TYPE_BUS,
+            from_newgrf: true,
+            grfid: 1,
+            newgrf_local_id: 0,
+            newgrf_grf_version: 8,
+            draw_mode: crate::ROADSTOP_DRAW_MODE_DEFAULT,
+            random_cargo_triggers: 1 << crate::CargoType::Passengers.bitnum(),
+            flags: 0,
+            callback_mask: 0,
+            animation_status: 0xFF,
+            animation_frames: 0,
+            animation_speed: 2,
+            animation_triggers: 0,
+            newgrf_views: Vec::new(),
+            newgrf_runtime: Some(Box::new(gfx)),
+            newgrf_type_tables: None,
+            associated_badges: Vec::new(),
+        };
+        let mut station = Station::new_with_kind(TileCoord::new(6, 4), StopKind::BusStop);
+        station.road_stop_newgrf_random_bits = 0;
+
+        // Un cargo que no está en 0x0D no abre ni consume triggers.
+        assert!(!trigger_road_stop_randomisation(
+            &def,
+            &mut station,
+            StationRandomTrigger::NewCargo,
+            Some(crate::CargoType::Coal),
+            crate::Climate::Temperate,
+            91,
+            12,
+        ));
+        assert_eq!(station.newgrf_waiting_random_triggers, 0);
+
+        // NewCargo queda pendiente porque el grupo es `all`.
+        assert!(!trigger_road_stop_randomisation(
+            &def,
+            &mut station,
+            StationRandomTrigger::NewCargo,
+            Some(crate::CargoType::Passengers),
+            crate::Climate::Temperate,
+            91,
+            12,
+        ));
+        assert_eq!(
+            station.newgrf_waiting_random_triggers,
+            StationRandomTrigger::NewCargo.mask()
+        );
+
+        // La llegada consume ambos eventos y reseedea sólo el byte de tesela
+        // (randbit 16); los 16 bits base de estación no se tocan.
+        let base_before = station.newgrf_random_bits;
+        let waiting =
+            StationRandomTrigger::NewCargo.mask() | StationRandomTrigger::VehicleArrives.mask();
+        let expected = crate::map::industry_tile_rng(
+            91,
+            12,
+            station.pos,
+            0x524F_4144_u64
+                | (u64::from(StationRandomTrigger::VehicleArrives as u8) << 16)
+                | u64::from(waiting),
+        );
+        let _ = trigger_road_stop_randomisation(
+            &def,
+            &mut station,
+            StationRandomTrigger::VehicleArrives,
+            None,
+            crate::Climate::Temperate,
+            91,
+            12,
+        );
+        assert_eq!(station.newgrf_waiting_random_triggers, 0);
+        assert_eq!(station.newgrf_random_bits, base_before);
+        assert_eq!(station.road_stop_newgrf_random_bits & 1, expected & 1);
     }
 
     #[test]

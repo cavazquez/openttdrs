@@ -609,6 +609,55 @@ mod tests {
     }
 
     #[test]
+    fn rerandomisation_respects_all_triggers_and_active_branch() {
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 1,
+        });
+        // Root: un evento VehicleArrives (bit 2) reseedea bit 0. Con el
+        // random anterior en cero se entra además al grupo hijo 2.
+        gfx.action2_random.insert(
+            1,
+            Action2RandomEntry {
+                typ: 0x80,
+                consist_count: 0,
+                triggers: 1 << 2,
+                randbit: 0,
+                sets: vec![2, 3],
+            },
+        );
+        // Hijo: sólo se activa cuando ya están NewCargo (0) y VehicleArrives
+        // (2); reseedea el bit 4. El bit 7 conserva el modo `all` en raw.
+        gfx.action2_random.insert(
+            2,
+            Action2RandomEntry {
+                typ: 0x80,
+                consist_count: 0,
+                triggers: 0x80 | (1 << 0) | (1 << 2),
+                randbit: 4,
+                sets: vec![4, 5],
+            },
+        );
+
+        let mut ctx = Action2EvalCtx::default();
+        let (reseed, used) = gfx.rerandomisation_for_local_id(0, &mut ctx, 1 << 2);
+        assert_eq!(reseed, 1, "el hijo all aún no puede reseedear");
+        assert_eq!(used, 1 << 2);
+
+        let (reseed, used) = gfx.rerandomisation_for_local_id(0, &mut ctx, (1 << 0) | (1 << 2));
+        assert_eq!(reseed, (1 << 0) | (1 << 4));
+        assert_eq!(used, (1 << 0) | (1 << 2));
+
+        // Seleccionar la rama 3 no visita el grupo 2, aunque exista en el
+        // mismo GRF: sólo su camino Action2 activo puede cambiar bits.
+        ctx.random_bits = 1;
+        let (reseed, used) = gfx.rerandomisation_for_local_id(0, &mut ctx, (1 << 0) | (1 << 2));
+        assert_eq!(reseed, 1);
+        assert_eq!(used, 1 << 2);
+    }
+
+    #[test]
     fn needs_runtime_resolve_for_any_variational() {
         let mut gfx = TrainSpriteGraphics::default();
         assert!(!gfx.needs_runtime_resolve());

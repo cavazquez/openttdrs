@@ -592,23 +592,36 @@ pub(super) fn trigger_road_stop_animation_at(
     };
     let tick = state.tick.get();
     let climate = state.climate;
-    let changed = {
+    let (randomisation_changed, animation_changed) = {
         let Some(def) =
             crate::road_stop_spec::road_stop_spec_def(&state.road_stop_spec_catalog, spec_id)
         else {
             return;
         };
         let cargo_local_id = cargo.map(|cargo| def.newgrf_cargo_local_id(cargo, climate));
-        crate::newgrf_callback::trigger_road_stop_animation(
+        let randomisation_changed = crate::StationRandomTrigger::from_animation_trigger(trigger)
+            .is_some_and(|random_trigger| {
+                crate::newgrf_callback::trigger_road_stop_randomisation(
+                    def,
+                    &mut state.stations[station_index],
+                    random_trigger,
+                    cargo,
+                    climate,
+                    state.world_seed,
+                    tick,
+                )
+            });
+        let animation_changed = crate::newgrf_callback::trigger_road_stop_animation(
             def,
             &mut state.stations[station_index],
             tile.m5,
             trigger,
             cargo_local_id,
             tick,
-        )
+        );
+        (randomisation_changed, animation_changed)
     };
-    if changed {
+    if randomisation_changed || animation_changed {
         state.runtime.industry_tile_dirty.push(trigger_tile);
     }
 }
@@ -766,7 +779,9 @@ mod tests {
             from_newgrf: true,
             grfid: 0x5253_414E,
             newgrf_local_id: 0,
+            newgrf_grf_version: 0,
             draw_mode: crate::ROADSTOP_DRAW_MODE_DEFAULT,
+            random_cargo_triggers: 0,
             flags: 0,
             callback_mask: 0,
             animation_status: 1,

@@ -42,6 +42,8 @@ pub const BUILDING_FLAG_IS_STADIUM: u8 = 1 << 7;
 
 /// Umbral de aceptación de estación en octavos (`amt >= 8`).
 pub const STATION_ACCEPTANCE_THRESHOLD: u32 = 8;
+/// Bit `HouseCallbackMask::AllowConstruction`: consulta CB `0x17` al crecer.
+pub const HOUSE_CALLBACK_ALLOW_CONSTRUCTION_MASK: u16 = 1;
 
 /// Vista de un `HouseSpec` vanilla.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -144,6 +146,12 @@ pub struct HouseSpecDef {
 }
 
 impl HouseSpecDef {
+    /// ¿El GRF declaró CB `0x17` para autorizar la construcción de la casa?
+    #[must_use]
+    pub const fn has_construction_callback(&self) -> bool {
+        self.callback_mask & HOUSE_CALLBACK_ALLOW_CONSTRUCTION_MASK != 0
+    }
+
     #[must_use]
     pub const fn is_size_1x1(&self) -> bool {
         self.building_flags & BUILDING_FLAG_SIZE_1X1 != 0

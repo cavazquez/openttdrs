@@ -31,15 +31,15 @@ API común: `TrainSpriteGraphics::resolve_callback` / `resolve_callback_ctx`,
 | Stations | `0x14` draw layout, `0x140`–`0x142` anim, `0x149` slope | **OOS** | Máscaras/consumidas en Action0; sin call sites |
 | Vehicles (`00`–`03`) | `0x31` `CBID_VEHICLE_START_STOP_CHECK` | **soportado** | Call site: `toggle_vehicle_running_checked`; deniega → `NewGrfCallbackDenied` |
 | Vehicles | `0x10`–`0x12`, `0x15`–`0x16`, `0x19`, `0x1D`, `0x23`, `0x2D`, `0x32`–`0x36`, … | **OOS** | Evaluador Action2 listo; sin call sites |
-| Houses (`07`) | `0x17` `CBID_HOUSE_ALLOW_CONSTRUCTION` | **soportado** (#266) | Call site: crecimiento físico del pueblo (`try_build_town_house`), antes de reservar el footprint; `apply_house_construction_callback` + tests sintéticos |
+| Houses (`07`) | `0x17` `CBID_HOUSE_ALLOW_CONSTRUCTION` | **soportado** (#266) | Call site: crecimiento físico del pueblo (`try_build_town_house`), antes de reservar el footprint; respeta su máscara y booleano de 8 bits |
 | Houses | resto `0x1A`–`0x1C`, `0x1E`–`0x21`, … | **almacenado** | `HouseSpecDef.callback_mask` |
 | Industry tiles (`09`) | `0x25` trigger, `0x26` next frame, `0x27` speed | **soportado** (#293) | `phase_tile_animation` ejecuta los tres con coordenada real, `param2=IndustryTick`, máscara Action0 y fallback `CALLBACK_FAILED` |
 | Industry tiles | `0x2B`–`0x2C`, … | **almacenado** | `IndustryTileSpecDef.callback_mask` |
-| Industries (`0A`) | `0x28` `CBID_INDUSTRY_LOCATION` | **soportado** (#266) | Call site: `place_industry_spec_def_sandbox`; respeta el bit `Location` y carga la cadena Action3→Action2 del GRF |
+| Industries (`0A`) | `0x28` `CBID_INDUSTRY_LOCATION` | **soportado** (#266) | Call site: `place_industry_spec_def_sandbox`; respeta el bit `Location`, carga Action3→Action2 y sólo permite `FAILED`/`0x400` |
 | Industries | `0x22`, `0x29`, `0x35`, `0x37`–`0x3B`, `0x3D`, `0x14A`+, … | **almacenado** | `IndustrySpecDef.callback_mask` |
 | Airport tiles (`11`) / Airports (`0D`) | anim / FTA-related | **almacenado** / **OOS** | Máscaras; FTA bloqueado (#260) |
 | Canals (`05`) | `0x147` sprite offset | **almacenado** | `CanalSpecDef.callback_mask` |
-| RoadStops (`14`) | `0x13` `CBID_STATION_AVAILABILITY` | **soportado** | Máscara Action0 `0x11`, Action2/3 y call site query+execute de `PlaceBusStop`/`PlaceTruckStop`; `CALLBACK_FAILED` permite como OpenTTD |
+| RoadStops (`14`) | `0x13` `CBID_STATION_AVAILABILITY` | **soportado** | Máscara Action0 `0x11`, Action2/3 y call site query+execute de `PlaceBusStop`/`PlaceTruckStop`; `CALLBACK_FAILED` o booleano 8-bit no nulo permite |
 | RoadStops | `0x140`–`0x142` animación | **parcial runtime** | Action0 `0x0E`/`0x0F`/`0x10`; CB140 en `Built` y `TileLoop`, CB141/CB142 con frame/activo persistidos por parada. Faltan triggers de vehículo/carga, scopes vecinos, sonidos y selección visual dinámica |
 | Objects / Cargoes / Types | varios | **OOS** | Sin ejecución de CB en este corte |
 | Generic | `0x01` `CBID_RANDOM_TRIGGER` | **OOS** | Ver triggers abajo |

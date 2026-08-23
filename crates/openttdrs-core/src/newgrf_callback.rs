@@ -109,10 +109,30 @@ pub fn resolve_callback_or_failed(
     gfx.resolve_callback(local_id, callback, param1, param2)
 }
 
-/// ¿El resultado permite construcción / ubicación? (FAILED / 0x400 / 0xFF → sí).
+/// Resultado de un callback de ubicación/slope (`CB28` y afines).
+///
+/// `CALLBACK_FAILED` conserva el fallback de `OpenTTD`; sólo `0x400` significa
+/// explícitamente “sin error”. Los demás resultados representan un motivo de
+/// rechazo (texto `NewGRF` o error estándar).
 #[must_use]
-pub fn callback_allows_placement(result: u16) -> bool {
-    vehicle_start_stop_callback_allows(result)
+pub const fn callback_allows_location(result: u16) -> bool {
+    result == CALLBACK_FAILED || result == 0x400
+}
+
+/// Resultado de un callback booleano de ocho bits (CB13 de station/RoadStop,
+/// CB17 de house). `CALLBACK_FAILED` permite el fallback y cualquier byte bajo
+/// no nulo permite la operación, como `Convert8bitBooleanCallback` upstream.
+#[must_use]
+pub const fn callback_allows_8bit_boolean(result: u16) -> bool {
+    result == CALLBACK_FAILED || (result & 0xFF) != 0
+}
+
+/// Alias de compatibilidad para usuarios de la API que consultaban resultados
+/// de ubicación. Los callbacks booleanos deben usar
+/// [`callback_allows_8bit_boolean`] explícitamente.
+#[must_use]
+pub const fn callback_allows_placement(result: u16) -> bool {
+    callback_allows_location(result)
 }
 
 /// Call site industria: CB `0x28` location al colocar (#266).
@@ -127,17 +147,20 @@ pub fn apply_industry_location_callback(def: &IndustrySpecDef) -> bool {
         return true;
     };
     let result = runtime.resolve_callback(def.newgrf_local_id, CBID_INDUSTRY_LOCATION, 0, 0);
-    callback_allows_placement(result)
+    callback_allows_location(result)
 }
 
 /// Call site house: CB `0x17` allow construction (#266).
 #[must_use]
 pub fn apply_house_construction_callback(def: &HouseSpecDef) -> bool {
+    if !def.has_construction_callback() {
+        return true;
+    }
     let Some(runtime) = def.newgrf_runtime.as_ref() else {
         return true;
     };
     let result = runtime.resolve_callback(def.newgrf_local_id, CBID_HOUSE_ALLOW_CONSTRUCTION, 0, 0);
-    callback_allows_placement(result)
+    callback_allows_8bit_boolean(result)
 }
 
 /// Call site estación: CB `0x13` availability + writeback storage (#266).
@@ -150,7 +173,7 @@ pub fn apply_station_availability_callback(
     let mut ctx = action2_eval_ctx_from_station(station);
     let result = gfx.resolve_callback_ctx(local_id, CBID_STATION_AVAILABILITY, 0, 0, &mut ctx);
     writeback_station_persistent_registers(station, &ctx);
-    callback_allows_placement(result)
+    callback_allows_8bit_boolean(result)
 }
 
 /// Ejecuta la disponibilidad de un `RoadStop` `NewGRF` (`CBID 0x13`) antes de
@@ -211,7 +234,7 @@ pub fn apply_road_stop_availability_callback(
         0,
         &mut ctx,
     );
-    callback_allows_placement(result)
+    callback_allows_8bit_boolean(result)
 }
 
 /// Resuelve un callback de animación de `RoadStop` con el scope estable que
@@ -688,6 +711,20 @@ mod tests {
     }
 
     #[test]
+    fn callbacks_ac_location_and_8bit_boolean_semantics_match_upstream() {
+        assert!(callback_allows_location(CALLBACK_FAILED));
+        assert!(callback_allows_location(0x400));
+        assert!(!callback_allows_location(0xFF));
+        assert!(!callback_allows_location(0x401));
+
+        assert!(callback_allows_8bit_boolean(CALLBACK_FAILED));
+        assert!(!callback_allows_8bit_boolean(0));
+        assert!(callback_allows_8bit_boolean(1));
+        assert!(callback_allows_8bit_boolean(0xFF));
+        assert!(!callback_allows_8bit_boolean(0x100));
+    }
+
+    #[test]
     fn callbacks_ac_industry_location_denies_when_cb_says_so() {
         let mut def = IndustrySpecDef {
             id: 37,
@@ -710,7 +747,7 @@ mod tests {
             newgrf_runtime: Some(Box::new(gfx_callback_literal(0x10))),
         };
         assert!(!apply_industry_location_callback(&def));
-        def.newgrf_runtime = Some(Box::new(gfx_callback_literal(0xFF)));
+        def.newgrf_runtime = Some(Box::new(gfx_callback_allow_400()));
         assert!(apply_industry_location_callback(&def));
         def.newgrf_runtime = None;
         assert!(apply_industry_location_callback(&def));
@@ -733,7 +770,7 @@ mod tests {
             availability: 0xFFFF,
             probability: 1,
             override_id: None,
-            callback_mask: 0x0001,
+            callback_mask: crate::house_spec::HOUSE_CALLBACK_ALLOW_CONSTRUCTION_MASK,
             name: "cb-house".into(),
             from_newgrf: true,
             grfid: 1,
@@ -741,8 +778,13 @@ mod tests {
             newgrf_local_id: 0,
             newgrf_runtime: Some(Box::new(gfx_callback_literal(0x01))),
         };
+        assert!(apply_house_construction_callback(&house));
+        house.newgrf_runtime = Some(Box::new(gfx_callback_literal(0)));
         assert!(!apply_house_construction_callback(&house));
         house.newgrf_runtime = Some(Box::new(gfx_callback_literal(0xFF)));
+        assert!(apply_house_construction_callback(&house));
+        house.callback_mask = 0;
+        house.newgrf_runtime = Some(Box::new(gfx_callback_literal(0)));
         assert!(apply_house_construction_callback(&house));
 
         let gfx = gfx_callback_psto(5, 7, 0xFF);

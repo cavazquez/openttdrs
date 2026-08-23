@@ -2182,7 +2182,7 @@ mod tests {
         let action2 = crate::newgrf_sprites::build_action2_callback_literal_payload(
             ACTION0_FEATURE_ROADSTOPS,
             0x21,
-            0x10,
+            0,
         );
         let bytes = crate::newgrf_sprites::build_grf_v2_feature_with_action2_chain(
             &a0,

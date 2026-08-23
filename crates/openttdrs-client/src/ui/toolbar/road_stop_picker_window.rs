@@ -427,7 +427,10 @@ mod tests {
             newgrf_local_id: 0,
             draw_mode: openttdrs_core::ROADSTOP_DRAW_MODE_DEFAULT,
             flags: 0,
+            callback_mask: 0,
             newgrf_views: Vec::new(),
+            newgrf_runtime: None,
+            newgrf_type_tables: None,
             associated_badges: Vec::new(),
         });
         world.insert_resource(sim);

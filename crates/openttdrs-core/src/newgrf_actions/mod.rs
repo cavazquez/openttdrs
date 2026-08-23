@@ -3263,6 +3263,76 @@ mod tests {
         );
     }
 
+    /// CB145 debe usar la máscara de cargo y el Action2 cargado durante el
+    /// barrido periódico de rating, no quedarse como metadato del catálogo.
+    #[test]
+    fn cargo_station_rating_callback_runs_from_loaded_action2_graph_during_station_sweep() {
+        use crate::newgrf_sprites::{
+            build_action2_variational_payload, build_grf_v2_feature_with_action2_chain,
+        };
+        use crate::{CargoType, Station, TileCoord, VehicleKind};
+
+        let action0 = build_action0_cargo_payload_with_callback_mask(
+            0,
+            1,
+            b"COAL",
+            "Carbón CB145",
+            16,
+            8192,
+            0,
+            0,
+            true,
+            0,
+            0x100,
+            crate::CARGO_CALLBACK_STATION_RATING_CALC_MASK,
+        );
+        // var10 contiene el tipo histórico: un bus debe verse como road vehicle
+        // 0x11 y devolver el target 17, no el algoritmo vanilla.
+        let action2 =
+            build_action2_variational_payload(ACTION0_FEATURE_CARGOES, 7, 0x10, 0, u8::MAX, &[], 0);
+        let bytes = build_grf_v2_feature_with_action2_chain(
+            &action0,
+            ACTION0_FEATURE_CARGOES,
+            0,
+            7,
+            &action2,
+            1,
+            1,
+            &[174],
+            *b"CR45",
+            "cargo-station-rating-callback",
+        );
+        let dir = tempfile_dir_with("cargo-station-rating-callback.grf", &bytes);
+        let mut state = GameState::new(8, 8);
+        state.newgrf_stack.push(crate::NewGrfEntry::new(
+            "cargo-station-rating-callback.grf",
+            crate::newgrf_config::grfid_from_bytes(*b"CR45"),
+        ));
+        apply_newgrf_cargoes(&mut state, &[&dir]);
+        assert!(
+            crate::cargo_spec_by_label(&state.cargo_spec_catalog, "COAL")
+                .unwrap()
+                .has_station_rating_callback()
+        );
+
+        let mut station = Station::new(TileCoord::new(3, 3));
+        station.add_waiting_cargo(CargoType::Coal, 10);
+        station.goods.get_mut(CargoType::Coal).rating = 10;
+        station.goods.get_mut(CargoType::Coal).last_speed = 100;
+        station.last_vehicle_type = Some(VehicleKind::Bus);
+        state.stations.push(station);
+        let sweep = u64::from(crate::economy::STATION_RATING_TICKS);
+        while state.tick.get() < sweep {
+            state.step();
+        }
+
+        assert_eq!(
+            crate::station_rating_for_cargo(&state.stations[0], CargoType::Coal),
+            12,
+            "CB145 debe recibir var10=0x11 para bus y conservar convergencia ±2"
+        );
+    }
+
     #[test]
     fn sounds_ac_register_and_play() {
         let pcm: &[u8] = &[0x10, 0x20, 0x30, 0x40];

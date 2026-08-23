@@ -286,6 +286,8 @@ pub const CBID_INDUSTRY_LOCATION: u16 = 0x28;
 pub const CBID_HOUSE_ALLOW_CONSTRUCTION: u16 = 0x17;
 /// Callback cargos: calcular ingreso de la entrega (`CBID_CARGO_PROFIT_CALC`).
 pub const CBID_CARGO_PROFIT_CALC: u16 = 0x39;
+/// Callback cargos: calcular rating de estación (`CBID_CARGO_STATION_RATING_CALC`).
+pub const CBID_CARGO_STATION_RATING_CALC: u16 = 0x145;
 /// Callback objetos: comprobar pendiente de cada tesela (`CBID_OBJECT_LAND_SLOPE_CHECK`).
 pub const CBID_OBJECT_LAND_SLOPE_CHECK: u16 = 0x157;
 /// Callback teselas industria: trigger de animación (`CBID_INDTILE_ANIMATION_TRIGGER`).

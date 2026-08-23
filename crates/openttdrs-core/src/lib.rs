@@ -166,10 +166,10 @@ pub use cargo_packet::{
     decide_cargo_unload_action, load_unload_speed, prepare_unload,
 };
 pub use cargo_spec::{
-    CARGO_CALLBACK_PROFIT_CALC_MASK, CargoSpecDef, DEFAULT_CARGO_CAPACITY_MULTIPLIER,
-    apply_cargo_capacity_multiplier, cargo_spec_by_label, cargo_spec_def, cargo_spec_display_name,
-    cargo_type_label, empty_cargo_spec_catalog, payment_spec_for_cargo,
-    payment_spec_for_cargo_climate,
+    CARGO_CALLBACK_PROFIT_CALC_MASK, CARGO_CALLBACK_STATION_RATING_CALC_MASK, CargoSpecDef,
+    DEFAULT_CARGO_CAPACITY_MULTIPLIER, apply_cargo_capacity_multiplier, cargo_spec_by_label,
+    cargo_spec_def, cargo_spec_display_name, cargo_type_label, empty_cargo_spec_catalog,
+    payment_spec_for_cargo, payment_spec_for_cargo_climate,
 };
 pub use cheats::CheatsState;
 pub use command::{
@@ -387,9 +387,10 @@ pub use newgrf_callback::{
     apply_station_availability_callback, apply_station_availability_callback_for_build,
     apply_vehicle_start_stop_callback, callback_allows_8bit_boolean, callback_allows_location,
     callback_allows_placement, resolve_callback_or_failed, resolve_cargo_profit_callback,
-    resolve_industry_tile_animation_callback, resolve_industry_tile_random_trigger,
-    resolve_vehicle_callback, trigger_road_stop_animation, vehicle_start_stop_callback_allows,
-    writeback_station_persistent_registers, writeback_vehicle_persistent_registers,
+    resolve_cargo_station_rating_callback, resolve_industry_tile_animation_callback,
+    resolve_industry_tile_random_trigger, resolve_vehicle_callback, trigger_road_stop_animation,
+    vehicle_start_stop_callback_allows, writeback_station_persistent_registers,
+    writeback_vehicle_persistent_registers,
 };
 pub use newgrf_config::{
     GrfContainerVersion, GrfFileInfo, GrfParsed, GrfScanError, GrfStackIssue, MAX_NEWGRF_PARAMS,
@@ -405,9 +406,10 @@ pub use newgrf_sprites::{
     Action5LoadContext, BRIDGE_DECKS_ACTION5_SLOT_COUNT, CALLBACK_FAILED, CANALS_ACTION5_LOCK_SLOT,
     CANALS_ACTION5_SLOT_COUNT, CATENARY_ACTION5_SLOT_COUNT, CATENARY_ENTRANCE_SPRITE_BASE,
     CATENARY_PYLON_SPRITE_BASE, CATENARY_WIRE_SPRITE_BASE, CBID_CARGO_PROFIT_CALC,
-    CBID_HOUSE_ALLOW_CONSTRUCTION, CBID_INDTILE_ANIM_NEXT_FRAME, CBID_INDTILE_ANIMATION_NEXT_FRAME,
-    CBID_INDTILE_ANIMATION_SPEED, CBID_INDTILE_ANIMATION_TRIGGER, CBID_INDUSTRY_LOCATION,
-    CBID_OBJECT_LAND_SLOPE_CHECK, CBID_STATION_ANIMATION_NEXT_FRAME, CBID_STATION_ANIMATION_SPEED,
+    CBID_CARGO_STATION_RATING_CALC, CBID_HOUSE_ALLOW_CONSTRUCTION, CBID_INDTILE_ANIM_NEXT_FRAME,
+    CBID_INDTILE_ANIMATION_NEXT_FRAME, CBID_INDTILE_ANIMATION_SPEED,
+    CBID_INDTILE_ANIMATION_TRIGGER, CBID_INDUSTRY_LOCATION, CBID_OBJECT_LAND_SLOPE_CHECK,
+    CBID_STATION_ANIMATION_NEXT_FRAME, CBID_STATION_ANIMATION_SPEED,
     CBID_STATION_ANIMATION_TRIGGER, CBID_STATION_AVAILABILITY, CBID_STATION_BUILD_TILE_LAYOUT,
     CBID_VEHICLE_START_STOP_CHECK, DecodedSprite, FOUNDATION_ACTION5_SLOT_COUNT,
     ONEWAY_ACTION5_SLOT_COUNT, OPENTTD_GUI_ACTION5_SLOT_COUNT, ROADSTOP_ACTION5_SLOT_COUNT,
@@ -581,8 +583,9 @@ pub use station::{
     station_coverage_for, station_covers_tile, station_footprint_tiles, station_map_coherence,
     station_rating_for_cargo, station_rating_for_company_cargo, station_tile_can_have_pylons,
     station_tile_can_have_wires, station_tile_sets_adjacent, station_type_from_m6,
-    stop_kind_from_m6, train_on_rail_platform, update_station_ratings, update_station_waiting,
-    vehicle_at_road_stop, vehicle_physically_at_station,
+    stop_kind_from_m6, train_on_rail_platform, update_station_ratings,
+    update_station_ratings_with_cargo_callbacks, update_station_waiting, vehicle_at_road_stop,
+    vehicle_physically_at_station,
 };
 pub use station_action2::action2_eval_ctx_for_station_tile;
 pub use station_class::{

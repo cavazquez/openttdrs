@@ -19,6 +19,7 @@ API común: `TrainSpriteGraphics::resolve_callback` / `resolve_callback_ctx`,
 `apply_industry_location_callback`, `apply_house_construction_callback`,
 `apply_object_slope_callback`,
 `resolve_cargo_profit_callback`,
+`resolve_cargo_station_rating_callback`,
 `apply_station_availability_callback_for_build`,
 `apply_station_availability_callback`, `apply_road_stop_availability_callback`,
 `trigger_road_stop_animation`, `advance_road_stop_animation`,
@@ -45,7 +46,7 @@ API común: `TrainSpriteGraphics::resolve_callback` / `resolve_callback_ctx`,
 | RoadStops (`14`) | `0x13` `CBID_STATION_AVAILABILITY` | **soportado** | Máscara Action0 `0x11`, Action2/3 y call site query+execute de `PlaceBusStop`/`PlaceTruckStop`; `CALLBACK_FAILED` o booleano 8-bit no nulo permite |
 | RoadStops | `0x140`–`0x142` animación | **parcial runtime** | Action0 `0x0E`/`0x0F`/`0x10`; CB140 en `Built` y `TileLoop`, CB141/CB142 con frame/activo persistidos por parada. Faltan triggers de vehículo/carga, scopes vecinos, sonidos y selección visual dinámica |
 | Objects (`0F`) | `0x157` `CBID_OBJECT_LAND_SLOPE_CHECK` | **parcial runtime** | Máscara Action0 `0x15` WORD, Action3→Action2 y call site query+execute de `BuildObject` por tesela. `param1=slope`, `param2=dy<<4\|dx`; faltan scopes completos de objeto/vecinos, string de error GRF y el fallback de pendiente completo de OpenTTD. |
-| Cargoes (`0B`) | `0x39` `CBID_CARGO_PROFIT_CALC` | **parcial runtime** | Máscara Action0 `0x1A`, Action3→Action2 y call site de pago por packet en `unload_vehicles`. `param1=0`; `param2` empaqueta distancia/cantidad/tránsito y el resultado se interpreta como multiplicador firmado de 15 bits. Faltan scopes avanzados y CB145. |
+| Cargoes (`0B`) | `0x39` `CBID_CARGO_PROFIT_CALC`; `0x145` `CBID_CARGO_STATION_RATING_CALC` | **parcial runtime** | Máscara Action0 `0x1A`, Action3→Action2: CB39 paga cada packet en `unload_vehicles` (`param1=0`, distancia/cantidad/tránsito, multiplicador signed-15); CB145 sustituye el target durante `update_station_ratings` (`param1` tipo histórico de vehículo; `param2` días/espera/velocidad, resultado signed-15). Faltan scopes avanzados y demás CBs. |
 | Cargoes (resto) / Types | varios | **OOS** | Sin ejecución de CB en este corte |
 | Generic | `0x01` `CBID_RANDOM_TRIGGER` | **OOS** | Ver triggers abajo |
 
@@ -80,10 +81,11 @@ API común: `TrainSpriteGraphics::resolve_callback` / `resolve_callback_ctx`,
 9. RoadStops CB140/CB141/CB142 — `Built`/`TileLoop` + scheduler con velocidad/frame, writeback `7C` y JSON round-trip. Referencia: `newgrf_roadstop.cpp` / `newgrf_animation_base.h`.
 10. Objects CB157 — pendiente por tesela de `BuildObject`, desde Action0 `0x15` y Action3→Action2 cargados; query y execute rechazan antes de mutar.
 11. Cargoes CB39 — cálculo de pago por packet durante `unload_vehicles`, desde Action0 `0x1A` y Action3→Action2 cargados; `CALLBACK_FAILED` conserva la fórmula base.
+12. Cargoes CB145 — target de rating durante el barrido `update_station_ratings`, desde Action0 `0x1A` y Action3→Action2 cargados; `CALLBACK_FAILED` conserva el algoritmo estándar.
 
 ## Residual explícito (no bloquea cierre MVP #266)
 
-- Resto de CBs houses / airports / industries / objects (excepto CB157), cargo (excepto CB39); RoadStops aún requiere triggers de carga/vehículo, randomización, scopes vecinos y sprite Action2 dinámico.
+- Resto de CBs houses / airports / industries / objects (excepto CB157), cargo (excepto CB39/CB145); RoadStops aún requiere triggers de carga/vehículo, randomización, scopes vecinos y sprite Action2 dinámico.
 - Scopes parent/relative completos.
 - Storage persistente en industria/casa y callbacks de estación que sí tengan scope de estación.
 - Goldens tick-a-tick vs OpenTTD 15.3 para todos los features.

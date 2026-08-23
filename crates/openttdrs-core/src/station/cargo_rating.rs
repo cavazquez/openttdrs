@@ -1,8 +1,10 @@
 use crate::cargo::{ALL_CARGO_TYPES, CargoType};
+use crate::cargo_spec::{CargoSpecDef, cargo_spec_by_label, cargo_type_label};
 use crate::cargodist::parity::Randomizer;
 use crate::company::CompanyId;
 use crate::industry::Industry;
 use crate::map::{Map, TileCoord};
+use crate::newgrf_callback::resolve_cargo_station_rating_callback;
 use crate::vehicle::VehicleKind;
 
 use super::Station;
@@ -52,8 +54,22 @@ pub fn station_rating_for_company_cargo(
 /// Devuelve el valor crudo, sin acotar ni suavizar: la convergencia ±2 la aplica
 /// [`super::goods_entry::GoodsEntry::converge_rating_towards`].
 #[must_use]
-fn station_rating_target(station: &Station, cargo: CargoType) -> i16 {
+fn station_rating_target(station: &Station, cargo: CargoType, cargo_specs: &[CargoSpecDef]) -> i16 {
     let entry = station.goods.get(cargo);
+    if let Some(rating) =
+        cargo_spec_by_label(cargo_specs, cargo_type_label(cargo)).and_then(|def| {
+            resolve_cargo_station_rating_callback(
+                def,
+                station.time_since_pickup.get(cargo),
+                entry.max_waiting_cargo,
+                entry.has_vehicle_ever_tried_loading(),
+                entry.last_speed,
+                station.last_vehicle_type,
+            )
+        })
+    {
+        return rating;
+    }
     let mut rating: i16 = 0;
 
     let speed_bonus = i16::from(entry.last_speed) - 85;
@@ -179,13 +195,27 @@ pub fn recompute_station_rating(station: &mut Station) {
 /// Envejece la carga en espera, mueve el rating de cada tipo hacia el objetivo que merece el
 /// servicio prestado y descarta carga cuando la estación va mal y hay mucha acumulada.
 pub fn update_station_ratings(stations: &mut [Station], selectgoods: bool, rng: &mut Randomizer) {
+    update_station_ratings_with_cargo_callbacks(stations, &[], selectgoods, rng);
+}
+
+/// Barrido de rating que ejecuta CB145 para los cargos `NewGRF` del catálogo.
+///
+/// Conserva [`update_station_ratings`] como API sin catálogo para callers legacy;
+/// el loop de `GameState` usa esta variante y por eso el callback se ejecuta en
+/// el mismo punto periódico que el algoritmo estándar de `OpenTTD`.
+pub fn update_station_ratings_with_cargo_callbacks(
+    stations: &mut [Station],
+    cargo_specs: &[CargoSpecDef],
+    selectgoods: bool,
+    rng: &mut Randomizer,
+) {
     for station in stations {
         station.ensure_packets_from_stock();
         if !station.cargo_packets.is_empty() {
             station.cargo_packets.age_waiting_one_period();
         }
         for cargo in ALL_CARGO_TYPES {
-            update_cargo_rating(station, cargo, selectgoods, rng);
+            update_cargo_rating(station, cargo, cargo_specs, selectgoods, rng);
         }
         station.sync_stock_from_packets();
         recompute_station_rating(station);
@@ -195,6 +225,7 @@ pub fn update_station_ratings(stations: &mut [Station], selectgoods: bool, rng: 
 fn update_cargo_rating(
     station: &mut Station,
     cargo: CargoType,
+    cargo_specs: &[CargoSpecDef],
     selectgoods: bool,
     rng: &mut Randomizer,
 ) {
@@ -227,7 +258,7 @@ fn update_cargo_rating(
         return;
     }
 
-    let target = station_rating_target(station, cargo);
+    let target = station_rating_target(station, cargo, cargo_specs);
     let rating = station.goods.get_mut(cargo).converge_rating_towards(target);
     truncate_waiting_cargo(station, cargo, rating, waiting, rng);
 }

@@ -55,8 +55,9 @@ fn on_tick_water(state: &mut GameState) {
 /// `OnTick_Station`: rating (ciclo 185 ticks ≈ `STATION_ACCEPTANCE_TICKS` del port).
 fn on_tick_station(state: &mut GameState, t: u64) {
     if t > 0 && t.is_multiple_of(u64::from(crate::economy::STATION_RATING_TICKS)) {
-        station::update_station_ratings(
+        station::update_station_ratings_with_cargo_callbacks(
             &mut state.stations,
+            &state.cargo_spec_catalog,
             state.order.selectgoods,
             &mut state.random,
         );

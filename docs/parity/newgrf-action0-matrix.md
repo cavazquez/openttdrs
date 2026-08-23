@@ -201,7 +201,7 @@ Fuente: `newgrf_act0_cargo.cpp`.
 | `15` freight | **runtime** (catálogo) |
 | `16` classes | **runtime** (catálogo) |
 | `17` label 4 chars | **runtime** (identidad; lookup case-insensitive) |
-| `1A` callback mask BYTE | **parcial runtime**: bit `ProfitCalc` → CB39 al pagar cada packet; CB145 sigue OOS |
+| `1A` callback mask BYTE | **parcial runtime**: bit `ProfitCalc` → CB39 al pagar cada packet; bit `StationRatingCalc` → CB145 en el barrido periódico de rating; demás bits OOS |
 | `1D` capacity multiplier | **runtime** → compra vehículo |
 | `FE` nombre C-string (extensión local) | **runtime** (UI / inspect) |
 | strings WORD `09`–`0D` / `1B`/`1C` | consumidas |

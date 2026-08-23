@@ -15,6 +15,7 @@ pub use cargo_rating::{
     modify_station_rating_around, note_station_load_attempt, on_station_cargo_pickup,
     recompute_station_rating, station_is_freight_pickup_stop, station_rating_for_cargo,
     station_rating_for_company_cargo, update_station_ratings,
+    update_station_ratings_with_cargo_callbacks,
 };
 pub use coverage::{
     STATION_COVERAGE_RADIUS, StationCoverage, StationMapCoherenceReport,

@@ -14,14 +14,14 @@ use crate::industry_tile::IndustryTileSpecDef;
 use crate::map::TileCoord;
 use crate::newgrf_sprites::{
     Action2EvalCtx, Action2RandomEntry, CALLBACK_FAILED, CBID_CARGO_PROFIT_CALC,
-    CBID_HOUSE_ALLOW_CONSTRUCTION, CBID_INDUSTRY_LOCATION, CBID_OBJECT_LAND_SLOPE_CHECK,
-    CBID_STATION_ANIMATION_NEXT_FRAME, CBID_STATION_ANIMATION_SPEED,
+    CBID_CARGO_STATION_RATING_CALC, CBID_HOUSE_ALLOW_CONSTRUCTION, CBID_INDUSTRY_LOCATION,
+    CBID_OBJECT_LAND_SLOPE_CHECK, CBID_STATION_ANIMATION_NEXT_FRAME, CBID_STATION_ANIMATION_SPEED,
     CBID_STATION_ANIMATION_TRIGGER, CBID_STATION_AVAILABILITY, CBID_VEHICLE_START_STOP_CHECK,
     TrainSpriteGraphics,
 };
 use crate::object_spec::ObjectSpecDef;
 use crate::station::Station;
-use crate::vehicle::Vehicle;
+use crate::vehicle::{Vehicle, VehicleKind};
 use crate::{RoadType, StopKind};
 
 /// Escribe `persistent_registers` del ctx al vehículo.
@@ -166,8 +166,8 @@ pub fn apply_house_construction_callback(def: &HouseSpecDef) -> bool {
     callback_allows_8bit_boolean(result)
 }
 
-/// Convierte el resultado de CB39 al entero con signo de 15 bits de `OpenTTD`.
-fn cargo_profit_multiplier(result: u16) -> i64 {
+/// Convierte un resultado callback de 15 bits al entero con signo de `OpenTTD`.
+fn signed_15_bit_callback_result(result: u16) -> i64 {
     let low_14 = i64::from(result & 0x3FFF);
     if result & 0x4000 != 0 {
         low_14 - 0x4000
@@ -203,13 +203,63 @@ pub fn resolve_cargo_profit_callback(
     if result == CALLBACK_FAILED {
         return None;
     }
-    let multiplier = cargo_profit_multiplier(result);
+    let multiplier = signed_15_bit_callback_result(result);
     Some(
         multiplier
             .saturating_mul(i64::from(count))
             .saturating_mul(current_payment)
             / 8192,
     )
+}
+
+/// Codificación histórica de tipo de vehículo que recibe CB145 en `var 10`.
+const fn cargo_station_rating_vehicle_param(last_vehicle_kind: Option<VehicleKind>) -> u32 {
+    match last_vehicle_kind {
+        None => 0,
+        Some(VehicleKind::Train) => 0x10,
+        Some(VehicleKind::Truck | VehicleKind::Bus | VehicleKind::Tram) => 0x11,
+        Some(VehicleKind::Ship) => 0x12,
+        Some(VehicleKind::Aircraft) => 0x13,
+    }
+}
+
+/// Resuelve CB `0x145` de cargo para el target de rating de una estación.
+///
+/// `param1` conserva el tipo histórico del último vehículo y `param2` empaqueta
+/// días sin recogida (`u8`), máximo de carga esperando (`u16`) y última velocidad
+/// (`u8`; `0xFF` si nunca llegó un vehículo). Si el callback no está disponible,
+/// devuelve `None` para conservar el algoritmo de rating estándar.
+#[must_use]
+pub fn resolve_cargo_station_rating_callback(
+    def: &CargoSpecDef,
+    time_since_pickup: u8,
+    max_waiting_cargo: u32,
+    has_vehicle_ever_tried_loading: bool,
+    last_speed: u8,
+    last_vehicle_kind: Option<VehicleKind>,
+) -> Option<i16> {
+    if !def.has_station_rating_callback() {
+        return None;
+    }
+    let runtime = def.newgrf_runtime.as_ref()?;
+    let speed = if has_vehicle_ever_tried_loading {
+        last_speed
+    } else {
+        u8::MAX
+    };
+    let param2 = u32::from(time_since_pickup)
+        | (max_waiting_cargo.min(u32::from(u16::MAX)) << 8)
+        | (u32::from(speed) << 24);
+    let result = runtime.resolve_callback(
+        def.id,
+        CBID_CARGO_STATION_RATING_CALC,
+        cargo_station_rating_vehicle_param(last_vehicle_kind),
+        param2,
+    );
+    if result == CALLBACK_FAILED {
+        return None;
+    }
+    i16::try_from(signed_15_bit_callback_result(result)).ok()
 }
 
 /// Call site objeto: CB `0x157` de pendiente al construir cada tesela.
@@ -633,6 +683,32 @@ mod tests {
         gfx
     }
 
+    fn gfx_callback_variable_byte(variable: u8, shift: u8) -> TrainSpriteGraphics {
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 2,
+        });
+        gfx.action2_var.insert(
+            2,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        shift,
+                        and_mask: u8::MAX,
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
+        gfx
+    }
+
     /// `16 * 64 = 0x400` vía operador mul (`and_mask` es BYTE).
     fn gfx_callback_allow_400() -> TrainSpriteGraphics {
         let mut gfx = TrainSpriteGraphics::default();
@@ -821,11 +897,119 @@ mod tests {
     }
 
     #[test]
-    fn cargo_profit_multiplier_uses_upstream_signed_15_bit_encoding() {
-        assert_eq!(cargo_profit_multiplier(0), 0);
-        assert_eq!(cargo_profit_multiplier(0x3FFF), 16_383);
-        assert_eq!(cargo_profit_multiplier(0x4000), -16_384);
-        assert_eq!(cargo_profit_multiplier(0x7FFF), -1);
+    fn callback_result_uses_upstream_signed_15_bit_encoding() {
+        assert_eq!(signed_15_bit_callback_result(0), 0);
+        assert_eq!(signed_15_bit_callback_result(0x3FFF), 16_383);
+        assert_eq!(signed_15_bit_callback_result(0x4000), -16_384);
+        assert_eq!(signed_15_bit_callback_result(0x7FFF), -1);
+    }
+
+    #[test]
+    fn cargo_station_rating_uses_legacy_vehicle_type_codes() {
+        assert_eq!(cargo_station_rating_vehicle_param(None), 0);
+        assert_eq!(
+            cargo_station_rating_vehicle_param(Some(VehicleKind::Train)),
+            0x10
+        );
+        assert_eq!(
+            cargo_station_rating_vehicle_param(Some(VehicleKind::Bus)),
+            0x11
+        );
+        assert_eq!(
+            cargo_station_rating_vehicle_param(Some(VehicleKind::Tram)),
+            0x11
+        );
+        assert_eq!(
+            cargo_station_rating_vehicle_param(Some(VehicleKind::Ship)),
+            0x12
+        );
+        assert_eq!(
+            cargo_station_rating_vehicle_param(Some(VehicleKind::Aircraft)),
+            0x13
+        );
+    }
+
+    #[test]
+    fn cargo_station_rating_packs_upstream_callback_parameters_and_falls_back() {
+        let mut def = CargoSpecDef {
+            callback_mask: crate::CARGO_CALLBACK_STATION_RATING_CALC_MASK,
+            ..CargoSpecDef::default()
+        };
+
+        def.newgrf_runtime = Some(Box::new(gfx_callback_variable_byte(0x0C, 0)));
+        assert_eq!(
+            resolve_cargo_station_rating_callback(
+                &def,
+                0xAB,
+                0x1234,
+                true,
+                0x44,
+                Some(VehicleKind::Bus),
+            ),
+            Some(0x45),
+            "var0C debe recibir CB145"
+        );
+
+        def.newgrf_runtime = Some(Box::new(gfx_callback_variable_byte(0x10, 0)));
+        assert_eq!(
+            resolve_cargo_station_rating_callback(
+                &def,
+                0xAB,
+                0x1234,
+                true,
+                0x44,
+                Some(VehicleKind::Bus),
+            ),
+            Some(0x11),
+            "var10 debe recibir el tipo road histórico"
+        );
+
+        def.newgrf_runtime = Some(Box::new(gfx_callback_variable_byte(0x18, 0)));
+        assert_eq!(
+            resolve_cargo_station_rating_callback(
+                &def,
+                0xAB,
+                0x1234,
+                true,
+                0x44,
+                Some(VehicleKind::Bus),
+            ),
+            Some(0xAB),
+            "var18 byte bajo debe ser días sin recogida"
+        );
+
+        def.newgrf_runtime = Some(Box::new(gfx_callback_variable_byte(0x18, 8)));
+        assert_eq!(
+            resolve_cargo_station_rating_callback(
+                &def,
+                0xAB,
+                0x1234,
+                true,
+                0x44,
+                Some(VehicleKind::Bus),
+            ),
+            Some(0x34),
+            "var18 bits 8..15 deben contener espera"
+        );
+
+        def.newgrf_runtime = Some(Box::new(gfx_callback_variable_byte(0x18, 24)));
+        assert_eq!(
+            resolve_cargo_station_rating_callback(&def, 0, 0, false, 0x44, None),
+            Some(0xFF),
+            "sin visita previa OpenTTD entrega velocidad 0xFF"
+        );
+        assert_eq!(
+            resolve_cargo_station_rating_callback(&def, 0, 0, true, 0x44, None),
+            Some(0x44),
+            "con visita previa conserva la última velocidad"
+        );
+
+        def.newgrf_runtime = Some(Box::default());
+        assert_eq!(
+            resolve_cargo_station_rating_callback(&def, 0, 0, false, 0, None),
+            None,
+            "CALLBACK_FAILED debe dejar el rating estándar"
+        );
     }
 
     #[test]

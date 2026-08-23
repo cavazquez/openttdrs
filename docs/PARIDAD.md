@@ -18,7 +18,7 @@ el mismo seed (brecha de producto aún abierta).
 
 ## Estado canónico actual
 
-**Corte canónico: 2026-08-21 · `main` `288ba794`.
+**Corte canónico: 2026-08-22 · `main` `31c7ec03`.
 Referencia: OpenTTD 15.3, commit
 `14ec60f248547d4d062a1160f0fc26d742319888`.** Esta tabla es la fuente de
 verdad para el estado vigente. Las tablas detalladas posteriores conservan el
@@ -168,7 +168,6 @@ es evidencia de composición global aplicada.
 
 <!-- active-parity-backlog:start -->
 
-- [#313](https://github.com/cavazquez/openttdrs/issues/313) — calibrar cámara y composición tras el draw-plan exacto.
 - [#326](https://github.com/cavazquez/openttdrs/issues/326) — integrar composición global y cerrar paridad de framebuffer.
 - [#328](https://github.com/cavazquez/openttdrs/issues/328) — interoperabilidad residual de VEHS, ORDL, GRPS y ERNW.
 - [#329](https://github.com/cavazquez/openttdrs/issues/329) — callbacks runtime y persistencia NewGRF residual.

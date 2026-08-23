@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "cutoff": {
-    "date": "2026-08-21",
-    "main_commit": "288ba794",
+    "date": "2026-08-22",
+    "main_commit": "31c7ec03",
     "openttd_tag": "15.3",
     "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888"
   },
-  "active_issues": [313, 326, 328, 329, 330, 331],
+  "active_issues": [326, 328, 329, 330, 331],
   "closed_delivery_range": [275, 291]
 }

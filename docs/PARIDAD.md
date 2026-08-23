@@ -154,15 +154,19 @@ no una certificación raster. Los 383 comandos `industry-building` de Kale ya
 están contenidos por `world-draw`; eso no equivale a que sus variantes dinámicas
 o NewGRF tengan parent/children runtime. La relación rail base/vía posterior a
 fundación ya queda cubierta en runtime. El ancla visible de cada
-`DrawFoundation` aplica ahora también `SpriteBounds.origin` antes de proyectar
-el sprite: en el foco rail `(229,149)`, la media foundation `5499` con origen
-`(8,0,0)` deja de abrir sus dos rombos negros en las capturas limpias de
-`0,25×`, `1×` y `2×`. Persisten otros huecos y triángulos de infraestructura
-en las vistas amplias, por lo que #326 sigue abierto y no hay paridad raster.
-Restan otras familias de children, clipping, anclajes finales y framebuffer. El siguiente trabajo debe
-extenderlo a las piezas visibles de puentes y las familias NewGRF de estación,
-aeropuertos y objetos, no rebajar el baseline ni extrapolar una región a
-paridad general.
+`DrawFoundation` aplica también `SpriteBounds.origin` antes de proyectar el
+sprite; para la media foundation rail añade el recorte `SubSprite` y no vuelve
+a aplicar el offset de child ya compensado por ese origen. En el foco Kale
+`(229,149)`, la foundation `5499` con origen `(8,0,0)` deja de abrir rombos
+negros ni triángulos verdes: `world-draw` conserva 282/282 comandos contenidos
+y el raster limpio normal baja de 134.932 a **129.724 de 921.600 píxeles
+distintos (14,075955 %)**. Las capturas reales en `0,25×`, `1×` y `2×` no
+reintroducen el artefacto. Persisten otras familias de infraestructura en las
+vistas amplias, por lo que #326 sigue abierto y no hay paridad raster. Restan
+children, clipping, anclajes finales y framebuffer fuera de este foco; el
+siguiente trabajo debe extenderse a piezas visibles de puentes y familias
+NewGRF de estación, aeropuertos y objetos, sin rebajar el baseline ni
+extrapolar una región a paridad general.
 
 El perfil `CLEAN` normaliza la UI, las preferencias persistidas y los overrides
 de transparencia conocidos, pero no convierte al renderer actual en un gate

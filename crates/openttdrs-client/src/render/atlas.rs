@@ -18,6 +18,13 @@ use crate::sprites::{
 pub(crate) struct AtlasSprite {
     pub(crate) image: Handle<Image>,
     pub(crate) atlas: TextureAtlas,
+    /// Tamaño de la entrada original del atlas, antes de un `Sprite::rect`.
+    ///
+    /// Los recortes equivalentes a `SubSprite` necesitan conservar el ancla
+    /// del PNG completo. Consultarlo desde el layout en cada spawn no es
+    /// posible sin un recurso `Assets<TextureAtlasLayout>` en todos los
+    /// renderizadores, por lo que lo preservamos junto al handle.
+    pub(crate) size: Vec2,
 }
 
 impl AtlasSprite {
@@ -90,12 +97,14 @@ impl TileAtlas {
         let rect_idx = TILE_ATLAS_NAMES[i].1;
         let page = usize::from(TILE_ATLAS_RECTS[rect_idx as usize].0);
         let (start, _end) = TILE_ATLAS_PAGE_RANGES[page];
+        let (_, _, _, width, height) = TILE_ATLAS_RECTS[rect_idx as usize];
         Some(AtlasSprite {
             image: self.pages[page].clone(),
             atlas: TextureAtlas {
                 layout: self.layouts[page].clone(),
                 index: (rect_idx - start) as usize,
             },
+            size: Vec2::new(f32::from(width), f32::from(height)),
         })
     }
 
@@ -111,6 +120,10 @@ impl TileAtlas {
                     layout: self.layouts[0].clone(),
                     index: 0,
                 },
+                size: Vec2::new(
+                    f32::from(TILE_ATLAS_RECTS[0].3),
+                    f32::from(TILE_ATLAS_RECTS[0].4),
+                ),
             }
         })
     }

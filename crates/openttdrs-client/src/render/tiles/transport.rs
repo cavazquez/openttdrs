@@ -9,9 +9,9 @@ use super::{
     spawn_ground_sprite, spawn_rail_foundation, spawn_road_foundation,
 };
 use crate::iso::{
-    TILE_HALF_H, full_tile_sprite_pos, full_tile_sprite_pos_half, ground_tile_pos_half,
-    overlay_pos, remap_tile_offset, shore_png_index, shore_sprite_half_h, slope_half_h,
-    slope_sprite_offset, sortable_draw_z, tile_pos_half,
+    GROUND_SPRITE_CENTER_X_OFFSET, TILE_HALF_H, full_tile_sprite_pos, full_tile_sprite_pos_half,
+    ground_tile_pos_half, overlay_pos, remap_tile_offset, shore_png_index, shore_sprite_half_h,
+    slope_half_h, slope_sprite_offset, sortable_draw_z, tile_pos_half,
 };
 use crate::render::catenary_newgrf::catenary_sprite_colored;
 use crate::render::road_newgrf::{
@@ -394,18 +394,48 @@ const fn halftile_foundation_child_offset(corner: u8) -> (i32, i32, i32) {
     }
 }
 
-/// Convierte el mismo desplazamiento de `OffsetGroundSprite` a las
-/// coordenadas del renderer. El oráculo lo serializa multiplicado por
-/// `ZOOM_BASE=4`, mientras que nuestras teselas 8bpp ya usan píxeles finales
-/// de 64×31 y Bevy tiene Y hacia arriba.
-const fn halftile_foundation_child_visual_offset(corner: Option<u8>) -> Vec2 {
-    match corner {
-        Some(corner) => {
-            let (x, y, _) = halftile_foundation_child_offset(corner);
-            Vec2::new(x as f32 / 4.0, -(y as f32) / 4.0)
-        }
-        None => Vec2::ZERO,
+/// Convierte el `SubSprite` de la parte alta de una foundation de media
+/// tesela en un rectángulo de un `Sprite` de Bevy.
+///
+/// `DrawFoundation(Halftile...)` desplaza el parent por el origen de sus
+/// bounds y luego `OffsetGroundSprite` aplica el desplazamiento inverso al
+/// child. Por eso el ancla del PNG de vía ya es la de la tesela cruda; sólo
+/// hay que recortar la mitad que `GfxBlitter` deja visible. El centro de un
+/// `Sprite::rect` cambia al recortarlo, de modo que devolvemos también la
+/// compensación necesaria para mantener los píxeles que sobreviven en su
+/// posición OpenTTD.
+fn halftile_track_subsprite(corner: Option<u8>, size: Vec2, half_h: f32) -> Option<(Rect, Vec2)> {
+    let corner = corner?;
+    if size.x <= 0.0 || size.y <= 0.0 {
+        return None;
     }
+
+    // `full_tile_sprite_pos_half` expresa el mismo ancla que
+    // `DrawGroundSprite`: xrel = 1 - width/2 y yrel = half_h - height/2.
+    let xrel = GROUND_SPRITE_CENTER_X_OFFSET - size.x / 2.0;
+    let yrel = half_h - size.y / 2.0;
+    let rect = match corner {
+        // `{ -INF, -INF, 32 - 33, INF }`: derecha inclusiva = -1.
+        0 => Rect::new(0.0, 0.0, (-xrel).clamp(0.0, size.x), size.y),
+        // `{ -INF, 0 + 7, INF, INF }`.
+        1 => Rect::new(0.0, (7.0 - yrel).clamp(0.0, size.y), size.x, size.y),
+        // `{ -31 + 33, -INF, INF, INF }`: izquierda inclusiva = 2.
+        2 => Rect::new((2.0 - xrel).clamp(0.0, size.x), 0.0, size.x, size.y),
+        // `{ -INF, -INF, INF, 30 - 23 }`: abajo inclusivo = 7.
+        _ => Rect::new(0.0, 0.0, size.x, (8.0 - yrel).clamp(0.0, size.y)),
+    };
+    if rect.width() <= 0.0 || rect.height() <= 0.0 {
+        return None;
+    }
+
+    // El eje Y de la textura crece hacia abajo pero Bevy posiciona sprites
+    // en Y hacia arriba. La componente Y de la compensación invierte por eso
+    // el desplazamiento del centro del rectángulo fuente.
+    let shift = Vec2::new(
+        rect.center().x - size.x / 2.0,
+        size.y / 2.0 - rect.center().y,
+    );
+    Some((rect, shift))
 }
 
 /// `DrawTrackBits` sólo difiere la fundación cuando hay una pasada baja y una
@@ -1640,8 +1670,6 @@ pub(crate) fn spawn_rail_tile(
             pass_ends[pass_index - 1]
         };
         let end = pass_ends[pass_index];
-        let halftile_offset =
-            halftile_foundation_child_visual_offset(pass_halftile_corner[pass_index]);
         for sid in rail_layers[start..end].iter().copied() {
             let missing_asset = !assets.rail.contains_key(&sid);
             let fallback = typed_selection_fallback || missing_asset;
@@ -1669,30 +1697,34 @@ pub(crate) fn spawn_rail_tile(
                 z,
                 pass_half_h[pass_index],
             );
-            let position = base
-                + Vec3::new(
-                    offset.x + halftile_offset.x,
-                    offset.y + halftile_offset.y,
-                    0.0,
-                );
+            let mut sprite = img.sprite_colored(rail_paint);
+            let crop_shift = if let Some((rect, shift)) = halftile_track_subsprite(
+                pass_halftile_corner[pass_index],
+                img.size,
+                pass_half_h[pass_index],
+            ) {
+                sprite.rect = Some(rect);
+                shift
+            } else {
+                Vec2::ZERO
+            };
+            // `OffsetGroundSprite` ya queda incorporado por el origen del
+            // parent y el ancla NFO de la pendiente falsa. Sumárselo de nuevo
+            // desplaza el child 16 px y separa la vía del backing de agua.
+            let position = base + Vec3::new(offset.x + crop_shift.x, offset.y + crop_shift.y, 0.0);
             if matches!(
                 pass_modes[pass_index],
                 RailTrackTraceMode::FoundationChild(_)
             ) && let Some(parent) = foundation_child_parent
             {
                 spawn_foundation_child_sprite_at(
-                    commands,
-                    img.sprite_colored(rail_paint),
-                    ctx,
-                    position,
-                    map_dims.0,
-                    parent,
+                    commands, sprite, ctx, position, map_dims.0, parent,
                 );
             } else {
                 commands.spawn((
                     MapVisualLayer,
                     ctx.map_tile_chunk(),
-                    img.sprite_colored(rail_paint),
+                    sprite,
                     Transform::from_translation(position),
                 ));
             }
@@ -1720,12 +1752,7 @@ pub(crate) fn spawn_rail_tile(
                     0.026 + pbs_layer_index as f32 * 0.0004,
                     pass_half_h[pass_index],
                 );
-                let position = base
-                    + Vec3::new(
-                        offset.x + halftile_offset.x,
-                        offset.y + bevy_extra_y + halftile_offset.y,
-                        0.0,
-                    );
+                let position = base + Vec3::new(offset.x, offset.y + bevy_extra_y, 0.0);
                 if matches!(mode, RailTrackTraceMode::FoundationChild(_))
                     && let Some(parent) = foundation_child_parent
                 {
@@ -2015,15 +2042,15 @@ pub(crate) fn spawn_rail_tile(
 
 #[cfg(test)]
 mod tests {
-    use bevy::prelude::Vec2;
+    use bevy::prelude::{Rect, Vec2};
 
     use super::{
-        RailGroundKind, RailTrackTraceMode, catenary_local_z_delta,
-        halftile_foundation_child_visual_offset, pbs_extra_y_in_bevy, pbs_track_sprite_extra_y,
-        rail_foundation_after_pass, rail_ground_sprite_id, rail_initial_ground_draw,
-        rail_track_trace_mode, rail_upper_halftile_ground_draw, road_detail_world_z_delta,
-        road_foundation_child_offset, roadside_streetlight_parent_sprites,
-        roadside_streetlight_sorted_depths, signal_trace_geometry,
+        RailGroundKind, RailTrackTraceMode, catenary_local_z_delta, halftile_track_subsprite,
+        pbs_extra_y_in_bevy, pbs_track_sprite_extra_y, rail_foundation_after_pass,
+        rail_ground_sprite_id, rail_initial_ground_draw, rail_track_trace_mode,
+        rail_upper_halftile_ground_draw, road_detail_world_z_delta, road_foundation_child_offset,
+        roadside_streetlight_parent_sprites, roadside_streetlight_sorted_depths,
+        signal_trace_geometry,
     };
     use crate::sprites::{
         RAIL_GROUND_HALF_TILE_SNOW, RAIL_GROUND_HALF_TILE_WATER, RAIL_TB_LEFT, RAIL_TB_LOWER,
@@ -2233,23 +2260,32 @@ mod tests {
     }
 
     #[test]
-    fn halftile_rail_passes_defer_the_foundation_and_keep_its_screen_offset() {
+    fn halftile_rail_passes_defer_the_foundation_and_clip_like_openttd() {
         // Kale_TitleGame (160,65): hay una pasada baja y otra alta; el
         // cimiento Action5 debe emitirse entre ambas, no antes de las dos.
         let plan = openttdrs_core::rail_track_draw_plan(0x02, 0x0C);
         assert_eq!(rail_foundation_after_pass(plan), Some(0));
 
-        // `OffsetGroundSprite(0, -16)` se serializa como (0,-64) en el
-        // oráculo (ZOOM_BASE=4). El renderer usa Y positivo hacia arriba.
+        // `_halftile_sub_sprite` se aplica al PNG de la pendiente falsa. La
+        // compensación conserva el borde que OpenTTD dibuja antes de recortar
+        // el centro del sprite de Bevy.
         assert_eq!(
-            halftile_foundation_child_visual_offset(Some(1)),
-            Vec2::new(0.0, 16.0)
+            halftile_track_subsprite(Some(0), Vec2::new(64.0, 31.0), 7.5),
+            Some((Rect::new(0.0, 0.0, 31.0, 31.0), Vec2::new(-16.5, 0.0)))
         );
         assert_eq!(
-            halftile_foundation_child_visual_offset(Some(0)),
-            Vec2::new(16.0, 8.0)
+            halftile_track_subsprite(Some(1), Vec2::new(64.0, 23.0), 11.5),
+            Some((Rect::new(0.0, 7.0, 64.0, 23.0), Vec2::new(0.0, -3.5)))
         );
-        assert_eq!(halftile_foundation_child_visual_offset(None), Vec2::ZERO);
+        assert_eq!(
+            halftile_track_subsprite(Some(2), Vec2::new(64.0, 31.0), 7.5),
+            Some((Rect::new(33.0, 0.0, 64.0, 31.0), Vec2::new(16.5, 0.0)))
+        );
+        assert_eq!(
+            halftile_track_subsprite(Some(3), Vec2::new(64.0, 39.0), 11.5),
+            Some((Rect::new(0.0, 0.0, 64.0, 16.0), Vec2::new(0.0, 11.5)))
+        );
+        assert_eq!(halftile_track_subsprite(None, Vec2::ONE, 0.5), None);
     }
 
     #[test]

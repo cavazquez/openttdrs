@@ -184,6 +184,7 @@ mod tests {
                 layout: layout.clone(),
                 index: n,
             },
+            size: Vec2::ONE,
         }
     }
 

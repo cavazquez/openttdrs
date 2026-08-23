@@ -85,6 +85,7 @@ mod tests {
                 ),
                 index: n as usize,
             },
+            size: Vec2::ONE,
         }
     }
 

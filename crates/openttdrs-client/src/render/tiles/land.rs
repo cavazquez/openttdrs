@@ -19,10 +19,9 @@ use crate::render::atlas::AtlasSprite;
 use crate::render::viewport_sort::ParentSpriteBounds;
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
 use crate::render::{
-    CompanyColoredSprites, MapSpriteBatches, MapVisualLayer, TileRenderContext,
-    ViewportSortableChild, ViewportSortableParent, WaterTile, WorldAssets,
-    sprite_from_atlas_or_company_colour, sprite_from_atlas_or_industry_palette,
-    viewport_insertion_key, viewport_source_depth,
+    CompanyColoredSprites, MapVisualLayer, TileRenderContext, ViewportSortableChild,
+    ViewportSortableParent, WaterTile, WorldAssets, sprite_from_atlas_or_company_colour,
+    sprite_from_atlas_or_industry_palette, viewport_insertion_key, viewport_source_depth,
 };
 use crate::sprites::{
     CompanyColour, FENCE_MOD_BY_TILEH_NE, FENCE_MOD_BY_TILEH_NW, FENCE_MOD_BY_TILEH_SE,
@@ -1507,9 +1506,9 @@ const fn tree_slope_z_offset(tileh: u8) -> i32 {
 }
 
 pub(crate) fn push_forest_tree(
+    commands: &mut Commands,
     assets: &WorldAssets,
     ctx: &TileRenderContext,
-    batches: &mut MapSpriteBatches,
     map_w: u32,
 ) {
     use crate::sprites::{TransparencyOption, is_hidden, sprite_color};
@@ -1550,6 +1549,7 @@ pub(crate) fn push_forest_tree(
     // copa como en el artefacto azul observado.
     sort_tree_layers_like_openttd(&mut layers);
 
+    let mut parent_entity = None;
     for (draw_order, (sprite_idx, dx, dy)) in layers.into_iter().enumerate() {
         // `TREE_LAYOUT_SPRITE` contiene índices relativos a SPR_TREE_BASE
         // (1576). Registrar el ID original antes de resolver el atlas permite
@@ -1587,12 +1587,58 @@ pub(crate) fn push_forest_tree(
         // unidad de `GetSlopeMaxPixelZ(tileh) / 2` en píxeles y en la capa.
         pos3.y += slope_z_offset as f32;
         pos3.z += slope_z_offset as f32 * 0.000_125;
-        batches.trees.push((
-            ctx.map_tile_chunk(),
-            assets.trees[sprite_idx].sprite_colored(tint),
-            Transform::from_translation(pos3),
-        ));
+        let sprite = assets.trees[sprite_idx].sprite_colored(tint);
+        if draw_order == 0 {
+            // Sólo la primera capa es un parent de `DrawTile_Trees`; las
+            // restantes llegan con `AddCombinedSprite` y deben seguirlo si
+            // el sorter global intercambia el árbol con una estructura
+            // vecina. La caja no incorpora dx/dy: OpenTTD usa esos valores
+            // como offset de pantalla, pero el prisma 16×16×48 empieza en la
+            // tesela base (tal como lo expone world-sort).
+            let source_depth = viewport_source_depth(pos3.z, ctx.tx, map_w);
+            pos3.z = source_depth;
+            let entity = commands
+                .spawn((
+                    MapVisualLayer,
+                    ctx.map_tile_chunk(),
+                    sprite,
+                    Transform::from_translation(pos3),
+                    ViewportSortableParent {
+                        sprite_id: 1576 + sprite_idx as u32,
+                        bounds: tree_parent_bounds(ctx, slope_z_offset),
+                        insertion_key: viewport_insertion_key(ctx.tx, ctx.ty, 1),
+                        source_depth,
+                    },
+                ))
+                .id();
+            parent_entity = Some(entity);
+        } else {
+            let mut entity = commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                sprite,
+                Transform::from_translation(pos3),
+            ));
+            if let Some(parent) = parent_entity {
+                entity.insert(ViewportSortableChild {
+                    parent,
+                    source_depth: pos3.z,
+                });
+            }
+        }
     }
+}
+
+/// Prisma que OpenTTD entrega para el primer árbol de `DrawTile_Trees`.
+///
+/// Las posiciones de layout desplazan el píxel de la copa, no la caja del
+/// parent. `AddSortableSpriteToDraw` conserva la tesela base 16×16 y la mitad
+/// de pendiente calculada por `GetSlopeMaxPixelZ(tileh) / 2`.
+fn tree_parent_bounds(ctx: &TileRenderContext, slope_z_offset: i32) -> ParentSpriteBounds {
+    let xmin = ctx.tx_i32() * 16;
+    let ymin = ctx.ty_i32() * 16;
+    let zmin = i32::from(ctx.info.base_z) * 8 + slope_z_offset;
+    ParentSpriteBounds::new(xmin, ymin, zmin, xmin + 15, ymin + 15, zmin + 47)
 }
 
 #[cfg(test)]
@@ -1612,8 +1658,8 @@ mod tests {
         field_slope_max_pixel_z, field_slope_pixel_z_in_corner, house_building_trace_geometry,
         house_lift_screen_offset, industry_building_parent_bounds, industry_building_trace_palette,
         openttd_tile_hash, rough_flat_variant, sort_tree_layers_like_openttd,
-        tree_density_from_tile, tree_ground_from_tile, tree_ground_sprite_id, tree_shore_sprite_id,
-        void_ground_sprite_and_palette,
+        tree_density_from_tile, tree_ground_from_tile, tree_ground_sprite_id, tree_parent_bounds,
+        tree_shore_sprite_id, tree_slope_z_offset, void_ground_sprite_and_palette,
     };
 
     fn industry_ctx_at(tx: u32, ty: u32, base_z: u8) -> TileRenderContext {
@@ -1687,6 +1733,28 @@ mod tests {
         sort_tree_layers_like_openttd(&mut layers);
 
         assert_eq!(layers, [(1611, 1, 8), (1700, 1, 8), (1593, 9, 3)]);
+    }
+
+    #[test]
+    fn tree_parent_bounds_keep_base_tile_and_half_slope_height() {
+        // Kale `(138,7)`: el offset de layout de la copa es `(4,4)`, pero
+        // `ViewportSortParentSprites` recibe el prisma base 2208..2223,
+        // 112..127 y la media pendiente z=4.
+        let ctx = industry_ctx_at(138, 7, 0);
+        let bounds = tree_parent_bounds(&ctx, tree_slope_z_offset(0x04));
+        assert_eq!(
+            (
+                bounds.xmin,
+                bounds.ymin,
+                bounds.zmin,
+                bounds.xmax,
+                bounds.ymax,
+                bounds.zmax,
+            ),
+            (2208, 112, 4, 2223, 127, 51)
+        );
+        assert_eq!(tree_slope_z_offset(0), 0);
+        assert_eq!(tree_slope_z_offset(0x1b), 8);
     }
 
     #[test]

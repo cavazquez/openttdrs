@@ -19,7 +19,7 @@ use crate::render::tiles::{
 };
 use crate::render::{
     CompanyColoredSprites, MapSpriteBatches, MapVisualLayer, RenderGrid, TileRenderContext,
-    ViewportSortableParent,
+    ViewportSortableChild, ViewportSortableParent,
 };
 use crate::sprites::{RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS};
 
@@ -1094,6 +1094,61 @@ fn ship_depot_uses_water_and_all_vanilla_two_tile_parts() {
 }
 
 #[test]
+fn forest_combined_layers_attach_to_the_global_sort_parent() {
+    let assets = boot_assets_app();
+    let mut map = Map::new_flat(4, 4, 0);
+    let mut tree = tile_template();
+    tree.kind = TileKind::Forest;
+    tree.mapt = 0x40;
+    // Tres capas: la primera es parent y las otras dos son CombinedSprite.
+    tree.m5 = 0x80;
+    map.set_tile(TileCoord::new(1, 1), tree)
+        .expect("forest tile");
+    let grid = RenderGrid::from_map(&map, 4, 4);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+
+    world
+        .run_system_once(
+            |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                push_forest_tree(
+                    &mut commands,
+                    &a.0,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    m.0.dimensions().0,
+                );
+            },
+        )
+        .expect("forest spawn");
+
+    let mut parent_query = world.query::<(Entity, &ViewportSortableParent)>();
+    let parents: Vec<_> = parent_query.iter(&world).collect();
+    assert_eq!(parents.len(), 1, "el árbol comienza un parent sortable");
+    let (parent_entity, parent) = parents[0];
+    assert_eq!(
+        (
+            parent.bounds.xmin,
+            parent.bounds.ymin,
+            parent.bounds.zmin,
+            parent.bounds.xmax,
+            parent.bounds.ymax,
+            parent.bounds.zmax,
+        ),
+        (16, 16, 0, 31, 31, 47)
+    );
+
+    let mut child_query = world.query::<&ViewportSortableChild>();
+    let children: Vec<_> = child_query.iter(&world).collect();
+    assert_eq!(children.len(), 2, "las capas combinadas siguen al parent");
+    assert!(
+        children.iter().all(|child| child.parent == parent_entity),
+        "ninguna copa combinada puede quedar con profundidad independiente"
+    );
+}
+
+#[test]
 fn airport_pier_tile_seq_layers_spawn_for_both_import_paths() {
     let assets = boot_assets_app();
     let expected_apron = assets.airport_apron.clone();
@@ -1508,9 +1563,9 @@ fn spawn_land_house_industry_generics_and_batches() {
                     None,
                 );
                 push_forest_tree(
+                    &mut commands,
                     &a.0,
                     &TileRenderContext::new(&m.0, &g.0, 4, 4),
-                    &mut batches,
                     mw,
                 );
                 flush_map_batches(&mut commands, batches);

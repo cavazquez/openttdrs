@@ -294,7 +294,7 @@ pub(crate) fn spawn_map_tiles_in_bounds(
         }
 
         if kind == TileKind::Forest {
-            push_forest_tree(assets, &ctx, &mut batches, mw);
+            push_forest_tree(commands, assets, &ctx, mw);
         }
 
         // Tramos de puente que pasan por encima de esta tesela (IsBridgeAbove).

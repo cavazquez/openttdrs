@@ -129,5 +129,4 @@ pub(crate) struct IndustryPreviewCamera;
 pub(crate) struct MapSpriteBatches {
     pub(super) water: Vec<(MapTileChunk, WaterTile, Sprite, Transform)>,
     pub(super) shore: Vec<(MapTileChunk, ShoreTile, Sprite, Transform)>,
-    pub(super) trees: Vec<(MapTileChunk, Sprite, Transform)>,
 }

@@ -628,6 +628,10 @@ pub struct SavCompany {
     pub colour: u8,
     /// Nombre personalizado, si el save usa el campo moderno `PLYR.name`.
     pub name: Option<String>,
+    /// Nombre personalizado del presidente (`PLYR.president_name`).
+    pub president_name: Option<String>,
+    /// Bitfield del retrato del presidente (`PLYR.face`).
+    pub manager_face: Option<u32>,
     /// Marca de compañía controlada por IA, si está presente en el save.
     pub is_ai: Option<bool>,
     /// Esquemas `PLYR.liveries` en orden `LiveryScheme`.
@@ -742,6 +746,12 @@ pub(crate) fn companies_from_chunks(chunks: &[RawChunk], save_version: u16) -> V
             let name = record_get(&record, "name")
                 .and_then(SlValue::as_str)
                 .map(str::to_owned);
+            let president_name = record_get(&record, "president_name")
+                .and_then(SlValue::as_str)
+                .map(str::to_owned);
+            let manager_face = record_get(&record, "face")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u32::try_from(value).ok());
             let is_ai = record_get(&record, "is_ai")
                 .and_then(SlValue::as_u64)
                 .map(|value| value != 0);
@@ -793,6 +803,8 @@ pub(crate) fn companies_from_chunks(chunks: &[RawChunk], save_version: u16) -> V
                 money,
                 colour,
                 name,
+                president_name,
+                manager_face,
                 is_ai,
                 liveries,
                 engine_renew_list_head,

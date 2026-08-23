@@ -2141,7 +2141,7 @@ payload (zlib si OTTZ; raw si OTTN)
 6. `ORDL` — `CH_TABLE` con struct `orders` (estación/waypoint/depósito/condicional); una lista por vehículo con órdenes
 7. `VEHS` — `CH_SPARSE_TABLE` de tren, bus/camión, barco y avión de ala fija + ref a ORDL
 8. `DATE` — `CH_TABLE` `date` (i32) + `tick_counter` (u64)
-9. `PLYR` — `CH_TABLE` `name` (string) + `money` (i64) + `colour` (u8) + `is_ai` (u8) + `settings.*` (autorrenovación y servicio por tipo) + las 23 entradas `liveries` (`in_use`/`colour1`/`colour2`)
+9. `PLYR` — `CH_TABLE` `name`/`president_name` (string) + `face` (u32) + `money` (i64) + `colour` (u8) + `is_ai` (u8) + `settings.*` (autorrenovación y servicio por tipo) + las 23 entradas `liveries` (`in_use`/`colour1`/`colour2`). `face_style` requiere SLV355 y no se emite mientras el writer permanezca en SLV350.
 10. Terminador `00 00 00 00`
 
 #### Mapeo `Tile` → planos
@@ -2165,7 +2165,7 @@ avión de ala fija.
 
 Preserva `CAPY` al importar/exportar, pero todavía no crea pagos activos desde
 el runtime; `PLYR` conserva dinero/color/nombre/indicador AI, el subconjunto ejecutado de
-`settings.*` y las 23 libreas por compañía, aunque faltan historial, rostro y flags completos; también faltan `OBJS`,
+`settings.*`, presidente y el bitfield de rostro por compañía, aunque faltan historial, flags completos y `face_style` (SLV355); también faltan `OBJS`,
 `GSET`/`ENGN`/`SRND` completos ni ejecución de configuración NewGRF. Los chunks
 nativos `NGRF`/`ENGN`/`OBJS`/`SRND` y mappings asociados se conservan como
 passthrough al reexportar. `PATS`/`OPTS` ya conserva el

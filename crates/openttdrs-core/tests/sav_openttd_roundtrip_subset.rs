@@ -73,3 +73,23 @@ fn openttd_resaved_preserves_requested_company_livery() {
         })
     );
 }
+
+/// Contrato opcional para la identidad visual nativa de compañía. El fixture
+/// rico escribe una presidenta y un rostro válido; OpenTTD debe poder
+/// re-guardarlos sin randomizarlos ni perder sus bits.
+#[test]
+fn openttd_resaved_preserves_requested_company_manager_identity() {
+    if std::env::var("OPENTTDRS_ROUNDTRIP_REQUIRE_COMPANY_MANAGER_IDENTITY").as_deref() != Ok("1") {
+        return;
+    }
+    let path = std::env::var("OPENTTDRS_ROUNDTRIP_SAV")
+        .expect("OPENTTDRS_ROUNDTRIP_SAV requerido para el smoke de identidad");
+    let raw = std::fs::read(&path).unwrap_or_else(|e| panic!("leer {path}: {e}"));
+    let game = sav::load(&raw).unwrap_or_else(|e| panic!("import openttdrs: {e}"));
+    let company = game
+        .companies
+        .first()
+        .expect("PLYR de compañía activa tras re-guardado OpenTTD");
+    assert_eq!(company.president_name.as_deref(), Some("Ada Lovelace"));
+    assert_eq!(company.manager_face, Some(1 << 7));
+}

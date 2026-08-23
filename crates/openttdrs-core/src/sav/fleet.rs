@@ -233,6 +233,8 @@ mod tests {
             money: 0,
             colour: 0,
             name: None,
+            president_name: None,
+            manager_face: None,
             is_ai: None,
             liveries: Vec::new(),
             engine_renew_list_head: Some(0),

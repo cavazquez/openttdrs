@@ -762,6 +762,8 @@ mod tests {
                 .expect("rival company");
             rival.economy.money = 456_789;
             rival.set_colour(11);
+            rival.president_name = Some("Ada Rival".into());
+            rival.manager_face = 1 << 7;
             rival.liveries[1] = crate::CompanyLivery {
                 in_use: crate::COMPANY_LIVERY_FLAG_PRIMARY,
                 colour1: 7,
@@ -790,12 +792,19 @@ mod tests {
         let (payload, _) = crate::sav::container::decompress(&bytes).expect("decompress");
         let chunks = crate::sav::chunks::parse_chunks(&payload).expect("chunks");
         let plyr = crate::sav::chunks::find_chunk(&chunks, "PLYR").expect("PLYR chunk");
+        assert_table_field_type(&plyr.body, 0x1A, "president_name");
+        assert_table_field_type(&plyr.body, 6, "face");
         assert_table_field_type(&plyr.body, 0x1B, "liveries");
         let sav_game = sav::load(&bytes).expect("load");
         assert_eq!(sav_game.companies.len(), 2);
         assert_eq!(sav_game.companies[1].money, 456_789);
         assert_eq!(sav_game.companies[1].colour, 11);
         assert_eq!(sav_game.companies[1].name.as_deref(), Some("TransCargo"));
+        assert_eq!(
+            sav_game.companies[1].president_name.as_deref(),
+            Some("Ada Rival")
+        );
+        assert_eq!(sav_game.companies[1].manager_face, Some(1 << 7));
         assert_eq!(sav_game.companies[1].is_ai, Some(true));
         assert_eq!(sav_game.companies[1].engine_renew, Some(false));
         assert_eq!(sav_game.companies[1].engine_renew_months, Some(-3));
@@ -818,6 +827,8 @@ mod tests {
         assert_eq!(loaded_rival.economy.money, 456_789);
         assert_eq!(loaded_rival.colour, 11);
         assert_eq!(loaded_rival.name, "TransCargo");
+        assert_eq!(loaded_rival.president_name.as_deref(), Some("Ada Rival"));
+        assert_eq!(loaded_rival.manager_face, 1 << 7);
         assert!(loaded_rival.is_ai);
         assert!(!loaded_rival.engine_renew);
         assert_eq!(loaded_rival.engine_renew_months, -3);
@@ -1151,6 +1162,8 @@ mod tests {
 
         let mut state = mvp_rich_state();
         state.sync_active_from_mirrors();
+        state.companies[0].president_name = Some("Ada Lovelace".into());
+        state.companies[0].manager_face = 1 << 7;
         state.companies[0].reset_liveries();
         let custom_bus_livery = crate::CompanyLivery {
             in_use: crate::COMPANY_LIVERY_FLAG_PRIMARY | crate::COMPANY_LIVERY_FLAG_SECONDARY,
@@ -1170,6 +1183,11 @@ mod tests {
         let sav_game = sav::load(&bytes).expect("load rust");
         assert!(sav_game.stations.len() >= 2);
         assert_eq!(sav_game.industries.len(), 1);
+        assert_eq!(
+            sav_game.companies[0].president_name.as_deref(),
+            Some("Ada Lovelace")
+        );
+        assert_eq!(sav_game.companies[0].manager_face, Some(1 << 7));
         assert_eq!(sav_game.vehicles.len(), 2, "tren + bus");
         assert_eq!(sav_game.companies[0].liveries[14], custom_bus_livery);
         assert!(

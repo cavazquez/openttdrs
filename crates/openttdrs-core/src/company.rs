@@ -114,6 +114,14 @@ pub fn default_company_liveries(colour: u8) -> Vec<CompanyLivery> {
 pub struct Company {
     pub id: CompanyId,
     pub name: String,
+    /// Nombre del presidente/manager (`PLYR.president_name`), si fue
+    /// personalizado en `OpenTTD`.
+    #[serde(default)]
+    pub president_name: Option<String>,
+    /// Bitfield opaco del retrato de manager (`PLYR.face`). El core no lo
+    /// interpreta, pero debe conservarlo para que `OpenTTD` mantenga el rostro.
+    #[serde(default)]
+    pub manager_face: u32,
     pub colour: u8,
     /// Esquemas nativos de color de vehículos (`PLYR.liveries`).
     ///
@@ -195,6 +203,8 @@ impl Company {
         Self {
             id: CompanyId::PLAYER,
             name: "Jugador".to_string(),
+            president_name: None,
+            manager_face: 0,
             colour,
             liveries: default_company_liveries(colour),
             economy,
@@ -223,6 +233,8 @@ impl Company {
         Self {
             id: CompanyId(1),
             name: RIVAL_NAME_TRANSCARGO.to_string(),
+            president_name: None,
+            manager_face: 0,
             colour,
             liveries: default_company_liveries(colour),
             economy,
@@ -251,6 +263,8 @@ impl Company {
         Self {
             id: CompanyId(2),
             name: RIVAL_NAME_ROADHAUL.to_string(),
+            president_name: None,
+            manager_face: 0,
             colour,
             liveries: default_company_liveries(colour),
             economy,

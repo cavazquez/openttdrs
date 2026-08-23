@@ -732,6 +732,12 @@ impl GameState {
                 if let Some(name) = company.name {
                     target.name = name;
                 }
+                if let Some(name) = company.president_name {
+                    target.president_name = Some(name);
+                }
+                if let Some(face) = company.manager_face {
+                    target.manager_face = face;
+                }
                 if let Some(is_ai) = company.is_ai {
                     target.is_ai = is_ai;
                 }

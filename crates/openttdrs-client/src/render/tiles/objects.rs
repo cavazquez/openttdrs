@@ -1891,7 +1891,7 @@ fn spawn_road_stop_buildings(
     // con un contexto vacío congelaba el primer sprite aun después de recibir
     // eventos de carga/llegada/salida.
     if let Some(st) = station_at_tile(map, stations, ctx.coord)
-        && let Some(spec_id) = st.road_stop_spec
+        && let Some(spec_id) = st.road_stop_spec_at(ctx.coord)
         && let Some(def) = road_stop_spec_def(road_stop_catalog, spec_id)
         && let (Some(cache), Some(images)) = (action5_sprites.as_mut(), images.as_mut())
     {

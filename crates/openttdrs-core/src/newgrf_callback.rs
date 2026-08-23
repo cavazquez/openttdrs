@@ -439,6 +439,7 @@ pub fn apply_road_stop_availability_callback(
 fn resolve_road_stop_animation_callback(
     def: &crate::road_stop_spec::RoadStopSpecDef,
     station: &mut Station,
+    tile: TileCoord,
     view: u8,
     callback: u16,
     param1: u32,
@@ -459,23 +460,23 @@ fn resolve_road_stop_animation_callback(
             _ => 2,
         },
     );
-    // Las animaciones se ejecutan sobre una tesela ya construida. La capa de
-    // mapa no guarda aún la identidad road/tram necesaria para el scope 0x43/
-    // 0x44, por lo que usamos el valor inválido contractual de OpenTTD.
+    // Las animaciones se ejecutan sobre una tesela ya construida. El contexto
+    // completo de mapa (road/tram y vecinos) lo aporta el renderer; aquí se
+    // preserva el contrato de callback y el estado individual de la tesela.
     ctx.vars.insert(0x42, 0);
     ctx.vars.insert(0x43, u32::MAX);
     ctx.vars.insert(0x44, u32::MAX);
     ctx.vars
-        .insert(0x49, u32::from(station.road_stop_animation_frame));
+        .insert(0x49, u32::from(station.road_stop_animation_frame_at(tile)));
     let result =
         runtime.resolve_callback_ctx(def.newgrf_local_id, callback, param1, param2, &mut ctx);
     writeback_station_persistent_registers(station, &ctx);
     result
 }
 
-fn road_stop_animation_random_bits(station: &Station, tick: u64) -> u32 {
-    let x = station.pos.x.cast_unsigned();
-    let y = station.pos.y.cast_unsigned();
+fn road_stop_animation_random_bits(station: &Station, tile: TileCoord, tick: u64) -> u32 {
+    let x = tile.x.cast_unsigned();
+    let y = tile.y.cast_unsigned();
     let tick = u32::try_from(tick).unwrap_or(u32::MAX);
     x.wrapping_mul(0x9E37_79B9)
         ^ y.wrapping_mul(0x85EB_CA6B)
@@ -497,43 +498,82 @@ pub fn trigger_road_stop_animation(
     cargo_local_id: Option<u8>,
     tick: u64,
 ) -> bool {
+    trigger_road_stop_animation_at(
+        def,
+        station,
+        station.pos,
+        view,
+        trigger,
+        cargo_local_id,
+        tick,
+    )
+}
+
+/// Variante por tesela de [`trigger_road_stop_animation`].
+///
+/// Las paradas unidas pueden usar specs y frames distintos. `tile` es por lo
+/// tanto obligatorio en los call sites runtime; el wrapper legacy sólo queda
+/// para la parada 1×1 y fixtures anteriores.
+pub fn trigger_road_stop_animation_at(
+    def: &crate::road_stop_spec::RoadStopSpecDef,
+    station: &mut Station,
+    tile: TileCoord,
+    view: u8,
+    trigger: StationAnimationTrigger,
+    cargo_local_id: Option<u8>,
+    tick: u64,
+) -> bool {
     if def.animation_triggers & trigger.mask() == 0 {
         return false;
     }
     let before = (
-        station.road_stop_animation_frame,
-        station.road_stop_animation_active,
+        station.road_stop_animation_frame_at(tile),
+        station
+            .road_stop_tile_state(tile)
+            .map_or(station.road_stop_animation_active, |state| {
+                state.animation_active
+            }),
     );
     let result = resolve_road_stop_animation_callback(
         def,
         station,
+        tile,
         view,
         CBID_STATION_ANIMATION_TRIGGER,
-        road_stop_animation_random_bits(station, tick),
+        road_stop_animation_random_bits(station, tile, tick),
         trigger.callback_param(cargo_local_id),
     );
     if result == CALLBACK_FAILED {
         return false;
     }
-    match (result & 0xFF) as u8 {
-        0xFD => {}
-        0xFE => station.road_stop_animation_active = true,
-        0xFF => station.road_stop_animation_active = false,
-        frame => {
-            station.road_stop_animation_frame = frame;
-            station.road_stop_animation_active = true;
+    {
+        let state = station.ensure_road_stop_tile_state(tile);
+        match (result & 0xFF) as u8 {
+            0xFD => {}
+            0xFE => state.animation_active = true,
+            0xFF => state.animation_active = false,
+            frame => {
+                state.animation_frame = frame;
+                state.animation_active = true;
+            }
         }
     }
+    station.sync_legacy_road_stop_anchor();
     before
         != (
-            station.road_stop_animation_frame,
-            station.road_stop_animation_active,
+            station.road_stop_animation_frame_at(tile),
+            station
+                .road_stop_tile_state(tile)
+                .map_or(station.road_stop_animation_active, |state| {
+                    state.animation_active
+                }),
         )
 }
 
-fn action2_eval_ctx_from_road_stop(station: &Station) -> Action2EvalCtx {
+fn action2_eval_ctx_from_road_stop(station: &Station, tile: TileCoord) -> Action2EvalCtx {
     let mut ctx = action2_eval_ctx_from_station(station);
-    ctx.random_bits = station.road_stop_action2_random_bits();
+    ctx.random_bits = u32::from(station.newgrf_random_bits)
+        | (u32::from(station.road_stop_random_bits_at(tile)) << 16);
     ctx
 }
 
@@ -541,6 +581,17 @@ fn road_stop_random_u16(world_seed: u64, tick: u64, pos: TileCoord, salt: u64) -
     let low = crate::map::industry_tile_rng(world_seed, tick, pos, salt);
     let high = crate::map::industry_tile_rng(world_seed, tick, pos, salt ^ 0xA5A5_5A5A);
     u16::from(low) | (u16::from(high) << 8)
+}
+
+/// Datos de tiempo y mundo que necesita la randomización de una parada vial.
+///
+/// Se agrupan para que las rutas por tesela y legacy compartan exactamente la
+/// misma fuente determinista sin añadir parámetros sueltos a cada call site.
+#[derive(Debug, Clone, Copy)]
+pub struct RoadStopRandomisationContext {
+    pub climate: crate::Climate,
+    pub world_seed: u64,
+    pub tick: u64,
 }
 
 /// Aplica la randomización Action2 de una tesela `RoadStop`.
@@ -551,9 +602,9 @@ fn road_stop_random_u16(world_seed: u64, tick: u64, pos: TileCoord, salt: u64) -
 /// se limpian del estado persistente. La fuente pseudoaleatoria es
 /// determinista por mundo/tick/tesela para preservar replay y tests.
 ///
-/// Cada `Station` actual representa una parada vial; por eso este helper no
-/// puede todavía iterar datos random distintos por cada tesela de un stop
-/// compuesto importado.
+/// El wrapper legacy conserva la ancla de una parada 1×1. Los call sites de
+/// simulación usan [`trigger_road_stop_randomisation_at`] para mantener los
+/// datos random independientes de cada tesela compuesta.
 pub fn trigger_road_stop_randomisation(
     def: &crate::road_stop_spec::RoadStopSpecDef,
     station: &mut Station,
@@ -563,17 +614,40 @@ pub fn trigger_road_stop_randomisation(
     world_seed: u64,
     tick: u64,
 ) -> bool {
+    trigger_road_stop_randomisation_at(
+        def,
+        station,
+        station.pos,
+        trigger,
+        cargo,
+        RoadStopRandomisationContext {
+            climate,
+            world_seed,
+            tick,
+        },
+    )
+}
+
+/// Variante por tesela de [`trigger_road_stop_randomisation`].
+pub fn trigger_road_stop_randomisation_at(
+    def: &crate::road_stop_spec::RoadStopSpecDef,
+    station: &mut Station,
+    tile: TileCoord,
+    trigger: StationRandomTrigger,
+    cargo: Option<CargoType>,
+    context: RoadStopRandomisationContext,
+) -> bool {
     if !def.has_random_cargo_triggers() {
         return false;
     }
-    if cargo.is_some_and(|cargo| !def.cargo_triggers_randomisation(cargo, climate)) {
+    if cargo.is_some_and(|cargo| !def.cargo_triggers_randomisation(cargo, context.climate)) {
         return false;
     }
     // `CargoTaken` sólo ocurre cuando *todos* los cargos que declaró este
     // spec ya se vaciaron; no basta con que se haya retirado el cargo recibido.
     if trigger == StationRandomTrigger::CargoTaken
         && crate::ALL_CARGO_TYPES.iter().copied().any(|candidate| {
-            def.cargo_triggers_randomisation(candidate, climate)
+            def.cargo_triggers_randomisation(candidate, context.climate)
                 && station.cargo_stock.get(candidate) != 0
         })
     {
@@ -585,11 +659,10 @@ pub fn trigger_road_stop_randomisation(
 
     station.newgrf_waiting_random_triggers |= trigger.mask();
     let waiting = station.newgrf_waiting_random_triggers;
-    let mut ctx = action2_eval_ctx_from_road_stop(station);
-    ctx.vars.insert(
-        0x5F,
-        station.road_stop_action2_random_bits().wrapping_shl(8) | u32::from(waiting),
-    );
+    let mut ctx = action2_eval_ctx_from_road_stop(station, tile);
+    let random_bits = ctx.random_bits;
+    ctx.vars
+        .insert(0x5F, random_bits.wrapping_shl(8) | u32::from(waiting));
     let (reseed, used) =
         runtime.rerandomisation_for_local_id(def.newgrf_local_id, &mut ctx, waiting);
     writeback_station_persistent_registers(station, &ctx);
@@ -600,9 +673,9 @@ pub fn trigger_road_stop_randomisation(
     let mut changed = false;
     if base_mask != 0 {
         let random = road_stop_random_u16(
-            world_seed,
-            tick,
-            station.pos,
+            context.world_seed,
+            context.tick,
+            tile,
             u64::from(trigger as u8) | (u64::from(waiting) << 8),
         );
         let next = (station.newgrf_random_bits & !base_mask) | (random & base_mask);
@@ -611,15 +684,17 @@ pub fn trigger_road_stop_randomisation(
     }
     if tile_mask != 0 {
         let random = crate::map::industry_tile_rng(
-            world_seed,
-            tick,
-            station.pos,
+            context.world_seed,
+            context.tick,
+            tile,
             0x524F_4144_u64 | (u64::from(trigger as u8) << 16) | u64::from(waiting),
         );
-        let next = (station.road_stop_newgrf_random_bits & !tile_mask) | (random & tile_mask);
-        changed |= next != station.road_stop_newgrf_random_bits;
-        station.road_stop_newgrf_random_bits = next;
+        let state = station.ensure_road_stop_tile_state(tile);
+        let next = (state.random_bits & !tile_mask) | (random & tile_mask);
+        changed |= next != state.random_bits;
+        state.random_bits = next;
     }
+    station.sync_legacy_road_stop_anchor();
     changed
 }
 
@@ -634,18 +709,32 @@ pub fn advance_road_stop_animation(
     view: u8,
     tick: u64,
 ) -> bool {
-    if !station.road_stop_animation_active {
+    advance_road_stop_animation_at(def, station, station.pos, view, tick)
+}
+
+/// Variante por tesela de [`advance_road_stop_animation`].
+pub fn advance_road_stop_animation_at(
+    def: &crate::road_stop_spec::RoadStopSpecDef,
+    station: &mut Station,
+    tile: TileCoord,
+    view: u8,
+    tick: u64,
+) -> bool {
+    let active = station
+        .road_stop_tile_state(tile)
+        .map_or(station.road_stop_animation_active, |state| {
+            state.animation_active
+        });
+    if !active {
         return false;
     }
-    let before = (
-        station.road_stop_animation_frame,
-        station.road_stop_animation_active,
-    );
+    let before = (station.road_stop_animation_frame_at(tile), active);
     let mut speed = def.animation_speed.min(16);
     if def.has_animation_speed_callback() {
         let result = resolve_road_stop_animation_callback(
             def,
             station,
+            tile,
             view,
             CBID_STATION_ANIMATION_SPEED,
             0,
@@ -662,44 +751,53 @@ pub fn advance_road_stop_animation(
     let mut frame_set_by_callback = false;
     if def.has_animation_next_frame_callback() {
         let random_bits = if def.animation_next_frame_uses_random_bits() {
-            road_stop_animation_random_bits(station, tick)
+            road_stop_animation_random_bits(station, tile, tick)
         } else {
             0
         };
         let result = resolve_road_stop_animation_callback(
             def,
             station,
+            tile,
             view,
             CBID_STATION_ANIMATION_NEXT_FRAME,
             random_bits,
             0,
         );
         if result != CALLBACK_FAILED {
+            let state = station.ensure_road_stop_tile_state(tile);
             match (result & 0xFF) as u8 {
-                0xFF => station.road_stop_animation_active = false,
+                0xFF => state.animation_active = false,
                 0xFE => {}
                 frame => {
-                    station.road_stop_animation_frame = frame;
+                    state.animation_frame = frame;
                     frame_set_by_callback = true;
                 }
             }
         }
     }
 
-    if station.road_stop_animation_active && !frame_set_by_callback {
-        if station.road_stop_animation_frame < def.animation_frames {
-            station.road_stop_animation_frame = station.road_stop_animation_frame.saturating_add(1);
-        } else if station.road_stop_animation_frame == def.animation_frames && def.animation_loops()
-        {
-            station.road_stop_animation_frame = 0;
-        } else {
-            station.road_stop_animation_active = false;
+    {
+        let state = station.ensure_road_stop_tile_state(tile);
+        if state.animation_active && !frame_set_by_callback {
+            if state.animation_frame < def.animation_frames {
+                state.animation_frame = state.animation_frame.saturating_add(1);
+            } else if state.animation_frame == def.animation_frames && def.animation_loops() {
+                state.animation_frame = 0;
+            } else {
+                state.animation_active = false;
+            }
         }
     }
+    station.sync_legacy_road_stop_anchor();
     before
         != (
-            station.road_stop_animation_frame,
-            station.road_stop_animation_active,
+            station.road_stop_animation_frame_at(tile),
+            station
+                .road_stop_tile_state(tile)
+                .map_or(station.road_stop_animation_active, |state| {
+                    state.animation_active
+                }),
         )
 }
 

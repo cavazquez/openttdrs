@@ -567,10 +567,9 @@ pub(super) fn trigger_station_platform_animation(
 
 /// Ejecuta CB140 de un `RoadStop` `NewGRF` en su tesela concreta.
 ///
-/// A diferencia de las plataformas ferroviarias, cada road stop conserva su
-/// propio frame en la entidad `Station`; por eso los triggers de vehículo se
-/// resuelven sobre la tesela exacta y los de carga/aceptación usan el ancla de
-/// la parada lógica que recibió el cambio.
+/// Los triggers viales de vehículo se resuelven sobre su tesela exacta; los de
+/// carga y aceptación recorren todas las teselas custom de la estación, como
+/// `TriggerRoadStopAnimation` de `OpenTTD`.
 pub(super) fn trigger_road_stop_animation_at(
     state: &mut GameState,
     trigger_tile: crate::TileCoord,
@@ -584,45 +583,60 @@ pub(super) fn trigger_road_stop_animation_at(
     else {
         return;
     };
-    let Some(spec_id) = state.stations[station_index].road_stop_spec else {
-        return;
-    };
-    let Some(tile) = state.map.get(trigger_tile) else {
-        return;
-    };
     let tick = state.tick.get();
     let climate = state.climate;
-    let (randomisation_changed, animation_changed) = {
+    let whole_station = matches!(
+        trigger,
+        crate::StationAnimationTrigger::NewCargo
+            | crate::StationAnimationTrigger::CargoTaken
+            | crate::StationAnimationTrigger::AcceptanceTick
+    );
+    let target_tiles = if whole_station {
+        state.stations[station_index].road_stop_custom_tiles()
+    } else {
+        vec![trigger_tile]
+    };
+
+    for tile_pos in target_tiles {
+        let Some(spec_id) = state.stations[station_index].road_stop_spec_at(tile_pos) else {
+            continue;
+        };
+        let Some(tile) = state.map.get(tile_pos) else {
+            continue;
+        };
         let Some(def) =
             crate::road_stop_spec::road_stop_spec_def(&state.road_stop_spec_catalog, spec_id)
         else {
-            return;
+            continue;
         };
         let cargo_local_id = cargo.map(|cargo| def.newgrf_cargo_local_id(cargo, climate));
         let randomisation_changed = crate::StationRandomTrigger::from_animation_trigger(trigger)
             .is_some_and(|random_trigger| {
-                crate::newgrf_callback::trigger_road_stop_randomisation(
+                crate::newgrf_callback::trigger_road_stop_randomisation_at(
                     def,
                     &mut state.stations[station_index],
+                    tile_pos,
                     random_trigger,
                     cargo,
-                    climate,
-                    state.world_seed,
-                    tick,
+                    crate::newgrf_callback::RoadStopRandomisationContext {
+                        climate,
+                        world_seed: state.world_seed,
+                        tick,
+                    },
                 )
             });
-        let animation_changed = crate::newgrf_callback::trigger_road_stop_animation(
+        let animation_changed = crate::newgrf_callback::trigger_road_stop_animation_at(
             def,
             &mut state.stations[station_index],
+            tile_pos,
             tile.m5,
             trigger,
             cargo_local_id,
             tick,
         );
-        (randomisation_changed, animation_changed)
-    };
-    if randomisation_changed || animation_changed {
-        state.runtime.industry_tile_dirty.push(trigger_tile);
+        if randomisation_changed || animation_changed {
+            state.runtime.industry_tile_dirty.push(tile_pos);
+        }
     }
 }
 
@@ -932,6 +946,61 @@ mod tests {
             state.stations[0].road_stop_animation_frame,
             crate::StationAnimationTrigger::VehicleDeparts as u8,
             "CB140 debe salir antes de que el bus abandone el RoadStop",
+        );
+    }
+
+    #[test]
+    fn road_stop_compound_state_keeps_tile_events_separate_and_whole_events_broadcast() {
+        let (mut state, first) = state_with_newgrf_road_stop(
+            crate::ROADSTOP_ANIMATION_TRIGGER_VEHICLE_ARRIVES
+                | crate::ROADSTOP_ANIMATION_TRIGGER_NEW_CARGO,
+        );
+        let second = TileCoord::new(first.x + 1, first.y);
+        let mut tile = state.map.get(first).unwrap();
+        tile.m5 = crate::RSV_DRIVE_THROUGH_X;
+        state.map.set_tile(second, tile).unwrap();
+        {
+            let station = &mut state.stations[0];
+            station.joined_tiles.push(second);
+            let first_state = station.ensure_road_stop_tile_state(first);
+            first_state.spec = Some(7);
+            first_state.animation_frame = 1;
+            let second_state = station.ensure_road_stop_tile_state(second);
+            second_state.spec = Some(7);
+            second_state.animation_frame = 99;
+            second_state.random_bits = 0xA4;
+            station.sync_legacy_road_stop_anchor();
+        }
+
+        // Llegada vial: sólo se anima la tesela que tocó el vehículo.
+        trigger_road_stop_animation_at(
+            &mut state,
+            first,
+            crate::StationAnimationTrigger::VehicleArrives,
+            None,
+        );
+        assert_eq!(
+            state.stations[0].road_stop_animation_frame_at(first),
+            crate::StationAnimationTrigger::VehicleArrives as u8
+        );
+        assert_eq!(state.stations[0].road_stop_animation_frame_at(second), 99);
+
+        // NewCargo usa área completa: cada RoadStopTileData custom recibe
+        // CB140 aunque la carga haya llegado por el ancla de la estación.
+        trigger_road_stop_animation_at(
+            &mut state,
+            first,
+            crate::StationAnimationTrigger::NewCargo,
+            Some(crate::CargoType::Mail),
+        );
+        let expected = crate::StationAnimationTrigger::NewCargo as u8;
+        assert_eq!(
+            state.stations[0].road_stop_animation_frame_at(first),
+            expected
+        );
+        assert_eq!(
+            state.stations[0].road_stop_animation_frame_at(second),
+            expected
         );
     }
 

@@ -8,7 +8,7 @@ use crate::cargo::CargoType;
 use crate::company::Company;
 use crate::map::{Map, TileCoord, TileKind};
 use crate::newgrf_callback::{
-    advance_road_stop_animation, trigger_road_stop_animation,
+    advance_road_stop_animation_at, trigger_road_stop_animation_at,
     writeback_station_persistent_registers,
 };
 use crate::newgrf_sprites::{
@@ -90,18 +90,22 @@ pub fn step_newgrf_road_stop_tiles(
         if tile.kind != TileKind::Station {
             continue;
         }
-        let Some(index) = stations.iter().position(|station| station.pos == *coord) else {
+        let Some(index) = stations
+            .iter()
+            .position(|station| station.covers_tile(*coord))
+        else {
             continue;
         };
-        let Some(spec_id) = stations[index].road_stop_spec else {
+        let Some(spec_id) = stations[index].road_stop_spec_at(*coord) else {
             continue;
         };
         let Some(def) = road_stop_spec_def(catalog, spec_id) else {
             continue;
         };
-        if trigger_road_stop_animation(
+        if trigger_road_stop_animation_at(
             def,
             &mut stations[index],
+            *coord,
             tile.m5,
             StationAnimationTrigger::TileLoop,
             None,
@@ -111,21 +115,24 @@ pub fn step_newgrf_road_stop_tiles(
         }
     }
 
-    for station in stations {
+    for station in stations.iter_mut() {
         if !matches!(station.stop_kind, StopKind::BusStop | StopKind::TruckStop) {
             continue;
         }
-        let Some(spec_id) = station.road_stop_spec else {
-            continue;
-        };
-        let Some(def) = road_stop_spec_def(catalog, spec_id) else {
-            continue;
-        };
-        let Some(tile) = map.get(station.pos) else {
-            continue;
-        };
-        if advance_road_stop_animation(def, station, tile.m5, tick) {
-            dirty.push(station.pos);
+        let custom_tiles = station.road_stop_custom_tiles();
+        for coord in custom_tiles {
+            let Some(spec_id) = station.road_stop_spec_at(coord) else {
+                continue;
+            };
+            let Some(def) = road_stop_spec_def(catalog, spec_id) else {
+                continue;
+            };
+            let Some(tile) = map.get(coord) else {
+                continue;
+            };
+            if advance_road_stop_animation_at(def, station, coord, tile.m5, tick) {
+                dirty.push(coord);
+            }
         }
     }
 

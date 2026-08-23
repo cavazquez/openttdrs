@@ -144,6 +144,29 @@ impl CargoTimeSincePickup {
     }
 }
 
+/// Estado `NewGRF` que pertenece a una tesela de parada vial, no a toda la
+/// estación lógica.
+///
+/// `OpenTTD` guarda una entrada `RoadStopTileData` por cada tesela custom de
+/// una estación. Una parada compuesta puede mezclar specs, frames y random
+/// bits; mantenerlos en la entidad `Station` completa congelaba o mezclaba
+/// sus variantes después de `JoinStation`.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
+pub struct RoadStopTileState {
+    /// Spec `NewGRF` aplicado a esta tesela (`None` = gráficos vanilla).
+    #[serde(default)]
+    pub spec: Option<u16>,
+    /// Frame `CB140`/`CB141`/`CB142` de esta tesela.
+    #[serde(default)]
+    pub animation_frame: u8,
+    /// Si la tesela está activa en el scheduler de animación.
+    #[serde(default)]
+    pub animation_active: bool,
+    /// Bits 16..23 del random de `RoadStopScopeResolver`.
+    #[serde(default)]
+    pub random_bits: u8,
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Station {
     pub pos: TileCoord,
@@ -218,16 +241,29 @@ pub struct Station {
     /// La tesela está registrada en el scheduler de animación `NewGRF`.
     #[serde(default)]
     pub road_stop_animation_active: bool,
+    /// Estado individual de cada tesela custom de una parada vial compuesta.
+    ///
+    /// Los cuatro campos legacy inmediatamente anteriores se mantienen para
+    /// JSON viejo y para la ancla 1×1; esta lista es la fuente de verdad
+    /// cuando existe una entrada para la tesela consultada.
+    ///
+    /// Se usa una lista, en vez de un mapa con `TileCoord` como clave, para
+    /// que el JSON de partidas siga siendo representable por `serde_json`.
+    /// Una parada vial admite como máximo 63 teselas, por lo que la búsqueda
+    /// lineal no es una carga observable. Las consultas que exponen teselas
+    /// ordenan explícitamente su resultado.
+    #[serde(default)]
+    pub road_stop_tile_states: Vec<(TileCoord, RoadStopTileState)>,
     /// Bits aleatorios de estación `NewGRF` (bits bajos de `var 5F` / Action2).
     ///
     /// `OpenTTD` conserva 16 bits para la estación; los saves históricos de
     /// openttdrs guardaban sólo un byte, que serde amplía sin pérdida.
     #[serde(default)]
     pub newgrf_random_bits: u16,
-    /// Bits aleatorios propios de la tesela `RoadStop` (bits 16..23 de
-    /// `RoadStopScopeResolver::GetRandomBits`). Cada entidad actual modela
-    /// una parada vial; las paradas compuestas siguen siendo una limitación de
-    /// representación separada.
+    /// Bits aleatorios legacy de la tesela ancla `RoadStop` (bits 16..23 de
+    /// `RoadStopScopeResolver::GetRandomBits`). Las entradas de
+    /// [`RoadStopTileState`] contienen la fuente de verdad por tesela para
+    /// una parada compuesta.
     #[serde(default)]
     pub road_stop_newgrf_random_bits: u8,
     /// Máscara de eventos pendientes para grupos Action2 random (`var 5F`,
@@ -301,6 +337,7 @@ impl Station {
             road_stop_spec: None,
             road_stop_animation_frame: 0,
             road_stop_animation_active: false,
+            road_stop_tile_states: Vec::new(),
             newgrf_random_bits,
             road_stop_newgrf_random_bits: newgrf_random_bits.to_le_bytes()[0],
             newgrf_waiting_random_triggers: 0,
@@ -312,6 +349,123 @@ impl Station {
     #[must_use]
     pub const fn road_stop_action2_random_bits(&self) -> u32 {
         (self.newgrf_random_bits as u32) | ((self.road_stop_newgrf_random_bits as u32) << 16)
+    }
+
+    /// Devuelve el spec `NewGRF` aplicado a una tesela vial de la estación.
+    #[must_use]
+    pub fn road_stop_spec_at(&self, tile: TileCoord) -> Option<u16> {
+        if let Some(state) = self.road_stop_tile_state(tile) {
+            return state.spec;
+        }
+        self.covers_tile(tile)
+            .then_some(self.road_stop_spec)
+            .flatten()
+    }
+
+    /// Frame de animación de una tesela vial, conservando compatibilidad con
+    /// saves JSON anteriores a `road_stop_tile_states`.
+    #[must_use]
+    pub fn road_stop_animation_frame_at(&self, tile: TileCoord) -> u8 {
+        self.road_stop_tile_state(tile)
+            .map_or(self.road_stop_animation_frame, |state| {
+                state.animation_frame
+            })
+    }
+
+    /// Bits random propios de una tesela vial, con fallback determinista para
+    /// joins que proceden de JSON anterior al mapa por tesela.
+    #[must_use]
+    pub fn road_stop_random_bits_at(&self, tile: TileCoord) -> u8 {
+        self.road_stop_tile_state(tile).map_or_else(
+            || self.legacy_road_stop_random_bits(tile),
+            |state| state.random_bits,
+        )
+    }
+
+    /// Estado `NewGRF` de una tesela de parada vial, si ya fue materializado.
+    #[must_use]
+    pub fn road_stop_tile_state(&self, tile: TileCoord) -> Option<&RoadStopTileState> {
+        self.road_stop_tile_states
+            .iter()
+            .find_map(|(candidate, state)| (*candidate == tile).then_some(state))
+    }
+
+    /// Teselas custom de la parada, ordenadas y sin duplicados.
+    #[must_use]
+    pub fn road_stop_custom_tiles(&self) -> Vec<TileCoord> {
+        let mut tiles: Vec<_> = self
+            .road_stop_tile_states
+            .iter()
+            .filter_map(|(tile, state)| state.spec.map(|_| *tile))
+            .collect();
+        if tiles.is_empty()
+            && self.road_stop_tile_states.is_empty()
+            && self.road_stop_spec.is_some()
+        {
+            tiles.push(self.pos);
+            tiles.extend(self.joined_tiles.iter().copied());
+        }
+        tiles.sort_unstable();
+        tiles.dedup();
+        tiles
+    }
+
+    /// Crea (o recupera) la entrada por tesela a partir de los campos legacy.
+    /// El llamador debe invocar [`Self::sync_legacy_road_stop_anchor`] después
+    /// de mutarla si también necesita mantener visibles los campos ancla.
+    pub fn ensure_road_stop_tile_state(&mut self, tile: TileCoord) -> &mut RoadStopTileState {
+        if let Some(index) = self
+            .road_stop_tile_states
+            .iter()
+            .position(|(candidate, _)| *candidate == tile)
+        {
+            return &mut self.road_stop_tile_states[index].1;
+        }
+        let legacy = RoadStopTileState {
+            spec: self.road_stop_spec,
+            animation_frame: self.road_stop_animation_frame,
+            animation_active: self.road_stop_animation_active,
+            random_bits: self.legacy_road_stop_random_bits(tile),
+        };
+        let index = self.road_stop_tile_states.len();
+        self.road_stop_tile_states.push((tile, legacy));
+        &mut self.road_stop_tile_states[index].1
+    }
+
+    /// Expande el formato JSON anterior, que sólo retenía el estado del ancla,
+    /// sobre las teselas ya unidas. Las partidas nuevas escriben entradas
+    /// independientes antes de cualquier `JoinStation`.
+    pub fn normalize_road_stop_tile_states(&mut self) {
+        if self.road_stop_spec.is_none() && self.road_stop_tile_states.is_empty() {
+            return;
+        }
+        let mut tiles = Vec::with_capacity(self.joined_tiles.len() + 1);
+        tiles.push(self.pos);
+        tiles.extend(self.joined_tiles.iter().copied());
+        for tile in tiles {
+            let _ = self.ensure_road_stop_tile_state(tile);
+        }
+        self.sync_legacy_road_stop_anchor();
+    }
+
+    /// Copia el estado de la tesela ancla a los campos mantenidos por
+    /// compatibilidad. No borra un estado legacy si el ancla es vanilla.
+    pub fn sync_legacy_road_stop_anchor(&mut self) {
+        let Some(state) = self.road_stop_tile_state(self.pos).cloned() else {
+            return;
+        };
+        self.road_stop_spec = state.spec;
+        self.road_stop_animation_frame = state.animation_frame;
+        self.road_stop_animation_active = state.animation_active;
+        self.road_stop_newgrf_random_bits = state.random_bits;
+    }
+
+    fn legacy_road_stop_random_bits(&self, tile: TileCoord) -> u8 {
+        if tile == self.pos {
+            self.road_stop_newgrf_random_bits
+        } else {
+            seed_station_newgrf_random_bits(tile).to_le_bytes()[0]
+        }
     }
 
     pub(super) fn company_pickup_slot_mut(

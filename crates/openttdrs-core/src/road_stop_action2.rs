@@ -35,7 +35,8 @@ pub fn action2_eval_ctx_for_road_stop_tile(
     };
     let tile = map.get(coord);
     let (tileh, _) = tile_slope_and_z(map, coord).unwrap_or((0, 0));
-    let random = station.road_stop_action2_random_bits();
+    let random = u32::from(station.newgrf_random_bits)
+        | (u32::from(station.road_stop_random_bits_at(coord)) << 16);
 
     ctx.random_bits = random;
     ctx.persistent_registers
@@ -74,7 +75,7 @@ pub fn action2_eval_ctx_for_road_stop_tile(
     ctx.vars.insert(0x43, road_type);
     ctx.vars.insert(0x44, tram_type);
     ctx.vars
-        .insert(0x49, u32::from(station.road_stop_animation_frame));
+        .insert(0x49, u32::from(station.road_stop_animation_frame_at(coord)));
     // Bit 4 de var 50 sólo se usa cuando no existe tesela (picker/callback de
     // disponibilidad); esta ruta siempre resuelve una instancia en el mapa.
     ctx.vars.insert(0x50, 0);
@@ -143,6 +144,12 @@ mod tests {
         station.road_stop_newgrf_random_bits = 0x3C;
         station.newgrf_waiting_random_triggers = StationRandomTrigger::VehicleLoads.mask();
         station.road_stop_animation_frame = 7;
+        {
+            let state = station.ensure_road_stop_tile_state(coord);
+            state.random_bits = 0x3C;
+            state.animation_frame = 7;
+        }
+        station.sync_legacy_road_stop_anchor();
         station.newgrf_persistent_regs.insert(4, 99);
 
         let ctx = action2_eval_ctx_for_road_stop_tile(

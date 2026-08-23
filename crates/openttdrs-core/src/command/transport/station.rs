@@ -508,6 +508,11 @@ pub(in crate::command::transport) fn station_placement_on_tile(
     }
     if matches!(stop_kind, StopKind::BusStop | StopKind::TruckStop) {
         st.road_stop_spec = resolve_road_stop_spec_for_placement(state);
+        // El estado de una parada custom pertenece a su tesela desde el
+        // primer frame; esto permite conservarlo si más adelante se une a una
+        // estación compuesta con otro spec.
+        let _ = st.ensure_road_stop_tile_state(c);
+        st.sync_legacy_road_stop_anchor();
     }
     if let Some(spec_id) = st.road_stop_spec
         && let Some(def) =
@@ -795,6 +800,11 @@ pub(crate) fn join_stations(
             _ => return Err(CommandError::CannotJoinStations),
         }
     }
+    // Materializar los campos legacy antes de extraer la estación. Así un join
+    // posterior conserva spec/frame/random distintos por tesela en vez de
+    // quedarse con el estado del ancla `keep`.
+    state.stations[keep_idx].normalize_road_stop_tile_states();
+    state.stations[merge_idx].normalize_road_stop_tile_states();
     let mut merge_st = state.stations.remove(merge_idx);
     // Tras remove, keep_idx puede haber cambiado.
     let keep_idx = state
@@ -808,6 +818,7 @@ pub(crate) fn join_stations(
     let merge_income = merge_st.income;
     let merge_tsp = merge_st.time_since_pickup;
     let merge_joined = std::mem::take(&mut merge_st.joined_tiles);
+    let merge_road_stop_tile_states = std::mem::take(&mut merge_st.road_stop_tile_states);
 
     let keep_st = &mut state.stations[keep_idx];
     keep_st.ensure_packets_from_stock();
@@ -829,6 +840,10 @@ pub(crate) fn join_stations(
             keep_st.joined_tiles.push(t);
         }
     }
+    for (tile, tile_state) in merge_road_stop_tile_states {
+        *keep_st.ensure_road_stop_tile_state(tile) = tile_state;
+    }
+    keep_st.normalize_road_stop_tile_states();
 
     for vehicle in &mut state.vehicles {
         for order in &mut vehicle.orders {

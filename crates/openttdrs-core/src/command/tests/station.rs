@@ -1,6 +1,8 @@
 use crate::command::{Command, CommandError, apply_command, command_would_fail};
 use crate::economy::{road_build_cost, station_build_cost};
-use crate::{CLEAR_TILE_COST, GameState, TileCoord, TileKind, Vehicle, VehicleKind};
+use crate::{
+    CLEAR_TILE_COST, GameState, Station, StopKind, TileCoord, TileKind, Vehicle, VehicleKind,
+};
 
 #[test]
 fn place_station_requires_adjacent_transport() {
@@ -184,6 +186,20 @@ fn join_stations_merges_adjacent_bus_stops() {
     apply_command(&mut s, &Command::PlaceBusStop(keep, 3)).unwrap();
     apply_command(&mut s, &Command::PlaceBusStop(merge, 3)).unwrap();
     assert_eq!(s.stations.len(), 2);
+    for (pos, spec, frame, random) in [(keep, 7, 2, 0x31), (merge, 9, 5, 0xA4)] {
+        let station = s
+            .stations
+            .iter_mut()
+            .find(|station| station.pos == pos)
+            .unwrap();
+        station.road_stop_spec = Some(spec);
+        let tile_state = station.ensure_road_stop_tile_state(pos);
+        tile_state.spec = Some(spec);
+        tile_state.animation_frame = frame;
+        tile_state.animation_active = true;
+        tile_state.random_bits = random;
+        station.sync_legacy_road_stop_anchor();
+    }
 
     let mut veh = Vehicle::new(1, VehicleKind::Bus, keep, merge);
     veh.orders = vec![VehicleOrder::station(merge)];
@@ -194,10 +210,34 @@ fn join_stations_merges_adjacent_bus_stops() {
     assert_eq!(s.stations[0].pos, keep);
     assert!(s.stations[0].joined_tiles.contains(&merge));
     assert!(s.stations[0].covers_tile(merge));
+    assert_eq!(s.stations[0].road_stop_spec_at(keep), Some(7));
+    assert_eq!(s.stations[0].road_stop_spec_at(merge), Some(9));
+    assert_eq!(s.stations[0].road_stop_animation_frame_at(merge), 5);
+    assert_eq!(s.stations[0].road_stop_random_bits_at(merge), 0xA4);
+    let reloaded = GameState::load_json(&s.save_json().unwrap()).unwrap();
+    assert_eq!(reloaded.stations[0].road_stop_spec_at(keep), Some(7));
+    assert_eq!(reloaded.stations[0].road_stop_spec_at(merge), Some(9));
+    assert_eq!(reloaded.stations[0].road_stop_animation_frame_at(merge), 5);
+    assert_eq!(reloaded.stations[0].road_stop_random_bits_at(merge), 0xA4);
     match &s.vehicles[0].orders[0] {
         VehicleOrder::Station { station, .. } => assert_eq!(*station, keep),
         other => panic!("expected station order, got {other:?}"),
     }
+}
+
+#[test]
+fn road_stop_vanilla_tile_does_not_inherit_the_anchor_newgrf_spec() {
+    let anchor = TileCoord::new(2, 2);
+    let vanilla = TileCoord::new(3, 2);
+    let mut station = Station::new_with_kind(anchor, StopKind::BusStop);
+    station.joined_tiles.push(vanilla);
+    station.road_stop_spec = Some(7);
+    station.ensure_road_stop_tile_state(anchor).spec = Some(7);
+    station.ensure_road_stop_tile_state(vanilla).spec = None;
+
+    assert_eq!(station.road_stop_spec_at(anchor), Some(7));
+    assert_eq!(station.road_stop_spec_at(vanilla), None);
+    assert_eq!(station.road_stop_custom_tiles(), vec![anchor]);
 }
 
 #[test]

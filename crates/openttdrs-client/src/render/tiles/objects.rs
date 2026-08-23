@@ -11,8 +11,7 @@ use super::{
     catenary_under_low_bridge,
     helpers::{
         FLAT_WATER_LAYER_FRAC, SHORE_LAYER_FRAC, spawn_empty_bounding_box,
-        spawn_forced_leveled_foundation, spawn_forced_leveled_foundation_with_child_parent,
-        spawn_foundation_child_sprite_at,
+        spawn_forced_leveled_foundation_with_child_parent, spawn_foundation_child_sprite_at,
     },
     sloped_or_flat_image, spawn_ground_sprite,
 };
@@ -1616,7 +1615,7 @@ pub(crate) fn spawn_station_tile(
             // una fundación nivelada, independiente de los road bits. La
             // superficie resultante es plana y las capas BUILD se ordenan a
             // su altura, no a la del relieve crudo.
-            let road_stop_base_z = spawn_forced_leveled_foundation(
+            let road_stop_foundation = spawn_forced_leveled_foundation_with_child_parent(
                 commands,
                 map,
                 dims,
@@ -1629,6 +1628,8 @@ pub(crate) fn spawn_station_tile(
                 action5_sprites.as_deref_mut(),
                 images.as_deref_mut(),
             );
+            let road_stop_base_z = road_stop_foundation.surface_base_z;
+            let foundation_child_parent = road_stop_foundation.child_parent;
             if is_drive_through {
                 let road_bits = if m5 == openttdrs_core::RSV_DRIVE_THROUGH_X {
                     0x0A
@@ -1642,6 +1643,8 @@ pub(crate) fn spawn_station_tile(
                     road_stop_base_z,
                     tileh,
                     road_bits,
+                    dims.0,
+                    foundation_child_parent,
                 );
             }
             let view_idx = usize::from(m5.min(5));
@@ -1669,6 +1672,8 @@ pub(crate) fn spawn_station_tile(
                         tileh,
                         sprite_id,
                         road_stop_ground_asset_path(class, ground_dir),
+                        dims.0,
+                        foundation_child_parent,
                     );
                 } else {
                     // La rama sólo admite Bus/Truck y `ground_dir` ya está
@@ -1861,6 +1866,7 @@ pub(crate) fn spawn_station_tile(
 
 /// Base de una parada pasante: OpenTTD usa `SPR_ROAD_PAVED_STRAIGHT_*`, no el
 /// suelo de hierba/andén de una bahía convencional.
+#[allow(clippy::too_many_arguments)] // Conserva el contexto de fundación del caller.
 fn spawn_paved_road_stop_link(
     commands: &mut Commands,
     assets: &WorldAssets,
@@ -1868,24 +1874,33 @@ fn spawn_paved_road_stop_link(
     base_z: u8,
     tileh: u8,
     road_bits: u8,
+    map_width: u32,
+    foundation_child_parent: Option<Entity>,
 ) {
     // El layout vanilla siempre selecciona `SPR_ROAD_PAVED_STRAIGHT_*`.
     // Cuando había pendiente ya fue absorbida por `Foundation::Leveled`; no
     // debemos indexar una rampa de carretera con el `tileh` original.
     let fi = road_flat_sprite_index(0, road_bits);
     record_road_stop_ground_trace(tileh, road_ground_sprite_id(fi, true, false), 0, false);
-    commands.spawn((
-        MapVisualLayer,
-        ctx.map_tile_chunk(),
-        assets.road_paved[fi].sprite(),
-        Transform::from_translation(full_tile_sprite_pos_half(
-            ctx.tx_i32(),
-            ctx.ty_i32(),
-            base_z,
-            0.025,
-            TILE_HALF_H,
-        )),
-    ));
+    let position =
+        full_tile_sprite_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.025, TILE_HALF_H);
+    if let Some(parent) = foundation_child_parent {
+        spawn_foundation_child_sprite_at(
+            commands,
+            assets.road_paved[fi].sprite(),
+            ctx,
+            position,
+            map_width,
+            parent,
+        );
+    } else {
+        commands.spawn((
+            MapVisualLayer,
+            ctx.map_tile_chunk(),
+            assets.road_paved[fi].sprite(),
+            Transform::from_translation(position),
+        ));
+    }
 }
 
 /// Tipo sintético en la caché Action5 para vistas Action3 del catálogo `RoadStops`.
@@ -2077,6 +2092,8 @@ fn spawn_road_stop_ground_sprite(
     original_tileh: u8,
     sprite_id: u32,
     asset_path: &str,
+    map_width: u32,
+    foundation_child_parent: Option<Entity>,
 ) {
     record_road_stop_ground_trace(
         original_tileh,
@@ -2084,17 +2101,19 @@ fn spawn_road_stop_ground_sprite(
         station_company_palette(owner_colour),
         false,
     );
-    commands.spawn((
-        MapVisualLayer,
-        ctx.map_tile_chunk(),
-        sprite_from_atlas_or_company_white_colour(company, owner_colour, image, asset_path),
-        Transform::from_translation(full_tile_sprite_pos(
-            ctx.tx_i32(),
-            ctx.ty_i32(),
-            base_z,
-            0.04,
-        )),
-    ));
+    let sprite =
+        sprite_from_atlas_or_company_white_colour(company, owner_colour, image, asset_path);
+    let position = full_tile_sprite_pos(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.04);
+    if let Some(parent) = foundation_child_parent {
+        spawn_foundation_child_sprite_at(commands, sprite, ctx, position, map_width, parent);
+    } else {
+        commands.spawn((
+            MapVisualLayer,
+            ctx.map_tile_chunk(),
+            sprite,
+            Transform::from_translation(position),
+        ));
+    }
 }
 
 fn spawn_stop_ground_sprite(
@@ -2409,7 +2428,7 @@ pub(crate) fn spawn_transport_object_tile(
             // `DrawTile_Road` nivela los depósitos viales antes del suelo
             // 2634 y de sus capas BUILD. Dejar el césped inclinado debajo
             // desplazaba la losa y hacía que la boca pareciera desconectada.
-            let depot_base_z = spawn_forced_leveled_foundation(
+            let depot_foundation = spawn_forced_leveled_foundation_with_child_parent(
                 commands,
                 map,
                 dims,
@@ -2422,6 +2441,7 @@ pub(crate) fn spawn_transport_object_tile(
                 action5_sprites.as_deref_mut(),
                 images.as_deref_mut(),
             );
+            let depot_base_z = depot_foundation.surface_base_z;
             spawn_road_depot_tile(
                 commands,
                 assets,
@@ -2431,13 +2451,15 @@ pub(crate) fn spawn_transport_object_tile(
                 depot_base_z,
                 TILE_HALF_H,
                 tileh,
+                dims.0,
+                depot_foundation.child_parent,
             );
         }
         TileKind::RailDepot => {
             // `DrawTile_Rail` nivela cualquier depósito inclinado antes de
             // dibujar su suelo. No reutilizar el césped inclinado genérico:
             // las capas de suelo pasan a ser children de la fundación.
-            let depot_base_z = spawn_forced_leveled_foundation(
+            let depot_foundation = spawn_forced_leveled_foundation_with_child_parent(
                 commands,
                 map,
                 dims,
@@ -2450,6 +2472,7 @@ pub(crate) fn spawn_transport_object_tile(
                 action5_sprites.as_deref_mut(),
                 images.as_deref_mut(),
             );
+            let depot_base_z = depot_foundation.surface_base_z;
             spawn_rail_depot_tile(
                 commands,
                 assets,
@@ -2459,6 +2482,8 @@ pub(crate) fn spawn_transport_object_tile(
                 depot_base_z,
                 TILE_HALF_H,
                 tileh,
+                dims.0,
+                depot_foundation.child_parent,
                 show_pbs_reservations,
                 catenary_newgrf,
                 &mut catenary_sprites,
@@ -2768,21 +2793,29 @@ fn spawn_road_depot_tile(
     base_z: u8,
     half_h: f32,
     tileh: u8,
+    map_width: u32,
+    foundation_child_parent: Option<Entity>,
 ) {
     let dir = ctx.tile.map_or(0, |t| t.m5 & 0x03).min(3) as usize;
     record_road_depot_ground_trace(tileh);
-    commands.spawn((
-        MapVisualLayer,
-        ctx.map_tile_chunk(),
-        assets.road_depot_ground.sprite(),
-        Transform::from_translation(full_tile_sprite_pos_half(
-            ctx.tx_i32(),
-            ctx.ty_i32(),
-            base_z,
-            0.02,
-            half_h,
-        )),
-    ));
+    let position = full_tile_sprite_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.02, half_h);
+    if let Some(parent) = foundation_child_parent {
+        spawn_foundation_child_sprite_at(
+            commands,
+            assets.road_depot_ground.sprite(),
+            ctx,
+            position,
+            map_width,
+            parent,
+        );
+    } else {
+        commands.spawn((
+            MapVisualLayer,
+            ctx.map_tile_chunk(),
+            assets.road_depot_ground.sprite(),
+            Transform::from_translation(position),
+        ));
+    }
     // En OpenTTD, el depósito vial vanilla dibuja la losa `SPR_AIRPORT_APRON`
     // y las capas BUILD; no añade un `road_flat` normal. Ese overlay sólo
     // aparece para ciertos tipos custom/tranvías y no estaba resuelto aquí.
@@ -3096,6 +3129,8 @@ fn spawn_rail_depot_tile(
     base_z: u8,
     half_h: f32,
     tileh: u8,
+    map_width: u32,
+    foundation_child_parent: Option<Entity>,
     show_pbs_reservations: bool,
     catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     catenary_sprites: &mut Option<&mut crate::render::NewGrfCatenarySpriteCache>,
@@ -3111,36 +3146,49 @@ fn spawn_rail_depot_tile(
         let fallback = !assets.rail.contains_key(&track_id);
         record_rail_depot_ground_trace(tileh, "rail-depot-track", track_id, fallback);
         if let Some(image) = assets.rail.get(&track_id) {
-            commands.spawn((
-                MapVisualLayer,
-                ctx.map_tile_chunk(),
-                image.sprite(),
-                Transform::from_translation(full_tile_sprite_pos_half(
-                    ctx.tx_i32(),
-                    ctx.ty_i32(),
-                    base_z,
-                    0.02,
-                    half_h,
-                )),
-            ));
+            let position =
+                full_tile_sprite_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.02, half_h);
+            if let Some(parent) = foundation_child_parent {
+                spawn_foundation_child_sprite_at(
+                    commands,
+                    image.sprite(),
+                    ctx,
+                    position,
+                    map_width,
+                    parent,
+                );
+            } else {
+                commands.spawn((
+                    MapVisualLayer,
+                    ctx.map_tile_chunk(),
+                    image.sprite(),
+                    Transform::from_translation(position),
+                ));
+            }
         }
     } else {
         // NE/NW usan `SPR_FLAT_GRASS_TILE` en `_depot_gfx_table`; no el
         // relieve de la tesela original. En pendiente también es child del
         // mismo parent de fundación que la vía de las salidas SE/SW.
         record_rail_depot_ground_trace(tileh, "rail-depot-ground", 3981, false);
-        commands.spawn((
-            MapVisualLayer,
-            ctx.map_tile_chunk(),
-            assets.grass.sprite(),
-            Transform::from_translation(full_tile_sprite_pos_half(
-                ctx.tx_i32(),
-                ctx.ty_i32(),
-                base_z,
-                0.02,
-                half_h,
-            )),
-        ));
+        let position = full_tile_sprite_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.02, half_h);
+        if let Some(parent) = foundation_child_parent {
+            spawn_foundation_child_sprite_at(
+                commands,
+                assets.grass.sprite(),
+                ctx,
+                position,
+                map_width,
+                parent,
+            );
+        } else {
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                assets.grass.sprite(),
+                Transform::from_translation(position),
+            ));
+        }
     }
     // `HasDepotReservation` vive en m5 bit 4. En el depot no se codifican
     // TrackBits: la dirección fija si el overlay es SINGLE_X o SINGLE_Y.
@@ -3157,12 +3205,24 @@ fn spawn_rail_depot_tile(
         if let Some(image) = assets.pbs_rail_sprite(sid) {
             let base = full_tile_sprite_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.026, half_h);
             let offset = rail_pbs_reservation_offset(sid);
-            commands.spawn((
-                MapVisualLayer,
-                ctx.map_tile_chunk(),
-                image.sprite(),
-                Transform::from_translation(base + Vec3::new(offset.x, offset.y, 0.0)),
-            ));
+            let position = base + Vec3::new(offset.x, offset.y, 0.0);
+            if let Some(parent) = foundation_child_parent {
+                spawn_foundation_child_sprite_at(
+                    commands,
+                    image.sprite(),
+                    ctx,
+                    position,
+                    map_width,
+                    parent,
+                );
+            } else {
+                commands.spawn((
+                    MapVisualLayer,
+                    ctx.map_tile_chunk(),
+                    image.sprite(),
+                    Transform::from_translation(position),
+                ));
+            }
         }
     }
     let buildings_are_hidden = buildings_hidden();

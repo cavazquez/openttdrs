@@ -1486,6 +1486,255 @@ fn sloped_road_ground_attaches_to_its_foundation_parent() {
 }
 
 #[test]
+fn sloped_road_stop_grounds_attach_to_their_foundation_parent() {
+    let assets = boot_assets_app();
+    let bay_ground = assets.bus_stop_grounds[0].clone();
+    let drive_through_ground =
+        assets.road_paved[crate::sprites::road_flat_sprite_index(0, 0x0A)].clone();
+    let mut map = fresh_map8();
+    let c = |x: i32, y: i32| TileCoord::new(x, y);
+    let bay = c(1, 1);
+    let drive_through = c(5, 1);
+    for (coord, m5) in [
+        (bay, 0),
+        (drive_through, openttdrs_core::RSV_DRIVE_THROUGH_X),
+    ] {
+        map.set_tile(
+            coord,
+            Tile {
+                kind: TileKind::Station,
+                mapt: 0x50,
+                m5,
+                m6: 3 << 3, // StationType::Bus.
+                ..tile_template()
+            },
+        )
+        .expect("parada vial inclinada");
+        for corner in [
+            c(coord.x + 1, coord.y),
+            c(coord.x, coord.y + 1),
+            c(coord.x + 1, coord.y + 1),
+        ] {
+            map.set_height(corner, 1)
+                .expect("esquina elevada de la parada");
+        }
+    }
+
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world
+        .run_system_once(
+            move |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                for coord in [bay, drive_through] {
+                    spawn_station_tile(
+                        &mut commands,
+                        &m.0,
+                        m.0.dimensions(),
+                        &a.0,
+                        None,
+                        None,
+                        &TileRenderContext::new(
+                            &m.0,
+                            &g.0,
+                            u32::try_from(coord.x).expect("x positiva"),
+                            u32::try_from(coord.y).expect("y positiva"),
+                        ),
+                        &[],
+                        4.0,
+                        true,
+                        &[],
+                        &[],
+                        None,
+                        None,
+                        &[],
+                        None,
+                        &[],
+                        None,
+                        &[],
+                        TEST_CLIMATE,
+                        &[],
+                    );
+                }
+            },
+        )
+        .expect("sloped road stops spawn");
+
+    let foundation_parents: std::collections::HashSet<_> = world
+        .query::<(Entity, &ViewportSortableParent)>()
+        .iter(&world)
+        .filter_map(|(entity, parent)| {
+            (FOUNDATION_ORIGINAL_SPRITE_BASE..=FOUNDATION_ORIGINAL_SPRITE_BASE.saturating_add(14))
+                .contains(&parent.sprite_id)
+                .then_some(entity)
+        })
+        .collect();
+    assert_eq!(
+        foundation_parents.len(),
+        2,
+        "cada parada inclinada tiene fundación"
+    );
+
+    let attached: Vec<_> = world
+        .query::<(&ViewportSortableChild, &Sprite, &Transform)>()
+        .iter(&world)
+        .filter(|(child, _, _)| foundation_parents.contains(&child.parent))
+        .collect();
+    assert_eq!(
+        attached.len(),
+        2,
+        "cada suelo vial debe ser child del cimiento"
+    );
+    assert!(
+        attached
+            .iter()
+            .any(|(_, sprite, _)| bay_ground.matches(sprite))
+    );
+    assert!(
+        attached
+            .iter()
+            .any(|(_, sprite, _)| drive_through_ground.matches(sprite))
+    );
+    assert!(
+        attached
+            .iter()
+            .all(|(child, _, transform)| child.source_depth == transform.translation.z)
+    );
+}
+
+#[test]
+fn sloped_depot_grounds_and_reservation_attach_to_their_foundation_parent() {
+    let assets = boot_assets_app();
+    let road_ground = assets.road_depot_ground.clone();
+    let rail_ground = assets.rail.get(&1011).expect("vía de depósito SE").clone();
+    let reservation = assets
+        .pbs_rail_sprite(1006)
+        .expect("reserva PBS vertical")
+        .clone();
+    let mut map = fresh_map8();
+    let c = |x: i32, y: i32| TileCoord::new(x, y);
+    let road_depot = c(1, 1);
+    let rail_depot = c(5, 1);
+    map.set_tile(
+        road_depot,
+        Tile {
+            kind: TileKind::RoadDepot,
+            mapt: 0x20,
+            ..tile_template()
+        },
+    )
+    .expect("depósito vial inclinado");
+    map.set_tile(
+        rail_depot,
+        Tile {
+            kind: TileKind::RailDepot,
+            mapt: 0x10,
+            // Dirección SE + HasDepotReservation: ambos overlays deben
+            // colgar de la fundación nivelada.
+            m5: 0x11,
+            ..tile_template()
+        },
+    )
+    .expect("depósito ferroviario inclinado");
+    for coord in [road_depot, rail_depot] {
+        for corner in [
+            c(coord.x + 1, coord.y),
+            c(coord.x, coord.y + 1),
+            c(coord.x + 1, coord.y + 1),
+        ] {
+            map.set_height(corner, 1)
+                .expect("esquina elevada del depósito");
+        }
+    }
+
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world
+        .run_system_once(
+            move |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                let dims = m.0.dimensions();
+                for coord in [road_depot, rail_depot] {
+                    spawn_transport_object_tile(
+                        &mut commands,
+                        &a.0,
+                        None,
+                        None,
+                        &TileRenderContext::new(
+                            &m.0,
+                            &g.0,
+                            u32::try_from(coord.x).expect("x positiva"),
+                            u32::try_from(coord.y).expect("y positiva"),
+                        ),
+                        4.0,
+                        true,
+                        &m.0,
+                        dims,
+                        &[],
+                        &[],
+                        None,
+                        &[],
+                        &[],
+                        None,
+                        None,
+                    );
+                }
+            },
+        )
+        .expect("sloped depots spawn");
+
+    let foundation_parents: std::collections::HashSet<_> = world
+        .query::<(Entity, &ViewportSortableParent)>()
+        .iter(&world)
+        .filter_map(|(entity, parent)| {
+            (FOUNDATION_ORIGINAL_SPRITE_BASE..=FOUNDATION_ORIGINAL_SPRITE_BASE.saturating_add(14))
+                .contains(&parent.sprite_id)
+                .then_some(entity)
+        })
+        .collect();
+    assert_eq!(
+        foundation_parents.len(),
+        2,
+        "cada depósito inclinado tiene fundación"
+    );
+
+    let attached: Vec<_> = world
+        .query::<(&ViewportSortableChild, &Sprite, &Transform)>()
+        .iter(&world)
+        .filter(|(child, _, _)| foundation_parents.contains(&child.parent))
+        .collect();
+    assert_eq!(
+        attached.len(),
+        3,
+        "suelo vial, vía y reserva PBS deben ser children"
+    );
+    assert!(
+        attached
+            .iter()
+            .any(|(_, sprite, _)| road_ground.matches(sprite))
+    );
+    assert!(
+        attached
+            .iter()
+            .any(|(_, sprite, _)| rail_ground.matches(sprite))
+    );
+    assert!(
+        attached
+            .iter()
+            .any(|(_, sprite, _)| reservation.matches(sprite))
+    );
+    assert!(
+        attached
+            .iter()
+            .all(|(child, _, transform)| child.source_depth == transform.translation.z)
+    );
+}
+
+#[test]
 fn airport_pier_tile_seq_layers_spawn_for_both_import_paths() {
     let assets = boot_assets_app();
     let expected_apron = assets.airport_apron.clone();

@@ -1009,38 +1009,6 @@ pub(crate) fn spawn_forced_leveled_foundation_with_child_parent(
     }
 }
 
-/// Variante para callers que sólo necesitan la superficie efectiva.
-#[must_use]
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn spawn_forced_leveled_foundation(
-    commands: &mut Commands,
-    map: &Map,
-    map_dims: (u32, u32),
-    assets: &WorldAssets,
-    ctx: &TileRenderContext,
-    tileh: u8,
-    source: &'static str,
-    role: &'static str,
-    foundation_newgrf: &[Option<openttdrs_core::DecodedSprite>],
-    action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
-    images: Option<&mut Assets<Image>>,
-) -> u8 {
-    spawn_forced_leveled_foundation_with_child_parent(
-        commands,
-        map,
-        map_dims,
-        assets,
-        ctx,
-        tileh,
-        source,
-        role,
-        foundation_newgrf,
-        action5_sprites,
-        images,
-    )
-    .surface_base_z
-}
-
 pub(crate) fn spawn_ground_sprite(
     commands: &mut Commands,
     image: &AtlasSprite,

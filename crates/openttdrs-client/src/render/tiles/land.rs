@@ -8,9 +8,12 @@ use openttdrs_core::{
 };
 
 use super::{
-    helpers::{FLAT_WATER_LAYER_FRAC, foundation_surface_overlay_pos},
-    leveled_foundation_overlay_pos, sloped_or_flat_image, spawn_forced_leveled_foundation,
-    spawn_ground_sprite, spawn_leveled_foundation,
+    helpers::{
+        FLAT_WATER_LAYER_FRAC, foundation_surface_overlay_pos,
+        spawn_forced_leveled_foundation_with_child_parent,
+    },
+    leveled_foundation_overlay_pos, sloped_or_flat_image, spawn_ground_sprite,
+    spawn_leveled_foundation,
 };
 use crate::iso::{
     full_tile_sprite_pos, overlay_pos, remap_tile_offset, slope_sprite_offset, wang_hash,
@@ -494,8 +497,8 @@ pub(crate) fn spawn_house_tile(
     // pendientes, el atajo histórico usaba siempre el bloque original y
     // producía muros equivocados (o faltantes) en Kale. Reutilizamos el mismo
     // plan genérico que ya valida vías, puentes y estaciones.
-    let foundation_surface_base_z = if leveled {
-        spawn_forced_leveled_foundation(
+    let forced_foundation = leveled.then(|| {
+        spawn_forced_leveled_foundation_with_child_parent(
             commands,
             resources.map,
             resources.map_dims,
@@ -508,9 +511,9 @@ pub(crate) fn spawn_house_tile(
             resources.action5_sprites,
             resources.images,
         )
-    } else {
-        base_z
-    };
+    });
+    let foundation_surface_base_z =
+        forced_foundation.map_or(base_z, |foundation| foundation.surface_base_z);
     let house_pos = |xrel: f32, yrel: f32, w: f32, h: f32, layer: f32| {
         if leveled {
             foundation_surface_overlay_pos(
@@ -563,18 +566,31 @@ pub(crate) fn spawn_house_tile(
                 fallback,
                 (0, -32, 0),
             );
-            commands.spawn((
-                MapVisualLayer,
-                ctx.map_tile_chunk(),
-                ground_sprite,
-                Transform::from_translation(house_pos(
-                    spec.s1_xrel,
-                    spec.s1_yrel,
-                    spec.s1_w,
-                    spec.s1_h,
-                    0.4,
-                )),
-            ));
+            let mut position = house_pos(spec.s1_xrel, spec.s1_yrel, spec.s1_w, spec.s1_h, 0.4);
+            if let Some(parent) = forced_foundation.and_then(|foundation| foundation.child_parent) {
+                // `DrawFoundation` deja el último parent activo; el ground
+                // posterior usa `AddChildSpriteScreen`, por lo que conserva
+                // exactamente el delta que el sorter global aplique al muro.
+                let source_depth = viewport_source_depth(position.z, ctx.tx, resources.map_dims.0);
+                position.z = source_depth;
+                commands.spawn((
+                    MapVisualLayer,
+                    ctx.map_tile_chunk(),
+                    ground_sprite,
+                    Transform::from_translation(position),
+                    ViewportSortableChild {
+                        parent,
+                        source_depth,
+                    },
+                ));
+            } else {
+                commands.spawn((
+                    MapVisualLayer,
+                    ctx.map_tile_chunk(),
+                    ground_sprite,
+                    Transform::from_translation(position),
+                ));
+            }
         } else {
             WorldDrawTrace::record_sprite_with_palette(
                 "house-ground",

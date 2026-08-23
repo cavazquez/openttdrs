@@ -565,7 +565,7 @@ pub(crate) fn spawn_foundation_sprite(
     foundation_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
     images: Option<&mut Assets<Image>>,
-) {
+) -> Option<Entity> {
     let trace_bounds = TraceSpriteBounds::new(
         i32::from(draw.bounds.ox),
         i32::from(draw.bounds.oy),
@@ -604,7 +604,7 @@ pub(crate) fn spawn_foundation_sprite(
             foundation_gfx_for_tileh(tileh),
             assets.foundations.get(usize::from(tileh - 1)),
         ) else {
-            return;
+            return None;
         };
         let mut pos = overlay_pos(
             ctx.iso_pos,
@@ -619,23 +619,26 @@ pub(crate) fn spawn_foundation_sprite(
         );
         let source_depth = viewport_source_depth(pos.z, ctx.tx, map_width);
         pos.z = source_depth;
-        commands.spawn((
-            MapVisualLayer,
-            ctx.map_tile_chunk(),
-            image.sprite(),
-            Transform::from_translation(pos),
-            sortable_parent(source_depth),
-        ));
-        return;
+        return Some(
+            commands
+                .spawn((
+                    MapVisualLayer,
+                    ctx.map_tile_chunk(),
+                    image.sprite(),
+                    Transform::from_translation(pos),
+                    sortable_parent(source_depth),
+                ))
+                .id(),
+        );
     }
 
     let Some(slot) = openttdrs_core::foundation_action5_slot_for_sprite_id(draw.sprite_id) else {
         record_trace(true);
-        return;
+        return None;
     };
     let Some(decoded) = foundation_newgrf.get(slot).and_then(Option::as_ref) else {
         record_trace(true);
-        return;
+        return None;
     };
     let mut pos = overlay_pos(
         ctx.iso_pos,
@@ -658,18 +661,20 @@ pub(crate) fn spawn_foundation_sprite(
         )
     });
     record_trace(sprite.is_none());
-    let Some(sprite) = sprite else {
-        return;
-    };
+    let sprite = sprite?;
     let source_depth = viewport_source_depth(pos.z, ctx.tx, map_width);
     pos.z = source_depth;
-    commands.spawn((
-        MapVisualLayer,
-        ctx.map_tile_chunk(),
-        sprite,
-        Transform::from_translation(pos),
-        sortable_parent(source_depth),
-    ));
+    Some(
+        commands
+            .spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                sprite,
+                Transform::from_translation(pos),
+                sortable_parent(source_depth),
+            ))
+            .id(),
+    )
 }
 
 /// Bounds inclusivos del parent de `DrawFoundation` en coordenadas del mundo.
@@ -744,7 +749,7 @@ pub(crate) fn spawn_rail_foundation(
     let mut action5_sprites = action5_sprites;
     let mut images = images;
     for (index, draw) in plan.sprites.into_iter().flatten().enumerate() {
-        spawn_foundation_sprite(
+        let _ = spawn_foundation_sprite(
             commands,
             assets,
             ctx,
@@ -822,7 +827,7 @@ pub(crate) fn spawn_road_foundation(
     let mut action5_sprites = action5_sprites;
     let mut images = images;
     for (index, draw) in plan.sprites.into_iter().flatten().enumerate() {
-        spawn_foundation_sprite(
+        let _ = spawn_foundation_sprite(
             commands,
             assets,
             ctx,
@@ -844,15 +849,25 @@ pub(crate) fn spawn_road_foundation(
     }
 }
 
+/// Resultado de una fundación nivelada que puede recibir `AddChildSprite`.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ForcedLeveledFoundation {
+    pub(crate) surface_base_z: u8,
+    /// Último parent que `DrawFoundation` dejó activo. El siguiente ground
+    /// sprite de OpenTTD debe conservar su delta de profundidad respecto de él.
+    pub(crate) child_parent: Option<Entity>,
+}
+
 /// Dibuja la fundación nivelada que OpenTTD fuerza para construcciones que no
-/// pueden conservar la pendiente de la tesela, como un depósito ferroviario.
+/// pueden conservar la pendiente de la tesela, como una casa o un depósito.
 ///
 /// A diferencia de una vía normal, la elección no depende de `TrackBits`:
-/// `DrawTile_Rail` llama explícitamente a `DrawFoundation(Leveled)`. Devuelve
-/// la Z de la superficie plana que deben usar las capas posteriores.
+/// `DrawTile_Rail` llama explícitamente a `DrawFoundation(Leveled)`. Además
+/// de la superficie plana, conserva el último parent para adjuntar el ground
+/// siguiente igual que `AddChildSpriteScreen`.
 #[must_use]
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn spawn_forced_leveled_foundation(
+pub(crate) fn spawn_forced_leveled_foundation_with_child_parent(
     commands: &mut Commands,
     map: &Map,
     map_dims: (u32, u32),
@@ -864,9 +879,12 @@ pub(crate) fn spawn_forced_leveled_foundation(
     foundation_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
     images: Option<&mut Assets<Image>>,
-) -> u8 {
+) -> ForcedLeveledFoundation {
     if tileh == 0 {
-        return ctx.info.base_z;
+        return ForcedLeveledFoundation {
+            surface_base_z: ctx.info.base_z,
+            child_parent: None,
+        };
     }
 
     // `ApplyPixelFoundationToSlope(Leveled)` eleva una unidad normal y dos
@@ -916,8 +934,9 @@ pub(crate) fn spawn_forced_leveled_foundation(
     );
     let mut action5_sprites = action5_sprites;
     let mut images = images;
+    let mut child_parent = None;
     for (index, draw) in plan.sprites.into_iter().flatten().enumerate() {
-        spawn_foundation_sprite(
+        if let Some(parent) = spawn_foundation_sprite(
             commands,
             assets,
             ctx,
@@ -929,9 +948,46 @@ pub(crate) fn spawn_forced_leveled_foundation(
             foundation_newgrf,
             action5_sprites.as_deref_mut(),
             images.as_deref_mut(),
-        );
+        ) {
+            child_parent = Some(parent);
+        }
     }
-    decision.surface_base_z
+    ForcedLeveledFoundation {
+        surface_base_z: decision.surface_base_z,
+        child_parent,
+    }
+}
+
+/// Variante para callers que sólo necesitan la superficie efectiva.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn spawn_forced_leveled_foundation(
+    commands: &mut Commands,
+    map: &Map,
+    map_dims: (u32, u32),
+    assets: &WorldAssets,
+    ctx: &TileRenderContext,
+    tileh: u8,
+    source: &'static str,
+    role: &'static str,
+    foundation_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
+    images: Option<&mut Assets<Image>>,
+) -> u8 {
+    spawn_forced_leveled_foundation_with_child_parent(
+        commands,
+        map,
+        map_dims,
+        assets,
+        ctx,
+        tileh,
+        source,
+        role,
+        foundation_newgrf,
+        action5_sprites,
+        images,
+    )
+    .surface_base_z
 }
 
 pub(crate) fn spawn_ground_sprite(

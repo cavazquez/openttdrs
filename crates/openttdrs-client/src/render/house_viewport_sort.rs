@@ -36,10 +36,10 @@ pub(crate) struct ViewportSortableParent {
 
 /// Child visual que debe conservar el delta de profundidad de su parent.
 ///
-/// Por ahora sólo lo usa el ascensor de Large Office, que OpenTTD agrega como
-/// `AddChildSpriteScreen` después del edificio. Al mover el parent entre
-/// slots, el ascensor tiene que acompañarlo incluso cuando su animación
-/// actualiza la posición vertical en cada frame.
+/// Lo usan el ascensor de Large Office y el suelo de una casa con fundación,
+/// que `OpenTTD` agrega mediante `AddChildSpriteScreen`. Al mover el parent
+/// entre slots, ambos deben acompañarlo incluso cuando el ascensor actualiza
+/// su posición vertical en cada frame.
 #[derive(Component, Clone, Copy, Debug)]
 pub(crate) struct ViewportSortableChild {
     pub(crate) parent: Entity,

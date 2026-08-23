@@ -6,7 +6,7 @@ use bevy::ecs::system::RunSystemOnce;
 use bevy::image::ImagePlugin;
 use bevy::prelude::*;
 use openttdrs_core::prelude::*;
-use openttdrs_core::{Climate, WaterClass, set_water_class_m1};
+use openttdrs_core::{Climate, FOUNDATION_ORIGINAL_SPRITE_BASE, WaterClass, set_water_class_m1};
 
 const TEST_CLIMATE: Climate = Climate::Temperate;
 const TEST_WORLD_SEED: u64 = 0;
@@ -1170,6 +1170,74 @@ fn forest_combined_layers_attach_to_the_global_sort_parent() {
         children.iter().all(|child| child.parent == parent_entity),
         "ninguna copa combinada puede quedar con profundidad independiente"
     );
+}
+
+#[test]
+fn sloped_house_ground_attaches_to_the_last_foundation_parent() {
+    let assets = boot_assets_app();
+    let mut map = Map::new_flat(3, 3, 0);
+    let mut house = tile_template();
+    house.kind = TileKind::House;
+    // Primera entrada vanilla: tiene `s1` y `s2`, sin ascensor adicional.
+    house.m8 = 0;
+    map.set_tile(TileCoord::new(1, 1), house)
+        .expect("house tile");
+    // Esquina oeste elevada: `tileh = SLOPE_W`, por lo que DrawTile_Town
+    // fuerza `DrawFoundation(Leveled)` antes del suelo de la casa.
+    map.set_height(TileCoord::new(2, 1), 1)
+        .expect("west corner height");
+    let grid = RenderGrid::from_map(&map, 3, 3);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+
+    world
+        .run_system_once(
+            |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                spawn_house_tile(
+                    &mut commands,
+                    &a.0,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    HouseSpawnResources {
+                        map: &m.0,
+                        map_dims: m.0.dimensions(),
+                        house_catalog: &[],
+                        foundation_newgrf: &[],
+                        action5_sprites: None,
+                        images: None,
+                    },
+                );
+            },
+        )
+        .expect("sloped house spawn");
+
+    let foundation_parents: std::collections::HashSet<_> = world
+        .query::<(Entity, &ViewportSortableParent)>()
+        .iter(&world)
+        .filter_map(|(entity, parent)| {
+            (FOUNDATION_ORIGINAL_SPRITE_BASE..=FOUNDATION_ORIGINAL_SPRITE_BASE.saturating_add(14))
+                .contains(&parent.sprite_id)
+                .then_some(entity)
+        })
+        .collect();
+    assert!(
+        !foundation_parents.is_empty(),
+        "la pendiente debe materializar el parent de DrawFoundation"
+    );
+
+    let mut children = world.query::<(Entity, &ViewportSortableChild, &Transform)>();
+    let attached: Vec<_> = children
+        .iter(&world)
+        .filter(|(_, child, _)| foundation_parents.contains(&child.parent))
+        .collect();
+    assert_eq!(
+        attached.len(),
+        1,
+        "el ground de la casa debe seguir al último parent de la fundación"
+    );
+    let (_, child, transform) = attached[0];
+    assert_eq!(child.source_depth, transform.translation.z);
 }
 
 #[test]

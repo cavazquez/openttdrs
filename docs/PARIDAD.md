@@ -103,7 +103,8 @@ subsecuencia vanilla de estación ferroviaria eléctrica (postes, cable y capas
 BUILD) y a los parents de edificios de casas vanilla visibles. En Kale las
 8.497 casas tienen ahora caja y altura efectiva de `DrawFoundation` contenidas
 por el oráculo, y el runtime las ordena con la clave diagonal estable de
-`ViewportAddLandscape`; los 188 ascensores conservan el delta de su parent.
+`ViewportAddLandscape`; los 188 ascensores y el suelo `s1` de cada casa
+inclinada conservan el delta de su parent de fundación.
 También incorpora los edificios industriales vanilla planos y estáticos, cuya
 caja `M(...)` no cambia durante la composición; las pendientes, animaciones y
 layouts NewGRF permanecen fuera de ese subconjunto.
@@ -147,8 +148,9 @@ producers. Los focos naval `138,7..140,10` y de muelle `136,1..139,3` vinculan
 7/7 parents candidatos al orden final C++; es evidencia del contrato de cajas y
 no una certificación raster. Los 383 comandos `industry-building` de Kale ya
 están contenidos por `world-draw`; eso no equivale a que sus variantes dinámicas
-o NewGRF tengan parent/children runtime. Faltan children fuera de ascensores y
-árboles, clipping, anclajes finales y framebuffer. El siguiente trabajo debe
+o NewGRF tengan parent/children runtime. Faltan children de familias distintas
+de ascensores, árboles y suelo de casas inclinadas, además de clipping,
+anclajes finales y framebuffer. El siguiente trabajo debe
 extenderlo a las piezas visibles de puentes y las familias NewGRF de estación,
 aeropuertos y objetos, no rebajar el baseline ni extrapolar una región a
 paridad general.

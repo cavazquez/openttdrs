@@ -1830,7 +1830,7 @@ pub(crate) fn spawn_bridge_deck(
                 decision.surface_base_z.saturating_sub(ctx.info.base_z)
             );
             for (index, draw) in plan.sprites.into_iter().flatten().enumerate() {
-                spawn_foundation_sprite(
+                let _ = spawn_foundation_sprite(
                     commands,
                     assets,
                     ctx,

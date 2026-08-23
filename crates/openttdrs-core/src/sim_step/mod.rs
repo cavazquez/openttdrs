@@ -526,26 +526,41 @@ fn trigger_station_path_reservation_animations(
     }
 
     for trigger_tile in newly_reserved_tiles {
-        let Some(station_anchor) =
-            crate::station::station_at_tile(&state.map, &state.stations, trigger_tile)
-                .map(|station| station.pos)
-        else {
-            continue;
-        };
-        let dirty = crate::map::trigger_newgrf_station_animation_for_platform(
-            &mut state.map,
-            state.tick.get(),
-            &mut state.stations,
-            &state.companies,
-            state.climate,
-            &state.station_spec_catalog,
-            &mut state.newgrf_animated_station_tiles,
-            station_anchor,
+        trigger_station_platform_animation(
+            state,
             trigger_tile,
             crate::StationAnimationTrigger::PathReservation,
         );
-        state.runtime.industry_tile_dirty.extend(dirty);
     }
+}
+
+/// Ejecuta un CB140 ferroviario con área `TA_PLATFORM` en la plataforma que
+/// contiene la tesela del tren. Es la semántica compartida por llegada, salida
+/// y reserva PBS de `station_cmd.cpp` / `pbs.cpp`.
+pub(super) fn trigger_station_platform_animation(
+    state: &mut GameState,
+    trigger_tile: crate::TileCoord,
+    trigger: crate::StationAnimationTrigger,
+) {
+    let Some(station_anchor) =
+        crate::station::station_at_tile(&state.map, &state.stations, trigger_tile)
+            .map(|station| station.pos)
+    else {
+        return;
+    };
+    let dirty = crate::map::trigger_newgrf_station_animation_for_platform(
+        &mut state.map,
+        state.tick.get(),
+        &mut state.stations,
+        &state.companies,
+        state.climate,
+        &state.station_spec_catalog,
+        &mut state.newgrf_animated_station_tiles,
+        station_anchor,
+        trigger_tile,
+        trigger,
+    );
+    state.runtime.industry_tile_dirty.extend(dirty);
 }
 
 /// Movimiento de vehículos, colisiones y PBS post-move.
@@ -589,8 +604,9 @@ mod tests {
         Action2VarAdjust, Action2VarEntry, Action2VarTerm, TrainSpriteAssign, TrainSpriteGraphics,
     };
     use crate::{
-        GameState, PathNetwork, STATION_ANIMATION_TRIGGER_PATH_RESERVATION, TileCoord, Vehicle,
-        VehicleKind, find_path,
+        GameState, PathNetwork, STATION_ANIMATION_TRIGGER_PATH_RESERVATION,
+        STATION_ANIMATION_TRIGGER_VEHICLE_ARRIVES, TileCoord, Vehicle, VehicleKind, VehicleOrder,
+        find_path,
     };
 
     /// CB140 sintético: conserva en MAP7 el ordinal de `var 18`.
@@ -683,5 +699,39 @@ mod tests {
         assert_eq!(state.map.get(station_first).unwrap().m7, 0);
         assert_eq!(state.map.get(station_second).unwrap().m7, 0);
         assert_eq!(state.stations[0].pos, station_anchor);
+    }
+
+    #[test]
+    fn train_arrival_triggers_station_cb140_for_its_platform() {
+        let station_tile = TileCoord::new(4, 3);
+        let mut state = GameState::new(12, 8);
+        apply_command(
+            &mut state,
+            &Command::PlaceRailStationArea {
+                origin: station_tile,
+                axis_y: false,
+                platforms: 1,
+                length: 1,
+            },
+        )
+        .unwrap();
+
+        let mut train = Vehicle::new(1, VehicleKind::Train, station_tile, station_tile);
+        train.running = true;
+        train.orders.push(VehicleOrder::station(station_tile));
+        state.vehicles = vec![train];
+        let spec = &mut state.station_spec_catalog[0];
+        spec.from_newgrf = true;
+        spec.animation_triggers = STATION_ANIMATION_TRIGGER_VEHICLE_ARRIVES;
+        spec.newgrf_runtime = Some(Box::new(path_reservation_callbacks()));
+
+        state.step();
+
+        assert!(state.vehicles[0].awaiting_load_window);
+        assert_eq!(
+            state.map.get(station_tile).unwrap().m7,
+            crate::StationAnimationTrigger::VehicleArrives as u8,
+            "CB140 debe recibir VehicleArrives=3 al ejecutar BeginLoading"
+        );
     }
 }

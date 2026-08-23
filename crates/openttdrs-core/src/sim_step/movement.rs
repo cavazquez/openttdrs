@@ -243,6 +243,7 @@ pub(super) fn move_vehicles(state: &mut GameState) {
         let vehicle_id = state.vehicles[i].id;
         let vehicle_kind = state.vehicles[i].kind;
         let vehicle_running = state.vehicles[i].running;
+        let was_waiting_for_station_load = state.vehicles[i].awaiting_load_window;
         let train_previous_positions: Vec<(usize, crate::TileCoord)> =
             if vehicle_kind == VehicleKind::Train {
                 state
@@ -265,6 +266,19 @@ pub(super) fn move_vehicles(state: &mut GameState) {
         refresh_vehicle_track_speed_cap(state, i, vehicle_kind);
         state.vehicles[i].step_with_map_and_accel(Some(&state.map), train_accel);
         refresh_vehicle_track_speed_cap(state, i, vehicle_kind);
+        if vehicle_kind == VehicleKind::Train
+            && state.vehicles[i].is_consist_head()
+            && !was_waiting_for_station_load
+            && state.vehicles[i].awaiting_load_window
+        {
+            // `Train::BeginLoading`: OpenTTD dispara CB140 justo después de
+            // abrir la carga de la llegada, con alcance TA_PLATFORM.
+            super::trigger_station_platform_animation(
+                state,
+                state.vehicles[i].pos,
+                crate::StationAnimationTrigger::VehicleArrives,
+            );
+        }
         if matches!(
             vehicle_kind,
             VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram

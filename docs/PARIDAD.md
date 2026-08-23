@@ -153,9 +153,13 @@ producers. Los focos naval `138,7..140,10` y de muelle `136,1..139,3` vinculan
 no una certificación raster. Los 383 comandos `industry-building` de Kale ya
 están contenidos por `world-draw`; eso no equivale a que sus variantes dinámicas
 o NewGRF tengan parent/children runtime. La relación rail base/vía posterior a
-fundación ya queda cubierta en runtime, pero el framebuffer del foco aún muestra
-huecos de infraestructura que este vínculo no explica. Restan otras familias de
-children, clipping, anclajes finales y framebuffer. El siguiente trabajo debe
+fundación ya queda cubierta en runtime. El ancla visible de cada
+`DrawFoundation` aplica ahora también `SpriteBounds.origin` antes de proyectar
+el sprite: en el foco rail `(229,149)`, la media foundation `5499` con origen
+`(8,0,0)` deja de abrir sus dos rombos negros en las capturas limpias de
+`0,25×`, `1×` y `2×`. Persisten otros huecos y triángulos de infraestructura
+en las vistas amplias, por lo que #326 sigue abierto y no hay paridad raster.
+Restan otras familias de children, clipping, anclajes finales y framebuffer. El siguiente trabajo debe
 extenderlo a las piezas visibles de puentes y las familias NewGRF de estación,
 aeropuertos y objetos, no rebajar el baseline ni extrapolar una región a
 paridad general.

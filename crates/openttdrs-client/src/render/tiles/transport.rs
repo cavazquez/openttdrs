@@ -246,6 +246,16 @@ fn record_rail_ground_trace(draw: RailGroundDraw, mode: RailTrackTraceMode, worl
     }
 }
 
+/// Posición de una base de vía emitida con `DrawGroundSprite` sin foundation.
+///
+/// Aunque la tesela lógica sea `Rail`, OpenTTD la coloca en el pase previo de
+/// suelo. Mantener este pequeño helper separado evita que las variantes agua y
+/// costa vuelvan accidentalmente al pase sortable al compartir atlas.
+#[inline]
+fn rail_ground_pass_pos(tx: i32, ty: i32, base_z: u8, layer: f32, half_h: f32) -> Vec3 {
+    ground_tile_pos_half(tx, ty, base_z, layer, half_h)
+}
+
 /// Materializa una base ferroviaria que OpenTTD dibuja como suelo separado.
 ///
 /// Las variantes se resuelven desde [`WorldAssets`], no desde PNGs fijos,
@@ -320,11 +330,16 @@ fn spawn_rail_ground_draw(
                 ctx.map_tile_chunk(),
                 WaterTile::ANIMATED,
                 image.sprite(),
-                Transform::from_translation(full_tile_sprite_pos(
+                // `DrawGroundSprite(SPR_FLAT_WATER_TILE)` entra en el pase
+                // ground aun cuando la tesela sea ferroviaria. La altura
+                // sigue moviendo la imagen en pantalla, pero no altera el
+                // orden del pase ground (igual que OpenTTD).
+                Transform::from_translation(rail_ground_pass_pos(
                     ctx.tx_i32(),
                     ctx.ty_i32(),
                     base_z,
                     FLAT_WATER_LAYER_FRAC,
+                    TILE_HALF_H,
                 )),
             ));
         }
@@ -333,7 +348,10 @@ fn spawn_rail_ground_draw(
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
                 image.sprite(),
-                Transform::from_translation(full_tile_sprite_pos_half(
+                // `DrawGroundSprite` de la costa usa el mismo pase que el
+                // agua plana. Mantener ambas mitades en la banda ground evita
+                // que una foundation vecina abra una fisura entre ellas.
+                Transform::from_translation(rail_ground_pass_pos(
                     ctx.tx_i32(),
                     ctx.ty_i32(),
                     base_z,
@@ -2096,6 +2114,24 @@ mod tests {
             crate::iso::iso(7, 3).x + crate::iso::GROUND_SPRITE_CENTER_X_OFFSET
         );
         assert_eq!(flat.x, pos.x);
+    }
+
+    #[test]
+    fn rail_water_ground_stays_in_the_ground_pass() {
+        // `DrawGroundSprite(SPR_FLAT_WATER_TILE)` de una vía no es un
+        // sortable sprite. Esta es la forma que usa
+        // `spawn_rail_ground_draw` para la rama sin parent.
+        let expected = super::rail_ground_pass_pos(
+            230,
+            150,
+            0,
+            super::FLAT_WATER_LAYER_FRAC,
+            crate::iso::TILE_HALF_H,
+        );
+        assert!(
+            expected.z
+                < crate::iso::full_tile_sprite_pos(230, 150, 0, super::FLAT_WATER_LAYER_FRAC,).z
+        );
     }
 
     #[allow(clippy::expect_used)] // Fixture del oráculo: el fallo debe mostrar el caso exacto.

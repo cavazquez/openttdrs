@@ -2,7 +2,8 @@ use bevy::prelude::*;
 
 use crate::iso::{
     GROUND_SPRITE_CENTER_X_OFFSET, HEIGHT_PX, TILE_HALF_H, full_tile_sprite_pos_half,
-    ground_tile_pos_half, overlay_pos, slope_sprite_offset, sortable_draw_z, tile_pos,
+    ground_tile_pos_half, overlay_pos, remap_tile_offset, slope_sprite_offset, sortable_draw_z,
+    tile_pos,
 };
 use crate::render::viewport_sort::ParentSpriteBounds;
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
@@ -618,6 +619,8 @@ pub(crate) fn spawn_foundation_sprite(
             ctx.tx_i32(),
             ctx.ty_i32(),
         );
+        let visual_offset = foundation_bounds_visual_offset(draw.bounds);
+        pos += Vec3::new(visual_offset.x, visual_offset.y, 0.0);
         let source_depth = viewport_source_depth(pos.z, ctx.tx, map_width);
         pos.z = source_depth;
         return Some(
@@ -652,6 +655,8 @@ pub(crate) fn spawn_foundation_sprite(
         ctx.tx_i32(),
         ctx.ty_i32(),
     );
+    let visual_offset = foundation_bounds_visual_offset(draw.bounds);
+    pos += Vec3::new(visual_offset.x, visual_offset.y, 0.0);
     let sprite = action5_sprites.zip(images).and_then(|(cache, images)| {
         cache.sprite_colored(
             openttdrs_core::ACTION5_TYPE_FOUNDATIONS,
@@ -676,6 +681,25 @@ pub(crate) fn spawn_foundation_sprite(
             ))
             .id(),
     )
+}
+
+/// Desplazamiento visible del origen de `SpriteBounds` de una foundation.
+///
+/// `AddSortableSpriteToDraw` suma `bounds.origin` a las coordenadas del
+/// mundo *antes* de aplicar `RemapCoords`. Las cajas se usaban ya para el
+/// ordenador global, pero ignorarlas al posicionar la textura dejaba las
+/// foundations de media tesela (origen 8×8) una media altura demasiado abajo.
+/// Eso expone el clear color bajo sus transparencias aunque la traza lógica
+/// de sprite y bounds coincida con OpenTTD.
+#[inline]
+fn foundation_bounds_visual_offset(bounds: openttdrs_core::FoundationSpriteBounds) -> Vec2 {
+    // `iso(tx, ty)` representa `RemapCoords(16*tx, 16*ty) / 2`; conservar el
+    // mismo factor para los tres componentes del origen de SpriteBounds.
+    remap_tile_offset(
+        f32::from(bounds.ox),
+        f32::from(bounds.oy),
+        f32::from(bounds.oz),
+    ) * 0.5
 }
 
 /// Bounds inclusivos del parent de `DrawFoundation` en coordenadas del mundo.
@@ -1170,14 +1194,15 @@ pub(crate) fn spawn_coast_debug_label(
 mod tests {
     use bevy::prelude::Vec2;
     use openttdrs_core::{
-        FOUNDATION_INCLINED_X, FOUNDATION_INCLINED_Y, FOUNDATION_LEVELED, TileCoord, TileKind,
-        foundation_draw_plan,
+        FOUNDATION_INCLINED_X, FOUNDATION_INCLINED_Y, FOUNDATION_LEVELED, FoundationSpriteBounds,
+        TileCoord, TileKind, foundation_draw_plan,
     };
 
     use super::{
         FLAT_WATER_LAYER_FRAC, SHORE_LAYER_FRAC, bridge_foundation_kind, bridge_foundation_surface,
-        flattening_foundation_surface, foundation_parent_bounds, foundation_surface_overlay_pos,
-        leveled_foundation_overlay_pos, road_foundation_kind, road_foundation_surface,
+        flattening_foundation_surface, foundation_bounds_visual_offset, foundation_parent_bounds,
+        foundation_surface_overlay_pos, leveled_foundation_overlay_pos, road_foundation_kind,
+        road_foundation_surface,
     };
     use crate::iso::{
         GROUND_SPRITE_CENTER_X_OFFSET, HEIGHT_PX, TILE_HALF_H, full_tile_sprite_pos_half,
@@ -1215,6 +1240,24 @@ mod tests {
         assert_eq!(
             foundation_parent_bounds(&ctx_at(7, 2, 2), draw),
             ParentSpriteBounds::new(112, 32, 16, 127, 47, 22)
+        );
+    }
+
+    #[test]
+    fn foundation_visual_anchor_includes_sprite_bounds_origin() {
+        // Kale `(230,150)`: la parte alta de HalfTileWater usa 5499 con
+        // bounds origin=(8,0,0). `AddSortableSpriteToDraw` desplaza su
+        // textura, además de usar ese origen para el sort.
+        assert_eq!(
+            foundation_bounds_visual_offset(FoundationSpriteBounds::new(8, 0, 0, 8, 8, 7)),
+            Vec2::new(-16.0, -8.0)
+        );
+        // La segunda mitad de una foundation empinada baja la imagen 8 px
+        // (Y positivo de Bevy apunta hacia arriba);
+        // el `z_delta` por sí solo no representa ese origin.z negativo.
+        assert_eq!(
+            foundation_bounds_visual_offset(FoundationSpriteBounds::new(0, 0, -8, 16, 16, 7)),
+            Vec2::new(0.0, -8.0)
         );
     }
 

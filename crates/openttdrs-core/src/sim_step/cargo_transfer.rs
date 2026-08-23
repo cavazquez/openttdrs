@@ -22,9 +22,11 @@ fn trigger_station_cargo_animation(
         Some(cargo),
     );
     state.runtime.industry_tile_dirty.extend(dirty);
+    super::trigger_road_stop_animation_at(state, station_pos, trigger, Some(cargo));
 }
 
-/// Ejecuta el trigger de plataforma CB140 tras una carga/descarga de tren.
+/// Ejecuta CB140 tras una carga/descarga: plataforma en trenes y tesela exacta
+/// en `RoadStops`.
 fn trigger_station_vehicle_load_animation(
     state: &mut GameState,
     station_pos: TileCoord,
@@ -43,6 +45,12 @@ fn trigger_station_vehicle_load_animation(
         crate::StationAnimationTrigger::VehicleLoads,
     );
     state.runtime.industry_tile_dirty.extend(dirty);
+    super::trigger_road_stop_animation_at(
+        state,
+        vehicle_pos,
+        crate::StationAnimationTrigger::VehicleLoads,
+        None,
+    );
 }
 
 fn vehicle_load_unload_speed(state: &GameState, vehicle_idx: usize, cargo: CargoType) -> u32 {
@@ -298,9 +306,7 @@ pub(super) fn unload_vehicles(
                 );
             }
         }
-        if state.vehicles[i].kind == VehicleKind::Train {
-            trigger_station_vehicle_load_animation(state, station_pos, vpos);
-        }
+        trigger_station_vehicle_load_animation(state, station_pos, vpos);
         state.stations[station_idx].income += payment.cast_unsigned();
         state.credit_company(vehicle_owner, payment);
         let shown = payment.saturating_add(feeder_total);
@@ -568,10 +574,8 @@ fn try_load_from_industry(
     state.industries[ind_idx].transported_total = state.industries[ind_idx]
         .transported_total
         .saturating_add(u64::from(count));
-    if state.vehicles[vehicle_idx].kind == VehicleKind::Train {
-        let vehicle_pos = state.vehicles[vehicle_idx].pos;
-        trigger_station_vehicle_load_animation(state, station_pos, vehicle_pos);
-    }
+    let vehicle_pos = state.vehicles[vehicle_idx].pos;
+    trigger_station_vehicle_load_animation(state, station_pos, vehicle_pos);
     *loaded_flag = true;
     if first_pickup {
         state.stats.cargo_pickups += 1;
@@ -745,10 +749,8 @@ fn try_load_from_station_waiting_cargo(
             cargo,
         );
     }
-    if state.vehicles[vehicle_idx].kind == VehicleKind::Train {
-        let vehicle_pos = state.vehicles[vehicle_idx].pos;
-        trigger_station_vehicle_load_animation(state, station_pos, vehicle_pos);
-    }
+    let vehicle_pos = state.vehicles[vehicle_idx].pos;
+    trigger_station_vehicle_load_animation(state, station_pos, vehicle_pos);
     *loaded_flag = true;
     if first_pickup {
         state.stats.cargo_pickups += 1;
@@ -1025,6 +1027,42 @@ mod tests {
         (state, pos)
     }
 
+    fn state_with_newgrf_road_stop(trigger_mask: u16) -> (GameState, TileCoord) {
+        let pos = TileCoord::new(1, 1);
+        let mut state = GameState::new(4, 4);
+        let mut tile = state.map.get(pos).unwrap();
+        tile.kind = TileKind::Station;
+        tile.mapt = 0x50;
+        tile.m5 = crate::RSV_DRIVE_THROUGH_X;
+        tile.m6 = 2;
+        state.map.set_tile(pos, tile).unwrap();
+        let mut station = crate::Station::new_with_kind(pos, crate::StopKind::BusStop);
+        station.road_stop_spec = Some(7);
+        state.stations.push(station);
+        state.road_stop_spec_catalog.push(crate::RoadStopSpecDef {
+            id: 7,
+            class: 0,
+            label: "RoadStop animado".into(),
+            short_label: "RSAN".into(),
+            stop_type: crate::ROADSTOP_TYPE_BUS,
+            from_newgrf: true,
+            grfid: 0x5253_414E,
+            newgrf_local_id: 0,
+            draw_mode: crate::ROADSTOP_DRAW_MODE_DEFAULT,
+            flags: 0,
+            callback_mask: 0,
+            animation_status: 1,
+            animation_frames: u8::MAX,
+            animation_speed: 0,
+            animation_triggers: trigger_mask,
+            newgrf_views: Vec::new(),
+            newgrf_runtime: Some(Box::new(cb140_trigger_byte_runtime())),
+            newgrf_type_tables: None,
+            associated_badges: Vec::new(),
+        });
+        (state, pos)
+    }
+
     #[test]
     fn load_supply_requires_stock_in_industry_or_station() {
         let mut state = GameState::new(4, 4);
@@ -1117,6 +1155,34 @@ mod tests {
             "CargoTaken sólo ocurre al vaciar el cargo"
         );
         assert!(state.newgrf_animated_station_tiles.contains(&pos));
+    }
+
+    #[test]
+    fn road_stop_cargo_and_vehicle_load_triggers_reach_cb140() {
+        let (mut state, pos) = state_with_newgrf_road_stop(
+            crate::ROADSTOP_ANIMATION_TRIGGER_NEW_CARGO
+                | crate::ROADSTOP_ANIMATION_TRIGGER_CARGO_TAKEN
+                | crate::ROADSTOP_ANIMATION_TRIGGER_VEHICLE_LOADS,
+        );
+
+        trigger_station_cargo_animation(
+            &mut state,
+            pos,
+            crate::StationAnimationTrigger::NewCargo,
+            CargoType::Coal,
+        );
+        assert_eq!(state.stations[0].road_stop_animation_frame, 1);
+
+        trigger_station_cargo_animation(
+            &mut state,
+            pos,
+            crate::StationAnimationTrigger::CargoTaken,
+            CargoType::Coal,
+        );
+        assert_eq!(state.stations[0].road_stop_animation_frame, 2);
+
+        trigger_station_vehicle_load_animation(&mut state, pos, pos);
+        assert_eq!(state.stations[0].road_stop_animation_frame, 5);
     }
 
     fn map_frame(state: &GameState, coord: TileCoord) -> u8 {

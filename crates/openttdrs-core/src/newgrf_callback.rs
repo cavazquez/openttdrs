@@ -21,6 +21,7 @@ use crate::newgrf_sprites::{
 };
 use crate::object_spec::ObjectSpecDef;
 use crate::station::Station;
+use crate::station_class::StationAnimationTrigger;
 use crate::vehicle::{Vehicle, VehicleKind};
 use crate::{RoadType, StopKind};
 
@@ -492,10 +493,11 @@ pub fn trigger_road_stop_animation(
     def: &crate::road_stop_spec::RoadStopSpecDef,
     station: &mut Station,
     view: u8,
-    trigger: u16,
+    trigger: StationAnimationTrigger,
+    cargo_local_id: Option<u8>,
     tick: u64,
 ) -> bool {
-    if def.animation_triggers & trigger == 0 {
+    if def.animation_triggers & trigger.mask() == 0 {
         return false;
     }
     let before = (
@@ -508,7 +510,7 @@ pub fn trigger_road_stop_animation(
         view,
         CBID_STATION_ANIMATION_TRIGGER,
         road_stop_animation_random_bits(station, tick),
-        u32::from(trigger),
+        trigger.callback_param(cargo_local_id),
     );
     if result == CALLBACK_FAILED {
         return false;
@@ -1256,7 +1258,7 @@ mod tests {
 
     #[test]
     fn callbacks_ac_road_stop_animation_writes_back_station_storage() {
-        let def = crate::RoadStopSpecDef {
+        let mut def = crate::RoadStopSpecDef {
             id: 1,
             class: 0,
             label: "anim".into(),
@@ -1282,11 +1284,37 @@ mod tests {
             &def,
             &mut station,
             crate::RSV_BAY_NE,
-            crate::ROADSTOP_ANIMATION_TRIGGER_BUILT,
+            StationAnimationTrigger::Built,
+            None,
             1,
         ));
         assert!(station.road_stop_animation_active);
         assert_eq!(station.newgrf_persistent_regs.get(&4), Some(&12));
+
+        // Action0 usa la máscara, pero CB140 recibe el ordinal del trigger.
+        def.animation_triggers = crate::ROADSTOP_ANIMATION_TRIGGER_VEHICLE_DEPARTS
+            | crate::ROADSTOP_ANIMATION_TRIGGER_NEW_CARGO;
+        def.newgrf_runtime = Some(Box::new(gfx_callback_variable_byte(0x18, 0)));
+        assert!(trigger_road_stop_animation(
+            &def,
+            &mut station,
+            crate::RSV_BAY_NE,
+            StationAnimationTrigger::VehicleDeparts,
+            None,
+            2,
+        ));
+        assert_eq!(station.road_stop_animation_frame, 4);
+
+        def.newgrf_runtime = Some(Box::new(gfx_callback_variable_byte(0x18, 8)));
+        assert!(trigger_road_stop_animation(
+            &def,
+            &mut station,
+            crate::RSV_BAY_NE,
+            StationAnimationTrigger::NewCargo,
+            Some(5),
+            3,
+        ));
+        assert_eq!(station.road_stop_animation_frame, 5);
     }
 
     #[test]

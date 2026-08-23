@@ -50,7 +50,7 @@ API común: `TrainSpriteGraphics::resolve_callback` / `resolve_callback_ctx`,
 | Airport tiles (`11`) / Airports (`0D`) | anim / FTA-related | **almacenado** / **OOS** | Máscaras; FTA bloqueado (#260) |
 | Canals (`05`) | `0x147` sprite offset | **almacenado** | `CanalSpecDef.callback_mask` |
 | RoadStops (`14`) | `0x13` `CBID_STATION_AVAILABILITY` | **soportado** | Máscara Action0 `0x11`, Action2/3 y call site query+execute de `PlaceBusStop`/`PlaceTruckStop`; `CALLBACK_FAILED` o booleano 8-bit no nulo permite |
-| RoadStops | `0x140`–`0x142` animación | **parcial runtime** | Action0 `0x0E`/`0x0F`/`0x10`; CB140 en `Built` y `TileLoop`, CB141/CB142 con frame/activo persistidos por parada. Faltan triggers de vehículo/carga, scopes vecinos, sonidos y selección visual dinámica |
+| RoadStops | `0x140`–`0x142` animación | **parcial runtime** | Action0 `0x0E`/`0x0F`/`0x10`; CB140 cubre `Built`/`TileLoop`, `NewCargo`/`CargoTaken`, `VehicleLoads`/`VehicleArrives`/`VehicleDeparts` vial y `AcceptanceTick`; CB141/CB142 conservan frame/activo y `7C` por parada. `param2` lleva el ordinal del trigger y, para carga, el id CTT (o fallback histórico) en el byte alto. Faltan randomisation Action2, scopes vecinos, selección visual dinámica, sonidos y estado por tesela de RoadStops compuestos/importados. |
 | Objects (`0F`) | `0x157` `CBID_OBJECT_LAND_SLOPE_CHECK` | **parcial runtime** | Máscara Action0 `0x15` WORD, Action3→Action2 y call site query+execute de `BuildObject` por tesela. `param1=slope`, `param2=dy<<4\|dx`; faltan scopes completos de objeto/vecinos, string de error GRF y el fallback de pendiente completo de OpenTTD. |
 | Cargoes (`0B`) | `0x39` `CBID_CARGO_PROFIT_CALC`; `0x145` `CBID_CARGO_STATION_RATING_CALC` | **parcial runtime** | Máscara Action0 `0x1A`, Action3→Action2: CB39 paga cada packet en `unload_vehicles` (`param1=0`, distancia/cantidad/tránsito, multiplicador signed-15); CB145 sustituye el target durante `update_station_ratings` (`param1` tipo histórico de vehículo; `param2` días/espera/velocidad, resultado signed-15). Faltan scopes avanzados y demás CBs. |
 | Cargoes (resto) / Types | varios | **OOS** | Sin ejecución de CB en este corte |
@@ -84,7 +84,7 @@ API común: `TrainSpriteGraphics::resolve_callback` / `resolve_callback_ctx`,
 6. Industry tiles CB25/CB26/CB27 — trigger, next frame y velocidad en `phase_tile_animation` (FAILED observable).
 7. Industry tile trigger → Action2 random group (`resolve_industry_tile_random_trigger`).
 8. RoadStops CB13 — disponibilidad al previsualizar y ejecutar `PlaceBusStop`/`PlaceTruckStop`.
-9. RoadStops CB140/CB141/CB142 — `Built`/`TileLoop` + scheduler con velocidad/frame, writeback `7C` y JSON round-trip. Referencia: `newgrf_roadstop.cpp` / `newgrf_animation_base.h`.
+9. RoadStops CB140/CB141/CB142 — `Built`/`TileLoop`, carga/retirada de carga, carga/llegada/salida vial y `AcceptanceTick`; scheduler con velocidad/frame, writeback `7C`, CTT en `param2` y JSON round-trip. Referencia: `newgrf_roadstop.cpp` / `newgrf_animation_base.h`.
 10. Objects CB157 — pendiente por tesela de `BuildObject`, desde Action0 `0x15` y Action3→Action2 cargados; query y execute rechazan antes de mutar.
 11. Cargoes CB39 — cálculo de pago por packet durante `unload_vehicles`, desde Action0 `0x1A` y Action3→Action2 cargados; `CALLBACK_FAILED` conserva la fórmula base.
 12. Cargoes CB145 — target de rating durante el barrido `update_station_ratings`, desde Action0 `0x1A` y Action3→Action2 cargados; `CALLBACK_FAILED` conserva el algoritmo estándar.
@@ -94,7 +94,7 @@ API común: `TrainSpriteGraphics::resolve_callback` / `resolve_callback_ctx`,
 
 ## Residual explícito (no bloquea cierre MVP #266)
 
-- Resto de CBs houses / airports / industries / objects (excepto CB157), cargo (excepto CB39/CB145). Stations aún requieren road stops, scopes completos y sonidos; RoadStops conserva todos los triggers de carga/vehículo/aceptación/reserva y sigue sin selección visual Action2 dinámica.
+- Resto de CBs houses / airports / industries / objects (excepto CB157), cargo (excepto CB39/CB145). Stations aún requieren scopes completos y sonidos; RoadStops aún carece de randomisation Action2, scopes vecinos, selección visual Action2 dinámica, sonidos y estado por tesela en paradas compuestas/importadas.
 - Scopes parent/relative completos.
 - Storage persistente en industria/casa y callbacks de estación que sí tengan scope de estación; CB140–142 preserva `7C` de la estación pero no los scopes/áreas completos de `BaseStation`; CB14 aún no aporta el scope/regs de `BaseStation` ni layout 16-bit exacto; CB149 aún no aporta scope/vecinos, strings GRF ni la compatibilidad de bit 10 para GRF <8.
 - Goldens tick-a-tick vs OpenTTD 15.3 para todos los features.

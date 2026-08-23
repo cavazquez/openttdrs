@@ -97,6 +97,7 @@ pub(super) fn move_vehicles(state: &mut GameState) {
             state.vehicles[i].kind,
             VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram
         ) {
+            let was_waiting_for_station_load = state.vehicles[i].awaiting_load_window;
             let map = Some(&state.map);
             let drive_on_right = state.construction.road_drive_on_right();
             // Split borrow: tick road con flota completa para FindCloseTo.
@@ -109,6 +110,22 @@ pub(super) fn move_vehicles(state: &mut GameState) {
                 &mut road_traffic,
             );
             state.vehicles = vehicles;
+            // `RoadVehArrivesAt` abre `BeginLoading` dentro del controller.
+            // Disparar tras recuperar el préstamo completo conserva el tile
+            // exacto de llegada y habilita CB140 sin acoplar el runtime NewGRF
+            // al controlador vial.
+            super::trigger_pending_road_stop_departure(state, i, previous_road_pos);
+            if !was_waiting_for_station_load
+                && state.vehicles[i].awaiting_load_window
+                && !state.vehicles[i].crashed
+            {
+                super::trigger_road_stop_animation_at(
+                    state,
+                    state.vehicles[i].pos,
+                    crate::StationAnimationTrigger::VehicleArrives,
+                    None,
+                );
+            }
             let _ = crate::ground_crash::maybe_road_train_crash_indexed(state, i, &train_crashes);
             continue;
         }

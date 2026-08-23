@@ -565,6 +565,54 @@ pub(super) fn trigger_station_platform_animation(
     state.runtime.industry_tile_dirty.extend(dirty);
 }
 
+/// Ejecuta CB140 de un `RoadStop` `NewGRF` en su tesela concreta.
+///
+/// A diferencia de las plataformas ferroviarias, cada road stop conserva su
+/// propio frame en la entidad `Station`; por eso los triggers de vehículo se
+/// resuelven sobre la tesela exacta y los de carga/aceptación usan el ancla de
+/// la parada lógica que recibió el cambio.
+pub(super) fn trigger_road_stop_animation_at(
+    state: &mut GameState,
+    trigger_tile: crate::TileCoord,
+    trigger: crate::StationAnimationTrigger,
+    cargo: Option<crate::CargoType>,
+) {
+    let Some(station_index) = state
+        .stations
+        .iter()
+        .position(|station| station.covers_tile(trigger_tile))
+    else {
+        return;
+    };
+    let Some(spec_id) = state.stations[station_index].road_stop_spec else {
+        return;
+    };
+    let Some(tile) = state.map.get(trigger_tile) else {
+        return;
+    };
+    let tick = state.tick.get();
+    let climate = state.climate;
+    let changed = {
+        let Some(def) =
+            crate::road_stop_spec::road_stop_spec_def(&state.road_stop_spec_catalog, spec_id)
+        else {
+            return;
+        };
+        let cargo_local_id = cargo.map(|cargo| def.newgrf_cargo_local_id(cargo, climate));
+        crate::newgrf_callback::trigger_road_stop_animation(
+            def,
+            &mut state.stations[station_index],
+            tile.m5,
+            trigger,
+            cargo_local_id,
+            tick,
+        )
+    };
+    if changed {
+        state.runtime.industry_tile_dirty.push(trigger_tile);
+    }
+}
+
 /// Consume las salidas de estación que terminaron antes del movimiento
 /// (descarga/carga o espera de horario). Las salidas decididas dentro de
 /// `movement` usan la variante por índice inmediatamente antes de avanzar.
@@ -578,20 +626,49 @@ fn trigger_pending_train_station_departures(state: &mut GameState) {
 /// plataforma, antes de que el tren pueda mover un píxel. Equivale al bloque
 /// `Vehicle::LeaveStation` de `OpenTTD`.
 pub(super) fn trigger_pending_train_station_departure(state: &mut GameState, vehicle_idx: usize) {
-    let Some(trigger_tile) = state.vehicles.get_mut(vehicle_idx).and_then(|vehicle| {
-        let pending = vehicle.take_train_station_departure();
-        (pending
-            && vehicle.kind == crate::VehicleKind::Train
-            && vehicle.is_consist_head()
-            && !vehicle.crashed)
-            .then_some(vehicle.pos)
-    }) else {
+    let Some(vehicle) = state.vehicles.get_mut(vehicle_idx) else {
+        return;
+    };
+    if vehicle.kind != crate::VehicleKind::Train || !vehicle.is_consist_head() || vehicle.crashed {
+        return;
+    }
+    let pending = vehicle.take_station_departure();
+    let Some(trigger_tile) = pending.then_some(vehicle.pos) else {
         return;
     };
     trigger_station_platform_animation(
         state,
         trigger_tile,
         crate::StationAnimationTrigger::VehicleDeparts,
+    );
+}
+
+/// Emite la salida de un bus/camión/tranvía antes de que el movimiento deje
+/// atrás su `RoadStop`. `road_vehicle_tick` puede cerrar la carga y avanzar en
+/// el mismo tick, por lo que recibe la posición tomada antes de conducir.
+pub(super) fn trigger_pending_road_stop_departure(
+    state: &mut GameState,
+    vehicle_idx: usize,
+    trigger_tile: crate::TileCoord,
+) {
+    let Some(vehicle) = state.vehicles.get_mut(vehicle_idx) else {
+        return;
+    };
+    if !matches!(
+        vehicle.kind,
+        crate::VehicleKind::Bus | crate::VehicleKind::Truck | crate::VehicleKind::Tram
+    ) || vehicle.crashed
+    {
+        return;
+    }
+    if !vehicle.take_station_departure() {
+        return;
+    }
+    trigger_road_stop_animation_at(
+        state,
+        trigger_tile,
+        crate::StationAnimationTrigger::VehicleDeparts,
+        None,
     );
 }
 
@@ -666,6 +743,42 @@ mod tests {
             },
         );
         gfx
+    }
+
+    fn state_with_newgrf_road_stop(trigger_mask: u16) -> (GameState, TileCoord) {
+        let pos = TileCoord::new(4, 3);
+        let mut state = GameState::new(12, 8);
+        let mut tile = state.map.get(pos).unwrap();
+        tile.kind = crate::TileKind::Station;
+        tile.mapt = 0x50;
+        tile.m5 = crate::RSV_DRIVE_THROUGH_X;
+        tile.m6 = 2;
+        state.map.set_tile(pos, tile).unwrap();
+        let mut station = crate::Station::new_with_kind(pos, crate::StopKind::BusStop);
+        station.road_stop_spec = Some(7);
+        state.stations.push(station);
+        state.road_stop_spec_catalog.push(crate::RoadStopSpecDef {
+            id: 7,
+            class: 0,
+            label: "RoadStop animado".into(),
+            short_label: "RSAN".into(),
+            stop_type: crate::ROADSTOP_TYPE_BUS,
+            from_newgrf: true,
+            grfid: 0x5253_414E,
+            newgrf_local_id: 0,
+            draw_mode: crate::ROADSTOP_DRAW_MODE_DEFAULT,
+            flags: 0,
+            callback_mask: 0,
+            animation_status: 1,
+            animation_frames: u8::MAX,
+            animation_speed: 0,
+            animation_triggers: trigger_mask,
+            newgrf_views: Vec::new(),
+            newgrf_runtime: Some(Box::new(path_reservation_callbacks())),
+            newgrf_type_tables: None,
+            associated_badges: Vec::new(),
+        });
+        (state, pos)
     }
 
     #[test]
@@ -764,6 +877,46 @@ mod tests {
             state.map.get(station_tile).unwrap().m7,
             crate::StationAnimationTrigger::VehicleArrives as u8,
             "CB140 debe recibir VehicleArrives=3 al ejecutar BeginLoading"
+        );
+    }
+
+    #[test]
+    fn road_stop_vehicle_arrives_and_departs_trigger_cb140() {
+        let (mut state, stop) = state_with_newgrf_road_stop(
+            crate::ROADSTOP_ANIMATION_TRIGGER_VEHICLE_ARRIVES
+                | crate::ROADSTOP_ANIMATION_TRIGGER_VEHICLE_DEPARTS,
+        );
+
+        // La llegada vial alcanza el mismo ordinal CB140 que OpenTTD.
+        trigger_road_stop_animation_at(
+            &mut state,
+            stop,
+            crate::StationAnimationTrigger::VehicleArrives,
+            None,
+        );
+        assert_eq!(
+            state.stations[0].road_stop_animation_frame,
+            crate::StationAnimationTrigger::VehicleArrives as u8,
+        );
+
+        // La salida real se decide dentro del controller vial al cerrar
+        // BeginLoading; debe consumir el evento antes de abandonar el stop.
+        let mut bus = Vehicle::new(41, VehicleKind::Bus, stop, stop);
+        bus.running = true;
+        bus.progress = u8::MAX;
+        bus.awaiting_load_window = true;
+        bus.orders = vec![
+            VehicleOrder::station(stop),
+            VehicleOrder::Tile(TileCoord::new(7, 3)),
+        ];
+        state.vehicles.push(bus);
+
+        state.step();
+
+        assert_eq!(
+            state.stations[0].road_stop_animation_frame,
+            crate::StationAnimationTrigger::VehicleDeparts as u8,
+            "CB140 debe salir antes de que el bus abandone el RoadStop",
         );
     }
 

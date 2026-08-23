@@ -518,7 +518,8 @@ pub(in crate::command::transport) fn station_placement_on_tile(
             def,
             &mut st,
             view,
-            crate::road_stop_spec::ROADSTOP_ANIMATION_TRIGGER_BUILT,
+            crate::StationAnimationTrigger::Built,
+            None,
             state.tick.get(),
         ) {
             state.runtime.industry_tile_dirty.push(c);

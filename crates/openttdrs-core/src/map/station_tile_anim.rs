@@ -15,9 +15,7 @@ use crate::newgrf_sprites::{
     CALLBACK_FAILED, CBID_STATION_ANIMATION_NEXT_FRAME, CBID_STATION_ANIMATION_SPEED,
     CBID_STATION_ANIMATION_TRIGGER,
 };
-use crate::road_stop_spec::{
-    ROADSTOP_ANIMATION_TRIGGER_TILE_LOOP, RoadStopSpecDef, road_stop_spec_def,
-};
+use crate::road_stop_spec::{RoadStopSpecDef, road_stop_spec_def};
 use crate::station::{
     STATION_TYPE_RAIL_WAYPOINT, Station, StopKind, station_at_tile, station_footprint_tiles,
     station_type_from_m6,
@@ -76,9 +74,9 @@ pub fn step_airport_tiles(map: &mut Map, tick: u64, stations: &[Station]) -> Vec
 /// Ejecuta el subconjunto runtime de animación de paradas viales NewGRF.
 ///
 /// La instancia `Station` contiene el frame y el registro activo equivalentes
-/// a `roadstoptiledata`. Por ahora los call sites de trigger cubiertos son
-/// `Built` (en el comando de construcción) y `TileLoop`; carga, llegada y
-/// salida de vehículo permanecen fuera de este scheduler.
+/// a `roadstoptiledata`. Los eventos de carga, vehículos y aceptación se
+/// conectan desde sus subsistemas; este scheduler sólo resuelve `TileLoop` y
+/// el avance periódico de frames.
 pub fn step_newgrf_road_stop_tiles(
     map: &Map,
     tick: u64,
@@ -105,7 +103,8 @@ pub fn step_newgrf_road_stop_tiles(
             def,
             &mut stations[index],
             tile.m5,
-            ROADSTOP_ANIMATION_TRIGGER_TILE_LOOP,
+            StationAnimationTrigger::TileLoop,
+            None,
             tick,
         ) {
             dirty.push(*coord);

@@ -61,10 +61,24 @@ pub const ROADSTOP_CALLBACK_MASK_ANIMATION_SPEED: u8 = 1 << 2;
 
 /// Triggers de animación de una parada (`StationAnimationTrigger`).
 ///
-/// La implementación runtime actual cubre construcción y `TileLoop`; los
-/// triggers de carga/vehículo requieren todavía conectar sus call sites.
-pub const ROADSTOP_ANIMATION_TRIGGER_BUILT: u16 = 1 << 0;
-pub const ROADSTOP_ANIMATION_TRIGGER_TILE_LOOP: u16 = 1 << 7;
+/// Action0 guarda la máscara, pero CB140 recibe el ordinal correspondiente.
+/// Mantener estas constantes ligadas al enum compartido evita que ambas
+/// representaciones se desalineen.
+pub const ROADSTOP_ANIMATION_TRIGGER_BUILT: u16 = crate::StationAnimationTrigger::Built.mask();
+pub const ROADSTOP_ANIMATION_TRIGGER_NEW_CARGO: u16 =
+    crate::StationAnimationTrigger::NewCargo.mask();
+pub const ROADSTOP_ANIMATION_TRIGGER_CARGO_TAKEN: u16 =
+    crate::StationAnimationTrigger::CargoTaken.mask();
+pub const ROADSTOP_ANIMATION_TRIGGER_VEHICLE_ARRIVES: u16 =
+    crate::StationAnimationTrigger::VehicleArrives.mask();
+pub const ROADSTOP_ANIMATION_TRIGGER_VEHICLE_DEPARTS: u16 =
+    crate::StationAnimationTrigger::VehicleDeparts.mask();
+pub const ROADSTOP_ANIMATION_TRIGGER_VEHICLE_LOADS: u16 =
+    crate::StationAnimationTrigger::VehicleLoads.mask();
+pub const ROADSTOP_ANIMATION_TRIGGER_ACCEPTANCE_TICK: u16 =
+    crate::StationAnimationTrigger::AcceptanceTick.mask();
+pub const ROADSTOP_ANIMATION_TRIGGER_TILE_LOOP: u16 =
+    crate::StationAnimationTrigger::TileLoop.mask();
 
 /// Metadatos de una clase de road stop (`RoadStopClass`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -144,6 +158,20 @@ const fn default_road_stop_animation_speed() -> u8 {
 }
 
 impl RoadStopSpecDef {
+    /// Id local del cargo para CB140 (`var 18`, bits 8..15).
+    ///
+    /// Los catálogos antiguos que no conservaron Action8 usan `0`, que
+    /// `local_cargo_id` trata como formato moderno seguro (bitnum global).
+    #[must_use]
+    pub fn newgrf_cargo_local_id(&self, cargo: crate::CargoType, climate: crate::Climate) -> u8 {
+        crate::newgrf_type_tables::local_cargo_id(
+            self.newgrf_type_tables.as_ref(),
+            0,
+            cargo,
+            climate,
+        )
+    }
+
     /// Vista Action1/3 para índice de gfx (`RSV_*`).
     ///
     /// Bahía (`0..3`): módulo si hay vistas. Drive-through (`4`/`5`): solo si

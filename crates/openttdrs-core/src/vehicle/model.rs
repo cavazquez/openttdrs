@@ -289,8 +289,8 @@ pub struct Vehicle {
     /// no avanza hasta que la fase de carga tuvo oportunidad de actuar).
     #[serde(default)]
     pub awaiting_load_window: bool,
-    /// Evento transitorio para CB140: la cabeza ferroviaria terminó una parada
-    /// y debe emitir `VehicleDeparts` antes de iniciar el movimiento siguiente.
+    /// Evento transitorio para CB140: terminó una parada y debe emitir
+    /// `VehicleDeparts` antes de iniciar el movimiento siguiente.
     #[serde(skip)]
     pub(crate) station_departure_pending: bool,
     /// Ignorar señal roja en el próximo paso de simulación (trenes).

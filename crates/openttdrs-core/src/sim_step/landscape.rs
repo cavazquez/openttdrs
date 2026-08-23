@@ -103,6 +103,12 @@ fn trigger_station_acceptance_animations(state: &mut GameState, t: u64) {
             None,
         );
         state.runtime.industry_tile_dirty.extend(dirty);
+        super::trigger_road_stop_animation_at(
+            state,
+            station_anchor,
+            crate::StationAnimationTrigger::AcceptanceTick,
+            None,
+        );
     }
 }
 
@@ -224,6 +230,42 @@ mod tests {
         (state, first, second)
     }
 
+    fn animated_road_stop_state() -> (GameState, TileCoord) {
+        let pos = TileCoord::new(1, 1);
+        let mut state = GameState::new(4, 4);
+        let mut tile = state.map.get(pos).unwrap();
+        tile.kind = TileKind::Station;
+        tile.mapt = 0x50;
+        tile.m5 = crate::RSV_DRIVE_THROUGH_X;
+        tile.m6 = 2;
+        state.map.set_tile(pos, tile).unwrap();
+        let mut station = Station::new_with_kind(pos, StopKind::BusStop);
+        station.road_stop_spec = Some(7);
+        state.stations.push(station);
+        state.road_stop_spec_catalog.push(crate::RoadStopSpecDef {
+            id: 7,
+            class: 0,
+            label: "RoadStop animado".into(),
+            short_label: "RSAN".into(),
+            stop_type: crate::ROADSTOP_TYPE_BUS,
+            from_newgrf: true,
+            grfid: 0x5253_414E,
+            newgrf_local_id: 0,
+            draw_mode: crate::ROADSTOP_DRAW_MODE_DEFAULT,
+            flags: 0,
+            callback_mask: 0,
+            animation_status: 1,
+            animation_frames: u8::MAX,
+            animation_speed: 0,
+            animation_triggers: crate::ROADSTOP_ANIMATION_TRIGGER_ACCEPTANCE_TICK,
+            newgrf_views: Vec::new(),
+            newgrf_runtime: Some(Box::new(acceptance_trigger_callbacks())),
+            newgrf_type_tables: None,
+            associated_badges: Vec::new(),
+        });
+        (state, pos)
+    }
+
     #[test]
     fn acceptance_animation_uses_250_ticks_and_staggers_native_stations() {
         let (mut state, first, second) = animated_station_state();
@@ -254,5 +296,16 @@ mod tests {
 
         on_tick_station(&mut state, 243);
         assert_eq!(state.map.get(first).unwrap().m7, 6);
+    }
+
+    #[test]
+    fn acceptance_animation_reaches_newgrf_road_stops() {
+        let (mut state, _pos) = animated_road_stop_state();
+
+        on_tick_station(&mut state, 249);
+        assert_eq!(state.stations[0].road_stop_animation_frame, 0);
+
+        on_tick_station(&mut state, 250);
+        assert_eq!(state.stations[0].road_stop_animation_frame, 6);
     }
 }

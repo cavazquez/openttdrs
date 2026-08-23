@@ -76,6 +76,10 @@ fn plyr_records(
         write_str("Jugador", &mut rec)?;
         write_str(company.president_name.as_deref().unwrap_or(""), &mut rec)?;
         rec.extend_from_slice(&company.manager_face.to_be_bytes());
+        write_str(
+            company.manager_face_style.as_deref().unwrap_or(""),
+            &mut rec,
+        )?;
         rec.extend_from_slice(&state.economy.money.to_be_bytes());
         rec.push(state.company_colour);
         rec.push(0);
@@ -107,6 +111,10 @@ fn plyr_records(
             write_str(&company.name, &mut rec)?;
             write_str(company.president_name.as_deref().unwrap_or(""), &mut rec)?;
             rec.extend_from_slice(&company.manager_face.to_be_bytes());
+            write_str(
+                company.manager_face_style.as_deref().unwrap_or(""),
+                &mut rec,
+            )?;
             rec.extend_from_slice(&money.to_be_bytes());
             rec.push(colour);
             rec.push(u8::from(company.is_ai));
@@ -135,6 +143,8 @@ pub(super) fn plyr_chunk(
     write_str("president_name", &mut header)?;
     header.push(6);
     write_str("face", &mut header)?;
+    header.push(0x0A | 0x10);
+    write_str("face_style", &mut header)?;
     header.push(7);
     write_str("money", &mut header)?;
     header.push(2);

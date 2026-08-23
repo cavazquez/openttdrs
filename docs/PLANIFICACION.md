@@ -2114,7 +2114,7 @@ python3 scripts/gen_demo_sav.py crates/openttdrs-core/tests/fixtures/demo_opentt
 | `./scripts/check.sh openttd-smoke` | Gate load+round-trip fixture rico |
 | `docs/MAPA_Y_FERROCARRIL.md` §16–17 | Formato chunks / import |
 
-Versión de export: `EXPORT_SAVE_VERSION = 350` (≥ 348 HouseID en MAP8; ≥ 300 tick u64).
+Versión de export: `EXPORT_SAVE_VERSION = 355` (≥ 348 HouseID en MAP8; ≥ 300 tick u64; ≥355 `PLYR.face_style`).
 
 ---
 
@@ -2124,7 +2124,7 @@ Versión de export: `EXPORT_SAVE_VERSION = 350` (≥ 348 HouseID en MAP8; ≥ 30
 
 ```
 OTTZ | OTTN
-u16 BE version (= 350)
+u16 BE version (= 355)
 u16 BE unused (= 0)
 payload (zlib si OTTZ; raw si OTTN)
 ```
@@ -2141,7 +2141,7 @@ payload (zlib si OTTZ; raw si OTTN)
 6. `ORDL` — `CH_TABLE` con struct `orders` (estación/waypoint/depósito/condicional); una lista por vehículo con órdenes
 7. `VEHS` — `CH_SPARSE_TABLE` de tren, bus/camión, barco y avión de ala fija + ref a ORDL
 8. `DATE` — `CH_TABLE` `date` (i32) + `tick_counter` (u64)
-9. `PLYR` — `CH_TABLE` `name`/`president_name` (string) + `face` (u32) + `money` (i64) + `colour` (u8) + `is_ai` (u8) + `settings.*` (autorrenovación y servicio por tipo) + las 23 entradas `liveries` (`in_use`/`colour1`/`colour2`). `face_style` requiere SLV355 y no se emite mientras el writer permanezca en SLV350.
+9. `PLYR` — `CH_TABLE` `name`/`president_name`/`face_style` (string) + `face` (u32) + `money` (i64) + `colour` (u8) + `is_ai` (u8) + `settings.*` (autorrenovación y servicio por tipo) + las 23 entradas `liveries` (`in_use`/`colour1`/`colour2`). El writer usa SLV355 para conservar la etiqueta de estilo junto al bitfield de rostro.
 10. Terminador `00 00 00 00`
 
 #### Mapeo `Tile` → planos
@@ -2165,7 +2165,7 @@ avión de ala fija.
 
 Preserva `CAPY` al importar/exportar, pero todavía no crea pagos activos desde
 el runtime; `PLYR` conserva dinero/color/nombre/indicador AI, el subconjunto ejecutado de
-`settings.*`, presidente y el bitfield de rostro por compañía, aunque faltan historial, flags completos y `face_style` (SLV355); también faltan `OBJS`,
+`settings.*`, presidente, bitfield de rostro y `face_style` por compañía, aunque faltan historial y flags completos; también faltan `OBJS`,
 `GSET`/`ENGN`/`SRND` completos ni ejecución de configuración NewGRF. Los chunks
 nativos `NGRF`/`ENGN`/`OBJS`/`SRND` y mappings asociados se conservan como
 passthrough al reexportar. `PATS`/`OPTS` ya conserva el

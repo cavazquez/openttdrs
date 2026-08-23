@@ -632,6 +632,8 @@ pub struct SavCompany {
     pub president_name: Option<String>,
     /// Bitfield del retrato del presidente (`PLYR.face`).
     pub manager_face: Option<u32>,
+    /// Etiqueta del estilo de retrato (`PLYR.face_style`, SLV 355).
+    pub manager_face_style: Option<String>,
     /// Marca de compañía controlada por IA, si está presente en el save.
     pub is_ai: Option<bool>,
     /// Esquemas `PLYR.liveries` en orden `LiveryScheme`.
@@ -752,6 +754,10 @@ pub(crate) fn companies_from_chunks(chunks: &[RawChunk], save_version: u16) -> V
             let manager_face = record_get(&record, "face")
                 .and_then(SlValue::as_u64)
                 .and_then(|value| u32::try_from(value).ok());
+            let manager_face_style = record_get(&record, "face_style")
+                .and_then(SlValue::as_str)
+                .filter(|style| !style.is_empty())
+                .map(str::to_owned);
             let is_ai = record_get(&record, "is_ai")
                 .and_then(SlValue::as_u64)
                 .map(|value| value != 0);
@@ -805,6 +811,7 @@ pub(crate) fn companies_from_chunks(chunks: &[RawChunk], save_version: u16) -> V
                 name,
                 president_name,
                 manager_face,
+                manager_face_style,
                 is_ai,
                 liveries,
                 engine_renew_list_head,

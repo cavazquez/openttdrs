@@ -235,6 +235,7 @@ mod tests {
             name: None,
             president_name: None,
             manager_face: None,
+            manager_face_style: None,
             is_ai: None,
             liveries: Vec::new(),
             engine_renew_list_head: Some(0),

@@ -122,6 +122,13 @@ pub struct Company {
     /// interpreta, pero debe conservarlo para que `OpenTTD` mantenga el rostro.
     #[serde(default)]
     pub manager_face: u32,
+    /// Estilo opcional del retrato de manager (`PLYR.face_style`, SLV 355).
+    ///
+    /// El bitfield histórico sigue siendo la fuente de los rasgos; el estilo
+    /// es una etiqueta de apariencia que `OpenTTD` guarda por separado. El core
+    /// no lo interpreta, pero debe conservarlo durante un round-trip SAV.
+    #[serde(default)]
+    pub manager_face_style: Option<String>,
     pub colour: u8,
     /// Esquemas nativos de color de vehículos (`PLYR.liveries`).
     ///
@@ -205,6 +212,7 @@ impl Company {
             name: "Jugador".to_string(),
             president_name: None,
             manager_face: 0,
+            manager_face_style: None,
             colour,
             liveries: default_company_liveries(colour),
             economy,
@@ -235,6 +243,7 @@ impl Company {
             name: RIVAL_NAME_TRANSCARGO.to_string(),
             president_name: None,
             manager_face: 0,
+            manager_face_style: None,
             colour,
             liveries: default_company_liveries(colour),
             economy,
@@ -265,6 +274,7 @@ impl Company {
             name: RIVAL_NAME_ROADHAUL.to_string(),
             president_name: None,
             manager_face: 0,
+            manager_face_style: None,
             colour,
             liveries: default_company_liveries(colour),
             economy,

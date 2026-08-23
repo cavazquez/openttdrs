@@ -92,4 +92,5 @@ fn openttd_resaved_preserves_requested_company_manager_identity() {
         .expect("PLYR de compañía activa tras re-guardado OpenTTD");
     assert_eq!(company.president_name.as_deref(), Some("Ada Lovelace"));
     assert_eq!(company.manager_face, Some(1 << 7));
+    assert_eq!(company.manager_face_style.as_deref(), Some("modern"));
 }

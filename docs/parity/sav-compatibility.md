@@ -1,7 +1,7 @@
 # Compatibilidad `.sav` OpenTTD ↔ openttdrs
 
-Estado vigente de compatibilidad del formato `.sav`. Corte: **2026-08-21**,
-`main` `288ba794`; referencia: **OpenTTD
+Estado vigente de compatibilidad del formato `.sav`. Corte: **2026-08-23**,
+`main` posterior a `afaec71d`; referencia: **OpenTTD
 15.3**, commit `14ec60f248547d4d062a1160f0fc26d742319888`.
 
 Esta es la única matriz de capacidad para importación y exportación `.sav`.
@@ -29,7 +29,7 @@ preserva. Importar un dato no implica que el exportador lo escriba.
 | Grupos y autoreplace | 🟡 lee `GRPS` y el pool `ERNW` con índice, enlaces, owner desde `PLYR` y scopes `ALL_GROUP`/`DEFAULT_GROUP` | 🟡 reemite `GRPS`, `VEHS.group_id` y cadenas `ERNW` densas con referencias `u32` y cabecera por compañía | Livery/historial de grupos y la edición UI completa siguen reducidos; el runtime no cubre todas las reglas avanzadas |
 | Objetos | 🟡 usa `OBJS` para traducir tipos de objeto del mapa y conserva el chunk nativo | 🟡 reemite `OBJS`/`OBID` como passthrough cuando provienen del save | El runtime no ejecuta todavía todas las specs/callbacks de objetos |
 | Ajustes | 🟡 lee el subconjunto ejecutado por el core de `PATS`/`OPTS`: construcción, pathfinding, averías, subsidios, desastres, autoridad, inflación/recesiones y unidades de tiempo | 🟡 escribe ese subconjunto en `PATS` y conserva `GSET`/`ENGN`/`SRND` nativos como passthrough | [`sav/settings.rs`](../../crates/openttdrs-core/src/sav/settings.rs), [`sav/landscape.rs`](../../crates/openttdrs-core/src/sav/landscape.rs) |
-| Compañías y noticias | 🟡 dinero/color/nombre/presidente/`face`/indicador AI, `settings.*` y las 23 entradas `PLYR.liveries` | 🟡 `PLYR` con esos campos, incluidas las libreas nativas | Faltan historial económico, flags completos y `face_style` (requiere SLV355; el writer exporta SLV350); el renderer aún no aplica las libreas por tipo. La cola propia completa queda en JSON |
+| Compañías y noticias | 🟡 dinero/color/nombre/presidente/`face`/`face_style`/indicador AI, `settings.*` y las 23 entradas `PLYR.liveries` | 🟡 `PLYR` con esos campos, incluidas las libreas nativas (SLV355) | Faltan historial económico y flags completos; el renderer aún no aplica las libreas por tipo. La cola propia completa queda en JSON |
 | NewGRF | 🟡 conserva `NGRF`, `ENGN`, `EIDS` y storage/mappings nativos como chunks opacos | 🟡 reemite esos chunks sin interpretar | El runtime todavía no ejecuta todos los callbacks ni valida que los `.grf` estén instalados |
 
 ## Qué usar en cada caso

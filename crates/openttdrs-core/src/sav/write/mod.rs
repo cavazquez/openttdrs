@@ -8,8 +8,8 @@
 //! + `INDY` + `ECMY` + `DATE`/`PLYR` cargable por `OpenTTD` ≥15.3 dedicated.
 //!
 //! Residual: tram, rotor heli, creación de nuevos `CAPY` packets, settings fuera del
-//! subconjunto modelado de `PATS`, ejecución de `ENGN`/`SRND`/`NewGRF`, historial,
-//! rostro y flags completos de `PLYR`.
+//! subconjunto modelado de `PATS`, ejecución de `ENGN`/`SRND`/`NewGRF`, historial
+//! económico y flags completos de `PLYR`.
 //! Los chunks nativos no modelados se conservan como passthrough al reexportar.
 //! Limitaciones: `docs/PARIDAD.md` y `docs/archive/merged-2026-07/ROADMAP_SAV_EXPORT.md`.
 
@@ -34,11 +34,12 @@ use crate::game_state::GameState;
 
 /// Versión SLV del export.
 ///
-/// Se mantiene en **350** (mínimo viable): ≥294 `MAPS` `CH_TABLE`, ≥295 tablas,
-/// ≥300 tick u64, ≥348 `HouseID` en MAP8. `OpenTTD` 15.3 (`SAVEGAME_VERSION` 362)
-/// carga saves más antiguos; subir a 362 no aporta al MVP de load y obligaría
-/// campos DATE/economía posteriores sin ganancia.
-pub const EXPORT_SAVE_VERSION: u16 = 350;
+/// Se mantiene en **355** (mínimo viable actual): ≥294 `MAPS` `CH_TABLE`, ≥295
+/// tablas, ≥300 tick u64, ≥348 `HouseID` en MAP8 y ≥355 `PLYR.face_style`.
+/// `OpenTTD` 15.3 (`SAVEGAME_VERSION` 362) carga saves más antiguos; subir a
+/// 362 no aporta al MVP de load y obligaría campos DATE/economía posteriores
+/// sin ganancia.
+pub const EXPORT_SAVE_VERSION: u16 = 355;
 
 /// Contenedor exterior del `.sav`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -764,6 +765,7 @@ mod tests {
             rival.set_colour(11);
             rival.president_name = Some("Ada Rival".into());
             rival.manager_face = 1 << 7;
+            rival.manager_face_style = Some("modern".into());
             rival.liveries[1] = crate::CompanyLivery {
                 in_use: crate::COMPANY_LIVERY_FLAG_PRIMARY,
                 colour1: 7,
@@ -794,6 +796,7 @@ mod tests {
         let plyr = crate::sav::chunks::find_chunk(&chunks, "PLYR").expect("PLYR chunk");
         assert_table_field_type(&plyr.body, 0x1A, "president_name");
         assert_table_field_type(&plyr.body, 6, "face");
+        assert_table_field_type(&plyr.body, 0x1A, "face_style");
         assert_table_field_type(&plyr.body, 0x1B, "liveries");
         let sav_game = sav::load(&bytes).expect("load");
         assert_eq!(sav_game.companies.len(), 2);
@@ -805,6 +808,10 @@ mod tests {
             Some("Ada Rival")
         );
         assert_eq!(sav_game.companies[1].manager_face, Some(1 << 7));
+        assert_eq!(
+            sav_game.companies[1].manager_face_style.as_deref(),
+            Some("modern")
+        );
         assert_eq!(sav_game.companies[1].is_ai, Some(true));
         assert_eq!(sav_game.companies[1].engine_renew, Some(false));
         assert_eq!(sav_game.companies[1].engine_renew_months, Some(-3));
@@ -829,6 +836,7 @@ mod tests {
         assert_eq!(loaded_rival.name, "TransCargo");
         assert_eq!(loaded_rival.president_name.as_deref(), Some("Ada Rival"));
         assert_eq!(loaded_rival.manager_face, 1 << 7);
+        assert_eq!(loaded_rival.manager_face_style.as_deref(), Some("modern"));
         assert!(loaded_rival.is_ai);
         assert!(!loaded_rival.engine_renew);
         assert_eq!(loaded_rival.engine_renew_months, -3);
@@ -1164,6 +1172,7 @@ mod tests {
         state.sync_active_from_mirrors();
         state.companies[0].president_name = Some("Ada Lovelace".into());
         state.companies[0].manager_face = 1 << 7;
+        state.companies[0].manager_face_style = Some("modern".into());
         state.companies[0].reset_liveries();
         let custom_bus_livery = crate::CompanyLivery {
             in_use: crate::COMPANY_LIVERY_FLAG_PRIMARY | crate::COMPANY_LIVERY_FLAG_SECONDARY,
@@ -1188,6 +1197,10 @@ mod tests {
             Some("Ada Lovelace")
         );
         assert_eq!(sav_game.companies[0].manager_face, Some(1 << 7));
+        assert_eq!(
+            sav_game.companies[0].manager_face_style.as_deref(),
+            Some("modern")
+        );
         assert_eq!(sav_game.vehicles.len(), 2, "tren + bus");
         assert_eq!(sav_game.companies[0].liveries[14], custom_bus_livery);
         assert!(
@@ -1274,13 +1287,19 @@ mod tests {
 
     #[test]
     fn export_emits_synthetic_city_when_no_towns() {
-        let names = exported_chunk_names(&tiny_state()).expect("chunks");
+        let mut state = tiny_state();
+        state.companies[0].manager_face_style = Some("modern".into());
+        let names = exported_chunk_names(&state).expect("chunks");
         assert!(names.iter().any(|n| n == "CITY"), "{names:?}");
-        let bytes = save_to_bytes_with(&tiny_state(), SavContainer::Ottn).expect("save");
+        let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
         let sav_game = sav::load(&bytes).expect("load");
         assert!(
             !sav_game.towns.is_empty(),
             "OpenTTD exige ≥1 municipio; el export sintético debe roundtrippear"
+        );
+        assert_eq!(
+            sav_game.companies[0].manager_face_style.as_deref(),
+            Some("modern")
         );
         // Dump opcional para smoke OpenTTD: OPENTTDRS_DUMP_MVP_SAV=/ruta.sav
         if let Ok(path) = std::env::var("OPENTTDRS_DUMP_MVP_SAV") {

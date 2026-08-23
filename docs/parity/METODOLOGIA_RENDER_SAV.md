@@ -64,7 +64,7 @@ cuando el tile ya se decodificó mal.
 |---|---|---|
 | Viewport de mapas grandes | Completado de chunks parciales. | Corrección aislada publicada en `main` (`5b0023b`). |
 | Terreno, pendientes y árboles | Revisión de altura isométrica y sprites de ladera para eliminar artefactos que parecían vías o dejaban colores extraños. | En checkpoint; requiere captura focalizada. |
-| Puentes rail y conexiones | Fundaciones, pilares, rampas y altura efectiva; la traza conserva sprites y geometría de las transiciones. | En checkpoint; sin declarar paridad total. |
+| Puentes rail, túneles y conexiones | Fundaciones, pilares, rampas y altura efectiva; la traza conserva sprites y geometría de las transiciones. `DrawBridgeMiddle` y las bocas sin catenaria materializan además sus `SPR_EMPTY_BOUNDING_BOX` como constraints sin raster del sorter runtime. | Kale completo: parents identificables contenidos por el oráculo; el orden que `world-draw` exporta sigue siendo pre-sort. En checkpoint, sin declarar paridad global de composición. |
 | Catenaria | La ruta común cubre vía normal, cruces a nivel eléctricos, postes de la boca de túnel, cable especial de portal y cable de entrada de depósito. Conserva el orden PPP → PCP antes de las capas `TILE_SEQ` y la altura posterior a fundación. | Kale completo 8bpp: la comparación estricta no deja comandos, geometrías, paletas ni órdenes fuera de OpenTTD. |
 | Señales ferroviarias | El importador lee `vehicle.road_side` y `construction.train_signal_side` de `PATS`/`OPTS`; el renderer replica el orden de `DrawSignals` y la altura de `GetSafeSlopeZ` sobre la fundación ferroviaria efectiva. | Kale completo: las 729 señales coinciden en ID, ancla de mundo, geometría y orden relativo. |
 | Monorriel y maglev | Selección diagonal tipada por railtype para no usar rail convencional. | En checkpoint; validar por región. |
@@ -216,16 +216,19 @@ plan genérico de `DrawFoundation` conserva también la caja C++ para sus 3.014
 parents de Kale: 1.943 de casas, 439 de rail, 351 de road, 154 de estación
 rail, 101 de puentes y los grupos menores de depósitos, paradas y cruces. La
 comparación `world-draw --geometry --foundations --order` contiene las 3.014
-geometrías; el candidato de `world-sort` pasa de 53.169 a 56.183 parents y
-vincula 56.088 con el vector final C++. En runtime, los buildings vanilla y
-los sprites directos de esas fundaciones ya se etiquetan como parents comunes,
-reciben su clave diagonal/ordinal de inserción y se reubican con el mismo
-sorter. El mismo puente incorpora además los edificios industriales vanilla
-planos sin animación: para el ejemplo de Kale `(186,1)`, el sprite `2119` usa
-exactamente el prisma `(2976,16,8)..(2991,31,27)` de `industry_land.h`. Es un
-subconjunto deliberado: la industria inclinada, animada o NewGRF, los producers
-restantes, los children no vinculados y clipping continúan como residual
-explícito de #326.
+geometrías. La instrumentación posterior de los separadores invisibles de
+puentes y túneles lleva el conjunto a 56.990 parents: el comparador los vincula
+56.990/56.990 al vector final C++. La salida `world-draw` no se reordena para
+obtener ese número, porque representa deliberadamente la inserción previa a
+`ViewportSortParentSprites`; el runtime sí entrega esas constraints al sorter.
+Los buildings vanilla y los sprites directos de esas fundaciones ya se etiquetan
+como parents comunes, reciben su clave diagonal/ordinal de inserción y se
+reubican con el mismo sorter. El mismo puente incorpora además los edificios
+industriales vanilla planos sin animación: para el ejemplo de Kale `(186,1)`,
+el sprite `2119` usa exactamente el prisma `(2976,16,8)..(2991,31,27)` de
+`industry_land.h`. Es un subconjunto deliberado: la industria inclinada,
+animada o NewGRF, los producers restantes, los children no vinculados y
+clipping continúan como residual explícito de #326.
 
 ### Revalidación: catenaria de estaciones ferroviarias de Kale
 

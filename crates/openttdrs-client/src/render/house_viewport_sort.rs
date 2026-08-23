@@ -13,6 +13,14 @@ use crate::render::viewport_sort::{
     ParentSprite, ParentSpriteBounds, depths_in_viewport_sort_order,
 };
 
+/// `SPR_EMPTY_BOUNDING_BOX` de OpenTTD.
+///
+/// No tiene imagen: entra en `ViewportSortParentSprites` sólo para separar
+/// prismas de infraestructura (en particular puentes y túneles) antes de que
+/// se dibujen sus vecinos. Mantener el ID explícito permite que el puente entre
+/// en el mismo sorter de runtime sin inventar un sprite Bevy transparente.
+pub(crate) const EMPTY_BOUNDING_BOX_SPRITE_ID: u32 = 6_139;
+
 /// Parent con bounds exactos que participa en el sort de la vista cargada.
 ///
 /// `source_depth` no se recalcula después de ordenar: es el slot Bevy que la
@@ -88,7 +96,11 @@ pub(crate) fn sort_viewport_sortable_parents(
     let sprite_parents: Vec<_> = input
         .iter()
         .map(|(entity, parent, _)| {
-            ParentSprite::sprite(entity.to_bits(), parent.sprite_id, parent.bounds)
+            if parent.sprite_id == EMPTY_BOUNDING_BOX_SPRITE_ID {
+                ParentSprite::empty_bounding_box(entity.to_bits(), parent.bounds)
+            } else {
+                ParentSprite::sprite(entity.to_bits(), parent.sprite_id, parent.bounds)
+            }
         })
         .collect();
     let source_depths: Vec<_> = input
@@ -219,5 +231,55 @@ mod tests {
         assert!((first_depth - 1.000_5).abs() < 1e-6);
         assert!((second_depth - 1.0).abs() < 1e-6);
         assert!((child_depth - 1.000_55).abs() < 1e-6);
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)] // Fixtures creados arriba dentro del mismo World.
+    fn runtime_empty_bounding_box_consumes_a_sort_slot_without_a_sprite() {
+        let mut world = World::new();
+        let visible = world
+            .spawn((
+                ViewportSortableParent {
+                    sprite_id: 1422,
+                    bounds: ParentSpriteBounds::new(4, 4, 4, 6, 6, 6),
+                    insertion_key: 0,
+                    source_depth: 1.0,
+                },
+                Transform::from_xyz(0.0, 0.0, 1.0),
+            ))
+            .id();
+        // En producción esta entidad sólo tiene Transform + el parent: no se
+        // rasteriza, pero la caja debe mover el slot de profundidad del sprite
+        // visible igual que `SPR_EMPTY_BOUNDING_BOX` en OpenTTD.
+        let empty = world
+            .spawn((
+                ViewportSortableParent {
+                    sprite_id: EMPTY_BOUNDING_BOX_SPRITE_ID,
+                    bounds: ParentSpriteBounds::new(0, 0, 0, 2, 2, 2),
+                    insertion_key: 1,
+                    source_depth: 1.000_5,
+                },
+                Transform::from_xyz(0.0, 0.0, 1.000_5),
+            ))
+            .id();
+
+        let mut schedule = Schedule::default();
+        schedule.add_systems(sort_viewport_sortable_parents);
+        schedule.run(&mut world);
+
+        let visible_depth = world
+            .entity(visible)
+            .get::<Transform>()
+            .unwrap()
+            .translation
+            .z;
+        let empty_depth = world
+            .entity(empty)
+            .get::<Transform>()
+            .unwrap()
+            .translation
+            .z;
+        assert!((visible_depth - 1.000_5).abs() < 1e-6);
+        assert!((empty_depth - 1.0).abs() < 1e-6);
     }
 }

@@ -119,16 +119,34 @@ medición A/B aislada de estos cambios, así que no se atribuye una reducción
 cuantificada.
 
 La integración sigue siendo parcial: las 3.014 fundaciones comunes de Kale
-(incluidas 1.943 de casas) ya exportan sus bounds C++ exactos y el auditor
-vincula 56.088 de 56.183 parents candidatos con el vector final. El runtime
-aplica ese sorter compartido a los sprites directos de fundación, buildings
-vanilla de casas y el subconjunto plano/estático de industria vanilla, pero no
-al conjunto **global** de producers. Los 383 comandos `industry-building` de
-Kale ya están contenidos por `world-draw`; eso no equivale a que sus variantes
-dinámicas o NewGRF tengan parent/children runtime. Faltan children fuera del
-ascensor, clipping, anclajes finales y framebuffer. El siguiente trabajo debe
-extenderlo a puentes y las familias NewGRF de estación, aeropuertos y objetos,
-no rebajar el baseline ni extrapolar una región a paridad general.
+(incluidas 1.943 de casas) ya exportan sus bounds C++ exactos. El incremento
+actual materializa también los `SPR_EMPTY_BOUNDING_BOX`: el separador de cada
+tramo medio de puente y los dos de cada boca de túnel pasan a ser constraints
+sin píxeles del sorter runtime; el portal de túnel sin catenaria participa con
+ellos. Contra el `world-sort` completo de Kale se vinculan ahora **56.990 de
+56.990 parents** de referencia (y ésta contiene 36.140 children). Esa cifra
+demuestra cobertura de identidad y caja, no orden final: `world-draw` conserva
+por contrato la inserción *pre-sort*, por lo que la primera inversión de la
+parada `(225,2)` continúa siendo un diagnóstico esperado, no una forma de
+falsear la traza reordenándola.
+
+La captura limpia focalizada posterior en `(8,5)`, `1280×720`, escala normal,
+queda en `[0,4]` y 60.774/921.600 píxeles distintos (6,594401 %); los hotspots
+se agrupan en celdas de 64 px para priorizar zonas sin convertir una estructura
+alta en una tesela inventada. Se inspeccionaron además capturas reales del
+cliente en `0,25×`, `0,5×`, `1×` y `2×`. Es evidencia de que el portal y su
+entorno continúan componiéndose al cambiar el zoom, no una mejora A/B aislada
+ni paridad de framebuffer.
+
+El runtime aplica el sorter compartido a los sprites directos de fundación,
+buildings vanilla de casas y el subconjunto plano/estático de industria
+vanilla, pero no al conjunto **global** de producers. Los 383 comandos
+`industry-building` de Kale ya están contenidos por `world-draw`; eso no
+equivale a que sus variantes dinámicas o NewGRF tengan parent/children runtime.
+Faltan children fuera del ascensor, clipping, anclajes finales y framebuffer.
+El siguiente trabajo debe extenderlo a las piezas visibles de puentes y las
+familias NewGRF de estación, aeropuertos y objetos, no rebajar el baseline ni
+extrapolar una región a paridad general.
 
 El perfil `CLEAN` normaliza la UI, las preferencias persistidas y los overrides
 de transparencia conocidos, pero no convierte al renderer actual en un gate

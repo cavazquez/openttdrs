@@ -2,13 +2,13 @@ use bevy::prelude::*;
 
 use crate::iso::{
     GROUND_SPRITE_CENTER_X_OFFSET, HEIGHT_PX, TILE_HALF_H, full_tile_sprite_pos_half,
-    ground_tile_pos_half, overlay_pos, slope_sprite_offset, tile_pos,
+    ground_tile_pos_half, overlay_pos, slope_sprite_offset, sortable_draw_z, tile_pos,
 };
 use crate::render::viewport_sort::ParentSpriteBounds;
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
 use crate::render::{
-    AtlasSprite, MapTileChunk, MapVisualLayer, TileRenderContext, ViewportSortableParent,
-    WaterTile, WorldAssets, viewport_insertion_key, viewport_source_depth,
+    AtlasSprite, EMPTY_BOUNDING_BOX_SPRITE_ID, MapTileChunk, MapVisualLayer, TileRenderContext,
+    ViewportSortableParent, WaterTile, WorldAssets, viewport_insertion_key, viewport_source_depth,
 };
 use crate::sprites::{foundation_gfx_for_tileh, rail_trackbits_for_render};
 use openttdrs_core::{
@@ -26,6 +26,63 @@ pub(crate) const FLAT_WATER_LAYER_FRAC: f32 = -0.030;
 pub(crate) const SHORE_LAYER_FRAC: f32 = -0.015;
 /// Capa de tranvía (`tram_flat_*`, SPR_TRAMWAY_OVERLAY) por encima del asfalto.
 pub(crate) const TRAM_OVERLAY_LAYER_FRAC: f32 = 0.028;
+
+/// Materializa un `SPR_EMPTY_BOUNDING_BOX` del viewport de OpenTTD.
+///
+/// La entidad no lleva `Sprite`, por lo que Bevy no rasteriza nada. Aun así
+/// conserva su `Transform` y [`ViewportSortableParent`] para ocupar un lugar
+/// real en el ordenador global: puentes y túneles usan estas cajas invisibles
+/// para evitar que objetos cercanos se dibujen a través de su estructura.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn spawn_empty_bounding_box(
+    commands: &mut Commands,
+    ctx: &TileRenderContext,
+    role: &'static str,
+    bounds: TraceSpriteBounds,
+    world_z_delta: i32,
+    draw_ordinal: u8,
+    map_width: u32,
+    depth_height: u8,
+    layer: f32,
+) {
+    WorldDrawTrace::record_sprite_with_geometry(
+        role,
+        "empty_bounds",
+        EMPTY_BOUNDING_BOX_SPRITE_ID,
+        false,
+        (0, 0, 0),
+        world_z_delta,
+        Some(bounds),
+    );
+    let world_x = ctx.tx_i32() * 16 + bounds.ox;
+    let world_y = ctx.ty_i32() * 16 + bounds.oy;
+    let world_z =
+        i32::from(ctx.info.base_z) * i32::from(TILE_PIXEL_HEIGHT) + world_z_delta + bounds.oz;
+    let parent_bounds = ParentSpriteBounds::new(
+        world_x,
+        world_y,
+        world_z,
+        world_x + bounds.ex - 1,
+        world_y + bounds.ey - 1,
+        world_z + bounds.ez - 1,
+    );
+    let source_depth = viewport_source_depth(
+        sortable_draw_z(ctx.tx_i32(), ctx.ty_i32(), depth_height, layer),
+        ctx.tx,
+        map_width,
+    );
+    commands.spawn((
+        MapVisualLayer,
+        ctx.map_tile_chunk(),
+        Transform::from_translation(ctx.iso_pos.extend(source_depth)),
+        ViewportSortableParent {
+            sprite_id: EMPTY_BOUNDING_BOX_SPRITE_ID,
+            bounds: parent_bounds,
+            insertion_key: viewport_insertion_key(ctx.tx, ctx.ty, draw_ordinal),
+            source_depth,
+        },
+    ));
+}
 
 pub(crate) fn sloped_or_flat_image(
     tileh: u8,

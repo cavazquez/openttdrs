@@ -107,6 +107,17 @@ pub const fn bridge_structure_palette(bt: BridgeType) -> BridgeStructurePalette 
     }
 }
 
+/// Las cabezas genéricas comparten sprites entre varios puentes. Sólo las
+/// variantes de carretera, monorriel y maglev admiten recolor: las ocho de
+/// rail/electric (`2437..=2444`) llevan su apariencia propia en el PNG.
+///
+/// `bridge_land.h` da a las cabezas del arco de viga (`GirderSteel`) la
+/// paleta blanca, pero mantiene sus vanos en `PAL_NONE`; por eso no puede
+/// resolverse únicamente a partir del tipo de puente.
+const fn is_generic_recolourable_bridge_head(sprite_id: u32) -> bool {
+    matches!(sprite_id, 2445..=2452 | 4326..=4333 | 4366..=4373)
+}
+
 /// Paleta de una pieza concreta de puente, tal como la tabla vanilla de
 /// OpenTTD la entrega a `DrawTile_TunnelBridge`.
 ///
@@ -121,6 +132,13 @@ pub const fn bridge_structure_palette_for_sprite(
     bt: BridgeType,
     sprite_id: u32,
 ) -> BridgeStructurePalette {
+    if matches!(bt, BridgeType::GirderSteel) {
+        return if is_generic_recolourable_bridge_head(sprite_id) {
+            BridgeStructurePalette::White
+        } else {
+            BridgeStructurePalette::None
+        };
+    }
     if (sprite_id >= 2437 && sprite_id <= 2444)
         // El puente de concreto remapea tablero y frente, pero sus pilares
         // `SPR_BTCON_{X,Y}_PILLAR` son PAL_NONE en `bridge_land.h`.
@@ -203,6 +221,7 @@ impl BridgePaletteSprites {
         for sid in bridge_sprite_ids_for_structure_recolor() {
             for palette in [
                 BridgeStructurePalette::Brown,
+                BridgeStructurePalette::White,
                 BridgeStructurePalette::Red,
                 BridgeStructurePalette::Concrete,
                 BridgeStructurePalette::Yellow,
@@ -365,6 +384,18 @@ mod tests {
         assert_eq!(
             bridge_structure_palette_for_sprite(BridgeType::TubularYellow, 4367),
             BridgeStructurePalette::Yellow
+        );
+        assert_eq!(
+            bridge_structure_palette_for_sprite(BridgeType::GirderSteel, 2437),
+            BridgeStructurePalette::None
+        );
+        assert_eq!(
+            bridge_structure_palette_for_sprite(BridgeType::GirderSteel, 2445),
+            BridgeStructurePalette::White
+        );
+        assert_eq!(
+            bridge_structure_palette_for_sprite(BridgeType::GirderSteel, 4326),
+            BridgeStructurePalette::White
         );
     }
 

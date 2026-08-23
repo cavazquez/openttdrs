@@ -165,11 +165,14 @@ pub fn industry_palette_colour_for_instance(
     instance_id: u8,
     industries: &[openttdrs_core::Industry],
 ) -> crate::sprites::CompanyColour {
-    if instance_id == 0 {
-        return crate::sprites::CompanyColour::DarkBlue;
-    }
     if let Some(ind) = industries.iter().find(|i| i.instance_id == instance_id) {
         return crate::sprites::CompanyColour::from_u8(ind.random_colour);
+    }
+    // `IndustryID` 0 es válido en un `.sav` (la primera industria del pool).
+    // Sólo un cero que no tiene entidad correspondiente conserva el fallback
+    // legacy de azul oscuro.
+    if instance_id == 0 {
+        return crate::sprites::CompanyColour::DarkBlue;
     }
     // Fallback: índice secuencial legacy o hash del id.
     let idx = usize::from(instance_id.saturating_sub(1));
@@ -638,5 +641,26 @@ mod industry_coverage_tests {
         ];
         let colour = super::industry_palette_colour_for_instance(10, &industries);
         assert_eq!(colour, crate::sprites::CompanyColour::from_u8(7));
+    }
+
+    #[test]
+    fn palette_colour_accepts_the_first_sav_industry_id() {
+        use openttdrs_core::prelude::*;
+        use openttdrs_core::{Industry, IndustryKind, IndustrySpec};
+        let industries = vec![
+            Industry::with_tiles_spec(
+                TileCoord::new(0, 0),
+                IndustryKind::CoalMine,
+                IndustrySpec::CoalMine,
+                vec![TileCoord::new(0, 0)],
+                1,
+            )
+            .with_instance_id(0),
+        ];
+
+        assert_eq!(
+            super::industry_palette_colour_for_instance(0, &industries),
+            crate::sprites::CompanyColour::PaleGreen
+        );
     }
 }

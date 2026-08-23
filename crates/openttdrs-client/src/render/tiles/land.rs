@@ -94,6 +94,25 @@ const SPR_FLAT_ROCKY_LAND_1: u32 = 4023;
 const SPR_FLAT_WATER_TILE: u32 = 4061;
 /// `PaletteID::PALETTE_ALL_BLACK` en el namespace de sprites vanilla.
 const PALETTE_ALL_BLACK: u32 = 6140;
+/// `PALETTE_RECOLOUR_START` de OpenTTD. Las industrias usan
+/// `GetColourPalette(ind->random_colour)` al transformar la capa de edificio
+/// de `industry_land.h`.
+const PALETTE_RECOLOUR_START: u32 = 775;
+
+/// Paleta lógica de la capa sortable de una industria vanilla.
+///
+/// `DrawTile_Industry` aplica `SpriteLayoutPaletteTransform` con
+/// `GetColourPalette(ind->random_colour)`. La tabla local ya concentra qué
+/// GFX llevan la rampa de color; conservar también esa decisión en la traza
+/// evita que dos edificios geométricamente idénticos de industrias distintas
+/// se fusionen en el comparador de orden.
+fn industry_building_trace_palette(gfx: u16, palette_colour: CompanyColour) -> u32 {
+    if industry_gfx_uses_random_colour(gfx) {
+        PALETTE_RECOLOUR_START + palette_colour.as_u8() as u32
+    } else {
+        0
+    }
+}
 
 /// Sprite de suelo que selecciona `DrawTile_Clear`, salvo campos (que además
 /// llevan cercas). Mantener esta decisión pura evita que el nombre del PNG,
@@ -769,6 +788,7 @@ pub(crate) fn spawn_industry_tile(
         translated
     };
     let palette_colour = industry_palette_colour_for_instance(m2, industries);
+    let building_trace_palette = industry_building_trace_palette(gfx, palette_colour);
     let client_anim = industry_building_needs_client_anim(gfx, m1);
     let phase = crate::render::industry_anim_phase(ctx.tx_i32(), ctx.ty_i32(), m3hi);
     let m4 = industry_effective_m4_for_draw(gfx, m1, m3hi, 0.0, phase);
@@ -921,10 +941,11 @@ pub(crate) fn spawn_industry_tile(
             );
         }
         if s.sprite_id != 0 {
-            WorldDrawTrace::record_sprite_with_geometry(
+            WorldDrawTrace::record_sprite_with_palette_and_geometry(
                 "industry-building",
                 "sortable",
                 s.sprite_id,
+                building_trace_palette,
                 !assets.industries.contains_key(&s.sprite_id),
                 (0, 0, 0),
                 0,
@@ -1579,7 +1600,7 @@ mod tests {
     use crate::render::TileRenderContext;
     use crate::render::grid::TileRenderInfo;
     use crate::render::viewport_sort::ParentSpriteBounds;
-    use crate::sprites::{HOUSE_DRAW_DATA, INDUSTRY_GFX_DATA};
+    use crate::sprites::{CompanyColour, HOUSE_DRAW_DATA, INDUSTRY_GFX_DATA};
     use bevy::prelude::Vec2;
     use openttdrs_core::{
         CLEAR_GROUND_DESERT, CLEAR_GROUND_GRASS, CLEAR_GROUND_ROCKY, CLEAR_GROUND_ROUGH,
@@ -1589,9 +1610,9 @@ mod tests {
     use super::{
         TreeGround, clear_ground_sprite_id, field_fence_draws, field_ground_sprite_id,
         field_slope_max_pixel_z, field_slope_pixel_z_in_corner, house_building_trace_geometry,
-        house_lift_screen_offset, industry_building_parent_bounds, openttd_tile_hash,
-        rough_flat_variant, sort_tree_layers_like_openttd, tree_density_from_tile,
-        tree_ground_from_tile, tree_ground_sprite_id, tree_shore_sprite_id,
+        house_lift_screen_offset, industry_building_parent_bounds, industry_building_trace_palette,
+        openttd_tile_hash, rough_flat_variant, sort_tree_layers_like_openttd,
+        tree_density_from_tile, tree_ground_from_tile, tree_ground_sprite_id, tree_shore_sprite_id,
         void_ground_sprite_and_palette,
     };
 
@@ -1830,6 +1851,19 @@ mod tests {
             industry_building_parent_bounds(&industry_ctx_at(186, 1, 1), spec),
             ParentSpriteBounds::new(2976, 16, 8, 2991, 31, 27)
         );
+    }
+
+    #[test]
+    fn industry_building_trace_palette_keeps_the_instance_random_colour() {
+        // `DrawTile_Industry` pasa GetColourPalette(ind->random_colour) a
+        // SpriteLayoutPaletteTransform. Mauve = colour 10 = palette 785.
+        assert_eq!(
+            industry_building_trace_palette(18, CompanyColour::Mauve),
+            785
+        );
+        // Un GFX PAL_NONE no debe adquirir el color de la industria sólo por
+        // compartir la misma instancia.
+        assert_eq!(industry_building_trace_palette(10, CompanyColour::Mauve), 0);
     }
 
     #[test]

@@ -9,7 +9,10 @@ use super::bridge_draw::{bridge_span_at, spawn_bridge_deck};
 use super::transport::{catenary_local_z_delta, spawn_rail_catenary_for_surface};
 use super::{
     catenary_under_low_bridge,
-    helpers::{FLAT_WATER_LAYER_FRAC, SHORE_LAYER_FRAC, spawn_forced_leveled_foundation},
+    helpers::{
+        FLAT_WATER_LAYER_FRAC, SHORE_LAYER_FRAC, spawn_empty_bounding_box,
+        spawn_forced_leveled_foundation,
+    },
     sloped_or_flat_image, spawn_ground_sprite,
 };
 use crate::iso::{
@@ -26,7 +29,8 @@ use crate::render::viewport_sort::{
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
 use crate::render::{
     AirportRadarAnim, AtlasSprite, CompanyColoredSprites, MapVisualLayer, TileRenderContext,
-    WaterTile, WorldAssets, sprite_from_atlas_or_company_white_colour,
+    ViewportSortableParent, WaterTile, WorldAssets, sprite_from_atlas_or_company_white_colour,
+    viewport_insertion_key, viewport_source_depth,
 };
 use crate::sprites::{
     CatenarySpriteDraw, CatenaryWireDraw, CompanyColour, DockTileLayer,
@@ -98,6 +102,56 @@ fn station_company_palette(owner_colour: Option<CompanyColour>) -> u32 {
 const SPR_FLAT_BARE_LAND: u32 = 3924;
 /// `SPR_FLAT_WATER_TILE`, la base que `DrawWaterClassGround` usa para mar.
 const SPR_FLAT_WATER_TILE: u32 = 4061;
+
+/// Bounds de los dos separadores invisibles de una boca de túnel.
+///
+/// `DrawTile_TunnelBridge` usa `rear_sep` y `front_sep` para que el techo no
+/// atraviese sprites de las teselas vecinas. No son sprites transparentes:
+/// son `SPR_EMPTY_BOUNDING_BOX` y sólo existen para el sorter global.
+fn tunnel_sort_separator_bounds(direction: u8, front: bool) -> TraceSpriteBounds {
+    match (direction & 1, front) {
+        (0, false) => TraceSpriteBounds::new(0, 0, 0, 16, 1, 8),
+        (0, true) => TraceSpriteBounds::new(0, 15, 0, 16, 1, 8),
+        (1, false) => TraceSpriteBounds::new(0, 0, 0, 1, 16, 8),
+        (1, true) => TraceSpriteBounds::new(15, 0, 0, 1, 16, 8),
+        _ => unreachable!("direction & 1 sólo puede ser 0 o 1"),
+    }
+}
+
+/// Parents de una boca sin catenaria en el orden de inserción C++.
+///
+/// El portal delantero y los dos separadores no son tres capas Bevy
+/// independientes: entran juntos a `ViewportSortParentSprites`. Modelarlos
+/// como conjunto permite que la entidad visible use la misma relación de
+/// orden que el oráculo; `world-draw` conserva la inserción previa al sorter.
+fn tunnel_sortable_parents(
+    tx: i32,
+    ty: i32,
+    base_z: u8,
+    front_sprite_id: u32,
+    front_bounds: TraceSpriteBounds,
+    direction: u8,
+) -> Vec<ParentSprite> {
+    let parent_from_bounds = |id, sprite_id, bounds: TraceSpriteBounds| {
+        tile_seq_parent_sprite(
+            id, sprite_id, tx, ty, base_z, bounds.ox, bounds.oy, bounds.oz, bounds.ex, bounds.ey,
+            bounds.ez,
+        )
+    };
+    vec![
+        parent_from_bounds(0, front_sprite_id, front_bounds),
+        parent_from_bounds(
+            1,
+            crate::render::EMPTY_BOUNDING_BOX_SPRITE_ID,
+            tunnel_sort_separator_bounds(direction, false),
+        ),
+        parent_from_bounds(
+            2,
+            crate::render::EMPTY_BOUNDING_BOX_SPRITE_ID,
+            tunnel_sort_separator_bounds(direction, true),
+        ),
+    ]
+}
 /// `SPR_SHORE_BASE`, resuelto por Action5 del baseset OpenGFX.
 const SPR_SHORE_BASE: u32 = 5936;
 /// `SPR_IMG_BUOY` resuelto por el OpenGFX por defecto de la partida.
@@ -2162,6 +2216,20 @@ pub(crate) fn spawn_transport_object_tile(
             };
             let (front_offset, (ox, oy, oz, ex, ey, ez)) =
                 crate::sprites::tunnel_front_trace_geometry(dir);
+            let front_bounds = TraceSpriteBounds::new(ox, oy, oz, ex, ey, ez);
+            let tunnel_parents = (!draw_tunnel_catenary).then(|| {
+                tunnel_sortable_parents(
+                    ctx.tx_i32(),
+                    ctx.ty_i32(),
+                    base_z,
+                    front_sprite_id,
+                    front_bounds,
+                    dir,
+                )
+            });
+            // `world-draw` conserva la inserción previa al sorter: el
+            // portal se registra antes de los separadores, aunque las
+            // profundidades de runtime se reasignen después.
             WorldDrawTrace::record_sprite_with_geometry(
                 "tunnel-front",
                 if draw_tunnel_catenary {
@@ -2173,22 +2241,38 @@ pub(crate) fn spawn_transport_object_tile(
                 false,
                 front_offset,
                 0,
-                Some(crate::render::world_draw_trace::TraceSpriteBounds::new(
-                    ox, oy, oz, ex, ey, ez,
-                )),
+                Some(front_bounds),
             );
-            commands.spawn((
+            let mut front_translation = crate::sprites::tunnel_front_translation(
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+                base_z,
+                front_sprite_id,
+                0.08,
+            );
+            let front_sortable_parent = tunnel_parents.as_ref().map(|parents| {
+                let source_depth = viewport_source_depth(
+                    sortable_draw_z(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.08),
+                    ctx.tx,
+                    dims.0,
+                );
+                front_translation.z = source_depth;
+                ViewportSortableParent {
+                    sprite_id: front_sprite_id,
+                    bounds: parents[0].bounds,
+                    insertion_key: viewport_insertion_key(ctx.tx, ctx.ty, 1),
+                    source_depth,
+                }
+            });
+            let mut front_entity = commands.spawn((
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
                 front_image.sprite(),
-                Transform::from_translation(crate::sprites::tunnel_front_translation(
-                    ctx.tx_i32(),
-                    ctx.ty_i32(),
-                    base_z,
-                    front_sprite_id,
-                    0.08,
-                )),
+                Transform::from_translation(front_translation),
             ));
+            if let Some(parent) = front_sortable_parent {
+                front_entity.insert(parent);
+            }
             // Wire de portal (`DrawRailCatenaryOnTunnel`) si la vía es eléctrica.
             if let Some(sprite) = tunnel_catenary_sprite {
                 commands.spawn((
@@ -2203,6 +2287,26 @@ pub(crate) fn spawn_transport_object_tile(
                         0.085,
                     )),
                 ));
+            }
+            // Después del techo (y de su bloque combinado de catenaria),
+            // OpenTTD agrega dos cajas sin imagen que separan la boca de los
+            // sprites de las teselas vecinas. Conservamos tanto la traza como
+            // el parent de runtime: un `Sprite` transparente no sería
+            // equivalente, porque el sorter distingue explícitamente este
+            // parent sin rasterizarlo.
+            for (ordinal, separator_is_front) in [(2_u8, false), (3_u8, true)] {
+                let bounds = tunnel_sort_separator_bounds(dir, separator_is_front);
+                spawn_empty_bounding_box(
+                    commands,
+                    ctx,
+                    "tunnel-sort-separator",
+                    bounds,
+                    0,
+                    ordinal,
+                    dims.0,
+                    base_z,
+                    0.09 + f32::from(ordinal) * 0.0001,
+                );
             }
         }
         TileKind::RoadDepot => {
@@ -3005,10 +3109,11 @@ mod tests {
         station_catenary_pylon_parent_sprite, station_catenary_wire_parent_sprite,
         station_catenary_wire_trace_geometry, station_rail_child_offset,
         station_rail_foundation_world_z_delta, station_rail_layer_parent_sprite,
-        station_rail_local_sorted_depths, tunnel_catenary_trace_geometry,
+        station_rail_local_sorted_depths, tunnel_catenary_trace_geometry, tunnel_sortable_parents,
     };
     use openttdrs_core::{Map, TileCoord, TileKind, WaterClass, set_water_class_m1};
 
+    use crate::render::world_draw_trace::TraceSpriteBounds;
     use crate::sprites::{
         CatenarySpriteDraw, CatenaryWireDraw, PYLON_SPRITE_BASE, StationTileClass,
         airport_station_ground_layers_for_gfx, rail_depot_build_layers, rail_station_draw_layers,
@@ -3235,6 +3340,37 @@ mod tests {
         assert_eq!(
             tunnel_catenary_trace_geometry(1),
             ((7, 0, 3), (0, 0, 7, 15, 16, 1))
+        );
+    }
+
+    #[test]
+    fn road_tunnel_portal_and_separators_keep_kale_post_sort_order() {
+        // Kale `(8,5)`: el portal 2392 se inserta primero, pero el separador
+        // trasero de la boca Y lo adelanta después de `ViewportSortParentSprites`.
+        let (_, raw_bounds) = crate::sprites::tunnel_front_trace_geometry(1);
+        let front_bounds = TraceSpriteBounds::new(
+            raw_bounds.0,
+            raw_bounds.1,
+            raw_bounds.2,
+            raw_bounds.3,
+            raw_bounds.4,
+            raw_bounds.5,
+        );
+        let parents = tunnel_sortable_parents(8, 5, 3, 2392, front_bounds, 1);
+        assert_eq!(
+            crate::render::viewport_sort::viewport_sort_parent_sprites(&parents),
+            vec![1, 0, 2]
+        );
+        assert_eq!(
+            (
+                parents[1].bounds.xmin,
+                parents[1].bounds.ymin,
+                parents[1].bounds.zmin,
+                parents[1].bounds.xmax,
+                parents[1].bounds.ymax,
+                parents[1].bounds.zmax,
+            ),
+            (128, 80, 24, 128, 95, 31)
         );
     }
 

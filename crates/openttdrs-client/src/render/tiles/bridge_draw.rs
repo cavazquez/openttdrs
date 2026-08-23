@@ -27,7 +27,7 @@ use crate::sprites::{
 
 use super::helpers::{
     bridge_foundation_decision, foundation_surface_at, sloped_or_flat_image,
-    spawn_foundation_sprite, spawn_ground_sprite_at,
+    spawn_empty_bounding_box, spawn_foundation_sprite, spawn_ground_sprite_at,
 };
 use super::transport::catenary_local_z_delta;
 
@@ -43,6 +43,10 @@ const PILLAR_BACK_LAYER_FRAC: f32 = 0.074;
 const PILLAR_LAYER_FRAC: f32 = 0.075;
 const BRIDGE_Z_START: f32 = 3.0;
 const TILE_HEIGHT_PX: f32 = 8.0;
+const TILE_HEIGHT_WORLD: i32 = 8;
+/// `BB_Z_SEPARATOR` de `tunnelbridge_cmd.cpp`: separa el tablero del mundo
+/// que se dibuja por debajo sin añadir píxeles propios.
+const BRIDGE_SORT_SEPARATOR_Z: i32 = 7;
 /// `SPR_FLAT_GRASS_TILE` de OpenTTD.
 const SPR_FLAT_GRASS_TILE: u32 = 3981;
 /// `SPR_FLAT_SNOW_DESERT_TILE` de OpenTTD.
@@ -251,6 +255,21 @@ fn bridge_deck_z(ramp_tileh: u8, ramp_min_z: u8, axis: usize) -> u8 {
 /// El vano se dibuja a la altura elevada del tablero.
 fn bridge_surface_z(base_z: u8, deck_z: u8, on_ramp: bool) -> u8 {
     if on_ramp { base_z } else { deck_z }
+}
+
+/// Caja invisible que `DrawBridgeMiddle` agrega antes de sus barandillas.
+///
+/// La estructura de puente no puede depender sólo de sus sprites visibles:
+/// OpenTTD inserta este parent `SPR_EMPTY_BOUNDING_BOX` a una unidad de píxel
+/// por debajo del tablero para que el sorter separe correctamente todo lo que
+/// pasa debajo. El renderer la materializa como constraint sin `Sprite`.
+fn bridge_sort_separator_bounds() -> TraceSpriteBounds {
+    TraceSpriteBounds::new(0, 0, 0, 16, 16, 1)
+}
+
+fn bridge_sort_separator_world_z_delta(base_z: u8, deck_z: u8) -> i32 {
+    (i32::from(deck_z) - i32::from(base_z)) * TILE_HEIGHT_WORLD - TILE_HEIGHT_WORLD
+        + BRIDGE_SORT_SEPARATOR_Z
 }
 
 /// Sprite del overlay de reserva PBS de un puente vanilla.
@@ -1907,6 +1926,23 @@ pub(crate) fn spawn_bridge_deck(
     let pillar_id = if on_ramp { 0 } else { ids.pillar[span.axis] };
     let surface_z = bridge_surface_z(foundation_base_z, span.deck_z, on_ramp);
     let z_draw_px = f32::from(surface_z) * HEIGHT_PX - BRIDGE_Z_START;
+
+    if !on_ramp {
+        // `DrawBridgeMiddle` inserta el helper antes de comenzar el bloque
+        // combinado del tablero. Debe existir aun sin píxeles propios, porque
+        // vecinos (casas, foundations, señales) sí participan del sorter.
+        spawn_empty_bounding_box(
+            commands,
+            ctx,
+            "bridge-sort-separator",
+            bridge_sort_separator_bounds(),
+            bridge_sort_separator_world_z_delta(ctx.info.base_z, span.deck_z),
+            0,
+            dims.0,
+            span.deck_z,
+            DECK_LAYER_FRAC - 0.0005,
+        );
+    }
 
     let front_shift = if span.axis == 0 {
         remap_tile_offset(0.0, 12.0, 0.0) * 0.5

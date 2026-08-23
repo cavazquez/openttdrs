@@ -585,7 +585,8 @@ pub struct Industry {
     /// Color aleatorio de industria (`Colours` 0–15) para edificios con paleta.
     #[serde(default)]
     pub random_colour: u8,
-    /// `IndustryID` de mapa (`m2`); 0 = desconocido / legacy.
+    /// `IndustryID` de mapa (`m2`). El ID 0 es válido en un `.sav`; cuando no
+    /// existe una entidad correspondiente también se usa como fallback legacy.
     #[serde(default)]
     pub instance_id: u8,
     /// Unidades producidas acumuladas (para deltas mensuales).

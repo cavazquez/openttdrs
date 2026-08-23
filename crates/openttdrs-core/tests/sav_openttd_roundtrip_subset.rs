@@ -95,6 +95,25 @@ fn openttd_resaved_preserves_requested_company_manager_identity() {
     assert_eq!(company.manager_face_style.as_deref(), Some("modern"));
 }
 
+/// Contrato opcional para el límite de préstamo individual. OpenTTD representa
+/// el default con `INT64_MIN`, pero una compañía marcada por deity conserva un
+/// valor concreto incluso si cambia el límite global por inflación.
+#[test]
+fn openttd_resaved_preserves_requested_company_max_loan_override() {
+    if std::env::var("OPENTTDRS_ROUNDTRIP_REQUIRE_COMPANY_MAX_LOAN").as_deref() != Ok("1") {
+        return;
+    }
+    let path = std::env::var("OPENTTDRS_ROUNDTRIP_SAV")
+        .expect("OPENTTDRS_ROUNDTRIP_SAV requerido para el smoke de max_loan");
+    let raw = std::fs::read(&path).unwrap_or_else(|e| panic!("leer {path}: {e}"));
+    let game = sav::load(&raw).unwrap_or_else(|e| panic!("import openttdrs: {e}"));
+    let company = game
+        .companies
+        .first()
+        .expect("PLYR de compañía activa tras re-guardado OpenTTD");
+    assert_eq!(company.max_loan, Some(450_000));
+}
+
 /// Contrato opcional para `PLYR.cur_economy`/`old_economy`. El fixture mínimo
 /// de writer contiene un trimestre abierto y uno cerrado; `OpenTTD` debe
 /// re-guardarlos sin perder importe, desglose de carga ni orden de historial.

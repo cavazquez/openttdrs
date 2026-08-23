@@ -251,9 +251,21 @@ mod economy_history_tests {
 pub struct CompanyEconomy {
     pub money: i64,
     pub loan: i64,
-    /// Tope de préstamo (`economy.cpp` `max_loan`; por defecto 300 000).
+    /// Tope de préstamo efectivo (`Company::GetMaxLoan`).
+    ///
+    /// Para compañías sin límite particular se deriva de la economía global;
+    /// [`Self::max_loan_override`] conserva si el valor llegó como override
+    /// nativo desde `PLYR.max_loan`.
     #[serde(default = "default_max_loan")]
     pub max_loan: i64,
+    /// Límite individual de préstamo, si difiere del global.
+    ///
+    /// El wire de `OpenTTD` representa el caso `None` mediante
+    /// `COMPANY_MAX_LOAN_DEFAULT` (`INT64_MIN`). Separarlo del valor efectivo
+    /// permite que la inflación siga actualizando sólo las compañías sin
+    /// override y que el round-trip `.sav` no pierda el centinela.
+    #[serde(default)]
+    pub max_loan_override: Option<i64>,
 }
 
 const fn default_max_loan() -> i64 {
@@ -266,6 +278,24 @@ impl Default for CompanyEconomy {
             money: 100_000,
             loan: 0,
             max_loan: crate::economy::DEFAULT_MAX_LOAN,
+            max_loan_override: None,
+        }
+    }
+}
+
+impl CompanyEconomy {
+    /// Aplica la representación de `PLYR.max_loan` y calcula el valor efectivo.
+    pub fn set_sav_max_loan(&mut self, raw: i64, global_max_loan: i64) {
+        self.max_loan_override = (raw != crate::company::COMPANY_MAX_LOAN_DEFAULT).then_some(raw);
+        self.max_loan = self.max_loan_override.unwrap_or(global_max_loan);
+    }
+
+    /// Valor que debe emitirse en `PLYR.max_loan`.
+    #[must_use]
+    pub const fn sav_max_loan(&self) -> i64 {
+        match self.max_loan_override {
+            Some(value) => value,
+            None => crate::company::COMPANY_MAX_LOAN_DEFAULT,
         }
     }
 }
@@ -719,13 +749,18 @@ impl GameState {
         self.sync_scaled_max_loan();
     }
 
-    /// Propaga `global_economy.scaled_max_loan()` a todas las compañías y al espejo activo.
+    /// Propaga el límite global a compañías sin override y actualiza el espejo activo.
     pub fn sync_scaled_max_loan(&mut self) {
         let max_loan = self.global_economy.scaled_max_loan();
         for company in &mut self.companies {
-            company.economy.max_loan = max_loan;
+            company.economy.max_loan = company.economy.max_loan_override.unwrap_or(max_loan);
         }
-        self.economy.max_loan = max_loan;
+        if let Some(company) = self.companies.get(self.active_company.index()) {
+            self.economy.max_loan = company.economy.max_loan;
+            self.economy.max_loan_override = company.economy.max_loan_override;
+        } else {
+            self.economy.max_loan = self.economy.max_loan_override.unwrap_or(max_loan);
+        }
     }
 
     /// Crea un estado a partir de un mapa ya construido (sin industrias ni vehículos).
@@ -846,6 +881,23 @@ impl GameState {
         self.rebuild_station_flows();
         self.sanitize_all_vehicle_orders();
         self.sync_scaled_max_loan();
+    }
+
+    /// Migra JSON anteriores al campo `max_loan_override`.
+    ///
+    /// Antes de separar override y valor efectivo, un JSON propio sólo llevaba
+    /// `CompanyEconomy.max_loan`. Si difiere del límite global que corresponde
+    /// a su economía persistida, representa necesariamente un límite especial
+    /// y debe sobrevivir al primer `hydrate_runtime`.
+    pub(crate) fn infer_legacy_company_max_loan_overrides(&mut self) {
+        let global_max_loan = self.global_economy.scaled_max_loan();
+        for company in &mut self.companies {
+            if company.economy.max_loan_override.is_none()
+                && company.economy.max_loan != global_max_loan
+            {
+                company.economy.max_loan_override = Some(company.economy.max_loan);
+            }
+        }
     }
 
     /// Deriva los relojes desde `tick` si el save no los tenía (migración serde).
@@ -1213,6 +1265,7 @@ impl GameState {
                 money: 200_000,
                 loan: 0,
                 max_loan: crate::economy::DEFAULT_MAX_LOAN,
+                max_loan_override: None,
             },
             colour,
         );
@@ -1235,6 +1288,7 @@ impl GameState {
                 money: 150_000,
                 loan: 0,
                 max_loan: crate::economy::DEFAULT_MAX_LOAN,
+                max_loan_override: None,
             },
             colour,
         );

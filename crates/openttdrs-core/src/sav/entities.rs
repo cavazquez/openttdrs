@@ -627,6 +627,11 @@ pub struct SavCompany {
     pub money: i64,
     /// Préstamo vigente (`PLYR.current_loan`).
     pub loan: Option<i64>,
+    /// Límite individual de préstamo (`PLYR.max_loan`).
+    ///
+    /// `Some(COMPANY_MAX_LOAN_DEFAULT)` significa que la compañía debe seguir
+    /// el límite global, no que tenga un límite negativo.
+    pub max_loan: Option<i64>,
     pub colour: u8,
     /// Nombre personalizado, si el save usa el campo moderno `PLYR.name`.
     pub name: Option<String>,
@@ -824,8 +829,6 @@ pub(crate) fn companies_from_chunks(chunks: &[RawChunk], save_version: u16) -> V
             let bankruptcy_months = record_get(&record, "months_of_bankruptcy")
                 .and_then(SlValue::as_u64)
                 .and_then(|value| u8::try_from(value).ok());
-            let cur_economy = company_cur_economy_from_record(&record);
-            let old_economy = company_old_economy_from_record(&record);
             let liveries = company_liveries_from_record(&record, colour, save_version);
             let settings = nested_struct(&record, "settings");
             let setting = |name: &str, legacy: &str| {
@@ -873,6 +876,7 @@ pub(crate) fn companies_from_chunks(chunks: &[RawChunk], save_version: u16) -> V
                 id,
                 money,
                 loan,
+                max_loan: record_i64(&record, "max_loan"),
                 colour,
                 name,
                 president_name,
@@ -880,8 +884,8 @@ pub(crate) fn companies_from_chunks(chunks: &[RawChunk], save_version: u16) -> V
                 manager_face_style,
                 is_ai,
                 bankruptcy_months,
-                cur_economy,
-                old_economy,
+                cur_economy: company_cur_economy_from_record(&record),
+                old_economy: company_old_economy_from_record(&record),
                 liveries,
                 engine_renew_list_head,
                 engine_renew,

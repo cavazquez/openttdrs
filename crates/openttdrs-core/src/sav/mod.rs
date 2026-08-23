@@ -782,6 +782,11 @@ impl GameState {
                 if let Some(loan) = company.loan {
                     target.economy.loan = loan;
                 }
+                if let Some(max_loan) = company.max_loan {
+                    target
+                        .economy
+                        .set_sav_max_loan(max_loan, state.global_economy.scaled_max_loan());
+                }
                 target.set_colour(company.colour);
                 if company.liveries.is_empty() {
                     // OpenTTD llama `ResetCompanyLivery` para saves anteriores

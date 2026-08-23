@@ -251,6 +251,7 @@ mod tests {
             money: 50_000,
             loan: 0,
             max_loan: DEFAULT_MAX_LOAN,
+            max_loan_override: None,
         };
         let added = increase_loan(&mut economy).expect("increase loan");
         assert_eq!(added, LOAN_INTERVAL);
@@ -267,6 +268,7 @@ mod tests {
             money: 0,
             loan: DEFAULT_MAX_LOAN - 5_000,
             max_loan: DEFAULT_MAX_LOAN,
+            max_loan_override: None,
         };
         assert!(matches!(
             increase_loan(&mut economy),

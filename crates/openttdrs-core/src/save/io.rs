@@ -86,6 +86,10 @@ pub fn load_from_str(text: &str) -> Result<GameState, SaveError> {
         state.ensure_timers_from_tick();
         state.rebuild_station_flows();
         state.sanitize_all_vehicle_orders();
+        // JSON plano no lleva versión: tratarlo como anterior a v26 para no
+        // borrar un `max_loan` individual al reconstruir el runtime.
+        state.infer_legacy_company_max_loan_overrides();
+        state.sync_scaled_max_loan();
         Ok(state)
     }
 }

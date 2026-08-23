@@ -145,10 +145,13 @@ fn plyr_records(
 ) -> Result<Vec<Vec<u8>>, SavError> {
     if state.companies.is_empty() {
         let mut rec = Vec::with_capacity(112);
-        let company = crate::company::Company::player(
+        let mut company = crate::company::Company::player(
             crate::game_state::CompanyEconomy::default(),
             state.company_colour,
         );
+        // Save JSON antiguo puede no tener pool de compañías, pero su espejo
+        // activo sí conserva el override. No degradarlo al centinela global.
+        company.economy = state.economy;
         write_str("Jugador", &mut rec)?;
         write_str(company.president_name.as_deref().unwrap_or(""), &mut rec)?;
         rec.extend_from_slice(&company.manager_face.to_be_bytes());
@@ -158,6 +161,7 @@ fn plyr_records(
         )?;
         rec.extend_from_slice(&state.economy.money.to_be_bytes());
         rec.extend_from_slice(&state.economy.loan.to_be_bytes());
+        rec.extend_from_slice(&company.economy.sav_max_loan().to_be_bytes());
         rec.push(state.company_colour);
         rec.push(0);
         rec.push(company.bankruptcy_months);
@@ -191,6 +195,12 @@ fn plyr_records(
             if company_to_write.colour != colour {
                 company_to_write.set_colour(colour);
             }
+            if company.id == state.active_company {
+                company_to_write.economy.money = money;
+                company_to_write.economy.loan = loan;
+                company_to_write.economy.max_loan = state.economy.max_loan;
+                company_to_write.economy.max_loan_override = state.economy.max_loan_override;
+            }
             write_str(&company.name, &mut rec)?;
             write_str(company.president_name.as_deref().unwrap_or(""), &mut rec)?;
             rec.extend_from_slice(&company.manager_face.to_be_bytes());
@@ -200,6 +210,7 @@ fn plyr_records(
             )?;
             rec.extend_from_slice(&money.to_be_bytes());
             rec.extend_from_slice(&loan.to_be_bytes());
+            rec.extend_from_slice(&company_to_write.economy.sav_max_loan().to_be_bytes());
             rec.push(colour);
             rec.push(u8::from(company.is_ai));
             rec.push(company.bankruptcy_months);
@@ -235,6 +246,8 @@ pub(super) fn plyr_chunk(
     write_str("money", &mut header)?;
     header.push(7);
     write_str("current_loan", &mut header)?;
+    header.push(7);
+    write_str("max_loan", &mut header)?;
     header.push(2);
     write_str("colour", &mut header)?;
     header.push(1);

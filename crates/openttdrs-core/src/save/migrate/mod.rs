@@ -20,6 +20,7 @@ pub(super) fn migrate_loaded_state(
             }
             3 => migrate_state_v3_to_v4(&mut state),
             4 | 6 | 7 | 8 | 9 | 15 | 24 => {}
+            25 => migrate_state_v25_to_v26(&mut state),
             5 => migrate_state_v5_to_v6(&mut state),
             10 => migrate_state_v10_to_v11(&mut state),
             11 => migrate_state_v11_to_v12(&mut state),
@@ -43,6 +44,14 @@ pub(super) fn migrate_loaded_state(
     state.rebuild_station_flows();
     state.sanitize_all_vehicle_orders();
     Ok(state)
+}
+
+/// v26: `max_loan` anterior era sólo el valor efectivo. Si se aparta del
+/// límite global de ese save, es un override por compañía que hay que marcar
+/// antes de que la inflación vuelva a sincronizar el valor efectivo.
+fn migrate_state_v25_to_v26(state: &mut GameState) {
+    state.infer_legacy_company_max_loan_overrides();
+    state.sync_scaled_max_loan();
 }
 
 /// v20: modo `CargoDist` por defecto (`Manual`); `station_flows` se reconstruyen.

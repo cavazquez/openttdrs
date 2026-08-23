@@ -232,6 +232,7 @@ mod tests {
             id: 1,
             money: 0,
             loan: None,
+            max_loan: None,
             colour: 0,
             name: None,
             president_name: None,

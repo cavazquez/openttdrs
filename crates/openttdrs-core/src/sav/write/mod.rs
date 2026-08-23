@@ -858,6 +858,52 @@ mod tests {
     }
 
     #[test]
+    fn ottn_roundtrip_preserves_company_max_loan_override_and_global_sentinel() {
+        let mut state = tiny_state();
+        state.sync_active_from_mirrors();
+        state.ensure_rival_transcargo();
+        let rival = state
+            .companies
+            .iter_mut()
+            .find(|company| company.is_ai)
+            .expect("rival company");
+        rival.economy.max_loan = 455_000;
+        rival.economy.max_loan_override = Some(455_000);
+
+        let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
+        let (payload, _) = crate::sav::container::decompress(&bytes).expect("decompress");
+        let chunks = crate::sav::chunks::parse_chunks(&payload).expect("chunks");
+        let plyr = crate::sav::chunks::find_chunk(&chunks, "PLYR").expect("PLYR chunk");
+        assert_table_field_type(&plyr.body, 7, "max_loan");
+
+        let sav_game = sav::load(&bytes).expect("load");
+        assert_eq!(
+            sav_game.companies[0].max_loan,
+            Some(crate::company::COMPANY_MAX_LOAN_DEFAULT)
+        );
+        assert_eq!(sav_game.companies[1].max_loan, Some(455_000));
+
+        let mut loaded = GameState::from_sav_game(sav_game);
+        let loaded_rival = loaded
+            .companies
+            .iter()
+            .find(|company| company.id.0 == 1)
+            .expect("rival after load");
+        assert_eq!(loaded_rival.economy.max_loan_override, Some(455_000));
+        assert_eq!(loaded_rival.economy.max_loan, 455_000);
+
+        // Una recomputación global (por inflación/carga JSON) no puede borrar
+        // el override individual que OpenTTD conserva en `Company::max_loan`.
+        loaded.sync_scaled_max_loan();
+        let loaded_rival = loaded
+            .companies
+            .iter()
+            .find(|company| company.id.0 == 1)
+            .expect("rival after max-loan sync");
+        assert_eq!(loaded_rival.economy.max_loan, 455_000);
+    }
+
+    #[test]
     fn ottn_roundtrip_preserves_company_quarterly_history() {
         let mut state = tiny_state();
         let history = &mut state.companies[0].quarterly_economy;
@@ -1248,6 +1294,12 @@ mod tests {
         state.companies[0].manager_face = 1 << 7;
         state.companies[0].manager_face_style = Some("modern".into());
         state.companies[0].reset_liveries();
+        // Ejercita el valor distinto del centinela global de `PLYR.max_loan`.
+        // El smoke OpenTTD opcional re-guarda este valor para acreditar tanto
+        // el wire i64 como la semántica de override por compañía.
+        state.economy.max_loan = 450_000;
+        state.economy.max_loan_override = Some(450_000);
+        state.sync_active_from_mirrors();
         let custom_bus_livery = crate::CompanyLivery {
             in_use: crate::COMPANY_LIVERY_FLAG_PRIMARY | crate::COMPANY_LIVERY_FLAG_SECONDARY,
             colour1: 7,
@@ -1275,6 +1327,7 @@ mod tests {
             sav_game.companies[0].manager_face_style.as_deref(),
             Some("modern")
         );
+        assert_eq!(sav_game.companies[0].max_loan, Some(450_000));
         assert_eq!(sav_game.vehicles.len(), 2, "tren + bus");
         assert_eq!(sav_game.companies[0].liveries[14], custom_bus_livery);
         assert!(

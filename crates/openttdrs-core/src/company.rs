@@ -50,6 +50,14 @@ pub const OWNER_TOWN_M1: u8 = 0x0F;
 pub const OWNER_NONE_M1: u8 = 0x10;
 pub const OWNER_WATER_M1: u8 = 0x11;
 
+/// Centinela nativo `COMPANY_MAX_LOAN_DEFAULT` de `OpenTTD`.
+///
+/// `PLYR.max_loan` con este valor no representa un límite negativo: ordena
+/// usar el límite global escalado por inflación (`_economy.max_loan`). Cualquier
+/// otro valor es un override específico de la compañía, normalmente creado
+/// por el comando deity `SetCompanyMaxLoan`.
+pub const COMPANY_MAX_LOAN_DEFAULT: i64 = i64::MIN;
+
 /// Escribe el owner de infraestructura en `m1` (vía / carretera / depósitos).
 #[must_use]
 pub fn tile_with_owner(mut tile: crate::map::Tile, owner: CompanyId) -> crate::map::Tile {

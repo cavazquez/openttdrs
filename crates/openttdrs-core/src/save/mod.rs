@@ -40,7 +40,9 @@ pub use io::{load, load_from_str, save};
 /// v25: órdenes de estación usan `load_type` / `unload_type`; el lector acepta
 /// los cinco booleanos legacy de v24 y JSON plano. Añade ajustes persistentes
 /// de lado de circulación y de señales (con defaults compatibles).
-pub const CURRENT_SAVE_VERSION: u32 = 25;
+/// v26: separa el límite efectivo de préstamo de un override individual
+/// (`CompanyEconomy.max_loan_override`); migra el valor único de JSON antiguo.
+pub const CURRENT_SAVE_VERSION: u32 = 26;
 
 const SAVE_VERSION: u32 = CURRENT_SAVE_VERSION;
 
@@ -184,6 +186,22 @@ mod tests {
             loaded.vehicles[0].orders[0].unload_type(),
             OrderUnloadType::Transfer
         );
+    }
+
+    #[test]
+    fn v25_migrates_custom_company_max_loan_override() {
+        let mut state = crate::GameState::new(8, 8);
+        // v25 tenía el valor efectivo, pero aún no el campo de override.
+        state.companies[0].economy.max_loan = 455_000;
+        state.companies[0].economy.max_loan_override = None;
+
+        let file = io::GameStateFile { version: 25, state };
+        let loaded = load_from_str(&serde_json::to_string(&file).unwrap()).unwrap();
+
+        assert_eq!(loaded.companies[0].economy.max_loan_override, Some(455_000));
+        assert_eq!(loaded.companies[0].economy.max_loan, 455_000);
+        assert_eq!(loaded.economy.max_loan_override, Some(455_000));
+        assert_eq!(loaded.economy.max_loan, 455_000);
     }
 
     #[test]

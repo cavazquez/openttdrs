@@ -1,3 +1,4 @@
+use crate::i18n::Locale;
 use crate::ui::BuildMenuAction;
 
 #[must_use]
@@ -85,6 +86,99 @@ pub(crate) fn tool_hud_label(action: BuildMenuAction) -> &'static str {
     }
 }
 
+/// Variante localizada de [`tool_hud_label`] para el HUD dinámico.
+///
+/// Las acciones no son datos de una partida: el HUD las construye a partir de
+/// un enum cerrado. Mantener la traducción junto al enum evita intentar
+/// traducir por coincidencia parcial nombres de pueblos, vehículos o NewGRF.
+#[must_use]
+pub(crate) fn localized_tool_hud_label(locale: Locale, action: BuildMenuAction) -> &'static str {
+    if locale == Locale::Es {
+        return tool_hud_label(action);
+    }
+    match action {
+        BuildMenuAction::Road => "Road +",
+        BuildMenuAction::RoadX => "Road NE-SW",
+        BuildMenuAction::RoadY => "Road NW-SE",
+        BuildMenuAction::Tram => "Tram +",
+        BuildMenuAction::TramX => "Tram NE-SW",
+        BuildMenuAction::TramY => "Tram NW-SE",
+        BuildMenuAction::RoadDepot => "Road depot",
+        BuildMenuAction::RoadBridge => "Road bridge",
+        BuildMenuAction::RoadTunnel => "Road tunnel",
+        BuildMenuAction::Rail => "Rail",
+        BuildMenuAction::RailX => "Rail NE-SW",
+        BuildMenuAction::RailY => "Rail NW-SE",
+        BuildMenuAction::RailHorz => "Rail E-W",
+        BuildMenuAction::RailVert => "Rail N-S",
+        BuildMenuAction::RailStation => "Train station",
+        BuildMenuAction::RailDepot => "Rail depot",
+        BuildMenuAction::ShipDepot => "Ship depot",
+        BuildMenuAction::Dock => "Dock",
+        BuildMenuAction::Canal => "Canal",
+        BuildMenuAction::River => "River",
+        BuildMenuAction::Buoy => "Buoy",
+        BuildMenuAction::Aqueduct => "Aqueduct",
+        BuildMenuAction::Lock => "Lock",
+        BuildMenuAction::Airport => "Airport",
+        BuildMenuAction::RailBridge => "Rail bridge",
+        BuildMenuAction::RailTunnel => "Rail tunnel",
+        BuildMenuAction::RailWaypoint => "Rail waypoint",
+        BuildMenuAction::RoadWaypoint => "Road waypoint",
+        BuildMenuAction::RailSignals => {
+            "Signals (Ctrl: block/entry/exit/combo/path; Shift+RMB: density)"
+        }
+        BuildMenuAction::RailRemove => "Remove rail",
+        BuildMenuAction::RailConvert => "Convert rail (to selected type)",
+        BuildMenuAction::Station => "Truck stop",
+        BuildMenuAction::BusStop => "Bus stop",
+        BuildMenuAction::Clear => "Demolish (signal: remove without rail)",
+        BuildMenuAction::Orders => "Orders",
+        BuildMenuAction::BuildHouse => "House",
+        BuildMenuAction::FoundTown => "Found town",
+        BuildMenuAction::BuildCoalMine => "Coal mine",
+        BuildMenuAction::BuildIronOreMine => "Iron ore mine",
+        BuildMenuAction::BuildGoldMine => "Gold mine",
+        BuildMenuAction::BuildOilWell => "Oil well",
+        BuildMenuAction::BuildOilRefinery => "Oil refinery",
+        BuildMenuAction::BuildFactory => "Factory",
+        BuildMenuAction::BuildSawmill => "Sawmill",
+        BuildMenuAction::BuildForest => "Forest",
+        BuildMenuAction::BuildFarm => "Farm",
+        BuildMenuAction::BuildFarmTropic => "Tropical farm",
+        BuildMenuAction::BuildCopperOreMine => "Copper ore mine",
+        BuildMenuAction::BuildFactoryTropic => "Tropical factory",
+        BuildMenuAction::BuildFruitPlantation => "Fruit plantation",
+        BuildMenuAction::BuildRubberPlantation => "Rubber plantation",
+        BuildMenuAction::BuildPaperMill => "Paper mill",
+        BuildMenuAction::BuildFoodProcessingPlant => "Food processing plant",
+        BuildMenuAction::BuildDiamondMine => "Diamond mine",
+        BuildMenuAction::BuildWaterSupply => "Water supply",
+        BuildMenuAction::BuildLumberMill => "Tropical lumber mill",
+        BuildMenuAction::BuildCottonCandy => "Cotton candy forest",
+        BuildMenuAction::BuildCandyFactory => "Candy factory",
+        BuildMenuAction::BuildBatteryFarm => "Battery farm",
+        BuildMenuAction::BuildColaWells => "Cola wells",
+        BuildMenuAction::BuildToyFactory => "Toy factory",
+        BuildMenuAction::BuildPlasticFountain => "Plastic fountain",
+        BuildMenuAction::BuildFizzyDrinkFactory => "Fizzy drink factory",
+        BuildMenuAction::BuildBubbleGenerator => "Bubble generator",
+        BuildMenuAction::BuildToffeeQuarry => "Toffee quarry",
+        BuildMenuAction::BuildSugarMine => "Sugar mine",
+        BuildMenuAction::RaiseLand => "Raise land",
+        BuildMenuAction::LowerLand => "Lower land",
+        BuildMenuAction::LevelLand => "Level land",
+        BuildMenuAction::BuyLand => "Buy land",
+        BuildMenuAction::PlantTree => "Plant tree",
+        BuildMenuAction::PlaceSign => "Sign",
+        BuildMenuAction::BuildLighthouse => "Lighthouse",
+        BuildMenuAction::BuildTransmitter => "Transmitter",
+        BuildMenuAction::PlaceNewGrfObject => "Object",
+        BuildMenuAction::JoinStation => "Join stations",
+        BuildMenuAction::TramRemove => "Remove tram",
+    }
+}
+
 #[must_use]
 pub(crate) fn tool_hud_hint(action: BuildMenuAction) -> Option<&'static str> {
     match action {
@@ -123,10 +217,57 @@ pub(crate) fn tool_hud_hint(action: BuildMenuAction) -> Option<&'static str> {
     }
 }
 
+/// Variante localizada de [`tool_hud_hint`]. Ver [`localized_tool_hud_label`]
+/// para el motivo de no traducir texto libre por sustitución.
+#[must_use]
+pub(crate) fn localized_tool_hud_hint(
+    locale: Locale,
+    action: BuildMenuAction,
+) -> Option<&'static str> {
+    if locale == Locale::Es {
+        return tool_hud_hint(action);
+    }
+    match action {
+        BuildMenuAction::RoadDepot => Some("buy vehicle; does not load cargo"),
+        BuildMenuAction::RailDepot => Some("buy train"),
+        BuildMenuAction::ShipDepot => Some("buy ship; entrance faces water"),
+        BuildMenuAction::Dock => Some("coastal water; loads Goods"),
+        BuildMenuAction::Canal => Some("grass/forest → navigable water"),
+        BuildMenuAction::River => Some("river paint; supports sloped ground"),
+        BuildMenuAction::Buoy => Some("water; ship waypoint (no cargo)"),
+        BuildMenuAction::Aqueduct => Some("drag between opposing slopes"),
+        BuildMenuAction::Lock => Some("on water; RMB rotates N-S/E-W axis"),
+        BuildMenuAction::Airport => Some("picker: type/axis; RMB rotates; coverage in window"),
+        BuildMenuAction::RailSignals => {
+            Some("drag N-S density; click direction; Ctrl+click type; Shift+RMB density; RMB dir")
+        }
+        BuildMenuAction::Station | BuildMenuAction::BusStop => {
+            Some("NewGRF picker; grass beside road; load/unload")
+        }
+        BuildMenuAction::PlaceNewGrfObject => Some("picker: vanilla/NewGRF W×H; grass/forest"),
+        BuildMenuAction::Orders => Some("map click: destination"),
+        BuildMenuAction::RailStation => Some("grass beside rail"),
+        BuildMenuAction::FoundTown => Some("click grass: found a new town"),
+        BuildMenuAction::PlantTree => Some("grass → forest; forest → +1 tree (max 4)"),
+        BuildMenuAction::PlaceSign => Some("click: place sign; World → Signs for the list"),
+        BuildMenuAction::BuildLighthouse => Some("one lighthouse per map; grass/forest"),
+        BuildMenuAction::BuildTransmitter => Some("one transmitter per map; grass/forest"),
+        BuildMenuAction::Tram | BuildMenuAction::TramX | BuildMenuAction::TramY => {
+            Some("m3 overlay; Tram vehicles at road depot")
+        }
+        BuildMenuAction::TramRemove => Some("remove only the tram overlay"),
+        BuildMenuAction::JoinStation => {
+            Some("first click: keep; second: adjacent road or rail (footprint/axis)")
+        }
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
-    use super::{tool_hud_hint, tool_hud_label};
+    use super::{localized_tool_hud_hint, localized_tool_hud_label, tool_hud_hint, tool_hud_label};
+    use crate::i18n::Locale;
     use crate::ui::BuildMenuAction;
 
     #[test]
@@ -144,6 +285,22 @@ mod tests {
             tool_hud_hint(BuildMenuAction::Station)
                 .unwrap()
                 .contains("carga")
+        );
+    }
+
+    #[test]
+    fn english_hud_labels_and_hints_are_not_left_in_spanish() {
+        assert_eq!(
+            localized_tool_hud_label(Locale::En, BuildMenuAction::RoadDepot),
+            "Road depot"
+        );
+        assert_eq!(
+            localized_tool_hud_label(Locale::En, BuildMenuAction::BuildCoalMine),
+            "Coal mine"
+        );
+        assert_eq!(
+            localized_tool_hud_hint(Locale::En, BuildMenuAction::Station),
+            Some("NewGRF picker; grass beside road; load/unload")
         );
     }
 }

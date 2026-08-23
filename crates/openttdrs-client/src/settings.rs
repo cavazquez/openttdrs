@@ -130,7 +130,11 @@ impl Default for ClientPreferences {
 impl ClientPreferences {
     #[must_use]
     pub(crate) fn locale(&self) -> crate::i18n::Locale {
-        crate::i18n::Locale::from_code(&self.language)
+        // La sobreescritura de QA es de proceso, no de preferencias: permite
+        // capturar ambos idiomas sin alterar el TOML persistente del usuario.
+        config::env_string("OPENTTDRS_LANGUAGE")
+            .map(|language| crate::i18n::Locale::from_code(&language))
+            .unwrap_or_else(|| crate::i18n::Locale::from_code(&self.language))
     }
 
     #[must_use]

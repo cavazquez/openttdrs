@@ -4,7 +4,9 @@ use openttdrs_core::{
 };
 
 use crate::camera::{CameraFocusRequest, tile_camera_world_pos};
+use crate::i18n::Locale;
 use crate::news_prefs::NewsDisplayPrefs;
+use crate::settings::ClientPreferences;
 use crate::state::{EditorSession, SimRunState, SimWorld, sim_is_paused};
 use crate::ui::hud::{HudBuildFeedback, SelectedTileInfo};
 
@@ -25,6 +27,7 @@ fn active_company_display_name(sim: &SimWorld) -> String {
 
 #[derive(Default)]
 pub(crate) struct StatusBarCache {
+    locale: Locale,
     date: String,
     money: String,
     company: String,
@@ -36,8 +39,10 @@ pub(crate) struct StatusBarCache {
     paused_label: Option<String>,
 }
 
+#[allow(clippy::too_many_arguments)] // firma dictada por consultas ECS de la barra.
 pub(crate) fn sync_status_bar(
     sim: Res<SimWorld>,
+    prefs: Res<ClientPreferences>,
     news_ui: Res<NewsUiState>,
     run_state: Res<State<SimRunState>>,
     editor: Res<EditorSession>,
@@ -51,6 +56,7 @@ pub(crate) fn sync_status_bar(
     time: Res<Time>,
     mut cache: Local<StatusBarCache>,
 ) {
+    let locale = prefs.locale();
     let date = format_calendar_date(sim.state.tick);
     let money = format_money(sim.state.economy.money);
     let company_name = active_company_display_name(&sim);
@@ -59,7 +65,13 @@ pub(crate) fn sync_status_bar(
     } else {
         company_name
     };
-    let paused_label = sim_is_paused(&run_state).then(|| "Pausado".to_string());
+    let paused_label = sim_is_paused(&run_state).then(|| {
+        if locale == Locale::Es {
+            "Pausado".to_string()
+        } else {
+            "Paused".to_string()
+        }
+    });
     let ticker_key = news_ui.ticker.as_ref().map(|t| (t.item_id, t.scroll));
     let default_visible = news_ui.ticker.is_none() && paused_label.is_none();
     let ticker_visible = news_ui.ticker.is_some() && paused_label.is_none();
@@ -67,7 +79,8 @@ pub(crate) fn sync_status_bar(
         && !ticker_visible
         && paused_label.is_none();
 
-    if cache.date == date
+    if cache.locale == locale
+        && cache.date == date
         && cache.money == money
         && cache.company == company
         && cache.editor == editor.active
@@ -79,6 +92,7 @@ pub(crate) fn sync_status_bar(
     {
         return;
     }
+    cache.locale = locale;
     cache.date = date.clone();
     cache.money = money.clone();
     cache.company = company.clone();
@@ -503,5 +517,48 @@ pub(crate) fn handle_status_bar_center_click(
             feedback.pending_news_chime = true;
             info!("noticias: id={} reabierta; campanilla", item.id);
         }
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use bevy::prelude::*;
+
+    use super::sync_status_bar;
+    use crate::settings::ClientPreferences;
+    use crate::state::{EditorSession, SimRunState, SimWorld};
+    use crate::ui::statusbar::{NewsUiState, StatusBarDefaultText};
+
+    #[test]
+    fn paused_status_bar_follows_the_live_locale() {
+        let mut world = World::new();
+        world.insert_resource(SimWorld::default());
+        world.insert_resource(ClientPreferences {
+            language: "en".into(),
+            ..ClientPreferences::default()
+        });
+        world.insert_resource(NewsUiState::default());
+        world.insert_resource(State::new(SimRunState::Paused));
+        world.insert_resource(EditorSession::default());
+        world.insert_resource(Time::<()>::default());
+        let label = world
+            .spawn((StatusBarDefaultText, Text::new(""), Visibility::Hidden))
+            .id();
+
+        let mut schedule = Schedule::default();
+        schedule.add_systems(sync_status_bar);
+        schedule.run(&mut world);
+        assert_eq!(
+            world.entity(label).get::<Text>().unwrap().as_str(),
+            "Paused"
+        );
+
+        world.resource_mut::<ClientPreferences>().language = "es-AR".into();
+        schedule.run(&mut world);
+        assert_eq!(
+            world.entity(label).get::<Text>().unwrap().as_str(),
+            "Pausado"
+        );
     }
 }

@@ -6,6 +6,7 @@ use openttdrs_core::TileKind;
 use crate::audio::{ClientAssetStatus, MusicState};
 use crate::camera::zoom_display_magnification;
 use crate::config::{self, json_save_hud_label, truncate_hud_line};
+use crate::i18n::Locale;
 use crate::iso::{
     compute_tileh, shore_png_index, shore_tileh_for_draw_shore, slope_label,
     tile_slope_bits_from_heights,
@@ -25,14 +26,27 @@ use crate::ui::{BuildMenuAction, OrderEditState, UiToolState};
 mod labels;
 mod station_hud;
 
-pub(crate) use labels::{tool_hud_hint, tool_hud_label};
+pub(crate) use labels::{localized_tool_hud_hint, localized_tool_hud_label};
 pub(crate) use station_hud::{
-    rail_depot_tile_details, road_depot_tile_details, station_details_text,
+    localized_rail_depot_tile_details, localized_road_depot_tile_details,
+    localized_station_details_text,
 };
 
-/// Alertas breves de vehículos para la tercera línea del HUD.
+fn localized(locale: Locale, spanish: &'static str, english: &'static str) -> &'static str {
+    if locale == Locale::Es {
+        spanish
+    } else {
+        english
+    }
+}
+
+/// Alertas operativas localizadas, conservando IDs y nombres
+/// de la partida exactamente como fueron recibidos.
 #[must_use]
-pub(crate) fn vehicle_hud_alert_line(state: &openttdrs_core::GameState) -> String {
+pub(crate) fn localized_vehicle_hud_alert_line(
+    locale: Locale,
+    state: &openttdrs_core::GameState,
+) -> String {
     use openttdrs_core::VehicleOperationalSummary;
 
     let summary = VehicleOperationalSummary::analyze(state);
@@ -43,53 +57,95 @@ pub(crate) fn vehicle_hud_alert_line(state: &openttdrs_core::GameState) -> Strin
         if let Some(&vid) = summary.no_network_route.example_vehicle_ids.first()
             && let Some(v) = state.vehicles.iter().find(|v| v.id == vid)
         {
-            parts.push(format!(
-                "sin ruta por red: vehículo {} (orden {})",
-                v.id,
-                v.current_order.saturating_add(1)
-            ));
+            parts.push(if locale == Locale::Es {
+                format!(
+                    "sin ruta por red: vehículo {} (orden {})",
+                    v.id,
+                    v.current_order.saturating_add(1)
+                )
+            } else {
+                format!(
+                    "no network route: vehicle {} (order {})",
+                    v.id,
+                    v.current_order.saturating_add(1)
+                )
+            });
         }
     } else if summary.no_network_route.count > 1 {
-        parts.push(format!(
-            "sin ruta por red: {} vehículos",
-            summary.no_network_route.count
-        ));
+        parts.push(if locale == Locale::Es {
+            format!(
+                "sin ruta por red: {} vehículos",
+                summary.no_network_route.count
+            )
+        } else {
+            format!(
+                "no network route: {} vehicles",
+                summary.no_network_route.count
+            )
+        });
     }
 
     // Sin órdenes
     if summary.no_orders.count == 1 {
         if let Some(&vid) = summary.no_orders.example_vehicle_ids.first() {
-            parts.push(format!("sin órdenes: vehículo {vid}"));
+            parts.push(if locale == Locale::Es {
+                format!("sin órdenes: vehículo {vid}")
+            } else {
+                format!("no orders: vehicle {vid}")
+            });
         }
     } else if summary.no_orders.count > 1 {
-        parts.push(format!(
-            "sin órdenes: {} vehículos",
-            summary.no_orders.count
-        ));
+        parts.push(if locale == Locale::Es {
+            format!("sin órdenes: {} vehículos", summary.no_orders.count)
+        } else {
+            format!("no orders: {} vehicles", summary.no_orders.count)
+        });
     }
 
     // Parada incompatible
     if summary.incompatible_stop.count == 1 {
         if let Some(&vid) = summary.incompatible_stop.example_vehicle_ids.first() {
-            parts.push(format!("parada incompatible: vehículo {vid}"));
+            parts.push(if locale == Locale::Es {
+                format!("parada incompatible: vehículo {vid}")
+            } else {
+                format!("incompatible stop: vehicle {vid}")
+            });
         }
     } else if summary.incompatible_stop.count > 1 {
-        parts.push(format!(
-            "parada incompatible: {} vehículos",
-            summary.incompatible_stop.count
-        ));
+        parts.push(if locale == Locale::Es {
+            format!(
+                "parada incompatible: {} vehículos",
+                summary.incompatible_stop.count
+            )
+        } else {
+            format!(
+                "incompatible stop: {} vehicles",
+                summary.incompatible_stop.count
+            )
+        });
     }
 
     // Sin carga disponible
     if summary.waiting_cargo.count == 1 {
         if let Some(&vid) = summary.waiting_cargo.example_vehicle_ids.first() {
-            parts.push(format!("sin carga disponible: vehículo {vid}"));
+            parts.push(if locale == Locale::Es {
+                format!("sin carga disponible: vehículo {vid}")
+            } else {
+                format!("no cargo available: vehicle {vid}")
+            });
         }
     } else if summary.waiting_cargo.count > 1 {
-        parts.push(format!(
-            "sin carga disponible: {} vehículos",
-            summary.waiting_cargo.count
-        ));
+        parts.push(if locale == Locale::Es {
+            format!(
+                "sin carga disponible: {} vehículos",
+                summary.waiting_cargo.count
+            )
+        } else {
+            format!(
+                "no cargo available: {} vehicles",
+                summary.waiting_cargo.count
+            )
+        });
     }
 
     // Espera PBS
@@ -97,14 +153,26 @@ pub(crate) fn vehicle_hud_alert_line(state: &openttdrs_core::GameState) -> Strin
         if let Some(&vid) = summary.pbs_stuck.example_vehicle_ids.first()
             && let Some(v) = state.vehicles.iter().find(|v| v.id == vid)
         {
-            parts.push(format!(
-                "espera PBS: vehículo {} (orden {})",
-                v.id,
-                v.current_order.saturating_add(1)
-            ));
+            parts.push(if locale == Locale::Es {
+                format!(
+                    "espera PBS: vehículo {} (orden {})",
+                    v.id,
+                    v.current_order.saturating_add(1)
+                )
+            } else {
+                format!(
+                    "waiting for PBS: vehicle {} (order {})",
+                    v.id,
+                    v.current_order.saturating_add(1)
+                )
+            });
         }
     } else if summary.pbs_stuck.count > 1 {
-        parts.push(format!("espera PBS: {} vehículos", summary.pbs_stuck.count));
+        parts.push(if locale == Locale::Es {
+            format!("espera PBS: {} vehículos", summary.pbs_stuck.count)
+        } else {
+            format!("waiting for PBS: {} vehicles", summary.pbs_stuck.count)
+        });
     }
 
     parts.join(" | ")
@@ -115,15 +183,23 @@ pub(crate) fn vehicle_hud_alert_line(state: &openttdrs_core::GameState) -> Strin
 /// Se limita a dos nombres para que el HUD siga siendo legible, pero conserva
 /// el número total y la condición de diagnóstico para no ocultar un fallback o
 /// un GRF de jugador que no pudo aplicarse.
+/// Resumen NewGRF localizado; los nombres de GRF siguen siendo datos libres.
 #[must_use]
-pub(crate) fn newgrf_hud_label(state: &openttdrs_core::GameState) -> String {
+pub(crate) fn localized_newgrf_hud_label(
+    locale: Locale,
+    state: &openttdrs_core::GameState,
+) -> String {
     let active: Vec<_> = state
         .newgrf_stack
         .iter()
         .filter(|entry| entry.enabled)
         .collect();
     if active.is_empty() {
-        return "ninguno activo".into();
+        return if locale == Locale::Es {
+            "ninguno activo".into()
+        } else {
+            "none active".into()
+        };
     }
 
     let mut labels: Vec<String> = active
@@ -153,12 +229,21 @@ pub(crate) fn newgrf_hud_label(state: &openttdrs_core::GameState) -> String {
     }
     let diagnostics = state.runtime.newgrf_diagnostics.len();
     let diagnostic_suffix = (diagnostics > 0).then(|| format!(" · !{diagnostics}"));
-    format!(
-        "{} · {} activo(s){}",
-        labels.join(", "),
-        active.len(),
-        diagnostic_suffix.unwrap_or_default()
-    )
+    if locale == Locale::Es {
+        format!(
+            "{} · {} activo(s){}",
+            labels.join(", "),
+            active.len(),
+            diagnostic_suffix.unwrap_or_default()
+        )
+    } else {
+        format!(
+            "{} · {} active{}",
+            labels.join(", "),
+            active.len(),
+            diagnostic_suffix.unwrap_or_default()
+        )
+    }
 }
 
 /// Crea el texto de informacion del tile.
@@ -193,6 +278,7 @@ pub(crate) fn setup_tile_info_ui(
 /// Campos que afectan el contenido del HUD de tesela (no la posición en pantalla).
 #[derive(PartialEq, Clone)]
 pub(crate) struct TileInfoHudKey {
+    locale: Locale,
     selected: Option<(i32, i32)>,
     tick: u64,
     cam_scale_bits: u32,
@@ -284,19 +370,22 @@ pub(crate) fn update_tile_info_text(
         feedback.message = None;
     }
 
-    let vehicle_alert = vehicle_hud_alert_line(&sim.state);
+    let locale = prefs.locale();
+    let vehicle_alert = localized_vehicle_hud_alert_line(locale, &sim.state);
     let graphics_assets = asset_status
         .as_ref()
         .map(|status| status.graphics_hud_label())
-        .unwrap_or_else(|| "sin estado de gráficos".into());
+        .unwrap_or_else(|| {
+            localized(locale, "sin estado de gráficos", "no graphics status").into()
+        });
     let sfx_assets = asset_status
         .as_ref()
         .map(|status| status.sfx_hud_label())
-        .unwrap_or_else(|| "sin estado de SFX".into());
+        .unwrap_or_else(|| localized(locale, "sin estado de SFX", "no SFX status").into());
     let music_assets = asset_status
         .as_ref()
         .map(|status| status.music_hud_label())
-        .unwrap_or_else(|| "sin estado de música".into());
+        .unwrap_or_else(|| localized(locale, "sin estado de música", "no music status").into());
     let music_playback = music
         .as_ref()
         .map(|music| {
@@ -309,8 +398,8 @@ pub(crate) fn update_tile_info_text(
                 truncate_hud_line(music.current_track_title(), 24)
             )
         })
-        .unwrap_or_else(|| "sin reproductor".into());
-    let newgrf_assets = newgrf_hud_label(&sim.state);
+        .unwrap_or_else(|| localized(locale, "sin reproductor", "no player").into());
+    let newgrf_assets = localized_newgrf_hud_label(locale, &sim.state);
     let tile_snapshot = selected.pos.and_then(|pos| {
         sim.state.map.get(pos).map(|tile| {
             (
@@ -327,6 +416,7 @@ pub(crate) fn update_tile_info_text(
         })
     });
     let key = TileInfoHudKey {
+        locale,
         selected: selected.pos.map(|p| (p.x, p.y)),
         tick: sim.state.tick.get(),
         cam_scale_bits: proj.scale.to_bits(),
@@ -375,30 +465,50 @@ pub(crate) fn update_tile_info_text(
     }
     *cache = Some(key);
 
-    let zoom_label = format!("Zoom {:.2}×", zoom_display_magnification(proj.scale));
+    let zoom_label = format!(
+        "{} {:.2}×",
+        localized(locale, "Zoom", "Zoom"),
+        zoom_display_magnification(proj.scale)
+    );
     let pause_l = if sim_is_paused(&run_state) {
-        "Pausa ON"
+        localized(locale, "Pausa ON", "Paused")
     } else {
-        "Pausa OFF"
+        localized(locale, "Pausa OFF", "Running")
     };
     let speed_l = if hud.sim_speed < 1.0 {
-        format!("Velocidad {:.2}x", hud.sim_speed)
+        format!(
+            "{} {:.2}x",
+            localized(locale, "Velocidad", "Speed"),
+            hud.sim_speed
+        )
     } else {
-        format!("Velocidad {:.0}x", hud.sim_speed)
+        format!(
+            "{} {:.0}x",
+            localized(locale, "Velocidad", "Speed"),
+            hud.sim_speed
+        )
     };
     let tool_l = tool_state
         .active_tool
-        .map(tool_hud_label)
-        .unwrap_or("Ninguna");
-    let tool_hint = tool_state.active_tool.and_then(tool_hud_hint);
+        .map(|action| localized_tool_hud_label(locale, action))
+        .unwrap_or_else(|| localized(locale, "Ninguna", "None"));
+    let tool_hint = tool_state
+        .active_tool
+        .and_then(|action| localized_tool_hud_hint(locale, action));
     let order_l = order_state
         .vehicle_id()
-        .map(|id| format!(" | ordenes veh #{id}:{}", order_state.orders().len()))
+        .map(|id| {
+            format!(
+                " | {} #{id}:{}",
+                localized(locale, "órdenes veh", "vehicle orders"),
+                order_state.orders().len()
+            )
+        })
         .unwrap_or_default();
     let minimap_l = if hud.minimap_visible {
-        "mapa M:on"
+        localized(locale, "mapa M:on", "map M:on")
     } else {
-        "mapa M:off"
+        localized(locale, "mapa M:off", "map M:off")
     };
     let pbs_l = if prefs.show_pbs_reservations {
         "PBS R:on"
@@ -406,9 +516,13 @@ pub(crate) fn update_tile_info_text(
         "PBS R:off"
     };
     let catenary_l = match prefs.transparency_mode(crate::sprites::TransparencyOption::Catenary) {
-        crate::sprites::TransparencyMode::Hidden => "cat:oculta",
-        crate::sprites::TransparencyMode::Transparent => "cat:transp.",
-        crate::sprites::TransparencyMode::Visible => "cat:visible",
+        crate::sprites::TransparencyMode::Hidden => localized(locale, "cat:oculta", "cat:hidden"),
+        crate::sprites::TransparencyMode::Transparent => {
+            localized(locale, "cat:transp.", "cat:transparent")
+        }
+        crate::sprites::TransparencyMode::Visible => {
+            localized(locale, "cat:visible", "cat:visible")
+        }
     };
     let tick_n = sim.state.tick.get();
 
@@ -425,21 +539,29 @@ pub(crate) fn update_tile_info_text(
     // Text2d no hace wrap: repartir el estado en líneas cortas evita recorte al borde derecho.
     let hud_line1 = format!("{pause_l} | {speed_l} | t{tick_n}");
     let hud_line2 = format!(
-        "ingresos ${} · gastos veh ${} | u {}/{} · evt {}/{} · prod {} | veh {} ({}) | est {st_n}",
+        "{} ${} · {} ${} | u {}/{} · evt {}/{} · {} {} | {} {} ({}) | {} {st_n}",
+        localized(locale, "ingresos", "income"),
         stats.cargo_income_earned,
+        localized(locale, "gastos veh", "vehicle costs"),
         stats.vehicle_running_costs,
         stats.cargo_units_delivered,
         stats.cargo_units_loaded,
         stats.cargo_deliveries,
         stats.cargo_pickups,
+        localized(locale, "prod", "prod"),
         stats.industry_cargo_units_produced,
+        localized(locale, "veh", "veh"),
         veh_n,
         veh_running,
+        localized(locale, "est", "st"),
     );
     let mut hud_lines = vec![hud_line1, hud_line2];
     hud_lines.push(format!("Gfx: {graphics_assets} | NewGRF: {newgrf_assets}"));
     hud_lines.push(format!("SFX: {sfx_assets}"));
-    hud_lines.push(format!("Música: {music_assets} · {music_playback}"));
+    hud_lines.push(format!(
+        "{}: {music_assets} · {music_playback}",
+        localized(locale, "Música", "Music")
+    ));
     if !vehicle_alert.is_empty() || feedback_append.is_some() {
         let mut alert = vehicle_alert;
         if let Some(ref fb) = feedback_append {
@@ -452,8 +574,10 @@ pub(crate) fn update_tile_info_text(
     }
     let signal_tool_extra = if tool_state.active_tool == Some(BuildMenuAction::RailSignals) {
         format!(
-            " tipo:{} dens:{}",
+            " {}:{} {}:{}",
+            localized(locale, "tipo", "type"),
             openttdrs_core::signal_type_label(station_state.signal_type),
+            localized(locale, "dens", "density"),
             station_state.signal_density
         )
     } else {
@@ -475,7 +599,11 @@ pub(crate) fn update_tile_info_text(
                 | BuildMenuAction::RailConvert
         )
     }) {
-        format!(" vía:{}", sim.state.current_rail_type.label())
+        format!(
+            " {}:{}",
+            localized(locale, "vía", "rail"),
+            sim.state.current_rail_type.label()
+        )
     } else {
         String::new()
     };
@@ -493,7 +621,8 @@ pub(crate) fn update_tile_info_text(
         )
     }) {
         format!(
-            " ctra:{}",
+            " {}:{}",
+            localized(locale, "ctra", "road"),
             openttdrs_core::road_type_def(
                 &sim.state.road_type_catalog,
                 sim.state.current_road_type
@@ -508,7 +637,8 @@ pub(crate) fn update_tile_info_text(
         )
     }) {
         format!(
-            " tram:{}",
+            " {}:{}",
+            localized(locale, "tram", "tram"),
             openttdrs_core::road_type_def(
                 &sim.state.road_type_catalog,
                 sim.state.current_tram_type
@@ -522,13 +652,14 @@ pub(crate) fn update_tile_info_text(
     let join_extra = if tool_state.active_tool == Some(BuildMenuAction::JoinStation) {
         match station_state.join_keep {
             Some(p) => format!(" keep:({},{})", p.x, p.y),
-            None => " elige 1ª estación".into(),
+            None => localized(locale, " elige 1ª estación", " choose first station").into(),
         }
     } else {
         String::new()
     };
     hud_lines.push(format!(
-        "Herramienta: {tool_l}{}{}{signal_tool_extra}{rail_type_extra}{road_type_extra}{join_extra} | {minimap_l} | {pbs_l} | {catenary_l} | {save_file} · F4",
+        "{}: {tool_l}{}{}{signal_tool_extra}{rail_type_extra}{road_type_extra}{join_extra} | {minimap_l} | {pbs_l} | {catenary_l} | {save_file} · F4",
+        localized(locale, "Herramienta", "Tool"),
         tool_hint.map_or(String::new(), |h| format!(" ({h})")),
         order_l,
     ));
@@ -536,15 +667,22 @@ pub(crate) fn update_tile_info_text(
 
     let Some(pos) = selected.pos else {
         **text = format!(
-            "{zoom_label}\n{hud_status}\nClic mapa: tile · depósito: comprar vehículo · parada: carga"
+            "{zoom_label}\n{hud_status}\n{}",
+            localized(
+                locale,
+                "Clic mapa: tile · depósito: comprar vehículo · parada: carga",
+                "Map click: tile · depot: buy vehicle · stop: cargo"
+            )
         );
         return;
     };
 
     let Some(tile) = sim.state.map.get(pos) else {
         **text = format!(
-            "{zoom_label}\n{hud_status}\n({}, {}): fuera del mapa",
-            pos.x, pos.y
+            "{zoom_label}\n{hud_status}\n({}, {}): {}",
+            pos.x,
+            pos.y,
+            localized(locale, "fuera del mapa", "outside map")
         );
         return;
     };
@@ -556,15 +694,15 @@ pub(crate) fn update_tile_info_text(
             use openttdrs_core::{WaterClass, water_class_from_m1};
             match water_class_from_m1(tile.m1) {
                 WaterClass::Canal => "Canal",
-                WaterClass::River => "Río",
-                WaterClass::Sea => "Mar",
+                WaterClass::River => localized(locale, "Río", "River"),
+                WaterClass::Sea => localized(locale, "Mar", "Sea"),
                 WaterClass::Invalid => "Water",
             }
         }
         TileKind::Road => "Road",
         TileKind::Rail => "Rail",
-        TileKind::RoadDepot => "Depósito carretera",
-        TileKind::RailDepot => "Depósito vía",
+        TileKind::RoadDepot => localized(locale, "Depósito carretera", "Road depot"),
+        TileKind::RailDepot => localized(locale, "Depósito vía", "Rail depot"),
         TileKind::RoadTunnel => "RoadTunnel",
         TileKind::RailTunnel => "RailTunnel",
         TileKind::RoadBridge => "RoadBridge",
@@ -574,12 +712,15 @@ pub(crate) fn update_tile_info_text(
         TileKind::Station => "Station",
         TileKind::Forest => "Forest",
         TileKind::CoalField => "CoalField",
-        TileKind::ShipDepot => "Depósito barcos",
-        TileKind::Airport => "Aeropuerto",
+        TileKind::ShipDepot => localized(locale, "Depósito barcos", "Ship depot"),
+        TileKind::Airport => localized(locale, "Aeropuerto", "Airport"),
         TileKind::Unknown(n) => {
             **text = format!(
-                "{zoom_label}\n{hud_status}\n({}, {}): Unknown({})",
-                pos.x, pos.y, n
+                "{zoom_label}\n{hud_status}\n({}, {}): {}({})",
+                pos.x,
+                pos.y,
+                localized(locale, "Desconocido", "Unknown"),
+                n
             );
             return;
         }
@@ -642,11 +783,11 @@ pub(crate) fn update_tile_info_text(
             tile.m1, tile.m2, tile.m3hi
         )
     } else if tile.kind == TileKind::Station {
-        station_details_text(&sim, pos, &tile)
+        localized_station_details_text(locale, &sim, pos, &tile)
     } else if tile.kind == TileKind::RoadDepot {
-        road_depot_tile_details(tile.m5)
+        localized_road_depot_tile_details(locale, tile.m5)
     } else if tile.kind == TileKind::RailDepot {
-        rail_depot_tile_details(tile.m5)
+        localized_rail_depot_tile_details(locale, tile.m5)
     } else {
         String::new()
     };
@@ -696,11 +837,13 @@ pub(crate) fn update_tile_info_text(
         .unwrap_or_default();
 
     **text = format!(
-        "{zoom_label}\n{hud_status}\nTile ({},{}) {}\nh:{} slope:{} ({}) mapt:0x{:02X} m5:0x{:02X} m1:0x{:02X} m2:0x{:02X} m7:0x{:02X} m3:0x{:02X} m3hi:0x{:02X}{}{}{}",
+        "{zoom_label}\n{hud_status}\n{} ({},{}) {}\nh:{} {}:{} ({}) mapt:0x{:02X} m5:0x{:02X} m1:0x{:02X} m2:0x{:02X} m7:0x{:02X} m3:0x{:02X} m3hi:0x{:02X}{}{}{}",
+        localized(locale, "Tesela", "Tile"),
         pos.x,
         pos.y,
         kind_str,
         tile.height,
+        localized(locale, "pendiente", "slope"),
         tileh,
         slope_str,
         tile.mapt,
@@ -721,8 +864,8 @@ pub(crate) fn update_tile_info_text(
 #[allow(clippy::expect_used)]
 mod tests {
     use super::{
-        TileInfoText, newgrf_hud_label, setup_tile_info_ui, station_details_text,
-        update_tile_info_text, vehicle_hud_alert_line,
+        TileInfoText, localized_newgrf_hud_label, localized_station_details_text,
+        localized_vehicle_hud_alert_line, setup_tile_info_ui, update_tile_info_text,
     };
     use bevy::ecs::system::RunSystemOnce;
     use bevy::prelude::*;
@@ -732,6 +875,7 @@ mod tests {
     use openttdrs_core::prelude::*;
     use openttdrs_core::{Industry, IndustryKind, NewGrfEntry};
 
+    use crate::i18n::Locale;
     use crate::render::PrimaryGameCamera;
     use crate::settings::ClientPreferences;
     use crate::state::SimWorld;
@@ -900,6 +1044,15 @@ mod tests {
         assert!(depot_text.contains("Depósito carretera"));
         assert!(depot_text.contains("No es parada"));
 
+        // La clave del HUD incluye el locale: no debe retener la línea
+        // española al cambiar preferencias en vivo.
+        world.resource_mut::<ClientPreferences>().language = "en-US".into();
+        world.run_system_once(update_tile_info_text).unwrap();
+        let english_depot_text = hud_text(&mut world);
+        assert!(english_depot_text.contains("Road depot"));
+        assert!(english_depot_text.contains("Not a cargo stop"));
+        assert!(english_depot_text.contains("Tool:"));
+
         // Unknown kind early-return path.
         {
             let mut sim = world.resource_mut::<SimWorld>();
@@ -951,9 +1104,12 @@ mod tests {
         v2.running = true;
         let mut state = GameState::new(4, 4);
         state.vehicles = vec![v1, v2];
-        let alert = vehicle_hud_alert_line(&state);
+        let alert = localized_vehicle_hud_alert_line(Locale::Es, &state);
         assert!(alert.contains("sin ruta por red: vehículo 1"));
         assert!(alert.contains("sin órdenes: vehículo 2"));
+        let english = localized_vehicle_hud_alert_line(Locale::En, &state);
+        assert!(english.contains("no network route: vehicle 1"));
+        assert!(english.contains("no orders: vehicle 2"));
     }
 
     #[test]
@@ -968,11 +1124,13 @@ mod tests {
             .newgrf_diagnostics
             .push("sprite omitido".into());
 
-        let label = newgrf_hud_label(&state);
+        let label = localized_newgrf_hud_label(Locale::Es, &state);
         assert!(label.contains("OpenGFX [base, v8]"));
         assert!(label.contains("Rail Set Extended [v8]"));
         assert!(label.contains("2 activo(s)"));
         assert!(label.ends_with("!1"));
+        let english = localized_newgrf_hud_label(Locale::En, &state);
+        assert!(english.contains("2 active"));
     }
 
     #[test]
@@ -987,7 +1145,7 @@ mod tests {
         truck.set_station_orders(vec![stop]);
         state.vehicles.push(truck);
 
-        let alert = vehicle_hud_alert_line(&state);
+        let alert = localized_vehicle_hud_alert_line(Locale::Es, &state);
         assert!(alert.contains("parada incompatible: vehículo 3"));
     }
 
@@ -1006,7 +1164,7 @@ mod tests {
         truck.set_station_orders(vec![stop]);
         state.vehicles.push(truck);
 
-        let alert = vehicle_hud_alert_line(&state);
+        let alert = localized_vehicle_hud_alert_line(Locale::Es, &state);
         assert!(alert.contains("sin carga disponible: vehículo 4"));
     }
 
@@ -1019,7 +1177,7 @@ mod tests {
         train.set_orders(vec![TileCoord::new(3, 0)]);
         let mut state = GameState::new(4, 4);
         state.vehicles = vec![train];
-        let alert = vehicle_hud_alert_line(&state);
+        let alert = localized_vehicle_hud_alert_line(Locale::Es, &state);
         assert!(alert.contains("espera PBS: vehículo 5"));
     }
 
@@ -1057,7 +1215,7 @@ mod tests {
         });
 
         let tile = sim.state.map.get(station_pos).unwrap();
-        let text = station_details_text(&sim, station_pos, &tile);
+        let text = localized_station_details_text(Locale::Es, &sim, station_pos, &tile);
         assert!(text.contains("stock:7 ingresos:$84"));
         assert!(text.contains("coal:"));
         assert!(text.contains("source stock:42"));

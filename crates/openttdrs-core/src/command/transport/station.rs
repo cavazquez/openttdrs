@@ -413,6 +413,21 @@ pub(in crate::command::transport) fn station_placement_on_tile(
     if matches!(stop_kind, StopKind::BusStop | StopKind::TruckStop) {
         st.road_stop_spec = resolve_road_stop_spec_for_placement(state);
     }
+    if let Some(spec_id) = st.road_stop_spec
+        && let Some(def) =
+            crate::road_stop_spec::road_stop_spec_def(&state.road_stop_spec_catalog, spec_id)
+    {
+        let view = state.map.get(c).map_or(dir, |station_tile| station_tile.m5);
+        if crate::newgrf_callback::trigger_road_stop_animation(
+            def,
+            &mut st,
+            view,
+            crate::road_stop_spec::ROADSTOP_ANIMATION_TRIGGER_BUILT,
+            state.tick.get(),
+        ) {
+            state.runtime.industry_tile_dirty.push(c);
+        }
+    }
     state.stations.push(st);
     state.economy.money -= station_build_cost(&state.global_economy);
     if let Some((town_id, delta)) =

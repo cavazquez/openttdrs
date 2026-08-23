@@ -471,6 +471,14 @@ pub struct ParsedRoadStopMeta {
     pub flags: u32,
     /// Action0 `0x11` (`RoadStopCallbackMask`).
     pub callback_mask: u8,
+    /// Action0 `0x0E`: último frame de animación.
+    pub animation_frames: u8,
+    /// Action0 `0x0E`: estado de animación (`0` no-loop, `1` loop, `0xFF` no animation).
+    pub animation_status: u8,
+    /// Action0 `0x0F`: espera `2^speed` ticks entre frames.
+    pub animation_speed: u8,
+    /// Action0 `0x10`: máscara `StationAnimationTrigger`.
+    pub animation_triggers: u16,
     /// Etiquetas de badge (`prop 0xFD`); se resuelven en apply.
     pub badge_labels: Vec<String>,
     /// Lista `0xFD` truncada / inválida (diagnóstico observable).
@@ -484,6 +492,10 @@ struct RoadStopMetaParse {
     draw_mode: u8,
     flags: u32,
     callback_mask: u8,
+    animation_frames: u8,
+    animation_status: u8,
+    animation_speed: u8,
+    animation_triggers: u16,
     badge_labels: Vec<String>,
     badge_list_error: Option<String>,
 }
@@ -497,6 +509,10 @@ impl Default for RoadStopMetaParse {
             draw_mode: crate::road_stop_spec::ROADSTOP_DRAW_MODE_DEFAULT,
             flags: 0,
             callback_mask: 0,
+            animation_frames: 0,
+            animation_status: 0xFF,
+            animation_speed: 2,
+            animation_triggers: 0,
             badge_labels: Vec::new(),
             badge_list_error: None,
         }
@@ -528,6 +544,10 @@ impl RoadStopMetaParse {
             draw_mode: self.draw_mode,
             flags: self.flags,
             callback_mask: self.callback_mask,
+            animation_frames: self.animation_frames,
+            animation_status: self.animation_status,
+            animation_speed: self.animation_speed,
+            animation_triggers: self.animation_triggers,
             badge_labels: self.badge_labels,
             badge_list_error: self.badge_list_error,
         }
@@ -1931,6 +1951,7 @@ pub fn collect_house_metas_from_grf(data: &[u8]) -> Vec<ParsedHouseMeta> {
 
 /// Parsea Action0 `RoadStops` (`0x14`): class, stop type, `draw_mode`, flags, nombre `0xFE`, badges `0xFD`.
 #[must_use]
+#[allow(clippy::too_many_lines)] // El formato Action0 es de ancho variable por propiedad.
 pub fn parse_action0_roadstop_meta(payload: &[u8]) -> Option<ParsedRoadStopMeta> {
     let header = parse_action0_header(payload)?;
     if header.feature != ACTION0_FEATURE_ROADSTOPS || header.num_ids == 0 || payload.len() < 5 {
@@ -1984,6 +2005,28 @@ pub fn parse_action0_roadstop_meta(payload: &[u8]) -> Option<ParsedRoadStopMeta>
                 meta.callback_mask = payload[i];
                 i += 1;
             }
+            0x0E => {
+                if i + 2 > payload.len() {
+                    break;
+                }
+                meta.animation_frames = payload[i];
+                meta.animation_status = payload[i + 1];
+                i += 2;
+            }
+            0x0F => {
+                if i >= payload.len() {
+                    break;
+                }
+                meta.animation_speed = payload[i];
+                i += 1;
+            }
+            0x10 => {
+                if i + 2 > payload.len() {
+                    break;
+                }
+                meta.animation_triggers = u16::from_le_bytes([payload[i], payload[i + 1]]);
+                i += 2;
+            }
             PROP_NAME_CSTRING => {
                 let Some(nul) = payload[i..].iter().position(|&b| b == 0) else {
                     break;
@@ -2002,13 +2045,7 @@ pub fn parse_action0_roadstop_meta(payload: &[u8]) -> Option<ParsedRoadStopMeta>
                 }
             }
             // Anchos fijos OTTD (avanzar el bloque sin semántica).
-            0x0F => {
-                if i >= payload.len() {
-                    break;
-                }
-                i += 1;
-            }
-            0x0A | 0x0B | 0x0E | 0x10 | 0x15 => {
+            0x0A | 0x0B | 0x15 => {
                 if i + 2 > payload.len() {
                     break;
                 }

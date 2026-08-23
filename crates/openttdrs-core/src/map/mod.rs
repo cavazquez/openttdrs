@@ -98,6 +98,7 @@ pub use slope::{
 };
 pub use station_tile_anim::{
     AIRPORT_RADAR_FRAMES, airport_radar_frame, is_airport_tower_tile, step_airport_tiles,
+    step_newgrf_road_stop_tiles,
 };
 pub use tile_loop::{
     MAP_FULL_SCAN_TILE_LIMIT, MAP_TILE_LOOP_STRIDE, TileLoopState, collect_tile_loop_visits,

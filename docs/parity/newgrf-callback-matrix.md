@@ -18,6 +18,7 @@ API común: `TrainSpriteGraphics::resolve_callback` / `resolve_callback_ctx`,
 `resolve_vehicle_callback`, `writeback_*_persistent_registers`,
 `apply_industry_location_callback`, `apply_house_construction_callback`,
 `apply_station_availability_callback`, `apply_road_stop_availability_callback`,
+`trigger_road_stop_animation`, `advance_road_stop_animation`,
 `resolve_industry_tile_animation_callback`, `resolve_industry_tile_random_trigger`
 (`crates/openttdrs-core/src/newgrf_callback.rs`).
 
@@ -39,7 +40,7 @@ API común: `TrainSpriteGraphics::resolve_callback` / `resolve_callback_ctx`,
 | Airport tiles (`11`) / Airports (`0D`) | anim / FTA-related | **almacenado** / **OOS** | Máscaras; FTA bloqueado (#260) |
 | Canals (`05`) | `0x147` sprite offset | **almacenado** | `CanalSpecDef.callback_mask` |
 | RoadStops (`14`) | `0x13` `CBID_STATION_AVAILABILITY` | **soportado** | Máscara Action0 `0x11`, Action2/3 y call site query+execute de `PlaceBusStop`/`PlaceTruckStop`; `CALLBACK_FAILED` permite como OpenTTD |
-| RoadStops | `0x140`–`0x142` animación | **almacenado** | Se conserva la máscara; no hay scheduler/callback de animación todavía |
+| RoadStops | `0x140`–`0x142` animación | **parcial runtime** | Action0 `0x0E`/`0x0F`/`0x10`; CB140 en `Built` y `TileLoop`, CB141/CB142 con frame/activo persistidos por parada. Faltan triggers de vehículo/carga, scopes vecinos, sonidos y selección visual dinámica |
 | Objects / Cargoes / Types | varios | **OOS** | Sin ejecución de CB en este corte |
 | Generic | `0x01` `CBID_RANDOM_TRIGGER` | **OOS** | Ver triggers abajo |
 
@@ -71,10 +72,11 @@ API común: `TrainSpriteGraphics::resolve_callback` / `resolve_callback_ctx`,
 6. Industry tiles CB25/CB26/CB27 — trigger, next frame y velocidad en `phase_tile_animation` (FAILED observable).
 7. Industry tile trigger → Action2 random group (`resolve_industry_tile_random_trigger`).
 8. RoadStops CB13 — disponibilidad al previsualizar y ejecutar `PlaceBusStop`/`PlaceTruckStop`.
+9. RoadStops CB140/CB141/CB142 — `Built`/`TileLoop` + scheduler con velocidad/frame, writeback `7C` y JSON round-trip. Referencia: `newgrf_roadstop.cpp` / `newgrf_animation_base.h`.
 
 ## Residual explícito (no bloquea cierre MVP #266)
 
-- Resto de CBs houses / airports / industries / objects / RoadStops (animación).
+- Resto de CBs houses / airports / industries / objects; RoadStops aún requiere triggers de carga/vehículo, randomización, scopes vecinos y sprite Action2 dinámico.
 - Scopes parent/relative completos.
 - Storage persistente en industria/casa (estación ya cubierta).
 - Goldens tick-a-tick vs OpenTTD 15.3 para todos los features.

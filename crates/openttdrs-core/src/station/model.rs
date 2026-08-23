@@ -209,6 +209,15 @@ pub struct Station {
     /// Spec `NewGRF` de road stop al construir (`None` = vanilla / Action5 / `OpenGFX`).
     #[serde(default)]
     pub road_stop_spec: Option<u16>,
+    /// Frame actual de `CBID_STATION_ANIMATION_*` para esta parada vial `NewGRF`.
+    ///
+    /// En este modelo cada road stop ocupa una entidad `Station`, por lo que
+    /// no hace falta una tabla secundaria `roadstoptiledata` para conservarlo.
+    #[serde(default)]
+    pub road_stop_animation_frame: u8,
+    /// La tesela está registrada en el scheduler de animación `NewGRF`.
+    #[serde(default)]
+    pub road_stop_animation_active: bool,
     /// Bits aleatorios `NewGRF` de la estación (var `5F` / random Action2).
     #[serde(default)]
     pub newgrf_random_bits: u8,
@@ -275,6 +284,8 @@ impl Station {
             joined_tiles: Vec::new(),
             station_spec: crate::station_class::StationSpecId::DefaultRail,
             road_stop_spec: None,
+            road_stop_animation_frame: 0,
+            road_stop_animation_active: false,
             newgrf_random_bits: seed_station_newgrf_random_bits(pos),
             newgrf_persistent_regs: std::collections::HashMap::new(),
         }

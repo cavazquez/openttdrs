@@ -31,6 +31,7 @@ pub const ROADSTOP_TYPE_ALL: u8 = 2;
 /// | 5 | `RoadOnly` | Solo menú/carretera (no tranvía) |
 /// | 6 | `TramOnly` | Solo menú/tranvía (no carretera) |
 /// | 8 | `DrawModeRegister` | Leer draw mode del registro `0x100` |
+pub const ROADSTOP_FLAG_CB141_RANDOM_BITS: u32 = 1 << 0;
 pub const ROADSTOP_FLAG_DRIVE_THROUGH_ONLY: u32 = 1 << 3;
 pub const ROADSTOP_FLAG_ROAD_ONLY: u32 = 1 << 5;
 pub const ROADSTOP_FLAG_TRAM_ONLY: u32 = 1 << 6;
@@ -53,12 +54,17 @@ pub const ROADSTOP_DRAW_MODE_DEFAULT: u8 = ROADSTOP_DRAW_MODE_ROAD | ROADSTOP_DR
 /// en el picker como antes de ejecutar la construcción, igual que
 /// `RoadStopChangeInfo` / `CmdBuildRoadStop` de `OpenTTD`.
 pub const ROADSTOP_CALLBACK_MASK_AVAILABILITY: u8 = 1 << 0;
-/// El callback `CBID_STATION_ANIMATION_NEXT_FRAME` (`0x141`) está declarado
-/// por el GRF, pero su ciclo de animación aún no está implementado.
+/// `CBID_STATION_ANIMATION_NEXT_FRAME` (`0x141`) personaliza el scheduler.
 pub const ROADSTOP_CALLBACK_MASK_ANIMATION_NEXT_FRAME: u8 = 1 << 1;
-/// El callback `CBID_STATION_ANIMATION_SPEED` (`0x142`) está declarado por el
-/// GRF, pero su ciclo de animación aún no está implementado.
+/// `CBID_STATION_ANIMATION_SPEED` (`0x142`) personaliza su espera entre frames.
 pub const ROADSTOP_CALLBACK_MASK_ANIMATION_SPEED: u8 = 1 << 2;
+
+/// Triggers de animación de una parada (`StationAnimationTrigger`).
+///
+/// La implementación runtime actual cubre construcción y `TileLoop`; los
+/// triggers de carga/vehículo requieren todavía conectar sus call sites.
+pub const ROADSTOP_ANIMATION_TRIGGER_BUILT: u16 = 1 << 0;
+pub const ROADSTOP_ANIMATION_TRIGGER_TILE_LOOP: u16 = 1 << 7;
 
 /// Metadatos de una clase de road stop (`RoadStopClass`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -92,10 +98,23 @@ pub struct RoadStopSpecDef {
     #[serde(default)]
     pub flags: u32,
     /// Action0 `0x11` (`RoadStopCallbackMask`). El bit de disponibilidad se
-    /// ejecuta al previsualizar y construir; los bits de animación se preservan
-    /// como metadato hasta contar con su scheduler.
+    /// ejecuta al previsualizar y construir; los bits 1/2 accionan el
+    /// scheduler de animación de la parada.
     #[serde(default)]
     pub callback_mask: u8,
+    /// Action0 `0x0E`: último frame y estado (`0` no-loop, `1` loop,
+    /// `0xFF` sin animación).
+    #[serde(default = "default_road_stop_animation_status")]
+    pub animation_status: u8,
+    /// Action0 `0x0E`: último frame de la animación.
+    #[serde(default)]
+    pub animation_frames: u8,
+    /// Action0 `0x0F`: espera en ticks `2^speed`.
+    #[serde(default = "default_road_stop_animation_speed")]
+    pub animation_speed: u8,
+    /// Action0 `0x10`: máscara `StationAnimationTrigger`.
+    #[serde(default)]
+    pub animation_triggers: u16,
     /// Vistas Action1/3 (opcional; no se serializan — se rehidratan al re-aplicar).
     #[serde(default, skip)]
     pub newgrf_views: Vec<crate::newgrf_sprites::DecodedSprite>,
@@ -114,6 +133,14 @@ pub struct RoadStopSpecDef {
 
 const fn default_road_stop_draw_mode() -> u8 {
     ROADSTOP_DRAW_MODE_DEFAULT
+}
+
+const fn default_road_stop_animation_status() -> u8 {
+    0xFF
+}
+
+const fn default_road_stop_animation_speed() -> u8 {
+    2
 }
 
 impl RoadStopSpecDef {
@@ -167,6 +194,30 @@ impl RoadStopSpecDef {
     #[must_use]
     pub const fn has_availability_callback(&self) -> bool {
         self.callback_mask & ROADSTOP_CALLBACK_MASK_AVAILABILITY != 0
+    }
+
+    /// `CBID_STATION_ANIMATION_NEXT_FRAME` (`0x141`) está habilitado.
+    #[must_use]
+    pub const fn has_animation_next_frame_callback(&self) -> bool {
+        self.callback_mask & ROADSTOP_CALLBACK_MASK_ANIMATION_NEXT_FRAME != 0
+    }
+
+    /// `CBID_STATION_ANIMATION_SPEED` (`0x142`) está habilitado.
+    #[must_use]
+    pub const fn has_animation_speed_callback(&self) -> bool {
+        self.callback_mask & ROADSTOP_CALLBACK_MASK_ANIMATION_SPEED != 0
+    }
+
+    /// `CB141` recibe random bits en `param1`.
+    #[must_use]
+    pub const fn animation_next_frame_uses_random_bits(&self) -> bool {
+        self.flags & ROADSTOP_FLAG_CB141_RANDOM_BITS != 0
+    }
+
+    /// La propiedad `0x0E` declara una secuencia circular.
+    #[must_use]
+    pub const fn animation_loops(&self) -> bool {
+        self.animation_status == 1
     }
 }
 
@@ -289,6 +340,10 @@ mod tests {
             draw_mode: ROADSTOP_DRAW_MODE_DEFAULT,
             flags,
             callback_mask: 0,
+            animation_status: 0xFF,
+            animation_frames: 0,
+            animation_speed: 2,
+            animation_triggers: 0,
             newgrf_views: Vec::new(),
             newgrf_runtime: None,
             newgrf_type_tables: None,
@@ -324,6 +379,10 @@ mod tests {
                 draw_mode: ROADSTOP_DRAW_MODE_DEFAULT,
                 flags: 0,
                 callback_mask: 0,
+                animation_status: 0xFF,
+                animation_frames: 0,
+                animation_speed: 2,
+                animation_triggers: 0,
                 newgrf_views: Vec::new(),
                 newgrf_runtime: None,
                 newgrf_type_tables: None,
@@ -341,6 +400,10 @@ mod tests {
                 draw_mode: ROADSTOP_DRAW_MODE_DEFAULT,
                 flags: 0,
                 callback_mask: 0,
+                animation_status: 0xFF,
+                animation_frames: 0,
+                animation_speed: 2,
+                animation_triggers: 0,
                 newgrf_views: Vec::new(),
                 newgrf_runtime: None,
                 newgrf_type_tables: None,

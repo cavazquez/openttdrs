@@ -643,6 +643,45 @@ pub fn build_action0_roadstop_payload_with_callback_mask(
     p
 }
 
+/// Action0 `RoadStops` con propiedades de animación `0x0E`/`0x0F`/`0x10`.
+///
+/// Se usa en fixtures para comprobar el recorrido Action0 → catálogo →
+/// scheduler `CB140/141/142`; los campos se agregan después de las cadenas,
+/// que sigue siendo un orden válido de propiedades Action0.
+#[must_use]
+#[allow(clippy::too_many_arguments)] // Fixture: mantiene explícitos los campos wire-format de Action0.
+pub fn build_action0_roadstop_payload_with_animation(
+    class_label: &[u8; 4],
+    stop_type: u8,
+    name: &str,
+    callback_mask: u8,
+    animation_frames: u8,
+    animation_status: u8,
+    animation_speed: u8,
+    animation_triggers: u16,
+) -> Vec<u8> {
+    let mut payload = build_action0_roadstop_payload_with_callback_mask(
+        class_label,
+        stop_type,
+        name,
+        &[],
+        crate::road_stop_spec::ROADSTOP_DRAW_MODE_DEFAULT,
+        0,
+        callback_mask,
+    );
+    payload[2] = payload[2].saturating_add(3);
+    payload.extend_from_slice(&[
+        0x0E,
+        animation_frames,
+        animation_status,
+        0x0F,
+        animation_speed,
+    ]);
+    payload.push(0x10);
+    payload.extend_from_slice(&animation_triggers.to_le_bytes());
+    payload
+}
+
 #[must_use]
 pub fn build_action0_badge_payload(label: &[u8; 4], flags: u32, name: Option<&str>) -> Vec<u8> {
     let num_props = 2 + u8::from(name.is_some());
@@ -2088,6 +2127,43 @@ mod tests {
         assert!(def.associated_badges.is_empty());
     }
 
+    #[test]
+    fn roadstop_animation_properties_survive_action0_and_catalog_apply() {
+        let a0 = build_action0_roadstop_payload_with_animation(
+            b"ANIM",
+            0,
+            "Parada animada",
+            crate::ROADSTOP_CALLBACK_MASK_ANIMATION_NEXT_FRAME
+                | crate::ROADSTOP_CALLBACK_MASK_ANIMATION_SPEED,
+            7,
+            1,
+            3,
+            crate::ROADSTOP_ANIMATION_TRIGGER_BUILT | crate::ROADSTOP_ANIMATION_TRIGGER_TILE_LOOP,
+        );
+        let meta = parse_action0_roadstop_meta(&a0).unwrap();
+        assert_eq!(meta.animation_frames, 7);
+        assert_eq!(meta.animation_status, 1);
+        assert_eq!(meta.animation_speed, 3);
+        assert_eq!(
+            meta.animation_triggers,
+            crate::ROADSTOP_ANIMATION_TRIGGER_BUILT | crate::ROADSTOP_ANIMATION_TRIGGER_TILE_LOOP
+        );
+
+        let bytes = build_grf_v2_with_action0_and_action8(&a0, [b'A', b'N', 0, 1], "anim", "");
+        let dir = tempfile_dir_with("anim.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("anim.grf", 77));
+        apply_newgrf_roadstops(&mut state, &[&dir]);
+        let def = &state.road_stop_spec_catalog[0];
+        assert_eq!(def.animation_frames, 7);
+        assert!(def.animation_loops());
+        assert_eq!(def.animation_speed, 3);
+        assert!(def.has_animation_next_frame_callback());
+        assert!(def.has_animation_speed_callback());
+    }
+
     /// El `CB13` de `RoadStops` no puede quedarse sólo como un bit parseado: el
     /// mismo GRF que lo declara debe bloquear la query y el execute del comando.
     #[test]
@@ -2144,6 +2220,63 @@ mod tests {
             Err(CommandError::NewGrfCallbackDenied)
         );
         assert_eq!(state.stations.len(), 0);
+    }
+
+    #[test]
+    fn roadstop_built_trigger_registers_newgrf_animation() {
+        use crate::{Command, apply_command};
+
+        let a0 = build_action0_roadstop_payload_with_animation(
+            b"ANCB",
+            0,
+            "Parada animada",
+            0,
+            2,
+            1,
+            0,
+            crate::ROADSTOP_ANIMATION_TRIGGER_BUILT,
+        );
+        // El mismo Action2 devuelve FE para CB140: ActivateAnimation sin
+        // fijar frame. No se activa CB13 porque su bit no está en la máscara.
+        let action2 = crate::newgrf_sprites::build_action2_callback_literal_payload(
+            ACTION0_FEATURE_ROADSTOPS,
+            0x22,
+            0xFE,
+        );
+        let bytes = crate::newgrf_sprites::build_grf_v2_feature_with_action2_chain(
+            &a0,
+            ACTION0_FEATURE_ROADSTOPS,
+            0,
+            0x22,
+            &action2,
+            1,
+            1,
+            &[1],
+            *b"ANCB",
+            "roadstop-animation",
+        );
+        let dir = tempfile_dir_with("roadstop-animation.grf", &bytes);
+        let mut state = GameState::new(8, 8);
+        state.newgrf_stack.push(crate::NewGrfEntry::new(
+            "roadstop-animation.grf",
+            crate::newgrf_config::grfid_from_bytes(*b"ANCB"),
+        ));
+        apply_newgrf_roadstops(&mut state, &[&dir]);
+        let spec = state.road_stop_spec_catalog[0].id;
+        apply_command(&mut state, &Command::SetCurrentRoadStopSpec(spec)).unwrap();
+        apply_command(&mut state, &Command::PlaceRoad(crate::TileCoord::new(3, 2))).unwrap();
+        apply_command(
+            &mut state,
+            &Command::PlaceBusStop(crate::TileCoord::new(3, 3), 3),
+        )
+        .unwrap();
+
+        assert!(state.stations[0].road_stop_animation_active);
+        assert_eq!(state.stations[0].road_stop_animation_frame, 0);
+        // El scheduler se integra en la fase real `AnimateAnimatedTiles`, no
+        // sólo en el helper: sin CB141 usa el frame Action0 de fallback.
+        state.step();
+        assert_eq!(state.stations[0].road_stop_animation_frame, 1);
     }
 
     #[test]

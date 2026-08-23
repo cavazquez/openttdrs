@@ -377,12 +377,12 @@ pub use newgrf_actions::{
     parse_action0_sound_meta, parse_action0_station_meta, parse_action0_train_meta,
 };
 pub use newgrf_callback::{
-    action2_eval_ctx_from_station, action2_eval_ctx_from_vehicle,
+    action2_eval_ctx_from_station, action2_eval_ctx_from_vehicle, advance_road_stop_animation,
     apply_house_construction_callback, apply_industry_location_callback,
     apply_industry_tile_anim_callback, apply_station_availability_callback,
     apply_vehicle_start_stop_callback, callback_allows_placement, resolve_callback_or_failed,
     resolve_industry_tile_animation_callback, resolve_industry_tile_random_trigger,
-    resolve_vehicle_callback, vehicle_start_stop_callback_allows,
+    resolve_vehicle_callback, trigger_road_stop_animation, vehicle_start_stop_callback_allows,
     writeback_station_persistent_registers, writeback_vehicle_persistent_registers,
 };
 pub use newgrf_config::{
@@ -400,7 +400,8 @@ pub use newgrf_sprites::{
     CANALS_ACTION5_SLOT_COUNT, CATENARY_ACTION5_SLOT_COUNT, CATENARY_ENTRANCE_SPRITE_BASE,
     CATENARY_PYLON_SPRITE_BASE, CATENARY_WIRE_SPRITE_BASE, CBID_HOUSE_ALLOW_CONSTRUCTION,
     CBID_INDTILE_ANIM_NEXT_FRAME, CBID_INDTILE_ANIMATION_NEXT_FRAME, CBID_INDTILE_ANIMATION_SPEED,
-    CBID_INDTILE_ANIMATION_TRIGGER, CBID_INDUSTRY_LOCATION, CBID_STATION_AVAILABILITY,
+    CBID_INDTILE_ANIMATION_TRIGGER, CBID_INDUSTRY_LOCATION, CBID_STATION_ANIMATION_NEXT_FRAME,
+    CBID_STATION_ANIMATION_SPEED, CBID_STATION_ANIMATION_TRIGGER, CBID_STATION_AVAILABILITY,
     CBID_STATION_BUILD_TILE_LAYOUT, CBID_VEHICLE_START_STOP_CHECK, DecodedSprite,
     FOUNDATION_ACTION5_SLOT_COUNT, ONEWAY_ACTION5_SLOT_COUNT, OPENTTD_GUI_ACTION5_SLOT_COUNT,
     ROADSTOP_ACTION5_SLOT_COUNT, SHORE_ACTION5_SLOT_COUNT, SHORE_MISSING_BLOCK_SLOTS,
@@ -504,16 +505,17 @@ pub use road_movement::{
     vehicle_subtile_with_progress,
 };
 pub use road_stop_spec::{
+    ROADSTOP_ANIMATION_TRIGGER_BUILT, ROADSTOP_ANIMATION_TRIGGER_TILE_LOOP,
     ROADSTOP_CALLBACK_MASK_ANIMATION_NEXT_FRAME, ROADSTOP_CALLBACK_MASK_ANIMATION_SPEED,
     ROADSTOP_CALLBACK_MASK_AVAILABILITY, ROADSTOP_DRAW_MODE_DEFAULT, ROADSTOP_DRAW_MODE_OVERLAY,
-    ROADSTOP_DRAW_MODE_ROAD, ROADSTOP_FLAG_DRIVE_THROUGH_ONLY, ROADSTOP_FLAG_ROAD_ONLY,
-    ROADSTOP_FLAG_TRAM_ONLY, ROADSTOP_TYPE_ALL, ROADSTOP_TYPE_BUS, ROADSTOP_TYPE_TRUCK, RSV_BAY_NE,
-    RSV_BAY_NW, RSV_BAY_SE, RSV_BAY_SW, RSV_DRIVE_THROUGH_X, RSV_DRIVE_THROUGH_Y, RoadStopClassDef,
-    RoadStopSpecDef, drive_through_axis_y, empty_road_stop_class_catalog,
-    empty_road_stop_spec_catalog, first_matching_road_stop_spec, is_drive_through_orientation,
-    list_road_stop_classes, list_road_stop_specs, next_free_road_stop_class_id,
-    next_free_road_stop_spec_id, road_stop_class_def, road_stop_spec_by_grf_local,
-    road_stop_spec_def,
+    ROADSTOP_DRAW_MODE_ROAD, ROADSTOP_FLAG_CB141_RANDOM_BITS, ROADSTOP_FLAG_DRIVE_THROUGH_ONLY,
+    ROADSTOP_FLAG_ROAD_ONLY, ROADSTOP_FLAG_TRAM_ONLY, ROADSTOP_TYPE_ALL, ROADSTOP_TYPE_BUS,
+    ROADSTOP_TYPE_TRUCK, RSV_BAY_NE, RSV_BAY_NW, RSV_BAY_SE, RSV_BAY_SW, RSV_DRIVE_THROUGH_X,
+    RSV_DRIVE_THROUGH_Y, RoadStopClassDef, RoadStopSpecDef, drive_through_axis_y,
+    empty_road_stop_class_catalog, empty_road_stop_spec_catalog, first_matching_road_stop_spec,
+    is_drive_through_orientation, list_road_stop_classes, list_road_stop_specs,
+    next_free_road_stop_class_id, next_free_road_stop_spec_id, road_stop_class_def,
+    road_stop_spec_by_grf_local, road_stop_spec_def,
 };
 pub use road_type::{
     RoadTramType, RoadType, RoadTypeDef, all_road_type_defs, list_road_types,

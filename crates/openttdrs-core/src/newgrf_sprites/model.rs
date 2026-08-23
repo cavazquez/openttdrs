@@ -294,6 +294,12 @@ pub const CBID_INDTILE_ANIMATION_SPEED: u16 = 0x27;
 pub const CBID_INDTILE_ANIM_NEXT_FRAME: u16 = CBID_INDTILE_ANIMATION_NEXT_FRAME;
 /// Callback estaciones: disponibilidad de clase/spec (`CBID_STATION_AVAILABILITY`).
 pub const CBID_STATION_AVAILABILITY: u16 = 0x13;
+/// Callback estaciones / road stops: inicia, pausa o fija un frame de animación.
+pub const CBID_STATION_ANIMATION_TRIGGER: u16 = 0x140;
+/// Callback estaciones / road stops: siguiente frame de animación.
+pub const CBID_STATION_ANIMATION_NEXT_FRAME: u16 = 0x141;
+/// Callback estaciones / road stops: velocidad de animación.
+pub const CBID_STATION_ANIMATION_SPEED: u16 = 0x142;
 
 /// Bloque de sprites Action5 (shore / catenary / …).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

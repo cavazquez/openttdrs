@@ -13,7 +13,8 @@ use crate::industry_tile::IndustryTileSpecDef;
 use crate::map::TileCoord;
 use crate::newgrf_sprites::{
     Action2EvalCtx, Action2RandomEntry, CALLBACK_FAILED, CBID_HOUSE_ALLOW_CONSTRUCTION,
-    CBID_INDUSTRY_LOCATION, CBID_STATION_AVAILABILITY, CBID_VEHICLE_START_STOP_CHECK,
+    CBID_INDUSTRY_LOCATION, CBID_STATION_ANIMATION_NEXT_FRAME, CBID_STATION_ANIMATION_SPEED,
+    CBID_STATION_ANIMATION_TRIGGER, CBID_STATION_AVAILABILITY, CBID_VEHICLE_START_STOP_CHECK,
     TrainSpriteGraphics,
 };
 use crate::station::Station;
@@ -208,6 +209,187 @@ pub fn apply_road_stop_availability_callback(
         &mut ctx,
     );
     callback_allows_placement(result)
+}
+
+/// Resuelve un callback de animación de `RoadStop` con el scope estable que
+/// necesita este corte de runtime.
+///
+/// La parada actual aporta vista, tipo, frame y storage persistente. Los
+/// scopes vecinos, road/tram por tesela y textos/sounds del resultado siguen
+/// siendo una extensión separada; `0x43`/`0x44` se marcan inválidos en este
+/// scheduler porque no participa de una query de construcción.
+fn resolve_road_stop_animation_callback(
+    def: &crate::road_stop_spec::RoadStopSpecDef,
+    station: &mut Station,
+    view: u8,
+    callback: u16,
+    param1: u32,
+    param2: u32,
+) -> u16 {
+    let Some(runtime) = def.newgrf_runtime.as_ref() else {
+        return CALLBACK_FAILED;
+    };
+
+    let mut ctx = action2_eval_ctx_from_station(station);
+    ctx.random_bits = param1;
+    ctx.vars.insert(0x40, u32::from(view));
+    ctx.vars.insert(
+        0x41,
+        match station.stop_kind {
+            StopKind::BusStop => 0,
+            StopKind::TruckStop => 1,
+            _ => 2,
+        },
+    );
+    // Las animaciones se ejecutan sobre una tesela ya construida. La capa de
+    // mapa no guarda aún la identidad road/tram necesaria para el scope 0x43/
+    // 0x44, por lo que usamos el valor inválido contractual de OpenTTD.
+    ctx.vars.insert(0x42, 0);
+    ctx.vars.insert(0x43, u32::MAX);
+    ctx.vars.insert(0x44, u32::MAX);
+    ctx.vars
+        .insert(0x49, u32::from(station.road_stop_animation_frame));
+    let result =
+        runtime.resolve_callback_ctx(def.newgrf_local_id, callback, param1, param2, &mut ctx);
+    writeback_station_persistent_registers(station, &ctx);
+    result
+}
+
+fn road_stop_animation_random_bits(station: &Station, tick: u64) -> u32 {
+    let x = station.pos.x.cast_unsigned();
+    let y = station.pos.y.cast_unsigned();
+    let tick = u32::try_from(tick).unwrap_or(u32::MAX);
+    x.wrapping_mul(0x9E37_79B9)
+        ^ y.wrapping_mul(0x85EB_CA6B)
+        ^ tick.rotate_left(11)
+        ^ u32::from(station.newgrf_random_bits)
+}
+
+/// Ejecuta `CBID_STATION_ANIMATION_TRIGGER` (`0x140`) para una parada vial.
+///
+/// `0xFD` no cambia nada, `0xFE` registra la parada para animación, `0xFF`
+/// la quita y cualquier otro byte fija el frame y la activa, igual que
+/// `AnimationBase::ChangeAnimationFrame` de `OpenTTD`. Devuelve si cambió el
+/// estado persistente de la parada.
+pub fn trigger_road_stop_animation(
+    def: &crate::road_stop_spec::RoadStopSpecDef,
+    station: &mut Station,
+    view: u8,
+    trigger: u16,
+    tick: u64,
+) -> bool {
+    if def.animation_triggers & trigger == 0 {
+        return false;
+    }
+    let before = (
+        station.road_stop_animation_frame,
+        station.road_stop_animation_active,
+    );
+    let result = resolve_road_stop_animation_callback(
+        def,
+        station,
+        view,
+        CBID_STATION_ANIMATION_TRIGGER,
+        road_stop_animation_random_bits(station, tick),
+        u32::from(trigger),
+    );
+    if result == CALLBACK_FAILED {
+        return false;
+    }
+    match (result & 0xFF) as u8 {
+        0xFD => {}
+        0xFE => station.road_stop_animation_active = true,
+        0xFF => station.road_stop_animation_active = false,
+        frame => {
+            station.road_stop_animation_frame = frame;
+            station.road_stop_animation_active = true;
+        }
+    }
+    before
+        != (
+            station.road_stop_animation_frame,
+            station.road_stop_animation_active,
+        )
+}
+
+/// Avanza el scheduler de una parada vial `NewGRF` (`CB141`/`CB142`).
+///
+/// El frame y el bit activo pertenecen a la instancia de estación, no al
+/// catálogo del GRF; por eso sobreviven al JSON save/load y a la rehidratación
+/// de Action2. `CALLBACK_FAILED` conserva la secuencia declarada en Action0.
+pub fn advance_road_stop_animation(
+    def: &crate::road_stop_spec::RoadStopSpecDef,
+    station: &mut Station,
+    view: u8,
+    tick: u64,
+) -> bool {
+    if !station.road_stop_animation_active {
+        return false;
+    }
+    let before = (
+        station.road_stop_animation_frame,
+        station.road_stop_animation_active,
+    );
+    let mut speed = def.animation_speed.min(16);
+    if def.has_animation_speed_callback() {
+        let result = resolve_road_stop_animation_callback(
+            def,
+            station,
+            view,
+            CBID_STATION_ANIMATION_SPEED,
+            0,
+            0,
+        );
+        if result != CALLBACK_FAILED {
+            speed = u8::try_from(result & 0xFF).unwrap_or(16).min(16);
+        }
+    }
+    if !tick.is_multiple_of(1_u64 << u32::from(speed)) {
+        return false;
+    }
+
+    let mut frame_set_by_callback = false;
+    if def.has_animation_next_frame_callback() {
+        let random_bits = if def.animation_next_frame_uses_random_bits() {
+            road_stop_animation_random_bits(station, tick)
+        } else {
+            0
+        };
+        let result = resolve_road_stop_animation_callback(
+            def,
+            station,
+            view,
+            CBID_STATION_ANIMATION_NEXT_FRAME,
+            random_bits,
+            0,
+        );
+        if result != CALLBACK_FAILED {
+            match (result & 0xFF) as u8 {
+                0xFF => station.road_stop_animation_active = false,
+                0xFE => {}
+                frame => {
+                    station.road_stop_animation_frame = frame;
+                    frame_set_by_callback = true;
+                }
+            }
+        }
+    }
+
+    if station.road_stop_animation_active && !frame_set_by_callback {
+        if station.road_stop_animation_frame < def.animation_frames {
+            station.road_stop_animation_frame = station.road_stop_animation_frame.saturating_add(1);
+        } else if station.road_stop_animation_frame == def.animation_frames && def.animation_loops()
+        {
+            station.road_stop_animation_frame = 0;
+        } else {
+            station.road_stop_animation_active = false;
+        }
+    }
+    before
+        != (
+            station.road_stop_animation_frame,
+            station.road_stop_animation_active,
+        )
 }
 
 /// Trigger path: reseed `random_bits` y resolver un Action2 random group si el
@@ -572,6 +754,41 @@ mod tests {
         let json = state.save_json().unwrap();
         let loaded = crate::GameState::load_json(&json).unwrap();
         assert_eq!(loaded.stations[0].newgrf_persistent_regs.get(&2), Some(&99));
+    }
+
+    #[test]
+    fn callbacks_ac_road_stop_animation_writes_back_station_storage() {
+        let def = crate::RoadStopSpecDef {
+            id: 1,
+            class: 0,
+            label: "anim".into(),
+            short_label: "ANIM".into(),
+            stop_type: crate::ROADSTOP_TYPE_BUS,
+            from_newgrf: true,
+            grfid: 1,
+            newgrf_local_id: 0,
+            draw_mode: crate::ROADSTOP_DRAW_MODE_DEFAULT,
+            flags: 0,
+            callback_mask: 0,
+            animation_status: 1,
+            animation_frames: 1,
+            animation_speed: 0,
+            animation_triggers: crate::ROADSTOP_ANIMATION_TRIGGER_BUILT,
+            newgrf_views: Vec::new(),
+            newgrf_runtime: Some(Box::new(gfx_callback_psto(4, 12, 0xFE))),
+            newgrf_type_tables: None,
+            associated_badges: Vec::new(),
+        };
+        let mut station = Station::new_with_kind(TileCoord::new(1, 1), StopKind::BusStop);
+        assert!(trigger_road_stop_animation(
+            &def,
+            &mut station,
+            crate::RSV_BAY_NE,
+            crate::ROADSTOP_ANIMATION_TRIGGER_BUILT,
+            1,
+        ));
+        assert!(station.road_stop_animation_active);
+        assert_eq!(station.newgrf_persistent_regs.get(&4), Some(&12));
     }
 
     #[test]

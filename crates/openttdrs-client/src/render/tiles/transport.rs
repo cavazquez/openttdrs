@@ -16,7 +16,9 @@ use crate::iso::{
     ground_draw_z, ground_tile_pos_half, overlay_pos, remap_tile_offset, shore_png_index,
     shore_sprite_half_h, slope_half_h, slope_sprite_offset, sortable_draw_z, tile_pos_half,
 };
-use crate::render::catenary_newgrf::catenary_sprite_colored;
+use crate::render::catenary_newgrf::{
+    catenary_sprite_anchor, catenary_sprite_center, catenary_sprite_colored,
+};
 use crate::render::road_newgrf::{
     NewGrfRoadSpriteCache, newgrf_road_def_for_tile, newgrf_tram_def_for_tile,
     road_newgrf_view_index,
@@ -1310,7 +1312,6 @@ pub(crate) fn spawn_road_tile(
                 render_tb,
                 tileh,
                 base_z,
-                road_half_h,
                 true,
                 catenary_newgrf,
                 &mut catenary_sprites,
@@ -1339,7 +1340,6 @@ pub(crate) fn spawn_rail_catenary_for_surface(
     render_tb: u8,
     tileh: u8,
     surface_base_z: u8,
-    surface_half_h: f32,
     draw_wires: bool,
     catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     catenary_sprites: &mut Option<&mut crate::render::NewGrfCatenarySpriteCache>,
@@ -1389,6 +1389,7 @@ pub(crate) fn spawn_rail_catenary_for_surface(
         pylons.retain(|draw| draw.pcp_direction == Some(exterior_pcp));
     }
     for draw in pylons {
+        let anchor = catenary_sprite_anchor(draw.sprite_id, catenary_newgrf);
         let sprite = catenary_sprite_colored(
             assets,
             draw.sprite_id,
@@ -1411,29 +1412,35 @@ pub(crate) fn spawn_rail_catenary_for_surface(
             (1, 1, 0),
             Some(TraceSpriteBounds::new(-1, -1, 0, 1, 1, 6)),
         );
-        let Some(sprite) = sprite else {
+        let Some((sprite, anchor)) = sprite.zip(anchor) else {
             continue;
         };
+        // `AddSortableSpriteToDraw` traslada primero el origen del sprite por
+        // el `SpriteBounds` del poste. Aunque su caja sea diminuta, `(-1,-1)`
+        // cambia el píxel de anclaje; omitirlo desplazaba todos los PPP.
         let local_z = catenary_local_z_delta(world_z_delta, ctx.info.base_z, surface_base_z);
-        let off = remap_tile_offset(draw.tile_dx, draw.tile_dy, local_z as f32) * 0.5;
-        let base = tile_pos_half(
+        let position = catenary_sprite_center(
             ctx.tx_i32(),
             ctx.ty_i32(),
             surface_base_z,
             draw.z_layer,
-            surface_half_h,
+            draw.tile_dx - 1.0,
+            draw.tile_dy - 1.0,
+            local_z as f32,
+            anchor,
         );
         commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
             sprite,
-            Transform::from_translation(base + Vec3::new(off.x, off.y, 0.0)),
+            Transform::from_translation(position),
         ));
     }
     // OpenTTD emite primero los postes PPP y después los cables PCP. El
     // orden estable también permite comparar el stream sortable del oráculo.
     for (i, draw) in wires.iter().copied().enumerate() {
         let sid = draw.sprite_id;
+        let anchor = catenary_sprite_anchor(sid, catenary_newgrf);
         let sprite = catenary_sprite_colored(
             assets,
             sid,
@@ -1455,24 +1462,29 @@ pub(crate) fn spawn_rail_catenary_for_surface(
             world_z_delta,
             Some(TraceSpriteBounds::new(ox, oy, oz, ex, ey, ez)),
         );
-        let Some(sprite) = sprite else {
+        let Some((sprite, anchor)) = sprite.zip(anchor) else {
             continue;
         };
         let z = 0.035 + i as f32 * 0.0004;
-        let base = tile_pos_half(
+        // El `SortableSpriteStruct` de cada cable aporta un origen 3D. Es
+        // parte del ancla del PNG (no sólo del sorter): en vía plana `oz=10`
+        // eleva el hilo exactamente sobre la vía.
+        let local_z = catenary_local_z_delta(world_z_delta + oz, ctx.info.base_z, surface_base_z);
+        let position = catenary_sprite_center(
             ctx.tx_i32(),
             ctx.ty_i32(),
             surface_base_z,
             z,
-            surface_half_h,
+            ox as f32,
+            oy as f32,
+            local_z as f32,
+            anchor,
         );
-        let local_z = catenary_local_z_delta(world_z_delta, ctx.info.base_z, surface_base_z);
-        let off = remap_tile_offset(0.0, 0.0, local_z as f32) * 0.5;
         commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
             sprite,
-            Transform::from_translation(base + Vec3::new(off.x, off.y, 0.0)),
+            Transform::from_translation(position),
         ));
     }
 }
@@ -1936,7 +1948,6 @@ pub(crate) fn spawn_rail_tile(
         render_tb,
         tileh,
         rail_base_z,
-        rail_half_h,
         true,
         catenary_newgrf,
         &mut catenary_sprites,

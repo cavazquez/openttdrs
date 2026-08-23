@@ -27,9 +27,9 @@
       ],
       "check": "hash",
       "requires_opengfx": true,
-      "output_sha256": "fc0f473e97961b1d47e213c0cbe05a0a4717d8c639356060928ac337a0ac294d",
+      "output_sha256": "c478906938e30e7b395a9a79806cc2e036272395cc0ea155db297e5cab28caed",
       "license": "GPL-2.0-only (OpenTTD) + offsets OpenGFX locales",
-      "note": "Regenerado y verificado 2026-08-14 con OpenGFX local; CI solo hash. rustfmt_skip mantiene filas compactas."
+      "note": "Hash actualizado 2026-08-23 tras el ajuste de parents vanilla; CI solo hash. rustfmt_skip mantiene filas compactas."
     },
     {
       "id": "oneway_road_sprites",
@@ -77,6 +77,17 @@
       "output_sha256": "1c0a3049be4c95cbe06f756b3068ae5b752033e5248ec4a34877646c95901a47",
       "license": "metadatos NFO OpenGFX locales (GPL-2.0+)",
       "note": "Anclas de SPR_TRACK_FENCE_* del perfil gráfico activo; el generador y su regresión prueban la variante normal 8bpp/32bpp."
+    },
+    {
+      "id": "catenary_action5_gfx",
+      "generator": "scripts/extract_elrail_catenary.py",
+      "output": "crates/openttdrs-client/src/sprites/catenary_gfx_data_generated.rs",
+      "inputs": [],
+      "check": "regenerate_or_hash",
+      "requires_opengfx": true,
+      "output_sha256": "1288e47d2fb5b79c210bd3537c527bef5ca79b5746ea6db7734e0d1ccecc9b23",
+      "license": "metadatos NFO OpenGFX locales (GPL-2.0+)",
+      "note": "Los 36 slots Action5 de catenaria conservan recorte y ancla NFO; el mismo extractor genera los PNG para que no puedan divergir."
     },
     {
       "id": "water_palette",
@@ -181,6 +192,11 @@
     {
       "output": "crates/openttdrs-client/src/sprites/track_fence_meta_generated.rs",
       "generator": "scripts/gen_track_fence_meta.py",
+      "pilot": true
+    },
+    {
+      "output": "crates/openttdrs-client/src/sprites/catenary_gfx_data_generated.rs",
+      "generator": "scripts/extract_elrail_catenary.py",
       "pilot": true
     },
     {

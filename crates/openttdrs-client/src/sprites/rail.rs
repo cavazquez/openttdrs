@@ -19,6 +19,12 @@ mod rail_depot_gfx_data_generated;
 
 pub use rail_depot_gfx_data_generated::{RAIL_DEPOT_BUILD_LAYERS_BY_TYPE, RailDepotLayerGfx};
 
+#[path = "catenary_gfx_data_generated.rs"]
+mod catenary_gfx_data_generated;
+
+use catenary_gfx_data_generated::CATENARY_ACTION5_GFX;
+pub use catenary_gfx_data_generated::CatenarySpriteGfx;
+
 use super::transparency::catenary_hidden;
 use crate::config;
 use crate::iso::remap_tile_offset;
@@ -102,6 +108,17 @@ pub fn catenary_reference_sprite_id(sprite_id: u32) -> u32 {
     } else {
         sprite_id
     }
+}
+
+/// Metadatos NFO del sprite de catenaria local.
+///
+/// Los PNG Action5 se extraen sin su espacio transparente circundante. Sus
+/// dimensiones y offsets no pueden inferirse sólo del atlas: OpenTTD ancla el
+/// rectángulo recortado en el origen de mundo con estos valores NFO.
+#[must_use]
+pub fn catenary_sprite_gfx(sprite_id: u32) -> Option<CatenarySpriteGfx> {
+    let slot = openttdrs_core::catenary_action5_local_slot(sprite_id)?;
+    CATENARY_ACTION5_GFX.get(slot).copied()
 }
 
 /// `Direction` OpenTTD: N=0 … NW=7.

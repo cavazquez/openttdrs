@@ -12,7 +12,9 @@ use crate::iso::{
     HEIGHT_PX, TILE_HALF_H, full_tile_sprite_pos_half, remap_tile_offset, slope_half_h,
     slope_sprite_offset, tile_pos_half, tile_slope_and_min_z,
 };
-use crate::render::catenary_newgrf::catenary_sprite_colored;
+use crate::render::catenary_newgrf::{
+    catenary_sprite_anchor, catenary_sprite_center, catenary_sprite_colored,
+};
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
 use crate::render::{
     MapVisualLayer, NewGrfAction5SpriteCache, NewGrfCatenarySpriteCache, TileRenderContext,
@@ -607,6 +609,7 @@ fn spawn_bridge_catenary(
     );
     let tint = catenary_sprite_color();
     for draw in draws {
+        let anchor = catenary_sprite_anchor(draw.sprite_id, catenary_newgrf);
         let sprite = catenary_sprite_colored(
             assets,
             draw.sprite_id,
@@ -616,7 +619,7 @@ fn spawn_bridge_catenary(
             images.as_deref_mut(),
         );
         let world_z_delta = (i32::from(span.deck_z) - i32::from(ctx.info.base_z)) * 8;
-        if draw.pcp_direction.is_some() {
+        let bounds = if draw.pcp_direction.is_some() {
             // `DrawRailCatenaryOnBridge` ancla los postes directamente a la
             // altura del tablero. A diferencia de una rampa no consulta la
             // pendiente del terreno: el pilar vive completamente sobre el
@@ -632,10 +635,12 @@ fn spawn_bridge_catenary(
                 (1, 1, 0),
                 Some(TraceSpriteBounds::new(-1, -1, 0, 1, 1, 6)),
             );
+            TraceSpriteBounds::new(-1, -1, 0, 1, 1, 6)
         } else {
             // Los cables del vano son siempre rectos. Los WSO largo/corto
             // cambian el PNG y el remate, pero comparten la misma caja del
             // eje correspondiente en `_rail_catenary_sprite_data`.
+            let bounds = bridge_catenary_wire_trace_bounds(span.axis);
             WorldDrawTrace::record_sprite_with_palette_and_geometry(
                 "bridge-catenary-wire",
                 "sortable",
@@ -644,26 +649,41 @@ fn spawn_bridge_catenary(
                 sprite.is_none(),
                 (0, 0, 0),
                 world_z_delta,
-                Some(bridge_catenary_wire_trace_bounds(span.axis)),
+                Some(bounds),
             );
-        }
-        let Some(sprite) = sprite else {
+            bounds
+        };
+        let Some((sprite, anchor)) = sprite.zip(anchor) else {
             continue;
         };
-        let off = remap_tile_offset(draw.tile_dx, draw.tile_dy, 0.0) * 0.5;
+        let (tile_dx, tile_dy, local_z) = if draw.pcp_direction.is_some() {
+            (
+                draw.tile_dx - 1.0,
+                draw.tile_dy - 1.0,
+                catenary_local_z_delta(world_z_delta, ctx.info.base_z, span.deck_z),
+            )
+        } else {
+            (
+                bounds.ox as f32,
+                bounds.oy as f32,
+                catenary_local_z_delta(world_z_delta + bounds.oz, ctx.info.base_z, span.deck_z),
+            )
+        };
+        let position = catenary_sprite_center(
+            ctx.tx_i32(),
+            ctx.ty_i32(),
+            span.deck_z,
+            draw.z_layer,
+            tile_dx,
+            tile_dy,
+            local_z as f32,
+            anchor,
+        );
         commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
             sprite,
-            Transform::from_translation(
-                tile_pos_half(
-                    ctx.tx_i32(),
-                    ctx.ty_i32(),
-                    span.deck_z,
-                    draw.z_layer,
-                    TILE_HALF_H,
-                ) + Vec3::new(off.x, off.y, 0.0),
-            ),
+            Transform::from_translation(position),
         ));
     }
 }
@@ -742,11 +762,6 @@ fn spawn_bridge_ramp_catenary(
     // debajo del tablero en rampas con fundación nivelada.
     let ramp_slope = bridge_ramp_catenary_slope(foundation_tileh, tile.m5);
     let base_z = foundation_base_z;
-    let half_h = if ramp_slope == 0 {
-        TILE_HALF_H
-    } else {
-        slope_half_h(ramp_slope)
-    };
     let tint = catenary_sprite_color();
 
     let mut wires = Vec::new();
@@ -772,6 +787,7 @@ fn spawn_bridge_ramp_catenary(
         &mut pylons,
     );
     for draw in pylons {
+        let anchor = catenary_sprite_anchor(draw.sprite_id, catenary_newgrf);
         let sprite = catenary_sprite_colored(
             assets,
             draw.sprite_id,
@@ -803,24 +819,25 @@ fn spawn_bridge_ramp_catenary(
             (1, 1, 0),
             Some(TraceSpriteBounds::new(-1, -1, 0, 1, 1, 6)),
         );
-        let Some(sprite) = sprite else {
+        let Some((sprite, anchor)) = sprite.zip(anchor) else {
             continue;
         };
         let local_z = catenary_local_z_delta(world_z_delta, ctx.info.base_z, base_z);
-        let off = remap_tile_offset(draw.tile_dx, draw.tile_dy, local_z as f32) * 0.5;
+        let position = catenary_sprite_center(
+            ctx.tx_i32(),
+            ctx.ty_i32(),
+            base_z,
+            draw.z_layer + 0.055,
+            draw.tile_dx - 1.0,
+            draw.tile_dy - 1.0,
+            local_z as f32,
+            anchor,
+        );
         commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
             sprite,
-            Transform::from_translation(
-                tile_pos_half(
-                    ctx.tx_i32(),
-                    ctx.ty_i32(),
-                    base_z,
-                    draw.z_layer + 0.055,
-                    half_h,
-                ) + Vec3::new(off.x, off.y, 0.0),
-            ),
+            Transform::from_translation(position),
         ));
     }
 
@@ -830,6 +847,7 @@ fn spawn_bridge_ramp_catenary(
     // protegido por las capas `z_layer` (poste por encima del cable).
     for (i, draw) in wires.into_iter().enumerate() {
         let sid = draw.sprite_id;
+        let anchor = catenary_sprite_anchor(sid, catenary_newgrf);
         let sprite = catenary_sprite_colored(
             assets,
             sid,
@@ -859,24 +877,25 @@ fn spawn_bridge_ramp_catenary(
             world_z_delta,
             Some(TraceSpriteBounds::new(ox, oy, oz, ex, ey, ez)),
         );
-        let Some(sprite) = sprite else {
+        let Some((sprite, anchor)) = sprite.zip(anchor) else {
             continue;
         };
-        let local_z = catenary_local_z_delta(world_z_delta, ctx.info.base_z, base_z);
-        let off = remap_tile_offset(0.0, 0.0, local_z as f32) * 0.5;
+        let local_z = catenary_local_z_delta(world_z_delta + oz, ctx.info.base_z, base_z);
+        let position = catenary_sprite_center(
+            ctx.tx_i32(),
+            ctx.ty_i32(),
+            base_z,
+            0.09 + i as f32 * 0.0004,
+            ox as f32,
+            oy as f32,
+            local_z as f32,
+            anchor,
+        );
         commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
             sprite,
-            Transform::from_translation(
-                tile_pos_half(
-                    ctx.tx_i32(),
-                    ctx.ty_i32(),
-                    base_z,
-                    0.09 + i as f32 * 0.0004,
-                    half_h,
-                ) + Vec3::new(off.x, off.y, 0.0),
-            ),
+            Transform::from_translation(position),
         ));
     }
 }

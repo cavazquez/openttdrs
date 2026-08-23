@@ -7,7 +7,6 @@ use bevy::prelude::*;
 use openttdrs_core::RailType;
 
 use crate::iso::{HEIGHT_PX, iso, remap_tile_offset};
-use crate::sprites::rail::CATENARY_ENTRANCE_SPRITE_BASE;
 
 include!(concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -120,30 +119,6 @@ pub fn tunnel_sprite_meta(sid: u32) -> (f32, f32, f32, f32) {
     }
 }
 
-/// Metadatos NFO de los cuatro cables de entrada de túnel eléctrico.
-///
-/// No pertenecen a la hoja de portales `TUNNEL_SPRITE_META`: son sprites
-/// virtuales de catenaria que se extraen de `openttd-rails`. Usar el ancla
-/// del portal como fallback los desplazaba decenas de píxeles y los mezclaba
-/// visualmente con el techo.
-const TUNNEL_CATENARY_SPRITE_META: [(u32, f32, f32, f32, f32); 4] = [
-    // WSO_ENTRANCE_SW .. WSO_ENTRANCE_NW, Action5 de OpenGFX.
-    (CATENARY_ENTRANCE_SPRITE_BASE, 16.0, 8.0, -29.0, 6.0),
-    (CATENARY_ENTRANCE_SPRITE_BASE + 1, 16.0, 8.0, -1.0, -2.0),
-    (CATENARY_ENTRANCE_SPRITE_BASE + 2, 16.0, 8.0, -13.0, -2.0),
-    (CATENARY_ENTRANCE_SPRITE_BASE + 3, 16.0, 8.0, 15.0, 6.0),
-];
-
-#[must_use]
-fn tunnel_catenary_sprite_meta(sid: u32) -> (f32, f32, f32, f32) {
-    TUNNEL_CATENARY_SPRITE_META
-        .iter()
-        .find(|(sprite_id, ..)| *sprite_id == sid)
-        .map_or((16.0, 8.0, -29.0, 6.0), |(_, w, h, xrel, yrel)| {
-            (*w, *h, *xrel, *yrel)
-        })
-}
-
 fn tunnel_translation_from_meta(
     px: i32,
     py: i32,
@@ -184,27 +159,6 @@ pub fn tunnel_front_translation(px: i32, py: i32, base_z: u8, sprite_id: u32, la
     pos.x += offset.x;
     pos.y += offset.y;
     pos
-}
-
-/// Posición de la entrada de catenaria de un túnel eléctrico.
-///
-/// A diferencia del techo, `DrawRailCatenaryOnTunnel` parte de `(0, 0)`.
-/// Conserva el anclaje NFO del cable, no el del sprite frontal del túnel.
-#[must_use]
-pub fn tunnel_catenary_translation(
-    px: i32,
-    py: i32,
-    base_z: u8,
-    sprite_id: u32,
-    layer: f32,
-) -> Vec3 {
-    tunnel_translation_from_meta(
-        px,
-        py,
-        base_z,
-        tunnel_catenary_sprite_meta(sprite_id),
-        layer,
-    )
 }
 
 /// Geometría lógica de la capa frontal del portal, tal como
@@ -300,18 +254,5 @@ mod tests {
         assert_eq!(front.x - base.x, 0.0);
         assert_eq!(front.y - base.y, -30.0);
         assert_eq!(front.z, base.z);
-    }
-
-    #[test]
-    fn catenary_keeps_its_own_nfo_anchor() {
-        let wire = tunnel_catenary_translation(190, 127, 0, 910_063, 0.085);
-        assert_eq!(wire.x, -2037.0);
-        assert_eq!(wire.y, -5082.0);
-        assert!((wire.z - crate::iso::sortable_draw_z(190, 127, 0, 0.085)).abs() < 0.000_01);
-        assert_ne!(wire, tunnel_portal_translation(190, 127, 0, 910_063, 0.085));
-        assert_eq!(
-            tunnel_catenary_sprite_meta(CATENARY_ENTRANCE_SPRITE_BASE + 3),
-            (16.0, 8.0, 15.0, 6.0)
-        );
     }
 }

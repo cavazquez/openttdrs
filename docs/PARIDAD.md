@@ -194,6 +194,21 @@ slots locales de Bevy con el orden resultante. Las demás familias todavía
 carecen de bounds, identidad de parent o vínculo de children completos; esa
 cobertura parcial no es evidencia de composición global aplicada.
 
+El ciclo focal de catenaria de #326 conserva ahora, junto con cada recorte
+Action5 vanilla, su rectángulo y ancla NFO (`width`, `height`, `x_offs`,
+`y_offs`). El renderer aplica además `SpriteBounds::origin` y
+`SpriteBounds::offset` antes de proyectar el cable o poste, igual que
+`AddSortableSpriteToDraw`; cubre vía normal, estación, depósito, puente y
+túnel, y usa los metadatos decodificados cuando un NewGRF reemplaza el slot.
+El mismo extractor genera y verifica las 36 entradas para que PNG y anclas no
+diverjan. En Kale, foco `(32,162)`, `384×320`, OpenGFX 8bpp, perfil
+`clean-static` y escala normal, la comparación alineada `[0,0]` pasa de
+**7.264/122.880 (5,911 %) y delta medio 2,787** a **6.195/122.880 (5,042 %) y
+delta medio 2,061**. Se inspeccionó el cliente real a `0,25×`, `0,5×`, `1×` y
+`2×`, y el smoke de niveles fijos pasa. Es una mejora focal de anclaje, no
+paridad de framebuffer: el orden global y otras familias de composición
+siguen pendientes en #326.
+
 ## Backlog sucesor activo
 
 <!-- active-parity-backlog:start -->
@@ -1492,6 +1507,7 @@ Inventario y verificación de reproducibilidad de `*_generated.rs`.
 | `house_population` | `gen_house_population.py` | Regenera vs `town_land.h` del pin; si no hay upstream, `output_sha256` |
 | `house_draw_data` | `gen_house_draw_data.py` | Solo `output_sha256` (OpenGFX no vendorizado) |
 | `vehicle_gfx_data` | `gen_vehicle_gfx_data.py` | Solo `output_sha256`; `--check` local con PNG |
+| `catenary_action5_gfx` | `extract_elrail_catenary.py` | Hash + `--check` local de los 36 recortes y anclas NFO Action5 |
 | `tile_atlas` | `gen_tile_atlas.py` | CI valida `output_sha256` del `.rs`; localmente `--check` también compara las páginas PNG píxel a píxel sin escribir |
 
 Los generadores OpenGFX tienen `--check` (exit 2 si faltan assets). Tras regenerar con el set local, actualizá `output_sha256` en el manifiesto (PR de datos de render).
@@ -1510,6 +1526,7 @@ python3 scripts/check_generated_tables.py --check --fetch-upstream   # CI
 python3 scripts/gen_house_population.py
 python3 scripts/gen_house_draw_data.py
 python3 scripts/gen_vehicle_gfx_data.py
+python3 scripts/extract_elrail_catenary.py
 python3 scripts/gen_tile_atlas.py   # también reescribe assets/opengfx/atlas/*.png
 ```
 

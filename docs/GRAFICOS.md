@@ -77,7 +77,7 @@ Consumidores actuales:
 | Script | Qué saca del side-cache |
 |--------|-------------------------|
 | `gen_toolbar_rail_icons.py` | `toolbar_rail_electric_{rail_*,tunnel}.png` (slots A5 36..39, 44) |
-| `extract_elrail_catenary.py` | wires / postes / entradas de túnel |
+| `extract_elrail_catenary.py` | wires / postes / entradas de túnel y sus anclas NFO Action5 |
 | `gen_airport_station_draw_data.py` | Action5 4982, 5966–5968 (helipad y mitades de apron) si falta su variante 32bpp |
 | `gen_bridge_structure_palette.py` | tablas `PALETTE_TO_STRUCT_*` (pseudo-sprites 795–801 de `ogfx1_base`) |
 | `extract_rail_pbs_palette_sprites.py` | overlays de reserva PBS ya remapeados con la pseudo-sprite `PALETTE_CRASH=804` |

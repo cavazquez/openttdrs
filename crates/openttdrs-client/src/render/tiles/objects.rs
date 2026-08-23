@@ -21,7 +21,9 @@ use crate::iso::{
     road_stop_build_sprite_center, shore_png_index, shore_sprite_half_h, slope_half_h,
     slope_sprite_offset, sortable_draw_z, tile_pos_half,
 };
-use crate::render::catenary_newgrf::catenary_sprite_colored;
+use crate::render::catenary_newgrf::{
+    catenary_sprite_anchor, catenary_sprite_center, catenary_sprite_colored,
+};
 use crate::render::newgrf_cache::{runtime_fingerprint, vars};
 use crate::render::station_newgrf::{
     NewGrfStationSpriteCache, newgrf_station_def_for_tile, station_newgrf_view_index_for_tile,
@@ -1154,7 +1156,6 @@ fn spawn_station_rail_catenary(
     station_tb: u8,
     tileh: u8,
     rail_base_z: u8,
-    rail_half_h: f32,
     pylons: &[CatenarySpriteDraw],
     wires: &[CatenaryWireDraw],
     sorted_depths: Option<&RailStationLocalSortDepths>,
@@ -1167,6 +1168,7 @@ fn spawn_station_rail_catenary(
     // `DrawRailCatenaryRailway` coloca primero los PPP. A diferencia de los
     // cables, una estación puede prohibir wire y aun así autorizar postes.
     for (index, draw) in pylons.iter().copied().enumerate() {
+        let anchor = catenary_sprite_anchor(draw.sprite_id, catenary_newgrf);
         let sprite = catenary_sprite_colored(
             assets,
             draw.sprite_id,
@@ -1189,19 +1191,20 @@ fn spawn_station_rail_catenary(
             (1, 1, 0),
             Some(TraceSpriteBounds::new(-1, -1, 0, 1, 1, 6)),
         );
-        let Some(sprite) = sprite else {
+        let Some((sprite, anchor)) = sprite.zip(anchor) else {
             continue;
         };
         let local_z = catenary_local_z_delta(world_z_delta, ctx.info.base_z, rail_base_z);
-        let off = remap_tile_offset(draw.tile_dx, draw.tile_dy, local_z as f32) * 0.5;
-        let base = tile_pos_half(
+        let mut position = catenary_sprite_center(
             ctx.tx_i32(),
             ctx.ty_i32(),
             rail_base_z,
             draw.z_layer,
-            rail_half_h,
+            draw.tile_dx - 1.0,
+            draw.tile_dy - 1.0,
+            local_z as f32,
+            anchor,
         );
-        let mut position = base + Vec3::new(off.x, off.y, 0.0);
         if let Some(depth) = sorted_depths
             .and_then(|depths| depths.pylons.get(index))
             .copied()
@@ -1218,6 +1221,7 @@ fn spawn_station_rail_catenary(
 
     for (i, draw) in wires.iter().copied().enumerate() {
         let sid = draw.sprite_id;
+        let anchor = catenary_sprite_anchor(sid, catenary_newgrf);
         let sprite = catenary_sprite_colored(
             assets,
             sid,
@@ -1238,14 +1242,22 @@ fn spawn_station_rail_catenary(
             world_z_delta,
             Some(bounds),
         );
-        let Some(sprite) = sprite else {
+        let Some((sprite, anchor)) = sprite.zip(anchor) else {
             continue;
         };
         let z = 0.035 + i as f32 * 0.0004;
-        let base = tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), rail_base_z, z, rail_half_h);
-        let local_z = catenary_local_z_delta(world_z_delta, ctx.info.base_z, rail_base_z);
-        let off = remap_tile_offset(0.0, 0.0, local_z as f32) * 0.5;
-        let mut position = base + Vec3::new(off.x, off.y, 0.0);
+        let local_z =
+            catenary_local_z_delta(world_z_delta + bounds.oz, ctx.info.base_z, rail_base_z);
+        let mut position = catenary_sprite_center(
+            ctx.tx_i32(),
+            ctx.ty_i32(),
+            rail_base_z,
+            z,
+            bounds.ox as f32,
+            bounds.oy as f32,
+            local_z as f32,
+            anchor,
+        );
         if let Some(depth) = sorted_depths
             .and_then(|depths| depths.wires.get(i))
             .copied()
@@ -1498,7 +1510,6 @@ pub(crate) fn spawn_station_tile(
                 station_tb,
                 tileh,
                 rail_base_z,
-                rail_half_h,
                 &station_pylons,
                 &station_wires,
                 station_sort_depths.as_ref(),
@@ -2292,7 +2303,6 @@ pub(crate) fn spawn_transport_object_tile(
                     render_tb,
                     tileh,
                     base_z,
-                    slope_half_ground,
                     false,
                     catenary_newgrf,
                     &mut catenary_sprites,
@@ -2305,6 +2315,7 @@ pub(crate) fn spawn_transport_object_tile(
             // orden visual posterior, pero la traza modela el draw proc real.
             let tunnel_catenary_sprite = if draw_tunnel_catenary {
                 let sid = catenary_tunnel_wire_sprite(dir);
+                let anchor = catenary_sprite_anchor(sid, catenary_newgrf);
                 let sprite = catenary_sprite_colored(
                     assets,
                     sid,
@@ -2325,7 +2336,7 @@ pub(crate) fn spawn_transport_object_tile(
                         ox, oy, oz, ex, ey, ez,
                     )),
                 );
-                sprite
+                sprite.zip(anchor)
             } else {
                 None
             };
@@ -2389,17 +2400,21 @@ pub(crate) fn spawn_transport_object_tile(
                 front_entity.insert(parent);
             }
             // Wire de portal (`DrawRailCatenaryOnTunnel`) si la vía es eléctrica.
-            if let Some(sprite) = tunnel_catenary_sprite {
+            if let Some((sprite, anchor)) = tunnel_catenary_sprite {
+                let (offset, (ox, oy, oz, ..)) = tunnel_catenary_trace_geometry(dir);
                 commands.spawn((
                     MapVisualLayer,
                     ctx.map_tile_chunk(),
                     sprite,
-                    Transform::from_translation(crate::sprites::tunnel_catenary_translation(
+                    Transform::from_translation(catenary_sprite_center(
                         ctx.tx_i32(),
                         ctx.ty_i32(),
                         base_z,
-                        catenary_tunnel_wire_sprite(dir),
                         0.085,
+                        (offset.0 + ox) as f32,
+                        (offset.1 + oy) as f32,
+                        (offset.2 + oz) as f32,
+                        anchor,
                     )),
                 ));
             }
@@ -3065,7 +3080,6 @@ fn spawn_rail_depot_catenary(
     assets: &WorldAssets,
     ctx: &TileRenderContext,
     base_z: u8,
-    half_h: f32,
     sorted_depth: Option<f32>,
     catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     catenary_sprites: &mut Option<&mut crate::render::NewGrfCatenarySpriteCache>,
@@ -3079,6 +3093,7 @@ fn spawn_rail_depot_catenary(
     }
 
     let draw = catenary_depot_wire_draw(tile.m5 & 0x03);
+    let anchor = catenary_sprite_anchor(draw.sprite_id, catenary_newgrf);
     let sprite = catenary_sprite_colored(
         assets,
         draw.sprite_id,
@@ -3104,10 +3119,24 @@ fn spawn_rail_depot_catenary(
         (0, 0, 0),
         Some(TraceSpriteBounds::new(ox, oy, oz, ex, ey, ez)),
     );
-    let Some(sprite) = sprite else {
+    let Some((sprite, anchor)) = sprite.zip(anchor) else {
         return;
     };
-    let mut position = tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.035, half_h);
+    let local_z = catenary_local_z_delta(
+        (i32::from(base_z) - i32::from(ctx.info.base_z)) * 8 + oz,
+        ctx.info.base_z,
+        base_z,
+    );
+    let mut position = catenary_sprite_center(
+        ctx.tx_i32(),
+        ctx.ty_i32(),
+        base_z,
+        0.035,
+        ox as f32,
+        oy as f32,
+        local_z as f32,
+        anchor,
+    );
     if let Some(depth) = sorted_depth {
         position.z = depth;
     }
@@ -3234,7 +3263,6 @@ fn spawn_rail_depot_tile(
         assets,
         ctx,
         base_z,
-        half_h,
         catenary_depth,
         catenary_newgrf,
         catenary_sprites,

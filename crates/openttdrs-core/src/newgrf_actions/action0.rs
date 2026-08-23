@@ -73,6 +73,8 @@ const PROP_ROADSTOP_FLAGS: u8 = 0x12;
 const PROP_CARGO_BITNUM: u8 = 0x08;
 /// Cargoes: label 4 chars (`OpenTTD` `0x17`).
 const PROP_CARGO_LABEL: u8 = 0x17;
+/// Cargoes: callback mask BYTE (`OpenTTD` `0x1A`).
+const PROP_CARGO_CALLBACK_MASK: u8 = 0x1A;
 /// Sounds: relative volume BYTE (`OpenTTD` `0x08`; default 128).
 const PROP_SOUND_VOLUME: u8 = 0x08;
 /// Sounds: priority BYTE (`OpenTTD` `0x09`).
@@ -588,6 +590,7 @@ pub struct ParsedCargoMeta {
     pub capacity_multiplier: u16,
     pub rating_colour: u8,
     pub legend_colour: u8,
+    pub callback_mask: u8,
 }
 
 /// Metadatos `Sounds` Action0 (`0x0C`; props sobre samples Action11).
@@ -2480,6 +2483,7 @@ pub fn parse_action0_cargo_meta(payload: &[u8]) -> Option<ParsedCargoMeta> {
     let mut capacity_multiplier = crate::cargo_spec::DEFAULT_CARGO_CAPACITY_MULTIPLIER;
     let mut rating_colour = 0u8;
     let mut legend_colour = 0u8;
+    let mut callback_mask = 0u8;
     for _ in 0..header.num_props {
         if i >= payload.len() {
             break;
@@ -2574,7 +2578,14 @@ pub fn parse_action0_cargo_meta(payload: &[u8]) -> Option<ParsedCargoMeta> {
                 };
                 label = s;
             }
-            0x18 | 0x1A | 0x1E => {
+            PROP_CARGO_CALLBACK_MASK => {
+                if i >= payload.len() {
+                    break;
+                }
+                callback_mask = payload[i];
+                i += 1;
+            }
+            0x18 | 0x1E => {
                 if i >= payload.len() {
                     break;
                 }
@@ -2623,6 +2634,7 @@ pub fn parse_action0_cargo_meta(payload: &[u8]) -> Option<ParsedCargoMeta> {
         capacity_multiplier,
         rating_colour,
         legend_colour,
+        callback_mask,
     })
 }
 

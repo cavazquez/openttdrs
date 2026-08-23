@@ -2,7 +2,8 @@
 //!
 //! Catálogo runtime por label: pagos, pesos, clases y multiplicador de capacidad
 //! alimentan economía / UI cuando el label coincide con un [`crate::cargo::CargoType`]
-//! temperate (o se consulta por label). No inventa aliases de clima (#224).
+//! temperate (o se consulta por label). Los callbacks Action2/3 de pago también
+//! se conservan para ese flujo. No inventa aliases de clima (#224).
 
 use serde::{Deserialize, Serialize};
 
@@ -11,6 +12,9 @@ use crate::economy::CargoPaymentSpec;
 
 /// Multiplicador de capacidad “×1” en formato `OpenTTD` (`0x100` = 1.0).
 pub const DEFAULT_CARGO_CAPACITY_MULTIPLIER: u16 = 0x100;
+
+/// Bit `ProfitCalc` de la máscara de callbacks Action0 `0x1A`.
+pub const CARGO_CALLBACK_PROFIT_CALC_MASK: u8 = 1 << 0;
 
 /// Spec de cargo definido por Action0.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -50,9 +54,15 @@ pub struct CargoSpecDef {
     /// Color leyenda gráfico (`prop 0x14`).
     #[serde(default)]
     pub legend_colour: u8,
+    /// Máscara de callbacks Action0 `0x1A`.
+    #[serde(default)]
+    pub callback_mask: u8,
     /// Grupo Action3 default (`CargoMapSpriteGroupHandler`).
     #[serde(default, skip)]
     pub newgrf_views: Vec<crate::newgrf_sprites::DecodedSprite>,
+    /// Grafo Action2/3 para callbacks de pago (no se serializa).
+    #[serde(default, skip)]
+    pub newgrf_runtime: Option<Box<crate::newgrf_sprites::TrainSpriteGraphics>>,
 }
 
 const fn default_capacity_multiplier() -> u16 {
@@ -77,12 +87,20 @@ impl Default for CargoSpecDef {
             capacity_multiplier: DEFAULT_CARGO_CAPACITY_MULTIPLIER,
             rating_colour: 0,
             legend_colour: 0,
+            callback_mask: 0,
             newgrf_views: Vec::new(),
+            newgrf_runtime: None,
         }
     }
 }
 
 impl CargoSpecDef {
+    /// `true` si el cargo solicita CB `0x39` para calcular el ingreso de entrega.
+    #[must_use]
+    pub const fn has_profit_calc_callback(&self) -> bool {
+        self.callback_mask & CARGO_CALLBACK_PROFIT_CALC_MASK != 0
+    }
+
     #[must_use]
     pub fn has_newgrf_sprites(&self) -> bool {
         !self.newgrf_views.is_empty()

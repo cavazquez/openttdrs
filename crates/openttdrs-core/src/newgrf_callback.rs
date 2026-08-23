@@ -6,16 +6,18 @@
 //! - Call sites #266: industry location, house/object construction, station availability,
 //!   industry-tile trigger → Action2 random.
 
+use crate::cargo_spec::CargoSpecDef;
 use crate::engine::EngineDef;
 use crate::house_spec::HouseSpecDef;
 use crate::industry_spec::IndustrySpecDef;
 use crate::industry_tile::IndustryTileSpecDef;
 use crate::map::TileCoord;
 use crate::newgrf_sprites::{
-    Action2EvalCtx, Action2RandomEntry, CALLBACK_FAILED, CBID_HOUSE_ALLOW_CONSTRUCTION,
-    CBID_INDUSTRY_LOCATION, CBID_OBJECT_LAND_SLOPE_CHECK, CBID_STATION_ANIMATION_NEXT_FRAME,
-    CBID_STATION_ANIMATION_SPEED, CBID_STATION_ANIMATION_TRIGGER, CBID_STATION_AVAILABILITY,
-    CBID_VEHICLE_START_STOP_CHECK, TrainSpriteGraphics,
+    Action2EvalCtx, Action2RandomEntry, CALLBACK_FAILED, CBID_CARGO_PROFIT_CALC,
+    CBID_HOUSE_ALLOW_CONSTRUCTION, CBID_INDUSTRY_LOCATION, CBID_OBJECT_LAND_SLOPE_CHECK,
+    CBID_STATION_ANIMATION_NEXT_FRAME, CBID_STATION_ANIMATION_SPEED,
+    CBID_STATION_ANIMATION_TRIGGER, CBID_STATION_AVAILABILITY, CBID_VEHICLE_START_STOP_CHECK,
+    TrainSpriteGraphics,
 };
 use crate::object_spec::ObjectSpecDef;
 use crate::station::Station;
@@ -162,6 +164,52 @@ pub fn apply_house_construction_callback(def: &HouseSpecDef) -> bool {
     };
     let result = runtime.resolve_callback(def.newgrf_local_id, CBID_HOUSE_ALLOW_CONSTRUCTION, 0, 0);
     callback_allows_8bit_boolean(result)
+}
+
+/// Convierte el resultado de CB39 al entero con signo de 15 bits de `OpenTTD`.
+fn cargo_profit_multiplier(result: u16) -> i64 {
+    let low_14 = i64::from(result & 0x3FFF);
+    if result & 0x4000 != 0 {
+        low_14 - 0x4000
+    } else {
+        low_14
+    }
+}
+
+/// Resuelve CB `0x39` de cargo y devuelve el ingreso que reemplaza al cálculo base.
+///
+/// `OpenTTD` entrega `param1=0` y empaqueta en `param2` la distancia (`u16`),
+/// cantidad (`u8`) y períodos de tránsito (`u8`). El resultado es un
+/// multiplicador firmado de 15 bits aplicado a `count * current_payment / 8192`.
+/// Si el callback falla o no está declarado, `None` conserva la fórmula base.
+/// El resolver cubre esos parámetros genéricos; los scopes avanzados de cargo
+/// todavía no están implementados.
+#[must_use]
+pub fn resolve_cargo_profit_callback(
+    def: &CargoSpecDef,
+    count: u32,
+    distance: u32,
+    transit_periods: u16,
+    current_payment: i64,
+) -> Option<i64> {
+    if !def.has_profit_calc_callback() {
+        return None;
+    }
+    let runtime = def.newgrf_runtime.as_ref()?;
+    let param2 = distance.min(u32::from(u16::MAX))
+        | (count.min(u32::from(u8::MAX)) << 16)
+        | (u32::from(transit_periods.min(u16::from(u8::MAX))) << 24);
+    let result = runtime.resolve_callback(def.id, CBID_CARGO_PROFIT_CALC, 0, param2);
+    if result == CALLBACK_FAILED {
+        return None;
+    }
+    let multiplier = cargo_profit_multiplier(result);
+    Some(
+        multiplier
+            .saturating_mul(i64::from(count))
+            .saturating_mul(current_payment)
+            / 8192,
+    )
 }
 
 /// Call site objeto: CB `0x157` de pendiente al construir cada tesela.
@@ -770,6 +818,14 @@ mod tests {
         assert!(callback_allows_8bit_boolean(1));
         assert!(callback_allows_8bit_boolean(0xFF));
         assert!(!callback_allows_8bit_boolean(0x100));
+    }
+
+    #[test]
+    fn cargo_profit_multiplier_uses_upstream_signed_15_bit_encoding() {
+        assert_eq!(cargo_profit_multiplier(0), 0);
+        assert_eq!(cargo_profit_multiplier(0x3FFF), 16_383);
+        assert_eq!(cargo_profit_multiplier(0x4000), -16_384);
+        assert_eq!(cargo_profit_multiplier(0x7FFF), -1);
     }
 
     #[test]

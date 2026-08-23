@@ -269,8 +269,7 @@ pub fn transported_goods_income_with_spec(
     }
     let dist = distance.max(1);
     let (time_factor, asymptotic) = cargo_time_factor(transit_days, spec);
-    let effective_rate =
-        (i64::from(spec.base_rate) * i64::try_from(inflation_payment).unwrap_or(i64::MAX)) >> 16;
+    let effective_rate = cargo_current_payment(spec, inflation_payment);
     let mut income = i64::from(dist) * i64::from(time_factor) * i64::from(count) * effective_rate;
     let shift = if asymptotic {
         21 + TIME_FACTOR_FRAC_BITS
@@ -279,6 +278,14 @@ pub fn transported_goods_income_with_spec(
     };
     income >>= shift;
     income.max(1)
+}
+
+/// Pago actual de una unidad de cargo tras aplicar la inflación 16.16.
+///
+/// Es el `current_payment` que usa CB39 antes de aplicar su multiplicador.
+#[must_use]
+pub fn cargo_current_payment(spec: CargoPaymentSpec, inflation_payment: u64) -> i64 {
+    (i64::from(spec.base_rate) * i64::try_from(inflation_payment).unwrap_or(i64::MAX)) >> 16
 }
 
 pub const DEFAULT_MAX_LOAN: i64 = 300_000;

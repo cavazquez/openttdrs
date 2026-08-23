@@ -17,11 +17,12 @@ pub use global::{
     INFLATION_FRAC_ONE, MAX_INFLATION, ORIGINAL_BASE_YEAR, ORIGINAL_MAX_YEAR,
 };
 pub use payments::{
-    ANNUAL_INTEREST_RATE_PCT, CargoPaymentSpec, DEFAULT_MAX_LOAN, LOAN_INTERVAL, cargo_time_factor,
-    check_bankruptcy, decrease_loan, increase_loan, inflation_income_factor,
-    inflation_prices_factor, manhattan_distance, monthly_company_interest, monthly_loan_interest,
-    monthly_loan_interest_with_rate, monthly_station_maintenance_fee, transported_goods_income,
-    transported_goods_income_for_climate, transported_goods_income_with_spec,
+    ANNUAL_INTEREST_RATE_PCT, CargoPaymentSpec, DEFAULT_MAX_LOAN, LOAN_INTERVAL,
+    cargo_current_payment, cargo_time_factor, check_bankruptcy, decrease_loan, increase_loan,
+    inflation_income_factor, inflation_prices_factor, manhattan_distance, monthly_company_interest,
+    monthly_loan_interest, monthly_loan_interest_with_rate, monthly_station_maintenance_fee,
+    transported_goods_income, transported_goods_income_for_climate,
+    transported_goods_income_with_spec,
 };
 pub use pricebase::{PriceIndex, base_price_at, get_price, medium_default_price};
 pub use time::{

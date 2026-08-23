@@ -166,9 +166,10 @@ pub use cargo_packet::{
     decide_cargo_unload_action, load_unload_speed, prepare_unload,
 };
 pub use cargo_spec::{
-    CargoSpecDef, DEFAULT_CARGO_CAPACITY_MULTIPLIER, apply_cargo_capacity_multiplier,
-    cargo_spec_by_label, cargo_spec_def, cargo_spec_display_name, cargo_type_label,
-    empty_cargo_spec_catalog, payment_spec_for_cargo, payment_spec_for_cargo_climate,
+    CARGO_CALLBACK_PROFIT_CALC_MASK, CargoSpecDef, DEFAULT_CARGO_CAPACITY_MULTIPLIER,
+    apply_cargo_capacity_multiplier, cargo_spec_by_label, cargo_spec_def, cargo_spec_display_name,
+    cargo_type_label, empty_cargo_spec_catalog, payment_spec_for_cargo,
+    payment_spec_for_cargo_climate,
 };
 pub use cheats::CheatsState;
 pub use command::{
@@ -204,12 +205,13 @@ pub use economy::{
     FluctuationEvent, GlobalEconomy, INFLATION_FRAC_ONE, LOAN_INTERVAL, MAX_INFLATION,
     ORIGINAL_BASE_YEAR, ORIGINAL_MAX_YEAR, OTTD_MILLISECONDS_PER_TICK, SIM_TICKS_PER_SECOND,
     STATION_RATING_TICKS, TICKS_PER_DAY, TICKS_PER_MONTH, TICKS_PER_YEAR, build_object_cost,
-    build_object_cost_factored, buy_land_cost, cargo_time_factor, check_bankruptcy, decrease_loan,
-    increase_loan, inflation_income_factor, inflation_prices_factor, manhattan_distance,
-    monthly_loan_interest, rail_build_cost_factored, road_build_cost_factored,
-    terraform_cost_per_corner, ticks_to_transit_periods, transported_goods_income,
-    transported_goods_income_for_climate, transported_goods_income_with_spec,
-    vehicle_purchase_cost, vehicle_running_cost_per_tick, vehicle_sell_refund,
+    build_object_cost_factored, buy_land_cost, cargo_current_payment, cargo_time_factor,
+    check_bankruptcy, decrease_loan, increase_loan, inflation_income_factor,
+    inflation_prices_factor, manhattan_distance, monthly_loan_interest, rail_build_cost_factored,
+    road_build_cost_factored, terraform_cost_per_corner, ticks_to_transit_periods,
+    transported_goods_income, transported_goods_income_for_climate,
+    transported_goods_income_with_spec, vehicle_purchase_cost, vehicle_running_cost_per_tick,
+    vehicle_sell_refund,
 };
 pub use economy_quarterly::{
     ECONOMY_HISTORY_QUARTERS, QuarterlyEconomyEntry, QuarterlyEconomyHistory,
@@ -384,7 +386,7 @@ pub use newgrf_callback::{
     apply_industry_tile_anim_callback, apply_object_slope_callback,
     apply_station_availability_callback, apply_station_availability_callback_for_build,
     apply_vehicle_start_stop_callback, callback_allows_8bit_boolean, callback_allows_location,
-    callback_allows_placement, resolve_callback_or_failed,
+    callback_allows_placement, resolve_callback_or_failed, resolve_cargo_profit_callback,
     resolve_industry_tile_animation_callback, resolve_industry_tile_random_trigger,
     resolve_vehicle_callback, trigger_road_stop_animation, vehicle_start_stop_callback_allows,
     writeback_station_persistent_registers, writeback_vehicle_persistent_registers,
@@ -402,10 +404,10 @@ pub use newgrf_sprites::{
     Action2VarAdjust, Action2VarEntry, Action2VarOp, Action2VarTerm, Action5Block,
     Action5LoadContext, BRIDGE_DECKS_ACTION5_SLOT_COUNT, CALLBACK_FAILED, CANALS_ACTION5_LOCK_SLOT,
     CANALS_ACTION5_SLOT_COUNT, CATENARY_ACTION5_SLOT_COUNT, CATENARY_ENTRANCE_SPRITE_BASE,
-    CATENARY_PYLON_SPRITE_BASE, CATENARY_WIRE_SPRITE_BASE, CBID_HOUSE_ALLOW_CONSTRUCTION,
-    CBID_INDTILE_ANIM_NEXT_FRAME, CBID_INDTILE_ANIMATION_NEXT_FRAME, CBID_INDTILE_ANIMATION_SPEED,
-    CBID_INDTILE_ANIMATION_TRIGGER, CBID_INDUSTRY_LOCATION, CBID_OBJECT_LAND_SLOPE_CHECK,
-    CBID_STATION_ANIMATION_NEXT_FRAME, CBID_STATION_ANIMATION_SPEED,
+    CATENARY_PYLON_SPRITE_BASE, CATENARY_WIRE_SPRITE_BASE, CBID_CARGO_PROFIT_CALC,
+    CBID_HOUSE_ALLOW_CONSTRUCTION, CBID_INDTILE_ANIM_NEXT_FRAME, CBID_INDTILE_ANIMATION_NEXT_FRAME,
+    CBID_INDTILE_ANIMATION_SPEED, CBID_INDTILE_ANIMATION_TRIGGER, CBID_INDUSTRY_LOCATION,
+    CBID_OBJECT_LAND_SLOPE_CHECK, CBID_STATION_ANIMATION_NEXT_FRAME, CBID_STATION_ANIMATION_SPEED,
     CBID_STATION_ANIMATION_TRIGGER, CBID_STATION_AVAILABILITY, CBID_STATION_BUILD_TILE_LAYOUT,
     CBID_VEHICLE_START_STOP_CHECK, DecodedSprite, FOUNDATION_ACTION5_SLOT_COUNT,
     ONEWAY_ACTION5_SLOT_COUNT, OPENTTD_GUI_ACTION5_SLOT_COUNT, ROADSTOP_ACTION5_SLOT_COUNT,

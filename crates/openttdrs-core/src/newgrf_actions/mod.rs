@@ -748,12 +748,45 @@ pub fn build_action0_cargo_payload_full(
     classes: u16,
     capacity_multiplier: u16,
 ) -> Vec<u8> {
+    build_action0_cargo_payload_with_callback_mask(
+        local_id,
+        bitnum,
+        label,
+        name,
+        weight,
+        initial_payment,
+        transit_fast,
+        transit_slow,
+        is_freight,
+        classes,
+        capacity_multiplier,
+        0,
+    )
+}
+
+/// Action0 `Cargoes` con máscara de callbacks BYTE (`0x1A`).
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn build_action0_cargo_payload_with_callback_mask(
+    local_id: u8,
+    bitnum: u8,
+    label: &[u8; 4],
+    name: &str,
+    weight: u8,
+    initial_payment: u32,
+    transit_fast: u8,
+    transit_slow: u8,
+    is_freight: bool,
+    classes: u16,
+    capacity_multiplier: u16,
+    callback_mask: u8,
+) -> Vec<u8> {
     // 08 bitnum, 0F weight, 10/11 transit, 12 payment, 15 freight, 16 classes,
-    // 17 label, 1D multiplier, FE name = 10 props.
+    // 17 label, 1D multiplier, 1A callback mask, FE name = 10/11 props.
     let mut p = vec![
         0x00,
         ACTION0_FEATURE_CARGOES,
-        0x0A,
+        0x0A + u8::from(callback_mask != 0),
         0x01,
         local_id,
         0x08,
@@ -775,6 +808,10 @@ pub fn build_action0_cargo_payload_full(
     p.extend_from_slice(label);
     p.push(0x1D);
     p.extend_from_slice(&capacity_multiplier.to_le_bytes());
+    if callback_mask != 0 {
+        p.push(0x1A);
+        p.push(callback_mask);
+    }
     p.push(0xFE);
     p.extend_from_slice(name.as_bytes());
     p.push(0);
@@ -3128,6 +3165,101 @@ mod tests {
                 .unwrap()
                 .name,
             "Pax Custom"
+        );
+    }
+
+    /// CB39 debe venir del Action2 de un GRF cargado y reemplazar el pago
+    /// durante la descarga real de un packet, no limitarse a quedar parseado.
+    #[test]
+    fn cargo_profit_callback_runs_from_loaded_action2_graph_during_delivery() {
+        use crate::newgrf_sprites::{
+            build_action2_variational_payload, build_grf_v2_feature_with_action2_chain,
+        };
+        use crate::test_fixtures::SimHarness;
+        use crate::{CargoType, Station, TileCoord, Vehicle, VehicleKind};
+
+        let action0 = build_action0_cargo_payload_with_callback_mask(
+            0,
+            1,
+            b"COAL",
+            "Carbón CB39",
+            16,
+            8192,
+            0,
+            0,
+            true,
+            0,
+            0x100,
+            crate::CARGO_CALLBACK_PROFIT_CALC_MASK,
+        );
+        // var18 >> 16 = cantidad del packet; el resultado es el multiplicador
+        // firmado de 15 bits del CB39. Con cuatro unidades, devuelve cuatro.
+        let action2 = build_action2_variational_payload(
+            ACTION0_FEATURE_CARGOES,
+            7,
+            0x18,
+            16,
+            u8::MAX,
+            &[],
+            0,
+        );
+        let bytes = build_grf_v2_feature_with_action2_chain(
+            &action0,
+            ACTION0_FEATURE_CARGOES,
+            0,
+            7,
+            &action2,
+            1,
+            1,
+            &[174],
+            *b"CP39",
+            "cargo-profit-callback",
+        );
+        let dir = tempfile_dir_with("cargo-profit-callback.grf", &bytes);
+        let mut state = GameState::new(8, 8);
+        state.newgrf_stack.push(crate::NewGrfEntry::new(
+            "cargo-profit-callback.grf",
+            crate::newgrf_config::grfid_from_bytes(*b"CP39"),
+        ));
+        apply_newgrf_cargoes(&mut state, &[&dir]);
+        {
+            let spec = crate::cargo_spec_by_label(&state.cargo_spec_catalog, "COAL").unwrap();
+            assert!(spec.has_profit_calc_callback());
+            assert!(spec.newgrf_runtime.is_some());
+        }
+
+        let destination = TileCoord::new(3, 3);
+        let source = TileCoord::new(0, 0);
+        state.stations.push(Station::new(destination));
+        let mut truck = Vehicle::new(0, VehicleKind::Truck, destination, destination);
+        truck.cargo = 4;
+        truck.cargo_type = Some(CargoType::Coal);
+        truck.mark_cargo_loaded(source);
+        truck.ensure_packets_from_legacy();
+        state.vehicles.push(truck);
+
+        let payment_spec =
+            crate::payment_spec_for_cargo(CargoType::Coal, &state.cargo_spec_catalog);
+        let current_payment =
+            crate::cargo_current_payment(payment_spec, state.global_economy.inflation_payment);
+        let expected = 4_i64 * 4 * current_payment / 8192;
+        let vanilla = crate::transported_goods_income_with_spec(
+            4,
+            6,
+            0,
+            payment_spec,
+            state.global_economy.inflation_payment,
+        );
+        assert_ne!(
+            expected, vanilla,
+            "el callback debe sustituir la fórmula base"
+        );
+
+        SimHarness::until_vehicle_cargo(&mut state, 0, 0, 8);
+        assert_eq!(
+            state.stations[0].income,
+            u64::try_from(expected).unwrap(),
+            "CB39 debe controlar el ingreso de la entrega"
         );
     }
 

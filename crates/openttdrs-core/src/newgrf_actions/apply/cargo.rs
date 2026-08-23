@@ -32,6 +32,7 @@ pub fn apply_newgrf_cargoes(state: &mut GameState, search_dirs: &[&Path]) {
             continue;
         };
         let gfx = crate::newgrf_sprites::collect_cargo_sprite_graphics(&data).unwrap_or_default();
+        let newgrf_runtime = gfx.needs_runtime_resolve().then(|| Box::new(gfx.clone()));
         for meta in collect_cargo_metas_from_grf(&data) {
             let views = gfx
                 .views_for_local_id(meta.local_id)
@@ -57,7 +58,9 @@ pub fn apply_newgrf_cargoes(state: &mut GameState, search_dirs: &[&Path]) {
                 },
                 rating_colour: meta.rating_colour,
                 legend_colour: meta.legend_colour,
+                callback_mask: meta.callback_mask,
                 newgrf_views: views,
+                newgrf_runtime: newgrf_runtime.clone(),
             };
             if let Some(existing) = catalog.iter_mut().find(|d| d.id == def.id) {
                 *existing = def;

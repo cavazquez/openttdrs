@@ -201,10 +201,11 @@ Fuente: `newgrf_act0_cargo.cpp`.
 | `15` freight | **runtime** (catálogo) |
 | `16` classes | **runtime** (catálogo) |
 | `17` label 4 chars | **runtime** (identidad; lookup case-insensitive) |
+| `1A` callback mask BYTE | **parcial runtime**: bit `ProfitCalc` → CB39 al pagar cada packet; CB145 sigue OOS |
 | `1D` capacity multiplier | **runtime** → compra vehículo |
 | `FE` nombre C-string (extensión local) | **runtime** (UI / inspect) |
 | strings WORD `09`–`0D` / `1B`/`1C` | consumidas |
-| resto (`18`/`1A`/`1E`/`1F`) | consumidas (ancho fijo) |
+| resto (`18`/`1E`/`1F`) | consumidas (ancho fijo) |
 | Action1/3 views | **runtime** (`newgrf_views` en `CargoSpecDef`) |
 
 ## Signals (`0E`) — N/A Action0 en 15.3

@@ -9,6 +9,8 @@ use crate::vehicle::VehicleKind;
 
 /// Trimestres retenidos (`OpenTTD` `MAX_HISTORY_QUARTERS`).
 pub const ECONOMY_HISTORY_QUARTERS: usize = 24;
+/// Slots de carga de `CompanyEconomyEntry::delivered_cargo` en saves modernos.
+pub const QUARTERLY_CARGO_SLOTS: usize = 64;
 
 /// Componentes de `_score_info` (`economy.cpp:91-102`).
 #[derive(Debug, Clone, Copy)]
@@ -56,11 +58,16 @@ const SCORE_LOAN: ScoreInfo = ScoreInfo {
 const SCORE_MAX: i32 = 1000;
 
 /// Entrada de un trimestre cerrado.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct QuarterlyEconomyEntry {
     pub income: u64,
+    /// Costes absolutos del core; `PLYR` los serializa como `Money` negativo.
     pub expenses: u64,
     pub deliveries: u64,
+    /// Entregas por `CargoID` de `OpenTTD`. El runtime sólo calcula el total,
+    /// pero el vector conserva el desglose de un `.sav` importado.
+    #[serde(default)]
+    pub delivered_cargo: Vec<u32>,
     /// Rating 0..=1000 (`performance_history`).
     pub performance_history: i32,
     /// Valoración con activos (`CalculateCompanyValue`).
@@ -76,10 +83,19 @@ pub struct QuarterlyEconomyHistory {
     pub months_in_quarter: u8,
     #[serde(default)]
     pub cur_income: u64,
+    /// Costes absolutos del trimestre abierto; el wire format usa signo negativo.
     #[serde(default)]
     pub cur_expenses: u64,
     #[serde(default)]
     pub cur_deliveries: u64,
+    /// Desglose de carga del trimestre abierto importado desde `PLYR`.
+    #[serde(default)]
+    pub cur_delivered_cargo: Vec<u32>,
+    /// Valores publicados por `OpenTTD` para el trimestre todavía abierto.
+    #[serde(default)]
+    pub cur_company_value: i64,
+    #[serde(default)]
+    pub cur_performance_history: i32,
 }
 
 impl QuarterlyEconomyHistory {
@@ -95,6 +111,7 @@ impl QuarterlyEconomyHistory {
         self.cur_income = self.cur_income.saturating_add(month_income);
         self.cur_expenses = self.cur_expenses.saturating_add(month_expenses);
         self.cur_deliveries = self.cur_deliveries.saturating_add(month_deliveries);
+        add_fallback_deliveries(&mut self.cur_delivered_cargo, month_deliveries);
         self.months_in_quarter = self.months_in_quarter.saturating_add(1);
         if self.months_in_quarter < 3 {
             return;
@@ -103,6 +120,7 @@ impl QuarterlyEconomyHistory {
             income: self.cur_income,
             expenses: self.cur_expenses,
             deliveries: self.cur_deliveries,
+            delivered_cargo: std::mem::take(&mut self.cur_delivered_cargo),
             performance_history: performance.clamp(0, SCORE_MAX),
             company_value,
         };
@@ -114,7 +132,52 @@ impl QuarterlyEconomyHistory {
         self.cur_income = 0;
         self.cur_expenses = 0;
         self.cur_deliveries = 0;
+        self.cur_company_value = 0;
+        self.cur_performance_history = 0;
         self.months_in_quarter = 0;
+    }
+}
+
+/// Suma segura del desglose de carga serializado por `OpenTTD`.
+#[must_use]
+pub(crate) fn delivered_cargo_total(delivered_cargo: &[u32]) -> u64 {
+    delivered_cargo.iter().fold(0_u64, |total, &value| {
+        total.saturating_add(u64::from(value))
+    })
+}
+
+/// Normaliza un desglose para el array de 64 slots que espera un `.sav` moderno.
+///
+/// Si el runtime sólo conoce el total, lo distribuye en slots libres sin perder
+/// el agregado. Los datos importados por slot siempre tienen prioridad.
+#[must_use]
+pub(crate) fn delivered_cargo_for_save(delivered_cargo: &[u32], total: u64) -> Vec<u32> {
+    let mut slots = delivered_cargo
+        .iter()
+        .copied()
+        .take(QUARTERLY_CARGO_SLOTS)
+        .collect::<Vec<_>>();
+    slots.resize(QUARTERLY_CARGO_SLOTS, 0);
+    let missing = total.saturating_sub(delivered_cargo_total(&slots));
+    add_fallback_deliveries(&mut slots, missing);
+    slots
+}
+
+/// Añade entregas sin tipo conocido a slots con capacidad libre.
+fn add_fallback_deliveries(delivered_cargo: &mut Vec<u32>, deliveries: u64) {
+    if deliveries == 0 {
+        return;
+    }
+    delivered_cargo.resize(QUARTERLY_CARGO_SLOTS, 0);
+    let mut pending = deliveries;
+    for slot in delivered_cargo {
+        let room = u64::from(u32::MAX.saturating_sub(*slot));
+        let increment = pending.min(room);
+        *slot = slot.saturating_add(u32::try_from(increment).unwrap_or(u32::MAX));
+        pending = pending.saturating_sub(increment);
+        if pending == 0 {
+            break;
+        }
     }
 }
 

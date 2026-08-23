@@ -8,8 +8,8 @@
 //! + `INDY` + `ECMY` + `DATE`/`PLYR` cargable por `OpenTTD` ≥15.3 dedicated.
 //!
 //! Residual: tram, rotor heli, creación de nuevos `CAPY` packets, settings fuera del
-//! subconjunto modelado de `PATS`, ejecución de `ENGN`/`SRND`/`NewGRF`, historial
-//! económico y flags completos de `PLYR`.
+//! subconjunto modelado de `PATS`, ejecución de `ENGN`/`SRND`/`NewGRF` y flags
+//! completos de `PLYR`.
 //! Los chunks nativos no modelados se conservan como passthrough al reexportar.
 //! Limitaciones: `docs/PARIDAD.md` y `docs/archive/merged-2026-07/ROADMAP_SAV_EXPORT.md`.
 
@@ -858,6 +858,74 @@ mod tests {
     }
 
     #[test]
+    fn ottn_roundtrip_preserves_company_quarterly_history() {
+        let mut state = tiny_state();
+        let history = &mut state.companies[0].quarterly_economy;
+        history.cur_income = 12_345;
+        history.cur_expenses = 6_789;
+        history.cur_deliveries = 16;
+        history.cur_delivered_cargo = vec![7, 9];
+        history.cur_company_value = 500_000;
+        history.cur_performance_history = 321;
+        history.samples = vec![
+            crate::QuarterlyEconomyEntry {
+                income: 100,
+                expenses: 20,
+                deliveries: 4,
+                delivered_cargo: vec![1, 3],
+                performance_history: 111,
+                company_value: 400_000,
+            },
+            crate::QuarterlyEconomyEntry {
+                income: 200,
+                expenses: 30,
+                deliveries: 6,
+                delivered_cargo: vec![2, 4],
+                performance_history: 222,
+                company_value: 450_000,
+            },
+        ];
+
+        let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
+        let (payload, _) = crate::sav::container::decompress(&bytes).expect("decompress");
+        let chunks = crate::sav::chunks::parse_chunks(&payload).expect("chunks");
+        let plyr = crate::sav::chunks::find_chunk(&chunks, "PLYR").expect("PLYR chunk");
+        assert_table_field_type(&plyr.body, 0x1B, "cur_economy");
+        assert_table_field_type(&plyr.body, 0x1B, "old_economy");
+        crate::sav::table::parse_table_chunk(&plyr.body, false).expect("parse PLYR");
+
+        let sav_game = sav::load(&bytes).expect("load");
+        let company = sav_game.companies.first().expect("company");
+        let current = company.cur_economy.as_ref().expect("current economy");
+        assert_eq!(current.income, 12_345);
+        assert_eq!(current.expenses, -6_789);
+        assert_eq!(current.company_value, 500_000);
+        assert_eq!(&current.delivered_cargo[..2], &[7, 9]);
+        assert_eq!(current.performance_history, 321);
+        // OpenTTD serializa el más reciente primero.
+        assert_eq!(company.old_economy.len(), 2);
+        assert_eq!(company.old_economy[0].income, 200);
+        assert_eq!(company.old_economy[0].expenses, -30);
+        assert_eq!(company.old_economy[1].income, 100);
+
+        let loaded = GameState::from_sav_game(sav_game);
+        let loaded_history = &loaded.companies[0].quarterly_economy;
+        assert_eq!(loaded_history.cur_income, 12_345);
+        assert_eq!(loaded_history.cur_expenses, 6_789);
+        assert_eq!(loaded_history.cur_deliveries, 16);
+        assert_eq!(&loaded_history.cur_delivered_cargo[..2], &[7, 9]);
+        assert_eq!(loaded_history.samples.len(), 2);
+        assert_eq!(loaded_history.samples[0].income, 100);
+        assert_eq!(loaded_history.samples[1].income, 200);
+        assert_eq!(loaded_history.samples[1].expenses, 30);
+        assert_eq!(&loaded_history.samples[1].delivered_cargo[..2], &[2, 4]);
+        assert_eq!(
+            loaded_history.samples[1].delivered_cargo.len(),
+            crate::economy_quarterly::QUARTERLY_CARGO_SLOTS
+        );
+    }
+
+    #[test]
     fn ottz_roundtrip_loads() {
         let state = tiny_state();
         let bytes = save_to_bytes(&state).expect("save ottz");
@@ -1297,6 +1365,21 @@ mod tests {
         state.economy.loan = 50_000;
         state.companies[0].bankruptcy_months = 2;
         state.companies[0].manager_face_style = Some("modern".into());
+        state.companies[0].quarterly_economy.cur_income = 900;
+        state.companies[0].quarterly_economy.cur_expenses = 400;
+        state.companies[0].quarterly_economy.cur_deliveries = 7;
+        state.companies[0].quarterly_economy.cur_delivered_cargo = vec![3, 4];
+        state.companies[0]
+            .quarterly_economy
+            .samples
+            .push(crate::QuarterlyEconomyEntry {
+                income: 1_200,
+                expenses: 500,
+                deliveries: 9,
+                delivered_cargo: vec![4, 5],
+                performance_history: 456,
+                company_value: 800_000,
+            });
         let names = exported_chunk_names(&state).expect("chunks");
         assert!(names.iter().any(|n| n == "CITY"), "{names:?}");
         let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
@@ -1311,6 +1394,25 @@ mod tests {
         );
         assert_eq!(sav_game.companies[0].loan, Some(50_000));
         assert_eq!(sav_game.companies[0].bankruptcy_months, Some(2));
+        assert_eq!(
+            sav_game.companies[0]
+                .cur_economy
+                .as_ref()
+                .map(|entry| entry.income),
+            Some(900)
+        );
+        assert_eq!(
+            sav_game.companies[0]
+                .cur_economy
+                .as_ref()
+                .map(|entry| entry.expenses),
+            Some(-400)
+        );
+        assert_eq!(sav_game.companies[0].old_economy.len(), 1);
+        assert_eq!(
+            sav_game.companies[0].old_economy[0].performance_history,
+            456
+        );
         // Dump opcional para smoke OpenTTD: OPENTTDRS_DUMP_MVP_SAV=/ruta.sav
         if let Ok(path) = std::env::var("OPENTTDRS_DUMP_MVP_SAV") {
             std::fs::write(&path, &bytes).expect("dump mvp sav");

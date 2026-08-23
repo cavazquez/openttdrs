@@ -63,6 +63,82 @@ fn append_company_liveries(
     Ok(())
 }
 
+fn signed_economy_value(value: u64, field: &str) -> Result<i64, SavError> {
+    i64::try_from(value)
+        .map_err(|_| SavError::BadFormat(format!("{field} de economía de compañía excede i64")))
+}
+
+fn signed_economy_expense(value: u64) -> Result<i64, SavError> {
+    Ok(signed_economy_value(value, "expenses")?.saturating_neg())
+}
+
+fn append_company_economy_values(
+    record: &mut Vec<u8>,
+    income: u64,
+    expenses: u64,
+    company_value: i64,
+    delivered_cargo: &[u32],
+    deliveries: u64,
+    performance_history: i32,
+) -> Result<(), SavError> {
+    record.extend_from_slice(&signed_economy_value(income, "income")?.to_be_bytes());
+    record.extend_from_slice(&signed_economy_expense(expenses)?.to_be_bytes());
+    record.extend_from_slice(&company_value.to_be_bytes());
+    let cargo = crate::economy_quarterly::delivered_cargo_for_save(delivered_cargo, deliveries);
+    write_gamma(
+        u32::try_from(cargo.len())
+            .map_err(|_| SavError::BadFormat("demasiados slots de carga trimestrales".into()))?,
+        record,
+    )?;
+    for delivered in cargo {
+        record.extend_from_slice(&delivered.to_be_bytes());
+    }
+    record.extend_from_slice(&performance_history.to_be_bytes());
+    Ok(())
+}
+
+fn append_company_economy_history(
+    record: &mut Vec<u8>,
+    company: &crate::company::Company,
+) -> Result<(), SavError> {
+    let history = &company.quarterly_economy;
+    // `cur_economy` es un struct de una sola entrada; `old_economy` ya lleva
+    // su propia longitud de lista y sus entradas no incluyen gamma individual.
+    write_gamma(1, record)?;
+    append_company_economy_values(
+        record,
+        history.cur_income,
+        history.cur_expenses,
+        history.cur_company_value,
+        &history.cur_delivered_cargo,
+        history.cur_deliveries,
+        history.cur_performance_history,
+    )?;
+
+    let count = history
+        .samples
+        .len()
+        .min(crate::economy_quarterly::ECONOMY_HISTORY_QUARTERS);
+    write_gamma(
+        u32::try_from(count)
+            .map_err(|_| SavError::BadFormat("demasiados trimestres de compañía".into()))?,
+        record,
+    )?;
+    // `old_economy[0]` es el trimestre más reciente en OpenTTD.
+    for entry in history.samples.iter().rev().take(count) {
+        append_company_economy_values(
+            record,
+            entry.income,
+            entry.expenses,
+            entry.company_value,
+            &entry.delivered_cargo,
+            entry.deliveries,
+            entry.performance_history,
+        )?;
+    }
+    Ok(())
+}
+
 fn plyr_records(
     state: &GameState,
     autoreplace_export: &super::fleet::AutoreplaceExport,
@@ -90,6 +166,7 @@ fn plyr_records(
             &company,
             autoreplace_export.company_head(crate::CompanyId::PLAYER),
         )?;
+        append_company_economy_history(&mut rec, &company)?;
         append_company_liveries(&mut rec, &company)?;
         return Ok(vec![rec]);
     }
@@ -131,6 +208,7 @@ fn plyr_records(
                 &company_to_write,
                 autoreplace_export.company_head(company.id),
             )?;
+            append_company_economy_history(&mut rec, &company_to_write)?;
             append_company_liveries(&mut rec, &company_to_write)?;
             Ok(rec)
         })
@@ -166,6 +244,10 @@ pub(super) fn plyr_chunk(
     header.push(0x1B);
     write_str("settings", &mut header)?;
     header.push(0x1B);
+    write_str("cur_economy", &mut header)?;
+    header.push(0x1B);
+    write_str("old_economy", &mut header)?;
+    header.push(0x1B);
     write_str("liveries", &mut header)?;
     header.push(0);
 
@@ -191,6 +273,9 @@ pub(super) fn plyr_chunk(
     write_str("settings.vehicle.servint_ships", &mut header)?;
     header.push(0);
 
+    append_company_economy_header(&mut header)?;
+    append_company_economy_header(&mut header)?;
+
     header.push(2);
     write_str("in_use", &mut header)?;
     header.push(2);
@@ -205,6 +290,21 @@ pub(super) fn plyr_chunk(
         &plyr_records(state, autoreplace_export)?,
         CH_TABLE,
     )
+}
+
+fn append_company_economy_header(header: &mut Vec<u8>) -> Result<(), SavError> {
+    header.push(7);
+    write_str("income", header)?;
+    header.push(7);
+    write_str("expenses", header)?;
+    header.push(7);
+    write_str("company_value", header)?;
+    header.push(0x16);
+    write_str("delivered_cargo", header)?;
+    header.push(5);
+    write_str("performance_history", header)?;
+    header.push(0);
+    Ok(())
 }
 
 /// Ajustes de partida que afectan cómo `OpenTTD` interpreta y simula el mapa al

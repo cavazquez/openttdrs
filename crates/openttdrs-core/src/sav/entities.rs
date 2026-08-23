@@ -640,6 +640,10 @@ pub struct SavCompany {
     pub is_ai: Option<bool>,
     /// Meses consecutivos de bancarrota (`PLYR.months_of_bankruptcy`).
     pub bankruptcy_months: Option<u8>,
+    /// Acumulador del trimestre actual (`PLYR.cur_economy`).
+    pub cur_economy: Option<SavCompanyEconomy>,
+    /// Trimestres cerrados en orden `OpenTTD`: más reciente primero (`PLYR.old_economy`).
+    pub old_economy: Vec<SavCompanyEconomy>,
     /// Esquemas `PLYR.liveries` en orden `LiveryScheme`.
     pub liveries: Vec<crate::company::CompanyLivery>,
     /// Opciones de autorrenovación/servicio de `PLYR.settings`.
@@ -654,6 +658,20 @@ pub struct SavCompany {
     pub servint_roadveh: Option<u16>,
     pub servint_aircraft: Option<u16>,
     pub servint_ships: Option<u16>,
+}
+
+/// Entrada de `CompanyEconomyEntry` serializada en `PLYR`.
+///
+/// `income` y `expenses` se conservan con signo porque el wire format usa
+/// `Money` (`i64`), aunque el runtime normal los acumule como valores positivos.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SavCompanyEconomy {
+    pub income: i64,
+    pub expenses: i64,
+    pub company_value: i64,
+    /// Las 64 entradas modernas de `delivered_cargo` (o menos en saves legacy).
+    pub delivered_cargo: Vec<u32>,
+    pub performance_history: i32,
 }
 
 /// Migra la lista de libreas de `PLYR` al orden actual de `LiveryScheme`.
@@ -742,6 +760,37 @@ fn record_i64(record: &SlRecord, name: &str) -> Option<i64> {
         })
 }
 
+fn company_economy_from_record(record: &SlRecord) -> SavCompanyEconomy {
+    let delivered_cargo = match record_get(record, "delivered_cargo") {
+        Some(SlValue::List(values)) => values
+            .iter()
+            .filter_map(SlValue::as_u64)
+            .filter_map(|value| u32::try_from(value).ok())
+            .collect(),
+        _ => Vec::new(),
+    };
+    SavCompanyEconomy {
+        income: record_i64(record, "income").unwrap_or(0),
+        expenses: record_i64(record, "expenses").unwrap_or(0),
+        company_value: record_i64(record, "company_value").unwrap_or(0),
+        delivered_cargo,
+        performance_history: record_i64(record, "performance_history")
+            .and_then(|value| i32::try_from(value).ok())
+            .unwrap_or(0),
+    }
+}
+
+fn company_cur_economy_from_record(record: &SlRecord) -> Option<SavCompanyEconomy> {
+    nested_struct(record, "cur_economy").map(company_economy_from_record)
+}
+
+fn company_old_economy_from_record(record: &SlRecord) -> Vec<SavCompanyEconomy> {
+    let Some(SlValue::Structs(entries)) = record_get(record, "old_economy") else {
+        return Vec::new();
+    };
+    entries.iter().map(company_economy_from_record).collect()
+}
+
 /// Empresas presentes en `PLYR`, conservando dinero y color por `CompanyID`.
 #[must_use]
 pub(crate) fn companies_from_chunks(chunks: &[RawChunk], save_version: u16) -> Vec<SavCompany> {
@@ -775,6 +824,8 @@ pub(crate) fn companies_from_chunks(chunks: &[RawChunk], save_version: u16) -> V
             let bankruptcy_months = record_get(&record, "months_of_bankruptcy")
                 .and_then(SlValue::as_u64)
                 .and_then(|value| u8::try_from(value).ok());
+            let cur_economy = company_cur_economy_from_record(&record);
+            let old_economy = company_old_economy_from_record(&record);
             let liveries = company_liveries_from_record(&record, colour, save_version);
             let settings = nested_struct(&record, "settings");
             let setting = |name: &str, legacy: &str| {
@@ -829,6 +880,8 @@ pub(crate) fn companies_from_chunks(chunks: &[RawChunk], save_version: u16) -> V
                 manager_face_style,
                 is_ai,
                 bankruptcy_months,
+                cur_economy,
+                old_economy,
                 liveries,
                 engine_renew_list_head,
                 engine_renew,

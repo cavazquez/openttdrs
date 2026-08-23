@@ -2165,7 +2165,7 @@ avión de ala fija.
 
 Preserva `CAPY` al importar/exportar, pero todavía no crea pagos activos desde
 el runtime; `PLYR` conserva dinero/préstamo/meses de bancarrota/color/nombre/indicador AI, el subconjunto ejecutado de
-`settings.*`, presidente, bitfield de rostro y `face_style` por compañía, aunque faltan historial, límite especial de préstamo y flags completos; también faltan `OBJS`,
+`settings.*`, presidente, bitfield de rostro, `face_style` e historial trimestral (`cur_economy` y hasta 24 `old_economy`, incluido el desglose de carga) por compañía. Aún faltan límite especial de préstamo y flags completos; también faltan `OBJS`,
 `GSET`/`ENGN`/`SRND` completos ni ejecución de configuración NewGRF. Los chunks
 nativos `NGRF`/`ENGN`/`OBJS`/`SRND` y mappings asociados se conservan como
 passthrough al reexportar. `PATS`/`OPTS` ya conserva el

@@ -645,6 +645,63 @@ fn hydrate_sav_station_cargo(
     station.cargo_packets.reserved = reserved.min(station.cargo_packets.total_count());
 }
 
+fn quarterly_entry_from_sav(
+    entry: &entities::SavCompanyEconomy,
+) -> crate::economy_quarterly::QuarterlyEconomyEntry {
+    crate::economy_quarterly::QuarterlyEconomyEntry {
+        income: u64::try_from(entry.income).unwrap_or(0),
+        expenses: quarterly_expense_from_sav(entry.expenses),
+        deliveries: crate::economy_quarterly::delivered_cargo_total(&entry.delivered_cargo),
+        delivered_cargo: entry.delivered_cargo.clone(),
+        performance_history: entry.performance_history,
+        company_value: entry.company_value,
+    }
+}
+
+/// El core acumula costes como magnitudes positivas, pero `OpenTTD` los guarda
+/// en `CompanyEconomyEntry::expenses` como `Money` negativo.
+fn quarterly_expense_from_sav(value: i64) -> u64 {
+    if value.is_negative() {
+        value.unsigned_abs()
+    } else {
+        u64::try_from(value).unwrap_or(0)
+    }
+}
+
+/// Hidrata `PLYR.cur_economy` y `PLYR.old_economy` en el historial que usa el
+/// runtime. `OpenTTD` guarda el histórico más reciente primero; el core lo
+/// mantiene cronológico para que los gráficos puedan iterarlo naturalmente.
+fn hydrate_company_economy_history(
+    company: &mut crate::company::Company,
+    cur_economy: Option<&entities::SavCompanyEconomy>,
+    old_economy: &[entities::SavCompanyEconomy],
+    economy_month: u8,
+) {
+    let history = &mut company.quarterly_economy;
+    if let Some(current) = cur_economy {
+        history.cur_income = u64::try_from(current.income).unwrap_or(0);
+        history.cur_expenses = quarterly_expense_from_sav(current.expenses);
+        history.cur_deliveries =
+            crate::economy_quarterly::delivered_cargo_total(&current.delivered_cargo);
+        history
+            .cur_delivered_cargo
+            .clone_from(&current.delivered_cargo);
+        history.cur_company_value = current.company_value;
+        history.cur_performance_history = current.performance_history;
+        // Los cierres de OpenTTD ocurren en los meses 0/3/6/9. Restaurar la
+        // fase evita sumar tres meses nuevos antes del siguiente cierre.
+        history.months_in_quarter = economy_month % 3;
+    }
+    if !old_economy.is_empty() {
+        history.samples = old_economy
+            .iter()
+            .take(crate::economy_quarterly::ECONOMY_HISTORY_QUARTERS)
+            .rev()
+            .map(quarterly_entry_from_sav)
+            .collect();
+    }
+}
+
 impl GameState {
     /// Estado jugable desde un save de `OpenTTD`: mapa, estaciones, ciudades,
     /// vehículos (cabezas de convoy) y dinero de la empresa.
@@ -704,6 +761,7 @@ impl GameState {
             state.company_colour = colour;
         }
         let has_company_rows = !sav.companies.is_empty();
+        let economy_month = state.economy_timer.month;
         for company in sav.companies {
             let Ok(id) = u8::try_from(company.id) else {
                 continue;
@@ -750,6 +808,12 @@ impl GameState {
                 if let Some(months) = company.bankruptcy_months {
                     target.bankruptcy_months = months;
                 }
+                hydrate_company_economy_history(
+                    target,
+                    company.cur_economy.as_ref(),
+                    &company.old_economy,
+                    economy_month,
+                );
                 if let Some(value) = company.engine_renew {
                     target.engine_renew = value;
                 }

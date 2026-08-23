@@ -94,3 +94,30 @@ fn openttd_resaved_preserves_requested_company_manager_identity() {
     assert_eq!(company.manager_face, Some(1 << 7));
     assert_eq!(company.manager_face_style.as_deref(), Some("modern"));
 }
+
+/// Contrato opcional para `PLYR.cur_economy`/`old_economy`. El fixture mínimo
+/// de writer contiene un trimestre abierto y uno cerrado; `OpenTTD` debe
+/// re-guardarlos sin perder importe, desglose de carga ni orden de historial.
+#[test]
+fn openttd_resaved_preserves_requested_company_quarterly_history() {
+    if std::env::var("OPENTTDRS_ROUNDTRIP_REQUIRE_COMPANY_QUARTERLY_HISTORY").as_deref() != Ok("1")
+    {
+        return;
+    }
+    let path = std::env::var("OPENTTDRS_ROUNDTRIP_SAV")
+        .expect("OPENTTDRS_ROUNDTRIP_SAV requerido para el smoke de historial");
+    let raw = std::fs::read(&path).unwrap_or_else(|e| panic!("leer {path}: {e}"));
+    let game = sav::load(&raw).unwrap_or_else(|e| panic!("import openttdrs: {e}"));
+    let company = game
+        .companies
+        .first()
+        .expect("PLYR de compañía activa tras re-guardado OpenTTD");
+    let current = company.cur_economy.as_ref().expect("cur_economy presente");
+    assert_eq!(current.income, 900);
+    assert_eq!(current.expenses, -400);
+    assert_eq!(&current.delivered_cargo[..2], &[3, 4]);
+    assert_eq!(company.old_economy.len(), 1);
+    assert_eq!(company.old_economy[0].income, 1_200);
+    assert_eq!(company.old_economy[0].performance_history, 456);
+    assert_eq!(&company.old_economy[0].delivered_cargo[..2], &[4, 5]);
+}

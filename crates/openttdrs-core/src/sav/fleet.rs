@@ -239,6 +239,8 @@ mod tests {
             manager_face_style: None,
             is_ai: None,
             bankruptcy_months: None,
+            cur_economy: None,
+            old_economy: Vec::new(),
             liveries: Vec::new(),
             engine_renew_list_head: Some(0),
             engine_renew: None,

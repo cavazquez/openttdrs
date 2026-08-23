@@ -17,6 +17,7 @@ Estados:
 API común: `TrainSpriteGraphics::resolve_callback` / `resolve_callback_ctx`,
 `resolve_vehicle_callback`, `writeback_*_persistent_registers`,
 `apply_industry_location_callback`, `apply_house_construction_callback`,
+`apply_object_slope_callback`,
 `apply_station_availability_callback_for_build`,
 `apply_station_availability_callback`, `apply_road_stop_availability_callback`,
 `trigger_road_stop_animation`, `advance_road_stop_animation`,
@@ -42,7 +43,8 @@ API común: `TrainSpriteGraphics::resolve_callback` / `resolve_callback_ctx`,
 | Canals (`05`) | `0x147` sprite offset | **almacenado** | `CanalSpecDef.callback_mask` |
 | RoadStops (`14`) | `0x13` `CBID_STATION_AVAILABILITY` | **soportado** | Máscara Action0 `0x11`, Action2/3 y call site query+execute de `PlaceBusStop`/`PlaceTruckStop`; `CALLBACK_FAILED` o booleano 8-bit no nulo permite |
 | RoadStops | `0x140`–`0x142` animación | **parcial runtime** | Action0 `0x0E`/`0x0F`/`0x10`; CB140 en `Built` y `TileLoop`, CB141/CB142 con frame/activo persistidos por parada. Faltan triggers de vehículo/carga, scopes vecinos, sonidos y selección visual dinámica |
-| Objects / Cargoes / Types | varios | **OOS** | Sin ejecución de CB en este corte |
+| Objects (`0F`) | `0x157` `CBID_OBJECT_LAND_SLOPE_CHECK` | **parcial runtime** | Máscara Action0 `0x15` WORD, Action3→Action2 y call site query+execute de `BuildObject` por tesela. `param1=slope`, `param2=dy<<4\|dx`; faltan scopes completos de objeto/vecinos, string de error GRF y el fallback de pendiente completo de OpenTTD. |
+| Cargoes / Types | varios | **OOS** | Sin ejecución de CB en este corte |
 | Generic | `0x01` `CBID_RANDOM_TRIGGER` | **OOS** | Ver triggers abajo |
 
 ## Storage
@@ -74,10 +76,11 @@ API común: `TrainSpriteGraphics::resolve_callback` / `resolve_callback_ctx`,
 7. Industry tile trigger → Action2 random group (`resolve_industry_tile_random_trigger`).
 8. RoadStops CB13 — disponibilidad al previsualizar y ejecutar `PlaceBusStop`/`PlaceTruckStop`.
 9. RoadStops CB140/CB141/CB142 — `Built`/`TileLoop` + scheduler con velocidad/frame, writeback `7C` y JSON round-trip. Referencia: `newgrf_roadstop.cpp` / `newgrf_animation_base.h`.
+10. Objects CB157 — pendiente por tesela de `BuildObject`, desde Action0 `0x15` y Action3→Action2 cargados; query y execute rechazan antes de mutar.
 
 ## Residual explícito (no bloquea cierre MVP #266)
 
-- Resto de CBs houses / airports / industries / objects; RoadStops aún requiere triggers de carga/vehículo, randomización, scopes vecinos y sprite Action2 dinámico.
+- Resto de CBs houses / airports / industries / objects (excepto CB157); RoadStops aún requiere triggers de carga/vehículo, randomización, scopes vecinos y sprite Action2 dinámico.
 - Scopes parent/relative completos.
 - Storage persistente en industria/casa y callbacks de estación que sí tengan scope de estación.
 - Goldens tick-a-tick vs OpenTTD 15.3 para todos los features.

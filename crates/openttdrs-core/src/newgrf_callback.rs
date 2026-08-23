@@ -3,7 +3,7 @@
 //! - Fallo observable: [`CALLBACK_FAILED`] (nunca se acepta un resultado “silencioso”).
 //! - Storage: tras eval, writeback de `7C`/`\2psto` a vehículo o estación;
 //!   los registros temporales (`7D`/`\2sto`) viven solo en el ctx y se descartan.
-//! - Call sites #266: industry location, house construction, station availability,
+//! - Call sites #266: industry location, house/object construction, station availability,
 //!   industry-tile trigger → Action2 random.
 
 use crate::engine::EngineDef;
@@ -13,10 +13,11 @@ use crate::industry_tile::IndustryTileSpecDef;
 use crate::map::TileCoord;
 use crate::newgrf_sprites::{
     Action2EvalCtx, Action2RandomEntry, CALLBACK_FAILED, CBID_HOUSE_ALLOW_CONSTRUCTION,
-    CBID_INDUSTRY_LOCATION, CBID_STATION_ANIMATION_NEXT_FRAME, CBID_STATION_ANIMATION_SPEED,
-    CBID_STATION_ANIMATION_TRIGGER, CBID_STATION_AVAILABILITY, CBID_VEHICLE_START_STOP_CHECK,
-    TrainSpriteGraphics,
+    CBID_INDUSTRY_LOCATION, CBID_OBJECT_LAND_SLOPE_CHECK, CBID_STATION_ANIMATION_NEXT_FRAME,
+    CBID_STATION_ANIMATION_SPEED, CBID_STATION_ANIMATION_TRIGGER, CBID_STATION_AVAILABILITY,
+    CBID_VEHICLE_START_STOP_CHECK, TrainSpriteGraphics,
 };
+use crate::object_spec::ObjectSpecDef;
 use crate::station::Station;
 use crate::vehicle::Vehicle;
 use crate::{RoadType, StopKind};
@@ -161,6 +162,30 @@ pub fn apply_house_construction_callback(def: &HouseSpecDef) -> bool {
     };
     let result = runtime.resolve_callback(def.newgrf_local_id, CBID_HOUSE_ALLOW_CONSTRUCTION, 0, 0);
     callback_allows_8bit_boolean(result)
+}
+
+/// Call site objeto: CB `0x157` de pendiente al construir cada tesela.
+///
+/// `param1` es el slope de la tesela y `param2` codifica el offset `(dx, dy)`
+/// del footprint (`dy << 4 | dx`), igual que `object_cmd.cpp`. Durante la
+/// construcción no existe una instancia de objeto persistente; por ahora el
+/// resolver aporta esos parámetros genéricos, no los scopes completos de
+/// objeto/vecinos de `OpenTTD`.
+#[must_use]
+pub fn apply_object_slope_callback(def: &ObjectSpecDef, slope: u8, footprint_offset: u8) -> bool {
+    if !def.has_slope_check_callback() {
+        return true;
+    }
+    let Some(runtime) = def.newgrf_runtime.as_ref() else {
+        return true;
+    };
+    let result = runtime.resolve_callback(
+        def.local_id,
+        CBID_OBJECT_LAND_SLOPE_CHECK,
+        u32::from(slope),
+        u32::from(footprint_offset),
+    );
+    callback_allows_location(result)
 }
 
 /// Call site de construcción de estación ferroviaria: CB `0x13` availability.

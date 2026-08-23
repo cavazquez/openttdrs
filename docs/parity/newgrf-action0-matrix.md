@@ -376,8 +376,10 @@ Fuente: `newgrf_act0_objects.cpp`.
 
 Consumidor (#261): `BuildObject` valida footprint W×H, clima y coste antes de
 mutar; escribe todas las teselas (`m5` = id ≥ `NEW_OBJECT_OFFSET`, `m2` = offset);
-`ClearTile` demuele el footprint completo. Action3 dibuja `views[i % len]` en
-cada tesela. `grfid`/`local_id` persisten; NewGRF se re-aplica tras load.
+`ClearTile` demuele el footprint completo. Si la máscara `0x15` activa
+`SlopeCheck`, evalúa CB157 por tesela antes de mutar (`param1=slope`,
+`param2=dy<<4|dx`). Action3 dibuja `views[i % len]` en cada tesela.
+`grfid`/`local_id` persisten; NewGRF se re-aplica tras load.
 
 | Props | Estado |
 |---|---|
@@ -385,6 +387,7 @@ cada tesela. `grfid`/`local_id` persisten; NewGRF se re-aplica tras load.
 | `0B` climate mask BYTE | **runtime** (filtra en `check_build_object`) |
 | `0C` size BYTE | **runtime** (footprint W×H en build/clear/render) |
 | `0D` build cost multiplier BYTE | **runtime** (`build_object_cost_factored`) |
+| `15` callback mask WORD | **parcial runtime**: bit `SlopeCheck` → CB157 en query+execute; sin scopes completos/error string/fallback de pendiente upstream |
 | `FE` nombre C-string (extensión local) | **runtime** (catálogo) |
 | `FD` badge associations (extensión local: BYTE count + N× label 4 chars) | **runtime** (`associated_badges` + diagnósticos) |
 | Action1/3 views | **runtime** (render `views[i % len]` por tesela del footprint) |

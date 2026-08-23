@@ -1,6 +1,7 @@
 //! Specs de objetos `NewGRF` (`Objects`, feature Action0 `0x0F`).
 //!
-//! Catálogo runtime: clase, tamaño, clima, coste y nombre; sprites opcionales vía Action1/3.
+//! Catálogo runtime: clase, tamaño, clima, coste y nombre; sprites/callbacks opcionales vía
+//! Action1/2/3.
 
 use serde::{Deserialize, Serialize};
 
@@ -17,6 +18,11 @@ pub const DEFAULT_OBJECT_BUILD_COST_FACTOR: u8 = 1;
 
 /// Máscara de climas por defecto (todos).
 pub const DEFAULT_OBJECT_CLIMATE_MASK: u8 = 0x0F;
+
+/// Bit `SlopeCheck` de la máscara de callbacks Action0 `0x15`.
+///
+/// Corresponde a [`CBID_OBJECT_LAND_SLOPE_CHECK`](crate::CBID_OBJECT_LAND_SLOPE_CHECK).
+pub const OBJECT_CALLBACK_SLOPE_CHECK_MASK: u16 = 1 << 0;
 
 /// Spec de objeto definido por Action0.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -39,9 +45,15 @@ pub struct ObjectSpecDef {
     /// Multiplicador de coste Action0 `0x0D` (`build_cost_multiplier`).
     #[serde(default = "default_object_build_cost_factor")]
     pub build_cost_factor: u8,
+    /// Máscara de callbacks Action0 `0x15` (WORD).
+    #[serde(default)]
+    pub callback_mask: u16,
     /// Vistas Action1/3 (opcional; catálogo-only si vacío; no se serializa).
     #[serde(default, skip)]
     pub views: Vec<crate::newgrf_sprites::DecodedSprite>,
+    /// Grafo Action2/3 para callbacks de construcción (no se serializa).
+    #[serde(default, skip)]
+    pub newgrf_runtime: Option<Box<crate::newgrf_sprites::TrainSpriteGraphics>>,
     /// Ids de badges asociados (catálogo `badge`).
     #[serde(default)]
     pub associated_badges: Vec<u16>,
@@ -84,6 +96,12 @@ impl ObjectSpecDef {
     #[must_use]
     pub const fn available_in_climate(&self, climate_bit: u8) -> bool {
         self.climate_mask & climate_bit != 0
+    }
+
+    /// `true` si el objeto solicita CB `0x157` para cada tesela de su footprint.
+    #[must_use]
+    pub const fn has_slope_check_callback(&self) -> bool {
+        self.callback_mask & OBJECT_CALLBACK_SLOPE_CHECK_MASK != 0
     }
 
     /// Vista Action1/3 por índice (módulo `len` si hay varias).

@@ -79,7 +79,9 @@ mod tests {
             grfid: 0,
             climate_mask: openttdrs_core::DEFAULT_OBJECT_CLIMATE_MASK,
             build_cost_factor: openttdrs_core::DEFAULT_OBJECT_BUILD_COST_FACTOR,
+            callback_mask: 0,
             views: vec![view.clone()],
+            newgrf_runtime: None,
             associated_badges: Vec::new(),
         };
         let mut images = Assets::<Image>::default();

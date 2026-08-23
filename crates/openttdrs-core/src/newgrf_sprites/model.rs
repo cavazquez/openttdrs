@@ -284,6 +284,8 @@ pub const CBID_VEHICLE_START_STOP_CHECK: u16 = 0x31;
 pub const CBID_INDUSTRY_LOCATION: u16 = 0x28;
 /// Callback casas: permitir construcción (`CBID_HOUSE_ALLOW_CONSTRUCTION`).
 pub const CBID_HOUSE_ALLOW_CONSTRUCTION: u16 = 0x17;
+/// Callback objetos: comprobar pendiente de cada tesela (`CBID_OBJECT_LAND_SLOPE_CHECK`).
+pub const CBID_OBJECT_LAND_SLOPE_CHECK: u16 = 0x157;
 /// Callback teselas industria: trigger de animación (`CBID_INDTILE_ANIMATION_TRIGGER`).
 pub const CBID_INDTILE_ANIMATION_TRIGGER: u16 = 0x25;
 /// Callback teselas industria: siguiente frame (`CBID_INDTILE_ANIMATION_NEXT_FRAME`).

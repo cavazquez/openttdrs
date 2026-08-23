@@ -27,6 +27,7 @@ pub fn apply_newgrf_objects(state: &mut GameState, search_dirs: &[&Path]) {
             continue;
         };
         let gfx = crate::newgrf_sprites::collect_object_sprite_graphics(&data).unwrap_or_default();
+        let newgrf_runtime = gfx.needs_runtime_resolve().then(|| Box::new(gfx.clone()));
         for meta in collect_object_metas_from_grf(&data) {
             let Some(id) = next_free_object_spec_id(&catalog) else {
                 break;
@@ -62,7 +63,9 @@ pub fn apply_newgrf_objects(state: &mut GameState, search_dirs: &[&Path]) {
                 grfid: entry.grfid,
                 climate_mask: meta.climate_mask,
                 build_cost_factor: meta.build_cost_factor,
+                callback_mask: meta.callback_mask,
                 views,
+                newgrf_runtime: newgrf_runtime.clone(),
                 associated_badges,
             });
         }

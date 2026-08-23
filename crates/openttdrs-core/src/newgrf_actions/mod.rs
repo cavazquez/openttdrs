@@ -811,7 +811,32 @@ pub fn build_action0_object_payload_full(
     name: &str,
     badge_labels: &[[u8; 4]],
 ) -> Vec<u8> {
-    let num_props = 5 + u8::from(!badge_labels.is_empty());
+    build_action0_object_payload_with_callback_mask(
+        local_id,
+        class_label,
+        size,
+        climate_mask,
+        cost_factor,
+        0,
+        name,
+        badge_labels,
+    )
+}
+
+/// Action0 Objects con máscara de callbacks WORD (`0x15`).
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn build_action0_object_payload_with_callback_mask(
+    local_id: u8,
+    class_label: &[u8; 4],
+    size: u8,
+    climate_mask: u8,
+    cost_factor: u8,
+    callback_mask: u16,
+    name: &str,
+    badge_labels: &[[u8; 4]],
+) -> Vec<u8> {
+    let num_props = 5 + u8::from(callback_mask != 0) + u8::from(!badge_labels.is_empty());
     let mut p = vec![
         0x00,
         ACTION0_FEATURE_OBJECTS,
@@ -827,6 +852,10 @@ pub fn build_action0_object_payload_full(
     p.push(size);
     p.push(0x0D); // build cost multiplier
     p.push(cost_factor);
+    if callback_mask != 0 {
+        p.push(0x15); // callback mask (WORD)
+        p.extend_from_slice(&callback_mask.to_le_bytes());
+    }
     p.push(0xFE);
     p.extend_from_slice(name.as_bytes());
     p.push(0);
@@ -2711,12 +2740,22 @@ mod tests {
 
     #[test]
     fn parse_object_meta_and_apply_registers() {
-        let a0 = build_action0_object_payload_full(0, b"LIGT", 0x12, 0x05, 7, "Faro", &[]);
+        let a0 = build_action0_object_payload_with_callback_mask(
+            0,
+            b"LIGT",
+            0x12,
+            0x05,
+            7,
+            crate::OBJECT_CALLBACK_SLOPE_CHECK_MASK,
+            "Faro",
+            &[],
+        );
         let meta = parse_action0_object_meta(&a0).unwrap();
         assert_eq!(meta.class_label, "LIGT");
         assert_eq!(meta.size, 0x12);
         assert_eq!(meta.climate_mask, 0x05);
         assert_eq!(meta.build_cost_factor, 7);
+        assert_eq!(meta.callback_mask, crate::OBJECT_CALLBACK_SLOPE_CHECK_MASK);
         assert_eq!(meta.name, "Faro");
         assert!(meta.badge_labels.is_empty());
 
@@ -2736,6 +2775,8 @@ mod tests {
         assert_eq!(def.size, 0x12);
         assert_eq!(def.climate_mask, 0x05);
         assert_eq!(def.build_cost_factor, 7);
+        assert_eq!(def.callback_mask, crate::OBJECT_CALLBACK_SLOPE_CHECK_MASK);
+        assert!(def.has_slope_check_callback());
         assert_eq!(def.local_id, 0);
         assert!(def.associated_badges.is_empty());
     }

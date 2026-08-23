@@ -6,7 +6,7 @@ use crate::game_state::GameState;
 use crate::map::{
     MP_OBJECT_MAPT, Map, OBJECT_TYPE_LIGHTHOUSE, OBJECT_TYPE_TRANSMITTER, TileCoord, TileKind,
     is_map_object_tile, is_newgrf_object_type, object_footprint_tiles, object_tile_offset_byte,
-    object_type_dims, object_type_from_tile,
+    object_type_dims, object_type_from_tile, tile_slope_and_z,
 };
 use crate::object_spec::{DEFAULT_OBJECT_BUILD_COST_FACTOR, ObjectSpecDef, object_spec_def};
 use crate::world_gen::Climate;
@@ -71,14 +71,17 @@ pub(crate) fn check_build_object(
     if !is_allowed_build_object_type(object_type, catalog) {
         return Err(CommandError::CannotBuildObjectHere);
     }
-    if is_newgrf_object_type(object_type) {
+    let newgrf_spec = if is_newgrf_object_type(object_type) {
         let Some(def) = object_spec_def(catalog, u16::from(object_type)) else {
             return Err(CommandError::CannotBuildObjectHere);
         };
         if !def.available_in_climate(climate.newgrf_landscape_bit()) {
             return Err(CommandError::CannotBuildObjectHere);
         }
-    }
+        Some(def)
+    } else {
+        None
+    };
     let (w, h) = object_type_dims(object_type, catalog);
     if w == 0 || h == 0 {
         return Err(CommandError::CannotBuildObjectHere);
@@ -86,6 +89,23 @@ pub(crate) fn check_build_object(
     // Validar footprint completo ANTES de mutar el mapa.
     for tile in object_footprint_tiles(c, w, h) {
         check_single_object_tile(map, tile)?;
+    }
+    // `CBID_OBJECT_LAND_SLOPE_CHECK` se evalúa una vez por tesela, después de
+    // que el footprint entero superó las validaciones comunes y antes de mutar.
+    if let Some(def) = newgrf_spec {
+        for dy in 0..h {
+            for dx in 0..w {
+                let tile = TileCoord::new(c.x + i32::from(dx), c.y + i32::from(dy));
+                let (slope, _) = tile_slope_and_z(map, tile).ok_or(CommandError::OutOfBounds)?;
+                if !crate::newgrf_callback::apply_object_slope_callback(
+                    def,
+                    slope,
+                    object_tile_offset_byte(dx, dy),
+                ) {
+                    return Err(CommandError::NewGrfCallbackDenied);
+                }
+            }
+        }
     }
     Ok(())
 }
@@ -203,15 +223,20 @@ pub(crate) fn build_object_quote(state: &GameState, cmd: &super::types::Command)
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
-    use crate::command::{Command, apply_command};
+    use crate::command::{Command, apply_command, command_would_fail};
     use crate::economy::build_object_cost;
     use crate::map::object_type_from_tile;
     use crate::newgrf_actions::{
-        apply_newgrf_objects, build_action0_object_payload, build_action0_object_payload_full,
+        ACTION0_FEATURE_OBJECTS, apply_newgrf_objects, build_action0_object_payload,
+        build_action0_object_payload_full, build_action0_object_payload_with_callback_mask,
         build_grf_v2_with_action0_and_action8,
     };
+    use crate::newgrf_sprites::{
+        build_action2_callback_literal_payload, build_grf_v2_feature_with_action2_chain,
+    };
     use crate::object_spec::{
-        DEFAULT_OBJECT_CLIMATE_MASK, NEW_OBJECT_OFFSET, OBJECT_SIZE_1X1, ObjectSpecDef,
+        DEFAULT_OBJECT_CLIMATE_MASK, NEW_OBJECT_OFFSET, OBJECT_CALLBACK_SLOPE_CHECK_MASK,
+        OBJECT_SIZE_1X1, ObjectSpecDef,
     };
 
     fn push_spec(state: &mut GameState, size: u8, cost_factor: u8, climate_mask: u8) -> u8 {
@@ -226,7 +251,9 @@ mod tests {
             grfid: 0x4F_42_00_01,
             climate_mask,
             build_cost_factor: cost_factor,
+            callback_mask: 0,
             views: Vec::new(),
+            newgrf_runtime: None,
             associated_badges: Vec::new(),
         });
         u8::try_from(id).expect("id fits m5")
@@ -351,6 +378,75 @@ mod tests {
         let tile = state.map.get(c).expect("tile");
         assert_eq!(object_type_from_tile(&tile), Some(object_type));
         assert_eq!(crate::object_spec_id_from_tile(&tile), Some(id));
+    }
+
+    /// CB157 debe venir del Action2 del GRF cargado y bloquear tanto la query
+    /// como el execute antes de cobrar o escribir alguna tesela del objeto.
+    #[test]
+    fn loaded_newgrf_object_slope_callback_blocks_construction() {
+        let action0 = build_action0_object_payload_with_callback_mask(
+            0,
+            b"CBOS",
+            OBJECT_SIZE_1X1,
+            DEFAULT_OBJECT_CLIMATE_MASK,
+            1,
+            OBJECT_CALLBACK_SLOPE_CHECK_MASK,
+            "Objeto con pendiente controlada",
+            &[],
+        );
+        let action2 = build_action2_callback_literal_payload(
+            ACTION0_FEATURE_OBJECTS,
+            7,
+            0, // CB de ubicación: cero no es FAILED ni 0x400, por lo que deniega.
+        );
+        let bytes = build_grf_v2_feature_with_action2_chain(
+            &action0,
+            ACTION0_FEATURE_OBJECTS,
+            0,
+            7,
+            &action2,
+            1,
+            1,
+            &[174],
+            *b"CBOS",
+            "object-slope-callback",
+        );
+        let dir = std::env::temp_dir().join(format!(
+            "openttdrs_object_slope_callback_{}",
+            std::process::id()
+        ));
+        let _ = std::fs::create_dir_all(&dir);
+        std::fs::write(dir.join("object-slope-callback.grf"), &bytes).expect("write");
+
+        let mut state = GameState::new(8, 8);
+        state.newgrf_stack.push(crate::NewGrfEntry::new(
+            "object-slope-callback.grf",
+            crate::newgrf_config::grfid_from_bytes(*b"CBOS"),
+        ));
+        apply_newgrf_objects(&mut state, &[&dir]);
+        let _ = std::fs::remove_dir_all(&dir);
+
+        let def = state.object_spec_catalog.first().expect("object spec");
+        assert!(def.has_slope_check_callback());
+        assert!(def.newgrf_runtime.is_some());
+        let command = Command::BuildObject {
+            pos: TileCoord::new(3, 3),
+            object_type: u8::try_from(def.id).expect("id fits m5"),
+        };
+        assert_eq!(
+            command_would_fail(&state, &command),
+            Some(CommandError::NewGrfCallbackDenied)
+        );
+        let money_before = state.economy.money;
+        assert_eq!(
+            apply_command(&mut state, &command),
+            Err(CommandError::NewGrfCallbackDenied)
+        );
+        assert_eq!(state.economy.money, money_before);
+        assert_eq!(
+            state.map.get_kind(TileCoord::new(3, 3)),
+            Some(TileKind::Grass)
+        );
     }
 
     #[test]
@@ -504,7 +600,9 @@ mod tests {
             grfid: 1,
             climate_mask: DEFAULT_OBJECT_CLIMATE_MASK,
             build_cost_factor: 1,
+            callback_mask: 0,
             views: Vec::new(),
+            newgrf_runtime: None,
             associated_badges: Vec::new(),
         });
         apply_command(&mut state, &Command::SetCurrentObjectSpec(id_1x1)).unwrap();
@@ -521,7 +619,9 @@ mod tests {
             grfid: 1,
             climate_mask: DEFAULT_OBJECT_CLIMATE_MASK,
             build_cost_factor: 1,
+            callback_mask: 0,
             views: Vec::new(),
+            newgrf_runtime: None,
             associated_badges: Vec::new(),
         });
         apply_command(&mut state, &Command::SetCurrentObjectSpec(id_2x1)).unwrap();
@@ -543,20 +643,25 @@ mod tests {
             grfid: 0x4F_42_00_02,
             climate_mask: 0x05,
             build_cost_factor: 5,
+            callback_mask: OBJECT_CALLBACK_SLOPE_CHECK_MASK,
             views: Vec::new(),
+            newgrf_runtime: None,
             associated_badges: vec![1, 2],
         };
         let json = serde_json::to_string(&def).expect("ser");
         assert!(json.contains("\"local_id\":3"));
         assert!(json.contains("\"grfid\":"));
         assert!(json.contains("\"build_cost_factor\":5"));
+        assert!(json.contains("\"callback_mask\":1"));
         let loaded: ObjectSpecDef = serde_json::from_str(&json).expect("de");
         assert_eq!(loaded.local_id, 3);
         assert_eq!(loaded.grfid, 0x4F_42_00_02);
         assert_eq!(loaded.size, 0x12);
         assert_eq!(loaded.build_cost_factor, 5);
         assert_eq!(loaded.climate_mask, 0x05);
+        assert_eq!(loaded.callback_mask, OBJECT_CALLBACK_SLOPE_CHECK_MASK);
         assert!(loaded.views.is_empty());
+        assert!(loaded.newgrf_runtime.is_none());
     }
 
     #[test]

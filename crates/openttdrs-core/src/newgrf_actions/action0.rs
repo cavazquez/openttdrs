@@ -115,6 +115,8 @@ const PROP_OBJECT_CLIMATE: u8 = 0x0B;
 const PROP_OBJECT_SIZE: u8 = 0x0C;
 /// Objects: build cost multiplier BYTE (`OpenTTD` `0x0D`).
 const PROP_OBJECT_BUILD_COST: u8 = 0x0D;
+/// Objects: callback mask WORD (`OpenTTD` `0x15`).
+const PROP_OBJECT_CALLBACK_MASK: u8 = 0x15;
 /// Stations: callback mask (`OpenTTD` 15.3).
 const PROP_STATION_CALLBACK_MASK: u8 = 0x0B;
 /// Stations: platforms disallowed bitmask (`OpenTTD` `0x0C`).
@@ -636,6 +638,8 @@ pub struct ParsedObjectMeta {
     pub climate_mask: u8,
     /// Multiplicador de coste de construcción (`prop 0x0D`).
     pub build_cost_factor: u8,
+    /// Máscara de callbacks (`prop 0x15`, WORD).
+    pub callback_mask: u16,
     /// Etiquetas de badge (`prop 0xFD`); se resuelven en apply.
     pub badge_labels: Vec<String>,
     /// Lista `0xFD` truncada / inválida (diagnóstico observable).
@@ -2647,6 +2651,7 @@ pub fn parse_action0_object_meta(payload: &[u8]) -> Option<ParsedObjectMeta> {
     let mut size = crate::object_spec::OBJECT_SIZE_1X1;
     let mut climate_mask = crate::object_spec::DEFAULT_OBJECT_CLIMATE_MASK;
     let mut build_cost_factor = crate::object_spec::DEFAULT_OBJECT_BUILD_COST_FACTOR;
+    let mut callback_mask = 0u16;
     let mut badge_labels = Vec::new();
     let mut badge_list_error = None;
     for _ in 0..header.num_props {
@@ -2688,6 +2693,13 @@ pub fn parse_action0_object_meta(payload: &[u8]) -> Option<ParsedObjectMeta> {
                 build_cost_factor = payload[i];
                 i += 1;
             }
+            PROP_OBJECT_CALLBACK_MASK => {
+                let Some(bytes) = payload.get(i..i + 2) else {
+                    break;
+                };
+                callback_mask = u16::from_le_bytes([bytes[0], bytes[1]]);
+                i += 2;
+            }
             PROP_NAME_CSTRING => {
                 let Some(nul) = payload[i..].iter().position(|&b| b == 0) else {
                     break;
@@ -2721,6 +2733,7 @@ pub fn parse_action0_object_meta(payload: &[u8]) -> Option<ParsedObjectMeta> {
         size,
         climate_mask,
         build_cost_factor,
+        callback_mask,
         badge_labels,
         badge_list_error,
     })

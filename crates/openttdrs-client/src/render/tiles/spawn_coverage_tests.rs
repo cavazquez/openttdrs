@@ -19,6 +19,7 @@ use crate::render::tiles::{
 };
 use crate::render::{
     CompanyColoredSprites, MapSpriteBatches, MapVisualLayer, RenderGrid, TileRenderContext,
+    ViewportSortableParent,
 };
 use crate::sprites::{RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS};
 
@@ -1058,6 +1059,38 @@ fn ship_depot_uses_water_and_all_vanilla_two_tile_parts() {
     let mut visuals = world.query::<&crate::render::MapVisualLayer>();
     // 4 fondos de agua + 1/2/1/2 capas de edificio para las cuatro variantes.
     assert_eq!(visuals.iter(&world).count(), 10);
+
+    // Las seis capas BUILD no quedan relegadas al orden local de la tesela:
+    // sus prismas TILE_SEQ entran al mismo sorter global que casas y puentes.
+    // Los máximos son inclusivos, como `AddSortableSpriteToDraw` de OpenTTD.
+    let mut parents: Vec<_> = world
+        .query::<&ViewportSortableParent>()
+        .iter(&world)
+        .map(|parent| {
+            (
+                parent.sprite_id,
+                parent.bounds.xmin,
+                parent.bounds.ymin,
+                parent.bounds.zmin,
+                parent.bounds.xmax,
+                parent.bounds.ymax,
+                parent.bounds.zmax,
+            )
+        })
+        .collect();
+    parents.sort_unstable();
+    assert_eq!(
+        parents,
+        vec![
+            (4070, 32, 31, 0, 47, 31, 19),
+            (4071, 47, 32, 0, 47, 47, 19),
+            (4072, 16, 31, 0, 31, 31, 19),
+            (4073, 31, 32, 0, 31, 47, 19),
+            (4074, 32, 16, 0, 47, 16, 19),
+            (4075, 32, 32, 0, 32, 47, 19),
+        ],
+        "las cuatro variantes conservan los bounds de OpenTTD"
+    );
 }
 
 #[test]

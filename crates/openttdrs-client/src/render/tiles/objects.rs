@@ -2370,7 +2370,7 @@ pub(crate) fn spawn_transport_object_tile(
             );
         }
         TileKind::ShipDepot => {
-            spawn_ship_depot_tile(commands, assets, company, owner_colour, ctx, base_z);
+            spawn_ship_depot_tile(commands, assets, company, owner_colour, ctx, base_z, dims.0);
         }
         TileKind::Airport => {
             let half_h = if tileh == 0 {
@@ -2467,6 +2467,7 @@ fn spawn_ship_depot_tile(
     owner_colour: Option<CompanyColour>,
     ctx: &TileRenderContext,
     base_z: u8,
+    map_width: u32,
 ) {
     if buildings_hidden() {
         return;
@@ -2512,10 +2513,11 @@ fn spawn_ship_depot_tile(
     let company_palette = 775 + u32::from(owner_colour.unwrap_or_default().as_u8());
 
     for (layer_i, &(sprite_i, dx, dy, xrel, yrel, width, height)) in layers.iter().enumerate() {
+        let sprite_id = 4070 + sprite_i as u32;
         WorldDrawTrace::record_sprite_with_palette_and_geometry(
             "ship-depot",
             "sortable",
-            4070 + sprite_i as u32,
+            sprite_id,
             company_palette,
             false,
             (0, 0, 0),
@@ -2525,7 +2527,7 @@ fn spawn_ship_depot_tile(
             )),
         );
         let local = remap_tile_offset(dx, dy, 0.0) * 0.5;
-        let pos = overlay_pos(
+        let mut pos = overlay_pos(
             ctx.iso_pos + local,
             xrel,
             yrel,
@@ -2536,6 +2538,13 @@ fn spawn_ship_depot_tile(
             ctx.tx_i32(),
             ctx.ty_i32(),
         );
+        // Cada capa ya declara la misma `TILE_SEQ_LINE` que recibe
+        // `AddSortableSpriteToDraw`. Antes estos sprites quedaban en la
+        // profundidad local de la tesela y no podían cruzarse correctamente
+        // con edificios, puentes ni otros depósitos. Reservamos su slot y
+        // entregamos el prisma al sorter global igual que las casas vanilla.
+        let source_depth = viewport_source_depth(pos.z, ctx.tx, map_width);
+        pos.z = source_depth;
         commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
@@ -2546,8 +2555,50 @@ fn spawn_ship_depot_tile(
                 SHIP_DEPOT_PATHS[sprite_i],
             )),
             Transform::from_translation(pos),
+            ViewportSortableParent {
+                sprite_id,
+                bounds: ship_depot_parent_bounds(
+                    ctx, base_z, dx as i32, dy as i32, extent_x, extent_y,
+                ),
+                insertion_key: viewport_insertion_key(
+                    ctx.tx,
+                    ctx.ty,
+                    (layer_i as u8).saturating_add(1),
+                ),
+                source_depth,
+            },
         ));
     }
+}
+
+/// Caja mundial de una capa `TILE_SEQ_LINE` del depósito naval.
+///
+/// Las seis piezas 4070..4075 no comparten tamaño de imagen, pero sí el
+/// prisma lineal indicado por `water_land.h`: 16×1 o 1×16, siempre con altura
+/// 20. Centralizar la conversión evita que la traza y el sorter runtime
+/// diverjan por un máximo inclusivo o una elevación distinta.
+fn ship_depot_parent_bounds(
+    ctx: &TileRenderContext,
+    base_z: u8,
+    dx: i32,
+    dy: i32,
+    extent_x: i32,
+    extent_y: i32,
+) -> ParentSpriteBounds {
+    tile_seq_parent_sprite(
+        0,
+        0,
+        ctx.tx_i32(),
+        ctx.ty_i32(),
+        base_z,
+        dx,
+        dy,
+        0,
+        extent_x,
+        extent_y,
+        20,
+    )
+    .bounds
 }
 
 /// Padres BUILD del depósito vial. Aunque las cuatro variantes vanilla de

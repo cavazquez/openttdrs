@@ -300,6 +300,8 @@ pub const CBID_INDTILE_ANIMATION_SPEED: u16 = 0x27;
 pub const CBID_INDTILE_ANIM_NEXT_FRAME: u16 = CBID_INDTILE_ANIMATION_NEXT_FRAME;
 /// Callback estaciones: disponibilidad de clase/spec (`CBID_STATION_AVAILABILITY`).
 pub const CBID_STATION_AVAILABILITY: u16 = 0x13;
+/// Callback estaciones: elegir layout de tesela al dibujar.
+pub const CBID_STATION_DRAW_TILE_LAYOUT: u16 = 0x14;
 /// Callback estaciones: comprobar pendiente de cada tesela al construir.
 pub const CBID_STATION_LAND_SLOPE_CHECK: u16 = 0x149;
 /// Callback estaciones / road stops: inicia, pausa o fija un frame de animación.

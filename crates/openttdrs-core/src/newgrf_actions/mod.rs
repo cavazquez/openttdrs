@@ -4771,6 +4771,57 @@ mod tests {
         assert_eq!(state.map.get_kind(single), Some(TileKind::Grass));
     }
 
+    /// CB14 debe sobrevivir la carga Action0/3→Action2 y seleccionar el
+    /// tiletype que consumirá el renderer, conservando el eje de la tesela.
+    #[test]
+    fn station_draw_layout_callback_runs_from_loaded_action2_graph() {
+        use crate::newgrf_sprites::{
+            Action2EvalCtx, build_action2_callback_literal_payload,
+            build_grf_v2_feature_with_action2_chain,
+        };
+
+        let action0 = build_action0_station_payload_with_callback_mask(
+            b"CBDR",
+            b"Spec",
+            0,
+            0,
+            1 << 1,
+            "Station draw callback",
+        );
+        let action2 = build_action2_callback_literal_payload(ACTION0_FEATURE_STATIONS, 7, 6);
+        let bytes = build_grf_v2_feature_with_action2_chain(
+            &action0,
+            ACTION0_FEATURE_STATIONS,
+            0,
+            7,
+            &action2,
+            1,
+            1,
+            &[174],
+            [b'C', b'D', 0, 1],
+            "station-draw-cb",
+        );
+        let dir = tempfile_dir_with("station_draw_cb.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("station_draw_cb.grf", 0x4344_0001));
+        apply_newgrf_stations(&mut state, &[&dir]);
+
+        let spec = state
+            .station_spec_catalog
+            .iter()
+            .find(|spec| spec.from_newgrf)
+            .unwrap();
+        assert_eq!(spec.callback_mask, 1 << 1);
+        assert!(spec.has_draw_tile_layout_callback());
+        let mut ctx = Action2EvalCtx::default();
+        assert_eq!(
+            crate::apply_station_draw_tile_layout_callback(spec, 3, true, &mut ctx),
+            7,
+        );
+    }
+
     #[test]
     fn industry_tile_animation_properties_are_parsed_separately() {
         let tile = [

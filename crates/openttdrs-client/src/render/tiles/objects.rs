@@ -22,7 +22,9 @@ use crate::iso::{
     slope_sprite_offset, sortable_draw_z, tile_pos_half,
 };
 use crate::render::catenary_newgrf::catenary_sprite_colored;
-use crate::render::station_newgrf::{NewGrfStationSpriteCache, newgrf_station_def_for_tile};
+use crate::render::station_newgrf::{
+    NewGrfStationSpriteCache, newgrf_station_def_for_tile, station_newgrf_view_index_for_tile,
+};
 use crate::render::viewport_sort::{
     ParentSprite, ParentSpriteBounds, depths_in_viewport_sort_order,
 };
@@ -1396,7 +1398,6 @@ pub(crate) fn spawn_station_tile(
             // Primero resolvemos el handle, pero esperamos para hacer el spawn: la
             // catenaria siempre se emite antes de `DrawRailTileSeq` en OpenTTD.
             let mut newgrf_overlay = None;
-            let view_idx = openttdrs_core::station_newgrf_view_index(m5);
             if matches!(
                 class,
                 StationTileClass::Rail | StationTileClass::RailWaypoint
@@ -1404,7 +1405,6 @@ pub(crate) fn spawn_station_tile(
                 && !buildings_hidden()
                 && let Some(def) =
                     newgrf_station_def_for_tile(station_catalog, map, stations, ctx.coord)
-                && let Some(view) = def.newgrf_view(view_idx)
                 && let (Some(cache), Some(images)) = (station_sprites.as_mut(), images.as_mut())
             {
                 let colour_u8 = owner_colour.map(CompanyColour::as_u8).unwrap_or(0);
@@ -1420,8 +1420,11 @@ pub(crate) fn spawn_station_tile(
                     newgrf_stack,
                     def.newgrf_grfid,
                 ));
-                if let Some(handle) =
-                    cache.handle_for_runtime(def, view_idx, owner_colour, &mut a2, images)
+                let mut callback_ctx = a2.clone();
+                let view_idx = station_newgrf_view_index_for_tile(def, m5, &mut callback_ctx);
+                if let Some(view) = def.newgrf_view(view_idx)
+                    && let Some(handle) =
+                        cache.handle_for_runtime(def, view_idx, owner_colour, &mut a2, images)
                 {
                     let pos3 = crate::iso::overlay_pos(
                         ctx.iso_pos,

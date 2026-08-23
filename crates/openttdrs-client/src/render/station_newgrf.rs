@@ -58,6 +58,21 @@ impl NewGrfStationSpriteCache {
     }
 }
 
+/// Índice de vista de estación tras aplicar CB14 si el spec lo declaró.
+///
+/// El contexto se recibe separado del resolver de sprites: CB14 instala sus
+/// parámetros genéricos (`0x0C`/`0x10`/`0x18`) y no debe borrar las vars reales
+/// de tesela que Action2 usa inmediatamente después para elegir el gráfico.
+#[must_use]
+pub(crate) fn station_newgrf_view_index_for_tile(
+    def: &StationSpecDef,
+    m5: u8,
+    ctx: &mut openttdrs_core::Action2EvalCtx,
+) -> usize {
+    let layout = openttdrs_core::apply_station_draw_tile_layout_callback(def, m5, m5 & 1 != 0, ctx);
+    openttdrs_core::station_newgrf_view_index(layout)
+}
+
 /// Spec NewGRF con vistas Action1/3 para la estación/waypoint que cubre `coord`.
 #[must_use]
 pub(crate) fn newgrf_station_def_for_tile<'a>(
@@ -179,5 +194,59 @@ mod tests {
             .handle_for_runtime(&def, idx2, None, &mut ctx, &mut images)
             .expect("v2");
         assert_ne!(h0, h2);
+    }
+
+    #[test]
+    fn draw_layout_callback_changes_the_rendered_view_index() {
+        use openttdrs_core::{
+            Action2VarAdjust, Action2VarEntry, Action2VarTerm, TrainSpriteAssign,
+            TrainSpriteGraphics,
+        };
+
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 3,
+        });
+        gfx.action2_var.insert(
+            3,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x1A,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        shift: 0,
+                        and_mask: 6,
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
+        let def = StationSpecDef {
+            id: StationSpecId::from_u16(9),
+            class: openttdrs_core::StationClassId::from_u16(1),
+            label: "CB14".into(),
+            short_label: "CB14".into(),
+            disallowed_platforms: 0,
+            disallowed_lengths: 0,
+            callback_mask: 1 << 1,
+            from_newgrf: true,
+            newgrf_preview: None,
+            newgrf_views: Vec::new(),
+            newgrf_local_id: 0,
+            newgrf_runtime: Some(Box::new(gfx)),
+            newgrf_grfid: 0,
+            newgrf_type_tables: None,
+            custom_layouts: Default::default(),
+        };
+        let mut ctx = openttdrs_core::Action2EvalCtx::default();
+        assert_eq!(
+            station_newgrf_view_index_for_tile(&def, 3, &mut ctx),
+            7,
+            "CB14=6 conserva eje Y y el renderer usa la vista 7"
+        );
     }
 }

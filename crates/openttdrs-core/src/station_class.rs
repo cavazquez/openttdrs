@@ -111,6 +111,8 @@ pub struct StationSpecDef {
 
 /// Bit `StationCallbackMask::Avail` de `OpenTTD`: CB `0x13`.
 pub const STATION_CALLBACK_AVAILABILITY_MASK: u8 = 1;
+/// Bit `StationCallbackMask::DrawTileLayout` de `OpenTTD`: CB `0x14`.
+pub const STATION_CALLBACK_DRAW_TILE_LAYOUT_MASK: u8 = 1 << 1;
 /// Bit `StationCallbackMask::SlopeCheck` de `OpenTTD`: CB `0x149`.
 pub const STATION_CALLBACK_SLOPE_CHECK_MASK: u8 = 1 << 4;
 
@@ -162,6 +164,12 @@ impl StationSpecDef {
     #[must_use]
     pub const fn has_availability_callback(&self) -> bool {
         (self.callback_mask & STATION_CALLBACK_AVAILABILITY_MASK) != 0
+    }
+
+    /// El spec declaró CB `0x14` para elegir layout al dibujar.
+    #[must_use]
+    pub const fn has_draw_tile_layout_callback(&self) -> bool {
+        (self.callback_mask & STATION_CALLBACK_DRAW_TILE_LAYOUT_MASK) != 0
     }
 
     /// El spec declaró CB `0x149` de comprobación de pendiente en Action0.
@@ -345,6 +353,38 @@ pub fn apply_station_build_tile_layout_callback(
     (u8::try_from(cb).unwrap_or(0) & !1) + u8::from(axis_y)
 }
 
+/// Aplica CB14 (`CBID_STATION_DRAW_TILE_LAYOUT`) al layout in-world de una tesela.
+///
+/// Un callback fallido, un resultado fuera de la representación `m5` local o
+/// un spec sin máscara/runtime conserva `base_gfx`. El caller entrega el
+/// contexto de la tesela para que el Action2 pueda leer sus vars de estación;
+/// el scope/almacenamiento completo de `BaseStation` sigue fuera de este corte.
+#[must_use]
+pub fn apply_station_draw_tile_layout_callback(
+    def: &StationSpecDef,
+    base_gfx: u8,
+    axis_y: bool,
+    ctx: &mut crate::newgrf_sprites::Action2EvalCtx,
+) -> u8 {
+    if !def.has_draw_tile_layout_callback() {
+        return base_gfx;
+    }
+    let Some(runtime) = def.newgrf_runtime.as_ref() else {
+        return base_gfx;
+    };
+    let cb = runtime.resolve_callback_ctx(
+        def.newgrf_local_id,
+        crate::newgrf_sprites::CBID_STATION_DRAW_TILE_LAYOUT,
+        0,
+        0,
+        ctx,
+    );
+    if cb == crate::newgrf_sprites::CALLBACK_FAILED || cb > u16::from(u8::MAX) {
+        return base_gfx;
+    }
+    (u8::try_from(cb).unwrap_or(base_gfx) & !1) | u8::from(axis_y)
+}
+
 #[must_use]
 pub fn next_free_station_class_id(catalog: &[StationClassDef]) -> Option<StationClassId> {
     for id in 1u16..=1023 {
@@ -488,6 +528,64 @@ mod tests {
         assert_eq!(out, 4);
         let out_y = apply_station_build_tile_layout_callback(&specs[0], 1, 1, 1, 0, 0, true);
         assert_eq!(out_y, 5); // 4|axis_y
+    }
+
+    #[test]
+    fn cb14_selects_draw_layout_and_preserves_axis() {
+        use crate::newgrf_sprites::{
+            Action2EvalCtx, Action2VarAdjust, Action2VarEntry, Action2VarTerm, TrainSpriteAssign,
+            TrainSpriteGraphics,
+        };
+
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 3,
+        });
+        // nvar=0: devuelve el callback id bajo (`0x14`) y prueba que CB14
+        // llega al grafo, no sólo que se reutiliza el layout base.
+        gfx.action2_var.insert(
+            3,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x0C,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        shift: 0,
+                        and_mask: u8::MAX,
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
+        let mut specs = vanilla_station_spec_catalog();
+        specs[0].callback_mask = STATION_CALLBACK_DRAW_TILE_LAYOUT_MASK;
+        specs[0].newgrf_runtime = Some(Box::new(gfx));
+        specs[0].newgrf_local_id = 0;
+
+        let mut ctx = Action2EvalCtx::default();
+        assert_eq!(
+            apply_station_draw_tile_layout_callback(&specs[0], 2, true, &mut ctx),
+            21,
+            "0x14 con eje Y conserva el bit de eje tras limpiar el bit 0"
+        );
+
+        specs[0].callback_mask = 0;
+        assert_eq!(
+            apply_station_draw_tile_layout_callback(&specs[0], 2, true, &mut ctx),
+            2,
+            "sin bit DrawTileLayout conserva m5"
+        );
+        specs[0].callback_mask = STATION_CALLBACK_DRAW_TILE_LAYOUT_MASK;
+        specs[0].newgrf_runtime = None;
+        assert_eq!(
+            apply_station_draw_tile_layout_callback(&specs[0], 2, true, &mut ctx),
+            2,
+            "sin runtime conserva el fallback"
+        );
     }
 
     #[test]

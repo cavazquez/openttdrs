@@ -702,9 +702,18 @@ fn foundation_parent_bounds(
     )
 }
 
+/// Superficie y parent que deja `DrawFoundation` bajo una vía.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct RailFoundationRender {
+    pub(crate) surface_base_z: u8,
+    /// Último parent materializado por `DrawFoundation`. Los `DrawGroundSprite`
+    /// y `DrawTrackBits` posteriores lo usan como screen child.
+    pub(crate) child_parent: Option<Entity>,
+}
+
 /// Cimiento bajo vía/estación en pendiente. Replica la selección de sprites
-/// de `DrawTrackBits` / `DrawFoundation` y devuelve el `base_z` que deben usar
-/// las capas ferroviarias encima del cimiento.
+/// de `DrawTrackBits` / `DrawFoundation` y conserva el parent activo para las
+/// capas ferroviarias posteriores.
 #[must_use]
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_rail_foundation(
@@ -718,9 +727,12 @@ pub(crate) fn spawn_rail_foundation(
     foundation_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
     images: Option<&mut Assets<Image>>,
-) -> u8 {
+) -> RailFoundationRender {
     if tileh == 0 {
-        return ctx.info.base_z;
+        return RailFoundationRender {
+            surface_base_z: ctx.info.base_z,
+            child_parent: None,
+        };
     }
     let decision = rail_foundation_decision(map, ctx, map_dims, tileh, trackbits);
     if decision.foundation != 0 && decision.foundation != u8::MAX {
@@ -749,8 +761,9 @@ pub(crate) fn spawn_rail_foundation(
     let plan = rail_foundation_draw_plan(tileh, trackbits, decision.sprite_block);
     let mut action5_sprites = action5_sprites;
     let mut images = images;
+    let mut child_parent = None;
     for (index, draw) in plan.sprites.into_iter().flatten().enumerate() {
-        let _ = spawn_foundation_sprite(
+        if let Some(parent) = spawn_foundation_sprite(
             commands,
             assets,
             ctx,
@@ -762,9 +775,14 @@ pub(crate) fn spawn_rail_foundation(
             foundation_newgrf,
             action5_sprites.as_deref_mut(),
             images.as_deref_mut(),
-        );
+        ) {
+            child_parent = Some(parent);
+        }
     }
-    ctx.info.base_z.saturating_add(plan.surface_z_delta)
+    RailFoundationRender {
+        surface_base_z: ctx.info.base_z.saturating_add(plan.surface_z_delta),
+        child_parent,
+    }
 }
 
 /// Superficie que deja `DrawFoundation(GetRoadFoundation(...))` para una
@@ -1061,13 +1079,37 @@ pub(crate) fn spawn_foundation_child_ground_sprite_at(
     map_width: u32,
     parent: Entity,
 ) {
-    let mut position = full_tile_sprite_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, layer, half_h);
+    let position = full_tile_sprite_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, layer, half_h);
+    spawn_foundation_child_sprite_at(
+        commands,
+        image.sprite_colored(color),
+        ctx,
+        position,
+        map_width,
+        parent,
+    );
+}
+
+/// Adjunta un sprite ya resuelto al último parent de `DrawFoundation`.
+///
+/// `AddChildSpriteScreen` conserva la posición propia del child y desplaza su
+/// profundidad cuando el sorter mueve al parent. Este helper permite usar esa
+/// semántica tanto para ground como para capas de vía que no provienen de un
+/// `AtlasSprite` fijo.
+pub(crate) fn spawn_foundation_child_sprite_at(
+    commands: &mut Commands,
+    sprite: Sprite,
+    ctx: &TileRenderContext,
+    mut position: Vec3,
+    map_width: u32,
+    parent: Entity,
+) {
     let source_depth = viewport_source_depth(position.z, ctx.tx, map_width);
     position.z = source_depth;
     commands.spawn((
         MapVisualLayer,
         ctx.map_tile_chunk(),
-        image.sprite_colored(color),
+        sprite,
         Transform::from_translation(position),
         ViewportSortableChild {
             parent,

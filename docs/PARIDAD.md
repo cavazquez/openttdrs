@@ -107,6 +107,8 @@ por el oráculo, y el runtime las ordena con la clave diagonal estable de
 inclinada conservan el delta de su parent de fundación. Las rampas de puente
 con fundación materializada aplican la misma regla: su suelo posterior es un
 child del último parent de `DrawFoundation`, no una capa diagonal independiente.
+La vía y el suelo explícito de rail posteriores a una fundación comparten ahora
+ese parent, por lo que el sorter desplaza muro, base y carril como un conjunto.
 También incorpora los edificios industriales vanilla planos y estáticos, cuya
 caja `M(...)` no cambia durante la composición; las pendientes, animaciones y
 layouts NewGRF permanecen fuera de ese subconjunto.
@@ -150,9 +152,10 @@ producers. Los focos naval `138,7..140,10` y de muelle `136,1..139,3` vinculan
 7/7 parents candidatos al orden final C++; es evidencia del contrato de cajas y
 no una certificación raster. Los 383 comandos `industry-building` de Kale ya
 están contenidos por `world-draw`; eso no equivale a que sus variantes dinámicas
-o NewGRF tengan parent/children runtime. Faltan children de familias distintas
-de ascensores, árboles, suelo de casas inclinadas y suelo de rampas de puente,
-además de clipping, anclajes finales y framebuffer. El siguiente trabajo debe
+o NewGRF tengan parent/children runtime. La relación rail base/vía posterior a
+fundación ya queda cubierta en runtime, pero el framebuffer del foco aún muestra
+huecos de infraestructura que este vínculo no explica. Restan otras familias de
+children, clipping, anclajes finales y framebuffer. El siguiente trabajo debe
 extenderlo a las piezas visibles de puentes y las familias NewGRF de estación,
 aeropuertos y objetos, no rebajar el baseline ni extrapolar una región a
 paridad general.

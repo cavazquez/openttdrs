@@ -2,10 +2,11 @@ use bevy::prelude::*;
 use openttdrs_core::prelude::*;
 use openttdrs_core::{Climate, RoadTypeDef, partial_pixel_z};
 
+use super::helpers::{spawn_foundation_child_ground_sprite_at, spawn_foundation_child_sprite_at};
 use super::{
     FLAT_WATER_LAYER_FRAC, SHORE_LAYER_FRAC, TRAM_OVERLAY_LAYER_FRAC, catenary_under_low_bridge,
     roadside_detail_visible_under_bridge, sloped_or_flat_image, spawn_forced_leveled_foundation,
-    spawn_ground_sprite, spawn_ground_sprite_at, spawn_rail_foundation, spawn_road_foundation,
+    spawn_ground_sprite, spawn_rail_foundation, spawn_road_foundation,
 };
 use crate::iso::{
     TILE_HALF_H, full_tile_sprite_pos, full_tile_sprite_pos_half, ground_tile_pos_half,
@@ -22,8 +23,8 @@ use crate::render::viewport_sort::{
 };
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
 use crate::render::{
-    CompanyColoredSprites, MapVisualLayer, TileRenderContext, WaterTile, WorldAssets,
-    sprite_from_atlas_or_company_white_colour,
+    CompanyColoredSprites, MapVisualLayer, TileRenderContext, ViewportSortableChild, WaterTile,
+    WorldAssets, sprite_from_atlas_or_company_white_colour, viewport_source_depth,
 };
 use crate::sprites::{
     CompanyColour, ONEWAY_ROAD_SPRITE_META, RAIL_GROUND_HALF_TILE_SNOW,
@@ -258,7 +259,8 @@ fn spawn_rail_ground_draw(
     ctx: &TileRenderContext,
     draw: RailGroundDraw,
     base_z: u8,
-    child_of_foundation: bool,
+    foundation_child_parent: Option<Entity>,
+    map_width: u32,
 ) {
     let slope = usize::from(slope_sprite_offset(draw.tileh));
     let image = match draw.kind {
@@ -269,22 +271,24 @@ fn spawn_rail_ground_draw(
         RailGroundKind::Shore => &assets.shore[shore_png_index(draw.tileh)],
     };
 
-    if child_of_foundation {
+    if let Some(parent) = foundation_child_parent {
         // Los hijos de Foundation conservan el orden local de su padre. No
         // aparece agua hija en Kale hoy, pero conservar WaterTile evita que
         // un SAV posterior con esa rama pierda su animación.
         if draw.kind == RailGroundKind::Water {
+            let mut position = full_tile_sprite_pos(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.001);
+            let source_depth = viewport_source_depth(position.z, ctx.tx, map_width);
+            position.z = source_depth;
             commands.spawn((
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
                 WaterTile::ANIMATED,
                 image.sprite(),
-                Transform::from_translation(full_tile_sprite_pos(
-                    ctx.tx_i32(),
-                    ctx.ty_i32(),
-                    base_z,
-                    0.001,
-                )),
+                Transform::from_translation(position),
+                ViewportSortableChild {
+                    parent,
+                    source_depth,
+                },
             ));
             return;
         }
@@ -295,7 +299,17 @@ fn spawn_rail_ground_draw(
         } else {
             slope_half_h(draw.tileh)
         };
-        spawn_ground_sprite_at(commands, image, Color::WHITE, ctx, base_z, 0.001, half_h);
+        spawn_foundation_child_ground_sprite_at(
+            commands,
+            image,
+            Color::WHITE,
+            ctx,
+            base_z,
+            0.001,
+            half_h,
+            map_width,
+            parent,
+        );
         return;
     }
 
@@ -1466,7 +1480,8 @@ pub(crate) fn spawn_rail_tile(
             ctx,
             initial.draw,
             ctx.info.base_z.saturating_add(initial.surface_z_delta),
-            false,
+            None,
+            map_dims.0,
         );
     } else if tileh != 0 {
         // El sprite de vía clásica ya incluye suelo; esta base visual antigua
@@ -1486,11 +1501,12 @@ pub(crate) fn spawn_rail_tile(
     // STEEP_LOWER; el cimiento visible se crea recién entre las dos pasadas.
     // Aun así catenaria y señales posteriores necesitan conocer desde ahora
     // la altura final de la superficie.
+    let mut foundation_child_parent = None;
     let rail_base_z = if foundation_after_pass.is_some() {
         let (_, z_delta) = openttdrs_core::rail_surface_slope_and_z(tileh, render_tb);
         ctx.info.base_z.saturating_add(z_delta)
     } else {
-        spawn_rail_foundation(
+        let foundation = spawn_rail_foundation(
             commands,
             map,
             map_dims,
@@ -1501,7 +1517,9 @@ pub(crate) fn spawn_rail_tile(
             foundation_newgrf,
             action5_sprites.as_deref_mut(),
             images.as_deref_mut(),
-        )
+        );
+        foundation_child_parent = foundation.child_parent;
+        foundation.surface_base_z
     };
     if let Some(initial) = initial_ground
         && let RailTrackTraceMode::FoundationChild(_) = initial.trace_mode
@@ -1509,7 +1527,15 @@ pub(crate) fn spawn_rail_tile(
         // La fundación ya dejó el parent sortable activo. Emitir después el
         // suelo coincide con `DrawFoundation` seguido de `DrawGroundSprite`.
         record_rail_ground_trace(initial.draw, initial.trace_mode, 0);
-        spawn_rail_ground_draw(commands, assets, ctx, initial.draw, rail_base_z, true);
+        spawn_rail_ground_draw(
+            commands,
+            assets,
+            ctx,
+            initial.draw,
+            rail_base_z,
+            foundation_child_parent,
+            map_dims.0,
+        );
     }
     let (surface_tileh, _) = openttdrs_core::rail_surface_slope_and_z(tileh, render_tb);
     let render_tileh = if surface_tileh & 0x20 != 0 {
@@ -1625,18 +1651,33 @@ pub(crate) fn spawn_rail_tile(
                 z,
                 pass_half_h[pass_index],
             );
-            commands.spawn((
-                MapVisualLayer,
-                ctx.map_tile_chunk(),
-                img.sprite_colored(rail_paint),
-                Transform::from_translation(
-                    base + Vec3::new(
-                        offset.x + halftile_offset.x,
-                        offset.y + halftile_offset.y,
-                        0.0,
-                    ),
-                ),
-            ));
+            let position = base
+                + Vec3::new(
+                    offset.x + halftile_offset.x,
+                    offset.y + halftile_offset.y,
+                    0.0,
+                );
+            if matches!(
+                pass_modes[pass_index],
+                RailTrackTraceMode::FoundationChild(_)
+            ) && let Some(parent) = foundation_child_parent
+            {
+                spawn_foundation_child_sprite_at(
+                    commands,
+                    img.sprite_colored(rail_paint),
+                    ctx,
+                    position,
+                    map_dims.0,
+                    parent,
+                );
+            } else {
+                commands.spawn((
+                    MapVisualLayer,
+                    ctx.map_tile_chunk(),
+                    img.sprite_colored(rail_paint),
+                    Transform::from_translation(position),
+                ));
+            }
             track_layer_index += 1;
         }
         if let Some(draws) = reservation_draws.as_ref() {
@@ -1661,23 +1702,36 @@ pub(crate) fn spawn_rail_tile(
                     0.026 + pbs_layer_index as f32 * 0.0004,
                     pass_half_h[pass_index],
                 );
-                commands.spawn((
-                    MapVisualLayer,
-                    ctx.map_tile_chunk(),
-                    img.sprite(),
-                    Transform::from_translation(
-                        base + Vec3::new(
-                            offset.x + halftile_offset.x,
-                            offset.y + bevy_extra_y + halftile_offset.y,
-                            0.0,
-                        ),
-                    ),
-                ));
+                let position = base
+                    + Vec3::new(
+                        offset.x + halftile_offset.x,
+                        offset.y + bevy_extra_y + halftile_offset.y,
+                        0.0,
+                    );
+                if matches!(mode, RailTrackTraceMode::FoundationChild(_))
+                    && let Some(parent) = foundation_child_parent
+                {
+                    spawn_foundation_child_sprite_at(
+                        commands,
+                        img.sprite(),
+                        ctx,
+                        position,
+                        map_dims.0,
+                        parent,
+                    );
+                } else {
+                    commands.spawn((
+                        MapVisualLayer,
+                        ctx.map_tile_chunk(),
+                        img.sprite(),
+                        Transform::from_translation(position),
+                    ));
+                }
                 pbs_layer_index += 1;
             }
         }
         if foundation_after_pass == Some(pass_index) {
-            let _ = spawn_rail_foundation(
+            let foundation = spawn_rail_foundation(
                 commands,
                 map,
                 map_dims,
@@ -1689,6 +1743,7 @@ pub(crate) fn spawn_rail_tile(
                 action5_sprites.as_deref_mut(),
                 images.as_deref_mut(),
             );
+            foundation_child_parent = foundation.child_parent;
         }
     }
     // `DrawTrackDetails` se emite inmediatamente después de `DrawTrackBits`,

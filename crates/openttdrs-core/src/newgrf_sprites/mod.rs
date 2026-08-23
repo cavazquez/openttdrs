@@ -37,10 +37,11 @@ pub use action_graph::{
     collect_aircraft_sprite_graphics, collect_airport_sprite_graphics,
     collect_airport_tile_sprite_graphics, collect_canal_sprite_graphics,
     collect_cargo_sprite_graphics, collect_feature_sprite_graphics, collect_house_sprite_graphics,
-    collect_industry_tile_sprite_graphics, collect_object_sprite_graphics,
-    collect_railtype_sprite_graphics, collect_road_vehicle_sprite_graphics,
-    collect_roadstop_sprite_graphics, collect_roadtype_sprite_graphics,
-    collect_ship_sprite_graphics, collect_station_sprite_graphics, collect_train_sprite_graphics,
+    collect_industry_sprite_graphics, collect_industry_tile_sprite_graphics,
+    collect_object_sprite_graphics, collect_railtype_sprite_graphics,
+    collect_road_vehicle_sprite_graphics, collect_roadstop_sprite_graphics,
+    collect_roadtype_sprite_graphics, collect_ship_sprite_graphics,
+    collect_station_sprite_graphics, collect_train_sprite_graphics,
 };
 
 // Re-exportar funciones de runtime de action5

@@ -22,6 +22,8 @@ pub const INVALID_INDUSTRY: u16 = NUM_INDUSTRY_TYPES;
 pub const INDUSTRY_ORIGINAL_NUM_OUTPUTS: usize = 2;
 /// Entradas originales (`INDUSTRY_ORIGINAL_NUM_INPUTS`).
 pub const INDUSTRY_ORIGINAL_NUM_INPUTS: usize = 3;
+/// Bit `IndustryCallbackMask::Location`: consulta CB `0x28` antes de construir.
+pub const INDUSTRY_CALLBACK_LOCATION_MASK: u16 = 1 << 3;
 /// Tesela de un layout (`IndustryTileLayoutTile`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IndustryLayoutTile {
@@ -73,6 +75,12 @@ pub struct IndustrySpecDef {
 }
 
 impl IndustrySpecDef {
+    /// ¿El GRF declaró CB `0x28` para autorizar la ubicación de la industria?
+    #[must_use]
+    pub const fn has_location_callback(&self) -> bool {
+        self.callback_mask & INDUSTRY_CALLBACK_LOCATION_MASK != 0
+    }
+
     /// Primer layout (o vacío).
     #[must_use]
     pub fn primary_layout(&self) -> &[IndustryLayoutTile] {

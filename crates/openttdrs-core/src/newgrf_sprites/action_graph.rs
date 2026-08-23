@@ -3,9 +3,10 @@
 use crate::newgrf_actions::{
     ACTION0_FEATURE_AIRCRAFT, ACTION0_FEATURE_AIRPORTS, ACTION0_FEATURE_AIRPORTTILES,
     ACTION0_FEATURE_CANALS, ACTION0_FEATURE_CARGOES, ACTION0_FEATURE_HOUSES,
-    ACTION0_FEATURE_INDUSTRYTILES, ACTION0_FEATURE_OBJECTS, ACTION0_FEATURE_RAILTYPES,
-    ACTION0_FEATURE_ROAD_VEHICLES, ACTION0_FEATURE_ROADSTOPS, ACTION0_FEATURE_ROADTYPES,
-    ACTION0_FEATURE_SHIPS, ACTION0_FEATURE_STATIONS, ACTION0_FEATURE_TRAINS,
+    ACTION0_FEATURE_INDUSTRIES, ACTION0_FEATURE_INDUSTRYTILES, ACTION0_FEATURE_OBJECTS,
+    ACTION0_FEATURE_RAILTYPES, ACTION0_FEATURE_ROAD_VEHICLES, ACTION0_FEATURE_ROADSTOPS,
+    ACTION0_FEATURE_ROADTYPES, ACTION0_FEATURE_SHIPS, ACTION0_FEATURE_STATIONS,
+    ACTION0_FEATURE_TRAINS,
 };
 use crate::newgrf_config::{GrfContainerVersion, GrfScanError, parse_grf_full};
 use crate::newgrf_walk::{GrfEntry, walk_grf_entries};
@@ -293,7 +294,8 @@ pub(super) fn parse_action3_feature(payload: &[u8], feature: u8) -> Option<Parse
 
 /// Índice sprite section v2: `id` → lista `(info, body)` (body = tras el BYTE info).
 #[must_use]
-/// Features con cadena Action3→Action2→Action1 (trains / stations / roadtypes / industrytile).
+/// Features con cadena Action3→Action2→Action1 (vehículos, estaciones,
+/// industrias/teselas y tipos de infraestructura).
 fn supports_action2_chain(feature: u8) -> bool {
     matches!(
         feature,
@@ -306,6 +308,7 @@ fn supports_action2_chain(feature: u8) -> bool {
             | ACTION0_FEATURE_RAILTYPES
             | ACTION0_FEATURE_ROADTYPES
             | ACTION0_FEATURE_ROADSTOPS
+            | ACTION0_FEATURE_INDUSTRIES
             | ACTION0_FEATURE_INDUSTRYTILES
             | ACTION0_FEATURE_HOUSES
             | ACTION0_FEATURE_AIRPORTTILES
@@ -456,6 +459,15 @@ pub fn collect_industry_tile_sprite_graphics(
     data: &[u8],
 ) -> Result<TrainSpriteGraphics, GrfScanError> {
     collect_feature_sprite_graphics(data, ACTION0_FEATURE_INDUSTRYTILES)
+}
+
+/// Action1/2/3 industries (`0x0A`), incluidos callbacks de ubicación.
+///
+/// # Errors
+///
+/// Contenedor inválido.
+pub fn collect_industry_sprite_graphics(data: &[u8]) -> Result<TrainSpriteGraphics, GrfScanError> {
+    collect_feature_sprite_graphics(data, ACTION0_FEATURE_INDUSTRIES)
 }
 
 /// Action1/3 houses (`0x07`).

@@ -117,6 +117,8 @@ pub fn apply_newgrf_industries(state: &mut GameState, search_dirs: &[&Path]) {
         let Ok(data) = std::fs::read(&path) else {
             continue;
         };
+        let gfx =
+            crate::newgrf_sprites::collect_industry_sprite_graphics(&data).unwrap_or_default();
         for meta in collect_industry_metas_from_grf(&data) {
             let Some(global_id) = next_free_industry_id(&catalog) else {
                 break;
@@ -176,7 +178,7 @@ pub fn apply_newgrf_industries(state: &mut GameState, search_dirs: &[&Path]) {
                 from_newgrf: true,
                 grfid: entry.grfid,
                 newgrf_local_id: meta.local_id,
-                newgrf_runtime: None,
+                newgrf_runtime: gfx.needs_runtime_resolve().then(|| Box::new(gfx.clone())),
             });
         }
     }

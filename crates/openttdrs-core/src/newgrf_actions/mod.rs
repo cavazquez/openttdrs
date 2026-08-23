@@ -4180,6 +4180,64 @@ mod tests {
         ]);
     }
 
+    /// El CB28 debe venir del Action2 del GRF cargado, no solo de una fixture
+    /// inyectada manualmente en el catálogo.
+    #[test]
+    fn industries_ac_location_callback_runs_from_loaded_action2_graph() {
+        use crate::command::{CommandError, place_industry_spec_def_sandbox};
+        use crate::industry_spec::INDUSTRY_CALLBACK_LOCATION_MASK;
+        use crate::map::TileCoord;
+        use crate::newgrf_sprites::{
+            build_action2_callback_literal_payload, build_grf_v2_feature_with_action2_chain,
+        };
+
+        let action0 = build_action0_industry_payload(
+            0,
+            0,
+            None,
+            &[(0, 0, 0)],
+            &[1],
+            &[],
+            &[10],
+            INDUSTRY_CALLBACK_LOCATION_MASK,
+            "Location callback",
+        );
+        let action2 = build_action2_callback_literal_payload(
+            ACTION0_FEATURE_INDUSTRIES,
+            7,
+            0x10, // No es FAILED/0x400/0xFF: OpenTTD rechaza la ubicación.
+        );
+        let bytes = build_grf_v2_feature_with_action2_chain(
+            &action0,
+            ACTION0_FEATURE_INDUSTRIES,
+            0,
+            7,
+            &action2,
+            1,
+            1,
+            &[174],
+            [b'I', b'C', 0, 1],
+            "industry-cb",
+        );
+        let dir = tempfile_dir_with("industry_cb.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("industry_cb.grf", 0x4943_0001));
+
+        apply_newgrf_industries(&mut state, &[&dir]);
+        let def = state.industry_spec_catalog.first().unwrap();
+        assert!(def.newgrf_runtime.is_some());
+        assert!(def.has_location_callback());
+        let type_id = def.id;
+
+        assert_eq!(
+            place_industry_spec_def_sandbox(&mut state, TileCoord::new(1, 1), type_id),
+            Err(CommandError::NewGrfCallbackDenied)
+        );
+        assert!(state.industries.is_empty());
+    }
+
     #[test]
     fn industry_tile_animation_properties_are_parsed_separately() {
         let tile = [

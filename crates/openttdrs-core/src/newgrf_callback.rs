@@ -120,6 +120,9 @@ pub fn callback_allows_placement(result: u16) -> bool {
 /// Sin runtime → permitir (vanilla). Deny observable si el CB no permite.
 #[must_use]
 pub fn apply_industry_location_callback(def: &IndustrySpecDef) -> bool {
+    if !def.has_location_callback() {
+        return true;
+    }
     let Some(runtime) = def.newgrf_runtime.as_ref() else {
         return true;
     };
@@ -698,7 +701,7 @@ mod tests {
             accepted_cargo_labels: Vec::new(),
             production_rates: Vec::new(),
             input_multipliers: Vec::new(),
-            callback_mask: 0x0100,
+            callback_mask: crate::industry_spec::INDUSTRY_CALLBACK_LOCATION_MASK,
             cost_multiplier: 0,
             name: "test".into(),
             from_newgrf: true,
@@ -710,6 +713,9 @@ mod tests {
         def.newgrf_runtime = Some(Box::new(gfx_callback_literal(0xFF)));
         assert!(apply_industry_location_callback(&def));
         def.newgrf_runtime = None;
+        assert!(apply_industry_location_callback(&def));
+        def.newgrf_runtime = Some(Box::new(gfx_callback_literal(0x10)));
+        def.callback_mask = 0;
         assert!(apply_industry_location_callback(&def));
     }
 

@@ -7,10 +7,12 @@
 //! el sorter. Otras familias se incorporan cuando ya tengan el mismo contrato
 //! de parent y children; no se inventa geometría desde el atlas.
 
+use std::collections::HashMap;
+
 use bevy::prelude::*;
 
 use crate::render::viewport_sort::{
-    ParentSprite, ParentSpriteBounds, depths_in_viewport_sort_order,
+    ParentSprite, ParentSpriteBounds, depths_in_viewport_sort_order, viewport_sort_parent_sprites,
 };
 
 /// `SPR_EMPTY_BOUNDING_BOX` de OpenTTD.
@@ -46,6 +48,20 @@ pub(crate) struct ViewportSortableChild {
     pub(crate) source_depth: f32,
 }
 
+/// Límite superior de la secuencia de children de cada parent ordenado.
+///
+/// `ViewportDrawParentSprites` emite un parent y todos sus children como un
+/// bloque atómico antes del parent siguiente. Reusar sin más el delta Z local
+/// del child funciona sólo mientras el hueco entre dos slots Bevy sea mayor
+/// que ese delta. Tras ordenar un mapa real, dos parents consecutivos pueden
+/// quedar separados por un micro-slot menor y un child terminaba por encima
+/// del edificio siguiente. Esta caché reserva el intervalo exacto hasta el
+/// siguiente parent del stream de OpenTTD.
+#[derive(Resource, Default)]
+pub(crate) struct ViewportSortableChildDepthWindows {
+    next_parent_depth: HashMap<Entity, f32>,
+}
+
 /// Clave de inserción de `ViewportAddLandscape`: fila `x + y`, luego `x`
 /// descendente y finalmente el ordinal del parent dentro de su tesela.
 ///
@@ -78,6 +94,7 @@ pub(crate) fn viewport_source_depth(base_depth: f32, tx: u32, map_width: u32) ->
 pub(crate) fn sort_viewport_sortable_parents(
     mut parents: Query<(Entity, Ref<ViewportSortableParent>, &mut Transform)>,
     mut removed: RemovedComponents<ViewportSortableParent>,
+    mut child_depth_windows: ResMut<ViewportSortableChildDepthWindows>,
 ) {
     let mut needs_sort = removed.read().next().is_some();
     let mut input = Vec::new();
@@ -85,7 +102,15 @@ pub(crate) fn sort_viewport_sortable_parents(
         needs_sort |= parent.is_added() || parent.is_changed();
         input.push((entity, *parent, transform.translation.z));
     }
-    if !needs_sort || input.len() < 2 {
+    if !needs_sort {
+        return;
+    }
+
+    // La caché sólo es válida para el conjunto actual de parents. Limpiarla
+    // también al quedar uno (o ninguno) evita que un child de un chunk
+    // descargado conserve el límite de una escena anterior.
+    child_depth_windows.next_parent_depth.clear();
+    if input.is_empty() {
         return;
     }
 
@@ -107,7 +132,18 @@ pub(crate) fn sort_viewport_sortable_parents(
         .iter()
         .map(|(_, parent, _)| parent.source_depth)
         .collect();
+    let order = viewport_sort_parent_sprites(&sprite_parents);
     let sorted_depths = depths_in_viewport_sort_order(&sprite_parents, &source_depths);
+
+    // En el stream final, cada parent reserva el espacio hasta el siguiente.
+    // El último no tiene techo y conserva el delta histórico de sus children.
+    for pair in order.windows(2) {
+        let parent_index = pair[0];
+        let next_parent_index = pair[1];
+        child_depth_windows
+            .next_parent_depth
+            .insert(input[parent_index].0, sorted_depths[next_parent_index]);
+    }
 
     for ((entity, _, current_depth), sorted_depth) in input.into_iter().zip(sorted_depths) {
         if (current_depth - sorted_depth).abs() > f32::EPSILON
@@ -119,22 +155,86 @@ pub(crate) fn sort_viewport_sortable_parents(
 }
 
 /// Actualiza los children tras la animación de elevadores y el sort de padres.
+///
+/// Cada conjunto de children ocupa el intervalo entre su parent y el siguiente
+/// parent del sorter. De este modo un sprite de suelo con transparencias no
+/// puede cubrir el edificio que OpenTTD dibuja inmediatamente después.
 pub(crate) fn sync_viewport_sortable_children(
     parents: Query<
-        (&ViewportSortableParent, &Transform),
+        (Entity, &ViewportSortableParent, &Transform),
         (With<ViewportSortableParent>, Without<ViewportSortableChild>),
     >,
-    mut children: Query<(&ViewportSortableChild, &mut Transform), With<ViewportSortableChild>>,
+    children: Query<(Entity, &ViewportSortableChild), With<ViewportSortableChild>>,
+    mut child_transforms: Query<&mut Transform, With<ViewportSortableChild>>,
+    child_depth_windows: Res<ViewportSortableChildDepthWindows>,
 ) {
-    for (child, mut transform) in &mut children {
-        let Ok((parent, parent_transform)) = parents.get(child.parent) else {
+    let mut children_by_parent: HashMap<Entity, Vec<(Entity, f32)>> = HashMap::new();
+    for (entity, child) in &children {
+        children_by_parent
+            .entry(child.parent)
+            .or_default()
+            .push((entity, child.source_depth));
+    }
+
+    for (parent_entity, children) in &mut children_by_parent {
+        let Ok((_, parent, parent_transform)) = parents.get(*parent_entity) else {
             continue;
         };
-        let depth = child.source_depth + (parent_transform.translation.z - parent.source_depth);
-        if (transform.translation.z - depth).abs() > f32::EPSILON {
-            transform.translation.z = depth;
+
+        // `AddChildSpriteScreen` preserva la inserción de children. La
+        // profundidad de origen es el desempate estable que ya usaban los
+        // spawners; `Entity` sólo resuelve dos capas con la misma profundidad.
+        children.sort_unstable_by(|(left_entity, left_depth), (right_entity, right_depth)| {
+            left_depth
+                .total_cmp(right_depth)
+                .then_with(|| left_entity.to_bits().cmp(&right_entity.to_bits()))
+        });
+        let child_count = children.len();
+        let next_parent_depth = child_depth_windows
+            .next_parent_depth
+            .get(parent_entity)
+            .copied();
+
+        for (rank, (entity, source_depth)) in children.iter().copied().enumerate() {
+            let historical_depth =
+                source_depth + (parent_transform.translation.z - parent.source_depth);
+            let depth = child_depth_in_parent_interval(
+                parent_transform.translation.z,
+                next_parent_depth,
+                rank,
+                child_count,
+            )
+            .unwrap_or(historical_depth);
+            if let Ok(mut transform) = child_transforms.get_mut(entity)
+                && (transform.translation.z - depth).abs() > f32::EPSILON
+            {
+                transform.translation.z = depth;
+            }
         }
     }
+}
+
+/// Devuelve un micro-slot para un child dentro del bloque de su parent.
+///
+/// `None` conserva el desplazamiento histórico cuando el parent es el último
+/// de la vista o el formato `f32` no deja un valor representable entre ambos
+/// slots. En el caso normal todos los children quedan estrictamente entre los
+/// dos parents, como en el stream C++.
+fn child_depth_in_parent_interval(
+    parent_depth: f32,
+    next_parent_depth: Option<f32>,
+    rank: usize,
+    child_count: usize,
+) -> Option<f32> {
+    let next_parent_depth = next_parent_depth?;
+    if parent_depth.partial_cmp(&next_parent_depth) != Some(std::cmp::Ordering::Less)
+        || child_count == 0
+    {
+        return None;
+    }
+    let fraction = (rank + 1) as f32 / (child_count + 1) as f32;
+    let depth = parent_depth + (next_parent_depth - parent_depth) * fraction;
+    (parent_depth < depth && depth < next_parent_depth).then_some(depth)
 }
 
 #[cfg(test)]
@@ -168,6 +268,7 @@ mod tests {
     #[allow(clippy::unwrap_used)] // Fixtures creados arriba dentro del mismo World.
     fn runtime_sort_moves_parent_and_screen_child_together() {
         let mut world = World::new();
+        world.init_resource::<ViewportSortableChildDepthWindows>();
         let first = world
             .spawn((
                 ViewportSortableParent {
@@ -237,6 +338,7 @@ mod tests {
     #[allow(clippy::unwrap_used)] // Fixtures creados arriba dentro del mismo World.
     fn runtime_empty_bounding_box_consumes_a_sort_slot_without_a_sprite() {
         let mut world = World::new();
+        world.init_resource::<ViewportSortableChildDepthWindows>();
         let visible = world
             .spawn((
                 ViewportSortableParent {
@@ -281,5 +383,95 @@ mod tests {
             .z;
         assert!((visible_depth - 1.000_5).abs() < 1e-6);
         assert!((empty_depth - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)] // Fixtures creados arriba dentro del mismo World.
+    fn runtime_children_stay_before_the_next_sorted_parent() {
+        let mut world = World::new();
+        world.init_resource::<ViewportSortableChildDepthWindows>();
+
+        // El parent de la fundación se pinta antes del edificio. En un mapa
+        // real los slots globales contiguos pueden estar mucho más cerca que
+        // el delta local del suelo (0.00014): el cálculo histórico lo ponía
+        // por delante de `building` y dejaba visible su transparencia negra.
+        let foundation = world
+            .spawn((
+                ViewportSortableParent {
+                    sprite_id: 5473,
+                    bounds: ParentSpriteBounds::new(0, 0, 0, 15, 15, 15),
+                    insertion_key: 0,
+                    source_depth: 1.0,
+                },
+                Transform::from_xyz(0.0, 0.0, 1.0),
+            ))
+            .id();
+        let building = world
+            .spawn((
+                ViewportSortableParent {
+                    sprite_id: 1432,
+                    bounds: ParentSpriteBounds::new(0, 0, 16, 15, 15, 31),
+                    insertion_key: 1,
+                    source_depth: 1.000_05,
+                },
+                Transform::from_xyz(0.0, 0.0, 1.000_05),
+            ))
+            .id();
+        let ground = world
+            .spawn((
+                ViewportSortableChild {
+                    parent: foundation,
+                    source_depth: 1.000_14,
+                },
+                Transform::from_xyz(0.0, 0.0, 1.000_14),
+            ))
+            .id();
+
+        let mut schedule = Schedule::default();
+        schedule.add_systems(
+            (
+                sort_viewport_sortable_parents,
+                sync_viewport_sortable_children,
+            )
+                .chain(),
+        );
+        schedule.run(&mut world);
+
+        let foundation_depth = world
+            .entity(foundation)
+            .get::<Transform>()
+            .unwrap()
+            .translation
+            .z;
+        let ground_depth = world
+            .entity(ground)
+            .get::<Transform>()
+            .unwrap()
+            .translation
+            .z;
+        let building_depth = world
+            .entity(building)
+            .get::<Transform>()
+            .unwrap()
+            .translation
+            .z;
+        assert!(
+            foundation_depth < ground_depth && ground_depth < building_depth,
+            "el child debe quedar dentro de la secuencia foundation → ground → building; got {foundation_depth}, {ground_depth}, {building_depth}"
+        );
+    }
+
+    #[test]
+    fn child_depth_uses_only_representable_parent_intervals() {
+        assert_eq!(child_depth_in_parent_interval(2.0, None, 0, 1), None);
+        assert_eq!(child_depth_in_parent_interval(2.0, Some(2.0), 0, 1), None);
+        assert_eq!(child_depth_in_parent_interval(2.0, Some(1.0), 0, 1), None);
+        let (Some(first), Some(second)) = (
+            child_depth_in_parent_interval(1.0, Some(1.000_1), 0, 2),
+            child_depth_in_parent_interval(1.0, Some(1.000_1), 1, 2),
+        ) else {
+            panic!("un intervalo finito debe admitir slots de child");
+        };
+        assert!(1.0 < first && first < second && second < 1.000_1);
     }
 }

@@ -16,7 +16,8 @@ use super::{
     spawn_leveled_foundation,
 };
 use crate::iso::{
-    full_tile_sprite_pos, overlay_pos, remap_tile_offset, slope_sprite_offset, wang_hash,
+    full_tile_sprite_pos, ground_draw_z, overlay_pos, remap_tile_offset, slope_sprite_offset,
+    wang_hash,
 };
 use crate::render::atlas::AtlasSprite;
 use crate::render::viewport_sort::ParentSpriteBounds;
@@ -569,8 +570,9 @@ pub(crate) fn spawn_house_tile(
             let mut position = house_pos(spec.s1_xrel, spec.s1_yrel, spec.s1_w, spec.s1_h, 0.4);
             if let Some(parent) = forced_foundation.and_then(|foundation| foundation.child_parent) {
                 // `DrawFoundation` deja el último parent activo; el ground
-                // posterior usa `AddChildSpriteScreen`, por lo que conserva
-                // exactamente el delta que el sorter global aplique al muro.
+                // posterior usa `AddChildSpriteScreen`; los offsets NFO de
+                // `s1` siguen formando parte del sprite, pero su altura ya
+                // es la superficie efectiva de la fundación.
                 let source_depth = viewport_source_depth(position.z, ctx.tx, resources.map_dims.0);
                 position.z = source_depth;
                 commands.spawn((
@@ -602,17 +604,19 @@ pub(crate) fn spawn_house_tile(
             // Los sprites de ground de `town_land.h` no siempre miden 64×31
             // (los patios de oficinas llegan a 64×37): se anclan con sus
             // propios offsets NFO, no con el centro del rombo natural.
+            // En una tesela plana `DrawGroundSprite(s1)` sigue perteneciendo
+            // al pase de suelo completo de OpenTTD. Dejarlo en la banda
+            // sortable permitía que la reasignación global de `s2` lo pusiera
+            // por debajo de su propio patio transparente (los huecos negros
+            // visibles al ampliar Kale). Conservamos la posición NFO, pero
+            // reservamos la profundidad exclusiva del pase ground.
+            let mut position = house_pos(spec.s1_xrel, spec.s1_yrel, spec.s1_w, spec.s1_h, 0.4);
+            position.z = ground_draw_z(ctx.tx_i32(), ctx.ty_i32(), 0.4);
             commands.spawn((
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
                 ground_sprite,
-                Transform::from_translation(house_pos(
-                    spec.s1_xrel,
-                    spec.s1_yrel,
-                    spec.s1_w,
-                    spec.s1_h,
-                    0.4,
-                )),
+                Transform::from_translation(position),
             ));
         }
     }

@@ -1,9 +1,8 @@
 use bevy::prelude::*;
 
 use crate::iso::{
-    GROUND_SPRITE_CENTER_X_OFFSET, HEIGHT_PX, TILE_HALF_H, full_tile_sprite_pos_half,
-    ground_tile_pos_half, overlay_pos, remap_tile_offset, slope_sprite_offset, sortable_draw_z,
-    tile_pos,
+    GROUND_SPRITE_CENTER_X_OFFSET, TILE_HALF_H, full_tile_sprite_pos_half, ground_tile_pos_half,
+    overlay_pos, remap_tile_offset, slope_sprite_offset, sortable_draw_z, tile_pos,
 };
 use crate::render::viewport_sort::ParentSpriteBounds;
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
@@ -99,7 +98,7 @@ pub(crate) fn sloped_or_flat_image(
         .unwrap_or_else(|| flat.clone())
 }
 
-/// Posición de overlay tras `DrawFoundation(FOUNDATION_LEVELED)` + `OffsetGroundSprite(0, -8)`.
+/// Posición de overlay sobre la superficie que deja `DrawFoundation`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn leveled_foundation_overlay_pos(
     ref_pos: Vec2,
@@ -144,9 +143,12 @@ pub(crate) fn foundation_surface_overlay_pos(
     tx: i32,
     ty: i32,
 ) -> Vec3 {
-    let mut pos = overlay_pos(ref_pos, xrel, yrel, w, h, surface_base_z, layer, tx, ty);
-    pos.y -= HEIGHT_PX;
-    pos
+    // `DrawFoundation(Leveled)` mueve `ti->z` a la superficie superior. El
+    // `OffsetGroundSprite(0, -TILE_HEIGHT)` aplicado al child expresa en
+    // pantalla exactamente ese mismo ascenso; al usar ya `surface_base_z`,
+    // volver a restar `HEIGHT_PX` lo compensaba dos veces y bajaba las capas
+    // ocho píxeles por debajo de OpenTTD.
+    overlay_pos(ref_pos, xrel, yrel, w, h, surface_base_z, layer, tx, ty)
 }
 
 pub(crate) fn spawn_leveled_foundation(
@@ -1252,11 +1254,11 @@ mod tests {
     }
 
     #[test]
-    fn leveled_overlay_matches_flat_elevation() {
-        let flat = overlay_pos(Vec2::ZERO, 0.0, 0.0, 64.0, 40.0, 2, 0.5, 3, 4);
+    fn leveled_overlay_reaches_the_raised_foundation_surface() {
+        let raised_surface = overlay_pos(Vec2::ZERO, 0.0, 0.0, 64.0, 40.0, 3, 0.5, 3, 4);
         let leveled =
             leveled_foundation_overlay_pos(Vec2::ZERO, 0.0, 0.0, 64.0, 40.0, 2, 0.5, 3, 4);
-        assert!((flat.y - leveled.y).abs() < 0.01);
+        assert_eq!(raised_surface, leveled);
     }
 
     #[test]

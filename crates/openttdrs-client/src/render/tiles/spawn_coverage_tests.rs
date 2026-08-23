@@ -11,6 +11,7 @@ use openttdrs_core::{Climate, FOUNDATION_ORIGINAL_SPRITE_BASE, WaterClass, set_w
 const TEST_CLIMATE: Climate = Climate::Temperate;
 const TEST_WORLD_SEED: u64 = 0;
 
+use crate::iso::ground_draw_z;
 use crate::render::assets::{WorldAssets, stub_opengfx_tiles_for_tests};
 use crate::render::tiles::{
     HouseSpawnResources, flush_map_batches, push_forest_tree, push_water_tile, spawn_bridge_middle,
@@ -1238,6 +1239,61 @@ fn sloped_house_ground_attaches_to_the_last_foundation_parent() {
     );
     let (_, child, transform) = attached[0];
     assert_eq!(child.source_depth, transform.translation.z);
+}
+
+#[test]
+fn flat_house_ground_stays_in_the_dedicated_ground_pass() {
+    let assets = boot_assets_app();
+    let mut map = Map::new_flat(3, 3, 0);
+    let mut house = tile_template();
+    house.kind = TileKind::House;
+    // La entrada vanilla inicial tiene el par s1=1422/s2=1423.
+    house.m8 = 0;
+    map.set_tile(TileCoord::new(1, 1), house)
+        .expect("house tile");
+    let grid = RenderGrid::from_map(&map, 3, 3);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+
+    world
+        .run_system_once(
+            |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                spawn_house_tile(
+                    &mut commands,
+                    &a.0,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    HouseSpawnResources {
+                        map: &m.0,
+                        map_dims: m.0.dimensions(),
+                        house_catalog: &[],
+                        foundation_newgrf: &[],
+                        action5_sprites: None,
+                        images: None,
+                    },
+                );
+            },
+        )
+        .expect("flat house spawn");
+
+    let building_depth = world
+        .query::<(&ViewportSortableParent, &Transform)>()
+        .iter(&world)
+        .next()
+        .map(|(_, transform)| transform.translation.z)
+        .expect("building parent");
+    let ground_depth = world
+        .query_filtered::<&Transform, (With<MapVisualLayer>, Without<ViewportSortableParent>)>()
+        .iter(&world)
+        .next()
+        .map(|transform| transform.translation.z)
+        .expect("house s1 ground");
+    assert_eq!(ground_depth, ground_draw_z(1, 1, 0.4));
+    assert!(
+        ground_depth < building_depth,
+        "DrawGroundSprite s1 debe quedar detrás de todos los parents: ground={ground_depth}, building={building_depth}"
+    );
 }
 
 #[test]
@@ -2816,6 +2872,20 @@ fn paved_roadside_uses_paved_set_and_streetlights_spawn_lamps() {
         paved_ground_x,
         crate::iso::iso(2, 2).x + crate::iso::GROUND_SPRITE_CENTER_X_OFFSET,
         "road_paved conserva el xrel=-31 del sprite completo"
+    );
+    let paved_ground_z = world
+        .query::<(&Sprite, &Transform)>()
+        .iter(&world)
+        .find_map(|(sprite, transform)| {
+            expected_paved
+                .matches(sprite)
+                .then_some(transform.translation.z)
+        })
+        .expect("profundidad del suelo de carretera pavimentada");
+    assert_eq!(
+        paved_ground_z,
+        ground_draw_z(2, 2, 0.02),
+        "DrawRoadGroundSprites plano pertenece al pase ground, no a los parents"
     );
 
     world

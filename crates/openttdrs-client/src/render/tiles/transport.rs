@@ -13,8 +13,8 @@ use super::{
 };
 use crate::iso::{
     GROUND_SPRITE_CENTER_X_OFFSET, TILE_HALF_H, full_tile_sprite_pos, full_tile_sprite_pos_half,
-    ground_tile_pos_half, overlay_pos, remap_tile_offset, shore_png_index, shore_sprite_half_h,
-    slope_half_h, slope_sprite_offset, sortable_draw_z, tile_pos_half,
+    ground_draw_z, ground_tile_pos_half, overlay_pos, remap_tile_offset, shore_png_index,
+    shore_sprite_half_h, slope_half_h, slope_sprite_offset, sortable_draw_z, tile_pos_half,
 };
 use crate::render::catenary_newgrf::catenary_sprite_colored;
 use crate::render::road_newgrf::{
@@ -588,6 +588,18 @@ fn road_oneway_overlay_pos(
     )
 }
 
+/// Mantiene el ancla NFO de una capa vial, pero la entrega al pase global de
+/// `DrawGroundSprite` cuando no hay un `DrawFoundation` activo.
+///
+/// La altura sigue desplazando el PNG en pantalla; nunca debe promover el
+/// suelo vial a la banda de parents, donde puede cubrir la transparencia de
+/// una casa que OpenTTD dibuja después.
+#[inline]
+fn road_ground_pass_pos(mut position: Vec3, ctx: &TileRenderContext, layer: f32) -> Vec3 {
+    position.z = ground_draw_z(ctx.tx_i32(), ctx.ty_i32(), layer);
+    position
+}
+
 /// Altura de mundo del `DrawRoadDetail` respecto de la base cruda de la
 /// tesela. Después de una fundación `ti->z` y `ti->tileh` ya son los
 /// efectivos, por lo que ambos componentes son necesarios.
@@ -910,7 +922,7 @@ pub(crate) fn spawn_road_tile(
             def.newgrf_grfid,
         ));
         if let Some(handle) = cache.handle_for_runtime(def, view_idx, &mut a2, images) {
-            let pos3 = if tileh == 0 {
+            let position = if tileh == 0 {
                 overlay_pos(
                     ctx.iso_pos,
                     f32::from(view.x_offs),
@@ -925,16 +937,21 @@ pub(crate) fn spawn_road_tile(
             } else {
                 tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.02, road_half_h)
             };
-            commands.spawn((
-                MapVisualLayer,
-                ctx.map_tile_chunk(),
-                Sprite {
-                    image: handle,
-                    color: Color::WHITE,
-                    ..default()
-                },
-                Transform::from_translation(pos3),
-            ));
+            let sprite = Sprite {
+                image: handle,
+                color: Color::WHITE,
+                ..default()
+            };
+            if let Some(parent) = foundation_child_parent {
+                spawn_foundation_child_sprite_at(commands, sprite, ctx, position, mw, parent);
+            } else {
+                commands.spawn((
+                    MapVisualLayer,
+                    ctx.map_tile_chunk(),
+                    sprite,
+                    Transform::from_translation(road_ground_pass_pos(position, ctx, 0.02)),
+                ));
+            }
             used_newgrf = true;
         }
     }
@@ -964,7 +981,7 @@ pub(crate) fn spawn_road_tile(
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
                 sprite,
-                Transform::from_translation(position),
+                Transform::from_translation(road_ground_pass_pos(position, ctx, 0.02)),
             ));
         }
     }
@@ -1022,7 +1039,7 @@ pub(crate) fn spawn_road_tile(
                     MapVisualLayer,
                     ctx.map_tile_chunk(),
                     sprite,
-                    Transform::from_translation(position),
+                    Transform::from_translation(road_ground_pass_pos(position, ctx, 0.025)),
                 ));
             }
         }
@@ -1226,7 +1243,7 @@ pub(crate) fn spawn_road_tile(
                     MapVisualLayer,
                     ctx.map_tile_chunk(),
                     sprite,
-                    Transform::from_translation(position),
+                    Transform::from_translation(road_ground_pass_pos(position, ctx, 0.045)),
                 ));
             }
         }
@@ -1266,7 +1283,11 @@ pub(crate) fn spawn_road_tile(
                     MapVisualLayer,
                     ctx.map_tile_chunk(),
                     img.sprite(),
-                    Transform::from_translation(base + Vec3::new(offset.x, offset.y, 0.0)),
+                    Transform::from_translation(road_ground_pass_pos(
+                        base + Vec3::new(offset.x, offset.y, 0.0),
+                        ctx,
+                        0.048,
+                    )),
                 ));
             }
         }

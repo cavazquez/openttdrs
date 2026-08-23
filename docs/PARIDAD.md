@@ -109,6 +109,12 @@ con fundación materializada aplican la misma regla: su suelo posterior es un
 child del último parent de `DrawFoundation`, no una capa diagonal independiente.
 La vía y el suelo explícito de rail posteriores a una fundación comparten ahora
 ese parent, por lo que el sorter desplaza muro, base y carril como un conjunto.
+En el foco urbano Kale `(34,172)`, las casas sobre la foundation Action5 `5448`
+ya usan la superficie elevada resultante una sola vez: antes el helper volvía a
+compensar `TILE_HEIGHT` después de aplicar `ti->z` y bajaba `s1`/`s2` ocho
+píxeles, abriendo una cuña negra junto al muro. Las capturas limpias locales en
+`0,25×`, `0,5×`, `1×` y `2×` no reintroducen ese hueco. Es una regresión local
+cerrada, no una medición global ni el cierre de #326.
 Las variantes vanilla de asfalto/flecha de `DrawRoadGroundSprites`, los suelos
 de paradas bahía/pasantes y de depósitos viales/ferroviarios, y la vía/reserva
 PBS de una estación ferroviaria inclinada se adjuntan igualmente al último

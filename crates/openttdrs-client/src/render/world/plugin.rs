@@ -274,6 +274,7 @@ impl Plugin for WorldRenderPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<RemapMapVisualsPending>()
             .init_resource::<MapTileSpawnViewport>()
+            .init_resource::<crate::render::ViewportSortableChildDepthWindows>()
             .init_resource::<crate::render::MapLabelSpatialIndex>()
             .init_resource::<LoadedMapTileChunks>()
             .init_resource::<crate::render::NewGrfRoadSpriteCache>()

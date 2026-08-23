@@ -82,6 +82,7 @@ impl Plugin for ClientUiPlugin {
             floating_window::FloatingWindowPlugin,
             scrollbar::ClassicScrollbarPlugin,
             windows_shot::WindowsShotPlugin,
+            crate::i18n::LocalizationPlugin,
             lifecycle::InGameLifecyclePlugin,
             plugins::MainMenuUiPlugin,
             plugins::HudUiPlugin,

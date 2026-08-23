@@ -213,6 +213,20 @@ impl RoadStopSpecDef {
         self.newgrf_views.get(idx % self.newgrf_views.len())
     }
 
+    /// Vista re-resolviendo Action2 con el contexto runtime de la parada.
+    pub fn newgrf_view_runtime(
+        &self,
+        idx: usize,
+        ctx: &mut crate::newgrf_sprites::Action2EvalCtx,
+    ) -> Option<crate::newgrf_sprites::DecodedSprite> {
+        let runtime = self.newgrf_runtime.as_ref()?;
+        let views = runtime.views_for_local_id_ctx(self.newgrf_local_id, ctx)?;
+        if views.is_empty() {
+            return None;
+        }
+        Some(views[idx % views.len()].clone())
+    }
+
     /// `true` si el `stop_type` coincide con la clase de parada a construir.
     #[must_use]
     pub fn matches_stop_kind(&self, kind: crate::station::StopKind) -> bool {
@@ -519,6 +533,53 @@ mod tests {
         assert!(
             def.cargo_triggers_randomisation(crate::CargoType::Paper, crate::Climate::SubArctic)
         );
+    }
+
+    #[test]
+    fn runtime_view_uses_road_stop_random_bits() {
+        use crate::newgrf_sprites::{
+            Action2EvalCtx, Action2RandomEntry, TrainSpriteAssign, TrainSpriteGraphics,
+        };
+
+        fn solid(r: u8, g: u8, b: u8) -> crate::DecodedSprite {
+            crate::DecodedSprite {
+                width: 1,
+                height: 1,
+                x_offs: 0,
+                y_offs: 0,
+                rgba: vec![r, g, b, 255],
+                mask: Vec::new(),
+            }
+        }
+
+        let mut gfx = TrainSpriteGraphics {
+            sets: vec![vec![solid(255, 0, 0)], vec![solid(0, 0, 255)]],
+            ..Default::default()
+        };
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 7,
+        });
+        gfx.action2_random.insert(
+            7,
+            Action2RandomEntry {
+                typ: 0x80,
+                consist_count: 0,
+                triggers: 0,
+                randbit: 0,
+                sets: vec![0, 1],
+            },
+        );
+        let mut def = sample_spec(ROADSTOP_TYPE_BUS, 0);
+        def.newgrf_runtime = Some(Box::new(gfx));
+
+        let mut zero = Action2EvalCtx::default();
+        let mut one = Action2EvalCtx {
+            random_bits: 1,
+            ..Default::default()
+        };
+        assert_eq!(def.newgrf_view_runtime(0, &mut zero).unwrap().rgba[0], 255);
+        assert_eq!(def.newgrf_view_runtime(0, &mut one).unwrap().rgba[2], 255);
     }
 
     #[test]

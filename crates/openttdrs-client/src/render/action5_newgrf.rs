@@ -7,10 +7,14 @@ use openttdrs_core::DecodedSprite;
 
 use crate::render::newgrf_cache::{DecodedSpriteImagePolicy, decoded_sprite_image};
 
-/// Clave `(type_id, slot)` → textura RGBA.
+/// Clave `(type_id, slot, runtime_fp)` → textura RGBA.
+///
+/// Action5 usa siempre `runtime_fp=0`; los RoadStops Action3 reutilizan la
+/// caché con el fingerprint de su contexto Action2 para no congelar la primera
+/// variante random que se haya renderizado.
 #[derive(Resource, Default)]
 pub(crate) struct NewGrfAction5SpriteCache {
-    handles: HashMap<(u8, u16), Handle<Image>>,
+    handles: HashMap<(u8, u16, u32), Handle<Image>>,
 }
 
 impl NewGrfAction5SpriteCache {
@@ -25,8 +29,20 @@ impl NewGrfAction5SpriteCache {
         sprite: &DecodedSprite,
         images: &mut Assets<Image>,
     ) -> Handle<Image> {
+        self.handle_for_variant(type_id, slot, 0, sprite, images)
+    }
+
+    /// Textura de una variante Action2 cuya identidad adicional es `runtime_fp`.
+    pub(crate) fn handle_for_variant(
+        &mut self,
+        type_id: u8,
+        slot: u16,
+        runtime_fp: u32,
+        sprite: &DecodedSprite,
+        images: &mut Assets<Image>,
+    ) -> Handle<Image> {
         self.handles
-            .entry((type_id, slot))
+            .entry((type_id, slot, runtime_fp))
             .or_insert_with(|| {
                 images.add(decoded_sprite_image(sprite, DecodedSpriteImagePolicy::Raw))
             })
@@ -84,5 +100,33 @@ mod tests {
         let mut cache = NewGrfAction5SpriteCache::default();
         let handle = cache.handle_for(0x06, 0, spr, &mut images);
         assert!(images.get(&handle).is_some());
+    }
+
+    #[test]
+    fn runtime_variants_do_not_reuse_the_first_road_stop_sprite() {
+        let red = DecodedSprite {
+            width: 1,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: vec![255, 0, 0, 255],
+            mask: Vec::new(),
+        };
+        let blue = DecodedSprite {
+            width: 1,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: vec![0, 0, 255, 255],
+            mask: Vec::new(),
+        };
+        let mut images = Assets::<Image>::default();
+        let mut cache = NewGrfAction5SpriteCache::default();
+        let first = cache.handle_for_variant(0x14, 6, 10, &red, &mut images);
+        let repeated = cache.handle_for_variant(0x14, 6, 10, &red, &mut images);
+        let changed = cache.handle_for_variant(0x14, 6, 11, &blue, &mut images);
+        assert_eq!(first, repeated);
+        assert_ne!(first, changed);
+        assert_eq!(images.len(), 2);
     }
 }

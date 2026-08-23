@@ -64,6 +64,7 @@ pub mod rail_type;
 pub mod refit;
 pub mod road_action2;
 pub mod road_movement;
+pub mod road_stop_action2;
 pub mod road_stop_spec;
 pub mod road_type;
 pub mod sav;
@@ -516,6 +517,7 @@ pub use road_movement::{
     vehicle_subtile, vehicle_subtile_at, vehicle_subtile_at_with_map,
     vehicle_subtile_with_progress,
 };
+pub use road_stop_action2::action2_eval_ctx_for_road_stop_tile;
 pub use road_stop_spec::{
     ROADSTOP_ANIMATION_TRIGGER_ACCEPTANCE_TICK, ROADSTOP_ANIMATION_TRIGGER_BUILT,
     ROADSTOP_ANIMATION_TRIGGER_CARGO_TAKEN, ROADSTOP_ANIMATION_TRIGGER_NEW_CARGO,

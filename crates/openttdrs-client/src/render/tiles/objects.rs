@@ -22,6 +22,7 @@ use crate::iso::{
     slope_sprite_offset, sortable_draw_z, tile_pos_half,
 };
 use crate::render::catenary_newgrf::catenary_sprite_colored;
+use crate::render::newgrf_cache::{runtime_fingerprint, vars};
 use crate::render::station_newgrf::{
     NewGrfStationSpriteCache, newgrf_station_def_for_tile, station_newgrf_view_index_for_tile,
 };
@@ -1666,6 +1667,8 @@ pub(crate) fn spawn_station_tile(
                 roadstop_action5,
                 action5_sprites,
                 images,
+                climate,
+                newgrf_stack,
             );
         }
         StationTileClass::RoadWaypoint => {
@@ -1877,43 +1880,75 @@ fn spawn_road_stop_buildings(
     roadstop_action5: &[Option<openttdrs_core::DecodedSprite>],
     mut action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
     mut images: Option<&mut Assets<Image>>,
+    climate: openttdrs_core::Climate,
+    newgrf_stack: &[openttdrs_core::NewGrfEntry],
 ) {
     if buildings_hidden() {
         return;
     }
-    // Action3: vista NewGRF del spec persistido en la estación.
+    // Action3/2: vista NewGRF del spec persistido en la estación. La
+    // randomización Action2 vive en la entidad `Station`, por lo que resolver
+    // con un contexto vacío congelaba el primer sprite aun después de recibir
+    // eventos de carga/llegada/salida.
     if let Some(st) = station_at_tile(map, stations, ctx.coord)
         && let Some(spec_id) = st.road_stop_spec
         && let Some(def) = road_stop_spec_def(road_stop_catalog, spec_id)
-        && let Some(view) = def.newgrf_view(dir)
         && let (Some(cache), Some(images)) = (action5_sprites.as_mut(), images.as_mut())
     {
-        let slot = spec_id
-            .saturating_mul(6)
-            .saturating_add(u16::try_from(dir.min(5)).unwrap_or(0));
-        let handle = cache.handle_for(ROADSTOP_ACTION3_CACHE_TYPE, slot, view, images);
-        let pos3 = crate::iso::overlay_pos(
-            ctx.iso_pos,
-            f32::from(view.x_offs),
-            f32::from(view.y_offs),
-            f32::from(view.width),
-            f32::from(view.height),
-            base_z,
-            0.05,
-            ctx.tx_i32(),
-            ctx.ty_i32(),
+        let view_u8 = u8::try_from(dir.min(5)).unwrap_or(0);
+        let mut a2 = openttdrs_core::action2_eval_ctx_for_road_stop_tile(
+            map,
+            stations,
+            ctx.coord,
+            view_u8,
+            climate,
+            def.newgrf_type_tables.as_ref(),
         );
-        commands.spawn((
-            MapVisualLayer,
-            ctx.map_tile_chunk(),
-            tint_building_sprite(Sprite {
-                image: handle,
-                color: Color::WHITE,
-                ..default()
-            }),
-            Transform::from_translation(pos3),
+        a2.set_grf_params(openttdrs_core::stack_params_for_grfid(
+            newgrf_stack,
+            def.grfid,
         ));
-        return;
+        let runtime_fp = def
+            .newgrf_runtime
+            .as_ref()
+            .map_or(0, |_| runtime_fingerprint(&a2, vars::ROAD_STOP, false));
+        let view = def
+            .newgrf_view_runtime(dir, &mut a2)
+            .or_else(|| def.newgrf_view(dir).cloned());
+        if let Some(view) = view {
+            let slot = spec_id
+                .saturating_mul(6)
+                .saturating_add(u16::try_from(dir.min(5)).unwrap_or(0));
+            let handle = cache.handle_for_variant(
+                ROADSTOP_ACTION3_CACHE_TYPE,
+                slot,
+                runtime_fp,
+                &view,
+                images,
+            );
+            let pos3 = crate::iso::overlay_pos(
+                ctx.iso_pos,
+                f32::from(view.x_offs),
+                f32::from(view.y_offs),
+                f32::from(view.width),
+                f32::from(view.height),
+                base_z,
+                0.05,
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+            );
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                tint_building_sprite(Sprite {
+                    image: handle,
+                    color: Color::WHITE,
+                    ..default()
+                }),
+                Transform::from_translation(pos3),
+            ));
+            return;
+        }
     }
     let orientation = u8::try_from(dir).unwrap_or_default();
     let drive_through = road_stop_drive_through_layers(class, orientation);

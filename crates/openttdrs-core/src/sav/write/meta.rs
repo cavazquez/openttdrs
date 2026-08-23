@@ -81,8 +81,10 @@ fn plyr_records(
             &mut rec,
         )?;
         rec.extend_from_slice(&state.economy.money.to_be_bytes());
+        rec.extend_from_slice(&state.economy.loan.to_be_bytes());
         rec.push(state.company_colour);
         rec.push(0);
+        rec.push(company.bankruptcy_months);
         append_company_settings(
             &mut rec,
             &company,
@@ -96,10 +98,14 @@ fn plyr_records(
         .iter()
         .map(|company| {
             let mut rec = Vec::with_capacity(112);
-            let (money, colour) = if company.id == state.active_company {
-                (state.economy.money, state.company_colour)
+            let (money, loan, colour) = if company.id == state.active_company {
+                (
+                    state.economy.money,
+                    state.economy.loan,
+                    state.company_colour,
+                )
             } else {
-                (company.economy.money, company.colour)
+                (company.economy.money, company.economy.loan, company.colour)
             };
             // El writer es inmutable; normalizar la copia evita emitir un
             // `colour` espejo distinto del esquema por defecto en estados
@@ -116,8 +122,10 @@ fn plyr_records(
                 &mut rec,
             )?;
             rec.extend_from_slice(&money.to_be_bytes());
+            rec.extend_from_slice(&loan.to_be_bytes());
             rec.push(colour);
             rec.push(u8::from(company.is_ai));
+            rec.push(company.bankruptcy_months);
             append_company_settings(
                 &mut rec,
                 &company_to_write,
@@ -147,10 +155,14 @@ pub(super) fn plyr_chunk(
     write_str("face_style", &mut header)?;
     header.push(7);
     write_str("money", &mut header)?;
+    header.push(7);
+    write_str("current_loan", &mut header)?;
     header.push(2);
     write_str("colour", &mut header)?;
     header.push(1);
     write_str("is_ai", &mut header)?;
+    header.push(2);
+    write_str("months_of_bankruptcy", &mut header)?;
     header.push(0x1B);
     write_str("settings", &mut header)?;
     header.push(0x1B);

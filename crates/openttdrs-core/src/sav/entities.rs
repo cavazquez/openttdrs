@@ -625,6 +625,8 @@ pub struct SavCompany {
     /// Índice del pool `CompanyID` (`PLYR` es una tabla densa).
     pub id: u32,
     pub money: i64,
+    /// Préstamo vigente (`PLYR.current_loan`).
+    pub loan: Option<i64>,
     pub colour: u8,
     /// Nombre personalizado, si el save usa el campo moderno `PLYR.name`.
     pub name: Option<String>,
@@ -636,6 +638,8 @@ pub struct SavCompany {
     pub manager_face_style: Option<String>,
     /// Marca de compañía controlada por IA, si está presente en el save.
     pub is_ai: Option<bool>,
+    /// Meses consecutivos de bancarrota (`PLYR.months_of_bankruptcy`).
+    pub bankruptcy_months: Option<u8>,
     /// Esquemas `PLYR.liveries` en orden `LiveryScheme`.
     pub liveries: Vec<crate::company::CompanyLivery>,
     /// Opciones de autorrenovación/servicio de `PLYR.settings`.
@@ -726,6 +730,18 @@ fn company_liveries_from_record(
     liveries
 }
 
+/// Lee un entero firmado de tabla, aceptando la codificación sin signo usada
+/// por algunos saves históricos cuando el valor cabe en `i64`.
+fn record_i64(record: &SlRecord, name: &str) -> Option<i64> {
+    record_get(record, name)
+        .and_then(SlValue::as_i64)
+        .or_else(|| {
+            record_get(record, name)
+                .and_then(SlValue::as_u64)
+                .and_then(|value| i64::try_from(value).ok())
+        })
+}
+
 /// Empresas presentes en `PLYR`, conservando dinero y color por `CompanyID`.
 #[must_use]
 pub(crate) fn companies_from_chunks(chunks: &[RawChunk], save_version: u16) -> Vec<SavCompany> {
@@ -735,13 +751,8 @@ pub(crate) fn companies_from_chunks(chunks: &[RawChunk], save_version: u16) -> V
     table_rows(plyr, save_version)
         .into_iter()
         .filter_map(|(id, record)| {
-            let money = record_get(&record, "money")
-                .and_then(SlValue::as_i64)
-                .or_else(|| {
-                    record_get(&record, "money")
-                        .and_then(SlValue::as_u64)
-                        .and_then(|value| i64::try_from(value).ok())
-                })?;
+            let money = record_i64(&record, "money")?;
+            let loan = record_i64(&record, "current_loan");
             let colour = record_get(&record, "colour")
                 .and_then(SlValue::as_u64)
                 .and_then(|value| u8::try_from(value % 16).ok())?;
@@ -761,6 +772,9 @@ pub(crate) fn companies_from_chunks(chunks: &[RawChunk], save_version: u16) -> V
             let is_ai = record_get(&record, "is_ai")
                 .and_then(SlValue::as_u64)
                 .map(|value| value != 0);
+            let bankruptcy_months = record_get(&record, "months_of_bankruptcy")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok());
             let liveries = company_liveries_from_record(&record, colour, save_version);
             let settings = nested_struct(&record, "settings");
             let setting = |name: &str, legacy: &str| {
@@ -807,12 +821,14 @@ pub(crate) fn companies_from_chunks(chunks: &[RawChunk], save_version: u16) -> V
             Some(SavCompany {
                 id,
                 money,
+                loan,
                 colour,
                 name,
                 president_name,
                 manager_face,
                 manager_face_style,
                 is_ai,
+                bankruptcy_months,
                 liveries,
                 engine_renew_list_head,
                 engine_renew,

@@ -762,6 +762,8 @@ mod tests {
                 .find(|company| company.is_ai)
                 .expect("rival company");
             rival.economy.money = 456_789;
+            rival.economy.loan = 123_000;
+            rival.bankruptcy_months = 4;
             rival.set_colour(11);
             rival.president_name = Some("Ada Rival".into());
             rival.manager_face = 1 << 7;
@@ -801,6 +803,8 @@ mod tests {
         let sav_game = sav::load(&bytes).expect("load");
         assert_eq!(sav_game.companies.len(), 2);
         assert_eq!(sav_game.companies[1].money, 456_789);
+        assert_eq!(sav_game.companies[1].loan, Some(123_000));
+        assert_eq!(sav_game.companies[1].bankruptcy_months, Some(4));
         assert_eq!(sav_game.companies[1].colour, 11);
         assert_eq!(sav_game.companies[1].name.as_deref(), Some("TransCargo"));
         assert_eq!(
@@ -832,6 +836,8 @@ mod tests {
             .find(|company| company.id.0 == 1)
             .expect("rival after load");
         assert_eq!(loaded_rival.economy.money, 456_789);
+        assert_eq!(loaded_rival.economy.loan, 123_000);
+        assert_eq!(loaded_rival.bankruptcy_months, 4);
         assert_eq!(loaded_rival.colour, 11);
         assert_eq!(loaded_rival.name, "TransCargo");
         assert_eq!(loaded_rival.president_name.as_deref(), Some("Ada Rival"));
@@ -1288,6 +1294,8 @@ mod tests {
     #[test]
     fn export_emits_synthetic_city_when_no_towns() {
         let mut state = tiny_state();
+        state.economy.loan = 50_000;
+        state.companies[0].bankruptcy_months = 2;
         state.companies[0].manager_face_style = Some("modern".into());
         let names = exported_chunk_names(&state).expect("chunks");
         assert!(names.iter().any(|n| n == "CITY"), "{names:?}");
@@ -1301,6 +1309,8 @@ mod tests {
             sav_game.companies[0].manager_face_style.as_deref(),
             Some("modern")
         );
+        assert_eq!(sav_game.companies[0].loan, Some(50_000));
+        assert_eq!(sav_game.companies[0].bankruptcy_months, Some(2));
         // Dump opcional para smoke OpenTTD: OPENTTDRS_DUMP_MVP_SAV=/ruta.sav
         if let Ok(path) = std::env::var("OPENTTDRS_DUMP_MVP_SAV") {
             std::fs::write(&path, &bytes).expect("dump mvp sav");

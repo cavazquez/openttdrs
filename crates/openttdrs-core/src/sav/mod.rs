@@ -721,6 +721,9 @@ impl GameState {
             }
             if let Some(target) = state.companies.get_mut(index) {
                 target.economy.money = company.money;
+                if let Some(loan) = company.loan {
+                    target.economy.loan = loan;
+                }
                 target.set_colour(company.colour);
                 if company.liveries.is_empty() {
                     // OpenTTD llama `ResetCompanyLivery` para saves anteriores
@@ -743,6 +746,9 @@ impl GameState {
                 }
                 if let Some(is_ai) = company.is_ai {
                     target.is_ai = is_ai;
+                }
+                if let Some(months) = company.bankruptcy_months {
+                    target.bankruptcy_months = months;
                 }
                 if let Some(value) = company.engine_renew {
                     target.engine_renew = value;

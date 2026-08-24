@@ -157,8 +157,14 @@ ni paridad de framebuffer.
 El runtime aplica el sorter compartido a los sprites directos de fundación,
 buildings vanilla de casas, árboles `MP_TREES` con sus children combinados,
 mitades vanilla de muelle, el subconjunto plano/estático de industria vanilla y
-las seis capas `TILE_SEQ` del depósito naval, pero no al conjunto **global** de
-producers. Los focos naval `138,7..140,10` y de muelle `136,1..139,3` vinculan
+las seis capas `TILE_SEQ` del depósito naval y, desde este bloque, las piezas
+estructurales de puentes (cabezas de rampa con caja explícita, barandillas de
+vano y pilares) cuando tienen sprite vanilla disponible. Esas entidades
+conservan `ViewportSortableParent`, la caja `M(...)` de `world-draw`, el orden
+de inserción por tesela y su slot de profundidad; el test de ambos ejes evita
+volver a la profundidad diagonal fija. Esto corrige una familia concreta de
+#326, pero no al conjunto **global** de producers. Los focos naval
+`138,7..140,10` y de muelle `136,1..139,3` vinculan
 7/7 parents candidatos al orden final C++; es evidencia del contrato de cajas y
 no una certificación raster. Los 383 comandos `industry-building` de Kale ya
 están contenidos por `world-draw`; eso no equivale a que sus variantes dinámicas

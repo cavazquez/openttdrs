@@ -15,10 +15,11 @@ use crate::iso::{
 use crate::render::catenary_newgrf::{
     catenary_sprite_anchor, catenary_sprite_center, catenary_sprite_colored,
 };
+use crate::render::viewport_sort::ParentSpriteBounds;
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
 use crate::render::{
     MapVisualLayer, NewGrfAction5SpriteCache, NewGrfCatenarySpriteCache, TileRenderContext,
-    WorldAssets,
+    ViewportSortableParent, WorldAssets, viewport_insertion_key, viewport_source_depth,
 };
 use crate::sprites::{
     OTTD_MP_RAIL, RAIL_TB_X, RAIL_TB_Y, bridge_deck_sprite_ids, bridge_ramp_sprite_id,
@@ -44,6 +45,9 @@ const FOUNDATION_LEVELED_CHILD_OFFSET: (i32, i32, i32) = (0, -32, 0);
 const FRONT_LAYER_FRAC: f32 = 0.088;
 const PILLAR_BACK_LAYER_FRAC: f32 = 0.074;
 const PILLAR_LAYER_FRAC: f32 = 0.075;
+/// Deja espacio para los parents de `DrawFoundation` (ordinales 0..=3) antes
+/// de insertar las piezas estructurales del puente en la misma tesela.
+const BRIDGE_STRUCTURE_ORDINAL_BASE: u8 = 32;
 const BRIDGE_Z_START: f32 = 3.0;
 const TILE_HEIGHT_PX: f32 = 8.0;
 const TILE_HEIGHT_WORLD: i32 = 8;
@@ -1112,6 +1116,29 @@ struct BridgeTracePlacement {
     bounds: TraceSpriteBounds,
 }
 
+/// Convierte la misma geometría de `AddSortableSpriteToDraw` que se exporta a
+/// `world-draw` en la caja que consume el sorter runtime de Bevy.
+fn bridge_parent_bounds(
+    tx: i32,
+    ty: i32,
+    base_z: u8,
+    placement: BridgeTracePlacement,
+) -> ParentSpriteBounds {
+    let (world_dx, world_dy) = placement.world_xy_delta;
+    let world_x = tx * 16 + world_dx;
+    let world_y = ty * 16 + world_dy;
+    let world_z = i32::from(base_z) * 8 + placement.world_z_delta;
+    let bounds = placement.bounds;
+    ParentSpriteBounds::new(
+        world_x + bounds.ox,
+        world_y + bounds.oy,
+        world_z + bounds.oz,
+        world_x + bounds.ox + bounds.ex - 1,
+        world_y + bounds.oy + bounds.ey - 1,
+        world_z + bounds.oz + bounds.ez - 1,
+    )
+}
+
 fn pillar_trace_placement(
     ctx: &TileRenderContext,
     axis: usize,
@@ -1189,6 +1216,8 @@ fn spawn_layer(
     bridge_type: BridgeType,
     trace_bounds: Option<TraceSpriteBounds>,
     trace_placement: Option<BridgeTracePlacement>,
+    map_width: u32,
+    draw_ordinal: u8,
     pillar_half: Option<(usize, PillarHalf)>,
 ) {
     if sprite_id == 0 {
@@ -1215,6 +1244,18 @@ fn spawn_layer(
         );
         return;
     };
+    // Las cabezas de rampa no traen un `M(...)` separado en el call site,
+    // pero su `TraceSpriteBounds` sigue siendo la caja que OpenTTD entrega al
+    // sorter. Normalizar ambos caminos a una colocación permite que también
+    // las rampas participen del orden global, no sólo los vanos y pilares.
+    let effective_placement = trace_placement.or_else(|| {
+        trace_bounds.map(|bounds| BridgeTracePlacement {
+            world_xy_delta: (0, 0),
+            world_z_delta: (i32::from(deck_z) - i32::from(ctx.info.base_z)) * 8,
+            offset: (0, 0, 0),
+            bounds,
+        })
+    });
     record_bridge_structure_trace(
         ctx,
         sprite_id,
@@ -1222,7 +1263,7 @@ fn spawn_layer(
         false,
         deck_z,
         trace_bounds,
-        trace_placement,
+        effective_placement,
     );
     sprite.color = sprite_color(TransparencyOption::Bridges);
     let (w, h, xrel, yrel) = bridge_sprite_meta(sprite_id).unwrap_or((64.0, 32.0, -32.0, -16.0));
@@ -1242,12 +1283,28 @@ fn spawn_layer(
         ctx.iso_pos.y + shift.y - yrel - h / 2.0 + z_px,
         crate::iso::sortable_draw_z(ctx.tx_i32(), ctx.ty_i32(), deck_z, layer),
     );
-    commands.spawn((
+    let sortable_parent = effective_placement.map(|placement| {
+        let source_depth = viewport_source_depth(
+            crate::iso::sortable_draw_z(ctx.tx_i32(), ctx.ty_i32(), deck_z, layer),
+            ctx.tx,
+            map_width,
+        );
+        ViewportSortableParent {
+            sprite_id,
+            bounds: bridge_parent_bounds(ctx.tx_i32(), ctx.ty_i32(), ctx.info.base_z, placement),
+            insertion_key: viewport_insertion_key(ctx.tx, ctx.ty, draw_ordinal),
+            source_depth,
+        }
+    });
+    let mut entity = commands.spawn((
         MapVisualLayer,
         ctx.map_tile_chunk(),
         sprite,
         Transform::from_translation(pos),
     ));
+    if let Some(parent) = sortable_parent {
+        entity.insert(parent);
+    }
 }
 
 /// Las cabezas de puente se comparan con el `AddSortableSpriteToDraw` de
@@ -1305,11 +1362,12 @@ mod tests {
     use super::{
         BridgeRampGround, PILLAR_SLOPE_STEEP_W, PillarHalf, PillarSegment, RAIL_TB_X,
         bridge_catenary_wire_trace_bounds, bridge_foundation_child_offset,
-        bridge_middle_structure_trace_placement, bridge_pbs_reservation_offset,
-        bridge_pbs_reservation_sprite_id, bridge_pbs_trace_bounds, bridge_ramp_catenary_slope,
-        bridge_ramp_catenary_world_z_delta, bridge_ramp_ground_kind, bridge_ramp_ground_sprite_id,
-        bridge_span_at, bridge_surface_z, catenary_under_low_bridge, pillar_ground_heights,
-        pillar_half_crop, pillar_segments, roadside_detail_visible_under_bridge,
+        bridge_middle_structure_trace_placement, bridge_parent_bounds,
+        bridge_pbs_reservation_offset, bridge_pbs_reservation_sprite_id, bridge_pbs_trace_bounds,
+        bridge_ramp_catenary_slope, bridge_ramp_catenary_world_z_delta, bridge_ramp_ground_kind,
+        bridge_ramp_ground_sprite_id, bridge_span_at, bridge_surface_z, catenary_under_low_bridge,
+        pillar_ground_heights, pillar_half_crop, pillar_segments,
+        roadside_detail_visible_under_bridge,
     };
     use crate::sprites::bridge_deck_sprite_ids;
 
@@ -1569,6 +1627,37 @@ mod tests {
                 front_y.bounds.ez,
             ),
             (3, 0, 3, 1, 16, 40)
+        );
+    }
+
+    #[test]
+    fn bridge_parent_bounds_keep_trace_world_anchor_and_extent() {
+        let placement = bridge_middle_structure_trace_placement(1, 0, false, 13.0);
+        let bounds = bridge_parent_bounds(10, 20, 1, placement);
+        assert_eq!(
+            (
+                bounds.xmin,
+                bounds.ymin,
+                bounds.zmin,
+                bounds.xmax,
+                bounds.ymax,
+                bounds.zmax,
+            ),
+            (160, 320, 16, 175, 320, 55)
+        );
+
+        let front = bridge_middle_structure_trace_placement(1, 1, true, 13.0);
+        let front_bounds = bridge_parent_bounds(10, 20, 1, front);
+        assert_eq!(
+            (
+                front_bounds.xmin,
+                front_bounds.ymin,
+                front_bounds.zmin,
+                front_bounds.xmax,
+                front_bounds.ymax,
+                front_bounds.zmax,
+            ),
+            (175, 320, 16, 175, 335, 55)
         );
     }
 
@@ -2021,6 +2110,8 @@ pub(crate) fn spawn_bridge_deck(
         (!on_ramp).then(|| {
             bridge_middle_structure_trace_placement(ctx.info.base_z, span.axis, false, z_draw_px)
         }),
+        dims.0,
+        BRIDGE_STRUCTURE_ORDINAL_BASE,
         None,
     );
     // Una superficie Action5 `0x1B` se compone sobre la estructura en un
@@ -2124,6 +2215,8 @@ pub(crate) fn spawn_bridge_deck(
         (!on_ramp).then(|| {
             bridge_middle_structure_trace_placement(ctx.info.base_z, span.axis, true, z_draw_px)
         }),
+        dims.0,
+        BRIDGE_STRUCTURE_ORDINAL_BASE + 1,
         None,
     );
 
@@ -2165,6 +2258,8 @@ pub(crate) fn spawn_bridge_deck(
                     false,
                     segment.z_px as f32,
                 )),
+                dims.0,
+                BRIDGE_STRUCTURE_ORDINAL_BASE + 2,
                 segment.half.map(|half| (span.axis, half)),
             );
         }
@@ -2188,6 +2283,8 @@ pub(crate) fn spawn_bridge_deck(
                         true,
                         segment.z_px as f32,
                     )),
+                    dims.0,
+                    BRIDGE_STRUCTURE_ORDINAL_BASE + 3,
                     segment.half.map(|half| (span.axis, half)),
                 );
             }

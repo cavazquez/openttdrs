@@ -52,11 +52,16 @@ pub(crate) const OTTD_STOP_LOCATION_MASK: u8 = 0x3 << OTTD_STOP_LOCATION_SHIFT;
 /// `type(1) | flags(1) | dest(2) | refit(1) | wait(2) | travel(2) | max_speed(2)`.
 pub(crate) const ORDER_WIRE_LEN: usize = 11;
 
-/// Orden cruda decodificada del save (`Order::type` + `dest` + `flags` + horario).
+/// Orden cruda decodificada del save (`Order::type` + `dest` + `flags` + refit + horario).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SavOrder {
     pub order_type: u8,
     pub dest: u16,
+    /// Cargo de refit del depósito; `None` representa el sentinel `0xFF`.
+    ///
+    /// El wire conserva IDs vanilla de clima templado. Cargos `NewGRF` que no
+    /// tienen un `CargoType` local siguen siendo un residual explícito.
+    pub refit_cargo: Option<CargoType>,
     /// Byte `Order::flags` (`order_base.h`: unload bits 0–2, load bits 4–6).
     pub flags: u8,
     /// `Order::wait_time` (ticks).
@@ -230,6 +235,9 @@ pub(crate) fn decode_order_wire(bytes: &[u8]) -> Option<(SavOrder, u8)> {
             order_type: bytes[0],
             flags: bytes[1],
             dest: u16::from_be_bytes([bytes[2], bytes[3]]),
+            refit_cargo: (bytes[4] != 0xFF)
+                .then(|| CargoType::from_temperate_id(bytes[4]))
+                .flatten(),
             wait_time,
             travel_time,
             max_speed,
@@ -419,13 +427,27 @@ pub(crate) fn vehicle_orders_from_sav(
                         stop: true,
                         wait_ticks: 0,
                         travel_ticks: 0,
-                        refit_cargo: None,
+                        refit_cargo: order.refit_cargo,
                         unbunch: true,
                     }
                 } else if depot_stop_from_sav(order.flags) {
-                    VehicleOrder::depot(pos)
+                    VehicleOrder::Depot {
+                        depot: pos,
+                        stop: true,
+                        wait_ticks: 0,
+                        travel_ticks: 0,
+                        refit_cargo: order.refit_cargo,
+                        unbunch: false,
+                    }
                 } else {
-                    VehicleOrder::depot_pass_through(pos)
+                    VehicleOrder::Depot {
+                        depot: pos,
+                        stop: false,
+                        wait_ticks: 0,
+                        travel_ticks: 0,
+                        refit_cargo: order.refit_cargo,
+                        unbunch: false,
+                    }
                 };
                 depot_order = depot_order
                     .with_wait_ticks(u32::from(order.wait_time))
@@ -663,6 +685,7 @@ mod tests {
             // Middle (default de `VehicleOrder::station`) en bits 4–5.
             order_type: OT_GOTO_STATION | (1 << 4),
             dest: 0,
+            refit_cargo: None,
             flags: 0,
             wait_time: 0,
             travel_time: 0,
@@ -685,6 +708,26 @@ mod tests {
         let (cond_sav, _) = decode_order_wire(&cond_wire).unwrap();
         let decoded = vehicle_orders_from_sav(&[depot_sav, cond_sav], &HashMap::new(), map_w);
         assert_eq!(decoded, vec![depot, cond]);
+    }
+
+    #[test]
+    fn depot_refit_cargo_roundtrips_through_sav_order() {
+        let depot = VehicleOrder::Depot {
+            depot: TileCoord::new(5, 2),
+            stop: true,
+            wait_ticks: 0,
+            travel_ticks: 0,
+            refit_cargo: Some(CargoType::Coal),
+            unbunch: false,
+        };
+        let wire = encode_vehicle_order(&depot, |_| None, 64).unwrap();
+        assert_eq!(wire[4], CargoType::Coal.temperate_id());
+        let (sav, _) = decode_order_wire(&wire).unwrap();
+        assert_eq!(sav.refit_cargo, Some(CargoType::Coal));
+        assert_eq!(
+            vehicle_orders_from_sav(&[sav], &HashMap::new(), 64),
+            vec![depot]
+        );
     }
 
     #[test]

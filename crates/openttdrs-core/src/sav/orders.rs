@@ -4,6 +4,8 @@
 
 use std::collections::HashMap;
 
+use crate::cargo::CargoType;
+
 use super::chunks::{RawChunk, find_chunk};
 use super::orders_codec::OT_NOTHING;
 use super::table::{SlRecord, SlValue, record_get};
@@ -79,6 +81,7 @@ fn sav_order_from_fields(
         Some(SavOrder {
             order_type,
             dest,
+            refit_cargo: None,
             flags,
             wait_time,
             travel_time,
@@ -106,6 +109,11 @@ fn orders_from_record(record: &SlRecord) -> Vec<SavOrder> {
                 .and_then(SlValue::as_u64)
                 .and_then(|v| u8::try_from(v).ok())
                 .unwrap_or(0);
+            let refit_cargo = record_get(item, "refit_cargo")
+                .and_then(SlValue::as_u64)
+                .and_then(|v| u8::try_from(v).ok())
+                .filter(|id| *id != 0xFF)
+                .and_then(CargoType::from_temperate_id);
             let wait_time = record_get(item, "wait_time")
                 .and_then(SlValue::as_u64)
                 .and_then(|v| u16::try_from(v).ok())
@@ -118,7 +126,12 @@ fn orders_from_record(record: &SlRecord) -> Vec<SavOrder> {
                 .and_then(SlValue::as_u64)
                 .and_then(|v| u16::try_from(v).ok())
                 .unwrap_or(u16::MAX);
-            sav_order_from_fields(order_type, dest, flags, wait_time, travel_time, max_speed)
+            sav_order_from_fields(order_type, dest, flags, wait_time, travel_time, max_speed).map(
+                |mut order| {
+                    order.refit_cargo = refit_cargo;
+                    order
+                },
+            )
         })
         .collect()
 }
@@ -250,7 +263,7 @@ mod tests {
         order.push(1);
         order.push(0);
         order.extend_from_slice(&2u16.to_be_bytes());
-        order.push(0xFF);
+        order.push(CargoType::Coal.temperate_id());
         order.extend_from_slice(&0u16.to_be_bytes());
         order.extend_from_slice(&0u16.to_be_bytes());
         order.extend_from_slice(&0u16.to_be_bytes());
@@ -267,6 +280,7 @@ mod tests {
         let import = SavOrderImport::from_chunks(&[chunk], 360);
         assert_eq!(import.lists.get(&0).map(Vec::len), Some(1));
         assert_eq!(import.lists[&0][0].dest, 2);
+        assert_eq!(import.lists[&0][0].refit_cargo, Some(CargoType::Coal));
     }
 
     fn gamma_array_body(records: &[&[u8]]) -> Vec<u8> {
@@ -332,6 +346,7 @@ mod tests {
             &[SavOrder {
                 order_type,
                 dest: 0,
+                refit_cargo: None,
                 flags: 0,
                 wait_time: 0,
                 travel_time: 0,
@@ -371,6 +386,7 @@ mod tests {
             &[SavOrder {
                 order_type,
                 dest: 1,
+                refit_cargo: None,
                 flags: (OTTD_LOAD_FULL << 4) | OTTD_UNLOAD_NO_UNLOAD,
                 wait_time: 0,
                 travel_time: 0,
@@ -396,6 +412,7 @@ mod tests {
                 SavOrder {
                     order_type: OT_GOTO_DEPOT,
                     dest: 5 + 2 * 64,
+                    refit_cargo: None,
                     flags: OTTD_DEPOT_HALT | (1 << 1),
                     wait_time: 0,
                     travel_time: 0,
@@ -404,6 +421,7 @@ mod tests {
                 SavOrder {
                     order_type: OT_CONDITIONAL | (4 << 5),
                     dest: 50,
+                    refit_cargo: None,
                     flags: 2,
                     wait_time: 0,
                     travel_time: 0,

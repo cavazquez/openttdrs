@@ -231,6 +231,41 @@ impl SoundId {
         }
     }
 
+    /// Sonido vanilla de salida según el modelo, no sólo el tipo de vehículo.
+    ///
+    /// `OpenTTD` selecciona la entrada `sfx` del catálogo: buses antiguos,
+    /// modernos, monorail y maglev no comparten la misma muestra aunque todos
+    /// sean vehículos de la misma familia.
+    #[must_use]
+    pub const fn departure_for_engine_id(engine_id: u16) -> Option<Self> {
+        use crate::engine::{
+            ENGINE_AIRCRAFT_DAKOTA, ENGINE_AIRCRAFT_FOKKER, ENGINE_AIRCRAFT_TRICARIO,
+            ENGINE_BUS_FOSTER, ENGINE_BUS_HEREFORD, ENGINE_BUS_MPS, ENGINE_SHIP_FERRY,
+            ENGINE_SHIP_MPS, ENGINE_SHIP_OIL, ENGINE_TRAIN_ASIASTAR, ENGINE_TRAIN_CHANEY_JUBILEE,
+            ENGINE_TRAIN_GINZU_A4, ENGINE_TRAIN_KIRBY, ENGINE_TRAIN_LEV1,
+            ENGINE_TRAIN_MANLEY_MOREL, ENGINE_TRAIN_SH_8P, ENGINE_TRAIN_X2001, ENGINE_TRAM_MPS,
+            ENGINE_TRUCK_MPS,
+        };
+        match engine_id {
+            ENGINE_TRAIN_KIRBY
+            | ENGINE_TRAIN_CHANEY_JUBILEE
+            | ENGINE_TRAIN_GINZU_A4
+            | ENGINE_TRAIN_SH_8P => Some(Self::DepartureSteam),
+            ENGINE_TRAIN_X2001 => Some(Self::DepartureMonorail),
+            ENGINE_TRAIN_LEV1 => Some(Self::DepartureMaglev),
+            ENGINE_TRAIN_ASIASTAR | ENGINE_TRAIN_MANLEY_MOREL => Some(Self::DepartureTrain),
+            ENGINE_BUS_MPS | ENGINE_TRAM_MPS | ENGINE_TRUCK_MPS => Some(Self::DepartureOldRv1),
+            ENGINE_BUS_HEREFORD => Some(Self::DepartureOldBus),
+            ENGINE_BUS_FOSTER => Some(Self::DepartureModernBus),
+            ENGINE_SHIP_MPS | ENGINE_SHIP_OIL => Some(Self::DepartureCargoShip),
+            ENGINE_SHIP_FERRY => Some(Self::DepartureFerry),
+            ENGINE_AIRCRAFT_DAKOTA => Some(Self::TakeoffPropeller),
+            ENGINE_AIRCRAFT_FOKKER => Some(Self::TakeoffJet),
+            ENGINE_AIRCRAFT_TRICARIO => Some(Self::TakeoffHelicopter),
+            _ => None,
+        }
+    }
+
     /// Sonido de avería según tipo.
     #[must_use]
     pub const fn breakdown_for_kind(kind: crate::vehicle::VehicleKind) -> Self {
@@ -369,5 +404,14 @@ mod tests {
             SoundId::departure_for_kind(crate::vehicle::VehicleKind::Truck),
             SoundId::DepartureOldRv1
         );
+        assert_eq!(
+            SoundId::departure_for_engine_id(crate::engine::ENGINE_BUS_HEREFORD),
+            Some(SoundId::DepartureOldBus)
+        );
+        assert_eq!(
+            SoundId::departure_for_engine_id(crate::engine::ENGINE_TRAIN_X2001),
+            Some(SoundId::DepartureMonorail)
+        );
+        assert_eq!(SoundId::departure_for_engine_id(0xFFFF), None);
     }
 }

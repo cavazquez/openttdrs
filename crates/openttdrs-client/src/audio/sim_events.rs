@@ -83,6 +83,17 @@ const fn aircraft_landing_sound(engine_id: u16) -> SoundId {
     }
 }
 
+#[must_use]
+fn vehicle_departure_sound(sim: &SimWorld, vehicle_id: u32, kind: VehicleKind) -> SoundId {
+    sim.state
+        .vehicles
+        .iter()
+        .find(|vehicle| vehicle.id == vehicle_id)
+        .and_then(|vehicle| vehicle.engine_id)
+        .and_then(SoundId::departure_for_engine_id)
+        .unwrap_or_else(|| SoundId::departure_for_kind(kind))
+}
+
 /// Nivel de detalle para el registro del bus de eventos. Todo `SimEvent` se
 /// conserva en la traza: los eventos frecuentes se bajan a `debug` para que
 /// una partida normal no produzca miles de líneas por minuto.
@@ -232,12 +243,13 @@ fn dispatch_sim_events(
                 kind,
             } => {
                 if hud.sound_vehicle {
+                    let default_sound = vehicle_departure_sound(&sim, vehicle_id, kind);
                     play_vehicle_event_sound(
                         &mut sim,
                         &mut sfx,
                         vehicle_id,
                         VehicleSoundEvent::Start,
-                        SoundId::departure_for_kind(kind),
+                        default_sound,
                         at,
                         0.9,
                         72,
@@ -416,12 +428,14 @@ fn dispatch_sim_events(
                 engine_id,
             } => {
                 if hud.sound_vehicle {
+                    let default_sound = SoundId::departure_for_engine_id(engine_id)
+                        .unwrap_or_else(|| aircraft_takeoff_sound(engine_id));
                     play_vehicle_event_sound(
                         &mut sim,
                         &mut sfx,
                         vehicle_id,
                         VehicleSoundEvent::Start,
-                        aircraft_takeoff_sound(engine_id),
+                        default_sound,
                         at,
                         0.85,
                         78,

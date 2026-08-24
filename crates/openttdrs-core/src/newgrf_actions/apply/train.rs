@@ -90,6 +90,7 @@ fn push_feature_vehicles(
             newgrf_local_id: meta.local_id,
             newgrf_runtime,
             newgrf_grfid: grfid,
+            vehicle_callback_mask: meta.callback_mask,
         });
     }
 }
@@ -172,6 +173,7 @@ pub fn apply_newgrf_vehicles_trains(state: &mut GameState, search_dirs: &[&Path]
                 newgrf_local_id: local_id,
                 newgrf_runtime,
                 newgrf_grfid: entry.grfid,
+                vehicle_callback_mask: meta.callback_mask,
             });
         }
 

@@ -391,18 +391,19 @@ pub use newgrf_actions::{
     parse_action0_sound_meta, parse_action0_station_meta, parse_action0_train_meta,
 };
 pub use newgrf_callback::{
-    RoadStopCallbackWorld, action2_eval_ctx_from_station, action2_eval_ctx_from_vehicle,
-    advance_road_stop_animation, advance_road_stop_animation_at_with_world,
-    apply_house_construction_callback, apply_industry_location_callback,
-    apply_industry_tile_anim_callback, apply_object_slope_callback,
-    apply_station_availability_callback, apply_station_availability_callback_for_build,
-    apply_vehicle_start_stop_callback, callback_allows_8bit_boolean, callback_allows_location,
-    callback_allows_placement, resolve_callback_or_failed, resolve_cargo_profit_callback,
+    RoadStopCallbackWorld, VehicleSoundOverride, action2_eval_ctx_from_station,
+    action2_eval_ctx_from_vehicle, advance_road_stop_animation,
+    advance_road_stop_animation_at_with_world, apply_house_construction_callback,
+    apply_industry_location_callback, apply_industry_tile_anim_callback,
+    apply_object_slope_callback, apply_station_availability_callback,
+    apply_station_availability_callback_for_build, apply_vehicle_start_stop_callback,
+    callback_allows_8bit_boolean, callback_allows_location, callback_allows_placement,
+    resolve_callback_or_failed, resolve_cargo_profit_callback,
     resolve_cargo_station_rating_callback, resolve_industry_tile_animation_callback,
-    resolve_industry_tile_random_trigger, resolve_vehicle_callback, trigger_road_stop_animation,
-    trigger_road_stop_animation_at_with_world, trigger_road_stop_randomisation_at_with_world,
-    vehicle_start_stop_callback_allows, writeback_station_persistent_registers,
-    writeback_vehicle_persistent_registers,
+    resolve_industry_tile_random_trigger, resolve_vehicle_callback, resolve_vehicle_sound_callback,
+    trigger_road_stop_animation, trigger_road_stop_animation_at_with_world,
+    trigger_road_stop_randomisation_at_with_world, vehicle_start_stop_callback_allows,
+    writeback_station_persistent_registers, writeback_vehicle_persistent_registers,
 };
 pub use newgrf_config::{
     GrfContainerVersion, GrfFileInfo, GrfParsed, GrfScanError, GrfStackIssue, MAX_NEWGRF_PARAMS,
@@ -423,15 +424,15 @@ pub use newgrf_sprites::{
     CBID_INDTILE_ANIMATION_TRIGGER, CBID_INDUSTRY_LOCATION, CBID_OBJECT_LAND_SLOPE_CHECK,
     CBID_STATION_ANIMATION_NEXT_FRAME, CBID_STATION_ANIMATION_SPEED,
     CBID_STATION_ANIMATION_TRIGGER, CBID_STATION_AVAILABILITY, CBID_STATION_BUILD_TILE_LAYOUT,
-    CBID_STATION_DRAW_TILE_LAYOUT, CBID_STATION_LAND_SLOPE_CHECK, CBID_VEHICLE_START_STOP_CHECK,
-    DecodedSprite, FOUNDATION_ACTION5_SLOT_COUNT, ONEWAY_ACTION5_SLOT_COUNT,
-    OPENTTD_GUI_ACTION5_SLOT_COUNT, ROADSTOP_ACTION5_SLOT_COUNT, SHORE_ACTION5_SLOT_COUNT,
-    SHORE_MISSING_BLOCK_SLOTS, SIGNAL_ACTION5_SLOT_COUNT, SPR_SIGNALS_ACTION5_BASE,
-    SPRITE_V2_ZOOM_PREFERENCE, TRAMWAY_ACTION5_SLOT_COUNT, TWOCC_ACTION5_SLOT_COUNT,
-    TrainSpriteAssign, TrainSpriteGraphics, action5_type_name, airport_preview_action5_slot,
-    apply_company_colour_mask, bake_sprite_company_mask, bridge_decks_action5_base,
-    bridge_decks_action5_slot, catenary_action5_local_slot, collect_action5_blocks,
-    collect_active_action5_blocks, collect_airport_sprite_graphics,
+    CBID_STATION_DRAW_TILE_LAYOUT, CBID_STATION_LAND_SLOPE_CHECK, CBID_VEHICLE_SOUND_EFFECT,
+    CBID_VEHICLE_START_STOP_CHECK, DecodedSprite, FOUNDATION_ACTION5_SLOT_COUNT,
+    ONEWAY_ACTION5_SLOT_COUNT, OPENTTD_GUI_ACTION5_SLOT_COUNT, ROADSTOP_ACTION5_SLOT_COUNT,
+    SHORE_ACTION5_SLOT_COUNT, SHORE_MISSING_BLOCK_SLOTS, SIGNAL_ACTION5_SLOT_COUNT,
+    SPR_SIGNALS_ACTION5_BASE, SPRITE_V2_ZOOM_PREFERENCE, TRAMWAY_ACTION5_SLOT_COUNT,
+    TWOCC_ACTION5_SLOT_COUNT, TrainSpriteAssign, TrainSpriteGraphics, action5_type_name,
+    airport_preview_action5_slot, apply_company_colour_mask, bake_sprite_company_mask,
+    bridge_decks_action5_base, bridge_decks_action5_slot, catenary_action5_local_slot,
+    collect_action5_blocks, collect_active_action5_blocks, collect_airport_sprite_graphics,
     collect_airport_tile_sprite_graphics, collect_canal_sprite_graphics,
     collect_cargo_sprite_graphics, collect_feature_sprite_graphics, collect_house_sprite_graphics,
     collect_industry_sprite_graphics, collect_industry_tile_sprite_graphics,
@@ -580,6 +581,7 @@ pub use ship_movement::{
 pub use sign::{MAX_SIGN_NAME_CHARS, Sign, SignOwner};
 pub use sim_events::{
     ConstructionKind, DisasterKind, SimEvent, SimEventQueue, TrainSmokeKind, VehicleRunningPhase,
+    VehicleSoundEvent,
 };
 pub use sim_step::{TickPhaseTimings, step_profiled};
 pub use sound_effect::{

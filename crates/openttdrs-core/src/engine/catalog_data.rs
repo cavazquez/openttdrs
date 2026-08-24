@@ -130,6 +130,7 @@ macro_rules! road {
             newgrf_local_id: 0,
             newgrf_runtime: None,
             newgrf_grfid: 0,
+            vehicle_callback_mask: 0,
         }
     };
 }
@@ -192,6 +193,7 @@ macro_rules! train {
             newgrf_local_id: 0,
             newgrf_runtime: None,
             newgrf_grfid: 0,
+            vehicle_callback_mask: 0,
         }
     };
 }

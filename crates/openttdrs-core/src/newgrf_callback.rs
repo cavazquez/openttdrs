@@ -17,7 +17,7 @@ use crate::newgrf_sprites::{
     CBID_CARGO_STATION_RATING_CALC, CBID_HOUSE_ALLOW_CONSTRUCTION, CBID_INDUSTRY_LOCATION,
     CBID_OBJECT_LAND_SLOPE_CHECK, CBID_STATION_ANIMATION_NEXT_FRAME, CBID_STATION_ANIMATION_SPEED,
     CBID_STATION_ANIMATION_TRIGGER, CBID_STATION_AVAILABILITY, CBID_STATION_LAND_SLOPE_CHECK,
-    CBID_VEHICLE_START_STOP_CHECK, TrainSpriteGraphics,
+    CBID_VEHICLE_SOUND_EFFECT, CBID_VEHICLE_START_STOP_CHECK, TrainSpriteGraphics,
 };
 use crate::object_spec::ObjectSpecDef;
 use crate::road_stop_action2::{
@@ -28,7 +28,7 @@ use crate::station::Station;
 use crate::station_class::{StationAnimationTrigger, StationRandomTrigger};
 use crate::town::Town;
 use crate::vehicle::{Vehicle, VehicleKind};
-use crate::{CargoType, RoadType, StopKind};
+use crate::{CargoType, GameState, RoadType, SoundId, StopKind, VehicleSoundEvent};
 
 /// Contexto que el scheduler de callbacks necesita para reproducir los scopes
 /// de una parada vial ya colocada. El renderer ya usaba estos pools; ahora las
@@ -118,6 +118,82 @@ pub fn apply_vehicle_start_stop_callback(engine: &EngineDef, vehicle: &mut Vehic
     }
     let result = resolve_vehicle_callback(engine, vehicle, CBID_VEHICLE_START_STOP_CHECK, 0, 0);
     vehicle_start_stop_callback_allows(result)
+}
+
+/// Resultado del callback de sonido de un vehículo.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VehicleSoundOverride {
+    /// El callback no aplica y debe sonar el efecto vanilla del evento.
+    Default,
+    /// El callback devolvió un sample global del baseset (`0..72`).
+    Base(SoundId),
+    /// El callback devolvió un sample local del GRF (`73 + local_id`).
+    Newgrf { grfid: u32, local_id: u8 },
+    /// El callback devolvió un id válido pero sin sample reproducible.
+    Suppressed,
+}
+
+/// Resuelve `CBID_VEHICLE_SOUND_EFFECT` (`0x33`) para un vehículo real.
+///
+/// `OpenTTD` pasa el evento en `param1` y `0` en `param2`. Un callback fallido
+/// conserva el SFX vanilla; un id global selecciona un sample del baseset; un
+/// id desde `SOUND_COUNT` se traduce al espacio local del GRF. Un id custom
+/// ausente o sin PCM suprime el sonido, igual que `INVALID_SOUND` upstream.
+#[must_use]
+pub fn resolve_vehicle_sound_callback(
+    state: &mut GameState,
+    vehicle_id: u32,
+    event: VehicleSoundEvent,
+) -> VehicleSoundOverride {
+    let Some(vehicle_index) = state.vehicles.iter().position(|v| v.id == vehicle_id) else {
+        return VehicleSoundOverride::Default;
+    };
+    let Some(engine_id) = state.vehicles[vehicle_index].engine_id else {
+        return VehicleSoundOverride::Default;
+    };
+    let Some(engine) = state
+        .engine_catalog
+        .iter()
+        .find(|e| e.id == engine_id)
+        .cloned()
+    else {
+        return VehicleSoundOverride::Default;
+    };
+    if engine.newgrf_grfid == 0 || engine.vehicle_callback_mask & (1 << 7) == 0 {
+        return VehicleSoundOverride::Default;
+    }
+    let result = resolve_vehicle_callback(
+        &engine,
+        &mut state.vehicles[vehicle_index],
+        CBID_VEHICLE_SOUND_EFFECT,
+        event as u32,
+        0,
+    );
+    if result == CALLBACK_FAILED {
+        return VehicleSoundOverride::Default;
+    }
+    let sound_count = u16::try_from(crate::sound_id::SOUND_COUNT).unwrap_or(u16::MAX);
+    if result < sound_count {
+        return u8::try_from(result)
+            .ok()
+            .and_then(SoundId::from_u8)
+            .map_or(VehicleSoundOverride::Suppressed, VehicleSoundOverride::Base);
+    }
+    let Some(local_id) = u8::try_from(result - sound_count).ok() else {
+        return VehicleSoundOverride::Suppressed;
+    };
+    let Some(def) =
+        crate::sound_effect_def(&state.sound_effect_catalog, engine.newgrf_grfid, local_id)
+    else {
+        return VehicleSoundOverride::Suppressed;
+    };
+    if !def.has_sample || def.sample_pcm.is_empty() {
+        return VehicleSoundOverride::Suppressed;
+    }
+    VehicleSoundOverride::Newgrf {
+        grfid: engine.newgrf_grfid,
+        local_id,
+    }
 }
 
 /// Resuelve un callback genérico sobre graphics (sin vehículo), fallando de forma observable.
@@ -1244,6 +1320,60 @@ mod tests {
 
         engine.newgrf_runtime = None;
         assert!(apply_vehicle_start_stop_callback(&engine, &mut v));
+    }
+
+    #[test]
+    fn callbacks_ac_vehicle_sound_translates_base_and_grf_local_ids() {
+        let mut state = crate::GameState::new(4, 4);
+        let mut engine = engines_table()
+            .iter()
+            .find(|e| e.kind == VehicleKind::Train && e.power_hp > 0)
+            .cloned()
+            .unwrap();
+        engine.id = 4_000;
+        engine.newgrf_grfid = 0x534F_554E;
+        engine.newgrf_local_id = 0;
+        engine.vehicle_callback_mask = 1 << 7;
+        engine.newgrf_runtime = Some(Box::new(gfx_callback_literal(SoundId::CashTill.as_u8())));
+        let mut vehicle = Vehicle::new(
+            77,
+            VehicleKind::Train,
+            TileCoord::new(1, 1),
+            TileCoord::new(1, 1),
+        );
+        vehicle.engine_id = Some(engine.id);
+        state.engine_catalog.push(engine);
+        state.vehicles.push(vehicle);
+
+        assert_eq!(
+            resolve_vehicle_sound_callback(&mut state, 77, VehicleSoundEvent::Start),
+            VehicleSoundOverride::Base(SoundId::CashTill)
+        );
+
+        let engine_index = state
+            .engine_catalog
+            .iter()
+            .position(|candidate| candidate.id == 4_000)
+            .unwrap();
+        state.engine_catalog[engine_index].newgrf_runtime =
+            Some(Box::new(gfx_callback_literal(74)));
+        state.sound_effect_catalog.push(crate::SoundEffectDef {
+            local_id: 1,
+            grfid: 0x534F_554E,
+            volume: 128,
+            priority: 7,
+            override_old: None,
+            has_sample: true,
+            sample_pcm: vec![0x80, 0x90],
+            from_newgrf: true,
+        });
+        assert_eq!(
+            resolve_vehicle_sound_callback(&mut state, 77, VehicleSoundEvent::Running),
+            VehicleSoundOverride::Newgrf {
+                grfid: 0x534F_554E,
+                local_id: 1,
+            }
+        );
     }
 
     #[test]

@@ -1921,6 +1921,71 @@ mod tests {
     }
 
     #[test]
+    fn vehicle_action0_preserves_sound_effect_callback_mask() {
+        let road = [
+            0x00,
+            ACTION0_FEATURE_ROAD_VEHICLES,
+            0x01,
+            0x01,
+            0x00,
+            0x17,
+            0x80,
+        ];
+        assert_eq!(
+            parse_action0_vehicle_metas(&road).unwrap()[0].callback_mask,
+            0x80
+        );
+
+        let ship = [
+            0x00,
+            ACTION0_FEATURE_SHIPS,
+            0x02,
+            0x01,
+            0x00,
+            0x12,
+            0x80,
+            0x22,
+            0x01,
+        ];
+        assert_eq!(
+            parse_action0_vehicle_metas(&ship).unwrap()[0].callback_mask,
+            0x180
+        );
+
+        let aircraft = [
+            0x00,
+            ACTION0_FEATURE_AIRCRAFT,
+            0x02,
+            0x01,
+            0x00,
+            0x14,
+            0x80,
+            0x22,
+            0x01,
+        ];
+        assert_eq!(
+            parse_action0_vehicle_metas(&aircraft).unwrap()[0].callback_mask,
+            0x180
+        );
+
+        let train = [
+            0x00,
+            ACTION0_FEATURE_TRAINS,
+            0x02,
+            0x01,
+            0x00,
+            0x1E,
+            0x80,
+            0x31,
+            0x01,
+        ];
+        assert_eq!(
+            parse_action0_train_meta(&train).unwrap().callback_mask,
+            0x180
+        );
+    }
+
+    #[test]
     fn action0_climate_mask_filters_runtime_vehicle_catalog() {
         let action0 = vec![
             0x00,

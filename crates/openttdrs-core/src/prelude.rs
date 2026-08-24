@@ -10,7 +10,7 @@ pub use crate::command::{CommandError, LevelMode, apply_command, command_would_f
 pub use crate::company::{Company, CompanyId};
 pub use crate::game_state::{GameState, SimStats, SimulationRuntime};
 pub use crate::map::{Map, MapError, Tile, TileCoord, TileKind};
-pub use crate::sim_events::{SimEvent, SimEventQueue};
+pub use crate::sim_events::{SimEvent, SimEventQueue, VehicleSoundEvent};
 pub use crate::station::{Station, StopKind};
 pub use crate::tick::GameTick;
 pub use crate::vehicle::{

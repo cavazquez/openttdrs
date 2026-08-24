@@ -43,6 +43,24 @@ pub enum VehicleRunningPhase {
     Stopped16,
 }
 
+/// Motivo que dispara el callback `CBID_VEHICLE_SOUND_EFFECT` (`0x33`).
+///
+/// Los valores son los que usa `VehicleSoundEvent` en `OpenTTD` y forman parte
+/// del contrato con las Action2 de los GRF.
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VehicleSoundEvent {
+    Start = 1,
+    Tunnel = 2,
+    Breakdown = 3,
+    Running = 4,
+    Touchdown = 5,
+    VisualEffect = 6,
+    Running16 = 7,
+    Stopped16 = 8,
+    LoadUnload = 9,
+}
+
 /// Evento discreto emitido durante un tick de simulación.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SimEvent {

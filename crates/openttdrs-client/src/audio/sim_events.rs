@@ -3,7 +3,10 @@
 use bevy::prelude::*;
 
 use openttdrs_core::prelude::*;
-use openttdrs_core::{ConstructionKind, SoundId, VehicleRunningPhase};
+use openttdrs_core::{
+    ConstructionKind, SoundId, VehicleRunningPhase, VehicleSoundEvent, VehicleSoundOverride,
+    play_newgrf_sound, resolve_vehicle_sound_callback,
+};
 
 use crate::audio::PlayWorldSfx;
 use crate::bevy_app::{FixedUpdateSet, UpdateSet};
@@ -128,8 +131,38 @@ fn log_sim_event(event: &SimEvent) {
     }
 }
 
+// Agrupa el puente core→SFX: cada evento necesita id, callback, fallback,
+// posición y los parámetros del mixer para conservar la semántica vanilla.
+#[allow(clippy::too_many_arguments)]
+fn play_vehicle_event_sound(
+    sim: &mut SimWorld,
+    sfx: &mut MessageWriter<PlayWorldSfx>,
+    vehicle_id: u32,
+    event: VehicleSoundEvent,
+    default_sound: SoundId,
+    at: TileCoord,
+    volume: f32,
+    priority: u8,
+) {
+    match resolve_vehicle_sound_callback(&mut sim.state, vehicle_id, event) {
+        VehicleSoundOverride::Default => {
+            sfx.write(PlayWorldSfx::new(default_sound, at, volume).with_priority(priority));
+        }
+        VehicleSoundOverride::Base(sound) => {
+            sfx.write(PlayWorldSfx::new(sound, at, volume).with_priority(priority));
+        }
+        VehicleSoundOverride::Newgrf { grfid, local_id } => {
+            // El helper ya validó la entrada y su PCM; el mixer drena la cola
+            // en el mismo frame que este puente procesa el evento.
+            let _ = play_newgrf_sound(&mut sim.state, grfid, local_id);
+        }
+        VehicleSoundOverride::Suppressed => {}
+    }
+}
+
 fn dispatch_sim_events(
     mut pending: ResMut<PendingSimEvents>,
+    mut sim: ResMut<SimWorld>,
     hud: Res<SimHudControls>,
     mut sfx: MessageWriter<PlayWorldSfx>,
     mut fx: ResMut<FxSpawnQueue>,
@@ -163,16 +196,29 @@ fn dispatch_sim_events(
                 }
                 fx.push_explosion(at);
             }
-            SimEvent::VehicleDepart { at, kind, .. } => {
+            SimEvent::VehicleDepart {
+                vehicle_id,
+                at,
+                kind,
+            } => {
                 if hud.sound_vehicle {
-                    sfx.write(
-                        PlayWorldSfx::new(SoundId::departure_for_kind(kind), at, 0.9)
-                            .with_priority(72),
+                    play_vehicle_event_sound(
+                        &mut sim,
+                        &mut sfx,
+                        vehicle_id,
+                        VehicleSoundEvent::Start,
+                        SoundId::departure_for_kind(kind),
+                        at,
+                        0.9,
+                        72,
                     );
                 }
             }
             SimEvent::VehicleRunning {
-                at, kind, phase, ..
+                vehicle_id,
+                at,
+                kind,
+                phase,
             } => {
                 if !hud.sound_vehicle {
                     continue;
@@ -182,9 +228,20 @@ fn dispatch_sim_events(
                     VehicleRunningPhase::Running16 => (0.18, 6),
                     VehicleRunningPhase::Stopped16 => (0.12, 4),
                 };
-                sfx.write(
-                    PlayWorldSfx::new(SoundId::running_for_kind(kind), at, volume)
-                        .with_priority(priority),
+                let event = match phase {
+                    VehicleRunningPhase::Running => VehicleSoundEvent::Running,
+                    VehicleRunningPhase::Running16 => VehicleSoundEvent::Running16,
+                    VehicleRunningPhase::Stopped16 => VehicleSoundEvent::Stopped16,
+                };
+                play_vehicle_event_sound(
+                    &mut sim,
+                    &mut sfx,
+                    vehicle_id,
+                    event,
+                    SoundId::running_for_kind(kind),
+                    at,
+                    volume,
+                    priority,
                 );
             }
             SimEvent::LevelCrossing { at } => {
@@ -192,11 +249,21 @@ fn dispatch_sim_events(
                     sfx.write(PlayWorldSfx::new(SoundId::LevelCrossing, at, 0.8).with_priority(75));
                 }
             }
-            SimEvent::Breakdown { at, kind, .. } => {
+            SimEvent::Breakdown {
+                vehicle_id,
+                at,
+                kind,
+            } => {
                 if hud.sound_vehicle {
-                    sfx.write(
-                        PlayWorldSfx::new(SoundId::breakdown_for_kind(kind), at, 0.7)
-                            .with_priority(85),
+                    play_vehicle_event_sound(
+                        &mut sim,
+                        &mut sfx,
+                        vehicle_id,
+                        VehicleSoundEvent::Breakdown,
+                        SoundId::breakdown_for_kind(kind),
+                        at,
+                        0.7,
+                        85,
                     );
                 }
                 fx.push_breakdown(at);
@@ -262,19 +329,39 @@ fn dispatch_sim_events(
             SimEvent::LoanInterestPaid { .. }
             | SimEvent::BankruptcyWarning
             | SimEvent::GameOver { .. } => {}
-            SimEvent::AircraftTakeoff { at, engine_id, .. } => {
+            SimEvent::AircraftTakeoff {
+                vehicle_id,
+                at,
+                engine_id,
+            } => {
                 if hud.sound_vehicle {
-                    sfx.write(
-                        PlayWorldSfx::new(aircraft_takeoff_sound(engine_id), at, 0.85)
-                            .with_priority(78),
+                    play_vehicle_event_sound(
+                        &mut sim,
+                        &mut sfx,
+                        vehicle_id,
+                        VehicleSoundEvent::Start,
+                        aircraft_takeoff_sound(engine_id),
+                        at,
+                        0.85,
+                        78,
                     );
                 }
             }
-            SimEvent::AircraftLanding { at, engine_id, .. } => {
+            SimEvent::AircraftLanding {
+                vehicle_id,
+                at,
+                engine_id,
+            } => {
                 if hud.sound_vehicle {
-                    sfx.write(
-                        PlayWorldSfx::new(aircraft_landing_sound(engine_id), at, 0.8)
-                            .with_priority(78),
+                    play_vehicle_event_sound(
+                        &mut sim,
+                        &mut sfx,
+                        vehicle_id,
+                        VehicleSoundEvent::Touchdown,
+                        aircraft_landing_sound(engine_id),
+                        at,
+                        0.8,
+                        78,
                     );
                 }
             }

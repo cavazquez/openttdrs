@@ -123,6 +123,9 @@ pub struct EngineDef {
     /// GRFID del `NewGRF` que definió este motor (0 = vanilla).
     #[serde(default, skip)]
     pub newgrf_grfid: u32,
+    /// Máscara Action0 de callbacks de vehículo; bit 7 = `SoundEffect`.
+    #[serde(default)]
+    pub vehicle_callback_mask: u16,
 }
 
 impl EngineDef {

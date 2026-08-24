@@ -225,6 +225,8 @@ pub struct ParsedTrainMeta {
     pub shorten_factor: u8,
     pub required_rail_type: Option<u8>,
     pub refit_mask: u32,
+    /// Máscara de callbacks de vehículo (bit 7 = `SoundEffect`).
+    pub callback_mask: u16,
 }
 
 /// Subset de propiedades Action0 que alimenta el catálogo jugable de vehículos.
@@ -256,6 +258,8 @@ pub struct ParsedVehicleMeta {
     pub sound_effect: u8,
     /// Action0 ship `0x1E` CTT include → bitmask temperate (`0` = lista vanilla).
     pub refit_mask: u32,
+    /// Máscara de callbacks de vehículo (bit 7 = `SoundEffect`).
+    pub callback_mask: u16,
 }
 
 impl ParsedVehicleMeta {
@@ -327,6 +331,7 @@ impl ParsedVehicleMeta {
             canal_speed_frac: 0,
             sound_effect: 0,
             refit_mask: 0,
+            callback_mask: 0,
         })
     }
 }
@@ -2961,6 +2966,7 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
     let mut shorten_factor = 0u8;
     let mut required_rail_type = None;
     let mut refit_mask = 0u32;
+    let mut callback_mask = 0u16;
     for _ in 0..header.num_props {
         if i >= payload.len() {
             break;
@@ -3070,9 +3076,11 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
                 curve_speed_mod = i16::from_le_bytes(read_u16(payload, &mut i)?.to_le_bytes());
             }
             // Anchos fijos restantes consumidos sin semántica runtime.
-            0x08 | 0x0A | 0x0C | 0x0F | 0x10 | 0x11 | 0x18 | 0x19 | 0x1C | 0x1E | 0x22 | 0x25
-            | 0x26 | 0x31 => {
+            0x08 | 0x0A | 0x0C | 0x0F | 0x10 | 0x11 | 0x18 | 0x19 | 0x1C | 0x22 | 0x25 | 0x26 => {
                 skip_bytes(payload, &mut i, 1)?;
+            }
+            0x1E => {
+                callback_mask = (callback_mask & 0xFF00) | u16::from(read_u8(payload, &mut i)?);
             }
             0x1A => {
                 // Extended byte sort order: BYTE en fixtures locales.
@@ -3088,6 +3096,10 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
             0x2C | 0x2D => {
                 let count = usize::from(read_u8(payload, &mut i)?);
                 skip_bytes(payload, &mut i, count)?;
+            }
+            0x31 => {
+                callback_mask =
+                    (callback_mask & 0x00FF) | (u16::from(read_u8(payload, &mut i)?) << 8);
             }
             PROP_TRAIN_SPEED => {
                 if i + 2 > payload.len() {
@@ -3142,6 +3154,7 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
         shorten_factor,
         required_rail_type,
         refit_mask,
+        callback_mask,
     })
 }
 
@@ -3244,8 +3257,13 @@ fn parse_road_vehicle_property(
         // 0x0A/0x16/0x1F/0x27: dword props aún no mapeadas al runtime.
         0x0A | 0x16 | 0x1F | 0x27 => skip_bytes(payload, i, metas.len().checked_mul(4)?)?,
         // 0x05 translation table; 0x20/0x28 extended byte (fixtures usan BYTE).
-        0x05 | 0x0E | 0x17 | 0x18 | 0x19 | 0x1A | 0x1B | 0x1C | 0x20 | 0x21 | 0x23 | 0x28 => {
+        0x05 | 0x0E | 0x18 | 0x19 | 0x1A | 0x1B | 0x1C | 0x20 | 0x21 | 0x23 | 0x28 => {
             skip_bytes(payload, i, metas.len())?;
+        }
+        0x17 => {
+            for meta in metas {
+                meta.callback_mask = u16::from(read_u8(payload, i)?);
+            }
         }
         0x0F => {
             for meta in metas {
@@ -3298,8 +3316,13 @@ fn parse_ship_property(
     metas: &mut [ParsedVehicleMeta],
 ) -> Option<()> {
     match prop {
-        0x08 | 0x09 | 0x12 | 0x13 | 0x16 | 0x17 | 0x1C | 0x24 => {
+        0x08 | 0x09 | 0x13 | 0x16 | 0x17 | 0x1C | 0x24 => {
             skip_bytes(payload, i, metas.len())?;
+        }
+        0x12 => {
+            for meta in metas {
+                meta.callback_mask = u16::from(read_u8(payload, i)?);
+            }
         }
         0x0A => {
             for meta in metas {
@@ -3345,7 +3368,13 @@ fn parse_ship_property(
         0x18 | 0x19 | 0x1D | 0x20 | 0x25 => {
             skip_bytes(payload, i, metas.len().checked_mul(2)?)?;
         }
-        0x1B | 0x22 => skip_bytes(payload, i, metas.len())?,
+        0x1B => skip_bytes(payload, i, metas.len())?,
+        0x22 => {
+            for meta in metas {
+                meta.callback_mask =
+                    (meta.callback_mask & 0x00FF) | (u16::from(read_u8(payload, i)?) << 8);
+            }
+        }
         // CTT refit include (`0x1E`) / exclude (`0x1F`): BYTE count + N cargo indices.
         0x1E | 0x1F => {
             for meta in metas {
@@ -3379,8 +3408,20 @@ fn parse_aircraft_property(
     metas: &mut [ParsedVehicleMeta],
 ) -> Option<()> {
     match prop {
-        0x08 | 0x0D | 0x14 | 0x15 | 0x16 | 0x17 | 0x1B | 0x22 => {
+        0x08 | 0x0D | 0x15 | 0x16 | 0x17 | 0x1B => {
             skip_bytes(payload, i, metas.len())?;
+        }
+        0x14 => {
+            for meta in metas {
+                meta.callback_mask =
+                    (meta.callback_mask & 0xFF00) | u16::from(read_u8(payload, i)?);
+            }
+        }
+        0x22 => {
+            for meta in metas {
+                meta.callback_mask =
+                    (meta.callback_mask & 0x00FF) | (u16::from(read_u8(payload, i)?) << 8);
+            }
         }
         0x09 => {
             for meta in metas {

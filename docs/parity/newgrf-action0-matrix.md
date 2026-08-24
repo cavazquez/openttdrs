@@ -83,7 +83,8 @@ Fuente: `newgrf_act0_trains.cpp`.
 | `23` powered wagon weight | **runtime** |
 | `27` misc flags (bit0 `RailTilts`) | **runtime** (`rail_tilts`) |
 | `2E` curve speed mod | **runtime** |
-| `0E`, `08`, `0A`, `0C`, `0F`–`11`, `18`–`1A`, `1C`, `1E`, `22`, `25`–`26`, `28`–`2D`, `2F`–`31` | consumidas (ancho fijo / CTT / callbacks) |
+| `1E` callback mask BYTE / `31` additional mask BYTE | **runtime** (`EngineDef.vehicle_callback_mask`; bit 7 habilita CB33) |
+| `0E`, `08`, `0A`, `0C`, `0F`–`11`, `18`–`1A`, `1C`, `22`, `25`–`26`, `28`–`2D`, `2F`–`30` | consumidas (ancho fijo / CTT) |
 
 ## Road vehicles (`01`)
 
@@ -97,9 +98,10 @@ Fuente: `newgrf_act0_roadvehs.cpp`.
 | `10` carga default | **runtime**; pasajeros selecciona Bus, el resto Truck |
 | `11` cost factor | **runtime** |
 | `12` sound effect BYTE | **runtime** (`sound_effect`; `0`/`0xFF` = default) |
+| `17` callback mask BYTE / `28` additional mask BYTE | **runtime** (`EngineDef.vehicle_callback_mask`; bit 7 habilita CB33) |
 | `13` potencia (×10 HP) | **runtime** |
 | `14` peso (cuartos de tonelada) | **runtime** |
-| `05`, `0A`, `0E`, `16`–`1F`, `21`–`29` | consumidas cuando tienen ancho fijo; semántica pendiente |
+| `05`, `0A`, `0E`, `16`, `18`–`1F`, `21`–`27`, `29` | consumidas cuando tienen ancho fijo; semántica pendiente |
 | `20`, `24`, `25`, `2A` | pendiente: extended/listas variables |
 
 ## Ships (`02`)
@@ -114,9 +116,10 @@ Fuente: `newgrf_act0_ships.cpp`.
 | `0D` capacidad WORD | **runtime** |
 | `0F` running cost factor | **runtime** |
 | `10` sound effect BYTE | **runtime** (`sound_effect`) |
+| `12` callback mask BYTE / `22` additional mask BYTE | **runtime** (`EngineDef.vehicle_callback_mask`; bit 7 habilita CB33) |
 | `14` ocean speed fraction | **runtime** (`ocean_speed_frac` → `ship_speed_for_tile`) |
 | `15` canal speed fraction | **runtime** (`canal_speed_frac` → `ship_speed_for_tile`) |
-| `08`, `09`, `11`–`13`, `16`–`1D`, `20`–`26` restantes | consumidas si tienen ancho fijo; semántica pendiente |
+| `08`, `09`, `11`, `13`, `16`–`1D`, `20`–`21`, `23`–`26` restantes | consumidas si tienen ancho fijo; semántica pendiente |
 | `1E` CTT include (lista variable) | **runtime** (`refit_mask` → `refittable_cargo_types_for_engine`; #274) |
 | `1F` CTT exclude (lista variable) | consumida (bytes); exclude aún no resta de la máscara (#274 residual) |
 
@@ -133,7 +136,8 @@ Fuente: `newgrf_act0_aircraft.cpp`.
 | `0E` running cost factor | **runtime** |
 | `0F` capacidad de pasajeros | **runtime** |
 | `12` sound effect BYTE | **runtime** (`sound_effect`) |
-| `08`, `0D`, `11`, `13`–`1C`, `1F`–`24` restantes | consumidas si tienen ancho fijo; semántica pendiente |
+| `14` callback mask BYTE / `22` additional mask BYTE | **runtime** (`EngineDef.vehicle_callback_mask`; bit 7 habilita CB33) |
+| `08`, `0D`, `11`, `13`, `15`–`1C`, `1F`–`21`, `23`–`24` restantes | consumidas si tienen ancho fijo; semántica pendiente |
 | `1D`, `1E` | pendiente: listas CTT variables |
 
 ## Stations (`04`)
@@ -152,7 +156,7 @@ Fuente: `newgrf_act0_stations.cpp`.
 | `13` general flags | **runtime parcial**: se conserva `Cb141RandomBits` (bit 2) y entrega bits aleatorios a CB141; los demás flags no tienen consumidor todavía |
 | `16` animation info | **runtime parcial**: frames y estado de loop alimentan el scheduler CB140–142 por tesela (`m7`) |
 | `17` animation speed | **runtime parcial**: velocidad base `2^speed` del scheduler CB140–142 |
-| `18` animation triggers | **runtime parcial**: máscara CB140 para `Built`, `TileLoop`, `NewCargo`, `CargoTaken`, `VehicleLoads`, `VehicleArrives` y `VehicleDeparts` de tren (`TA_PLATFORM` al entrar en `BeginLoading` y al ejecutar `LeaveStation`), `AcceptanceTick` (`TA_WHOLE`, cada 250 ticks escalonado por StationID) y `PathReservation` (`TA_PLATFORM` al reservar por primera vez una tesela de estación). El disparador entrega el ordinal correcto en el byte bajo de `param2`; para carga, el byte alto usa la CTT Action0 GlobalVar `0x09` (o el bitnum/clima según versión GRF). Faltan sonidos. |
+| `18` animation triggers | **runtime parcial**: máscara CB140 para `Built`, `TileLoop`, `NewCargo`, `CargoTaken`, `VehicleLoads`, `VehicleArrives` y `VehicleDeparts` de tren (`TA_PLATFORM` al entrar en `BeginLoading` y al ejecutar `LeaveStation`), `AcceptanceTick` (`TA_WHOLE`, cada 250 ticks escalonado por StationID) y `PathReservation` (`TA_PLATFORM` al reservar por primera vez una tesela de estación). El disparador entrega el ordinal correcto en el byte bajo de `param2`; para carga, el byte alto usa la CTT Action0 GlobalVar `0x09` (o el bitnum/clima según versión GRF). Restan scopes de estación y sonidos propios de tesela. |
 | `09` sprite layouts | pendiente (variable; no bloquea AC de catálogo/construcción) |
 | short label del spec | derivado del nombre (no hay prop Action0 15.3) |
 | Action3 cargo group / default | **runtime** (`views_for_local_id_cargo_ctx`; fallback verificable) |
@@ -409,13 +413,13 @@ Fuente: `newgrf_act0_roadstops.cpp` / `newgrf_roadstop.h`.
 | `0C` draw_mode BYTE (`Road`/`Overlay`/`WaypGround`) | **runtime** (catálogo; bits en `road_stop_spec`) |
 | `0D` cargos de random triggers DWORD | **runtime parcial**: preserva la máscara local y la traduce con CTT/versión Action8; habilita re-randomización Action2 en NewCargo, CargoTaken, carga, llegada y salida vial. Falta estado independiente por cada tesela de una parada compuesta. |
 | `12` flags DWORD (`DriveThroughOnly` bit3, `RoadOnly` bit5, `TramOnly` bit6, …) | **runtime** (validado en query+execute; resto almacenado) |
-| `11` callback mask BYTE | **runtime parcial**: bit `Avail` ejecuta CB13 en picker/query+execute; `AnimationNextFrame`/`AnimationSpeed` habilitan CB141/CB142 y CB140 usa la máscara Action0 `0x10`. El render reevalúa la rama Action3/Action2 con el contexto local persistente; restan scopes completos y pools de town/company para algunos triggers. |
+| `11` callback mask BYTE | **runtime parcial**: bit `Avail` ejecuta CB13 en picker/query+execute; `AnimationNextFrame`/`AnimationSpeed` habilitan CB141/CB142 y CB140 usa la máscara Action0 `0x10`. El render reevalúa la rama Action3/Action2 con el contexto local persistente; restan scopes completos de estación. |
 | `0E` animation info | **runtime parcial**: frames/loop alimentan CB140–142, con frame/activo persistidos por parada |
 | `0F` animation speed | **runtime parcial**: espera base `2^speed` del scheduler CB140–142 |
 | `10` animation triggers | **runtime parcial**: `Built`, `TileLoop`, `NewCargo`, `CargoTaken`, `VehicleLoads`, llegada/salida vial y `AcceptanceTick`; CB140 recibe el ordinal y el id CTT de cargo en `param2`. Una parada compuesta/importada todavía no conserva estado separado por tesela. |
 | `FE` nombre C-string (extensión local) | **runtime** (catálogo) |
 | `FD` badge associations (extensión local: BYTE count + N× label 4 chars) | **runtime** (`associated_badges` + diagnósticos) |
-| Action1/3 views | **runtime** parcial: bahía `0..3`; DT `4`/`5` si hay vistas; el renderer resuelve Action2 por parada con random/triggers, vista/tipo/terreno, road/tram, frame, `param[]` y los scopes vecinos `66`/`67`/`68`/`6A`/`6B`, y cachea también `(var,param)`; si no hay vista usa Action5 `0x11` / OpenGFX. Restan vars BaseStation `60`–`65`/`69` y pools de town/company en la randomización del scheduler. |
+| Action1/3 views | **runtime** parcial: bahía `0..3`; DT `4`/`5` si hay vistas; el renderer resuelve Action2 por parada con random/triggers, vista/tipo/terreno, road/tram, frame, `param[]` y los scopes vecinos `66`/`67`/`68`/`6A`/`6B`, y cachea también `(var,param)`; si no hay vista usa Action5 `0x11` / OpenGFX. Restan vars BaseStation `60`–`65`/`69`. |
 | drive-through `m5`=`RSV_*` 4/5 | **runtime** (colocación + connect eje X/Y) |
 | `grfid` + `newgrf_local_id` | **runtime** (save/load + rebind tras re-apply multi-GRF) |
 | resto (`0x0A`–`0x0B`, `0x13`–`0x16`) | consumidas (ancho fijo) / pendiente |
@@ -431,7 +435,8 @@ N× (`WORD` size LE + PCM mono u8). Action0 sin sample o Action11 truncado →
 `GameState.runtime.newgrf_diagnostics`. Reproducción observable:
 `play_newgrf_sound` / `pending_newgrf_sounds`; el cliente Bevy drena la cola,
 empaqueta el PCM como WAV 8-bit/11.025 kHz y lo reproduce por el mixer mundial
-(los callbacks de sonido de vehículo todavía no tienen call site).
+(el callback de sonido de vehículo cubre salida, marcha, avería y
+despegue/aterrizaje; quedan túnel, efecto visual y carga/descarga).
 `override_old` (`0x0A`) rellena `runtime.sound_overrides[SoundId]`.
 
 | Props | Estado |

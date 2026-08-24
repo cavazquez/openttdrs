@@ -709,6 +709,20 @@ pub fn trigger_road_stop_randomisation_at(
     cargo: Option<CargoType>,
     context: RoadStopRandomisationContext,
 ) -> bool {
+    trigger_road_stop_randomisation_at_with_world(def, station, tile, trigger, cargo, context, None)
+}
+
+/// Variante de [`trigger_road_stop_randomisation_at`] con los scopes de mundo
+/// disponibles para la evaluación Action2 que decide los bits a resembrar.
+pub fn trigger_road_stop_randomisation_at_with_world(
+    def: &crate::road_stop_spec::RoadStopSpecDef,
+    station: &mut Station,
+    tile: TileCoord,
+    trigger: StationRandomTrigger,
+    cargo: Option<CargoType>,
+    context: RoadStopRandomisationContext,
+    world: Option<RoadStopCallbackWorld<'_>>,
+) -> bool {
     if !def.has_random_cargo_triggers() {
         return false;
     }
@@ -731,7 +745,13 @@ pub fn trigger_road_stop_randomisation_at(
 
     station.newgrf_waiting_random_triggers |= trigger.mask();
     let waiting = station.newgrf_waiting_random_triggers;
-    let mut ctx = action2_eval_ctx_from_road_stop(station, tile);
+    let mut ctx = world.map_or_else(
+        || action2_eval_ctx_from_road_stop(station, tile),
+        |world| {
+            let view = world.map.get(tile).map_or(0, |tile| tile.m5);
+            action2_eval_ctx_from_road_stop_with_world(station, tile, view, world)
+        },
+    );
     let random_bits = ctx.random_bits;
     ctx.vars
         .insert(0x5F, random_bits.wrapping_shl(8) | u32::from(waiting));
@@ -1670,6 +1690,130 @@ mod tests {
             5,
             "CB140 debe ver var 46 = distancia cuadrática 5"
         );
+    }
+
+    #[test]
+    #[allow(clippy::expect_used)]
+    fn road_stop_randomisation_uses_world_scopes_before_reseeding() {
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 2,
+        });
+        gfx.action2_var.insert(
+            2,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x46,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        and_mask: u8::MAX,
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: vec![(5, 5, 5)],
+                default: 0,
+            },
+        );
+        gfx.action2_random.insert(
+            5,
+            Action2RandomEntry {
+                typ: 0x80,
+                consist_count: 0,
+                triggers: crate::StationRandomTrigger::NewCargo.mask(),
+                randbit: 16,
+                sets: vec![1, 2],
+            },
+        );
+        let def = crate::RoadStopSpecDef {
+            id: 1,
+            class: 0,
+            label: "random-world".into(),
+            short_label: "RWORLD".into(),
+            stop_type: crate::ROADSTOP_TYPE_BUS,
+            from_newgrf: true,
+            grfid: 1,
+            newgrf_local_id: 0,
+            newgrf_grf_version: 8,
+            draw_mode: crate::ROADSTOP_DRAW_MODE_DEFAULT,
+            random_cargo_triggers: 1 << crate::CargoType::Passengers.bitnum(),
+            flags: 0,
+            callback_mask: 0,
+            animation_status: 0,
+            animation_frames: 0,
+            animation_speed: 0,
+            animation_triggers: 0,
+            newgrf_views: Vec::new(),
+            newgrf_runtime: Some(Box::new(gfx)),
+            newgrf_type_tables: None,
+            associated_badges: Vec::new(),
+        };
+        let catalog = vec![def.clone()];
+        let coord = TileCoord::new(1, 2);
+        let mut map = crate::Map::new_flat(8, 8, 0);
+        let mut tile = map.get(coord).expect("tile");
+        tile.kind = crate::TileKind::Station;
+        tile.m5 = crate::RSV_BAY_NE;
+        map.set_tile(coord, tile).expect("station tile");
+        let towns = vec![crate::Town {
+            pos: TileCoord::new(0, 0),
+            ..crate::Town::default()
+        }];
+        let companies = Vec::new();
+        let world = Some(RoadStopCallbackWorld {
+            map: &map,
+            road_stop_catalog: &catalog,
+            towns: &towns,
+            companies: &companies,
+            climate: crate::Climate::Temperate,
+        });
+
+        let mut legacy = Station::new_with_kind(coord, StopKind::BusStop);
+        legacy.road_stop_spec = Some(def.id);
+        assert!(!trigger_road_stop_randomisation_at(
+            &def,
+            &mut legacy,
+            coord,
+            StationRandomTrigger::NewCargo,
+            Some(crate::CargoType::Passengers),
+            RoadStopRandomisationContext {
+                climate: crate::Climate::Temperate,
+                world_seed: 9,
+                tick: 2,
+            },
+        ));
+        assert_eq!(
+            legacy.newgrf_waiting_random_triggers,
+            StationRandomTrigger::NewCargo.mask(),
+            "sin world var 46 no se alcanza la rama random"
+        );
+
+        let mut world_station = Station::new_with_kind(coord, StopKind::BusStop);
+        world_station.road_stop_spec = Some(def.id);
+        let _ = trigger_road_stop_randomisation_at_with_world(
+            &def,
+            &mut world_station,
+            coord,
+            StationRandomTrigger::NewCargo,
+            Some(crate::CargoType::Passengers),
+            RoadStopRandomisationContext {
+                climate: crate::Climate::Temperate,
+                world_seed: 9,
+                tick: 2,
+            },
+            world,
+        );
+        assert_eq!(world_station.newgrf_waiting_random_triggers, 0);
+        let expected = crate::map::industry_tile_rng(
+            9,
+            2,
+            coord,
+            0x524F_4144_u64
+                | (u64::from(StationRandomTrigger::NewCargo as u8) << 16)
+                | u64::from(StationRandomTrigger::NewCargo.mask()),
+        );
+        assert_eq!(world_station.road_stop_newgrf_random_bits & 1, expected & 1);
     }
 
     #[test]

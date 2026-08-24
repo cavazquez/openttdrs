@@ -619,7 +619,7 @@ pub(super) fn trigger_road_stop_animation_at(
         let cargo_local_id = cargo.map(|cargo| def.newgrf_cargo_local_id(cargo, climate));
         let randomisation_changed = crate::StationRandomTrigger::from_animation_trigger(trigger)
             .is_some_and(|random_trigger| {
-                crate::newgrf_callback::trigger_road_stop_randomisation_at(
+                crate::newgrf_callback::trigger_road_stop_randomisation_at_with_world(
                     def,
                     &mut state.stations[station_index],
                     tile_pos,
@@ -630,6 +630,13 @@ pub(super) fn trigger_road_stop_animation_at(
                         world_seed: state.world_seed,
                         tick,
                     },
+                    Some(crate::RoadStopCallbackWorld {
+                        map: &state.map,
+                        road_stop_catalog: &state.road_stop_spec_catalog,
+                        towns: &state.towns,
+                        companies: &state.companies,
+                        climate,
+                    }),
                 )
             });
         let animation_changed = crate::newgrf_callback::trigger_road_stop_animation_at_with_world(

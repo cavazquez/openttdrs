@@ -46,8 +46,12 @@ const FRONT_LAYER_FRAC: f32 = 0.088;
 const PILLAR_BACK_LAYER_FRAC: f32 = 0.074;
 const PILLAR_LAYER_FRAC: f32 = 0.075;
 /// Deja espacio para los parents de `DrawFoundation` (ordinales 0..=3) antes
-/// de insertar las piezas estructurales del puente en la misma tesela.
-const BRIDGE_STRUCTURE_ORDINAL_BASE: u8 = 32;
+/// de insertar las piezas estructurales del puente en la misma tesela. Los
+/// subrangos conservan el orden observable rear → catenaria → front → pilares.
+const BRIDGE_REAR_ORDINAL: u8 = 32;
+const BRIDGE_CATENARY_ORDINAL_BASE: u8 = 48;
+const BRIDGE_FRONT_ORDINAL: u8 = 64;
+const BRIDGE_PILLAR_ORDINAL_BASE: u8 = 80;
 const BRIDGE_Z_START: f32 = 3.0;
 const TILE_HEIGHT_PX: f32 = 8.0;
 const TILE_HEIGHT_WORLD: i32 = 8;
@@ -593,11 +597,13 @@ fn bridge_catenary_wire_trace_bounds(axis: usize) -> TraceSpriteBounds {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn spawn_bridge_catenary(
     commands: &mut Commands,
     assets: &WorldAssets,
     ctx: &TileRenderContext,
     span: &BridgeSpanInfo,
+    map_width: u32,
     catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     mut catenary_sprites: Option<&mut NewGrfCatenarySpriteCache>,
     mut images: Option<&mut Assets<Image>>,
@@ -612,7 +618,7 @@ fn spawn_bridge_catenary(
         &mut draws,
     );
     let tint = catenary_sprite_color();
-    for draw in draws {
+    for (draw_index, draw) in draws.into_iter().enumerate() {
         let anchor = catenary_sprite_anchor(draw.sprite_id, catenary_newgrf);
         let sprite = catenary_sprite_colored(
             assets,
@@ -683,11 +689,31 @@ fn spawn_bridge_catenary(
             local_z as f32,
             anchor,
         );
+        let placement = BridgeTracePlacement {
+            world_xy_delta: if draw.pcp_direction.is_some() {
+                (draw.tile_dx as i32, draw.tile_dy as i32)
+            } else {
+                (0, 0)
+            },
+            world_z_delta,
+            offset: (0, 0, 0),
+            bounds,
+        };
+        let parent = bridge_sortable_parent(
+            ctx,
+            map_width,
+            catenary_reference_sprite_id(draw.sprite_id),
+            span.deck_z,
+            draw.z_layer,
+            BRIDGE_CATENARY_ORDINAL_BASE.saturating_add(draw_index as u8),
+            placement,
+        );
         commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
             sprite,
             Transform::from_translation(position),
+            parent,
         ));
     }
 }
@@ -751,6 +777,7 @@ fn spawn_bridge_ramp_catenary(
     assets: &WorldAssets,
     ctx: &TileRenderContext,
     span: &BridgeSpanInfo,
+    map_width: u32,
     foundation_tileh: u8,
     foundation_base_z: u8,
     catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
@@ -790,7 +817,8 @@ fn spawn_bridge_ramp_catenary(
         ramp_slope,
         &mut pylons,
     );
-    for draw in pylons {
+    let pylon_count = pylons.len();
+    for (pylon_index, draw) in pylons.into_iter().enumerate() {
         let anchor = catenary_sprite_anchor(draw.sprite_id, catenary_newgrf);
         let sprite = catenary_sprite_colored(
             assets,
@@ -837,11 +865,26 @@ fn spawn_bridge_ramp_catenary(
             local_z as f32,
             anchor,
         );
+        let parent = bridge_sortable_parent(
+            ctx,
+            map_width,
+            catenary_reference_sprite_id(draw.sprite_id),
+            base_z,
+            draw.z_layer + 0.055,
+            BRIDGE_CATENARY_ORDINAL_BASE.saturating_add(pylon_index as u8),
+            BridgeTracePlacement {
+                world_xy_delta: (draw.tile_dx as i32, draw.tile_dy as i32),
+                world_z_delta,
+                offset: (1, 1, 0),
+                bounds: TraceSpriteBounds::new(-1, -1, 0, 1, 1, 6),
+            },
+        );
         commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
             sprite,
             Transform::from_translation(position),
+            parent,
         ));
     }
 
@@ -895,11 +938,28 @@ fn spawn_bridge_ramp_catenary(
             local_z as f32,
             anchor,
         );
+        let parent = bridge_sortable_parent(
+            ctx,
+            map_width,
+            catenary_reference_sprite_id(sid),
+            base_z,
+            0.09 + i as f32 * 0.0004,
+            BRIDGE_CATENARY_ORDINAL_BASE
+                .saturating_add(pylon_count as u8)
+                .saturating_add(i as u8),
+            BridgeTracePlacement {
+                world_xy_delta: (0, 0),
+                world_z_delta,
+                offset: (0, 0, 0),
+                bounds: TraceSpriteBounds::new(ox, oy, oz, ex, ey, ez),
+            },
+        );
         commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
             sprite,
             Transform::from_translation(position),
+            parent,
         ));
     }
 }
@@ -1139,6 +1199,28 @@ fn bridge_parent_bounds(
     )
 }
 
+fn bridge_sortable_parent(
+    ctx: &TileRenderContext,
+    map_width: u32,
+    sprite_id: u32,
+    deck_z: u8,
+    layer: f32,
+    draw_ordinal: u8,
+    placement: BridgeTracePlacement,
+) -> ViewportSortableParent {
+    let source_depth = viewport_source_depth(
+        crate::iso::sortable_draw_z(ctx.tx_i32(), ctx.ty_i32(), deck_z, layer),
+        ctx.tx,
+        map_width,
+    );
+    ViewportSortableParent {
+        sprite_id,
+        bounds: bridge_parent_bounds(ctx.tx_i32(), ctx.ty_i32(), ctx.info.base_z, placement),
+        insertion_key: viewport_insertion_key(ctx.tx, ctx.ty, draw_ordinal),
+        source_depth,
+    }
+}
+
 fn pillar_trace_placement(
     ctx: &TileRenderContext,
     axis: usize,
@@ -1284,17 +1366,15 @@ fn spawn_layer(
         crate::iso::sortable_draw_z(ctx.tx_i32(), ctx.ty_i32(), deck_z, layer),
     );
     let sortable_parent = effective_placement.map(|placement| {
-        let source_depth = viewport_source_depth(
-            crate::iso::sortable_draw_z(ctx.tx_i32(), ctx.ty_i32(), deck_z, layer),
-            ctx.tx,
+        bridge_sortable_parent(
+            ctx,
             map_width,
-        );
-        ViewportSortableParent {
             sprite_id,
-            bounds: bridge_parent_bounds(ctx.tx_i32(), ctx.ty_i32(), ctx.info.base_z, placement),
-            insertion_key: viewport_insertion_key(ctx.tx, ctx.ty, draw_ordinal),
-            source_depth,
-        }
+            deck_z,
+            layer,
+            draw_ordinal,
+            placement,
+        )
     });
     let mut entity = commands.spawn((
         MapVisualLayer,
@@ -2111,7 +2191,7 @@ pub(crate) fn spawn_bridge_deck(
             bridge_middle_structure_trace_placement(ctx.info.base_z, span.axis, false, z_draw_px)
         }),
         dims.0,
-        BRIDGE_STRUCTURE_ORDINAL_BASE,
+        BRIDGE_REAR_ORDINAL,
         None,
     );
     // Una superficie Action5 `0x1B` se compone sobre la estructura en un
@@ -2183,6 +2263,7 @@ pub(crate) fn spawn_bridge_deck(
                 assets,
                 ctx,
                 span,
+                dims.0,
                 foundation_tileh,
                 foundation_base_z,
                 catenary_newgrf,
@@ -2195,6 +2276,7 @@ pub(crate) fn spawn_bridge_deck(
                 assets,
                 ctx,
                 span,
+                dims.0,
                 catenary_newgrf,
                 catenary_sprites,
                 images,
@@ -2216,7 +2298,7 @@ pub(crate) fn spawn_bridge_deck(
             bridge_middle_structure_trace_placement(ctx.info.base_z, span.axis, true, z_draw_px)
         }),
         dims.0,
-        BRIDGE_STRUCTURE_ORDINAL_BASE + 1,
+        BRIDGE_FRONT_ORDINAL,
         None,
     );
 
@@ -2259,7 +2341,7 @@ pub(crate) fn spawn_bridge_deck(
                     segment.z_px as f32,
                 )),
                 dims.0,
-                BRIDGE_STRUCTURE_ORDINAL_BASE + 2,
+                BRIDGE_PILLAR_ORDINAL_BASE,
                 segment.half.map(|half| (span.axis, half)),
             );
         }
@@ -2284,7 +2366,7 @@ pub(crate) fn spawn_bridge_deck(
                         segment.z_px as f32,
                     )),
                     dims.0,
-                    BRIDGE_STRUCTURE_ORDINAL_BASE + 3,
+                    BRIDGE_PILLAR_ORDINAL_BASE + 1,
                     segment.half.map(|half| (span.axis, half)),
                 );
             }

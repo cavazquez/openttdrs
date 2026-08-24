@@ -10,6 +10,7 @@ use openttdrs_core::{
     Vehicle, VehicleOrder, extrapolate_vehicle_pose, retreat_vehicle_pose, train_smoke_kind,
 };
 
+use crate::audio::{PlayWorldSfx, play_vehicle_event_sound_with_default};
 use crate::bevy_app::UpdateSet;
 use crate::iso::wang_hash;
 use crate::render::effect_vehicle::{
@@ -21,6 +22,7 @@ use crate::render::{
 use crate::settings::ClientPreferences;
 use crate::simulation::SimClock;
 use crate::state::{ClientScreen, SimWorld};
+use crate::ui::SimHudControls;
 
 /// Desplazamiento sub-tesela hacia atrás respecto a la locomotora.
 const TRAIN_SMOKE_EMIT_BACK_PROGRESS: u8 = 28;
@@ -229,14 +231,17 @@ fn train_smoke_to_emit(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn spawn_train_smoke(
-    sim: Res<SimWorld>,
+    mut sim: ResMut<SimWorld>,
     sim_clock: Res<SimClock>,
     prefs: Res<ClientPreferences>,
+    hud: Res<SimHudControls>,
     frames: Res<EffectVehicleFrames>,
     mut spawn_clock: ResMut<TrainSmokeSpawnClock>,
     mut commands: Commands,
     existing: Query<(), With<TrainSmokeEffect>>,
+    mut sfx: MessageWriter<PlayWorldSfx>,
 ) {
     if !frames.is_loaded() {
         return;
@@ -249,6 +254,7 @@ fn spawn_train_smoke(
 
     let mut active_count = existing.iter().count();
     let map = &sim.state.map;
+    let mut visual_sound_events = Vec::new();
     for vehicle in &sim.state.vehicles {
         if active_count >= MAX_TRAIN_SMOKE_EFFECTS {
             break;
@@ -284,7 +290,26 @@ fn spawn_train_smoke(
             Transform::from_translation(pos),
             Visibility::Visible,
         ));
+        // `ShowVisualEffect` llama a `PlayVehicleSound(VSE_VISUAL_EFFECT)`
+        // una vez por vehículo primario cuando al menos un humo/chispa fue
+        // creado. Los efectos de los vagones se siguen dibujando, pero no
+        // duplican el callback del consist.
+        if hud.sound_vehicle && vehicle.is_consist_head() {
+            visual_sound_events.push((vehicle.id, vehicle.pos));
+        }
         active_count += 1;
+    }
+    for (vehicle_id, at) in visual_sound_events {
+        play_vehicle_event_sound_with_default(
+            &mut sim,
+            &mut sfx,
+            vehicle_id,
+            VehicleSoundEvent::VisualEffect,
+            None,
+            at,
+            0.35,
+            5,
+        );
     }
 }
 

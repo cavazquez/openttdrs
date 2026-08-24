@@ -98,8 +98,8 @@ pub enum SimEvent {
         kind: crate::vehicle::VehicleKind,
     },
     /// Efecto visual de vehículo que puede tener un sonido `NewGRF` asociado.
-    /// El renderer emite este evento cuando crea humo/chispas, mientras que
-    /// el callback se resuelve en el puente de audio.
+    /// El renderer puede publicar este evento cuando crea humo/chispas,
+    /// mientras que el callback se resuelve en el puente de audio.
     VehicleVisualEffect {
         vehicle_id: u32,
         at: TileCoord,

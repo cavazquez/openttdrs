@@ -1,8 +1,11 @@
 //! Contexto Action2 para teselas de estación (vars de runtime).
 
+use crate::cargo::{ALL_CARGO_TYPES, CargoType};
 use crate::map::{Map, TileCoord, TileKind, tile_slope_and_z};
 use crate::newgrf_sprites::Action2EvalCtx;
-use crate::newgrf_type_tables::{GrfTypeTranslationTables, reverse_rail_type};
+use crate::newgrf_type_tables::{
+    GrfTypeTranslationTables, cargo_from_local_id, local_cargo_id, reverse_rail_type,
+};
 use crate::rail_type::rail_type_from_tile;
 use crate::station::{Station, station_at_tile, station_type_from_m6};
 use crate::world_gen::Climate;
@@ -19,6 +22,29 @@ pub fn action2_eval_ctx_for_station_tile(
     owner_colour: u8,
     climate: Climate,
     type_tables: Option<&GrfTypeTranslationTables>,
+) -> Action2EvalCtx {
+    action2_eval_ctx_for_station_tile_with_grf(
+        map,
+        stations,
+        coord,
+        owner_colour,
+        climate,
+        type_tables,
+        8,
+    )
+}
+
+/// Variante que conserva la versión Action8 del GRF para traducir los
+/// parámetros de cargo de las variables `60`–`65`/`69`.
+#[must_use]
+pub fn action2_eval_ctx_for_station_tile_with_grf(
+    map: &Map,
+    stations: &[Station],
+    coord: TileCoord,
+    owner_colour: u8,
+    climate: Climate,
+    type_tables: Option<&GrfTypeTranslationTables>,
+    grf_version: u8,
 ) -> Action2EvalCtx {
     let mut ctx = Action2EvalCtx::default();
     let Some(st) = station_at_tile(map, stations, coord) else {
@@ -62,7 +88,80 @@ pub fn action2_eval_ctx_for_station_tile(
     let land = tile_type_byte << 24 | u32::from(z) << 16 | (terrain << 2) << 8 | u32::from(tileh);
     ctx.vars.insert(0x67, land);
 
+    populate_station_cargo_vars(&mut ctx, st, type_tables, grf_version, climate);
+
     ctx
+}
+
+/// Materializa las variables de carga parametrizadas que puede consultar el
+/// Action2 de una estación. Los ids locales se generan con la misma CTT y
+/// fallback de versión que `param2` de CB140; los slots desconocidos (cargos
+/// definidos por un GRF y ausentes del modelo) quedan deliberadamente sin
+/// valor en vez de reutilizar otro cargo.
+pub(crate) fn populate_station_cargo_vars(
+    ctx: &mut Action2EvalCtx,
+    station: &Station,
+    type_tables: Option<&GrfTypeTranslationTables>,
+    grf_version: u8,
+    climate: Climate,
+) {
+    for cargo in ALL_CARGO_TYPES {
+        let local_id = local_cargo_id(type_tables, grf_version, cargo, climate);
+        if local_id == 0xFF
+            || cargo_from_local_id(type_tables, grf_version, local_id, climate) != Some(cargo)
+        {
+            continue;
+        }
+        for variable in [0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x69] {
+            ctx.parameterized_vars.insert(
+                (variable, local_id),
+                station_cargo_var(station, cargo, variable),
+            );
+        }
+    }
+}
+
+fn station_cargo_var(station: &Station, cargo: CargoType, variable: u8) -> u32 {
+    let entry = station.goods.get(cargo);
+    match variable {
+        // `GoodsEntry::TotalCount`, capped to the 12-bit Action2 contract.
+        0x60 => station.cargo_stock.get(cargo).min(4095),
+        0x61 => u32::from(station.time_since_pickup.get(cargo)),
+        0x62 => {
+            if entry.has_rating {
+                u32::from(entry.rating)
+            } else {
+                u32::MAX
+            }
+        }
+        // The packet queue retains the same maximum transit-period statistic
+        // used by the cargo rating path; legacy stock-only saves naturally
+        // return zero until their packets are hydrated.
+        0x63 => station
+            .cargo_packets
+            .packets()
+            .filter(|packet| packet.cargo == cargo)
+            .map(|packet| u32::from(packet.periods_in_transit))
+            .max()
+            .unwrap_or(0),
+        0x64 => {
+            if entry.has_vehicle_ever_tried_loading() {
+                u32::from(entry.last_speed) | (u32::from(entry.last_age) << 8)
+            } else {
+                0xFF00
+            }
+        }
+        // The station model exposes the effective catchment predicate. It is
+        // the closest persisted equivalent to GoodsEntry::Acceptance and uses
+        // the same bit (3) as upstream.
+        0x65 => u32::from(station.accepts_cargo(cargo)) << 3,
+        // `GoodsEntry::ConvertState` needs monthly delivery flags that are not
+        // persisted yet. `has_rating` is the conservative observable bit for
+        // cargo ever seen at this station; the remaining historical bits stay
+        // zero until that state model is added.
+        0x69 => u32::from(entry.has_rating),
+        _ => 0,
+    }
 }
 
 fn tile_kind_as_ottd(kind: TileKind) -> u8 {
@@ -196,6 +295,7 @@ fn platform_info_for_tile(map: &Map, stations: &[Station], coord: TileCoord, m5:
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use crate::cargo_packet::CargoPacket;
     use crate::company::CompanyId;
     use crate::map::{Map, Tile, TileKind};
     use crate::station::{Station, StopKind};
@@ -308,5 +408,39 @@ mod tests {
             action2_eval_ctx_for_station_tile(&map, &[st], c, 0, Climate::Temperate, Some(&tables));
         let v42 = *ctx.vars.get(&0x42).unwrap();
         assert_eq!((v42 >> 8) & 0xFF, 1); // ELRL at index 1
+    }
+
+    #[test]
+    fn station_ctx_exposes_parameterized_cargo_scope() {
+        let mut map = Map::new_flat(4, 4, 0);
+        let c = TileCoord::new(1, 1);
+        map.set_tile(c, rail_station_tile(0)).unwrap();
+        let mut st = Station::new_with_kind(c, StopKind::RailStation);
+        let mut packet = CargoPacket::new(CargoType::Coal, 23, c);
+        packet.periods_in_transit = 6;
+        st.push_waiting_packets([packet]);
+        st.time_since_pickup.coal = 9;
+        let entry = st.goods.get_mut(CargoType::Coal);
+        entry.has_rating = true;
+        entry.rating = 123;
+        entry.last_speed = 77;
+        entry.last_age = 4;
+
+        let ctx = action2_eval_ctx_for_station_tile_with_grf(
+            &map,
+            &[st],
+            c,
+            0,
+            Climate::Temperate,
+            None,
+            8,
+        );
+        assert_eq!(ctx.parameterized_vars.get(&(0x60, 1)), Some(&23));
+        assert_eq!(ctx.parameterized_vars.get(&(0x61, 1)), Some(&9));
+        assert_eq!(ctx.parameterized_vars.get(&(0x62, 1)), Some(&123));
+        assert_eq!(ctx.parameterized_vars.get(&(0x63, 1)), Some(&6));
+        assert_eq!(ctx.parameterized_vars.get(&(0x64, 1)), Some(&1_101));
+        assert_eq!(ctx.parameterized_vars.get(&(0x65, 1)), Some(&8));
+        assert_eq!(ctx.parameterized_vars.get(&(0x69, 1)), Some(&1));
     }
 }

@@ -135,6 +135,37 @@ pub fn local_cargo_id(
     }
 }
 
+/// Traduce el parámetro local de una variable Action2 de carga al tipo global.
+///
+/// `OpenTTD` usa la CTT explícita cuando existe; para GRF antiguos usa el slot
+/// del clima y, desde `GRFv7`, el `bitnum` global. Mantener la inversa junto a
+/// [`local_cargo_id`] evita que los scopes de estación inventen un orden local
+/// distinto al usado por los callbacks.
+#[must_use]
+pub fn cargo_from_local_id(
+    tables: Option<&GrfTypeTranslationTables>,
+    grf_version: u8,
+    local_id: u8,
+    climate: Climate,
+) -> Option<CargoType> {
+    if let Some(tables) = tables
+        && !tables.cargo.is_empty()
+    {
+        let label = *tables.cargo.get(usize::from(local_id))?;
+        if label == INVALID_LABEL {
+            return None;
+        }
+        return CargoType::from_label(std::str::from_utf8(&label).ok()?);
+    }
+    if (1..7).contains(&grf_version) {
+        return CargoType::from_climate_slot(climate, local_id);
+    }
+    CargoType::for_climate(climate)
+        .iter()
+        .copied()
+        .find(|cargo| cargo.bitnum() == local_id)
+}
+
 /// Traducción directa índice local GRF → `RailType` (`GetRailTypeTranslation`).
 ///
 /// Sin tabla o índice fuera de rango: `None`. Etiqueta desconocida: `None`.
@@ -359,6 +390,25 @@ mod tests {
             9,
             "v6 conserva el slot clásico del clima"
         );
+    }
+
+    #[test]
+    fn cargo_translation_inverse_matches_ctt_and_climate_fallbacks() {
+        let mut tables = GrfTypeTranslationTables::default();
+        tables.cargo = vec![*b"PASS", *b"COAL", *b"WOOD"];
+        assert_eq!(
+            cargo_from_local_id(Some(&tables), 8, 2, Climate::Temperate),
+            Some(CargoType::Wood)
+        );
+        assert_eq!(
+            cargo_from_local_id(None, 6, 9, Climate::SubArctic),
+            Some(CargoType::Paper)
+        );
+        assert_eq!(
+            cargo_from_local_id(None, 8, CargoType::Paper.bitnum(), Climate::SubArctic),
+            Some(CargoType::Paper)
+        );
+        assert_eq!(cargo_from_local_id(None, 8, 0xFF, Climate::Temperate), None);
     }
 
     #[test]

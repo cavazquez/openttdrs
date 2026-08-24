@@ -16,6 +16,7 @@ use crate::newgrf_type_tables::{GrfTypeTranslationTables, reverse_road_type};
 use crate::road_stop_spec::{RoadStopSpecDef, road_stop_spec_def};
 use crate::road_type::{road_type_from_tile, tram_road_type_from_tile, vanilla_road_type_catalog};
 use crate::station::{Station, StopKind, station_at_tile};
+use crate::station_action2::populate_station_cargo_vars;
 use crate::world_gen::Climate;
 
 /// Construye el contexto Action2 de una tesela `RoadStop` para render runtime.
@@ -160,6 +161,13 @@ fn action2_eval_ctx_for_road_stop_tile_impl(
     // disponibilidad); esta ruta siempre resuelve una instancia en el mapa.
     ctx.vars.insert(0x50, 0);
     if let Some(spec) = resolution.current_spec {
+        populate_station_cargo_vars(
+            &mut ctx,
+            station,
+            resolution.type_tables,
+            spec.newgrf_grf_version,
+            climate,
+        );
         RoadStopNeighbourScope {
             map,
             stations,

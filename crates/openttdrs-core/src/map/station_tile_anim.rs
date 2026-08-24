@@ -20,7 +20,7 @@ use crate::station::{
     STATION_TYPE_RAIL_WAYPOINT, Station, StopKind, station_at_tile, station_footprint_tiles,
     station_type_from_m6,
 };
-use crate::station_action2::action2_eval_ctx_for_station_tile;
+use crate::station_action2::action2_eval_ctx_for_station_tile_with_grf;
 use crate::station_class::{StationAnimationTrigger, StationSpecDef, station_spec_def};
 use crate::world_gen::Climate;
 
@@ -184,13 +184,14 @@ fn station_animation_context(
         .iter()
         .find(|company| company.id == station.owner)
         .map_or(0, |company| company.colour);
-    let mut ctx = action2_eval_ctx_for_station_tile(
+    let mut ctx = action2_eval_ctx_for_station_tile_with_grf(
         map,
         stations,
         coord,
         owner_colour,
         climate,
         def.newgrf_type_tables.as_ref(),
+        def.newgrf_grf_version,
     );
     ctx.persistent_registers
         .clone_from(&station.newgrf_persistent_regs);

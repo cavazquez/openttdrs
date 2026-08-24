@@ -600,7 +600,9 @@ pub use station::{
     update_station_ratings_with_cargo_callbacks, update_station_waiting, vehicle_at_road_stop,
     vehicle_physically_at_station,
 };
-pub use station_action2::action2_eval_ctx_for_station_tile;
+pub use station_action2::{
+    action2_eval_ctx_for_station_tile, action2_eval_ctx_for_station_tile_with_grf,
+};
 pub use station_class::{
     STATION_ANIMATION_TRIGGER_ACCEPTANCE_TICK, STATION_ANIMATION_TRIGGER_BUILT,
     STATION_ANIMATION_TRIGGER_CARGO_TAKEN, STATION_ANIMATION_TRIGGER_NEW_CARGO,

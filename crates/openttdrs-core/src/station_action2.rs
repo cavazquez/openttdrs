@@ -7,7 +7,10 @@ use crate::newgrf_type_tables::{
     GrfTypeTranslationTables, cargo_from_local_id, local_cargo_id, reverse_rail_type,
 };
 use crate::rail_type::rail_type_from_tile;
-use crate::station::{Station, station_at_tile, station_type_from_m6};
+use crate::station::{
+    STATION_TILE_RESERVATION, STATION_TYPE_RAIL_WAYPOINT, Station, station_at_tile,
+    station_type_from_m6,
+};
 use crate::world_gen::Climate;
 
 /// Contexto Action2 para dibujar / resolver sprites de una tesela de estación.
@@ -52,6 +55,7 @@ pub fn action2_eval_ctx_for_station_tile_with_grf(
     };
     let tile = map.get(coord);
     let m5 = tile.map_or(0, |t| t.m5);
+    let m6 = tile.map_or(0, |t| t.m6);
     let (tileh, z) = tile_slope_and_z(map, coord).unwrap_or((0, 0));
 
     let random = u32::from(st.newgrf_random_bits);
@@ -62,6 +66,21 @@ pub fn action2_eval_ctx_for_station_tile_with_grf(
     let c = u32::from(owner_colour & 0x0F);
     let var43 = nn_player | ((c | (c << 4)) << 24);
     ctx.vars.insert(0x43, var43);
+
+    // `StationScopeResolver::GetVariable(0x44)`: rail station/waypoint PBS
+    // status (`HasStationReservation`), con los valores de compra `2` y de
+    // tesela `4`/`7` que usa OpenTTD. El bit vive en m6 junto al tipo de parada.
+    let station_type = station_type_from_m6(m6);
+    let var44 = if matches!(station_type, 0 | STATION_TYPE_RAIL_WAYPOINT) {
+        if m6 & STATION_TILE_RESERVATION != 0 {
+            7
+        } else {
+            4
+        }
+    } else {
+        2
+    };
+    ctx.vars.insert(0x44, var44);
 
     // Var 10: info adicional (m5 + tileh) para selección de sprites.
     ctx.vars
@@ -384,6 +403,51 @@ mod tests {
         let st = Station::new_with_kind(c, StopKind::RailStation);
         let ctx = action2_eval_ctx_for_station_tile(&map, &[st], c, 0, Climate::SubArctic, None);
         assert_eq!(ctx.vars.get(&0x42).map(|v| v & 0xFF), Some(4));
+    }
+
+    #[test]
+    fn station_ctx_var44_reports_pbs_reservation_status() {
+        let mut map = Map::new_flat(4, 4, 0);
+        let c = TileCoord::new(1, 1);
+        let mut tile = rail_station_tile(0);
+        tile.m6 |= STATION_TILE_RESERVATION;
+        map.set_tile(c, tile).unwrap();
+        let st = Station::new_with_kind(c, StopKind::RailStation);
+        let ctx = action2_eval_ctx_for_station_tile(
+            &map,
+            std::slice::from_ref(&st),
+            c,
+            0,
+            Climate::Temperate,
+            None,
+        );
+        assert_eq!(ctx.vars.get(&0x44), Some(&7));
+
+        let mut free_tile = map.get(c).unwrap();
+        free_tile.m6 &= !STATION_TILE_RESERVATION;
+        map.set_tile(c, free_tile).unwrap();
+        let ctx = action2_eval_ctx_for_station_tile(
+            &map,
+            std::slice::from_ref(&st),
+            c,
+            0,
+            Climate::Temperate,
+            None,
+        );
+        assert_eq!(ctx.vars.get(&0x44), Some(&4));
+
+        let mut road_stop = rail_station_tile(0);
+        road_stop.m6 = 3 << 3;
+        map.set_tile(c, road_stop).unwrap();
+        let ctx = action2_eval_ctx_for_station_tile(
+            &map,
+            &[Station::new_with_kind(c, StopKind::BusStop)],
+            c,
+            0,
+            Climate::Temperate,
+            None,
+        );
+        assert_eq!(ctx.vars.get(&0x44), Some(&2));
     }
 
     #[test]

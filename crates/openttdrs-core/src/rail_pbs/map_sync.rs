@@ -7,6 +7,10 @@ use crate::rail_signals::{
     is_pbs_signal_type, rail_signal_present_mask, rail_signal_state_mask, rail_tile_is_signals,
     signal_exit_dir, signal_track_for_bit, signal_type_for_track,
 };
+use crate::station::{
+    STATION_TILE_RESERVATION, is_rail_station_type, station_tile_has_reservation,
+    station_type_from_m6,
+};
 use crate::vehicle::{Vehicle, VehicleKind};
 
 use super::model::{
@@ -16,6 +20,10 @@ use super::model::{
 
 fn is_rail_reservation_tile(kind: TileKind) -> bool {
     matches!(kind, TileKind::Rail | TileKind::RailBridge)
+}
+
+fn is_rail_station_reservation_tile(tile: &crate::map::Tile) -> bool {
+    tile.kind == TileKind::Station && is_rail_station_type(station_type_from_m6(tile.m6))
 }
 
 /// Bit de reserva PBS en cruces a nivel (`HasCrossingReservation` / `m5` bit 4).
@@ -41,8 +49,10 @@ pub fn sync_reservations_to_map(
                 let Some(tile) = map.get(c) else {
                     continue;
                 };
-                if is_rail_reservation_tile(tile.kind)
-                    && decode_rail_reservation_m2_hi(tile.m2_hi) != 0
+                if (is_rail_reservation_tile(tile.kind)
+                    && decode_rail_reservation_m2_hi(tile.m2_hi) != 0)
+                    || (is_rail_station_reservation_tile(&tile)
+                        && station_tile_has_reservation(tile.m6))
                 {
                     prev_active.insert(c);
                 }
@@ -58,6 +68,17 @@ pub fn sync_reservations_to_map(
         for step in &v.reserved_steps {
             match map.get_kind(step.tile) {
                 Some(TileKind::Rail | TileKind::RailBridge) => {
+                    next_tracks
+                        .entry(step.tile)
+                        .and_modify(|bits| *bits |= step.track)
+                        .or_insert(step.track);
+                }
+                Some(TileKind::Station)
+                    if {
+                        map.get(step.tile)
+                            .is_some_and(|tile| is_rail_station_reservation_tile(&tile))
+                    } =>
+                {
                     next_tracks
                         .entry(step.tile)
                         .and_modify(|bits| *bits |= step.track)
@@ -102,6 +123,15 @@ pub fn sync_reservations_to_map(
                 tile.m5 |= CROSSING_RESERVATION_M5_BIT;
             } else {
                 tile.m5 &= !CROSSING_RESERVATION_M5_BIT;
+            }
+            had != want_flag
+        } else if is_rail_station_reservation_tile(&tile) {
+            let had = station_tile_has_reservation(tile.m6);
+            let want_flag = want != 0;
+            if want_flag {
+                tile.m6 |= STATION_TILE_RESERVATION;
+            } else {
+                tile.m6 &= !STATION_TILE_RESERVATION;
             }
             had != want_flag
         } else {

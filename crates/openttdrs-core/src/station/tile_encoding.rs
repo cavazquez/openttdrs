@@ -42,9 +42,28 @@ pub const STATION_TYPE_RAIL_WAYPOINT: u8 = 7;
 /// `StationType::RoadWaypoint` en bits 3–6 de `m6` (`station_type.h`).
 pub const STATION_TYPE_ROAD_WAYPOINT: u8 = 8;
 
+/// `station_map.h`: bit 2 de `m6` indica una reserva PBS en una tesela rail.
+///
+/// El byte `m6` también contiene el tipo de estación en los bits 3–6; mantener
+/// la máscara aquí evita que los consumidores del scope `NewGRF` confundan ambos
+/// campos y permite sincronizar reservas sin tocar la geometría de la parada.
+pub const STATION_TILE_RESERVATION: u8 = 1 << 2;
+
 #[must_use]
 pub fn station_type_from_m6(m6: u8) -> u8 {
     (m6 >> 3) & 0x0F
+}
+
+/// ¿La tesela es una estación o waypoint ferroviario con estado PBS en `m6`?
+#[must_use]
+pub const fn is_rail_station_type(station_type: u8) -> bool {
+    matches!(station_type, 0 | STATION_TYPE_RAIL_WAYPOINT)
+}
+
+/// Lee `HasStationReservation` para una tesela ferroviaria.
+#[must_use]
+pub const fn station_tile_has_reservation(m6: u8) -> bool {
+    m6 & STATION_TILE_RESERVATION != 0
 }
 
 #[must_use]

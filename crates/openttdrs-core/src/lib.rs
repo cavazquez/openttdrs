@@ -581,10 +581,11 @@ pub use sound_effect::{
 pub use sound_id::SoundId;
 pub use station::{
     CargoTimeSincePickup, GoodsEntry, INITIAL_STATION_RATING, MAX_TIME_SINCE_PICKUP_DAYS,
-    STATION_COVERAGE_RADIUS, STATION_RATING_MAX_STEP, STATION_TILE_PYLONS, STATION_TILE_WIRES,
-    STATION_TYPE_DOCK, STATION_TYPE_OILRIG, STATION_TYPE_RAIL_WAYPOINT, Station, StationCoverage,
-    StationGoods, StationMapCoherenceReport, StationVisit, StopKind, TOWN_CARGO_MIN_OWNER_RATING,
-    can_move_goods_to_station, default_station_catenary_flags, industry_in_station_coverage,
+    STATION_COVERAGE_RADIUS, STATION_RATING_MAX_STEP, STATION_TILE_PYLONS,
+    STATION_TILE_RESERVATION, STATION_TILE_WIRES, STATION_TYPE_DOCK, STATION_TYPE_OILRIG,
+    STATION_TYPE_RAIL_WAYPOINT, Station, StationCoverage, StationGoods, StationMapCoherenceReport,
+    StationVisit, StopKind, TOWN_CARGO_MIN_OWNER_RATING, can_move_goods_to_station,
+    default_station_catenary_flags, industry_in_station_coverage, is_rail_station_type,
     is_rail_waypoint_at, is_rail_waypoint_tile, load_amount_for_rating, move_goods_to_station,
     note_station_load_attempt, on_station_cargo_pickup, pick_stop_tile, platform_past_stop_tiles,
     rail_station_approach_tile, rail_station_axis_y, rail_station_owned_tiles,
@@ -595,8 +596,8 @@ pub use station::{
     road_stop_approach_tile, station_at_tile, station_catchment_radius, station_coverage_at,
     station_coverage_for, station_covers_tile, station_footprint_tiles, station_map_coherence,
     station_rating_for_cargo, station_rating_for_company_cargo, station_tile_can_have_pylons,
-    station_tile_can_have_wires, station_tile_sets_adjacent, station_type_from_m6,
-    stop_kind_from_m6, train_on_rail_platform, update_station_ratings,
+    station_tile_can_have_wires, station_tile_has_reservation, station_tile_sets_adjacent,
+    station_type_from_m6, stop_kind_from_m6, train_on_rail_platform, update_station_ratings,
     update_station_ratings_with_cargo_callbacks, update_station_waiting, vehicle_at_road_stop,
     vehicle_physically_at_station,
 };

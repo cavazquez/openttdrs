@@ -19,6 +19,7 @@ use crate::rail_signals::{
     RAIL_TILE_NORMAL, SIGTYPE_BLOCK, SIGTYPE_PATH, update_rail_signal_states,
 };
 use crate::sav::{self, SavContainer};
+use crate::station_tile_has_reservation;
 use crate::vehicle::{Vehicle, VehicleKind};
 
 #[test]
@@ -241,6 +242,38 @@ fn sync_sets_m2_reservation_bits_on_rail_bridge_ramp() {
     sync_reservations_to_map(&mut state.map, &state.vehicles, &mut prev, &mut dirty);
     assert!(!rail_tile_has_pbs_reservation(
         state.map.get(tile).expect("rampa").m2_hi
+    ));
+}
+
+#[test]
+fn sync_sets_and_clears_station_pbs_reservation_bit() {
+    let mut state = GameState::new(8, 4);
+    let tile = TileCoord::new(2, 1);
+    state
+        .map
+        .set_kind(tile, TileKind::Station)
+        .expect("estación ferroviaria");
+    let mut train = Vehicle::new(
+        1,
+        VehicleKind::Train,
+        TileCoord::new(1, 1),
+        TileCoord::new(3, 1),
+    );
+    train.reserved_steps = vec![ReservedRailStep::new(tile, 0x01)];
+    state.vehicles = vec![train];
+
+    let mut prev = HashSet::new();
+    let mut dirty = Vec::new();
+    sync_reservations_to_map(&mut state.map, &state.vehicles, &mut prev, &mut dirty);
+    assert!(station_tile_has_reservation(
+        state.map.get(tile).expect("estación").m6
+    ));
+    assert!(dirty.contains(&tile));
+
+    state.vehicles[0].reserved_steps.clear();
+    sync_reservations_to_map(&mut state.map, &state.vehicles, &mut prev, &mut dirty);
+    assert!(!station_tile_has_reservation(
+        state.map.get(tile).expect("estación").m6
     ));
 }
 

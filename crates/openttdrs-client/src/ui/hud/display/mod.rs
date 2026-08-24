@@ -6,7 +6,7 @@ use openttdrs_core::TileKind;
 use crate::audio::{ClientAssetStatus, MusicState};
 use crate::camera::zoom_display_magnification;
 use crate::config::{self, json_save_hud_label, truncate_hud_line};
-use crate::i18n::Locale;
+use crate::i18n::{Locale, localized_text};
 use crate::iso::{
     compute_tileh, shore_png_index, shore_tileh_for_draw_shore, slope_label,
     tile_slope_bits_from_heights,
@@ -371,6 +371,14 @@ pub(crate) fn update_tile_info_text(
     }
 
     let locale = prefs.locale();
+    // El feedback de construcción se produce en comandos muy alejados del
+    // renderer del HUD. Traducir la clave española al consumirla cubre tanto
+    // errores estáticos como los que llegan después de cambiar el locale, sin
+    // hacer que cada toolbar tenga que transportar otra Res de preferencias.
+    let feedback_message = feedback
+        .message
+        .as_ref()
+        .map(|message| localized_text(locale, message));
     let vehicle_alert = localized_vehicle_hud_alert_line(locale, &sim.state);
     let graphics_assets = asset_status
         .as_ref()
@@ -426,7 +434,7 @@ pub(crate) fn update_tile_info_text(
         tool: tool_state.active_tool,
         order_vehicle: order_state.vehicle_id(),
         order_len: order_state.orders().len(),
-        feedback: feedback.message.clone(),
+        feedback: feedback_message.clone(),
         money: sim.state.economy.money,
         loan: sim.state.economy.loan,
         cargo_income: sim.state.stats.cargo_income_earned,
@@ -526,7 +534,7 @@ pub(crate) fn update_tile_info_text(
     };
     let tick_n = sim.state.tick.get();
 
-    let feedback_append = feedback.message.as_ref().map(|m| {
+    let feedback_append = feedback_message.as_ref().map(|m| {
         let t = truncate_hud_line(m, 44);
         format!(" | {t}")
     });

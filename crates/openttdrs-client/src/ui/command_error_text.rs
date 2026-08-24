@@ -156,6 +156,8 @@ pub const fn command_error_message(err: CommandError) -> &'static str {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
+    use crate::i18n::{Locale, text};
+
     use super::*;
 
     #[test]
@@ -256,6 +258,11 @@ mod tests {
             assert!(
                 msg.chars().any(char::is_alphabetic),
                 "{err:?}: '{msg}' sin letras"
+            );
+            assert_ne!(
+                text(Locale::En, msg),
+                msg,
+                "{err:?}: falta traducción inglesa para '{msg}'"
             );
         }
     }

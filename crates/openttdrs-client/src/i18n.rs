@@ -349,8 +349,176 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "(sin puntuaciones)" => "(no high scores)",
         "¿Salir de OpenTTDRS?" => "Exit OpenTTDRS?",
         "No hay noticias todavía." => "There is no news yet.",
+        // Errores de comandos: se generan durante la partida y por eso no
+        // pasan por un constructor de ventana que pueda traducirlos al crear
+        // el HUD. Mantener sus claves aquí permite que el feedback se
+        // actualice también cuando el jugador cambia de idioma en vivo.
+        "Fuera del mapa." => "Outside the map.",
+        "No se puede construir carretera en agua." => "Cannot build a road on water.",
+        "No se puede construir carretera aquí." => "Cannot build a road here.",
+        "No se puede construir vía en agua." => "Cannot build rail on water.",
+        "No se puede construir vía aquí." => "Cannot build rail here.",
+        "No se puede construir estación en agua." => "Cannot build a station on water.",
+        "No se puede construir estación aquí." => "Cannot build a station here.",
+        "La parada debe ir en hierba o bosque limpiable, no sobre carretera ni vía." => {
+            "The stop must be on clearable grass or forest, not on a road or rail."
+        }
+        "La entrada debe dar a la carretera o vía en esa dirección." => {
+            "The entrance must face the road or rail in that direction."
+        }
+        "Ya hay una estación en esta tesela." => "There is already a station on this tile.",
+        "Este tipo de estación no permite ese número de andenes o longitud." => {
+            "This station type does not allow that platform count or length."
+        }
+        "No hay estación en esta tesela." => "There is no station on this tile.",
+        "Vehículo no encontrado." => "Vehicle not found.",
+        "Ese vehículo pertenece a otra compañía." => "That vehicle belongs to another company.",
+        "Esta infraestructura pertenece a otra compañía." => {
+            "This infrastructure belongs to another company."
+        }
+        "Solo se puede vender un vehículo dentro de un depósito." => {
+            "A vehicle can only be sold inside a depot."
+        }
+        "Ubicación de depósito inválida." => "Invalid depot location.",
+        "Tipo de vehículo no permitido aquí." => "Vehicle type is not allowed here.",
+        "Modelo de vehículo desconocido." => "Unknown vehicle model.",
+        "No hay dinero suficiente." => "Insufficient funds.",
+        "Parada incompatible con este vehículo." => "Stop is incompatible with this vehicle.",
+        "Índice de orden inválido." => "Invalid order index.",
+        "Ese ajuste solo aplica a paradas de estación." => {
+            "That setting only applies to station stops."
+        }
+        "No hay depósito compatible en el mapa." => "No compatible depot found on the map.",
+        "El nombre del vehículo es demasiado largo." => "Vehicle name is too long.",
+        "El nombre de la estación es demasiado largo." => "Station name is too long.",
+        "Solo se puede refit en depósito, sin carga y con un tipo compatible." => {
+            "Refit is only possible in a depot, with no cargo, and with a compatible type."
+        }
+        "Ese ajuste de horario no aplica a esta orden." => {
+            "That timetable setting does not apply to this order."
+        }
+        "Autoreemplazo no permitido para este vehículo o motor." => {
+            "Autoreplace is not allowed for this vehicle or engine."
+        }
+        "No hay regla de autoreemplazo para ese motor." => {
+            "No autoreplace rule exists for that engine."
+        }
+        "Grupo de vehículos no encontrado." => "Vehicle group not found.",
+        "Nombre de grupo inválido." => "Invalid group name.",
+        "Pool de órdenes compartidas no encontrado." => "Shared orders pool not found.",
+        "El vehículo aún espera según el horario antes de salir del depósito." => {
+            "The vehicle is still waiting according to its timetable before leaving the depot."
+        }
+        "Túnel inválido: entrada en pendiente inclinada (NE/SE/SW/NW) y salida al mismo nivel." => {
+            "Invalid tunnel: entrance on a sloped tile (NE/SE/SW/NW) and exit at the same level."
+        }
+        "Este tipo de puente no está disponible (año, longitud o presupuesto)." => {
+            "This bridge type is unavailable (year, length, or budget)."
+        }
+        "Puente inválido: las orillas al mismo nivel y agua o terreno más bajo bajo el tramo." => {
+            "Invalid bridge: banks must be level with water or lower ground beneath the span."
+        }
+        "La vía no puede construirse en esta pendiente con esa geometría." => {
+            "Rail cannot be built on this slope with that geometry."
+        }
+        "El waypoint solo puede colocarse sobre vía recta (eje X o Y)." => {
+            "A waypoint can only be placed on straight rail (X or Y axis)."
+        }
+        "No hay vía que quitar aquí." => "There is no rail to remove here.",
+        "No hay tranvía que quitar aquí." => "There is no tram track to remove here.",
+        "No hay vía que convertir aquí." => "There is no rail to convert here.",
+        "Hay un tren incompatible con ese tipo de vía." => {
+            "A train is incompatible with that rail type."
+        }
+        "Este motor requiere vía electrificada (convertí la vía o el depósito)." => {
+            "This engine requires electrified rail (convert the rail or depot)."
+        }
+        "Este motor requiere vía monorail (convertí la vía adyacente)." => {
+            "This engine requires monorail (convert the adjacent rail)."
+        }
+        "Este motor requiere vía maglev (convertí la vía adyacente)." => {
+            "This engine requires maglev (convert the adjacent rail)."
+        }
+        "La señal solo puede colocarse sobre vía recta (eje X o Y)." => {
+            "A signal can only be placed on straight rail (X or Y axis)."
+        }
+        "Ya hay una señal en esa dirección." => "There is already a signal in that direction.",
+        "Solo se puede modificar el terreno en hierba o bosque libre." => {
+            "Terrain can only be modified on clear grass or forest."
+        }
+        "Demasiado alto: no se puede elevar más." => "Too high: terrain cannot be raised further.",
+        "Demasiado bajo: ya está al nivel del mar." => "Too low: it is already at sea level.",
+        "Pendiente inválida en el vecindario." => "Invalid slope in the neighbourhood.",
+        "Esta tesela ya es terreno comprado." => "This tile is already owned land.",
+        "Solo se puede comprar hierba o bosque libre (sin objetos ni infra)." => {
+            "Only clear grass or forest can be purchased (no objects or infrastructure)."
+        }
+        "Solo se puede colocar el faro/transmisor en hierba o bosque libre." => {
+            "The lighthouse/transmitter can only be placed on clear grass or forest."
+        }
+        "Ya hay un faro o transmisor de ese tipo en el mapa." => {
+            "There is already a lighthouse or transmitter of that type on the map."
+        }
+        "Esta industria no está disponible en el clima de este mapa." => {
+            "This industry is unavailable in this map's climate."
+        }
+        "El préstamo ya está al máximo permitido." => {
+            "The loan is already at the allowed maximum."
+        }
+        "No hay préstamo suficiente para devolver." => "There is not enough loan to repay.",
+        "Ciudad no encontrada." => "Town not found.",
+        "Esa acción de autoridad no está disponible ahora." => {
+            "That town authority action is not available now."
+        }
+        "No hay sitio libre para la estatua." => "There is no free space for the statue.",
+        "No se puede fundar un pueblo aquí." => "A town cannot be founded here.",
+        "Hay otro pueblo demasiado cerca." => "Another town is too close.",
+        "Cheats desactivados (consola: cheat on)." => "Cheats are disabled (console: cheat on).",
+        "Año de cheat inválido (1950–2450)." => "Invalid cheat year (1950–2450).",
+        "Compañía no encontrada." => "Company not found.",
+        "Ese color ya lo usa otra compañía." => "That colour is already used by another company.",
+        "No puedes comprar tu propia compañía." => "You cannot buy your own company.",
+        "La compañía no está en quiebra." => "The company is not bankrupt.",
+        "La autoridad local no permite construir una estación aquí." => {
+            "The local authority does not allow a station here."
+        }
+        "La autoridad local rechaza el aeropuerto: demasiado ruido." => {
+            "The local authority rejects the airport: too much noise."
+        }
+        "No se puede plantar un árbol aquí." => "A tree cannot be planted here.",
+        "No hay árbol ni cultivo en esta tesela." => "There is no tree or crop on this tile.",
+        "Cartel no encontrado." => "Sign not found.",
+        "El nombre del cartel es demasiado largo." => "Sign name is too long.",
+        "El cartel necesita un nombre." => "The sign needs a name.",
+        "No se pueden unir: road 1×1 adyacentes o rail (huella/eje) del mismo tipo." => {
+            "Cannot join: adjacent 1×1 roads or rail (footprint/axis) of the same type."
+        }
+        "Índice NewGRF inválido." => "Invalid NewGRF index.",
+        "Ese NewGRF es base y no se puede desactivar ni quitar." => {
+            "That NewGRF is a base set and cannot be disabled or removed."
+        }
+        "Ya hay un NewGRF con ese GRFID." => "A NewGRF with that GRFID already exists.",
+        "Entrada NewGRF inválida." => "Invalid NewGRF entry.",
+        "Índice de parámetro NewGRF inválido." => "Invalid NewGRF parameter index.",
+        "Esta parada NewGRF no admite bus o camión en esta herramienta." => {
+            "This NewGRF stop does not support buses or trucks in this tool."
+        }
+        "Esta parada NewGRF no admite el tipo de vía actual (carretera/tranvía)." => {
+            "This NewGRF stop does not support the current road type (road/tram)."
+        }
+        "Esta parada NewGRF solo admite colocación drive-through." => {
+            "This NewGRF stop only supports drive-through placement."
+        }
+        "Un NewGRF denegó esta acción (callback)." => "A NewGRF denied this action (callback).",
         _ => source,
     }
+}
+
+/// Traduce una cadena de UI ya materializada sin perder los valores dinámicos.
+/// Las claves desconocidas se conservan tal cual hasta que entren al catálogo.
+#[must_use]
+pub(crate) fn localized_text(locale: Locale, source: &str) -> String {
+    text(locale, source).to_owned()
 }
 
 #[cfg(test)]
@@ -360,7 +528,7 @@ mod tests {
 
     use crate::settings::ClientPreferences;
 
-    use super::{Locale, LocalizationPlugin, text};
+    use super::{Locale, LocalizationPlugin, localized_text, text};
 
     #[test]
     fn locale_codes_accept_region_suffixes_and_fallback_to_spanish() {
@@ -379,6 +547,22 @@ mod tests {
         assert_eq!(text(Locale::En, "Densidad de pueblos"), "Town density");
         assert_eq!(text(Locale::En, "Esc cancelar"), "Esc cancel");
         assert_eq!(text(Locale::En, "untranslated"), "untranslated");
+    }
+
+    #[test]
+    fn catalog_translates_runtime_command_errors() {
+        assert_eq!(
+            localized_text(Locale::En, "No se puede construir carretera en agua."),
+            "Cannot build a road on water."
+        );
+        assert_eq!(
+            localized_text(Locale::En, "No hay depósito compatible en el mapa."),
+            "No compatible depot found on the map."
+        );
+        assert_eq!(
+            localized_text(Locale::En, "Un NewGRF denegó esta acción (callback)."),
+            "A NewGRF denied this action (callback)."
+        );
     }
 
     #[test]

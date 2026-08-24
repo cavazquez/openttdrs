@@ -27,7 +27,10 @@ anterior y reconstruye la nueva. Antes sólo cambiaba el `scale` y los chunks
 seguían marcados como cargados, por lo que una sesión que se alejaba y volvía a
 acercar podía conservar rombos agregados o dejar franjas negras. La regresión
 `render::world::tests::setup_and_apply_remap_covers_multiple_fixed_zoom_levels`
-mantiene además el smoke de `1×`, `2×`, `4×` y `8×` después de cada rebuild.
+mantiene además el smoke de los seis niveles `0,25×`, `0,5×`, `1×`, `2×`,
+`4×` y `8×` después de cada rebuild. La cámara comprueba por separado que la
+magnificación del HUD sea la inversa de esas escalas y que cada paso fijo avance
+exactamente al siguiente nivel OpenTTD.
 
 Las etiquetas compensan la escala ortográfica para seguir siendo legibles y se
 componen en el mismo orden de OpenTTD: pueblos → carteles → estaciones. No se
@@ -70,7 +73,7 @@ La matriz aleatoria de 1024×1024 con semilla `1331024978` conserva el contrato
 `blocks4=0/65536`. Sobre ese mismo `.sav`, las capturas limpias a 1280×720 en
 `Out1x`, `Out2x`, `Out4x` y `Out8x`, y la captura con UI/labels a 1832×960 en
 `Out8x`, conservaron sprites detallados y no mostraron huecos diagonales. La
-revisión adicional de `Kale_TitleGame.sav` en los cuatro zooms confirmó que no
+revisión adicional de `Kale_TitleGame.sav` en los seis zooms confirmó que no
 se reintroducen textos de carga ni fondos verdes genéricos. La captura de
 OpenTTD a `Out1x` se generó con el mismo centro para comprobar la selección,
 color y orden de los carteles de estación.
@@ -86,3 +89,19 @@ solicitud del issue. El cliente no expone esa imagen del chat como un archivo
 local reutilizable; el issue conserva la descripción y esta candidata
 versionada para que la referencia se adjunte allí sin inventar una captura
 distinta.
+
+## Matriz de validación vigente
+
+| Escala ortográfica | HUD | Camino esperado en mapa grande |
+|---:|---:|---|
+| `0,25` | `4×` | detalle |
+| `0,50` | `2×` | detalle |
+| `1` | `1×` | detalle |
+| `2` | `0,50×` | detalle |
+| `4` | `0,25×` | detalle u overview 4×4 según el viewport |
+| `8` | `0,125×` (título redondeado `0,12×`) | detalle u overview 8×8 según el viewport |
+
+La validación automatizada es reproducible con `./scripts/check.sh zoom-smoke`.
+Las capturas del cliente sólo son evidencia raster cuando se ejecutan bajo una
+superficie WGPU presentable (Weston headless o GPU real); un Xvfb sin adaptador
+puede iniciar la ventana pero no demuestra que la composición visual sea válida.

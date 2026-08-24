@@ -83,7 +83,10 @@ mod tests {
         let world = app.world_mut();
         world.run_system_once(setup).unwrap();
 
-        for scale in [1.0_f32, 2.0, 4.0, 8.0] {
+        // Cubrir la matriz completa de OpenTTD, incluidos In4x/In2x. Los
+        // niveles de alejamiento pasan por el camino detallado u overview,
+        // pero todos deben materializar al menos una capa de mapa.
+        for scale in [0.25_f32, 0.5, 1.0, 2.0, 4.0, 8.0] {
             {
                 let mut cameras =
                     world.query_filtered::<&mut Projection, With<PrimaryGameCamera>>();

@@ -26,8 +26,9 @@ OpenTTD: Flatpak `org.openttd.OpenTTD` **15.3**, dedicated + consola `fps`.
 | Sim vacía temperate 4096² | **OK** (~1,4 ms/tick) |
 | Sim SubArctic 4096² | **OK** tras #196 (~2,0 ms media; max ~2,3 ms; sin pico diario) |
 | Memoria `Tile` | +2 B/tile vs OpenTTD (~16,7 %); 4096² = 224 MiB vs ~192 MiB |
-| Cliente culling | Activo ≥1024 teselas; spawn acotado a ~192² |
-| Cliente zoom mínimo | Tope iso (~0,27× @ 1280×720) — AABB spawn ≤192² sin huecos |
+| Cliente culling | Activo ≥1024 teselas; detalle acotado a un AABB de ~192² |
+| Cliente zoom fijo | Seis niveles OpenTTD: 4×, 2×, 1×, 0,5×, 0,25× y 0,125× (Out8x) |
+| Cliente detalle/overview | En mapas grandes el detalle se limita a ~0,27× @ 1280×720; Out4x/Out8x siguen disponibles con resumen 4×4/8×8 cuando el viewport supera 512² |
 | Cliente remap dirty | Solo chunks dirty ∩ viewport (antes: todo el viewport) |
 
 ### Fix #196 — nieve al estilo `TileLoopClearAlps`
@@ -88,8 +89,21 @@ MAP_BITS=12 LANDSCAPE=arctic ./scripts/bench_openttd_flatpak.sh
 
 Culling ≥1024 teselas. En zoom extremo el viewport ortográfico cubría cientos de miles de teselas (p. ej. **332 928** a 0,05× → ~2–9 FPS). Mitigaciones:
 
-1. **Tope de zoom isométrico** (`MAX_SPAWN_SPAN_TILES = 192`, `clamp_ortho_scale`): el span en teselas es `scale·(w/(2·ISO_HW)+h/(2·ISO_QH))`; a 1280×720 el máximo es ~0,27×. No se recorta el spawn (eso dejaba franjas diagonales vacías).
-2. **Remap dirty** (#197): `refresh_chunks` se queda en dirty ∩ viewport (ya no se clona todo `needed`).
+1. **Tope del camino detallado** (`MAX_SPAWN_SPAN_TILES = 192`, `clamp_ortho_scale`): el span en teselas es `scale·(w/(2·ISO_HW)+h/(2·ISO_QH))`; a 1280×720 la escala máxima detallada es ~3,7, equivalente a ~0,27×. No se recorta el spawn (eso dejaba franjas diagonales vacías).
+2. **Out4x/Out8x con overview**: las escalas 4 y 8 no se bloquean; si el viewport supera `OVERVIEW_DETAIL_MAX_VIEWPORT_TILES` se instancian bloques agregados 4×4/8×8. Esto conserva el mapa y las etiquetas, pero no es paridad raster completa para infraestructura y vehículos fuera del recorte detallado.
+3. **Remap dirty** (#197): `refresh_chunks` se queda en dirty ∩ viewport (ya no se clona todo `needed`).
+
+La matriz automatizada de zoom valida las seis escalas (`0.25, 0.5, 1, 2, 4, 8`) y la magnificación inversa que se muestra en el HUD. El smoke de render también materializa una capa de mapa en cada nivel:
+
+```bash
+./scripts/check.sh zoom-smoke
+cargo test -p openttdrs-client --bin openttdrs-client camera::
+cargo test -p openttdrs-client --bin openttdrs-client render::viewport::
+```
+
+Las capturas raster requieren un compositor WGPU presentable (Weston headless
+o una GPU real); Xvfb sin adaptador no es una prueba visual válida y puede
+fallar al crear la superficie FIFO.
 
 ### Perfil SAV real: `Kale_TitleGame.sav`
 

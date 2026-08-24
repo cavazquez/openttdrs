@@ -493,6 +493,42 @@ mod tests {
     }
 
     #[test]
+    fn fixed_zoom_matrix_matches_all_openttd_levels_and_hud_magnification() {
+        // OpenTTD exposes seis niveles: In4x, In2x, Normal, Out2x, Out4x y
+        // Out8x. La escala ortográfica es la inversa de la magnificación que
+        // se muestra en el título/HUD.
+        let levels = [0.25_f32, 0.5, 1.0, 2.0, 4.0, 8.0];
+        let expected_magnification = [4.0_f32, 2.0, 1.0, 0.5, 0.25, 0.125];
+
+        for (index, (&scale, &magnification)) in
+            levels.iter().zip(expected_magnification.iter()).enumerate()
+        {
+            assert_eq!(snap_fixed_ortho_scale(scale, 1280.0, 720.0, true), scale);
+            assert!((zoom_display_magnification(scale) - magnification).abs() < 0.001);
+
+            if index > 0 {
+                assert_eq!(
+                    zoom_step_scale(
+                        levels[index - 1],
+                        false,
+                        ZoomMode::Fixed,
+                        1280.0,
+                        720.0,
+                        true,
+                    ),
+                    scale
+                );
+            }
+            if index + 1 < levels.len() {
+                assert_eq!(
+                    zoom_step_scale(scale, false, ZoomMode::Fixed, 1280.0, 720.0, true,),
+                    levels[index + 1]
+                );
+            }
+        }
+    }
+
+    #[test]
     fn move_camera_scroll_without_window_returns_after_zoom_branch() {
         let mut world = World::new();
         let mut time = Time::<()>::default();

@@ -521,7 +521,9 @@ pub use road_movement::{
     vehicle_subtile_with_progress,
 };
 pub use road_stop_action2::{
-    action2_eval_ctx_for_road_stop_tile, action2_eval_ctx_for_road_stop_tile_with_catalog,
+    RoadStopWorldContext, action2_eval_ctx_for_road_stop_tile,
+    action2_eval_ctx_for_road_stop_tile_with_catalog,
+    action2_eval_ctx_for_road_stop_tile_with_catalog_and_world,
 };
 pub use road_stop_spec::{
     ROADSTOP_ANIMATION_TRIGGER_ACCEPTANCE_TICK, ROADSTOP_ANIMATION_TRIGGER_BUILT,

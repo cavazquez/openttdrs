@@ -8,6 +8,8 @@
 
 use std::collections::BTreeSet;
 
+use crate::company::{Company, CompanyId};
+use crate::house_spec::{distance_square, get_town_radius_group};
 use crate::map::{
     Map, TILE_PIXEL_HEIGHT, Tile, TileCoord, TileKind, tile_slope_and_z, water_class,
 };
@@ -17,6 +19,7 @@ use crate::road_stop_spec::{RoadStopSpecDef, road_stop_spec_def};
 use crate::road_type::{road_type_from_tile, tram_road_type_from_tile, vanilla_road_type_catalog};
 use crate::station::{Station, StopKind, station_at_tile};
 use crate::station_action2::populate_station_cargo_vars;
+use crate::town::{HouseZone, Town};
 use crate::world_gen::Climate;
 
 /// Construye el contexto Action2 de una tesela `RoadStop` para render runtime.
@@ -48,6 +51,7 @@ pub fn action2_eval_ctx_for_road_stop_tile(
             road_stop_catalog: &[],
             current_spec: None,
             type_tables,
+            world: None,
         },
         coord,
         view,
@@ -82,11 +86,53 @@ pub fn action2_eval_ctx_for_road_stop_tile_with_catalog(
             road_stop_catalog,
             current_spec,
             type_tables,
+            world: None,
         },
         coord,
         view,
         climate,
     )
+}
+
+/// Variante del contexto completo que aporta los pools de pueblos y compañías
+/// del `GameState`, necesarios para `RoadStopScopeResolver` vars `45`–`47`.
+/// Las APIs históricas siguen devolviendo los valores seguros de compra cuando
+/// esos pools no están disponibles.
+#[must_use]
+pub fn action2_eval_ctx_for_road_stop_tile_with_catalog_and_world(
+    map: &Map,
+    stations: &[Station],
+    road_stop_catalog: &[RoadStopSpecDef],
+    world: RoadStopWorldContext<'_>,
+    coord: TileCoord,
+    view: u8,
+    climate: Climate,
+) -> Action2EvalCtx {
+    let current_spec = station_at_tile(map, stations, coord)
+        .and_then(|station| station.road_stop_spec_at(coord))
+        .and_then(|id| road_stop_spec_def(road_stop_catalog, id));
+    let type_tables = current_spec.and_then(|spec| spec.newgrf_type_tables.as_ref());
+    action2_eval_ctx_for_road_stop_tile_impl(
+        map,
+        stations,
+        RoadStopAction2Resolution {
+            road_stop_catalog,
+            current_spec,
+            type_tables,
+            world: Some(world),
+        },
+        coord,
+        view,
+        climate,
+    )
+}
+
+/// Pools del mundo que alimentan las variables urbanas y de compañía de una
+/// parada vial.
+#[derive(Clone, Copy)]
+pub struct RoadStopWorldContext<'a> {
+    pub towns: &'a [Town],
+    pub companies: &'a [Company],
 }
 
 /// Datos opcionales que diferencian el contexto local legacy del renderer
@@ -96,6 +142,7 @@ struct RoadStopAction2Resolution<'a> {
     road_stop_catalog: &'a [RoadStopSpecDef],
     current_spec: Option<&'a RoadStopSpecDef>,
     type_tables: Option<&'a GrfTypeTranslationTables>,
+    world: Option<RoadStopWorldContext<'a>>,
 }
 
 fn action2_eval_ctx_for_road_stop_tile_impl(
@@ -155,6 +202,14 @@ fn action2_eval_ctx_for_road_stop_tile_impl(
     });
     ctx.vars.insert(0x43, road_type);
     ctx.vars.insert(0x44, tram_type);
+    let (town_zone_distance, town_distance_square) =
+        road_stop_town_vars(resolution.world.map(|world| world.towns), coord);
+    ctx.vars.insert(0x45, town_zone_distance);
+    ctx.vars.insert(0x46, town_distance_square);
+    ctx.vars.insert(
+        0x47,
+        road_stop_company_info(station.owner, resolution.world.map(|world| world.companies)),
+    );
     ctx.vars
         .insert(0x49, u32::from(station.road_stop_animation_frame_at(coord)));
     // Bit 4 de var 50 sólo se usa cuando no existe tesela (picker/callback de
@@ -180,6 +235,37 @@ fn action2_eval_ctx_for_road_stop_tile_impl(
         .populate(&mut ctx);
     }
     ctx
+}
+
+fn road_stop_town_vars(towns: Option<&[Town]>, coord: TileCoord) -> (u32, u32) {
+    let Some(towns) = towns else {
+        return (u32::from(HouseZone::TownEdge as u8) << 16, 0);
+    };
+    let Some(town) = towns
+        .iter()
+        .min_by_key(|town| (crate::economy::manhattan_distance(coord, town.pos), town.id))
+    else {
+        return (u32::from(HouseZone::TownEdge as u8) << 16, 0);
+    };
+    let manhattan = crate::economy::manhattan_distance(coord, town.pos);
+    let zone = u32::from(get_town_radius_group(town, coord) as u8) << 16;
+    (
+        zone | manhattan.min(u32::from(u16::MAX)),
+        distance_square(coord, town.pos),
+    )
+}
+
+fn road_stop_company_info(owner: CompanyId, companies: Option<&[Company]>) -> u32 {
+    let Some(company) =
+        companies.and_then(|companies| companies.iter().find(|company| company.id == owner))
+    else {
+        return u32::from(owner.0);
+    };
+    let livery = company.liveries.first();
+    u32::from(owner.0)
+        | (u32::from(company.is_ai) << 16)
+        | (u32::from(livery.map_or(company.colour, |l| l.colour1)) << 24)
+        | (u32::from(livery.map_or(company.colour, |l| l.colour2)) << 28)
 }
 
 /// Datos invariantes de una evaluación Action2 de `RoadStop` con vecindad.
@@ -471,11 +557,14 @@ fn terrain_type_for_road_stop_tile(
 mod tests {
     use super::*;
     use crate::StationRandomTrigger;
+    use crate::company::{Company, CompanyId};
+    use crate::game_state::CompanyEconomy;
     use crate::map::{Tile, TileKind};
     use crate::newgrf_sprites::{
         Action2VarAdjust, Action2VarEntry, Action2VarTerm, TrainSpriteGraphics,
     };
     use crate::road_stop_spec::{ROADSTOP_DRAW_MODE_DEFAULT, ROADSTOP_TYPE_ALL};
+    use crate::town::Town;
 
     fn road_stop_tile(m5: u8, m6: u8) -> Tile {
         Tile {
@@ -616,8 +705,45 @@ mod tests {
         assert_eq!(ctx.vars.get(&0x41), Some(&0));
         assert_eq!(ctx.vars.get(&0x43), Some(&0));
         assert_eq!(ctx.vars.get(&0x44), Some(&u32::MAX));
+        assert_eq!(ctx.vars.get(&0x45), Some(&0));
+        assert_eq!(ctx.vars.get(&0x46), Some(&0));
+        assert_eq!(ctx.vars.get(&0x47), Some(&0));
         assert_eq!(ctx.vars.get(&0x49), Some(&7));
         assert_eq!(ctx.persistent_registers.get(&4), Some(&99));
+    }
+
+    #[test]
+    fn road_stop_ctx_exposes_town_and_company_scopes_with_world() {
+        let mut map = Map::new_flat(8, 8, 0);
+        let coord = TileCoord::new(1, 2);
+        map.set_tile(coord, road_stop_tile(4, 3 << 3)).unwrap();
+        let mut station = Station::new_with_kind(coord, StopKind::BusStop);
+        station.owner = CompanyId(1);
+
+        let mut town = Town {
+            id: 7,
+            pos: TileCoord::new(0, 0),
+            squared_town_zone_radius: [100, 100, 0, 0, 0],
+            ..Town::default()
+        };
+        town.fund_buildings_months = 0;
+        let companies = vec![Company::rival_transcargo(CompanyEconomy::default(), 3)];
+        let ctx = action2_eval_ctx_for_road_stop_tile_with_catalog_and_world(
+            &map,
+            &[station],
+            &[],
+            RoadStopWorldContext {
+                towns: &[town],
+                companies: &companies,
+            },
+            coord,
+            0,
+            Climate::Temperate,
+        );
+
+        assert_eq!(ctx.vars.get(&0x45), Some(&(1 << 16 | 3)));
+        assert_eq!(ctx.vars.get(&0x46), Some(&5));
+        assert_eq!(ctx.vars.get(&0x47), Some(&0x3301_0001));
     }
 
     #[test]

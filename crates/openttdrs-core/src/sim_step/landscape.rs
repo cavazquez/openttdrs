@@ -90,6 +90,15 @@ fn trigger_station_acceptance_animations(state: &mut GameState, t: u64) {
         .collect();
 
     for station_anchor in station_anchors {
+        if let Some(station) = state
+            .stations
+            .iter_mut()
+            .find(|station| station.pos == station_anchor)
+        {
+            for cargo in crate::ALL_CARGO_TYPES {
+                station.goods.get_mut(cargo).clear_newgrf_bigtick();
+            }
+        }
         let dirty = crate::map::trigger_newgrf_station_animation_for_station(
             &mut state.map,
             t,

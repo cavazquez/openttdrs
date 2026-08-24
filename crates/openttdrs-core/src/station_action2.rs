@@ -155,11 +155,7 @@ fn station_cargo_var(station: &Station, cargo: CargoType, variable: u8) -> u32 {
         // the closest persisted equivalent to GoodsEntry::Acceptance and uses
         // the same bit (3) as upstream.
         0x65 => u32::from(station.accepts_cargo(cargo)) << 3,
-        // `GoodsEntry::ConvertState` needs monthly delivery flags that are not
-        // persisted yet. `has_rating` is the conservative observable bit for
-        // cargo ever seen at this station; the remaining historical bits stay
-        // zero until that state model is added.
-        0x69 => u32::from(entry.has_rating),
+        0x69 => u32::from(entry.convert_state()),
         _ => 0,
     }
 }
@@ -425,6 +421,7 @@ mod tests {
         entry.rating = 123;
         entry.last_speed = 77;
         entry.last_age = 4;
+        entry.newgrf_state = 0b1101;
 
         let ctx = action2_eval_ctx_for_station_tile_with_grf(
             &map,
@@ -441,6 +438,6 @@ mod tests {
         assert_eq!(ctx.parameterized_vars.get(&(0x63, 1)), Some(&6));
         assert_eq!(ctx.parameterized_vars.get(&(0x64, 1)), Some(&1_101));
         assert_eq!(ctx.parameterized_vars.get(&(0x65, 1)), Some(&8));
-        assert_eq!(ctx.parameterized_vars.get(&(0x69, 1)), Some(&1));
+        assert_eq!(ctx.parameterized_vars.get(&(0x69, 1)), Some(&13));
     }
 }

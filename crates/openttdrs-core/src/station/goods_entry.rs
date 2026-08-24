@@ -24,6 +24,10 @@ pub struct GoodsEntry {
     pub max_waiting_cargo: u32,
     #[serde(default)]
     pub amount_fract: u8,
+    /// Bits `GoodsEntry::State` de `OpenTTD` usados por `var 69`:
+    /// `EverAccepted`, `LastMonth`, `CurrentMonth` y `AcceptedBigtick`.
+    #[serde(default)]
+    pub newgrf_state: u8,
 }
 
 const fn default_rating() -> u8 {
@@ -43,6 +47,7 @@ impl Default for GoodsEntry {
             last_age: 255,
             max_waiting_cargo: 0,
             amount_fract: 0,
+            newgrf_state: 0,
         }
     }
 }
@@ -51,6 +56,29 @@ impl GoodsEntry {
     #[must_use]
     pub const fn has_vehicle_ever_tried_loading(&self) -> bool {
         self.last_speed != 0
+    }
+
+    /// Representación compacta de `GoodsEntry::ConvertState` (`var 69`).
+    #[must_use]
+    pub const fn convert_state(self) -> u8 {
+        self.newgrf_state & 0x0F
+    }
+
+    /// Marca una entrega final para los tres estados que `OpenTTD` actualiza
+    /// durante el mes/intervalo actual.
+    pub fn mark_final_delivery(&mut self) {
+        self.newgrf_state |= 0b1101;
+    }
+
+    /// Rota los flags mensuales al comenzar un nuevo mes.
+    pub fn roll_newgrf_month(&mut self) {
+        let current = self.newgrf_state & (1 << 2);
+        self.newgrf_state = (self.newgrf_state & 1) | (current >> 1);
+    }
+
+    /// Limpia el flag del intervalo de aceptación sin tocar el historial.
+    pub fn clear_newgrf_bigtick(&mut self) {
+        self.newgrf_state &= !(1 << 3);
     }
 
     pub fn converge_rating_towards(&mut self, target: i16) -> u8 {
@@ -159,5 +187,23 @@ mod tests {
         assert_eq!(entry.converge_rating_towards(0), 177);
         entry.rating = 1;
         assert_eq!(entry.converge_rating_towards(0), 0);
+    }
+
+    #[test]
+    fn convert_state_matches_newgrf_var_69_bits() {
+        let mut entry = GoodsEntry::default();
+        entry.newgrf_state = 0x0F;
+        assert_eq!(entry.convert_state(), 0x0F);
+    }
+
+    #[test]
+    fn newgrf_state_rolls_month_and_acceptance_interval() {
+        let mut entry = GoodsEntry::default();
+        entry.newgrf_state = 0x0F;
+        entry.roll_newgrf_month();
+        assert_eq!(entry.convert_state(), 0x03, "ever + last month");
+        entry.mark_final_delivery();
+        entry.clear_newgrf_bigtick();
+        assert_eq!(entry.convert_state(), 0x07, "ever + last + current month");
     }
 }

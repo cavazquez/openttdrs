@@ -274,6 +274,12 @@ pub(super) fn unload_vehicles(
 
         let town_cargo = cargo_type.is_town_cargo();
         if town_cargo && delivered_units > 0 {
+            let entry = state.stations[station_idx].goods.get_mut(cargo_type);
+            // `GoodsEntry::State` mirrors the upstream station flags used by
+            // NewGRF var 69. A final delivery is the event that marks cargo
+            // as ever/currently accepted; the bigtick flag is cleared by the
+            // next acceptance interval.
+            entry.mark_final_delivery();
             town::record_delivery_near_town(
                 &mut state.towns,
                 station_pos,

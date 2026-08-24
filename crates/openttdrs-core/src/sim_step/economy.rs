@@ -41,6 +41,7 @@ fn trigger_station_new_cargo_since(state: &mut GameState, before: &[crate::Cargo
 pub(super) fn process_monthly_economy(state: &mut GameState) {
     apply_monthly_inflation_and_fluctuations(state);
     apply_monthly_interest_and_bankruptcy(state);
+    roll_station_newgrf_month(&mut state.stations);
     // Industrias ya marcadas con prod_level = 0 el mes pasado: fuera del mapa.
     let closed = crate::industry::remove_closed_industries(&mut state.industries, &mut state.map);
     for at in closed {
@@ -143,6 +144,14 @@ pub(super) fn process_monthly_economy(state: &mut GameState) {
         let produced = industry.produced_total;
         let transported = industry.transported_total;
         industry.history.push_month(stock, produced, transported);
+    }
+}
+
+fn roll_station_newgrf_month(stations: &mut [crate::Station]) {
+    for station in stations {
+        for cargo in crate::ALL_CARGO_TYPES {
+            station.goods.get_mut(cargo).roll_newgrf_month();
+        }
     }
 }
 

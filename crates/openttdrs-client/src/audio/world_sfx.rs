@@ -4,6 +4,9 @@
 //! core (`play_newgrf_sound`). Un drenado futuro a `AudioSource` PCM puede
 //! engancharse aquí sin cambiar el catálogo.
 
+use std::sync::Arc;
+
+use bevy::audio::AudioSource;
 use bevy::prelude::*;
 
 use openttdrs_core::SoundId;
@@ -60,6 +63,26 @@ struct MixerSlot {
 #[derive(Resource, Default)]
 pub(crate) struct WorldSfxHandles {
     handles: std::collections::HashMap<SoundId, Handle<AudioSource>>,
+    newgrf_handles: std::collections::HashMap<(u32, u8), Handle<AudioSource>>,
+}
+
+impl WorldSfxHandles {
+    fn newgrf_handle(
+        &mut self,
+        grfid: u32,
+        local_id: u8,
+        pcm: &[u8],
+        assets: &mut Assets<AudioSource>,
+    ) -> Handle<AudioSource> {
+        self.newgrf_handles
+            .entry((grfid, local_id))
+            .or_insert_with(|| {
+                assets.add(AudioSource {
+                    bytes: Arc::from(pcm_to_wav(pcm)),
+                })
+            })
+            .clone()
+    }
 }
 
 /// Mixer de 8 canales: como máximo 8 `AudioPlayer` de mundo a la vez.
@@ -180,10 +203,15 @@ fn allocate_channel(mixer: &mut SfxMixer, priority: u8) -> Option<(usize, Option
     best.map(|(i, _, _)| (i, mixer.slots[i].map(|s| s.entity)))
 }
 
+// The mixer needs both its cached handles and the asset store, plus the
+// simulation queue and camera used by the existing spatial-effects path.
+#[allow(clippy::too_many_arguments)]
 fn play_world_sfx(
     mut commands: Commands,
     mut reader: MessageReader<PlayWorldSfx>,
-    handles: Res<WorldSfxHandles>,
+    mut handles: ResMut<WorldSfxHandles>,
+    mut assets: ResMut<Assets<AudioSource>>,
+    mut sim: ResMut<crate::state::SimWorld>,
     mut mixer: ResMut<SfxMixer>,
     hud: Res<SimHudControls>,
     viewport: Option<Res<MapTileSpawnViewport>>,
@@ -192,6 +220,55 @@ fn play_world_sfx(
     let base = hud.sfx_volume.clamp(0.0, 1.0);
     let cam = camera.iter().next();
     let bounds = viewport.as_deref().map(|v| &v.bounds);
+
+    // `play_newgrf_sound` ya valida catálogo, sample y volumen en el core.
+    // Convertir el PCM raw de Action11 a WAV aquí permite que Bevy/rodio lo
+    // decodifique sin escribir archivos temporales. No conocemos una tesela
+    // para todos los callbacks de vehículo, por eso estos efectos son globales
+    // (sin atenuación espacial), igual que `SndPlayFx` de OpenTTD.
+    let pending_newgrf = std::mem::take(&mut sim.state.runtime.pending_newgrf_sounds);
+    for pending in pending_newgrf {
+        let Some(def) = sim
+            .state
+            .sound_effect_catalog
+            .iter()
+            .find(|def| def.grfid == pending.grfid && def.local_id == pending.local_id)
+        else {
+            continue;
+        };
+        if !def.has_sample || def.sample_pcm.is_empty() {
+            continue;
+        }
+        let handle = handles.newgrf_handle(
+            pending.grfid,
+            pending.local_id,
+            &def.sample_pcm,
+            &mut assets,
+        );
+        let vol = (base * pending.volume.clamp(0.0, 1.0)).clamp(0.0, 1.0);
+        if vol < 0.02 {
+            continue;
+        }
+        let Some((channel, steal)) = allocate_channel(&mut mixer, pending.priority) else {
+            continue;
+        };
+        if let Some(old) = steal {
+            commands.entity(old).despawn();
+        }
+        let entity = commands
+            .spawn((
+                AudioPlayer::new(handle),
+                PlaybackSettings::DESPAWN.with_volume(bevy::audio::Volume::Linear(vol)),
+                WorldSfxChannel(channel as u8),
+            ))
+            .id();
+        mixer.slots[channel] = Some(MixerSlot {
+            entity,
+            priority: pending.priority,
+            age: 0,
+        });
+    }
+
     for msg in reader.read() {
         if msg.sound.is_unused() {
             continue;
@@ -226,9 +303,48 @@ fn play_world_sfx(
     }
 }
 
+/// Empaqueta el PCM mono unsigned de Action11 como WAV PCM 8-bit/11.025 kHz.
+/// OpenTTD usa esa frecuencia para samples raw; el header hace explícito el
+/// formato que espera el decoder de Bevy.
+fn pcm_to_wav(pcm: &[u8]) -> Vec<u8> {
+    let data_len = u32::try_from(pcm.len()).unwrap_or(u32::MAX);
+    let riff_len = 36_u32.saturating_add(data_len);
+    let mut wav = Vec::with_capacity(44usize.saturating_add(pcm.len()));
+    wav.extend_from_slice(b"RIFF");
+    wav.extend_from_slice(&riff_len.to_le_bytes());
+    wav.extend_from_slice(b"WAVEfmt ");
+    wav.extend_from_slice(&16_u32.to_le_bytes()); // PCM fmt chunk length
+    wav.extend_from_slice(&1_u16.to_le_bytes()); // PCM
+    wav.extend_from_slice(&1_u16.to_le_bytes()); // mono
+    wav.extend_from_slice(&11_025_u32.to_le_bytes());
+    wav.extend_from_slice(&11_025_u32.to_le_bytes()); // byte rate
+    wav.extend_from_slice(&1_u16.to_le_bytes()); // block align
+    wav.extend_from_slice(&8_u16.to_le_bytes()); // bits per sample
+    wav.extend_from_slice(b"data");
+    wav.extend_from_slice(&data_len.to_le_bytes());
+    wav.extend_from_slice(pcm);
+    wav
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pcm_to_wav_writes_a_decodable_mono_header() {
+        let wav = pcm_to_wav(&[0x00, 0x80, 0xFF]);
+        assert_eq!(&wav[0..4], b"RIFF");
+        assert_eq!(&wav[8..12], b"WAVE");
+        assert_eq!(&wav[12..16], b"fmt ");
+        assert_eq!(u16::from_le_bytes([wav[22], wav[23]]), 1);
+        assert_eq!(
+            u32::from_le_bytes([wav[24], wav[25], wav[26], wav[27]]),
+            11_025
+        );
+        assert_eq!(&wav[36..40], b"data");
+        assert_eq!(&wav[40..44], 3_u32.to_le_bytes());
+        assert_eq!(&wav[44..], &[0x00, 0x80, 0xFF]);
+    }
 
     #[test]
     fn mixer_prefers_free_slot_then_steals_lower_priority() {

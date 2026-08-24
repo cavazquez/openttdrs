@@ -52,6 +52,7 @@ pub fn action2_eval_ctx_for_road_stop_tile(
         stations,
         RoadStopAction2Resolution {
             road_stop_catalog: &[],
+            road_type_catalog: &[],
             current_spec: None,
             type_tables,
             world: None,
@@ -87,6 +88,40 @@ pub fn action2_eval_ctx_for_road_stop_tile_with_catalog(
         stations,
         RoadStopAction2Resolution {
             road_stop_catalog,
+            road_type_catalog: &[],
+            current_spec,
+            type_tables,
+            world: None,
+        },
+        coord,
+        view,
+        climate,
+    )
+}
+
+/// Variante explícita para callers que no disponen de los pools del mundo pero
+/// sí del catálogo `RoadTypes`/`TramTypes` activo. Evita que una API de
+/// integración externa traduzca siempre contra los dos tipos vanilla.
+#[must_use]
+pub fn action2_eval_ctx_for_road_stop_tile_with_catalog_and_road_types(
+    map: &Map,
+    stations: &[Station],
+    road_stop_catalog: &[RoadStopSpecDef],
+    road_type_catalog: &[RoadTypeDef],
+    coord: TileCoord,
+    view: u8,
+    climate: Climate,
+) -> Action2EvalCtx {
+    let current_spec = station_at_tile(map, stations, coord)
+        .and_then(|station| station.road_stop_spec_at(coord))
+        .and_then(|id| road_stop_spec_def(road_stop_catalog, id));
+    let type_tables = current_spec.and_then(|spec| spec.newgrf_type_tables.as_ref());
+    action2_eval_ctx_for_road_stop_tile_impl(
+        map,
+        stations,
+        RoadStopAction2Resolution {
+            road_stop_catalog,
+            road_type_catalog,
             current_spec,
             type_tables,
             world: None,
@@ -120,6 +155,7 @@ pub fn action2_eval_ctx_for_road_stop_tile_with_catalog_and_world(
         stations,
         RoadStopAction2Resolution {
             road_stop_catalog,
+            road_type_catalog: &[],
             current_spec,
             type_tables,
             world: Some(world),
@@ -145,6 +181,7 @@ pub struct RoadStopWorldContext<'a> {
 #[derive(Clone, Copy)]
 struct RoadStopAction2Resolution<'a> {
     road_stop_catalog: &'a [RoadStopSpecDef],
+    road_type_catalog: &'a [RoadTypeDef],
     current_spec: Option<&'a RoadStopSpecDef>,
     type_tables: Option<&'a GrfTypeTranslationTables>,
     world: Option<RoadStopWorldContext<'a>>,
@@ -189,13 +226,17 @@ fn action2_eval_ctx_for_road_stop_tile_impl(
     );
 
     let vanilla_types = vanilla_road_type_catalog();
-    let road_type_catalog = resolution.world.map_or(vanilla_types.as_slice(), |world| {
-        if world.road_type_catalog.is_empty() {
-            vanilla_types.as_slice()
-        } else {
-            world.road_type_catalog
-        }
-    });
+    let road_type_catalog = if resolution.road_type_catalog.is_empty() {
+        resolution.world.map_or(vanilla_types.as_slice(), |world| {
+            if world.road_type_catalog.is_empty() {
+                vanilla_types.as_slice()
+            } else {
+                world.road_type_catalog
+            }
+        })
+    } else {
+        resolution.road_type_catalog
+    };
     let road_type = tile.map_or(u32::MAX, |tile| {
         u32::from(reverse_road_type(
             resolution.type_tables,

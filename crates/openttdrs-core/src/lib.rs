@@ -529,6 +529,7 @@ pub use road_movement::{
 pub use road_stop_action2::{
     RoadStopWorldContext, action2_eval_ctx_for_road_stop_tile,
     action2_eval_ctx_for_road_stop_tile_with_catalog,
+    action2_eval_ctx_for_road_stop_tile_with_catalog_and_road_types,
     action2_eval_ctx_for_road_stop_tile_with_catalog_and_world,
 };
 pub use road_stop_spec::{

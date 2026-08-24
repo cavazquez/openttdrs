@@ -409,13 +409,13 @@ Fuente: `newgrf_act0_roadstops.cpp` / `newgrf_roadstop.h`.
 | `0C` draw_mode BYTE (`Road`/`Overlay`/`WaypGround`) | **runtime** (catálogo; bits en `road_stop_spec`) |
 | `0D` cargos de random triggers DWORD | **runtime parcial**: preserva la máscara local y la traduce con CTT/versión Action8; habilita re-randomización Action2 en NewCargo, CargoTaken, carga, llegada y salida vial. Falta estado independiente por cada tesela de una parada compuesta. |
 | `12` flags DWORD (`DriveThroughOnly` bit3, `RoadOnly` bit5, `TramOnly` bit6, …) | **runtime** (validado en query+execute; resto almacenado) |
-| `11` callback mask BYTE | **runtime parcial**: bit `Avail` ejecuta CB13 en picker/query+execute; `AnimationNextFrame`/`AnimationSpeed` habilitan CB141/CB142 y CB140 usa la máscara Action0 `0x10`. El render reevalúa la rama Action3/Action2 con el contexto local persistente; restan scopes completos, tipos viales externos y efectos de sonido. |
+| `11` callback mask BYTE | **runtime parcial**: bit `Avail` ejecuta CB13 en picker/query+execute; `AnimationNextFrame`/`AnimationSpeed` habilitan CB141/CB142 y CB140 usa la máscara Action0 `0x10`. El render reevalúa la rama Action3/Action2 con el contexto local persistente; restan scopes completos y pools de town/company para algunos triggers. |
 | `0E` animation info | **runtime parcial**: frames/loop alimentan CB140–142, con frame/activo persistidos por parada |
 | `0F` animation speed | **runtime parcial**: espera base `2^speed` del scheduler CB140–142 |
 | `10` animation triggers | **runtime parcial**: `Built`, `TileLoop`, `NewCargo`, `CargoTaken`, `VehicleLoads`, llegada/salida vial y `AcceptanceTick`; CB140 recibe el ordinal y el id CTT de cargo en `param2`. Una parada compuesta/importada todavía no conserva estado separado por tesela. |
 | `FE` nombre C-string (extensión local) | **runtime** (catálogo) |
 | `FD` badge associations (extensión local: BYTE count + N× label 4 chars) | **runtime** (`associated_badges` + diagnósticos) |
-| Action1/3 views | **runtime** parcial: bahía `0..3`; DT `4`/`5` si hay vistas; el renderer resuelve Action2 por parada con random/triggers, vista/tipo/terreno, road/tram, frame, `param[]` y los scopes vecinos `66`/`67`/`68`/`6A`/`6B`, y cachea también `(var,param)`; si no hay vista usa Action5 `0x11` / OpenGFX. Restan vars BaseStation `60`–`65`/`69`, tipos viales externos y sonidos. |
+| Action1/3 views | **runtime** parcial: bahía `0..3`; DT `4`/`5` si hay vistas; el renderer resuelve Action2 por parada con random/triggers, vista/tipo/terreno, road/tram, frame, `param[]` y los scopes vecinos `66`/`67`/`68`/`6A`/`6B`, y cachea también `(var,param)`; si no hay vista usa Action5 `0x11` / OpenGFX. Restan vars BaseStation `60`–`65`/`69` y pools de town/company en la randomización del scheduler. |
 | drive-through `m5`=`RSV_*` 4/5 | **runtime** (colocación + connect eje X/Y) |
 | `grfid` + `newgrf_local_id` | **runtime** (save/load + rebind tras re-apply multi-GRF) |
 | resto (`0x0A`–`0x0B`, `0x13`–`0x16`) | consumidas (ancho fijo) / pendiente |
@@ -429,7 +429,9 @@ Action11. Identidad runtime: `(grfid, local_id)` — dos GRFs con el mismo
 `local_id` no se contaminan. Formato fixture Action11: `0x11`, count, luego
 N× (`WORD` size LE + PCM mono u8). Action0 sin sample o Action11 truncado →
 `GameState.runtime.newgrf_diagnostics`. Reproducción observable:
-`play_newgrf_sound` / `pending_newgrf_sounds` (cliente Bevy puede drenar después).
+`play_newgrf_sound` / `pending_newgrf_sounds`; el cliente Bevy drena la cola,
+empaqueta el PCM como WAV 8-bit/11.025 kHz y lo reproduce por el mixer mundial
+(los callbacks de sonido de vehículo todavía no tienen call site).
 `override_old` (`0x0A`) rellena `runtime.sound_overrides[SoundId]`.
 
 | Props | Estado |

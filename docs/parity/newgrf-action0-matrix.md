@@ -435,8 +435,8 @@ N× (`WORD` size LE + PCM mono u8). Action0 sin sample o Action11 truncado →
 `GameState.runtime.newgrf_diagnostics`. Reproducción observable:
 `play_newgrf_sound` / `pending_newgrf_sounds`; el cliente Bevy drena la cola,
 empaqueta el PCM como WAV 8-bit/11.025 kHz y lo reproduce por el mixer mundial
-(el callback de sonido de vehículo cubre salida, marcha, avería y
-despegue/aterrizaje; quedan túnel, efecto visual y carga/descarga).
+(el callback de sonido de vehículo cubre salida, marcha, avería, túnel,
+carga/descarga y despegue/aterrizaje; el efecto visual queda pendiente).
 `override_old` (`0x0A`) rellena `runtime.sound_overrides[SoundId]`.
 
 | Props | Estado |

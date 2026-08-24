@@ -98,6 +98,9 @@ const fn sim_event_log_level(event: &SimEvent) -> SimEventLogLevel {
         SimEvent::Income { .. }
         | SimEvent::VehicleDepart { .. }
         | SimEvent::VehicleRunning { .. }
+        | SimEvent::VehicleTunnel { .. }
+        | SimEvent::VehicleVisualEffect { .. }
+        | SimEvent::VehicleLoadUnload { .. }
         | SimEvent::LevelCrossing { .. }
         | SimEvent::Bubble { .. }
         | SimEvent::AircraftTakeoff { .. }
@@ -134,7 +137,7 @@ fn log_sim_event(event: &SimEvent) {
 // Agrupa el puente core→SFX: cada evento necesita id, callback, fallback,
 // posición y los parámetros del mixer para conservar la semántica vanilla.
 #[allow(clippy::too_many_arguments)]
-fn play_vehicle_event_sound(
+pub(crate) fn play_vehicle_event_sound(
     sim: &mut SimWorld,
     sfx: &mut MessageWriter<PlayWorldSfx>,
     vehicle_id: u32,
@@ -144,9 +147,36 @@ fn play_vehicle_event_sound(
     volume: f32,
     priority: u8,
 ) {
+    play_vehicle_event_sound_with_default(
+        sim,
+        sfx,
+        vehicle_id,
+        event,
+        Some(default_sound),
+        at,
+        volume,
+        priority,
+    );
+}
+
+/// Variante para eventos cuyo comportamiento vanilla no reproduce ningún
+/// sonido cuando el callback no está implementado (por ejemplo, humo/chispas).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn play_vehicle_event_sound_with_default(
+    sim: &mut SimWorld,
+    sfx: &mut MessageWriter<PlayWorldSfx>,
+    vehicle_id: u32,
+    event: VehicleSoundEvent,
+    default_sound: Option<SoundId>,
+    at: TileCoord,
+    volume: f32,
+    priority: u8,
+) {
     match resolve_vehicle_sound_callback(&mut sim.state, vehicle_id, event) {
         VehicleSoundOverride::Default => {
-            sfx.write(PlayWorldSfx::new(default_sound, at, volume).with_priority(priority));
+            if let Some(sound) = default_sound {
+                sfx.write(PlayWorldSfx::new(sound, at, volume).with_priority(priority));
+            }
         }
         VehicleSoundOverride::Base(sound) => {
             sfx.write(PlayWorldSfx::new(sound, at, volume).with_priority(priority));
@@ -243,6 +273,57 @@ fn dispatch_sim_events(
                     volume,
                     priority,
                 );
+            }
+            SimEvent::VehicleTunnel {
+                vehicle_id,
+                at,
+                kind,
+            } => {
+                if hud.sound_vehicle && kind == VehicleKind::Train {
+                    let default = sim
+                        .state
+                        .vehicles
+                        .iter()
+                        .find(|vehicle| vehicle.id == vehicle_id)
+                        .and_then(|vehicle| vehicle.engine_id)
+                        .unwrap_or_else(|| openttdrs_core::default_engine_id(VehicleKind::Train));
+                    let default = (openttdrs_core::train_smoke_kind(default)
+                        == openttdrs_core::TrainSmokeKind::Steam)
+                        .then_some(SoundId::TrainThroughTunnel);
+                    play_vehicle_event_sound_with_default(
+                        &mut sim,
+                        &mut sfx,
+                        vehicle_id,
+                        VehicleSoundEvent::Tunnel,
+                        default,
+                        at,
+                        0.85,
+                        74,
+                    );
+                }
+            }
+            SimEvent::VehicleVisualEffect { .. } => {
+                // El renderer de humo resuelve el callback en el mismo frame
+                // en que crea el efecto, por lo que no se reproduce dos veces
+                // aquí si el evento queda pendiente de un tick anterior.
+            }
+            SimEvent::VehicleLoadUnload {
+                vehicle_id,
+                at,
+                kind: _,
+            } => {
+                if hud.sound_vehicle {
+                    play_vehicle_event_sound(
+                        &mut sim,
+                        &mut sfx,
+                        vehicle_id,
+                        VehicleSoundEvent::LoadUnload,
+                        SoundId::CashTill,
+                        at,
+                        0.8,
+                        70,
+                    );
+                }
             }
             SimEvent::LevelCrossing { at } => {
                 if hud.sound_vehicle {

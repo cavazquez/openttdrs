@@ -87,6 +87,30 @@ pub enum SimEvent {
         kind: crate::vehicle::VehicleKind,
         phase: VehicleRunningPhase,
     },
+    /// Tren que acaba de entrar en una boca de túnel.
+    ///
+    /// `OpenTTD` dispara `VSE_TUNNEL` una sola vez al cruzar la animación de
+    /// entrada, no por cada tesela interior. El movimiento core conserva el
+    /// mismo borde de transición para que el cliente pueda resolver CB33.
+    VehicleTunnel {
+        vehicle_id: u32,
+        at: TileCoord,
+        kind: crate::vehicle::VehicleKind,
+    },
+    /// Efecto visual de vehículo que puede tener un sonido `NewGRF` asociado.
+    /// El renderer emite este evento cuando crea humo/chispas, mientras que
+    /// el callback se resuelve en el puente de audio.
+    VehicleVisualEffect {
+        vehicle_id: u32,
+        at: TileCoord,
+        kind: crate::vehicle::VehicleKind,
+    },
+    /// Se realizó un pago de carga/descarga para el vehículo.
+    VehicleLoadUnload {
+        vehicle_id: u32,
+        at: TileCoord,
+        kind: crate::vehicle::VehicleKind,
+    },
     LevelCrossing {
         at: TileCoord,
     },

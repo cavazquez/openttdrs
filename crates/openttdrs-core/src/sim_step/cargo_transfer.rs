@@ -347,6 +347,20 @@ pub(super) fn unload_vehicles(
                 amount: payment,
                 at: vpos,
             });
+        // OpenTTD calls `PlayVehicleSound(VSE_LOAD_UNLOAD)` when the route
+        // profit is committed. `shown` includes feeder income, so transfers
+        // also receive the callback even when the direct delivery amount is
+        // zero.
+        if shown != 0 {
+            state
+                .runtime
+                .pending_sim_events
+                .push(crate::sim_events::SimEvent::VehicleLoadUnload {
+                    vehicle_id: state.vehicles[i].id,
+                    at: vpos,
+                    kind: state.vehicles[i].kind,
+                });
+        }
         let first_chunk = !state.vehicles[i].cargo_unloading;
         let first_delivery = state.stats.cargo_deliveries == 0 && first_chunk;
         // Freight baja en una estación como trasbordo: no es una entrega final
@@ -1138,6 +1152,20 @@ mod tests {
         assert_eq!(state.stations[0].cargo_stock.get(CargoType::Coal), 1);
         assert_eq!(map_frame(&state, pos), 1, "NewCargo ordinal llega a CB140");
         assert!(state.newgrf_animated_station_tiles.contains(&pos));
+        assert!(
+            state
+                .runtime
+                .pending_sim_events
+                .iter()
+                .any(|event| matches!(
+                    event,
+                    crate::sim_events::SimEvent::VehicleLoadUnload {
+                        vehicle_id: 7,
+                        kind: VehicleKind::Train,
+                        ..
+                    }
+                ))
+        );
     }
 
     #[test]

@@ -288,6 +288,19 @@ pub(super) fn move_vehicles(state: &mut GameState) {
         refresh_vehicle_track_speed_cap(state, i, vehicle_kind);
         state.vehicles[i].step_with_map_and_accel(Some(&state.map), train_accel);
         refresh_vehicle_track_speed_cap(state, i, vehicle_kind);
+        // `Vehicle::MoveTo` calls `PlayVehicleSound(VSE_TUNNEL)` only at the
+        // entrance frame. Detect the same outside→inside edge here instead of
+        // emitting once per interior tile (or once per consist wagon).
+        if vehicle_entered_train_tunnel(state, i, prev_pos) {
+            state
+                .runtime
+                .pending_sim_events
+                .push(crate::sim_events::SimEvent::VehicleTunnel {
+                    vehicle_id,
+                    at: state.vehicles[i].pos,
+                    kind: vehicle_kind,
+                });
+        }
         if vehicle_kind == VehicleKind::Train
             && state.vehicles[i].is_consist_head()
             && !was_waiting_for_station_load
@@ -378,6 +391,23 @@ pub(super) fn move_vehicles(state: &mut GameState) {
             state.vehicles[i].force_proceed = false;
         }
     }
+}
+
+/// Detecta el borde exterior→interior de una boca de túnel para la cabeza de
+/// un consist. Mantenerlo separado del hot path permite cubrir la regla sin
+/// depender de la geometría sub-tesela del renderer.
+#[must_use]
+fn vehicle_entered_train_tunnel(
+    state: &GameState,
+    vehicle_idx: usize,
+    prev_pos: crate::TileCoord,
+) -> bool {
+    let vehicle = &state.vehicles[vehicle_idx];
+    vehicle.kind == VehicleKind::Train
+        && vehicle.is_consist_head()
+        && vehicle.pos != prev_pos
+        && state.map.get_kind(vehicle.pos) == Some(crate::TileKind::RailTunnel)
+        && state.map.get_kind(prev_pos) != Some(crate::TileKind::RailTunnel)
 }
 
 /// Cruce de la boca de un depósito road. El vehículo queda oculto mientras
@@ -599,5 +629,25 @@ fn reroute_head_on_to_alt_platform(state: &mut GameState, vehicle_idx: usize) {
             state.vehicles[vehicle_idx].no_network_route_to_order = false;
             return;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::vehicle_entered_train_tunnel;
+    use crate::{GameState, TileCoord, TileKind, Vehicle, VehicleKind};
+
+    #[test]
+    fn tunnel_sound_edge_only_fires_on_outside_to_inside_transition() {
+        let mut state = GameState::new(4, 4);
+        let outside = TileCoord::new(0, 1);
+        let entrance = TileCoord::new(1, 1);
+        assert!(state.map.set_kind(entrance, TileKind::RailTunnel).is_ok());
+        state
+            .vehicles
+            .push(Vehicle::new(1, VehicleKind::Train, entrance, entrance));
+
+        assert!(vehicle_entered_train_tunnel(&state, 0, outside));
+        assert!(!vehicle_entered_train_tunnel(&state, 0, entrance));
     }
 }

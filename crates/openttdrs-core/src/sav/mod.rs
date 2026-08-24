@@ -90,7 +90,8 @@ use crate::vehicle::{AircraftPhase, Vehicle, VehicleKind};
 use std::collections::HashMap;
 
 pub use entities::{
-    SavCargoPacket, SavIndustry, SavIndustryAcceptedCargo, SavIndustryProducedCargo, SavStation,
+    SavCargoPacket, SavIndustry, SavIndustryAcceptedCargo, SavIndustryProducedCargo,
+    SavRoadStopSpecMapping, SavRoadStopStationData, SavRoadStopTileData, SavStation,
     SavStationCargo, SavVehicle, SavVehicleKind, format_generated_station_name,
     resolve_sav_station_name,
 };
@@ -226,6 +227,10 @@ pub struct SavGame {
     pub company_colour: Option<u8>,
     /// Índice `StationID` → tesela (incluye waypoints) para órdenes importadas.
     pub(crate) station_index: std::collections::HashMap<u32, entities::SavStationIndex>,
+    /// Mapeo nativo de `roadstopspeclist` y `roadstoptiledata` por estación.
+    /// Se conserva hasta que el stack `NewGRF` activo pueda resolver `(GRFID,
+    /// localidx)` a un id de catálogo runtime.
+    pub road_stop_station_data: std::collections::HashMap<u32, entities::SavRoadStopStationData>,
     /// Reloj de simulación del chunk `DATE`, si está presente.
     pub game_time: Option<date::SavGameTime>,
     /// Grafo de enlaces observado (`LGRP`); vacío si el chunk falta o es legacy.
@@ -300,6 +305,8 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
     let cargo_payments = economy::cargo_payments_from_chunks(&chunk_list);
     let order_import = orders::SavOrderImport::from_chunks(&chunk_list, version);
     let station_index = entities::station_index_from_chunks(&chunk_list, map_w, version);
+    let road_stop_station_data =
+        entities::road_stop_station_data_from_chunks(&chunk_list, map_w, version);
     let vehicles = entities::vehicles_from_chunks(&chunk_list, map_w, &order_import, version);
     let companies = entities::companies_from_chunks(&chunk_list, version);
     let game_time = date::game_time_from_chunks(&chunk_list, version);
@@ -330,6 +337,7 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
         money,
         company_colour,
         station_index,
+        road_stop_station_data,
         game_time,
         link_graph,
         climate,
@@ -677,6 +685,48 @@ fn hydrate_sav_station_cargo(
     station.cargo_packets.reserved = reserved.min(station.cargo_packets.total_count());
 }
 
+/// Conserva el mapeo nativo por tesela de road stops hasta que el catálogo
+/// `NewGRF` se reconstruya después de cargar el save. `m8[0..6]` es el índice de
+/// `roadstopspeclist`; la identidad `(GRFID, localidx)` queda en el estado de
+/// la tesela y `apply_newgrf_roadstops` la reata al id local del catálogo.
+fn hydrate_sav_road_stop_tiles(
+    state: &mut GameState,
+    saved: &HashMap<u32, entities::SavRoadStopStationData>,
+) {
+    for station_index in 0..state.stations.len() {
+        let Some(station_id) = state.stations[station_index].ottd_station_id else {
+            continue;
+        };
+        let Some(data) = saved.get(&station_id) else {
+            continue;
+        };
+        for tile_data in &data.tiles {
+            let Some(tile) = state.map.get(tile_data.tile) else {
+                continue;
+            };
+            let tile_station_id = u32::from(tile.m2) | (u32::from(tile.m2_hi) << 8);
+            if tile_station_id != station_id || tile.kind != TileKind::Station {
+                continue;
+            }
+            let spec_index = usize::from(tile.m8 & 0x3F);
+            if spec_index == 0 {
+                continue;
+            }
+            let Some(binding) = data.specs.get(spec_index) else {
+                continue;
+            };
+            let tile_state =
+                state.stations[station_index].ensure_road_stop_tile_state(tile_data.tile);
+            tile_state.spec = None;
+            tile_state.saved_grfid = Some(binding.grfid);
+            tile_state.saved_local_id = Some(binding.localidx);
+            tile_state.random_bits = tile_data.random_bits;
+            tile_state.animation_frame = tile_data.animation_frame;
+        }
+        state.stations[station_index].sync_legacy_road_stop_anchor();
+    }
+}
+
 fn quarterly_entry_from_sav(
     entry: &entities::SavCompanyEconomy,
 ) -> crate::economy_quarterly::QuarterlyEconomyEntry {
@@ -981,6 +1031,7 @@ impl GameState {
             );
             state.stations.push(station);
         }
+        hydrate_sav_road_stop_tiles(&mut state, &sav.road_stop_station_data);
         import::hydrate_sav_industries(&mut state, &sav.industries, &sav.extras);
         state.link_graph = sav.link_graph;
         if !matches!(
@@ -1315,6 +1366,7 @@ mod tests {
             money: None,
             company_colour: None,
             station_index: HashMap::new(),
+            road_stop_station_data: HashMap::new(),
             game_time: None,
             link_graph: LinkGraphStats::default(),
             climate: crate::Climate::Temperate,
@@ -1405,6 +1457,62 @@ mod tests {
             state.map.get(oilrig).map(|tile| tile.m6),
             Some(crate::station::STATION_TYPE_OILRIG << 3)
         );
+    }
+
+    #[test]
+    fn from_sav_game_preserves_native_road_stop_tile_mapping() {
+        let tile_pos = TileCoord::new(2, 2);
+        let mut sav = empty_sav(352, Map::new_flat(8, 8, 0));
+        let mut tile = sav.map.get(tile_pos).expect("tile");
+        tile.kind = TileKind::Station;
+        tile.m2 = 7;
+        tile.m8 = 1; // roadstopspeclist[1]
+        tile.m6 = 3 << 3; // bus stop
+        sav.map.set_tile(tile_pos, tile).expect("road stop tile");
+        sav.stations.push(SavStation {
+            station_id: 7,
+            pos: tile_pos,
+            name: Some("Parada importada".into()),
+            facilities: FACIL_BUS_STOP,
+            string_id: None,
+            town_id: None,
+            airport_type: 0,
+            airport_w: 0,
+            airport_h: 0,
+            airport_layout: 0,
+            airport_blocks: 0,
+            cargo: Vec::new(),
+        });
+        sav.road_stop_station_data.insert(
+            7,
+            SavRoadStopStationData {
+                specs: vec![
+                    SavRoadStopSpecMapping {
+                        grfid: 0,
+                        localidx: 0,
+                    },
+                    SavRoadStopSpecMapping {
+                        grfid: 0x4455_6677,
+                        localidx: 0x1234,
+                    },
+                ],
+                tiles: vec![SavRoadStopTileData {
+                    tile: tile_pos,
+                    random_bits: 0xA5,
+                    animation_frame: 6,
+                }],
+            },
+        );
+
+        let state = GameState::from_sav_game(sav);
+        let tile_state = state.stations[0]
+            .road_stop_tile_state(tile_pos)
+            .expect("estado custom por tesela");
+        assert_eq!(tile_state.spec, None);
+        assert_eq!(tile_state.saved_grfid, Some(0x4455_6677));
+        assert_eq!(tile_state.saved_local_id, Some(0x1234));
+        assert_eq!(tile_state.random_bits, 0xA5);
+        assert_eq!(tile_state.animation_frame, 6);
     }
 
     #[test]
@@ -1785,6 +1893,7 @@ mod tests {
             money: Some(123_456),
             company_colour: Some(9),
             station_index: std::collections::HashMap::new(),
+            road_stop_station_data: std::collections::HashMap::new(),
             game_time: None,
             climate: crate::Climate::Temperate,
             construction: crate::ConstructionSettings::default(),

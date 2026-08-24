@@ -43,6 +43,32 @@ pub struct SavStation {
     pub cargo: Vec<SavStationCargo>,
 }
 
+/// Identidad estable de una spec de road stop en la lista nativa de una
+/// estación (`STNN.roadstopspeclist`). El índice dentro del vector es el que
+/// guarda cada tesela en los seis bits bajos de `m8`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SavRoadStopSpecMapping {
+    pub grfid: u32,
+    /// `OpenTTD` serializa el local ID como `uint16` desde `SLV_EXTEND_ENTITY_MAPPING`.
+    pub localidx: u16,
+}
+
+/// Estado nativo por tesela de una parada vial (`STNN.roadstoptiledata`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SavRoadStopTileData {
+    pub tile: TileCoord,
+    pub random_bits: u8,
+    pub animation_frame: u8,
+}
+
+/// Datos de road stops agrupados por `StationID`, separados de [`SavStation`]
+/// para no romper fixtures que construyen estaciones sintéticas a mano.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct SavRoadStopStationData {
+    pub specs: Vec<SavRoadStopSpecMapping>,
+    pub tiles: Vec<SavRoadStopTileData>,
+}
+
 /// Referencias de una entrada `Station::goods[cargo_slot]`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SavStationCargo {
@@ -224,6 +250,75 @@ pub(crate) fn stations_from_chunks(
             airport_layout: st.airport_layout,
             airport_blocks: st.airport_blocks,
             cargo: cargo_by_station.remove(&station_id).unwrap_or_default(),
+        })
+        .collect()
+}
+
+/// Extrae la tabla nativa de specs y el estado por tesela de road stops.
+/// `STNN` moderno guarda ambos vectores al nivel superior del record de la
+/// estación; en saves legacy la ausencia de cualquiera de ellos es válida.
+pub(crate) fn road_stop_station_data_from_chunks(
+    chunks: &[RawChunk],
+    map_w: u32,
+    save_version: u16,
+) -> HashMap<u32, SavRoadStopStationData> {
+    let Some(stnn) = find_chunk(chunks, "STNN") else {
+        return HashMap::new();
+    };
+    table_rows(stnn, save_version)
+        .into_iter()
+        .filter_map(|(station_id, record)| {
+            let specs: Vec<SavRoadStopSpecMapping> = record_get(&record, "roadstopspeclist")
+                .and_then(|value| match value {
+                    SlValue::Structs(entries) => Some(
+                        entries
+                            .iter()
+                            .filter_map(|entry| {
+                                Some(SavRoadStopSpecMapping {
+                                    grfid: u32::try_from(record_get(entry, "grfid")?.as_u64()?)
+                                        .ok()?,
+                                    localidx: u16::try_from(
+                                        record_get(entry, "localidx")?.as_u64()?,
+                                    )
+                                    .ok()?,
+                                })
+                            })
+                            .collect(),
+                    ),
+                    _ => None,
+                })
+                .unwrap_or_default();
+            let tiles: Vec<SavRoadStopTileData> = record_get(&record, "roadstoptiledata")
+                .and_then(|value| match value {
+                    SlValue::Structs(entries) => Some(
+                        entries
+                            .iter()
+                            .filter_map(|entry| {
+                                let tile = record_get(entry, "tile")
+                                    .and_then(SlValue::as_u64)
+                                    .and_then(|value| coord_from_linear_index(value, map_w))?;
+                                Some(SavRoadStopTileData {
+                                    tile,
+                                    random_bits: u8::try_from(
+                                        record_get(entry, "random_bits")?.as_u64()?,
+                                    )
+                                    .ok()?,
+                                    animation_frame: u8::try_from(
+                                        record_get(entry, "animation_frame")?.as_u64()?,
+                                    )
+                                    .ok()?,
+                                })
+                            })
+                            .collect(),
+                    ),
+                    _ => None,
+                })
+                .unwrap_or_default();
+            if specs.is_empty() && tiles.is_empty() {
+                None
+            } else {
+                Some((station_id, SavRoadStopStationData { specs, tiles }))
+            }
         })
         .collect()
 }
@@ -1345,7 +1440,7 @@ mod tests {
     use super::super::chunks::{CH_SPARSE_TABLE, CH_TABLE, RawChunk, find_chunk, parse_chunks};
     use super::super::container;
     use super::super::orders::SavOrderImport;
-    use super::super::table::tests::{build_table_body, write_str};
+    use super::super::table::tests::{build_table_body, write_gamma, write_str};
     use super::super::table::{SlValue, record_get};
     use super::*;
 
@@ -1433,6 +1528,61 @@ mod tests {
         assert_eq!(stations[0].pos, TileCoord::new(5, 2));
         assert_eq!(stations[0].name.as_deref(), Some("Mi Estación"));
         assert_eq!(stations[0].facilities, 1);
+    }
+
+    #[test]
+    fn decodes_native_road_stop_spec_and_tile_mapping() {
+        let mut header = Vec::new();
+        header.push(0x1B);
+        write_str("roadstopspeclist", &mut header);
+        header.push(0x1B);
+        write_str("roadstoptiledata", &mut header);
+        header.push(0);
+        header.push(6);
+        write_str("grfid", &mut header);
+        header.push(4);
+        write_str("localidx", &mut header);
+        header.push(0);
+        header.push(6);
+        write_str("tile", &mut header);
+        header.push(2);
+        write_str("random_bits", &mut header);
+        header.push(2);
+        write_str("animation_frame", &mut header);
+        header.push(0);
+
+        let mut record = Vec::new();
+        write_gamma(2, &mut record);
+        record.extend_from_slice(&0u32.to_be_bytes());
+        record.extend_from_slice(&0u16.to_be_bytes());
+        record.extend_from_slice(&0x4455_6677u32.to_be_bytes());
+        record.extend_from_slice(&0x1234u16.to_be_bytes());
+        write_gamma(1, &mut record);
+        record.extend_from_slice(&(2u32 * 64 + 3).to_be_bytes());
+        record.push(0xA5);
+        record.push(6);
+
+        let mut body = Vec::new();
+        write_gamma(header.len() as u32 + 1, &mut body);
+        body.extend_from_slice(&header);
+        write_gamma(record.len() as u32 + 1, &mut body);
+        body.extend_from_slice(&record);
+        write_gamma(0, &mut body);
+        let chunk = RawChunk {
+            name: *b"STNN",
+            ch_type: CH_TABLE,
+            body,
+        };
+
+        let data = road_stop_station_data_from_chunks(&[chunk], 64, 300);
+        let station = data.get(&0).expect("station road stop data");
+        assert_eq!(station.specs.len(), 2);
+        assert_eq!(station.specs[1].grfid, 0x4455_6677);
+        assert_eq!(station.specs[1].localidx, 0x1234);
+        assert_eq!(station.tiles.len(), 1);
+        assert_eq!(station.tiles[0].tile, TileCoord::new(3, 2));
+        assert_eq!(station.tiles[0].random_bits, 0xA5);
+        assert_eq!(station.tiles[0].animation_frame, 6);
     }
 
     #[test]

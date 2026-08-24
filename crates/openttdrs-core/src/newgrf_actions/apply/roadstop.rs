@@ -6,7 +6,7 @@ use crate::GameState;
 use crate::badge::resolve_badge_labels_detailed;
 use crate::road_stop_spec::{
     RoadStopClassDef, RoadStopSpecDef, empty_road_stop_class_catalog, empty_road_stop_spec_catalog,
-    next_free_road_stop_class_id, next_free_road_stop_spec_id, road_stop_spec_by_grf_local,
+    next_free_road_stop_class_id, next_free_road_stop_spec_id,
 };
 
 use super::super::action0::{ParsedRoadStopMeta, collect_roadstop_metas_from_grf};
@@ -37,24 +37,30 @@ pub fn apply_newgrf_roadstops(state: &mut GameState, search_dirs: &[&Path]) {
     // Snapshot identidad estable → rebind por tesela tras rebuild. Los saves
     // antiguos sólo tienen `Station.road_stop_spec`, que conserva `None` como
     // marcador de ancla legacy.
-    let mut station_bindings: Vec<(usize, Option<crate::TileCoord>, u32, u8)> = Vec::new();
+    let mut station_bindings: Vec<(usize, Option<crate::TileCoord>, u32, u16)> = Vec::new();
     for (station_idx, station) in state.stations.iter().enumerate() {
         let mut has_tile_binding = false;
         for (tile, tile_state) in &station.road_stop_tile_states {
-            let Some(id) = tile_state.spec else {
-                continue;
-            };
-            let Some(def) = state.road_stop_spec_catalog.iter().find(|def| def.id == id) else {
-                continue;
-            };
-            station_bindings.push((station_idx, Some(*tile), def.grfid, def.newgrf_local_id));
-            has_tile_binding = true;
+            let identity = tile_state
+                .spec
+                .and_then(|id| {
+                    state
+                        .road_stop_spec_catalog
+                        .iter()
+                        .find(|def| def.id == id)
+                        .map(|def| (def.grfid, u16::from(def.newgrf_local_id)))
+                })
+                .or_else(|| Some((tile_state.saved_grfid?, tile_state.saved_local_id?)));
+            if let Some((grfid, local_id)) = identity {
+                station_bindings.push((station_idx, Some(*tile), grfid, local_id));
+                has_tile_binding = true;
+            }
         }
         if !has_tile_binding
             && let Some(id) = station.road_stop_spec
             && let Some(def) = state.road_stop_spec_catalog.iter().find(|def| def.id == id)
         {
-            station_bindings.push((station_idx, None, def.grfid, def.newgrf_local_id));
+            station_bindings.push((station_idx, None, def.grfid, u16::from(def.newgrf_local_id)));
         }
     }
     let current_binding = state.current_road_stop_spec.and_then(|id| {
@@ -62,7 +68,7 @@ pub fn apply_newgrf_roadstops(state: &mut GameState, search_dirs: &[&Path]) {
             .road_stop_spec_catalog
             .iter()
             .find(|d| d.id == id)
-            .map(|d| (d.grfid, d.newgrf_local_id))
+            .map(|d| (d.grfid, u16::from(d.newgrf_local_id)))
     });
 
     let mut classes = empty_road_stop_class_catalog();
@@ -148,7 +154,12 @@ pub fn apply_newgrf_roadstops(state: &mut GameState, search_dirs: &[&Path]) {
     }
 
     for (station_idx, tile, grfid, local_id) in station_bindings {
-        let new_id = road_stop_spec_by_grf_local(&specs, grfid, local_id).map(|d| d.id);
+        let new_id = specs
+            .iter()
+            .find(|def| {
+                def.from_newgrf && def.grfid == grfid && u16::from(def.newgrf_local_id) == local_id
+            })
+            .map(|def| def.id);
         if let Some(st) = state.stations.get_mut(station_idx) {
             if let Some(tile) = tile {
                 st.ensure_road_stop_tile_state(tile).spec = new_id;
@@ -159,7 +170,12 @@ pub fn apply_newgrf_roadstops(state: &mut GameState, search_dirs: &[&Path]) {
         }
     }
     state.current_road_stop_spec = current_binding.and_then(|(grfid, local_id)| {
-        road_stop_spec_by_grf_local(&specs, grfid, local_id).map(|d| d.id)
+        specs
+            .iter()
+            .find(|def| {
+                def.from_newgrf && def.grfid == grfid && u16::from(def.newgrf_local_id) == local_id
+            })
+            .map(|def| def.id)
     });
     state.current_road_stop_class = state
         .current_road_stop_spec

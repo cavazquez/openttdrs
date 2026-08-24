@@ -165,6 +165,13 @@ pub struct RoadStopTileState {
     /// Bits 16..23 del random de `RoadStopScopeResolver`.
     #[serde(default)]
     pub random_bits: u8,
+    /// Identidad `(GRFID, localidx)` leída de `roadstopspeclist` de un `.sav`.
+    /// Se conserva hasta que el catálogo `NewGRF` activo pueda convertirla al
+    /// `RoadStopSpecDef::id` local.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub saved_grfid: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub saved_local_id: Option<u16>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -426,6 +433,8 @@ impl Station {
             animation_frame: self.road_stop_animation_frame,
             animation_active: self.road_stop_animation_active,
             random_bits: self.legacy_road_stop_random_bits(tile),
+            saved_grfid: None,
+            saved_local_id: None,
         };
         let index = self.road_stop_tile_states.len();
         self.road_stop_tile_states.push((tile, legacy));

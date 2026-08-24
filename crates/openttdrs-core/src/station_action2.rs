@@ -18,8 +18,8 @@ use crate::world_gen::Climate;
 /// Contexto Action2 para dibujar / resolver sprites de una tesela de estación.
 ///
 /// MVP: `40` (plataforma), `42` (terreno+rail), `43` (owner), `44` (PBS),
-/// `45` (continuación rail), `46` (posición centrada), `49` (eje), `4A` (frame),
-/// `5F` (random), `10` (m5/tileh),
+/// `45` (continuación rail), `46` (posición centrada), `47` (spec centrado),
+/// `49` (eje), `4A` (frame), `5F` (random), `10` (m5/tileh),
 /// `67` (land info tesela actual, param 0).
 #[must_use]
 pub fn action2_eval_ctx_for_station_tile(
@@ -102,6 +102,13 @@ pub fn action2_eval_ctx_for_station_tile_with_grf(
     if matches!(station_type, 0 | STATION_TYPE_RAIL_WAYPOINT) {
         ctx.vars.insert(
             0x46,
+            platform_info_for_tile_variant(map, stations, coord, m5, true, false),
+        );
+        // `Station` conserva un único StationSpecId para toda la huella; por
+        // eso el filtro de tipo de 0x47 es hoy idéntico al de 0x46. La
+        // diferencia reaparecerá cuando el importador preserve specs por tile.
+        ctx.vars.insert(
+            0x47,
             platform_info_for_tile_variant(map, stations, coord, m5, true, false),
         );
         ctx.vars.insert(
@@ -508,6 +515,11 @@ mod tests {
         );
         assert_eq!((v46 >> 16) & 0x0F, 3, "L centrada=3");
         assert_eq!((v46 >> 20) & 0x0F, 1, "N centrada=1");
+        assert_eq!(
+            ctx.vars.get(&0x47),
+            Some(&v46),
+            "spec homogéneo en la huella"
+        );
         assert_eq!(
             ctx.vars.get(&0x49),
             Some(&v40),

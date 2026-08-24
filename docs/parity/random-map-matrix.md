@@ -72,11 +72,13 @@ convertirse en gate de release.
 La divergencia del generador aparece ya en la primera tesela del caso 64×64
 (altura y tipo distintos) y no es un problema de resolución de la imagen:
 afecta al estado lógico del mapa. El generador Rust ahora porta la escala TGP,
-el RNG previo a la normalización, las costas de OpenTTD, `water_borders`, los
-bordes `MP_VOID`, el conteo de ríos y la etapa inicial de pueblos/industrias.
-Eso corrigió la causa gruesa (el resultado ya no es un heightmap sin población),
-pero aún no es una reproducción bit a bit de `GenerateLandscape`/`genworld`:
-quedan el algoritmo/consumo exacto de ríos, pueblos, industrias y árboles,
+el RNG previo a la normalización, la suma de octavas de costa sin normalizar
+(igual que `perlin_coast_noise_2D`), `FixSlopes`, las costas de OpenTTD,
+`water_borders`, los bordes `MP_VOID`, el conteo de ríos y la etapa inicial de
+pueblos/industrias. Eso redujo la sonda 64×64 de 2.230 a 2.176 teselas
+distintas (y la matriz completa queda en 1.843–137.590), pero aún no es una
+reproducción bit a bit de `GenerateLandscape`/`genworld`: quedan el
+algoritmo/consumo exacto de ríos, pueblos, industrias y árboles,
 `GenerateObjects` y sus bytes `m1..m8`. El flujo procedural ya conserva un
 único `Randomizer` entre TGP, `GenerateClearTile`, pueblos, industrias y
 árboles; la medición no debe interpretarse como paridad del generador.

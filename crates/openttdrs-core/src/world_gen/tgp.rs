@@ -354,7 +354,6 @@ fn interpolated_noise(x: f64, y: f64, prime: i32, seed: u32) -> f64 {
 fn perlin_coast_noise_2d(x: f64, y: f64, p: f64, prime: i32, seed: u32) -> f64 {
     const OCTAVES: i32 = 6;
     let mut total = 0.0;
-    let mut max_value = 0.0;
     // `tgp.cpp` starts at frequency 1 and divides the coordinates by 64;
     // no se debe aplicar ambas escalas (la versión anterior hacía ruido
     // 64× demasiado suave en las costas).
@@ -363,11 +362,13 @@ fn perlin_coast_noise_2d(x: f64, y: f64, p: f64, prime: i32, seed: u32) -> f64 {
     for _ in 0..OCTAVES {
         total += interpolated_noise((x * frequency) / 64.0, (y * frequency) / 64.0, prime, seed)
             * amplitude;
-        max_value += amplitude;
         frequency *= 2.0;
         amplitude *= p;
     }
-    total / max_value
+    // OpenTTD intentionally returns the accumulated, unnormalised octave
+    // sum. Normalising by the geometric-series weight changes the coastline
+    // cut for every seed and breaks same-seed TGP parity.
+    total
 }
 
 fn height_map_coast_lines(hm: &mut HeightMap, water_borders: BorderFlags, seed: u32) {

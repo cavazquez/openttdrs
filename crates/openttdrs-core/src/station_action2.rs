@@ -18,7 +18,8 @@ use crate::world_gen::Climate;
 /// Contexto Action2 para dibujar / resolver sprites de una tesela de estación.
 ///
 /// MVP: `40` (plataforma), `42` (terreno+rail), `43` (owner), `44` (PBS),
-/// `45` (continuación rail), `4A` (frame), `5F` (random), `10` (m5/tileh),
+/// `45` (continuación rail), `46` (posición centrada), `49` (eje), `4A` (frame),
+/// `5F` (random), `10` (m5/tileh),
 /// `67` (land info tesela actual, param 0).
 #[must_use]
 pub fn action2_eval_ctx_for_station_tile(
@@ -98,6 +99,16 @@ pub fn action2_eval_ctx_for_station_tile_with_grf(
 
     ctx.vars
         .insert(0x40, platform_info_for_tile(map, stations, coord, m5));
+    if matches!(station_type, 0 | STATION_TYPE_RAIL_WAYPOINT) {
+        ctx.vars.insert(
+            0x46,
+            platform_info_for_tile_variant(map, stations, coord, m5, true, false),
+        );
+        ctx.vars.insert(
+            0x49,
+            platform_info_for_tile_variant(map, stations, coord, m5, false, true),
+        );
+    }
 
     let terrain = terrain_type_for_tile(map, coord, climate, tile);
     let rail_tt = tile.map_or(0xFF_u32, |t| {
@@ -251,10 +262,12 @@ fn find_rail_station_end(
     start: TileCoord,
     dx: i32,
     dy: i32,
+    check_axis: bool,
 ) -> TileCoord {
     let Some(st) = station_at_tile(map, stations, start) else {
         return start;
     };
+    let axis_y = map.get(start).is_some_and(|tile| tile.m5 & 1 != 0);
     let mut tile = start;
     loop {
         let next = TileCoord::new(tile.x + dx, tile.y + dy);
@@ -265,6 +278,9 @@ fn find_rail_station_end(
             break;
         };
         if !same_station(st, other) {
+            break;
+        }
+        if check_axis && map.get(next).is_some_and(|candidate| candidate.m5 & 1 != 0) != axis_y {
             break;
         }
         tile = next;
@@ -336,15 +352,47 @@ fn pack_platform_info(gfx: u8, platforms: i32, length: i32, platform: i32, posit
     retval
 }
 
+fn pack_platform_info_centered(
+    gfx: u8,
+    platforms: i32,
+    length: i32,
+    platform: i32,
+    position: i32,
+) -> u32 {
+    let x = (platform - platforms / 2).clamp(-8, 7).cast_unsigned() & 0x0F;
+    let y = (position - length / 2).clamp(-8, 7).cast_unsigned() & 0x0F;
+    let mut retval = y | (x << 4);
+    retval |= length.min(15).cast_unsigned() << 16;
+    retval |= platforms.min(15).cast_unsigned() << 20;
+    retval |= u32::from(gfx) << 24;
+    retval
+}
+
 fn platform_info_for_tile(map: &Map, stations: &[Station], coord: TileCoord, m5: u8) -> u32 {
+    platform_info_for_tile_variant(map, stations, coord, m5, false, false)
+}
+
+fn platform_info_for_tile_variant(
+    map: &Map,
+    stations: &[Station],
+    coord: TileCoord,
+    m5: u8,
+    centered: bool,
+    check_axis: bool,
+) -> u32 {
     if !is_rail_platform_tile(map, coord) {
         // Waypoints / no-rail: layout 1×1.
-        return pack_platform_info(m5 & 0x3F, 1, 1, 0, 0);
+        return if centered {
+            pack_platform_info_centered(m5 & 0x3F, 1, 1, 0, 0)
+        } else {
+            pack_platform_info(m5 & 0x3F, 1, 1, 0, 0)
+        };
     }
-    let sx = find_rail_station_end(map, stations, coord, -1, 0).x;
-    let sy = find_rail_station_end(map, stations, coord, 0, -1).y;
-    let ex = find_rail_station_end(map, stations, coord, 1, 0).x + 1;
-    let ey = find_rail_station_end(map, stations, coord, 0, 1).y + 1;
+    let end = |dx: i32, dy: i32| find_rail_station_end(map, stations, coord, dx, dy, check_axis);
+    let sx = end(-1, 0).x;
+    let sy = end(0, -1).y;
+    let ex = end(1, 0).x + 1;
+    let ey = end(0, 1).y + 1;
 
     let mut tx = coord.x - sx;
     let mut ty = coord.y - sy;
@@ -358,7 +406,11 @@ fn platform_info_for_tile(map: &Map, stations: &[Station], coord: TileCoord, m5:
         std::mem::swap(&mut tx, &mut ty);
     }
 
-    pack_platform_info(m5 & 0x3F, width, height, tx, ty)
+    if centered {
+        pack_platform_info_centered(m5 & 0x3F, width, height, tx, ty)
+    } else {
+        pack_platform_info(m5 & 0x3F, width, height, tx, ty)
+    }
 }
 
 #[cfg(test)]
@@ -448,6 +500,19 @@ mod tests {
         assert_eq!((v40 >> 4) & 0x0F, 1, "p=1");
         assert_eq!((v40 >> 16) & 0x0F, 3, "L=3");
         assert_eq!((v40 >> 20) & 0x0F, 1, "N=1");
+        let v46 = *ctx.vars.get(&0x46).unwrap();
+        assert_eq!(
+            v46 & 0xFF,
+            0,
+            "posición centrada en plataforma de longitud impar"
+        );
+        assert_eq!((v46 >> 16) & 0x0F, 3, "L centrada=3");
+        assert_eq!((v46 >> 20) & 0x0F, 1, "N centrada=1");
+        assert_eq!(
+            ctx.vars.get(&0x49),
+            Some(&v40),
+            "var 49 conserva el eje homogéneo"
+        );
     }
 
     #[test]

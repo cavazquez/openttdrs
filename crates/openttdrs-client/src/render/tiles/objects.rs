@@ -1273,8 +1273,61 @@ fn spawn_station_rail_catenary(
     }
 }
 
+#[cfg(test)]
 #[allow(clippy::too_many_arguments, clippy::needless_option_as_deref)]
 pub(crate) fn spawn_station_tile(
+    commands: &mut Commands,
+    map: &Map,
+    dims: (u32, u32),
+    assets: &WorldAssets,
+    company: Option<&CompanyColoredSprites>,
+    owner_colour: Option<CompanyColour>,
+    ctx: &TileRenderContext,
+    stations: &[Station],
+    slope_half_ground: f32,
+    show_pbs_reservations: bool,
+    station_catalog: &[StationSpecDef],
+    road_stop_catalog: &[RoadStopSpecDef],
+    station_sprites: Option<&mut NewGrfStationSpriteCache>,
+    images: Option<&mut Assets<Image>>,
+    catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    catenary_sprites: Option<&mut crate::render::NewGrfCatenarySpriteCache>,
+    foundation_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
+    roadstop_action5: &[Option<openttdrs_core::DecodedSprite>],
+    climate: openttdrs_core::Climate,
+    newgrf_stack: &[openttdrs_core::NewGrfEntry],
+) {
+    spawn_station_tile_with_world(
+        commands,
+        map,
+        dims,
+        assets,
+        company,
+        owner_colour,
+        ctx,
+        stations,
+        slope_half_ground,
+        show_pbs_reservations,
+        station_catalog,
+        road_stop_catalog,
+        station_sprites,
+        images,
+        catenary_newgrf,
+        catenary_sprites,
+        foundation_newgrf,
+        action5_sprites,
+        roadstop_action5,
+        climate,
+        newgrf_stack,
+        None,
+    );
+}
+
+/// Dibuja una estación y, cuando el caller aporta los pools del mundo, pasa
+/// esos datos a los scopes NewGRF de las paradas viales (vars 45–47).
+#[allow(clippy::too_many_arguments, clippy::needless_option_as_deref)]
+pub(crate) fn spawn_station_tile_with_world(
     commands: &mut Commands,
     map: &Map,
     dims: (u32, u32),
@@ -1296,6 +1349,7 @@ pub(crate) fn spawn_station_tile(
     roadstop_action5: &[Option<openttdrs_core::DecodedSprite>],
     climate: openttdrs_core::Climate,
     newgrf_stack: &[openttdrs_core::NewGrfEntry],
+    world: Option<openttdrs_core::RoadStopWorldContext<'_>>,
 ) {
     let tileh = ctx.info.tileh;
     let base_z = ctx.info.base_z;
@@ -1713,6 +1767,7 @@ pub(crate) fn spawn_station_tile(
                 images,
                 climate,
                 newgrf_stack,
+                world,
             );
         }
         StationTileClass::RoadWaypoint => {
@@ -1936,6 +1991,7 @@ fn spawn_road_stop_buildings(
     mut images: Option<&mut Assets<Image>>,
     climate: openttdrs_core::Climate,
     newgrf_stack: &[openttdrs_core::NewGrfEntry],
+    world: Option<openttdrs_core::RoadStopWorldContext<'_>>,
 ) {
     if buildings_hidden() {
         return;
@@ -1950,13 +2006,28 @@ fn spawn_road_stop_buildings(
         && let (Some(cache), Some(images)) = (action5_sprites.as_mut(), images.as_mut())
     {
         let view_u8 = u8::try_from(dir.min(5)).unwrap_or(0);
-        let mut a2 = openttdrs_core::action2_eval_ctx_for_road_stop_tile_with_catalog(
-            map,
-            stations,
-            road_stop_catalog,
-            ctx.coord,
-            view_u8,
-            climate,
+        let mut a2 = world.map_or_else(
+            || {
+                openttdrs_core::action2_eval_ctx_for_road_stop_tile_with_catalog(
+                    map,
+                    stations,
+                    road_stop_catalog,
+                    ctx.coord,
+                    view_u8,
+                    climate,
+                )
+            },
+            |world| {
+                openttdrs_core::action2_eval_ctx_for_road_stop_tile_with_catalog_and_world(
+                    map,
+                    stations,
+                    road_stop_catalog,
+                    world,
+                    ctx.coord,
+                    view_u8,
+                    climate,
+                )
+            },
         );
         a2.set_grf_params(openttdrs_core::stack_params_for_grfid(
             newgrf_stack,

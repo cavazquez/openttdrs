@@ -26,6 +26,8 @@ pub(crate) use land::{
     HouseSpawnResources, push_forest_tree, spawn_generic_land_tile, spawn_house_tile,
     spawn_industry_tile, spawn_void_tile,
 };
-pub(crate) use objects::{spawn_station_tile, spawn_transport_object_tile};
+#[cfg(test)]
+pub(crate) use objects::spawn_station_tile;
+pub(crate) use objects::{spawn_station_tile_with_world, spawn_transport_object_tile};
 pub(crate) use transport::{spawn_rail_tile, spawn_road_tile};
 pub(crate) use water::push_water_tile;

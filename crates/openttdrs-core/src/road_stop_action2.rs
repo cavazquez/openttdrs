@@ -17,7 +17,9 @@ use crate::map::{
 use crate::newgrf_sprites::Action2EvalCtx;
 use crate::newgrf_type_tables::{GrfTypeTranslationTables, reverse_road_type};
 use crate::road_stop_spec::{RoadStopSpecDef, road_stop_spec_def};
-use crate::road_type::{road_type_from_tile, tram_road_type_from_tile, vanilla_road_type_catalog};
+use crate::road_type::{
+    RoadTypeDef, road_type_from_tile, tram_road_type_from_tile, vanilla_road_type_catalog,
+};
 use crate::station::{Station, StopKind, station_at_tile};
 use crate::station_action2::populate_station_cargo_vars;
 use crate::town::{HouseZone, Town};
@@ -135,6 +137,7 @@ pub struct RoadStopWorldContext<'a> {
     pub towns: &'a [Town],
     pub companies: &'a [Company],
     pub industries: &'a [Industry],
+    pub road_type_catalog: &'a [RoadTypeDef],
 }
 
 /// Datos opcionales que diferencian el contexto local legacy del renderer
@@ -186,10 +189,17 @@ fn action2_eval_ctx_for_road_stop_tile_impl(
     );
 
     let vanilla_types = vanilla_road_type_catalog();
+    let road_type_catalog = resolution.world.map_or(vanilla_types.as_slice(), |world| {
+        if world.road_type_catalog.is_empty() {
+            vanilla_types.as_slice()
+        } else {
+            world.road_type_catalog
+        }
+    });
     let road_type = tile.map_or(u32::MAX, |tile| {
         u32::from(reverse_road_type(
             resolution.type_tables,
-            &vanilla_types,
+            road_type_catalog,
             road_type_from_tile(&tile),
         ))
     });
@@ -197,7 +207,7 @@ fn action2_eval_ctx_for_road_stop_tile_impl(
         tram_road_type_from_tile(&tile).map_or(u32::MAX, |tram| {
             u32::from(reverse_road_type(
                 resolution.type_tables,
-                &vanilla_types,
+                road_type_catalog,
                 tram,
             ))
         })
@@ -741,6 +751,7 @@ mod tests {
                 towns: &[town],
                 companies: &companies,
                 industries: &[],
+                road_type_catalog: &[],
             },
             coord,
             0,
@@ -774,6 +785,7 @@ mod tests {
                 towns: &towns,
                 companies: &companies,
                 industries: &industries,
+                road_type_catalog: &[],
             },
             coord,
             0,
@@ -793,12 +805,52 @@ mod tests {
                 towns: &towns,
                 companies: &companies,
                 industries: &industries,
+                road_type_catalog: &[],
             },
             coord,
             0,
             Climate::Temperate,
         );
         assert_eq!(accepted_ctx.parameterized_vars.get(&(0x65, 0)), Some(&8));
+    }
+
+    #[test]
+    fn road_stop_world_scope_translates_external_road_type() {
+        let coord = TileCoord::new(1, 1);
+        let mut map = Map::new_flat(4, 4, 0);
+        let mut tile = road_stop_tile(4, 3 << 3);
+        tile.m3hi = 2;
+        map.set_tile(coord, tile).expect("road stop tile");
+        let mut station = Station::new_with_kind(coord, StopKind::BusStop);
+        station.road_stop_spec = Some(7);
+        let mut spec = road_stop_spec(7, 1, 0, None);
+        spec.newgrf_type_tables = Some(crate::GrfTypeTranslationTables {
+            road: vec![*b"RNEW"],
+            ..crate::GrfTypeTranslationTables::default()
+        });
+        let catalog = vec![spec];
+        let mut road_types = crate::road_type::vanilla_road_type_catalog();
+        let mut external = road_types[0].clone();
+        external.id = crate::RoadType::from_u8(2);
+        external.label = "RNEW".into();
+        external.short_label = "RNEW".into();
+        external.from_newgrf = true;
+        road_types.push(external);
+        let ctx = action2_eval_ctx_for_road_stop_tile_with_catalog_and_world(
+            &map,
+            std::slice::from_ref(&station),
+            &catalog,
+            RoadStopWorldContext {
+                towns: &[],
+                companies: &[],
+                industries: &[],
+                road_type_catalog: &road_types,
+            },
+            coord,
+            0,
+            Climate::Temperate,
+        );
+        assert_eq!(ctx.vars.get(&0x43), Some(&0));
     }
 
     #[test]

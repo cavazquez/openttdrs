@@ -95,13 +95,20 @@ pub(crate) fn sync_map_tile_spawn_viewport(
             }
         })
         .unwrap_or(viewport.last_ortho_scale);
+    let overview_stride = overview_stride_for_viewport(ortho_scale, needed);
     let scale_changed = (ortho_scale - viewport.last_ortho_scale).abs() > f32::EPSILON;
+    let representation_changed = overview_stride != viewport.last_overview_stride;
     if scale_changed || !viewport.bounds.contains(needed) {
         viewport.bounds = needed;
         viewport.last_ortho_scale = ortho_scale;
+        viewport.last_overview_stride = overview_stride;
         pending.pending = true;
         pending.sync_camera = false;
-        pending.full = false;
+        // Overview y detalle no comparten entidades: tratar el cambio como
+        // rebuild completo evita conservar rombos agregados al volver a
+        // acercar (o dejar huecos al alejar) mientras el índice de chunks aún
+        // describe la representación anterior.
+        pending.full |= representation_changed;
         // El borde del viewport puede cambiar dentro del mismo chunk de 16×16;
         // en ese caso el plan incremental no agrega/quita chunks, pero sí hay
         // que volver a filtrar las etiquetas por el nuevo viewport.

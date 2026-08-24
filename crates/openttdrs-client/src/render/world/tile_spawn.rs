@@ -756,6 +756,7 @@ pub(crate) fn setup(
     commands.insert_resource(MapTileSpawnViewport {
         bounds: spawn_bounds,
         last_ortho_scale: cam_scale,
+        last_overview_stride: overview_stride_for_viewport(cam_scale, spawn_bounds),
     });
     let atlas = TileAtlas::build(&asset_server, &mut asset_stores.layout_assets);
     let mut assets = WorldAssets::load(&atlas, &mut asset_stores.images);

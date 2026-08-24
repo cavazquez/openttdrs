@@ -178,6 +178,13 @@ siguiente trabajo debe extenderse a piezas visibles de puentes y familias
 NewGRF de estación, aeropuertos y objetos, sin rebajar el baseline ni
 extrapolar una región a paridad general.
 
+El camino de zoom conserva ahora también la representación correcta al cruzar
+el límite de detalle: si el viewport pasa de overview `4×/8×` a sprites
+individuales (o cambia entre ambos strides), el remap fuerza un rebuild y no
+reutiliza los chunks que describían la capa anterior. Esto corrige el caso de
+rombos persistentes/franjas negras después de alejar y volver a acercar; no
+reduce la diferencia raster global ni cierra #326.
+
 El perfil `CLEAN` normaliza la UI, las preferencias persistidas y los overrides
 de transparencia conocidos, pero no convierte al renderer actual en un gate
 pixel-perfect: mientras el orden global de composición siga divergente, la

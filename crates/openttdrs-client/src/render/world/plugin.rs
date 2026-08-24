@@ -257,6 +257,11 @@ pub(crate) struct MapTileSpawnViewport {
     pub(crate) bounds: TileViewportBounds,
     /// Último `OrthographicProjection::scale` usado para `bounds` (detectar zoom).
     pub(crate) last_ortho_scale: f32,
+    /// Representación materializada del viewport: `None` es detalle y `Some`
+    /// es el stride del overview (`Out4x`/`Out8x`). Cuando cambia, no alcanza
+    /// con refrescar chunks: hay que reemplazar los sprites agregados por los
+    /// detallados (o viceversa).
+    pub(crate) last_overview_stride: Option<u32>,
 }
 
 impl Default for MapTileSpawnViewport {
@@ -264,6 +269,7 @@ impl Default for MapTileSpawnViewport {
         Self {
             bounds: TileViewportBounds::full(1, 1),
             last_ortho_scale: 1.0,
+            last_overview_stride: None,
         }
     }
 }

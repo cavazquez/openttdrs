@@ -114,6 +114,7 @@ pub(crate) fn apply_remap_map_visuals(
     commands.insert_resource(MapTileSpawnViewport {
         bounds: spawn_bounds,
         last_ortho_scale: ortho_scale,
+        last_overview_stride: overview_stride,
     });
 
     let use_incremental = !full_rebuild

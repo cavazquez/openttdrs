@@ -21,6 +21,14 @@ el rombo lógico de 64×32 píxeles y un respaldo opaco del color del terreno: a
 las esquinas transparentes del sprite OpenGFX no abren grietas negras entre
 bloques ampliados.
 
+El cambio de representación también es explícito: al cruzar el umbral entre
+detalle y overview (o entre `Out4x` y `Out8x`) el cliente descarta la capa
+anterior y reconstruye la nueva. Antes sólo cambiaba el `scale` y los chunks
+seguían marcados como cargados, por lo que una sesión que se alejaba y volvía a
+acercar podía conservar rombos agregados o dejar franjas negras. La regresión
+`render::world::tests::setup_and_apply_remap_covers_multiple_fixed_zoom_levels`
+mantiene además el smoke de `1×`, `2×`, `4×` y `8×` después de cada rebuild.
+
 Las etiquetas compensan la escala ortográfica para seguir siendo legibles y se
 componen en el mismo orden de OpenTTD: pueblos → carteles → estaciones. No se
 eliminan por colisión; el viewport oficial agrega todos los signos dentro del

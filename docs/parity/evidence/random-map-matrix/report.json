@@ -26,11 +26,11 @@
     "exact_cases": 0,
     "divergent_cases": 15,
     "error_cases": 0,
-    "min_changed_tiles": 1843,
-    "max_changed_tiles": 137590,
+    "min_changed_tiles": 1700,
+    "max_changed_tiles": 136048,
     "changed_blocks4_cases": 15,
     "status": "open-product-gap",
-    "note": "Corrida posterior a portar la suma de octavas de costa sin normalizar y FixSlopes, además de compartir el stream Randomizer entre TGP, GenerateClearTile, pueblos, industrias y árboles; aún divergen el algoritmo/consumo exacto de esas etapas, GenerateObjects y m1..m8."
+    "note": "Corrida posterior a portar la suma de octavas de costa sin normalizar, FixSlopes y el descarte de MP_VOID en TileLoop_Water, además de compartir el stream Randomizer entre TGP, GenerateClearTile, pueblos, industrias y árboles; aún divergen el algoritmo/consumo exacto de esas etapas, GenerateObjects y m1..m8."
   },
   "comparison": {
     "fields": ["height", "type", "m1", "m2", "m3", "m4", "m5", "m6", "m7", "m8"],

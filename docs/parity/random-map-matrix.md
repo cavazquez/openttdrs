@@ -67,25 +67,26 @@ convertirse en gate de release.
 | 128×128 | 4 | 16.384 | 1.024 | **4/4 exactos** | 0/4 exactos; 4/4 divergen |
 | 256×256 | 2 | 65.536 | 4.096 | **2/2 exactos** | 0/2 exactos; 2/2 divergen |
 | 512×512 | 1 | 262.144 | 16.384 | **1/1 exacto** | 0/1 exacto; 1/1 diverge |
-| **Total** | **15** | — | — | **15/15; 0 teselas y 0 bloques cambiados** | **0/15; 15/15 divergen; 2.168–138.528 teselas distintas por caso; 15/15 bloques completos afectados** |
+| **Total** | **15** | — | — | **15/15; 0 teselas y 0 bloques cambiados** | **0/15; 15/15 divergen; 1.700–136.048 teselas distintas por caso; 15/15 bloques completos afectados** |
 
-La divergencia del generador aparece ya en la primera tesela del caso 64×64
-(altura y tipo distintos) y no es un problema de resolución de la imagen:
+La divergencia del generador aparece en las primeras teselas del caso 64×64
+(según la semilla puede ser `m3` de agua, altura de un borde o tipo de una
+entidad) y no es un problema de resolución de la imagen:
 afecta al estado lógico del mapa. El generador Rust ahora porta la escala TGP,
 el RNG previo a la normalización, la suma de octavas de costa sin normalizar
 (igual que `perlin_coast_noise_2D`), `FixSlopes`, las costas de OpenTTD,
 `water_borders`, los bordes `MP_VOID`, el conteo de ríos y la etapa inicial de
-pueblos/industrias. Eso redujo la sonda 64×64 de 2.230 a 2.176 teselas
-distintas (y la matriz completa queda en 1.843–137.590), pero aún no es una
+pueblos/industrias. Eso redujo la sonda 64×64 de 2.230 a 2.176 y luego a 2.034
+teselas distintas (y la matriz completa queda en 1.700–136.048), pero aún no es una
 reproducción bit a bit de `GenerateLandscape`/`genworld`: quedan el
 algoritmo/consumo exacto de ríos, pueblos, industrias y árboles,
 `GenerateObjects` y sus bytes `m1..m8`. El flujo procedural ya conserva un
 único `Randomizer` entre TGP, `GenerateClearTile`, pueblos, industrias y
 árboles; la medición no debe interpretarse como paridad del generador.
 
-La última sonda reproducible sobre 64×64, seed `1330928978`, reporta 2.230
-teselas distintas después de compartir el stream de RNG y comparar después de
-esos 1280 ciclos. Sigue siendo evidencia diagnóstica local (checkout de
+La última sonda reproducible sobre 64×64, seed `1330928978`, reporta 2.034
+teselas distintas después de descartar `MP_VOID` en el tile loop de agua,
+compartir el stream de RNG y comparar después de esos 1280 ciclos. Sigue siendo evidencia diagnóstica local (checkout de
 referencia `c2661164`), no un cierre de RMAP-004.
 
 ## Estado e issues

@@ -327,7 +327,11 @@ fn try_flood_neighbor(state: &mut GameState, from: TileCoord, dir: u8) -> bool {
     let Some(dest_tile) = state.map.get(dest) else {
         return false;
     };
-    if dest_tile.kind == TileKind::Water {
+    // OpenTTD's `IsValidTile` rejects MP_VOID before deciding whether the
+    // neighbour keeps flooding alive. Void borders are a rendering edge, not
+    // land that can become water; counting them here leaves every edge sea
+    // tile in a permanent flooding state and diverges in m3 bit 0.
+    if matches!(dest_tile.kind, TileKind::Water | TileKind::Void) {
         return false;
     }
     if dest_tile.kind == TileKind::Station {
@@ -516,6 +520,28 @@ mod tests {
         let tile = state.map.get(water).unwrap();
         tile_loop_water_at(&mut state, water, tile);
         assert_eq!(state.map.get_kind(land), Some(TileKind::Grass));
+    }
+
+    #[test]
+    fn void_border_does_not_keep_sea_tile_flooding() {
+        let mut state = GameState::new(8, 8);
+        flatten_sea_level(&mut state.map);
+        for y in 0..8 {
+            for x in 0..8 {
+                let c = TileCoord::new(x, y);
+                if x == 0 || y == 0 || x == 7 || y == 7 {
+                    state.map.set_kind(c, TileKind::Void).unwrap();
+                } else {
+                    sea_at(&mut state.map, c);
+                }
+            }
+        }
+
+        let edge_sea = TileCoord::new(1, 1);
+        let tile = state.map.get(edge_sea).unwrap();
+        tile_loop_water_at(&mut state, edge_sea, tile);
+
+        assert_eq!(state.map.get(edge_sea).unwrap().m3 & 1, 1);
     }
 
     #[test]

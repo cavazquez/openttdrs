@@ -396,12 +396,19 @@ fn phase_tile_animation(state: &mut GameState, t: u64) {
     }
     let airport_dirty = crate::map::step_airport_tiles(&mut state.map, t, &state.stations);
     state.runtime.industry_tile_dirty.extend(airport_dirty);
-    let road_stop_dirty = crate::map::step_newgrf_road_stop_tiles(
+    let road_stop_dirty = crate::map::step_newgrf_road_stop_tiles_with_world(
         &state.map,
         t,
         &mut state.stations,
         &state.road_stop_spec_catalog,
         &visits,
+        Some(crate::RoadStopCallbackWorld {
+            map: &state.map,
+            road_stop_catalog: &state.road_stop_spec_catalog,
+            towns: &state.towns,
+            companies: &state.companies,
+            climate: state.climate,
+        }),
     );
     state.runtime.industry_tile_dirty.extend(road_stop_dirty);
     let station_dirty = crate::map::step_newgrf_station_tiles(
@@ -625,7 +632,7 @@ pub(super) fn trigger_road_stop_animation_at(
                     },
                 )
             });
-        let animation_changed = crate::newgrf_callback::trigger_road_stop_animation_at(
+        let animation_changed = crate::newgrf_callback::trigger_road_stop_animation_at_with_world(
             def,
             &mut state.stations[station_index],
             tile_pos,
@@ -633,6 +640,13 @@ pub(super) fn trigger_road_stop_animation_at(
             trigger,
             cargo_local_id,
             tick,
+            Some(crate::RoadStopCallbackWorld {
+                map: &state.map,
+                road_stop_catalog: &state.road_stop_spec_catalog,
+                towns: &state.towns,
+                companies: &state.companies,
+                climate,
+            }),
         );
         if randomisation_changed || animation_changed {
             state.runtime.industry_tile_dirty.push(tile_pos);

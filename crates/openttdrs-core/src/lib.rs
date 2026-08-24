@@ -387,7 +387,8 @@ pub use newgrf_actions::{
     parse_action0_sound_meta, parse_action0_station_meta, parse_action0_train_meta,
 };
 pub use newgrf_callback::{
-    action2_eval_ctx_from_station, action2_eval_ctx_from_vehicle, advance_road_stop_animation,
+    RoadStopCallbackWorld, action2_eval_ctx_from_station, action2_eval_ctx_from_vehicle,
+    advance_road_stop_animation, advance_road_stop_animation_at_with_world,
     apply_house_construction_callback, apply_industry_location_callback,
     apply_industry_tile_anim_callback, apply_object_slope_callback,
     apply_station_availability_callback, apply_station_availability_callback_for_build,
@@ -395,8 +396,8 @@ pub use newgrf_callback::{
     callback_allows_placement, resolve_callback_or_failed, resolve_cargo_profit_callback,
     resolve_cargo_station_rating_callback, resolve_industry_tile_animation_callback,
     resolve_industry_tile_random_trigger, resolve_vehicle_callback, trigger_road_stop_animation,
-    vehicle_start_stop_callback_allows, writeback_station_persistent_registers,
-    writeback_vehicle_persistent_registers,
+    trigger_road_stop_animation_at_with_world, vehicle_start_stop_callback_allows,
+    writeback_station_persistent_registers, writeback_vehicle_persistent_registers,
 };
 pub use newgrf_config::{
     GrfContainerVersion, GrfFileInfo, GrfParsed, GrfScanError, GrfStackIssue, MAX_NEWGRF_PARAMS,

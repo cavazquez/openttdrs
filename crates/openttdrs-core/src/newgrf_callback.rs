@@ -11,7 +11,7 @@ use crate::engine::EngineDef;
 use crate::house_spec::HouseSpecDef;
 use crate::industry_spec::IndustrySpecDef;
 use crate::industry_tile::IndustryTileSpecDef;
-use crate::map::TileCoord;
+use crate::map::{Map, TileCoord};
 use crate::newgrf_sprites::{
     Action2EvalCtx, Action2RandomEntry, CALLBACK_FAILED, CBID_CARGO_PROFIT_CALC,
     CBID_CARGO_STATION_RATING_CALC, CBID_HOUSE_ALLOW_CONSTRUCTION, CBID_INDUSTRY_LOCATION,
@@ -20,10 +20,27 @@ use crate::newgrf_sprites::{
     CBID_VEHICLE_START_STOP_CHECK, TrainSpriteGraphics,
 };
 use crate::object_spec::ObjectSpecDef;
+use crate::road_stop_action2::{
+    RoadStopWorldContext, action2_eval_ctx_for_road_stop_tile_with_catalog_and_world,
+};
+use crate::road_stop_spec::RoadStopSpecDef;
 use crate::station::Station;
 use crate::station_class::{StationAnimationTrigger, StationRandomTrigger};
+use crate::town::Town;
 use crate::vehicle::{Vehicle, VehicleKind};
 use crate::{CargoType, RoadType, StopKind};
+
+/// Contexto que el scheduler de callbacks necesita para reproducir los scopes
+/// de una parada vial ya colocada. El renderer ya usaba estos pools; ahora las
+/// rutas CB140–CB142 reciben el mismo mapa, catálogo y contexto de mundo.
+#[derive(Clone, Copy)]
+pub struct RoadStopCallbackWorld<'a> {
+    pub map: &'a Map,
+    pub road_stop_catalog: &'a [RoadStopSpecDef],
+    pub towns: &'a [Town],
+    pub companies: &'a [crate::company::Company],
+    pub climate: crate::Climate,
+}
 
 /// Escribe `persistent_registers` del ctx al vehículo.
 ///
@@ -438,6 +455,7 @@ pub fn apply_road_stop_availability_callback(
 /// scopes vecinos, road/tram por tesela y textos/sounds del resultado siguen
 /// siendo una extensión separada; `0x43`/`0x44` se marcan inválidos en este
 /// scheduler porque no participa de una query de construcción.
+#[allow(clippy::too_many_arguments)]
 fn resolve_road_stop_animation_callback(
     def: &crate::road_stop_spec::RoadStopSpecDef,
     station: &mut Station,
@@ -446,12 +464,16 @@ fn resolve_road_stop_animation_callback(
     callback: u16,
     param1: u32,
     param2: u32,
+    world: Option<RoadStopCallbackWorld<'_>>,
 ) -> u16 {
     let Some(runtime) = def.newgrf_runtime.as_ref() else {
         return CALLBACK_FAILED;
     };
 
-    let mut ctx = action2_eval_ctx_from_station(station);
+    let mut ctx = world.map_or_else(
+        || action2_eval_ctx_from_road_stop(station, tile),
+        |world| action2_eval_ctx_from_road_stop_with_world(station, tile, view, world),
+    );
     ctx.random_bits = param1;
     ctx.vars.insert(0x40, u32::from(view));
     ctx.vars.insert(
@@ -462,12 +484,14 @@ fn resolve_road_stop_animation_callback(
             _ => 2,
         },
     );
-    // Las animaciones se ejecutan sobre una tesela ya construida. El contexto
-    // completo de mapa (road/tram y vecinos) lo aporta el renderer; aquí se
-    // preserva el contrato de callback y el estado individual de la tesela.
-    ctx.vars.insert(0x42, 0);
-    ctx.vars.insert(0x43, u32::MAX);
-    ctx.vars.insert(0x44, u32::MAX);
+    // Las APIs legacy no tienen mapa y conservan los sentinelas de compra.
+    // Cuando el scheduler entrega mundo, la ruta anterior ya materializó
+    // terreno, road/tram, pueblo, compañía y vecindad reales.
+    if world.is_none() {
+        ctx.vars.insert(0x42, 0);
+        ctx.vars.insert(0x43, u32::MAX);
+        ctx.vars.insert(0x44, u32::MAX);
+    }
     ctx.vars
         .insert(0x49, u32::from(station.road_stop_animation_frame_at(tile)));
     let result =
@@ -525,6 +549,31 @@ pub fn trigger_road_stop_animation_at(
     cargo_local_id: Option<u8>,
     tick: u64,
 ) -> bool {
+    trigger_road_stop_animation_at_with_world(
+        def,
+        station,
+        tile,
+        view,
+        trigger,
+        cargo_local_id,
+        tick,
+        None,
+    )
+}
+
+/// Variante de [`trigger_road_stop_animation_at`] con el contexto completo
+/// del mundo para los scopes `RoadStop` de los callbacks.
+#[allow(clippy::too_many_arguments)]
+pub fn trigger_road_stop_animation_at_with_world(
+    def: &crate::road_stop_spec::RoadStopSpecDef,
+    station: &mut Station,
+    tile: TileCoord,
+    view: u8,
+    trigger: StationAnimationTrigger,
+    cargo_local_id: Option<u8>,
+    tick: u64,
+    world: Option<RoadStopCallbackWorld<'_>>,
+) -> bool {
     if def.animation_triggers & trigger.mask() == 0 {
         return false;
     }
@@ -544,6 +593,7 @@ pub fn trigger_road_stop_animation_at(
         CBID_STATION_ANIMATION_TRIGGER,
         road_stop_animation_random_bits(station, tile, tick),
         trigger.callback_param(cargo_local_id),
+        world,
     );
     if result == CALLBACK_FAILED {
         return false;
@@ -577,6 +627,26 @@ fn action2_eval_ctx_from_road_stop(station: &Station, tile: TileCoord) -> Action
     ctx.random_bits = u32::from(station.newgrf_random_bits)
         | (u32::from(station.road_stop_random_bits_at(tile)) << 16);
     ctx
+}
+
+fn action2_eval_ctx_from_road_stop_with_world(
+    station: &Station,
+    tile: TileCoord,
+    view: u8,
+    world: RoadStopCallbackWorld<'_>,
+) -> Action2EvalCtx {
+    action2_eval_ctx_for_road_stop_tile_with_catalog_and_world(
+        world.map,
+        std::slice::from_ref(station),
+        world.road_stop_catalog,
+        RoadStopWorldContext {
+            towns: world.towns,
+            companies: world.companies,
+        },
+        tile,
+        view,
+        world.climate,
+    )
 }
 
 fn road_stop_random_u16(world_seed: u64, tick: u64, pos: TileCoord, salt: u64) -> u16 {
@@ -722,6 +792,19 @@ pub fn advance_road_stop_animation_at(
     view: u8,
     tick: u64,
 ) -> bool {
+    advance_road_stop_animation_at_with_world(def, station, tile, view, tick, None)
+}
+
+/// Variante de [`advance_road_stop_animation_at`] con el contexto completo
+/// del mundo para CB141/CB142.
+pub fn advance_road_stop_animation_at_with_world(
+    def: &crate::road_stop_spec::RoadStopSpecDef,
+    station: &mut Station,
+    tile: TileCoord,
+    view: u8,
+    tick: u64,
+    world: Option<RoadStopCallbackWorld<'_>>,
+) -> bool {
     let active = station
         .road_stop_tile_state(tile)
         .map_or(station.road_stop_animation_active, |state| {
@@ -741,6 +824,7 @@ pub fn advance_road_stop_animation_at(
             CBID_STATION_ANIMATION_SPEED,
             0,
             0,
+            world,
         );
         if result != CALLBACK_FAILED {
             speed = u8::try_from(result & 0xFF).unwrap_or(16).min(16);
@@ -765,6 +849,7 @@ pub fn advance_road_stop_animation_at(
             CBID_STATION_ANIMATION_NEXT_FRAME,
             random_bits,
             0,
+            world,
         );
         if result != CALLBACK_FAILED {
             let state = station.ensure_road_stop_tile_state(tile);
@@ -1521,6 +1606,70 @@ mod tests {
             3,
         ));
         assert_eq!(station.road_stop_animation_frame, 5);
+    }
+
+    #[test]
+    #[allow(clippy::expect_used)]
+    fn road_stop_animation_callback_receives_world_scopes() {
+        let def = crate::RoadStopSpecDef {
+            id: 1,
+            class: 0,
+            label: "world".into(),
+            short_label: "WORLD".into(),
+            stop_type: crate::ROADSTOP_TYPE_BUS,
+            from_newgrf: true,
+            grfid: 1,
+            newgrf_local_id: 0,
+            newgrf_grf_version: 8,
+            draw_mode: crate::ROADSTOP_DRAW_MODE_DEFAULT,
+            random_cargo_triggers: 0,
+            flags: 0,
+            callback_mask: 0,
+            animation_status: 1,
+            animation_frames: 8,
+            animation_speed: 0,
+            animation_triggers: crate::ROADSTOP_ANIMATION_TRIGGER_BUILT,
+            newgrf_views: Vec::new(),
+            newgrf_runtime: Some(Box::new(gfx_callback_variable_byte(0x46, 0))),
+            newgrf_type_tables: None,
+            associated_badges: Vec::new(),
+        };
+        let catalog = vec![def.clone()];
+        let coord = TileCoord::new(1, 2);
+        let mut map = crate::Map::new_flat(8, 8, 0);
+        let mut tile = map.get(coord).expect("tile");
+        tile.kind = crate::TileKind::Station;
+        tile.m5 = crate::RSV_BAY_NE;
+        map.set_tile(coord, tile).expect("station tile");
+        let mut station = Station::new_with_kind(coord, StopKind::BusStop);
+        station.road_stop_spec = Some(def.id);
+        let towns = vec![crate::Town {
+            pos: TileCoord::new(0, 0),
+            ..crate::Town::default()
+        }];
+        let companies = Vec::new();
+
+        assert!(trigger_road_stop_animation_at_with_world(
+            &def,
+            &mut station,
+            coord,
+            crate::RSV_BAY_NE,
+            StationAnimationTrigger::Built,
+            None,
+            1,
+            Some(RoadStopCallbackWorld {
+                map: &map,
+                road_stop_catalog: &catalog,
+                towns: &towns,
+                companies: &companies,
+                climate: crate::Climate::Temperate,
+            }),
+        ));
+        assert_eq!(
+            station.road_stop_animation_frame_at(coord),
+            5,
+            "CB140 debe ver var 46 = distancia cuadrática 5"
+        );
     }
 
     #[test]

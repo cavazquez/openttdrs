@@ -8,8 +8,8 @@ use crate::cargo::CargoType;
 use crate::company::Company;
 use crate::map::{Map, TileCoord, TileKind};
 use crate::newgrf_callback::{
-    advance_road_stop_animation_at, trigger_road_stop_animation_at,
-    writeback_station_persistent_registers,
+    RoadStopCallbackWorld, advance_road_stop_animation_at_with_world,
+    trigger_road_stop_animation_at_with_world, writeback_station_persistent_registers,
 };
 use crate::newgrf_sprites::{
     CALLBACK_FAILED, CBID_STATION_ANIMATION_NEXT_FRAME, CBID_STATION_ANIMATION_SPEED,
@@ -84,6 +84,18 @@ pub fn step_newgrf_road_stop_tiles(
     catalog: &[RoadStopSpecDef],
     tile_loop_visits: &[(TileCoord, crate::map::Tile)],
 ) -> Vec<TileCoord> {
+    step_newgrf_road_stop_tiles_with_world(map, tick, stations, catalog, tile_loop_visits, None)
+}
+
+/// Variante que entrega al scheduler los pools del mundo para CB140–CB142.
+pub fn step_newgrf_road_stop_tiles_with_world(
+    map: &Map,
+    tick: u64,
+    stations: &mut [Station],
+    catalog: &[RoadStopSpecDef],
+    tile_loop_visits: &[(TileCoord, crate::map::Tile)],
+    world: Option<RoadStopCallbackWorld<'_>>,
+) -> Vec<TileCoord> {
     let mut dirty = Vec::new();
 
     for (coord, tile) in tile_loop_visits {
@@ -102,7 +114,7 @@ pub fn step_newgrf_road_stop_tiles(
         let Some(def) = road_stop_spec_def(catalog, spec_id) else {
             continue;
         };
-        if trigger_road_stop_animation_at(
+        if trigger_road_stop_animation_at_with_world(
             def,
             &mut stations[index],
             *coord,
@@ -110,6 +122,7 @@ pub fn step_newgrf_road_stop_tiles(
             StationAnimationTrigger::TileLoop,
             None,
             tick,
+            world,
         ) {
             dirty.push(*coord);
         }
@@ -130,7 +143,8 @@ pub fn step_newgrf_road_stop_tiles(
             let Some(tile) = map.get(coord) else {
                 continue;
             };
-            if advance_road_stop_animation_at(def, station, coord, tile.m5, tick) {
+            if advance_road_stop_animation_at_with_world(def, station, coord, tile.m5, tick, world)
+            {
                 dirty.push(coord);
             }
         }

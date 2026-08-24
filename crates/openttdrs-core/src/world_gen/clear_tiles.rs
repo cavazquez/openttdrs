@@ -17,12 +17,11 @@ use super::population::scale_by_size;
 
 /// Materializa suelo áspero y grupos de roca antes de pueblos, industrias y
 /// árboles, como `GenerateClearTile` en `genworld.cpp`.
-pub(crate) fn generate_clear_tiles(map: &mut Map, seed: u64, preserve: &[PreserveRect]) {
+pub(crate) fn generate_clear_tiles(map: &mut Map, rng: &mut Randomizer, preserve: &[PreserveRect]) {
     let (map_w, map_h) = map.dimensions();
     if map_w == 0 || map_h == 0 {
         return;
     }
-    let mut rng = Randomizer::new(seed as u32);
     let rough_steps = scale_by_size((rng.next() & 0x3FF) + 0x400, map_w, map_h);
     let rock_groups = scale_by_size((rng.next() & 0x7F) + 0x80, map_w, map_h);
 
@@ -94,14 +93,17 @@ fn set_ground(map: &mut Map, c: TileCoord, ground: u8) {
 #[cfg(test)]
 mod tests {
     use super::generate_clear_tiles;
+    use crate::cargodist::parity::Randomizer;
     use crate::map::{Map, TileKind};
 
     #[test]
     fn clear_generation_is_deterministic_and_keeps_map_kind() {
         let mut a = Map::new_flat(64, 64, 0);
         let mut b = a.clone();
-        generate_clear_tiles(&mut a, 42, &[]);
-        generate_clear_tiles(&mut b, 42, &[]);
+        let mut rng_a = Randomizer::new(42);
+        let mut rng_b = Randomizer::new(42);
+        generate_clear_tiles(&mut a, &mut rng_a, &[]);
+        generate_clear_tiles(&mut b, &mut rng_b, &[]);
         assert_eq!(a.tiles(), b.tiles());
         assert!(a.tiles().iter().any(|tile| tile.m5 >> 2 == 1));
         assert!(a.tiles().iter().any(|tile| tile.m5 >> 2 == 2));

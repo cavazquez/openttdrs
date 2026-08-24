@@ -43,11 +43,22 @@ struct Point {
 /// La función es pública para que las herramientas de comparación puedan
 /// aislar la etapa `GenerateTrees` sin ejecutar pueblos o industrias.
 pub fn generate_trees(map: &mut Map, climate: Climate, seed: u64, preserve: &[PreserveRect]) {
+    let mut rng = Randomizer::new(seed as u32);
+    generate_trees_with_rng(map, climate, &mut rng, preserve);
+}
+
+/// Variante de [`generate_trees`] que continúa el stream global de generación
+/// de `OpenTTD` después de terreno, suelo, pueblos e industrias.
+pub fn generate_trees_with_rng(
+    map: &mut Map,
+    climate: Climate,
+    rng: &mut Randomizer,
+    preserve: &[PreserveRect],
+) {
     let (map_w, map_h) = map.dimensions();
     if map_w < 4 || map_h < 4 {
         return;
     }
-    let mut rng = Randomizer::new(seed as u32);
     let attempts = scale_by_size(DEFAULT_TREE_STEPS, map_w, map_h);
     let groups = if matches!(climate, Climate::Toyland) {
         0
@@ -57,7 +68,7 @@ pub fn generate_trees(map: &mut Map, climate: Climate, seed: u64, preserve: &[Pr
 
     for _ in 0..groups {
         let center = random_tile(rng.next(), map_w, map_h);
-        let grove = random_grove(&mut rng);
+        let grove = random_grove(rng);
         for _ in 0..DEFAULT_TREE_STEPS {
             let r = rng.next();
             let x = ((r & 0x1F) as i32) - GROVE_RADIUS;
@@ -94,7 +105,7 @@ pub fn generate_trees(map: &mut Map, climate: Climate, seed: u64, preserve: &[Pr
                     // otherwise sparse random pass into visible groves on
                     // hilly maps.
                     for _ in 0..u32::from(height).saturating_mul(2) {
-                        place_tree_at_same_height(map, tile, height, &mut rng, climate, preserve);
+                        place_tree_at_same_height(map, tile, height, rng, climate, preserve);
                     }
                 }
             }

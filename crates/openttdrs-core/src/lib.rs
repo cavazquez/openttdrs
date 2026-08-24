@@ -673,10 +673,11 @@ pub use world_gen::{
     CLEAR_GROUND_SNOW, Climate, DEF_DESERT_COVERAGE, DEF_SNOW_COVERAGE, DEF_SNOW_LINE_HEIGHT,
     HeightmapData, IndustryDensity, NUM_INITIAL_INDUSTRIES, NUM_INITIAL_TOWNS, PopulationGenConfig,
     PreserveRect, QuantitySeaLakes, TerrainType, TgenSmoothness, TownDensity, WorldGenConfig,
-    apply_heightmap, apply_population_gen, apply_world_gen, ceil_div, clear_ground_m5,
-    effective_clear_ground, generate_industries, generate_towns, generate_trees, house_beside_road,
-    industry_target_count, initial_clear_ground, parse_hmap, road_tiles_are_flat, scale_by_size,
-    serialize_heightmap, town_target_count,
+    WorldGenRng, apply_heightmap, apply_population_gen, apply_population_gen_with_rng,
+    apply_world_gen, apply_world_gen_with_rng, ceil_div, clear_ground_m5, effective_clear_ground,
+    generate_industries, generate_towns, generate_trees, generate_trees_with_rng,
+    house_beside_road, industry_target_count, initial_clear_ground, parse_hmap,
+    road_tiles_are_flat, scale_by_size, serialize_heightmap, town_target_count,
 };
 
 #[cfg(test)]

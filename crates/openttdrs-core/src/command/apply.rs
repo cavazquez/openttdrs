@@ -714,8 +714,9 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
                 island: *island,
                 ..crate::world_gen::WorldGenConfig::default().with_height_span(*height_span)
             };
-            crate::world_gen::apply_world_gen(&mut state.map, &cfg, &[])
-                .map_err(|_| CommandError::OutOfBounds)?;
+            let mut generation_rng =
+                crate::world_gen::apply_world_gen_with_rng(&mut state.map, &cfg, &[])
+                    .map_err(|_| CommandError::OutOfBounds)?;
             state.climate = *climate;
             state.world_seed = seed;
             state.towns.clear();
@@ -724,7 +725,7 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
             state.vehicles.clear();
             state.signs.clear();
             // Orden genworld: terreno → pueblos → industrias (P3.1).
-            crate::world_gen::apply_population_gen(
+            crate::world_gen::apply_population_gen_with_rng(
                 state,
                 &crate::world_gen::PopulationGenConfig {
                     town_density: crate::world_gen::TownDensity::Normal,
@@ -732,6 +733,7 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
                     seed,
                 },
                 &[],
+                &mut generation_rng,
             );
             Ok(())
         }

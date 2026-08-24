@@ -67,7 +67,7 @@ convertirse en gate de release.
 | 128×128 | 4 | 16.384 | 1.024 | **4/4 exactos** | 0/4 exactos; 4/4 divergen |
 | 256×256 | 2 | 65.536 | 4.096 | **2/2 exactos** | 0/2 exactos; 2/2 divergen |
 | 512×512 | 1 | 262.144 | 16.384 | **1/1 exacto** | 0/1 exacto; 1/1 diverge |
-| **Total** | **15** | — | — | **15/15; 0 teselas y 0 bloques cambiados** | **0/15; 15/15 divergen; 3.846–260.108 teselas distintas por caso; 15/15 bloques completos afectados** |
+| **Total** | **15** | — | — | **15/15; 0 teselas y 0 bloques cambiados** | **0/15; 15/15 divergen; 2.168–138.528 teselas distintas por caso; 15/15 bloques completos afectados** |
 
 La divergencia del generador aparece ya en la primera tesela del caso 64×64
 (altura y tipo distintos) y no es un problema de resolución de la imagen:
@@ -76,13 +76,15 @@ el RNG previo a la normalización, las costas de OpenTTD, `water_borders`, los
 bordes `MP_VOID`, el conteo de ríos y la etapa inicial de pueblos/industrias.
 Eso corrigió la causa gruesa (el resultado ya no es un heightmap sin población),
 pero aún no es una reproducción bit a bit de `GenerateLandscape`/`genworld`:
-quedan los ríos y la secuencia exacta de pueblos, industrias, objetos, árboles
-y sus bytes `m1..m8`.
+quedan el algoritmo/consumo exacto de ríos, pueblos, industrias y árboles,
+`GenerateObjects` y sus bytes `m1..m8`. El flujo procedural ya conserva un
+único `Randomizer` entre TGP, `GenerateClearTile`, pueblos, industrias y
+árboles; la medición no debe interpretarse como paridad del generador.
 
-La última sonda reproducible sobre 64×64, seed `1330928978`, bajó de 3121 a
-2073 teselas distintas al corregir la densidad inicial `MakeClear(..., 3)` y
-comparar después de esos 1280 ciclos. Sigue siendo evidencia diagnóstica
-local (checkout de referencia `c2661164`), no un cierre de RMAP-004.
+La última sonda reproducible sobre 64×64, seed `1330928978`, reporta 2.230
+teselas distintas después de compartir el stream de RNG y comparar después de
+esos 1280 ciclos. Sigue siendo evidencia diagnóstica local (checkout de
+referencia `c2661164`), no un cierre de RMAP-004.
 
 ## Estado e issues
 

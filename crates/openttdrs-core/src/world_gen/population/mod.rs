@@ -13,6 +13,7 @@
 mod industries;
 mod towns;
 
+use crate::cargodist::parity::Randomizer;
 use crate::game_state::GameState;
 use crate::map::{Map, TileCoord, TileKind, tile_slope_and_z};
 use crate::world_gen::PreserveRect;
@@ -138,7 +139,7 @@ pub fn generate_towns(
     preserve: &[PreserveRect],
 ) -> usize {
     let (mw, mh) = state.map.dimensions();
-    let mut rng = SeededRng::new(resolve_population_seed(state, cfg.seed));
+    let mut rng = Randomizer::new(resolve_population_seed(state, cfg.seed) as u32);
     let mut town_centers = Vec::new();
     let mut ctx = PopCtx {
         state,
@@ -165,7 +166,7 @@ pub fn generate_industries(
     let (mw, mh) = state.map.dimensions();
     // Desplazamos el RNG respecto a towns para no repetir la misma secuencia.
     let seed = resolve_population_seed(state, cfg.seed).wrapping_add(0x494E_4453_5452);
-    let mut rng = SeededRng::new(seed);
+    let mut rng = Randomizer::new(seed as u32);
     let town_centers: Vec<TileCoord> = state.towns.iter().map(|t| t.pos).collect();
     let mut ctx = PopCtx {
         state,
@@ -187,14 +188,25 @@ pub fn apply_population_gen(
     cfg: &PopulationGenConfig,
     preserve: &[PreserveRect],
 ) {
-    let (mw, mh) = state.map.dimensions();
     let seed = resolve_population_seed(state, cfg.seed);
-    let mut rng = SeededRng::new(seed);
+    let mut rng = Randomizer::new(seed as u32);
+    apply_population_gen_with_rng(state, cfg, preserve, &mut rng);
+}
+
+/// Genera pueblos, industrias y árboles continuando el stream global de
+/// `OpenTTD` que dejó [`super::apply_world_gen_with_rng`].
+pub fn apply_population_gen_with_rng(
+    state: &mut GameState,
+    cfg: &PopulationGenConfig,
+    preserve: &[PreserveRect],
+    rng: &mut Randomizer,
+) {
+    let (mw, mh) = state.map.dimensions();
     let mut town_centers = Vec::new();
     let mut ctx = PopCtx {
         state,
         preserve,
-        rng: &mut rng,
+        rng,
         mw,
         mh,
     };
@@ -212,7 +224,7 @@ pub fn apply_population_gen(
     // trees. Objects are not yet part of this procedural backend, but trees
     // must still run after industry footprints so fields/industry tiles can
     // win their tile before `GenerateTrees` samples the map.
-    super::generate_trees(&mut ctx.state.map, ctx.state.climate, seed, preserve);
+    super::trees::generate_trees_with_rng(&mut ctx.state.map, ctx.state.climate, ctx.rng, preserve);
 }
 
 /// Variación de estilo dentro de un mismo pueblo (índice en la tabla 1×1).
@@ -229,32 +241,6 @@ pub(crate) fn procedural_house_choices() -> &'static [u16] {
             })
             .collect()
     })
-}
-
-/// Generador determinista para colocación (mismo seed → mismo mundo).
-pub(crate) struct SeededRng {
-    state: u64,
-}
-
-impl SeededRng {
-    pub(crate) fn new(seed: u64) -> Self {
-        Self { state: seed.max(1) }
-    }
-
-    pub(crate) fn next_u32(&mut self) -> u32 {
-        self.state = self
-            .state
-            .wrapping_mul(6_364_136_223_846_793_005)
-            .wrapping_add(1);
-        (self.state >> 32) as u32
-    }
-
-    pub(crate) fn next_range(&mut self, max_exclusive: u32) -> u32 {
-        if max_exclusive <= 1 {
-            return 0;
-        }
-        self.next_u32() % max_exclusive
-    }
 }
 
 pub(crate) fn in_preserve(preserve: &[PreserveRect], x: i32, y: i32) -> bool {
@@ -288,7 +274,7 @@ pub(crate) fn min_distance_sq(a: TileCoord, b: TileCoord) -> i32 {
 pub(crate) struct PopCtx<'a> {
     pub(crate) state: &'a mut GameState,
     pub(crate) preserve: &'a [PreserveRect],
-    pub(crate) rng: &'a mut SeededRng,
+    pub(crate) rng: &'a mut Randomizer,
     pub(crate) mw: u32,
     pub(crate) mh: u32,
 }

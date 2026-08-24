@@ -37,8 +37,8 @@ pub(super) fn place_industries(
         if industry_origins.len() >= target {
             break;
         }
-        let x = i32::try_from(margin + ctx.rng.next_range(span_w)).unwrap_or(5);
-        let y = i32::try_from(margin + ctx.rng.next_range(span_h)).unwrap_or(5);
+        let x = i32::try_from(margin + ctx.rng.random_range(span_w)).unwrap_or(5);
+        let y = i32::try_from(margin + ctx.rng.random_range(span_h)).unwrap_or(5);
         let origin = TileCoord::new(x, y);
         if in_preserve(ctx.preserve, x, y) {
             continue;
@@ -56,9 +56,11 @@ pub(super) fn place_industries(
             continue;
         }
 
-        let spec =
-            specs[usize::try_from(ctx.rng.next_range(u32::try_from(specs.len()).unwrap_or(1)))
-                .unwrap_or(0)];
+        let spec = specs[usize::try_from(
+            ctx.rng
+                .random_range(u32::try_from(specs.len()).unwrap_or(1)),
+        )
+        .unwrap_or(0)];
         if check_place_industry_spec(&ctx.state.map, origin, spec).is_err() {
             continue;
         }
@@ -105,27 +107,14 @@ fn plant_farm_fields(ctx: &mut PopCtx<'_>, origin: TileCoord, industry_id: u8) {
     if map_w == 0 || map_h == 0 {
         return;
     }
-    // La RNG global de OpenTTD sí intercalará estos draws, pero el generador
-    // procedural de esta etapa todavía no porta `GenerateIndustries` completo.
-    // Mantener un stream derivado evita que añadir la representación correcta
-    // de campos cambie qué industrias se colocan, y permite medir este gap de
-    // forma aislada.
-    let field_seed = ctx
-        .state
-        .world_seed
-        .wrapping_add(u64::from(industry_id) << 32)
-        .wrapping_add(u64::from(origin.x.cast_unsigned()) << 16)
-        .wrapping_add(u64::from(origin.y.cast_unsigned()));
-    let mut rng = super::SeededRng::new(field_seed);
-
     for _ in 0..FARM_FIELD_ATTEMPTS {
         // `PlantFarmField`: width/height are 4..7 in temperate and are
         // derived from the same 0x303 random mask as upstream.
-        let size_random = (rng.next_u32() & 0x303).wrapping_add(0x404);
+        let size_random = (ctx.rng.next() & 0x303).wrapping_add(0x404);
         let size_x = i32::try_from(size_random & 0xFF).unwrap_or(4).max(1);
         let size_y = i32::try_from((size_random >> 8) & 0xFF).unwrap_or(4).max(1);
-        let center_x = origin.x + i32::try_from(rng.next_range(31)).unwrap_or(0) - 16;
-        let center_y = origin.y + i32::try_from(rng.next_range(31)).unwrap_or(0) - 16;
+        let center_x = origin.x + i32::try_from(ctx.rng.random_range(31)).unwrap_or(0) - 16;
+        let center_y = origin.y + i32::try_from(ctx.rng.random_range(31)).unwrap_or(0) - 16;
         let min_x = (center_x - size_x / 2).clamp(0, map_w.saturating_sub(1));
         let min_y = (center_y - size_y / 2).clamp(0, map_h.saturating_sub(1));
         let max_x = (min_x + size_x).min(map_w);
@@ -153,7 +142,7 @@ fn plant_farm_fields(ctx: &mut PopCtx<'_>, origin: TileCoord, industry_id: u8) {
             continue;
         }
 
-        let field_random = rng.next_u32();
+        let field_random = ctx.rng.next();
         let counter = u8::try_from((field_random >> 5) & 7).unwrap_or(0);
         let field_type = u8::try_from((((field_random >> 8) & 0xFF) * 9) >> 8).unwrap_or(0);
         for y in min_y..max_y {
@@ -201,7 +190,7 @@ mod tests {
                 state.map.set_tile(c, tile).expect("set flat tile");
             }
         }
-        let mut rng = super::super::SeededRng::new(7);
+        let mut rng = crate::cargodist::parity::Randomizer::new(7);
         let mut ctx = PopCtx {
             state: &mut state,
             preserve: &[],

@@ -339,6 +339,7 @@ pub(crate) fn build_procedural_demo_world(settings: &NewGameSettings) -> GameSta
     } else {
         Vec::new()
     };
+    let mut generation_rng = None;
     if settings.world_gen {
         let seed = if settings.seed == 0 {
             0xDEAD_BEEF_u64
@@ -346,7 +347,7 @@ pub(crate) fn build_procedural_demo_world(settings: &NewGameSettings) -> GameSta
             settings.seed
         };
         state.world_seed = seed;
-        apply_optional_world_gen(
+        generation_rng = apply_optional_world_gen(
             &mut state,
             WorldGenConfig {
                 climate: settings.climate,
@@ -360,7 +361,7 @@ pub(crate) fn build_procedural_demo_world(settings: &NewGameSettings) -> GameSta
         );
     }
     if should_populate_procedurally(&settings) {
-        populate_procedural_world(&mut state, &settings, &preserve);
+        populate_procedural_world(&mut state, &settings, &preserve, generation_rng.as_mut());
     }
     if settings.preserve_demo {
         place_clean_demo_transport(&mut state);

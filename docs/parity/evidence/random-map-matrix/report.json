@@ -26,11 +26,11 @@
     "exact_cases": 0,
     "divergent_cases": 15,
     "error_cases": 0,
-    "min_changed_tiles": 3846,
-    "max_changed_tiles": 260108,
+    "min_changed_tiles": 2168,
+    "max_changed_tiles": 138528,
     "changed_blocks4_cases": 15,
     "status": "open-product-gap",
-    "note": "La generación Rust ya incluye población inicial; aún divergen ríos, secuencia de población, objetos, árboles y m1..m8."
+    "note": "Corrida posterior a compartir el stream Randomizer entre TGP, GenerateClearTile, pueblos, industrias y árboles; aún divergen el algoritmo/consumo exacto de esas etapas, GenerateObjects y m1..m8."
   },
   "comparison": {
     "fields": ["height", "type", "m1", "m2", "m3", "m4", "m5", "m6", "m7", "m8"],

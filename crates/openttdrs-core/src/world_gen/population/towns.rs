@@ -48,8 +48,8 @@ pub(super) fn place_towns(
         if town_centers.len() >= target {
             break;
         }
-        let x = i32::try_from(margin + ctx.rng.next_range(span_w)).unwrap_or(5);
-        let y = i32::try_from(margin + ctx.rng.next_range(span_h)).unwrap_or(5);
+        let x = i32::try_from(margin + ctx.rng.random_range(span_w)).unwrap_or(5);
+        let y = i32::try_from(margin + ctx.rng.random_range(span_h)).unwrap_or(5);
         let center = TileCoord::new(x, y);
         if in_preserve(ctx.preserve, x, y) {
             continue;
@@ -64,13 +64,13 @@ pub(super) fn place_towns(
             continue;
         }
 
-        let axis = if ctx.rng.next_range(2) == 0 {
+        let axis = if ctx.rng.random_range(2) == 0 {
             StreetAxis::EastWest
         } else {
             StreetAxis::NorthSouth
         };
-        let half_len = i32::try_from(2 + ctx.rng.next_range(3)).unwrap_or(2);
-        let south_row = ctx.rng.next_range(3) != 0;
+        let half_len = i32::try_from(2 + ctx.rng.random_range(3)).unwrap_or(2);
+        let south_row = ctx.rng.random_range(3) != 0;
         let Some(plan) = plan_street_town(center, axis, half_len, south_row, map_w, map_h) else {
             continue;
         };
@@ -84,13 +84,13 @@ pub(super) fn place_towns(
         }
         let town_house_base = ctx
             .rng
-            .next_range(u32::try_from(choices.len()).unwrap_or(1));
+            .random_range(u32::try_from(choices.len()).unwrap_or(1));
         let (placed_houses, population) = build_street_town(ctx, &plan, town_house_base);
         if placed_houses < 3 {
             continue;
         }
 
-        let name_seed = ctx.rng.next_u32();
+        let name_seed = ctx.rng.next();
         let name = generate_town_name(4, name_seed).unwrap_or_else(|| format!("Pueblo {x},{y}"));
         let town_id = u32::try_from(ctx.state.towns.len().saturating_add(1)).unwrap_or(1);
         let mut town = Town {
@@ -280,9 +280,10 @@ fn build_street_town(
         if !tile_ok_for_house(ctx.state, c, ctx.preserve) {
             continue;
         }
-        let idx = (town_house_base + ctx.rng.next_range(PROCEDURAL_HOUSE_STYLE_SPREAD)) % n_choices;
+        let idx =
+            (town_house_base + ctx.rng.random_range(PROCEDURAL_HOUSE_STYLE_SPREAD)) % n_choices;
         let house_id = choices[usize::try_from(idx).unwrap_or(0)];
-        let age = u8::try_from(ctx.rng.next_u32() % 200).unwrap_or(0);
+        let age = u8::try_from(ctx.rng.next() % 200).unwrap_or(0);
         if ctx.state.map.set_completed_house(c, house_id, age).is_ok() {
             placed += 1;
             population = population.saturating_add(u32::from(house_spec_population(house_id)));

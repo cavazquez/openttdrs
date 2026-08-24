@@ -4,7 +4,10 @@
 mod tests;
 
 use openttdrs_core::prelude::*;
-use openttdrs_core::{PopulationGenConfig, PreserveRect, apply_population_gen};
+use openttdrs_core::{
+    PopulationGenConfig, PreserveRect, WorldGenRng, apply_population_gen,
+    apply_population_gen_with_rng,
+};
 
 use super::world::NewGameSettings;
 
@@ -19,19 +22,21 @@ pub(crate) fn populate_procedural_world(
     state: &mut GameState,
     settings: &NewGameSettings,
     preserve: &[PreserveRect],
+    mut generation_rng: Option<&mut WorldGenRng>,
 ) {
     let settings = settings.sanitized();
     let (mw, mh) = state.map.dimensions();
     let seed = procedural_seed(state.world_seed, settings.seed, mw, mh);
-    apply_population_gen(
-        state,
-        &PopulationGenConfig {
-            town_density: settings.town_density.to_town_density(),
-            industry_density: settings.industry_density.to_industry_density(),
-            seed,
-        },
-        preserve,
-    );
+    let config = PopulationGenConfig {
+        town_density: settings.town_density.to_town_density(),
+        industry_density: settings.industry_density.to_industry_density(),
+        seed,
+    };
+    if let Some(rng) = generation_rng.as_mut() {
+        apply_population_gen_with_rng(state, &config, preserve, rng);
+    } else {
+        apply_population_gen(state, &config, preserve);
+    }
 }
 
 fn procedural_seed(world_seed: u64, settings_seed: u64, mw: u32, mh: u32) -> u64 {

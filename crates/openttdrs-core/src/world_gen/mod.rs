@@ -31,11 +31,13 @@ pub use config::{
 pub use heightmap::{HeightmapData, apply_heightmap, parse_hmap, serialize_heightmap};
 pub use population::{
     IndustryDensity, NUM_INITIAL_INDUSTRIES, NUM_INITIAL_TOWNS, PopulationGenConfig, TownDensity,
-    apply_population_gen, ceil_div, generate_industries, generate_towns, house_beside_road,
-    industry_target_count, road_tiles_are_flat, scale_by_size, town_target_count,
+    apply_population_gen, apply_population_gen_with_rng, ceil_div, generate_industries,
+    generate_towns, house_beside_road, industry_target_count, road_tiles_are_flat, scale_by_size,
+    town_target_count,
 };
-pub use trees::generate_trees;
+pub use trees::{generate_trees, generate_trees_with_rng};
 
+use crate::cargodist::parity::Randomizer;
 use crate::company::{OWNER_NONE_M1, OWNER_WATER_M1};
 use crate::map::{
     Map, MapError, TileCoord, TileKind, WaterClass, set_water_class_m1, tile_slope_and_z,
@@ -43,6 +45,10 @@ use crate::map::{
 
 use rivers::{carve_rivers, mark_water_coasts};
 use tgp::{calculate_coverage_line, generate_tgp_heights};
+
+/// Stream de RNG que `OpenTTD` comparte entre terreno, suelo, población y
+/// árboles durante la creación de una partida nueva.
+pub type WorldGenRng = Randomizer;
 
 /// Genera colinas y lagos sobre un mapa ya inicializado (backend TGP / Perlin).
 ///
@@ -57,11 +63,29 @@ pub fn apply_world_gen(
     config: &WorldGenConfig,
     preserve: &[PreserveRect],
 ) -> Result<(), MapError> {
+    apply_world_gen_with_rng(map, config, preserve).map(|_| ())
+}
+
+/// Genera el paisaje y devuelve el estado de RNG para continuar con
+/// `GenerateTowns`/`GenerateIndustries`/`GenerateTrees` sin reiniciar la
+/// secuencia global de `OpenTTD`.
+pub fn apply_world_gen_with_rng(
+    map: &mut Map,
+    config: &WorldGenConfig,
+    preserve: &[PreserveRect],
+) -> Result<WorldGenRng, MapError> {
     let (mw, mh) = map.dimensions();
     let map_w = i32::try_from(mw).expect("map width fits i32");
     let map_h = i32::try_from(mh).expect("map height fits i32");
 
-    let heights = generate_tgp_heights(map_w, map_h, config);
+    let mut rng = Randomizer::new(config.seed as u32);
+    for _ in 0..config.startup_rng_draws {
+        // `_GenerateWorld` llama a `StartupEconomy` tras sembrar `_random`;
+        // esa rutina consume exactamente un `Random()` antes de entrar en
+        // `GenerateTerrainPerlin`.
+        let _ = rng.next();
+    }
+    let heights = generate_tgp_heights(map_w, map_h, config, &mut rng);
 
     for y in 0..map_h {
         for x in 0..map_w {
@@ -154,9 +178,9 @@ pub fn apply_world_gen(
     // `GenerateClearTile` runs after the landscape converter and before
     // towns/industries. Its rough/rocky bits are part of the raw map contract,
     // not a renderer-only decoration.
-    generate_clear_tiles(map, config.seed, preserve);
+    generate_clear_tiles(map, &mut rng, preserve);
 
-    Ok(())
+    Ok(rng)
 }
 
 #[cfg(test)]

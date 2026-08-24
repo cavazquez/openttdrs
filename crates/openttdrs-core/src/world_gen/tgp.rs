@@ -700,19 +700,18 @@ fn height_map_normalize(hm: &mut HeightMap, cfg: &WorldGenConfig, rng: &mut Rand
     }
 }
 
-/// Genera alturas de tesela (una por celda) con TGP; determinista para `config.seed`.
+/// Genera alturas de tesela (una por celda) con TGP usando el stream global de
+/// `OpenTTD` que recibe el llamador.
 #[must_use]
-pub(super) fn generate_tgp_heights(map_w: i32, map_h: i32, config: &WorldGenConfig) -> Vec<u8> {
+pub(super) fn generate_tgp_heights(
+    map_w: i32,
+    map_h: i32,
+    config: &WorldGenConfig,
+    rng: &mut Randomizer,
+) -> Vec<u8> {
     let mut hm = HeightMap::new(map_w, map_h);
-    let mut rng = Randomizer::new(config.seed as u32);
-    for _ in 0..config.startup_rng_draws {
-        // `_GenerateWorld` llama a `StartupEconomy` tras sembrar `_random`;
-        // esa rutina consume exactamente un `Random()` antes de entrar en
-        // `GenerateTerrainPerlin`.
-        let _ = rng.next();
-    }
-    height_map_generate(&mut hm, config, &mut rng);
-    height_map_normalize(&mut hm, config, &mut rng);
+    height_map_generate(&mut hm, config, rng);
+    height_map_normalize(&mut hm, config, rng);
 
     let max_height = h2i(tgp_get_max_height(config.terrain_type, map_w, map_h));
     let mut out = vec![0u8; (map_w * map_h) as usize];
@@ -788,6 +787,14 @@ mod tests {
     use super::*;
     use crate::world_gen::config::{QuantitySeaLakes, WorldGenConfig};
 
+    fn heights(map_w: i32, map_h: i32, cfg: &WorldGenConfig) -> Vec<u8> {
+        let mut rng = Randomizer::new(cfg.seed as u32);
+        for _ in 0..cfg.startup_rng_draws {
+            let _ = rng.next();
+        }
+        generate_tgp_heights(map_w, map_h, cfg, &mut rng)
+    }
+
     #[test]
     fn tgp_is_deterministic_for_seed() {
         let cfg = WorldGenConfig {
@@ -795,8 +802,8 @@ mod tests {
             island: true,
             ..WorldGenConfig::default()
         };
-        let a = generate_tgp_heights(32, 32, &cfg);
-        let b = generate_tgp_heights(32, 32, &cfg);
+        let a = heights(32, 32, &cfg);
+        let b = heights(32, 32, &cfg);
         assert_eq!(a, b);
     }
 
@@ -804,8 +811,8 @@ mod tests {
     fn tgp_terrain_type_changes_max_height() {
         let flat = WorldGenConfig::default().with_terrain_type(TerrainType::VeryFlat);
         let alpine = WorldGenConfig::default().with_terrain_type(TerrainType::Alpinist);
-        let hf = generate_tgp_heights(64, 64, &WorldGenConfig { seed: 7, ..flat });
-        let ha = generate_tgp_heights(64, 64, &WorldGenConfig { seed: 7, ..alpine });
+        let hf = heights(64, 64, &WorldGenConfig { seed: 7, ..flat });
+        let ha = heights(64, 64, &WorldGenConfig { seed: 7, ..alpine });
         let max_f = *hf.iter().max().unwrap_or(&0);
         let max_a = *ha.iter().max().unwrap_or(&0);
         assert!(max_a >= max_f, "alpinist max {max_a} vs very flat {max_f}");
@@ -824,9 +831,6 @@ mod tests {
             ..low
         };
         let water = |h: &[u8]| h.iter().filter(|&&z| z == 0).count();
-        assert!(
-            water(&generate_tgp_heights(48, 48, &high))
-                >= water(&generate_tgp_heights(48, 48, &low))
-        );
+        assert!(water(&heights(48, 48, &high)) >= water(&heights(48, 48, &low)));
     }
 }

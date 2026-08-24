@@ -11,7 +11,7 @@ use openttdrs_core::world_raw::{
 };
 use openttdrs_core::{
     Climate, GameState, Map, PopulationGenConfig, TerrainType, WorldGenConfig,
-    apply_population_gen, apply_world_gen, generate_trees,
+    apply_population_gen_with_rng, apply_world_gen_with_rng, generate_trees_with_rng,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -323,9 +323,10 @@ fn run(args: &Args) -> Result<(), String> {
                 .unwrap_or(1),
             ..WorldGenConfig::default().with_terrain_type(TerrainType::Flat)
         };
-        apply_world_gen(&mut map, &config, &[]).map_err(|error| {
-            format!("falló la generación {width}x{height}, seed={seed}: {error:?}")
-        })?;
+        let mut generation_rng =
+            apply_world_gen_with_rng(&mut map, &config, &[]).map_err(|error| {
+                format!("falló la generación {width}x{height}, seed={seed}: {error:?}")
+            })?;
         // Una partida nueva de OpenTTD continúa con pueblos e industrias
         // después del paisaje. Mantener esta etapa activada por defecto hace
         // que `--generate` represente un mapa jugable; `...=0` conserva el
@@ -346,20 +347,21 @@ fn run(args: &Args) -> Result<(), String> {
             // OpenTTD ejecuta GenerateTowns/GenerateIndustries antes del
             // primer ciclo de RunTileLoop. Mantenerlo opcional permite
             // aislar el relieve en la matriz de diagnóstico.
-            apply_population_gen(
+            apply_population_gen_with_rng(
                 &mut state,
                 &PopulationGenConfig {
                     seed,
                     ..PopulationGenConfig::default()
                 },
                 &[],
+                &mut generation_rng,
             );
         } else {
             // Incluso en el modo de diagnóstico "sólo terreno", OpenTTD
             // ejecuta `GenerateTrees` antes de entregar el mundo nuevo. La
             // separación conserva la posibilidad de aislar pueblos/industrias
             // sin convertir el raw en un mapa artificialmente pelado.
-            generate_trees(&mut state.map, state.climate, seed, &[]);
+            generate_trees_with_rng(&mut state.map, state.climate, &mut generation_rng, &[]);
         }
         for _ in 0..startup_ticks {
             state.step();

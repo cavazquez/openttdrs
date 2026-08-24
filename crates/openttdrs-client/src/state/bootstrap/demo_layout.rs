@@ -5,8 +5,8 @@ use openttdrs_core::Command;
 use openttdrs_core::prelude::*;
 use openttdrs_core::{
     BridgeType, FACTORY_GRAIN_INPUT, FACTORY_LIVESTOCK_INPUT, FACTORY_STEEL_INPUT, Industry,
-    IndustryKind, IndustrySpec, PathNetwork, PreserveRect, WorldGenConfig, apply_world_gen,
-    find_path, road_stop_approach_tile,
+    IndustryKind, IndustrySpec, PathNetwork, PreserveRect, WorldGenConfig, WorldGenRng,
+    apply_world_gen_with_rng, find_path, road_stop_approach_tile,
 };
 
 /// Carretera horizontal de demo (eje X).
@@ -125,9 +125,13 @@ pub(crate) fn apply_optional_world_gen(
     state: &mut GameState,
     config: WorldGenConfig,
     preserve: &[PreserveRect],
-) {
-    if let Err(e) = apply_world_gen(&mut state.map, &config, preserve) {
-        error!("Generación procedural fallida: {e:?}");
+) -> Option<WorldGenRng> {
+    match apply_world_gen_with_rng(&mut state.map, &config, preserve) {
+        Ok(rng) => Some(rng),
+        Err(e) => {
+            error!("Generación procedural fallida: {e:?}");
+            None
+        }
     }
 }
 

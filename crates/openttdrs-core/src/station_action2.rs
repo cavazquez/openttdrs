@@ -1,6 +1,7 @@
 //! Contexto Action2 para teselas de estación (vars de runtime).
 
 use crate::cargo::{ALL_CARGO_TYPES, CargoType};
+use crate::industry::Industry;
 use crate::map::{
     Map, TileCoord, TileKind, rail_bits_touching_side, rail_traversal_bits, tile_slope_and_z,
 };
@@ -52,6 +53,62 @@ pub fn action2_eval_ctx_for_station_tile_with_grf(
     climate: Climate,
     type_tables: Option<&GrfTypeTranslationTables>,
     grf_version: u8,
+) -> Action2EvalCtx {
+    action2_eval_ctx_for_station_tile_impl(
+        map,
+        stations,
+        coord,
+        owner_colour,
+        climate,
+        type_tables,
+        grf_version,
+        None,
+    )
+}
+
+/// Pools de mundo necesarios para que las variables de carga de una estación
+/// consulten el catchment vivo en vez del predicado persistido del save.
+#[derive(Debug, Clone, Copy)]
+pub struct StationAction2WorldContext<'a> {
+    pub industries: &'a [Industry],
+}
+
+/// Variante con pools de mundo para los call sites reales de render y
+/// animación. Las APIs anteriores siguen usando el fallback legacy.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn action2_eval_ctx_for_station_tile_with_world(
+    map: &Map,
+    stations: &[Station],
+    coord: TileCoord,
+    owner_colour: u8,
+    climate: Climate,
+    type_tables: Option<&GrfTypeTranslationTables>,
+    grf_version: u8,
+    world: StationAction2WorldContext<'_>,
+) -> Action2EvalCtx {
+    action2_eval_ctx_for_station_tile_impl(
+        map,
+        stations,
+        coord,
+        owner_colour,
+        climate,
+        type_tables,
+        grf_version,
+        Some(world),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn action2_eval_ctx_for_station_tile_impl(
+    map: &Map,
+    stations: &[Station],
+    coord: TileCoord,
+    owner_colour: u8,
+    climate: Climate,
+    type_tables: Option<&GrfTypeTranslationTables>,
+    grf_version: u8,
+    world: Option<StationAction2WorldContext<'_>>,
 ) -> Action2EvalCtx {
     let mut ctx = Action2EvalCtx::default();
     let Some(st) = station_at_tile(map, stations, coord) else {
@@ -132,7 +189,9 @@ pub fn action2_eval_ctx_for_station_tile_with_grf(
     let land = tile_type_byte << 24 | u32::from(z) << 16 | (terrain << 2) << 8 | u32::from(tileh);
     ctx.vars.insert(0x67, land);
 
-    populate_station_cargo_vars(&mut ctx, st, type_tables, grf_version, climate, None);
+    let coverage =
+        world.map(|world| crate::station::station_coverage_for(map, world.industries, st));
+    populate_station_cargo_vars(&mut ctx, st, type_tables, grf_version, climate, coverage);
 
     ctx
 }
@@ -683,5 +742,57 @@ mod tests {
         assert_eq!(ctx.parameterized_vars.get(&(0x64, 1)), Some(&1_101));
         assert_eq!(ctx.parameterized_vars.get(&(0x65, 1)), Some(&8));
         assert_eq!(ctx.parameterized_vars.get(&(0x69, 1)), Some(&13));
+    }
+
+    #[test]
+    fn station_world_scope_uses_live_catchment_for_acceptance() {
+        let mut map = Map::new_flat(5, 5, 0);
+        let coord = TileCoord::new(2, 2);
+        map.set_tile(coord, rail_station_tile(0)).unwrap();
+        let station = Station::new_with_kind(coord, StopKind::BusStop);
+
+        let legacy = action2_eval_ctx_for_station_tile_with_grf(
+            &map,
+            std::slice::from_ref(&station),
+            coord,
+            0,
+            Climate::Temperate,
+            None,
+            8,
+        );
+        assert_eq!(legacy.parameterized_vars.get(&(0x65, 0)), Some(&8));
+
+        let world_without_house = action2_eval_ctx_for_station_tile_with_world(
+            &map,
+            std::slice::from_ref(&station),
+            coord,
+            0,
+            Climate::Temperate,
+            None,
+            8,
+            StationAction2WorldContext { industries: &[] },
+        );
+        assert_eq!(
+            world_without_house.parameterized_vars.get(&(0x65, 0)),
+            Some(&0)
+        );
+
+        let mut house = map.get(TileCoord::new(3, 2)).unwrap();
+        house.kind = TileKind::House;
+        map.set_tile(TileCoord::new(3, 2), house).unwrap();
+        let world_with_house = action2_eval_ctx_for_station_tile_with_world(
+            &map,
+            std::slice::from_ref(&station),
+            coord,
+            0,
+            Climate::Temperate,
+            None,
+            8,
+            StationAction2WorldContext { industries: &[] },
+        );
+        assert_eq!(
+            world_with_house.parameterized_vars.get(&(0x65, 0)),
+            Some(&8)
+        );
     }
 }

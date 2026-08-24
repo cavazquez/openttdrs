@@ -1700,6 +1700,7 @@ mod tests {
 
     #[test]
     #[allow(clippy::expect_used)]
+    #[allow(clippy::too_many_lines)]
     fn road_stop_randomisation_uses_world_scopes_before_reseeding() {
         let mut gfx = TrainSpriteGraphics::default();
         gfx.assigns.push(TrainSpriteAssign {

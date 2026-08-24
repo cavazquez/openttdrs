@@ -394,8 +394,10 @@ mod tests {
 
     #[test]
     fn cargo_translation_inverse_matches_ctt_and_climate_fallbacks() {
-        let mut tables = GrfTypeTranslationTables::default();
-        tables.cargo = vec![*b"PASS", *b"COAL", *b"WOOD"];
+        let tables = GrfTypeTranslationTables {
+            cargo: vec![*b"PASS", *b"COAL", *b"WOOD"],
+            ..GrfTypeTranslationTables::default()
+        };
         assert_eq!(
             cargo_from_local_id(Some(&tables), 8, 2, Climate::Temperate),
             Some(CargoType::Wood)

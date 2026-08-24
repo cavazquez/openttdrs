@@ -6,6 +6,7 @@ use std::hash::BuildHasher;
 use crate::airport::{AirportPiece, airport_station_gfx_animation_frames};
 use crate::cargo::CargoType;
 use crate::company::Company;
+use crate::industry::Industry;
 use crate::map::{Map, TileCoord, TileKind};
 use crate::newgrf_callback::{
     RoadStopCallbackWorld, advance_road_stop_animation_at_with_world,
@@ -20,7 +21,10 @@ use crate::station::{
     STATION_TYPE_RAIL_WAYPOINT, Station, StopKind, station_at_tile, station_footprint_tiles,
     station_type_from_m6,
 };
-use crate::station_action2::action2_eval_ctx_for_station_tile_with_grf;
+use crate::station_action2::{
+    StationAction2WorldContext, action2_eval_ctx_for_station_tile_with_grf,
+    action2_eval_ctx_for_station_tile_with_world,
+};
 use crate::station_class::{StationAnimationTrigger, StationSpecDef, station_spec_def};
 use crate::world_gen::Climate;
 
@@ -165,6 +169,7 @@ fn station_animation_context(
     map: &Map,
     stations: &[Station],
     companies: &[Company],
+    industries: Option<&[Industry]>,
     climate: Climate,
     catalog: &[StationSpecDef],
     coord: TileCoord,
@@ -198,14 +203,30 @@ fn station_animation_context(
         .iter()
         .find(|company| company.id == station.owner)
         .map_or(0, |company| company.colour);
-    let mut ctx = action2_eval_ctx_for_station_tile_with_grf(
-        map,
-        stations,
-        coord,
-        owner_colour,
-        climate,
-        def.newgrf_type_tables.as_ref(),
-        def.newgrf_grf_version,
+    let mut ctx = industries.map_or_else(
+        || {
+            action2_eval_ctx_for_station_tile_with_grf(
+                map,
+                stations,
+                coord,
+                owner_colour,
+                climate,
+                def.newgrf_type_tables.as_ref(),
+                def.newgrf_grf_version,
+            )
+        },
+        |industries| {
+            action2_eval_ctx_for_station_tile_with_world(
+                map,
+                stations,
+                coord,
+                owner_colour,
+                climate,
+                def.newgrf_type_tables.as_ref(),
+                def.newgrf_grf_version,
+                StationAction2WorldContext { industries },
+            )
+        },
     );
     ctx.persistent_registers
         .clone_from(&station.newgrf_persistent_regs);
@@ -251,6 +272,7 @@ fn trigger_newgrf_station_animation_inner<S: BuildHasher>(
     tick: u64,
     stations: &mut [Station],
     companies: &[Company],
+    industries: Option<&[Industry]>,
     climate: Climate,
     catalog: &[StationSpecDef],
     active_tiles: &mut HashSet<TileCoord, S>,
@@ -258,9 +280,9 @@ fn trigger_newgrf_station_animation_inner<S: BuildHasher>(
     trigger: StationAnimationTrigger,
     cargo: Option<CargoType>,
 ) -> bool {
-    let Some((station_index, mut ctx)) =
-        station_animation_context(map, stations, companies, climate, catalog, coord)
-    else {
+    let Some((station_index, mut ctx)) = station_animation_context(
+        map, stations, companies, industries, climate, catalog, coord,
+    ) else {
         active_tiles.remove(&coord);
         return false;
     };
@@ -325,11 +347,68 @@ pub fn trigger_newgrf_station_animation<S: BuildHasher>(
     coord: TileCoord,
     trigger: StationAnimationTrigger,
 ) -> bool {
+    trigger_newgrf_station_animation_with_industries(
+        map,
+        tick,
+        stations,
+        companies,
+        None,
+        climate,
+        catalog,
+        active_tiles,
+        coord,
+        trigger,
+    )
+}
+
+/// Variante con el pool de industrias para resolver `var 0x65` contra el
+/// catchment vivo durante los callbacks de animación.
+#[allow(clippy::too_many_arguments)]
+pub fn trigger_newgrf_station_animation_with_world<S: BuildHasher>(
+    map: &mut Map,
+    tick: u64,
+    stations: &mut [Station],
+    companies: &[Company],
+    industries: &[Industry],
+    climate: Climate,
+    catalog: &[StationSpecDef],
+    active_tiles: &mut HashSet<TileCoord, S>,
+    coord: TileCoord,
+    trigger: StationAnimationTrigger,
+) -> bool {
+    trigger_newgrf_station_animation_with_industries(
+        map,
+        tick,
+        stations,
+        companies,
+        Some(industries),
+        climate,
+        catalog,
+        active_tiles,
+        coord,
+        trigger,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn trigger_newgrf_station_animation_with_industries<S: BuildHasher>(
+    map: &mut Map,
+    tick: u64,
+    stations: &mut [Station],
+    companies: &[Company],
+    industries: Option<&[Industry]>,
+    climate: Climate,
+    catalog: &[StationSpecDef],
+    active_tiles: &mut HashSet<TileCoord, S>,
+    coord: TileCoord,
+    trigger: StationAnimationTrigger,
+) -> bool {
     trigger_newgrf_station_animation_inner(
         map,
         tick,
         stations,
         companies,
+        industries,
         climate,
         catalog,
         active_tiles,
@@ -390,6 +469,65 @@ pub fn trigger_newgrf_station_animation_for_station<S: BuildHasher>(
     trigger: StationAnimationTrigger,
     cargo: Option<CargoType>,
 ) -> Vec<TileCoord> {
+    trigger_newgrf_station_animation_for_station_with_industries(
+        map,
+        tick,
+        stations,
+        companies,
+        None,
+        climate,
+        catalog,
+        active_tiles,
+        station_anchor,
+        trigger,
+        cargo,
+    )
+}
+
+/// Variante de `TA_WHOLE` con el pool de industrias del mundo.
+#[allow(clippy::too_many_arguments)]
+pub fn trigger_newgrf_station_animation_for_station_with_world<S: BuildHasher>(
+    map: &mut Map,
+    tick: u64,
+    stations: &mut [Station],
+    companies: &[Company],
+    industries: &[Industry],
+    climate: Climate,
+    catalog: &[StationSpecDef],
+    active_tiles: &mut HashSet<TileCoord, S>,
+    station_anchor: TileCoord,
+    trigger: StationAnimationTrigger,
+    cargo: Option<CargoType>,
+) -> Vec<TileCoord> {
+    trigger_newgrf_station_animation_for_station_with_industries(
+        map,
+        tick,
+        stations,
+        companies,
+        Some(industries),
+        climate,
+        catalog,
+        active_tiles,
+        station_anchor,
+        trigger,
+        cargo,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn trigger_newgrf_station_animation_for_station_with_industries<S: BuildHasher>(
+    map: &mut Map,
+    tick: u64,
+    stations: &mut [Station],
+    companies: &[Company],
+    industries: Option<&[Industry]>,
+    climate: Climate,
+    catalog: &[StationSpecDef],
+    active_tiles: &mut HashSet<TileCoord, S>,
+    station_anchor: TileCoord,
+    trigger: StationAnimationTrigger,
+    cargo: Option<CargoType>,
+) -> Vec<TileCoord> {
     let tiles = station_animation_whole_tiles(map, stations, station_anchor);
     let mut dirty = Vec::new();
     for coord in tiles {
@@ -398,6 +536,7 @@ pub fn trigger_newgrf_station_animation_for_station<S: BuildHasher>(
             tick,
             stations,
             companies,
+            industries,
             climate,
             catalog,
             active_tiles,
@@ -422,6 +561,65 @@ pub fn trigger_newgrf_station_animation_for_platform<S: BuildHasher>(
     tick: u64,
     stations: &mut [Station],
     companies: &[Company],
+    climate: Climate,
+    catalog: &[StationSpecDef],
+    active_tiles: &mut HashSet<TileCoord, S>,
+    station_anchor: TileCoord,
+    trigger_tile: TileCoord,
+    trigger: StationAnimationTrigger,
+) -> Vec<TileCoord> {
+    trigger_newgrf_station_animation_for_platform_with_industries(
+        map,
+        tick,
+        stations,
+        companies,
+        None,
+        climate,
+        catalog,
+        active_tiles,
+        station_anchor,
+        trigger_tile,
+        trigger,
+    )
+}
+
+/// Variante de `TA_PLATFORM` con el pool de industrias del mundo.
+#[allow(clippy::too_many_arguments)]
+pub fn trigger_newgrf_station_animation_for_platform_with_world<S: BuildHasher>(
+    map: &mut Map,
+    tick: u64,
+    stations: &mut [Station],
+    companies: &[Company],
+    industries: &[Industry],
+    climate: Climate,
+    catalog: &[StationSpecDef],
+    active_tiles: &mut HashSet<TileCoord, S>,
+    station_anchor: TileCoord,
+    trigger_tile: TileCoord,
+    trigger: StationAnimationTrigger,
+) -> Vec<TileCoord> {
+    trigger_newgrf_station_animation_for_platform_with_industries(
+        map,
+        tick,
+        stations,
+        companies,
+        Some(industries),
+        climate,
+        catalog,
+        active_tiles,
+        station_anchor,
+        trigger_tile,
+        trigger,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn trigger_newgrf_station_animation_for_platform_with_industries<S: BuildHasher>(
+    map: &mut Map,
+    tick: u64,
+    stations: &mut [Station],
+    companies: &[Company],
+    industries: Option<&[Industry]>,
     climate: Climate,
     catalog: &[StationSpecDef],
     active_tiles: &mut HashSet<TileCoord, S>,
@@ -454,6 +652,7 @@ pub fn trigger_newgrf_station_animation_for_platform<S: BuildHasher>(
             tick,
             stations,
             companies,
+            industries,
             climate,
             catalog,
             active_tiles,
@@ -473,14 +672,15 @@ fn advance_newgrf_station_tile<S: BuildHasher>(
     tick: u64,
     stations: &mut [Station],
     companies: &[Company],
+    industries: Option<&[Industry]>,
     climate: Climate,
     catalog: &[StationSpecDef],
     active_tiles: &mut HashSet<TileCoord, S>,
     coord: TileCoord,
 ) -> bool {
-    let Some((station_index, mut ctx)) =
-        station_animation_context(map, stations, companies, climate, catalog, coord)
-    else {
+    let Some((station_index, mut ctx)) = station_animation_context(
+        map, stations, companies, industries, climate, catalog, coord,
+    ) else {
         active_tiles.remove(&coord);
         return false;
     };
@@ -573,13 +773,65 @@ pub fn step_newgrf_station_tiles<S: BuildHasher>(
     active_tiles: &mut HashSet<TileCoord, S>,
     tile_loop_visits: &[(TileCoord, crate::map::Tile)],
 ) -> Vec<TileCoord> {
+    step_newgrf_station_tiles_with_industries(
+        map,
+        tick,
+        stations,
+        companies,
+        None,
+        climate,
+        catalog,
+        active_tiles,
+        tile_loop_visits,
+    )
+}
+
+/// Variante del scheduler con el pool de industrias del mundo.
+#[allow(clippy::too_many_arguments)]
+pub fn step_newgrf_station_tiles_with_world<S: BuildHasher>(
+    map: &mut Map,
+    tick: u64,
+    stations: &mut [Station],
+    companies: &[Company],
+    industries: &[Industry],
+    climate: Climate,
+    catalog: &[StationSpecDef],
+    active_tiles: &mut HashSet<TileCoord, S>,
+    tile_loop_visits: &[(TileCoord, crate::map::Tile)],
+) -> Vec<TileCoord> {
+    step_newgrf_station_tiles_with_industries(
+        map,
+        tick,
+        stations,
+        companies,
+        Some(industries),
+        climate,
+        catalog,
+        active_tiles,
+        tile_loop_visits,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn step_newgrf_station_tiles_with_industries<S: BuildHasher>(
+    map: &mut Map,
+    tick: u64,
+    stations: &mut [Station],
+    companies: &[Company],
+    industries: Option<&[Industry]>,
+    climate: Climate,
+    catalog: &[StationSpecDef],
+    active_tiles: &mut HashSet<TileCoord, S>,
+    tile_loop_visits: &[(TileCoord, crate::map::Tile)],
+) -> Vec<TileCoord> {
     let mut dirty = Vec::new();
     for (coord, _) in tile_loop_visits {
-        if trigger_newgrf_station_animation(
+        if trigger_newgrf_station_animation_with_industries(
             map,
             tick,
             stations,
             companies,
+            industries,
             climate,
             catalog,
             active_tiles,
@@ -598,6 +850,7 @@ pub fn step_newgrf_station_tiles<S: BuildHasher>(
             tick,
             stations,
             companies,
+            industries,
             climate,
             catalog,
             active_tiles,

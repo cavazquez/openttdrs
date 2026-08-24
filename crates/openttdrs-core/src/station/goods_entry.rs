@@ -191,15 +191,19 @@ mod tests {
 
     #[test]
     fn convert_state_matches_newgrf_var_69_bits() {
-        let mut entry = GoodsEntry::default();
-        entry.newgrf_state = 0x0F;
+        let entry = GoodsEntry {
+            newgrf_state: 0x0F,
+            ..GoodsEntry::default()
+        };
         assert_eq!(entry.convert_state(), 0x0F);
     }
 
     #[test]
     fn newgrf_state_rolls_month_and_acceptance_interval() {
-        let mut entry = GoodsEntry::default();
-        entry.newgrf_state = 0x0F;
+        let mut entry = GoodsEntry {
+            newgrf_state: 0x0F,
+            ..GoodsEntry::default()
+        };
         entry.roll_newgrf_month();
         assert_eq!(entry.convert_state(), 0x03, "ever + last month");
         entry.mark_final_delivery();

@@ -16,11 +16,12 @@ fn trigger_station_new_cargo_since(state: &mut GameState, before: &[crate::Cargo
         })
         .collect();
     for (station_pos, cargo) in arrivals {
-        let dirty = crate::map::trigger_newgrf_station_animation_for_station(
+        let dirty = crate::map::trigger_newgrf_station_animation_for_station_with_world(
             &mut state.map,
             state.tick.get(),
             &mut state.stations,
             &state.companies,
+            &state.industries,
             state.climate,
             &state.station_spec_catalog,
             &mut state.newgrf_animated_station_tiles,

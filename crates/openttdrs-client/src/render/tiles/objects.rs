@@ -1501,14 +1501,32 @@ pub(crate) fn spawn_station_tile_with_world(
                 && let (Some(cache), Some(images)) = (station_sprites.as_mut(), images.as_mut())
             {
                 let colour_u8 = owner_colour.map(CompanyColour::as_u8).unwrap_or(0);
-                let mut a2 = openttdrs_core::action2_eval_ctx_for_station_tile_with_grf(
-                    map,
-                    stations,
-                    ctx.coord,
-                    colour_u8,
-                    climate,
-                    def.newgrf_type_tables.as_ref(),
-                    def.newgrf_grf_version,
+                let mut a2 = world.map_or_else(
+                    || {
+                        openttdrs_core::action2_eval_ctx_for_station_tile_with_grf(
+                            map,
+                            stations,
+                            ctx.coord,
+                            colour_u8,
+                            climate,
+                            def.newgrf_type_tables.as_ref(),
+                            def.newgrf_grf_version,
+                        )
+                    },
+                    |world| {
+                        openttdrs_core::action2_eval_ctx_for_station_tile_with_world(
+                            map,
+                            stations,
+                            ctx.coord,
+                            colour_u8,
+                            climate,
+                            def.newgrf_type_tables.as_ref(),
+                            def.newgrf_grf_version,
+                            openttdrs_core::StationAction2WorldContext {
+                                industries: world.industries,
+                            },
+                        )
+                    },
                 );
                 a2.set_grf_params(openttdrs_core::stack_params_for_grfid(
                     newgrf_stack,

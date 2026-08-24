@@ -412,11 +412,12 @@ pub(in crate::command) fn place_rail_station_area(
             } else {
                 TileCoord::new(origin.x + i32::from(l), origin.y + i32::from(n))
             };
-            if crate::map::trigger_newgrf_station_animation(
+            if crate::map::trigger_newgrf_station_animation_with_world(
                 &mut state.map,
                 tick,
                 &mut state.stations,
                 &state.companies,
+                &state.industries,
                 climate,
                 &state.station_spec_catalog,
                 &mut state.newgrf_animated_station_tiles,
@@ -534,11 +535,12 @@ pub(in crate::command::transport) fn station_placement_on_tile(
     if stop_kind == StopKind::RailStation {
         let tick = state.tick.get();
         let climate = state.climate;
-        if crate::map::trigger_newgrf_station_animation(
+        if crate::map::trigger_newgrf_station_animation_with_world(
             &mut state.map,
             tick,
             &mut state.stations,
             &state.companies,
+            &state.industries,
             climate,
             &state.station_spec_catalog,
             &mut state.newgrf_animated_station_tiles,
@@ -631,11 +633,12 @@ pub(in crate::command) fn place_rail_waypoint(
     state.stations.push(st);
     let tick = state.tick.get();
     let climate = state.climate;
-    if crate::map::trigger_newgrf_station_animation(
+    if crate::map::trigger_newgrf_station_animation_with_world(
         &mut state.map,
         tick,
         &mut state.stations,
         &state.companies,
+        &state.industries,
         climate,
         &state.station_spec_catalog,
         &mut state.newgrf_animated_station_tiles,

@@ -349,6 +349,7 @@ pub(crate) fn spawn_map_tiles_in_bounds(
                 Some(openttdrs_core::RoadStopWorldContext {
                     towns: &sim.state.towns,
                     companies: &sim.state.companies,
+                    industries: &sim.state.industries,
                 }),
             ),
             TileKind::House => spawn_house_tile(

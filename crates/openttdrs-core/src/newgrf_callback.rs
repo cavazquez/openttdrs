@@ -39,6 +39,7 @@ pub struct RoadStopCallbackWorld<'a> {
     pub road_stop_catalog: &'a [RoadStopSpecDef],
     pub towns: &'a [Town],
     pub companies: &'a [crate::company::Company],
+    pub industries: &'a [crate::industry::Industry],
     pub climate: crate::Climate,
 }
 
@@ -642,6 +643,7 @@ fn action2_eval_ctx_from_road_stop_with_world(
         RoadStopWorldContext {
             towns: world.towns,
             companies: world.companies,
+            industries: world.industries,
         },
         tile,
         view,
@@ -1682,6 +1684,7 @@ mod tests {
                 road_stop_catalog: &catalog,
                 towns: &towns,
                 companies: &companies,
+                industries: &[],
                 climate: crate::Climate::Temperate,
             }),
         ));
@@ -1766,6 +1769,7 @@ mod tests {
             road_stop_catalog: &catalog,
             towns: &towns,
             companies: &companies,
+            industries: &[],
             climate: crate::Climate::Temperate,
         });
 

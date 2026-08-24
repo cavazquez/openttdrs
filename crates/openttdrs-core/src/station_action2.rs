@@ -10,8 +10,8 @@ use crate::newgrf_type_tables::{
 };
 use crate::rail_type::rail_type_from_tile;
 use crate::station::{
-    STATION_TILE_RESERVATION, STATION_TYPE_RAIL_WAYPOINT, Station, station_at_tile,
-    station_type_from_m6,
+    STATION_TILE_RESERVATION, STATION_TYPE_RAIL_WAYPOINT, Station, StationCoverage,
+    station_at_tile, station_type_from_m6,
 };
 use crate::world_gen::Climate;
 
@@ -132,7 +132,7 @@ pub fn action2_eval_ctx_for_station_tile_with_grf(
     let land = tile_type_byte << 24 | u32::from(z) << 16 | (terrain << 2) << 8 | u32::from(tileh);
     ctx.vars.insert(0x67, land);
 
-    populate_station_cargo_vars(&mut ctx, st, type_tables, grf_version, climate);
+    populate_station_cargo_vars(&mut ctx, st, type_tables, grf_version, climate, None);
 
     ctx
 }
@@ -148,6 +148,7 @@ pub(crate) fn populate_station_cargo_vars(
     type_tables: Option<&GrfTypeTranslationTables>,
     grf_version: u8,
     climate: Climate,
+    coverage: Option<StationCoverage>,
 ) {
     for cargo in ALL_CARGO_TYPES {
         let local_id = local_cargo_id(type_tables, grf_version, cargo, climate);
@@ -159,13 +160,18 @@ pub(crate) fn populate_station_cargo_vars(
         for variable in [0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x69] {
             ctx.parameterized_vars.insert(
                 (variable, local_id),
-                station_cargo_var(station, cargo, variable),
+                station_cargo_var(station, cargo, variable, coverage),
             );
         }
     }
 }
 
-fn station_cargo_var(station: &Station, cargo: CargoType, variable: u8) -> u32 {
+fn station_cargo_var(
+    station: &Station,
+    cargo: CargoType,
+    variable: u8,
+    coverage: Option<StationCoverage>,
+) -> u32 {
     let entry = station.goods.get(cargo);
     match variable {
         // `GoodsEntry::TotalCount`, capped to the 12-bit Action2 contract.
@@ -195,13 +201,33 @@ fn station_cargo_var(station: &Station, cargo: CargoType, variable: u8) -> u32 {
                 0xFF00
             }
         }
-        // The station model exposes the effective catchment predicate. It is
-        // the closest persisted equivalent to GoodsEntry::Acceptance and uses
-        // the same bit (3) as upstream.
-        0x65 => u32::from(station.accepts_cargo(cargo)) << 3,
+        // GoodsEntry::Acceptance is driven by the catchment amount in
+        // OpenTTD. When the caller has the live map/industry pools, use that
+        // amount; legacy contexts retain the persisted type-only predicate.
+        0x65 => u32::from(cargo_is_accepted(station, cargo, coverage)) << 3,
         0x69 => u32::from(entry.convert_state()),
         _ => 0,
     }
+}
+
+fn cargo_is_accepted(
+    station: &Station,
+    cargo: CargoType,
+    coverage: Option<StationCoverage>,
+) -> bool {
+    let Some(coverage) = coverage else {
+        return station.accepts_cargo(cargo);
+    };
+    if !station.accepts_cargo(cargo) {
+        return false;
+    }
+    let amount = match cargo {
+        CargoType::Passengers => coverage.accepts_passengers,
+        CargoType::Mail => coverage.accepts_mail,
+        CargoType::Water => coverage.accepts_water,
+        _ => coverage.accepts_goods,
+    };
+    amount >= crate::house_spec::STATION_ACCEPTANCE_THRESHOLD
 }
 
 fn tile_kind_as_ottd(kind: TileKind) -> u8 {

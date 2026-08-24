@@ -10,6 +10,7 @@ use std::collections::BTreeSet;
 
 use crate::company::{Company, CompanyId};
 use crate::house_spec::{distance_square, get_town_radius_group};
+use crate::industry::Industry;
 use crate::map::{
     Map, TILE_PIXEL_HEIGHT, Tile, TileCoord, TileKind, tile_slope_and_z, water_class,
 };
@@ -133,6 +134,7 @@ pub fn action2_eval_ctx_for_road_stop_tile_with_catalog_and_world(
 pub struct RoadStopWorldContext<'a> {
     pub towns: &'a [Town],
     pub companies: &'a [Company],
+    pub industries: &'a [Industry],
 }
 
 /// Datos opcionales que diferencian el contexto local legacy del renderer
@@ -222,6 +224,9 @@ fn action2_eval_ctx_for_road_stop_tile_impl(
             resolution.type_tables,
             spec.newgrf_grf_version,
             climate,
+            resolution
+                .world
+                .map(|world| crate::station::station_coverage_for(map, world.industries, station)),
         );
         RoadStopNeighbourScope {
             map,
@@ -735,6 +740,7 @@ mod tests {
             RoadStopWorldContext {
                 towns: &[town],
                 companies: &companies,
+                industries: &[],
             },
             coord,
             0,
@@ -744,6 +750,55 @@ mod tests {
         assert_eq!(ctx.vars.get(&0x45), Some(&(1 << 16 | 3)));
         assert_eq!(ctx.vars.get(&0x46), Some(&5));
         assert_eq!(ctx.vars.get(&0x47), Some(&0x3301_0001));
+    }
+
+    #[test]
+    fn road_stop_cargo_acceptance_uses_live_catchment() {
+        let coord = TileCoord::new(2, 2);
+        let catalog = vec![road_stop_spec(7, 1, 0, None)];
+        let mut station = Station::new_with_kind(coord, StopKind::BusStop);
+        station.road_stop_spec = Some(7);
+        let towns = Vec::new();
+        let companies = Vec::new();
+        let industries = Vec::new();
+
+        let mut empty_map = Map::new_flat(8, 8, 0);
+        empty_map
+            .set_tile(coord, road_stop_tile(4, 3 << 3))
+            .expect("road stop tile");
+        let empty_ctx = action2_eval_ctx_for_road_stop_tile_with_catalog_and_world(
+            &empty_map,
+            std::slice::from_ref(&station),
+            &catalog,
+            RoadStopWorldContext {
+                towns: &towns,
+                companies: &companies,
+                industries: &industries,
+            },
+            coord,
+            0,
+            Climate::Temperate,
+        );
+        assert_eq!(empty_ctx.parameterized_vars.get(&(0x65, 0)), Some(&0));
+
+        let mut accepted_map = empty_map.clone();
+        accepted_map
+            .set_completed_house(TileCoord::new(2, 3), 0, 0)
+            .expect("house in catchment");
+        let accepted_ctx = action2_eval_ctx_for_road_stop_tile_with_catalog_and_world(
+            &accepted_map,
+            std::slice::from_ref(&station),
+            &catalog,
+            RoadStopWorldContext {
+                towns: &towns,
+                companies: &companies,
+                industries: &industries,
+            },
+            coord,
+            0,
+            Climate::Temperate,
+        );
+        assert_eq!(accepted_ctx.parameterized_vars.get(&(0x65, 0)), Some(&8));
     }
 
     #[test]

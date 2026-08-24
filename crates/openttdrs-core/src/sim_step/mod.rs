@@ -407,6 +407,7 @@ fn phase_tile_animation(state: &mut GameState, t: u64) {
             road_stop_catalog: &state.road_stop_spec_catalog,
             towns: &state.towns,
             companies: &state.companies,
+            industries: &state.industries,
             climate: state.climate,
         }),
     );
@@ -635,6 +636,7 @@ pub(super) fn trigger_road_stop_animation_at(
                         road_stop_catalog: &state.road_stop_spec_catalog,
                         towns: &state.towns,
                         companies: &state.companies,
+                        industries: &state.industries,
                         climate,
                     }),
                 )
@@ -652,6 +654,7 @@ pub(super) fn trigger_road_stop_animation_at(
                 road_stop_catalog: &state.road_stop_spec_catalog,
                 towns: &state.towns,
                 companies: &state.companies,
+                industries: &state.industries,
                 climate,
             }),
         );

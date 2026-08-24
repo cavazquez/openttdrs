@@ -1,7 +1,9 @@
 //! Contexto Action2 para teselas de estación (vars de runtime).
 
 use crate::cargo::{ALL_CARGO_TYPES, CargoType};
-use crate::map::{Map, TileCoord, TileKind, tile_slope_and_z};
+use crate::map::{
+    Map, TileCoord, TileKind, rail_bits_touching_side, rail_traversal_bits, tile_slope_and_z,
+};
 use crate::newgrf_sprites::Action2EvalCtx;
 use crate::newgrf_type_tables::{
     GrfTypeTranslationTables, cargo_from_local_id, local_cargo_id, reverse_rail_type,
@@ -15,8 +17,9 @@ use crate::world_gen::Climate;
 
 /// Contexto Action2 para dibujar / resolver sprites de una tesela de estación.
 ///
-/// MVP: `40` (plataforma), `42` (terreno+rail), `43` (owner), `4A` (frame),
-/// `5F` (random), `10` (m5/tileh), `67` (land info tesela actual, param 0).
+/// MVP: `40` (plataforma), `42` (terreno+rail), `43` (owner), `44` (PBS),
+/// `45` (continuación rail), `4A` (frame), `5F` (random), `10` (m5/tileh),
+/// `67` (land info tesela actual, param 0).
 #[must_use]
 pub fn action2_eval_ctx_for_station_tile(
     map: &Map,
@@ -81,6 +84,10 @@ pub fn action2_eval_ctx_for_station_tile_with_grf(
         2
     };
     ctx.vars.insert(0x44, var44);
+    if matches!(station_type, 0 | STATION_TYPE_RAIL_WAYPOINT) {
+        ctx.vars
+            .insert(0x45, rail_continuation_info(map, coord, m5));
+    }
 
     // Var 10: info adicional (m5 + tileh) para selección de sprites.
     ctx.vars
@@ -263,6 +270,54 @@ fn find_rail_station_end(
         tile = next;
     }
     tile
+}
+
+/// Replica `GetRailContinuationInfo` de `newgrf_station.cpp`.
+///
+/// Los ocho vecinos se mantienen en el orden de las tablas de `OpenTTD`. El
+/// byte alto marca que el vecino tiene alguna vía; el byte bajo marca además
+/// que esa vía alcanza la salida diagonal correspondiente de la plataforma.
+fn rail_continuation_info(map: &Map, coord: TileCoord, m5: u8) -> u32 {
+    // `TileOffsByDir` + `DiagdirReachesTracks` de OpenTTD, separados por eje.
+    const X_NEIGHBOURS: [(i32, i32, u8); 8] = [
+        (1, 0, 2),
+        (-1, 0, 0),
+        (0, 1, 1),
+        (0, -1, 3),
+        (1, 1, 2),
+        (-1, 1, 0),
+        (1, -1, 2),
+        (-1, -1, 0),
+    ];
+    const Y_NEIGHBOURS: [(i32, i32, u8); 8] = [
+        (0, 1, 1),
+        (0, -1, 3),
+        (1, 0, 2),
+        (-1, 0, 0),
+        (1, 1, 1),
+        (1, -1, 3),
+        (-1, 1, 1),
+        (-1, -1, 3),
+    ];
+    let neighbours = if m5 & 1 != 0 {
+        &Y_NEIGHBOURS
+    } else {
+        &X_NEIGHBOURS
+    };
+
+    let mut result = 0u32;
+    for (index, &(dx, dy, exit)) in neighbours.iter().enumerate() {
+        let neighbour = TileCoord::new(coord.x + dx, coord.y + dy);
+        let tracks = rail_traversal_bits(map, neighbour);
+        if tracks == 0 {
+            continue;
+        }
+        result |= 1 << (index + 8);
+        if tracks & rail_bits_touching_side(exit) != 0 {
+            result |= 1 << index;
+        }
+    }
+    result
 }
 
 fn pack_platform_info(gfx: u8, platforms: i32, length: i32, platform: i32, position: i32) -> u32 {
@@ -448,6 +503,28 @@ mod tests {
             None,
         );
         assert_eq!(ctx.vars.get(&0x44), Some(&2));
+    }
+
+    #[test]
+    fn station_ctx_var45_reports_rail_continuation_bits() {
+        let mut map = Map::new_flat(8, 8, 0);
+        let c = TileCoord::new(3, 3);
+        map.set_tile(c, rail_station_tile(0)).unwrap();
+
+        let mut west = rail_station_tile(0);
+        west.kind = TileKind::Rail;
+        west.m5 = 0x01;
+        map.set_tile(TileCoord::new(2, 3), west).unwrap();
+        let east = west;
+        map.set_tile(TileCoord::new(4, 3), east).unwrap();
+
+        let station = Station::new_with_kind(c, StopKind::RailStation);
+        let ctx =
+            action2_eval_ctx_for_station_tile(&map, &[station], c, 0, Climate::Temperate, None);
+        let continuation = *ctx.vars.get(&0x45).expect("var 45");
+        assert_eq!(continuation & 0x03, 0x03, "ambos vecinos conectan");
+        assert_eq!((continuation >> 8) & 0x03, 0x03, "ambos vecinos tienen vía");
+        assert_eq!(continuation & !0x303, 0, "sin vecinos diagonales");
     }
 
     #[test]

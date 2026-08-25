@@ -166,6 +166,12 @@ volver a la profundidad diagonal fija. Esto corrige una familia concreta de
 #326, pero no al conjunto **global** de producers. El mismo contrato ya se
 aplica a los cables y postes de catenaria de vanos y rampas, que antes
 quedaban con Z local fija aunque `world-draw` los marcara como `sortable`.
+Los overlays de tablero Action5, la reserva PBS y el overlay de tranvía de
+puente se adjuntan ahora al parent trasero del bloque `StartSpriteCombine`,
+conservando su ventana de profundidad y su orden local; si el parent visible
+no está disponible, se mantiene el fallback independiente para no perder el
+sprite. Los overlays NewGRF de carretera y la mitad frontal de
+`DrawBridgeRoadBits` todavía requieren sus propios parents/children.
 Los focos naval
 `138,7..140,10` y de muelle `136,1..139,3` vinculan
 7/7 parents candidatos al orden final C++; es evidencia del contrato de cajas y

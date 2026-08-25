@@ -29,7 +29,7 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 |---:|---|---|---|
 | 1 | Zoom y viewport | Completado | Seis niveles OpenTTD (`0,25×`…`0,125×`), culling/overview deterministas y smoke de render; la paridad raster global queda separada de la cobertura de zoom. |
 | 2 | RMAP-004: generador procedural | Abierto P1 | Reducir la primera divergencia de TGP/RNG/`FixSlopes`/clear/towns/industries/trees con matriz 64²→512²; cerrar sólo cuando el mismo seed tenga contrato documentado y sin divergencias no explicadas. |
-| 3 | Composición raster global (#323→#322→#326) | En curso | El sorter runtime ya cubre piezas estructurales y catenaria de puentes con cajas `M(...)` y orden de inserción estable; siguen pendientes children/overlays, vehículos y producers NewGRF. Las capturas 4×4 siguen siendo diagnóstico, no único oracle. |
+| 3 | Composición raster global (#323→#322→#326) | En curso | El sorter runtime ya cubre piezas estructurales, catenaria y el bloque combinado PBS/Action5/tranvía de puentes con cajas `M(...)`, children y orden de inserción estable; siguen pendientes overlays NewGRF de carretera, mitad frontal, vehículos y producers NewGRF. Las capturas 4×4 siguen siendo diagnóstico, no único oracle. |
 | 4 | Interoperabilidad SAV (#328) | Abierto | VEHS/ORDL/GRPS/ERNW y shared orders/autoreplace round-trip OpenTTD→Rust→OpenTTD, con campos desconocidos preservados. |
 | 5 | NewGRF runtime (#329) | Abierto | Callbacks de vehículos, estaciones, casas, aeropuertos, objetos y cargos ejecutados en fixtures, además de persistencia NGRF/OBJS. |
 | 6 | Movimiento y economía diferencial (#330) | Abierto | Oráculos externos para carretera (tráfico/colisiones/dirección), rail (PBS/YAPF/presignals/consist) y aire/mar, incluyendo casos límite. |
@@ -57,8 +57,9 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 - Composición #326: el bloque publicado de puentes enlaza cabezas de rampa,
   barandillas de vano y pilares al sorter global cuando hay sprite; el vínculo
   usa la misma caja de mundo que `world-draw`. No cubre todavía
-  overlays/PBS/tablero como children, vehículos ni todas las familias NewGRF;
-  cables y postes de catenaria ya participan como parents `sortable` con esa
-  misma caja.
+  overlays NewGRF de carretera ni la mitad frontal de `DrawBridgeRoadBits`,
+  vehículos ni todas las familias NewGRF; cables y postes de catenaria ya
+  participan como parents `sortable` con esa misma caja, y los overlays
+  Action5/PBS/tranvía como children del parent trasero combinado.
 - `reference/` es un checkout local ignorado/no versionado; nunca se agrega al
   commit de una tarea.

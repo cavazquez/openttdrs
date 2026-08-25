@@ -19,7 +19,8 @@ use crate::render::viewport_sort::ParentSpriteBounds;
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
 use crate::render::{
     MapVisualLayer, NewGrfAction5SpriteCache, NewGrfCatenarySpriteCache, TileRenderContext,
-    ViewportSortableParent, WorldAssets, viewport_insertion_key, viewport_source_depth,
+    ViewportSortableChild, ViewportSortableParent, WorldAssets, viewport_insertion_key,
+    viewport_source_depth,
 };
 use crate::sprites::{
     OTTD_MP_RAIL, RAIL_TB_X, RAIL_TB_Y, bridge_deck_sprite_ids, bridge_ramp_sprite_id,
@@ -71,6 +72,10 @@ const SPR_RAIL_SINGLE_BASE: u32 = 1005;
 const SPR_MONO_SINGLE_BASE: u32 = 1087;
 /// `SPR_MGLV_SINGLE_X`; análogo para maglev.
 const SPR_MAGLEV_SINGLE_BASE: u32 = 1169;
+/// `SPR_TRAMWAY_OVERLAY` de la tabla vanilla (base 5986 + 4).
+const SPR_TRAMWAY_OVERLAY_BASE: u32 = 5990;
+/// `SPR_BRIDGE_DECKS_BASE` de Action5 `0x1B` (base 6240).
+const SPR_BRIDGE_DECKS_BASE: u32 = 6240;
 /// `SPR_TRACKS_FOR_SLOPES_RAIL_BASE` de OpenTTD.
 const SPR_RAIL_SLOPED_RESERVATION_BASE: u32 = 5401;
 /// `SPR_TRACKS_FOR_SLOPES_MONO_BASE` de OpenTTD.
@@ -351,6 +356,36 @@ fn bridge_pbs_trace_bounds(on_ramp: bool, foundation_tileh: u8, axis: usize) -> 
     }
 }
 
+/// Materializa un `AddSortableSpriteToDraw` emitido dentro de
+/// `StartSpriteCombine` como child del primer sprite del bloque.
+///
+/// Los overlays del tablero y las reservas PBS no son parents independientes:
+/// OpenTTD los mueve junto con la barandilla trasera cuando el `ViewportSort`
+/// intercambia el puente con una casa, una fundación o una tesela vecina. El
+/// `source_depth` conserva el orden local del bloque y el sistema global de
+/// children lo encierra entre este parent y el siguiente.
+fn spawn_bridge_combined_child(
+    commands: &mut Commands,
+    ctx: &TileRenderContext,
+    map_width: u32,
+    parent: Entity,
+    sprite: Sprite,
+    position: Vec3,
+) {
+    let source_depth = viewport_source_depth(position.z, ctx.tx, map_width);
+    commands.spawn((
+        MapVisualLayer,
+        ctx.map_tile_chunk(),
+        sprite,
+        Transform::from_translation(position.with_z(source_depth)),
+        ViewportSortableChild {
+            parent,
+            source_depth,
+        },
+    ));
+}
+
+#[allow(clippy::too_many_arguments)]
 fn spawn_bridge_pbs_reservation(
     commands: &mut Commands,
     assets: &WorldAssets,
@@ -359,6 +394,8 @@ fn spawn_bridge_pbs_reservation(
     on_ramp: bool,
     foundation_tileh: u8,
     surface_z: u8,
+    map_width: u32,
+    parent: Option<Entity>,
 ) {
     let ramp_direction = ctx.tile.map_or(0, |tile| tile.m5);
     let sprite_id = bridge_pbs_reservation_sprite_id(
@@ -388,20 +425,23 @@ fn spawn_bridge_pbs_reservation(
         return;
     };
     let offset = bridge_pbs_reservation_offset(sprite_id);
-    commands.spawn((
-        MapVisualLayer,
-        ctx.map_tile_chunk(),
-        sprite.sprite(),
-        Transform::from_translation(
-            full_tile_sprite_pos_half(
-                ctx.tx_i32(),
-                ctx.ty_i32(),
-                surface_z,
-                RAIL_ON_BRIDGE_LAYER_FRAC,
-                TILE_HALF_H,
-            ) + Vec3::new(offset.x, offset.y, 0.0),
-        ),
-    ));
+    let position = full_tile_sprite_pos_half(
+        ctx.tx_i32(),
+        ctx.ty_i32(),
+        surface_z,
+        RAIL_ON_BRIDGE_LAYER_FRAC,
+        TILE_HALF_H,
+    ) + Vec3::new(offset.x, offset.y, 0.0);
+    if let Some(parent) = parent {
+        spawn_bridge_combined_child(commands, ctx, map_width, parent, sprite.sprite(), position);
+    } else {
+        commands.spawn((
+            MapVisualLayer,
+            ctx.map_tile_chunk(),
+            sprite.sprite(),
+            Transform::from_translation(position),
+        ));
+    }
 }
 
 fn axis_step(axis: usize) -> (i32, i32) {
@@ -1301,9 +1341,9 @@ fn spawn_layer(
     map_width: u32,
     draw_ordinal: u8,
     pillar_half: Option<(usize, PillarHalf)>,
-) {
+) -> Option<Entity> {
     if sprite_id == 0 {
-        return;
+        return None;
     }
     use crate::sprites::{TransparencyOption, sprite_color};
     let palette = bridge_structure_palette_for_sprite(bridge_type, sprite_id);
@@ -1324,7 +1364,7 @@ fn spawn_layer(
             trace_bounds,
             trace_placement,
         );
-        return;
+        return None;
     };
     // Las cabezas de rampa no traen un `M(...)` separado en el call site,
     // pero su `TraceSpriteBounds` sigue siendo la caja que OpenTTD entrega al
@@ -1353,7 +1393,7 @@ fn spawn_layer(
         let Some((rect, x_shift)) = pillar_half_crop(axis, half, w, h, xrel) else {
             // Igual que `GfxBlitter`: una subsprite vacía conserva la decisión
             // de dibujo en la traza, pero no llega a rasterizar píxeles.
-            return;
+            return None;
         };
         sprite.rect = Some(rect);
         x_shift
@@ -1385,6 +1425,7 @@ fn spawn_layer(
     if let Some(parent) = sortable_parent {
         entity.insert(parent);
     }
+    Some(entity.id())
 }
 
 /// Las cabezas de puente se comparan con el `AddSortableSpriteToDraw` de
@@ -2163,7 +2204,7 @@ pub(crate) fn spawn_bridge_deck(
         remap_tile_offset(3.0, 0.0, 0.0) * 0.5
     };
 
-    spawn_layer(
+    let rear_parent = spawn_layer(
         commands,
         assets,
         ctx,
@@ -2211,18 +2252,33 @@ pub(crate) fn spawn_bridge_deck(
             images,
         )
     {
-        commands.spawn((
-            MapVisualLayer,
-            ctx.map_tile_chunk(),
-            sprite,
-            Transform::from_translation(tile_pos_half(
-                ctx.tx_i32(),
-                ctx.ty_i32(),
-                surface_z,
-                DECK_LAYER_FRAC + 0.001,
-                TILE_HALF_H,
-            )),
-        ));
+        let position = tile_pos_half(
+            ctx.tx_i32(),
+            ctx.ty_i32(),
+            surface_z,
+            DECK_LAYER_FRAC + 0.001,
+            TILE_HALF_H,
+        );
+        WorldDrawTrace::record_sprite_with_palette_and_geometry(
+            "bridge-deck-overlay",
+            "combined",
+            SPR_BRIDGE_DECKS_BASE.saturating_add(u32::try_from(slot).unwrap_or(0)),
+            0,
+            false,
+            (0, 0, 0),
+            (i32::from(surface_z) - i32::from(ctx.info.base_z)) * 8,
+            Some(TraceSpriteBounds::new(0, 0, 0, 16, 16, 0)),
+        );
+        if let Some(parent) = rear_parent {
+            spawn_bridge_combined_child(commands, ctx, dims.0, parent, sprite, position);
+        } else {
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                sprite,
+                Transform::from_translation(position),
+            ));
+        }
     }
     if span.rail && show_pbs_reservations && span.pbs_reserved {
         spawn_bridge_pbs_reservation(
@@ -2233,6 +2289,8 @@ pub(crate) fn spawn_bridge_deck(
             on_ramp,
             foundation_tileh,
             surface_z,
+            dims.0,
+            rear_parent,
         );
     }
     // Overlay de tranvía sobre tablero de puente de carretera.
@@ -2241,18 +2299,32 @@ pub(crate) fn spawn_bridge_deck(
         && let Some(tfi) = crate::sprites::tram_flat_sprite_index(0, tile.m3)
         && let Some(tram) = assets.tram_flat.get(tfi)
     {
-        commands.spawn((
-            MapVisualLayer,
-            ctx.map_tile_chunk(),
-            tram.sprite(),
-            Transform::from_translation(tile_pos_half(
-                ctx.tx_i32(),
-                ctx.ty_i32(),
-                surface_z,
-                RAIL_ON_BRIDGE_LAYER_FRAC,
-                TILE_HALF_H,
-            )),
-        ));
+        let position = tile_pos_half(
+            ctx.tx_i32(),
+            ctx.ty_i32(),
+            surface_z,
+            RAIL_ON_BRIDGE_LAYER_FRAC,
+            TILE_HALF_H,
+        );
+        WorldDrawTrace::record_sprite_with_geometry(
+            "bridge-tram-overlay",
+            "combined",
+            SPR_TRAMWAY_OVERLAY_BASE.saturating_add(u32::try_from(tfi).unwrap_or(0)),
+            false,
+            (0, 0, 0),
+            (i32::from(surface_z) - i32::from(ctx.info.base_z)) * 8,
+            Some(TraceSpriteBounds::new(0, 0, 0, 16, 16, 0)),
+        );
+        if let Some(parent) = rear_parent {
+            spawn_bridge_combined_child(commands, ctx, dims.0, parent, tram.sprite(), position);
+        } else {
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                tram.sprite(),
+                Transform::from_translation(position),
+            ));
+        }
     }
     if span.electric {
         if on_ramp {

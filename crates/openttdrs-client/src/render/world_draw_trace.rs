@@ -544,7 +544,15 @@ impl WorldDrawTrace {
                 return;
             };
             let ordinal = tile.draws.len();
-            let parent_ordinal = (primitive == "child").then_some(tile.last_parent).flatten();
+            // `AddSortableSpriteToDraw` dentro de `StartSpriteCombine` es un
+            // hijo del primer sortable del bloque, igual que un
+            // `AddChildSpriteScreen` conserva el último parent activo. Esto
+            // permite que la traza candidata exprese la relación de los
+            // overlays de puentes, árboles y túneles sin inventar un parent
+            // adicional en el JSONL.
+            let parent_ordinal = matches!(primitive, "child" | "combined")
+                .then_some(tile.last_parent)
+                .flatten();
             tile.draws.push(TraceDraw {
                 role,
                 primitive,

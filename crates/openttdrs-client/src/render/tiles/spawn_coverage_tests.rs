@@ -6,7 +6,9 @@ use bevy::ecs::system::RunSystemOnce;
 use bevy::image::ImagePlugin;
 use bevy::prelude::*;
 use openttdrs_core::prelude::*;
-use openttdrs_core::{Climate, FOUNDATION_ORIGINAL_SPRITE_BASE, WaterClass, set_water_class_m1};
+use openttdrs_core::{
+    BridgeType, Climate, FOUNDATION_ORIGINAL_SPRITE_BASE, RailType, WaterClass, set_water_class_m1,
+};
 
 const TEST_CLIMATE: Climate = Climate::Temperate;
 const TEST_WORLD_SEED: u64 = 0;
@@ -2612,6 +2614,80 @@ fn spawn_bridge_middle_draws_deck_over_marked_water() {
     // Tablero + barandilla frontal + 1 pilar (deck_z 1, suelo 0).
     let sprites = world.query::<&Sprite>().iter(&world).count();
     assert_eq!(sprites, 3, "vano dibuja tablero, barandilla y pilar");
+}
+
+#[test]
+fn bridge_pbs_overlay_stays_attached_to_the_rear_combined_parent() {
+    let assets = boot_assets_app();
+    let expected_pbs = assets.pbs_rail_sprite(1005).expect("reserva PBS X").clone();
+    let mut map = fresh_map8();
+    let c = |x: i32, y: i32| TileCoord::new(x, y);
+
+    // Puente ferroviario X con reserva en el extremo norte. El vano está
+    // sobre agua para recorrer el mismo camino que un puente real de Kale.
+    let mut ramp = tile_template();
+    ramp.kind = TileKind::RailBridge;
+    ramp.mapt = 0x90;
+    ramp.m5 = 0x92; // bridge + SW + HasTunnelBridgeReservation
+    ramp.m8 = RailType::Rail as u16;
+    ramp.m6 = openttdrs_core::set_bridge_type_m6(0, BridgeType::CantileverRed);
+    map.set_tile(c(1, 1), ramp).expect("rampa oeste");
+    ramp.m5 = 0x90; // bridge + NE + reserva
+    map.set_tile(c(4, 1), ramp).expect("rampa este");
+    for x in 2..=3 {
+        let mut water = tile_template();
+        water.kind = TileKind::Water;
+        water.mapt = 0x64; // MP_WATER + bridge above eje X
+        map.set_tile(c(x, 1), water).expect("vano de agua");
+    }
+
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world
+        .run_system_once(
+            |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                spawn_bridge_middle(
+                    &mut commands,
+                    &m.0,
+                    m.0.dimensions(),
+                    &a.0,
+                    &TileRenderContext::new(&m.0, &g.0, 2, 1),
+                    true,
+                    &[],
+                    None,
+                    &[],
+                    None,
+                    None,
+                );
+            },
+        )
+        .expect("bridge PBS spawn");
+
+    let mut children = world.query::<(Entity, &ViewportSortableChild, &Sprite)>();
+    let attached: Vec<_> = children
+        .iter(&world)
+        .filter(|(_, _, sprite)| expected_pbs.matches(sprite))
+        .collect();
+    assert_eq!(attached.len(), 1, "el overlay PBS debe dibujarse una vez");
+    let (_, child, _) = attached[0];
+    assert!(
+        world
+            .entity(child.parent)
+            .contains::<ViewportSortableParent>(),
+        "el overlay PBS debe colgar del parent trasero del bloque combinado"
+    );
+    assert_eq!(
+        child.source_depth,
+        world
+            .entity(attached[0].0)
+            .get::<Transform>()
+            .unwrap()
+            .translation
+            .z
+    );
 }
 
 #[test]

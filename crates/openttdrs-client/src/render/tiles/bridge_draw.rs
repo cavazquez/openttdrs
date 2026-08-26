@@ -81,7 +81,15 @@ const SPR_TRAMWAY_OVERLAY_BASE: u32 = 5990;
 const BRIDGE_ROAD_OVERLAY_OFFSETS: [usize; 6] = [0, 1, 11, 12, 13, 14];
 /// Selectores `RoadTypeSpriteGroup` de `road.h`.
 const ROTSG_OVERLAY: u8 = 1;
+const ROTSG_CATENARY_FRONT: u8 = 4;
+const ROTSG_CATENARY_BACK: u8 = 5;
 const ROTSG_BRIDGE: u8 = 6;
+/// Desplazamientos de los sprites de catenaria de puente vanilla.
+///
+/// Los grupos custom empiezan en la vista 23 y reutilizan esta misma tabla
+/// para que la selección de pendientes coincida con `GetBridgeRoadCatenary`.
+const BRIDGE_ROAD_CATENARY_BACK_OFFSETS: [usize; 6] = [95, 96, 99, 102, 100, 101];
+const BRIDGE_ROAD_CATENARY_FRONT_OFFSETS: [usize; 6] = [97, 98, 103, 106, 104, 105];
 /// `SPR_BRIDGE_DECKS_BASE` de Action5 `0x1B` (base 6240).
 const SPR_BRIDGE_DECKS_BASE: u32 = 6240;
 /// `SPR_TRACKS_FOR_SLOPES_RAIL_BASE` de OpenTTD.
@@ -2442,6 +2450,7 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
     let transport_source = bridge_transport_source(map, ctx.coord, dims, on_ramp);
     let mut custom_bridge_surface = false;
     let mut custom_tram_overlay = false;
+    let mut custom_front_catenary = None;
     if !span.rail
         && let Some((source_coord, source_tile)) = transport_source
     {
@@ -2546,6 +2555,64 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
                 RAIL_ON_BRIDGE_LAYER_FRAC,
             );
             custom_tram_overlay = true;
+        }
+
+        // `DrawBridgeRoadBits` coloca la catenaria trasera en el primer
+        // `SpriteCombine` y la delantera en uno nuevo. Resolver ambos grupos
+        // aquí conserva esa separación: la trasera es child de la baranda
+        // posterior y la delantera espera al parent frontal que se crea más
+        // abajo. La carretera tiene prioridad sobre el tranvía, igual que en
+        // OpenTTD; sólo los tipos que publican el flag Catenary pueden usar
+        // estos grupos específicos.
+        let catenary_def = road_def
+            .filter(|def| def.has_catenary())
+            .or_else(|| tram_def.filter(|def| def.has_catenary()));
+        if let Some(def) = catenary_def {
+            let offset = bridge_road_sprite_offset(span, source_tile, on_ramp, foundation_tileh)
+                .min(BRIDGE_ROAD_CATENARY_BACK_OFFSETS.len() - 1);
+            if def.has_newgrf_specific_group(ROTSG_CATENARY_BACK)
+                && let Some((sprite, view)) = bridge_specific_sprite(
+                    def,
+                    map,
+                    ROTSG_CATENARY_BACK,
+                    23 + BRIDGE_ROAD_CATENARY_BACK_OFFSETS[offset],
+                    source_coord,
+                    source_tile,
+                    climate,
+                    road_catalog,
+                    newgrf_stack,
+                    &mut road_sprites,
+                    &mut images,
+                )
+            {
+                spawn_bridge_specific_child(
+                    commands,
+                    ctx,
+                    dims.0,
+                    rear_parent,
+                    sprite,
+                    &view,
+                    surface_z,
+                    DECK_LAYER_FRAC + 0.002,
+                );
+            }
+            if def.has_newgrf_specific_group(ROTSG_CATENARY_FRONT)
+                && let Some((sprite, view)) = bridge_specific_sprite(
+                    def,
+                    map,
+                    ROTSG_CATENARY_FRONT,
+                    23 + BRIDGE_ROAD_CATENARY_FRONT_OFFSETS[offset],
+                    source_coord,
+                    source_tile,
+                    climate,
+                    road_catalog,
+                    newgrf_stack,
+                    &mut road_sprites,
+                    &mut images,
+                )
+            {
+                custom_front_catenary = Some((sprite, view));
+            }
         }
     }
     // Una superficie Action5 `0x1B` se compone sobre la estructura en un
@@ -2678,7 +2745,7 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
             );
         }
     }
-    spawn_layer(
+    let front_parent = spawn_layer(
         commands,
         assets,
         ctx,
@@ -2696,6 +2763,21 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
         BRIDGE_FRONT_ORDINAL,
         None,
     );
+    if let Some((sprite, view)) = custom_front_catenary {
+        // En una rampa no hay baranda frontal independiente; el bloque de
+        // catenaria sigue siendo parte del combine de la cabeza y se ancla al
+        // parent trasero. En un vano se conserva el combine frontal real.
+        spawn_bridge_specific_child(
+            commands,
+            ctx,
+            dims.0,
+            front_parent.or(rear_parent),
+            sprite,
+            &view,
+            surface_z,
+            FRONT_LAYER_FRAC + 0.002,
+        );
+    }
 
     if !draw_pillars {
         return;

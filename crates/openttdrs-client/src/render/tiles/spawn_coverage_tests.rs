@@ -3155,7 +3155,7 @@ fn bridge_middle_uses_south_ramp_tram_overlay_as_combined_child() {
 }
 
 #[test]
-fn bridge_middle_resolves_newgrf_bridge_and_overlay_groups_from_south_ramp() {
+fn bridge_middle_resolves_newgrf_bridge_overlay_and_catenary_groups_from_south_ramp() {
     use openttdrs_core::newgrf_sprites::{DecodedSprite, TrainSpriteAssign, TrainSpriteGraphics};
 
     let assets = boot_assets_app();
@@ -3193,8 +3193,24 @@ fn bridge_middle_resolves_newgrf_bridge_and_overlay_groups_from_south_ramp() {
         rgba: [0, 0, 255, 255].repeat(4),
         mask: Vec::new(),
     };
+    let green = DecodedSprite {
+        width: 2,
+        height: 2,
+        x_offs: 0,
+        y_offs: 0,
+        rgba: [0, 255, 0, 255].repeat(4),
+        mask: Vec::new(),
+    };
+    let yellow = DecodedSprite {
+        width: 2,
+        height: 2,
+        x_offs: 0,
+        y_offs: 0,
+        rgba: [255, 255, 0, 255].repeat(4),
+        mask: Vec::new(),
+    };
     let mut graphics = TrainSpriteGraphics {
-        sets: vec![vec![red], vec![blue]],
+        sets: vec![vec![red], vec![blue], vec![green], vec![yellow]],
         assigns: vec![TrainSpriteAssign {
             local_id: 0,
             set_id: 0,
@@ -3203,6 +3219,8 @@ fn bridge_middle_resolves_newgrf_bridge_and_overlay_groups_from_south_ramp() {
     };
     graphics.specific_assigns.insert((0, 6), 0); // ROTSG_BRIDGE
     graphics.specific_assigns.insert((0, 1), 1); // ROTSG_OVERLAY
+    graphics.specific_assigns.insert((0, 5), 2); // ROTSG_CATENARY_BACK
+    graphics.specific_assigns.insert((0, 4), 3); // ROTSG_CATENARY_FRONT
     let road_def = RoadTypeDef {
         id: RoadType::from_u8(2),
         class: RoadTramType::Road,
@@ -3212,7 +3230,7 @@ fn bridge_middle_resolves_newgrf_bridge_and_overlay_groups_from_south_ramp() {
         max_speed: 0,
         cost_multiplier: 0,
         maintenance_multiplier: 0,
-        flags: 0,
+        flags: 1, // RoadTypeFlag::Catenary
         powered_mask: 0,
         from_tramtypes_feature: false,
         from_newgrf: true,
@@ -3269,14 +3287,17 @@ fn bridge_middle_resolves_newgrf_bridge_and_overlay_groups_from_south_ramp() {
         .filter_map(|(parent, handle)| {
             let image = world.resource::<Assets<Image>>().get(&handle)?;
             let first = image.data.as_deref()?.get(0..4)?;
-            (first == [255, 0, 0, 255] || first == [0, 0, 255, 255])
-                .then_some((parent, first.to_vec()))
+            (first == [255, 0, 0, 255]
+                || first == [0, 0, 255, 255]
+                || first == [0, 255, 0, 255]
+                || first == [255, 255, 0, 255])
+            .then_some((parent, first.to_vec()))
         })
         .collect();
     assert_eq!(
         custom_handles.len(),
-        2,
-        "bridge y overlay deben ser children"
+        4,
+        "bridge, overlay y ambos grupos de catenaria deben ser children"
     );
     assert!(
         custom_handles
@@ -3292,6 +3313,16 @@ fn bridge_middle_resolves_newgrf_bridge_and_overlay_groups_from_south_ramp() {
         custom_handles
             .iter()
             .any(|(_, rgba)| rgba == &[0, 0, 255, 255])
+    );
+    assert!(
+        custom_handles
+            .iter()
+            .any(|(_, rgba)| rgba == &[0, 255, 0, 255])
+    );
+    assert!(
+        custom_handles
+            .iter()
+            .any(|(_, rgba)| rgba == &[255, 255, 0, 255])
     );
 }
 

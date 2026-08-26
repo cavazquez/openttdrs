@@ -145,6 +145,17 @@ pub struct RoadTypeDef {
 }
 
 impl RoadTypeDef {
+    /// Indica si este tipo dibuja catenaria sobre carreteras y puentes.
+    ///
+    /// `RoadTypeFlag::Catenary` es el bit 0 de Action0. El tranvía vanilla
+    /// se creó antes de que el catálogo conservara esos flags, por lo que se
+    /// mantiene como excepción explícita para que los puentes no pierdan sus
+    /// cables al usar el catálogo vanilla.
+    #[must_use]
+    pub const fn has_catenary(&self) -> bool {
+        self.flags & 1 != 0 || self.id.0 == RoadType::TRAM.0
+    }
+
     /// Preview `NewGRF` si el tipo trae sprite Action1/3.
     #[must_use]
     pub fn newgrf_preview_sprite(&self) -> Option<&crate::newgrf_sprites::DecodedSprite> {
@@ -403,5 +414,17 @@ mod tests {
 
         assert!(list_road_types(&cat, RoadTramType::Road, "zzz", 1950).is_empty());
         assert!(list_road_types(&cat, RoadTramType::Tram, "carretera", 1950).is_empty());
+    }
+
+    #[test]
+    fn catenary_flag_matches_roadtype_flag_and_vanilla_tram() {
+        let mut catalog = vanilla_road_type_catalog();
+        assert!(!catalog[0].has_catenary());
+        assert!(catalog[1].has_catenary());
+
+        catalog[0].flags = 1;
+        assert!(catalog[0].has_catenary());
+        catalog[1].flags = 0;
+        assert!(catalog[1].has_catenary());
     }
 }

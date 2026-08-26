@@ -185,8 +185,13 @@ mantiene el fallback independiente para no perder el sprite. Los grupos
 NewGRF `ROTSG_BRIDGE`/`ROTSG_OVERLAY` de carretera ya se resuelven
 contra la rampa sur del puente, aplican los offsets específicos, sustituyen el
 deck Action5 cuando entregan una superficie y quedan como children del parent
-trasero combinado. La mitad frontal de `DrawBridgeRoadBits` y los grupos de
-catenaria todavía requieren sus propios parents/children.
+trasero combinado. `ROTSG_CATENARY_BACK` y `ROTSG_CATENARY_FRONT` también se
+resuelven con la misma prioridad carretera→tranvía: la mitad trasera queda
+unida al parent posterior y la delantera al parent frontal de cada vano (en
+una cabeza sin baranda frontal se conserva el parent de la cabeza). El flag
+Action0 `RoadTypeFlag::Catenary` y el tranvía vanilla determinan si se solicita
+el grupo. Sigue faltando el fallback vanilla de `SPR_TRAMWAY_BASE` y sus
+assets, además de layouts/children completos.
 Los overlays de estación rail NewGRF se resuelven también en pendientes y se
 vinculan al parent de la fundación nivelada. Los objetos NewGRF ya reevalúan
 Action2 por tesela con random, offset de footprint, pendiente/terreno,

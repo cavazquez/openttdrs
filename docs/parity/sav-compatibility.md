@@ -33,6 +33,18 @@ preserva. Importar un dato no implica que el exportador lo escriba.
 | Compañías y noticias | 🟡 dinero/préstamo/límite de préstamo individual (`PLYR.max_loan`, incluido el centinela global), meses de bancarrota/color/nombre/presidente/`face`/`face_style`/indicador AI, `settings.*`, 23 `PLYR.liveries` e historial trimestral (`cur_economy` + hasta 24 `old_economy`, incluido `delivered_cargo`) | 🟡 `PLYR` con esos campos, incluidas las libreas nativas (SLV355) y el orden más-reciente-primero de `old_economy`; un override de préstamo no es reemplazado por inflación | Faltan flags completos; el renderer aún no aplica las libreas por tipo. La cola propia completa queda en JSON |
 | NewGRF | 🟡 conserva `NGRF`, `ENGN`, `EIDS` y storage/mappings nativos como chunks opacos | 🟡 reemite esos chunks sin interpretar | El runtime todavía no ejecuta todos los callbacks ni valida que los `.grf` estén instalados |
 
+### Chunks futuros y campos no modelados
+
+El lector conserva ahora todos los chunks cuyo *fourcc* no es reconstruido por
+el escritor, no sólo la lista de features conocida. Esto incluye chunks nativos
+actuales como `VIEW`, `DEPT`, `SUBS`, `ROAD`, `AIPL`, `GSTR` y `GSDT`, además de
+cualquier chunk futuro que use uno de los tipos de contenedor soportados. El
+cuerpo se guarda junto con su tipo (`RIFF`, `TABLE`, `ARRAY`, etc.) y se reemite
+sin modificar al exportar. Las tablas que sí se reconstruyen (`VEHS`, `STNN`,
+`PLYR`, `PATS`, `LGRP`, …) siguen teniendo únicamente el subconjunto de campos
+documentado; sus columnas desconocidas todavía requieren un merge estructural
+antes de poder afirmar paridad completa.
+
 ## Qué usar en cada caso
 
 - Elegir `.sav` para intercambio del subconjunto anterior con OpenTTD 15.3.

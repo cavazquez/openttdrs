@@ -114,17 +114,27 @@ pub struct SavOpaqueChunk {
     pub body: Vec<u8>,
 }
 
-/// Chunks cuyo contenido es necesario para que `OpenTTD` reconstruya pools,
-/// mappings o configuración que el core aún no ejecuta.
+/// Chunks que el escritor reconstruye desde el modelo semántico.
+///
+/// Todo chunk que no aparece aquí se conserva como [`SavOpaqueChunk`]. Esto es
+/// deliberadamente más amplio que una lista de features conocida: `OpenTTD`
+/// agrega chunks con frecuencia (por ejemplo `VIEW`, `DEPT`, `SUBS` o
+/// `GSTR`) y descartarlos rompe el round-trip aunque todavía no sepamos
+/// interpretar sus campos.
+const REBUILT_CHUNKS: &[[u8; 4]] = &[
+    *b"MAPS", *b"MAPT", *b"MAPH", *b"MAPO", *b"MAP2", *b"M3LO", *b"M3HI", *b"MAP5", *b"MAPE",
+    *b"MAP7", *b"MAP8", *b"STNN", *b"CITY", *b"INDY", *b"ORDL", *b"ORDR", *b"VEHS", *b"LGRP",
+    *b"LGRJ", *b"LGRS", *b"PATS", *b"ECMY", *b"CAPY", *b"GRPS", *b"ERNW", *b"DATE", *b"PLYR",
+];
+
+/// Conserva los chunks nativos cuyo contenido todavía no tiene un modelo de
+/// runtime. La comparación con [`REBUILT_CHUNKS`] evita reemitir una copia
+/// obsoleta de `ORDR`/`PLYR`/`VEHS` junto con la tabla reconstruida, pero deja
+/// pasar tanto los chunks `NewGRF` conocidos como cualquier fourcc futuro.
 fn opaque_chunks_from_chunks(chunks: &[chunks::RawChunk]) -> Vec<SavOpaqueChunk> {
-    const PASSTHROUGH: &[[u8; 4]] = &[
-        *b"ENGN", *b"ENGS", *b"EIDS", *b"GSET", *b"NGRF", *b"OBJS", *b"OBID", *b"SRND", *b"PSAC",
-        *b"IIDS", *b"TIDS", *b"APID", *b"ATID", *b"RAIL", *b"ROTT", *b"GLOG", *b"GOAL", *b"STPE",
-        *b"STPA", *b"SIGN",
-    ];
     chunks
         .iter()
-        .filter(|chunk| PASSTHROUGH.contains(&chunk.name))
+        .filter(|chunk| !REBUILT_CHUNKS.contains(&chunk.name))
         .map(|chunk| SavOpaqueChunk {
             name: chunk.name,
             ch_type: chunk.ch_type,
@@ -1403,6 +1413,59 @@ mod tests {
             autoreplace_rules: Vec::new(),
             opaque_chunks: Vec::new(),
         }
+    }
+
+    #[test]
+    fn opaque_chunks_capture_future_fourcc_without_shadowing_rebuilt_tables() {
+        let chunks = vec![
+            chunks::RawChunk {
+                name: *b"MAPT",
+                ch_type: chunks::CH_RIFF,
+                body: vec![1],
+            },
+            chunks::RawChunk {
+                name: *b"VIEW",
+                ch_type: chunks::CH_RIFF,
+                body: vec![2, 3],
+            },
+            chunks::RawChunk {
+                name: *b"CAPA",
+                ch_type: chunks::CH_TABLE,
+                body: vec![4],
+            },
+            chunks::RawChunk {
+                name: *b"ZZZZ",
+                ch_type: chunks::CH_RIFF,
+                body: vec![5, 6],
+            },
+            chunks::RawChunk {
+                name: *b"ORDR",
+                ch_type: chunks::CH_ARRAY,
+                body: vec![7],
+            },
+        ];
+
+        let opaque = opaque_chunks_from_chunks(&chunks);
+        assert_eq!(
+            opaque,
+            vec![
+                SavOpaqueChunk {
+                    name: *b"VIEW",
+                    ch_type: chunks::CH_RIFF,
+                    body: vec![2, 3],
+                },
+                SavOpaqueChunk {
+                    name: *b"CAPA",
+                    ch_type: chunks::CH_TABLE,
+                    body: vec![4],
+                },
+                SavOpaqueChunk {
+                    name: *b"ZZZZ",
+                    ch_type: chunks::CH_RIFF,
+                    body: vec![5, 6],
+                },
+            ]
+        );
     }
 
     #[test]

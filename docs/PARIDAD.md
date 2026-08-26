@@ -197,6 +197,8 @@ contrato runtime completo. El sprite-stack de vehículos ya resuelve grupos
 Action2 real (loaded/loading) y materializa hasta ocho capas como children
 ordenados por unidad; articulación, wagon overrides y callbacks que requieren
 estado completo de consist siguen siendo residuales.
+La carga gradual ya ejecuta CB12 (`load_amount`) cuando el motor declara la
+máscara correspondiente.
 Los focos naval
 `138,7..140,10` y de muelle `136,1..139,3` vinculan
 7/7 parents candidatos al orden final C++; es evidencia del contrato de cajas y

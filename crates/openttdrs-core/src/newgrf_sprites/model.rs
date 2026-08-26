@@ -445,6 +445,8 @@ impl TrainSpriteGraphics {
 pub const CALLBACK_FAILED: u16 = 0xFFFF;
 /// Callback estaciones: layout de tesela al construir (`CBID_STATION_BUILD_TILE_LAYOUT`).
 pub const CBID_STATION_BUILD_TILE_LAYOUT: u16 = 0x24;
+/// Callback vehículos: ajustar la cantidad cargada por tick (`CBID_VEHICLE_LOAD_AMOUNT`).
+pub const CBID_VEHICLE_LOAD_AMOUNT: u16 = 0x12;
 /// Callback vehículos: permitir start/stop (`CBID_VEHICLE_START_STOP_CHECK`).
 pub const CBID_VEHICLE_START_STOP_CHECK: u16 = 0x31;
 /// Callback vehículos: seleccionar un efecto de sonido (`CBID_VEHICLE_SOUND_EFFECT`).

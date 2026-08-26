@@ -103,18 +103,21 @@ fn trigger_station_vehicle_load_animation(
     );
 }
 
-fn vehicle_load_unload_speed(state: &GameState, vehicle_idx: usize, cargo: CargoType) -> u32 {
-    let configured = state
-        .vehicles
-        .get(vehicle_idx)
-        .and_then(|vehicle| vehicle.engine_id)
+fn vehicle_load_unload_speed(state: &mut GameState, vehicle_idx: usize, cargo: CargoType) -> u32 {
+    let Some(vehicle) = state.vehicles.get_mut(vehicle_idx) else {
+        return crate::cargo_packet::load_unload_speed(cargo);
+    };
+    let configured_engine = vehicle
+        .engine_id
         .and_then(|engine_id| crate::engine::engine_in_catalog(&state.engine_catalog, engine_id))
-        .map_or(0, |engine| engine.load_amount);
-    if configured == 0 {
-        crate::cargo_packet::load_unload_speed(cargo)
-    } else {
-        u32::from(configured)
-    }
+        .cloned();
+    let callback_amount = configured_engine.as_ref().and_then(|engine| {
+        crate::newgrf_callback::resolve_vehicle_load_amount_callback(engine, vehicle)
+    });
+    let configured = callback_amount.or_else(|| configured_engine.map(|engine| engine.load_amount));
+    configured
+        .filter(|amount| *amount > 0)
+        .map_or_else(|| crate::cargo_packet::load_unload_speed(cargo), u32::from)
 }
 
 #[allow(clippy::too_many_lines)]
@@ -1184,7 +1187,7 @@ mod tests {
         state.vehicles.push(vehicle);
 
         assert_eq!(
-            vehicle_load_unload_speed(&state, 0, CargoType::Passengers),
+            vehicle_load_unload_speed(&mut state, 0, CargoType::Passengers),
             crate::cargo_packet::load_unload_speed(CargoType::Passengers)
         );
         let mut patched = false;
@@ -1199,7 +1202,7 @@ mod tests {
         }
         assert!(patched, "engine in catalog");
         assert_eq!(
-            vehicle_load_unload_speed(&state, 0, CargoType::Passengers),
+            vehicle_load_unload_speed(&mut state, 0, CargoType::Passengers),
             3
         );
     }

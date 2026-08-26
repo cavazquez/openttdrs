@@ -17,7 +17,8 @@ use crate::newgrf_sprites::{
     CBID_CARGO_STATION_RATING_CALC, CBID_HOUSE_ALLOW_CONSTRUCTION, CBID_INDUSTRY_LOCATION,
     CBID_OBJECT_LAND_SLOPE_CHECK, CBID_STATION_ANIMATION_NEXT_FRAME, CBID_STATION_ANIMATION_SPEED,
     CBID_STATION_ANIMATION_TRIGGER, CBID_STATION_AVAILABILITY, CBID_STATION_LAND_SLOPE_CHECK,
-    CBID_VEHICLE_SOUND_EFFECT, CBID_VEHICLE_START_STOP_CHECK, TrainSpriteGraphics,
+    CBID_VEHICLE_LOAD_AMOUNT, CBID_VEHICLE_SOUND_EFFECT, CBID_VEHICLE_START_STOP_CHECK,
+    TrainSpriteGraphics,
 };
 use crate::object_spec::ObjectSpecDef;
 use crate::road_stop_action2::{
@@ -121,6 +122,30 @@ pub fn apply_vehicle_start_stop_callback(engine: &EngineDef, vehicle: &mut Vehic
     }
     let result = resolve_vehicle_callback(engine, vehicle, CBID_VEHICLE_START_STOP_CHECK, 0, 0);
     vehicle_start_stop_callback_allows(result)
+}
+
+/// Resuelve `CBID_VEHICLE_LOAD_AMOUNT` (`0x12`) para carga gradual.
+///
+/// El callback devuelve un `BYTE`; `CALLBACK_FAILED` o cero conservan la
+/// propiedad `load_amount` del motor. Un resultado fuera de ocho bits se trata
+/// como inválido y también cae al valor de la propiedad, evitando que un GRF
+/// mal formado detenga el pipeline de carga.
+#[must_use]
+pub fn resolve_vehicle_load_amount_callback(
+    engine: &EngineDef,
+    vehicle: &mut Vehicle,
+) -> Option<u8> {
+    if engine.newgrf_grfid == 0
+        || engine.vehicle_callback_mask & (1 << 2) == 0
+        || engine.newgrf_runtime.is_none()
+    {
+        return None;
+    }
+    let result = resolve_vehicle_callback(engine, vehicle, CBID_VEHICLE_LOAD_AMOUNT, 0, 0);
+    if result == CALLBACK_FAILED || result == 0 || result >= 0x100 {
+        return None;
+    }
+    u8::try_from(result).ok()
 }
 
 /// Resultado del callback de sonido de un vehículo.
@@ -1323,6 +1348,43 @@ mod tests {
 
         engine.newgrf_runtime = None;
         assert!(apply_vehicle_start_stop_callback(&engine, &mut v));
+    }
+
+    #[test]
+    fn callbacks_ac_vehicle_load_amount_uses_nonzero_byte_and_falls_back() {
+        let mut engine = engines_table()
+            .iter()
+            .find(|e| e.kind == VehicleKind::Train && e.power_hp > 0)
+            .cloned()
+            .unwrap();
+        engine.newgrf_grfid = 0x4C_4F_41_44;
+        engine.newgrf_local_id = 0;
+        engine.vehicle_callback_mask = 1 << 2;
+        engine.newgrf_runtime = Some(Box::new(gfx_callback_literal(7)));
+        let mut vehicle = Vehicle::new(
+            2,
+            VehicleKind::Train,
+            TileCoord::new(1, 1),
+            TileCoord::new(1, 1),
+        );
+        assert_eq!(
+            resolve_vehicle_load_amount_callback(&engine, &mut vehicle),
+            Some(7)
+        );
+
+        // Cero significa «usa la propiedad load_amount», no una carga nula.
+        engine.newgrf_runtime = Some(Box::new(gfx_callback_literal(0)));
+        assert_eq!(
+            resolve_vehicle_load_amount_callback(&engine, &mut vehicle),
+            None
+        );
+        // Sin la máscara o sin GRF el callback no se consulta.
+        engine.vehicle_callback_mask = 0;
+        engine.newgrf_runtime = Some(Box::new(gfx_callback_literal(9)));
+        assert_eq!(
+            resolve_vehicle_load_amount_callback(&engine, &mut vehicle),
+            None
+        );
     }
 
     #[test]

@@ -408,10 +408,16 @@ pub(super) fn move_vehicles(state: &mut GameState) {
             // todavía no tienen sus cachés de potencia/peso. Una vez armadas,
             // el hot path sólo propaga poses de los seguidores.
             if state.vehicles[i].cached_weight_t == 0 {
-                crate::train_consist::consist_changed_with_map(
+                // La reconstrucción también ocurre al recuperar saves y en
+                // fixtures que crean la unidad directamente. Debe resolver
+                // el motor del catálogo activo para no perder los callbacks
+                // CB36 (peso, potencia, capacidad y velocidad) en el primer
+                // tick de movimiento.
+                crate::train_consist::consist_changed_with_map_and_catalog(
                     &mut state.vehicles,
                     vehicle_id,
                     Some(&state.map),
+                    &state.engine_catalog,
                 );
             } else {
                 crate::train_consist::propagate_consist_unit_poses_with_map_indexed(

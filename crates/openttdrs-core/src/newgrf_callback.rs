@@ -17,8 +17,8 @@ use crate::newgrf_sprites::{
     CBID_CARGO_STATION_RATING_CALC, CBID_HOUSE_ALLOW_CONSTRUCTION, CBID_INDUSTRY_LOCATION,
     CBID_OBJECT_LAND_SLOPE_CHECK, CBID_STATION_ANIMATION_NEXT_FRAME, CBID_STATION_ANIMATION_SPEED,
     CBID_STATION_ANIMATION_TRIGGER, CBID_STATION_AVAILABILITY, CBID_STATION_LAND_SLOPE_CHECK,
-    CBID_VEHICLE_LOAD_AMOUNT, CBID_VEHICLE_SOUND_EFFECT, CBID_VEHICLE_START_STOP_CHECK,
-    TrainSpriteGraphics,
+    CBID_VEHICLE_LOAD_AMOUNT, CBID_VEHICLE_REFIT_CAPACITY, CBID_VEHICLE_SOUND_EFFECT,
+    CBID_VEHICLE_START_STOP_CHECK, TrainSpriteGraphics,
 };
 use crate::object_spec::ObjectSpecDef;
 use crate::road_stop_action2::{
@@ -146,6 +146,32 @@ pub fn resolve_vehicle_load_amount_callback(
         return None;
     }
     u8::try_from(result).ok()
+}
+
+/// Resuelve `CBID_VEHICLE_REFIT_CAPACITY` (`0x15`) para un cargo objetivo.
+///
+/// `OpenTTD` evalúa el callback con `Vehicle::cargo_type` ya cambiado al cargo
+/// solicitado y devuelve la capacidad final (15 bits). El tipo original se
+/// restaura antes de volver al caller; los registros `7C` sí se conservan en
+/// el vehículo, como en cualquier callback con scope de vehículo. Un callback
+/// fallido deja que el motor aplique su propiedad y multiplicador normales.
+#[must_use]
+pub fn resolve_vehicle_refit_capacity_callback(
+    engine: &EngineDef,
+    vehicle: &mut Vehicle,
+    cargo: CargoType,
+) -> Option<u32> {
+    if engine.newgrf_grfid == 0
+        || engine.vehicle_callback_mask & (1 << 3) == 0
+        || engine.newgrf_runtime.is_none()
+    {
+        return None;
+    }
+    let previous_cargo = vehicle.cargo_type;
+    vehicle.cargo_type = Some(cargo);
+    let result = resolve_vehicle_callback(engine, vehicle, CBID_VEHICLE_REFIT_CAPACITY, 0, 0);
+    vehicle.cargo_type = previous_cargo;
+    (result != CALLBACK_FAILED).then_some(u32::from(result))
 }
 
 /// Resultado del callback de sonido de un vehículo.
@@ -1383,6 +1409,47 @@ mod tests {
         engine.newgrf_runtime = Some(Box::new(gfx_callback_literal(9)));
         assert_eq!(
             resolve_vehicle_load_amount_callback(&engine, &mut vehicle),
+            None
+        );
+    }
+
+    #[test]
+    fn callbacks_ac_vehicle_refit_capacity_uses_target_cargo_and_restores_type() {
+        let mut engine = engines_table()
+            .iter()
+            .find(|e| e.kind == VehicleKind::Train && e.power_hp > 0)
+            .cloned()
+            .unwrap();
+        engine.newgrf_grfid = 0x5245_4649;
+        engine.newgrf_local_id = 0;
+        engine.vehicle_callback_mask = 1 << 3;
+        engine.newgrf_runtime = Some(Box::new(gfx_callback_literal(42)));
+        let mut vehicle = Vehicle::new(
+            3,
+            VehicleKind::Train,
+            TileCoord::new(1, 1),
+            TileCoord::new(1, 1),
+        );
+        vehicle.cargo_type = Some(CargoType::Passengers);
+        assert_eq!(
+            resolve_vehicle_refit_capacity_callback(&engine, &mut vehicle, CargoType::Coal),
+            Some(42)
+        );
+        assert_eq!(
+            vehicle.cargo_type,
+            Some(CargoType::Passengers),
+            "el callback no debe cambiar el refit solicitado"
+        );
+
+        engine.newgrf_runtime = Some(Box::new(gfx_callback_literal(0)));
+        assert_eq!(
+            resolve_vehicle_refit_capacity_callback(&engine, &mut vehicle, CargoType::Coal),
+            Some(0),
+            "cero es una capacidad válida devuelta por CB15"
+        );
+        engine.vehicle_callback_mask = 0;
+        assert_eq!(
+            resolve_vehicle_refit_capacity_callback(&engine, &mut vehicle, CargoType::Coal),
             None
         );
     }

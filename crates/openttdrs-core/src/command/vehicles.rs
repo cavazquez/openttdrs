@@ -721,6 +721,27 @@ pub(super) fn refit_vehicle(
         let Some(vehicle) = state.vehicles.iter_mut().find(|v| v.id == tid) else {
             return Err(CommandError::VehicleNotFound);
         };
+        let engine = vehicle
+            .engine_id
+            .and_then(|id| crate::engine::engine_in_catalog(&state.engine_catalog, id))
+            .cloned();
+        let callback_capacity = engine.as_ref().and_then(|engine| {
+            crate::newgrf_callback::resolve_vehicle_refit_capacity_callback(engine, vehicle, cargo)
+        });
+        let property_capacity =
+            engine
+                .as_ref()
+                .filter(|engine| engine.capacity > 0)
+                .map(|engine| {
+                    crate::cargo_spec::apply_cargo_capacity_multiplier(
+                        engine.capacity,
+                        &state.cargo_spec_catalog,
+                        cargo,
+                    )
+                });
+        if let Some(capacity) = callback_capacity.or(property_capacity) {
+            vehicle.capacity = capacity;
+        }
         vehicle.cargo_type = Some(cargo);
     }
     Ok(())

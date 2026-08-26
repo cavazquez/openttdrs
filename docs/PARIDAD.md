@@ -243,9 +243,12 @@ la clave de caché de sprites runtime. Los mapas 2CC/crash y livery específicos
 por compañía siguen pendientes porque requieren sus tablas de paleta propias.
 El callback `0x36` (modify property) ya expone resultados signed/unsigned de
 15 bits y alimenta el acortamiento de unidades de tren y carretera mediante las
-propiedades `0x21`/`0x23` cuando no hay CB11. Capacidad, velocidad, potencia,
-esfuerzo tractor, costes y el resto de propiedades Action0 todavía no tienen
-call sites, por lo que esta cobertura sigue siendo parcial.
+propiedades `0x21`/`0x23` cuando no hay CB11. La velocidad efectiva consulta
+`0x09` (tren), `0x15` (carretera), `0x0B` (barco) y `0x0C` (aeronave) durante el
+movimiento, pendientes, crucero, adelantamiento y rating de estación, con
+fallback a Action0 y writeback de `7C`. Capacidad, potencia, esfuerzo tractor,
+costes y el resto de propiedades Action0 todavía no tienen call sites, por lo
+que esta cobertura sigue siendo parcial.
 La carga gradual ya ejecuta CB12 (`load_amount`) cuando el motor declara la
 máscara correspondiente.
 Los focos naval

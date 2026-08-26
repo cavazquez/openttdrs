@@ -837,7 +837,7 @@ fn try_load_from_station_waiting_cargo(
     }
 
     // Aunque no haya carga, el intento cuenta: desbloquea selectgoods / MoveGoodsToStation.
-    let visit = state.vehicles[vehicle_idx].station_visit(state.tick.get());
+    let visit = state.vehicles[vehicle_idx].station_visit_with_callbacks(state.tick.get());
     station::note_station_load_attempt(&mut state.stations[station_idx], cargo, visit);
 
     let available = stock.get(cargo);
@@ -904,7 +904,7 @@ fn try_load_from_station_waiting_cargo(
     state.vehicles[vehicle_idx].sync_cargo_from_packets();
     state.vehicles[vehicle_idx].last_pickup_station = Some(station_pos);
     state.vehicles[vehicle_idx].last_depart_tick = Some(state.tick.get());
-    let visit = state.vehicles[vehicle_idx].station_visit(state.tick.get());
+    let visit = state.vehicles[vehicle_idx].station_visit_with_callbacks(state.tick.get());
     station::on_station_cargo_pickup(&mut state.stations[station_idx], cargo, company, visit);
     if state.stations[station_idx].cargo_stock.get(cargo) == 0 {
         trigger_station_cargo_animation(

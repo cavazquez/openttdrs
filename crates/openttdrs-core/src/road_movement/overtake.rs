@@ -27,54 +27,72 @@ pub fn road_veh_check_overtake(
     blocker_idx: usize,
     map: Option<&Map>,
 ) {
+    if v_idx == blocker_idx {
+        return;
+    }
     let Some(v) = vehicles.get(v_idx) else {
         return;
     };
-    if v.overtaking != 0 || !is_road_vehicle_kind(v.kind) {
+    let v_kind = v.kind;
+    let v_pos = v.pos;
+    let v_direction = v.direction;
+    let v_road_state = v.road_state;
+    let v_overtaking = v.overtaking;
+    if v_overtaking != 0 || !is_road_vehicle_kind(v_kind) {
         return;
     }
-    if v.kind == VehicleKind::Tram {
+    if v_kind == VehicleKind::Tram {
         return;
     }
-    if v.road_state >= RVSB_IN_ROAD_STOP {
+    if v_road_state >= RVSB_IN_ROAD_STOP {
         return;
     }
-    if !is_straight_road_trackdir(v.road_state) {
+    if !is_straight_road_trackdir(v_road_state) {
         return;
     }
     // Solo diagonales de sprite (`direction & 1` en OpenTTD Direction 0..7).
-    if !matches!(v.direction, DIR_NE | DIR_SE | DIR_SW | DIR_NW) {
+    if !matches!(v_direction, DIR_NE | DIR_SE | DIR_SW | DIR_NW) {
         return;
     }
     let Some(u) = vehicles.get(blocker_idx) else {
         return;
     };
-    if v.direction != u.direction {
+    let u_direction = u.direction;
+    let u_pos = u.pos;
+    let u_running = u.running;
+    let u_cur_speed = u.cur_speed;
+    if v_direction != u_direction {
         return;
     }
-    if map.is_some_and(|m| tile_is_station(m, v.pos) || tile_is_station(m, u.pos)) {
+    if map.is_some_and(|m| tile_is_station(m, v_pos) || tile_is_station(m, u_pos)) {
         return;
     }
-    let v_max = v.effective_engine().max_speed;
-    let u_max = u.effective_engine().max_speed;
-    let u_speed = if u.running && u.cur_speed != 0 {
+    let v_max = vehicles
+        .get_mut(v_idx)
+        .map(crate::newgrf_callback::effective_vehicle_max_speed)
+        .unwrap_or_default();
+    let u_max = vehicles
+        .get_mut(blocker_idx)
+        .map(crate::newgrf_callback::effective_vehicle_max_speed)
+        .unwrap_or_default();
+    let u_speed = if u_running && u_cur_speed != 0 {
         u_max
     } else {
-        u.cur_speed
+        u_cur_speed
     };
-    if u_speed >= v_max && u.running && u.cur_speed != 0 {
+    if u_speed >= v_max && u_running && u_cur_speed != 0 {
         return;
     }
     if map.is_some_and(|m| {
-        road_blocked_for_overtaking(m, vehicles, v_idx, blocker_idx, v.pos, v.direction)
-            || next_tile(v.pos, v.direction).is_some_and(|n| {
-                road_blocked_for_overtaking(m, vehicles, v_idx, blocker_idx, n, v.direction)
+        road_blocked_for_overtaking(m, vehicles, v_idx, blocker_idx, v_pos, v_direction)
+            || next_tile(v_pos, v_direction).is_some_and(|n| {
+                road_blocked_for_overtaking(m, vehicles, v_idx, blocker_idx, n, v_direction)
             })
     }) {
         return;
     }
 
-    let half = u.cur_speed == 0 || !u.running;
+    let half = u_cur_speed == 0 || !u_running;
     let v = &mut vehicles[v_idx];
     v.overtaking = RVSB_DRIVE_SIDE;
     v.overtaking_ctr = if half { RV_OVERTAKE_TIMEOUT / 2 } else { 0 };

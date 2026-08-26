@@ -384,13 +384,13 @@ impl super::model::Vehicle {
     }
 
     fn train_do_update_speed(
-        &self,
+        &mut self,
         map: Option<&Map>,
         train_accel: TrainAccelerationModel,
         braking: bool,
     ) -> crate::engine::DoUpdateSpeedResult {
         let engine = self.effective_engine();
-        let mut max_speed = engine.max_speed;
+        let mut max_speed = crate::newgrf_callback::vehicle_max_speed(engine, self);
         // P3.20: techo del consist (mínimo por unidad); `u16::MAX` = aún no cacheado.
         if self.cached_max_speed > 0 && self.cached_max_speed < u16::MAX {
             max_speed = max_speed.min(self.cached_max_speed);
@@ -754,7 +754,8 @@ impl super::model::Vehicle {
         let rail_idx = map
             .get(self.pos)
             .map_or(0, |t| rail_type_from_tile(t).accel_table_index());
-        let mut max_speed = self.effective_engine().max_speed;
+        let engine = self.effective_engine();
+        let mut max_speed = crate::newgrf_callback::vehicle_max_speed(engine, self);
         if self.cached_max_track_speed > 0 {
             max_speed = max_speed.min(self.cached_max_track_speed);
         }
@@ -817,7 +818,7 @@ impl super::model::Vehicle {
 
     fn update_movement_speed(&mut self, map: Option<&Map>, train_accel: TrainAccelerationModel) {
         let engine = self.effective_engine();
-        let mut max_speed = engine.max_speed;
+        let mut max_speed = crate::newgrf_callback::vehicle_max_speed(engine, self);
         // Barcos: velocidad en `ship_accelerate` / `ship_controller_tick` (no road-like).
         if self.kind == super::model::VehicleKind::Ship {
             if !self.running {

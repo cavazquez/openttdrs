@@ -456,7 +456,7 @@ fn road_vehicle_tick_side_with_traffic(
         }
     }
 
-    let max_speed = super::slope::current_road_max_speed(v, map);
+    let max_speed = super::slope::current_road_max_speed_with_callbacks(v, map);
 
     let engine = v.effective_engine();
     let cargo_weight = crate::train_consist::cargo_weight_t(v.cargo, v.cargo_type);

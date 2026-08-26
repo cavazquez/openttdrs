@@ -747,7 +747,7 @@ impl Vehicle {
 
     /// Velocidad de crucero inmediata (tests / saves legacy).
     pub fn set_cruise_speed(&mut self) {
-        self.cur_speed = self.effective_engine().max_speed;
+        self.cur_speed = crate::newgrf_callback::effective_vehicle_max_speed(self);
         self.subspeed = 0;
     }
 

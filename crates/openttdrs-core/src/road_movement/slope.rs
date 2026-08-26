@@ -16,6 +16,21 @@ pub const ROAD_Z_DOWN_BOOST: u16 = 2;
 #[must_use]
 pub fn current_road_max_speed(v: &Vehicle, map: Option<&Map>) -> u16 {
     let engine_speed = v.effective_engine().max_speed;
+    current_road_max_speed_for_engine(v, map, engine_speed)
+}
+
+/// Como [`current_road_max_speed`], consultando CB36 para el techo del motor.
+///
+/// Se mantiene la variante inmutable para callers de diagnóstico/render que
+/// no pueden escribir los registros persistentes del vehículo; el controlador
+/// de movimiento usa esta versión mutable.
+pub fn current_road_max_speed_with_callbacks(v: &mut Vehicle, map: Option<&Map>) -> u16 {
+    let engine = v.effective_engine();
+    let engine_speed = crate::newgrf_callback::vehicle_max_speed(engine, v);
+    current_road_max_speed_for_engine(v, map, engine_speed)
+}
+
+fn current_road_max_speed_for_engine(v: &Vehicle, map: Option<&Map>, engine_speed: u16) -> u16 {
     let mut max_speed = if v.cached_max_track_speed > 0 {
         v.cached_max_track_speed.min(engine_speed)
     } else {
@@ -78,7 +93,8 @@ pub fn sync_road_slope_speed(v: &mut Vehicle, map: &Map) {
         return;
     };
     v.z_pos = Some(new_z);
-    let mut max_speed = v.effective_engine().max_speed;
+    let engine = v.effective_engine();
+    let mut max_speed = crate::newgrf_callback::vehicle_max_speed(engine, v);
     if let Some(cap) = crate::bridge_spec::bridge_max_speed_for_tile(map, v.pos) {
         max_speed = max_speed.min(cap);
     }

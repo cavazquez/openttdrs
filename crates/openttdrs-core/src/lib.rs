@@ -408,7 +408,7 @@ pub use newgrf_callback::{
     resolve_vehicle_sound_callback, resolve_vehicle_visual_effect_callback,
     trigger_road_stop_animation, trigger_road_stop_animation_at_with_world,
     trigger_road_stop_randomisation_at_with_world, trigger_vehicle_randomisation,
-    trigger_vehicle_randomisation_chain, vehicle_start_stop_callback_allows,
+    trigger_vehicle_randomisation_chain, vehicle_max_speed, vehicle_start_stop_callback_allows,
     vehicle_visual_effect_kind, writeback_station_persistent_registers,
     writeback_vehicle_persistent_registers,
 };

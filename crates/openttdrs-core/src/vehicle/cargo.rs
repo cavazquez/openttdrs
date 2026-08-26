@@ -10,9 +10,18 @@ impl super::model::Vehicle {
     /// carretera la mitad y las aeronaves convertidas a las unidades antiguas.
     #[must_use]
     pub fn station_visit(&self, tick: u64) -> crate::station::StationVisit {
+        self.station_visit_with_speed(tick, u32::from(self.effective_engine().max_speed))
+    }
+
+    /// Variante runtime que aplica CB36 antes de registrar la visita.
+    pub fn station_visit_with_callbacks(&mut self, tick: u64) -> crate::station::StationVisit {
+        let max_speed = u32::from(crate::newgrf_callback::effective_vehicle_max_speed(self));
+        self.station_visit_with_speed(tick, max_speed)
+    }
+
+    fn station_visit_with_speed(&self, tick: u64, max_speed: u32) -> crate::station::StationVisit {
         use super::model::VehicleKind;
 
-        let max_speed = u32::from(self.effective_engine().max_speed);
         let speed = match self.kind {
             VehicleKind::Train | VehicleKind::Ship => max_speed,
             VehicleKind::Bus | VehicleKind::Tram | VehicleKind::Truck => max_speed / 2,

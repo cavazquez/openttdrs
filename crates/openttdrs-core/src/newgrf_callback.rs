@@ -593,6 +593,35 @@ pub fn resolve_vehicle_modify_property_callback(
     })
 }
 
+/// Devuelve la velocidad máxima efectiva de una unidad, consultando CB36
+/// cuando el motor procede de un `NewGRF`.
+///
+/// Los valores de `max_speed` se expresan en las unidades nativas de la
+/// propiedad Action0 de cada clase (`0x09` tren, `0x15` carretera, `0x0B`
+/// barco y `0x0C` aeronave). `CALLBACK_FAILED` o un resultado que no quepa en
+/// `u16` conservan la propiedad base del catálogo. El callback se ejecuta con
+/// el vehículo mutable para que los registros persistentes (`7C`) sigan la
+/// misma semántica que el resto de consultas runtime.
+#[must_use]
+pub fn vehicle_max_speed(engine: &EngineDef, vehicle: &mut Vehicle) -> u16 {
+    let property = match engine.kind {
+        VehicleKind::Train => 0x09,
+        VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram => 0x15,
+        VehicleKind::Ship => 0x0B,
+        VehicleKind::Aircraft => 0x0C,
+    };
+    resolve_vehicle_modify_property_callback(engine, vehicle, property, false)
+        .and_then(|value| u16::try_from(value).ok())
+        .unwrap_or(engine.max_speed)
+}
+
+/// Atajo para consultar la velocidad efectiva desde el estado de una unidad.
+#[must_use]
+pub fn effective_vehicle_max_speed(vehicle: &mut Vehicle) -> u16 {
+    let engine = vehicle.effective_engine();
+    vehicle_max_speed(engine, vehicle)
+}
+
 /// Resuelve `CBID_VEHICLE_LENGTH` (`0x11`) y devuelve la longitud efectiva.
 ///
 /// El callback de `OpenTTD` devuelve cuánto se acorta una unidad de ocho
@@ -2453,6 +2482,32 @@ mod tests {
             resolve_vehicle_modify_property_callback(&engine, &mut vehicle, 0x2E, true),
             Some(-1)
         );
+    }
+
+    #[test]
+    fn callbacks_ac_vehicle_modify_property_overrides_class_speed_and_falls_back() {
+        let mut engine = engines_table()
+            .iter()
+            .find(|e| e.kind == VehicleKind::Train && e.power_hp > 0)
+            .cloned()
+            .unwrap();
+        let base_speed = engine.max_speed;
+        engine.newgrf_grfid = 0x5350_4545;
+        engine.newgrf_local_id = 0;
+        engine.newgrf_runtime = Some(Box::new(gfx_callback_literal_u16(77)));
+        let mut vehicle = Vehicle::new(
+            47,
+            VehicleKind::Train,
+            TileCoord::new(1, 1),
+            TileCoord::new(1, 1),
+        );
+        vehicle.engine_id = Some(engine.id);
+
+        assert_eq!(vehicle_max_speed(&engine, &mut vehicle), 77);
+
+        // CALLBACK_FAILED conserva la propiedad Action0 del motor.
+        engine.newgrf_runtime = None;
+        assert_eq!(vehicle_max_speed(&engine, &mut vehicle), base_speed);
     }
 
     #[test]

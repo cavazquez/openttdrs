@@ -228,8 +228,12 @@ El callback de vehículo `0x32` ya se ejecuta en el barrido económico
 escalonado, conserva `day_counter` y triggers pendientes entre saves, y aplica
 la máscara de reseed del grupo Action2 activo. Su resultado conserva los bits
 de invalidación de paleta para el futuro enlace con la caché visual; todavía no
-es paridad completa porque el trigger todavía no se propaga a toda la cadena
-como en `TriggerVehicleRandomisation`.
+es paridad completa porque los call sites de eventos todavía no están
+conectados a toda la cadena como en `TriggerVehicleRandomisation`.
+La API `trigger_vehicle_randomisation_chain` ya conserva los 16 bits de la
+palabra aleatoria y propaga `NewCargo`/`AnyNewCargo`, `Depot` y `Empty` por la
+cadena, respetando la palabra compartida o independiente que corresponde a
+cada trigger; faltan los call sites de esos eventos en la simulación.
 El callback `0x2D` (color mapping) también se consulta para motores NewGRF con
 la máscara correspondiente y sus paletas de compañía `775..790` ya entran en
 la clave de caché de sprites runtime. Los mapas 2CC/crash y livery específicos

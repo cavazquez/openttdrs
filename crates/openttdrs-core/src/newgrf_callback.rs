@@ -32,6 +32,7 @@ use crate::station_class::{StationAnimationTrigger, StationRandomTrigger};
 use crate::town::Town;
 use crate::vehicle::{Vehicle, VehicleKind, VehicleRandomTrigger};
 use crate::{CargoType, GameState, RoadType, SoundId, StopKind, VehicleSoundEvent};
+use std::collections::HashSet;
 
 /// Contexto que el scheduler de callbacks necesita para reproducir los scopes
 /// de una parada vial ya colocada. El renderer ya usaba estos pools; ahora las
@@ -195,13 +196,48 @@ pub fn trigger_vehicle_randomisation(
     world_seed: u64,
     tick: u64,
 ) -> bool {
-    let Some(runtime) = engine.newgrf_runtime.as_ref() else {
-        return false;
+    trigger_vehicle_randomisation_with_base(engine, vehicle, trigger, world_seed, tick, 0, true).0
+}
+
+fn vehicle_random_word(
+    vehicle: &Vehicle,
+    trigger: VehicleRandomTrigger,
+    world_seed: u64,
+    tick: u64,
+) -> u16 {
+    let salt = u64::from(vehicle.id) ^ (u64::from(trigger as u8) << 32);
+    let low = crate::map::industry_tile_rng(world_seed, tick, vehicle.pos, salt);
+    let high = crate::map::industry_tile_rng(world_seed, tick, vehicle.pos, salt ^ 0xA5A5_5A5A);
+    u16::from(low) | (u16::from(high) << 8)
+}
+
+/// Ejecuta la randomización de un vehículo y devuelve `(cambió, palabra_random)`
+/// para propagar la misma palabra a los vehículos que exige `OpenTTD`.
+fn trigger_vehicle_randomisation_with_base(
+    engine: &EngineDef,
+    vehicle: &mut Vehicle,
+    trigger: VehicleRandomTrigger,
+    world_seed: u64,
+    tick: u64,
+    base_random: u16,
+    first: bool,
+) -> (bool, u16) {
+    let random = if first {
+        vehicle_random_word(vehicle, trigger, world_seed, tick)
+    } else {
+        base_random
     };
     let before_random = vehicle.newgrf_random_bits;
     let before_waiting = vehicle.newgrf_waiting_random_triggers;
     vehicle.newgrf_waiting_random_triggers |= trigger.mask();
     let waiting = vehicle.newgrf_waiting_random_triggers;
+    let Some(runtime) = engine.newgrf_runtime.as_ref() else {
+        return (
+            before_random != vehicle.newgrf_random_bits
+                || before_waiting != vehicle.newgrf_waiting_random_triggers,
+            random,
+        );
+    };
     let mut ctx = action2_eval_ctx_from_vehicle(vehicle);
     ctx.vars.insert(
         0x5F,
@@ -214,23 +250,160 @@ pub fn trigger_vehicle_randomisation(
 
     let reseed_mask = u16::try_from(reseed & 0xFFFF).unwrap_or(0);
     if reseed_mask != 0 {
-        let low = crate::map::industry_tile_rng(
-            world_seed,
-            tick,
-            vehicle.pos,
-            u64::from(vehicle.id) ^ (u64::from(trigger as u8) << 32),
-        );
-        let high = crate::map::industry_tile_rng(
-            world_seed,
-            tick,
-            vehicle.pos,
-            u64::from(vehicle.id) ^ (u64::from(trigger as u8) << 32) ^ 0xA5A5_5A5A,
-        );
-        let random = u16::from(low) | (u16::from(high) << 8);
         vehicle.newgrf_random_bits = (before_random & !reseed_mask) | (random & reseed_mask);
     }
-    before_random != vehicle.newgrf_random_bits
-        || before_waiting != vehicle.newgrf_waiting_random_triggers
+    (
+        before_random != vehicle.newgrf_random_bits
+            || before_waiting != vehicle.newgrf_waiting_random_triggers,
+        random,
+    )
+}
+
+fn engine_for_vehicle_catalog(catalog: &[EngineDef], vehicle: &Vehicle) -> Option<EngineDef> {
+    vehicle
+        .engine_id
+        .and_then(|id| {
+            catalog
+                .iter()
+                .find(|candidate| candidate.id == id)
+                .cloned()
+                .or_else(|| crate::engine::engine_by_id(id).cloned())
+        })
+        .or_else(|| {
+            Some(
+                crate::engine::engine_for_vehicle(
+                    vehicle.kind,
+                    crate::engine::default_engine_id(vehicle.kind),
+                )
+                .clone(),
+            )
+        })
+}
+
+fn vehicle_previous_id(vehicles: &[Vehicle], id: u32) -> Option<u32> {
+    vehicles
+        .iter()
+        .find(|vehicle| vehicle.id == id)
+        .and_then(|vehicle| vehicle.prev_unit)
+}
+
+fn vehicle_next_id(vehicles: &[Vehicle], id: u32) -> Option<u32> {
+    vehicles
+        .iter()
+        .find(|vehicle| vehicle.id == id)
+        .and_then(|vehicle| vehicle.next_unit)
+}
+
+fn vehicle_chain_head_id(vehicles: &[Vehicle], id: u32) -> Option<u32> {
+    let mut current = id;
+    let mut seen = HashSet::new();
+    while seen.insert(current) {
+        let Some(previous) = vehicle_previous_id(vehicles, current) else {
+            return Some(current);
+        };
+        if vehicles.iter().all(|vehicle| vehicle.id != previous) {
+            return Some(current);
+        }
+        current = previous;
+    }
+    None
+}
+
+#[allow(clippy::too_many_arguments)]
+fn trigger_vehicle_randomisation_chain_step(
+    vehicles: &mut [Vehicle],
+    catalog: &[EngineDef],
+    id: u32,
+    trigger: VehicleRandomTrigger,
+    world_seed: u64,
+    tick: u64,
+    base_random: u16,
+    first: bool,
+    seen: &mut HashSet<u32>,
+) -> (bool, u16) {
+    if !seen.insert(id) {
+        return (false, base_random);
+    }
+    let Some(index) = vehicles.iter().position(|vehicle| vehicle.id == id) else {
+        return (false, base_random);
+    };
+    let Some(engine) = engine_for_vehicle_catalog(catalog, &vehicles[index]) else {
+        return (false, base_random);
+    };
+    let (mut changed, random) = trigger_vehicle_randomisation_with_base(
+        &engine,
+        &mut vehicles[index],
+        trigger,
+        world_seed,
+        tick,
+        base_random,
+        first,
+    );
+    let next = vehicle_next_id(vehicles, id);
+    match trigger {
+        VehicleRandomTrigger::NewCargo => {
+            if let Some(head) = vehicle_chain_head_id(vehicles, id) {
+                let (next_changed, _) = trigger_vehicle_randomisation_chain_step(
+                    vehicles,
+                    catalog,
+                    head,
+                    VehicleRandomTrigger::AnyNewCargo,
+                    world_seed,
+                    tick,
+                    random,
+                    false,
+                    seen,
+                );
+                changed |= next_changed;
+            }
+        }
+        VehicleRandomTrigger::Depot => {
+            if let Some(next) = next {
+                let (next_changed, _) = trigger_vehicle_randomisation_chain_step(
+                    vehicles, catalog, next, trigger, world_seed, tick, 0, true, seen,
+                );
+                changed |= next_changed;
+            }
+        }
+        VehicleRandomTrigger::Empty | VehicleRandomTrigger::AnyNewCargo => {
+            if let Some(next) = next {
+                let (next_changed, _) = trigger_vehicle_randomisation_chain_step(
+                    vehicles, catalog, next, trigger, world_seed, tick, random, false, seen,
+                );
+                changed |= next_changed;
+            }
+        }
+        VehicleRandomTrigger::Callback32 => {}
+    }
+    (changed, random)
+}
+
+/// Replica `TriggerVehicleRandomisation` para una cadena completa de
+/// vehículos. `NewCargo` dispara `AnyNewCargo` desde la cabeza; `Depot`
+/// reseedea cada unidad con su propio aleatorio; `Empty` y `AnyNewCargo`
+/// comparten la palabra aleatoria de la primera unidad. Los enlaces inválidos
+/// se cortan de forma determinista y nunca pueden crear una recursión infinita.
+pub fn trigger_vehicle_randomisation_chain(
+    vehicles: &mut [Vehicle],
+    vehicle_id: u32,
+    engine_catalog: &[EngineDef],
+    trigger: VehicleRandomTrigger,
+    world_seed: u64,
+    tick: u64,
+) -> bool {
+    let mut seen = HashSet::new();
+    trigger_vehicle_randomisation_chain_step(
+        vehicles,
+        engine_catalog,
+        vehicle_id,
+        trigger,
+        world_seed,
+        tick,
+        0,
+        true,
+        &mut seen,
+    )
+    .0
 }
 
 /// Resultado normalizado de `CBID_VEHICLE_COLOUR_MAPPING` (`0x2D`).
@@ -1910,6 +2083,77 @@ mod tests {
         );
         // A reseed of bit 8 must not erase an unrelated bit in the word.
         assert_eq!(vehicle.newgrf_random_bits & 0x8000, 0x8000);
+    }
+
+    #[test]
+    fn callbacks_ac_vehicle_random_trigger_propagates_empty_to_the_chain() {
+        let mut engine = engines_table()
+            .iter()
+            .find(|e| e.kind == VehicleKind::Train && e.power_hp > 0)
+            .cloned()
+            .unwrap();
+        engine.newgrf_grfid = 0x4348_4149;
+        engine.newgrf_local_id = 0;
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 2,
+        });
+        gfx.action2_random.insert(
+            2,
+            Action2RandomEntry {
+                typ: 0x80,
+                consist_count: 0,
+                triggers: VehicleRandomTrigger::Empty.mask(),
+                randbit: 8,
+                sets: vec![0x8000, 0x8001],
+            },
+        );
+        engine.newgrf_runtime = Some(Box::new(gfx));
+        let mut vehicles = (0..3)
+            .map(|id| {
+                let mut vehicle = Vehicle::new(
+                    100 + id,
+                    VehicleKind::Train,
+                    TileCoord::new(2, 3),
+                    TileCoord::new(2, 3),
+                );
+                vehicle.engine_id = Some(engine.id);
+                vehicle.newgrf_random_bits = 0x8000 | u16::try_from(id).unwrap();
+                vehicle
+            })
+            .collect::<Vec<_>>();
+        vehicles[0].next_unit = Some(101);
+        vehicles[1].prev_unit = Some(100);
+        vehicles[1].next_unit = Some(102);
+        vehicles[2].prev_unit = Some(101);
+
+        assert!(trigger_vehicle_randomisation_chain(
+            &mut vehicles,
+            100,
+            std::slice::from_ref(&engine),
+            VehicleRandomTrigger::Empty,
+            99,
+            7,
+        ));
+        assert!(
+            vehicles
+                .iter()
+                .all(|vehicle| vehicle.newgrf_waiting_random_triggers == 0)
+        );
+        // Empty propagates the first unit's random word to every unit, while
+        // preserving unrelated bits in each vehicle.
+        assert_eq!(
+            vehicles[0].newgrf_random_bits & 0x0100,
+            vehicles[1].newgrf_random_bits & 0x0100
+        );
+        assert_eq!(
+            vehicles[1].newgrf_random_bits & 0x0100,
+            vehicles[2].newgrf_random_bits & 0x0100
+        );
+        assert_eq!(vehicles[0].newgrf_random_bits & 0x8000, 0x8000);
+        assert_eq!(vehicles[1].newgrf_random_bits & 0x8000, 0x8000);
+        assert_eq!(vehicles[2].newgrf_random_bits & 0x8000, 0x8000);
     }
 
     #[test]

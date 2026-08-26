@@ -27,6 +27,17 @@ pub fn road_veh_check_overtake(
     blocker_idx: usize,
     map: Option<&Map>,
 ) {
+    road_veh_check_overtake_with_catalog(vehicles, v_idx, blocker_idx, map, &[]);
+}
+
+/// Variante de [`road_veh_check_overtake`] que consulta el catálogo activo.
+pub fn road_veh_check_overtake_with_catalog(
+    vehicles: &mut [Vehicle],
+    v_idx: usize,
+    blocker_idx: usize,
+    map: Option<&Map>,
+    engine_catalog: &[crate::engine::EngineDef],
+) {
     if v_idx == blocker_idx {
         return;
     }
@@ -67,14 +78,15 @@ pub fn road_veh_check_overtake(
     if map.is_some_and(|m| tile_is_station(m, v_pos) || tile_is_station(m, u_pos)) {
         return;
     }
-    let v_max = vehicles
-        .get_mut(v_idx)
-        .map(crate::newgrf_callback::effective_vehicle_max_speed)
-        .unwrap_or_default();
-    let u_max = vehicles
-        .get_mut(blocker_idx)
-        .map(crate::newgrf_callback::effective_vehicle_max_speed)
-        .unwrap_or_default();
+    let v_max = vehicles.get_mut(v_idx).map(|vehicle| {
+        let engine = crate::newgrf_callback::engine_for_vehicle_catalog(engine_catalog, vehicle);
+        crate::newgrf_callback::vehicle_max_speed(engine, vehicle)
+    });
+    let u_max = vehicles.get_mut(blocker_idx).map(|vehicle| {
+        let engine = crate::newgrf_callback::engine_for_vehicle_catalog(engine_catalog, vehicle);
+        crate::newgrf_callback::vehicle_max_speed(engine, vehicle)
+    });
+    let (v_max, u_max) = (v_max.unwrap_or_default(), u_max.unwrap_or_default());
     let u_speed = if u_running && u_cur_speed != 0 {
         u_max
     } else {
@@ -227,6 +239,26 @@ mod tests {
         let mut vehicles = vec![bus_at(1, 0, 40), bus_at(2, 1, 5)];
         road_veh_check_overtake(&mut vehicles, 0, 1, None);
         assert_eq!(vehicles[0].overtaking, 0);
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn catalog_variant_compares_newgrf_speed_limits() {
+        let mut faster = crate::engine::engine_by_id(crate::engine::ENGINE_BUS_MPS)
+            .unwrap()
+            .clone();
+        faster.id = crate::engine::NEWGRF_ENGINE_ID_BASE;
+        faster.max_speed = 100;
+        let mut slower = faster.clone();
+        slower.id = crate::engine::NEWGRF_ENGINE_ID_BASE + 1;
+        slower.max_speed = 90;
+        let catalog = vec![faster, slower];
+        let mut vehicles = vec![bus_at(1, 0, 40), bus_at(2, 1, 5)];
+        vehicles[0].engine_id = Some(crate::engine::NEWGRF_ENGINE_ID_BASE);
+        vehicles[1].engine_id = Some(crate::engine::NEWGRF_ENGINE_ID_BASE + 1);
+
+        road_veh_check_overtake_with_catalog(&mut vehicles, 0, 1, None, &catalog);
+        assert_eq!(vehicles[0].overtaking, RVSB_DRIVE_SIDE);
     }
 
     #[test]

@@ -3,7 +3,6 @@
 use std::collections::HashMap;
 
 use crate::map::{Map, TileCoord};
-use crate::road_movement::overtake::road_veh_check_overtake;
 use crate::vehicle::{Vehicle, VehicleKind};
 
 /// Umbral `OpenTTD`: tras tantos ticks bloqueado se atraviesa (`roadveh_cmd.cpp`).
@@ -200,6 +199,7 @@ pub fn apply_road_veh_close_to(vehicles: &mut [Vehicle], v_idx: usize, map: Opti
         v_idx,
         map,
         road_veh_find_close_to(vehicles, v_idx),
+        &[],
     )
 }
 
@@ -210,8 +210,20 @@ pub fn apply_road_veh_close_to_indexed(
     map: Option<&Map>,
     index: &RoadTrafficIndex,
 ) -> bool {
+    apply_road_veh_close_to_indexed_with_catalog(vehicles, v_idx, map, index, &[])
+}
+
+/// Variante indexada que usa el catálogo activo para comparar velocidades en
+/// `RoadVehCheckOvertake` (incluidos CB36 de motores `NewGRF`).
+pub fn apply_road_veh_close_to_indexed_with_catalog(
+    vehicles: &mut [Vehicle],
+    v_idx: usize,
+    map: Option<&Map>,
+    index: &RoadTrafficIndex,
+    engine_catalog: &[crate::engine::EngineDef],
+) -> bool {
     let blocker = road_veh_find_close_to_indexed(vehicles, v_idx, index);
-    apply_road_veh_close_to_with_blocker(vehicles, v_idx, map, blocker)
+    apply_road_veh_close_to_with_blocker(vehicles, v_idx, map, blocker, engine_catalog)
 }
 
 fn apply_road_veh_close_to_with_blocker(
@@ -219,6 +231,7 @@ fn apply_road_veh_close_to_with_blocker(
     v_idx: usize,
     map: Option<&Map>,
     blocker: Option<usize>,
+    engine_catalog: &[crate::engine::EngineDef],
 ) -> bool {
     if vehicles
         .get(v_idx)
@@ -231,7 +244,13 @@ fn apply_road_veh_close_to_with_blocker(
         vehicles[v_idx].blocked_ctr = 0;
         return false;
     };
-    road_veh_check_overtake(vehicles, v_idx, blocker, map);
+    crate::road_movement::overtake::road_veh_check_overtake_with_catalog(
+        vehicles,
+        v_idx,
+        blocker,
+        map,
+        engine_catalog,
+    );
     if vehicles[v_idx].overtaking != 0 {
         vehicles[v_idx].blocked_ctr = 0;
         return false;

@@ -16,8 +16,9 @@ pub mod traffic;
 pub use bay::{BayStationTable, bay_station_table, bay_station_table_for_side, parked_inside_bay};
 pub use controller::{
     individual_road_vehicle_controller, individual_road_vehicle_controller_side,
-    individual_road_vehicle_controller_side_indexed, road_vehicle_step_solo, road_vehicle_tick,
-    road_vehicle_tick_side, road_vehicle_tick_side_indexed,
+    individual_road_vehicle_controller_side_indexed,
+    individual_road_vehicle_controller_side_indexed_with_catalog, road_vehicle_step_solo,
+    road_vehicle_tick, road_vehicle_tick_side, road_vehicle_tick_side_indexed,
     road_vehicle_tick_side_indexed_with_acceleration,
     road_vehicle_tick_side_indexed_with_acceleration_and_catalog,
 };
@@ -30,6 +31,7 @@ pub use drive_data::{RDE_NEXT_TILE, RDE_TURNED, RoadDriveEntry, road_drive_entry
 pub use overtake::{
     ROAD_ACCEL_OVERTAKE, RV_OVERTAKE_TIMEOUT, drive_state_with_overtake,
     drive_state_with_overtake_and_side, road_veh_check_overtake,
+    road_veh_check_overtake_with_catalog,
 };
 pub use pose::{
     VehiclePose, extrapolate_vehicle_pose, retreat_vehicle_pose, retreat_vehicle_pose_distance,
@@ -49,7 +51,8 @@ pub use slope::{
 };
 pub use traffic::{
     BLOCKED_CTR_LIMIT, RoadTrafficIndex, apply_road_veh_close_to, apply_road_veh_close_to_indexed,
-    road_veh_find_close_to, road_veh_find_close_to_indexed,
+    apply_road_veh_close_to_indexed_with_catalog, road_veh_find_close_to,
+    road_veh_find_close_to_indexed,
 };
 
 #[cfg(test)]

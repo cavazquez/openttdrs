@@ -18,7 +18,7 @@ use crate::road_movement::rvsb::{
 };
 use crate::road_movement::slope::sync_road_slope_speed;
 use crate::road_movement::traffic::{
-    RoadTrafficIndex, apply_road_veh_close_to, apply_road_veh_close_to_indexed,
+    RoadTrafficIndex, apply_road_veh_close_to, apply_road_veh_close_to_indexed_with_catalog,
     is_road_vehicle_kind,
 };
 use crate::vehicle::{RoadDepotPhase, Vehicle};
@@ -50,6 +50,27 @@ pub fn individual_road_vehicle_controller_side_indexed(
     drive_on_right: bool,
     traffic: Option<&RoadTrafficIndex>,
 ) -> bool {
+    individual_road_vehicle_controller_side_indexed_with_catalog(
+        vehicles,
+        v_idx,
+        map,
+        drive_on_right,
+        traffic,
+        &[],
+    )
+}
+
+/// Variante indexada que propaga el catálogo activo a la comprobación de
+/// tráfico/adelantamiento y sus callbacks de velocidad.
+#[allow(clippy::too_many_lines)]
+pub fn individual_road_vehicle_controller_side_indexed_with_catalog(
+    vehicles: &mut [Vehicle],
+    v_idx: usize,
+    map: Option<&Map>,
+    drive_on_right: bool,
+    traffic: Option<&RoadTrafficIndex>,
+    engine_catalog: &[crate::engine::EngineDef],
+) -> bool {
     if vehicles.get(v_idx).is_some_and(|v| v.crashed) {
         return false;
     }
@@ -57,7 +78,13 @@ pub fn individual_road_vehicle_controller_side_indexed(
     tick_overtaking(&mut vehicles[v_idx], map);
 
     let blocked_by_traffic = match traffic {
-        Some(traffic) => apply_road_veh_close_to_indexed(vehicles, v_idx, map, traffic),
+        Some(traffic) => apply_road_veh_close_to_indexed_with_catalog(
+            vehicles,
+            v_idx,
+            map,
+            traffic,
+            engine_catalog,
+        ),
         None => apply_road_veh_close_to(vehicles, v_idx, map),
     };
     if !is_bay_road_state(vehicles[v_idx].road_state) && blocked_by_traffic {
@@ -554,12 +581,13 @@ fn road_vehicle_tick_side_with_traffic(
     let mut blocked = false;
     while j >= adv_spd {
         j -= adv_spd;
-        if !individual_road_vehicle_controller_side_indexed(
+        if !individual_road_vehicle_controller_side_indexed_with_catalog(
             vehicles,
             v_idx,
             map,
             drive_on_right,
             traffic,
+            engine_catalog,
         ) {
             blocked = true;
             break;

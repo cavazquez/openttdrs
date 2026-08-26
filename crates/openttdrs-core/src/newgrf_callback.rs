@@ -17,8 +17,8 @@ use crate::newgrf_sprites::{
     CBID_CARGO_STATION_RATING_CALC, CBID_HOUSE_ALLOW_CONSTRUCTION, CBID_INDUSTRY_LOCATION,
     CBID_OBJECT_LAND_SLOPE_CHECK, CBID_STATION_ANIMATION_NEXT_FRAME, CBID_STATION_ANIMATION_SPEED,
     CBID_STATION_ANIMATION_TRIGGER, CBID_STATION_AVAILABILITY, CBID_STATION_LAND_SLOPE_CHECK,
-    CBID_VEHICLE_LOAD_AMOUNT, CBID_VEHICLE_REFIT_CAPACITY, CBID_VEHICLE_SOUND_EFFECT,
-    CBID_VEHICLE_START_STOP_CHECK, TrainSpriteGraphics,
+    CBID_VEHICLE_LENGTH, CBID_VEHICLE_LOAD_AMOUNT, CBID_VEHICLE_REFIT_CAPACITY,
+    CBID_VEHICLE_SOUND_EFFECT, CBID_VEHICLE_START_STOP_CHECK, TrainSpriteGraphics,
 };
 use crate::object_spec::ObjectSpecDef;
 use crate::road_stop_action2::{
@@ -146,6 +146,31 @@ pub fn resolve_vehicle_load_amount_callback(
         return None;
     }
     u8::try_from(result).ok()
+}
+
+/// Resuelve `CBID_VEHICLE_LENGTH` (`0x11`) y devuelve la longitud efectiva.
+///
+/// El callback de `OpenTTD` devuelve cuánto se acorta una unidad de ocho
+/// fracciones de tesela (`0..=7`), no la longitud final. Un resultado fuera de
+/// rango o `CALLBACK_FAILED` conserva la propiedad `shorten_factor` del motor.
+#[must_use]
+pub fn resolve_vehicle_length_callback(engine: &EngineDef, vehicle: &mut Vehicle) -> Option<u8> {
+    if engine.newgrf_grfid == 0
+        || engine.vehicle_callback_mask & (1 << 1) == 0
+        || engine.newgrf_runtime.is_none()
+    {
+        return None;
+    }
+    let result = resolve_vehicle_callback(engine, vehicle, CBID_VEHICLE_LENGTH, 0, 0);
+    (result < 8).then(|| 8_u8.saturating_sub(u8::try_from(result).unwrap_or(7)))
+}
+
+/// Longitud de una unidad de vehículo al crear/refrescar su caché.
+#[must_use]
+pub fn vehicle_unit_length(engine: &EngineDef, vehicle: &mut Vehicle) -> u8 {
+    resolve_vehicle_length_callback(engine, vehicle)
+        .unwrap_or_else(|| 8_u8.saturating_sub(engine.shorten_factor.min(7)))
+        .max(1)
 }
 
 /// Resuelve `CBID_VEHICLE_REFIT_CAPACITY` (`0x15`) para un cargo objetivo.
@@ -1411,6 +1436,39 @@ mod tests {
             resolve_vehicle_load_amount_callback(&engine, &mut vehicle),
             None
         );
+    }
+
+    #[test]
+    fn callbacks_ac_vehicle_length_converts_shorten_amount_and_falls_back() {
+        let mut engine = engines_table()
+            .iter()
+            .find(|e| e.kind == VehicleKind::Train && e.power_hp > 0)
+            .cloned()
+            .unwrap();
+        engine.newgrf_grfid = 0x4C45_4E47;
+        engine.newgrf_local_id = 0;
+        engine.vehicle_callback_mask = 1 << 1;
+        engine.shorten_factor = 6;
+        let mut vehicle = Vehicle::new(
+            4,
+            VehicleKind::Train,
+            TileCoord::new(1, 1),
+            TileCoord::new(1, 1),
+        );
+        engine.newgrf_runtime = Some(Box::new(gfx_callback_literal(3)));
+        assert_eq!(
+            resolve_vehicle_length_callback(&engine, &mut vehicle),
+            Some(5)
+        );
+        assert_eq!(vehicle_unit_length(&engine, &mut vehicle), 5);
+
+        // CALLBACK_FAILED o runtime ausente usa la propiedad shorten_factor.
+        engine.newgrf_runtime = None;
+        assert_eq!(resolve_vehicle_length_callback(&engine, &mut vehicle), None);
+        assert_eq!(vehicle_unit_length(&engine, &mut vehicle), 2);
+        engine.newgrf_runtime = Some(Box::new(gfx_callback_literal(8)));
+        assert_eq!(resolve_vehicle_length_callback(&engine, &mut vehicle), None);
+        assert_eq!(vehicle_unit_length(&engine, &mut vehicle), 2);
     }
 
     #[test]

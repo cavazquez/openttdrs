@@ -192,6 +192,7 @@ pub(super) fn build_vehicle_at_depot(
     let mut vehicle = Vehicle::new(next_id, engine.kind, depot_pos, depot_pos);
     vehicle.running = false;
     vehicle.engine_id = Some(engine.id);
+    vehicle.unit_length = crate::newgrf_callback::vehicle_unit_length(&engine, &mut vehicle);
     crate::vehicle::init_vehicle_reliability_from_engine(&mut vehicle, &engine);
     if engine.capacity > 0 {
         vehicle.capacity = crate::cargo_spec::apply_cargo_capacity_multiplier(
@@ -294,6 +295,7 @@ fn spawn_dual_headed_rear(
     let mut rear = Vehicle::new(rear_id, engine.kind, depot_pos, depot_pos);
     rear.running = false;
     rear.engine_id = Some(engine.id);
+    rear.unit_length = crate::newgrf_callback::vehicle_unit_length(engine, &mut rear);
     rear.capacity = engine.capacity;
     rear.cargo_type = engine.cargo;
     rear.build_tick = state.tick.get();
@@ -743,6 +745,9 @@ pub(super) fn refit_vehicle(
             vehicle.capacity = capacity;
         }
         vehicle.cargo_type = Some(cargo);
+        if let Some(engine) = engine.as_ref() {
+            vehicle.unit_length = crate::newgrf_callback::vehicle_unit_length(engine, vehicle);
+        }
     }
     Ok(())
 }

@@ -113,10 +113,31 @@ impl IndustrySpecDef {
         self.production_rates.first().copied().unwrap_or(0)
     }
 
+    /// Rate de producción de la segunda salida (`prop 0x13`).
+    #[must_use]
+    pub fn secondary_production_rate(&self) -> Option<u8> {
+        self.production_rates.get(1).copied()
+    }
+
     /// Primer cargo de salida mapeable a [`CargoType`] conocido.
     #[must_use]
     pub fn primary_output_cargo(&self) -> Option<CargoType> {
         cargo_type_from_label(self.produced_cargo_labels.first().map(String::as_str))
+    }
+
+    /// Segundo cargo de salida mapeable a [`CargoType`] conocido.
+    #[must_use]
+    pub fn secondary_output_cargo(&self) -> Option<CargoType> {
+        cargo_type_from_label(self.produced_cargo_labels.get(1).map(String::as_str))
+    }
+
+    /// Cargos de salida mapeables, conservando el orden declarado por el GRF.
+    #[must_use]
+    pub fn produced_cargo_types(&self) -> Vec<CargoType> {
+        self.produced_cargo_labels
+            .iter()
+            .filter_map(|label| cargo_type_from_label(Some(label.as_str())))
+            .collect()
     }
 
     /// Cargos de entrada mapeables a [`CargoType`].

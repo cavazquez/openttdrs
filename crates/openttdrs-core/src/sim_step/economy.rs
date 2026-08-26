@@ -259,6 +259,7 @@ pub(super) fn maybe_change_industry_production(state: &mut GameState) {
 pub(super) fn produce_industries(state: &mut GameState, tick: u64) {
     for i in 0..state.industries.len() {
         let before = state.industries[i].stock;
+        let secondary_before = state.industries[i].secondary_stock;
         let tiles = state.industries[i].tiles.clone();
         let pos = state.industries[i].pos;
         let footprint: Vec<TileCoord> = if tiles.is_empty() { vec![pos] } else { tiles };
@@ -288,7 +289,12 @@ pub(super) fn produce_industries(state: &mut GameState, tick: u64) {
                 state.runtime.industry_tile_dirty.extend(dirty);
             }
         }
-        let produced = u64::from(state.industries[i].stock.saturating_sub(before));
+        let produced =
+            u64::from(state.industries[i].stock.saturating_sub(before)).saturating_add(u64::from(
+                state.industries[i]
+                    .secondary_stock
+                    .saturating_sub(secondary_before),
+            ));
         state.stats.industry_cargo_units_produced += produced;
         state.industries[i].produced_total =
             state.industries[i].produced_total.saturating_add(produced);

@@ -2,6 +2,7 @@ use crate::CargoType;
 use crate::Climate;
 use crate::cargodist::parity::Randomizer;
 use crate::entity_history::IndustryHistory;
+use crate::industry_spec::IndustrySpecDef;
 use crate::map::TileCoord;
 use crate::station::{self, Station, StopKind};
 
@@ -20,7 +21,7 @@ pub const FACTORY_GRAIN_INPUT: u32 = 8;
 pub const FACTORY_STEEL_INPUT: u32 = 8;
 
 /// Entrada de procesamiento con multiplicador hacia la salida (`/256`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct IndustryProcessingInput {
     pub cargo: CargoType,
     /// Unidades consumidas por ciclo a [`PRODLEVEL_DEFAULT`].
@@ -616,9 +617,21 @@ pub struct Industry {
     /// Rate de producción `NewGRF` (copia del def al colocar; `None` = usar vanilla).
     #[serde(default)]
     pub newgrf_production_rate: Option<u8>,
+    /// Rate de la segunda salida `NewGRF` (copia de `production_rates[1]`).
+    #[serde(default)]
+    pub newgrf_secondary_production_rate: Option<u8>,
     /// Cargo de salida `NewGRF` resuelto (`None` = usar vanilla/`kind`).
     #[serde(default)]
     pub newgrf_output_cargo: Option<CargoType>,
+    /// Segundo cargo de salida `NewGRF`, si el label pudo resolverse.
+    #[serde(default)]
+    pub newgrf_secondary_output_cargo: Option<CargoType>,
+    /// Insumos y multiplicadores de una procesadora `NewGRF`.
+    #[serde(default)]
+    pub newgrf_processing_inputs: Vec<IndustryProcessingInput>,
+    /// Multiplicadores del segundo output para esos mismos insumos.
+    #[serde(default)]
+    pub newgrf_processing_secondary_multipliers: Vec<u16>,
 }
 
 const fn default_prod_level() -> u8 {
@@ -669,7 +682,11 @@ impl Industry {
             prod_level: PRODLEVEL_DEFAULT,
             newgrf_type_id: None,
             newgrf_production_rate: None,
+            newgrf_secondary_production_rate: None,
             newgrf_output_cargo: None,
+            newgrf_secondary_output_cargo: None,
+            newgrf_processing_inputs: Vec::new(),
+            newgrf_processing_secondary_multipliers: Vec::new(),
         }
     }
 
@@ -692,7 +709,11 @@ impl Industry {
             prod_level: PRODLEVEL_DEFAULT,
             newgrf_type_id: None,
             newgrf_production_rate: None,
+            newgrf_secondary_production_rate: None,
             newgrf_output_cargo: None,
+            newgrf_secondary_output_cargo: None,
+            newgrf_processing_inputs: Vec::new(),
+            newgrf_processing_secondary_multipliers: Vec::new(),
         }
     }
 
@@ -721,7 +742,11 @@ impl Industry {
             prod_level: PRODLEVEL_DEFAULT,
             newgrf_type_id: None,
             newgrf_production_rate: None,
+            newgrf_secondary_production_rate: None,
             newgrf_output_cargo: None,
+            newgrf_secondary_output_cargo: None,
+            newgrf_processing_inputs: Vec::new(),
+            newgrf_processing_secondary_multipliers: Vec::new(),
         }
     }
 
@@ -803,7 +828,10 @@ impl Industry {
     /// Unidades del segundo output (Farm Livestock), si el spec lo define.
     #[must_use]
     pub fn produce_secondary_amount(&self) -> u32 {
-        let Some(rate) = self.spec.and_then(IndustrySpec::production_rate_secondary) else {
+        let Some(rate) = self
+            .newgrf_secondary_production_rate
+            .or_else(|| self.spec.and_then(IndustrySpec::production_rate_secondary))
+        else {
             return 0;
         };
         Self::scaled_production_amount(rate, self.prod_level)
@@ -820,22 +848,35 @@ impl Industry {
 
     /// Cargos producidos del spec (primario + secundario).
     #[must_use]
-    pub fn produced_cargos(&self) -> &'static [CargoType] {
+    pub fn produced_cargos(&self) -> Vec<CargoType> {
+        if self.newgrf_type_id.is_some() {
+            let mut cargos = Vec::with_capacity(2);
+            if let Some(cargo) = self.newgrf_output_cargo {
+                cargos.push(cargo);
+            }
+            if let Some(cargo) = self.newgrf_secondary_output_cargo {
+                cargos.push(cargo);
+            }
+            if !cargos.is_empty() {
+                return cargos;
+            }
+        }
         if let Some(spec) = self.spec {
-            return spec.produced_cargos();
+            return spec.produced_cargos().to_vec();
         }
         match self.kind {
-            IndustryKind::CoalMine => &[CargoType::Coal],
-            IndustryKind::Forest => &[CargoType::Wood],
-            IndustryKind::OilWell => &[CargoType::Oil],
-            IndustryKind::Factory => &[CargoType::Goods],
+            IndustryKind::CoalMine => vec![CargoType::Coal],
+            IndustryKind::Forest => vec![CargoType::Wood],
+            IndustryKind::OilWell => vec![CargoType::Oil],
+            IndustryKind::Factory => vec![CargoType::Goods],
         }
     }
 
     /// Segundo cargo de salida (Farm → Livestock).
     #[must_use]
     pub fn secondary_output_cargo(&self) -> Option<CargoType> {
-        self.produced_cargos().get(1).copied()
+        self.newgrf_secondary_output_cargo
+            .or_else(|| self.produced_cargos().get(1).copied())
     }
 
     /// Salida de procesadora escalada por `prod_level` (legacy; preferir [`Self::processing_output_amount`]).
@@ -863,7 +904,45 @@ impl Industry {
             .sum()
     }
 
-    fn processing_inputs(&self) -> &'static [IndustryProcessingInput] {
+    /// Salidas de una procesadora, separadas en primario/secundario.
+    fn processing_output_amounts(&self) -> [u32; 2] {
+        if self.prod_level == PRODLEVEL_CLOSURE {
+            return [0, 0];
+        }
+        let inputs = self.processing_inputs();
+        if inputs.is_empty() {
+            return [0, 0];
+        }
+        if self.newgrf_type_id.is_none() {
+            return [self.processing_output_amount(), 0];
+        }
+        let primary = inputs
+            .iter()
+            .map(|input| {
+                let consumed = scaled_processing_batch(input.batch, self.prod_level);
+                consumed.saturating_mul(u32::from(input.multiplier)) / 256
+            })
+            .sum();
+        let secondary = inputs
+            .iter()
+            .enumerate()
+            .map(|(idx, input)| {
+                let consumed = scaled_processing_batch(input.batch, self.prod_level);
+                let multiplier = self
+                    .newgrf_processing_secondary_multipliers
+                    .get(idx)
+                    .copied()
+                    .unwrap_or(0);
+                consumed.saturating_mul(u32::from(multiplier)) / 256
+            })
+            .sum();
+        [primary, secondary]
+    }
+
+    fn processing_inputs(&self) -> &[IndustryProcessingInput] {
+        if self.newgrf_type_id.is_some() {
+            return &self.newgrf_processing_inputs;
+        }
         if let Some(spec) = self.spec {
             return spec.processing_inputs();
         }
@@ -922,7 +1001,9 @@ impl Industry {
         if inputs.is_empty() || self.is_closing() {
             return false;
         }
-        if !self.produces_on_tick(tick) || self.stock >= self.capacity {
+        if !self.produces_on_tick(tick)
+            || (self.stock >= self.capacity && self.secondary_stock >= self.capacity)
+        {
             return false;
         }
 
@@ -968,11 +1049,19 @@ impl Industry {
             debug_assert_eq!(remaining, 0);
         }
 
-        let output = self.processing_output_amount();
-        if output == 0 {
+        let [output, secondary_output] = self.processing_output_amounts();
+        if output == 0 && secondary_output == 0 {
             return self.life_type() == IndustryLifeType::BlackHole;
         }
-        self.stock = self.stock.saturating_add(output).min(self.capacity);
+        if output > 0 {
+            self.stock = self.stock.saturating_add(output).min(self.capacity);
+        }
+        if secondary_output > 0 {
+            self.secondary_stock = self
+                .secondary_stock
+                .saturating_add(secondary_output)
+                .min(self.capacity);
+        }
         true
     }
 
@@ -984,8 +1073,15 @@ impl Industry {
 
     /// Insumos de estación (cargo + lote a `prod_level` por defecto) para UI y tests.
     #[must_use]
-    pub fn station_input_requirements(&self) -> &'static [(CargoType, u32)] {
-        match self.spec.unwrap_or(match self.kind {
+    pub fn station_input_requirements(&self) -> Vec<(CargoType, u32)> {
+        if !self.newgrf_processing_inputs.is_empty() {
+            return self
+                .newgrf_processing_inputs
+                .iter()
+                .map(|input| (input.cargo, input.batch))
+                .collect();
+        }
+        let requirements: &[(CargoType, u32)] = match self.spec.unwrap_or(match self.kind {
             IndustryKind::Factory => IndustrySpec::Factory,
             IndustryKind::CoalMine => IndustrySpec::CoalMine,
             IndustryKind::Forest => IndustrySpec::Forest,
@@ -1017,7 +1113,8 @@ impl Industry {
                 &[(CargoType::Livestock, 8), (CargoType::Wheat, 8)]
             }
             _ => &[],
-        }
+        };
+        requirements.to_vec()
     }
 
     #[must_use]
@@ -1046,9 +1143,67 @@ impl Industry {
     ) -> Self {
         self.newgrf_type_id = Some(type_id);
         self.newgrf_production_rate = Some(production_rate);
+        self.newgrf_secondary_production_rate = None;
         self.newgrf_output_cargo = output_cargo;
+        self.newgrf_secondary_output_cargo = None;
+        self.newgrf_processing_inputs.clear();
+        self.newgrf_processing_secondary_multipliers.clear();
         self
     }
+
+    /// Asocia todos los productores/insumos resueltos de un `IndustrySpecDef`.
+    #[must_use]
+    pub fn with_newgrf_spec(mut self, type_id: u16, def: &IndustrySpecDef) -> Self {
+        let outputs = def.produced_cargo_types();
+        self.newgrf_type_id = Some(type_id);
+        self.newgrf_production_rate = Some(def.primary_production_rate());
+        self.newgrf_secondary_production_rate = def.secondary_production_rate();
+        self.newgrf_output_cargo = outputs.first().copied();
+        self.newgrf_secondary_output_cargo = outputs.get(1).copied();
+
+        let accepted = def.accepted_cargo_types();
+        let output_count = outputs.len();
+        self.newgrf_processing_secondary_multipliers = accepted
+            .iter()
+            .enumerate()
+            .map(|(input_idx, _)| {
+                if output_count < 2 {
+                    0
+                } else {
+                    def.input_multipliers
+                        .get(input_idx.saturating_mul(output_count) + 1)
+                        .copied()
+                        .unwrap_or(0)
+                }
+            })
+            .collect();
+        self.newgrf_processing_inputs = accepted
+            .into_iter()
+            .enumerate()
+            .map(|(input_idx, cargo)| IndustryProcessingInput {
+                cargo,
+                batch: 8,
+                multiplier: newgrf_input_multiplier(
+                    &def.input_multipliers,
+                    input_idx,
+                    output_count,
+                ),
+            })
+            .collect();
+        self
+    }
+}
+
+fn newgrf_input_multiplier(multipliers: &[u16], input_idx: usize, output_count: usize) -> u16 {
+    if output_count == 0 {
+        return 0;
+    }
+    let matrix_idx = input_idx.saturating_mul(output_count);
+    multipliers
+        .get(matrix_idx)
+        .copied()
+        .or_else(|| multipliers.get(input_idx).copied())
+        .unwrap_or(256)
 }
 
 fn scaled_processing_batch(batch: u32, prod_level: u8) -> u32 {
@@ -1352,6 +1507,86 @@ mod tests {
         let mut mine = Industry::new(TileCoord::new(0, 0), IndustryKind::CoalMine);
         mine.prod_level = PRODLEVEL_DEFAULT * 2;
         assert_eq!(mine.produce_amount(), 30);
+    }
+
+    #[test]
+    fn newgrf_industry_keeps_both_output_rates_and_cargos() {
+        let def = IndustrySpecDef {
+            id: 37,
+            local_id: 0,
+            subst_id: 0,
+            override_id: None,
+            layouts: Vec::new(),
+            produced_cargo_indices: vec![1, 4],
+            produced_cargo_labels: vec!["COAL".into(), "LVST".into()],
+            accepted_cargo_indices: Vec::new(),
+            accepted_cargo_labels: Vec::new(),
+            production_rates: vec![15, 7],
+            input_multipliers: Vec::new(),
+            callback_mask: 0,
+            cost_multiplier: 0,
+            name: "Dual producer".into(),
+            from_newgrf: true,
+            grfid: 1,
+            newgrf_local_id: 0,
+            newgrf_runtime: None,
+        };
+        let mut mine = Industry::new(TileCoord::new(0, 0), IndustryKind::CoalMine)
+            .with_newgrf_spec(def.id, &def);
+
+        assert_eq!(
+            mine.produced_cargos(),
+            vec![CargoType::Coal, CargoType::Livestock]
+        );
+        assert_eq!(mine.produce_amount(), 15);
+        assert_eq!(mine.produce_secondary_amount(), 7);
+        assert_eq!(mine.secondary_output_cargo(), Some(CargoType::Livestock));
+
+        mine.produce(INDUSTRY_PRODUCE_TICKS);
+        assert_eq!(mine.stock, 15);
+        assert_eq!(mine.secondary_stock, 7);
+    }
+
+    #[test]
+    fn newgrf_processor_applies_input_matrix_to_both_outputs() {
+        let def = IndustrySpecDef {
+            id: 38,
+            local_id: 1,
+            subst_id: 0,
+            override_id: None,
+            layouts: Vec::new(),
+            produced_cargo_indices: vec![1, 4],
+            produced_cargo_labels: vec!["COAL".into(), "LVST".into()],
+            accepted_cargo_indices: vec![7],
+            accepted_cargo_labels: vec!["WOOD".into()],
+            production_rates: vec![0, 0],
+            // One input × two outputs: 128/256 and 64/256.
+            input_multipliers: vec![128, 64],
+            callback_mask: 0,
+            cost_multiplier: 0,
+            name: "Dual processor".into(),
+            from_newgrf: true,
+            grfid: 1,
+            newgrf_local_id: 1,
+            newgrf_runtime: None,
+        };
+        let pos = TileCoord::new(4, 4);
+        let mut processor =
+            Industry::new(pos, IndustryKind::Factory).with_newgrf_spec(def.id, &def);
+        let mut stations = vec![Station::new_with_kind(
+            TileCoord::new(5, 4),
+            StopKind::TruckStop,
+        )];
+        stations[0].cargo_stock.wood = 8;
+
+        assert_eq!(
+            processor.station_input_requirements(),
+            vec![(CargoType::Wood, 8)]
+        );
+        assert!(processor.produce_from_nearby_stations(&mut stations, INDUSTRY_PRODUCE_TICKS * 2));
+        assert_eq!(processor.stock, 4);
+        assert_eq!(processor.secondary_stock, 2);
+        assert_eq!(stations[0].cargo_stock.wood, 0);
     }
 
     /// Sin transporte, bajar una y otra vez desde el mínimo cierra la mina.

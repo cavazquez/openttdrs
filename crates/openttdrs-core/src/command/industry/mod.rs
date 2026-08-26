@@ -207,11 +207,7 @@ pub fn place_industry_spec_def_sandbox(
             .with_instance_id(industry_id)
             .with_random_colour(random_colour)
             .with_counter(counter)
-            .with_newgrf(
-                def.id,
-                def.primary_production_rate(),
-                def.primary_output_cargo(),
-            ),
+            .with_newgrf_spec(def.id, &def),
     );
     state.economy.money -= 250;
     Ok(())

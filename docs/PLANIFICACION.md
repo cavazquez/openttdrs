@@ -356,7 +356,12 @@ Veintidós entradas, **todas cerradas** (P1.1 —con P0.3— a P1.22).
   bosque 13, pozos 12, minas 10/7, etc.; procesadoras 0). `Industry::produce_amount` aplica
   `CeilDiv(rate * prod_level, 16)`. Las fábricas de goods siguen transformando insumos y
   escalan su salida de 8 con el mismo `prod_level`. Hecho junto a [P1.4](#p14--prod_level-y-cierre-de-industrias--hecho).
-- **Pendiente** — segundo cargo de granja (livestock) y rates de NewGRF.
+- **Hecho** — el productor conserva las dos salidas declaradas por `NewGRF`:
+  `production_rates[0/1]`, cargo primario/secundario y sus stocks se producen y
+  transportan por separado. Las procesadoras usan los cargos aceptados y la
+  matriz `input_multipliers` (`[input][output]`) para calcular ambas salidas.
+  Sigue pendiente resolver labels de cargos custom/clima fuera del catálogo
+  vanilla y ejecutar callbacks de producción (`0x22`, `0x29`, `0x35`, …).
 
 #### P1.4 — `prod_level` y cierre de industrias · hecho
 
@@ -390,7 +395,8 @@ Veintidós entradas, **todas cerradas** (P1.1 —con P0.3— a P1.22).
   refinería. Tests `sawmill_consumes_wood_for_goods`, `steel_mill_consumes_iron_and_coal_for_steel`,
   `oil_refinery_consumes_oil_for_goods` y fábrica actualizada.
 - **Pendiente** — colas `accepted[]`/`produced[]` persistentes en la industria (hoy se consume
-  del andén cada ciclo); specs de otros climas y segundo cargo de granja.
+  del andén cada ciclo), labels de cargos custom/clima fuera del catálogo
+  vanilla y los callbacks de producción dinámica.
 
 #### P1.6 — Pago diferido de transferencias · hecho
 

@@ -194,9 +194,7 @@ pub(crate) fn hydrate_sav_industries(
 fn import_industry_output_stock(industry: &mut Industry, saved: &SavIndustry, climate: Climate) {
     let mut primary_seen = false;
     let mut secondary_seen = false;
-    let outputs = industry
-        .spec
-        .map_or(&[] as &[crate::CargoType], IndustrySpec::produced_cargos);
+    let outputs = industry.produced_cargos();
     for produced in &saved.produced {
         let Some(cargo) = crate::CargoType::from_climate_slot(climate, produced.cargo_slot) else {
             continue;

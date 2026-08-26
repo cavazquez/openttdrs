@@ -370,6 +370,7 @@ fn build_vehicle_at_depot_buys_newgrf_train_from_catalog() {
         ocean_speed_frac: 0,
         canal_speed_frac: 0,
         sound_effect: 0,
+        visual_effect: crate::engine::VEHICLE_VISUAL_EFFECT_DEFAULT,
         newgrf_views: Vec::new(),
         newgrf_local_id: 0,
         newgrf_runtime: None,

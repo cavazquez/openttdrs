@@ -1999,6 +1999,37 @@ mod tests {
     }
 
     #[test]
+    fn vehicle_action0_preserves_visual_effect_for_each_ground_feature() {
+        let train = [0x00, ACTION0_FEATURE_TRAINS, 0x01, 0x01, 0x00, 0x22, 0xFF];
+        // VE_DEFAULT se normaliza como en `UpdateVisualEffect`: bit de
+        // desactivación conservado, bits de tipo limpios.
+        assert_eq!(
+            parse_action0_train_meta(&train).unwrap().visual_effect,
+            0xCF
+        );
+
+        let road = [
+            0x00,
+            ACTION0_FEATURE_ROAD_VEHICLES,
+            0x01,
+            0x01,
+            0x00,
+            0x21,
+            0x20,
+        ];
+        assert_eq!(
+            parse_action0_vehicle_metas(&road).unwrap()[0].visual_effect,
+            0x20
+        );
+
+        let ship = [0x00, ACTION0_FEATURE_SHIPS, 0x01, 0x01, 0x00, 0x1C, 0x40];
+        assert_eq!(
+            parse_action0_vehicle_metas(&ship).unwrap()[0].visual_effect,
+            0x40
+        );
+    }
+
+    #[test]
     fn action0_climate_mask_filters_runtime_vehicle_catalog() {
         let action0 = vec![
             0x00,

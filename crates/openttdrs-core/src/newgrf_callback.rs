@@ -161,31 +161,36 @@ pub fn resolve_vehicle_visual_effect_callback(
     if result == CALLBACK_FAILED || result >= 0x100 {
         return None;
     }
-    let value = u8::try_from(result).ok()?;
-    if value & (1 << 6) != 0 {
-        return Some(VehicleVisualEffectKind::Disabled);
+    Some(decode_vehicle_visual_effect(u8::try_from(result).ok()?))
+}
+
+fn decode_vehicle_visual_effect(value: u8) -> VehicleVisualEffectKind {
+    if value == crate::engine::VEHICLE_VISUAL_EFFECT_DEFAULT {
+        return VehicleVisualEffectKind::Default;
     }
-    Some(match (value >> 4) & 0x03 {
+    if value & (1 << 6) != 0 {
+        return VehicleVisualEffectKind::Disabled;
+    }
+    match (value >> 4) & 0x03 {
         1 => VehicleVisualEffectKind::Steam,
         2 => VehicleVisualEffectKind::Diesel,
         3 => VehicleVisualEffectKind::Electric,
         _ => VehicleVisualEffectKind::Default,
-    })
+    }
 }
 
 /// Obtiene el efecto efectivo de un vehículo, aplicando CB10 cuando procede.
 ///
-/// La propiedad de efecto visual todavía no se serializa en `EngineDef` para
-/// los catálogos externos; por eso el fallback es `Default`, que conserva la
-/// selección vanilla por clase. El callback sí es ejecutado y sus registros
-/// persistentes se escriben de vuelta al vehículo.
+/// Si el callback no aplica, decodifica la propiedad Action0 conservada en el
+/// catálogo. `0xFF` delega en la selección vanilla por clase; el callback sí es
+/// ejecutado y sus registros persistentes se escriben de vuelta al vehículo.
 #[must_use]
 pub fn vehicle_visual_effect_kind(
     engine: &EngineDef,
     vehicle: &mut Vehicle,
 ) -> VehicleVisualEffectKind {
     resolve_vehicle_visual_effect_callback(engine, vehicle)
-        .unwrap_or(VehicleVisualEffectKind::Default)
+        .unwrap_or_else(|| decode_vehicle_visual_effect(engine.visual_effect))
 }
 
 /// Resuelve `CBID_VEHICLE_LOAD_AMOUNT` (`0x12`) para carga gradual.
@@ -1510,6 +1515,25 @@ mod tests {
         assert_eq!(
             resolve_vehicle_visual_effect_callback(&engine, &mut vehicle),
             None
+        );
+
+        // Sin callback, la propiedad Action0 del motor sigue siendo la fuente
+        // de verdad y `0xFF` conserva el fallback por clase.
+        engine.vehicle_callback_mask = 0;
+        engine.visual_effect = 0x20;
+        assert_eq!(
+            vehicle_visual_effect_kind(&engine, &mut vehicle),
+            VehicleVisualEffectKind::Diesel
+        );
+        engine.visual_effect = 0xCF;
+        assert_eq!(
+            vehicle_visual_effect_kind(&engine, &mut vehicle),
+            VehicleVisualEffectKind::Disabled
+        );
+        engine.visual_effect = crate::engine::VEHICLE_VISUAL_EFFECT_DEFAULT;
+        assert_eq!(
+            vehicle_visual_effect_kind(&engine, &mut vehicle),
+            VehicleVisualEffectKind::Default
         );
     }
 

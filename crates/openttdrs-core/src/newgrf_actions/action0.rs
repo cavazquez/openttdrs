@@ -227,6 +227,8 @@ pub struct ParsedTrainMeta {
     pub refit_mask: u32,
     /// Máscara de callbacks de vehículo (bit 7 = `SoundEffect`).
     pub callback_mask: u16,
+    /// Action0 train `0x22`: efecto visual bit-stuffed.
+    pub visual_effect: u8,
     /// Action0 misc flag bit 7: `OpenTTD` draws a sequence of stacked sprites.
     pub sprite_stack: bool,
 }
@@ -258,6 +260,8 @@ pub struct ParsedVehicleMeta {
     pub ocean_speed_frac: u8,
     pub canal_speed_frac: u8,
     pub sound_effect: u8,
+    /// Action0 visual effect (`road 0x21`, `ship 0x1C`).
+    pub visual_effect: u8,
     /// Action0 ship `0x1E` CTT include → bitmask temperate (`0` = lista vanilla).
     pub refit_mask: u32,
     /// Máscara de callbacks de vehículo (bit 7 = `SoundEffect`).
@@ -334,6 +338,7 @@ impl ParsedVehicleMeta {
             ocean_speed_frac: 0,
             canal_speed_frac: 0,
             sound_effect: 0,
+            visual_effect: crate::engine::VEHICLE_VISUAL_EFFECT_DEFAULT,
             refit_mask: 0,
             callback_mask: 0,
             sprite_stack: false,
@@ -2973,6 +2978,7 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
     let mut refit_mask = 0u32;
     let mut callback_mask = 0u16;
     let mut sprite_stack = false;
+    let mut visual_effect = crate::engine::VEHICLE_VISUAL_EFFECT_DEFAULT;
     for _ in 0..header.num_props {
         if i >= payload.len() {
             break;
@@ -3065,6 +3071,9 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
             0x21 => {
                 shorten_factor = read_u8(payload, &mut i)?;
             }
+            0x22 => {
+                visual_effect = normalize_visual_effect(read_u8(payload, &mut i)?);
+            }
             0x23 => {
                 pow_wag_weight = u16::from(read_u8(payload, &mut i)?);
             }
@@ -3084,7 +3093,7 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
                 curve_speed_mod = i16::from_le_bytes(read_u16(payload, &mut i)?.to_le_bytes());
             }
             // Anchos fijos restantes consumidos sin semántica runtime.
-            0x08 | 0x0A | 0x0C | 0x0F | 0x10 | 0x11 | 0x18 | 0x19 | 0x1C | 0x22 | 0x25 | 0x26 => {
+            0x08 | 0x0A | 0x0C | 0x0F | 0x10 | 0x11 | 0x18 | 0x19 | 0x1C | 0x25 | 0x26 => {
                 skip_bytes(payload, &mut i, 1)?;
             }
             0x1E => {
@@ -3163,8 +3172,19 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
         required_rail_type,
         refit_mask,
         callback_mask,
+        visual_effect,
         sprite_stack,
     })
+}
+
+/// Action0 representa `VE_DEFAULT` como un byte con el bit de desactivación
+/// activo; se limpian sólo los bits de tipo para conservar la semántica nativa.
+fn normalize_visual_effect(value: u8) -> u8 {
+    if value == crate::engine::VEHICLE_VISUAL_EFFECT_DEFAULT {
+        value & !(0x03 << 4)
+    } else {
+        value
+    }
 }
 
 #[must_use]
@@ -3271,8 +3291,13 @@ fn parse_road_vehicle_property(
             }
         }
         // 0x05 translation table; 0x20/0x28 extended byte (fixtures usan BYTE).
-        0x05 | 0x0E | 0x18 | 0x19 | 0x1A | 0x1B | 0x20 | 0x21 | 0x23 | 0x28 => {
+        0x05 | 0x0E | 0x18 | 0x19 | 0x1A | 0x1B | 0x20 | 0x23 | 0x28 => {
             skip_bytes(payload, i, metas.len())?;
+        }
+        0x21 => {
+            for meta in metas {
+                meta.visual_effect = normalize_visual_effect(read_u8(payload, i)?);
+            }
         }
         0x17 => {
             for meta in metas {
@@ -3331,7 +3356,13 @@ fn parse_ship_property(
 ) -> Option<()> {
     match prop {
         0x08 | 0x09 | 0x13 | 0x16 | 0x1C | 0x24 => {
-            skip_bytes(payload, i, metas.len())?;
+            if prop == 0x1C {
+                for meta in metas {
+                    meta.visual_effect = normalize_visual_effect(read_u8(payload, i)?);
+                }
+            } else {
+                skip_bytes(payload, i, metas.len())?;
+            }
         }
         0x17 => {
             for meta in metas {

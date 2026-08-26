@@ -5,7 +5,9 @@ use std::sync::OnceLock;
 use crate::cargo::CargoType;
 use crate::vehicle::VehicleKind;
 
-use super::model::{DEFAULT_RELIABILITY_SPD_DEC, EngineDef, SHIP_RELIABILITY_SPD_DEC};
+use super::model::{
+    DEFAULT_RELIABILITY_SPD_DEC, EngineDef, SHIP_RELIABILITY_SPD_DEC, VEHICLE_VISUAL_EFFECT_DEFAULT,
+};
 
 pub const ENGINE_BUS_MPS: u16 = 0;
 pub const ENGINE_BUS_HEREFORD: u16 = 1;
@@ -127,6 +129,7 @@ macro_rules! road {
             ocean_speed_frac: 0,
             canal_speed_frac: 0,
             sound_effect: 0,
+            visual_effect: VEHICLE_VISUAL_EFFECT_DEFAULT,
             newgrf_views: Vec::new(),
             newgrf_local_id: 0,
             newgrf_runtime: None,
@@ -191,6 +194,7 @@ macro_rules! train {
             ocean_speed_frac: 0,
             canal_speed_frac: 0,
             sound_effect: 0,
+            visual_effect: VEHICLE_VISUAL_EFFECT_DEFAULT,
             newgrf_views: Vec::new(),
             newgrf_local_id: 0,
             newgrf_runtime: None,

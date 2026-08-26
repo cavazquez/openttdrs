@@ -10,6 +10,9 @@ pub const DEFAULT_RELIABILITY_SPD_DEC: u16 = 80;
 /// Barcos: `MS` usa `decay_speed` 5 → `20`.
 pub const SHIP_RELIABILITY_SPD_DEC: u16 = 20;
 
+/// Valor Action0 `visual_effect` que delega en la clase del motor.
+pub const VEHICLE_VISUAL_EFFECT_DEFAULT: u8 = 0xFF;
+
 fn default_reliability_spd_dec() -> u16 {
     DEFAULT_RELIABILITY_SPD_DEC
 }
@@ -114,6 +117,10 @@ pub struct EngineDef {
     /// Action0 RV `0x12` / ship `0x10` / aircraft `0x12` (`0`/`0xFF` = default).
     #[serde(default)]
     pub sound_effect: u8,
+    /// Action0 visual effect (`train 0x22`, `road 0x21`, `ship 0x1C`).
+    /// `0xFF` conserva la selección por clase de motor de `OpenTTD`.
+    #[serde(default = "default_visual_effect")]
+    pub visual_effect: u8,
     /// Vistas Action1 (1..=8); vacías = sin gfx `NewGRF`. No se serializa en saves.
     #[serde(default, skip)]
     pub newgrf_views: Vec<crate::newgrf_sprites::DecodedSprite>,
@@ -129,6 +136,10 @@ pub struct EngineDef {
     /// Máscara Action0 de callbacks de vehículo; bit 7 = `SoundEffect`.
     #[serde(default)]
     pub vehicle_callback_mask: u16,
+}
+
+const fn default_visual_effect() -> u8 {
+    VEHICLE_VISUAL_EFFECT_DEFAULT
 }
 
 impl EngineDef {

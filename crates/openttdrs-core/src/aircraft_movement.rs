@@ -53,6 +53,17 @@ pub fn tick_aircraft_phase(
     map: &Map,
     stations: &mut [Station],
 ) -> AircraftPhaseEvent {
+    tick_aircraft_phase_with_catalog(v, map, stations, &[])
+}
+
+/// Variante que resuelve velocidad y callbacks contra el catálogo activo de
+/// la partida. La API histórica conserva el fallback vanilla.
+pub fn tick_aircraft_phase_with_catalog(
+    v: &mut Vehicle,
+    map: &Map,
+    stations: &mut [Station],
+    engine_catalog: &[crate::engine::EngineDef],
+) -> AircraftPhaseEvent {
     if v.kind != VehicleKind::Aircraft {
         return AircraftPhaseEvent::None;
     }
@@ -101,7 +112,9 @@ pub fn tick_aircraft_phase(
                 v.aircraft_phase = AircraftPhase::Flying;
                 v.altitude = AIRCRAFT_CRUISE_ALTITUDE;
                 v.path = straight_line_path(v.pos, v.dest).into();
-                v.set_cruise_speed();
+                let engine = crate::newgrf_callback::engine_for_vehicle_catalog(engine_catalog, v);
+                v.cur_speed = crate::newgrf_callback::vehicle_max_speed(engine, v);
+                v.subspeed = 0;
             }
             AircraftPhaseEvent::None
         }

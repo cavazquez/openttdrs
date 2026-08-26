@@ -159,8 +159,20 @@ impl super::model::Vehicle {
         map: Option<&Map>,
         train_accel: TrainAccelerationModel,
     ) {
+        self.step_with_map_and_accel_and_catalog(map, train_accel, &[]);
+    }
+
+    /// Como [`Self::step_with_map_and_accel`], resolviendo motores y callbacks
+    /// contra el catálogo activo de la partida. Las APIs históricas que no
+    /// reciben catálogo mantienen el fallback vanilla.
+    pub fn step_with_map_and_accel_and_catalog(
+        &mut self,
+        map: Option<&Map>,
+        train_accel: TrainAccelerationModel,
+        engine_catalog: &[crate::engine::EngineDef],
+    ) {
         if !self.running {
-            self.update_movement_speed(map, train_accel);
+            self.update_movement_speed_with_catalog(map, train_accel, engine_catalog);
             if self.kind != super::model::VehicleKind::Train {
                 self.progress = 0;
             }
@@ -170,7 +182,7 @@ impl super::model::Vehicle {
         self.resolve_conditional_orders();
 
         if self.holding_for_timetable() {
-            self.update_movement_speed(map, train_accel);
+            self.update_movement_speed_with_catalog(map, train_accel, engine_catalog);
             return;
         }
 
@@ -199,7 +211,7 @@ impl super::model::Vehicle {
             }
             // `Train::Tick` llama `TrainLocoHandler` dos veces por tick de juego.
             for _ in 0..2 {
-                self.train_loco_handler(map, train_accel);
+                self.train_loco_handler(map, train_accel, engine_catalog);
             }
             return;
         }
@@ -216,16 +228,21 @@ impl super::model::Vehicle {
         }
 
         if self.kind == super::model::VehicleKind::Ship {
-            crate::ship_movement::ship_controller_tick(self, map);
+            crate::ship_movement::ship_controller_tick_with_catalog(self, map, engine_catalog);
             return;
         }
 
-        self.step_path_vehicle(map, train_accel);
+        self.step_path_vehicle(map, train_accel, engine_catalog);
     }
 
     /// Movimiento genérico de barcos y aeronaves que siguen `movement_target`.
-    fn step_path_vehicle(&mut self, map: Option<&Map>, train_accel: TrainAccelerationModel) {
-        self.update_movement_speed(map, train_accel);
+    fn step_path_vehicle(
+        &mut self,
+        map: Option<&Map>,
+        train_accel: TrainAccelerationModel,
+        engine_catalog: &[crate::engine::EngineDef],
+    ) {
+        self.update_movement_speed_with_catalog(map, train_accel, engine_catalog);
 
         if self.movement_target().is_none() {
             let at_fta_airport_stand = self.kind == super::model::VehicleKind::Aircraft
@@ -300,7 +317,12 @@ impl super::model::Vehicle {
     }
 
     /// Un `TrainLocoHandler` de `OpenTTD`: actualizar velocidad y consumir distancia.
-    fn train_loco_handler(&mut self, map: Option<&Map>, train_accel: TrainAccelerationModel) {
+    fn train_loco_handler(
+        &mut self,
+        map: Option<&Map>,
+        train_accel: TrainAccelerationModel,
+        engine_catalog: &[crate::engine::EngineDef],
+    ) {
         // Parada en estación / transferencia: no consumir el ancla `progress=255`.
         if self.awaiting_load_window || self.cargo_transfer_active() {
             return;
@@ -309,7 +331,7 @@ impl super::model::Vehicle {
         self.apply_immediate_train_turnaround(map, train_accel);
 
         if self.movement_target().is_none() {
-            self.update_movement_speed(map, train_accel);
+            self.update_movement_speed_with_catalog(map, train_accel, engine_catalog);
             if self.cur_speed == 0 && self.pos == self.dest {
                 self.advance_destination_after_arrival();
             }
@@ -317,7 +339,7 @@ impl super::model::Vehicle {
         }
 
         if self.depart_turn > 0 {
-            self.update_movement_speed(map, train_accel);
+            self.update_movement_speed_with_catalog(map, train_accel, engine_catalog);
             let step = u16::from(self.progress_step().max(1));
             let next = u16::from(self.depart_turn) + step;
             if next < 255 {
@@ -340,7 +362,7 @@ impl super::model::Vehicle {
         }
 
         let braking = !self.running || self.pbs_stuck;
-        let result = self.train_do_update_speed(map, train_accel, braking);
+        let result = self.train_do_update_speed(map, train_accel, braking, engine_catalog);
         self.cur_speed = result.cur_speed;
         self.subspeed = result.subspeed;
         self.progress = 0;
@@ -354,7 +376,7 @@ impl super::model::Vehicle {
         if j < adv_spd {
             self.progress = u8::try_from(j.min(u32::from(u8::MAX))).unwrap_or(u8::MAX);
             if let Some(map) = map {
-                self.sync_train_slope_speed(map);
+                self.sync_train_slope_speed_with_catalog(map, engine_catalog);
             }
             return;
         }
@@ -379,7 +401,7 @@ impl super::model::Vehicle {
             self.progress = u8::try_from(j.min(u32::from(u8::MAX))).unwrap_or(u8::MAX);
         }
         if let Some(map) = map {
-            self.sync_train_slope_speed(map);
+            self.sync_train_slope_speed_with_catalog(map, engine_catalog);
         }
     }
 
@@ -388,8 +410,9 @@ impl super::model::Vehicle {
         map: Option<&Map>,
         train_accel: TrainAccelerationModel,
         braking: bool,
+        engine_catalog: &[crate::engine::EngineDef],
     ) -> crate::engine::DoUpdateSpeedResult {
-        let engine = self.effective_engine();
+        let engine = crate::newgrf_callback::engine_for_vehicle_catalog(engine_catalog, self);
         let mut max_speed = crate::newgrf_callback::vehicle_max_speed(engine, self);
         // P3.20: techo del consist (mínimo por unidad); `u16::MAX` = aún no cacheado.
         if self.cached_max_speed > 0 && self.cached_max_speed < u16::MAX {
@@ -732,6 +755,14 @@ impl super::model::Vehicle {
     ///
     /// Usa Z en píxeles (`GetSlopePixelZ` ≈ base·8 + partial) en la sub-tesela actual.
     pub(super) fn sync_train_slope_speed(&mut self, map: &Map) {
+        self.sync_train_slope_speed_with_catalog(map, &[]);
+    }
+
+    fn sync_train_slope_speed_with_catalog(
+        &mut self,
+        map: &Map,
+        engine_catalog: &[crate::engine::EngineDef],
+    ) {
         if self.kind != super::model::VehicleKind::Train || !self.is_consist_head() {
             return;
         }
@@ -754,7 +785,7 @@ impl super::model::Vehicle {
         let rail_idx = map
             .get(self.pos)
             .map_or(0, |t| rail_type_from_tile(t).accel_table_index());
-        let engine = self.effective_engine();
+        let engine = crate::newgrf_callback::engine_for_vehicle_catalog(engine_catalog, self);
         let mut max_speed = crate::newgrf_callback::vehicle_max_speed(engine, self);
         if self.cached_max_track_speed > 0 {
             max_speed = max_speed.min(self.cached_max_track_speed);
@@ -816,8 +847,13 @@ impl super::model::Vehicle {
         self.direction = new_dir;
     }
 
-    fn update_movement_speed(&mut self, map: Option<&Map>, train_accel: TrainAccelerationModel) {
-        let engine = self.effective_engine();
+    fn update_movement_speed_with_catalog(
+        &mut self,
+        map: Option<&Map>,
+        train_accel: TrainAccelerationModel,
+        engine_catalog: &[crate::engine::EngineDef],
+    ) {
+        let engine = crate::newgrf_callback::engine_for_vehicle_catalog(engine_catalog, self);
         let mut max_speed = crate::newgrf_callback::vehicle_max_speed(engine, self);
         // Barcos: velocidad en `ship_accelerate` / `ship_controller_tick` (no road-like).
         if self.kind == super::model::VehicleKind::Ship {

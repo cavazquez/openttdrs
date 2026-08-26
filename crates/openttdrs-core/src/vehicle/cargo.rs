@@ -15,7 +15,18 @@ impl super::model::Vehicle {
 
     /// Variante runtime que aplica CB36 antes de registrar la visita.
     pub fn station_visit_with_callbacks(&mut self, tick: u64) -> crate::station::StationVisit {
-        let max_speed = u32::from(crate::newgrf_callback::effective_vehicle_max_speed(self));
+        self.station_visit_with_callbacks_and_catalog(tick, &[])
+    }
+
+    /// Variante runtime que resuelve el motor NewGRF desde el catálogo activo.
+    pub fn station_visit_with_callbacks_and_catalog(
+        &mut self,
+        tick: u64,
+        engine_catalog: &[crate::engine::EngineDef],
+    ) -> crate::station::StationVisit {
+        let max_speed = u32::from(
+            crate::newgrf_callback::effective_vehicle_max_speed_with_catalog(engine_catalog, self),
+        );
         self.station_visit_with_speed(tick, max_speed)
     }
 

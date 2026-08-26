@@ -429,9 +429,13 @@ pub fn ship_move_up_down_on_lock(v: &mut Vehicle, map: &Map) -> bool {
     true
 }
 
-fn ship_max_speed(v: &Vehicle, map: Option<&Map>) -> u16 {
-    let engine = v.effective_engine();
-    let mut max_speed = engine.max_speed;
+fn ship_max_speed(
+    v: &mut Vehicle,
+    map: Option<&Map>,
+    engine_catalog: &[crate::engine::EngineDef],
+) -> u16 {
+    let engine = crate::newgrf_callback::engine_for_vehicle_catalog(engine_catalog, v);
+    let mut max_speed = crate::newgrf_callback::vehicle_max_speed(engine, v);
     if let Some(map) = map {
         let is_canal = map.get(v.pos).is_some_and(crate::map::is_canal_tile);
         max_speed = ship_speed_for_tile(engine, is_canal);
@@ -652,6 +656,17 @@ fn face_path_target(v: &mut Vehicle) {
 /// Un tick del controlador mínimo (`ShipController` simplificado).
 #[allow(clippy::too_many_lines)]
 pub fn ship_controller_tick(v: &mut Vehicle, map: Option<&Map>) {
+    ship_controller_tick_with_catalog(v, map, &[]);
+}
+
+/// Variante que resuelve el motor NewGRF desde el catálogo activo de la
+/// partida. La API histórica conserva el fallback vanilla mediante
+/// [`ship_controller_tick`].
+pub fn ship_controller_tick_with_catalog(
+    v: &mut Vehicle,
+    map: Option<&Map>,
+    engine_catalog: &[crate::engine::EngineDef],
+) {
     if v.kind != VehicleKind::Ship {
         return;
     }
@@ -691,7 +706,7 @@ pub fn ship_controller_tick(v: &mut Vehicle, map: Option<&Map>) {
         }
     }
 
-    let max_speed = ship_max_speed(v, map);
+    let max_speed = ship_max_speed(v, map, engine_catalog);
     let steps = ship_accelerate(v, max_speed);
     if steps == 0 {
         return;

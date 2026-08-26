@@ -108,7 +108,10 @@ pub use aircraft_crash::{
     SHORT_STRIP_JET_CRASH_PROB, crash_airplane, maybe_crash_after_brake_tick,
     should_crash_short_strip_jet,
 };
-pub use aircraft_movement::{aircraft_requires_path, straight_line_path};
+pub use aircraft_movement::{
+    aircraft_requires_path, straight_line_path, tick_aircraft_phase,
+    tick_aircraft_phase_with_catalog,
+};
 pub use airport::{
     AIRPORT_SMALL_H, AIRPORT_SMALL_W, AirportPiece, airport_loading_tile, airport_loading_tile_at,
     airport_m6_airport, airport_runway_tile, airport_small_footprint, airport_small_tiles,
@@ -402,10 +405,10 @@ pub use newgrf_callback::{
     apply_industry_tile_anim_callback, apply_object_slope_callback,
     apply_station_availability_callback, apply_station_availability_callback_for_build,
     apply_vehicle_start_stop_callback, callback_allows_8bit_boolean, callback_allows_location,
-    callback_allows_placement, engine_for_vehicle_catalog, resolve_callback_or_failed,
-    resolve_cargo_profit_callback, resolve_cargo_station_rating_callback,
-    resolve_industry_tile_animation_callback, resolve_industry_tile_random_trigger,
-    resolve_vehicle_32day_callback, resolve_vehicle_callback,
+    callback_allows_placement, effective_vehicle_max_speed_with_catalog,
+    engine_for_vehicle_catalog, resolve_callback_or_failed, resolve_cargo_profit_callback,
+    resolve_cargo_station_rating_callback, resolve_industry_tile_animation_callback,
+    resolve_industry_tile_random_trigger, resolve_vehicle_32day_callback, resolve_vehicle_callback,
     resolve_vehicle_capacity_property_callback, resolve_vehicle_colour_mapping_callback,
     resolve_vehicle_modify_property_callback, resolve_vehicle_sound_callback,
     resolve_vehicle_visual_effect_callback, trigger_road_stop_animation,
@@ -586,9 +589,9 @@ pub use ship_movement::{
     LOCK_TRANSIT_TICKS, SHIP_ACCELERATION_DEFAULT, SHIP_SUBCOORD, ShipLockOccupancy,
     ShipSubcoordData, choose_ship_track, find_closest_ship_depot, is_water_network_tile,
     is_water_network_tile_at, lock_sprite_level, release_ship_lock, ship_accelerate,
-    ship_arrival_ready, ship_controller_tick, ship_lock_occupancy_allows,
-    ship_move_up_down_on_lock, ship_requires_path, ship_subcoord, try_claim_ship_lock,
-    water_tile_is_lock, water_tiles_connected,
+    ship_arrival_ready, ship_controller_tick, ship_controller_tick_with_catalog,
+    ship_lock_occupancy_allows, ship_move_up_down_on_lock, ship_requires_path, ship_subcoord,
+    try_claim_ship_lock, water_tile_is_lock, water_tiles_connected,
 };
 pub use sign::{MAX_SIGN_NAME_CHARS, Sign, SignOwner};
 pub use sim_events::{

@@ -638,6 +638,18 @@ pub fn effective_vehicle_max_speed(vehicle: &mut Vehicle) -> u16 {
     vehicle_max_speed(engine, vehicle)
 }
 
+/// Igual que [`effective_vehicle_max_speed`], resolviendo el motor contra el
+/// catálogo de la partida para que los ratings y APIs que reciben `GameState`
+/// no vuelvan accidentalmente al catálogo vanilla.
+#[must_use]
+pub fn effective_vehicle_max_speed_with_catalog(
+    catalog: &[EngineDef],
+    vehicle: &mut Vehicle,
+) -> u16 {
+    let engine = engine_for_vehicle_catalog(catalog, vehicle);
+    vehicle_max_speed(engine, vehicle)
+}
+
 /// Resuelve la propiedad de capacidad de CB36 para la clase de una unidad.
 ///
 /// El valor devuelto mantiene la unidad nativa de Action0 (capacidad de

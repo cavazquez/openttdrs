@@ -252,8 +252,10 @@ comprar, refitar y materializar articulados, conservando un callback válido de
 cero. Potencia (`0x0B`/`0x13`), peso (`0x16`/`0x14`) y esfuerzo tractor
 (`0x1F`/`0x18`) también se resuelven con sus unidades nativas y alimentan el
 recálculo físico de consist ferroviario; los ceros válidos y las piezas
-articuladas viales sin motor se conservan. La capacidad dinámica durante la
-partida, carretera con catálogo activo, costes y el resto de propiedades
+articuladas viales sin motor se conservan. El tick vial de la simulación ya
+resuelve esos valores contra el catálogo activo, aunque los callbacks de
+adelantamiento y las APIs legacy sin catálogo aún usan el fallback estático.
+La capacidad dinámica durante la partida, costes y el resto de propiedades
 Action0 siguen siendo residuales.
 La carga gradual ya ejecuta CB12 (`load_amount`) cuando el motor declara la
 máscara correspondiente.

@@ -25,7 +25,17 @@ pub fn current_road_max_speed(v: &Vehicle, map: Option<&Map>) -> u16 {
 /// no pueden escribir los registros persistentes del vehículo; el controlador
 /// de movimiento usa esta versión mutable.
 pub fn current_road_max_speed_with_callbacks(v: &mut Vehicle, map: Option<&Map>) -> u16 {
-    let engine = v.effective_engine();
+    current_road_max_speed_with_callbacks_in_catalog(v, map, &[])
+}
+
+/// Variante de [`current_road_max_speed_with_callbacks`] que resuelve el
+/// motor contra el catálogo activo de la partida (incluidos ids Action0).
+pub fn current_road_max_speed_with_callbacks_in_catalog(
+    v: &mut Vehicle,
+    map: Option<&Map>,
+    engine_catalog: &[crate::engine::EngineDef],
+) -> u16 {
+    let engine = crate::newgrf_callback::engine_for_vehicle_catalog(engine_catalog, v);
     let engine_speed = crate::newgrf_callback::vehicle_max_speed(engine, v);
     current_road_max_speed_for_engine(v, map, engine_speed)
 }
@@ -111,7 +121,35 @@ pub fn sync_road_slope_speed(v: &mut Vehicle, map: &Map) {
 mod tests {
     use super::*;
     use crate::map::TileCoord;
+    use crate::newgrf_sprites::{
+        Action2VarAdjust, Action2VarEntry, Action2VarTerm, TrainSpriteAssign, TrainSpriteGraphics,
+    };
     use crate::vehicle::{DIR_E, DIR_NE, VehicleKind};
+
+    fn callback_literal(value: u16) -> TrainSpriteGraphics {
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 2,
+        });
+        gfx.action2_var.insert(
+            2,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x1A,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        and_mask: u32::from(value),
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
+        gfx
+    }
 
     fn road_vehicle() -> Vehicle {
         let mut v = Vehicle::new(
@@ -151,6 +189,26 @@ mod tests {
         v.set_station_orders(vec![TileCoord::new(1, 0)]);
         v.orders[0] = v.orders[0].with_max_speed(80);
         assert_eq!(current_road_max_speed(&v, None), 80);
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn current_max_speed_uses_active_catalog_and_cb36() {
+        let mut engine = crate::engine::engine_by_id(crate::engine::ENGINE_BUS_MPS)
+            .unwrap()
+            .clone();
+        engine.id = crate::engine::NEWGRF_ENGINE_ID_BASE;
+        engine.newgrf_grfid = 0x524F_4144;
+        engine.newgrf_local_id = 0;
+        engine.newgrf_runtime = Some(Box::new(callback_literal(44)));
+        let catalog = vec![engine];
+        let mut v = road_vehicle();
+        v.engine_id = Some(crate::engine::NEWGRF_ENGINE_ID_BASE);
+
+        assert_eq!(
+            current_road_max_speed_with_callbacks_in_catalog(&mut v, None, &catalog),
+            44
+        );
     }
 
     #[test]

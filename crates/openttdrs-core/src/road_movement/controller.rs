@@ -1,8 +1,8 @@
 //! `IndividualRoadVehicleController` — un sub-paso de frame/tesela.
 
 use crate::engine::{
-    RoadVehicleAccelerationModel, get_advance_distance, road_engine_air_drag,
-    road_engine_tractive_effort, road_max_te_n, update_road_vehicle_speed,
+    RoadVehicleAccelerationModel, get_advance_distance, road_engine_air_drag, road_max_te_n,
+    update_road_vehicle_speed,
 };
 use crate::map::Map;
 use crate::road_movement::bay::{
@@ -362,6 +362,7 @@ pub fn road_vehicle_tick_side(
         drive_on_right,
         RoadVehicleAccelerationModel::Original,
         None,
+        &[],
     );
 }
 
@@ -396,6 +397,28 @@ pub fn road_vehicle_tick_side_indexed_with_acceleration(
     acceleration_model: RoadVehicleAccelerationModel,
     traffic: &mut RoadTrafficIndex,
 ) {
+    road_vehicle_tick_side_indexed_with_acceleration_and_catalog(
+        vehicles,
+        v_idx,
+        map,
+        drive_on_right,
+        acceleration_model,
+        &[],
+        traffic,
+    );
+}
+
+/// Variante de [`road_vehicle_tick_side_indexed_with_acceleration`] que usa el
+/// catálogo activo para resolver motores Action0/Action3 y sus callbacks CB36.
+pub fn road_vehicle_tick_side_indexed_with_acceleration_and_catalog(
+    vehicles: &mut [Vehicle],
+    v_idx: usize,
+    map: Option<&Map>,
+    drive_on_right: bool,
+    acceleration_model: RoadVehicleAccelerationModel,
+    engine_catalog: &[crate::engine::EngineDef],
+    traffic: &mut RoadTrafficIndex,
+) {
     let previous = vehicles
         .get(v_idx)
         .map_or(crate::TileCoord::new(0, 0), |v| v.pos);
@@ -406,6 +429,7 @@ pub fn road_vehicle_tick_side_indexed_with_acceleration(
         drive_on_right,
         acceleration_model,
         Some(traffic),
+        engine_catalog,
     );
     traffic.update_vehicle(vehicles, v_idx, previous);
 }
@@ -418,6 +442,7 @@ fn road_vehicle_tick_side_with_traffic(
     drive_on_right: bool,
     acceleration_model: RoadVehicleAccelerationModel,
     traffic: Option<&RoadTrafficIndex>,
+    engine_catalog: &[crate::engine::EngineDef],
 ) {
     if !is_road_vehicle_kind(vehicles[v_idx].kind) {
         return;
@@ -456,12 +481,19 @@ fn road_vehicle_tick_side_with_traffic(
         }
     }
 
-    let max_speed = super::slope::current_road_max_speed_with_callbacks(v, map);
+    let max_speed =
+        super::slope::current_road_max_speed_with_callbacks_in_catalog(v, map, engine_catalog);
 
-    let engine = v.effective_engine();
+    let engine = crate::newgrf_callback::engine_for_vehicle_catalog(engine_catalog, v);
     let cargo_weight = crate::train_consist::cargo_weight_t(v.cargo, v.cargo_type);
-    let weight = engine.weight_t.saturating_add(cargo_weight).max(1);
-    let max_te = road_max_te_n(weight, road_engine_tractive_effort(engine));
+    let weight = crate::newgrf_callback::vehicle_weight_t(engine, v)
+        .saturating_add(cargo_weight)
+        .max(1);
+    let max_te = road_max_te_n(
+        weight,
+        crate::newgrf_callback::vehicle_tractive_effort(engine, v),
+    );
+    let power = crate::newgrf_callback::vehicle_power_hp(engine, v);
     let air_drag = road_engine_air_drag(engine);
 
     if is_bay_road_state(v.road_state)
@@ -478,7 +510,7 @@ fn road_vehicle_tick_side_with_traffic(
             v.subspeed,
             v.progress,
             acceleration_model,
-            engine.power_hp,
+            power,
             weight,
             max_te,
             air_drag,
@@ -493,7 +525,7 @@ fn road_vehicle_tick_side_with_traffic(
             v.subspeed,
             0,
             acceleration_model,
-            engine.power_hp,
+            power,
             weight,
             max_te,
             air_drag,

@@ -19,6 +19,7 @@ pub use controller::{
     individual_road_vehicle_controller_side_indexed, road_vehicle_step_solo, road_vehicle_tick,
     road_vehicle_tick_side, road_vehicle_tick_side_indexed,
     road_vehicle_tick_side_indexed_with_acceleration,
+    road_vehicle_tick_side_indexed_with_acceleration_and_catalog,
 };
 pub use curves::{straight_subtile, train_straight_subtile, turn_curve_points};
 pub use depot::{
@@ -43,7 +44,8 @@ pub use render_pose::{
 pub use rvsb::RVSB_DRIVE_SIDE;
 pub use rvsb::{RVSB_IN_DEPOT, RVSB_TRACKDIR_MASK, trackdir_from_direction};
 pub use slope::{
-    current_road_max_speed_with_callbacks, road_z_pos_affect_speed, sync_road_slope_speed,
+    current_road_max_speed_with_callbacks, current_road_max_speed_with_callbacks_in_catalog,
+    road_z_pos_affect_speed, sync_road_slope_speed,
 };
 pub use traffic::{
     BLOCKED_CTR_LIMIT, RoadTrafficIndex, apply_road_veh_close_to, apply_road_veh_close_to_indexed,

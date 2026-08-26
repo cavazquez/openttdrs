@@ -287,6 +287,57 @@ fn refit_truck_in_depot_changes_cargo_type() {
 }
 
 #[test]
+fn newgrf_vehicle_length_callback_applies_when_buying() {
+    use crate::engine::{ENGINE_BUS_FOSTER, NEWGRF_ENGINE_ID_BASE};
+    use crate::newgrf_sprites::{
+        Action2VarAdjust, Action2VarEntry, Action2VarTerm, TrainSpriteAssign, TrainSpriteGraphics,
+    };
+
+    let mut gfx = TrainSpriteGraphics::default();
+    gfx.assigns.push(TrainSpriteAssign {
+        local_id: 0,
+        set_id: 2,
+    });
+    gfx.action2_var.insert(
+        2,
+        Action2VarEntry {
+            first: Action2VarTerm {
+                variable: 0x1A,
+                param: None,
+                adjust: Action2VarAdjust {
+                    shift: 0,
+                    and_mask: 3,
+                    ..Action2VarAdjust::default()
+                },
+            },
+            ops: Vec::new(),
+            ranges: Vec::new(),
+            default: 0,
+        },
+    );
+
+    let mut s = GameState::new(8, 8);
+    let mut engine = crate::engine_by_id(ENGINE_BUS_FOSTER).unwrap().clone();
+    engine.id = NEWGRF_ENGINE_ID_BASE;
+    engine.from_newgrf = true;
+    engine.newgrf_grfid = 0x4C45_4E47;
+    engine.newgrf_local_id = 0;
+    engine.vehicle_callback_mask = 1 << 1;
+    engine.newgrf_runtime = Some(Box::new(gfx));
+    s.engine_catalog.push(engine);
+
+    let depot = TileCoord::new(2, 2);
+    apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(1, 2))).unwrap();
+    apply_command(&mut s, &Command::PlaceRoadDepotDir(depot, 0)).unwrap();
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(depot, NEWGRF_ENGINE_ID_BASE),
+    )
+    .unwrap();
+    assert_eq!(s.vehicles[0].unit_length, 5);
+}
+
+#[test]
 fn refit_rejects_with_cargo_on_board() {
     let mut s = GameState::new(8, 8);
     let depot = TileCoord::new(2, 2);

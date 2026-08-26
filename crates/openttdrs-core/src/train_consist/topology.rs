@@ -132,16 +132,17 @@ pub fn consist_changed_with_map_and_catalog(
             .flatten()
             .unwrap_or(eng.capacity);
         let speed = crate::newgrf_callback::vehicle_max_speed(eng, v);
-        total_weight = total_weight.saturating_add(eng.weight_t);
+        let unit_weight = crate::newgrf_callback::vehicle_weight_t(eng, v);
+        total_weight = total_weight.saturating_add(unit_weight);
         if v.powered_wagon {
             total_weight = total_weight.saturating_add(head_pow_wag_weight);
             total_power = total_power.saturating_add(head_pow_wag_power);
         }
         // Multihead: cada cabina aporta la mitad de la potencia del motor.
         let unit_power = if eng.is_dual_headed() || v.other_multiheaded_part.is_some() {
-            eng.power_hp / 2
+            crate::newgrf_callback::vehicle_power_hp(eng, v) / 2
         } else {
-            eng.power_hp
+            crate::newgrf_callback::vehicle_power_hp(eng, v)
         };
         total_power = total_power.saturating_add(unit_power);
         if capacity > 0 {
@@ -160,7 +161,7 @@ pub fn consist_changed_with_map_and_catalog(
             max_speed = max_speed.min(speed);
         }
         // Compatible railtypes: solo unidades con potencia propia (no powered wagons).
-        if eng.power_hp > 0 && !v.powered_wagon {
+        if unit_power > 0 && !v.powered_wagon {
             let rt = eng
                 .required_rail_type
                 .map_or_else(|| required_rail_type_for_engine(eng.id), RailType::from_u8);
@@ -181,12 +182,15 @@ pub fn consist_changed_with_map_and_catalog(
     if total_cap == 0 {
         total_cap = crate::vehicle::VEHICLE_CAPACITY;
     }
+    let te_coeff = vehicles.iter_mut().find(|v| v.id == head_id).map_or_else(
+        || crate::engine::engine_tractive_effort(head_eng),
+        |head| crate::newgrf_callback::vehicle_tractive_effort(head_eng, head),
+    );
     if let Some(head) = vehicles.iter_mut().find(|v| v.id == head_id) {
         head.cached_total_length = total_len.max(u16::from(super::VEHICLE_LENGTH));
         head.capacity = total_cap;
         head.cached_power_hp = total_power;
         head.cached_weight_t = total_weight.max(1);
-        let te_coeff = crate::engine::engine_tractive_effort(head_eng);
         head.cached_max_te_n = crate::engine::train_max_te_n(head.cached_weight_t, te_coeff);
         let parts = u32::try_from(ids.len()).unwrap_or(1);
         head.cached_air_drag = crate::engine::engine_air_drag(head_eng, parts);

@@ -259,7 +259,29 @@ fn trigger_vehicle_randomisation_with_base(
     )
 }
 
-fn engine_for_vehicle_catalog(catalog: &[EngineDef], vehicle: &Vehicle) -> Option<EngineDef> {
+/// Busca el motor efectivo de una unidad dentro del catálogo de la partida.
+///
+/// `Vehicle::effective_engine` sólo puede consultar el catálogo vanilla
+/// estático. Los motores asignados por Action0 viven en `GameState` y deben
+/// resolverse contra ese vector antes de ejecutar callbacks o física; si el
+/// id no existe se conserva el fallback vanilla para saves antiguos.
+#[must_use]
+pub fn engine_for_vehicle_catalog<'a>(
+    catalog: &'a [EngineDef],
+    vehicle: &Vehicle,
+) -> &'a EngineDef {
+    vehicle
+        .engine_id
+        .and_then(|id| catalog.iter().find(|candidate| candidate.id == id))
+        .unwrap_or_else(|| {
+            crate::engine::engine_for_vehicle(
+                vehicle.kind,
+                crate::engine::default_engine_id(vehicle.kind),
+            )
+        })
+}
+
+fn engine_for_vehicle_catalog_owned(catalog: &[EngineDef], vehicle: &Vehicle) -> Option<EngineDef> {
     vehicle
         .engine_id
         .and_then(|id| {
@@ -269,15 +291,7 @@ fn engine_for_vehicle_catalog(catalog: &[EngineDef], vehicle: &Vehicle) -> Optio
                 .cloned()
                 .or_else(|| crate::engine::engine_by_id(id).cloned())
         })
-        .or_else(|| {
-            Some(
-                crate::engine::engine_for_vehicle(
-                    vehicle.kind,
-                    crate::engine::default_engine_id(vehicle.kind),
-                )
-                .clone(),
-            )
-        })
+        .or_else(|| Some(engine_for_vehicle_catalog(catalog, vehicle).clone()))
 }
 
 fn vehicle_previous_id(vehicles: &[Vehicle], id: u32) -> Option<u32> {
@@ -327,7 +341,8 @@ fn trigger_vehicle_randomisation_chain_step(
     let Some(index) = vehicles.iter().position(|vehicle| vehicle.id == id) else {
         return (false, base_random);
     };
-    let Some(engine) = engine_for_vehicle_catalog(catalog, &vehicles[index]) else {
+    let engine = engine_for_vehicle_catalog_owned(catalog, &vehicles[index]);
+    let Some(engine) = engine else {
         return (false, base_random);
     };
     let (mut changed, random) = trigger_vehicle_randomisation_with_base(
@@ -641,6 +656,100 @@ pub fn resolve_vehicle_capacity_property_callback(
     };
     resolve_vehicle_modify_property_callback(engine, vehicle, property, false)
         .and_then(|value| u32::try_from(value).ok())
+}
+
+/// Potencia efectiva de una unidad después de `CBID_VEHICLE_MODIFY_PROPERTY`.
+///
+/// La propiedad ferroviaria `0x0B` ya está expresada en HP; la vial `0x13`
+/// está expresada en decenas de HP. Un resultado cero es válido y por eso no
+/// se usa `unwrap_or` sobre la conversión antes de distinguir el fallo del
+/// callback. Las piezas articuladas viales no aportan potencia en `OpenTTD`.
+#[must_use]
+pub fn vehicle_power_hp(engine: &EngineDef, vehicle: &mut Vehicle) -> u32 {
+    if matches!(
+        engine.kind,
+        VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram
+    ) && vehicle.is_articulated_unit()
+    {
+        return 0;
+    }
+    let property = match engine.kind {
+        VehicleKind::Train => 0x0B,
+        VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram => 0x13,
+        VehicleKind::Ship | VehicleKind::Aircraft => return engine.power_hp,
+    };
+    resolve_vehicle_modify_property_callback(engine, vehicle, property, false)
+        .and_then(|value| u32::try_from(value).ok())
+        .map_or(engine.power_hp, |value| {
+            if matches!(
+                engine.kind,
+                VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram
+            ) {
+                value.saturating_mul(10)
+            } else {
+                value
+            }
+        })
+}
+
+/// Peso de motor efectivo en toneladas después de CB36.
+///
+/// `0x16` ferroviario usa toneladas enteras; `0x14` vial usa cuartos de
+/// tonelada y `OpenTTD` aplica división entera al convertirlo para la física.
+/// Las piezas articuladas viales sólo pesan la carga que se les asigne, no
+/// vuelven a sumar el peso de su motor.
+#[must_use]
+pub fn vehicle_weight_t(engine: &EngineDef, vehicle: &mut Vehicle) -> u16 {
+    if matches!(
+        engine.kind,
+        VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram
+    ) && vehicle.is_articulated_unit()
+    {
+        return 0;
+    }
+    let property = match engine.kind {
+        VehicleKind::Train => 0x16,
+        VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram => 0x14,
+        VehicleKind::Ship | VehicleKind::Aircraft => return engine.weight_t,
+    };
+    resolve_vehicle_modify_property_callback(engine, vehicle, property, false)
+        .and_then(|value| u16::try_from(value).ok())
+        .map_or(engine.weight_t, |value| {
+            if matches!(
+                engine.kind,
+                VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram
+            ) {
+                value / 4
+            } else {
+                value
+            }
+        })
+}
+
+/// Coeficiente de esfuerzo tractor efectivo (`1/256`) después de CB36.
+///
+/// El valor es un BYTE en las dos clases terrestres. Resultados fuera de ese
+/// rango son inválidos y conservan la tabla/property vanilla; cero, en
+/// cambio, desactiva deliberadamente el esfuerzo tractor de la unidad.
+#[must_use]
+pub fn vehicle_tractive_effort(engine: &EngineDef, vehicle: &mut Vehicle) -> u8 {
+    if matches!(
+        engine.kind,
+        VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram
+    ) && vehicle.is_articulated_unit()
+    {
+        return 0;
+    }
+    let (property, fallback) = match engine.kind {
+        VehicleKind::Train => (0x1F, crate::engine::engine_tractive_effort(engine)),
+        VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram => {
+            (0x18, crate::engine::road_engine_tractive_effort(engine))
+        }
+        VehicleKind::Ship | VehicleKind::Aircraft => return 0,
+    };
+    resolve_vehicle_modify_property_callback(engine, vehicle, property, false)
+        .and_then(|value| u8::try_from(value).ok())
+        .unwrap_or(fallback)
 }
 
 /// Resuelve `CBID_VEHICLE_LENGTH` (`0x11`) y devuelve la longitud efectiva.
@@ -2566,6 +2675,54 @@ mod tests {
             resolve_vehicle_capacity_property_callback(&aircraft_engine, &mut aircraft),
             Some(0x800)
         );
+    }
+
+    #[test]
+    fn callbacks_ac_vehicle_modify_property_resolves_physical_values_per_class() {
+        let mut train_engine = engines_table()
+            .iter()
+            .find(|e| e.kind == VehicleKind::Train && e.power_hp > 0)
+            .cloned()
+            .unwrap();
+        train_engine.newgrf_grfid = 0x5048_5953;
+        train_engine.newgrf_local_id = 0;
+        let mut train = Vehicle::new(
+            50,
+            VehicleKind::Train,
+            TileCoord::new(1, 1),
+            TileCoord::new(1, 1),
+        );
+
+        train_engine.newgrf_runtime = Some(Box::new(gfx_callback_literal_u16(1234)));
+        assert_eq!(vehicle_power_hp(&train_engine, &mut train), 1234);
+        train_engine.newgrf_runtime = Some(Box::new(gfx_callback_literal_u16(57)));
+        assert_eq!(vehicle_weight_t(&train_engine, &mut train), 57);
+        train_engine.newgrf_runtime = Some(Box::new(gfx_callback_literal_u16(201)));
+        assert_eq!(vehicle_tractive_effort(&train_engine, &mut train), 201);
+
+        let mut road_engine = engines_table()
+            .iter()
+            .find(|e| e.kind == VehicleKind::Bus)
+            .cloned()
+            .unwrap();
+        road_engine.newgrf_grfid = 0x5048_5953;
+        road_engine.newgrf_local_id = 0;
+        let mut bus = Vehicle::new(
+            51,
+            VehicleKind::Bus,
+            TileCoord::new(1, 1),
+            TileCoord::new(1, 1),
+        );
+        road_engine.newgrf_runtime = Some(Box::new(gfx_callback_literal_u16(37)));
+        assert_eq!(vehicle_power_hp(&road_engine, &mut bus), 370);
+        road_engine.newgrf_runtime = Some(Box::new(gfx_callback_literal_u16(13)));
+        assert_eq!(vehicle_weight_t(&road_engine, &mut bus), 3);
+        road_engine.newgrf_runtime = Some(Box::new(gfx_callback_literal_u16(180)));
+        assert_eq!(vehicle_tractive_effort(&road_engine, &mut bus), 180);
+
+        // Un resultado cero no se confunde con callback ausente.
+        train_engine.newgrf_runtime = Some(Box::new(gfx_callback_literal_u16(0)));
+        assert_eq!(vehicle_power_hp(&train_engine, &mut train), 0);
     }
 
     #[test]

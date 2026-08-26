@@ -249,9 +249,12 @@ movimiento, pendientes, crucero, adelantamiento y rating de estación, con
 fallback a Action0 y writeback de `7C`. La capacidad también consulta las
 propiedades `0x14`/`0x0F`/`0x0D` por clase (y `0x11` para correo aéreo) al
 comprar, refitar y materializar articulados, conservando un callback válido de
-cero. La capacidad dinámica durante la partida, potencia, esfuerzo tractor,
-costes y el resto de propiedades Action0 todavía no tienen call sites, por lo
-que esta cobertura sigue siendo parcial.
+cero. Potencia (`0x0B`/`0x13`), peso (`0x16`/`0x14`) y esfuerzo tractor
+(`0x1F`/`0x18`) también se resuelven con sus unidades nativas y alimentan el
+recálculo físico de consist ferroviario; los ceros válidos y las piezas
+articuladas viales sin motor se conservan. La capacidad dinámica durante la
+partida, carretera con catálogo activo, costes y el resto de propiedades
+Action0 siguen siendo residuales.
 La carga gradual ya ejecuta CB12 (`load_amount`) cuando el motor declara la
 máscara correspondiente.
 Los focos naval

@@ -1,11 +1,12 @@
 use bevy::prelude::*;
+use openttdrs_core::Climate;
 use openttdrs_core::prelude::*;
 use openttdrs_core::{
     RoadStopSpecDef, StationSpecDef, inclined_slope_direction, is_tunnel_entrance_slope,
     rail_type_from_tile, road_stop_spec_def, station_at_tile,
 };
 
-use super::bridge_draw::{bridge_span_at, spawn_bridge_deck};
+use super::bridge_draw::{bridge_span_at, spawn_bridge_deck_with_road_types};
 use super::transport::{catenary_local_z_delta, spawn_rail_catenary_for_surface};
 use super::{
     catenary_under_low_bridge,
@@ -2246,7 +2247,54 @@ fn spawn_stop_ground_sprite(
 }
 
 #[allow(clippy::too_many_arguments)]
+#[allow(dead_code)]
 pub(crate) fn spawn_transport_object_tile(
+    commands: &mut Commands,
+    assets: &WorldAssets,
+    company: Option<&CompanyColoredSprites>,
+    owner_colour: Option<CompanyColour>,
+    ctx: &TileRenderContext,
+    slope_half_ground: f32,
+    show_pbs_reservations: bool,
+    map: &Map,
+    dims: (u32, u32),
+    stations: &[Station],
+    catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    catenary_sprites: Option<&mut crate::render::NewGrfCatenarySpriteCache>,
+    bridge_decks_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    foundation_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
+    images: Option<&mut Assets<Image>>,
+) {
+    spawn_transport_object_tile_with_road_types(
+        commands,
+        assets,
+        company,
+        owner_colour,
+        ctx,
+        slope_half_ground,
+        show_pbs_reservations,
+        map,
+        dims,
+        stations,
+        catenary_newgrf,
+        catenary_sprites,
+        bridge_decks_newgrf,
+        foundation_newgrf,
+        Climate::Temperate,
+        &[],
+        None,
+        &[],
+        action5_sprites,
+        images,
+    );
+}
+
+/// Variante de [`spawn_transport_object_tile`] que conserva el estado de
+/// roadtypes/NewGRF necesario para que los puentes dibujados desde el camino
+/// de objetos resuelvan `ROTSG_BRIDGE` y `ROTSG_OVERLAY` igual que el mundo.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn spawn_transport_object_tile_with_road_types(
     commands: &mut Commands,
     assets: &WorldAssets,
     company: Option<&CompanyColoredSprites>,
@@ -2261,6 +2309,10 @@ pub(crate) fn spawn_transport_object_tile(
     mut catenary_sprites: Option<&mut crate::render::NewGrfCatenarySpriteCache>,
     bridge_decks_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     foundation_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    climate: Climate,
+    road_catalog: &[openttdrs_core::RoadTypeDef],
+    road_sprites: Option<&mut crate::render::NewGrfRoadSpriteCache>,
+    newgrf_stack: &[openttdrs_core::NewGrfEntry],
     mut action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
     mut images: Option<&mut Assets<Image>>,
 ) {
@@ -2672,7 +2724,7 @@ pub(crate) fn spawn_transport_object_tile(
         }
         TileKind::RoadBridge | TileKind::RailBridge => {
             if let Some(span) = bridge_span_at(map, ctx.coord, dims) {
-                spawn_bridge_deck(
+                spawn_bridge_deck_with_road_types(
                     commands,
                     map,
                     dims,
@@ -2685,6 +2737,10 @@ pub(crate) fn spawn_transport_object_tile(
                     catenary_sprites,
                     bridge_decks_newgrf,
                     foundation_newgrf,
+                    climate,
+                    road_catalog,
+                    road_sprites,
+                    newgrf_stack,
                     action5_sprites,
                     images,
                 );

@@ -1,15 +1,17 @@
 //! Tramos intermedios de puente sobre teselas con `IsBridgeAbove` en `mapt`.
 
 use bevy::prelude::*;
+use openttdrs_core::Climate;
 use openttdrs_core::bridge_above_axis_from_mapt;
 use openttdrs_core::prelude::*;
 
 use crate::render::{TileRenderContext, WorldAssets};
 
-use super::bridge_draw::{bridge_span_at, spawn_bridge_deck};
+use super::bridge_draw::bridge_span_at;
 
 /// Dibuja el tablero si la tesela tiene un puente por encima (no rampa).
 #[allow(clippy::too_many_arguments)]
+#[allow(dead_code)]
 pub(crate) fn spawn_bridge_middle(
     commands: &mut Commands,
     map: &Map,
@@ -17,6 +19,45 @@ pub(crate) fn spawn_bridge_middle(
     assets: &WorldAssets,
     ctx: &TileRenderContext,
     show_pbs_reservations: bool,
+    catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    catenary_sprites: Option<&mut crate::render::NewGrfCatenarySpriteCache>,
+    bridge_decks_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
+    images: Option<&mut Assets<Image>>,
+) {
+    spawn_bridge_middle_with_road_types(
+        commands,
+        map,
+        dims,
+        assets,
+        ctx,
+        show_pbs_reservations,
+        Climate::Temperate,
+        &[],
+        None,
+        &[],
+        catenary_newgrf,
+        catenary_sprites,
+        bridge_decks_newgrf,
+        action5_sprites,
+        images,
+    );
+}
+
+/// Variante de [`spawn_bridge_middle`] con el catálogo de roadtypes para
+/// resolver `ROTSG_BRIDGE`/`ROTSG_OVERLAY` desde la rampa sur.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn spawn_bridge_middle_with_road_types(
+    commands: &mut Commands,
+    map: &Map,
+    dims: (u32, u32),
+    assets: &WorldAssets,
+    ctx: &TileRenderContext,
+    show_pbs_reservations: bool,
+    climate: Climate,
+    road_catalog: &[openttdrs_core::RoadTypeDef],
+    road_sprites: Option<&mut crate::render::NewGrfRoadSpriteCache>,
+    newgrf_stack: &[openttdrs_core::NewGrfEntry],
     catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     catenary_sprites: Option<&mut crate::render::NewGrfCatenarySpriteCache>,
     bridge_decks_newgrf: &[Option<openttdrs_core::DecodedSprite>],
@@ -32,7 +73,7 @@ pub(crate) fn spawn_bridge_middle(
     let Some(span) = bridge_span_at(map, ctx.coord, dims) else {
         return;
     };
-    spawn_bridge_deck(
+    super::bridge_draw::spawn_bridge_deck_with_road_types(
         commands,
         map,
         dims,
@@ -45,6 +86,10 @@ pub(crate) fn spawn_bridge_middle(
         catenary_sprites,
         bridge_decks_newgrf,
         &[],
+        climate,
+        road_catalog,
+        road_sprites,
+        newgrf_stack,
         action5_sprites,
         images,
     );

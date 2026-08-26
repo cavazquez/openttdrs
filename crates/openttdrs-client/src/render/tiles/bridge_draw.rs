@@ -1,6 +1,7 @@
 //! Dibujo compartido de tablero de puente (rampas y vano).
 
 use bevy::prelude::*;
+use openttdrs_core::Climate;
 use openttdrs_core::prelude::*;
 use openttdrs_core::{
     BridgeType, bridge_above_axis_from_mapt, bridge_type_from_m6, calc_bridge_piece,
@@ -9,8 +10,8 @@ use openttdrs_core::{
 };
 
 use crate::iso::{
-    HEIGHT_PX, TILE_HALF_H, full_tile_sprite_pos_half, remap_tile_offset, slope_half_h,
-    slope_sprite_offset, tile_pos_half, tile_slope_and_min_z,
+    HEIGHT_PX, TILE_HALF_H, full_tile_sprite_pos_half, overlay_pos, remap_tile_offset,
+    slope_half_h, slope_sprite_offset, tile_pos_half, tile_slope_and_min_z,
 };
 use crate::render::catenary_newgrf::{
     catenary_sprite_anchor, catenary_sprite_center, catenary_sprite_colored,
@@ -18,9 +19,9 @@ use crate::render::catenary_newgrf::{
 use crate::render::viewport_sort::ParentSpriteBounds;
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
 use crate::render::{
-    MapVisualLayer, NewGrfAction5SpriteCache, NewGrfCatenarySpriteCache, TileRenderContext,
-    ViewportSortableChild, ViewportSortableParent, WorldAssets, viewport_insertion_key,
-    viewport_source_depth,
+    MapVisualLayer, NewGrfAction5SpriteCache, NewGrfCatenarySpriteCache, NewGrfRoadSpriteCache,
+    TileRenderContext, ViewportSortableChild, ViewportSortableParent, WorldAssets,
+    viewport_insertion_key, viewport_source_depth,
 };
 use crate::sprites::{
     OTTD_MP_RAIL, RAIL_TB_X, RAIL_TB_Y, bridge_deck_sprite_ids, bridge_ramp_sprite_id,
@@ -78,6 +79,9 @@ const SPR_TRAMWAY_OVERLAY_BASE: u32 = 5990;
 /// `ROTSG_OVERLAY`/`SPR_TRAMWAY_OVERLAY`. No coinciden con la tabla de
 /// `GetRoadSpriteOffset`: los puentes reservan 0, 1 y 11..14.
 const BRIDGE_ROAD_OVERLAY_OFFSETS: [usize; 6] = [0, 1, 11, 12, 13, 14];
+/// Selectores `RoadTypeSpriteGroup` de `road.h`.
+const ROTSG_OVERLAY: u8 = 1;
+const ROTSG_BRIDGE: u8 = 6;
 /// `SPR_BRIDGE_DECKS_BASE` de Action5 `0x1B` (base 6240).
 const SPR_BRIDGE_DECKS_BASE: u32 = 6240;
 /// `SPR_TRACKS_FOR_SLOPES_RAIL_BASE` de OpenTTD.
@@ -300,16 +304,17 @@ fn bridge_road_sprite_offset(
 /// Recupera la rampa que contiene la información de road/tram para un tramo
 /// intermedio. Las teselas de agua del vano no tienen `m3`/tipo: OpenTTD pasa
 /// explícitamente la rampa sur a `DrawBridgeRoadBits`.
-fn bridge_transport_tile(
+fn bridge_transport_source(
     map: &Map,
     coord: TileCoord,
     dims: (u32, u32),
     on_ramp: bool,
-) -> Option<Tile> {
+) -> Option<(TileCoord, Tile)> {
     if on_ramp {
-        return map.get(coord);
+        return map.get(coord).map(|tile| (coord, tile));
     }
-    bridge_span_endpoints(map, coord, dims).and_then(|(_, _, south)| map.get(south))
+    bridge_span_endpoints(map, coord, dims)
+        .and_then(|(_, _, south)| map.get(south).map(|tile| (south, tile)))
 }
 
 /// Caja invisible que `DrawBridgeMiddle` agrega antes de sus barandillas.
@@ -422,6 +427,85 @@ fn spawn_bridge_combined_child(
             source_depth,
         },
     ));
+}
+
+/// Resuelve una vista de `ROTSG_*` contra la rampa sur y la convierte en un
+/// sprite Bevy. `GetCustomRoadSprite` devuelve la primera vista del grupo y
+/// el draw-proc suma el offset del puente; aquí la vista se indexa con esa
+/// misma convención, mientras la caché conserva la evaluación Action2.
+#[allow(clippy::too_many_arguments)]
+fn bridge_specific_sprite(
+    def: &openttdrs_core::RoadTypeDef,
+    map: &Map,
+    selector: u8,
+    view_idx: usize,
+    source_coord: TileCoord,
+    source_tile: Tile,
+    climate: Climate,
+    road_catalog: &[openttdrs_core::RoadTypeDef],
+    newgrf_stack: &[openttdrs_core::NewGrfEntry],
+    road_sprites: &mut Option<&mut NewGrfRoadSpriteCache>,
+    images: &mut Option<&mut Assets<Image>>,
+) -> Option<(Sprite, openttdrs_core::DecodedSprite)> {
+    let cache = road_sprites.as_deref_mut()?;
+    let image_store = images.as_deref_mut()?;
+    let mut action2 = openttdrs_core::action2_eval_ctx_for_road_tile(
+        map,
+        source_tile,
+        source_coord,
+        climate,
+        def.newgrf_type_tables.as_ref(),
+        road_catalog,
+    );
+    action2.set_grf_params(openttdrs_core::stack_params_for_grfid(
+        newgrf_stack,
+        def.newgrf_grfid,
+    ));
+    let view = def.newgrf_specific_view_runtime(selector, view_idx, &mut action2)?;
+    let handle =
+        cache.handle_for_specific_runtime(def, selector, view_idx, &mut action2, image_store)?;
+    Some((
+        Sprite {
+            image: handle,
+            color: Color::WHITE,
+            ..default()
+        },
+        view,
+    ))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn spawn_bridge_specific_child(
+    commands: &mut Commands,
+    ctx: &TileRenderContext,
+    map_width: u32,
+    parent: Option<Entity>,
+    sprite: Sprite,
+    view: &openttdrs_core::DecodedSprite,
+    surface_z: u8,
+    layer: f32,
+) {
+    let position = overlay_pos(
+        ctx.iso_pos,
+        f32::from(view.x_offs),
+        f32::from(view.y_offs),
+        f32::from(view.width),
+        f32::from(view.height),
+        surface_z,
+        layer,
+        ctx.tx_i32(),
+        ctx.ty_i32(),
+    );
+    if let Some(parent) = parent {
+        spawn_bridge_combined_child(commands, ctx, map_width, parent, sprite, position);
+    } else {
+        commands.spawn((
+            MapVisualLayer,
+            ctx.map_tile_chunk(),
+            sprite,
+            Transform::from_translation(position),
+        ));
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2060,6 +2144,7 @@ mod tests {
 
 /// Dibuja tablero + barandilla + pilares para rampa o vano.
 #[allow(clippy::expect_used, clippy::too_many_arguments)]
+#[allow(dead_code)]
 pub(crate) fn spawn_bridge_deck(
     commands: &mut Commands,
     map: &Map,
@@ -2073,6 +2158,53 @@ pub(crate) fn spawn_bridge_deck(
     catenary_sprites: Option<&mut NewGrfCatenarySpriteCache>,
     bridge_decks_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     foundation_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    action5_sprites: Option<&mut NewGrfAction5SpriteCache>,
+    images: Option<&mut Assets<Image>>,
+) {
+    spawn_bridge_deck_with_road_types(
+        commands,
+        map,
+        dims,
+        assets,
+        ctx,
+        span,
+        draw_pillars,
+        show_pbs_reservations,
+        catenary_newgrf,
+        catenary_sprites,
+        bridge_decks_newgrf,
+        foundation_newgrf,
+        Climate::Temperate,
+        &[],
+        None,
+        &[],
+        action5_sprites,
+        images,
+    );
+}
+
+/// Variante de [`spawn_bridge_deck`] que conserva el catálogo road/tram y
+/// permite resolver los grupos Action3 específicos que `DrawBridgeRoadBits`
+/// solicita para un puente. La envolvente legacy se mantiene para previews y
+/// tests que no montan el estado completo de NewGRF.
+#[allow(clippy::expect_used, clippy::too_many_arguments)]
+pub(crate) fn spawn_bridge_deck_with_road_types(
+    commands: &mut Commands,
+    map: &Map,
+    dims: (u32, u32),
+    assets: &WorldAssets,
+    ctx: &TileRenderContext,
+    span: &BridgeSpanInfo,
+    draw_pillars: bool,
+    show_pbs_reservations: bool,
+    catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    catenary_sprites: Option<&mut NewGrfCatenarySpriteCache>,
+    bridge_decks_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    foundation_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    climate: Climate,
+    road_catalog: &[openttdrs_core::RoadTypeDef],
+    mut road_sprites: Option<&mut NewGrfRoadSpriteCache>,
+    newgrf_stack: &[openttdrs_core::NewGrfEntry],
     mut action5_sprites: Option<&mut NewGrfAction5SpriteCache>,
     mut images: Option<&mut Assets<Image>>,
 ) {
@@ -2307,6 +2439,115 @@ pub(crate) fn spawn_bridge_deck(
         BRIDGE_REAR_ORDINAL,
         None,
     );
+    let transport_source = bridge_transport_source(map, ctx.coord, dims, on_ramp);
+    let mut custom_bridge_surface = false;
+    let mut custom_tram_overlay = false;
+    if !span.rail
+        && let Some((source_coord, source_tile)) = transport_source
+    {
+        let road_def =
+            crate::render::road_newgrf::newgrf_road_def_for_tile(road_catalog, source_tile);
+        let tram_def =
+            crate::render::road_newgrf::newgrf_tram_def_for_tile(road_catalog, source_tile);
+        // `road_rti` tiene prioridad sobre `tram_rti` para la superficie de
+        // puente. Si sólo existe el grupo de tranvía, OpenTTD permite que
+        // éste aporte la superficie (caso sin carretera en la cabeza).
+        if let Some(def) = road_def
+            .filter(|def| def.has_newgrf_specific_group(ROTSG_BRIDGE))
+            .or_else(|| tram_def.filter(|def| def.has_newgrf_specific_group(ROTSG_BRIDGE)))
+            && let Some((sprite, view)) = bridge_specific_sprite(
+                def,
+                map,
+                ROTSG_BRIDGE,
+                bridge_road_sprite_offset(span, source_tile, on_ramp, foundation_tileh),
+                source_coord,
+                source_tile,
+                climate,
+                road_catalog,
+                newgrf_stack,
+                &mut road_sprites,
+                &mut images,
+            )
+        {
+            spawn_bridge_specific_child(
+                commands,
+                ctx,
+                dims.0,
+                rear_parent,
+                sprite,
+                &view,
+                surface_z,
+                DECK_LAYER_FRAC + 0.001,
+            );
+            custom_bridge_surface = true;
+        }
+        if let Some(def) = road_def.filter(|def| def.has_newgrf_specific_group(ROTSG_OVERLAY))
+            && let Some((sprite, view)) = bridge_specific_sprite(
+                def,
+                map,
+                ROTSG_OVERLAY,
+                BRIDGE_ROAD_OVERLAY_OFFSETS[bridge_road_sprite_offset(
+                    span,
+                    source_tile,
+                    on_ramp,
+                    foundation_tileh,
+                )
+                .min(5)],
+                source_coord,
+                source_tile,
+                climate,
+                road_catalog,
+                newgrf_stack,
+                &mut road_sprites,
+                &mut images,
+            )
+        {
+            spawn_bridge_specific_child(
+                commands,
+                ctx,
+                dims.0,
+                rear_parent,
+                sprite,
+                &view,
+                surface_z,
+                RAIL_ON_BRIDGE_LAYER_FRAC,
+            );
+        }
+        if (source_tile.m3 & 0x0F) != 0
+            && let Some(def) = tram_def.filter(|def| def.has_newgrf_specific_group(ROTSG_OVERLAY))
+            && let Some((sprite, view)) = bridge_specific_sprite(
+                def,
+                map,
+                ROTSG_OVERLAY,
+                BRIDGE_ROAD_OVERLAY_OFFSETS[bridge_road_sprite_offset(
+                    span,
+                    source_tile,
+                    on_ramp,
+                    foundation_tileh,
+                )
+                .min(5)],
+                source_coord,
+                source_tile,
+                climate,
+                road_catalog,
+                newgrf_stack,
+                &mut road_sprites,
+                &mut images,
+            )
+        {
+            spawn_bridge_specific_child(
+                commands,
+                ctx,
+                dims.0,
+                rear_parent,
+                sprite,
+                &view,
+                surface_z,
+                RAIL_ON_BRIDGE_LAYER_FRAC,
+            );
+            custom_tram_overlay = true;
+        }
+    }
     // Una superficie Action5 `0x1B` se compone sobre la estructura en un
     // vano. Las vías vanilla no agregan una capa de tablero separada: los
     // `SINGLE_*` de rail/mono/maglev se reservan para PBS más abajo.
@@ -2314,7 +2555,8 @@ pub(crate) fn spawn_bridge_deck(
         .then(|| openttdrs_core::bridge_decks_action5_slot(span.rail, span.rail_type, span.axis))
         .flatten();
     // Superficie Action5 `0x1B` (tablero NewGRF sobre la estructura OpenGFX).
-    if let Some(slot) = action5_surface_slot
+    if !custom_bridge_surface
+        && let Some(slot) = action5_surface_slot
         && let (Some(cache), Some(images)) = (action5_sprites.as_mut(), images.as_mut())
         && let Some(sprite) = cache.sprite_colored(
             openttdrs_core::ACTION5_TYPE_BRIDGE_DECKS,
@@ -2371,7 +2613,8 @@ pub(crate) fn spawn_bridge_deck(
     // Además, el índice de este overlay es el offset propio de bridge bits
     // (0, 1, 11..14), no la tabla de cruces de carretera normal.
     if !span.rail
-        && let Some(transport_tile) = bridge_transport_tile(map, ctx.coord, dims, on_ramp)
+        && !custom_tram_overlay
+        && let Some((_, transport_tile)) = transport_source
     {
         let offset = bridge_road_sprite_offset(span, transport_tile, on_ramp, foundation_tileh);
         let overlay_offset = BRIDGE_ROAD_OVERLAY_OFFSETS[offset.min(5)];

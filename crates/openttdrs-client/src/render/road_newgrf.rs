@@ -55,7 +55,6 @@ impl NewGrfRoadSpriteCache {
     /// Textura de un grupo Action3 específico (`ROTSG_*`) con vars de tesela.
     /// El selector forma parte de la clave: dos grupos del mismo roadtype
     /// pueden resolver sets distintos para bridge/overlay/catenaria.
-    #[allow(dead_code)] // Lo consume el draw-proc de puentes del siguiente bloque.
     pub(crate) fn handle_for_specific_runtime(
         &mut self,
         def: &RoadTypeDef,

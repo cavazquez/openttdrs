@@ -14,9 +14,10 @@ use crate::render::world_draw_trace::WorldDrawTrace;
 use crate::render::{
     CompanyColoredSprites, HouseSpawnResources, MapLabelSpatialIndex, MapSpriteBatches, RenderGrid,
     TileAtlas, TileRenderContext, TileViewportBounds, WorldAssets, chunk_tile_bounds,
-    flush_map_batches, push_forest_tree, push_water_tile, spawn_bridge_middle,
+    flush_map_batches, push_forest_tree, push_water_tile, spawn_bridge_middle_with_road_types,
     spawn_generic_land_tile, spawn_house_tile, spawn_industry_tile, spawn_rail_tile,
-    spawn_road_tile, spawn_station_tile_with_world, spawn_transport_object_tile, spawn_void_tile,
+    spawn_road_tile, spawn_station_tile_with_world, spawn_transport_object_tile_with_road_types,
+    spawn_void_tile,
 };
 use crate::sprites::CompanyColour;
 use crate::state::SimWorld;
@@ -232,7 +233,7 @@ pub(crate) fn spawn_map_tiles_in_bounds(
             | TileKind::RailTunnel
             | TileKind::RoadBridge
             | TileKind::RailBridge => {
-                spawn_transport_object_tile(
+                spawn_transport_object_tile_with_road_types(
                     commands,
                     assets,
                     Some(company),
@@ -247,6 +248,10 @@ pub(crate) fn spawn_map_tiles_in_bounds(
                     Some(catenary_sprites),
                     &sim.state.runtime.bridge_decks_newgrf_sprites,
                     &sim.state.runtime.foundation_newgrf_sprites,
+                    climate,
+                    &sim.state.road_type_catalog,
+                    Some(road_sprites),
+                    &sim.state.newgrf_stack,
                     Some(action5_sprites),
                     Some(images),
                 );
@@ -299,13 +304,17 @@ pub(crate) fn spawn_map_tiles_in_bounds(
         }
 
         // Tramos de puente que pasan por encima de esta tesela (IsBridgeAbove).
-        spawn_bridge_middle(
+        spawn_bridge_middle_with_road_types(
             commands,
             map,
             (mw, mh),
             assets,
             &ctx,
             show_pbs_reservations,
+            climate,
+            &sim.state.road_type_catalog,
+            Some(road_sprites),
+            &sim.state.newgrf_stack,
             &sim.state.runtime.catenary_newgrf_sprites,
             Some(catenary_sprites),
             &sim.state.runtime.bridge_decks_newgrf_sprites,

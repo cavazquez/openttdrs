@@ -14,7 +14,9 @@ mod water;
 mod spawn_coverage_tests;
 
 pub(crate) use batches::flush_map_batches;
+#[cfg(test)]
 pub(crate) use bridge::spawn_bridge_middle;
+pub(crate) use bridge::spawn_bridge_middle_with_road_types;
 pub(crate) use bridge_draw::{catenary_under_low_bridge, roadside_detail_visible_under_bridge};
 pub(crate) use helpers::{
     FLAT_WATER_LAYER_FRAC, SHORE_LAYER_FRAC, TRAM_OVERLAY_LAYER_FRAC,
@@ -27,6 +29,10 @@ pub(crate) use land::{
 };
 #[cfg(test)]
 pub(crate) use objects::spawn_station_tile;
-pub(crate) use objects::{spawn_station_tile_with_world, spawn_transport_object_tile};
+#[cfg(test)]
+pub(crate) use objects::spawn_transport_object_tile;
+pub(crate) use objects::{
+    spawn_station_tile_with_world, spawn_transport_object_tile_with_road_types,
+};
 pub(crate) use transport::{spawn_rail_tile, spawn_road_tile};
 pub(crate) use water::push_water_tile;

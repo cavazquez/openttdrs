@@ -9,7 +9,7 @@ use openttdrs_core::prelude::*;
 use openttdrs_core::{
     Action2VarAdjust, Action2VarEntry, Action2VarTerm, BridgeType, Climate, DecodedSprite,
     FOUNDATION_ORIGINAL_SPRITE_BASE, HouseSpecDef, IndustryTileGfxId, IndustryTileSpecDef,
-    RailType, RoadTramType, RoadType, StationClassId, StationSpecDef, StationSpecId,
+    RailType, RoadTramType, RoadType, RoadTypeDef, StationClassId, StationSpecDef, StationSpecId,
     TrainSpriteAssign, TrainSpriteGraphics, WaterClass, set_water_class_m1,
     vanilla_road_type_catalog,
 };
@@ -21,8 +21,9 @@ use crate::iso::ground_draw_z;
 use crate::render::assets::{WorldAssets, stub_opengfx_tiles_for_tests};
 use crate::render::tiles::{
     HouseSpawnResources, flush_map_batches, push_forest_tree, push_water_tile, spawn_bridge_middle,
-    spawn_generic_land_tile, spawn_house_tile, spawn_industry_tile, spawn_rail_tile,
-    spawn_road_tile, spawn_station_tile, spawn_transport_object_tile,
+    spawn_bridge_middle_with_road_types, spawn_generic_land_tile, spawn_house_tile,
+    spawn_industry_tile, spawn_rail_tile, spawn_road_tile, spawn_station_tile,
+    spawn_transport_object_tile,
 };
 use crate::render::{
     CompanyColoredSprites, MapSpriteBatches, MapVisualLayer, RenderGrid, TileRenderContext,
@@ -3150,6 +3151,147 @@ fn bridge_middle_uses_south_ramp_tram_overlay_as_combined_child() {
             .entity(attached[0].1.parent)
             .contains::<ViewportSortableParent>(),
         "el overlay debe colgar del parent trasero combinado"
+    );
+}
+
+#[test]
+fn bridge_middle_resolves_newgrf_bridge_and_overlay_groups_from_south_ramp() {
+    use openttdrs_core::newgrf_sprites::{DecodedSprite, TrainSpriteAssign, TrainSpriteGraphics};
+
+    let assets = boot_assets_app();
+    let mut map = fresh_map8();
+    let c = |x: i32, y: i32| TileCoord::new(x, y);
+
+    let mut ramp = tile_template();
+    ramp.kind = TileKind::RoadBridge;
+    ramp.mapt = 0x90;
+    ramp.m5 = 0x86; // rampa SW, puente de carretera
+    ramp = openttdrs_core::set_road_type_on_tile(ramp, RoadType::from_u8(2));
+    map.set_tile(c(1, 1), ramp).expect("rampa oeste");
+    ramp.m5 = 0x84; // rampa NE
+    map.set_tile(c(4, 1), ramp).expect("rampa este");
+    for x in 2..=3 {
+        let mut water = tile_template();
+        water.kind = TileKind::Water;
+        water.mapt = 0x64; // MP_WATER + puente encima eje X
+        map.set_tile(c(x, 1), water).expect("vano de agua");
+    }
+
+    let red = DecodedSprite {
+        width: 2,
+        height: 2,
+        x_offs: 0,
+        y_offs: 0,
+        rgba: [255, 0, 0, 255].repeat(4),
+        mask: Vec::new(),
+    };
+    let blue = DecodedSprite {
+        width: 2,
+        height: 2,
+        x_offs: 0,
+        y_offs: 0,
+        rgba: [0, 0, 255, 255].repeat(4),
+        mask: Vec::new(),
+    };
+    let mut graphics = TrainSpriteGraphics {
+        sets: vec![vec![red], vec![blue]],
+        assigns: vec![TrainSpriteAssign {
+            local_id: 0,
+            set_id: 0,
+        }],
+        ..TrainSpriteGraphics::default()
+    };
+    graphics.specific_assigns.insert((0, 6), 0); // ROTSG_BRIDGE
+    graphics.specific_assigns.insert((0, 1), 1); // ROTSG_OVERLAY
+    let road_def = RoadTypeDef {
+        id: RoadType::from_u8(2),
+        class: RoadTramType::Road,
+        label: "Puente NewGRF".into(),
+        short_label: "NGBR".into(),
+        intro_year: 0,
+        max_speed: 0,
+        cost_multiplier: 0,
+        maintenance_multiplier: 0,
+        flags: 0,
+        powered_mask: 0,
+        from_tramtypes_feature: false,
+        from_newgrf: true,
+        newgrf_preview: None,
+        newgrf_views: Vec::new(),
+        newgrf_local_id: 0,
+        newgrf_runtime: Some(Box::new(graphics)),
+        newgrf_grfid: 0,
+        newgrf_type_tables: None,
+    };
+    let road_catalog = vec![road_def];
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world.insert_resource(Assets::<Image>::default());
+    world
+        .run_system_once(
+            move |mut commands: Commands,
+                  m: Res<TsMap>,
+                  g: Res<TsGrid>,
+                  a: Res<TsAssets>,
+                  mut cache: Local<crate::render::NewGrfRoadSpriteCache>,
+                  mut images: ResMut<Assets<Image>>| {
+                spawn_bridge_middle_with_road_types(
+                    &mut commands,
+                    &m.0,
+                    m.0.dimensions(),
+                    &a.0,
+                    &TileRenderContext::new(&m.0, &g.0, 2, 1),
+                    false,
+                    TEST_CLIMATE,
+                    &road_catalog,
+                    Some(&mut cache),
+                    &[],
+                    &[],
+                    None,
+                    &[],
+                    None,
+                    Some(&mut images),
+                );
+            },
+        )
+        .expect("bridge NewGRF groups");
+
+    let custom_handles: Vec<_> = world
+        .query::<(&ViewportSortableChild, &Sprite)>()
+        .iter(&world)
+        .map(|(child, sprite)| (child.parent, sprite.image.clone()))
+        .collect();
+    let custom_handles: Vec<_> = custom_handles
+        .into_iter()
+        .filter_map(|(parent, handle)| {
+            let image = world.resource::<Assets<Image>>().get(&handle)?;
+            let first = image.data.as_deref()?.get(0..4)?;
+            (first == [255, 0, 0, 255] || first == [0, 0, 255, 255])
+                .then_some((parent, first.to_vec()))
+        })
+        .collect();
+    assert_eq!(
+        custom_handles.len(),
+        2,
+        "bridge y overlay deben ser children"
+    );
+    assert!(
+        custom_handles
+            .iter()
+            .all(|(parent, _)| world.entity(*parent).contains::<ViewportSortableParent>())
+    );
+    assert!(
+        custom_handles
+            .iter()
+            .any(|(_, rgba)| rgba == &[255, 0, 0, 255])
+    );
+    assert!(
+        custom_handles
+            .iter()
+            .any(|(_, rgba)| rgba == &[0, 0, 255, 255])
     );
 }
 

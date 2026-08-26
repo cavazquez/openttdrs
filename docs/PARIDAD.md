@@ -234,9 +234,9 @@ La API `trigger_vehicle_randomisation_chain` ya conserva los 16 bits de la
 palabra aleatoria y propaga `NewCargo`/`AnyNewCargo`, `Depot` y `Empty` por la
 cadena, respetando la palabra compartida o independiente que corresponde a
 cada trigger. La simulación conecta `NewCargo` al primer lote cargado de
-industria o estación y `Empty` al vaciado completo del consist; `Depot` queda
-reservado para el bloque de entrada a depósito, que todavía debe cubrir todos
-los tipos de vehículo.
+industria o estación, `Empty` al vaciado completo del consist y `Depot` al
+borde de entrada de trenes, barcos, vehículos de carretera y aeronaves (el
+hangar es el estado físico del avión).
 El callback `0x2D` (color mapping) también se consulta para motores NewGRF con
 la máscara correspondiente y sus paletas de compañía `775..790` ya entran en
 la clave de caché de sprites runtime. Los mapas 2CC/crash y livery específicos

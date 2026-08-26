@@ -1,5 +1,57 @@
 use crate::GameState;
-use crate::vehicle::VehicleKind;
+use crate::vehicle::{AircraftPhase, RoadDepotPhase, VehicleKind, VehicleRandomTrigger};
+
+/// Ejecuta `TriggerVehicleRandomisation(Depot)` con el catálogo activo.
+///
+/// El evento pertenece a la cabeza del consist: las reglas de propagación de
+/// `trigger_vehicle_randomisation_chain` se encargan de reseedear cada unidad
+/// con la palabra independiente que exige `OpenTTD`.
+fn trigger_vehicle_depot_randomisation(state: &mut GameState, vehicle_id: u32) {
+    let world_seed = state.world_seed;
+    let tick = state.tick.get();
+    let _ = crate::newgrf_callback::trigger_vehicle_randomisation_chain(
+        &mut state.vehicles,
+        vehicle_id,
+        &state.engine_catalog,
+        VehicleRandomTrigger::Depot,
+        world_seed,
+        tick,
+    );
+}
+
+/// Estado físico de depósito usado para detectar sólo el borde de entrada.
+///
+/// Airport cubre toda la plataforma, por lo que los aviones se consideran
+/// dentro únicamente durante `InHangar`; para carretera la fase explícita
+/// distingue la boca de entrada del interior.
+#[must_use]
+fn vehicle_is_in_depot(state: &GameState, index: usize) -> bool {
+    let Some(vehicle) = state.vehicles.get(index) else {
+        return false;
+    };
+    match vehicle.kind {
+        VehicleKind::Aircraft => vehicle.aircraft_phase == AircraftPhase::InHangar,
+        VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram => {
+            vehicle.road_depot_phase == RoadDepotPhase::InDepot
+        }
+        VehicleKind::Train => state.map.get_kind(vehicle.pos) == Some(crate::TileKind::RailDepot),
+        VehicleKind::Ship => state.map.get_kind(vehicle.pos) == Some(crate::TileKind::ShipDepot),
+    }
+}
+
+/// Dispara el evento común al cruzar desde fuera hacia el interior del depot.
+fn trigger_depot_on_entry(state: &mut GameState, index: usize, was_in_depot: bool) {
+    if was_in_depot || !vehicle_is_in_depot(state, index) {
+        return;
+    }
+    let Some(vehicle) = state.vehicles.get(index) else {
+        return;
+    };
+    if vehicle.kind == VehicleKind::Train && !vehicle.is_consist_head() {
+        return;
+    }
+    trigger_vehicle_depot_randomisation(state, vehicle.id);
+}
 
 pub(super) fn tick_aircraft_phases(state: &mut GameState) {
     use crate::aircraft_movement::{AircraftPhaseEvent, tick_aircraft_phase};
@@ -7,11 +59,17 @@ pub(super) fn tick_aircraft_phases(state: &mut GameState) {
 
     let mut brake_checks = Vec::new();
     for i in 0..state.vehicles.len() {
+        let previous_phase = state.vehicles[i].aircraft_phase;
         let prev_pos = state.vehicles[i].airport_pos;
         let prev_fta = state.vehicles[i].airport_fta_active;
         let ev = tick_aircraft_phase(&mut state.vehicles[i], &state.map, &mut state.stations);
         let id = state.vehicles[i].id;
         let at = state.vehicles[i].pos;
+        if previous_phase != AircraftPhase::InHangar
+            && state.vehicles[i].aircraft_phase == AircraftPhase::InHangar
+        {
+            trigger_vehicle_depot_randomisation(state, id);
+        }
         let engine_id = state.vehicles[i]
             .engine_id
             .unwrap_or_else(|| crate::engine::default_engine_id(VehicleKind::Aircraft));
@@ -56,6 +114,7 @@ pub(super) fn move_vehicles(state: &mut GameState) {
     train_crashes.rebuild(&state.vehicles);
     for i in 0..vehicle_count {
         state.vehicles[i].sim_tick = tick;
+        let was_in_depot = vehicle_is_in_depot(state, i);
         // Vagones y partes articuladas: no se mueven solos; se sincronizan
         // tras la cabeza para conservar una única cinemática por vehículo.
         if state.vehicles[i].is_wagon_unit() || state.vehicles[i].is_articulated_unit() {
@@ -297,6 +356,7 @@ pub(super) fn move_vehicles(state: &mut GameState) {
         refresh_vehicle_track_speed_cap(state, i, vehicle_kind);
         state.vehicles[i].step_with_map_and_accel(Some(&state.map), train_accel);
         refresh_vehicle_track_speed_cap(state, i, vehicle_kind);
+        trigger_depot_on_entry(state, i, was_in_depot);
         // `Vehicle::MoveTo` calls `PlayVehicleSound(VSE_TUNNEL)` only at the
         // entrance frame. Detect the same outside→inside edge here instead of
         // emitting once per interior tile (or once per consist wagon).
@@ -546,6 +606,8 @@ fn tick_road_depot_movement(state: &mut GameState, i: usize) -> bool {
                 state.vehicles[i].progress = 0;
                 state.vehicles[i].cur_speed = 0;
                 state.vehicles[i].running = false;
+                let vehicle_id = state.vehicles[i].id;
+                trigger_vehicle_depot_randomisation(state, vehicle_id);
             } else {
                 state.vehicles[i].road_depot_phase = RoadDepotPhase::Entering {
                     direction,
@@ -742,9 +804,33 @@ fn reroute_head_on_to_alt_platform(state: &mut GameState, vehicle_idx: usize) {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
-    use super::{sync_road_articulated_parts, vehicle_entered_train_tunnel};
+    use super::{
+        sync_road_articulated_parts, tick_road_depot_movement, trigger_depot_on_entry,
+        vehicle_entered_train_tunnel,
+    };
+    use crate::engine::engines_table;
+    use crate::newgrf_sprites::{Action2RandomEntry, TrainSpriteAssign, TrainSpriteGraphics};
     use crate::{GameState, TileCoord, TileKind, Vehicle, VehicleKind};
     use std::collections::VecDeque;
+
+    fn depot_random_runtime() -> TrainSpriteGraphics {
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 2,
+        });
+        gfx.action2_random.insert(
+            2,
+            Action2RandomEntry {
+                typ: 0x80,
+                consist_count: 0,
+                triggers: crate::vehicle::VehicleRandomTrigger::Depot.mask(),
+                randbit: 0,
+                sets: vec![0x8000, 0x8001],
+            },
+        );
+        gfx
+    }
 
     #[test]
     fn tunnel_sound_edge_only_fires_on_outside_to_inside_transition() {
@@ -758,6 +844,65 @@ mod tests {
 
         assert!(vehicle_entered_train_tunnel(&state, 0, outside));
         assert!(!vehicle_entered_train_tunnel(&state, 0, entrance));
+    }
+
+    #[test]
+    fn depot_random_trigger_is_edge_triggered_for_rail_and_road() {
+        let mut state = GameState::new(8, 8);
+        let depot = TileCoord::new(2, 2);
+        state.map.set_kind(depot, TileKind::RailDepot).unwrap();
+        let mut engine = engines_table()
+            .iter()
+            .find(|engine| engine.kind == VehicleKind::Train && engine.power_hp > 0)
+            .cloned()
+            .unwrap();
+        engine.id = 64_999;
+        engine.newgrf_grfid = 0x4445_504F;
+        engine.newgrf_local_id = 0;
+        engine.newgrf_runtime = Some(Box::new(depot_random_runtime()));
+        state.engine_catalog.push(engine.clone());
+        let mut train = Vehicle::new(90, VehicleKind::Train, depot, depot);
+        train.engine_id = Some(engine.id);
+        state.vehicles.push(train);
+
+        trigger_depot_on_entry(&mut state, 0, false);
+        assert_eq!(state.vehicles[0].newgrf_waiting_random_triggers, 0);
+        let random_after_entry = state.vehicles[0].newgrf_random_bits;
+        trigger_depot_on_entry(&mut state, 0, true);
+        assert_eq!(state.vehicles[0].newgrf_waiting_random_triggers, 0);
+        assert_eq!(state.vehicles[0].newgrf_random_bits, random_after_entry);
+
+        let road_depot = TileCoord::new(4, 4);
+        state.map.set_kind(road_depot, TileKind::RoadDepot).unwrap();
+        let mut road_engine = engines_table()
+            .iter()
+            .find(|engine| {
+                matches!(
+                    engine.kind,
+                    VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram
+                )
+            })
+            .cloned()
+            .unwrap();
+        road_engine.id = 65_000;
+        road_engine.newgrf_grfid = 0x4445_504F;
+        road_engine.newgrf_local_id = 0;
+        road_engine.newgrf_runtime = Some(Box::new(depot_random_runtime()));
+        state.engine_catalog.push(road_engine.clone());
+        let mut bus = Vehicle::new(91, road_engine.kind, road_depot, road_depot);
+        bus.engine_id = Some(road_engine.id);
+        bus.road_depot_phase = crate::vehicle::RoadDepotPhase::Entering {
+            direction: 0,
+            progress: crate::road_movement::ROAD_DEPOT_ENTRY_STOP
+                .saturating_sub(crate::road_movement::ROAD_DEPOT_PROGRESS_STEP),
+        };
+        state.vehicles.push(bus);
+        assert!(tick_road_depot_movement(&mut state, 1));
+        assert_eq!(
+            state.vehicles[1].road_depot_phase,
+            crate::vehicle::RoadDepotPhase::InDepot
+        );
+        assert_eq!(state.vehicles[1].newgrf_waiting_random_triggers, 0);
     }
 
     #[test]

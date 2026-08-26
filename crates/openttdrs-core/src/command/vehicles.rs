@@ -233,7 +233,19 @@ pub(super) fn build_vehicle_at_depot(
         spawn_dual_headed_rear(state, next_id, depot_pos, &engine);
     }
     if engine.kind == VehicleKind::Train {
-        crate::train_consist::consist_changed(&mut state.vehicles, next_id);
+        // `AddArticulatedParts` runs immediately after allocating the front
+        // vehicle in OpenTTD.  Keep the callback on the real front vehicle so
+        // persistent Action2 registers are written back before the consist
+        // cache is rebuilt.
+        if !engine.is_dual_headed() {
+            spawn_newgrf_articulated_train_parts(state, next_id, &engine);
+        }
+        crate::train_consist::consist_changed_with_map_and_catalog(
+            &mut state.vehicles,
+            next_id,
+            Some(&state.map),
+            &state.engine_catalog,
+        );
     }
     state.economy.money -= engine.price;
     Ok(())
@@ -317,6 +329,150 @@ fn spawn_dual_headed_rear(
         }
     }
     state.vehicles.push(rear);
+}
+
+/// Materializa las piezas devueltas por `CBID_VEHICLE_ARTIC_ENGINE` al comprar
+/// una locomotora `NewGRF`.
+///
+/// La cadena se resuelve con el motor frontal y el catálogo activo, igual que
+/// `AddArticulatedParts` upstream.  La orientación espejo se conserva en el
+/// resultado del callback para que el renderer pueda consumirla en una etapa
+/// posterior; el modelo actual todavía no tiene un campo de orientación por
+/// unidad, por lo que no se inventa un bit de `vehicle_flags`.
+#[allow(clippy::too_many_lines)]
+fn spawn_newgrf_articulated_train_parts(
+    state: &mut GameState,
+    front_id: u32,
+    front_engine: &crate::engine::EngineDef,
+) {
+    const MAX_ARTICULATED_PARTS: u8 = 100;
+
+    if front_engine.newgrf_grfid == 0
+        || front_engine.vehicle_callback_mask & (1 << 4) == 0
+        || front_engine.newgrf_runtime.is_none()
+    {
+        return;
+    }
+    let grf_version = state
+        .newgrf_stack
+        .iter()
+        .find(|entry| entry.grfid == front_engine.newgrf_grfid)
+        .map_or(0, |entry| entry.grf_version);
+    let Some(mut previous_id) = state
+        .vehicles
+        .iter()
+        .find(|vehicle| vehicle.id == front_id)
+        .map(|vehicle| vehicle.id)
+    else {
+        return;
+    };
+
+    for index in 1..MAX_ARTICULATED_PARTS {
+        let callback_part = {
+            let Some(front) = state.vehicles.iter_mut().find(|v| v.id == front_id) else {
+                break;
+            };
+            crate::newgrf_callback::resolve_vehicle_articulated_part_callback(
+                front_engine,
+                front,
+                index,
+                grf_version,
+            )
+        };
+        let Some(crate::newgrf_callback::VehicleArticulatedPart {
+            local_id,
+            mirrored: _mirrored,
+        }) = callback_part
+        else {
+            break;
+        };
+        let Some(local_id) = u8::try_from(local_id).ok() else {
+            // Action2 can encode 14-bit local ids in GRF v8+, while the
+            // current EngineDef/Action3 catalog still indexes local ids as
+            // bytes.  Stop this chain rather than attaching a wrong engine.
+            break;
+        };
+        let Some(part_engine) = state
+            .engine_catalog
+            .iter()
+            .find(|candidate| {
+                candidate.kind == VehicleKind::Train
+                    && candidate.newgrf_grfid == front_engine.newgrf_grfid
+                    && candidate.newgrf_local_id == local_id
+            })
+            .cloned()
+        else {
+            // A missing local engine means the GRF reported an invalid chain;
+            // OpenTTD aborts materialisation at this point as well.
+            break;
+        };
+        let Some(front_snapshot) = state
+            .vehicles
+            .iter()
+            .find(|vehicle| vehicle.id == front_id)
+            .map(|front| {
+                (
+                    front.pos,
+                    front.origin,
+                    front.dest,
+                    front.owner,
+                    front.direction,
+                    front.build_tick,
+                    front.cargo_type,
+                )
+            })
+        else {
+            break;
+        };
+        let part_id = next_vehicle_id(state);
+        let (pos, origin, dest, owner, direction, build_tick, front_cargo_type) = front_snapshot;
+        let mut part = Vehicle::new(part_id, VehicleKind::Train, pos, dest);
+        part.running = false;
+        part.engine_id = Some(part_engine.id);
+        part.origin = origin;
+        part.direction = direction;
+        part.build_tick = build_tick;
+        part.owner = owner;
+        part.depot_leave_cleared = false;
+        part.prev_unit = Some(previous_id);
+        part.unit_length = crate::newgrf_callback::vehicle_unit_length(&part_engine, &mut part);
+        crate::vehicle::init_vehicle_reliability_from_engine(&mut part, &part_engine);
+        if part_engine.capacity > 0 {
+            part.capacity = crate::cargo_spec::apply_cargo_capacity_multiplier(
+                part_engine.capacity,
+                &state.cargo_spec_catalog,
+                part_engine
+                    .cargo
+                    .unwrap_or(crate::cargo::CargoType::Passengers),
+            );
+            part.cargo_type = part_engine.cargo;
+        } else {
+            part.capacity = 0;
+            part.cargo_type = front_cargo_type;
+        }
+        if let Some(previous) = state
+            .vehicles
+            .iter_mut()
+            .find(|vehicle| vehicle.id == previous_id)
+        {
+            previous.next_unit = Some(part_id);
+        } else {
+            break;
+        }
+        state.vehicles.push(part);
+        previous_id = part_id;
+    }
+}
+
+/// Obtiene un id libre para una unidad materializada, sin asumir que los ids
+/// existentes sean contiguos (los SAV pueden contener huecos).
+fn next_vehicle_id(state: &GameState) -> u32 {
+    state
+        .vehicles
+        .iter()
+        .map(|vehicle| vehicle.id)
+        .max()
+        .map_or(1, |id| id.saturating_add(1))
 }
 
 pub(super) fn attach_wagon_to_consist(

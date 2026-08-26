@@ -56,11 +56,22 @@ pub fn consist_changed(vehicles: &mut [Vehicle], head_id: u32) {
 }
 
 /// Como [`consist_changed`], con mapa para retener followers en `Track::Depot`.
-#[allow(clippy::too_many_lines)] // ConsistChanged OpenTTD: powered/speed/railtypes en un pase.
 pub fn consist_changed_with_map(
     vehicles: &mut [Vehicle],
     head_id: u32,
     map: Option<&crate::map::Map>,
+) {
+    consist_changed_with_map_and_catalog(vehicles, head_id, map, &[]);
+}
+
+/// Como [`consist_changed_with_map`], resolviendo también motores del catálogo
+/// activo (incluidos los ids asignados por Action0 `NewGRF`).
+#[allow(clippy::too_many_lines)] // ConsistChanged OpenTTD: powered/speed/railtypes en un pase.
+pub fn consist_changed_with_map_and_catalog(
+    vehicles: &mut [Vehicle],
+    head_id: u32,
+    map: Option<&crate::map::Map>,
+    engine_catalog: &[EngineDef],
 ) {
     let ids = consist_unit_ids(vehicles, head_id);
     if ids.is_empty() {
@@ -71,7 +82,7 @@ pub fn consist_changed_with_map(
         .iter()
         .find(|v| v.id == head_id)
         .and_then(|v| v.engine_id)
-        .and_then(engine_by_id)
+        .and_then(|id| engine_for_id(engine_catalog, id))
         .unwrap_or_else(|| crate::engine::engine_for_vehicle(VehicleKind::Train, 0));
     let head_pow_wag_power = head_eng.pow_wag_power;
     let head_pow_wag_weight = head_eng.pow_wag_weight;
@@ -95,7 +106,7 @@ pub fn consist_changed_with_map(
         };
         let eng = v
             .engine_id
-            .and_then(engine_by_id)
+            .and_then(|id| engine_for_id(engine_catalog, id))
             .unwrap_or_else(|| crate::engine::engine_for_vehicle(v.kind, 0));
         // OpenTTD: powered wagon si la cabeza aporta `pow_wag_power` y la unidad es vagón.
         let powered = head_pow_wag_power > 0 && eng.is_wagon();
@@ -114,7 +125,7 @@ pub fn consist_changed_with_map(
         total_len = total_len.saturating_add(u16::from(v.unit_length.max(1)));
         let eng = v
             .engine_id
-            .and_then(engine_by_id)
+            .and_then(|id| engine_for_id(engine_catalog, id))
             .unwrap_or_else(|| crate::engine::engine_for_vehicle(v.kind, 0));
         total_weight = total_weight.saturating_add(eng.weight_t);
         if v.powered_wagon {
@@ -187,6 +198,13 @@ pub fn consist_changed_with_map(
         }
     }
     sync_consist_followers_and_curve_cache(vehicles, head_id, &ids, map);
+}
+
+fn engine_for_id(engine_catalog: &[EngineDef], id: u16) -> Option<&EngineDef> {
+    engine_catalog
+        .iter()
+        .find(|engine| engine.id == id)
+        .or_else(|| engine_by_id(id))
 }
 
 /// Sincroniza poses derivadas de las unidades y `cached_max_curve_speed`.

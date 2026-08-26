@@ -2145,7 +2145,7 @@ payload (zlib si OTTZ; raw si OTTN)
 4. `CITY` — `CH_TABLE` `xy` / `name` / `cache.population` / townname* desde `GameState.towns`
 5. `INDY` — `CH_TABLE` `location.tile` / `w` / `h` / `type` desde `GameState.industries`
 6. `ORDL` — `CH_TABLE` con struct `orders` (estación/waypoint/depósito/condicional); una lista por vehículo con órdenes
-7. `VEHS` — `CH_SPARSE_TABLE` de tren, bus/camión, barco y avión de ala fija + ref a ORDL
+7. `VEHS` — `CH_SPARSE_TABLE` de tren, bus/camión, barco y aeronaves (ala fija o helicóptero con sombra y rotor) + ref a ORDL; se conservan los campos FTA básicos
 8. `DATE` — `CH_TABLE` `date` (i32) + `tick_counter` (u64)
 9. `PLYR` — `CH_TABLE` `name`/`president_name`/`face_style` (string) + `face` (u32) + `money`/`current_loan`/`max_loan` (i64) + `colour`/`months_of_bankruptcy` (u8) + `is_ai` (u8) + `settings.*` (autorrenovación y servicio por tipo) + las 23 entradas `liveries` (`in_use`/`colour1`/`colour2`). `max_loan=INT64_MIN` conserva el centinela nativo de límite global; otro valor es un override individual. El writer usa SLV355 para conservar la etiqueta de estilo junto al bitfield de rostro.
 10. Terminador `00 00 00 00`

@@ -9,8 +9,8 @@
 //! (`m4`/`M3HI`; 0 = `ROADTYPE_ROAD`). Ship: agua (`MP_WATER`). Aircraft:
 //! primario + sombra encadenada (`next` REF) — `OpenTTD` exige shadow.
 //!
-//! Residual: tram, rotor heli (solo ala fija en export) y callbacks `NewGRF` de
-//! vehículos todavía no modelados.
+//! Residual: tranvías, callbacks `NewGRF` de vehículos todavía no modelados y
+//! parte del runtime FTA que no existe en el modelo de estado.
 
 use super::super::SavError;
 use super::super::chunks::{CH_SPARSE_TABLE, CH_TABLE};
@@ -30,8 +30,12 @@ const TRAIN_SUBTYPE_WAGON: u8 = 1 << 2;
 
 /// `AirVehicleSubType::AIR_AIRCRAFT` (ala fija; no requiere rotor).
 const AIR_AIRCRAFT: u8 = 2;
+/// `AirVehicleSubType::AIR_HELICOPTER`.
+const AIR_HELICOPTER: u8 = 0;
 /// `AirVehicleSubType::AIR_SHADOW`.
 const AIR_SHADOW: u8 = 4;
+/// `AirVehicleSubType::AIR_ROTOR`.
+const AIR_ROTOR: u8 = 6;
 
 /// `VehState::Stopped` (bit 1).
 const VEHSTATUS_STOPPED: u8 = 1 << 1;
@@ -70,6 +74,18 @@ fn station_id_for_pos(state: &GameState, pos: TileCoord) -> Option<u16> {
         .iter()
         .position(|s| s.pos == pos)
         .and_then(|i| u16::try_from(i).ok())
+}
+
+fn airport_id_for_vehicle(state: &GameState, v: &Vehicle) -> u16 {
+    let pos = v.airport_fta_station.unwrap_or(v.dest);
+    state
+        .stations
+        .iter()
+        .find(|station| station.pos == pos)
+        .and_then(|station| station.ottd_station_id)
+        .and_then(|id| u16::try_from(id).ok())
+        .or_else(|| station_id_for_pos(state, pos))
+        .unwrap_or(u16::MAX)
 }
 
 fn cargo_ottd_byte(v: &Vehicle) -> u8 {
@@ -223,6 +239,46 @@ struct CommonWire {
     service_interval: u16,
 }
 
+/// Campos específicos de `SlVehicleAircraft` (`vehicle_sl.cpp`).
+#[derive(Clone, Copy)]
+struct AircraftWire {
+    crashed_counter: u16,
+    pos: u8,
+    targetairport: u16,
+    state: u8,
+    previous_pos: u8,
+    last_direction: u8,
+    number_consecutive_turns: u8,
+    turn_counter: u8,
+    flags: u8,
+}
+
+fn aircraft_wire_for(state: &GameState, v: &Vehicle) -> AircraftWire {
+    AircraftWire {
+        crashed_counter: v.crashed_ctr,
+        pos: v.airport_pos,
+        targetairport: airport_id_for_vehicle(state, v),
+        state: v.airport_heading.as_u8(),
+        previous_pos: v.airport_prev_pos,
+        last_direction: v.direction,
+        number_consecutive_turns: 0,
+        turn_counter: 0,
+        flags: 0,
+    }
+}
+
+fn write_aircraft_fields(buf: &mut Vec<u8>, aircraft: &AircraftWire) {
+    buf.extend_from_slice(&aircraft.crashed_counter.to_be_bytes());
+    buf.push(aircraft.pos);
+    buf.extend_from_slice(&aircraft.targetairport.to_be_bytes());
+    buf.push(aircraft.state);
+    buf.push(aircraft.previous_pos);
+    buf.push(aircraft.last_direction);
+    buf.push(aircraft.number_consecutive_turns);
+    buf.push(aircraft.turn_counter);
+    buf.push(aircraft.flags);
+}
+
 fn write_vehs_common(buf: &mut Vec<u8>, c: &CommonWire) {
     buf.push(c.subtype);
     buf.push(c.owner);
@@ -354,6 +410,7 @@ fn push_typed_vehicle(
     common: &CommonWire,
     train_track: Option<u8>,
     road_runtime: Option<&Vehicle>,
+    aircraft_runtime: Option<&AircraftWire>,
 ) -> Result<(), SavError> {
     rec.push(veh_type);
     for t in VEH_TRAIN..=VEH_AIRCRAFT {
@@ -373,6 +430,9 @@ fn push_typed_vehicle(
                 rec.extend_from_slice(&road.crashed_ctr.to_be_bytes());
                 rec.push(road.reverse_ctr);
             }
+            if let Some(aircraft) = aircraft_runtime {
+                write_aircraft_fields(rec, aircraft);
+            }
         } else {
             write_gamma(0, rec)?;
         }
@@ -380,7 +440,7 @@ fn push_typed_vehicle(
     Ok(())
 }
 
-/// ORDL + VEHS: tren, ROAD, ship y aircraft (ala fija + sombra).
+/// ORDL + VEHS: tren, ROAD, ship y aircraft (ala fija/helicóptero + auxiliares).
 ///
 /// # Errors
 ///
@@ -424,7 +484,13 @@ pub(super) fn ordl_and_vehs_records(
         let v = &state.vehicles[vehicle_idx];
         sparse_by_vehicle_id.insert(v.id, sparse_idx);
         sparse_idx = sparse_idx.saturating_add(if v.kind == VehicleKind::Aircraft {
-            2
+            if v.engine_id
+                .is_some_and(crate::engine::aircraft_is_helicopter)
+            {
+                3
+            } else {
+                2
+            }
         } else {
             1
         });
@@ -469,10 +535,15 @@ pub(super) fn ordl_and_vehs_records(
         };
 
         if is_air {
-            // Primario + sombra (OpenTTD `Missing shadow for aircraft`).
+            let is_helicopter = v
+                .engine_id
+                .is_some_and(crate::engine::aircraft_is_helicopter);
+            // Primario + sombra (y rotor para helicópteros). OpenTTD exige
+            // ambos auxiliares al cargar un `Aircraft` normal.
             let shadow_idx = sparse_idx + 1;
             let next_ref = shadow_idx + 1; // REF = index+1
             let engine_type = openttd_aircraft_engine_type(v);
+            let aircraft_runtime = aircraft_wire_for(state, v);
 
             let mut primary = Vec::new();
             write_gamma(sparse_idx, &mut primary)?;
@@ -485,11 +556,16 @@ pub(super) fn ordl_and_vehs_records(
                     direction,
                     engine_type,
                     order_list_ref,
-                    AIR_AIRCRAFT,
+                    if is_helicopter {
+                        AIR_HELICOPTER
+                    } else {
+                        AIR_AIRCRAFT
+                    },
                     next_ref,
                 ),
                 None,
                 None,
+                Some(&aircraft_runtime),
             )?;
             vehs.push(primary);
             sparse_idx += 1;
@@ -514,7 +590,9 @@ pub(super) fn ordl_and_vehs_records(
                     cargo_count: 0,
                     order_list_ref: 0,
                     cur_order: 0,
-                    next_ref: 0,
+                    // Para helicópteros la sombra encadena al rotor. En el
+                    // formato SAV `REF_VEHICLE` es sparse index + 1.
+                    next_ref: if is_helicopter { sparse_idx + 2 } else { 0 },
                     group_id: 0xFFFE,
                     timetable_start: 0,
                     current_order_time: 0,
@@ -527,9 +605,49 @@ pub(super) fn ordl_and_vehs_records(
                 },
                 None,
                 None,
+                Some(&aircraft_runtime),
             )?;
             vehs.push(shadow);
             sparse_idx += 1;
+            if is_helicopter {
+                let mut rotor = Vec::new();
+                write_gamma(sparse_idx, &mut rotor)?;
+                push_typed_vehicle(
+                    &mut rotor,
+                    VEH_AIRCRAFT,
+                    &CommonWire {
+                        subtype: AIR_ROTOR,
+                        owner: v.owner.0,
+                        tile: tile_idx,
+                        x_pos: v.pos.x * TILE_SIZE + TILE_SIZE / 2,
+                        y_pos: v.pos.y * TILE_SIZE + TILE_SIZE / 2,
+                        z_pos: i32::from(v.z_pos.unwrap_or(0)) + 5,
+                        direction,
+                        engine_type,
+                        vehstatus: VEHSTATUS_STOPPED,
+                        cargo: 0,
+                        cargo_capacity: 0,
+                        cargo_count: 0,
+                        order_list_ref: 0,
+                        cur_order: 0,
+                        next_ref: 0,
+                        group_id: 0xFFFE,
+                        timetable_start: 0,
+                        current_order_time: 0,
+                        timetable_lateness: 0,
+                        vehicle_flags: 0,
+                        service_interval: 0,
+                        cur_speed: 32,
+                        subspeed: 0,
+                        progress: 0,
+                    },
+                    None,
+                    None,
+                    Some(&aircraft_runtime),
+                )?;
+                vehs.push(rotor);
+                sparse_idx += 1;
+            }
             continue;
         }
 
@@ -562,6 +680,7 @@ pub(super) fn ordl_and_vehs_records(
                 ),
                 Some(track),
                 None,
+                None,
             )?;
         } else if is_road {
             let engine_type = openttd_road_engine_type(v);
@@ -579,6 +698,7 @@ pub(super) fn ordl_and_vehs_records(
                 ),
                 None,
                 Some(v),
+                None,
             )?;
         } else {
             // ship
@@ -595,6 +715,7 @@ pub(super) fn ordl_and_vehs_records(
                     TRAIN_SUBTYPE_FRONT_ENGINE,
                     0,
                 ),
+                None,
                 None,
                 None,
             )?;
@@ -643,8 +764,17 @@ fn append_vehs_header(header: &mut Vec<u8>) -> Result<(), SavError> {
     header.push(0);
     append_vehs_common_fields(header)?;
 
-    // aircraft → common (pos/state/targetairport usan defaults)
+    // aircraft → common + `SlVehicleAircraft` (FTA y destino)
     append_field(header, 0x1B, "common")?;
+    append_field(header, 4, "crashed_counter")?;
+    append_field(header, 2, "pos")?;
+    append_field(header, 4, "targetairport")?;
+    append_field(header, 2, "state")?;
+    append_field(header, 2, "previous_pos")?;
+    append_field(header, 2, "last_direction")?;
+    append_field(header, 2, "number_consecutive_turns")?;
+    append_field(header, 2, "turn_counter")?;
+    append_field(header, 2, "flags")?;
     header.push(0);
     append_vehs_common_fields(header)?;
     Ok(())
@@ -887,6 +1017,105 @@ mod tests {
         assert_eq!(
             record_get(shadow_common, "subtype").and_then(SlValue::as_u64),
             Some(u64::from(AIR_SHADOW))
+        );
+    }
+
+    #[test]
+    #[allow(clippy::items_after_statements)]
+    fn vehs_exports_helicopter_rotor_and_fta_state() {
+        use crate::airport_fta::AirportHeading;
+        use crate::sav::chunks::{find_chunk, parse_chunks};
+        use crate::sav::table::{SlValue, parse_table_chunk, record_get};
+
+        let mut state = GameState::new(64, 64);
+        let air_pos = TileCoord::new(40, 40);
+        let airport_pos = TileCoord::new(42, 40);
+        let mut airport = Station::new_with_kind(airport_pos, StopKind::Airport);
+        airport.ottd_station_id = Some(42);
+        state.stations = vec![airport];
+
+        let mut helicopter = Vehicle::new(7, VehicleKind::Aircraft, air_pos, airport_pos);
+        helicopter.engine_id = Some(crate::engine::ENGINE_AIRCRAFT_TRICARIO);
+        helicopter.crashed_ctr = 19;
+        helicopter.airport_pos = 8;
+        helicopter.airport_prev_pos = 7;
+        helicopter.airport_heading = AirportHeading::HeliLanding;
+        helicopter.airport_fta_station = Some(airport_pos);
+        helicopter.direction = DIR_SW;
+        state.vehicles = vec![helicopter];
+
+        let (_, vehs) = ordl_and_vehs_records(&state, 64).unwrap();
+        assert_eq!(vehs.len(), 3, "primario + sombra + rotor");
+        let chunk = vehs_chunk(&vehs).unwrap();
+        let chunks = parse_chunks(&chunk).unwrap();
+        let raw = find_chunk(&chunks, "VEHS").expect("VEHS");
+        let rows = parse_table_chunk(&raw.body, true).expect("parse VEHS");
+        assert_eq!(rows.len(), 3);
+
+        fn aircraft(row: &crate::sav::table::SlRecord) -> &crate::sav::table::SlRecord {
+            match record_get(row, "aircraft") {
+                Some(SlValue::Structs(items)) => items.first().expect("aircraft"),
+                other => panic!("aircraft ausente: {other:?}"),
+            }
+        }
+        fn common(aircraft: &crate::sav::table::SlRecord) -> &crate::sav::table::SlRecord {
+            match record_get(aircraft, "common") {
+                Some(SlValue::Structs(items)) => items.first().expect("common"),
+                other => panic!("common ausente: {other:?}"),
+            }
+        }
+
+        let primary = aircraft(&rows[0].1);
+        let primary_common = common(primary);
+        assert_eq!(
+            record_get(primary_common, "subtype").and_then(SlValue::as_u64),
+            Some(u64::from(AIR_HELICOPTER))
+        );
+        assert_eq!(
+            record_get(primary_common, "next").and_then(SlValue::as_u64),
+            Some(2),
+            "REF sombra = sparse_idx 1 + 1"
+        );
+        assert_eq!(
+            record_get(primary, "crashed_counter").and_then(SlValue::as_u64),
+            Some(19)
+        );
+        assert_eq!(
+            record_get(primary, "pos").and_then(SlValue::as_u64),
+            Some(8)
+        );
+        assert_eq!(
+            record_get(primary, "targetairport").and_then(SlValue::as_u64),
+            Some(42)
+        );
+        assert_eq!(
+            record_get(primary, "state").and_then(SlValue::as_u64),
+            Some(u64::from(AirportHeading::HeliLanding.as_u8()))
+        );
+        assert_eq!(
+            record_get(primary, "previous_pos").and_then(SlValue::as_u64),
+            Some(7)
+        );
+
+        let shadow_common = common(aircraft(&rows[1].1));
+        assert_eq!(
+            record_get(shadow_common, "subtype").and_then(SlValue::as_u64),
+            Some(u64::from(AIR_SHADOW))
+        );
+        assert_eq!(
+            record_get(shadow_common, "next").and_then(SlValue::as_u64),
+            Some(3),
+            "la sombra de un helicóptero debe apuntar al rotor"
+        );
+
+        let rotor_common = common(aircraft(&rows[2].1));
+        assert_eq!(
+            record_get(rotor_common, "subtype").and_then(SlValue::as_u64),
+            Some(u64::from(AIR_ROTOR))
+        );
+        assert_eq!(
+            record_get(rotor_common, "next").and_then(SlValue::as_u64),
+            Some(0)
         );
     }
 

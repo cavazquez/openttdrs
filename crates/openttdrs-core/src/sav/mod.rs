@@ -1062,6 +1062,9 @@ impl GameState {
             let id = v.sav_id;
             if kind == VehicleKind::Aircraft {
                 let mut vehicle = Vehicle::new(id, kind, v.pos, v.pos);
+                vehicle.owner = crate::company::CompanyId(v.owner);
+                vehicle.name = v.name.clone();
+                vehicle.native_engine_type = Some(v.engine_type);
                 vehicle.group_id = v.group_id;
                 vehicle.timetable_start =
                     u32::try_from(v.timetable_start.min(u64::from(u32::MAX))).unwrap_or(u32::MAX);
@@ -1143,6 +1146,9 @@ impl GameState {
                 continue;
             }
             let mut vehicle = Vehicle::new(id, kind, v.pos, v.pos);
+            vehicle.owner = crate::company::CompanyId(v.owner);
+            vehicle.name = v.name.clone();
+            vehicle.native_engine_type = Some(v.engine_type);
             vehicle.group_id = v.group_id;
             vehicle.timetable_start =
                 u32::try_from(v.timetable_start.min(u64::from(u32::MAX))).unwrap_or(u32::MAX);
@@ -1797,6 +1803,7 @@ mod tests {
             vehicles: vec![
                 SavVehicle {
                     sav_id: 0,
+                    owner: 0,
                     // Las unidades pueden estar separadas por filas de otros
                     // tipos de vehículo en `VEHS`.
                     next_sav_id: Some(3),
@@ -1808,6 +1815,7 @@ mod tests {
                     service_interval: 150,
                     order_list_id: None,
                     kind: SavVehicleKind::Train,
+                    name: None,
                     pos: crate::TileCoord::new(5, 5),
                     raw_tile: crate::TileCoord::new(5, 5),
                     progress: 0,
@@ -1841,6 +1849,7 @@ mod tests {
                 },
                 SavVehicle {
                     sav_id: 1,
+                    owner: 0,
                     next_sav_id: None,
                     group_id: None,
                     timetable_start: 0,
@@ -1850,6 +1859,7 @@ mod tests {
                     service_interval: 150,
                     order_list_id: None,
                     kind: SavVehicleKind::RoadVehicle,
+                    name: None,
                     pos: crate::TileCoord::new(6, 6),
                     raw_tile: crate::TileCoord::new(6, 6),
                     progress: 0,
@@ -1883,6 +1893,7 @@ mod tests {
                 },
                 SavVehicle {
                     sav_id: 2,
+                    owner: 0,
                     next_sav_id: None,
                     group_id: None,
                     timetable_start: 0,
@@ -1892,6 +1903,7 @@ mod tests {
                     service_interval: 150,
                     order_list_id: None,
                     kind: SavVehicleKind::RoadVehicle,
+                    name: None,
                     pos: crate::TileCoord::new(7, 7),
                     raw_tile: crate::TileCoord::new(7, 7),
                     progress: 0,
@@ -1925,6 +1937,7 @@ mod tests {
                 },
                 SavVehicle {
                     sav_id: 3,
+                    owner: 0,
                     next_sav_id: None,
                     group_id: None,
                     timetable_start: 0,
@@ -1934,6 +1947,7 @@ mod tests {
                     service_interval: 150,
                     order_list_id: None,
                     kind: SavVehicleKind::Train,
+                    name: None,
                     pos: crate::TileCoord::new(5, 5),
                     raw_tile: crate::TileCoord::new(5, 5),
                     progress: 0,

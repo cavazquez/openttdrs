@@ -230,6 +230,14 @@ pub struct Vehicle {
     /// Motor `OpenGFX` (`None` en saves antiguos → default por [`VehicleKind`]).
     #[serde(default)]
     pub engine_id: Option<u16>,
+    /// `EngineID` nativo de OpenTTD leído desde `VEHS.common.engine_type`.
+    ///
+    /// El catálogo Rust no contiene necesariamente todos los motores de un
+    /// NewGRF. Mantener el identificador wire separado permite reexportar un
+    /// `.sav` sin sustituir silenciosamente un motor desconocido por el
+    /// primero del catálogo vanilla.
+    #[serde(default)]
+    pub native_engine_type: Option<u16>,
     /// Nombre personalizado; si falta, la UI usa modelo + id.
     #[serde(default)]
     pub name: Option<String>,
@@ -587,6 +595,7 @@ impl Vehicle {
             curve_prev_direction: DIR_NE,
             direction: DIR_NE,
             engine_id: Some(engine_id),
+            native_engine_type: None,
             name: None,
             cur_speed: 0,
             z_pos: None,

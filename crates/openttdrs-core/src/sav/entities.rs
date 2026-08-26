@@ -1043,6 +1043,8 @@ pub struct SavVehicle {
     /// la tabla sparse; esta referencia es la fuente autoritativa para
     /// reconstruir la cadena del tren.
     pub next_sav_id: Option<u32>,
+    /// Compañía propietaria (`Vehicle::owner`).
+    pub owner: u8,
     /// Grupo de flota (`Vehicle::group_id`) o `None` para el grupo por defecto.
     pub group_id: Option<u32>,
     /// Inicio del ciclo de horario (`Vehicle::timetable_start`) en ticks.
@@ -1070,6 +1072,9 @@ pub struct SavVehicle {
     /// `None` cubre listas legacy (`ORDR`) y vehículos sin órdenes.
     pub order_list_id: Option<u32>,
     pub kind: SavVehicleKind,
+    /// Nombre personalizado (`Vehicle::name`); vacío cuando usa el nombre
+    /// generado por el motor.
+    pub name: Option<String>,
     /// Tesela utilizable por el motor. Para trenes/carretera es literal
     /// `Vehicle::tile`; para aviones se recalcula desde `x_pos`/`y_pos`
     /// (ver [`Self::raw_tile`] para el valor crudo del save).
@@ -1183,6 +1188,14 @@ pub(crate) fn vehicles_from_chunks(
             // siguiente `33` con la fila 33 en vez de la 32.
             .and_then(|next| next.checked_sub(1))
             .and_then(|next| u32::try_from(next).ok());
+        let owner = record_get(common, "owner")
+            .and_then(SlValue::as_u64)
+            .and_then(|value| u8::try_from(value).ok())
+            .unwrap_or(0);
+        let name = record_get(common, "name")
+            .and_then(SlValue::as_str)
+            .filter(|name| !name.is_empty())
+            .map(str::to_owned);
         // OpenTTD usa DEFAULT_GROUP/ALL_GROUP como sentinelas, no como grupos
         // persistibles. Mantenerlos como `None` evita crear grupos fantasma al
         // hidratar un save nativo.
@@ -1391,6 +1404,7 @@ pub(crate) fn vehicles_from_chunks(
         out.push(SavVehicle {
             sav_id,
             next_sav_id,
+            owner,
             group_id,
             timetable_start,
             current_order_time,
@@ -1399,6 +1413,7 @@ pub(crate) fn vehicles_from_chunks(
             service_interval,
             order_list_id,
             kind,
+            name,
             pos,
             raw_tile,
             progress,

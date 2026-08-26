@@ -157,6 +157,9 @@ fn water_tile_ok(state: &GameState, pos: TileCoord) -> bool {
 
 /// `EngineID` vanilla `OpenTTD` desde el catálogo Rust (inverso de `vanilla_train_engine_id`).
 fn openttd_train_engine_type(v: &Vehicle) -> u16 {
+    if let Some(native) = v.native_engine_type {
+        return native;
+    }
     match v.engine_id {
         Some(100) => 0,  // Kirby Paul Tank
         Some(101) => 8,  // Chaney 'Jubilee'
@@ -178,6 +181,9 @@ fn openttd_train_engine_type(v: &Vehicle) -> u16 {
 
 /// `EngineID` `OpenTTD` para bus/camión (ids globales en `table/engines.h`).
 fn openttd_road_engine_type(v: &Vehicle) -> u16 {
+    if let Some(native) = v.native_engine_type {
+        return native;
+    }
     match v.kind {
         VehicleKind::Bus => match v.engine_id {
             Some(0) => 116, // MPS Regal Bus
@@ -197,6 +203,9 @@ fn openttd_road_engine_type(v: &Vehicle) -> u16 {
 }
 
 fn openttd_ship_engine_type(v: &Vehicle) -> u16 {
+    if let Some(native) = v.native_engine_type {
+        return native;
+    }
     match v.engine_id {
         Some(0) => 204, // MPS Oil Tanker
         Some(2) => 206, // MPS Passenger Ferry
@@ -206,6 +215,9 @@ fn openttd_ship_engine_type(v: &Vehicle) -> u16 {
 }
 
 fn openttd_aircraft_engine_type(v: &Vehicle) -> u16 {
+    if let Some(native) = v.native_engine_type {
+        return native;
+    }
     match v.engine_id {
         Some(0) => 218,  // Yate Haugan
         Some(10) => 225, // Yate Aerospace YAC 1-11
@@ -218,6 +230,7 @@ type SavRecordList = Vec<SavRecordBytes>;
 
 struct CommonWire {
     subtype: u8,
+    name: Option<String>,
     owner: u8,
     tile: u32,
     x_pos: i32,
@@ -290,8 +303,9 @@ fn write_aircraft_fields(buf: &mut Vec<u8>, aircraft: &AircraftWire) {
     buf.push(aircraft.flags);
 }
 
-fn write_vehs_common(buf: &mut Vec<u8>, c: &CommonWire) {
+fn write_vehs_common(buf: &mut Vec<u8>, c: &CommonWire) -> Result<(), SavError> {
     buf.push(c.subtype);
+    write_str(c.name.as_deref().unwrap_or(""), buf)?;
     buf.push(c.owner);
     buf.extend_from_slice(&c.tile.to_be_bytes());
     buf.extend_from_slice(&u32::try_from(c.x_pos).unwrap_or(0).to_be_bytes());
@@ -315,6 +329,7 @@ fn write_vehs_common(buf: &mut Vec<u8>, c: &CommonWire) {
     buf.extend_from_slice(&c.timetable_lateness.to_be_bytes());
     buf.extend_from_slice(&c.vehicle_flags.to_be_bytes());
     buf.extend_from_slice(&c.service_interval.to_be_bytes());
+    Ok(())
 }
 
 /// Bits de `VehicleFlags` que el core modela hoy.
@@ -381,6 +396,7 @@ fn common_wire_for(
     let group_id = v.group_id.unwrap_or(0xFFFE).min(u32::from(u16::MAX)) as u16;
     CommonWire {
         subtype,
+        name: v.name.clone(),
         owner: v.owner.0,
         tile: tile_idx,
         x_pos,
@@ -428,7 +444,7 @@ fn push_typed_vehicle(
         if t == veh_type {
             write_gamma(1, rec)?; // struct presente
             write_gamma(1, rec)?; // common presente
-            write_vehs_common(rec, common);
+            write_vehs_common(rec, common)?;
             if let Some(track) = train_track {
                 rec.push(track);
             }
@@ -588,6 +604,7 @@ pub(super) fn ordl_and_vehs_records(
                 VEH_AIRCRAFT,
                 &CommonWire {
                     subtype: AIR_SHADOW,
+                    name: None,
                     owner: v.owner.0,
                     tile: tile_idx,
                     x_pos: v.pos.x * TILE_SIZE + TILE_SIZE / 2,
@@ -628,6 +645,7 @@ pub(super) fn ordl_and_vehs_records(
                     VEH_AIRCRAFT,
                     &CommonWire {
                         subtype: AIR_ROTOR,
+                        name: None,
                         owner: v.owner.0,
                         tile: tile_idx,
                         x_pos: v.pos.x * TILE_SIZE + TILE_SIZE / 2,
@@ -793,6 +811,7 @@ fn append_vehs_header(header: &mut Vec<u8>) -> Result<(), SavError> {
 
 fn append_vehs_common_fields(header: &mut Vec<u8>) -> Result<(), SavError> {
     append_field(header, 2, "subtype")?;
+    append_field(header, 0x0A, "name")?;
     append_field(header, 2, "owner")?;
     append_field(header, 6, "tile")?;
     append_field(header, 6, "x_pos")?;
@@ -1294,6 +1313,10 @@ mod tests {
         );
         train.direction = DIR_NE;
         train.running = true;
+        train.owner = crate::CompanyId(3);
+        train.name = Some("Expreso Norte".to_owned());
+        // ID fuera del catálogo vanilla: debe sobrevivir al round-trip.
+        train.native_engine_type = Some(511);
         state.vehicles = vec![train];
 
         let (_, vehs) = ordl_and_vehs_records(&state, 64).unwrap();
@@ -1316,11 +1339,15 @@ mod tests {
         );
         assert_eq!(
             record_get(common, "engine_type").and_then(SlValue::as_u64),
-            Some(0)
+            Some(511)
         );
         assert_eq!(
             record_get(common, "owner").and_then(SlValue::as_u64),
-            Some(0)
+            Some(3)
+        );
+        assert_eq!(
+            record_get(common, "name").and_then(SlValue::as_str),
+            Some("Expreso Norte")
         );
         assert_eq!(
             record_get(train, "track").and_then(SlValue::as_u64),

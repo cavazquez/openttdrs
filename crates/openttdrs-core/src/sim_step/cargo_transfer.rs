@@ -1419,7 +1419,7 @@ mod tests {
             .engine_catalog
             .iter_mut()
             .find(|candidate| candidate.id == engine.id)
-            .expect("custom engine in catalog")
+            .unwrap()
             .newgrf_runtime = Some(Box::new(cb36_literal_runtime(7)));
         refresh_runtime_vehicle_capacities(&mut state);
         assert_eq!(state.vehicles[0].capacity, 7);

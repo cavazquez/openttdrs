@@ -131,8 +131,8 @@ pub enum RoadDepotPhase {
     },
 }
 
-fn seed_newgrf_random_bits(id: u32) -> u8 {
-    (id.wrapping_mul(0x9E37_79B9) >> 24) as u8
+fn seed_newgrf_random_bits(id: u32) -> u16 {
+    (id.wrapping_mul(0x9E37_79B9) >> 16) as u16
 }
 
 const fn default_depot_leave_cleared() -> bool {
@@ -505,9 +505,10 @@ pub struct Vehicle {
     /// Peso agregado del consist (t); cabeza.
     #[serde(default)]
     pub cached_weight_t: u16,
-    /// Bits aleatorios `NewGRF` del vehículo (`random_bits`; random Action2 / consist).
+    /// Bits aleatorios `NewGRF` del vehículo (`random_bits`; 16 bits de
+    /// `OpenTTD`, usados por Action2 random y scopes de consist).
     #[serde(default)]
-    pub newgrf_random_bits: u8,
+    pub newgrf_random_bits: u16,
     /// Triggers de randomización pendientes (`VehicleRandomTriggers`).
     ///
     /// `OpenTTD` los conserva hasta que el grupo Action2 activo los consume;

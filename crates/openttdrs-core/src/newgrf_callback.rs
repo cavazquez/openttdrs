@@ -185,9 +185,9 @@ pub fn resolve_vehicle_32day_callback(
 ///
 /// `OpenTTD` mantiene `waiting_random_triggers` hasta que el grupo activo los
 /// consume; esta implementación conserva exactamente ese comportamiento para
-/// el scope propio. La máscara de random bits del port sigue siendo de ocho
-/// bits, por lo que un `randbit` fuera de ese rango queda pendiente para la
-/// ampliación del almacenamiento a 16 bits.
+/// el scope propio. La máscara de random bits conserva los 16 bits nativos de
+/// `OpenTTD`; los grupos que declaran bits fuera de esa palabra siguen siendo
+/// ignorados por el evaluador Action2, no truncados al persistir el vehículo.
 pub fn trigger_vehicle_randomisation(
     engine: &EngineDef,
     vehicle: &mut Vehicle,
@@ -212,14 +212,21 @@ pub fn trigger_vehicle_randomisation(
     writeback_vehicle_persistent_registers(vehicle, &ctx);
     vehicle.newgrf_waiting_random_triggers &= !used;
 
-    let reseed_mask = u8::try_from(reseed & 0xFF).unwrap_or(0);
+    let reseed_mask = u16::try_from(reseed & 0xFFFF).unwrap_or(0);
     if reseed_mask != 0 {
-        let random = crate::map::industry_tile_rng(
+        let low = crate::map::industry_tile_rng(
             world_seed,
             tick,
             vehicle.pos,
             u64::from(vehicle.id) ^ (u64::from(trigger as u8) << 32),
         );
+        let high = crate::map::industry_tile_rng(
+            world_seed,
+            tick,
+            vehicle.pos,
+            u64::from(vehicle.id) ^ (u64::from(trigger as u8) << 32) ^ 0xA5A5_5A5A,
+        );
+        let random = u16::from(low) | (u16::from(high) << 8);
         vehicle.newgrf_random_bits = (before_random & !reseed_mask) | (random & reseed_mask);
     }
     before_random != vehicle.newgrf_random_bits
@@ -1852,7 +1859,57 @@ mod tests {
             vehicle.pos,
             u64::from(vehicle.id) ^ (u64::from(VehicleRandomTrigger::Callback32 as u8) << 32),
         );
-        assert_eq!(vehicle.newgrf_random_bits & 1, expected & 1);
+        assert_eq!(vehicle.newgrf_random_bits & 1, u16::from(expected) & 1);
+    }
+
+    #[test]
+    fn callbacks_ac_vehicle_random_trigger_reseeds_the_high_random_word() {
+        let mut engine = engines_table()
+            .iter()
+            .find(|e| e.kind == VehicleKind::Train && e.power_hp > 0)
+            .cloned()
+            .unwrap();
+        engine.newgrf_grfid = 0x5241_4E44;
+        engine.newgrf_local_id = 0;
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 2,
+        });
+        gfx.action2_random.insert(
+            2,
+            Action2RandomEntry {
+                typ: 0x80,
+                consist_count: 0,
+                triggers: VehicleRandomTrigger::Callback32.mask(),
+                randbit: 8,
+                sets: vec![0x8000, 0x8001],
+            },
+        );
+        engine.newgrf_runtime = Some(Box::new(gfx));
+        let mut vehicle = Vehicle::new(
+            45,
+            VehicleKind::Train,
+            TileCoord::new(2, 3),
+            TileCoord::new(2, 3),
+        );
+        vehicle.newgrf_random_bits = 0x8000;
+        assert!(trigger_vehicle_randomisation(
+            &engine,
+            &mut vehicle,
+            VehicleRandomTrigger::Callback32,
+            9,
+            17,
+        ));
+        let salt =
+            u64::from(vehicle.id) ^ (u64::from(VehicleRandomTrigger::Callback32 as u8) << 32);
+        let high = crate::map::industry_tile_rng(9, 17, vehicle.pos, salt ^ 0xA5A5_5A5A);
+        assert_eq!(
+            vehicle.newgrf_random_bits & 0x0100,
+            u16::from(high) << 8 & 0x0100
+        );
+        // A reseed of bit 8 must not erase an unrelated bit in the word.
+        assert_eq!(vehicle.newgrf_random_bits & 0x8000, 0x8000);
     }
 
     #[test]

@@ -950,8 +950,11 @@ pub fn resolve_vehicle_sound_callback(
     else {
         return VehicleSoundOverride::Default;
     };
-    if engine.newgrf_grfid == 0 || engine.vehicle_callback_mask & (1 << 7) == 0 {
+    if engine.newgrf_grfid == 0 {
         return VehicleSoundOverride::Default;
+    }
+    if engine.vehicle_callback_mask & (1 << 7) == 0 {
+        return vehicle_action0_sound_override(&state.sound_effect_catalog, &engine, event);
     }
     let result = resolve_vehicle_callback(
         &engine,
@@ -961,7 +964,7 @@ pub fn resolve_vehicle_sound_callback(
         0,
     );
     if result == CALLBACK_FAILED {
-        return VehicleSoundOverride::Default;
+        return vehicle_action0_sound_override(&state.sound_effect_catalog, &engine, event);
     }
     let sound_count = u16::try_from(crate::sound_id::SOUND_COUNT).unwrap_or(u16::MAX);
     if result < sound_count {
@@ -976,6 +979,46 @@ pub fn resolve_vehicle_sound_callback(
     let Some(def) =
         crate::sound_effect_def(&state.sound_effect_catalog, engine.newgrf_grfid, local_id)
     else {
+        return VehicleSoundOverride::Suppressed;
+    };
+    if !def.has_sample || def.sample_pcm.is_empty() {
+        return VehicleSoundOverride::Suppressed;
+    }
+    VehicleSoundOverride::Newgrf {
+        grfid: engine.newgrf_grfid,
+        local_id,
+    }
+}
+
+/// Resuelve el sonido de salida declarado por Action0 cuando CB33 no está
+/// disponible o devuelve `CALLBACK_FAILED`.
+///
+/// El campo `sound_effect` se guarda en el catálogo con el valor bruto de la
+/// propiedad. `0` y `0xFF` son los sentinelas de OpenTTD para conservar el
+/// sonido por defecto; los valores menores a `SOUND_COUNT` son muestras del
+/// baseset y los restantes son IDs locales del GRF (`SOUND_COUNT + id`).
+/// Sólo los eventos de salida (`VSE_START`) consultan esta propiedad: los
+/// sonidos de marcha, avería y aterrizaje tienen sus propias selecciones
+/// vanilla y no deben heredar el SFX de salida del motor.
+#[must_use]
+fn vehicle_action0_sound_override(
+    catalog: &[crate::sound_effect::SoundEffectDef],
+    engine: &EngineDef,
+    event: VehicleSoundEvent,
+) -> VehicleSoundOverride {
+    if event != VehicleSoundEvent::Start
+        || engine.sound_effect == 0
+        || engine.sound_effect == u8::MAX
+    {
+        return VehicleSoundOverride::Default;
+    }
+    let sound_count = u8::try_from(crate::sound_id::SOUND_COUNT).unwrap_or(u8::MAX);
+    if engine.sound_effect < sound_count {
+        return SoundId::from_u8(engine.sound_effect)
+            .map_or(VehicleSoundOverride::Suppressed, VehicleSoundOverride::Base);
+    }
+    let local_id = engine.sound_effect.saturating_sub(sound_count);
+    let Some(def) = crate::sound_effect_def(catalog, engine.newgrf_grfid, local_id) else {
         return VehicleSoundOverride::Suppressed;
     };
     if !def.has_sample || def.sample_pcm.is_empty() {
@@ -2910,6 +2953,69 @@ mod tests {
                 grfid: 0x534F_554E,
                 local_id: 1,
             }
+        );
+    }
+
+    #[test]
+    fn callbacks_ac_vehicle_sound_uses_action0_sfx_without_cb33() {
+        let mut state = crate::GameState::new(4, 4);
+        let mut engine = engines_table()
+            .iter()
+            .find(|e| e.kind == VehicleKind::Ship)
+            .cloned()
+            .unwrap();
+        engine.id = 4_001;
+        engine.newgrf_grfid = 0x5346_5830;
+        engine.sound_effect = SoundId::LevelCrossing.as_u8();
+        let mut vehicle = Vehicle::new(
+            78,
+            VehicleKind::Ship,
+            TileCoord::new(1, 1),
+            TileCoord::new(1, 1),
+        );
+        vehicle.engine_id = Some(engine.id);
+        state.engine_catalog.push(engine);
+        state.vehicles.push(vehicle);
+
+        assert_eq!(
+            resolve_vehicle_sound_callback(&mut state, 78, VehicleSoundEvent::Start),
+            VehicleSoundOverride::Base(SoundId::LevelCrossing)
+        );
+        assert_eq!(
+            resolve_vehicle_sound_callback(&mut state, 78, VehicleSoundEvent::Running),
+            VehicleSoundOverride::Default
+        );
+
+        let engine_index = state
+            .engine_catalog
+            .iter()
+            .position(|candidate| candidate.id == 4_001)
+            .unwrap();
+        state.engine_catalog[engine_index].sound_effect =
+            u8::try_from(crate::sound_id::SOUND_COUNT).unwrap() + 2;
+        state.sound_effect_catalog.push(crate::SoundEffectDef {
+            local_id: 2,
+            grfid: 0x5346_5830,
+            volume: 128,
+            priority: 9,
+            override_old: None,
+            has_sample: true,
+            sample_pcm: vec![0x80],
+            from_newgrf: true,
+        });
+        assert_eq!(
+            resolve_vehicle_sound_callback(&mut state, 78, VehicleSoundEvent::Start),
+            VehicleSoundOverride::Newgrf {
+                grfid: 0x5346_5830,
+                local_id: 2,
+            }
+        );
+
+        state.engine_catalog[engine_index].sound_effect =
+            u8::try_from(crate::sound_id::SOUND_COUNT).unwrap() + 3;
+        assert_eq!(
+            resolve_vehicle_sound_callback(&mut state, 78, VehicleSoundEvent::Start),
+            VehicleSoundOverride::Suppressed
         );
     }
 

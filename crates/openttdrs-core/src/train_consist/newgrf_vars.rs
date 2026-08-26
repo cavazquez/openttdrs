@@ -226,8 +226,11 @@ fn fill_vehicle_action2_vars(
     let var43 = nn_player | (mm << 8) | (tt_player << 16) | ((c | (c << 4)) << 24);
     ctx.vars.insert(0x43, var43);
 
-    // 5F: triggers low byte + random bits in other bytes
-    let random_data = u32::from(unit.newgrf_random_bits) << 8;
+    // 5F: triggers low byte + random bits in other bytes.  The waiting mask
+    // must survive the Action2 snapshot so `CBID_RANDOM_TRIGGER` can consume
+    // only the events matched by the active random group.
+    let random_data =
+        u32::from(unit.newgrf_random_bits) << 8 | u32::from(unit.newgrf_waiting_random_triggers);
     ctx.vars.insert(0x5F, random_data);
 
     let mut status = 0u32;
@@ -280,10 +283,14 @@ fn fill_relative_vehicle_vars(
         ctx.relative_vars.insert((offset, variable), value);
     }
     // Upstream exposes random bits through var 5F as random<<8 | triggers.
-    // Waiting triggers are not persisted in this model, so the low byte is
-    // intentionally zero while the random portion remains exact.
-    ctx.relative_vars
-        .insert((offset, 0x5F), u32::from(candidate.newgrf_random_bits) << 8);
+    // Keep the low trigger byte as part of the relative scope too; variable
+    // 61/5F is frequently used by vehicle sprite groups after a cargo/depot
+    // event.
+    ctx.relative_vars.insert(
+        (offset, 0x5F),
+        u32::from(candidate.newgrf_random_bits) << 8
+            | u32::from(candidate.newgrf_waiting_random_triggers),
+    );
 
     let previous = offset < 0;
     let direction = if previous {

@@ -53,6 +53,29 @@ pub enum TimetableWaitKind {
     TravelEarly,
 }
 
+/// Triggers de randomización de vehículos usados por `CBID_RANDOM_TRIGGER`.
+///
+/// Los valores siguen el orden de `VehicleRandomTrigger` de `OpenTTD`. Se
+/// mantienen como una máscara compacta porque el runtime Action2 conserva
+/// triggers pendientes entre evaluaciones.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum VehicleRandomTrigger {
+    NewCargo = 0,
+    Depot = 1,
+    Empty = 2,
+    AnyNewCargo = 3,
+    Callback32 = 4,
+}
+
+impl VehicleRandomTrigger {
+    /// Bit de espera que se expone en la variable `5F`.
+    #[must_use]
+    pub const fn mask(self) -> u8 {
+        1 << (self as u8)
+    }
+}
+
 const fn default_vehicle_reliability() -> u16 {
     8_500
 }
@@ -405,6 +428,9 @@ pub struct Vehicle {
     /// Ticks restantes de avería activa (`breakdown_delay`).
     #[serde(default)]
     pub breakdown_delay: u8,
+    /// Contador económico diario (`Vehicle::day_counter`), usado por CB32.
+    #[serde(default)]
+    pub newgrf_day_counter: u8,
     /// Fase de vuelo (solo aviones; resto ignora).
     #[serde(default)]
     pub aircraft_phase: AircraftPhase,
@@ -482,6 +508,12 @@ pub struct Vehicle {
     /// Bits aleatorios `NewGRF` del vehículo (`random_bits`; random Action2 / consist).
     #[serde(default)]
     pub newgrf_random_bits: u8,
+    /// Triggers de randomización pendientes (`VehicleRandomTriggers`).
+    ///
+    /// `OpenTTD` los conserva hasta que el grupo Action2 activo los consume;
+    /// persistirlos evita que un save/load cambie la variante seleccionada.
+    #[serde(default)]
+    pub newgrf_waiting_random_triggers: u8,
     /// Registros persistentes `NewGRF` (`7C` / `\2psto`); writeback tras eval CB/Action2.
     #[serde(default)]
     pub newgrf_persistent_regs: std::collections::HashMap<u8, u32>,
@@ -613,6 +645,7 @@ impl Vehicle {
             breakdown_chance: 0,
             breakdown_ctr: 0,
             breakdown_delay: 0,
+            newgrf_day_counter: 0,
             aircraft_phase: AircraftPhase::InHangar,
             altitude: 0,
             aircraft_phase_ticks: 0,
@@ -637,6 +670,7 @@ impl Vehicle {
             cached_power_hp: 0,
             cached_weight_t: 0,
             newgrf_random_bits: seed_newgrf_random_bits(id),
+            newgrf_waiting_random_triggers: 0,
             newgrf_persistent_regs: std::collections::HashMap::new(),
             profit_this_year: 0,
             profit_last_year: 0,

@@ -669,8 +669,16 @@ pub const CBID_VEHICLE_ARTIC_ENGINE: u16 = 0x16;
 pub const CBID_VEHICLE_REFIT_CAPACITY: u16 = 0x15;
 /// Callback vehículos: permitir start/stop (`CBID_VEHICLE_START_STOP_CHECK`).
 pub const CBID_VEHICLE_START_STOP_CHECK: u16 = 0x31;
+/// Callback vehículos: invocado cada 32 días por vehículo (`CBID_VEHICLE_32DAY_CALLBACK`).
+pub const CBID_VEHICLE_32DAY_CALLBACK: u16 = 0x32;
 /// Callback vehículos: seleccionar un efecto de sonido (`CBID_VEHICLE_SOUND_EFFECT`).
 pub const CBID_VEHICLE_SOUND_EFFECT: u16 = 0x33;
+/// Callback vehículos: seleccionar el reemplazo automático (`CBID_VEHICLE_AUTOREPLACE_SELECTION`).
+pub const CBID_VEHICLE_AUTOREPLACE_SELECTION: u16 = 0x34;
+/// Callback vehículos: modificar una propiedad Action0 (`CBID_VEHICLE_MODIFY_PROPERTY`).
+pub const CBID_VEHICLE_MODIFY_PROPERTY: u16 = 0x36;
+/// Callback vehículos: seleccionar el mapa de colores (`CBID_VEHICLE_COLOUR_MAPPING`).
+pub const CBID_VEHICLE_COLOUR_MAPPING: u16 = 0x2D;
 /// Callback industrias: disponibilidad / ubicación al colocar (`CBID_INDUSTRY_LOCATION`).
 pub const CBID_INDUSTRY_LOCATION: u16 = 0x28;
 /// Callback casas: permitir construcción (`CBID_HOUSE_ALLOW_CONSTRUCTION`).

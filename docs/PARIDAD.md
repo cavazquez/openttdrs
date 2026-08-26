@@ -224,6 +224,13 @@ residuales los scopes/callbacks avanzados que requieren estado completo de consi
 (relativo especial por primer motor y variables `61/62` recursivas); los
 wagon overrides de Action3 ya conservan la cadena de motores anterior y se
 seleccionan por cargo con fallback al grupo default.
+El callback de vehículo `0x32` ya se ejecuta en el barrido económico
+escalonado, conserva `day_counter` y triggers pendientes entre saves, y aplica
+la máscara de reseed del grupo Action2 activo. Su resultado conserva los bits
+de invalidación de paleta para el futuro enlace con la caché visual; todavía no
+es paridad completa porque el almacenamiento local de `random_bits` sigue
+limitado a ocho bits y el trigger no se propaga a toda la cadena como en
+`TriggerVehicleRandomisation`.
 La carga gradual ya ejecuta CB12 (`load_amount`) cuando el motor declara la
 máscara correspondiente.
 Los focos naval

@@ -17,9 +17,9 @@ use crate::newgrf_sprites::{
     CBID_CARGO_STATION_RATING_CALC, CBID_HOUSE_ALLOW_CONSTRUCTION, CBID_INDUSTRY_LOCATION,
     CBID_OBJECT_LAND_SLOPE_CHECK, CBID_STATION_ANIMATION_NEXT_FRAME, CBID_STATION_ANIMATION_SPEED,
     CBID_STATION_ANIMATION_TRIGGER, CBID_STATION_AVAILABILITY, CBID_STATION_LAND_SLOPE_CHECK,
-    CBID_VEHICLE_ARTIC_ENGINE, CBID_VEHICLE_LENGTH, CBID_VEHICLE_LOAD_AMOUNT,
-    CBID_VEHICLE_REFIT_CAPACITY, CBID_VEHICLE_SOUND_EFFECT, CBID_VEHICLE_START_STOP_CHECK,
-    CBID_VEHICLE_VISUAL_EFFECT, TrainSpriteGraphics,
+    CBID_VEHICLE_32DAY_CALLBACK, CBID_VEHICLE_ARTIC_ENGINE, CBID_VEHICLE_LENGTH,
+    CBID_VEHICLE_LOAD_AMOUNT, CBID_VEHICLE_REFIT_CAPACITY, CBID_VEHICLE_SOUND_EFFECT,
+    CBID_VEHICLE_START_STOP_CHECK, CBID_VEHICLE_VISUAL_EFFECT, TrainSpriteGraphics,
 };
 use crate::object_spec::ObjectSpecDef;
 use crate::road_stop_action2::{
@@ -29,7 +29,7 @@ use crate::road_stop_spec::RoadStopSpecDef;
 use crate::station::Station;
 use crate::station_class::{StationAnimationTrigger, StationRandomTrigger};
 use crate::town::Town;
-use crate::vehicle::{Vehicle, VehicleKind};
+use crate::vehicle::{Vehicle, VehicleKind, VehicleRandomTrigger};
 use crate::{CargoType, GameState, RoadType, SoundId, StopKind, VehicleSoundEvent};
 
 /// Contexto que el scheduler de callbacks necesita para reproducir los scopes
@@ -65,6 +65,15 @@ pub fn action2_eval_ctx_from_vehicle(vehicle: &Vehicle) -> Action2EvalCtx {
     ctx.vehicle_loading = vehicle.cargo_loading || vehicle.cargo_unloading;
     ctx.vehicle_cargo = vehicle.cargo;
     ctx.vehicle_capacity = vehicle.capacity;
+    // `5F` combines the random bits (bits 8..15 in the vehicle scope) with
+    // triggers still waiting to be consumed (bits 0..7).  Keeping this value
+    // in the callback context is important for `CBID_RANDOM_TRIGGER` paths:
+    // a GRF can deliberately defer a trigger until another one arrives.
+    ctx.vars.insert(
+        0x5F,
+        u32::from(vehicle.newgrf_random_bits) << 8
+            | u32::from(vehicle.newgrf_waiting_random_triggers),
+    );
     ctx
 }
 
@@ -128,6 +137,92 @@ pub fn apply_vehicle_start_stop_callback(engine: &EngineDef, vehicle: &mut Vehic
     }
     let result = resolve_vehicle_callback(engine, vehicle, CBID_VEHICLE_START_STOP_CHECK, 0, 0);
     vehicle_start_stop_callback_allows(result)
+}
+
+/// Resultado normalizado de `CBID_VEHICLE_32DAY_CALLBACK` (`0x32`).
+///
+/// Sólo los bits 0 y 1 tienen significado en `OpenTTD`: el primero solicita el
+/// trigger de randomización 32-day y el segundo invalida la paleta/cache del
+/// vehículo. Los bits restantes se devuelven en `unknown_bits` para que el
+/// caller pueda diagnosticarlos sin convertir un resultado inválido en una
+/// decisión silenciosa.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Vehicle32DayCallback {
+    pub trigger_randomisation: bool,
+    pub invalidate_palette: bool,
+    pub unknown_bits: u16,
+}
+
+/// Ejecuta `CBID_VEHICLE_32DAY_CALLBACK` (`0x32`).
+///
+/// Este callback no tiene bit en la máscara Action0: la presencia de una
+/// asignación Action3/runtime es la condición de `OpenTTD`. `CALLBACK_FAILED`
+/// conserva la semántica de «sin callback» y devuelve `None`.
+#[must_use]
+pub fn resolve_vehicle_32day_callback(
+    engine: &EngineDef,
+    vehicle: &mut Vehicle,
+) -> Option<Vehicle32DayCallback> {
+    if engine.newgrf_grfid == 0 || engine.newgrf_runtime.is_none() {
+        return None;
+    }
+    let result = resolve_vehicle_callback(engine, vehicle, CBID_VEHICLE_32DAY_CALLBACK, 0, 0);
+    if result == CALLBACK_FAILED {
+        return None;
+    }
+    Some(Vehicle32DayCallback {
+        trigger_randomisation: result & 1 != 0,
+        invalidate_palette: result & 2 != 0,
+        unknown_bits: result & !0x0003,
+    })
+}
+
+/// Reevalúa el grupo Action2 activo tras un trigger de vehículo y reseedea
+/// únicamente los bits que el grupo declara. La operación es determinista
+/// por mundo/tick/vehículo para que replay y tests no dependan del orden de
+/// iteración del RNG global.
+///
+/// `OpenTTD` mantiene `waiting_random_triggers` hasta que el grupo activo los
+/// consume; esta implementación conserva exactamente ese comportamiento para
+/// el scope propio. La máscara de random bits del port sigue siendo de ocho
+/// bits, por lo que un `randbit` fuera de ese rango queda pendiente para la
+/// ampliación del almacenamiento a 16 bits.
+pub fn trigger_vehicle_randomisation(
+    engine: &EngineDef,
+    vehicle: &mut Vehicle,
+    trigger: VehicleRandomTrigger,
+    world_seed: u64,
+    tick: u64,
+) -> bool {
+    let Some(runtime) = engine.newgrf_runtime.as_ref() else {
+        return false;
+    };
+    let before_random = vehicle.newgrf_random_bits;
+    let before_waiting = vehicle.newgrf_waiting_random_triggers;
+    vehicle.newgrf_waiting_random_triggers |= trigger.mask();
+    let waiting = vehicle.newgrf_waiting_random_triggers;
+    let mut ctx = action2_eval_ctx_from_vehicle(vehicle);
+    ctx.vars.insert(
+        0x5F,
+        u32::from(vehicle.newgrf_random_bits) << 8 | u32::from(waiting),
+    );
+    let (reseed, used) =
+        runtime.rerandomisation_for_local_id_u16(engine.newgrf_local_id, &mut ctx, waiting);
+    writeback_vehicle_persistent_registers(vehicle, &ctx);
+    vehicle.newgrf_waiting_random_triggers &= !used;
+
+    let reseed_mask = u8::try_from(reseed & 0xFF).unwrap_or(0);
+    if reseed_mask != 0 {
+        let random = crate::map::industry_tile_rng(
+            world_seed,
+            tick,
+            vehicle.pos,
+            u64::from(vehicle.id) ^ (u64::from(trigger as u8) << 32),
+        );
+        vehicle.newgrf_random_bits = (before_random & !reseed_mask) | (random & reseed_mask);
+    }
+    before_random != vehicle.newgrf_random_bits
+        || before_waiting != vehicle.newgrf_waiting_random_triggers
 }
 
 /// Resultado normalizado de `CBID_VEHICLE_VISUAL_EFFECT` (`0x10`).
@@ -1547,6 +1642,123 @@ mod tests {
 
         engine.newgrf_runtime = None;
         assert!(apply_vehicle_start_stop_callback(&engine, &mut v));
+    }
+
+    #[test]
+    fn callbacks_ac_vehicle_32day_decodes_two_bits_and_reports_unknown() {
+        let mut engine = engines_table()
+            .iter()
+            .find(|e| e.kind == VehicleKind::Train && e.power_hp > 0)
+            .cloned()
+            .unwrap();
+        engine.newgrf_grfid = 0x3332_4441;
+        engine.newgrf_local_id = 0;
+        engine.newgrf_runtime = Some(Box::new(gfx_callback_literal(0x87)));
+        let mut vehicle = Vehicle::new(
+            32,
+            VehicleKind::Train,
+            TileCoord::new(1, 1),
+            TileCoord::new(1, 1),
+        );
+        assert_eq!(
+            resolve_vehicle_32day_callback(&engine, &mut vehicle),
+            Some(Vehicle32DayCallback {
+                trigger_randomisation: true,
+                invalidate_palette: true,
+                unknown_bits: 0x84,
+            })
+        );
+
+        engine.newgrf_runtime = None;
+        assert_eq!(resolve_vehicle_32day_callback(&engine, &mut vehicle), None);
+        engine.newgrf_runtime = Some(Box::new(gfx_callback_literal(0x01)));
+        engine.newgrf_grfid = 0;
+        assert_eq!(resolve_vehicle_32day_callback(&engine, &mut vehicle), None);
+    }
+
+    #[test]
+    fn callbacks_ac_vehicle_random_trigger_consumes_waiting_and_reseeds_mask() {
+        let mut engine = engines_table()
+            .iter()
+            .find(|e| e.kind == VehicleKind::Train && e.power_hp > 0)
+            .cloned()
+            .unwrap();
+        engine.newgrf_grfid = 0x5241_4E44;
+        engine.newgrf_local_id = 0;
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 2,
+        });
+        gfx.action2_random.insert(
+            2,
+            Action2RandomEntry {
+                typ: 0x80,
+                consist_count: 0,
+                triggers: VehicleRandomTrigger::Callback32.mask(),
+                randbit: 0,
+                sets: vec![0x8000, 0x8001],
+            },
+        );
+        engine.newgrf_runtime = Some(Box::new(gfx));
+        let mut vehicle = Vehicle::new(
+            44,
+            VehicleKind::Train,
+            TileCoord::new(2, 3),
+            TileCoord::new(2, 3),
+        );
+        vehicle.newgrf_random_bits = 0;
+        assert!(trigger_vehicle_randomisation(
+            &engine,
+            &mut vehicle,
+            VehicleRandomTrigger::Callback32,
+            9,
+            17,
+        ));
+        assert_eq!(vehicle.newgrf_waiting_random_triggers, 0);
+        // The one-bit random group is applied to the deterministic vehicle
+        // seed; the exact value is stable even when the new bit equals zero.
+        let expected = crate::map::industry_tile_rng(
+            9,
+            17,
+            vehicle.pos,
+            u64::from(vehicle.id) ^ (u64::from(VehicleRandomTrigger::Callback32 as u8) << 32),
+        );
+        assert_eq!(vehicle.newgrf_random_bits & 1, expected & 1);
+    }
+
+    #[test]
+    fn callbacks_ac_vehicle_32day_runs_in_staggered_economy_slot() {
+        let mut state = crate::GameState::new(8, 8);
+        let engine_id = state
+            .engine_catalog
+            .iter()
+            .find(|e| e.kind == VehicleKind::Train && e.power_hp > 0)
+            .map(|e| e.id)
+            .unwrap();
+        let engine_index = state
+            .engine_catalog
+            .iter()
+            .position(|e| e.id == engine_id)
+            .unwrap();
+        state.engine_catalog[engine_index].newgrf_grfid = 0x3332_534C;
+        state.engine_catalog[engine_index].newgrf_local_id = 0;
+        state.engine_catalog[engine_index].newgrf_runtime = Some(Box::new(gfx_callback_literal(1)));
+        let mut vehicle = Vehicle::new(
+            1,
+            VehicleKind::Train,
+            TileCoord::new(1, 1),
+            TileCoord::new(2, 1),
+        );
+        vehicle.engine_id = Some(engine_id);
+        state.vehicles.push(vehicle);
+        state.economy_timer.date_fract = 0;
+        crate::vehicle::process_vehicle_economy_day(&mut state);
+        assert_eq!(state.vehicles[0].newgrf_day_counter, 1);
+        assert_eq!(
+            state.vehicles[0].newgrf_waiting_random_triggers,
+            VehicleRandomTrigger::Callback32.mask()
+        );
     }
 
     #[test]

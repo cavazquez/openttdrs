@@ -327,6 +327,7 @@ pub(crate) fn process_vehicle_calendar_day(state: &mut crate::GameState) {
 /// (`RunEconomyVehicleDayProc`, `vehicle.cpp:954-960`).
 pub(crate) fn process_vehicle_economy_day(state: &mut crate::GameState) {
     let tick = state.tick.get();
+    let world_seed = state.world_seed;
     let fract = usize::from(state.economy_timer.date_fract);
     let day_ticks = usize::from(crate::timer::DAY_TICKS);
     let breakdown_level = state.vehicle_breakdowns.min(2);
@@ -334,6 +335,42 @@ pub(crate) fn process_vehicle_economy_day(state: &mut crate::GameState) {
     let mut i = fract;
     while i < state.vehicles.len() {
         state.vehicles[i].sim_tick = tick;
+
+        // OpenTTD evaluates CB32 before `OnNewEconomyDay`, when the vehicle's
+        // day counter is still at its previous value.  The staggered sweep
+        // visits each vehicle once per economy day, so keeping the counter in
+        // the persisted model reproduces both the initial callback and the
+        // 32-day cadence across save/load.
+        let callback_32day = state.vehicles[i].newgrf_day_counter.is_multiple_of(32);
+        if callback_32day {
+            let engine = state.vehicles[i].engine_id.and_then(|engine_id| {
+                state
+                    .engine_catalog
+                    .iter()
+                    .find(|candidate| candidate.id == engine_id)
+                    .cloned()
+            });
+            if let Some(engine) = engine
+                && let Some(effect) = crate::newgrf_callback::resolve_vehicle_32day_callback(
+                    &engine,
+                    &mut state.vehicles[i],
+                )
+                && effect.trigger_randomisation
+            {
+                crate::newgrf_callback::trigger_vehicle_randomisation(
+                    &engine,
+                    &mut state.vehicles[i],
+                    crate::vehicle::VehicleRandomTrigger::Callback32,
+                    world_seed,
+                    tick,
+                );
+                // `invalidate_palette` is represented by the changed Action2
+                // fingerprint/random bits.  The explicit result is retained
+                // in the resolver API so the client cache can consume it when
+                // colour callbacks are wired into the renderer.
+            }
+        }
+        state.vehicles[i].newgrf_day_counter = state.vehicles[i].newgrf_day_counter.wrapping_add(1);
         if state.vehicles[i].prev_unit.is_none() {
             state.vehicles[i].check_vehicle_breakdown_with_setting(
                 &mut state.random,

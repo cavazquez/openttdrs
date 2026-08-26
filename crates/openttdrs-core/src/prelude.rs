@@ -15,5 +15,5 @@ pub use crate::station::{Station, StopKind};
 pub use crate::tick::GameTick;
 pub use crate::vehicle::{
     DIR_E, DIR_N, DIR_NE, DIR_NW, DIR_S, DIR_SE, DIR_SW, DIR_W, Vehicle, VehicleDirection,
-    VehicleKind, VehicleOrder,
+    VehicleKind, VehicleOrder, VehicleRandomTrigger,
 };

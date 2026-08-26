@@ -247,8 +247,10 @@ Action1/2 también se aplican a carretera, barcos y aeronaves. Los tiletypes
 NewGRF de estaciones rail se resuelven en pendientes y se vinculan al parent
 de la fundación nivelada. Los objetos NewGRF también reevalúan Action2 por
 tesela (random, offset, pendiente/terreno, animación y owner) y cachean la
-textura por fingerprint; las variables de town/vecindad, color/view y los
-layouts/children dinámicos de estación, objeto e industria siguen siendo
+textura por fingerprint. Las industrias NewGRF también usan la vista Action2
+runtime y cuelgan su overlay del parent de la fundación nivelada cuando existe;
+los callbacks de foundation específicos, variables de town/vecindad, color/view
+y los layouts/children dinámicos de estación, objeto e industria siguen siendo
 residual explícito y no se presentan como paridad completa.
 
 ### Revalidación: catenaria de estaciones ferroviarias de Kale

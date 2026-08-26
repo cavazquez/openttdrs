@@ -10,10 +10,9 @@ use openttdrs_core::{
 use super::{
     helpers::{
         FLAT_WATER_LAYER_FRAC, foundation_surface_overlay_pos,
-        spawn_forced_leveled_foundation_with_child_parent,
+        spawn_forced_leveled_foundation_with_child_parent, spawn_foundation_child_sprite_at,
     },
-    leveled_foundation_overlay_pos, sloped_or_flat_image, spawn_ground_sprite,
-    spawn_leveled_foundation,
+    sloped_or_flat_image, spawn_ground_sprite,
 };
 use crate::iso::{
     full_tile_sprite_pos, ground_draw_z, overlay_pos, remap_tile_offset, slope_sprite_offset,
@@ -781,7 +780,8 @@ pub(crate) fn spawn_industry_tile(
     action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
     newgrf_stack: &[openttdrs_core::NewGrfEntry],
 ) {
-    let map_width = map.dimensions().0;
+    let map_dims = map.dimensions();
+    let map_width = map_dims.0;
     let tileh = ctx.info.tileh;
     let base_z = ctx.info.base_z;
     // gfx limpio + traducción NewGRF (`GetIndustryGfx`).
@@ -855,31 +855,36 @@ pub(crate) fn spawn_industry_tile(
         );
     }
     let leveled = tileh != 0;
-    if leveled {
-        spawn_leveled_foundation(
+    let foundation = if leveled {
+        spawn_forced_leveled_foundation_with_child_parent(
             commands,
+            map,
+            map_dims,
             assets,
             ctx,
             tileh,
+            "industry",
+            "industry-foundation",
             foundation_newgrf,
             action5_sprites,
             Some(&mut *images),
-        );
-    }
-    let overlay_z = if leveled {
-        base_z.saturating_add(crate::sprites::leveled_foundation_z_delta(tileh))
+        )
     } else {
-        base_z
+        super::helpers::ForcedLeveledFoundation {
+            surface_base_z: base_z,
+            child_parent: None,
+        }
     };
+    let overlay_z = foundation.surface_base_z;
     let overlay_at = |xrel, yrel, w, h, layer| {
         if leveled {
-            leveled_foundation_overlay_pos(
+            foundation_surface_overlay_pos(
                 ctx.iso_pos,
                 xrel,
                 yrel,
                 w,
                 h,
-                base_z,
+                foundation.surface_base_z,
                 layer,
                 ctx.tx_i32(),
                 ctx.ty_i32(),
@@ -917,7 +922,11 @@ pub(crate) fn spawn_industry_tile(
             def.newgrf_grfid,
         ));
         if let Some(handle) = cache.handle_for_runtime(def, stage, colour, &mut a2, images) {
-            let view = def.newgrf_view(stage).or(def.newgrf_preview.as_ref());
+            let view = if def.newgrf_runtime.is_some() {
+                def.newgrf_view_runtime(stage, &mut a2)
+            } else {
+                def.newgrf_view(stage).cloned()
+            };
             if let Some(view) = view {
                 let pos3 = overlay_at(
                     f32::from(view.x_offs),
@@ -932,12 +941,18 @@ pub(crate) fn spawn_industry_tile(
                     ..default()
                 };
                 sprite.color = with_to_alpha(sprite.color, TransparencyOption::Industries);
-                commands.spawn((
-                    MapVisualLayer,
-                    chunk,
-                    sprite,
-                    Transform::from_translation(pos3),
-                ));
+                if let Some(parent) = foundation.child_parent {
+                    spawn_foundation_child_sprite_at(
+                        commands, sprite, ctx, pos3, map_width, parent,
+                    );
+                } else {
+                    commands.spawn((
+                        MapVisualLayer,
+                        chunk,
+                        sprite,
+                        Transform::from_translation(pos3),
+                    ));
+                }
                 return;
             }
         }

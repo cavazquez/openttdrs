@@ -77,5 +77,9 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
   (`m3`), offset de footprint, pendiente/terreno, animación (`m3hi`) y owner,
   y cachea cada resultado por fingerprint. Las variables de town, teselas
   vecinas, color/view y los layouts `TileSeq`/children siguen pendientes.
+- Industria NewGRF: la vista Action2 runtime usa también sus offsets resueltos
+  y, cuando la tesela se nivela, el overlay se adjunta al último parent de
+  `DrawFoundation`; callbacks de foundation específicos y layouts/children
+  múltiples siguen abiertos.
 - `reference/` es un checkout local ignorado/no versionado; nunca se agrega al
   commit de una tarea.

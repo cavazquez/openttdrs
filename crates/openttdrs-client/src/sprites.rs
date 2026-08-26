@@ -119,7 +119,7 @@ pub(crate) use company_palette::{
 #[allow(unused_imports)]
 pub use foundation::{
     FOUNDATION_LEVELED_GFX, FOUNDATION_SPRITE_BASE, FoundationGfx, foundation_asset_path,
-    foundation_gfx_for_tileh, foundation_sprite_id, leveled_foundation_z_delta,
+    foundation_gfx_for_tileh, foundation_sprite_id,
 };
 #[allow(unused_imports)]
 pub use industry::{

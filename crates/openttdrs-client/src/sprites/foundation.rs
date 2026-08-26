@@ -122,18 +122,12 @@ pub fn foundation_asset_path(tileh: u8) -> Option<String> {
     foundation_sprite_id(tileh).map(|_| format!("assets/opengfx/tiles/foundation_{tileh:02}.png"))
 }
 
-/// Incremento Z tras `ApplyFoundationToSlope(FOUNDATION_LEVELED)` (pendiente normal).
-#[must_use]
-pub const fn leveled_foundation_z_delta(tileh: u8) -> u8 {
-    if tileh == 0 { 0 } else { 1 }
-}
-
 #[cfg(test)]
 #[allow(clippy::expect_used)]
 mod tests {
     use super::{
         FOUNDATION_SPRITE_BASE, foundation_asset_path, foundation_gfx_for_tileh,
-        foundation_sprite_id, leveled_foundation_z_delta,
+        foundation_sprite_id,
     };
 
     #[test]
@@ -142,12 +136,6 @@ mod tests {
         assert_eq!(foundation_sprite_id(1), Some(990));
         assert_eq!(foundation_sprite_id(14), Some(1003));
         assert_eq!(foundation_sprite_id(15), None);
-    }
-
-    #[test]
-    fn leveled_z_delta_only_on_slope() {
-        assert_eq!(leveled_foundation_z_delta(0), 0);
-        assert_eq!(leveled_foundation_z_delta(6), 1);
     }
 
     #[test]

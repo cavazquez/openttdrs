@@ -7,9 +7,10 @@ use bevy::image::ImagePlugin;
 use bevy::prelude::*;
 use openttdrs_core::prelude::*;
 use openttdrs_core::{
-    BridgeType, Climate, FOUNDATION_ORIGINAL_SPRITE_BASE, RailType, RoadTramType, RoadType,
-    StationClassId, StationSpecDef, StationSpecId, WaterClass, set_water_class_m1,
-    vanilla_road_type_catalog,
+    Action2VarAdjust, Action2VarEntry, Action2VarTerm, BridgeType, Climate, DecodedSprite,
+    FOUNDATION_ORIGINAL_SPRITE_BASE, IndustryTileGfxId, IndustryTileSpecDef, RailType,
+    RoadTramType, RoadType, StationClassId, StationSpecDef, StationSpecId, TrainSpriteAssign,
+    TrainSpriteGraphics, WaterClass, set_water_class_m1, vanilla_road_type_catalog,
 };
 
 const TEST_CLIMATE: Climate = Climate::Temperate;
@@ -2693,6 +2694,134 @@ fn spawn_industry_on_slope_spawns_foundation_layer() {
             },
         )
         .expect("industry slope");
+}
+
+#[test]
+fn sloped_newgrf_industry_overlay_is_child_of_foundation() {
+    let assets = boot_assets_app();
+    let mut map = Map::new_flat(4, 4, 0);
+    let c = |x: i32, y: i32| TileCoord::new(x, y);
+    map.set_height(c(1, 1), 7).expect("h");
+    for (x, y) in [(0, 0), (2, 0), (0, 2), (2, 2)] {
+        map.set_height(c(x, y), 4).expect("h");
+    }
+    let mut tile = tile_template();
+    tile.kind = TileKind::Industry;
+    tile.mapt = 0x80;
+    tile.m5 = 175; // primer slot IndustryTile NewGRF.
+    tile.m1 = 0x80;
+    map.set_tile(c(1, 1), tile).expect("tile");
+    let view = DecodedSprite {
+        width: 2,
+        height: 2,
+        x_offs: -1,
+        y_offs: -2,
+        rgba: vec![
+            255, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255,
+        ],
+        mask: Vec::new(),
+    };
+    let mut runtime = TrainSpriteGraphics {
+        sets: vec![vec![view.clone()]],
+        assigns: vec![TrainSpriteAssign {
+            local_id: 3,
+            set_id: 0,
+        }],
+        ..Default::default()
+    };
+    runtime.action2_var.insert(
+        0,
+        Action2VarEntry {
+            first: Action2VarTerm {
+                variable: 0x5F,
+                param: None,
+                adjust: Action2VarAdjust {
+                    and_mask: 0xFF,
+                    ..Default::default()
+                },
+            },
+            ops: Vec::new(),
+            ranges: Vec::new(),
+            default: 0,
+        },
+    );
+    let def = IndustryTileSpecDef {
+        gfx: IndustryTileGfxId(175),
+        subst_id: 0,
+        from_newgrf: true,
+        accepts_cargo_indices: Vec::new(),
+        accepts_cargo_labels: Vec::new(),
+        acceptance: Vec::new(),
+        callback_mask: 0,
+        animation_frames: 0,
+        animation_status: 0,
+        animation_speed: 0,
+        animation_triggers: 0,
+        animation_special_flags: 0,
+        newgrf_local_id: 3,
+        newgrf_grfid: 0,
+        newgrf_preview: Some(view.clone()),
+        newgrf_views: vec![view],
+        newgrf_runtime: Some(Box::new(runtime)),
+    };
+    let industry_catalog = vec![def];
+
+    let grid = RenderGrid::from_map(&map, 4, 4);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world
+        .run_system_once(
+            move |mut commands: Commands,
+                  m: Res<TsMap>,
+                  g: Res<TsGrid>,
+                  a: Res<TsAssets>,
+                  mut company: Local<CompanyColoredSprites>,
+                  mut images: Local<Assets<Image>>| {
+                let mut cache = crate::render::NewGrfIndustrySpriteCache::default();
+                spawn_industry_tile(
+                    &mut commands,
+                    &a.0,
+                    &m.0,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    4.0,
+                    &[],
+                    &mut company,
+                    &mut images,
+                    &industry_catalog,
+                    &openttdrs_core::empty_industry_tile_overrides(),
+                    Some(&mut cache),
+                    &[],
+                    None,
+                    &[],
+                );
+            },
+        )
+        .expect("newgrf industry slope");
+
+    let parents: Vec<_> = world
+        .query_filtered::<Entity, With<ViewportSortableParent>>()
+        .iter(&world)
+        .collect();
+    assert!(
+        !parents.is_empty(),
+        "la fundación debe crear un parent sortable"
+    );
+    let child_parents: Vec<_> = world
+        .query::<&ViewportSortableChild>()
+        .iter(&world)
+        .map(|child| child.parent)
+        .collect();
+    assert_eq!(
+        child_parents.len(),
+        1,
+        "el overlay NewGRF debe ser un child"
+    );
+    assert!(
+        parents.contains(&child_parents[0]),
+        "el overlay debe colgar de la fundación de industria"
+    );
 }
 
 /// `industry_land.h`: GFX 7 usa `s1=0xF54` / `SPR_FLAT_BARE_LAND` y el

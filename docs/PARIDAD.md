@@ -184,9 +184,11 @@ Los overlays de estación rail NewGRF se resuelven también en pendientes y se
 vinculan al parent de la fundación nivelada. Los objetos NewGRF ya reevalúan
 Action2 por tesela con random, offset de footprint, pendiente/terreno,
 animación y owner, y cachean por fingerprint. Los producers de industria y
-los layouts `TileSeq`/children completos de estación/objeto/industria, junto
-con las variables de town/vecindad/color/view y el sprite-stack de vehículos
-NewGRF, siguen pendientes de un contrato runtime completo.
+las industrias NewGRF ya usan sus offsets Action2 runtime y cuelgan el overlay
+del parent de la fundación nivelada cuando existe. Los layouts `TileSeq`/children
+completos de estación/objeto/industria, los callbacks de foundation específicos,
+las variables de town/vecindad/color/view y el sprite-stack de vehículos NewGRF
+siguen pendientes de un contrato runtime completo.
 Los focos naval
 `138,7..140,10` y de muelle `136,1..139,3` vinculan
 7/7 parents candidatos al orden final C++; es evidencia del contrato de cajas y

@@ -151,40 +151,6 @@ pub(crate) fn foundation_surface_overlay_pos(
     overlay_pos(ref_pos, xrel, yrel, w, h, surface_base_z, layer, tx, ty)
 }
 
-pub(crate) fn spawn_leveled_foundation(
-    commands: &mut Commands,
-    assets: &WorldAssets,
-    ctx: &TileRenderContext,
-    tileh: u8,
-    _foundation_newgrf: &[Option<openttdrs_core::DecodedSprite>],
-    _action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
-    _images: Option<&mut Assets<Image>>,
-) {
-    let Some(gfx) = foundation_gfx_for_tileh(tileh) else {
-        return;
-    };
-    let pos = overlay_pos(
-        ctx.iso_pos,
-        gfx.xrel,
-        gfx.yrel,
-        gfx.w,
-        gfx.h,
-        ctx.info.base_z,
-        0.36,
-        ctx.tx_i32(),
-        ctx.ty_i32(),
-    );
-    let Some(img) = assets.foundations.get((tileh - 1) as usize) else {
-        return;
-    };
-    commands.spawn((
-        MapVisualLayer,
-        ctx.map_tile_chunk(),
-        img.sprite(),
-        Transform::from_translation(pos),
-    ));
-}
-
 const SLOPE_STEEP: u8 = 0x10;
 const SLOPE_HALFTILE: u8 = 0x20;
 const SLOPE_W: u8 = 0x01;

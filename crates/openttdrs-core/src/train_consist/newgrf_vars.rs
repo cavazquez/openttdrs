@@ -46,6 +46,7 @@ pub fn cargo_class_bits(cargo: Option<CargoType>) -> u16 {
 /// Rellena `random_bits` / `consist_random_bits` y variables de vehículo MVP
 /// (`40`, `47`, `48`, `49`, `43`, `5F`, `B2`, `B4`, `B9`, `C0`, `C4`, `C6`, `C8`).
 #[must_use]
+#[allow(clippy::too_many_lines)]
 pub fn action2_eval_ctx_for_unit(
     vehicles: &[Vehicle],
     unit_id: u32,
@@ -76,6 +77,16 @@ pub fn action2_eval_ctx_for_unit(
     if let Some(unit) = current {
         ctx.relative_random_bits
             .insert(0, u32::from(unit.newgrf_random_bits));
+        fill_relative_vehicle_vars(
+            &mut ctx,
+            vehicles,
+            unit,
+            0,
+            unit,
+            tick,
+            engine_catalog,
+            owner_colour,
+        );
         let mut next = unit.next_unit;
         for distance in 1i16..=15 {
             let Some(id) = next else {
@@ -86,6 +97,16 @@ pub fn action2_eval_ctx_for_unit(
             };
             ctx.relative_random_bits
                 .insert(distance, u32::from(candidate.newgrf_random_bits));
+            fill_relative_vehicle_vars(
+                &mut ctx,
+                vehicles,
+                unit,
+                distance,
+                candidate,
+                tick,
+                engine_catalog,
+                owner_colour,
+            );
             next = candidate.next_unit;
         }
         let mut previous = unit.prev_unit;
@@ -98,6 +119,16 @@ pub fn action2_eval_ctx_for_unit(
             };
             ctx.relative_random_bits
                 .insert(-distance, u32::from(candidate.newgrf_random_bits));
+            fill_relative_vehicle_vars(
+                &mut ctx,
+                vehicles,
+                unit,
+                -distance,
+                candidate,
+                tick,
+                engine_catalog,
+                owner_colour,
+            );
             previous = candidate.prev_unit;
         }
     }
@@ -216,4 +247,75 @@ fn fill_vehicle_action2_vars(
 
     ctx.persistent_registers
         .clone_from(&unit.newgrf_persistent_regs);
+}
+
+/// Populate the relative vehicle tables used by Action2 variables `61`/`62`.
+///
+/// `61` is evaluated through registers `10F` (signed vehicle offset) and
+/// `10E` (secondary parameter), while `62` carries its signed offset in the
+/// term itself.  The table is deliberately derived from the same
+/// `fill_vehicle_action2_vars` snapshot as the self/parent scopes, avoiding a
+/// second source of cargo/build-year/consist-position values.
+#[allow(clippy::too_many_arguments)]
+fn fill_relative_vehicle_vars(
+    ctx: &mut Action2EvalCtx,
+    vehicles: &[Vehicle],
+    current: &Vehicle,
+    offset: i16,
+    candidate: &Vehicle,
+    tick: GameTick,
+    engine_catalog: &[EngineDef],
+    owner_colour: u8,
+) {
+    let mut candidate_ctx = Action2EvalCtx::default();
+    fill_vehicle_action2_vars(
+        &mut candidate_ctx,
+        vehicles,
+        candidate.id,
+        tick,
+        engine_catalog,
+        owner_colour,
+    );
+    for (&variable, &value) in &candidate_ctx.vars {
+        ctx.relative_vars.insert((offset, variable), value);
+    }
+    // Upstream exposes random bits through var 5F as random<<8 | triggers.
+    // Waiting triggers are not persisted in this model, so the low byte is
+    // intentionally zero while the random portion remains exact.
+    ctx.relative_vars
+        .insert((offset, 0x5F), u32::from(candidate.newgrf_random_bits) << 8);
+
+    let previous = offset < 0;
+    let direction = if previous {
+        crate::train_movement::dir_difference(candidate.direction, current.direction)
+    } else {
+        crate::train_movement::dir_difference(current.direction, candidate.direction)
+    };
+    let mut curvature = u32::from(direction.min(7));
+    if direction > 2 {
+        curvature |= 0x08;
+    }
+    if candidate.crashed {
+        curvature |= 0x80;
+    }
+    let (dx, dy) = if previous {
+        (
+            candidate.pos.x - current.pos.x,
+            candidate.pos.y - current.pos.y,
+        )
+    } else {
+        (
+            current.pos.x - candidate.pos.x,
+            current.pos.y - candidate.pos.y,
+        )
+    };
+    let dz = if previous {
+        i32::from(candidate.z_pos.unwrap_or(0)) - i32::from(current.z_pos.unwrap_or(0))
+    } else {
+        i32::from(current.z_pos.unwrap_or(0)) - i32::from(candidate.z_pos.unwrap_or(0))
+    };
+    curvature |= (dx.cast_unsigned() & 0xFF) << 8;
+    curvature |= (dy.cast_unsigned() & 0xFF) << 16;
+    curvature |= (dz.cast_unsigned() & 0xFF) << 24;
+    ctx.relative_vars.insert((offset, 0x62), curvature);
 }

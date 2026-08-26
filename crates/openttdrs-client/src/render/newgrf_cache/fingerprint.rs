@@ -48,6 +48,37 @@ pub(crate) fn runtime_fingerprint(
             .wrapping_add(u32::from(variable) << 16)
             .wrapping_add(u32::from(parameter) << 24);
     }
+    // Parent/relative scopes affect vehicle Action2 selection just as much as
+    // the self variables.  Hash them in sorted order so HashMap iteration
+    // cannot make a sprite cache key vary between frames.
+    h = h.wrapping_mul(31).wrapping_add(ctx.parent_random_bits);
+    let mut parent_vars: Vec<_> = ctx.parent_vars.iter().collect();
+    parent_vars.sort_unstable_by_key(|entry| *entry.0);
+    for (&variable, &value) in parent_vars {
+        h = h
+            .wrapping_mul(31)
+            .wrapping_add(value)
+            .wrapping_add(u32::from(variable) << 16);
+    }
+    let mut relative_vars: Vec<_> = ctx.relative_vars.iter().collect();
+    relative_vars.sort_unstable_by_key(|entry| *entry.0);
+    for (&(offset, variable), &value) in relative_vars {
+        h = h
+            .wrapping_mul(31)
+            .wrapping_add(value)
+            .wrapping_add(u32::from(variable) << 16)
+            .wrapping_add((offset as i32 as u32).rotate_left(7));
+    }
+    let mut relative_parameterized: Vec<_> = ctx.relative_parameterized_vars.iter().collect();
+    relative_parameterized.sort_unstable_by_key(|entry| *entry.0);
+    for (&(offset, variable, parameter), &value) in relative_parameterized {
+        h = h
+            .wrapping_mul(31)
+            .wrapping_add(value)
+            .wrapping_add(u32::from(variable) << 16)
+            .wrapping_add(u32::from(parameter) << 24)
+            .wrapping_add((offset as i32 as u32).rotate_left(11));
+    }
     for (i, &p) in ctx.grf_params.iter().enumerate().take(16) {
         h = h
             .wrapping_mul(31)
@@ -106,6 +137,29 @@ mod tests {
         assert_ne!(
             runtime_fingerprint(&first, vars::ROAD_STOP, false),
             runtime_fingerprint(&second, vars::ROAD_STOP, false)
+        );
+    }
+
+    #[test]
+    fn parent_and_relative_scopes_change_fingerprint() {
+        let mut first = Action2EvalCtx::default();
+        first.parent_vars.insert(0x40, 1);
+        first.relative_vars.insert((1, 0x40), 2);
+        let mut second = first.clone();
+        assert_eq!(
+            runtime_fingerprint(&first, vars::TRAIN, true),
+            runtime_fingerprint(&second, vars::TRAIN, true)
+        );
+        second.parent_vars.insert(0x40, 3);
+        assert_ne!(
+            runtime_fingerprint(&first, vars::TRAIN, true),
+            runtime_fingerprint(&second, vars::TRAIN, true)
+        );
+        second = first.clone();
+        second.relative_vars.insert((-1, 0x40), 4);
+        assert_ne!(
+            runtime_fingerprint(&first, vars::TRAIN, true),
+            runtime_fingerprint(&second, vars::TRAIN, true)
         );
     }
 }

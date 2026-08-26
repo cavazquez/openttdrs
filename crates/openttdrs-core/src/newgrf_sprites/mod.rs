@@ -617,6 +617,59 @@ mod tests {
     }
 
     #[test]
+    fn resolve_relative_vehicle_variables_61_and_62() {
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.action2_var.insert(
+            6,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x61,
+                    // Variable 61's parameter is the variable to read from
+                    // the selected vehicle; register 10F supplies its offset.
+                    param: Some(0x40),
+                    adjust: Action2VarAdjust {
+                        shift: 0,
+                        and_mask: 0xFF,
+                        add_val: None,
+                        divide_val: None,
+                        modulo_val: None,
+                    },
+                },
+                ops: Vec::new(),
+                ranges: vec![(10, 7, 7)],
+                default: 11,
+            },
+        );
+        gfx.action2_var.insert(
+            7,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x62,
+                    param: Some(1),
+                    adjust: Action2VarAdjust {
+                        shift: 0,
+                        and_mask: 0xFF,
+                        add_val: None,
+                        divide_val: None,
+                        modulo_val: None,
+                    },
+                },
+                ops: Vec::new(),
+                ranges: vec![(12, 3, 3)],
+                default: 13,
+            },
+        );
+        gfx.action2_to_action1
+            .extend([(10, 0), (11, 1), (12, 2), (13, 3)]);
+        let mut ctx = Action2EvalCtx::default();
+        ctx.registers_100.insert(0x10F, 1);
+        ctx.relative_vars.insert((1, 0x40), 7);
+        ctx.relative_vars.insert((1, 0x62), 3);
+        assert_eq!(gfx.resolve_action1_set_ctx(6, &mut ctx), 0);
+        assert_eq!(gfx.resolve_action1_set_ctx(7, &mut ctx), 2);
+    }
+
+    #[test]
     fn resolve_variational_ranges_with_ctx() {
         let mut gfx = TrainSpriteGraphics::default();
         gfx.action2_var.insert(

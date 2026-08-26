@@ -61,6 +61,33 @@ fn read_action2_var(
             let idx = usize::from(term.param.unwrap_or(0));
             Some(ctx.grf_params.get(idx).copied().unwrap_or(0))
         }
+        // Variable 61 selects a neighboring vehicle.  OpenTTD stores the
+        // signed offset in register 10F and the variable's secondary
+        // parameter in register 10E; the consist context precomputes the
+        // supported vehicle variables for each offset.
+        0x61 if !parent_scope => {
+            let target = term.param.unwrap_or(0);
+            let offset = signed_register(ctx, 0x10F);
+            let parameter =
+                u8::try_from(ctx.registers_100.get(&0x10E).copied().unwrap_or(0)).unwrap_or(0);
+            if target == 0x5F {
+                return ctx
+                    .relative_vars
+                    .get(&(offset, 0x5F))
+                    .copied()
+                    .or_else(|| ctx.relative_random_bits.get(&offset).map(|bits| bits << 8));
+            }
+            ctx.relative_parameterized_vars
+                .get(&(offset, target, parameter))
+                .copied()
+                .or_else(|| ctx.relative_vars.get(&(offset, target)).copied())
+        }
+        // Variable 62 encodes the signed relative vehicle offset directly in
+        // its parameter and returns the precomputed curvature/position word.
+        0x62 if !parent_scope => {
+            let offset = i16::from(i8::from_ne_bytes([term.param.unwrap_or(0)]));
+            ctx.relative_vars.get(&(offset, 0x62)).copied()
+        }
         v => {
             let (parameterized, variables) = if parent_scope {
                 (&ctx.parent_parameterized_vars, &ctx.parent_vars)
@@ -72,6 +99,19 @@ fn read_action2_var(
                 .or_else(|| variables.get(&v).copied())
         }
     }
+}
+
+fn signed_register(ctx: &Action2EvalCtx, index: u16) -> i16 {
+    ctx.registers_100.get(&index).copied().map_or(0, |value| {
+        let signed = i32::from_ne_bytes(value.to_ne_bytes());
+        i16::try_from(signed).unwrap_or_else(|_| {
+            if signed.is_negative() {
+                i16::MIN
+            } else {
+                i16::MAX
+            }
+        })
+    })
 }
 
 fn eval_term(
@@ -278,8 +318,6 @@ pub(super) fn eval_action2_random(entry: &Action2RandomEntry, ctx: &Action2EvalC
             let count = i16::from(entry.consist_count & 0x0F);
             let direction = (entry.consist_count >> 6) & 0x03;
             let offset = match direction {
-                // Count back (away from the engine), starting at self.
-                0 => count,
                 // Count forward (toward the engine), starting at self.
                 1 => -count,
                 // Count back, starting at the parent/engine.

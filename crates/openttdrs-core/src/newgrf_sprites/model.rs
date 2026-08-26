@@ -221,6 +221,12 @@ pub struct Action2EvalCtx {
     /// Positive offsets move toward `next_unit` (away from the engine), and
     /// negative offsets move toward `prev_unit` (toward the engine).
     pub relative_random_bits: HashMap<i16, u32>,
+    /// Feature variables exposed by neighboring vehicles, indexed by
+    /// `(signed_offset, variable)`.  This is the data source for Action2
+    /// variable `61`, whose offset is selected through register `0x10F`.
+    pub relative_vars: HashMap<(i16, u8), u32>,
+    /// Parameterized counterpart of [`Self::relative_vars`].
+    pub relative_parameterized_vars: HashMap<(i16, u8, u8), u32>,
     /// Registros temporales (variable `7D` / operador `\2sto`).
     pub temp_registers: HashMap<u8, u32>,
     /// Registros temporales extendidos (`0x100+`) escritos por `STO`.

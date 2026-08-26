@@ -175,6 +175,33 @@ impl RoadTypeDef {
         }
         Some(views[idx % views.len()].clone())
     }
+
+    /// Vista de un grupo Action3 específico de carretera (`ROTSG_*`).
+    ///
+    /// Los tipos pueden publicar sólo grupos como `ROTSG_BRIDGE` o
+    /// `ROTSG_OVERLAY`, sin asignación para la vista normal. Esos grupos se
+    /// deben conservar para los draw-procs que los solicitan explícitamente.
+    pub fn newgrf_specific_view_runtime(
+        &self,
+        selector: u8,
+        idx: usize,
+        ctx: &mut crate::newgrf_sprites::Action2EvalCtx,
+    ) -> Option<crate::newgrf_sprites::DecodedSprite> {
+        let runtime = self.newgrf_runtime.as_ref()?;
+        let views = runtime.views_for_specific_ctx(self.newgrf_local_id, selector, ctx)?;
+        if views.is_empty() {
+            return None;
+        }
+        Some(views[idx % views.len()].clone())
+    }
+
+    /// Indica si el tipo trae un grupo Action3 específico para el selector.
+    #[must_use]
+    pub fn has_newgrf_specific_group(&self, selector: u8) -> bool {
+        self.newgrf_runtime
+            .as_ref()
+            .is_some_and(|runtime| runtime.has_specific_assignment(self.newgrf_local_id, selector))
+    }
 }
 
 /// Catálogo vanilla (Road + Tram).

@@ -13,11 +13,13 @@ use crate::render::newgrf_cache::{
 #[derive(Resource, Default)]
 pub(crate) struct NewGrfRoadSpriteCache {
     handles: HashMap<(u8, u8, u32), Handle<Image>>,
+    specific_handles: HashMap<(u8, u8, u8, u32), Handle<Image>>,
 }
 
 impl NewGrfRoadSpriteCache {
     pub(crate) fn clear(&mut self) {
         self.handles.clear();
+        self.specific_handles.clear();
     }
 
     /// Textura re-resolviendo Action2 con vars de tesela.
@@ -42,6 +44,36 @@ impl NewGrfRoadSpriteCache {
         let key = (def.id.as_u8(), idx, fp);
         Some(
             self.handles
+                .entry(key)
+                .or_insert_with(|| {
+                    images.add(decoded_sprite_image(&view, DecodedSpriteImagePolicy::Raw))
+                })
+                .clone(),
+        )
+    }
+
+    /// Textura de un grupo Action3 específico (`ROTSG_*`) con vars de tesela.
+    /// El selector forma parte de la clave: dos grupos del mismo roadtype
+    /// pueden resolver sets distintos para bridge/overlay/catenaria.
+    #[allow(dead_code)] // Lo consume el draw-proc de puentes del siguiente bloque.
+    pub(crate) fn handle_for_specific_runtime(
+        &mut self,
+        def: &RoadTypeDef,
+        selector: u8,
+        view_idx: usize,
+        ctx: &mut openttdrs_core::Action2EvalCtx,
+        images: &mut Assets<Image>,
+    ) -> Option<Handle<Image>> {
+        let fp = if def.newgrf_runtime.is_some() {
+            runtime_fingerprint(ctx, vars::ROAD, false)
+        } else {
+            0
+        };
+        let view = def.newgrf_specific_view_runtime(selector, view_idx, ctx)?;
+        let idx = u8::try_from(view_idx).unwrap_or(u8::MAX);
+        let key = (def.id.as_u8(), selector, idx, fp);
+        Some(
+            self.specific_handles
                 .entry(key)
                 .or_insert_with(|| {
                     images.add(decoded_sprite_image(&view, DecodedSpriteImagePolicy::Raw))
@@ -222,5 +254,80 @@ mod tests {
 
         tile = set_tram_road_type_on_tile(tile, Some(openttdrs_core::RoadType::TRAM));
         assert!(newgrf_tram_def_for_tile(&state.road_type_catalog, tile).is_none());
+    }
+
+    #[test]
+    fn specific_bridge_group_survives_roadtype_catalog_and_uses_selector_cache() {
+        use openttdrs_core::newgrf_sprites::{
+            DecodedSprite, TrainSpriteAssign, TrainSpriteGraphics,
+        };
+        use openttdrs_core::{RoadTramType, RoadType};
+
+        let sprite = DecodedSprite {
+            width: 1,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: vec![255, 0, 0, 255],
+            mask: Vec::new(),
+        };
+        let mut graphics = TrainSpriteGraphics {
+            sets: vec![vec![sprite.clone()], vec![sprite.clone()]],
+            assigns: vec![TrainSpriteAssign {
+                local_id: 0,
+                set_id: 0,
+            }],
+            ..TrainSpriteGraphics::default()
+        };
+        graphics.specific_assigns.insert((0, 6), 1); // ROTSG_BRIDGE
+        let mut def = RoadTypeDef {
+            id: RoadType::from_u8(2),
+            class: RoadTramType::Road,
+            label: "Bridge only".into(),
+            short_label: "BRDG".into(),
+            intro_year: 0,
+            max_speed: 0,
+            cost_multiplier: 0,
+            maintenance_multiplier: 0,
+            flags: 0,
+            powered_mask: 1 << 2,
+            from_tramtypes_feature: false,
+            from_newgrf: true,
+            newgrf_preview: None,
+            newgrf_views: Vec::new(),
+            newgrf_local_id: 0,
+            newgrf_runtime: Some(Box::new(graphics)),
+            newgrf_grfid: 0,
+            newgrf_type_tables: None,
+        };
+        assert!(def.has_newgrf_specific_group(6));
+        let mut ctx = openttdrs_core::Action2EvalCtx::default();
+        assert_eq!(
+            def.newgrf_specific_view_runtime(6, 0, &mut ctx)
+                .expect("bridge view")
+                .rgba,
+            sprite.rgba
+        );
+
+        let mut images = Assets::<Image>::default();
+        let mut cache = NewGrfRoadSpriteCache::default();
+        let first = cache
+            .handle_for_specific_runtime(&def, 6, 0, &mut ctx, &mut images)
+            .expect("bridge handle");
+        let second = cache
+            .handle_for_specific_runtime(&def, 6, 0, &mut ctx, &mut images)
+            .expect("cached bridge handle");
+        assert_eq!(first, second);
+        // El selector es parte de la clave; un grupo distinto no debe
+        // reutilizar accidentalmente la textura del puente.
+        def.newgrf_runtime
+            .as_mut()
+            .expect("runtime")
+            .specific_assigns
+            .insert((0, 1), 0);
+        let overlay = cache
+            .handle_for_specific_runtime(&def, 1, 0, &mut ctx, &mut images)
+            .expect("overlay handle");
+        assert_ne!(first, overlay);
     }
 }

@@ -60,7 +60,15 @@ pub fn apply_newgrf_road_types(state: &mut GameState, search_dirs: &[&Path]) {
                 .map(<[crate::newgrf_sprites::DecodedSprite]>::to_vec)
                 .unwrap_or_default();
             let preview = views.first().cloned();
-            let newgrf_runtime = if gfx.needs_runtime_resolve() {
+            // Algunos roadtypes no tienen asignación default: publican sólo
+            // grupos Action3 específicos (`ROTSG_BRIDGE`, `ROTSG_OVERLAY`,
+            // catenaria, etc.). Conservamos el grafo completo para que los
+            // draw-procs que pidan esos selectores no caigan a vanilla.
+            let has_specific_group = gfx
+                .specific_assigns
+                .keys()
+                .any(|(specific_local_id, _)| *specific_local_id == local_id);
+            let newgrf_runtime = if gfx.needs_runtime_resolve() || has_specific_group {
                 Some(Box::new(gfx.clone()))
             } else {
                 None

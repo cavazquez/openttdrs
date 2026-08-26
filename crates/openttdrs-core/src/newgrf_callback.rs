@@ -343,6 +343,13 @@ fn trigger_vehicle_randomisation_chain_step(
     match trigger {
         VehicleRandomTrigger::NewCargo => {
             if let Some(head) = vehicle_chain_head_id(vehicles, id) {
+                // `NewCargo` first applies to the unit that picked up the
+                // cargo and then raises `AnyNewCargo` from the front of the
+                // consist.  The nested walk needs its own cycle guard: when
+                // the picked-up unit is already the front unit, the outer
+                // `seen` set already contains that id but the nested event
+                // must still be evaluated for it.
+                let mut any_new_cargo_seen = HashSet::new();
                 let (next_changed, _) = trigger_vehicle_randomisation_chain_step(
                     vehicles,
                     catalog,
@@ -352,7 +359,7 @@ fn trigger_vehicle_randomisation_chain_step(
                     tick,
                     random,
                     false,
-                    seen,
+                    &mut any_new_cargo_seen,
                 );
                 changed |= next_changed;
             }
@@ -2154,6 +2161,62 @@ mod tests {
         assert_eq!(vehicles[0].newgrf_random_bits & 0x8000, 0x8000);
         assert_eq!(vehicles[1].newgrf_random_bits & 0x8000, 0x8000);
         assert_eq!(vehicles[2].newgrf_random_bits & 0x8000, 0x8000);
+    }
+
+    #[test]
+    fn callbacks_ac_vehicle_new_cargo_runs_any_new_cargo_from_chain_head() {
+        let mut engine = engines_table()
+            .iter()
+            .find(|e| e.kind == VehicleKind::Train && e.power_hp > 0)
+            .cloned()
+            .unwrap();
+        engine.newgrf_grfid = 0x4E45_5743;
+        engine.newgrf_local_id = 0;
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 2,
+        });
+        gfx.action2_random.insert(
+            2,
+            Action2RandomEntry {
+                typ: 0x80,
+                consist_count: 0,
+                triggers: VehicleRandomTrigger::AnyNewCargo.mask(),
+                randbit: 8,
+                sets: vec![0x8000, 0x8001],
+            },
+        );
+        engine.newgrf_runtime = Some(Box::new(gfx));
+        let mut vehicle = Vehicle::new(
+            46,
+            VehicleKind::Train,
+            TileCoord::new(2, 3),
+            TileCoord::new(2, 3),
+        );
+        vehicle.engine_id = Some(engine.id);
+        vehicle.newgrf_random_bits = 0x8000;
+        let vehicle_id = vehicle.id;
+        assert!(trigger_vehicle_randomisation_chain(
+            std::slice::from_mut(&mut vehicle),
+            vehicle_id,
+            std::slice::from_ref(&engine),
+            VehicleRandomTrigger::NewCargo,
+            99,
+            7,
+        ));
+        // No group in this fixture consumes the outer `NewCargo` bit; the
+        // nested `AnyNewCargo` group must still run and consume only its bit.
+        assert_eq!(
+            vehicle.newgrf_waiting_random_triggers,
+            VehicleRandomTrigger::NewCargo.mask()
+        );
+        let salt = u64::from(vehicle.id) ^ (u64::from(VehicleRandomTrigger::NewCargo as u8) << 32);
+        let high = crate::map::industry_tile_rng(99, 7, vehicle.pos, salt ^ 0xA5A5_5A5A);
+        assert_eq!(
+            vehicle.newgrf_random_bits & 0x0100,
+            u16::from(high) << 8 & 0x0100
+        );
     }
 
     #[test]

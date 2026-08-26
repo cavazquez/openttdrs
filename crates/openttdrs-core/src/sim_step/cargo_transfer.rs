@@ -1,4 +1,4 @@
-use crate::vehicle::{OrderUnloadType, VehicleKind};
+use crate::vehicle::{OrderUnloadType, VehicleKind, VehicleRandomTrigger};
 use crate::{CargoType, GameState, TileCoord, TileKind, economy, station, town};
 
 /// Obtiene (o crea) el pago de la cabeza de convoy que está atendiendo una
@@ -101,6 +101,63 @@ fn trigger_station_vehicle_load_animation(
         crate::StationAnimationTrigger::VehicleLoads,
         None,
     );
+}
+
+/// Ejecuta la cadena de randomización de vehículo para un evento económico.
+///
+/// Los eventos de carga/descarga deben pasar por la cabeza del consist cuando
+/// corresponde (`NewCargo`/`Empty`), pero la función común también acepta una
+/// unidad concreta para que `NewCargo` pueda evaluar primero el vehículo que
+/// tomó la carga. Mantener el puente aquí evita que cada camino de carga
+/// replique la combinación de catálogo, semilla y tick.
+fn trigger_vehicle_randomisation_event(
+    state: &mut GameState,
+    vehicle_id: u32,
+    trigger: VehicleRandomTrigger,
+) {
+    let world_seed = state.world_seed;
+    let tick = state.tick.get();
+    let _ = crate::newgrf_callback::trigger_vehicle_randomisation_chain(
+        &mut state.vehicles,
+        vehicle_id,
+        &state.engine_catalog,
+        trigger,
+        world_seed,
+        tick,
+    );
+}
+
+/// Dispara `Empty` exactamente al vaciarse por completo un consist.
+///
+/// El bucle de descarga visita las unidades de forma independiente; por eso
+/// sólo se llama después de sincronizar una unidad que quedó vacía y se
+/// comprueba el estado de toda la cadena. En el tick en que se vacía la última
+/// unidad, ninguna iteración posterior puede volver a entrar aquí porque su
+/// carga ya es cero.
+fn trigger_vehicle_empty_if_consist_empty(state: &mut GameState, vehicle_idx: usize) {
+    let Some(vehicle) = state.vehicles.get(vehicle_idx) else {
+        return;
+    };
+    if vehicle.cargo != 0 {
+        return;
+    }
+    let vehicle_id = vehicle.id;
+    let Some(head_id) = crate::consist_head_id(&state.vehicles, vehicle_id) else {
+        return;
+    };
+    let unit_ids = crate::consist_unit_ids(&state.vehicles, head_id);
+    if unit_ids.is_empty()
+        || !unit_ids.iter().all(|id| {
+            state
+                .vehicles
+                .iter()
+                .find(|candidate| candidate.id == *id)
+                .is_some_and(|candidate| candidate.cargo == 0)
+        })
+    {
+        return;
+    }
+    trigger_vehicle_randomisation_event(state, head_id, VehicleRandomTrigger::Empty);
 }
 
 fn vehicle_load_unload_speed(state: &mut GameState, vehicle_idx: usize, cargo: CargoType) -> u32 {
@@ -471,6 +528,9 @@ pub(super) fn unload_vehicles(
         } else {
             state.vehicles[i].cargo_unloading = true;
         }
+        if state.vehicles[i].cargo == 0 {
+            trigger_vehicle_empty_if_consist_empty(state, i);
+        }
     }
 
     // El pipeline Demand + MCF es global y costoso. Todas las descargas del tick
@@ -662,6 +722,10 @@ fn try_load_from_industry(
     );
     packet.update_loading_tile(station_pos);
     let first_pickup = state.vehicles[vehicle_idx].cargo == 0;
+    if first_pickup {
+        let vehicle_id = state.vehicles[vehicle_idx].id;
+        trigger_vehicle_randomisation_event(state, vehicle_id, VehicleRandomTrigger::NewCargo);
+    }
     state.vehicles[vehicle_idx].cargo_packets.push(packet);
     state.vehicles[vehicle_idx].mark_cargo_loaded(source);
     state.vehicles[vehicle_idx].sync_cargo_from_packets();
@@ -829,6 +893,10 @@ fn try_load_from_station_waiting_cargo(
         .cargo_packets
         .consume_reserved(loaded_units);
     let first_pickup = state.vehicles[vehicle_idx].cargo == 0;
+    if first_pickup {
+        let vehicle_id = state.vehicles[vehicle_idx].id;
+        trigger_vehicle_randomisation_event(state, vehicle_id, VehicleRandomTrigger::NewCargo);
+    }
     state.vehicles[vehicle_idx]
         .cargo_packets
         .append_packets(taken);

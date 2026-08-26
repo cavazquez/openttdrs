@@ -84,7 +84,8 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
   Action3 anterior, aplican primero el cargo específico y luego el grupo
   default, y sólo cruzan motores del mismo GRFID. El registro `0x100` ya
   termina explícitamente las secuencias SpriteStack (bit 31); quedan
-  pendientes su paleta, callbacks y los scopes completos de consist.
+  pendientes las paletas especiales (2CC/crash), callbacks y los scopes
+  completos de consist.
 - Estaciones rail NewGRF: los tiletypes Action1/2/3 se dibujan también en
   pendientes y el overlay queda como child de la fundación nivelada, igual que
   la vía/PBS. Los layouts `TileSeq` con varias cajas y children siguen siendo
@@ -125,4 +126,5 @@ resuelve para la cabeza real del consist, sólo cuando ambos motores pertenecen
 al mismo GRFID. La selección respeta el orden de OpenTTD (cargo específico
 antes del default) y cae al sprite propio si no existe coincidencia. La
 terminación SpriteStack por registro `0x100` (bit 31) ya está implementada;
-siguen abiertos su paleta, scopes y callbacks/layouts sin call site completo.
+siguen abiertas las paletas especiales (2CC/crash), scopes y callbacks/layouts
+sin call site completo.

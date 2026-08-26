@@ -259,8 +259,8 @@ resuelven grupos Action2 real para estados loaded/loading y, con el bit de
 sprite-stack de Action0, emiten hasta ocho children por unidad controlados por
 la variable `0x10` y respetan la terminación explícita del registro `0x100`
 (bit 31). Los wagon overrides de Action3 ya se resuelven por cadena de motor,
-cargo y grupo default; su paleta, callbacks y scopes completos siguen fuera
-del contrato.
+cargo y grupo default; las paletas especiales (2CC/crash), callbacks y scopes
+completos siguen fuera del contrato.
 
 ### Revalidación: catenaria de estaciones ferroviarias de Kale
 

@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
-use openttdrs_core::{DecodedSprite, bake_sprite_company_mask};
+use openttdrs_core::{DecodedSprite, bake_sprite_company_mask, bake_sprite_company_palette};
 
 use crate::sprites::CompanyColour;
 
@@ -15,6 +15,8 @@ pub(crate) enum DecodedSpriteImagePolicy {
     Masked { colour: CompanyColour },
     /// Máscara opcional con el color de compañía (industria / estación).
     MaskedAndRecolored { colour: Option<CompanyColour> },
+    /// PaletteID de compañía explícita (`775..=790`) escrita por Action2.
+    CompanyPalette { colour: CompanyColour },
 }
 
 pub(crate) fn decoded_sprite_image(
@@ -37,6 +39,9 @@ pub(crate) fn decoded_sprite_image(
                 let c = colour.map(CompanyColour::as_u8).unwrap_or(0);
                 bake_sprite_company_mask(sprite, c)
             }
+        }
+        DecodedSpriteImagePolicy::CompanyPalette { colour } => {
+            bake_sprite_company_palette(sprite, colour.as_u8())
         }
     };
     Image::new(
@@ -96,5 +101,18 @@ mod tests {
             },
         );
         assert_eq!(img.data.as_deref(), Some(&[8, 24, 88, 255][..]));
+    }
+
+    #[test]
+    fn explicit_company_palette_recolours_palette_only_sprite() {
+        let sprite = sprite_with_rgba(vec![8, 24, 88, 255]); // author ramp, shade 0
+        let img = decoded_sprite_image(
+            &sprite,
+            DecodedSpriteImagePolicy::CompanyPalette {
+                colour: CompanyColour::Green,
+            },
+        );
+        assert_ne!(img.data.as_deref(), Some(&[8, 24, 88, 255][..]));
+        assert_eq!(img.data.as_deref().map(|rgba| rgba[3]), Some(255));
     }
 }

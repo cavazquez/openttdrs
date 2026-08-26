@@ -434,6 +434,36 @@ pub fn bake_sprite_company_mask(sprite: &DecodedSprite, company_colour: u8) -> V
     rgba
 }
 
+/// Hornea una paleta de compañía explícita (`PALETTE_RECOLOUR_START + colour`)
+/// sobre un sprite que conserva sus colores DOS.
+///
+/// Los sprites 8bpp no tienen canal de máscara: el índice de la rampa autora
+/// ya está convertido a RGB por [`indices_to_rgba`]. En ese caso se puede
+/// aplicar la misma transformación que hace el blitter de `OpenTTD` buscando
+/// los ocho colores exactos de la rampa 198..205. Los sprites 32bpp con canal
+/// de paleta siguen usando [`bake_sprite_company_mask`], que conserva su
+/// máscara y sus brillos.
+#[must_use]
+pub fn bake_sprite_company_palette(sprite: &DecodedSprite, company_colour: u8) -> Vec<u8> {
+    if !sprite.mask.is_empty() {
+        return bake_sprite_company_mask(sprite, company_colour);
+    }
+    let company = usize::from(company_colour) % COMPANY_COLOUR_COUNT;
+    let mut rgba = sprite.rgba.clone();
+    let (pixels, _) = rgba.as_chunks_mut::<4>();
+    for pixel in pixels {
+        let rgb = [pixel[0], pixel[1], pixel[2]];
+        let Some(shade) = (0..COMPANY_RAMP_SHADES)
+            .find(|&shade| rgb == DOS_PALETTE_RGB[usize::from(AUTHOR_CC_PALETTE_FIRST) + shade])
+        else {
+            continue;
+        };
+        let target = COMPANY_RAMP_RGB[company * COMPANY_RAMP_SHADES + shade];
+        pixel[..3].copy_from_slice(&target);
+    }
+    rgba
+}
+
 /// Decodifica imagen de sprite section v2 (8bpp / 32bpp / máscara / chunked).
 ///
 /// Devuelve `(zoom, sprite)`.

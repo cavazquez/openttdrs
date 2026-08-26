@@ -29,7 +29,7 @@ pub use model::{
 // Re-exportar funciones de runtime de pixel_codec
 pub use pixel_codec::{
     SPRITE_V2_ZOOM_PREFERENCE, apply_company_colour_mask, bake_sprite_company_mask,
-    decode_chunked_8bpp, decode_chunked_pixels, decode_real_sprite_v1,
+    bake_sprite_company_palette, decode_chunked_8bpp, decode_chunked_pixels, decode_real_sprite_v1,
     decode_real_sprite_v1_uncompressed, decode_real_sprite_v2_section,
     decode_real_sprite_v2_section_zoom, decompress_grf_lz77, encode_chunked_8bpp_full_rows,
     encode_chunked_pixels_full_rows, index_sprite_section, indices_to_rgba, resolve_fd_sprite,
@@ -107,7 +107,7 @@ mod tests {
         ACTION0_FEATURE_ROADTYPES, ACTION0_FEATURE_TRAINS, build_action0_roadtype_payload,
         build_action0_train_payload,
     };
-    use crate::newgrf_company_ramp::AUTHOR_CC_PALETTE_FIRST;
+    use crate::newgrf_company_ramp::{AUTHOR_CC_PALETTE_FIRST, COMPANY_RAMP_RGB};
     use crate::vehicle::Vehicle;
 
     use action_graph::{parse_action2_basic, parse_action2_random, parse_action2_variational};
@@ -990,6 +990,19 @@ mod tests {
         // Pixel 0 masked → rampa red; pixel 1 sin máscara.
         assert_ne!(&baked[0..3], &rgba[0..3]);
         assert_eq!(&baked[4..8], &rgba[4..8]);
+    }
+
+    #[test]
+    fn bake_company_palette_remaps_palette_only_sprite() {
+        let indices = [AUTHOR_CC_PALETTE_FIRST, AUTHOR_CC_PALETTE_FIRST + 7, 174];
+        let entry = build_sprite_section_palette_entry(13, 0, 3, 1, 0, 0, &indices);
+        let index = index_sprite_section(&entry);
+        let sprite = resolve_fd_sprite(&index, 13).unwrap();
+        assert!(sprite.mask.is_empty());
+        let baked = bake_sprite_company_palette(&sprite, 4); // Red
+        assert_eq!(&baked[0..3], &COMPANY_RAMP_RGB[4 * 8]);
+        assert_eq!(&baked[4..7], &COMPANY_RAMP_RGB[4 * 8 + 7]);
+        assert_eq!(&baked[8..11], &sprite.rgba[8..11]);
     }
 
     #[test]

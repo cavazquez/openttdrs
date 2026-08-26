@@ -131,7 +131,7 @@ aeronaves también aplican sus offsets NFO al ancla, igual que los trenes. Los
 grupos Action2 real distinguen loaded/loading y el bit de sprite-stack NewGRF
 crea hasta ocho children por unidad mediante la variable `0x10`; la terminación
 explícita del stack mediante el registro `0x100` (bit 31) ya se respeta,
-mientras que la paleta/callbacks siguen OOS. Los wagon overrides de Action3 ya se
+mientras que las paletas especiales (2CC/crash) y callbacks siguen OOS. Los wagon overrides de Action3 ya se
 resuelven por cadena de motor, cargo y grupo default durante el render de
 vehículos; quedan fuera los scopes completos y los callbacks que aún no tienen
 call site.
@@ -207,8 +207,8 @@ random/triggers) y registran el edificio con bounds conservadoras como parent
 sortable; el suelo/layout propio y las variables de pueblo/vecindad aún usan
 el sustituto vanilla. Los layouts `TileSeq`/children completos de
 estación/objeto/industria/casa, los callbacks de foundation específicos,
-color/view y la paleta de vehículos NewGRF siguen pendientes de un contrato
-runtime completo. El sprite-stack de vehículos ya resuelve grupos
+color/view y las paletas especiales de vehículos NewGRF siguen pendientes de
+un contrato runtime completo. El sprite-stack de vehículos ya resuelve grupos
 Action2 real (loaded/loading) y materializa hasta ocho capas como children
 ordenados por unidad. La compra y el autoreemplazo de trenes y vehículos de
 carretera materializan las piezas articuladas y enlazan la cadena; el

@@ -154,8 +154,8 @@ fn overriding_engine_local_id(
 /// Caché in-world / preview: `(engine_id, view_idx, company_colour)` → textura.
 #[derive(Resource, Default)]
 pub(crate) struct NewGrfTrainSpriteCache {
-    /// `(engine_id, view_idx, colour, stack, runtime_fp)` → textura.
-    handles: HashMap<(u16, u8, u8, u8, u32), Handle<Image>>,
+    /// `(engine_id, view_idx, colour, stack, palette, runtime_fp)` → textura.
+    handles: HashMap<(u16, u8, u8, u8, u16, u32), Handle<Image>>,
 }
 
 impl NewGrfTrainSpriteCache {
@@ -178,7 +178,7 @@ impl NewGrfTrainSpriteCache {
     ) -> Option<Handle<Image>> {
         let view = engine.newgrf_view(dir)?;
         let view_idx = u8::try_from(dir % engine.newgrf_views.len()).unwrap_or(0);
-        let key = (engine.id, view_idx, colour.as_u8(), 0, 0);
+        let key = (engine.id, view_idx, colour.as_u8(), 0, 0, 0);
         Some(
             self.handles
                 .entry(key)
@@ -271,7 +271,13 @@ impl NewGrfTrainSpriteCache {
                         &mut stack_ctx,
                     )
                 });
-            let register_100 = stack_ctx.registers_100.get(&0x100).copied();
+            let register_100 = engine
+                .sprite_stack
+                .then(|| stack_ctx.registers_100.get(&0x100).copied())
+                .flatten();
+            let palette_id = register_100
+                .and_then(|value| u16::try_from(value & 0xFFFF).ok())
+                .unwrap_or(0);
             let Some(views) = views else {
                 if register_100.is_some_and(|value| value & 0x8000_0000 != 0) {
                     continue;
@@ -295,16 +301,33 @@ impl NewGrfTrainSpriteCache {
             let view_idx = u8::try_from(dir % views.len()).unwrap_or(0);
             let fp = runtime_fingerprint(&stack_ctx, vars::TRAIN, true);
             let stack_idx = u8::try_from(stack).unwrap_or(u8::MAX);
-            let key = (engine.id, view_idx, colour.as_u8(), stack_idx, fp);
+            let key = (
+                engine.id,
+                view_idx,
+                colour.as_u8(),
+                stack_idx,
+                palette_id,
+                fp,
+            );
+            let image_policy = if palette_id == 0 {
+                DecodedSpriteImagePolicy::Masked { colour }
+            } else if (775..=790).contains(&palette_id) {
+                let palette_colour =
+                    CompanyColour::from_u8(u8::try_from(palette_id - 775).unwrap_or(0));
+                DecodedSpriteImagePolicy::CompanyPalette {
+                    colour: palette_colour,
+                }
+            } else {
+                // Other PaletteIDs (2CC, crash, pulsating overlays) require
+                // a palette table that Bevy does not currently expose. Keep
+                // the decoded pixels instead of applying the owner's colour
+                // to a palette chosen explicitly by the GRF.
+                DecodedSpriteImagePolicy::Raw
+            };
             let handle = self
                 .handles
                 .entry(key)
-                .or_insert_with(|| {
-                    images.add(decoded_sprite_image(
-                        &view,
-                        DecodedSpriteImagePolicy::Masked { colour },
-                    ))
-                })
+                .or_insert_with(|| images.add(decoded_sprite_image(&view, image_policy)))
                 .clone();
             layers.push(NewGrfVehicleLayer {
                 handle,

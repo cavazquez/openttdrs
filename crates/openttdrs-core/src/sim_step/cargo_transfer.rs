@@ -177,6 +177,88 @@ fn vehicle_load_unload_speed(state: &mut GameState, vehicle_idx: usize, cargo: C
         .map_or_else(|| crate::cargo_packet::load_unload_speed(cargo), u32::from)
 }
 
+/// Refresca las capacidades que pueden cambiar mediante CB36 antes de
+/// `LoadUnloadStation`.
+///
+/// `OpenTTD` vuelve a consultar `GetCapacity` durante la fase de carga, no sólo
+/// al comprar o refitar. Esto es observable para callbacks que dependen del
+/// cargo actual, de registros persistentes o del estado del vehículo. Los
+/// consist ferroviarios se recalculan de una vez (la cabeza conserva la suma y
+/// cada vagón recibe su capacidad propia); las otras clases actualizan su
+/// unidad directamente. Los motores vanilla y los `NewGRF` sin runtime quedan
+/// intactos para preservar el camino legacy.
+fn refresh_runtime_vehicle_capacities(state: &mut GameState) {
+    let train_heads: Vec<u32> = state
+        .vehicles
+        .iter()
+        .filter(|vehicle| vehicle.kind == VehicleKind::Train && vehicle.is_consist_head())
+        .filter_map(|vehicle| {
+            let ids = state.runtime.fleet_index.consist(vehicle.id);
+            let has_newgrf_capacity = ids.iter().any(|id| {
+                state
+                    .runtime
+                    .fleet_index
+                    .slot(*id)
+                    .and_then(|slot| state.vehicles.get(slot))
+                    .and_then(|unit| unit.engine_id)
+                    .and_then(|engine_id| {
+                        crate::engine::engine_in_catalog(&state.engine_catalog, engine_id)
+                    })
+                    .is_some_and(|engine| {
+                        engine.newgrf_grfid != 0 && engine.newgrf_runtime.is_some()
+                    })
+            });
+            has_newgrf_capacity.then_some(vehicle.id)
+        })
+        .collect();
+
+    for head_id in train_heads {
+        crate::train_consist::consist_changed_with_map_and_catalog(
+            &mut state.vehicles,
+            head_id,
+            Some(&state.map),
+            &state.engine_catalog,
+        );
+    }
+
+    for index in 0..state.vehicles.len() {
+        if state.vehicles[index].kind == VehicleKind::Train {
+            continue;
+        }
+        let Some(engine_id) = state.vehicles[index].engine_id else {
+            continue;
+        };
+        let Some(engine) =
+            crate::engine::engine_in_catalog(&state.engine_catalog, engine_id).cloned()
+        else {
+            continue;
+        };
+        if engine.newgrf_grfid == 0 || engine.newgrf_runtime.is_none() {
+            continue;
+        }
+        let Some(raw_capacity) = crate::newgrf_callback::resolve_vehicle_capacity_property_callback(
+            &engine,
+            &mut state.vehicles[index],
+        ) else {
+            continue;
+        };
+        let cargo = state.vehicles[index].cargo_type.or(engine.cargo).unwrap_or(
+            match state.vehicles[index].kind {
+                VehicleKind::Bus | VehicleKind::Tram | VehicleKind::Aircraft => {
+                    CargoType::Passengers
+                }
+                VehicleKind::Truck | VehicleKind::Ship => CargoType::Goods,
+                VehicleKind::Train => unreachable!("trenes se actualizan por consist"),
+            },
+        );
+        state.vehicles[index].capacity = crate::cargo_spec::apply_cargo_capacity_multiplier(
+            raw_capacity,
+            &state.cargo_spec_catalog,
+            cargo,
+        );
+    }
+}
+
 #[allow(clippy::too_many_lines)]
 pub(super) fn unload_vehicles(
     state: &mut GameState,
@@ -184,6 +266,7 @@ pub(super) fn unload_vehicles(
     loaded_this_tick: &[bool],
     unloaded_this_tick: &mut [bool],
 ) {
+    refresh_runtime_vehicle_capacities(state);
     let mut link_graph_dirty = false;
     for (i, loaded_flag) in loaded_this_tick
         .iter()
@@ -1142,6 +1225,36 @@ fn station_has_industry_waiting(
 mod tests {
     use super::*;
 
+    fn cb36_literal_runtime(value: u16) -> crate::newgrf_sprites::TrainSpriteGraphics {
+        use crate::newgrf_sprites::{
+            Action2VarAdjust, Action2VarEntry, Action2VarTerm, TrainSpriteAssign,
+        };
+
+        let mut gfx = crate::newgrf_sprites::TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 2,
+        });
+        gfx.action2_var.insert(
+            2,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x1A,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        shift: 0,
+                        and_mask: u32::from(value),
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
+        gfx
+    }
+
     fn cb140_trigger_byte_runtime() -> crate::newgrf_sprites::TrainSpriteGraphics {
         use crate::newgrf_sprites::{
             Action2VarAdjust, Action2VarEntry, Action2VarTerm, TrainSpriteAssign,
@@ -1273,6 +1386,43 @@ mod tests {
             vehicle_load_unload_speed(&mut state, 0, CargoType::Passengers),
             3
         );
+    }
+
+    #[test]
+    fn capacity_callback_is_refreshed_during_cargo_phase() {
+        let mut state = GameState::new(4, 4);
+        let mut engine = crate::engine::engines_table()
+            .iter()
+            .find(|engine| engine.kind == VehicleKind::Bus)
+            .cloned()
+            .unwrap();
+        engine.id = 65_101;
+        engine.newgrf_grfid = 0x4341_5036;
+        engine.newgrf_local_id = 0;
+        engine.newgrf_runtime = Some(Box::new(cb36_literal_runtime(42)));
+        state.engine_catalog.push(engine.clone());
+
+        let mut bus = crate::Vehicle::new(
+            12,
+            VehicleKind::Bus,
+            TileCoord::new(1, 1),
+            TileCoord::new(1, 1),
+        );
+        bus.engine_id = Some(engine.id);
+        state.vehicles.push(bus);
+        state.runtime.fleet_index.rebuild(&state.vehicles);
+
+        refresh_runtime_vehicle_capacities(&mut state);
+        assert_eq!(state.vehicles[0].capacity, 42);
+
+        state
+            .engine_catalog
+            .iter_mut()
+            .find(|candidate| candidate.id == engine.id)
+            .expect("custom engine in catalog")
+            .newgrf_runtime = Some(Box::new(cb36_literal_runtime(7)));
+        refresh_runtime_vehicle_capacities(&mut state);
+        assert_eq!(state.vehicles[0].capacity, 7);
     }
 
     #[test]

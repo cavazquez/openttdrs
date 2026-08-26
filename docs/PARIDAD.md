@@ -256,8 +256,9 @@ articuladas viales sin motor se conservan. El tick vial de la simulación ya
 resuelve esos valores contra el catálogo activo, incluida la comparación de
 velocidad de `RoadVehCheckOvertake`; las APIs legacy sin catálogo aún usan el
 fallback estático.
-La capacidad dinámica durante la partida, costes y el resto de propiedades
-Action0 siguen siendo residuales.
+La capacidad dinámica durante la partida ya se refresca al entrar en
+`LoadUnloadStation`, incluyendo la suma de consist y las unidades articuladas;
+los costes y el resto de propiedades Action0 siguen siendo residuales.
 La carga gradual ya ejecuta CB12 (`load_amount`) cuando el motor declara la
 máscara correspondiente.
 Los focos naval

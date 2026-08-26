@@ -127,10 +127,25 @@ pub fn consist_changed_with_map_and_catalog(
             .engine_id
             .and_then(|id| engine_for_id(engine_catalog, id))
             .unwrap_or_else(|| crate::engine::engine_for_vehicle(v.kind, 0));
-        let capacity = (eng.capacity > 0 || eng.cargo.is_some())
+        // Un motor NewGRF puede empezar con capacidad cero y obtenerla
+        // únicamente de CB36 (por ejemplo, una cabina que se convierte en
+        // unidad de carga según el estado actual). No descartes el callback
+        // por la propiedad Action0 antes de evaluar la unidad.
+        let callback_capacity = (eng.newgrf_grfid != 0 && eng.newgrf_runtime.is_some())
             .then(|| crate::newgrf_callback::resolve_vehicle_capacity_property_callback(eng, v))
-            .flatten()
-            .unwrap_or(eng.capacity);
+            .flatten();
+        let capacity = (eng.capacity > 0
+            || eng.cargo.is_some()
+            || (eng.newgrf_grfid != 0 && eng.newgrf_runtime.is_some()))
+        .then_some(callback_capacity)
+        .flatten()
+        .unwrap_or(eng.capacity);
+        // La cabeza guarda la suma del consist más abajo; cada follower sí
+        // conserva su capacidad local para que LoadUnloadStation no vuelva a
+        // usar la propiedad Action0 después de un cambio dinámico de CB36.
+        if id != head_id && callback_capacity.is_some() {
+            v.capacity = capacity;
+        }
         let speed = crate::newgrf_callback::vehicle_max_speed(eng, v);
         let unit_weight = crate::newgrf_callback::vehicle_weight_t(eng, v);
         total_weight = total_weight.saturating_add(unit_weight);

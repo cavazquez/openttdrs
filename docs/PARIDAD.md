@@ -177,10 +177,13 @@ aplica a los cables y postes de catenaria de vanos y rampas, que antes
 quedaban con Z local fija aunque `world-draw` los marcara como `sortable`.
 Los overlays de tablero Action5, la reserva PBS y el overlay de tranvía de
 puente se adjuntan ahora al parent trasero del bloque `StartSpriteCombine`,
-conservando su ventana de profundidad y su orden local; si el parent visible
-no está disponible, se mantiene el fallback independiente para no perder el
-sprite. Los overlays NewGRF de carretera y la mitad frontal de
-`DrawBridgeRoadBits` todavía requieren sus propios parents/children.
+conservando su ventana de profundidad y su orden local; el overlay vanilla de
+tranvía en los vanos toma los bits de la rampa sur y usa la tabla específica de
+seis offsets de `DrawBridgeRoadBits` (incluidos los offsets 11..14), en lugar de
+leer la tesela de agua del vano. Si el parent visible no está disponible, se
+mantiene el fallback independiente para no perder el sprite. Los overlays
+NewGRF de carretera y la mitad frontal de `DrawBridgeRoadBits` todavía
+requieren sus propios parents/children.
 Los overlays de estación rail NewGRF se resuelven también en pendientes y se
 vinculan al parent de la fundación nivelada. Los objetos NewGRF ya reevalúan
 Action2 por tesela con random, offset de footprint, pendiente/terreno,

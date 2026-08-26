@@ -3087,6 +3087,73 @@ fn spawn_bridge_middle_draws_deck_over_marked_water() {
 }
 
 #[test]
+fn bridge_middle_uses_south_ramp_tram_overlay_as_combined_child() {
+    let assets = boot_assets_app();
+    let expected_overlay = assets.tram_flat[1].clone();
+    let mut map = fresh_map8();
+    let c = |x: i32, y: i32| TileCoord::new(x, y);
+
+    // El tramo intermedio es agua: sólo la rampa sur conserva los bits de
+    // tranvía que `DrawBridgeRoadBits` recibe como `head_tile`.
+    let mut ramp = tile_template();
+    ramp.kind = TileKind::RoadBridge;
+    ramp.mapt = 0x90;
+    ramp.m3 = 0x05;
+    ramp.m5 = 0x86; // bridge + SW + road
+    map.set_tile(c(1, 1), ramp).expect("rampa oeste");
+    ramp.m5 = 0x84; // bridge + NE + road
+    map.set_tile(c(4, 1), ramp).expect("rampa este");
+    for x in 2..=3 {
+        let mut water = tile_template();
+        water.kind = TileKind::Water;
+        water.mapt = 0x64; // MP_WATER + bridge above eje X
+        map.set_tile(c(x, 1), water).expect("vano de agua");
+    }
+
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world
+        .run_system_once(
+            |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                spawn_bridge_middle(
+                    &mut commands,
+                    &m.0,
+                    m.0.dimensions(),
+                    &a.0,
+                    &TileRenderContext::new(&m.0, &g.0, 2, 1),
+                    false,
+                    &[],
+                    None,
+                    &[],
+                    None,
+                    None,
+                );
+            },
+        )
+        .expect("bridge tram overlay spawn");
+
+    let attached: Vec<_> = world
+        .query::<(Entity, &ViewportSortableChild, &Sprite)>()
+        .iter(&world)
+        .filter(|(_, _, sprite)| expected_overlay.matches(sprite))
+        .collect();
+    assert_eq!(
+        attached.len(),
+        1,
+        "el overlay de tranvía debe aparecer una vez"
+    );
+    assert!(
+        world
+            .entity(attached[0].1.parent)
+            .contains::<ViewportSortableParent>(),
+        "el overlay debe colgar del parent trasero combinado"
+    );
+}
+
+#[test]
 fn bridge_pbs_overlay_stays_attached_to_the_rear_combined_parent() {
     let assets = boot_assets_app();
     let expected_pbs = assets.pbs_rail_sprite(1005).expect("reserva PBS X").clone();

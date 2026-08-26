@@ -74,6 +74,10 @@ const SPR_MONO_SINGLE_BASE: u32 = 1087;
 const SPR_MAGLEV_SINGLE_BASE: u32 = 1169;
 /// `SPR_TRAMWAY_OVERLAY` de la tabla vanilla (base 5986 + 4).
 const SPR_TRAMWAY_OVERLAY_BASE: u32 = 5990;
+/// Índices que usa `DrawBridgeRoadBits` para las seis variantes de
+/// `ROTSG_OVERLAY`/`SPR_TRAMWAY_OVERLAY`. No coinciden con la tabla de
+/// `GetRoadSpriteOffset`: los puentes reservan 0, 1 y 11..14.
+const BRIDGE_ROAD_OVERLAY_OFFSETS: [usize; 6] = [0, 1, 11, 12, 13, 14];
 /// `SPR_BRIDGE_DECKS_BASE` de Action5 `0x1B` (base 6240).
 const SPR_BRIDGE_DECKS_BASE: u32 = 6240;
 /// `SPR_TRACKS_FOR_SLOPES_RAIL_BASE` de OpenTTD.
@@ -271,6 +275,41 @@ fn bridge_deck_z(ramp_tileh: u8, ramp_min_z: u8, axis: usize) -> u8 {
 /// El vano se dibuja a la altura elevada del tablero.
 fn bridge_surface_z(base_z: u8, deck_z: u8, on_ramp: bool) -> u8 {
     if on_ramp { base_z } else { deck_z }
+}
+
+/// `DrawBridgeRoadBits` recibe un único offset para ambas capas de carretera.
+/// En una cabeza, `DrawFoundation` ya dejó `tileh` efectivo; una cabeza plana
+/// usa las dos variantes direccionales altas y una cabeza inclinada usa las
+/// dos variantes de pendiente. El vano sólo distingue su eje.
+fn bridge_road_sprite_offset(
+    span: &BridgeSpanInfo,
+    tile: Tile,
+    on_ramp: bool,
+    effective_tileh: u8,
+) -> usize {
+    if !on_ramp {
+        return span.axis ^ 1;
+    }
+    if effective_tileh == 0 {
+        usize::from((tile.m5 & 0x03).saturating_add(2))
+    } else {
+        usize::from((tile.m5.wrapping_add(1)) & 1)
+    }
+}
+
+/// Recupera la rampa que contiene la información de road/tram para un tramo
+/// intermedio. Las teselas de agua del vano no tienen `m3`/tipo: OpenTTD pasa
+/// explícitamente la rampa sur a `DrawBridgeRoadBits`.
+fn bridge_transport_tile(
+    map: &Map,
+    coord: TileCoord,
+    dims: (u32, u32),
+    on_ramp: bool,
+) -> Option<Tile> {
+    if on_ramp {
+        return map.get(coord);
+    }
+    bridge_span_endpoints(map, coord, dims).and_then(|(_, _, south)| map.get(south))
 }
 
 /// Caja invisible que `DrawBridgeMiddle` agrega antes de sus barandillas.
@@ -1481,13 +1520,13 @@ mod tests {
     };
 
     use super::{
-        BridgeRampGround, PILLAR_SLOPE_STEEP_W, PillarHalf, PillarSegment, RAIL_TB_X,
-        bridge_catenary_wire_trace_bounds, bridge_foundation_child_offset,
+        BridgeRampGround, BridgeSpanInfo, PILLAR_SLOPE_STEEP_W, PillarHalf, PillarSegment,
+        RAIL_TB_X, bridge_catenary_wire_trace_bounds, bridge_foundation_child_offset,
         bridge_middle_structure_trace_placement, bridge_parent_bounds,
         bridge_pbs_reservation_offset, bridge_pbs_reservation_sprite_id, bridge_pbs_trace_bounds,
         bridge_ramp_catenary_slope, bridge_ramp_catenary_world_z_delta, bridge_ramp_ground_kind,
-        bridge_ramp_ground_sprite_id, bridge_span_at, bridge_surface_z, catenary_under_low_bridge,
-        pillar_ground_heights, pillar_half_crop, pillar_segments,
+        bridge_ramp_ground_sprite_id, bridge_road_sprite_offset, bridge_span_at, bridge_surface_z,
+        catenary_under_low_bridge, pillar_ground_heights, pillar_half_crop, pillar_segments,
         roadside_detail_visible_under_bridge,
     };
     use crate::sprites::bridge_deck_sprite_ids;
@@ -1496,6 +1535,39 @@ mod tests {
     fn bridge_ramp_uses_ground_height_while_span_uses_deck_height() {
         assert_eq!(bridge_surface_z(1, 2, true), 1);
         assert_eq!(bridge_surface_z(1, 2, false), 2);
+    }
+
+    #[test]
+    fn bridge_road_bits_use_bridge_specific_overlay_offsets() {
+        let span = BridgeSpanInfo {
+            deck_z: 2,
+            rail: false,
+            pbs_reserved: false,
+            bridge_type: BridgeType::Wooden,
+            axis: 0,
+            piece: BridgePiece::MiddleOdd,
+            middle_length: 2,
+            middle_num: 1,
+            electric: false,
+            rail_type: RailType::Rail,
+        };
+        let tile = Tile {
+            height: 0,
+            kind: TileKind::RoadBridge,
+            mapt: 0,
+            m1: 0,
+            m5: 0x86, // SW road head
+            m6: 0,
+            m8: 0,
+            m3: 0,
+            m2: 0,
+            m2_hi: 0,
+            m7: 0,
+            m3hi: 0,
+        };
+        assert_eq!(bridge_road_sprite_offset(&span, tile, true, 0), 4);
+        assert_eq!(bridge_road_sprite_offset(&span, tile, true, 12), 1);
+        assert_eq!(bridge_road_sprite_offset(&span, tile, false, 0), 1);
     }
 
     #[test]
@@ -2293,37 +2365,45 @@ pub(crate) fn spawn_bridge_deck(
             rear_parent,
         );
     }
-    // Overlay de tranvía sobre tablero de puente de carretera.
+    // `DrawBridgeRoadBits` recibe los tipos y bits desde la rampa sur. En un
+    // vano la tesela actual suele ser agua y `m3` vale cero, por lo que leer
+    // sólo `ctx.tile` hacía desaparecer el overlay de tranvía del puente.
+    // Además, el índice de este overlay es el offset propio de bridge bits
+    // (0, 1, 11..14), no la tabla de cruces de carretera normal.
     if !span.rail
-        && let Some(tile) = ctx.tile
-        && let Some(tfi) = crate::sprites::tram_flat_sprite_index(0, tile.m3)
-        && let Some(tram) = assets.tram_flat.get(tfi)
+        && let Some(transport_tile) = bridge_transport_tile(map, ctx.coord, dims, on_ramp)
     {
-        let position = tile_pos_half(
-            ctx.tx_i32(),
-            ctx.ty_i32(),
-            surface_z,
-            RAIL_ON_BRIDGE_LAYER_FRAC,
-            TILE_HALF_H,
-        );
-        WorldDrawTrace::record_sprite_with_geometry(
-            "bridge-tram-overlay",
-            "combined",
-            SPR_TRAMWAY_OVERLAY_BASE.saturating_add(u32::try_from(tfi).unwrap_or(0)),
-            false,
-            (0, 0, 0),
-            (i32::from(surface_z) - i32::from(ctx.info.base_z)) * 8,
-            Some(TraceSpriteBounds::new(0, 0, 0, 16, 16, 0)),
-        );
-        if let Some(parent) = rear_parent {
-            spawn_bridge_combined_child(commands, ctx, dims.0, parent, tram.sprite(), position);
-        } else {
-            commands.spawn((
-                MapVisualLayer,
-                ctx.map_tile_chunk(),
-                tram.sprite(),
-                Transform::from_translation(position),
-            ));
+        let offset = bridge_road_sprite_offset(span, transport_tile, on_ramp, foundation_tileh);
+        let overlay_offset = BRIDGE_ROAD_OVERLAY_OFFSETS[offset.min(5)];
+        if let Some(tram) = assets.tram_flat.get(overlay_offset)
+            && transport_tile.m3 & 0x0F != 0
+        {
+            let position = tile_pos_half(
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+                surface_z,
+                RAIL_ON_BRIDGE_LAYER_FRAC,
+                TILE_HALF_H,
+            );
+            WorldDrawTrace::record_sprite_with_geometry(
+                "bridge-tram-overlay",
+                "combined",
+                SPR_TRAMWAY_OVERLAY_BASE.saturating_add(u32::try_from(overlay_offset).unwrap_or(0)),
+                false,
+                (0, 0, 0),
+                (i32::from(surface_z) - i32::from(ctx.info.base_z)) * 8,
+                Some(TraceSpriteBounds::new(0, 0, 0, 16, 16, 0)),
+            );
+            if let Some(parent) = rear_parent {
+                spawn_bridge_combined_child(commands, ctx, dims.0, parent, tram.sprite(), position);
+            } else {
+                commands.spawn((
+                    MapVisualLayer,
+                    ctx.map_tile_chunk(),
+                    tram.sprite(),
+                    Transform::from_translation(position),
+                ));
+            }
         }
     }
     if span.electric {

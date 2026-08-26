@@ -246,7 +246,10 @@ El callback `0x36` (modify property) ya expone resultados signed/unsigned de
 propiedades `0x21`/`0x23` cuando no hay CB11. La velocidad efectiva consulta
 `0x09` (tren), `0x15` (carretera), `0x0B` (barco) y `0x0C` (aeronave) durante el
 movimiento, pendientes, crucero, adelantamiento y rating de estación, con
-fallback a Action0 y writeback de `7C`. Capacidad, potencia, esfuerzo tractor,
+fallback a Action0 y writeback de `7C`. La capacidad también consulta las
+propiedades `0x14`/`0x0F`/`0x0D` por clase (y `0x11` para correo aéreo) al
+comprar, refitar y materializar articulados, conservando un callback válido de
+cero. La capacidad dinámica durante la partida, potencia, esfuerzo tractor,
 costes y el resto de propiedades Action0 todavía no tienen call sites, por lo
 que esta cobertura sigue siendo parcial.
 La carga gradual ya ejecuta CB12 (`load_amount`) cuando el motor declara la

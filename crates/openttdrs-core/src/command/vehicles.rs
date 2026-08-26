@@ -192,22 +192,38 @@ pub(super) fn build_vehicle_at_depot(
     let mut vehicle = Vehicle::new(next_id, engine.kind, depot_pos, depot_pos);
     vehicle.running = false;
     vehicle.engine_id = Some(engine.id);
+    if vehicle.cargo_type.is_none() {
+        vehicle.cargo_type = engine.cargo;
+    }
     vehicle.unit_length = crate::newgrf_callback::vehicle_unit_length(&engine, &mut vehicle);
     crate::vehicle::init_vehicle_reliability_from_engine(&mut vehicle, &engine);
-    if engine.capacity > 0 {
+    let property_capacity = (engine.capacity > 0 || engine.cargo.is_some())
+        .then(|| {
+            crate::newgrf_callback::resolve_vehicle_capacity_property_callback(
+                &engine,
+                &mut vehicle,
+            )
+        })
+        .flatten();
+    let raw_capacity = property_capacity.or((engine.capacity > 0).then_some(engine.capacity));
+    if let Some(raw_capacity) = raw_capacity {
         vehicle.capacity = crate::cargo_spec::apply_cargo_capacity_multiplier(
-            engine.capacity,
+            raw_capacity,
             &state.cargo_spec_catalog,
             engine.cargo.unwrap_or(crate::cargo::CargoType::Passengers),
         );
-    } else if engine.kind == VehicleKind::Train && engine.is_train_engine() {
+    } else if property_capacity.is_none()
+        && engine.kind == VehicleKind::Train
+        && engine.is_train_engine()
+    {
         // Loco sola: capacidad placeholder hasta enganchar vagones.
         vehicle.capacity = crate::vehicle::VEHICLE_CAPACITY;
     }
     if engine.is_wagon() {
         vehicle.cargo_type = engine.cargo;
+        let raw_capacity = property_capacity.unwrap_or(engine.capacity);
         vehicle.capacity = crate::cargo_spec::apply_cargo_capacity_multiplier(
-            engine.capacity,
+            raw_capacity,
             &state.cargo_spec_catalog,
             engine.cargo.unwrap_or(crate::cargo::CargoType::Goods),
         );
@@ -312,8 +328,17 @@ fn spawn_dual_headed_rear(
     let mut rear = Vehicle::new(rear_id, engine.kind, depot_pos, depot_pos);
     rear.running = false;
     rear.engine_id = Some(engine.id);
+    if rear.cargo_type.is_none() {
+        rear.cargo_type = engine.cargo;
+    }
     rear.unit_length = crate::newgrf_callback::vehicle_unit_length(engine, &mut rear);
-    rear.capacity = engine.capacity;
+    let rear_capacity = (engine.capacity > 0 || engine.cargo.is_some())
+        .then(|| {
+            crate::newgrf_callback::resolve_vehicle_capacity_property_callback(engine, &mut rear)
+        })
+        .flatten()
+        .unwrap_or(engine.capacity);
+    rear.capacity = rear_capacity;
     rear.cargo_type = engine.cargo;
     rear.build_tick = state.tick.get();
     rear.owner = state.active_company;
@@ -328,8 +353,8 @@ fn spawn_dual_headed_rear(
     if let Some(front) = state.vehicles.iter_mut().find(|v| v.id == front_id) {
         front.next_unit = Some(rear_id);
         front.other_multiheaded_part = Some(rear_id);
-        if engine.capacity > 0 {
-            front.capacity = engine.capacity;
+        if engine.capacity > 0 || rear_capacity > 0 {
+            front.capacity = rear_capacity;
             front.cargo_type = engine.cargo;
         }
     }
@@ -437,6 +462,9 @@ pub(crate) fn spawn_newgrf_articulated_parts(
         let mut part = Vehicle::new(part_id, front_engine.kind, pos, dest);
         part.running = false;
         part.engine_id = Some(part_engine.id);
+        if part.cargo_type.is_none() {
+            part.cargo_type = part_engine.cargo.or(front_cargo_type);
+        }
         part.origin = origin;
         part.direction = direction;
         part.build_tick = build_tick;
@@ -454,9 +482,18 @@ pub(crate) fn spawn_newgrf_articulated_parts(
             part.road_depot_phase = crate::vehicle::RoadDepotPhase::InDepot;
             part.road_state = crate::road_movement::RVSB_IN_DEPOT;
         }
-        if part_engine.capacity > 0 {
+        let property_capacity = (part_engine.capacity > 0 || part_engine.cargo.is_some())
+            .then(|| {
+                crate::newgrf_callback::resolve_vehicle_capacity_property_callback(
+                    &part_engine,
+                    &mut part,
+                )
+            })
+            .flatten();
+        let raw_capacity = property_capacity.unwrap_or(part_engine.capacity);
+        if raw_capacity > 0 {
             part.capacity = crate::cargo_spec::apply_cargo_capacity_multiplier(
-                part_engine.capacity,
+                raw_capacity,
                 &state.cargo_spec_catalog,
                 part_engine
                     .cargo
@@ -917,24 +954,33 @@ pub(super) fn refit_vehicle(
             .engine_id
             .and_then(|id| crate::engine::engine_in_catalog(&state.engine_catalog, id))
             .cloned();
+        // CB36 se evalúa con el cargo objetivo, igual que DetermineCapacity.
+        vehicle.cargo_type = Some(cargo);
         let callback_capacity = engine.as_ref().and_then(|engine| {
             crate::newgrf_callback::resolve_vehicle_refit_capacity_callback(engine, vehicle, cargo)
         });
-        let property_capacity =
-            engine
-                .as_ref()
-                .filter(|engine| engine.capacity > 0)
-                .map(|engine| {
+        let property_capacity = engine.as_ref().and_then(|engine| {
+            crate::newgrf_callback::resolve_vehicle_capacity_property_callback(engine, vehicle)
+                .map(|capacity| {
                     crate::cargo_spec::apply_cargo_capacity_multiplier(
-                        engine.capacity,
+                        capacity,
                         &state.cargo_spec_catalog,
                         cargo,
                     )
-                });
+                })
+                .or_else(|| {
+                    (engine.capacity > 0).then(|| {
+                        crate::cargo_spec::apply_cargo_capacity_multiplier(
+                            engine.capacity,
+                            &state.cargo_spec_catalog,
+                            cargo,
+                        )
+                    })
+                })
+        });
         if let Some(capacity) = callback_capacity.or(property_capacity) {
             vehicle.capacity = capacity;
         }
-        vehicle.cargo_type = Some(cargo);
         if let Some(engine) = engine.as_ref() {
             vehicle.unit_length = crate::newgrf_callback::vehicle_unit_length(engine, vehicle);
         }

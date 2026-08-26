@@ -119,7 +119,7 @@ pub fn consist_changed_with_map_and_catalog(
     }
 
     for &id in &ids {
-        let Some(v) = vehicles.iter().find(|v| v.id == id) else {
+        let Some(v) = vehicles.iter_mut().find(|v| v.id == id) else {
             continue;
         };
         total_len = total_len.saturating_add(u16::from(v.unit_length.max(1)));
@@ -127,6 +127,11 @@ pub fn consist_changed_with_map_and_catalog(
             .engine_id
             .and_then(|id| engine_for_id(engine_catalog, id))
             .unwrap_or_else(|| crate::engine::engine_for_vehicle(v.kind, 0));
+        let capacity = (eng.capacity > 0 || eng.cargo.is_some())
+            .then(|| crate::newgrf_callback::resolve_vehicle_capacity_property_callback(eng, v))
+            .flatten()
+            .unwrap_or(eng.capacity);
+        let speed = crate::newgrf_callback::vehicle_max_speed(eng, v);
         total_weight = total_weight.saturating_add(eng.weight_t);
         if v.powered_wagon {
             total_weight = total_weight.saturating_add(head_pow_wag_weight);
@@ -139,8 +144,8 @@ pub fn consist_changed_with_map_and_catalog(
             eng.power_hp
         };
         total_power = total_power.saturating_add(unit_power);
-        if eng.capacity > 0 {
-            total_cap = total_cap.saturating_add(eng.capacity);
+        if capacity > 0 {
+            total_cap = total_cap.saturating_add(capacity);
             if cargo_type.is_none() {
                 cargo_type = eng.cargo;
             }
@@ -151,8 +156,8 @@ pub fn consist_changed_with_map_and_catalog(
             curve_mod = curve_mod.min(eng.curve_speed_mod);
         }
         // Min speed por unidad (`wagon_speed_limits` activo por defecto).
-        if eng.max_speed > 0 {
-            max_speed = max_speed.min(eng.max_speed);
+        if speed > 0 {
+            max_speed = max_speed.min(speed);
         }
         // Compatible railtypes: solo unidades con potencia propia (no powered wagons).
         if eng.power_hp > 0 && !v.powered_wagon {

@@ -622,6 +622,27 @@ pub fn effective_vehicle_max_speed(vehicle: &mut Vehicle) -> u16 {
     vehicle_max_speed(engine, vehicle)
 }
 
+/// Resuelve la propiedad de capacidad de CB36 para la clase de una unidad.
+///
+/// El valor devuelto mantiene la unidad nativa de Action0 (capacidad de
+/// pasajeros/carga; para aeronaves se usa `0x11` cuando el tipo actual es
+/// correo). `None` conserva el valor ya calculado por el caller y distingue
+/// un callback ausente/fallido de un resultado válido igual a cero.
+#[must_use]
+pub fn resolve_vehicle_capacity_property_callback(
+    engine: &EngineDef,
+    vehicle: &mut Vehicle,
+) -> Option<u32> {
+    let property = match engine.kind {
+        VehicleKind::Train => 0x14,
+        VehicleKind::Ship => 0x0D,
+        VehicleKind::Aircraft if vehicle.cargo_type == Some(CargoType::Mail) => 0x11,
+        VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram | VehicleKind::Aircraft => 0x0F,
+    };
+    resolve_vehicle_modify_property_callback(engine, vehicle, property, false)
+        .and_then(|value| u32::try_from(value).ok())
+}
+
 /// Resuelve `CBID_VEHICLE_LENGTH` (`0x11`) y devuelve la longitud efectiva.
 ///
 /// El callback de `OpenTTD` devuelve cuánto se acorta una unidad de ocho
@@ -2508,6 +2529,43 @@ mod tests {
         // CALLBACK_FAILED conserva la propiedad Action0 del motor.
         engine.newgrf_runtime = None;
         assert_eq!(vehicle_max_speed(&engine, &mut vehicle), base_speed);
+    }
+
+    #[test]
+    fn callbacks_ac_vehicle_modify_property_selects_capacity_property_per_class() {
+        let mut train_engine = engines_table()
+            .iter()
+            .find(|e| e.kind == VehicleKind::Train && e.power_hp > 0)
+            .cloned()
+            .unwrap();
+        train_engine.newgrf_grfid = 0x4341_5041;
+        train_engine.newgrf_local_id = 0;
+        train_engine.newgrf_runtime = Some(Box::new(gfx_callback_allow_if_byte(0x1A, 0, 0x14)));
+        let mut train = Vehicle::new(
+            48,
+            VehicleKind::Train,
+            TileCoord::new(1, 1),
+            TileCoord::new(1, 1),
+        );
+        assert_eq!(
+            resolve_vehicle_capacity_property_callback(&train_engine, &mut train),
+            Some(0x800)
+        );
+
+        let mut aircraft_engine = train_engine.clone();
+        aircraft_engine.kind = VehicleKind::Aircraft;
+        aircraft_engine.newgrf_runtime = Some(Box::new(gfx_callback_allow_if_byte(0x1A, 0, 0x11)));
+        let mut aircraft = Vehicle::new(
+            49,
+            VehicleKind::Aircraft,
+            TileCoord::new(1, 1),
+            TileCoord::new(1, 1),
+        );
+        aircraft.cargo_type = Some(CargoType::Mail);
+        assert_eq!(
+            resolve_vehicle_capacity_property_callback(&aircraft_engine, &mut aircraft),
+            Some(0x800)
+        );
     }
 
     #[test]

@@ -451,6 +451,8 @@ pub const CBID_STATION_BUILD_TILE_LAYOUT: u16 = 0x24;
 pub const CBID_VEHICLE_LENGTH: u16 = 0x11;
 /// Callback vehículos: ajustar la cantidad cargada por tick (`CBID_VEHICLE_LOAD_AMOUNT`).
 pub const CBID_VEHICLE_LOAD_AMOUNT: u16 = 0x12;
+/// Callback vehículos: añadir la siguiente parte articulada (`CBID_VEHICLE_ARTIC_ENGINE`).
+pub const CBID_VEHICLE_ARTIC_ENGINE: u16 = 0x16;
 /// Callback vehículos: capacidad efectiva después de un refit (`CBID_VEHICLE_REFIT_CAPACITY`).
 pub const CBID_VEHICLE_REFIT_CAPACITY: u16 = 0x15;
 /// Callback vehículos: permitir start/stop (`CBID_VEHICLE_START_STOP_CHECK`).

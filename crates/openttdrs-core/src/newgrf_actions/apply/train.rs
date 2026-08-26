@@ -119,15 +119,17 @@ pub fn apply_newgrf_vehicles_trains(state: &mut GameState, search_dirs: &[&Path]
         };
         let metas = collect_train_metas_from_grf(&data);
         let gfx = crate::newgrf_sprites::collect_train_sprite_graphics(&data).unwrap_or_default();
-        // Emparejar Action0 (orden de aparición) con ids locales 0,1,2,…
-        for (local_idx, meta) in metas.into_iter().enumerate() {
+        // Action0 conserva el id local del primer vehículo del bloque; no lo
+        // sustituimos por el índice de aparición porque CB16 necesita volver a
+        // localizar partes articuladas dentro del mismo GRF.
+        for meta in metas {
             if meta.climate_mask & climate_bit == 0 {
                 continue;
             }
             let Some(id) = next_free_engine_id(&catalog) else {
                 break;
             };
-            let local_id = u8::try_from(local_idx).unwrap_or(0);
+            let local_id = meta.local_id;
             let views = gfx
                 .views_for_local_id(local_id)
                 .map(<[crate::newgrf_sprites::DecodedSprite]>::to_vec)

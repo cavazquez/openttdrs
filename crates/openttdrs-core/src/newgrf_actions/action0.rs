@@ -200,6 +200,8 @@ pub struct ParsedStationMeta {
 /// Metadatos `Trains` Action0 (antes de asignar ID ≥1000).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParsedTrainMeta {
+    /// Primer id local definido por el bloque Action0.
+    pub local_id: u8,
     pub name: String,
     pub intro_year: u16,
     pub max_speed: u16,
@@ -3146,6 +3148,7 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
         name = "NewGRF Train".into();
     }
     Some(ParsedTrainMeta {
+        local_id: payload[4],
         name,
         intro_year,
         max_speed,

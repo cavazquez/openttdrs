@@ -17,9 +17,9 @@ use crate::newgrf_sprites::{
     CBID_CARGO_STATION_RATING_CALC, CBID_HOUSE_ALLOW_CONSTRUCTION, CBID_INDUSTRY_LOCATION,
     CBID_OBJECT_LAND_SLOPE_CHECK, CBID_STATION_ANIMATION_NEXT_FRAME, CBID_STATION_ANIMATION_SPEED,
     CBID_STATION_ANIMATION_TRIGGER, CBID_STATION_AVAILABILITY, CBID_STATION_LAND_SLOPE_CHECK,
-    CBID_VEHICLE_LENGTH, CBID_VEHICLE_LOAD_AMOUNT, CBID_VEHICLE_REFIT_CAPACITY,
-    CBID_VEHICLE_SOUND_EFFECT, CBID_VEHICLE_START_STOP_CHECK, CBID_VEHICLE_VISUAL_EFFECT,
-    TrainSpriteGraphics,
+    CBID_VEHICLE_ARTIC_ENGINE, CBID_VEHICLE_LENGTH, CBID_VEHICLE_LOAD_AMOUNT,
+    CBID_VEHICLE_REFIT_CAPACITY, CBID_VEHICLE_SOUND_EFFECT, CBID_VEHICLE_START_STOP_CHECK,
+    CBID_VEHICLE_VISUAL_EFFECT, TrainSpriteGraphics,
 };
 use crate::object_spec::ObjectSpecDef;
 use crate::road_stop_action2::{
@@ -240,6 +240,80 @@ pub fn vehicle_unit_length(engine: &EngineDef, vehicle: &mut Vehicle) -> u8 {
     resolve_vehicle_length_callback(engine, vehicle)
         .unwrap_or_else(|| 8_u8.saturating_sub(engine.shorten_factor.min(7)))
         .max(1)
+}
+
+/// Parte articulada devuelta por `CBID_VEHICLE_ARTIC_ENGINE` (`0x16`).
+///
+/// `local_id` es el id del motor dentro del mismo GRF y `mirrored` conserva el
+/// bit de orientación que `OpenTTD` aplica al sprite de la pieza. El catálogo
+/// actual usa ids locales de 8 bits, pero se conserva `u16` para no truncar la
+/// codificación de GRF v8 (14 bits) antes de buscar el motor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VehicleArticulatedPart {
+    pub local_id: u16,
+    pub mirrored: bool,
+}
+
+/// Decodifica el resultado bruto de `CBID_VEHICLE_ARTIC_ENGINE`.
+///
+/// GRF anteriores a la versión 8 usan un callback de 8 bits (`0xFF` termina y
+/// el bit 7 indica espejo); GRF v8+ usan 15 bits (`0x7FFF` termina y el bit 14
+/// indica espejo). Una versión cero significa que el encabezado no fue
+/// escaneado y se trata como GRF moderno, que es el fallback seguro para
+/// entradas creadas por la API.
+#[must_use]
+pub fn decode_vehicle_articulated_part(
+    result: u16,
+    grf_version: u8,
+) -> Option<VehicleArticulatedPart> {
+    if result == CALLBACK_FAILED {
+        return None;
+    }
+    if grf_version != 0 && grf_version < 8 {
+        let value = result & 0x00FF;
+        if value == 0x00FF {
+            return None;
+        }
+        return Some(VehicleArticulatedPart {
+            local_id: value & 0x007F,
+            mirrored: value & 0x0080 != 0,
+        });
+    }
+    if result == 0x7FFF {
+        return None;
+    }
+    Some(VehicleArticulatedPart {
+        local_id: result & 0x3FFF,
+        mirrored: result & 0x4000 != 0,
+    })
+}
+
+/// Ejecuta `CBID_VEHICLE_ARTIC_ENGINE` para la posición `index` (1..=100).
+///
+/// `None` significa callback ausente/fallido o terminador; cualquier registro
+/// persistente escrito por Action2 se conserva en `vehicle`, igual que en los
+/// demás callbacks de vehículo.
+#[must_use]
+pub fn resolve_vehicle_articulated_part_callback(
+    engine: &EngineDef,
+    vehicle: &mut Vehicle,
+    index: u8,
+    grf_version: u8,
+) -> Option<VehicleArticulatedPart> {
+    if engine.newgrf_grfid == 0
+        || engine.vehicle_callback_mask & (1 << 4) == 0
+        || engine.newgrf_runtime.is_none()
+    {
+        return None;
+    }
+    let result = resolve_vehicle_callback(
+        engine,
+        vehicle,
+        CBID_VEHICLE_ARTIC_ENGINE,
+        u32::from(index),
+        0,
+    );
+    decode_vehicle_articulated_part(result, grf_version)
 }
 
 /// Resuelve `CBID_VEHICLE_REFIT_CAPACITY` (`0x15`) para un cargo objetivo.
@@ -1605,6 +1679,66 @@ mod tests {
         engine.newgrf_runtime = Some(Box::new(gfx_callback_literal(8)));
         assert_eq!(resolve_vehicle_length_callback(&engine, &mut vehicle), None);
         assert_eq!(vehicle_unit_length(&engine, &mut vehicle), 2);
+    }
+
+    #[test]
+    fn callbacks_ac_vehicle_articulated_part_decodes_grf_width_and_mirror() {
+        assert_eq!(
+            decode_vehicle_articulated_part(0x80 | 7, 7),
+            Some(VehicleArticulatedPart {
+                local_id: 7,
+                mirrored: true,
+            })
+        );
+        assert_eq!(decode_vehicle_articulated_part(0xFF, 7), None);
+        assert_eq!(
+            decode_vehicle_articulated_part(0x4000 | 0x04D2, 8),
+            Some(VehicleArticulatedPart {
+                local_id: 1234,
+                mirrored: true,
+            })
+        );
+        assert_eq!(decode_vehicle_articulated_part(0x7FFF, 8), None);
+        assert_eq!(decode_vehicle_articulated_part(CALLBACK_FAILED, 8), None);
+        // La versión cero es el fallback moderno para entradas sin Action8.
+        assert_eq!(
+            decode_vehicle_articulated_part(0x4001, 0),
+            Some(VehicleArticulatedPart {
+                local_id: 1,
+                mirrored: true,
+            })
+        );
+    }
+
+    #[test]
+    fn callbacks_ac_vehicle_articulated_part_requires_mask_and_writes_callback() {
+        let mut engine = engines_table()
+            .iter()
+            .find(|e| e.kind == VehicleKind::Train && e.power_hp > 0)
+            .cloned()
+            .unwrap();
+        engine.newgrf_grfid = 0x4152_5449;
+        engine.newgrf_local_id = 0;
+        engine.vehicle_callback_mask = 1 << 4;
+        engine.newgrf_runtime = Some(Box::new(gfx_callback_literal(2)));
+        let mut vehicle = Vehicle::new(
+            6,
+            VehicleKind::Train,
+            TileCoord::new(1, 1),
+            TileCoord::new(1, 1),
+        );
+        assert_eq!(
+            resolve_vehicle_articulated_part_callback(&engine, &mut vehicle, 1, 8),
+            Some(VehicleArticulatedPart {
+                local_id: 2,
+                mirrored: false,
+            })
+        );
+        engine.vehicle_callback_mask = 0;
+        assert_eq!(
+            resolve_vehicle_articulated_part_callback(&engine, &mut vehicle, 1, 8),
+            None
+        );
     }
 
     #[test]

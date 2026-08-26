@@ -1725,8 +1725,10 @@ mod tests {
 
     #[test]
     fn parse_train_meta_and_apply_from_bytes() {
-        let a0 = build_action0_train_payload(1955, 120, 1500, "Locomotora NewGRF");
+        let mut a0 = build_action0_train_payload(1955, 120, 1500, "Locomotora NewGRF");
+        a0[4] = 7;
         let meta = parse_action0_train_meta(&a0).unwrap();
+        assert_eq!(meta.local_id, 7);
         assert_eq!(meta.name, "Locomotora NewGRF");
         assert_eq!(meta.intro_year, 1955);
         assert_eq!(meta.max_speed, 120);

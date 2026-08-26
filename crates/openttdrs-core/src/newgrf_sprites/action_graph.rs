@@ -245,6 +245,50 @@ pub(super) fn parse_action2_random(
     ))
 }
 
+/// Action2 real group used by vehicle features:
+/// `02 feature set-id num-loaded num-loading [loaded ids] [loading ids]`.
+///
+/// Both lists are meaningful. `OpenTTD` picks a proportional entry from the
+/// active list according to the vehicle cargo amount and resolves it as an
+/// Action1 sprite set.
+fn parse_action2_real(payload: &[u8], feature: u8) -> Option<(u8, super::model::Action2RealEntry)> {
+    if payload.len() < 6
+        || payload[0] != 0x02
+        || !matches!(
+            feature,
+            ACTION0_FEATURE_TRAINS
+                | ACTION0_FEATURE_ROAD_VEHICLES
+                | ACTION0_FEATURE_SHIPS
+                | ACTION0_FEATURE_AIRCRAFT
+        )
+    {
+        return None;
+    }
+    let set_id = payload[2];
+    let num_loaded = usize::from(payload[3]);
+    let num_loading = usize::from(payload[4]);
+    if num_loaded.saturating_add(num_loading) == 0 {
+        return None;
+    }
+    let words = num_loaded.saturating_add(num_loading);
+    let end = 5usize.checked_add(words.checked_mul(2)?)?;
+    if payload.len() < end {
+        return None;
+    }
+    let mut loaded = Vec::with_capacity(num_loaded);
+    for index in 0..num_loaded {
+        let offset = 5 + index * 2;
+        loaded.push(u16::from_le_bytes([payload[offset], payload[offset + 1]]));
+    }
+    let mut loading = Vec::with_capacity(num_loading);
+    let start = 5 + num_loaded * 2;
+    for index in 0..num_loading {
+        let offset = start + index * 2;
+        loading.push(u16::from_le_bytes([payload[offset], payload[offset + 1]]));
+    }
+    Some((set_id, super::model::Action2RealEntry { loaded, loading }))
+}
+
 type ParsedAction3 = (Vec<TrainSpriteAssign>, Vec<((u8, u8), u16)>);
 
 pub(super) fn parse_action3_feature(payload: &[u8], feature: u8) -> Option<ParsedAction3> {
@@ -346,6 +390,13 @@ pub fn collect_feature_sprite_graphics(
                 sets_left = ns;
                 views_per_set = ne;
                 views_left_in_set = ne;
+            } else if let Some((a2_id, real)) = parse_action2_real(payload, feature) {
+                // Keep the historical static mapping for preview/legacy callers;
+                // runtime contexts select the proportional loaded/loading entry.
+                if let Some(&first) = real.loaded.first().or_else(|| real.loading.first()) {
+                    out.action2_to_action1.insert(a2_id, first);
+                }
+                out.action2_real.insert(a2_id, real);
             } else if supports_action2_chain(feature)
                 && let Some((a2_id, a1_idx)) = parse_action2_basic(payload, feature)
             {
@@ -533,4 +584,20 @@ pub fn collect_airport_sprite_graphics(data: &[u8]) -> Result<TrainSpriteGraphic
 /// Contenedor inválido.
 pub fn collect_cargo_sprite_graphics(data: &[u8]) -> Result<TrainSpriteGraphics, GrfScanError> {
     collect_feature_sprite_graphics(data, ACTION0_FEATURE_CARGOES)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_vehicle_real_group_keeps_loaded_and_loading_lists() {
+        // 02 <trains> <set=7> <loaded=2> <loading=1> <10,11> <12>
+        let payload = [0x02, ACTION0_FEATURE_TRAINS, 7, 2, 1, 10, 0, 11, 0, 12, 0];
+        let Some((_, group)) = parse_action2_real(&payload, ACTION0_FEATURE_TRAINS) else {
+            panic!("vehicle real group should parse");
+        };
+        assert_eq!(group.loaded, vec![10, 11]);
+        assert_eq!(group.loading, vec![12]);
+    }
 }

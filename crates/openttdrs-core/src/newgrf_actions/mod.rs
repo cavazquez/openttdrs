@@ -1983,6 +1983,19 @@ mod tests {
             parse_action0_train_meta(&train).unwrap().callback_mask,
             0x180
         );
+
+        let train_stack = [0x00, ACTION0_FEATURE_TRAINS, 0x01, 0x01, 0x00, 0x27, 0x80];
+        assert!(parse_action0_train_meta(&train_stack).unwrap().sprite_stack);
+        let road_stack = [
+            0x00,
+            ACTION0_FEATURE_ROAD_VEHICLES,
+            0x01,
+            0x01,
+            0x00,
+            0x1C,
+            0x80,
+        ];
+        assert!(parse_action0_vehicle_metas(&road_stack).unwrap()[0].sprite_stack);
     }
 
     #[test]

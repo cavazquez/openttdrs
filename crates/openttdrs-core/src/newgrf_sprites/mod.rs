@@ -13,8 +13,8 @@ mod pixel_codec;
 
 // Re-exportar todos los tipos públicos del módulo model
 pub use model::{
-    Action2EvalCtx, Action2RandomEntry, Action2VarAdjust, Action2VarEntry, Action2VarOp,
-    Action2VarTerm, Action5Block, CALLBACK_FAILED, CBID_CARGO_PROFIT_CALC,
+    Action2EvalCtx, Action2RandomEntry, Action2RealEntry, Action2VarAdjust, Action2VarEntry,
+    Action2VarOp, Action2VarTerm, Action5Block, CALLBACK_FAILED, CBID_CARGO_PROFIT_CALC,
     CBID_CARGO_STATION_RATING_CALC, CBID_HOUSE_ALLOW_CONSTRUCTION, CBID_INDTILE_ANIM_NEXT_FRAME,
     CBID_INDTILE_ANIMATION_NEXT_FRAME, CBID_INDTILE_ANIMATION_SPEED,
     CBID_INDTILE_ANIMATION_TRIGGER, CBID_INDUSTRY_LOCATION, CBID_OBJECT_LAND_SLOPE_CHECK,
@@ -606,6 +606,35 @@ mod tests {
         ctx.random_bits = 1;
         assert_eq!(gfx.resolve_action1_set_ctx(4, &mut ctx), 1);
         assert_eq!(gfx.resolve_action1_set(4), 0); // sin ctx → set[0]
+    }
+
+    #[test]
+    fn resolve_real_action2_uses_loaded_and_loading_stage() {
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.action2_real.insert(
+            6,
+            Action2RealEntry {
+                loaded: vec![10, 11, 12],
+                loading: vec![20, 21],
+            },
+        );
+        gfx.action2_to_action1
+            .extend([(10, 0), (11, 1), (12, 2), (20, 3), (21, 4)]);
+
+        let mut ctx = Action2EvalCtx {
+            vehicle_cargo: 0,
+            vehicle_capacity: 100,
+            ..Default::default()
+        };
+        assert_eq!(gfx.resolve_action1_set_ctx(6, &mut ctx), 0);
+        ctx.vehicle_cargo = 50;
+        assert_eq!(gfx.resolve_action1_set_ctx(6, &mut ctx), 1);
+        ctx.vehicle_cargo = 100;
+        assert_eq!(gfx.resolve_action1_set_ctx(6, &mut ctx), 2);
+
+        ctx.vehicle_loading = true;
+        ctx.vehicle_cargo = 99;
+        assert_eq!(gfx.resolve_action1_set_ctx(6, &mut ctx), 4);
     }
 
     #[test]

@@ -27,6 +27,39 @@ pub struct TrainSpriteAssign {
     pub set_id: u16,
 }
 
+/// Action2 real group for vehicle graphics.
+///
+/// `OpenTTD` keeps separate sprite-set choices while a vehicle is moving and
+/// while it is in a loading window.  The old compact graph only retained the
+/// first word of this group, which made every cargo/loading stage look like
+/// the empty vehicle.  The entries are Action1 set ids (not sprite ids).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Action2RealEntry {
+    pub loaded: Vec<u16>,
+    pub loading: Vec<u16>,
+}
+
+impl Action2RealEntry {
+    /// Select the set using the same proportional stage rule as
+    /// `VehicleResolverObject::ResolveReal` in `OpenTTD`.
+    #[must_use]
+    pub fn selected_set(&self, loading: bool, cargo: u32, capacity: u32) -> Option<u16> {
+        let sets = if loading { &self.loading } else { &self.loaded };
+        let total = sets.len();
+        if total == 0 {
+            return None;
+        }
+        let denominator = capacity.max(1);
+        let stage = usize::try_from(
+            u64::from(cargo).saturating_mul(u64::try_from(total).unwrap_or(u64::MAX))
+                / u64::from(denominator),
+        )
+        .unwrap_or(total.saturating_sub(1))
+        .min(total.saturating_sub(1));
+        sets.get(stage).copied()
+    }
+}
+
 /// Ajuste `varadjust` (shift/and [+add+div|mod]).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Action2VarAdjust {
@@ -146,6 +179,12 @@ pub struct Action2EvalCtx {
     pub last_result: u32,
     /// Parámetros del GRF (`GRFFile::param`; variable `0x7F[param]`).
     pub grf_params: Vec<u32>,
+    /// Vehicle loading state used by Action2 real groups (`loaded`/`loading`).
+    pub vehicle_loading: bool,
+    /// Current cargo amount for proportional real-group selection.
+    pub vehicle_cargo: u32,
+    /// Vehicle cargo capacity for proportional real-group selection.
+    pub vehicle_capacity: u32,
 }
 
 impl Action2EvalCtx {
@@ -168,6 +207,8 @@ pub struct TrainSpriteGraphics {
     pub specific_assigns: HashMap<(u8, u8), u16>,
     /// Action2 set-id → índice del primer set Action1 "moving" (solo trains).
     pub action2_to_action1: HashMap<u8, u16>,
+    /// Action2 real groups with loaded/loading alternatives.
+    pub action2_real: HashMap<u8, Action2RealEntry>,
     /// Action2 variational completo (rangos + default / advanced).
     pub action2_var: HashMap<u8, Action2VarEntry>,
     /// Action2 random (`0x80`/`0x83`/`0x84`).
@@ -197,6 +238,13 @@ impl TrainSpriteGraphics {
                 if next & 0x8000 != 0 {
                     break;
                 }
+                id = next;
+                continue;
+            }
+            if let Some(real) = self.action2_real.get(&a2)
+                && let Some(next) =
+                    real.selected_set(ctx.vehicle_loading, ctx.vehicle_cargo, ctx.vehicle_capacity)
+            {
                 id = next;
                 continue;
             }
@@ -352,7 +400,9 @@ impl TrainSpriteGraphics {
     /// ¿Necesita re-resolución en runtime (random o cualquier variational)?
     #[must_use]
     pub fn needs_runtime_resolve(&self) -> bool {
-        !self.action2_random.is_empty() || !self.action2_var.is_empty()
+        !self.action2_random.is_empty()
+            || !self.action2_var.is_empty()
+            || !self.action2_real.is_empty()
     }
 
     /// Resuelve un callback `NewGRF` (`nvar=0` → valor; sprite group → [`CALLBACK_FAILED`]).

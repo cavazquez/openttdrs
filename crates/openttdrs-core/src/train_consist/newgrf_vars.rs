@@ -103,6 +103,13 @@ fn fill_vehicle_action2_vars(
     ctx.vars.insert(0x40, var40);
 
     let cargo = unit.cargo_type;
+    // `RealSpriteGroup::Resolve` switches between its loaded and loading
+    // lists while a vehicle is inside a load/unload window. Keep the state and
+    // the proportional cargo stage in the shared Action2 context so render,
+    // previews and callbacks make the same choice.
+    ctx.vehicle_loading = unit.cargo_loading || unit.cargo_unloading;
+    ctx.vehicle_cargo = unit.cargo;
+    ctx.vehicle_capacity = unit.capacity;
     let tt = cargo_type_a_id(cargo);
     let ww = cargo_unit_weight_16ths(cargo);
     let cccc = u32::from(cargo_class_bits(cargo));

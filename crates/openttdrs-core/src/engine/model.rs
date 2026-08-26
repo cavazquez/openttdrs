@@ -102,6 +102,9 @@ pub struct EngineDef {
     /// Action0 aircraft `0x0A`: avión grande.
     #[serde(default)]
     pub is_large_aircraft: bool,
+    /// Action0 miscellaneous flag bit 7: render a `NewGRF` sprite sequence.
+    #[serde(default)]
+    pub sprite_stack: bool,
     /// Action0 ship `0x14`: fracción de velocidad en océano (`0` = 256/256).
     #[serde(default)]
     pub ocean_speed_frac: u8,

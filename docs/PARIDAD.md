@@ -127,9 +127,10 @@ Los cuerpos de vehículos y cada unidad de consist ahora reciben la caja
 orientación de barcos y el vuelo de aeronaves) y una clave estable del pase
 `ViewportAddVehicles`; la sombra y el rotor de helicóptero quedan como
 children del cuerpo. Las vistas Action1/2 de vehículos de carretera, barcos y
-aeronaves también aplican sus offsets NFO al ancla, igual que los trenes. Esto
-mejora la composición y la selección de sprite, pero no cierra los sprite-stack
-NewGRF ni los callbacks de vehículo que siguen OOS.
+aeronaves también aplican sus offsets NFO al ancla, igual que los trenes. Los
+grupos Action2 real distinguen loaded/loading y el bit de sprite-stack NewGRF
+crea hasta ocho children por unidad mediante la variable `0x10`; el registro
+100, la paleta/callbacks y los wagon overrides siguen OOS.
 En `(225,2)` las cajas de
 `5982` y `5983` coinciden con el oráculo y Bevy recibe sus slots de Z en el
 orden final `5983 → 5982`; en `(195,17)`, OpenTTD transforma la inserción
@@ -191,8 +192,11 @@ random/triggers) y registran el edificio con bounds conservadoras como parent
 sortable; el suelo/layout propio y las variables de pueblo/vecindad aún usan
 el sustituto vanilla. Los layouts `TileSeq`/children completos de
 estación/objeto/industria/casa, los callbacks de foundation específicos,
-color/view y el sprite-stack de vehículos NewGRF siguen pendientes de un
-contrato runtime completo.
+color/view y el registro 100/paleta de vehículos NewGRF siguen pendientes de un
+contrato runtime completo. El sprite-stack de vehículos ya resuelve grupos
+Action2 real (loaded/loading) y materializa hasta ocho capas como children
+ordenados por unidad; articulación, wagon overrides y callbacks que requieren
+estado completo de consist siguen siendo residuales.
 Los focos naval
 `138,7..140,10` y de muelle `136,1..139,3` vinculan
 7/7 parents candidatos al orden final C++; es evidencia del contrato de cajas y

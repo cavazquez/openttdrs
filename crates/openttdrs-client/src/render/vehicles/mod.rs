@@ -451,17 +451,86 @@ mod tests {
             ottdmap_extras: None,
         };
         let trucks = default_handles();
-        let selected = assets::TruckHandles::for_vehicle_with_newgrf(
-            &trucks,
-            &v,
-            pose,
+        let selected = trucks
+            .for_vehicle_with_newgrf_layers(&v, pose, None, None, &sim, &mut cache, &mut images)
+            .into_iter()
+            .next()
+            .expect("newgrf layer");
+        assert_eq!(selected.handle, handle);
+    }
+
+    #[test]
+    fn newgrf_sprite_stack_resolves_var10_layers() {
+        use crate::sprites::CompanyColour;
+        use assets::NewGrfVehicleLayer;
+        use openttdrs_core::newgrf_sprites::{
+            Action2VarAdjust, Action2VarEntry, Action2VarTerm, TrainSpriteAssign,
+            TrainSpriteGraphics,
+        };
+
+        let solid = |red| openttdrs_core::DecodedSprite {
+            width: 1,
+            height: 1,
+            x_offs: i16::from(red),
+            y_offs: 0,
+            rgba: vec![red, 0, 0, 255],
+            mask: Vec::new(),
+        };
+        let mut graphics = TrainSpriteGraphics {
+            sets: vec![vec![solid(10)], vec![solid(20)]],
+            assigns: vec![TrainSpriteAssign {
+                local_id: 0,
+                set_id: 1,
+            }],
+            ..Default::default()
+        };
+        graphics.action2_var.insert(
+            1,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x10,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        shift: 8,
+                        and_mask: 0xFF,
+                        ..Default::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: vec![(0, 0, 0)],
+                default: 1,
+            },
+        );
+        let mut engine = openttdrs_core::engine_by_id(openttdrs_core::ENGINE_TRAIN_KIRBY)
+            .expect("vanilla train")
+            .clone();
+        engine.newgrf_local_id = 0;
+        engine.sprite_stack = true;
+        engine.newgrf_runtime = Some(Box::new(graphics));
+
+        let mut cache = NewGrfTrainSpriteCache::default();
+        let mut images = Assets::<Image>::default();
+        let mut ctx = openttdrs_core::Action2EvalCtx::default();
+        let layers: Vec<NewGrfVehicleLayer> = cache.handles_for_runtime(
+            &engine,
+            0,
             None,
-            None,
-            &sim,
-            &mut cache,
+            CompanyColour::DarkBlue,
+            &mut ctx,
             &mut images,
         );
-        assert_eq!(selected, handle);
+        assert_eq!(layers.len(), 2);
+        assert_eq!(layers[0].x_offs, 10);
+        assert_eq!(layers[1].x_offs, 20);
+        assert_ne!(layers[0].handle, layers[1].handle);
+        assert_eq!(
+            images.get(&layers[0].handle).unwrap().data.as_deref(),
+            Some(&[10, 0, 0, 255][..])
+        );
+        assert_eq!(
+            images.get(&layers[1].handle).unwrap().data.as_deref(),
+            Some(&[20, 0, 0, 255][..])
+        );
     }
 
     #[test]

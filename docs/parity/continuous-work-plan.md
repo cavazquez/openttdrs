@@ -29,9 +29,9 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 |---:|---|---|---|
 | 1 | Zoom y viewport | Completado | Seis niveles OpenTTD (`0,25×`…`0,125×`), culling/overview deterministas y smoke de render; la paridad raster global queda separada de la cobertura de zoom. |
 | 2 | RMAP-004: generador procedural | Abierto P1 | Reducir la primera divergencia de TGP/RNG/`FixSlopes`/clear/towns/industries/trees con matriz 64²→512²; cerrar sólo cuando el mismo seed tenga contrato documentado y sin divergencias no explicadas. |
-| 3 | Composición raster global (#323→#322→#326) | En curso | El sorter runtime ya cubre piezas estructurales, catenaria, el bloque combinado PBS/Action5/tranvía de puentes y cuerpos/unidades de vehículos con cajas `M(...)`, children y orden de inserción estable; los overlays NewGRF de carretera y estación rail (incluidas pendientes niveladas) siguen la fundación cuando existe. Siguen pendientes mitad frontal de puente, layouts/children completos de estación/objeto/industria y sprite-stack. Las capturas 4×4 siguen siendo diagnóstico, no único oracle. |
+| 3 | Composición raster global (#323→#322→#326) | En curso | El sorter runtime ya cubre piezas estructurales, catenaria, el bloque combinado PBS/Action5/tranvía de puentes y cuerpos/unidades de vehículos con cajas `M(...)`, children y orden de inserción estable; los overlays NewGRF de carretera y estación rail (incluidas pendientes niveladas) siguen la fundación cuando existe. Siguen pendientes mitad frontal de puente y layouts/children completos de estación/objeto/industria/casa; el sprite-stack de vehículos ya materializa hasta ocho capas runtime con Action2 real y var `0x10`, pero conserva límites de callbacks/paleta. Las capturas 4×4 siguen siendo diagnóstico, no único oracle. |
 | 4 | Interoperabilidad SAV (#328) | Abierto | VEHS/ORDL/GRPS/ERNW y shared orders/autoreplace round-trip OpenTTD→Rust→OpenTTD, con campos desconocidos preservados. |
-| 5 | NewGRF runtime (#329) | Abierto | Vehículos, estaciones, objetos e industrias ya tienen rutas runtime parciales; casas ahora reevalúan Action2 por tesela (etapa/hash, edad, terreno, frame, posición y random/triggers) y cachean el resultado. Siguen pendientes callbacks/layouts completos de casas, vehículos, estaciones, aeropuertos, objetos, industrias y cargos, además de persistencia NGRF/OBJS. |
+| 5 | NewGRF runtime (#329) | Abierto | Vehículos, estaciones, objetos e industrias ya tienen rutas runtime parciales; vehículos además resuelven grupos Action2 real por etapa cargada/cargando y hasta ocho capas de sprite-stack, y casas reevalúan Action2 por tesela (etapa/hash, edad, terreno, frame, posición y random/triggers). Siguen pendientes callbacks/layouts completos de casas, vehículos, estaciones, aeropuertos, objetos, industrias y cargos, además de persistencia NGRF/OBJS. |
 | 6 | Movimiento y economía diferencial (#330) | Abierto | Oráculos externos para carretera (tráfico/colisiones/dirección), rail (PBS/YAPF/presignals/consist) y aire/mar, incluyendo casos límite. |
 | 7 | Idiomas y settings (#331) | Abierto | Catálogo de idiomas, locale, settings y textos guardados se cargan y se comparan con OpenTTD sin colisiones ECS ni regresiones de UI. |
 
@@ -60,7 +60,7 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
   tranvía, incluidos los reemplazos NewGRF, también se cuelgan del parent de
   fundación cuando existe. Sigue pendiente la mitad frontal de
   `DrawBridgeRoadBits`, los layouts/children NewGRF de estación/objeto/industria
-  y el sprite-stack; cables y postes de catenaria ya participan como parents
+  y casa; cables y postes de catenaria ya participan como parents
   `sortable` con esa misma caja, y los overlays Action5/PBS/tranvía como
   children del parent trasero combinado.
 - Vehículos: cada cuerpo y unidad de consist recibe la caja `Vehicle::bounds`
@@ -68,7 +68,11 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
   de aeronave), clave estable de `ViewportAddVehicles` y profundidad fuente;
   sombra/rotor se conservan como children del cuerpo. Las vistas Action1/2
   aplican sus offsets NFO a carretera, barcos y aeronaves además de trenes.
-  El sprite-stack NewGRF y sus secuencias múltiples siguen pendientes.
+  Los grupos Action2 real distinguen ahora listas loaded/loading según carga y
+  capacidad. Cuando Action0 activa el bit de sprite-stack, el renderer crea
+  hasta ocho children por unidad, reevalúa la variable `0x10` y conserva offsets
+  NFO por capa; quedan pendientes el registro 100, paleta/callbacks y los casos
+  de articulación/wagon override que requieren más contexto de consist.
 - Estaciones rail NewGRF: los tiletypes Action1/2/3 se dibujan también en
   pendientes y el overlay queda como child de la fundación nivelada, igual que
   la vía/PBS. Los layouts `TileSeq` con varias cajas y children siguen siendo

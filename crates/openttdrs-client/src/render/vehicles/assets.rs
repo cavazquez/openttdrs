@@ -28,6 +28,19 @@ use vehicle_gfx::{
     TRUCK_VEHICLE_LAYERS, TRUCK_VEHICLE_LAYERS_LOADED,
 };
 
+/// Una entrada de la secuencia visual que devuelve `GetCustomVehicleSprite`.
+///
+/// Los offsets forman parte del sprite, no del parent: una capa apilada puede
+/// tener un origen distinto aunque comparta dirección y vehículo.
+#[derive(Clone)]
+pub(crate) struct NewGrfVehicleLayer {
+    pub handle: Handle<Image>,
+    pub x_offs: i16,
+    pub y_offs: i16,
+    pub width: u16,
+    pub height: u16,
+}
+
 pub(crate) use vehicle_gfx::{AIRCRAFT_ROTOR_LAYERS, VehicleLayerGfx};
 
 const TRAIN_GROUP_COUNT: usize = 10;
@@ -104,8 +117,8 @@ pub(crate) fn vehicle_layers(v: &Vehicle) -> &'static [vehicle_gfx::VehicleLayer
 /// Caché in-world / preview: `(engine_id, view_idx, company_colour)` → textura.
 #[derive(Resource, Default)]
 pub(crate) struct NewGrfTrainSpriteCache {
-    /// `(engine_id, view_idx, colour, runtime_fp)` → textura.
-    handles: HashMap<(u16, u8, u8, u32), Handle<Image>>,
+    /// `(engine_id, view_idx, colour, stack, runtime_fp)` → textura.
+    handles: HashMap<(u16, u8, u8, u8, u32), Handle<Image>>,
 }
 
 impl NewGrfTrainSpriteCache {
@@ -128,7 +141,7 @@ impl NewGrfTrainSpriteCache {
     ) -> Option<Handle<Image>> {
         let view = engine.newgrf_view(dir)?;
         let view_idx = u8::try_from(dir % engine.newgrf_views.len()).unwrap_or(0);
-        let key = (engine.id, view_idx, colour.as_u8(), 0);
+        let key = (engine.id, view_idx, colour.as_u8(), 0, 0);
         Some(
             self.handles
                 .entry(key)
@@ -143,6 +156,7 @@ impl NewGrfTrainSpriteCache {
     }
 
     /// Textura re-resolviendo Action2 con bits del vehículo / consist.
+    #[allow(dead_code)]
     pub(crate) fn handle_for_runtime(
         &mut self,
         engine: &EngineDef,
@@ -152,26 +166,78 @@ impl NewGrfTrainSpriteCache {
         ctx: &mut openttdrs_core::Action2EvalCtx,
         images: &mut Assets<Image>,
     ) -> Option<Handle<Image>> {
-        let runtime = engine.newgrf_runtime.as_ref()?;
-        let views = runtime.views_for_local_id_cargo_ctx(engine.newgrf_local_id, cargo, ctx)?;
-        if views.is_empty() {
-            return None;
-        }
-        let view = &views[dir % views.len()];
-        let view_idx = u8::try_from(dir % views.len()).unwrap_or(0);
-        let fp = runtime_fingerprint(ctx, vars::TRAIN, true);
-        let key = (engine.id, view_idx, colour.as_u8(), fp);
-        Some(
-            self.handles
+        self.handles_for_runtime(engine, dir, cargo, colour, ctx, images)
+            .into_iter()
+            .next()
+            .map(|layer| layer.handle)
+    }
+
+    /// Resuelve la secuencia visual de un vehículo, incluyendo las capas que
+    /// `EngineMiscFlag::SpriteStack` pide repetir con `var 10` alto.
+    ///
+    /// El registro `100h` que indica el final de la secuencia sólo existe en
+    /// callbacks completos. Mientras ese callback siga fuera del subconjunto,
+    /// se usa el contrato seguro de OpenTTD: como máximo ocho capas y se corta
+    /// en la primera vista repetida. Esto evita duplicar una vista estática sin
+    /// inventar sprites cuando el GRF no implementa stack.
+    pub(crate) fn handles_for_runtime(
+        &mut self,
+        engine: &EngineDef,
+        dir: usize,
+        cargo: Option<openttdrs_core::CargoType>,
+        colour: CompanyColour,
+        ctx: &mut openttdrs_core::Action2EvalCtx,
+        images: &mut Assets<Image>,
+    ) -> Vec<NewGrfVehicleLayer> {
+        let Some(runtime) = engine.newgrf_runtime.as_ref() else {
+            return Vec::new();
+        };
+        let max_stack = if engine.sprite_stack { 8 } else { 1 };
+        let mut layers = Vec::with_capacity(max_stack);
+        let base_ctx = ctx.clone();
+        let mut previous: Option<openttdrs_core::DecodedSprite> = None;
+        for stack in 0..max_stack {
+            let mut stack_ctx = base_ctx.clone();
+            // EIT_ON_MAP = 0; the high byte is the sprite-stack index.
+            stack_ctx
+                .vars
+                .insert(0x10, u32::try_from(stack).unwrap_or(0) << 8);
+            let Some(views) =
+                runtime.views_for_local_id_cargo_ctx(engine.newgrf_local_id, cargo, &mut stack_ctx)
+            else {
+                break;
+            };
+            if views.is_empty() {
+                break;
+            }
+            let view = views[dir % views.len()].clone();
+            if stack > 0 && previous.as_ref() == Some(&view) {
+                break;
+            }
+            let view_idx = u8::try_from(dir % views.len()).unwrap_or(0);
+            let fp = runtime_fingerprint(&stack_ctx, vars::TRAIN, true);
+            let stack_idx = u8::try_from(stack).unwrap_or(u8::MAX);
+            let key = (engine.id, view_idx, colour.as_u8(), stack_idx, fp);
+            let handle = self
+                .handles
                 .entry(key)
                 .or_insert_with(|| {
                     images.add(decoded_sprite_image(
-                        view,
+                        &view,
                         DecodedSpriteImagePolicy::Masked { colour },
                     ))
                 })
-                .clone(),
-        )
+                .clone();
+            layers.push(NewGrfVehicleLayer {
+                handle,
+                x_offs: view.x_offs,
+                y_offs: view.y_offs,
+                width: view.width,
+                height: view.height,
+            });
+            previous = Some(view);
+        }
+        layers
     }
 }
 
@@ -341,18 +407,18 @@ impl TruckHandles {
         }
     }
 
-    /// Textura del vehículo; prioriza vistas NewGRF del catálogo runtime.
+    /// Capas NewGRF con offsets individuales para el parent y sus children.
     #[allow(clippy::too_many_arguments)]
-    pub(super) fn for_vehicle_with_newgrf(
+    pub(super) fn for_vehicle_with_newgrf_layers(
         &self,
         v: &Vehicle,
         pose: openttdrs_core::VehiclePose,
-        company: Option<&CompanyColoredSprites>,
+        _company: Option<&CompanyColoredSprites>,
         owner_colour: Option<crate::sprites::CompanyColour>,
         sim: &crate::state::SimWorld,
         cache: &mut NewGrfTrainSpriteCache,
         images: &mut Assets<Image>,
-    ) -> Handle<Image> {
+    ) -> Vec<NewGrfVehicleLayer> {
         let dir = openttdrs_core::vehicle_render_direction_at(v, pose).min(7) as usize;
         if let Some(eid) = v.engine_id
             && let Some(eng) = super::engine_in_sim(sim, eid)
@@ -371,15 +437,23 @@ impl TruckHandles {
                     &sim.state.newgrf_stack,
                     eng.newgrf_grfid,
                 ));
-                if let Some(handle) =
-                    cache.handle_for_runtime(eng, dir, v.cargo_type, colour, &mut ctx, images)
-                {
-                    return handle;
+                let layers =
+                    cache.handles_for_runtime(eng, dir, v.cargo_type, colour, &mut ctx, images);
+                if !layers.is_empty() {
+                    return layers;
                 }
-            } else if let Some(handle) = cache.handle_for(eng, dir, colour, images) {
-                return handle;
+            } else if let Some(handle) = cache.handle_for(eng, dir, colour, images)
+                && let Some(view) = eng.newgrf_view(dir)
+            {
+                return vec![NewGrfVehicleLayer {
+                    handle,
+                    x_offs: view.x_offs,
+                    y_offs: view.y_offs,
+                    width: view.width,
+                    height: view.height,
+                }];
             }
         }
-        self.for_vehicle(v, pose, company, owner_colour)
+        Vec::new()
     }
 }

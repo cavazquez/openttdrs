@@ -18,6 +18,14 @@ pub(crate) fn runtime_fingerprint(
                     .wrapping_add(u32::from(offset) << 24);
             }
         }
+        // Action2 real vehicle groups select a loaded/loading set by cargo
+        // stage. Include that state or a cached empty sprite can survive a
+        // station load window and make the runtime appear stuck.
+        h = h
+            .wrapping_mul(31)
+            .wrapping_add(u32::from(ctx.vehicle_loading))
+            .wrapping_add(ctx.vehicle_cargo)
+            .wrapping_add(ctx.vehicle_capacity.rotate_left(16));
     }
     for &var in vars {
         if let Some(&v) = ctx.vars.get(&var) {

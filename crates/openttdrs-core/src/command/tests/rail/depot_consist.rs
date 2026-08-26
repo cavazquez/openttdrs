@@ -366,6 +366,7 @@ fn build_vehicle_at_depot_buys_newgrf_train_from_catalog() {
         refit_mask: 0,
         is_helicopter: false,
         is_large_aircraft: false,
+        sprite_stack: false,
         ocean_speed_frac: 0,
         canal_speed_frac: 0,
         sound_effect: 0,

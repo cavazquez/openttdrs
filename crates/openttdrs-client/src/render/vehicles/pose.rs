@@ -95,9 +95,34 @@ pub(crate) fn vehicle_sprite_pos_at_with_catalog(
         let layer = vehicle_layer(v, Some(map), pose);
         (layer.x_offs, layer.y_offs, layer.w, layer.h)
     };
-    let (anchor, height, tx, ty) = vehicle_draw_anchor_from_pose(v, map, pose);
-    let height = height.saturating_add(v.altitude);
-    overlay_pos(anchor, x_offs, y_offs, w, h, height, 1.0, tx, ty)
+    vehicle_sprite_pos_at_offsets(v, map, pose, x_offs, y_offs, w, h)
+}
+
+/// Posición de una capa de vehículo que conserva sus offsets NFO individuales.
+/// Las secuencias NewGRF (sprite-stack) comparten ancla, pero no
+/// necesariamente tamaño/origen.
+pub(crate) fn vehicle_sprite_pos_at_offsets(
+    v: &Vehicle,
+    map: &Map,
+    pose: openttdrs_core::VehiclePose,
+    x_offs: f32,
+    y_offs: f32,
+    width: f32,
+    sprite_height: f32,
+) -> Vec3 {
+    let (anchor, height_base, tx, ty) = vehicle_draw_anchor_from_pose(v, map, pose);
+    let world_height = height_base.saturating_add(v.altitude);
+    overlay_pos(
+        anchor,
+        x_offs,
+        y_offs,
+        width,
+        sprite_height,
+        world_height,
+        1.0,
+        tx,
+        ty,
+    )
 }
 
 pub(crate) fn vehicle_sprite_pos(v: &Vehicle, map: &Map, tick_alpha: f32) -> Vec3 {

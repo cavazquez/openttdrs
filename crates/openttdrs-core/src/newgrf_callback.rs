@@ -60,6 +60,9 @@ pub fn action2_eval_ctx_from_vehicle(vehicle: &Vehicle) -> Action2EvalCtx {
     ctx.persistent_registers
         .clone_from(&vehicle.newgrf_persistent_regs);
     ctx.random_bits = u32::from(vehicle.newgrf_random_bits);
+    ctx.vehicle_loading = vehicle.cargo_loading || vehicle.cargo_unloading;
+    ctx.vehicle_cargo = vehicle.cargo;
+    ctx.vehicle_capacity = vehicle.capacity;
     ctx
 }
 

@@ -227,6 +227,8 @@ pub struct ParsedTrainMeta {
     pub refit_mask: u32,
     /// Máscara de callbacks de vehículo (bit 7 = `SoundEffect`).
     pub callback_mask: u16,
+    /// Action0 misc flag bit 7: `OpenTTD` draws a sequence of stacked sprites.
+    pub sprite_stack: bool,
 }
 
 /// Subset de propiedades Action0 que alimenta el catálogo jugable de vehículos.
@@ -260,6 +262,8 @@ pub struct ParsedVehicleMeta {
     pub refit_mask: u32,
     /// Máscara de callbacks de vehículo (bit 7 = `SoundEffect`).
     pub callback_mask: u16,
+    /// Action0 misc flag bit 7: `OpenTTD` draws a sequence of stacked sprites.
+    pub sprite_stack: bool,
 }
 
 impl ParsedVehicleMeta {
@@ -332,6 +336,7 @@ impl ParsedVehicleMeta {
             sound_effect: 0,
             refit_mask: 0,
             callback_mask: 0,
+            sprite_stack: false,
         })
     }
 }
@@ -2967,6 +2972,7 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
     let mut required_rail_type = None;
     let mut refit_mask = 0u32;
     let mut callback_mask = 0u16;
+    let mut sprite_stack = false;
     for _ in 0..header.num_props {
         if i >= payload.len() {
             break;
@@ -3069,8 +3075,10 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
                 }
             }
             0x27 => {
-                // `EngineMiscFlag::RailTilts` = bit 0.
-                rail_tilts = read_u8(payload, &mut i)? & 0x01 != 0;
+                // `EngineMiscFlag::RailTilts` = bit 0 and SpriteStack = bit 7.
+                let flags = read_u8(payload, &mut i)?;
+                rail_tilts = flags & 0x01 != 0;
+                sprite_stack = flags & 0x80 != 0;
             }
             0x2E => {
                 curve_speed_mod = i16::from_le_bytes(read_u16(payload, &mut i)?.to_le_bytes());
@@ -3155,6 +3163,7 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
         required_rail_type,
         refit_mask,
         callback_mask,
+        sprite_stack,
     })
 }
 
@@ -3256,8 +3265,13 @@ fn parse_road_vehicle_property(
         }
         // 0x0A/0x16/0x1F/0x27: dword props aún no mapeadas al runtime.
         0x0A | 0x16 | 0x1F | 0x27 => skip_bytes(payload, i, metas.len().checked_mul(4)?)?,
+        0x1C => {
+            for meta in metas {
+                meta.sprite_stack = read_u8(payload, i)? & 0x80 != 0;
+            }
+        }
         // 0x05 translation table; 0x20/0x28 extended byte (fixtures usan BYTE).
-        0x05 | 0x0E | 0x18 | 0x19 | 0x1A | 0x1B | 0x1C | 0x20 | 0x21 | 0x23 | 0x28 => {
+        0x05 | 0x0E | 0x18 | 0x19 | 0x1A | 0x1B | 0x20 | 0x21 | 0x23 | 0x28 => {
             skip_bytes(payload, i, metas.len())?;
         }
         0x17 => {
@@ -3316,8 +3330,13 @@ fn parse_ship_property(
     metas: &mut [ParsedVehicleMeta],
 ) -> Option<()> {
     match prop {
-        0x08 | 0x09 | 0x13 | 0x16 | 0x17 | 0x1C | 0x24 => {
+        0x08 | 0x09 | 0x13 | 0x16 | 0x1C | 0x24 => {
             skip_bytes(payload, i, metas.len())?;
+        }
+        0x17 => {
+            for meta in metas {
+                meta.sprite_stack = read_u8(payload, i)? & 0x80 != 0;
+            }
         }
         0x12 => {
             for meta in metas {
@@ -3408,8 +3427,13 @@ fn parse_aircraft_property(
     metas: &mut [ParsedVehicleMeta],
 ) -> Option<()> {
     match prop {
-        0x08 | 0x0D | 0x15 | 0x16 | 0x17 | 0x1B => {
+        0x08 | 0x0D | 0x15 | 0x16 | 0x1B => {
             skip_bytes(payload, i, metas.len())?;
+        }
+        0x17 => {
+            for meta in metas {
+                meta.sprite_stack = read_u8(payload, i)? & 0x80 != 0;
+            }
         }
         0x14 => {
             for meta in metas {

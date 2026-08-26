@@ -9,7 +9,7 @@ use super::assets::{NewGrfTrainSpriteCache, TruckHandles, vehicle_layers};
 use super::pose::{
     aircraft_aux_sprite_pos_at, vehicle_insertion_key, vehicle_parent_bounds,
     vehicle_pose_for_construction, vehicle_source_depth, vehicle_sprite_pos,
-    vehicle_sprite_pos_at_with_catalog,
+    vehicle_sprite_pos_at_offsets, vehicle_sprite_pos_at_with_catalog,
 };
 use super::spawn::{vehicle_cargo_color, vehicle_cargo_label};
 
@@ -43,6 +43,16 @@ pub(crate) struct AircraftRotorSprite(pub(super) u32);
 pub(crate) struct ConsistUnitSprite {
     pub(super) head_id: u32,
     pub(super) unit_index: usize,
+}
+
+/// Capa adicional de una secuencia `EngineMiscFlag::SpriteStack`.
+///
+/// El id es directo para que las unidades de un consist y los cuerpos
+/// principales puedan compartir el mismo sistema de sincronización.
+#[derive(Component)]
+pub(crate) struct VehicleNewGrfStackSprite {
+    pub(super) vehicle_id: u32,
+    pub(super) stack_index: usize,
 }
 
 #[derive(Component)]
@@ -113,6 +123,22 @@ pub(crate) fn update_vehicles(
         ),
         (
             Without<VehicleSprite>,
+            Without<AircraftShadowSprite>,
+            Without<AircraftRotorSprite>,
+        ),
+    >,
+    mut stack_layers: Query<
+        (
+            &VehicleNewGrfStackSprite,
+            &mut Transform,
+            &mut Sprite,
+            &mut Visibility,
+            Option<&mut ViewportSortableChild>,
+        ),
+        (
+            Without<VehicleSprite>,
+            Without<ConsistUnitSprite>,
+            Without<VehicleCargoLabel>,
             Without<AircraftShadowSprite>,
             Without<AircraftRotorSprite>,
         ),
@@ -188,15 +214,7 @@ pub(crate) fn update_vehicles(
             pose,
             Some(&sim.state.engine_catalog),
         );
-        let source_depth = vehicle_source_depth(v, &sim.state.map, pose, pos3);
-        pos3.z = source_depth;
-        transform.translation = pos3;
-        if let Some(parent) = parent.as_deref_mut() {
-            parent.bounds = vehicle_parent_bounds(v, &sim.state.map, pose);
-            parent.insertion_key = vehicle_insertion_key(v, pose);
-            parent.source_depth = source_depth;
-        }
-        sprite.image = trucks.for_vehicle_with_newgrf(
+        let layers = trucks.for_vehicle_with_newgrf_layers(
             v,
             pose,
             Some(&company),
@@ -205,6 +223,31 @@ pub(crate) fn update_vehicles(
             &mut cache,
             &mut images,
         );
+        if let Some(layer) = layers.first() {
+            pos3 = vehicle_sprite_pos_at_offsets(
+                v,
+                &sim.state.map,
+                pose,
+                f32::from(layer.x_offs),
+                f32::from(layer.y_offs),
+                f32::from(layer.width),
+                f32::from(layer.height),
+            );
+        }
+        let source_depth = vehicle_source_depth(v, &sim.state.map, pose, pos3);
+        pos3.z = source_depth;
+        transform.translation = pos3;
+        if let Some(parent) = parent.as_deref_mut() {
+            parent.bounds = vehicle_parent_bounds(v, &sim.state.map, pose);
+            parent.insertion_key = vehicle_insertion_key(v, pose);
+            parent.source_depth = source_depth;
+        }
+        sprite.image = layers
+            .first()
+            .map(|layer| layer.handle.clone())
+            .unwrap_or_else(|| {
+                trucks.for_vehicle(v, pose, Some(&company), Some(vehicle_owner_colour(&sim, v)))
+            });
         sprite.color = vehicle_tint(v);
     }
 
@@ -237,12 +280,32 @@ pub(crate) fn update_vehicles(
             continue;
         }
         *visibility = Visibility::Visible;
-        let base = vehicle_sprite_pos_at_with_catalog(
+        let mut base = vehicle_sprite_pos_at_with_catalog(
             unit,
             &sim.state.map,
             trailer_pose,
             Some(&sim.state.engine_catalog),
         );
+        let layers = trucks.for_vehicle_with_newgrf_layers(
+            unit,
+            trailer_pose,
+            Some(&company),
+            Some(vehicle_owner_colour(&sim, unit)),
+            &sim,
+            &mut cache,
+            &mut images,
+        );
+        if let Some(layer) = layers.first() {
+            base = vehicle_sprite_pos_at_offsets(
+                unit,
+                &sim.state.map,
+                trailer_pose,
+                f32::from(layer.x_offs),
+                f32::from(layer.y_offs),
+                f32::from(layer.width),
+                f32::from(layer.height),
+            );
+        }
         let source_depth = vehicle_source_depth(unit, &sim.state.map, trailer_pose, base);
         let mut sorted_base = base;
         sorted_base.z = source_depth;
@@ -252,16 +315,65 @@ pub(crate) fn update_vehicles(
             parent.insertion_key = vehicle_insertion_key(unit, trailer_pose);
             parent.source_depth = source_depth;
         }
-        sprite.image = trucks.for_vehicle_with_newgrf(
-            unit,
-            trailer_pose,
+        sprite.image = layers
+            .first()
+            .map(|layer| layer.handle.clone())
+            .unwrap_or_else(|| {
+                trucks.for_vehicle(
+                    unit,
+                    trailer_pose,
+                    Some(&company),
+                    Some(vehicle_owner_colour(&sim, unit)),
+                )
+            });
+        sprite.color = vehicle_tint(unit);
+    }
+
+    for (layer, mut transform, mut sprite, mut visibility, mut child) in &mut stack_layers {
+        let Some(i) = vehicle_index.core.slot(layer.vehicle_id) else {
+            *visibility = Visibility::Hidden;
+            continue;
+        };
+        let Some(v) = sim.state.vehicles.get(i) else {
+            *visibility = Visibility::Hidden;
+            continue;
+        };
+        let pose = vehicle_pose_for_construction(v, sim_clock.tick_alpha, sim.state.construction);
+        if vehicle_is_hidden_from_view(&sim, v, pose) {
+            *visibility = Visibility::Hidden;
+            continue;
+        }
+        let layers = trucks.for_vehicle_with_newgrf_layers(
+            v,
+            pose,
             Some(&company),
-            Some(vehicle_owner_colour(&sim, unit)),
+            Some(vehicle_owner_colour(&sim, v)),
             &sim,
             &mut cache,
             &mut images,
         );
-        sprite.color = vehicle_tint(unit);
+        let Some(layer_data) = layers.get(layer.stack_index) else {
+            *visibility = Visibility::Hidden;
+            continue;
+        };
+        *visibility = Visibility::Visible;
+        let mut pos3 = vehicle_sprite_pos_at_offsets(
+            v,
+            &sim.state.map,
+            pose,
+            f32::from(layer_data.x_offs),
+            f32::from(layer_data.y_offs),
+            f32::from(layer_data.width),
+            f32::from(layer_data.height),
+        );
+        let source_depth = vehicle_source_depth(v, &sim.state.map, pose, pos3);
+        pos3.z = source_depth;
+        transform.translation = pos3;
+        sprite.image = layer_data.handle.clone();
+        sprite.color = vehicle_tint(v);
+        if let Some(child) = child.as_deref_mut() {
+            child.source_depth = source_depth;
+        }
     }
 
     for (shadow, mut transform, mut sprite, mut visibility, mut child) in &mut shadows {

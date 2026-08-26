@@ -122,6 +122,14 @@ parent de `DrawFoundation`; no conservan ya una Z independiente.
 También incorpora los edificios industriales vanilla planos y estáticos, cuya
 caja `M(...)` no cambia durante la composición; las pendientes, animaciones y
 layouts NewGRF permanecen fuera de ese subconjunto.
+Los cuerpos de vehículos y cada unidad de consist ahora reciben la caja
+`Vehicle::bounds` de OpenTTD (incluidas longitudes diagonales de tren,
+orientación de barcos y el vuelo de aeronaves) y una clave estable del pase
+`ViewportAddVehicles`; la sombra y el rotor de helicóptero quedan como
+children del cuerpo. Las vistas Action1/2 de vehículos de carretera, barcos y
+aeronaves también aplican sus offsets NFO al ancla, igual que los trenes. Esto
+mejora la composición y la selección de sprite, pero no cierra los sprite-stack
+NewGRF ni los callbacks de vehículo que siguen OOS.
 En `(225,2)` las cajas de
 `5982` y `5983` coinciden con el oráculo y Bevy recibe sus slots de Z en el
 orden final `5983 → 5982`; en `(195,17)`, OpenTTD transforma la inserción
@@ -172,6 +180,8 @@ conservando su ventana de profundidad y su orden local; si el parent visible
 no está disponible, se mantiene el fallback independiente para no perder el
 sprite. Los overlays NewGRF de carretera y la mitad frontal de
 `DrawBridgeRoadBits` todavía requieren sus propios parents/children.
+Los producers de industria/estación/objeto y el sprite-stack de vehículos
+NewGRF siguen pendientes de un parent/child runtime completo.
 Los focos naval
 `138,7..140,10` y de muelle `136,1..139,3` vinculan
 7/7 parents candidatos al orden final C++; es evidencia del contrato de cajas y

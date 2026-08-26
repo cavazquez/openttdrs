@@ -1,13 +1,14 @@
 use bevy::prelude::*;
 use openttdrs_core::prelude::*;
 
-use crate::render::CompanyColoredSprites;
+use crate::render::{CompanyColoredSprites, ViewportSortableChild, ViewportSortableParent};
 use crate::simulation::SimClock;
 use crate::state::SimWorld;
 
 use super::assets::{NewGrfTrainSpriteCache, TruckHandles, vehicle_layers};
 use super::pose::{
-    aircraft_aux_sprite_pos_at, vehicle_pose_for_construction, vehicle_sprite_pos,
+    aircraft_aux_sprite_pos_at, vehicle_insertion_key, vehicle_parent_bounds,
+    vehicle_pose_for_construction, vehicle_source_depth, vehicle_sprite_pos,
     vehicle_sprite_pos_at_with_catalog,
 };
 use super::spawn::{vehicle_cargo_color, vehicle_cargo_label};
@@ -95,13 +96,20 @@ pub(crate) fn update_vehicles(
     vehicle_index: Res<VehicleIndex>,
     mut cache: ResMut<NewGrfTrainSpriteCache>,
     mut images: ResMut<Assets<Image>>,
-    mut q: Query<(&VehicleSprite, &mut Transform, &mut Sprite, &mut Visibility)>,
+    mut q: Query<(
+        &VehicleSprite,
+        &mut Transform,
+        &mut Sprite,
+        &mut Visibility,
+        Option<&mut ViewportSortableParent>,
+    )>,
     mut trailers: Query<
         (
             &ConsistUnitSprite,
             &mut Transform,
             &mut Sprite,
             &mut Visibility,
+            Option<&mut ViewportSortableParent>,
         ),
         (
             Without<VehicleSprite>,
@@ -130,6 +138,7 @@ pub(crate) fn update_vehicles(
             &mut Transform,
             &mut Sprite,
             &mut Visibility,
+            Option<&mut ViewportSortableChild>,
         ),
         (
             Without<VehicleSprite>,
@@ -144,6 +153,7 @@ pub(crate) fn update_vehicles(
             &mut Transform,
             &mut Sprite,
             &mut Visibility,
+            Option<&mut ViewportSortableChild>,
         ),
         (
             Without<VehicleSprite>,
@@ -159,7 +169,7 @@ pub(crate) fn update_vehicles(
             &mut images,
         );
     }
-    for (vs, mut transform, mut sprite, mut visibility) in &mut q {
+    for (vs, mut transform, mut sprite, mut visibility, mut parent) in &mut q {
         let Some(i) = vehicle_index.core.slot(vs.0) else {
             continue;
         };
@@ -172,13 +182,20 @@ pub(crate) fn update_vehicles(
             continue;
         }
         *visibility = Visibility::Visible;
-        let pos3 = vehicle_sprite_pos_at_with_catalog(
+        let mut pos3 = vehicle_sprite_pos_at_with_catalog(
             v,
             &sim.state.map,
             pose,
             Some(&sim.state.engine_catalog),
         );
+        let source_depth = vehicle_source_depth(v, &sim.state.map, pose, pos3);
+        pos3.z = source_depth;
         transform.translation = pos3;
+        if let Some(parent) = parent.as_deref_mut() {
+            parent.bounds = vehicle_parent_bounds(v, &sim.state.map, pose);
+            parent.insertion_key = vehicle_insertion_key(v, pose);
+            parent.source_depth = source_depth;
+        }
         sprite.image = trucks.for_vehicle_with_newgrf(
             v,
             pose,
@@ -191,7 +208,7 @@ pub(crate) fn update_vehicles(
         sprite.color = vehicle_tint(v);
     }
 
-    for (trailer, mut transform, mut sprite, mut visibility) in &mut trailers {
+    for (trailer, mut transform, mut sprite, mut visibility, mut parent) in &mut trailers {
         let Some(i) = vehicle_index.core.slot(trailer.head_id) else {
             *visibility = Visibility::Hidden;
             continue;
@@ -226,7 +243,15 @@ pub(crate) fn update_vehicles(
             trailer_pose,
             Some(&sim.state.engine_catalog),
         );
-        transform.translation = base - Vec3::Z * (trailer.unit_index as f32 * 0.01);
+        let source_depth = vehicle_source_depth(unit, &sim.state.map, trailer_pose, base);
+        let mut sorted_base = base;
+        sorted_base.z = source_depth;
+        transform.translation = sorted_base;
+        if let Some(parent) = parent.as_deref_mut() {
+            parent.bounds = vehicle_parent_bounds(unit, &sim.state.map, trailer_pose);
+            parent.insertion_key = vehicle_insertion_key(unit, trailer_pose);
+            parent.source_depth = source_depth;
+        }
         sprite.image = trucks.for_vehicle_with_newgrf(
             unit,
             trailer_pose,
@@ -239,7 +264,7 @@ pub(crate) fn update_vehicles(
         sprite.color = vehicle_tint(unit);
     }
 
-    for (shadow, mut transform, mut sprite, mut visibility) in &mut shadows {
+    for (shadow, mut transform, mut sprite, mut visibility, mut child) in &mut shadows {
         let Some(i) = vehicle_index.core.slot(shadow.0) else {
             *visibility = Visibility::Hidden;
             continue;
@@ -256,12 +281,18 @@ pub(crate) fn update_vehicles(
         *visibility = Visibility::Visible;
         let dir = openttdrs_core::vehicle_render_direction_at(v, pose).min(7) as usize;
         let layer = &vehicle_layers(v)[dir];
-        transform.translation =
+        let mut shadow_pos =
             aircraft_aux_sprite_pos_at(v, &sim.state.map, pose, layer, false, 0.85);
+        let source_depth = vehicle_source_depth(v, &sim.state.map, pose, shadow_pos);
+        shadow_pos.z = source_depth;
+        transform.translation = shadow_pos;
+        if let Some(child) = child.as_deref_mut() {
+            child.source_depth = source_depth;
+        }
         sprite.image = trucks.for_vehicle(v, pose, None, None);
     }
 
-    for (rotor, mut transform, mut sprite, mut visibility) in &mut rotors {
+    for (rotor, mut transform, mut sprite, mut visibility, mut child) in &mut rotors {
         let Some(i) = vehicle_index.core.slot(rotor.0) else {
             *visibility = Visibility::Hidden;
             continue;
@@ -278,8 +309,13 @@ pub(crate) fn update_vehicles(
         let frame = aircraft_rotor_frame(v, sim.state.tick.get());
         let layer = &super::assets::AIRCRAFT_ROTOR_LAYERS[frame];
         *visibility = Visibility::Visible;
-        transform.translation =
-            aircraft_aux_sprite_pos_at(v, &sim.state.map, pose, layer, true, 1.1);
+        let mut rotor_pos = aircraft_aux_sprite_pos_at(v, &sim.state.map, pose, layer, true, 1.1);
+        let source_depth = vehicle_source_depth(v, &sim.state.map, pose, rotor_pos);
+        rotor_pos.z = source_depth;
+        transform.translation = rotor_pos;
+        if let Some(child) = child.as_deref_mut() {
+            child.source_depth = source_depth;
+        }
         sprite.image = trucks.aircraft_rotor(frame);
     }
 

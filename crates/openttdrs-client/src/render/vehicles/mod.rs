@@ -42,7 +42,10 @@ mod tests {
     };
     use assets::{TruckHandles, vehicle_layers};
     use picking::pick_vehicle_id_at_world;
-    use pose::{vehicle_sprite_pos, vehicle_sprite_pos_at, vehicle_sprite_pos_at_with_catalog};
+    use pose::{
+        vehicle_parent_bounds, vehicle_sprite_pos, vehicle_sprite_pos_at,
+        vehicle_sprite_pos_at_with_catalog,
+    };
     use spawn::{vehicle_cargo_color, vehicle_cargo_label};
     use sync::{VehicleIndex, rebuild_vehicle_index, update_vehicles, vehicle_tint};
 
@@ -128,6 +131,118 @@ mod tests {
         assert_eq!(vehicle_tint(&v), Color::WHITE);
         v.pbs_stuck = true;
         assert_eq!(vehicle_tint(&v), Color::srgb(1.0, 0.75, 0.35));
+    }
+
+    #[test]
+    fn vehicle_bounds_match_openttd_kind_extents() {
+        let map = Map::new_flat(32, 32, 0);
+        let tile = TileCoord::new(8, 8);
+
+        let mut road = Vehicle::new(1, VehicleKind::Bus, tile, tile);
+        road.direction = DIR_E;
+        let road_bounds = vehicle_parent_bounds(
+            &road,
+            &map,
+            openttdrs_core::VehiclePose::from_vehicle(&road),
+        );
+        assert_eq!(
+            (
+                road_bounds.xmax - road_bounds.xmin + 1,
+                road_bounds.ymax - road_bounds.ymin + 1,
+                road_bounds.zmax - road_bounds.zmin + 1,
+            ),
+            (3, 3, 6)
+        );
+
+        let mut train = Vehicle::new(2, VehicleKind::Train, tile, tile);
+        train.direction = DIR_NE;
+        train.unit_length = 12;
+        let train_bounds = vehicle_parent_bounds(
+            &train,
+            &map,
+            openttdrs_core::VehiclePose::from_vehicle(&train),
+        );
+        assert_eq!(
+            (
+                train_bounds.xmax - train_bounds.xmin + 1,
+                train_bounds.ymax - train_bounds.ymin + 1,
+                train_bounds.zmax - train_bounds.zmin + 1,
+            ),
+            (12, 3, 6)
+        );
+
+        let mut ship = Vehicle::new(3, VehicleKind::Ship, tile, tile);
+        ship.direction = DIR_SE;
+        let ship_bounds = vehicle_parent_bounds(
+            &ship,
+            &map,
+            openttdrs_core::VehiclePose::from_vehicle(&ship),
+        );
+        assert_eq!(
+            (
+                ship_bounds.xmax - ship_bounds.xmin + 1,
+                ship_bounds.ymax - ship_bounds.ymin + 1,
+                ship_bounds.zmax - ship_bounds.zmin + 1,
+            ),
+            (6, 32, 6)
+        );
+
+        let mut aircraft = Vehicle::new(4, VehicleKind::Aircraft, tile, tile);
+        aircraft.aircraft_phase = openttdrs_core::AircraftPhase::Flying;
+        let aircraft_bounds = vehicle_parent_bounds(
+            &aircraft,
+            &map,
+            openttdrs_core::VehiclePose::from_vehicle(&aircraft),
+        );
+        assert_eq!(
+            (
+                aircraft_bounds.xmax - aircraft_bounds.xmin + 1,
+                aircraft_bounds.ymax - aircraft_bounds.ymin + 1,
+                aircraft_bounds.zmax - aircraft_bounds.zmin + 1,
+            ),
+            (24, 24, 5)
+        );
+    }
+
+    #[test]
+    fn newgrf_offsets_are_used_for_road_ship_and_aircraft_sprites() {
+        let map = Map::new_flat(32, 32, 0);
+        let cases = [
+            (VehicleKind::Bus, openttdrs_core::ENGINE_BUS_MPS),
+            (VehicleKind::Ship, openttdrs_core::ENGINE_SHIP_MPS),
+            (
+                VehicleKind::Aircraft,
+                openttdrs_core::ENGINE_AIRCRAFT_DAKOTA,
+            ),
+        ];
+        for (kind, engine_id) in cases {
+            let tile = TileCoord::new(8, 8);
+            let mut vehicle = Vehicle::new(10, kind, tile, tile);
+            vehicle.engine_id = Some(engine_id);
+            let mut engine = openttdrs_core::engine_by_id(engine_id)
+                .expect("motor vanilla de fixture")
+                .clone();
+            engine.newgrf_views = vec![openttdrs_core::DecodedSprite {
+                width: 4,
+                height: 4,
+                x_offs: 20,
+                y_offs: 18,
+                rgba: vec![255; 4 * 4 * 4],
+                mask: Vec::new(),
+            }];
+            let vanilla = vehicle_sprite_pos(&vehicle, &map, 0.0);
+            let custom = vehicle_sprite_pos_at_with_catalog(
+                &vehicle,
+                &map,
+                openttdrs_core::VehiclePose::from_vehicle(&vehicle),
+                Some(std::slice::from_ref(&engine)),
+            );
+            assert_ne!(
+                (vanilla.x, vanilla.y),
+                (custom.x, custom.y),
+                "offset NewGRF ignorado para {kind:?}"
+            );
+        }
     }
 
     #[test]

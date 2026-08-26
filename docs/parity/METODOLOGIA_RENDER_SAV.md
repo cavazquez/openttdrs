@@ -34,7 +34,7 @@ la paridad se comprueba por capas, de menor a mayor distancia del píxel final.
 | 1 | [`world-raw`](WORLD_RAW_SCHEMA.md) | ¿Los bytes de mapa de cada tesela son los mismos? | No explica su significado. |
 | 2 | [`world-semantic`](WORLD_SEMANTIC_SCHEMA.md) | ¿Ambos clasifican igual vía, puente, túnel, estación, pendiente y orientación? | No garantiza el sprite final. |
 | 3 | [`world-draw`](WORLD_DRAW_SCHEMA.md) | ¿Rust selecciona sprite, paleta y geometría permitidos por el `draw_tile_proc` C++? | La cobertura Rust aún no incluye todas las familias ni prueba el sort global o el framebuffer. |
-| 3b | [`world-sort`](WORLD_DRAW_SCHEMA.md#orden-global-de-parents-world-sort) | ¿Los parents candidatos se emiten en el orden final de `ViewportSortParentSprites`? | El runtime aplica el sorter compartido a casas vanilla, árboles `MP_TREES` con sus capas combinadas, muelles vanilla, edificios industriales vanilla planos/estáticos, sprites directos de `DrawFoundation` y las seis capas `TILE_SEQ` del depósito naval. El suelo posterior de casas inclinadas/rampas de puente y la base/vía rail posterior a fundación quedan vinculados al último parent; conserva además grupos locales de paradas, depósitos, faroles y estación rail. Restan producers, otros children, pivotes y clipping; no certifica el framebuffer global. |
+| 3b | [`world-sort`](WORLD_DRAW_SCHEMA.md#orden-global-de-parents-world-sort) | ¿Los parents candidatos se emiten en el orden final de `ViewportSortParentSprites`? | El runtime aplica el sorter compartido a casas vanilla, árboles `MP_TREES` con sus capas combinadas, muelles vanilla, edificios industriales vanilla planos/estáticos, sprites directos de `DrawFoundation`, las seis capas `TILE_SEQ` del depósito naval, estructuras/catenaria y bloque combinado PBS/Action5 de puentes, y cuerpos/unidades de vehículos con las cajas `Vehicle::bounds` de OpenTTD. El suelo posterior de casas inclinadas/rampas de puente y la base/vía rail posterior a fundación quedan vinculados al último parent; sombra/rotor de aeronave son children del cuerpo. Restan overlays NewGRF de carretera, mitad frontal de puente, sprite-stack y producers dinámicos, pivotes y clipping; no certifica el framebuffer global. |
 | 4 | Captura enfocada | ¿La composición completa se ve correcta en el contexto real? | Es aceptación visual, no la única evidencia. |
 
 La regla es encontrar la primera capa que diverge antes de editar. De ese modo
@@ -240,6 +240,12 @@ el sprite `2119` usa exactamente el prisma `(2976,16,8)..(2991,31,27)` de
 animada o NewGRF, los producers restantes, los children no vinculados fuera de
 casas/rampas de puente/base-vía rail y clipping continúan como residual
 explícito de #326.
+Los cuerpos y unidades de vehículos ya portan la caja `Vehicle::bounds`, la
+clave de inserción y la profundidad fuente del pase `ViewportAddVehicles`; la
+sombra y el rotor de aeronave son children del cuerpo. Los offsets NFO de
+Action1/2 también se aplican a carretera, barcos y aeronaves. El sprite-stack y
+los producers dinámicos NewGRF siguen siendo residual explícito y no se
+presentan como paridad completa.
 
 ### Revalidación: catenaria de estaciones ferroviarias de Kale
 

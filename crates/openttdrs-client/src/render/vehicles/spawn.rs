@@ -2,11 +2,17 @@ use bevy::prelude::*;
 use openttdrs_core::extrapolate_vehicle_pose;
 use openttdrs_core::prelude::*;
 
-use crate::render::{CompanyColoredSprites, MapVisualLayer};
+use crate::render::{
+    CompanyColoredSprites, MapVisualLayer, ViewportSortableChild, ViewportSortableParent,
+    viewport_source_depth,
+};
 use crate::state::SimWorld;
 
 use super::assets::{NewGrfTrainSpriteCache, TruckHandles, vehicle_layers};
-use super::pose::{aircraft_aux_sprite_pos_at, vehicle_sprite_pos_at_with_catalog};
+use super::pose::{
+    aircraft_aux_sprite_pos_at, vehicle_insertion_key, vehicle_parent_bounds, vehicle_source_depth,
+    vehicle_sprite_pos_at_with_catalog,
+};
 use super::sync::{
     AircraftRotorSprite, AircraftShadowSprite, ConsistUnitSprite, VehicleCargoLabel, VehicleSprite,
 };
@@ -32,6 +38,8 @@ fn vehicle_owner_colour(sim: &SimWorld, v: &Vehicle) -> crate::sprites::CompanyC
 fn vehicle_cargo_label_pos(vehicle_pos: Vec3) -> Vec3 {
     Vec3::new(vehicle_pos.x, vehicle_pos.y + 21.0, vehicle_pos.z + 0.35)
 }
+
+const VEHICLE_SORT_SPRITE_ID: u32 = 0xFFFE_0000;
 
 pub(super) fn vehicle_cargo_label(v: &Vehicle) -> String {
     let cargo = v.cargo_type.map_or("ANY", openttdrs_core::CargoType::label);
@@ -64,7 +72,7 @@ pub(crate) fn spawn_initial_vehicles(
             continue;
         }
         let pose = extrapolate_vehicle_pose(vehicle, 0.0);
-        let pos3 = vehicle_sprite_pos_at_with_catalog(
+        let mut pos3 = vehicle_sprite_pos_at_with_catalog(
             vehicle,
             &sim.state.map,
             pose,
@@ -75,28 +83,46 @@ pub(crate) fn spawn_initial_vehicles(
         } else {
             Visibility::Visible
         };
-        commands.spawn((
-            MapVisualLayer,
-            VehicleSprite(vehicle.id),
-            Sprite {
-                image: trucks.for_vehicle_with_newgrf(
-                    vehicle,
-                    pose,
-                    Some(company),
-                    Some(vehicle_owner_colour(sim, vehicle)),
-                    sim,
-                    cache,
-                    images,
-                ),
-                color: Color::WHITE,
-                ..default()
-            },
-            Transform::from_translation(pos3),
-            vis,
-        ));
+        let source_depth = vehicle_source_depth(vehicle, &sim.state.map, pose, pos3);
+        pos3.z = source_depth;
+        let vehicle_entity = commands
+            .spawn((
+                MapVisualLayer,
+                VehicleSprite(vehicle.id),
+                Sprite {
+                    image: trucks.for_vehicle_with_newgrf(
+                        vehicle,
+                        pose,
+                        Some(company),
+                        Some(vehicle_owner_colour(sim, vehicle)),
+                        sim,
+                        cache,
+                        images,
+                    ),
+                    color: Color::WHITE,
+                    ..default()
+                },
+                Transform::from_translation(pos3),
+                vis,
+                ViewportSortableParent {
+                    sprite_id: VEHICLE_SORT_SPRITE_ID,
+                    bounds: vehicle_parent_bounds(vehicle, &sim.state.map, pose),
+                    insertion_key: vehicle_insertion_key(vehicle, pose),
+                    source_depth,
+                },
+            ))
+            .id();
         if vehicle.kind == VehicleKind::Aircraft {
             let layer = &vehicle_layers(vehicle)
                 [openttdrs_core::vehicle_render_direction_at(vehicle, pose).min(7) as usize];
+            let mut shadow_pos =
+                aircraft_aux_sprite_pos_at(vehicle, &sim.state.map, pose, layer, false, 0.85);
+            let shadow_source_depth = viewport_source_depth(
+                shadow_pos.z,
+                u32::try_from(pose.pos.x).unwrap_or(0),
+                sim.state.map.dimensions().0,
+            );
+            shadow_pos.z = shadow_source_depth;
             commands.spawn((
                 MapVisualLayer,
                 AircraftShadowSprite(vehicle.id),
@@ -105,21 +131,26 @@ pub(crate) fn spawn_initial_vehicles(
                     color: Color::srgba(0.08, 0.08, 0.08, 0.5),
                     ..default()
                 },
-                Transform::from_translation(aircraft_aux_sprite_pos_at(
-                    vehicle,
-                    &sim.state.map,
-                    pose,
-                    layer,
-                    false,
-                    0.85,
-                )),
+                Transform::from_translation(shadow_pos),
                 vis,
+                ViewportSortableChild {
+                    parent: vehicle_entity,
+                    source_depth: shadow_source_depth,
+                },
             ));
             if vehicle
                 .engine_id
                 .is_some_and(openttdrs_core::aircraft_is_helicopter)
             {
                 let rotor = &super::assets::AIRCRAFT_ROTOR_LAYERS[0];
+                let mut rotor_pos =
+                    aircraft_aux_sprite_pos_at(vehicle, &sim.state.map, pose, rotor, true, 1.1);
+                let rotor_source_depth = viewport_source_depth(
+                    rotor_pos.z,
+                    u32::try_from(pose.pos.x).unwrap_or(0),
+                    sim.state.map.dimensions().0,
+                );
+                rotor_pos.z = rotor_source_depth;
                 commands.spawn((
                     MapVisualLayer,
                     AircraftRotorSprite(vehicle.id),
@@ -127,15 +158,12 @@ pub(crate) fn spawn_initial_vehicles(
                         image: trucks.aircraft_rotor(0),
                         ..default()
                     },
-                    Transform::from_translation(aircraft_aux_sprite_pos_at(
-                        vehicle,
-                        &sim.state.map,
-                        pose,
-                        rotor,
-                        true,
-                        1.1,
-                    )),
+                    Transform::from_translation(rotor_pos),
                     vis,
+                    ViewportSortableChild {
+                        parent: vehicle_entity,
+                        source_depth: rotor_source_depth,
+                    },
                 ));
             }
         }
@@ -199,12 +227,14 @@ fn spawn_consist_trailer_sprites(
             continue;
         };
         let unit_pose = openttdrs_core::VehiclePose::from_vehicle(unit);
-        let base = vehicle_sprite_pos_at_with_catalog(
+        let mut base = vehicle_sprite_pos_at_with_catalog(
             unit,
             &sim.state.map,
             unit_pose,
             Some(&sim.state.engine_catalog),
         );
+        let source_depth = vehicle_source_depth(unit, &sim.state.map, unit_pose, base);
+        base.z = source_depth;
         commands.spawn((
             MapVisualLayer,
             ConsistUnitSprite {
@@ -224,8 +254,14 @@ fn spawn_consist_trailer_sprites(
                 color: Color::WHITE,
                 ..default()
             },
-            Transform::from_translation(base - Vec3::Z * (i as f32 * 0.01)),
+            Transform::from_translation(base),
             vis,
+            ViewportSortableParent {
+                sprite_id: VEHICLE_SORT_SPRITE_ID,
+                bounds: vehicle_parent_bounds(unit, &sim.state.map, unit_pose),
+                insertion_key: vehicle_insertion_key(unit, unit_pose),
+                source_depth,
+            },
         ));
     }
 }

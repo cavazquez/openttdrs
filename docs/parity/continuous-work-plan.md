@@ -73,5 +73,9 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
   pendientes y el overlay queda como child de la fundación nivelada, igual que
   la vía/PBS. Los layouts `TileSeq` con varias cajas y children siguen siendo
   un residual explícito.
+- Objetos NewGRF: el renderer ya reevalúa Action2 por tesela con random
+  (`m3`), offset de footprint, pendiente/terreno, animación (`m3hi`) y owner,
+  y cachea cada resultado por fingerprint. Las variables de town, teselas
+  vecinas, color/view y los layouts `TileSeq`/children siguen pendientes.
 - `reference/` es un checkout local ignorado/no versionado; nunca se agrega al
   commit de una tarea.

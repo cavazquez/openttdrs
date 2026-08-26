@@ -245,9 +245,11 @@ clave de inserción y la profundidad fuente del pase `ViewportAddVehicles`; la
 sombra y el rotor de aeronave son children del cuerpo. Los offsets NFO de
 Action1/2 también se aplican a carretera, barcos y aeronaves. Los tiletypes
 NewGRF de estaciones rail se resuelven en pendientes y se vinculan al parent
-de la fundación nivelada; el sprite-stack y los layouts/children dinámicos de
-estación, objeto e industria siguen siendo residual explícito y no se
-presentan como paridad completa.
+de la fundación nivelada. Los objetos NewGRF también reevalúan Action2 por
+tesela (random, offset, pendiente/terreno, animación y owner) y cachean la
+textura por fingerprint; las variables de town/vecindad, color/view y los
+layouts/children dinámicos de estación, objeto e industria siguen siendo
+residual explícito y no se presentan como paridad completa.
 
 ### Revalidación: catenaria de estaciones ferroviarias de Kale
 

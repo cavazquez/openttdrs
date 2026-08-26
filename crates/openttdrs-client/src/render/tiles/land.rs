@@ -1359,32 +1359,46 @@ pub(crate) fn spawn_generic_land_tile(
                 object_catalog,
                 object_type,
             )
-            && let Some(view) = def.view(view_idx)
+            && let Some(tile) = ctx.tile
             && let (Some(cache), Some(images)) = (object_sprites.as_mut(), images.as_mut())
         {
-            let handle = cache.handle_for(def, view_idx, view, images);
-            let pos3 = overlay_pos(
-                ctx.iso_pos,
-                f32::from(view.x_offs),
-                f32::from(view.y_offs),
-                f32::from(view.width),
-                f32::from(view.height),
-                ctx.info.base_z,
-                0.6,
-                ctx.tx_i32(),
-                ctx.ty_i32(),
-            );
-            commands.spawn((
-                MapVisualLayer,
-                ctx.map_tile_chunk(),
-                Sprite {
-                    image: handle,
-                    color: tint,
-                    ..default()
-                },
-                Transform::from_translation(pos3),
-            ));
-            return;
+            // `DrawNewObjectTile` usa el mismo ObjectScopeResolver para cada
+            // tesela. Resolver aquí permite que Action2 observe el random,
+            // offset de footprint, pendiente, frame y owner en vez de usar
+            // siempre el preview estático del GRF.
+            let mut a2 =
+                openttdrs_core::action2_eval_ctx_for_object_tile(tile, ctx.info.tileh, climate);
+            let view = if def.newgrf_runtime.is_some() {
+                def.newgrf_view_runtime(view_idx, &mut a2)
+            } else {
+                def.view(view_idx).cloned()
+            };
+            if let Some(view) = view
+                && let Some(handle) = cache.handle_for_runtime(def, view_idx, &mut a2, images)
+            {
+                let pos3 = overlay_pos(
+                    ctx.iso_pos,
+                    f32::from(view.x_offs),
+                    f32::from(view.y_offs),
+                    f32::from(view.width),
+                    f32::from(view.height),
+                    ctx.info.base_z,
+                    0.6,
+                    ctx.tx_i32(),
+                    ctx.ty_i32(),
+                );
+                commands.spawn((
+                    MapVisualLayer,
+                    ctx.map_tile_chunk(),
+                    Sprite {
+                        image: handle,
+                        color: tint,
+                        ..default()
+                    },
+                    Transform::from_translation(pos3),
+                ));
+                return;
+            }
         }
         // Offsets NFO OpenGFX2 32ez (`ogfx21_base_32ez.nfo` sprites 2601/2602).
         let (obj_img, obj_xrel, obj_yrel, obj_w, obj_h) = match object_type {

@@ -113,9 +113,29 @@ impl ObjectSpecDef {
         self.views.get(idx % self.views.len())
     }
 
+    /// Resuelve una vista Action1/3 usando el grafo Action2 del objeto.
+    ///
+    /// `OpenTTD` vuelve a evaluar el grupo de sprites para cada tesela del
+    /// objeto.  La vista estática de [`Self::view`] sólo representa el preview
+    /// y no puede observar variables como pendiente, aleatorio o animación.
+    /// El cliente conserva el resultado como `DecodedSprite` propio para que
+    /// el caché de texturas pueda asociarlo al contexto runtime.
+    pub fn newgrf_view_runtime(
+        &self,
+        idx: usize,
+        ctx: &mut crate::newgrf_sprites::Action2EvalCtx,
+    ) -> Option<crate::newgrf_sprites::DecodedSprite> {
+        let runtime = self.newgrf_runtime.as_ref()?;
+        let views = runtime.views_for_local_id_ctx(self.local_id, ctx)?;
+        if views.is_empty() {
+            return None;
+        }
+        Some(views[idx % views.len()].clone())
+    }
+
     #[must_use]
     pub fn has_views(&self) -> bool {
-        !self.views.is_empty()
+        !self.views.is_empty() || self.newgrf_runtime.is_some()
     }
 }
 
@@ -180,4 +200,81 @@ pub fn list_1x1_object_specs(catalog: &[ObjectSpecDef]) -> Vec<&ObjectSpecDef> {
 pub fn is_selectable_object_spec(catalog: &[ObjectSpecDef], id: u16) -> bool {
     matches!(id, 0 | 1)
         || object_spec_def(catalog, id).is_some_and(|d| d.size_width() > 0 && d.size_height() > 0)
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use crate::newgrf_sprites::{
+        Action2VarAdjust, Action2VarEntry, Action2VarTerm, DecodedSprite, TrainSpriteAssign,
+        TrainSpriteGraphics,
+    };
+
+    fn solid(r: u8, g: u8, b: u8) -> DecodedSprite {
+        DecodedSprite {
+            width: 1,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: vec![r, g, b, 255],
+            mask: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn runtime_view_uses_object_scope_variables() {
+        let red = solid(255, 0, 0);
+        let blue = solid(0, 0, 255);
+        let mut runtime = TrainSpriteGraphics {
+            sets: vec![vec![red.clone()], vec![blue.clone()]],
+            assigns: vec![TrainSpriteAssign {
+                local_id: 4,
+                set_id: 6,
+            }],
+            ..Default::default()
+        };
+        runtime.action2_var.insert(
+            6,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x41,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        and_mask: 0xFF,
+                        ..Default::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: vec![(8, 3, 3)],
+                default: 9,
+            },
+        );
+        runtime.action2_to_action1.insert(8, 0);
+        runtime.action2_to_action1.insert(9, 1);
+        let def = ObjectSpecDef {
+            id: NEW_OBJECT_OFFSET,
+            class_label: "TEST".into(),
+            name: "runtime".into(),
+            size: OBJECT_SIZE_1X1,
+            from_newgrf: true,
+            local_id: 4,
+            grfid: 0,
+            climate_mask: DEFAULT_OBJECT_CLIMATE_MASK,
+            build_cost_factor: DEFAULT_OBJECT_BUILD_COST_FACTOR,
+            callback_mask: 0,
+            views: vec![red, blue],
+            newgrf_runtime: Some(Box::new(runtime)),
+            associated_badges: Vec::new(),
+        };
+        let mut first = crate::newgrf_sprites::Action2EvalCtx::default();
+        first.vars.insert(0x41, 3);
+        assert_eq!(def.newgrf_view_runtime(0, &mut first).unwrap().rgba[0], 255);
+        let mut second = crate::newgrf_sprites::Action2EvalCtx::default();
+        second.vars.insert(0x41, 4);
+        assert_eq!(
+            def.newgrf_view_runtime(0, &mut second).unwrap().rgba[2],
+            255
+        );
+    }
 }

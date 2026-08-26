@@ -1,10 +1,12 @@
 //! Objetos de mapa (`MP_OBJECT` / `TileType::Object` en `OpenTTD`).
 
 use super::{Map, Tile, TileCoord};
+use crate::newgrf_sprites::Action2EvalCtx;
 use crate::object_spec::{
     NEW_OBJECT_OFFSET, ObjectSpecDef, decode_object_tile_offset, encode_object_tile_offset,
     object_footprint_tile_index, object_spec_def,
 };
+use crate::world_gen::Climate;
 
 /// Nibble alto de `mapt` para teselas objeto.
 pub const OTTD_MP_OBJECT: u8 = 10;
@@ -185,10 +187,55 @@ pub const fn object_tile_offset_byte(dx: u8, dy: u8) -> u8 {
     encode_object_tile_offset(dx, dy)
 }
 
+/// Construye el contexto de variables Action2 para una tesela de objeto.
+///
+/// Es la traducción del `ObjectScopeResolver` de OpenTTD para los datos que
+/// están presentes en nuestro mapa: `m3` contiene los bits aleatorios del
+/// objeto, `m2` conserva el offset dentro del footprint local, `m3hi` es el
+/// `m4` de animación y `m1` el propietario. Las variables que requieren el
+/// objeto/town global (fecha de construcción, pueblo más cercano, color,
+/// teselas vecinas y conteos) quedan deliberadamente ausentes; el evaluador
+/// las trata como no disponibles en vez de inventar valores.
+#[must_use]
+pub fn action2_eval_ctx_for_object_tile(tile: Tile, tileh: u8, climate: Climate) -> Action2EvalCtx {
+    let mut ctx = Action2EvalCtx::default();
+    let random = u32::from(tile.m3);
+    ctx.random_bits = random;
+    // Var 5F expone los random bits en el byte alto, igual que los demás
+    // scopes de tesela (`GetRandomBits` + `GetVariable(0x5F)`).
+    ctx.vars.insert(0x5F, random << 8);
+
+    // `ObjectScopeResolver::GetVariable(0x40)`: yyxx repetido en las dos
+    // mitades de la palabra. El formato local guarda dx/dy en MAP2 como lo
+    // hace la ruta de construcción de objetos de este proyecto.
+    let (dx, dy) = decode_object_tile_offset(tile.m2);
+    let relative = u32::from(dy) << 20 | u32::from(dx) << 16 | u32::from(dy) << 8 | u32::from(dx);
+    ctx.vars.insert(0x40, relative);
+
+    // `GetTileSlope(tile) << 8 | GetTerrainType(tile)`. La marca MAP7 0x20
+    // es la misma que usan las rutas road/rail para nieve/desierto importados.
+    let terrain = if climate.uses_desert_patches() && tile.m7 & 0x20 != 0 {
+        1
+    } else if climate.uses_snow_ground() || tile.m7 & 0x20 != 0 {
+        4
+    } else {
+        0
+    };
+    ctx.vars.insert(0x41, u32::from(tileh) << 8 | terrain);
+    // MAP3HI es MAP4 en el save OpenTTD y contiene el frame de animación de
+    // objetos cuando existe.
+    ctx.vars.insert(0x43, u32::from(tile.m3hi));
+    // `GetTileOwner(tile).base()`: los mapas del proyecto conservan el owner
+    // directamente en m1 para MP_OBJECT.
+    ctx.vars.insert(0x44, u32::from(tile.m1));
+    ctx
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::GameState;
+    use crate::map::TileKind;
     use crate::sav;
 
     #[test]
@@ -225,5 +272,30 @@ mod tests {
         assert_eq!(OBJECT_TYPE_LIGHTHOUSE, 1);
         assert_eq!(OBJECT_TYPE_STATUE_COMPANY, 2);
         assert_eq!(OBJECT_TYPE_OWNED_LAND, 3);
+    }
+
+    #[test]
+    fn object_action2_context_matches_scope_tile_fields() {
+        let tile = Tile {
+            height: 0,
+            kind: TileKind::Grass,
+            mapt: MP_OBJECT_MAPT,
+            m5: 5,
+            m1: 7,
+            m6: 0,
+            m8: 0,
+            m3: 0x2A,
+            m2: object_tile_offset_byte(2, 3),
+            m2_hi: 0,
+            m7: 0x20,
+            m3hi: 9,
+        };
+        let ctx = action2_eval_ctx_for_object_tile(tile, 5, Climate::SubTropical);
+        assert_eq!(ctx.random_bits, 0x2A);
+        assert_eq!(ctx.vars.get(&0x5F), Some(&0x2A00));
+        assert_eq!(ctx.vars.get(&0x40), Some(&0x0032_0302));
+        assert_eq!(ctx.vars.get(&0x41), Some(&0x0501));
+        assert_eq!(ctx.vars.get(&0x43), Some(&9));
+        assert_eq!(ctx.vars.get(&0x44), Some(&7));
     }
 }

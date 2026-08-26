@@ -6,8 +6,8 @@ use super::chunks::raw_table_chunk;
 use super::codec::{write_gamma, write_str};
 use crate::game_state::GameState;
 use crate::industry::{Industry, IndustryKind, IndustrySpec};
-use crate::map::coord_to_linear_index;
-use crate::station::{Station, StopKind};
+use crate::map::{Map, TileCoord, coord_to_linear_index};
+use crate::station::{RoadStopTileState, Station, StopKind};
 
 /// Bits `FACIL_*` al escribir `STNN` (alineados con el import).
 const FACIL_TRAIN: u8 = 0x01;
@@ -29,6 +29,19 @@ const STR_SV_STNAME: u16 = 0x6006;
 /// `VEH_INVALID`.
 const VEH_INVALID: u8 = 0xFF;
 
+/// Identidad nativa `(GRFID, localidx)` de una spec de road stop.
+type RoadStopSpecIdentity = (u32, u16);
+
+/// Entrada que se escribe en `STNN.roadstoptiledata` y que también determina
+/// los seis bits bajos de `MAP8` para esa tesela.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RoadStopTileExport {
+    tile: TileCoord,
+    spec_index: u8,
+    random_bits: u8,
+    animation_frame: u8,
+}
+
 fn facilities_for_stop(kind: StopKind) -> u8 {
     match kind {
         StopKind::RailStation => FACIL_TRAIN,
@@ -43,6 +56,162 @@ fn facilities_for_stop(kind: StopKind) -> u8 {
 
 fn is_waypoint(facilities: u8) -> bool {
     facilities & FACIL_WAYPOINT != 0
+}
+
+fn road_stop_spec_identity(
+    state: &GameState,
+    tile_state: &RoadStopTileState,
+) -> Option<RoadStopSpecIdentity> {
+    if let (Some(grfid), Some(local_id)) = (tile_state.saved_grfid, tile_state.saved_local_id) {
+        return Some((grfid, local_id));
+    }
+    tile_state.spec.and_then(|spec_id| {
+        state
+            .road_stop_spec_catalog
+            .iter()
+            .find(|spec| spec.id == spec_id && spec.from_newgrf)
+            .map(|spec| (spec.grfid, u16::from(spec.newgrf_local_id)))
+    })
+}
+
+fn station_road_stop_spec_identity(
+    state: &GameState,
+    station: &Station,
+    spec_id: Option<u16>,
+) -> Option<RoadStopSpecIdentity> {
+    spec_id.and_then(|id| {
+        state
+            .road_stop_spec_catalog
+            .iter()
+            .find(|spec| spec.id == id && spec.from_newgrf)
+            .map(|spec| (spec.grfid, u16::from(spec.newgrf_local_id)))
+            .or_else(|| {
+                // Saves imported without an installed GRF retain the stable
+                // identity on the legacy anchor when available.
+                let anchor = station.road_stop_tile_state(station.pos)?;
+                Some((anchor.saved_grfid?, anchor.saved_local_id?))
+            })
+    })
+}
+
+/// Reúne las specs custom de una estación y su estado por tesela en el orden
+/// estable que exige `MAP8`/`roadstopspeclist`.
+fn road_stop_export_data(
+    state: &GameState,
+    station: &Station,
+    map_w: u32,
+) -> Result<(Vec<RoadStopSpecIdentity>, Vec<RoadStopTileExport>), SavError> {
+    let mut candidates: Vec<(TileCoord, RoadStopSpecIdentity, u8, u8)> = Vec::new();
+    if !station.road_stop_tile_states.is_empty() {
+        for (tile, tile_state) in &station.road_stop_tile_states {
+            let Some(identity) = road_stop_spec_identity(state, tile_state) else {
+                continue;
+            };
+            if coord_to_linear_index(*tile, map_w).is_some() {
+                candidates.push((
+                    *tile,
+                    identity,
+                    tile_state.random_bits,
+                    tile_state.animation_frame,
+                ));
+            }
+        }
+    }
+    if candidates.is_empty()
+        && let Some(identity) =
+            station_road_stop_spec_identity(state, station, station.road_stop_spec)
+    {
+        let mut tiles = Vec::with_capacity(station.joined_tiles.len() + 1);
+        tiles.push(station.pos);
+        tiles.extend(station.joined_tiles.iter().copied());
+        for tile in tiles {
+            if coord_to_linear_index(tile, map_w).is_some() {
+                candidates.push((
+                    tile,
+                    identity,
+                    station.road_stop_newgrf_random_bits,
+                    station.road_stop_animation_frame,
+                ));
+            }
+        }
+    }
+
+    candidates.sort_unstable_by_key(|(tile, ..)| *tile);
+    candidates.dedup_by_key(|(tile, ..)| *tile);
+
+    if candidates.is_empty() {
+        return Ok((Vec::new(), Vec::new()));
+    }
+
+    let mut specs = vec![(0, 0)];
+    for (_, identity, ..) in &candidates {
+        if !specs.contains(identity) {
+            if specs.len() >= 64 {
+                return Err(SavError::ValueOutOfRange {
+                    field: "roadstopspeclist",
+                    value: u32::try_from(specs.len() + 1).unwrap_or(u32::MAX),
+                });
+            }
+            specs.push(*identity);
+        }
+    }
+
+    let tiles = candidates
+        .into_iter()
+        .filter_map(|(tile, identity, random_bits, animation_frame)| {
+            let spec_index = specs
+                .iter()
+                .position(|candidate| *candidate == identity)
+                .and_then(|index| u8::try_from(index).ok())?;
+            Some(RoadStopTileExport {
+                tile,
+                spec_index,
+                random_bits,
+                animation_frame,
+            })
+        })
+        .collect();
+    Ok((specs, tiles))
+}
+
+fn write_road_stop_data(
+    buf: &mut Vec<u8>,
+    state: &GameState,
+    station: &Station,
+    map_w: u32,
+) -> Result<(), SavError> {
+    let (specs, tiles) = road_stop_export_data(state, station, map_w)?;
+    write_gamma(u32::try_from(specs.len()).unwrap_or(u32::MAX), buf)?;
+    for (grfid, localidx) in specs {
+        buf.extend_from_slice(&grfid.to_be_bytes());
+        buf.extend_from_slice(&localidx.to_be_bytes());
+    }
+    write_gamma(u32::try_from(tiles.len()).unwrap_or(u32::MAX), buf)?;
+    for entry in tiles {
+        let tile_idx = coord_to_linear_index(entry.tile, map_w).unwrap_or(0);
+        buf.extend_from_slice(&tile_idx.to_be_bytes());
+        buf.push(entry.random_bits);
+        buf.push(entry.animation_frame);
+    }
+    Ok(())
+}
+
+/// Clona el mapa de salida y escribe el índice de spec de cada road stop en
+/// `MAP8`, preservando los bits altos usados por otros tipos de tesela.
+pub(super) fn map_with_road_stop_indices(state: &GameState, map_w: u32) -> Result<Map, SavError> {
+    let mut map = state.map.clone();
+    for station in &state.stations {
+        let (_, tiles) = road_stop_export_data(state, station, map_w)?;
+        for entry in tiles {
+            let Some(mut tile) = map.get(entry.tile) else {
+                continue;
+            };
+            tile.m8 = (tile.m8 & !0x3F) | u16::from(entry.spec_index);
+            map.set_tile(entry.tile, tile)
+                .map_err(|error| SavError::BadFormat(format!("MAP8 road stop: {error:?}")))?;
+        }
+    }
+    Ok(map)
 }
 
 fn append_field(header: &mut Vec<u8>, ftype: u8, name: &str) -> Result<(), SavError> {
@@ -332,8 +501,7 @@ pub(super) fn stnn_records(state: &GameState, map_w: u32) -> Result<Vec<Vec<u8>>
             rec.push(0); // waypoint ausente
         }
         write_gamma(0, &mut rec)?; // speclist
-        write_gamma(0, &mut rec)?; // roadstopspeclist
-        write_gamma(0, &mut rec)?; // roadstoptiledata
+        write_road_stop_data(&mut rec, state, st, map_w)?;
         out.push(rec);
     }
     Ok(out)
@@ -458,7 +626,8 @@ pub(super) fn indy_records(state: &GameState, map_w: u32) -> Vec<Vec<u8>> {
 mod tests {
     use super::*;
     use crate::map::TileCoord;
-    use crate::station::Station;
+    use crate::sav::table::record_get;
+    use crate::station::{Station, StopKind};
 
     #[test]
     fn stnn_header_starts_with_savebyte_facilities() {
@@ -486,5 +655,90 @@ mod tests {
         let chunk = stnn_chunk(&recs).unwrap();
         assert!(chunk.starts_with(b"STNN"));
         assert_eq!(chunk[4], CH_TABLE);
+    }
+
+    #[test]
+    fn stnn_road_stop_record_emits_native_spec_and_tile_data() {
+        let mut state = GameState::new(8, 8);
+        let tile = TileCoord::new(3, 2);
+        let mut raw = state.map.get(tile).unwrap();
+        raw.kind = crate::map::TileKind::Station;
+        raw.mapt = 0x50;
+        raw.m2 = 0;
+        raw.m6 = 3 << 3;
+        state.map.set_tile(tile, raw).unwrap();
+
+        let mut station = Station::new_with_kind(tile, StopKind::BusStop);
+        station.road_stop_spec = Some(7);
+        let tile_state = station.ensure_road_stop_tile_state(tile);
+        tile_state.spec = Some(7);
+        tile_state.random_bits = 0xA5;
+        tile_state.animation_frame = 6;
+        state.road_stop_spec_catalog.push(crate::RoadStopSpecDef {
+            id: 7,
+            class: 0,
+            label: "Custom bus".into(),
+            short_label: "CBUS".into(),
+            stop_type: crate::road_stop_spec::ROADSTOP_TYPE_BUS,
+            from_newgrf: true,
+            grfid: 0x4455_6677,
+            newgrf_local_id: 0x12,
+            newgrf_grf_version: 8,
+            draw_mode: crate::road_stop_spec::ROADSTOP_DRAW_MODE_DEFAULT,
+            random_cargo_triggers: 0,
+            flags: 0,
+            callback_mask: 0,
+            animation_status: 0xFF,
+            animation_frames: 0,
+            animation_speed: 2,
+            animation_triggers: 0,
+            newgrf_views: Vec::new(),
+            newgrf_runtime: None,
+            newgrf_type_tables: None,
+            associated_badges: Vec::new(),
+        });
+        state.stations.push(station);
+
+        let records = stnn_records(&state, 8).unwrap();
+        let chunk = stnn_chunk(&records).unwrap();
+        let rows = crate::sav::table::parse_table_chunk(&chunk[5..], false).unwrap();
+        let record = &rows[0].1;
+        let specs = record_get(record, "roadstopspeclist")
+            .and_then(|value| match value {
+                crate::sav::table::SlValue::Structs(items) => Some(items),
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(specs.len(), 2);
+        assert_eq!(
+            record_get(&specs[1], "grfid").and_then(crate::sav::table::SlValue::as_u64),
+            Some(0x4455_6677)
+        );
+        assert_eq!(
+            record_get(&specs[1], "localidx").and_then(crate::sav::table::SlValue::as_u64),
+            Some(0x12)
+        );
+        let tiles = record_get(record, "roadstoptiledata")
+            .and_then(|value| match value {
+                crate::sav::table::SlValue::Structs(items) => Some(items),
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(tiles.len(), 1);
+        assert_eq!(
+            record_get(&tiles[0], "tile").and_then(crate::sav::table::SlValue::as_u64),
+            Some(19)
+        );
+        assert_eq!(
+            record_get(&tiles[0], "random_bits").and_then(crate::sav::table::SlValue::as_u64),
+            Some(0xA5)
+        );
+        assert_eq!(
+            record_get(&tiles[0], "animation_frame").and_then(crate::sav::table::SlValue::as_u64),
+            Some(6)
+        );
+
+        let export_map = map_with_road_stop_indices(&state, 8).unwrap();
+        assert_eq!(export_map.get(tile).unwrap().m8 & 0x3F, 1);
     }
 }

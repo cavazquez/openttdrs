@@ -1,7 +1,7 @@
 # Compatibilidad `.sav` OpenTTD ↔ openttdrs
 
-Estado vigente de compatibilidad del formato `.sav`. Corte: **2026-08-24**,
-`main` posterior al bloque de mapeo nativo de RoadStops; referencia: **OpenTTD
+Estado vigente de compatibilidad del formato `.sav`. Corte: **2026-08-26**,
+`main` posterior al bloque de exportación nativa de RoadStops; referencia: **OpenTTD
 15.3**, commit `14ec60f248547d4d062a1160f0fc26d742319888`.
 
 Esta es la única matriz de capacidad para importación y exportación `.sav`.
@@ -21,7 +21,7 @@ preserva. Importar un dato no implica que el exportador lo escriba.
 | Link graph y carga | 🟡 lee `LGRP`, `CAPA` y `CAPY` cuando están presentes | 🟡 escribe `LGRP` observado, `ECMY` y `CAPY` preservado; el runtime aún no crea pagos activos | [`sav/linkgraph.rs`](../../crates/openttdrs-core/src/sav/linkgraph.rs), [`sav/entities.rs`](../../crates/openttdrs-core/src/sav/entities.rs), [`sav/economy.rs`](../../crates/openttdrs-core/src/sav/economy.rs) |
 | Tren y consist | 🟡 lee cabezas, vagones y `next`; recompone el consist best-effort | 🟡 escribe `next` y subtipos de cabeza/vagón para cadenas modeladas | Motores, runtime y geometría siguen siendo best-effort; no es equivalencia dinámica completa |
 | Road y tranvía | 🟡 road conserva motor vanilla soportado, `cargo_cap`/`cargo_count`, velocidad, progreso y runtime (`state`/`frame`/bloqueo/adelantamiento/reversa); se convierte a bus/camión, no identifica tranvía | 🟡 bus/camión sobre road/depot válido; reemite capacidad/cantidad de carga y runtime vial; no tranvía | La carga se reconstituye como total legacy, no como cada `cargo.packets`; vehículos/propiedades NewGRF y articulados siguen best-effort. [`sav/mod.rs`](../../crates/openttdrs-core/src/sav/mod.rs), [`sav/write/vehicles.rs`](../../crates/openttdrs-core/src/sav/write/vehicles.rs) |
-| RoadStops NewGRF por tesela | 🟡 decodifica `STNN.roadstopspeclist` y `STNN.roadstoptiledata`; conserva `(GRFID, localidx)`, random/frame y reata la spec al reconstruir el catálogo | ❌ el writer todavía no emite listas nativas de specs/estado por tesela; JSON mantiene el estado propio | Requiere que el GRF esté instalado para resolver el `localidx`; un GRF ausente conserva la identidad pendiente, no una vista ejecutable |
+| RoadStops NewGRF por tesela | 🟡 decodifica `STNN.roadstopspeclist` y `STNN.roadstoptiledata`; conserva `(GRFID, localidx)`, random/frame y reata la spec al reconstruir el catálogo | 🟡 emite listas nativas por estación, estados por tesela e índice de spec en `MAP8` | Requiere que el GRF esté instalado para resolver el `localidx`; un GRF ausente conserva la identidad pendiente, no una vista ejecutable; el límite nativo de `MAP8` es 63 specs custom por estación |
 | Barcos | 🟡 `VEH_SHIP` se hidrata como `Ship` | 🟡 sólo sobre agua o ship depot | Motor y estado dinámico son best-effort |
 | Aviones y helicópteros | 🟡 aeronaves y FTA se hidratan; reconoce helicóptero | 🟡 avión de ala fija + sombra; no rotor de helicóptero ni runtime FTA completo | [`sav/entities.rs`](../../crates/openttdrs-core/src/sav/entities.rs), [`sav/write/vehicles.rs`](../../crates/openttdrs-core/src/sav/write/vehicles.rs) |
 | Órdenes | 🟡 estación, waypoint, depósito, condicionales, refit vanilla y flags soportados | 🟡 mismo subconjunto, una lista `ORDL` por vehículo | El refit vanilla de depósito (`0..10`) se restaura; cargos NewGRF, destinos/contextos no soportados y variantes avanzadas se degradan |

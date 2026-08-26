@@ -2168,7 +2168,10 @@ el runtime; `PLYR` conserva dinero/préstamo/límite individual (incluido el cen
 `settings.*`, presidente, bitfield de rostro, `face_style` e historial trimestral (`cur_economy` y hasta 24 `old_economy`, incluido el desglose de carga) por compañía. Aún faltan flags completos y el modelado/ejecución completa de `OBJS`,
 `GSET`/`ENGN`/`SRND` y configuración NewGRF. Los chunks nativos
 `NGRF`/`GSET`/`ENGN`/`OBJS`/`SRND` y mappings asociados se conservan como
-passthrough al reexportar cuando provienen de un `.sav`; no se confunde esa conservación con ejecutar sus callbacks. `PATS`/`OPTS` ya conserva el
+passthrough al reexportar cuando provienen de un `.sav`; las listas nativas de
+RoadStops (`roadstopspeclist`/`roadstoptiledata`) también se reconstruyen desde
+el estado por tesela y actualizan `MAP8`; no se confunde esa conservación con
+ejecutar sus callbacks. `PATS`/`OPTS` ya conserva el
 subconjunto ejecutado por el core (construcción, pathfinding, averías,
 subsidios, desastres, autoridad, inflación/recesiones y unidades de tiempo). El historial de
 noticias propio queda en JSON (no es un pool nativo de OpenTTD `.sav`). `ORDL`

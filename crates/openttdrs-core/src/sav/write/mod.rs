@@ -186,7 +186,8 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
         .checked_mul(h as usize)
         .ok_or_else(|| SavError::BadFormat("dimensiones de mapa overflow".into()))?;
 
-    let planes = map::collect_planes(&state.map, w, h, n);
+    let export_map = entities::map_with_road_stop_indices(state, w)?;
+    let planes = map::collect_planes(&export_map, w, h, n);
     let autoreplace_export = fleet::autoreplace_export(state)?;
 
     let mut data = Vec::new();

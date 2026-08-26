@@ -348,9 +348,11 @@ siguen pendientes en #326.
 El tramo de identidad básica de #328 ya está implementado: `VEHS.common`
 conserva y reemite compañía propietaria, nombre personalizado y el
 `EngineID` nativo, incluso cuando el motor no existe en el catálogo Rust.
+También conserva fiabilidad, decaimiento, contadores de avería y beneficios
+anuales de `VEHS.common`, evitando reiniciar el estado operativo al cargar.
 Esto no cierra el issue: siguen pendientes los contadores de servicio/edad,
-beneficios, carga vehicular por paquetes y los flags/estado completos de
-tren, carretera, barco y FTA.
+carga vehicular por paquetes y los flags/estado completos de tren, carretera,
+barco y FTA.
 
 <!-- active-parity-backlog:end -->
 

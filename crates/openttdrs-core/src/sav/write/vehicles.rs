@@ -261,6 +261,14 @@ struct CommonWire {
     vehicle_flags: u16,
     /// Intervalo de servicio (`Vehicle::service_interval`).
     service_interval: u16,
+    reliability: u16,
+    reliability_spd_dec: u16,
+    breakdown_ctr: u8,
+    breakdown_delay: u8,
+    breakdowns_since_last_service: u8,
+    breakdown_chance: u8,
+    profit_this_year: i64,
+    profit_last_year: i64,
 }
 
 /// Campos específicos de `SlVehicleAircraft` (`vehicle_sl.cpp`).
@@ -329,6 +337,14 @@ fn write_vehs_common(buf: &mut Vec<u8>, c: &CommonWire) -> Result<(), SavError> 
     buf.extend_from_slice(&c.timetable_lateness.to_be_bytes());
     buf.extend_from_slice(&c.vehicle_flags.to_be_bytes());
     buf.extend_from_slice(&c.service_interval.to_be_bytes());
+    buf.extend_from_slice(&c.reliability.to_be_bytes());
+    buf.extend_from_slice(&c.reliability_spd_dec.to_be_bytes());
+    buf.push(c.breakdown_ctr);
+    buf.push(c.breakdown_delay);
+    buf.push(c.breakdowns_since_last_service);
+    buf.push(c.breakdown_chance);
+    buf.extend_from_slice(&c.profit_this_year.to_be_bytes());
+    buf.extend_from_slice(&c.profit_last_year.to_be_bytes());
     Ok(())
 }
 
@@ -420,6 +436,14 @@ fn common_wire_for(
         timetable_lateness: v.timetable_lateness,
         vehicle_flags: vehicle_flags_for(v),
         service_interval: v.service_interval_days,
+        reliability: v.reliability,
+        reliability_spd_dec: v.reliability_spd_dec,
+        breakdown_ctr: v.breakdown_ctr,
+        breakdown_delay: v.breakdown_delay,
+        breakdowns_since_last_service: v.breakdowns_since_last_service,
+        breakdown_chance: v.breakdown_chance,
+        profit_this_year: v.profit_this_year,
+        profit_last_year: v.profit_last_year,
     }
 }
 
@@ -627,6 +651,14 @@ pub(super) fn ordl_and_vehs_records(
                     timetable_lateness: 0,
                     vehicle_flags: 0,
                     service_interval: 0,
+                    reliability: 0,
+                    reliability_spd_dec: 0,
+                    breakdown_ctr: 0,
+                    breakdown_delay: 0,
+                    breakdowns_since_last_service: 0,
+                    breakdown_chance: 0,
+                    profit_this_year: 0,
+                    profit_last_year: 0,
                     cur_speed: 0,
                     subspeed: 0,
                     progress: 0,
@@ -666,6 +698,14 @@ pub(super) fn ordl_and_vehs_records(
                         timetable_lateness: 0,
                         vehicle_flags: 0,
                         service_interval: 0,
+                        reliability: 0,
+                        reliability_spd_dec: 0,
+                        breakdown_ctr: 0,
+                        breakdown_delay: 0,
+                        breakdowns_since_last_service: 0,
+                        breakdown_chance: 0,
+                        profit_this_year: 0,
+                        profit_last_year: 0,
                         cur_speed: 32,
                         subspeed: 0,
                         progress: 0,
@@ -835,6 +875,14 @@ fn append_vehs_common_fields(header: &mut Vec<u8>) -> Result<(), SavError> {
     append_field(header, 5, "lateness_counter")?; // SLE_INT32
     append_field(header, 4, "vehicle_flags")?; // SLE_UINT16
     append_field(header, 4, "service_interval")?; // SLE_UINT16
+    append_field(header, 4, "reliability")?; // SLE_UINT16
+    append_field(header, 4, "reliability_spd_dec")?; // SLE_UINT16
+    append_field(header, 2, "breakdown_ctr")?; // SLE_UINT8
+    append_field(header, 2, "breakdown_delay")?; // SLE_UINT8
+    append_field(header, 2, "breakdowns_since_last_service")?; // SLE_UINT8
+    append_field(header, 2, "breakdown_chance")?; // SLE_UINT8
+    append_field(header, 7, "profit_this_year")?; // SLE_INT64
+    append_field(header, 7, "profit_last_year")?; // SLE_INT64
     header.push(0);
     Ok(())
 }
@@ -1382,6 +1430,14 @@ mod tests {
         train.timetable_autofill = true;
         train.vehicle_flags = 1 << 7;
         train.service_interval_days = 87;
+        train.reliability = 7_654;
+        train.reliability_spd_dec = 321;
+        train.breakdown_ctr = 4;
+        train.breakdown_delay = 5;
+        train.breakdowns_since_last_service = 6;
+        train.breakdown_chance = 7;
+        train.profit_this_year = 123_456;
+        train.profit_last_year = -654_321;
         state.vehicles = vec![train];
 
         let (_, vehs) = ordl_and_vehs_records(&state, 64).unwrap();
@@ -1416,6 +1472,26 @@ mod tests {
         assert_eq!(
             record_get(common, "service_interval").and_then(SlValue::as_u64),
             Some(87)
+        );
+        assert_eq!(
+            record_get(common, "reliability").and_then(SlValue::as_u64),
+            Some(7_654)
+        );
+        assert_eq!(
+            record_get(common, "reliability_spd_dec").and_then(SlValue::as_u64),
+            Some(321)
+        );
+        assert_eq!(
+            record_get(common, "breakdowns_since_last_service").and_then(SlValue::as_u64),
+            Some(6)
+        );
+        assert_eq!(
+            record_get(common, "profit_this_year").and_then(SlValue::as_i64),
+            Some(123_456)
+        );
+        assert_eq!(
+            record_get(common, "profit_last_year").and_then(SlValue::as_i64),
+            Some(-654_321)
         );
     }
 

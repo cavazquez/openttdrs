@@ -436,6 +436,9 @@ pub struct Vehicle {
     /// Ticks restantes de avería activa (`breakdown_delay`).
     #[serde(default)]
     pub breakdown_delay: u8,
+    /// Averías sufridas desde la última revisión (`breakdowns_since_last_service`).
+    #[serde(default)]
+    pub breakdowns_since_last_service: u8,
     /// Contador económico diario (`Vehicle::day_counter`), usado por CB32.
     #[serde(default)]
     pub newgrf_day_counter: u8,
@@ -660,6 +663,7 @@ impl Vehicle {
             breakdown_chance: 0,
             breakdown_ctr: 0,
             breakdown_delay: 0,
+            breakdowns_since_last_service: 0,
             newgrf_day_counter: 0,
             aircraft_phase: AircraftPhase::InHangar,
             altitude: 0,

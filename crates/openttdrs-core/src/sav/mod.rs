@@ -1072,6 +1072,14 @@ impl GameState {
                 vehicle.timetable_lateness = v.timetable_lateness;
                 vehicle.vehicle_flags = v.vehicle_flags;
                 vehicle.service_interval_days = v.service_interval;
+                vehicle.reliability = v.reliability;
+                vehicle.reliability_spd_dec = v.reliability_spd_dec;
+                vehicle.breakdown_ctr = v.breakdown_ctr;
+                vehicle.breakdown_delay = v.breakdown_delay;
+                vehicle.breakdowns_since_last_service = v.breakdowns_since_last_service;
+                vehicle.breakdown_chance = v.breakdown_chance;
+                vehicle.profit_this_year = v.profit_this_year;
+                vehicle.profit_last_year = v.profit_last_year;
                 vehicle.timetable_started = v.vehicle_flags & (1 << 3) != 0;
                 vehicle.timetable_autofill = v.vehicle_flags & (1 << 4) != 0;
                 vehicle.running = v.running;
@@ -1156,6 +1164,14 @@ impl GameState {
             vehicle.timetable_lateness = v.timetable_lateness;
             vehicle.vehicle_flags = v.vehicle_flags;
             vehicle.service_interval_days = v.service_interval;
+            vehicle.reliability = v.reliability;
+            vehicle.reliability_spd_dec = v.reliability_spd_dec;
+            vehicle.breakdown_ctr = v.breakdown_ctr;
+            vehicle.breakdown_delay = v.breakdown_delay;
+            vehicle.breakdowns_since_last_service = v.breakdowns_since_last_service;
+            vehicle.breakdown_chance = v.breakdown_chance;
+            vehicle.profit_this_year = v.profit_this_year;
+            vehicle.profit_last_year = v.profit_last_year;
             vehicle.timetable_started = v.vehicle_flags & (1 << 3) != 0;
             vehicle.timetable_autofill = v.vehicle_flags & (1 << 4) != 0;
             vehicle.running = v.running;
@@ -1813,6 +1829,14 @@ mod tests {
                     timetable_lateness: 0,
                     vehicle_flags: 0b1_1000,
                     service_interval: 150,
+                    reliability: 8_500,
+                    reliability_spd_dec: crate::engine::DEFAULT_RELIABILITY_SPD_DEC,
+                    breakdown_ctr: 0,
+                    breakdown_delay: 0,
+                    breakdowns_since_last_service: 0,
+                    breakdown_chance: 0,
+                    profit_this_year: 0,
+                    profit_last_year: 0,
                     order_list_id: None,
                     kind: SavVehicleKind::Train,
                     name: None,
@@ -1857,6 +1881,14 @@ mod tests {
                     timetable_lateness: 0,
                     vehicle_flags: 0,
                     service_interval: 150,
+                    reliability: 8_500,
+                    reliability_spd_dec: crate::engine::DEFAULT_RELIABILITY_SPD_DEC,
+                    breakdown_ctr: 0,
+                    breakdown_delay: 0,
+                    breakdowns_since_last_service: 0,
+                    breakdown_chance: 0,
+                    profit_this_year: 0,
+                    profit_last_year: 0,
                     order_list_id: None,
                     kind: SavVehicleKind::RoadVehicle,
                     name: None,
@@ -1901,6 +1933,14 @@ mod tests {
                     timetable_lateness: 0,
                     vehicle_flags: 0,
                     service_interval: 150,
+                    reliability: 8_500,
+                    reliability_spd_dec: crate::engine::DEFAULT_RELIABILITY_SPD_DEC,
+                    breakdown_ctr: 0,
+                    breakdown_delay: 0,
+                    breakdowns_since_last_service: 0,
+                    breakdown_chance: 0,
+                    profit_this_year: 0,
+                    profit_last_year: 0,
                     order_list_id: None,
                     kind: SavVehicleKind::RoadVehicle,
                     name: None,
@@ -1945,6 +1985,14 @@ mod tests {
                     timetable_lateness: 0,
                     vehicle_flags: 0,
                     service_interval: 150,
+                    reliability: 8_500,
+                    reliability_spd_dec: crate::engine::DEFAULT_RELIABILITY_SPD_DEC,
+                    breakdown_ctr: 0,
+                    breakdown_delay: 0,
+                    breakdowns_since_last_service: 0,
+                    breakdown_chance: 0,
+                    profit_this_year: 0,
+                    profit_last_year: 0,
                     order_list_id: None,
                     kind: SavVehicleKind::Train,
                     name: None,

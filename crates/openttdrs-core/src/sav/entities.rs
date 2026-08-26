@@ -1066,6 +1066,16 @@ pub struct SavVehicle {
     pub vehicle_flags: u16,
     /// Intervalo de servicio nativo (`Vehicle::service_interval`).
     pub service_interval: u16,
+    /// Fiabilidad y estado de averías del vehículo al guardar.
+    pub reliability: u16,
+    pub reliability_spd_dec: u16,
+    pub breakdown_ctr: u8,
+    pub breakdown_delay: u8,
+    pub breakdowns_since_last_service: u8,
+    pub breakdown_chance: u8,
+    /// Beneficios acumulados de la unidad/cabeza de consist.
+    pub profit_this_year: i64,
+    pub profit_last_year: i64,
     /// Índice de la lista `ORDL` referenciada por `VEHS.common.orders`.
     ///
     /// Se conserva para reconstruir shared orders al hidratar el `GameState`.
@@ -1374,6 +1384,36 @@ pub(crate) fn vehicles_from_chunks(
             .and_then(SlValue::as_u64)
             .and_then(|value| u16::try_from(value).ok())
             .unwrap_or(crate::DEFAULT_SERVICE_INTERVAL_DAYS);
+        let reliability = record_get(common, "reliability")
+            .and_then(SlValue::as_u64)
+            .and_then(|value| u16::try_from(value).ok())
+            .unwrap_or(8_500);
+        let reliability_spd_dec = record_get(common, "reliability_spd_dec")
+            .and_then(SlValue::as_u64)
+            .and_then(|value| u16::try_from(value).ok())
+            .unwrap_or(crate::engine::DEFAULT_RELIABILITY_SPD_DEC);
+        let breakdown_ctr = record_get(common, "breakdown_ctr")
+            .and_then(SlValue::as_u64)
+            .and_then(|value| u8::try_from(value).ok())
+            .unwrap_or(0);
+        let breakdown_delay = record_get(common, "breakdown_delay")
+            .and_then(SlValue::as_u64)
+            .and_then(|value| u8::try_from(value).ok())
+            .unwrap_or(0);
+        let breakdowns_since_last_service = record_get(common, "breakdowns_since_last_service")
+            .and_then(SlValue::as_u64)
+            .and_then(|value| u8::try_from(value).ok())
+            .unwrap_or(0);
+        let breakdown_chance = record_get(common, "breakdown_chance")
+            .and_then(SlValue::as_u64)
+            .and_then(|value| u8::try_from(value).ok())
+            .unwrap_or(0);
+        let profit_this_year = record_get(common, "profit_this_year")
+            .and_then(SlValue::as_i64)
+            .unwrap_or(0);
+        let profit_last_year = record_get(common, "profit_last_year")
+            .and_then(SlValue::as_i64)
+            .unwrap_or(0);
         let vehstatus = record_get(common, "vehstatus")
             .and_then(SlValue::as_u64)
             .unwrap_or(0);
@@ -1411,6 +1451,14 @@ pub(crate) fn vehicles_from_chunks(
             timetable_lateness,
             vehicle_flags,
             service_interval,
+            reliability,
+            reliability_spd_dec,
+            breakdown_ctr,
+            breakdown_delay,
+            breakdowns_since_last_service,
+            breakdown_chance,
+            profit_this_year,
+            profit_last_year,
             order_list_id,
             kind,
             name,

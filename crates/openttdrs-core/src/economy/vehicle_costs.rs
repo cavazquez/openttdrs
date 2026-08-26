@@ -14,10 +14,62 @@ pub fn vehicle_purchase_cost(kind: VehicleKind) -> i64 {
     crate::engine::engine_for_vehicle(kind, crate::engine::default_engine_id(kind)).price
 }
 
+fn purchase_price_base(engine: &EngineDef) -> i64 {
+    match engine.kind {
+        VehicleKind::Train if crate::train_consist::engine_is_wagon(engine) => 2_000,
+        VehicleKind::Train => 400_000,
+        VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram => 14_000,
+        VehicleKind::Ship => 65_000,
+        VehicleKind::Aircraft => 700_000,
+    }
+}
+
+fn running_price_base(engine: &EngineDef) -> i64 {
+    match engine.kind {
+        // NewGRF trains use the diesel running-cost class in the current
+        // catalogue; vanilla engines without a runtime callback retain their
+        // precomputed value through the fallback below.
+        VehicleKind::Train => 5_200,
+        VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram => 1_600,
+        VehicleKind::Ship => 5_600,
+        VehicleKind::Aircraft => 9_600,
+    }
+}
+
+/// Precio de compra aplicando CB36 (`0x17`, `0x11`, `0x0A` o `0x0B`).
+///
+/// El callback devuelve el `cost_factor` BYTE, que se vuelve a combinar con
+/// el precio base de `pricebase.h`. Si falla, se mantiene exactamente el
+/// precio ya calculado del catálogo.
+#[must_use]
+pub fn vehicle_purchase_cost_with_callbacks(engine: &EngineDef, vehicle: &mut Vehicle) -> i64 {
+    crate::newgrf_callback::vehicle_cost_factor(engine, vehicle, false)
+        .map_or(engine.price, |factor| {
+            (purchase_price_base(engine) * i64::from(factor)) >> 8
+        })
+}
+
 /// Reembolso al vender en depósito (~50 % del precio del modelo del vehículo).
 #[must_use]
 pub fn vehicle_sell_refund(vehicle: &Vehicle) -> i64 {
     let base = vehicle.effective_engine().price;
+    (base * 50) / 100
+}
+
+/// Reembolso usando el motor runtime y CB36. El callback se evalúa sobre una
+/// copia: vender no debe mutar registros persistentes de la unidad que se va a
+/// eliminar.
+#[must_use]
+pub fn vehicle_sell_refund_with_catalog(vehicle: &Vehicle, engine_catalog: &[EngineDef]) -> i64 {
+    let Some(engine) = vehicle
+        .engine_id
+        .and_then(|id| crate::engine::engine_in_catalog(engine_catalog, id))
+        .cloned()
+    else {
+        return vehicle_sell_refund(vehicle);
+    };
+    let mut snapshot = vehicle.clone();
+    let base = vehicle_purchase_cost_with_callbacks(&engine, &mut snapshot);
     (base * 50) / 100
 }
 
@@ -27,10 +79,33 @@ pub fn vehicle_asset_value(vehicle: &Vehicle) -> i64 {
     vehicle.effective_engine().price.max(1)
 }
 
+/// Valor contable con catálogo activo y CB36 de coste de compra.
+#[must_use]
+pub fn vehicle_asset_value_with_catalog(vehicle: &Vehicle, engine_catalog: &[EngineDef]) -> i64 {
+    let Some(engine) = vehicle
+        .engine_id
+        .and_then(|id| crate::engine::engine_in_catalog(engine_catalog, id))
+        .cloned()
+    else {
+        return vehicle_asset_value(vehicle);
+    };
+    let mut snapshot = vehicle.clone();
+    vehicle_purchase_cost_with_callbacks(&engine, &mut snapshot).max(1)
+}
+
 /// Coste de explotación anual del motor (`Engine::GetRunningCost` / catálogo).
 #[must_use]
 pub fn engine_running_cost_year(engine: &EngineDef) -> i64 {
     engine.running_cost_year.max(0)
+}
+
+/// Coste anual aplicando CB36 de factor de explotación.
+#[must_use]
+pub fn engine_running_cost_year_with_callbacks(engine: &EngineDef, vehicle: &mut Vehicle) -> i64 {
+    crate::newgrf_callback::vehicle_cost_factor(engine, vehicle, true).map_or_else(
+        || engine_running_cost_year(engine),
+        |factor| (running_price_base(engine) * i64::from(factor)) >> 8,
+    )
 }
 
 /// Suma anual del consist (cada unidad con `running_cost_year`; cabeza dual ×½ en multihead).
@@ -42,6 +117,41 @@ pub fn consist_running_cost_year(vehicles: &[Vehicle], head_id: u32) -> i64 {
             continue;
         };
         let mut yearly = engine_running_cost_year(unit.effective_engine());
+        if unit.other_multiheaded_part.is_some() {
+            yearly /= 2;
+        }
+        total = total.saturating_add(yearly);
+    }
+    total
+}
+
+/// Suma anual de un consist usando el catálogo activo y los factores CB36.
+///
+/// Se conserva una variante separada para que las APIs públicas históricas
+/// sigan siendo inmutables y determininistas con el catálogo vanilla.
+pub fn consist_running_cost_year_with_catalog(
+    vehicles: &mut [Vehicle],
+    head_id: u32,
+    engine_catalog: &[EngineDef],
+) -> i64 {
+    let mut total = 0_i64;
+    for unit_id in consist_unit_ids(vehicles, head_id) {
+        let Some(unit) = vehicles.iter_mut().find(|v| v.id == unit_id) else {
+            continue;
+        };
+        let Some(engine) = unit
+            .engine_id
+            .and_then(|id| crate::engine::engine_in_catalog(engine_catalog, id))
+            .cloned()
+        else {
+            let mut yearly = engine_running_cost_year(unit.effective_engine());
+            if unit.other_multiheaded_part.is_some() {
+                yearly /= 2;
+            }
+            total = total.saturating_add(yearly);
+            continue;
+        };
+        let mut yearly = engine_running_cost_year_with_callbacks(&engine, unit);
         if unit.other_multiheaded_part.is_some() {
             yearly /= 2;
         }
@@ -103,6 +213,35 @@ mod tests {
     use crate::engine::ENGINE_BUS_MPS;
     use crate::map::TileCoord;
 
+    fn callback_runtime_literal(value: u8) -> crate::newgrf_sprites::TrainSpriteGraphics {
+        use crate::newgrf_sprites::{
+            Action2VarAdjust, Action2VarEntry, Action2VarTerm, TrainSpriteAssign,
+        };
+
+        let mut gfx = crate::newgrf_sprites::TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 2,
+        });
+        gfx.action2_var.insert(
+            2,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x1A,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        and_mask: u32::from(value),
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
+        gfx
+    }
+
     #[test]
     fn running_cost_prorates_yearly_catalog_cost() {
         let mut bus = Vehicle::new(
@@ -143,6 +282,48 @@ mod tests {
         let engine = crate::engine::engine_for_vehicle(VehicleKind::Bus, ENGINE_BUS_MPS);
         assert_eq!(
             engine_running_cost_from_price_base(&ge, engine),
+            engine.running_cost_year
+        );
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn cb36_cost_factors_override_purchase_and_running_costs() {
+        let mut engine = crate::engine::engines_table()
+            .iter()
+            .find(|candidate| candidate.kind == VehicleKind::Bus)
+            .cloned()
+            .unwrap();
+        engine.id = 65_102;
+        engine.newgrf_grfid = 0x434F_5354;
+        engine.newgrf_local_id = 0;
+        engine.newgrf_runtime = Some(Box::new(callback_runtime_literal(64)));
+        let mut vehicle = Vehicle::new(
+            3,
+            VehicleKind::Bus,
+            TileCoord::new(0, 0),
+            TileCoord::new(1, 0),
+        );
+        vehicle.engine_id = Some(engine.id);
+
+        // `0x40 / 0x100` is applied to the OpenTTD road bases 14,000 and
+        // 1,600, independently of the Action0 factors stored in `engine`.
+        assert_eq!(
+            vehicle_purchase_cost_with_callbacks(&engine, &mut vehicle),
+            (14_000_i64 * 64) >> 8
+        );
+        assert_eq!(
+            engine_running_cost_year_with_callbacks(&engine, &mut vehicle),
+            (1_600_i64 * 64) >> 8
+        );
+
+        engine.newgrf_runtime = None;
+        assert_eq!(
+            vehicle_purchase_cost_with_callbacks(&engine, &mut vehicle),
+            engine.price
+        );
+        assert_eq!(
+            engine_running_cost_year_with_callbacks(&engine, &mut vehicle),
             engine.running_cost_year
         );
     }

@@ -398,9 +398,23 @@ pub(super) fn apply_vehicle_running_costs(state: &mut GameState) {
             .iter()
             .filter_map(|&unit_id| state.runtime.fleet_index.slot(unit_id))
             .map(|slot| {
-                let unit = &state.vehicles[slot];
-                let mut cost = economy::engine_running_cost_year(unit.effective_engine());
-                if unit.other_multiheaded_part.is_some() {
+                let Some(engine) = state.vehicles[slot]
+                    .engine_id
+                    .and_then(|id| crate::engine::engine_in_catalog(&state.engine_catalog, id))
+                    .cloned()
+                else {
+                    let unit = &state.vehicles[slot];
+                    let mut cost = economy::engine_running_cost_year(unit.effective_engine());
+                    if unit.other_multiheaded_part.is_some() {
+                        cost /= 2;
+                    }
+                    return cost;
+                };
+                let mut cost = economy::engine_running_cost_year_with_callbacks(
+                    &engine,
+                    &mut state.vehicles[slot],
+                );
+                if state.vehicles[slot].other_multiheaded_part.is_some() {
                     cost /= 2;
                 }
                 cost

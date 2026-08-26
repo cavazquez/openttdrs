@@ -117,8 +117,15 @@ pub fn resolve_rule_for_company(
     })
 }
 
-fn autoreplace_cost(vehicle: &Vehicle, new_engine: &EngineDef) -> i64 {
-    new_engine.price - economy::vehicle_sell_refund(vehicle)
+fn autoreplace_cost(
+    vehicle: &Vehicle,
+    new_engine: &EngineDef,
+    engine_catalog: &[EngineDef],
+) -> i64 {
+    let mut probe = vehicle.clone();
+    probe.engine_id = Some(new_engine.id);
+    let purchase = economy::vehicle_purchase_cost_with_callbacks(new_engine, &mut probe);
+    purchase - economy::vehicle_sell_refund_with_catalog(vehicle, engine_catalog)
 }
 
 /// Resuelve un motor usando primero el catálogo activo (incluidos ids
@@ -193,7 +200,11 @@ pub fn pending_autoreplace_for_service(state: &GameState, vehicle: &Vehicle) -> 
             && new_engine.kind == vehicle.kind
             && engine_available_in_year(&new_engine, calendar_year)
         {
-            needed_money = needed_money.saturating_add(autoreplace_cost(vehicle, &new_engine));
+            needed_money = needed_money.saturating_add(autoreplace_cost(
+                vehicle,
+                &new_engine,
+                &state.engine_catalog,
+            ));
             return needed_money <= company.economy.money;
         }
     }
@@ -209,7 +220,8 @@ pub fn pending_autoreplace_for_service(state: &GameState, vehicle: &Vehicle) -> 
     if !engine_available_in_year(&engine, calendar_year) {
         return false;
     }
-    needed_money = needed_money.saturating_add(autoreplace_cost(vehicle, &engine));
+    needed_money =
+        needed_money.saturating_add(autoreplace_cost(vehicle, &engine, &state.engine_catalog));
     needed_money <= company.economy.money
 }
 
@@ -267,7 +279,11 @@ pub fn try_autoreplace_vehicle(
                 return Ok(false);
             }
             let wagon_removal = company.renew_keep_length;
-            let cost = autoreplace_cost(&state.vehicles[vehicle_idx], &new_engine);
+            let cost = autoreplace_cost(
+                &state.vehicles[vehicle_idx],
+                &new_engine,
+                &state.engine_catalog,
+            );
             if !can_afford_replacement(company.economy.money, cost, company.engine_renew_money) {
                 crate::news::push_autoreplace_failed_news(
                     state,
@@ -301,7 +317,7 @@ pub fn try_autoreplace_vehicle(
     }
     let wagon_removal = company.renew_keep_length;
     let vehicle = &state.vehicles[vehicle_idx];
-    let cost = autoreplace_cost(vehicle, &new_engine);
+    let cost = autoreplace_cost(vehicle, &new_engine, &state.engine_catalog);
     if !can_afford_replacement(company.economy.money, cost, company.engine_renew_money) {
         crate::news::push_autoreplace_failed_news(
             state,

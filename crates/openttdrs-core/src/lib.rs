@@ -211,8 +211,9 @@ pub use economy::{
     inflation_prices_factor, manhattan_distance, monthly_loan_interest, rail_build_cost_factored,
     road_build_cost_factored, terraform_cost_per_corner, ticks_to_transit_periods,
     transported_goods_income, transported_goods_income_for_climate,
-    transported_goods_income_with_spec, vehicle_purchase_cost, vehicle_running_cost_per_tick,
-    vehicle_sell_refund,
+    transported_goods_income_with_spec, vehicle_asset_value_with_catalog, vehicle_purchase_cost,
+    vehicle_purchase_cost_with_callbacks, vehicle_running_cost_per_tick, vehicle_sell_refund,
+    vehicle_sell_refund_with_catalog,
 };
 pub use economy_quarterly::{
     ECONOMY_HISTORY_QUARTERS, QuarterlyEconomyEntry, QuarterlyEconomyHistory,
@@ -409,10 +410,10 @@ pub use newgrf_callback::{
     resolve_vehicle_modify_property_callback, resolve_vehicle_sound_callback,
     resolve_vehicle_visual_effect_callback, trigger_road_stop_animation,
     trigger_road_stop_animation_at_with_world, trigger_road_stop_randomisation_at_with_world,
-    trigger_vehicle_randomisation, trigger_vehicle_randomisation_chain, vehicle_max_speed,
-    vehicle_power_hp, vehicle_start_stop_callback_allows, vehicle_tractive_effort,
-    vehicle_visual_effect_kind, vehicle_weight_t, writeback_station_persistent_registers,
-    writeback_vehicle_persistent_registers,
+    trigger_vehicle_randomisation, trigger_vehicle_randomisation_chain, vehicle_cost_factor,
+    vehicle_max_speed, vehicle_power_hp, vehicle_start_stop_callback_allows,
+    vehicle_tractive_effort, vehicle_visual_effect_kind, vehicle_weight_t,
+    writeback_station_persistent_registers, writeback_vehicle_persistent_registers,
 };
 pub use newgrf_config::{
     GrfContainerVersion, GrfFileInfo, GrfParsed, GrfScanError, GrfStackIssue, MAX_NEWGRF_PARAMS,

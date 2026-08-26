@@ -180,7 +180,15 @@ pub(super) fn build_vehicle_at_depot(
             }
         }
     }
-    if state.economy.money < engine.price {
+    // `Engine::GetCost` evalúa CB36 antes de crear la unidad. Usar una unidad
+    // efímera reproduce el scope de compra y permite que el callback cambie
+    // el factor sin mutar todavía la flota real.
+    let mut cost_probe = Vehicle::new(0, engine.kind, depot_pos, depot_pos);
+    cost_probe.engine_id = Some(engine.id);
+    cost_probe.cargo_type = engine.cargo;
+    let purchase_cost =
+        crate::economy::vehicle_purchase_cost_with_callbacks(&engine, &mut cost_probe);
+    if state.economy.money < purchase_cost {
         return Err(CommandError::InsufficientFunds);
     }
     let next_id = state
@@ -268,7 +276,7 @@ pub(super) fn build_vehicle_at_depot(
             );
         }
     }
-    state.economy.money -= engine.price;
+    state.economy.money -= purchase_cost;
     Ok(())
 }
 
@@ -681,7 +689,8 @@ pub(super) fn sell_vehicle(state: &mut GameState, vehicle_id: u32) -> Result<(),
     let mut refund_total = 0_i64;
     for id in &chain {
         if let Some(v) = state.vehicles.iter().find(|x| x.id == *id) {
-            refund_total += crate::economy::vehicle_sell_refund(v);
+            refund_total +=
+                crate::economy::vehicle_sell_refund_with_catalog(v, &state.engine_catalog);
         }
     }
     state.vehicles.retain(|v| !chain.contains(&v.id));

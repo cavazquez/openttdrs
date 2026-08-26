@@ -2,7 +2,7 @@
 
 use crate::cargo::ALL_CARGO_TYPES;
 use crate::company::CompanyId;
-use crate::economy::{get_price, pricebase::PriceIndex, vehicle_asset_value};
+use crate::economy::{get_price, pricebase::PriceIndex, vehicle_asset_value_with_catalog};
 use crate::game_state::GameState;
 use crate::station::{Station, StopKind};
 use crate::vehicle::VehicleKind;
@@ -234,8 +234,9 @@ pub fn calculate_company_value(state: &GameState, company_id: CompanyId) -> i64 
                 | VehicleKind::Ship
                 | VehicleKind::Aircraft
         ) {
-            vehicle_assets =
-                vehicle_assets.saturating_add(vehicle_asset_value(v).saturating_mul(3) / 2);
+            vehicle_assets = vehicle_assets.saturating_add(
+                vehicle_asset_value_with_catalog(v, &state.engine_catalog).saturating_mul(3) / 2,
+            );
         }
     }
 

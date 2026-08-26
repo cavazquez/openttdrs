@@ -658,6 +658,27 @@ pub fn resolve_vehicle_capacity_property_callback(
         .and_then(|value| u32::try_from(value).ok())
 }
 
+/// Resuelve el factor de compra o explotación de una unidad mediante CB36.
+///
+/// Los factores de coste son BYTE en las cuatro clases. Un resultado fuera de
+/// ese rango no es una propiedad válida y se deja al caller para conservar el
+/// factor Action0 ya calculado en el catálogo.
+#[must_use]
+pub fn vehicle_cost_factor(engine: &EngineDef, vehicle: &mut Vehicle, running: bool) -> Option<u8> {
+    let property = match (engine.kind, running) {
+        (VehicleKind::Train, false) => 0x17,
+        (VehicleKind::Train, true) => 0x0D,
+        (VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram, false) => 0x11,
+        (VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram, true) => 0x09,
+        (VehicleKind::Ship, false) => 0x0A,
+        (VehicleKind::Ship, true) => 0x0F,
+        (VehicleKind::Aircraft, false) => 0x0B,
+        (VehicleKind::Aircraft, true) => 0x0E,
+    };
+    resolve_vehicle_modify_property_callback(engine, vehicle, property, false)
+        .and_then(|value| u8::try_from(value).ok())
+}
+
 /// Potencia efectiva de una unidad después de `CBID_VEHICLE_MODIFY_PROPERTY`.
 ///
 /// La propiedad ferroviaria `0x0B` ya está expresada en HP; la vial `0x13`

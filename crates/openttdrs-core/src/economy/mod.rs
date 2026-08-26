@@ -32,9 +32,11 @@ pub use time::{
 };
 pub use vehicle_costs::{
     YEAR_TICKS, accumulate_running_cost_for_head, accumulate_vehicle_running_cost,
-    consist_running_cost_year, engine_running_cost_from_price_base, engine_running_cost_year,
-    vehicle_asset_value, vehicle_counts_running_tick, vehicle_purchase_cost,
-    vehicle_running_cost_per_tick, vehicle_sell_refund,
+    consist_running_cost_year, consist_running_cost_year_with_catalog,
+    engine_running_cost_from_price_base, engine_running_cost_year,
+    engine_running_cost_year_with_callbacks, vehicle_asset_value, vehicle_asset_value_with_catalog,
+    vehicle_counts_running_tick, vehicle_purchase_cost, vehicle_purchase_cost_with_callbacks,
+    vehicle_running_cost_per_tick, vehicle_sell_refund, vehicle_sell_refund_with_catalog,
 };
 
 #[cfg(test)]

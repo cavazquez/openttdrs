@@ -258,7 +258,9 @@ velocidad de `RoadVehCheckOvertake`; las APIs legacy sin catálogo aún usan el
 fallback estático.
 La capacidad dinámica durante la partida ya se refresca al entrar en
 `LoadUnloadStation`, incluyendo la suma de consist y las unidades articuladas;
-los costes y el resto de propiedades Action0 siguen siendo residuales.
+los factores de compra/explotación de CB36 también se aplican al construir,
+vender, autoreemplazar, valorar activos y cobrar el coste anual. Quedan las
+APIs legacy sin catálogo y el resto de propiedades Action0.
 La carga gradual ya ejecuta CB12 (`load_amount`) cuando el motor declara la
 máscara correspondiente.
 Los focos naval

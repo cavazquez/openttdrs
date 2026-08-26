@@ -215,7 +215,7 @@ pub struct SavGame {
     pub industries: Vec<SavIndustry>,
     /// Paquetes de carga físicos del chunk `CAPA`.
     pub cargo_packets: Vec<SavCargoPacket>,
-    /// Pagos activos del pool `CAPY` (preservados, sin ejecución de runtime).
+    /// Pagos activos del pool `CAPY`, incluyendo liquidaciones en curso.
     pub cargo_payments: Vec<crate::CargoPaymentState>,
     /// Vehículos del chunk `VEHS` (cabezas de convoy tren/carretera).
     pub vehicles: Vec<SavVehicle>,
@@ -1323,6 +1323,20 @@ impl GameState {
                 if sav_ids.contains(&vehicle.id) {
                     vehicle.shared_order_id = Some(order_list_id);
                 }
+            }
+        }
+
+        // `CAPY.front` guarda una referencia sparse del pool `VEHS`, mientras
+        // que el runtime trabaja con el id lógico que conserva cada
+        // `Vehicle`. Resolver este enlace una vez al importar permite que los
+        // pagos activos sigan acumulándose durante la descarga; el writer
+        // vuelve a traducirlo al índice sparse al exportar.
+        for payment in &mut state.cargo_payments {
+            if payment.front_vehicle_id.is_none()
+                && let Some(front_ref) = payment.front_vehicle_ref
+                && state.vehicles.iter().any(|vehicle| vehicle.id == front_ref)
+            {
+                payment.front_vehicle_id = Some(front_ref);
             }
         }
         state

@@ -1,6 +1,54 @@
 use crate::vehicle::{OrderUnloadType, VehicleKind};
 use crate::{CargoType, GameState, TileCoord, TileKind, economy, station, town};
 
+/// Obtiene (o crea) el pago de la cabeza de convoy que está atendiendo una
+/// parada. `OpenTTD` mantiene un `CargoPayment` por cabeza mientras la orden de
+/// carga/descarga está abierta; el id lógico se traduce al `REF_VEHICLE` nativo
+/// sólo al guardar.
+fn ensure_cargo_payment(state: &mut GameState, front_vehicle_id: u32) -> usize {
+    if let Some(index) = state
+        .cargo_payments
+        .iter()
+        .position(|payment| payment.front_vehicle_id == Some(front_vehicle_id))
+    {
+        return index;
+    }
+    let id = state
+        .cargo_payments
+        .iter()
+        .map(|payment| payment.id)
+        .max()
+        .unwrap_or(0)
+        .saturating_add(u32::from(!state.cargo_payments.is_empty()));
+    state.cargo_payments.push(crate::CargoPaymentState {
+        id,
+        front_vehicle_ref: None,
+        front_vehicle_id: Some(front_vehicle_id),
+        route_profit: 0,
+        visual_profit: 0,
+        visual_transfer: 0,
+    });
+    state.cargo_payments.len() - 1
+}
+
+/// Descarta pagos creados por el runtime una vez que la cabeza y todas sus
+/// unidades terminaron la descarga. Las entradas importadas desde `CAPY`
+/// conservan su referencia nativa y se mantienen para round-trip.
+fn purge_finished_runtime_payments(state: &mut GameState) {
+    state.cargo_payments.retain(|payment| {
+        let Some(front_id) = payment.front_vehicle_id else {
+            return true;
+        };
+        if payment.front_vehicle_ref.is_some() {
+            return true;
+        }
+        crate::consist_unit_ids(&state.vehicles, front_id)
+            .into_iter()
+            .filter_map(|id| state.vehicles.iter().find(|vehicle| vehicle.id == id))
+            .any(|vehicle| vehicle.cargo > 0 || vehicle.cargo_unloading || vehicle.cargo_loading)
+    });
+}
+
 /// Ejecuta un trigger CB140 con área `TA_WHOLE` después de que la economía
 /// cambió de verdad la cola de carga de una estación.
 fn trigger_station_cargo_animation(
@@ -141,6 +189,14 @@ pub(super) fn unload_vehicles(
             continue;
         }
 
+        // `PrepareUnload` crea el pago antes de clasificar cada paquete. Usar
+        // la cabeza del consist evita generar una entrada por vagón y permite
+        // guardar un CAPY coherente incluso si la descarga es gradual.
+        let payment_front_id =
+            crate::train_consist::consist_head_id(&state.vehicles, state.vehicles[i].id)
+                .unwrap_or(state.vehicles[i].id);
+        let payment_index = ensure_cargo_payment(state, payment_front_id);
+
         let speed = vehicle_load_unload_speed(state, i, cargo_type);
         // Tras `Stage`, transfer/deliver están al frente de la lista.
         let unloadable = state.vehicles[i]
@@ -240,11 +296,20 @@ pub(super) fn unload_vehicles(
                         let share = crate::company::feeder_share_of(part);
                         if share > 0 {
                             packet.feeder_share = packet.feeder_share.saturating_add(share);
+                            if let Some(cargo_payment) = state.cargo_payments.get_mut(payment_index)
+                            {
+                                // `PayTransfer` sólo actualiza la parte visual
+                                // del pago; el crédito monetario se concreta
+                                // cuando la entrega final liquida el feeder.
+                                cargo_payment.visual_transfer =
+                                    cargo_payment.visual_transfer.saturating_add(share);
+                            }
                         }
                     }
                 }
                 crate::cargo_packet::CargoUnloadAction::Deliver => {
                     delivered_units = delivered_units.saturating_add(u32::from(packet.count));
+                    let gross_part = part;
                     let mut deliverer_part = part;
                     if !packet.feeder_paid
                         && packet.feeder_share > 0
@@ -268,6 +333,12 @@ pub(super) fn unload_vehicles(
                         deliverer_part = part.saturating_sub(accumulated);
                     }
                     payment = payment.saturating_add(deliverer_part);
+                    if let Some(cargo_payment) = state.cargo_payments.get_mut(payment_index) {
+                        cargo_payment.route_profit =
+                            cargo_payment.route_profit.saturating_add(gross_part);
+                        cargo_payment.visual_profit =
+                            cargo_payment.visual_profit.saturating_add(deliverer_part);
+                    }
                 }
                 crate::cargo_packet::CargoUnloadAction::Keep
                 | crate::cargo_packet::CargoUnloadAction::Load => {}
@@ -405,6 +476,7 @@ pub(super) fn unload_vehicles(
     if link_graph_dirty {
         state.rebuild_station_flows();
     }
+    purge_finished_runtime_payments(state);
 }
 
 pub(super) fn load_vehicles(
@@ -1130,6 +1202,31 @@ mod tests {
             vehicle_load_unload_speed(&state, 0, CargoType::Passengers),
             3
         );
+    }
+
+    #[test]
+    fn runtime_cargo_payment_is_keyed_by_front_and_purged_after_consist_finishes() {
+        let mut state = GameState::new(4, 4);
+        state.vehicles.push(crate::Vehicle::new(
+            41,
+            VehicleKind::Train,
+            TileCoord::new(1, 1),
+            TileCoord::new(1, 1),
+        ));
+
+        let index = ensure_cargo_payment(&mut state, 41);
+        state.cargo_payments[index].route_profit = 123;
+        state.vehicles[0].cargo = 8;
+        purge_finished_runtime_payments(&mut state);
+        assert_eq!(state.cargo_payments.len(), 1);
+        assert_eq!(state.cargo_payments[0].front_vehicle_id, Some(41));
+        assert_eq!(state.cargo_payments[0].route_profit, 123);
+
+        state.vehicles[0].cargo = 0;
+        state.vehicles[0].cargo_loading = false;
+        state.vehicles[0].cargo_unloading = false;
+        purge_finished_runtime_payments(&mut state);
+        assert!(state.cargo_payments.is_empty());
     }
 
     #[test]

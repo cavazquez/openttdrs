@@ -51,14 +51,21 @@ pub struct SimStats {
 /// Entrada persistente del pool `CAPY` de `OpenTTD`.
 ///
 /// `front_vehicle_ref` es el índice de pool serializado por `REF_VEHICLE`
-/// (no el id lógico del vehículo). El runtime todavía no crea pagos activos,
-/// pero conservarlos permite un round-trip `.sav` sin perder el estado de una
-/// partida que estaba guardando una liquidación.
+/// (no el id lógico del vehículo). Durante la simulación se usa además
+/// `front_vehicle_id` para acumular la liquidación de una descarga gradual;
+/// al guardar se vuelve a resolver la referencia sparse nativa.
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct CargoPaymentState {
     pub id: u32,
     #[serde(default)]
     pub front_vehicle_ref: Option<u32>,
+    /// ID lógico del vehículo cabeza mientras el pago está vivo en el core.
+    ///
+    /// `front_vehicle_ref` es el índice del pool `VEHS` y sólo se conoce al
+    /// serializar. Mantener ambos evita confundir un id lógico de JSON con la
+    /// referencia sparse nativa de `OpenTTD`.
+    #[serde(default)]
+    pub front_vehicle_id: Option<u32>,
     #[serde(default)]
     pub route_profit: i64,
     #[serde(default)]

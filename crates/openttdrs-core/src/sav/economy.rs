@@ -61,7 +61,7 @@ pub(crate) fn global_economy_from_chunks(chunks: &[RawChunk]) -> GlobalEconomy {
     economy
 }
 
-/// Lee el pool `CAPY` sin intentar ejecutar pagos durante la simulación.
+/// Lee el pool `CAPY`; el enlace al vehículo se resuelve al hidratar el estado.
 #[must_use]
 pub(crate) fn cargo_payments_from_chunks(chunks: &[RawChunk]) -> Vec<crate::CargoPaymentState> {
     let Some(chunk) = find_chunk(chunks, "CAPY") else {
@@ -80,6 +80,7 @@ pub(crate) fn cargo_payments_from_chunks(chunks: &[RawChunk]) -> Vec<crate::Carg
                         .then(|| u32::try_from(reference - 1).ok())
                         .flatten()
                 }),
+            front_vehicle_id: None,
             route_profit: record_get(&record, "route_profit")
                 .and_then(SlValue::as_i64)
                 .unwrap_or(0),

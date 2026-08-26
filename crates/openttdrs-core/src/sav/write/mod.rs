@@ -7,7 +7,7 @@
 //! (SAVEBYTE + structs) + `VEHS`/`ORDL` (tren + ROAD + ship + aircraft ala fija)
 //! + `INDY` + `ECMY` + `DATE`/`PLYR` cargable por `OpenTTD` ≥15.3 dedicated.
 //!
-//! Residual: tram, rotor heli, creación de nuevos `CAPY` packets, settings fuera del
+//! Residual: tram, rotor heli, creación de nuevos paquetes `CAPA`, settings fuera del
 //! subconjunto modelado de `PATS`, ejecución de `ENGN`/`SRND`/`NewGRF` y flags
 //! completos de `PLYR`.
 //! Los chunks nativos no modelados se conservan como passthrough al reexportar.
@@ -399,6 +399,7 @@ mod tests {
         state.cargo_payments = vec![crate::CargoPaymentState {
             id: 1,
             front_vehicle_ref: Some(7),
+            front_vehicle_id: None,
             route_profit: -11,
             visual_profit: -7,
             visual_transfer: 3,
@@ -459,6 +460,37 @@ mod tests {
                 .iter()
                 .any(|name| name == "CAPY")
         );
+    }
+
+    #[test]
+    fn capy_runtime_front_id_is_translated_to_sparse_vehicle_ref() {
+        let mut state = tiny_state();
+        let vehicle_pos = TileCoord::new(10, 20);
+        state.vehicles.push(Vehicle::new(
+            41,
+            VehicleKind::Train,
+            vehicle_pos,
+            vehicle_pos,
+        ));
+        state.cargo_payments = vec![crate::CargoPaymentState {
+            id: 0,
+            front_vehicle_ref: None,
+            front_vehicle_id: Some(41),
+            route_profit: 99,
+            visual_profit: 77,
+            visual_transfer: 11,
+        }];
+
+        let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
+        let sav_game = sav::load(&bytes).expect("load");
+        assert_eq!(sav_game.cargo_payments.len(), 1);
+        assert_eq!(sav_game.cargo_payments[0].front_vehicle_ref, Some(0));
+        assert_eq!(sav_game.cargo_payments[0].route_profit, 99);
+
+        let loaded = GameState::from_sav_game(sav_game);
+        assert_eq!(loaded.vehicles.len(), 1);
+        assert_eq!(loaded.cargo_payments[0].front_vehicle_id, Some(0));
+        assert_eq!(loaded.cargo_payments[0].front_vehicle_ref, Some(0));
     }
 
     #[test]

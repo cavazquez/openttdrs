@@ -1,7 +1,9 @@
 //! Chunks de metadatos (DATE, PLYR).
 
 use crate::game_state::GameState;
+use crate::map::{TileKind, coord_to_linear_index};
 use crate::news::{CALENDAR_BASE_YEAR, calendar_day_index, calendar_year_day};
+use crate::vehicle::VehicleKind;
 
 use super::super::SavError;
 use super::super::chunks::CH_TABLE;
@@ -421,9 +423,42 @@ pub(super) fn ecmy_chunk(state: &GameState) -> Result<Vec<u8>, SavError> {
     )
 }
 
-/// Serializa el pool `CAPY` preservado desde un save. El runtime no crea
-/// nuevos pagos activos, por lo que un estado recién iniciado simplemente no
-/// emite este chunk.
+/// Devuelve la referencia sparse que `VEHS` asignará a una cabeza de vehículo.
+///
+/// `CAPY.front` no usa el id lógico del vehículo: es un `REF_VEHICLE` al índice
+/// de la tabla sparse. Mantener este cálculo junto al writer evita emitir un
+/// pago que apunte a otra unidad cuando la tabla mezcla trenes y aeronaves.
+fn emitted_vehicle_pool_index(state: &GameState, vehicle_id: u32) -> Option<u32> {
+    let (map_w, _) = state.map.dimensions();
+    let mut sparse_idx = 0_u32;
+    for vehicle in &state.vehicles {
+        let emitted = match vehicle.kind {
+            VehicleKind::Train | VehicleKind::Aircraft => true,
+            VehicleKind::Bus | VehicleKind::Truck => state
+                .map
+                .get(vehicle.pos)
+                .is_some_and(|tile| matches!(tile.kind, TileKind::Road | TileKind::RoadDepot)),
+            VehicleKind::Ship => state
+                .map
+                .get(vehicle.pos)
+                .is_some_and(|tile| matches!(tile.kind, TileKind::Water | TileKind::ShipDepot)),
+            VehicleKind::Tram => false,
+        } && coord_to_linear_index(vehicle.pos, map_w).is_some();
+        if !emitted {
+            continue;
+        }
+        if vehicle.id == vehicle_id {
+            return Some(sparse_idx);
+        }
+        sparse_idx =
+            sparse_idx.saturating_add(u32::from(vehicle.kind == VehicleKind::Aircraft) + 1);
+    }
+    None
+}
+
+/// Serializa el pool `CAPY`, incluyendo pagos creados por el runtime durante
+/// una descarga. Las entradas importadas sin enlace lógico conservan su
+/// referencia nativa; las nuevas se traducen desde `front_vehicle_id`.
 pub(super) fn capy_chunk(state: &GameState) -> Result<Option<Vec<u8>>, SavError> {
     if state.cargo_payments.is_empty() {
         return Ok(None);
@@ -448,9 +483,11 @@ pub(super) fn capy_chunk(state: &GameState) -> Result<Option<Vec<u8>>, SavError>
         let Some(record) = records.get_mut(id) else {
             return Err(SavError::BadFormat("índice CAPY fuera de rango".into()));
         };
-        let front = payment
-            .front_vehicle_ref
-            .map_or(0, |reference| reference.saturating_add(1));
+        let front_ref = payment
+            .front_vehicle_id
+            .and_then(|id| emitted_vehicle_pool_index(state, id))
+            .or(payment.front_vehicle_ref);
+        let front = front_ref.map_or(0, |reference| reference.saturating_add(1));
         record.extend_from_slice(&front.to_be_bytes());
         record.extend_from_slice(&payment.route_profit.to_be_bytes());
         record.extend_from_slice(&payment.visual_profit.to_be_bytes());

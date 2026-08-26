@@ -2163,8 +2163,8 @@ resumen se limita a lo que emite el writer: `MAP*`, `DATE`, `PLYR`, `STNN`,
 `CITY`, `INDY`, `LGRP`, `ORDL` y `VEHS`; incluye tren, bus/camión, barco y
 avión de ala fija.
 
-Preserva `CAPY` al importar/exportar, pero todavía no crea pagos activos desde
-el runtime; `PLYR` conserva dinero/préstamo/límite individual (incluido el centinela de límite global)/meses de bancarrota/color/nombre/indicador AI, el subconjunto ejecutado de
+Preserva `CAPY` al importar/exportar y crea/acumula el pago por cabeza durante
+descargas graduales (conversión lógica↔`REF_VEHICLE` al guardar); `PLYR` conserva dinero/préstamo/límite individual (incluido el centinela de límite global)/meses de bancarrota/color/nombre/indicador AI, el subconjunto ejecutado de
 `settings.*`, presidente, bitfield de rostro, `face_style` e historial trimestral (`cur_economy` y hasta 24 `old_economy`, incluido el desglose de carga) por compañía. Aún faltan flags completos y el modelado/ejecución completa de `OBJS`,
 `GSET`/`ENGN`/`SRND` y configuración NewGRF. Los chunks nativos
 `NGRF`/`GSET`/`ENGN`/`OBJS`/`SRND` y mappings asociados se conservan como

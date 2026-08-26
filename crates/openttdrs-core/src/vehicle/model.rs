@@ -243,6 +243,11 @@ pub struct Vehicle {
     /// Historial reciente de teselas (cabeza → atrás) para huella PBS del consist.
     #[serde(default)]
     pub rail_tile_history: VecDeque<TileCoord>,
+    /// Historial reciente de teselas (cabeza → atrás) para la pose de cadenas
+    /// articuladas road. Se persiste para que una carga/reanudación no vuelva
+    /// a colocar todos los eslabones sobre la cabeza durante el primer tick.
+    #[serde(default)]
+    pub road_tile_history: VecDeque<TileCoord>,
     /// Camino calculado por el pathfinder (siguiente tile en el frente).
     pub path: VecDeque<TileCoord>,
     /// Lista circular de destinos asignados por el jugador.
@@ -553,6 +558,7 @@ impl Vehicle {
             path: VecDeque::new(),
             reserved_steps: Vec::new(),
             rail_tile_history: VecDeque::new(),
+            road_tile_history: VecDeque::new(),
             orders: Vec::new(),
             current_order: 0,
             cur_implicit_order_index: 0,

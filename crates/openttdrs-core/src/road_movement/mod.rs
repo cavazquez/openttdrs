@@ -31,7 +31,8 @@ pub use overtake::{
     drive_state_with_overtake_and_side, road_veh_check_overtake,
 };
 pub use pose::{
-    VehiclePose, extrapolate_vehicle_pose, retreat_vehicle_pose, vehicle_render_progress,
+    VehiclePose, extrapolate_vehicle_pose, retreat_vehicle_pose, retreat_vehicle_pose_distance,
+    vehicle_render_progress,
 };
 pub use render_pose::{
     road_turn_entry_exit, train_subtile_direction, vehicle_render_direction,
@@ -71,6 +72,28 @@ mod tests {
     fn detects_ne_to_se_turn() {
         let v = ne_to_se_turn_vehicle();
         assert_eq!(road_turn_entry_exit(&v), Some((DIR_NE, DIR_SE)));
+    }
+
+    #[test]
+    fn retreat_pose_uses_multiple_road_history_tiles() {
+        let mut v = Vehicle::new(
+            1,
+            VehicleKind::Bus,
+            TileCoord::new(4, 2),
+            TileCoord::new(8, 2),
+        );
+        v.progress = 128;
+        v.path = VecDeque::from([TileCoord::new(5, 2)]);
+        v.road_tile_history = VecDeque::from([
+            TileCoord::new(3, 2),
+            TileCoord::new(2, 2),
+            TileCoord::new(1, 2),
+        ]);
+
+        let pose = retreat_vehicle_pose_distance(&v, VehiclePose::from_vehicle(&v), 512);
+
+        assert_eq!(pose.pos, TileCoord::new(2, 2));
+        assert_eq!(pose.progress, 126);
     }
 
     #[test]

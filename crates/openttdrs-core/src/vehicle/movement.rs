@@ -621,6 +621,10 @@ impl super::model::Vehicle {
     /// El historial de la cabeza alimenta [`crate::train_consist::consist_unit_poses`]:
     /// cada vagón se sitúa con `CalcNextVehicleOffset` sobre este recorrido.
     const RAIL_HISTORY_CAP: usize = 32;
+    /// Máximo de teselas que conserva una cabeza road para ubicar trailers.
+    /// Ocho unidades de longitud máxima ocupan menos de este recorrido y el
+    /// límite también evita que una partida larga haga crecer el save.
+    const ROAD_HISTORY_CAP: usize = 32;
 
     fn push_rail_tile_history(&mut self, left: TileCoord) {
         if self.kind != super::model::VehicleKind::Train {
@@ -631,6 +635,23 @@ impl super::model::Vehicle {
         }
         while self.rail_tile_history.len() > Self::RAIL_HISTORY_CAP {
             self.rail_tile_history.pop_back();
+        }
+    }
+
+    fn push_road_tile_history(&mut self, left: TileCoord) {
+        if !matches!(
+            self.kind,
+            super::model::VehicleKind::Bus
+                | super::model::VehicleKind::Truck
+                | super::model::VehicleKind::Tram
+        ) {
+            return;
+        }
+        if self.road_tile_history.front() != Some(&left) {
+            self.road_tile_history.push_front(left);
+        }
+        while self.road_tile_history.len() > Self::ROAD_HISTORY_CAP {
+            self.road_tile_history.pop_back();
         }
     }
 
@@ -650,6 +671,7 @@ impl super::model::Vehicle {
             let left = self.pos;
             self.pos = next;
             self.push_rail_tile_history(left);
+            self.push_road_tile_history(left);
             if self.pos == self.dest && !self.defers_connected_bay_arrival(map) {
                 self.advance_destination_after_arrival();
             }
@@ -675,6 +697,7 @@ impl super::model::Vehicle {
             }
             if self.pos != previous {
                 self.update_direction_step(previous, self.pos, map);
+                self.push_road_tile_history(previous);
             }
             if self.orders.is_empty() && self.pos != previous {
                 self.origin = previous;

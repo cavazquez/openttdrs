@@ -161,34 +161,87 @@ pub(super) fn virtual_advance_tile(
 /// Pose un poco detrás del vehículo para emitir humo/chispas (cola en la vía).
 #[must_use]
 pub fn retreat_vehicle_pose(v: &Vehicle, pose: VehiclePose, back: u8) -> VehiclePose {
+    retreat_vehicle_pose_distance(v, pose, u16::from(back))
+}
+
+/// Retrocede una pose una distancia expresada en la escala de progreso road
+/// (`255` unidades por tesela).
+///
+/// La versión histórica de [`retreat_vehicle_pose`] recibía un `u8`, lo que
+/// truncaba cualquier trailer separado más de una tesela. `OpenTTD` mantiene la
+/// huella completa de la cabeza y puede colocar cadenas largas sobre varias
+/// teselas; este helper recorre `road_tile_history` para conservar esa
+/// separación sin convertir las unidades articuladas en vehículos autónomos.
+#[must_use]
+pub fn retreat_vehicle_pose_distance(v: &Vehicle, pose: VehiclePose, back: u16) -> VehiclePose {
     if back == 0 || pose.depart_turn_f > 0.0 {
         return pose;
     }
-    let back_f = f32::from(back);
+    let mut remaining = f32::from(back);
     let mut p = pose;
-    if p.progress_f >= back_f {
-        p.progress_f -= back_f;
-        p.sync_discrete_fields();
-        return p;
-    }
-    let deficit = back_f - p.progress_f;
-    p.progress_f = 0.0;
-    if let Some((prev, idx)) = previous_tile_on_route(v, p.pos, p.path_index) {
+    let mut history_index = 0;
+    loop {
+        if remaining <= p.progress_f {
+            p.progress_f -= remaining;
+            p.sync_discrete_fields();
+            return p;
+        }
+
+        // Reach the beginning of the current tile, then continue over the
+        // previous tile(s). A missing history entry leaves the best pose that
+        // can be inferred from the route rather than inventing coordinates.
+        remaining -= p.progress_f;
+        let Some((prev, idx, from_history)) =
+            previous_tile_on_route(v, p.pos, p.path_index, history_index)
+        else {
+            return p;
+        };
         p.pos = prev;
         p.path_index = idx;
-        p.progress_f = 255.0 - deficit;
-        p.sync_discrete_fields();
+        p.progress_f = 255.0;
+        if from_history {
+            history_index += 1;
+        }
+
+        if remaining <= p.progress_f {
+            p.progress_f -= remaining;
+            p.sync_discrete_fields();
+            return p;
+        }
+        remaining -= p.progress_f;
+        p.progress_f = 0.0;
+
+        // The neighbour fallback is only authoritative for one tile. Without
+        // persisted history, using it repeatedly would place long chains on a
+        // made-up loop of the same adjacent tile.
+        if !from_history {
+            p.progress_f = 0.0;
+            p.sync_discrete_fields();
+            return p;
+        }
     }
-    p
 }
 
 fn previous_tile_on_route(
     v: &Vehicle,
     pos: TileCoord,
     path_index: usize,
-) -> Option<(TileCoord, usize)> {
+    history_index: usize,
+) -> Option<(TileCoord, usize, bool)> {
     if path_index > 0 {
-        return v.path.get(path_index - 1).map(|&c| (c, path_index - 1));
+        return v
+            .path
+            .get(path_index - 1)
+            .map(|&c| (c, path_index - 1, false));
+    }
+    if matches!(
+        v.kind,
+        VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram
+    ) && let Some(&prev) = v.road_tile_history.get(history_index)
+        && (prev.x - pos.x).abs() <= 1
+        && (prev.y - pos.y).abs() <= 1
+    {
+        return Some((prev, path_index, true));
     }
     for (dx, dy) in [
         (-1_i32, 0),
@@ -202,7 +255,7 @@ fn previous_tile_on_route(
     ] {
         let prev = TileCoord::new(pos.x - dx, pos.y - dy);
         if movement_target_at(v, prev, path_index) == Some(pos) {
-            return Some((prev, path_index));
+            return Some((prev, path_index, false));
         }
     }
     None

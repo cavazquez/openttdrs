@@ -485,10 +485,15 @@ fn sync_road_articulated_parts(
             unit.z_pos = head.z_pos;
         } else {
             // Convert sixteenths of a tile to the 0..=255 road progress scale.
+            // Keep the full distance: a long articulated vehicle can span
+            // several tiles and the head's persisted history resolves each
+            // predecessor instead of clamping every trailer to one tile.
             let back_progress = back_fractions.saturating_mul(255).div_ceil(16);
-            let back_progress =
-                u8::try_from(back_progress.min(u16::from(u8::MAX))).unwrap_or(u8::MAX);
-            let pose = crate::road_movement::retreat_vehicle_pose(&head, head_pose, back_progress);
+            let pose = crate::road_movement::retreat_vehicle_pose_distance(
+                &head,
+                head_pose,
+                back_progress,
+            );
             let unit = &mut state.vehicles[slot];
             unit.pos = pose.pos;
             unit.origin = head.origin;
@@ -808,5 +813,46 @@ mod tests {
             state.vehicles[1].road_state,
             crate::road_movement::RVSB_IN_DEPOT
         );
+    }
+
+    #[test]
+    fn road_articulated_long_chain_uses_history_beyond_one_tile() {
+        let mut state = GameState::new(12, 8);
+        let pos = TileCoord::new(4, 2);
+        let dest = TileCoord::new(8, 2);
+        let mut head = Vehicle::new(1, VehicleKind::Bus, pos, dest);
+        head.progress = 128;
+        head.path = VecDeque::from([TileCoord::new(5, 2)]);
+        head.road_tile_history = VecDeque::from([
+            TileCoord::new(3, 2),
+            TileCoord::new(2, 2),
+            TileCoord::new(1, 2),
+        ]);
+
+        let mut units = Vec::new();
+        for id in 2..=5 {
+            let mut unit = Vehicle::new(id, VehicleKind::Bus, pos, dest);
+            unit.running = false;
+            unit.newgrf_articulated = true;
+            unit.prev_unit = Some(id - 1);
+            units.push(unit);
+        }
+        head.next_unit = Some(2);
+        units[0].next_unit = Some(3);
+        units[1].next_unit = Some(4);
+        units[2].next_unit = Some(5);
+        state.vehicles.push(head);
+        state.vehicles.extend(units);
+
+        sync_road_articulated_parts(&mut state, 0);
+
+        assert_eq!(state.vehicles[1].pos, pos);
+        assert_eq!(state.vehicles[1].progress, 0);
+        assert_eq!(state.vehicles[2].pos, TileCoord::new(3, 2));
+        assert_eq!(state.vehicles[2].progress, 128);
+        assert_eq!(state.vehicles[3].pos, TileCoord::new(3, 2));
+        assert_eq!(state.vehicles[3].progress, 0);
+        assert_eq!(state.vehicles[4].pos, TileCoord::new(2, 2));
+        assert_eq!(state.vehicles[4].progress, 128);
     }
 }

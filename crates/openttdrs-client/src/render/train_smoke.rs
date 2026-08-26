@@ -7,7 +7,8 @@ use bevy::prelude::*;
 
 use openttdrs_core::prelude::*;
 use openttdrs_core::{
-    Vehicle, VehicleOrder, extrapolate_vehicle_pose, retreat_vehicle_pose, train_smoke_kind,
+    EngineDef, Vehicle, VehicleOrder, VehicleVisualEffectKind, extrapolate_vehicle_pose,
+    retreat_vehicle_pose, train_smoke_kind, vehicle_visual_effect_kind,
 };
 
 use crate::audio::{PlayWorldSfx, play_vehicle_event_sound_with_default};
@@ -160,14 +161,27 @@ fn train_is_stopping_at_station(map: &Map, vehicle: &Vehicle) -> bool {
 
 /// Port de las reglas de `Vehicle::ShowVisualEffect` para trenes.
 #[must_use]
+#[cfg(test)]
 fn train_smoke_to_emit(
     map: &Map,
-    vehicle: &Vehicle,
+    vehicle: &mut Vehicle,
+    tick: u64,
+    smoke_amount: u8,
+) -> Option<TrainSmokeSet> {
+    let engine = vehicle.effective_engine();
+    train_smoke_to_emit_with_engine(map, vehicle, engine, tick, smoke_amount)
+}
+
+/// Igual que [`train_smoke_to_emit`], pero usando el catálogo de motores de la
+/// partida para resolver callbacks de vehículos NewGRF.
+fn train_smoke_to_emit_with_engine(
+    map: &Map,
+    vehicle: &mut Vehicle,
+    engine: &EngineDef,
     tick: u64,
     smoke_amount: u8,
 ) -> Option<TrainSmokeSet> {
     let amount = smoke_amount.min(2);
-    let engine = vehicle.effective_engine();
     if amount == 0
         || vehicle.kind != VehicleKind::Train
         || !engine.is_train_engine()
@@ -187,7 +201,14 @@ fn train_smoke_to_emit(
         vehicle.cached_max_speed.max(1)
     };
     let speed = vehicle.cur_speed.min(max_speed);
-    match train_smoke_kind(engine.id) {
+    let smoke_kind = match vehicle_visual_effect_kind(engine, vehicle) {
+        VehicleVisualEffectKind::Disabled => return None,
+        VehicleVisualEffectKind::Steam => openttdrs_core::TrainSmokeKind::Steam,
+        VehicleVisualEffectKind::Diesel => openttdrs_core::TrainSmokeKind::Diesel,
+        VehicleVisualEffectKind::Electric => openttdrs_core::TrainSmokeKind::Electric,
+        VehicleVisualEffectKind::Default => train_smoke_kind(engine.id),
+    };
+    match smoke_kind {
         openttdrs_core::TrainSmokeKind::Steam => {
             let bits = u32::from((4_u8 >> amount) + (speed.saturating_mul(3) / max_speed) as u8);
             let mask = (1_u64 << bits.min(63)).saturating_sub(1);
@@ -253,13 +274,25 @@ fn spawn_train_smoke(
     spawn_clock.last_tick = Some(tick);
 
     let mut active_count = existing.iter().count();
-    let map = &sim.state.map;
+    let state = &mut sim.state;
+    let map = &state.map;
+    let engine_catalog = &state.engine_catalog;
     let mut visual_sound_events = Vec::new();
-    for vehicle in &sim.state.vehicles {
+    for vehicle in &mut state.vehicles {
         if active_count >= MAX_TRAIN_SMOKE_EFFECTS {
             break;
         }
-        let Some(set_kind) = train_smoke_to_emit(map, vehicle, tick, prefs.smoke_amount) else {
+        let engine_id = vehicle
+            .engine_id
+            .unwrap_or_else(|| openttdrs_core::default_engine_id(vehicle.kind));
+        let Some(engine) = openttdrs_core::engine_in_catalog(engine_catalog, engine_id)
+            .or_else(|| openttdrs_core::engine_by_id(engine_id))
+        else {
+            continue;
+        };
+        let Some(set_kind) =
+            train_smoke_to_emit_with_engine(map, vehicle, engine, tick, prefs.smoke_amount)
+        else {
             continue;
         };
         let effect_set = sprite_set(&frames, set_kind);
@@ -358,8 +391,9 @@ fn animate_train_smoke(
 #[cfg(test)]
 mod tests {
     use openttdrs_core::{
-        ENGINE_TRAIN_ASIASTAR, ENGINE_TRAIN_KIRBY, Map, TileCoord, TrainSmokeKind, Vehicle,
-        VehicleKind, train_smoke_kind,
+        Action2VarAdjust, Action2VarEntry, Action2VarTerm, ENGINE_TRAIN_ASIASTAR,
+        ENGINE_TRAIN_KIRBY, Map, TileCoord, TrainSmokeKind, TrainSpriteAssign, TrainSpriteGraphics,
+        Vehicle, VehicleKind, train_smoke_kind,
     };
 
     use super::*;
@@ -373,6 +407,32 @@ mod tests {
         vehicle
     }
 
+    fn callback_literal(value: u8) -> TrainSpriteGraphics {
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 2,
+        });
+        gfx.action2_var.insert(
+            2,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x1A,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        shift: 0,
+                        and_mask: value,
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
+        gfx
+    }
+
     #[test]
     fn smoke_kind_matches_engine_class() {
         assert_eq!(train_smoke_kind(ENGINE_TRAIN_KIRBY), TrainSmokeKind::Steam);
@@ -380,6 +440,21 @@ mod tests {
             train_smoke_kind(ENGINE_TRAIN_ASIASTAR),
             TrainSmokeKind::Electric
         );
+    }
+
+    #[test]
+    fn smoke_call_site_honors_newgrf_visual_effect_disable() {
+        let map = Map::new_flat(4, 4, 0);
+        let mut vehicle = running_train(ENGINE_TRAIN_KIRBY);
+        let Some(mut engine) = openttdrs_core::engine_by_id(ENGINE_TRAIN_KIRBY).cloned() else {
+            panic!("motor vanilla ausente");
+        };
+        engine.newgrf_grfid = 0x5649_5355;
+        engine.newgrf_local_id = 0;
+        engine.vehicle_callback_mask = 1;
+        // CB10 bit 6 = VE_DISABLE_EFFECT.
+        engine.newgrf_runtime = Some(Box::new(callback_literal(0x40)));
+        assert!(train_smoke_to_emit_with_engine(&map, &mut vehicle, &engine, 0, 2).is_none());
     }
 
     #[test]
@@ -425,30 +500,30 @@ mod tests {
     fn emission_rejects_off_stopped_wagon_hidden_and_station_states() {
         let mut map = Map::new_flat(4, 4, 0);
         let mut vehicle = running_train(ENGINE_TRAIN_KIRBY);
-        assert!(train_smoke_to_emit(&map, &vehicle, 0, 0).is_none());
+        assert!(train_smoke_to_emit(&map, &mut vehicle, 0, 0).is_none());
         vehicle.cur_speed = 0;
-        assert!(train_smoke_to_emit(&map, &vehicle, 0, 2).is_none());
+        assert!(train_smoke_to_emit(&map, &mut vehicle, 0, 2).is_none());
         vehicle.cur_speed = 24;
         vehicle.running = false;
-        assert!(train_smoke_to_emit(&map, &vehicle, 0, 2).is_none());
+        assert!(train_smoke_to_emit(&map, &mut vehicle, 0, 2).is_none());
         vehicle.running = true;
         vehicle.engine_id = Some(openttdrs_core::ENGINE_WAGON_COAL);
-        assert!(train_smoke_to_emit(&map, &vehicle, 0, 2).is_none());
+        assert!(train_smoke_to_emit(&map, &mut vehicle, 0, 2).is_none());
 
         vehicle.engine_id = Some(ENGINE_TRAIN_KIRBY);
         vehicle.set_station_orders(vec![vehicle.pos]);
         assert!(map.set_kind(vehicle.pos, TileKind::Station).is_ok());
-        assert!(train_smoke_to_emit(&map, &vehicle, 0, 2).is_none());
+        assert!(train_smoke_to_emit(&map, &mut vehicle, 0, 2).is_none());
     }
 
     #[test]
     fn steam_density_uses_tick_mask_and_not_visual_time() {
         let map = Map::new_flat(4, 4, 0);
-        let vehicle = running_train(ENGINE_TRAIN_KIRBY);
+        let mut vehicle = running_train(ENGINE_TRAIN_KIRBY);
         assert_eq!(
-            train_smoke_to_emit(&map, &vehicle, 0, 2),
+            train_smoke_to_emit(&map, &mut vehicle, 0, 2),
             Some(TrainSmokeSet::Steam)
         );
-        assert!(train_smoke_to_emit(&map, &vehicle, 1, 2).is_none());
+        assert!(train_smoke_to_emit(&map, &mut vehicle, 1, 2).is_none());
     }
 }

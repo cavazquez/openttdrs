@@ -31,6 +31,7 @@ API común: `TrainSpriteGraphics::resolve_callback` / `resolve_callback_ctx`,
 `resolve_vehicle_load_amount_callback`, `resolve_vehicle_sound_callback`,
 `resolve_vehicle_refit_capacity_callback`,
 `resolve_vehicle_length_callback`, `vehicle_unit_length`,
+`resolve_vehicle_visual_effect_callback`, `vehicle_visual_effect_kind`,
 `resolve_industry_tile_animation_callback`,
 `resolve_industry_tile_random_trigger`
 (`crates/openttdrs-core/src/newgrf_callback.rs`).
@@ -47,9 +48,10 @@ API común: `TrainSpriteGraphics::resolve_callback` / `resolve_callback_ctx`,
 | Vehicles (`00`–`03`) | `0x12` `CBID_VEHICLE_LOAD_AMOUNT` | **parcial runtime** | `vehicle_load_unload_speed` ejecuta el callback para carga gradual con `param1=0`; un byte no nulo sustituye `EngineInfo::load_amount`, mientras `CALLBACK_FAILED`, cero, resultado fuera de rango, máscara ausente o GRF ausente conservan la propiedad base y escriben `7C` del vehículo |
 | Vehicles (`00`–`03`) | `0x11` `CBID_VEHICLE_LENGTH` | **parcial runtime** | `vehicle_unit_length` ejecuta el callback con `param1=param2=0` al comprar/refrescar una unidad; convierte el acortamiento `0..7` a longitud `8−shorten`, conserva `CALLBACK_FAILED`/resultados inválidos y usa la propiedad `shorten_factor` como fallback. La longitud se persiste en la unidad y participa en la geometría de consist; faltan callbacks de longitud dependientes de propiedades `0x36` y refresco diferencial de cadenas importadas |
 | Vehicles (`00`–`03`) | `0x15` `CBID_VEHICLE_REFIT_CAPACITY` | **parcial runtime** | `refit_vehicle` evalúa el callback con el cargo objetivo en `Vehicle::cargo_type`; un resultado distinto de `CALLBACK_FAILED` fija la capacidad final (incluido cero), conserva el tipo original durante la consulta y escribe `7C`. Sin callback se aplica la propiedad `capacity` y el multiplicador de cargo; faltan cadenas articuladas, subtipo y la capacidad secundaria de aeronaves |
+| Vehicles (`00`–`03`) | `0x10` `CBID_VEHICLE_VISUAL_EFFECT` | **parcial runtime** | `resolve_vehicle_visual_effect_callback` ejecuta el callback con `param1=param2=0`, normaliza bits de tipo (vapor/diésel/chispa) y `VE_DISABLE_EFFECT`, y escribe `7C`. El emisor de humo ferroviario usa el catálogo activo (incluidos motores NewGRF) y respeta el resultado; faltan la propiedad visual Action0 persistida, el offset/potencia de vagones y `CBID_VEHICLE_SPAWN_VISUAL_EFFECT` avanzado. |
 | Vehicles (`00`–`03`) | `0x31` `CBID_VEHICLE_START_STOP_CHECK` | **soportado** | Call site: `toggle_vehicle_running_checked`; deniega → `NewGrfCallbackDenied` |
 | Vehicles | `0x33` `CBID_VEHICLE_SOUND_EFFECT` | **parcial runtime** | Action0 conserva la máscara (bit `SoundEffect`) y el callback recibe `VehicleSoundEvent` en `param1`; los eventos de salida, marcha (`Running`/`Running16`/`Stopped16`), avería, túnel, pago de carga/descarga y despegue/aterrizaje traducen samples globales `0..72` o locales `73+id` a la cola del mixer. `CALLBACK_FAILED` mantiene el SFX vanilla; id local inválido suprime el sonido como `INVALID_SOUND`. El efecto visual (humo/chispas) resuelve también el callback; los motores vanilla conocidos ya seleccionan su muestra específica y queda mapear el `sfx` custom de Action0 sin callback. |
-| Vehicles | `0x10`, `0x16`, `0x19`, `0x1D`, `0x23`, `0x2D`, `0x32`, `0x34`–`0x36`, … | **OOS** | Evaluador Action2 listo; sin call sites |
+| Vehicles | `0x16`, `0x19`, `0x1D`, `0x23`, `0x2D`, `0x32`, `0x34`–`0x36`, … | **OOS** | Evaluador Action2 listo; sin call sites |
 | Houses (`07`) | `0x17` `CBID_HOUSE_ALLOW_CONSTRUCTION` | **soportado** (#266) | Call site: crecimiento físico del pueblo (`try_build_town_house`), antes de reservar el footprint; respeta su máscara y booleano de 8 bits |
 | Houses | resto `0x1A`–`0x1C`, `0x1E`–`0x21`, … | **almacenado** | `HouseSpecDef.callback_mask` |
 | Industry tiles (`09`) | `0x25` trigger, `0x26` next frame, `0x27` speed | **soportado** (#293) | `phase_tile_animation` ejecuta los tres con coordenada real, `param2=IndustryTick`, máscara Action0 y fallback `CALLBACK_FAILED` |
@@ -90,19 +92,20 @@ API común: `TrainSpriteGraphics::resolve_callback` / `resolve_callback_ctx`,
 2. Vehicles CB31 — start/stop check (+ writeback persistent regs).
 3. Vehicles CB11 — longitud efectiva al comprar/refrescar unidades (+ fallback `shorten_factor`).
 4. Vehicles CB15 — capacidad de refit en `RefitVehicle` (+ writeback persistent regs).
-5. Industries CB28 — location al colocar NewGRF (`place_industry_spec_def_sandbox`).
-6. Houses CB17 — allow construction durante crecimiento físico (GRF Action0/2/3 cargado + call site).
-7. Stations CB13 — availability en query+execute de construcción; sin storage en el scope nulo de OpenTTD.
-8. Industry tiles CB25/CB26/CB27 — trigger, next frame y velocidad en `phase_tile_animation` (FAILED observable).
-9. Industry tile trigger → Action2 random group (`resolve_industry_tile_random_trigger`).
-10. RoadStops CB13 — disponibilidad al previsualizar y ejecutar `PlaceBusStop`/`PlaceTruckStop`.
-11. RoadStops CB140/CB141/CB142 — `Built`/`TileLoop`, carga/retirada de carga, carga/llegada/salida vial y `AcceptanceTick`; scheduler con velocidad/frame, writeback `7C`, CTT en `param2` y JSON round-trip. Cada tesela custom conserva spec/frame/activo/random, incluso tras `JoinStation`; los eventos exactos y de área completa siguen el alcance de `RoadStopTileData`. Action0 `0x0D` + Action2 random reacciona a NewCargo, CargoTaken, carga, llegada y salida con grupos `any`/`all`, bits base/tesela y triggers persistentes. Referencia: `newgrf_roadstop.cpp` / `newgrf_animation_base.h`.
-12. Objects CB157 — pendiente por tesela de `BuildObject`, desde Action0 `0x15` y Action3→Action2 cargados; query y execute rechazan antes de mutar.
-13. Cargoes CB39 — cálculo de pago por packet durante `unload_vehicles`, desde Action0 `0x1A` y Action3→Action2 cargados; `CALLBACK_FAILED` conserva la fórmula base.
-14. Cargoes CB145 — target de rating durante el barrido `update_station_ratings`, desde Action0 `0x1A` y Action3→Action2 cargados; `CALLBACK_FAILED` conserva el algoritmo estándar.
-15. Stations CB149 — pendiente por tesela al construir, desde Action0 `0x0B` y Action3→Action2 cargados; query y execute rechazan antes de mutar.
-16. Stations CB14 — layout de tesela al dibujar, desde Action0 `0x0B` y Action3→Action2 cargados; el renderer el aplica antes de elegir la vista NewGRF.
-17. Stations CB140/CB141/CB142 — `Built`/`TileLoop`, `NewCargo`/`CargoTaken` y `AcceptanceTick` de área completa (250 ticks escalonados por StationID), y `VehicleLoads`/`VehicleArrives`/`VehicleDeparts`/`PathReservation` ferroviarios por plataforma; scheduler persistido por tesela, velocidad/frame, CTT de cargo en `param2` y var Action2 `4A`.
+5. Vehicles CB10 — efecto visual al emitir humo/chispas; el renderer usa el catálogo activo y respeta tipo/desactivación del callback (+ writeback persistent regs).
+6. Industries CB28 — location al colocar NewGRF (`place_industry_spec_def_sandbox`).
+7. Houses CB17 — allow construction durante crecimiento físico (GRF Action0/2/3 cargado + call site).
+8. Stations CB13 — availability en query+execute de construcción; sin storage en el scope nulo de OpenTTD.
+9. Industry tiles CB25/CB26/CB27 — trigger, next frame y velocidad en `phase_tile_animation` (FAILED observable).
+10. Industry tile trigger → Action2 random group (`resolve_industry_tile_random_trigger`).
+11. RoadStops CB13 — disponibilidad al previsualizar y ejecutar `PlaceBusStop`/`PlaceTruckStop`.
+12. RoadStops CB140/CB141/CB142 — `Built`/`TileLoop`, carga/retirada de carga, carga/llegada/salida vial y `AcceptanceTick`; scheduler con velocidad/frame, writeback `7C`, CTT en `param2` y JSON round-trip. Cada tesela custom conserva spec/frame/activo/random, incluso tras `JoinStation`; los eventos exactos y de área completa siguen el alcance de `RoadStopTileData`. Action0 `0x0D` + Action2 random reacciona a NewCargo, CargoTaken, carga, llegada y salida con grupos `any`/`all`, bits base/tesela y triggers persistentes. Referencia: `newgrf_roadstop.cpp` / `newgrf_animation_base.h`.
+13. Objects CB157 — pendiente por tesela de `BuildObject`, desde Action0 `0x15` y Action3→Action2 cargados; query y execute rechazan antes de mutar.
+14. Cargoes CB39 — cálculo de pago por packet durante `unload_vehicles`, desde Action0 `0x1A` y Action3→Action2 cargados; `CALLBACK_FAILED` conserva la fórmula base.
+15. Cargoes CB145 — target de rating durante el barrido `update_station_ratings`, desde Action0 `0x1A` y Action3→Action2 cargados; `CALLBACK_FAILED` conserva el algoritmo estándar.
+16. Stations CB149 — pendiente por tesela al construir, desde Action0 `0x0B` y Action3→Action2 cargados; query y execute rechazan antes de mutar.
+17. Stations CB14 — layout de tesela al dibujar, desde Action0 `0x0B` y Action3→Action2 cargados; el renderer el aplica antes de elegir la vista NewGRF.
+18. Stations CB140/CB141/CB142 — `Built`/`TileLoop`, `NewCargo`/`CargoTaken` y `AcceptanceTick` de área completa (250 ticks escalonada por StationID), y `VehicleLoads`/`VehicleArrives`/`VehicleDeparts`/`PathReservation` ferroviarios por plataforma; scheduler persistido por tesela, velocidad/frame, CTT de cargo en `param2` y var Action2 `4A`.
 
 ## Residual explícito (no bloquea cierre MVP #266)
 

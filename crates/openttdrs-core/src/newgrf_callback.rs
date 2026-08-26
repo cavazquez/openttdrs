@@ -18,7 +18,8 @@ use crate::newgrf_sprites::{
     CBID_OBJECT_LAND_SLOPE_CHECK, CBID_STATION_ANIMATION_NEXT_FRAME, CBID_STATION_ANIMATION_SPEED,
     CBID_STATION_ANIMATION_TRIGGER, CBID_STATION_AVAILABILITY, CBID_STATION_LAND_SLOPE_CHECK,
     CBID_VEHICLE_LENGTH, CBID_VEHICLE_LOAD_AMOUNT, CBID_VEHICLE_REFIT_CAPACITY,
-    CBID_VEHICLE_SOUND_EFFECT, CBID_VEHICLE_START_STOP_CHECK, TrainSpriteGraphics,
+    CBID_VEHICLE_SOUND_EFFECT, CBID_VEHICLE_START_STOP_CHECK, CBID_VEHICLE_VISUAL_EFFECT,
+    TrainSpriteGraphics,
 };
 use crate::object_spec::ObjectSpecDef;
 use crate::road_stop_action2::{
@@ -122,6 +123,69 @@ pub fn apply_vehicle_start_stop_callback(engine: &EngineDef, vehicle: &mut Vehic
     }
     let result = resolve_vehicle_callback(engine, vehicle, CBID_VEHICLE_START_STOP_CHECK, 0, 0);
     vehicle_start_stop_callback_allows(result)
+}
+
+/// Resultado normalizado de `CBID_VEHICLE_VISUAL_EFFECT` (`0x10`).
+///
+/// El callback devuelve el byte bit-stuffed de `VisualEffect`: los bits 4–5
+/// seleccionan vapor/diésel/chispa y el bit 6 desactiva el efecto. El valor
+/// cero solicita la clase por defecto del motor; `OpenTTD` también conserva el
+/// bit 7 (potencia de vagón), pero ese detalle no altera el renderer de humo.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VehicleVisualEffectKind {
+    /// Resolver según la clase del motor (la ruta vanilla).
+    Default,
+    /// El vehículo no debe emitir humo/chispas.
+    Disabled,
+    Steam,
+    Diesel,
+    Electric,
+}
+
+/// Resuelve `CBID_VEHICLE_VISUAL_EFFECT` (`0x10`) con la máscara Action0.
+///
+/// Un resultado fuera del byte permitido o la ausencia de runtime se trata
+/// como `None`, dejando que el caller aplique la propiedad/default vanilla.
+#[must_use]
+pub fn resolve_vehicle_visual_effect_callback(
+    engine: &EngineDef,
+    vehicle: &mut Vehicle,
+) -> Option<VehicleVisualEffectKind> {
+    if engine.newgrf_grfid == 0
+        || engine.vehicle_callback_mask & (1 << 0) == 0
+        || engine.newgrf_runtime.is_none()
+    {
+        return None;
+    }
+    let result = resolve_vehicle_callback(engine, vehicle, CBID_VEHICLE_VISUAL_EFFECT, 0, 0);
+    if result == CALLBACK_FAILED || result >= 0x100 {
+        return None;
+    }
+    let value = u8::try_from(result).ok()?;
+    if value & (1 << 6) != 0 {
+        return Some(VehicleVisualEffectKind::Disabled);
+    }
+    Some(match (value >> 4) & 0x03 {
+        1 => VehicleVisualEffectKind::Steam,
+        2 => VehicleVisualEffectKind::Diesel,
+        3 => VehicleVisualEffectKind::Electric,
+        _ => VehicleVisualEffectKind::Default,
+    })
+}
+
+/// Obtiene el efecto efectivo de un vehículo, aplicando CB10 cuando procede.
+///
+/// La propiedad de efecto visual todavía no se serializa en `EngineDef` para
+/// los catálogos externos; por eso el fallback es `Default`, que conserva la
+/// selección vanilla por clase. El callback sí es ejecutado y sus registros
+/// persistentes se escriben de vuelta al vehículo.
+#[must_use]
+pub fn vehicle_visual_effect_kind(
+    engine: &EngineDef,
+    vehicle: &mut Vehicle,
+) -> VehicleVisualEffectKind {
+    resolve_vehicle_visual_effect_callback(engine, vehicle)
+        .unwrap_or(VehicleVisualEffectKind::Default)
 }
 
 /// Resuelve `CBID_VEHICLE_LOAD_AMOUNT` (`0x12`) para carga gradual.
@@ -1399,6 +1463,54 @@ mod tests {
 
         engine.newgrf_runtime = None;
         assert!(apply_vehicle_start_stop_callback(&engine, &mut v));
+    }
+
+    #[test]
+    fn callbacks_ac_vehicle_visual_effect_decodes_types_and_disable_bit() {
+        let mut engine = engines_table()
+            .iter()
+            .find(|e| e.kind == VehicleKind::Train && e.power_hp > 0)
+            .cloned()
+            .unwrap();
+        engine.newgrf_grfid = 0x5649_5355;
+        engine.newgrf_local_id = 0;
+        engine.vehicle_callback_mask = 1 << 0;
+        let mut vehicle = Vehicle::new(
+            5,
+            VehicleKind::Train,
+            TileCoord::new(1, 1),
+            TileCoord::new(1, 1),
+        );
+
+        // Bits 4–5 = 2 → diésel.
+        engine.newgrf_runtime = Some(Box::new(gfx_callback_literal(0x20)));
+        assert_eq!(
+            resolve_vehicle_visual_effect_callback(&engine, &mut vehicle),
+            Some(VehicleVisualEffectKind::Diesel)
+        );
+        assert_eq!(
+            vehicle_visual_effect_kind(&engine, &mut vehicle),
+            VehicleVisualEffectKind::Diesel
+        );
+
+        // El bit 6 desactiva humo/chispas, incluso si los bits de tipo están puestos.
+        engine.newgrf_runtime = Some(Box::new(gfx_callback_literal(0x70)));
+        assert_eq!(
+            resolve_vehicle_visual_effect_callback(&engine, &mut vehicle),
+            Some(VehicleVisualEffectKind::Disabled)
+        );
+
+        // Cero pide la clase por defecto y un resultado ancho cae al fallback.
+        engine.newgrf_runtime = Some(Box::new(gfx_callback_literal(0)));
+        assert_eq!(
+            resolve_vehicle_visual_effect_callback(&engine, &mut vehicle),
+            Some(VehicleVisualEffectKind::Default)
+        );
+        engine.newgrf_runtime = Some(Box::new(gfx_callback_allow_400()));
+        assert_eq!(
+            resolve_vehicle_visual_effect_callback(&engine, &mut vehicle),
+            None
+        );
     }
 
     #[test]

@@ -17,9 +17,10 @@ use crate::newgrf_sprites::{
     CBID_CARGO_STATION_RATING_CALC, CBID_HOUSE_ALLOW_CONSTRUCTION, CBID_INDUSTRY_LOCATION,
     CBID_OBJECT_LAND_SLOPE_CHECK, CBID_STATION_ANIMATION_NEXT_FRAME, CBID_STATION_ANIMATION_SPEED,
     CBID_STATION_ANIMATION_TRIGGER, CBID_STATION_AVAILABILITY, CBID_STATION_LAND_SLOPE_CHECK,
-    CBID_VEHICLE_32DAY_CALLBACK, CBID_VEHICLE_ARTIC_ENGINE, CBID_VEHICLE_LENGTH,
-    CBID_VEHICLE_LOAD_AMOUNT, CBID_VEHICLE_REFIT_CAPACITY, CBID_VEHICLE_SOUND_EFFECT,
-    CBID_VEHICLE_START_STOP_CHECK, CBID_VEHICLE_VISUAL_EFFECT, TrainSpriteGraphics,
+    CBID_VEHICLE_32DAY_CALLBACK, CBID_VEHICLE_ARTIC_ENGINE, CBID_VEHICLE_COLOUR_MAPPING,
+    CBID_VEHICLE_LENGTH, CBID_VEHICLE_LOAD_AMOUNT, CBID_VEHICLE_REFIT_CAPACITY,
+    CBID_VEHICLE_SOUND_EFFECT, CBID_VEHICLE_START_STOP_CHECK, CBID_VEHICLE_VISUAL_EFFECT,
+    TrainSpriteGraphics,
 };
 use crate::object_spec::ObjectSpecDef;
 use crate::road_stop_action2::{
@@ -223,6 +224,59 @@ pub fn trigger_vehicle_randomisation(
     }
     before_random != vehicle.newgrf_random_bits
         || before_waiting != vehicle.newgrf_waiting_random_triggers
+}
+
+/// Resultado normalizado de `CBID_VEHICLE_COLOUR_MAPPING` (`0x2D`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VehicleColourMapping {
+    /// `PaletteID` devuelto por el callback (bits 0..13).
+    pub palette_id: u16,
+    /// Bit 14: aplicar los colores de la compañía sobre la paleta.
+    pub apply_company_colour: bool,
+}
+
+impl VehicleColourMapping {
+    /// Convierte el resultado a una paleta que el renderer actual puede
+    /// materializar. Las paletas 2CC/crash quedan explícitamente fuera y
+    /// conservan el id original para que no se aplique una recoloración falsa.
+    #[must_use]
+    pub const fn palette_for_company(self, company_colour: u8) -> u16 {
+        if self.apply_company_colour {
+            // `PALETTE_RECOLOUR_START` de OpenTTD (775) es la tabla que el
+            // cliente ya puede hornear sin depender de un atlas adicional.
+            775 + (company_colour & 0x0F) as u16
+        } else {
+            self.palette_id
+        }
+    }
+}
+
+/// Ejecuta `CBID_VEHICLE_COLOUR_MAPPING` (`0x2D`) sin mutar el vehículo real.
+///
+/// El renderer consulta este callback por frame y no debe escribir registros
+/// persistentes durante una fase visual; por eso se evalúa sobre una copia del
+/// vehículo. `CALLBACK_FAILED`, GRF vanilla, máscara ausente o un resultado
+/// fuera de los 15 bits dejan la paleta vanilla al caller.
+#[must_use]
+pub fn resolve_vehicle_colour_mapping_callback(
+    engine: &EngineDef,
+    vehicle: &Vehicle,
+) -> Option<VehicleColourMapping> {
+    if engine.newgrf_grfid == 0
+        || engine.vehicle_callback_mask & (1 << 6) == 0
+        || engine.newgrf_runtime.is_none()
+    {
+        return None;
+    }
+    let mut snapshot = vehicle.clone();
+    let result = resolve_vehicle_callback(engine, &mut snapshot, CBID_VEHICLE_COLOUR_MAPPING, 0, 0);
+    if result == CALLBACK_FAILED {
+        return None;
+    }
+    Some(VehicleColourMapping {
+        palette_id: result & 0x3FFF,
+        apply_company_colour: result & 0x4000 != 0,
+    })
 }
 
 /// Resultado normalizado de `CBID_VEHICLE_VISUAL_EFFECT` (`0x10`).
@@ -1431,6 +1485,32 @@ mod tests {
         gfx
     }
 
+    fn gfx_callback_literal_u16(value: u16) -> TrainSpriteGraphics {
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 2,
+        });
+        gfx.action2_var.insert(
+            2,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x1A,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        shift: 0,
+                        and_mask: u32::from(value),
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
+        gfx
+    }
+
     fn gfx_callback_variable_byte(variable: u8, shift: u8) -> TrainSpriteGraphics {
         let mut gfx = TrainSpriteGraphics::default();
         gfx.assigns.push(TrainSpriteAssign {
@@ -1725,6 +1805,40 @@ mod tests {
             u64::from(vehicle.id) ^ (u64::from(VehicleRandomTrigger::Callback32 as u8) << 32),
         );
         assert_eq!(vehicle.newgrf_random_bits & 1, expected & 1);
+    }
+
+    #[test]
+    fn callbacks_ac_vehicle_colour_mapping_respects_mask_and_company_bit() {
+        let mut engine = engines_table()
+            .iter()
+            .find(|e| e.kind == VehicleKind::Train && e.power_hp > 0)
+            .cloned()
+            .unwrap();
+        engine.newgrf_grfid = 0x434F_4C52;
+        engine.newgrf_local_id = 0;
+        engine.vehicle_callback_mask = 1 << 6;
+        engine.newgrf_runtime = Some(Box::new(gfx_callback_literal_u16(0x4000 | 0x0310)));
+        let vehicle = Vehicle::new(
+            45,
+            VehicleKind::Train,
+            TileCoord::new(1, 1),
+            TileCoord::new(1, 1),
+        );
+        let mapping = resolve_vehicle_colour_mapping_callback(&engine, &vehicle).unwrap();
+        assert_eq!(mapping.palette_id, 0x0310);
+        assert!(mapping.apply_company_colour);
+        assert_eq!(mapping.palette_for_company(4), 779);
+
+        engine.vehicle_callback_mask = 0;
+        assert_eq!(
+            resolve_vehicle_colour_mapping_callback(&engine, &vehicle),
+            None
+        );
+        engine.vehicle_callback_mask = 1 << 6;
+        engine.newgrf_runtime = Some(Box::new(gfx_callback_literal_u16(0x3FFF)));
+        let mapping = resolve_vehicle_colour_mapping_callback(&engine, &vehicle).unwrap();
+        assert_eq!(mapping.palette_id, 0x3FFF);
+        assert!(!mapping.apply_company_colour);
     }
 
     #[test]

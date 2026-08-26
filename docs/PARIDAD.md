@@ -231,6 +231,10 @@ de invalidación de paleta para el futuro enlace con la caché visual; todavía 
 es paridad completa porque el almacenamiento local de `random_bits` sigue
 limitado a ocho bits y el trigger no se propaga a toda la cadena como en
 `TriggerVehicleRandomisation`.
+El callback `0x2D` (color mapping) también se consulta para motores NewGRF con
+la máscara correspondiente y sus paletas de compañía `775..790` ya entran en
+la clave de caché de sprites runtime. Los mapas 2CC/crash y livery específicos
+por compañía siguen pendientes porque requieren sus tablas de paleta propias.
 La carga gradual ya ejecuta CB12 (`load_amount`) cuando el motor declara la
 máscara correspondiente.
 Los focos naval

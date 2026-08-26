@@ -226,7 +226,7 @@ impl NewGrfTrainSpriteCache {
         ctx: &mut openttdrs_core::Action2EvalCtx,
         images: &mut Assets<Image>,
     ) -> Vec<NewGrfVehicleLayer> {
-        self.handles_for_runtime_with_override(engine, dir, cargo, colour, None, ctx, images)
+        self.handles_for_runtime_with_override(engine, dir, cargo, colour, None, None, ctx, images)
     }
 
     /// Igual que [`Self::handles_for_runtime`], pero aplicando el motor que
@@ -239,6 +239,7 @@ impl NewGrfTrainSpriteCache {
         cargo: Option<openttdrs_core::CargoType>,
         colour: CompanyColour,
         overriding_local_id: Option<u16>,
+        palette_override: Option<u16>,
         ctx: &mut openttdrs_core::Action2EvalCtx,
         images: &mut Assets<Image>,
     ) -> Vec<NewGrfVehicleLayer> {
@@ -275,8 +276,8 @@ impl NewGrfTrainSpriteCache {
                 .sprite_stack
                 .then(|| stack_ctx.registers_100.get(&0x100).copied())
                 .flatten();
-            let palette_id = register_100
-                .and_then(|value| u16::try_from(value & 0xFFFF).ok())
+            let palette_id = palette_override
+                .or_else(|| register_100.and_then(|value| u16::try_from(value & 0xFFFF).ok()))
                 .unwrap_or(0);
             let Some(views) = views else {
                 if register_100.is_some_and(|value| value & 0x8000_0000 != 0) {
@@ -310,7 +311,11 @@ impl NewGrfTrainSpriteCache {
                 fp,
             );
             let image_policy = if palette_id == 0 {
-                DecodedSpriteImagePolicy::Masked { colour }
+                if palette_override.is_some() {
+                    DecodedSpriteImagePolicy::Raw
+                } else {
+                    DecodedSpriteImagePolicy::Masked { colour }
+                }
             } else if (775..=790).contains(&palette_id) {
                 let palette_colour =
                     CompanyColour::from_u8(u8::try_from(palette_id - 775).unwrap_or(0));
@@ -542,12 +547,16 @@ impl TruckHandles {
                     eng.newgrf_grfid,
                 ));
                 let overriding_local_id = overriding_engine_local_id(sim, v, eng);
+                let palette_override =
+                    openttdrs_core::resolve_vehicle_colour_mapping_callback(eng, v)
+                        .map(|mapping| mapping.palette_for_company(colour.as_u8()));
                 let layers = cache.handles_for_runtime_with_override(
                     eng,
                     dir,
                     v.cargo_type,
                     colour,
                     overriding_local_id,
+                    palette_override,
                     &mut ctx,
                     images,
                 );

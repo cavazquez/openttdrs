@@ -177,6 +177,34 @@ impl EngineDef {
         Some(views[dir % views.len()].clone())
     }
 
+    /// Vista `NewGRF` aplicando el *wagon override* del motor que encabeza el
+    /// consist y cayendo al grupo propio cuando no hay una coincidencia.
+    pub fn newgrf_view_runtime_with_override(
+        &self,
+        dir: usize,
+        cargo: Option<crate::cargo::CargoType>,
+        overriding_local_id: Option<u16>,
+        ctx: &mut crate::newgrf_sprites::Action2EvalCtx,
+    ) -> Option<crate::newgrf_sprites::DecodedSprite> {
+        let runtime = self.newgrf_runtime.as_ref()?;
+        let views = overriding_local_id
+            .and_then(|overriding_id| {
+                runtime.views_for_wagon_override_u16_ctx(
+                    self.newgrf_local_id,
+                    overriding_id,
+                    cargo,
+                    ctx,
+                )
+            })
+            .or_else(|| {
+                runtime.views_for_local_id_cargo_u16_ctx(self.newgrf_local_id, cargo, ctx)
+            })?;
+        if views.is_empty() {
+            return None;
+        }
+        Some(views[dir % views.len()].clone())
+    }
+
     /// Velocidad máxima en km/h para mostrar en UI (conversión por tipo).
     #[must_use]
     pub fn speed_kmh(&self) -> u16 {

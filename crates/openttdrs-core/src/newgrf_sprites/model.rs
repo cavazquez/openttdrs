@@ -27,6 +27,20 @@ pub struct TrainSpriteAssign {
     pub set_id: u16,
 }
 
+/// Asignación de un grupo Action3 de *wagon override*.
+///
+/// `wagon_local_id` identifica el vehículo cuyo sprite se reemplaza y
+/// `overriding_local_id` uno de los motores de la cadena Action3 anterior.
+/// `selector` es el cargo (o `0xFF` para el grupo default). Los IDs usan el
+/// mismo formato extendido que Action3, por eso ambos son `u16`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WagonOverrideAssign {
+    pub wagon_local_id: u16,
+    pub overriding_local_id: u16,
+    pub selector: u8,
+    pub set_id: u16,
+}
+
 /// Action2 real group for vehicle graphics.
 ///
 /// `OpenTTD` keeps separate sprite-set choices while a vehicle is moving and
@@ -211,6 +225,9 @@ pub struct TrainSpriteGraphics {
     pub specific_assigns: HashMap<(u8, u8), u16>,
     /// Equivalente extendido de `specific_assigns` para vehículos.
     pub extended_specific_assigns: HashMap<(u16, u8), u16>,
+    /// Grupos Action3 que sustituyen el sprite de un vagón según el motor
+    /// principal del consist (`SetWagonOverrideSprites` de `OpenTTD`).
+    pub wagon_overrides: Vec<WagonOverrideAssign>,
     /// Action2 set-id → índice del primer set Action1 "moving" (solo trains).
     pub action2_to_action1: HashMap<u8, u16>,
     /// Action2 real groups with loaded/loading alternatives.
@@ -462,6 +479,38 @@ impl TrainSpriteGraphics {
             return self.views_for_specific_u16_ctx(local_id, selector, ctx);
         }
         self.views_for_local_id_u16_ctx(local_id, ctx)
+    }
+
+    /// Vistas de un vagón aplicando un *wagon override* para el motor que
+    /// encabeza el consist.
+    ///
+    /// `OpenTTD` recorre los overrides en orden de declaración y acepta primero
+    /// una entrada específica del cargo o el grupo default (`0xFF`). Se
+    /// conserva ese orden para que una cadena de GRF que declara varios
+    /// overrides mantenga la misma precedencia.
+    pub fn views_for_wagon_override_u16_ctx(
+        &self,
+        wagon_local_id: u16,
+        overriding_local_id: u16,
+        cargo: Option<crate::cargo::CargoType>,
+        ctx: &mut Action2EvalCtx,
+    ) -> Option<&[DecodedSprite]> {
+        let selector = cargo.map(crate::cargo::CargoType::temperate_id);
+        let set_id = self
+            .wagon_overrides
+            .iter()
+            .find(|override_assign| {
+                override_assign.wagon_local_id == wagon_local_id
+                    && override_assign.overriding_local_id == overriding_local_id
+                    && (selector.is_some_and(|cargo_id| override_assign.selector == cargo_id)
+                        || override_assign.selector == 0xFF)
+            })
+            .map(|override_assign| override_assign.set_id)?;
+        let action1_idx = self.resolve_action1_set_ctx(set_id, ctx);
+        self.sets
+            .get(usize::from(action1_idx))
+            .map(Vec::as_slice)
+            .filter(|sprites| !sprites.is_empty())
     }
 
     /// ¿Action3 asignó este grupo específico al id local?

@@ -23,7 +23,7 @@ pub use model::{
     CBID_STATION_DRAW_TILE_LAYOUT, CBID_STATION_LAND_SLOPE_CHECK, CBID_VEHICLE_ARTIC_ENGINE,
     CBID_VEHICLE_LENGTH, CBID_VEHICLE_LOAD_AMOUNT, CBID_VEHICLE_REFIT_CAPACITY,
     CBID_VEHICLE_SOUND_EFFECT, CBID_VEHICLE_START_STOP_CHECK, CBID_VEHICLE_VISUAL_EFFECT,
-    DecodedSprite, TrainSpriteAssign, TrainSpriteGraphics,
+    DecodedSprite, TrainSpriteAssign, TrainSpriteGraphics, WagonOverrideAssign,
 };
 
 // Re-exportar funciones de runtime de pixel_codec

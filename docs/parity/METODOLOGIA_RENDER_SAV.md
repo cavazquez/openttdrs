@@ -257,8 +257,9 @@ layouts/children dinámicos de estación, objeto e industria/casa siguen siendo
 residual explícito y no se presentan como paridad completa. Los vehículos
 resuelven grupos Action2 real para estados loaded/loading y, con el bit de
 sprite-stack de Action0, emiten hasta ocho children por unidad controlados por
-la variable `0x10`; registro 100, paleta/callbacks y wagon overrides siguen
-fuera del contrato.
+la variable `0x10`. Los wagon overrides de Action3 ya se resuelven por cadena
+de motor, cargo y grupo default; registro 100, paleta/callbacks y scopes
+completos siguen fuera del contrato.
 
 ### Revalidación: catenaria de estaciones ferroviarias de Kale
 

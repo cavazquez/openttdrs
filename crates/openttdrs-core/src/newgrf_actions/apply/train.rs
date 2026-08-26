@@ -55,7 +55,11 @@ fn push_feature_vehicles(
             .extended_assigns
             .iter()
             .any(|(local_id, _)| *local_id == meta.local_id);
-        let newgrf_runtime = if gfx.needs_runtime_resolve() || has_cargo_groups || has_extended_id {
+        let newgrf_runtime = if gfx.needs_runtime_resolve()
+            || has_cargo_groups
+            || has_extended_id
+            || !gfx.wagon_overrides.is_empty()
+        {
             Some(Box::new(gfx.clone()))
         } else {
             None
@@ -144,7 +148,10 @@ pub fn apply_newgrf_vehicles_trains(state: &mut GameState, search_dirs: &[&Path]
                 .map(<[crate::newgrf_sprites::DecodedSprite]>::to_vec)
                 .unwrap_or_default();
             let has_extended_id = gfx.extended_assigns.iter().any(|(id, _)| *id == local_id);
-            let newgrf_runtime = if gfx.needs_runtime_resolve() || has_extended_id {
+            let newgrf_runtime = if gfx.needs_runtime_resolve()
+                || has_extended_id
+                || !gfx.wagon_overrides.is_empty()
+            {
                 Some(Box::new(gfx.clone()))
             } else {
                 None

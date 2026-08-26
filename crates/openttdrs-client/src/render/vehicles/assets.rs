@@ -114,6 +114,43 @@ pub(crate) fn vehicle_layers(v: &Vehicle) -> &'static [vehicle_gfx::VehicleLayer
     }
 }
 
+/// Devuelve el ID local del motor que encabeza la cadena de un vehículo.
+///
+/// `OpenTTD` guarda este valor como `first_engine` en la caché de vehículos;
+/// aquí se reconstruye desde `prev_unit` porque la caché del cliente es
+/// efímera y no forma parte de `SimWorld`.
+fn overriding_engine_local_id(
+    sim: &crate::state::SimWorld,
+    vehicle: &Vehicle,
+    wagon_engine: &EngineDef,
+) -> Option<u16> {
+    if wagon_engine.newgrf_grfid == 0 {
+        return None;
+    }
+    let mut current_id = vehicle.id;
+    let mut head_engine_id = None;
+    for _ in 0..256 {
+        let current = if current_id == vehicle.id {
+            Some(vehicle)
+        } else {
+            sim.state
+                .vehicles
+                .iter()
+                .find(|candidate| candidate.id == current_id)
+        }?;
+        match current.prev_unit {
+            Some(previous_id) if previous_id != current.id => current_id = previous_id,
+            _ => {
+                head_engine_id = current.engine_id;
+                break;
+            }
+        }
+    }
+    let head_engine_id = head_engine_id?;
+    let head_engine = super::engine_in_sim(sim, head_engine_id)?;
+    (head_engine.newgrf_grfid == wagon_engine.newgrf_grfid).then_some(head_engine.newgrf_local_id)
+}
+
 /// Caché in-world / preview: `(engine_id, view_idx, company_colour)` → textura.
 #[derive(Resource, Default)]
 pub(crate) struct NewGrfTrainSpriteCache {
@@ -189,6 +226,22 @@ impl NewGrfTrainSpriteCache {
         ctx: &mut openttdrs_core::Action2EvalCtx,
         images: &mut Assets<Image>,
     ) -> Vec<NewGrfVehicleLayer> {
+        self.handles_for_runtime_with_override(engine, dir, cargo, colour, None, ctx, images)
+    }
+
+    /// Igual que [`Self::handles_for_runtime`], pero aplicando el motor que
+    /// encabeza el consist para resolver los *wagon overrides* de Action3.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn handles_for_runtime_with_override(
+        &mut self,
+        engine: &EngineDef,
+        dir: usize,
+        cargo: Option<openttdrs_core::CargoType>,
+        colour: CompanyColour,
+        overriding_local_id: Option<u16>,
+        ctx: &mut openttdrs_core::Action2EvalCtx,
+        images: &mut Assets<Image>,
+    ) -> Vec<NewGrfVehicleLayer> {
         let Some(runtime) = engine.newgrf_runtime.as_ref() else {
             return Vec::new();
         };
@@ -202,11 +255,23 @@ impl NewGrfTrainSpriteCache {
             stack_ctx
                 .vars
                 .insert(0x10, u32::try_from(stack).unwrap_or(0) << 8);
-            let Some(views) = runtime.views_for_local_id_cargo_u16_ctx(
-                engine.newgrf_local_id,
-                cargo,
-                &mut stack_ctx,
-            ) else {
+            let Some(views) = overriding_local_id
+                .and_then(|overriding_id| {
+                    runtime.views_for_wagon_override_u16_ctx(
+                        engine.newgrf_local_id,
+                        overriding_id,
+                        cargo,
+                        &mut stack_ctx,
+                    )
+                })
+                .or_else(|| {
+                    runtime.views_for_local_id_cargo_u16_ctx(
+                        engine.newgrf_local_id,
+                        cargo,
+                        &mut stack_ctx,
+                    )
+                })
+            else {
                 break;
             };
             if views.is_empty() {
@@ -439,8 +504,16 @@ impl TruckHandles {
                     &sim.state.newgrf_stack,
                     eng.newgrf_grfid,
                 ));
-                let layers =
-                    cache.handles_for_runtime(eng, dir, v.cargo_type, colour, &mut ctx, images);
+                let overriding_local_id = overriding_engine_local_id(sim, v, eng);
+                let layers = cache.handles_for_runtime_with_override(
+                    eng,
+                    dir,
+                    v.cargo_type,
+                    colour,
+                    overriding_local_id,
+                    &mut ctx,
+                    images,
+                );
                 if !layers.is_empty() {
                     return layers;
                 }

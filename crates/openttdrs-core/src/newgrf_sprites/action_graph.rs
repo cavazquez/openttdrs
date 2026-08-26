@@ -13,7 +13,7 @@ use crate::newgrf_walk::{GrfEntry, walk_grf_entries};
 
 use super::model::{
     Action2RandomEntry, Action2VarAdjust, Action2VarEntry, Action2VarOp, Action2VarTerm,
-    DecodedSprite, TrainSpriteAssign, TrainSpriteGraphics,
+    DecodedSprite, TrainSpriteAssign, TrainSpriteGraphics, WagonOverrideAssign,
 };
 use super::pixel_codec::{decode_real_sprite_entry, index_sprite_section, resolve_fd_sprite};
 
@@ -289,12 +289,18 @@ fn parse_action2_real(payload: &[u8], feature: u8) -> Option<(u8, super::model::
     Some((set_id, super::model::Action2RealEntry { loaded, loading }))
 }
 
-type ParsedAction3 = (
-    Vec<TrainSpriteAssign>,
-    Vec<((u8, u8), u16)>,
-    Vec<(u16, u16)>,
-    Vec<((u16, u8), u16)>,
-);
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ParsedAction3 {
+    /// Bit 7 de `n-id`: la definición se aplica a los motores de la cadena
+    /// Action3 anterior, en vez de establecer el grupo propio del vehículo.
+    wagon_override: bool,
+    /// IDs locales de esta definición (byte o `ExtendedByte`).
+    ids: Vec<u16>,
+    assigns: Vec<TrainSpriteAssign>,
+    specific: Vec<((u8, u8), u16)>,
+    extended: Vec<(u16, u16)>,
+    extended_specific: Vec<((u16, u8), u16)>,
+}
 
 fn read_extended_byte(payload: &[u8], i: &mut usize) -> Option<u16> {
     let value = u16::from(*payload.get(*i)?);
@@ -308,7 +314,7 @@ fn read_extended_byte(payload: &[u8], i: &mut usize) -> Option<u16> {
     }
 }
 
-pub(super) fn parse_action3_feature(payload: &[u8], feature: u8) -> Option<ParsedAction3> {
+fn parse_action3_feature(payload: &[u8], feature: u8) -> Option<ParsedAction3> {
     // 03 <feature> <n-id> <ids…> <num-cid> [cargo…] <default:u16>
     if payload.len() < 6 || payload[0] != 0x03 {
         return None;
@@ -316,10 +322,14 @@ pub(super) fn parse_action3_feature(payload: &[u8], feature: u8) -> Option<Parse
     if payload[1] != feature {
         return None;
     }
-    // Bit 7 marks a wagon-override definition.  The override chain still
-    // uses the same extended-byte IDs; the runtime currently records the
-    // mapping and leaves override precedence to the existing catalog path.
-    let n_id = payload[2] & 0x7F;
+    // Bit 7 marks a wagon-override definition for vehicle features.  Other
+    // features use all eight bits for the number of local IDs.
+    let wagon_override = is_vehicle_feature(feature) && payload[2] & 0x80 != 0;
+    let n_id = if wagon_override {
+        payload[2] & 0x7F
+    } else {
+        payload[2]
+    };
     if n_id == 0 {
         return None;
     }
@@ -351,7 +361,7 @@ pub(super) fn parse_action3_feature(payload: &[u8], feature: u8) -> Option<Parse
     let default_set = u16::from_le_bytes([default_bytes[0], default_bytes[1]]);
     let mut defaults = Vec::new();
     let mut extended = Vec::new();
-    for local_id in ids {
+    for &local_id in &ids {
         if let Ok(byte_id) = u8::try_from(local_id)
             && byte_id != u8::MAX
         {
@@ -363,7 +373,96 @@ pub(super) fn parse_action3_feature(payload: &[u8], feature: u8) -> Option<Parse
             extended.push((local_id, default_set));
         }
     }
-    Some((defaults, specific, extended, extended_specific))
+    Some(ParsedAction3 {
+        wagon_override,
+        ids,
+        assigns: defaults,
+        specific,
+        extended,
+        extended_specific,
+    })
+}
+
+const fn is_vehicle_feature(feature: u8) -> bool {
+    matches!(
+        feature,
+        ACTION0_FEATURE_TRAINS
+            | ACTION0_FEATURE_ROAD_VEHICLES
+            | ACTION0_FEATURE_SHIPS
+            | ACTION0_FEATURE_AIRCRAFT
+    )
+}
+
+/// Aplica una definición Action3 al grafo, incluyendo la cadena de motores
+/// que precede a un *wagon override*.
+fn apply_action3(
+    out: &mut TrainSpriteGraphics,
+    parsed: ParsedAction3,
+    feature: u8,
+    last_engines: &mut Vec<u16>,
+) {
+    if parsed.wagon_override {
+        // OpenTTD ignora una definición de override sin una cadena de motores
+        // previa. Mantener ese comportamiento evita inventar asignaciones.
+        if !last_engines.is_empty() {
+            for &((wagon_local_id, selector), set_id) in &parsed.specific {
+                for &overriding_local_id in last_engines.iter() {
+                    out.wagon_overrides.push(WagonOverrideAssign {
+                        wagon_local_id: u16::from(wagon_local_id),
+                        overriding_local_id,
+                        selector,
+                        set_id,
+                    });
+                }
+            }
+            for &((wagon_local_id, selector), set_id) in &parsed.extended_specific {
+                for &overriding_local_id in last_engines.iter() {
+                    out.wagon_overrides.push(WagonOverrideAssign {
+                        wagon_local_id,
+                        overriding_local_id,
+                        selector,
+                        set_id,
+                    });
+                }
+            }
+            for (wagon_local_id, set_id) in parsed
+                .assigns
+                .iter()
+                .map(|assign| (u16::from(assign.local_id), assign.set_id))
+            {
+                for &overriding_local_id in last_engines.iter() {
+                    out.wagon_overrides.push(WagonOverrideAssign {
+                        wagon_local_id,
+                        overriding_local_id,
+                        selector: 0xFF,
+                        set_id,
+                    });
+                }
+            }
+            for &(wagon_local_id, set_id) in &parsed.extended {
+                for &overriding_local_id in last_engines.iter() {
+                    out.wagon_overrides.push(WagonOverrideAssign {
+                        wagon_local_id,
+                        overriding_local_id,
+                        selector: 0xFF,
+                        set_id,
+                    });
+                }
+            }
+        }
+        return;
+    }
+
+    if is_vehicle_feature(feature) {
+        // The next override references exactly this list, including extended
+        // IDs, not the Action3 set IDs.
+        last_engines.clone_from(&parsed.ids);
+    }
+    out.assigns.extend(parsed.assigns);
+    out.specific_assigns.extend(parsed.specific);
+    out.extended_assigns.extend(parsed.extended);
+    out.extended_specific_assigns
+        .extend(parsed.extended_specific);
 }
 
 /// Índice sprite section v2: `id` → lista `(info, body)` (body = tras el BYTE info).
@@ -410,6 +509,9 @@ pub fn collect_feature_sprite_graphics(
     let mut views_left_in_set = 0u8;
     let mut sets_left = 0u8;
     let mut views_per_set = 0u8;
+    // `VehicleMapSpriteGroup` keeps the engine IDs from the last non-override
+    // Action3 until the next override definition in the same feature.
+    let mut last_engines = Vec::new();
 
     walk_grf_entries(section, container, |entry| match entry {
         GrfEntry::Pseudo(payload) => {
@@ -439,13 +541,8 @@ pub fn collect_feature_sprite_graphics(
                 && let Some((a2_id, rnd)) = parse_action2_random(payload, feature)
             {
                 out.action2_random.insert(a2_id, rnd);
-            } else if let Some((assigns, specific, extended, extended_specific)) =
-                parse_action3_feature(payload, feature)
-            {
-                out.assigns.extend(assigns);
-                out.specific_assigns.extend(specific);
-                out.extended_assigns.extend(extended);
-                out.extended_specific_assigns.extend(extended_specific);
+            } else if let Some(parsed_action3) = parse_action3_feature(payload, feature) {
+                apply_action3(&mut out, parsed_action3, feature, &mut last_engines);
             }
         }
         GrfEntry::Real { info, payload } => {
@@ -654,15 +751,14 @@ mod tests {
             2,
             0,
         ];
-        let Some((assigns, specific, extended, extended_specific)) =
-            parse_action3_feature(&payload, ACTION0_FEATURE_TRAINS)
-        else {
+        let Some(parsed) = parse_action3_feature(&payload, ACTION0_FEATURE_TRAINS) else {
             panic!("extended Action3 mapping should parse");
         };
-        assert!(assigns.is_empty());
-        assert!(specific.is_empty());
-        assert_eq!(extended, vec![(1234, 2)]);
-        assert_eq!(extended_specific, vec![((1234, 0), 2)]);
+        assert!(!parsed.wagon_override);
+        assert!(parsed.assigns.is_empty());
+        assert!(parsed.specific.is_empty());
+        assert_eq!(parsed.extended, vec![(1234, 2)]);
+        assert_eq!(parsed.extended_specific, vec![((1234, 0), 2)]);
 
         let mut gfx = TrainSpriteGraphics {
             sets: vec![
@@ -679,12 +775,112 @@ mod tests {
             ],
             ..TrainSpriteGraphics::default()
         };
-        gfx.extended_assigns = extended;
-        gfx.extended_specific_assigns = extended_specific.into_iter().collect();
+        gfx.extended_assigns = parsed.extended;
+        gfx.extended_specific_assigns = parsed.extended_specific.into_iter().collect();
         assert!(gfx.views_for_local_id_u16(1234).is_some());
         assert!(
             gfx.views_for_specific_u16_ctx(1234, 0, &mut Action2EvalCtx::default())
                 .is_some()
         );
+    }
+
+    #[test]
+    fn action3_wagon_override_keeps_previous_engine_chain() {
+        // Base chain: engines 3 and 0x1234. The high bit in the next n-id
+        // marks a wagon override for wagon 7.
+        let base = [
+            0x03,
+            ACTION0_FEATURE_TRAINS,
+            2,
+            3,
+            0xFF,
+            0xD2,
+            0x04,
+            1,
+            0,
+            5,
+            0,
+            6,
+            0,
+        ];
+        let override_payload = [0x03, ACTION0_FEATURE_TRAINS, 0x80 | 1, 7, 1, 0, 8, 0, 9, 0];
+        let Some(base) = parse_action3_feature(&base, ACTION0_FEATURE_TRAINS) else {
+            panic!("base Action3 mapping should parse");
+        };
+        let Some(override_payload) =
+            parse_action3_feature(&override_payload, ACTION0_FEATURE_TRAINS)
+        else {
+            panic!("override Action3 mapping should parse");
+        };
+        assert!(!base.wagon_override);
+        assert!(override_payload.wagon_override);
+
+        let mut gfx = TrainSpriteGraphics::default();
+        let mut last_engines = Vec::new();
+        apply_action3(&mut gfx, base, ACTION0_FEATURE_TRAINS, &mut last_engines);
+        apply_action3(
+            &mut gfx,
+            override_payload,
+            ACTION0_FEATURE_TRAINS,
+            &mut last_engines,
+        );
+        assert_eq!(last_engines, vec![3, 1234]);
+        assert_eq!(
+            gfx.wagon_overrides,
+            vec![
+                WagonOverrideAssign {
+                    wagon_local_id: 7,
+                    overriding_local_id: 3,
+                    selector: 0,
+                    set_id: 8,
+                },
+                WagonOverrideAssign {
+                    wagon_local_id: 7,
+                    overriding_local_id: 1234,
+                    selector: 0,
+                    set_id: 8,
+                },
+                WagonOverrideAssign {
+                    wagon_local_id: 7,
+                    overriding_local_id: 3,
+                    selector: 0xFF,
+                    set_id: 9,
+                },
+                WagonOverrideAssign {
+                    wagon_local_id: 7,
+                    overriding_local_id: 1234,
+                    selector: 0xFF,
+                    set_id: 9,
+                },
+            ]
+        );
+
+        let sprite = |red: u8| DecodedSprite {
+            width: 1,
+            height: 1,
+            x_offs: i16::from(red),
+            y_offs: 0,
+            rgba: vec![red, 0, 0, 255],
+            mask: Vec::new(),
+        };
+        gfx.sets = (0_u8..10).map(|index| vec![sprite(index)]).collect();
+        let Some(specific) = gfx.views_for_wagon_override_u16_ctx(
+            7,
+            3,
+            Some(crate::cargo::CargoType::Passengers),
+            &mut Action2EvalCtx::default(),
+        ) else {
+            panic!("cargo-specific wagon override");
+        };
+        assert_eq!(specific[0].x_offs, 8);
+        let Some(default) = gfx.views_for_wagon_override_u16_ctx(
+            7,
+            3,
+            Some(crate::cargo::CargoType::Coal),
+            &mut Action2EvalCtx::default(),
+        ) else {
+            panic!("default wagon override");
+        };
+        assert_eq!(default[0].x_offs, 9);
     }
 }

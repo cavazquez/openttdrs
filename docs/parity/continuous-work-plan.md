@@ -31,7 +31,7 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 | 2 | RMAP-004: generador procedural | Abierto P1 | Reducir la primera divergencia de TGP/RNG/`FixSlopes`/clear/towns/industries/trees con matriz 64²→512²; cerrar sólo cuando el mismo seed tenga contrato documentado y sin divergencias no explicadas. |
 | 3 | Composición raster global (#323→#322→#326) | En curso | El sorter runtime ya cubre piezas estructurales, catenaria, el bloque combinado PBS/Action5/tranvía de puentes y cuerpos/unidades de vehículos con cajas `M(...)`, children y orden de inserción estable; el overlay vanilla de tranvía de un puente medio resuelve la rampa sur y los offsets específicos `0,1,11..14` de `DrawBridgeRoadBits`. Los grupos NewGRF `ROTSG_BRIDGE`/`ROTSG_OVERLAY` y `ROTSG_CATENARY_BACK/FRONT` se resuelven desde esa rampa con la caché runtime; superficie y catenaria trasera quedan como children del parent trasero y la mitad frontal como child del parent frontal. Los overlays NewGRF de carretera y estación rail (incluidas pendientes niveladas) siguen la fundación cuando existe. Siguen pendientes el fallback de catenaria vanilla de carretera/tranvía, sus assets completos y layouts/children completos de estación/objeto/industria/casa; el sprite-stack de vehículos ya materializa hasta ocho capas runtime con Action2 real y var `0x10`, pero conserva límites de callbacks/paleta. Las capturas 4×4 siguen siendo diagnóstico, no único oracle. |
 | 4 | Interoperabilidad SAV (#328) | Abierto | VEHS/ORDL/GRPS/ERNW y shared orders/autoreplace round-trip OpenTTD→Rust→OpenTTD; todos los chunks no reconstruidos se preservan opacos, pero las columnas desconocidas dentro de tablas semánticas aún requieren merge estructural. |
-| 5 | NewGRF runtime (#329) | Abierto | Vehículos, estaciones, objetos e industrias ya tienen rutas runtime parciales; vehículos además resuelven grupos Action2 real por etapa cargada/cargando, hasta ocho capas de sprite-stack y el callback de articulación `0x16` (decodificación por versión, espejo y writeback `7C`). La compra y el autoreemplazo de trenes y vehículos de carretera materializan ahora las cadenas articuladas, enlazan sus unidades, conservan los vagones/unidades del jugador y usan el catálogo activo; el movimiento vial procesa sólo la cabeza, persiste un historial road multi-tesela y sincroniza las piezas creadas por CB16, y el renderer consulta la dirección invertida para cada unidad marcada como espejo antes de mantenerla como child. Action0/Action3 de vehículos aceptan ahora IDs locales `ExtendedByte` de hasta 14 bits en el catálogo, callbacks y vistas. Casas reevalúan Action2 por tesela (etapa/hash, edad, terreno, frame, posición y random/triggers). Los roadtypes conservan grupos Action3 específicos por selector, la caché los separa por `ROTSG_*` y el compositor de puentes ya invoca desde la rampa sur/vano superficie, overlay y catenaria trasera/delantera, vinculando cada mitad a su parent combinado. Sigue pendiente el fallback vanilla de catenaria vial, callbacks/layouts completos de casas, vehículos, estaciones, aeropuertos, objetos, industrias y cargos, además de wagon overrides y persistencia NGRF/OBJS. |
+| 5 | NewGRF runtime (#329) | Abierto | Vehículos, estaciones, objetos e industrias ya tienen rutas runtime parciales; vehículos además resuelven grupos Action2 real por etapa cargada/cargando, hasta ocho capas de sprite-stack, wagon overrides de Action3 por cadena de motor/cargo/default y el callback de articulación `0x16` (decodificación por versión, espejo y writeback `7C`). La compra y el autoreemplazo de trenes y vehículos de carretera materializan ahora las cadenas articuladas, enlazan sus unidades, conservan los vagones/unidades del jugador y usan el catálogo activo; el movimiento vial procesa sólo la cabeza, persiste un historial road multi-tesela y sincroniza las piezas creadas por CB16, y el renderer consulta la dirección invertida para cada unidad marcada como espejo antes de mantenerla como child. Action0/Action3 de vehículos aceptan ahora IDs locales `ExtendedByte` de hasta 14 bits en el catálogo, callbacks y vistas. Casas reevalúan Action2 por tesela (etapa/hash, edad, terreno, frame, posición y random/triggers). Los roadtypes conservan grupos Action3 específicos por selector, la caché los separa por `ROTSG_*` y el compositor de puentes ya invoca desde la rampa sur/vano superficie, overlay y catenaria trasera/delantera, vinculando cada mitad a su parent combinado. Sigue pendiente el fallback vanilla de catenaria vial, callbacks/layouts completos de casas, vehículos, estaciones, aeropuertos, objetos, industrias y cargos, además de persistencia NGRF/OBJS. |
 | 6 | Movimiento y economía diferencial (#330) | Abierto | Oráculos externos para carretera (tráfico/colisiones/dirección), rail (PBS/YAPF/presignals/consist) y aire/mar, incluyendo casos límite. |
 | 7 | Idiomas y settings (#331) | Abierto | Catálogo de idiomas, locale, settings y textos guardados se cargan y se comparan con OpenTTD sin colisiones ECS ni regresiones de UI. |
 
@@ -80,8 +80,10 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
   Los grupos Action2 real distinguen ahora listas loaded/loading según carga y
   capacidad. Cuando Action0 activa el bit de sprite-stack, el renderer crea
   hasta ocho children por unidad, reevalúa la variable `0x10` y conserva offsets
-  NFO por capa; quedan pendientes el registro 100, paleta/callbacks y los casos
-  de articulación/wagon override que requieren más contexto de consist.
+  NFO por capa. Los wagon overrides conservan los IDs extendidos de la cadena
+  Action3 anterior, aplican primero el cargo específico y luego el grupo
+  default, y sólo cruzan motores del mismo GRFID; quedan pendientes el registro
+  100, paleta/callbacks y los scopes completos de consist.
 - Estaciones rail NewGRF: los tiletypes Action1/2/3 se dibujan también en
   pendientes y el overlay queda como child de la fundación nivelada, igual que
   la vía/PBS. Los layouts `TileSeq` con varias cajas y children siguen siendo
@@ -112,3 +114,14 @@ incluyendo su tipo de contenedor y cuerpo exacto. Así un round-trip no descarta
 features nuevas sólo porque todavía no tengan un modelo Rust. Esto no cierra
 el bloque: las columnas adicionales de tablas que sí reconstruimos (`VEHS`,
 `PLYR`, `PATS`, `LGRP`, etc.) siguen explícitamente pendientes.
+
+### Avance NewGRF — 2026-08-26
+
+Action3 conserva ahora el bit de *wagon override* y la lista de motores de la
+definición anterior, incluidos los IDs `ExtendedByte`. Cada asignación se
+registra como vagón→motor sobrescriptor→cargo/grupo default y el renderer la
+resuelve para la cabeza real del consist, sólo cuando ambos motores pertenecen
+al mismo GRFID. La selección respeta el orden de OpenTTD (cargo específico
+antes del default) y cae al sprite propio si no existe coincidencia. El bloque
+sigue abierto por el registro 100, paletas, scopes y callbacks/layouts que aún
+no tienen call site completo.

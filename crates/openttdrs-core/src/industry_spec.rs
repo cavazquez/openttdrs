@@ -8,7 +8,6 @@
 use serde::{Deserialize, Serialize};
 
 use crate::cargo::CargoType;
-use crate::cargo::TEMPERATE_CARGO_TYPES;
 use crate::cargo_spec::{CargoSpecDef, cargo_spec_def, cargo_type_label};
 use crate::map::TileCoord;
 
@@ -200,6 +199,23 @@ pub fn get_translated_industry_id(clean: u16, overrides: &[u16]) -> u16 {
 /// devuelve `None`.
 #[must_use]
 pub fn get_cargo_translation(cargo: u8, catalog: &[CargoSpecDef]) -> Option<String> {
+    get_cargo_translation_for_climate(cargo, catalog, crate::Climate::Temperate)
+}
+
+/// Traduce un cargo usando los slots vanilla activos del clima.
+///
+/// Los GRF anteriores a la tabla climate-independent usan el slot local
+/// (`GetClimateDependentCargoTranslationTable`): el slot 6 es `WHEA` en
+/// Arctic, `MAIZ` en Tropic y `TOFF` en Toyland. Para los índices fuera de
+/// esos slots también se intenta el `bitnum` de los cargos activos, cubriendo
+/// la tabla independiente de clima usada por GRF modernos. Un `CargoSpecDef`
+/// explícito siempre tiene prioridad porque puede redefinir el label.
+#[must_use]
+pub fn get_cargo_translation_for_climate(
+    cargo: u8,
+    catalog: &[CargoSpecDef],
+    climate: crate::Climate,
+) -> Option<String> {
     if cargo == 0xFF {
         return None;
     }
@@ -212,9 +228,13 @@ pub fn get_cargo_translation(cargo: u8, catalog: &[CargoSpecDef]) -> Option<Stri
     if let Some(def) = cargo_spec_def(catalog, cargo) {
         return Some(def.label.clone());
     }
-    TEMPERATE_CARGO_TYPES
-        .get(usize::from(cargo))
-        .map(|c| cargo_type_label(*c).to_string())
+    if let Some(default) = CargoType::from_climate_slot(climate, cargo) {
+        return Some(cargo_type_label(default).to_string());
+    }
+    CargoType::for_climate(climate)
+        .iter()
+        .find(|&&default| default.bitnum() == cargo)
+        .map(|&default| cargo_type_label(default).to_string())
 }
 
 /// Resuelve label a [`CargoType`] conocido (case-insensitive).
@@ -224,10 +244,7 @@ pub fn cargo_type_from_label(label: Option<&str>) -> Option<CargoType> {
     if label.is_empty() {
         return None;
     }
-    TEMPERATE_CARGO_TYPES
-        .iter()
-        .find(|&&cargo| cargo_type_label(cargo).eq_ignore_ascii_case(label))
-        .copied()
+    CargoType::from_label(label)
 }
 
 #[cfg(test)]
@@ -275,5 +292,37 @@ mod tests {
         assert_eq!(get_cargo_translation(1, &[]).as_deref(), Some("COAL"));
         assert_eq!(get_cargo_translation(7, &[]).as_deref(), Some("WOOD"));
         assert_eq!(get_cargo_translation(0xFF, &[]), None);
+    }
+
+    #[test]
+    fn cargo_translation_uses_active_climate_slots() {
+        assert_eq!(
+            get_cargo_translation_for_climate(6, &[], crate::Climate::SubArctic).as_deref(),
+            Some("WHEA")
+        );
+        assert_eq!(
+            get_cargo_translation_for_climate(1, &[], crate::Climate::SubTropical).as_deref(),
+            Some("RUBR")
+        );
+        assert_eq!(
+            get_cargo_translation_for_climate(3, &[], crate::Climate::Toyland).as_deref(),
+            Some("TOYS")
+        );
+        assert_eq!(
+            get_cargo_translation_for_climate(11, &[], crate::Climate::Toyland).as_deref(),
+            Some("FZDR")
+        );
+        assert_eq!(
+            get_cargo_translation_for_climate(8, &[], crate::Climate::SubArctic),
+            None
+        );
+    }
+
+    #[test]
+    fn cargo_type_from_label_accepts_all_vanilla_climates() {
+        assert_eq!(cargo_type_from_label(Some("WHEA")), Some(CargoType::Wheat));
+        assert_eq!(cargo_type_from_label(Some("rubr")), Some(CargoType::Rubber));
+        assert_eq!(cargo_type_from_label(Some("TOFF")), Some(CargoType::Toffee));
+        assert_eq!(cargo_type_from_label(Some("unknown")), None);
     }
 }

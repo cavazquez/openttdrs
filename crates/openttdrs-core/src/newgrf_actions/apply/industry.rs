@@ -6,7 +6,7 @@ use std::path::Path;
 use crate::GameState;
 use crate::industry_spec::{
     IndustryLayoutTile, IndustrySpecDef, empty_industry_overrides, empty_industry_spec_catalog,
-    get_cargo_translation, next_free_industry_id,
+    get_cargo_translation_for_climate, next_free_industry_id,
 };
 use crate::industry_tile::{
     IndustryTileGfxId, IndustryTileSpecDef, empty_industry_tile_overrides,
@@ -59,7 +59,9 @@ pub fn apply_newgrf_industry_tiles(state: &mut GameState, search_dirs: &[&Path])
             let accepts_cargo_labels: Vec<String> = meta
                 .accepts_cargo_indices
                 .iter()
-                .filter_map(|&idx| get_cargo_translation(idx, &state.cargo_spec_catalog))
+                .filter_map(|&idx| {
+                    get_cargo_translation_for_climate(idx, &state.cargo_spec_catalog, state.climate)
+                })
                 .collect();
             catalog.push(IndustryTileSpecDef {
                 gfx: IndustryTileGfxId(global_gfx),
@@ -150,12 +152,16 @@ pub fn apply_newgrf_industries(state: &mut GameState, search_dirs: &[&Path]) {
             let produced_cargo_labels: Vec<String> = meta
                 .produced_cargo_indices
                 .iter()
-                .filter_map(|&idx| get_cargo_translation(idx, &state.cargo_spec_catalog))
+                .filter_map(|&idx| {
+                    get_cargo_translation_for_climate(idx, &state.cargo_spec_catalog, state.climate)
+                })
                 .collect();
             let accepted_cargo_labels: Vec<String> = meta
                 .accepted_cargo_indices
                 .iter()
-                .filter_map(|&idx| get_cargo_translation(idx, &state.cargo_spec_catalog))
+                .filter_map(|&idx| {
+                    get_cargo_translation_for_climate(idx, &state.cargo_spec_catalog, state.climate)
+                })
                 .collect();
             if let Some(ovr) = meta.override_id {
                 overrides[usize::from(ovr)] = global_id;

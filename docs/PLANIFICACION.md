@@ -360,8 +360,9 @@ Veintidós entradas, **todas cerradas** (P1.1 —con P0.3— a P1.22).
   `production_rates[0/1]`, cargo primario/secundario y sus stocks se producen y
   transportan por separado. Las procesadoras usan los cargos aceptados y la
   matriz `input_multipliers` (`[input][output]`) para calcular ambas salidas.
-  Sigue pendiente resolver labels de cargos custom/clima fuera del catálogo
-  vanilla y ejecutar callbacks de producción (`0x22`, `0x29`, `0x35`, …).
+  Las tablas de labels vanilla ya se traducen según el clima activo; sigue
+  pendiente resolver cargos custom fuera del catálogo vanilla y ejecutar
+  callbacks de producción (`0x22`, `0x29`, `0x35`, …).
 
 #### P1.4 — `prod_level` y cierre de industrias · hecho
 

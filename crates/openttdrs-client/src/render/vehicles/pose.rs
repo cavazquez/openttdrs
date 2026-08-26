@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use openttdrs_core::prelude::*;
 use openttdrs_core::{
     ConstructionSettings, EngineDef, extrapolate_vehicle_pose, slope_dz_at_subtile,
-    vehicle_render_direction_at_with_map, vehicle_subtile_at_with_map,
+    vehicle_sprite_direction_at_with_map, vehicle_subtile_at_with_map,
 };
 
 /// Pose de render con el lado de circulación de la partida.
@@ -26,7 +26,7 @@ pub(super) fn vehicle_layer(
     map: Option<&Map>,
     pose: openttdrs_core::VehiclePose,
 ) -> &'static VehicleLayerGfx {
-    let dir = vehicle_render_direction_at_with_map(v, pose, map).min(7) as usize;
+    let dir = vehicle_sprite_direction_at_with_map(v, pose, map).min(7) as usize;
     &vehicle_layers(v)[dir]
 }
 
@@ -79,7 +79,7 @@ pub(crate) fn vehicle_sprite_pos_at_with_catalog(
     pose: openttdrs_core::VehiclePose,
     catalog: Option<&[EngineDef]>,
 ) -> Vec3 {
-    let dir = vehicle_render_direction_at_with_map(v, pose, Some(map)).min(7) as usize;
+    let dir = vehicle_sprite_direction_at_with_map(v, pose, Some(map)).min(7) as usize;
     let (x_offs, y_offs, w, h) = if let Some(cat) = catalog
         && let Some(eid) = v.engine_id
         && let Some(eng) = openttdrs_core::engine_in_catalog(cat, eid)

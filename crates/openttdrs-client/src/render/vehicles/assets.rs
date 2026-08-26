@@ -360,7 +360,7 @@ impl TruckHandles {
         company: Option<&CompanyColoredSprites>,
         owner_colour: Option<crate::sprites::CompanyColour>,
     ) -> Handle<Image> {
-        let dir = openttdrs_core::vehicle_render_direction_at(v, pose).min(7) as usize;
+        let dir = openttdrs_core::vehicle_sprite_direction_at(v, pose).min(7) as usize;
         let layer = &vehicle_layers(v)[dir];
         if let Some(c) = company {
             let handle = match owner_colour {
@@ -419,7 +419,7 @@ impl TruckHandles {
         cache: &mut NewGrfTrainSpriteCache,
         images: &mut Assets<Image>,
     ) -> Vec<NewGrfVehicleLayer> {
-        let dir = openttdrs_core::vehicle_render_direction_at(v, pose).min(7) as usize;
+        let dir = openttdrs_core::vehicle_sprite_direction_at(v, pose).min(7) as usize;
         if let Some(eid) = v.engine_id
             && let Some(eng) = super::engine_in_sim(sim, eid)
         {

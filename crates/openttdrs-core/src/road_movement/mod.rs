@@ -36,8 +36,9 @@ pub use pose::{
 };
 pub use render_pose::{
     road_turn_entry_exit, train_subtile_direction, vehicle_render_direction,
-    vehicle_render_direction_at, vehicle_render_direction_at_with_map, vehicle_subtile,
-    vehicle_subtile_at, vehicle_subtile_at_with_map, vehicle_subtile_with_progress,
+    vehicle_render_direction_at, vehicle_render_direction_at_with_map, vehicle_sprite_direction_at,
+    vehicle_sprite_direction_at_with_map, vehicle_subtile, vehicle_subtile_at,
+    vehicle_subtile_at_with_map, vehicle_subtile_with_progress,
 };
 pub use rvsb::RVSB_DRIVE_SIDE;
 pub use rvsb::{RVSB_IN_DEPOT, RVSB_TRACKDIR_MASK, trackdir_from_direction};
@@ -94,6 +95,45 @@ mod tests {
 
         assert_eq!(pose.pos, TileCoord::new(2, 2));
         assert_eq!(pose.progress, 126);
+    }
+
+    #[test]
+    fn articulated_mirror_reverses_sprite_direction_without_changing_motion() {
+        let mut v = Vehicle::new(
+            2,
+            VehicleKind::Bus,
+            TileCoord::new(1, 1),
+            TileCoord::new(3, 1),
+        );
+        v.path = VecDeque::from([TileCoord::new(2, 1)]);
+        v.direction = crate::vehicle::DIR_E;
+        let pose = VehiclePose::from_vehicle(&v);
+        let motion = vehicle_render_direction_at(&v, pose);
+        v.newgrf_mirrored = true;
+
+        assert_eq!(vehicle_render_direction_at(&v, pose), motion);
+        assert_eq!(
+            vehicle_sprite_direction_at(&v, pose),
+            crate::vehicle::reverse_direction(motion)
+        );
+    }
+
+    #[test]
+    fn articulated_mirror_and_road_history_survive_json_roundtrip() {
+        let mut v = Vehicle::new(
+            3,
+            VehicleKind::Bus,
+            TileCoord::new(2, 2),
+            TileCoord::new(4, 2),
+        );
+        v.newgrf_articulated = true;
+        v.newgrf_mirrored = true;
+        v.road_tile_history = VecDeque::from([TileCoord::new(1, 2)]);
+
+        let restored: Vehicle = serde_json::from_str(&serde_json::to_string(&v).unwrap()).unwrap();
+
+        assert!(restored.newgrf_mirrored);
+        assert_eq!(restored.road_tile_history, v.road_tile_history);
     }
 
     #[test]

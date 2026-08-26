@@ -226,6 +226,34 @@ pub fn vehicle_render_direction_at(v: &Vehicle, pose: VehiclePose) -> VehicleDir
     vehicle_render_direction_at_with_map(v, pose, None)
 }
 
+/// Dirección que debe recibir `GetCustomVehicleSprite` para una unidad.
+///
+/// `CBID_VEHICLE_ARTIC_ENGINE` no cambia la cinemática de la pieza: cuando
+/// devuelve el bit de espejo, `OpenTTD` materializa
+/// `CUSTOM_VEHICLE_SPRITENUM_REVERSED` y consulta el grupo de sprites con la
+/// dirección invertida. Mantener este paso separado de
+/// [`vehicle_render_direction_at`] evita invertir también el movimiento físico.
+#[must_use]
+pub fn vehicle_sprite_direction_at(v: &Vehicle, pose: VehiclePose) -> VehicleDirection {
+    vehicle_sprite_direction_at_with_map(v, pose, None)
+}
+
+/// Como [`vehicle_sprite_direction_at`] conservando la consulta de geometría
+/// ferroviaria/de depósito que requiere el mapa.
+#[must_use]
+pub fn vehicle_sprite_direction_at_with_map(
+    v: &Vehicle,
+    pose: VehiclePose,
+    map: Option<&Map>,
+) -> VehicleDirection {
+    let direction = vehicle_render_direction_at_with_map(v, pose, map);
+    if v.newgrf_mirrored {
+        crate::vehicle::reverse_direction(direction)
+    } else {
+        direction
+    }
+}
+
 /// Como [`vehicle_render_direction_at`] con mapa (orientación en depósito).
 #[must_use]
 pub fn vehicle_render_direction_at_with_map(

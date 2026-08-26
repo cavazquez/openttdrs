@@ -593,7 +593,7 @@ mod tests {
 
         let logical_pose = extrapolate_vehicle_pose(&v, 0.0);
         let logical_dir =
-            openttdrs_core::vehicle_render_direction_at(&v, logical_pose).min(7) as usize;
+            openttdrs_core::vehicle_sprite_direction_at(&v, logical_pose).min(7) as usize;
         assert_eq!(logical_dir, openttdrs_core::DIR_NE as usize);
 
         let pose = extrapolate_vehicle_pose(&v, 1.0);
@@ -601,7 +601,7 @@ mod tests {
             pose.road_frame_f >= 5.0,
             "la extrapolación cruza al tramo diagonal de la tabla"
         );
-        let render_dir = openttdrs_core::vehicle_render_direction_at(&v, pose).min(7) as usize;
+        let render_dir = openttdrs_core::vehicle_sprite_direction_at(&v, pose).min(7) as usize;
         assert_eq!(render_dir, openttdrs_core::DIR_E as usize);
 
         assert_eq!(
@@ -646,7 +646,7 @@ mod tests {
         assert_eq!(
             vehicle_layer(&v, None, extrap_pose).path,
             vehicle_layers(&v)
-                [openttdrs_core::vehicle_render_direction_at(&v, extrap_pose).min(7) as usize]
+                [openttdrs_core::vehicle_sprite_direction_at(&v, extrap_pose).min(7) as usize]
                 .path
         );
     }

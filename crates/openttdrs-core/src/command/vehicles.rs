@@ -340,10 +340,9 @@ fn spawn_dual_headed_rear(
 /// una locomotora `NewGRF`.
 ///
 /// La cadena se resuelve con el motor frontal y el catálogo activo, igual que
-/// `AddArticulatedParts` upstream.  La orientación espejo se conserva en el
-/// resultado del callback para que el renderer pueda consumirla en una etapa
-/// posterior; el modelo actual todavía no tiene un campo de orientación por
-/// unidad, por lo que no se inventa un bit de `vehicle_flags`.
+/// `AddArticulatedParts` upstream. La orientación espejo se persiste por
+/// unidad como `CUSTOM_VEHICLE_SPRITENUM_REVERSED` para que el renderer consulte
+/// el grupo de sprites en la dirección invertida.
 #[allow(clippy::too_many_lines)]
 pub(crate) fn spawn_newgrf_articulated_parts(
     state: &mut GameState,
@@ -394,10 +393,8 @@ pub(crate) fn spawn_newgrf_articulated_parts(
                 grf_version,
             )
         };
-        let Some(crate::newgrf_callback::VehicleArticulatedPart {
-            local_id,
-            mirrored: _mirrored,
-        }) = callback_part
+        let Some(crate::newgrf_callback::VehicleArticulatedPart { local_id, mirrored }) =
+            callback_part
         else {
             break;
         };
@@ -450,6 +447,7 @@ pub(crate) fn spawn_newgrf_articulated_parts(
         part.owner = owner;
         part.depot_leave_cleared = false;
         part.newgrf_articulated = true;
+        part.newgrf_mirrored = mirrored;
         part.prev_unit = Some(previous_id);
         part.unit_length = crate::newgrf_callback::vehicle_unit_length(&part_engine, &mut part);
         crate::vehicle::init_vehicle_reliability_from_engine(&mut part, &part_engine);

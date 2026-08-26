@@ -559,8 +559,8 @@ fn build_newgrf_road_vehicle_materializes_articulated_parts_from_callback() {
                 },
             },
             ops: Vec::new(),
-            ranges: vec![(3, 1, 1)],
-            default: 4,
+            ranges: vec![(4, 1, 1)],
+            default: u16::from(u8::MAX),
         },
     );
     callback.action2_var.insert(
@@ -575,7 +575,7 @@ fn build_newgrf_road_vehicle_materializes_articulated_parts_from_callback() {
     callback.action2_var.insert(
         4,
         Action2VarEntry {
-            first: literal(0xFF),
+            first: literal(0x80),
             ops: vec![
                 Action2VarOp {
                     operator: 0x0A,
@@ -583,7 +583,7 @@ fn build_newgrf_road_vehicle_materializes_articulated_parts_from_callback() {
                 },
                 Action2VarOp {
                     operator: 0x00,
-                    rhs: literal(0x7F),
+                    rhs: literal(0x01),
                 },
             ],
             ranges: Vec::new(),
@@ -641,6 +641,7 @@ fn build_newgrf_road_vehicle_materializes_articulated_parts_from_callback() {
     assert_eq!(head.next_unit, Some(part.id));
     assert_eq!(part.prev_unit, Some(head.id));
     assert!(part.newgrf_articulated);
+    assert!(part.newgrf_mirrored);
     assert!(!part.is_consist_head());
     assert_eq!(
         part.road_depot_phase,

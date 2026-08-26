@@ -463,6 +463,10 @@ pub struct Vehicle {
     /// reconstruya las piezas articuladas.
     #[serde(default)]
     pub newgrf_articulated: bool,
+    /// `CUSTOM_VEHICLE_SPRITENUM_REVERSED`: el callback de articulación pide
+    /// resolver la vista del eslabón en la dirección opuesta a la cabeza.
+    #[serde(default)]
+    pub newgrf_mirrored: bool,
     /// Longitud de esta unidad en fracciones (`VEHICLE_LENGTH` = 8).
     #[serde(default = "default_unit_length")]
     pub unit_length: u8,
@@ -627,6 +631,7 @@ impl Vehicle {
             prev_unit: None,
             other_multiheaded_part: None,
             newgrf_articulated: false,
+            newgrf_mirrored: false,
             unit_length: crate::train_consist::VEHICLE_LENGTH,
             cached_total_length: u16::from(crate::train_consist::VEHICLE_LENGTH),
             cached_power_hp: 0,

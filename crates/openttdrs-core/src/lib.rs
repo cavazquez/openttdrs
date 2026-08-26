@@ -529,8 +529,8 @@ pub use road_movement::{
     retreat_vehicle_pose, road_turn_entry_exit, straight_subtile, train_straight_subtile,
     train_subtile_direction, turn_curve_points, vehicle_render_direction,
     vehicle_render_direction_at, vehicle_render_direction_at_with_map, vehicle_render_progress,
-    vehicle_subtile, vehicle_subtile_at, vehicle_subtile_at_with_map,
-    vehicle_subtile_with_progress,
+    vehicle_sprite_direction_at, vehicle_sprite_direction_at_with_map, vehicle_subtile,
+    vehicle_subtile_at, vehicle_subtile_at_with_map, vehicle_subtile_with_progress,
 };
 pub use road_stop_action2::{
     RoadStopWorldContext, action2_eval_ctx_for_road_stop_tile,

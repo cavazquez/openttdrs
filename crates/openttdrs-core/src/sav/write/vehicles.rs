@@ -69,6 +69,17 @@ const VEH_AIRCRAFT: u8 = 3;
 const TILE_SIZE: i32 = 16;
 
 fn station_id_for_pos(state: &GameState, pos: TileCoord) -> Option<u16> {
+    // Las estaciones importadas conservan el `StationID` real de OpenTTD;
+    // no necesariamente coincide con su posición en `GameState.stations`.
+    // Sólo las estaciones creadas localmente carecen de ese campo y usan el
+    // índice denso como fallback para saves sintéticos/propios.
+    if let Some(station) = state.stations.iter().find(|s| s.pos == pos)
+        && let Some(id) = station
+            .ottd_station_id
+            .and_then(|id| u16::try_from(id).ok())
+    {
+        return Some(id);
+    }
     state
         .stations
         .iter()
@@ -859,6 +870,20 @@ mod tests {
         // OT_GOTO_STATION | (OrderStopLocation::Middle << 4) = 0x11.
         assert_eq!(enc[0], 0x11);
         assert_eq!(&enc[2..4], &0u16.to_be_bytes());
+    }
+
+    #[test]
+    fn encode_station_order_prefers_imported_ottd_station_id() {
+        let mut state = GameState::new(64, 64);
+        let station_pos = TileCoord::new(28, 39);
+        let mut station = Station::new_with_kind(station_pos, StopKind::RailStation);
+        station.ottd_station_id = Some(42);
+        state.stations = vec![station];
+
+        let order = VehicleOrder::station(station_pos);
+        let enc = encode_goto_order(&order, &state, 64).expect("encode");
+        assert_eq!(enc.len(), 11);
+        assert_eq!(&enc[2..4], &42u16.to_be_bytes());
     }
 
     #[test]

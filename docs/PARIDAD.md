@@ -180,8 +180,11 @@ conservando su ventana de profundidad y su orden local; si el parent visible
 no está disponible, se mantiene el fallback independiente para no perder el
 sprite. Los overlays NewGRF de carretera y la mitad frontal de
 `DrawBridgeRoadBits` todavía requieren sus propios parents/children.
-Los producers de industria/estación/objeto y el sprite-stack de vehículos
-NewGRF siguen pendientes de un parent/child runtime completo.
+Los overlays de estación rail NewGRF se resuelven también en pendientes y se
+vinculan al parent de la fundación nivelada, pero los producers de
+industria/objeto y los layouts `TileSeq`/children completos de estación, junto
+con el sprite-stack de vehículos NewGRF, siguen pendientes de un contrato
+runtime completo.
 Los focos naval
 `138,7..140,10` y de muelle `136,1..139,3` vinculan
 7/7 parents candidatos al orden final C++; es evidencia del contrato de cajas y

@@ -29,7 +29,7 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 |---:|---|---|---|
 | 1 | Zoom y viewport | Completado | Seis niveles OpenTTD (`0,25×`…`0,125×`), culling/overview deterministas y smoke de render; la paridad raster global queda separada de la cobertura de zoom. |
 | 2 | RMAP-004: generador procedural | Abierto P1 | Reducir la primera divergencia de TGP/RNG/`FixSlopes`/clear/towns/industries/trees con matriz 64²→512²; cerrar sólo cuando el mismo seed tenga contrato documentado y sin divergencias no explicadas. |
-| 3 | Composición raster global (#323→#322→#326) | En curso | El sorter runtime ya cubre piezas estructurales, catenaria, el bloque combinado PBS/Action5/tranvía de puentes y cuerpos/unidades de vehículos con cajas `M(...)`, children y orden de inserción estable; siguen pendientes overlays NewGRF de carretera, mitad frontal, sprite-stack y producers NewGRF. Las capturas 4×4 siguen siendo diagnóstico, no único oracle. |
+| 3 | Composición raster global (#323→#322→#326) | En curso | El sorter runtime ya cubre piezas estructurales, catenaria, el bloque combinado PBS/Action5/tranvía de puentes y cuerpos/unidades de vehículos con cajas `M(...)`, children y orden de inserción estable; los overlays NewGRF de carretera y estación rail (incluidas pendientes niveladas) siguen la fundación cuando existe. Siguen pendientes mitad frontal de puente, layouts/children completos de estación/objeto/industria y sprite-stack. Las capturas 4×4 siguen siendo diagnóstico, no único oracle. |
 | 4 | Interoperabilidad SAV (#328) | Abierto | VEHS/ORDL/GRPS/ERNW y shared orders/autoreplace round-trip OpenTTD→Rust→OpenTTD, con campos desconocidos preservados. |
 | 5 | NewGRF runtime (#329) | Abierto | Callbacks de vehículos, estaciones, casas, aeropuertos, objetos y cargos ejecutados en fixtures, además de persistencia NGRF/OBJS. |
 | 6 | Movimiento y economía diferencial (#330) | Abierto | Oráculos externos para carretera (tráfico/colisiones/dirección), rail (PBS/YAPF/presignals/consist) y aire/mar, incluyendo casos límite. |
@@ -69,5 +69,9 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
   sombra/rotor se conservan como children del cuerpo. Las vistas Action1/2
   aplican sus offsets NFO a carretera, barcos y aeronaves además de trenes.
   El sprite-stack NewGRF y sus secuencias múltiples siguen pendientes.
+- Estaciones rail NewGRF: los tiletypes Action1/2/3 se dibujan también en
+  pendientes y el overlay queda como child de la fundación nivelada, igual que
+  la vía/PBS. Los layouts `TileSeq` con varias cajas y children siguen siendo
+  un residual explícito.
 - `reference/` es un checkout local ignorado/no versionado; nunca se agrega al
   commit de una tarea.

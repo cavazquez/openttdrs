@@ -1487,15 +1487,16 @@ pub(crate) fn spawn_station_tile_with_world(
             } else {
                 rail_station_draw_layers(m5)
             };
-            // NewGRF: en plano, sustituir overlays OpenGFX por vista según tiletype `m5` (#46).
-            // Primero resolvemos el handle, pero esperamos para hacer el spawn: la
-            // catenaria siempre se emite antes de `DrawRailTileSeq` en OpenTTD.
+            // NewGRF: sustituir overlays OpenGFX por la vista según tiletype
+            // `m5` (#46). OpenTTD ejecuta `DrawNewStationTile` después de
+            // `DrawFoundation(Leveled)`, también en pendientes; conservar el
+            // parent de esa fundación evita que el sprite vuelva a la banda
+            // de profundidad de la tesela inclinada.
             let mut newgrf_overlay = None;
             if matches!(
                 class,
                 StationTileClass::Rail | StationTileClass::RailWaypoint
-            ) && tileh == 0
-                && !buildings_hidden()
+            ) && !buildings_hidden()
                 && let Some(def) =
                     newgrf_station_def_for_tile(station_catalog, map, stations, ctx.coord)
                 && let (Some(cache), Some(images)) = (station_sprites.as_mut(), images.as_mut())
@@ -1591,16 +1592,23 @@ pub(crate) fn spawn_station_tile_with_world(
                 &mut images,
             );
             if let Some((handle, pos3)) = newgrf_overlay {
-                commands.spawn((
-                    MapVisualLayer,
-                    ctx.map_tile_chunk(),
-                    tint_building_sprite(Sprite {
-                        image: handle,
-                        color: Color::WHITE,
-                        ..default()
-                    }),
-                    Transform::from_translation(pos3),
-                ));
+                let sprite = tint_building_sprite(Sprite {
+                    image: handle,
+                    color: Color::WHITE,
+                    ..default()
+                });
+                if let Some(parent) = foundation_child_parent {
+                    spawn_foundation_child_sprite_at(commands, sprite, ctx, pos3, dims.0, parent);
+                } else {
+                    // En plano no existe un parent de `DrawFoundation`; la
+                    // entidad conserva la ruta directa que usa OpenTTD.
+                    commands.spawn((
+                        MapVisualLayer,
+                        ctx.map_tile_chunk(),
+                        sprite,
+                        Transform::from_translation(pos3),
+                    ));
+                }
             }
             if !buildings_hidden() && !used_newgrf {
                 for (layer_index, base_layer) in overlay_layers.iter().enumerate() {

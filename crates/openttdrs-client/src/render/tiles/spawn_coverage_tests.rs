@@ -8,7 +8,8 @@ use bevy::prelude::*;
 use openttdrs_core::prelude::*;
 use openttdrs_core::{
     BridgeType, Climate, FOUNDATION_ORIGINAL_SPRITE_BASE, RailType, RoadTramType, RoadType,
-    WaterClass, set_water_class_m1, vanilla_road_type_catalog,
+    StationClassId, StationSpecDef, StationSpecId, WaterClass, set_water_class_m1,
+    vanilla_road_type_catalog,
 };
 
 const TEST_CLIMATE: Climate = Climate::Temperate;
@@ -2524,6 +2525,120 @@ fn sloped_rail_station_levels_platform_without_sloped_grass() {
         "la vía de una estación inclinada debe seguir al parent de DrawFoundation"
     );
     assert_eq!(attached[0].1.translation.z, expected_track_pos.z);
+}
+
+#[test]
+fn sloped_newgrf_station_overlay_follows_foundation_parent() {
+    let assets = boot_assets_app();
+    let mut map = Map::new_flat(3, 3, 0);
+    let c = |x: i32, y: i32| TileCoord::new(x, y);
+    map.set_height(c(1, 1), 5).expect("h");
+    for (x, y) in [(0, 0), (2, 0), (0, 2), (2, 2)] {
+        map.set_height(c(x, y), 4).expect("h");
+    }
+    let tile = Tile {
+        kind: TileKind::Station,
+        mapt: 0x50,
+        m5: 0,
+        m6: 0,
+        ..tile_template()
+    };
+    map.set_tile(c(1, 1), tile).expect("station");
+
+    let sprite = openttdrs_core::DecodedSprite {
+        width: 4,
+        height: 4,
+        x_offs: -2,
+        y_offs: -8,
+        rgba: [32, 192, 64, 255].repeat(16),
+        mask: Vec::new(),
+    };
+    let station_spec = StationSpecDef {
+        id: StationSpecId::from_u16(1),
+        class: StationClassId::DEFAULT,
+        label: "Pendiente NewGRF".into(),
+        short_label: "NGRF".into(),
+        disallowed_platforms: 0,
+        disallowed_lengths: 0,
+        callback_mask: 0,
+        flags: 0,
+        animation_status: 0,
+        animation_frames: 0,
+        animation_speed: 2,
+        animation_triggers: 0,
+        from_newgrf: true,
+        newgrf_preview: Some(sprite.clone()),
+        newgrf_views: vec![sprite],
+        newgrf_local_id: 0,
+        newgrf_runtime: None,
+        newgrf_grfid: 0x5354_4E47,
+        newgrf_grf_version: 8,
+        newgrf_type_tables: None,
+        custom_layouts: std::collections::HashMap::new(),
+    };
+    let mut station = Station::new_with_kind(c(1, 1), StopKind::RailStation);
+    station.station_spec = StationSpecId::from_u16(1);
+    let stations = vec![station];
+
+    let grid = RenderGrid::from_map(&map, 3, 3);
+    let ctx = TileRenderContext::new(&map, &grid, 1, 1);
+    assert_ne!(ctx.info.tileh, 0, "el caso debe permanecer inclinado");
+
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world
+        .run_system_once(
+            move |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                let mut station_sprites = crate::render::NewGrfStationSpriteCache::default();
+                let mut images = Assets::<Image>::default();
+                spawn_station_tile(
+                    &mut commands,
+                    &m.0,
+                    m.0.dimensions(),
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    &stations,
+                    4.0,
+                    true,
+                    std::slice::from_ref(&station_spec),
+                    &[],
+                    Some(&mut station_sprites),
+                    Some(&mut images),
+                    &[],
+                    None,
+                    &[],
+                    None,
+                    &[],
+                    TEST_CLIMATE,
+                    &[],
+                );
+            },
+        )
+        .expect("sloped NewGRF station");
+
+    let foundation_parents: std::collections::HashSet<_> = world
+        .query::<(Entity, &ViewportSortableParent)>()
+        .iter(&world)
+        .filter_map(|(entity, parent)| {
+            (FOUNDATION_ORIGINAL_SPRITE_BASE..=FOUNDATION_ORIGINAL_SPRITE_BASE.saturating_add(14))
+                .contains(&parent.sprite_id)
+                .then_some(entity)
+        })
+        .collect();
+    let attached: Vec<_> = world
+        .query::<(&ViewportSortableChild, &Transform)>()
+        .iter(&world)
+        .filter(|(child, _)| foundation_parents.contains(&child.parent))
+        .collect();
+    assert_eq!(
+        attached.len(),
+        2,
+        "la vía y el overlay NewGRF inclinado deben compartir el parent de DrawFoundation"
+    );
 }
 
 #[test]

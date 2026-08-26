@@ -18,9 +18,9 @@ use crate::newgrf_sprites::{
     CBID_OBJECT_LAND_SLOPE_CHECK, CBID_STATION_ANIMATION_NEXT_FRAME, CBID_STATION_ANIMATION_SPEED,
     CBID_STATION_ANIMATION_TRIGGER, CBID_STATION_AVAILABILITY, CBID_STATION_LAND_SLOPE_CHECK,
     CBID_VEHICLE_32DAY_CALLBACK, CBID_VEHICLE_ARTIC_ENGINE, CBID_VEHICLE_COLOUR_MAPPING,
-    CBID_VEHICLE_LENGTH, CBID_VEHICLE_LOAD_AMOUNT, CBID_VEHICLE_REFIT_CAPACITY,
-    CBID_VEHICLE_SOUND_EFFECT, CBID_VEHICLE_START_STOP_CHECK, CBID_VEHICLE_VISUAL_EFFECT,
-    TrainSpriteGraphics,
+    CBID_VEHICLE_LENGTH, CBID_VEHICLE_LOAD_AMOUNT, CBID_VEHICLE_MODIFY_PROPERTY,
+    CBID_VEHICLE_REFIT_CAPACITY, CBID_VEHICLE_SOUND_EFFECT, CBID_VEHICLE_START_STOP_CHECK,
+    CBID_VEHICLE_VISUAL_EFFECT, TrainSpriteGraphics,
 };
 use crate::object_spec::ObjectSpecDef;
 use crate::road_stop_action2::{
@@ -371,6 +371,41 @@ pub fn resolve_vehicle_load_amount_callback(
     u8::try_from(result).ok()
 }
 
+/// Ejecuta `CBID_VEHICLE_MODIFY_PROPERTY` (`0x36`) para una propiedad Action0.
+///
+/// `param1` es el identificador de propiedad tal como aparece en
+/// `newgrf_properties.h`. El resultado siempre es de 15 bits; cuando
+/// `is_signed` se solicita, se aplica la extensión de signo de esos 15 bits
+/// que usa `GetEngineProperty`. `None` significa `CALLBACK_FAILED`, ausencia
+/// de runtime/GRF o una máscara de propiedad no aplicable al motor.
+#[must_use]
+pub fn resolve_vehicle_modify_property_callback(
+    engine: &EngineDef,
+    vehicle: &mut Vehicle,
+    property: u8,
+    is_signed: bool,
+) -> Option<i32> {
+    if engine.newgrf_grfid == 0 || engine.newgrf_runtime.is_none() {
+        return None;
+    }
+    let result = resolve_vehicle_callback(
+        engine,
+        vehicle,
+        CBID_VEHICLE_MODIFY_PROPERTY,
+        u32::from(property),
+        0,
+    );
+    if result == CALLBACK_FAILED {
+        return None;
+    }
+    let value = i32::from(result & 0x7FFF);
+    Some(if is_signed && value & 0x4000 != 0 {
+        value - 0x8000
+    } else {
+        value
+    })
+}
+
 /// Resuelve `CBID_VEHICLE_LENGTH` (`0x11`) y devuelve la longitud efectiva.
 ///
 /// El callback de `OpenTTD` devuelve cuánto se acorta una unidad de ocho
@@ -391,7 +426,20 @@ pub fn resolve_vehicle_length_callback(engine: &EngineDef, vehicle: &mut Vehicle
 /// Longitud de una unidad de vehículo al crear/refrescar su caché.
 #[must_use]
 pub fn vehicle_unit_length(engine: &EngineDef, vehicle: &mut Vehicle) -> u8 {
+    let callback_shorten = (!matches!(engine.kind, VehicleKind::Ship | VehicleKind::Aircraft))
+        .then(|| {
+            let property = match engine.kind {
+                VehicleKind::Train => 0x21,
+                VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram => 0x23,
+                VehicleKind::Ship | VehicleKind::Aircraft => return None,
+            };
+            resolve_vehicle_modify_property_callback(engine, vehicle, property, false)
+                .and_then(|value| u8::try_from(value).ok())
+                .filter(|value| *value < 8)
+        })
+        .flatten();
     resolve_vehicle_length_callback(engine, vehicle)
+        .or(callback_shorten.map(|shorten| 8_u8.saturating_sub(shorten)))
         .unwrap_or_else(|| 8_u8.saturating_sub(engine.shorten_factor.min(7)))
         .max(1)
 }
@@ -2010,6 +2058,37 @@ mod tests {
         engine.newgrf_runtime = Some(Box::new(gfx_callback_literal(8)));
         assert_eq!(resolve_vehicle_length_callback(&engine, &mut vehicle), None);
         assert_eq!(vehicle_unit_length(&engine, &mut vehicle), 2);
+    }
+
+    #[test]
+    fn callbacks_ac_vehicle_modify_property_sign_extends_and_feeds_length_fallback() {
+        let mut engine = engines_table()
+            .iter()
+            .find(|e| e.kind == VehicleKind::Train && e.power_hp > 0)
+            .cloned()
+            .unwrap();
+        engine.newgrf_grfid = 0x5052_4F50;
+        engine.newgrf_local_id = 0;
+        engine.vehicle_callback_mask = 0;
+        engine.shorten_factor = 7;
+        engine.newgrf_runtime = Some(Box::new(gfx_callback_literal(3)));
+        let mut vehicle = Vehicle::new(
+            46,
+            VehicleKind::Train,
+            TileCoord::new(1, 1),
+            TileCoord::new(1, 1),
+        );
+        assert_eq!(
+            resolve_vehicle_modify_property_callback(&engine, &mut vehicle, 0x21, false),
+            Some(3)
+        );
+        assert_eq!(vehicle_unit_length(&engine, &mut vehicle), 5);
+
+        engine.newgrf_runtime = Some(Box::new(gfx_callback_literal_u16(0x7FFF)));
+        assert_eq!(
+            resolve_vehicle_modify_property_callback(&engine, &mut vehicle, 0x2E, true),
+            Some(-1)
+        );
     }
 
     #[test]

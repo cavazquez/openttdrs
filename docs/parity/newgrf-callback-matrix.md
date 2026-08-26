@@ -31,6 +31,7 @@ API común: `TrainSpriteGraphics::resolve_callback` / `resolve_callback_ctx`,
 `resolve_vehicle_load_amount_callback`, `resolve_vehicle_sound_callback`,
 `resolve_vehicle_refit_capacity_callback`,
 `resolve_vehicle_length_callback`, `vehicle_unit_length`,
+`resolve_vehicle_modify_property_callback`,
 `decode_vehicle_articulated_part`, `resolve_vehicle_articulated_part_callback`,
 `resolve_vehicle_visual_effect_callback`, `vehicle_visual_effect_kind`,
 `resolve_industry_tile_animation_callback`,
@@ -55,7 +56,8 @@ API común: `TrainSpriteGraphics::resolve_callback` / `resolve_callback_ctx`,
 | Vehicles (`00`–`03`) | `0x32` `CBID_VEHICLE_32DAY_CALLBACK` | **parcial runtime** | El barrido económico escalonado conserva `day_counter` y ejecuta el callback al inicio y cada 32 días por unidad; decodifica los bits de randomización/paleta y expone los bits desconocidos para diagnóstico. El trigger `Callback32` persiste, consume la máscara del grupo Action2 activo y reseedea los bits declarados de forma determinista. Falta ampliar `random_bits` a 16 bits, propagar el trigger a toda la cadena como `TriggerVehicleRandomisation` y conectar la invalidación de paleta con la caché visual. |
 | Vehicles | `0x33` `CBID_VEHICLE_SOUND_EFFECT` | **parcial runtime** | Action0 conserva la máscara (bit `SoundEffect`) y el callback recibe `VehicleSoundEvent` en `param1`; los eventos de salida, marcha (`Running`/`Running16`/`Stopped16`), avería, túnel, pago de carga/descarga y despegue/aterrizaje traducen samples globales `0..72` o locales `73+id` a la cola del mixer. `CALLBACK_FAILED` mantiene el SFX vanilla; id local inválido suprime el sonido como `INVALID_SOUND`. El efecto visual (humo/chispas) resuelve también el callback; los motores vanilla conocidos ya seleccionan su muestra específica y queda mapear el `sfx` custom de Action0 sin callback. |
 | Vehicles (`00`–`03`) | `0x2D` `CBID_VEHICLE_COLOUR_MAPPING` | **parcial runtime** | El callback se consulta cuando Action0 declara la máscara `ColourRemap` (bit 6), conserva el `PaletteID` y el bit de colores de compañía sin mutar el vehículo, y el cache de sprites runtime aplica las paletas de compañía `775..790`. Faltan tablas 2CC/crash y livery por compañía; los IDs no materializables permanecen raw. |
-| Vehicles | `0x16`, `0x19`, `0x1D`, `0x23`, `0x34`–`0x36`, … | **OOS** | Evaluador Action2 listo; sin call sites |
+| Vehicles (`00`–`03`) | `0x36` `CBID_VEHICLE_MODIFY_PROPERTY` | **parcial runtime** | `resolve_vehicle_modify_property_callback` ejecuta el resultado signed/unsigned de 15 bits y hace visible `CALLBACK_FAILED`. `vehicle_unit_length` consume las propiedades `0x21` (tren) y `0x23` (carretera) como acortamiento cuando falta CB11. Faltan los call sites de capacidad, velocidad, potencia, esfuerzo tractor, costes y el resto de propiedades Action0, además de la semántica completa de cadenas articuladas. |
+| Vehicles | `0x16`, `0x19`, `0x1D`, `0x23`, `0x34`–`0x35`, … | **OOS** | Evaluador Action2 listo; sin call sites |
 | Houses (`07`) | `0x17` `CBID_HOUSE_ALLOW_CONSTRUCTION` | **soportado** (#266) | Call site: crecimiento físico del pueblo (`try_build_town_house`), antes de reservar el footprint; respeta su máscara y booleano de 8 bits |
 | Houses | resto `0x1A`–`0x1C`, `0x1E`–`0x21`, … | **almacenado** | `HouseSpecDef.callback_mask` |
 | Industry tiles (`09`) | `0x25` trigger, `0x26` next frame, `0x27` speed | **soportado** (#293) | `phase_tile_animation` ejecuta los tres con coordenada real, `param2=IndustryTick`, máscara Action0 y fallback `CALLBACK_FAILED` |
@@ -105,12 +107,13 @@ API común: `TrainSpriteGraphics::resolve_callback` / `resolve_callback_ctx`,
 11. RoadStops CB13 — disponibilidad al previsualizar y ejecutar `PlaceBusStop`/`PlaceTruckStop`.
 12. RoadStops CB140/CB141/CB142 — `Built`/`TileLoop`, carga/retirada de carga, carga/llegada/salida vial y `AcceptanceTick`; scheduler con velocidad/frame, writeback `7C`, CTT en `param2` y JSON round-trip. Cada tesela custom conserva spec/frame/activo/random, incluso tras `JoinStation`; los eventos exactos y de área completa siguen el alcance de `RoadStopTileData`. Action0 `0x0D` + Action2 random reacciona a NewCargo, CargoTaken, carga, llegada y salida con grupos `any`/`all`, bits base/tesela y triggers persistentes. Referencia: `newgrf_roadstop.cpp` / `newgrf_animation_base.h`.
 13. Vehicles CB32 — barrido económico escalonado, `day_counter` persistente, bits de randomización/paleta y trigger `Callback32` con reseed del grupo Action2 activo. Pendientes la cadena completa, random de 16 bits e invalidación de paleta del renderer.
-13. Objects CB157 — pendiente por tesela de `BuildObject`, desde Action0 `0x15` y Action3→Action2 cargados; query y execute rechazan antes de mutar.
-14. Cargoes CB39 — cálculo de pago por packet durante `unload_vehicles`, desde Action0 `0x1A` y Action3→Action2 cargados; `CALLBACK_FAILED` conserva la fórmula base.
-15. Cargoes CB145 — target de rating durante el barrido `update_station_ratings`, desde Action0 `0x1A` y Action3→Action2 cargados; `CALLBACK_FAILED` conserva el algoritmo estándar.
-16. Stations CB149 — pendiente por tesela al construir, desde Action0 `0x0B` y Action3→Action2 cargados; query y execute rechazan antes de mutar.
-17. Stations CB14 — layout de tesela al dibujar, desde Action0 `0x0B` y Action3→Action2 cargados; el renderer el aplica antes de elegir la vista NewGRF.
-18. Stations CB140/CB141/CB142 — `Built`/`TileLoop`, `NewCargo`/`CargoTaken` y `AcceptanceTick` de área completa (250 ticks escalonada por StationID), y `VehicleLoads`/`VehicleArrives`/`VehicleDeparts`/`PathReservation` ferroviarios por plataforma; scheduler persistido por tesela, velocidad/frame, CTT de cargo en `param2` y var Action2 `4A`.
+14. Vehicles CB36 — resolver signed/unsigned y aplicar el acortamiento `0x21`/`0x23` al crear/refrescar la longitud de unidades; quedan propiedades económicas y de rendimiento.
+15. Objects CB157 — pendiente por tesela de `BuildObject`, desde Action0 `0x15` y Action3→Action2 cargados; query y execute rechazan antes de mutar.
+16. Cargoes CB39 — cálculo de pago por packet durante `unload_vehicles`, desde Action0 `0x1A` y Action3→Action2 cargados; `CALLBACK_FAILED` conserva la fórmula base.
+17. Cargoes CB145 — target de rating durante el barrido `update_station_ratings`, desde Action0 `0x1A` y Action3→Action2 cargados; `CALLBACK_FAILED` conserva el algoritmo estándar.
+18. Stations CB149 — pendiente por tesela al construir, desde Action0 `0x0B` y Action3→Action2 cargados; query y execute rechazan antes de mutar.
+19. Stations CB14 — layout de tesela al dibujar, desde Action0 `0x0B` y Action3→Action2 cargados; el renderer el aplica antes de elegir la vista NewGRF.
+20. Stations CB140/CB141/CB142 — `Built`/`TileLoop`, `NewCargo`/`CargoTaken` y `AcceptanceTick` de área completa (250 ticks escalonada por StationID), y `VehicleLoads`/`VehicleArrives`/`VehicleDeparts`/`PathReservation` ferroviarios por plataforma; scheduler persistido por tesela, velocidad/frame, CTT de cargo en `param2` y var Action2 `4A`.
 
 ## Residual explícito (no bloquea cierre MVP #266)
 

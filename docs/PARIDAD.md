@@ -185,10 +185,14 @@ vinculan al parent de la fundación nivelada. Los objetos NewGRF ya reevalúan
 Action2 por tesela con random, offset de footprint, pendiente/terreno,
 animación y owner, y cachean por fingerprint. Los producers de industria y
 las industrias NewGRF ya usan sus offsets Action2 runtime y cuelgan el overlay
-del parent de la fundación nivelada cuando existe. Los layouts `TileSeq`/children
-completos de estación/objeto/industria, los callbacks de foundation específicos,
-las variables de town/vecindad/color/view y el sprite-stack de vehículos NewGRF
-siguen pendientes de un contrato runtime completo.
+del parent de la fundación nivelada cuando existe. Las casas NewGRF también
+reevalúan Action2 por tesela (etapa/hash, edad, terreno, frame, posición y
+random/triggers) y registran el edificio con bounds conservadoras como parent
+sortable; el suelo/layout propio y las variables de pueblo/vecindad aún usan
+el sustituto vanilla. Los layouts `TileSeq`/children completos de
+estación/objeto/industria/casa, los callbacks de foundation específicos,
+color/view y el sprite-stack de vehículos NewGRF siguen pendientes de un
+contrato runtime completo.
 Los focos naval
 `138,7..140,10` y de muelle `136,1..139,3` vinculan
 7/7 parents candidatos al orden final C++; es evidencia del contrato de cajas y

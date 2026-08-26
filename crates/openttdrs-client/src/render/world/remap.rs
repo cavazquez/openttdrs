@@ -160,6 +160,7 @@ pub(crate) fn apply_remap_map_visuals(
                 newgrf_sprites.catenary.as_mut(),
                 newgrf_sprites.signal.as_mut(),
                 newgrf_sprites.industry.as_mut(),
+                newgrf_sprites.house.as_mut(),
                 newgrf_sprites.object.as_mut(),
                 newgrf_sprites.action5.as_mut(),
             );
@@ -184,6 +185,7 @@ pub(crate) fn apply_remap_map_visuals(
                 newgrf_sprites.catenary.as_mut(),
                 newgrf_sprites.signal.as_mut(),
                 newgrf_sprites.industry.as_mut(),
+                newgrf_sprites.house.as_mut(),
                 newgrf_sprites.object.as_mut(),
                 newgrf_sprites.action5.as_mut(),
             );
@@ -273,6 +275,7 @@ pub(crate) fn apply_remap_map_visuals(
             newgrf_sprites.catenary.as_mut(),
             newgrf_sprites.signal.as_mut(),
             newgrf_sprites.industry.as_mut(),
+            newgrf_sprites.house.as_mut(),
             newgrf_sprites.object.as_mut(),
             newgrf_sprites.action5.as_mut(),
         );

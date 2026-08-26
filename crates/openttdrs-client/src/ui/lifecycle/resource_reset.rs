@@ -8,10 +8,10 @@ use crate::render::effect_fx::FxSpawnQueue;
 use crate::render::{
     ChimneySmokeFrames, CompanyColoredSprites, CopperMineSmokeFrames, EffectVehicleFrames,
     FizzyDrinkAnimFrames, LighthouseAnimFrames, LoadedMapTileChunks, MapTileSpawnViewport,
-    NewGrfAction5SpriteCache, NewGrfCatenarySpriteCache, NewGrfObjectSpriteCache,
-    NewGrfRoadSpriteCache, NewGrfShoreSpriteCache, NewGrfStationSpriteCache,
-    NewGrfTrainSpriteCache, RefineryFireAnimFrames, RemapMapVisualsPending, TileAtlas,
-    TruckHandles, VehicleIndex, WaterAnimFrames, WorldAssets,
+    NewGrfAction5SpriteCache, NewGrfCatenarySpriteCache, NewGrfHouseSpriteCache,
+    NewGrfObjectSpriteCache, NewGrfRoadSpriteCache, NewGrfShoreSpriteCache,
+    NewGrfStationSpriteCache, NewGrfTrainSpriteCache, RefineryFireAnimFrames,
+    RemapMapVisualsPending, TileAtlas, TruckHandles, VehicleIndex, WaterAnimFrames, WorldAssets,
 };
 use crate::simulation::SimClock;
 use crate::state::{EditorSession, OrderPickState};
@@ -168,6 +168,12 @@ fn clear_newgrf_action5_sprites(world: &mut World) {
 
 fn clear_newgrf_object_sprites(world: &mut World) {
     if let Some(mut cache) = world.get_resource_mut::<NewGrfObjectSpriteCache>() {
+        cache.clear();
+    }
+}
+
+fn clear_newgrf_house_sprites(world: &mut World) {
+    if let Some(mut cache) = world.get_resource_mut::<NewGrfHouseSpriteCache>() {
         cache.clear();
     }
 }
@@ -335,6 +341,10 @@ pub(super) static RESOURCE_RESETS: &[ResourceTeardown] = &[
     ResourceTeardown {
         name: "NewGrfObjectSpriteCache",
         apply: clear_newgrf_object_sprites,
+    },
+    ResourceTeardown {
+        name: "NewGrfHouseSpriteCache",
+        apply: clear_newgrf_house_sprites,
     },
     ResourceTeardown {
         name: "DestinationPickerState",
@@ -559,6 +569,10 @@ pub(super) static RESOURCE_REMOVES: &[ResourceTeardown] = &[
     ResourceTeardown {
         name: "NewGrfObjectSpriteCache(remove)",
         apply: remove_res::<NewGrfObjectSpriteCache>,
+    },
+    ResourceTeardown {
+        name: "NewGrfHouseSpriteCache(remove)",
+        apply: remove_res::<NewGrfHouseSpriteCache>,
     },
 ];
 

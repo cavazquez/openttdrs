@@ -15,6 +15,7 @@ mod effect_vehicle;
 mod fizzy_drink;
 mod grid;
 mod house_lift_anim;
+pub(crate) mod house_newgrf;
 mod house_viewport_sort;
 mod industry_anim;
 mod industry_draw_proc;
@@ -94,6 +95,7 @@ pub(crate) use train_smoke::TrainSmokePlugin;
 
 pub(crate) use action5_newgrf::NewGrfAction5SpriteCache;
 pub(crate) use catenary_newgrf::NewGrfCatenarySpriteCache;
+pub(crate) use house_newgrf::NewGrfHouseSpriteCache;
 pub(crate) use industry_newgrf::NewGrfIndustrySpriteCache;
 pub(crate) use object_newgrf::NewGrfObjectSpriteCache;
 pub(crate) use road_newgrf::NewGrfRoadSpriteCache;

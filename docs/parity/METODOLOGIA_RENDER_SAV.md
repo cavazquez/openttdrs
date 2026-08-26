@@ -34,7 +34,7 @@ la paridad se comprueba por capas, de menor a mayor distancia del píxel final.
 | 1 | [`world-raw`](WORLD_RAW_SCHEMA.md) | ¿Los bytes de mapa de cada tesela son los mismos? | No explica su significado. |
 | 2 | [`world-semantic`](WORLD_SEMANTIC_SCHEMA.md) | ¿Ambos clasifican igual vía, puente, túnel, estación, pendiente y orientación? | No garantiza el sprite final. |
 | 3 | [`world-draw`](WORLD_DRAW_SCHEMA.md) | ¿Rust selecciona sprite, paleta y geometría permitidos por el `draw_tile_proc` C++? | La cobertura Rust aún no incluye todas las familias ni prueba el sort global o el framebuffer. |
-| 3b | [`world-sort`](WORLD_DRAW_SCHEMA.md#orden-global-de-parents-world-sort) | ¿Los parents candidatos se emiten en el orden final de `ViewportSortParentSprites`? | El runtime aplica el sorter compartido a casas vanilla, árboles `MP_TREES` con sus capas combinadas, muelles vanilla, edificios industriales vanilla planos/estáticos, sprites directos de `DrawFoundation`, las seis capas `TILE_SEQ` del depósito naval, estructuras/catenaria y bloque combinado PBS/Action5 de puentes, y cuerpos/unidades de vehículos con las cajas `Vehicle::bounds` de OpenTTD. El suelo posterior de casas inclinadas/rampas de puente y la base/vía rail posterior a fundación quedan vinculados al último parent; sombra/rotor de aeronave son children del cuerpo. Los overlays de carretera y tranvía, incluidos reemplazos NewGRF, y los overlays NewGRF de estación rail (también en pendientes niveladas) siguen el parent de fundación cuando existe. Restan la mitad frontal de puente, layouts/children NewGRF completos de estación/objeto/industria, sprite-stack, pivotes y clipping; no certifica el framebuffer global. |
+| 3b | [`world-sort`](WORLD_DRAW_SCHEMA.md#orden-global-de-parents-world-sort) | ¿Los parents candidatos se emiten en el orden final de `ViewportSortParentSprites`? | El runtime aplica el sorter compartido a casas vanilla y casas NewGRF con bounds conservadoras, árboles `MP_TREES` con sus capas combinadas, muelles vanilla, edificios industriales vanilla planos/estáticos, sprites directos de `DrawFoundation`, las seis capas `TILE_SEQ` del depósito naval, estructuras/catenaria y bloque combinado PBS/Action5 de puentes, y cuerpos/unidades de vehículos con las cajas `Vehicle::bounds` de OpenTTD. El suelo posterior de casas inclinadas/rampas de puente y la base/vía rail posterior a fundación quedan vinculados al último parent; sombra/rotor de aeronave son children del cuerpo. Los overlays de carretera y tranvía, incluidos reemplazos NewGRF, y los overlays NewGRF de estación rail (también en pendientes niveladas) siguen el parent de fundación cuando existe. Restan la mitad frontal de puente, layouts/children NewGRF completos de estación/objeto/industria/casa, sprite-stack, pivotes y clipping; no certifica el framebuffer global. |
 | 4 | Captura enfocada | ¿La composición completa se ve correcta en el contexto real? | Es aceptación visual, no la única evidencia. |
 
 La regla es encontrar la primera capa que diverge antes de editar. De ese modo
@@ -249,8 +249,11 @@ de la fundación nivelada. Los objetos NewGRF también reevalúan Action2 por
 tesela (random, offset, pendiente/terreno, animación y owner) y cachean la
 textura por fingerprint. Las industrias NewGRF también usan la vista Action2
 runtime y cuelgan su overlay del parent de la fundación nivelada cuando existe;
-los callbacks de foundation específicos, variables de town/vecindad, color/view
-y los layouts/children dinámicos de estación, objeto e industria siguen siendo
+las casas NewGRF hacen lo mismo para etapa/hash, edad, terreno, frame,
+posición y random/triggers, y registran el edificio como parent sortable. El
+suelo/layout propio de la casa sigue usando el sustituto vanilla. Los callbacks
+de foundation específicos, variables de town/vecindad, color/view y los
+layouts/children dinámicos de estación, objeto e industria/casa siguen siendo
 residual explícito y no se presentan como paridad completa.
 
 ### Revalidación: catenaria de estaciones ferroviarias de Kale

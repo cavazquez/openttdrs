@@ -428,6 +428,26 @@ fn house_building_parent_bounds(
     )
 }
 
+/// Caja conservadora para un sprite de casa proporcionado por NewGRF.
+///
+/// `HouseSpecDef` todavía no modela `TileLayoutSpriteGroup`/`M(...)`; el
+/// decoder sí conserva offsets y dimensiones de Action1. Usar esa extensión
+/// como prisma mantiene el sprite dentro del ordenador de viewport y evita
+/// que una casa custom atraviese edificios vecinos aunque su layout avanzado
+/// siga pendiente.
+fn newgrf_house_parent_bounds(
+    ctx: &TileRenderContext,
+    view: &openttdrs_core::DecodedSprite,
+    surface_base_z: u8,
+) -> ParentSpriteBounds {
+    let x = ctx.tx_i32() * 16 + i32::from(view.x_offs);
+    let y = ctx.ty_i32() * 16 + i32::from(view.y_offs);
+    let z = i32::from(surface_base_z) * 8;
+    let width = i32::from(view.width).max(1);
+    let height = i32::from(view.height).max(1);
+    ParentSpriteBounds::new(x, y, z, x + width - 1, y + height - 1, z + height - 1)
+}
+
 /// Bounds inclusivos del parent vanilla de `DrawTile_Industry`.
 ///
 /// La tabla generada preserva el `M(dx, dy, sx, sy, sz)` de
@@ -461,7 +481,10 @@ pub(crate) struct HouseSpawnResources<'a> {
     pub(crate) map: &'a Map,
     pub(crate) map_dims: (u32, u32),
     pub(crate) house_catalog: &'a [openttdrs_core::HouseSpecDef],
+    pub(crate) climate: Climate,
+    pub(crate) newgrf_stack: &'a [openttdrs_core::NewGrfEntry],
     pub(crate) foundation_newgrf: &'a [Option<openttdrs_core::DecodedSprite>],
+    pub(crate) house_sprites: Option<&'a mut crate::render::NewGrfHouseSpriteCache>,
     pub(crate) action5_sprites: Option<&'a mut crate::render::NewGrfAction5SpriteCache>,
     pub(crate) images: Option<&'a mut Assets<Image>>,
 }
@@ -470,7 +493,7 @@ pub(crate) fn spawn_house_tile(
     commands: &mut Commands,
     assets: &WorldAssets,
     ctx: &TileRenderContext,
-    resources: HouseSpawnResources<'_>,
+    mut resources: HouseSpawnResources<'_>,
 ) {
     let tileh = ctx.info.tileh;
     let base_z = ctx.info.base_z;
@@ -508,8 +531,8 @@ pub(crate) fn spawn_house_tile(
             "house",
             "house-foundation",
             resources.foundation_newgrf,
-            resources.action5_sprites,
-            resources.images,
+            resources.action5_sprites.as_deref_mut(),
+            resources.images.as_deref_mut(),
         )
     });
     let foundation_surface_base_z =
@@ -627,6 +650,81 @@ pub(crate) fn spawn_house_tile(
         return;
     }
     let tint = sprite_color(TransparencyOption::Houses);
+    // `DrawNewHouseTile` resuelve el grupo Action2 después de la fundación.
+    // Antes el catálogo sólo se consultaba para elegir el sustituto vanilla,
+    // por lo que cualquier casa con random/variational terminaba mostrando
+    // una fila de `HOUSE_DRAW_DATA` ajena. Repetimos la resolución con las
+    // variables persistidas de la tesela y mantenemos el ground vanilla como
+    // fallback mientras no exista un layout de suelo NewGRF completo.
+    if let Some(tile) = ctx.tile
+        && let Some(def) = crate::render::house_newgrf::newgrf_house_def_for_id(
+            resources.house_catalog,
+            clean_house_id,
+        )
+        && let (Some(cache), Some(images)) =
+            (resources.house_sprites.as_mut(), resources.images.as_mut())
+    {
+        let mut a2 = openttdrs_core::action2_eval_ctx_for_house_tile(
+            tile,
+            ctx.tx_i32(),
+            ctx.ty_i32(),
+            resources.climate,
+        );
+        a2.set_grf_params(openttdrs_core::stack_params_for_grfid(
+            resources.newgrf_stack,
+            def.grfid,
+        ));
+        if let Some(view) = if def.newgrf_runtime.is_some() {
+            def.newgrf_view_runtime(building_stage, &mut a2)
+        } else {
+            def.newgrf_view(building_stage).cloned()
+        } && let Some(handle) = cache.handle_for_runtime(def, building_stage, &mut a2, images)
+        {
+            let pos3 = house_pos(
+                f32::from(view.x_offs),
+                f32::from(view.y_offs),
+                f32::from(view.width),
+                f32::from(view.height),
+                0.5,
+            );
+            let source_depth = viewport_source_depth(pos3.z, ctx.tx, resources.map_dims.0);
+            let sprite = Sprite {
+                image: handle,
+                color: tint,
+                ..default()
+            };
+            WorldDrawTrace::record_sprite_with_geometry(
+                "house-building-newgrf",
+                "sortable",
+                u32::from(def.id),
+                false,
+                (i32::from(view.x_offs), i32::from(view.y_offs), 0),
+                (i32::from(foundation_surface_base_z) - i32::from(base_z)) * 8,
+                Some(TraceSpriteBounds::new(
+                    i32::from(view.x_offs),
+                    i32::from(view.y_offs),
+                    0,
+                    i32::from(view.width).max(1),
+                    i32::from(view.height).max(1),
+                    i32::from(view.height).max(1),
+                )),
+            );
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                sprite,
+                Transform::from_translation(Vec3::new(pos3.x, pos3.y, source_depth)),
+                ViewportSortableParent {
+                    sprite_id: u32::from(def.id),
+                    bounds: newgrf_house_parent_bounds(ctx, &view, foundation_surface_base_z),
+                    insertion_key: viewport_insertion_key(ctx.tx, ctx.ty, 2),
+                    source_depth,
+                },
+            ));
+            return;
+        }
+    }
+
     let mut building_entity = None;
     if spec.s2 != 0 {
         let (building_world_z_delta, building_bounds) =

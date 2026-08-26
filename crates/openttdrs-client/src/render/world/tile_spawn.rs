@@ -104,6 +104,7 @@ pub(crate) fn spawn_map_tiles_in_bounds(
     catenary_sprites: &mut crate::render::NewGrfCatenarySpriteCache,
     signal_sprites: &mut crate::render::NewGrfSignalSpriteCache,
     industry_sprites: &mut crate::render::NewGrfIndustrySpriteCache,
+    house_sprites: &mut crate::render::NewGrfHouseSpriteCache,
     object_sprites: &mut crate::render::NewGrfObjectSpriteCache,
     action5_sprites: &mut crate::render::NewGrfAction5SpriteCache,
 ) {
@@ -361,7 +362,10 @@ pub(crate) fn spawn_map_tiles_in_bounds(
                     map,
                     map_dims: (mw, mh),
                     house_catalog: &sim.state.house_spec_catalog,
+                    climate,
+                    newgrf_stack: &sim.state.newgrf_stack,
                     foundation_newgrf: &sim.state.runtime.foundation_newgrf_sprites,
+                    house_sprites: Some(house_sprites),
                     action5_sprites: Some(action5_sprites),
                     images: Some(images),
                 },
@@ -602,6 +606,7 @@ pub(crate) fn spawn_world_layer(
     catenary_sprites: &mut crate::render::NewGrfCatenarySpriteCache,
     signal_sprites: &mut crate::render::NewGrfSignalSpriteCache,
     industry_sprites: &mut crate::render::NewGrfIndustrySpriteCache,
+    house_sprites: &mut crate::render::NewGrfHouseSpriteCache,
     object_sprites: &mut crate::render::NewGrfObjectSpriteCache,
     action5_sprites: &mut crate::render::NewGrfAction5SpriteCache,
 ) {
@@ -664,6 +669,7 @@ pub(crate) fn spawn_world_layer(
             catenary_sprites,
             signal_sprites,
             industry_sprites,
+            house_sprites,
             object_sprites,
             action5_sprites,
         );
@@ -687,6 +693,7 @@ pub(crate) fn spawn_map_chunk(
     catenary_sprites: &mut crate::render::NewGrfCatenarySpriteCache,
     signal_sprites: &mut crate::render::NewGrfSignalSpriteCache,
     industry_sprites: &mut crate::render::NewGrfIndustrySpriteCache,
+    house_sprites: &mut crate::render::NewGrfHouseSpriteCache,
     object_sprites: &mut crate::render::NewGrfObjectSpriteCache,
     action5_sprites: &mut crate::render::NewGrfAction5SpriteCache,
 ) {
@@ -706,6 +713,7 @@ pub(crate) fn spawn_map_chunk(
         catenary_sprites,
         signal_sprites,
         industry_sprites,
+        house_sprites,
         object_sprites,
         action5_sprites,
     );
@@ -818,6 +826,7 @@ pub(crate) fn setup(
     let mut catenary_sprites = crate::render::NewGrfCatenarySpriteCache::default();
     let mut signal_sprites = crate::render::NewGrfSignalSpriteCache::default();
     let mut industry_sprites = crate::render::NewGrfIndustrySpriteCache::default();
+    let mut house_sprites = crate::render::NewGrfHouseSpriteCache::default();
     let mut object_sprites = crate::render::NewGrfObjectSpriteCache::default();
     let mut action5_sprites = crate::render::NewGrfAction5SpriteCache::default();
     spawn_world_layer(
@@ -843,6 +852,7 @@ pub(crate) fn setup(
         &mut catenary_sprites,
         &mut signal_sprites,
         &mut industry_sprites,
+        &mut house_sprites,
         &mut object_sprites,
         &mut action5_sprites,
     );
@@ -852,6 +862,7 @@ pub(crate) fn setup(
     commands.insert_resource(catenary_sprites);
     commands.insert_resource(signal_sprites);
     commands.insert_resource(industry_sprites);
+    commands.insert_resource(house_sprites);
     commands.insert_resource(object_sprites);
     commands.insert_resource(action5_sprites);
     commands.insert_resource(label_index);
@@ -904,6 +915,7 @@ pub(crate) fn spawn_intro_map_render(
     let mut catenary_sprites = crate::render::NewGrfCatenarySpriteCache::default();
     let mut signal_sprites = crate::render::NewGrfSignalSpriteCache::default();
     let mut industry_sprites = crate::render::NewGrfIndustrySpriteCache::default();
+    let mut house_sprites = crate::render::NewGrfHouseSpriteCache::default();
     let mut object_sprites = crate::render::NewGrfObjectSpriteCache::default();
     let mut action5_sprites = crate::render::NewGrfAction5SpriteCache::default();
     let label_index = MapLabelSpatialIndex::from_state(&sim.state);
@@ -930,6 +942,7 @@ pub(crate) fn spawn_intro_map_render(
         &mut catenary_sprites,
         &mut signal_sprites,
         &mut industry_sprites,
+        &mut house_sprites,
         &mut object_sprites,
         &mut action5_sprites,
     );
@@ -941,6 +954,7 @@ pub(crate) fn spawn_intro_map_render(
     commands.insert_resource(signal_sprites);
     commands.insert_resource(industry_sprites);
     commands.insert_resource(object_sprites);
+    commands.insert_resource(house_sprites);
     commands.insert_resource(atlas);
     commands.insert_resource(LoadedMapTileChunks::from_spawn_bounds(spawn_bounds, mw, mh));
 }

@@ -6,7 +6,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::cargo::CargoType;
-use crate::map::TileCoord;
+use crate::map::{Tile, TileCoord};
 use crate::sav::house_population_generated::{
     HOUSE_ACCEPTS_CARGO, HOUSE_AVAILABILITY, HOUSE_BUILDING_FLAGS, HOUSE_CARGO_ACCEPTANCE,
     HOUSE_MAIL_GENERATION, HOUSE_MAX_YEAR, HOUSE_MAX_YEAR_OF, HOUSE_MIN_YEAR, HOUSE_MINIMUM_LIFE,
@@ -195,6 +195,80 @@ impl HouseSpecDef {
         }
         self.newgrf_views.get(idx % self.newgrf_views.len())
     }
+
+    /// Vista re-resolviendo Action2 con el contexto de la tesela.
+    ///
+    /// Las casas conservan sus bits aleatorios y de triggers en `m1`/`m3`;
+    /// cuando el grupo usa una variational/random, el renderer debe volver a
+    /// recorrer el grafo por cada contexto en vez de reutilizar el preview
+    /// estático cargado al iniciar el GRF.
+    pub fn newgrf_view_runtime(
+        &self,
+        idx: usize,
+        ctx: &mut crate::newgrf_sprites::Action2EvalCtx,
+    ) -> Option<crate::newgrf_sprites::DecodedSprite> {
+        let runtime = self.newgrf_runtime.as_ref()?;
+        let views = runtime.views_for_local_id_ctx(self.newgrf_local_id, ctx)?;
+        if views.is_empty() {
+            return None;
+        }
+        Some(views[idx % views.len()].clone())
+    }
+}
+
+/// Construye el contexto Action2 disponible para una casa ya materializada.
+///
+/// Es la traducción de las variables de `HouseScopeResolver` que están
+/// persistidas en `Tile`: etapa/hash (`0x40`), edad (`0x41`), terreno (`0x43`),
+/// frame (`0x46`), posición (`0x47`) y random/triggers (`0x5F`). Las variables
+/// que dependen del pueblo o de contadores globales (zona, número de casas,
+/// vecinos y aceptación de estaciones) se dejan ausentes para que el
+/// evaluador no invente valores.
+#[must_use]
+pub fn action2_eval_ctx_for_house_tile(
+    tile: Tile,
+    tx: i32,
+    ty: i32,
+    climate: Climate,
+) -> crate::newgrf_sprites::Action2EvalCtx {
+    let mut ctx = crate::newgrf_sprites::Action2EvalCtx::default();
+    let stage = if tile.m3 & 0x80 != 0 {
+        3
+    } else {
+        u32::from((tile.m5 >> 3) & 0x03)
+    };
+    let tile_hash = (tx.cast_unsigned() ^ (tx.cast_unsigned() >> 2) ^ ty.cast_unsigned())
+        .wrapping_sub(ty.cast_unsigned() >> 2)
+        & 0x03;
+    ctx.vars.insert(0x40, stage | tile_hash << 2);
+    let age = if tile.m3 & 0x80 != 0 {
+        u32::from(tile.m5)
+    } else {
+        0
+    };
+    ctx.vars.insert(0x41, age);
+    // `GetTerrainType` returns a small climate-dependent enum. The map
+    // representation has no separate terrain enum, but `m7` carries the
+    // snow/desert marker used by imported maps; keep temperate grass as zero.
+    let terrain = if climate.uses_desert_patches() && tile.m7 & 0x20 != 0 {
+        1
+    } else if climate.uses_snow_ground() || tile.m7 & 0x20 != 0 {
+        4
+    } else {
+        0
+    };
+    ctx.vars.insert(0x43, terrain);
+    ctx.vars.insert(0x46, u32::from(tile.m3hi));
+    ctx.vars.insert(
+        0x47,
+        (ty.cast_unsigned() << 16) | (tx.cast_unsigned() & 0xFFFF),
+    );
+    ctx.random_bits = u32::from(tile.m1);
+    // `var 5F` combines GetHouseRandomBits (high byte) and the pending
+    // randomisation triggers (low five bits of m3).
+    ctx.vars
+        .insert(0x5F, (u32::from(tile.m1) << 8) | u32::from(tile.m3 & 0x1F));
+    ctx
 }
 
 /// Catálogo vacío (solo `NewGRF`).
@@ -605,5 +679,25 @@ mod tests {
         }];
         assert_eq!(resolve_house_draw_id(NEW_HOUSE_OFFSET, &catalog), 7);
         assert_eq!(resolve_house_draw_id(200, &[]), 200 % NEW_HOUSE_OFFSET);
+    }
+
+    #[test]
+    fn house_action2_context_matches_persisted_scope_fields() {
+        let mut tile = Tile::completed_house(7, 19, 0);
+        tile.m1 = 0xAB; // GetHouseRandomBits
+        tile.m3 = 0x95; // completed + waiting randomisation triggers
+        tile.m3hi = 4; // animation frame in the local map representation
+        let ctx = action2_eval_ctx_for_house_tile(tile, 5, 2, Climate::Temperate);
+
+        // stage 3 + TileHash2Bit(5,2)=2 in bits 2..3.
+        assert_eq!(ctx.vars.get(&0x40), Some(&11));
+        assert_eq!(ctx.vars.get(&0x41), Some(&19));
+        assert_eq!(ctx.vars.get(&0x43), Some(&0));
+        assert_eq!(ctx.vars.get(&0x46), Some(&4));
+        assert_eq!(ctx.vars.get(&0x47), Some(&((2 << 16) | 5)));
+        assert_eq!(ctx.random_bits, 0xAB);
+        assert_eq!(ctx.vars.get(&0x5F), Some(&((0xAB << 8) | 0x15)));
+        assert!(!ctx.vars.contains_key(&0x42));
+        assert!(!ctx.vars.contains_key(&0x44));
     }
 }

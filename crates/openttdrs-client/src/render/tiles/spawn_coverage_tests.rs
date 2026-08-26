@@ -8,9 +8,10 @@ use bevy::prelude::*;
 use openttdrs_core::prelude::*;
 use openttdrs_core::{
     Action2VarAdjust, Action2VarEntry, Action2VarTerm, BridgeType, Climate, DecodedSprite,
-    FOUNDATION_ORIGINAL_SPRITE_BASE, IndustryTileGfxId, IndustryTileSpecDef, RailType,
-    RoadTramType, RoadType, StationClassId, StationSpecDef, StationSpecId, TrainSpriteAssign,
-    TrainSpriteGraphics, WaterClass, set_water_class_m1, vanilla_road_type_catalog,
+    FOUNDATION_ORIGINAL_SPRITE_BASE, HouseSpecDef, IndustryTileGfxId, IndustryTileSpecDef,
+    RailType, RoadTramType, RoadType, StationClassId, StationSpecDef, StationSpecId,
+    TrainSpriteAssign, TrainSpriteGraphics, WaterClass, set_water_class_m1,
+    vanilla_road_type_catalog,
 };
 
 const TEST_CLIMATE: Climate = Climate::Temperate;
@@ -1209,7 +1210,10 @@ fn sloped_house_ground_attaches_to_the_last_foundation_parent() {
                         map: &m.0,
                         map_dims: m.0.dimensions(),
                         house_catalog: &[],
+                        climate: openttdrs_core::Climate::Temperate,
+                        newgrf_stack: &[],
                         foundation_newgrf: &[],
+                        house_sprites: None,
                         action5_sprites: None,
                         images: None,
                     },
@@ -1273,7 +1277,10 @@ fn flat_house_ground_stays_in_the_dedicated_ground_pass() {
                         map: &m.0,
                         map_dims: m.0.dimensions(),
                         house_catalog: &[],
+                        climate: openttdrs_core::Climate::Temperate,
+                        newgrf_stack: &[],
                         foundation_newgrf: &[],
+                        house_sprites: None,
                         action5_sprites: None,
                         images: None,
                     },
@@ -1299,6 +1306,126 @@ fn flat_house_ground_stays_in_the_dedicated_ground_pass() {
         ground_depth < building_depth,
         "DrawGroundSprite s1 debe quedar detrás de todos los parents: ground={ground_depth}, building={building_depth}"
     );
+}
+
+#[test]
+fn newgrf_house_building_uses_runtime_action2_view() {
+    let assets = boot_assets_app();
+    let mut map = Map::new_flat(3, 3, 0);
+    let mut house = tile_template();
+    house.kind = TileKind::House;
+    house.m8 = 110;
+    house.m3 = 0x80;
+    house.m5 = 2; // age: Action2 var 0x41 chooses the default (blue) view
+    map.set_tile(TileCoord::new(1, 1), house)
+        .expect("newgrf house tile");
+
+    let solid = |r: u8, g: u8, b: u8| DecodedSprite {
+        width: 2,
+        height: 2,
+        x_offs: -4,
+        y_offs: -8,
+        rgba: vec![r, g, b, 255, r, g, b, 255, r, g, b, 255, r, g, b, 255],
+        mask: Vec::new(),
+    };
+    let red = solid(255, 0, 0);
+    let blue = solid(0, 0, 255);
+    let mut runtime = TrainSpriteGraphics {
+        sets: vec![vec![red.clone()], vec![blue.clone()]],
+        assigns: vec![TrainSpriteAssign {
+            local_id: 3,
+            set_id: 4,
+        }],
+        ..Default::default()
+    };
+    runtime.action2_var.insert(
+        4,
+        Action2VarEntry {
+            first: Action2VarTerm {
+                variable: 0x41,
+                param: None,
+                adjust: Action2VarAdjust {
+                    and_mask: 0xFF,
+                    ..Default::default()
+                },
+            },
+            ops: Vec::new(),
+            ranges: vec![(7, 1, 1)],
+            default: 8,
+        },
+    );
+    runtime.action2_to_action1.insert(7, 0);
+    runtime.action2_to_action1.insert(8, 1);
+    let house_def = HouseSpecDef {
+        id: 110,
+        local_id: 3,
+        subst_id: 0,
+        building_flags: openttdrs_core::house_spec::BUILDING_FLAG_SIZE_1X1,
+        min_year: 0,
+        max_year: 5000,
+        population: 1,
+        mail_generation: 1,
+        availability: openttdrs_core::DEFAULT_HOUSE_AVAILABILITY,
+        probability: openttdrs_core::DEFAULT_HOUSE_PROBABILITY,
+        override_id: None,
+        callback_mask: 0,
+        name: "runtime house".into(),
+        from_newgrf: true,
+        grfid: 0,
+        newgrf_views: vec![red, blue],
+        newgrf_local_id: 3,
+        newgrf_runtime: Some(Box::new(runtime)),
+    };
+    let grid = RenderGrid::from_map(&map, 3, 3);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world.insert_resource(crate::render::NewGrfHouseSpriteCache::default());
+    world.insert_resource(Assets::<Image>::default());
+    world
+        .run_system_once(
+            move |mut commands: Commands,
+                  m: Res<TsMap>,
+                  g: Res<TsGrid>,
+                  a: Res<TsAssets>,
+                  mut cache: ResMut<crate::render::NewGrfHouseSpriteCache>,
+                  mut images: ResMut<Assets<Image>>| {
+                spawn_house_tile(
+                    &mut commands,
+                    &a.0,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    HouseSpawnResources {
+                        map: &m.0,
+                        map_dims: m.0.dimensions(),
+                        house_catalog: std::slice::from_ref(&house_def),
+                        climate: TEST_CLIMATE,
+                        newgrf_stack: &[],
+                        foundation_newgrf: &[],
+                        house_sprites: Some(&mut cache),
+                        action5_sprites: None,
+                        images: Some(&mut images),
+                    },
+                );
+            },
+        )
+        .expect("newgrf house spawn");
+
+    let (sprite, parent) = world
+        .query::<(&Sprite, &ViewportSortableParent)>()
+        .iter(&world)
+        .find(|(_, parent)| parent.sprite_id == 110)
+        .expect("runtime NewGRF house parent");
+    let image = world
+        .resource::<Assets<Image>>()
+        .get(&sprite.image)
+        .expect("runtime house image");
+    assert_eq!(
+        image.data.as_deref().and_then(|rgba| rgba.get(2)),
+        Some(&255)
+    );
+    assert_eq!(parent.bounds.xmin, 12);
+    assert_eq!(parent.bounds.ymin, 8);
 }
 
 #[test]
@@ -2257,7 +2384,10 @@ fn spawn_land_house_industry_generics_and_batches() {
                         map: &m.0,
                         map_dims: (mw, mh),
                         house_catalog: &[],
+                        climate: openttdrs_core::Climate::Temperate,
+                        newgrf_stack: &[],
                         foundation_newgrf: &[],
+                        house_sprites: None,
                         action5_sprites: None,
                         images: None,
                     },

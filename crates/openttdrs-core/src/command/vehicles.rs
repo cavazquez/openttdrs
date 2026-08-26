@@ -398,12 +398,8 @@ pub(crate) fn spawn_newgrf_articulated_parts(
         else {
             break;
         };
-        let Some(local_id) = u8::try_from(local_id).ok() else {
-            // Action2 can encode 14-bit local ids in GRF v8+, while the
-            // current EngineDef/Action3 catalog still indexes local ids as
-            // bytes.  Stop this chain rather than attaching a wrong engine.
-            break;
-        };
+        // El valor puede ser un WORD (GRF v8+); el catálogo conserva la misma
+        // anchura para que no se confunda con el sentinel `0xFF`.
         let Some(part_engine) = state
             .engine_catalog
             .iter()

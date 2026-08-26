@@ -39,14 +39,23 @@ fn push_feature_vehicles(
         };
         let mut ctx = crate::newgrf_sprites::Action2EvalCtx::default();
         let views = gfx
-            .views_for_local_id_cargo_ctx(meta.local_id, meta.cargo, &mut ctx)
+            .views_for_local_id_cargo_u16_ctx(meta.local_id, meta.cargo, &mut ctx)
             .map(<[crate::newgrf_sprites::DecodedSprite]>::to_vec)
             .unwrap_or_default();
         let has_cargo_groups = gfx
             .specific_assigns
             .keys()
+            .any(|(local_id, _)| u16::from(*local_id) == meta.local_id);
+        let has_cargo_groups = has_cargo_groups
+            || gfx
+                .extended_specific_assigns
+                .keys()
+                .any(|(local_id, _)| *local_id == meta.local_id);
+        let has_extended_id = gfx
+            .extended_assigns
+            .iter()
             .any(|(local_id, _)| *local_id == meta.local_id);
-        let newgrf_runtime = if gfx.needs_runtime_resolve() || has_cargo_groups {
+        let newgrf_runtime = if gfx.needs_runtime_resolve() || has_cargo_groups || has_extended_id {
             Some(Box::new(gfx.clone()))
         } else {
             None
@@ -131,10 +140,11 @@ pub fn apply_newgrf_vehicles_trains(state: &mut GameState, search_dirs: &[&Path]
             };
             let local_id = meta.local_id;
             let views = gfx
-                .views_for_local_id(local_id)
+                .views_for_local_id_u16(local_id)
                 .map(<[crate::newgrf_sprites::DecodedSprite]>::to_vec)
                 .unwrap_or_default();
-            let newgrf_runtime = if gfx.needs_runtime_resolve() {
+            let has_extended_id = gfx.extended_assigns.iter().any(|(id, _)| *id == local_id);
+            let newgrf_runtime = if gfx.needs_runtime_resolve() || has_extended_id {
                 Some(Box::new(gfx.clone()))
             } else {
                 None

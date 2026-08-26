@@ -201,7 +201,7 @@ pub struct ParsedStationMeta {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParsedTrainMeta {
     /// Primer id local definido por el bloque Action0.
-    pub local_id: u8,
+    pub local_id: u16,
     pub name: String,
     pub intro_year: u16,
     pub max_speed: u16,
@@ -241,7 +241,7 @@ pub struct ParsedTrainMeta {
 /// su ancho de `OpenTTD` 15.3, pero no se anuncian como aplicados.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParsedVehicleMeta {
-    pub local_id: u8,
+    pub local_id: u16,
     pub kind: VehicleKind,
     pub name: String,
     pub intro_year: u16,
@@ -273,7 +273,7 @@ pub struct ParsedVehicleMeta {
 }
 
 impl ParsedVehicleMeta {
-    fn defaults(feature: u8, local_id: u8) -> Option<Self> {
+    fn defaults(feature: u8, local_id: u16) -> Option<Self> {
         let (kind, name, speed, price, running, capacity, cargo, power, weight, life) =
             match feature {
                 ACTION0_FEATURE_ROAD_VEHICLES => (
@@ -2952,7 +2952,8 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
     if payload.len() < 5 {
         return None;
     }
-    let mut i = 5usize;
+    let mut i = 4usize;
+    let local_id = read_extended_byte(payload, &mut i)?;
     let mut name = String::new();
     let mut intro_year = 1920u16;
     let mut max_speed = 96u16;
@@ -3148,7 +3149,7 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
         name = "NewGRF Train".into();
     }
     Some(ParsedTrainMeta {
-        local_id: payload[4],
+        local_id,
         name,
         intro_year,
         max_speed,
@@ -3205,6 +3206,18 @@ fn read_u8(payload: &[u8], i: &mut usize) -> Option<u8> {
     let value = *payload.get(*i)?;
     *i += 1;
     Some(value)
+}
+
+/// Lee un `ExtendedByte` del wire format `NewGRF` (BYTE, o WORD LE cuando el
+/// byte sentinela es `0xFF`).  Action0 y Action3 usan esta codificación para
+/// identificar entidades; no debe confundirse con los bytes de propiedades.
+fn read_extended_byte(payload: &[u8], i: &mut usize) -> Option<u16> {
+    let value = u16::from(read_u8(payload, i)?);
+    if value == 0xFF {
+        read_u16(payload, i)
+    } else {
+        Some(value)
+    }
 }
 
 fn read_u16(payload: &[u8], i: &mut usize) -> Option<u16> {
@@ -3538,11 +3551,13 @@ pub fn parse_action0_vehicle_metas(payload: &[u8]) -> Option<Vec<ParsedVehicleMe
     {
         return None;
     }
-    let first_id = payload[4];
+    let mut i = 4usize;
+    let first_id = read_extended_byte(payload, &mut i)?;
     let mut metas = (0..header.num_ids)
-        .map(|offset| ParsedVehicleMeta::defaults(header.feature, first_id.wrapping_add(offset)))
+        .map(|offset| {
+            ParsedVehicleMeta::defaults(header.feature, first_id.saturating_add(u16::from(offset)))
+        })
         .collect::<Option<Vec<_>>>()?;
-    let mut i = 5usize;
     for _ in 0..header.num_props {
         let prop = read_u8(payload, &mut i)?;
         if parse_common_vehicle_property(prop, payload, &mut i, &mut metas)? {

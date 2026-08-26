@@ -100,8 +100,13 @@ pub fn resolve_vehicle_callback(
         return CALLBACK_FAILED;
     };
     let mut ctx = action2_eval_ctx_from_vehicle(vehicle);
-    let result =
-        runtime.resolve_callback_ctx(engine.newgrf_local_id, callback, param1, param2, &mut ctx);
+    let result = runtime.resolve_callback_ctx_u16(
+        engine.newgrf_local_id,
+        callback,
+        param1,
+        param2,
+        &mut ctx,
+    );
     writeback_vehicle_persistent_registers(vehicle, &ctx);
     result
 }
@@ -1727,6 +1732,18 @@ mod tests {
             TileCoord::new(1, 1),
             TileCoord::new(1, 1),
         );
+        assert_eq!(
+            resolve_vehicle_articulated_part_callback(&engine, &mut vehicle, 1, 8),
+            Some(VehicleArticulatedPart {
+                local_id: 2,
+                mirrored: false,
+            })
+        );
+        let mut extended_runtime = gfx_callback_literal(2);
+        extended_runtime.assigns.clear();
+        extended_runtime.extended_assigns.push((1234, 2));
+        engine.newgrf_local_id = 1234;
+        engine.newgrf_runtime = Some(Box::new(extended_runtime));
         assert_eq!(
             resolve_vehicle_articulated_part_callback(&engine, &mut vehicle, 1, 8),
             Some(VehicleArticulatedPart {

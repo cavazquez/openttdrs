@@ -125,8 +125,12 @@ pub struct EngineDef {
     #[serde(default, skip)]
     pub newgrf_views: Vec<crate::newgrf_sprites::DecodedSprite>,
     /// Id local Action3 en el GRF (para re-resolver Action2 en runtime).
+    ///
+    /// `OpenTTD` lee este campo como *extended byte*: los IDs `0x00..=0xFE`
+    /// ocupan un byte y `0xFF` introduce un WORD.  Mantenerlo en `u16` evita
+    /// truncar los motores que sólo aparecen como destino de CB16.
     #[serde(default, skip)]
-    pub newgrf_local_id: u8,
+    pub newgrf_local_id: u16,
     /// Graphics completas si hace falta re-resolver random/advanced al dibujar.
     #[serde(default, skip)]
     pub newgrf_runtime: Option<Box<crate::newgrf_sprites::TrainSpriteGraphics>>,
@@ -166,7 +170,7 @@ impl EngineDef {
         ctx: &mut crate::newgrf_sprites::Action2EvalCtx,
     ) -> Option<crate::newgrf_sprites::DecodedSprite> {
         let runtime = self.newgrf_runtime.as_ref()?;
-        let views = runtime.views_for_local_id_ctx(self.newgrf_local_id, ctx)?;
+        let views = runtime.views_for_local_id_u16_ctx(self.newgrf_local_id, ctx)?;
         if views.is_empty() {
             return None;
         }

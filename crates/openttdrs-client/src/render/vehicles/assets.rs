@@ -202,9 +202,11 @@ impl NewGrfTrainSpriteCache {
             stack_ctx
                 .vars
                 .insert(0x10, u32::try_from(stack).unwrap_or(0) << 8);
-            let Some(views) =
-                runtime.views_for_local_id_cargo_ctx(engine.newgrf_local_id, cargo, &mut stack_ctx)
-            else {
+            let Some(views) = runtime.views_for_local_id_cargo_u16_ctx(
+                engine.newgrf_local_id,
+                cargo,
+                &mut stack_ctx,
+            ) else {
                 break;
             };
             if views.is_empty() {

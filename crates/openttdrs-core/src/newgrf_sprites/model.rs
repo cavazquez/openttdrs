@@ -201,10 +201,16 @@ pub struct TrainSpriteGraphics {
     /// `sets[set_id][view]` — sets Action1 en orden de aparición.
     pub sets: Vec<Vec<DecodedSprite>>,
     pub assigns: Vec<TrainSpriteAssign>,
+    /// Asignaciones Action3 cuyo id local usa `ExtendedByte` (WORD).
+    /// Los IDs byte permanecen en [`Self::assigns`] para no romper features
+    /// que históricamente sólo admitían 255 entradas.
+    pub extended_assigns: Vec<(u16, u16)>,
     /// Action3 específico: `(id local, cargo/sprite-type)` → set Action2.
     ///
     /// Para `RailTypes` el segundo byte es `RailSpriteType`; señales usan `11`.
     pub specific_assigns: HashMap<(u8, u8), u16>,
+    /// Equivalente extendido de `specific_assigns` para vehículos.
+    pub extended_specific_assigns: HashMap<(u16, u8), u16>,
     /// Action2 set-id → índice del primer set Action1 "moving" (solo trains).
     pub action2_to_action1: HashMap<u8, u16>,
     /// Action2 real groups with loaded/loading alternatives.
@@ -281,11 +287,29 @@ impl TrainSpriteGraphics {
         ctx: &mut Action2EvalCtx,
         waiting_triggers: u8,
     ) -> (u32, u8) {
+        self.rerandomisation_for_local_id_u16(u16::from(local_id), ctx, waiting_triggers)
+    }
+
+    /// Variante de [`Self::rerandomisation_for_local_id`] para un ID local
+    /// codificado como `ExtendedByte`.
+    #[must_use]
+    pub fn rerandomisation_for_local_id_u16(
+        &self,
+        local_id: u16,
+        ctx: &mut Action2EvalCtx,
+        waiting_triggers: u8,
+    ) -> (u32, u8) {
         let start = self
-            .assigns
+            .extended_assigns
             .iter()
-            .find(|assign| assign.local_id == local_id)
-            .map(|assign| assign.set_id)
+            .find(|(id, _)| *id == local_id)
+            .map(|(_, set_id)| *set_id)
+            .or_else(|| {
+                self.assigns
+                    .iter()
+                    .find(|assign| u16::from(assign.local_id) == local_id)
+                    .map(|assign| assign.set_id)
+            })
             .or_else(|| (!self.sets.is_empty()).then_some(0));
         start.map_or((0, 0), |set_id| {
             self.rerandomisation_for_action2(set_id, ctx, waiting_triggers, 0)
@@ -337,7 +361,13 @@ impl TrainSpriteGraphics {
     /// Todas las vistas del set asignado al id local (ctx por defecto).
     #[must_use]
     pub fn views_for_local_id(&self, local_id: u8) -> Option<&[DecodedSprite]> {
-        self.views_for_local_id_ctx(local_id, &mut Action2EvalCtx::default())
+        self.views_for_local_id_u16(u16::from(local_id))
+    }
+
+    /// Todas las vistas para un ID local codificado como `ExtendedByte`.
+    #[must_use]
+    pub fn views_for_local_id_u16(&self, local_id: u16) -> Option<&[DecodedSprite]> {
+        self.views_for_local_id_u16_ctx(local_id, &mut Action2EvalCtx::default())
     }
 
     /// Vistas resolviendo Action2 con contexto (random/consist/advanced).
@@ -346,11 +376,26 @@ impl TrainSpriteGraphics {
         local_id: u8,
         ctx: &mut Action2EvalCtx,
     ) -> Option<&[DecodedSprite]> {
+        self.views_for_local_id_u16_ctx(u16::from(local_id), ctx)
+    }
+
+    /// Vistas resolviendo Action2 para un ID local extendido.
+    pub fn views_for_local_id_u16_ctx(
+        &self,
+        local_id: u16,
+        ctx: &mut Action2EvalCtx,
+    ) -> Option<&[DecodedSprite]> {
         let set_id = self
-            .assigns
+            .extended_assigns
             .iter()
-            .find(|a| a.local_id == local_id)
-            .map(|a| a.set_id)
+            .find(|(id, _)| *id == local_id)
+            .map(|(_, set_id)| *set_id)
+            .or_else(|| {
+                self.assigns
+                    .iter()
+                    .find(|a| u16::from(a.local_id) == local_id)
+                    .map(|a| a.set_id)
+            })
             .or_else(|| (!self.sets.is_empty()).then_some(0))?;
         let action1_idx = self.resolve_action1_set_ctx(set_id, ctx);
         self.sets
@@ -366,7 +411,25 @@ impl TrainSpriteGraphics {
         selector: u8,
         ctx: &mut Action2EvalCtx,
     ) -> Option<&[DecodedSprite]> {
-        let set_id = *self.specific_assigns.get(&(local_id, selector))?;
+        self.views_for_specific_u16_ctx(u16::from(local_id), selector, ctx)
+    }
+
+    /// Vistas del grupo Action3 específico para un ID local extendido.
+    pub fn views_for_specific_u16_ctx(
+        &self,
+        local_id: u16,
+        selector: u8,
+        ctx: &mut Action2EvalCtx,
+    ) -> Option<&[DecodedSprite]> {
+        let set_id = self
+            .extended_specific_assigns
+            .get(&(local_id, selector))
+            .copied()
+            .or_else(|| {
+                u8::try_from(local_id)
+                    .ok()
+                    .and_then(|id| self.specific_assigns.get(&(id, selector)).copied())
+            })?;
         let action1_idx = self.resolve_action1_set_ctx(set_id, ctx);
         self.sets
             .get(usize::from(action1_idx))
@@ -383,18 +446,37 @@ impl TrainSpriteGraphics {
         cargo: Option<crate::cargo::CargoType>,
         ctx: &mut Action2EvalCtx,
     ) -> Option<&[DecodedSprite]> {
+        self.views_for_local_id_cargo_u16_ctx(u16::from(local_id), cargo, ctx)
+    }
+
+    /// Grupo específico de cargo para un ID local extendido.
+    pub fn views_for_local_id_cargo_u16_ctx(
+        &self,
+        local_id: u16,
+        cargo: Option<crate::cargo::CargoType>,
+        ctx: &mut Action2EvalCtx,
+    ) -> Option<&[DecodedSprite]> {
         if let Some(selector) = cargo.map(crate::cargo::CargoType::temperate_id)
-            && self.has_specific_assignment(local_id, selector)
+            && self.has_specific_assignment_u16(local_id, selector)
         {
-            return self.views_for_specific_ctx(local_id, selector, ctx);
+            return self.views_for_specific_u16_ctx(local_id, selector, ctx);
         }
-        self.views_for_local_id_ctx(local_id, ctx)
+        self.views_for_local_id_u16_ctx(local_id, ctx)
     }
 
     /// ¿Action3 asignó este grupo específico al id local?
     #[must_use]
     pub fn has_specific_assignment(&self, local_id: u8, selector: u8) -> bool {
-        self.specific_assigns.contains_key(&(local_id, selector))
+        self.has_specific_assignment_u16(u16::from(local_id), selector)
+    }
+
+    /// ¿Action3 asignó un grupo específico a un ID local extendido?
+    #[must_use]
+    pub fn has_specific_assignment_u16(&self, local_id: u16, selector: u8) -> bool {
+        self.extended_specific_assigns
+            .contains_key(&(local_id, selector))
+            || u8::try_from(local_id)
+                .is_ok_and(|id| self.specific_assigns.contains_key(&(id, selector)))
     }
 
     /// ¿Necesita re-resolución en runtime (random o cualquier variational)?
@@ -410,8 +492,20 @@ impl TrainSpriteGraphics {
     /// Inserta `0x0C`/`0x10`/`0x18` en el contexto (como `ResolverObject` upstream).
     #[must_use]
     pub fn resolve_callback(&self, local_id: u8, callback: u16, param1: u32, param2: u32) -> u16 {
+        self.resolve_callback_u16(u16::from(local_id), callback, param1, param2)
+    }
+
+    /// Resuelve un callback para un ID local codificado como `ExtendedByte`.
+    #[must_use]
+    pub fn resolve_callback_u16(
+        &self,
+        local_id: u16,
+        callback: u16,
+        param1: u32,
+        param2: u32,
+    ) -> u16 {
         let mut ctx = Action2EvalCtx::default();
-        self.resolve_callback_ctx(local_id, callback, param1, param2, &mut ctx)
+        self.resolve_callback_ctx_u16(local_id, callback, param1, param2, &mut ctx)
     }
 
     /// Como [`Self::resolve_callback`], pero reutiliza/muta `ctx` (regs persistentes, etc.).
@@ -425,11 +519,29 @@ impl TrainSpriteGraphics {
         param2: u32,
         ctx: &mut Action2EvalCtx,
     ) -> u16 {
+        self.resolve_callback_ctx_u16(u16::from(local_id), callback, param1, param2, ctx)
+    }
+
+    /// Como [`Self::resolve_callback_ctx`] para IDs locales extendidos.
+    pub fn resolve_callback_ctx_u16(
+        &self,
+        local_id: u16,
+        callback: u16,
+        param1: u32,
+        param2: u32,
+        ctx: &mut Action2EvalCtx,
+    ) -> u16 {
         let set_id = self
-            .assigns
+            .extended_assigns
             .iter()
-            .find(|a| a.local_id == local_id)
-            .map(|a| a.set_id)
+            .find(|(id, _)| *id == local_id)
+            .map(|(_, set_id)| *set_id)
+            .or_else(|| {
+                self.assigns
+                    .iter()
+                    .find(|a| u16::from(a.local_id) == local_id)
+                    .map(|a| a.set_id)
+            })
             .or_else(|| (!self.sets.is_empty()).then_some(0));
         let Some(set_id) = set_id else {
             return CALLBACK_FAILED;

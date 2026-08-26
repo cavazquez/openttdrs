@@ -289,7 +289,24 @@ fn parse_action2_real(payload: &[u8], feature: u8) -> Option<(u8, super::model::
     Some((set_id, super::model::Action2RealEntry { loaded, loading }))
 }
 
-type ParsedAction3 = (Vec<TrainSpriteAssign>, Vec<((u8, u8), u16)>);
+type ParsedAction3 = (
+    Vec<TrainSpriteAssign>,
+    Vec<((u8, u8), u16)>,
+    Vec<(u16, u16)>,
+    Vec<((u16, u8), u16)>,
+);
+
+fn read_extended_byte(payload: &[u8], i: &mut usize) -> Option<u16> {
+    let value = u16::from(*payload.get(*i)?);
+    *i += 1;
+    if value == 0xFF {
+        let bytes = payload.get(*i..i.checked_add(2)?)?;
+        *i += 2;
+        Some(u16::from_le_bytes([bytes[0], bytes[1]]))
+    } else {
+        Some(value)
+    }
+}
 
 pub(super) fn parse_action3_feature(payload: &[u8], feature: u8) -> Option<ParsedAction3> {
     // 03 <feature> <n-id> <ids…> <num-cid> [cargo…] <default:u16>
@@ -299,41 +316,54 @@ pub(super) fn parse_action3_feature(payload: &[u8], feature: u8) -> Option<Parse
     if payload[1] != feature {
         return None;
     }
-    let n_id = payload[2];
+    // Bit 7 marks a wagon-override definition.  The override chain still
+    // uses the same extended-byte IDs; the runtime currently records the
+    // mapping and leaves override precedence to the existing catalog path.
+    let n_id = payload[2] & 0x7F;
     if n_id == 0 {
         return None;
     }
-    let ids_end = 3 + usize::from(n_id);
-    if payload.len() < ids_end + 1 + 2 {
-        return None;
+    let mut i = 3usize;
+    let mut ids = Vec::with_capacity(usize::from(n_id));
+    for _ in 0..n_id {
+        ids.push(read_extended_byte(payload, &mut i)?);
     }
-    let ids = &payload[3..ids_end];
-    let num_cid = payload[ids_end];
-    let mut i = ids_end + 1;
+    let num_cid = *payload.get(i)?;
+    i += 1;
     let mut specific = Vec::with_capacity(usize::from(num_cid) * ids.len());
+    let mut extended_specific = Vec::new();
     for _ in 0..num_cid {
-        if i + 3 > payload.len() {
-            return None;
-        }
-        let selector = payload[i];
-        let set_id = u16::from_le_bytes([payload[i + 1], payload[i + 2]]);
-        for &local_id in ids {
-            specific.push(((local_id, selector), set_id));
+        let selector = *payload.get(i)?;
+        let set_bytes = payload.get(i + 1..i.checked_add(3)?)?;
+        let set_id = u16::from_le_bytes([set_bytes[0], set_bytes[1]]);
+        for &local_id in &ids {
+            if let Ok(byte_id) = u8::try_from(local_id)
+                && byte_id != u8::MAX
+            {
+                specific.push(((byte_id, selector), set_id));
+            } else {
+                extended_specific.push(((local_id, selector), set_id));
+            }
         }
         i += 3;
     }
-    if i + 2 > payload.len() {
-        return None;
+    let default_bytes = payload.get(i..i.checked_add(2)?)?;
+    let default_set = u16::from_le_bytes([default_bytes[0], default_bytes[1]]);
+    let mut defaults = Vec::new();
+    let mut extended = Vec::new();
+    for local_id in ids {
+        if let Ok(byte_id) = u8::try_from(local_id)
+            && byte_id != u8::MAX
+        {
+            defaults.push(TrainSpriteAssign {
+                local_id: byte_id,
+                set_id: default_set,
+            });
+        } else {
+            extended.push((local_id, default_set));
+        }
     }
-    let default_set = u16::from_le_bytes([payload[i], payload[i + 1]]);
-    let defaults = ids
-        .iter()
-        .map(|&local_id| TrainSpriteAssign {
-            local_id,
-            set_id: default_set,
-        })
-        .collect();
-    Some((defaults, specific))
+    Some((defaults, specific, extended, extended_specific))
 }
 
 /// Índice sprite section v2: `id` → lista `(info, body)` (body = tras el BYTE info).
@@ -409,9 +439,13 @@ pub fn collect_feature_sprite_graphics(
                 && let Some((a2_id, rnd)) = parse_action2_random(payload, feature)
             {
                 out.action2_random.insert(a2_id, rnd);
-            } else if let Some((assigns, specific)) = parse_action3_feature(payload, feature) {
+            } else if let Some((assigns, specific, extended, extended_specific)) =
+                parse_action3_feature(payload, feature)
+            {
                 out.assigns.extend(assigns);
                 out.specific_assigns.extend(specific);
+                out.extended_assigns.extend(extended);
+                out.extended_specific_assigns.extend(extended_specific);
             }
         }
         GrfEntry::Real { info, payload } => {
@@ -588,6 +622,8 @@ pub fn collect_cargo_sprite_graphics(data: &[u8]) -> Result<TrainSpriteGraphics,
 
 #[cfg(test)]
 mod tests {
+    use crate::newgrf_sprites::Action2EvalCtx;
+
     use super::*;
 
     #[test]
@@ -599,5 +635,56 @@ mod tests {
         };
         assert_eq!(group.loaded, vec![10, 11]);
         assert_eq!(group.loading, vec![12]);
+    }
+
+    #[test]
+    fn parse_action3_accepts_extended_vehicle_local_id() {
+        // 03 <trains> <1 id> <extended 1234> <1 cargo> <passengers> <default>
+        let payload = [
+            0x03,
+            ACTION0_FEATURE_TRAINS,
+            1,
+            0xFF,
+            0xD2,
+            0x04,
+            1,
+            0,
+            2,
+            0,
+            2,
+            0,
+        ];
+        let Some((assigns, specific, extended, extended_specific)) =
+            parse_action3_feature(&payload, ACTION0_FEATURE_TRAINS)
+        else {
+            panic!("extended Action3 mapping should parse");
+        };
+        assert!(assigns.is_empty());
+        assert!(specific.is_empty());
+        assert_eq!(extended, vec![(1234, 2)]);
+        assert_eq!(extended_specific, vec![((1234, 0), 2)]);
+
+        let mut gfx = TrainSpriteGraphics {
+            sets: vec![
+                vec![],
+                vec![],
+                vec![DecodedSprite {
+                    width: 1,
+                    height: 1,
+                    x_offs: 0,
+                    y_offs: 0,
+                    rgba: vec![255, 255, 255, 255],
+                    mask: Vec::new(),
+                }],
+            ],
+            ..TrainSpriteGraphics::default()
+        };
+        gfx.extended_assigns = extended;
+        gfx.extended_specific_assigns = extended_specific.into_iter().collect();
+        assert!(gfx.views_for_local_id_u16(1234).is_some());
+        assert!(
+            gfx.views_for_specific_u16_ctx(1234, 0, &mut Action2EvalCtx::default())
+                .is_some()
+        );
     }
 }

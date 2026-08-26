@@ -472,7 +472,10 @@ truncadas / labels inválidos → `GameState.runtime.newgrf_diagnostics` y
 Los features `00`–`03` comparten el grafo Action1 → Action2 → Action3. El
 selector de cargo se consulta primero y cae al grupo default si no existe. El
 renderer hace esta selección para trenes, vehículos de carretera, barcos y
-aviones; cambiar/refitear la carga cambia también el grupo seleccionado.
+aviones; cambiar/refitear la carga cambia también el grupo seleccionado. La
+lista de IDs de Action0/Action3 se lee como `ExtendedByte`: los valores
+`0x00..=0xFE` siguen el camino byte histórico y `0xFF + WORD` conserva los
+motores locales extendidos hasta 14 bits en el catálogo y sus callbacks.
 
 ## Action5
 

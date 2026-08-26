@@ -1903,7 +1903,7 @@ mod tests {
             apply_newgrf_vehicles_trains(&mut state, &[&dir]);
             let eng = state.engine_catalog.iter().find(|e| e.from_newgrf).unwrap();
             assert_eq!(eng.kind, expected_kind);
-            assert_eq!(eng.newgrf_local_id, action0[4]);
+            assert_eq!(eng.newgrf_local_id, u16::from(action0[4]));
             assert!(
                 crate::engine::engines_for_depot_kind_in(
                     &state.engine_catalog,
@@ -2029,6 +2029,57 @@ mod tests {
             parse_action0_vehicle_metas(&ship).unwrap()[0].visual_effect,
             0x40
         );
+    }
+
+    #[test]
+    fn vehicle_action0_reads_extended_first_local_id() {
+        let road = [
+            0x00,
+            ACTION0_FEATURE_ROAD_VEHICLES,
+            0x02,
+            0x01,
+            0xFF,
+            0xD2,
+            0x04,
+            0x09,
+            100,
+            0x0F,
+            40,
+            0,
+        ];
+        let metas = parse_action0_vehicle_metas(&road).expect("extended Action0 should parse");
+        assert_eq!(metas.len(), 1);
+        assert_eq!(metas[0].local_id, 1234);
+        assert_eq!(metas[0].capacity, 40);
+    }
+
+    #[test]
+    fn extended_vehicle_local_id_survives_catalog_application() {
+        let action0 = [
+            0x00,
+            ACTION0_FEATURE_ROAD_VEHICLES,
+            0x00,
+            0x01,
+            0xFF,
+            0xD2,
+            0x04,
+        ];
+        let filename = "vehicle-extended.grf";
+        let bytes =
+            build_grf_v2_with_action0_and_action8(&action0, *b"EXID", "extended vehicle", "");
+        let dir = tempfile_dir_with(filename, &bytes);
+        let mut state = GameState::new(4, 4);
+        state.newgrf_stack.push(crate::NewGrfEntry::new(
+            filename,
+            u32::from_be_bytes(*b"EXID"),
+        ));
+        apply_newgrf_vehicles_trains(&mut state, &[&dir]);
+        let engine = state
+            .engine_catalog
+            .iter()
+            .find(|candidate| candidate.from_newgrf)
+            .expect("extended vehicle should enter catalog");
+        assert_eq!(engine.newgrf_local_id, 1234);
     }
 
     #[test]

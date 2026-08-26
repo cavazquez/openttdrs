@@ -1095,32 +1095,52 @@ pub(crate) fn spawn_road_tile(
                         tram_half_h,
                     )
                 };
-                commands.spawn((
-                    MapVisualLayer,
-                    ctx.map_tile_chunk(),
-                    Sprite {
-                        image: handle,
-                        color: Color::WHITE,
-                        ..default()
-                    },
-                    Transform::from_translation(pos3),
-                ));
+                let sprite = Sprite {
+                    image: handle,
+                    color: Color::WHITE,
+                    ..default()
+                };
+                if let Some(parent) = foundation_child_parent {
+                    // El overlay de tranvía sigue a `DrawFoundation` igual que
+                    // el asfalto: una vista NewGRF no puede quedar como parent
+                    // independiente en una pendiente.
+                    spawn_foundation_child_sprite_at(commands, sprite, ctx, pos3, mw, parent);
+                } else {
+                    commands.spawn((
+                        MapVisualLayer,
+                        ctx.map_tile_chunk(),
+                        sprite,
+                        Transform::from_translation(pos3),
+                    ));
+                }
                 used_tram_newgrf = true;
             }
         }
         if !used_tram_newgrf {
-            commands.spawn((
-                MapVisualLayer,
-                ctx.map_tile_chunk(),
-                assets.tram_flat[tfi].sprite(),
-                Transform::from_translation(tile_pos_half(
-                    ctx.tx_i32(),
-                    ctx.ty_i32(),
-                    base_z,
-                    TRAM_OVERLAY_LAYER_FRAC,
-                    tram_half_h,
-                )),
-            ));
+            let position = tile_pos_half(
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+                base_z,
+                TRAM_OVERLAY_LAYER_FRAC,
+                tram_half_h,
+            );
+            if let Some(parent) = foundation_child_parent {
+                spawn_foundation_child_sprite_at(
+                    commands,
+                    assets.tram_flat[tfi].sprite(),
+                    ctx,
+                    position,
+                    mw,
+                    parent,
+                );
+            } else {
+                commands.spawn((
+                    MapVisualLayer,
+                    ctx.map_tile_chunk(),
+                    assets.tram_flat[tfi].sprite(),
+                    Transform::from_translation(position),
+                ));
+            }
         }
     }
 

@@ -56,11 +56,13 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
   smoke de entidades.
 - Composición #326: el bloque publicado de puentes enlaza cabezas de rampa,
   barandillas de vano y pilares al sorter global cuando hay sprite; el vínculo
-  usa la misma caja de mundo que `world-draw`. No cubre todavía
-  overlays NewGRF de carretera ni la mitad frontal de `DrawBridgeRoadBits`,
-  vehículos ni todas las familias NewGRF; cables y postes de catenaria ya
-  participan como parents `sortable` con esa misma caja, y los overlays
-  Action5/PBS/tranvía como children del parent trasero combinado.
+  usa la misma caja de mundo que `world-draw`. Los overlays de carretera y
+  tranvía, incluidos los reemplazos NewGRF, también se cuelgan del parent de
+  fundación cuando existe. Sigue pendiente la mitad frontal de
+  `DrawBridgeRoadBits`, los layouts/children NewGRF de estación/objeto/industria
+  y el sprite-stack; cables y postes de catenaria ya participan como parents
+  `sortable` con esa misma caja, y los overlays Action5/PBS/tranvía como
+  children del parent trasero combinado.
 - Vehículos: cada cuerpo y unidad de consist recibe la caja `Vehicle::bounds`
   equivalente (tren diagonal según `unit_length`, orientación de barco y fase
   de aeronave), clave estable de `ViewportAddVehicles` y profundidad fuente;

@@ -7,7 +7,8 @@ use bevy::image::ImagePlugin;
 use bevy::prelude::*;
 use openttdrs_core::prelude::*;
 use openttdrs_core::{
-    BridgeType, Climate, FOUNDATION_ORIGINAL_SPRITE_BASE, RailType, WaterClass, set_water_class_m1,
+    BridgeType, Climate, FOUNDATION_ORIGINAL_SPRITE_BASE, RailType, RoadTramType, RoadType,
+    WaterClass, set_water_class_m1, vanilla_road_type_catalog,
 };
 
 const TEST_CLIMATE: Climate = Climate::Temperate;
@@ -1541,6 +1542,101 @@ fn sloped_road_ground_attaches_to_its_foundation_parent() {
         "el asfalto posterior debe seguir al último parent de la fundación"
     );
     assert_eq!(attached[0].0.source_depth, attached[0].1.translation.z);
+}
+
+#[test]
+fn sloped_newgrf_tram_overlay_attaches_to_its_foundation_parent() {
+    let assets = boot_assets_app();
+    let mut map = fresh_map8();
+    let c = |x: i32, y: i32| TileCoord::new(x, y);
+    let mut road = tile_template();
+    road.kind = TileKind::Road;
+    road.mapt = 0x20;
+    road.m5 = 0x0F;
+    road.m3 = 0x05;
+    road = openttdrs_core::set_tram_road_type_on_tile(road, Some(RoadType::from_u8(2)));
+    map.set_tile(c(1, 1), road)
+        .expect("tranvía NewGRF inclinado");
+    for corner in [c(2, 1), c(1, 2), c(2, 2)] {
+        map.set_height(corner, 1)
+            .expect("esquina elevada de la carretera");
+    }
+
+    let mut tram = vanilla_road_type_catalog()
+        .into_iter()
+        .find(|def| def.id == RoadType::TRAM)
+        .expect("tipo tranvía vanilla");
+    tram.id = RoadType::from_u8(2);
+    tram.class = RoadTramType::Tram;
+    tram.from_newgrf = true;
+    tram.from_tramtypes_feature = true;
+    tram.newgrf_views = vec![openttdrs_core::DecodedSprite {
+        width: 8,
+        height: 8,
+        x_offs: 0,
+        y_offs: 0,
+        rgba: vec![255; 8 * 8 * 4],
+        mask: Vec::new(),
+    }];
+    let road_catalog = vec![tram];
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world
+        .run_system_once(
+            move |mut commands: Commands,
+                  m: Res<TsMap>,
+                  g: Res<TsGrid>,
+                  a: Res<TsAssets>,
+                  mut cache: Local<crate::render::NewGrfRoadSpriteCache>,
+                  mut images: Local<Assets<Image>>| {
+                spawn_road_tile(
+                    &mut commands,
+                    &m.0,
+                    8,
+                    8,
+                    &a.0,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    4.0,
+                    TEST_CLIMATE,
+                    false,
+                    false,
+                    &road_catalog,
+                    Some(&mut cache),
+                    Some(&mut images),
+                    &[],
+                    &[],
+                    &[],
+                    None,
+                    &[],
+                    None,
+                );
+            },
+        )
+        .expect("tranvía NewGRF inclinado");
+
+    let foundation_parents: std::collections::HashSet<_> = world
+        .query::<(Entity, &ViewportSortableParent)>()
+        .iter(&world)
+        .filter_map(|(entity, parent)| {
+            (FOUNDATION_ORIGINAL_SPRITE_BASE..=FOUNDATION_ORIGINAL_SPRITE_BASE.saturating_add(14))
+                .contains(&parent.sprite_id)
+                .then_some(entity)
+        })
+        .collect();
+    assert!(!foundation_parents.is_empty());
+    let attached: Vec<_> = world
+        .query::<&ViewportSortableChild>()
+        .iter(&world)
+        .filter(|child| foundation_parents.contains(&child.parent))
+        .collect();
+    assert_eq!(
+        attached.len(),
+        2,
+        "asfalto y overlay NewGRF de tranvía deben seguir al cimiento"
+    );
 }
 
 #[test]

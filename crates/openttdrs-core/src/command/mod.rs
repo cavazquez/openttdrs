@@ -17,7 +17,7 @@ mod transport;
 mod types;
 mod util;
 mod vehicle_fleet;
-mod vehicles;
+pub(crate) mod vehicles;
 
 pub use apply::apply_command;
 pub use error::{CommandError, OrderMoveDirection};

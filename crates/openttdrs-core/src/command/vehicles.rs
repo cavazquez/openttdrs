@@ -340,7 +340,7 @@ fn spawn_dual_headed_rear(
 /// posterior; el modelo actual todavía no tiene un campo de orientación por
 /// unidad, por lo que no se inventa un bit de `vehicle_flags`.
 #[allow(clippy::too_many_lines)]
-fn spawn_newgrf_articulated_train_parts(
+pub(crate) fn spawn_newgrf_articulated_train_parts(
     state: &mut GameState,
     front_id: u32,
     front_engine: &crate::engine::EngineDef,
@@ -366,6 +366,13 @@ fn spawn_newgrf_articulated_train_parts(
     else {
         return;
     };
+    // Durante un reemplazo puede haber vagones comprados detrás de la cabeza;
+    // las piezas nuevas se insertan delante de ellos, no los desconectan.
+    let original_next = state
+        .vehicles
+        .iter()
+        .find(|vehicle| vehicle.id == front_id)
+        .and_then(|vehicle| vehicle.next_unit);
 
     for index in 1..MAX_ARTICULATED_PARTS {
         let callback_part = {
@@ -434,6 +441,7 @@ fn spawn_newgrf_articulated_train_parts(
         part.build_tick = build_tick;
         part.owner = owner;
         part.depot_leave_cleared = false;
+        part.newgrf_articulated = true;
         part.prev_unit = Some(previous_id);
         part.unit_length = crate::newgrf_callback::vehicle_unit_length(&part_engine, &mut part);
         crate::vehicle::init_vehicle_reliability_from_engine(&mut part, &part_engine);
@@ -461,6 +469,23 @@ fn spawn_newgrf_articulated_train_parts(
         }
         state.vehicles.push(part);
         previous_id = part_id;
+    }
+    if previous_id != front_id {
+        if let Some(last) = state
+            .vehicles
+            .iter_mut()
+            .find(|vehicle| vehicle.id == previous_id)
+        {
+            last.next_unit = original_next;
+        }
+        if let Some(next_id) = original_next
+            && let Some(next) = state
+                .vehicles
+                .iter_mut()
+                .find(|vehicle| vehicle.id == next_id)
+        {
+            next.prev_unit = Some(previous_id);
+        }
     }
 }
 

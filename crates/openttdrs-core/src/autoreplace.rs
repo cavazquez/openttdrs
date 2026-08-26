@@ -5,7 +5,7 @@
 
 use crate::engine::{EngineDef, engine_available_in_year, engine_by_id};
 use crate::refit::{refittable_cargo_types, vehicle_in_depot};
-use crate::train_consist::{consist_changed, consist_unit_ids, detach_unit, engine_is_wagon};
+use crate::train_consist::{consist_unit_ids, detach_unit, engine_is_wagon};
 use crate::vehicle::{Vehicle, VehicleKind};
 use crate::{CompanyId, GameState, economy};
 
@@ -121,8 +121,17 @@ fn autoreplace_cost(vehicle: &Vehicle, new_engine: &EngineDef) -> i64 {
     new_engine.price - economy::vehicle_sell_refund(vehicle)
 }
 
+/// Resuelve un motor usando primero el catálogo activo (incluidos ids
+/// asignados por `NewGRF`) y luego la tabla vanilla para saves antiguos.
+fn engine_for_state(state: &GameState, engine_id: u16) -> Option<EngineDef> {
+    crate::engine::engine_in_catalog(&state.engine_catalog, engine_id)
+        .cloned()
+        .or_else(|| engine_by_id(engine_id).cloned())
+}
+
 fn apply_engine_with_refit(vehicle: &mut Vehicle, new_engine: &EngineDef, current_tick: u64) {
     vehicle.engine_id = Some(new_engine.id);
+    vehicle.unit_length = crate::newgrf_callback::vehicle_unit_length(new_engine, vehicle);
     if new_engine.capacity > 0 {
         vehicle.capacity = new_engine.capacity;
     }
@@ -180,11 +189,11 @@ pub fn pending_autoreplace_for_service(state: &GameState, vehicle: &Vehicle) -> 
         {
             return false;
         }
-        if let Some(new_engine) = engine_by_id(rule.to_engine_id)
+        if let Some(new_engine) = engine_for_state(state, rule.to_engine_id)
             && new_engine.kind == vehicle.kind
-            && engine_available_in_year(new_engine, calendar_year)
+            && engine_available_in_year(&new_engine, calendar_year)
         {
-            needed_money = needed_money.saturating_add(autoreplace_cost(vehicle, new_engine));
+            needed_money = needed_money.saturating_add(autoreplace_cost(vehicle, &new_engine));
             return needed_money <= company.economy.money;
         }
     }
@@ -194,13 +203,13 @@ pub fn pending_autoreplace_for_service(state: &GameState, vehicle: &Vehicle) -> 
     {
         return false;
     }
-    let Some(engine) = engine_by_id(from_engine_id) else {
+    let Some(engine) = engine_for_state(state, from_engine_id) else {
         return false;
     };
-    if !engine_available_in_year(engine, calendar_year) {
+    if !engine_available_in_year(&engine, calendar_year) {
         return false;
     }
-    needed_money = needed_money.saturating_add(autoreplace_cost(vehicle, engine));
+    needed_money = needed_money.saturating_add(autoreplace_cost(vehicle, &engine));
     needed_money <= company.economy.money
 }
 
@@ -243,13 +252,13 @@ pub fn try_autoreplace_vehicle(
             return Ok(false);
         }
         if rule.from_engine_id != rule.to_engine_id {
-            let Some(new_engine) = engine_by_id(rule.to_engine_id) else {
+            let Some(new_engine) = engine_for_state(state, rule.to_engine_id) else {
                 return Err(CommandError::EngineNotFound);
             };
             if new_engine.kind != vehicle.kind {
                 return Err(CommandError::AutoreplaceNotAllowed);
             }
-            if !engine_available_in_year(new_engine, calendar_year) {
+            if !engine_available_in_year(&new_engine, calendar_year) {
                 crate::news::push_autoreplace_failed_news(
                     state,
                     vehicle_id,
@@ -258,7 +267,7 @@ pub fn try_autoreplace_vehicle(
                 return Ok(false);
             }
             let wagon_removal = company.renew_keep_length;
-            let cost = autoreplace_cost(&state.vehicles[vehicle_idx], new_engine);
+            let cost = autoreplace_cost(&state.vehicles[vehicle_idx], &new_engine);
             if !can_afford_replacement(company.economy.money, cost, company.engine_renew_money) {
                 crate::news::push_autoreplace_failed_news(
                     state,
@@ -267,7 +276,7 @@ pub fn try_autoreplace_vehicle(
                 );
                 return Ok(false);
             }
-            replace_chain(state, vehicle_id, new_engine, wagon_removal, current_tick)?;
+            replace_chain(state, vehicle_id, &new_engine, wagon_removal, current_tick)?;
             if let Some(c) = state.companies.get_mut(owner.index()) {
                 c.economy.money -= cost;
             }
@@ -283,16 +292,16 @@ pub fn try_autoreplace_vehicle(
     {
         return Ok(false);
     }
-    let Some(new_engine) = engine_by_id(from_engine_id) else {
+    let Some(new_engine) = engine_for_state(state, from_engine_id) else {
         return Err(CommandError::EngineNotFound);
     };
-    if !engine_available_in_year(new_engine, calendar_year) {
+    if !engine_available_in_year(&new_engine, calendar_year) {
         crate::news::push_autoreplace_failed_news(state, vehicle_id, CommandError::EngineNotFound);
         return Ok(false);
     }
     let wagon_removal = company.renew_keep_length;
     let vehicle = &state.vehicles[vehicle_idx];
-    let cost = autoreplace_cost(vehicle, new_engine);
+    let cost = autoreplace_cost(vehicle, &new_engine);
     if !can_afford_replacement(company.economy.money, cost, company.engine_renew_money) {
         crate::news::push_autoreplace_failed_news(
             state,
@@ -301,7 +310,7 @@ pub fn try_autoreplace_vehicle(
         );
         return Ok(false);
     }
-    replace_chain(state, vehicle_id, new_engine, wagon_removal, current_tick)?;
+    replace_chain(state, vehicle_id, &new_engine, wagon_removal, current_tick)?;
     if let Some(c) = state.companies.get_mut(owner.index()) {
         c.economy.money -= cost;
     }
@@ -338,6 +347,10 @@ fn replace_chain(
         return Ok(());
     }
 
+    // Las piezas creadas por el callback pertenecen a la definición anterior
+    // y deben retirarse antes de reconstruir la nueva cadena. Los vagones que
+    // el jugador compró permanecen enlazados.
+    remove_newgrf_articulated_train_parts(state, head_id);
     sync_dual_head_after_replace(state, head_id, new_engine, current_tick);
 
     // Reemplazar otras unidades del consist con la misma regla from→to (vagones).
@@ -360,20 +373,55 @@ fn replace_chain(
         if rule.from_engine_id == rule.to_engine_id {
             continue;
         }
-        let Some(eng) = engine_by_id(rule.to_engine_id) else {
+        let Some(eng) = engine_for_state(state, rule.to_engine_id) else {
             continue;
         };
         if let Some(unit) = state.vehicles.iter_mut().find(|v| v.id == uid) {
-            apply_engine_with_refit(unit, eng, current_tick);
+            apply_engine_with_refit(unit, &eng, current_tick);
         }
     }
 
-    consist_changed(&mut state.vehicles, head_id);
+    if !new_engine.is_dual_headed() {
+        crate::command::vehicles::spawn_newgrf_articulated_train_parts(state, head_id, new_engine);
+    }
+    crate::train_consist::consist_changed_with_map_and_catalog(
+        &mut state.vehicles,
+        head_id,
+        Some(&state.map),
+        &state.engine_catalog,
+    );
 
     if wagon_removal {
         trim_consist_to_length(state, head_id, old_total_rounded);
     }
     Ok(())
+}
+
+/// Retira sólo las unidades que fueron creadas por CB16 en una materialización
+/// anterior y vuelve a unir los vagones ordinarios de la cadena.
+fn remove_newgrf_articulated_train_parts(state: &mut GameState, head_id: u32) {
+    let ids = consist_unit_ids(&state.vehicles, head_id);
+    for id in ids {
+        let Some(part) = state.vehicles.iter().find(|v| v.id == id) else {
+            continue;
+        };
+        if !part.newgrf_articulated {
+            continue;
+        }
+        let previous = part.prev_unit;
+        let next = part.next_unit;
+        if let Some(previous_id) = previous
+            && let Some(previous) = state.vehicles.iter_mut().find(|v| v.id == previous_id)
+        {
+            previous.next_unit = next;
+        }
+        if let Some(next_id) = next
+            && let Some(next) = state.vehicles.iter_mut().find(|v| v.id == next_id)
+        {
+            next.prev_unit = previous;
+        }
+        state.vehicles.retain(|v| v.id != id);
+    }
 }
 
 fn sync_dual_head_after_replace(
@@ -421,6 +469,7 @@ fn sync_dual_head_after_replace(
         let mut rear = Vehicle::new(next_id, new_engine.kind, depot_pos, depot_pos);
         rear.running = false;
         rear.engine_id = Some(new_engine.id);
+        rear.unit_length = crate::newgrf_callback::vehicle_unit_length(new_engine, &mut rear);
         rear.capacity = new_engine.capacity;
         rear.cargo_type = new_engine.cargo;
         rear.build_tick = current_tick;
@@ -475,15 +524,20 @@ fn trim_consist_to_length(state: &mut GameState, head_id: u32, max_length: u16) 
                     && v.id != head_id
                     && v.other_multiheaded_part.is_none()
                     && v.engine_id
-                        .and_then(engine_by_id)
-                        .is_some_and(engine_is_wagon)
+                        .and_then(|id| engine_for_state(state, id))
+                        .is_some_and(|engine| engine_is_wagon(&engine))
             })
         }) else {
             break;
         };
         let _ = detach_unit(&mut state.vehicles, tail);
         state.vehicles.retain(|v| v.id != tail);
-        consist_changed(&mut state.vehicles, head_id);
+        crate::train_consist::consist_changed_with_map_and_catalog(
+            &mut state.vehicles,
+            head_id,
+            Some(&state.map),
+            &state.engine_catalog,
+        );
     }
 }
 
@@ -491,9 +545,74 @@ fn trim_consist_to_length(state: &mut GameState, head_id: u32, max_length: u16) 
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use crate::command::apply_command;
     use crate::map::TileCoord;
     use crate::map::TileKind;
+    use crate::newgrf_sprites::{
+        Action2VarAdjust, Action2VarEntry, Action2VarOp, Action2VarTerm, TrainSpriteAssign,
+        TrainSpriteGraphics,
+    };
     use crate::vehicle::{Vehicle, VehicleKind};
+
+    fn one_articulated_part_callback() -> TrainSpriteGraphics {
+        let literal = |value: u8| Action2VarTerm {
+            variable: 0x1A,
+            param: None,
+            adjust: Action2VarAdjust {
+                and_mask: value,
+                ..Action2VarAdjust::default()
+            },
+        };
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 2,
+        });
+        gfx.action2_var.insert(
+            2,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x10,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        and_mask: u8::MAX,
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: vec![(3, 1, 1)],
+                default: 4,
+            },
+        );
+        gfx.action2_var.insert(
+            3,
+            Action2VarEntry {
+                first: literal(1),
+                ops: Vec::new(),
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
+        gfx.action2_var.insert(
+            4,
+            Action2VarEntry {
+                first: literal(0xFF),
+                ops: vec![
+                    Action2VarOp {
+                        operator: 0x0A,
+                        rhs: literal(0x80),
+                    },
+                    Action2VarOp {
+                        operator: 0x00,
+                        rhs: literal(0x7F),
+                    },
+                ],
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
+        gfx
+    }
 
     #[test]
     fn group_rule_wins_over_global() {
@@ -670,5 +789,138 @@ mod tests {
             after < before,
             "wagon removal debe acortar; {before}→{after}"
         );
+    }
+
+    #[test]
+    #[allow(clippy::too_many_lines)]
+    fn autoreplace_uses_active_newgrf_catalog_and_rebuilds_articulated_chain() {
+        use crate::engine::{ENGINE_TRAIN_KIRBY, ENGINE_WAGON_PASSENGER, EngineDef};
+        use crate::newgrf_config::NewGrfEntry;
+        use crate::train_consist::consist_unit_ids;
+
+        let mut state = GameState::new(8, 8);
+        let depot = TileCoord::new(2, 2);
+        state.map.set_kind(depot, TileKind::RailDepot).unwrap();
+        state.companies[0].engine_renew_money = 0;
+        state.companies[0].economy.money = 5_000_000;
+        state.economy.money = 5_000_000;
+
+        let make_front = |id: u16, grfid: u32, name: &str| {
+            let mut engine: EngineDef = crate::engine::engine_by_id(ENGINE_TRAIN_KIRBY)
+                .unwrap()
+                .clone();
+            engine.id = id;
+            engine.name = name.into();
+            engine.price = 1;
+            engine.intro_year = 1900;
+            engine.from_newgrf = true;
+            engine.newgrf_local_id = 0;
+            engine.newgrf_grfid = grfid;
+            engine.vehicle_callback_mask = 1 << 4;
+            engine.newgrf_runtime = Some(Box::new(one_articulated_part_callback()));
+            engine
+        };
+        let make_part = |id: u16, grfid: u32, name: &str| {
+            let mut engine: EngineDef = crate::engine::engine_by_id(ENGINE_WAGON_PASSENGER)
+                .unwrap()
+                .clone();
+            engine.id = id;
+            engine.name = name.into();
+            engine.price = 0;
+            engine.intro_year = 1900;
+            engine.from_newgrf = true;
+            engine.newgrf_local_id = 1;
+            engine.newgrf_grfid = grfid;
+            engine
+        };
+        let old_grfid = 0x4F4C_4441;
+        let new_grfid = 0x4E45_5742;
+        let old_front_id = 1_200;
+        let old_part_id = 1_201;
+        let new_front_id = 1_210;
+        let new_part_id = 1_211;
+        state.engine_catalog.extend([
+            make_front(old_front_id, old_grfid, "Old articulated front"),
+            make_part(old_part_id, old_grfid, "Old articulated module"),
+            make_front(new_front_id, new_grfid, "New articulated front"),
+            make_part(new_part_id, new_grfid, "New articulated module"),
+        ]);
+        for (grfid, filename) in [(old_grfid, "old.grf"), (new_grfid, "new.grf")] {
+            state.newgrf_stack.push(NewGrfEntry {
+                filename: filename.into(),
+                grfid,
+                name: filename.into(),
+                description: String::new(),
+                grf_version: 8,
+                enabled: true,
+                is_static: false,
+                params: Vec::new(),
+            });
+        }
+
+        apply_command(
+            &mut state,
+            &crate::command::Command::BuildVehicleAtDepot(depot, old_front_id),
+        )
+        .unwrap();
+        assert_eq!(
+            state.vehicles.len(),
+            2,
+            "el front materializa su parte vieja"
+        );
+        // El callback devuelve la pieza, por lo que la unidad creada usa el id
+        // del catálogo NewGRF, no la tabla vanilla.
+        assert!(state.engine_catalog.iter().any(|e| e.id == old_part_id));
+        assert_eq!(state.vehicles[0].engine_id, Some(old_front_id));
+        let generated_old = state
+            .vehicles
+            .iter()
+            .find(|vehicle| vehicle.newgrf_articulated)
+            .map(|vehicle| vehicle.id)
+            .unwrap();
+
+        // Compra un wagon vanilla y engánchalo detrás de la pieza automática.
+        apply_command(
+            &mut state,
+            &crate::command::Command::BuildVehicleAtDepot(depot, ENGINE_WAGON_PASSENGER),
+        )
+        .unwrap();
+        let wagon_id = state
+            .vehicles
+            .iter()
+            .find(|vehicle| vehicle.id != 1 && vehicle.id != generated_old)
+            .map(|vehicle| vehicle.id)
+            .unwrap();
+        crate::command::apply_command(
+            &mut state,
+            &crate::command::Command::AttachWagonToConsist {
+                head_id: 1,
+                wagon_id,
+            },
+        )
+        .unwrap();
+        state
+            .autoreplace_rules
+            .push(AutoReplaceRule::new(old_front_id, new_front_id));
+        assert!(try_autoreplace_vehicle(&mut state, 1).unwrap());
+
+        let ids = consist_unit_ids(&state.vehicles, 1);
+        assert_eq!(ids.len(), 3, "front + parte nueva + wagon del usuario");
+        assert_eq!(state.vehicles[0].engine_id, Some(new_front_id));
+        let generated_new = state
+            .vehicles
+            .iter()
+            .find(|vehicle| vehicle.newgrf_articulated)
+            .unwrap();
+        assert_eq!(generated_new.engine_id, Some(new_part_id));
+        assert!(
+            !state
+                .vehicles
+                .iter()
+                .any(|vehicle| vehicle.id == generated_old)
+        );
+        assert!(state.vehicles.iter().any(|vehicle| {
+            vehicle.id == wagon_id && !vehicle.newgrf_articulated && vehicle.prev_unit.is_some()
+        }));
     }
 }

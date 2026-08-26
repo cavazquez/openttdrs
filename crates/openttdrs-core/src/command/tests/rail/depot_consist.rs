@@ -385,6 +385,7 @@ fn build_vehicle_at_depot_buys_newgrf_train_from_catalog() {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn build_newgrf_train_materializes_articulated_parts_from_callback() {
     use crate::engine::{EngineDef, NEWGRF_ENGINE_ID_BASE};
     use crate::newgrf_config::NewGrfEntry;

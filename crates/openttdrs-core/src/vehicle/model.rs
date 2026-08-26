@@ -451,6 +451,13 @@ pub struct Vehicle {
     /// Par dual-headed (`other_multiheaded_part`); `None` si no aplica.
     #[serde(default)]
     pub other_multiheaded_part: Option<u32>,
+    /// Unidad creada automáticamente por `CBID_VEHICLE_ARTIC_ENGINE`.
+    ///
+    /// No se deriva del enlace `prev_unit`: un wagon comprado por el jugador
+    /// puede pertenecer al mismo consist y debe sobrevivir a un reemplazo que
+    /// reconstruya las piezas articuladas.
+    #[serde(default)]
+    pub newgrf_articulated: bool,
     /// Longitud de esta unidad en fracciones (`VEHICLE_LENGTH` = 8).
     #[serde(default = "default_unit_length")]
     pub unit_length: u8,
@@ -613,6 +620,7 @@ impl Vehicle {
             next_unit: None,
             prev_unit: None,
             other_multiheaded_part: None,
+            newgrf_articulated: false,
             unit_length: crate::train_consist::VEHICLE_LENGTH,
             cached_total_length: u16::from(crate::train_consist::VEHICLE_LENGTH),
             cached_power_hp: 0,

@@ -343,8 +343,8 @@ fn write_vehs_common(buf: &mut Vec<u8>, c: &CommonWire) -> Result<(), SavError> 
     buf.push(c.breakdown_delay);
     buf.push(c.breakdowns_since_last_service);
     buf.push(c.breakdown_chance);
-    buf.extend_from_slice(&c.profit_this_year.to_be_bytes());
-    buf.extend_from_slice(&c.profit_last_year.to_be_bytes());
+    buf.extend_from_slice(&c.profit_this_year.saturating_mul(256).to_be_bytes());
+    buf.extend_from_slice(&c.profit_last_year.saturating_mul(256).to_be_bytes());
     Ok(())
 }
 
@@ -1487,11 +1487,11 @@ mod tests {
         );
         assert_eq!(
             record_get(common, "profit_this_year").and_then(SlValue::as_i64),
-            Some(123_456)
+            Some(123_456_i64 * 256)
         );
         assert_eq!(
             record_get(common, "profit_last_year").and_then(SlValue::as_i64),
-            Some(-654_321)
+            Some(-654_321_i64 * 256)
         );
     }
 

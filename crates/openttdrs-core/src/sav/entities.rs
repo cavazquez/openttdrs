@@ -1410,9 +1410,11 @@ pub(crate) fn vehicles_from_chunks(
             .unwrap_or(0);
         let profit_this_year = record_get(common, "profit_this_year")
             .and_then(SlValue::as_i64)
+            .map(|value| value / 256)
             .unwrap_or(0);
         let profit_last_year = record_get(common, "profit_last_year")
             .and_then(SlValue::as_i64)
+            .map(|value| value / 256)
             .unwrap_or(0);
         let vehstatus = record_get(common, "vehstatus")
             .and_then(SlValue::as_u64)

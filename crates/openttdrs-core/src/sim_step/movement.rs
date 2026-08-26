@@ -56,8 +56,9 @@ pub(super) fn move_vehicles(state: &mut GameState) {
     train_crashes.rebuild(&state.vehicles);
     for i in 0..vehicle_count {
         state.vehicles[i].sim_tick = tick;
-        // Vagones: no se mueven solos; se sincronizan tras la cabeza.
-        if state.vehicles[i].is_wagon_unit() {
+        // Vagones y partes articuladas: no se mueven solos; se sincronizan
+        // tras la cabeza para conservar una única cinemática por vehículo.
+        if state.vehicles[i].is_wagon_unit() || state.vehicles[i].is_articulated_unit() {
             continue;
         }
         // Espera ~37 ticks + reserva/PBS de boca (`CheckTrainStayInDepot`).
@@ -87,7 +88,11 @@ pub(super) fn move_vehicles(state: &mut GameState) {
         }
         let previous_road_pos = state.vehicles[i].pos;
         if tick_road_depot_movement(state, i) {
+            let articulated = sync_road_articulated_parts(state, i);
             road_traffic.update_vehicle(&state.vehicles, i, previous_road_pos);
+            for (slot, previous) in articulated {
+                road_traffic.update_vehicle(&state.vehicles, slot, previous);
+            }
             continue;
         }
         if state.vehicles[i].crashed {
@@ -112,6 +117,7 @@ pub(super) fn move_vehicles(state: &mut GameState) {
                 &mut road_traffic,
             );
             state.vehicles = vehicles;
+            let articulated = sync_road_articulated_parts(state, i);
             // `RoadVehArrivesAt` abre `BeginLoading` dentro del controller.
             // Disparar tras recuperar el préstamo completo conserva el tile
             // exacto de llegada y habilita CB140 sin acoplar el runtime NewGRF
@@ -129,6 +135,9 @@ pub(super) fn move_vehicles(state: &mut GameState) {
                 );
             }
             let _ = crate::ground_crash::maybe_road_train_crash_indexed(state, i, &train_crashes);
+            for (slot, previous) in articulated {
+                road_traffic.update_vehicle(&state.vehicles, slot, previous);
+            }
             continue;
         }
         if state.vehicles[i].kind == VehicleKind::Train && state.vehicles[i].is_consist_head() {
@@ -410,6 +419,99 @@ fn vehicle_entered_train_tunnel(
         && state.map.get_kind(prev_pos) != Some(crate::TileKind::RailTunnel)
 }
 
+/// Propaga la pose de la cabeza a las unidades road creadas por CB16.
+///
+/// `OpenTTD` sólo ejecuta el controlador vial para la primera unidad de una
+/// cadena articulada. Las demás conservan estado de depósito/carril y se
+/// colocan detrás según la longitud de cada eslabón; si se procesaran como
+/// vehículos independientes avanzarían por la misma ruta y bloquearían al
+/// frente.
+fn sync_road_articulated_parts(
+    state: &mut GameState,
+    head_idx: usize,
+) -> Vec<(usize, crate::TileCoord)> {
+    let Some(head) = state
+        .vehicles
+        .get(head_idx)
+        .filter(|v| {
+            matches!(
+                v.kind,
+                VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram
+            ) && v.is_consist_head()
+        })
+        .cloned()
+    else {
+        return Vec::new();
+    };
+    let ids = crate::train_consist::consist_unit_ids(&state.vehicles, head.id);
+    if ids.len() < 2 {
+        return Vec::new();
+    }
+
+    let depot_phase = head.road_depot_phase;
+    let in_depot = !matches!(depot_phase, crate::vehicle::RoadDepotPhase::None)
+        || head.road_state == crate::road_movement::RVSB_IN_DEPOT;
+    let head_pose = crate::road_movement::VehiclePose::from_vehicle(&head);
+    let mut previous_length = u16::from(head.unit_length.max(1));
+    let mut back_fractions = 0_u16;
+    let mut changed = Vec::with_capacity(ids.len().saturating_sub(1));
+
+    for unit_id in ids.into_iter().skip(1) {
+        let Some(slot) = state.vehicles.iter().position(|v| v.id == unit_id) else {
+            continue;
+        };
+        let unit_length = u16::from(state.vehicles[slot].unit_length.max(1));
+        // `unit_length` is measured in sixteenths of a tile. The centers of
+        // adjacent units are separated by half the sum of their lengths.
+        back_fractions =
+            back_fractions.saturating_add(previous_length.saturating_add(unit_length).div_ceil(2));
+        let previous_pos = state.vehicles[slot].pos;
+        if in_depot {
+            let unit = &mut state.vehicles[slot];
+            unit.pos = head.pos;
+            unit.origin = head.origin;
+            unit.dest = head.dest;
+            unit.progress = head.progress;
+            unit.frame = head.frame;
+            unit.direction = head.direction;
+            unit.road_state = crate::road_movement::RVSB_IN_DEPOT;
+            unit.road_depot_phase = depot_phase;
+            unit.running = head.running;
+            unit.cur_speed = head.cur_speed;
+            unit.subspeed = head.subspeed;
+            unit.path.clone_from(&head.path);
+            unit.depart_turn = head.depart_turn;
+            unit.depot_leave_cleared = head.depot_leave_cleared;
+            unit.z_pos = head.z_pos;
+        } else {
+            // Convert sixteenths of a tile to the 0..=255 road progress scale.
+            let back_progress = back_fractions.saturating_mul(255).div_ceil(16);
+            let back_progress =
+                u8::try_from(back_progress.min(u16::from(u8::MAX))).unwrap_or(u8::MAX);
+            let pose = crate::road_movement::retreat_vehicle_pose(&head, head_pose, back_progress);
+            let unit = &mut state.vehicles[slot];
+            unit.pos = pose.pos;
+            unit.origin = head.origin;
+            unit.dest = head.dest;
+            unit.progress = pose.progress;
+            unit.frame = head.frame;
+            unit.direction = head.direction;
+            unit.road_state = head.road_state;
+            unit.road_depot_phase = crate::vehicle::RoadDepotPhase::None;
+            unit.running = head.running;
+            unit.cur_speed = head.cur_speed;
+            unit.subspeed = head.subspeed;
+            unit.path.clone_from(&head.path);
+            unit.depart_turn = head.depart_turn;
+            unit.depot_leave_cleared = head.depot_leave_cleared;
+            unit.z_pos = head.z_pos;
+        }
+        changed.push((slot, previous_pos));
+        previous_length = unit_length;
+    }
+    changed
+}
+
 /// Cruce de la boca de un depósito road. El vehículo queda oculto mientras
 /// está dentro y aparece recién al iniciar el frame de salida.
 fn tick_road_depot_movement(state: &mut GameState, i: usize) -> bool {
@@ -633,9 +735,11 @@ fn reroute_head_on_to_alt_platform(state: &mut GameState, vehicle_idx: usize) {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
-    use super::vehicle_entered_train_tunnel;
+    use super::{sync_road_articulated_parts, vehicle_entered_train_tunnel};
     use crate::{GameState, TileCoord, TileKind, Vehicle, VehicleKind};
+    use std::collections::VecDeque;
 
     #[test]
     fn tunnel_sound_edge_only_fires_on_outside_to_inside_transition() {
@@ -649,5 +753,60 @@ mod tests {
 
         assert!(vehicle_entered_train_tunnel(&state, 0, outside));
         assert!(!vehicle_entered_train_tunnel(&state, 0, entrance));
+    }
+
+    #[test]
+    fn road_articulated_parts_follow_head_without_becoming_heads() {
+        let mut state = GameState::new(8, 8);
+        let pos = TileCoord::new(2, 2);
+        let dest = TileCoord::new(5, 2);
+        let mut head = Vehicle::new(1, VehicleKind::Bus, pos, dest);
+        head.running = true;
+        head.progress = 128;
+        head.frame = 4;
+        head.path = VecDeque::from([TileCoord::new(3, 2), TileCoord::new(4, 2), dest]);
+        let mut part = Vehicle::new(2, VehicleKind::Bus, pos, dest);
+        part.running = false;
+        part.newgrf_articulated = true;
+        part.prev_unit = Some(head.id);
+        head.next_unit = Some(part.id);
+        state.vehicles.extend([head, part]);
+
+        let changed = sync_road_articulated_parts(&mut state, 0);
+
+        assert_eq!(changed, vec![(1, pos)]);
+        assert!(state.vehicles[1].is_articulated_unit());
+        assert!(!state.vehicles[1].is_consist_head());
+        assert_eq!(state.vehicles[1].running, state.vehicles[0].running);
+        assert_eq!(state.vehicles[1].frame, state.vehicles[0].frame);
+        assert!(state.vehicles[1].progress < state.vehicles[0].progress);
+    }
+
+    #[test]
+    fn road_articulated_parts_stay_hidden_inside_depot() {
+        let mut state = GameState::new(8, 8);
+        let depot = TileCoord::new(2, 2);
+        state.map.set_kind(depot, TileKind::RoadDepot).unwrap();
+        let mut head = Vehicle::new(1, VehicleKind::Bus, depot, depot);
+        head.running = true;
+        head.road_depot_phase = crate::vehicle::RoadDepotPhase::InDepot;
+        head.road_state = crate::road_movement::RVSB_IN_DEPOT;
+        let mut part = Vehicle::new(2, VehicleKind::Bus, depot, depot);
+        part.newgrf_articulated = true;
+        part.prev_unit = Some(head.id);
+        head.next_unit = Some(part.id);
+        state.vehicles.extend([head, part]);
+
+        sync_road_articulated_parts(&mut state, 0);
+
+        assert_eq!(state.vehicles[1].pos, depot);
+        assert_eq!(
+            state.vehicles[1].road_depot_phase,
+            crate::vehicle::RoadDepotPhase::InDepot
+        );
+        assert_eq!(
+            state.vehicles[1].road_state,
+            crate::road_movement::RVSB_IN_DEPOT
+        );
     }
 }

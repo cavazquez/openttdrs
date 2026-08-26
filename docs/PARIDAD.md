@@ -37,7 +37,7 @@ no existe. Ningún nivel implica compatibilidad binaria o de red con OpenTTD.
 | Área | Estado vigente | Evidencia y límite principal |
 |---|---|---|
 | Tick y determinismo | **Alta** | Tick de 27 ms, RNG/orden autoritativo, hash canónico, replay y save/load deterministas |
-| Carretera | **Alta funcional / media exacta** | Construcción, paradas bahía/drive-through, circulación izquierda/derecha, seguimiento y adelantamiento. Falta fidelidad exhaustiva de tráfico/YAPF, tranvías y articulados |
+| Carretera | **Alta funcional / media exacta** | Construcción, paradas bahía/drive-through, circulación izquierda/derecha, seguimiento y adelantamiento. Las cadenas articuladas NewGRF ya se materializan al comprar/reemplazar, se sincronizan detrás de la cabeza y se dibujan como children; falta fidelidad exhaustiva de tráfico/YAPF, tranvías, historial de ruta en cadenas largas y callbacks restantes |
 | Ferrocarril | **Alta funcional / media exacta** | Consists, railtypes, ENTRY/EXIT/COMBO, PBS/YAPF, túneles/puentes y plataformas. Los oráculos externos aún cubren escenarios acotados |
 | Economía y carga | **Media** | Catálogo multi-clima (#224/#273): pagos Oil/Wood tropic, Farm dual-output, packets/transfer/CargoDist; NewGRF/cargos custom incompletos |
 | Pueblos e industrias | **Media** | I/O por clima (#224/#273): UI fundación Arctic/Tropic/Toyland; layouts/gráficos aún parciales |
@@ -47,7 +47,7 @@ no existe. Ningún nivel implica compatibilidad binaria o de red con OpenTTD.
 | Barcos | **Parcial → media MVP (#268)** | Infra acuática + `ChooseShipTrack`-like (path A*/cache), `FindClosestShipDepot` BFS, arrival dock/depot (8,8) / buoy ≤3, ocupación esclusa (bitset), golden interno tick pos/dir/z/orden. Residual: YAPF ship/water regions completas, goldens externos vs OpenTTD 15.3 |
 | Guardado propio JSON | **Alta** | Formato versionado con migraciones y determinismo mid-run |
 | Compatibilidad `.sav` | **Inicial-media** | Import/export interoperable de un subconjunto. La cobertura exacta, incluyendo la diferencia import vs export, está en [`parity/sav-compatibility.md`](parity/sav-compatibility.md); release ejecuta la matriz OpenTTD 15.3 sin `SKIP` |
-| NewGRF | **Media de parseo / media de runtime** | Catálogos Action0/3/5 amplios y callbacks reales de estaciones, road stops, casas, industrias, cargos y vehículos (CB10/11/12/13/15/16/24/25–28/31/33/140–149). Vehículos ya resuelven Action2 real por carga, sprite-stack de hasta ocho capas y CB16 con codificación GRF <8/≥8, espejo, ids locales y writeback `7C`; la compra y el autoreemplazo de trenes materializan la cadena articulada, enlazan unidades, conservan vagones del jugador y recalculan el consist con el catálogo activo. Faltan refresco en movimiento, articulados viales, orientación espejo persistida/renderizada e ids locales extendidos. Los roadtypes resuelven `ROTSG_BRIDGE`/`ROTSG_OVERLAY`/`ROTSG_CATENARY_BACK/FRONT` y los adjuntan a parents combinados; sigue pendiente el fallback vanilla `SPR_TRAMWAY_BASE`, assets completos y layouts/children de estación/objeto/industria/casa, además de scopes/CBIDs restantes, persistencia NGRF/OBJS y `sfx` custom sin callback. Ver las [matrices Action0/3/5](parity/newgrf-action0-matrix.md) y de [callbacks](parity/newgrf-callback-matrix.md) |
+| NewGRF | **Media de parseo / media de runtime** | Catálogos Action0/3/5 amplios y callbacks reales de estaciones, road stops, casas, industrias, cargos y vehículos (CB10/11/12/13/15/16/24/25–28/31/33/140–149). Vehículos ya resuelven Action2 real por carga, sprite-stack de hasta ocho capas y CB16 con codificación GRF <8/≥8, espejo, ids locales y writeback `7C`; la compra y el autoreemplazo de trenes y vehículos de carretera materializan las cadenas, enlazan unidades, conservan unidades del jugador y usan el catálogo activo. El movimiento vial sincroniza las piezas detrás de la cabeza y el renderer las anida como children; quedan el historial de ruta exacto en cadenas largas, la orientación espejo persistida/renderizada e ids locales extendidos. Los roadtypes resuelven `ROTSG_BRIDGE`/`ROTSG_OVERLAY`/`ROTSG_CATENARY_BACK/FRONT` y los adjuntan a parents combinados; sigue pendiente el fallback vanilla `SPR_TRAMWAY_BASE`, assets completos y layouts/children de estación/objeto/industria/casa, además de scopes/CBIDs restantes, persistencia NGRF/OBJS y `sfx` custom sin callback. Ver las [matrices Action0/3/5](parity/newgrf-action0-matrix.md) y de [callbacks](parity/newgrf-callback-matrix.md) |
 | Multijugador | **Media propia** | Lockstep TCP, dedicated, late join y host migration; el servidor asigna empresa por peer, valida antes de secuenciar, rechaza issuer inválido y resincroniza desync por snapshot. Sigue siendo protocolo propio, sin lobby, auth, cifrado ni interoperabilidad OpenTTD |
 | IA / GameScript / editor | **Inicial-media** | TransCargo/RoadHaul, GS-lite y editor propios; Squirrel compatible ausente |
 | Idioma de la UI | **Parcial** | Locale persistente `es`/`en`, cambio en vivo y catálogo de etiquetas estáticas de menús, HUD, noticias y ventanas. El HUD dinámico (herramienta, telemetría, alertas operativas, errores de comandos y detalles de estación/depósito) y el estado de pausa siguen el locale activo. Los cuerpos/titulares generados por simulación y los 67 catálogos upstream siguen fuera de alcance (#331) |
@@ -206,10 +206,12 @@ estación/objeto/industria/casa, los callbacks de foundation específicos,
 color/view y el registro 100/paleta de vehículos NewGRF siguen pendientes de un
 contrato runtime completo. El sprite-stack de vehículos ya resuelve grupos
 Action2 real (loaded/loading) y materializa hasta ocho capas como children
-ordenados por unidad. La compra y el autoreemplazo de trenes materializan las
-piezas articuladas y actualizan el consist; articulados viales, refresco en
-movimiento, wagon overrides y callbacks que requieren estado completo de
-consist siguen siendo residuales.
+ordenados por unidad. La compra y el autoreemplazo de trenes y vehículos de
+carretera materializan las piezas articuladas y enlazan la cadena; el
+movimiento vial sincroniza las unidades detrás de la cabeza y el renderer las
+mantiene como children. Siguen siendo residuales el historial de ruta exacto
+para cadenas largas, los wagon overrides y callbacks que requieren estado
+completo de consist, además de la orientación espejo e ids locales extendidos.
 La carga gradual ya ejecuta CB12 (`load_amount`) cuando el motor declara la
 máscara correspondiente.
 Los focos naval
@@ -660,8 +662,8 @@ la auditoría histórica.
 
 **Residual activo:** equivalencia de tráfico compleja contra un oráculo externo,
 costes y desempates YAPF, `AM_REALISTIC`, tablas/controlador de tranvías y
-vehículos articulados. También falta validar exhaustivamente mapas grandes y
-las combinaciones de carril/parada poco frecuentes.
+historial de ruta de articulados largos. También falta validar exhaustivamente
+mapas grandes y las combinaciones de carril/parada poco frecuentes.
 
 La evidencia de implementación vive en `road_movement/traffic.rs`,
 `road_movement/overtake.rs`, `road_movement/controller.rs` y sus tests. Al
@@ -729,7 +731,11 @@ vehículos de carretera. Muchos ítems ya están ~~tachados~~ (implementados).
 13. ~~**`reverse_ctr` y giros en U forzados**~~ — reversa forzada implementada;
     quedan ajustes de fidelidad.
 14. **Tranvías** (tablas `_roadveh_tram_turn_*`, `roadveh_movement.h:1095+`).
-15. **Articulados** (`HasArticulatedPart`): trailers que siguen al frontal.
+15. **Articulados** (`HasArticulatedPart`): **parcial implementado** — compra y
+    autoreemplazo de trenes y vehículos road materializan trailers; el tick vial
+    mueve sólo la cabeza, sincroniza sus poses/estado de depósito y el renderer
+    los dibuja como children. Falta el historial de ruta exacto para más de una
+    tesela, orientación espejo persistida y la cobertura diferencial de tráfico.
 16. ~~**Aceleración realista (`AM_REALISTIC`)**~~ — **implementada y acreditada
     en llano** con potencia, peso, carga, TE, fricción y arrastre de
     `GroundVehicle::GetAcceleration`; `PATS` preserva el selector. Quedan

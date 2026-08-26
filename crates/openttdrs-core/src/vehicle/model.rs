@@ -634,16 +634,38 @@ impl Vehicle {
         }
     }
 
-    /// ¿Es la cabeza del consist (o no es tren)?
+    /// ¿Es la cabeza del consist (o un vehículo que no tiene cadena)?
+    ///
+    /// Los articulados de carretera usan `Next()` igual que los trenes, pero
+    /// sus remolques se marcan con `newgrf_articulated`.  Tratar esos remolques
+    /// como cabezas haría que el simulador los moviese y que la UI los dibujase
+    /// dos veces.
     #[must_use]
     pub fn is_consist_head(&self) -> bool {
-        self.kind != VehicleKind::Train || self.prev_unit.is_none()
+        match self.kind {
+            VehicleKind::Train => self.prev_unit.is_none(),
+            VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram => {
+                !self.newgrf_articulated || self.prev_unit.is_none()
+            }
+            VehicleKind::Ship | VehicleKind::Aircraft => true,
+        }
     }
 
     /// ¿Es un vagón enganchado (no cabeza)?
     #[must_use]
     pub fn is_wagon_unit(&self) -> bool {
         self.kind == VehicleKind::Train && self.prev_unit.is_some()
+    }
+
+    /// ¿Es una unidad vial creada automáticamente por `CBID_VEHICLE_ARTIC_ENGINE`?
+    #[must_use]
+    pub fn is_articulated_unit(&self) -> bool {
+        self.newgrf_articulated
+            && self.prev_unit.is_some()
+            && matches!(
+                self.kind,
+                VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram
+            )
     }
 
     #[must_use]

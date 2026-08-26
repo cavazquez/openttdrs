@@ -232,20 +232,25 @@ pub(super) fn build_vehicle_at_depot(
     if engine.kind == VehicleKind::Train && engine.is_dual_headed() {
         spawn_dual_headed_rear(state, next_id, depot_pos, &engine);
     }
-    if engine.kind == VehicleKind::Train {
+    if matches!(
+        engine.kind,
+        VehicleKind::Train | VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram
+    ) {
         // `AddArticulatedParts` runs immediately after allocating the front
         // vehicle in OpenTTD.  Keep the callback on the real front vehicle so
         // persistent Action2 registers are written back before the consist
         // cache is rebuilt.
         if !engine.is_dual_headed() {
-            spawn_newgrf_articulated_train_parts(state, next_id, &engine);
+            spawn_newgrf_articulated_parts(state, next_id, &engine);
         }
-        crate::train_consist::consist_changed_with_map_and_catalog(
-            &mut state.vehicles,
-            next_id,
-            Some(&state.map),
-            &state.engine_catalog,
-        );
+        if engine.kind == VehicleKind::Train {
+            crate::train_consist::consist_changed_with_map_and_catalog(
+                &mut state.vehicles,
+                next_id,
+                Some(&state.map),
+                &state.engine_catalog,
+            );
+        }
     }
     state.economy.money -= engine.price;
     Ok(())
@@ -340,14 +345,17 @@ fn spawn_dual_headed_rear(
 /// posterior; el modelo actual todavía no tiene un campo de orientación por
 /// unidad, por lo que no se inventa un bit de `vehicle_flags`.
 #[allow(clippy::too_many_lines)]
-pub(crate) fn spawn_newgrf_articulated_train_parts(
+pub(crate) fn spawn_newgrf_articulated_parts(
     state: &mut GameState,
     front_id: u32,
     front_engine: &crate::engine::EngineDef,
 ) {
     const MAX_ARTICULATED_PARTS: u8 = 100;
 
-    if front_engine.newgrf_grfid == 0
+    if !matches!(
+        front_engine.kind,
+        VehicleKind::Train | VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram
+    ) || front_engine.newgrf_grfid == 0
         || front_engine.vehicle_callback_mask & (1 << 4) == 0
         || front_engine.newgrf_runtime.is_none()
     {
@@ -403,7 +411,7 @@ pub(crate) fn spawn_newgrf_articulated_train_parts(
             .engine_catalog
             .iter()
             .find(|candidate| {
-                candidate.kind == VehicleKind::Train
+                candidate.kind == front_engine.kind
                     && candidate.newgrf_grfid == front_engine.newgrf_grfid
                     && candidate.newgrf_local_id == local_id
             })
@@ -433,7 +441,7 @@ pub(crate) fn spawn_newgrf_articulated_train_parts(
         };
         let part_id = next_vehicle_id(state);
         let (pos, origin, dest, owner, direction, build_tick, front_cargo_type) = front_snapshot;
-        let mut part = Vehicle::new(part_id, VehicleKind::Train, pos, dest);
+        let mut part = Vehicle::new(part_id, front_engine.kind, pos, dest);
         part.running = false;
         part.engine_id = Some(part_engine.id);
         part.origin = origin;
@@ -445,6 +453,13 @@ pub(crate) fn spawn_newgrf_articulated_train_parts(
         part.prev_unit = Some(previous_id);
         part.unit_length = crate::newgrf_callback::vehicle_unit_length(&part_engine, &mut part);
         crate::vehicle::init_vehicle_reliability_from_engine(&mut part, &part_engine);
+        if matches!(
+            front_engine.kind,
+            VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram
+        ) {
+            part.road_depot_phase = crate::vehicle::RoadDepotPhase::InDepot;
+            part.road_state = crate::road_movement::RVSB_IN_DEPOT;
+        }
         if part_engine.capacity > 0 {
             part.capacity = crate::cargo_spec::apply_cargo_capacity_multiplier(
                 part_engine.capacity,

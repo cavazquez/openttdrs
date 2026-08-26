@@ -148,7 +148,7 @@ pub(crate) fn spawn_initial_vehicles(
         company.ensure_palette(crate::sprites::CompanyColour::from_u8(c.colour), images);
     }
     for vehicle in &sim.state.vehicles {
-        if vehicle.is_wagon_unit() {
+        if vehicle.is_wagon_unit() || vehicle.is_articulated_unit() {
             continue;
         }
         let pose = extrapolate_vehicle_pose(vehicle, 0.0);
@@ -285,7 +285,10 @@ pub(crate) fn spawn_initial_vehicles(
                 ));
             }
         }
-        if vehicle.kind == VehicleKind::Train {
+        if matches!(
+            vehicle.kind,
+            VehicleKind::Train | VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram
+        ) {
             spawn_consist_trailer_sprites(
                 commands,
                 sim,
@@ -344,7 +347,8 @@ fn spawn_consist_trailer_sprites(
         else {
             continue;
         };
-        let unit_pose = openttdrs_core::VehiclePose::from_vehicle(unit);
+        let unit_pose = openttdrs_core::VehiclePose::from_vehicle(unit)
+            .with_drive_on_right(sim.state.construction.road_drive_on_right());
         let layers = trucks.for_vehicle_with_newgrf_layers(
             unit,
             unit_pose,

@@ -517,6 +517,139 @@ fn build_newgrf_train_materializes_articulated_parts_from_callback() {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
+fn build_newgrf_road_vehicle_materializes_articulated_parts_from_callback() {
+    use crate::engine::{ENGINE_BUS_FOSTER, ENGINE_BUS_MPS, EngineDef, NEWGRF_ENGINE_ID_BASE};
+    use crate::newgrf_config::NewGrfEntry;
+    use crate::newgrf_sprites::{
+        Action2VarAdjust, Action2VarEntry, Action2VarOp, Action2VarTerm, TrainSpriteAssign,
+        TrainSpriteGraphics,
+    };
+
+    let mut s = GameState::new(8, 8);
+    let depot = TileCoord::new(3, 3);
+    apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(2, 3))).unwrap();
+    apply_command(&mut s, &Command::PlaceRoadDepotDir(depot, 0)).unwrap();
+
+    let grfid = 0x4152_5444;
+    let front_id = NEWGRF_ENGINE_ID_BASE + 30;
+    let part_id = front_id + 1;
+    let mut callback = TrainSpriteGraphics::default();
+    callback.assigns.push(TrainSpriteAssign {
+        local_id: 0,
+        set_id: 2,
+    });
+    let literal = |value: u8| Action2VarTerm {
+        variable: 0x1A,
+        param: None,
+        adjust: Action2VarAdjust {
+            and_mask: value,
+            ..Action2VarAdjust::default()
+        },
+    };
+    callback.action2_var.insert(
+        2,
+        Action2VarEntry {
+            first: Action2VarTerm {
+                variable: 0x10,
+                param: None,
+                adjust: Action2VarAdjust {
+                    and_mask: u8::MAX,
+                    ..Action2VarAdjust::default()
+                },
+            },
+            ops: Vec::new(),
+            ranges: vec![(3, 1, 1)],
+            default: 4,
+        },
+    );
+    callback.action2_var.insert(
+        3,
+        Action2VarEntry {
+            first: literal(1),
+            ops: Vec::new(),
+            ranges: Vec::new(),
+            default: 0,
+        },
+    );
+    callback.action2_var.insert(
+        4,
+        Action2VarEntry {
+            first: literal(0xFF),
+            ops: vec![
+                Action2VarOp {
+                    operator: 0x0A,
+                    rhs: literal(0x80),
+                },
+                Action2VarOp {
+                    operator: 0x00,
+                    rhs: literal(0x7F),
+                },
+            ],
+            ranges: Vec::new(),
+            default: 0,
+        },
+    );
+
+    let mut front: EngineDef = crate::engine::engine_by_id(ENGINE_BUS_MPS).unwrap().clone();
+    front.id = front_id;
+    front.name = "Articulated road front".into();
+    front.price = 50_000;
+    front.from_newgrf = true;
+    front.newgrf_local_id = 0;
+    front.newgrf_grfid = grfid;
+    front.vehicle_callback_mask = 1 << 4;
+    front.newgrf_runtime = Some(Box::new(callback));
+
+    let mut part: EngineDef = crate::engine::engine_by_id(ENGINE_BUS_FOSTER)
+        .unwrap()
+        .clone();
+    part.id = part_id;
+    part.name = "Articulated road module".into();
+    part.price = 0;
+    part.from_newgrf = true;
+    part.newgrf_local_id = 1;
+    part.newgrf_grfid = grfid;
+    s.engine_catalog.push(front);
+    s.engine_catalog.push(part);
+    s.newgrf_stack.push(NewGrfEntry {
+        filename: "articulated-road-test.grf".into(),
+        grfid,
+        name: "Articulated road test".into(),
+        description: String::new(),
+        grf_version: 8,
+        enabled: true,
+        is_static: false,
+        params: Vec::new(),
+    });
+
+    apply_command(&mut s, &Command::BuildVehicleAtDepot(depot, front_id)).unwrap();
+
+    assert_eq!(s.vehicles.len(), 2);
+    let head = s
+        .vehicles
+        .iter()
+        .find(|v| v.engine_id == Some(front_id))
+        .unwrap();
+    let part = s
+        .vehicles
+        .iter()
+        .find(|v| v.engine_id == Some(part_id))
+        .unwrap();
+    assert_eq!(head.kind, VehicleKind::Bus);
+    assert_eq!(part.kind, VehicleKind::Bus);
+    assert_eq!(head.next_unit, Some(part.id));
+    assert_eq!(part.prev_unit, Some(head.id));
+    assert!(part.newgrf_articulated);
+    assert!(!part.is_consist_head());
+    assert_eq!(
+        part.road_depot_phase,
+        crate::vehicle::RoadDepotPhase::InDepot
+    );
+    assert_eq!(part.road_state, crate::road_movement::RVSB_IN_DEPOT);
+}
+
+#[test]
 fn build_manley_morel_creates_dual_head_pair() {
     let mut s = SandboxMap::flat_rich(12, 12, 1);
     let depot = TileCoord::new(4, 4);

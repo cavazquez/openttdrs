@@ -336,22 +336,29 @@ fn replace_chain(
     let Some(head_idx) = state.vehicles.iter().position(|v| v.id == head_id) else {
         return Err(crate::CommandError::VehicleNotFound);
     };
-    let is_train = state.vehicles[head_idx].kind == VehicleKind::Train;
+    let vehicle_kind = state.vehicles[head_idx].kind;
+    let is_train = vehicle_kind == VehicleKind::Train;
+    let is_road = matches!(
+        vehicle_kind,
+        VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram
+    );
     let old_total = state.vehicles[head_idx].cached_total_length;
     // Longitud antigua redondeada a teselas (OpenTTD: CeilDiv(..., TILE_SIZE)*TILE_SIZE).
     let old_total_rounded = old_total.div_ceil(16).saturating_mul(16);
 
     apply_engine_with_refit(&mut state.vehicles[head_idx], new_engine, current_tick);
 
-    if !is_train {
+    if !is_train && !is_road {
         return Ok(());
     }
 
     // Las piezas creadas por el callback pertenecen a la definición anterior
     // y deben retirarse antes de reconstruir la nueva cadena. Los vagones que
     // el jugador compró permanecen enlazados.
-    remove_newgrf_articulated_train_parts(state, head_id);
-    sync_dual_head_after_replace(state, head_id, new_engine, current_tick);
+    remove_newgrf_articulated_parts(state, head_id);
+    if is_train {
+        sync_dual_head_after_replace(state, head_id, new_engine, current_tick);
+    }
 
     // Reemplazar otras unidades del consist con la misma regla from→to (vagones).
     let unit_ids = consist_unit_ids(&state.vehicles, head_id);
@@ -382,16 +389,18 @@ fn replace_chain(
     }
 
     if !new_engine.is_dual_headed() {
-        crate::command::vehicles::spawn_newgrf_articulated_train_parts(state, head_id, new_engine);
+        crate::command::vehicles::spawn_newgrf_articulated_parts(state, head_id, new_engine);
     }
-    crate::train_consist::consist_changed_with_map_and_catalog(
-        &mut state.vehicles,
-        head_id,
-        Some(&state.map),
-        &state.engine_catalog,
-    );
+    if is_train {
+        crate::train_consist::consist_changed_with_map_and_catalog(
+            &mut state.vehicles,
+            head_id,
+            Some(&state.map),
+            &state.engine_catalog,
+        );
+    }
 
-    if wagon_removal {
+    if wagon_removal && is_train {
         trim_consist_to_length(state, head_id, old_total_rounded);
     }
     Ok(())
@@ -399,7 +408,7 @@ fn replace_chain(
 
 /// Retira sólo las unidades que fueron creadas por CB16 en una materialización
 /// anterior y vuelve a unir los vagones ordinarios de la cadena.
-fn remove_newgrf_articulated_train_parts(state: &mut GameState, head_id: u32) {
+fn remove_newgrf_articulated_parts(state: &mut GameState, head_id: u32) {
     let ids = consist_unit_ids(&state.vehicles, head_id);
     for id in ids {
         let Some(part) = state.vehicles.iter().find(|v| v.id == id) else {
@@ -922,5 +931,135 @@ mod tests {
         assert!(state.vehicles.iter().any(|vehicle| {
             vehicle.id == wagon_id && !vehicle.newgrf_articulated && vehicle.prev_unit.is_some()
         }));
+    }
+
+    #[test]
+    #[allow(clippy::too_many_lines)]
+    fn autoreplace_rebuilds_active_newgrf_road_articulated_chain() {
+        use crate::engine::{ENGINE_BUS_FOSTER, ENGINE_BUS_MPS, EngineDef};
+        use crate::newgrf_config::NewGrfEntry;
+        use crate::train_consist::consist_unit_ids;
+
+        let mut state = GameState::new(8, 8);
+        let depot = TileCoord::new(2, 2);
+        state.map.set_kind(depot, TileKind::RoadDepot).unwrap();
+        state.companies[0].engine_renew_money = 0;
+        state.companies[0].economy.money = 5_000_000;
+        state.economy.money = 5_000_000;
+
+        let make_front = |id: u16, grfid: u32, name: &str| {
+            let mut engine: EngineDef =
+                crate::engine::engine_by_id(ENGINE_BUS_MPS).unwrap().clone();
+            engine.id = id;
+            engine.name = name.into();
+            engine.price = 1;
+            engine.intro_year = 1900;
+            engine.from_newgrf = true;
+            engine.newgrf_local_id = 0;
+            engine.newgrf_grfid = grfid;
+            engine.vehicle_callback_mask = 1 << 4;
+            engine.newgrf_runtime = Some(Box::new(one_articulated_part_callback()));
+            engine
+        };
+        let make_part = |id: u16, grfid: u32, name: &str| {
+            let mut engine: EngineDef = crate::engine::engine_by_id(ENGINE_BUS_FOSTER)
+                .unwrap()
+                .clone();
+            engine.id = id;
+            engine.name = name.into();
+            engine.price = 0;
+            engine.intro_year = 1900;
+            engine.from_newgrf = true;
+            engine.newgrf_local_id = 1;
+            engine.newgrf_grfid = grfid;
+            engine
+        };
+        let old_grfid = 0x4F4C_5241;
+        let new_grfid = 0x4E45_5252;
+        let old_front_id = 1_300;
+        let old_part_id = 1_301;
+        let new_front_id = 1_310;
+        let new_part_id = 1_311;
+        state.engine_catalog.extend([
+            make_front(old_front_id, old_grfid, "Old articulated bus"),
+            make_part(old_part_id, old_grfid, "Old bus module"),
+            make_front(new_front_id, new_grfid, "New articulated bus"),
+            make_part(new_part_id, new_grfid, "New bus module"),
+        ]);
+        for (grfid, filename) in [(old_grfid, "old-road.grf"), (new_grfid, "new-road.grf")] {
+            state.newgrf_stack.push(NewGrfEntry {
+                filename: filename.into(),
+                grfid,
+                name: filename.into(),
+                description: String::new(),
+                grf_version: 8,
+                enabled: true,
+                is_static: false,
+                params: Vec::new(),
+            });
+        }
+
+        apply_command(
+            &mut state,
+            &crate::command::Command::BuildVehicleAtDepot(depot, old_front_id),
+        )
+        .unwrap();
+        assert_eq!(state.vehicles.len(), 2);
+        let generated_old = state
+            .vehicles
+            .iter()
+            .find(|vehicle| vehicle.newgrf_articulated)
+            .map(|vehicle| vehicle.id)
+            .unwrap();
+        state
+            .autoreplace_rules
+            .push(AutoReplaceRule::new(old_front_id, new_front_id));
+
+        assert!(try_autoreplace_vehicle(&mut state, 1).unwrap());
+
+        assert_eq!(consist_unit_ids(&state.vehicles, 1).len(), 2);
+        assert!(
+            !state
+                .vehicles
+                .iter()
+                .any(|vehicle| vehicle.engine_id == Some(old_part_id)),
+            "old generated id={generated_old}; vehicles={:?}",
+            state
+                .vehicles
+                .iter()
+                .map(|vehicle| {
+                    (
+                        vehicle.id,
+                        vehicle.engine_id,
+                        vehicle.newgrf_articulated,
+                        vehicle.prev_unit,
+                        vehicle.next_unit,
+                    )
+                })
+                .collect::<Vec<_>>()
+        );
+        let head = state
+            .vehicles
+            .iter()
+            .find(|vehicle| vehicle.id == 1)
+            .unwrap();
+        assert_eq!(head.kind, VehicleKind::Bus);
+        assert_eq!(head.engine_id, Some(new_front_id));
+        let generated_new = state
+            .vehicles
+            .iter()
+            .find(|vehicle| vehicle.newgrf_articulated)
+            .unwrap();
+        assert_eq!(generated_new.kind, VehicleKind::Bus);
+        assert_eq!(generated_new.engine_id, Some(new_part_id));
+        assert_eq!(generated_new.prev_unit, Some(head.id));
+        assert_eq!(
+            generated_new.road_depot_phase,
+            crate::vehicle::RoadDepotPhase::InDepot
+        );
+        assert_eq!(
+            generated_new.road_state,
+            crate::road_movement::RVSB_IN_DEPOT
+        );
     }
 }

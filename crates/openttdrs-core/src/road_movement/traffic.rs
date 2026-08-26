@@ -23,7 +23,7 @@ impl RoadTrafficIndex {
     pub fn rebuild(&mut self, vehicles: &[Vehicle]) {
         self.by_tile.clear();
         for (index, vehicle) in vehicles.iter().enumerate() {
-            if is_road_vehicle_kind(vehicle.kind) {
+            if is_road_vehicle_kind(vehicle.kind) && !vehicle.is_articulated_unit() {
                 self.by_tile.entry(vehicle.pos).or_default().push(index);
             }
         }
@@ -36,7 +36,10 @@ impl RoadTrafficIndex {
         let Some(vehicle) = vehicles.get(index) else {
             return;
         };
-        if !is_road_vehicle_kind(vehicle.kind) || vehicle.pos == previous {
+        if !is_road_vehicle_kind(vehicle.kind)
+            || vehicle.is_articulated_unit()
+            || vehicle.pos == previous
+        {
             return;
         }
         if let Some(indices) = self.by_tile.get_mut(&previous) {
@@ -67,7 +70,7 @@ pub fn is_road_vehicle_kind(kind: VehicleKind) -> bool {
 #[must_use]
 pub fn road_veh_find_close_to(vehicles: &[Vehicle], v_idx: usize) -> Option<usize> {
     let v = vehicles.get(v_idx)?;
-    if !is_road_vehicle_kind(v.kind) || !v.running {
+    if !is_road_vehicle_kind(v.kind) || v.is_articulated_unit() || !v.running {
         return None;
     }
     // Dentro de una bahía la exclusión de boca y la asignación far/near son
@@ -93,7 +96,11 @@ pub fn road_veh_find_close_to(vehicles: &[Vehicle], v_idx: usize) -> Option<usiz
     let mut best: Option<(u32, usize)> = None;
 
     for (i, other) in vehicles.iter().enumerate() {
-        if i == v_idx || !is_road_vehicle_kind(other.kind) || !other.running {
+        if i == v_idx
+            || !is_road_vehicle_kind(other.kind)
+            || other.is_articulated_unit()
+            || !other.running
+        {
             continue;
         }
         if crate::road_movement::rvsb::is_bay_road_state(other.road_state) {
@@ -134,7 +141,7 @@ pub fn road_veh_find_close_to_indexed(
     index: &RoadTrafficIndex,
 ) -> Option<usize> {
     let v = vehicles.get(v_idx)?;
-    if !is_road_vehicle_kind(v.kind) || !v.running {
+    if !is_road_vehicle_kind(v.kind) || v.is_articulated_unit() || !v.running {
         return None;
     }
     if crate::road_movement::rvsb::is_bay_road_state(v.road_state)
@@ -158,6 +165,7 @@ pub fn road_veh_find_close_to_indexed(
                 };
                 if other_idx == v_idx
                     || !other.running
+                    || other.is_articulated_unit()
                     || crate::road_movement::rvsb::is_bay_road_state(other.road_state)
                     || other.overtaking != v.overtaking
                     || other.direction != v.direction
@@ -359,5 +367,21 @@ mod tests {
         vehicles[1].pos = TileCoord::new(4, 0);
         assert!(!apply_road_veh_close_to(&mut vehicles, 0, None));
         assert_eq!(vehicles[0].blocked_ctr, 0);
+    }
+
+    #[test]
+    fn articulated_parts_are_not_counted_as_independent_traffic() {
+        let mut head = bus_at(1, 0, 2, 40);
+        let mut part = bus_at(2, 0, 2, 40);
+        part.newgrf_articulated = true;
+        part.prev_unit = Some(head.id);
+        head.next_unit = Some(part.id);
+        let vehicles = vec![head, part];
+
+        let mut index = RoadTrafficIndex::default();
+        index.rebuild(&vehicles);
+
+        assert_eq!(road_veh_find_close_to_indexed(&vehicles, 0, &index), None);
+        assert_eq!(road_veh_find_close_to(&vehicles, 1), None);
     }
 }

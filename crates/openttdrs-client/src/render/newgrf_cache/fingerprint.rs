@@ -9,6 +9,10 @@ pub(crate) fn runtime_fingerprint(
     include_consist_random: bool,
 ) -> u32 {
     let mut h = ctx.random_bits;
+    h = h
+        .wrapping_mul(31)
+        .wrapping_add(ctx.vehicle_palette_generation)
+        .wrapping_add(ctx.parent_vehicle_palette_generation.rotate_left(7));
     if include_consist_random {
         for offset in 0u8..=15 {
             if let Some(&bits) = ctx.consist_random_bits.get(&offset) {
@@ -118,6 +122,18 @@ mod tests {
         ctx.consist_random_bits = HashMap::from([(0u8, 99u32)]);
         let with = runtime_fingerprint(&ctx, vars::TRAIN, true);
         assert_ne!(without, with);
+    }
+
+    #[test]
+    fn palette_generation_invalidates_train_fingerprint() {
+        let mut ctx = Action2EvalCtx::default();
+        let before = runtime_fingerprint(&ctx, vars::TRAIN, true);
+        ctx.vehicle_palette_generation = 1;
+        let after = runtime_fingerprint(&ctx, vars::TRAIN, true);
+        assert_ne!(before, after);
+        ctx.parent_vehicle_palette_generation = 1;
+        let parent_after = runtime_fingerprint(&ctx, vars::TRAIN, true);
+        assert_ne!(after, parent_after);
     }
 
     #[test]

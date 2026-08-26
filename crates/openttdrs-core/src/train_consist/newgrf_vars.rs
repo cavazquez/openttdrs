@@ -75,6 +75,7 @@ pub fn action2_eval_ctx_for_unit(
     // The legacy `consist_random_bits` table above is retained because older
     // callers address it by the nibble encoded in the Action2 payload.
     if let Some(unit) = current {
+        ctx.vehicle_palette_generation = unit.newgrf_palette_generation;
         ctx.relative_random_bits
             .insert(0, u32::from(unit.newgrf_random_bits));
         fill_relative_vehicle_vars(
@@ -161,6 +162,10 @@ pub fn action2_eval_ctx_for_unit(
             .iter()
             .find(|vehicle| vehicle.id == parent_id)
             .map_or(0, |vehicle| u32::from(vehicle.newgrf_random_bits));
+        ctx.parent_vehicle_palette_generation = vehicles
+            .iter()
+            .find(|vehicle| vehicle.id == parent_id)
+            .map_or(0, |vehicle| vehicle.newgrf_palette_generation);
     }
     ctx
 }

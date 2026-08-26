@@ -67,6 +67,7 @@ pub fn action2_eval_ctx_from_vehicle(vehicle: &Vehicle) -> Action2EvalCtx {
     ctx.vehicle_loading = vehicle.cargo_loading || vehicle.cargo_unloading;
     ctx.vehicle_cargo = vehicle.cargo;
     ctx.vehicle_capacity = vehicle.capacity;
+    ctx.vehicle_palette_generation = vehicle.newgrf_palette_generation;
     // `5F` combines the random bits (bits 8..15 in the vehicle scope) with
     // triggers still waiting to be consumed (bits 0..7).  Keeping this value
     // in the callback context is important for `CBID_RANDOM_TRIGGER` paths:

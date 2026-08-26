@@ -215,6 +215,12 @@ pub struct Action2EvalCtx {
     pub random_bits: u32,
     /// Random bits of the parent scope (`0x83` random Action2).
     pub parent_random_bits: u32,
+    /// Generación visual de la unidad; CB32 la incrementa cuando invalida la
+    /// paleta y el renderer la incluye en la clave de caché.
+    pub vehicle_palette_generation: u32,
+    /// Generación visual del vehículo padre, cuando el scope parent participa
+    /// en la selección de sprites.
+    pub parent_vehicle_palette_generation: u32,
     /// Bits de vehículos del consist indexados por offset (`0x84` nibble bajo).
     pub consist_random_bits: HashMap<u8, u32>,
     /// Random bits indexed by signed relative position in a vehicle chain.

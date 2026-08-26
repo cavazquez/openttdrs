@@ -355,19 +355,20 @@ pub(crate) fn process_vehicle_economy_day(state: &mut crate::GameState) {
                     &engine,
                     &mut state.vehicles[i],
                 )
-                && effect.trigger_randomisation
             {
-                crate::newgrf_callback::trigger_vehicle_randomisation(
-                    &engine,
-                    &mut state.vehicles[i],
-                    crate::vehicle::VehicleRandomTrigger::Callback32,
-                    world_seed,
-                    tick,
-                );
-                // `invalidate_palette` is represented by the changed Action2
-                // fingerprint/random bits.  The explicit result is retained
-                // in the resolver API so the client cache can consume it when
-                // colour callbacks are wired into the renderer.
+                if effect.invalidate_palette {
+                    state.vehicles[i].newgrf_palette_generation =
+                        state.vehicles[i].newgrf_palette_generation.wrapping_add(1);
+                }
+                if effect.trigger_randomisation {
+                    crate::newgrf_callback::trigger_vehicle_randomisation(
+                        &engine,
+                        &mut state.vehicles[i],
+                        crate::vehicle::VehicleRandomTrigger::Callback32,
+                        world_seed,
+                        tick,
+                    );
+                }
             }
         }
         state.vehicles[i].newgrf_day_counter = state.vehicles[i].newgrf_day_counter.wrapping_add(1);

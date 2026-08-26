@@ -518,6 +518,11 @@ pub struct Vehicle {
     /// Registros persistentes `NewGRF` (`7C` / `\2psto`); writeback tras eval CB/Action2.
     #[serde(default)]
     pub newgrf_persistent_regs: std::collections::HashMap<u8, u32>,
+    /// Generación visual incrementada por CB32 cuando solicita invalidar la
+    /// paleta. No altera la simulación; sólo impide reutilizar una textura
+    /// horneada antes de la invalidación.
+    #[serde(default)]
+    pub newgrf_palette_generation: u32,
     /// Beneficio neto del año en curso (ingresos − costes; solo cabeza de consist).
     #[serde(default)]
     pub profit_this_year: i64,
@@ -673,6 +678,7 @@ impl Vehicle {
             newgrf_random_bits: seed_newgrf_random_bits(id),
             newgrf_waiting_random_triggers: 0,
             newgrf_persistent_regs: std::collections::HashMap::new(),
+            newgrf_palette_generation: 0,
             profit_this_year: 0,
             profit_last_year: 0,
             running_cost_accum: 0,

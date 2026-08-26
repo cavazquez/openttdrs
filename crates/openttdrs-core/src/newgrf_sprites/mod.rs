@@ -553,6 +553,70 @@ mod tests {
     }
 
     #[test]
+    fn resolve_parent_scope_variational_before_self_scope() {
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.action2_var.insert(
+            3,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x40,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        shift: super::model::ACTION2_PARENT_SCOPE_MARKER,
+                        and_mask: 0xFF,
+                        add_val: None,
+                        divide_val: None,
+                        modulo_val: None,
+                    },
+                },
+                ops: Vec::new(),
+                ranges: vec![(7, 2, 2)],
+                default: 8,
+            },
+        );
+        gfx.action2_to_action1.extend([(7, 0), (8, 1)]);
+        let mut ctx = Action2EvalCtx::default();
+        ctx.vars.insert(0x40, 1);
+        ctx.parent_vars.insert(0x40, 2);
+        assert_eq!(gfx.resolve_action1_set_ctx(3, &mut ctx), 0);
+    }
+
+    #[test]
+    fn resolve_parent_and_relative_random_scopes() {
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.action2_random.insert(
+            4,
+            Action2RandomEntry {
+                typ: 0x83,
+                consist_count: 0,
+                triggers: 0,
+                randbit: 0,
+                sets: vec![10, 11],
+            },
+        );
+        gfx.action2_random.insert(
+            5,
+            Action2RandomEntry {
+                typ: 0x84,
+                // Direction 1 = toward the engine; one vehicle back.
+                consist_count: 0x40 | 1,
+                triggers: 0,
+                randbit: 0,
+                sets: vec![12, 13],
+            },
+        );
+        gfx.action2_to_action1
+            .extend([(10, 0), (11, 1), (12, 2), (13, 3)]);
+        let mut ctx = Action2EvalCtx {
+            parent_random_bits: 1,
+            ..Default::default()
+        };
+        ctx.relative_random_bits.insert(-1, 1);
+        assert_eq!(gfx.resolve_action1_set_ctx(4, &mut ctx), 1);
+        assert_eq!(gfx.resolve_action1_set_ctx(5, &mut ctx), 3);
+    }
+
+    #[test]
     fn resolve_variational_ranges_with_ctx() {
         let mut gfx = TrainSpriteGraphics::default();
         gfx.action2_var.insert(

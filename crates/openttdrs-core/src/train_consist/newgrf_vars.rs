@@ -54,6 +54,7 @@ pub fn action2_eval_ctx_for_unit(
     owner_colour: u8,
 ) -> Action2EvalCtx {
     let mut ctx = Action2EvalCtx::default();
+    let current = vehicles.iter().find(|v| v.id == unit_id);
     let mut cur = Some(unit_id);
     for offset in 0u8..=15 {
         let Some(id) = cur else {
@@ -69,6 +70,37 @@ pub fn action2_eval_ctx_for_unit(
         ctx.consist_random_bits.insert(offset, bits);
         cur = unit.prev_unit;
     }
+    // Keep both directions available for relative random groups (`0x84`).
+    // The legacy `consist_random_bits` table above is retained because older
+    // callers address it by the nibble encoded in the Action2 payload.
+    if let Some(unit) = current {
+        ctx.relative_random_bits
+            .insert(0, u32::from(unit.newgrf_random_bits));
+        let mut next = unit.next_unit;
+        for distance in 1i16..=15 {
+            let Some(id) = next else {
+                break;
+            };
+            let Some(candidate) = vehicles.iter().find(|v| v.id == id) else {
+                break;
+            };
+            ctx.relative_random_bits
+                .insert(distance, u32::from(candidate.newgrf_random_bits));
+            next = candidate.next_unit;
+        }
+        let mut previous = unit.prev_unit;
+        for distance in 1i16..=15 {
+            let Some(id) = previous else {
+                break;
+            };
+            let Some(candidate) = vehicles.iter().find(|v| v.id == id) else {
+                break;
+            };
+            ctx.relative_random_bits
+                .insert(-distance, u32::from(candidate.newgrf_random_bits));
+            previous = candidate.prev_unit;
+        }
+    }
     fill_vehicle_action2_vars(
         &mut ctx,
         vehicles,
@@ -77,6 +109,28 @@ pub fn action2_eval_ctx_for_unit(
         engine_catalog,
         owner_colour,
     );
+    // For an articulated child/wagon, OpenTTD's parent scope is the vehicle
+    // immediately toward the engine (`Previous()`).  Build that scope with
+    // the same catalogue and tick so all vehicle variables (including cargo,
+    // consist position and persistent storage) use one consistent snapshot.
+    if let Some(parent_id) = current.and_then(|unit| unit.prev_unit) {
+        let mut parent_ctx = Action2EvalCtx::default();
+        fill_vehicle_action2_vars(
+            &mut parent_ctx,
+            vehicles,
+            parent_id,
+            tick,
+            engine_catalog,
+            owner_colour,
+        );
+        ctx.parent_vars = parent_ctx.vars;
+        ctx.parent_parameterized_vars = parent_ctx.parameterized_vars;
+        ctx.parent_persistent_registers = parent_ctx.persistent_registers;
+        ctx.parent_random_bits = vehicles
+            .iter()
+            .find(|vehicle| vehicle.id == parent_id)
+            .map_or(0, |vehicle| u32::from(vehicle.newgrf_random_bits));
+    }
     ctx
 }
 

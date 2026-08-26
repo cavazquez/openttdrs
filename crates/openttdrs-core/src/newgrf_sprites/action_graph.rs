@@ -12,8 +12,9 @@ use crate::newgrf_config::{GrfContainerVersion, GrfScanError, parse_grf_full};
 use crate::newgrf_walk::{GrfEntry, walk_grf_entries};
 
 use super::model::{
-    Action2RandomEntry, Action2VarAdjust, Action2VarEntry, Action2VarOp, Action2VarTerm,
-    DecodedSprite, TrainSpriteAssign, TrainSpriteGraphics, WagonOverrideAssign,
+    ACTION2_PARENT_SCOPE_MARKER, Action2RandomEntry, Action2VarAdjust, Action2VarEntry,
+    Action2VarOp, Action2VarTerm, DecodedSprite, TrainSpriteAssign, TrainSpriteGraphics,
+    WagonOverrideAssign,
 };
 use super::pixel_codec::{decode_real_sprite_entry, index_sprite_section, resolve_fd_sprite};
 
@@ -88,6 +89,7 @@ fn parse_var_term(
     payload: &[u8],
     i: &mut usize,
     var_size: usize,
+    parent_scope: bool,
 ) -> Option<(Action2VarTerm, bool)> {
     if *i >= payload.len() {
         return None;
@@ -133,7 +135,12 @@ fn parse_var_term(
             variable,
             param,
             adjust: Action2VarAdjust {
-                shift: shift_num & 0x1F,
+                shift: (shift_num & 0x1F)
+                    | if parent_scope {
+                        ACTION2_PARENT_SCOPE_MARKER
+                    } else {
+                        0
+                    },
                 and_mask,
                 add_val,
                 divide_val,
@@ -161,8 +168,9 @@ pub(super) fn parse_action2_variational(
         0x89 | 0x8A => 4,
         _ => return None,
     };
+    let parent_scope = matches!(typ, 0x82 | 0x86 | 0x8A);
     let mut i = 4usize;
-    let (first, mut continued) = parse_var_term(payload, &mut i, var_size)?;
+    let (first, mut continued) = parse_var_term(payload, &mut i, var_size, parent_scope)?;
     let mut ops = Vec::new();
     while continued {
         if i >= payload.len() {
@@ -170,7 +178,7 @@ pub(super) fn parse_action2_variational(
         }
         let operator = payload[i];
         i += 1;
-        let (rhs, next) = parse_var_term(payload, &mut i, var_size)?;
+        let (rhs, next) = parse_var_term(payload, &mut i, var_size, parent_scope)?;
         ops.push(Action2VarOp { operator, rhs });
         continued = next;
         if ops.len() > 32 {
@@ -809,6 +817,25 @@ mod tests {
             panic!("dword deterministic group should parse");
         };
         assert_eq!(dword_entry.first.adjust.and_mask, 0x1234_5678);
+    }
+
+    #[test]
+    fn parse_action2_variational_marks_parent_scope_for_all_widths() {
+        for (typ, width) in [(0x82_u8, 1_usize), (0x86, 2), (0x8A, 4)] {
+            let mut payload = vec![0x02, ACTION0_FEATURE_TRAINS, 9, typ, 0x40, 0];
+            payload.extend(std::iter::repeat_n(0xFF, width));
+            // One range (result 3, value 0..max) plus default 3.
+            payload.push(1);
+            payload.extend_from_slice(&3_u16.to_le_bytes());
+            payload.extend(std::iter::repeat_n(0, width));
+            payload.extend(std::iter::repeat_n(0xFF, width));
+            payload.extend_from_slice(&3_u16.to_le_bytes());
+            let Some((_, entry)) = parse_action2_variational(&payload, ACTION0_FEATURE_TRAINS)
+            else {
+                panic!("parent Action2 type {typ:#x} should parse");
+            };
+            assert!(entry.first.adjust.is_parent_scope());
+        }
     }
 
     #[test]

@@ -75,6 +75,13 @@ impl Action2RealEntry {
 }
 
 /// Ajuste `varadjust` (shift/and [+add+div|mod]).
+///
+/// The high bit of `shift` is kept as an internal parser marker for Action2
+/// groups whose type selects the parent scope.  Only bits 0..4 are part of
+/// the wire-format shift; [`Action2VarAdjust::shift_amount`] masks the marker
+/// before applying the arithmetic.
+pub(crate) const ACTION2_PARENT_SCOPE_MARKER: u8 = 0x80;
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Action2VarAdjust {
     /// Bits 0..4 del `shift-num`.
@@ -83,6 +90,20 @@ pub struct Action2VarAdjust {
     pub add_val: Option<u32>,
     pub divide_val: Option<u32>,
     pub modulo_val: Option<u32>,
+}
+
+impl Action2VarAdjust {
+    /// Shift amount encoded by Action2 (`shift-num`, bits 0..4).
+    #[must_use]
+    pub const fn shift_amount(&self) -> u8 {
+        self.shift & 0x1F
+    }
+
+    /// Whether this term was parsed from a parent-scope Action2 group.
+    #[must_use]
+    pub const fn is_parent_scope(&self) -> bool {
+        self.shift & ACTION2_PARENT_SCOPE_MARKER != 0
+    }
 }
 
 /// Un término variable + ajuste (y parámetro opcional para `60+x`).
@@ -181,10 +202,25 @@ pub struct Action2EvalCtx {
     /// Action2 (por ejemplo `68[01]` y `68[0F]`). Esta tabla conserva esa
     /// distinción sin alterar las variables especiales `7C`–`7F`.
     pub parameterized_vars: HashMap<(u8, u8), u32>,
+    /// Variables exposed by the parent scope of the resolved object.
+    ///
+    /// Action2 deterministic types `0x82`, `0x86` and `0x8A` select this
+    /// table.  It is intentionally separate from [`Self::vars`], so a GRF
+    /// can compare a child vehicle with its parent without overwriting the
+    /// current unit's values.
+    pub parent_vars: HashMap<u8, u32>,
+    /// Parameterized variables available in the parent scope.
+    pub parent_parameterized_vars: HashMap<(u8, u8), u32>,
     /// Bits aleatorios del objeto (vehículo/estación/…).
     pub random_bits: u32,
+    /// Random bits of the parent scope (`0x83` random Action2).
+    pub parent_random_bits: u32,
     /// Bits de vehículos del consist indexados por offset (`0x84` nibble bajo).
     pub consist_random_bits: HashMap<u8, u32>,
+    /// Random bits indexed by signed relative position in a vehicle chain.
+    /// Positive offsets move toward `next_unit` (away from the engine), and
+    /// negative offsets move toward `prev_unit` (toward the engine).
+    pub relative_random_bits: HashMap<i16, u32>,
     /// Registros temporales (variable `7D` / operador `\2sto`).
     pub temp_registers: HashMap<u8, u32>,
     /// Registros temporales extendidos (`0x100+`) escritos por `STO`.
@@ -194,6 +230,10 @@ pub struct Action2EvalCtx {
     pub registers_100: HashMap<u16, u32>,
     /// Registros persistentes (variable `7C` / operador `\2psto`).
     pub persistent_registers: HashMap<u8, u32>,
+    /// Persistent storage belonging to the parent scope, when that scope has
+    /// one.  Generic register `7D` remains object-wide; `7C` is feature
+    /// specific and may use this table for vehicle parent lookups.
+    pub parent_persistent_registers: HashMap<u8, u32>,
     /// Último resultado de un `VarAction2` (variable `1C`; p. ej. tras procedure `7E`).
     pub last_result: u32,
     /// Parámetros del GRF (`GRFFile::param`; variable `0x7F[param]`).

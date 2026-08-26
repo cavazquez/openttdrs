@@ -88,6 +88,25 @@ mod tests {
     }
 
     #[test]
+    fn action2_ctx_exposes_parent_and_relative_random_scopes() {
+        let mut vs = vec![train(1), train(2), train(3)];
+        vs[0].newgrf_random_bits = 0x11;
+        vs[1].newgrf_random_bits = 0x22;
+        vs[2].newgrf_random_bits = 0x33;
+        vs[1].engine_id = Some(crate::engine::ENGINE_WAGON_PASSENGER);
+        vs[2].engine_id = Some(crate::engine::ENGINE_WAGON_PASSENGER);
+        assert!(attach_wagon(&mut vs, 1, 2).is_ok());
+        assert!(attach_wagon(&mut vs, 1, 3).is_ok());
+
+        let ctx = action2_eval_ctx_for_unit(&vs, 3, crate::tick::GameTick::new(0), &[], 0);
+        assert_eq!(ctx.parent_random_bits, 0x22);
+        assert_eq!(ctx.parent_vars.get(&0x40).map(|v| v & 0xFF), Some(1));
+        assert_eq!(ctx.relative_random_bits.get(&0), Some(&0x33));
+        assert_eq!(ctx.relative_random_bits.get(&-1), Some(&0x22));
+        assert_eq!(ctx.relative_random_bits.get(&-2), Some(&0x11));
+    }
+
+    #[test]
     fn action2_ctx_var40_consist_position() {
         let mut vs = vec![train(1), train(2), train(3)];
         vs[1].engine_id = Some(crate::engine::ENGINE_WAGON_PASSENGER);

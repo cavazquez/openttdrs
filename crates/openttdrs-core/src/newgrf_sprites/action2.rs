@@ -7,7 +7,7 @@ use super::model::{
 
 fn apply_var_adjust(raw: u32, adj: &Action2VarAdjust) -> i32 {
     // Cast wrapping: literales `0x1A` usan `0xFFFFFFFF` → `-1` en i32.
-    let shifted = raw.wrapping_shr(u32::from(adj.shift & 0x1F));
+    let shifted = raw.wrapping_shr(u32::from(adj.shift_amount()));
     let mut value = (shifted & adj.and_mask).cast_signed();
     if let Some(add) = adj.add_val {
         value = value.wrapping_add(add.cast_signed());
@@ -30,6 +30,7 @@ fn read_action2_var(
     term: &Action2VarTerm,
     depth: u8,
 ) -> Option<u32> {
+    let parent_scope = term.adjust.is_parent_scope();
     match term.variable {
         // Literal: `and-mask` selecciona bits de 0xFFFFFFFF.
         0x1A => Some(0xFFFF_FFFF),
@@ -38,7 +39,12 @@ fn read_action2_var(
         // Registro persistente `7C[param]`.
         0x7C => {
             let idx = term.param.unwrap_or(0);
-            Some(ctx.persistent_registers.get(&idx).copied().unwrap_or(0))
+            let registers = if parent_scope {
+                &ctx.parent_persistent_registers
+            } else {
+                &ctx.persistent_registers
+            };
+            Some(registers.get(&idx).copied().unwrap_or(0))
         }
         // Registro temporal `7D[param]`.
         0x7D => {
@@ -55,10 +61,16 @@ fn read_action2_var(
             let idx = usize::from(term.param.unwrap_or(0));
             Some(ctx.grf_params.get(idx).copied().unwrap_or(0))
         }
-        v => term
-            .param
-            .and_then(|parameter| ctx.parameterized_vars.get(&(v, parameter)).copied())
-            .or_else(|| ctx.vars.get(&v).copied()),
+        v => {
+            let (parameterized, variables) = if parent_scope {
+                (&ctx.parent_parameterized_vars, &ctx.parent_vars)
+            } else {
+                (&ctx.parameterized_vars, &ctx.vars)
+            };
+            term.param
+                .and_then(|parameter| parameterized.get(&(v, parameter)).copied())
+                .or_else(|| variables.get(&v).copied())
+        }
     }
 }
 
@@ -257,14 +269,38 @@ pub(super) fn eval_action2_var(
 }
 
 pub(super) fn eval_action2_random(entry: &Action2RandomEntry, ctx: &Action2EvalCtx) -> u16 {
-    let count_key = entry.consist_count & 0x0F;
-    let bits = if entry.typ == 0x84 {
-        ctx.consist_random_bits
-            .get(&count_key)
-            .copied()
-            .unwrap_or(ctx.random_bits)
-    } else {
-        ctx.random_bits
+    let bits = match entry.typ {
+        // Type 83 is the parent-scope counterpart of type 80.  Keep the
+        // fallback to self random bits for contexts (e.g. purchase previews)
+        // that do not have a related object.
+        0x83 => ctx.parent_random_bits,
+        0x84 => {
+            let count = i16::from(entry.consist_count & 0x0F);
+            let direction = (entry.consist_count >> 6) & 0x03;
+            let offset = match direction {
+                // Count back (away from the engine), starting at self.
+                0 => count,
+                // Count forward (toward the engine), starting at self.
+                1 => -count,
+                // Count back, starting at the parent/engine.
+                2 => -1 + count,
+                // The first vehicle with the same engine id is not retained
+                // by every caller yet; use the closest chain offset as the
+                // deterministic fallback and let the legacy nibble map cover
+                // old contexts.
+                _ => count,
+            };
+            ctx.relative_random_bits
+                .get(&offset)
+                .copied()
+                .or_else(|| {
+                    ctx.consist_random_bits
+                        .get(&(entry.consist_count & 0x0F))
+                        .copied()
+                })
+                .unwrap_or(ctx.random_bits)
+        }
+        _ => ctx.random_bits,
     };
     let n = entry.sets.len();
     if n == 0 {

@@ -1324,7 +1324,7 @@ mod tests {
                     param: None,
                     adjust: Action2VarAdjust {
                         shift: 0,
-                        and_mask: value,
+                        and_mask: u32::from(value),
                         ..Action2VarAdjust::default()
                     },
                 },
@@ -1350,7 +1350,7 @@ mod tests {
                     param: None,
                     adjust: Action2VarAdjust {
                         shift,
-                        and_mask: u8::MAX,
+                        and_mask: u32::from(u8::MAX),
                         ..Action2VarAdjust::default()
                     },
                 },
@@ -1366,12 +1366,12 @@ mod tests {
     /// Así los tests prueban que el call site empaqueta el parámetro correcto,
     /// no sólo que invocó alguna cadena Action2.
     fn gfx_callback_allow_if_byte(variable: u8, shift: u8, expected: u8) -> TrainSpriteGraphics {
-        let literal = |value| Action2VarTerm {
+        let literal = |value: u8| Action2VarTerm {
             variable: 0x1A,
             param: None,
             adjust: Action2VarAdjust {
                 shift: 0,
-                and_mask: value,
+                and_mask: u32::from(value),
                 ..Action2VarAdjust::default()
             },
         };
@@ -1388,7 +1388,7 @@ mod tests {
                     param: None,
                     adjust: Action2VarAdjust {
                         shift,
-                        and_mask: u8::MAX,
+                        and_mask: u32::from(u8::MAX),
                         ..Action2VarAdjust::default()
                     },
                 },
@@ -1466,7 +1466,7 @@ mod tests {
                     param: None,
                     adjust: Action2VarAdjust {
                         shift: 0,
-                        and_mask: value,
+                        and_mask: u32::from(value),
                         ..Action2VarAdjust::default()
                     },
                 },
@@ -1478,7 +1478,7 @@ mod tests {
                             param: None,
                             adjust: Action2VarAdjust {
                                 shift: 0,
-                                and_mask: reg,
+                                and_mask: u32::from(reg),
                                 ..Action2VarAdjust::default()
                             },
                         },
@@ -1490,7 +1490,7 @@ mod tests {
                             param: None,
                             adjust: Action2VarAdjust {
                                 shift: 0,
-                                and_mask: result,
+                                and_mask: u32::from(result),
                                 ..Action2VarAdjust::default()
                             },
                         },
@@ -2321,7 +2321,7 @@ mod tests {
                     variable: 0x46,
                     param: None,
                     adjust: Action2VarAdjust {
-                        and_mask: u8::MAX,
+                        and_mask: u32::from(u8::MAX),
                         ..Action2VarAdjust::default()
                     },
                 },

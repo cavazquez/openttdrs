@@ -534,6 +534,94 @@ mod tests {
     }
 
     #[test]
+    fn newgrf_sprite_stack_honors_register_100_termination() {
+        use crate::sprites::CompanyColour;
+        use assets::NewGrfVehicleLayer;
+        use openttdrs_core::newgrf_sprites::{
+            Action2VarAdjust, Action2VarEntry, Action2VarOp, Action2VarTerm, TrainSpriteAssign,
+            TrainSpriteGraphics,
+        };
+
+        let solid = |red| openttdrs_core::DecodedSprite {
+            width: 1,
+            height: 1,
+            x_offs: i16::from(red),
+            y_offs: 0,
+            rgba: vec![red, 0, 0, 255],
+            mask: Vec::new(),
+        };
+        let literal = |value: u32| Action2VarTerm {
+            variable: 0x1A,
+            param: None,
+            adjust: Action2VarAdjust {
+                and_mask: value,
+                ..Default::default()
+            },
+        };
+        let mut graphics = TrainSpriteGraphics {
+            sets: vec![Vec::new(), vec![solid(33)]],
+            assigns: vec![TrainSpriteAssign {
+                local_id: 0,
+                set_id: 1,
+            }],
+            ..Default::default()
+        };
+        // Compare var 10 (the SpriteStack index) with zero, shift the result
+        // by 31 and store it in register 100. Stack 0 sets the continuation
+        // bit; stack 1 clears it, so exactly two layers are emitted even
+        // though both iterations resolve the same sprite.
+        graphics.action2_var.insert(
+            1,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x10,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        shift: 8,
+                        and_mask: 1,
+                        ..Default::default()
+                    },
+                },
+                ops: vec![
+                    Action2VarOp {
+                        operator: 0x12,
+                        rhs: literal(0),
+                    },
+                    Action2VarOp {
+                        operator: 0x14,
+                        rhs: literal(31),
+                    },
+                    Action2VarOp {
+                        operator: 0x0E,
+                        rhs: literal(0x100),
+                    },
+                ],
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
+        let mut engine = openttdrs_core::engine_by_id(openttdrs_core::ENGINE_TRAIN_KIRBY)
+            .expect("vanilla train")
+            .clone();
+        engine.newgrf_local_id = 0;
+        engine.sprite_stack = true;
+        engine.newgrf_runtime = Some(Box::new(graphics));
+
+        let mut cache = NewGrfTrainSpriteCache::default();
+        let mut images = Assets::<Image>::default();
+        let mut ctx = openttdrs_core::Action2EvalCtx::default();
+        let layers: Vec<NewGrfVehicleLayer> = cache.handles_for_runtime(
+            &engine,
+            0,
+            None,
+            CompanyColour::DarkBlue,
+            &mut ctx,
+            &mut images,
+        );
+        assert_eq!(layers.len(), 2);
+    }
+
+    #[test]
     fn train_layers_differ_from_bus() {
         assert_ne!(
             TRAIN_VEHICLE_LAYERS[DIR_SW as usize].path,

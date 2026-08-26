@@ -608,7 +608,7 @@ mod tests {
                 param: None,
                 adjust: Action2VarAdjust {
                     shift: 0,
-                    and_mask: value,
+                    and_mask: u32::from(value),
                     ..Action2VarAdjust::default()
                 },
             },

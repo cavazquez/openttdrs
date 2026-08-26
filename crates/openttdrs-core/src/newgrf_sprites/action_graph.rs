@@ -64,8 +64,31 @@ pub(super) fn parse_action2_basic(payload: &[u8], feature: u8) -> Option<(u8, u1
     Some((set_id, a1))
 }
 
+/// Lee un valor little-endian del ancho indicado por el tipo Action2.
+///
+/// Los tipos deterministas de Action2 codifican todos sus operandos con el
+/// mismo ancho que la variable principal: byte (`0x81/0x82`), word
+/// (`0x85/0x86`) o dword (`0x89/0x8A`). Mantener el lector aquí evita que una
+/// máscara de word/dword se interprete como una secuencia de bytes y desplace
+/// el resto del grupo.
+fn read_var_size(payload: &[u8], i: &mut usize, size: usize) -> Option<u32> {
+    let end = i.checked_add(size)?;
+    let bytes = payload.get(*i..end)?;
+    *i = end;
+    match size {
+        1 => Some(u32::from(bytes[0])),
+        2 => Some(u32::from(u16::from_le_bytes([bytes[0], bytes[1]]))),
+        4 => Some(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])),
+        _ => None,
+    }
+}
+
 /// Lee `variable` [+param `60+x`] + `varadjust`. Devuelve `(término, bit5_continúa)`.
-fn parse_var_term(payload: &[u8], i: &mut usize) -> Option<(Action2VarTerm, bool)> {
+fn parse_var_term(
+    payload: &[u8],
+    i: &mut usize,
+    var_size: usize,
+) -> Option<(Action2VarTerm, bool)> {
     if *i >= payload.len() {
         return None;
     }
@@ -92,21 +115,13 @@ fn parse_var_term(payload: &[u8], i: &mut usize) -> Option<(Action2VarTerm, bool
     if do_divide && do_modulo {
         return None;
     }
-    if *i >= payload.len() {
-        return None;
-    }
-    let and_mask = payload[*i];
-    *i += 1;
+    let and_mask = read_var_size(payload, i, var_size)?;
     let mut add_val = None;
     let mut divide_val = None;
     let mut modulo_val = None;
     if do_divide || do_modulo {
-        if *i + 2 > payload.len() {
-            return None;
-        }
-        add_val = Some(payload[*i]);
-        let operand = payload[*i + 1];
-        *i += 2;
+        add_val = Some(read_var_size(payload, i, var_size)?);
+        let operand = read_var_size(payload, i, var_size)?;
         if do_divide {
             divide_val = Some(operand);
         } else {
@@ -129,7 +144,8 @@ fn parse_var_term(payload: &[u8], i: &mut usize) -> Option<(Action2VarTerm, bool
     ))
 }
 
-/// Action2 variational `0x81`/`0x82` (byte): simple, divide/modulo o advanced (bit 5).
+/// Action2 variational determinista: byte/word/dword, divide/modulo o
+/// advanced (bit 5).
 pub(super) fn parse_action2_variational(
     payload: &[u8],
     feature: u8,
@@ -139,11 +155,14 @@ pub(super) fn parse_action2_variational(
     }
     let set_id = payload[2];
     let typ = payload[3];
-    if typ != 0x81 && typ != 0x82 {
-        return None;
-    }
+    let var_size = match typ {
+        0x81 | 0x82 => 1,
+        0x85 | 0x86 => 2,
+        0x89 | 0x8A => 4,
+        _ => return None,
+    };
     let mut i = 4usize;
-    let (first, mut continued) = parse_var_term(payload, &mut i)?;
+    let (first, mut continued) = parse_var_term(payload, &mut i, var_size)?;
     let mut ops = Vec::new();
     while continued {
         if i >= payload.len() {
@@ -151,7 +170,7 @@ pub(super) fn parse_action2_variational(
         }
         let operator = payload[i];
         i += 1;
-        let (rhs, next) = parse_var_term(payload, &mut i)?;
+        let (rhs, next) = parse_var_term(payload, &mut i, var_size)?;
         ops.push(Action2VarOp { operator, rhs });
         continued = next;
         if ops.len() > 32 {
@@ -165,14 +184,12 @@ pub(super) fn parse_action2_variational(
     i += 1;
     let mut ranges = Vec::with_capacity(usize::from(nvar));
     for _ in 0..nvar {
-        if i + 4 > payload.len() {
-            return None;
-        }
-        let result = u16::from_le_bytes([payload[i], payload[i + 1]]);
-        let low = payload[i + 2];
-        let high = payload[i + 3];
+        let result_bytes = payload.get(i..i.checked_add(2)?)?;
+        let result = u16::from_le_bytes([result_bytes[0], result_bytes[1]]);
+        i += 2;
+        let low = read_var_size(payload, &mut i, var_size)?;
+        let high = read_var_size(payload, &mut i, var_size)?;
         ranges.push((result, low, high));
-        i += 4;
     }
     if i + 2 > payload.len() {
         return None;
@@ -732,6 +749,102 @@ mod tests {
         };
         assert_eq!(group.loaded, vec![10, 11]);
         assert_eq!(group.loading, vec![12]);
+    }
+
+    #[test]
+    fn parse_action2_variational_supports_byte_word_and_dword_masks() {
+        let byte = [
+            0x02,
+            ACTION0_FEATURE_TRAINS,
+            1,
+            0x81,
+            0x1A,
+            0,
+            0x7F,
+            0,
+            0,
+            0,
+        ];
+        let Some((_, byte_entry)) = parse_action2_variational(&byte, ACTION0_FEATURE_TRAINS) else {
+            panic!("byte deterministic group should parse");
+        };
+        assert_eq!(byte_entry.first.adjust.and_mask, 0x7F);
+
+        let word = [
+            0x02,
+            ACTION0_FEATURE_TRAINS,
+            2,
+            0x85,
+            0x1A,
+            0,
+            0x34,
+            0x12,
+            0,
+            0,
+            0,
+            0,
+        ];
+        let Some((_, word_entry)) = parse_action2_variational(&word, ACTION0_FEATURE_TRAINS) else {
+            panic!("word deterministic group should parse");
+        };
+        assert_eq!(word_entry.first.adjust.and_mask, 0x1234);
+
+        let dword = [
+            0x02,
+            ACTION0_FEATURE_TRAINS,
+            3,
+            0x89,
+            0x1A,
+            0,
+            0x78,
+            0x56,
+            0x34,
+            0x12,
+            0,
+            0,
+            0,
+        ];
+        let Some((_, dword_entry)) = parse_action2_variational(&dword, ACTION0_FEATURE_TRAINS)
+        else {
+            panic!("dword deterministic group should parse");
+        };
+        assert_eq!(dword_entry.first.adjust.and_mask, 0x1234_5678);
+    }
+
+    #[test]
+    fn action2_sto_writes_extended_sprite_stack_register() {
+        // 7 + (STO target 0x100) writes register 0x100 while resolving the
+        // calculated result. This is the contract used by SpriteStack.
+        let payload = [
+            0x02,
+            ACTION0_FEATURE_TRAINS,
+            7,
+            0x85,
+            0x1A,
+            0x20,
+            0x07,
+            0x00,
+            0x0E,
+            0x1A,
+            0x00,
+            0x00,
+            0x01,
+            0,
+            0,
+            0,
+        ];
+        let Some((set_id, entry)) = parse_action2_variational(&payload, ACTION0_FEATURE_TRAINS)
+        else {
+            panic!("word advanced group should parse");
+        };
+        assert_eq!(entry.ops.len(), 1);
+        assert_eq!(entry.ops[0].rhs.adjust.and_mask, 0x100);
+
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.action2_var.insert(set_id, entry);
+        let mut ctx = Action2EvalCtx::default();
+        let _ = gfx.resolve_action1_set_ctx(u16::from(set_id), &mut ctx);
+        assert_eq!(ctx.registers_100.get(&0x100), Some(&7));
     }
 
     #[test]

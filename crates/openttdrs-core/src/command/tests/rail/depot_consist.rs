@@ -411,7 +411,7 @@ fn build_newgrf_train_materializes_articulated_parts_from_callback() {
         variable: 0x1A,
         param: None,
         adjust: Action2VarAdjust {
-            and_mask: value,
+            and_mask: u32::from(value),
             ..Action2VarAdjust::default()
         },
     };
@@ -425,7 +425,7 @@ fn build_newgrf_train_materializes_articulated_parts_from_callback() {
                 variable: 0x10,
                 param: None,
                 adjust: Action2VarAdjust {
-                    and_mask: u8::MAX,
+                    and_mask: u32::from(u8::MAX),
                     ..Action2VarAdjust::default()
                 },
             },
@@ -543,7 +543,7 @@ fn build_newgrf_road_vehicle_materializes_articulated_parts_from_callback() {
         variable: 0x1A,
         param: None,
         adjust: Action2VarAdjust {
-            and_mask: value,
+            and_mask: u32::from(value),
             ..Action2VarAdjust::default()
         },
     };
@@ -554,7 +554,7 @@ fn build_newgrf_road_vehicle_materializes_articulated_parts_from_callback() {
                 variable: 0x10,
                 param: None,
                 adjust: Action2VarAdjust {
-                    and_mask: u8::MAX,
+                    and_mask: u32::from(u8::MAX),
                     ..Action2VarAdjust::default()
                 },
             },

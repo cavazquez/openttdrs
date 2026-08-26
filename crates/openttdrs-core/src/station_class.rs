@@ -723,7 +723,7 @@ mod tests {
                     param: None,
                     adjust: Action2VarAdjust {
                         shift: 0,
-                        and_mask: u8::MAX,
+                        and_mask: u32::from(u8::MAX),
                         ..Action2VarAdjust::default()
                     },
                 },

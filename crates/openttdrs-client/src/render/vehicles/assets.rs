@@ -255,7 +255,7 @@ impl NewGrfTrainSpriteCache {
             stack_ctx
                 .vars
                 .insert(0x10, u32::try_from(stack).unwrap_or(0) << 8);
-            let Some(views) = overriding_local_id
+            let views = overriding_local_id
                 .and_then(|overriding_id| {
                     runtime.views_for_wagon_override_u16_ctx(
                         engine.newgrf_local_id,
@@ -270,15 +270,26 @@ impl NewGrfTrainSpriteCache {
                         cargo,
                         &mut stack_ctx,
                     )
-                })
-            else {
+                });
+            let register_100 = stack_ctx.registers_100.get(&0x100).copied();
+            let Some(views) = views else {
+                if register_100.is_some_and(|value| value & 0x8000_0000 != 0) {
+                    continue;
+                }
                 break;
             };
             if views.is_empty() {
+                if register_100.is_some_and(|value| value & 0x8000_0000 != 0) {
+                    continue;
+                }
                 break;
             }
             let view = views[dir % views.len()].clone();
-            if stack > 0 && previous.as_ref() == Some(&view) {
+            // GRFs that implement SpriteStack explicitly set bit 31 in
+            // register 0x100 while another layer follows. Legacy fixtures do
+            // not write the register, so retain the repeated-view guard only
+            // for that fallback path.
+            if stack > 0 && register_100.is_none() && previous.as_ref() == Some(&view) {
                 break;
             }
             let view_idx = u8::try_from(dir % views.len()).unwrap_or(0);
@@ -303,6 +314,9 @@ impl NewGrfTrainSpriteCache {
                 height: view.height,
             });
             previous = Some(view);
+            if register_100.is_some_and(|value| value & 0x8000_0000 == 0) {
+                break;
+            }
         }
         layers
     }

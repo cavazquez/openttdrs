@@ -82,8 +82,9 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
   hasta ocho children por unidad, reevalúa la variable `0x10` y conserva offsets
   NFO por capa. Los wagon overrides conservan los IDs extendidos de la cadena
   Action3 anterior, aplican primero el cargo específico y luego el grupo
-  default, y sólo cruzan motores del mismo GRFID; quedan pendientes el registro
-  100, paleta/callbacks y los scopes completos de consist.
+  default, y sólo cruzan motores del mismo GRFID. El registro `0x100` ya
+  termina explícitamente las secuencias SpriteStack (bit 31); quedan
+  pendientes su paleta, callbacks y los scopes completos de consist.
 - Estaciones rail NewGRF: los tiletypes Action1/2/3 se dibujan también en
   pendientes y el overlay queda como child de la fundación nivelada, igual que
   la vía/PBS. Los layouts `TileSeq` con varias cajas y children siguen siendo
@@ -122,6 +123,6 @@ definición anterior, incluidos los IDs `ExtendedByte`. Cada asignación se
 registra como vagón→motor sobrescriptor→cargo/grupo default y el renderer la
 resuelve para la cabeza real del consist, sólo cuando ambos motores pertenecen
 al mismo GRFID. La selección respeta el orden de OpenTTD (cargo específico
-antes del default) y cae al sprite propio si no existe coincidencia. El bloque
-sigue abierto por el registro 100, paletas, scopes y callbacks/layouts que aún
-no tienen call site completo.
+antes del default) y cae al sprite propio si no existe coincidencia. La
+terminación SpriteStack por registro `0x100` (bit 31) ya está implementada;
+siguen abiertos su paleta, scopes y callbacks/layouts sin call site completo.

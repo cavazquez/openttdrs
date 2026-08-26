@@ -7,19 +7,19 @@ use super::model::{
 
 fn apply_var_adjust(raw: u32, adj: &Action2VarAdjust) -> i32 {
     // Cast wrapping: literales `0x1A` usan `0xFFFFFFFF` → `-1` en i32.
-    let mut value = raw.wrapping_shr(u32::from(adj.shift & 0x1F)).cast_signed();
-    value &= i32::from(adj.and_mask);
+    let shifted = raw.wrapping_shr(u32::from(adj.shift & 0x1F));
+    let mut value = (shifted & adj.and_mask).cast_signed();
     if let Some(add) = adj.add_val {
-        value = value.wrapping_add(i32::from(add));
+        value = value.wrapping_add(add.cast_signed());
     }
     if let Some(div) = adj.divide_val
         && div != 0
     {
-        value /= i32::from(div);
+        value /= div.cast_signed();
     } else if let Some(modulo) = adj.modulo_val
         && modulo != 0
     {
-        value %= i32::from(modulo);
+        value %= modulo.cast_signed();
     }
     value
 }
@@ -114,8 +114,16 @@ fn apply_advanced_op(op: u8, val1: i32, val2: i32, ctx: &mut Action2EvalCtx) -> 
         0x0D => val1 ^ val2,
         // \2sto: temp_registers[val2] = val1
         0x0E => {
-            let idx = u8::try_from(val2 & 0xFF).unwrap_or(0);
-            ctx.temp_registers.insert(idx, val1.cast_unsigned());
+            let idx = val2.cast_unsigned();
+            if idx >= 0x100 {
+                // SpriteStack uses register 0x100 for the palette and the
+                // continuation bit. Keep the complete register index.
+                if let Ok(index) = u16::try_from(idx) {
+                    ctx.registers_100.insert(index, val1.cast_unsigned());
+                }
+            } else if let Ok(index) = u8::try_from(idx) {
+                ctx.temp_registers.insert(index, val1.cast_unsigned());
+            }
             val1
         }
         // \2rst: result = val2
@@ -239,9 +247,9 @@ pub(super) fn eval_action2_var(
         let low = u16::try_from(acc & 0x7FFF).unwrap_or(0);
         return low | 0x8000;
     }
-    let value_u8 = u8::try_from(acc & 0xFF).unwrap_or(0);
+    let value = acc.cast_unsigned();
     for &(result, low, high) in &entry.ranges {
-        if value_u8 >= low && value_u8 <= high {
+        if value >= low && value <= high {
             return result;
         }
     }

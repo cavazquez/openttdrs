@@ -79,10 +79,10 @@ impl Action2RealEntry {
 pub struct Action2VarAdjust {
     /// Bits 0..4 del `shift-num`.
     pub shift: u8,
-    pub and_mask: u8,
-    pub add_val: Option<u8>,
-    pub divide_val: Option<u8>,
-    pub modulo_val: Option<u8>,
+    pub and_mask: u32,
+    pub add_val: Option<u32>,
+    pub divide_val: Option<u32>,
+    pub modulo_val: Option<u32>,
 }
 
 /// Un término variable + ajuste (y parámetro opcional para `60+x`).
@@ -110,7 +110,7 @@ pub struct Action2VarEntry {
     /// Cadena advanced (`operator` + término); vacía = variational simple.
     pub ops: Vec<Action2VarOp>,
     /// `(result_set, low, high)` inclusive.
-    pub ranges: Vec<(u16, u8, u8)>,
+    pub ranges: Vec<(u16, u32, u32)>,
     pub default: u16,
 }
 
@@ -187,6 +187,11 @@ pub struct Action2EvalCtx {
     pub consist_random_bits: HashMap<u8, u32>,
     /// Registros temporales (variable `7D` / operador `\2sto`).
     pub temp_registers: HashMap<u8, u32>,
+    /// Registros temporales extendidos (`0x100+`) escritos por `STO`.
+    ///
+    /// `OpenTTD` usa `0x100` para devolver el palette id y el bit 31 de
+    /// continuidad de una secuencia `SpriteStack`.
+    pub registers_100: HashMap<u16, u32>,
     /// Registros persistentes (variable `7C` / operador `\2psto`).
     pub persistent_registers: HashMap<u8, u32>,
     /// Último resultado de un `VarAction2` (variable `1C`; p. ej. tras procedure `7E`).

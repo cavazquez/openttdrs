@@ -29,7 +29,8 @@ pub fn apply_newgrf_objects(state: &mut GameState, search_dirs: &[&Path]) {
             continue;
         };
         let gfx = crate::newgrf_sprites::collect_object_sprite_graphics(&data).unwrap_or_default();
-        let newgrf_runtime = gfx.needs_runtime_resolve().then(|| Box::new(gfx.clone()));
+        let newgrf_runtime =
+            (gfx.needs_runtime_resolve() || gfx.has_tile_layouts()).then(|| Box::new(gfx.clone()));
         for meta in collect_object_metas_from_grf(&data) {
             let mapped_id = mapped_object_id(&mappings, entry.grfid, meta.local_id, &catalog);
             let Some(id) = mapped_id.or_else(|| next_free_object_spec_id(&catalog)) else {

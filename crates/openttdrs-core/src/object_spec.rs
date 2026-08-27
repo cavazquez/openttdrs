@@ -133,6 +133,23 @@ impl ObjectSpecDef {
         Some(views[idx % views.len()].clone())
     }
 
+    /// Layout `TileSeq` de Action2 para una tesela del objeto.
+    ///
+    /// El objeto ya selecciona su tesela/footprint mediante el contexto de
+    /// `ObjectScopeResolver`; las referencias del layout apuntan al primer
+    /// sprite de cada set Action1, por lo que `view` no se usa como un índice
+    /// adicional dentro del set.
+    pub fn newgrf_tile_layout_runtime(
+        &self,
+        view: usize,
+        ctx: &mut crate::newgrf_sprites::Action2EvalCtx,
+    ) -> Option<crate::newgrf_sprites::ResolvedTileLayout> {
+        let _ = view;
+        self.newgrf_runtime
+            .as_ref()?
+            .tile_layout_for_local_id_ctx(u16::from(self.local_id), 0, ctx)
+    }
+
     #[must_use]
     pub fn has_views(&self) -> bool {
         !self.views.is_empty() || self.newgrf_runtime.is_some()
@@ -207,8 +224,8 @@ pub fn is_selectable_object_spec(catalog: &[ObjectSpecDef], id: u16) -> bool {
 mod tests {
     use super::*;
     use crate::newgrf_sprites::{
-        Action2VarAdjust, Action2VarEntry, Action2VarTerm, DecodedSprite, TrainSpriteAssign,
-        TrainSpriteGraphics,
+        Action2VarAdjust, Action2VarEntry, Action2VarTerm, DecodedSprite, TileLayout,
+        TileLayoutSpriteRef, TrainSpriteAssign, TrainSpriteGraphics,
     };
 
     fn solid(r: u8, g: u8, b: u8) -> DecodedSprite {
@@ -276,5 +293,56 @@ mod tests {
             def.newgrf_view_runtime(0, &mut second).unwrap().rgba[2],
             255
         );
+    }
+
+    #[test]
+    fn runtime_tile_layout_resolves_ground_and_sequence() {
+        let sprite = solid(80, 120, 160);
+        let mut runtime = TrainSpriteGraphics {
+            sets: vec![vec![sprite.clone()], vec![sprite.clone()]],
+            assigns: vec![TrainSpriteAssign {
+                local_id: 4,
+                set_id: 7,
+            }],
+            ..Default::default()
+        };
+        runtime.tile_layouts.insert(
+            7,
+            TileLayout {
+                ground: TileLayoutSpriteRef {
+                    action1_set: Some(0),
+                    ..Default::default()
+                },
+                sequence: vec![TileLayoutSpriteRef {
+                    action1_set: Some(1),
+                    origin: [2, 3, 4],
+                    extent: [8, 8, 16],
+                    ..Default::default()
+                }],
+            },
+        );
+        let def = ObjectSpecDef {
+            id: NEW_OBJECT_OFFSET,
+            class_label: "TEST".into(),
+            name: "layout".into(),
+            size: OBJECT_SIZE_1X1,
+            from_newgrf: true,
+            local_id: 4,
+            grfid: 0,
+            climate_mask: DEFAULT_OBJECT_CLIMATE_MASK,
+            build_cost_factor: DEFAULT_OBJECT_BUILD_COST_FACTOR,
+            callback_mask: 0,
+            views: vec![sprite],
+            newgrf_runtime: Some(Box::new(runtime)),
+            associated_badges: Vec::new(),
+        };
+        let mut ctx = crate::newgrf_sprites::Action2EvalCtx::default();
+        let layout = def
+            .newgrf_tile_layout_runtime(0, &mut ctx)
+            .expect("TileSeq");
+        assert!(layout.complete);
+        assert!(layout.ground.is_some());
+        assert_eq!(layout.sequence.len(), 1);
+        assert_eq!(layout.sequence[0].origin, [2, 3, 4]);
     }
 }

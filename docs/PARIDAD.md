@@ -219,8 +219,8 @@ hay grupos específicos, el fallback vanilla de `SPR_TRAMWAY_BASE` selecciona
 las seis filas de puente (`95..106`) con sus 119 sprites extraídos y las mismas
 cajas `SpriteBounds` delanteras/traseras. El flag Action0
 `RoadTypeFlag::Catenary` y el tranvía vanilla determinan si se solicita el
-grupo. Los layouts/children completos de objetos, industrias y casas siguen
-pendientes.
+grupo. Los layouts/children completos de objetos ya se materializan; los de
+industrias y casas siguen pendientes.
 Los overlays de estación rail NewGRF se resuelven también en pendientes y se
 vinculan al parent de la fundación nivelada. Sus layouts `TileSeq` completos
 ahora sustituyen el suelo y emiten parents/children con cajas `M(...)`; los
@@ -238,14 +238,17 @@ exclusión de cargos y la máscara final de refit descarta los cargos excluidos;
 el resto de propiedades CTT variables continúa pendiente.
 Los objetos NewGRF ya reevalúan
 Action2 por tesela con random, offset de footprint, pendiente/terreno,
-animación y owner, y cachean por fingerprint. Los producers de industria y
+animación y owner, y cachean por fingerprint. Los layouts `TileSeq` completos
+reemplazan el suelo y emiten parents/children con cajas `M(...)`; los sprites
+base, paletas custom y layouts incompletos conservan fallback vanilla. Los
+producers de industria y
 las industrias NewGRF ya usan sus offsets Action2 runtime y cuelgan el overlay
 del parent de la fundación nivelada cuando existe. Las casas NewGRF también
 reevalúan Action2 por tesela (etapa/hash, edad, terreno, frame, posición y
 random/triggers) y registran el edificio con bounds conservadoras como parent
 sortable; el suelo/layout propio y las variables de pueblo/vecindad aún usan
 el sustituto vanilla. Los layouts `TileSeq`/children completos de
-estación/objeto/industria/casa, los callbacks de foundation específicos,
+industria/casa, los callbacks de foundation específicos,
 color/view y las paletas especiales no basadas en la rampa de compañía fuera
 del renderer de vehículos siguen pendientes de un contrato runtime completo.
 El sprite-stack de vehículos ya resuelve grupos

@@ -15,10 +15,11 @@ use super::{
     sloped_or_flat_image, spawn_ground_sprite,
 };
 use crate::iso::{
-    full_tile_sprite_pos, ground_draw_z, overlay_pos, remap_tile_offset, slope_sprite_offset,
-    wang_hash,
+    RoadStopSeqGfx, full_tile_sprite_pos, ground_draw_z, overlay_pos, remap_tile_offset,
+    road_stop_build_sprite_center, slope_sprite_offset, wang_hash,
 };
 use crate::render::atlas::AtlasSprite;
+use crate::render::newgrf_cache::{runtime_fingerprint, vars};
 use crate::render::viewport_sort::ParentSpriteBounds;
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
 use crate::render::{
@@ -1226,6 +1227,246 @@ pub(crate) fn spawn_industry_tile(
     );
 }
 
+/// Bounds inclusivos de una entrada parent `TileSeq` de objeto.
+#[allow(clippy::too_many_arguments)]
+fn object_tile_seq_bounds(
+    tx: i32,
+    ty: i32,
+    base_z: u8,
+    origin: [i8; 3],
+    extent: [u8; 3],
+) -> ParentSpriteBounds {
+    let x = tx * 16 + i32::from(origin[0]);
+    let y = ty * 16 + i32::from(origin[1]);
+    let z = i32::from(base_z) * 8 + i32::from(origin[2]);
+    ParentSpriteBounds::new(
+        x,
+        y,
+        z,
+        x + i32::from(extent[0]) - 1,
+        y + i32::from(extent[1]) - 1,
+        z + i32::from(extent[2]) - 1,
+    )
+}
+
+/// Centro de un child `TileSeq`: offsets de pantalla desde la esquina
+/// superior izquierda del parent, con el eje Y invertido al entrar en Bevy.
+#[allow(clippy::too_many_arguments)]
+fn object_tile_seq_child_center(
+    parent_top_left: Vec2,
+    origin: [i8; 3],
+    width: f32,
+    height: f32,
+    tx: i32,
+    ty: i32,
+    base_z: u8,
+    layer_z: f32,
+) -> Vec3 {
+    let top_left = parent_top_left + Vec2::new(f32::from(origin[0]), -f32::from(origin[1]));
+    Vec3::new(
+        top_left.x + width / 2.0,
+        top_left.y - height / 2.0,
+        crate::iso::sortable_draw_z(tx, ty, base_z, layer_z),
+    )
+}
+
+/// Resuelve el `TileSeq` de un objeto para la tesela concreta del footprint.
+#[allow(clippy::too_many_arguments)]
+fn resolve_newgrf_object_layout(
+    object_type: u16,
+    tile: Tile,
+    tileh: u8,
+    climate: Climate,
+    object_catalog: &[ObjectSpecDef],
+) -> Option<(
+    &ObjectSpecDef,
+    openttdrs_core::newgrf_sprites::ResolvedTileLayout,
+    u32,
+    usize,
+)> {
+    let def =
+        crate::render::object_newgrf::newgrf_object_def_for_type(object_catalog, object_type)?;
+    let view_idx =
+        openttdrs_core::object_view_index_for_type(&tile, object_type, object_catalog).unwrap_or(0);
+    let mut action2 = openttdrs_core::action2_eval_ctx_for_object_tile(tile, tileh, climate);
+    let layout = def.newgrf_tile_layout_runtime(view_idx, &mut action2)?;
+    let runtime_fp = def
+        .newgrf_runtime
+        .as_ref()
+        .map_or(0, |_| runtime_fingerprint(&action2, vars::OBJECT, false));
+    Some((def, layout, runtime_fp, view_idx))
+}
+
+/// Emite el suelo de un layout de objeto. Un resultado completo sin `ground`
+/// representa `DODRAW=0` y suprime el suelo genérico de la tesela.
+#[allow(clippy::too_many_arguments)]
+fn spawn_newgrf_object_layout_ground(
+    commands: &mut Commands,
+    ctx: &TileRenderContext,
+    def: &ObjectSpecDef,
+    runtime_fp: u32,
+    layout: &openttdrs_core::newgrf_sprites::ResolvedTileLayout,
+    cache: &mut crate::render::NewGrfObjectSpriteCache,
+    images: &mut Assets<Image>,
+    tint: Color,
+) -> bool {
+    if !layout.complete {
+        return false;
+    }
+    let Some(ground) = layout.ground.as_ref() else {
+        return true;
+    };
+    let handle = cache.handle_for_layout(def, 0, runtime_fp, &ground.sprite, images);
+    let position = overlay_pos(
+        ctx.iso_pos,
+        f32::from(ground.sprite.x_offs),
+        f32::from(ground.sprite.y_offs),
+        f32::from(ground.sprite.width),
+        f32::from(ground.sprite.height),
+        ctx.info.base_z,
+        0.55,
+        ctx.tx_i32(),
+        ctx.ty_i32(),
+    );
+    commands.spawn((
+        MapVisualLayer,
+        ctx.map_tile_chunk(),
+        Sprite {
+            image: handle,
+            color: tint,
+            ..default()
+        },
+        Transform::from_translation(position),
+    ));
+    true
+}
+
+/// Emite parents y children `BUILD` de un layout de objeto NewGRF.
+#[allow(clippy::too_many_arguments)]
+fn spawn_newgrf_object_layout_sequence(
+    commands: &mut Commands,
+    ctx: &TileRenderContext,
+    map_width: u32,
+    def: &ObjectSpecDef,
+    runtime_fp: u32,
+    layout: &openttdrs_core::newgrf_sprites::ResolvedTileLayout,
+    cache: &mut crate::render::NewGrfObjectSpriteCache,
+    images: &mut Assets<Image>,
+    tint: Color,
+) -> bool {
+    if !layout.complete || layout.sequence.is_empty() {
+        return false;
+    }
+    let mut last_parent: Option<(Entity, Vec2)> = None;
+    for (index, layer) in layout.sequence.iter().enumerate() {
+        let slot = u16::try_from(index.saturating_add(1)).unwrap_or(u16::MAX);
+        let handle = cache.handle_for_layout(def, slot, runtime_fp, &layer.sprite, images);
+        let width = f32::from(layer.sprite.width);
+        let height = f32::from(layer.sprite.height);
+        let seq = RoadStopSeqGfx {
+            dx: f32::from(layer.origin[0]),
+            dy: f32::from(layer.origin[1]),
+            dz: if layer.is_parent() {
+                f32::from(layer.origin[2])
+            } else {
+                0.0
+            },
+            x_offs: f32::from(layer.sprite.x_offs),
+            y_offs: f32::from(layer.sprite.y_offs),
+            remap_x_adj: 0.0,
+        };
+        let layer_z = 0.6 + index as f32 * 0.0003;
+        let sprite = Sprite {
+            image: handle,
+            color: tint,
+            ..default()
+        };
+        if layer.is_parent() {
+            let position = road_stop_build_sprite_center(
+                ctx.iso_pos,
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+                ctx.info.base_z,
+                layer_z,
+                seq,
+                width,
+                height,
+            );
+            let source_depth = viewport_source_depth(position.z, ctx.tx, map_width);
+            let sprite_id = u32::MAX.saturating_sub(u32::try_from(index).unwrap_or(u32::MAX));
+            let bounds = object_tile_seq_bounds(
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+                ctx.info.base_z,
+                layer.origin,
+                layer.extent,
+            );
+            let entity = commands
+                .spawn((
+                    MapVisualLayer,
+                    ctx.map_tile_chunk(),
+                    sprite,
+                    Transform::from_translation(Vec3::new(position.x, position.y, source_depth)),
+                    ViewportSortableParent {
+                        sprite_id,
+                        bounds,
+                        insertion_key: viewport_insertion_key(
+                            ctx.tx,
+                            ctx.ty,
+                            u8::try_from(index.saturating_add(2)).unwrap_or(u8::MAX),
+                        ),
+                        source_depth,
+                    },
+                ))
+                .id();
+            last_parent = Some((
+                entity,
+                Vec2::new(position.x - width / 2.0, position.y + height / 2.0),
+            ));
+        } else if let Some((parent, parent_top_left)) = last_parent {
+            let position = object_tile_seq_child_center(
+                parent_top_left,
+                layer.origin,
+                width,
+                height,
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+                ctx.info.base_z,
+                layer_z,
+            );
+            let source_depth = viewport_source_depth(position.z, ctx.tx, map_width);
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                sprite,
+                Transform::from_translation(Vec3::new(position.x, position.y, source_depth)),
+                ViewportSortableChild {
+                    parent,
+                    source_depth,
+                },
+            ));
+        } else {
+            let position = road_stop_build_sprite_center(
+                ctx.iso_pos,
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+                ctx.info.base_z,
+                layer_z,
+                seq,
+                width,
+                height,
+            );
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                sprite,
+                Transform::from_translation(position),
+            ));
+        }
+    }
+    true
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_generic_land_tile(
     commands: &mut Commands,
@@ -1236,6 +1477,7 @@ pub(crate) fn spawn_generic_land_tile(
     slope_half_ground: f32,
     climate: Climate,
     world_seed: u64,
+    map_width: u32,
     object_catalog: &[ObjectSpecDef],
     mut object_sprites: Option<&mut crate::render::NewGrfObjectSpriteCache>,
     mut images: Option<&mut Assets<Image>>,
@@ -1244,6 +1486,13 @@ pub(crate) fn spawn_generic_land_tile(
     let ottd_type = ctx.tile.map_or(0u8, |t| (t.mapt >> 4) & 0xF);
     let tile_m5 = ctx.tile.map_or(0u8, |t| t.m5);
     let object_type = ctx.object_type.unwrap_or(u16::from(tile_m5));
+    let object_layout = if ottd_type == 10 && is_newgrf_object_type_id(object_type) {
+        ctx.tile.and_then(|tile| {
+            resolve_newgrf_object_layout(object_type, tile, tileh, climate, object_catalog)
+        })
+    } else {
+        None
+    };
 
     // MP_CLEAR (0): distinguir subtipo de suelo vía m5 bits 2-4.
     // MP_OBJECT (10): el suelo depende del ObjectType resuelto desde OBJS;
@@ -1399,7 +1648,24 @@ pub(crate) fn spawn_generic_land_tile(
         | TileKind::Water
         | TileKind::Void => unreachable!(),
     };
-    spawn_ground_sprite(commands, &image, color, ctx, slope_half_ground);
+    let mut used_newgrf_layout_ground = false;
+    if let Some((def, layout, runtime_fp, _view_idx)) = object_layout.as_ref()
+        && let (Some(cache), Some(image_store)) = (object_sprites.as_mut(), images.as_mut())
+    {
+        used_newgrf_layout_ground = spawn_newgrf_object_layout_ground(
+            commands,
+            ctx,
+            def,
+            *runtime_fp,
+            layout,
+            cache,
+            image_store,
+            color,
+        );
+    }
+    if !used_newgrf_layout_ground {
+        spawn_ground_sprite(commands, &image, color, ctx, slope_half_ground);
+    }
 
     // Los dos hitos originales requieren terreno plano y `DrawTile_Object`
     // siempre les asigna `SPR_FLAT_2_THIRD_GRASS_TILE`. Registrar ambas
@@ -1481,6 +1747,27 @@ pub(crate) fn spawn_generic_land_tile(
             // siempre el preview estático del GRF.
             let mut a2 =
                 openttdrs_core::action2_eval_ctx_for_object_tile(tile, ctx.info.tileh, climate);
+            if let Some((layout_def, layout, runtime_fp, _layout_view_idx)) = object_layout.as_ref()
+                && layout.complete
+            {
+                if spawn_newgrf_object_layout_sequence(
+                    commands,
+                    ctx,
+                    map_width,
+                    layout_def,
+                    *runtime_fp,
+                    layout,
+                    cache,
+                    images,
+                    tint,
+                ) {
+                    return;
+                }
+                // Un layout completo sin secuencia sólo dibuja su ground (ya
+                // emitido arriba), por lo que no debe duplicarse con la vista
+                // plana Action1/3.
+                return;
+            }
             let view = if def.newgrf_runtime.is_some() {
                 def.newgrf_view_runtime(view_idx, &mut a2)
             } else {

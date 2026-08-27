@@ -295,6 +295,7 @@ pub(crate) fn spawn_map_tiles_in_bounds(
                     slope_half_ground,
                     climate,
                     world_seed,
+                    mw,
                     &sim.state.object_spec_catalog,
                     Some(object_sprites),
                     Some(images),

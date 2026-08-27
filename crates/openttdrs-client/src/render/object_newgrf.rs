@@ -9,10 +9,11 @@ use crate::render::newgrf_cache::{
     DecodedSpriteImagePolicy, decoded_sprite_image, runtime_fingerprint, vars,
 };
 
-/// `(spec_id, view_idx, runtime_fp)` → textura RGBA.
+/// `(spec_id, slot, runtime_fp)` → textura RGBA. El bit alto del slot separa
+/// piezas TileSeq de vistas planas para no reutilizar una textura por error.
 #[derive(Resource, Default)]
 pub(crate) struct NewGrfObjectSpriteCache {
-    handles: HashMap<(u16, u8, u32), Handle<Image>>,
+    handles: HashMap<(u16, u16, u32), Handle<Image>>,
 }
 
 impl NewGrfObjectSpriteCache {
@@ -28,7 +29,7 @@ impl NewGrfObjectSpriteCache {
         view: &DecodedSprite,
         images: &mut Assets<Image>,
     ) -> Handle<Image> {
-        let idx = u8::try_from(view_idx % def.views.len().max(1)).unwrap_or(0);
+        let idx = u16::try_from(view_idx % def.views.len().max(1)).unwrap_or(0);
         let key = (def.id, idx, 0);
         self.handles
             .entry(key)
@@ -56,7 +57,7 @@ impl NewGrfObjectSpriteCache {
         } else {
             def.view(view_idx)?.clone()
         };
-        let idx = u8::try_from(view_idx % def.views.len().max(1)).unwrap_or(0);
+        let idx = u16::try_from(view_idx % def.views.len().max(1)).unwrap_or(0);
         let key = (def.id, idx, fp);
         Some(
             self.handles
@@ -66,6 +67,24 @@ impl NewGrfObjectSpriteCache {
                 })
                 .clone(),
         )
+    }
+
+    /// Materializa una pieza ya resuelta de un layout `TileSeq` de objeto.
+    pub(crate) fn handle_for_layout(
+        &mut self,
+        def: &ObjectSpecDef,
+        slot: u16,
+        runtime_fp: u32,
+        sprite: &DecodedSprite,
+        images: &mut Assets<Image>,
+    ) -> Handle<Image> {
+        let key = (def.id, 0x8000 | (slot & 0x7FFF), runtime_fp);
+        self.handles
+            .entry(key)
+            .or_insert_with(|| {
+                images.add(decoded_sprite_image(sprite, DecodedSpriteImagePolicy::Raw))
+            })
+            .clone()
     }
 }
 

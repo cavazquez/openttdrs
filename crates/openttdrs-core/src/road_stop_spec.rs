@@ -38,8 +38,8 @@ pub const ROADSTOP_FLAG_DRIVE_THROUGH_ONLY: u32 = 1 << 3;
 pub const ROADSTOP_FLAG_ROAD_ONLY: u32 = 1 << 5;
 pub const ROADSTOP_FLAG_TRAM_ONLY: u32 = 1 << 6;
 /// `DrawModeRegister`: Action2 register `0x100` overrides `draw_mode`.
-/// Register-driven draw modes are kept as a renderer fallback until the
-/// `TileLayout` register processor is materialized.
+/// El resolver de layouts captura el valor después de evaluar los registros
+/// Action2, de modo que `WaypGround` puede decidirse por tesela.
 pub const ROADSTOP_FLAG_DRAW_MODE_REGISTER: u32 = 1 << 8;
 
 /// Bits de `RoadStopDrawMode` (Action0 prop `0x0C` BYTE).

@@ -39,6 +39,26 @@ pub(crate) fn runtime_fingerprint(
                 .wrapping_add(u32::from(var) << 16);
         }
     }
+    // Sprite layouts may consume temporary (`7D`) and extended (`0x100+`)
+    // registers written while resolving an Action2 procedure. They affect
+    // DODRAW, sprite/palette offsets and bounding boxes, so they belong in the
+    // same deterministic key as ordinary variables.
+    let mut temp_registers: Vec<_> = ctx.temp_registers.iter().collect();
+    temp_registers.sort_unstable_by_key(|entry| *entry.0);
+    for (&index, &value) in temp_registers {
+        h = h
+            .wrapping_mul(31)
+            .wrapping_add(value)
+            .wrapping_add(u32::from(index) << 16);
+    }
+    let mut extended_registers: Vec<_> = ctx.registers_100.iter().collect();
+    extended_registers.sort_unstable_by_key(|entry| *entry.0);
+    for (&index, &value) in extended_registers {
+        h = h
+            .wrapping_mul(31)
+            .wrapping_add(value)
+            .wrapping_add(u32::from(index).rotate_left(11));
+    }
     // Las variables `60+x` pueden consultar varios offsets del mismo scope
     // dentro de un Action2. Ordenar la tabla evita que el orden aleatorio del
     // `HashMap` haga inestable la clave de caché entre frames.
@@ -178,6 +198,29 @@ mod tests {
         assert_ne!(
             runtime_fingerprint(&first, vars::TRAIN, true),
             runtime_fingerprint(&second, vars::TRAIN, true)
+        );
+    }
+
+    #[test]
+    fn layout_registers_invalidate_fingerprint() {
+        let mut first = Action2EvalCtx::default();
+        first.temp_registers.insert(3, 1);
+        first.registers_100.insert(0x100, 7);
+        let mut second = first.clone();
+        assert_eq!(
+            runtime_fingerprint(&first, vars::ROAD_STOP, false),
+            runtime_fingerprint(&second, vars::ROAD_STOP, false)
+        );
+        second.temp_registers.insert(3, 2);
+        assert_ne!(
+            runtime_fingerprint(&first, vars::ROAD_STOP, false),
+            runtime_fingerprint(&second, vars::ROAD_STOP, false)
+        );
+        second = first.clone();
+        second.registers_100.insert(0x100, 8);
+        assert_ne!(
+            runtime_fingerprint(&first, vars::ROAD_STOP, false),
+            runtime_fingerprint(&second, vars::ROAD_STOP, false)
         );
     }
 }

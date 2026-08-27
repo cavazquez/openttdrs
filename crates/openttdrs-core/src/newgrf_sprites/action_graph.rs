@@ -14,7 +14,8 @@ use crate::newgrf_walk::{GrfEntry, walk_grf_entries};
 use super::model::{
     ACTION2_PARENT_SCOPE_MARKER, Action2RandomEntry, Action2VarAdjust, Action2VarEntry,
     Action2VarOp, Action2VarTerm, DecodedSprite, IndustryProductionGroup, TileLayout,
-    TileLayoutSpriteRef, TrainSpriteAssign, TrainSpriteGraphics, WagonOverrideAssign,
+    TileLayoutRegisterRefs, TileLayoutSpriteRef, TrainSpriteAssign, TrainSpriteGraphics,
+    WagonOverrideAssign,
 };
 use super::pixel_codec::{decode_real_sprite_entry, index_sprite_section, resolve_fd_sprite};
 
@@ -60,7 +61,15 @@ fn parse_action2_tile_layout(payload: &[u8], feature: u8) -> Option<(u8, TileLay
     let set_id = payload[2];
     let raw_type = payload[3];
     let has_flags = raw_type & 0x40 != 0;
-    let num_building_sprites = usize::from((raw_type & !0x40).max(1));
+    let building_count = raw_type & !0x40;
+    // OpenTTD first clamps a zero `type` to one and only then strips the
+    // has-flags bit. Therefore `0x00` means one child record while `0x40`
+    // means a ground-only layout with flags.
+    let num_building_sprites = if building_count == 0 && raw_type != 0 {
+        0
+    } else {
+        usize::from(building_count.max(1))
+    };
     let no_z_position = raw_type == 0;
     let mut cursor = 4usize;
 
@@ -117,47 +126,52 @@ fn parse_action2_tile_layout(payload: &[u8], feature: u8) -> Option<(u8, TileLay
         }
 
         // `ReadSpriteLayoutRegisters` follows every sprite record when the
-        // layout has drawing flags. We do not evaluate those registers yet,
-        // but skipping their encoded bytes is essential: otherwise a layout
-        // with `TLF_DODRAW`, register offsets or var10 would shift the next
-        // sprite and silently produce bogus bounds.
+        // layout has drawing flags. Keep the register indices instead of only
+        // skipping them: the runtime processor can now apply DODRAW, sprite
+        // offsets, bounding-box offsets and var10 without reparsing NFO.
+        let mut registers = TileLayoutRegisterRefs::default();
         if has_flags {
-            let mut register_bytes = 0usize;
             if flags & 0x01 != 0 {
-                register_bytes += 1; // TLF_DODRAW
+                registers.dodraw = Some(*payload.get(cursor)?);
+                cursor += 1;
             }
             if flags & 0x02 != 0 {
-                register_bytes += 1; // TLF_SPRITE
+                registers.sprite = Some(*payload.get(cursor)?);
+                cursor += 1;
             }
             if flags & 0x04 != 0 {
-                register_bytes += 1; // TLF_PALETTE
+                registers.palette = Some(*payload.get(cursor)?);
+                cursor += 1;
             }
             if !is_ground {
                 if origin[2] == i8::MIN {
                     if flags & 0x10 != 0 {
-                        register_bytes += 1; // TLF_CHILD_X_OFFSET
+                        registers.child_delta[0] = Some(*payload.get(cursor)?);
+                        cursor += 1;
                     }
                     if flags & 0x20 != 0 {
-                        register_bytes += 1; // TLF_CHILD_Y_OFFSET
+                        registers.child_delta[1] = Some(*payload.get(cursor)?);
+                        cursor += 1;
                     }
                 } else {
                     if flags & 0x10 != 0 {
-                        register_bytes += 2; // TLF_BB_XY_OFFSET
+                        registers.parent_delta[0] = Some(*payload.get(cursor)?);
+                        registers.parent_delta[1] = Some(*payload.get(cursor + 1)?);
+                        cursor += 2;
                     }
                     if flags & 0x20 != 0 {
-                        register_bytes += 1; // TLF_BB_Z_OFFSET
+                        registers.parent_delta[2] = Some(*payload.get(cursor)?);
+                        cursor += 1;
                     }
                 }
             }
             if flags & 0x40 != 0 {
-                register_bytes += 1; // TLF_SPRITE_VAR10
+                registers.sprite_var10 = Some(*payload.get(cursor)?);
+                cursor += 1;
             }
             if flags & 0x80 != 0 {
-                register_bytes += 1; // TLF_PALETTE_VAR10
-            }
-            cursor = cursor.checked_add(register_bytes)?;
-            if cursor > payload.len() {
-                return None;
+                registers.palette_var10 = Some(*payload.get(cursor)?);
+                cursor += 1;
             }
         }
 
@@ -167,6 +181,7 @@ fn parse_action2_tile_layout(payload: &[u8], feature: u8) -> Option<(u8, TileLay
             palette_action1_set,
             direct_palette,
             flags,
+            registers,
             origin,
             extent,
         })
@@ -1062,6 +1077,11 @@ mod tests {
         assert_eq!(layout.sequence[0].origin, [3, 4, 5]);
         assert_eq!(layout.sequence[0].extent, [6, 7, 8]);
         assert_eq!(layout.sequence[0].flags, 0x10);
+        assert_eq!(layout.ground.registers.dodraw, Some(0));
+        assert_eq!(
+            layout.sequence[0].registers.parent_delta,
+            [Some(9), Some(10), None]
+        );
     }
 
     #[test]
@@ -1114,6 +1134,68 @@ mod tests {
         assert_eq!(layout.sequence[0].sprite.rgba[0], 1);
         assert_eq!(layout.sequence[0].origin, [4, 5, 6]);
         assert_eq!(layout.sequence[0].extent, [7, 8, 9]);
+    }
+
+    #[test]
+    fn tile_layout_processes_register_offsets_and_dodraw() {
+        let sprite = |red| DecodedSprite {
+            width: 1,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: vec![red, 0, 0, 255],
+            mask: Vec::new(),
+        };
+        let mut graphics = TrainSpriteGraphics {
+            sets: vec![vec![sprite(1), sprite(2), sprite(3)]],
+            ..TrainSpriteGraphics::default()
+        };
+        graphics.assigns.push(TrainSpriteAssign {
+            local_id: 1,
+            set_id: 4,
+        });
+        graphics.tile_layouts.insert(
+            4,
+            TileLayout {
+                ground: TileLayoutSpriteRef {
+                    action1_set: Some(0),
+                    ..TileLayoutSpriteRef::default()
+                },
+                sequence: vec![TileLayoutSpriteRef {
+                    action1_set: Some(0),
+                    flags: 0x02 | 0x10,
+                    registers: TileLayoutRegisterRefs {
+                        sprite: Some(3),
+                        parent_delta: [Some(4), Some(5), None],
+                        ..TileLayoutRegisterRefs::default()
+                    },
+                    origin: [10, 20, 0],
+                    extent: [1, 1, 1],
+                    ..TileLayoutSpriteRef::default()
+                }],
+            },
+        );
+        let mut ctx = Action2EvalCtx::default();
+        ctx.temp_registers.insert(3, 1);
+        ctx.temp_registers.insert(4, 2);
+        ctx.temp_registers.insert(5, u32::from(u16::MAX));
+        let Some(layout) = graphics.tile_layout_for_local_id_ctx(1, 0, &mut ctx) else {
+            panic!("dynamic TileLayout");
+        };
+        assert!(layout.complete);
+        assert_eq!(layout.sequence[0].sprite.rgba[0], 2);
+        assert_eq!(layout.sequence[0].origin, [12, 19, 0]);
+
+        let mut hidden = graphics.tile_layouts.get(&4).cloned().unwrap_or_default();
+        hidden.ground.flags = 0x01;
+        hidden.ground.registers.dodraw = Some(6);
+        graphics.tile_layouts.insert(4, hidden);
+        ctx.temp_registers.insert(6, 0);
+        let Some(layout) = graphics.tile_layout_for_local_id_ctx(1, 0, &mut ctx) else {
+            panic!("hidden TileLayout");
+        };
+        assert!(layout.complete);
+        assert!(layout.ground.is_none());
     }
 
     #[test]

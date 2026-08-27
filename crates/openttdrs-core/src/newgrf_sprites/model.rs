@@ -20,6 +20,30 @@ pub struct DecodedSprite {
     pub mask: Vec<u8>,
 }
 
+/// Registros que modifican una entrada de un layout `TileSeq`.
+///
+/// Los bytes almacenados por NFO son índices de registros temporales. El
+/// procesador consulta primero la tabla compacta y luego el rango extendido
+/// `0x100..0x1FF`, que es la forma en que los contextos de Action2 exponen
+/// `STO`/`0x100` al renderer.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct TileLayoutRegisterRefs {
+    /// Registro `TLF_DODRAW`.
+    pub dodraw: Option<u8>,
+    /// Registro `TLF_SPRITE` (offset signed de la entrada Action1).
+    pub sprite: Option<u8>,
+    /// Registro `TLF_PALETTE`.
+    pub palette: Option<u8>,
+    /// Registros `TLF_BB_XY_OFFSET`/`TLF_BB_Z_OFFSET` de un parent.
+    pub parent_delta: [Option<u8>; 3],
+    /// Registros `TLF_CHILD_X_OFFSET`/`TLF_CHILD_Y_OFFSET` de un child.
+    pub child_delta: [Option<u8>; 2],
+    /// Valor de var10 usado para seleccionar el sprite Action1.
+    pub sprite_var10: Option<u8>,
+    /// Valor de var10 usado para seleccionar la paleta Action1.
+    pub palette_var10: Option<u8>,
+}
+
 /// Referencia a un sprite dentro de un layout `TileSeq` de Action2.
 ///
 /// En el formato `NewGRF`, el bit 15 de la paleta indica que el campo `sprite`
@@ -38,6 +62,8 @@ pub struct TileLayoutSpriteRef {
     pub direct_palette: u16,
     /// Flags `TileLayoutFlags` del registro de layout.
     pub flags: u8,
+    /// Índices de los registros usados por `flags`.
+    pub registers: TileLayoutRegisterRefs,
     /// Origen `TILE_SEQ` en unidades de mapa/píxel. `origin_z == -128`
     /// identifica un child (`DrawTileSeqStruct::IsParentSprite == false`).
     pub origin: [i8; 3],
@@ -82,58 +108,170 @@ impl ResolvedTileLayoutSprite {
 pub struct ResolvedTileLayout {
     pub ground: Option<ResolvedTileLayoutSprite>,
     pub sequence: Vec<ResolvedTileLayoutSprite>,
-    /// `false` when an entry needs a base sprite, custom palette or register
-    /// preprocessing that the compact client model does not expose. Consumers
-    /// must use the vanilla path for incomplete layouts.
+    /// `false` when an entry needs a base sprite or custom palette that the
+    /// decoded Action1 cache cannot materialize. Consumers must use the
+    /// vanilla path for incomplete layouts.
     pub complete: bool,
 }
 
 impl TileLayout {
-    fn resolve(&self, graphics: &TrainSpriteGraphics, view: usize) -> ResolvedTileLayout {
+    fn resolve(
+        &self,
+        graphics: &TrainSpriteGraphics,
+        ctx: &Action2EvalCtx,
+        view: usize,
+    ) -> ResolvedTileLayout {
         let mut complete = true;
-        let mut resolve_sprite = |reference: &TileLayoutSpriteRef| {
-            // Direct base-set sprites and register-driven layouts need the
-            // original sprite/palette resolver. The decoded Action1 cache
-            // cannot reproduce those yet; mark the whole layout incomplete so
-            // callers can fall back atomically instead of drawing a mixture
-            // of custom and vanilla pieces.
-            if reference.flags != 0 {
-                complete = false;
-                return None;
-            }
-            if reference.action1_set.is_none() {
-                if reference.direct_sprite != 0 {
-                    complete = false;
-                }
-                return None;
-            }
-            let set = reference.action1_set?;
-            let Some(sprites) = graphics.sets.get(usize::from(set)) else {
-                complete = false;
-                return None;
-            };
-            // Road-stop layouts select orientation in the Action2 resolver;
-            // the selected custom reference is the first sprite of its
-            // Action1 set. Construction-stage selection for houses/objects is
-            // intentionally left to their future feature-specific processor.
-            let _ = view;
-            let Some(sprite) = sprites.first().cloned() else {
-                complete = false;
-                return None;
-            };
-            Some(ResolvedTileLayoutSprite {
-                sprite,
-                origin: reference.origin,
-                extent: reference.extent,
+        let ground = resolve_layout_sprite(&self.ground, true, graphics, ctx, view, &mut complete);
+        let sequence = self
+            .sequence
+            .iter()
+            .filter_map(|reference| {
+                resolve_layout_sprite(reference, false, graphics, ctx, view, &mut complete)
             })
-        };
-
+            .collect();
         ResolvedTileLayout {
-            ground: resolve_sprite(&self.ground),
-            sequence: self.sequence.iter().filter_map(resolve_sprite).collect(),
+            ground,
+            sequence,
             complete,
         }
     }
+}
+
+fn resolve_layout_sprite(
+    reference: &TileLayoutSpriteRef,
+    is_ground: bool,
+    graphics: &TrainSpriteGraphics,
+    ctx: &Action2EvalCtx,
+    _view: usize,
+    complete: &mut bool,
+) -> Option<ResolvedTileLayoutSprite> {
+    // Palettes are still represented as raw ids by `DecodedSprite`. Do not
+    // draw a custom sprite with the wrong recolour: callers fall back
+    // atomically until the palette map is available.
+    if reference.flags & (0x04 | 0x08 | 0x80) != 0 {
+        *complete = false;
+        return None;
+    }
+    if reference.flags & 0x01 != 0 {
+        if reference.registers.dodraw.is_none() {
+            *complete = false;
+            return None;
+        }
+        if register_value(ctx, reference.registers.dodraw) == 0 {
+            return None;
+        }
+    }
+    if reference.flags & 0x02 != 0 && reference.registers.sprite.is_none() {
+        *complete = false;
+        return None;
+    }
+    if reference.flags & 0x40 != 0 && reference.registers.sprite_var10.is_none() {
+        *complete = false;
+        return None;
+    }
+    if reference.action1_set.is_none() {
+        if reference.direct_sprite != 0 {
+            *complete = false;
+        }
+        return None;
+    }
+    let set = reference.action1_set?;
+    let Some(sprites) = graphics.sets.get(usize::from(set)) else {
+        *complete = false;
+        return None;
+    };
+    if sprites.is_empty() {
+        *complete = false;
+        return None;
+    }
+
+    // Road-stop layouts select orientation in the Action2 resolver. A plain
+    // layout keeps the first entry, while register-driven sprite offsets and
+    // var10 select a further entry in the decoded Action1 set.
+    let mut sprite_index = 0_i32;
+    if reference.flags & 0x40 != 0 {
+        let var10 = register_value(ctx, reference.registers.sprite_var10);
+        if var10 > 7 {
+            *complete = false;
+            return None;
+        }
+        sprite_index = i32::try_from(var10).unwrap_or(0);
+    }
+    if reference.flags & 0x02 != 0 {
+        sprite_index =
+            sprite_index.saturating_add(signed_register(ctx, reference.registers.sprite));
+    }
+    let Ok(sprite_index) = usize::try_from(sprite_index) else {
+        *complete = false;
+        return None;
+    };
+    let Some(sprite) = sprites.get(sprite_index).cloned() else {
+        *complete = false;
+        return None;
+    };
+
+    let mut origin = reference.origin;
+    if !is_ground {
+        if reference.is_parent() {
+            if reference.flags & 0x10 != 0 {
+                origin[0] = add_signed(
+                    origin[0],
+                    signed_register(ctx, reference.registers.parent_delta[0]),
+                );
+                origin[1] = add_signed(
+                    origin[1],
+                    signed_register(ctx, reference.registers.parent_delta[1]),
+                );
+            }
+            if reference.flags & 0x20 != 0 {
+                origin[2] = add_signed(
+                    origin[2],
+                    signed_register(ctx, reference.registers.parent_delta[2]),
+                );
+            }
+        } else {
+            if reference.flags & 0x10 != 0 {
+                origin[0] = add_signed(
+                    origin[0],
+                    signed_register(ctx, reference.registers.child_delta[0]),
+                );
+            }
+            if reference.flags & 0x20 != 0 {
+                origin[1] = add_signed(
+                    origin[1],
+                    signed_register(ctx, reference.registers.child_delta[1]),
+                );
+            }
+        }
+    }
+    Some(ResolvedTileLayoutSprite {
+        sprite,
+        origin,
+        extent: reference.extent,
+    })
+}
+
+fn register_value(ctx: &Action2EvalCtx, index: Option<u8>) -> u32 {
+    let Some(index) = index else {
+        return 0;
+    };
+    ctx.temp_registers
+        .get(&index)
+        .copied()
+        .or_else(|| ctx.registers_100.get(&(0x100 + u16::from(index))).copied())
+        .unwrap_or(0)
+}
+
+fn signed_register(ctx: &Action2EvalCtx, index: Option<u8>) -> i32 {
+    let value = register_value(ctx, index);
+    let low = u16::try_from(value & u32::from(u16::MAX)).unwrap_or_default();
+    i32::from(i16::from_ne_bytes(low.to_ne_bytes()))
+}
+
+fn add_signed(base: i8, delta: i32) -> i8 {
+    let value = i32::from(base).saturating_add(delta);
+    i8::try_from(value.clamp(i32::from(i8::MIN), i32::from(i8::MAX))).unwrap_or_default()
 }
 
 /// Asignación Action3: id local → set Action2 (o índice Action1 si no hay Action2).
@@ -523,7 +661,7 @@ impl TrainSpriteGraphics {
         for _ in 0..8 {
             let a2 = u8::try_from(id).ok()?;
             if let Some(layout) = self.tile_layouts.get(&a2) {
-                return Some(layout.resolve(self, view));
+                return Some(layout.resolve(self, ctx, view));
             }
             if let Some(random) = self.action2_random.get(&a2) {
                 let next = eval_action2_random(random, ctx);

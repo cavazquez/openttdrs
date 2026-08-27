@@ -125,11 +125,14 @@ cuando el tile declara ese tipo y fundación nivelada con todos esos sprites com
 children en pendientes. La catenaria conserva la altura efectiva de esa
 superficie. El layout vanilla de los dos postes (`SPR_ROAD_WAYPOINT_*`, cuatro
 recortes oficiales y cajas `3×16`/`16×3`) también se materializa por eje y queda
-como child de la fundación cuando corresponde. Los layouts `TileSeq` estáticos
-de `NewGRF` para road stops y waypoints ya se parsean desde Action2, resuelven
+como child de la fundación cuando corresponde. Los layouts `TileSeq` de
+`NewGRF` para road stops y waypoints ya se parsean desde Action2, resuelven
 Action3/2→Action1 y materializan suelo, parents con cajas `M(...)` y children
-relativos. Si usan sprites base, paletas custom o registros dinámicos se conserva
-el fallback vanilla completo hasta implementar su procesador de registros.
+relativos. El procesador runtime aplica `DODRAW`, offsets de sprite, offsets de
+cajas/children y selección `var10`, y la huella de caché incluye los registros
+`7D`/`0x100`. Sprites base y paletas custom todavía conservan el fallback
+vanilla atómico; también queda pendiente el procesado equivalente para
+estaciones rail, casas, objetos e industrias.
 También incorpora los edificios industriales vanilla planos y estáticos, cuya
 caja `M(...)` no cambia durante la composición; las pendientes, animaciones y
 layouts NewGRF permanecen fuera de ese subconjunto.

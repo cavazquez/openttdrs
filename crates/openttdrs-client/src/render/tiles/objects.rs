@@ -1880,7 +1880,7 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                 world,
             );
             let mut used_newgrf_ground = false;
-            if let Some((spec_id, layout, runtime_fp)) = custom_layout.as_ref()
+            if let Some((spec_id, layout, runtime_fp, _draw_mode)) = custom_layout.as_ref()
                 && let (Some(cache), Some(image_store)) =
                     (action5_sprites.as_mut(), images.as_mut())
             {
@@ -2198,14 +2198,11 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                     );
                 }
             }
-            // `WaypGround` pertenece al draw mode de la spec; si el GRF pide
-            // resolverlo desde el registro 0x100 todavía no podemos evaluar
-            // ese registro sin arriesgar una superficie incorrecta, por lo
-            // que se conserva el asfalto vanilla en ese caso.
-            if let Some((spec_id, layout, runtime_fp)) = waypoint_layout.as_ref()
-                && let Some(def) = road_stop_spec_def(road_stop_catalog, *spec_id)
-                && def.flags & openttdrs_core::ROADSTOP_FLAG_DRAW_MODE_REGISTER == 0
-                && def.draw_mode & openttdrs_core::ROADSTOP_DRAW_MODE_WAYP_GROUND != 0
+            // `WaypGround` pertenece al draw mode de la spec. Cuando el GRF
+            // usa el registro 0x100, `resolve_road_stop_layout_for_tile` ya
+            // devolvió el valor efectivo después de evaluar Action2.
+            if let Some((spec_id, layout, runtime_fp, draw_mode)) = waypoint_layout.as_ref()
+                && *draw_mode & openttdrs_core::ROADSTOP_DRAW_MODE_WAYP_GROUND != 0
                 && let (Some(cache), Some(image_store)) =
                     (action5_sprites.as_mut(), images.as_mut())
             {
@@ -2248,7 +2245,7 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
             // sus parents/children y sólo si no se pudo materializar entero
             // se usa el layout vanilla de dos postes por eje.
             let mut used_newgrf_waypoint_layout = false;
-            if let Some((spec_id, layout, runtime_fp)) = waypoint_layout.as_ref()
+            if let Some((spec_id, layout, runtime_fp, _draw_mode)) = waypoint_layout.as_ref()
                 && let (Some(cache), Some(image_store)) =
                     (action5_sprites.as_mut(), images.as_mut())
             {
@@ -2481,7 +2478,12 @@ fn resolve_road_stop_layout_for_tile(
     climate: Climate,
     newgrf_stack: &[openttdrs_core::NewGrfEntry],
     world: Option<openttdrs_core::RoadStopWorldContext<'_>>,
-) -> Option<(u16, openttdrs_core::newgrf_sprites::ResolvedTileLayout, u32)> {
+) -> Option<(
+    u16,
+    openttdrs_core::newgrf_sprites::ResolvedTileLayout,
+    u32,
+    u8,
+)> {
     let station = station_at_tile(map, stations, ctx.coord)?;
     let spec_id = station.road_stop_spec_at(ctx.coord)?;
     let def = road_stop_spec_def(road_stop_catalog, spec_id)?;
@@ -2513,12 +2515,21 @@ fn resolve_road_stop_layout_for_tile(
         newgrf_stack,
         def.grfid,
     ));
+    let layout = def.newgrf_tile_layout_runtime(view, &mut action2)?;
+    // Layout register evaluation can execute Action2 STO operations. Include
+    // those final values in the cache key, otherwise a changed DODRAW/offset
+    // would keep the previous texture and transform alive.
     let runtime_fp = def
         .newgrf_runtime
         .as_ref()
         .map_or(0, |_| runtime_fingerprint(&action2, vars::ROAD_STOP, false));
-    let layout = def.newgrf_tile_layout_runtime(view, &mut action2)?;
-    Some((spec_id, layout, runtime_fp))
+    let draw_mode = if def.flags & openttdrs_core::ROADSTOP_FLAG_DRAW_MODE_REGISTER != 0 {
+        u8::try_from(action2.registers_100.get(&0x100).copied().unwrap_or(0) & 0xFF)
+            .unwrap_or_default()
+    } else {
+        def.draw_mode
+    };
+    Some((spec_id, layout, runtime_fp, draw_mode))
 }
 
 /// El renderer compacto sólo puede materializar layouts compuestos cuando
@@ -2549,7 +2560,9 @@ fn spawn_newgrf_road_stop_layout_ground(
         return false;
     }
     let Some(ground) = layout.ground.as_ref() else {
-        return false;
+        // A constant DODRAW=0 is a valid layout result: OpenTTD suppresses
+        // the ground sprite instead of falling back to the vanilla road.
+        return true;
     };
     let slot = spec_id.saturating_mul(64);
     let handle = cache.handle_for_variant(
@@ -2824,11 +2837,12 @@ fn spawn_road_stop_buildings(
             newgrf_stack,
             def.grfid,
         ));
+        let layout = def.newgrf_tile_layout_runtime(usize::from(view_u8), &mut a2);
         let runtime_fp = def
             .newgrf_runtime
             .as_ref()
             .map_or(0, |_| runtime_fingerprint(&a2, vars::ROAD_STOP, false));
-        if let Some(layout) = def.newgrf_tile_layout_runtime(usize::from(view_u8), &mut a2)
+        if let Some(layout) = layout
             && spawn_newgrf_road_stop_layout_sequence(
                 commands,
                 ctx,

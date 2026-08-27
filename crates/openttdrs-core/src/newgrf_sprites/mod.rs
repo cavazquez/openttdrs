@@ -26,8 +26,8 @@ pub use model::{
     CBID_VEHICLE_LENGTH, CBID_VEHICLE_LOAD_AMOUNT, CBID_VEHICLE_MODIFY_PROPERTY,
     CBID_VEHICLE_REFIT_CAPACITY, CBID_VEHICLE_SOUND_EFFECT, CBID_VEHICLE_START_STOP_CHECK,
     CBID_VEHICLE_VISUAL_EFFECT, DecodedSprite, IndustryProductionGroup, ResolvedTileLayout,
-    ResolvedTileLayoutSprite, TileLayout, TileLayoutSpriteRef, TrainSpriteAssign,
-    TrainSpriteGraphics, WagonOverrideAssign,
+    ResolvedTileLayoutSprite, TileLayout, TileLayoutRegisterRefs, TileLayoutSpriteRef,
+    TrainSpriteAssign, TrainSpriteGraphics, WagonOverrideAssign,
 };
 
 // Re-exportar funciones de runtime de pixel_codec

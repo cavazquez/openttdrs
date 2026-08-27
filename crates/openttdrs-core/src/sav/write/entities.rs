@@ -940,7 +940,115 @@ fn industry_footprint(ind: &Industry) -> (u8, u8) {
     (w, h)
 }
 
-pub(super) fn indy_records(state: &GameState, map_w: u32) -> Vec<Vec<u8>> {
+fn append_indy_header(header: &mut Vec<u8>) -> Result<(), SavError> {
+    // El header es deliberadamente un subconjunto compatible con
+    // `_industry_desc`: los campos omitidos quedan con sus defaults al
+    // cargar en OpenTTD, mientras que las listas de carga sí se preservan.
+    append_field(header, 6, "location.tile")?;
+    append_field(header, 2, "location.w")?;
+    append_field(header, 2, "location.h")?;
+    append_field(header, 2, "type")?;
+    append_field(header, 2, "random_colour")?;
+    append_field(header, 2, "prod_level")?;
+    append_field(header, 4, "counter")?;
+    append_field(header, 0x1B, "accepted")?;
+    append_field(header, 0x1B, "produced")?;
+    header.push(0);
+
+    // SlIndustryAccepted: sólo los campos que el modelo puede reconstruir.
+    append_field(header, 2, "cargo")?;
+    append_field(header, 4, "waiting")?;
+    header.push(0);
+
+    // SlIndustryProduced: `history` se conserva en el JSON propio, pero el
+    // cargo, stock y rate forman parte del contrato nativo de INDY.
+    append_field(header, 2, "cargo")?;
+    append_field(header, 4, "waiting")?;
+    append_field(header, 2, "rate")?;
+    header.push(0);
+    Ok(())
+}
+
+fn write_indy_accepted(
+    buf: &mut Vec<u8>,
+    industry: &Industry,
+    climate: crate::Climate,
+) -> Result<(), SavError> {
+    let entries: Vec<(u8, u16)> = crate::cargo::CargoType::for_climate(climate)
+        .iter()
+        .filter_map(|&cargo| {
+            let waiting = industry.accepted_cargo_waiting(cargo);
+            if waiting == 0 {
+                return None;
+            }
+            Some((
+                cargo_slot_for_climate(climate, cargo)?,
+                waiting.min(u32::from(u16::MAX)) as u16,
+            ))
+        })
+        .collect();
+    // At most 12 entries for the built-in climate catalog, well below the
+    // simple-gamma limit used by the TABLE codec.
+    write_gamma(entries.len() as u32, buf)?;
+    for (cargo, waiting) in entries {
+        buf.push(cargo);
+        buf.extend_from_slice(&waiting.to_be_bytes());
+    }
+    Ok(())
+}
+
+fn write_indy_produced(
+    buf: &mut Vec<u8>,
+    industry: &Industry,
+    climate: crate::Climate,
+) -> Result<(), SavError> {
+    let outputs = industry.produced_cargos();
+    let secondary_rate = industry
+        .newgrf_secondary_production_rate
+        .or_else(|| {
+            industry
+                .spec
+                .and_then(IndustrySpec::production_rate_secondary)
+        })
+        .unwrap_or(0);
+    let mut entries: Vec<(u8, u16, u8)> = Vec::with_capacity(outputs.len() + 4);
+    for (index, cargo) in outputs.iter().copied().enumerate() {
+        let waiting = if index == 0 {
+            industry.stock
+        } else {
+            industry.secondary_stock
+        };
+        let rate = if index == 0 {
+            industry.production_rate()
+        } else {
+            secondary_rate
+        };
+        if let Some(slot) = cargo_slot_for_climate(climate, cargo) {
+            entries.push((slot, waiting.min(u32::from(u16::MAX)) as u16, rate));
+        }
+    }
+    for &cargo in &crate::cargo::ALL_CARGO_TYPES {
+        if outputs.contains(&cargo) {
+            continue;
+        }
+        let waiting = industry.extra_produced_cargo(cargo);
+        if waiting == 0 {
+            continue;
+        }
+        if let Some(slot) = cargo_slot_for_climate(climate, cargo) {
+            entries.push((slot, waiting.min(u32::from(u16::MAX)) as u16, 0));
+        }
+    }
+    write_gamma(entries.len() as u32, buf)?;
+    for (cargo, waiting, rate) in entries {
+        buf.push(cargo);
+        buf.extend_from_slice(&waiting.to_be_bytes());
+        buf.push(rate);
+    }
+    Ok(())
+}
+
+fn indy_records_with_cargo(state: &GameState, map_w: u32) -> Result<Vec<Vec<u8>>, SavError> {
     let mut out = Vec::with_capacity(state.industries.len());
     for ind in &state.industries {
         let Some(tile_idx) = coord_to_linear_index(ind.pos, map_w) else {
@@ -952,9 +1060,24 @@ pub(super) fn indy_records(state: &GameState, map_w: u32) -> Vec<Vec<u8>> {
         rec.push(w);
         rec.push(h);
         rec.push(industry_ottd_type(ind));
+        rec.push(ind.random_colour % 16);
+        rec.push(ind.prod_level);
+        rec.extend_from_slice(&ind.counter.to_be_bytes());
+        write_indy_accepted(&mut rec, ind, state.climate)?;
+        write_indy_produced(&mut rec, ind, state.climate)?;
         out.push(rec);
     }
-    out
+    Ok(out)
+}
+
+pub(super) fn indy_chunk(state: &GameState, map_w: u32) -> Result<Vec<u8>, SavError> {
+    let records = indy_records_with_cargo(state, map_w)?;
+    if records.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut header = Vec::new();
+    append_indy_header(&mut header)?;
+    raw_table_chunk(*b"INDY", &header, &records, CH_TABLE)
 }
 
 #[cfg(test)]
@@ -1076,5 +1199,64 @@ mod tests {
 
         let export_map = map_with_road_stop_indices(&state, 8).unwrap();
         assert_eq!(export_map.get(tile).unwrap().m8 & 0x3F, 1);
+    }
+
+    #[test]
+    fn indy_chunk_preserves_native_cargo_lists() {
+        let mut state = GameState::new(8, 8);
+        let mut industry = Industry::with_tiles_spec(
+            TileCoord::new(3, 3),
+            IndustryKind::Factory,
+            IndustrySpec::Factory,
+            vec![TileCoord::new(3, 3)],
+            0,
+        );
+        industry.stock = 42;
+        industry.add_accepted_cargo_waiting(CargoType::Livestock, 9);
+        // Steel no es la salida legacy de la fábrica y debe viajar en la
+        // lista adicional, no desaparecer ni sobrescribir `stock`.
+        industry.add_newgrf_produced_cargo(CargoType::Steel, 7);
+        state.industries.push(industry);
+
+        let chunk = indy_chunk(&state, 8).expect("INDY chunk");
+        let rows = crate::sav::table::parse_table_chunk(&chunk[5..], false).expect("INDY table");
+        let record = &rows[0].1;
+        let accepted = match crate::sav::table::record_get(record, "accepted") {
+            Some(crate::sav::table::SlValue::Structs(items)) => items,
+            other => panic!("accepted ausente: {other:?}"),
+        };
+        assert_eq!(accepted.len(), 1);
+        assert_eq!(
+            crate::sav::table::record_get(&accepted[0], "cargo")
+                .and_then(crate::sav::table::SlValue::as_u64),
+            Some(4)
+        );
+        assert_eq!(
+            crate::sav::table::record_get(&accepted[0], "waiting")
+                .and_then(crate::sav::table::SlValue::as_u64),
+            Some(9)
+        );
+
+        let produced = match crate::sav::table::record_get(record, "produced") {
+            Some(crate::sav::table::SlValue::Structs(items)) => items,
+            other => panic!("produced ausente: {other:?}"),
+        };
+        assert_eq!(produced.len(), 2);
+        assert!(produced.iter().any(|entry| {
+            crate::sav::table::record_get(entry, "cargo")
+                .and_then(crate::sav::table::SlValue::as_u64)
+                == Some(5)
+                && crate::sav::table::record_get(entry, "waiting")
+                    .and_then(crate::sav::table::SlValue::as_u64)
+                    == Some(42)
+        }));
+        assert!(produced.iter().any(|entry| {
+            crate::sav::table::record_get(entry, "cargo")
+                .and_then(crate::sav::table::SlValue::as_u64)
+                == Some(9)
+                && crate::sav::table::record_get(entry, "waiting")
+                    .and_then(crate::sav::table::SlValue::as_u64)
+                    == Some(7)
+        }));
     }
 }

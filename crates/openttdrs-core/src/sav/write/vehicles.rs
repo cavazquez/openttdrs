@@ -1408,7 +1408,9 @@ fn append_vehs_header(header: &mut Vec<u8>) -> Result<(), SavError> {
 
 fn append_vehs_common_fields(header: &mut Vec<u8>) -> Result<(), SavError> {
     append_field(header, 2, "subtype")?;
-    append_field(header, 0x0A, "name")?;
+    // Desde SLV_84 `Vehicle::name` usa `SLE_STR`: en una tabla el string
+    // siempre lleva el bit HAS_LENGTH (0x10), igual que los nombres de grupo.
+    append_field(header, 0x0A | 0x10, "name")?;
     append_field(header, 4, "unitnumber")?; // SLE_UINT16
     append_field(header, 2, "owner")?;
     append_field(header, 6, "tile")?;

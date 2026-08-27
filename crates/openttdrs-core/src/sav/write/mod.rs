@@ -234,18 +234,9 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
         &city,
     )?);
 
-    let indy = entities::indy_records(state, w);
+    let indy = entities::indy_chunk(state, w)?;
     if !indy.is_empty() {
-        data.extend_from_slice(&chunks::table_chunk(
-            *b"INDY",
-            &[
-                (6, "location.tile"),
-                (2, "location.w"),
-                (2, "location.h"),
-                (2, "type"),
-            ],
-            &indy,
-        )?);
+        data.extend_from_slice(&indy);
     }
 
     let (ordl, vehs) = vehicles::ordl_and_vehs_records_with_cargo(state, w, &cargo_export)?;

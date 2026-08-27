@@ -5,6 +5,7 @@ use std::path::Path;
 use crate::GameState;
 use crate::badge::resolve_badge_labels_detailed;
 use crate::object_spec::{ObjectSpecDef, empty_object_spec_catalog, next_free_object_spec_id};
+use crate::sav::SavObjectMapping;
 
 use super::super::action0::collect_object_metas_from_grf;
 
@@ -12,6 +13,7 @@ use super::super::action0::collect_object_metas_from_grf;
 pub fn apply_newgrf_objects(state: &mut GameState, search_dirs: &[&Path]) {
     let mut catalog = empty_object_spec_catalog();
     let stack = state.newgrf_stack.clone();
+    let mappings = state.object_mappings.clone();
     for entry in &stack {
         if !entry.enabled {
             continue;
@@ -29,7 +31,8 @@ pub fn apply_newgrf_objects(state: &mut GameState, search_dirs: &[&Path]) {
         let gfx = crate::newgrf_sprites::collect_object_sprite_graphics(&data).unwrap_or_default();
         let newgrf_runtime = gfx.needs_runtime_resolve().then(|| Box::new(gfx.clone()));
         for meta in collect_object_metas_from_grf(&data) {
-            let Some(id) = next_free_object_spec_id(&catalog) else {
+            let mapped_id = mapped_object_id(&mappings, entry.grfid, meta.local_id, &catalog);
+            let Some(id) = mapped_id.or_else(|| next_free_object_spec_id(&catalog)) else {
                 break;
             };
             let views = gfx
@@ -71,6 +74,24 @@ pub fn apply_newgrf_objects(state: &mut GameState, search_dirs: &[&Path]) {
         }
     }
     state.object_spec_catalog = catalog;
+}
+
+/// Recupera el `ObjectType` que `OpenTTD` asignó a `(GRFID, local ID)` en
+/// `OBID`. Si el mapping no existe o apunta a un ID ya ocupado, se deja que el
+/// catálogo asigne el siguiente hueco libre, igual que en una partida nueva.
+fn mapped_object_id(
+    mappings: &[SavObjectMapping],
+    grfid: u32,
+    local_id: u8,
+    catalog: &[ObjectSpecDef],
+) -> Option<u16> {
+    let id = mappings
+        .iter()
+        .find(|mapping| mapping.grfid == grfid && mapping.entity_id == u16::from(local_id))
+        .map(|mapping| mapping.object_type)
+        .filter(|&id| id >= crate::object_spec::NEW_OBJECT_OFFSET)
+        .filter(|id| !catalog.iter().any(|spec| spec.id == *id))?;
+    Some(id)
 }
 
 /// Aplica Objects con directorios de búsqueda por defecto.

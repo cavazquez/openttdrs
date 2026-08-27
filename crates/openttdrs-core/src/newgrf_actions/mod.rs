@@ -3383,6 +3383,28 @@ mod tests {
     }
 
     #[test]
+    fn object_mapping_from_sav_keeps_assigned_object_type() {
+        let a0 = build_action0_object_payload(0, b"LIGT", 0x11, "Faro", &[]);
+        let bytes = build_grf_v2_with_action0_and_action8(&a0, [b'O', b'B', 0, 1], "obj", "");
+        let dir = tempfile_dir_with("obj.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("obj.grf", 15));
+        state.object_mappings.push(crate::sav::SavObjectMapping {
+            object_type: 123,
+            grfid: 15,
+            entity_id: 0,
+            substitute_id: 123,
+        });
+
+        apply_newgrf_objects(&mut state, &[&dir]);
+
+        assert_eq!(state.object_spec_catalog.len(), 1);
+        assert_eq!(state.object_spec_catalog[0].id, 123);
+    }
+
+    #[test]
     fn parse_and_apply_industry_tiles_allocates_gfx_ge_175() {
         let a0 = build_action0_industry_tile_payload(0, Some(42));
         let meta = parse_action0_industry_tile_meta(&a0).unwrap();

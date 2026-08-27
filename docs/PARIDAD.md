@@ -1690,8 +1690,9 @@ En saves &lt; 214, OpenTTD mueve el RoadType desde bits 6–7 de `m7` a `m4` (ro
   reconstruyen al construir o demoler objetos; `OBID` conserva los mapeos
   `(GRFID, local, sustituto)` y puede reconstruirse desde el catálogo. Un save
   sin mutaciones conserva los payloads originales para no perder columnas
-  futuras; aún falta aplicar `OBID` al cargador de overrides y completar el
-  runtime de objetos.
+  futuras. El cargador de objetos usa ahora `OBID` para conservar el
+  `ObjectType` asignado cuando el `(GRFID, local ID)` coincide; siguen
+  pendientes mappings faltantes y completar el runtime de objetos.
 - Dedicated + `-g` dispara dos `AfterLoadGame` (new-game luego load); el export usa `OPENTTDRS_SNAPSHOT_MIN_CALL=2`.
 - El oráculo **no** invoca `parse_sav.py` ni `snapshot_dumper`.
 

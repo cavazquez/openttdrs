@@ -39,7 +39,8 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 > después de una mutación; `OBID` y las columnas desconocidas permanecen en
 > passthrough hasta implementar el merge estructural; `OBID` ya se decodifica
 > y puede reconstruirse desde el catálogo, pero todavía no se aplica al
-> cargador de overrides.
+> cargador de overrides. El catálogo de objetos ahora consume ese mapping al
+> reasignar los `ObjectType` de cada `(GRFID, local ID)`.
 
 ## Cómo se decide el siguiente bloque
 

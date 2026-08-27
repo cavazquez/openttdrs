@@ -20,6 +20,122 @@ pub struct DecodedSprite {
     pub mask: Vec<u8>,
 }
 
+/// Referencia a un sprite dentro de un layout `TileSeq` de Action2.
+///
+/// En el formato `NewGRF`, el bit 15 de la paleta indica que el campo `sprite`
+/// no es un id absoluto sino el índice de un set Action1. El parser conserva
+/// ambos casos: los ids vanilla/directos se mantienen para diagnóstico y los
+/// sets Action1 se resuelven contra [`TrainSpriteGraphics::sets`] al dibujar.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct TileLayoutSpriteRef {
+    /// Índice del set Action1 cuando el sprite usa el marcador custom.
+    pub action1_set: Option<u16>,
+    /// Id absoluto para sprites del banco base (no custom).
+    pub direct_sprite: u16,
+    /// Índice del set Action1 usado como paleta explícita, si existe.
+    pub palette_action1_set: Option<u16>,
+    /// Paleta absoluta del layout cuando no referencia Action1.
+    pub direct_palette: u16,
+    /// Flags `TileLayoutFlags` del registro de layout.
+    pub flags: u8,
+    /// Origen `TILE_SEQ` en unidades de mapa/píxel. `origin_z == -128`
+    /// identifica un child (`DrawTileSeqStruct::IsParentSprite == false`).
+    pub origin: [i8; 3],
+    /// Extensión de la caja cuando la entrada es parent.
+    pub extent: [u8; 3],
+}
+
+impl TileLayoutSpriteRef {
+    /// `true` si la entrada crea un parent sortable con caja 3D.
+    #[must_use]
+    pub const fn is_parent(&self) -> bool {
+        self.origin[2] != i8::MIN
+    }
+}
+
+/// Layout `NewGRF` completo: suelo y secuencia de building/child sprites.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct TileLayout {
+    pub ground: TileLayoutSpriteRef,
+    pub sequence: Vec<TileLayoutSpriteRef>,
+}
+
+/// Sprite de un layout después de resolver su referencia Action1.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResolvedTileLayoutSprite {
+    pub sprite: DecodedSprite,
+    pub origin: [i8; 3],
+    pub extent: [u8; 3],
+}
+
+impl ResolvedTileLayoutSprite {
+    #[must_use]
+    pub const fn is_parent(&self) -> bool {
+        self.origin[2] != i8::MIN
+    }
+}
+
+/// Layout listo para que el cliente cree el suelo y la secuencia de parents /
+/// children. Las entradas directas que no pertenecen a un sprite Action1 no
+/// tienen una textura decodificada y se omiten del resultado.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ResolvedTileLayout {
+    pub ground: Option<ResolvedTileLayoutSprite>,
+    pub sequence: Vec<ResolvedTileLayoutSprite>,
+    /// `false` when an entry needs a base sprite, custom palette or register
+    /// preprocessing that the compact client model does not expose. Consumers
+    /// must use the vanilla path for incomplete layouts.
+    pub complete: bool,
+}
+
+impl TileLayout {
+    fn resolve(&self, graphics: &TrainSpriteGraphics, view: usize) -> ResolvedTileLayout {
+        let mut complete = true;
+        let mut resolve_sprite = |reference: &TileLayoutSpriteRef| {
+            // Direct base-set sprites and register-driven layouts need the
+            // original sprite/palette resolver. The decoded Action1 cache
+            // cannot reproduce those yet; mark the whole layout incomplete so
+            // callers can fall back atomically instead of drawing a mixture
+            // of custom and vanilla pieces.
+            if reference.flags != 0 {
+                complete = false;
+                return None;
+            }
+            if reference.action1_set.is_none() {
+                if reference.direct_sprite != 0 {
+                    complete = false;
+                }
+                return None;
+            }
+            let set = reference.action1_set?;
+            let Some(sprites) = graphics.sets.get(usize::from(set)) else {
+                complete = false;
+                return None;
+            };
+            // Road-stop layouts select orientation in the Action2 resolver;
+            // the selected custom reference is the first sprite of its
+            // Action1 set. Construction-stage selection for houses/objects is
+            // intentionally left to their future feature-specific processor.
+            let _ = view;
+            let Some(sprite) = sprites.first().cloned() else {
+                complete = false;
+                return None;
+            };
+            Some(ResolvedTileLayoutSprite {
+                sprite,
+                origin: reference.origin,
+                extent: reference.extent,
+            })
+        };
+
+        ResolvedTileLayout {
+            ground: resolve_sprite(&self.ground),
+            sequence: self.sequence.iter().filter_map(resolve_sprite).collect(),
+            complete,
+        }
+    }
+}
+
 /// Asignación Action3: id local → set Action2 (o índice Action1 si no hay Action2).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TrainSpriteAssign {
@@ -321,6 +437,10 @@ pub struct TrainSpriteGraphics {
     pub action2_random: HashMap<u8, Action2RandomEntry>,
     /// Action2 de producción para `GSF_INDUSTRIES` (versiones 0/1/2).
     pub industry_production: HashMap<u8, IndustryProductionGroup>,
+    /// Grupos Action2 de tipo `TileLayoutSpriteGroup` (casas, objetos,
+    /// aeropuertos, industrias y road stops). Se conserva el layout crudo para
+    /// resolver sus sets Action1 cuando el feature se dibuja.
+    pub tile_layouts: HashMap<u8, TileLayout>,
 }
 
 impl TrainSpriteGraphics {
@@ -373,6 +493,64 @@ impl TrainSpriteGraphics {
             .get(&u8::try_from(id).unwrap_or(u8::MAX))
             .copied()
             .unwrap_or(id)
+    }
+
+    /// Resuelve un layout `TileSeq` asignado a un id local. Los grupos
+    /// variational/random intermedios siguen la misma cadena que los sprites
+    /// simples; un grupo Action2 básico sin layout no se interpreta como un
+    /// layout por accidente.
+    pub fn tile_layout_for_local_id_ctx(
+        &self,
+        local_id: u16,
+        view: usize,
+        ctx: &mut Action2EvalCtx,
+    ) -> Option<ResolvedTileLayout> {
+        let mut id = self
+            .extended_assigns
+            .iter()
+            .find(|(assigned, _)| *assigned == local_id)
+            .map(|(_, set)| *set)
+            .or_else(|| {
+                u8::try_from(local_id).ok().and_then(|id| {
+                    self.assigns
+                        .iter()
+                        .find(|assign| assign.local_id == id)
+                        .map(|assign| assign.set_id)
+                })
+            })
+            .or_else(|| (!self.sets.is_empty()).then_some(0))?;
+
+        for _ in 0..8 {
+            let a2 = u8::try_from(id).ok()?;
+            if let Some(layout) = self.tile_layouts.get(&a2) {
+                return Some(layout.resolve(self, view));
+            }
+            if let Some(random) = self.action2_random.get(&a2) {
+                let next = eval_action2_random(random, ctx);
+                if next & 0x8000 != 0 {
+                    return None;
+                }
+                id = next;
+                continue;
+            }
+            if let Some(real) = self.action2_real.get(&a2)
+                && let Some(next) =
+                    real.selected_set(ctx.vehicle_loading, ctx.vehicle_cargo, ctx.vehicle_capacity)
+            {
+                id = next;
+                continue;
+            }
+            if let Some(var) = self.action2_var.get(&a2).cloned() {
+                let next = eval_action2_var(self, &var, ctx, 0);
+                if next & 0x8000 != 0 {
+                    return None;
+                }
+                id = next;
+                continue;
+            }
+            return None;
+        }
+        None
     }
 
     /// Recorre el camino Action3/Action2 activo y acumula los bits que deben
@@ -620,6 +798,14 @@ impl TrainSpriteGraphics {
             || !self.action2_var.is_empty()
             || !self.action2_real.is_empty()
             || !self.industry_production.is_empty()
+    }
+
+    /// `TileLayout` también requiere conservar el grafo después de aplicar
+    /// Action0: a diferencia de un sprite plano, el Action2 asignado contiene
+    /// varias referencias y cajas `TILE_SEQ`.
+    #[must_use]
+    pub fn has_tile_layouts(&self) -> bool {
+        !self.tile_layouts.is_empty()
     }
 
     /// Busca el grupo de producción asignado por Action3 y atraviesa grupos

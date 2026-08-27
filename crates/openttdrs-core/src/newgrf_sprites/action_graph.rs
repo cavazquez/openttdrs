@@ -13,8 +13,8 @@ use crate::newgrf_walk::{GrfEntry, walk_grf_entries};
 
 use super::model::{
     ACTION2_PARENT_SCOPE_MARKER, Action2RandomEntry, Action2VarAdjust, Action2VarEntry,
-    Action2VarOp, Action2VarTerm, DecodedSprite, IndustryProductionGroup, TrainSpriteAssign,
-    TrainSpriteGraphics, WagonOverrideAssign,
+    Action2VarOp, Action2VarTerm, DecodedSprite, IndustryProductionGroup, TileLayout,
+    TileLayoutSpriteRef, TrainSpriteAssign, TrainSpriteGraphics, WagonOverrideAssign,
 };
 use super::pixel_codec::{decode_real_sprite_entry, index_sprite_section, resolve_fd_sprite};
 
@@ -32,6 +32,152 @@ fn parse_action1_feature(payload: &[u8], feature: u8) -> Option<(u8, u8)> {
         return None;
     }
     Some((num_sets, num_ent))
+}
+
+/// Parsea un grupo Action2 `TileLayoutSpriteGroup` para features que dibujan
+/// una secuencia de suelo + parents/children (`GSF_ROADSTOPS` incluido).
+///
+/// La cabecera usa el byte `type` como cantidad de building sprites; el bit 6
+/// añade un WORD de flags después de cada pareja sprite/paleta. Cuando `type`
+/// es cero el layout no tiene coordenada Z y sus entradas son children (`0x80`)
+/// igual que `DrawTileSeqStruct::IsParentSprite` de `OpenTTD`.
+#[allow(clippy::too_many_lines)]
+fn parse_action2_tile_layout(payload: &[u8], feature: u8) -> Option<(u8, TileLayout)> {
+    if payload.len() < 4
+        || payload[0] != 0x02
+        || payload[1] != feature
+        || !matches!(
+            feature,
+            ACTION0_FEATURE_HOUSES
+                | ACTION0_FEATURE_AIRPORTTILES
+                | ACTION0_FEATURE_OBJECTS
+                | ACTION0_FEATURE_INDUSTRYTILES
+                | ACTION0_FEATURE_ROADSTOPS
+        )
+    {
+        return None;
+    }
+    let set_id = payload[2];
+    let raw_type = payload[3];
+    let has_flags = raw_type & 0x40 != 0;
+    let num_building_sprites = usize::from((raw_type & !0x40).max(1));
+    let no_z_position = raw_type == 0;
+    let mut cursor = 4usize;
+
+    let mut read_sprite = |is_ground: bool| {
+        let sprite_bytes = payload.get(cursor..cursor.checked_add(2)?)?;
+        let sprite = u16::from_le_bytes([sprite_bytes[0], sprite_bytes[1]]);
+        cursor += 2;
+        let palette_bytes = payload.get(cursor..cursor.checked_add(2)?)?;
+        let palette = u16::from_le_bytes([palette_bytes[0], palette_bytes[1]]);
+        cursor += 2;
+        let flags = if has_flags {
+            let flag_bytes = payload.get(cursor..cursor.checked_add(2)?)?;
+            cursor += 2;
+            // `TileLayoutFlags` is a byte-sized enum even though NFO stores
+            // it as a WORD. Keep the low byte used by OpenTTD and consume the
+            // full word here so the following origin and sequence records
+            // remain aligned.
+            u8::try_from(u16::from_le_bytes([flag_bytes[0], flag_bytes[1]])).unwrap_or_default()
+        } else {
+            0
+        };
+
+        // `ReadSpriteLayoutSprite` uses palette bit 15 as the Action1 marker
+        // for the sprite itself. The palette reference is meaningful only
+        // when TLF_CUSTOM_PALETTE is enabled, but retaining it here lets later
+        // runtime work apply the same distinction without reparsing the GRF.
+        let custom_sprite = palette & 0x8000 != 0;
+        let action1_set = custom_sprite.then_some(sprite & 0x3FFF);
+        let direct_sprite = if custom_sprite { 0 } else { sprite };
+        let custom_palette = flags & 0x08 != 0 && palette & 0x8000 != 0;
+        let palette_action1_set = custom_palette.then_some(palette & 0x3FFF);
+        let direct_palette = if custom_palette { 0 } else { palette & 0x7FFF };
+
+        let mut origin = [0_i8; 3];
+        let mut extent = [0_u8; 3];
+        if !is_ground {
+            origin[0] = i8::from_ne_bytes([*payload.get(cursor)?]);
+            cursor += 1;
+            origin[1] = i8::from_ne_bytes([*payload.get(cursor)?]);
+            cursor += 1;
+            origin[2] = if no_z_position {
+                i8::MIN
+            } else {
+                let z = i8::from_ne_bytes([*payload.get(cursor)?]);
+                cursor += 1;
+                z
+            };
+            if origin[2] != i8::MIN {
+                extent[0] = *payload.get(cursor)?;
+                extent[1] = *payload.get(cursor + 1)?;
+                extent[2] = *payload.get(cursor + 2)?;
+                cursor += 3;
+            }
+        }
+
+        // `ReadSpriteLayoutRegisters` follows every sprite record when the
+        // layout has drawing flags. We do not evaluate those registers yet,
+        // but skipping their encoded bytes is essential: otherwise a layout
+        // with `TLF_DODRAW`, register offsets or var10 would shift the next
+        // sprite and silently produce bogus bounds.
+        if has_flags {
+            let mut register_bytes = 0usize;
+            if flags & 0x01 != 0 {
+                register_bytes += 1; // TLF_DODRAW
+            }
+            if flags & 0x02 != 0 {
+                register_bytes += 1; // TLF_SPRITE
+            }
+            if flags & 0x04 != 0 {
+                register_bytes += 1; // TLF_PALETTE
+            }
+            if !is_ground {
+                if origin[2] == i8::MIN {
+                    if flags & 0x10 != 0 {
+                        register_bytes += 1; // TLF_CHILD_X_OFFSET
+                    }
+                    if flags & 0x20 != 0 {
+                        register_bytes += 1; // TLF_CHILD_Y_OFFSET
+                    }
+                } else {
+                    if flags & 0x10 != 0 {
+                        register_bytes += 2; // TLF_BB_XY_OFFSET
+                    }
+                    if flags & 0x20 != 0 {
+                        register_bytes += 1; // TLF_BB_Z_OFFSET
+                    }
+                }
+            }
+            if flags & 0x40 != 0 {
+                register_bytes += 1; // TLF_SPRITE_VAR10
+            }
+            if flags & 0x80 != 0 {
+                register_bytes += 1; // TLF_PALETTE_VAR10
+            }
+            cursor = cursor.checked_add(register_bytes)?;
+            if cursor > payload.len() {
+                return None;
+            }
+        }
+
+        Some(TileLayoutSpriteRef {
+            action1_set,
+            direct_sprite,
+            palette_action1_set,
+            direct_palette,
+            flags,
+            origin,
+            extent,
+        })
+    };
+
+    let ground = read_sprite(true)?;
+    let mut sequence = Vec::with_capacity(num_building_sprites);
+    for _ in 0..num_building_sprites {
+        sequence.push(read_sprite(false)?);
+    }
+    Some((set_id, TileLayout { ground, sequence }))
 }
 
 /// Action2 básico (vehículos / stations / roadtypes): `02 <feat> <set-id> <n1> <n2> <words…>`.
@@ -623,6 +769,13 @@ pub fn collect_feature_sprite_graphics(
                 sets_left = ns;
                 views_per_set = ne;
                 views_left_in_set = ne;
+            } else if let Some((a2_id, layout)) = parse_action2_tile_layout(payload, feature) {
+                // RoadStops (and the other tile-layout features) encode the
+                // number of sequence entries in the Action2 type byte, so a
+                // generic `num_ent1/num_ent2` parser would mistake the first
+                // sprite word for an Action1 set. Keep these groups separate
+                // and resolve them against Action3 at runtime.
+                out.tile_layouts.insert(a2_id, layout);
             } else if let Some((a2_id, real)) = parse_action2_real(payload, feature) {
                 // Keep the historical static mapping for preview/legacy callers;
                 // runtime contexts select the proportional loaded/loading entry.
@@ -837,6 +990,130 @@ mod tests {
         };
         assert_eq!(group.loaded, vec![10, 11]);
         assert_eq!(group.loading, vec![12]);
+    }
+
+    #[test]
+    fn parse_roadstop_tile_layout_keeps_ground_sequence_and_bounds() {
+        // 02 <roadstops> <layout=7> <2 building sprites>
+        // ground: custom Action1 set 0; first building: set 1 + parent box;
+        // second building: set 2 + parent box.
+        let mut payload = vec![0x02, ACTION0_FEATURE_ROADSTOPS, 7, 2];
+        payload.extend_from_slice(&0_u16.to_le_bytes());
+        payload.extend_from_slice(&0x8000_u16.to_le_bytes());
+        for (set, origin, extent) in [
+            (1_u16, [3_u8, 4, 5], [6_u8, 7, 8]),
+            (2_u16, [9_u8, 10, 11], [12_u8, 13, 14]),
+        ] {
+            payload.extend_from_slice(&set.to_le_bytes());
+            payload.extend_from_slice(&0x8000_u16.to_le_bytes());
+            payload.extend_from_slice(&origin);
+            payload.extend_from_slice(&extent);
+        }
+        let Some((set_id, layout)) = parse_action2_tile_layout(&payload, ACTION0_FEATURE_ROADSTOPS)
+        else {
+            panic!("roadstop TileLayout should parse");
+        };
+        assert_eq!(set_id, 7);
+        assert_eq!(layout.ground.action1_set, Some(0));
+        assert_eq!(layout.sequence.len(), 2);
+        assert_eq!(layout.sequence[0].action1_set, Some(1));
+        assert_eq!(layout.sequence[0].origin, [3, 4, 5]);
+        assert_eq!(layout.sequence[0].extent, [6, 7, 8]);
+        assert!(layout.sequence[1].is_parent());
+    }
+
+    #[test]
+    fn parse_roadstop_tile_layout_type_zero_marks_child_z() {
+        let mut payload = vec![0x02, ACTION0_FEATURE_ROADSTOPS, 4, 0];
+        payload.extend_from_slice(&0_u16.to_le_bytes());
+        payload.extend_from_slice(&0x8000_u16.to_le_bytes());
+        payload.extend_from_slice(&1_u16.to_le_bytes());
+        payload.extend_from_slice(&0x8000_u16.to_le_bytes());
+        payload.extend_from_slice(&[250, 251]); // signed child offsets -6, -5
+        let Some((_, layout)) = parse_action2_tile_layout(&payload, ACTION0_FEATURE_ROADSTOPS)
+        else {
+            panic!("child layout");
+        };
+        assert_eq!(layout.sequence.len(), 1);
+        assert_eq!(layout.sequence[0].origin, [-6, -5, i8::MIN]);
+        assert!(!layout.sequence[0].is_parent());
+    }
+
+    #[test]
+    fn parse_roadstop_tile_layout_skips_register_payloads() {
+        // type=0x41: one building sprite plus the has-flags bit. The ground
+        // consumes one DODRAW register; the parent consumes two BB_XY offset
+        // registers after its origin/extents. The second record must still be
+        // read from the correct byte boundary.
+        let mut payload = vec![0x02, ACTION0_FEATURE_ROADSTOPS, 7, 0x41];
+        payload.extend_from_slice(&0_u16.to_le_bytes());
+        payload.extend_from_slice(&0_u16.to_le_bytes());
+        payload.extend_from_slice(&0x0001_u16.to_le_bytes());
+        payload.push(0); // ground DODRAW register
+        payload.extend_from_slice(&1_u16.to_le_bytes());
+        payload.extend_from_slice(&0x8000_u16.to_le_bytes());
+        payload.extend_from_slice(&0x0010_u16.to_le_bytes());
+        payload.extend_from_slice(&[3, 4, 5, 6, 7, 8, 9, 10]);
+        let Some((_, layout)) = parse_action2_tile_layout(&payload, ACTION0_FEATURE_ROADSTOPS)
+        else {
+            panic!("flagged layout");
+        };
+        assert_eq!(layout.sequence.len(), 1);
+        assert_eq!(layout.sequence[0].origin, [3, 4, 5]);
+        assert_eq!(layout.sequence[0].extent, [6, 7, 8]);
+        assert_eq!(layout.sequence[0].flags, 0x10);
+    }
+
+    #[test]
+    fn tile_layout_resolves_action3_set_without_using_view_as_sprite_offset() {
+        let sprite = |rgba| DecodedSprite {
+            width: 1,
+            height: 1,
+            x_offs: -2,
+            y_offs: 3,
+            rgba,
+            mask: Vec::new(),
+        };
+        let mut graphics = TrainSpriteGraphics {
+            sets: vec![
+                vec![sprite(vec![1, 0, 0, 255])],
+                vec![sprite(vec![2, 0, 0, 255]), sprite(vec![3, 0, 0, 255])],
+            ],
+            ..TrainSpriteGraphics::default()
+        };
+        graphics.assigns.push(TrainSpriteAssign {
+            local_id: 4,
+            set_id: 9,
+        });
+        graphics.tile_layouts.insert(
+            9,
+            TileLayout {
+                ground: TileLayoutSpriteRef {
+                    action1_set: Some(1),
+                    ..TileLayoutSpriteRef::default()
+                },
+                sequence: vec![TileLayoutSpriteRef {
+                    action1_set: Some(0),
+                    origin: [4, 5, 6],
+                    extent: [7, 8, 9],
+                    ..TileLayoutSpriteRef::default()
+                }],
+            },
+        );
+        let mut ctx = Action2EvalCtx::default();
+        let Some(layout) = graphics.tile_layout_for_local_id_ctx(4, 5, &mut ctx) else {
+            panic!("assigned TileLayout");
+        };
+        assert!(layout.complete);
+        // Road stops resolve the first sprite of the selected Action1 set;
+        // passing view=5 must not select the second sprite in that set.
+        let Some(ground) = layout.ground else {
+            panic!("ground");
+        };
+        assert_eq!(ground.sprite.rgba[0], 2);
+        assert_eq!(layout.sequence[0].sprite.rgba[0], 1);
+        assert_eq!(layout.sequence[0].origin, [4, 5, 6]);
+        assert_eq!(layout.sequence[0].extent, [7, 8, 9]);
     }
 
     #[test]

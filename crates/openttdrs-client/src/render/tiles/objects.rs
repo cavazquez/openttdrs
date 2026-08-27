@@ -1869,7 +1869,35 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                 );
             }
             let view_idx = usize::from(m5.min(5));
-            if !is_drive_through {
+            let custom_layout = resolve_road_stop_layout_for_tile(
+                map,
+                stations,
+                ctx,
+                view_idx,
+                road_stop_catalog,
+                climate,
+                newgrf_stack,
+                world,
+            );
+            let mut used_newgrf_ground = false;
+            if let Some((spec_id, layout, runtime_fp)) = custom_layout.as_ref()
+                && let (Some(cache), Some(image_store)) =
+                    (action5_sprites.as_mut(), images.as_mut())
+            {
+                used_newgrf_ground = spawn_newgrf_road_stop_layout_ground(
+                    commands,
+                    ctx,
+                    road_stop_base_z,
+                    dims.0,
+                    foundation_child_parent,
+                    *spec_id,
+                    *runtime_fp,
+                    layout,
+                    cache,
+                    image_store,
+                );
+            }
+            if !is_drive_through && !used_newgrf_ground {
                 let ground_dir = road_stop_ground_index(m5).min(3);
                 let image = if class == StationTileClass::Bus {
                     assets
@@ -1995,6 +2023,19 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
             } else {
                 openttdrs_core::FOUNDATION_LEVELED
             };
+            // Un waypoint puede publicar un `TileLayoutSpriteGroup` propio.
+            // El grupo se selecciona con el mismo `view` que la parada
+            // drive-through; sus sprites BUILD se emiten después del suelo.
+            let waypoint_layout = resolve_road_stop_layout_for_tile(
+                map,
+                stations,
+                ctx,
+                usize::from(m5.min(5)),
+                road_stop_catalog,
+                climate,
+                newgrf_stack,
+                world,
+            );
 
             // Action1/2/3 default del roadtype sustituye el suelo vanilla
             // cuando existe. Es la misma vista que usa `DrawRoadTile`, pero
@@ -2157,6 +2198,30 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                     );
                 }
             }
+            // `WaypGround` pertenece al draw mode de la spec; si el GRF pide
+            // resolverlo desde el registro 0x100 todavía no podemos evaluar
+            // ese registro sin arriesgar una superficie incorrecta, por lo
+            // que se conserva el asfalto vanilla en ese caso.
+            if let Some((spec_id, layout, runtime_fp)) = waypoint_layout.as_ref()
+                && let Some(def) = road_stop_spec_def(road_stop_catalog, *spec_id)
+                && def.flags & openttdrs_core::ROADSTOP_FLAG_DRAW_MODE_REGISTER == 0
+                && def.draw_mode & openttdrs_core::ROADSTOP_DRAW_MODE_WAYP_GROUND != 0
+                && let (Some(cache), Some(image_store)) =
+                    (action5_sprites.as_mut(), images.as_mut())
+            {
+                let _ = spawn_newgrf_road_stop_layout_ground(
+                    commands,
+                    ctx,
+                    waypoint_base_z,
+                    dims.0,
+                    foundation_child_parent,
+                    *spec_id,
+                    *runtime_fp,
+                    layout,
+                    cache,
+                    image_store,
+                );
+            }
             if !road_stop_catenary_suppressed(map, stations, road_stop_catalog, ctx.coord)
                 && let Some(tile) = ctx.tile
             {
@@ -2179,19 +2244,39 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                 );
             }
             // OpenTTD emite los postes después de la catenaria mediante
-            // `DrawRailTileSeq(TO_BUILDINGS, ...)`. Son dos capas distintas
-            // por eje, no un sprite único centrado sobre el asfalto.
-            spawn_road_waypoint_buildings(
-                commands,
-                assets,
-                company,
-                owner_colour,
-                ctx,
-                waypoint_base_z,
-                u8::from(waypoint_bits == 0x05),
-                dims.0,
-                foundation_child_parent,
-            );
+            // `DrawRailTileSeq(TO_BUILDINGS, ...)`. Un layout custom conserva
+            // sus parents/children y sólo si no se pudo materializar entero
+            // se usa el layout vanilla de dos postes por eje.
+            let mut used_newgrf_waypoint_layout = false;
+            if let Some((spec_id, layout, runtime_fp)) = waypoint_layout.as_ref()
+                && let (Some(cache), Some(image_store)) =
+                    (action5_sprites.as_mut(), images.as_mut())
+            {
+                used_newgrf_waypoint_layout = spawn_newgrf_road_stop_layout_sequence(
+                    commands,
+                    ctx,
+                    waypoint_base_z,
+                    dims.0,
+                    *spec_id,
+                    *runtime_fp,
+                    layout,
+                    cache,
+                    image_store,
+                );
+            }
+            if !used_newgrf_waypoint_layout {
+                spawn_road_waypoint_buildings(
+                    commands,
+                    assets,
+                    company,
+                    owner_colour,
+                    ctx,
+                    waypoint_base_z,
+                    u8::from(waypoint_bits == 0x05),
+                    dims.0,
+                    foundation_child_parent,
+                );
+            }
         }
         StationTileClass::Oilrig => {
             // `DrawTile_Station`: Oilrig usa `SPR_FLAT_WATER_TILE` como
@@ -2382,6 +2467,303 @@ fn spawn_paved_road_stop_link(
 /// Tipo sintético en la caché Action5 para vistas Action3 del catálogo `RoadStops`.
 const ROADSTOP_ACTION3_CACHE_TYPE: u8 = 0x14;
 
+/// Resuelve el grupo Action2 de una parada con el mismo contexto que usa el
+/// callback/render actual. El resultado conserva el fingerprint para que todas
+/// las piezas de un `TileSeq` compartan la misma entrada de caché cuando
+/// cambian random bits, carga o variables del mapa.
+#[allow(clippy::too_many_arguments)]
+fn resolve_road_stop_layout_for_tile(
+    map: &Map,
+    stations: &[Station],
+    ctx: &TileRenderContext,
+    view: usize,
+    road_stop_catalog: &[RoadStopSpecDef],
+    climate: Climate,
+    newgrf_stack: &[openttdrs_core::NewGrfEntry],
+    world: Option<openttdrs_core::RoadStopWorldContext<'_>>,
+) -> Option<(u16, openttdrs_core::newgrf_sprites::ResolvedTileLayout, u32)> {
+    let station = station_at_tile(map, stations, ctx.coord)?;
+    let spec_id = station.road_stop_spec_at(ctx.coord)?;
+    let def = road_stop_spec_def(road_stop_catalog, spec_id)?;
+    let view_u8 = u8::try_from(view.min(5)).unwrap_or(0);
+    let mut action2 = world.map_or_else(
+        || {
+            openttdrs_core::action2_eval_ctx_for_road_stop_tile_with_catalog(
+                map,
+                stations,
+                road_stop_catalog,
+                ctx.coord,
+                view_u8,
+                climate,
+            )
+        },
+        |world| {
+            openttdrs_core::action2_eval_ctx_for_road_stop_tile_with_catalog_and_world(
+                map,
+                stations,
+                road_stop_catalog,
+                world,
+                ctx.coord,
+                view_u8,
+                climate,
+            )
+        },
+    );
+    action2.set_grf_params(openttdrs_core::stack_params_for_grfid(
+        newgrf_stack,
+        def.grfid,
+    ));
+    let runtime_fp = def
+        .newgrf_runtime
+        .as_ref()
+        .map_or(0, |_| runtime_fingerprint(&action2, vars::ROAD_STOP, false));
+    let layout = def.newgrf_tile_layout_runtime(view, &mut action2)?;
+    Some((spec_id, layout, runtime_fp))
+}
+
+/// El renderer compacto sólo puede materializar layouts compuestos cuando
+/// todos sus registros son constantes y cada entrada usa un set Action1
+/// decodificado. Un layout incompleto se deja entero en manos de OpenGFX/Action5
+/// para no mezclar offsets de sprites base con piezas custom.
+fn road_stop_layout_is_static(layout: &openttdrs_core::newgrf_sprites::ResolvedTileLayout) -> bool {
+    layout.complete
+}
+
+/// Emite el suelo custom de un `TileLayout` de road stop. OpenTTD lo dibuja
+/// como ground sprite antes del asfalto/overlay; en una pendiente queda como
+/// child de la fundación nivelada, igual que el suelo vanilla.
+#[allow(clippy::too_many_arguments)]
+fn spawn_newgrf_road_stop_layout_ground(
+    commands: &mut Commands,
+    ctx: &TileRenderContext,
+    base_z: u8,
+    map_width: u32,
+    foundation_child_parent: Option<Entity>,
+    spec_id: u16,
+    runtime_fp: u32,
+    layout: &openttdrs_core::newgrf_sprites::ResolvedTileLayout,
+    cache: &mut crate::render::NewGrfAction5SpriteCache,
+    images: &mut Assets<Image>,
+) -> bool {
+    if !road_stop_layout_is_static(layout) {
+        return false;
+    }
+    let Some(ground) = layout.ground.as_ref() else {
+        return false;
+    };
+    let slot = spec_id.saturating_mul(64);
+    let handle = cache.handle_for_variant(
+        ROADSTOP_ACTION3_CACHE_TYPE,
+        slot,
+        runtime_fp,
+        &ground.sprite,
+        images,
+    );
+    let position = overlay_pos(
+        ctx.iso_pos,
+        f32::from(ground.sprite.x_offs),
+        f32::from(ground.sprite.y_offs),
+        f32::from(ground.sprite.width),
+        f32::from(ground.sprite.height),
+        base_z,
+        0.025,
+        ctx.tx_i32(),
+        ctx.ty_i32(),
+    );
+    let sprite = Sprite {
+        image: handle,
+        color: Color::WHITE,
+        ..default()
+    };
+    if let Some(parent) = foundation_child_parent {
+        spawn_foundation_child_sprite_at(commands, sprite, ctx, position, map_width, parent);
+    } else {
+        commands.spawn((
+            MapVisualLayer,
+            ctx.map_tile_chunk(),
+            sprite,
+            Transform::from_translation(position),
+        ));
+    }
+    true
+}
+
+/// Convierte el offset de pantalla de una entrada child a su centro Bevy.
+/// `DrawRailTileSeq` pasa esos bytes como píxeles firmados y la coordenada Y
+/// de OpenTTD crece hacia abajo, mientras que el viewport Bevy usa Y positiva
+/// hacia arriba.
+// The values mirror the independent NFO register fields used by a TileSeq
+// child; keeping them explicit makes the coordinate conversion auditable.
+#[allow(clippy::too_many_arguments)]
+fn newgrf_road_stop_child_center(
+    parent_top_left: Vec2,
+    origin: [i8; 3],
+    width: f32,
+    height: f32,
+    tx: i32,
+    ty: i32,
+    base_z: u8,
+    layer_z: f32,
+) -> Vec3 {
+    let child_top_left = parent_top_left + Vec2::new(f32::from(origin[0]), -f32::from(origin[1]));
+    Vec3::new(
+        child_top_left.x + width / 2.0,
+        child_top_left.y - height / 2.0,
+        sortable_draw_z(tx, ty, base_z, layer_z),
+    )
+}
+
+/// Emite la secuencia BUILD de un `TileLayout` custom. Los parents usan las
+/// cajas 3D de `TILE_SEQ_LINE`; los children conservan el anclaje de pantalla
+/// al último parent, que es la semántica de `AddChildSpriteScreen` de OpenTTD.
+#[allow(clippy::too_many_arguments)]
+fn spawn_newgrf_road_stop_layout_sequence(
+    commands: &mut Commands,
+    ctx: &TileRenderContext,
+    base_z: u8,
+    map_width: u32,
+    spec_id: u16,
+    runtime_fp: u32,
+    layout: &openttdrs_core::newgrf_sprites::ResolvedTileLayout,
+    cache: &mut crate::render::NewGrfAction5SpriteCache,
+    images: &mut Assets<Image>,
+) -> bool {
+    if !road_stop_layout_is_static(layout) || layout.sequence.is_empty() {
+        return false;
+    }
+
+    let slot_base = spec_id.saturating_mul(64).saturating_add(1);
+    let mut last_parent: Option<(Entity, Vec2)> = None;
+    let mut emitted = false;
+    for (index, layer) in layout.sequence.iter().enumerate() {
+        let slot = slot_base.saturating_add(u16::try_from(index).unwrap_or(u16::MAX));
+        let handle = cache.handle_for_variant(
+            ROADSTOP_ACTION3_CACHE_TYPE,
+            slot,
+            runtime_fp,
+            &layer.sprite,
+            images,
+        );
+        let width = f32::from(layer.sprite.width);
+        let height = f32::from(layer.sprite.height);
+        let origin = crate::iso::RoadStopSeqGfx {
+            dx: f32::from(layer.origin[0]),
+            dy: f32::from(layer.origin[1]),
+            dz: if layer.is_parent() {
+                f32::from(layer.origin[2])
+            } else {
+                0.0
+            },
+            x_offs: f32::from(layer.sprite.x_offs),
+            y_offs: f32::from(layer.sprite.y_offs),
+            remap_x_adj: 0.0,
+        };
+        let layer_z = 0.05 + index as f32 * 0.0003;
+        let sprite = tint_building_sprite(Sprite {
+            image: handle,
+            color: Color::WHITE,
+            ..default()
+        });
+
+        if layer.is_parent() {
+            let position = road_stop_build_sprite_center(
+                ctx.iso_pos,
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+                base_z,
+                layer_z,
+                origin,
+                width,
+                height,
+            );
+            let source_depth = viewport_source_depth(position.z, ctx.tx, map_width);
+            let sprite_id = u32::MAX.saturating_sub(u32::try_from(index).unwrap_or(u32::MAX));
+            let bounds = tile_seq_parent_sprite(
+                index as u64,
+                sprite_id,
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+                base_z,
+                i32::from(layer.origin[0]),
+                i32::from(layer.origin[1]),
+                i32::from(layer.origin[2]),
+                i32::from(layer.extent[0]),
+                i32::from(layer.extent[1]),
+                i32::from(layer.extent[2]),
+            )
+            .bounds;
+            let entity = commands
+                .spawn((
+                    MapVisualLayer,
+                    ctx.map_tile_chunk(),
+                    sprite,
+                    Transform::from_translation(Vec3::new(position.x, position.y, source_depth)),
+                    ViewportSortableParent {
+                        sprite_id,
+                        bounds,
+                        insertion_key: viewport_insertion_key(
+                            ctx.tx,
+                            ctx.ty,
+                            u8::try_from(index.saturating_add(2)).unwrap_or(u8::MAX),
+                        ),
+                        source_depth,
+                    },
+                ))
+                .id();
+            // `overlay_pos` stores the centre; converting back to the sprite's
+            // upper-left gives the same anchor used by AddChildSpriteScreen.
+            last_parent = Some((
+                entity,
+                Vec2::new(position.x - width / 2.0, position.y + height / 2.0),
+            ));
+        } else if let Some((parent, parent_top_left)) = last_parent {
+            let position = newgrf_road_stop_child_center(
+                parent_top_left,
+                layer.origin,
+                width,
+                height,
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+                base_z,
+                layer_z,
+            );
+            let source_depth = viewport_source_depth(position.z, ctx.tx, map_width);
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                sprite,
+                Transform::from_translation(Vec3::new(position.x, position.y, source_depth)),
+                crate::render::ViewportSortableChild {
+                    parent,
+                    source_depth,
+                },
+            ));
+        } else {
+            // A child before its first parent is legal in the raw format. The
+            // C++ path draws it as a ground sprite; use the tile anchor as the
+            // equivalent fallback rather than dropping the decoded texture.
+            let position = road_stop_build_sprite_center(
+                ctx.iso_pos,
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+                base_z,
+                layer_z,
+                origin,
+                width,
+                height,
+            );
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                sprite,
+                Transform::from_translation(position),
+            ));
+        }
+        emitted = true;
+    }
+    emitted
+}
+
 #[allow(clippy::too_many_arguments)]
 fn spawn_road_stop_buildings(
     commands: &mut Commands,
@@ -2446,6 +2828,21 @@ fn spawn_road_stop_buildings(
             .newgrf_runtime
             .as_ref()
             .map_or(0, |_| runtime_fingerprint(&a2, vars::ROAD_STOP, false));
+        if let Some(layout) = def.newgrf_tile_layout_runtime(usize::from(view_u8), &mut a2)
+            && spawn_newgrf_road_stop_layout_sequence(
+                commands,
+                ctx,
+                base_z,
+                map.dimensions().0,
+                spec_id,
+                runtime_fp,
+                &layout,
+                cache,
+                images,
+            )
+        {
+            return;
+        }
         let view = def
             .newgrf_view_runtime(dir, &mut a2)
             .or_else(|| def.newgrf_view(dir).cloned());
@@ -3934,12 +4331,15 @@ fn spawn_rail_depot_tile(
 
 #[cfg(test)]
 mod tests {
+    use bevy::prelude::Vec2;
+
     use super::{
         airport_station_ground_layer_trace_offset, buoy_trace_bounds, dock_clear_land_sprite_id,
-        dock_water_neighbour_is_sea, rail_depot_build_parent_sprites,
-        rail_depot_catenary_parent_sprite, rail_depot_foundation_child_offset,
-        rail_depot_reservation_track_visible, road_depot_foundation_child_offset,
-        road_depot_parent_sprites, road_stop_foundation_child_offset, road_stop_parent_sprites,
+        dock_water_neighbour_is_sea, newgrf_road_stop_child_center,
+        rail_depot_build_parent_sprites, rail_depot_catenary_parent_sprite,
+        rail_depot_foundation_child_offset, rail_depot_reservation_track_visible,
+        road_depot_foundation_child_offset, road_depot_parent_sprites,
+        road_stop_foundation_child_offset, road_stop_parent_sprites,
         station_catenary_pylon_parent_sprite, station_catenary_wire_parent_sprite,
         station_catenary_wire_trace_geometry, station_rail_child_offset,
         station_rail_foundation_world_z_delta, station_rail_layer_parent_sprite,
@@ -3953,6 +4353,25 @@ mod tests {
         airport_station_ground_layers_for_gfx, rail_depot_build_layers, rail_station_draw_layers,
         road_depot_build_layers, road_stop_drive_through_layers,
     };
+
+    #[test]
+    fn newgrf_road_stop_child_uses_signed_screen_offsets() {
+        let center = newgrf_road_stop_child_center(
+            Vec2::new(100.0, 200.0),
+            [4, 6, i8::MIN],
+            10.0,
+            20.0,
+            3,
+            4,
+            0,
+            0.05,
+        );
+        // OpenTTD child offsets are pixels from the previous sprite's
+        // top-left; Y is inverted when entering Bevy's screen coordinates.
+        assert_eq!(center.x, 109.0);
+        assert_eq!(center.y, 184.0);
+        assert_eq!(center.z, crate::iso::sortable_draw_z(3, 4, 0, 0.05));
+    }
 
     #[test]
     fn dock_land_ground_uses_its_facing_water_class_and_full_clear_grass() {

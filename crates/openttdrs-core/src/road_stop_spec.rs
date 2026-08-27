@@ -37,6 +37,10 @@ pub const ROADSTOP_FLAG_NO_CATENARY: u32 = 1 << 2;
 pub const ROADSTOP_FLAG_DRIVE_THROUGH_ONLY: u32 = 1 << 3;
 pub const ROADSTOP_FLAG_ROAD_ONLY: u32 = 1 << 5;
 pub const ROADSTOP_FLAG_TRAM_ONLY: u32 = 1 << 6;
+/// `DrawModeRegister`: Action2 register `0x100` overrides `draw_mode`.
+/// Register-driven draw modes are kept as a renderer fallback until the
+/// `TileLayout` register processor is materialized.
+pub const ROADSTOP_FLAG_DRAW_MODE_REGISTER: u32 = 1 << 8;
 
 /// Bits de `RoadStopDrawMode` (Action0 prop `0x0C` BYTE).
 ///
@@ -47,6 +51,7 @@ pub const ROADSTOP_FLAG_TRAM_ONLY: u32 = 1 << 6;
 /// | 2 | `WaypGround` | Waypoint: suelo del layout |
 pub const ROADSTOP_DRAW_MODE_ROAD: u8 = 1 << 0;
 pub const ROADSTOP_DRAW_MODE_OVERLAY: u8 = 1 << 1;
+pub const ROADSTOP_DRAW_MODE_WAYP_GROUND: u8 = 1 << 2;
 /// Default OTTD: `Road | Overlay`.
 pub const ROADSTOP_DRAW_MODE_DEFAULT: u8 = ROADSTOP_DRAW_MODE_ROAD | ROADSTOP_DRAW_MODE_OVERLAY;
 
@@ -227,6 +232,28 @@ impl RoadStopSpecDef {
             return None;
         }
         Some(views[idx % views.len()].clone())
+    }
+
+    /// Layout `TileSeq` de Action2 para la parada, resuelto con las variables
+    /// de tesela actuales. `None` significa que el GRF sólo publicó vistas
+    /// planas o que la cadena seleccionada no devolvió un layout.
+    pub fn newgrf_tile_layout_runtime(
+        &self,
+        view: usize,
+        ctx: &mut crate::newgrf_sprites::Action2EvalCtx,
+    ) -> Option<crate::newgrf_sprites::ResolvedTileLayout> {
+        // Road-stop layouts are selected by the resolver's `var 0x40` view;
+        // once the TileLayout group is selected, each custom reference points
+        // at the first sprite of its Action1 set.  Unlike houses/objects,
+        // road stops do not pass a construction-stage offset to
+        // `DrawRailTileSeq`, so never use the view as an index inside the
+        // Action1 set here.
+        let _ = view;
+        self.newgrf_runtime.as_ref()?.tile_layout_for_local_id_ctx(
+            u16::from(self.newgrf_local_id),
+            0,
+            ctx,
+        )
     }
 
     /// `true` si el `stop_type` coincide con la clase de parada a construir.

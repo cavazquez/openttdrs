@@ -6,7 +6,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::cargo::CargoType;
-use crate::map::{Tile, TileCoord};
+use crate::map::{Map, Tile, TileCoord, TileKind, tile_slope_and_z, water_class};
 use crate::sav::house_population_generated::{
     HOUSE_ACCEPTS_CARGO, HOUSE_AVAILABILITY, HOUSE_BUILDING_FLAGS, HOUSE_CARGO_ACCEPTANCE,
     HOUSE_MAIL_GENERATION, HOUSE_MAX_YEAR, HOUSE_MAX_YEAR_OF, HOUSE_MIN_YEAR, HOUSE_MINIMUM_LIFE,
@@ -143,6 +143,72 @@ pub struct HouseSpecDef {
     pub newgrf_local_id: u8,
     #[serde(default, skip)]
     pub newgrf_runtime: Option<Box<crate::newgrf_sprites::TrainSpriteGraphics>>,
+}
+
+/// Conteos de edificios que consume `HouseScopeResolver`.
+///
+/// `OpenTTD` mantiene estos contadores en un cache global y otro por pueblo.
+/// El renderer consulta muchas casas durante un mismo pase, por lo que no
+/// debe recorrer el mapa para cada tesela: esta instantánea se construye una
+/// vez por pase y se reutiliza en todas las evaluaciones Action2.
+#[derive(Debug, Clone, Default)]
+pub struct HouseScopeCounts {
+    map_by_id: Vec<u32>,
+    town_by_id: std::collections::HashMap<(u32, u16), u32>,
+}
+
+impl HouseScopeCounts {
+    /// Construye los conteos a partir de `MAP8` y `MAP2`.
+    ///
+    /// `MAP2` es `TownID` para `MP_HOUSE`. En mapas legacy donde ese id no
+    /// identifica un pueblo cargado, se conserva el fallback de `OpenTTD` que
+    /// usa el pueblo más cercano para resolver el scope.
+    #[must_use]
+    pub fn from_map(map: &Map, towns: &[Town]) -> Self {
+        let mut counts = Self {
+            map_by_id: vec![0; 1 << 12],
+            town_by_id: std::collections::HashMap::new(),
+        };
+        let (width, height) = map.dimensions();
+        for y in 0..height {
+            for x in 0..width {
+                let coord = TileCoord::new(x.cast_signed(), y.cast_signed());
+                let Some(tile) = map.get(coord) else {
+                    continue;
+                };
+                if tile.kind != TileKind::House {
+                    continue;
+                }
+                let house_id = tile.m8 & 0x0FFF;
+                if let Some(slot) = counts.map_by_id.get_mut(usize::from(house_id)) {
+                    *slot = slot.saturating_add(1);
+                }
+                if let Some(town_id) = house_town_id(tile, coord, towns) {
+                    let entry = counts.town_by_id.entry((town_id, house_id)).or_default();
+                    *entry = entry.saturating_add(1);
+                }
+            }
+        }
+        counts
+    }
+
+    /// Número de teselas con el `HouseID` indicado en todo el mapa.
+    #[must_use]
+    pub fn map_count(&self, house_id: u16) -> u32 {
+        self.map_by_id
+            .get(usize::from(house_id & 0x0FFF))
+            .copied()
+            .unwrap_or(0)
+    }
+
+    /// Número de teselas con el `HouseID` indicado dentro de un pueblo.
+    #[must_use]
+    pub fn town_count(&self, town_id: u32, house_id: u16) -> u32 {
+        self.town_by_id
+            .get(&(town_id, house_id & 0x0FFF))
+            .copied()
+            .unwrap_or(0)
+    }
 }
 
 impl HouseSpecDef {
@@ -287,19 +353,16 @@ pub fn action2_eval_ctx_for_house_tile_with_towns(
     };
     ctx.vars.insert(0x41, age);
     let coord = TileCoord::new(tx, ty);
-    let persisted_town_id = u32::from(tile.m2) | (u32::from(tile.m2_hi) << 8);
-    let town_zone = towns
-        .iter()
-        .find(|town| town.id == persisted_town_id)
-        .or_else(|| {
-            towns
-                .iter()
-                .min_by_key(|town| distance_square(town.pos, coord))
-        })
+    let town_zone = house_town_id(tile, coord, towns)
+        .and_then(|town_id| towns.iter().find(|town| town.id == town_id))
         .map_or(HouseZone::TownEdge, |town| {
             get_town_radius_group(town, coord)
         });
     ctx.vars.insert(0x42, u32::from(town_zone as u8));
+    // `HouseScopeResolver::GetVariable(0x45)`: true only while the world is
+    // being generated. Runtime rendering and town expansion happen after the
+    // generation pass, so the normal map context is zero.
+    ctx.vars.insert(0x45, 0);
     // `GetTerrainType` returns a small climate-dependent enum. The map
     // representation has no separate terrain enum, but `m7` carries the
     // snow/desert marker used by imported maps; keep temperate grass as zero.
@@ -322,6 +385,195 @@ pub fn action2_eval_ctx_for_house_tile_with_towns(
     ctx.vars
         .insert(0x5F, (u32::from(tile.m1) << 8) | u32::from(tile.m3 & 0x1F));
     ctx
+}
+
+/// Construye un contexto de casa con conteos globales y teselas vecinas.
+///
+/// `neighbor_params` debe contener los pares `(variable, parámetro)` que el
+/// grafo Action2 solicita. Las variables `0x60`/`0x61` son conteos
+/// parametrizados; `0x62` devuelve la información de terreno de la tesela
+/// vecina y `0x63` su frame de animación si es una casa.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn action2_eval_ctx_for_house_tile_with_counts(
+    map: &Map,
+    tile: Tile,
+    tx: i32,
+    ty: i32,
+    climate: Climate,
+    towns: &[Town],
+    house_catalog: &[HouseSpecDef],
+    counts: &HouseScopeCounts,
+    neighbor_params: &[(u8, u8)],
+) -> crate::newgrf_sprites::Action2EvalCtx {
+    let mut ctx = action2_eval_ctx_for_house_tile_with_towns(tile, tx, ty, climate, towns);
+    let coord = TileCoord::new(tx, ty);
+    let house_id = tile.m8 & 0x0FFF;
+    let town_id = house_town_id(tile, coord, towns);
+    let map_count = counts.map_count(house_id).min(u32::from(u8::MAX));
+    let town_count = town_id
+        .map_or(0, |id| counts.town_count(id, house_id))
+        .min(u32::from(u8::MAX));
+    // `GetNumHouses`: class counts occupy the high bytes. Class IDs are not
+    // represented by the current catalog yet, so leave those two bytes zero
+    // while preserving the exact map/town ID count layout.
+    ctx.vars.insert(0x44, (map_count << 8) | town_count);
+
+    let current_def = house_catalog.iter().find(|def| def.id == house_id);
+    for &(variable, parameter) in neighbor_params {
+        match variable {
+            0x60 => {
+                let value = if u16::from(parameter) < NEW_HOUSE_OFFSET {
+                    counts.map_count(u16::from(parameter))
+                } else {
+                    0
+                };
+                // The town-specific low byte is selected by the current
+                // house's associated town, matching `GetNumHouses`.
+                let town_value =
+                    town_id.map_or(0, |id| counts.town_count(id, u16::from(parameter)));
+                ctx.parameterized_vars.insert(
+                    (variable, parameter),
+                    (value.min(u32::from(u8::MAX)) << 8) | town_value.min(u32::from(u8::MAX)),
+                );
+            }
+            0x61 => {
+                let target = current_def.filter(|def| def.from_newgrf).and_then(|def| {
+                    house_catalog
+                        .iter()
+                        .find(|candidate| {
+                            candidate.from_newgrf
+                                && candidate.grfid == def.grfid
+                                && candidate.local_id == parameter
+                        })
+                        .map(|candidate| candidate.id)
+                });
+                let value = target.map_or(0, |id| counts.map_count(id).min(u32::from(u8::MAX)));
+                let town_value = target
+                    .zip(town_id)
+                    .map_or(0, |(id, town)| counts.town_count(town, id))
+                    .min(u32::from(u8::MAX));
+                ctx.parameterized_vars
+                    .insert((variable, parameter), (value << 8) | town_value);
+            }
+            0x62 | 0x63 => {
+                let nearby = nearby_house_coord(map, coord, parameter);
+                let value = if variable == 0x62 {
+                    nearby_house_tile_information(map, nearby, climate)
+                } else {
+                    map.get(nearby)
+                        .filter(|candidate| candidate.kind == TileKind::House)
+                        .map_or(0, |candidate| u32::from(candidate.m3hi))
+                };
+                ctx.parameterized_vars.insert((variable, parameter), value);
+            }
+            _ => {}
+        }
+    }
+    ctx
+}
+
+/// Variante cómoda que calcula los conteos para callers pequeños/tests.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn action2_eval_ctx_for_house_tile_with_map(
+    map: &Map,
+    tile: Tile,
+    tx: i32,
+    ty: i32,
+    climate: Climate,
+    towns: &[Town],
+    house_catalog: &[HouseSpecDef],
+    neighbor_params: &[(u8, u8)],
+) -> crate::newgrf_sprites::Action2EvalCtx {
+    let counts = HouseScopeCounts::from_map(map, towns);
+    action2_eval_ctx_for_house_tile_with_counts(
+        map,
+        tile,
+        tx,
+        ty,
+        climate,
+        towns,
+        house_catalog,
+        &counts,
+        neighbor_params,
+    )
+}
+
+fn house_town_id(tile: Tile, coord: TileCoord, towns: &[Town]) -> Option<u32> {
+    let persisted = u32::from(tile.m2) | (u32::from(tile.m2_hi) << 8);
+    towns
+        .iter()
+        .find(|town| town.id == persisted)
+        .map(|town| town.id)
+        .or_else(|| {
+            towns
+                .iter()
+                .min_by_key(|town| distance_square(town.pos, coord))
+                .map(|town| town.id)
+        })
+}
+
+fn nearby_house_coord(map: &Map, base: TileCoord, parameter: u8) -> TileCoord {
+    let (width, height) = map.dimensions();
+    let (Ok(width), Ok(height)) = (i32::try_from(width), i32::try_from(height)) else {
+        return base;
+    };
+    if width == 0 || height == 0 {
+        return base;
+    }
+    let signed_nibble = |value: u8| {
+        let value = i32::from(value & 0x0F);
+        if value >= 8 { value - 16 } else { value }
+    };
+    TileCoord::new(
+        base.x
+            .saturating_add(signed_nibble(parameter))
+            .rem_euclid(width),
+        base.y
+            .saturating_add(signed_nibble(parameter >> 4))
+            .rem_euclid(height),
+    )
+}
+
+fn nearby_house_tile_information(map: &Map, coord: TileCoord, climate: Climate) -> u32 {
+    let Some(tile) = map.get(coord) else {
+        return 0;
+    };
+    let (tileh, z) = tile_slope_and_z(map, coord).unwrap_or((0, tile.height));
+    let terrain = if climate.uses_desert_patches() && tile.m7 & 0x20 != 0 {
+        1
+    } else if climate.uses_snow_ground() || tile.m7 & 0x20 != 0 {
+        4
+    } else {
+        0
+    };
+    let water_info = water_class(tile).map_or(0, |water| (water as u8 + 1) & 3);
+    let is_water = u8::from(tile.kind == TileKind::Water);
+    let terrain_info = (water_info << 5) | (terrain << 2) | (is_water << 1);
+    let tile_type = if tile.ottd_type_nibble() != 0 || tile.kind == TileKind::Grass {
+        tile.ottd_type_nibble()
+    } else {
+        match tile.kind {
+            TileKind::Water => 6,
+            TileKind::Forest => 4,
+            TileKind::Road | TileKind::RoadDepot | TileKind::RoadTunnel | TileKind::RoadBridge => 2,
+            TileKind::Rail | TileKind::RailDepot | TileKind::RailTunnel | TileKind::RailBridge => 1,
+            TileKind::House => 3,
+            TileKind::Station => 5,
+            TileKind::Industry => 8,
+            TileKind::Void => 7,
+            TileKind::ShipDepot
+            | TileKind::Airport
+            | TileKind::CoalField
+            | TileKind::Unknown(_) => tile.ottd_type_nibble(),
+            TileKind::Grass => 0,
+        }
+    };
+    (u32::from(tile_type) << 24)
+        | (u32::from(z) << 16)
+        | (u32::from(terrain_info) << 8)
+        | u32::from(tileh)
 }
 
 /// Catálogo vacío (solo `NewGRF`).
@@ -778,6 +1030,44 @@ mod tests {
         );
 
         assert_eq!(ctx.vars.get(&0x42), Some(&(HouseZone::TownCentre as u32)));
+    }
+
+    #[test]
+    fn house_action2_map_context_exposes_counts_and_neighbours() {
+        let mut map = Map::new_flat(4, 1, 0);
+        let first = TileCoord::new(0, 0);
+        let second = TileCoord::new(1, 0);
+        map.set_completed_house(first, 7, 0).unwrap();
+        map.set_house_town_id(first, 3).unwrap();
+        map.set_completed_house(second, 7, 0).unwrap();
+        map.set_house_town_id(second, 3).unwrap();
+        let mut animated = map.get(second).unwrap();
+        animated.m3hi = 9;
+        map.set_tile(second, animated).unwrap();
+        crate::map::make_water_tile(&mut map, TileCoord::new(3, 0), crate::map::WaterClass::Sea)
+            .unwrap();
+        let town = Town {
+            id: 3,
+            pos: first,
+            num_houses: 2,
+            ..Default::default()
+        };
+        let ctx = action2_eval_ctx_for_house_tile_with_map(
+            &map,
+            map.get(first).unwrap(),
+            first.x,
+            first.y,
+            Climate::Temperate,
+            std::slice::from_ref(&town),
+            &[],
+            &[(0x60, 7), (0x62, 0x0F), (0x63, 1)],
+        );
+        assert_eq!(ctx.vars.get(&0x44), Some(&0x0202));
+        assert_eq!(ctx.parameterized_vars.get(&(0x60, 7)), Some(&0x0202));
+        assert_eq!(ctx.parameterized_vars.get(&(0x63, 1)), Some(&9));
+        let nearby_water = *ctx.parameterized_vars.get(&(0x62, 0x0F)).unwrap();
+        assert_eq!(nearby_water >> 24, 6);
+        assert_eq!(nearby_water & 0xFF, 0);
     }
 
     #[test]

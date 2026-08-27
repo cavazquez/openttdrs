@@ -371,11 +371,13 @@ pub use map::{
 };
 // Runtime NewGRF en raíz; builders/fixtures vía `newgrf_actions` / `newgrf_sprites::fixture` (#157).
 pub use house_spec::{
-    DEFAULT_HOUSE_AVAILABILITY, DEFAULT_HOUSE_PROBABILITY, HOUSE_YEAR_MAX, HouseLookup, HouseSpec,
-    HouseSpecDef, INVALID_HOUSE, NEW_HOUSE_OFFSET, NUM_HOUSES, action2_eval_ctx_for_house_tile,
-    action2_eval_ctx_for_house_tile_with_towns, empty_house_overrides, empty_house_spec_catalog,
-    get_town_radius_group, get_translated_house_id, house_footprint_offsets, house_spec_def,
-    next_free_house_id, pick_town_house_id, pick_town_house_id_with_catalog, resolve_house_draw_id,
+    DEFAULT_HOUSE_AVAILABILITY, DEFAULT_HOUSE_PROBABILITY, HOUSE_YEAR_MAX, HouseLookup,
+    HouseScopeCounts, HouseSpec, HouseSpecDef, INVALID_HOUSE, NEW_HOUSE_OFFSET, NUM_HOUSES,
+    action2_eval_ctx_for_house_tile, action2_eval_ctx_for_house_tile_with_counts,
+    action2_eval_ctx_for_house_tile_with_map, action2_eval_ctx_for_house_tile_with_towns,
+    empty_house_overrides, empty_house_spec_catalog, get_town_radius_group,
+    get_translated_house_id, house_footprint_offsets, house_spec_def, next_free_house_id,
+    pick_town_house_id, pick_town_house_id_with_catalog, resolve_house_draw_id,
     vanilla_or_newgrf_house,
 };
 pub use map::{

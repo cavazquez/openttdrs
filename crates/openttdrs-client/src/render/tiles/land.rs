@@ -482,6 +482,7 @@ pub(crate) struct HouseSpawnResources<'a> {
     pub(crate) map: &'a Map,
     pub(crate) map_dims: (u32, u32),
     pub(crate) house_catalog: &'a [openttdrs_core::HouseSpecDef],
+    pub(crate) house_counts: Option<&'a openttdrs_core::HouseScopeCounts>,
     pub(crate) towns: &'a [openttdrs_core::Town],
     pub(crate) climate: Climate,
     pub(crate) newgrf_stack: &'a [openttdrs_core::NewGrfEntry],
@@ -520,6 +521,7 @@ pub(crate) fn spawn_house_tile(
         )
         .and_then(|def| {
             resolve_newgrf_house_layout(
+                resources.map,
                 def,
                 building_stage,
                 tile,
@@ -527,6 +529,8 @@ pub(crate) fn spawn_house_tile(
                 ctx.ty_i32(),
                 resources.climate,
                 resources.towns,
+                resources.house_catalog,
+                resources.house_counts,
                 resources.newgrf_stack,
             )
         })
@@ -730,12 +734,16 @@ pub(crate) fn spawn_house_tile(
         && let (Some(cache), Some(images)) =
             (resources.house_sprites.as_mut(), resources.images.as_mut())
     {
-        let mut a2 = openttdrs_core::action2_eval_ctx_for_house_tile_with_towns(
+        let mut a2 = house_action2_context(
+            resources.map,
             tile,
             ctx.tx_i32(),
             ctx.ty_i32(),
             resources.climate,
             resources.towns,
+            resources.house_catalog,
+            resources.house_counts,
+            def,
         );
         a2.set_grf_params(openttdrs_core::stack_params_for_grfid(
             resources.newgrf_stack,
@@ -932,6 +940,7 @@ pub(crate) fn spawn_house_tile(
 /// `HouseScopeResolver` disponible en el mapa y conserva su huella runtime.
 #[allow(clippy::too_many_arguments)]
 fn resolve_newgrf_house_layout<'a>(
+    map: &Map,
     def: &'a openttdrs_core::HouseSpecDef,
     building_stage: usize,
     tile: Tile,
@@ -939,14 +948,25 @@ fn resolve_newgrf_house_layout<'a>(
     ty: i32,
     climate: Climate,
     towns: &[openttdrs_core::Town],
+    house_catalog: &[openttdrs_core::HouseSpecDef],
+    house_counts: Option<&openttdrs_core::HouseScopeCounts>,
     newgrf_stack: &[openttdrs_core::NewGrfEntry],
 ) -> Option<(
     &'a openttdrs_core::HouseSpecDef,
     openttdrs_core::newgrf_sprites::ResolvedTileLayout,
     u32,
 )> {
-    let mut action2 =
-        openttdrs_core::action2_eval_ctx_for_house_tile_with_towns(tile, tx, ty, climate, towns);
+    let mut action2 = house_action2_context(
+        map,
+        tile,
+        tx,
+        ty,
+        climate,
+        towns,
+        house_catalog,
+        house_counts,
+        def,
+    );
     action2.set_grf_params(openttdrs_core::stack_params_for_grfid(
         newgrf_stack,
         def.grfid,
@@ -957,6 +977,69 @@ fn resolve_newgrf_house_layout<'a>(
         .as_ref()
         .map_or(0, |_| runtime_fingerprint(&action2, vars::HOUSE, false));
     Some((def, layout, runtime_fp))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn house_action2_context(
+    map: &Map,
+    tile: Tile,
+    tx: i32,
+    ty: i32,
+    climate: Climate,
+    towns: &[openttdrs_core::Town],
+    house_catalog: &[openttdrs_core::HouseSpecDef],
+    house_counts: Option<&openttdrs_core::HouseScopeCounts>,
+    def: &openttdrs_core::HouseSpecDef,
+) -> openttdrs_core::newgrf_sprites::Action2EvalCtx {
+    let neighbor_params = requested_house_scope_vars(def.newgrf_runtime.as_deref());
+    house_counts.map_or_else(
+        || {
+            openttdrs_core::action2_eval_ctx_for_house_tile_with_map(
+                map,
+                tile,
+                tx,
+                ty,
+                climate,
+                towns,
+                house_catalog,
+                &neighbor_params,
+            )
+        },
+        |counts| {
+            openttdrs_core::action2_eval_ctx_for_house_tile_with_counts(
+                map,
+                tile,
+                tx,
+                ty,
+                climate,
+                towns,
+                house_catalog,
+                counts,
+                &neighbor_params,
+            )
+        },
+    )
+}
+
+fn requested_house_scope_vars(
+    runtime: Option<&openttdrs_core::newgrf_sprites::TrainSpriteGraphics>,
+) -> Vec<(u8, u8)> {
+    let Some(runtime) = runtime else {
+        return Vec::new();
+    };
+    let mut requested = Vec::new();
+    for entry in runtime.action2_var.values() {
+        for term in std::iter::once(&entry.first).chain(entry.ops.iter().map(|op| &op.rhs)) {
+            if matches!(term.variable, 0x60..=0x63)
+                && let Some(parameter) = term.param
+                && !requested.contains(&(term.variable, parameter))
+            {
+                requested.push((term.variable, parameter));
+            }
+        }
+    }
+    requested.sort_unstable();
+    requested
 }
 
 /// Emite el suelo de un layout de casa. Un layout completo sin ground es

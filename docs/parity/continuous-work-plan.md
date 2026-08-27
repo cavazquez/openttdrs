@@ -145,7 +145,9 @@ secundarias fuera de ese contrato.
   el contexto persistido de la tesela y la zona `0x42` del pueblo identificado
   por `MAP2` (fallback al más cercano en mapas legacy),
   y se registra como parent sortable, mientras el suelo sigue usando el
-  sustituto vanilla. Las variables de conteos/vecindad, layouts `TileLayout`
+  sustituto vanilla. Las variables `0x44`, `0x60`/`0x61` (conteos por
+  `HouseID`) y `0x62`/`0x63` (información/frame de teselas vecinas) usan ahora
+  el mapa y una instantánea de conteos por pase. Los layouts `TileLayout`
   con suelo propio, callbacks de
   foundation/color/animación y la paleta `random_colour` siguen siendo
   residuales explícitos.

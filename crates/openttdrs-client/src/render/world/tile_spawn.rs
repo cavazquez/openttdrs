@@ -129,6 +129,10 @@ pub(crate) fn spawn_map_tiles_in_bounds(
     let map = &sim.state.map;
     let climate = sim.state.climate;
     let world_seed = sim.state.world_seed;
+    // `HouseScopeResolver` consulta conteos globales y por pueblo para cada
+    // casa. Prepararlos una sola vez mantiene el coste del pase lineal aun
+    // cuando el viewport contiene miles de teselas de casas.
+    let house_counts = openttdrs_core::HouseScopeCounts::from_map(map, &sim.state.towns);
     for c in &sim.state.companies {
         company.ensure_palette(CompanyColour::from_u8(c.colour), images);
     }
@@ -381,6 +385,7 @@ pub(crate) fn spawn_map_tiles_in_bounds(
                     map,
                     map_dims: (mw, mh),
                     house_catalog: &sim.state.house_spec_catalog,
+                    house_counts: Some(&house_counts),
                     towns: &sim.state.towns,
                     climate,
                     newgrf_stack: &sim.state.newgrf_stack,

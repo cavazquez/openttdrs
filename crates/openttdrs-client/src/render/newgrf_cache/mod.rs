@@ -18,10 +18,11 @@ pub(crate) mod vars {
     /// propietario y random. Las variables de teselas vecinas siguen fuera
     /// del fingerprint hasta completar su contexto global.
     pub const OBJECT: &[u8] = &[0x40, 0x41, 0x43, 0x44, 0x45, 0x46, 0x5F];
-    /// Variables de `HouseScopeResolver` presentes en `Tile` y zona del
-    /// pueblo más cercano; conteos y vecinos requieren todavía contexto
-    /// global adicional y quedan documentados como residual.
-    pub const HOUSE: &[u8] = &[0x40, 0x41, 0x42, 0x43, 0x46, 0x47, 0x5F];
+    /// Variables de `HouseScopeResolver` presentes en `Tile`, pueblo,
+    /// conteos precalculados y vecinos de la tesela.
+    pub const HOUSE: &[u8] = &[
+        0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x60, 0x61, 0x62, 0x63, 0x5F,
+    ];
     pub const ROAD_STOP: &[u8] = &[0x40, 0x41, 0x42, 0x43, 0x44, 0x49, 0x50, 0x5F];
     pub const STATION: &[u8] = &[0x10, 0x40, 0x42, 0x43, 0x4A, 0x5F, 0x67];
     /// Variables `AirportTileScopeResolver` que pueden cambiar la vista por

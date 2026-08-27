@@ -1297,6 +1297,25 @@ impl GameState {
                 vehicle.crashed_ctr = v.road_crashed_ctr;
                 vehicle.reverse_ctr = v.road_reverse_ctr;
             }
+            if kind == VehicleKind::Ship {
+                vehicle.ship_state = v.ship_state;
+                vehicle.ship_rotation = v.ship_rotation;
+                vehicle.ship_track = v.ship_track;
+                // `Ship::state` is authoritative when it contains a regular
+                // TrackBits value. `ship_track` remains the projection used
+                // by the Rust controller for special states (depot/wormhole).
+                vehicle.ship_pos_valid = true;
+                vehicle.ship_x = v.x_pos;
+                vehicle.ship_y = v.y_pos;
+                vehicle.z_pos = Some(i16::try_from(v.z_pos).unwrap_or_else(|_| {
+                    if v.z_pos.is_negative() {
+                        i16::MIN
+                    } else {
+                        i16::MAX
+                    }
+                }));
+                vehicle.ship_tick_counter = v.tick_counter;
+            }
             vehicle.cargo_type = crate::CargoType::from_climate_slot(sav.climate, v.cargo_type);
             hydrate_sav_vehicle_cargo(
                 &mut vehicle,
@@ -1979,6 +1998,9 @@ mod tests {
                     road_overtaking_ctr: 0,
                     road_crashed_ctr: 0,
                     road_reverse_ctr: 0,
+                    ship_state: 0,
+                    ship_rotation: 0,
+                    ship_track: 0,
                     direction: 0,
                     engine_type: 0,
                     cargo_type: 9,
@@ -2058,6 +2080,9 @@ mod tests {
                     road_overtaking_ctr: 0,
                     road_crashed_ctr: 0,
                     road_reverse_ctr: 0,
+                    ship_state: 0,
+                    ship_rotation: 0,
+                    ship_track: 0,
                     direction: 0,
                     engine_type: 0,
                     cargo_type: 0,
@@ -2137,6 +2162,9 @@ mod tests {
                     road_overtaking_ctr: 0,
                     road_crashed_ctr: 0,
                     road_reverse_ctr: 0,
+                    ship_state: 0,
+                    ship_rotation: 0,
+                    ship_track: 0,
                     direction: 0,
                     engine_type: 0,
                     cargo_type: 5,
@@ -2216,6 +2244,9 @@ mod tests {
                     road_overtaking_ctr: 0,
                     road_crashed_ctr: 0,
                     road_reverse_ctr: 0,
+                    ship_state: 0,
+                    ship_rotation: 0,
+                    ship_track: 0,
                     direction: 0,
                     engine_type: 0,
                     cargo_type: 9,

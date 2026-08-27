@@ -1155,6 +1155,16 @@ pub struct SavVehicle {
     pub road_crashed_ctr: u16,
     /// Contador de reversa vial (`RoadVehicle::reverse_ctr`).
     pub road_reverse_ctr: u8,
+    /// Bits de estado nativos de un barco (`Ship::state`).
+    ///
+    /// Además de `TrackBits`, `OpenTTD` usa este byte para depósito y wormhole;
+    /// por eso no debe reducirse únicamente a `ship_track` al importar.
+    pub ship_state: u8,
+    /// Rotación gráfica persistida por `SlVehicleShip`.
+    pub ship_rotation: u8,
+    /// Track derivado de `ship_state`, cuando el estado representa una vía
+    /// ordinaria. Es la forma que consume el controlador de movimiento Rust.
+    pub ship_track: u8,
     /// Dirección visual/de movimiento (`Vehicle::direction`) al guardar.
     pub direction: u8,
     /// ID de motor vanilla de `OpenTTD` (`Vehicle::engine_type`).
@@ -1219,6 +1229,22 @@ pub struct SavVehicle {
 
 /// Bit `GVSF_FRONT` de `Vehicle::subtype` (cabeza de convoy en tren/camión).
 const GVSF_FRONT: u64 = 0x01;
+
+/// Proyecta `Ship::state` (`TrackBits`) al índice de track que usa el
+/// controlador Rust. Los valores restantes son estados especiales de
+/// `OpenTTD` (depósito, wormhole o vacío) y no tienen track navegable directo.
+#[must_use]
+fn ship_track_from_state(state: u8) -> u8 {
+    match state {
+        1 => crate::ship_movement::TRACK_X,
+        2 => crate::ship_movement::TRACK_Y,
+        4 => crate::ship_movement::TRACK_UPPER,
+        8 => crate::ship_movement::TRACK_LOWER,
+        16 => crate::ship_movement::TRACK_LEFT,
+        32 => crate::ship_movement::TRACK_RIGHT,
+        _ => 0,
+    }
+}
 
 /// Vehículos del chunk `VEHS` (sparse table): tren/road/ship/aircraft.
 /// Aviones: solo el primario (`subtype` ≤ 2); sombra/rotor se omiten.
@@ -1373,6 +1399,19 @@ pub(crate) fn vehicles_from_chunks(
             )
         } else {
             (0, 0, 0, 0, 0, 0, 0)
+        };
+        let (ship_state, ship_rotation, ship_track) = if kind == SavVehicleKind::Ship {
+            let state = record_get(sub, "state")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok())
+                .unwrap_or(0);
+            let rotation = record_get(sub, "rotation")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok())
+                .unwrap_or(0);
+            (state, rotation, ship_track_from_state(state))
+        } else {
+            (0, 0, 0)
         };
         let direction = record_get(common, "direction")
             .and_then(SlValue::as_u64)
@@ -1667,6 +1706,9 @@ pub(crate) fn vehicles_from_chunks(
             road_overtaking_ctr,
             road_crashed_ctr,
             road_reverse_ctr,
+            ship_state,
+            ship_rotation,
+            ship_track,
             direction,
             engine_type,
             cargo_type: cargo_type.min(255) as u8,

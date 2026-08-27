@@ -362,8 +362,11 @@ su tick, año calendario de compra, cuenta atrás de carga/descarga, valor
 contable y el contador legacy `cargo_paid_for`. Esto no cierra el issue:
 la orden activa ya conserva sus campos crudos (`type`, `flags`, `dest`, refit y
 horario) y los contadores diarios (`day_counter`, `tick_counter`,
-`running_ticks`), pero siguen pendientes los flags/estado completos de tren,
-carretera, barco y FTA.
+`running_ticks`). En barcos, el subregistro `SlVehicleShip` ya conserva los
+bits crudos de `state`, su `rotation` y la proyección de `TrackBits` usada por
+el controlador; todavía faltan su vector `path` cacheado y la semántica YAPF /
+wormhole completa. Siguen pendientes los flags/estado completos de tren,
+carretera y FTA.
 
 <!-- active-parity-backlog:end -->
 

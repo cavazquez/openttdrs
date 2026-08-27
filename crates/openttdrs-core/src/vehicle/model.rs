@@ -277,6 +277,17 @@ pub struct Vehicle {
     /// Track actual del barco (`Track` / `v->state` bits → índice 0..5).
     #[serde(default)]
     pub ship_track: u8,
+    /// Bits de estado nativos del barco (`Ship::state`).
+    ///
+    /// El estado puede representar además de una vía (`TrackBits`) un
+    /// depósito o un wormhole. `ship_track` es sólo la proyección utilizable
+    /// por el controlador Rust; conservar los bits crudos evita que un
+    /// round-trip de SAV convierta esos estados especiales en vía plana.
+    #[serde(default)]
+    pub ship_state: u8,
+    /// Rotación gráfica persistida por `SlVehicleShip`.
+    #[serde(default)]
+    pub ship_rotation: u8,
     /// Contador de tick del barco (`Ship::tick_counter`; esclusa cada 8).
     #[serde(default)]
     pub ship_tick_counter: u8,
@@ -659,6 +670,8 @@ impl Vehicle {
             ship_y: 0,
             ship_pos_valid: false,
             ship_track: 0,
+            ship_state: 0,
+            ship_rotation: 0,
             ship_tick_counter: 0,
             motion_counter: 0,
             subspeed: 0,

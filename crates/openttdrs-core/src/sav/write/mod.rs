@@ -1185,6 +1185,9 @@ mod tests {
         let mut ship = Vehicle::new(0, VehicleKind::Ship, ship_pos, ship_pos);
         ship.running = false;
         ship.direction = crate::vehicle::DIR_NE;
+        ship.ship_state = 16;
+        ship.ship_track = crate::ship_movement::TRACK_LEFT;
+        ship.ship_rotation = 7;
         ship.set_vehicle_orders(vec![VehicleOrder::station(dock_pos)]);
         state.vehicles = vec![ship];
         state
@@ -1307,6 +1310,18 @@ mod tests {
                 .iter()
                 .any(|v| v.kind == sav::SavVehicleKind::Ship),
             "ship en VEHS"
+        );
+        let imported_ship = sav_game
+            .vehicles
+            .iter()
+            .find(|v| v.kind == sav::SavVehicleKind::Ship)
+            .expect("ship importado");
+        assert_eq!(imported_ship.ship_state, 16);
+        assert_eq!(imported_ship.ship_rotation, 7);
+        assert_eq!(
+            imported_ship.ship_track,
+            crate::ship_movement::TRACK_LEFT,
+            "TrackBits debe conservar la proyección usada por el controlador"
         );
 
         let vehs = find_chunk(&chunks, "VEHS").expect("VEHS");

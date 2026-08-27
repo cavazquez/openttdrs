@@ -339,6 +339,36 @@ struct AircraftWire {
     flags: u8,
 }
 
+/// Campos específicos de `SlVehicleShip` (`vehicle_sl.cpp`).
+#[derive(Clone, Copy)]
+struct ShipWire {
+    state: u8,
+    rotation: u8,
+}
+
+fn ship_wire_for(v: &Vehicle) -> ShipWire {
+    // `Ship::state` puede conservar estados especiales (depósito/wormhole).
+    // Para una unidad creada desde JSON sin snapshot raw, reconstruir sólo la
+    // TrackBit correspondiente mantiene una salida SAV navegable.
+    let state = if v.ship_state != 0 {
+        v.ship_state
+    } else {
+        match v.ship_track {
+            crate::ship_movement::TRACK_X => 1,
+            crate::ship_movement::TRACK_Y => 2,
+            crate::ship_movement::TRACK_UPPER => 4,
+            crate::ship_movement::TRACK_LOWER => 8,
+            crate::ship_movement::TRACK_LEFT => 16,
+            crate::ship_movement::TRACK_RIGHT => 32,
+            _ => 0,
+        }
+    };
+    ShipWire {
+        state,
+        rotation: v.ship_rotation,
+    }
+}
+
 fn aircraft_wire_for(state: &GameState, v: &Vehicle) -> AircraftWire {
     AircraftWire {
         crashed_counter: v.crashed_ctr,
@@ -363,6 +393,11 @@ fn write_aircraft_fields(buf: &mut Vec<u8>, aircraft: &AircraftWire) {
     buf.push(aircraft.number_consecutive_turns);
     buf.push(aircraft.turn_counter);
     buf.push(aircraft.flags);
+}
+
+fn write_ship_fields(buf: &mut Vec<u8>, ship: ShipWire) {
+    buf.push(ship.state);
+    buf.push(ship.rotation);
 }
 
 fn write_vehs_common(buf: &mut Vec<u8>, c: &CommonWire) -> Result<(), SavError> {
@@ -643,6 +678,7 @@ fn push_typed_vehicle(
     common: &CommonWire,
     train_track: Option<u8>,
     road_runtime: Option<&Vehicle>,
+    ship_runtime: Option<&ShipWire>,
     aircraft_runtime: Option<&AircraftWire>,
 ) -> Result<(), SavError> {
     rec.push(veh_type);
@@ -662,6 +698,9 @@ fn push_typed_vehicle(
                 rec.push(road.overtaking_ctr);
                 rec.extend_from_slice(&road.crashed_ctr.to_be_bytes());
                 rec.push(road.reverse_ctr);
+            }
+            if let Some(ship) = ship_runtime {
+                write_ship_fields(rec, *ship);
             }
             if let Some(aircraft) = aircraft_runtime {
                 write_aircraft_fields(rec, aircraft);
@@ -815,6 +854,7 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                 ),
                 None,
                 None,
+                None,
                 Some(&aircraft_runtime),
             )?;
             vehs.push(primary);
@@ -891,6 +931,7 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                 },
                 None,
                 None,
+                None,
                 Some(&aircraft_runtime),
             )?;
             vehs.push(shadow);
@@ -965,6 +1006,7 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                     },
                     None,
                     None,
+                    None,
                     Some(&aircraft_runtime),
                 )?;
                 vehs.push(rotor);
@@ -1008,6 +1050,7 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                 Some(track),
                 None,
                 None,
+                None,
             )?;
         } else if is_road {
             let engine_type = openttd_road_engine_type(v);
@@ -1031,10 +1074,12 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                 None,
                 Some(v),
                 None,
+                None,
             )?;
         } else {
             // ship
             let engine_type = openttd_ship_engine_type(v);
+            let ship_runtime = ship_wire_for(v);
             push_typed_vehicle(
                 &mut rec,
                 VEH_SHIP,
@@ -1054,6 +1099,7 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                 ),
                 None,
                 None,
+                Some(&ship_runtime),
                 None,
             )?;
         }
@@ -1096,8 +1142,11 @@ fn append_vehs_header(header: &mut Vec<u8>) -> Result<(), SavError> {
     header.push(0);
     append_vehs_common_fields(header)?;
 
-    // ship → common (state/path/rotation usan defaults)
+    // ship → common + estado/rotación persistentes. El path cache se deja
+    // fuera hasta contar con una representación de Trackdir interoperable.
     append_field(header, 0x1B, "common")?;
+    append_field(header, 2, "state")?;
+    append_field(header, 2, "rotation")?;
     header.push(0);
     append_vehs_common_fields(header)?;
 
@@ -1314,6 +1363,9 @@ mod tests {
         let mut ship = Vehicle::new(0, VehicleKind::Ship, ship_pos, ship_pos);
         ship.running = false;
         ship.direction = DIR_NE;
+        ship.ship_state = 16; // TRACK_BIT_LEFT, conserva el byte raw del SAV.
+        ship.ship_track = crate::ship_movement::TRACK_LEFT;
+        ship.ship_rotation = 7;
         state.vehicles = vec![ship];
 
         let (_, vehs) = ordl_and_vehs_records(&state, 64).unwrap();
@@ -1338,6 +1390,14 @@ mod tests {
         assert_eq!(
             record_get(common, "engine_type").and_then(SlValue::as_u64),
             Some(u64::from(DEFAULT_OPENTTD_SHIP_ENGINE))
+        );
+        assert_eq!(
+            record_get(ship, "state").and_then(SlValue::as_u64),
+            Some(16)
+        );
+        assert_eq!(
+            record_get(ship, "rotation").and_then(SlValue::as_u64),
+            Some(7)
         );
     }
 

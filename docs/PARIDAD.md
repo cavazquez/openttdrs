@@ -244,11 +244,13 @@ base, paletas custom y layouts incompletos conservan fallback vanilla. Los
 producers de industria y
 las industrias NewGRF ya usan sus offsets Action2 runtime y cuelgan el overlay
 del parent de la fundación nivelada cuando existe. Las casas NewGRF también
-reevalúan Action2 por tesela (etapa/hash, edad, terreno, frame, posición y
+reevalúan Action2 por tesela (etapa/hash, edad, zona `0x42` del pueblo más
+cercano, terreno, frame, posición y
 random/triggers) y registran el edificio con bounds conservadoras como parent
 sortable; los layouts `TileSeq`/children completos de industria y casa ya
-reemplazan el suelo/edificio vanilla. Las variables de pueblo/vecindad aún usan
-el sustituto vanilla; siguen pendientes callbacks de foundation específicos,
+reemplazan el suelo/edificio vanilla. La asociación nativa casa↔pueblo, los
+conteos/vecindad y las variables que dependen de ellos aún usan el sustituto
+vanilla; siguen pendientes callbacks de foundation específicos,
 color/view y las paletas especiales no basadas en la rampa de compañía fuera
 del renderer de vehículos siguen pendientes de un contrato runtime completo.
 El sprite-stack de vehículos ya resuelve grupos

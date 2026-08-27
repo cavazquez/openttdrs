@@ -482,6 +482,7 @@ pub(crate) struct HouseSpawnResources<'a> {
     pub(crate) map: &'a Map,
     pub(crate) map_dims: (u32, u32),
     pub(crate) house_catalog: &'a [openttdrs_core::HouseSpecDef],
+    pub(crate) towns: &'a [openttdrs_core::Town],
     pub(crate) climate: Climate,
     pub(crate) newgrf_stack: &'a [openttdrs_core::NewGrfEntry],
     pub(crate) foundation_newgrf: &'a [Option<openttdrs_core::DecodedSprite>],
@@ -525,6 +526,7 @@ pub(crate) fn spawn_house_tile(
                 ctx.tx_i32(),
                 ctx.ty_i32(),
                 resources.climate,
+                resources.towns,
                 resources.newgrf_stack,
             )
         })
@@ -728,11 +730,12 @@ pub(crate) fn spawn_house_tile(
         && let (Some(cache), Some(images)) =
             (resources.house_sprites.as_mut(), resources.images.as_mut())
     {
-        let mut a2 = openttdrs_core::action2_eval_ctx_for_house_tile(
+        let mut a2 = openttdrs_core::action2_eval_ctx_for_house_tile_with_towns(
             tile,
             ctx.tx_i32(),
             ctx.ty_i32(),
             resources.climate,
+            resources.towns,
         );
         a2.set_grf_params(openttdrs_core::stack_params_for_grfid(
             resources.newgrf_stack,
@@ -935,13 +938,15 @@ fn resolve_newgrf_house_layout<'a>(
     tx: i32,
     ty: i32,
     climate: Climate,
+    towns: &[openttdrs_core::Town],
     newgrf_stack: &[openttdrs_core::NewGrfEntry],
 ) -> Option<(
     &'a openttdrs_core::HouseSpecDef,
     openttdrs_core::newgrf_sprites::ResolvedTileLayout,
     u32,
 )> {
-    let mut action2 = openttdrs_core::action2_eval_ctx_for_house_tile(tile, tx, ty, climate);
+    let mut action2 =
+        openttdrs_core::action2_eval_ctx_for_house_tile_with_towns(tile, tx, ty, climate, towns);
     action2.set_grf_params(openttdrs_core::stack_params_for_grfid(
         newgrf_stack,
         def.grfid,

@@ -236,18 +236,39 @@ impl HouseSpecDef {
 
 /// Construye el contexto Action2 disponible para una casa ya materializada.
 ///
-/// Es la traducción de las variables de `HouseScopeResolver` que están
-/// persistidas en `Tile`: etapa/hash (`0x40`), edad (`0x41`), terreno (`0x43`),
-/// frame (`0x46`), posición (`0x47`) y random/triggers (`0x5F`). Las variables
-/// que dependen del pueblo o de contadores globales (zona, número de casas,
-/// vecinos y aceptación de estaciones) se dejan ausentes para que el
-/// evaluador no invente valores.
+/// Este wrapper conserva el contrato histórico para callers que todavía no
+/// tienen el vector de pueblos: las variables dependientes del pueblo siguen
+/// ausentes en ese caso. El renderer usa
+/// [`action2_eval_ctx_for_house_tile_with_towns`] para materializar la zona
+/// urbana real.
 #[must_use]
 pub fn action2_eval_ctx_for_house_tile(
     tile: Tile,
     tx: i32,
     ty: i32,
     climate: Climate,
+) -> crate::newgrf_sprites::Action2EvalCtx {
+    let mut ctx = action2_eval_ctx_for_house_tile_with_towns(tile, tx, ty, climate, &[]);
+    // La API legacy no podía resolver el pueblo asociado y sus tests/callers
+    // distinguen una variable no disponible de `TownEdge` (valor cero).
+    ctx.vars.remove(&0x42);
+    ctx
+}
+
+/// Construye el contexto Action2 de una casa con los pueblos del mapa.
+///
+/// `HouseScopeResolver::GetVariable(0x42)` devuelve la zona del pueblo
+/// asociado a la casa. Los mapas importados todavía no conservan el puntero
+/// nativo `House::town`, por lo que se usa el pueblo más cercano, la misma
+/// aproximación que emplean los scopes de `AirportTile` hasta completar esa
+/// asociación estructural.
+#[must_use]
+pub fn action2_eval_ctx_for_house_tile_with_towns(
+    tile: Tile,
+    tx: i32,
+    ty: i32,
+    climate: Climate,
+    towns: &[Town],
 ) -> crate::newgrf_sprites::Action2EvalCtx {
     let mut ctx = crate::newgrf_sprites::Action2EvalCtx::default();
     let stage = if tile.m3 & 0x80 != 0 {
@@ -265,6 +286,14 @@ pub fn action2_eval_ctx_for_house_tile(
         0
     };
     ctx.vars.insert(0x41, age);
+    let coord = TileCoord::new(tx, ty);
+    let town_zone = towns
+        .iter()
+        .min_by_key(|town| distance_square(town.pos, coord))
+        .map_or(HouseZone::TownEdge, |town| {
+            get_town_radius_group(town, coord)
+        });
+    ctx.vars.insert(0x42, u32::from(town_zone as u8));
     // `GetTerrainType` returns a small climate-dependent enum. The map
     // representation has no separate terrain enum, but `m7` carries the
     // snow/desert marker used by imported maps; keep temperate grass as zero.
@@ -720,6 +749,27 @@ mod tests {
         assert_eq!(ctx.vars.get(&0x5F), Some(&((0xAB << 8) | 0x15)));
         assert!(!ctx.vars.contains_key(&0x42));
         assert!(!ctx.vars.contains_key(&0x44));
+    }
+
+    #[test]
+    fn house_action2_context_exposes_nearest_town_zone() {
+        let tile = Tile::completed_house(7, 19, 0);
+        let mut town = Town {
+            pos: TileCoord::new(5, 2),
+            num_houses: 48,
+            ..Default::default()
+        };
+        update_town_radius(&mut town);
+
+        let ctx = action2_eval_ctx_for_house_tile_with_towns(
+            tile,
+            5,
+            2,
+            Climate::Temperate,
+            std::slice::from_ref(&town),
+        );
+
+        assert_eq!(ctx.vars.get(&0x42), Some(&(HouseZone::TownCentre as u32)));
     }
 
     #[test]

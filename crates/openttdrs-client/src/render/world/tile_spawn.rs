@@ -379,6 +379,7 @@ pub(crate) fn spawn_map_tiles_in_bounds(
                     map,
                     map_dims: (mw, mh),
                     house_catalog: &sim.state.house_spec_catalog,
+                    towns: &sim.state.towns,
                     climate,
                     newgrf_stack: &sim.state.newgrf_stack,
                     foundation_newgrf: &sim.state.runtime.foundation_newgrf_sprites,

@@ -107,6 +107,34 @@ mod tests {
     }
 
     #[test]
+    fn action2_ctx_exposes_same_engine_relative_random_scope() {
+        let mut vs = vec![train(1), train(2), train(3), train(4), train(5)];
+        vs[0].engine_id = Some(10);
+        vs[1].engine_id = Some(20);
+        vs[2].engine_id = Some(20);
+        vs[3].engine_id = Some(20);
+        vs[4].engine_id = Some(30);
+        vs[0].newgrf_random_bits = 0x10;
+        vs[1].newgrf_random_bits = 0x20;
+        vs[2].newgrf_random_bits = 0x30;
+        vs[3].newgrf_random_bits = 0x40;
+        vs[4].newgrf_random_bits = 0x50;
+        assert!(attach_wagon(&mut vs, 1, 2).is_ok());
+        assert!(attach_wagon(&mut vs, 1, 3).is_ok());
+        assert!(attach_wagon(&mut vs, 1, 4).is_ok());
+        assert!(attach_wagon(&mut vs, 1, 5).is_ok());
+
+        // For unit 4 the contiguous run with engine 20 starts at unit 2.
+        // Counts 0, 1 and 2 select units 2, 3 and 4; count 3 advances into
+        // the following unit exactly as OpenTTD's Move(count) does.
+        let ctx = action2_eval_ctx_for_unit(&vs, 4, crate::tick::GameTick::new(0), &[], 0);
+        assert_eq!(ctx.relative_same_engine_random_bits.get(&0), Some(&0x20));
+        assert_eq!(ctx.relative_same_engine_random_bits.get(&1), Some(&0x30));
+        assert_eq!(ctx.relative_same_engine_random_bits.get(&2), Some(&0x40));
+        assert_eq!(ctx.relative_same_engine_random_bits.get(&3), Some(&0x50));
+    }
+
+    #[test]
     fn action2_ctx_var40_consist_position() {
         let mut vs = vec![train(1), train(2), train(3)];
         vs[1].engine_id = Some(crate::engine::ENGINE_WAGON_PASSENGER);

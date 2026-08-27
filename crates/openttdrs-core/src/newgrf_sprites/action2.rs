@@ -315,28 +315,33 @@ pub(super) fn eval_action2_random(entry: &Action2RandomEntry, ctx: &Action2EvalC
         // that do not have a related object.
         0x83 => ctx.parent_random_bits,
         0x84 => {
-            let count = i16::from(entry.consist_count & 0x0F);
+            let encoded_count = entry.consist_count & 0x0F;
+            // A zero nibble asks OpenTTD to read the signed count from
+            // register 0x100. Keeping this here matters for all four
+            // relative directions, including the same-engine scope.
+            let count = if encoded_count == 0 {
+                signed_register(ctx, 0x100)
+            } else {
+                i16::from(encoded_count)
+            };
             let direction = (entry.consist_count >> 6) & 0x03;
             let offset = match direction {
                 // Count forward (toward the engine), starting at self.
                 1 => -count,
                 // Count back, starting at the parent/engine.
                 2 => -1 + count,
-                // The first vehicle with the same engine id is not retained
-                // by every caller yet; use the closest chain offset as the
-                // deterministic fallback and let the legacy nibble map cover
-                // old contexts.
                 _ => count,
             };
-            ctx.relative_random_bits
-                .get(&offset)
-                .copied()
-                .or_else(|| {
-                    ctx.consist_random_bits
-                        .get(&(entry.consist_count & 0x0F))
-                        .copied()
-                })
-                .unwrap_or(ctx.random_bits)
+            if direction == 3 {
+                ctx.relative_same_engine_random_bits
+                    .get(&count)
+                    .copied()
+                    .or_else(|| ctx.relative_random_bits.get(&offset).copied())
+            } else {
+                ctx.relative_random_bits.get(&offset).copied()
+            }
+            .or_else(|| ctx.consist_random_bits.get(&encoded_count).copied())
+            .unwrap_or(ctx.random_bits)
         }
         _ => ctx.random_bits,
     };

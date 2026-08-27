@@ -243,6 +243,11 @@ pub struct Action2EvalCtx {
     /// Positive offsets move toward `next_unit` (away from the engine), and
     /// negative offsets move toward `prev_unit` (toward the engine).
     pub relative_random_bits: HashMap<i16, u32>,
+    /// Random bits selected from the first contiguous vehicle run with the
+    /// same engine id as the resolved vehicle. Action2 random type `0x84`
+    /// direction `3` starts at that run and applies its count forward, just
+    /// like `OpenTTD`'s `VehicleResolverObject::GetScope`.
+    pub relative_same_engine_random_bits: HashMap<i16, u32>,
     /// Feature variables exposed by neighboring vehicles, indexed by
     /// `(signed_offset, variable)`.  This is the data source for Action2
     /// variable `61`, whose offset is selected through register `0x10F`.

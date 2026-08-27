@@ -132,6 +132,33 @@ pub fn action2_eval_ctx_for_unit(
             );
             previous = candidate.prev_unit;
         }
+
+        // Action2 random type 0x84 direction 3 starts at the first vehicle
+        // in the contiguous run ending at the current vehicle whose engine
+        // id matches the current one, then advances by the encoded count.
+        // OpenTTD calls this the relative scope used by vehicle variable 41.
+        // Keep the table keyed by the count (rather than by chain offset) so
+        // the evaluator can apply a dynamic count from register 0x100.
+        if let Some(engine_id) = vehicle_engine_identity(unit) {
+            let mut first_same_offset = 0i16;
+            let mut previous = unit.prev_unit;
+            while let Some(id) = previous {
+                let Some(candidate) = vehicles.iter().find(|v| v.id == id) else {
+                    break;
+                };
+                if vehicle_engine_identity(candidate) != Some(engine_id) {
+                    break;
+                }
+                first_same_offset -= 1;
+                previous = candidate.prev_unit;
+            }
+            for count in 0i16..=15 {
+                let target_offset = first_same_offset + count;
+                if let Some(bits) = ctx.relative_random_bits.get(&target_offset) {
+                    ctx.relative_same_engine_random_bits.insert(count, *bits);
+                }
+            }
+        }
     }
     fill_vehicle_action2_vars(
         &mut ctx,
@@ -168,6 +195,13 @@ pub fn action2_eval_ctx_for_unit(
             .map_or(0, |vehicle| vehicle.newgrf_palette_generation);
     }
     ctx
+}
+
+/// Engine identity used by `NewGRF` scopes. Imported vehicles retain the
+/// native `OpenTTD` engine type; newly-created vehicles only have the catalog
+/// id, so the latter is the fallback for runtime-created consists.
+fn vehicle_engine_identity(vehicle: &Vehicle) -> Option<u16> {
+    vehicle.native_engine_type.or(vehicle.engine_id)
 }
 
 fn fill_vehicle_action2_vars(

@@ -617,6 +617,22 @@ mod tests {
         ctx.relative_random_bits.insert(-1, 1);
         assert_eq!(gfx.resolve_action1_set_ctx(4, &mut ctx), 1);
         assert_eq!(gfx.resolve_action1_set_ctx(5, &mut ctx), 3);
+
+        gfx.action2_random.insert(
+            6,
+            Action2RandomEntry {
+                typ: 0x84,
+                // Direction 3 = first vehicle in the contiguous same-engine
+                // run, then count forward from that vehicle.
+                consist_count: 0xC0,
+                triggers: 0,
+                randbit: 0,
+                sets: vec![14, 15],
+            },
+        );
+        gfx.action2_to_action1.extend([(14, 4), (15, 5)]);
+        ctx.relative_same_engine_random_bits.insert(0, 1);
+        assert_eq!(gfx.resolve_action1_set_ctx(6, &mut ctx), 5);
     }
 
     #[test]

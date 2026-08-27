@@ -645,6 +645,7 @@ fn write_stnn_normal(
     buf: &mut Vec<u8>,
     st: &Station,
     tile_idx: u32,
+    map_w: u32,
     facilities: u8,
     town_ref: u32,
     station_id: u32,
@@ -677,7 +678,12 @@ fn write_stnn_normal(
     buf.push(0);
 
     let (air_tile, air_w, air_h, air_type) = if facilities & FACIL_AIRPORT != 0 {
-        (tile_idx, 1u8, 1u8, 0u8)
+        let (air_tile, air_w, air_h) = airport_wire_footprint(st, tile_idx, map_w);
+        let air_type = st
+            .airport_newgrf_spec_id
+            .and_then(|id| u8::try_from(id).ok())
+            .unwrap_or_else(|| st.airport_spec.as_ottd_airport_type());
+        (air_tile, air_w, air_h, air_type)
     } else {
         (INVALID_TILE, 0u8, 0u8, 0u8)
     };
@@ -711,6 +717,31 @@ fn write_stnn_normal(
         write_station_goods_entry(buf, st, cargo, saved)?;
     }
     Ok(())
+}
+
+/// Convierte la huella materializada de una estación en los campos compactos
+/// `airport.tile/w/h` de `STNN`. El origen se elige de forma determinista
+/// (mínimo Y/X), que coincide con el ancla de los layouts vanilla y custom.
+fn airport_wire_footprint(st: &Station, fallback_tile: u32, map_w: u32) -> (u32, u8, u8) {
+    let Some((min, rest)) = st.airport_tiles.split_first().map(|(first, rest)| {
+        let min = rest.iter().copied().fold(*first, |best, coord| {
+            if (coord.y, coord.x).lt(&(best.y, best.x)) {
+                coord
+            } else {
+                best
+            }
+        });
+        (min, rest)
+    }) else {
+        return (fallback_tile, 1, 1);
+    };
+    let max = rest.iter().copied().fold(min, |best, coord| {
+        TileCoord::new(best.x.max(coord.x), best.y.max(coord.y))
+    });
+    let tile = coord_to_linear_index(min, map_w).unwrap_or(fallback_tile);
+    let width = u8::try_from(max.x.saturating_sub(min.x).saturating_add(1)).unwrap_or(u8::MAX);
+    let height = u8::try_from(max.y.saturating_sub(min.y).saturating_add(1)).unwrap_or(u8::MAX);
+    (tile, width, height)
 }
 
 fn write_stnn_waypoint(
@@ -770,7 +801,14 @@ pub(crate) fn stnn_records_with_cargo(
         let ux = st.pos.x.cast_unsigned();
         let uy = st.pos.y.cast_unsigned();
         let tile_idx = uy.saturating_mul(map_w).saturating_add(ux);
-        let facilities = facilities_for_stop(st.stop_kind);
+        // Una estación importada puede conservar varias facilidades en una
+        // sola entidad (por ejemplo tren + aeropuerto). `StopKind` representa
+        // la facilidad principal, por lo que la huella aérea también debe
+        // volver a activar `FACIL_AIRPORT` al exportar.
+        let mut facilities = facilities_for_stop(st.stop_kind);
+        if !st.airport_tiles.is_empty() || st.airport_newgrf_spec_id.is_some() {
+            facilities |= FACIL_AIRPORT;
+        }
         let mut rec = Vec::new();
         // SAVEBYTE: leído a mano por OpenTTD antes de SlObject.
         rec.push(facilities);
@@ -785,6 +823,7 @@ pub(crate) fn stnn_records_with_cargo(
                 &mut rec,
                 st,
                 tile_idx,
+                map_w,
                 facilities,
                 town_ref,
                 station_id,
@@ -1085,7 +1124,7 @@ pub(super) fn indy_chunk(state: &GameState, map_w: u32) -> Result<Vec<u8>, SavEr
 mod tests {
     use super::*;
     use crate::map::TileCoord;
-    use crate::sav::table::record_get;
+    use crate::sav::table::{SlValue, record_get};
     use crate::station::{Station, StopKind};
 
     #[test]
@@ -1114,6 +1153,46 @@ mod tests {
         let chunk = stnn_chunk(&recs).unwrap();
         assert!(chunk.starts_with(b"STNN"));
         assert_eq!(chunk[4], CH_TABLE);
+    }
+
+    #[test]
+    fn stnn_airport_record_preserves_custom_type_and_footprint() {
+        let mut state = GameState::new(16, 16);
+        let mut airport = Station::new_with_kind(TileCoord::new(7, 7), StopKind::Airport);
+        airport.ottd_station_id = Some(10);
+        airport.airport_newgrf_spec_id = Some(10);
+        airport.airport_tiles = vec![
+            TileCoord::new(4, 5),
+            TileCoord::new(5, 5),
+            TileCoord::new(4, 6),
+            TileCoord::new(5, 6),
+        ];
+        state.stations.push(airport);
+
+        let records = stnn_records(&state, 16).expect("STNN records");
+        assert_eq!(records[0][0], FACIL_AIRPORT);
+        let chunk = stnn_chunk(&records).expect("STNN chunk");
+        let rows = crate::sav::table::parse_table_chunk(&chunk[5..], false).expect("table");
+        let normal = match record_get(&rows[0].1, "normal") {
+            Some(SlValue::Structs(items)) => items.first().expect("normal"),
+            other => panic!("normal ausente: {other:?}"),
+        };
+        assert_eq!(
+            record_get(normal, "airport.type").and_then(SlValue::as_u64),
+            Some(10)
+        );
+        assert_eq!(
+            record_get(normal, "airport.tile").and_then(SlValue::as_u64),
+            Some(84)
+        );
+        assert_eq!(
+            record_get(normal, "airport.w").and_then(SlValue::as_u64),
+            Some(2)
+        );
+        assert_eq!(
+            record_get(normal, "airport.h").and_then(SlValue::as_u64),
+            Some(2)
+        );
     }
 
     #[test]

@@ -7,9 +7,10 @@
 //! (SAVEBYTE + structs) + `VEHS`/`ORDL` (tren + ROAD + ship + aircraft ala fija)
 //! + `INDY` + `CAPA` + `ECMY` + `DATE`/`PLYR` cargable por `OpenTTD` ≥15.3 dedicated.
 //!
-//! Residual: tram, settings fuera del subconjunto modelado de `PATS`, ejecución
-//! de `ENGN`/`SRND`/`NewGRF` y flags
-//! completos de `PLYR`.
+//! Residual: tranvía, settings fuera del subconjunto modelado de `PATS`,
+//! ejecución de `ENGN`/`SRND`/callbacks `NewGRF` y flags completos de `PLYR`.
+//! La configuración activa `NGRF` (archivo, GRFID, versión y parámetros) sí se
+//! reconstruye; `OBJS`/`OBID` y otros pools aún se conservan como passthrough.
 //! Los chunks nativos no modelados se conservan como passthrough al reexportar.
 //! Limitaciones: `docs/PARIDAD.md` y `docs/archive/merged-2026-07/ROADMAP_SAV_EXPORT.md`.
 
@@ -21,6 +22,7 @@ mod entities;
 mod fleet;
 mod map;
 mod meta;
+mod newgrf;
 mod vehicles;
 
 use std::io::Write;
@@ -262,7 +264,13 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
         data.extend_from_slice(&capy);
     }
     data.extend_from_slice(&fleet::fleet_chunks(state, &autoreplace_export)?);
+    if let Some(ngrf) = newgrf::newgrf_chunk(state)? {
+        data.extend_from_slice(&ngrf);
+    }
     for chunk in &state.sav_opaque_chunks {
+        if super::REBUILT_CHUNKS.contains(&chunk.name) {
+            continue;
+        }
         data.extend_from_slice(&chunks::raw_chunk(chunk.name, chunk.ch_type, &chunk.body));
     }
 
@@ -644,7 +652,7 @@ mod tests {
     fn ottn_roundtrip_preserves_opaque_runtime_chunks() {
         let mut state = tiny_state();
         let body = crate::sav::table::tests::build_table_body(&[(2, "grfid")], &[vec![7]]);
-        state.sav_opaque_chunks = [*b"GSET", *b"NGRF", *b"ENGN", *b"SRND"]
+        state.sav_opaque_chunks = [*b"GSET", *b"ENGN", *b"SRND"]
             .into_iter()
             .map(|name| crate::SavOpaqueChunk {
                 name,
@@ -659,9 +667,34 @@ mod tests {
         let loaded = GameState::from_sav_game(sav_game);
         assert_eq!(loaded.sav_opaque_chunks, state.sav_opaque_chunks);
         let names = exported_chunk_names(&state).expect("chunk names");
-        for expected in ["GSET", "NGRF", "ENGN", "SRND"] {
+        for expected in ["GSET", "ENGN", "SRND"] {
             assert!(names.iter().any(|name| name == expected), "{names:?}");
         }
+    }
+
+    #[test]
+    fn ottn_roundtrip_preserves_active_newgrf_configuration() {
+        let mut state = tiny_state();
+        let mut active = crate::NewGrfEntry::new("active.grf", 0x4142_4301);
+        active.grf_version = 8;
+        active.set_param(0, 0x0102_0304);
+        active.set_param(3, 0xAABB_CCDD);
+        let mut disabled = crate::NewGrfEntry::new("disabled.grf", 0x4449_5301);
+        disabled.enabled = false;
+        let mut static_grf = crate::NewGrfEntry::new("static.grf", 0x5354_4101);
+        static_grf.is_static = true;
+        state.newgrf_stack = vec![active.clone(), disabled, static_grf];
+
+        let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
+        let payload = &bytes[8..];
+        let chunks = crate::sav::chunks::parse_chunks(payload).expect("chunks");
+        let ngrf = crate::sav::chunks::find_chunk(&chunks, "NGRF").expect("NGRF");
+        assert_eq!(ngrf.ch_type, crate::sav::chunks::CH_TABLE);
+
+        let sav_game = sav::load(&bytes).expect("load");
+        assert_eq!(sav_game.newgrf_stack, vec![active.clone()]);
+        let loaded = GameState::from_sav_game(sav_game);
+        assert_eq!(loaded.newgrf_stack, vec![active]);
     }
 
     #[test]

@@ -19,6 +19,7 @@ mod fleet;
 pub(crate) mod house_population_generated;
 mod import;
 mod landscape;
+mod newgrf;
 mod settings;
 
 /// Población de un `HouseID` original (`HouseSpec::population`).
@@ -124,7 +125,8 @@ pub struct SavOpaqueChunk {
 const REBUILT_CHUNKS: &[[u8; 4]] = &[
     *b"MAPS", *b"MAPT", *b"MAPH", *b"MAPO", *b"MAP2", *b"M3LO", *b"M3HI", *b"MAP5", *b"MAPE",
     *b"MAP7", *b"MAP8", *b"STNN", *b"CITY", *b"INDY", *b"ORDL", *b"ORDR", *b"VEHS", *b"LGRP",
-    *b"LGRJ", *b"LGRS", *b"PATS", *b"ECMY", *b"CAPY", *b"GRPS", *b"ERNW", *b"DATE", *b"PLYR",
+    *b"LGRJ", *b"LGRS", *b"PATS", *b"ECMY", *b"CAPY", *b"GRPS", *b"ERNW", *b"NGRF", *b"DATE",
+    *b"PLYR",
 ];
 
 /// Conserva los chunks nativos cuyo contenido todavía no tiene un modelo de
@@ -281,6 +283,8 @@ pub struct SavGame {
     pub vehicle_groups: Vec<crate::vehicle_group::VehicleGroup>,
     /// Reglas de autoreemplazo del chunk `ERNW`.
     pub autoreplace_rules: Vec<crate::autoreplace::AutoReplaceRule>,
+    /// Stack activo de configuración `NewGRF` del chunk `NGRF`.
+    pub newgrf_stack: Vec<crate::newgrf_config::NewGrfEntry>,
     /// Chunks nativos no modelados que se conservan para round-trip.
     pub opaque_chunks: Vec<SavOpaqueChunk>,
 }
@@ -330,6 +334,7 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
     let vehicle_groups = fleet::vehicle_groups_from_chunks(&chunk_list);
     let mut autoreplace_rules = fleet::autoreplace_rules_from_chunks(&chunk_list);
     fleet::assign_autoreplace_owners(&mut autoreplace_rules, &companies);
+    let newgrf_stack = newgrf::newgrf_stack_from_chunks(&chunk_list);
     let opaque_chunks = opaque_chunks_from_chunks(&chunk_list);
     let link_graph =
         linkgraph::link_graph_from_chunks(&chunk_list, map_w, &station_index, version, climate);
@@ -368,6 +373,7 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
         global_economy,
         vehicle_groups,
         autoreplace_rules,
+        newgrf_stack,
         opaque_chunks,
     })
 }
@@ -881,6 +887,11 @@ impl GameState {
         state.using_wallclock_units = sav.using_wallclock_units;
         state.vehicle_groups = sav.vehicle_groups;
         state.autoreplace_rules = sav.autoreplace_rules;
+        state.newgrf_stack = if sav.newgrf_stack.is_empty() {
+            crate::newgrf_config::default_vanilla_stack()
+        } else {
+            sav.newgrf_stack
+        };
         state.sav_opaque_chunks = sav.opaque_chunks;
         if let Some(time) = sav.game_time {
             state.tick = date::game_tick_from_sav_time(time);
@@ -1613,6 +1624,7 @@ mod tests {
             global_economy: crate::economy::GlobalEconomy::new(),
             vehicle_groups: Vec::new(),
             autoreplace_rules: Vec::new(),
+            newgrf_stack: Vec::new(),
             opaque_chunks: Vec::new(),
         }
     }
@@ -2460,6 +2472,7 @@ mod tests {
             global_economy: crate::economy::GlobalEconomy::new(),
             vehicle_groups: Vec::new(),
             autoreplace_rules: Vec::new(),
+            newgrf_stack: Vec::new(),
             opaque_chunks: Vec::new(),
         };
         let state = GameState::from_sav_game(sav);

@@ -30,8 +30,8 @@ preserva. Importar un dato no implica que el exportador lo escriba.
 | Grupos y autoreplace | 🟡 lee `GRPS` y el pool `ERNW` con índice, enlaces, owner desde `PLYR` y scopes `ALL_GROUP`/`DEFAULT_GROUP` | 🟡 reemite `GRPS`, `VEHS.group_id` y cadenas `ERNW` densas con referencias `u32` y cabecera por compañía | Livery/historial de grupos y la edición UI completa siguen reducidos; el runtime no cubre todas las reglas avanzadas |
 | Objetos | 🟡 usa `OBJS` para traducir tipos de objeto del mapa y conserva el chunk nativo | 🟡 reemite `OBJS`/`OBID` como passthrough cuando provienen del save | El runtime no ejecuta todavía todas las specs/callbacks de objetos |
 | Ajustes | 🟡 lee el subconjunto ejecutado por el core de `PATS`/`OPTS`: construcción, pathfinding, aceleración de trenes **y carretera**, averías, subsidios, desastres, autoridad, inflación/recesiones y unidades de tiempo | 🟡 escribe ese subconjunto en `PATS` y conserva `GSET`/`ENGN`/`SRND` nativos como passthrough | [`sav/settings.rs`](../../crates/openttdrs-core/src/sav/settings.rs), [`sav/landscape.rs`](../../crates/openttdrs-core/src/sav/landscape.rs) |
-| Compañías y noticias | 🟡 dinero/préstamo/límite de préstamo individual (`PLYR.max_loan`, incluido el centinela global), meses de bancarrota/color/nombre/presidente/`face`/`face_style`/indicador AI, `settings.*`, 23 `PLYR.liveries` e historial trimestral (`cur_economy` + hasta 24 `old_economy`, incluido `delivered_cargo`) | 🟡 `PLYR` con esos campos, incluidas las libreas nativas (SLV355) y el orden más-reciente-primero de `old_economy`; un override de préstamo no es reemplazado por inflación | Faltan flags completos; el renderer aún no aplica las libreas por tipo. La cola propia completa queda en JSON |
-| NewGRF | 🟡 conserva `NGRF`, `ENGN`, `EIDS` y storage/mappings nativos como chunks opacos; las colas `INDY.accepted`/`produced` conocidas se hidratan para CB1/CB2 | 🟡 reemite esos chunks sin interpretar; `INDY` escribe las listas nativas de entradas, salidas y rates que puede mapear | Runtime/cargos custom y los historiales anidados de industria continúan parciales; los labels no representables en el catálogo fijo se omiten |
+| Compañías y noticias | 🟡 dinero/préstamo/límite de préstamo individual (`PLYR.max_loan`, incluido el centinela global), meses de bancarrota/color/nombre/presidente/`face`/`face_style`/indicador AI, `settings.*`, 23 `PLYR.liveries` e historial trimestral (`cur_economy` + hasta 24 `old_economy`, incluido `delivered_cargo`) | 🟡 `PLYR` con esos campos, incluidas las libreas nativas (SLV355) y el orden más-reciente-primero de `old_economy`; un override de préstamo no es reemplazado por inflación | Faltan flags completos. La cola propia completa queda en JSON; los consumidores de noticias siguen fuera del formato nativo |
+| NewGRF | ✅ lee `NGRF` como tabla y restaura archivo, GRFID, versión y hasta 128 parámetros activos; `ENGN`, `EIDS` y mappings no modelados siguen como chunks opacos; las colas `INDY.accepted`/`produced` conocidas se hidratan para CB1/CB2 | ✅ reconstruye `NGRF` para entradas activas no estáticas, con el array fijo de 128 parámetros (`num_params` conserva la longitud usada); MD5 y `palette` se emiten con valores neutros porque aún no son parte del modelo | Runtime/cargos custom y los historiales anidados de industria continúan parciales; `OBJS`/`OBID` todavía son passthrough; los labels no representables en el catálogo fijo se omiten |
 
 ### Chunks futuros y campos no modelados
 
@@ -40,7 +40,9 @@ el escritor, no sólo la lista de features conocida. Esto incluye chunks nativos
 actuales como `VIEW`, `DEPT`, `SUBS`, `ROAD`, `AIPL`, `GSTR` y `GSDT`, además de
 cualquier chunk futuro que use uno de los tipos de contenedor soportados. El
 cuerpo se guarda junto con su tipo (`RIFF`, `TABLE`, `ARRAY`, etc.) y se reemite
-sin modificar al exportar. Las tablas que sí se reconstruyen (`VEHS`, `STNN`,
+sin modificar al exportar. `NGRF` es la excepción ya modelada: se parsea y se
+reconstruye desde `GameState`, evitando duplicarlo como passthrough; `OBJS` y
+`OBID` permanecen opacos. Las demás tablas reconstruidas (`VEHS`, `STNN`,
 `PLYR`, `PATS`, `LGRP`, …) siguen teniendo únicamente el subconjunto de campos
 documentado; sus columnas desconocidas todavía requieren un merge estructural
 antes de poder afirmar paridad completa.

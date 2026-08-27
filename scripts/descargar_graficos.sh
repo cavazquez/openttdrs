@@ -1496,6 +1496,11 @@ python3 "$(dirname "$0")/extract_tramway_sprites.py" || {
   rc=$?
   [[ "$rc" -eq 2 ]] || exit "$rc"
 }
+# Postes vanilla de road waypoint (bloque oficial fuera de OpenGFX).
+python3 "$(dirname "$0")/extract_road_waypoint_sprites.py" || {
+  rc=$?
+  [[ "$rc" -eq 2 ]] || exit "$rc"
+}
 # Flechas de calles de sentido único: Action5 0x09 del `openttd.grf` oficial.
 # Es un fallback propio de OpenTTD (paletizado también con base 32bpp), no un
 # bloque de OpenGFX ni un NewGRF declarado por la partida.
@@ -1543,6 +1548,7 @@ if command -v rustfmt >/dev/null 2>&1; then
     "${ROOT}/crates/openttdrs-client/src/sprites/track_fence_meta_generated.rs"
     "${ROOT}/crates/openttdrs-client/src/sprites/tramway_catenary_gfx_data_generated.rs"
     "${ROOT}/crates/openttdrs-client/src/sprites/tunnel_draw_data_generated.rs"
+    "${ROOT}/crates/openttdrs-client/src/sprites/road_waypoint_gfx_data_generated.rs"
   )
   rustfmt --edition 2024 "${GENERATED_RUST[@]}"
 else

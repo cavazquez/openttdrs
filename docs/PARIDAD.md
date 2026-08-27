@@ -123,8 +123,10 @@ Los waypoints viales siguen ahora la misma secuencia de `DrawTile_Station`:
 suelo orientado por `m5`, decoración `Roadside` de `m3`, overlay de tranvía
 cuando el tile declara ese tipo y fundación nivelada con todos esos sprites como
 children en pendientes. La catenaria conserva la altura efectiva de esa
-superficie. El layout vanilla de los dos postes y los layouts `TileSeq`
-NewGRF del waypoint todavía no están materializados.
+superficie. El layout vanilla de los dos postes (`SPR_ROAD_WAYPOINT_*`, cuatro
+recortes oficiales y cajas `3×16`/`16×3`) también se materializa por eje y queda
+como child de la fundación cuando corresponde. Los layouts `TileSeq` NewGRF del
+waypoint todavía no están materializados.
 También incorpora los edificios industriales vanilla planos y estáticos, cuya
 caja `M(...)` no cambia durante la composición; las pendientes, animaciones y
 layouts NewGRF permanecen fuera de ese subconjunto.

@@ -535,6 +535,11 @@ include!(concat!(
 
 include!(concat!(
     env!("CARGO_MANIFEST_DIR"),
+    "/src/sprites/road_waypoint_gfx_data_generated.rs"
+));
+
+include!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
     "/src/sprites/rail_station_draw_data_generated.rs"
 ));
 
@@ -548,6 +553,25 @@ pub fn road_stop_seq_gfx(layer: &RoadStopLayerGfx) -> crate::iso::RoadStopSeqGfx
         x_offs: layer.x_offs,
         y_offs: layer.y_offs,
         remap_x_adj: layer.remap_x_adj,
+    }
+}
+
+/// Capas BUILD vanilla de un waypoint vial: [eje X, eje Y].
+///
+/// `GetStationGfx` entrega 4/5 para X/Y, pero el layout oficial sólo tiene
+/// dos líneas por eje. Mantener los datos separados de las paradas evita
+/// volver a pintar una marquesina de bus en un waypoint.
+#[must_use]
+pub fn road_waypoint_build_layers(axis: u8) -> &'static [RoadStopLayerGfx; 2] {
+    &ROAD_WAYPOINT_BUILD_LAYERS[usize::from(axis.min(1))]
+}
+
+/// Índice del atlas para un sprite de poste vanilla.
+#[must_use]
+pub const fn road_waypoint_sprite_index(sprite_id: u32) -> Option<usize> {
+    match sprite_id {
+        6141..=6144 => Some((sprite_id - 6141) as usize),
+        _ => None,
     }
 }
 
@@ -1010,6 +1034,27 @@ mod tests {
             2
         );
         assert!(road_stop_drive_through_layers(StationTileClass::Bus, 0).is_empty());
+    }
+
+    #[test]
+    fn road_waypoint_layers_match_station_land_layout() {
+        let x = road_waypoint_build_layers(0);
+        assert_eq!([x[0].sprite_id, x[1].sprite_id], [6143, 6144]);
+        assert_eq!([x[0].bounds, x[1].bounds], [(16, 3, 16), (16, 3, 16)]);
+        assert_eq!(
+            [(x[0].dx, x[0].dy), (x[1].dx, x[1].dy)],
+            [(0.0, 0.0), (0.0, 13.0)]
+        );
+
+        let y = road_waypoint_build_layers(1);
+        assert_eq!([y[0].sprite_id, y[1].sprite_id], [6141, 6142]);
+        assert_eq!([y[0].bounds, y[1].bounds], [(3, 16, 16), (3, 16, 16)]);
+        assert_eq!(
+            [(y[0].dx, y[0].dy), (y[1].dx, y[1].dy)],
+            [(13.0, 0.0), (0.0, 0.0)]
+        );
+        assert_eq!(road_waypoint_sprite_index(6144), Some(3));
+        assert_eq!(road_waypoint_sprite_index(6140), None);
     }
 
     /// Contrato literal de `station_land.h`: evita que un ID local de Action5

@@ -852,6 +852,8 @@ fn drive_through_waypoint_and_road_depot_grounds_keep_opengfx_xrel_center() {
     // `Roadside::Paved`, igual que un waypoint vial recién construido.
     let waypoint_ground =
         assets.road_paved[crate::sprites::road_flat_sprite_index(0, 0x0A)].clone();
+    let waypoint_x_w = assets.road_waypoint[2].clone();
+    let waypoint_x_e = assets.road_waypoint[3].clone();
     let depot_ground = assets.road_depot_ground.clone();
     let drive_through = TileCoord::new(2, 2);
     let waypoint = TileCoord::new(4, 2);
@@ -990,6 +992,34 @@ fn drive_through_waypoint_and_road_depot_grounds_keep_opengfx_xrel_center() {
         crate::iso::iso(waypoint.x, waypoint.y).x + offset
     );
     assert_eq!(depot_x, crate::iso::iso(depot.x, depot.y).x + offset);
+    assert_eq!(
+        world
+            .query::<&Sprite>()
+            .iter(&world)
+            .filter(|sprite| {
+                sprite
+                    .texture_atlas
+                    .as_ref()
+                    .is_some_and(|atlas| atlas.index == waypoint_x_w.atlas.index)
+            })
+            .count(),
+        1,
+        "el waypoint X debe dibujar su poste oeste vanilla"
+    );
+    assert_eq!(
+        world
+            .query::<&Sprite>()
+            .iter(&world)
+            .filter(|sprite| {
+                sprite
+                    .texture_atlas
+                    .as_ref()
+                    .is_some_and(|atlas| atlas.index == waypoint_x_e.atlas.index)
+            })
+            .count(),
+        1,
+        "el waypoint X debe dibujar su poste este vanilla"
+    );
 }
 
 #[test]
@@ -1030,6 +1060,10 @@ fn sloped_road_waypoint_levels_ground_and_attaches_surface_to_foundation() {
         .get(crate::sprites::road_flat_sprite_index(0, 0x0A))
         .expect("waypoint road ground")
         .clone();
+    let expected_waypoint_posts = [
+        assets.road_waypoint[2].atlas.index,
+        assets.road_waypoint[3].atlas.index,
+    ];
 
     let mut world = World::new();
     world.insert_resource(TsMap(map));
@@ -1088,6 +1122,21 @@ fn sloped_road_waypoint_levels_ground_and_attaches_surface_to_foundation() {
         attached_ground,
         "el suelo plano del waypoint debe ser child de la fundación"
     );
+    for (post_index, label) in expected_waypoint_posts.into_iter().zip(["oeste", "este"]) {
+        assert!(
+            world
+                .query::<(&ViewportSortableChild, &Sprite)>()
+                .iter(&world)
+                .any(|(child, sprite)| {
+                    foundation_parents.contains(&child.parent)
+                        && sprite
+                            .texture_atlas
+                            .as_ref()
+                            .is_some_and(|atlas| atlas.index == post_index)
+                }),
+            "el poste {label} del waypoint inclinado debe ser child de la fundación"
+        );
+    }
     assert!(
         world.query::<&Sprite>().iter(&world).all(|sprite| {
             !world

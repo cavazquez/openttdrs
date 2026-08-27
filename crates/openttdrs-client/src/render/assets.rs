@@ -101,6 +101,9 @@ pub(crate) struct WorldAssets {
     pub(crate) house_lift: AtlasSprite,
     /// OpenGFX `tram_flat_*` (SPR_TRAMWAY_OVERLAY+0..18); mismo índice que `road_flat_*`.
     pub(crate) tram_flat: Vec<AtlasSprite>,
+    /// Postes vanilla de road waypoint (`SPR_ROAD_WAYPOINTS_BASE..+3`):
+    /// Y_W, Y_E, X_W, X_E.
+    pub(crate) road_waypoint: [AtlasSprite; 4],
     pub(crate) rail: HashMap<u32, AtlasSprite>,
     /// Suelo de cruce de nivel, separado de `rail`: los IDs lógicos se solapan
     /// con señales Action5 y por tanto no pueden usar `rail_<id>.png`.
@@ -321,6 +324,9 @@ impl WorldAssets {
         let tram_flat = (0..19)
             .map(|i| atlas.get(&format!("tram_flat_{i:02}.png")))
             .collect();
+        let road_waypoint = std::array::from_fn(|index| {
+            atlas.get_path(crate::sprites::ROAD_WAYPOINT_SPRITE_PATHS[index])
+        });
         let mut rail_ids: std::collections::BTreeSet<_> =
             rail_sprite_ids_for_preload().into_iter().collect();
         for rail_type in [
@@ -781,6 +787,7 @@ impl WorldAssets {
             lighthouse_anim_frames,
             house_lift,
             tram_flat,
+            road_waypoint,
             rail,
             level_crossing_grounds,
             rail_pbs,

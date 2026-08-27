@@ -60,8 +60,9 @@ use crate::sprites::{
     rail_waypoint_draw_layers, rail_waypoint_layer_meta, rail_waypoint_sprite_center,
     remap_rail_sprite_id, road_depot_build_layers, road_depot_seq_gfx, road_flat_sprite_index,
     road_ground_sprite_id, road_stop_build_layers, road_stop_drive_through_layers,
-    road_stop_ground_index, road_stop_ground_sprite_id, road_stop_seq_gfx, roadside_is_paved,
-    station_tile_class, with_to_alpha,
+    road_stop_ground_index, road_stop_ground_sprite_id, road_stop_seq_gfx,
+    road_waypoint_build_layers, road_waypoint_sprite_index, roadside_is_paved, station_tile_class,
+    with_to_alpha,
 };
 
 fn buildings_hidden() -> bool {
@@ -490,7 +491,8 @@ fn record_road_stop_ground_trace(tileh: u8, sprite_id: u32, palette: u32, fallba
 /// Registra cada `TILE_SEQ_LINE` de una parada vial con la caja de mundo del
 /// oráculo. En una pendiente, `DrawFoundation(Leveled)` actualiza `ti->z` y
 /// por eso el drawable sortable suma la elevación de la superficie plana.
-fn record_road_stop_layer_trace(
+fn record_road_layer_trace(
+    role: &'static str,
     layer: &RoadStopLayerGfx,
     owner_colour: Option<CompanyColour>,
     fallback: bool,
@@ -498,7 +500,7 @@ fn record_road_stop_layer_trace(
 ) {
     let (ex, ey, ez) = layer.bounds;
     WorldDrawTrace::record_sprite_with_palette_and_geometry(
-        "station-road-stop-layer",
+        role,
         "sortable",
         layer.sprite_id,
         station_company_palette(owner_colour),
@@ -513,6 +515,21 @@ fn record_road_stop_layer_trace(
             ey,
             ez,
         )),
+    );
+}
+
+fn record_road_stop_layer_trace(
+    layer: &RoadStopLayerGfx,
+    owner_colour: Option<CompanyColour>,
+    fallback: bool,
+    world_z_delta: i32,
+) {
+    record_road_layer_trace(
+        "station-road-stop-layer",
+        layer,
+        owner_colour,
+        fallback,
+        world_z_delta,
     );
 }
 
@@ -2161,6 +2178,20 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                     catenary_sprites.as_deref_mut(),
                 );
             }
+            // OpenTTD emite los postes después de la catenaria mediante
+            // `DrawRailTileSeq(TO_BUILDINGS, ...)`. Son dos capas distintas
+            // por eje, no un sprite único centrado sobre el asfalto.
+            spawn_road_waypoint_buildings(
+                commands,
+                assets,
+                company,
+                owner_colour,
+                ctx,
+                waypoint_base_z,
+                u8::from(waypoint_bits == 0x05),
+                dims.0,
+                foundation_child_parent,
+            );
         }
         StationTileClass::Oilrig => {
             // `DrawTile_Station`: Oilrig usa `SPR_FLAT_WATER_TILE` como
@@ -2597,6 +2628,66 @@ fn spawn_waypoint_surface_sprite(
             sprite,
             Transform::from_translation(position),
         ));
+    }
+}
+
+/// Dibuja las dos líneas BUILD del waypoint vial vanilla.
+///
+/// `station_land.h` no reutiliza las capas de una parada: los postes ocupan
+/// sólo 3×16 o 16×3 unidades y se eligen por el eje de `m5`. Las cajas y los
+/// offsets NFO se conservan en `road_waypoint_gfx_data_generated.rs`; al igual
+/// que `AddChildSpriteScreen`, una fundación nivelada recibe ambas capas como
+/// children para que sigan el parent cuando el terreno es inclinado.
+#[allow(clippy::too_many_arguments)]
+fn spawn_road_waypoint_buildings(
+    commands: &mut Commands,
+    assets: &WorldAssets,
+    company: Option<&CompanyColoredSprites>,
+    owner_colour: Option<CompanyColour>,
+    ctx: &TileRenderContext,
+    base_z: u8,
+    axis: u8,
+    map_width: u32,
+    foundation_child_parent: Option<Entity>,
+) {
+    if buildings_hidden() {
+        return;
+    }
+    let layers = road_waypoint_build_layers(axis);
+    let world_z_delta = i32::from(base_z.saturating_sub(ctx.info.base_z)) * 8;
+    for layer in layers {
+        record_road_layer_trace(
+            "station-road-waypoint-layer",
+            layer,
+            owner_colour,
+            false,
+            world_z_delta,
+        );
+    }
+    let centers = road_stop_sorted_layer_centers(ctx, base_z, layers);
+    for (layer, center) in layers.iter().zip(centers) {
+        let Some(asset_index) = road_waypoint_sprite_index(layer.sprite_id) else {
+            continue;
+        };
+        let Some(image) = assets.road_waypoint.get(asset_index) else {
+            continue;
+        };
+        let sprite = tint_building_sprite(sprite_from_atlas_or_company_white_colour(
+            company,
+            owner_colour,
+            image,
+            layer.path,
+        ));
+        if let Some(parent) = foundation_child_parent {
+            spawn_foundation_child_sprite_at(commands, sprite, ctx, center, map_width, parent);
+        } else {
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                sprite,
+                Transform::from_translation(center),
+            ));
+        }
     }
 }
 

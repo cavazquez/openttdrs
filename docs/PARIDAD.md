@@ -360,8 +360,10 @@ con sus referencias `STNN`/`VEHS`, edades, origen, siguiente salto, feeder y
 vector recorrido. `VEHS.common` también conserva la última estación de carga,
 su tick, año calendario de compra, cuenta atrás de carga/descarga, valor
 contable y el contador legacy `cargo_paid_for`. Esto no cierra el issue:
-siguen pendientes los flags/estado completos de tren, carretera, barco y FTA,
-además de la orden activa y los contadores diarios de movimiento.
+la orden activa ya conserva sus campos crudos (`type`, `flags`, `dest`, refit y
+horario) y los contadores diarios (`day_counter`, `tick_counter`,
+`running_ticks`), pero siguen pendientes los flags/estado completos de tren,
+carretera, barco y FTA.
 
 <!-- active-parity-backlog:end -->
 

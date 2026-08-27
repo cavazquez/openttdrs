@@ -23,7 +23,9 @@ use super::entities::cargo_packet_export;
 use crate::game_state::GameState;
 use crate::map::{TileCoord, TileKind, coord_to_linear_index};
 use crate::news::{CALENDAR_BASE_YEAR, calendar_year_day};
-use crate::vehicle::{DIR_NE, DIR_NW, DIR_SE, DIR_SW, Vehicle, VehicleKind, VehicleOrder};
+use crate::vehicle::{
+    DIR_NE, DIR_NW, DIR_SE, DIR_SW, Vehicle, VehicleKind, VehicleOrder, VehicleOrderRuntime,
+};
 use std::collections::HashMap;
 
 /// Cabeza de convoy + motor (`GVSF_FRONT | GVSF_ENGINE`).
@@ -277,6 +279,7 @@ struct CommonWire {
     date_of_last_service: i32,
     order_list_ref: u32,
     cur_order: u8,
+    current_order: VehicleOrderRuntime,
     /// `REF_VEHICLE`: 0 = null, resto = índice sparse + 1.
     next_ref: u32,
     /// Grupo de flota (`DEFAULT_GROUP` si no está asignado).
@@ -317,6 +320,9 @@ struct CommonWire {
     profit_last_year: i64,
     /// Valor contable de la unidad (sin la fracción de 8 bits).
     value: i64,
+    day_counter: u8,
+    tick_counter: u8,
+    running_ticks: u8,
 }
 
 /// Campos específicos de `SlVehicleAircraft` (`vehicle_sl.cpp`).
@@ -397,6 +403,13 @@ fn write_vehs_common(buf: &mut Vec<u8>, c: &CommonWire) -> Result<(), SavError> 
     buf.extend_from_slice(&c.date_of_last_service.to_be_bytes());
     buf.extend_from_slice(&c.order_list_ref.to_be_bytes());
     buf.push(c.cur_order);
+    buf.push(c.current_order.order_type);
+    buf.push(c.current_order.flags);
+    buf.extend_from_slice(&c.current_order.dest.to_be_bytes());
+    buf.push(c.current_order.refit_cargo);
+    buf.extend_from_slice(&c.current_order.wait_time.to_be_bytes());
+    buf.extend_from_slice(&c.current_order.travel_time.to_be_bytes());
+    buf.extend_from_slice(&c.current_order.max_speed.to_be_bytes());
     buf.extend_from_slice(&c.next_ref.to_be_bytes());
     buf.extend_from_slice(&c.group_id.to_be_bytes());
     buf.extend_from_slice(&c.timetable_start.to_be_bytes());
@@ -421,6 +434,9 @@ fn write_vehs_common(buf: &mut Vec<u8>, c: &CommonWire) -> Result<(), SavError> 
     buf.extend_from_slice(&c.profit_last_year.saturating_mul(256).to_be_bytes());
     buf.extend_from_slice(&c.value.saturating_mul(256).to_be_bytes());
     buf.extend_from_slice(&c.last_loading_tick.to_be_bytes());
+    buf.push(c.day_counter);
+    buf.push(c.tick_counter);
+    buf.push(c.running_ticks);
     Ok(())
 }
 
@@ -470,6 +486,44 @@ fn push_orders(
     push_order_list(&v.orders, state, map_w, ordl)
 }
 
+fn current_order_runtime_for(v: &Vehicle, state: &GameState, map_w: u32) -> VehicleOrderRuntime {
+    if let Some(runtime) = v.current_order_state {
+        return runtime;
+    }
+    let Some(order) = v.orders.get(v.current_order) else {
+        return VehicleOrderRuntime {
+            order_type: 0,
+            flags: 0,
+            dest: 0,
+            refit_cargo: 0xFF,
+            wait_time: 0,
+            travel_time: 0,
+            max_speed: u16::MAX,
+        };
+    };
+    let Some(encoded) = encode_vehicle_order(order, |pos| station_id_for_pos(state, pos), map_w)
+    else {
+        return VehicleOrderRuntime {
+            order_type: 0,
+            flags: 0,
+            dest: 0,
+            refit_cargo: 0xFF,
+            wait_time: 0,
+            travel_time: 0,
+            max_speed: u16::MAX,
+        };
+    };
+    VehicleOrderRuntime {
+        order_type: encoded[0],
+        flags: encoded[1],
+        dest: u16::from_be_bytes([encoded[2], encoded[3]]),
+        refit_cargo: encoded[4],
+        wait_time: u16::from_be_bytes([encoded[5], encoded[6]]),
+        travel_time: u16::from_be_bytes([encoded[7], encoded[8]]),
+        max_speed: u16::from_be_bytes([encoded[9], encoded[10]]),
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn common_wire_for(
     v: &Vehicle,
@@ -482,6 +536,7 @@ fn common_wire_for(
     next_ref: u32,
     last_station_visited: u16,
     last_loading_station: u16,
+    current_order: VehicleOrderRuntime,
     cargo_packet_refs: &[u32],
 ) -> CommonWire {
     let cargo = cargo_ottd_byte(v);
@@ -523,6 +578,7 @@ fn common_wire_for(
         date_of_last_service,
         order_list_ref,
         cur_order,
+        current_order,
         next_ref,
         group_id,
         timetable_start: u64::from(v.timetable_start),
@@ -547,6 +603,9 @@ fn common_wire_for(
         profit_this_year: v.profit_this_year,
         profit_last_year: v.profit_last_year,
         value: v.value,
+        day_counter: v.newgrf_day_counter,
+        tick_counter: v.newgrf_tick_counter,
+        running_ticks: v.running_ticks,
     }
 }
 
@@ -751,6 +810,7 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                     next_ref,
                     last_station_visited,
                     last_loading_station_id_for_vehicle(state, v),
+                    current_order_runtime_for(v, state, map_w),
                     cargo_packet_refs_for(cargo_export, v),
                 ),
                 None,
@@ -787,6 +847,15 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                     date_of_last_service: 0,
                     order_list_ref: 0,
                     cur_order: 0,
+                    current_order: VehicleOrderRuntime {
+                        order_type: 0,
+                        flags: 0,
+                        dest: 0,
+                        refit_cargo: 0xFF,
+                        wait_time: 0,
+                        travel_time: 0,
+                        max_speed: u16::MAX,
+                    },
                     // Para helicópteros la sombra encadena al rotor. En el
                     // formato SAV `REF_VEHICLE` es sparse index + 1.
                     next_ref: if is_helicopter { sparse_idx + 2 } else { 0 },
@@ -813,6 +882,9 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                     profit_this_year: 0,
                     profit_last_year: 0,
                     value: 0,
+                    day_counter: 0,
+                    tick_counter: 0,
+                    running_ticks: 0,
                     cur_speed: 0,
                     subspeed: 0,
                     progress: 0,
@@ -851,6 +923,15 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                         date_of_last_service: 0,
                         order_list_ref: 0,
                         cur_order: 0,
+                        current_order: VehicleOrderRuntime {
+                            order_type: 0,
+                            flags: 0,
+                            dest: 0,
+                            refit_cargo: 0xFF,
+                            wait_time: 0,
+                            travel_time: 0,
+                            max_speed: u16::MAX,
+                        },
                         next_ref: 0,
                         group_id: 0xFFFE,
                         timetable_start: 0,
@@ -875,6 +956,9 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                         profit_this_year: 0,
                         profit_last_year: 0,
                         value: 0,
+                        day_counter: 0,
+                        tick_counter: 0,
+                        running_ticks: 0,
                         cur_speed: 32,
                         subspeed: 0,
                         progress: 0,
@@ -918,6 +1002,7 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                     next_ref,
                     last_station_id_for_vehicle(state, v),
                     last_loading_station_id_for_vehicle(state, v),
+                    current_order_runtime_for(v, state, map_w),
                     cargo_packet_refs_for(cargo_export, v),
                 ),
                 Some(track),
@@ -940,6 +1025,7 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                     0,
                     last_station_id_for_vehicle(state, v),
                     last_loading_station_id_for_vehicle(state, v),
+                    current_order_runtime_for(v, state, map_w),
                     cargo_packet_refs_for(cargo_export, v),
                 ),
                 None,
@@ -963,6 +1049,7 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                     0,
                     last_station_id_for_vehicle(state, v),
                     last_loading_station_id_for_vehicle(state, v),
+                    current_order_runtime_for(v, state, map_w),
                     cargo_packet_refs_for(cargo_export, v),
                 ),
                 None,
@@ -1055,6 +1142,13 @@ fn append_vehs_common_fields(header: &mut Vec<u8>) -> Result<(), SavError> {
     append_field(header, 5, "date_of_last_service")?;
     append_field(header, 6, "orders")?; // REF_ORDERLIST → U32
     append_field(header, 2, "cur_real_order_index")?;
+    append_field(header, 2, "current_order.type")?;
+    append_field(header, 2, "current_order.flags")?;
+    append_field(header, 4, "current_order.dest")?;
+    append_field(header, 2, "current_order.refit_cargo")?;
+    append_field(header, 4, "current_order.wait_time")?;
+    append_field(header, 4, "current_order.travel_time")?;
+    append_field(header, 4, "current_order.max_speed")?;
     append_field(header, 6, "next")?; // REF_VEHICLE → U32
     append_field(header, 4, "group_id")?; // Vehicle::group_id → U16
     append_field(header, 8, "timetable_start")?; // SLE_UINT64
@@ -1079,6 +1173,9 @@ fn append_vehs_common_fields(header: &mut Vec<u8>) -> Result<(), SavError> {
     append_field(header, 7, "profit_last_year")?; // SLE_INT64
     append_field(header, 7, "value")?; // SLE_INT64
     append_field(header, 8, "last_loading_tick")?; // SLE_UINT64
+    append_field(header, 2, "day_counter")?; // SLE_UINT8
+    append_field(header, 2, "tick_counter")?; // SLE_UINT8
+    append_field(header, 2, "running_ticks")?; // SLE_UINT8
     header.push(0);
     Ok(())
 }
@@ -1631,6 +1728,18 @@ mod tests {
         train.last_station_visited = Some(station_pos);
         train.last_pickup_station = Some(station_pos);
         train.last_depart_tick = Some(9_876);
+        train.current_order_state = Some(VehicleOrderRuntime {
+            order_type: 3,
+            flags: 0x91,
+            dest: 0x1234,
+            refit_cargo: 0xFF,
+            wait_time: 11,
+            travel_time: 22,
+            max_speed: 333,
+        });
+        train.newgrf_day_counter = 7;
+        train.newgrf_tick_counter = 8;
+        train.running_ticks = 9;
         train.service_interval_days = 87;
         train.cargo_subtype = 3;
         train.cargo_age_counter = 42;
@@ -1702,6 +1811,30 @@ mod tests {
             Some(9_876)
         );
         assert_eq!(
+            record_get(common, "current_order.type").and_then(SlValue::as_u64),
+            Some(3)
+        );
+        assert_eq!(
+            record_get(common, "current_order.flags").and_then(SlValue::as_u64),
+            Some(0x91)
+        );
+        assert_eq!(
+            record_get(common, "current_order.dest").and_then(SlValue::as_u64),
+            Some(0x1234)
+        );
+        assert_eq!(
+            record_get(common, "current_order.wait_time").and_then(SlValue::as_u64),
+            Some(11)
+        );
+        assert_eq!(
+            record_get(common, "current_order.travel_time").and_then(SlValue::as_u64),
+            Some(22)
+        );
+        assert_eq!(
+            record_get(common, "current_order.max_speed").and_then(SlValue::as_u64),
+            Some(333)
+        );
+        assert_eq!(
             record_get(common, "service_interval").and_then(SlValue::as_u64),
             Some(87)
         );
@@ -1752,6 +1885,18 @@ mod tests {
         assert_eq!(
             record_get(common, "value").and_then(SlValue::as_i64),
             Some(765_432_i64 * 256)
+        );
+        assert_eq!(
+            record_get(common, "day_counter").and_then(SlValue::as_u64),
+            Some(7)
+        );
+        assert_eq!(
+            record_get(common, "tick_counter").and_then(SlValue::as_u64),
+            Some(8)
+        );
+        assert_eq!(
+            record_get(common, "running_ticks").and_then(SlValue::as_u64),
+            Some(9)
         );
     }
 

@@ -53,6 +53,21 @@ pub enum TimetableWaitKind {
     TravelEarly,
 }
 
+/// Campos crudos de `Vehicle::current_order` que no forman parte de la orden
+/// persistida del jugador. `OpenTTD` usa estos valores para representar el
+/// estado de carga (`OT_LOADING`), flags temporales y el destino nativo aun
+/// cuando la lista `ORDL` no cambió.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct VehicleOrderRuntime {
+    pub order_type: u8,
+    pub flags: u8,
+    pub dest: u16,
+    pub refit_cargo: u8,
+    pub wait_time: u16,
+    pub travel_time: u16,
+    pub max_speed: u16,
+}
+
 /// Triggers de randomización de vehículos usados por `CBID_RANDOM_TRIGGER`.
 ///
 /// Los valores siguen el orden de `VehicleRandomTrigger` de `OpenTTD`. Se
@@ -293,6 +308,11 @@ pub struct Vehicle {
     /// Índice de orden implícita (`cur_implicit_order_index`).
     #[serde(default)]
     pub cur_implicit_order_index: usize,
+    /// Snapshot crudo de `Vehicle::current_order` para round-trip SAV. Se
+    /// regenera desde `orders[current_order]` cuando una partida JSON nueva no
+    /// trae este campo.
+    #[serde(default)]
+    pub current_order_state: Option<VehicleOrderRuntime>,
     /// Última estación visitada (`Vehicle::last_station_visited`).
     #[serde(default)]
     pub last_station_visited: Option<TileCoord>,
@@ -456,6 +476,13 @@ pub struct Vehicle {
     /// Contador económico diario (`Vehicle::day_counter`), usado por CB32.
     #[serde(default)]
     pub newgrf_day_counter: u8,
+    /// Contador de tick nativo (`Vehicle::tick_counter`) usado por callbacks
+    /// de vehículos y por la cadencia de tráfico/averías.
+    #[serde(default)]
+    pub newgrf_tick_counter: u8,
+    /// Ticks activos acumulados en el día actual (`Vehicle::running_ticks`).
+    #[serde(default)]
+    pub running_ticks: u8,
     /// Fase de vuelo (solo aviones; resto ignora).
     #[serde(default)]
     pub aircraft_phase: AircraftPhase,
@@ -642,6 +669,7 @@ impl Vehicle {
             orders: Vec::new(),
             current_order: 0,
             cur_implicit_order_index: 0,
+            current_order_state: None,
             last_station_visited: None,
             no_network_route_to_order: false,
             cargo_source: None,
@@ -693,6 +721,8 @@ impl Vehicle {
             breakdown_delay: 0,
             breakdowns_since_last_service: 0,
             newgrf_day_counter: 0,
+            newgrf_tick_counter: 0,
+            running_ticks: 0,
             aircraft_phase: AircraftPhase::InHangar,
             altitude: 0,
             aircraft_phase_ticks: 0,

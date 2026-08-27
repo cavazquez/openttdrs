@@ -1194,6 +1194,13 @@ pub struct SavVehicle {
     pub current_order: usize,
     /// Índice de orden implícita (`cur_implicit_order_index`).
     pub cur_implicit_order_index: usize,
+    /// Snapshot crudo de `Vehicle::current_order`, incluidos flags de carga y
+    /// los campos de horario que no están en `ORDL`.
+    pub current_order_state: crate::vehicle::VehicleOrderRuntime,
+    /// Contadores diarios de `Vehicle` usados por callbacks y costes.
+    pub day_counter: u8,
+    pub tick_counter: u8,
+    pub running_ticks: u8,
     /// `false` si el jugador detuvo el vehículo (`VehState::Stopped`).
     pub running: bool,
     /// Tren: unidad sin `GVSF_FRONT` (vagón del consist anterior).
@@ -1463,6 +1470,48 @@ pub(crate) fn vehicles_from_chunks(
             .and_then(SlValue::as_u64)
             .and_then(|v| usize::try_from(v).ok())
             .unwrap_or(0);
+        let current_order_state = crate::vehicle::VehicleOrderRuntime {
+            order_type: record_get(common, "current_order.type")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok())
+                .unwrap_or(0),
+            flags: record_get(common, "current_order.flags")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok())
+                .unwrap_or(0),
+            dest: record_get(common, "current_order.dest")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u16::try_from(value).ok())
+                .unwrap_or(0),
+            refit_cargo: record_get(common, "current_order.refit_cargo")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok())
+                .unwrap_or(0xFF),
+            wait_time: record_get(common, "current_order.wait_time")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u16::try_from(value).ok())
+                .unwrap_or(0),
+            travel_time: record_get(common, "current_order.travel_time")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u16::try_from(value).ok())
+                .unwrap_or(0),
+            max_speed: record_get(common, "current_order.max_speed")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u16::try_from(value).ok())
+                .unwrap_or(u16::MAX),
+        };
+        let day_counter = record_get(common, "day_counter")
+            .and_then(SlValue::as_u64)
+            .and_then(|value| u8::try_from(value).ok())
+            .unwrap_or(0);
+        let tick_counter = record_get(common, "tick_counter")
+            .and_then(SlValue::as_u64)
+            .and_then(|value| u8::try_from(value).ok())
+            .unwrap_or(0);
+        let running_ticks = record_get(common, "running_ticks")
+            .and_then(SlValue::as_u64)
+            .and_then(|value| u8::try_from(value).ok())
+            .unwrap_or(0);
         let cur_implicit_order_index = record_get(common, "cur_implicit_order_index")
             .and_then(SlValue::as_u64)
             .and_then(|v| usize::try_from(v).ok())
@@ -1636,6 +1685,10 @@ pub(crate) fn vehicles_from_chunks(
             orders,
             current_order,
             cur_implicit_order_index,
+            current_order_state,
+            day_counter,
+            tick_counter,
+            running_ticks,
             running,
             is_wagon,
             is_helicopter,

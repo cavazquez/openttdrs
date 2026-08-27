@@ -1113,6 +1113,7 @@ impl GameState {
                 vehicle.current_order_time = v.current_order_time;
                 vehicle.timetable_lateness = v.timetable_lateness;
                 vehicle.vehicle_flags = v.vehicle_flags;
+                vehicle.current_order_state = Some(v.current_order_state);
                 vehicle.newgrf_random_bits = v.random_bits;
                 vehicle.newgrf_waiting_random_triggers = v.waiting_random_triggers;
                 vehicle.last_station_visited = v
@@ -1132,6 +1133,9 @@ impl GameState {
                 vehicle.breakdown_chance = v.breakdown_chance;
                 vehicle.profit_this_year = v.profit_this_year;
                 vehicle.profit_last_year = v.profit_last_year;
+                vehicle.newgrf_day_counter = v.day_counter;
+                vehicle.newgrf_tick_counter = v.tick_counter;
+                vehicle.running_ticks = v.running_ticks;
                 vehicle.build_year = u32::try_from(v.build_year.max(0)).unwrap_or(0);
                 vehicle.load_unload_ticks = v.load_unload_ticks;
                 vehicle.cargo_paid_for = v.cargo_paid_for;
@@ -1238,6 +1242,7 @@ impl GameState {
             vehicle.current_order_time = v.current_order_time;
             vehicle.timetable_lateness = v.timetable_lateness;
             vehicle.vehicle_flags = v.vehicle_flags;
+            vehicle.current_order_state = Some(v.current_order_state);
             vehicle.newgrf_random_bits = v.random_bits;
             vehicle.newgrf_waiting_random_triggers = v.waiting_random_triggers;
             vehicle.last_station_visited = v
@@ -1256,6 +1261,9 @@ impl GameState {
             vehicle.breakdown_chance = v.breakdown_chance;
             vehicle.profit_this_year = v.profit_this_year;
             vehicle.profit_last_year = v.profit_last_year;
+            vehicle.newgrf_day_counter = v.day_counter;
+            vehicle.newgrf_tick_counter = v.tick_counter;
+            vehicle.running_ticks = v.running_ticks;
             vehicle.build_year = u32::try_from(v.build_year.max(0)).unwrap_or(0);
             vehicle.load_unload_ticks = v.load_unload_ticks;
             vehicle.cargo_paid_for = v.cargo_paid_for;
@@ -1989,6 +1997,18 @@ mod tests {
                     orders: Vec::new(),
                     current_order: 0,
                     cur_implicit_order_index: 0,
+                    current_order_state: crate::vehicle::VehicleOrderRuntime {
+                        order_type: 0,
+                        flags: 0,
+                        dest: 0,
+                        refit_cargo: 0xFF,
+                        wait_time: 0,
+                        travel_time: 0,
+                        max_speed: u16::MAX,
+                    },
+                    day_counter: 0,
+                    tick_counter: 0,
+                    running_ticks: 0,
                     running: true,
                     is_wagon: false,
                     is_helicopter: false,
@@ -2056,6 +2076,18 @@ mod tests {
                     orders: Vec::new(),
                     current_order: 0,
                     cur_implicit_order_index: 0,
+                    current_order_state: crate::vehicle::VehicleOrderRuntime {
+                        order_type: 0,
+                        flags: 0,
+                        dest: 0,
+                        refit_cargo: 0xFF,
+                        wait_time: 0,
+                        travel_time: 0,
+                        max_speed: u16::MAX,
+                    },
+                    day_counter: 0,
+                    tick_counter: 0,
+                    running_ticks: 0,
                     running: true,
                     is_wagon: false,
                     is_helicopter: false,
@@ -2123,6 +2155,18 @@ mod tests {
                     orders: Vec::new(),
                     current_order: 0,
                     cur_implicit_order_index: 0,
+                    current_order_state: crate::vehicle::VehicleOrderRuntime {
+                        order_type: 0,
+                        flags: 0,
+                        dest: 0,
+                        refit_cargo: 0xFF,
+                        wait_time: 0,
+                        travel_time: 0,
+                        max_speed: u16::MAX,
+                    },
+                    day_counter: 0,
+                    tick_counter: 0,
+                    running_ticks: 0,
                     running: true,
                     is_wagon: false,
                     is_helicopter: false,
@@ -2190,6 +2234,18 @@ mod tests {
                     orders: Vec::new(),
                     current_order: 0,
                     cur_implicit_order_index: 0,
+                    current_order_state: crate::vehicle::VehicleOrderRuntime {
+                        order_type: 0,
+                        flags: 0,
+                        dest: 0,
+                        refit_cargo: 0xFF,
+                        wait_time: 0,
+                        travel_time: 0,
+                        max_speed: u16::MAX,
+                    },
+                    day_counter: 0,
+                    tick_counter: 0,
+                    running_ticks: 0,
                     running: true,
                     is_wagon: true,
                     is_helicopter: false,

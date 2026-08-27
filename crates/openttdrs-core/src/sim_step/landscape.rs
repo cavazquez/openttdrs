@@ -113,6 +113,12 @@ fn trigger_station_acceptance_animations(state: &mut GameState, t: u64) {
             None,
         );
         state.runtime.industry_tile_dirty.extend(dirty);
+        super::trigger_airport_animation_at(
+            state,
+            station_anchor,
+            crate::AirportAnimationTrigger::AcceptanceTick,
+            None,
+        );
         super::trigger_road_stop_animation_at(
             state,
             station_anchor,

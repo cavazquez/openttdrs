@@ -30,6 +30,12 @@ fn trigger_station_new_cargo_since(state: &mut GameState, before: &[crate::Cargo
             Some(cargo),
         );
         state.runtime.industry_tile_dirty.extend(dirty);
+        super::trigger_airport_animation_at(
+            state,
+            station_pos,
+            crate::AirportAnimationTrigger::NewCargo,
+            Some(cargo),
+        );
         super::trigger_road_stop_animation_at(
             state,
             station_pos,

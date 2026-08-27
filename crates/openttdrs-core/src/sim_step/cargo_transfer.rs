@@ -85,6 +85,16 @@ fn trigger_station_cargo_animation(
         Some(cargo),
     );
     state.runtime.industry_tile_dirty.extend(dirty);
+    let airport_trigger = match trigger {
+        crate::StationAnimationTrigger::NewCargo => Some(crate::AirportAnimationTrigger::NewCargo),
+        crate::StationAnimationTrigger::CargoTaken => {
+            Some(crate::AirportAnimationTrigger::CargoTaken)
+        }
+        _ => None,
+    };
+    if let Some(airport_trigger) = airport_trigger {
+        super::trigger_airport_animation_at(state, station_pos, airport_trigger, Some(cargo));
+    }
     super::trigger_road_stop_animation_at(state, station_pos, trigger, Some(cargo));
 }
 

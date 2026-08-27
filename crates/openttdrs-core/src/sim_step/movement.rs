@@ -70,6 +70,29 @@ pub(super) fn tick_aircraft_phases(state: &mut GameState) {
         );
         let id = state.vehicles[i].id;
         let at = state.vehicles[i].pos;
+        // `AircraftLandAirplane` dispara `AirplaneTouchdown` al entrar en el
+        // nodo de aterrizaje FTA. En el FSM de aeropuertos custom no existe
+        // ese nodo explícito, por lo que usamos el borde Landing → Taxi /
+        // Hangar como equivalente físico. Los helicópteros no ejecutan el
+        // callback de avión de ala fija en OpenTTD.
+        let fta_touchdown = matches!(ev, AircraftPhaseEvent::Landing)
+            && prev_fta
+            && state.vehicles[i].airport_fta_active;
+        let simple_touchdown = !prev_fta
+            && previous_phase == AircraftPhase::Landing
+            && state.vehicles[i].aircraft_phase != AircraftPhase::Landing;
+        if (fta_touchdown || simple_touchdown)
+            && !state.vehicles[i]
+                .engine_id
+                .is_some_and(crate::engine::aircraft_is_helicopter)
+        {
+            super::trigger_airport_animation_at(
+                state,
+                at,
+                crate::AirportAnimationTrigger::AirplaneTouchdown,
+                None,
+            );
+        }
         if previous_phase != AircraftPhase::InHangar
             && state.vehicles[i].aircraft_phase == AircraftPhase::InHangar
         {

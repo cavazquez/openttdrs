@@ -591,6 +591,44 @@ pub(super) fn trigger_station_platform_animation(
     state.runtime.industry_tile_dirty.extend(dirty);
 }
 
+/// Ejecuta los triggers `AirportTile` que cubren una estación.
+///
+/// `TriggerAirportAnimation` de `OpenTTD` recibe el cargo traducido al espacio
+/// local del GRF en los bits altos de `var 18`. Los catálogos antiguos no
+/// conservan una CTT por tesela, por lo que usamos la traducción moderna
+/// global (`bitnum`) como fallback; cuando el catálogo aporte tablas propias
+/// esta función seguirá siendo el único punto de integración de los eventos.
+pub(super) fn trigger_airport_animation_at(
+    state: &mut GameState,
+    trigger_tile: crate::TileCoord,
+    trigger: crate::AirportAnimationTrigger,
+    cargo: Option<crate::CargoType>,
+) {
+    let Some(station_anchor) =
+        crate::station::station_at_tile(&state.map, &state.stations, trigger_tile)
+            .filter(|station| station.stop_kind == crate::station::StopKind::Airport)
+            .map(|station| station.pos)
+    else {
+        return;
+    };
+    let cargo_local = cargo.map_or(0, |cargo| {
+        crate::newgrf_type_tables::local_cargo_id(None, 0, cargo, state.climate)
+    });
+    let dirty = crate::map::trigger_newgrf_airport_animation_for_station(
+        &mut state.map,
+        state.tick.get(),
+        &mut state.stations,
+        state.climate,
+        &state.airport_tile_spec_catalog,
+        &mut state.newgrf_animated_airport_tiles,
+        &state.newgrf_stack,
+        station_anchor,
+        trigger,
+        cargo_local,
+    );
+    state.runtime.industry_tile_dirty.extend(dirty);
+}
+
 /// Ejecuta CB140 de un `RoadStop` `NewGRF` en su tesela concreta.
 ///
 /// Los triggers viales de vehículo se resuelven sobre su tesela exacta; los de

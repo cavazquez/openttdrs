@@ -161,7 +161,7 @@ pub struct Vehicle {
     pub cargo: u32,
     #[serde(default)]
     pub cargo_type: Option<CargoType>,
-    /// Subtipo de carga (`Vehicle::cargo_subtype`) usado por NewGRF.
+    /// Subtipo de carga (`Vehicle::cargo_subtype`) usado por `NewGRF`.
     #[serde(default)]
     pub cargo_subtype: u8,
     pub capacity: u32,
@@ -233,10 +233,10 @@ pub struct Vehicle {
     /// Motor `OpenGFX` (`None` en saves antiguos → default por [`VehicleKind`]).
     #[serde(default)]
     pub engine_id: Option<u16>,
-    /// `EngineID` nativo de OpenTTD leído desde `VEHS.common.engine_type`.
+    /// `EngineID` nativo de `OpenTTD` leído desde `VEHS.common.engine_type`.
     ///
     /// El catálogo Rust no contiene necesariamente todos los motores de un
-    /// NewGRF. Mantener el identificador wire separado permite reexportar un
+    /// `NewGRF`. Mantener el identificador wire separado permite reexportar un
     /// `.sav` sin sustituir silenciosamente un motor desconocido por el
     /// primero del catálogo vanilla.
     #[serde(default)]

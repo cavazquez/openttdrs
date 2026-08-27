@@ -695,6 +695,48 @@ fn hydrate_sav_station_cargo(
     station.cargo_packets.reserved = reserved.min(station.cargo_packets.total_count());
 }
 
+fn hydrate_sav_vehicle_cargo(
+    vehicle: &mut Vehicle,
+    saved: &entities::SavVehicle,
+    packets_by_id: &HashMap<u32, &entities::SavCargoPacket>,
+    station_positions: &HashMap<u32, TileCoord>,
+    climate: crate::Climate,
+) {
+    let cargo = crate::CargoType::from_climate_slot(climate, saved.cargo_type);
+    if let Some(cargo) = cargo {
+        for packet_id in &saved.cargo_packet_ids {
+            let Some(saved_packet) = packets_by_id.get(packet_id) else {
+                continue;
+            };
+            let mut packet = crate::CargoPacket::new(
+                cargo,
+                saved_packet.count,
+                saved_packet.source_xy.unwrap_or(vehicle.pos),
+            );
+            packet.source_xy = saved_packet.source_xy;
+            packet.periods_in_transit = saved_packet.periods_in_transit;
+            packet.feeder_share = saved_packet.feeder_share;
+            packet.travelled.x = saved_packet.travelled_x;
+            packet.travelled.y = saved_packet.travelled_y;
+            packet.first_station = saved_packet
+                .source_station_id
+                .and_then(|id| station_positions.get(&id).copied());
+            packet.next_hop = saved_packet
+                .next_hop_station_id
+                .and_then(|id| station_positions.get(&id).copied());
+            vehicle.cargo_packets.push(packet);
+        }
+    }
+    if vehicle.cargo_packets.is_empty() {
+        vehicle.cargo = u32::from(saved.cargo);
+        vehicle.cargo_type = cargo;
+        vehicle.cargo_transit_ticks = 0;
+        vehicle.ensure_packets_from_legacy();
+    } else {
+        vehicle.sync_cargo_from_packets();
+    }
+}
+
 /// Conserva el mapeo nativo por tesela de road stops hasta que el catálogo
 /// `NewGRF` se reconstruya después de cargar el save. `m8[0..6]` es el índice de
 /// `roadstopspeclist`; la identidad `(GRFID, localidx)` queda en el estado de
@@ -1063,7 +1105,7 @@ impl GameState {
             if kind == VehicleKind::Aircraft {
                 let mut vehicle = Vehicle::new(id, kind, v.pos, v.pos);
                 vehicle.owner = crate::company::CompanyId(v.owner);
-                vehicle.name = v.name.clone();
+                vehicle.name.clone_from(&v.name);
                 vehicle.native_engine_type = Some(v.engine_type);
                 vehicle.group_id = v.group_id;
                 vehicle.timetable_start =
@@ -1091,8 +1133,16 @@ impl GameState {
                 vehicle.cur_speed = v.cur_speed;
                 vehicle.subspeed = v.subspeed;
                 vehicle.direction = v.direction;
+                vehicle.cargo_type = crate::CargoType::from_climate_slot(sav.climate, v.cargo_type);
                 vehicle.cargo_subtype = v.cargo_subtype;
                 vehicle.cargo_age_counter = v.cargo_age_counter;
+                hydrate_sav_vehicle_cargo(
+                    &mut vehicle,
+                    v,
+                    &cargo_packets_by_id,
+                    &station_positions,
+                    sav.climate,
+                );
                 if v.max_age_days != 0 {
                     vehicle.max_age_days = v.max_age_days;
                 }
@@ -1171,7 +1221,7 @@ impl GameState {
             }
             let mut vehicle = Vehicle::new(id, kind, v.pos, v.pos);
             vehicle.owner = crate::company::CompanyId(v.owner);
-            vehicle.name = v.name.clone();
+            vehicle.name.clone_from(&v.name);
             vehicle.native_engine_type = Some(v.engine_type);
             vehicle.group_id = v.group_id;
             vehicle.timetable_start =
@@ -1223,6 +1273,13 @@ impl GameState {
                 vehicle.reverse_ctr = v.road_reverse_ctr;
             }
             vehicle.cargo_type = crate::CargoType::from_climate_slot(sav.climate, v.cargo_type);
+            hydrate_sav_vehicle_cargo(
+                &mut vehicle,
+                v,
+                &cargo_packets_by_id,
+                &station_positions,
+                sav.climate,
+            );
             if matches!(kind, VehicleKind::Bus | VehicleKind::Truck)
                 && let Some(candidate) = vanilla_road_engine_id(v.engine_type, kind)
                 && let Some(engine) = crate::engine::engine_by_id(candidate)
@@ -1694,6 +1751,10 @@ mod tests {
             count: 9,
             periods_in_transit: 7,
             feeder_share: 11,
+            source_type: 0,
+            source_id: None,
+            travelled_x: 0,
+            travelled_y: 0,
         }];
         for (station_id, pos) in [(0, source), (1, destination)] {
             sav.station_index.insert(
@@ -1897,6 +1958,7 @@ mod tests {
                     cargo_subtype: 0,
                     cargo: 0,
                     cargo_capacity: 0,
+                    cargo_packet_ids: Vec::new(),
                     cargo_age_counter: 0,
                     age_days: 0,
                     max_age_days: 0,
@@ -1957,6 +2019,7 @@ mod tests {
                     cargo_subtype: 0,
                     cargo: 0,
                     cargo_capacity: 0,
+                    cargo_packet_ids: Vec::new(),
                     cargo_age_counter: 0,
                     age_days: 0,
                     max_age_days: 0,
@@ -2017,6 +2080,7 @@ mod tests {
                     cargo_subtype: 0,
                     cargo: 0,
                     cargo_capacity: 0,
+                    cargo_packet_ids: Vec::new(),
                     cargo_age_counter: 0,
                     age_days: 0,
                     max_age_days: 0,
@@ -2077,6 +2141,7 @@ mod tests {
                     cargo_subtype: 0,
                     cargo: 0,
                     cargo_capacity: 0,
+                    cargo_packet_ids: Vec::new(),
                     cargo_age_counter: 0,
                     age_days: 0,
                     max_age_days: 0,

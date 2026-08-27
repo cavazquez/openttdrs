@@ -18,7 +18,7 @@ impl super::model::Vehicle {
         self.station_visit_with_callbacks_and_catalog(tick, &[])
     }
 
-    /// Variante runtime que resuelve el motor NewGRF desde el catálogo activo.
+    /// Variante runtime que resuelve el motor `NewGRF` desde el catálogo activo.
     pub fn station_visit_with_callbacks_and_catalog(
         &mut self,
         tick: u64,

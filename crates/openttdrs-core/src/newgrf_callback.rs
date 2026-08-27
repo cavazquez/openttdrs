@@ -1007,7 +1007,7 @@ pub fn resolve_vehicle_sound_callback(
 /// disponible o devuelve `CALLBACK_FAILED`.
 ///
 /// El campo `sound_effect` se guarda en el catálogo con el valor bruto de la
-/// propiedad. `0` y `0xFF` son los sentinelas de OpenTTD para conservar el
+/// propiedad. `0` y `0xFF` son los sentinelas de `OpenTTD` para conservar el
 /// sonido por defecto; los valores menores a `SOUND_COUNT` son muestras del
 /// baseset y los restantes son IDs locales del GRF (`SOUND_COUNT + id`).
 /// Sólo los eventos de salida (`VSE_START`) consultan esta propiedad: los

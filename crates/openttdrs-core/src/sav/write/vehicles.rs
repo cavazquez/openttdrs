@@ -17,6 +17,9 @@ use super::super::chunks::{CH_SPARSE_TABLE, CH_TABLE};
 use super::super::orders_codec::{append_ordl_orders_header, encode_vehicle_order};
 use super::chunks::raw_table_chunk;
 use super::codec::{write_gamma, write_str};
+use super::entities::CargoPacketExport;
+#[cfg(test)]
+use super::entities::cargo_packet_export;
 use crate::game_state::GameState;
 use crate::map::{TileCoord, TileKind, coord_to_linear_index};
 use crate::news::{CALENDAR_BASE_YEAR, calendar_year_day};
@@ -69,7 +72,7 @@ const VEH_AIRCRAFT: u8 = 3;
 /// Píxeles por tesela (`TILE_SIZE`).
 const TILE_SIZE: i32 = 16;
 
-/// Convierte el índice de día del reloj Rust al `Date` que usa OpenTTD en
+/// Convierte el índice de día del reloj Rust al `Date` que usa `OpenTTD` en
 /// `Vehicle::date_of_last_service`.
 fn packed_calendar_date_from_day_index(day_index: u64) -> i32 {
     let (year, doy) = calendar_year_day(day_index);
@@ -115,7 +118,7 @@ fn last_station_id_for_vehicle(state: &GameState, v: &Vehicle) -> u16 {
 }
 
 fn cargo_ottd_byte(v: &Vehicle) -> u8 {
-    if let Some(c) = v.cargo_type {
+    if let Some(c) = v.cargo_type.or_else(|| v.cargo_packets.primary_type()) {
         return c.temperate_id();
     }
     match v.kind {
@@ -261,6 +264,7 @@ struct CommonWire {
     cargo_subtype: u8,
     cargo_capacity: u16,
     cargo_count: u16,
+    cargo_packet_refs: Vec<u32>,
     cargo_age_counter: u16,
     age_days: u32,
     max_age_days: u32,
@@ -355,6 +359,16 @@ fn write_vehs_common(buf: &mut Vec<u8>, c: &CommonWire) -> Result<(), SavError> 
     buf.push(c.cargo_subtype);
     buf.extend_from_slice(&c.cargo_capacity.to_be_bytes());
     buf.extend_from_slice(&c.cargo_count.to_be_bytes());
+    write_gamma(
+        u32::try_from(c.cargo_packet_refs.len()).map_err(|_| SavError::ValueOutOfRange {
+            field: "vehicle cargo packet count",
+            value: u32::MAX,
+        })?,
+        buf,
+    )?;
+    for packet_id in &c.cargo_packet_refs {
+        buf.extend_from_slice(&packet_id.saturating_add(1).to_be_bytes());
+    }
     buf.extend_from_slice(&c.cargo_age_counter.to_be_bytes());
     buf.extend_from_slice(&i32::try_from(c.age_days).unwrap_or(i32::MAX).to_be_bytes());
     buf.extend_from_slice(
@@ -432,6 +446,7 @@ fn push_orders(
     push_order_list(&v.orders, state, map_w, ordl)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn common_wire_for(
     v: &Vehicle,
     current_tick: u64,
@@ -442,8 +457,14 @@ fn common_wire_for(
     subtype: u8,
     next_ref: u32,
     last_station_visited: u16,
+    cargo_packet_refs: &[u32],
 ) -> CommonWire {
     let cargo = cargo_ottd_byte(v);
+    let cargo_count = if v.cargo_packets.is_empty() {
+        v.cargo
+    } else {
+        v.cargo_packets.total()
+    };
     let cur_order = u8::try_from(v.current_order.min(255)).unwrap_or(0);
     let vehstatus = if v.running { 0 } else { VEHSTATUS_STOPPED };
     let x_pos = v.pos.x * TILE_SIZE + i32::from(v.rail_pixel.min(15));
@@ -469,7 +490,8 @@ fn common_wire_for(
         cargo,
         cargo_subtype: v.cargo_subtype,
         cargo_capacity: u16::try_from(v.capacity).unwrap_or(u16::MAX),
-        cargo_count: u16::try_from(v.cargo).unwrap_or(u16::MAX),
+        cargo_count: u16::try_from(cargo_count).unwrap_or(u16::MAX),
+        cargo_packet_refs: cargo_packet_refs.to_vec(),
         cargo_age_counter: v.cargo_age_counter,
         age_days: u32::try_from(age_days).unwrap_or(u32::MAX),
         max_age_days: v.max_age_days,
@@ -495,6 +517,13 @@ fn common_wire_for(
         profit_this_year: v.profit_this_year,
         profit_last_year: v.profit_last_year,
     }
+}
+
+fn cargo_packet_refs_for<'a>(export: &'a CargoPacketExport, v: &Vehicle) -> &'a [u32] {
+    export
+        .vehicle_refs
+        .get(&v.id)
+        .map_or(&[][..], Vec::as_slice)
 }
 
 fn diag_direction(v: &Vehicle) -> u8 {
@@ -547,9 +576,20 @@ fn push_typed_vehicle(
 ///
 /// Falla si algún valor gamma está fuera de rango.
 #[allow(clippy::too_many_lines)]
+#[cfg(test)]
 pub(super) fn ordl_and_vehs_records(
     state: &GameState,
     map_w: u32,
+) -> Result<(SavRecordList, SavRecordList), SavError> {
+    let cargo_export = cargo_packet_export(state, map_w);
+    ordl_and_vehs_records_with_cargo(state, map_w, &cargo_export)
+}
+
+#[allow(clippy::too_many_lines)]
+pub(crate) fn ordl_and_vehs_records_with_cargo(
+    state: &GameState,
+    map_w: u32,
+    cargo_export: &CargoPacketExport,
 ) -> Result<(SavRecordList, SavRecordList), SavError> {
     let mut ordl = Vec::new();
     let mut vehs = Vec::new();
@@ -666,6 +706,7 @@ pub(super) fn ordl_and_vehs_records(
                     },
                     next_ref,
                     last_station_visited,
+                    cargo_packet_refs_for(cargo_export, v),
                 ),
                 None,
                 None,
@@ -694,6 +735,7 @@ pub(super) fn ordl_and_vehs_records(
                     cargo_subtype: 0,
                     cargo_capacity: 0,
                     cargo_count: 0,
+                    cargo_packet_refs: Vec::new(),
                     cargo_age_counter: 0,
                     age_days: 0,
                     max_age_days: 0,
@@ -751,6 +793,7 @@ pub(super) fn ordl_and_vehs_records(
                         cargo_subtype: 0,
                         cargo_capacity: 0,
                         cargo_count: 0,
+                        cargo_packet_refs: Vec::new(),
                         cargo_age_counter: 0,
                         age_days: 0,
                         max_age_days: 0,
@@ -817,6 +860,7 @@ pub(super) fn ordl_and_vehs_records(
                     subtype,
                     next_ref,
                     last_station_id_for_vehicle(state, v),
+                    cargo_packet_refs_for(cargo_export, v),
                 ),
                 Some(track),
                 None,
@@ -837,6 +881,7 @@ pub(super) fn ordl_and_vehs_records(
                     TRAIN_SUBTYPE_FRONT_ENGINE,
                     0,
                     last_station_id_for_vehicle(state, v),
+                    cargo_packet_refs_for(cargo_export, v),
                 ),
                 None,
                 Some(v),
@@ -858,6 +903,7 @@ pub(super) fn ordl_and_vehs_records(
                     TRAIN_SUBTYPE_FRONT_ENGINE,
                     0,
                     last_station_id_for_vehicle(state, v),
+                    cargo_packet_refs_for(cargo_export, v),
                 ),
                 None,
                 None,
@@ -942,6 +988,7 @@ fn append_vehs_common_fields(header: &mut Vec<u8>) -> Result<(), SavError> {
     append_field(header, 2, "cargo_subtype")?;
     append_field(header, 4, "cargo_cap")?;
     append_field(header, 4, "cargo_count")?;
+    append_field(header, 0x16, "cargo.packets")?; // REF_CARGO_PACKET list
     append_field(header, 4, "cargo_age_counter")?;
     append_field(header, 5, "age")?;
     append_field(header, 5, "max_age")?;
@@ -1487,6 +1534,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn vehs_record_preserves_timetable_runtime_fields() {
         use crate::sav::chunks::{find_chunk, parse_chunks};
         use crate::sav::table::{SlValue, parse_table_chunk, record_get};

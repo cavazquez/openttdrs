@@ -4,10 +4,13 @@ use super::super::SavError;
 use super::super::chunks::CH_TABLE;
 use super::chunks::raw_table_chunk;
 use super::codec::{write_gamma, write_str};
+use crate::cargo::CargoType;
+use crate::cargo_packet::CargoPacket;
 use crate::game_state::GameState;
 use crate::industry::{Industry, IndustryKind, IndustrySpec};
 use crate::map::{Map, TileCoord, coord_to_linear_index};
 use crate::station::{RoadStopTileState, Station, StopKind};
+use std::collections::{BTreeMap, HashMap};
 
 /// Bits `FACIL_*` al escribir `STNN` (alineados con el import).
 const FACIL_TRAIN: u8 = 0x01;
@@ -31,6 +34,47 @@ const VEH_INVALID: u8 = 0xFF;
 
 /// Identidad nativa `(GRFID, localidx)` de una spec de road stop.
 type RoadStopSpecIdentity = (u32, u16);
+
+/// Registro serializable del pool `CAPA`.
+///
+/// El tipo de carga no forma parte del registro nativo: `OpenTTD` lo obtiene de
+/// la entrada `STNN.goods` o de `VEHS.common.cargo_type`. Por eso el exportador
+/// conserva aquí sólo los campos propios de `CargoPacket` y mantiene los
+/// enlaces por separado.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct CargoPacketWire {
+    pub source: u16,
+    pub source_xy: u32,
+    pub loaded_at_xy: u16,
+    pub count: u16,
+    pub periods_in_transit: u16,
+    pub feeder_share: i64,
+    pub source_type: u8,
+    pub source_id: u16,
+    pub travelled_x: i16,
+    pub travelled_y: i16,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct StationCargoGroupWire {
+    pub next_hop: u16,
+    pub packet_ids: Vec<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct StationCargoWire {
+    pub cargo_slot: u8,
+    pub groups: Vec<StationCargoGroupWire>,
+    pub reserved: u32,
+}
+
+/// Referencias CAPA que se escribirán junto con `STNN` y `VEHS`.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct CargoPacketExport {
+    pub packets: Vec<CargoPacketWire>,
+    pub station_refs: HashMap<u32, Vec<StationCargoWire>>,
+    pub vehicle_refs: HashMap<u32, Vec<u32>>,
+}
 
 /// Entrada que se escribe en `STNN.roadstoptiledata` y que también determina
 /// los seis bits bajos de `MAP8` para esa tesela.
@@ -56,6 +100,171 @@ fn facilities_for_stop(kind: StopKind) -> u8 {
 
 fn is_waypoint(facilities: u8) -> bool {
     facilities & FACIL_WAYPOINT != 0
+}
+
+fn station_id_for_pos(state: &GameState, pos: TileCoord) -> Option<u16> {
+    state
+        .stations
+        .iter()
+        .find(|station| station.pos == pos)
+        .and_then(|station| station.ottd_station_id)
+        .and_then(|id| u16::try_from(id).ok())
+        .or_else(|| {
+            state
+                .stations
+                .iter()
+                .position(|station| station.pos == pos)
+                .and_then(|index| u16::try_from(index).ok())
+        })
+}
+
+fn station_id_for_index(state: &GameState, index: usize) -> Option<u16> {
+    state
+        .stations
+        .get(index)
+        .and_then(|station| station.ottd_station_id)
+        .and_then(|id| u16::try_from(id).ok())
+        .or_else(|| u16::try_from(index).ok())
+}
+
+fn cargo_slot_for_climate(climate: crate::Climate, cargo: CargoType) -> Option<u8> {
+    crate::cargo::CargoType::for_climate(climate)
+        .iter()
+        .position(|candidate| *candidate == cargo)
+        .and_then(|slot| u8::try_from(slot).ok())
+}
+
+fn source_for_packet(state: &GameState, packet: &CargoPacket) -> (u8, u16) {
+    if let Some(industry) = state
+        .industries
+        .iter()
+        .find(|industry| industry.pos == packet.source || industry.tiles.contains(&packet.source))
+    {
+        return (0, u16::from(industry.instance_id));
+    }
+    if let Some(town) = state.towns.iter().find(|town| town.pos == packet.source) {
+        return (1, u16::try_from(town.id).unwrap_or(u16::MAX));
+    }
+    (0, u16::MAX)
+}
+
+fn packet_wire_for(state: &GameState, map_w: u32, packet: &CargoPacket) -> CargoPacketWire {
+    let source_xy = packet
+        .source_xy
+        .or(Some(packet.source))
+        .and_then(|pos| coord_to_linear_index(pos, map_w))
+        .unwrap_or(INVALID_TILE);
+    let source = packet
+        .first_station
+        .and_then(|pos| station_id_for_pos(state, pos))
+        .unwrap_or(u16::MAX);
+    let loaded_at_xy = packet
+        .next_hop
+        .and_then(|pos| station_id_for_pos(state, pos))
+        .unwrap_or(u16::MAX);
+    let (source_type, source_id) = source_for_packet(state, packet);
+    CargoPacketWire {
+        source,
+        source_xy,
+        loaded_at_xy,
+        count: packet.count,
+        periods_in_transit: packet.periods_in_transit,
+        feeder_share: packet.feeder_share,
+        source_type,
+        source_id,
+        travelled_x: packet.travelled.x,
+        travelled_y: packet.travelled.y,
+    }
+}
+
+fn push_cargo_packet(
+    export: &mut CargoPacketExport,
+    state: &GameState,
+    map_w: u32,
+    packet: &CargoPacket,
+) -> Option<u32> {
+    let packet_id = u32::try_from(export.packets.len()).ok()?;
+    export.packets.push(packet_wire_for(state, map_w, packet));
+    Some(packet_id)
+}
+
+/// Reúne una sola numeración CAPA para packets en estaciones y vehículos.
+///
+/// El orden es estable (estaciones, luego vehículos, y FIFO dentro de cada
+/// lista), de modo que los `REF_CARGO_PACKET` son reproducibles entre saves.
+pub(crate) fn cargo_packet_export(state: &GameState, map_w: u32) -> CargoPacketExport {
+    let mut export = CargoPacketExport::default();
+
+    for (station_index, source_station) in state.stations.iter().enumerate() {
+        let Some(station_id) = station_id_for_index(state, station_index).map(u32::from) else {
+            continue;
+        };
+        // `ensure_packets_from_stock` también cubre estados JSON antiguos que
+        // aún sólo tenían el balance agregado de la estación.
+        let mut station = source_station.clone();
+        station.ensure_packets_from_stock();
+        let mut groups: BTreeMap<(u8, u16), Vec<u32>> = BTreeMap::new();
+        for packet in station.cargo_packets.packets() {
+            let Some(cargo_slot) = cargo_slot_for_climate(state.climate, packet.cargo) else {
+                continue;
+            };
+            let Some(packet_id) = push_cargo_packet(&mut export, state, map_w, packet) else {
+                continue;
+            };
+            let next_hop = packet
+                .next_hop
+                .and_then(|pos| station_id_for_pos(state, pos))
+                .unwrap_or(u16::MAX);
+            groups
+                .entry((cargo_slot, next_hop))
+                .or_default()
+                .push(packet_id);
+        }
+
+        let mut by_slot: BTreeMap<u8, Vec<StationCargoGroupWire>> = BTreeMap::new();
+        for ((cargo_slot, next_hop), packet_ids) in groups {
+            by_slot
+                .entry(cargo_slot)
+                .or_default()
+                .push(StationCargoGroupWire {
+                    next_hop,
+                    packet_ids,
+                });
+        }
+        let mut remaining_reserved = station.cargo_packets.reserved;
+        let mut refs = Vec::with_capacity(by_slot.len());
+        for (cargo_slot, groups) in by_slot {
+            let total = groups
+                .iter()
+                .flat_map(|group| group.packet_ids.iter())
+                .filter_map(|id| export.packets.get(*id as usize))
+                .map(|packet| u32::from(packet.count))
+                .fold(0, u32::saturating_add);
+            let reserved = remaining_reserved.min(total);
+            remaining_reserved = remaining_reserved.saturating_sub(reserved);
+            refs.push(StationCargoWire {
+                cargo_slot,
+                groups,
+                reserved,
+            });
+        }
+        if !refs.is_empty() {
+            export.station_refs.insert(station_id, refs);
+        }
+    }
+
+    for vehicle in &state.vehicles {
+        let mut refs = Vec::new();
+        for packet in &vehicle.cargo_packets.packets {
+            if let Some(packet_id) = push_cargo_packet(&mut export, state, map_w, packet) {
+                refs.push(packet_id);
+            }
+        }
+        if !refs.is_empty() {
+            export.vehicle_refs.insert(vehicle.id, refs);
+        }
+    }
+    export
 }
 
 fn road_stop_spec_identity(
@@ -342,6 +551,58 @@ fn append_stnn_base_header(header: &mut Vec<u8>) -> Result<(), SavError> {
     Ok(())
 }
 
+fn write_cargo_groups(buf: &mut Vec<u8>, groups: &[StationCargoGroupWire]) -> Result<(), SavError> {
+    write_gamma(
+        u32::try_from(groups.len()).map_err(|_| SavError::ValueOutOfRange {
+            field: "station cargo group count",
+            value: u32::MAX,
+        })?,
+        buf,
+    )?;
+    for group in groups {
+        buf.extend_from_slice(&group.next_hop.to_be_bytes());
+        write_gamma(
+            u32::try_from(group.packet_ids.len()).map_err(|_| SavError::ValueOutOfRange {
+                field: "station cargo packet count",
+                value: u32::MAX,
+            })?,
+            buf,
+        )?;
+        for packet_id in &group.packet_ids {
+            buf.extend_from_slice(&packet_id.saturating_add(1).to_be_bytes());
+        }
+    }
+    Ok(())
+}
+
+fn write_station_goods_entry(
+    buf: &mut Vec<u8>,
+    station: &Station,
+    cargo: Option<CargoType>,
+    saved: Option<&StationCargoWire>,
+) -> Result<(), SavError> {
+    let Some(cargo) = cargo else {
+        return write_empty_goods_entry(buf);
+    };
+    let entry = station.goods.get(cargo);
+    let groups = saved.map_or(&[][..], |saved| saved.groups.as_slice());
+    let reserved = saved.map_or(0, |saved| saved.reserved);
+    // `GoodsEntry::State::EverAccepted` queda implícito cuando hay paquetes;
+    // el resto del estado mensual se conserva en la entrada JSON propia.
+    buf.push(u8::from(!groups.is_empty())); // status
+    buf.push(station.time_since_pickup.get(cargo));
+    buf.push(entry.rating);
+    buf.push(entry.last_speed);
+    buf.push(entry.last_age);
+    buf.push(entry.amount_fract);
+    buf.extend_from_slice(&reserved.to_be_bytes()); // cargo.reserved_count
+    buf.extend_from_slice(&u16::MAX.to_be_bytes()); // link_graph
+    buf.extend_from_slice(&u16::MAX.to_be_bytes()); // node
+    buf.extend_from_slice(&entry.max_waiting_cargo.to_be_bytes());
+    write_gamma(0, buf)?; // flow (el exportador aún no materializa shares)
+    write_cargo_groups(buf, groups)
+}
+
 fn write_empty_goods_entry(buf: &mut Vec<u8>) -> Result<(), SavError> {
     // Defaults típicos de GoodsEntry vacía en saves 15.3.
     buf.push(0); // status
@@ -379,12 +640,16 @@ fn write_stnn_base(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn write_stnn_normal(
     buf: &mut Vec<u8>,
     st: &Station,
     tile_idx: u32,
     facilities: u8,
     town_ref: u32,
+    station_id: u32,
+    cargo_export: &CargoPacketExport,
+    climate: crate::Climate,
 ) -> Result<(), SavError> {
     let name = st.name.as_deref().unwrap_or("");
     buf.push(1); // base presente
@@ -434,8 +699,16 @@ fn write_stnn_normal(
     buf.extend_from_slice(&0u64.to_be_bytes()); // always_accepted
 
     write_gamma(NUM_CARGO, buf)?;
-    for _ in 0..NUM_CARGO {
-        write_empty_goods_entry(buf)?;
+    for slot in 0..NUM_CARGO {
+        let slot_u8 = u8::try_from(slot).ok();
+        let cargo = slot_u8.and_then(|slot| CargoType::from_climate_slot(climate, slot));
+        let saved = slot_u8.and_then(|slot| {
+            cargo_export
+                .station_refs
+                .get(&station_id)
+                .and_then(|entries| entries.iter().find(|entry| entry.cargo_slot == slot))
+        });
+        write_station_goods_entry(buf, st, cargo, saved)?;
     }
     Ok(())
 }
@@ -476,11 +749,21 @@ fn write_stnn_waypoint(
 /// # Errors
 ///
 /// Falla si algún nombre de estación es demasiado largo.
+#[cfg(test)]
 pub(super) fn stnn_records(state: &GameState, map_w: u32) -> Result<Vec<Vec<u8>>, SavError> {
+    let cargo_export = cargo_packet_export(state, map_w);
+    stnn_records_with_cargo(state, map_w, &cargo_export)
+}
+
+pub(crate) fn stnn_records_with_cargo(
+    state: &GameState,
+    map_w: u32,
+    cargo_export: &CargoPacketExport,
+) -> Result<Vec<Vec<u8>>, SavError> {
     // CITY sintético o real: el primer municipio es índice 0 → ref 1.
     let town_ref = 1u32;
     let mut out = Vec::with_capacity(state.stations.len());
-    for st in &state.stations {
+    for (station_index, st) in state.stations.iter().enumerate() {
         if st.pos.x < 0 || st.pos.y < 0 {
             continue;
         }
@@ -497,7 +780,17 @@ pub(super) fn stnn_records(state: &GameState, map_w: u32) -> Result<Vec<Vec<u8>>
             write_stnn_waypoint(&mut rec, st, tile_idx, facilities, town_ref)?;
         } else {
             rec.push(1); // normal presente
-            write_stnn_normal(&mut rec, st, tile_idx, facilities, town_ref)?;
+            let station_id = station_id_for_index(state, station_index).map_or(u32::MAX, u32::from);
+            write_stnn_normal(
+                &mut rec,
+                st,
+                tile_idx,
+                facilities,
+                town_ref,
+                station_id,
+                cargo_export,
+                state.climate,
+            )?;
             rec.push(0); // waypoint ausente
         }
         write_gamma(0, &mut rec)?; // speclist
@@ -516,6 +809,49 @@ pub(super) fn stnn_chunk(records: &[Vec<u8>]) -> Result<Vec<u8>, SavError> {
     let mut header = Vec::new();
     append_stnn_header(&mut header)?;
     raw_table_chunk(*b"STNN", &header, records, CH_TABLE)
+}
+
+fn append_capa_header(header: &mut Vec<u8>) -> Result<(), SavError> {
+    append_field(header, 4, "source")?; // StationID
+    append_field(header, 6, "source_xy")?; // TileIndex
+    append_field(header, 4, "loaded_at_xy")?; // next_hop StationID
+    append_field(header, 4, "count")?;
+    append_field(header, 4, "periods_in_transit")?;
+    append_field(header, 7, "feeder_share")?;
+    append_field(header, 2, "source_type")?;
+    append_field(header, 4, "source_id")?;
+    append_field(header, 3, "travelled.x")?;
+    append_field(header, 3, "travelled.y")?;
+    header.push(0);
+    Ok(())
+}
+
+/// Construye el pool `CAPA` y enlaza sus registros desde `STNN`/`VEHS`.
+pub(crate) fn capa_chunk(export: &CargoPacketExport) -> Result<Option<Vec<u8>>, SavError> {
+    if export.packets.is_empty() {
+        return Ok(None);
+    }
+    let records = export
+        .packets
+        .iter()
+        .map(|packet| {
+            let mut record = Vec::with_capacity(31);
+            record.extend_from_slice(&packet.source.to_be_bytes());
+            record.extend_from_slice(&packet.source_xy.to_be_bytes());
+            record.extend_from_slice(&packet.loaded_at_xy.to_be_bytes());
+            record.extend_from_slice(&packet.count.to_be_bytes());
+            record.extend_from_slice(&packet.periods_in_transit.to_be_bytes());
+            record.extend_from_slice(&packet.feeder_share.to_be_bytes());
+            record.push(packet.source_type);
+            record.extend_from_slice(&packet.source_id.to_be_bytes());
+            record.extend_from_slice(&packet.travelled_x.to_be_bytes());
+            record.extend_from_slice(&packet.travelled_y.to_be_bytes());
+            record
+        })
+        .collect::<Vec<_>>();
+    let mut header = Vec::new();
+    append_capa_header(&mut header)?;
+    raw_table_chunk(*b"CAPA", &header, &records, CH_TABLE).map(Some)
 }
 
 /// Record CITY mínimo (`OpenTTD` exige ≥1 municipio: `STR_ERROR_NO_TOWN_IN_SCENARIO`).

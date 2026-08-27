@@ -1,14 +1,14 @@
 //! Export mínimo de [`GameState`] a savegame `OpenTTD` (`.sav`).
 //!
 //! Contenedor por defecto: `OTTZ` (zlib). Versión de save: [`EXPORT_SAVE_VERSION`].
-//! Chunks: `MAPS` (`CH_TABLE`) + planos RIFF + `STNN`/`CITY`/`INDY`/`ORDL`/`VEHS`/`LGRP` + `DATE` + `PLYR`.
+//! Chunks: `MAPS` (`CH_TABLE`) + planos RIFF + `STNN`/`CITY`/`INDY`/`ORDL`/`VEHS`/`CAPA`/`LGRP` + `DATE` + `PLYR`.
 //!
 //! Subconjunto prometido (MVP #226/#267): mapa + `CITY` (≥1) + `STNN` moderno
 //! (SAVEBYTE + structs) + `VEHS`/`ORDL` (tren + ROAD + ship + aircraft ala fija)
-//! + `INDY` + `ECMY` + `DATE`/`PLYR` cargable por `OpenTTD` ≥15.3 dedicated.
+//! + `INDY` + `CAPA` + `ECMY` + `DATE`/`PLYR` cargable por `OpenTTD` ≥15.3 dedicated.
 //!
-//! Residual: tram, rotor heli, creación de nuevos paquetes `CAPA`, settings fuera del
-//! subconjunto modelado de `PATS`, ejecución de `ENGN`/`SRND`/`NewGRF` y flags
+//! Residual: tram, settings fuera del subconjunto modelado de `PATS`, ejecución
+//! de `ENGN`/`SRND`/`NewGRF` y flags
 //! completos de `PLYR`.
 //! Los chunks nativos no modelados se conservan como passthrough al reexportar.
 //! Limitaciones: `docs/PARIDAD.md` y `docs/archive/merged-2026-07/ROADMAP_SAV_EXPORT.md`.
@@ -132,9 +132,10 @@ fn scan_chunk_names(payload: &[u8]) -> Vec<String> {
     // Tras CH_TABLE el tamaño del header no basta: completar con búsqueda de fourcc.
     for &want in REQUIRED_EXPORT_CHUNKS.iter().chain(
         [
-            "STNN", "CITY", "INDY", "ORDL", "VEHS", "LGRP", "LGRJ", "LGRS", "PATS", "ECMY", "CAPY",
-            "GRPS", "ERNW", "ENGN", "ENGS", "EIDS", "GSET", "NGRF", "OBJS", "OBID", "SRND", "PSAC",
-            "IIDS", "TIDS", "APID", "ATID", "RAIL", "ROTT", "GLOG", "GOAL", "STPE", "STPA", "SIGN",
+            "STNN", "CITY", "INDY", "ORDL", "VEHS", "CAPA", "LGRP", "LGRJ", "LGRS", "PATS", "ECMY",
+            "CAPY", "GRPS", "ERNW", "ENGN", "ENGS", "EIDS", "GSET", "NGRF", "OBJS", "OBID", "SRND",
+            "PSAC", "IIDS", "TIDS", "APID", "ATID", "RAIL", "ROTT", "GLOG", "GOAL", "STPE", "STPA",
+            "SIGN",
         ]
         .iter(),
     ) {
@@ -189,6 +190,7 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
     let export_map = entities::map_with_road_stop_indices(state, w)?;
     let planes = map::collect_planes(&export_map, w, h, n);
     let autoreplace_export = fleet::autoreplace_export(state)?;
+    let cargo_export = entities::cargo_packet_export(state, w);
 
     let mut data = Vec::new();
     // MAPS CH_TABLE (SLV ≥ 294): dim_x/dim_y SLE_FILE_U32 BE — ver map_sl.cpp.
@@ -212,7 +214,7 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
     data.extend_from_slice(&chunks::riff_chunk(*b"MAP7", &planes.map7));
     data.extend_from_slice(&chunks::riff_chunk(*b"MAP8", &planes.map8));
 
-    let stnn = entities::stnn_records(state, w)?;
+    let stnn = entities::stnn_records_with_cargo(state, w, &cargo_export)?;
     if !stnn.is_empty() {
         data.extend_from_slice(&entities::stnn_chunk(&stnn)?);
     }
@@ -246,12 +248,15 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
         )?);
     }
 
-    let (ordl, vehs) = vehicles::ordl_and_vehs_records(state, w)?;
+    let (ordl, vehs) = vehicles::ordl_and_vehs_records_with_cargo(state, w, &cargo_export)?;
     if !ordl.is_empty() {
         data.extend_from_slice(&vehicles::ordl_chunk(&ordl)?);
     }
     if !vehs.is_empty() {
         data.extend_from_slice(&vehicles::vehs_chunk(&vehs)?);
+    }
+    if let Some(capa) = entities::capa_chunk(&cargo_export)? {
+        data.extend_from_slice(&capa);
     }
 
     data.extend_from_slice(&super::linkgraph::encode_linkgraph_chunks(
@@ -1628,6 +1633,52 @@ mod tests {
         assert_eq!(
             loaded.link_graph.edges.get(&key).map(|s| s.units_total),
             Some(7)
+        );
+    }
+
+    #[test]
+    fn export_roundtrip_preserves_station_and_vehicle_cargo_packets() {
+        use crate::cargo::CargoType;
+        use crate::cargo_packet::CargoPacket;
+
+        let mut state = tiny_state();
+        let source = TileCoord::new(28, 39);
+        let destination = TileCoord::new(40, 40);
+        let mut source_station = Station::new_with_kind(source, StopKind::RailStation);
+        source_station.cargo_packets.push(
+            CargoPacket::new(CargoType::Coal, 7, source)
+                .with_first_station(source)
+                .with_next_hop(Some(destination)),
+        );
+        let destination_station = Station::new_with_kind(destination, StopKind::RailStation);
+        state.stations = vec![source_station, destination_station];
+
+        let vehicle_pos = TileCoord::new(10, 20);
+        let mut train = Vehicle::new(0, VehicleKind::Train, vehicle_pos, vehicle_pos);
+        train.cargo_type = Some(CargoType::Coal);
+        train.cargo_packets.push(
+            CargoPacket::new(CargoType::Coal, 9, source)
+                .with_first_station(source)
+                .with_next_hop(Some(destination)),
+        );
+        state.vehicles = vec![train];
+
+        let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
+        let sav_game = sav::load(&bytes).expect("load");
+        assert_eq!(sav_game.cargo_packets.len(), 2);
+        assert_eq!(sav_game.stations[0].cargo[0].packet_ids.len(), 1);
+        assert_eq!(sav_game.vehicles[0].cargo_packet_ids.len(), 1);
+
+        let loaded = GameState::from_sav_game(sav_game);
+        assert_eq!(
+            loaded.stations[0].cargo_packets.total_of(CargoType::Coal),
+            7
+        );
+        assert_eq!(loaded.vehicles[0].cargo_packets.total(), 9);
+        assert_eq!(loaded.vehicles[0].cargo_source, Some(source));
+        assert_eq!(
+            loaded.vehicles[0].cargo_packets.packets[0].next_hop,
+            Some(destination)
         );
     }
 }

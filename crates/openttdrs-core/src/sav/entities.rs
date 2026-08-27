@@ -97,6 +97,12 @@ pub struct SavCargoPacket {
     pub count: u16,
     pub periods_in_transit: u16,
     pub feeder_share: i64,
+    /// Tipo/ID del productor nativo (`SourceType`/`SourceID`).
+    pub source_type: u8,
+    pub source_id: Option<u16>,
+    /// Vector `CargoPacket::travelled` usado para el cálculo de pago.
+    pub travelled_x: i16,
+    pub travelled_y: i16,
 }
 
 /// Entrada del índice de estación (`StationID`) en `STNN`.
@@ -424,6 +430,22 @@ fn sav_cargo_packet_from_record(
             .unwrap_or(0),
         feeder_share: record_get(record, "feeder_share")
             .and_then(SlValue::as_i64)
+            .unwrap_or(0),
+        source_type: record_get(record, "source_type")
+            .and_then(SlValue::as_u64)
+            .and_then(|value| u8::try_from(value).ok())
+            .unwrap_or(0),
+        source_id: record_get(record, "source_id")
+            .and_then(SlValue::as_u64)
+            .and_then(|value| u16::try_from(value).ok())
+            .filter(|value| *value != u16::MAX),
+        travelled_x: record_get(record, "travelled.x")
+            .and_then(SlValue::as_i64)
+            .and_then(|value| i16::try_from(value).ok())
+            .unwrap_or(0),
+        travelled_y: record_get(record, "travelled.y")
+            .and_then(SlValue::as_i64)
+            .and_then(|value| i16::try_from(value).ok())
             .unwrap_or(0),
     })
 }
@@ -1144,6 +1166,8 @@ pub struct SavVehicle {
     pub cargo: u16,
     /// Capacidad efectiva tras refit (`Vehicle::cargo_cap`).
     pub cargo_capacity: u16,
+    /// Referencias físicas al pool `CAPA` (`Vehicle::cargo.packets`).
+    pub cargo_packet_ids: Vec<u32>,
     /// Cuenta atrás de `Vehicle::cargo_age_counter`.
     pub cargo_age_counter: u16,
     /// Edad y servicio en días/fechas del calendario nativo.
@@ -1350,6 +1374,21 @@ pub(crate) fn vehicles_from_chunks(
             .and_then(SlValue::as_u64)
             .and_then(|value| u16::try_from(value).ok())
             .unwrap_or(0);
+        let cargo_packet_ids = record_get(common, "cargo.packets")
+            .and_then(|value| match value {
+                SlValue::List(refs) => Some(
+                    refs.iter()
+                        .filter_map(|reference| {
+                            reference
+                                .as_u64()
+                                .and_then(|value| value.checked_sub(1))
+                                .and_then(|value| u32::try_from(value).ok())
+                        })
+                        .collect(),
+                ),
+                _ => None,
+            })
+            .unwrap_or_default();
         let cargo_capacity = record_get(common, "cargo_cap")
             .and_then(SlValue::as_u64)
             .and_then(|value| u16::try_from(value).ok())
@@ -1460,12 +1499,10 @@ pub(crate) fn vehicles_from_chunks(
             .unwrap_or(0);
         let profit_this_year = record_get(common, "profit_this_year")
             .and_then(SlValue::as_i64)
-            .map(|value| value / 256)
-            .unwrap_or(0);
+            .map_or(0, |value| value / 256);
         let profit_last_year = record_get(common, "profit_last_year")
             .and_then(SlValue::as_i64)
-            .map(|value| value / 256)
-            .unwrap_or(0);
+            .map_or(0, |value| value / 256);
         let vehstatus = record_get(common, "vehstatus")
             .and_then(SlValue::as_u64)
             .unwrap_or(0);
@@ -1538,6 +1575,7 @@ pub(crate) fn vehicles_from_chunks(
             cargo_subtype,
             cargo,
             cargo_capacity,
+            cargo_packet_ids,
             cargo_age_counter,
             age_days,
             max_age_days,

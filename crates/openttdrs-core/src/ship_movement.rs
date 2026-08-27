@@ -659,9 +659,10 @@ pub fn ship_controller_tick(v: &mut Vehicle, map: Option<&Map>) {
     ship_controller_tick_with_catalog(v, map, &[]);
 }
 
-/// Variante que resuelve el motor NewGRF desde el catálogo activo de la
+/// Variante que resuelve el motor `NewGRF` desde el catálogo activo de la
 /// partida. La API histórica conserva el fallback vanilla mediante
 /// [`ship_controller_tick`].
+#[allow(clippy::too_many_lines)]
 pub fn ship_controller_tick_with_catalog(
     v: &mut Vehicle,
     map: Option<&Map>,

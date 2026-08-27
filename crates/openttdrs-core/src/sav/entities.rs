@@ -1225,6 +1225,14 @@ pub struct SavVehicle {
     pub airport_state: u8,
     /// Avión: `StationID` destino FTA (`Aircraft::targetairport`).
     pub airport_targetairport: u16,
+    /// Avión: contador de animación tras choque (`Aircraft::crashed_counter`).
+    pub aircraft_crashed_counter: u16,
+    /// Avión: giros consecutivos (`Aircraft::number_consecutive_turns`).
+    pub aircraft_number_consecutive_turns: u8,
+    /// Avión: contador de giro (`Aircraft::turn_counter`).
+    pub aircraft_turn_counter: u8,
+    /// Avión: flags nativos (`Aircraft::flags`).
+    pub aircraft_flags: u8,
 }
 
 /// Bit `GVSF_FRONT` de `Vehicle::subtype` (cabeza de convoy en tren/camión).
@@ -1664,6 +1672,38 @@ pub(crate) fn vehicles_from_chunks(
             .unwrap_or(0)
             .try_into()
             .unwrap_or(u16::MAX);
+        let aircraft_crashed_counter = if kind == SavVehicleKind::Aircraft {
+            record_get(sub, "crashed_counter")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u16::try_from(value).ok())
+                .unwrap_or(0)
+        } else {
+            0
+        };
+        let aircraft_number_consecutive_turns = if kind == SavVehicleKind::Aircraft {
+            record_get(sub, "number_consecutive_turns")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok())
+                .unwrap_or(0)
+        } else {
+            0
+        };
+        let aircraft_turn_counter = if kind == SavVehicleKind::Aircraft {
+            record_get(sub, "turn_counter")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok())
+                .unwrap_or(0)
+        } else {
+            0
+        };
+        let aircraft_flags = if kind == SavVehicleKind::Aircraft {
+            record_get(sub, "flags")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok())
+                .unwrap_or(0)
+        } else {
+            0
+        };
         #[allow(clippy::cast_possible_truncation)]
         out.push(SavVehicle {
             sav_id,
@@ -1738,6 +1778,10 @@ pub(crate) fn vehicles_from_chunks(
             airport_previous_pos,
             airport_state,
             airport_targetairport,
+            aircraft_crashed_counter,
+            aircraft_number_consecutive_turns,
+            aircraft_turn_counter,
+            aircraft_flags,
         });
     }
     out

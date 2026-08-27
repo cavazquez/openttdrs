@@ -377,9 +377,9 @@ fn aircraft_wire_for(state: &GameState, v: &Vehicle) -> AircraftWire {
         state: v.airport_heading.as_u8(),
         previous_pos: v.airport_prev_pos,
         last_direction: v.direction,
-        number_consecutive_turns: 0,
-        turn_counter: 0,
-        flags: 0,
+        number_consecutive_turns: v.aircraft_number_consecutive_turns,
+        turn_counter: v.aircraft_turn_counter,
+        flags: v.aircraft_flags,
     }
 }
 
@@ -1466,7 +1466,7 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::items_after_statements)]
+    #[allow(clippy::items_after_statements, clippy::too_many_lines)]
     fn vehs_exports_helicopter_rotor_and_fta_state() {
         use crate::airport_fta::AirportHeading;
         use crate::sav::chunks::{find_chunk, parse_chunks};
@@ -1482,6 +1482,9 @@ mod tests {
         let mut helicopter = Vehicle::new(7, VehicleKind::Aircraft, air_pos, airport_pos);
         helicopter.engine_id = Some(crate::engine::ENGINE_AIRCRAFT_TRICARIO);
         helicopter.crashed_ctr = 19;
+        helicopter.aircraft_number_consecutive_turns = 6;
+        helicopter.aircraft_turn_counter = 11;
+        helicopter.aircraft_flags = 0xA5;
         helicopter.airport_pos = 8;
         helicopter.airport_prev_pos = 7;
         helicopter.airport_heading = AirportHeading::HeliLanding;
@@ -1496,6 +1499,17 @@ mod tests {
         let raw = find_chunk(&chunks, "VEHS").expect("VEHS");
         let rows = parse_table_chunk(&raw.body, true).expect("parse VEHS");
         assert_eq!(rows.len(), 3);
+        let parsed = crate::sav::entities::vehicles_from_chunks(
+            &chunks,
+            64,
+            &crate::sav::orders::SavOrderImport::from_chunks(&chunks, 360),
+            360,
+        );
+        let parsed_primary = parsed.first().expect("primario parseado");
+        assert_eq!(parsed_primary.aircraft_crashed_counter, 19);
+        assert_eq!(parsed_primary.aircraft_number_consecutive_turns, 6);
+        assert_eq!(parsed_primary.aircraft_turn_counter, 11);
+        assert_eq!(parsed_primary.aircraft_flags, 0xA5);
 
         fn aircraft(row: &crate::sav::table::SlRecord) -> &crate::sav::table::SlRecord {
             match record_get(row, "aircraft") {
@@ -1524,6 +1538,18 @@ mod tests {
         assert_eq!(
             record_get(primary, "crashed_counter").and_then(SlValue::as_u64),
             Some(19)
+        );
+        assert_eq!(
+            record_get(primary, "number_consecutive_turns").and_then(SlValue::as_u64),
+            Some(6)
+        );
+        assert_eq!(
+            record_get(primary, "turn_counter").and_then(SlValue::as_u64),
+            Some(11)
+        );
+        assert_eq!(
+            record_get(primary, "flags").and_then(SlValue::as_u64),
+            Some(0xA5)
         );
         assert_eq!(
             record_get(primary, "pos").and_then(SlValue::as_u64),

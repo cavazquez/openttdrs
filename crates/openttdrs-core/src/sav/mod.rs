@@ -1199,6 +1199,10 @@ impl GameState {
                 vehicle.airport_pos = v.airport_pos;
                 vehicle.airport_prev_pos = v.airport_previous_pos;
                 vehicle.airport_heading = AirportHeading::from_u8(v.airport_state);
+                vehicle.crashed_ctr = v.aircraft_crashed_counter;
+                vehicle.aircraft_number_consecutive_turns = v.aircraft_number_consecutive_turns;
+                vehicle.aircraft_turn_counter = v.aircraft_turn_counter;
+                vehicle.aircraft_flags = v.aircraft_flags;
                 vehicle.aircraft_phase =
                     aircraft_phase_from_airport_heading(vehicle.airport_heading);
                 // El save no persiste el motor FTA como tal: si el avión está
@@ -2038,6 +2042,10 @@ mod tests {
                     airport_previous_pos: 0,
                     airport_state: 0,
                     airport_targetairport: 0,
+                    aircraft_crashed_counter: 0,
+                    aircraft_number_consecutive_turns: 0,
+                    aircraft_turn_counter: 0,
+                    aircraft_flags: 0,
                 },
                 SavVehicle {
                     sav_id: 1,
@@ -2120,6 +2128,10 @@ mod tests {
                     airport_previous_pos: 0,
                     airport_state: 0,
                     airport_targetairport: 0,
+                    aircraft_crashed_counter: 0,
+                    aircraft_number_consecutive_turns: 0,
+                    aircraft_turn_counter: 0,
+                    aircraft_flags: 0,
                 },
                 SavVehicle {
                     sav_id: 2,
@@ -2202,6 +2214,10 @@ mod tests {
                     airport_previous_pos: 0,
                     airport_state: 0,
                     airport_targetairport: 0,
+                    aircraft_crashed_counter: 0,
+                    aircraft_number_consecutive_turns: 0,
+                    aircraft_turn_counter: 0,
+                    aircraft_flags: 0,
                 },
                 SavVehicle {
                     sav_id: 3,
@@ -2284,6 +2300,10 @@ mod tests {
                     airport_previous_pos: 0,
                     airport_state: 0,
                     airport_targetairport: 0,
+                    aircraft_crashed_counter: 0,
+                    aircraft_number_consecutive_turns: 0,
+                    aircraft_turn_counter: 0,
+                    aircraft_flags: 0,
                 },
             ],
             companies: Vec::new(),

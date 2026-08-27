@@ -527,6 +527,15 @@ pub struct Vehicle {
     /// Heading FTA (`v->state` / `AirportMovementStates`).
     #[serde(default)]
     pub airport_heading: crate::airport_fta::AirportHeading,
+    /// Contador de giros consecutivos del avión (`Aircraft::number_consecutive_turns`).
+    #[serde(default)]
+    pub aircraft_number_consecutive_turns: u8,
+    /// Contador de giro FTA (`Aircraft::turn_counter`).
+    #[serde(default)]
+    pub aircraft_turn_counter: u8,
+    /// Flags nativos de aeronave (`Aircraft::flags`).
+    #[serde(default)]
+    pub aircraft_flags: u8,
     /// `true` mientras el avión está bajo control FTA de un aeropuerto Country.
     #[serde(default)]
     pub airport_fta_active: bool,
@@ -747,6 +756,9 @@ impl Vehicle {
             airport_waypoint_reached: false,
             airport_loading_stand_reached: false,
             airport_heading: crate::airport_fta::AirportHeading::Hangar,
+            aircraft_number_consecutive_turns: 0,
+            aircraft_turn_counter: 0,
+            aircraft_flags: 0,
             airport_fta_active: false,
             airport_fta_station: None,
             airport_blocks_held: 0,

@@ -1686,6 +1686,10 @@ En saves &lt; 214, OpenTTD mueve el RoadType desde bits 6–7 de `m7` a `m4` (ro
   esquema y la herencia de librea explícita de grupos; también materializa
   2CC/crash y mapas Action5 en vehículos. La invalidación visual completa
   fuera de esa caché sigue abierta en #329.
+- En SAV, `OBJS` ya se importa como pool de instancias y sus filas base se
+  reconstruyen al construir o demoler objetos; un save sin mutaciones conserva
+  el payload original para no perder columnas futuras. `OBID` y el runtime
+  completo de objetos siguen pendientes.
 - Dedicated + `-g` dispara dos `AfterLoadGame` (new-game luego load); el export usa `OPENTTDRS_SNAPSHOT_MIN_CALL=2`.
 - El oráculo **no** invoca `parse_sav.py` ni `snapshot_dumper`.
 

@@ -1,6 +1,6 @@
 use crate::map::{
     Map, OBJECT_TYPE_STATUE_COMPANY, TileCoord, TileKind, WaterClass, make_water_tile,
-    object_type_from_tile, water_class_from_m1,
+    object_id_from_tile, object_type_from_tile, water_class_from_m1,
 };
 use crate::{CLEAR_TILE_COST, GameState};
 
@@ -253,6 +253,7 @@ pub(in crate::command) fn clear_tile(
     if let Some(object_tiles) =
         crate::map::object_footprint_at(&state.map, c, &state.object_spec_catalog)
     {
+        let object_id = state.map.get(c).and_then(|tile| object_id_from_tile(&tile));
         let statue_owner = state
             .map
             .get(c)
@@ -275,6 +276,14 @@ pub(in crate::command) fn clear_tile(
             let _ = state.map.set_m2(tile, 0);
             crate::command::sign::remove_signs_at(state, tile);
         }
+        // Un objeto importado moderno comparte ObjectID en todas sus teselas;
+        // el layout local histórico usa m2 como offset, por lo que también
+        // quitamos la instancia cuyo origen cae dentro del footprint.
+        state.objects.retain(|object| {
+            let same_id = object_id.is_some_and(|id| object.object_id == id);
+            !(same_id || object_tiles.contains(&object.tile))
+        });
+        state.sav_objects_dirty = true;
         state.stations.retain(|s| !object_tiles.contains(&s.pos));
         // `Object` upstream conserva el pueblo de la estatua. El port no
         // mantiene ese pool, por lo que la estatua se vincula al pueblo más

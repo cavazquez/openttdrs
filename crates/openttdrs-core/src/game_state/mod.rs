@@ -354,6 +354,13 @@ pub struct GameState {
     pub industries: Vec<Industry>,
     pub vehicles: Vec<Vehicle>,
     pub stations: Vec<Station>,
+    /// Instancias del pool `Object` importadas desde `OBJS`.
+    ///
+    /// Las teselas del mapa siguen siendo la fuente de verdad para la huella
+    /// visual; este pool conserva el `ObjectID` y la metadata que `OpenTTD` usa
+    /// en callbacks y al serializar el save.
+    #[serde(default)]
+    pub objects: Vec<crate::sav::SavObject>,
     /// Ciudades (importadas de saves de `OpenTTD`; vacío en mapas procedurales).
     #[serde(default)]
     pub towns: Vec<crate::town::Town>,
@@ -553,6 +560,11 @@ pub struct GameState {
     /// `NewGRF`, motores y objetos al exportar nuevamente a `OpenTTD`.
     #[serde(default)]
     pub sav_opaque_chunks: Vec<crate::sav::SavOpaqueChunk>,
+    /// Marca que invalida el passthrough de `OBJS` después de una mutación.
+    /// Así un save importado conserva columnas desconocidas hasta que el
+    /// jugador realmente construye o demuele un objeto.
+    #[serde(default)]
+    pub sav_objects_dirty: bool,
     /// Carteles del mapa (`Sign` en `OpenTTD`).
     #[serde(default)]
     pub signs: Vec<crate::sign::Sign>,
@@ -659,6 +671,7 @@ impl GameState {
             industries: Vec::new(),
             vehicles: Vec::new(),
             stations: Vec::new(),
+            objects: Vec::new(),
             towns: Vec::new(),
             stats: SimStats::default(),
             cargo_payments: Vec::new(),
@@ -731,6 +744,7 @@ impl GameState {
             order: crate::cargo::OrderSettings::default(),
             newgrf_stack: crate::newgrf_config::default_vanilla_stack(),
             sav_opaque_chunks: Vec::new(),
+            sav_objects_dirty: false,
             signs: Vec::new(),
             next_sign_id: 1,
             bankruptcy_streak: 0,
@@ -787,6 +801,7 @@ impl GameState {
             industries: Vec::new(),
             vehicles: Vec::new(),
             stations: Vec::new(),
+            objects: Vec::new(),
             towns: Vec::new(),
             stats: SimStats::default(),
             cargo_payments: Vec::new(),
@@ -859,6 +874,7 @@ impl GameState {
             order: crate::cargo::OrderSettings::default(),
             newgrf_stack: crate::newgrf_config::default_vanilla_stack(),
             sav_opaque_chunks: Vec::new(),
+            sav_objects_dirty: false,
             signs: Vec::new(),
             next_sign_id: 1,
             bankruptcy_streak: 0,

@@ -9,8 +9,9 @@
 //!
 //! Residual: tranvía, settings fuera del subconjunto modelado de `PATS`,
 //! ejecución de `ENGN`/`SRND`/callbacks `NewGRF` y flags completos de `PLYR`.
-//! La configuración activa `NGRF` (archivo, GRFID, versión y parámetros) sí se
-//! reconstruye; `OBJS`/`OBID` y otros pools aún se conservan como passthrough.
+//! La configuración activa `NGRF` (archivo, GRFID, versión y parámetros) y
+//! las filas base de `OBJS` se reconstruyen cuando se modifican en el runtime;
+//! `OBID` y las columnas desconocidas siguen conservándose como passthrough.
 //! Los chunks nativos no modelados se conservan como passthrough al reexportar.
 //! Limitaciones: `docs/PARIDAD.md` y `docs/archive/merged-2026-07/ROADMAP_SAV_EXPORT.md`.
 
@@ -23,6 +24,7 @@ mod fleet;
 mod map;
 mod meta;
 mod newgrf;
+mod objects;
 mod vehicles;
 
 use std::io::Write;
@@ -193,6 +195,11 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
     let planes = map::collect_planes(&export_map, w, h, n);
     let autoreplace_export = fleet::autoreplace_export(state)?;
     let cargo_export = entities::cargo_packet_export(state, w);
+    let rebuild_objects = state.sav_objects_dirty
+        || !state
+            .sav_opaque_chunks
+            .iter()
+            .any(|chunk| chunk.name == *b"OBJS");
 
     let mut data = Vec::new();
     // MAPS CH_TABLE (SLV ≥ 294): dim_x/dim_y SLE_FILE_U32 BE — ver map_sl.cpp.
@@ -267,8 +274,13 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
     if let Some(ngrf) = newgrf::newgrf_chunk(state)? {
         data.extend_from_slice(&ngrf);
     }
+    if rebuild_objects && let Some(objs) = objects::objects_chunk(state, w, h)? {
+        data.extend_from_slice(&objs);
+    }
     for chunk in &state.sav_opaque_chunks {
-        if super::REBUILT_CHUNKS.contains(&chunk.name) {
+        if super::REBUILT_CHUNKS.contains(&chunk.name)
+            || (rebuild_objects && chunk.name == *b"OBJS")
+        {
             continue;
         }
         data.extend_from_slice(&chunks::raw_chunk(chunk.name, chunk.ch_type, &chunk.body));
@@ -1826,5 +1838,31 @@ mod tests {
             loaded.vehicles[0].cargo_packets.packets[0].next_hop,
             Some(destination)
         );
+    }
+
+    #[test]
+    fn export_roundtrip_preserves_object_pool_instances() {
+        let mut state = tiny_state();
+        state.objects.push(crate::sav::SavObject {
+            object_id: 4,
+            tile: TileCoord::new(11, 12),
+            width: 2,
+            height: 1,
+            town: 3,
+            build_date: 77,
+            colour: 6,
+            view: 1,
+            object_type: 512,
+        });
+
+        let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
+        let names = exported_chunk_names(&state).expect("chunk names");
+        assert!(names.iter().any(|name| name == "OBJS"), "{names:?}");
+        let sav_game = sav::load(&bytes).expect("load");
+        assert_eq!(sav_game.objects, state.objects);
+
+        let loaded = GameState::from_sav_game(sav_game);
+        assert_eq!(loaded.objects, state.objects);
+        assert!(!loaded.sav_objects_dirty);
     }
 }

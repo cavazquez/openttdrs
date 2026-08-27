@@ -11,6 +11,34 @@ use super::table::{SlRecord, SlValue, record_get};
 /// Flag de waypoint en `BaseStation::facilities` (no es una estación jugable).
 const FACIL_WAYPOINT: u64 = 0x80;
 
+/// Instancia persistida del pool `Object` (`OBJS`).
+///
+/// `OpenTTD` utiliza el índice de la tabla como `ObjectID` y guarda la
+/// ubicación/huella separadas del tipo de objeto. Mantener ese índice es
+/// importante: las teselas `MP_OBJECT` sólo contienen los 24 bits del ID y lo
+/// consultan al dibujar y al ejecutar callbacks `NewGRF`.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct SavObject {
+    /// Índice del pool (`ObjectID`).
+    pub object_id: u32,
+    /// Tesela de origen (`Object::location.tile`).
+    pub tile: TileCoord,
+    /// Ancho y alto guardados (ya rotados según la orientación elegida).
+    pub width: u16,
+    pub height: u16,
+    /// Referencia serializada a `TownID` (`0` = inválida, resto = índice + 1).
+    /// Se conserva cruda para no confundir un ID de town ausente con uno real.
+    pub town: u32,
+    /// Fecha de construcción (`TimerGameEconomy::date`).
+    pub build_date: u32,
+    /// Color de la instancia (`Colours`).
+    pub colour: u8,
+    /// Vista/rotación seleccionada por `Object::view`.
+    pub view: u8,
+    /// Tipo de objeto (`ObjectType`).
+    pub object_type: u16,
+}
+
 /// Estación decodificada del save (posición + nombre custom + facilities).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SavStation {
@@ -224,6 +252,92 @@ pub(crate) fn station_index_from_chunks(
 
 fn table_rows(chunk: &RawChunk, save_version: u16) -> Vec<(u32, super::table::SlRecord)> {
     super::array_legacy::chunk_rows(chunk, save_version)
+}
+
+/// Extrae las instancias del pool `Object` (`OBJS`) de saves modernos.
+///
+/// El índice denso de la tabla es el `ObjectID`; no se debe sustituir por la
+/// posición de la tesela porque un mismo objeto ocupa varias teselas y el ID
+/// puede tener huecos. Los campos que aparezcan en versiones futuras se
+/// ignoran mediante el parser autodescriptivo, conservando el chunk crudo para
+/// reexportarlo cuando la instancia no fue modificada.
+#[must_use]
+pub(crate) fn objects_from_chunks(chunks: &[RawChunk], map_w: u32, map_h: u32) -> Vec<SavObject> {
+    let Some(objs) = find_chunk(chunks, "OBJS") else {
+        return Vec::new();
+    };
+    if !matches!(
+        objs.ch_type,
+        super::chunks::CH_TABLE | super::chunks::CH_SPARSE_TABLE
+    ) {
+        return Vec::new();
+    }
+    let sparse = objs.ch_type == super::chunks::CH_SPARSE_TABLE;
+    let Ok(rows) = super::table::parse_table_chunk(&objs.body, sparse) else {
+        return Vec::new();
+    };
+    rows.into_iter()
+        .filter_map(|(object_id, record)| {
+            let linear = record_get(&record, "location.tile")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u32::try_from(value).ok())?;
+            let tile = coord_from_linear_index(u64::from(linear), map_w)?;
+            let in_bounds = tile.x >= 0
+                && tile.y >= 0
+                && u32::try_from(tile.x).ok()? < map_w
+                && u32::try_from(tile.y).ok()? < map_h;
+            if !in_bounds {
+                return None;
+            }
+            // Width/height are `SLE_FILE_U8 | SLE_VAR_U16`: the current table
+            // header therefore exposes them as U16. Old saves without the
+            // fields are valid and represent the vanilla 1×1 footprint.
+            let width = record_get(&record, "location.w")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u16::try_from(value).ok())
+                .filter(|&value| value > 0)
+                .unwrap_or(1);
+            let height = record_get(&record, "location.h")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u16::try_from(value).ok())
+                .filter(|&value| value > 0)
+                .unwrap_or(1);
+            let town = record_get(&record, "town")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u32::try_from(value).ok())
+                .unwrap_or(0);
+            let build_date = record_get(&record, "build_date")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u32::try_from(value).ok())
+                .unwrap_or(0);
+            let colour = record_get(&record, "colour")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok())
+                .unwrap_or(0);
+            let view = record_get(&record, "view")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok())
+                .unwrap_or(0);
+            let object_type = record_get(&record, "type")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u16::try_from(value).ok())
+                .unwrap_or(0);
+            // Empty pool slots are represented by a zero-length record and
+            // were already skipped by `parse_table_chunk`; `type == 0xFFFF`
+            // is the explicit invalid marker used by some converted saves.
+            (object_type != u16::MAX).then_some(SavObject {
+                object_id,
+                tile,
+                width,
+                height,
+                town,
+                build_date,
+                colour,
+                view,
+                object_type,
+            })
+        })
+        .collect()
 }
 
 /// Estaciones del chunk `STNN`; best-effort (tabla o array legacy).

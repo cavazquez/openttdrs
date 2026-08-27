@@ -194,6 +194,30 @@ pub(crate) fn build_object(
             place_object_tile(state, tile, object_type, object_tile_offset_byte(dx, dy))?;
         }
     }
+    // El mapa local conserva el layout histórico del puerto (m2 = offset),
+    // pero el pool `OBJS` necesita igualmente una instancia para que el save
+    // pueda reconstruir metadata, huella y callbacks. El ObjectID del origen
+    // es el que expone actualmente `GetObjectIndex` para este layout.
+    if let Some(origin) = state.map.get(c)
+        && let Some(object_id) = crate::map::object_id_from_tile(&origin)
+        && !state
+            .objects
+            .iter()
+            .any(|object| object.object_id == object_id)
+    {
+        state.objects.push(crate::sav::SavObject {
+            object_id,
+            tile: c,
+            width: u16::from(w),
+            height: u16::from(h),
+            town: 0,
+            build_date: state.calendar.date,
+            colour: state.company_colour,
+            view: 0,
+            object_type: u16::from(object_type),
+        });
+    }
+    state.sav_objects_dirty = true;
     state.economy.money -= cost;
     Ok(())
 }

@@ -281,12 +281,16 @@ pub use gs::{
 };
 pub use industry::{
     FACTORY_GRAIN_INPUT, FACTORY_LIVESTOCK_INPUT, FACTORY_STEEL_INPUT, INDUSTRY_PRODUCE_AMOUNT,
-    INDUSTRY_PRODUCE_TICKS, Industry, IndustryKind, IndustryLifeType, IndustryProductionChange,
-    IndustrySpec, PERCENT_TRANSPORTED_60, PRODLEVEL_CLOSURE, PRODLEVEL_DEFAULT, PRODLEVEL_MAXIMUM,
-    PRODLEVEL_MINIMUM, change_industry_production, industry_produce_period_ticks,
-    remove_closed_industries, transport_industry_goods,
+    INDUSTRY_PRODUCE_TICKS, Industry, IndustryKind, IndustryLifeType, IndustryProductionAction,
+    IndustryProductionChange, IndustrySpec, PERCENT_TRANSPORTED_60, PRODLEVEL_CLOSURE,
+    PRODLEVEL_DEFAULT, PRODLEVEL_MAXIMUM, PRODLEVEL_MINIMUM, apply_industry_production_action,
+    change_industry_production, industry_produce_period_ticks, remove_closed_industries,
+    transport_industry_goods,
 };
 pub use industry_spec::{
+    INDUSTRY_CALLBACK_LOCATION_MASK, INDUSTRY_CALLBACK_MONTHLY_PROD_CHANGE_MASK,
+    INDUSTRY_CALLBACK_PROD_CHANGE_BUILD_MASK, INDUSTRY_CALLBACK_PRODUCTION_256_TICKS_MASK,
+    INDUSTRY_CALLBACK_PRODUCTION_CARGO_ARRIVAL_MASK, INDUSTRY_CALLBACK_PRODUCTION_CHANGE_MASK,
     INDUSTRY_ORIGINAL_NUM_INPUTS, INDUSTRY_ORIGINAL_NUM_OUTPUTS, INVALID_INDUSTRY,
     IndustryLayoutTile, IndustrySpecDef, IndustryTileLayout, NEW_INDUSTRY_OFFSET,
     NUM_INDUSTRY_TYPES, cargo_type_from_label, empty_industry_overrides,
@@ -407,7 +411,8 @@ pub use newgrf_callback::{
     apply_vehicle_start_stop_callback, callback_allows_8bit_boolean, callback_allows_location,
     callback_allows_placement, effective_vehicle_max_speed_with_catalog,
     engine_for_vehicle_catalog, resolve_callback_or_failed, resolve_cargo_profit_callback,
-    resolve_cargo_station_rating_callback, resolve_industry_tile_animation_callback,
+    resolve_cargo_station_rating_callback, resolve_industry_production_change_build_callback,
+    resolve_industry_production_change_callback, resolve_industry_tile_animation_callback,
     resolve_industry_tile_random_trigger, resolve_vehicle_32day_callback, resolve_vehicle_callback,
     resolve_vehicle_capacity_property_callback, resolve_vehicle_colour_mapping_callback,
     resolve_vehicle_modify_property_callback, resolve_vehicle_sound_callback,

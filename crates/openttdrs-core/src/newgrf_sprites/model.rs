@@ -687,6 +687,12 @@ pub const CBID_VEHICLE_MODIFY_PROPERTY: u16 = 0x36;
 pub const CBID_VEHICLE_COLOUR_MAPPING: u16 = 0x2D;
 /// Callback industrias: disponibilidad / ubicación al colocar (`CBID_INDUSTRY_LOCATION`).
 pub const CBID_INDUSTRY_LOCATION: u16 = 0x28;
+/// Callback industrias: cambio aleatorio de producción (`CBID_INDUSTRY_PRODUCTION_CHANGE`).
+pub const CBID_INDUSTRY_PRODUCTION_CHANGE: u16 = 0x29;
+/// Callback industrias: cambio mensual de producción (`CBID_INDUSTRY_MONTHLYPROD_CHANGE`).
+pub const CBID_INDUSTRY_MONTHLY_PROD_CHANGE: u16 = 0x35;
+/// Callback industrias: nivel inicial al fundar (`CBID_INDUSTRY_PROD_CHANGE_BUILD`).
+pub const CBID_INDUSTRY_PROD_CHANGE_BUILD: u16 = 0x15F;
 /// Callback casas: permitir construcción (`CBID_HOUSE_ALLOW_CONSTRUCTION`).
 pub const CBID_HOUSE_ALLOW_CONSTRUCTION: u16 = 0x17;
 /// Callback cargos: calcular ingreso de la entrega (`CBID_CARGO_PROFIT_CALC`).

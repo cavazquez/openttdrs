@@ -7,15 +7,19 @@
 //!   industry-tile trigger → Action2 random.
 
 use crate::cargo_spec::CargoSpecDef;
+use crate::cargodist::parity::Randomizer;
 use crate::engine::EngineDef;
 use crate::house_spec::HouseSpecDef;
+use crate::industry::{Industry, IndustryProductionAction};
 use crate::industry_spec::IndustrySpecDef;
 use crate::industry_tile::IndustryTileSpecDef;
 use crate::map::{Map, TileCoord};
 use crate::newgrf_sprites::{
     Action2EvalCtx, Action2RandomEntry, CALLBACK_FAILED, CBID_CARGO_PROFIT_CALC,
     CBID_CARGO_STATION_RATING_CALC, CBID_HOUSE_ALLOW_CONSTRUCTION, CBID_INDUSTRY_LOCATION,
-    CBID_OBJECT_LAND_SLOPE_CHECK, CBID_STATION_ANIMATION_NEXT_FRAME, CBID_STATION_ANIMATION_SPEED,
+    CBID_INDUSTRY_MONTHLY_PROD_CHANGE, CBID_INDUSTRY_PROD_CHANGE_BUILD,
+    CBID_INDUSTRY_PRODUCTION_CHANGE, CBID_OBJECT_LAND_SLOPE_CHECK,
+    CBID_STATION_ANIMATION_NEXT_FRAME, CBID_STATION_ANIMATION_SPEED,
     CBID_STATION_ANIMATION_TRIGGER, CBID_STATION_AVAILABILITY, CBID_STATION_LAND_SLOPE_CHECK,
     CBID_VEHICLE_32DAY_CALLBACK, CBID_VEHICLE_ARTIC_ENGINE, CBID_VEHICLE_COLOUR_MAPPING,
     CBID_VEHICLE_LENGTH, CBID_VEHICLE_LOAD_AMOUNT, CBID_VEHICLE_MODIFY_PROPERTY,
@@ -1094,6 +1098,125 @@ pub fn apply_industry_location_callback(def: &IndustrySpecDef) -> bool {
     };
     let result = runtime.resolve_callback(def.newgrf_local_id, CBID_INDUSTRY_LOCATION, 0, 0);
     callback_allows_location(result)
+}
+
+/// Construye el contexto mínimo del scope `Industry` para callbacks de
+/// producción. Las variables de vecinos/industria cercana que requieren
+/// consultar el mapa se dejan fuera; las variables propias (stocks, nivel,
+/// contador y posición) sí quedan disponibles para Action2.
+fn action2_eval_ctx_from_industry(industry: &Industry, random: u32) -> Action2EvalCtx {
+    let mut ctx = Action2EvalCtx {
+        random_bits: random,
+        ..Action2EvalCtx::default()
+    };
+    ctx.vars.insert(0x40, industry.stock);
+    ctx.vars.insert(0x41, industry.secondary_stock);
+    ctx.vars.insert(0x42, industry.capacity);
+    ctx.vars
+        .insert(0x80, u32::from_ne_bytes(industry.pos.x.to_ne_bytes()));
+    ctx.vars
+        .insert(0x81, u32::from_ne_bytes(industry.pos.y.to_ne_bytes()));
+    ctx.vars.insert(0x93, u32::from(industry.prod_level));
+    ctx.vars.insert(0xAA, u32::from(industry.counter));
+    ctx
+}
+
+/// Decodificación del resultado de `CBID_INDUSTRY_PRODUCTION_CHANGE` y
+/// `CBID_INDUSTRY_MONTHLYPROD_CHANGE` (`OpenTTD` `ChangeIndustryProduction`).
+fn decode_industry_production_action(
+    result: u16,
+    ctx: &Action2EvalCtx,
+) -> IndustryProductionAction {
+    if result == CALLBACK_FAILED {
+        return IndustryProductionAction::NoChange;
+    }
+    match result & 0x0F {
+        0x01 => IndustryProductionAction::Halve,
+        0x02 => IndustryProductionAction::Double,
+        0x03 => IndustryProductionAction::Close,
+        0x04 => IndustryProductionAction::Standard,
+        0x05..=0x08 => IndustryProductionAction::Divide(1 << ((result & 0x0F) - 3)),
+        0x09..=0x0C => IndustryProductionAction::Multiply(1 << ((result & 0x0F) - 7)),
+        0x0D => IndustryProductionAction::Decrease,
+        0x0E => IndustryProductionAction::Increase,
+        0x0F => {
+            // CB 0xF reads byte 2 of register 0x100 (`regs100[0]`).
+            let level = ctx
+                .registers_100
+                .get(&0x100)
+                .copied()
+                .map_or(0, |value| ((value >> 16) & 0xFF) as u8);
+            IndustryProductionAction::Set(level)
+        }
+        _ => IndustryProductionAction::NoChange,
+    }
+}
+
+/// Ejecuta el callback de cambio de producción declarado por una industria.
+///
+/// `None` significa que el callback no está declarado; `Some(NoChange)` es
+/// distinto: el callback está declarado pero devolvió `CALLBACK_FAILED`/0 y,
+/// como en `OpenTTD`, no debe caer silenciosamente al algoritmo vanilla.
+pub fn resolve_industry_production_change_callback(
+    def: &IndustrySpecDef,
+    industry: &Industry,
+    monthly: bool,
+    rng: &mut Randomizer,
+) -> Option<IndustryProductionAction> {
+    let declared = if monthly {
+        def.has_monthly_production_change_callback()
+    } else {
+        def.has_production_change_callback()
+    };
+    if !declared {
+        return None;
+    }
+    let Some(runtime) = def.newgrf_runtime.as_ref() else {
+        return Some(IndustryProductionAction::NoChange);
+    };
+    let random = rng.next();
+    let callback = if monthly {
+        CBID_INDUSTRY_MONTHLY_PROD_CHANGE
+    } else {
+        CBID_INDUSTRY_PRODUCTION_CHANGE
+    };
+    let mut ctx = action2_eval_ctx_from_industry(industry, random);
+    let result = runtime.resolve_callback_ctx_u16(
+        u16::from(def.newgrf_local_id),
+        callback,
+        0,
+        random,
+        &mut ctx,
+    );
+    Some(decode_industry_production_action(result, &ctx))
+}
+
+/// Ejecuta `CBID_INDUSTRY_PROD_CHANGE_BUILD` (`0x15F`) al fundar una industria.
+/// Un resultado fuera de `PRODLEVEL_MINIMUM..=PRODLEVEL_MAXIMUM` conserva el
+/// nivel inicial vanilla, igual que el chequeo de `OpenTTD`.
+pub fn resolve_industry_production_change_build_callback(
+    def: &IndustrySpecDef,
+    industry: &Industry,
+    rng: &mut Randomizer,
+) -> Option<u8> {
+    if !def.has_production_change_build_callback() {
+        return None;
+    }
+    let runtime = def.newgrf_runtime.as_ref()?;
+    let random = rng.next();
+    let mut ctx = action2_eval_ctx_from_industry(industry, random);
+    let result = runtime.resolve_callback_ctx_u16(
+        u16::from(def.newgrf_local_id),
+        CBID_INDUSTRY_PROD_CHANGE_BUILD,
+        0,
+        random,
+        &mut ctx,
+    );
+    (result != CALLBACK_FAILED
+        && (u16::from(crate::industry::PRODLEVEL_MINIMUM)
+            ..=u16::from(crate::industry::PRODLEVEL_MAXIMUM))
+            .contains(&result))
+    .then(|| u8::try_from(result).unwrap_or(crate::industry::PRODLEVEL_DEFAULT))
 }
 
 /// Call site house: CB `0x17` allow construction (#266).
@@ -3230,6 +3353,52 @@ mod tests {
         def.newgrf_runtime = Some(Box::new(gfx_callback_literal(0x10)));
         def.callback_mask = 0;
         assert!(apply_industry_location_callback(&def));
+    }
+
+    #[test]
+    fn callbacks_ac_industry_production_change_decodes_actions_and_build_level() {
+        let mut def = IndustrySpecDef {
+            id: 37,
+            local_id: 0,
+            subst_id: 0,
+            override_id: None,
+            layouts: Vec::new(),
+            produced_cargo_indices: Vec::new(),
+            produced_cargo_labels: Vec::new(),
+            accepted_cargo_indices: Vec::new(),
+            accepted_cargo_labels: Vec::new(),
+            production_rates: vec![15],
+            input_multipliers: Vec::new(),
+            callback_mask: crate::industry_spec::INDUSTRY_CALLBACK_PRODUCTION_CHANGE_MASK,
+            cost_multiplier: 0,
+            name: "production-callback".into(),
+            from_newgrf: true,
+            grfid: 1,
+            newgrf_local_id: 0,
+            newgrf_runtime: Some(Box::new(gfx_callback_literal(0x02))),
+        };
+        let industry = Industry::new(
+            TileCoord::new(4, 5),
+            crate::industry::IndustryKind::CoalMine,
+        );
+        let mut rng = Randomizer::new(42);
+        assert_eq!(
+            resolve_industry_production_change_callback(&def, &industry, false, &mut rng),
+            Some(IndustryProductionAction::Double)
+        );
+
+        def.callback_mask = crate::industry_spec::INDUSTRY_CALLBACK_PROD_CHANGE_BUILD_MASK;
+        def.newgrf_runtime = Some(Box::new(gfx_callback_literal(64)));
+        assert_eq!(
+            resolve_industry_production_change_build_callback(&def, &industry, &mut rng),
+            Some(64)
+        );
+        def.newgrf_runtime = Some(Box::new(gfx_callback_literal(3)));
+        assert_eq!(
+            resolve_industry_production_change_build_callback(&def, &industry, &mut rng),
+            None,
+            "niveles fuera del rango válido conservan el valor vanilla"
+        );
     }
 
     #[test]

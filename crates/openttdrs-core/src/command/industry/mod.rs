@@ -202,13 +202,21 @@ pub fn place_industry_spec_def_sandbox(
         IndustryKind::CoalMine
     };
     let counter = industry_counter_seed(state, c, industry_id);
-    state.industries.push(
-        Industry::with_tiles(c, kind, tiles)
-            .with_instance_id(industry_id)
-            .with_random_colour(random_colour)
-            .with_counter(counter)
-            .with_newgrf_spec(def.id, &def),
-    );
+    let mut industry = Industry::with_tiles(c, kind, tiles)
+        .with_instance_id(industry_id)
+        .with_random_colour(random_colour)
+        .with_counter(counter)
+        .with_newgrf_spec(def.id, &def);
+    if let Some(initial_level) =
+        crate::newgrf_callback::resolve_industry_production_change_build_callback(
+            &def,
+            &industry,
+            &mut state.random,
+        )
+    {
+        industry.prod_level = initial_level;
+    }
+    state.industries.push(industry);
     state.economy.money -= 250;
     Ok(())
 }

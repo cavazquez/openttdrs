@@ -146,6 +146,8 @@ pub(super) fn process_monthly_economy(state: &mut GameState) {
         let transported = industry.transported_total;
         industry.history.push_month(stock, produced, transported);
     }
+    // OpenTTD evalúa CB35 después de actualizar las estadísticas mensuales.
+    maybe_change_industry_production_monthly(state);
 }
 
 fn roll_station_newgrf_month(stations: &mut [crate::Station]) {
@@ -244,15 +246,93 @@ pub(super) fn maybe_change_industry_production(state: &mut GameState) {
         .random
         .random_range(u32::try_from(state.industries.len()).unwrap_or(1)) as usize;
     let climate = state.climate;
-    let change = crate::industry::change_industry_production(
-        &mut state.industries[idx],
-        false,
-        climate,
-        &mut state.random,
-    );
+    // Las industrias NewGRF con CB29 no deben caer al algoritmo vanilla cuando
+    // el callback devuelve `CALLBACK_FAILED`: OpenTTD interpreta ese resultado
+    // como “sin cambio”. Clonamos el spec para no mantener un borrow cruzado
+    // mientras el resolver consume el RNG del estado.
+    let def = state.industries[idx].newgrf_type_id.and_then(|type_id| {
+        state
+            .industry_spec_catalog
+            .iter()
+            .find(|def| def.id == type_id)
+            .cloned()
+    });
+    let callback_action = def.as_ref().and_then(|def| {
+        crate::newgrf_callback::resolve_industry_production_change_callback(
+            def,
+            &state.industries[idx],
+            false,
+            &mut state.random,
+        )
+    });
+    let change = match callback_action {
+        Some(crate::IndustryProductionAction::Standard) => {
+            crate::industry::change_industry_production(
+                &mut state.industries[idx],
+                false,
+                climate,
+                &mut state.random,
+            )
+        }
+        Some(action) => {
+            crate::industry::apply_industry_production_action(&mut state.industries[idx], action)
+        }
+        None => crate::industry::change_industry_production(
+            &mut state.industries[idx],
+            false,
+            climate,
+            &mut state.random,
+        ),
+    };
     if change == crate::industry::IndustryProductionChange::Closing {
         let at = state.industries[idx].pos;
         crate::news::report_industry_closing(state, at);
+    }
+}
+
+/// Ejecuta CB35 para todas las industrias que lo declararon durante el cierre
+/// mensual. Las industrias sin callback mantienen el comportamiento existente
+/// (el algoritmo vanilla mensual todavía no modifica `prod_level` en este
+/// recorte); `CALLBACK_FAILED` es un no-op observable y no un fallback.
+pub(super) fn maybe_change_industry_production_monthly(state: &mut GameState) {
+    for idx in 0..state.industries.len() {
+        let Some(type_id) = state.industries[idx].newgrf_type_id else {
+            continue;
+        };
+        let Some(def) = state
+            .industry_spec_catalog
+            .iter()
+            .find(|def| def.id == type_id)
+            .cloned()
+        else {
+            continue;
+        };
+        let Some(action) = crate::newgrf_callback::resolve_industry_production_change_callback(
+            &def,
+            &state.industries[idx],
+            true,
+            &mut state.random,
+        ) else {
+            continue;
+        };
+        let change = match action {
+            crate::IndustryProductionAction::Standard => {
+                crate::industry::change_industry_production(
+                    &mut state.industries[idx],
+                    true,
+                    state.climate,
+                    &mut state.random,
+                )
+            }
+            action => crate::industry::apply_industry_production_action(
+                &mut state.industries[idx],
+                action,
+            ),
+        };
+        if change == crate::industry::IndustryProductionChange::Closing {
+            let at = state.industries[idx].pos;
+            crate::news::report_industry_closing(state, at);
+        }
     }
 }
 

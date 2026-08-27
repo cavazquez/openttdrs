@@ -21,8 +21,18 @@ pub const INVALID_INDUSTRY: u16 = NUM_INDUSTRY_TYPES;
 pub const INDUSTRY_ORIGINAL_NUM_OUTPUTS: usize = 2;
 /// Entradas originales (`INDUSTRY_ORIGINAL_NUM_INPUTS`).
 pub const INDUSTRY_ORIGINAL_NUM_INPUTS: usize = 3;
+/// Bit `IndustryCallbackMask::ProductionCargoArrival`: callback al llegar carga.
+pub const INDUSTRY_CALLBACK_PRODUCTION_CARGO_ARRIVAL_MASK: u16 = 1 << 1;
+/// Bit `IndustryCallbackMask::Production256Ticks`: callback de producción periódico.
+pub const INDUSTRY_CALLBACK_PRODUCTION_256_TICKS_MASK: u16 = 1 << 2;
 /// Bit `IndustryCallbackMask::Location`: consulta CB `0x28` antes de construir.
 pub const INDUSTRY_CALLBACK_LOCATION_MASK: u16 = 1 << 3;
+/// Bit `IndustryCallbackMask::ProductionChange`: cambio diario de producción.
+pub const INDUSTRY_CALLBACK_PRODUCTION_CHANGE_MASK: u16 = 1 << 4;
+/// Bit `IndustryCallbackMask::MonthlyProdChange`: cambio mensual de producción.
+pub const INDUSTRY_CALLBACK_MONTHLY_PROD_CHANGE_MASK: u16 = 1 << 5;
+/// Bit `IndustryCallbackMask::ProdChangeBuild`: nivel inicial al fundar.
+pub const INDUSTRY_CALLBACK_PROD_CHANGE_BUILD_MASK: u16 = 1 << 14;
 /// Tesela de un layout (`IndustryTileLayoutTile`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IndustryLayoutTile {
@@ -74,6 +84,24 @@ pub struct IndustrySpecDef {
 }
 
 impl IndustrySpecDef {
+    /// ¿El GRF declaró un callback de cambio de producción diario?
+    #[must_use]
+    pub const fn has_production_change_callback(&self) -> bool {
+        self.callback_mask & INDUSTRY_CALLBACK_PRODUCTION_CHANGE_MASK != 0
+    }
+
+    /// ¿El GRF declaró un callback de cambio de producción mensual?
+    #[must_use]
+    pub const fn has_monthly_production_change_callback(&self) -> bool {
+        self.callback_mask & INDUSTRY_CALLBACK_MONTHLY_PROD_CHANGE_MASK != 0
+    }
+
+    /// ¿El GRF declaró un callback que fija la producción inicial?
+    #[must_use]
+    pub const fn has_production_change_build_callback(&self) -> bool {
+        self.callback_mask & INDUSTRY_CALLBACK_PROD_CHANGE_BUILD_MASK != 0
+    }
+
     /// ¿El GRF declaró CB `0x28` para autorizar la ubicación de la industria?
     #[must_use]
     pub const fn has_location_callback(&self) -> bool {

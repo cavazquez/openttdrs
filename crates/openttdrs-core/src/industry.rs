@@ -1338,6 +1338,121 @@ pub enum IndustryProductionChange {
     Closing,
 }
 
+/// Acción decodificada de los callbacks `CBID_INDUSTRY_PRODUCTION_CHANGE` /
+/// `CBID_INDUSTRY_MONTHLYPROD_CHANGE` (bits 0..3 del resultado `NewGRF`).
+///
+/// `OpenTTD` aplica las acciones sobre `prod_level`; el callback `Production256Ticks`
+/// tiene otro formato y no se convierte a este enum.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IndustryProductionAction {
+    NoChange,
+    Halve,
+    Double,
+    Close,
+    Standard,
+    Divide(u8),
+    Multiply(u8),
+    Decrease,
+    Increase,
+    Set(u8),
+}
+
+/// Aplica una acción de cambio de producción de industria.
+///
+/// Devuelve el cambio observable para noticias/telemetría. `Standard` se deja
+/// para el algoritmo vanilla porque necesita el `Randomizer` y la información
+/// mensual de transporte del estado.
+#[must_use]
+pub fn apply_industry_production_action(
+    industry: &mut Industry,
+    action: IndustryProductionAction,
+) -> IndustryProductionChange {
+    if industry.is_closing() {
+        return IndustryProductionChange::None;
+    }
+    match action {
+        IndustryProductionAction::NoChange | IndustryProductionAction::Standard => {
+            IndustryProductionChange::None
+        }
+        IndustryProductionAction::Close => {
+            industry.prod_level = PRODLEVEL_CLOSURE;
+            IndustryProductionChange::Closing
+        }
+        IndustryProductionAction::Halve | IndustryProductionAction::Divide(1) => {
+            if industry.prod_level <= PRODLEVEL_MINIMUM {
+                industry.prod_level = PRODLEVEL_CLOSURE;
+                IndustryProductionChange::Closing
+            } else {
+                let old = industry.prod_level;
+                industry.prod_level = (old / 2).max(PRODLEVEL_MINIMUM);
+                IndustryProductionChange::Decreased
+            }
+        }
+        IndustryProductionAction::Double | IndustryProductionAction::Multiply(1) => {
+            if industry.prod_level >= PRODLEVEL_MAXIMUM {
+                IndustryProductionChange::None
+            } else {
+                industry.prod_level = industry.prod_level.saturating_mul(2).min(PRODLEVEL_MAXIMUM);
+                IndustryProductionChange::Increased
+            }
+        }
+        IndustryProductionAction::Divide(times) => {
+            let mut changed = false;
+            for _ in 0..times {
+                if industry.prod_level <= PRODLEVEL_MINIMUM {
+                    industry.prod_level = PRODLEVEL_CLOSURE;
+                    return IndustryProductionChange::Closing;
+                }
+                industry.prod_level = (industry.prod_level / 2).max(PRODLEVEL_MINIMUM);
+                changed = true;
+            }
+            if changed {
+                IndustryProductionChange::Decreased
+            } else {
+                IndustryProductionChange::None
+            }
+        }
+        IndustryProductionAction::Multiply(times) => {
+            let old = industry.prod_level;
+            for _ in 0..times {
+                industry.prod_level = industry.prod_level.saturating_mul(2).min(PRODLEVEL_MAXIMUM);
+            }
+            if industry.prod_level > old {
+                IndustryProductionChange::Increased
+            } else {
+                IndustryProductionChange::None
+            }
+        }
+        IndustryProductionAction::Decrease => {
+            if industry.prod_level <= PRODLEVEL_MINIMUM {
+                industry.prod_level = PRODLEVEL_CLOSURE;
+                IndustryProductionChange::Closing
+            } else {
+                industry.prod_level = industry.prod_level.saturating_sub(1);
+                IndustryProductionChange::Decreased
+            }
+        }
+        IndustryProductionAction::Increase => {
+            if industry.prod_level >= PRODLEVEL_MAXIMUM {
+                IndustryProductionChange::None
+            } else {
+                industry.prod_level = industry.prod_level.saturating_add(1).min(PRODLEVEL_MAXIMUM);
+                IndustryProductionChange::Increased
+            }
+        }
+        IndustryProductionAction::Set(level) => {
+            let level = level.clamp(PRODLEVEL_MINIMUM, PRODLEVEL_MAXIMUM);
+            let old = industry.prod_level;
+            industry.prod_level = level;
+            match level.cmp(&old) {
+                std::cmp::Ordering::Greater => IndustryProductionChange::Increased,
+                std::cmp::Ordering::Less => IndustryProductionChange::Decreased,
+                std::cmp::Ordering::Equal => IndustryProductionChange::None,
+            }
+        }
+    }
+}
+
 /// Cambia el `prod_level` o marca cierre (`ChangeIndustryProduction`, modo original).
 ///
 /// Con economía original los cambios ocurren en la llamada diaria (`monthly = false`);
@@ -1507,6 +1622,38 @@ mod tests {
         let mut mine = Industry::new(TileCoord::new(0, 0), IndustryKind::CoalMine);
         mine.prod_level = PRODLEVEL_DEFAULT * 2;
         assert_eq!(mine.produce_amount(), 30);
+    }
+
+    #[test]
+    fn newgrf_production_actions_match_callback_levels() {
+        let mut mine = Industry::new(TileCoord::new(2, 2), IndustryKind::CoalMine);
+        assert_eq!(
+            apply_industry_production_action(&mut mine, IndustryProductionAction::Halve),
+            IndustryProductionChange::Decreased
+        );
+        assert_eq!(mine.prod_level, PRODLEVEL_DEFAULT / 2);
+        assert_eq!(
+            apply_industry_production_action(&mut mine, IndustryProductionAction::Halve),
+            IndustryProductionChange::Decreased
+        );
+        assert_eq!(mine.prod_level, PRODLEVEL_MINIMUM);
+        assert_eq!(
+            apply_industry_production_action(&mut mine, IndustryProductionAction::Halve),
+            IndustryProductionChange::Closing
+        );
+        assert!(mine.is_closing());
+
+        let mut mine = Industry::new(TileCoord::new(2, 2), IndustryKind::CoalMine);
+        assert_eq!(
+            apply_industry_production_action(&mut mine, IndustryProductionAction::Multiply(2)),
+            IndustryProductionChange::Increased
+        );
+        assert_eq!(mine.prod_level, PRODLEVEL_DEFAULT * 4);
+        assert_eq!(
+            apply_industry_production_action(&mut mine, IndustryProductionAction::Set(200)),
+            IndustryProductionChange::Increased
+        );
+        assert_eq!(mine.prod_level, PRODLEVEL_MAXIMUM);
     }
 
     #[test]

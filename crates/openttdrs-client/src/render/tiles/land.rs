@@ -510,6 +510,30 @@ pub(crate) fn spawn_house_tile(
         resources.house_catalog,
     );
     let spec = &HOUSE_DRAW_DATA[spec_idx];
+    // Resolver el layout antes de dibujar `s1`: un grupo completo puede
+    // declarar `DODRAW=0` y debe reemplazar suelo y edificio vanilla juntos.
+    let house_layout = ctx.tile.and_then(|tile| {
+        crate::render::house_newgrf::newgrf_house_def_for_id(
+            resources.house_catalog,
+            clean_house_id,
+        )
+        .and_then(|def| {
+            resolve_newgrf_house_layout(
+                def,
+                building_stage,
+                tile,
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+                resources.climate,
+                resources.newgrf_stack,
+            )
+        })
+    });
+    let custom_house_layout = house_layout
+        .as_ref()
+        .is_some_and(|(_, layout, _)| layout.complete)
+        && resources.house_sprites.is_some()
+        && resources.images.is_some();
 
     // `DrawTile_Town`: si la tesela no es plana, `DrawFoundation(Leveled)`
     // muta la superficie antes de dibujar *ambas* capas de la casa. El suelo
@@ -565,7 +589,24 @@ pub(crate) fn spawn_house_tile(
             )
         }
     };
-    if spec.s1 != 0 {
+    if custom_house_layout
+        && let Some((def, layout, runtime_fp)) = house_layout.as_ref()
+        && let (Some(cache), Some(images)) =
+            (resources.house_sprites.as_mut(), resources.images.as_mut())
+    {
+        let _ = spawn_newgrf_house_layout_ground(
+            commands,
+            ctx,
+            resources.map_dims.0,
+            foundation_surface_base_z,
+            forced_foundation.and_then(|foundation| foundation.child_parent),
+            def,
+            *runtime_fp,
+            layout,
+            cache,
+            images,
+        );
+    } else if spec.s1 != 0 {
         let ground = assets.houses.get(&spec.s1);
         let palette_image = (spec.s1_palette != 0)
             .then(|| assets.house_palettes.handle(spec.s1, spec.s1_palette))
@@ -651,6 +692,28 @@ pub(crate) fn spawn_house_tile(
         return;
     }
     let tint = sprite_color(TransparencyOption::Houses);
+    if custom_house_layout
+        && let Some((def, layout, runtime_fp)) = house_layout.as_ref()
+        && let (Some(cache), Some(images)) =
+            (resources.house_sprites.as_mut(), resources.images.as_mut())
+    {
+        if spawn_newgrf_house_layout_sequence(
+            commands,
+            ctx,
+            resources.map_dims.0,
+            foundation_surface_base_z,
+            def,
+            *runtime_fp,
+            layout,
+            cache,
+            images,
+            tint,
+        ) {
+            return;
+        }
+        // Layout completo sin secuencia: el ground ya fue emitido arriba.
+        return;
+    }
     // `DrawNewHouseTile` resuelve el grupo Action2 después de la fundación.
     // Antes el catálogo sólo se consultaba para elegir el sustituto vanilla,
     // por lo que cualquier casa con random/variational terminaba mostrando
@@ -860,6 +923,213 @@ pub(crate) fn spawn_house_tile(
             },
         ));
     }
+}
+
+/// Resuelve el layout `TileSeq` de una casa con el contexto de
+/// `HouseScopeResolver` disponible en el mapa y conserva su huella runtime.
+#[allow(clippy::too_many_arguments)]
+fn resolve_newgrf_house_layout<'a>(
+    def: &'a openttdrs_core::HouseSpecDef,
+    building_stage: usize,
+    tile: Tile,
+    tx: i32,
+    ty: i32,
+    climate: Climate,
+    newgrf_stack: &[openttdrs_core::NewGrfEntry],
+) -> Option<(
+    &'a openttdrs_core::HouseSpecDef,
+    openttdrs_core::newgrf_sprites::ResolvedTileLayout,
+    u32,
+)> {
+    let mut action2 = openttdrs_core::action2_eval_ctx_for_house_tile(tile, tx, ty, climate);
+    action2.set_grf_params(openttdrs_core::stack_params_for_grfid(
+        newgrf_stack,
+        def.grfid,
+    ));
+    let layout = def.newgrf_tile_layout_runtime(building_stage, &mut action2)?;
+    let runtime_fp = def
+        .newgrf_runtime
+        .as_ref()
+        .map_or(0, |_| runtime_fingerprint(&action2, vars::HOUSE, false));
+    Some((def, layout, runtime_fp))
+}
+
+/// Emite el suelo de un layout de casa. Un layout completo sin ground es
+/// `DODRAW=0` y por eso devuelve `true` sin recuperar `s1` vanilla.
+#[allow(clippy::too_many_arguments)]
+fn spawn_newgrf_house_layout_ground(
+    commands: &mut Commands,
+    ctx: &TileRenderContext,
+    map_width: u32,
+    surface_base_z: u8,
+    foundation_child_parent: Option<Entity>,
+    def: &openttdrs_core::HouseSpecDef,
+    runtime_fp: u32,
+    layout: &openttdrs_core::newgrf_sprites::ResolvedTileLayout,
+    cache: &mut crate::render::NewGrfHouseSpriteCache,
+    images: &mut Assets<Image>,
+) -> bool {
+    if !layout.complete {
+        return false;
+    }
+    let Some(ground) = layout.ground.as_ref() else {
+        return true;
+    };
+    let handle = cache.handle_for_layout(def, 0, runtime_fp, &ground.sprite, images);
+    let position = overlay_pos(
+        ctx.iso_pos,
+        f32::from(ground.sprite.x_offs),
+        f32::from(ground.sprite.y_offs),
+        f32::from(ground.sprite.width),
+        f32::from(ground.sprite.height),
+        surface_base_z,
+        0.4,
+        ctx.tx_i32(),
+        ctx.ty_i32(),
+    );
+    let sprite = Sprite {
+        image: handle,
+        color: Color::WHITE,
+        ..default()
+    };
+    if let Some(parent) = foundation_child_parent {
+        spawn_foundation_child_sprite_at(commands, sprite, ctx, position, map_width, parent);
+    } else {
+        commands.spawn((
+            MapVisualLayer,
+            ctx.map_tile_chunk(),
+            sprite,
+            Transform::from_translation(position),
+        ));
+    }
+    true
+}
+
+/// Emite parents y children `BUILD` de un layout de casa NewGRF.
+#[allow(clippy::too_many_arguments)]
+fn spawn_newgrf_house_layout_sequence(
+    commands: &mut Commands,
+    ctx: &TileRenderContext,
+    map_width: u32,
+    surface_base_z: u8,
+    def: &openttdrs_core::HouseSpecDef,
+    runtime_fp: u32,
+    layout: &openttdrs_core::newgrf_sprites::ResolvedTileLayout,
+    cache: &mut crate::render::NewGrfHouseSpriteCache,
+    images: &mut Assets<Image>,
+    tint: Color,
+) -> bool {
+    if !layout.complete || layout.sequence.is_empty() {
+        return false;
+    }
+    let mut last_parent: Option<(Entity, Vec2)> = None;
+    for (index, layer) in layout.sequence.iter().enumerate() {
+        let slot = u16::try_from(index.saturating_add(1)).unwrap_or(u16::MAX);
+        let handle = cache.handle_for_layout(def, slot, runtime_fp, &layer.sprite, images);
+        let width = f32::from(layer.sprite.width);
+        let height = f32::from(layer.sprite.height);
+        let seq = RoadStopSeqGfx {
+            dx: f32::from(layer.origin[0]),
+            dy: f32::from(layer.origin[1]),
+            dz: if layer.is_parent() {
+                f32::from(layer.origin[2])
+            } else {
+                0.0
+            },
+            x_offs: f32::from(layer.sprite.x_offs),
+            y_offs: f32::from(layer.sprite.y_offs),
+            remap_x_adj: 0.0,
+        };
+        let layer_z = 0.5 + index as f32 * 0.0003;
+        let sprite = Sprite {
+            image: handle,
+            color: tint,
+            ..default()
+        };
+        if layer.is_parent() {
+            let position = road_stop_build_sprite_center(
+                ctx.iso_pos,
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+                surface_base_z,
+                layer_z,
+                seq,
+                width,
+                height,
+            );
+            let source_depth = viewport_source_depth(position.z, ctx.tx, map_width);
+            let sprite_id = u32::MAX.saturating_sub(u32::try_from(index).unwrap_or(u32::MAX));
+            let bounds = object_tile_seq_bounds(
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+                surface_base_z,
+                layer.origin,
+                layer.extent,
+            );
+            let entity = commands
+                .spawn((
+                    MapVisualLayer,
+                    ctx.map_tile_chunk(),
+                    sprite,
+                    Transform::from_translation(Vec3::new(position.x, position.y, source_depth)),
+                    ViewportSortableParent {
+                        sprite_id,
+                        bounds,
+                        insertion_key: viewport_insertion_key(
+                            ctx.tx,
+                            ctx.ty,
+                            u8::try_from(index.saturating_add(2)).unwrap_or(u8::MAX),
+                        ),
+                        source_depth,
+                    },
+                ))
+                .id();
+            last_parent = Some((
+                entity,
+                Vec2::new(position.x - width / 2.0, position.y + height / 2.0),
+            ));
+        } else if let Some((parent, parent_top_left)) = last_parent {
+            let position = object_tile_seq_child_center(
+                parent_top_left,
+                layer.origin,
+                width,
+                height,
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+                surface_base_z,
+                layer_z,
+            );
+            let source_depth = viewport_source_depth(position.z, ctx.tx, map_width);
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                sprite,
+                Transform::from_translation(Vec3::new(position.x, position.y, source_depth)),
+                ViewportSortableChild {
+                    parent,
+                    source_depth,
+                },
+            ));
+        } else {
+            let position = road_stop_build_sprite_center(
+                ctx.iso_pos,
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+                surface_base_z,
+                layer_z,
+                seq,
+                width,
+                height,
+            );
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                sprite,
+                Transform::from_translation(position),
+            ));
+        }
+    }
+    true
 }
 
 #[allow(clippy::too_many_arguments)]

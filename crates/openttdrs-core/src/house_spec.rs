@@ -214,6 +214,24 @@ impl HouseSpecDef {
         }
         Some(views[idx % views.len()].clone())
     }
+
+    /// Layout `TileSeq` de Action2 para una tesela de casa.
+    ///
+    /// La etapa se utiliza para seleccionar la rama Action2; una referencia
+    /// de layout ya apunta al primer sprite de su set Action1 y por eso no se
+    /// vuelve a aplicar `idx` como desplazamiento de textura.
+    pub fn newgrf_tile_layout_runtime(
+        &self,
+        idx: usize,
+        ctx: &mut crate::newgrf_sprites::Action2EvalCtx,
+    ) -> Option<crate::newgrf_sprites::ResolvedTileLayout> {
+        let _ = idx;
+        self.newgrf_runtime.as_ref()?.tile_layout_for_local_id_ctx(
+            u16::from(self.newgrf_local_id),
+            0,
+            ctx,
+        )
+    }
 }
 
 /// Construye el contexto Action2 disponible para una casa ya materializada.
@@ -599,6 +617,9 @@ pub fn grow_town_at_road_iterations(layout: TownLayout, num_houses: u16) -> i32 
 mod tests {
     use super::*;
     use crate::map::TileCoord;
+    use crate::newgrf_sprites::{
+        DecodedSprite, TileLayout, TileLayoutSpriteRef, TrainSpriteAssign, TrainSpriteGraphics,
+    };
     use crate::town::{Town, update_town_radius};
 
     #[test]
@@ -699,5 +720,67 @@ mod tests {
         assert_eq!(ctx.vars.get(&0x5F), Some(&((0xAB << 8) | 0x15)));
         assert!(!ctx.vars.contains_key(&0x42));
         assert!(!ctx.vars.contains_key(&0x44));
+    }
+
+    #[test]
+    fn runtime_tile_layout_resolves_ground_and_sequence() {
+        let sprite = DecodedSprite {
+            width: 2,
+            height: 2,
+            x_offs: -1,
+            y_offs: 3,
+            rgba: [96, 128, 160, 255].repeat(4),
+            mask: Vec::new(),
+        };
+        let mut runtime = TrainSpriteGraphics {
+            sets: vec![vec![sprite.clone()], vec![sprite.clone()]],
+            assigns: vec![TrainSpriteAssign {
+                local_id: 12,
+                set_id: 5,
+            }],
+            ..Default::default()
+        };
+        runtime.tile_layouts.insert(
+            5,
+            TileLayout {
+                ground: TileLayoutSpriteRef {
+                    action1_set: Some(0),
+                    ..Default::default()
+                },
+                sequence: vec![TileLayoutSpriteRef {
+                    action1_set: Some(1),
+                    origin: [4, 5, 6],
+                    extent: [8, 8, 16],
+                    ..Default::default()
+                }],
+            },
+        );
+        let def = HouseSpecDef {
+            id: NEW_HOUSE_OFFSET,
+            local_id: 12,
+            subst_id: 0,
+            building_flags: BUILDING_FLAG_SIZE_1X1,
+            min_year: 0,
+            max_year: HOUSE_YEAR_MAX,
+            population: 1,
+            mail_generation: 1,
+            availability: DEFAULT_HOUSE_AVAILABILITY,
+            probability: DEFAULT_HOUSE_PROBABILITY,
+            override_id: None,
+            callback_mask: 0,
+            name: "layout".into(),
+            from_newgrf: true,
+            grfid: 1,
+            newgrf_views: vec![sprite.clone()],
+            newgrf_local_id: 12,
+            newgrf_runtime: Some(Box::new(runtime)),
+        };
+        let mut ctx = crate::newgrf_sprites::Action2EvalCtx::default();
+        let Some(layout) = def.newgrf_tile_layout_runtime(2, &mut ctx) else {
+            panic!("house TileSeq");
+        };
+        assert!(layout.complete);
+        assert!(layout.ground.is_some());
+        assert_eq!(layout.sequence[0].origin, [4, 5, 6]);
     }
 }

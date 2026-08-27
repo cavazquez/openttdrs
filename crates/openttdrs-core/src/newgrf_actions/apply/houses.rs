@@ -37,7 +37,7 @@ pub fn apply_newgrf_houses(state: &mut GameState, search_dirs: &[&Path]) {
                 .views_for_local_id(meta.local_id)
                 .map(<[crate::newgrf_sprites::DecodedSprite]>::to_vec)
                 .unwrap_or_default();
-            let newgrf_runtime = if gfx.needs_runtime_resolve() {
+            let newgrf_runtime = if gfx.needs_runtime_resolve() || gfx.has_tile_layouts() {
                 Some(Box::new(gfx.clone()))
             } else {
                 None

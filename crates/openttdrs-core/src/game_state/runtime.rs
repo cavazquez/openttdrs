@@ -118,6 +118,10 @@ pub struct SimulationRuntime {
     /// Action3 `Underlay` por `RailType` (selector 0).
     pub rail_type_underlay_newgrf: Vec<Option<crate::rail_type::RailSignalSpriteSpec>>,
 
+    /// Action3 `GroundComplete` por `RailType` (selector 12). Se usa cuando
+    /// el tipo activa `RailTypeFlag::NoSpriteCombine`.
+    pub rail_type_ground_complete_newgrf: Vec<Option<crate::rail_type::RailSignalSpriteSpec>>,
+
     /// Props Action0 runtime por `RailType` vanilla.
     pub rail_type_props: [crate::rail_type::RailTypeRuntimeProps; 4],
 
@@ -201,6 +205,7 @@ impl SimulationRuntime {
             rail_signal_newgrf: Vec::new(),
             rail_type_overlay_newgrf: Vec::new(),
             rail_type_underlay_newgrf: Vec::new(),
+            rail_type_ground_complete_newgrf: Vec::new(),
             rail_type_props: crate::rail_type::RailTypeRuntimeProps::defaults(),
             rail_type_badges: std::array::from_fn(|_| Vec::new()),
             rail_type_max_speed: [0; 4],

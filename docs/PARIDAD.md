@@ -200,10 +200,14 @@ el grupo. Sigue faltando el fallback vanilla de `SPR_TRAMWAY_BASE` y sus
 assets, además de layouts/children completos.
 Los overlays de estación rail NewGRF se resuelven también en pendientes y se
 vinculan al parent de la fundación nivelada. Los railtypes NewGRF con grupos
-Action3 de underlay/overlay ya reemplazan el bloque combinado vanilla en vías
-normales, cruces y reservas PBS, conservan los offsets NFO de sprites HD y se
-vinculan a la fundación activa (con fallback por vista ausente); las variantes
-`NoSpriteCombine`, túnel y depósito todavía requieren una matriz específica.
+Action3 de ground/underlay/overlay ya reemplazan el bloque combinado vanilla
+en vías normales, cruces y reservas PBS, conservan los offsets NFO de sprites
+HD y se vinculan a la fundación activa (con fallback por vista ausente). El
+flag `RailTypeFlag::NoSpriteCombine` ya selecciona el grupo
+`RTSG_GROUND_COMPLETE` (selector 12) para teselas planas, usando el bitmask de
+vías menos uno como índice, y mantiene el overlay PBS separado; si falta la
+vista, conserva la vía vanilla. Las variantes de pendiente, túnel y depósito
+todavía requieren una matriz específica.
 En vehículos marítimos, las listas CTT `0x1E/0x1F` ya conservan inclusión y
 exclusión de cargos y la máscara final de refit descarta los cargos excluidos;
 el resto de propiedades CTT variables continúa pendiente.

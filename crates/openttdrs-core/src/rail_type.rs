@@ -92,8 +92,19 @@ impl RailType {
 pub const RAIL_SPRITE_TYPE_SIGNALS: u8 = 11;
 /// Selector Action3 `RailSpriteType::TrackOverlay` (guías / catenaria overlay).
 pub const RAIL_SPRITE_TYPE_TRACK_OVERLAY: u8 = 1;
-/// Selector Action3 `RailSpriteType::Underlay` / ground.
+/// Selector Action3 `RailSpriteType::Ground` / ground (valor upstream 2).
+pub const RAIL_SPRITE_TYPE_GROUND: u8 = 2;
+/// Selector Action3 histórico del parser local para `Ground`.
+///
+/// Las versiones anteriores de `openttdrs` trataban el selector 0 como
+/// underlay. Se conserva para leer fixtures antiguos, pero los GRF reales
+/// usan [`RAIL_SPRITE_TYPE_GROUND`].
 pub const RAIL_SPRITE_TYPE_UNDERLAY: u8 = 0;
+/// Selector Action3 `RailSpriteType::GroundComplete` (valor upstream 12).
+pub const RAIL_SPRITE_TYPE_GROUND_COMPLETE: u8 = 12;
+
+/// `RailTypeFlag::NoSpriteCombine` de `OpenTTD` (`Action0` prop `0x10`, bit 3).
+pub const RAIL_TYPE_FLAG_NO_SPRITE_COMBINE: u8 = 1 << 3;
 
 /// Props Action0 runtime por `RailType` vanilla (reconstruidas desde el stack).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -123,6 +134,13 @@ impl RailTypeRuntimeProps {
             compatible_mask: 0,
             powered_mask: 0,
         }; 4]
+    }
+
+    /// Indica que el railtype entrega un sprite completo por combinación de
+    /// vías en lugar de componer los sprites normales.
+    #[must_use]
+    pub const fn no_sprite_combine(self) -> bool {
+        self.flags & RAIL_TYPE_FLAG_NO_SPRITE_COMBINE != 0
     }
 }
 
@@ -422,5 +440,17 @@ mod tests {
         }
         assert!(seen.iter().all(|&x| x));
         assert_eq!(t, RailType::Rail);
+    }
+
+    #[test]
+    fn no_sprite_combine_flag_matches_upstream_bit_three() {
+        let mut props = RailTypeRuntimeProps::default();
+        assert!(!props.no_sprite_combine());
+        props.flags = RAIL_TYPE_FLAG_NO_SPRITE_COMBINE;
+        assert!(props.no_sprite_combine());
+        props.flags |= 0x01;
+        assert!(props.no_sprite_combine());
+        assert_eq!(RAIL_SPRITE_TYPE_GROUND, 2);
+        assert_eq!(RAIL_SPRITE_TYPE_GROUND_COMPLETE, 12);
     }
 }

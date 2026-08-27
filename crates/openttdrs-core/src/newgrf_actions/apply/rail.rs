@@ -7,8 +7,9 @@ use crate::GameState;
 use crate::newgrf_actions::collect_railtype_metas_from_grf;
 use crate::newgrf_type_tables::rail_type_from_label;
 use crate::rail_type::{
-    RAIL_SPRITE_TYPE_SIGNALS, RAIL_SPRITE_TYPE_TRACK_OVERLAY, RAIL_SPRITE_TYPE_UNDERLAY,
-    RailSignalSpriteSpec, RailType, RailTypeRuntimeProps, rail_type_bit,
+    RAIL_SPRITE_TYPE_GROUND, RAIL_SPRITE_TYPE_GROUND_COMPLETE, RAIL_SPRITE_TYPE_SIGNALS,
+    RAIL_SPRITE_TYPE_TRACK_OVERLAY, RAIL_SPRITE_TYPE_UNDERLAY, RailSignalSpriteSpec, RailType,
+    RailTypeRuntimeProps, rail_type_bit,
 };
 
 fn labels_to_mask(labels: &[[u8; 4]]) -> u8 {
@@ -28,6 +29,7 @@ pub fn apply_newgrf_rail_signals(state: &mut GameState, search_dirs: &[&Path]) {
     let mut props = RailTypeRuntimeProps::defaults();
     let mut overlay_slots: Vec<Option<RailSignalSpriteSpec>> = vec![None; 4];
     let mut underlay_slots: Vec<Option<RailSignalSpriteSpec>> = vec![None; 4];
+    let mut ground_complete_slots: Vec<Option<RailSignalSpriteSpec>> = vec![None; 4];
     let mut rail_type_badges = std::array::from_fn(|_| Vec::new());
     let badge_catalog = state.badge_catalog.clone();
     let stack = state.newgrf_stack.clone();
@@ -112,7 +114,10 @@ pub fn apply_newgrf_rail_signals(state: &mut GameState, search_dirs: &[&Path]) {
             match selector {
                 RAIL_SPRITE_TYPE_SIGNALS => slots[idx] = Some(spec),
                 RAIL_SPRITE_TYPE_TRACK_OVERLAY => overlay_slots[idx] = Some(spec),
-                RAIL_SPRITE_TYPE_UNDERLAY => underlay_slots[idx] = Some(spec),
+                RAIL_SPRITE_TYPE_GROUND | RAIL_SPRITE_TYPE_UNDERLAY => {
+                    underlay_slots[idx] = Some(spec);
+                }
+                RAIL_SPRITE_TYPE_GROUND_COMPLETE => ground_complete_slots[idx] = Some(spec),
                 _ => {}
             }
         }
@@ -120,6 +125,7 @@ pub fn apply_newgrf_rail_signals(state: &mut GameState, search_dirs: &[&Path]) {
     state.runtime.rail_signal_newgrf = slots;
     state.runtime.rail_type_overlay_newgrf = overlay_slots;
     state.runtime.rail_type_underlay_newgrf = underlay_slots;
+    state.runtime.rail_type_ground_complete_newgrf = ground_complete_slots;
     state.runtime.rail_type_props = props;
     state.runtime.rail_type_badges = rail_type_badges;
     state.runtime.rail_type_max_speed = [

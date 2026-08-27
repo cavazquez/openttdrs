@@ -170,14 +170,14 @@ Fuente: `newgrf_act0_railtypes.cpp`.
 |---|---|
 | `08` label | **runtime** (señales / tablas) |
 | `0E`/`0F` compatible / powered lists | **runtime** (`rail_type_props` → convert/vehicles) |
-| `10` flags | **runtime** |
+| `10` flags | **runtime** (`NoSpriteCombine` bit 3 selecciona `RTSG_GROUND_COMPLETE` en teselas planas) |
 | `11` curve speed | **runtime** (almacenado) |
 | `13` construction cost | **runtime** (`rail_build_cost_factored`) |
 | `14` max speed | **runtime** (`rail_type_max_speed` / `rail_type_props`) |
 | `17` introduction date | **runtime** (almacenado) |
 | `1C` maintenance cost | **runtime** (almacenado) |
 | `1E` badge list | **runtime** (`rail_type_badges`; lista WORD traducida por GlobalVar `0x18`) |
-| Action3 signals / underlay / overlay | **runtime** (slots por `RailType`; señales y underlay/overlay ferroviario para rectas, cruces, PBS y fundaciones; fallback OpenGFX por vista ausente) |
+| Action3 signals / ground / overlay / ground-complete | **runtime** (slots por `RailType`; señales y ground/overlay ferroviario para rectas, cruces, PBS y fundaciones; `GroundComplete` para `NoSpriteCombine` plano; fallback OpenGFX por vista ausente) |
 | resto tamaños fijos | consumidas |
 
 ## Road types (`12`) / Tram types (`13`)

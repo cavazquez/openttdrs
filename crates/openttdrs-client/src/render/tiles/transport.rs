@@ -1643,6 +1643,14 @@ const fn rail_custom_offset_for_track_bit(track_bit: u8) -> Option<u8> {
     }
 }
 
+/// Índice del grupo `RTSG_GROUND_COMPLETE` para una combinación de vías.
+/// OpenTTD usa el bitmask directamente y deja libre el índice cero para
+/// `TRACK_BIT_NONE`.
+const fn rail_ground_complete_offset(track_bits: u8) -> Option<u8> {
+    let bits = track_bits & 0x3F;
+    if bits == 0 { None } else { Some(bits - 1) }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn resolve_custom_rail_group_sprite(
     map: &Map,
@@ -1753,6 +1761,8 @@ pub(crate) fn spawn_rail_tile(
     rail_signal_newgrf: &[Option<openttdrs_core::RailSignalSpriteSpec>],
     rail_type_underlay_newgrf: &[Option<openttdrs_core::RailSignalSpriteSpec>],
     rail_type_overlay_newgrf: &[Option<openttdrs_core::RailSignalSpriteSpec>],
+    rail_type_ground_complete_newgrf: &[Option<openttdrs_core::RailSignalSpriteSpec>],
+    rail_type_props: &[openttdrs_core::RailTypeRuntimeProps; 4],
     mut signal_sprites: Option<&mut crate::render::NewGrfSignalSpriteCache>,
     signal_action5: &[Option<openttdrs_core::DecodedSprite>],
     foundation_newgrf: &[Option<openttdrs_core::DecodedSprite>],
@@ -1774,12 +1784,22 @@ pub(crate) fn spawn_rail_tile(
     let overlay_spec = rail_type_overlay_newgrf
         .get(rail_type_index)
         .and_then(Option::as_ref);
+    let ground_complete_spec = rail_type_ground_complete_newgrf
+        .get(rail_type_index)
+        .and_then(Option::as_ref);
+    let no_sprite_combine = tileh == 0
+        && rail_type_props
+            .get(rail_type_index)
+            .is_some_and(|props| props.no_sprite_combine());
     // `RailTypeInfo::UsesOverlay()` no depende de que el tipo sea mono o
-    // maglev: sólo es true cuando hay un grupo Action3 `Underlay` (selector
-    // 0) activo. Los tipos vanilla siguen `DrawTrackBits`, incluso mono y
-    // maglev. Inferirlo del enum agregaba un segundo suelo inexistente en
-    // Kale (116,79).
+    // maglev: se activa cuando el railtype publica su grupo `Ground`. El
+    // selector 2 es el valor upstream; el selector 0 se conserva como
+    // compatibilidad con fixtures antiguos del parser local. `GroundComplete`
+    // sólo sustituye el sprite combinado en la rama plana y no debe forzar un
+    // segundo rombo de suelo en pendientes.
     let rail_uses_overlay = underlay_spec.is_some();
+    let rail_has_custom_overlay =
+        rail_uses_overlay || (no_sprite_combine && ground_complete_spec.is_some());
     // `GetRailGroundType` lee los cuatro bits bajos de m4. En el mapa Rust
     // m4 se llama `m3hi`; leer `m3` confundía el tipo de vía/señales con
     // nieve y dejaba el suelo de mono/maglev desalineado del oráculo.
@@ -1971,7 +1991,50 @@ pub(crate) fn spawn_rail_tile(
         // separada. Antes sólo se usaba el underlay como booleano, por lo que
         // un railtype NewGRF terminaba mostrando la vía vanilla completa.
         let mut custom_ground_complete = false;
-        if rail_uses_overlay {
+        let mut custom_track_drawn = false;
+        if no_sprite_combine {
+            // `DrawTrackBits` selecciona `RTSG_GROUND_COMPLETE` con el
+            // bitmask de vías como índice directo (sin sprite para `NONE`).
+            // Sólo la tesela plana entra en esta rama, igual que OpenTTD;
+            // si el GRF no entrega el grupo o la vista, se conserva el
+            // fallback vanilla en lugar de ocultar la vía.
+            if let Some(spec) = ground_complete_spec
+                && let Some(tile) = ctx.tile
+            {
+                let track_bits = track_plan.passes[pass_index].map_or(0, |pass| pass.track_bits);
+                if let Some(image) = rail_ground_complete_offset(track_bits)
+                    && let Some(resolved) = resolve_custom_rail_group_sprite(
+                        map,
+                        tile,
+                        ctx,
+                        climate,
+                        calendar_date,
+                        newgrf_stack,
+                        spec,
+                        image,
+                        &mut signal_sprites,
+                        &mut images,
+                    )
+                {
+                    spawn_custom_rail_sprite(
+                        commands,
+                        ctx,
+                        resolved,
+                        pass_base_z[pass_index],
+                        0.02,
+                        0,
+                        pass_halftile_corner[pass_index],
+                        pass_half_h[pass_index],
+                        foundation_child_parent,
+                        map_dims.0,
+                        "rail-newgrf-ground-complete",
+                        image,
+                    );
+                    custom_track_drawn = true;
+                }
+            }
+        }
+        if rail_uses_overlay && !no_sprite_combine {
             let mut custom_draws = 0_usize;
             if let Some(spec) = underlay_spec {
                 custom_ground_complete = true;
@@ -2054,7 +2117,7 @@ pub(crate) fn spawn_rail_tile(
                 }
             }
         }
-        if !rail_uses_overlay || !custom_ground_complete {
+        if !custom_track_drawn && (!rail_uses_overlay || !custom_ground_complete) {
             for sid in rail_layers[start..end].iter().copied() {
                 let missing_asset = !assets.rail.contains_key(&sid);
                 let fallback = typed_selection_fallback || missing_asset;
@@ -2125,7 +2188,7 @@ pub(crate) fn spawn_rail_tile(
                 let sid = draw.sprite_id;
                 let mode = rail_track_trace_mode(rail_foundation, draw.halftile_corner);
                 let extra_y = pbs_track_sprite_extra_y(draw.track_bit, draw.sprite_tileh);
-                if rail_uses_overlay
+                if rail_has_custom_overlay
                     && let Some(spec) = overlay_spec
                     && let Some(offset) = rail_custom_offset_for_track_bit(draw.track_bit)
                     && let Some(tile) = ctx.tile
@@ -2468,10 +2531,11 @@ mod tests {
         RTO_CROSSING_XY, RTO_E, RTO_JUNCTION_SE, RTO_N, RTO_S, RTO_W, RTO_X, RTO_Y, RailGroundKind,
         RailTrackTraceMode, catenary_local_z_delta, halftile_track_subsprite, pbs_extra_y_in_bevy,
         pbs_track_sprite_extra_y, rail_custom_overlay_offsets, rail_custom_underlay_offsets,
-        rail_foundation_after_pass, rail_ground_sprite_id, rail_initial_ground_draw,
-        rail_track_trace_mode, rail_upper_halftile_ground_draw, road_detail_world_z_delta,
-        road_foundation_child_offset, roadside_streetlight_parent_sprites,
-        roadside_streetlight_sorted_depths, signal_trace_geometry,
+        rail_foundation_after_pass, rail_ground_complete_offset, rail_ground_sprite_id,
+        rail_initial_ground_draw, rail_track_trace_mode, rail_upper_halftile_ground_draw,
+        road_detail_world_z_delta, road_foundation_child_offset,
+        roadside_streetlight_parent_sprites, roadside_streetlight_sorted_depths,
+        signal_trace_geometry,
     };
     use crate::sprites::{
         RAIL_GROUND_HALF_TILE_SNOW, RAIL_GROUND_HALF_TILE_WATER, RAIL_TB_CROSS, RAIL_TB_HORZ,
@@ -2544,6 +2608,14 @@ mod tests {
             ]
         );
         assert!(rail_custom_overlay_offsets(RAIL_TB_X).is_empty());
+    }
+
+    #[test]
+    fn rail_ground_complete_uses_trackbits_minus_one() {
+        assert_eq!(rail_ground_complete_offset(0), None);
+        assert_eq!(rail_ground_complete_offset(RAIL_TB_X), Some(0));
+        assert_eq!(rail_ground_complete_offset(RAIL_TB_CROSS), Some(2));
+        assert_eq!(rail_ground_complete_offset(0xFF), Some(0x3E));
     }
 
     #[test]

@@ -1093,6 +1093,11 @@ pub struct SavVehicle {
     pub waiting_random_triggers: u8,
     /// Última estación visitada, conservando el `StationID` nativo del save.
     pub last_station_visited: Option<u32>,
+    /// Última estación desde la que pudo salir con carga
+    /// (`Vehicle::last_loading_station`).
+    pub last_loading_station: Option<u32>,
+    /// Tick nativo de la última salida con carga (`last_loading_tick`).
+    pub last_loading_tick: u64,
     /// Intervalo de servicio nativo (`Vehicle::service_interval`).
     pub service_interval: u16,
     /// Fiabilidad y estado de averías del vehículo al guardar.
@@ -1174,6 +1179,15 @@ pub struct SavVehicle {
     pub age_days: u32,
     pub max_age_days: u32,
     pub date_of_last_service: i32,
+    /// Año calendario en que se compró la unidad (`Vehicle::build_year`).
+    pub build_year: i32,
+    /// Cuenta atrás entre ciclos de carga/descarga.
+    pub load_unload_ticks: u16,
+    /// Campo legacy de pago de carga, aún presente en el descriptor nativo.
+    pub cargo_paid_for: u16,
+    /// Valor contable de la unidad, en dinero entero (se elimina la fracción
+    /// de 8 bits del wire format para alinearlo con el modelo core).
+    pub value: i64,
     /// Órdenes de la lista referenciada (`ORDL`).
     pub orders: Vec<super::orders::SavOrder>,
     /// Índice de orden actual (`cur_real_order_index`).
@@ -1409,6 +1423,31 @@ pub(crate) fn vehicles_from_chunks(
             .and_then(SlValue::as_i64)
             .and_then(|value| i32::try_from(value).ok())
             .unwrap_or(0);
+        let build_year = record_get(common, "build_year")
+            .and_then(SlValue::as_i64)
+            .and_then(|value| i32::try_from(value).ok())
+            .or_else(|| {
+                record_get(common, "build_year")
+                    .and_then(SlValue::as_u64)
+                    .and_then(|value| i32::try_from(value).ok())
+            })
+            .unwrap_or(0);
+        let load_unload_ticks = record_get(common, "load_unload_ticks")
+            .and_then(SlValue::as_u64)
+            .and_then(|value| u16::try_from(value).ok())
+            .unwrap_or(0);
+        let cargo_paid_for = record_get(common, "cargo_paid_for")
+            .and_then(SlValue::as_u64)
+            .and_then(|value| u16::try_from(value).ok())
+            .unwrap_or(0);
+        let value = record_get(common, "value")
+            .and_then(SlValue::as_i64)
+            .or_else(|| {
+                record_get(common, "value")
+                    .and_then(SlValue::as_u64)
+                    .and_then(|raw| i64::try_from(raw).ok())
+            })
+            .map_or(0, |raw| raw / 256);
         let order_list_ref = record_get(common, "orders")
             .and_then(SlValue::as_u64)
             .unwrap_or(0);
@@ -1469,6 +1508,14 @@ pub(crate) fn vehicles_from_chunks(
             .and_then(|value| u16::try_from(value).ok())
             .filter(|value| *value != u16::MAX)
             .map(u32::from);
+        let last_loading_station = record_get(common, "last_loading_station")
+            .and_then(SlValue::as_u64)
+            .and_then(|value| u16::try_from(value).ok())
+            .filter(|value| *value != u16::MAX)
+            .map(u32::from);
+        let last_loading_tick = record_get(common, "last_loading_tick")
+            .and_then(SlValue::as_u64)
+            .unwrap_or(0);
         let service_interval = record_get(common, "service_interval")
             .and_then(SlValue::as_u64)
             .and_then(|value| u16::try_from(value).ok())
@@ -1542,6 +1589,8 @@ pub(crate) fn vehicles_from_chunks(
             random_bits,
             waiting_random_triggers,
             last_station_visited,
+            last_loading_station,
+            last_loading_tick,
             service_interval,
             reliability,
             reliability_spd_dec,
@@ -1580,6 +1629,10 @@ pub(crate) fn vehicles_from_chunks(
             age_days,
             max_age_days,
             date_of_last_service,
+            build_year,
+            load_unload_ticks,
+            cargo_paid_for,
+            value,
             orders,
             current_order,
             cur_implicit_order_index,

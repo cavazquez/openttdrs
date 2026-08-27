@@ -1118,6 +1118,11 @@ impl GameState {
                 vehicle.last_station_visited = v
                     .last_station_visited
                     .and_then(|station_id| station_positions.get(&station_id).copied());
+                vehicle.last_pickup_station = v
+                    .last_loading_station
+                    .and_then(|station_id| station_positions.get(&station_id).copied());
+                vehicle.last_depart_tick =
+                    (v.last_loading_tick != 0).then_some(v.last_loading_tick);
                 vehicle.service_interval_days = v.service_interval;
                 vehicle.reliability = v.reliability;
                 vehicle.reliability_spd_dec = v.reliability_spd_dec;
@@ -1127,6 +1132,10 @@ impl GameState {
                 vehicle.breakdown_chance = v.breakdown_chance;
                 vehicle.profit_this_year = v.profit_this_year;
                 vehicle.profit_last_year = v.profit_last_year;
+                vehicle.build_year = u32::try_from(v.build_year.max(0)).unwrap_or(0);
+                vehicle.load_unload_ticks = v.load_unload_ticks;
+                vehicle.cargo_paid_for = v.cargo_paid_for;
+                vehicle.value = v.value;
                 vehicle.timetable_started = v.vehicle_flags & (1 << 3) != 0;
                 vehicle.timetable_autofill = v.vehicle_flags & (1 << 4) != 0;
                 vehicle.running = v.running;
@@ -1234,6 +1243,10 @@ impl GameState {
             vehicle.last_station_visited = v
                 .last_station_visited
                 .and_then(|station_id| station_positions.get(&station_id).copied());
+            vehicle.last_pickup_station = v
+                .last_loading_station
+                .and_then(|station_id| station_positions.get(&station_id).copied());
+            vehicle.last_depart_tick = (v.last_loading_tick != 0).then_some(v.last_loading_tick);
             vehicle.service_interval_days = v.service_interval;
             vehicle.reliability = v.reliability;
             vehicle.reliability_spd_dec = v.reliability_spd_dec;
@@ -1243,6 +1256,10 @@ impl GameState {
             vehicle.breakdown_chance = v.breakdown_chance;
             vehicle.profit_this_year = v.profit_this_year;
             vehicle.profit_last_year = v.profit_last_year;
+            vehicle.build_year = u32::try_from(v.build_year.max(0)).unwrap_or(0);
+            vehicle.load_unload_ticks = v.load_unload_ticks;
+            vehicle.cargo_paid_for = v.cargo_paid_for;
+            vehicle.value = v.value;
             vehicle.timetable_started = v.vehicle_flags & (1 << 3) != 0;
             vehicle.timetable_autofill = v.vehicle_flags & (1 << 4) != 0;
             vehicle.running = v.running;
@@ -1925,6 +1942,8 @@ mod tests {
                     random_bits: 0,
                     waiting_random_triggers: 0,
                     last_station_visited: None,
+                    last_loading_station: None,
+                    last_loading_tick: 0,
                     service_interval: 150,
                     reliability: 8_500,
                     reliability_spd_dec: crate::engine::DEFAULT_RELIABILITY_SPD_DEC,
@@ -1963,6 +1982,10 @@ mod tests {
                     age_days: 0,
                     max_age_days: 0,
                     date_of_last_service: 0,
+                    build_year: 0,
+                    load_unload_ticks: 0,
+                    cargo_paid_for: 0,
+                    value: 0,
                     orders: Vec::new(),
                     current_order: 0,
                     cur_implicit_order_index: 0,
@@ -1986,6 +2009,8 @@ mod tests {
                     random_bits: 0,
                     waiting_random_triggers: 0,
                     last_station_visited: None,
+                    last_loading_station: None,
+                    last_loading_tick: 0,
                     service_interval: 150,
                     reliability: 8_500,
                     reliability_spd_dec: crate::engine::DEFAULT_RELIABILITY_SPD_DEC,
@@ -2024,6 +2049,10 @@ mod tests {
                     age_days: 0,
                     max_age_days: 0,
                     date_of_last_service: 0,
+                    build_year: 0,
+                    load_unload_ticks: 0,
+                    cargo_paid_for: 0,
+                    value: 0,
                     orders: Vec::new(),
                     current_order: 0,
                     cur_implicit_order_index: 0,
@@ -2047,6 +2076,8 @@ mod tests {
                     random_bits: 0,
                     waiting_random_triggers: 0,
                     last_station_visited: None,
+                    last_loading_station: None,
+                    last_loading_tick: 0,
                     service_interval: 150,
                     reliability: 8_500,
                     reliability_spd_dec: crate::engine::DEFAULT_RELIABILITY_SPD_DEC,
@@ -2085,6 +2116,10 @@ mod tests {
                     age_days: 0,
                     max_age_days: 0,
                     date_of_last_service: 0,
+                    build_year: 0,
+                    load_unload_ticks: 0,
+                    cargo_paid_for: 0,
+                    value: 0,
                     orders: Vec::new(),
                     current_order: 0,
                     cur_implicit_order_index: 0,
@@ -2108,6 +2143,8 @@ mod tests {
                     random_bits: 0,
                     waiting_random_triggers: 0,
                     last_station_visited: None,
+                    last_loading_station: None,
+                    last_loading_tick: 0,
                     service_interval: 150,
                     reliability: 8_500,
                     reliability_spd_dec: crate::engine::DEFAULT_RELIABILITY_SPD_DEC,
@@ -2146,6 +2183,10 @@ mod tests {
                     age_days: 0,
                     max_age_days: 0,
                     date_of_last_service: 0,
+                    build_year: 0,
+                    load_unload_ticks: 0,
+                    cargo_paid_for: 0,
+                    value: 0,
                     orders: Vec::new(),
                     current_order: 0,
                     cur_implicit_order_index: 0,

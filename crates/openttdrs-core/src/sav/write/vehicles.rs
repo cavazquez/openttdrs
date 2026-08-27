@@ -117,6 +117,12 @@ fn last_station_id_for_vehicle(state: &GameState, v: &Vehicle) -> u16 {
         .unwrap_or(u16::MAX)
 }
 
+fn last_loading_station_id_for_vehicle(state: &GameState, v: &Vehicle) -> u16 {
+    v.last_pickup_station
+        .and_then(|pos| station_id_for_pos(state, pos))
+        .unwrap_or(u16::MAX)
+}
+
 fn cargo_ottd_byte(v: &Vehicle) -> u8 {
     if let Some(c) = v.cargo_type.or_else(|| v.cargo_packets.primary_type()) {
         return c.temperate_id();
@@ -289,6 +295,10 @@ struct CommonWire {
     waiting_random_triggers: u8,
     /// Última estación visitada (`StationID::Invalid()` si no existe).
     last_station_visited: u16,
+    /// Última estación desde la que el vehículo pudo salir con carga.
+    last_loading_station: u16,
+    /// Tick absoluto de la última salida con carga.
+    last_loading_tick: u64,
     /// Intervalo de servicio (`Vehicle::service_interval`).
     service_interval: u16,
     reliability: u16,
@@ -297,8 +307,16 @@ struct CommonWire {
     breakdown_delay: u8,
     breakdowns_since_last_service: u8,
     breakdown_chance: u8,
+    /// Año calendario nativo de compra.
+    build_year: i32,
+    /// Cuenta atrás de carga/descarga.
+    load_unload_ticks: u16,
+    /// Campo legacy de pago de carga.
+    cargo_paid_for: u16,
     profit_this_year: i64,
     profit_last_year: i64,
+    /// Valor contable de la unidad (sin la fracción de 8 bits).
+    value: i64,
 }
 
 /// Campos específicos de `SlVehicleAircraft` (`vehicle_sl.cpp`).
@@ -388,6 +406,7 @@ fn write_vehs_common(buf: &mut Vec<u8>, c: &CommonWire) -> Result<(), SavError> 
     buf.extend_from_slice(&c.random_bits.to_be_bytes());
     buf.push(c.waiting_random_triggers);
     buf.extend_from_slice(&c.last_station_visited.to_be_bytes());
+    buf.extend_from_slice(&c.last_loading_station.to_be_bytes());
     buf.extend_from_slice(&c.service_interval.to_be_bytes());
     buf.extend_from_slice(&c.reliability.to_be_bytes());
     buf.extend_from_slice(&c.reliability_spd_dec.to_be_bytes());
@@ -395,8 +414,13 @@ fn write_vehs_common(buf: &mut Vec<u8>, c: &CommonWire) -> Result<(), SavError> 
     buf.push(c.breakdown_delay);
     buf.push(c.breakdowns_since_last_service);
     buf.push(c.breakdown_chance);
+    buf.extend_from_slice(&c.build_year.to_be_bytes());
+    buf.extend_from_slice(&c.load_unload_ticks.to_be_bytes());
+    buf.extend_from_slice(&c.cargo_paid_for.to_be_bytes());
     buf.extend_from_slice(&c.profit_this_year.saturating_mul(256).to_be_bytes());
     buf.extend_from_slice(&c.profit_last_year.saturating_mul(256).to_be_bytes());
+    buf.extend_from_slice(&c.value.saturating_mul(256).to_be_bytes());
+    buf.extend_from_slice(&c.last_loading_tick.to_be_bytes());
     Ok(())
 }
 
@@ -457,6 +481,7 @@ fn common_wire_for(
     subtype: u8,
     next_ref: u32,
     last_station_visited: u16,
+    last_loading_station: u16,
     cargo_packet_refs: &[u32],
 ) -> CommonWire {
     let cargo = cargo_ottd_byte(v);
@@ -507,6 +532,8 @@ fn common_wire_for(
         random_bits: v.newgrf_random_bits,
         waiting_random_triggers: v.newgrf_waiting_random_triggers,
         last_station_visited,
+        last_loading_station,
+        last_loading_tick: v.last_depart_tick.unwrap_or(0),
         service_interval: v.service_interval_days,
         reliability: v.reliability,
         reliability_spd_dec: v.reliability_spd_dec,
@@ -514,9 +541,26 @@ fn common_wire_for(
         breakdown_delay: v.breakdown_delay,
         breakdowns_since_last_service: v.breakdowns_since_last_service,
         breakdown_chance: v.breakdown_chance,
+        build_year: build_year_for_vehicle(v, current_tick),
+        load_unload_ticks: v.load_unload_ticks,
+        cargo_paid_for: v.cargo_paid_for,
         profit_this_year: v.profit_this_year,
         profit_last_year: v.profit_last_year,
+        value: v.value,
     }
+}
+
+fn build_year_for_vehicle(v: &Vehicle, current_tick: u64) -> i32 {
+    if v.build_year != 0 {
+        return i32::try_from(v.build_year).unwrap_or(i32::MAX);
+    }
+    let age_days = v.vehicle_age_days(current_tick);
+    let build_tick = current_tick
+        .saturating_sub(age_days.saturating_mul(u64::from(crate::economy::TICKS_PER_DAY)));
+    let (year, _) = crate::news::calendar_year_day(crate::news::calendar_day_index(
+        crate::tick::GameTick::new(build_tick),
+    ));
+    i32::try_from(year).unwrap_or(i32::MAX)
 }
 
 fn cargo_packet_refs_for<'a>(export: &'a CargoPacketExport, v: &Vehicle) -> &'a [u32] {
@@ -706,6 +750,7 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                     },
                     next_ref,
                     last_station_visited,
+                    last_loading_station_id_for_vehicle(state, v),
                     cargo_packet_refs_for(cargo_export, v),
                 ),
                 None,
@@ -753,6 +798,8 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                     random_bits: 0,
                     waiting_random_triggers: 0,
                     last_station_visited: u16::MAX,
+                    last_loading_station: u16::MAX,
+                    last_loading_tick: 0,
                     service_interval: 0,
                     reliability: 0,
                     reliability_spd_dec: 0,
@@ -760,8 +807,12 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                     breakdown_delay: 0,
                     breakdowns_since_last_service: 0,
                     breakdown_chance: 0,
+                    build_year: 0,
+                    load_unload_ticks: 0,
+                    cargo_paid_for: 0,
                     profit_this_year: 0,
                     profit_last_year: 0,
+                    value: 0,
                     cur_speed: 0,
                     subspeed: 0,
                     progress: 0,
@@ -809,6 +860,8 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                         random_bits: 0,
                         waiting_random_triggers: 0,
                         last_station_visited: u16::MAX,
+                        last_loading_station: u16::MAX,
+                        last_loading_tick: 0,
                         service_interval: 0,
                         reliability: 0,
                         reliability_spd_dec: 0,
@@ -816,8 +869,12 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                         breakdown_delay: 0,
                         breakdowns_since_last_service: 0,
                         breakdown_chance: 0,
+                        build_year: 0,
+                        load_unload_ticks: 0,
+                        cargo_paid_for: 0,
                         profit_this_year: 0,
                         profit_last_year: 0,
+                        value: 0,
                         cur_speed: 32,
                         subspeed: 0,
                         progress: 0,
@@ -860,6 +917,7 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                     subtype,
                     next_ref,
                     last_station_id_for_vehicle(state, v),
+                    last_loading_station_id_for_vehicle(state, v),
                     cargo_packet_refs_for(cargo_export, v),
                 ),
                 Some(track),
@@ -881,6 +939,7 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                     TRAIN_SUBTYPE_FRONT_ENGINE,
                     0,
                     last_station_id_for_vehicle(state, v),
+                    last_loading_station_id_for_vehicle(state, v),
                     cargo_packet_refs_for(cargo_export, v),
                 ),
                 None,
@@ -903,6 +962,7 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                     TRAIN_SUBTYPE_FRONT_ENGINE,
                     0,
                     last_station_id_for_vehicle(state, v),
+                    last_loading_station_id_for_vehicle(state, v),
                     cargo_packet_refs_for(cargo_export, v),
                 ),
                 None,
@@ -1004,6 +1064,7 @@ fn append_vehs_common_fields(header: &mut Vec<u8>) -> Result<(), SavError> {
     append_field(header, 4, "random_bits")?; // SLE_UINT16
     append_field(header, 2, "waiting_triggers")?; // SLE_UINT8
     append_field(header, 4, "last_station_visited")?; // SLE_UINT16
+    append_field(header, 4, "last_loading_station")?; // SLE_UINT16
     append_field(header, 4, "service_interval")?; // SLE_UINT16
     append_field(header, 4, "reliability")?; // SLE_UINT16
     append_field(header, 4, "reliability_spd_dec")?; // SLE_UINT16
@@ -1011,8 +1072,13 @@ fn append_vehs_common_fields(header: &mut Vec<u8>) -> Result<(), SavError> {
     append_field(header, 2, "breakdown_delay")?; // SLE_UINT8
     append_field(header, 2, "breakdowns_since_last_service")?; // SLE_UINT8
     append_field(header, 2, "breakdown_chance")?; // SLE_UINT8
+    append_field(header, 5, "build_year")?; // SLE_INT32
+    append_field(header, 4, "load_unload_ticks")?; // SLE_UINT16
+    append_field(header, 4, "cargo_paid_for")?; // SLE_UINT16
     append_field(header, 7, "profit_this_year")?; // SLE_INT64
     append_field(header, 7, "profit_last_year")?; // SLE_INT64
+    append_field(header, 7, "value")?; // SLE_INT64
+    append_field(header, 8, "last_loading_tick")?; // SLE_UINT64
     header.push(0);
     Ok(())
 }
@@ -1563,6 +1629,8 @@ mod tests {
         train.newgrf_random_bits = 0xCAFE;
         train.newgrf_waiting_random_triggers = 0x12;
         train.last_station_visited = Some(station_pos);
+        train.last_pickup_station = Some(station_pos);
+        train.last_depart_tick = Some(9_876);
         train.service_interval_days = 87;
         train.cargo_subtype = 3;
         train.cargo_age_counter = 42;
@@ -1576,6 +1644,10 @@ mod tests {
         train.breakdown_chance = 7;
         train.profit_this_year = 123_456;
         train.profit_last_year = -654_321;
+        train.build_year = 1987;
+        train.load_unload_ticks = 23;
+        train.cargo_paid_for = 17;
+        train.value = 765_432;
         state.vehicles = vec![train];
 
         let (_, vehs) = ordl_and_vehs_records(&state, 64).unwrap();
@@ -1621,6 +1693,15 @@ mod tests {
             "la estación sintética usa el índice denso 0"
         );
         assert_eq!(
+            record_get(common, "last_loading_station").and_then(SlValue::as_u64),
+            Some(0),
+            "la estación sintética usa el índice denso 0"
+        );
+        assert_eq!(
+            record_get(common, "last_loading_tick").and_then(SlValue::as_u64),
+            Some(9_876)
+        );
+        assert_eq!(
             record_get(common, "service_interval").and_then(SlValue::as_u64),
             Some(87)
         );
@@ -1655,6 +1736,22 @@ mod tests {
         assert_eq!(
             record_get(common, "profit_last_year").and_then(SlValue::as_i64),
             Some(-654_321_i64 * 256)
+        );
+        assert_eq!(
+            record_get(common, "build_year").and_then(SlValue::as_i64),
+            Some(1_987)
+        );
+        assert_eq!(
+            record_get(common, "load_unload_ticks").and_then(SlValue::as_u64),
+            Some(23)
+        );
+        assert_eq!(
+            record_get(common, "cargo_paid_for").and_then(SlValue::as_u64),
+            Some(17)
+        );
+        assert_eq!(
+            record_get(common, "value").and_then(SlValue::as_i64),
+            Some(765_432_i64 * 256)
         );
     }
 

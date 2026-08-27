@@ -311,11 +311,14 @@ pub struct Vehicle {
     /// Packets a bordo (fuente de verdad Fase 2); `cargo`/`cargo_source` se sincronizan.
     #[serde(default)]
     pub cargo_packets: crate::cargo_packet::VehicleCargoList,
-    /// Última estación donde se cargó (link graph observacional; no persistido).
-    #[serde(skip)]
+    /// Última estación donde el vehículo pudo salir con carga
+    /// (`Vehicle::last_loading_station`). Se usa también como origen de la
+    /// métrica de viaje del link graph.
+    #[serde(default)]
     pub last_pickup_station: Option<TileCoord>,
-    /// Tick de la última carga (para `travel_time` del link graph; no persistido).
-    #[serde(skip)]
+    /// Tick en que dejó la última estación con carga
+    /// (`Vehicle::last_loading_tick`).
+    #[serde(default)]
     pub last_depart_tick: Option<u64>,
     /// Carga gradual en curso (no avanzar orden hasta terminar o `full_load`).
     #[serde(default)]
@@ -391,6 +394,11 @@ pub struct Vehicle {
     /// Tick de simulación en que se compró el vehículo.
     #[serde(default)]
     pub build_tick: u64,
+    /// Año calendario nativo de compra (`Vehicle::build_year`). Cuando es
+    /// cero, el escritor lo deriva de `build_tick` para vehículos creados por
+    /// openttdrs.
+    #[serde(default)]
+    pub build_year: u32,
     /// Grupo de flota opcional.
     #[serde(default)]
     pub group_id: Option<u32>,
@@ -546,6 +554,17 @@ pub struct Vehicle {
     /// Beneficio neto del año anterior (solo cabeza de consist).
     #[serde(default)]
     pub profit_last_year: i64,
+    /// Cuenta atrás de carga/descarga (`Vehicle::load_unload_ticks`).
+    #[serde(default)]
+    pub load_unload_ticks: u16,
+    /// Campo legacy de migración (`cargo_paid_for`) conservado por saves
+    /// modernos para no perder el contador al cruzar `OpenTTD`.
+    #[serde(default)]
+    pub cargo_paid_for: u16,
+    /// Valor contable persistido (`Vehicle::value`, Money con 8 bits de
+    /// fracción en el wire format).
+    #[serde(default)]
+    pub value: i64,
     /// Refit pendiente al llegar a depósito con orden (`VehicleOrder::Depot.refit_cargo`).
     #[serde(skip, default)]
     pub(crate) pending_depot_order_refit: Option<CargoType>,
@@ -654,6 +673,7 @@ impl Vehicle {
             vehicle_flags: 0,
             autoreplace_attempted_this_stop: false,
             build_tick: 0,
+            build_year: 0,
             group_id: None,
             shared_order_id: None,
             timetable_lateness: 0,
@@ -702,6 +722,9 @@ impl Vehicle {
             newgrf_palette_generation: 0,
             profit_this_year: 0,
             profit_last_year: 0,
+            load_unload_ticks: 0,
+            cargo_paid_for: 0,
+            value: 0,
             running_cost_accum: 0,
             pending_depot_order_refit: None,
         }

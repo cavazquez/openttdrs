@@ -357,8 +357,11 @@ del estado. Las semillas aleatorias de `NewGRF`, los triggers pendientes y la
 `last_station_visited`) también se conservan con sus tipos/sentinelas nativos.
 La carga vehicular y de estación por paquetes físicos (`CAPA`) ya se reemite
 con sus referencias `STNN`/`VEHS`, edades, origen, siguiente salto, feeder y
-vector recorrido. Esto no cierra el issue: siguen pendientes el calendario de
-compra exacto y los flags/estado completos de tren, carretera, barco y FTA.
+vector recorrido. `VEHS.common` también conserva la última estación de carga,
+su tick, año calendario de compra, cuenta atrás de carga/descarga, valor
+contable y el contador legacy `cargo_paid_for`. Esto no cierra el issue:
+siguen pendientes los flags/estado completos de tren, carretera, barco y FTA,
+además de la orden activa y los contadores diarios de movimiento.
 
 <!-- active-parity-backlog:end -->
 

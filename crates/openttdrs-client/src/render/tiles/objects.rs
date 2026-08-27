@@ -3486,12 +3486,14 @@ fn spawn_newgrf_airport_tile(
     base_z: u8,
     gfx: u16,
     map: &Map,
+    map_width: u32,
     stations: &[Station],
     catalog: &[openttdrs_core::AirportTileSpecDef],
     climate: Climate,
     newgrf_stack: &[openttdrs_core::NewGrfEntry],
     cache: Option<&mut crate::render::NewGrfAction5SpriteCache>,
     images: Option<&mut Assets<Image>>,
+    child_parent: Option<Entity>,
 ) -> bool {
     let Some(def) = catalog
         .iter()
@@ -3550,17 +3552,58 @@ fn spawn_newgrf_airport_tile(
         ctx.tx_i32(),
         ctx.ty_i32(),
     );
-    commands.spawn((
-        MapVisualLayer,
-        ctx.map_tile_chunk(),
-        tint_building_sprite(Sprite {
-            image,
-            color: Color::WHITE,
-            ..default()
-        }),
-        Transform::from_translation(position),
-    ));
+    let sprite = tint_building_sprite(Sprite {
+        image,
+        color: Color::WHITE,
+        ..default()
+    });
+    if let Some(parent) = child_parent {
+        spawn_foundation_child_sprite_at(commands, sprite, ctx, position, map_width, parent);
+    } else {
+        commands.spawn((
+            MapVisualLayer,
+            ctx.map_tile_chunk(),
+            sprite,
+            Transform::from_translation(position),
+        ));
+    }
     true
+}
+
+/// Decide si un `AirportTile` custom conserva la fundación vanilla sobre una
+/// pendiente. `CBID_AIRPTILE_DRAW_FOUNDATIONS` devuelve booleano; un callback
+/// ausente/fallido conserva la conducta por defecto de `DrawNewAirportTile`.
+#[allow(clippy::too_many_arguments)]
+fn airport_tile_draws_default_foundation(
+    def: &openttdrs_core::AirportTileSpecDef,
+    map: &Map,
+    stations: &[Station],
+    coord: TileCoord,
+    catalog: &[openttdrs_core::AirportTileSpecDef],
+    climate: Climate,
+    newgrf_stack: &[openttdrs_core::NewGrfEntry],
+) -> bool {
+    if !def.has_draw_foundations_callback() {
+        return true;
+    }
+    let Some(runtime) = def.newgrf_runtime.as_ref() else {
+        return true;
+    };
+    let mut ctx = openttdrs_core::action2_eval_ctx_for_airport_tile(
+        map, stations, coord, catalog, def, climate,
+    );
+    ctx.set_grf_params(openttdrs_core::stack_params_for_grfid(
+        newgrf_stack,
+        def.newgrf_grfid,
+    ));
+    let result = runtime.resolve_callback_ctx(
+        def.newgrf_local_id,
+        openttdrs_core::CBID_AIRPTILE_DRAW_FOUNDATIONS,
+        0,
+        0,
+        &mut ctx,
+    );
+    result == openttdrs_core::CALLBACK_FAILED || result != 0
 }
 
 /// Variante de [`spawn_transport_object_tile`] que conserva el estado de
@@ -3948,20 +3991,55 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
                     .iter()
                     .find(|(coord, _)| *coord == ctx.coord)
                     .map(|(_, gfx)| *gfx)
-            }) && spawn_newgrf_airport_tile(
-                commands,
-                ctx,
-                base_z,
-                gfx,
-                map,
-                stations,
-                airport_tile_catalog,
-                climate,
-                newgrf_stack,
-                action5_sprites.as_deref_mut(),
-                images.as_deref_mut(),
-            ) {
-                return;
+            }) && let Some(def) = airport_tile_catalog
+                .iter()
+                .find(|candidate| candidate.gfx.as_u16() == gfx && candidate.has_newgrf_sprites())
+            {
+                let draws_foundation = tileh != 0
+                    && airport_tile_draws_default_foundation(
+                        def,
+                        map,
+                        stations,
+                        ctx.coord,
+                        airport_tile_catalog,
+                        climate,
+                        newgrf_stack,
+                    );
+                let (custom_base_z, child_parent) = if draws_foundation {
+                    let foundation = spawn_forced_leveled_foundation_with_child_parent(
+                        commands,
+                        map,
+                        dims,
+                        assets,
+                        ctx,
+                        tileh,
+                        "airport",
+                        "airport-foundation",
+                        foundation_newgrf,
+                        action5_sprites.as_deref_mut(),
+                        images.as_deref_mut(),
+                    );
+                    (foundation.surface_base_z, foundation.child_parent)
+                } else {
+                    (base_z, None)
+                };
+                if spawn_newgrf_airport_tile(
+                    commands,
+                    ctx,
+                    custom_base_z,
+                    gfx,
+                    map,
+                    dims.0,
+                    stations,
+                    airport_tile_catalog,
+                    climate,
+                    newgrf_stack,
+                    action5_sprites.as_deref_mut(),
+                    images.as_deref_mut(),
+                    child_parent,
+                ) {
+                    return;
+                }
             }
             let imported_station_gfx = ctx.tile.is_some_and(|tile| {
                 let station_id = u32::from(tile.m2) | (u32::from(tile.m2_hi) << 8);

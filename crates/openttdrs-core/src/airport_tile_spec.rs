@@ -153,6 +153,12 @@ impl AirportTileSpecDef {
         self.callback_mask & 2 != 0
     }
 
+    /// Indica si el GRF instaló `CBID_AIRPTILE_DRAW_FOUNDATIONS` (bit 5).
+    #[must_use]
+    pub const fn has_draw_foundations_callback(&self) -> bool {
+        self.callback_mask & (1 << 5) != 0
+    }
+
     #[must_use]
     pub const fn animation_loops(&self) -> bool {
         self.animation_status == 1

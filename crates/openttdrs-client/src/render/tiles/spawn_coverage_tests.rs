@@ -2668,6 +2668,8 @@ fn built_newgrf_airport_uses_airport_tile_action1_sprite() {
         animation_special_flags: 0,
         newgrf_local_id: 0,
         newgrf_grfid: 0x4150_544C,
+        newgrf_grf_version: 0,
+        newgrf_type_tables: None,
         newgrf_preview: Some(view.clone()),
         newgrf_views: vec![view, blue_view],
         newgrf_runtime: Some(Box::new(runtime)),

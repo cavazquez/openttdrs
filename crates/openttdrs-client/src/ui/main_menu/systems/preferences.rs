@@ -138,29 +138,26 @@ pub(crate) fn main_menu_preferences_interaction(
 pub(crate) fn sync_main_menu_preferences(
     panel: Res<MainMenuPanel>,
     prefs: Res<crate::settings::ClientPreferences>,
-    mut res_btn: Query<
-        (
-            &MainMenuResolutionButton,
-            &mut BackgroundColor,
-            &Interaction,
-        ),
-        Without<MainMenuLanguageButton>,
-    >,
-    mut lang_btn: Query<
-        (&MainMenuLanguageButton, &mut BackgroundColor, &Interaction),
-        Without<MainMenuResolutionButton>,
-    >,
+    mut buttons: Query<(
+        &mut BackgroundColor,
+        &Interaction,
+        Option<&MainMenuResolutionButton>,
+        Option<&MainMenuLanguageButton>,
+    )>,
     mut lang_label: Query<&mut Text, With<MainMenuLanguageLabel>>,
 ) {
     if *panel != MainMenuPanel::Preferences {
         return;
     }
-    for (btn, mut bg, interaction) in &mut res_btn {
-        let selected = prefs.window_width == btn.width && prefs.window_height == btn.height;
+    for (mut bg, interaction, resolution, language) in &mut buttons {
+        let selected = if let Some(btn) = resolution {
+            prefs.window_width == btn.width && prefs.window_height == btn.height
+        } else if let Some(btn) = language {
+            prefs.locale() == btn.0
+        } else {
+            continue;
+        };
         *bg = option_button_bg(selected, *interaction);
-    }
-    for (btn, mut bg, interaction) in &mut lang_btn {
-        *bg = option_button_bg(prefs.locale() == btn.0, *interaction);
     }
     for mut text in &mut lang_label {
         **text = format!(

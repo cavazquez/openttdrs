@@ -69,24 +69,33 @@ pub(crate) fn sync_main_menu_panel_visibility(
 /// Actualiza los textos de los botones que se crean en todos los subpaneles.
 pub(crate) fn sync_main_menu_localized_labels(
     prefs: Res<crate::settings::ClientPreferences>,
-    mut labels: Query<(&MainMenuLocalizedText, &mut Text), Without<MainMenuDynamicText>>,
-    mut dynamic_labels: Query<(&MainMenuDynamicText, &mut Text), Without<MainMenuLocalizedText>>,
+    mut labels: Query<(
+        &mut Text,
+        Option<&MainMenuLocalizedText>,
+        Option<&MainMenuDynamicText>,
+    )>,
 ) {
     let locale = prefs.locale();
-    for (key, mut text) in &mut labels {
-        let translated = crate::i18n::text(locale, key.0);
-        if **text != translated {
-            **text = translated.to_owned();
-        }
-    }
-    for (key, mut text) in &mut dynamic_labels {
-        let translated = match key {
-            MainMenuDynamicText::Climate(value) => localized_climate_label(locale, *value),
-            MainMenuDynamicText::Density(value) => localized_density_label(locale, *value),
-            MainMenuDynamicText::Roughness(value) => localized_roughness_label(locale, *value),
+    for (mut text, localized, dynamic) in &mut labels {
+        let translated = if let Some(key) = localized {
+            crate::i18n::text(locale, key.0).to_owned()
+        } else if let Some(key) = dynamic {
+            match key {
+                MainMenuDynamicText::Climate(value) => {
+                    localized_climate_label(locale, *value).to_owned()
+                }
+                MainMenuDynamicText::Density(value) => {
+                    localized_density_label(locale, *value).to_owned()
+                }
+                MainMenuDynamicText::Roughness(value) => {
+                    localized_roughness_label(locale, *value).to_owned()
+                }
+            }
+        } else {
+            continue;
         };
         if **text != translated {
-            **text = translated.to_owned();
+            **text = translated;
         }
     }
 }

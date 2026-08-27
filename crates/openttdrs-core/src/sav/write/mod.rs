@@ -625,6 +625,7 @@ mod tests {
             TileCoord::new(10, 20),
         );
         first.shared_order_id = Some(77);
+        first.next_shared_vehicle_id = Some(41);
         first.set_vehicle_orders(orders.clone());
         let mut second = Vehicle::new(
             41,
@@ -644,6 +645,8 @@ mod tests {
         assert_eq!(loaded.vehicles.len(), 2);
         assert_eq!(loaded.vehicles[0].shared_order_id, Some(0));
         assert_eq!(loaded.vehicles[1].shared_order_id, Some(0));
+        assert_eq!(loaded.vehicles[0].next_shared_vehicle_id, Some(1));
+        assert_eq!(loaded.vehicles[1].next_shared_vehicle_id, None);
     }
 
     #[test]
@@ -1374,8 +1377,14 @@ mod tests {
             .find(|vehicle| vehicle.kind == crate::VehicleKind::Bus)
             .expect("bus MVP");
         bus.progress = 173;
+        bus.motion_counter = 0x1234_5678;
         bus.cur_speed = 41;
         bus.subspeed = 99;
+        bus.economy_age_days = 777;
+        bus.last_service_newgrf_day = 1_234;
+        bus.depot_unbunching_last_departure = 88_000;
+        bus.depot_unbunching_next_departure = 99_000;
+        bus.round_trip_time = 12_345;
         bus.cargo = 17;
         bus.capacity = 31;
         bus.cargo_packets.action_counts = [3, 5, 7, 2];
@@ -1425,8 +1434,17 @@ mod tests {
             .find(|v| v.kind == sav::SavVehicleKind::RoadVehicle)
             .expect("bus en VEHS");
         assert_eq!(saved_bus.progress, 173);
+        assert_eq!(saved_bus.motion_counter, 0x1234_5678);
         assert_eq!(saved_bus.cur_speed, 41);
         assert_eq!(saved_bus.subspeed, 99);
+        assert_eq!(saved_bus.economy_age_days, 777);
+        assert_eq!(
+            saved_bus.date_of_last_service_newgrf,
+            crate::sav::write::vehicles::packed_calendar_date_from_day_index(1_234)
+        );
+        assert_eq!(saved_bus.depot_unbunching_last_departure, 88_000);
+        assert_eq!(saved_bus.depot_unbunching_next_departure, 99_000);
+        assert_eq!(saved_bus.round_trip_time, 12_345);
         assert_eq!(saved_bus.cargo, 17);
         assert_eq!(saved_bus.cargo_capacity, 31);
         assert_eq!(saved_bus.cargo_action_counts, [3, 5, 7, 2]);
@@ -1447,8 +1465,14 @@ mod tests {
             .find(|vehicle| vehicle.kind == crate::VehicleKind::Bus)
             .expect("bus importado");
         assert_eq!(imported_bus.progress, 173);
+        assert_eq!(imported_bus.motion_counter, 0x1234_5678);
         assert_eq!(imported_bus.cur_speed, 41);
         assert_eq!(imported_bus.subspeed, 99);
+        assert_eq!(imported_bus.economy_age_days, 777);
+        assert_eq!(imported_bus.last_service_newgrf_day, 1_234);
+        assert_eq!(imported_bus.depot_unbunching_last_departure, 88_000);
+        assert_eq!(imported_bus.depot_unbunching_next_departure, 99_000);
+        assert_eq!(imported_bus.round_trip_time, 12_345);
         assert_eq!(imported_bus.cargo, 17);
         assert_eq!(imported_bus.capacity, 31);
         assert_eq!(imported_bus.cargo_packets.action_counts, [3, 5, 7, 2]);

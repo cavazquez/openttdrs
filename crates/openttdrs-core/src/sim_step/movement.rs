@@ -720,9 +720,11 @@ fn update_vehicle_running_sounds(state: &mut GameState, i: usize, tick: u64) {
     let running_flag = vehicle.running;
 
     if speed > 0 {
-        let mc = state.vehicles[i].motion_counter.wrapping_add(speed);
+        let mc = state.vehicles[i]
+            .motion_counter
+            .wrapping_add(u32::from(speed));
         state.vehicles[i].motion_counter = mc;
-        if (mc & 0xFF) < speed {
+        if (mc & 0xFF) < u32::from(speed) {
             state
                 .runtime
                 .pending_sim_events

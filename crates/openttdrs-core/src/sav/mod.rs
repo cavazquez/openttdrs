@@ -1113,10 +1113,14 @@ impl GameState {
                 vehicle.name.clone_from(&v.name);
                 vehicle.native_engine_type = Some(v.engine_type);
                 vehicle.group_id = v.group_id;
+                vehicle.next_shared_vehicle_id = v.next_shared_sav_id;
                 vehicle.timetable_start =
                     u32::try_from(v.timetable_start.min(u64::from(u32::MAX))).unwrap_or(u32::MAX);
                 vehicle.current_order_time = v.current_order_time;
                 vehicle.timetable_lateness = v.timetable_lateness;
+                vehicle.depot_unbunching_last_departure = v.depot_unbunching_last_departure;
+                vehicle.depot_unbunching_next_departure = v.depot_unbunching_next_departure;
+                vehicle.round_trip_time = v.round_trip_time;
                 vehicle.vehicle_flags = v.vehicle_flags;
                 vehicle.current_order_state = Some(v.current_order_state);
                 vehicle.newgrf_random_bits = v.random_bits;
@@ -1150,6 +1154,7 @@ impl GameState {
                 vehicle.running = v.running;
                 vehicle.cur_speed = v.cur_speed;
                 vehicle.subspeed = v.subspeed;
+                vehicle.motion_counter = v.motion_counter;
                 vehicle.direction = v.direction;
                 vehicle.cargo_type = crate::CargoType::from_climate_slot(sav.climate, v.cargo_type);
                 vehicle.cargo_subtype = v.cargo_subtype;
@@ -1167,9 +1172,14 @@ impl GameState {
                 vehicle.build_tick = state.tick.get().saturating_sub(
                     u64::from(v.age_days) * u64::from(crate::economy::TICKS_PER_DAY),
                 );
+                vehicle.economy_age_days = v.economy_age_days;
                 vehicle.last_service_day = crate::news::calendar_day_index(
                     crate::sav::date::tick_from_packed_calendar_date(v.date_of_last_service),
                 );
+                vehicle.last_service_newgrf_day = i32::try_from(crate::news::calendar_day_index(
+                    crate::sav::date::tick_from_packed_calendar_date(v.date_of_last_service_newgrf),
+                ))
+                .unwrap_or(i32::MAX);
                 // `ENGINE_AIRCRAFT_TRICARIO`/`ENGINE_AIRCRAFT_DAKOTA`: OpenTTD
                 // trae IDs vanilla (`engine_type`) que no coinciden con
                 // nuestro catálogo; best-effort por `is_helicopter` (subtype).
@@ -1246,10 +1256,14 @@ impl GameState {
             vehicle.name.clone_from(&v.name);
             vehicle.native_engine_type = Some(v.engine_type);
             vehicle.group_id = v.group_id;
+            vehicle.next_shared_vehicle_id = v.next_shared_sav_id;
             vehicle.timetable_start =
                 u32::try_from(v.timetable_start.min(u64::from(u32::MAX))).unwrap_or(u32::MAX);
             vehicle.current_order_time = v.current_order_time;
             vehicle.timetable_lateness = v.timetable_lateness;
+            vehicle.depot_unbunching_last_departure = v.depot_unbunching_last_departure;
+            vehicle.depot_unbunching_next_departure = v.depot_unbunching_next_departure;
+            vehicle.round_trip_time = v.round_trip_time;
             vehicle.vehicle_flags = v.vehicle_flags;
             vehicle.current_order_state = Some(v.current_order_state);
             vehicle.newgrf_random_bits = v.random_bits;
@@ -1281,6 +1295,7 @@ impl GameState {
             vehicle.timetable_autofill = v.vehicle_flags & (1 << 4) != 0;
             vehicle.running = v.running;
             vehicle.progress = v.progress;
+            vehicle.motion_counter = v.motion_counter;
             vehicle.cur_speed = v.cur_speed;
             vehicle.subspeed = v.subspeed;
             vehicle.direction = v.direction;
@@ -1294,9 +1309,14 @@ impl GameState {
                 .tick
                 .get()
                 .saturating_sub(u64::from(v.age_days) * u64::from(crate::economy::TICKS_PER_DAY));
+            vehicle.economy_age_days = v.economy_age_days;
             vehicle.last_service_day = crate::news::calendar_day_index(
                 crate::sav::date::tick_from_packed_calendar_date(v.date_of_last_service),
             );
+            vehicle.last_service_newgrf_day = i32::try_from(crate::news::calendar_day_index(
+                crate::sav::date::tick_from_packed_calendar_date(v.date_of_last_service_newgrf),
+            ))
+            .unwrap_or(i32::MAX);
             if matches!(kind, VehicleKind::Bus | VehicleKind::Truck) {
                 vehicle.road_state = v.road_state;
                 vehicle.road_gv_flags = v.road_gv_flags;
@@ -1978,10 +1998,14 @@ mod tests {
                     // Las unidades pueden estar separadas por filas de otros
                     // tipos de vehículo en `VEHS`.
                     next_sav_id: Some(3),
+                    next_shared_sav_id: None,
                     group_id: None,
                     timetable_start: 0,
                     current_order_time: 0,
                     timetable_lateness: 0,
+                    depot_unbunching_last_departure: 0,
+                    depot_unbunching_next_departure: 0,
+                    round_trip_time: 0,
                     vehicle_flags: 0b1_1000,
                     random_bits: 0,
                     waiting_random_triggers: 0,
@@ -2003,6 +2027,7 @@ mod tests {
                     pos: crate::TileCoord::new(5, 5),
                     raw_tile: crate::TileCoord::new(5, 5),
                     progress: 0,
+                    motion_counter: 0,
                     x_pos: 5 * 16,
                     y_pos: 5 * 16,
                     z_pos: 0,
@@ -2036,8 +2061,10 @@ mod tests {
                     cargo_action_counts: [0; 4],
                     cargo_age_counter: 0,
                     age_days: 0,
+                    economy_age_days: 0,
                     max_age_days: 0,
                     date_of_last_service: 0,
+                    date_of_last_service_newgrf: 0,
                     build_year: 0,
                     load_unload_ticks: 0,
                     cargo_paid_for: 0,
@@ -2073,10 +2100,14 @@ mod tests {
                     sav_id: 1,
                     owner: 0,
                     next_sav_id: None,
+                    next_shared_sav_id: None,
                     group_id: None,
                     timetable_start: 0,
                     current_order_time: 0,
                     timetable_lateness: 0,
+                    depot_unbunching_last_departure: 0,
+                    depot_unbunching_next_departure: 0,
+                    round_trip_time: 0,
                     vehicle_flags: 0,
                     random_bits: 0,
                     waiting_random_triggers: 0,
@@ -2098,6 +2129,7 @@ mod tests {
                     pos: crate::TileCoord::new(6, 6),
                     raw_tile: crate::TileCoord::new(6, 6),
                     progress: 0,
+                    motion_counter: 0,
                     x_pos: 6 * 16,
                     y_pos: 6 * 16,
                     z_pos: 0,
@@ -2131,8 +2163,10 @@ mod tests {
                     cargo_action_counts: [0; 4],
                     cargo_age_counter: 0,
                     age_days: 0,
+                    economy_age_days: 0,
                     max_age_days: 0,
                     date_of_last_service: 0,
+                    date_of_last_service_newgrf: 0,
                     build_year: 0,
                     load_unload_ticks: 0,
                     cargo_paid_for: 0,
@@ -2168,10 +2202,14 @@ mod tests {
                     sav_id: 2,
                     owner: 0,
                     next_sav_id: None,
+                    next_shared_sav_id: None,
                     group_id: None,
                     timetable_start: 0,
                     current_order_time: 0,
                     timetable_lateness: 0,
+                    depot_unbunching_last_departure: 0,
+                    depot_unbunching_next_departure: 0,
+                    round_trip_time: 0,
                     vehicle_flags: 0,
                     random_bits: 0,
                     waiting_random_triggers: 0,
@@ -2193,6 +2231,7 @@ mod tests {
                     pos: crate::TileCoord::new(7, 7),
                     raw_tile: crate::TileCoord::new(7, 7),
                     progress: 0,
+                    motion_counter: 0,
                     x_pos: 7 * 16,
                     y_pos: 7 * 16,
                     z_pos: 0,
@@ -2226,8 +2265,10 @@ mod tests {
                     cargo_action_counts: [0; 4],
                     cargo_age_counter: 0,
                     age_days: 0,
+                    economy_age_days: 0,
                     max_age_days: 0,
                     date_of_last_service: 0,
+                    date_of_last_service_newgrf: 0,
                     build_year: 0,
                     load_unload_ticks: 0,
                     cargo_paid_for: 0,
@@ -2263,10 +2304,14 @@ mod tests {
                     sav_id: 3,
                     owner: 0,
                     next_sav_id: None,
+                    next_shared_sav_id: None,
                     group_id: None,
                     timetable_start: 0,
                     current_order_time: 0,
                     timetable_lateness: 0,
+                    depot_unbunching_last_departure: 0,
+                    depot_unbunching_next_departure: 0,
+                    round_trip_time: 0,
                     vehicle_flags: 0,
                     random_bits: 0,
                     waiting_random_triggers: 0,
@@ -2288,6 +2333,7 @@ mod tests {
                     pos: crate::TileCoord::new(5, 5),
                     raw_tile: crate::TileCoord::new(5, 5),
                     progress: 0,
+                    motion_counter: 0,
                     x_pos: 5 * 16,
                     y_pos: 5 * 16,
                     z_pos: 0,
@@ -2321,8 +2367,10 @@ mod tests {
                     cargo_action_counts: [0; 4],
                     cargo_age_counter: 0,
                     age_days: 0,
+                    economy_age_days: 0,
                     max_age_days: 0,
                     date_of_last_service: 0,
+                    date_of_last_service_newgrf: 0,
                     build_year: 0,
                     load_unload_ticks: 0,
                     cargo_paid_for: 0,

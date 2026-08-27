@@ -76,7 +76,7 @@ const TILE_SIZE: i32 = 16;
 
 /// Convierte el índice de día del reloj Rust al `Date` que usa `OpenTTD` en
 /// `Vehicle::date_of_last_service`.
-fn packed_calendar_date_from_day_index(day_index: u64) -> i32 {
+pub(super) fn packed_calendar_date_from_day_index(day_index: u64) -> i32 {
     let (year, doy) = calendar_year_day(day_index);
     i32::try_from(u64::from(year) * 365 + doy.saturating_sub(1))
         .unwrap_or(i32::try_from(u64::from(CALENDAR_BASE_YEAR) * 365).unwrap_or(0))
@@ -266,6 +266,7 @@ struct CommonWire {
     engine_type: u16,
     cur_speed: u16,
     subspeed: u8,
+    motion_counter: u32,
     progress: u8,
     vehstatus: u8,
     cargo: u8,
@@ -276,13 +277,17 @@ struct CommonWire {
     cargo_action_counts: [u32; 4],
     cargo_age_counter: u16,
     age_days: u32,
+    economy_age_days: u32,
     max_age_days: u32,
     date_of_last_service: i32,
+    date_of_last_service_newgrf: i32,
     order_list_ref: u32,
     cur_order: u8,
     current_order: VehicleOrderRuntime,
     /// `REF_VEHICLE`: 0 = null, resto = índice sparse + 1.
     next_ref: u32,
+    /// `REF_VEHICLE` de la cadena de órdenes compartidas.
+    next_shared_ref: u32,
     /// Grupo de flota (`DEFAULT_GROUP` si no está asignado).
     group_id: u16,
     /// Inicio del horario en ticks (`Vehicle::timetable_start`).
@@ -291,6 +296,9 @@ struct CommonWire {
     current_order_time: u32,
     /// Retraso acumulado del horario (`lateness_counter`).
     timetable_lateness: i32,
+    depot_unbunching_last_departure: u64,
+    depot_unbunching_next_departure: u64,
+    round_trip_time: u32,
     /// `Vehicle::vehicle_flags` (`OpenTTD` `VehicleFlags`).
     vehicle_flags: u16,
     /// Semilla de randomización de callbacks/Action2 de `NewGRF`.
@@ -524,6 +532,7 @@ fn write_vehs_common(buf: &mut Vec<u8>, c: &CommonWire) -> Result<(), SavError> 
     buf.extend_from_slice(&c.engine_type.to_be_bytes());
     buf.extend_from_slice(&c.cur_speed.to_be_bytes());
     buf.push(c.subspeed);
+    buf.extend_from_slice(&c.motion_counter.to_be_bytes());
     buf.push(c.progress);
     buf.push(c.vehstatus);
     buf.push(c.cargo);
@@ -547,11 +556,17 @@ fn write_vehs_common(buf: &mut Vec<u8>, c: &CommonWire) -> Result<(), SavError> 
     buf.extend_from_slice(&c.cargo_age_counter.to_be_bytes());
     buf.extend_from_slice(&i32::try_from(c.age_days).unwrap_or(i32::MAX).to_be_bytes());
     buf.extend_from_slice(
+        &i32::try_from(c.economy_age_days)
+            .unwrap_or(i32::MAX)
+            .to_be_bytes(),
+    );
+    buf.extend_from_slice(
         &i32::try_from(c.max_age_days)
             .unwrap_or(i32::MAX)
             .to_be_bytes(),
     );
     buf.extend_from_slice(&c.date_of_last_service.to_be_bytes());
+    buf.extend_from_slice(&c.date_of_last_service_newgrf.to_be_bytes());
     buf.extend_from_slice(&c.order_list_ref.to_be_bytes());
     buf.push(c.cur_order);
     buf.push(c.current_order.order_type);
@@ -569,6 +584,7 @@ fn write_vehs_common(buf: &mut Vec<u8>, c: &CommonWire) -> Result<(), SavError> 
     buf.extend_from_slice(&c.vehicle_flags.to_be_bytes());
     buf.extend_from_slice(&c.random_bits.to_be_bytes());
     buf.push(c.waiting_random_triggers);
+    buf.extend_from_slice(&c.next_shared_ref.to_be_bytes());
     buf.extend_from_slice(&c.last_station_visited.to_be_bytes());
     buf.extend_from_slice(&c.last_loading_station.to_be_bytes());
     buf.extend_from_slice(&c.service_interval.to_be_bytes());
@@ -588,6 +604,13 @@ fn write_vehs_common(buf: &mut Vec<u8>, c: &CommonWire) -> Result<(), SavError> 
     buf.push(c.day_counter);
     buf.push(c.tick_counter);
     buf.push(c.running_ticks);
+    buf.extend_from_slice(&c.depot_unbunching_last_departure.to_be_bytes());
+    buf.extend_from_slice(&c.depot_unbunching_next_departure.to_be_bytes());
+    buf.extend_from_slice(
+        &i32::try_from(c.round_trip_time)
+            .unwrap_or(i32::MAX)
+            .to_be_bytes(),
+    );
     Ok(())
 }
 
@@ -685,6 +708,7 @@ fn common_wire_for(
     order_list_ref: u32,
     subtype: u8,
     next_ref: u32,
+    next_shared_ref: u32,
     last_station_visited: u16,
     last_loading_station: u16,
     current_order: VehicleOrderRuntime,
@@ -703,7 +727,17 @@ fn common_wire_for(
     let y_pos = v.pos.y * TILE_SIZE + TILE_SIZE / 2;
     let z_pos = i32::from(v.z_pos.unwrap_or(0));
     let age_days = v.vehicle_age_days(current_tick).min(u64::from(u32::MAX));
+    let economy_age_days = if v.economy_age_days == 0 {
+        age_days
+    } else {
+        u64::from(v.economy_age_days)
+    };
     let date_of_last_service = packed_calendar_date_from_day_index(v.last_service_day);
+    let date_of_last_service_newgrf = if v.last_service_newgrf_day == 0 {
+        date_of_last_service
+    } else {
+        packed_calendar_date_from_day_index(u64::try_from(v.last_service_newgrf_day).unwrap_or(0))
+    };
     let group_id = v.group_id.unwrap_or(0xFFFE).min(u32::from(u16::MAX)) as u16;
     CommonWire {
         subtype,
@@ -717,6 +751,7 @@ fn common_wire_for(
         engine_type,
         cur_speed: v.cur_speed,
         subspeed: v.subspeed,
+        motion_counter: v.motion_counter,
         progress: v.progress,
         vehstatus,
         cargo,
@@ -727,16 +762,22 @@ fn common_wire_for(
         cargo_action_counts,
         cargo_age_counter: v.cargo_age_counter,
         age_days: u32::try_from(age_days).unwrap_or(u32::MAX),
+        economy_age_days: u32::try_from(economy_age_days).unwrap_or(u32::MAX),
         max_age_days: v.max_age_days,
         date_of_last_service,
+        date_of_last_service_newgrf,
         order_list_ref,
         cur_order,
         current_order,
         next_ref,
+        next_shared_ref,
         group_id,
         timetable_start: u64::from(v.timetable_start),
         current_order_time: v.current_order_time,
         timetable_lateness: v.timetable_lateness,
+        depot_unbunching_last_departure: v.depot_unbunching_last_departure,
+        depot_unbunching_next_departure: v.depot_unbunching_next_departure,
+        round_trip_time: v.round_trip_time,
         vehicle_flags: vehicle_flags_for(v),
         random_bits: v.newgrf_random_bits,
         waiting_random_triggers: v.newgrf_waiting_random_triggers,
@@ -780,6 +821,11 @@ fn cargo_packet_refs_for<'a>(export: &'a CargoPacketExport, v: &Vehicle) -> &'a 
         .vehicle_refs
         .get(&v.id)
         .map_or(&[][..], Vec::as_slice)
+}
+
+fn sparse_vehicle_ref(sparse_by_vehicle_id: &HashMap<u32, u32>, id: Option<u32>) -> u32 {
+    id.and_then(|vehicle_id| sparse_by_vehicle_id.get(&vehicle_id).copied())
+        .map_or(0, |index| index.saturating_add(1))
 }
 
 fn diag_direction(v: &Vehicle) -> u8 {
@@ -959,6 +1005,7 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                         AIR_AIRCRAFT
                     },
                     next_ref,
+                    sparse_vehicle_ref(&sparse_by_vehicle_id, v.next_shared_vehicle_id),
                     last_station_visited,
                     last_loading_station_id_for_vehicle(state, v),
                     current_order_runtime_for(v, state, map_w),
@@ -996,8 +1043,10 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                     cargo_action_counts: [0; 4],
                     cargo_age_counter: 0,
                     age_days: 0,
+                    economy_age_days: 0,
                     max_age_days: 0,
                     date_of_last_service: 0,
+                    date_of_last_service_newgrf: 0,
                     order_list_ref: 0,
                     cur_order: 0,
                     current_order: VehicleOrderRuntime {
@@ -1012,10 +1061,14 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                     // Para helicópteros la sombra encadena al rotor. En el
                     // formato SAV `REF_VEHICLE` es sparse index + 1.
                     next_ref: if is_helicopter { sparse_idx + 2 } else { 0 },
+                    next_shared_ref: 0,
                     group_id: 0xFFFE,
                     timetable_start: 0,
                     current_order_time: 0,
                     timetable_lateness: 0,
+                    depot_unbunching_last_departure: 0,
+                    depot_unbunching_next_departure: 0,
+                    round_trip_time: 0,
                     vehicle_flags: 0,
                     random_bits: 0,
                     waiting_random_triggers: 0,
@@ -1040,6 +1093,7 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                     running_ticks: 0,
                     cur_speed: 0,
                     subspeed: 0,
+                    motion_counter: 0,
                     progress: 0,
                 },
                 None,
@@ -1074,8 +1128,10 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                         cargo_action_counts: [0; 4],
                         cargo_age_counter: 0,
                         age_days: 0,
+                        economy_age_days: 0,
                         max_age_days: 0,
                         date_of_last_service: 0,
+                        date_of_last_service_newgrf: 0,
                         order_list_ref: 0,
                         cur_order: 0,
                         current_order: VehicleOrderRuntime {
@@ -1088,10 +1144,14 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                             max_speed: u16::MAX,
                         },
                         next_ref: 0,
+                        next_shared_ref: 0,
                         group_id: 0xFFFE,
                         timetable_start: 0,
                         current_order_time: 0,
                         timetable_lateness: 0,
+                        depot_unbunching_last_departure: 0,
+                        depot_unbunching_next_departure: 0,
+                        round_trip_time: 0,
                         vehicle_flags: 0,
                         random_bits: 0,
                         waiting_random_triggers: 0,
@@ -1116,6 +1176,7 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                         running_ticks: 0,
                         cur_speed: 32,
                         subspeed: 0,
+                        motion_counter: 0,
                         progress: 0,
                     },
                     None,
@@ -1144,6 +1205,8 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                 .next_unit
                 .and_then(|next_id| sparse_by_vehicle_id.get(&next_id).copied())
                 .map_or(0, |idx| idx.saturating_add(1));
+            let next_shared_ref =
+                sparse_vehicle_ref(&sparse_by_vehicle_id, v.next_shared_vehicle_id);
             push_typed_vehicle(
                 &mut rec,
                 VEH_TRAIN,
@@ -1156,6 +1219,7 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                     order_list_ref,
                     subtype,
                     next_ref,
+                    next_shared_ref,
                     last_station_id_for_vehicle(state, v),
                     last_loading_station_id_for_vehicle(state, v),
                     current_order_runtime_for(v, state, map_w),
@@ -1181,6 +1245,7 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                     order_list_ref,
                     TRAIN_SUBTYPE_FRONT_ENGINE,
                     0,
+                    sparse_vehicle_ref(&sparse_by_vehicle_id, v.next_shared_vehicle_id),
                     last_station_id_for_vehicle(state, v),
                     last_loading_station_id_for_vehicle(state, v),
                     current_order_runtime_for(v, state, map_w),
@@ -1207,6 +1272,7 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                     order_list_ref,
                     TRAIN_SUBTYPE_FRONT_ENGINE,
                     0,
+                    sparse_vehicle_ref(&sparse_by_vehicle_id, v.next_shared_vehicle_id),
                     last_station_id_for_vehicle(state, v),
                     last_loading_station_id_for_vehicle(state, v),
                     current_order_runtime_for(v, state, map_w),
@@ -1303,6 +1369,7 @@ fn append_vehs_common_fields(header: &mut Vec<u8>) -> Result<(), SavError> {
     append_field(header, 4, "engine_type")?;
     append_field(header, 4, "cur_speed")?;
     append_field(header, 2, "subspeed")?;
+    append_field(header, 6, "motion_counter")?; // SLE_UINT32
     append_field(header, 2, "progress")?;
     append_field(header, 2, "vehstatus")?;
     append_field(header, 2, "cargo_type")?;
@@ -1313,8 +1380,10 @@ fn append_vehs_common_fields(header: &mut Vec<u8>) -> Result<(), SavError> {
     append_field(header, 0x16, "cargo.action_counts")?; // SLE_CONDARR u32[4]
     append_field(header, 4, "cargo_age_counter")?;
     append_field(header, 5, "age")?;
+    append_field(header, 5, "economy_age")?;
     append_field(header, 5, "max_age")?;
     append_field(header, 5, "date_of_last_service")?;
+    append_field(header, 5, "date_of_last_service_newgrf")?;
     append_field(header, 6, "orders")?; // REF_ORDERLIST → U32
     append_field(header, 2, "cur_real_order_index")?;
     append_field(header, 2, "current_order.type")?;
@@ -1332,6 +1401,7 @@ fn append_vehs_common_fields(header: &mut Vec<u8>) -> Result<(), SavError> {
     append_field(header, 4, "vehicle_flags")?; // SLE_UINT16
     append_field(header, 4, "random_bits")?; // SLE_UINT16
     append_field(header, 2, "waiting_triggers")?; // SLE_UINT8
+    append_field(header, 6, "next_shared")?; // REF_VEHICLE → U32
     append_field(header, 4, "last_station_visited")?; // SLE_UINT16
     append_field(header, 4, "last_loading_station")?; // SLE_UINT16
     append_field(header, 4, "service_interval")?; // SLE_UINT16
@@ -1351,6 +1421,9 @@ fn append_vehs_common_fields(header: &mut Vec<u8>) -> Result<(), SavError> {
     append_field(header, 2, "day_counter")?; // SLE_UINT8
     append_field(header, 2, "tick_counter")?; // SLE_UINT8
     append_field(header, 2, "running_ticks")?; // SLE_UINT8
+    append_field(header, 8, "depot_unbunching_last_departure")?; // SLE_UINT64
+    append_field(header, 8, "depot_unbunching_next_departure")?; // SLE_UINT64
+    append_field(header, 5, "round_trip_time")?; // SLE_INT32
     header.push(0);
     Ok(())
 }
@@ -1976,8 +2049,14 @@ mod tests {
         );
         train.set_vehicle_orders(vec![order]);
         train.timetable_start = 1_234;
+        train.motion_counter = 0x1234_5678;
         train.current_order_time = 55;
         train.timetable_lateness = -7;
+        train.economy_age_days = 654;
+        train.last_service_newgrf_day = 321;
+        train.depot_unbunching_last_departure = 77_000;
+        train.depot_unbunching_next_departure = 88_000;
+        train.round_trip_time = 9_876;
         train.timetable_started = true;
         train.timetable_autofill = true;
         train.vehicle_flags = 1 << 7;
@@ -2035,12 +2114,36 @@ mod tests {
             Some(1_234)
         );
         assert_eq!(
+            record_get(common, "motion_counter").and_then(SlValue::as_u64),
+            Some(0x1234_5678)
+        );
+        assert_eq!(
             record_get(common, "current_order_time").and_then(SlValue::as_i64),
             Some(55)
         );
         assert_eq!(
             record_get(common, "lateness_counter").and_then(SlValue::as_i64),
             Some(-7)
+        );
+        assert_eq!(
+            record_get(common, "economy_age").and_then(SlValue::as_i64),
+            Some(654)
+        );
+        assert_eq!(
+            record_get(common, "date_of_last_service_newgrf").and_then(SlValue::as_i64),
+            Some(packed_calendar_date_from_day_index(321).into())
+        );
+        assert_eq!(
+            record_get(common, "depot_unbunching_last_departure").and_then(SlValue::as_u64),
+            Some(77_000)
+        );
+        assert_eq!(
+            record_get(common, "depot_unbunching_next_departure").and_then(SlValue::as_u64),
+            Some(88_000)
+        );
+        assert_eq!(
+            record_get(common, "round_trip_time").and_then(SlValue::as_i64),
+            Some(9_876)
         );
         assert_eq!(
             record_get(common, "vehicle_flags").and_then(SlValue::as_u64),

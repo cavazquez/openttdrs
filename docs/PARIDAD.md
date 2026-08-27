@@ -363,7 +363,11 @@ contable, el contador legacy `cargo_paid_for` y el arreglo nativo
 `cargo.action_counts` (transferir/entregar/conservar/cargar). Esto no cierra el issue:
 la orden activa ya conserva sus campos crudos (`type`, `flags`, `dest`, refit y
 horario) y los contadores diarios (`day_counter`, `tick_counter`,
-`running_ticks`). En barcos, el subregistro `SlVehicleShip` ya conserva los
+`running_ticks`). El estado común también conserva el contador de movimiento de
+32 bits, `economy_age`, la fecha de servicio protegida para callbacks NewGRF,
+el enlace `next_shared` de la cadena de órdenes y las ventanas de salida
+`depot_unbunching_*`/`round_trip_time`; la hidratación mantiene esos valores en
+el modelo Rust sin convertirlos en defaults. En barcos, el subregistro `SlVehicleShip` ya conserva los
 bits crudos de `state`, su `rotation` y la proyección de `TrackBits` usada por
 el controlador; todavía faltan su vector `path` cacheado y la semántica YAPF /
 wormhole completa. En carretera, `SlVehicleRoadVeh` conserva además `gv_flags`

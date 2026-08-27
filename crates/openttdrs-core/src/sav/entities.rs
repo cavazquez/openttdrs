@@ -1065,6 +1065,8 @@ pub struct SavVehicle {
     /// la tabla sparse; esta referencia es la fuente autoritativa para
     /// reconstruir la cadena del tren.
     pub next_sav_id: Option<u32>,
+    /// Siguiente vehículo de la cadena nativa de órdenes compartidas.
+    pub next_shared_sav_id: Option<u32>,
     /// Compañía propietaria (`Vehicle::owner`).
     pub owner: u8,
     /// Grupo de flota (`Vehicle::group_id`) o `None` para el grupo por defecto.
@@ -1079,6 +1081,10 @@ pub struct SavVehicle {
     pub current_order_time: u32,
     /// Retraso acumulado del horario (`lateness_counter`).
     pub timetable_lateness: i32,
+    /// Ventanas de salida de depósito para unbunching.
+    pub depot_unbunching_last_departure: u64,
+    pub depot_unbunching_next_departure: u64,
+    pub round_trip_time: u32,
     /// Bits `Vehicle::vehicle_flags` relevantes para el runtime de horarios.
     ///
     /// `OpenTTD` conserva, entre otros, `TimetableStarted` (bit 3) y
@@ -1129,6 +1135,8 @@ pub struct SavVehicle {
     pub raw_tile: TileCoord,
     /// Progreso sub-tesela (`Vehicle::progress`, 0…255) al guardar.
     pub progress: u8,
+    /// Contador de movimiento de 32 bits (`Vehicle::motion_counter`).
+    pub motion_counter: u32,
     /// Coordenada píxel absoluta (`Vehicle::x_pos` / `y_pos`).
     pub x_pos: i32,
     pub y_pos: i32,
@@ -1206,8 +1214,12 @@ pub struct SavVehicle {
     pub cargo_age_counter: u16,
     /// Edad y servicio en días/fechas del calendario nativo.
     pub age_days: u32,
+    /// Edad contable en días de economía (`Vehicle::economy_age`).
+    pub economy_age_days: u32,
     pub max_age_days: u32,
     pub date_of_last_service: i32,
+    /// Fecha de servicio protegida para callbacks `NewGRF`.
+    pub date_of_last_service_newgrf: i32,
     /// Año calendario en que se compró la unidad (`Vehicle::build_year`).
     pub build_year: i32,
     /// Cuenta atrás entre ciclos de carga/descarga.
@@ -1347,6 +1359,10 @@ pub(crate) fn vehicles_from_chunks(
             // siguiente `33` con la fila 33 en vez de la 32.
             .and_then(|next| next.checked_sub(1))
             .and_then(|next| u32::try_from(next).ok());
+        let next_shared_sav_id = record_get(common, "next_shared")
+            .and_then(SlValue::as_u64)
+            .and_then(|next| next.checked_sub(1))
+            .and_then(|next| u32::try_from(next).ok());
         let owner = record_get(common, "owner")
             .and_then(SlValue::as_u64)
             .and_then(|value| u8::try_from(value).ok())
@@ -1421,6 +1437,10 @@ pub(crate) fn vehicles_from_chunks(
             .unwrap_or(0)
             .try_into()
             .unwrap_or(u8::MAX);
+        let motion_counter = record_get(common, "motion_counter")
+            .and_then(SlValue::as_u64)
+            .and_then(|value| u32::try_from(value).ok())
+            .unwrap_or(0);
         let (
             road_state,
             road_frame,
@@ -1589,6 +1609,15 @@ pub(crate) fn vehicles_from_chunks(
             .and_then(SlValue::as_i64)
             .and_then(|value| u32::try_from(value.max(0)).ok())
             .unwrap_or(0);
+        let economy_age_days = record_get(common, "economy_age")
+            .and_then(SlValue::as_i64)
+            .and_then(|value| u32::try_from(value.max(0)).ok())
+            .or_else(|| {
+                record_get(common, "economy_age")
+                    .and_then(SlValue::as_u64)
+                    .and_then(|value| u32::try_from(value).ok())
+            })
+            .unwrap_or(age_days);
         let max_age_days = record_get(common, "max_age")
             .and_then(SlValue::as_i64)
             .and_then(|value| u32::try_from(value.max(0)).ok())
@@ -1597,6 +1626,15 @@ pub(crate) fn vehicles_from_chunks(
             .and_then(SlValue::as_i64)
             .and_then(|value| i32::try_from(value).ok())
             .unwrap_or(0);
+        let date_of_last_service_newgrf = record_get(common, "date_of_last_service_newgrf")
+            .and_then(SlValue::as_i64)
+            .and_then(|value| i32::try_from(value).ok())
+            .or_else(|| {
+                record_get(common, "date_of_last_service_newgrf")
+                    .and_then(SlValue::as_u64)
+                    .and_then(|value| i32::try_from(value).ok())
+            })
+            .unwrap_or(date_of_last_service);
         let build_year = record_get(common, "build_year")
             .and_then(SlValue::as_i64)
             .and_then(|value| i32::try_from(value).ok())
@@ -1705,6 +1743,21 @@ pub(crate) fn vehicles_from_chunks(
                     .and_then(|v| i32::try_from(v).ok())
                     .unwrap_or(0)
             });
+        let depot_unbunching_last_departure = record_get(common, "depot_unbunching_last_departure")
+            .and_then(SlValue::as_u64)
+            .unwrap_or(0);
+        let depot_unbunching_next_departure = record_get(common, "depot_unbunching_next_departure")
+            .and_then(SlValue::as_u64)
+            .unwrap_or(0);
+        let round_trip_time = record_get(common, "round_trip_time")
+            .and_then(SlValue::as_i64)
+            .and_then(|value| u32::try_from(value.max(0)).ok())
+            .or_else(|| {
+                record_get(common, "round_trip_time")
+                    .and_then(SlValue::as_u64)
+                    .and_then(|value| u32::try_from(value).ok())
+            })
+            .unwrap_or(0);
         let vehicle_flags = record_get(common, "vehicle_flags")
             .and_then(SlValue::as_u64)
             .and_then(|value| u16::try_from(value).ok())
@@ -1828,11 +1881,15 @@ pub(crate) fn vehicles_from_chunks(
         out.push(SavVehicle {
             sav_id,
             next_sav_id,
+            next_shared_sav_id,
             owner,
             group_id,
             timetable_start,
             current_order_time,
             timetable_lateness,
+            depot_unbunching_last_departure,
+            depot_unbunching_next_departure,
+            round_trip_time,
             vehicle_flags,
             random_bits,
             waiting_random_triggers,
@@ -1854,6 +1911,7 @@ pub(crate) fn vehicles_from_chunks(
             pos,
             raw_tile,
             progress,
+            motion_counter,
             x_pos: i32::try_from(x_pos).unwrap_or(0),
             y_pos: i32::try_from(y_pos).unwrap_or(0),
             z_pos: i32::try_from(z_pos).unwrap_or(0),
@@ -1887,8 +1945,10 @@ pub(crate) fn vehicles_from_chunks(
             cargo_action_counts,
             cargo_age_counter,
             age_days,
+            economy_age_days,
             max_age_days,
             date_of_last_service,
+            date_of_last_service_newgrf,
             build_year,
             load_unload_ticks,
             cargo_paid_for,

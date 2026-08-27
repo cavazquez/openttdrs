@@ -322,7 +322,7 @@ pub struct Vehicle {
     pub ship_tick_counter: u8,
     /// Contador de movimiento para SFX de motor (`vehicle.cpp` `motion_counter`).
     #[serde(default)]
-    pub motion_counter: u16,
+    pub motion_counter: u32,
     /// Fracción sub-unidad de velocidad (`Vehicle::subspeed`).
     #[serde(default)]
     pub subspeed: u8,
@@ -454,6 +454,9 @@ pub struct Vehicle {
     /// Tick de simulación en que se compró el vehículo.
     #[serde(default)]
     pub build_tick: u64,
+    /// Edad contable en días de economía (`Vehicle::economy_age`).
+    #[serde(default)]
+    pub economy_age_days: u32,
     /// Año calendario nativo de compra (`Vehicle::build_year`). Cuando es
     /// cero, el escritor lo deriva de `build_tick` para vehículos creados por
     /// openttdrs.
@@ -465,6 +468,9 @@ pub struct Vehicle {
     /// Pool de órdenes compartidas enlazado.
     #[serde(default)]
     pub shared_order_id: Option<u32>,
+    /// Siguiente vehículo de la cadena nativa de órdenes compartidas.
+    #[serde(default)]
+    pub next_shared_vehicle_id: Option<u32>,
     /// Retraso acumulado del horario (ticks; positivo = tarde).
     #[serde(default)]
     pub timetable_lateness: i32,
@@ -495,6 +501,9 @@ pub struct Vehicle {
     /// Día de calendario del último servicio en depósito.
     #[serde(default)]
     pub last_service_day: u64,
+    /// Fecha protegida para callbacks `NewGRF` (`date_of_last_service_newgrf`).
+    #[serde(default)]
+    pub last_service_newgrf_day: i32,
     /// Decaimiento diario de fiabilidad (copia del motor al comprar).
     #[serde(default = "default_vehicle_reliability_spd_dec")]
     pub reliability_spd_dec: u16,
@@ -758,9 +767,11 @@ impl Vehicle {
             vehicle_flags: 0,
             autoreplace_attempted_this_stop: false,
             build_tick: 0,
+            economy_age_days: 0,
             build_year: 0,
             group_id: None,
             shared_order_id: None,
+            next_shared_vehicle_id: None,
             timetable_lateness: 0,
             timetable_autofill: false,
             timetable_autofill_samples: Vec::new(),
@@ -771,6 +782,7 @@ impl Vehicle {
             needs_servicing: false,
             service_interval_days: crate::vehicle::reliability::DEFAULT_SERVICE_INTERVAL_DAYS,
             last_service_day: 0,
+            last_service_newgrf_day: 0,
             reliability_spd_dec,
             max_age_days,
             breakdown_chance: 0,

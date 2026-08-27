@@ -546,6 +546,10 @@ impl StationCargoList {
 pub struct VehicleCargoList {
     #[serde(default)]
     pub packets: Vec<CargoPacket>,
+    /// Conteos nativos `VehicleCargoList::action_counts`:
+    /// transferir, entregar, conservar y cargar.
+    #[serde(default)]
+    pub action_counts: [u32; 4],
     /// Conteos por acción tras `Stage` (P2.19).
     #[serde(skip)]
     pub staged_transfer: u32,
@@ -591,6 +595,7 @@ impl VehicleCargoList {
 
     pub fn clear(&mut self) {
         self.packets.clear();
+        self.action_counts = [0; 4];
         self.staged_transfer = 0;
         self.staged_deliver = 0;
         self.staged_keep = 0;
@@ -725,6 +730,7 @@ impl VehicleCargoList {
         self.staged_transfer = 0;
         self.staged_deliver = 0;
         self.staged_keep = 0;
+        self.action_counts = [0; 4];
         if self.packets.is_empty() {
             return false;
         }
@@ -758,6 +764,12 @@ impl VehicleCargoList {
         self.packets = transfer;
         self.packets.extend(deliver);
         self.packets.extend(keep);
+        self.action_counts = [
+            self.staged_transfer,
+            self.staged_deliver,
+            self.staged_keep,
+            0,
+        ];
         self.staged_transfer > 0 || self.staged_deliver > 0
     }
 }

@@ -273,6 +273,7 @@ struct CommonWire {
     cargo_capacity: u16,
     cargo_count: u16,
     cargo_packet_refs: Vec<u32>,
+    cargo_action_counts: [u32; 4],
     cargo_age_counter: u16,
     age_days: u32,
     max_age_days: u32,
@@ -497,6 +498,20 @@ fn write_road_fields(buf: &mut Vec<u8>, road: &RoadWire) -> Result<(), SavError>
     Ok(())
 }
 
+fn cargo_action_counts_for(v: &Vehicle, cargo_count: u32) -> [u32; 4] {
+    let counts = v.cargo_packets.action_counts;
+    let total = counts.iter().copied().fold(0_u32, u32::saturating_add);
+    if total == cargo_count {
+        counts
+    } else if cargo_count == 0 {
+        [0; 4]
+    } else {
+        // Una partida JSON/legacy sólo tiene el contador agregado. OpenTTD
+        // considera esa carga conservada hasta que una parada la clasifica.
+        [0, 0, cargo_count, 0]
+    }
+}
+
 fn write_vehs_common(buf: &mut Vec<u8>, c: &CommonWire) -> Result<(), SavError> {
     buf.push(c.subtype);
     write_str(c.name.as_deref().unwrap_or(""), buf)?;
@@ -524,6 +539,10 @@ fn write_vehs_common(buf: &mut Vec<u8>, c: &CommonWire) -> Result<(), SavError> 
     )?;
     for packet_id in &c.cargo_packet_refs {
         buf.extend_from_slice(&packet_id.saturating_add(1).to_be_bytes());
+    }
+    write_gamma(4, buf)?;
+    for count in c.cargo_action_counts {
+        buf.extend_from_slice(&count.to_be_bytes());
     }
     buf.extend_from_slice(&c.cargo_age_counter.to_be_bytes());
     buf.extend_from_slice(&i32::try_from(c.age_days).unwrap_or(i32::MAX).to_be_bytes());
@@ -677,6 +696,7 @@ fn common_wire_for(
     } else {
         v.cargo_packets.total()
     };
+    let cargo_action_counts = cargo_action_counts_for(v, cargo_count);
     let cur_order = u8::try_from(v.current_order.min(255)).unwrap_or(0);
     let vehstatus = if v.running { 0 } else { VEHSTATUS_STOPPED };
     let x_pos = v.pos.x * TILE_SIZE + i32::from(v.rail_pixel.min(15));
@@ -704,6 +724,7 @@ fn common_wire_for(
         cargo_capacity: u16::try_from(v.capacity).unwrap_or(u16::MAX),
         cargo_count: u16::try_from(cargo_count).unwrap_or(u16::MAX),
         cargo_packet_refs: cargo_packet_refs.to_vec(),
+        cargo_action_counts,
         cargo_age_counter: v.cargo_age_counter,
         age_days: u32::try_from(age_days).unwrap_or(u32::MAX),
         max_age_days: v.max_age_days,
@@ -972,6 +993,7 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                     cargo_capacity: 0,
                     cargo_count: 0,
                     cargo_packet_refs: Vec::new(),
+                    cargo_action_counts: [0; 4],
                     cargo_age_counter: 0,
                     age_days: 0,
                     max_age_days: 0,
@@ -1049,6 +1071,7 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                         cargo_capacity: 0,
                         cargo_count: 0,
                         cargo_packet_refs: Vec::new(),
+                        cargo_action_counts: [0; 4],
                         cargo_age_counter: 0,
                         age_days: 0,
                         max_age_days: 0,
@@ -1287,6 +1310,7 @@ fn append_vehs_common_fields(header: &mut Vec<u8>) -> Result<(), SavError> {
     append_field(header, 4, "cargo_cap")?;
     append_field(header, 4, "cargo_count")?;
     append_field(header, 0x16, "cargo.packets")?; // REF_CARGO_PACKET list
+    append_field(header, 0x16, "cargo.action_counts")?; // SLE_CONDARR u32[4]
     append_field(header, 4, "cargo_age_counter")?;
     append_field(header, 5, "age")?;
     append_field(header, 5, "max_age")?;

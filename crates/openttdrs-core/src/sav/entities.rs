@@ -1199,6 +1199,9 @@ pub struct SavVehicle {
     pub cargo_capacity: u16,
     /// Referencias físicas al pool `CAPA` (`Vehicle::cargo.packets`).
     pub cargo_packet_ids: Vec<u32>,
+    /// Conteos de movimiento de carga (`VehicleCargoList::action_counts`).
+    /// El orden nativo es transferir, entregar, conservar y cargar.
+    pub cargo_action_counts: [u32; 4],
     /// Cuenta atrás de `Vehicle::cargo_age_counter`.
     pub cargo_age_counter: u16,
     /// Edad y servicio en días/fechas del calendario nativo.
@@ -1559,6 +1562,21 @@ pub(crate) fn vehicles_from_chunks(
                 _ => None,
             })
             .unwrap_or_default();
+        let cargo_action_counts = record_get(common, "cargo.action_counts")
+            .and_then(|value| match value {
+                SlValue::List(values) => {
+                    let mut counts = [0_u32; 4];
+                    for (slot, value) in values.iter().take(counts.len()).enumerate() {
+                        counts[slot] = value
+                            .as_u64()
+                            .and_then(|raw| u32::try_from(raw).ok())
+                            .unwrap_or(0);
+                    }
+                    Some(counts)
+                }
+                _ => None,
+            })
+            .unwrap_or_else(|| [0, 0, u32::from(cargo), 0]);
         let cargo_capacity = record_get(common, "cargo_cap")
             .and_then(SlValue::as_u64)
             .and_then(|value| u16::try_from(value).ok())
@@ -1866,6 +1884,7 @@ pub(crate) fn vehicles_from_chunks(
             cargo,
             cargo_capacity,
             cargo_packet_ids,
+            cargo_action_counts,
             cargo_age_counter,
             age_days,
             max_age_days,

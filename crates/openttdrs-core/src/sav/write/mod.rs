@@ -1378,6 +1378,7 @@ mod tests {
         bus.subspeed = 99;
         bus.cargo = 17;
         bus.capacity = 31;
+        bus.cargo_packets.action_counts = [3, 5, 7, 2];
         bus.road_state = 8;
         bus.frame = 6;
         bus.blocked_ctr = 19;
@@ -1428,6 +1429,7 @@ mod tests {
         assert_eq!(saved_bus.subspeed, 99);
         assert_eq!(saved_bus.cargo, 17);
         assert_eq!(saved_bus.cargo_capacity, 31);
+        assert_eq!(saved_bus.cargo_action_counts, [3, 5, 7, 2]);
         assert_eq!(saved_bus.road_state, 8);
         assert_eq!(saved_bus.road_frame, 6);
         assert_eq!(saved_bus.road_blocked_ctr, 19);
@@ -1449,6 +1451,7 @@ mod tests {
         assert_eq!(imported_bus.subspeed, 99);
         assert_eq!(imported_bus.cargo, 17);
         assert_eq!(imported_bus.capacity, 31);
+        assert_eq!(imported_bus.cargo_packets.action_counts, [3, 5, 7, 2]);
         assert_eq!(imported_bus.road_state, 8);
         assert_eq!(imported_bus.frame, 6);
         assert_eq!(imported_bus.blocked_ctr, 19);
@@ -1499,6 +1502,17 @@ mod tests {
         assert_eq!(
             record_get(rv, "blocked_ctr").and_then(SlValue::as_u64),
             Some(19)
+        );
+        let action_counts = match record_get(common, "cargo.action_counts") {
+            Some(SlValue::List(values)) => values,
+            other => panic!("cargo.action_counts ausente: {other:?}"),
+        };
+        assert_eq!(
+            action_counts
+                .iter()
+                .map(SlValue::as_u64)
+                .collect::<Option<Vec<_>>>(),
+            Some(vec![3, 5, 7, 2])
         );
         assert_eq!(
             record_get(rv, "gv_flags").and_then(SlValue::as_u64),

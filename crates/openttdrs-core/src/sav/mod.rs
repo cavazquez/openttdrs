@@ -703,6 +703,7 @@ fn hydrate_sav_vehicle_cargo(
     climate: crate::Climate,
 ) {
     let cargo = crate::CargoType::from_climate_slot(climate, saved.cargo_type);
+    vehicle.cargo_packets.action_counts = saved.cargo_action_counts;
     if let Some(cargo) = cargo {
         for packet_id in &saved.cargo_packet_ids {
             let Some(saved_packet) = packets_by_id.get(packet_id) else {
@@ -735,6 +736,10 @@ fn hydrate_sav_vehicle_cargo(
     } else {
         vehicle.sync_cargo_from_packets();
     }
+    // `ensure_packets_from_legacy` reemplaza la lista vacía por un packet
+    // sintético; restaurar después los contadores nativos evita perderlos en
+    // saves sin referencias `CAPA`.
+    vehicle.cargo_packets.action_counts = saved.cargo_action_counts;
 }
 
 /// Conserva el mapeo nativo por tesela de road stops hasta que el catálogo
@@ -2028,6 +2033,7 @@ mod tests {
                     cargo: 0,
                     cargo_capacity: 0,
                     cargo_packet_ids: Vec::new(),
+                    cargo_action_counts: [0; 4],
                     cargo_age_counter: 0,
                     age_days: 0,
                     max_age_days: 0,
@@ -2122,6 +2128,7 @@ mod tests {
                     cargo: 0,
                     cargo_capacity: 0,
                     cargo_packet_ids: Vec::new(),
+                    cargo_action_counts: [0; 4],
                     cargo_age_counter: 0,
                     age_days: 0,
                     max_age_days: 0,
@@ -2216,6 +2223,7 @@ mod tests {
                     cargo: 0,
                     cargo_capacity: 0,
                     cargo_packet_ids: Vec::new(),
+                    cargo_action_counts: [0; 4],
                     cargo_age_counter: 0,
                     age_days: 0,
                     max_age_days: 0,
@@ -2310,6 +2318,7 @@ mod tests {
                     cargo: 0,
                     cargo_capacity: 0,
                     cargo_packet_ids: Vec::new(),
+                    cargo_action_counts: [0; 4],
                     cargo_age_counter: 0,
                     age_days: 0,
                     max_age_days: 0,

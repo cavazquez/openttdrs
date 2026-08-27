@@ -359,7 +359,8 @@ La carga vehicular y de estación por paquetes físicos (`CAPA`) ya se reemite
 con sus referencias `STNN`/`VEHS`, edades, origen, siguiente salto, feeder y
 vector recorrido. `VEHS.common` también conserva la última estación de carga,
 su tick, año calendario de compra, cuenta atrás de carga/descarga, valor
-contable y el contador legacy `cargo_paid_for`. Esto no cierra el issue:
+contable, el contador legacy `cargo_paid_for` y el arreglo nativo
+`cargo.action_counts` (transferir/entregar/conservar/cargar). Esto no cierra el issue:
 la orden activa ya conserva sus campos crudos (`type`, `flags`, `dest`, refit y
 horario) y los contadores diarios (`day_counter`, `tick_counter`,
 `running_ticks`). En barcos, el subregistro `SlVehicleShip` ya conserva los

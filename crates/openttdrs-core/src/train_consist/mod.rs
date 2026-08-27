@@ -172,6 +172,29 @@ mod tests {
     }
 
     #[test]
+    fn action2_ctx_preserves_extended_engine_local_ids() {
+        let Some(vanilla_engine) = crate::engine::engine_by_id(crate::engine::ENGINE_TRAIN_KIRBY)
+        else {
+            panic!("vanilla train fixture is missing");
+        };
+        let mut engine = vanilla_engine.clone();
+        engine.id = 60_000;
+        engine.newgrf_local_id = 0x1234;
+        engine.from_newgrf = true;
+
+        let mut vs = vec![train(1), train(2)];
+        vs[0].engine_id = Some(engine.id);
+        vs[1].engine_id = Some(engine.id);
+        assert!(attach_wagon(&mut vs, 1, 2).is_ok());
+
+        let ctx = action2_eval_ctx_for_unit(&vs, 2, crate::tick::GameTick::new(0), &[engine], 0);
+        assert_eq!(
+            ctx.relative_parameterized_vars.get(&(-1, 0x60, 0x1234)),
+            Some(&2)
+        );
+    }
+
+    #[test]
     fn action2_ctx_var40_consist_position() {
         let mut vs = vec![train(1), train(2), train(3)];
         vs[1].engine_id = Some(crate::engine::ENGINE_WAGON_PASSENGER);

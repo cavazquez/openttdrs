@@ -80,7 +80,9 @@ pub(crate) fn runtime_fingerprint(
             .wrapping_mul(31)
             .wrapping_add(value)
             .wrapping_add(u32::from(variable) << 16)
-            .wrapping_add(u32::from(parameter) << 24)
+            // Preserve the high byte of ExtendedByte vehicle ids in the
+            // cache key; a plain `<< 24` would discard it.
+            .wrapping_add(u32::from(parameter).rotate_left(24))
             .wrapping_add((offset as i32 as u32).rotate_left(11));
     }
     for (i, &p) in ctx.grf_params.iter().enumerate().take(16) {

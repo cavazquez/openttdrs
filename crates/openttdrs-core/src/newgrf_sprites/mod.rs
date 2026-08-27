@@ -678,14 +678,38 @@ mod tests {
                 default: 13,
             },
         );
+        gfx.action2_var.insert(
+            8,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x61,
+                    // The selected vehicle's engine id is an ExtendedByte
+                    // parameter supplied through register 10E.
+                    param: Some(0x60),
+                    adjust: Action2VarAdjust {
+                        shift: 0,
+                        and_mask: 0xFF,
+                        add_val: None,
+                        divide_val: None,
+                        modulo_val: None,
+                    },
+                },
+                ops: Vec::new(),
+                ranges: vec![(14, 9, 9)],
+                default: 15,
+            },
+        );
         gfx.action2_to_action1
-            .extend([(10, 0), (11, 1), (12, 2), (13, 3)]);
+            .extend([(10, 0), (11, 1), (12, 2), (13, 3), (14, 4), (15, 5)]);
         let mut ctx = Action2EvalCtx::default();
         ctx.registers_100.insert(0x10F, 1);
+        ctx.registers_100.insert(0x10E, 0x1234);
         ctx.relative_vars.insert((1, 0x40), 7);
         ctx.relative_vars.insert((1, 0x62), 3);
+        ctx.relative_parameterized_vars.insert((1, 0x60, 0x1234), 9);
         assert_eq!(gfx.resolve_action1_set_ctx(6, &mut ctx), 0);
         assert_eq!(gfx.resolve_action1_set_ctx(7, &mut ctx), 2);
+        assert_eq!(gfx.resolve_action1_set_ctx(8, &mut ctx), 4);
     }
 
     #[test]

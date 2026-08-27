@@ -342,23 +342,19 @@ fn fill_relative_vehicle_vars(
         .iter()
         .position(|&id| id == candidate.id)
         .unwrap_or(0);
-    let mut local_ids = Vec::new();
+    let mut local_ids = Vec::<u16>::new();
     for &id in candidate_chain.iter().skip(candidate_position) {
         let Some(vehicle) = vehicles.iter().find(|vehicle| vehicle.id == id) else {
             continue;
         };
         let local_id = vehicle_engine_local_id(vehicle, engine_catalog);
-        if let Ok(local_id) = u8::try_from(local_id)
-            && !local_ids.contains(&local_id)
-        {
+        if !local_ids.contains(&local_id) {
             local_ids.push(local_id);
         }
     }
     if candidate.kind != crate::vehicle::VehicleKind::Train {
         local_ids.clear();
-        if let Ok(local_id) = u8::try_from(vehicle_engine_local_id(candidate, engine_catalog)) {
-            local_ids.push(local_id);
-        }
+        local_ids.push(vehicle_engine_local_id(candidate, engine_catalog));
     }
     for local_id in local_ids {
         let count = if candidate.kind == crate::vehicle::VehicleKind::Train {
@@ -366,9 +362,7 @@ fn fill_relative_vehicle_vars(
                 .iter()
                 .skip(candidate_position)
                 .filter_map(|&id| vehicles.iter().find(|vehicle| vehicle.id == id))
-                .filter(|vehicle| {
-                    vehicle_engine_local_id(vehicle, engine_catalog) == u16::from(local_id)
-                })
+                .filter(|vehicle| vehicle_engine_local_id(vehicle, engine_catalog) == local_id)
                 .count()
         } else {
             1
@@ -401,7 +395,7 @@ fn fill_relative_vehicle_vars(
             };
             let nested_curvature =
                 vehicle_relative_curvature(candidate, nested_candidate, nested_offset);
-            let encoded_offset = nested_offset.to_le_bytes()[0];
+            let encoded_offset = u16::from(nested_offset.to_le_bytes()[0]);
             ctx.relative_parameterized_vars
                 .insert((offset, 0x62, encoded_offset), nested_curvature);
         }

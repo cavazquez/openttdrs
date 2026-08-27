@@ -345,6 +345,10 @@ siguen pendientes en #326.
 
 ## Backlog sucesor activo
 
+La ruta `61 → 0x60` ya conserva el parámetro `ExtendedByte` completo (WORD,
+hasta 14 bits) en el contexto relativo; los IDs locales altos no se truncan al
+resolver la variante de Action2.
+
 <!-- active-parity-backlog:start -->
 
 - [#326](https://github.com/cavazquez/openttdrs/issues/326) — integrar composición global y cerrar paridad de framebuffer.

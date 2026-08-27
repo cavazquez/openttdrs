@@ -37,6 +37,10 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 
 ## Cómo se decide el siguiente bloque
 
+Nota de implementación: la consulta de variable `61` para `0x60` conserva el
+parámetro `ExtendedByte` completo (WORD, hasta 14 bits); no se trunca al byte
+bajo al resolver IDs locales de vehículos.
+
 1. Ejecutar la matriz o fixture del bloque actual.
 2. Localizar la primera divergencia por tile, entidad o tick.
 3. Portar la regla de OpenTTD mínima necesaria y añadir el test de regresión.

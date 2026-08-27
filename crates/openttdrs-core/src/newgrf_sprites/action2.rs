@@ -68,8 +68,11 @@ fn read_action2_var(
         0x61 if !parent_scope => {
             let target = term.param.unwrap_or(0);
             let offset = signed_register(ctx, 0x10F);
-            let parameter =
-                u8::try_from(ctx.registers_100.get(&0x10E).copied().unwrap_or(0)).unwrap_or(0);
+            // Vehicle variable 0x60 uses an ExtendedByte engine id.  The
+            // register is therefore read as a WORD instead of truncating it
+            // to the legacy byte range (0x100..0x3FFF are valid local ids).
+            let parameter = u16::try_from(ctx.registers_100.get(&0x10E).copied().unwrap_or(0))
+                .unwrap_or(u16::MAX);
             if target == 0x5F {
                 return ctx
                     .relative_vars

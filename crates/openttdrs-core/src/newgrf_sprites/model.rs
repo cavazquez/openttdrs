@@ -253,7 +253,12 @@ pub struct Action2EvalCtx {
     /// variable `61`, whose offset is selected through register `0x10F`.
     pub relative_vars: HashMap<(i16, u8), u32>,
     /// Parameterized counterpart of [`Self::relative_vars`].
-    pub relative_parameterized_vars: HashMap<(i16, u8, u8), u32>,
+    ///
+    /// The secondary parameter is a WORD because vehicle variable `0x60`
+    /// receives an `ExtendedByte` engine id through register `0x10E`.
+    /// Keeping this wider than the ordinary `60+x` byte parameters prevents
+    /// local ids above `0xFF` from aliasing the vanilla id zero.
+    pub relative_parameterized_vars: HashMap<(i16, u8, u16), u32>,
     /// Registros temporales (variable `7D` / operador `\2sto`).
     pub temp_registers: HashMap<u8, u32>,
     /// Registros temporales extendidos (`0x100+`) escritos por `STO`.

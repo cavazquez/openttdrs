@@ -124,6 +124,10 @@ API común: `TrainSpriteGraphics::resolve_callback` / `resolve_callback_ctx`,
 
 ## Residual explícito (no bloquea cierre MVP #266)
 
+La tabla de variables relativas conserva el parámetro `ExtendedByte` completo
+(WORD, hasta 14 bits) para `61 → 0x60`; los IDs locales superiores a `0xFF` no
+se aliasan con el motor vanilla de id cero.
+
 - Resto de CBs houses / airports / industries / objects (excepto CB157), cargo (excepto CB39/CB145). Stations aún requieren scopes completos y sonidos propios de tesela; el callback de sonido de vehículo ya cubre salida (incluido `sound_effect` de Action0), marcha, avería, túnel, efecto visual, carga/descarga y despegue/aterrizaje. RoadStops resuelve `45`/`46`/`47`, `60`–`65`/`69` y `66`/`67`/`68`/`6A`/`6B` al renderizar, en CB140–142 y en la randomización con pools de mundo. La importación `.sav` conserva el mapeo nativo `(GRFID, localidx)` y el estado de cada tesela; la API legacy sin catálogo mantiene fallback vanilla y un GRF ausente no puede reatajarse a una vista ejecutable.
 - Scopes parent determinista/random, offsets relativos básicos, el tramo especial del primer vehículo contiguo con el mismo motor, la consulta `61→62` con segundo offset y el conteo `61→60` ya están cubiertos; siguen pendientes otras variables secundarias (badges) y scopes parent de estación/industria/casa/objeto con sus storage propios.
 - Storage persistente en industria/casa y callbacks de estación que sí tengan scope de estación; CB140–142 preserva `7C` de la estación pero no los scopes/áreas completos de `BaseStation`; CB14 aún no aporta el scope/regs de `BaseStation` ni layout 16-bit exacto; CB149 aún no aporta scope/vecinos, strings GRF ni la compatibilidad de bit 10 para GRF <8.

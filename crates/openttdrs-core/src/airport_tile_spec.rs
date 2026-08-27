@@ -87,6 +87,12 @@ pub struct AirportTileSpecDef {
     /// CTT/GlobalVar del GRF para traducir cargos a ids locales.
     #[serde(default, skip)]
     pub newgrf_type_tables: Option<crate::newgrf_type_tables::GrfTypeTranslationTables>,
+    /// Badges asociados a esta tesela (ids globales del catálogo).
+    #[serde(default)]
+    pub associated_badges: Vec<u16>,
+    /// Tabla local de badges (`GlobalVar` 0x18) ya traducida a ids globales.
+    #[serde(default, skip)]
+    pub newgrf_badge_translation: Vec<u16>,
     #[serde(default, skip)]
     pub newgrf_preview: Option<crate::newgrf_sprites::DecodedSprite>,
     #[serde(default, skip)]

@@ -190,6 +190,9 @@ pub struct NewgrfAirportSpecDef {
     pub min_year: u16,
     pub max_year: u16,
     pub maintenance_cost: u16,
+    /// Badges asociados a este aeropuerto (ids globales del catálogo).
+    #[serde(default)]
+    pub associated_badges: Vec<u16>,
     #[serde(default, skip)]
     pub newgrf_local_id: u8,
     #[serde(default, skip)]

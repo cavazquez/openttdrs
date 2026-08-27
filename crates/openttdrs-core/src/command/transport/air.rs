@@ -165,7 +165,7 @@ pub(in crate::command) fn place_airport_area(
             &state.newgrf_stack,
             station_anchor,
             crate::AirportAnimationTrigger::Built,
-            0,
+            None,
         );
         state.runtime.industry_tile_dirty.extend(dirty);
     }

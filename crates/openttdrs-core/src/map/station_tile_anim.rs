@@ -1547,6 +1547,8 @@ mod tests {
             newgrf_grfid: 0x4150_0001,
             newgrf_grf_version: 0,
             newgrf_type_tables: None,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
             newgrf_preview: None,
             newgrf_views: Vec::new(),
             newgrf_runtime: Some(Box::new(airport_animation_callbacks())),

@@ -458,6 +458,8 @@ pub struct ParsedAirportTileMeta {
     pub animation_triggers: u8,
     /// Flags especiales no expuestos por Action0; se conserva para runtime.
     pub animation_special_flags: u8,
+    /// `prop 0x12`: índices locales de la tabla Badge Translation Table.
+    pub badge_local_ids: Vec<u16>,
 }
 
 /// Metadatos `Airports` Action0 (antes de asignar id ≥10).
@@ -477,6 +479,8 @@ pub struct ParsedAirportMeta {
     pub noise_level: u8,
     pub maintenance_cost: u16,
     pub name: String,
+    /// `prop 0x12`: índices locales de la tabla Badge Translation Table.
+    pub badge_local_ids: Vec<u16>,
 }
 
 /// Tesela cruda de layout industria (`prop 0x0A`); `local_tile` = gfx era `0xFE`.
@@ -3712,6 +3716,7 @@ pub fn parse_action0_airport_tile_meta(payload: &[u8]) -> Option<ParsedAirportTi
     let mut animation_status = 0xFFu8;
     let mut animation_speed = 2u8;
     let mut animation_triggers = 0u8;
+    let mut badge_local_ids = Vec::new();
     for _ in 0..header.num_props {
         if i >= payload.len() {
             break;
@@ -3770,17 +3775,7 @@ pub fn parse_action0_airport_tile_meta(payload: &[u8]) -> Option<ParsedAirportTi
                 i += 1;
             }
             0x12 => {
-                // Badge list: WORD count + n×WORD
-                if i + 2 > payload.len() {
-                    break;
-                }
-                let count = usize::from(u16::from_le_bytes([payload[i], payload[i + 1]]));
-                i += 2;
-                let need = count.saturating_mul(2);
-                if i + need > payload.len() {
-                    break;
-                }
-                i += need;
+                badge_local_ids = read_badge_local_ids(payload, &mut i)?;
             }
             _ => break,
         }
@@ -3795,6 +3790,7 @@ pub fn parse_action0_airport_tile_meta(payload: &[u8]) -> Option<ParsedAirportTi
         animation_speed,
         animation_triggers,
         animation_special_flags: 0,
+        badge_local_ids,
     })
 }
 
@@ -3831,6 +3827,7 @@ pub fn parse_action0_airport_meta(payload: &[u8]) -> Option<ParsedAirportMeta> {
     let mut noise_level = 3u8;
     let mut maintenance_cost = 0u16;
     let mut name = String::new();
+    let mut badge_local_ids = Vec::new();
 
     for _ in 0..header.num_props {
         if i >= payload.len() {
@@ -3978,16 +3975,7 @@ pub fn parse_action0_airport_meta(payload: &[u8]) -> Option<ParsedAirportMeta> {
                 i += 2;
             }
             0x12 => {
-                if i + 2 > payload.len() {
-                    break;
-                }
-                let count = usize::from(u16::from_le_bytes([payload[i], payload[i + 1]]));
-                i += 2;
-                let need = count.saturating_mul(2);
-                if i + need > payload.len() {
-                    break;
-                }
-                i += need;
+                badge_local_ids = read_badge_local_ids(payload, &mut i)?;
             }
             _ => break,
         }
@@ -4007,6 +3995,7 @@ pub fn parse_action0_airport_meta(payload: &[u8]) -> Option<ParsedAirportMeta> {
             noise_level,
             maintenance_cost,
             name,
+            badge_local_ids,
         });
     }
     Some(ParsedAirportMeta {
@@ -4023,6 +4012,7 @@ pub fn parse_action0_airport_meta(payload: &[u8]) -> Option<ParsedAirportMeta> {
         noise_level,
         maintenance_cost,
         name,
+        badge_local_ids,
     })
 }
 

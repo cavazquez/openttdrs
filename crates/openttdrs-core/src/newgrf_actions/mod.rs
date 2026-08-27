@@ -4605,6 +4605,73 @@ mod tests {
         assert_eq!(meta.animation_special_flags, 0);
     }
 
+    #[test]
+    fn airport_badge_lists_use_globalvar_translation_table() {
+        let badge = build_action0_badge_payload(b"GATE", 0, None);
+        let badge_translation = vec![
+            0x00,
+            crate::newgrf_type_tables::ACTION0_FEATURE_GLOBALVAR,
+            0x01,
+            0x01,
+            0x00,
+            crate::newgrf_type_tables::PROP_BADGE_TRANSLATION,
+            b'G',
+            b'A',
+            b'T',
+            b'E',
+            0,
+        ];
+        let tile = vec![
+            0x00,
+            ACTION0_FEATURE_AIRPORTTILES,
+            0x02,
+            0x01,
+            0x00,
+            0x08,
+            24,
+            0x12,
+            0x01,
+            0x00,
+            0x00,
+            0x00,
+        ];
+        let mut airport = build_action0_airport_payload(0, 0, &[(0, 0, 0)], 4, 3, "BadgePort");
+        airport[2] = airport[2].saturating_add(1);
+        airport.extend_from_slice(&[0x12, 0x01, 0x00, 0x00, 0x00]);
+        let tile_meta = parse_action0_airport_tile_meta(&tile).expect("airport tile metadata");
+        assert_eq!(tile_meta.badge_local_ids, vec![0]);
+        let airport_meta = parse_action0_airport_meta(&airport).expect("airport metadata");
+        assert_eq!(airport_meta.badge_local_ids, vec![0]);
+
+        let bytes = build_grf_v2_with_action0s_and_action8(
+            &[&badge, &badge_translation, &tile, &airport],
+            [b'A', b'B', 0, 1],
+            "airport-badge",
+            "",
+        );
+        let dir = tempfile_dir_with("airport-badge.grf", &bytes);
+        let mut state = GameState::new(8, 8);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("airport-badge.grf", 0x4142_0001));
+        apply_newgrf_badges(&mut state, &[&dir]);
+        apply_newgrf_airport_tiles(&mut state, &[&dir]);
+        apply_newgrf_airports(&mut state, &[&dir]);
+        let badge_id = state.badge_catalog[0].id;
+        assert_eq!(
+            state.airport_tile_spec_catalog[0].associated_badges,
+            vec![badge_id]
+        );
+        assert_eq!(
+            state.airport_tile_spec_catalog[0].newgrf_badge_translation,
+            vec![badge_id]
+        );
+        assert_eq!(
+            state.airport_spec_catalog[0].associated_badges,
+            vec![badge_id]
+        );
+    }
+
     fn tempfile_dir_with(name: &str, bytes: &[u8]) -> std::path::PathBuf {
         let dir =
             std::env::temp_dir().join(format!("openttdrs_ngr_{}_{}", std::process::id(), name));

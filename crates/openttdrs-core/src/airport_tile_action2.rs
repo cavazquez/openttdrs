@@ -89,6 +89,19 @@ pub fn action2_eval_ctx_for_airport_tile(
             };
             ctx.parameterized_vars.insert((variable, parameter), value);
         }
+        for parameter in requested_badge_vars(runtime) {
+            let value = current_spec
+                .newgrf_badge_translation
+                .get(usize::from(parameter))
+                .map_or(u32::MAX, |&badge| {
+                    if badge == u16::MAX {
+                        u32::MAX
+                    } else {
+                        u32::from(current_spec.associated_badges.contains(&badge))
+                    }
+                });
+            ctx.parameterized_vars.insert((0x7A, parameter), value);
+        }
     }
     ctx
 }
@@ -103,6 +116,21 @@ fn requested_nearby_vars(
                 && let Some(parameter) = term.param
             {
                 requested.insert((term.variable, parameter));
+            }
+        }
+    }
+    requested
+}
+
+fn requested_badge_vars(runtime: &crate::newgrf_sprites::TrainSpriteGraphics) -> BTreeSet<u8> {
+    let mut requested = BTreeSet::new();
+    for entry in runtime.action2_var.values() {
+        for term in std::iter::once(&entry.first).chain(entry.ops.iter().map(|op| &op.rhs)) {
+            if term.variable == 0x7A
+                && !term.adjust.is_parent_scope()
+                && let Some(parameter) = term.param
+            {
+                requested.insert(parameter);
             }
         }
     }
@@ -365,6 +393,41 @@ mod tests {
                 default: 0,
             },
         );
+        runtime.action2_var.insert(
+            9,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x7A,
+                    param: Some(0),
+                    adjust: Action2VarAdjust {
+                        and_mask: u32::MAX,
+                        ..Default::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: vec![(0, 0, 0)],
+                default: 0,
+            },
+        );
+        runtime.action2_var.insert(
+            10,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x7A,
+                    param: Some(1),
+                    adjust: Action2VarAdjust {
+                        and_mask: u32::MAX,
+                        ..Default::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: vec![(0, 0, 0)],
+                default: 0,
+            },
+        );
+        // The context builder only needs the variable graph to discover
+        // parameterized reads; no Action1 assignment is required for this
+        // scope-variable test.
         let current = AirportTileSpecDef {
             gfx: AirportTileGfxId(74),
             subst_id: 24,
@@ -379,6 +442,8 @@ mod tests {
             newgrf_grfid: 0xAABB_CCDD,
             newgrf_grf_version: 0,
             newgrf_type_tables: None,
+            associated_badges: vec![7],
+            newgrf_badge_translation: vec![7],
             newgrf_preview: Some(sprite(255, 0)),
             newgrf_views: vec![sprite(255, 0), sprite(0, 255)],
             newgrf_runtime: Some(Box::new(runtime)),
@@ -397,6 +462,8 @@ mod tests {
             newgrf_grfid: 0,
             newgrf_grf_version: 0,
             newgrf_type_tables: None,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
             newgrf_preview: None,
             newgrf_views: Vec::new(),
             newgrf_runtime: None,
@@ -414,6 +481,8 @@ mod tests {
         assert_eq!(ctx.vars.get(&0x44), Some(&3));
         assert_eq!(ctx.parent_vars.get(&0x40), Some(&2));
         assert_eq!(ctx.parameterized_vars.get(&(0x62, 1)), Some(&0xFF18));
+        assert_eq!(ctx.parameterized_vars.get(&(0x7A, 0)), Some(&1));
+        assert_eq!(ctx.parameterized_vars.get(&(0x7A, 1)), Some(&u32::MAX));
         let selected = current.newgrf_view_runtime(0, &mut ctx);
         assert_eq!(selected.as_ref().map(|sprite| sprite.rgba[0]), Some(255));
     }

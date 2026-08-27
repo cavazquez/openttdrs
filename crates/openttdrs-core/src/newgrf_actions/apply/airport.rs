@@ -21,6 +21,7 @@ use super::super::action0::{collect_airport_metas_from_grf, collect_airport_tile
 pub fn apply_newgrf_airport_tiles(state: &mut GameState, search_dirs: &[&Path]) {
     let mut catalog = Vec::new();
     let mut overrides = empty_airport_tile_overrides();
+    let badge_catalog = state.badge_catalog.clone();
     let stack = state.newgrf_stack.clone();
     for entry in &stack {
         if !entry.enabled {
@@ -37,7 +38,7 @@ pub fn apply_newgrf_airport_tiles(state: &mut GameState, search_dirs: &[&Path]) 
             continue;
         };
         let type_tables = crate::newgrf_type_tables::collect_type_tables_from_grf(&data);
-        let type_tables = (!type_tables.is_empty()).then_some(type_tables);
+        let type_tables_opt = (!type_tables.is_empty()).then_some(type_tables.clone());
         let gfx =
             crate::newgrf_sprites::collect_airport_tile_sprite_graphics(&data).unwrap_or_default();
         for meta in collect_airport_tile_metas_from_grf(&data) {
@@ -57,6 +58,19 @@ pub fn apply_newgrf_airport_tiles(state: &mut GameState, search_dirs: &[&Path]) 
             if let Some(ovr) = meta.override_of {
                 overrides[usize::from(ovr)] = global_gfx;
             }
+            let (associated_badges, newgrf_badge_translation, unresolved_badges) =
+                crate::badge::resolve_badge_local_ids(
+                    &meta.badge_local_ids,
+                    &type_tables.badges,
+                    &badge_catalog,
+                    entry.grfid,
+                );
+            for badge in unresolved_badges {
+                state.runtime.newgrf_diagnostics.push(format!(
+                    "{}: airport tile {}: badge '{}' no resuelto",
+                    entry.filename, meta.local_id, badge
+                ));
+            }
             catalog.push(AirportTileSpecDef {
                 gfx: AirportTileGfxId(global_gfx),
                 subst_id: u16::from(meta.subst_id),
@@ -70,7 +84,9 @@ pub fn apply_newgrf_airport_tiles(state: &mut GameState, search_dirs: &[&Path]) 
                 newgrf_local_id: meta.local_id,
                 newgrf_grfid: entry.grfid,
                 newgrf_grf_version: entry.grf_version,
-                newgrf_type_tables: type_tables.clone(),
+                newgrf_type_tables: type_tables_opt.clone(),
+                associated_badges,
+                newgrf_badge_translation,
                 newgrf_preview: preview,
                 newgrf_views: views,
                 newgrf_runtime,
@@ -102,6 +118,7 @@ pub fn apply_newgrf_airports(state: &mut GameState, search_dirs: &[&Path]) {
     let local_tile_map = local_tile_gfx_map(&state.airport_tile_spec_catalog);
     let mut catalog = Vec::new();
     let mut disabled_vanilla = vec![false; NEW_AIRPORT_OFFSET as usize];
+    let badge_catalog = state.badge_catalog.clone();
     let stack = state.newgrf_stack.clone();
     for entry in &stack {
         if !entry.enabled {
@@ -117,6 +134,7 @@ pub fn apply_newgrf_airports(state: &mut GameState, search_dirs: &[&Path]) {
         let Ok(data) = std::fs::read(&path) else {
             continue;
         };
+        let type_tables = crate::newgrf_type_tables::collect_type_tables_from_grf(&data);
         let gfx = crate::newgrf_sprites::collect_airport_sprite_graphics(&data).unwrap_or_default();
         for meta in collect_airport_metas_from_grf(&data) {
             if meta.disabled {
@@ -168,6 +186,18 @@ pub fn apply_newgrf_airports(state: &mut GameState, search_dirs: &[&Path]) {
                 meta.name.clone()
             };
             let short = label.chars().take(6).collect::<String>();
+            let (associated_badges, _, unresolved_badges) = crate::badge::resolve_badge_local_ids(
+                &meta.badge_local_ids,
+                &type_tables.badges,
+                &badge_catalog,
+                entry.grfid,
+            );
+            for badge in unresolved_badges {
+                state.runtime.newgrf_diagnostics.push(format!(
+                    "{}: airport '{}': badge '{}' no resuelto",
+                    entry.filename, label, badge
+                ));
+            }
             let views = gfx
                 .views_for_local_id(meta.local_id)
                 .map(<[crate::newgrf_sprites::DecodedSprite]>::to_vec)
@@ -195,6 +225,7 @@ pub fn apply_newgrf_airports(state: &mut GameState, search_dirs: &[&Path]) {
                 min_year: meta.min_year,
                 max_year: meta.max_year,
                 maintenance_cost: meta.maintenance_cost,
+                associated_badges,
                 newgrf_local_id: meta.local_id,
                 newgrf_grfid: entry.grfid,
                 newgrf_views: views,
@@ -351,6 +382,8 @@ mod tests {
                 newgrf_grfid: 1,
                 newgrf_grf_version: 0,
                 newgrf_type_tables: None,
+                associated_badges: Vec::new(),
+                newgrf_badge_translation: Vec::new(),
                 newgrf_preview: None,
                 newgrf_views: Vec::new(),
                 newgrf_runtime: None,
@@ -369,6 +402,8 @@ mod tests {
                 newgrf_grfid: 1,
                 newgrf_grf_version: 0,
                 newgrf_type_tables: None,
+                associated_badges: Vec::new(),
+                newgrf_badge_translation: Vec::new(),
                 newgrf_preview: None,
                 newgrf_views: Vec::new(),
                 newgrf_runtime: None,
@@ -413,6 +448,7 @@ mod tests {
             min_year: 0,
             max_year: u16::MAX,
             maintenance_cost: 0,
+            associated_badges: Vec::new(),
             newgrf_local_id: 0,
             newgrf_grfid: 1,
             newgrf_views: Vec::new(),

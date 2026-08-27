@@ -98,9 +98,10 @@ pub use slope::{
 };
 pub use station_tile_anim::{
     AIRPORT_RADAR_FRAMES, airport_radar_frame, is_airport_tower_tile, step_airport_tiles,
-    step_newgrf_road_stop_tiles, step_newgrf_road_stop_tiles_with_world, step_newgrf_station_tiles,
-    step_newgrf_station_tiles_with_world, trigger_newgrf_station_animation,
-    trigger_newgrf_station_animation_for_platform,
+    step_newgrf_airport_tiles, step_newgrf_road_stop_tiles, step_newgrf_road_stop_tiles_with_world,
+    step_newgrf_station_tiles, step_newgrf_station_tiles_with_world,
+    trigger_newgrf_airport_animation_for_station, trigger_newgrf_airport_tile_animation,
+    trigger_newgrf_station_animation, trigger_newgrf_station_animation_for_platform,
     trigger_newgrf_station_animation_for_platform_with_world,
     trigger_newgrf_station_animation_for_station,
     trigger_newgrf_station_animation_for_station_with_world,

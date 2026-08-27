@@ -341,6 +341,7 @@ fn phase_timer_economy(state: &mut GameState) {
 /// `AnimateAnimatedTiles`: animación de industrias y aeropuertos.
 ///
 /// Usa las visitas del tile loop del tick anterior (si las hay) más la lista de industrias.
+#[allow(clippy::too_many_lines)]
 fn phase_tile_animation(state: &mut GameState, t: u64) {
     let visits = std::mem::take(&mut state.runtime.tile_loop_visited);
     let bubble_spawns = crate::map::bubble_generator_spawns_from_visits(&visits);
@@ -396,6 +397,20 @@ fn phase_tile_animation(state: &mut GameState, t: u64) {
     }
     let airport_dirty = crate::map::step_airport_tiles(&mut state.map, t, &state.stations);
     state.runtime.industry_tile_dirty.extend(airport_dirty);
+    let newgrf_airport_dirty = crate::map::step_newgrf_airport_tiles(
+        &mut state.map,
+        t,
+        &mut state.stations,
+        state.climate,
+        &state.airport_tile_spec_catalog,
+        &mut state.newgrf_animated_airport_tiles,
+        &state.newgrf_stack,
+        &visits,
+    );
+    state
+        .runtime
+        .industry_tile_dirty
+        .extend(newgrf_airport_dirty);
     let road_stop_dirty = crate::map::step_newgrf_road_stop_tiles_with_world(
         &state.map,
         t,

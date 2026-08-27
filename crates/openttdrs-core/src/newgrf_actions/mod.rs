@@ -368,6 +368,53 @@ pub fn build_action0_airport_tile_payload(
     p
 }
 
+/// Fixture `AirportTiles` con metadatos completos de animación (`0x0F`–`0x11`).
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn build_action0_airport_tile_payload_with_animation(
+    local_id: u8,
+    subst_id: u8,
+    override_of: Option<u8>,
+    callback_mask: u8,
+    animation_frames: u8,
+    animation_status: u8,
+    animation_speed: u8,
+    animation_triggers: u8,
+) -> Vec<u8> {
+    let mut num_props = 4u8; // subst, animation info/speed/triggers
+    if override_of.is_some() {
+        num_props = num_props.saturating_add(1);
+    }
+    if callback_mask != 0 {
+        num_props = num_props.saturating_add(1);
+    }
+    let mut p = vec![
+        0x00,
+        ACTION0_FEATURE_AIRPORTTILES,
+        num_props,
+        0x01,
+        local_id,
+        0x08,
+        subst_id,
+    ];
+    if let Some(o) = override_of {
+        p.extend_from_slice(&[0x09, o]);
+    }
+    if callback_mask != 0 {
+        p.extend_from_slice(&[0x0E, callback_mask]);
+    }
+    p.extend_from_slice(&[
+        0x0F,
+        animation_frames,
+        animation_status,
+        0x10,
+        animation_speed,
+        0x11,
+        animation_triggers,
+    ]);
+    p
+}
+
 /// Action0 `Airports` (`0x0D`) con layout 0xFE + nombre C-string.
 ///
 /// `layout_tiles`: `(x, y, local_tile_id)`.
@@ -4540,6 +4587,22 @@ mod tests {
             "NewGRF airport must not use vanilla FTA"
         );
         assert!(newgrf_airport_spec_def(&state.airport_spec_catalog, newgrf_id).is_some());
+    }
+
+    #[test]
+    fn airport_tile_animation_properties_are_preserved() {
+        let payload =
+            build_action0_airport_tile_payload_with_animation(3, 24, Some(12), 0x03, 7, 1, 4, 0x23);
+        let meta = parse_action0_airport_tile_meta(&payload).expect("airport tile metadata");
+        assert_eq!(meta.local_id, 3);
+        assert_eq!(meta.subst_id, 24);
+        assert_eq!(meta.override_of, Some(12));
+        assert_eq!(meta.callback_mask, 0x03);
+        assert_eq!(meta.animation_frames, 7);
+        assert_eq!(meta.animation_status, 1);
+        assert_eq!(meta.animation_speed, 4);
+        assert_eq!(meta.animation_triggers, 0x23);
+        assert_eq!(meta.animation_special_flags, 0);
     }
 
     fn tempfile_dir_with(name: &str, bytes: &[u8]) -> std::path::PathBuf {

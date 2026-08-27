@@ -446,8 +446,18 @@ pub struct ParsedAirportTileMeta {
     pub local_id: u8,
     pub subst_id: u8,
     pub override_of: Option<u8>,
-    /// Callback mask (`prop 0x0E`); almacenado sin ejecutar (#228).
+    /// Callback mask (`prop 0x0E`): bit 0 = next frame, bit 1 = speed.
     pub callback_mask: u8,
+    /// `prop 0x0F`: último frame de animación permitido.
+    pub animation_frames: u8,
+    /// `prop 0x0F`: estado (`0` no-loop, `1` loop, `0xFF` sin animación).
+    pub animation_status: u8,
+    /// `prop 0x10`: espera como potencia de dos de ticks.
+    pub animation_speed: u8,
+    /// `prop 0x11`: máscara de triggers de `AirportTile`.
+    pub animation_triggers: u8,
+    /// Flags especiales no expuestos por Action0; se conserva para runtime.
+    pub animation_special_flags: u8,
 }
 
 /// Metadatos `Airports` Action0 (antes de asignar id ≥10).
@@ -3698,6 +3708,10 @@ pub fn parse_action0_airport_tile_meta(payload: &[u8]) -> Option<ParsedAirportTi
     let mut subst_id: Option<u8> = None;
     let mut override_of: Option<u8> = None;
     let mut callback_mask = 0u8;
+    let mut animation_frames = 0u8;
+    let mut animation_status = 0xFFu8;
+    let mut animation_speed = 2u8;
+    let mut animation_triggers = 0u8;
     for _ in 0..header.num_props {
         if i >= payload.len() {
             break;
@@ -3737,12 +3751,22 @@ pub fn parse_action0_airport_tile_meta(payload: &[u8]) -> Option<ParsedAirportTi
                 if i + 2 > payload.len() {
                     break;
                 }
+                animation_frames = payload[i];
+                animation_status = payload[i + 1];
                 i += 2;
             }
-            0x10 | 0x11 => {
+            0x10 => {
                 if i >= payload.len() {
                     break;
                 }
+                animation_speed = payload[i];
+                i += 1;
+            }
+            0x11 => {
+                if i >= payload.len() {
+                    break;
+                }
+                animation_triggers = payload[i];
                 i += 1;
             }
             0x12 => {
@@ -3766,6 +3790,11 @@ pub fn parse_action0_airport_tile_meta(payload: &[u8]) -> Option<ParsedAirportTi
         subst_id: subst_id?,
         override_of,
         callback_mask,
+        animation_frames,
+        animation_status,
+        animation_speed,
+        animation_triggers,
+        animation_special_flags: 0,
     })
 }
 

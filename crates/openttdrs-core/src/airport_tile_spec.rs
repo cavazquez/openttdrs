@@ -12,6 +12,32 @@ pub const NUM_AIRPORT_TILES: u16 = 256;
 /// Id inválido.
 pub const INVALID_AIRPORT_TILE: u16 = NUM_AIRPORT_TILES;
 
+/// Triggers de animación de `AirportTile` (`newgrf/station_type.h`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum AirportAnimationTrigger {
+    Built = 0,
+    TileLoop = 1,
+    NewCargo = 2,
+    CargoTaken = 3,
+    AcceptanceTick = 4,
+    AirplaneTouchdown = 5,
+}
+
+impl AirportAnimationTrigger {
+    /// Bit correspondiente en la propiedad Action0 `0x11`.
+    #[must_use]
+    pub const fn mask(self) -> u8 {
+        1_u8 << (self as u8)
+    }
+
+    /// Ordinal que recibe CB `0x152` en el byte bajo de `var 18`.
+    #[must_use]
+    pub const fn callback_param(self, extra: u8) -> u32 {
+        self as u32 | ((extra as u32) << 8)
+    }
+}
+
 /// Identificador global de gfx de tesela de aeropuerto.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct AirportTileGfxId(pub u16);
@@ -23,7 +49,7 @@ impl AirportTileGfxId {
     }
 }
 
-/// Spec `NewGRF` de una tesela de aeropuerto (simplificado).
+/// Spec `NewGRF` de una tesela de aeropuerto.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AirportTileSpecDef {
     /// Gfx global (≥ [`NEW_AIRPORT_TILE_OFFSET`] si `from_newgrf`).
@@ -31,9 +57,24 @@ pub struct AirportTileSpecDef {
     /// Fallback vanilla (`subst_id` &lt; 74).
     pub subst_id: u16,
     pub from_newgrf: bool,
-    /// Callback mask (`prop 0x0E`); almacenado, sin ejecutar (#228).
+    /// Callback mask (`prop 0x0E`): bit 0 = siguiente frame, bit 1 = velocidad.
     #[serde(default)]
     pub callback_mask: u8,
+    /// `prop 0x0F`: último frame de animación permitido.
+    #[serde(default)]
+    pub animation_frames: u8,
+    /// `prop 0x0F`: 0 = no loop, 1 = loop, `0xFF` = sin animación.
+    #[serde(default = "default_airport_animation_status")]
+    pub animation_status: u8,
+    /// `prop 0x10`: espera como potencia de dos de ticks.
+    #[serde(default = "default_airport_animation_speed")]
+    pub animation_speed: u8,
+    /// `prop 0x11`: máscara de `AirportAnimationTrigger` para CB `0x152`.
+    #[serde(default)]
+    pub animation_triggers: u8,
+    /// Flags internos de animación; bit 0 pasa random al callback de frame.
+    #[serde(default)]
+    pub animation_special_flags: u8,
     /// Id local Action0/3 en el GRF.
     #[serde(default, skip)]
     pub newgrf_local_id: u8,
@@ -46,6 +87,14 @@ pub struct AirportTileSpecDef {
     pub newgrf_views: Vec<crate::newgrf_sprites::DecodedSprite>,
     #[serde(default, skip)]
     pub newgrf_runtime: Option<Box<crate::newgrf_sprites::TrainSpriteGraphics>>,
+}
+
+const fn default_airport_animation_status() -> u8 {
+    0xFF
+}
+
+const fn default_airport_animation_speed() -> u8 {
+    2
 }
 
 impl AirportTileSpecDef {
@@ -73,6 +122,28 @@ impl AirportTileSpecDef {
             return None;
         }
         Some(views[idx % views.len()].clone())
+    }
+
+    /// Indica si el GRF instaló el callback `CBID_AIRPTILE_ANIMATION_NEXT_FRAME`.
+    #[must_use]
+    pub const fn has_animation_next_frame_callback(&self) -> bool {
+        self.callback_mask & 1 != 0
+    }
+
+    /// Indica si el GRF instaló el callback `CBID_AIRPTILE_ANIMATION_SPEED`.
+    #[must_use]
+    pub const fn has_animation_speed_callback(&self) -> bool {
+        self.callback_mask & 2 != 0
+    }
+
+    #[must_use]
+    pub const fn animation_loops(&self) -> bool {
+        self.animation_status == 1
+    }
+
+    #[must_use]
+    pub const fn animation_random_bits(&self) -> bool {
+        self.animation_special_flags & 1 != 0
     }
 
     #[must_use]

@@ -141,9 +141,10 @@ pub use airport_fta::{
 };
 pub use airport_tile_action2::action2_eval_ctx_for_airport_tile;
 pub use airport_tile_spec::{
-    AirportTileGfxId, AirportTileSpecDef, INVALID_AIRPORT_TILE, NEW_AIRPORT_TILE_OFFSET,
-    NUM_AIRPORT_TILES, empty_airport_tile_overrides, get_translated_airport_tile_id,
-    next_free_airport_tile_gfx_id, resolve_airport_tile_draw_gfx, resolve_airport_tile_piece_gfx,
+    AirportAnimationTrigger, AirportTileGfxId, AirportTileSpecDef, INVALID_AIRPORT_TILE,
+    NEW_AIRPORT_TILE_OFFSET, NUM_AIRPORT_TILES, empty_airport_tile_overrides,
+    get_translated_airport_tile_id, next_free_airport_tile_gfx_id, resolve_airport_tile_draw_gfx,
+    resolve_airport_tile_piece_gfx,
 };
 pub use autoreplace::{AutoReplaceRule, try_autoreplace_vehicle};
 pub use badge::{
@@ -449,9 +450,10 @@ pub use newgrf_sprites::{
     Action2VarAdjust, Action2VarEntry, Action2VarOp, Action2VarTerm, Action5Block,
     Action5LoadContext, BRIDGE_DECKS_ACTION5_SLOT_COUNT, CALLBACK_FAILED, CANALS_ACTION5_LOCK_SLOT,
     CANALS_ACTION5_SLOT_COUNT, CATENARY_ACTION5_SLOT_COUNT, CATENARY_ENTRANCE_SPRITE_BASE,
-    CATENARY_PYLON_SPRITE_BASE, CATENARY_WIRE_SPRITE_BASE, CBID_CARGO_PROFIT_CALC,
-    CBID_CARGO_STATION_RATING_CALC, CBID_HOUSE_ALLOW_CONSTRUCTION, CBID_INDTILE_ANIM_NEXT_FRAME,
-    CBID_INDTILE_ANIMATION_NEXT_FRAME, CBID_INDTILE_ANIMATION_SPEED,
+    CATENARY_PYLON_SPRITE_BASE, CATENARY_WIRE_SPRITE_BASE, CBID_AIRPTILE_ANIMATION_NEXT_FRAME,
+    CBID_AIRPTILE_ANIMATION_SPEED, CBID_AIRPTILE_ANIMATION_TRIGGER, CBID_AIRPTILE_DRAW_FOUNDATIONS,
+    CBID_CARGO_PROFIT_CALC, CBID_CARGO_STATION_RATING_CALC, CBID_HOUSE_ALLOW_CONSTRUCTION,
+    CBID_INDTILE_ANIM_NEXT_FRAME, CBID_INDTILE_ANIMATION_NEXT_FRAME, CBID_INDTILE_ANIMATION_SPEED,
     CBID_INDTILE_ANIMATION_TRIGGER, CBID_INDUSTRY_LOCATION, CBID_OBJECT_LAND_SLOPE_CHECK,
     CBID_STATION_ANIMATION_NEXT_FRAME, CBID_STATION_ANIMATION_SPEED,
     CBID_STATION_ANIMATION_TRIGGER, CBID_STATION_AVAILABILITY, CBID_STATION_BUILD_TILE_LAYOUT,

@@ -154,6 +154,21 @@ pub(in crate::command) fn place_airport_area(
     st.airport_blocks = 0;
     // Catchment: `station_catchment_radius` lee `airport_spec` en cobertura.
     state.stations.push(st);
+    if newgrf_def.is_some() {
+        let dirty = crate::map::trigger_newgrf_airport_animation_for_station(
+            &mut state.map,
+            state.tick.get(),
+            &mut state.stations,
+            state.climate,
+            &state.airport_tile_spec_catalog,
+            &mut state.newgrf_animated_airport_tiles,
+            &state.newgrf_stack,
+            station_anchor,
+            crate::AirportAnimationTrigger::Built,
+            0,
+        );
+        state.runtime.industry_tile_dirty.extend(dirty);
+    }
     Ok(())
 }
 

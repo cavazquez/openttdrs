@@ -1129,6 +1129,14 @@ pub const CBID_STATION_ANIMATION_TRIGGER: u16 = 0x140;
 pub const CBID_STATION_ANIMATION_NEXT_FRAME: u16 = 0x141;
 /// Callback estaciones / road stops: velocidad de animación.
 pub const CBID_STATION_ANIMATION_SPEED: u16 = 0x142;
+/// Callback `AirportTile`: trigger de animación (`CBID_AIRPTILE_ANIMATION_TRIGGER`).
+pub const CBID_AIRPTILE_ANIMATION_TRIGGER: u16 = 0x152;
+/// Callback `AirportTile`: siguiente frame (`CBID_AIRPTILE_ANIMATION_NEXT_FRAME`).
+pub const CBID_AIRPTILE_ANIMATION_NEXT_FRAME: u16 = 0x153;
+/// Callback `AirportTile`: velocidad de animación (`CBID_AIRPTILE_ANIMATION_SPEED`).
+pub const CBID_AIRPTILE_ANIMATION_SPEED: u16 = 0x154;
+/// Callback `AirportTile`: foundations dinámicos (`CBID_AIRPTILE_DRAW_FOUNDATIONS`).
+pub const CBID_AIRPTILE_DRAW_FOUNDATIONS: u16 = 0x150;
 
 /// Bloque de sprites Action5 (shore / catenary / …).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

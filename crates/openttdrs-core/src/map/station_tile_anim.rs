@@ -4,6 +4,9 @@ use std::collections::HashSet;
 use std::hash::BuildHasher;
 
 use crate::airport::{AirportPiece, airport_station_gfx_animation_frames};
+use crate::airport_tile_spec::{
+    AirportAnimationTrigger, AirportTileSpecDef, NEW_AIRPORT_TILE_OFFSET,
+};
 use crate::cargo::CargoType;
 use crate::company::Company;
 use crate::industry::Industry;
@@ -13,8 +16,9 @@ use crate::newgrf_callback::{
     trigger_road_stop_animation_at_with_world, writeback_station_persistent_registers,
 };
 use crate::newgrf_sprites::{
-    CALLBACK_FAILED, CBID_STATION_ANIMATION_NEXT_FRAME, CBID_STATION_ANIMATION_SPEED,
-    CBID_STATION_ANIMATION_TRIGGER,
+    CALLBACK_FAILED, CBID_AIRPTILE_ANIMATION_NEXT_FRAME, CBID_AIRPTILE_ANIMATION_SPEED,
+    CBID_AIRPTILE_ANIMATION_TRIGGER, CBID_STATION_ANIMATION_NEXT_FRAME,
+    CBID_STATION_ANIMATION_SPEED, CBID_STATION_ANIMATION_TRIGGER,
 };
 use crate::road_stop_spec::{RoadStopSpecDef, road_stop_spec_def};
 use crate::station::{
@@ -71,6 +75,377 @@ pub fn step_airport_tiles(map: &mut Map, tick: u64, stations: &[Station]) -> Vec
         }
     }
     dirty.sort_by_key(|c| (c.x, c.y));
+    dirty.dedup();
+    dirty
+}
+
+/// Busca el gfx `AirportTile` global que corresponde a una coordenada.
+///
+/// Los aeropuertos construidos dentro del juego conservan la tabla explícita
+/// `airport_tile_gfx`; los saves antiguos pueden no tenerla, en cuyo caso se
+/// usa el byte `m5` como compatibilidad con el mapa nativo.
+fn airport_tile_gfx(station: &Station, map: &Map, coord: TileCoord) -> Option<u16> {
+    station
+        .airport_tile_gfx
+        .iter()
+        .find(|(candidate, _)| *candidate == coord)
+        .map(|(_, gfx)| *gfx)
+        .or_else(|| map.get(coord).map(|tile| u16::from(tile.m5)))
+}
+
+fn airport_station_index(stations: &[Station], coord: TileCoord) -> Option<usize> {
+    stations
+        .iter()
+        .position(|station| station.stop_kind == StopKind::Airport && station.covers_tile(coord))
+}
+
+fn airport_animation_context(
+    map: &Map,
+    stations: &[Station],
+    catalog: &[AirportTileSpecDef],
+    climate: Climate,
+    newgrf_stack: &[crate::NewGrfEntry],
+    coord: TileCoord,
+) -> Option<(
+    usize,
+    AirportTileSpecDef,
+    crate::newgrf_sprites::Action2EvalCtx,
+)> {
+    let station_index = airport_station_index(stations, coord)?;
+    let gfx = airport_tile_gfx(&stations[station_index], map, coord)?;
+    if gfx < NEW_AIRPORT_TILE_OFFSET {
+        return None;
+    }
+    let def = catalog
+        .iter()
+        .find(|candidate| candidate.gfx.as_u16() == gfx && candidate.from_newgrf)
+        .cloned()?;
+    let mut ctx = crate::airport_tile_action2::action2_eval_ctx_for_airport_tile(
+        map, stations, coord, catalog, &def, climate,
+    );
+    ctx.set_grf_params(crate::stack_params_for_grfid(
+        newgrf_stack,
+        def.newgrf_grfid,
+    ));
+    Some((station_index, def, ctx))
+}
+
+fn airport_animation_random_bits(station: &Station, map: &Map, coord: TileCoord, tick: u64) -> u32 {
+    let x = coord.x.cast_unsigned();
+    let y = coord.y.cast_unsigned();
+    let tick = u32::try_from(tick).unwrap_or(u32::MAX);
+    let tile_random = u32::from(map.get(coord).map_or(0, |tile| tile.m3));
+    u32::from(station.newgrf_random_bits)
+        | (tile_random << 16)
+            ^ x.wrapping_mul(0x9E37_79B9)
+            ^ y.wrapping_mul(0x85EB_CA6B)
+            ^ tick.rotate_left(11)
+}
+
+fn resolve_airport_animation_callback(
+    station: &mut Station,
+    def: &AirportTileSpecDef,
+    ctx: &mut crate::newgrf_sprites::Action2EvalCtx,
+    callback: u16,
+    param1: u32,
+    param2: u32,
+) -> u16 {
+    let Some(runtime) = def.newgrf_runtime.as_ref() else {
+        return CALLBACK_FAILED;
+    };
+    ctx.random_bits = param1;
+    let result = runtime.resolve_callback_ctx(def.newgrf_local_id, callback, param1, param2, ctx);
+    writeback_station_persistent_registers(station, ctx);
+    result
+}
+
+/// Ejecuta `CBID_AIRPTILE_ANIMATION_TRIGGER` (`0x152`) para una tesela.
+///
+/// `OpenTTD` registra la tesela en `AnimatedTileList` cuando el callback
+/// devuelve `0xFE`, la retira con `0xFF`, y fija `MAP7` para cualquier otro
+/// byte. El resultado del callback se conserva junto a la instancia de
+/// estación para que los eventos de carga/avión puedan reutilizarlo.
+#[allow(clippy::too_many_arguments)]
+pub fn trigger_newgrf_airport_tile_animation<S: BuildHasher>(
+    map: &mut Map,
+    tick: u64,
+    stations: &mut [Station],
+    climate: Climate,
+    catalog: &[AirportTileSpecDef],
+    active_tiles: &mut HashSet<TileCoord, S>,
+    newgrf_stack: &[crate::NewGrfEntry],
+    coord: TileCoord,
+    trigger: AirportAnimationTrigger,
+    random: Option<u32>,
+    var18_extra: u8,
+) -> bool {
+    let Some((station_index, def, mut ctx)) =
+        airport_animation_context(map, stations, catalog, climate, newgrf_stack, coord)
+    else {
+        active_tiles.remove(&coord);
+        return false;
+    };
+    if def.animation_triggers & trigger.mask() == 0 {
+        return false;
+    }
+    let Some(mut tile) = map.get(coord) else {
+        active_tiles.remove(&coord);
+        return false;
+    };
+    let before = (tile.m7, active_tiles.contains(&coord));
+    let random = random.unwrap_or_else(|| {
+        airport_animation_random_bits(&stations[station_index], map, coord, tick)
+    });
+    let result = resolve_airport_animation_callback(
+        &mut stations[station_index],
+        &def,
+        &mut ctx,
+        CBID_AIRPTILE_ANIMATION_TRIGGER,
+        random,
+        trigger.callback_param(var18_extra),
+    );
+    if result == CALLBACK_FAILED {
+        return false;
+    }
+    match (result & 0xFF) as u8 {
+        0xFD => {}
+        0xFE => {
+            active_tiles.insert(coord);
+        }
+        0xFF => {
+            active_tiles.remove(&coord);
+        }
+        frame => {
+            tile.m7 = frame;
+            active_tiles.insert(coord);
+        }
+    }
+    if tile.m7 != before.0 {
+        let _ = map.set_tile(coord, tile);
+    }
+    before != (tile.m7, active_tiles.contains(&coord))
+}
+
+/// Dispara un trigger de aeropuerto en todas las teselas que pertenecen a su
+/// estación (`TA_WHOLE` equivalente para `AirportAnimationTrigger`).
+#[allow(clippy::too_many_arguments)]
+pub fn trigger_newgrf_airport_animation_for_station<S: BuildHasher>(
+    map: &mut Map,
+    tick: u64,
+    stations: &mut [Station],
+    climate: Climate,
+    catalog: &[AirportTileSpecDef],
+    active_tiles: &mut HashSet<TileCoord, S>,
+    newgrf_stack: &[crate::NewGrfEntry],
+    station_anchor: TileCoord,
+    trigger: AirportAnimationTrigger,
+    var18_extra: u8,
+) -> Vec<TileCoord> {
+    let Some(station) = stations
+        .iter()
+        .find(|station| station.pos == station_anchor && station.stop_kind == StopKind::Airport)
+    else {
+        return Vec::new();
+    };
+    let mut coords = if station.airport_tiles.is_empty() {
+        vec![station.pos]
+    } else {
+        station.airport_tiles.clone()
+    };
+    coords.sort_by_key(|coord| (coord.x, coord.y));
+    coords.dedup();
+    coords
+        .into_iter()
+        .filter(|coord| {
+            trigger_newgrf_airport_tile_animation(
+                map,
+                tick,
+                stations,
+                climate,
+                catalog,
+                active_tiles,
+                newgrf_stack,
+                *coord,
+                trigger,
+                None,
+                var18_extra,
+            )
+        })
+        .collect()
+}
+
+#[allow(clippy::too_many_arguments)]
+fn advance_newgrf_airport_tile<S: BuildHasher>(
+    map: &mut Map,
+    tick: u64,
+    stations: &mut [Station],
+    climate: Climate,
+    catalog: &[AirportTileSpecDef],
+    active_tiles: &mut HashSet<TileCoord, S>,
+    newgrf_stack: &[crate::NewGrfEntry],
+    coord: TileCoord,
+) -> bool {
+    let Some((station_index, def, mut ctx)) =
+        airport_animation_context(map, stations, catalog, climate, newgrf_stack, coord)
+    else {
+        active_tiles.remove(&coord);
+        return false;
+    };
+    let Some(mut tile) = map.get(coord) else {
+        active_tiles.remove(&coord);
+        return false;
+    };
+    let before = (tile.m7, active_tiles.contains(&coord));
+    let mut speed = def.animation_speed.min(16);
+    if def.has_animation_speed_callback() {
+        let result = resolve_airport_animation_callback(
+            &mut stations[station_index],
+            &def,
+            &mut ctx,
+            CBID_AIRPTILE_ANIMATION_SPEED,
+            0,
+            0,
+        );
+        if result != CALLBACK_FAILED {
+            speed = u8::try_from(result & 0xFF).unwrap_or(16).min(16);
+        }
+    }
+    if !tick.is_multiple_of(1_u64 << u32::from(speed)) {
+        return false;
+    }
+
+    let mut frame_set_by_callback = false;
+    if def.has_animation_next_frame_callback() {
+        let random = if def.animation_random_bits() {
+            airport_animation_random_bits(&stations[station_index], map, coord, tick)
+        } else {
+            0
+        };
+        let result = resolve_airport_animation_callback(
+            &mut stations[station_index],
+            &def,
+            &mut ctx,
+            CBID_AIRPTILE_ANIMATION_NEXT_FRAME,
+            random,
+            0,
+        );
+        if result != CALLBACK_FAILED {
+            match (result & 0xFF) as u8 {
+                0xFF => {
+                    active_tiles.remove(&coord);
+                    frame_set_by_callback = true;
+                }
+                0xFE => {}
+                frame => {
+                    tile.m7 = frame;
+                    frame_set_by_callback = true;
+                }
+            }
+        }
+    }
+
+    if active_tiles.contains(&coord) && !frame_set_by_callback {
+        if tile.m7 < def.animation_frames {
+            tile.m7 = tile.m7.saturating_add(1);
+        } else if tile.m7 == def.animation_frames && def.animation_loops() {
+            tile.m7 = 0;
+        } else {
+            active_tiles.remove(&coord);
+        }
+    }
+    if tile.m7 != before.0 {
+        let _ = map.set_tile(coord, tile);
+    }
+    before != (tile.m7, active_tiles.contains(&coord))
+}
+
+/// Scheduler de `AirportTile` equivalente a `AnimateTile_Airport`.
+///
+/// Primero procesa `TileLoop` de las visitas recibidas y luego avanza la lista
+/// persistida de teselas activas. Las teselas con `animation.status != 0xFF`
+/// se registran al observarse por primera vez, lo que permite reanudar saves
+/// antiguos que no tenían aún el `AnimatedTileList` serializado.
+#[allow(clippy::too_many_arguments)]
+pub fn step_newgrf_airport_tiles<S: BuildHasher>(
+    map: &mut Map,
+    tick: u64,
+    stations: &mut [Station],
+    climate: Climate,
+    catalog: &[AirportTileSpecDef],
+    active_tiles: &mut HashSet<TileCoord, S>,
+    newgrf_stack: &[crate::NewGrfEntry],
+    tile_loop_visits: &[(TileCoord, crate::map::Tile)],
+) -> Vec<TileCoord> {
+    let mut dirty = Vec::new();
+    for (coord, _) in tile_loop_visits {
+        if trigger_newgrf_airport_tile_animation(
+            map,
+            tick,
+            stations,
+            climate,
+            catalog,
+            active_tiles,
+            newgrf_stack,
+            *coord,
+            AirportAnimationTrigger::TileLoop,
+            None,
+            0,
+        ) {
+            dirty.push(*coord);
+        }
+    }
+
+    let mut candidates = Vec::new();
+    for station in stations.iter() {
+        if station.stop_kind != StopKind::Airport {
+            continue;
+        }
+        let tiles = if station.airport_tiles.is_empty() {
+            std::slice::from_ref(&station.pos)
+        } else {
+            station.airport_tiles.as_slice()
+        };
+        candidates.extend(tiles.iter().copied());
+    }
+    candidates.sort_by_key(|coord| (coord.x, coord.y));
+    candidates.dedup();
+    for coord in candidates {
+        let Some((_, def, _)) =
+            airport_animation_context(map, stations, catalog, climate, newgrf_stack, coord)
+        else {
+            continue;
+        };
+        if def.animation_status == 0xFF {
+            continue;
+        }
+        if !active_tiles.contains(&coord) {
+            // A non-looping animation that already reached its terminal frame
+            // must not restart every tick. Fresh tiles start at MAP7=0.
+            let frame = map.get(coord).map_or(0, |tile| tile.m7);
+            if !def.animation_loops() && frame >= def.animation_frames && tick > 0 {
+                continue;
+            }
+            active_tiles.insert(coord);
+        }
+    }
+
+    let mut active: Vec<_> = active_tiles.iter().copied().collect();
+    active.sort_by_key(|coord| (coord.x, coord.y));
+    for coord in active {
+        if advance_newgrf_airport_tile(
+            map,
+            tick,
+            stations,
+            climate,
+            catalog,
+            active_tiles,
+            newgrf_stack,
+            coord,
+        ) {
+            dirty.push(coord);
+        }
+    }
+    dirty.sort_by_key(|coord| (coord.x, coord.y));
     dirty.dedup();
     dirty
 }
@@ -904,6 +1279,52 @@ mod tests {
         }
     }
 
+    fn airport_animation_callbacks() -> TrainSpriteGraphics {
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 2,
+        });
+        gfx.action2_var.insert(
+            2,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x0C,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        shift: 0,
+                        and_mask: u32::MAX,
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: Vec::new(),
+                ranges: vec![
+                    (
+                        4,
+                        u32::from(CBID_AIRPTILE_ANIMATION_TRIGGER),
+                        u32::from(CBID_AIRPTILE_ANIMATION_TRIGGER),
+                    ),
+                    (
+                        5,
+                        u32::from(CBID_AIRPTILE_ANIMATION_NEXT_FRAME),
+                        u32::from(CBID_AIRPTILE_ANIMATION_NEXT_FRAME),
+                    ),
+                    (
+                        6,
+                        u32::from(CBID_AIRPTILE_ANIMATION_SPEED),
+                        u32::from(CBID_AIRPTILE_ANIMATION_SPEED),
+                    ),
+                ],
+                default: 0,
+            },
+        );
+        // Trigger registra, next-frame fija el frame 3 y speed espera 2^2 ticks.
+        gfx.action2_var.insert(4, callback_literal(0xFE));
+        gfx.action2_var.insert(5, callback_literal(3));
+        gfx.action2_var.insert(6, callback_literal(2));
+        gfx
+    }
+
     /// Runtime sintético que distingue 0x140, 0x141 y 0x142 por el byte bajo
     /// de `var 0x0C`, como hacen los callbacks de 15 bits en Action2.
     fn road_stop_animation_callbacks() -> TrainSpriteGraphics {
@@ -1065,6 +1486,94 @@ mod tests {
         map.set_tile(pos, tile).unwrap();
         assert!(step_airport_tiles(&mut map, 3, &[]).is_empty());
         assert_eq!(map.get(pos).unwrap().m7, 0);
+    }
+
+    #[test]
+    fn newgrf_airport_animation_runs_trigger_speed_next_frame_and_roundtrips() {
+        let coord = TileCoord::new(1, 1);
+        let mut map = Map::new_flat(4, 4, 0);
+        let mut tile = map.get(coord).unwrap();
+        tile.kind = TileKind::Airport;
+        tile.mapt = 0x50;
+        tile.m5 = AirportPiece::Apron as u8;
+        map.set_tile(coord, tile).unwrap();
+
+        let mut station = Station::new_with_kind(coord, StopKind::Airport);
+        station.airport_tiles = vec![coord];
+        station.airport_tile_gfx = vec![(coord, 74)];
+        let mut stations = vec![station];
+        let catalog = vec![AirportTileSpecDef {
+            gfx: crate::AirportTileGfxId(74),
+            subst_id: 24,
+            from_newgrf: true,
+            callback_mask: 0x03,
+            animation_frames: 5,
+            animation_status: 1,
+            animation_speed: 0,
+            animation_triggers: AirportAnimationTrigger::Built.mask()
+                | AirportAnimationTrigger::TileLoop.mask(),
+            animation_special_flags: 0,
+            newgrf_local_id: 0,
+            newgrf_grfid: 0x4150_0001,
+            newgrf_preview: None,
+            newgrf_views: Vec::new(),
+            newgrf_runtime: Some(Box::new(airport_animation_callbacks())),
+        }];
+        let stack = vec![crate::NewGrfEntry::new("airport.grf", 0x4150_0001)];
+        let mut active = HashSet::new();
+
+        assert!(trigger_newgrf_airport_tile_animation(
+            &mut map,
+            1,
+            &mut stations,
+            Climate::Temperate,
+            &catalog,
+            &mut active,
+            &stack,
+            coord,
+            AirportAnimationTrigger::Built,
+            None,
+            0,
+        ));
+        assert!(active.contains(&coord));
+        assert_eq!(map.get(coord).unwrap().m7, 0);
+
+        // CB154 devuelve 2: el tick 1 no consulta CB153 todavía.
+        let dirty = step_newgrf_airport_tiles(
+            &mut map,
+            1,
+            &mut stations,
+            Climate::Temperate,
+            &catalog,
+            &mut active,
+            &stack,
+            &[],
+        );
+        assert!(dirty.is_empty());
+        assert_eq!(map.get(coord).unwrap().m7, 0);
+
+        let dirty = step_newgrf_airport_tiles(
+            &mut map,
+            4,
+            &mut stations,
+            Climate::Temperate,
+            &catalog,
+            &mut active,
+            &stack,
+            &[],
+        );
+        assert_eq!(dirty, vec![coord]);
+        assert_eq!(map.get(coord).unwrap().m7, 3);
+
+        let mut state = crate::GameState::from_map(map);
+        state.stations = stations;
+        state.airport_tile_spec_catalog = catalog;
+        state.newgrf_stack = stack;
+        state.newgrf_animated_airport_tiles = active;
+        let json = state.save_json().unwrap();
+        let loaded = crate::GameState::load_json(&json).unwrap();
+        assert_eq!(loaded.map.get(coord).unwrap().m7, 3);
+        assert!(loaded.newgrf_animated_airport_tiles.contains(&coord));
     }
 
     #[test]

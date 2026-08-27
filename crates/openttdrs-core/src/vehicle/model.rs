@@ -68,6 +68,17 @@ pub struct VehicleOrderRuntime {
     pub max_speed: u16,
 }
 
+/// Elemento del caché de ruta de `RoadVehicle` en `VEHS`.
+///
+/// Se mantiene separado de `Vehicle::path` porque `OpenTTD` guarda también el
+/// `Trackdir` elegido y el índice lineal de la tesela, datos que no se pueden
+/// reconstruir de forma fiable a partir de una cola de coordenadas.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct RoadPathEntry {
+    pub trackdir: u8,
+    pub tile: u32,
+}
+
 /// Triggers de randomización de vehículos usados por `CBID_RANDOM_TRIGGER`.
 ///
 /// Los valores siguen el orden de `VehicleRandomTrigger` de `OpenTTD`. Se
@@ -188,6 +199,12 @@ pub struct Vehicle {
     /// Estado de conducción road (`RVSB_*` / trackdir).
     #[serde(default)]
     pub road_state: u8,
+    /// Flags generales del vehículo de carretera (`RoadVehicle::gv_flags`).
+    #[serde(default)]
+    pub road_gv_flags: u16,
+    /// Caché de ruta nativo de carretera (`RoadVehicle::path`).
+    #[serde(default)]
+    pub road_path: Vec<RoadPathEntry>,
     /// Frame dentro de la tabla `_road_drive_data` actual.
     #[serde(default)]
     pub frame: u8,
@@ -663,6 +680,8 @@ impl Vehicle {
             running: true,
             progress: 0,
             road_state: 0,
+            road_gv_flags: 0,
+            road_path: Vec::new(),
             frame: 0,
             blocked_ctr: 0,
             reverse_ctr: 0,

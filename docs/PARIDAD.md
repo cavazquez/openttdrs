@@ -365,10 +365,12 @@ horario) y los contadores diarios (`day_counter`, `tick_counter`,
 `running_ticks`). En barcos, el subregistro `SlVehicleShip` ya conserva los
 bits crudos de `state`, su `rotation` y la proyección de `TrackBits` usada por
 el controlador; todavía faltan su vector `path` cacheado y la semántica YAPF /
-wormhole completa. En aeronaves, `crashed_counter`, `number_consecutive_turns`,
-`turn_counter` y `flags` también se conservan en el subregistro FTA. Siguen
-pendientes el path/tcache y la geometría completa de tren, carretera y barco,
-además del runtime FTA.
+wormhole completa. En carretera, `SlVehicleRoadVeh` conserva además `gv_flags`
+y las dos formas nativas del caché `path` (`trackdir`/`tile`), aunque la
+reconstrucción de rutas y la conducción completa siguen siendo best-effort. En
+aeronaves, `crashed_counter`, `number_consecutive_turns`, `turn_counter` y
+`flags` también se conservan en el subregistro FTA. Siguen pendientes el
+path/tcache y la geometría completa de tren y barco, además del runtime FTA.
 
 <!-- active-parity-backlog:end -->
 

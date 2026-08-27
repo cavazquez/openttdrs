@@ -15,7 +15,7 @@ pub(crate) use reliability::{
 // Re-exportaciones públicas desde model.rs
 pub use model::{
     AircraftPhase, DIR_E, DIR_N, DIR_NE, DIR_NW, DIR_S, DIR_SE, DIR_SW, DIR_W, RoadDepotPhase,
-    TimetableWaitKind, Vehicle, VehicleDirection, VehicleKind, VehicleOrderRuntime,
+    RoadPathEntry, TimetableWaitKind, Vehicle, VehicleDirection, VehicleKind, VehicleOrderRuntime,
     VehicleRandomTrigger,
 };
 

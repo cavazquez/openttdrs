@@ -1143,6 +1143,10 @@ pub struct SavVehicle {
     /// contiene todavía el campo. Mantenerlo evita reiniciar la tabla
     /// `_road_drive_data` al importar un vehículo en movimiento.
     pub road_state: u8,
+    /// Flags generales de vehículo de carretera (`RoadVehicle::gv_flags`).
+    pub road_gv_flags: u16,
+    /// Caché de ruta nativo (`trackdir` + `tile`) cuando el save lo incluye.
+    pub road_path: Vec<crate::vehicle::RoadPathEntry>,
     /// Frame de la tabla de conducción de carretera (`RoadVehicle::frame`).
     pub road_frame: u8,
     /// Contador de bloqueo vial (`RoadVehicle::blocked_ctr`).
@@ -1264,6 +1268,42 @@ fn ship_track_from_state(state: u8) -> u8 {
         32 => crate::ship_movement::TRACK_RIGHT,
         _ => 0,
     }
+}
+
+/// Lee las dos variantes del caché de ruta vial de `OpenTTD`: la lista moderna
+/// de structs `path` y los vectores legacy `path.td`/`path.tile`.
+#[must_use]
+fn road_path_from_record(record: &SlRecord) -> Vec<crate::vehicle::RoadPathEntry> {
+    if let Some(SlValue::Structs(items)) = record_get(record, "path") {
+        return items
+            .iter()
+            .filter_map(|item| {
+                let trackdir = record_get(item, "trackdir")
+                    .and_then(SlValue::as_u64)
+                    .and_then(|value| u8::try_from(value).ok())?;
+                let tile = record_get(item, "tile")
+                    .and_then(SlValue::as_u64)
+                    .and_then(|value| u32::try_from(value).ok())?;
+                Some(crate::vehicle::RoadPathEntry { trackdir, tile })
+            })
+            .collect();
+    }
+    let Some(SlValue::List(trackdirs)) = record_get(record, "path.td") else {
+        return Vec::new();
+    };
+    let Some(SlValue::List(tiles)) = record_get(record, "path.tile") else {
+        return Vec::new();
+    };
+    trackdirs
+        .iter()
+        .zip(tiles)
+        .filter_map(|(trackdir, tile)| {
+            Some(crate::vehicle::RoadPathEntry {
+                trackdir: u8::try_from(trackdir.as_u64()?).ok()?,
+                tile: u32::try_from(tile.as_u64()?).ok()?,
+            })
+        })
+        .collect()
 }
 
 /// Vehículos del chunk `VEHS` (sparse table): tren/road/ship/aircraft.
@@ -1419,6 +1459,19 @@ pub(crate) fn vehicles_from_chunks(
             )
         } else {
             (0, 0, 0, 0, 0, 0, 0)
+        };
+        let road_gv_flags = if kind == SavVehicleKind::RoadVehicle {
+            record_get(sub, "gv_flags")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u16::try_from(value).ok())
+                .unwrap_or(0)
+        } else {
+            0
+        };
+        let road_path = if kind == SavVehicleKind::RoadVehicle {
+            road_path_from_record(sub)
+        } else {
+            Vec::new()
         };
         let (ship_state, ship_rotation, ship_track) = if kind == SavVehicleKind::Ship {
             let state = record_get(sub, "state")
@@ -1795,6 +1848,8 @@ pub(crate) fn vehicles_from_chunks(
             road_overtaking_ctr,
             road_crashed_ctr,
             road_reverse_ctr,
+            road_gv_flags,
+            road_path,
             train_crash_anim_pos,
             train_force_proceed,
             train_track,

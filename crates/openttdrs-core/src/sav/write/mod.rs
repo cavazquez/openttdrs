@@ -1385,6 +1385,17 @@ mod tests {
         bus.overtaking_ctr = 7;
         bus.crashed_ctr = 23;
         bus.reverse_ctr = 3;
+        bus.road_gv_flags = 0x4567;
+        bus.road_path = vec![
+            crate::vehicle::RoadPathEntry {
+                trackdir: 9,
+                tile: 1234,
+            },
+            crate::vehicle::RoadPathEntry {
+                trackdir: 17,
+                tile: 5678,
+            },
+        ];
         let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
         let payload = &bytes[8..];
         let chunks = parse_chunks(payload).expect("chunks");
@@ -1448,6 +1459,20 @@ mod tests {
         assert_eq!(imported_bus.overtaking_ctr, 7);
         assert_eq!(imported_bus.crashed_ctr, 23);
         assert_eq!(imported_bus.reverse_ctr, 3);
+        assert_eq!(imported_bus.road_gv_flags, 0x4567);
+        assert_eq!(
+            imported_bus.road_path,
+            vec![
+                crate::vehicle::RoadPathEntry {
+                    trackdir: 9,
+                    tile: 1234,
+                },
+                crate::vehicle::RoadPathEntry {
+                    trackdir: 17,
+                    tile: 5678,
+                },
+            ]
+        );
 
         let vehs = find_chunk(&chunks, "VEHS").expect("VEHS");
         let rows = parse_table_chunk(&vehs.body, true).expect("VEHS table");
@@ -1474,6 +1499,31 @@ mod tests {
         assert_eq!(
             record_get(rv, "blocked_ctr").and_then(SlValue::as_u64),
             Some(19)
+        );
+        assert_eq!(
+            record_get(rv, "gv_flags").and_then(SlValue::as_u64),
+            Some(0x4567)
+        );
+        let path = match record_get(rv, "path") {
+            Some(SlValue::Structs(items)) => items,
+            other => panic!("path ausente: {other:?}"),
+        };
+        assert_eq!(path.len(), 2);
+        assert_eq!(
+            record_get(&path[0], "trackdir").and_then(SlValue::as_u64),
+            Some(9)
+        );
+        assert_eq!(
+            record_get(&path[0], "tile").and_then(SlValue::as_u64),
+            Some(1234)
+        );
+        assert_eq!(
+            record_get(&path[1], "trackdir").and_then(SlValue::as_u64),
+            Some(17)
+        );
+        assert_eq!(
+            record_get(&path[1], "tile").and_then(SlValue::as_u64),
+            Some(5678)
         );
 
         // Smoke OpenTTD: OPENTTDRS_DUMP_MVP_RICH_SAV=/ruta/mvp_openttd_rich.sav

@@ -357,6 +357,33 @@ struct TrainWire {
     gv_flags: u16,
 }
 
+/// Campos específicos de `SlVehicleRoadVeh` que no forman parte de `common`.
+struct RoadWire {
+    state: u8,
+    frame: u8,
+    blocked_ctr: u16,
+    overtaking: u8,
+    overtaking_ctr: u8,
+    crashed_ctr: u16,
+    reverse_ctr: u8,
+    gv_flags: u16,
+    path: Vec<crate::vehicle::RoadPathEntry>,
+}
+
+fn road_wire_for(v: &Vehicle) -> RoadWire {
+    RoadWire {
+        state: v.road_state,
+        frame: v.frame,
+        blocked_ctr: v.blocked_ctr,
+        overtaking: v.overtaking,
+        overtaking_ctr: v.overtaking_ctr,
+        crashed_ctr: v.crashed_ctr,
+        reverse_ctr: v.reverse_ctr,
+        gv_flags: v.road_gv_flags,
+        path: v.road_path.clone(),
+    }
+}
+
 fn train_wire_for(state: &GameState, v: &Vehicle) -> TrainWire {
     let track = if v.train_track != 0 {
         v.train_track
@@ -445,6 +472,29 @@ fn write_train_fields(buf: &mut Vec<u8>, train: TrainWire) {
     buf.extend_from_slice(&train.flags.to_be_bytes());
     buf.extend_from_slice(&train.wait_counter.to_be_bytes());
     buf.extend_from_slice(&train.gv_flags.to_be_bytes());
+}
+
+fn write_road_fields(buf: &mut Vec<u8>, road: &RoadWire) -> Result<(), SavError> {
+    buf.push(road.state);
+    buf.push(road.frame);
+    buf.extend_from_slice(&road.blocked_ctr.to_be_bytes());
+    buf.push(road.overtaking);
+    buf.push(road.overtaking_ctr);
+    buf.extend_from_slice(&road.crashed_ctr.to_be_bytes());
+    buf.push(road.reverse_ctr);
+    write_gamma(
+        u32::try_from(road.path.len()).map_err(|_| SavError::ValueOutOfRange {
+            field: "road path count",
+            value: u32::MAX,
+        })?,
+        buf,
+    )?;
+    for entry in &road.path {
+        buf.push(entry.trackdir);
+        buf.extend_from_slice(&entry.tile.to_be_bytes());
+    }
+    buf.extend_from_slice(&road.gv_flags.to_be_bytes());
+    Ok(())
 }
 
 fn write_vehs_common(buf: &mut Vec<u8>, c: &CommonWire) -> Result<(), SavError> {
@@ -724,7 +774,7 @@ fn push_typed_vehicle(
     veh_type: u8,
     common: &CommonWire,
     train_runtime: Option<TrainWire>,
-    road_runtime: Option<&Vehicle>,
+    road_runtime: Option<&RoadWire>,
     ship_runtime: Option<&ShipWire>,
     aircraft_runtime: Option<&AircraftWire>,
 ) -> Result<(), SavError> {
@@ -738,13 +788,7 @@ fn push_typed_vehicle(
                 write_train_fields(rec, train);
             }
             if let Some(road) = road_runtime {
-                rec.push(road.road_state);
-                rec.push(road.frame);
-                rec.extend_from_slice(&road.blocked_ctr.to_be_bytes());
-                rec.push(road.overtaking);
-                rec.push(road.overtaking_ctr);
-                rec.extend_from_slice(&road.crashed_ctr.to_be_bytes());
-                rec.push(road.reverse_ctr);
+                write_road_fields(rec, road)?;
             }
             if let Some(ship) = ship_runtime {
                 write_ship_fields(rec, *ship);
@@ -1101,6 +1145,7 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
             )?;
         } else if is_road {
             let engine_type = openttd_road_engine_type(v);
+            let road_runtime = road_wire_for(v);
             push_typed_vehicle(
                 &mut rec,
                 VEH_ROAD,
@@ -1119,7 +1164,7 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                     cargo_packet_refs_for(cargo_export, v),
                 ),
                 None,
-                Some(v),
+                Some(&road_runtime),
                 None,
                 None,
             )?;
@@ -1182,7 +1227,7 @@ fn append_vehs_header(header: &mut Vec<u8>) -> Result<(), SavError> {
     header.push(0);
     append_vehs_common_fields(header)?;
 
-    // roadveh → common + estado de la tabla de conducción.
+    // roadveh → common + estado de conducción + caché de ruta.
     append_field(header, 0x1B, "common")?;
     append_field(header, 2, "state")?;
     append_field(header, 2, "frame")?;
@@ -1191,8 +1236,13 @@ fn append_vehs_header(header: &mut Vec<u8>) -> Result<(), SavError> {
     append_field(header, 2, "overtaking_ctr")?;
     append_field(header, 4, "crashed_ctr")?;
     append_field(header, 2, "reverse_ctr")?;
+    append_field(header, 0x1B, "path")?;
+    append_field(header, 4, "gv_flags")?;
     header.push(0);
     append_vehs_common_fields(header)?;
+    append_field(header, 2, "trackdir")?;
+    append_field(header, 6, "tile")?;
+    header.push(0);
 
     // ship → common + estado/rotación persistentes. El path cache se deja
     // fuera hasta contar con una representación de Trackdir interoperable.

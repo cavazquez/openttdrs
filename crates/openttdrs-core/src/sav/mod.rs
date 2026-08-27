@@ -1294,6 +1294,8 @@ impl GameState {
             );
             if matches!(kind, VehicleKind::Bus | VehicleKind::Truck) {
                 vehicle.road_state = v.road_state;
+                vehicle.road_gv_flags = v.road_gv_flags;
+                vehicle.road_path.clone_from(&v.road_path);
                 vehicle.frame = v.road_frame;
                 vehicle.blocked_ctr = v.road_blocked_ctr;
                 vehicle.overtaking = v.road_overtaking;
@@ -2008,6 +2010,8 @@ mod tests {
                     road_overtaking_ctr: 0,
                     road_crashed_ctr: 0,
                     road_reverse_ctr: 0,
+                    road_gv_flags: 0,
+                    road_path: Vec::new(),
                     train_crash_anim_pos: 0,
                     train_force_proceed: 0,
                     train_track: 0,
@@ -2100,6 +2104,8 @@ mod tests {
                     road_overtaking_ctr: 0,
                     road_crashed_ctr: 0,
                     road_reverse_ctr: 0,
+                    road_gv_flags: 0,
+                    road_path: Vec::new(),
                     train_crash_anim_pos: 0,
                     train_force_proceed: 0,
                     train_track: 0,
@@ -2192,6 +2198,8 @@ mod tests {
                     road_overtaking_ctr: 0,
                     road_crashed_ctr: 0,
                     road_reverse_ctr: 0,
+                    road_gv_flags: 0,
+                    road_path: Vec::new(),
                     train_crash_anim_pos: 0,
                     train_force_proceed: 0,
                     train_track: 0,
@@ -2284,6 +2292,8 @@ mod tests {
                     road_overtaking_ctr: 0,
                     road_crashed_ctr: 0,
                     road_reverse_ctr: 0,
+                    road_gv_flags: 0,
+                    road_path: Vec::new(),
                     train_crash_anim_pos: 0,
                     train_force_proceed: 0,
                     train_track: 0,

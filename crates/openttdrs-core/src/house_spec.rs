@@ -258,10 +258,10 @@ pub fn action2_eval_ctx_for_house_tile(
 /// Construye el contexto Action2 de una casa con los pueblos del mapa.
 ///
 /// `HouseScopeResolver::GetVariable(0x42)` devuelve la zona del pueblo
-/// asociado a la casa. Los mapas importados todavía no conservan el puntero
-/// nativo `House::town`, por lo que se usa el pueblo más cercano, la misma
-/// aproximación que emplean los scopes de `AirportTile` hasta completar esa
-/// asociación estructural.
+/// asociado a la casa. Los mapas importados conservan el `TownID` en `MAP2`;
+/// cuando ese dato no está disponible (mapas procedurales antiguos) se usa el
+/// pueblo más cercano, la misma aproximación que emplean otros scopes hasta
+/// completar la asociación estructural.
 #[must_use]
 pub fn action2_eval_ctx_for_house_tile_with_towns(
     tile: Tile,
@@ -287,9 +287,15 @@ pub fn action2_eval_ctx_for_house_tile_with_towns(
     };
     ctx.vars.insert(0x41, age);
     let coord = TileCoord::new(tx, ty);
+    let persisted_town_id = u32::from(tile.m2) | (u32::from(tile.m2_hi) << 8);
     let town_zone = towns
         .iter()
-        .min_by_key(|town| distance_square(town.pos, coord))
+        .find(|town| town.id == persisted_town_id)
+        .or_else(|| {
+            towns
+                .iter()
+                .min_by_key(|town| distance_square(town.pos, coord))
+        })
         .map_or(HouseZone::TownEdge, |town| {
             get_town_radius_group(town, coord)
         });
@@ -753,13 +759,15 @@ mod tests {
 
     #[test]
     fn house_action2_context_exposes_nearest_town_zone() {
-        let tile = Tile::completed_house(7, 19, 0);
+        let mut tile = Tile::completed_house(7, 19, 0);
         let mut town = Town {
+            id: 7,
             pos: TileCoord::new(5, 2),
             num_houses: 48,
             ..Default::default()
         };
         update_town_radius(&mut town);
+        tile.m2 = 7;
 
         let ctx = action2_eval_ctx_for_house_tile_with_towns(
             tile,

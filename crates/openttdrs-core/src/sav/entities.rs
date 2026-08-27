@@ -1186,6 +1186,8 @@ pub struct SavVehicle {
     pub ship_state: u8,
     /// Rotación gráfica persistida por `SlVehicleShip`.
     pub ship_rotation: u8,
+    /// Caché de ruta nativo de barco (`Ship::path`, sólo `Trackdir`).
+    pub ship_path: Vec<u8>,
     /// Track derivado de `ship_state`, cuando el estado representa una vía
     /// ordinaria. Es la forma que consume el controlador de movimiento Rust.
     pub ship_track: u8,
@@ -1282,6 +1284,29 @@ fn ship_track_from_state(state: u8) -> u8 {
         16 => crate::ship_movement::TRACK_LEFT,
         32 => crate::ship_movement::TRACK_RIGHT,
         _ => 0,
+    }
+}
+
+/// Lee las dos variantes del caché de ruta marítimo de `OpenTTD`: la lista
+/// moderna de structs `path` y el vector legacy de `Trackdir`.
+#[must_use]
+fn ship_path_from_record(record: &SlRecord) -> Vec<u8> {
+    if let Some(SlValue::Structs(items)) = record_get(record, "path") {
+        return items
+            .iter()
+            .filter_map(|item| {
+                record_get(item, "trackdir")
+                    .and_then(SlValue::as_u64)
+                    .and_then(|value| u8::try_from(value).ok())
+            })
+            .collect();
+    }
+    match record_get(record, "path") {
+        Some(SlValue::List(items)) => items
+            .iter()
+            .filter_map(|value| value.as_u64().and_then(|raw| u8::try_from(raw).ok()))
+            .collect(),
+        _ => Vec::new(),
     }
 }
 
@@ -1493,6 +1518,11 @@ pub(crate) fn vehicles_from_chunks(
         };
         let road_path = if kind == SavVehicleKind::RoadVehicle {
             road_path_from_record(sub)
+        } else {
+            Vec::new()
+        };
+        let ship_path = if kind == SavVehicleKind::Ship {
+            ship_path_from_record(sub)
         } else {
             Vec::new()
         };
@@ -1934,6 +1964,7 @@ pub(crate) fn vehicles_from_chunks(
             train_wait_counter,
             ship_state,
             ship_rotation,
+            ship_path,
             ship_track,
             direction,
             engine_type,

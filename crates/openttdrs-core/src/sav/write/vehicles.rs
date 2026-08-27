@@ -349,9 +349,10 @@ struct AircraftWire {
 }
 
 /// Campos específicos de `SlVehicleShip` (`vehicle_sl.cpp`).
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 struct ShipWire {
     state: u8,
+    path: Vec<u8>,
     rotation: u8,
 }
 
@@ -439,6 +440,7 @@ fn ship_wire_for(v: &Vehicle) -> ShipWire {
     };
     ShipWire {
         state,
+        path: v.ship_path.clone(),
         rotation: v.ship_rotation,
     }
 }
@@ -469,9 +471,18 @@ fn write_aircraft_fields(buf: &mut Vec<u8>, aircraft: &AircraftWire) {
     buf.push(aircraft.flags);
 }
 
-fn write_ship_fields(buf: &mut Vec<u8>, ship: ShipWire) {
+fn write_ship_fields(buf: &mut Vec<u8>, ship: &ShipWire) -> Result<(), SavError> {
     buf.push(ship.state);
+    write_gamma(
+        u32::try_from(ship.path.len()).map_err(|_| SavError::ValueOutOfRange {
+            field: "ship path count",
+            value: u32::MAX,
+        })?,
+        buf,
+    )?;
+    buf.extend_from_slice(&ship.path);
     buf.push(ship.rotation);
+    Ok(())
 }
 
 fn write_train_fields(buf: &mut Vec<u8>, train: TrainWire) {
@@ -858,7 +869,7 @@ fn push_typed_vehicle(
                 write_road_fields(rec, road)?;
             }
             if let Some(ship) = ship_runtime {
-                write_ship_fields(rec, *ship);
+                write_ship_fields(rec, ship)?;
             }
             if let Some(aircraft) = aircraft_runtime {
                 write_aircraft_fields(rec, aircraft);
@@ -1333,13 +1344,15 @@ fn append_vehs_header(header: &mut Vec<u8>) -> Result<(), SavError> {
     append_field(header, 6, "tile")?;
     header.push(0);
 
-    // ship → common + estado/rotación persistentes. El path cache se deja
-    // fuera hasta contar con una representación de Trackdir interoperable.
+    // ship → common + estado/path/rotación persistentes.
     append_field(header, 0x1B, "common")?;
     append_field(header, 2, "state")?;
+    append_field(header, 0x1B, "path")?;
     append_field(header, 2, "rotation")?;
     header.push(0);
     append_vehs_common_fields(header)?;
+    append_field(header, 2, "trackdir")?;
+    header.push(0);
 
     // aircraft → common + `SlVehicleAircraft` (FTA y destino)
     append_field(header, 0x1B, "common")?;
@@ -1565,6 +1578,7 @@ mod tests {
         ship.ship_state = 16; // TRACK_BIT_LEFT, conserva el byte raw del SAV.
         ship.ship_track = crate::ship_movement::TRACK_LEFT;
         ship.ship_rotation = 7;
+        ship.ship_path = vec![4, 12];
         state.vehicles = vec![ship];
 
         let (_, vehs) = ordl_and_vehs_records(&state, 64).unwrap();
@@ -1597,6 +1611,19 @@ mod tests {
         assert_eq!(
             record_get(ship, "rotation").and_then(SlValue::as_u64),
             Some(7)
+        );
+        let path = match record_get(ship, "path") {
+            Some(SlValue::Structs(items)) => items,
+            other => panic!("path ausente: {other:?}"),
+        };
+        assert_eq!(path.len(), 2);
+        assert_eq!(
+            record_get(&path[0], "trackdir").and_then(SlValue::as_u64),
+            Some(4)
+        );
+        assert_eq!(
+            record_get(&path[1], "trackdir").and_then(SlValue::as_u64),
+            Some(12)
         );
     }
 

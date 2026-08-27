@@ -317,6 +317,9 @@ pub struct Vehicle {
     /// Rotación gráfica persistida por `SlVehicleShip`.
     #[serde(default)]
     pub ship_rotation: u8,
+    /// Caché de ruta nativo de barco (`Ship::path`, sólo `Trackdir`).
+    #[serde(default)]
+    pub ship_path: Vec<u8>,
     /// Contador de tick del barco (`Ship::tick_counter`; esclusa cada 8).
     #[serde(default)]
     pub ship_tick_counter: u8,
@@ -725,6 +728,7 @@ impl Vehicle {
             ship_track: 0,
             ship_state: 0,
             ship_rotation: 0,
+            ship_path: Vec::new(),
             ship_tick_counter: 0,
             motion_counter: 0,
             subspeed: 0,

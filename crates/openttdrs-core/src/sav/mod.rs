@@ -1331,6 +1331,7 @@ impl GameState {
             if kind == VehicleKind::Ship {
                 vehicle.ship_state = v.ship_state;
                 vehicle.ship_rotation = v.ship_rotation;
+                vehicle.ship_path.clone_from(&v.ship_path);
                 vehicle.ship_track = v.ship_track;
                 // `Ship::state` is authoritative when it contains a regular
                 // TrackBits value. `ship_track` remains the projection used
@@ -2050,6 +2051,7 @@ mod tests {
                     train_wait_counter: 0,
                     ship_state: 0,
                     ship_rotation: 0,
+                    ship_path: Vec::new(),
                     ship_track: 0,
                     direction: 0,
                     engine_type: 0,
@@ -2152,6 +2154,7 @@ mod tests {
                     train_wait_counter: 0,
                     ship_state: 0,
                     ship_rotation: 0,
+                    ship_path: Vec::new(),
                     ship_track: 0,
                     direction: 0,
                     engine_type: 0,
@@ -2254,6 +2257,7 @@ mod tests {
                     train_wait_counter: 0,
                     ship_state: 0,
                     ship_rotation: 0,
+                    ship_path: Vec::new(),
                     ship_track: 0,
                     direction: 0,
                     engine_type: 0,
@@ -2356,6 +2360,7 @@ mod tests {
                     train_wait_counter: 0,
                     ship_state: 0,
                     ship_rotation: 0,
+                    ship_path: Vec::new(),
                     ship_track: 0,
                     direction: 0,
                     engine_type: 0,

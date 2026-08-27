@@ -1191,6 +1191,7 @@ mod tests {
         ship.ship_state = 16;
         ship.ship_track = crate::ship_movement::TRACK_LEFT;
         ship.ship_rotation = 7;
+        ship.ship_path = vec![3, 11, 27];
         ship.set_vehicle_orders(vec![VehicleOrder::station(dock_pos)]);
         state.vehicles = vec![ship];
         state
@@ -1321,6 +1322,7 @@ mod tests {
             .expect("ship importado");
         assert_eq!(imported_ship.ship_state, 16);
         assert_eq!(imported_ship.ship_rotation, 7);
+        assert_eq!(imported_ship.ship_path, vec![3, 11, 27]);
         assert_eq!(
             imported_ship.ship_track,
             crate::ship_movement::TRACK_LEFT,

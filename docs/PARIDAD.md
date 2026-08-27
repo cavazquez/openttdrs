@@ -367,10 +367,11 @@ horario) y los contadores diarios (`day_counter`, `tick_counter`,
 32 bits, `economy_age`, la fecha de servicio protegida para callbacks NewGRF,
 el enlace `next_shared` de la cadena de órdenes y las ventanas de salida
 `depot_unbunching_*`/`round_trip_time`; la hidratación mantiene esos valores en
-el modelo Rust sin convertirlos en defaults. En barcos, el subregistro `SlVehicleShip` ya conserva los
-bits crudos de `state`, su `rotation` y la proyección de `TrackBits` usada por
-el controlador; todavía faltan su vector `path` cacheado y la semántica YAPF /
-wormhole completa. En carretera, `SlVehicleRoadVeh` conserva además `gv_flags`
+el modelo Rust sin convertirlos en defaults. En barcos, el subregistro
+`SlVehicleShip` ya conserva los bits crudos de `state`, su `rotation`, el vector
+`path` de `Trackdir` y la proyección de `TrackBits` usada por el controlador;
+todavía faltan la semántica YAPF/wormhole completa y otros estados de navegación.
+En carretera, `SlVehicleRoadVeh` conserva además `gv_flags`
 y las dos formas nativas del caché `path` (`trackdir`/`tile`), aunque la
 reconstrucción de rutas y la conducción completa siguen siendo best-effort. En
 aeronaves, `crashed_counter`, `number_consecutive_turns`, `turn_counter` y

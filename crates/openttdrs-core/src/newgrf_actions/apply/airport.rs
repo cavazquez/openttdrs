@@ -221,17 +221,29 @@ pub fn rehydrate_newgrf_airport_tiles(state: &mut GameState) {
         else {
             continue;
         };
+        let rotation = station.airport_rotation & 6;
         let Some(layout) = def
             .layouts
-            .iter()
-            .find(|candidate| candidate.rotation == 0 || candidate.rotation == 4)
+            .get(usize::from(station.airport_layout))
+            .filter(|candidate| candidate.rotation == rotation)
+            .or_else(|| {
+                def.layouts
+                    .iter()
+                    .find(|candidate| candidate.rotation == rotation)
+            })
+            .or_else(|| {
+                def.layouts
+                    .iter()
+                    .find(|candidate| candidate.rotation == 0 || candidate.rotation == 4)
+            })
             .or_else(|| def.layouts.first())
         else {
             continue;
         };
+        let axis_y = rotation == 2 || rotation == 6;
         let actual = station.airport_tiles.clone();
         let mut found = None;
-        for axis_y in [false, true] {
+        for axis_y in [axis_y] {
             for actual_coord in &actual {
                 for layout_tile in &layout.tiles {
                     let (dx, dy) = if axis_y {
@@ -240,8 +252,14 @@ pub fn rehydrate_newgrf_airport_tiles(state: &mut GameState) {
                         (i32::from(layout_tile.x), i32::from(layout_tile.y))
                     };
                     let origin = TileCoord::new(actual_coord.x - dx, actual_coord.y - dy);
-                    let mapping =
-                        crate::airport::newgrf_airport_tile_gfx(origin, def, tile_catalog, axis_y);
+                    let mapping = crate::airport::newgrf_airport_tile_gfx_with_layout(
+                        origin,
+                        def,
+                        tile_catalog,
+                        axis_y,
+                        Some(station.airport_layout),
+                        Some(rotation),
+                    );
                     if airport_tile_coords_match(&mapping, &actual) {
                         found = Some(mapping);
                         break;

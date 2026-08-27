@@ -606,12 +606,42 @@ pub fn newgrf_airport_tile_gfx(
     tile_catalog: &[crate::airport_tile_spec::AirportTileSpecDef],
     axis_y: bool,
 ) -> Vec<(TileCoord, u16)> {
-    let layout = def
-        .layouts
-        .iter()
-        .find(|l| {
-            // Prefer north (0) or south (4); else first.
-            l.rotation == 0 || l.rotation == 4
+    newgrf_airport_tile_gfx_with_layout(origin, def, tile_catalog, axis_y, None, None)
+}
+
+/// Variante que conserva el selector exacto de `STNN.normal.airport.layout`
+/// y la rotación `Direction` del aeropuerto importado.
+///
+/// `None` mantiene la política histórica (primera orientación norte/sur).
+/// Cuando el índice o la rotación no existen en el catálogo se degrada a esa
+/// política, nunca a una huella inventada.
+#[must_use]
+pub fn newgrf_airport_tile_gfx_with_layout(
+    origin: TileCoord,
+    def: &crate::airport_class::NewgrfAirportSpecDef,
+    tile_catalog: &[crate::airport_tile_spec::AirportTileSpecDef],
+    axis_y: bool,
+    layout_index: Option<u8>,
+    rotation: Option<u8>,
+) -> Vec<(TileCoord, u16)> {
+    let requested_rotation = rotation.map(|value| value & 6);
+    let layout = layout_index
+        .and_then(|index| def.layouts.get(usize::from(index)))
+        .filter(|candidate| {
+            requested_rotation.is_none_or(|expected| candidate.rotation == expected)
+        })
+        .or_else(|| {
+            requested_rotation.and_then(|expected| {
+                def.layouts
+                    .iter()
+                    .find(|candidate| candidate.rotation == expected)
+            })
+        })
+        .or_else(|| {
+            def.layouts.iter().find(|layout| {
+                // Prefer north (0) or south (4); else first.
+                layout.rotation == 0 || layout.rotation == 4
+            })
         })
         .or_else(|| def.layouts.first());
     let Some(layout) = layout else {

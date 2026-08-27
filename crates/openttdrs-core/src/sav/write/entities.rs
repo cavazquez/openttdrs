@@ -691,9 +691,9 @@ fn write_stnn_normal(
     buf.push(air_w);
     buf.push(air_h);
     buf.push(air_type);
-    buf.push(0); // layout
+    buf.push(st.airport_layout); // layout
     buf.extend_from_slice(&0u64.to_be_bytes()); // airport.flags
-    buf.push(0); // rotation
+    buf.push(st.airport_rotation & 6); // rotation
     buf.extend_from_slice(&0u32.to_be_bytes()); // psa null
 
     buf.push(0); // indtype
@@ -1161,6 +1161,8 @@ mod tests {
         let mut airport = Station::new_with_kind(TileCoord::new(7, 7), StopKind::Airport);
         airport.ottd_station_id = Some(10);
         airport.airport_newgrf_spec_id = Some(10);
+        airport.airport_layout = 3;
+        airport.airport_rotation = 6;
         airport.airport_tiles = vec![
             TileCoord::new(4, 5),
             TileCoord::new(5, 5),
@@ -1192,6 +1194,14 @@ mod tests {
         assert_eq!(
             record_get(normal, "airport.h").and_then(SlValue::as_u64),
             Some(2)
+        );
+        assert_eq!(
+            record_get(normal, "airport.layout").and_then(SlValue::as_u64),
+            Some(3)
+        );
+        assert_eq!(
+            record_get(normal, "airport.rotation").and_then(SlValue::as_u64),
+            Some(6)
         );
     }
 

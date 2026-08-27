@@ -337,6 +337,7 @@ mod tests {
                 airport_w: 0,
                 airport_h: 0,
                 airport_layout: 0,
+                airport_rotation: 0,
                 airport_blocks: 0,
             },
         );
@@ -374,6 +375,7 @@ mod tests {
                 airport_w: 0,
                 airport_h: 0,
                 airport_layout: 0,
+                airport_rotation: 0,
                 airport_blocks: 0,
             },
         );

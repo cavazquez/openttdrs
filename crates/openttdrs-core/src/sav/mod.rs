@@ -1080,6 +1080,8 @@ impl GameState {
                 // `AirportTile` graphics after the SAV is loaded.
                 station.airport_newgrf_spec_id = (u16::from(st.airport_type) >= NEW_AIRPORT_OFFSET)
                     .then_some(u16::from(st.airport_type));
+                station.airport_layout = st.airport_layout;
+                station.airport_rotation = st.airport_rotation & 6;
                 station.airport_blocks = st.airport_blocks;
                 // La huella real ya está en el mapa: `m2` es `StationID` y
                 // `m6` codifica `StationType::Airport`. Esto también cubre
@@ -1760,6 +1762,7 @@ mod tests {
             airport_w: 1,
             airport_h: 1,
             airport_layout: 0,
+            airport_rotation: 0,
             airport_blocks: 0,
             cargo: Vec::new(),
         });
@@ -1795,6 +1798,7 @@ mod tests {
             airport_w: 0,
             airport_h: 0,
             airport_layout: 0,
+            airport_rotation: 0,
             airport_blocks: 0,
             cargo: Vec::new(),
         });
@@ -1847,6 +1851,7 @@ mod tests {
                 airport_w: 0,
                 airport_h: 0,
                 airport_layout: 0,
+                airport_rotation: 0,
                 airport_blocks: 0,
                 cargo: vec![entities::SavStationCargo {
                     cargo_slot: 1,
@@ -1865,6 +1870,7 @@ mod tests {
                 airport_w: 0,
                 airport_h: 0,
                 airport_layout: 0,
+                airport_rotation: 0,
                 airport_blocks: 0,
                 cargo: Vec::new(),
             },
@@ -1896,6 +1902,7 @@ mod tests {
                     airport_w: 0,
                     airport_h: 0,
                     airport_layout: 0,
+                    airport_rotation: 0,
                     airport_blocks: 0,
                 },
             );
@@ -2004,6 +2011,7 @@ mod tests {
                     airport_w: 0,
                     airport_h: 0,
                     airport_layout: 0,
+                    airport_rotation: 0,
                     airport_blocks: 0,
                     cargo: Vec::new(),
                 },
@@ -2017,7 +2025,8 @@ mod tests {
                     airport_type: 10,
                     airport_w: 9,
                     airport_h: 11,
-                    airport_layout: 0,
+                    airport_layout: 3,
+                    airport_rotation: 6,
                     airport_blocks: 0,
                     cargo: Vec::new(),
                 },
@@ -2527,6 +2536,8 @@ mod tests {
             .expect("integrated airport station");
         assert_eq!(imported_airport.stop_kind, StopKind::RailStation);
         assert_eq!(imported_airport.airport_newgrf_spec_id, Some(10));
+        assert_eq!(imported_airport.airport_layout, 3);
+        assert_eq!(imported_airport.airport_rotation, 6);
         assert_eq!(imported_airport.airport_tiles, vec![airport_tile]);
         assert_eq!(state.map.get_kind(airport_tile), Some(TileKind::Airport));
         assert_eq!(state.map.get(airport_tile).map(|tile| tile.m5), Some(14));

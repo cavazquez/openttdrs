@@ -117,7 +117,7 @@ pub use airport::{
     airport_m6_airport, airport_runway_tile, airport_small_footprint, airport_small_tiles,
     airport_spec_footprint, airport_spec_tiles, airport_station_gfx_animation_frames,
     airport_tile_is_hangar, airport_tile_is_heliport, is_airport_flag_station_gfx,
-    is_airport_radar_station_gfx,
+    is_airport_radar_station_gfx, newgrf_airport_tile_gfx_with_layout,
 };
 pub use airport_class::{
     AIRPORT_ACTION3_PURCHASE, AirportClassDef, AirportClassId, AirportFtaFlags, AirportLayoutTile,

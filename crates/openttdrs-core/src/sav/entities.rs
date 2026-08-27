@@ -71,6 +71,8 @@ pub struct SavStation {
     pub airport_h: u16,
     /// `Station::airport.layout`.
     pub airport_layout: u8,
+    /// `Station::airport.rotation` (`Direction`, bits 1..2).
+    pub airport_rotation: u8,
     /// `Station::airport.blocks` (guardado como `airport.flags`).
     pub airport_blocks: u64,
     /// Paquetes de carga en espera, agrupados por slot de cargo de `OpenTTD`.
@@ -156,6 +158,7 @@ pub(crate) struct SavStationIndex {
     pub airport_w: u16,
     pub airport_h: u16,
     pub airport_layout: u8,
+    pub airport_rotation: u8,
     pub airport_blocks: u64,
 }
 
@@ -234,6 +237,10 @@ pub(crate) fn station_index_from_chunks(
             .and_then(|n| record_get(n, "airport.layout"))
             .and_then(SlValue::as_u64)
             .unwrap_or(0);
+        let airport_rotation = normal
+            .and_then(|n| record_get(n, "airport.rotation"))
+            .and_then(SlValue::as_u64)
+            .unwrap_or(0);
         // Guardado en disco como `airport.flags` (`SLE_VARNAME`); `Station::airport.blocks` en memoria.
         let airport_blocks = normal
             .and_then(|n| record_get(n, "airport.flags"))
@@ -253,6 +260,7 @@ pub(crate) fn station_index_from_chunks(
                 airport_w: airport_w as u16,
                 airport_h: airport_h as u16,
                 airport_layout: airport_layout as u8,
+                airport_rotation: airport_rotation as u8,
                 airport_blocks,
             },
         );
@@ -417,6 +425,7 @@ pub(crate) fn stations_from_chunks(
             airport_w: st.airport_w,
             airport_h: st.airport_h,
             airport_layout: st.airport_layout,
+            airport_rotation: st.airport_rotation,
             airport_blocks: st.airport_blocks,
             cargo: cargo_by_station.remove(&station_id).unwrap_or_default(),
         })

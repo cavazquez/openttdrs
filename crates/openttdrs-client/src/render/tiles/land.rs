@@ -1221,6 +1221,7 @@ fn spawn_newgrf_house_layout_sequence(
 }
 
 #[allow(clippy::too_many_arguments)]
+#[allow(dead_code)]
 pub(crate) fn spawn_industry_tile(
     commands: &mut Commands,
     assets: &WorldAssets,
@@ -1228,6 +1229,49 @@ pub(crate) fn spawn_industry_tile(
     ctx: &TileRenderContext,
     slope_half_ground: f32,
     industries: &[openttdrs_core::Industry],
+    company: &mut CompanyColoredSprites,
+    images: &mut Assets<Image>,
+    industry_catalog: &[openttdrs_core::IndustryTileSpecDef],
+    industry_overrides: &[u16],
+    industry_sprites: Option<&mut crate::render::NewGrfIndustrySpriteCache>,
+    foundation_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
+    newgrf_stack: &[openttdrs_core::NewGrfEntry],
+) {
+    spawn_industry_tile_with_world(
+        commands,
+        assets,
+        map,
+        ctx,
+        slope_half_ground,
+        industries,
+        Climate::Temperate,
+        &[],
+        &[],
+        company,
+        images,
+        industry_catalog,
+        industry_overrides,
+        industry_sprites,
+        foundation_newgrf,
+        action5_sprites,
+        newgrf_stack,
+    );
+}
+
+/// Variante del renderer que recibe los pools de pueblos y tipos de industria
+/// para evaluar el scope padre de `IndustryTile` como hace OpenTTD.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn spawn_industry_tile_with_world(
+    commands: &mut Commands,
+    assets: &WorldAssets,
+    map: &Map,
+    ctx: &TileRenderContext,
+    slope_half_ground: f32,
+    industries: &[openttdrs_core::Industry],
+    climate: Climate,
+    towns: &[openttdrs_core::Town],
+    industry_specs: &[openttdrs_core::IndustrySpecDef],
     company: &mut CompanyColoredSprites,
     images: &mut Assets<Image>,
     industry_catalog: &[openttdrs_core::IndustryTileSpecDef],
@@ -1259,8 +1303,20 @@ pub(crate) fn spawn_industry_tile(
     // puede declarar `DODRAW=0` y debe suprimir también el agua/rough vanilla.
     // Si no hay caché disponible, se conserva todo el fallback atómico.
     let industry_layout = newgrf_def.and_then(|def| {
-        ctx.tile
-            .and_then(|_| resolve_newgrf_industry_layout(def, stage, m3hi, newgrf_stack))
+        ctx.tile.and_then(|_| {
+            resolve_newgrf_industry_layout(
+                map,
+                ctx.coord,
+                industries,
+                towns,
+                industry_specs,
+                climate,
+                industry_catalog,
+                def,
+                stage,
+                newgrf_stack,
+            )
+        })
     });
     let custom_industry_layout = industry_layout
         .as_ref()
@@ -1423,11 +1479,18 @@ pub(crate) fn spawn_industry_tile(
         && let Some(cache) = industry_sprites.as_mut()
     {
         let colour = Some(palette_colour);
-        let mut a2 = openttdrs_core::Action2EvalCtx {
-            random_bits: u32::from(m3hi),
-            ..Default::default()
-        };
-        a2.vars.insert(0x5F, u32::from(m3hi) << 8);
+        let neighbor_params = requested_industry_scope_vars(def.newgrf_runtime.as_deref());
+        let mut a2 = openttdrs_core::action2_eval_ctx_for_industry_tile_with_world(
+            map,
+            ctx.coord,
+            industries,
+            towns,
+            industry_catalog,
+            industry_specs,
+            climate,
+            Some(def),
+            &neighbor_params,
+        );
         a2.set_grf_params(openttdrs_core::stack_params_for_grfid(
             newgrf_stack,
             def.newgrf_grfid,
@@ -1643,20 +1706,33 @@ pub(crate) fn spawn_industry_tile(
 /// contexto Action2 que la vista plana (`stage`, random y parámetros GRF).
 #[allow(clippy::too_many_arguments)]
 fn resolve_newgrf_industry_layout<'a>(
+    map: &Map,
+    coord: openttdrs_core::TileCoord,
+    industries: &[openttdrs_core::Industry],
+    towns: &[openttdrs_core::Town],
+    industry_specs: &[openttdrs_core::IndustrySpecDef],
+    climate: Climate,
+    tile_catalog: &[openttdrs_core::IndustryTileSpecDef],
     def: &'a openttdrs_core::IndustryTileSpecDef,
     stage: usize,
-    m3hi: u8,
     newgrf_stack: &[openttdrs_core::NewGrfEntry],
 ) -> Option<(
     &'a openttdrs_core::IndustryTileSpecDef,
     openttdrs_core::newgrf_sprites::ResolvedTileLayout,
     u32,
 )> {
-    let mut action2 = openttdrs_core::Action2EvalCtx {
-        random_bits: u32::from(m3hi),
-        ..Default::default()
-    };
-    action2.vars.insert(0x5F, u32::from(m3hi) << 8);
+    let neighbor_params = requested_industry_scope_vars(def.newgrf_runtime.as_deref());
+    let mut action2 = openttdrs_core::action2_eval_ctx_for_industry_tile_with_world(
+        map,
+        coord,
+        industries,
+        towns,
+        tile_catalog,
+        industry_specs,
+        climate,
+        Some(def),
+        &neighbor_params,
+    );
     action2.set_grf_params(openttdrs_core::stack_params_for_grfid(
         newgrf_stack,
         def.newgrf_grfid,
@@ -1667,6 +1743,27 @@ fn resolve_newgrf_industry_layout<'a>(
         .as_ref()
         .map_or(0, |_| runtime_fingerprint(&action2, vars::INDUSTRY, false));
     Some((def, layout, runtime_fp))
+}
+
+fn requested_industry_scope_vars(
+    runtime: Option<&openttdrs_core::newgrf_sprites::TrainSpriteGraphics>,
+) -> Vec<(u8, u8)> {
+    let Some(runtime) = runtime else {
+        return Vec::new();
+    };
+    let mut requested = Vec::new();
+    for entry in runtime.action2_var.values() {
+        for term in std::iter::once(&entry.first).chain(entry.ops.iter().map(|op| &op.rhs)) {
+            if ((0x60..=0x71).contains(&term.variable) || term.variable == 0x7A)
+                && let Some(parameter) = term.param
+                && !requested.contains(&(term.variable, parameter))
+            {
+                requested.push((term.variable, parameter));
+            }
+        }
+    }
+    requested.sort_unstable();
+    requested
 }
 
 /// Emite el suelo de un layout de industria. Un layout completo sin ground

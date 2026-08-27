@@ -420,6 +420,8 @@ pub struct ParsedIndustryTileMeta {
     pub animation_triggers: u8,
     /// `prop 0x12`: flags especiales (`NextFrameRandomBits` bit 0).
     pub animation_special_flags: u8,
+    /// `prop 0x14`: índices locales de la tabla Badge Translation Table.
+    pub badge_local_ids: Vec<u16>,
 }
 
 /// Tesela de layout aeropuerto (`prop 0x0A`); `local_tile` si gfx era `0xFE`.
@@ -1511,6 +1513,7 @@ pub fn parse_action0_industry_tile_meta(payload: &[u8]) -> Option<ParsedIndustry
     let mut animation_speed = 0u8;
     let mut animation_triggers = 0u8;
     let mut animation_special_flags = 0u8;
+    let mut badge_local_ids = Vec::new();
     for _ in 0..header.num_props {
         if i >= payload.len() {
             break;
@@ -1628,7 +1631,10 @@ pub fn parse_action0_industry_tile_meta(payload: &[u8]) -> Option<ParsedIndustry
                 if i + need > payload.len() {
                     break;
                 }
-                i += need;
+                for _ in 0..count {
+                    badge_local_ids.push(u16::from_le_bytes([payload[i], payload[i + 1]]));
+                    i += 2;
+                }
             }
             _ => break,
         }
@@ -1653,6 +1659,7 @@ pub fn parse_action0_industry_tile_meta(payload: &[u8]) -> Option<ParsedIndustry
         animation_speed,
         animation_triggers,
         animation_special_flags,
+        badge_local_ids,
     })
 }
 

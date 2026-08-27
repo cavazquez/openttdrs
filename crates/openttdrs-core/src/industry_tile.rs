@@ -58,6 +58,12 @@ pub struct IndustryTileSpecDef {
     /// `prop 0x12`: bit 0 pasa los random bits al callback 0x26.
     #[serde(default)]
     pub animation_special_flags: u8,
+    /// Badges asociados por `prop 0x14` (`ReadBadgeList`).
+    #[serde(default)]
+    pub associated_badges: Vec<u16>,
+    /// Tabla local→global de badges del GRF.
+    #[serde(default)]
+    pub newgrf_badge_translation: Vec<u16>,
     /// Id local Action3 en el GRF.
     #[serde(default, skip)]
     pub newgrf_local_id: u8,
@@ -209,6 +215,8 @@ mod tests {
             animation_speed: 0,
             animation_triggers: 0,
             animation_special_flags: 0,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
             newgrf_local_id: 0,
             newgrf_grfid: 1,
             newgrf_preview: None,
@@ -264,6 +272,8 @@ mod tests {
             animation_speed: 0,
             animation_triggers: 0,
             animation_special_flags: 0,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
             newgrf_local_id: 9,
             newgrf_grfid: 0,
             newgrf_preview: Some(sprite.clone()),

@@ -664,6 +664,8 @@ mod tests {
             animation_speed: 0,
             animation_triggers: 1 << INDTILE_TRIGGER_INDUSTRY_TICK,
             animation_special_flags: INDTILE_SPECIAL_NEXT_FRAME_RANDOM_BITS,
+            associated_badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
             newgrf_local_id: 0,
             newgrf_grfid: 0x1234_5678,
             newgrf_preview: None,

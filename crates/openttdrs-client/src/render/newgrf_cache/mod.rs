@@ -12,7 +12,9 @@ pub(crate) use image_factory::{
 pub(crate) mod vars {
     pub const ROAD: &[u8] = &[0x40, 0x42, 0x45, 0x5F];
     pub const RAIL_SIGNAL: &[u8] = &[0x10, 0x18, 0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x5F];
-    pub const INDUSTRY: &[u8] = &[0x40, 0x5F];
+    /// Variables de `IndustryTileScopeResolver` y entradas básicas del
+    /// `IndustriesScopeResolver` que pueden cambiar la vista runtime.
+    pub const INDUSTRY: &[u8] = &[0x40, 0x41, 0x42, 0x43, 0x44, 0x5F, 0x7A];
     /// Variables disponibles en `ObjectScopeResolver` para una tesela que ya
     /// está en el mapa: offset, terreno, pueblo/distancias, animación,
     /// propietario y random. Las variables de teselas vecinas siguen fuera

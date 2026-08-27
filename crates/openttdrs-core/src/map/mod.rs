@@ -4,6 +4,7 @@
 mod binary;
 pub mod house_lift;
 pub mod index;
+pub mod industry_action2;
 pub mod industry_construction;
 pub mod industry_link;
 pub mod industry_random;
@@ -35,6 +36,7 @@ pub use index::{
     coord_from_linear_index, coord_to_dense_index, coord_to_linear_index,
     openttd_tile_index_to_coord,
 };
+pub use industry_action2::action2_eval_ctx_for_industry_tile_with_world;
 pub use industry_construction::{
     INDUSTRY_CONSTRUCTION_COMPLETED, advance_industry_construction, industry_construction_counter,
     industry_construction_stage, is_industry_completed, make_industry_tile_bigger,

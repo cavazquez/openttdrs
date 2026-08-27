@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use crate::GameState;
+use crate::badge::resolve_badge_local_ids;
 use crate::industry_spec::{
     IndustryLayoutTile, IndustrySpecDef, empty_industry_overrides, empty_industry_spec_catalog,
     get_cargo_translation_for_climate, next_free_industry_id,
@@ -21,6 +22,7 @@ use super::super::action0::{
 pub fn apply_newgrf_industry_tiles(state: &mut GameState, search_dirs: &[&Path]) {
     let mut catalog = Vec::new();
     let mut overrides = empty_industry_tile_overrides();
+    let badge_catalog = state.badge_catalog.clone();
     let stack = state.newgrf_stack.clone();
     for entry in &stack {
         if !entry.enabled {
@@ -39,6 +41,7 @@ pub fn apply_newgrf_industry_tiles(state: &mut GameState, search_dirs: &[&Path])
         let gfx =
             crate::newgrf_sprites::collect_industry_tile_sprite_graphics(&data).unwrap_or_default();
         let metas = collect_industry_tile_metas_from_grf(&data);
+        let type_tables = crate::newgrf_type_tables::collect_type_tables_from_grf(&data);
         for meta in metas {
             let Some(global_gfx) = next_free_industry_tile_gfx_id(&catalog) else {
                 break;
@@ -55,6 +58,19 @@ pub fn apply_newgrf_industry_tiles(state: &mut GameState, search_dirs: &[&Path])
             };
             if let Some(ovr) = meta.override_of {
                 overrides[usize::from(ovr)] = global_gfx;
+            }
+            let (associated_badges, newgrf_badge_translation, unresolved_badges) =
+                resolve_badge_local_ids(
+                    &meta.badge_local_ids,
+                    &type_tables.badges,
+                    &badge_catalog,
+                    entry.grfid,
+                );
+            for badge in unresolved_badges {
+                state.runtime.newgrf_diagnostics.push(format!(
+                    "{}: industry tile {}: badge '{}' no resuelto",
+                    entry.filename, meta.local_id, badge
+                ));
             }
             let accepts_cargo_labels: Vec<String> = meta
                 .accepts_cargo_indices
@@ -76,6 +92,8 @@ pub fn apply_newgrf_industry_tiles(state: &mut GameState, search_dirs: &[&Path])
                 animation_speed: meta.animation_speed,
                 animation_triggers: meta.animation_triggers,
                 animation_special_flags: meta.animation_special_flags,
+                associated_badges,
+                newgrf_badge_translation,
                 newgrf_local_id: meta.local_id,
                 newgrf_grfid: entry.grfid,
                 newgrf_preview: preview,

@@ -3407,6 +3407,8 @@ fn sloped_newgrf_industry_overlay_is_child_of_foundation() {
         animation_speed: 0,
         animation_triggers: 0,
         animation_special_flags: 0,
+        associated_badges: Vec::new(),
+        newgrf_badge_translation: Vec::new(),
         newgrf_local_id: 3,
         newgrf_grfid: 0,
         newgrf_preview: Some(view.clone()),

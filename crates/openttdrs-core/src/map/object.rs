@@ -1,6 +1,6 @@
 //! Objetos de mapa (`MP_OBJECT` / `TileType::Object` en `OpenTTD`).
 
-use super::{Map, Tile, TileCoord};
+use super::{Map, Tile, TileCoord, TileKind, tile_slope_and_z, water_class};
 use crate::newgrf_sprites::Action2EvalCtx;
 use crate::object_spec::{
     NEW_OBJECT_OFFSET, ObjectSpecDef, decode_object_tile_offset, encode_object_tile_offset,
@@ -271,6 +271,114 @@ pub fn action2_eval_ctx_for_object_tile_with_towns(
     ctx
 }
 
+/// Construye el contexto de un objeto con información de teselas vecinas.
+///
+/// `neighbor_params` contiene los pares `(variable, parámetro)` que el grafo
+/// Action2 realmente solicita. Sólo se calculan esos offsets para evitar que
+/// cada tesela de un mapa grande tenga que recorrer las 256 combinaciones
+/// posibles de `GetNearbyTile`.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn action2_eval_ctx_for_object_tile_with_map(
+    map: &Map,
+    tile: Tile,
+    tileh: u8,
+    climate: Climate,
+    coord: TileCoord,
+    towns: &[crate::town::Town],
+    object_type: u16,
+    object_origin: Option<TileCoord>,
+    neighbor_params: &[(u8, u8)],
+) -> Action2EvalCtx {
+    let mut ctx = action2_eval_ctx_for_object_tile_with_towns(tile, tileh, climate, coord, towns);
+    for &(variable, parameter) in neighbor_params {
+        if !matches!(variable, 0x62 | 0x63) {
+            continue;
+        }
+        let nearby = nearby_object_coord(map, coord, parameter);
+        let same_object = object_origin.is_some_and(|origin| {
+            map.object_type_at(nearby) == Some(object_type)
+                && map
+                    .get(nearby)
+                    .and_then(|candidate| object_origin_from_tile(&candidate, nearby))
+                    == Some(origin)
+        });
+        let value = match variable {
+            0x62 => {
+                nearby_object_tile_information(map, nearby, climate) | (u32::from(same_object) << 8)
+            }
+            0x63 if same_object => map
+                .get(nearby)
+                .map_or(0, |candidate| u32::from(candidate.m3hi)),
+            _ => 0,
+        };
+        ctx.parameterized_vars.insert((variable, parameter), value);
+    }
+    ctx
+}
+
+fn nearby_object_coord(map: &Map, base: TileCoord, parameter: u8) -> TileCoord {
+    let (width, height) = map.dimensions();
+    let (Ok(width), Ok(height)) = (i32::try_from(width), i32::try_from(height)) else {
+        return base;
+    };
+    if width == 0 || height == 0 {
+        return base;
+    }
+    let signed_nibble = |value: u8| {
+        let value = i32::from(value & 0x0F);
+        if value >= 8 { value - 16 } else { value }
+    };
+    TileCoord::new(
+        base.x
+            .saturating_add(signed_nibble(parameter))
+            .rem_euclid(width),
+        base.y
+            .saturating_add(signed_nibble(parameter >> 4))
+            .rem_euclid(height),
+    )
+}
+
+fn nearby_object_tile_information(map: &Map, coord: TileCoord, climate: Climate) -> u32 {
+    let Some(tile) = map.get(coord) else {
+        return 0;
+    };
+    let (tileh, z) = tile_slope_and_z(map, coord).unwrap_or((0, tile.height));
+    let terrain = if climate.uses_desert_patches() && tile.m7 & 0x20 != 0 {
+        1
+    } else if climate.uses_snow_ground() || tile.m7 & 0x20 != 0 {
+        4
+    } else {
+        0
+    };
+    let water_info = water_class(tile).map_or(0, |water| (water as u8 + 1) & 3);
+    let is_water = u8::from(tile.kind == TileKind::Water);
+    let terrain_info = (water_info << 5) | (terrain << 2) | (is_water << 1);
+    let tile_type = if tile.ottd_type_nibble() != 0 || tile.kind == TileKind::Grass {
+        tile.ottd_type_nibble()
+    } else {
+        match tile.kind {
+            TileKind::Water => 6,
+            TileKind::Forest => 4,
+            TileKind::Road | TileKind::RoadDepot | TileKind::RoadTunnel | TileKind::RoadBridge => 2,
+            TileKind::Rail | TileKind::RailDepot | TileKind::RailTunnel | TileKind::RailBridge => 1,
+            TileKind::House => 3,
+            TileKind::Station => 5,
+            TileKind::Industry => 8,
+            TileKind::Void => 7,
+            TileKind::ShipDepot
+            | TileKind::Airport
+            | TileKind::CoalField
+            | TileKind::Unknown(_) => tile.ottd_type_nibble(),
+            TileKind::Grass => 0,
+        }
+    };
+    (u32::from(tile_type) << 24)
+        | (u32::from(z) << 16)
+        | (u32::from(terrain_info) << 8)
+        | u32::from(tileh)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -372,5 +480,48 @@ mod tests {
 
         assert_eq!(ctx.vars.get(&0x45), Some(&0x0004_0003));
         assert_eq!(ctx.vars.get(&0x46), Some(&5));
+    }
+
+    #[test]
+    fn object_action2_context_resolves_neighbor_tile_info_and_animation() {
+        let mut map = Map::new_flat(4, 4, 0);
+        let mut origin = Tile {
+            height: 0,
+            kind: TileKind::Grass,
+            mapt: MP_OBJECT_MAPT,
+            m5: 110,
+            m1: 0,
+            m6: 0,
+            m8: 0,
+            m3: 0x11,
+            m2: object_tile_offset_byte(0, 0),
+            m2_hi: 0,
+            m7: 0,
+            m3hi: 2,
+        };
+        map.set_tile(TileCoord::new(1, 1), origin)
+            .expect("object origin");
+        origin.m2 = object_tile_offset_byte(1, 0);
+        origin.m3hi = 7;
+        map.set_tile(TileCoord::new(2, 1), origin)
+            .expect("object neighbour");
+
+        let ctx = action2_eval_ctx_for_object_tile_with_map(
+            &map,
+            map.get(TileCoord::new(1, 1)).expect("object tile"),
+            0,
+            Climate::Temperate,
+            TileCoord::new(1, 1),
+            &[],
+            110,
+            Some(TileCoord::new(1, 1)),
+            &[(0x62, 0x01), (0x63, 0x01)],
+        );
+
+        assert_eq!(
+            ctx.parameterized_vars.get(&(0x62, 0x01)),
+            Some(&0x0A00_0100)
+        );
+        assert_eq!(ctx.parameterized_vars.get(&(0x63, 0x01)), Some(&7));
     }
 }

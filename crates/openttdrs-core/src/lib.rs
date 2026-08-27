@@ -348,13 +348,14 @@ pub use map::{
     is_owned_land_tile, is_river_tile, is_tropic_desert_zone, is_tunnel_entrance_slope,
     lift_destination, lift_has_destination, lift_position, make_industry_tile_bigger,
     make_shore_tile, make_water_tile, object_footprint_at, object_footprint_tiles,
-    object_id_from_tile, object_spec_id_from_tile, object_type_dims, object_type_dims_id,
-    object_view_index_for_tile, object_view_index_for_type, openttd_tile_index_to_coord,
-    opposite_diag_dir, partial_pixel_z, plant_tree, process_water_flood_from_visits,
-    rail_bit_for_sides, rail_bits_touching_side, rail_foundation_draw_plan,
-    rail_foundation_for_trackbits, rail_signal_diag_dir_offset, rail_surface_slope_and_z,
-    rail_tile_is_signals, rail_track_draw_plan, rail_trackbits_valid_on_slope, rail_traversal_bits,
-    resolve_tunnel_end, river_tile_is_ship_navigable, set_industry_gfx, set_industry_random_bits,
+    object_id_from_tile, object_origin_from_tile, object_spec_id_from_tile, object_type_dims,
+    object_type_dims_id, object_view_index_for_tile, object_view_index_for_type,
+    openttd_tile_index_to_coord, opposite_diag_dir, partial_pixel_z, plant_tree,
+    process_water_flood_from_visits, rail_bit_for_sides, rail_bits_touching_side,
+    rail_foundation_draw_plan, rail_foundation_for_trackbits, rail_signal_diag_dir_offset,
+    rail_surface_slope_and_z, rail_tile_is_signals, rail_track_draw_plan,
+    rail_trackbits_valid_on_slope, rail_traversal_bits, resolve_tunnel_end,
+    river_tile_is_ship_navigable, set_industry_gfx, set_industry_random_bits,
     set_industry_random_triggers, set_water_class_m1, slope_dz_at_subtile, slope_dz_on_tile,
     slope_pixel_z, step_airport_tiles, step_industry_tiles, step_industry_tiles_with_seed,
     step_newgrf_station_tiles, step_newgrf_station_tiles_with_world, step_tree_and_field_growth,
@@ -377,7 +378,10 @@ pub use house_spec::{
     next_free_house_id, pick_town_house_id, pick_town_house_id_with_catalog, resolve_house_draw_id,
     vanilla_or_newgrf_house,
 };
-pub use map::{action2_eval_ctx_for_object_tile, action2_eval_ctx_for_object_tile_with_towns};
+pub use map::{
+    action2_eval_ctx_for_object_tile, action2_eval_ctx_for_object_tile_with_map,
+    action2_eval_ctx_for_object_tile_with_towns,
+};
 pub use newgrf_actions::{
     ACTION0_FEATURE_BADGES, ACTION0_FEATURE_BRIDGES, ACTION0_FEATURE_CANALS,
     ACTION0_FEATURE_CARGOES, ACTION0_FEATURE_HOUSES, ACTION0_FEATURE_INDUSTRIES,

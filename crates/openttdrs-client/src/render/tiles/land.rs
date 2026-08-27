@@ -1832,6 +1832,7 @@ fn object_tile_seq_child_center(
 /// Resuelve el `TileSeq` de un objeto para la tesela concreta del footprint.
 #[allow(clippy::too_many_arguments)]
 fn resolve_newgrf_object_layout<'a>(
+    map: &Map,
     object_type: u16,
     tile: Tile,
     tileh: u8,
@@ -1849,8 +1850,18 @@ fn resolve_newgrf_object_layout<'a>(
         crate::render::object_newgrf::newgrf_object_def_for_type(object_catalog, object_type)?;
     let view_idx =
         openttdrs_core::object_view_index_for_type(&tile, object_type, object_catalog).unwrap_or(0);
-    let mut action2 = openttdrs_core::action2_eval_ctx_for_object_tile_with_towns(
-        tile, tileh, climate, coord, towns,
+    let object_origin = openttdrs_core::object_origin_from_tile(&tile, coord);
+    let neighbor_params = requested_object_neighbor_vars(def.newgrf_runtime.as_deref());
+    let mut action2 = openttdrs_core::action2_eval_ctx_for_object_tile_with_map(
+        map,
+        tile,
+        tileh,
+        climate,
+        coord,
+        towns,
+        object_type,
+        object_origin,
+        &neighbor_params,
     );
     let layout = def.newgrf_tile_layout_runtime(view_idx, &mut action2)?;
     let runtime_fp = def
@@ -1858,6 +1869,27 @@ fn resolve_newgrf_object_layout<'a>(
         .as_ref()
         .map_or(0, |_| runtime_fingerprint(&action2, vars::OBJECT, false));
     Some((def, layout, runtime_fp, view_idx))
+}
+
+fn requested_object_neighbor_vars(
+    runtime: Option<&openttdrs_core::newgrf_sprites::TrainSpriteGraphics>,
+) -> Vec<(u8, u8)> {
+    let Some(runtime) = runtime else {
+        return Vec::new();
+    };
+    let mut requested = Vec::new();
+    for entry in runtime.action2_var.values() {
+        for term in std::iter::once(&entry.first).chain(entry.ops.iter().map(|op| &op.rhs)) {
+            if matches!(term.variable, 0x62 | 0x63)
+                && let Some(parameter) = term.param
+                && !requested.contains(&(term.variable, parameter))
+            {
+                requested.push((term.variable, parameter));
+            }
+        }
+    }
+    requested.sort_unstable();
+    requested
 }
 
 /// Emite el suelo de un layout de objeto. Un resultado completo sin `ground`
@@ -2037,6 +2069,7 @@ pub(crate) fn spawn_generic_land_tile(
     company: Option<&CompanyColoredSprites>,
     owner_colour: Option<CompanyColour>,
     ctx: &TileRenderContext,
+    map: &Map,
     slope_half_ground: f32,
     climate: Climate,
     world_seed: u64,
@@ -2053,6 +2086,7 @@ pub(crate) fn spawn_generic_land_tile(
     let object_layout = if ottd_type == 10 && is_newgrf_object_type_id(object_type) {
         ctx.tile.and_then(|tile| {
             resolve_newgrf_object_layout(
+                map,
                 object_type,
                 tile,
                 tileh,
@@ -2317,12 +2351,18 @@ pub(crate) fn spawn_generic_land_tile(
             // tesela. Resolver aquí permite que Action2 observe el random,
             // offset de footprint, pendiente, frame y owner en vez de usar
             // siempre el preview estático del GRF.
-            let mut a2 = openttdrs_core::action2_eval_ctx_for_object_tile_with_towns(
+            let neighbor_params = requested_object_neighbor_vars(def.newgrf_runtime.as_deref());
+            let object_origin = openttdrs_core::object_origin_from_tile(&tile, ctx.coord);
+            let mut a2 = openttdrs_core::action2_eval_ctx_for_object_tile_with_map(
+                map,
                 tile,
                 ctx.info.tileh,
                 climate,
                 ctx.coord,
                 towns,
+                object_type,
+                object_origin,
+                &neighbor_params,
             );
             if let Some((layout_def, layout, runtime_fp, _layout_view_idx)) = object_layout.as_ref()
                 && layout.complete

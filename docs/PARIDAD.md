@@ -239,7 +239,8 @@ el resto de propiedades CTT variables continúa pendiente.
 Los objetos NewGRF ya reevalúan
 Action2 por tesela con random, offset de footprint, pendiente/terreno,
 animación, owner y zona/distancias (`0x45`/`0x46`) del pueblo más cercano, y
-cachean por fingerprint. Los layouts `TileSeq` completos
+cachean por fingerprint; las vars `0x62`/`0x63` también consultan información
+y animación de teselas vecinas del mismo footprint. Los layouts `TileSeq` completos
 reemplazan el suelo y emiten parents/children con cajas `M(...)`; los sprites
 base, paletas custom y layouts incompletos conservan fallback vanilla. Los
 producers de industria y

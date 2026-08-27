@@ -138,8 +138,8 @@ secundarias fuera de ese contrato.
   resultado por fingerprint. Los layouts `TileSeq` completos
   reemplazan el suelo y emiten parents/children con cajas `M(...)`; sprites
   base, paletas custom y layouts incompletos mantienen fallback vanilla. La
-  asociación nativa objeto↔pueblo, las teselas vecinas y los callbacks de
-  objeto siguen pendientes.
+  asociación nativa objeto↔pueblo, los conteos (`0x60`/`0x64`) y los callbacks
+  de objeto siguen pendientes.
 - Casas NewGRF: `DrawNewHouseTile` ya no cae automáticamente en
   `HOUSE_DRAW_DATA`: el sprite de edificio se resuelve desde Action1/2/3 con
   el contexto persistido de la tesela y la zona `0x42` del pueblo más cercano,

@@ -294,6 +294,7 @@ pub(crate) fn spawn_map_tiles_in_bounds(
                     Some(company),
                     owner_colour_for_tile(sim, ctx.coord, kind),
                     &ctx,
+                    map,
                     slope_half_ground,
                     climate,
                     world_seed,

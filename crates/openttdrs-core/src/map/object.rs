@@ -6,6 +6,7 @@ use crate::object_spec::{
     NEW_OBJECT_OFFSET, ObjectSpecDef, decode_object_tile_offset, encode_object_tile_offset,
     object_footprint_tile_index, object_spec_def,
 };
+use crate::sav::SavObject;
 use crate::world_gen::Climate;
 
 /// Nibble alto de `mapt` para teselas objeto.
@@ -20,6 +21,34 @@ pub const OBJECT_TYPE_LIGHTHOUSE: u8 = 1;
 /// Estatua de compañía construida por la autoridad local (`SPR_STATUE_COMPANY`).
 pub const OBJECT_TYPE_STATUE_COMPANY: u8 = 2;
 pub const OBJECT_TYPE_OWNED_LAND: u8 = 3;
+
+/// Conteos de instancias `Object` para `ObjectScopeResolver::0x64`.
+///
+/// El contador nativo es por objeto (no por tesela del footprint). Se
+/// precalcula una vez por pase de render y se consulta por `ObjectType`.
+#[derive(Debug, Clone, Default)]
+pub struct ObjectScopeCounts {
+    by_type: std::collections::HashMap<u16, u32>,
+}
+
+impl ObjectScopeCounts {
+    /// Construye una instantánea de las instancias persistidas en `OBJS`.
+    #[must_use]
+    pub fn from_objects(objects: &[SavObject]) -> Self {
+        let mut counts = Self::default();
+        for object in objects {
+            let entry = counts.by_type.entry(object.object_type).or_default();
+            *entry = entry.saturating_add(1);
+        }
+        counts
+    }
+
+    /// Número de objetos de un tipo global.
+    #[must_use]
+    pub fn count(&self, object_type: u16) -> u32 {
+        self.by_type.get(&object_type).copied().unwrap_or(0)
+    }
+}
 
 #[must_use]
 pub const fn is_map_object_tile(mapt: u8) -> bool {
@@ -145,6 +174,26 @@ pub fn object_origin_from_tile(tile: &Tile, at: TileCoord) -> Option<TileCoord> 
         at.x.saturating_sub(i32::from(dx)),
         at.y.saturating_sub(i32::from(dy)),
     ))
+}
+
+/// Origen de un objeto usando el pool nativo `OBJS` cuando está disponible.
+///
+/// En un save de `OpenTTD`, `MAP2/MAP5` guardan el `ObjectID`, no el offset de
+/// la tesela dentro del footprint; el origen vive en `Object::location.tile`.
+/// El fallback conserva el formato histórico del proyecto, que sí codificaba
+/// `(dx, dy)` en `MAP2`.
+#[must_use]
+pub fn object_origin_from_tile_with_objects(
+    tile: &Tile,
+    at: TileCoord,
+    objects: &[SavObject],
+) -> Option<TileCoord> {
+    let object_id = object_id_from_tile(tile)?;
+    objects
+        .iter()
+        .find(|object| object.object_id == object_id)
+        .map(|object| object.tile)
+        .or_else(|| object_origin_from_tile(tile, at))
 }
 
 /// Todas las teselas del footprint del objeto que contiene `at`.
@@ -315,6 +364,250 @@ pub fn action2_eval_ctx_for_object_tile_with_map(
         ctx.parameterized_vars.insert((variable, parameter), value);
     }
     ctx
+}
+
+/// Contexto Action2 de objeto con la instancia `OBJS` y los conteos globales.
+///
+/// Completa las variables que sólo existen para un objeto construido:
+/// fecha/color/vista, asociación al pueblo, ids/random de vecinos y
+/// `0x64` (cantidad y distancia de la instancia hermana más cercana).
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_lines)]
+pub fn action2_eval_ctx_for_object_tile_with_counts(
+    map: &Map,
+    tile: Tile,
+    tileh: u8,
+    climate: Climate,
+    coord: TileCoord,
+    towns: &[crate::town::Town],
+    objects: &[SavObject],
+    object_catalog: &[ObjectSpecDef],
+    object_type: u16,
+    object_origin: Option<TileCoord>,
+    counts: &ObjectScopeCounts,
+    neighbor_params: &[(u8, u8)],
+) -> Action2EvalCtx {
+    let mut ctx = action2_eval_ctx_for_object_tile_with_map(
+        map,
+        tile,
+        tileh,
+        climate,
+        coord,
+        towns,
+        object_type,
+        object_origin,
+        &[],
+    );
+    let current_id = object_id_from_tile(&tile);
+    let current = objects
+        .iter()
+        .find(|object| current_id == Some(object.object_id))
+        .or_else(|| {
+            object_origin.and_then(|origin| {
+                objects
+                    .iter()
+                    .find(|object| object.tile == origin && object.object_type == object_type)
+            })
+        });
+    let current_origin = current.map(|object| object.tile).or(object_origin);
+    let town = current
+        .and_then(|object| {
+            (object.town != 0).then_some(object.town).and_then(|id| {
+                towns
+                    .iter()
+                    .find(|town| town.id == id)
+                    .map(|town| (town, true))
+            })
+        })
+        .or_else(|| {
+            towns
+                .iter()
+                .min_by_key(|town| crate::house_spec::distance_square(town.pos, coord))
+                .map(|town| (town, false))
+        });
+    if let Some((town, _native)) = town {
+        let zone = crate::house_spec::get_town_radius_group(town, coord) as u32;
+        let manhattan = town
+            .pos
+            .x
+            .abs_diff(coord.x)
+            .saturating_add(town.pos.y.abs_diff(coord.y))
+            .min(u32::from(u16::MAX));
+        ctx.vars
+            .insert(0x45, (zone << 16) | manhattan.min(u32::from(u16::MAX)));
+        ctx.vars
+            .insert(0x46, crate::house_spec::distance_square(town.pos, coord));
+    }
+    ctx.vars
+        .insert(0x42, current.map_or(0, |object| object.build_date));
+    ctx.vars
+        .insert(0x47, current.map_or(0, |object| u32::from(object.colour)));
+    ctx.vars
+        .insert(0x48, current.map_or(0, |object| u32::from(object.view)));
+    if let Some(origin) = current_origin {
+        let dx = u32::try_from(coord.x.saturating_sub(origin.x)).unwrap_or(0);
+        let dy = u32::try_from(coord.y.saturating_sub(origin.y)).unwrap_or(0);
+        ctx.vars.insert(
+            0x40,
+            (dy & 0x0F) << 20 | (dx & 0x0F) << 16 | (dy & 0x0F) << 8 | (dx & 0x0F),
+        );
+    }
+
+    for &(variable, parameter) in neighbor_params {
+        let nearby = nearby_object_coord(map, coord, parameter);
+        let nearby_tile = map.get(nearby);
+        let nearby_id = nearby_tile.as_ref().and_then(object_id_from_tile);
+        let nearby_instance =
+            nearby_id.and_then(|id| objects.iter().find(|object| object.object_id == id));
+        let same_object = match (current_id, nearby_id) {
+            (Some(current), Some(nearby)) if current == nearby => true,
+            _ => current_origin
+                .is_some_and(|origin| nearby_instance.is_some_and(|object| object.tile == origin)),
+        };
+        let nearby_type = nearby_instance
+            .map(|object| object.object_type)
+            .or_else(|| map.object_type_at(nearby))
+            .unwrap_or(u16::MAX);
+        let value = match variable {
+            0x60 => object_id_at_offset(
+                nearby_tile,
+                nearby_instance,
+                nearby_type,
+                object_catalog,
+                current_grfid(object_type, object_catalog),
+            ),
+            0x61 if same_object => nearby_tile.map_or(0, |candidate| u32::from(candidate.m3)),
+            0x62 => {
+                nearby_object_tile_information(map, nearby, climate) | (u32::from(same_object) << 8)
+            }
+            0x63 if same_object => nearby_tile.map_or(0, |candidate| u32::from(candidate.m3hi)),
+            0x64 => object_count_and_distance(
+                parameter,
+                &ctx,
+                object_type,
+                object_catalog,
+                counts,
+                objects,
+                coord,
+                current_id,
+            ),
+            _ => 0,
+        };
+        ctx.parameterized_vars.insert((variable, parameter), value);
+    }
+    ctx
+}
+
+/// Variante que construye la instantánea de `OBJS` para callers pequeños.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn action2_eval_ctx_for_object_tile_with_world(
+    map: &Map,
+    tile: Tile,
+    tileh: u8,
+    climate: Climate,
+    coord: TileCoord,
+    towns: &[crate::town::Town],
+    objects: &[SavObject],
+    object_catalog: &[ObjectSpecDef],
+    object_type: u16,
+    object_origin: Option<TileCoord>,
+    neighbor_params: &[(u8, u8)],
+) -> Action2EvalCtx {
+    let counts = ObjectScopeCounts::from_objects(objects);
+    action2_eval_ctx_for_object_tile_with_counts(
+        map,
+        tile,
+        tileh,
+        climate,
+        coord,
+        towns,
+        objects,
+        object_catalog,
+        object_type,
+        object_origin,
+        &counts,
+        neighbor_params,
+    )
+}
+
+fn current_grfid(object_type: u16, object_catalog: &[ObjectSpecDef]) -> u32 {
+    object_spec_def(object_catalog, object_type).map_or(0, |def| def.grfid)
+}
+
+fn object_id_at_offset(
+    _tile: Option<Tile>,
+    instance: Option<&SavObject>,
+    object_type: u16,
+    catalog: &[ObjectSpecDef],
+    current_grfid: u32,
+) -> u32 {
+    let Some(instance) = instance else {
+        return 0xFFFF;
+    };
+    let Some(def) = object_spec_def(catalog, object_type) else {
+        return 0xFFFE;
+    };
+    if !def.from_newgrf {
+        return 0xFFFE;
+    }
+    if def.grfid != current_grfid {
+        return 0xFFFE;
+    }
+    u32::from(def.local_id) | (u32::from(instance.view) << 16)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn object_count_and_distance(
+    parameter: u8,
+    ctx: &Action2EvalCtx,
+    current_type: u16,
+    catalog: &[ObjectSpecDef],
+    counts: &ObjectScopeCounts,
+    objects: &[SavObject],
+    coord: TileCoord,
+    current_id: Option<u32>,
+) -> u32 {
+    let requested_grfid = ctx.registers_100.get(&0x100).copied().unwrap_or(0);
+    let target = if requested_grfid == 0 {
+        Some(u16::from(parameter))
+    } else if requested_grfid == u32::MAX {
+        object_spec_def(catalog, current_type)
+            .map(|current| current.grfid)
+            .and_then(|grfid| {
+                catalog
+                    .iter()
+                    .find(|def| def.from_newgrf && def.grfid == grfid && def.local_id == parameter)
+                    .map(|def| def.id)
+            })
+    } else {
+        catalog
+            .iter()
+            .find(|def| {
+                def.from_newgrf && def.grfid == requested_grfid && def.local_id == parameter
+            })
+            .map(|def| def.id)
+    };
+    let Some(target) = target else {
+        return 0xFFFF;
+    };
+    let count = counts.count(target).min(u32::from(u16::MAX));
+    let distance = objects
+        .iter()
+        .filter(|object| object.object_type == target)
+        .filter(|object| current_id != Some(object.object_id))
+        .map(|object| {
+            object
+                .tile
+                .x
+                .abs_diff(coord.x)
+                .saturating_add(object.tile.y.abs_diff(coord.y))
+        })
+        .min()
+        .unwrap_or(u32::from(u16::MAX))
+        .min(u32::from(u16::MAX));
+    (count << 16) | distance
 }
 
 fn nearby_object_coord(map: &Map, base: TileCoord, parameter: u8) -> TileCoord {
@@ -523,5 +816,101 @@ mod tests {
             Some(&0x0A00_0100)
         );
         assert_eq!(ctx.parameterized_vars.get(&(0x63, 0x01)), Some(&7));
+    }
+
+    #[test]
+    fn object_action2_context_uses_pool_metadata_and_scope_counts() {
+        let mut map = Map::new_flat(4, 1, 0);
+        let tile = Tile {
+            height: 0,
+            kind: TileKind::Grass,
+            mapt: MP_OBJECT_MAPT,
+            // Native saves store ObjectID in MAP2/MAP5. Both footprint tiles
+            // therefore carry the same id instead of the legacy offset.
+            m5: 0,
+            m1: 3,
+            m6: 0,
+            m8: 0,
+            m3: 0x12,
+            m2: 7,
+            m2_hi: 0,
+            m7: 0,
+            m3hi: 9,
+        };
+        map.set_tile(TileCoord::new(0, 0), tile)
+            .expect("object origin");
+        map.set_tile(TileCoord::new(1, 0), tile)
+            .expect("object footprint");
+
+        let objects = vec![SavObject {
+            object_id: 7,
+            tile: TileCoord::new(0, 0),
+            width: 2,
+            height: 1,
+            town: 1,
+            build_date: 1234,
+            colour: 6,
+            view: 2,
+            object_type: 5,
+        }];
+        let catalog = vec![ObjectSpecDef {
+            id: 5,
+            class_label: "TEST".into(),
+            name: "Test object".into(),
+            size: 0x12,
+            from_newgrf: true,
+            local_id: 4,
+            grfid: 0xABCD_0001,
+            climate_mask: 0x0F,
+            build_cost_factor: 1,
+            callback_mask: 0,
+            views: Vec::new(),
+            newgrf_runtime: None,
+            associated_badges: Vec::new(),
+        }];
+        let town = crate::town::Town {
+            id: 1,
+            pos: TileCoord::new(1, 0),
+            ..Default::default()
+        };
+        let counts = ObjectScopeCounts::from_objects(&objects);
+        let ctx = action2_eval_ctx_for_object_tile_with_counts(
+            &map,
+            map.get(TileCoord::new(1, 0)).expect("object tile"),
+            0,
+            Climate::Temperate,
+            TileCoord::new(1, 0),
+            std::slice::from_ref(&town),
+            &objects,
+            &catalog,
+            5,
+            Some(TileCoord::new(0, 0)),
+            &counts,
+            &[
+                (0x60, 0x0F),
+                (0x61, 0x0F),
+                (0x62, 0x0F),
+                (0x63, 0x0F),
+                (0x64, 5),
+            ],
+        );
+
+        assert_eq!(ctx.vars.get(&0x40), Some(&0x0001_0001));
+        assert_eq!(ctx.vars.get(&0x42), Some(&1234));
+        assert_eq!(ctx.vars.get(&0x45), Some(&0));
+        assert_eq!(ctx.vars.get(&0x46), Some(&0));
+        assert_eq!(ctx.vars.get(&0x47), Some(&6));
+        assert_eq!(ctx.vars.get(&0x48), Some(&2));
+        assert_eq!(
+            ctx.parameterized_vars.get(&(0x60, 0x0F)),
+            Some(&0x0002_0004)
+        );
+        assert_eq!(ctx.parameterized_vars.get(&(0x61, 0x0F)), Some(&0x12));
+        assert_eq!(
+            ctx.parameterized_vars.get(&(0x62, 0x0F)),
+            Some(&0x0A00_0100)
+        );
+        assert_eq!(ctx.parameterized_vars.get(&(0x63, 0x0F)), Some(&9));
+        assert_eq!(ctx.parameterized_vars.get(&(0x64, 5)), Some(&0x0001_FFFF));
     }
 }

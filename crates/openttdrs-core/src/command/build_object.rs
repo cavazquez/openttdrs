@@ -210,7 +210,11 @@ pub(crate) fn build_object(
             tile: c,
             width: u16::from(w),
             height: u16::from(h),
-            town: 0,
+            town: state
+                .towns
+                .iter()
+                .min_by_key(|town| crate::house_spec::distance_square(town.pos, c))
+                .map_or(0, |town| town.id),
             build_date: state.calendar.date,
             colour: state.company_colour,
             view: 0,

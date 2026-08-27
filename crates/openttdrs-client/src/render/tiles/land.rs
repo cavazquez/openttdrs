@@ -1923,6 +1923,8 @@ fn resolve_newgrf_object_layout<'a>(
     climate: Climate,
     object_catalog: &'a [ObjectSpecDef],
     towns: &[openttdrs_core::Town],
+    objects: &[openttdrs_core::sav::SavObject],
+    object_counts: Option<&openttdrs_core::ObjectScopeCounts>,
 ) -> Option<(
     &'a ObjectSpecDef,
     openttdrs_core::newgrf_sprites::ResolvedTileLayout,
@@ -1933,18 +1935,40 @@ fn resolve_newgrf_object_layout<'a>(
         crate::render::object_newgrf::newgrf_object_def_for_type(object_catalog, object_type)?;
     let view_idx =
         openttdrs_core::object_view_index_for_type(&tile, object_type, object_catalog).unwrap_or(0);
-    let object_origin = openttdrs_core::object_origin_from_tile(&tile, coord);
+    let object_origin = openttdrs_core::object_origin_from_tile_with_objects(&tile, coord, objects);
     let neighbor_params = requested_object_neighbor_vars(def.newgrf_runtime.as_deref());
-    let mut action2 = openttdrs_core::action2_eval_ctx_for_object_tile_with_map(
-        map,
-        tile,
-        tileh,
-        climate,
-        coord,
-        towns,
-        object_type,
-        object_origin,
-        &neighbor_params,
+    let mut action2 = object_counts.map_or_else(
+        || {
+            openttdrs_core::action2_eval_ctx_for_object_tile_with_world(
+                map,
+                tile,
+                tileh,
+                climate,
+                coord,
+                towns,
+                objects,
+                object_catalog,
+                object_type,
+                object_origin,
+                &neighbor_params,
+            )
+        },
+        |counts| {
+            openttdrs_core::action2_eval_ctx_for_object_tile_with_counts(
+                map,
+                tile,
+                tileh,
+                climate,
+                coord,
+                towns,
+                objects,
+                object_catalog,
+                object_type,
+                object_origin,
+                counts,
+                &neighbor_params,
+            )
+        },
     );
     let layout = def.newgrf_tile_layout_runtime(view_idx, &mut action2)?;
     let runtime_fp = def
@@ -1963,7 +1987,7 @@ fn requested_object_neighbor_vars(
     let mut requested = Vec::new();
     for entry in runtime.action2_var.values() {
         for term in std::iter::once(&entry.first).chain(entry.ops.iter().map(|op| &op.rhs)) {
-            if matches!(term.variable, 0x62 | 0x63)
+            if matches!(term.variable, 0x60..=0x64)
                 && let Some(parameter) = term.param
                 && !requested.contains(&(term.variable, parameter))
             {
@@ -2146,6 +2170,7 @@ fn spawn_newgrf_object_layout_sequence(
 }
 
 #[allow(clippy::too_many_arguments)]
+#[allow(dead_code)]
 pub(crate) fn spawn_generic_land_tile(
     commands: &mut Commands,
     assets: &WorldAssets,
@@ -2159,6 +2184,45 @@ pub(crate) fn spawn_generic_land_tile(
     map_width: u32,
     object_catalog: &[ObjectSpecDef],
     towns: &[openttdrs_core::Town],
+    object_sprites: Option<&mut crate::render::NewGrfObjectSpriteCache>,
+    images: Option<&mut Assets<Image>>,
+) {
+    spawn_generic_land_tile_with_objects(
+        commands,
+        assets,
+        company,
+        owner_colour,
+        ctx,
+        map,
+        slope_half_ground,
+        climate,
+        world_seed,
+        map_width,
+        object_catalog,
+        towns,
+        &[],
+        None,
+        object_sprites,
+        images,
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn spawn_generic_land_tile_with_objects(
+    commands: &mut Commands,
+    assets: &WorldAssets,
+    company: Option<&CompanyColoredSprites>,
+    owner_colour: Option<CompanyColour>,
+    ctx: &TileRenderContext,
+    map: &Map,
+    slope_half_ground: f32,
+    climate: Climate,
+    world_seed: u64,
+    map_width: u32,
+    object_catalog: &[ObjectSpecDef],
+    towns: &[openttdrs_core::Town],
+    objects: &[openttdrs_core::sav::SavObject],
+    object_counts: Option<&openttdrs_core::ObjectScopeCounts>,
     mut object_sprites: Option<&mut crate::render::NewGrfObjectSpriteCache>,
     mut images: Option<&mut Assets<Image>>,
 ) {
@@ -2177,6 +2241,8 @@ pub(crate) fn spawn_generic_land_tile(
                 climate,
                 object_catalog,
                 towns,
+                objects,
+                object_counts,
             )
         })
     } else {
@@ -2435,17 +2501,40 @@ pub(crate) fn spawn_generic_land_tile(
             // offset de footprint, pendiente, frame y owner en vez de usar
             // siempre el preview estático del GRF.
             let neighbor_params = requested_object_neighbor_vars(def.newgrf_runtime.as_deref());
-            let object_origin = openttdrs_core::object_origin_from_tile(&tile, ctx.coord);
-            let mut a2 = openttdrs_core::action2_eval_ctx_for_object_tile_with_map(
-                map,
-                tile,
-                ctx.info.tileh,
-                climate,
-                ctx.coord,
-                towns,
-                object_type,
-                object_origin,
-                &neighbor_params,
+            let object_origin =
+                openttdrs_core::object_origin_from_tile_with_objects(&tile, ctx.coord, objects);
+            let mut a2 = object_counts.map_or_else(
+                || {
+                    openttdrs_core::action2_eval_ctx_for_object_tile_with_world(
+                        map,
+                        tile,
+                        ctx.info.tileh,
+                        climate,
+                        ctx.coord,
+                        towns,
+                        objects,
+                        object_catalog,
+                        object_type,
+                        object_origin,
+                        &neighbor_params,
+                    )
+                },
+                |counts| {
+                    openttdrs_core::action2_eval_ctx_for_object_tile_with_counts(
+                        map,
+                        tile,
+                        ctx.info.tileh,
+                        climate,
+                        ctx.coord,
+                        towns,
+                        objects,
+                        object_catalog,
+                        object_type,
+                        object_origin,
+                        counts,
+                        &neighbor_params,
+                    )
+                },
             );
             if let Some((layout_def, layout, runtime_fp, _layout_view_idx)) = object_layout.as_ref()
                 && layout.complete

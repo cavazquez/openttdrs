@@ -381,8 +381,10 @@ pub use house_spec::{
     vanilla_or_newgrf_house,
 };
 pub use map::{
-    action2_eval_ctx_for_object_tile, action2_eval_ctx_for_object_tile_with_map,
-    action2_eval_ctx_for_object_tile_with_towns,
+    ObjectScopeCounts, action2_eval_ctx_for_object_tile,
+    action2_eval_ctx_for_object_tile_with_counts, action2_eval_ctx_for_object_tile_with_map,
+    action2_eval_ctx_for_object_tile_with_towns, action2_eval_ctx_for_object_tile_with_world,
+    object_origin_from_tile_with_objects,
 };
 pub use newgrf_actions::{
     ACTION0_FEATURE_BADGES, ACTION0_FEATURE_BRIDGES, ACTION0_FEATURE_CANALS,

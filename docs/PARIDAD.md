@@ -238,10 +238,13 @@ exclusión de cargos y la máscara final de refit descarta los cargos excluidos;
 el resto de propiedades CTT variables continúa pendiente.
 Los objetos NewGRF ya reevalúan
 Action2 por tesela con random, offset de footprint, pendiente/terreno,
-animación, owner y zona/distancias (`0x45`/`0x46`) del pueblo más cercano, y
-cachean por fingerprint; las vars `0x62`/`0x63` también consultan información
-y animación de teselas vecinas del mismo footprint. Los layouts `TileSeq` completos
-reemplazan el suelo y emiten parents/children con cajas `M(...)`; los sprites
+animación, owner, fecha, color, vista y zona/distancias (`0x42`, `0x45`/`0x46`)
+del pueblo asociado. La asociación usa `Object::town` importado y cae al pueblo
+más cercano en mapas legacy; las vars `0x60`/`0x61`/`0x62`/`0x63` consultan
+id, random, información y animación de teselas vecinas del mismo footprint, y
+`0x64` devuelve cantidad/distancia de instancias por tipo. Los conteos se
+calculan una vez por pase. Los layouts `TileSeq` completos reemplazan el suelo
+y emiten parents/children con cajas `M(...)`; los sprites
 base, paletas custom y layouts incompletos conservan fallback vanilla. Los
 producers de industria y
 las industrias NewGRF ya usan sus offsets Action2 runtime y cuelgan el overlay
@@ -1720,8 +1723,11 @@ En saves &lt; 214, OpenTTD mueve el RoadType desde bits 6–7 de `m7` a `m4` (ro
   `(GRFID, local, sustituto)` y puede reconstruirse desde el catálogo. Un save
   sin mutaciones conserva los payloads originales para no perder columnas
   futuras. El cargador de objetos usa ahora `OBID` para conservar el
-  `ObjectType` asignado cuando el `(GRFID, local ID)` coincide; siguen
-  pendientes mappings faltantes y completar el runtime de objetos.
+  `ObjectType` asignado cuando el `(GRFID, local ID)` coincide. El renderer
+  consume además `Object::town`, fecha, color, vista y `ObjectID` para resolver
+  los scopes `0x42`, `0x47`, `0x48`, `0x60`–`0x64`; siguen pendientes mappings
+  faltantes, callbacks de objeto adicionales y el merge estructural de
+  columnas desconocidas.
 - Dedicated + `-g` dispara dos `AfterLoadGame` (new-game luego load); el export usa `OPENTTDRS_SNAPSHOT_MIN_CALL=2`.
 - El oráculo **no** invoca `parse_sav.py` ni `snapshot_dumper`.
 

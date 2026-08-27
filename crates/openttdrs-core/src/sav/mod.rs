@@ -77,7 +77,7 @@ mod table;
 pub mod write;
 
 use crate::airport::airport_spec_tiles;
-use crate::airport_class::{AirportSpecId, airport_spec_def};
+use crate::airport_class::{AirportSpecId, NEW_AIRPORT_OFFSET, airport_spec_def};
 use crate::airport_fta::AirportHeading;
 use crate::command::normalize_rail_trackbits_from_neighbors;
 use crate::game_state::GameState;
@@ -1074,6 +1074,12 @@ impl GameState {
                 let spec = AirportSpecId::from_ottd_airport_type(st.airport_type);
                 let axis_y = airport_axis_y_from_saved_footprint(spec, st.airport_w, st.airport_h);
                 station.airport_spec = spec;
+                // `STNN.airport_type` keeps the global id for custom
+                // `AirportSpec` entries (vanilla occupies 0..=9). Preserve it
+                // so the active NewGRF catalog can rehydrate per-tile
+                // `AirportTile` graphics after the SAV is loaded.
+                station.airport_newgrf_spec_id = (u16::from(st.airport_type) >= NEW_AIRPORT_OFFSET)
+                    .then_some(u16::from(st.airport_type));
                 station.airport_blocks = st.airport_blocks;
                 // La huella real ya está en el mapa: `m2` es `StationID` y
                 // `m6` codifica `StationType::Airport`. Esto también cubre
@@ -2008,7 +2014,7 @@ mod tests {
                     facilities: FACIL_TRAIN | FACIL_BUS_STOP | FACIL_AIRPORT,
                     string_id: None,
                     town_id: None,
-                    airport_type: 7,
+                    airport_type: 10,
                     airport_w: 9,
                     airport_h: 11,
                     airport_layout: 0,
@@ -2520,6 +2526,7 @@ mod tests {
             .find(|station| station.ottd_station_id == Some(1))
             .expect("integrated airport station");
         assert_eq!(imported_airport.stop_kind, StopKind::RailStation);
+        assert_eq!(imported_airport.airport_newgrf_spec_id, Some(10));
         assert_eq!(imported_airport.airport_tiles, vec![airport_tile]);
         assert_eq!(state.map.get_kind(airport_tile), Some(TileKind::Airport));
         assert_eq!(state.map.get(airport_tile).map(|tile| tile.m5), Some(14));

@@ -12,6 +12,7 @@ use crate::airport_tile_spec::{
     AirportTileGfxId, AirportTileSpecDef, empty_airport_tile_overrides,
     next_free_airport_tile_gfx_id,
 };
+use crate::map::TileCoord;
 use crate::newgrf_sprites::Action2EvalCtx;
 
 use super::super::action0::{collect_airport_metas_from_grf, collect_airport_tile_metas_from_grf};
@@ -194,6 +195,81 @@ pub fn apply_newgrf_airports(state: &mut GameState, search_dirs: &[&Path]) {
     }
     state.airport_spec_catalog = catalog;
     state.airport_vanilla_disabled = disabled_vanilla;
+    rehydrate_newgrf_airport_tiles(state);
+}
+
+/// Reatacha los `AirportTile` de aeropuertos que llegaron desde un `.sav`.
+///
+/// `STNN` sólo persiste la huella y el id global del aeropuerto; el layout
+/// `Airport` no guarda explícitamente su origen. Se prueban los anclajes
+/// derivados de cada tile real y de cada entrada del layout y se acepta sólo
+/// una huella exacta. Si el GRF/catálogo no está disponible se conserva la
+/// huella vanilla y el renderer cae a `AirportPiece` sin inventar sprites.
+pub fn rehydrate_newgrf_airport_tiles(state: &mut GameState) {
+    let tile_catalog = &state.airport_tile_spec_catalog;
+    let airport_catalog = &state.airport_spec_catalog;
+    for station in &mut state.stations {
+        let Some(spec_id) = station.airport_newgrf_spec_id else {
+            continue;
+        };
+        if station.airport_tiles.is_empty() {
+            continue;
+        }
+        let Some(def) = airport_catalog
+            .iter()
+            .find(|candidate| candidate.id == spec_id && candidate.enabled)
+        else {
+            continue;
+        };
+        let Some(layout) = def
+            .layouts
+            .iter()
+            .find(|candidate| candidate.rotation == 0 || candidate.rotation == 4)
+            .or_else(|| def.layouts.first())
+        else {
+            continue;
+        };
+        let actual = station.airport_tiles.clone();
+        let mut found = None;
+        for axis_y in [false, true] {
+            for actual_coord in &actual {
+                for layout_tile in &layout.tiles {
+                    let (dx, dy) = if axis_y {
+                        (i32::from(layout_tile.y), i32::from(layout_tile.x))
+                    } else {
+                        (i32::from(layout_tile.x), i32::from(layout_tile.y))
+                    };
+                    let origin = TileCoord::new(actual_coord.x - dx, actual_coord.y - dy);
+                    let mapping =
+                        crate::airport::newgrf_airport_tile_gfx(origin, def, tile_catalog, axis_y);
+                    if airport_tile_coords_match(&mapping, &actual) {
+                        found = Some(mapping);
+                        break;
+                    }
+                }
+                if found.is_some() {
+                    break;
+                }
+            }
+            if found.is_some() {
+                break;
+            }
+        }
+        if let Some(mapping) = found {
+            station.airport_tile_gfx = mapping;
+        }
+    }
+}
+
+fn airport_tile_coords_match(mapping: &[(TileCoord, u16)], actual: &[TileCoord]) -> bool {
+    if mapping.len() != actual.len() {
+        return false;
+    }
+    let mut mapped: Vec<_> = mapping.iter().map(|(coord, _)| *coord).collect();
+    let mut expected = actual.to_vec();
+    mapped.sort_unstable();
+    expected.sort_unstable();
+    mapped == expected
 }
 
 pub fn apply_newgrf_airport_tiles_default_dirs(state: &mut GameState) {
@@ -206,4 +282,111 @@ pub fn apply_newgrf_airports_default_dirs(state: &mut GameState) {
     let dirs = super::default_newgrf_search_dirs();
     let refs: Vec<&Path> = dirs.iter().map(PathBuf::as_path).collect();
     apply_newgrf_airports(state, &refs);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::rehydrate_newgrf_airport_tiles;
+    use crate::GameState;
+    use crate::airport_class::{
+        AirportClassId, AirportLayoutTile, AirportSpecId, AirportTileLayout, NewgrfAirportSpecDef,
+    };
+    use crate::airport_tile_spec::{AirportTileGfxId, AirportTileSpecDef};
+    use crate::map::TileCoord;
+    use crate::station::{Station, StopKind};
+
+    #[test]
+    fn rehydrates_sav_airport_tile_mapping_from_exact_footprint() {
+        let mut state = GameState::new(16, 16);
+        let origin = TileCoord::new(5, 6);
+        let mut station = Station::new_with_kind(origin, StopKind::Airport);
+        station.airport_newgrf_spec_id = Some(10);
+        station.airport_tiles = vec![
+            TileCoord::new(5, 6),
+            TileCoord::new(6, 6),
+            TileCoord::new(5, 7),
+            TileCoord::new(6, 7),
+        ];
+        state.stations.push(station);
+        state.airport_tile_spec_catalog = vec![
+            AirportTileSpecDef {
+                gfx: AirportTileGfxId(74),
+                subst_id: 24,
+                from_newgrf: true,
+                callback_mask: 0,
+                newgrf_local_id: 0,
+                newgrf_grfid: 1,
+                newgrf_preview: None,
+                newgrf_views: Vec::new(),
+                newgrf_runtime: None,
+            },
+            AirportTileSpecDef {
+                gfx: AirportTileGfxId(75),
+                subst_id: 14,
+                from_newgrf: true,
+                callback_mask: 0,
+                newgrf_local_id: 1,
+                newgrf_grfid: 1,
+                newgrf_preview: None,
+                newgrf_views: Vec::new(),
+                newgrf_runtime: None,
+            },
+        ];
+        state.airport_spec_catalog = vec![NewgrfAirportSpecDef {
+            id: 10,
+            class: AirportClassId::Small,
+            label: "Test airport".into(),
+            short_label: "Test".into(),
+            size_x: 2,
+            size_y: 2,
+            catchment: 4,
+            noise_level: 1,
+            subst_id: AirportSpecId::Small,
+            layouts: vec![AirportTileLayout {
+                rotation: 0,
+                tiles: vec![
+                    AirportLayoutTile {
+                        x: 0,
+                        y: 0,
+                        gfx: 74,
+                    },
+                    AirportLayoutTile {
+                        x: 1,
+                        y: 0,
+                        gfx: 75,
+                    },
+                    AirportLayoutTile {
+                        x: 0,
+                        y: 1,
+                        gfx: 74,
+                    },
+                    AirportLayoutTile {
+                        x: 1,
+                        y: 1,
+                        gfx: 75,
+                    },
+                ],
+            }],
+            enabled: true,
+            min_year: 0,
+            max_year: u16::MAX,
+            maintenance_cost: 0,
+            newgrf_local_id: 0,
+            newgrf_grfid: 1,
+            newgrf_views: Vec::new(),
+            newgrf_purchase_views: Vec::new(),
+        }];
+
+        rehydrate_newgrf_airport_tiles(&mut state);
+
+        assert_eq!(
+            state.stations[0].airport_tile_gfx,
+            vec![
+                (TileCoord::new(5, 6), 74),
+                (TileCoord::new(6, 6), 75),
+                (TileCoord::new(5, 7), 74),
+                (TileCoord::new(6, 7), 75),
+            ]
+        );
+    }
 }

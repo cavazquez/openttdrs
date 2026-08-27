@@ -99,9 +99,10 @@ fn airport_station_index(stations: &[Station], coord: TileCoord) -> Option<usize
         .position(|station| station.stop_kind == StopKind::Airport && station.covers_tile(coord))
 }
 
-fn airport_animation_context(
+fn airport_animation_context_with_towns(
     map: &Map,
     stations: &[Station],
+    towns: &[crate::town::Town],
     catalog: &[AirportTileSpecDef],
     climate: Climate,
     newgrf_stack: &[crate::NewGrfEntry],
@@ -120,8 +121,8 @@ fn airport_animation_context(
         .iter()
         .find(|candidate| candidate.gfx.as_u16() == gfx && candidate.from_newgrf)
         .cloned()?;
-    let mut ctx = crate::airport_tile_action2::action2_eval_ctx_for_airport_tile(
-        map, stations, coord, catalog, &def, climate,
+    let mut ctx = crate::airport_tile_action2::action2_eval_ctx_for_airport_tile_with_towns(
+        map, stations, towns, coord, catalog, &def, climate,
     );
     ctx.set_grf_params(crate::stack_params_for_grfid(
         newgrf_stack,
@@ -205,9 +206,48 @@ pub fn trigger_newgrf_airport_tile_animation<S: BuildHasher>(
     random: Option<u32>,
     var18_extra: u8,
 ) -> bool {
-    let Some((station_index, def, mut ctx)) =
-        airport_animation_context(map, stations, catalog, climate, newgrf_stack, coord)
-    else {
+    trigger_newgrf_airport_tile_animation_with_towns(
+        map,
+        tick,
+        stations,
+        &[],
+        climate,
+        catalog,
+        active_tiles,
+        newgrf_stack,
+        coord,
+        trigger,
+        random,
+        var18_extra,
+    )
+}
+
+/// Variante del trigger de `AirportTile` con el catálogo de pueblos para la
+/// variable de scope `0x42`.
+#[allow(clippy::too_many_arguments)]
+pub fn trigger_newgrf_airport_tile_animation_with_towns<S: BuildHasher>(
+    map: &mut Map,
+    tick: u64,
+    stations: &mut [Station],
+    towns: &[crate::town::Town],
+    climate: Climate,
+    catalog: &[AirportTileSpecDef],
+    active_tiles: &mut HashSet<TileCoord, S>,
+    newgrf_stack: &[crate::NewGrfEntry],
+    coord: TileCoord,
+    trigger: AirportAnimationTrigger,
+    random: Option<u32>,
+    var18_extra: u8,
+) -> bool {
+    let Some((station_index, def, mut ctx)) = airport_animation_context_with_towns(
+        map,
+        stations,
+        towns,
+        catalog,
+        climate,
+        newgrf_stack,
+        coord,
+    ) else {
         active_tiles.remove(&coord);
         return false;
     };
@@ -267,6 +307,37 @@ pub fn trigger_newgrf_airport_animation_for_station<S: BuildHasher>(
     trigger: AirportAnimationTrigger,
     cargo: Option<CargoType>,
 ) -> Vec<TileCoord> {
+    trigger_newgrf_airport_animation_for_station_with_towns(
+        map,
+        tick,
+        stations,
+        &[],
+        climate,
+        catalog,
+        active_tiles,
+        newgrf_stack,
+        station_anchor,
+        trigger,
+        cargo,
+    )
+}
+
+/// Variante que conserva los pueblos para que cada tile evalúe `0x42` con la
+/// misma selección de `ClosestTownFromTile` que OpenTTD.
+#[allow(clippy::too_many_arguments)]
+pub fn trigger_newgrf_airport_animation_for_station_with_towns<S: BuildHasher>(
+    map: &mut Map,
+    tick: u64,
+    stations: &mut [Station],
+    towns: &[crate::town::Town],
+    climate: Climate,
+    catalog: &[AirportTileSpecDef],
+    active_tiles: &mut HashSet<TileCoord, S>,
+    newgrf_stack: &[crate::NewGrfEntry],
+    station_anchor: TileCoord,
+    trigger: AirportAnimationTrigger,
+    cargo: Option<CargoType>,
+) -> Vec<TileCoord> {
     let Some(station) = stations
         .iter()
         .find(|station| station.pos == station_anchor && station.stop_kind == StopKind::Airport)
@@ -285,10 +356,11 @@ pub fn trigger_newgrf_airport_animation_for_station<S: BuildHasher>(
         .filter(|coord| {
             let var18_extra =
                 airport_cargo_local_id(map, stations, catalog, climate, *coord, cargo);
-            trigger_newgrf_airport_tile_animation(
+            trigger_newgrf_airport_tile_animation_with_towns(
                 map,
                 tick,
                 stations,
+                towns,
                 climate,
                 catalog,
                 active_tiles,
@@ -307,15 +379,22 @@ fn advance_newgrf_airport_tile<S: BuildHasher>(
     map: &mut Map,
     tick: u64,
     stations: &mut [Station],
+    towns: &[crate::town::Town],
     climate: Climate,
     catalog: &[AirportTileSpecDef],
     active_tiles: &mut HashSet<TileCoord, S>,
     newgrf_stack: &[crate::NewGrfEntry],
     coord: TileCoord,
 ) -> bool {
-    let Some((station_index, def, mut ctx)) =
-        airport_animation_context(map, stations, catalog, climate, newgrf_stack, coord)
-    else {
+    let Some((station_index, def, mut ctx)) = airport_animation_context_with_towns(
+        map,
+        stations,
+        towns,
+        catalog,
+        climate,
+        newgrf_stack,
+        coord,
+    ) else {
         active_tiles.remove(&coord);
         return false;
     };
@@ -404,12 +483,40 @@ pub fn step_newgrf_airport_tiles<S: BuildHasher>(
     newgrf_stack: &[crate::NewGrfEntry],
     tile_loop_visits: &[(TileCoord, crate::map::Tile)],
 ) -> Vec<TileCoord> {
+    step_newgrf_airport_tiles_with_towns(
+        map,
+        tick,
+        stations,
+        &[],
+        climate,
+        catalog,
+        active_tiles,
+        newgrf_stack,
+        tile_loop_visits,
+    )
+}
+
+/// Variante del scheduler con pueblos para evaluar el scope `AirportTile`
+/// completo durante `TileLoop` y el avance periódico.
+#[allow(clippy::too_many_arguments)]
+pub fn step_newgrf_airport_tiles_with_towns<S: BuildHasher>(
+    map: &mut Map,
+    tick: u64,
+    stations: &mut [Station],
+    towns: &[crate::town::Town],
+    climate: Climate,
+    catalog: &[AirportTileSpecDef],
+    active_tiles: &mut HashSet<TileCoord, S>,
+    newgrf_stack: &[crate::NewGrfEntry],
+    tile_loop_visits: &[(TileCoord, crate::map::Tile)],
+) -> Vec<TileCoord> {
     let mut dirty = Vec::new();
     for (coord, _) in tile_loop_visits {
-        if trigger_newgrf_airport_tile_animation(
+        if trigger_newgrf_airport_tile_animation_with_towns(
             map,
             tick,
             stations,
+            towns,
             climate,
             catalog,
             active_tiles,
@@ -438,9 +545,15 @@ pub fn step_newgrf_airport_tiles<S: BuildHasher>(
     candidates.sort_by_key(|coord| (coord.x, coord.y));
     candidates.dedup();
     for coord in candidates {
-        let Some((_, def, _)) =
-            airport_animation_context(map, stations, catalog, climate, newgrf_stack, coord)
-        else {
+        let Some((_, def, _)) = airport_animation_context_with_towns(
+            map,
+            stations,
+            towns,
+            catalog,
+            climate,
+            newgrf_stack,
+            coord,
+        ) else {
             continue;
         };
         if def.animation_status == 0xFF {
@@ -464,6 +577,7 @@ pub fn step_newgrf_airport_tiles<S: BuildHasher>(
             map,
             tick,
             stations,
+            towns,
             climate,
             catalog,
             active_tiles,

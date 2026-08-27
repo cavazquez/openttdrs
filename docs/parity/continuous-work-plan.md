@@ -160,7 +160,7 @@ secundarias fuera de ese contrato.
   frames/status/speed/triggers y el scheduler ejecuta parcialmente Built,
   TileLoop, next-frame y speed (`0x152`/`0x153`/`0x154`) con estado persistido;
   quedan los triggers FTA (carga/descarga/aterrizaje) ya conectados al scheduler,
-  el scope de pueblo `0x42`, rotaciones runtime del compositor y sonidos, por lo
+  las rotaciones runtime del compositor y sonidos, por lo
   que #329 continúa abierto.
 - `reference/` es un checkout local ignorado/no versionado; nunca se agrega al
   commit de una tarea.

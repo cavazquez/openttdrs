@@ -3462,6 +3462,7 @@ pub(crate) fn spawn_transport_object_tile(
         dims,
         stations,
         &[],
+        &[],
         catenary_newgrf,
         catenary_sprites,
         bridge_decks_newgrf,
@@ -3488,6 +3489,7 @@ fn spawn_newgrf_airport_tile(
     map: &Map,
     map_width: u32,
     stations: &[Station],
+    towns: &[openttdrs_core::Town],
     catalog: &[openttdrs_core::AirportTileSpecDef],
     climate: Climate,
     newgrf_stack: &[openttdrs_core::NewGrfEntry],
@@ -3503,8 +3505,8 @@ fn spawn_newgrf_airport_tile(
     };
     let frame = usize::from(ctx.tile.map_or(0, |tile| tile.m7));
     let mut action2 = if def.newgrf_runtime.is_some() {
-        let mut action2 = openttdrs_core::action2_eval_ctx_for_airport_tile(
-            map, stations, ctx.coord, catalog, def, climate,
+        let mut action2 = openttdrs_core::action2_eval_ctx_for_airport_tile_with_towns(
+            map, stations, towns, ctx.coord, catalog, def, climate,
         );
         action2.set_grf_params(openttdrs_core::stack_params_for_grfid(
             newgrf_stack,
@@ -3578,6 +3580,7 @@ fn airport_tile_draws_default_foundation(
     def: &openttdrs_core::AirportTileSpecDef,
     map: &Map,
     stations: &[Station],
+    towns: &[openttdrs_core::Town],
     coord: TileCoord,
     catalog: &[openttdrs_core::AirportTileSpecDef],
     climate: Climate,
@@ -3589,8 +3592,8 @@ fn airport_tile_draws_default_foundation(
     let Some(runtime) = def.newgrf_runtime.as_ref() else {
         return true;
     };
-    let mut ctx = openttdrs_core::action2_eval_ctx_for_airport_tile(
-        map, stations, coord, catalog, def, climate,
+    let mut ctx = openttdrs_core::action2_eval_ctx_for_airport_tile_with_towns(
+        map, stations, towns, coord, catalog, def, climate,
     );
     ctx.set_grf_params(openttdrs_core::stack_params_for_grfid(
         newgrf_stack,
@@ -3621,6 +3624,7 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
     map: &Map,
     dims: (u32, u32),
     stations: &[Station],
+    towns: &[openttdrs_core::Town],
     airport_tile_catalog: &[openttdrs_core::AirportTileSpecDef],
     catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     mut catenary_sprites: Option<&mut crate::render::NewGrfCatenarySpriteCache>,
@@ -4000,6 +4004,7 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
                         def,
                         map,
                         stations,
+                        towns,
                         ctx.coord,
                         airport_tile_catalog,
                         climate,
@@ -4031,6 +4036,7 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
                     map,
                     dims.0,
                     stations,
+                    towns,
                     airport_tile_catalog,
                     climate,
                     newgrf_stack,

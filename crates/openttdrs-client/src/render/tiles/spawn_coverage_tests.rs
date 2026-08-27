@@ -2709,6 +2709,7 @@ fn built_newgrf_airport_uses_airport_tile_action1_sprite() {
                     &m.0,
                     m.0.dimensions(),
                     &stations,
+                    &[],
                     &catalog,
                     &[],
                     None,

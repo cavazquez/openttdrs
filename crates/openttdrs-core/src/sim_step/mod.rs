@@ -397,10 +397,11 @@ fn phase_tile_animation(state: &mut GameState, t: u64) {
     }
     let airport_dirty = crate::map::step_airport_tiles(&mut state.map, t, &state.stations);
     state.runtime.industry_tile_dirty.extend(airport_dirty);
-    let newgrf_airport_dirty = crate::map::step_newgrf_airport_tiles(
+    let newgrf_airport_dirty = crate::map::step_newgrf_airport_tiles_with_towns(
         &mut state.map,
         t,
         &mut state.stations,
+        &state.towns,
         state.climate,
         &state.airport_tile_spec_catalog,
         &mut state.newgrf_animated_airport_tiles,
@@ -611,10 +612,11 @@ pub(super) fn trigger_airport_animation_at(
     else {
         return;
     };
-    let dirty = crate::map::trigger_newgrf_airport_animation_for_station(
+    let dirty = crate::map::trigger_newgrf_airport_animation_for_station_with_towns(
         &mut state.map,
         state.tick.get(),
         &mut state.stations,
+        &state.towns,
         state.climate,
         &state.airport_tile_spec_catalog,
         &mut state.newgrf_animated_airport_tiles,

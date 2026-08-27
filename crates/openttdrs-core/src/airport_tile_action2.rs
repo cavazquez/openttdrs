@@ -9,6 +9,7 @@
 use std::collections::BTreeSet;
 
 use crate::airport_tile_spec::{AirportTileSpecDef, NEW_AIRPORT_TILE_OFFSET};
+use crate::house_spec::{distance_square, get_town_radius_group};
 use crate::map::{Map, Tile, TileCoord, TileKind, tile_slope_and_z, water_class};
 use crate::newgrf_sprites::Action2EvalCtx;
 use crate::station::{Station, StopKind, station_at_tile};
@@ -24,6 +25,32 @@ use crate::world_gen::{CLEAR_GROUND_DESERT, Climate};
 pub fn action2_eval_ctx_for_airport_tile(
     map: &Map,
     stations: &[Station],
+    coord: TileCoord,
+    tile_catalog: &[AirportTileSpecDef],
+    current_spec: &AirportTileSpecDef,
+    climate: Climate,
+) -> Action2EvalCtx {
+    action2_eval_ctx_for_airport_tile_with_towns(
+        map,
+        stations,
+        &[],
+        coord,
+        tile_catalog,
+        current_spec,
+        climate,
+    )
+}
+
+/// Variante que materializa el pueblo más cercano para la variable `0x42`.
+///
+/// `OpenTTD` consulta `ClosestTownFromTile` en el scope de `AirportTile`; el
+/// wrapper histórico sin pueblos conserva `TownEdge` para callers que sólo
+/// tienen el mapa y las estaciones.
+#[must_use]
+pub fn action2_eval_ctx_for_airport_tile_with_towns(
+    map: &Map,
+    stations: &[Station],
+    towns: &[crate::town::Town],
     coord: TileCoord,
     tile_catalog: &[AirportTileSpecDef],
     current_spec: &AirportTileSpecDef,
@@ -54,6 +81,13 @@ pub fn action2_eval_ctx_for_airport_tile(
     // AirportTileScopeResolver::GetVariable(0x41).
     ctx.vars
         .insert(0x41, airport_terrain_type(map, coord, climate, tile));
+    let town_zone = towns
+        .iter()
+        .min_by_key(|town| distance_square(town.pos, coord))
+        .map_or(crate::town::HouseZone::TownEdge, |town| {
+            get_town_radius_group(town, coord)
+        });
+    ctx.vars.insert(0x42, u32::from(town_zone as u8));
     // `GetRelativePosition(tile, st->airport.tile)` = 00yxYYXX.
     let dx = coord.x.wrapping_sub(station.pos.x).to_le_bytes()[0];
     let dy = coord.y.wrapping_sub(station.pos.y).to_le_bytes()[0];
@@ -352,6 +386,13 @@ mod tests {
         station.airport_tile_gfx = vec![(first, 74), (second, 24)];
         station.newgrf_random_bits = 0x55AA;
         let stations = vec![station];
+        let mut town = crate::town::Town {
+            pos: first,
+            num_houses: 48,
+            ..Default::default()
+        };
+        crate::town::update_town_radius(&mut town);
+        let towns = vec![town];
         let mut runtime = TrainSpriteGraphics {
             sets: vec![vec![sprite(255, 0)], vec![sprite(0, 255)]],
             assigns: vec![TrainSpriteAssign {
@@ -469,9 +510,10 @@ mod tests {
             newgrf_runtime: None,
         };
         let catalog = vec![current.clone(), vanilla];
-        let mut ctx = action2_eval_ctx_for_airport_tile(
+        let mut ctx = action2_eval_ctx_for_airport_tile_with_towns(
             &map,
             &stations,
+            &towns,
             first,
             &catalog,
             &current,
@@ -479,6 +521,7 @@ mod tests {
         );
         assert_eq!(ctx.vars.get(&0x43), Some(&0));
         assert_eq!(ctx.vars.get(&0x44), Some(&3));
+        assert_eq!(ctx.vars.get(&0x42), Some(&4));
         assert_eq!(ctx.parent_vars.get(&0x40), Some(&2));
         assert_eq!(ctx.parameterized_vars.get(&(0x62, 1)), Some(&0xFF18));
         assert_eq!(ctx.parameterized_vars.get(&(0x7A, 0)), Some(&1));

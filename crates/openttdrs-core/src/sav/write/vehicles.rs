@@ -108,6 +108,12 @@ fn airport_id_for_vehicle(state: &GameState, v: &Vehicle) -> u16 {
         .unwrap_or(u16::MAX)
 }
 
+fn last_station_id_for_vehicle(state: &GameState, v: &Vehicle) -> u16 {
+    v.last_station_visited
+        .and_then(|pos| station_id_for_pos(state, pos))
+        .unwrap_or(u16::MAX)
+}
+
 fn cargo_ottd_byte(v: &Vehicle) -> u8 {
     if let Some(c) = v.cargo_type {
         return c.temperate_id();
@@ -273,6 +279,12 @@ struct CommonWire {
     timetable_lateness: i32,
     /// `Vehicle::vehicle_flags` (`OpenTTD` `VehicleFlags`).
     vehicle_flags: u16,
+    /// Semilla de randomización de callbacks/Action2 de `NewGRF`.
+    random_bits: u16,
+    /// Triggers de randomización pendientes (`VehicleRandomTriggers`).
+    waiting_random_triggers: u8,
+    /// Última estación visitada (`StationID::Invalid()` si no existe).
+    last_station_visited: u16,
     /// Intervalo de servicio (`Vehicle::service_interval`).
     service_interval: u16,
     reliability: u16,
@@ -359,6 +371,9 @@ fn write_vehs_common(buf: &mut Vec<u8>, c: &CommonWire) -> Result<(), SavError> 
     buf.extend_from_slice(&c.current_order_time.to_be_bytes());
     buf.extend_from_slice(&c.timetable_lateness.to_be_bytes());
     buf.extend_from_slice(&c.vehicle_flags.to_be_bytes());
+    buf.extend_from_slice(&c.random_bits.to_be_bytes());
+    buf.push(c.waiting_random_triggers);
+    buf.extend_from_slice(&c.last_station_visited.to_be_bytes());
     buf.extend_from_slice(&c.service_interval.to_be_bytes());
     buf.extend_from_slice(&c.reliability.to_be_bytes());
     buf.extend_from_slice(&c.reliability_spd_dec.to_be_bytes());
@@ -426,6 +441,7 @@ fn common_wire_for(
     order_list_ref: u32,
     subtype: u8,
     next_ref: u32,
+    last_station_visited: u16,
 ) -> CommonWire {
     let cargo = cargo_ottd_byte(v);
     let cur_order = u8::try_from(v.current_order.min(255)).unwrap_or(0);
@@ -466,6 +482,9 @@ fn common_wire_for(
         current_order_time: v.current_order_time,
         timetable_lateness: v.timetable_lateness,
         vehicle_flags: vehicle_flags_for(v),
+        random_bits: v.newgrf_random_bits,
+        waiting_random_triggers: v.newgrf_waiting_random_triggers,
+        last_station_visited,
         service_interval: v.service_interval_days,
         reliability: v.reliability,
         reliability_spd_dec: v.reliability_spd_dec,
@@ -626,6 +645,7 @@ pub(super) fn ordl_and_vehs_records(
             let next_ref = shadow_idx + 1; // REF = index+1
             let engine_type = openttd_aircraft_engine_type(v);
             let aircraft_runtime = aircraft_wire_for(state, v);
+            let last_station_visited = last_station_id_for_vehicle(state, v);
 
             let mut primary = Vec::new();
             write_gamma(sparse_idx, &mut primary)?;
@@ -645,6 +665,7 @@ pub(super) fn ordl_and_vehs_records(
                         AIR_AIRCRAFT
                     },
                     next_ref,
+                    last_station_visited,
                 ),
                 None,
                 None,
@@ -687,6 +708,9 @@ pub(super) fn ordl_and_vehs_records(
                     current_order_time: 0,
                     timetable_lateness: 0,
                     vehicle_flags: 0,
+                    random_bits: 0,
+                    waiting_random_triggers: 0,
+                    last_station_visited: u16::MAX,
                     service_interval: 0,
                     reliability: 0,
                     reliability_spd_dec: 0,
@@ -739,6 +763,9 @@ pub(super) fn ordl_and_vehs_records(
                         current_order_time: 0,
                         timetable_lateness: 0,
                         vehicle_flags: 0,
+                        random_bits: 0,
+                        waiting_random_triggers: 0,
+                        last_station_visited: u16::MAX,
                         service_interval: 0,
                         reliability: 0,
                         reliability_spd_dec: 0,
@@ -789,6 +816,7 @@ pub(super) fn ordl_and_vehs_records(
                     order_list_ref,
                     subtype,
                     next_ref,
+                    last_station_id_for_vehicle(state, v),
                 ),
                 Some(track),
                 None,
@@ -808,6 +836,7 @@ pub(super) fn ordl_and_vehs_records(
                     order_list_ref,
                     TRAIN_SUBTYPE_FRONT_ENGINE,
                     0,
+                    last_station_id_for_vehicle(state, v),
                 ),
                 None,
                 Some(v),
@@ -828,6 +857,7 @@ pub(super) fn ordl_and_vehs_records(
                     order_list_ref,
                     TRAIN_SUBTYPE_FRONT_ENGINE,
                     0,
+                    last_station_id_for_vehicle(state, v),
                 ),
                 None,
                 None,
@@ -924,6 +954,9 @@ fn append_vehs_common_fields(header: &mut Vec<u8>) -> Result<(), SavError> {
     append_field(header, 5, "current_order_time")?; // SLE_INT32
     append_field(header, 5, "lateness_counter")?; // SLE_INT32
     append_field(header, 4, "vehicle_flags")?; // SLE_UINT16
+    append_field(header, 4, "random_bits")?; // SLE_UINT16
+    append_field(header, 2, "waiting_triggers")?; // SLE_UINT8
+    append_field(header, 4, "last_station_visited")?; // SLE_UINT16
     append_field(header, 4, "service_interval")?; // SLE_UINT16
     append_field(header, 4, "reliability")?; // SLE_UINT16
     append_field(header, 4, "reliability_spd_dec")?; // SLE_UINT16
@@ -1479,6 +1512,9 @@ mod tests {
         train.timetable_started = true;
         train.timetable_autofill = true;
         train.vehicle_flags = 1 << 7;
+        train.newgrf_random_bits = 0xCAFE;
+        train.newgrf_waiting_random_triggers = 0x12;
+        train.last_station_visited = Some(station_pos);
         train.service_interval_days = 87;
         train.cargo_subtype = 3;
         train.cargo_age_counter = 42;
@@ -1522,6 +1558,19 @@ mod tests {
         assert_eq!(
             record_get(common, "vehicle_flags").and_then(SlValue::as_u64),
             Some(u64::from((1u16 << 7) | 0b1_1000))
+        );
+        assert_eq!(
+            record_get(common, "random_bits").and_then(SlValue::as_u64),
+            Some(0xCAFE)
+        );
+        assert_eq!(
+            record_get(common, "waiting_triggers").and_then(SlValue::as_u64),
+            Some(0x12)
+        );
+        assert_eq!(
+            record_get(common, "last_station_visited").and_then(SlValue::as_u64),
+            Some(0),
+            "la estación sintética usa el índice denso 0"
         );
         assert_eq!(
             record_get(common, "service_interval").and_then(SlValue::as_u64),

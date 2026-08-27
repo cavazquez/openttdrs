@@ -1071,6 +1071,11 @@ impl GameState {
                 vehicle.current_order_time = v.current_order_time;
                 vehicle.timetable_lateness = v.timetable_lateness;
                 vehicle.vehicle_flags = v.vehicle_flags;
+                vehicle.newgrf_random_bits = v.random_bits;
+                vehicle.newgrf_waiting_random_triggers = v.waiting_random_triggers;
+                vehicle.last_station_visited = v
+                    .last_station_visited
+                    .and_then(|station_id| station_positions.get(&station_id).copied());
                 vehicle.service_interval_days = v.service_interval;
                 vehicle.reliability = v.reliability;
                 vehicle.reliability_spd_dec = v.reliability_spd_dec;
@@ -1174,6 +1179,11 @@ impl GameState {
             vehicle.current_order_time = v.current_order_time;
             vehicle.timetable_lateness = v.timetable_lateness;
             vehicle.vehicle_flags = v.vehicle_flags;
+            vehicle.newgrf_random_bits = v.random_bits;
+            vehicle.newgrf_waiting_random_triggers = v.waiting_random_triggers;
+            vehicle.last_station_visited = v
+                .last_station_visited
+                .and_then(|station_id| station_positions.get(&station_id).copied());
             vehicle.service_interval_days = v.service_interval;
             vehicle.reliability = v.reliability;
             vehicle.reliability_spd_dec = v.reliability_spd_dec;
@@ -1851,6 +1861,9 @@ mod tests {
                     current_order_time: 0,
                     timetable_lateness: 0,
                     vehicle_flags: 0b1_1000,
+                    random_bits: 0,
+                    waiting_random_triggers: 0,
+                    last_station_visited: None,
                     service_interval: 150,
                     reliability: 8_500,
                     reliability_spd_dec: crate::engine::DEFAULT_RELIABILITY_SPD_DEC,
@@ -1908,6 +1921,9 @@ mod tests {
                     current_order_time: 0,
                     timetable_lateness: 0,
                     vehicle_flags: 0,
+                    random_bits: 0,
+                    waiting_random_triggers: 0,
+                    last_station_visited: None,
                     service_interval: 150,
                     reliability: 8_500,
                     reliability_spd_dec: crate::engine::DEFAULT_RELIABILITY_SPD_DEC,
@@ -1965,6 +1981,9 @@ mod tests {
                     current_order_time: 0,
                     timetable_lateness: 0,
                     vehicle_flags: 0,
+                    random_bits: 0,
+                    waiting_random_triggers: 0,
+                    last_station_visited: None,
                     service_interval: 150,
                     reliability: 8_500,
                     reliability_spd_dec: crate::engine::DEFAULT_RELIABILITY_SPD_DEC,
@@ -2022,6 +2041,9 @@ mod tests {
                     current_order_time: 0,
                     timetable_lateness: 0,
                     vehicle_flags: 0,
+                    random_bits: 0,
+                    waiting_random_triggers: 0,
+                    last_station_visited: None,
                     service_interval: 150,
                     reliability: 8_500,
                     reliability_spd_dec: crate::engine::DEFAULT_RELIABILITY_SPD_DEC,

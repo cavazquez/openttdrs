@@ -352,7 +352,9 @@ También conserva fiabilidad, decaimiento, contadores de avería y beneficios
 anuales de `VEHS.common`, evitando reiniciar el estado operativo al cargar.
 La edad, vida útil, última revisión, subtipo de carga y cuenta atrás de
 envejecimiento también viajan en el round-trip y se vuelven a aplicar al reloj
-del estado.
+del estado. Las semillas aleatorias de `NewGRF`, los triggers pendientes y la
+última estación visitada (`random_bits`, `waiting_triggers` y
+`last_station_visited`) también se conservan con sus tipos/sentinelas nativos.
 Esto no cierra el issue: siguen pendientes la carga vehicular por paquetes,
 el calendario de compra exacto y los flags/estado completos de tren,
 carretera, barco y FTA.

@@ -1064,6 +1064,13 @@ pub struct SavVehicle {
     /// Mantener el bitset crudo permite round-trippear flags futuros sin
     /// confundirlos con los tiempos numéricos del horario.
     pub vehicle_flags: u16,
+    /// Semilla aleatoria persistente usada por los callbacks/Action2 de
+    /// `NewGRF` (`Vehicle::random_bits`).
+    pub random_bits: u16,
+    /// Triggers aleatorios pendientes de consumir por el `NewGRF` activo.
+    pub waiting_random_triggers: u8,
+    /// Última estación visitada, conservando el `StationID` nativo del save.
+    pub last_station_visited: Option<u32>,
     /// Intervalo de servicio nativo (`Vehicle::service_interval`).
     pub service_interval: u16,
     /// Fiabilidad y estado de averías del vehículo al guardar.
@@ -1408,6 +1415,21 @@ pub(crate) fn vehicles_from_chunks(
             .and_then(SlValue::as_u64)
             .and_then(|value| u16::try_from(value).ok())
             .unwrap_or(0);
+        let random_bits = record_get(common, "random_bits")
+            .and_then(SlValue::as_u64)
+            .and_then(|value| u16::try_from(value).ok())
+            .unwrap_or(0);
+        let waiting_random_triggers = record_get(common, "waiting_triggers")
+            .and_then(SlValue::as_u64)
+            .and_then(|value| u8::try_from(value).ok())
+            .unwrap_or(0);
+        // A diferencia de los campos REF, `last_station_visited` se serializa
+        // como `StationID` plano. `0xFFFF` es `StationID::Invalid()`.
+        let last_station_visited = record_get(common, "last_station_visited")
+            .and_then(SlValue::as_u64)
+            .and_then(|value| u16::try_from(value).ok())
+            .filter(|value| *value != u16::MAX)
+            .map(u32::from);
         let service_interval = record_get(common, "service_interval")
             .and_then(SlValue::as_u64)
             .and_then(|value| u16::try_from(value).ok())
@@ -1480,6 +1502,9 @@ pub(crate) fn vehicles_from_chunks(
             current_order_time,
             timetable_lateness,
             vehicle_flags,
+            random_bits,
+            waiting_random_triggers,
+            last_station_visited,
             service_interval,
             reliability,
             reliability_spd_dec,

@@ -121,6 +121,10 @@ pub struct SimulationRuntime {
     /// Props Action0 runtime por `RailType` vanilla.
     pub rail_type_props: [crate::rail_type::RailTypeRuntimeProps; 4],
 
+    /// Badges asociados a cada `RailType` vanilla/custom representable
+    /// (`Action0` prop `0x1E`), indexados por el id de vía.
+    pub rail_type_badges: [Vec<u16>; 4],
+
     /// Techos Action0 `0x14` por `RailType` vanilla (`0` = sin límite).
     /// Espejo de `rail_type_props[].max_speed` para callers existentes.
     pub rail_type_max_speed: [u16; 4],
@@ -198,6 +202,7 @@ impl SimulationRuntime {
             rail_type_overlay_newgrf: Vec::new(),
             rail_type_underlay_newgrf: Vec::new(),
             rail_type_props: crate::rail_type::RailTypeRuntimeProps::defaults(),
+            rail_type_badges: std::array::from_fn(|_| Vec::new()),
             rail_type_max_speed: [0; 4],
             station_flows: crate::flow_stat::StationFlows::default(),
             station_flow_rebuilds: 0,

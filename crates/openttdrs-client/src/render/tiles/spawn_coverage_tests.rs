@@ -3235,6 +3235,7 @@ fn bridge_middle_resolves_newgrf_bridge_overlay_and_catenary_groups_from_south_r
         maintenance_multiplier: 0,
         flags: 1, // RoadTypeFlag::Catenary
         powered_mask: 0,
+        badges: Vec::new(),
         from_tramtypes_feature: false,
         from_newgrf: true,
         newgrf_preview: None,

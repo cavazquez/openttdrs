@@ -176,6 +176,7 @@ Fuente: `newgrf_act0_railtypes.cpp`.
 | `14` max speed | **runtime** (`rail_type_max_speed` / `rail_type_props`) |
 | `17` introduction date | **runtime** (almacenado) |
 | `1C` maintenance cost | **runtime** (almacenado) |
+| `1E` badge list | **runtime** (`rail_type_badges`; lista WORD traducida por GlobalVar `0x18`) |
 | Action3 signals / underlay / overlay | **runtime** (slots por `RailType`; señales y underlay/overlay ferroviario para rectas, cruces, PBS y fundaciones; fallback OpenGFX por vista ausente) |
 | resto tamaños fijos | consumidas |
 
@@ -193,6 +194,7 @@ Fuente: `newgrf_act0_roadtypes.cpp` (TramTypes reutiliza el handler).
 | `16` intro year (extensión local WORD) | **runtime** |
 | `09` flags tram (extensión local en RoadTypes) | **runtime** (bit0); en TramTypes `0x09` es string WORD consumido |
 | feature `13` | **runtime**: `from_tramtypes_feature` + clase `Tram`; IDs ≠ road |
+| `1E` badge list | **runtime** (`RoadTypeDef.badges`; lista WORD traducida por GlobalVar `0x18`) |
 | Action3 views | **runtime** (grupo local; fallback OpenGFX) |
 
 ## Cargoes (`0B`)

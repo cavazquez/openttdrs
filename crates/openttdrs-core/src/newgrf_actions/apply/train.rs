@@ -20,59 +20,13 @@ fn vehicle_price_bases(kind: VehicleKind) -> (i64, i64) {
     }
 }
 
-/// Resuelve la tabla Badge Translation Table de un GRF a ids globales del
-/// catálogo. `u16::MAX` conserva una entrada no resoluble sin desplazar los
-/// índices locales que usan las variables de vehículo.
-fn resolve_badge_translation(
-    labels: &[String],
-    badge_catalog: &[crate::badge::BadgeDef],
-    grfid: u32,
-) -> (Vec<u16>, Vec<String>) {
-    let mut translation = Vec::with_capacity(labels.len());
-    let mut unresolved = Vec::new();
-    for label in labels {
-        let badge = badge_catalog
-            .iter()
-            .find(|badge| badge.grfid == grfid && badge.label.eq_ignore_ascii_case(label))
-            .or_else(|| {
-                badge_catalog
-                    .iter()
-                    .find(|badge| badge.label.eq_ignore_ascii_case(label))
-            });
-        if let Some(badge) = badge {
-            translation.push(badge.id);
-        } else {
-            translation.push(u16::MAX);
-            unresolved.push(label.clone());
-        }
-    }
-    (translation, unresolved)
-}
-
 fn resolve_vehicle_badges(
     local_ids: &[u16],
     badge_labels: &[String],
     badge_catalog: &[crate::badge::BadgeDef],
     grfid: u32,
 ) -> (Vec<u16>, Vec<u16>, Vec<String>) {
-    let (translation, mut unresolved) =
-        resolve_badge_translation(badge_labels, badge_catalog, grfid);
-    let mut badges = Vec::new();
-    for &local_id in local_ids {
-        let Some(global_id) = translation.get(usize::from(local_id)).copied() else {
-            unresolved.push(format!(
-                "índice local {local_id} fuera de Badge Translation Table"
-            ));
-            continue;
-        };
-        if global_id == u16::MAX {
-            continue;
-        }
-        if !badges.contains(&global_id) {
-            badges.push(global_id);
-        }
-    }
-    (badges, translation, unresolved)
+    crate::badge::resolve_badge_local_ids(local_ids, badge_labels, badge_catalog, grfid)
 }
 
 #[allow(clippy::too_many_arguments)]

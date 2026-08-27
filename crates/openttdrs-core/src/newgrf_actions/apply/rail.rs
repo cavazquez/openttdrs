@@ -22,11 +22,14 @@ fn labels_to_mask(labels: &[[u8; 4]]) -> u8 {
 }
 
 /// Reconstruye overrides de señales, techos y props Action0 desde el stack.
+#[allow(clippy::too_many_lines)]
 pub fn apply_newgrf_rail_signals(state: &mut GameState, search_dirs: &[&Path]) {
     let mut slots: Vec<Option<RailSignalSpriteSpec>> = vec![None; 4];
     let mut props = RailTypeRuntimeProps::defaults();
     let mut overlay_slots: Vec<Option<RailSignalSpriteSpec>> = vec![None; 4];
     let mut underlay_slots: Vec<Option<RailSignalSpriteSpec>> = vec![None; 4];
+    let mut rail_type_badges = std::array::from_fn(|_| Vec::new());
+    let badge_catalog = state.badge_catalog.clone();
     let stack = state.newgrf_stack.clone();
     for entry in &stack {
         if !entry.enabled {
@@ -62,6 +65,21 @@ pub fn apply_newgrf_rail_signals(state: &mut GameState, search_dirs: &[&Path]) {
                     compatible_mask: compatible,
                     powered_mask: powered,
                 };
+                let type_tables = crate::newgrf_type_tables::collect_type_tables_from_grf(&data);
+                let (badges, _, unresolved_badges) = crate::badge::resolve_badge_local_ids(
+                    &meta.badge_local_ids,
+                    &type_tables.badges,
+                    &badge_catalog,
+                    entry.grfid,
+                );
+                rail_type_badges[idx] = badges;
+                for label in unresolved_badges {
+                    state.runtime.newgrf_diagnostics.push(format!(
+                        "railtype '{}': badge '{}' no resuelto",
+                        String::from_utf8_lossy(&meta.label),
+                        label
+                    ));
+                }
             }
         }
         let Ok(graphics) = crate::newgrf_sprites::collect_railtype_sprite_graphics(&data) else {
@@ -103,6 +121,7 @@ pub fn apply_newgrf_rail_signals(state: &mut GameState, search_dirs: &[&Path]) {
     state.runtime.rail_type_overlay_newgrf = overlay_slots;
     state.runtime.rail_type_underlay_newgrf = underlay_slots;
     state.runtime.rail_type_props = props;
+    state.runtime.rail_type_badges = rail_type_badges;
     state.runtime.rail_type_max_speed = [
         props[0].max_speed,
         props[1].max_speed,

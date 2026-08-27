@@ -23,7 +23,9 @@ pub use metrics::{
     consist_capacity, consist_occupied_tiles, consist_occupied_tiles_indexed, consist_power_hp,
     consist_tile_span, consist_weight_t,
 };
-pub use newgrf_vars::{action2_eval_ctx_for_unit, cargo_class_bits, cargo_type_a_id};
+pub use newgrf_vars::{
+    action2_eval_ctx_for_unit, cargo_class_bits, cargo_type_a_id, enrich_vehicle_track_badge_vars,
+};
 pub use pose::{TrainUnitPose, consist_unit_poses};
 pub use topology::{
     consist_changed, consist_changed_with_map, consist_changed_with_map_and_catalog,
@@ -41,7 +43,7 @@ mod tests {
     use super::*;
     use crate::cargo::CargoType;
     use crate::economy::TICKS_PER_DAY;
-    use crate::map::TileCoord;
+    use crate::map::{Map, TileCoord, TileKind};
     use crate::vehicle::{Vehicle, VehicleKind};
 
     fn train(id: u32) -> Vehicle {
@@ -191,6 +193,75 @@ mod tests {
         assert_eq!(
             ctx.relative_parameterized_vars.get(&(-1, 0x60, 0x1234)),
             Some(&2)
+        );
+    }
+
+    #[test]
+    fn action2_ctx_var65_matches_current_rail_badges_and_relative_unit() {
+        let Some(vanilla_engine) = crate::engine::engine_by_id(crate::engine::ENGINE_TRAIN_KIRBY)
+        else {
+            panic!("vanilla train fixture is missing");
+        };
+        let mut engine = vanilla_engine.clone();
+        engine.id = 60_001;
+        engine.newgrf_local_id = 7;
+        engine.from_newgrf = true;
+        engine.badges = vec![11];
+        engine.newgrf_badge_translation = vec![11];
+
+        let mut map = Map::new_flat(4, 4, 0);
+        let current = TileCoord::new(1, 1);
+        let previous = TileCoord::new(2, 1);
+        let Some(mut current_tile) = map.get(current) else {
+            panic!("current tile is inside the fixture map");
+        };
+        current_tile.kind = TileKind::Rail;
+        current_tile.m8 = 1;
+        assert!(map.set_tile(current, current_tile).is_ok());
+        let Some(mut previous_tile) = map.get(previous) else {
+            panic!("previous tile is inside the fixture map");
+        };
+        previous_tile.kind = TileKind::Rail;
+        previous_tile.m8 = 0;
+        assert!(map.set_tile(previous, previous_tile).is_ok());
+
+        let mut vs = vec![train(1), train(2)];
+        vs[0].engine_id = Some(engine.id);
+        vs[1].engine_id = Some(engine.id);
+        assert!(attach_wagon(&mut vs, 1, 2).is_ok());
+        vs[0].pos = previous;
+        vs[1].pos = current;
+        assert_eq!(
+            map.get(current)
+                .map(crate::rail_type_from_tile)
+                .map(crate::rail_type::RailType::as_u8),
+            Some(1)
+        );
+        assert_eq!(vs[1].pos, current);
+        assert_eq!(vs[1].engine_id, Some(engine.id));
+
+        let mut ctx = action2_eval_ctx_for_unit(
+            &vs,
+            2,
+            crate::tick::GameTick::new(0),
+            std::slice::from_ref(&engine),
+            0,
+        );
+        let rail_badges =
+            std::array::from_fn(|index| if index == 1 { vec![11] } else { Vec::new() });
+        enrich_vehicle_track_badge_vars(
+            &mut ctx,
+            &vs,
+            2,
+            &map,
+            std::slice::from_ref(&engine),
+            &rail_badges,
+            &crate::road_type::vanilla_road_type_catalog(),
+        );
+        assert_eq!(ctx.parameterized_vars.get(&(0x65, 0)), Some(&1));
+        assert_eq!(
+            ctx.relative_parameterized_vars.get(&(-1, 0x65, 0)),
+            Some(&0)
         );
     }
 

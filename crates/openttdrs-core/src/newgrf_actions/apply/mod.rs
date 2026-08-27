@@ -37,10 +37,12 @@ pub fn default_newgrf_search_dirs() -> Vec<PathBuf> {
 /// Refresco completo de catálogos Action0 tras cambiar el stack.
 pub fn apply_newgrf_stack_catalogs_default_dirs(state: &mut GameState) {
     state.runtime.newgrf_diagnostics.clear();
+    // Badges deben existir antes de resolver listas `ReadBadgeList` de
+    // road/rail types y vehículos.
+    badges::apply_newgrf_badges_default_dirs(state);
     road::apply_newgrf_road_types_default_dirs(state);
     station::apply_newgrf_stations_default_dirs(state);
-    // Badges antes de roadstops/objects para resolver asociaciones `0xFD`.
-    badges::apply_newgrf_badges_default_dirs(state);
+    // Badges ya fueron aplicados para resolver asociaciones `0xFD`.
     roadstop::apply_newgrf_roadstops_default_dirs(state);
     train::apply_newgrf_vehicles_trains_default_dirs(state);
     // Cargoes antes de industries/tiles para `GetCargoTranslation` (#224).

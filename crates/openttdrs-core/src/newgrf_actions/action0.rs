@@ -168,6 +168,8 @@ pub struct ParsedRoadTypeMeta {
     pub flags: u8,
     /// Labels de `prop 0x0F` powered list (sin resolver).
     pub powered_labels: Vec<[u8; 4]>,
+    /// Action0 `0x1E`: índices locales de la tabla Badge Translation Table.
+    pub badge_local_ids: Vec<u16>,
     /// `true` si el bloque era feature `TramTypes` (`0x13`), no extensión local.
     pub from_tramtypes_feature: bool,
 }
@@ -380,6 +382,8 @@ pub struct ParsedRailTypeMeta {
     pub compatible_labels: Vec<[u8; 4]>,
     /// Labels `prop 0x0F` powered (implica compatible).
     pub powered_labels: Vec<[u8; 4]>,
+    /// Action0 `0x1E`: índices locales de la tabla Badge Translation Table.
+    pub badge_local_ids: Vec<u16>,
 }
 
 /// Metadatos `IndustryTiles` Action0 (antes de asignar gfx ≥175).
@@ -754,6 +758,7 @@ pub fn parse_action0_roadtype_meta(payload: &[u8]) -> Option<ParsedRoadTypeMeta>
     let mut maintenance_multiplier = 0u16;
     let mut flags = 0u8;
     let mut powered_labels = Vec::new();
+    let mut badge_local_ids = Vec::new();
     // Extensión local en RoadTypes: bit0 de `0x09` = tram. En OTTD `0x09` es string WORD.
     let mut is_tram = feature_tram;
     for _ in 0..header.num_props {
@@ -874,6 +879,9 @@ pub fn parse_action0_roadtype_meta(payload: &[u8]) -> Option<ParsedRoadTypeMeta>
                     break;
                 }
             }
+            0x1E => {
+                badge_local_ids = read_badge_local_ids(payload, &mut i)?;
+            }
             _ => break,
         }
     }
@@ -894,6 +902,7 @@ pub fn parse_action0_roadtype_meta(payload: &[u8]) -> Option<ParsedRoadTypeMeta>
         maintenance_multiplier,
         flags,
         powered_labels,
+        badge_local_ids,
         from_tramtypes_feature: feature_tram,
     })
 }
@@ -930,6 +939,7 @@ pub fn parse_action0_railtype_metas(payload: &[u8]) -> Option<Vec<ParsedRailType
     let mut introduction_dates = vec![0u32; n];
     let mut compatible_labels = vec![Vec::<[u8; 4]>::new(); n];
     let mut powered_labels = vec![Vec::<[u8; 4]>::new(); n];
+    let mut badge_local_ids = vec![Vec::<u16>::new(); n];
     for _ in 0..header.num_props {
         let prop = *payload.get(i)?;
         i += 1;
@@ -955,6 +965,11 @@ pub fn parse_action0_railtype_metas(payload: &[u8]) -> Option<Vec<ParsedRailType
                         0x0F => powered_labels[offset] = list,
                         _ => {}
                     }
+                }
+            }
+            0x1E => {
+                for badges in &mut badge_local_ids {
+                    *badges = read_badge_local_ids(payload, &mut i)?;
                 }
             }
             0x14 => {
@@ -1042,6 +1057,7 @@ pub fn parse_action0_railtype_metas(payload: &[u8]) -> Option<Vec<ParsedRailType
                 introduction_date: introduction_dates.get(offset).copied().unwrap_or(0),
                 compatible_labels: compatible_labels.get(offset).cloned().unwrap_or_default(),
                 powered_labels: powered_labels.get(offset).cloned().unwrap_or_default(),
+                badge_local_ids: badge_local_ids.get(offset).cloned().unwrap_or_default(),
             })
             .collect()
     })

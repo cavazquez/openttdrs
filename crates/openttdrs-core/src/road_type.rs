@@ -120,6 +120,9 @@ pub struct RoadTypeDef {
     /// Máscara de `RoadType` powered (`prop 0x0F` resuelta); bit = `id.as_u8()`.
     #[serde(default)]
     pub powered_mask: u64,
+    /// Badges asociados al tipo (`Action0` prop `0x1E`).
+    #[serde(default)]
+    pub badges: Vec<u16>,
     /// Registrado vía feature `TramTypes` (`0x13`), no `RoadTypes`.
     #[serde(default)]
     pub from_tramtypes_feature: bool,
@@ -230,6 +233,7 @@ pub fn vanilla_road_type_catalog() -> Vec<RoadTypeDef> {
             maintenance_multiplier: 0,
             flags: 0,
             powered_mask: 0,
+            badges: Vec::new(),
             from_tramtypes_feature: false,
             from_newgrf: false,
             newgrf_preview: None,
@@ -250,6 +254,7 @@ pub fn vanilla_road_type_catalog() -> Vec<RoadTypeDef> {
             maintenance_multiplier: 0,
             flags: 0,
             powered_mask: 0,
+            badges: Vec::new(),
             from_tramtypes_feature: true,
             from_newgrf: false,
             newgrf_preview: None,

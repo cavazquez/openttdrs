@@ -683,8 +683,8 @@ pub use train_consist::{
     consist_changed_with_map_and_catalog, consist_head_id, consist_occupied_tiles,
     consist_power_hp, consist_tile_span, consist_unit_ids, consist_unit_ids_indexed,
     consist_unit_poses, consist_weight_t, detach_unit, detach_unit_keep_tail,
-    engine_is_train_engine, engine_is_wagon, propagate_consist_unit_poses, reverse_consist_at_stop,
-    same_consist, sell_chain_ids,
+    engine_is_train_engine, engine_is_wagon, enrich_vehicle_track_badge_vars,
+    propagate_consist_unit_poses, reverse_consist_at_stop, same_consist, sell_chain_ids,
 };
 pub use train_movement::{
     ACCEL_SLOWDOWN, AccelSlowdownParams, DELTACOORD_LEAVE_OFFSET, FRACTCOORDS_BEHIND,

@@ -3,8 +3,11 @@
 use crate::cargo::CargoType;
 use crate::economy::TICKS_PER_DAY;
 use crate::engine::{EngineDef, engine_in_catalog};
+use crate::map::{Map, Tile};
 use crate::newgrf_sprites::Action2EvalCtx;
 use crate::news::{calendar_day_index, calendar_year_day};
+use crate::rail_type::rail_type_from_tile;
+use crate::road_type::{RoadType, RoadTypeDef, road_type_from_tile, tram_road_type_from_tile};
 use crate::tick::GameTick;
 use crate::vehicle::Vehicle;
 
@@ -221,6 +224,163 @@ fn vehicle_engine<'a>(vehicle: &Vehicle, engine_catalog: &'a [EngineDef]) -> Opt
 
 fn vehicle_has_badge(vehicle: &Vehicle, engine_catalog: &[EngineDef], badge_id: u16) -> bool {
     vehicle_engine(vehicle, engine_catalog).is_some_and(|engine| engine.badges.contains(&badge_id))
+}
+
+fn vehicle_track_badges<'a>(
+    vehicle: &Vehicle,
+    tile: Option<Tile>,
+    rail_type_badges: &'a [Vec<u16>; 4],
+    road_type_catalog: &'a [RoadTypeDef],
+) -> Option<&'a [u16]> {
+    let tile = tile?;
+    match vehicle.kind {
+        crate::vehicle::VehicleKind::Train => rail_type_badges
+            .get(usize::from(rail_type_from_tile(tile).as_u8()))
+            .map(Vec::as_slice),
+        crate::vehicle::VehicleKind::Bus
+        | crate::vehicle::VehicleKind::Truck
+        | crate::vehicle::VehicleKind::Tram => {
+            let road_type = if vehicle.kind == crate::vehicle::VehicleKind::Tram {
+                tram_road_type_from_tile(&tile).unwrap_or(RoadType::TRAM)
+            } else {
+                road_type_from_tile(&tile)
+            };
+            road_type_catalog
+                .iter()
+                .find(|def| def.id == road_type)
+                .map(|def| def.badges.as_slice())
+        }
+        crate::vehicle::VehicleKind::Ship | crate::vehicle::VehicleKind::Aircraft => None,
+    }
+}
+
+fn fill_vehicle_track_badges(
+    ctx: &mut Action2EvalCtx,
+    vehicle: &Vehicle,
+    tile: Option<Tile>,
+    engine_catalog: &[EngineDef],
+    rail_type_badges: &[Vec<u16>; 4],
+    road_type_catalog: &[RoadTypeDef],
+) {
+    let Some(engine) = vehicle_engine(vehicle, engine_catalog) else {
+        return;
+    };
+    let badges = vehicle_track_badges(vehicle, tile, rail_type_badges, road_type_catalog);
+    for (local_index, &global_id) in engine
+        .newgrf_badge_translation
+        .iter()
+        .enumerate()
+        .take(usize::from(u8::MAX) + 1)
+    {
+        let value = badges.map_or(u32::MAX, |ids| {
+            u32::from(global_id != u16::MAX && ids.contains(&global_id))
+        });
+        let parameter = u8::try_from(local_index).unwrap_or(u8::MAX);
+        ctx.parameterized_vars.insert((0x65, parameter), value);
+    }
+}
+
+fn copy_relative_track_badges(
+    ctx: &mut Action2EvalCtx,
+    offset: i16,
+    candidate: &Vehicle,
+    map: &Map,
+    engine_catalog: &[EngineDef],
+    rail_type_badges: &[Vec<u16>; 4],
+    road_type_catalog: &[RoadTypeDef],
+) {
+    let mut candidate_ctx = Action2EvalCtx::default();
+    fill_vehicle_track_badges(
+        &mut candidate_ctx,
+        candidate,
+        map.get(candidate.pos),
+        engine_catalog,
+        rail_type_badges,
+        road_type_catalog,
+    );
+    for (&(variable, parameter), &value) in &candidate_ctx.parameterized_vars {
+        ctx.relative_parameterized_vars
+            .insert((offset, variable, u16::from(parameter)), value);
+    }
+}
+
+/// Añade la variable de vehículo `0x65` (badge del tipo de vía actual).
+///
+/// El constructor histórico de contextos no recibe un mapa, por lo que esta
+/// fase de enriquecimiento se ejecuta en los call sites que sí tienen la
+/// tesela. También rellena los offsets relativos y el scope parent para que
+/// `61 → 65` y los grupos parent observen la misma vía que el vehículo actual.
+pub fn enrich_vehicle_track_badge_vars(
+    ctx: &mut Action2EvalCtx,
+    vehicles: &[Vehicle],
+    unit_id: u32,
+    map: &Map,
+    engine_catalog: &[EngineDef],
+    rail_type_badges: &[Vec<u16>; 4],
+    road_type_catalog: &[RoadTypeDef],
+) {
+    let Some(unit) = vehicles.iter().find(|vehicle| vehicle.id == unit_id) else {
+        return;
+    };
+    fill_vehicle_track_badges(
+        ctx,
+        unit,
+        map.get(unit.pos),
+        engine_catalog,
+        rail_type_badges,
+        road_type_catalog,
+    );
+
+    let mut next = unit.next_unit;
+    for offset in 1i16..=15 {
+        let Some(id) = next else { break };
+        let Some(candidate) = vehicles.iter().find(|vehicle| vehicle.id == id) else {
+            break;
+        };
+        copy_relative_track_badges(
+            ctx,
+            offset,
+            candidate,
+            map,
+            engine_catalog,
+            rail_type_badges,
+            road_type_catalog,
+        );
+        next = candidate.next_unit;
+    }
+    let mut previous = unit.prev_unit;
+    for offset in 1i16..=15 {
+        let Some(id) = previous else { break };
+        let Some(candidate) = vehicles.iter().find(|vehicle| vehicle.id == id) else {
+            break;
+        };
+        copy_relative_track_badges(
+            ctx,
+            -offset,
+            candidate,
+            map,
+            engine_catalog,
+            rail_type_badges,
+            road_type_catalog,
+        );
+        previous = candidate.prev_unit;
+    }
+
+    if let Some(parent_id) = unit.prev_unit
+        && let Some(parent) = vehicles.iter().find(|vehicle| vehicle.id == parent_id)
+    {
+        let mut parent_ctx = Action2EvalCtx::default();
+        fill_vehicle_track_badges(
+            &mut parent_ctx,
+            parent,
+            map.get(parent.pos),
+            engine_catalog,
+            rail_type_badges,
+            road_type_catalog,
+        );
+        ctx.parent_parameterized_vars
+            .extend(parent_ctx.parameterized_vars);
+    }
 }
 
 fn fill_vehicle_action2_vars(

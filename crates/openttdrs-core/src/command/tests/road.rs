@@ -677,6 +677,7 @@ fn place_road_writes_newgrf_road_type_m4() {
         maintenance_multiplier: 0,
         flags: 0,
         powered_mask: 0,
+        badges: Vec::new(),
         from_tramtypes_feature: false,
         from_newgrf: true,
         newgrf_preview: None,

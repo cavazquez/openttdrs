@@ -542,6 +542,15 @@ impl TruckHandles {
                     &sim.state.engine_catalog,
                     colour_u8,
                 );
+                openttdrs_core::enrich_vehicle_track_badge_vars(
+                    &mut ctx,
+                    &sim.state.vehicles,
+                    v.id,
+                    &sim.state.map,
+                    &sim.state.engine_catalog,
+                    &sim.state.runtime.rail_type_badges,
+                    &sim.state.road_type_catalog,
+                );
                 ctx.set_grf_params(openttdrs_core::stack_params_for_grfid(
                     &sim.state.newgrf_stack,
                     eng.newgrf_grfid,

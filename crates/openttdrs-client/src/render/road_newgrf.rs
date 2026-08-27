@@ -290,6 +290,7 @@ mod tests {
             maintenance_multiplier: 0,
             flags: 0,
             powered_mask: 1 << 2,
+            badges: Vec::new(),
             from_tramtypes_feature: false,
             from_newgrf: true,
             newgrf_preview: None,

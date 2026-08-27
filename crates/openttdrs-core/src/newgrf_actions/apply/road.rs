@@ -30,6 +30,7 @@ fn resolve_powered_mask(catalog: &[RoadTypeDef], labels: &[[u8; 4]], self_id: Ro
 /// Reconstruye el catálogo road/tram desde el stack `enabled` + vanilla.
 pub fn apply_newgrf_road_types(state: &mut GameState, search_dirs: &[&Path]) {
     let mut catalog = vanilla_road_type_catalog();
+    let badge_catalog = state.badge_catalog.clone();
     let stack = state.newgrf_stack.clone();
     for entry in &stack {
         if !entry.enabled {
@@ -46,7 +47,6 @@ pub fn apply_newgrf_road_types(state: &mut GameState, search_dirs: &[&Path]) {
             continue;
         };
         let type_tables = crate::newgrf_type_tables::collect_type_tables_from_grf(&data);
-        let tables_opt = (!type_tables.is_empty()).then_some(type_tables);
         let gfx =
             crate::newgrf_sprites::collect_roadtype_sprite_graphics(&data).unwrap_or_default();
         let metas = collect_roadtype_metas_from_grf(&data);
@@ -74,6 +74,19 @@ pub fn apply_newgrf_road_types(state: &mut GameState, search_dirs: &[&Path]) {
                 None
             };
             let powered_mask = resolve_powered_mask(&catalog, &meta.powered_labels, id);
+            let (badges, _, unresolved_badges) = crate::badge::resolve_badge_local_ids(
+                &meta.badge_local_ids,
+                &type_tables.badges,
+                &badge_catalog,
+                entry.grfid,
+            );
+            for label in unresolved_badges {
+                state.runtime.newgrf_diagnostics.push(format!(
+                    "roadtype '{}': badge '{}' no resuelto",
+                    meta.label, label
+                ));
+            }
+            let tables_opt = (!type_tables.is_empty()).then(|| type_tables.clone());
             catalog.push(RoadTypeDef {
                 id,
                 class: meta.class,
@@ -85,6 +98,7 @@ pub fn apply_newgrf_road_types(state: &mut GameState, search_dirs: &[&Path]) {
                 maintenance_multiplier: meta.maintenance_multiplier,
                 flags: meta.flags,
                 powered_mask,
+                badges,
                 from_tramtypes_feature: meta.from_tramtypes_feature,
                 from_newgrf: true,
                 newgrf_preview: preview,

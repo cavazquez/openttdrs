@@ -1906,6 +1906,21 @@ mod tests {
     }
 
     #[test]
+    fn parse_track_type_badge_lists_uses_word_local_indices() {
+        let mut rail = build_action0_railtype_payload(1, b"ELRL");
+        rail[2] = 0x02;
+        rail.extend_from_slice(&[0x1E, 0x01, 0x00, 0x34, 0x12]);
+        let rail_meta = parse_action0_railtype_metas(&rail).unwrap();
+        assert_eq!(rail_meta[0].badge_local_ids, vec![0x1234]);
+
+        let mut road = build_action0_roadtype_payload(b"COBB", false, 1950, "Cobble");
+        road[2] = road[2].saturating_add(1);
+        road.extend_from_slice(&[0x1E, 0x01, 0x00, 0x78, 0x56]);
+        let road_meta = parse_action0_roadtype_meta(&road).unwrap();
+        assert_eq!(road_meta.badge_local_ids, vec![0x5678]);
+    }
+
+    #[test]
     fn apply_vehicle_badges_exposes_engine_variables() {
         let badge = build_action0_badge_payload(b"ELEC", 0, None);
         let badge_translation = vec![
@@ -1988,6 +2003,53 @@ mod tests {
         );
         assert_eq!(ctx.parameterized_vars.get(&(0x64, 0)), Some(&1));
         assert_eq!(ctx.parameterized_vars.get(&(0x7A, 0)), Some(&1));
+    }
+
+    #[test]
+    fn apply_track_type_badges_exposes_rail_and_road_catalogs() {
+        let badge = build_action0_badge_payload(b"ELEC", 0, None);
+        let badge_translation = vec![
+            0x00,
+            crate::newgrf_type_tables::ACTION0_FEATURE_GLOBALVAR,
+            0x01,
+            0x01,
+            0x00,
+            crate::newgrf_type_tables::PROP_BADGE_TRANSLATION,
+            b'E',
+            b'L',
+            b'E',
+            b'C',
+            0,
+        ];
+        let mut rail = build_action0_railtype_payload(1, b"ELRL");
+        rail[2] = 0x02;
+        rail.extend_from_slice(&[0x1E, 0x01, 0x00, 0x00, 0x00]);
+        let mut road = build_action0_roadtype_payload(b"COBB", false, 1950, "Cobble");
+        road[2] = road[2].saturating_add(1);
+        road.extend_from_slice(&[0x1E, 0x01, 0x00, 0x00, 0x00]);
+        let bytes = build_grf_v2_with_action0s_and_action8(
+            &[&badge, &badge_translation, &rail, &road],
+            [b'T', b'B', 0, 1],
+            "track-badge",
+            "",
+        );
+        let dir = tempfile_dir_with("track-badge.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("track-badge.grf", 42));
+        apply_newgrf_badges(&mut state, &[&dir]);
+        crate::newgrf_actions::apply_newgrf_road_types(&mut state, &[&dir]);
+        crate::newgrf_actions::apply_newgrf_rail_signals(&mut state, &[&dir]);
+
+        let badge_id = state.badge_catalog[0].id;
+        let road = state
+            .road_type_catalog
+            .iter()
+            .find(|def| def.short_label == "COBB")
+            .expect("road type");
+        assert_eq!(road.badges, vec![badge_id]);
+        assert_eq!(state.runtime.rail_type_badges[1], vec![badge_id]);
     }
 
     #[test]

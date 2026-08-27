@@ -57,6 +57,24 @@ impl AirportTileSpecDef {
         self.newgrf_views.get(idx % self.newgrf_views.len())
     }
 
+    /// Resuelve la vista `Action1/2/3` con el contexto de la tesela.
+    ///
+    /// Los aeropuertos pueden seleccionar un grupo distinto según la posición,
+    /// el frame y el layout padre. El preview estático sigue siendo el fallback
+    /// para catálogos antiguos que no tienen un grafo runtime.
+    pub fn newgrf_view_runtime(
+        &self,
+        idx: usize,
+        ctx: &mut crate::newgrf_sprites::Action2EvalCtx,
+    ) -> Option<crate::newgrf_sprites::DecodedSprite> {
+        let runtime = self.newgrf_runtime.as_ref()?;
+        let views = runtime.views_for_local_id_ctx(self.newgrf_local_id, ctx)?;
+        if views.is_empty() {
+            return None;
+        }
+        Some(views[idx % views.len()].clone())
+    }
+
     #[must_use]
     pub fn has_newgrf_sprites(&self) -> bool {
         !self.newgrf_views.is_empty()

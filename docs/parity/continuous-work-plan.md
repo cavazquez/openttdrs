@@ -152,8 +152,9 @@ secundarias fuera de ese contrato.
   múltiples siguen abiertos.
 - Aeropuertos NewGRF: los layouts `Airports` conservan el `gfx` global de cada
   `AirportTile` junto con el `subst` vanilla de `m5`; al construir, el cliente
-  materializa el sprite Action1/3 estático por tesela mediante la caché de
-  imágenes y cae al `AirportPiece` vanilla si falta el catálogo o la vista.
+  materializa el sprite Action1/3 por tesela mediante la caché de imágenes y
+  reevalúa Action2 con posición relativa, frame, layout padre, random y
+  vecinos. Si falta el catálogo o la vista cae al `AirportPiece` vanilla.
   El importador SAV conserva tipo, layout, rotación y huella, y reatacha los
   `AirportTile` cuando el layout activo coincide exactamente; callbacks de
   animación/FTA y rotaciones runtime del compositor siguen pendientes y

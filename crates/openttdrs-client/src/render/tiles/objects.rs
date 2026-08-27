@@ -3479,12 +3479,17 @@ pub(crate) fn spawn_transport_object_tile(
 /// de construcción conservó un gfx global por tesela. El mapa sigue llevando
 /// el `subst` vanilla en `m5` para FTA/compatibilidad, pero la imagen visible
 /// debe venir del `Action1/3` del tile custom.
+#[allow(clippy::too_many_arguments)]
 fn spawn_newgrf_airport_tile(
     commands: &mut Commands,
     ctx: &TileRenderContext,
     base_z: u8,
     gfx: u16,
+    map: &Map,
+    stations: &[Station],
     catalog: &[openttdrs_core::AirportTileSpecDef],
+    climate: Climate,
+    newgrf_stack: &[openttdrs_core::NewGrfEntry],
     cache: Option<&mut crate::render::NewGrfAction5SpriteCache>,
     images: Option<&mut Assets<Image>>,
 ) -> bool {
@@ -3494,15 +3499,35 @@ fn spawn_newgrf_airport_tile(
     else {
         return false;
     };
+    let frame = usize::from(ctx.tile.map_or(0, |tile| tile.m7));
+    let mut action2 = if def.newgrf_runtime.is_some() {
+        let mut action2 = openttdrs_core::action2_eval_ctx_for_airport_tile(
+            map, stations, ctx.coord, catalog, def, climate,
+        );
+        action2.set_grf_params(openttdrs_core::stack_params_for_grfid(
+            newgrf_stack,
+            def.newgrf_grfid,
+        ));
+        Some(action2)
+    } else {
+        None
+    };
+    let runtime_fp = action2.as_ref().map_or(0, |action2| {
+        runtime_fingerprint(action2, vars::AIRPORT_TILE, false)
+    });
     // Clone the small decoded descriptor before borrowing the image cache so
     // the catalog remains immutable while the texture is materialized.
-    let Some(view) = def.newgrf_view(0).cloned() else {
+    let Some(view) = action2
+        .as_mut()
+        .and_then(|action2| def.newgrf_view_runtime(frame, action2))
+        .or_else(|| def.newgrf_view(frame).cloned())
+    else {
         return false;
     };
     let (Some(cache), Some(images)) = (cache, images) else {
         return false;
     };
-    let image = cache.handle_for_variant(0x11, gfx, 0, &view, images);
+    let image = cache.handle_for_variant(0x11, gfx, runtime_fp, &view, images);
     WorldDrawTrace::record_sprite_with_palette_and_world_geometry(
         "airport-newgrf-tile",
         "sortable",
@@ -3928,7 +3953,11 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
                 ctx,
                 base_z,
                 gfx,
+                map,
+                stations,
                 airport_tile_catalog,
+                climate,
+                newgrf_stack,
                 action5_sprites.as_deref_mut(),
                 images.as_deref_mut(),
             ) {

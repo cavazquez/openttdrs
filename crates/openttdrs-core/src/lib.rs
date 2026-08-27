@@ -11,6 +11,7 @@ pub mod aircraft_movement;
 pub mod airport;
 pub mod airport_class;
 pub mod airport_fta;
+pub mod airport_tile_action2;
 pub mod airport_tile_spec;
 pub mod autoreplace;
 pub mod badge;
@@ -138,6 +139,7 @@ pub use airport_fta::{
     METROPOLITAN_ENTRIES, METROPOLITAN_MOVING_DATA, METROPOLITAN_NOF_ELEMENTS, OILRIG_ENTRIES,
     OILRIG_MOVING_DATA, OILRIG_NOF_ELEMENTS, station_uses_airport_fta, station_uses_country_fta,
 };
+pub use airport_tile_action2::action2_eval_ctx_for_airport_tile;
 pub use airport_tile_spec::{
     AirportTileGfxId, AirportTileSpecDef, INVALID_AIRPORT_TILE, NEW_AIRPORT_TILE_OFFSET,
     NUM_AIRPORT_TILES, empty_airport_tile_overrides, get_translated_airport_tile_id,

@@ -2606,12 +2606,14 @@ fn built_newgrf_airport_uses_airport_tile_action1_sprite() {
             // The airport layout stores this vanilla substitute in m5; the
             // custom gfx is carried separately by Station::airport_tile_gfx.
             m5: 24,
+            m7: 1,
             ..tile_template()
         },
     )
     .expect("newgrf airport tile");
 
     let rgba = [255, 0, 0, 255].repeat(4);
+    let blue_rgba = [0, 0, 255, 255].repeat(4);
     let view = DecodedSprite {
         width: 2,
         height: 2,
@@ -2620,6 +2622,39 @@ fn built_newgrf_airport_uses_airport_tile_action1_sprite() {
         rgba: rgba.clone(),
         mask: Vec::new(),
     };
+    let blue_view = DecodedSprite {
+        width: 2,
+        height: 2,
+        x_offs: -1,
+        y_offs: -2,
+        rgba: blue_rgba.clone(),
+        mask: Vec::new(),
+    };
+    let mut runtime = TrainSpriteGraphics {
+        sets: vec![vec![view.clone()], vec![blue_view.clone()]],
+        assigns: vec![TrainSpriteAssign {
+            local_id: 0,
+            set_id: 7,
+        }],
+        action2_to_action1: [(0, 0), (1, 1)].into_iter().collect(),
+        ..Default::default()
+    };
+    runtime.action2_var.insert(
+        7,
+        Action2VarEntry {
+            first: Action2VarTerm {
+                variable: 0x44,
+                param: None,
+                adjust: Action2VarAdjust {
+                    and_mask: u32::MAX,
+                    ..Default::default()
+                },
+            },
+            ops: Vec::new(),
+            ranges: vec![(0, 0, 0), (1, 1, u32::MAX)],
+            default: 0,
+        },
+    );
     let gfx = 74;
     let airport_tile = AirportTileSpecDef {
         gfx: AirportTileGfxId(gfx),
@@ -2629,8 +2664,8 @@ fn built_newgrf_airport_uses_airport_tile_action1_sprite() {
         newgrf_local_id: 0,
         newgrf_grfid: 0x4150_544C,
         newgrf_preview: Some(view.clone()),
-        newgrf_views: vec![view],
-        newgrf_runtime: None,
+        newgrf_views: vec![view, blue_view],
+        newgrf_runtime: Some(Box::new(runtime)),
     };
     let mut station = Station::new_with_kind(coord, StopKind::Airport);
     station.airport_newgrf_spec_id = Some(10);
@@ -2689,9 +2724,9 @@ fn built_newgrf_airport_uses_airport_tile_action1_sprite() {
     let images = world.resource::<Assets<Image>>();
     assert!(
         sprite_handles.iter().any(|handle| {
-            images.get(handle).and_then(|image| image.data.as_deref()) == Some(rgba.as_slice())
+            images.get(handle).and_then(|image| image.data.as_deref()) == Some(blue_rgba.as_slice())
         }),
-        "el aeropuerto construido debe consumir el sprite Action1/3 de AirportTile"
+        "el aeropuerto construido debe reevaluar Action2 y consumir la vista por frame"
     );
 }
 

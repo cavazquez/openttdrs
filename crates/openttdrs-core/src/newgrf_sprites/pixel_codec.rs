@@ -464,6 +464,132 @@ pub fn bake_sprite_company_palette(sprite: &DecodedSprite, company_colour: u8) -
     rgba
 }
 
+fn sprite_palette_indices(sprite: &DecodedSprite) -> Option<Vec<u8>> {
+    let pixel_count = usize::from(sprite.width).checked_mul(usize::from(sprite.height))?;
+    if sprite.mask.len() >= pixel_count {
+        return Some(sprite.mask[..pixel_count].to_vec());
+    }
+    let mut indices = Vec::with_capacity(pixel_count);
+    let (pixels, _) = sprite.rgba.as_chunks::<4>();
+    for pixel in pixels.iter().take(pixel_count) {
+        if pixel[3] == 0 {
+            indices.push(0);
+            continue;
+        }
+        let rgb = [pixel[0], pixel[1], pixel[2]];
+        let index = DOS_PALETTE_RGB
+            .iter()
+            .position(|candidate| *candidate == rgb)?;
+        indices.push(u8::try_from(index).ok()?);
+    }
+    (indices.len() == pixel_count).then_some(indices)
+}
+
+fn standard_twocc_colour(index: u8, primary: u8, secondary: u8) -> Option<[u8; 3]> {
+    let (colour, shade) = if (0x50..=0x57).contains(&index) {
+        (secondary, usize::from(index - 0x50))
+    } else if (AUTHOR_CC_PALETTE_FIRST..=AUTHOR_CC_PALETTE_FIRST + 7).contains(&index) {
+        (primary, usize::from(index - AUTHOR_CC_PALETTE_FIRST))
+    } else {
+        return None;
+    };
+    let colour = usize::from(colour) % COMPANY_COLOUR_COUNT;
+    Some(COMPANY_RAMP_RGB[colour * COMPANY_RAMP_SHADES + shade])
+}
+
+/// Hornea una paleta 2CC vanilla sobre un sprite `NewGRF`.
+///
+/// `OpenTTD` reserva `0x50..=0x57` para el canal secundario y
+/// `0xC6..=0xCD` para el primario. Los sprites 8bpp se recuperan desde el
+/// RGB DOS exacto; los 32bpp conservan los índices en `mask`. Los píxeles que
+/// no pertenecen a esos rangos permanecen intactos.
+#[must_use]
+pub fn bake_sprite_two_company_palette(
+    sprite: &DecodedSprite,
+    primary: u8,
+    secondary: u8,
+) -> Vec<u8> {
+    bake_sprite_two_company_palette_with_map(sprite, primary, secondary, None)
+}
+
+/// Hornea una paleta 2CC, usando opcionalmente el mapa Action5 del slot
+/// `SPR_2CCMAP_BASE + primary + secondary * 16`.
+///
+/// Un mapa custom es una tabla de 256 índices DOS (representada como un
+/// sprite `256×1`); cuando no está instalado se usa la tabla vanilla de los
+/// dos rangos de colores de compañía.
+#[must_use]
+pub fn bake_sprite_two_company_palette_with_map(
+    sprite: &DecodedSprite,
+    primary: u8,
+    secondary: u8,
+    map: Option<&DecodedSprite>,
+) -> Vec<u8> {
+    let Some(source_indices) = sprite_palette_indices(sprite) else {
+        return sprite.rgba.clone();
+    };
+    let map_indices = map.and_then(sprite_palette_indices);
+    let mut rgba = sprite.rgba.clone();
+    let pixel_count = source_indices.len().min(rgba.len() / 4);
+    let masked = !sprite.mask.is_empty();
+    for (pixel_index, &source) in source_indices.iter().take(pixel_count).enumerate() {
+        if source == 0 {
+            continue;
+        }
+        let target_rgb = if let Some(map_indices) = map_indices.as_deref() {
+            let Some(target) = map_indices.get(usize::from(source)).copied() else {
+                continue;
+            };
+            if target == 0 {
+                continue;
+            }
+            DOS_PALETTE_RGB[usize::from(target)]
+        } else {
+            let Some(target) = standard_twocc_colour(source, primary, secondary) else {
+                continue;
+            };
+            target
+        };
+        let pixel = &mut rgba[pixel_index * 4..pixel_index * 4 + 4];
+        let tuned = if masked {
+            let brightness = pixel[0].max(pixel[1]).max(pixel[2]);
+            adjust_brightness_rgb(target_rgb, brightness)
+        } else {
+            target_rgb
+        };
+        pixel[..3].copy_from_slice(&tuned);
+    }
+    rgba
+}
+
+/// Hornea `PALETTE_CRASH` para un sprite `NewGRF`.
+///
+/// El blitter 32bpp de `OpenTTD` conserva el alfa y convierte los píxeles sin
+/// máscara en gris oscuro mediante `MakeDark`; para una máscara de paleta el
+/// resultado visible también debe quedar gris. Aplicar la misma transformación
+/// al RGBA ya decodificado cubre ambos formatos sin perder offsets ni tamaño.
+#[must_use]
+pub fn bake_sprite_crash(sprite: &DecodedSprite) -> Vec<u8> {
+    let mut rgba = sprite.rgba.clone();
+    let (pixels, _) = rgba.as_chunks_mut::<4>();
+    for pixel in pixels {
+        if pixel[3] == 0 {
+            continue;
+        }
+        let dark = u8::try_from(
+            (u32::from(pixel[0]) * 13_063
+                + u32::from(pixel[1]) * 25_647
+                + u32::from(pixel[2]) * 4_981)
+                / 65_536,
+        )
+        .unwrap_or(u8::MAX);
+        pixel[0] = dark;
+        pixel[1] = dark;
+        pixel[2] = dark;
+    }
+    rgba
+}
+
 /// Decodifica imagen de sprite section v2 (8bpp / 32bpp / máscara / chunked).
 ///
 /// Devuelve `(zoom, sprite)`.

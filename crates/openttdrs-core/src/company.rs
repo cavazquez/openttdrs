@@ -386,15 +386,43 @@ impl Company {
 /// un valor antiguo distinto.
 #[must_use]
 pub fn company_livery_primary_colour(company: &Company, scheme: usize) -> u8 {
+    company_livery_colours(company, scheme).0
+}
+
+/// Colores efectivos de una librea de compañía `(primario, secundario)`.
+///
+/// El esquema especializado sólo se activa cuando el esquema por defecto
+/// tiene al menos un canal personalizado. Cada canal especializado que no
+/// esté marcado hereda el canal correspondiente del esquema por defecto, tal
+/// como `GetEngineLivery` + `UpdateCompanyLiveries` de `OpenTTD`.
+#[must_use]
+pub fn company_livery_colours(company: &Company, scheme: usize) -> (u8, u8) {
     let liveries = company.effective_liveries();
     let default = liveries[LIVERY_SCHEME_DEFAULT];
     if default.in_use & (COMPANY_LIVERY_FLAG_PRIMARY | COMPANY_LIVERY_FLAG_SECONDARY) == 0 {
-        return default.colour1;
+        return (default.colour1, default.colour2);
     }
-    liveries
+    let specialized = liveries
         .get(scheme.min(COMPANY_LIVERY_SCHEME_COUNT - 1))
-        .filter(|livery| livery.in_use & COMPANY_LIVERY_FLAG_PRIMARY != 0)
-        .map_or(default.colour1, |livery| livery.colour1)
+        .copied()
+        .unwrap_or(default);
+    let primary = if specialized.in_use & COMPANY_LIVERY_FLAG_PRIMARY != 0 {
+        specialized.colour1
+    } else {
+        default.colour1
+    };
+    let secondary = if specialized.in_use & COMPANY_LIVERY_FLAG_SECONDARY != 0 {
+        specialized.colour2
+    } else {
+        default.colour2
+    };
+    (primary, secondary)
+}
+
+/// Color secundario efectivo de una librea de compañía.
+#[must_use]
+pub fn company_livery_secondary_colour(company: &Company, scheme: usize) -> u8 {
+    company_livery_colours(company, scheme).1
 }
 
 /// Esquema nativo de librea para una unidad de vehículo.
@@ -652,6 +680,34 @@ mod tests {
         assert_eq!(
             company_livery_primary_colour(&company, LIVERY_SCHEME_DIESEL),
             3
+        );
+    }
+
+    #[test]
+    fn livery_secondary_inherits_default_until_custom_channel_is_enabled() {
+        let mut company = Company::player(CompanyEconomy::default(), 3);
+        company.liveries[LIVERY_SCHEME_DEFAULT] = CompanyLivery {
+            in_use: COMPANY_LIVERY_FLAG_PRIMARY | COMPANY_LIVERY_FLAG_SECONDARY,
+            colour1: 4,
+            colour2: 5,
+        };
+        company.liveries[LIVERY_SCHEME_STEAM] = CompanyLivery {
+            in_use: COMPANY_LIVERY_FLAG_PRIMARY,
+            colour1: 9,
+            colour2: 12,
+        };
+        assert_eq!(
+            company_livery_colours(&company, LIVERY_SCHEME_STEAM),
+            (9, 5)
+        );
+        assert_eq!(
+            company_livery_secondary_colour(&company, LIVERY_SCHEME_STEAM),
+            5
+        );
+        company.liveries[LIVERY_SCHEME_STEAM].in_use |= COMPANY_LIVERY_FLAG_SECONDARY;
+        assert_eq!(
+            company_livery_colours(&company, LIVERY_SCHEME_STEAM),
+            (9, 12)
         );
     }
 

@@ -32,8 +32,9 @@ pub use model::{
 // Re-exportar funciones de runtime de pixel_codec
 pub use pixel_codec::{
     SPRITE_V2_ZOOM_PREFERENCE, apply_company_colour_mask, bake_sprite_company_mask,
-    bake_sprite_company_palette, decode_chunked_8bpp, decode_chunked_pixels, decode_real_sprite_v1,
-    decode_real_sprite_v1_uncompressed, decode_real_sprite_v2_section,
+    bake_sprite_company_palette, bake_sprite_crash, bake_sprite_two_company_palette,
+    bake_sprite_two_company_palette_with_map, decode_chunked_8bpp, decode_chunked_pixels,
+    decode_real_sprite_v1, decode_real_sprite_v1_uncompressed, decode_real_sprite_v2_section,
     decode_real_sprite_v2_section_zoom, decompress_grf_lz77, encode_chunked_8bpp_full_rows,
     encode_chunked_pixels_full_rows, index_sprite_section, indices_to_rgba, resolve_fd_sprite,
     sprite_v2_bpp,
@@ -62,7 +63,7 @@ pub use action5::{
     CATENARY_WIRE_SPRITE_BASE, FOUNDATION_ACTION5_SLOT_COUNT, ONEWAY_ACTION5_SLOT_COUNT,
     OPENTTD_GUI_ACTION5_SLOT_COUNT, ROADSTOP_ACTION5_SLOT_COUNT, SHORE_ACTION5_SLOT_COUNT,
     SHORE_MISSING_BLOCK_SLOTS, SIGNAL_ACTION5_SLOT_COUNT, SPR_SIGNALS_ACTION5_BASE,
-    TRAMWAY_ACTION5_SLOT_COUNT, TWOCC_ACTION5_SLOT_COUNT, action5_type_name,
+    TRAMWAY_ACTION5_SLOT_COUNT, TWOCC_ACTION5_SLOT_COUNT, TWOCC_PALETTE_BASE, action5_type_name,
     airport_preview_action5_slot, bridge_decks_action5_base, bridge_decks_action5_slot,
     catenary_action5_local_slot, collect_action5_blocks, collect_active_action5_blocks,
     disallowed_road_directions, foundation_action5_slot_for_sprite_id, merge_action5_offset_block,
@@ -111,6 +112,7 @@ mod tests {
         build_action0_train_payload,
     };
     use crate::newgrf_company_ramp::{AUTHOR_CC_PALETTE_FIRST, COMPANY_RAMP_RGB};
+    use crate::newgrf_palette_data::DOS_PALETTE_RGB;
     use crate::vehicle::Vehicle;
 
     use action_graph::{parse_action2_basic, parse_action2_random, parse_action2_variational};
@@ -1163,6 +1165,60 @@ mod tests {
         assert_eq!(&baked[0..3], &COMPANY_RAMP_RGB[4 * 8]);
         assert_eq!(&baked[4..7], &COMPANY_RAMP_RGB[4 * 8 + 7]);
         assert_eq!(&baked[8..11], &sprite.rgba[8..11]);
+    }
+
+    #[test]
+    fn bake_two_company_palette_remaps_primary_and_secondary_ranges() {
+        let indices = [0x50, AUTHOR_CC_PALETTE_FIRST, 174];
+        let entry = build_sprite_section_palette_entry(14, 0, 3, 1, 0, 0, &indices);
+        let index = index_sprite_section(&entry);
+        let sprite = resolve_fd_sprite(&index, 14).unwrap();
+        let baked = bake_sprite_two_company_palette(&sprite, 4, 6);
+        assert_eq!(&baked[0..3], &COMPANY_RAMP_RGB[6 * 8]);
+        assert_eq!(&baked[4..7], &COMPANY_RAMP_RGB[4 * 8]);
+        assert_eq!(&baked[8..11], &sprite.rgba[8..11]);
+    }
+
+    #[test]
+    fn bake_two_company_palette_honors_action5_map() {
+        let source = indices_to_rgba(&[0x50, AUTHOR_CC_PALETTE_FIRST], 2, 1).unwrap();
+        let sprite = DecodedSprite {
+            width: 2,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: source,
+            mask: Vec::new(),
+        };
+        let mut map_indices: Vec<u8> = (0..=u8::MAX).collect();
+        map_indices[0x50] = 174;
+        map_indices[usize::from(AUTHOR_CC_PALETTE_FIRST)] = 175;
+        let map = DecodedSprite {
+            width: 256,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: indices_to_rgba(&map_indices, 256, 1).unwrap(),
+            mask: Vec::new(),
+        };
+        let baked = bake_sprite_two_company_palette_with_map(&sprite, 4, 6, Some(&map));
+        assert_eq!(&baked[0..3], &DOS_PALETTE_RGB[174]);
+        assert_eq!(&baked[4..7], &DOS_PALETTE_RGB[175]);
+    }
+
+    #[test]
+    fn bake_crash_palette_matches_openttd_make_dark() {
+        let sprite = DecodedSprite {
+            width: 1,
+            height: 1,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: vec![100, 150, 200, 255],
+            mask: Vec::new(),
+        };
+        let dark = u8::try_from((100_u32 * 13_063 + 150 * 25_647 + 200 * 4_981) / 65_536)
+            .unwrap_or(u8::MAX);
+        assert_eq!(bake_sprite_crash(&sprite), vec![dark, dark, dark, 255]);
     }
 
     #[test]

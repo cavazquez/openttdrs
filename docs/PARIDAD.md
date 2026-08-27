@@ -130,15 +130,18 @@ children del cuerpo. Las vistas Action1/2 de vehículos de carretera, barcos y
 aeronaves también aplican sus offsets NFO al ancla, igual que los trenes. Los
 grupos Action2 real distinguen loaded/loading y el bit de sprite-stack NewGRF
 crea hasta ocho children por unidad mediante la variable `0x10`; la terminación
-explícita del stack mediante el registro `0x100` (bit 31) ya se respeta,
-mientras que las paletas especiales (2CC/crash) y callbacks siguen OOS. Los
+explícita del stack mediante el registro `0x100` (bit 31) ya se respeta. El
+renderer de vehículos materializa ahora las paletas vanilla 2CC (primaria y
+secundaria), los mapas Action5 `0x0A` y `PALETTE_CRASH` (`804`), además de las
+23 libreas por esquema. Los
 scopes parent/relative básicos de vehículos ya se resuelven con el padre inmediato
 y offsets firmados de la cadena. Los wagon overrides de Action3 ya se
 resuelven por cadena de motor, cargo y grupo default durante el render de
 vehículos. El renderer también aplica el color primario de librea por esquema
 (clase de tracción, DMU/EMU, carga, tipo aéreo y tranvías) y respeta la librea
-explícita del grupo y sus padres; quedan fuera las paletas 2CC/crash, los
-scopes completos y los callbacks que aún no tienen call site.
+explícita del grupo y sus padres; quedan fuera los scopes completos, los
+callbacks que aún no tienen call site y la invalidación global de cachés fuera
+del renderer de vehículos.
 En `(225,2)` las cajas de
 `5982` y `5983` coinciden con el oráculo y Bevy recibe sus slots de Z en el
 orden final `5983 → 5982`; en `(195,17)`, OpenTTD transforma la inserción
@@ -223,8 +226,9 @@ random/triggers) y registran el edificio con bounds conservadoras como parent
 sortable; el suelo/layout propio y las variables de pueblo/vecindad aún usan
 el sustituto vanilla. Los layouts `TileSeq`/children completos de
 estación/objeto/industria/casa, los callbacks de foundation específicos,
-color/view y las paletas especiales no basadas en la rampa de compañía
-(2CC/crash) siguen pendientes de un contrato runtime completo. El sprite-stack de vehículos ya resuelve grupos
+color/view y las paletas especiales no basadas en la rampa de compañía fuera
+del renderer de vehículos siguen pendientes de un contrato runtime completo.
+El sprite-stack de vehículos ya resuelve grupos
 Action2 real (loaded/loading) y materializa hasta ocho capas como children
 ordenados por unidad. La compra y el autoreemplazo de trenes y vehículos de
 carretera materializan las piezas articuladas y enlazan la cadena; el
@@ -253,11 +257,12 @@ industria o estación, `Empty` al vaciado completo del consist y `Depot` al
 borde de entrada de trenes, barcos, vehículos de carretera y aeronaves (el
 hangar es el estado físico del avión).
 El callback `0x2D` (color mapping) también se consulta para motores NewGRF con
-la máscara correspondiente y sus paletas de compañía `775..790` ya entran en
+la máscara correspondiente y sus paletas de compañía `775..790`, 2CC
+(`SPR_2CCMAP_BASE + primary + secondary * 16`) y crash (`804`) ya entran en
 la clave de caché de sprites runtime. Las 23 libreas por esquema y la herencia
-de grupos se resuelven para el canal primario; los mapas 2CC/crash y la
-invalidación visual completa del callback siguen pendientes porque requieren
-tablas de paleta propias.
+de grupos se resuelven para ambos canales; los mapas Action5 propios se
+consultan cuando el GRF los instala. Sigue pendiente la invalidación visual
+completa del callback en consumidores que no pasan por la caché de vehículos.
 El callback `0x36` (modify property) ya expone resultados signed/unsigned de
 15 bits y alimenta el acortamiento de unidades de tren y carretera mediante las
 propiedades `0x21`/`0x23` cuando no hay CB11. La velocidad efectiva consulta
@@ -1676,10 +1681,11 @@ En saves &lt; 214, OpenTTD mueve el RoadType desde bits 6–7 de `m7` a `m4` (ro
 
 ### Notas
 
-- Export MVP (#226/#267): `MAPS` `CH_TABLE` + `CITY` (≥1) + `STNN` moderno + `VEHS`/`ORDL` (tren + ROAD + **ship** + aeronaves de ala fija o helicópteros con sombra/rotor y campos FTA básicos) + `INDY` + `ECMY` + `CAPY` (incluye pagos activos de descargas graduales) + DATE/PLYR; planos RIFF. Cargamentos nuevos siguen goods×64 vacíos en STNN. Fixtures smoke `validate_sav_openttd.sh`: `mvp_openttd_load.sav`, `mvp_openttd_stations.sav`, `mvp_openttd_train.sav`, `mvp_openttd_rich.sav`, `mvp_openttd_ship.sav` (#267), `demo_openttd.sav`. Round-trip OpenTTD→openttdrs: `scripts/roundtrip_sav_openttd.sh`. Residual: tranvía, contadores/flags FTA avanzados, **GSET completo** y ejecución NewGRF completa; `PLYR` ya conserva dinero/préstamo/límite individual (incluido el centinela de límite global)/meses de bancarrota/color/nombre/presidente/`face`/`face_style`/indicador AI, `settings.*`, las 23 libreas y el historial trimestral (`cur_economy` + hasta 24 `old_economy`, incluso `delivered_cargo`) por todo el pool de compañías. Siguen pendientes flags completos; el renderer todavía no aplica la librea por tipo. `PATS`/`OPTS` y chunks nativos `NGRF`/`ENGN`/`OBJS`/`SRND` se conservan como passthrough.
-- El renderer aplica el canal primario de las 23 libreas por esquema y la
-  herencia de librea explícita de grupos; las paletas 2CC/crash y la
-  invalidación visual completa siguen abiertas en #329.
+- Export MVP (#226/#267): `MAPS` `CH_TABLE` + `CITY` (≥1) + `STNN` moderno + `VEHS`/`ORDL` (tren + ROAD + **ship** + aeronaves de ala fija o helicópteros con sombra/rotor y campos FTA básicos) + `INDY` + `ECMY` + `CAPY` (incluye pagos activos de descargas graduales) + DATE/PLYR; planos RIFF. Cargamentos nuevos siguen goods×64 vacíos en STNN. Fixtures smoke `validate_sav_openttd.sh`: `mvp_openttd_load.sav`, `mvp_openttd_stations.sav`, `mvp_openttd_train.sav`, `mvp_openttd_rich.sav`, `mvp_openttd_ship.sav` (#267), `demo_openttd.sav`. Round-trip OpenTTD→openttdrs: `scripts/roundtrip_sav_openttd.sh`. Residual: tranvía, contadores/flags FTA avanzados, **GSET completo** y ejecución NewGRF completa; `PLYR` ya conserva dinero/préstamo/límite individual (incluido el centinela de límite global)/meses de bancarrota/color/nombre/presidente/`face`/`face_style`/indicador AI, `settings.*`, las 23 libreas y el historial trimestral (`cur_economy` + hasta 24 `old_economy`, incluso `delivered_cargo`) por todo el pool de compañías. Siguen pendientes flags completos y algunos consumidores de librea fuera del renderer de vehículos; el renderer de vehículos ya aplica la librea por tipo y ambos canales. `PATS`/`OPTS` y chunks nativos `NGRF`/`ENGN`/`OBJS`/`SRND` se conservan como passthrough.
+- El renderer aplica los canales primario y secundario de las 23 libreas por
+  esquema y la herencia de librea explícita de grupos; también materializa
+  2CC/crash y mapas Action5 en vehículos. La invalidación visual completa
+  fuera de esa caché sigue abierta en #329.
 - Dedicated + `-g` dispara dos `AfterLoadGame` (new-game luego load); el export usa `OPENTTDRS_SNAPSHOT_MIN_CALL=2`.
 - El oráculo **no** invoca `parse_sav.py` ni `snapshot_dumper`.
 

@@ -45,18 +45,18 @@ fn vehicle_head_id(sim: &SimWorld, vehicle: &openttdrs_core::Vehicle) -> u32 {
     vehicle.id
 }
 
-/// Color primario que debe usar el renderer para una unidad.
+/// Colores de librea que debe usar el renderer para una unidad.
 ///
 /// La prioridad coincide con `GetEngineLivery`: librea explícita del grupo (o
 /// de uno de sus padres), esquema por tipo de vehículo si el default está
 /// habilitado y, por último, el color por defecto de la compañía.
-fn vehicle_livery_colour(
+fn vehicle_livery_colours(
     sim: &SimWorld,
     vehicle: &openttdrs_core::Vehicle,
-) -> crate::sprites::CompanyColour {
+) -> (crate::sprites::CompanyColour, crate::sprites::CompanyColour) {
     let fallback = crate::sprites::CompanyColour::from_u8(sim.state.company_colour);
     let Some(company) = sim.state.companies.get(vehicle.owner.index()) else {
-        return fallback;
+        return (fallback, fallback);
     };
     let head_id = vehicle_head_id(sim, vehicle);
     let head = sim
@@ -73,7 +73,7 @@ fn vehicle_livery_colour(
         .then(|| head.engine_id.and_then(|id| engine_in_sim(sim, id)))
         .flatten();
     let scheme = openttdrs_core::vehicle_livery_scheme(vehicle, engine, parent_engine);
-    let mut colour = openttdrs_core::company_livery_primary_colour(company, scheme);
+    let (mut primary, mut secondary) = openttdrs_core::company_livery_colours(company, scheme);
 
     let mut group_id = head.group_id;
     let mut seen = std::collections::HashSet::new();
@@ -89,12 +89,27 @@ fn vehicle_livery_colour(
                 | openttdrs_core::COMPANY_LIVERY_FLAG_SECONDARY)
             != 0
         {
-            colour = group.livery_colour1;
-            break;
+            primary = group.livery_colour1;
+            secondary = group.livery_colour2;
+            return (
+                crate::sprites::CompanyColour::from_u8(primary),
+                crate::sprites::CompanyColour::from_u8(secondary),
+            );
         }
         group_id = group.parent;
     }
-    crate::sprites::CompanyColour::from_u8(colour)
+    (
+        crate::sprites::CompanyColour::from_u8(primary),
+        crate::sprites::CompanyColour::from_u8(secondary),
+    )
+}
+
+/// Color primario que debe usar el renderer para una unidad.
+fn vehicle_livery_colour(
+    sim: &SimWorld,
+    vehicle: &openttdrs_core::Vehicle,
+) -> crate::sprites::CompanyColour {
+    vehicle_livery_colours(sim, vehicle).0
 }
 
 fn ensure_vehicle_livery_palettes(

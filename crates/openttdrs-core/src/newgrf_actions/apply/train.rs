@@ -107,7 +107,7 @@ fn push_feature_vehicles(
             dual_headed: false,
             rail_engine_class: 0,
             rail_is_mu: false,
-            uses_2cc: false,
+            uses_2cc: meta.uses_2cc,
             rail_tilts: false,
             curve_speed_mod: 0,
             pow_wag_power: 0,

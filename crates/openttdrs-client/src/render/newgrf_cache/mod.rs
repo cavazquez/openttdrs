@@ -4,7 +4,9 @@ mod fingerprint;
 mod image_factory;
 
 pub(crate) use fingerprint::runtime_fingerprint;
-pub(crate) use image_factory::{DecodedSpriteImagePolicy, decoded_sprite_image};
+pub(crate) use image_factory::{
+    DecodedSpriteImagePolicy, decoded_sprite_image, decoded_sprite_image_with_twocc_map,
+};
 
 /// Listas de vars Action2 que entran en el fingerprint por dominio.
 pub(crate) mod vars {

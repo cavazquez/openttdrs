@@ -251,6 +251,7 @@ pub struct ParsedTrainMeta {
 /// Los campos no representados por [`crate::engine::EngineDef`] se consumen con
 /// su ancho de `OpenTTD` 15.3, pero no se anuncian como aplicados.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct ParsedVehicleMeta {
     pub local_id: u16,
     pub kind: VehicleKind,
@@ -283,6 +284,8 @@ pub struct ParsedVehicleMeta {
     pub refit_exclude_mask: u32,
     /// Máscara de callbacks de vehículo (bit 7 = `SoundEffect`).
     pub callback_mask: u16,
+    /// Action0 misc flags bit 1: usa la segunda rampa de compañía (2CC).
+    pub uses_2cc: bool,
     /// Action0 misc flag bit 7: `OpenTTD` draws a sequence of stacked sprites.
     pub sprite_stack: bool,
     /// Action0 vehicle badge list (`road 0x2A`, `ship 0x26`, `aircraft 0x24`).
@@ -362,6 +365,7 @@ impl ParsedVehicleMeta {
             refit_mask: 0,
             refit_exclude_mask: 0,
             callback_mask: 0,
+            uses_2cc: false,
             sprite_stack: false,
             badge_local_ids: Vec::new(),
         })
@@ -3373,7 +3377,9 @@ fn parse_road_vehicle_property(
         0x0A | 0x16 | 0x1F | 0x27 => skip_bytes(payload, i, metas.len().checked_mul(4)?)?,
         0x1C => {
             for meta in metas {
-                meta.sprite_stack = read_u8(payload, i)? & 0x80 != 0;
+                let flags = read_u8(payload, i)?;
+                meta.uses_2cc = flags & 0x02 != 0;
+                meta.sprite_stack = flags & 0x80 != 0;
             }
         }
         // 0x05 translation table; 0x20/0x28 extended byte (fixtures usan BYTE).
@@ -3458,7 +3464,9 @@ fn parse_ship_property(
         }
         0x17 => {
             for meta in metas {
-                meta.sprite_stack = read_u8(payload, i)? & 0x80 != 0;
+                let flags = read_u8(payload, i)?;
+                meta.uses_2cc = flags & 0x02 != 0;
+                meta.sprite_stack = flags & 0x80 != 0;
             }
         }
         0x12 => {
@@ -3562,7 +3570,9 @@ fn parse_aircraft_property(
         }
         0x17 => {
             for meta in metas {
-                meta.sprite_stack = read_u8(payload, i)? & 0x80 != 0;
+                let flags = read_u8(payload, i)?;
+                meta.uses_2cc = flags & 0x02 != 0;
+                meta.sprite_stack = flags & 0x80 != 0;
             }
         }
         0x14 => {

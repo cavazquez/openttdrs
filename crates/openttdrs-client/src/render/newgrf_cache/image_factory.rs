@@ -2,7 +2,10 @@
 
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
-use openttdrs_core::{DecodedSprite, bake_sprite_company_mask, bake_sprite_company_palette};
+use openttdrs_core::{
+    DecodedSprite, bake_sprite_company_mask, bake_sprite_company_palette, bake_sprite_crash,
+    bake_sprite_two_company_palette, bake_sprite_two_company_palette_with_map,
+};
 
 use crate::sprites::CompanyColour;
 
@@ -17,11 +20,26 @@ pub(crate) enum DecodedSpriteImagePolicy {
     MaskedAndRecolored { colour: Option<CompanyColour> },
     /// PaletteID de compañía explícita (`775..=790`) escrita por Action2.
     CompanyPalette { colour: CompanyColour },
+    /// Paleta de dos colores de compañía (`SPR_2CCMAP_BASE + offset`).
+    TwoCompany {
+        primary: CompanyColour,
+        secondary: CompanyColour,
+    },
+    /// Remapeo gris oscuro de un vehículo en estado de choque (`804`).
+    Crash,
 }
 
 pub(crate) fn decoded_sprite_image(
     sprite: &DecodedSprite,
     policy: DecodedSpriteImagePolicy,
+) -> Image {
+    decoded_sprite_image_with_twocc_map(sprite, policy, None)
+}
+
+pub(crate) fn decoded_sprite_image_with_twocc_map(
+    sprite: &DecodedSprite,
+    policy: DecodedSpriteImagePolicy,
+    twocc_map: Option<&DecodedSprite>,
 ) -> Image {
     let rgba = match policy {
         DecodedSpriteImagePolicy::Raw => sprite.rgba.clone(),
@@ -43,6 +61,19 @@ pub(crate) fn decoded_sprite_image(
         DecodedSpriteImagePolicy::CompanyPalette { colour } => {
             bake_sprite_company_palette(sprite, colour.as_u8())
         }
+        DecodedSpriteImagePolicy::TwoCompany { primary, secondary } => {
+            if let Some(map) = twocc_map {
+                bake_sprite_two_company_palette_with_map(
+                    sprite,
+                    primary.as_u8(),
+                    secondary.as_u8(),
+                    Some(map),
+                )
+            } else {
+                bake_sprite_two_company_palette(sprite, primary.as_u8(), secondary.as_u8())
+            }
+        }
+        DecodedSpriteImagePolicy::Crash => bake_sprite_crash(sprite),
     };
     Image::new(
         Extent3d {

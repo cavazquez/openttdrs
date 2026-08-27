@@ -82,7 +82,7 @@ Fuente: `newgrf_act0_trains.cpp`.
 | `21` shorten factor BYTE | **runtime** (almacenado en `EngineDef.shorten_factor`) |
 | `23` powered wagon weight | **runtime** |
 | `19` traction type BYTE | **runtime** (`rail_engine_class`: vapor/diésel/eléctrico/monorail/maglev) |
-| `27` misc flags (bit0 `RailTilts`, bit1 `Uses2CC`, bit2 `RailIsMU`, bit7 `SpriteStack`) | **runtime parcial** (`rail_tilts`, `uses_2cc`, `rail_is_mu`, `sprite_stack`; 2CC aún no materializa la segunda rampa) |
+| `27` misc flags (bit0 `RailTilts`, bit1 `Uses2CC`, bit2 `RailIsMU`, bit7 `SpriteStack`) | **runtime parcial** (`rail_tilts`, `uses_2cc`, `rail_is_mu`, `sprite_stack`; trenes y vehículos con `uses_2cc` aplican ambas rampas y mapas Action5 en la caché visual) |
 | `2E` curve speed mod | **runtime** |
 | `1E` callback mask BYTE / `31` additional mask BYTE | **runtime** (`EngineDef.vehicle_callback_mask`; bit 7 habilita CB33) |
 | `0E`, `08`, `0A`, `0C`, `0F`–`11`, `18`, `1A`, `1C`, `22`, `25`–`26`, `28`–`2D`, `2F`–`30` | consumidas (ancho fijo / CTT) |
@@ -102,7 +102,8 @@ Fuente: `newgrf_act0_roadvehs.cpp`.
 | `17` callback mask BYTE / `28` additional mask BYTE | **runtime** (`EngineDef.vehicle_callback_mask`; bit 7 habilita CB33) |
 | `13` potencia (×10 HP) | **runtime** |
 | `14` peso (cuartos de tonelada) | **runtime** |
-| `05`, `0A`, `0E`, `16`, `18`–`1F`, `21`–`27`, `29` | consumidas cuando tienen ancho fijo; semántica pendiente |
+| `1C` misc flags (bit1 `Uses2CC`, bit7 `SpriteStack`) | **runtime parcial** (`uses_2cc` y `sprite_stack`; la caché de vehículos aplica ambas rampas y mapas Action5 2CC) |
+| `05`, `0A`, `0E`, `16`, `18`–`1B`, `1D`–`1F`, `21`–`27`, `29` | consumidas cuando tienen ancho fijo; semántica pendiente |
 | `20`, `24`, `25`, `2A` | pendiente: extended/listas variables |
 
 ## Ships (`02`)
@@ -120,7 +121,8 @@ Fuente: `newgrf_act0_ships.cpp`.
 | `12` callback mask BYTE / `22` additional mask BYTE | **runtime** (`EngineDef.vehicle_callback_mask`; bit 7 habilita CB33) |
 | `14` ocean speed fraction | **runtime** (`ocean_speed_frac` → `ship_speed_for_tile`) |
 | `15` canal speed fraction | **runtime** (`canal_speed_frac` → `ship_speed_for_tile`) |
-| `08`, `09`, `11`, `13`, `16`–`1D`, `20`–`21`, `23`–`26` restantes | consumidas si tienen ancho fijo; semántica pendiente |
+| `17` misc flags (bit1 `Uses2CC`, bit7 `SpriteStack`) | **runtime parcial** (`uses_2cc` y `sprite_stack`; la caché de vehículos aplica ambas rampas y mapas Action5 2CC) |
+| `08`, `09`, `11`, `13`, `16`, `18`–`1D`, `20`–`21`, `23`–`26` restantes | consumidas si tienen ancho fijo; semántica pendiente |
 | `1E` CTT include (lista variable) | **runtime** (`refit_mask` → `refittable_cargo_types_for_engine`; #274) |
 | `1F` CTT exclude (lista variable) | **runtime**: la máscara se resta del `include` (o de la lista vanilla cuando no hay `include`) al ofrecer cargas de refit (#274) |
 
@@ -138,7 +140,8 @@ Fuente: `newgrf_act0_aircraft.cpp`.
 | `0F` capacidad de pasajeros | **runtime** |
 | `12` sound effect BYTE | **runtime** (`sound_effect`) |
 | `14` callback mask BYTE / `22` additional mask BYTE | **runtime** (`EngineDef.vehicle_callback_mask`; bit 7 habilita CB33) |
-| `08`, `0D`, `11`, `13`, `15`–`1C`, `1F`–`21`, `23`–`24` restantes | consumidas si tienen ancho fijo; semántica pendiente |
+| `17` misc flags (bit1 `Uses2CC`, bit7 `SpriteStack`) | **runtime parcial** (`uses_2cc` y `sprite_stack`; la caché de vehículos aplica ambas rampas y mapas Action5 2CC) |
+| `08`, `0D`, `11`, `13`, `15`–`16`, `18`–`1C`, `1F`–`21`, `23`–`24` restantes | consumidas si tienen ancho fijo; semántica pendiente |
 | `1D`, `1E` | pendiente: listas CTT variables |
 
 ## Stations (`04`)
@@ -509,7 +512,7 @@ de OpenGFX no se pisan entre sí. Las condiciones que exigen estado externo
 | `07` | TTDP GUI | — | ignorada por spec (no usada por OTTD) |
 | `08` | canals | 65 | **runtime** (#259; `canal_action5_newgrf_sprites`) |
 | `09` | one-way roads | 18 | **runtime** |
-| `0A` | 2CC colour maps | 256 | **runtime** (#274; merge no-clobber; slots en `twocc_action5_newgrf_sprites`) |
+| `0A` | 2CC colour maps | 256 | **runtime** (#274; merge no-clobber; tablas decodificadas y consultadas por la caché de vehículos desde `twocc_action5_newgrf_sprites`) |
 | `0B` | tramway | 119 | **runtime** (#274; merge no-clobber; slots en `tramway_action5_newgrf_sprites`) |
 | `0C` | snowy temperate tree | — | ignorada por spec (`A5BLOCK_INVALID`; no es «grass» — #250 N/A en 15.3) |
 | `0D` | shore | 18 | **runtime** |

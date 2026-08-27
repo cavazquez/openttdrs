@@ -6,7 +6,8 @@ use openttdrs_core::prelude::*;
 
 use crate::render::CompanyColoredSprites;
 use crate::render::newgrf_cache::{
-    DecodedSpriteImagePolicy, decoded_sprite_image, runtime_fingerprint, vars,
+    DecodedSpriteImagePolicy, decoded_sprite_image, decoded_sprite_image_with_twocc_map,
+    runtime_fingerprint, vars,
 };
 use crate::sprites::CompanyColour;
 
@@ -169,6 +170,7 @@ impl NewGrfTrainSpriteCache {
     }
 
     /// Textura para la vista `dir` (0..=7) de un motor NewGRF (vistas horneadas).
+    #[allow(dead_code)]
     pub(crate) fn handle_for(
         &mut self,
         engine: &EngineDef,
@@ -176,17 +178,37 @@ impl NewGrfTrainSpriteCache {
         colour: CompanyColour,
         images: &mut Assets<Image>,
     ) -> Option<Handle<Image>> {
+        self.handle_for_with_livery(engine, dir, colour, colour, images)
+    }
+
+    pub(crate) fn handle_for_with_livery(
+        &mut self,
+        engine: &EngineDef,
+        dir: usize,
+        primary: CompanyColour,
+        secondary: CompanyColour,
+        images: &mut Assets<Image>,
+    ) -> Option<Handle<Image>> {
         let view = engine.newgrf_view(dir)?;
         let view_idx = u8::try_from(dir % engine.newgrf_views.len()).unwrap_or(0);
-        let key = (engine.id, view_idx, colour.as_u8(), 0, 0, 0);
+        let palette = if engine.uses_2cc {
+            openttdrs_core::TWOCC_PALETTE_BASE
+                + u16::from(primary.as_u8())
+                + u16::from(secondary.as_u8()) * 16
+        } else {
+            0
+        };
+        let key = (engine.id, view_idx, primary.as_u8(), 0, palette, 0);
         Some(
             self.handles
                 .entry(key)
                 .or_insert_with(|| {
-                    images.add(decoded_sprite_image(
-                        view,
-                        DecodedSpriteImagePolicy::Masked { colour },
-                    ))
+                    let policy = if engine.uses_2cc {
+                        DecodedSpriteImagePolicy::TwoCompany { primary, secondary }
+                    } else {
+                        DecodedSpriteImagePolicy::Masked { colour: primary }
+                    };
+                    images.add(decoded_sprite_image(view, policy))
                 })
                 .clone(),
         )
@@ -226,7 +248,18 @@ impl NewGrfTrainSpriteCache {
         ctx: &mut openttdrs_core::Action2EvalCtx,
         images: &mut Assets<Image>,
     ) -> Vec<NewGrfVehicleLayer> {
-        self.handles_for_runtime_with_override(engine, dir, cargo, colour, None, None, ctx, images)
+        self.handles_for_runtime_with_override(
+            engine,
+            dir,
+            cargo,
+            colour,
+            colour,
+            None,
+            None,
+            &[],
+            ctx,
+            images,
+        )
     }
 
     /// Igual que [`Self::handles_for_runtime`], pero aplicando el motor que
@@ -237,9 +270,11 @@ impl NewGrfTrainSpriteCache {
         engine: &EngineDef,
         dir: usize,
         cargo: Option<openttdrs_core::CargoType>,
-        colour: CompanyColour,
+        primary: CompanyColour,
+        secondary: CompanyColour,
         overriding_local_id: Option<u16>,
         palette_override: Option<u16>,
+        twocc_maps: &[Option<openttdrs_core::DecodedSprite>],
         ctx: &mut openttdrs_core::Action2EvalCtx,
         images: &mut Assets<Image>,
     ) -> Vec<NewGrfVehicleLayer> {
@@ -305,7 +340,7 @@ impl NewGrfTrainSpriteCache {
             let key = (
                 engine.id,
                 view_idx,
-                colour.as_u8(),
+                primary.as_u8(),
                 stack_idx,
                 palette_id,
                 fp,
@@ -314,7 +349,7 @@ impl NewGrfTrainSpriteCache {
                 if palette_override.is_some() {
                     DecodedSpriteImagePolicy::Raw
                 } else {
-                    DecodedSpriteImagePolicy::Masked { colour }
+                    DecodedSpriteImagePolicy::Masked { colour: primary }
                 }
             } else if (775..=790).contains(&palette_id) {
                 let palette_colour =
@@ -322,17 +357,43 @@ impl NewGrfTrainSpriteCache {
                 DecodedSpriteImagePolicy::CompanyPalette {
                     colour: palette_colour,
                 }
+            } else if (openttdrs_core::TWOCC_PALETTE_BASE
+                ..openttdrs_core::TWOCC_PALETTE_BASE
+                    + openttdrs_core::TWOCC_ACTION5_SLOT_COUNT as u16)
+                .contains(&palette_id)
+            {
+                DecodedSpriteImagePolicy::TwoCompany { primary, secondary }
             } else {
-                // Other PaletteIDs (2CC, crash, pulsating overlays) require
-                // a palette table that Bevy does not currently expose. Keep
-                // the decoded pixels instead of applying the owner's colour
-                // to a palette chosen explicitly by the GRF.
-                DecodedSpriteImagePolicy::Raw
+                match palette_id {
+                    804 => DecodedSpriteImagePolicy::Crash,
+                    _ => {
+                        // Other PaletteIDs (pulsating overlays and custom
+                        // tables) remain raw until their palette source is
+                        // available. Never apply a false company colour.
+                        DecodedSpriteImagePolicy::Raw
+                    }
+                }
             };
+            let twocc_map = (openttdrs_core::TWOCC_PALETTE_BASE
+                ..openttdrs_core::TWOCC_PALETTE_BASE
+                    + openttdrs_core::TWOCC_ACTION5_SLOT_COUNT as u16)
+                .contains(&palette_id)
+                .then(|| {
+                    twocc_maps
+                        .get(usize::from(palette_id - openttdrs_core::TWOCC_PALETTE_BASE))
+                        .and_then(Option::as_ref)
+                })
+                .flatten();
             let handle = self
                 .handles
                 .entry(key)
-                .or_insert_with(|| images.add(decoded_sprite_image(&view, image_policy)))
+                .or_insert_with(|| {
+                    images.add(decoded_sprite_image_with_twocc_map(
+                        &view,
+                        image_policy,
+                        twocc_map,
+                    ))
+                })
                 .clone();
             layers.push(NewGrfVehicleLayer {
                 handle,
@@ -532,7 +593,8 @@ impl TruckHandles {
         if let Some(eid) = v.engine_id
             && let Some(eng) = super::engine_in_sim(sim, eid)
         {
-            let colour = owner_colour.unwrap_or(CompanyColour::DarkBlue);
+            let (livery_primary, livery_secondary) = super::vehicle_livery_colours(sim, v);
+            let colour = owner_colour.unwrap_or(livery_primary);
             if eng.newgrf_runtime.is_some() {
                 let colour_u8 = colour.as_u8();
                 let mut ctx = openttdrs_core::action2_eval_ctx_for_unit(
@@ -558,21 +620,37 @@ impl TruckHandles {
                 let overriding_local_id = overriding_engine_local_id(sim, v, eng);
                 let palette_override =
                     openttdrs_core::resolve_vehicle_colour_mapping_callback(eng, v)
-                        .map(|mapping| mapping.palette_for_company(colour.as_u8()));
+                        .map(|mapping| {
+                            mapping.palette_for_companies(
+                                colour.as_u8(),
+                                livery_secondary.as_u8(),
+                                eng.uses_2cc,
+                            )
+                        })
+                        .or_else(|| {
+                            eng.uses_2cc.then(|| {
+                                openttdrs_core::TWOCC_PALETTE_BASE
+                                    + u16::from(colour.as_u8())
+                                    + u16::from(livery_secondary.as_u8()) * 16
+                            })
+                        });
                 let layers = cache.handles_for_runtime_with_override(
                     eng,
                     dir,
                     v.cargo_type,
                     colour,
+                    livery_secondary,
                     overriding_local_id,
                     palette_override,
+                    &sim.state.runtime.twocc_action5_newgrf_sprites,
                     &mut ctx,
                     images,
                 );
                 if !layers.is_empty() {
                     return layers;
                 }
-            } else if let Some(handle) = cache.handle_for(eng, dir, colour, images)
+            } else if let Some(handle) =
+                cache.handle_for_with_livery(eng, dir, colour, livery_secondary, images)
                 && let Some(view) = eng.newgrf_view(dir)
             {
                 return vec![NewGrfVehicleLayer {

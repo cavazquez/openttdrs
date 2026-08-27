@@ -2204,6 +2204,61 @@ mod tests {
     }
 
     #[test]
+    fn vehicle_action0_misc_flags_enable_2cc_for_every_feature() {
+        let road = [
+            0x00,
+            ACTION0_FEATURE_ROAD_VEHICLES,
+            0x01,
+            0x01,
+            0x00,
+            0x1C,
+            0x82,
+        ];
+        let road_meta = parse_action0_vehicle_metas(&road).unwrap().remove(0);
+        assert!(road_meta.uses_2cc);
+        assert!(road_meta.sprite_stack);
+
+        let ship = [0x00, ACTION0_FEATURE_SHIPS, 0x01, 0x01, 0x00, 0x17, 0x82];
+        let ship_meta = parse_action0_vehicle_metas(&ship).unwrap().remove(0);
+        assert!(ship_meta.uses_2cc);
+        assert!(ship_meta.sprite_stack);
+
+        let aircraft = [0x00, ACTION0_FEATURE_AIRCRAFT, 0x01, 0x01, 0x00, 0x17, 0x82];
+        let aircraft_meta = parse_action0_vehicle_metas(&aircraft).unwrap().remove(0);
+        assert!(aircraft_meta.uses_2cc);
+        assert!(aircraft_meta.sprite_stack);
+    }
+
+    #[test]
+    fn apply_vehicle_misc_flags_propagates_2cc_to_engine_catalog() {
+        for (feature, misc_prop, kind) in [
+            (ACTION0_FEATURE_ROAD_VEHICLES, 0x1C, VehicleKind::Bus),
+            (ACTION0_FEATURE_SHIPS, 0x17, VehicleKind::Ship),
+            (ACTION0_FEATURE_AIRCRAFT, 0x17, VehicleKind::Aircraft),
+        ] {
+            let action0 = [0x00, feature, 0x01, 0x01, 0x00, misc_prop, 0x02];
+            let bytes = build_grf_v2_with_action0_and_action8(
+                &action0,
+                [b'2', b'C', feature, 1],
+                "2cc",
+                "",
+            );
+            let dir = tempfile_dir_with("2cc.grf", &bytes);
+            let mut state = GameState::new(4, 4);
+            state
+                .newgrf_stack
+                .push(crate::NewGrfEntry::new("2cc.grf", 0x3243_0001));
+            apply_newgrf_vehicles_trains(&mut state, &[&dir]);
+            let engine = state
+                .engine_catalog
+                .iter()
+                .find(|candidate| candidate.from_newgrf && candidate.kind == kind)
+                .expect("vehicle with misc flags should enter catalog");
+            assert!(engine.uses_2cc, "{kind:?} should preserve Uses2CC");
+        }
+    }
+
+    #[test]
     fn vehicle_action0_preserves_visual_effect_for_each_ground_feature() {
         let train = [0x00, ACTION0_FEATURE_TRAINS, 0x01, 0x01, 0x00, 0x22, 0xFF];
         // VE_DEFAULT se normaliza como en `UpdateVisualEffect`: bit de

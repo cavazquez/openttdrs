@@ -61,6 +61,11 @@ pub const CANALS_ACTION5_SLOT_COUNT: usize = 65;
 pub const CANALS_ACTION5_LOCK_SLOT: usize = 4;
 /// `TWOCCMAP_SPRITE_COUNT` (Action5 tipo `0x0A`).
 pub const TWOCC_ACTION5_SLOT_COUNT: usize = 256;
+/// Primer `SpriteID` de la tabla 2CC de `OpenTTD` (`SPR_2CCMAP_BASE`).
+///
+/// Los `PaletteID` devueltos por `CBID_VEHICLE_COLOUR_MAPPING` usan este
+/// rango para seleccionar un mapa: `base + colour1 + colour2 * 16`.
+pub const TWOCC_PALETTE_BASE: u16 = 5680;
 /// `TRAMWAY_SPRITE_COUNT` (Action5 tipo `0x0B`).
 pub const TRAMWAY_ACTION5_SLOT_COUNT: usize = 119;
 
@@ -199,17 +204,7 @@ pub fn collect_action5_blocks(data: &[u8]) -> Result<Vec<Action5Block>, GrfScanE
         }
         GrfEntry::Real { info, payload } => {
             if in_block && sprites_left > 0 {
-                let spr = if container == GrfContainerVersion::V2 && info == 0xFD {
-                    if payload.len() >= 4 {
-                        let id =
-                            u32::from_le_bytes([payload[0], payload[1], payload[2], payload[3]]);
-                        resolve_fd_sprite(&sprite_index, id)
-                    } else {
-                        None
-                    }
-                } else {
-                    decode_real_sprite_entry(container, info, payload)
-                };
+                let spr = decode_action5_sprite(cur_type, container, &sprite_index, info, payload);
                 if let Some(spr) = spr {
                     sprites.push(spr);
                 }
@@ -289,16 +284,77 @@ impl Action5ControlState {
 }
 
 fn decode_action5_sprite(
+    type_id: u8,
     container: GrfContainerVersion,
     sprite_index: &HashMap<u32, Vec<(u8, &[u8])>>,
     info: u8,
     payload: &[u8],
 ) -> Option<DecodedSprite> {
+    if type_id == ACTION5_TYPE_TWOCC {
+        if container == GrfContainerVersion::V2 && info == 0xFD {
+            let id = u32::from_le_bytes(payload.get(..4)?.try_into().ok()?);
+            return resolve_fd_twocc_sprite(sprite_index, id);
+        }
+        return decode_twocc_sprite_payload(container, info, payload);
+    }
     if container == GrfContainerVersion::V2 && info == 0xFD {
         let id = u32::from_le_bytes(payload.get(..4)?.try_into().ok()?);
         return resolve_fd_sprite(sprite_index, id);
     }
     decode_real_sprite_entry(container, info, payload)
+}
+
+/// Decodifica una entrada de mapa 2CC.
+///
+/// A diferencia de un sprite normal, Action5 `0x0A` carga sprites de
+/// recoloración sin dimensiones: un byte de tipo opcional seguido de 256
+/// índices de paleta. El parser general de sprites no puede interpretarlos
+/// como una imagen, por eso se normalizan a una fila `256×1` conservando los
+/// índices en los colores DOS (el renderer los vuelve a recuperar de forma
+/// exacta). Se aceptan también entradas v2 sin el byte de tipo.
+fn decode_twocc_sprite_payload(
+    container: GrfContainerVersion,
+    _info: u8,
+    payload: &[u8],
+) -> Option<DecodedSprite> {
+    let indices = match container {
+        GrfContainerVersion::V1 => {
+            if payload.len() >= 257 {
+                &payload[1..257]
+            } else if payload.len() >= 256 {
+                &payload[..256]
+            } else {
+                return None;
+            }
+        }
+        GrfContainerVersion::V2 => {
+            if payload.len() >= 257 && payload[0] == 0 {
+                &payload[1..257]
+            } else if payload.len() >= 256 {
+                &payload[..256]
+            } else {
+                return None;
+            }
+        }
+    };
+    Some(DecodedSprite {
+        width: 256,
+        height: 1,
+        x_offs: 0,
+        y_offs: 0,
+        rgba: super::pixel_codec::indices_to_rgba(indices, 256, 1)?,
+        mask: Vec::new(),
+    })
+}
+
+fn resolve_fd_twocc_sprite(
+    index: &HashMap<u32, Vec<(u8, &[u8])>>,
+    sprite_id: u32,
+) -> Option<DecodedSprite> {
+    index
+        .get(&sprite_id)?
+        .iter()
+        .find_map(|&(info, body)| decode_twocc_sprite_payload(GrfContainerVersion::V2, info, body))
 }
 
 fn action5_condition(payload: &[u8], state: &Action5ControlState) -> Option<(bool, u8)> {
@@ -544,9 +600,13 @@ pub fn collect_active_action5_blocks(
             }
             GrfEntry::Real { info, payload } => {
                 if let Some(block) = active.as_mut() {
-                    if let Some(sprite) =
-                        decode_action5_sprite(parsed.container, &sprite_index, info, payload)
-                    {
+                    if let Some(sprite) = decode_action5_sprite(
+                        block.type_id,
+                        parsed.container,
+                        &sprite_index,
+                        info,
+                        payload,
+                    ) {
                         block.sprites.push(sprite);
                     }
                     block.seen_real_sprites = block.seen_real_sprites.saturating_add(1);
@@ -829,6 +889,7 @@ mod slot_helper_tests {
     use super::*;
     use crate::airport_class::AirportSpecId;
     use crate::map::{SLOPE_NE, SLOPE_SE};
+    use crate::newgrf_palette_data::DOS_PALETTE_RGB;
     use crate::newgrf_sprites::{
         Action5Block, DecodedSprite, build_real_sprite_v1_uncompressed_payload,
     };
@@ -1002,5 +1063,25 @@ mod slot_helper_tests {
         };
         merge_tramway_action5_block(&mut tram_slots, &wrong);
         assert_eq!(tram_slots[0].as_ref().unwrap().rgba[0], 99);
+    }
+
+    #[test]
+    fn twocc_action5_payload_is_decoded_as_palette_map() {
+        let mut payload = Vec::with_capacity(257);
+        payload.push(0); // recolour sprite type
+        payload.extend(0..=u8::MAX);
+        let Some(sprite) = decode_action5_sprite(
+            ACTION5_TYPE_TWOCC,
+            GrfContainerVersion::V1,
+            &HashMap::new(),
+            0,
+            &payload,
+        ) else {
+            panic!("2CC palette map");
+        };
+        assert_eq!((sprite.width, sprite.height), (256, 1));
+        assert_eq!(&sprite.rgba[0..4], &[0, 0, 0, 0]);
+        assert_eq!(&sprite.rgba[80 * 4..80 * 4 + 3], &DOS_PALETTE_RGB[80]);
+        assert_eq!(&sprite.rgba[198 * 4..198 * 4 + 3], &DOS_PALETTE_RGB[198]);
     }
 }

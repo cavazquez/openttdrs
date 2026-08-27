@@ -443,9 +443,9 @@ pub struct VehicleColourMapping {
 }
 
 impl VehicleColourMapping {
-    /// Convierte el resultado a una paleta que el renderer actual puede
-    /// materializar. Las paletas 2CC/crash quedan explícitamente fuera y
-    /// conservan el id original para que no se aplique una recoloración falsa.
+    /// Convierte el resultado a una paleta de compañía de un solo canal. Para
+    /// motores 2CC usar [`Self::palette_for_companies`], que incorpora el
+    /// segundo color y el rango `SPR_2CCMAP_BASE`.
     #[must_use]
     pub const fn palette_for_company(self, company_colour: u8) -> u16 {
         if self.apply_company_colour {
@@ -454,6 +454,22 @@ impl VehicleColourMapping {
             775 + (company_colour & 0x0F) as u16
         } else {
             self.palette_id
+        }
+    }
+
+    /// Convierte el resultado del callback en la paleta efectiva de uno o dos
+    /// colores de compañía.
+    #[must_use]
+    pub const fn palette_for_companies(self, primary: u8, secondary: u8, uses_2cc: bool) -> u16 {
+        if !self.apply_company_colour {
+            return self.palette_id;
+        }
+        if uses_2cc {
+            crate::newgrf_sprites::TWOCC_PALETTE_BASE
+                + (primary & 0x0F) as u16
+                + ((secondary & 0x0F) as u16) * 16
+        } else {
+            775 + (primary & 0x0F) as u16
         }
     }
 }
@@ -2764,6 +2780,11 @@ mod tests {
         assert_eq!(mapping.palette_id, 0x0310);
         assert!(mapping.apply_company_colour);
         assert_eq!(mapping.palette_for_company(4), 779);
+        assert_eq!(
+            mapping.palette_for_companies(4, 6, true),
+            crate::newgrf_sprites::TWOCC_PALETTE_BASE + 4 + 6 * 16
+        );
+        assert_eq!(mapping.palette_for_companies(4, 6, false), 779);
 
         engine.vehicle_callback_mask = 0;
         assert_eq!(

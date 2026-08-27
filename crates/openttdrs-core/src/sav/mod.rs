@@ -92,8 +92,8 @@ use std::collections::HashMap;
 
 pub use entities::{
     SavCargoPacket, SavIndustry, SavIndustryAcceptedCargo, SavIndustryProducedCargo, SavObject,
-    SavRoadStopSpecMapping, SavRoadStopStationData, SavRoadStopTileData, SavStation,
-    SavStationCargo, SavVehicle, SavVehicleKind, format_generated_station_name,
+    SavObjectMapping, SavRoadStopSpecMapping, SavRoadStopStationData, SavRoadStopTileData,
+    SavStation, SavStationCargo, SavVehicle, SavVehicleKind, format_generated_station_name,
     resolve_sav_station_name,
 };
 pub use import::{
@@ -291,6 +291,8 @@ pub struct SavGame {
     /// escritor sólo lo reconstruye después de una mutación explícita, para
     /// que campos de versiones futuras sobrevivan a un round-trip sin cambios.
     pub objects: Vec<SavObject>,
+    /// Mapeos `(GRFID, local ID) → ObjectType` del chunk `OBID`.
+    pub object_mappings: Vec<SavObjectMapping>,
     /// Chunks nativos no modelados que se conservan para round-trip.
     pub opaque_chunks: Vec<SavOpaqueChunk>,
 }
@@ -342,6 +344,7 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
     fleet::assign_autoreplace_owners(&mut autoreplace_rules, &companies);
     let newgrf_stack = newgrf::newgrf_stack_from_chunks(&chunk_list);
     let objects = entities::objects_from_chunks(&chunk_list, map_w, map_h);
+    let object_mappings = entities::object_mappings_from_chunks(&chunk_list);
     let opaque_chunks = opaque_chunks_from_chunks(&chunk_list);
     let link_graph =
         linkgraph::link_graph_from_chunks(&chunk_list, map_w, &station_index, version, climate);
@@ -382,6 +385,7 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
         autoreplace_rules,
         newgrf_stack,
         objects,
+        object_mappings,
         opaque_chunks,
     })
 }
@@ -901,7 +905,9 @@ impl GameState {
             sav.newgrf_stack
         };
         state.objects = sav.objects;
+        state.object_mappings = sav.object_mappings;
         state.sav_objects_dirty = false;
+        state.sav_object_mappings_dirty = false;
         state.sav_opaque_chunks = sav.opaque_chunks;
         if let Some(time) = sav.game_time {
             state.tick = date::game_tick_from_sav_time(time);
@@ -1636,6 +1642,7 @@ mod tests {
             autoreplace_rules: Vec::new(),
             newgrf_stack: Vec::new(),
             objects: Vec::new(),
+            object_mappings: Vec::new(),
             opaque_chunks: Vec::new(),
         }
     }
@@ -2485,6 +2492,7 @@ mod tests {
             autoreplace_rules: Vec::new(),
             newgrf_stack: Vec::new(),
             objects: Vec::new(),
+            object_mappings: Vec::new(),
             opaque_chunks: Vec::new(),
         };
         let state = GameState::from_sav_game(sav);

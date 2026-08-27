@@ -39,6 +39,16 @@ pub struct SavObject {
     pub object_type: u16,
 }
 
+/// Mapeo `ObjectType` ↔ identidad `(GRFID, local ID)` del chunk `OBID`.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct SavObjectMapping {
+    /// Índice del `ObjectType` asignado por `ObjectOverrideManager`.
+    pub object_type: u16,
+    pub grfid: u32,
+    pub entity_id: u16,
+    pub substitute_id: u16,
+}
+
 /// Estación decodificada del save (posición + nombre custom + facilities).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SavStation {
@@ -335,6 +345,45 @@ pub(crate) fn objects_from_chunks(chunks: &[RawChunk], map_w: u32, map_h: u32) -
                 colour,
                 view,
                 object_type,
+            })
+        })
+        .collect()
+}
+
+/// Extrae el mapping `NewGRF` de objetos (`OBID`).
+#[must_use]
+pub(crate) fn object_mappings_from_chunks(chunks: &[RawChunk]) -> Vec<SavObjectMapping> {
+    let Some(obid) = find_chunk(chunks, "OBID") else {
+        return Vec::new();
+    };
+    if !matches!(
+        obid.ch_type,
+        super::chunks::CH_TABLE | super::chunks::CH_SPARSE_TABLE
+    ) {
+        return Vec::new();
+    }
+    let sparse = obid.ch_type == super::chunks::CH_SPARSE_TABLE;
+    let Ok(rows) = super::table::parse_table_chunk(&obid.body, sparse) else {
+        return Vec::new();
+    };
+    rows.into_iter()
+        .filter_map(|(object_type, record)| {
+            let object_type = u16::try_from(object_type).ok()?;
+            let grfid = record_get(&record, "grfid")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u32::try_from(value).ok())?;
+            let entity_id = record_get(&record, "entity_id")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u16::try_from(value).ok())?;
+            let substitute_id = record_get(&record, "substitute_id")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u16::try_from(value).ok())
+                .unwrap_or(0);
+            (grfid != 0 || entity_id != 0 || substitute_id != 0).then_some(SavObjectMapping {
+                object_type,
+                grfid,
+                entity_id,
+                substitute_id,
             })
         })
         .collect()

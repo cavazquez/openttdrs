@@ -37,7 +37,9 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 
 > Actualización SAV: `OBJS` ya se modela en filas base y sólo se reconstruye
 > después de una mutación; `OBID` y las columnas desconocidas permanecen en
-> passthrough hasta implementar el merge estructural.
+> passthrough hasta implementar el merge estructural; `OBID` ya se decodifica
+> y puede reconstruirse desde el catálogo, pero todavía no se aplica al
+> cargador de overrides.
 
 ## Cómo se decide el siguiente bloque
 

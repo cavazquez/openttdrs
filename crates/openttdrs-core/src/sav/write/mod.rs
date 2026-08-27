@@ -24,6 +24,7 @@ mod fleet;
 mod map;
 mod meta;
 mod newgrf;
+mod object_mappings;
 mod objects;
 mod vehicles;
 
@@ -182,6 +183,7 @@ fn wrap_container(
     Ok(out)
 }
 
+#[allow(clippy::too_many_lines)]
 fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
     let (w, h) = state.map.dimensions();
     if w == 0 || h == 0 {
@@ -200,6 +202,11 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
             .sav_opaque_chunks
             .iter()
             .any(|chunk| chunk.name == *b"OBJS");
+    let rebuild_object_mappings = state.sav_object_mappings_dirty
+        || !state
+            .sav_opaque_chunks
+            .iter()
+            .any(|chunk| chunk.name == *b"OBID");
 
     let mut data = Vec::new();
     // MAPS CH_TABLE (SLV ≥ 294): dim_x/dim_y SLE_FILE_U32 BE — ver map_sl.cpp.
@@ -277,9 +284,13 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
     if rebuild_objects && let Some(objs) = objects::objects_chunk(state, w, h)? {
         data.extend_from_slice(&objs);
     }
+    if rebuild_object_mappings && let Some(obid) = object_mappings::object_mappings_chunk(state)? {
+        data.extend_from_slice(&obid);
+    }
     for chunk in &state.sav_opaque_chunks {
         if super::REBUILT_CHUNKS.contains(&chunk.name)
             || (rebuild_objects && chunk.name == *b"OBJS")
+            || (rebuild_object_mappings && chunk.name == *b"OBID")
         {
             continue;
         }
@@ -1854,15 +1865,25 @@ mod tests {
             view: 1,
             object_type: 512,
         });
+        state.object_mappings.push(crate::sav::SavObjectMapping {
+            object_type: 512,
+            grfid: 0x4f42_0001,
+            entity_id: 3,
+            substitute_id: 512,
+        });
 
         let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
         let names = exported_chunk_names(&state).expect("chunk names");
         assert!(names.iter().any(|name| name == "OBJS"), "{names:?}");
+        assert!(names.iter().any(|name| name == "OBID"), "{names:?}");
         let sav_game = sav::load(&bytes).expect("load");
         assert_eq!(sav_game.objects, state.objects);
+        assert_eq!(sav_game.object_mappings, state.object_mappings);
 
         let loaded = GameState::from_sav_game(sav_game);
         assert_eq!(loaded.objects, state.objects);
+        assert_eq!(loaded.object_mappings, state.object_mappings);
         assert!(!loaded.sav_objects_dirty);
+        assert!(!loaded.sav_object_mappings_dirty);
     }
 }

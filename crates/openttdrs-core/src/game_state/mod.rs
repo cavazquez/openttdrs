@@ -361,6 +361,9 @@ pub struct GameState {
     /// en callbacks y al serializar el save.
     #[serde(default)]
     pub objects: Vec<crate::sav::SavObject>,
+    /// Mapeos `NewGRF` de objetos (`OBID`) usados para resolver IDs locales.
+    #[serde(default)]
+    pub object_mappings: Vec<crate::sav::SavObjectMapping>,
     /// Ciudades (importadas de saves de `OpenTTD`; vacío en mapas procedurales).
     #[serde(default)]
     pub towns: Vec<crate::town::Town>,
@@ -565,6 +568,10 @@ pub struct GameState {
     /// jugador realmente construye o demuele un objeto.
     #[serde(default)]
     pub sav_objects_dirty: bool,
+    /// Marca que invalida el passthrough de `OBID` después de reconstruir el
+    /// mapping desde el catálogo `NewGRF`.
+    #[serde(default)]
+    pub sav_object_mappings_dirty: bool,
     /// Carteles del mapa (`Sign` en `OpenTTD`).
     #[serde(default)]
     pub signs: Vec<crate::sign::Sign>,
@@ -672,6 +679,7 @@ impl GameState {
             vehicles: Vec::new(),
             stations: Vec::new(),
             objects: Vec::new(),
+            object_mappings: Vec::new(),
             towns: Vec::new(),
             stats: SimStats::default(),
             cargo_payments: Vec::new(),
@@ -745,6 +753,7 @@ impl GameState {
             newgrf_stack: crate::newgrf_config::default_vanilla_stack(),
             sav_opaque_chunks: Vec::new(),
             sav_objects_dirty: false,
+            sav_object_mappings_dirty: false,
             signs: Vec::new(),
             next_sign_id: 1,
             bankruptcy_streak: 0,
@@ -802,6 +811,7 @@ impl GameState {
             vehicles: Vec::new(),
             stations: Vec::new(),
             objects: Vec::new(),
+            object_mappings: Vec::new(),
             towns: Vec::new(),
             stats: SimStats::default(),
             cargo_payments: Vec::new(),
@@ -875,6 +885,7 @@ impl GameState {
             newgrf_stack: crate::newgrf_config::default_vanilla_stack(),
             sav_opaque_chunks: Vec::new(),
             sav_objects_dirty: false,
+            sav_object_mappings_dirty: false,
             signs: Vec::new(),
             next_sign_id: 1,
             bankruptcy_streak: 0,

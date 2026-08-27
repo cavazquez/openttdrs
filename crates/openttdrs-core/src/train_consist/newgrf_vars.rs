@@ -331,6 +331,68 @@ fn fill_relative_vehicle_vars(
             | u32::from(candidate.newgrf_waiting_random_triggers),
     );
 
+    if is_ground_vehicle(current) && is_ground_vehicle(candidate) {
+        // A var 61 lookup may ask the selected vehicle for var 62.  OpenTTD
+        // evaluates that second lookup relative to the selected vehicle, not
+        // relative to the original resolver.  Materialize the signed byte
+        // offsets in the parameterized table so the Action2 evaluator can do
+        // the same without retaining a live vehicle pointer.
+        for nested_offset in i16::from(i8::MIN)..=i16::from(i8::MAX) {
+            let Some(nested_candidate) = vehicle_at_relative(vehicles, candidate, nested_offset)
+            else {
+                continue;
+            };
+            let nested_curvature =
+                vehicle_relative_curvature(candidate, nested_candidate, nested_offset);
+            let encoded_offset = nested_offset.to_le_bytes()[0];
+            ctx.relative_parameterized_vars
+                .insert((offset, 0x62, encoded_offset), nested_curvature);
+        }
+    }
+
+    ctx.relative_vars.insert(
+        (offset, 0x62),
+        vehicle_relative_curvature(current, candidate, offset),
+    );
+}
+
+fn is_ground_vehicle(vehicle: &Vehicle) -> bool {
+    matches!(
+        vehicle.kind,
+        crate::vehicle::VehicleKind::Train
+            | crate::vehicle::VehicleKind::Bus
+            | crate::vehicle::VehicleKind::Truck
+            | crate::vehicle::VehicleKind::Tram
+    )
+}
+
+fn vehicle_at_relative<'a>(
+    vehicles: &'a [Vehicle],
+    current: &Vehicle,
+    offset: i16,
+) -> Option<&'a Vehicle> {
+    let mut id = Some(current.id);
+    if offset < 0 {
+        for _ in 0..offset.unsigned_abs() {
+            let current_id = id?;
+            id = vehicles
+                .iter()
+                .find(|vehicle| vehicle.id == current_id)?
+                .prev_unit;
+        }
+    } else {
+        for _ in 0..offset {
+            let current_id = id?;
+            id = vehicles
+                .iter()
+                .find(|vehicle| vehicle.id == current_id)?
+                .next_unit;
+        }
+    }
+    vehicles.iter().find(|vehicle| Some(vehicle.id) == id)
+}
+
+fn vehicle_relative_curvature(current: &Vehicle, candidate: &Vehicle, offset: i16) -> u32 {
     let previous = offset < 0;
     let direction = if previous {
         crate::train_movement::dir_difference(candidate.direction, current.direction)
@@ -363,5 +425,5 @@ fn fill_relative_vehicle_vars(
     curvature |= (dx.cast_unsigned() & 0xFF) << 8;
     curvature |= (dy.cast_unsigned() & 0xFF) << 16;
     curvature |= (dz.cast_unsigned() & 0xFF) << 24;
-    ctx.relative_vars.insert((offset, 0x62), curvature);
+    curvature
 }

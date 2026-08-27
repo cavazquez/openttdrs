@@ -135,6 +135,36 @@ mod tests {
     }
 
     #[test]
+    fn action2_ctx_resolves_var61_to_selected_vehicle_var62() {
+        let mut vs = vec![train(1), train(2), train(3)];
+        vs[0].engine_id = Some(10);
+        vs[1].engine_id = Some(20);
+        vs[2].engine_id = Some(20);
+        assert!(attach_wagon(&mut vs, 1, 2).is_ok());
+        assert!(attach_wagon(&mut vs, 1, 3).is_ok());
+        // Set the geometry after coupling: the topology helper intentionally
+        // propagates the head direction to followers while it refreshes the
+        // consist cache.
+        vs[0].pos = TileCoord::new(1, 1);
+        vs[1].pos = TileCoord::new(3, 2);
+        vs[2].pos = TileCoord::new(8, 5);
+        vs[0].direction = 0;
+        vs[1].direction = 1;
+        vs[2].direction = 2;
+
+        // Resolve unit 3, select unit 2 with var 61 (offset -1), then ask
+        // that selected unit for var 62 at its own offset -1 (unit 1).
+        let ctx = action2_eval_ctx_for_unit(&vs, 3, crate::tick::GameTick::new(0), &[], 0);
+        let direct = ctx.relative_vars.get(&(-1, 0x62)).copied();
+        let nested = ctx
+            .relative_parameterized_vars
+            .get(&(-1, 0x62, 0xFF))
+            .copied();
+        assert_ne!(direct, nested);
+        assert_eq!(nested, Some(0x00FF_FE0F));
+    }
+
+    #[test]
     fn action2_ctx_var40_consist_position() {
         let mut vs = vec![train(1), train(2), train(3)];
         vs[1].engine_id = Some(crate::engine::ENGINE_WAGON_PASSENGER);

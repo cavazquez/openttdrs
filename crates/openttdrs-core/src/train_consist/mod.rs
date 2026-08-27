@@ -162,6 +162,13 @@ mod tests {
             .copied();
         assert_ne!(direct, nested);
         assert_eq!(nested, Some(0x00FF_FE0F));
+        // Through var 61, register 10E can also select the engine-local-id
+        // count (var 60) of the selected unit's remaining chain. Vanilla
+        // engines use local id zero, so units 2 and 3 are counted here.
+        assert_eq!(
+            ctx.relative_parameterized_vars.get(&(-1, 0x60, 0)),
+            Some(&2)
+        );
     }
 
     #[test]

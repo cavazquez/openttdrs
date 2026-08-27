@@ -204,6 +204,15 @@ fn vehicle_engine_identity(vehicle: &Vehicle) -> Option<u16> {
     vehicle.native_engine_type.or(vehicle.engine_id)
 }
 
+fn vehicle_engine_local_id(vehicle: &Vehicle, engine_catalog: &[EngineDef]) -> u16 {
+    vehicle
+        .engine_id
+        .and_then(|id| {
+            engine_in_catalog(engine_catalog, id).or_else(|| crate::engine::engine_by_id(id))
+        })
+        .map_or(0, |engine| engine.newgrf_local_id)
+}
+
 fn fill_vehicle_action2_vars(
     ctx: &mut Action2EvalCtx,
     vehicles: &[Vehicle],
@@ -320,6 +329,54 @@ fn fill_relative_vehicle_vars(
     );
     for (&variable, &value) in &candidate_ctx.vars {
         ctx.relative_vars.insert((offset, variable), value);
+    }
+    // Vehicle variable 0x60 is parameterized by the engine's NewGRF local
+    // id. When it is reached through var 61, the parameter lives in register
+    // 0x10E, so retain the values for every local id present in the selected
+    // vehicle's remaining chain.
+    let candidate_chain = consist_unit_ids(
+        vehicles,
+        consist_head_id(vehicles, candidate.id).unwrap_or(candidate.id),
+    );
+    let candidate_position = candidate_chain
+        .iter()
+        .position(|&id| id == candidate.id)
+        .unwrap_or(0);
+    let mut local_ids = Vec::new();
+    for &id in candidate_chain.iter().skip(candidate_position) {
+        let Some(vehicle) = vehicles.iter().find(|vehicle| vehicle.id == id) else {
+            continue;
+        };
+        let local_id = vehicle_engine_local_id(vehicle, engine_catalog);
+        if let Ok(local_id) = u8::try_from(local_id)
+            && !local_ids.contains(&local_id)
+        {
+            local_ids.push(local_id);
+        }
+    }
+    if candidate.kind != crate::vehicle::VehicleKind::Train {
+        local_ids.clear();
+        if let Ok(local_id) = u8::try_from(vehicle_engine_local_id(candidate, engine_catalog)) {
+            local_ids.push(local_id);
+        }
+    }
+    for local_id in local_ids {
+        let count = if candidate.kind == crate::vehicle::VehicleKind::Train {
+            candidate_chain
+                .iter()
+                .skip(candidate_position)
+                .filter_map(|&id| vehicles.iter().find(|vehicle| vehicle.id == id))
+                .filter(|vehicle| {
+                    vehicle_engine_local_id(vehicle, engine_catalog) == u16::from(local_id)
+                })
+                .count()
+        } else {
+            1
+        };
+        ctx.relative_parameterized_vars.insert(
+            (offset, 0x60, local_id),
+            u32::try_from(count).unwrap_or(u32::MAX),
+        );
     }
     // Upstream exposes random bits through var 5F as random<<8 | triggers.
     // Keep the low trigger byte as part of the relative scope too; variable

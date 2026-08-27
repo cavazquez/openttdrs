@@ -140,6 +140,13 @@ pub struct EngineDef {
     /// Máscara Action0 de callbacks de vehículo; bit 7 = `SoundEffect`.
     #[serde(default)]
     pub vehicle_callback_mask: u16,
+    /// Badges globales asociados al motor (`ReadBadgeList`).
+    #[serde(default)]
+    pub badges: Vec<u16>,
+    /// Traducción de índice local del GRF a id global de badge. No se persiste:
+    /// se reconstruye al aplicar el stack `NewGRF`.
+    #[serde(default, skip)]
+    pub newgrf_badge_translation: Vec<u16>,
 }
 
 const fn default_visual_effect() -> u8 {

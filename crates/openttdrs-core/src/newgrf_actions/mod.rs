@@ -1869,6 +1869,128 @@ mod tests {
     }
 
     #[test]
+    fn parse_vehicle_badge_lists_uses_word_local_indices() {
+        let train = vec![
+            0x00,
+            ACTION0_FEATURE_TRAINS,
+            0x01,
+            0x01,
+            0x00,
+            0x33,
+            0x02,
+            0x00,
+            0x34,
+            0x12,
+            0x78,
+            0x56,
+        ];
+        let train_meta = parse_action0_train_meta(&train).unwrap();
+        assert_eq!(train_meta.badge_local_ids, vec![0x1234, 0x5678]);
+
+        let road = vec![
+            0x00,
+            ACTION0_FEATURE_ROAD_VEHICLES,
+            0x01,
+            0x01,
+            0x00,
+            0x2A,
+            0x02,
+            0x00,
+            0x07,
+            0x00,
+            0x09,
+            0x00,
+        ];
+        let road_meta = parse_action0_vehicle_metas(&road).unwrap().remove(0);
+        assert_eq!(road_meta.badge_local_ids, vec![7, 9]);
+    }
+
+    #[test]
+    fn apply_vehicle_badges_exposes_engine_variables() {
+        let badge = build_action0_badge_payload(b"ELEC", 0, None);
+        let badge_translation = vec![
+            0x00,
+            crate::newgrf_type_tables::ACTION0_FEATURE_GLOBALVAR,
+            0x01,
+            0x01,
+            0x00,
+            crate::newgrf_type_tables::PROP_BADGE_TRANSLATION,
+            b'E',
+            b'L',
+            b'E',
+            b'C',
+            0,
+        ];
+        let train = vec![
+            0x00,
+            ACTION0_FEATURE_TRAINS,
+            0x02,
+            0x01,
+            0x00,
+            0x33,
+            0x01,
+            0x00,
+            0x00,
+            0x00,
+            0xFE,
+            b'B',
+            b'a',
+            b'd',
+            b'g',
+            b'e',
+            0,
+        ];
+        let bytes = build_grf_v2_with_action0s_and_action8(
+            &[&badge, &badge_translation, &train],
+            [b'B', b'G', 0, 1],
+            "vehicle-badge",
+            "",
+        );
+        assert_eq!(
+            crate::newgrf_type_tables::collect_type_tables_from_grf(&bytes).badges,
+            vec!["ELEC"]
+        );
+        assert_eq!(
+            collect_train_metas_from_grf(&bytes)[0].badge_local_ids,
+            vec![0]
+        );
+        let dir = tempfile_dir_with("vehicle-badge.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("vehicle-badge.grf", 42));
+        apply_newgrf_badges(&mut state, &[&dir]);
+        apply_newgrf_vehicles_trains(&mut state, &[&dir]);
+
+        let badge_id = state.badge_catalog[0].id;
+        let engine = state
+            .engine_catalog
+            .iter()
+            .find(|engine| engine.from_newgrf)
+            .unwrap();
+        assert_eq!(engine.badges, vec![badge_id]);
+        assert_eq!(engine.newgrf_badge_translation, vec![badge_id]);
+
+        let vehicle = crate::vehicle::Vehicle::new(
+            1,
+            VehicleKind::Train,
+            crate::TileCoord::new(0, 0),
+            crate::TileCoord::new(0, 0),
+        );
+        let mut vehicle = vehicle;
+        vehicle.engine_id = Some(engine.id);
+        let ctx = crate::action2_eval_ctx_for_unit(
+            &[vehicle],
+            1,
+            crate::tick::GameTick::new(0),
+            &state.engine_catalog,
+            0,
+        );
+        assert_eq!(ctx.parameterized_vars.get(&(0x64, 0)), Some(&1));
+        assert_eq!(ctx.parameterized_vars.get(&(0x7A, 0)), Some(&1));
+    }
+
+    #[test]
     fn apply_registers_road_ship_and_aircraft_in_runtime_catalog() {
         let fixtures = [
             (

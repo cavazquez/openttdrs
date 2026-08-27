@@ -20,12 +20,71 @@ fn vehicle_price_bases(kind: VehicleKind) -> (i64, i64) {
     }
 }
 
+/// Resuelve la tabla Badge Translation Table de un GRF a ids globales del
+/// catálogo. `u16::MAX` conserva una entrada no resoluble sin desplazar los
+/// índices locales que usan las variables de vehículo.
+fn resolve_badge_translation(
+    labels: &[String],
+    badge_catalog: &[crate::badge::BadgeDef],
+    grfid: u32,
+) -> (Vec<u16>, Vec<String>) {
+    let mut translation = Vec::with_capacity(labels.len());
+    let mut unresolved = Vec::new();
+    for label in labels {
+        let badge = badge_catalog
+            .iter()
+            .find(|badge| badge.grfid == grfid && badge.label.eq_ignore_ascii_case(label))
+            .or_else(|| {
+                badge_catalog
+                    .iter()
+                    .find(|badge| badge.label.eq_ignore_ascii_case(label))
+            });
+        if let Some(badge) = badge {
+            translation.push(badge.id);
+        } else {
+            translation.push(u16::MAX);
+            unresolved.push(label.clone());
+        }
+    }
+    (translation, unresolved)
+}
+
+fn resolve_vehicle_badges(
+    local_ids: &[u16],
+    badge_labels: &[String],
+    badge_catalog: &[crate::badge::BadgeDef],
+    grfid: u32,
+) -> (Vec<u16>, Vec<u16>, Vec<String>) {
+    let (translation, mut unresolved) =
+        resolve_badge_translation(badge_labels, badge_catalog, grfid);
+    let mut badges = Vec::new();
+    for &local_id in local_ids {
+        let Some(global_id) = translation.get(usize::from(local_id)).copied() else {
+            unresolved.push(format!(
+                "índice local {local_id} fuera de Badge Translation Table"
+            ));
+            continue;
+        };
+        if global_id == u16::MAX {
+            continue;
+        }
+        if !badges.contains(&global_id) {
+            badges.push(global_id);
+        }
+    }
+    (badges, translation, unresolved)
+}
+
+#[allow(clippy::too_many_arguments)]
 fn push_feature_vehicles(
     catalog: &mut Vec<EngineDef>,
     data: &[u8],
     feature: u8,
     grfid: u32,
     climate_bit: u8,
+    badge_catalog: &[crate::badge::BadgeDef],
+    badge_labels: &[String],
+    diagnostics: &mut Vec<String>,
 ) {
     let metas = collect_vehicle_metas_from_grf(data, feature);
     let gfx =
@@ -65,6 +124,14 @@ fn push_feature_vehicles(
             None
         };
         let (price_base, running_base) = vehicle_price_bases(meta.kind);
+        let (badges, newgrf_badge_translation, unresolved_badges) =
+            resolve_vehicle_badges(&meta.badge_local_ids, badge_labels, badge_catalog, grfid);
+        for label in unresolved_badges {
+            diagnostics.push(format!(
+                "vehicle '{}': badge '{}' no resuelto",
+                meta.name, label
+            ));
+        }
         catalog.push(EngineDef {
             id,
             kind: meta.kind,
@@ -106,14 +173,18 @@ fn push_feature_vehicles(
             newgrf_runtime,
             newgrf_grfid: grfid,
             vehicle_callback_mask: meta.callback_mask,
+            badges,
+            newgrf_badge_translation,
         });
     }
 }
 
 /// Reconstruye el catálogo de motores (vanilla + Action0/1/2/3 de los cuatro
 /// features de vehículos).
+#[allow(clippy::too_many_lines)]
 pub fn apply_newgrf_vehicles_trains(state: &mut GameState, search_dirs: &[&Path]) {
     let mut catalog = vanilla_engine_catalog();
+    let badge_catalog = state.badge_catalog.clone();
     let stack = state.newgrf_stack.clone();
     let climate_bit = state.climate.newgrf_landscape_bit();
     for entry in &stack {
@@ -131,6 +202,7 @@ pub fn apply_newgrf_vehicles_trains(state: &mut GameState, search_dirs: &[&Path]
             continue;
         };
         let metas = collect_train_metas_from_grf(&data);
+        let badge_labels = crate::newgrf_type_tables::collect_type_tables_from_grf(&data).badges;
         let gfx = crate::newgrf_sprites::collect_train_sprite_graphics(&data).unwrap_or_default();
         // Action0 conserva el id local del primer vehículo del bloque; no lo
         // sustituimos por el índice de aparición porque CB16 necesita volver a
@@ -156,6 +228,18 @@ pub fn apply_newgrf_vehicles_trains(state: &mut GameState, search_dirs: &[&Path]
             } else {
                 None
             };
+            let (badges, newgrf_badge_translation, unresolved_badges) = resolve_vehicle_badges(
+                &meta.badge_local_ids,
+                &badge_labels,
+                &badge_catalog,
+                entry.grfid,
+            );
+            for label in unresolved_badges {
+                state.runtime.newgrf_diagnostics.push(format!(
+                    "vehicle '{}': badge '{}' no resuelto",
+                    meta.name, label
+                ));
+            }
             catalog.push(EngineDef {
                 id,
                 kind: VehicleKind::Train,
@@ -197,6 +281,8 @@ pub fn apply_newgrf_vehicles_trains(state: &mut GameState, search_dirs: &[&Path]
                 newgrf_runtime,
                 newgrf_grfid: entry.grfid,
                 vehicle_callback_mask: meta.callback_mask,
+                badges,
+                newgrf_badge_translation,
             });
         }
 
@@ -205,7 +291,16 @@ pub fn apply_newgrf_vehicles_trains(state: &mut GameState, search_dirs: &[&Path]
             ACTION0_FEATURE_SHIPS,
             ACTION0_FEATURE_AIRCRAFT,
         ] {
-            push_feature_vehicles(&mut catalog, &data, feature, entry.grfid, climate_bit);
+            push_feature_vehicles(
+                &mut catalog,
+                &data,
+                feature,
+                entry.grfid,
+                climate_bit,
+                &badge_catalog,
+                &badge_labels,
+                &mut state.runtime.newgrf_diagnostics,
+            );
         }
     }
     state.engine_catalog = catalog;

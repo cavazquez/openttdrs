@@ -463,12 +463,19 @@ apply resuelve contra `badge_catalog` (mismo GRF primero). Listas `0xFD`
 truncadas / labels inválidos → `GameState.runtime.newgrf_diagnostics` y
 `GrfInspectReport.warnings`. Inspector lista labels y asociaciones.
 
+Los vehículos consumen además las listas nativas `ReadBadgeList` (WORD count +
+índices WORD) de Trains `0x33`, RoadVehicles `0x2A`, Ships `0x26` y Aircraft
+`0x24`. Sus índices se traducen mediante GlobalVar `0x18` y quedan asociados al
+`EngineDef`; las variables de vehículo `0x64` y `0x7A` ya consultan esa misma
+tabla durante Action2.
+
 | Props | Estado |
 |---|---|
 | `08` label 4 chars | **runtime** (catálogo; fallback si no hay `FE`) |
 | `09` flags DWORD | **runtime** (catálogo; merge actualiza flags) |
 | `FE` nombre C-string (extensión local) | **runtime** (identidad preferida) |
 | `FD` badge associations (en roadstops/objects) | **runtime** (`associated_badges` + diagnósticos) |
+| Vehicle badge lists (`0x33`/`0x2A`/`0x26`/`0x24`) + GlobalVar `0x18` | **runtime** (`EngineDef.badges`, traducción local y vars `0x64`/`0x7A`) |
 
 ## Action3 de vehículos
 

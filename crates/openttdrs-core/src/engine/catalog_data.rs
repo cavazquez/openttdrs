@@ -135,6 +135,8 @@ macro_rules! road {
             newgrf_runtime: None,
             newgrf_grfid: 0,
             vehicle_callback_mask: 0,
+            badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
         }
     };
 }
@@ -200,6 +202,8 @@ macro_rules! train {
             newgrf_runtime: None,
             newgrf_grfid: 0,
             vehicle_callback_mask: 0,
+            badges: Vec::new(),
+            newgrf_badge_translation: Vec::new(),
         }
     };
 }

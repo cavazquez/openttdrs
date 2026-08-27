@@ -233,6 +233,8 @@ pub struct ParsedTrainMeta {
     pub visual_effect: u8,
     /// Action0 misc flag bit 7: `OpenTTD` draws a sequence of stacked sprites.
     pub sprite_stack: bool,
+    /// Action0 train `0x33`: índices locales de la tabla de traducción de badges.
+    pub badge_local_ids: Vec<u16>,
 }
 
 /// Subset de propiedades Action0 que alimenta el catálogo jugable de vehículos.
@@ -274,6 +276,9 @@ pub struct ParsedVehicleMeta {
     pub callback_mask: u16,
     /// Action0 misc flag bit 7: `OpenTTD` draws a sequence of stacked sprites.
     pub sprite_stack: bool,
+    /// Action0 vehicle badge list (`road 0x2A`, `ship 0x26`, `aircraft 0x24`).
+    /// Los índices se traducen contra `GlobalVar` `0x18` durante `apply`.
+    pub badge_local_ids: Vec<u16>,
 }
 
 impl ParsedVehicleMeta {
@@ -349,6 +354,7 @@ impl ParsedVehicleMeta {
             refit_exclude_mask: 0,
             callback_mask: 0,
             sprite_stack: false,
+            badge_local_ids: Vec::new(),
         })
     }
 }
@@ -1098,6 +1104,17 @@ fn read_badge_association_labels(payload: &[u8], i: &mut usize) -> Option<BadgeA
         labels.push(s);
     }
     Some(BadgeAssocParse { labels, error })
+}
+
+/// Lee una lista estándar `ReadBadgeList`: WORD count + N×WORD de índices
+/// locales de la tabla `GlobalVar` `Badge` del GRF.
+fn read_badge_local_ids(payload: &[u8], i: &mut usize) -> Option<Vec<u16>> {
+    let count = usize::from(read_u16(payload, i)?);
+    let mut ids = Vec::with_capacity(count);
+    for _ in 0..count {
+        ids.push(read_u16(payload, i)?);
+    }
+    Some(ids)
 }
 
 fn parse_station_custom_layouts(
@@ -2987,6 +3004,7 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
     let mut callback_mask = 0u16;
     let mut sprite_stack = false;
     let mut visual_effect = crate::engine::VEHICLE_VISUAL_EFFECT_DEFAULT;
+    let mut badge_local_ids = Vec::new();
     for _ in 0..header.num_props {
         if i >= payload.len() {
             break;
@@ -3122,6 +3140,9 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
                 let count = usize::from(read_u8(payload, &mut i)?);
                 skip_bytes(payload, &mut i, count)?;
             }
+            0x33 => {
+                badge_local_ids = read_badge_local_ids(payload, &mut i)?;
+            }
             0x31 => {
                 callback_mask =
                     (callback_mask & 0x00FF) | (u16::from(read_u8(payload, &mut i)?) << 8);
@@ -3183,6 +3204,7 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
         callback_mask,
         visual_effect,
         sprite_stack,
+        badge_local_ids,
     })
 }
 
@@ -3315,6 +3337,11 @@ fn parse_road_vehicle_property(
         0x05 | 0x0E | 0x18 | 0x19 | 0x1A | 0x1B | 0x20 | 0x23 | 0x28 => {
             skip_bytes(payload, i, metas.len())?;
         }
+        0x2A => {
+            for meta in metas {
+                meta.badge_local_ids = read_badge_local_ids(payload, i)?;
+            }
+        }
         0x21 => {
             for meta in metas {
                 meta.visual_effect = normalize_visual_effect(read_u8(payload, i)?);
@@ -3369,6 +3396,7 @@ fn parse_road_vehicle_property(
     Some(())
 }
 
+#[allow(clippy::too_many_lines)]
 fn parse_ship_property(
     prop: u8,
     payload: &[u8],
@@ -3438,6 +3466,11 @@ fn parse_ship_property(
         }
         0x18 | 0x19 | 0x1D | 0x20 | 0x25 => {
             skip_bytes(payload, i, metas.len().checked_mul(2)?)?;
+        }
+        0x26 => {
+            for meta in metas {
+                meta.badge_local_ids = read_badge_local_ids(payload, i)?;
+            }
         }
         0x1B => skip_bytes(payload, i, metas.len())?,
         0x22 => {
@@ -3540,6 +3573,11 @@ fn parse_aircraft_property(
         0x13 | 0x1A | 0x21 => skip_bytes(payload, i, metas.len().checked_mul(4)?)?,
         0x18 | 0x19 | 0x1C | 0x1F | 0x20 | 0x23 => {
             skip_bytes(payload, i, metas.len().checked_mul(2)?)?;
+        }
+        0x24 => {
+            for meta in metas {
+                meta.badge_local_ids = read_badge_local_ids(payload, i)?;
+            }
         }
         _ => return None,
     }

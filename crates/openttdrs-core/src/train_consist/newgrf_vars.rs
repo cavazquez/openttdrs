@@ -213,6 +213,16 @@ fn vehicle_engine_local_id(vehicle: &Vehicle, engine_catalog: &[EngineDef]) -> u
         .map_or(0, |engine| engine.newgrf_local_id)
 }
 
+fn vehicle_engine<'a>(vehicle: &Vehicle, engine_catalog: &'a [EngineDef]) -> Option<&'a EngineDef> {
+    vehicle.engine_id.and_then(|id| {
+        engine_in_catalog(engine_catalog, id).or_else(|| crate::engine::engine_by_id(id))
+    })
+}
+
+fn vehicle_has_badge(vehicle: &Vehicle, engine_catalog: &[EngineDef], badge_id: u16) -> bool {
+    vehicle_engine(vehicle, engine_catalog).is_some_and(|engine| engine.badges.contains(&badge_id))
+}
+
 fn fill_vehicle_action2_vars(
     ctx: &mut Action2EvalCtx,
     vehicles: &[Vehicle],
@@ -288,11 +298,44 @@ fn fill_vehicle_action2_vars(
     ctx.vars.insert(0xB2, status);
     ctx.vars.insert(0xB4, u32::from(unit.cur_speed));
 
-    let eng = unit
-        .engine_id
-        .and_then(|id| engine_in_catalog(engine_catalog, id));
+    let eng = vehicle_engine(unit, engine_catalog);
     let local_id = eng.map_or(0, |e| e.newgrf_local_id);
     ctx.vars.insert(0xC6, u32::from(local_id));
+    // Vehicle variables 0x64/0x7A use the GRF-local badge translation table.
+    // Keep one parameterized value per local index so Action2 can select it
+    // without confusing a badge id from another GRF with the current one.
+    if let Some(engine) = eng {
+        for (local_index, &badge_id) in engine
+            .newgrf_badge_translation
+            .iter()
+            .enumerate()
+            .take(usize::from(u8::MAX) + 1)
+        {
+            if badge_id == u16::MAX {
+                continue;
+            }
+            let present = engine.badges.contains(&badge_id);
+            let occurrence = if unit.kind == crate::vehicle::VehicleKind::Train {
+                ids.iter()
+                    .skip(ff)
+                    .filter_map(|&id| vehicles.iter().find(|vehicle| vehicle.id == id))
+                    .filter(|vehicle| vehicle_has_badge(vehicle, engine_catalog, badge_id))
+                    .count()
+            } else {
+                usize::from(present)
+            };
+            let value = u32::try_from(if unit.kind == crate::vehicle::VehicleKind::Train {
+                occurrence
+            } else {
+                usize::from(present)
+            })
+            .unwrap_or(u32::MAX);
+            let parameter = u8::try_from(local_index).unwrap_or(u8::MAX);
+            ctx.parameterized_vars.insert((0x64, parameter), value);
+            ctx.parameterized_vars
+                .insert((0x7A, parameter), u32::from(present));
+        }
+    }
     // FD = trains forward
     ctx.vars.insert(0xC8, 0xFD);
 
@@ -329,6 +372,10 @@ fn fill_relative_vehicle_vars(
     );
     for (&variable, &value) in &candidate_ctx.vars {
         ctx.relative_vars.insert((offset, variable), value);
+    }
+    for (&(variable, parameter), &value) in &candidate_ctx.parameterized_vars {
+        ctx.relative_parameterized_vars
+            .insert((offset, variable, u16::from(parameter)), value);
     }
     // Vehicle variable 0x60 is parameterized by the engine's NewGRF local
     // id. When it is reached through var 61, the parameter lives in register

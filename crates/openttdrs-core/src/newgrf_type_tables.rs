@@ -19,6 +19,8 @@ pub const PROP_RAILTYPE_TRANSLATION: u8 = 0x12;
 pub const PROP_ROADTYPE_TRANSLATION: u8 = 0x16;
 /// Prop tabla de traducción tramtype.
 pub const PROP_TRAMTYPE_TRANSLATION: u8 = 0x17;
+/// Prop tabla de traducción de badges (`Badge`); sus valores son C-strings.
+pub const PROP_BADGE_TRANSLATION: u8 = 0x18;
 
 /// Etiqueta de 4 caracteres (`RailTypeLabel` / `RoadTypeLabel`).
 pub type TypeLabel = [u8; 4];
@@ -31,6 +33,8 @@ pub struct GrfTypeTranslationTables {
     pub rail: Vec<TypeLabel>,
     pub road: Vec<TypeLabel>,
     pub tram: Vec<TypeLabel>,
+    /// Tabla Badge Translation Table: índice local → etiqueta global.
+    pub badges: Vec<String>,
 }
 
 impl GrfTypeTranslationTables {
@@ -40,6 +44,7 @@ impl GrfTypeTranslationTables {
             && self.rail.is_empty()
             && self.road.is_empty()
             && self.tram.is_empty()
+            && self.badges.is_empty()
     }
 
     /// Fusiona tablas no vacías de `other` por rango; la última definición
@@ -50,6 +55,7 @@ impl GrfTypeTranslationTables {
         merge_table(&mut self.rail, &other.rail);
         merge_table(&mut self.road, &other.road);
         merge_table(&mut self.tram, &other.tram);
+        merge_string_table(&mut self.badges, &other.badges);
     }
 }
 
@@ -65,6 +71,20 @@ fn merge_table(dest: &mut Vec<TypeLabel>, source: &[TypeLabel]) {
     for (idx, &label) in source.iter().enumerate() {
         if label != INVALID_LABEL {
             dest[idx] = label;
+        }
+    }
+}
+
+fn merge_string_table(dest: &mut Vec<String>, source: &[String]) {
+    if source.is_empty() {
+        return;
+    }
+    if dest.len() < source.len() {
+        dest.resize(source.len(), String::new());
+    }
+    for (idx, label) in source.iter().enumerate() {
+        if !label.is_empty() {
+            dest[idx].clone_from(label);
         }
     }
 }
@@ -308,6 +328,17 @@ pub fn parse_action0_type_translation_tables(payload: &[u8]) -> Option<GrfTypeTr
                 }
                 any = true;
             }
+            PROP_BADGE_TRANSLATION => {
+                let mut labels = vec![String::new(); usize::from(first_id) + usize::from(num_ids)];
+                for offset in 0..num_ids {
+                    let end = payload[i..].iter().position(|&b| b == 0)?;
+                    labels[usize::from(first_id) + usize::from(offset)] =
+                        String::from_utf8_lossy(&payload[i..i + end]).to_string();
+                    i += end + 1;
+                }
+                out.badges = labels;
+                any = true;
+            }
             _ => break,
         }
     }
@@ -446,6 +477,31 @@ mod tests {
         let mut merged = parse_action0_type_translation_tables(&first).unwrap();
         merged.merge_from(&parse_action0_type_translation_tables(&second).unwrap());
         assert_eq!(merged.cargo, vec![*b"PASS", *b"MAIL", *b"COAL"]);
+    }
+
+    #[test]
+    fn badge_translation_table_reads_local_cstrings() {
+        let payload = vec![
+            0x00,
+            ACTION0_FEATURE_GLOBALVAR,
+            0x01,
+            0x02,
+            0x00,
+            PROP_BADGE_TRANSLATION,
+            b'E',
+            b'L',
+            b'E',
+            b'C',
+            0,
+            b'D',
+            b'I',
+            b'E',
+            b'S',
+            0,
+        ];
+        let tables = parse_action0_type_translation_tables(&payload).unwrap();
+        assert_eq!(tables.badges, vec!["ELEC", "DIES"]);
+        assert!(!tables.is_empty());
     }
 
     #[test]

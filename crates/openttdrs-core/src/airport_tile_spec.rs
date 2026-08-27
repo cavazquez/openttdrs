@@ -81,6 +81,12 @@ pub struct AirportTileSpecDef {
     /// GRFID del set.
     #[serde(default, skip)]
     pub newgrf_grfid: u32,
+    /// Versión GRF usada para traducir cargos en `var 18`.
+    #[serde(default, skip)]
+    pub newgrf_grf_version: u8,
+    /// CTT/GlobalVar del GRF para traducir cargos a ids locales.
+    #[serde(default, skip)]
+    pub newgrf_type_tables: Option<crate::newgrf_type_tables::GrfTypeTranslationTables>,
     #[serde(default, skip)]
     pub newgrf_preview: Option<crate::newgrf_sprites::DecodedSprite>,
     #[serde(default, skip)]
@@ -98,6 +104,17 @@ const fn default_airport_animation_speed() -> u8 {
 }
 
 impl AirportTileSpecDef {
+    /// Id local de un cargo para callbacks de esta tesela (`var 18`, bits 8..15).
+    #[must_use]
+    pub fn newgrf_cargo_local_id(&self, cargo: crate::CargoType, climate: crate::Climate) -> u8 {
+        crate::newgrf_type_tables::local_cargo_id(
+            self.newgrf_type_tables.as_ref(),
+            self.newgrf_grf_version,
+            cargo,
+            climate,
+        )
+    }
+
     #[must_use]
     pub fn newgrf_view(&self, idx: usize) -> Option<&crate::newgrf_sprites::DecodedSprite> {
         if self.newgrf_views.is_empty() {

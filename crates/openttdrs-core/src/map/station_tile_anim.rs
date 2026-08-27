@@ -142,6 +142,32 @@ fn airport_animation_random_bits(station: &Station, map: &Map, coord: TileCoord,
             ^ tick.rotate_left(11)
 }
 
+fn airport_cargo_local_id(
+    map: &Map,
+    stations: &[Station],
+    catalog: &[AirportTileSpecDef],
+    climate: Climate,
+    coord: TileCoord,
+    cargo: Option<CargoType>,
+) -> u8 {
+    let Some(cargo) = cargo else {
+        return 0;
+    };
+    let Some(station_index) = airport_station_index(stations, coord) else {
+        return crate::newgrf_type_tables::local_cargo_id(None, 0, cargo, climate);
+    };
+    let Some(gfx) = airport_tile_gfx(&stations[station_index], map, coord) else {
+        return crate::newgrf_type_tables::local_cargo_id(None, 0, cargo, climate);
+    };
+    catalog
+        .iter()
+        .find(|candidate| candidate.gfx.as_u16() == gfx && candidate.from_newgrf)
+        .map_or_else(
+            || crate::newgrf_type_tables::local_cargo_id(None, 0, cargo, climate),
+            |def| def.newgrf_cargo_local_id(cargo, climate),
+        )
+}
+
 fn resolve_airport_animation_callback(
     station: &mut Station,
     def: &AirportTileSpecDef,
@@ -239,7 +265,7 @@ pub fn trigger_newgrf_airport_animation_for_station<S: BuildHasher>(
     newgrf_stack: &[crate::NewGrfEntry],
     station_anchor: TileCoord,
     trigger: AirportAnimationTrigger,
-    var18_extra: u8,
+    cargo: Option<CargoType>,
 ) -> Vec<TileCoord> {
     let Some(station) = stations
         .iter()
@@ -257,6 +283,8 @@ pub fn trigger_newgrf_airport_animation_for_station<S: BuildHasher>(
     coords
         .into_iter()
         .filter(|coord| {
+            let var18_extra =
+                airport_cargo_local_id(map, stations, catalog, climate, *coord, cargo);
             trigger_newgrf_airport_tile_animation(
                 map,
                 tick,
@@ -1489,6 +1517,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn newgrf_airport_animation_runs_trigger_speed_next_frame_and_roundtrips() {
         let coord = TileCoord::new(1, 1);
         let mut map = Map::new_flat(4, 4, 0);
@@ -1502,7 +1531,7 @@ mod tests {
         station.airport_tiles = vec![coord];
         station.airport_tile_gfx = vec![(coord, 74)];
         let mut stations = vec![station];
-        let catalog = vec![AirportTileSpecDef {
+        let mut catalog = vec![AirportTileSpecDef {
             gfx: crate::AirportTileGfxId(74),
             subst_id: 24,
             from_newgrf: true,
@@ -1511,10 +1540,13 @@ mod tests {
             animation_status: 1,
             animation_speed: 0,
             animation_triggers: AirportAnimationTrigger::Built.mask()
-                | AirportAnimationTrigger::TileLoop.mask(),
+                | AirportAnimationTrigger::TileLoop.mask()
+                | AirportAnimationTrigger::NewCargo.mask(),
             animation_special_flags: 0,
             newgrf_local_id: 0,
             newgrf_grfid: 0x4150_0001,
+            newgrf_grf_version: 0,
+            newgrf_type_tables: None,
             newgrf_preview: None,
             newgrf_views: Vec::new(),
             newgrf_runtime: Some(Box::new(airport_animation_callbacks())),
@@ -1565,6 +1597,29 @@ mod tests {
         assert_eq!(dirty, vec![coord]);
         assert_eq!(map.get(coord).unwrap().m7, 3);
 
+        // Un CTT explícito debe ganar sobre el bitnum global al construir
+        // `var18` para cada AirportTile del GRF.
+        catalog[0].newgrf_grf_version = 8;
+        catalog[0].newgrf_type_tables = Some(crate::newgrf_type_tables::GrfTypeTranslationTables {
+            cargo: vec![*b"PASS", *b"MAIL", *b"GOOD", *b"WOOD", *b"GRAI", *b"COAL"],
+            ..Default::default()
+        });
+        catalog[0].newgrf_runtime = Some(Box::new(station_trigger_parameter_callbacks(8)));
+        let dirty = trigger_newgrf_airport_animation_for_station(
+            &mut map,
+            5,
+            &mut stations,
+            Climate::Temperate,
+            &catalog,
+            &mut active,
+            &stack,
+            coord,
+            AirportAnimationTrigger::NewCargo,
+            Some(CargoType::Coal),
+        );
+        assert_eq!(dirty, vec![coord]);
+        assert_eq!(map.get(coord).unwrap().m7, 5);
+
         let mut state = crate::GameState::from_map(map);
         state.stations = stations;
         state.airport_tile_spec_catalog = catalog;
@@ -1572,7 +1627,7 @@ mod tests {
         state.newgrf_animated_airport_tiles = active;
         let json = state.save_json().unwrap();
         let loaded = crate::GameState::load_json(&json).unwrap();
-        assert_eq!(loaded.map.get(coord).unwrap().m7, 3);
+        assert_eq!(loaded.map.get(coord).unwrap().m7, 5);
         assert!(loaded.newgrf_animated_airport_tiles.contains(&coord));
     }
 

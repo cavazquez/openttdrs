@@ -36,6 +36,8 @@ pub fn apply_newgrf_airport_tiles(state: &mut GameState, search_dirs: &[&Path]) 
         let Ok(data) = std::fs::read(&path) else {
             continue;
         };
+        let type_tables = crate::newgrf_type_tables::collect_type_tables_from_grf(&data);
+        let type_tables = (!type_tables.is_empty()).then_some(type_tables);
         let gfx =
             crate::newgrf_sprites::collect_airport_tile_sprite_graphics(&data).unwrap_or_default();
         for meta in collect_airport_tile_metas_from_grf(&data) {
@@ -67,6 +69,8 @@ pub fn apply_newgrf_airport_tiles(state: &mut GameState, search_dirs: &[&Path]) 
                 animation_special_flags: meta.animation_special_flags,
                 newgrf_local_id: meta.local_id,
                 newgrf_grfid: entry.grfid,
+                newgrf_grf_version: entry.grf_version,
+                newgrf_type_tables: type_tables.clone(),
                 newgrf_preview: preview,
                 newgrf_views: views,
                 newgrf_runtime,
@@ -319,6 +323,7 @@ mod tests {
     use crate::station::{Station, StopKind};
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn rehydrates_sav_airport_tile_mapping_from_exact_footprint() {
         let mut state = GameState::new(16, 16);
         let origin = TileCoord::new(5, 6);
@@ -344,6 +349,8 @@ mod tests {
                 animation_special_flags: 0,
                 newgrf_local_id: 0,
                 newgrf_grfid: 1,
+                newgrf_grf_version: 0,
+                newgrf_type_tables: None,
                 newgrf_preview: None,
                 newgrf_views: Vec::new(),
                 newgrf_runtime: None,
@@ -360,6 +367,8 @@ mod tests {
                 animation_special_flags: 0,
                 newgrf_local_id: 1,
                 newgrf_grfid: 1,
+                newgrf_grf_version: 0,
+                newgrf_type_tables: None,
                 newgrf_preview: None,
                 newgrf_views: Vec::new(),
                 newgrf_runtime: None,

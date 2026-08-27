@@ -611,9 +611,6 @@ pub(super) fn trigger_airport_animation_at(
     else {
         return;
     };
-    let cargo_local = cargo.map_or(0, |cargo| {
-        crate::newgrf_type_tables::local_cargo_id(None, 0, cargo, state.climate)
-    });
     let dirty = crate::map::trigger_newgrf_airport_animation_for_station(
         &mut state.map,
         state.tick.get(),
@@ -624,7 +621,7 @@ pub(super) fn trigger_airport_animation_at(
         &state.newgrf_stack,
         station_anchor,
         trigger,
-        cargo_local,
+        cargo,
     );
     state.runtime.industry_tile_dirty.extend(dirty);
 }

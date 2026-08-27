@@ -1,6 +1,20 @@
 use crate::vehicle::{OrderUnloadType, VehicleKind, VehicleRandomTrigger};
 use crate::{CargoType, GameState, TileCoord, TileKind, economy, station, town};
 
+/// Convierte un pago de economía en el contador acumulativo de ingresos.
+///
+/// `Money` es firmado porque un callback `NewGRF` puede devolver un ajuste
+/// negativo (por ejemplo, una penalización de entrega), mientras que los
+/// contadores históricos de estaciones, compañías y estadísticas son `u64`.
+/// Convertir directamente con `cast_unsigned` transforma un valor negativo
+/// en un número enorme y puede desbordar el contador en el siguiente tick.
+/// `OpenTTD` no registra una penalización como ingreso, por lo que la conversión
+/// correcta para estos contadores es saturar los valores no positivos a cero.
+#[inline]
+fn positive_money(amount: i64) -> u64 {
+    u64::try_from(amount).unwrap_or_default()
+}
+
 /// Obtiene (o crea) el pago de la cabeza de convoy que está atendiendo una
 /// parada. `OpenTTD` mantiene un `CargoPayment` por cabeza mientras la orden de
 /// carga/descarga está abierta; el id lógico se traduce al `REF_VEHICLE` nativo
@@ -529,12 +543,19 @@ pub(super) fn unload_vehicles(
             }
         }
         trigger_station_vehicle_load_animation(state, station_pos, vpos);
-        state.stations[station_idx].income += payment.cast_unsigned();
+        state.stations[station_idx].income = state.stations[station_idx]
+            .income
+            .saturating_add(positive_money(payment));
         state.credit_company(vehicle_owner, payment);
         let shown = payment.saturating_add(feeder_total);
-        state.stats.cargo_income_earned += shown.cast_unsigned();
+        state.stats.cargo_income_earned = state
+            .stats
+            .cargo_income_earned
+            .saturating_add(positive_money(shown));
         if let Some(c) = state.companies.get_mut(vehicle_owner.index()) {
-            c.cargo_income_earned += payment.cast_unsigned();
+            c.cargo_income_earned = c
+                .cargo_income_earned
+                .saturating_add(positive_money(payment));
         }
         let profit_vehicle_id = state.vehicles[i].id;
         let head_id =
@@ -544,7 +565,7 @@ pub(super) fn unload_vehicles(
         }
         for (fo, share) in feeder_income_by_owner {
             if let Some(c) = state.companies.get_mut(fo.index()) {
-                c.cargo_income_earned += share.cast_unsigned();
+                c.cargo_income_earned = c.cargo_income_earned.saturating_add(positive_money(share));
             }
         }
         state
@@ -1355,6 +1376,15 @@ mod tests {
         station.cargo_stock.passengers = 1;
         state.stations.push(station);
         assert!(has_loadable_supply(&state));
+    }
+
+    #[test]
+    fn negative_cargo_payment_does_not_wrap_income_counters() {
+        assert_eq!(positive_money(i64::MIN), 0);
+        assert_eq!(positive_money(-1), 0);
+        assert_eq!(positive_money(0), 0);
+        assert_eq!(positive_money(42), 42);
+        assert_eq!(positive_money(i64::MAX), i64::MAX as u64);
     }
 
     #[test]

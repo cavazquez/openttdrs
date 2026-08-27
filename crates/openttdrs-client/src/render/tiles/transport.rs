@@ -1518,7 +1518,7 @@ fn custom_road_catenary_sprite(
 }
 
 #[allow(clippy::needless_option_as_deref, clippy::too_many_arguments)]
-fn spawn_road_catenary_for_type(
+pub(crate) fn spawn_road_catenary_for_type(
     commands: &mut Commands,
     map: &Map,
     dims: (u32, u32),

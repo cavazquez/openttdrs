@@ -3,11 +3,14 @@ use openttdrs_core::Climate;
 use openttdrs_core::prelude::*;
 use openttdrs_core::{
     RoadStopSpecDef, StationSpecDef, inclined_slope_direction, is_tunnel_entrance_slope,
-    rail_type_from_tile, road_stop_spec_def, station_at_tile,
+    rail_type_from_tile, road_stop_spec_def, road_type_from_tile, station_at_tile,
+    tram_road_type_from_tile,
 };
 
 use super::bridge_draw::{bridge_span_at, spawn_bridge_deck_with_road_types};
-use super::transport::{catenary_local_z_delta, spawn_rail_catenary_for_surface};
+use super::transport::{
+    catenary_local_z_delta, spawn_rail_catenary_for_surface, spawn_road_catenary_for_type,
+};
 use super::{
     catenary_under_low_bridge,
     helpers::{
@@ -66,6 +69,104 @@ fn buildings_hidden() -> bool {
 fn tint_building_sprite(mut sprite: Sprite) -> Sprite {
     sprite.color = with_to_alpha(sprite.color, TransparencyOption::Buildings);
     sprite
+}
+
+/// `DrawRoadCatenary` usa la geometría de la entrada de la parada, no los
+/// roadbits almacenados en `m3/m5`. Las vistas `RSV_*` están ordenadas
+/// NE, SE, SW, NW y una bahía sólo tiene un brazo conectado.
+#[must_use]
+const fn road_stop_catenary_bits(view: u8) -> u8 {
+    match view {
+        openttdrs_core::RSV_DRIVE_THROUGH_X => 0x0A, // ROAD_X
+        openttdrs_core::RSV_DRIVE_THROUGH_Y => 0x05, // ROAD_Y
+        0 => 0x08,                                   // ROAD_NE
+        1 => 0x04,                                   // ROAD_SE
+        2 => 0x02,                                   // ROAD_SW
+        3 => 0x01,                                   // ROAD_NW
+        _ => 0,
+    }
+}
+
+/// Un road stop `NewGRF` puede desactivar expresamente la catenaria. La
+/// ausencia de spec conserva el comportamiento vanilla de OpenTTD.
+#[must_use]
+fn road_stop_catenary_suppressed(
+    map: &Map,
+    stations: &[Station],
+    road_stop_catalog: &[RoadStopSpecDef],
+    coord: TileCoord,
+) -> bool {
+    station_at_tile(map, stations, coord)
+        .and_then(|station| station.road_stop_spec_at(coord))
+        .and_then(|spec_id| road_stop_spec_def(road_stop_catalog, spec_id))
+        .is_some_and(|spec| spec.flags & openttdrs_core::ROADSTOP_FLAG_NO_CATENARY != 0)
+}
+
+/// Dibuja ambos tipos de una tesela de parada. OpenTTD normalmente tiene sólo
+/// carretera en una bahía y puede tener carretera y tranvía en una
+/// drive-through/waypoint; resolverlos por separado conserva esa distinción y
+/// permite que cada tipo consulte sus grupos `ROTSG_CATENARY_*`.
+#[allow(clippy::needless_option_as_deref, clippy::too_many_arguments)]
+fn spawn_road_stop_catenary(
+    commands: &mut Commands,
+    map: &Map,
+    dims: (u32, u32),
+    assets: &WorldAssets,
+    ctx: &TileRenderContext,
+    tile: Tile,
+    road_bits: u8,
+    surface_base_z: u8,
+    climate: Climate,
+    road_catalog: &[openttdrs_core::RoadTypeDef],
+    mut road_sprites: Option<&mut crate::render::NewGrfRoadSpriteCache>,
+    mut images: Option<&mut Assets<Image>>,
+    newgrf_stack: &[openttdrs_core::NewGrfEntry],
+    catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    mut catenary_sprites: Option<&mut crate::render::NewGrfCatenarySpriteCache>,
+) {
+    if road_bits == 0 {
+        return;
+    }
+    spawn_road_catenary_for_type(
+        commands,
+        map,
+        dims,
+        assets,
+        ctx,
+        road_type_from_tile(&tile),
+        road_bits,
+        0,
+        surface_base_z,
+        climate,
+        tile,
+        road_catalog,
+        road_sprites.as_deref_mut(),
+        images.as_deref_mut(),
+        newgrf_stack,
+        catenary_newgrf,
+        catenary_sprites.as_deref_mut(),
+    );
+    if let Some(tram_type) = tram_road_type_from_tile(&tile) {
+        spawn_road_catenary_for_type(
+            commands,
+            map,
+            dims,
+            assets,
+            ctx,
+            tram_type,
+            road_bits,
+            0,
+            surface_base_z,
+            climate,
+            tile,
+            road_catalog,
+            road_sprites.as_deref_mut(),
+            images.as_deref_mut(),
+            newgrf_stack,
+            catenary_newgrf,
+            catenary_sprites.as_deref_mut(),
+        );
+    }
 }
 
 /// `DrawTile_Station` llama a `DrawFoundation(Leveled)` para toda estación
@@ -1299,7 +1400,8 @@ pub(crate) fn spawn_station_tile(
     climate: openttdrs_core::Climate,
     newgrf_stack: &[openttdrs_core::NewGrfEntry],
 ) {
-    spawn_station_tile_with_world(
+    let road_catalog = openttdrs_core::vanilla_road_type_catalog();
+    spawn_station_tile_with_world_and_road_types(
         commands,
         map,
         dims,
@@ -1312,6 +1414,8 @@ pub(crate) fn spawn_station_tile(
         show_pbs_reservations,
         station_catalog,
         road_stop_catalog,
+        &road_catalog,
+        None,
         station_sprites,
         images,
         catenary_newgrf,
@@ -1325,10 +1429,12 @@ pub(crate) fn spawn_station_tile(
     );
 }
 
-/// Dibuja una estación y, cuando el caller aporta los pools del mundo, pasa
-/// esos datos a los scopes NewGRF de las paradas viales (vars 45–47).
+/// Variante del renderer de estaciones que recibe el catálogo y la caché de
+/// `RoadTypes` del mundo. Esto permite que una parada `NewGRF` comparta la
+/// misma resolución de catenaria que una carretera, sin romper los callers de
+/// tests/fallback que sólo disponen de los assets vanilla.
 #[allow(clippy::too_many_arguments, clippy::needless_option_as_deref)]
-pub(crate) fn spawn_station_tile_with_world(
+pub(crate) fn spawn_station_tile_with_world_and_road_types(
     commands: &mut Commands,
     map: &Map,
     dims: (u32, u32),
@@ -1341,6 +1447,8 @@ pub(crate) fn spawn_station_tile_with_world(
     show_pbs_reservations: bool,
     station_catalog: &[StationSpecDef],
     road_stop_catalog: &[RoadStopSpecDef],
+    road_catalog: &[openttdrs_core::RoadTypeDef],
+    mut road_sprites: Option<&mut crate::render::NewGrfRoadSpriteCache>,
     mut station_sprites: Option<&mut NewGrfStationSpriteCache>,
     mut images: Option<&mut Assets<Image>>,
     catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
@@ -1790,12 +1898,38 @@ pub(crate) fn spawn_station_tile_with_world(
                 view_idx,
                 road_stop_catalog,
                 roadstop_action5,
-                action5_sprites,
-                images,
+                action5_sprites.as_deref_mut(),
+                images.as_deref_mut(),
                 climate,
                 newgrf_stack,
                 world,
             );
+            // OpenTTD dibuja la catenaria después del suelo y del layout BUILD
+            // de la parada. La entrada de una bahía es un único brazo diagonal;
+            // una drive-through usa el eje completo. En pendientes la parada
+            // ya fue nivelada, por eso el selector recibe SLOPE_FLAT (0) y la
+            // altura de la superficie resultante de `DrawFoundation`.
+            if !road_stop_catenary_suppressed(map, stations, road_stop_catalog, ctx.coord)
+                && let Some(tile) = ctx.tile
+            {
+                spawn_road_stop_catenary(
+                    commands,
+                    map,
+                    dims,
+                    assets,
+                    ctx,
+                    tile,
+                    road_stop_catenary_bits(m5),
+                    road_stop_base_z,
+                    climate,
+                    road_catalog,
+                    road_sprites.as_deref_mut(),
+                    images.as_deref_mut(),
+                    newgrf_stack,
+                    catenary_newgrf,
+                    catenary_sprites.as_deref_mut(),
+                );
+            }
         }
         StationTileClass::RoadWaypoint => {
             if tileh == 0 {
@@ -1809,6 +1943,27 @@ pub(crate) fn spawn_station_tile_with_world(
             };
             if let Some(img) = assets.road_flat.get(flat_idx) {
                 spawn_stop_ground_sprite(commands, img, ctx, base_z, 0.03);
+            }
+            if !road_stop_catenary_suppressed(map, stations, road_stop_catalog, ctx.coord)
+                && let Some(tile) = ctx.tile
+            {
+                spawn_road_stop_catenary(
+                    commands,
+                    map,
+                    dims,
+                    assets,
+                    ctx,
+                    tile,
+                    road_stop_catenary_bits(m5),
+                    base_z,
+                    climate,
+                    road_catalog,
+                    road_sprites.as_deref_mut(),
+                    images.as_deref_mut(),
+                    newgrf_stack,
+                    catenary_newgrf,
+                    catenary_sprites.as_deref_mut(),
+                );
             }
         }
         StationTileClass::Oilrig => {

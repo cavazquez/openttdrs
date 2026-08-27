@@ -9,8 +9,8 @@ use openttdrs_core::prelude::*;
 use openttdrs_core::{
     Action2VarAdjust, Action2VarEntry, Action2VarTerm, BridgeType, Climate, DecodedSprite,
     FOUNDATION_ORIGINAL_SPRITE_BASE, HouseSpecDef, IndustryTileGfxId, IndustryTileSpecDef,
-    RailType, RoadTramType, RoadType, RoadTypeDef, StationClassId, StationSpecDef, StationSpecId,
-    TrainSpriteAssign, TrainSpriteGraphics, WaterClass, set_water_class_m1,
+    RailType, RoadStopSpecDef, RoadTramType, RoadType, RoadTypeDef, StationClassId, StationSpecDef,
+    StationSpecId, TrainSpriteAssign, TrainSpriteGraphics, WaterClass, set_water_class_m1,
     vanilla_road_type_catalog,
 };
 
@@ -666,6 +666,180 @@ fn road_stop_bay_uses_only_its_vanilla_ground_and_build_layers() {
         bay_ground_x,
         crate::iso::iso(stop.x, stop.y).x + crate::iso::GROUND_SPRITE_CENTER_X_OFFSET,
         "la bahía usa el xrel=-31 del ground OpenGFX"
+    );
+}
+
+#[test]
+fn drive_through_tram_stop_draws_vanilla_catenary_after_stop_layers() {
+    let assets = boot_assets_app();
+    let expected_back = assets
+        .rail
+        .get(&6071)
+        .expect("catenaria trasera plana ROAD_X")
+        .clone();
+    let expected_front = assets
+        .rail
+        .get(&6043)
+        .expect("catenaria delantera plana ROAD_X")
+        .clone();
+    let stop = TileCoord::new(3, 3);
+    let mut map = fresh_map8();
+    let mut tile = Tile {
+        kind: TileKind::Station,
+        mapt: 0x50,
+        m5: openttdrs_core::RSV_DRIVE_THROUGH_X,
+        m6: 3 << 3, // StationType::Bus.
+        ..tile_template()
+    };
+    tile = openttdrs_core::set_tram_road_type_on_tile(tile, Some(RoadType::TRAM));
+    map.set_tile(stop, tile)
+        .expect("parada drive-through con tranvía");
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+
+    world
+        .run_system_once(
+            |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                spawn_station_tile(
+                    &mut commands,
+                    &m.0,
+                    m.0.dimensions(),
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, 3, 3),
+                    &[],
+                    4.0,
+                    true,
+                    &[],
+                    &[],
+                    None,
+                    None,
+                    &[],
+                    None,
+                    &[],
+                    None,
+                    &[],
+                    TEST_CLIMATE,
+                    &[],
+                );
+            },
+        )
+        .expect("parada drive-through con catenaria");
+
+    let catenary: Vec<_> = world
+        .query::<(&Sprite, &Transform)>()
+        .iter(&world)
+        .filter(|(sprite, _)| expected_back.matches(sprite) || expected_front.matches(sprite))
+        .collect();
+    assert_eq!(
+        catenary.len(),
+        4,
+        "una parada drive-through X emite tres recortes traseros y un frente"
+    );
+    assert_eq!(
+        catenary
+            .iter()
+            .filter(|(sprite, _)| expected_back.matches(sprite))
+            .count(),
+        3
+    );
+    assert_eq!(
+        catenary
+            .iter()
+            .filter(|(sprite, _)| expected_front.matches(sprite))
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn road_stop_no_catenary_flag_suppresses_road_and_tram_wires() {
+    let assets = boot_assets_app();
+    let expected_back = assets.rail.get(&6071).expect("catenaria trasera").clone();
+    let expected_front = assets.rail.get(&6043).expect("catenaria delantera").clone();
+    let stop = TileCoord::new(3, 3);
+    let mut map = fresh_map8();
+    let mut tile = Tile {
+        kind: TileKind::Station,
+        mapt: 0x50,
+        m5: openttdrs_core::RSV_DRIVE_THROUGH_X,
+        m6: 3 << 3,
+        ..tile_template()
+    };
+    tile = openttdrs_core::set_tram_road_type_on_tile(tile, Some(RoadType::TRAM));
+    map.set_tile(stop, tile).expect("parada con NoCatenary");
+    let mut station = Station::new_with_kind(stop, StopKind::BusStop);
+    station.road_stop_spec = Some(7);
+    let stations = vec![station];
+    let spec = RoadStopSpecDef {
+        id: 7,
+        class: 0,
+        label: "Sin catenaria".into(),
+        short_label: "NC".into(),
+        stop_type: openttdrs_core::ROADSTOP_TYPE_BUS,
+        from_newgrf: true,
+        grfid: 1,
+        newgrf_local_id: 0,
+        newgrf_grf_version: 0,
+        draw_mode: openttdrs_core::ROADSTOP_DRAW_MODE_DEFAULT,
+        random_cargo_triggers: 0,
+        flags: openttdrs_core::ROADSTOP_FLAG_NO_CATENARY,
+        callback_mask: 0,
+        animation_status: 0xFF,
+        animation_frames: 0,
+        animation_speed: 2,
+        animation_triggers: 0,
+        newgrf_views: Vec::new(),
+        newgrf_runtime: None,
+        newgrf_type_tables: None,
+        associated_badges: Vec::new(),
+    };
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world
+        .run_system_once(
+            move |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                spawn_station_tile(
+                    &mut commands,
+                    &m.0,
+                    m.0.dimensions(),
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, 3, 3),
+                    &stations,
+                    4.0,
+                    true,
+                    &[],
+                    std::slice::from_ref(&spec),
+                    None,
+                    None,
+                    &[],
+                    None,
+                    &[],
+                    None,
+                    &[],
+                    TEST_CLIMATE,
+                    &[],
+                );
+            },
+        )
+        .expect("parada sin catenaria");
+    assert_eq!(
+        world
+            .query::<&Sprite>()
+            .iter(&world)
+            .filter(|sprite| expected_back.matches(sprite) || expected_front.matches(sprite))
+            .count(),
+        0,
+        "NoCatenary debe bloquear ambos tipos de cable"
     );
 }
 

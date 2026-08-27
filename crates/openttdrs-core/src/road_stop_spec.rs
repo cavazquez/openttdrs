@@ -32,6 +32,8 @@ pub const ROADSTOP_TYPE_ALL: u8 = 2;
 /// | 6 | `TramOnly` | Solo menú/tranvía (no carretera) |
 /// | 8 | `DrawModeRegister` | Leer draw mode del registro `0x100` |
 pub const ROADSTOP_FLAG_CB141_RANDOM_BITS: u32 = 1 << 0;
+/// `RoadStopSpecFlag::NoCatenary`: no emitir postes ni cables sobre la parada.
+pub const ROADSTOP_FLAG_NO_CATENARY: u32 = 1 << 2;
 pub const ROADSTOP_FLAG_DRIVE_THROUGH_ONLY: u32 = 1 << 3;
 pub const ROADSTOP_FLAG_ROAD_ONLY: u32 = 1 << 5;
 pub const ROADSTOP_FLAG_TRAM_ONLY: u32 = 1 << 6;

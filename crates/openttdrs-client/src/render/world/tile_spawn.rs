@@ -16,8 +16,8 @@ use crate::render::{
     TileAtlas, TileRenderContext, TileViewportBounds, WorldAssets, chunk_tile_bounds,
     flush_map_batches, push_forest_tree, push_water_tile, spawn_bridge_middle_with_road_types,
     spawn_generic_land_tile, spawn_house_tile, spawn_industry_tile, spawn_rail_tile,
-    spawn_road_tile, spawn_station_tile_with_world, spawn_transport_object_tile_with_road_types,
-    spawn_void_tile,
+    spawn_road_tile, spawn_station_tile_with_world_and_road_types,
+    spawn_transport_object_tile_with_road_types, spawn_void_tile,
 };
 use crate::sprites::CompanyColour;
 use crate::state::SimWorld;
@@ -337,7 +337,7 @@ pub(crate) fn spawn_map_tiles_in_bounds(
             trace.begin_tile(&ctx);
         }
         match ctx.kind {
-            TileKind::Station => spawn_station_tile_with_world(
+            TileKind::Station => spawn_station_tile_with_world_and_road_types(
                 commands,
                 map,
                 (mw, mh),
@@ -350,6 +350,8 @@ pub(crate) fn spawn_map_tiles_in_bounds(
                 show_pbs_reservations,
                 &sim.state.station_spec_catalog,
                 &sim.state.road_stop_spec_catalog,
+                &sim.state.road_type_catalog,
+                Some(road_sprites),
                 Some(station_sprites),
                 Some(images),
                 &sim.state.runtime.catenary_newgrf_sprites,

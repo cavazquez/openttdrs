@@ -98,9 +98,9 @@ pub use road::{
     ONEWAY_ROAD_SPRITE_COUNT, ONEWAY_ROAD_SPRITE_META, ROAD_DEPOT_GROUND_PATH,
     ROAD_DEPOT_GROUND_SPRITE_ID, ROAD_FLAT_OFFSET_TBL, ROAD_STREETLIGHT_META, ROADSIDE_LAMPS,
     ROADSIDE_TREE_META, ROADSIDE_TREES, RoadDepotLayerGfx, SPR_ROADSIDE_TREE,
-    oneway_road_sprite_id, road_depot_build_layers, road_depot_entrance_road_bits,
-    road_depot_seq_gfx, road_ground_sprite_id, road_streetlight_sprite_id, road_tile_roadside,
-    roadside_is_paved,
+    oneway_road_sprite_id, road_catenary_sprite_ids, road_depot_build_layers,
+    road_depot_entrance_road_bits, road_depot_seq_gfx, road_ground_sprite_id,
+    road_streetlight_sprite_id, road_tile_roadside, roadside_is_paved,
 };
 pub(crate) use track_fence::{
     track_fence_draws_for_tile, track_fence_height_px, track_fence_sprite_meta,

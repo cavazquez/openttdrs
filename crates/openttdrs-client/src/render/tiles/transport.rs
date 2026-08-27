@@ -18,7 +18,8 @@ use crate::iso::{
     tile_pos_half,
 };
 use crate::render::catenary_newgrf::{
-    catenary_sprite_anchor, catenary_sprite_center, catenary_sprite_colored,
+    CatenarySpriteAnchor, catenary_sprite_anchor, catenary_sprite_center, catenary_sprite_colored,
+    catenary_sprite_horizontal_crop,
 };
 use crate::render::road_newgrf::{
     NewGrfRoadSpriteCache, newgrf_road_def_for_tile, newgrf_tram_def_for_tile,
@@ -37,7 +38,7 @@ use crate::sprites::{
     RAIL_GROUND_HALF_TILE_WATER, RAIL_GROUND_SNOW_OR_DESERT, RAIL_TB_CROSS, RAIL_TB_HORZ,
     RAIL_TB_LEFT, RAIL_TB_LOWER, RAIL_TB_RIGHT, RAIL_TB_UPPER, RAIL_TB_VERT, RAIL_TB_X, RAIL_TB_Y,
     ROAD_FLAT_HALF_H, ROAD_STREETLIGHT_META, ROADSIDE_LAMPS, ROADSIDE_TREE_META, ROADSIDE_TREES,
-    SPR_ROADSIDE_TREE, catenary_pylon_world_z_delta, catenary_reference_sprite_id,
+    SPR_ROADSIDE_TREE, catenary_hidden, catenary_pylon_world_z_delta, catenary_reference_sprite_id,
     catenary_sprite_color, catenary_tunnel_exterior_pcp, catenary_wire_world_z_delta,
     collect_catenary_pylons_from_map_with_pcp_override, collect_catenary_wire_draws_from_map,
     collect_rail_pbs_reservation_draws, collect_rail_sprites_for_surface,
@@ -45,12 +46,12 @@ use crate::sprites::{
     level_crossing_ground_sprite_id_for_type, level_crossing_has_rail_reservation,
     oneway_road_sprite_id, rail_ghost_overlay_offset, rail_pbs_reservation_offset,
     rail_tile_is_signals, rail_trackbits_for_render, remap_rail_sprite_id, road_bits_for_render,
-    road_flat_sprite_color, road_flat_sprite_index, road_ground_sprite_id,
-    road_streetlight_sprite_id, road_tile_roadside, road_tile_snow_or_desert, roadside_is_paved,
-    signal_safe_slope_position_for_side, signal_screen_anchor_for_side,
-    signal_screen_position_for_side, signal_sprite_center_offset, signal_world_position_for_side,
-    track_fence_draws_for_tile, track_fence_height_px, track_fence_sprite_meta,
-    tram_flat_sprite_index,
+    road_catenary_sprite_ids, road_flat_sprite_color, road_flat_sprite_index,
+    road_ground_sprite_id, road_streetlight_sprite_id, road_tile_roadside,
+    road_tile_snow_or_desert, roadside_is_paved, signal_safe_slope_position_for_side,
+    signal_screen_anchor_for_side, signal_screen_position_for_side, signal_sprite_center_offset,
+    signal_world_position_for_side, track_fence_draws_for_tile, track_fence_height_px,
+    track_fence_sprite_meta, tram_flat_sprite_index,
 };
 
 /// Contexto de `DrawGroundSprite` para una pasada de vía. Una fundación crea
@@ -1216,6 +1217,56 @@ pub(crate) fn spawn_road_tile(
         }
     }
 
+    // `DrawRoadCatenary` se ejecuta para las carreteras normales antes de los
+    // detalles de roadside. El bloque vanilla de tranvía incluye tanto los
+    // sprites planos como los cuatro pares inclinados; hasta ahora el cliente
+    // sólo los tenía en el atlas y por eso una calle electrificada quedaba sin
+    // hilo/postes aunque el overlay de riel sí estuviera presente.
+    if !is_level_crossing && let Some(tile) = ctx.tile.filter(|tile| tile.kind == TileKind::Road) {
+        let road_bits = rb;
+        let road_type = openttdrs_core::road_type_from_tile(&tile);
+        spawn_road_catenary_for_type(
+            commands,
+            map,
+            (mw, mh),
+            assets,
+            ctx,
+            road_type,
+            road_bits,
+            tileh,
+            base_z,
+            climate,
+            tile,
+            road_catalog,
+            road_sprites.as_deref_mut(),
+            images.as_deref_mut(),
+            newgrf_stack,
+            catenary_newgrf,
+            catenary_sprites.as_deref_mut(),
+        );
+        if let Some(tram_type) = openttdrs_core::tram_road_type_from_tile(&tile) {
+            spawn_road_catenary_for_type(
+                commands,
+                map,
+                (mw, mh),
+                assets,
+                ctx,
+                tram_type,
+                tile.m3 & 0x0F,
+                tileh,
+                base_z,
+                climate,
+                tile,
+                road_catalog,
+                road_sprites.as_deref_mut(),
+                images.as_deref_mut(),
+                newgrf_stack,
+                catenary_newgrf,
+                catenary_sprites.as_deref_mut(),
+            );
+        }
+    }
+
     // `Roadside::Trees` (5): árboles de `_roadside_trees` (sprite 0x1212).
     if !is_level_crossing
         && show_full_detail
@@ -1358,6 +1409,303 @@ pub(crate) fn spawn_road_tile(
                 &mut images,
             );
         }
+    }
+}
+
+/// Comprueba la regla especial de `DrawRoadTypeCatenary`: en una unión de más
+/// de dos brazos sólo se conserva el extremo cuyo vecino también tiene algún
+/// tipo de carretera/tranvía electrificado. Si quedan menos de dos extremos,
+/// OpenTTD mantiene la máscara original para no borrar una catenaria corta.
+fn road_catenary_bits_for_render(
+    map: &Map,
+    coord: TileCoord,
+    dims: (u32, u32),
+    bits: u8,
+    road_catalog: &[RoadTypeDef],
+) -> u8 {
+    if bits.count_ones() <= 2 {
+        return bits & 0x0F;
+    }
+    let mut filtered = 0;
+    for (bit, (dx, dy)) in [
+        (0x01, (0, -1)), // NW
+        (0x02, (1, 0)),  // SW
+        (0x04, (0, 1)),  // SE
+        (0x08, (-1, 0)), // NE
+    ] {
+        if bits & bit == 0 {
+            continue;
+        }
+        let neighbour = TileCoord::new(coord.x + dx, coord.y + dy);
+        if neighbour.x < 0
+            || neighbour.y < 0
+            || neighbour.x >= dims.0 as i32
+            || neighbour.y >= dims.1 as i32
+        {
+            continue;
+        }
+        let Some(tile) = map.get(neighbour) else {
+            continue;
+        };
+        if !matches!(tile.kind, TileKind::Road | TileKind::Station) {
+            continue;
+        }
+        let road_electric =
+            openttdrs_core::road_type_def(road_catalog, openttdrs_core::road_type_from_tile(&tile))
+                .is_some_and(RoadTypeDef::has_catenary);
+        let tram_electric = openttdrs_core::tram_road_type_from_tile(&tile)
+            .and_then(|rt| openttdrs_core::road_type_def(road_catalog, rt))
+            .is_some_and(RoadTypeDef::has_catenary);
+        if road_electric || tram_electric {
+            filtered |= bit;
+        }
+    }
+    if filtered.count_ones() >= 2 {
+        filtered
+    } else {
+        bits & 0x0F
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn custom_road_catenary_sprite(
+    def: &RoadTypeDef,
+    selector: u8,
+    view_idx: usize,
+    map: &Map,
+    coord: TileCoord,
+    tile: Tile,
+    climate: Climate,
+    road_catalog: &[RoadTypeDef],
+    newgrf_stack: &[openttdrs_core::NewGrfEntry],
+    road_sprites: &mut Option<&mut NewGrfRoadSpriteCache>,
+    images: &mut Option<&mut Assets<Image>>,
+    tint: Color,
+) -> Option<(Sprite, CatenarySpriteAnchor)> {
+    let cache = road_sprites.as_deref_mut()?;
+    let image_store = images.as_deref_mut()?;
+    let mut action2 = openttdrs_core::action2_eval_ctx_for_road_tile(
+        map,
+        tile,
+        coord,
+        climate,
+        def.newgrf_type_tables.as_ref(),
+        road_catalog,
+    );
+    action2.set_grf_params(openttdrs_core::stack_params_for_grfid(
+        newgrf_stack,
+        def.newgrf_grfid,
+    ));
+    let view = def.newgrf_specific_view_runtime(selector, view_idx, &mut action2)?;
+    let handle =
+        cache.handle_for_specific_runtime(def, selector, view_idx, &mut action2, image_store)?;
+    let anchor = CatenarySpriteAnchor::from_decoded(&view);
+    Some((
+        Sprite {
+            image: handle,
+            color: tint,
+            ..default()
+        },
+        anchor,
+    ))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn spawn_road_catenary_for_type(
+    commands: &mut Commands,
+    map: &Map,
+    dims: (u32, u32),
+    assets: &WorldAssets,
+    ctx: &TileRenderContext,
+    road_type: openttdrs_core::RoadType,
+    road_bits: u8,
+    tileh: u8,
+    surface_base_z: u8,
+    climate: Climate,
+    tile: Tile,
+    road_catalog: &[RoadTypeDef],
+    mut road_sprites: Option<&mut NewGrfRoadSpriteCache>,
+    mut images: Option<&mut Assets<Image>>,
+    newgrf_stack: &[openttdrs_core::NewGrfEntry],
+    catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    mut catenary_sprites: Option<&mut crate::render::NewGrfCatenarySpriteCache>,
+) {
+    if catenary_hidden() {
+        return;
+    }
+    let Some(def) = openttdrs_core::road_type_def(road_catalog, road_type) else {
+        return;
+    };
+    if !def.has_catenary() {
+        return;
+    }
+    let road_bits = road_catenary_bits_for_render(map, ctx.coord, dims, road_bits, road_catalog);
+    let Some((fallback_back, fallback_front)) = road_catenary_sprite_ids(tileh, road_bits) else {
+        return;
+    };
+    let view_idx = road_newgrf_view_index(tileh, road_bits);
+    let tint = catenary_sprite_color();
+    let custom_back = def.has_newgrf_specific_group(5);
+    let custom_front = def.has_newgrf_specific_group(4);
+    let custom_any = custom_back || custom_front;
+    let (back_resolved, back_fallback) = if custom_any {
+        let resolved = custom_back.then(|| {
+            custom_road_catenary_sprite(
+                def,
+                5,
+                view_idx,
+                map,
+                ctx.coord,
+                tile,
+                climate,
+                road_catalog,
+                newgrf_stack,
+                &mut road_sprites,
+                &mut images,
+                tint,
+            )
+        });
+        (resolved.flatten(), false)
+    } else {
+        (
+            catenary_sprite_colored(
+                assets,
+                fallback_back,
+                tint,
+                catenary_newgrf,
+                catenary_sprites.as_deref_mut(),
+                images.as_deref_mut(),
+            )
+            .zip(catenary_sprite_anchor(fallback_back, catenary_newgrf)),
+            true,
+        )
+    };
+    let (front_resolved, front_fallback) = if custom_any {
+        let resolved = custom_front.then(|| {
+            custom_road_catenary_sprite(
+                def,
+                4,
+                view_idx,
+                map,
+                ctx.coord,
+                tile,
+                climate,
+                road_catalog,
+                newgrf_stack,
+                &mut road_sprites,
+                &mut images,
+                tint,
+            )
+        });
+        (resolved.flatten(), false)
+    } else {
+        (
+            catenary_sprite_colored(
+                assets,
+                fallback_front,
+                tint,
+                catenary_newgrf,
+                catenary_sprites.as_deref_mut(),
+                images.as_deref_mut(),
+            )
+            .zip(catenary_sprite_anchor(fallback_front, catenary_newgrf)),
+            true,
+        )
+    };
+
+    let z_wires = if tileh == 0 { 0 } else { 8 } + 2;
+    let west_z = i32::from(partial_pixel_z(15.0, 0.0, tileh));
+    let north_z = i32::from(partial_pixel_z(0.0, 0.0, tileh));
+    let east_z = i32::from(partial_pixel_z(0.0, 15.0, tileh));
+    let base_z_delta = (i32::from(surface_base_z) - i32::from(ctx.info.base_z)) * 8;
+
+    if let Some((sprite, anchor)) = back_resolved {
+        for (index, (left, right, bounds, offset)) in [
+            (
+                None,
+                Some(-12.0),
+                TraceSpriteBounds::new(15, 0, west_z, 1, 1, z_wires),
+                (-15, 0, -west_z),
+            ),
+            (
+                Some(-12.0),
+                Some(12.0),
+                TraceSpriteBounds::new(0, 0, north_z, 1, 1, z_wires),
+                (0, 0, -north_z),
+            ),
+            (
+                Some(12.0),
+                None,
+                TraceSpriteBounds::new(0, 15, east_z, 1, 1, z_wires),
+                (0, -15, -east_z),
+            ),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let Some((sprite, x_shift)) =
+                catenary_sprite_horizontal_crop(sprite.clone(), anchor, left, right)
+            else {
+                continue;
+            };
+            WorldDrawTrace::record_sprite_with_palette_and_world_geometry(
+                "road-catenary-back",
+                "sortable",
+                fallback_back,
+                0,
+                back_fallback,
+                (0, 0),
+                base_z_delta,
+                offset,
+                Some(bounds),
+            );
+            let mut position = catenary_sprite_center(
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+                surface_base_z,
+                0.034 + index as f32 * 0.0001,
+                0.0,
+                0.0,
+                0.0,
+                anchor,
+            );
+            position.x += x_shift;
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                sprite,
+                Transform::from_translation(position),
+            ));
+        }
+    }
+    if let Some((sprite, anchor)) = front_resolved {
+        WorldDrawTrace::record_sprite_with_palette_and_world_geometry(
+            "road-catenary-front",
+            "sortable",
+            fallback_front,
+            0,
+            front_fallback,
+            (0, 0),
+            base_z_delta,
+            (0, 0, -z_wires),
+            Some(TraceSpriteBounds::new(0, 0, z_wires, 16, 16, 1)),
+        );
+        let position = catenary_sprite_center(
+            ctx.tx_i32(),
+            ctx.ty_i32(),
+            surface_base_z,
+            0.04,
+            0.0,
+            0.0,
+            0.0,
+            anchor,
+        );
+        commands.spawn((
+            MapVisualLayer,
+            ctx.map_tile_chunk(),
+            sprite,
+            Transform::from_translation(position),
+        ));
     }
 }
 

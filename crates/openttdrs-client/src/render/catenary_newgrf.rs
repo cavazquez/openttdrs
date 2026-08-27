@@ -25,7 +25,7 @@ pub(crate) struct CatenarySpriteAnchor {
 }
 
 impl CatenarySpriteAnchor {
-    fn from_decoded(sprite: &DecodedSprite) -> Self {
+    pub(crate) fn from_decoded(sprite: &DecodedSprite) -> Self {
         Self {
             width: f32::from(sprite.width),
             height: f32::from(sprite.height),
@@ -33,6 +33,28 @@ impl CatenarySpriteAnchor {
             y_offs: f32::from(sprite.y_offs),
         }
     }
+}
+
+/// Recorta una parte horizontal de un sprite de catenaria sin perder el ancla
+/// NFO del PNG completo. `left`/`right` están expresados en coordenadas de
+/// mundo relativas al origen del sprite (`None` = infinito).
+pub(crate) fn catenary_sprite_horizontal_crop(
+    mut sprite: Sprite,
+    anchor: CatenarySpriteAnchor,
+    left: Option<f32>,
+    right: Option<f32>,
+) -> Option<(Sprite, f32)> {
+    let min_x = left.map_or(0.0, |x| (x - anchor.x_offs).clamp(0.0, anchor.width));
+    let max_x = right.map_or(anchor.width, |x| {
+        (x - anchor.x_offs + 1.0).clamp(0.0, anchor.width)
+    });
+    if max_x <= min_x {
+        return None;
+    }
+    let rect = Rect::new(min_x, 0.0, max_x, anchor.height);
+    let x_shift = rect.center().x - anchor.width / 2.0;
+    sprite.rect = Some(rect);
+    Some((sprite, x_shift))
 }
 
 /// Resuelve los metadatos de anclaje de Action5, incluidos reemplazos NewGRF.

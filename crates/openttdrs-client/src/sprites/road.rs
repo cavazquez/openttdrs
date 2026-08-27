@@ -17,6 +17,58 @@ pub const SPR_ROAD_STREETLIGHT_BASE: u32 = 1406;
 /// `0x1212`: árbol usado por `_roadside_trees`.
 pub const SPR_ROADSIDE_TREE: u32 = 4626;
 
+/// Bloque vanilla `SPR_TRAMWAY_BASE` del GRF `openttd` oficial.
+const ROAD_TRAMWAY_SPRITE_BASE: u32 = 5986;
+/// Sprite de catenaria trasera en una pendiente (`+68`).
+pub const TRAMWAY_BACK_WIRES_SLOPED: u32 = ROAD_TRAMWAY_SPRITE_BASE + 68;
+/// Sprite de catenaria delantera en una pendiente (`+72`).
+pub const TRAMWAY_FRONT_WIRES_SLOPED: u32 = ROAD_TRAMWAY_SPRITE_BASE + 72;
+
+/// `_road_sloped_sprites` de `table/road_land.h`.
+const ROAD_SLOPED_CATENARY_OFFSETS: [u32; 14] = [0, 0, 2, 0, 0, 1, 0, 0, 3, 0, 0, 0, 0, 0];
+
+/// `_road_backpole_sprites_1` de `table/road_land.h`.
+const ROAD_CATENARY_BACK_OFFSETS: [u32; 16] = [
+    0, 0x54, 0x55, 0x5B, 0x54, 0x54, 0x5E, 0x5A, 0x55, 0x5C, 0x55, 0x58, 0x5D, 0x57, 0x59, 0x56,
+];
+
+/// `_road_frontwire_sprites_1` de `table/road_land.h`.
+const ROAD_CATENARY_FRONT_OFFSETS: [u32; 16] = [
+    0, 0x38, 0x39, 0x40, 0x38, 0x38, 0x43, 0x3E, 0x39, 0x41, 0x39, 0x3C, 0x42, 0x3B, 0x3D, 0x3A,
+];
+
+/// Selecciona los sprites vanilla de `DrawRoadTypeCatenary`.
+///
+/// La carretera usa un sprite trasero con tres postes recortables y otro
+/// delantero con el hilo/poste sur. En pendientes OpenTTD ignora los roadbits
+/// para escoger los cuatro pares inclinados; en plano usa las tablas de
+/// `road_land.h` byte por byte.
+#[must_use]
+pub const fn road_catenary_sprite_ids(tileh: u8, road_bits: u8) -> Option<(u32, u32)> {
+    let bits = (road_bits & 0x0F) as usize;
+    if bits == 0 {
+        return None;
+    }
+    if tileh != 0 {
+        let index = tileh.saturating_sub(1) as usize;
+        let index = if index < ROAD_SLOPED_CATENARY_OFFSETS.len() {
+            index
+        } else {
+            ROAD_SLOPED_CATENARY_OFFSETS.len() - 1
+        };
+        let offset = ROAD_SLOPED_CATENARY_OFFSETS[index];
+        Some((
+            TRAMWAY_BACK_WIRES_SLOPED + offset,
+            TRAMWAY_FRONT_WIRES_SLOPED + offset,
+        ))
+    } else {
+        Some((
+            ROAD_TRAMWAY_SPRITE_BASE + ROAD_CATENARY_BACK_OFFSETS[bits],
+            ROAD_TRAMWAY_SPRITE_BASE + ROAD_CATENARY_FRONT_OFFSETS[bits],
+        ))
+    }
+}
+
 /// ID lógico del suelo vanilla que selecciona `GetRoadGroundSprite`.
 ///
 /// `offset` es el índice de `GetRoadSpriteOffset` (0..18), no el patrón de
@@ -453,6 +505,17 @@ mod tests {
         assert_eq!(road_flat_index(bits, &ROAD_FLAT_OFFSET_TBL), 2);
         assert!(tram_flat_sprite_index(0, 0x03, &ROAD_FLAT_OFFSET_TBL).is_some());
         assert_eq!(road_flat_sprite_index(12, bits, &ROAD_FLAT_OFFSET_TBL), 11);
+    }
+
+    #[test]
+    fn road_catenary_selector_matches_vanilla_tables() {
+        assert_eq!(road_catenary_sprite_ids(0, 0x05), Some((6070, 6042)));
+        assert_eq!(road_catenary_sprite_ids(0, 0x0A), Some((6071, 6043)));
+        assert_eq!(road_catenary_sprite_ids(12, 0x05), Some((6054, 6058)));
+        assert_eq!(road_catenary_sprite_ids(6, 0x05), Some((6055, 6059)));
+        assert_eq!(road_catenary_sprite_ids(3, 0x05), Some((6056, 6060)));
+        assert_eq!(road_catenary_sprite_ids(9, 0x05), Some((6057, 6061)));
+        assert_eq!(road_catenary_sprite_ids(0, 0), None);
     }
 
     #[test]

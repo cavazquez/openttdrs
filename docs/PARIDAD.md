@@ -199,7 +199,12 @@ Action0 `RoadTypeFlag::Catenary` y el tranvía vanilla determinan si se solicita
 el grupo. Sigue faltando el fallback vanilla de `SPR_TRAMWAY_BASE` y sus
 assets, además de layouts/children completos.
 Los overlays de estación rail NewGRF se resuelven también en pendientes y se
-vinculan al parent de la fundación nivelada. Los objetos NewGRF ya reevalúan
+vinculan al parent de la fundación nivelada. Los railtypes NewGRF con grupos
+Action3 de underlay/overlay ya reemplazan el bloque combinado vanilla en vías
+normales, cruces y reservas PBS, conservan los offsets NFO de sprites HD y se
+vinculan a la fundación activa (con fallback por vista ausente); las variantes
+`NoSpriteCombine`, túnel y depósito todavía requieren una matriz específica.
+Los objetos NewGRF ya reevalúan
 Action2 por tesela con random, offset de footprint, pendiente/terreno,
 animación y owner, y cachean por fingerprint. Los producers de industria y
 las industrias NewGRF ya usan sus offsets Action2 runtime y cuelgan el overlay

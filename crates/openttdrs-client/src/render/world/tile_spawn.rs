@@ -213,6 +213,7 @@ pub(crate) fn spawn_map_tiles_in_bounds(
                     Some(catenary_sprites),
                     &sim.state.runtime.rail_signal_newgrf,
                     &sim.state.runtime.rail_type_underlay_newgrf,
+                    &sim.state.runtime.rail_type_overlay_newgrf,
                     Some(signal_sprites),
                     &sim.state.runtime.signal_action5_newgrf_sprites,
                     &sim.state.runtime.foundation_newgrf_sprites,

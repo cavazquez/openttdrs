@@ -11,12 +11,16 @@ use crate::render::newgrf_cache::{
 
 #[derive(Resource, Default)]
 pub(crate) struct NewGrfSignalSpriteCache {
-    handles: HashMap<(u32, u8, u8, u32), Handle<Image>>,
+    handles: HashMap<(u32, u8, u8, u8, u32), Handle<Image>>,
 }
 
 pub(crate) struct ResolvedSignalSprite {
     pub sprite: Sprite,
     pub center_offset: Vec2,
+    /// Dimensiones del sprite original. Las usa el renderer de vías para
+    /// aplicar el recorte de media tesela exactamente igual que
+    /// `DrawGroundSprite`/`DrawTrackSprite`.
+    pub size: Vec2,
 }
 
 impl NewGrfSignalSpriteCache {
@@ -33,7 +37,13 @@ impl NewGrfSignalSpriteCache {
     ) -> Option<ResolvedSignalSprite> {
         let decoded = spec.resolve_sprite(image, signal_type, variant, green, ctx)?;
         let fingerprint = runtime_fingerprint(ctx, vars::RAIL_SIGNAL, false);
-        let key = (spec.grfid, spec.rail_type.as_u8(), image, fingerprint);
+        let key = (
+            spec.grfid,
+            spec.rail_type.as_u8(),
+            spec.sprite_type,
+            image,
+            fingerprint,
+        );
         let handle = self
             .handles
             .entry(key)
@@ -54,6 +64,51 @@ impl NewGrfSignalSpriteCache {
                 ..default()
             },
             center_offset,
+            size: Vec2::new(f32::from(decoded.width), f32::from(decoded.height)),
+        })
+    }
+
+    /// Resuelve una vista Action3 genérica de `RailType` (underlay/overlay).
+    ///
+    /// Las señales preparan `param1/param2` antes de entrar aquí; las vistas
+    /// de vía no tienen esos parámetros, pero sí comparten el mismo contexto
+    /// de tesela y el mismo grafo Action2 (incluidos random/variational).
+    pub(crate) fn sprite_for_group(
+        &mut self,
+        spec: &RailSignalSpriteSpec,
+        image: u8,
+        ctx: &mut Action2EvalCtx,
+        images: &mut Assets<Image>,
+    ) -> Option<ResolvedSignalSprite> {
+        let decoded = spec.resolve_group(image, ctx)?;
+        let fingerprint = runtime_fingerprint(ctx, vars::RAIL_SIGNAL, false);
+        let key = (
+            spec.grfid,
+            spec.rail_type.as_u8(),
+            spec.sprite_type,
+            image,
+            fingerprint,
+        );
+        let handle = self
+            .handles
+            .entry(key)
+            .or_insert_with(|| {
+                images.add(decoded_sprite_image(
+                    &decoded,
+                    DecodedSpriteImagePolicy::Raw,
+                ))
+            })
+            .clone();
+        Some(ResolvedSignalSprite {
+            sprite: Sprite {
+                image: handle,
+                ..default()
+            },
+            center_offset: Vec2::new(
+                f32::from(decoded.x_offs) + f32::from(decoded.width) * 0.5,
+                -(f32::from(decoded.y_offs) + f32::from(decoded.height) * 0.5),
+            ),
+            size: Vec2::new(f32::from(decoded.width), f32::from(decoded.height)),
         })
     }
 }
@@ -64,7 +119,10 @@ mod tests {
     use super::*;
     use openttdrs_core::newgrf_actions::build_action0_railtype_payload;
     use openttdrs_core::newgrf_sprites::build_grf_v2_railtype_signal_sprites;
-    use openttdrs_core::{GameState, NewGrfEntry, RailType, apply_newgrf_rail_signals};
+    use openttdrs_core::{
+        DecodedSprite, GameState, NewGrfEntry, RailSignalSpriteSpec, RailType, TrainSpriteGraphics,
+        apply_newgrf_rail_signals,
+    };
 
     #[test]
     fn cache_selects_state_and_preserves_hd_offsets() {
@@ -108,5 +166,38 @@ mod tests {
             .sprite_for(spec, 6, 4, 1, false, &mut same_ctx, &mut images)
             .expect("same cached");
         assert_eq!(red.sprite.image, same.sprite.image);
+    }
+
+    #[test]
+    fn cache_resolves_track_overlay_group_with_nfo_anchor() {
+        let decoded = DecodedSprite {
+            width: 8,
+            height: 4,
+            x_offs: -3,
+            y_offs: 0,
+            rgba: vec![21, 34, 55, 255].repeat(8 * 4),
+            mask: Vec::new(),
+        };
+        let mut graphics = TrainSpriteGraphics {
+            sets: vec![vec![decoded]],
+            ..Default::default()
+        };
+        graphics.specific_assigns.insert((0, 1), 0);
+        let spec = RailSignalSpriteSpec {
+            rail_type: RailType::Rail,
+            local_id: 0,
+            sprite_type: 1,
+            grfid: 0x544F_0001,
+            type_tables: None,
+            graphics,
+        };
+        let mut images = Assets::<Image>::default();
+        let mut cache = NewGrfSignalSpriteCache::default();
+        let mut ctx = Action2EvalCtx::default();
+        let result = cache
+            .sprite_for_group(&spec, 0, &mut ctx, &mut images)
+            .expect("track overlay");
+        assert_eq!(result.center_offset, Vec2::new(1.0, -2.0));
+        assert_eq!(result.size, Vec2::new(8.0, 4.0));
     }
 }

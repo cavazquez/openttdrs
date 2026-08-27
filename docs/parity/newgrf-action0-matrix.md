@@ -176,7 +176,7 @@ Fuente: `newgrf_act0_railtypes.cpp`.
 | `14` max speed | **runtime** (`rail_type_max_speed` / `rail_type_props`) |
 | `17` introduction date | **runtime** (almacenado) |
 | `1C` maintenance cost | **runtime** (almacenado) |
-| Action3 signals / underlay / overlay | **runtime** (slots por `RailType`; fallback OpenGFX) |
+| Action3 signals / underlay / overlay | **runtime** (slots por `RailType`; señales y underlay/overlay ferroviario para rectas, cruces, PBS y fundaciones; fallback OpenGFX por vista ausente) |
 | resto tamaños fijos | consumidas |
 
 ## Road types (`12`) / Tram types (`13`)

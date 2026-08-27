@@ -12,9 +12,10 @@ use super::{
     spawn_rail_foundation, spawn_road_foundation,
 };
 use crate::iso::{
-    GROUND_SPRITE_CENTER_X_OFFSET, TILE_HALF_H, full_tile_sprite_pos, full_tile_sprite_pos_half,
-    ground_draw_z, ground_tile_pos_half, overlay_pos, remap_tile_offset, shore_png_index,
-    shore_sprite_half_h, slope_half_h, slope_sprite_offset, sortable_draw_z, tile_pos_half,
+    GROUND_SPRITE_CENTER_X_OFFSET, HEIGHT_PX, TILE_HALF_H, full_tile_sprite_pos,
+    full_tile_sprite_pos_half, ground_draw_z, ground_tile_pos_half, overlay_pos, remap_tile_offset,
+    shore_png_index, shore_sprite_half_h, slope_half_h, slope_sprite_offset, sortable_draw_z,
+    tile_pos_half,
 };
 use crate::render::catenary_newgrf::{
     catenary_sprite_anchor, catenary_sprite_center, catenary_sprite_colored,
@@ -33,22 +34,23 @@ use crate::render::{
 };
 use crate::sprites::{
     CompanyColour, ONEWAY_ROAD_SPRITE_META, RAIL_GROUND_HALF_TILE_SNOW,
-    RAIL_GROUND_HALF_TILE_WATER, RAIL_GROUND_SNOW_OR_DESERT, RAIL_TB_LEFT, RAIL_TB_LOWER,
-    RAIL_TB_RIGHT, RAIL_TB_UPPER, ROAD_FLAT_HALF_H, ROAD_STREETLIGHT_META, ROADSIDE_LAMPS,
-    ROADSIDE_TREE_META, ROADSIDE_TREES, SPR_ROADSIDE_TREE, catenary_pylon_world_z_delta,
-    catenary_reference_sprite_id, catenary_sprite_color, catenary_tunnel_exterior_pcp,
-    catenary_wire_world_z_delta, collect_catenary_pylons_from_map_with_pcp_override,
-    collect_catenary_wire_draws_from_map, collect_rail_pbs_reservation_draws,
-    collect_rail_sprites_for_surface, collect_signal_sprite_draws, is_road_level_crossing,
-    is_typed_rail_track_sprite, level_crossing_ground_sprite_id_for_type,
-    level_crossing_has_rail_reservation, oneway_road_sprite_id, rail_ghost_overlay_offset,
-    rail_pbs_reservation_offset, rail_tile_is_signals, rail_trackbits_for_render,
-    remap_rail_sprite_id, road_bits_for_render, road_flat_sprite_color, road_flat_sprite_index,
-    road_ground_sprite_id, road_streetlight_sprite_id, road_tile_roadside,
-    road_tile_snow_or_desert, roadside_is_paved, signal_safe_slope_position_for_side,
-    signal_screen_anchor_for_side, signal_screen_position_for_side, signal_sprite_center_offset,
-    signal_world_position_for_side, track_fence_draws_for_tile, track_fence_height_px,
-    track_fence_sprite_meta, tram_flat_sprite_index,
+    RAIL_GROUND_HALF_TILE_WATER, RAIL_GROUND_SNOW_OR_DESERT, RAIL_TB_CROSS, RAIL_TB_HORZ,
+    RAIL_TB_LEFT, RAIL_TB_LOWER, RAIL_TB_RIGHT, RAIL_TB_UPPER, RAIL_TB_VERT, RAIL_TB_X, RAIL_TB_Y,
+    ROAD_FLAT_HALF_H, ROAD_STREETLIGHT_META, ROADSIDE_LAMPS, ROADSIDE_TREE_META, ROADSIDE_TREES,
+    SPR_ROADSIDE_TREE, catenary_pylon_world_z_delta, catenary_reference_sprite_id,
+    catenary_sprite_color, catenary_tunnel_exterior_pcp, catenary_wire_world_z_delta,
+    collect_catenary_pylons_from_map_with_pcp_override, collect_catenary_wire_draws_from_map,
+    collect_rail_pbs_reservation_draws, collect_rail_sprites_for_surface,
+    collect_signal_sprite_draws, is_road_level_crossing, is_typed_rail_track_sprite,
+    level_crossing_ground_sprite_id_for_type, level_crossing_has_rail_reservation,
+    oneway_road_sprite_id, rail_ghost_overlay_offset, rail_pbs_reservation_offset,
+    rail_tile_is_signals, rail_trackbits_for_render, remap_rail_sprite_id, road_bits_for_render,
+    road_flat_sprite_color, road_flat_sprite_index, road_ground_sprite_id,
+    road_streetlight_sprite_id, road_tile_roadside, road_tile_snow_or_desert, roadside_is_paved,
+    signal_safe_slope_position_for_side, signal_screen_anchor_for_side,
+    signal_screen_position_for_side, signal_sprite_center_offset, signal_world_position_for_side,
+    track_fence_draws_for_tile, track_fence_height_px, track_fence_sprite_meta,
+    tram_flat_sprite_index,
 };
 
 /// Contexto de `DrawGroundSprite` para una pasada de vía. Una fundación crea
@@ -410,15 +412,33 @@ const fn halftile_foundation_child_offset(corner: u8) -> (i32, i32, i32) {
 /// compensación necesaria para mantener los píxeles que sobreviven en su
 /// posición OpenTTD.
 fn halftile_track_subsprite(corner: Option<u8>, size: Vec2, half_h: f32) -> Option<(Rect, Vec2)> {
+    halftile_track_subsprite_with_center(
+        corner,
+        size,
+        Vec2::new(GROUND_SPRITE_CENTER_X_OFFSET, -half_h),
+        half_h,
+    )
+}
+
+/// Variante del recorte que conserva un ancla NFO arbitraria (sprites HD de
+/// underlay/overlay). `center_offset` es el centro del PNG respecto de
+/// `ctx.iso_pos`, con Y ya convertido al eje de Bevy.
+fn halftile_track_subsprite_with_center(
+    corner: Option<u8>,
+    size: Vec2,
+    center_offset: Vec2,
+    _half_h: f32,
+) -> Option<(Rect, Vec2)> {
     let corner = corner?;
     if size.x <= 0.0 || size.y <= 0.0 {
         return None;
     }
 
-    // `full_tile_sprite_pos_half` expresa el mismo ancla que
-    // `DrawGroundSprite`: xrel = 1 - width/2 y yrel = half_h - height/2.
-    let xrel = GROUND_SPRITE_CENTER_X_OFFSET - size.x / 2.0;
-    let yrel = half_h - size.y / 2.0;
+    // `DrawGroundSprite` expresa la posición como centro del PNG. Recuperar
+    // xrel/yrel desde ese centro permite reutilizar exactamente el recorte
+    // aun cuando el NewGRF publique offsets distintos de OpenGFX.
+    let xrel = center_offset.x - size.x / 2.0;
+    let yrel = -center_offset.y - size.y / 2.0;
     let rect = match corner {
         // `{ -INF, -INF, 32 - 33, INF }`: derecha inclusiva = -1.
         0 => Rect::new(0.0, 0.0, (-xrel).clamp(0.0, size.x), size.y),
@@ -1509,6 +1529,210 @@ pub(crate) fn spawn_rail_catenary_for_surface(
     }
 }
 
+// Offsets `RailTrackOffset` de OpenTTD. El grupo Action3 de underlay/overlay
+// comparte esta tabla: los cinco últimos índices son las variantes de cruce.
+const RTO_X: u8 = 0;
+const RTO_Y: u8 = 1;
+const RTO_N: u8 = 2;
+const RTO_S: u8 = 3;
+const RTO_E: u8 = 4;
+const RTO_W: u8 = 5;
+const RTO_CROSSING_XY: u8 = 10;
+const RTO_JUNCTION_SW: u8 = 11;
+const RTO_JUNCTION_NE: u8 = 12;
+const RTO_JUNCTION_SE: u8 = 13;
+const RTO_JUNCTION_NW: u8 = 14;
+const RTO_JUNCTION_NSEW: u8 = 15;
+
+const RAIL_3WAY_NE: u8 = RAIL_TB_X | RAIL_TB_UPPER | RAIL_TB_RIGHT;
+const RAIL_3WAY_SW: u8 = RAIL_TB_X | RAIL_TB_LOWER | RAIL_TB_LEFT;
+const RAIL_3WAY_NW: u8 = RAIL_TB_Y | RAIL_TB_UPPER | RAIL_TB_LEFT;
+const RAIL_3WAY_SE: u8 = RAIL_TB_Y | RAIL_TB_LOWER | RAIL_TB_RIGHT;
+
+/// Devuelve el offset de underlay para una pasada de `DrawTrackBitsOverlay`.
+///
+/// Para una recta/corner se emite una imagen que ya contiene suelo y vía. En
+/// cruces el underlay sólo contiene el lastre y las piezas se agregan con el
+/// grupo overlay, exactamente como en `rail_cmd.cpp`.
+fn rail_custom_underlay_offsets(track_bits: u8) -> Vec<u8> {
+    let bits = track_bits & 0x3F;
+    if bits == 0 {
+        return Vec::new();
+    }
+    match bits {
+        RAIL_TB_X => vec![RTO_X],
+        RAIL_TB_Y => vec![RTO_Y],
+        RAIL_TB_UPPER => vec![RTO_N],
+        RAIL_TB_LOWER => vec![RTO_S],
+        RAIL_TB_RIGHT => vec![RTO_E],
+        RAIL_TB_LEFT => vec![RTO_W],
+        RAIL_TB_CROSS => vec![RTO_CROSSING_XY],
+        RAIL_TB_HORZ => vec![RTO_N, RTO_S],
+        RAIL_TB_VERT => vec![RTO_E, RTO_W],
+        bits => {
+            let offset = if bits & RAIL_3WAY_NE == 0 {
+                RTO_JUNCTION_SW
+            } else if bits & RAIL_3WAY_SW == 0 {
+                RTO_JUNCTION_NE
+            } else if bits & RAIL_3WAY_NW == 0 {
+                RTO_JUNCTION_SE
+            } else if bits & RAIL_3WAY_SE == 0 {
+                RTO_JUNCTION_NW
+            } else {
+                RTO_JUNCTION_NSEW
+            };
+            vec![offset]
+        }
+    }
+}
+
+/// Piezas que OpenTTD dibuja con `RTSG_OVERLAY` en una pasada normal. Sólo
+/// las uniones necesitan la capa de vía; las rectas ya vienen completas en el
+/// underlay. PBS se agrega aparte y usa siempre estos mismos índices.
+fn rail_custom_overlay_offsets(track_bits: u8) -> Vec<(u8, u8)> {
+    let bits = track_bits & 0x3F;
+    if matches!(
+        bits,
+        RAIL_TB_X
+            | RAIL_TB_Y
+            | RAIL_TB_UPPER
+            | RAIL_TB_LOWER
+            | RAIL_TB_RIGHT
+            | RAIL_TB_LEFT
+            | RAIL_TB_CROSS
+            | RAIL_TB_HORZ
+            | RAIL_TB_VERT
+    ) {
+        return Vec::new();
+    }
+    [
+        (RAIL_TB_X, RTO_X),
+        (RAIL_TB_Y, RTO_Y),
+        (RAIL_TB_UPPER, RTO_N),
+        (RAIL_TB_LOWER, RTO_S),
+        (RAIL_TB_RIGHT, RTO_E),
+        (RAIL_TB_LEFT, RTO_W),
+    ]
+    .into_iter()
+    .filter(|(track, _)| bits & track != 0)
+    .collect()
+}
+
+/// Offset de `DrawTrackSprite`: las piezas de esquina se desplazan una
+/// altura de vía cuando la pendiente efectiva contiene su dirección.
+fn rail_custom_track_extra_y(offset: u8, surface_tileh: u8) -> i32 {
+    let track_bit = match offset {
+        RTO_N => RAIL_TB_UPPER,
+        RTO_S => RAIL_TB_LOWER,
+        RTO_E => RAIL_TB_RIGHT,
+        RTO_W => RAIL_TB_LEFT,
+        _ => 0,
+    };
+    pbs_track_sprite_extra_y(track_bit, surface_tileh)
+}
+
+const fn rail_custom_offset_for_track_bit(track_bit: u8) -> Option<u8> {
+    match track_bit {
+        RAIL_TB_X => Some(RTO_X),
+        RAIL_TB_Y => Some(RTO_Y),
+        RAIL_TB_UPPER => Some(RTO_N),
+        RAIL_TB_LOWER => Some(RTO_S),
+        RAIL_TB_RIGHT => Some(RTO_E),
+        RAIL_TB_LEFT => Some(RTO_W),
+        _ => None,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn resolve_custom_rail_group_sprite(
+    map: &Map,
+    tile: openttdrs_core::Tile,
+    ctx: &TileRenderContext,
+    climate: Climate,
+    calendar_date: u32,
+    newgrf_stack: &[openttdrs_core::NewGrfEntry],
+    spec: &openttdrs_core::RailSignalSpriteSpec,
+    image: u8,
+    signal_sprites: &mut Option<&mut crate::render::NewGrfSignalSpriteCache>,
+    images: &mut Option<&mut Assets<Image>>,
+) -> Option<crate::render::signal_newgrf::ResolvedSignalSprite> {
+    let cache = signal_sprites.as_deref_mut()?;
+    let images = images.as_deref_mut()?;
+    let mut action2 = openttdrs_core::action2_eval_ctx_for_rail_tile(
+        map,
+        tile,
+        ctx.coord,
+        climate,
+        calendar_date,
+        spec.type_tables.as_ref(),
+    );
+    action2.set_grf_params(openttdrs_core::stack_params_for_grfid(
+        newgrf_stack,
+        spec.grfid,
+    ));
+    cache.sprite_for_group(spec, image, &mut action2, images)
+}
+
+/// Emite una vista Action3 de rail con el ancla NFO original y la relación
+/// parent/child de la fundación activa. `center_offset` se calcula desde
+/// `(x_offs, y_offs, width, height)`, por lo que no se impone el 64×31 de
+/// OpenGFX a un sprite NewGRF HD.
+#[allow(clippy::too_many_arguments)]
+fn spawn_custom_rail_sprite(
+    commands: &mut Commands,
+    ctx: &TileRenderContext,
+    resolved: crate::render::signal_newgrf::ResolvedSignalSprite,
+    base_z: u8,
+    layer: f32,
+    extra_y: i32,
+    halftile_corner: Option<u8>,
+    half_h: f32,
+    foundation_child_parent: Option<Entity>,
+    map_width: u32,
+    role: &'static str,
+    trace_image: u8,
+) {
+    let mut sprite = resolved.sprite;
+    let crop_shift = halftile_track_subsprite_with_center(
+        halftile_corner,
+        resolved.size,
+        resolved.center_offset,
+        half_h,
+    )
+    .map_or(Vec2::ZERO, |(rect, shift)| {
+        sprite.rect = Some(rect);
+        shift
+    });
+    let elevation = f32::from(base_z) * HEIGHT_PX;
+    let mut position = Vec3::new(
+        ctx.iso_pos.x + resolved.center_offset.x,
+        ctx.iso_pos.y + resolved.center_offset.y + elevation,
+        sortable_draw_z(ctx.tx_i32(), ctx.ty_i32(), base_z, layer),
+    );
+    position.y += pbs_extra_y_in_bevy(extra_y) + crop_shift.y;
+    position.x += crop_shift.x;
+    WorldDrawTrace::record_sprite_with_palette_and_geometry(
+        role,
+        "sortable",
+        u32::from(trace_image),
+        0,
+        false,
+        (0, extra_y, 0),
+        0,
+        None,
+    );
+    if let Some(parent) = foundation_child_parent {
+        spawn_foundation_child_sprite_at(commands, sprite, ctx, position, map_width, parent);
+    } else {
+        commands.spawn((
+            MapVisualLayer,
+            ctx.map_tile_chunk(),
+            sprite,
+            Transform::from_translation(position),
+        ));
+    }
+}
+
 #[allow(clippy::too_many_arguments, clippy::needless_option_as_deref)]
 pub(crate) fn spawn_rail_tile(
     commands: &mut Commands,
@@ -1528,6 +1752,7 @@ pub(crate) fn spawn_rail_tile(
     mut catenary_sprites: Option<&mut crate::render::NewGrfCatenarySpriteCache>,
     rail_signal_newgrf: &[Option<openttdrs_core::RailSignalSpriteSpec>],
     rail_type_underlay_newgrf: &[Option<openttdrs_core::RailSignalSpriteSpec>],
+    rail_type_overlay_newgrf: &[Option<openttdrs_core::RailSignalSpriteSpec>],
     mut signal_sprites: Option<&mut crate::render::NewGrfSignalSpriteCache>,
     signal_action5: &[Option<openttdrs_core::DecodedSprite>],
     foundation_newgrf: &[Option<openttdrs_core::DecodedSprite>],
@@ -1542,14 +1767,19 @@ pub(crate) fn spawn_rail_tile(
         .tile
         .map(openttdrs_core::rail_type_from_tile)
         .unwrap_or_default();
+    let rail_type_index = usize::from(rail_type.as_u8());
+    let underlay_spec = rail_type_underlay_newgrf
+        .get(rail_type_index)
+        .and_then(Option::as_ref);
+    let overlay_spec = rail_type_overlay_newgrf
+        .get(rail_type_index)
+        .and_then(Option::as_ref);
     // `RailTypeInfo::UsesOverlay()` no depende de que el tipo sea mono o
     // maglev: sólo es true cuando hay un grupo Action3 `Underlay` (selector
     // 0) activo. Los tipos vanilla siguen `DrawTrackBits`, incluso mono y
     // maglev. Inferirlo del enum agregaba un segundo suelo inexistente en
     // Kale (116,79).
-    let rail_uses_overlay = rail_type_underlay_newgrf
-        .get(usize::from(rail_type.as_u8()))
-        .is_some_and(Option::is_some);
+    let rail_uses_overlay = underlay_spec.is_some();
     // `GetRailGroundType` lee los cuatro bits bajos de m4. En el mapa Rust
     // m4 se llama `m3hi`; leer `m3` confundía el tipo de vía/señales con
     // nieve y dejaba el suelo de mono/maglev desalineado del oráculo.
@@ -1735,65 +1965,157 @@ pub(crate) fn spawn_rail_tile(
             pass_ends[pass_index - 1]
         };
         let end = pass_ends[pass_index];
-        for sid in rail_layers[start..end].iter().copied() {
-            let missing_asset = !assets.rail.contains_key(&sid);
-            let fallback = typed_selection_fallback || missing_asset;
-            let role = if fallback {
-                match rail_type {
-                    openttdrs_core::RailType::Rail => "rail-track-fallback-rail",
-                    openttdrs_core::RailType::Electric => "rail-track-fallback-electric",
-                    openttdrs_core::RailType::Monorail => "rail-track-fallback-monorail",
-                    openttdrs_core::RailType::Maglev => "rail-track-fallback-maglev",
+        // `DrawTrackBitsOverlay` no reutiliza los sprites combinados del
+        // baseset cuando el railtype publica `Underlay`: resuelve el grupo
+        // Action3 para cada `RailTrackOffset` y agrega la vía como una capa
+        // separada. Antes sólo se usaba el underlay como booleano, por lo que
+        // un railtype NewGRF terminaba mostrando la vía vanilla completa.
+        let mut custom_ground_complete = false;
+        if rail_uses_overlay {
+            let mut custom_draws = 0_usize;
+            if let Some(spec) = underlay_spec {
+                custom_ground_complete = true;
+                for offset in rail_custom_underlay_offsets(
+                    track_plan.passes[pass_index].map_or(0, |pass| pass.track_bits),
+                ) {
+                    let Some(tile) = ctx.tile else {
+                        custom_ground_complete = false;
+                        continue;
+                    };
+                    let resolved = resolve_custom_rail_group_sprite(
+                        map,
+                        tile,
+                        ctx,
+                        climate,
+                        calendar_date,
+                        newgrf_stack,
+                        spec,
+                        offset,
+                        &mut signal_sprites,
+                        &mut images,
+                    );
+                    let Some(resolved) = resolved else {
+                        custom_ground_complete = false;
+                        continue;
+                    };
+                    spawn_custom_rail_sprite(
+                        commands,
+                        ctx,
+                        resolved,
+                        pass_base_z[pass_index],
+                        0.02 + custom_draws as f32 * 0.0004,
+                        rail_custom_track_extra_y(offset, pass_tileh[pass_index]),
+                        pass_halftile_corner[pass_index],
+                        pass_half_h[pass_index],
+                        foundation_child_parent,
+                        map_dims.0,
+                        "rail-newgrf-underlay",
+                        offset,
+                    );
+                    custom_draws += 1;
                 }
-            } else {
-                "rail-track"
-            };
-            record_rail_track_trace(role, sid, fallback, pass_modes[pass_index]);
-            let Some(img) = assets.rail.get(&sid) else {
-                track_layer_index += 1;
-                continue;
-            };
-            let z = 0.02 + track_layer_index as f32 * 0.0004;
-            let offset = rail_ghost_overlay_offset(sid);
-            let base = full_tile_sprite_pos_half(
-                ctx.tx_i32(),
-                ctx.ty_i32(),
-                pass_base_z[pass_index],
-                z,
-                pass_half_h[pass_index],
-            );
-            let mut sprite = img.sprite_colored(rail_paint);
-            let crop_shift = if let Some((rect, shift)) = halftile_track_subsprite(
-                pass_halftile_corner[pass_index],
-                img.size,
-                pass_half_h[pass_index],
-            ) {
-                sprite.rect = Some(rect);
-                shift
-            } else {
-                Vec2::ZERO
-            };
-            // `OffsetGroundSprite` ya queda incorporado por el origen del
-            // parent y el ancla NFO de la pendiente falsa. Sumárselo de nuevo
-            // desplaza el child 16 px y separa la vía del backing de agua.
-            let position = base + Vec3::new(offset.x + crop_shift.x, offset.y + crop_shift.y, 0.0);
-            if matches!(
-                pass_modes[pass_index],
-                RailTrackTraceMode::FoundationChild(_)
-            ) && let Some(parent) = foundation_child_parent
-            {
-                spawn_foundation_child_sprite_at(
-                    commands, sprite, ctx, position, map_dims.0, parent,
-                );
-            } else {
-                commands.spawn((
-                    MapVisualLayer,
-                    ctx.map_tile_chunk(),
-                    sprite,
-                    Transform::from_translation(position),
-                ));
             }
-            track_layer_index += 1;
+            if custom_ground_complete && let Some(spec) = overlay_spec {
+                for (_, offset) in rail_custom_overlay_offsets(
+                    track_plan.passes[pass_index].map_or(0, |pass| pass.track_bits),
+                ) {
+                    let Some(tile) = ctx.tile else {
+                        continue;
+                    };
+                    let Some(resolved) = resolve_custom_rail_group_sprite(
+                        map,
+                        tile,
+                        ctx,
+                        climate,
+                        calendar_date,
+                        newgrf_stack,
+                        spec,
+                        offset,
+                        &mut signal_sprites,
+                        &mut images,
+                    ) else {
+                        continue;
+                    };
+                    spawn_custom_rail_sprite(
+                        commands,
+                        ctx,
+                        resolved,
+                        pass_base_z[pass_index],
+                        0.02 + custom_draws as f32 * 0.0004,
+                        rail_custom_track_extra_y(offset, pass_tileh[pass_index]),
+                        pass_halftile_corner[pass_index],
+                        pass_half_h[pass_index],
+                        foundation_child_parent,
+                        map_dims.0,
+                        "rail-newgrf-overlay",
+                        offset,
+                    );
+                    custom_draws += 1;
+                }
+            }
+        }
+        if !rail_uses_overlay || !custom_ground_complete {
+            for sid in rail_layers[start..end].iter().copied() {
+                let missing_asset = !assets.rail.contains_key(&sid);
+                let fallback = typed_selection_fallback || missing_asset;
+                let role = if fallback {
+                    match rail_type {
+                        openttdrs_core::RailType::Rail => "rail-track-fallback-rail",
+                        openttdrs_core::RailType::Electric => "rail-track-fallback-electric",
+                        openttdrs_core::RailType::Monorail => "rail-track-fallback-monorail",
+                        openttdrs_core::RailType::Maglev => "rail-track-fallback-maglev",
+                    }
+                } else {
+                    "rail-track"
+                };
+                record_rail_track_trace(role, sid, fallback, pass_modes[pass_index]);
+                let Some(img) = assets.rail.get(&sid) else {
+                    track_layer_index += 1;
+                    continue;
+                };
+                let z = 0.02 + track_layer_index as f32 * 0.0004;
+                let offset = rail_ghost_overlay_offset(sid);
+                let base = full_tile_sprite_pos_half(
+                    ctx.tx_i32(),
+                    ctx.ty_i32(),
+                    pass_base_z[pass_index],
+                    z,
+                    pass_half_h[pass_index],
+                );
+                let mut sprite = img.sprite_colored(rail_paint);
+                let crop_shift = if let Some((rect, shift)) = halftile_track_subsprite(
+                    pass_halftile_corner[pass_index],
+                    img.size,
+                    pass_half_h[pass_index],
+                ) {
+                    sprite.rect = Some(rect);
+                    shift
+                } else {
+                    Vec2::ZERO
+                };
+                // `OffsetGroundSprite` ya queda incorporado por el origen del
+                // parent y el ancla NFO de la pendiente falsa. Sumárselo de nuevo
+                // desplaza el child 16 px y separa la vía del backing de agua.
+                let position =
+                    base + Vec3::new(offset.x + crop_shift.x, offset.y + crop_shift.y, 0.0);
+                if matches!(
+                    pass_modes[pass_index],
+                    RailTrackTraceMode::FoundationChild(_)
+                ) && let Some(parent) = foundation_child_parent
+                {
+                    spawn_foundation_child_sprite_at(
+                        commands, sprite, ctx, position, map_dims.0, parent,
+                    );
+                } else {
+                    commands.spawn((
+                        MapVisualLayer,
+                        ctx.map_tile_chunk(),
+                        sprite,
+                        Transform::from_translation(position),
+                    ));
+                }
+                track_layer_index += 1;
+            }
         }
         if let Some(draws) = reservation_draws.as_ref() {
             for draw in draws
@@ -1803,6 +2125,40 @@ pub(crate) fn spawn_rail_tile(
                 let sid = draw.sprite_id;
                 let mode = rail_track_trace_mode(rail_foundation, draw.halftile_corner);
                 let extra_y = pbs_track_sprite_extra_y(draw.track_bit, draw.sprite_tileh);
+                if rail_uses_overlay
+                    && let Some(spec) = overlay_spec
+                    && let Some(offset) = rail_custom_offset_for_track_bit(draw.track_bit)
+                    && let Some(tile) = ctx.tile
+                    && let Some(resolved) = resolve_custom_rail_group_sprite(
+                        map,
+                        tile,
+                        ctx,
+                        climate,
+                        calendar_date,
+                        newgrf_stack,
+                        spec,
+                        offset,
+                        &mut signal_sprites,
+                        &mut images,
+                    )
+                {
+                    spawn_custom_rail_sprite(
+                        commands,
+                        ctx,
+                        resolved,
+                        pass_base_z[pass_index],
+                        0.026 + pbs_layer_index as f32 * 0.0004,
+                        extra_y,
+                        pass_halftile_corner[pass_index],
+                        pass_half_h[pass_index],
+                        foundation_child_parent,
+                        map_dims.0,
+                        "rail-newgrf-pbs",
+                        offset,
+                    );
+                    pbs_layer_index += 1;
+                    continue;
+                }
                 record_rail_pbs_trace(sid, !assets.has_exact_pbs_rail_sprite(sid), mode, extra_y);
                 let Some(img) = assets.pbs_rail_sprite(sid) else {
                     pbs_layer_index += 1;
@@ -2109,16 +2465,18 @@ mod tests {
     use bevy::prelude::{Rect, Vec2};
 
     use super::{
-        RailGroundKind, RailTrackTraceMode, catenary_local_z_delta, halftile_track_subsprite,
-        pbs_extra_y_in_bevy, pbs_track_sprite_extra_y, rail_foundation_after_pass,
-        rail_ground_sprite_id, rail_initial_ground_draw, rail_track_trace_mode,
-        rail_upper_halftile_ground_draw, road_detail_world_z_delta, road_foundation_child_offset,
-        roadside_streetlight_parent_sprites, roadside_streetlight_sorted_depths,
-        signal_trace_geometry,
+        RTO_CROSSING_XY, RTO_E, RTO_JUNCTION_SE, RTO_N, RTO_S, RTO_W, RTO_X, RTO_Y, RailGroundKind,
+        RailTrackTraceMode, catenary_local_z_delta, halftile_track_subsprite, pbs_extra_y_in_bevy,
+        pbs_track_sprite_extra_y, rail_custom_overlay_offsets, rail_custom_underlay_offsets,
+        rail_foundation_after_pass, rail_ground_sprite_id, rail_initial_ground_draw,
+        rail_track_trace_mode, rail_upper_halftile_ground_draw, road_detail_world_z_delta,
+        road_foundation_child_offset, roadside_streetlight_parent_sprites,
+        roadside_streetlight_sorted_depths, signal_trace_geometry,
     };
     use crate::sprites::{
-        RAIL_GROUND_HALF_TILE_SNOW, RAIL_GROUND_HALF_TILE_WATER, RAIL_TB_LEFT, RAIL_TB_LOWER,
-        RAIL_TB_RIGHT, RAIL_TB_UPPER, ROADSIDE_LAMPS,
+        RAIL_GROUND_HALF_TILE_SNOW, RAIL_GROUND_HALF_TILE_WATER, RAIL_TB_CROSS, RAIL_TB_HORZ,
+        RAIL_TB_LEFT, RAIL_TB_LOWER, RAIL_TB_RIGHT, RAIL_TB_UPPER, RAIL_TB_VERT, RAIL_TB_X,
+        RAIL_TB_Y, ROADSIDE_LAMPS,
     };
     use openttdrs_core::{FOUNDATION_INCLINED_X, FOUNDATION_LEVELED};
 
@@ -2157,6 +2515,35 @@ mod tests {
             rail_track_trace_mode(5, Some(0)),
             RailTrackTraceMode::FoundationChild((64, -32, 0))
         );
+    }
+
+    #[test]
+    fn rail_newgrf_offsets_match_openttd_track_overlay_table() {
+        assert_eq!(rail_custom_underlay_offsets(RAIL_TB_X), vec![RTO_X]);
+        assert_eq!(rail_custom_underlay_offsets(RAIL_TB_Y), vec![RTO_Y]);
+        assert_eq!(
+            rail_custom_underlay_offsets(RAIL_TB_HORZ),
+            vec![RTO_N, RTO_S]
+        );
+        assert_eq!(
+            rail_custom_underlay_offsets(RAIL_TB_VERT),
+            vec![RTO_E, RTO_W]
+        );
+        assert_eq!(
+            rail_custom_underlay_offsets(RAIL_TB_CROSS),
+            vec![RTO_CROSSING_XY]
+        );
+        // X + LOWER + RIGHT deja libre la esquina NW → RTO_JUNCTION_SE.
+        assert_eq!(rail_custom_underlay_offsets(0x29), vec![RTO_JUNCTION_SE]);
+        assert_eq!(
+            rail_custom_overlay_offsets(RAIL_TB_X | RAIL_TB_LOWER | RAIL_TB_LEFT),
+            vec![
+                (RAIL_TB_X, RTO_X),
+                (RAIL_TB_LOWER, RTO_S),
+                (RAIL_TB_LEFT, RTO_W)
+            ]
+        );
+        assert!(rail_custom_overlay_offsets(RAIL_TB_X).is_empty());
     }
 
     #[test]

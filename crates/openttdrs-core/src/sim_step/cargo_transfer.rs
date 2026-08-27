@@ -726,11 +726,12 @@ pub(super) fn load_vehicles(
 /// iniciar una carga. Las industrias que todavía no produjeron no obligan a
 /// visitar toda la flota: el siguiente tick las verá cuando tengan stock.
 fn has_loadable_supply(state: &GameState) -> bool {
-    state.industries.iter().any(|industry| industry.stock > 0)
-        || state
-            .stations
-            .iter()
-            .any(|station| station.cargo_stock != crate::CargoStock::default())
+    state.industries.iter().any(|industry| {
+        industry.stock > 0 || industry.newgrf_extra_produced_cargo != crate::CargoStock::default()
+    }) || state
+        .stations
+        .iter()
+        .any(|station| station.cargo_stock != crate::CargoStock::default())
 }
 
 fn try_load_from_industry(

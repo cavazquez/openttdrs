@@ -11,7 +11,7 @@ use crate::cargodist::parity::Randomizer;
 use crate::engine::EngineDef;
 use crate::house_spec::HouseSpecDef;
 use crate::industry::{Industry, IndustryProductionAction};
-use crate::industry_spec::IndustrySpecDef;
+use crate::industry_spec::{IndustrySpecDef, cargo_type_from_label};
 use crate::industry_tile::IndustryTileSpecDef;
 use crate::map::{Map, TileCoord};
 use crate::newgrf_sprites::{
@@ -24,7 +24,7 @@ use crate::newgrf_sprites::{
     CBID_VEHICLE_32DAY_CALLBACK, CBID_VEHICLE_ARTIC_ENGINE, CBID_VEHICLE_COLOUR_MAPPING,
     CBID_VEHICLE_LENGTH, CBID_VEHICLE_LOAD_AMOUNT, CBID_VEHICLE_MODIFY_PROPERTY,
     CBID_VEHICLE_REFIT_CAPACITY, CBID_VEHICLE_SOUND_EFFECT, CBID_VEHICLE_START_STOP_CHECK,
-    CBID_VEHICLE_VISUAL_EFFECT, TrainSpriteGraphics,
+    CBID_VEHICLE_VISUAL_EFFECT, IndustryProductionGroup, TrainSpriteGraphics,
 };
 use crate::object_spec::ObjectSpecDef;
 use crate::road_stop_action2::{
@@ -1109,9 +1109,25 @@ fn action2_eval_ctx_from_industry(industry: &Industry, random: u32) -> Action2Ev
         random_bits: random,
         ..Action2EvalCtx::default()
     };
-    ctx.vars.insert(0x40, industry.stock);
-    ctx.vars.insert(0x41, industry.secondary_stock);
-    ctx.vars.insert(0x42, industry.capacity);
+    let accepted = industry.station_input_requirements();
+    ctx.vars.insert(
+        0x40,
+        accepted
+            .first()
+            .map_or(0, |(cargo, _)| industry.accepted_cargo_waiting(*cargo)),
+    );
+    ctx.vars.insert(
+        0x41,
+        accepted
+            .get(1)
+            .map_or(0, |(cargo, _)| industry.accepted_cargo_waiting(*cargo)),
+    );
+    ctx.vars.insert(
+        0x42,
+        accepted
+            .get(2)
+            .map_or(0, |(cargo, _)| industry.accepted_cargo_waiting(*cargo)),
+    );
     ctx.vars
         .insert(0x80, u32::from_ne_bytes(industry.pos.x.to_ne_bytes()));
     ctx.vars
@@ -1119,6 +1135,155 @@ fn action2_eval_ctx_from_industry(industry: &Industry, random: u32) -> Action2Ev
     ctx.vars.insert(0x93, u32::from(industry.prod_level));
     ctx.vars.insert(0xAA, u32::from(industry.counter));
     ctx
+}
+
+/// Resultado observable de un callback de producción iterativo.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct IndustryProductionCallbackResult {
+    /// Cantidad de grupos que se aplicaron antes de terminar (`again == 0`).
+    pub iterations: u16,
+    /// Unidades retiradas de las colas de cargos aceptados.
+    pub inputs_consumed: u32,
+    /// Unidades añadidas a las colas de cargos producidos.
+    pub outputs_added: u32,
+}
+
+fn cargo_for_group_index(raw: u8, indices: &[u8], labels: &[String]) -> Option<CargoType> {
+    indices
+        .iter()
+        .position(|&index| index == raw)
+        .and_then(|idx| labels.get(idx))
+        .and_then(|label| cargo_type_from_label(Some(label.as_str())))
+        .or_else(|| CargoType::from_cargo_id(raw))
+}
+
+fn indirect_production_value(raw: i32, indirect: bool, ctx: &Action2EvalCtx) -> i32 {
+    if !indirect {
+        return raw;
+    }
+    let index = u8::try_from(raw).unwrap_or(0);
+    i32::try_from(ctx.temp_registers.get(&index).copied().unwrap_or(0)).unwrap_or(i32::MAX)
+}
+
+fn apply_industry_group_input(industry: &mut Industry, cargo: CargoType, amount: i32) -> u32 {
+    if amount >= 0 {
+        let requested = u32::try_from(amount).unwrap_or(u32::MAX);
+        industry.take_accepted_cargo_waiting(cargo, requested)
+    } else {
+        let added = amount.unsigned_abs();
+        industry.add_accepted_cargo_waiting(cargo, added);
+        0
+    }
+}
+
+/// Ejecuta `IndustryProductionSpriteGroup` para CB1 (cargo recibido) o CB2
+/// (ciclo de 256 ticks).
+///
+/// `None`/cero significa que el callback está declarado pero no resolvió un
+/// grupo; en ese caso `OpenTTD` conserva las colas pendientes y no aplica el
+/// algoritmo vanilla silenciosamente. Las dos salidas históricas de
+/// [`Industry`] siguen usando `stock`/`secondary_stock`; cargos adicionales
+/// se guardan en `newgrf_extra_produced_cargo`.
+pub fn apply_industry_production_callback(
+    def: &IndustrySpecDef,
+    industry: &mut Industry,
+    reason: u8,
+    rng: &mut Randomizer,
+) -> IndustryProductionCallbackResult {
+    let declared = match reason {
+        0 => def.has_production_cargo_arrival_callback(),
+        1 => def.has_production_256_ticks_callback(),
+        _ => false,
+    };
+    if !declared {
+        return IndustryProductionCallbackResult::default();
+    }
+    let Some(runtime) = def.newgrf_runtime.as_ref() else {
+        return IndustryProductionCallbackResult::default();
+    };
+
+    let random = rng.next();
+    let mut ctx = action2_eval_ctx_from_industry(industry, random);
+    let mut result = IndustryProductionCallbackResult::default();
+    let accepted_slots: Vec<CargoType> = industry
+        .station_input_requirements()
+        .into_iter()
+        .map(|(cargo, _)| cargo)
+        .collect();
+    let produced_slots = industry.produced_cargos();
+
+    for loop_index in 0..=u16::MAX {
+        ctx.vars
+            .insert(0x18, u32::from(reason) | (u32::from(loop_index) << 8));
+        let Some(group) =
+            runtime.industry_production_group_u16(u16::from(def.newgrf_local_id), &mut ctx)
+        else {
+            break;
+        };
+        let group: IndustryProductionGroup = group.clone();
+        let indirect = group.version >= 1;
+        if group.version < 2 {
+            for (idx, &raw) in group.subtract_input.iter().enumerate() {
+                let Some(&cargo) = accepted_slots.get(idx) else {
+                    continue;
+                };
+                result.inputs_consumed =
+                    result
+                        .inputs_consumed
+                        .saturating_add(apply_industry_group_input(
+                            industry,
+                            cargo,
+                            indirect_production_value(i32::from(raw), indirect, &ctx),
+                        ));
+            }
+            for (idx, &raw) in group.add_output.iter().enumerate() {
+                let Some(&cargo) = produced_slots.get(idx) else {
+                    continue;
+                };
+                let amount = indirect_production_value(i32::from(raw), indirect, &ctx).max(0);
+                let amount = u32::try_from(amount).unwrap_or(u32::MAX);
+                industry.add_newgrf_produced_cargo(cargo, amount);
+                result.outputs_added = result.outputs_added.saturating_add(amount);
+            }
+        } else {
+            for (idx, &raw_cargo) in group.cargo_input.iter().enumerate() {
+                let Some(cargo) = cargo_for_group_index(
+                    raw_cargo,
+                    &def.accepted_cargo_indices,
+                    &def.accepted_cargo_labels,
+                ) else {
+                    continue;
+                };
+                let amount = group.subtract_input.get(idx).copied().map_or(0, |value| {
+                    indirect_production_value(i32::from(value), indirect, &ctx)
+                });
+                result.inputs_consumed = result
+                    .inputs_consumed
+                    .saturating_add(apply_industry_group_input(industry, cargo, amount));
+            }
+            for (idx, &raw_cargo) in group.cargo_output.iter().enumerate() {
+                let Some(cargo) = cargo_for_group_index(
+                    raw_cargo,
+                    &def.produced_cargo_indices,
+                    &def.produced_cargo_labels,
+                ) else {
+                    continue;
+                };
+                let amount = group.add_output.get(idx).copied().map_or(0, |value| {
+                    indirect_production_value(i32::from(value), indirect, &ctx).max(0)
+                });
+                let amount = u32::try_from(amount).unwrap_or(u32::MAX);
+                industry.add_newgrf_produced_cargo(cargo, amount);
+                result.outputs_added = result.outputs_added.saturating_add(amount);
+            }
+        }
+        result.iterations = result.iterations.saturating_add(1);
+        let again = indirect_production_value(i32::from(group.again), indirect, &ctx);
+        if again == 0 {
+            break;
+        }
+    }
+    result
 }
 
 /// Decodificación del resultado de `CBID_INDUSTRY_PRODUCTION_CHANGE` y
@@ -3399,6 +3564,63 @@ mod tests {
             None,
             "niveles fuera del rango válido conservan el valor vanilla"
         );
+    }
+
+    #[test]
+    fn industry_production_group_consumes_inputs_and_adds_outputs() {
+        let mut runtime = TrainSpriteGraphics::default();
+        runtime
+            .assigns
+            .push(crate::newgrf_sprites::TrainSpriteAssign {
+                local_id: 0,
+                set_id: 7,
+            });
+        runtime.industry_production.insert(
+            7,
+            IndustryProductionGroup {
+                version: 0,
+                subtract_input: vec![3, 0, 0],
+                cargo_input: Vec::new(),
+                add_output: vec![5, 0],
+                cargo_output: Vec::new(),
+                again: 0,
+            },
+        );
+        let def = IndustrySpecDef {
+            id: 37,
+            local_id: 0,
+            subst_id: 0,
+            override_id: None,
+            layouts: Vec::new(),
+            produced_cargo_indices: vec![5],
+            produced_cargo_labels: vec!["GOOD".into()],
+            accepted_cargo_indices: vec![4, 6, 9],
+            accepted_cargo_labels: vec!["LVST".into(), "GRNT".into(), "STEL".into()],
+            production_rates: vec![0],
+            input_multipliers: Vec::new(),
+            callback_mask: crate::industry_spec::INDUSTRY_CALLBACK_PRODUCTION_CARGO_ARRIVAL_MASK,
+            cost_multiplier: 0,
+            name: "production-group".into(),
+            from_newgrf: true,
+            grfid: 1,
+            newgrf_local_id: 0,
+            newgrf_runtime: Some(Box::new(runtime)),
+        };
+        let mut industry = Industry::with_tiles_spec(
+            TileCoord::new(4, 5),
+            crate::industry::IndustryKind::Factory,
+            crate::industry::IndustrySpec::Factory,
+            vec![TileCoord::new(4, 5)],
+            0,
+        );
+        industry.add_accepted_cargo_waiting(CargoType::Livestock, 10);
+        let mut rng = Randomizer::new(42);
+        let applied = apply_industry_production_callback(&def, &mut industry, 0, &mut rng);
+        assert_eq!(applied.iterations, 1);
+        assert_eq!(applied.inputs_consumed, 3);
+        assert_eq!(applied.outputs_added, 5);
+        assert_eq!(industry.accepted_cargo_waiting(CargoType::Livestock), 7);
+        assert_eq!(industry.stock, 5);
     }
 
     #[test]

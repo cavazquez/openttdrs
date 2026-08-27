@@ -88,6 +88,18 @@ pub struct IndustrySpecDef {
 }
 
 impl IndustrySpecDef {
+    /// ¿El GRF declaró callback al recibir cargo en la industria?
+    #[must_use]
+    pub const fn has_production_cargo_arrival_callback(&self) -> bool {
+        self.callback_mask & INDUSTRY_CALLBACK_PRODUCTION_CARGO_ARRIVAL_MASK != 0
+    }
+
+    /// ¿El GRF declaró callback de producción cada 256 ticks?
+    #[must_use]
+    pub const fn has_production_256_ticks_callback(&self) -> bool {
+        self.callback_mask & INDUSTRY_CALLBACK_PRODUCTION_256_TICKS_MASK != 0
+    }
+
     /// ¿El GRF declaró un callback de cambio de producción diario?
     #[must_use]
     pub const fn has_production_change_callback(&self) -> bool {

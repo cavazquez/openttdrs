@@ -403,10 +403,11 @@ pub use newgrf_actions::{
     parse_action0_sound_meta, parse_action0_station_meta, parse_action0_train_meta,
 };
 pub use newgrf_callback::{
-    RoadStopCallbackWorld, Vehicle32DayCallback, VehicleColourMapping, VehicleSoundOverride,
-    VehicleVisualEffectKind, action2_eval_ctx_from_station, action2_eval_ctx_from_vehicle,
-    advance_road_stop_animation, advance_road_stop_animation_at_with_world,
-    apply_house_construction_callback, apply_industry_location_callback,
+    IndustryProductionCallbackResult, RoadStopCallbackWorld, Vehicle32DayCallback,
+    VehicleColourMapping, VehicleSoundOverride, VehicleVisualEffectKind,
+    action2_eval_ctx_from_station, action2_eval_ctx_from_vehicle, advance_road_stop_animation,
+    advance_road_stop_animation_at_with_world, apply_house_construction_callback,
+    apply_industry_location_callback, apply_industry_production_callback,
     apply_industry_tile_anim_callback, apply_object_slope_callback,
     apply_station_availability_callback, apply_station_availability_callback_for_build,
     apply_vehicle_start_stop_callback, callback_allows_8bit_boolean, callback_allows_location,

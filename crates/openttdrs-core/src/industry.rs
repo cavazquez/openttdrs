@@ -1,10 +1,10 @@
-use crate::CargoType;
 use crate::Climate;
 use crate::cargodist::parity::Randomizer;
 use crate::entity_history::IndustryHistory;
 use crate::industry_spec::IndustrySpecDef;
 use crate::map::TileCoord;
 use crate::station::{self, Station, StopKind};
+use crate::{ALL_CARGO_TYPES, CargoStock, CargoType};
 
 /// Ticks entre cada ciclo de producción (equivale a `INDUSTRY_PRODUCE_TICKS` del upstream).
 pub const INDUSTRY_PRODUCE_TICKS: u64 = 256;
@@ -582,6 +582,18 @@ pub struct Industry {
     /// Stock del segundo cargo producido (Farm: Livestock; 0 si no aplica).
     #[serde(default)]
     pub secondary_stock: u32,
+    /// Cargo aceptado pendiente de procesar por callbacks `NewGRF`.
+    ///
+    /// El modelo vanilla conserva sus entradas en estaciones; este buffer
+    /// reproduce los `accepted[i].waiting` de `OpenTTD` para CB1/CB2 y evita
+    /// perder entregas cuando el GRF decide consumirlas más tarde.
+    #[serde(default)]
+    pub newgrf_accepted_cargo_waiting: CargoStock,
+    /// Salidas `NewGRF` que no caben en los dos stocks legacy (`stock` y
+    /// `secondary_stock`). Las dos salidas principales se reflejan también en
+    /// esos campos para mantener compatibilidad con el cargador existente.
+    #[serde(default)]
+    pub newgrf_extra_produced_cargo: CargoStock,
     pub capacity: u32,
     /// Color aleatorio de industria (`Colours` 0–15) para edificios con paleta.
     #[serde(default)]
@@ -672,6 +684,8 @@ impl Industry {
             kind,
             stock: 0,
             secondary_stock: 0,
+            newgrf_accepted_cargo_waiting: CargoStock::default(),
+            newgrf_extra_produced_cargo: CargoStock::default(),
             capacity: INDUSTRY_STOCK_CAPACITY,
             random_colour: 0,
             instance_id: 0,
@@ -699,6 +713,8 @@ impl Industry {
             kind,
             stock: 0,
             secondary_stock: 0,
+            newgrf_accepted_cargo_waiting: CargoStock::default(),
+            newgrf_extra_produced_cargo: CargoStock::default(),
             capacity: INDUSTRY_STOCK_CAPACITY,
             random_colour: 0,
             instance_id: 0,
@@ -732,6 +748,8 @@ impl Industry {
             kind,
             stock: 0,
             secondary_stock: 0,
+            newgrf_accepted_cargo_waiting: CargoStock::default(),
+            newgrf_extra_produced_cargo: CargoStock::default(),
             capacity: INDUSTRY_STOCK_CAPACITY,
             random_colour,
             instance_id: 0,
@@ -879,6 +897,59 @@ impl Industry {
             .or_else(|| self.produced_cargos().get(1).copied())
     }
 
+    /// Cantidad de un cargo aceptado que espera el callback `NewGRF`.
+    #[must_use]
+    pub const fn accepted_cargo_waiting(&self, cargo: CargoType) -> u32 {
+        self.newgrf_accepted_cargo_waiting.get(cargo)
+    }
+
+    /// Añade cargo a la cola de entradas de la industria.
+    pub fn add_accepted_cargo_waiting(&mut self, cargo: CargoType, amount: u32) {
+        let current = self.accepted_cargo_waiting(cargo);
+        let room = u32::from(u16::MAX).saturating_sub(current);
+        self.newgrf_accepted_cargo_waiting
+            .add(cargo, amount.min(room));
+    }
+
+    /// Retira cargo de la cola de entradas de la industria.
+    #[must_use]
+    pub fn take_accepted_cargo_waiting(&mut self, cargo: CargoType, amount: u32) -> u32 {
+        self.newgrf_accepted_cargo_waiting.take(cargo, amount)
+    }
+
+    /// Registra una salida de callback. Las dos salidas legacy se reflejan en
+    /// `stock`/`secondary_stock`; el resto queda disponible para el transporte
+    /// `NewGRF` sin alterar el formato histórico del estado.
+    pub fn add_newgrf_produced_cargo(&mut self, cargo: CargoType, amount: u32) {
+        if amount == 0 {
+            return;
+        }
+        if Some(cargo) == self.newgrf_output_cargo || cargo == self.output_cargo() {
+            self.stock = self.stock.saturating_add(amount).min(self.capacity);
+        } else if Some(cargo) == self.newgrf_secondary_output_cargo
+            || Some(cargo) == self.secondary_output_cargo()
+        {
+            self.secondary_stock = self
+                .secondary_stock
+                .saturating_add(amount)
+                .min(self.capacity);
+        } else {
+            self.newgrf_extra_produced_cargo.add(cargo, amount);
+        }
+    }
+
+    /// Cantidad de una salida `NewGRF` que no está en los stocks legacy.
+    #[must_use]
+    pub const fn extra_produced_cargo(&self, cargo: CargoType) -> u32 {
+        self.newgrf_extra_produced_cargo.get(cargo)
+    }
+
+    /// Retira una salida `NewGRF` adicional ya entregada a la industria.
+    #[must_use]
+    pub fn take_extra_produced_cargo(&mut self, cargo: CargoType, amount: u32) -> u32 {
+        self.newgrf_extra_produced_cargo.take(cargo, amount)
+    }
+
     /// Salida de procesadora escalada por `prod_level` (legacy; preferir [`Self::processing_output_amount`]).
     #[must_use]
     pub fn factory_output_amount(&self) -> u32 {
@@ -997,6 +1068,17 @@ impl Industry {
     ///
     /// Devuelve `true` si hubo un ciclo de procesamiento en este tick.
     pub fn produce_from_nearby_stations(&mut self, stations: &mut [Station], tick: u64) -> bool {
+        self.produce_from_nearby_stations_with_callback(stations, tick, false)
+    }
+
+    /// Variante que deja las entradas en la cola de la industria para que el
+    /// callback `ProductionCargoArrival` decida cuánto consumir y producir.
+    pub fn produce_from_nearby_stations_with_callback(
+        &mut self,
+        stations: &mut [Station],
+        tick: u64,
+        callback_on_arrival: bool,
+    ) -> bool {
         let inputs = self.processing_inputs();
         if inputs.is_empty() || self.is_closing() {
             return false;
@@ -1043,10 +1125,17 @@ impl Industry {
                 let take = stations[idx].cargo_stock.get(cargo).min(remaining);
                 if take > 0 {
                     let _ = stations[idx].take_waiting_cargo(cargo, take);
+                    if callback_on_arrival {
+                        self.add_accepted_cargo_waiting(cargo, take);
+                    }
                     remaining -= take;
                 }
             }
             debug_assert_eq!(remaining, 0);
+        }
+
+        if callback_on_arrival {
+            return true;
         }
 
         let [output, secondary_output] = self.processing_output_amounts();
@@ -1281,6 +1370,22 @@ pub fn transport_industry_goods(
             false,
         ));
     }
+    // CB1/CB2 v2 puede producir más de las dos salidas históricas. Esas
+    // cantidades viven en `newgrf_extra_produced_cargo` y siguen el mismo
+    // reparto por rating/cobertura que los stocks legacy.
+    let primary = industry.output_cargo();
+    let secondary = industry.secondary_output_cargo();
+    for cargo in ALL_CARGO_TYPES {
+        if cargo == primary || Some(cargo) == secondary {
+            continue;
+        }
+        total = total.saturating_add(transport_industry_extra_cargo_stock(
+            industry,
+            stations,
+            selectgoods,
+            cargo,
+        ));
+    }
     total
 }
 
@@ -1314,6 +1419,41 @@ fn transport_industry_cargo_stock(
     } else {
         industry.secondary_stock = industry.secondary_stock.saturating_sub(amount);
     }
+    let moved = station::move_goods_to_station(
+        stations,
+        &eligible,
+        cargo,
+        amount,
+        industry.pos,
+        selectgoods,
+        None,
+    );
+    if moved > 0 {
+        industry.transported_total = industry.transported_total.saturating_add(u64::from(moved));
+    }
+    moved
+}
+
+fn transport_industry_extra_cargo_stock(
+    industry: &mut Industry,
+    stations: &mut [Station],
+    selectgoods: bool,
+    cargo: CargoType,
+) -> u32 {
+    let stock = industry.extra_produced_cargo(cargo);
+    if stock == 0 {
+        return 0;
+    }
+    let nearby = covering_output_station_indices(industry, stations);
+    let eligible: Vec<usize> = nearby
+        .into_iter()
+        .filter(|&idx| station::can_move_goods_to_station(&stations[idx], cargo, selectgoods))
+        .collect();
+    if eligible.is_empty() {
+        return 0;
+    }
+    let amount = stock.min(255);
+    let _ = industry.take_extra_produced_cargo(cargo, amount);
     let moved = station::move_goods_to_station(
         stations,
         &eligible,
@@ -1797,6 +1937,27 @@ mod tests {
         );
         assert_eq!(stations[0].cargo_stock.grain, 10 - FACTORY_GRAIN_INPUT);
         assert_eq!(stations[0].cargo_stock.steel, 10 - FACTORY_STEEL_INPUT);
+    }
+
+    #[test]
+    fn newgrf_extra_produced_cargo_reaches_station() {
+        let industry_pos = TileCoord::new(4, 4);
+        let mut industry = Industry::new(industry_pos, IndustryKind::CoalMine);
+        industry
+            .newgrf_extra_produced_cargo
+            .add(CargoType::Paper, 7);
+        let mut stations = vec![Station::new_with_kind(
+            TileCoord::new(5, 4),
+            StopKind::RailStation,
+        )];
+
+        let moved = transport_industry_goods(&mut industry, &mut stations, false);
+        assert_eq!(
+            moved,
+            7 * (u32::from(crate::station::INITIAL_STATION_RATING) + 1) / 256
+        );
+        assert_eq!(industry.extra_produced_cargo(CargoType::Paper), 0);
+        assert!(stations[0].cargo_stock.paper > 0);
     }
 
     #[test]

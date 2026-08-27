@@ -336,17 +336,46 @@ pub(super) fn maybe_change_industry_production_monthly(state: &mut GameState) {
     }
 }
 
+#[allow(clippy::too_many_lines)] // Mantiene juntos los caminos vanilla y CB1/CB2.
 pub(super) fn produce_industries(state: &mut GameState, tick: u64) {
     for i in 0..state.industries.len() {
+        let newgrf_def = state.industries[i].newgrf_type_id.and_then(|type_id| {
+            state
+                .industry_spec_catalog
+                .iter()
+                .find(|def| def.id == type_id)
+                .cloned()
+        });
+        let callback_on_arrival = newgrf_def.as_ref().is_some_and(
+            crate::industry_spec::IndustrySpecDef::has_production_cargo_arrival_callback,
+        );
+        let callback_on_tick = newgrf_def
+            .as_ref()
+            .is_some_and(crate::industry_spec::IndustrySpecDef::has_production_256_ticks_callback);
         let before = state.industries[i].stock;
         let secondary_before = state.industries[i].secondary_stock;
         let tiles = state.industries[i].tiles.clone();
         let pos = state.industries[i].pos;
         let footprint: Vec<TileCoord> = if tiles.is_empty() { vec![pos] } else { tiles };
         if state.industries[i].requires_station_inputs() {
-            let processed =
-                state.industries[i].produce_from_nearby_stations(&mut state.stations, tick);
+            let processed = if callback_on_arrival || callback_on_tick {
+                state.industries[i].produce_from_nearby_stations_with_callback(
+                    &mut state.stations,
+                    tick,
+                    true,
+                )
+            } else {
+                state.industries[i].produce_from_nearby_stations(&mut state.stations, tick)
+            };
             if processed {
+                if callback_on_arrival && let Some(def) = newgrf_def.as_ref() {
+                    crate::newgrf_callback::apply_industry_production_callback(
+                        def,
+                        &mut state.industries[i],
+                        0,
+                        &mut state.random,
+                    );
+                }
                 let dirty = crate::map::trigger_industry_randomisation_at(
                     &mut state.map,
                     &footprint,
@@ -356,8 +385,31 @@ pub(super) fn produce_industries(state: &mut GameState, tick: u64) {
                 );
                 state.runtime.industry_tile_dirty.extend(dirty);
             }
+            if callback_on_tick
+                && state.industries[i].produces_on_tick(tick)
+                && let Some(def) = newgrf_def.as_ref()
+            {
+                crate::newgrf_callback::apply_industry_production_callback(
+                    def,
+                    &mut state.industries[i],
+                    1,
+                    &mut state.random,
+                );
+            }
         } else {
-            state.industries[i].produce(tick);
+            if callback_on_tick
+                && state.industries[i].produces_on_tick(tick)
+                && let Some(def) = newgrf_def.as_ref()
+            {
+                crate::newgrf_callback::apply_industry_production_callback(
+                    def,
+                    &mut state.industries[i],
+                    1,
+                    &mut state.random,
+                );
+            } else {
+                state.industries[i].produce(tick);
+            }
             if state.industries[i].stock > before {
                 let dirty = crate::map::trigger_industry_randomisation_at(
                     &mut state.map,

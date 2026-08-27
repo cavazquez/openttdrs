@@ -289,6 +289,27 @@ impl StationSpecDef {
         Some(views[idx % views.len()].clone())
     }
 
+    /// Layout `TileSeq` de Action2 para una tesela de estación, resuelto con
+    /// las variables y registros de la tesela actual.  Los grupos de layout
+    /// no son sprites planos: conservar el grafo completo permite materializar
+    /// el suelo y la secuencia de parents/children con la misma selección
+    /// Action2 que usa la vista in-world.
+    pub fn newgrf_tile_layout_runtime(
+        &self,
+        view: usize,
+        ctx: &mut crate::newgrf_sprites::Action2EvalCtx,
+    ) -> Option<crate::newgrf_sprites::ResolvedTileLayout> {
+        // La orientación ya se resuelve por `var 0x40`/CB14 al seleccionar el
+        // grupo Action2. Cada referencia del layout apunta al primer sprite
+        // del set Action1; no usar `view` como índice dentro de ese set.
+        let _ = view;
+        self.newgrf_runtime.as_ref()?.tile_layout_for_local_id_ctx(
+            u16::from(self.newgrf_local_id),
+            0,
+            ctx,
+        )
+    }
+
     #[must_use]
     pub fn allows_platforms(&self, platforms: u8) -> bool {
         let n = platforms.clamp(1, 7);

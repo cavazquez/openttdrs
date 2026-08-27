@@ -84,7 +84,7 @@ pub fn apply_newgrf_stations(state: &mut GameState, search_dirs: &[&Path]) {
                 .map(<[crate::newgrf_sprites::DecodedSprite]>::to_vec)
                 .unwrap_or_default();
             let preview = views.first().cloned();
-            let newgrf_runtime = if gfx.needs_runtime_resolve() {
+            let newgrf_runtime = if gfx.needs_runtime_resolve() || gfx.has_tile_layouts() {
                 Some(Box::new(gfx.clone()))
             } else {
                 None

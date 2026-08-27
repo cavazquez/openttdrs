@@ -126,13 +126,14 @@ children en pendientes. La catenaria conserva la altura efectiva de esa
 superficie. El layout vanilla de los dos postes (`SPR_ROAD_WAYPOINT_*`, cuatro
 recortes oficiales y cajas `3×16`/`16×3`) también se materializa por eje y queda
 como child de la fundación cuando corresponde. Los layouts `TileSeq` de
-`NewGRF` para road stops y waypoints ya se parsean desde Action2, resuelven
-Action3/2→Action1 y materializan suelo, parents con cajas `M(...)` y children
-relativos. El procesador runtime aplica `DODRAW`, offsets de sprite, offsets de
-cajas/children y selección `var10`, y la huella de caché incluye los registros
-`7D`/`0x100`. Sprites base y paletas custom todavía conservan el fallback
-vanilla atómico; también queda pendiente el procesado equivalente para
-estaciones rail, casas, objetos e industrias.
+`NewGRF` para road stops, waypoints y estaciones rail ya se parsean desde
+Action2, resuelven Action3/2→Action1 y materializan suelo, parents con cajas
+`M(...)` y children relativos. El procesador runtime aplica `DODRAW`, offsets de
+sprite, offsets de cajas/children y selección `var10`, y la huella de caché
+incluye los registros `7D`/`0x100`; en estaciones rail la secuencia se emite
+después de la catenaria y reemplaza el suelo vanilla cuando está completa.
+Sprites base y paletas custom todavía conservan el fallback vanilla atómico;
+queda pendiente el procesado equivalente para casas, objetos e industrias.
 También incorpora los edificios industriales vanilla planos y estáticos, cuya
 caja `M(...)` no cambia durante la composición; las pendientes, animaciones y
 layouts NewGRF permanecen fuera de ese subconjunto.
@@ -218,9 +219,12 @@ hay grupos específicos, el fallback vanilla de `SPR_TRAMWAY_BASE` selecciona
 las seis filas de puente (`95..106`) con sus 119 sprites extraídos y las mismas
 cajas `SpriteBounds` delanteras/traseras. El flag Action0
 `RoadTypeFlag::Catenary` y el tranvía vanilla determinan si se solicita el
-grupo. Siguen pendientes layouts/children completos.
+grupo. Los layouts/children completos de objetos, industrias y casas siguen
+pendientes.
 Los overlays de estación rail NewGRF se resuelven también en pendientes y se
-vinculan al parent de la fundación nivelada. Los railtypes NewGRF con grupos
+vinculan al parent de la fundación nivelada. Sus layouts `TileSeq` completos
+ahora sustituyen el suelo y emiten parents/children con cajas `M(...)`; los
+layouts incompletos mantienen fallback vanilla. Los railtypes NewGRF con grupos
 Action3 de ground/underlay/overlay ya reemplazan el bloque combinado vanilla
 en vías normales, cruces y reservas PBS, conservan los offsets NFO de sprites
 HD y se vinculan a la fundación activa (con fallback por vista ausente). El

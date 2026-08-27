@@ -189,15 +189,39 @@ pub const fn object_tile_offset_byte(dx: u8, dy: u8) -> u8 {
 
 /// Construye el contexto de variables Action2 para una tesela de objeto.
 ///
-/// Es la traducción del `ObjectScopeResolver` de OpenTTD para los datos que
-/// están presentes en nuestro mapa: `m3` contiene los bits aleatorios del
-/// objeto, `m2` conserva el offset dentro del footprint local, `m3hi` es el
-/// `m4` de animación y `m1` el propietario. Las variables que requieren el
-/// objeto/town global (fecha de construcción, pueblo más cercano, color,
-/// teselas vecinas y conteos) quedan deliberadamente ausentes; el evaluador
-/// las trata como no disponibles en vez de inventar valores.
+/// Este wrapper conserva el contrato histórico para callers que sólo tienen
+/// la tesela: las variables dependientes del pueblo siguen ausentes. El
+/// renderer usa [`action2_eval_ctx_for_object_tile_with_towns`] para resolver
+/// el scope completo disponible en el mapa.
 #[must_use]
 pub fn action2_eval_ctx_for_object_tile(tile: Tile, tileh: u8, climate: Climate) -> Action2EvalCtx {
+    let mut ctx = action2_eval_ctx_for_object_tile_with_towns(
+        tile,
+        tileh,
+        climate,
+        TileCoord::new(0, 0),
+        &[],
+    );
+    ctx.vars.remove(&0x45);
+    ctx.vars.remove(&0x46);
+    ctx
+}
+
+/// Variante que materializa las variables de pueblo de `ObjectScopeResolver`.
+///
+/// Los objetos importados todavía no conservan un puntero nativo a su pueblo,
+/// así que se consulta el pueblo más cercano, igual que en los scopes de casas
+/// y aeropuertos. `0x45` empaqueta zona urbana en los 16 bits altos y distancia
+/// Manhattan acotada en los bajos; `0x46` devuelve la distancia euclídea al
+/// cuadrado.
+#[must_use]
+pub fn action2_eval_ctx_for_object_tile_with_towns(
+    tile: Tile,
+    tileh: u8,
+    climate: Climate,
+    coord: TileCoord,
+    towns: &[crate::town::Town],
+) -> Action2EvalCtx {
     let mut ctx = Action2EvalCtx::default();
     let random = u32::from(tile.m3);
     ctx.random_bits = random;
@@ -228,6 +252,22 @@ pub fn action2_eval_ctx_for_object_tile(tile: Tile, tileh: u8, climate: Climate)
     // `GetTileOwner(tile).base()`: los mapas del proyecto conservan el owner
     // directamente en m1 para MP_OBJECT.
     ctx.vars.insert(0x44, u32::from(tile.m1));
+    if let Some(town) = towns
+        .iter()
+        .min_by_key(|town| crate::house_spec::distance_square(town.pos, coord))
+    {
+        let zone = crate::house_spec::get_town_radius_group(town, coord) as u32;
+        let manhattan = town
+            .pos
+            .x
+            .abs_diff(coord.x)
+            .saturating_add(town.pos.y.abs_diff(coord.y))
+            .min(u32::from(u16::MAX));
+        ctx.vars
+            .insert(0x45, (zone << 16) | manhattan.min(u32::from(u16::MAX)));
+        ctx.vars
+            .insert(0x46, crate::house_spec::distance_square(town.pos, coord));
+    }
     ctx
 }
 
@@ -297,5 +337,40 @@ mod tests {
         assert_eq!(ctx.vars.get(&0x41), Some(&0x0501));
         assert_eq!(ctx.vars.get(&0x43), Some(&9));
         assert_eq!(ctx.vars.get(&0x44), Some(&7));
+    }
+
+    #[test]
+    fn object_action2_context_exposes_nearest_town_zone_and_distances() {
+        let tile = Tile {
+            height: 0,
+            kind: TileKind::Grass,
+            mapt: MP_OBJECT_MAPT,
+            m5: 0,
+            m1: 0,
+            m6: 0,
+            m8: 0,
+            m3: 0,
+            m2: object_tile_offset_byte(0, 0),
+            m2_hi: 0,
+            m7: 0,
+            m3hi: 0,
+        };
+        let mut town = crate::town::Town {
+            pos: TileCoord::new(5, 2),
+            num_houses: 48,
+            ..Default::default()
+        };
+        crate::town::update_town_radius(&mut town);
+
+        let ctx = action2_eval_ctx_for_object_tile_with_towns(
+            tile,
+            0,
+            Climate::Temperate,
+            TileCoord::new(6, 4),
+            std::slice::from_ref(&town),
+        );
+
+        assert_eq!(ctx.vars.get(&0x45), Some(&0x0004_0003));
+        assert_eq!(ctx.vars.get(&0x46), Some(&5));
     }
 }

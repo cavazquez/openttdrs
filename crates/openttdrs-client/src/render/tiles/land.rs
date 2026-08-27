@@ -1831,14 +1831,16 @@ fn object_tile_seq_child_center(
 
 /// Resuelve el `TileSeq` de un objeto para la tesela concreta del footprint.
 #[allow(clippy::too_many_arguments)]
-fn resolve_newgrf_object_layout(
+fn resolve_newgrf_object_layout<'a>(
     object_type: u16,
     tile: Tile,
     tileh: u8,
+    coord: openttdrs_core::TileCoord,
     climate: Climate,
-    object_catalog: &[ObjectSpecDef],
+    object_catalog: &'a [ObjectSpecDef],
+    towns: &[openttdrs_core::Town],
 ) -> Option<(
-    &ObjectSpecDef,
+    &'a ObjectSpecDef,
     openttdrs_core::newgrf_sprites::ResolvedTileLayout,
     u32,
     usize,
@@ -1847,7 +1849,9 @@ fn resolve_newgrf_object_layout(
         crate::render::object_newgrf::newgrf_object_def_for_type(object_catalog, object_type)?;
     let view_idx =
         openttdrs_core::object_view_index_for_type(&tile, object_type, object_catalog).unwrap_or(0);
-    let mut action2 = openttdrs_core::action2_eval_ctx_for_object_tile(tile, tileh, climate);
+    let mut action2 = openttdrs_core::action2_eval_ctx_for_object_tile_with_towns(
+        tile, tileh, climate, coord, towns,
+    );
     let layout = def.newgrf_tile_layout_runtime(view_idx, &mut action2)?;
     let runtime_fp = def
         .newgrf_runtime
@@ -2038,6 +2042,7 @@ pub(crate) fn spawn_generic_land_tile(
     world_seed: u64,
     map_width: u32,
     object_catalog: &[ObjectSpecDef],
+    towns: &[openttdrs_core::Town],
     mut object_sprites: Option<&mut crate::render::NewGrfObjectSpriteCache>,
     mut images: Option<&mut Assets<Image>>,
 ) {
@@ -2047,7 +2052,15 @@ pub(crate) fn spawn_generic_land_tile(
     let object_type = ctx.object_type.unwrap_or(u16::from(tile_m5));
     let object_layout = if ottd_type == 10 && is_newgrf_object_type_id(object_type) {
         ctx.tile.and_then(|tile| {
-            resolve_newgrf_object_layout(object_type, tile, tileh, climate, object_catalog)
+            resolve_newgrf_object_layout(
+                object_type,
+                tile,
+                tileh,
+                ctx.coord,
+                climate,
+                object_catalog,
+                towns,
+            )
         })
     } else {
         None
@@ -2304,8 +2317,13 @@ pub(crate) fn spawn_generic_land_tile(
             // tesela. Resolver aquí permite que Action2 observe el random,
             // offset de footprint, pendiente, frame y owner en vez de usar
             // siempre el preview estático del GRF.
-            let mut a2 =
-                openttdrs_core::action2_eval_ctx_for_object_tile(tile, ctx.info.tileh, climate);
+            let mut a2 = openttdrs_core::action2_eval_ctx_for_object_tile_with_towns(
+                tile,
+                ctx.info.tileh,
+                climate,
+                ctx.coord,
+                towns,
+            );
             if let Some((layout_def, layout, runtime_fp, _layout_view_idx)) = object_layout.as_ref()
                 && layout.complete
             {

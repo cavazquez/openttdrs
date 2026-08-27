@@ -238,7 +238,8 @@ exclusión de cargos y la máscara final de refit descarta los cargos excluidos;
 el resto de propiedades CTT variables continúa pendiente.
 Los objetos NewGRF ya reevalúan
 Action2 por tesela con random, offset de footprint, pendiente/terreno,
-animación y owner, y cachean por fingerprint. Los layouts `TileSeq` completos
+animación, owner y zona/distancias (`0x45`/`0x46`) del pueblo más cercano, y
+cachean por fingerprint. Los layouts `TileSeq` completos
 reemplazan el suelo y emiten parents/children con cajas `M(...)`; los sprites
 base, paletas custom y layouts incompletos conservan fallback vanilla. Los
 producers de industria y

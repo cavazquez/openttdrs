@@ -65,9 +65,10 @@ pub use industry_tile_anim::{
 pub use level_crossing::is_road_level_crossing;
 pub use object::{
     MP_OBJECT_MAPT, OBJECT_TYPE_LIGHTHOUSE, OBJECT_TYPE_OWNED_LAND, OBJECT_TYPE_STATUE_COMPANY,
-    OBJECT_TYPE_TRANSMITTER, OTTD_MP_OBJECT, action2_eval_ctx_for_object_tile, is_map_object_tile,
-    is_newgrf_object_type, is_newgrf_object_type_id, is_owned_land_tile, object_footprint_at,
-    object_footprint_tiles, object_id_from_tile, object_origin_from_tile, object_spec_id_from_tile,
+    OBJECT_TYPE_TRANSMITTER, OTTD_MP_OBJECT, action2_eval_ctx_for_object_tile,
+    action2_eval_ctx_for_object_tile_with_towns, is_map_object_tile, is_newgrf_object_type,
+    is_newgrf_object_type_id, is_owned_land_tile, object_footprint_at, object_footprint_tiles,
+    object_id_from_tile, object_origin_from_tile, object_spec_id_from_tile,
     object_tile_offset_byte, object_type_dims, object_type_dims_id, object_type_from_tile,
     object_view_index_for_tile, object_view_index_for_type,
 };

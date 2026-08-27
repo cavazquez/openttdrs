@@ -299,6 +299,7 @@ pub(crate) fn spawn_map_tiles_in_bounds(
                     world_seed,
                     mw,
                     &sim.state.object_spec_catalog,
+                    &sim.state.towns,
                     Some(object_sprites),
                     Some(images),
                 );

@@ -133,12 +133,13 @@ secundarias fuera de ese contrato.
   draw mode `0x100` y la caché invalida por registros. Sprites base y paletas
   custom siguen en fallback atómico.
 - Objetos NewGRF: el renderer ya reevalúa Action2 por tesela con random
-  (`m3`), offset de footprint, pendiente/terreno, animación (`m3hi`) y owner,
-  y cachea cada resultado por fingerprint. Los layouts `TileSeq` completos
+  (`m3`), offset de footprint, pendiente/terreno, animación (`m3hi`), owner y
+  zona/distancias (`0x45`/`0x46`) del pueblo más cercano, y cachea cada
+  resultado por fingerprint. Los layouts `TileSeq` completos
   reemplazan el suelo y emiten parents/children con cajas `M(...)`; sprites
-  base, paletas custom y layouts incompletos mantienen fallback vanilla. Las
-  variables de town/teselas vecinas y los callbacks de objeto siguen
-  pendientes.
+  base, paletas custom y layouts incompletos mantienen fallback vanilla. La
+  asociación nativa objeto↔pueblo, las teselas vecinas y los callbacks de
+  objeto siguen pendientes.
 - Casas NewGRF: `DrawNewHouseTile` ya no cae automáticamente en
   `HOUSE_DRAW_DATA`: el sprite de edificio se resuelve desde Action1/2/3 con
   el contexto persistido de la tesela y la zona `0x42` del pueblo más cercano,

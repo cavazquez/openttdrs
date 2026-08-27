@@ -2821,6 +2821,7 @@ fn spawn_land_house_industry_generics_and_batches() {
                     TEST_WORLD_SEED,
                     8,
                     &[],
+                    &[],
                     None,
                     None,
                 );
@@ -2834,6 +2835,7 @@ fn spawn_land_house_industry_generics_and_batches() {
                     TEST_CLIMATE,
                     TEST_WORLD_SEED,
                     8,
+                    &[],
                     &[],
                     None,
                     None,
@@ -2849,6 +2851,7 @@ fn spawn_land_house_industry_generics_and_batches() {
                     TEST_WORLD_SEED,
                     8,
                     &[],
+                    &[],
                     None,
                     None,
                 );
@@ -2863,6 +2866,7 @@ fn spawn_land_house_industry_generics_and_batches() {
                     TEST_WORLD_SEED,
                     8,
                     &[],
+                    &[],
                     None,
                     None,
                 );
@@ -2876,6 +2880,7 @@ fn spawn_land_house_industry_generics_and_batches() {
                     TEST_CLIMATE,
                     TEST_WORLD_SEED,
                     8,
+                    &[],
                     &[],
                     None,
                     None,
@@ -4459,6 +4464,7 @@ fn spawn_field_tile_draws_crop_ground_and_fences() {
                     TEST_WORLD_SEED,
                     8,
                     &[],
+                    &[],
                     None,
                     None,
                 );
@@ -4519,6 +4525,7 @@ fn spawn_field_tile_draws_crop_ground_and_fences() {
                     TEST_CLIMATE,
                     TEST_WORLD_SEED,
                     8,
+                    &[],
                     &[],
                     None,
                     None,

@@ -25,6 +25,11 @@ mod catenary_gfx_data_generated;
 use catenary_gfx_data_generated::CATENARY_ACTION5_GFX;
 pub use catenary_gfx_data_generated::CatenarySpriteGfx;
 
+#[path = "tramway_catenary_gfx_data_generated.rs"]
+mod tramway_catenary_gfx_data_generated;
+
+use tramway_catenary_gfx_data_generated::TRAMWAY_SPRITE_GFX;
+
 use super::transparency::catenary_hidden;
 use crate::config;
 use crate::iso::remap_tile_offset;
@@ -52,6 +57,14 @@ pub const WIRE_SPRITE_LAST: u32 = 1062;
 pub const CATENARY_ENTRANCE_SPRITE_BASE: u32 = 910_063;
 /// IDs virtuales de postes PPP (`PSO_*` → `rail_pylon_*.png`).
 pub const PYLON_SPRITE_BASE: u32 = 910_067;
+
+/// Bloque Action5 `0x0B` de gráficos vanilla de tranvía.
+///
+/// OpenTTD asigna este bloque después de los gráficos extra de señales y
+/// cimientos (`SPR_TRAMWAY_BASE = 5986`). Los PNG se extraen del GRF
+/// `openttd` y se sirven desde el mismo atlas que el resto de las teselas.
+pub const TRAMWAY_SPRITE_BASE: u32 = 5986;
+pub const TRAMWAY_SPRITE_LAST: u32 = TRAMWAY_SPRITE_BASE + 118;
 
 /// `WireSpriteOffset` — `elrail_data.h`.
 const WSO_X_SHORT: u32 = 0;
@@ -117,8 +130,36 @@ pub fn catenary_reference_sprite_id(sprite_id: u32) -> u32 {
 /// rectángulo recortado en el origen de mundo con estos valores NFO.
 #[must_use]
 pub fn catenary_sprite_gfx(sprite_id: u32) -> Option<CatenarySpriteGfx> {
-    let slot = openttdrs_core::catenary_action5_local_slot(sprite_id)?;
-    CATENARY_ACTION5_GFX.get(slot).copied()
+    if let Some(slot) = openttdrs_core::catenary_action5_local_slot(sprite_id) {
+        return CATENARY_ACTION5_GFX.get(slot).copied();
+    }
+    tramway_sprite_gfx(sprite_id)
+}
+
+/// Metadatos NFO de un sprite del bloque vanilla de tranvía.
+#[must_use]
+pub fn tramway_sprite_gfx(sprite_id: u32) -> Option<CatenarySpriteGfx> {
+    let offset = usize::try_from(sprite_id.checked_sub(TRAMWAY_SPRITE_BASE)?).ok()?;
+    let gfx = TRAMWAY_SPRITE_GFX.get(offset)?;
+    Some(CatenarySpriteGfx {
+        width: gfx.width,
+        height: gfx.height,
+        x_offs: gfx.x_offs,
+        y_offs: gfx.y_offs,
+    })
+}
+
+/// Clave del atlas para un sprite del bloque vanilla de tranvía.
+#[must_use]
+pub fn tramway_sprite_atlas_key(sprite_id: u32) -> Option<String> {
+    let offset = sprite_id.checked_sub(TRAMWAY_SPRITE_BASE)?;
+    (offset <= TRAMWAY_SPRITE_LAST - TRAMWAY_SPRITE_BASE)
+        .then(|| format!("tramway_{offset:03}.png"))
+}
+
+/// Todos los offsets del bloque `SPR_TRAMWAY_BASE` para preload y pruebas.
+pub fn tramway_sprite_ids() -> impl Iterator<Item = u32> {
+    TRAMWAY_SPRITE_BASE..=TRAMWAY_SPRITE_LAST
 }
 
 /// `Direction` OpenTTD: N=0 … NW=7.
@@ -3636,5 +3677,33 @@ mod tests {
         for id in 1370u32..=1405 {
             assert!(ids.contains(&id), "falta el sprite de cruce {id}");
         }
+    }
+
+    #[test]
+    fn tramway_action5_block_has_vanilla_geometry_and_atlas_keys() {
+        assert_eq!(tramway_sprite_ids().count(), 119);
+        assert_eq!(
+            tramway_sprite_atlas_key(TRAMWAY_SPRITE_BASE + 55).as_deref(),
+            Some("tramway_055.png")
+        );
+        assert_eq!(
+            tramway_sprite_gfx(TRAMWAY_SPRITE_BASE + 55),
+            Some(CatenarySpriteGfx {
+                width: 64.0,
+                height: 48.0,
+                x_offs: -31.0,
+                y_offs: -17.0,
+            })
+        );
+        assert_eq!(
+            tramway_sprite_gfx(TRAMWAY_SPRITE_BASE + 68),
+            Some(CatenarySpriteGfx {
+                width: 64.0,
+                height: 56.0,
+                x_offs: -31.0,
+                y_offs: -25.0,
+            })
+        );
+        assert_eq!(tramway_sprite_gfx(TRAMWAY_SPRITE_LAST + 1), None);
     }
 }

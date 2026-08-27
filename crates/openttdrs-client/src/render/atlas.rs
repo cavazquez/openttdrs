@@ -211,6 +211,8 @@ mod tests {
             "crossing_mglv_00.png",
             "terrain_rocky_1_00.png",
             "terrain_rocky_1_18.png",
+            "tramway_055.png",
+            "tramway_072.png",
         ] {
             assert!(atlas.try_get(name).is_some(), "falta {name}");
         }

@@ -354,6 +354,17 @@ impl WorldAssets {
                 rail.insert(id, sprite);
             }
         }
+        // El bloque vanilla de tranvía (`SPR_TRAMWAY_BASE`) vive en
+        // `openttd.grf`, no en `ogfx1_base`. Mantenerlo en el mismo mapa que
+        // los sprites ferroviarios permite que el resolver de catenaria use
+        // los IDs globales sin introducir una segunda ruta de atlas.
+        for id in crate::sprites::tramway_sprite_ids() {
+            if let Some(key) = crate::sprites::tramway_sprite_atlas_key(id)
+                && let Some(sprite) = atlas.try_get(&key)
+            {
+                rail.insert(id, sprite);
+            }
+        }
         let level_crossing_grounds = (1370u32..=1405)
             .filter_map(|id| level_crossing_sprite_atlas_key(id).map(|key| (id, atlas.get(&key))))
             .collect();

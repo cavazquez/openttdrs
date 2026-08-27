@@ -121,7 +121,7 @@ Fuente: `newgrf_act0_ships.cpp`.
 | `15` canal speed fraction | **runtime** (`canal_speed_frac` → `ship_speed_for_tile`) |
 | `08`, `09`, `11`, `13`, `16`–`1D`, `20`–`21`, `23`–`26` restantes | consumidas si tienen ancho fijo; semántica pendiente |
 | `1E` CTT include (lista variable) | **runtime** (`refit_mask` → `refittable_cargo_types_for_engine`; #274) |
-| `1F` CTT exclude (lista variable) | consumida (bytes); exclude aún no resta de la máscara (#274 residual) |
+| `1F` CTT exclude (lista variable) | **runtime**: la máscara se resta del `include` (o de la lista vanilla cuando no hay `include`) al ofrecer cargas de refit (#274) |
 
 ## Aircraft (`03`)
 

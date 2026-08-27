@@ -204,6 +204,9 @@ Action3 de underlay/overlay ya reemplazan el bloque combinado vanilla en vías
 normales, cruces y reservas PBS, conservan los offsets NFO de sprites HD y se
 vinculan a la fundación activa (con fallback por vista ausente); las variantes
 `NoSpriteCombine`, túnel y depósito todavía requieren una matriz específica.
+En vehículos marítimos, las listas CTT `0x1E/0x1F` ya conservan inclusión y
+exclusión de cargos y la máscara final de refit descarta los cargos excluidos;
+el resto de propiedades CTT variables continúa pendiente.
 Los objetos NewGRF ya reevalúan
 Action2 por tesela con random, offset de footprint, pendiente/terreno,
 animación y owner, y cachean por fingerprint. Los producers de industria y

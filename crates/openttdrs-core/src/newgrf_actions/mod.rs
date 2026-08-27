@@ -3891,6 +3891,47 @@ mod tests {
         assert_eq!(cargos, vec![crate::CargoType::Oil, crate::CargoType::Goods]);
     }
 
+    /// #274: el CTT exclude debe restarse del include antes de ofrecer refit.
+    #[test]
+    fn ships_ctt_exclude_list_removes_cargo_from_refit_mask() {
+        // Include Goods+Oil y exclude Oil: sólo Goods queda disponible.
+        let a0 = vec![
+            0x00,
+            ACTION0_FEATURE_SHIPS,
+            0x02,
+            0x01,
+            0x00,
+            0x1E,
+            0x02,
+            0x05,
+            0x03,
+            0x1F,
+            0x01,
+            0x03,
+        ];
+        let meta = parse_action0_vehicle_metas(&a0).unwrap().remove(0);
+        assert_eq!(meta.refit_mask, (1u32 << 5) | (1u32 << 3));
+        assert_eq!(meta.refit_exclude_mask, 1u32 << 3);
+
+        let bytes = build_grf_v2_with_action0_and_action8(&a0, [b'X', b'C', 0, 1], "ctt-ex", "");
+        let dir = tempfile_dir_with("ctt-ex.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("ctt-ex.grf", 1));
+        apply_newgrf_vehicles_trains(&mut state, &[&dir]);
+        let eng = state
+            .engine_catalog
+            .iter()
+            .find(|e| e.from_newgrf && e.kind == crate::VehicleKind::Ship)
+            .unwrap();
+        assert_eq!(eng.refit_mask, 1u32 << 5);
+        assert_eq!(
+            crate::refittable_cargo_types_for_engine(eng),
+            vec![crate::CargoType::Goods]
+        );
+    }
+
     /// #249: Vehicles AC — flag helicóptero aircraft prop 0x09.
     #[test]
     fn vehicles_ac_aircraft_heli_flag() {

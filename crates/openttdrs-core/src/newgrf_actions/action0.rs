@@ -266,6 +266,10 @@ pub struct ParsedVehicleMeta {
     pub visual_effect: u8,
     /// Action0 ship `0x1E` CTT include → bitmask temperate (`0` = lista vanilla).
     pub refit_mask: u32,
+    /// Action0 ship `0x1F` CTT exclude → bitmask temperate. Se resta de
+    /// `refit_mask` cuando el GRF declara ambas listas y de la lista vanilla
+    /// cuando sólo declara exclusiones.
+    pub refit_exclude_mask: u32,
     /// Máscara de callbacks de vehículo (bit 7 = `SoundEffect`).
     pub callback_mask: u16,
     /// Action0 misc flag bit 7: `OpenTTD` draws a sequence of stacked sprites.
@@ -342,6 +346,7 @@ impl ParsedVehicleMeta {
             sound_effect: 0,
             visual_effect: crate::engine::VEHICLE_VISUAL_EFFECT_DEFAULT,
             refit_mask: 0,
+            refit_exclude_mask: 0,
             callback_mask: 0,
             sprite_stack: false,
         })
@@ -3454,6 +3459,8 @@ fn parse_ship_property(
                 }
                 if prop == 0x1E && count > 0 {
                     meta.refit_mask = mask;
+                } else if prop == 0x1F {
+                    meta.refit_exclude_mask = mask;
                 }
             }
         }

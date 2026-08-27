@@ -175,7 +175,7 @@ mod tests {
             height: 4,
             x_offs: -3,
             y_offs: 0,
-            rgba: vec![21, 34, 55, 255].repeat(8 * 4),
+            rgba: [21, 34, 55, 255].repeat(8 * 4),
             mask: Vec::new(),
         };
         let mut graphics = TrainSpriteGraphics {

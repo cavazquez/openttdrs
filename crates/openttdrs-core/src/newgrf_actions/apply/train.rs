@@ -93,7 +93,7 @@ fn push_feature_vehicles(
             air_drag: 0,
             shorten_factor: 0,
             required_rail_type: None,
-            refit_mask: meta.refit_mask,
+            refit_mask: meta.refit_mask & !meta.refit_exclude_mask,
             is_helicopter: meta.is_helicopter,
             is_large_aircraft: meta.is_large_aircraft,
             sprite_stack: meta.sprite_stack,

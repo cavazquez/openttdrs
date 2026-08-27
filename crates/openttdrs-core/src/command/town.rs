@@ -156,6 +156,14 @@ pub(crate) fn found_town(state: &mut GameState, center: TileCoord) -> Result<(),
 
     state.economy.money -= FOUND_TOWN_COST;
 
+    let town_id = state
+        .towns
+        .iter()
+        .map(|t| t.id)
+        .max()
+        .unwrap_or(0)
+        .saturating_add(1);
+
     for &c in &roads {
         if let Err(e) = super::transport::write_normal_road_tile(state, c, road_bits) {
             state.economy.money += FOUND_TOWN_COST;
@@ -171,18 +179,13 @@ pub(crate) fn found_town(state: &mut GameState, center: TileCoord) -> Result<(),
         if state.map.get_kind(c) != Some(TileKind::Grass) {
             continue;
         }
-        if state.map.set_completed_house(c, 1, 20).is_ok() {
+        if state.map.set_completed_house(c, 1, 20).is_ok()
+            && state.map.set_house_town_id(c, town_id).is_ok()
+        {
             placed += 1;
         }
     }
 
-    let town_id = state
-        .towns
-        .iter()
-        .map(|t| t.id)
-        .max()
-        .unwrap_or(0)
-        .saturating_add(1);
     let seed = state
         .world_seed
         .wrapping_add(u64::from(town_id).wrapping_mul(0x9E37_79B9))

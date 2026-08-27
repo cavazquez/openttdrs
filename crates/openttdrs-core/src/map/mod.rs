@@ -315,6 +315,19 @@ impl Map {
         self.set_tile(c, Tile::completed_house(house_id, age, height))
     }
 
+    /// Atribuye una casa al pueblo que la contiene (`MAP2`/`TownID`).
+    pub fn set_house_town_id(&mut self, c: TileCoord, town_id: u32) -> Result<(), MapError> {
+        let mut tile = self.get(c).ok_or(MapError::OutOfBounds)?;
+        if tile.kind != TileKind::House {
+            return Err(MapError::OutOfBounds);
+        }
+        let town_id = u16::try_from(town_id).unwrap_or(u16::MAX);
+        let [town_id_lo, town_id_hi] = town_id.to_le_bytes();
+        tile.m2 = town_id_lo;
+        tile.m2_hi = town_id_hi;
+        self.set_tile(c, tile)
+    }
+
     /// Sustituye la tesela en `c` (tests, fixtures y herramientas de edición).
     pub fn set_tile(&mut self, c: TileCoord, tile: Tile) -> Result<(), MapError> {
         let i = self.index(c).ok_or(MapError::OutOfBounds)?;
@@ -444,6 +457,16 @@ mod ottdmap_binary_tests {
         assert_eq!(t.m8, 42);
         assert_eq!(t.m3 & 0x80, 0x80);
         assert_eq!(t.m5, 10);
+    }
+
+    #[test]
+    fn set_house_town_id_roundtrips_the_map2_word() {
+        let mut map = Map::new_flat(2, 2, 0);
+        let c = TileCoord::new(0, 0);
+        map.set_completed_house(c, 42, 10).unwrap();
+        map.set_house_town_id(c, 0x1234).unwrap();
+        let tile = map.get(c).expect("house tile");
+        assert_eq!(u16::from(tile.m2) | (u16::from(tile.m2_hi) << 8), 0x1234);
     }
 
     #[test]

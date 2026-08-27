@@ -85,14 +85,14 @@ pub(super) fn place_towns(
         let town_house_base = ctx
             .rng
             .random_range(u32::try_from(choices.len()).unwrap_or(1));
-        let (placed_houses, population) = build_street_town(ctx, &plan, town_house_base);
+        let town_id = u32::try_from(ctx.state.towns.len().saturating_add(1)).unwrap_or(1);
+        let (placed_houses, population) = build_street_town(ctx, &plan, town_house_base, town_id);
         if placed_houses < 3 {
             continue;
         }
 
         let name_seed = ctx.rng.next();
         let name = generate_town_name(4, name_seed).unwrap_or_else(|| format!("Pueblo {x},{y}"));
-        let town_id = u32::try_from(ctx.state.towns.len().saturating_add(1)).unwrap_or(1);
         let mut town = Town {
             id: town_id,
             pos: plan.town_pos,
@@ -251,6 +251,7 @@ fn build_street_town(
     ctx: &mut PopCtx<'_>,
     plan: &StreetTownPlan,
     town_house_base: u32,
+    town_id: u32,
 ) -> (usize, u32) {
     let road_bits = match plan.axis {
         StreetAxis::EastWest => ROAD_BITS_AXIS_X,
@@ -284,7 +285,9 @@ fn build_street_town(
             (town_house_base + ctx.rng.random_range(PROCEDURAL_HOUSE_STYLE_SPREAD)) % n_choices;
         let house_id = choices[usize::try_from(idx).unwrap_or(0)];
         let age = u8::try_from(ctx.rng.next() % 200).unwrap_or(0);
-        if ctx.state.map.set_completed_house(c, house_id, age).is_ok() {
+        if ctx.state.map.set_completed_house(c, house_id, age).is_ok()
+            && ctx.state.map.set_house_town_id(c, town_id).is_ok()
+        {
             placed += 1;
             population = population.saturating_add(u32::from(house_spec_population(house_id)));
         }

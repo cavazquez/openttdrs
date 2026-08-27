@@ -348,7 +348,7 @@ fn try_build_town_house(
         .map(|d| d.building_flags)
         .or_else(|| HouseSpec::get(house_id).map(|hs| hs.building_flags))
         .unwrap_or(crate::house_spec::BUILDING_FLAG_SIZE_1X1);
-    if !place_house_footprint(map, pos, house_id, flags) {
+    if !place_house_footprint_for_town(map, pos, house_id, flags, Some(town.id)) {
         return false;
     }
     let tiles = u16::try_from(house_footprint_offsets(flags).len()).unwrap_or(1);
@@ -377,6 +377,16 @@ pub fn place_house_footprint(
     base_id: u16,
     building_flags: u8,
 ) -> bool {
+    place_house_footprint_for_town(map, north, base_id, building_flags, None)
+}
+
+fn place_house_footprint_for_town(
+    map: &mut Map,
+    north: TileCoord,
+    base_id: u16,
+    building_flags: u8,
+    town_id: Option<u32>,
+) -> bool {
     let offsets = house_footprint_offsets(building_flags);
     for &(dx, dy) in &offsets {
         let pos = TileCoord::new(north.x + dx, north.y + dy);
@@ -387,7 +397,9 @@ pub fn place_house_footprint(
     for (i, &(dx, dy)) in offsets.iter().enumerate() {
         let pos = TileCoord::new(north.x + dx, north.y + dy);
         let id = base_id.saturating_add(u16::try_from(i).unwrap_or(0));
-        if map.set_completed_house(pos, id, 0).is_err() {
+        if map.set_completed_house(pos, id, 0).is_err()
+            || town_id.is_some_and(|town_id| map.set_house_town_id(pos, town_id).is_err())
+        {
             return false;
         }
     }
@@ -766,6 +778,7 @@ mod tests {
         };
         assert!(try_build_town_house(&mut map, &mut town, pos, 99, ctx));
         let tile = map.get(pos).unwrap();
+        assert_eq!(u32::from(tile.m2) | (u32::from(tile.m2_hi) << 8), town.id);
         let house_id = tile.m8 & 0x0FFF;
         let hs = HouseSpec::get(house_id).unwrap();
         assert!(hs.is_size_1x1());

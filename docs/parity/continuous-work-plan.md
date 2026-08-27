@@ -142,10 +142,11 @@ secundarias fuera de ese contrato.
   de objeto siguen pendientes.
 - Casas NewGRF: `DrawNewHouseTile` ya no cae automáticamente en
   `HOUSE_DRAW_DATA`: el sprite de edificio se resuelve desde Action1/2/3 con
-  el contexto persistido de la tesela y la zona `0x42` del pueblo más cercano,
+  el contexto persistido de la tesela y la zona `0x42` del pueblo identificado
+  por `MAP2` (fallback al más cercano en mapas legacy),
   y se registra como parent sortable, mientras el suelo sigue usando el
-  sustituto vanilla. La asociación nativa casa↔pueblo, las variables de
-  conteos/vecindad, layouts `TileLayout` con suelo propio, callbacks de
+  sustituto vanilla. Las variables de conteos/vecindad, layouts `TileLayout`
+  con suelo propio, callbacks de
   foundation/color/animación y la paleta `random_colour` siguen siendo
   residuales explícitos.
 - Industria NewGRF: la vista Action2 runtime usa también sus offsets resueltos

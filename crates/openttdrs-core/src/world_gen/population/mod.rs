@@ -412,6 +412,23 @@ mod tests {
         let state = gen_populated(12345, TownDensity::High, IndustryDensity::High);
         assert!(!state.towns.is_empty(), "expected towns");
         assert!(!state.industries.is_empty(), "expected industries");
+        let (width, height) = state.map.dimensions();
+        for y in 0..height {
+            for x in 0..width {
+                let coord = TileCoord::new(x as i32, y as i32);
+                let Some(tile) = state.map.get(coord) else {
+                    continue;
+                };
+                if tile.kind != TileKind::House {
+                    continue;
+                }
+                let town_id = u32::from(tile.m2) | (u32::from(tile.m2_hi) << 8);
+                assert!(
+                    state.towns.iter().any(|town| town.id == town_id),
+                    "house at {coord:?} must retain its town id"
+                );
+            }
+        }
     }
 
     #[test]

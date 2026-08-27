@@ -367,7 +367,8 @@ bits crudos de `state`, su `rotation` y la proyección de `TrackBits` usada por
 el controlador; todavía faltan su vector `path` cacheado y la semántica YAPF /
 wormhole completa. En aeronaves, `crashed_counter`, `number_consecutive_turns`,
 `turn_counter` y `flags` también se conservan en el subregistro FTA. Siguen
-pendientes los flags/estado completos de tren, carretera y el runtime FTA.
+pendientes el path/tcache y la geometría completa de tren, carretera y barco,
+además del runtime FTA.
 
 <!-- active-parity-backlog:end -->
 

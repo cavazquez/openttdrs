@@ -346,6 +346,44 @@ struct ShipWire {
     rotation: u8,
 }
 
+/// Campos específicos de `SlVehicleTrain` (`vehicle_sl.cpp`).
+#[derive(Clone, Copy)]
+struct TrainWire {
+    crash_anim_pos: u16,
+    force_proceed: u8,
+    track: u8,
+    flags: u16,
+    wait_counter: u16,
+    gv_flags: u16,
+}
+
+fn train_wire_for(state: &GameState, v: &Vehicle) -> TrainWire {
+    let track = if v.train_track != 0 {
+        v.train_track
+    } else {
+        // `track_bits_for` devuelve la máscara del tile; SlVehicleTrain.track
+        // guarda el índice de Track. Elegir el primer bit evita escribir la
+        // máscara (que OpenTTD interpretaría como otra vía).
+        let bits = track_bits_for(state, v.pos);
+        match bits.trailing_zeros() {
+            1 => 1,
+            2 => 2,
+            3 => 3,
+            4 => 4,
+            5 => 5,
+            _ => 0,
+        }
+    };
+    TrainWire {
+        crash_anim_pos: v.train_crash_anim_pos,
+        force_proceed: u8::from(v.force_proceed),
+        track,
+        flags: v.train_flags,
+        wait_counter: u16::try_from(v.wait_counter).unwrap_or(u16::MAX),
+        gv_flags: v.train_gv_flags,
+    }
+}
+
 fn ship_wire_for(v: &Vehicle) -> ShipWire {
     // `Ship::state` puede conservar estados especiales (depósito/wormhole).
     // Para una unidad creada desde JSON sin snapshot raw, reconstruir sólo la
@@ -398,6 +436,15 @@ fn write_aircraft_fields(buf: &mut Vec<u8>, aircraft: &AircraftWire) {
 fn write_ship_fields(buf: &mut Vec<u8>, ship: ShipWire) {
     buf.push(ship.state);
     buf.push(ship.rotation);
+}
+
+fn write_train_fields(buf: &mut Vec<u8>, train: TrainWire) {
+    buf.extend_from_slice(&train.crash_anim_pos.to_be_bytes());
+    buf.push(train.force_proceed);
+    buf.push(train.track);
+    buf.extend_from_slice(&train.flags.to_be_bytes());
+    buf.extend_from_slice(&train.wait_counter.to_be_bytes());
+    buf.extend_from_slice(&train.gv_flags.to_be_bytes());
 }
 
 fn write_vehs_common(buf: &mut Vec<u8>, c: &CommonWire) -> Result<(), SavError> {
@@ -676,7 +723,7 @@ fn push_typed_vehicle(
     rec: &mut Vec<u8>,
     veh_type: u8,
     common: &CommonWire,
-    train_track: Option<u8>,
+    train_runtime: Option<TrainWire>,
     road_runtime: Option<&Vehicle>,
     ship_runtime: Option<&ShipWire>,
     aircraft_runtime: Option<&AircraftWire>,
@@ -687,8 +734,8 @@ fn push_typed_vehicle(
             write_gamma(1, rec)?; // struct presente
             write_gamma(1, rec)?; // common presente
             write_vehs_common(rec, common)?;
-            if let Some(track) = train_track {
-                rec.push(track);
+            if let Some(train) = train_runtime {
+                write_train_fields(rec, train);
             }
             if let Some(road) = road_runtime {
                 rec.push(road.road_state);
@@ -1019,7 +1066,7 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
         write_gamma(sparse_idx, &mut rec)?;
 
         if is_train {
-            let track = track_bits_for(state, v.pos);
+            let train_runtime = train_wire_for(state, v);
             let engine_type = openttd_train_engine_type(v);
             let subtype = if v.prev_unit.is_none() {
                 TRAIN_SUBTYPE_FRONT_ENGINE
@@ -1047,7 +1094,7 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                     current_order_runtime_for(v, state, map_w),
                     cargo_packet_refs_for(cargo_export, v),
                 ),
-                Some(track),
+                Some(train_runtime),
                 None,
                 None,
                 None,
@@ -1124,9 +1171,14 @@ fn append_vehs_header(header: &mut Vec<u8>) -> Result<(), SavError> {
     append_field(header, 0x1B, "aircraft")?;
     header.push(0);
 
-    // train → common + track
+    // train → common + estado runtime específico
     append_field(header, 0x1B, "common")?;
+    append_field(header, 4, "crash_anim_pos")?;
+    append_field(header, 2, "force_proceed")?;
     append_field(header, 2, "track")?;
+    append_field(header, 4, "flags")?;
+    append_field(header, 4, "wait_counter")?;
+    append_field(header, 4, "gv_flags")?;
     header.push(0);
     append_vehs_common_fields(header)?;
 
@@ -1591,7 +1643,7 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::items_after_statements)]
+    #[allow(clippy::items_after_statements, clippy::too_many_lines)]
     fn vehs_preserves_train_consist_next_refs_and_wagon_subtypes() {
         use crate::sav::chunks::{find_chunk, parse_chunks};
         use crate::sav::table::{SlRecord, SlValue, parse_table_chunk, record_get};
@@ -1606,6 +1658,12 @@ mod tests {
         // orden incidental del vector JSON.
         let mut head = Vehicle::new(10, VehicleKind::Train, head_pos, head_pos);
         head.next_unit = Some(30);
+        head.train_crash_anim_pos = 321;
+        head.force_proceed = true;
+        head.train_track = 5;
+        head.train_flags = 0x1234;
+        head.train_gv_flags = 0x4567;
+        head.wait_counter = 513;
         let mut rear = Vehicle::new(20, VehicleKind::Train, rear_pos, rear_pos);
         rear.prev_unit = Some(30);
         let mut middle = Vehicle::new(30, VehicleKind::Train, middle_pos, middle_pos);
@@ -1619,6 +1677,18 @@ mod tests {
         let raw = find_chunk(&chunks, "VEHS").expect("VEHS");
         let rows = parse_table_chunk(&raw.body, true).expect("parse VEHS");
         assert_eq!(rows.len(), 3);
+        let parsed = crate::sav::entities::vehicles_from_chunks(
+            &chunks,
+            64,
+            &crate::sav::orders::SavOrderImport::from_chunks(&chunks, 360),
+            360,
+        );
+        assert_eq!(parsed[0].train_crash_anim_pos, 321);
+        assert_eq!(parsed[0].train_force_proceed, 1);
+        assert_eq!(parsed[0].train_track, 5);
+        assert_eq!(parsed[0].train_flags, 0x1234);
+        assert_eq!(parsed[0].train_wait_counter, 513);
+        assert_eq!(parsed[0].train_gv_flags, 0x4567);
 
         fn train_common(row: &SlRecord) -> &SlRecord {
             let train = match record_get(row, "train") {
@@ -1640,6 +1710,34 @@ mod tests {
         assert_eq!(
             record_get(head_common, "subtype").and_then(SlValue::as_u64),
             Some(u64::from(TRAIN_SUBTYPE_FRONT_ENGINE))
+        );
+        let head_train = match record_get(&rows[0].1, "train") {
+            Some(SlValue::Structs(items)) => items.first().expect("train"),
+            other => panic!("train ausente: {other:?}"),
+        };
+        assert_eq!(
+            record_get(head_train, "crash_anim_pos").and_then(SlValue::as_u64),
+            Some(321)
+        );
+        assert_eq!(
+            record_get(head_train, "force_proceed").and_then(SlValue::as_u64),
+            Some(1)
+        );
+        assert_eq!(
+            record_get(head_train, "track").and_then(SlValue::as_u64),
+            Some(5)
+        );
+        assert_eq!(
+            record_get(head_train, "flags").and_then(SlValue::as_u64),
+            Some(0x1234)
+        );
+        assert_eq!(
+            record_get(head_train, "wait_counter").and_then(SlValue::as_u64),
+            Some(513)
+        );
+        assert_eq!(
+            record_get(head_train, "gv_flags").and_then(SlValue::as_u64),
+            Some(0x4567)
         );
 
         let rear_common = train_common(&rows[1].1);
@@ -1778,7 +1876,7 @@ mod tests {
         );
         assert_eq!(
             record_get(train, "track").and_then(SlValue::as_u64),
-            Some(u64::from(TRACK_BIT_X))
+            Some(u64::from(crate::ship_movement::TRACK_X))
         );
     }
 

@@ -212,6 +212,18 @@ pub struct Vehicle {
     /// Tren: píxeles consumidos en la tesela actual (0..15) hacia el cruce.
     #[serde(default)]
     pub rail_pixel: u8,
+    /// Estado persistido de `Train::track` (índice de `Track`, no `TrackBits`).
+    #[serde(default)]
+    pub train_track: u8,
+    /// Animación de choque nativa (`Train::crash_anim_pos`).
+    #[serde(default)]
+    pub train_crash_anim_pos: u16,
+    /// Flags nativos específicos del tren (`Train::flags`).
+    #[serde(default)]
+    pub train_flags: u16,
+    /// Flags de vehículo general (`Train::gv_flags`).
+    #[serde(default)]
+    pub train_gv_flags: u16,
     /// Techo de velocidad por tipo de vía (`gcache.cached_max_track_speed`).
     #[serde(default)]
     pub cached_max_track_speed: u16,
@@ -659,6 +671,10 @@ impl Vehicle {
             crashed: false,
             crashed_ctr: 0,
             rail_pixel: 0,
+            train_track: 0,
+            train_crash_anim_pos: 0,
+            train_flags: 0,
+            train_gv_flags: 0,
             cached_max_track_speed: 0,
             cached_max_te_n: 0,
             cached_air_drag: 0,

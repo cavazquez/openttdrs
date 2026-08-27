@@ -1155,6 +1155,18 @@ pub struct SavVehicle {
     pub road_crashed_ctr: u16,
     /// Contador de reversa vial (`RoadVehicle::reverse_ctr`).
     pub road_reverse_ctr: u8,
+    /// Tren: posición de la animación de choque (`Train::crash_anim_pos`).
+    pub train_crash_anim_pos: u16,
+    /// Tren: `force_proceed` serializado como byte, sin normalizar flags.
+    pub train_force_proceed: u8,
+    /// Tren: índice de `Train::track` (no máscara `TrackBits`).
+    pub train_track: u8,
+    /// Tren: flags específicos (`Train::flags`).
+    pub train_flags: u16,
+    /// Tren: flags generales (`Train::gv_flags`).
+    pub train_gv_flags: u16,
+    /// Tren: contador de espera PBS (`Train::wait_counter`).
+    pub train_wait_counter: u16,
     /// Bits de estado nativos de un barco (`Ship::state`).
     ///
     /// Además de `TrackBits`, `OpenTTD` usa este byte para depósito y wormhole;
@@ -1420,6 +1432,43 @@ pub(crate) fn vehicles_from_chunks(
             (state, rotation, ship_track_from_state(state))
         } else {
             (0, 0, 0)
+        };
+        let (
+            train_crash_anim_pos,
+            train_force_proceed,
+            train_track,
+            train_flags,
+            train_gv_flags,
+            train_wait_counter,
+        ) = if kind == SavVehicleKind::Train {
+            (
+                record_get(sub, "crash_anim_pos")
+                    .and_then(SlValue::as_u64)
+                    .and_then(|value| u16::try_from(value).ok())
+                    .unwrap_or(0),
+                record_get(sub, "force_proceed")
+                    .and_then(SlValue::as_u64)
+                    .and_then(|value| u8::try_from(value).ok())
+                    .unwrap_or(0),
+                record_get(sub, "track")
+                    .and_then(SlValue::as_u64)
+                    .and_then(|value| u8::try_from(value).ok())
+                    .unwrap_or(0),
+                record_get(sub, "flags")
+                    .and_then(SlValue::as_u64)
+                    .and_then(|value| u16::try_from(value).ok())
+                    .unwrap_or(0),
+                record_get(sub, "gv_flags")
+                    .and_then(SlValue::as_u64)
+                    .and_then(|value| u16::try_from(value).ok())
+                    .unwrap_or(0),
+                record_get(sub, "wait_counter")
+                    .and_then(SlValue::as_u64)
+                    .and_then(|value| u16::try_from(value).ok())
+                    .unwrap_or(0),
+            )
+        } else {
+            (0, 0, 0, 0, 0, 0)
         };
         let direction = record_get(common, "direction")
             .and_then(SlValue::as_u64)
@@ -1746,6 +1795,12 @@ pub(crate) fn vehicles_from_chunks(
             road_overtaking_ctr,
             road_crashed_ctr,
             road_reverse_ctr,
+            train_crash_anim_pos,
+            train_force_proceed,
+            train_track,
+            train_flags,
+            train_gv_flags,
+            train_wait_counter,
             ship_state,
             ship_rotation,
             ship_track,

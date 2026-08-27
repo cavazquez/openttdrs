@@ -1342,6 +1342,12 @@ impl GameState {
                 vehicle.capacity = u32::from(v.cargo_capacity);
             }
             if kind == VehicleKind::Train {
+                vehicle.train_crash_anim_pos = v.train_crash_anim_pos;
+                vehicle.force_proceed = v.train_force_proceed != 0;
+                vehicle.train_track = v.train_track;
+                vehicle.train_flags = v.train_flags;
+                vehicle.train_gv_flags = v.train_gv_flags;
+                vehicle.wait_counter = u32::from(v.train_wait_counter);
                 vehicle.rail_pixel = rail_pixel_from_openttd_pos(v.x_pos, v.y_pos, v.direction);
                 if let Some(candidate) = vanilla_train_engine_id(v.engine_type)
                     && crate::engine::engine_by_id(candidate).is_some()
@@ -2002,6 +2008,12 @@ mod tests {
                     road_overtaking_ctr: 0,
                     road_crashed_ctr: 0,
                     road_reverse_ctr: 0,
+                    train_crash_anim_pos: 0,
+                    train_force_proceed: 0,
+                    train_track: 0,
+                    train_flags: 0,
+                    train_gv_flags: 0,
+                    train_wait_counter: 0,
                     ship_state: 0,
                     ship_rotation: 0,
                     ship_track: 0,
@@ -2088,6 +2100,12 @@ mod tests {
                     road_overtaking_ctr: 0,
                     road_crashed_ctr: 0,
                     road_reverse_ctr: 0,
+                    train_crash_anim_pos: 0,
+                    train_force_proceed: 0,
+                    train_track: 0,
+                    train_flags: 0,
+                    train_gv_flags: 0,
+                    train_wait_counter: 0,
                     ship_state: 0,
                     ship_rotation: 0,
                     ship_track: 0,
@@ -2174,6 +2192,12 @@ mod tests {
                     road_overtaking_ctr: 0,
                     road_crashed_ctr: 0,
                     road_reverse_ctr: 0,
+                    train_crash_anim_pos: 0,
+                    train_force_proceed: 0,
+                    train_track: 0,
+                    train_flags: 0,
+                    train_gv_flags: 0,
+                    train_wait_counter: 0,
                     ship_state: 0,
                     ship_rotation: 0,
                     ship_track: 0,
@@ -2260,6 +2284,12 @@ mod tests {
                     road_overtaking_ctr: 0,
                     road_crashed_ctr: 0,
                     road_reverse_ctr: 0,
+                    train_crash_anim_pos: 0,
+                    train_force_proceed: 0,
+                    train_track: 0,
+                    train_flags: 0,
+                    train_gv_flags: 0,
+                    train_wait_counter: 0,
                     ship_state: 0,
                     ship_rotation: 0,
                     ship_track: 0,

@@ -88,6 +88,14 @@ pub(in crate::command) fn place_airport_area(
     });
     let place_spec = newgrf_def.as_ref().map_or(spec, |d| d.subst_id);
 
+    let airport_tile_gfx = newgrf_def.as_ref().map_or_else(Vec::new, |def| {
+        crate::airport::newgrf_airport_tile_gfx(
+            origin,
+            def,
+            &state.airport_tile_spec_catalog,
+            axis_y,
+        )
+    });
     let placed: Vec<(TileCoord, AirportPiece)> = if let Some(ref def) = newgrf_def {
         newgrf_airport_tiles(origin, def, &state.airport_tile_spec_catalog, axis_y)
     } else {
@@ -136,6 +144,7 @@ pub(in crate::command) fn place_airport_area(
     let mut st = Station::new_with_kind(station_anchor, StopKind::Airport);
     st.owner = state.active_company;
     st.airport_tiles = tiles;
+    st.airport_tile_gfx = airport_tile_gfx;
     st.airport_spec = place_spec;
     st.airport_newgrf_spec_id = newgrf_id.filter(|_| newgrf_def.is_some());
     st.airport_blocks = 0;

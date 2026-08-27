@@ -580,6 +580,32 @@ pub fn newgrf_airport_tiles(
     tile_catalog: &[crate::airport_tile_spec::AirportTileSpecDef],
     axis_y: bool,
 ) -> Vec<(TileCoord, AirportPiece)> {
+    newgrf_airport_tile_gfx(origin, def, tile_catalog, axis_y)
+        .into_iter()
+        .map(|(coord, gfx)| {
+            let piece = AirportPiece::from_station_gfx(
+                crate::airport_tile_spec::resolve_airport_tile_piece_gfx(gfx, tile_catalog),
+            );
+            (coord, piece)
+        })
+        .collect()
+}
+
+/// Itera la huella de un aeropuerto `NewGRF` conservando el gfx custom de
+/// `AirportTile` por tesela.
+///
+/// El mapa necesita el `subst` vanilla en `m5` para FTA y compatibilidad con
+/// saves, pero el compositor debe poder recuperar el id global asignado por
+/// `AirportTiles` para dibujar Action1/2. Mantener ambas representaciones
+/// evita inferir el origen a partir del hangar (que puede estar en cualquier
+/// coordenada del layout).
+#[must_use]
+pub fn newgrf_airport_tile_gfx(
+    origin: TileCoord,
+    def: &crate::airport_class::NewgrfAirportSpecDef,
+    tile_catalog: &[crate::airport_tile_spec::AirportTileSpecDef],
+    axis_y: bool,
+) -> Vec<(TileCoord, u16)> {
     let layout = def
         .layouts
         .iter()
@@ -589,7 +615,9 @@ pub fn newgrf_airport_tiles(
         })
         .or_else(|| def.layouts.first());
     let Some(layout) = layout else {
-        return airport_spec_tiles(origin, def.subst_id, axis_y).collect();
+        return airport_spec_tiles(origin, def.subst_id, axis_y)
+            .map(|(coord, piece)| (coord, u16::from(piece as u8)))
+            .collect();
     };
     layout
         .tiles
@@ -600,9 +628,18 @@ pub fn newgrf_airport_tiles(
             } else {
                 (i32::from(t.x), i32::from(t.y))
             };
-            let gfx = crate::airport_tile_spec::resolve_airport_tile_piece_gfx(t.gfx, tile_catalog);
-            let piece = AirportPiece::from_station_gfx(gfx);
-            (TileCoord::new(origin.x + dx, origin.y + dy), piece)
+            let gfx = if t.gfx < crate::airport_tile_spec::NEW_AIRPORT_TILE_OFFSET {
+                t.gfx
+            } else {
+                // Keep the global id even when the catalog entry is not
+                // currently installed; the renderer will use the vanilla
+                // fallback instead of silently shifting the footprint.
+                tile_catalog
+                    .iter()
+                    .find(|candidate| candidate.gfx.as_u16() == t.gfx)
+                    .map_or(t.gfx, |candidate| candidate.gfx.as_u16())
+            };
+            (TileCoord::new(origin.x + dx, origin.y + dy), gfx)
         })
         .collect()
 }

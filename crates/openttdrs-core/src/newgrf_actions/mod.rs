@@ -4529,6 +4529,12 @@ mod tests {
         assert_eq!(st.airport_newgrf_spec_id, Some(newgrf_id));
         assert_eq!(st.airport_spec, AirportSpecId::Small);
         assert_eq!(st.airport_tiles.len(), 4);
+        assert_eq!(st.airport_tile_gfx.len(), 4);
+        assert_eq!(
+            st.airport_tile_gfx[0].1,
+            state.airport_tile_spec_catalog[0].gfx.as_u16(),
+            "el layout conserva el gfx AirportTile global para el renderer"
+        );
         assert!(
             !station_uses_airport_fta(st),
             "NewGRF airport must not use vanilla FTA"

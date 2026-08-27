@@ -3461,6 +3461,7 @@ pub(crate) fn spawn_transport_object_tile(
         map,
         dims,
         stations,
+        &[],
         catenary_newgrf,
         catenary_sprites,
         bridge_decks_newgrf,
@@ -3472,6 +3473,69 @@ pub(crate) fn spawn_transport_object_tile(
         action5_sprites,
         images,
     );
+}
+
+/// Emite el sprite `AirportTile` de un aeropuerto `NewGRF` cuando el layout
+/// de construcción conservó un gfx global por tesela. El mapa sigue llevando
+/// el `subst` vanilla en `m5` para FTA/compatibilidad, pero la imagen visible
+/// debe venir del `Action1/3` del tile custom.
+fn spawn_newgrf_airport_tile(
+    commands: &mut Commands,
+    ctx: &TileRenderContext,
+    base_z: u8,
+    gfx: u16,
+    catalog: &[openttdrs_core::AirportTileSpecDef],
+    cache: Option<&mut crate::render::NewGrfAction5SpriteCache>,
+    images: Option<&mut Assets<Image>>,
+) -> bool {
+    let Some(def) = catalog
+        .iter()
+        .find(|candidate| candidate.gfx.as_u16() == gfx && candidate.has_newgrf_sprites())
+    else {
+        return false;
+    };
+    // Clone the small decoded descriptor before borrowing the image cache so
+    // the catalog remains immutable while the texture is materialized.
+    let Some(view) = def.newgrf_view(0).cloned() else {
+        return false;
+    };
+    let (Some(cache), Some(images)) = (cache, images) else {
+        return false;
+    };
+    let image = cache.handle_for_variant(0x11, gfx, 0, &view, images);
+    WorldDrawTrace::record_sprite_with_palette_and_world_geometry(
+        "airport-newgrf-tile",
+        "sortable",
+        u32::from(gfx),
+        0,
+        false,
+        (0, 0),
+        0,
+        (i32::from(view.x_offs), i32::from(view.y_offs), 0),
+        None,
+    );
+    let position = overlay_pos(
+        ctx.iso_pos,
+        f32::from(view.x_offs),
+        f32::from(view.y_offs),
+        f32::from(view.width),
+        f32::from(view.height),
+        base_z,
+        0.04,
+        ctx.tx_i32(),
+        ctx.ty_i32(),
+    );
+    commands.spawn((
+        MapVisualLayer,
+        ctx.map_tile_chunk(),
+        tint_building_sprite(Sprite {
+            image,
+            color: Color::WHITE,
+            ..default()
+        }),
+        Transform::from_translation(position),
+    ));
+    true
 }
 
 /// Variante de [`spawn_transport_object_tile`] que conserva el estado de
@@ -3489,6 +3553,7 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
     map: &Map,
     dims: (u32, u32),
     stations: &[Station],
+    airport_tile_catalog: &[openttdrs_core::AirportTileSpecDef],
     catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     mut catenary_sprites: Option<&mut crate::render::NewGrfCatenarySpriteCache>,
     bridge_decks_newgrf: &[Option<openttdrs_core::DecodedSprite>],
@@ -3849,6 +3914,26 @@ pub(crate) fn spawn_transport_object_tile_with_road_types(
                 slope_half_h(tileh)
             };
             let m5 = ctx.tile.map(|t| t.m5).unwrap_or(0);
+            // A newly built NewGRF airport stores the vanilla `subst` in
+            // `m5`, so use the per-tile global gfx retained on its Station
+            // before falling back to the vanilla AirportPiece renderer.
+            if let Some(gfx) = stations.iter().find_map(|station| {
+                station
+                    .airport_tile_gfx
+                    .iter()
+                    .find(|(coord, _)| *coord == ctx.coord)
+                    .map(|(_, gfx)| *gfx)
+            }) && spawn_newgrf_airport_tile(
+                commands,
+                ctx,
+                base_z,
+                gfx,
+                airport_tile_catalog,
+                action5_sprites.as_deref_mut(),
+                images.as_deref_mut(),
+            ) {
+                return;
+            }
             let imported_station_gfx = ctx.tile.is_some_and(|tile| {
                 let station_id = u32::from(tile.m2) | (u32::from(tile.m2_hi) << 8);
                 stations.iter().any(|station| {

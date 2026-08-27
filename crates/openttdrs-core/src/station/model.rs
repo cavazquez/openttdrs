@@ -221,6 +221,14 @@ pub struct Station {
     /// Teselas del aeropuerto (helipuerto = `[pos]`; small = footprint completo).
     #[serde(default)]
     pub airport_tiles: Vec<TileCoord>,
+    /// Gfx `AirportTile` efectivo por tesela de un aeropuerto `NewGRF`.
+    ///
+    /// `airport_tiles` conserva la huella y el byte `m5` conserva únicamente
+    /// el `subst` vanilla para FTA/compatibilidad. Esta lista mantiene la
+    /// referencia global al tile custom que debe consumir el renderer; queda
+    /// vacía para aeropuertos vanilla o saves antiguos sin layout disponible.
+    #[serde(default)]
+    pub airport_tile_gfx: Vec<(TileCoord, u16)>,
     /// Spec de aeropuerto vanilla (`AirportSpecId`); si hay `NewGRF`, es el subst.
     #[serde(default)]
     pub airport_spec: crate::airport_class::AirportSpecId,
@@ -336,6 +344,7 @@ impl Station {
             last_vehicle_type: None,
             company_time_since_pickup: vec![(CompanyId::PLAYER, CargoTimeSincePickup::default())],
             airport_tiles: Vec::new(),
+            airport_tile_gfx: Vec::new(),
             airport_spec: crate::airport_class::AirportSpecId::Heliport,
             airport_newgrf_spec_id: None,
             airport_blocks: 0,

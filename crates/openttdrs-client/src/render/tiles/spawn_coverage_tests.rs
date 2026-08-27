@@ -7,11 +7,11 @@ use bevy::image::ImagePlugin;
 use bevy::prelude::*;
 use openttdrs_core::prelude::*;
 use openttdrs_core::{
-    Action2VarAdjust, Action2VarEntry, Action2VarTerm, BridgeType, Climate, DecodedSprite,
-    FOUNDATION_ORIGINAL_SPRITE_BASE, HouseSpecDef, IndustryTileGfxId, IndustryTileSpecDef,
-    RailType, RoadStopSpecDef, RoadTramType, RoadType, RoadTypeDef, StationClassId, StationSpecDef,
-    StationSpecId, TrainSpriteAssign, TrainSpriteGraphics, WaterClass, set_water_class_m1,
-    vanilla_road_type_catalog,
+    Action2VarAdjust, Action2VarEntry, Action2VarTerm, AirportTileGfxId, AirportTileSpecDef,
+    BridgeType, Climate, DecodedSprite, FOUNDATION_ORIGINAL_SPRITE_BASE, HouseSpecDef,
+    IndustryTileGfxId, IndustryTileSpecDef, RailType, RoadStopSpecDef, RoadTramType, RoadType,
+    RoadTypeDef, StationClassId, StationSpecDef, StationSpecId, TrainSpriteAssign,
+    TrainSpriteGraphics, WaterClass, set_water_class_m1, vanilla_road_type_catalog,
 };
 
 const TEST_CLIMATE: Climate = Climate::Temperate;
@@ -23,7 +23,7 @@ use crate::render::tiles::{
     HouseSpawnResources, flush_map_batches, push_forest_tree, push_water_tile, spawn_bridge_middle,
     spawn_bridge_middle_with_road_types, spawn_generic_land_tile, spawn_house_tile,
     spawn_industry_tile, spawn_rail_tile, spawn_road_tile, spawn_station_tile,
-    spawn_transport_object_tile,
+    spawn_transport_object_tile, spawn_transport_object_tile_with_road_types,
 };
 use crate::render::{
     CompanyColoredSprites, MapSpriteBatches, MapVisualLayer, RenderGrid, TileRenderContext,
@@ -2591,6 +2591,108 @@ fn imported_airport_uses_full_station_gfx_not_airport_piece_fallbacks() {
             "falta capa StationGfx con sprite {sprite_id}"
         );
     }
+}
+
+#[test]
+fn built_newgrf_airport_uses_airport_tile_action1_sprite() {
+    let assets = boot_assets_app();
+    let mut map = fresh_map8();
+    let coord = TileCoord::new(2, 2);
+    map.set_tile(
+        coord,
+        Tile {
+            kind: TileKind::Airport,
+            mapt: 0x50,
+            // The airport layout stores this vanilla substitute in m5; the
+            // custom gfx is carried separately by Station::airport_tile_gfx.
+            m5: 24,
+            ..tile_template()
+        },
+    )
+    .expect("newgrf airport tile");
+
+    let rgba = [255, 0, 0, 255].repeat(4);
+    let view = DecodedSprite {
+        width: 2,
+        height: 2,
+        x_offs: -1,
+        y_offs: -2,
+        rgba: rgba.clone(),
+        mask: Vec::new(),
+    };
+    let gfx = 74;
+    let airport_tile = AirportTileSpecDef {
+        gfx: AirportTileGfxId(gfx),
+        subst_id: 24,
+        from_newgrf: true,
+        callback_mask: 0,
+        newgrf_local_id: 0,
+        newgrf_grfid: 0x4150_544C,
+        newgrf_preview: Some(view.clone()),
+        newgrf_views: vec![view],
+        newgrf_runtime: None,
+    };
+    let mut station = Station::new_with_kind(coord, StopKind::Airport);
+    station.airport_newgrf_spec_id = Some(10);
+    station.airport_tiles.push(coord);
+    station.airport_tile_gfx.push((coord, gfx));
+    let stations = vec![station];
+    let catalog = vec![airport_tile];
+
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world.insert_resource(crate::render::NewGrfAction5SpriteCache::default());
+    world.insert_resource(Assets::<Image>::default());
+    world
+        .run_system_once(
+            move |mut commands: Commands,
+                  m: Res<TsMap>,
+                  g: Res<TsGrid>,
+                  a: Res<TsAssets>,
+                  mut cache: ResMut<crate::render::NewGrfAction5SpriteCache>,
+                  mut images: ResMut<Assets<Image>>| {
+                spawn_transport_object_tile_with_road_types(
+                    &mut commands,
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, 2, 2),
+                    4.0,
+                    false,
+                    &m.0,
+                    m.0.dimensions(),
+                    &stations,
+                    &catalog,
+                    &[],
+                    None,
+                    &[],
+                    &[],
+                    TEST_CLIMATE,
+                    &[],
+                    None,
+                    &[],
+                    Some(&mut cache),
+                    Some(&mut images),
+                );
+            },
+        )
+        .expect("newgrf airport spawn");
+
+    let sprite_handles: Vec<_> = world
+        .query::<&Sprite>()
+        .iter(&world)
+        .map(|sprite| sprite.image.clone())
+        .collect();
+    let images = world.resource::<Assets<Image>>();
+    assert!(
+        sprite_handles.iter().any(|handle| {
+            images.get(handle).and_then(|image| image.data.as_deref()) == Some(rgba.as_slice())
+        }),
+        "el aeropuerto construido debe consumir el sprite Action1/3 de AirportTile"
+    );
 }
 
 #[test]

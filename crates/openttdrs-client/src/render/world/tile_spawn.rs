@@ -247,6 +247,7 @@ pub(crate) fn spawn_map_tiles_in_bounds(
                     map,
                     (mw, mh),
                     &sim.state.stations,
+                    &sim.state.airport_tile_spec_catalog,
                     &sim.state.runtime.catenary_newgrf_sprites,
                     Some(catenary_sprites),
                     &sim.state.runtime.bridge_decks_newgrf_sprites,

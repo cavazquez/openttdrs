@@ -1086,6 +1086,17 @@ impl GameState {
                 vehicle.cur_speed = v.cur_speed;
                 vehicle.subspeed = v.subspeed;
                 vehicle.direction = v.direction;
+                vehicle.cargo_subtype = v.cargo_subtype;
+                vehicle.cargo_age_counter = v.cargo_age_counter;
+                if v.max_age_days != 0 {
+                    vehicle.max_age_days = v.max_age_days;
+                }
+                vehicle.build_tick = state.tick.get().saturating_sub(
+                    u64::from(v.age_days) * u64::from(crate::economy::TICKS_PER_DAY),
+                );
+                vehicle.last_service_day = crate::news::calendar_day_index(
+                    crate::sav::date::tick_from_packed_calendar_date(v.date_of_last_service),
+                );
                 // `ENGINE_AIRCRAFT_TRICARIO`/`ENGINE_AIRCRAFT_DAKOTA`: OpenTTD
                 // trae IDs vanilla (`engine_type`) que no coinciden con
                 // nuestro catálogo; best-effort por `is_helicopter` (subtype).
@@ -1180,6 +1191,18 @@ impl GameState {
             vehicle.subspeed = v.subspeed;
             vehicle.direction = v.direction;
             vehicle.cargo = u32::from(v.cargo);
+            vehicle.cargo_subtype = v.cargo_subtype;
+            vehicle.cargo_age_counter = v.cargo_age_counter;
+            if v.max_age_days != 0 {
+                vehicle.max_age_days = v.max_age_days;
+            }
+            vehicle.build_tick = state
+                .tick
+                .get()
+                .saturating_sub(u64::from(v.age_days) * u64::from(crate::economy::TICKS_PER_DAY));
+            vehicle.last_service_day = crate::news::calendar_day_index(
+                crate::sav::date::tick_from_packed_calendar_date(v.date_of_last_service),
+            );
             if matches!(kind, VehicleKind::Bus | VehicleKind::Truck) {
                 vehicle.road_state = v.road_state;
                 vehicle.frame = v.road_frame;
@@ -1858,8 +1881,13 @@ mod tests {
                     direction: 0,
                     engine_type: 0,
                     cargo_type: 9,
+                    cargo_subtype: 0,
                     cargo: 0,
                     cargo_capacity: 0,
+                    cargo_age_counter: 0,
+                    age_days: 0,
+                    max_age_days: 0,
+                    date_of_last_service: 0,
                     orders: Vec::new(),
                     current_order: 0,
                     cur_implicit_order_index: 0,
@@ -1910,8 +1938,13 @@ mod tests {
                     direction: 0,
                     engine_type: 0,
                     cargo_type: 0,
+                    cargo_subtype: 0,
                     cargo: 0,
                     cargo_capacity: 0,
+                    cargo_age_counter: 0,
+                    age_days: 0,
+                    max_age_days: 0,
+                    date_of_last_service: 0,
                     orders: Vec::new(),
                     current_order: 0,
                     cur_implicit_order_index: 0,
@@ -1962,8 +1995,13 @@ mod tests {
                     direction: 0,
                     engine_type: 0,
                     cargo_type: 5,
+                    cargo_subtype: 0,
                     cargo: 0,
                     cargo_capacity: 0,
+                    cargo_age_counter: 0,
+                    age_days: 0,
+                    max_age_days: 0,
+                    date_of_last_service: 0,
                     orders: Vec::new(),
                     current_order: 0,
                     cur_implicit_order_index: 0,
@@ -2014,8 +2052,13 @@ mod tests {
                     direction: 0,
                     engine_type: 0,
                     cargo_type: 9,
+                    cargo_subtype: 0,
                     cargo: 0,
                     cargo_capacity: 0,
+                    cargo_age_counter: 0,
+                    age_days: 0,
+                    max_age_days: 0,
+                    date_of_last_service: 0,
                     orders: Vec::new(),
                     current_order: 0,
                     cur_implicit_order_index: 0,

@@ -161,6 +161,9 @@ pub struct Vehicle {
     pub cargo: u32,
     #[serde(default)]
     pub cargo_type: Option<CargoType>,
+    /// Subtipo de carga (`Vehicle::cargo_subtype`) usado por NewGRF.
+    #[serde(default)]
+    pub cargo_subtype: u8,
     pub capacity: u32,
     #[serde(default = "default_running_true")]
     pub running: bool,
@@ -302,6 +305,9 @@ pub struct Vehicle {
     /// Ticks con carga a bordo (envejecimiento / penalización de pago).
     #[serde(default)]
     pub cargo_transit_ticks: u32,
+    /// Cuenta atrás nativa hasta el siguiente envejecimiento de carga.
+    #[serde(default)]
+    pub cargo_age_counter: u16,
     /// Packets a bordo (fuente de verdad Fase 2); `cargo`/`cargo_source` se sincronizan.
     #[serde(default)]
     pub cargo_packets: crate::cargo_packet::VehicleCargoList,
@@ -574,6 +580,7 @@ impl Vehicle {
             dest,
             cargo: 0,
             cargo_type,
+            cargo_subtype: 0,
             capacity: super::VEHICLE_CAPACITY,
             running: true,
             progress: 0,
@@ -620,6 +627,7 @@ impl Vehicle {
             no_network_route_to_order: false,
             cargo_source: None,
             cargo_transit_ticks: 0,
+            cargo_age_counter: 0,
             cargo_packets: crate::cargo_packet::VehicleCargoList::default(),
             last_pickup_station: None,
             last_depart_tick: None,

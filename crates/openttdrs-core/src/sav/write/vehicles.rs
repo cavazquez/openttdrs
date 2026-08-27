@@ -19,6 +19,7 @@ use super::chunks::raw_table_chunk;
 use super::codec::{write_gamma, write_str};
 use crate::game_state::GameState;
 use crate::map::{TileCoord, TileKind, coord_to_linear_index};
+use crate::news::{CALENDAR_BASE_YEAR, calendar_year_day};
 use crate::vehicle::{DIR_NE, DIR_NW, DIR_SE, DIR_SW, Vehicle, VehicleKind, VehicleOrder};
 use std::collections::HashMap;
 
@@ -67,6 +68,14 @@ const VEH_AIRCRAFT: u8 = 3;
 
 /// Píxeles por tesela (`TILE_SIZE`).
 const TILE_SIZE: i32 = 16;
+
+/// Convierte el índice de día del reloj Rust al `Date` que usa OpenTTD en
+/// `Vehicle::date_of_last_service`.
+fn packed_calendar_date_from_day_index(day_index: u64) -> i32 {
+    let (year, doy) = calendar_year_day(day_index);
+    i32::try_from(u64::from(year) * 365 + doy.saturating_sub(1))
+        .unwrap_or(i32::try_from(u64::from(CALENDAR_BASE_YEAR) * 365).unwrap_or(0))
+}
 
 fn station_id_for_pos(state: &GameState, pos: TileCoord) -> Option<u16> {
     // Las estaciones importadas conservan el `StationID` real de OpenTTD;
@@ -243,8 +252,13 @@ struct CommonWire {
     progress: u8,
     vehstatus: u8,
     cargo: u8,
+    cargo_subtype: u8,
     cargo_capacity: u16,
     cargo_count: u16,
+    cargo_age_counter: u16,
+    age_days: u32,
+    max_age_days: u32,
+    date_of_last_service: i32,
     order_list_ref: u32,
     cur_order: u8,
     /// `REF_VEHICLE`: 0 = null, resto = índice sparse + 1.
@@ -326,8 +340,17 @@ fn write_vehs_common(buf: &mut Vec<u8>, c: &CommonWire) -> Result<(), SavError> 
     buf.push(c.progress);
     buf.push(c.vehstatus);
     buf.push(c.cargo);
+    buf.push(c.cargo_subtype);
     buf.extend_from_slice(&c.cargo_capacity.to_be_bytes());
     buf.extend_from_slice(&c.cargo_count.to_be_bytes());
+    buf.extend_from_slice(&c.cargo_age_counter.to_be_bytes());
+    buf.extend_from_slice(&i32::try_from(c.age_days).unwrap_or(i32::MAX).to_be_bytes());
+    buf.extend_from_slice(
+        &i32::try_from(c.max_age_days)
+            .unwrap_or(i32::MAX)
+            .to_be_bytes(),
+    );
+    buf.extend_from_slice(&c.date_of_last_service.to_be_bytes());
     buf.extend_from_slice(&c.order_list_ref.to_be_bytes());
     buf.push(c.cur_order);
     buf.extend_from_slice(&c.next_ref.to_be_bytes());
@@ -396,6 +419,7 @@ fn push_orders(
 
 fn common_wire_for(
     v: &Vehicle,
+    current_tick: u64,
     tile_idx: u32,
     direction: u8,
     engine_type: u16,
@@ -409,6 +433,8 @@ fn common_wire_for(
     let x_pos = v.pos.x * TILE_SIZE + i32::from(v.rail_pixel.min(15));
     let y_pos = v.pos.y * TILE_SIZE + TILE_SIZE / 2;
     let z_pos = i32::from(v.z_pos.unwrap_or(0));
+    let age_days = v.vehicle_age_days(current_tick).min(u64::from(u32::MAX));
+    let date_of_last_service = packed_calendar_date_from_day_index(v.last_service_day);
     let group_id = v.group_id.unwrap_or(0xFFFE).min(u32::from(u16::MAX)) as u16;
     CommonWire {
         subtype,
@@ -425,8 +451,13 @@ fn common_wire_for(
         progress: v.progress,
         vehstatus,
         cargo,
+        cargo_subtype: v.cargo_subtype,
         cargo_capacity: u16::try_from(v.capacity).unwrap_or(u16::MAX),
         cargo_count: u16::try_from(v.cargo).unwrap_or(u16::MAX),
+        cargo_age_counter: v.cargo_age_counter,
+        age_days: u32::try_from(age_days).unwrap_or(u32::MAX),
+        max_age_days: v.max_age_days,
+        date_of_last_service,
         order_list_ref,
         cur_order,
         next_ref,
@@ -603,6 +634,7 @@ pub(super) fn ordl_and_vehs_records(
                 VEH_AIRCRAFT,
                 &common_wire_for(
                     v,
+                    state.tick.get(),
                     tile_idx,
                     direction,
                     engine_type,
@@ -638,8 +670,13 @@ pub(super) fn ordl_and_vehs_records(
                     engine_type,
                     vehstatus: VEHSTATUS_STOPPED,
                     cargo: 0,
+                    cargo_subtype: 0,
                     cargo_capacity: 0,
                     cargo_count: 0,
+                    cargo_age_counter: 0,
+                    age_days: 0,
+                    max_age_days: 0,
+                    date_of_last_service: 0,
                     order_list_ref: 0,
                     cur_order: 0,
                     // Para helicópteros la sombra encadena al rotor. En el
@@ -687,8 +724,13 @@ pub(super) fn ordl_and_vehs_records(
                         engine_type,
                         vehstatus: VEHSTATUS_STOPPED,
                         cargo: 0,
+                        cargo_subtype: 0,
                         cargo_capacity: 0,
                         cargo_count: 0,
+                        cargo_age_counter: 0,
+                        age_days: 0,
+                        max_age_days: 0,
+                        date_of_last_service: 0,
                         order_list_ref: 0,
                         cur_order: 0,
                         next_ref: 0,
@@ -740,6 +782,7 @@ pub(super) fn ordl_and_vehs_records(
                 VEH_TRAIN,
                 &common_wire_for(
                     v,
+                    state.tick.get(),
                     tile_idx,
                     direction,
                     engine_type,
@@ -758,6 +801,7 @@ pub(super) fn ordl_and_vehs_records(
                 VEH_ROAD,
                 &common_wire_for(
                     v,
+                    state.tick.get(),
                     tile_idx,
                     direction,
                     engine_type,
@@ -777,6 +821,7 @@ pub(super) fn ordl_and_vehs_records(
                 VEH_SHIP,
                 &common_wire_for(
                     v,
+                    state.tick.get(),
                     tile_idx,
                     direction,
                     engine_type,
@@ -864,8 +909,13 @@ fn append_vehs_common_fields(header: &mut Vec<u8>) -> Result<(), SavError> {
     append_field(header, 2, "progress")?;
     append_field(header, 2, "vehstatus")?;
     append_field(header, 2, "cargo_type")?;
+    append_field(header, 2, "cargo_subtype")?;
     append_field(header, 4, "cargo_cap")?;
     append_field(header, 4, "cargo_count")?;
+    append_field(header, 4, "cargo_age_counter")?;
+    append_field(header, 5, "age")?;
+    append_field(header, 5, "max_age")?;
+    append_field(header, 5, "date_of_last_service")?;
     append_field(header, 6, "orders")?; // REF_ORDERLIST → U32
     append_field(header, 2, "cur_real_order_index")?;
     append_field(header, 6, "next")?; // REF_VEHICLE → U32
@@ -1430,6 +1480,10 @@ mod tests {
         train.timetable_autofill = true;
         train.vehicle_flags = 1 << 7;
         train.service_interval_days = 87;
+        train.cargo_subtype = 3;
+        train.cargo_age_counter = 42;
+        train.max_age_days = 12_345;
+        train.last_service_day = 123;
         train.reliability = 7_654;
         train.reliability_spd_dec = 321;
         train.breakdown_ctr = 4;
@@ -1472,6 +1526,18 @@ mod tests {
         assert_eq!(
             record_get(common, "service_interval").and_then(SlValue::as_u64),
             Some(87)
+        );
+        assert_eq!(
+            record_get(common, "cargo_subtype").and_then(SlValue::as_u64),
+            Some(3)
+        );
+        assert_eq!(
+            record_get(common, "cargo_age_counter").and_then(SlValue::as_u64),
+            Some(42)
+        );
+        assert_eq!(
+            record_get(common, "max_age").and_then(SlValue::as_i64),
+            Some(12_345)
         );
         assert_eq!(
             record_get(common, "reliability").and_then(SlValue::as_u64),

@@ -1127,6 +1127,8 @@ pub struct SavVehicle {
     pub engine_type: u16,
     /// `CargoType` de `OpenTTD` (0 = pasajeros).
     pub cargo_type: u8,
+    /// Subtipo de carga guardado por `Vehicle::cargo_subtype`.
+    pub cargo_subtype: u8,
     /// Unidades de carga a bordo (`Vehicle::cargo.StoredCount()`).
     ///
     /// En saves modernos es la suma cacheada de `cargo.packets`; se conserva
@@ -1135,6 +1137,12 @@ pub struct SavVehicle {
     pub cargo: u16,
     /// Capacidad efectiva tras refit (`Vehicle::cargo_cap`).
     pub cargo_capacity: u16,
+    /// Cuenta atrás de `Vehicle::cargo_age_counter`.
+    pub cargo_age_counter: u16,
+    /// Edad y servicio en días/fechas del calendario nativo.
+    pub age_days: u32,
+    pub max_age_days: u32,
+    pub date_of_last_service: i32,
     /// Órdenes de la lista referenciada (`ORDL`).
     pub orders: Vec<super::orders::SavOrder>,
     /// Índice de orden actual (`cur_real_order_index`).
@@ -1327,6 +1335,10 @@ pub(crate) fn vehicles_from_chunks(
         let cargo_type = record_get(common, "cargo_type")
             .and_then(SlValue::as_u64)
             .unwrap_or(0xFF);
+        let cargo_subtype = record_get(common, "cargo_subtype")
+            .and_then(SlValue::as_u64)
+            .and_then(|value| u8::try_from(value).ok())
+            .unwrap_or(0);
         let cargo = record_get(common, "cargo_count")
             .and_then(SlValue::as_u64)
             .and_then(|value| u16::try_from(value).ok())
@@ -1334,6 +1346,22 @@ pub(crate) fn vehicles_from_chunks(
         let cargo_capacity = record_get(common, "cargo_cap")
             .and_then(SlValue::as_u64)
             .and_then(|value| u16::try_from(value).ok())
+            .unwrap_or(0);
+        let cargo_age_counter = record_get(common, "cargo_age_counter")
+            .and_then(SlValue::as_u64)
+            .and_then(|value| u16::try_from(value).ok())
+            .unwrap_or(0);
+        let age_days = record_get(common, "age")
+            .and_then(SlValue::as_i64)
+            .and_then(|value| u32::try_from(value.max(0)).ok())
+            .unwrap_or(0);
+        let max_age_days = record_get(common, "max_age")
+            .and_then(SlValue::as_i64)
+            .and_then(|value| u32::try_from(value.max(0)).ok())
+            .unwrap_or(0);
+        let date_of_last_service = record_get(common, "date_of_last_service")
+            .and_then(SlValue::as_i64)
+            .and_then(|value| i32::try_from(value).ok())
             .unwrap_or(0);
         let order_list_ref = record_get(common, "orders")
             .and_then(SlValue::as_u64)
@@ -1482,8 +1510,13 @@ pub(crate) fn vehicles_from_chunks(
             direction,
             engine_type,
             cargo_type: cargo_type.min(255) as u8,
+            cargo_subtype,
             cargo,
             cargo_capacity,
+            cargo_age_counter,
+            age_days,
+            max_age_days,
+            date_of_last_service,
             orders,
             current_order,
             cur_implicit_order_index,

@@ -257,21 +257,26 @@ type SavRecordList = Vec<SavRecordBytes>;
 struct CommonWire {
     subtype: u8,
     name: Option<String>,
+    unit_number: u16,
     owner: u8,
     tile: u32,
+    dest_tile: u32,
     x_pos: i32,
     y_pos: i32,
     z_pos: i32,
     direction: u8,
+    sprite_num: u8,
     engine_type: u16,
     cur_speed: u16,
     subspeed: u8,
+    acceleration: u8,
     motion_counter: u32,
     progress: u8,
     vehstatus: u8,
     cargo: u8,
     cargo_subtype: u8,
     cargo_capacity: u16,
+    refit_capacity: u16,
     cargo_count: u16,
     cargo_packet_refs: Vec<u32>,
     cargo_action_counts: [u32; 4],
@@ -534,21 +539,26 @@ fn cargo_action_counts_for(v: &Vehicle, cargo_count: u32) -> [u32; 4] {
 fn write_vehs_common(buf: &mut Vec<u8>, c: &CommonWire) -> Result<(), SavError> {
     buf.push(c.subtype);
     write_str(c.name.as_deref().unwrap_or(""), buf)?;
+    buf.extend_from_slice(&c.unit_number.to_be_bytes());
     buf.push(c.owner);
     buf.extend_from_slice(&c.tile.to_be_bytes());
+    buf.extend_from_slice(&c.dest_tile.to_be_bytes());
     buf.extend_from_slice(&u32::try_from(c.x_pos).unwrap_or(0).to_be_bytes());
     buf.extend_from_slice(&u32::try_from(c.y_pos).unwrap_or(0).to_be_bytes());
     buf.extend_from_slice(&c.z_pos.to_be_bytes());
     buf.push(c.direction);
+    buf.push(c.sprite_num);
     buf.extend_from_slice(&c.engine_type.to_be_bytes());
     buf.extend_from_slice(&c.cur_speed.to_be_bytes());
     buf.push(c.subspeed);
+    buf.push(c.acceleration);
     buf.extend_from_slice(&c.motion_counter.to_be_bytes());
     buf.push(c.progress);
     buf.push(c.vehstatus);
     buf.push(c.cargo);
     buf.push(c.cargo_subtype);
     buf.extend_from_slice(&c.cargo_capacity.to_be_bytes());
+    buf.extend_from_slice(&c.refit_capacity.to_be_bytes());
     buf.extend_from_slice(&c.cargo_count.to_be_bytes());
     write_gamma(
         u32::try_from(c.cargo_packet_refs.len()).map_err(|_| SavError::ValueOutOfRange {
@@ -714,6 +724,7 @@ fn common_wire_for(
     v: &Vehicle,
     current_tick: u64,
     tile_idx: u32,
+    dest_tile_idx: u32,
     direction: u8,
     engine_type: u16,
     order_list_ref: u32,
@@ -750,24 +761,34 @@ fn common_wire_for(
         packed_calendar_date_from_day_index(u64::try_from(v.last_service_newgrf_day).unwrap_or(0))
     };
     let group_id = v.group_id.unwrap_or(0xFFFE).min(u32::from(u16::MAX)) as u16;
+    let unit_number = if v.unit_number == 0 {
+        u16::try_from(v.id.saturating_add(1)).unwrap_or(u16::MAX)
+    } else {
+        v.unit_number
+    };
     CommonWire {
         subtype,
         name: v.name.clone(),
+        unit_number,
         owner: v.owner.0,
         tile: tile_idx,
+        dest_tile: dest_tile_idx,
         x_pos,
         y_pos,
         z_pos,
         direction,
+        sprite_num: v.native_sprite_num,
         engine_type,
         cur_speed: v.cur_speed,
         subspeed: v.subspeed,
+        acceleration: v.acceleration,
         motion_counter: v.motion_counter,
         progress: v.progress,
         vehstatus,
         cargo,
         cargo_subtype: v.cargo_subtype,
         cargo_capacity: u16::try_from(v.capacity).unwrap_or(u16::MAX),
+        refit_capacity: v.refit_capacity,
         cargo_count: u16::try_from(cargo_count).unwrap_or(u16::MAX),
         cargo_packet_refs: cargo_packet_refs.to_vec(),
         cargo_action_counts,
@@ -962,6 +983,7 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
         let Some(tile_idx) = coord_to_linear_index(v.pos, map_w) else {
             continue;
         };
+        let dest_tile_idx = coord_to_linear_index(v.dest, map_w).unwrap_or(tile_idx);
 
         let order_list_ref = if let Some(shared_id) = v.shared_order_id {
             if let Some(existing) = shared_order_refs.get(&shared_id) {
@@ -1007,6 +1029,7 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                     v,
                     state.tick.get(),
                     tile_idx,
+                    dest_tile_idx,
                     direction,
                     engine_type,
                     order_list_ref,
@@ -1038,17 +1061,22 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                 &CommonWire {
                     subtype: AIR_SHADOW,
                     name: None,
+                    unit_number: 0,
                     owner: v.owner.0,
                     tile: tile_idx,
+                    dest_tile: tile_idx,
                     x_pos: v.pos.x * TILE_SIZE + TILE_SIZE / 2,
                     y_pos: v.pos.y * TILE_SIZE + TILE_SIZE / 2,
                     z_pos: i32::from(v.z_pos.unwrap_or(0)),
                     direction,
+                    sprite_num: 0,
                     engine_type,
                     vehstatus: VEHSTATUS_STOPPED,
+                    acceleration: 0,
                     cargo: 0,
                     cargo_subtype: 0,
                     cargo_capacity: 0,
+                    refit_capacity: 0,
                     cargo_count: 0,
                     cargo_packet_refs: Vec::new(),
                     cargo_action_counts: [0; 4],
@@ -1123,17 +1151,22 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                     &CommonWire {
                         subtype: AIR_ROTOR,
                         name: None,
+                        unit_number: 0,
                         owner: v.owner.0,
                         tile: tile_idx,
+                        dest_tile: tile_idx,
                         x_pos: v.pos.x * TILE_SIZE + TILE_SIZE / 2,
                         y_pos: v.pos.y * TILE_SIZE + TILE_SIZE / 2,
                         z_pos: i32::from(v.z_pos.unwrap_or(0)) + 5,
                         direction,
+                        sprite_num: 0,
                         engine_type,
                         vehstatus: VEHSTATUS_STOPPED,
+                        acceleration: 0,
                         cargo: 0,
                         cargo_subtype: 0,
                         cargo_capacity: 0,
+                        refit_capacity: 0,
                         cargo_count: 0,
                         cargo_packet_refs: Vec::new(),
                         cargo_action_counts: [0; 4],
@@ -1225,6 +1258,7 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                     v,
                     state.tick.get(),
                     tile_idx,
+                    dest_tile_idx,
                     direction,
                     engine_type,
                     order_list_ref,
@@ -1251,6 +1285,7 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                     v,
                     state.tick.get(),
                     tile_idx,
+                    dest_tile_idx,
                     direction,
                     engine_type,
                     order_list_ref,
@@ -1278,6 +1313,7 @@ pub(crate) fn ordl_and_vehs_records_with_cargo(
                     v,
                     state.tick.get(),
                     tile_idx,
+                    dest_tile_idx,
                     direction,
                     engine_type,
                     order_list_ref,
@@ -1373,21 +1409,26 @@ fn append_vehs_header(header: &mut Vec<u8>) -> Result<(), SavError> {
 fn append_vehs_common_fields(header: &mut Vec<u8>) -> Result<(), SavError> {
     append_field(header, 2, "subtype")?;
     append_field(header, 0x0A, "name")?;
+    append_field(header, 4, "unitnumber")?; // SLE_UINT16
     append_field(header, 2, "owner")?;
     append_field(header, 6, "tile")?;
+    append_field(header, 6, "dest_tile")?;
     append_field(header, 6, "x_pos")?;
     append_field(header, 6, "y_pos")?;
     append_field(header, 5, "z_pos")?; // SLE_FILE_I32
     append_field(header, 2, "direction")?;
+    append_field(header, 2, "spritenum")?;
     append_field(header, 4, "engine_type")?;
     append_field(header, 4, "cur_speed")?;
     append_field(header, 2, "subspeed")?;
+    append_field(header, 2, "acceleration")?;
     append_field(header, 6, "motion_counter")?; // SLE_UINT32
     append_field(header, 2, "progress")?;
     append_field(header, 2, "vehstatus")?;
     append_field(header, 2, "cargo_type")?;
     append_field(header, 2, "cargo_subtype")?;
     append_field(header, 4, "cargo_cap")?;
+    append_field(header, 4, "refit_cap")?;
     append_field(header, 4, "cargo_count")?;
     append_field(header, 0x16, "cargo.packets")?; // REF_CARGO_PACKET list
     append_field(header, 0x16, "cargo.action_counts")?; // SLE_CONDARR u32[4]
@@ -2075,6 +2116,11 @@ mod tests {
             TileCoord::new(20, 40),
         );
         train.set_vehicle_orders(vec![order]);
+        train.unit_number = 42;
+        train.native_sprite_num = 17;
+        train.acceleration = 9;
+        train.refit_capacity = 123;
+        train.dest = TileCoord::new(22, 40);
         train.timetable_start = 1_234;
         train.motion_counter = 0x1234_5678;
         train.current_order_time = 55;
@@ -2139,6 +2185,26 @@ mod tests {
         assert_eq!(
             record_get(common, "timetable_start").and_then(SlValue::as_u64),
             Some(1_234)
+        );
+        assert_eq!(
+            record_get(common, "unitnumber").and_then(SlValue::as_u64),
+            Some(42)
+        );
+        assert_eq!(
+            record_get(common, "dest_tile").and_then(SlValue::as_u64),
+            Some(22 + 40 * 64)
+        );
+        assert_eq!(
+            record_get(common, "spritenum").and_then(SlValue::as_u64),
+            Some(17)
+        );
+        assert_eq!(
+            record_get(common, "acceleration").and_then(SlValue::as_u64),
+            Some(9)
+        );
+        assert_eq!(
+            record_get(common, "refit_cap").and_then(SlValue::as_u64),
+            Some(123)
         );
         assert_eq!(
             record_get(common, "motion_counter").and_then(SlValue::as_u64),

@@ -1069,6 +1069,8 @@ pub struct SavVehicle {
     pub next_shared_sav_id: Option<u32>,
     /// Compañía propietaria (`Vehicle::owner`).
     pub owner: u8,
+    /// Número visible de unidad (`Vehicle::unitnumber`).
+    pub unit_number: u16,
     /// Grupo de flota (`Vehicle::group_id`) o `None` para el grupo por defecto.
     pub group_id: Option<u32>,
     /// Inicio del ciclo de horario (`Vehicle::timetable_start`) en ticks.
@@ -1133,6 +1135,8 @@ pub struct SavVehicle {
     /// suele quedar vestigial en `(0, 0)` (`OpenTTD` no lo actualiza en
     /// vuelo); se conserva para trazas/oráculos que lo esperan tal cual.
     pub raw_tile: TileCoord,
+    /// Destino nativo (`Vehicle::dest_tile`), cuando está disponible.
+    pub dest: TileCoord,
     /// Progreso sub-tesela (`Vehicle::progress`, 0…255) al guardar.
     pub progress: u8,
     /// Contador de movimiento de 32 bits (`Vehicle::motion_counter`).
@@ -1145,6 +1149,10 @@ pub struct SavVehicle {
     /// Velocidad y fracción interna al guardar (`cur_speed` / `subspeed`).
     pub cur_speed: u16,
     pub subspeed: u8,
+    /// Aceleración nativa (`Vehicle::acceleration`).
+    pub acceleration: u8,
+    /// Sprite base nativo (`Vehicle::spritenum`).
+    pub sprite_num: u8,
     /// Estado de conducción de carretera (`RoadVehicle::state`).
     ///
     /// Es `0` para los demás tipos y para saves antiguos cuyo descriptor no
@@ -1207,6 +1215,8 @@ pub struct SavVehicle {
     pub cargo: u16,
     /// Capacidad efectiva tras refit (`Vehicle::cargo_cap`).
     pub cargo_capacity: u16,
+    /// Capacidad máxima de refit (`Vehicle::refit_cap`).
+    pub refit_capacity: u16,
     /// Referencias físicas al pool `CAPA` (`Vehicle::cargo.packets`).
     pub cargo_packet_ids: Vec<u32>,
     /// Conteos de movimiento de carga (`VehicleCargoList::action_counts`).
@@ -1392,6 +1402,10 @@ pub(crate) fn vehicles_from_chunks(
             .and_then(SlValue::as_u64)
             .and_then(|value| u8::try_from(value).ok())
             .unwrap_or(0);
+        let unit_number = record_get(common, "unitnumber")
+            .and_then(SlValue::as_u64)
+            .and_then(|value| u16::try_from(value).ok())
+            .unwrap_or(0);
         let name = record_get(common, "name")
             .and_then(SlValue::as_str)
             .filter(|name| !name.is_empty())
@@ -1425,6 +1439,10 @@ pub(crate) fn vehicles_from_chunks(
         let Some(pos) = coord_from_linear_index(tile, map_w) else {
             continue;
         };
+        let dest = record_get(common, "dest_tile")
+            .and_then(SlValue::as_u64)
+            .and_then(|value| coord_from_linear_index(value, map_w))
+            .unwrap_or(pos);
         let progress = record_get(common, "progress")
             .and_then(SlValue::as_u64)
             .unwrap_or(0)
@@ -1462,6 +1480,14 @@ pub(crate) fn vehicles_from_chunks(
             .unwrap_or(0)
             .try_into()
             .unwrap_or(u8::MAX);
+        let acceleration = record_get(common, "acceleration")
+            .and_then(SlValue::as_u64)
+            .and_then(|value| u8::try_from(value).ok())
+            .unwrap_or(0);
+        let sprite_num = record_get(common, "spritenum")
+            .and_then(SlValue::as_u64)
+            .and_then(|value| u8::try_from(value).ok())
+            .unwrap_or(0);
         let motion_counter = record_get(common, "motion_counter")
             .and_then(SlValue::as_u64)
             .and_then(|value| u32::try_from(value).ok())
@@ -1628,6 +1654,10 @@ pub(crate) fn vehicles_from_chunks(
             })
             .unwrap_or_else(|| [0, 0, u32::from(cargo), 0]);
         let cargo_capacity = record_get(common, "cargo_cap")
+            .and_then(SlValue::as_u64)
+            .and_then(|value| u16::try_from(value).ok())
+            .unwrap_or(0);
+        let refit_capacity = record_get(common, "refit_cap")
             .and_then(SlValue::as_u64)
             .and_then(|value| u16::try_from(value).ok())
             .unwrap_or(0);
@@ -1913,6 +1943,7 @@ pub(crate) fn vehicles_from_chunks(
             next_sav_id,
             next_shared_sav_id,
             owner,
+            unit_number,
             group_id,
             timetable_start,
             current_order_time,
@@ -1940,6 +1971,7 @@ pub(crate) fn vehicles_from_chunks(
             name,
             pos,
             raw_tile,
+            dest,
             progress,
             motion_counter,
             x_pos: i32::try_from(x_pos).unwrap_or(0),
@@ -1947,6 +1979,8 @@ pub(crate) fn vehicles_from_chunks(
             z_pos: i32::try_from(z_pos).unwrap_or(0),
             cur_speed,
             subspeed,
+            acceleration,
+            sprite_num,
             road_state,
             road_frame,
             road_blocked_ctr,
@@ -1972,6 +2006,7 @@ pub(crate) fn vehicles_from_chunks(
             cargo_subtype,
             cargo,
             cargo_capacity,
+            refit_capacity,
             cargo_packet_ids,
             cargo_action_counts,
             cargo_age_counter,

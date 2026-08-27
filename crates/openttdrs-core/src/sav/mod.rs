@@ -1108,10 +1108,14 @@ impl GameState {
             };
             let id = v.sav_id;
             if kind == VehicleKind::Aircraft {
-                let mut vehicle = Vehicle::new(id, kind, v.pos, v.pos);
+                let mut vehicle = Vehicle::new(id, kind, v.pos, v.dest);
                 vehicle.owner = crate::company::CompanyId(v.owner);
+                vehicle.unit_number = v.unit_number;
                 vehicle.name.clone_from(&v.name);
                 vehicle.native_engine_type = Some(v.engine_type);
+                vehicle.native_sprite_num = v.sprite_num;
+                vehicle.acceleration = v.acceleration;
+                vehicle.refit_capacity = v.refit_capacity;
                 vehicle.group_id = v.group_id;
                 vehicle.next_shared_vehicle_id = v.next_shared_sav_id;
                 vehicle.timetable_start =
@@ -1251,10 +1255,14 @@ impl GameState {
                 state.vehicles.push(vehicle);
                 continue;
             }
-            let mut vehicle = Vehicle::new(id, kind, v.pos, v.pos);
+            let mut vehicle = Vehicle::new(id, kind, v.pos, v.dest);
             vehicle.owner = crate::company::CompanyId(v.owner);
+            vehicle.unit_number = v.unit_number;
             vehicle.name.clone_from(&v.name);
             vehicle.native_engine_type = Some(v.engine_type);
+            vehicle.native_sprite_num = v.sprite_num;
+            vehicle.acceleration = v.acceleration;
+            vehicle.refit_capacity = v.refit_capacity;
             vehicle.group_id = v.group_id;
             vehicle.next_shared_vehicle_id = v.next_shared_sav_id;
             vehicle.timetable_start =
@@ -1996,6 +2004,7 @@ mod tests {
                 SavVehicle {
                     sav_id: 0,
                     owner: 0,
+                    unit_number: 0,
                     // Las unidades pueden estar separadas por filas de otros
                     // tipos de vehículo en `VEHS`.
                     next_sav_id: Some(3),
@@ -2027,6 +2036,7 @@ mod tests {
                     name: None,
                     pos: crate::TileCoord::new(5, 5),
                     raw_tile: crate::TileCoord::new(5, 5),
+                    dest: crate::TileCoord::new(5, 5),
                     progress: 0,
                     motion_counter: 0,
                     x_pos: 5 * 16,
@@ -2034,6 +2044,8 @@ mod tests {
                     z_pos: 0,
                     cur_speed: 0,
                     subspeed: 0,
+                    acceleration: 0,
+                    sprite_num: 0,
                     road_state: 0,
                     road_frame: 0,
                     road_blocked_ctr: 0,
@@ -2059,6 +2071,7 @@ mod tests {
                     cargo_subtype: 0,
                     cargo: 0,
                     cargo_capacity: 0,
+                    refit_capacity: 0,
                     cargo_packet_ids: Vec::new(),
                     cargo_action_counts: [0; 4],
                     cargo_age_counter: 0,
@@ -2101,6 +2114,7 @@ mod tests {
                 SavVehicle {
                     sav_id: 1,
                     owner: 0,
+                    unit_number: 0,
                     next_sav_id: None,
                     next_shared_sav_id: None,
                     group_id: None,
@@ -2130,6 +2144,7 @@ mod tests {
                     name: None,
                     pos: crate::TileCoord::new(6, 6),
                     raw_tile: crate::TileCoord::new(6, 6),
+                    dest: crate::TileCoord::new(6, 6),
                     progress: 0,
                     motion_counter: 0,
                     x_pos: 6 * 16,
@@ -2137,6 +2152,8 @@ mod tests {
                     z_pos: 0,
                     cur_speed: 0,
                     subspeed: 0,
+                    acceleration: 0,
+                    sprite_num: 0,
                     road_state: 0,
                     road_frame: 0,
                     road_blocked_ctr: 0,
@@ -2162,6 +2179,7 @@ mod tests {
                     cargo_subtype: 0,
                     cargo: 0,
                     cargo_capacity: 0,
+                    refit_capacity: 0,
                     cargo_packet_ids: Vec::new(),
                     cargo_action_counts: [0; 4],
                     cargo_age_counter: 0,
@@ -2204,6 +2222,7 @@ mod tests {
                 SavVehicle {
                     sav_id: 2,
                     owner: 0,
+                    unit_number: 0,
                     next_sav_id: None,
                     next_shared_sav_id: None,
                     group_id: None,
@@ -2233,6 +2252,7 @@ mod tests {
                     name: None,
                     pos: crate::TileCoord::new(7, 7),
                     raw_tile: crate::TileCoord::new(7, 7),
+                    dest: crate::TileCoord::new(7, 7),
                     progress: 0,
                     motion_counter: 0,
                     x_pos: 7 * 16,
@@ -2240,6 +2260,8 @@ mod tests {
                     z_pos: 0,
                     cur_speed: 0,
                     subspeed: 0,
+                    acceleration: 0,
+                    sprite_num: 0,
                     road_state: 0,
                     road_frame: 0,
                     road_blocked_ctr: 0,
@@ -2265,6 +2287,7 @@ mod tests {
                     cargo_subtype: 0,
                     cargo: 0,
                     cargo_capacity: 0,
+                    refit_capacity: 0,
                     cargo_packet_ids: Vec::new(),
                     cargo_action_counts: [0; 4],
                     cargo_age_counter: 0,
@@ -2307,6 +2330,7 @@ mod tests {
                 SavVehicle {
                     sav_id: 3,
                     owner: 0,
+                    unit_number: 0,
                     next_sav_id: None,
                     next_shared_sav_id: None,
                     group_id: None,
@@ -2336,6 +2360,7 @@ mod tests {
                     name: None,
                     pos: crate::TileCoord::new(5, 5),
                     raw_tile: crate::TileCoord::new(5, 5),
+                    dest: crate::TileCoord::new(5, 5),
                     progress: 0,
                     motion_counter: 0,
                     x_pos: 5 * 16,
@@ -2343,6 +2368,8 @@ mod tests {
                     z_pos: 0,
                     cur_speed: 0,
                     subspeed: 0,
+                    acceleration: 0,
+                    sprite_num: 0,
                     road_state: 0,
                     road_frame: 0,
                     road_blocked_ctr: 0,
@@ -2368,6 +2395,7 @@ mod tests {
                     cargo_subtype: 0,
                     cargo: 0,
                     cargo_capacity: 0,
+                    refit_capacity: 0,
                     cargo_packet_ids: Vec::new(),
                     cargo_action_counts: [0; 4],
                     cargo_age_counter: 0,

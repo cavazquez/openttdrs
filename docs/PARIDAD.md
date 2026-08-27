@@ -367,7 +367,10 @@ horario) y los contadores diarios (`day_counter`, `tick_counter`,
 32 bits, `economy_age`, la fecha de servicio protegida para callbacks NewGRF,
 el enlace `next_shared` de la cadena de órdenes y las ventanas de salida
 `depot_unbunching_*`/`round_trip_time`; la hidratación mantiene esos valores en
-el modelo Rust sin convertirlos en defaults. En barcos, el subregistro
+el modelo Rust sin convertirlos en defaults. También se preservan los campos
+comunes `unitnumber`, `dest_tile`, `spritenum`, `acceleration` y `refit_cap`;
+el destino operativo puede volver a proyectarse sobre la orden al importarlo.
+En barcos, el subregistro
 `SlVehicleShip` ya conserva los bits crudos de `state`, su `rotation`, el vector
 `path` de `Trackdir` y la proyección de `TrackBits` usada por el controlador;
 todavía faltan la semántica YAPF/wormhole completa y otros estados de navegación.

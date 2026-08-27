@@ -177,6 +177,9 @@ const fn default_depot_leave_cleared() -> bool {
 pub struct Vehicle {
     pub id: u32,
     pub kind: VehicleKind,
+    /// Número visible de unidad (`Vehicle::unitnumber`).
+    #[serde(default)]
+    pub unit_number: u16,
     /// Compañía propietaria (Fase 4; default jugador).
     #[serde(default)]
     pub owner: crate::company::CompanyId,
@@ -285,12 +288,21 @@ pub struct Vehicle {
     /// primero del catálogo vanilla.
     #[serde(default)]
     pub native_engine_type: Option<u16>,
+    /// Sprite base nativo (`Vehicle::spritenum`) conservado para round-trip SAV.
+    #[serde(default)]
+    pub native_sprite_num: u8,
     /// Nombre personalizado; si falta, la UI usa modelo + id.
     #[serde(default)]
     pub name: Option<String>,
     /// Velocidad actual (unidades `OpenTTD`; 0 = parado).
     #[serde(default)]
     pub cur_speed: u16,
+    /// Aceleración persistida por `Vehicle::acceleration`.
+    #[serde(default)]
+    pub acceleration: u8,
+    /// Capacidad máxima de refit (`Vehicle::refit_cap`).
+    #[serde(default)]
+    pub refit_capacity: u16,
     /// Altura en píxeles (`Vehicle::z_pos` / `GetSlopePixelZ`); `None` = sin sincronizar.
     #[serde(default)]
     pub z_pos: Option<i16>,
@@ -681,6 +693,7 @@ impl Vehicle {
         Self {
             id,
             kind,
+            unit_number: u16::try_from(id.saturating_add(1)).unwrap_or(u16::MAX),
             owner: crate::company::CompanyId::PLAYER,
             pos,
             origin: pos,
@@ -719,8 +732,11 @@ impl Vehicle {
             direction: DIR_NE,
             engine_id: Some(engine_id),
             native_engine_type: None,
+            native_sprite_num: 0,
             name: None,
             cur_speed: 0,
+            acceleration: 0,
+            refit_capacity: 0,
             z_pos: None,
             ship_x: 0,
             ship_y: 0,

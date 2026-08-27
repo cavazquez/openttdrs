@@ -1378,6 +1378,11 @@ mod tests {
             .iter_mut()
             .find(|vehicle| vehicle.kind == crate::VehicleKind::Bus)
             .expect("bus MVP");
+        bus.unit_number = 314;
+        bus.native_sprite_num = 7;
+        bus.acceleration = 13;
+        bus.refit_capacity = 29;
+        bus.dest = TileCoord::new(14, 16);
         bus.progress = 173;
         bus.motion_counter = 0x1234_5678;
         bus.cur_speed = 41;
@@ -1436,6 +1441,11 @@ mod tests {
             .find(|v| v.kind == sav::SavVehicleKind::RoadVehicle)
             .expect("bus en VEHS");
         assert_eq!(saved_bus.progress, 173);
+        assert_eq!(saved_bus.unit_number, 314);
+        assert_eq!(saved_bus.sprite_num, 7);
+        assert_eq!(saved_bus.acceleration, 13);
+        assert_eq!(saved_bus.refit_capacity, 29);
+        assert_eq!(saved_bus.dest, TileCoord::new(14, 16));
         assert_eq!(saved_bus.motion_counter, 0x1234_5678);
         assert_eq!(saved_bus.cur_speed, 41);
         assert_eq!(saved_bus.subspeed, 99);
@@ -1467,6 +1477,13 @@ mod tests {
             .find(|vehicle| vehicle.kind == crate::VehicleKind::Bus)
             .expect("bus importado");
         assert_eq!(imported_bus.progress, 173);
+        assert_eq!(imported_bus.unit_number, 314);
+        assert_eq!(imported_bus.native_sprite_num, 7);
+        assert_eq!(imported_bus.acceleration, 13);
+        assert_eq!(imported_bus.refit_capacity, 29);
+        // La orden de parada vuelve a proyectar el destino operativo sobre la
+        // estación; el `dest_tile` crudo ya se verificó en `saved_bus`.
+        assert_eq!(imported_bus.dest, TileCoord::new(17, 16));
         assert_eq!(imported_bus.motion_counter, 0x1234_5678);
         assert_eq!(imported_bus.cur_speed, 41);
         assert_eq!(imported_bus.subspeed, 99);

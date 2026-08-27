@@ -116,6 +116,10 @@ secundarias fuera de ese contrato.
   pendientes y el overlay queda como child de la fundación nivelada, igual que
   la vía/PBS. Los layouts `TileSeq` con varias cajas y children siguen siendo
   un residual explícito.
+- Waypoints viales: el suelo vanilla ya respeta `m5` (eje), `m3` (Roadside),
+  tranvía y catenaria, y en pendientes usa `FOUNDATION_LEVELED` con sus capas
+  como children. Los dos postes del layout vanilla y los layouts/children
+  `NewGRF` de road stops siguen pendientes.
 - Objetos NewGRF: el renderer ya reevalúa Action2 por tesela con random
   (`m3`), offset de footprint, pendiente/terreno, animación (`m3hi`) y owner,
   y cachea cada resultado por fingerprint. Las variables de town, teselas

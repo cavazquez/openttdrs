@@ -848,7 +848,10 @@ fn drive_through_waypoint_and_road_depot_grounds_keep_opengfx_xrel_center() {
     let assets = boot_assets_app();
     let drive_through_ground =
         assets.road_paved[crate::sprites::road_flat_sprite_index(0, 0x0A)].clone();
-    let waypoint_ground = assets.road_flat[10].clone();
+    // `m5` conserva `GetDriveThroughStopAxis` y los bits 2..3 de m3 son
+    // `Roadside::Paved`, igual que un waypoint vial recién construido.
+    let waypoint_ground =
+        assets.road_paved[crate::sprites::road_flat_sprite_index(0, 0x0A)].clone();
     let depot_ground = assets.road_depot_ground.clone();
     let drive_through = TileCoord::new(2, 2);
     let waypoint = TileCoord::new(4, 2);
@@ -870,7 +873,8 @@ fn drive_through_waypoint_and_road_depot_grounds_keep_opengfx_xrel_center() {
         Tile {
             kind: TileKind::Station,
             mapt: 0x50,
-            m3: 0x0A,
+            m3: 0x08,
+            m5: openttdrs_core::RSV_DRIVE_THROUGH_X,
             m6: openttdrs_core::station::STATION_TYPE_ROAD_WAYPOINT << 3,
             ..tile_template()
         },
@@ -955,6 +959,7 @@ fn drive_through_waypoint_and_road_depot_grounds_keep_opengfx_xrel_center() {
                 .then_some(transform.translation.x)
         })
         .expect("ground drive-through");
+    let offset = crate::iso::GROUND_SPRITE_CENTER_X_OFFSET;
     let waypoint_x = world
         .query::<(&Sprite, &Transform)>()
         .iter(&world)
@@ -962,6 +967,9 @@ fn drive_through_waypoint_and_road_depot_grounds_keep_opengfx_xrel_center() {
             waypoint_ground
                 .matches(sprite)
                 .then_some(transform.translation.x)
+                .filter(|x| {
+                    (*x - (crate::iso::iso(waypoint.x, waypoint.y).x + offset)).abs() < 0.01
+                })
         })
         .expect("ground waypoint");
     let depot_x = world
@@ -973,7 +981,6 @@ fn drive_through_waypoint_and_road_depot_grounds_keep_opengfx_xrel_center() {
                 .then_some(transform.translation.x)
         })
         .expect("ground depot");
-    let offset = crate::iso::GROUND_SPRITE_CENTER_X_OFFSET;
     assert_eq!(
         drive_through_x,
         crate::iso::iso(drive_through.x, drive_through.y).x + offset
@@ -983,6 +990,115 @@ fn drive_through_waypoint_and_road_depot_grounds_keep_opengfx_xrel_center() {
         crate::iso::iso(waypoint.x, waypoint.y).x + offset
     );
     assert_eq!(depot_x, crate::iso::iso(depot.x, depot.y).x + offset);
+}
+
+#[test]
+fn sloped_road_waypoint_levels_ground_and_attaches_surface_to_foundation() {
+    let assets = boot_assets_app();
+    let mut map = Map::new_flat(3, 3, 0);
+    let coord = TileCoord::new(1, 1);
+    // NE slope: DrawTile_Station must replace it with a flat surface before
+    // drawing the road waypoint, while m5 still carries the drive-through X
+    // axis and m3 bits 2..3 carry the roadside decoration.
+    map.set_height(coord, 5).expect("waypoint height");
+    for neighbour in [
+        TileCoord::new(0, 1),
+        TileCoord::new(1, 0),
+        TileCoord::new(2, 1),
+        TileCoord::new(1, 2),
+    ] {
+        map.set_height(neighbour, 4).expect("neighbour height");
+    }
+    map.set_tile(
+        coord,
+        Tile {
+            kind: TileKind::Station,
+            mapt: 0x50,
+            m3: 0x04, // Roadside::Grass.
+            m5: openttdrs_core::RSV_DRIVE_THROUGH_X,
+            m6: openttdrs_core::station::STATION_TYPE_ROAD_WAYPOINT << 3,
+            ..tile_template()
+        },
+    )
+    .expect("sloped road waypoint");
+
+    let grid = RenderGrid::from_map(&map, 3, 3);
+    let ctx = TileRenderContext::new(&map, &grid, 1, 1);
+    assert_ne!(ctx.info.tileh, 0, "the fixture must remain sloped");
+    let expected_ground = assets
+        .road_flat
+        .get(crate::sprites::road_flat_sprite_index(0, 0x0A))
+        .expect("waypoint road ground")
+        .clone();
+
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+    world
+        .run_system_once(
+            |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                spawn_station_tile(
+                    &mut commands,
+                    &m.0,
+                    m.0.dimensions(),
+                    &a.0,
+                    None,
+                    None,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    &[],
+                    4.0,
+                    true,
+                    &[],
+                    &[],
+                    None,
+                    None,
+                    &[],
+                    None,
+                    &[],
+                    None,
+                    &[],
+                    TEST_CLIMATE,
+                    &[],
+                );
+            },
+        )
+        .expect("sloped road waypoint");
+
+    let foundation_parents: std::collections::HashSet<_> = world
+        .query::<(Entity, &ViewportSortableParent)>()
+        .iter(&world)
+        .filter_map(|(entity, parent)| {
+            (FOUNDATION_ORIGINAL_SPRITE_BASE..=FOUNDATION_ORIGINAL_SPRITE_BASE.saturating_add(14))
+                .contains(&parent.sprite_id)
+                .then_some(entity)
+        })
+        .collect();
+    assert!(
+        !foundation_parents.is_empty(),
+        "una pendiente de waypoint debe materializar DrawFoundation"
+    );
+    let attached_ground = world
+        .query::<(&ViewportSortableChild, &Sprite)>()
+        .iter(&world)
+        .any(|(child, sprite)| {
+            foundation_parents.contains(&child.parent) && expected_ground.matches(sprite)
+        });
+    assert!(
+        attached_ground,
+        "el suelo plano del waypoint debe ser child de la fundación"
+    );
+    assert!(
+        world.query::<&Sprite>().iter(&world).all(|sprite| {
+            !world
+                .resource::<TsAssets>()
+                .0
+                .grass_slopes
+                .iter()
+                .any(|grass| grass.matches(sprite))
+        }),
+        "un waypoint vial inclinado no debe conservar césped inclinado"
+    );
 }
 
 #[test]

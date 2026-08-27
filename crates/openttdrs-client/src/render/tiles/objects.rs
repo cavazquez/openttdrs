@@ -9,7 +9,8 @@ use openttdrs_core::{
 
 use super::bridge_draw::{bridge_span_at, spawn_bridge_deck_with_road_types};
 use super::transport::{
-    catenary_local_z_delta, spawn_rail_catenary_for_surface, spawn_road_catenary_for_type,
+    catenary_local_z_delta, record_road_ground_trace, spawn_rail_catenary_for_surface,
+    spawn_road_catenary_for_type,
 };
 use super::{
     catenary_under_low_bridge,
@@ -29,6 +30,7 @@ use crate::render::catenary_newgrf::{
     catenary_sprite_anchor, catenary_sprite_center, catenary_sprite_colored,
 };
 use crate::render::newgrf_cache::{runtime_fingerprint, vars};
+use crate::render::road_newgrf::{newgrf_road_def_for_tile, road_newgrf_view_index};
 use crate::render::station_newgrf::{
     NewGrfStationSpriteCache, newgrf_station_def_for_tile, station_newgrf_view_index_for_tile,
 };
@@ -58,8 +60,8 @@ use crate::sprites::{
     rail_waypoint_draw_layers, rail_waypoint_layer_meta, rail_waypoint_sprite_center,
     remap_rail_sprite_id, road_depot_build_layers, road_depot_seq_gfx, road_flat_sprite_index,
     road_ground_sprite_id, road_stop_build_layers, road_stop_drive_through_layers,
-    road_stop_ground_index, road_stop_ground_sprite_id, road_stop_seq_gfx, station_tile_class,
-    with_to_alpha,
+    road_stop_ground_index, road_stop_ground_sprite_id, road_stop_seq_gfx, roadside_is_paved,
+    station_tile_class, with_to_alpha,
 };
 
 fn buildings_hidden() -> bool {
@@ -1478,6 +1480,7 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                 | StationTileClass::RailWaypoint
                 | StationTileClass::Bus
                 | StationTileClass::Truck
+                | StationTileClass::RoadWaypoint
                 | StationTileClass::Dock
         )
     {
@@ -1932,17 +1935,210 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
             }
         }
         StationTileClass::RoadWaypoint => {
-            if tileh == 0 {
-                let grass = sloped_or_flat_image(0, &assets.grass, &assets.grass_slopes);
-                spawn_ground_sprite(commands, &grass, Color::WHITE, ctx, slope_half_ground);
-            }
-            let bits = ctx.tile.map_or(0x0A, |t| t.m3 & 0x0F);
-            let flat_idx = match bits {
-                0x05 => 5usize,
-                _ => 10usize,
+            // `DrawTile_Station` trata el waypoint vial como un
+            // drive-through: la geometría sale de `GetStationGfx` (m5), no
+            // del nibble de roadside de m3. En una pendiente OpenTTD fuerza
+            // `FOUNDATION_LEVELED` y todas las capas siguientes son children
+            // de ese parent; el césped inclinado anterior dejaba una segunda
+            // superficie visible debajo del waypoint.
+            let waypoint_foundation = spawn_forced_leveled_foundation_with_child_parent(
+                commands,
+                map,
+                dims,
+                assets,
+                ctx,
+                tileh,
+                "road-waypoint",
+                "road-waypoint-foundation",
+                foundation_newgrf,
+                action5_sprites.as_deref_mut(),
+                images.as_deref_mut(),
+            );
+            let waypoint_base_z = waypoint_foundation.surface_base_z;
+            let foundation_child_parent = waypoint_foundation.child_parent;
+            let waypoint_bits = match m5 {
+                openttdrs_core::RSV_DRIVE_THROUGH_X => 0x0A,
+                openttdrs_core::RSV_DRIVE_THROUGH_Y => 0x05,
+                // Saves viejos y fixtures sintéticos pueden no conservar m5.
+                // Sólo usar m3 como fallback cuando contiene un eje válido;
+                // nunca convertir los bits de una acera en orientación.
+                _ => match ctx.tile.map(|tile| tile.m3 & 0x0F) {
+                    Some(0x05) => 0x05,
+                    Some(0x0A) => 0x0A,
+                    _ => 0x0A,
+                },
             };
-            if let Some(img) = assets.road_flat.get(flat_idx) {
-                spawn_stop_ground_sprite(commands, img, ctx, base_z, 0.03);
+            let roadside = ctx.tile.map(|tile| (tile.m3 >> 2) & 0x03).unwrap_or(1);
+            let snow_or_desert =
+                ctx.tile.is_some_and(|tile| tile.m8 & (1 << 15) != 0) || climate.uses_snow_ground();
+            let paved = roadside_is_paved(roadside) && !snow_or_desert;
+            let flat_idx = road_flat_sprite_index(0, waypoint_bits);
+            let foundation = if tileh == 0 {
+                0
+            } else {
+                openttdrs_core::FOUNDATION_LEVELED
+            };
+
+            // Action1/2/3 default del roadtype sustituye el suelo vanilla
+            // cuando existe. Es la misma vista que usa `DrawRoadTile`, pero
+            // con tileh=0 porque la fundación del waypoint ya niveló la
+            // superficie.
+            let mut used_newgrf_ground = false;
+            if let Some(tile) = ctx.tile
+                && let Some(def) = newgrf_road_def_for_tile(road_catalog, tile)
+                && let Some(view) = def.newgrf_view(road_newgrf_view_index(0, waypoint_bits))
+                && let (Some(cache), Some(image_store)) = (road_sprites.as_mut(), images.as_mut())
+            {
+                let mut action2 = openttdrs_core::action2_eval_ctx_for_road_tile(
+                    map,
+                    tile,
+                    ctx.coord,
+                    climate,
+                    def.newgrf_type_tables.as_ref(),
+                    road_catalog,
+                );
+                action2.set_grf_params(openttdrs_core::stack_params_for_grfid(
+                    newgrf_stack,
+                    def.newgrf_grfid,
+                ));
+                if let Some(handle) = cache.handle_for_runtime(
+                    def,
+                    road_newgrf_view_index(0, waypoint_bits),
+                    &mut action2,
+                    image_store,
+                ) {
+                    let position = overlay_pos(
+                        ctx.iso_pos,
+                        f32::from(view.x_offs),
+                        f32::from(view.y_offs),
+                        f32::from(view.width),
+                        f32::from(view.height),
+                        waypoint_base_z,
+                        0.02,
+                        ctx.tx_i32(),
+                        ctx.ty_i32(),
+                    );
+                    spawn_waypoint_surface_sprite(
+                        commands,
+                        ctx,
+                        Sprite {
+                            image: handle,
+                            color: Color::WHITE,
+                            ..default()
+                        },
+                        position,
+                        dims.0,
+                        foundation_child_parent,
+                    );
+                    used_newgrf_ground = true;
+                }
+            }
+
+            if !used_newgrf_ground {
+                let sprite_id = road_ground_sprite_id(flat_idx, paved, snow_or_desert);
+                record_road_ground_trace("road-waypoint-ground", sprite_id, foundation);
+                let image = if paved {
+                    assets.road_paved.get(flat_idx)
+                } else {
+                    assets.road_flat.get(flat_idx)
+                };
+                if let Some(image) = image {
+                    let paint = if snow_or_desert {
+                        Color::srgb(0.82, 0.88, 0.98)
+                    } else {
+                        Color::WHITE
+                    };
+                    let position = full_tile_sprite_pos_half(
+                        ctx.tx_i32(),
+                        ctx.ty_i32(),
+                        waypoint_base_z,
+                        0.02,
+                        TILE_HALF_H,
+                    );
+                    spawn_waypoint_surface_sprite(
+                        commands,
+                        ctx,
+                        image.sprite_colored(paint),
+                        position,
+                        dims.0,
+                        foundation_child_parent,
+                    );
+                }
+            }
+
+            // Un waypoint vial es una parada drive-through para la catenaria,
+            // pero no dibuja el overlay de acera de una parada normal. El
+            // overlay NewGRF del tranvía sí se conserva si el tile declara un
+            // tipo de tranvía, y sigue la misma fundación que el asfalto.
+            if let Some(tile) = ctx.tile
+                && tram_road_type_from_tile(&tile).is_some()
+            {
+                let tram_idx = road_flat_sprite_index(0, waypoint_bits);
+                let mut used_tram_newgrf = false;
+                if let Some(def) =
+                    crate::render::road_newgrf::newgrf_tram_def_for_tile(road_catalog, tile)
+                    && let Some(view) = def.newgrf_view(tram_idx)
+                    && let (Some(cache), Some(image_store)) =
+                        (road_sprites.as_mut(), images.as_mut())
+                {
+                    let mut action2 = openttdrs_core::action2_eval_ctx_for_road_tile(
+                        map,
+                        tile,
+                        ctx.coord,
+                        climate,
+                        def.newgrf_type_tables.as_ref(),
+                        road_catalog,
+                    );
+                    action2.set_grf_params(openttdrs_core::stack_params_for_grfid(
+                        newgrf_stack,
+                        def.newgrf_grfid,
+                    ));
+                    if let Some(handle) =
+                        cache.handle_for_runtime(def, tram_idx, &mut action2, image_store)
+                    {
+                        let position = overlay_pos(
+                            ctx.iso_pos,
+                            f32::from(view.x_offs),
+                            f32::from(view.y_offs),
+                            f32::from(view.width),
+                            f32::from(view.height),
+                            waypoint_base_z,
+                            0.028,
+                            ctx.tx_i32(),
+                            ctx.ty_i32(),
+                        );
+                        spawn_waypoint_surface_sprite(
+                            commands,
+                            ctx,
+                            Sprite {
+                                image: handle,
+                                color: Color::WHITE,
+                                ..default()
+                            },
+                            position,
+                            dims.0,
+                            foundation_child_parent,
+                        );
+                        used_tram_newgrf = true;
+                    }
+                }
+                if !used_tram_newgrf && let Some(image) = assets.tram_flat.get(tram_idx) {
+                    let position = full_tile_sprite_pos_half(
+                        ctx.tx_i32(),
+                        ctx.ty_i32(),
+                        waypoint_base_z,
+                        0.028,
+                        TILE_HALF_H,
+                    );
+                    spawn_waypoint_surface_sprite(
+                        commands,
+                        ctx,
+                        image.sprite(),
+                        position,
+                        dims.0,
+                        foundation_child_parent,
+                    );
+                }
             }
             if !road_stop_catenary_suppressed(map, stations, road_stop_catalog, ctx.coord)
                 && let Some(tile) = ctx.tile
@@ -1955,7 +2151,7 @@ pub(crate) fn spawn_station_tile_with_world_and_road_types(
                     ctx,
                     tile,
                     road_stop_catenary_bits(m5),
-                    base_z,
+                    waypoint_base_z,
                     climate,
                     road_catalog,
                     road_sprites.as_deref_mut(),
@@ -2381,24 +2577,27 @@ fn spawn_road_stop_ground_sprite(
     }
 }
 
-fn spawn_stop_ground_sprite(
+/// Emite una superficie de waypoint vial y conserva el vínculo de
+/// `AddChildSpriteScreen` cuando `DrawFoundation(Leveled)` creó un parent.
+#[allow(clippy::too_many_arguments)]
+fn spawn_waypoint_surface_sprite(
     commands: &mut Commands,
-    image: &AtlasSprite,
     ctx: &TileRenderContext,
-    base_z: u8,
-    layer: f32,
+    sprite: Sprite,
+    position: Vec3,
+    map_width: u32,
+    foundation_child_parent: Option<Entity>,
 ) {
-    commands.spawn((
-        MapVisualLayer,
-        ctx.map_tile_chunk(),
-        image.sprite(),
-        Transform::from_translation(full_tile_sprite_pos(
-            ctx.tx_i32(),
-            ctx.ty_i32(),
-            base_z,
-            layer,
-        )),
-    ));
+    if let Some(parent) = foundation_child_parent {
+        spawn_foundation_child_sprite_at(commands, sprite, ctx, position, map_width, parent);
+    } else {
+        commands.spawn((
+            MapVisualLayer,
+            ctx.map_tile_chunk(),
+            sprite,
+            Transform::from_translation(position),
+        ));
+    }
 }
 
 #[allow(clippy::too_many_arguments)]

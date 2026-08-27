@@ -119,6 +119,12 @@ Las variantes vanilla de asfalto/flecha de `DrawRoadGroundSprites`, los suelos
 de paradas bahía/pasantes y de depósitos viales/ferroviarios, y la vía/reserva
 PBS de una estación ferroviaria inclinada se adjuntan igualmente al último
 parent de `DrawFoundation`; no conservan ya una Z independiente.
+Los waypoints viales siguen ahora la misma secuencia de `DrawTile_Station`:
+suelo orientado por `m5`, decoración `Roadside` de `m3`, overlay de tranvía
+cuando el tile declara ese tipo y fundación nivelada con todos esos sprites como
+children en pendientes. La catenaria conserva la altura efectiva de esa
+superficie. El layout vanilla de los dos postes y los layouts `TileSeq`
+NewGRF del waypoint todavía no están materializados.
 También incorpora los edificios industriales vanilla planos y estáticos, cuya
 caja `M(...)` no cambia durante la composición; las pendientes, animaciones y
 layouts NewGRF permanecen fuera de ese subconjunto.

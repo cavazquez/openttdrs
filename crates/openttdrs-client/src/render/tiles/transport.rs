@@ -541,7 +541,7 @@ const fn road_foundation_child_offset(foundation: u8) -> Option<(i32, i32, i32)>
     }
 }
 
-fn record_road_ground_trace(role: &'static str, sprite_id: u32, foundation: u8) {
+pub(crate) fn record_road_ground_trace(role: &'static str, sprite_id: u32, foundation: u8) {
     if let Some(offset) = road_foundation_child_offset(foundation) {
         WorldDrawTrace::record_foundation_child_sprite(role, sprite_id, false, offset);
     } else {

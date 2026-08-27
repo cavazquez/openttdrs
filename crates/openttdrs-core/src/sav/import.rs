@@ -192,8 +192,6 @@ pub(crate) fn hydrate_sav_industries(
 }
 
 fn import_industry_output_stock(industry: &mut Industry, saved: &SavIndustry, climate: Climate) {
-    let mut primary_seen = false;
-    let mut secondary_seen = false;
     let outputs = industry.produced_cargos();
     for produced in &saved.produced {
         let Some(cargo) = crate::CargoType::from_climate_slot(climate, produced.cargo_slot) else {
@@ -202,23 +200,27 @@ fn import_industry_output_stock(industry: &mut Industry, saved: &SavIndustry, cl
         let waiting = u32::from(produced.waiting);
         if outputs.first().copied() == Some(cargo) {
             industry.stock = waiting;
-            primary_seen = true;
             continue;
         }
         if outputs.get(1).copied() == Some(cargo) {
             industry.secondary_stock = waiting;
-            secondary_seen = true;
             continue;
         }
-        // NewGRF o una spec aún no modelada: preservamos al menos la primera
-        // salida como stock genérico en vez de hacerla desaparecer.
-        if !primary_seen {
-            industry.stock = waiting;
-            primary_seen = true;
-        } else if !secondary_seen {
-            industry.secondary_stock = waiting;
-            secondary_seen = true;
-        }
+        // Una industria NewGRF puede producir más de dos cargos. No los
+        // confundimos con los stocks legacy: el runtime de callbacks y el
+        // transporte los consumen desde este buffer separado.
+        industry.newgrf_extra_produced_cargo.add(cargo, waiting);
+    }
+
+    // En OpenTTD las entradas no se almacenan en las estaciones una vez que
+    // fueron aceptadas por la industria: quedan en `accepted[i].waiting` a la
+    // espera de CB1/CB2. El parser ya conserva esa lista; hidratarla aquí
+    // evita perderla al abrir un `.sav` y permite que el callback la consuma.
+    for accepted in &saved.accepted {
+        let Some(cargo) = crate::CargoType::from_climate_slot(climate, accepted.cargo_slot) else {
+            continue;
+        };
+        industry.add_accepted_cargo_waiting(cargo, u32::from(accepted.waiting));
     }
     industry.capacity = INDUSTRY_STOCK_CAPACITY.max(industry.stock.max(industry.secondary_stock));
 }
@@ -352,12 +354,22 @@ mod tests {
             random_colour: 14,
             counter: 123,
             prod_level: 32,
-            produced: vec![super::super::entities::SavIndustryProducedCargo {
-                cargo_slot: 1,
-                waiting: 77,
-                rate: 15,
+            produced: vec![
+                super::super::entities::SavIndustryProducedCargo {
+                    cargo_slot: 1,
+                    waiting: 77,
+                    rate: 15,
+                },
+                super::super::entities::SavIndustryProducedCargo {
+                    cargo_slot: 9,
+                    waiting: 22,
+                    rate: 4,
+                },
+            ],
+            accepted: vec![super::super::entities::SavIndustryAcceptedCargo {
+                cargo_slot: 6,
+                waiting: 15,
             }],
-            accepted: Vec::new(),
         };
 
         hydrate_sav_industries(&mut state, &[saved], &OttdmapExtras::default());
@@ -367,6 +379,8 @@ mod tests {
         assert_eq!(industry.tiles.len(), 2);
         assert_eq!(industry.spec, Some(IndustrySpec::CoalMine));
         assert_eq!(industry.stock, 77);
+        assert_eq!(industry.extra_produced_cargo(crate::CargoType::Steel), 22);
+        assert_eq!(industry.accepted_cargo_waiting(crate::CargoType::Grain), 15);
         assert_eq!(industry.counter, 123);
         assert_eq!(industry.prod_level, 32);
         assert_eq!(industry.random_colour, 14);

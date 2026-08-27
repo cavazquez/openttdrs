@@ -291,11 +291,12 @@ pub use industry_spec::{
     INDUSTRY_CALLBACK_LOCATION_MASK, INDUSTRY_CALLBACK_MONTHLY_PROD_CHANGE_MASK,
     INDUSTRY_CALLBACK_PROD_CHANGE_BUILD_MASK, INDUSTRY_CALLBACK_PRODUCTION_256_TICKS_MASK,
     INDUSTRY_CALLBACK_PRODUCTION_CARGO_ARRIVAL_MASK, INDUSTRY_CALLBACK_PRODUCTION_CHANGE_MASK,
-    INDUSTRY_ORIGINAL_NUM_INPUTS, INDUSTRY_ORIGINAL_NUM_OUTPUTS, INVALID_INDUSTRY,
-    IndustryLayoutTile, IndustrySpecDef, IndustryTileLayout, NEW_INDUSTRY_OFFSET,
-    NUM_INDUSTRY_TYPES, cargo_type_from_label, empty_industry_overrides,
-    empty_industry_spec_catalog, get_cargo_translation, get_cargo_translation_for_climate,
-    get_translated_industry_id, industry_spec_def, next_free_industry_id,
+    INDUSTRY_NUM_INPUTS, INDUSTRY_NUM_OUTPUTS, INDUSTRY_ORIGINAL_NUM_INPUTS,
+    INDUSTRY_ORIGINAL_NUM_OUTPUTS, INVALID_INDUSTRY, IndustryLayoutTile, IndustrySpecDef,
+    IndustryTileLayout, NEW_INDUSTRY_OFFSET, NUM_INDUSTRY_TYPES, cargo_type_from_label,
+    empty_industry_overrides, empty_industry_spec_catalog, get_cargo_translation,
+    get_cargo_translation_for_climate, get_translated_industry_id, industry_spec_def,
+    next_free_industry_id,
 };
 pub use industry_tile::{
     INVALID_INDUSTRY_TILE, IndustryTileGfxId, IndustryTileSpecDef, NEW_INDUSTRY_TILE_OFFSET,

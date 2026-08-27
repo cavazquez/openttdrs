@@ -53,6 +53,22 @@ pub struct Action2RealEntry {
     pub loading: Vec<u16>,
 }
 
+/// Grupo Action2 de producción de industrias (`GSF_INDUSTRIES`).
+///
+/// Las versiones 0/1 guardan los slots de entrada/salida implícitos; la
+/// versión 2 añade el índice local de cada cargo. En versiones 1/2 los valores
+/// de cantidad son índices de registro temporal (`7D`) y se resuelven al
+/// ejecutar el callback.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct IndustryProductionGroup {
+    pub version: u8,
+    pub subtract_input: Vec<i16>,
+    pub cargo_input: Vec<u8>,
+    pub add_output: Vec<u16>,
+    pub cargo_output: Vec<u8>,
+    pub again: u8,
+}
+
 impl Action2RealEntry {
     /// Select the set using the same proportional stage rule as
     /// `VehicleResolverObject::ResolveReal` in `OpenTTD`.
@@ -293,6 +309,8 @@ pub struct TrainSpriteGraphics {
     pub action2_var: HashMap<u8, Action2VarEntry>,
     /// Action2 random (`0x80`/`0x83`/`0x84`).
     pub action2_random: HashMap<u8, Action2RandomEntry>,
+    /// Action2 de producción para `GSF_INDUSTRIES` (versiones 0/1/2).
+    pub industry_production: HashMap<u8, IndustryProductionGroup>,
 }
 
 impl TrainSpriteGraphics {
@@ -591,6 +609,62 @@ impl TrainSpriteGraphics {
         !self.action2_random.is_empty()
             || !self.action2_var.is_empty()
             || !self.action2_real.is_empty()
+            || !self.industry_production.is_empty()
+    }
+
+    /// Busca el grupo de producción asignado por Action3 y atraviesa grupos
+    /// variational/random intermedios cuando el GRF los usa como selector.
+    pub fn industry_production_group_u16(
+        &self,
+        local_id: u16,
+        ctx: &mut Action2EvalCtx,
+    ) -> Option<&IndustryProductionGroup> {
+        let mut id = self
+            .extended_assigns
+            .iter()
+            .find(|(assigned, _)| *assigned == local_id)
+            .map(|(_, set)| *set)
+            .or_else(|| {
+                u8::try_from(local_id).ok().and_then(|id| {
+                    self.assigns
+                        .iter()
+                        .find(|assign| assign.local_id == id)
+                        .map(|assign| assign.set_id)
+                })
+            })?;
+        for _ in 0..8 {
+            let a2 = u8::try_from(id).ok()?;
+            if let Some(group) = self.industry_production.get(&a2) {
+                return Some(group);
+            }
+            if let Some(random) = self.action2_random.get(&a2) {
+                let next = eval_action2_random(random, ctx);
+                if next & 0x8000 != 0 {
+                    return None;
+                }
+                id = next;
+                continue;
+            }
+            if let Some(var) = self.action2_var.get(&a2).cloned() {
+                let next = eval_action2_var(self, &var, ctx, 0);
+                if next & 0x8000 != 0 {
+                    return None;
+                }
+                id = next;
+                continue;
+            }
+            return None;
+        }
+        None
+    }
+
+    /// Variante byte para callers legacy que no usan IDs `ExtendedByte`.
+    pub fn industry_production_group(
+        &self,
+        local_id: u8,
+        ctx: &mut Action2EvalCtx,
+    ) -> Option<&IndustryProductionGroup> {
+        self.industry_production_group_u16(u16::from(local_id), ctx)
     }
 
     /// Resuelve un callback `NewGRF` (`nvar=0` → valor; sprite group → [`CALLBACK_FAILED`]).

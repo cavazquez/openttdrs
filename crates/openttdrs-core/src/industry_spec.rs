@@ -21,6 +21,10 @@ pub const INVALID_INDUSTRY: u16 = NUM_INDUSTRY_TYPES;
 pub const INDUSTRY_ORIGINAL_NUM_OUTPUTS: usize = 2;
 /// Entradas originales (`INDUSTRY_ORIGINAL_NUM_INPUTS`).
 pub const INDUSTRY_ORIGINAL_NUM_INPUTS: usize = 3;
+/// Máximo moderno de cargos aceptados por una industria (`INDUSTRY_NUM_INPUTS`).
+pub const INDUSTRY_NUM_INPUTS: usize = 16;
+/// Máximo moderno de cargos producidos por una industria (`INDUSTRY_NUM_OUTPUTS`).
+pub const INDUSTRY_NUM_OUTPUTS: usize = 16;
 /// Bit `IndustryCallbackMask::ProductionCargoArrival`: callback al llegar carga.
 pub const INDUSTRY_CALLBACK_PRODUCTION_CARGO_ARRIVAL_MASK: u16 = 1 << 1;
 /// Bit `IndustryCallbackMask::Production256Ticks`: callback de producción periódico.

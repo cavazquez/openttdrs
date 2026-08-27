@@ -13,8 +13,8 @@ use crate::newgrf_walk::{GrfEntry, walk_grf_entries};
 
 use super::model::{
     ACTION2_PARENT_SCOPE_MARKER, Action2RandomEntry, Action2VarAdjust, Action2VarEntry,
-    Action2VarOp, Action2VarTerm, DecodedSprite, TrainSpriteAssign, TrainSpriteGraphics,
-    WagonOverrideAssign,
+    Action2VarOp, Action2VarTerm, DecodedSprite, IndustryProductionGroup, TrainSpriteAssign,
+    TrainSpriteGraphics, WagonOverrideAssign,
 };
 use super::pixel_codec::{decode_real_sprite_entry, index_sprite_section, resolve_fd_sprite};
 
@@ -63,6 +63,82 @@ pub(super) fn parse_action2_basic(payload: &[u8], feature: u8) -> Option<(u8, u1
     }
     let a1 = u16::from_le_bytes([payload[words_start], payload[words_start + 1]]);
     Some((set_id, a1))
+}
+
+/// Action2 de producción de industrias.
+///
+/// La cabecera es `02 0A set-id version`; el cuerpo depende de la versión que
+/// `OpenTTD` registra en `IndustryProductionSpriteGroup`:
+/// - v0: 3 entradas signed-word, 2 salidas unsigned-word, `again`;
+/// - v1: 3 entradas byte, 2 salidas byte, `again` (cantidades indirectas);
+/// - v2: cantidad + pares `(cargo, cantidad)` para entradas y salidas.
+fn parse_action2_industry_production(
+    payload: &[u8],
+    feature: u8,
+) -> Option<(u8, IndustryProductionGroup)> {
+    if payload.len() < 5 || payload[0] != 0x02 || feature != ACTION0_FEATURE_INDUSTRIES {
+        return None;
+    }
+    let set_id = payload[2];
+    let version = payload[3];
+    let mut i = 4usize;
+    let mut group = IndustryProductionGroup {
+        version,
+        ..IndustryProductionGroup::default()
+    };
+    match version {
+        0 => {
+            for _ in 0..crate::industry_spec::INDUSTRY_ORIGINAL_NUM_INPUTS {
+                let bytes = payload.get(i..i.checked_add(2)?)?;
+                group
+                    .subtract_input
+                    .push(i16::from_le_bytes([bytes[0], bytes[1]]));
+                i += 2;
+            }
+            for _ in 0..crate::industry_spec::INDUSTRY_ORIGINAL_NUM_OUTPUTS {
+                let bytes = payload.get(i..i.checked_add(2)?)?;
+                group
+                    .add_output
+                    .push(u16::from_le_bytes([bytes[0], bytes[1]]));
+                i += 2;
+            }
+        }
+        1 => {
+            for _ in 0..crate::industry_spec::INDUSTRY_ORIGINAL_NUM_INPUTS {
+                group.subtract_input.push(i16::from(*payload.get(i)?));
+                i += 1;
+            }
+            for _ in 0..crate::industry_spec::INDUSTRY_ORIGINAL_NUM_OUTPUTS {
+                group.add_output.push(u16::from(*payload.get(i)?));
+                i += 1;
+            }
+        }
+        2 => {
+            let num_input = usize::from(*payload.get(i)?);
+            i += 1;
+            if num_input > crate::industry_spec::INDUSTRY_NUM_INPUTS {
+                return None;
+            }
+            for _ in 0..num_input {
+                group.cargo_input.push(*payload.get(i)?);
+                group.subtract_input.push(i16::from(*payload.get(i + 1)?));
+                i += 2;
+            }
+            let num_output = usize::from(*payload.get(i)?);
+            i += 1;
+            if num_output > crate::industry_spec::INDUSTRY_NUM_OUTPUTS {
+                return None;
+            }
+            for _ in 0..num_output {
+                group.cargo_output.push(*payload.get(i)?);
+                group.add_output.push(u16::from(*payload.get(i + 1)?));
+                i += 2;
+            }
+        }
+        _ => return None,
+    }
+    group.again = *payload.get(i)?;
+    Some((set_id, group))
 }
 
 /// Lee un valor little-endian del ancho indicado por el tipo Action2.
@@ -554,6 +630,10 @@ pub fn collect_feature_sprite_graphics(
                     out.action2_to_action1.insert(a2_id, first);
                 }
                 out.action2_real.insert(a2_id, real);
+            } else if let Some((a2_id, production)) =
+                parse_action2_industry_production(payload, feature)
+            {
+                out.industry_production.insert(a2_id, production);
             } else if supports_action2_chain(feature)
                 && let Some((a2_id, a1_idx)) = parse_action2_basic(payload, feature)
             {
@@ -757,6 +837,75 @@ mod tests {
         };
         assert_eq!(group.loaded, vec![10, 11]);
         assert_eq!(group.loading, vec![12]);
+    }
+
+    #[test]
+    fn parse_industry_production_groups_all_versions() {
+        // v0: 3 signed words, 2 unsigned words, again.
+        let mut v0 = vec![0x02, ACTION0_FEATURE_INDUSTRIES, 4, 0];
+        v0.extend_from_slice(&(-2_i16).to_le_bytes());
+        v0.extend_from_slice(&1_i16.to_le_bytes());
+        v0.extend_from_slice(&0_i16.to_le_bytes());
+        v0.extend_from_slice(&8_u16.to_le_bytes());
+        v0.extend_from_slice(&9_u16.to_le_bytes());
+        v0.push(0);
+        let Some((set, group)) = parse_action2_industry_production(&v0, ACTION0_FEATURE_INDUSTRIES)
+        else {
+            panic!("industry production v0 should parse");
+        };
+        assert_eq!(set, 4);
+        assert_eq!(group.version, 0);
+        assert_eq!(group.subtract_input, vec![-2, 1, 0]);
+        assert_eq!(group.add_output, vec![8, 9]);
+
+        // v1: byte quantities are indirect register indices.
+        let v1 = [0x02, ACTION0_FEATURE_INDUSTRIES, 5, 1, 3, 4, 5, 6, 7, 8, 0];
+        let Some((_, group)) = parse_action2_industry_production(&v1, ACTION0_FEATURE_INDUSTRIES)
+        else {
+            panic!("industry production v1 should parse");
+        };
+        assert_eq!(group.subtract_input, vec![3, 4, 5]);
+        assert_eq!(group.add_output, vec![6, 7]);
+
+        // v2: cargo index and quantity pairs.
+        let v2 = [
+            0x02,
+            ACTION0_FEATURE_INDUSTRIES,
+            6,
+            2,
+            2,
+            1,
+            9,
+            2,
+            10,
+            2,
+            8,
+            2,
+            11,
+            3,
+            0,
+        ];
+        let Some((_, group)) = parse_action2_industry_production(&v2, ACTION0_FEATURE_INDUSTRIES)
+        else {
+            panic!("industry production v2 should parse");
+        };
+        assert_eq!(group.cargo_input, vec![1, 2]);
+        assert_eq!(group.subtract_input, vec![9, 10]);
+        assert_eq!(group.cargo_output, vec![8, 11]);
+        assert_eq!(group.add_output, vec![2, 3]);
+
+        let mut graphics = TrainSpriteGraphics::default();
+        graphics.assigns.push(TrainSpriteAssign {
+            local_id: 9,
+            set_id: 6,
+        });
+        graphics.industry_production.insert(6, group.clone());
+        let mut ctx = Action2EvalCtx::default();
+        let Some(resolved) = graphics.industry_production_group(9, &mut ctx) else {
+            panic!("Action3 should resolve production group");
+        };
+        assert_eq!(resolved, &group);
+        assert!(graphics.needs_runtime_resolve());
     }
 
     #[test]

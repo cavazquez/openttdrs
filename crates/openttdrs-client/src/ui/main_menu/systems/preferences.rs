@@ -70,36 +70,38 @@ pub(crate) fn main_menu_preferences_interaction(
     mut panel: ResMut<MainMenuPanel>,
     mut prefs: ResMut<crate::settings::ClientPreferences>,
     mut windows: Query<&mut Window, With<bevy::window::PrimaryWindow>>,
-    mut root_btn: Query<
-        (&Interaction, &mut BackgroundColor),
-        (
-            Changed<Interaction>,
-            With<MainMenuPreferencesButton>,
-            Without<MainMenuResolutionButton>,
-            Without<MainMenuLanguageButton>,
-        ),
-    >,
-    mut res_btn: Query<
-        (
-            &Interaction,
-            &MainMenuResolutionButton,
-            &mut BackgroundColor,
-        ),
-        (
-            Without<MainMenuPreferencesButton>,
-            Without<MainMenuLanguageButton>,
-        ),
-    >,
-    mut lang_btn: Query<
-        (&Interaction, &MainMenuLanguageButton, &mut BackgroundColor),
-        (
-            Without<MainMenuPreferencesButton>,
-            Without<MainMenuResolutionButton>,
-        ),
-    >,
+    mut button_sets: ParamSet<(
+        Query<
+            (&Interaction, &mut BackgroundColor),
+            (
+                Changed<Interaction>,
+                With<MainMenuPreferencesButton>,
+                Without<MainMenuResolutionButton>,
+                Without<MainMenuLanguageButton>,
+            ),
+        >,
+        Query<
+            (
+                &Interaction,
+                &MainMenuResolutionButton,
+                &mut BackgroundColor,
+            ),
+            (
+                Without<MainMenuPreferencesButton>,
+                Without<MainMenuLanguageButton>,
+            ),
+        >,
+        Query<
+            (&Interaction, &MainMenuLanguageButton, &mut BackgroundColor),
+            (
+                Without<MainMenuPreferencesButton>,
+                Without<MainMenuResolutionButton>,
+            ),
+        >,
+    )>,
 ) {
     if *panel == MainMenuPanel::Root {
-        for (interaction, mut bg) in &mut root_btn {
+        for (interaction, mut bg) in button_sets.p0().iter_mut() {
             if *interaction == Interaction::Pressed {
                 *panel = MainMenuPanel::Preferences;
                 return;
@@ -111,7 +113,7 @@ pub(crate) fn main_menu_preferences_interaction(
     if *panel != MainMenuPanel::Preferences {
         return;
     }
-    for (interaction, btn, mut bg) in &mut res_btn {
+    for (interaction, btn, mut bg) in button_sets.p1().iter_mut() {
         let selected = prefs.window_width == btn.width && prefs.window_height == btn.height;
         if *interaction == Interaction::Pressed {
             prefs.window_width = btn.width;
@@ -126,7 +128,7 @@ pub(crate) fn main_menu_preferences_interaction(
             *interaction,
         );
     }
-    for (interaction, btn, mut bg) in &mut lang_btn {
+    for (interaction, btn, mut bg) in button_sets.p2().iter_mut() {
         if *interaction == Interaction::Pressed {
             prefs.language = btn.0.code().to_owned();
             prefs.set_changed();

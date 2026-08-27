@@ -3,7 +3,7 @@
 use super::labels::{adjust_seed, cycle_density, summary_text, summary_text_for};
 use super::{
     MainMenuDynamicText, MainMenuLanguageButton, MainMenuLocalizedText, MainMenuPanel,
-    MainMenuResolutionButton, setup_main_menu,
+    MainMenuPreferencesButton, MainMenuResolutionButton, setup_main_menu,
 };
 use crate::network::{NetCli, NetworkStatus};
 use crate::state::bootstrap::{
@@ -60,6 +60,35 @@ fn preferences_sync_runs_with_resolution_and_language_buttons() {
 
     world
         .run_system_once(super::systems::sync_main_menu_preferences)
+        .unwrap();
+}
+
+#[test]
+fn preferences_interaction_accepts_all_button_queries_without_query_conflict() {
+    let mut world = World::new();
+    world.insert_resource(MainMenuPanel::Preferences);
+    world.insert_resource(crate::settings::ClientPreferences::default());
+    world.spawn((
+        MainMenuPreferencesButton,
+        bevy::prelude::BackgroundColor::default(),
+        bevy::prelude::Interaction::default(),
+    ));
+    world.spawn((
+        MainMenuResolutionButton {
+            width: 1280,
+            height: 720,
+        },
+        bevy::prelude::BackgroundColor::default(),
+        bevy::prelude::Interaction::default(),
+    ));
+    world.spawn((
+        MainMenuLanguageButton(crate::i18n::Locale::Es),
+        bevy::prelude::BackgroundColor::default(),
+        bevy::prelude::Interaction::default(),
+    ));
+
+    world
+        .run_system_once(super::systems::main_menu_preferences_interaction)
         .unwrap();
 }
 

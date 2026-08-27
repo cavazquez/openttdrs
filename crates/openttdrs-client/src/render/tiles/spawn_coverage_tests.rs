@@ -3100,6 +3100,10 @@ fn spawn_bridge_middle_draws_deck_over_marked_water() {
 fn bridge_middle_uses_south_ramp_tram_overlay_as_combined_child() {
     let assets = boot_assets_app();
     let expected_overlay = assets.tram_flat[1].clone();
+    // `offset=1` para un vano X: `GetBridgeRoadCatenary` escoge las filas
+    // 96/98 del bloque vanilla de tranvía (6082/6084 globales).
+    let expected_catenary_back = assets.rail.get(&6082).expect("catenaria trasera").clone();
+    let expected_catenary_front = assets.rail.get(&6084).expect("catenaria delantera").clone();
     let mut map = fresh_map8();
     let c = |x: i32, y: i32| TileCoord::new(x, y);
 
@@ -3161,6 +3165,24 @@ fn bridge_middle_uses_south_ramp_tram_overlay_as_combined_child() {
             .contains::<ViewportSortableParent>(),
         "el overlay debe colgar del parent trasero combinado"
     );
+
+    let catenary_children: Vec<_> = world
+        .query::<(Entity, &ViewportSortableChild, &Sprite)>()
+        .iter(&world)
+        .filter(|(_, _, sprite)| {
+            expected_catenary_back.matches(sprite) || expected_catenary_front.matches(sprite)
+        })
+        .collect();
+    assert_eq!(
+        catenary_children.len(),
+        2,
+        "el fallback vanilla debe emitir las dos mitades de catenaria del puente"
+    );
+    assert!(catenary_children.iter().all(|(_, child, _)| {
+        world
+            .entity(child.parent)
+            .contains::<ViewportSortableParent>()
+    }));
 }
 
 #[test]

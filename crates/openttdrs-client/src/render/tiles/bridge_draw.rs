@@ -14,7 +14,7 @@ use crate::iso::{
     slope_half_h, slope_sprite_offset, tile_pos_half, tile_slope_and_min_z,
 };
 use crate::render::catenary_newgrf::{
-    catenary_sprite_anchor, catenary_sprite_center, catenary_sprite_colored,
+    CatenarySpriteAnchor, catenary_sprite_anchor, catenary_sprite_center, catenary_sprite_colored,
 };
 use crate::render::viewport_sort::ParentSpriteBounds;
 use crate::render::world_draw_trace::{TraceSpriteBounds, WorldDrawTrace};
@@ -24,10 +24,11 @@ use crate::render::{
     viewport_insertion_key, viewport_source_depth,
 };
 use crate::sprites::{
-    OTTD_MP_RAIL, RAIL_TB_X, RAIL_TB_Y, bridge_deck_sprite_ids, bridge_ramp_sprite_id,
-    bridge_sprite_meta, bridge_structure_palette_for_sprite, catenary_reference_sprite_id,
-    catenary_sprite_color, catenary_tile_location_group, collect_catenary_bridge_draws,
-    collect_catenary_pylons_from_map, collect_catenary_wire_draws_from_map,
+    OTTD_MP_RAIL, RAIL_TB_X, RAIL_TB_Y, TRAMWAY_SPRITE_BASE, bridge_deck_sprite_ids,
+    bridge_ramp_sprite_id, bridge_sprite_meta, bridge_structure_palette_for_sprite,
+    catenary_hidden, catenary_reference_sprite_id, catenary_sprite_color,
+    catenary_tile_location_group, collect_catenary_bridge_draws, collect_catenary_pylons_from_map,
+    collect_catenary_wire_draws_from_map,
 };
 
 use super::helpers::{
@@ -90,6 +91,43 @@ const ROTSG_BRIDGE: u8 = 6;
 /// para que la selección de pendientes coincida con `GetBridgeRoadCatenary`.
 const BRIDGE_ROAD_CATENARY_BACK_OFFSETS: [usize; 6] = [95, 96, 99, 102, 100, 101];
 const BRIDGE_ROAD_CATENARY_FRONT_OFFSETS: [usize; 6] = [97, 98, 103, 106, 104, 105];
+
+/// Cajas que `DrawBridgeRoadBits` entrega al sorter para las dos mitades de
+/// una catenaria vial. El sprite se dibuja en el mismo origen para ambos
+/// bloques; la diferencia está en el `origin/offset` que mantiene unido el
+/// bloque delantero a su baranda correspondiente.
+fn bridge_road_catenary_trace_geometry(
+    offset: usize,
+    front: bool,
+) -> (TraceSpriteBounds, (i32, i32, i32)) {
+    let offset = offset.min(5);
+    if !front {
+        let bounds = match offset {
+            0 | 3 | 5 => TraceSpriteBounds::new(0, 0, 0, 0, 16, 40),
+            1 | 2 | 4 => TraceSpriteBounds::new(0, 0, 0, 16, 0, 40),
+            _ => unreachable!("offset de puente fuera del rango 0..=5"),
+        };
+        return (bounds, (0, 0, 0));
+    }
+
+    match offset {
+        0 | 3 | 5 => (TraceSpriteBounds::new(15, 0, 0, 0, 16, 40), (-15, 0, 0)),
+        1 | 2 | 4 => (TraceSpriteBounds::new(0, 15, 0, 16, 0, 40), (0, -15, 0)),
+        _ => unreachable!("offset de puente fuera del rango 0..=5"),
+    }
+}
+
+/// `GetBridgeRoadCatenary` usa el bloque vanilla de tranvía cuando ninguno de
+/// los dos grupos Action2 específicos existe. Mantener la tabla aquí evita
+/// confundirla con los offsets de catenaria de una calle en superficie.
+fn bridge_road_catenary_sprite_ids(offset: usize) -> (u32, u32) {
+    let offset = offset.min(5);
+    (
+        TRAMWAY_SPRITE_BASE + u32::try_from(BRIDGE_ROAD_CATENARY_BACK_OFFSETS[offset]).unwrap_or(0),
+        TRAMWAY_SPRITE_BASE
+            + u32::try_from(BRIDGE_ROAD_CATENARY_FRONT_OFFSETS[offset]).unwrap_or(0),
+    )
+}
 /// `SPR_BRIDGE_DECKS_BASE` de Action5 `0x1B` (base 6240).
 const SPR_BRIDGE_DECKS_BASE: u32 = 6240;
 /// `SPR_TRACKS_FOR_SLOPES_RAIL_BASE` de OpenTTD.
@@ -1617,9 +1655,10 @@ mod tests {
         bridge_middle_structure_trace_placement, bridge_parent_bounds,
         bridge_pbs_reservation_offset, bridge_pbs_reservation_sprite_id, bridge_pbs_trace_bounds,
         bridge_ramp_catenary_slope, bridge_ramp_catenary_world_z_delta, bridge_ramp_ground_kind,
-        bridge_ramp_ground_sprite_id, bridge_road_sprite_offset, bridge_span_at, bridge_surface_z,
-        catenary_under_low_bridge, pillar_ground_heights, pillar_half_crop, pillar_segments,
-        roadside_detail_visible_under_bridge,
+        bridge_ramp_ground_sprite_id, bridge_road_catenary_sprite_ids,
+        bridge_road_catenary_trace_geometry, bridge_road_sprite_offset, bridge_span_at,
+        bridge_surface_z, catenary_under_low_bridge, pillar_ground_heights, pillar_half_crop,
+        pillar_segments, roadside_detail_visible_under_bridge,
     };
     use crate::sprites::bridge_deck_sprite_ids;
 
@@ -1660,6 +1699,31 @@ mod tests {
         assert_eq!(bridge_road_sprite_offset(&span, tile, true, 0), 4);
         assert_eq!(bridge_road_sprite_offset(&span, tile, true, 12), 1);
         assert_eq!(bridge_road_sprite_offset(&span, tile, false, 0), 1);
+    }
+
+    #[test]
+    fn bridge_road_catenary_uses_vanilla_tramway_rows_and_split_boxes() {
+        assert_eq!(bridge_road_catenary_sprite_ids(0), (6081, 6083));
+        assert_eq!(bridge_road_catenary_sprite_ids(1), (6082, 6084));
+        assert_eq!(bridge_road_catenary_sprite_ids(5), (6087, 6091));
+
+        let (back_x, back_x_offset) = bridge_road_catenary_trace_geometry(1, false);
+        assert_eq!(
+            (
+                back_x.ox, back_x.oy, back_x.oz, back_x.ex, back_x.ey, back_x.ez
+            ),
+            (0, 0, 0, 16, 0, 40)
+        );
+        assert_eq!(back_x_offset, (0, 0, 0));
+
+        let (front_y, front_y_offset) = bridge_road_catenary_trace_geometry(0, true);
+        assert_eq!(
+            (
+                front_y.ox, front_y.oy, front_y.oz, front_y.ex, front_y.ey, front_y.ez
+            ),
+            (15, 0, 0, 0, 16, 40)
+        );
+        assert_eq!(front_y_offset, (-15, 0, 0));
     }
 
     #[test]
@@ -2169,6 +2233,7 @@ pub(crate) fn spawn_bridge_deck(
     action5_sprites: Option<&mut NewGrfAction5SpriteCache>,
     images: Option<&mut Assets<Image>>,
 ) {
+    let road_catalog = openttdrs_core::vanilla_road_type_catalog();
     spawn_bridge_deck_with_road_types(
         commands,
         map,
@@ -2183,7 +2248,7 @@ pub(crate) fn spawn_bridge_deck(
         bridge_decks_newgrf,
         foundation_newgrf,
         Climate::Temperate,
-        &[],
+        &road_catalog,
         None,
         &[],
         action5_sprites,
@@ -2206,7 +2271,7 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
     draw_pillars: bool,
     show_pbs_reservations: bool,
     catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
-    catenary_sprites: Option<&mut NewGrfCatenarySpriteCache>,
+    mut catenary_sprites: Option<&mut NewGrfCatenarySpriteCache>,
     bridge_decks_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     foundation_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     climate: Climate,
@@ -2451,6 +2516,8 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
     let mut custom_bridge_surface = false;
     let mut custom_tram_overlay = false;
     let mut custom_front_catenary = None;
+    let mut vanilla_front_catenary: Option<(Sprite, CatenarySpriteAnchor, u32, usize)> = None;
+    let mut vanilla_front_catenary_id: Option<(u32, usize)> = None;
     if !span.rail
         && let Some((source_coord, source_tile)) = transport_source
     {
@@ -2564,54 +2631,143 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
         // abajo. La carretera tiene prioridad sobre el tranvía, igual que en
         // OpenTTD; sólo los tipos que publican el flag Catenary pueden usar
         // estos grupos específicos.
-        let catenary_def = road_def
-            .filter(|def| def.has_catenary())
-            .or_else(|| tram_def.filter(|def| def.has_catenary()));
-        if let Some(def) = catenary_def {
+        let road_catenary_def = openttdrs_core::road_type_def(
+            road_catalog,
+            openttdrs_core::road_type_from_tile(&source_tile),
+        )
+        .filter(|def| def.has_catenary());
+        let tram_catenary_def = openttdrs_core::tram_road_type_from_tile(&source_tile)
+            .or_else(|| {
+                (openttdrs_core::tram_track_bits(&source_tile) != 0)
+                    .then_some(openttdrs_core::RoadType::TRAM)
+            })
+            .and_then(|road_type| openttdrs_core::road_type_def(road_catalog, road_type))
+            .filter(|def| def.has_catenary());
+        let catenary_def = road_catenary_def.or(tram_catenary_def);
+        if !catenary_hidden()
+            && let Some(def) = catenary_def
+        {
             let offset = bridge_road_sprite_offset(span, source_tile, on_ramp, foundation_tileh)
                 .min(BRIDGE_ROAD_CATENARY_BACK_OFFSETS.len() - 1);
-            if def.has_newgrf_specific_group(ROTSG_CATENARY_BACK)
-                && let Some((sprite, view)) = bridge_specific_sprite(
-                    def,
-                    map,
-                    ROTSG_CATENARY_BACK,
-                    23 + BRIDGE_ROAD_CATENARY_BACK_OFFSETS[offset],
-                    source_coord,
-                    source_tile,
-                    climate,
-                    road_catalog,
-                    newgrf_stack,
-                    &mut road_sprites,
-                    &mut images,
+            let custom_any = def.has_newgrf_specific_group(ROTSG_CATENARY_BACK)
+                || def.has_newgrf_specific_group(ROTSG_CATENARY_FRONT);
+            if custom_any {
+                if def.has_newgrf_specific_group(ROTSG_CATENARY_BACK)
+                    && let Some((sprite, view)) = bridge_specific_sprite(
+                        def,
+                        map,
+                        ROTSG_CATENARY_BACK,
+                        23 + BRIDGE_ROAD_CATENARY_BACK_OFFSETS[offset],
+                        source_coord,
+                        source_tile,
+                        climate,
+                        road_catalog,
+                        newgrf_stack,
+                        &mut road_sprites,
+                        &mut images,
+                    )
+                {
+                    spawn_bridge_specific_child(
+                        commands,
+                        ctx,
+                        dims.0,
+                        rear_parent,
+                        sprite,
+                        &view,
+                        surface_z,
+                        DECK_LAYER_FRAC + 0.002,
+                    );
+                }
+                if def.has_newgrf_specific_group(ROTSG_CATENARY_FRONT)
+                    && let Some((sprite, view)) = bridge_specific_sprite(
+                        def,
+                        map,
+                        ROTSG_CATENARY_FRONT,
+                        23 + BRIDGE_ROAD_CATENARY_FRONT_OFFSETS[offset],
+                        source_coord,
+                        source_tile,
+                        climate,
+                        road_catalog,
+                        newgrf_stack,
+                        &mut road_sprites,
+                        &mut images,
+                    )
+                {
+                    custom_front_catenary = Some((sprite, view));
+                }
+            } else {
+                let (back_id, front_id) = bridge_road_catenary_sprite_ids(offset);
+                let tint = catenary_sprite_color();
+                if let Some((sprite, anchor)) = catenary_sprite_colored(
+                    assets,
+                    back_id,
+                    tint,
+                    catenary_newgrf,
+                    catenary_sprites.as_deref_mut(),
+                    images.as_deref_mut(),
                 )
-            {
-                spawn_bridge_specific_child(
-                    commands,
-                    ctx,
-                    dims.0,
-                    rear_parent,
-                    sprite,
-                    &view,
-                    surface_z,
-                    DECK_LAYER_FRAC + 0.002,
-                );
-            }
-            if def.has_newgrf_specific_group(ROTSG_CATENARY_FRONT)
-                && let Some((sprite, view)) = bridge_specific_sprite(
-                    def,
-                    map,
-                    ROTSG_CATENARY_FRONT,
-                    23 + BRIDGE_ROAD_CATENARY_FRONT_OFFSETS[offset],
-                    source_coord,
-                    source_tile,
-                    climate,
-                    road_catalog,
-                    newgrf_stack,
-                    &mut road_sprites,
-                    &mut images,
+                .zip(catenary_sprite_anchor(back_id, catenary_newgrf))
+                {
+                    let (bounds, offset) = bridge_road_catenary_trace_geometry(offset, false);
+                    let z_delta =
+                        (i32::from(surface_z) - i32::from(ctx.info.base_z)) * TILE_HEIGHT_WORLD;
+                    WorldDrawTrace::record_sprite_with_palette_and_world_geometry(
+                        "bridge-road-catenary-back",
+                        "combined",
+                        back_id,
+                        0,
+                        false,
+                        (0, 0),
+                        z_delta,
+                        offset,
+                        Some(bounds),
+                    );
+                    let position = catenary_sprite_center(
+                        ctx.tx_i32(),
+                        ctx.ty_i32(),
+                        surface_z,
+                        DECK_LAYER_FRAC + 0.002,
+                        0.0,
+                        0.0,
+                        0.0,
+                        anchor,
+                    );
+                    if let Some(parent) = rear_parent {
+                        spawn_bridge_combined_child(
+                            commands, ctx, dims.0, parent, sprite, position,
+                        );
+                    } else {
+                        commands.spawn((
+                            MapVisualLayer,
+                            ctx.map_tile_chunk(),
+                            sprite,
+                            Transform::from_translation(position),
+                        ));
+                    }
+                } else {
+                    WorldDrawTrace::record_sprite_with_palette_and_world_geometry(
+                        "bridge-road-catenary-back",
+                        "combined",
+                        back_id,
+                        0,
+                        true,
+                        (0, 0),
+                        (i32::from(surface_z) - i32::from(ctx.info.base_z)) * TILE_HEIGHT_WORLD,
+                        bridge_road_catenary_trace_geometry(offset, false).1,
+                        Some(bridge_road_catenary_trace_geometry(offset, false).0),
+                    );
+                }
+                vanilla_front_catenary = catenary_sprite_colored(
+                    assets,
+                    front_id,
+                    tint,
+                    catenary_newgrf,
+                    catenary_sprites.as_deref_mut(),
+                    images.as_deref_mut(),
                 )
-            {
-                custom_front_catenary = Some((sprite, view));
+                .zip(catenary_sprite_anchor(front_id, catenary_newgrf))
+                .map(|(sprite, anchor)| (sprite, anchor, front_id, offset));
+                vanilla_front_catenary_id = Some((front_id, offset));
             }
         }
     }
@@ -2776,6 +2932,54 @@ pub(crate) fn spawn_bridge_deck_with_road_types(
             &view,
             surface_z,
             FRONT_LAYER_FRAC + 0.002,
+        );
+    }
+    if let Some((sprite, anchor, sprite_id, offset)) = vanilla_front_catenary {
+        let (bounds, geometry_offset) = bridge_road_catenary_trace_geometry(offset, true);
+        let z_delta = (i32::from(surface_z) - i32::from(ctx.info.base_z)) * TILE_HEIGHT_WORLD;
+        WorldDrawTrace::record_sprite_with_palette_and_world_geometry(
+            "bridge-road-catenary-front",
+            "combined",
+            sprite_id,
+            0,
+            false,
+            (0, 0),
+            z_delta,
+            geometry_offset,
+            Some(bounds),
+        );
+        let position = catenary_sprite_center(
+            ctx.tx_i32(),
+            ctx.ty_i32(),
+            surface_z,
+            FRONT_LAYER_FRAC + 0.002,
+            0.0,
+            0.0,
+            0.0,
+            anchor,
+        );
+        if let Some(parent) = front_parent.or(rear_parent) {
+            spawn_bridge_combined_child(commands, ctx, dims.0, parent, sprite, position);
+        } else {
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                sprite,
+                Transform::from_translation(position),
+            ));
+        }
+    } else if let Some((sprite_id, offset)) = vanilla_front_catenary_id {
+        let (bounds, geometry_offset) = bridge_road_catenary_trace_geometry(offset, true);
+        WorldDrawTrace::record_sprite_with_palette_and_world_geometry(
+            "bridge-road-catenary-front",
+            "combined",
+            sprite_id,
+            0,
+            true,
+            (0, 0),
+            (i32::from(surface_z) - i32::from(ctx.info.base_z)) * TILE_HEIGHT_WORLD,
+            geometry_offset,
+            Some(bounds),
         );
     }
 

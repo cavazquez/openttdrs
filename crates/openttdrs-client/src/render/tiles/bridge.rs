@@ -25,6 +25,7 @@ pub(crate) fn spawn_bridge_middle(
     action5_sprites: Option<&mut crate::render::NewGrfAction5SpriteCache>,
     images: Option<&mut Assets<Image>>,
 ) {
+    let road_catalog = openttdrs_core::vanilla_road_type_catalog();
     spawn_bridge_middle_with_road_types(
         commands,
         map,
@@ -33,7 +34,7 @@ pub(crate) fn spawn_bridge_middle(
         ctx,
         show_pbs_reservations,
         Climate::Temperate,
-        &[],
+        &road_catalog,
         None,
         &[],
         catenary_newgrf,

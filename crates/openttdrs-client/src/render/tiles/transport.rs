@@ -811,7 +811,7 @@ fn signal_trace_geometry(
     )
 }
 
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::needless_option_as_deref, clippy::too_many_arguments)]
 pub(crate) fn spawn_road_tile(
     commands: &mut Commands,
     map: &Map,
@@ -1244,7 +1244,10 @@ pub(crate) fn spawn_road_tile(
             catenary_newgrf,
             catenary_sprites.as_deref_mut(),
         );
-        if let Some(tram_type) = openttdrs_core::tram_road_type_from_tile(&tile) {
+        let tram_type = openttdrs_core::tram_road_type_from_tile(&tile).or_else(|| {
+            (openttdrs_core::tram_track_bits(&tile) != 0).then_some(openttdrs_core::RoadType::TRAM)
+        });
+        if let Some(tram_type) = tram_type {
             spawn_road_catenary_for_type(
                 commands,
                 map,
@@ -1454,6 +1457,10 @@ fn road_catenary_bits_for_render(
             openttdrs_core::road_type_def(road_catalog, openttdrs_core::road_type_from_tile(&tile))
                 .is_some_and(RoadTypeDef::has_catenary);
         let tram_electric = openttdrs_core::tram_road_type_from_tile(&tile)
+            .or_else(|| {
+                (openttdrs_core::tram_track_bits(&tile) != 0)
+                    .then_some(openttdrs_core::RoadType::TRAM)
+            })
             .and_then(|rt| openttdrs_core::road_type_def(road_catalog, rt))
             .is_some_and(RoadTypeDef::has_catenary);
         if road_electric || tram_electric {
@@ -1510,7 +1517,7 @@ fn custom_road_catenary_sprite(
     ))
 }
 
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::needless_option_as_deref, clippy::too_many_arguments)]
 fn spawn_road_catenary_for_type(
     commands: &mut Commands,
     map: &Map,

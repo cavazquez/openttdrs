@@ -69,6 +69,17 @@ pub struct EngineDef {
     /// `RailVehicleType::Multihead` (`engines.h`): compra spawnea cabina trasera.
     #[serde(default)]
     pub dual_headed: bool,
+    /// Clase de tracción nativa (`EngineClass`): 0 vapor, 1 diésel,
+    /// 2 eléctrica, 3 monorail y 4 maglev. Se usa, entre otras cosas, para
+    /// seleccionar la librea ferroviaria correcta.
+    #[serde(default)]
+    pub rail_engine_class: u8,
+    /// `EngineMiscFlag::RailIsMU`: la unidad usa el esquema DMU/EMU.
+    #[serde(default)]
+    pub rail_is_mu: bool,
+    /// `EngineMiscFlag::Uses2CC`: el sprite admite dos colores de compañía.
+    #[serde(default)]
+    pub uses_2cc: bool,
     /// `EngineInfo::flags` `RailTilts` — bonus +20 % en `GetCurveSpeedLimit`.
     #[serde(default)]
     pub rail_tilts: bool,

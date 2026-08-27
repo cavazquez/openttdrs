@@ -37,6 +37,12 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 
 ## Cómo se decide el siguiente bloque
 
+Actualización de #329: el renderer de vehículos ya resuelve el canal primario
+de las 23 libreas por esquema (incluidas clase de tracción, DMU/EMU, carga,
+aviones, barcos y tranvías) y la prioridad de librea explícita del grupo y sus
+padres. Siguen abiertos 2CC/crash, la segunda rampa y la invalidación visual
+completa de paleta; esta cobertura no cierra el issue de runtime.
+
 Nota de implementación: la consulta de variable `61` para `0x60` conserva el
 parámetro `ExtendedByte` completo (WORD, hasta 14 bits); no se trunca al byte
 bajo al resolver IDs locales de vehículos.

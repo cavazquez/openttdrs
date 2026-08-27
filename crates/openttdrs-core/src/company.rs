@@ -82,6 +82,31 @@ pub const COMPANY_LIVERY_FLAG_PRIMARY: u8 = 1 << 0;
 /// Bit `Livery::Flag::Secondary` de `OpenTTD`.
 pub const COMPANY_LIVERY_FLAG_SECONDARY: u8 = 1 << 1;
 
+/// Índices de `LiveryScheme` tal como los serializa `OpenTTD` (`LS_END = 23`).
+pub const LIVERY_SCHEME_DEFAULT: usize = 0;
+pub const LIVERY_SCHEME_STEAM: usize = 1;
+pub const LIVERY_SCHEME_DIESEL: usize = 2;
+pub const LIVERY_SCHEME_ELECTRIC: usize = 3;
+pub const LIVERY_SCHEME_MONORAIL: usize = 4;
+pub const LIVERY_SCHEME_MAGLEV: usize = 5;
+pub const LIVERY_SCHEME_DMU: usize = 6;
+pub const LIVERY_SCHEME_EMU: usize = 7;
+pub const LIVERY_SCHEME_PASSENGER_WAGON_STEAM: usize = 8;
+pub const LIVERY_SCHEME_PASSENGER_WAGON_DIESEL: usize = 9;
+pub const LIVERY_SCHEME_PASSENGER_WAGON_ELECTRIC: usize = 10;
+pub const LIVERY_SCHEME_PASSENGER_WAGON_MONORAIL: usize = 11;
+pub const LIVERY_SCHEME_PASSENGER_WAGON_MAGLEV: usize = 12;
+pub const LIVERY_SCHEME_FREIGHT_WAGON: usize = 13;
+pub const LIVERY_SCHEME_BUS: usize = 14;
+pub const LIVERY_SCHEME_TRUCK: usize = 15;
+pub const LIVERY_SCHEME_PASSENGER_SHIP: usize = 16;
+pub const LIVERY_SCHEME_FREIGHT_SHIP: usize = 17;
+pub const LIVERY_SCHEME_HELICOPTER: usize = 18;
+pub const LIVERY_SCHEME_SMALL_PLANE: usize = 19;
+pub const LIVERY_SCHEME_LARGE_PLANE: usize = 20;
+pub const LIVERY_SCHEME_PASSENGER_TRAM: usize = 21;
+pub const LIVERY_SCHEME_FREIGHT_TRAM: usize = 22;
+
 /// Colores y flags de un esquema de librea de compañía (`PLYR.liveries[]`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CompanyLivery {
@@ -353,6 +378,97 @@ impl Company {
     }
 }
 
+/// Color primario efectivo para un esquema de librea.
+///
+/// `OpenTTD` sólo selecciona un esquema especializado cuando el esquema por
+/// defecto tiene al menos un canal marcado como personalizado. Un canal no
+/// marcado hereda el color del esquema por defecto aunque el registro guarde
+/// un valor antiguo distinto.
+#[must_use]
+pub fn company_livery_primary_colour(company: &Company, scheme: usize) -> u8 {
+    let liveries = company.effective_liveries();
+    let default = liveries[LIVERY_SCHEME_DEFAULT];
+    if default.in_use & (COMPANY_LIVERY_FLAG_PRIMARY | COMPANY_LIVERY_FLAG_SECONDARY) == 0 {
+        return default.colour1;
+    }
+    liveries
+        .get(scheme.min(COMPANY_LIVERY_SCHEME_COUNT - 1))
+        .filter(|livery| livery.in_use & COMPANY_LIVERY_FLAG_PRIMARY != 0)
+        .map_or(default.colour1, |livery| livery.colour1)
+}
+
+/// Esquema nativo de librea para una unidad de vehículo.
+///
+/// `parent_engine` debe ser el motor de la cabeza del consist cuando la unidad
+/// es un vagón/articulado; `OpenTTD` usa esa cabeza para las libreas de sus
+/// partes. La función cubre las 23 entradas de `LiveryScheme` y deja la
+/// decisión de prioridad de grupos al llamador, que conoce el pool de grupos.
+#[must_use]
+pub fn vehicle_livery_scheme(
+    vehicle: &crate::vehicle::Vehicle,
+    engine: &crate::engine::EngineDef,
+    parent_engine: Option<&crate::engine::EngineDef>,
+) -> usize {
+    let cargo = vehicle
+        .cargo_type
+        .or(engine.cargo)
+        .unwrap_or(crate::cargo::CargoType::Goods);
+    match vehicle.kind {
+        crate::vehicle::VehicleKind::Train => {
+            let parent = parent_engine.unwrap_or(engine);
+            let is_wagon = vehicle.is_wagon_unit() || engine.is_wagon();
+            if is_wagon {
+                if cargo.is_freight() {
+                    return LIVERY_SCHEME_FREIGHT_WAGON;
+                }
+                return match parent.rail_engine_class {
+                    1 if parent.rail_is_mu => LIVERY_SCHEME_DMU,
+                    1 => LIVERY_SCHEME_PASSENGER_WAGON_DIESEL,
+                    2 if parent.rail_is_mu => LIVERY_SCHEME_EMU,
+                    2 => LIVERY_SCHEME_PASSENGER_WAGON_ELECTRIC,
+                    3 => LIVERY_SCHEME_PASSENGER_WAGON_MONORAIL,
+                    4 => LIVERY_SCHEME_PASSENGER_WAGON_MAGLEV,
+                    _ => LIVERY_SCHEME_PASSENGER_WAGON_STEAM,
+                };
+            }
+            match engine.rail_engine_class {
+                1 if engine.rail_is_mu => LIVERY_SCHEME_DMU,
+                1 => LIVERY_SCHEME_DIESEL,
+                2 if engine.rail_is_mu => LIVERY_SCHEME_EMU,
+                2 => LIVERY_SCHEME_ELECTRIC,
+                3 => LIVERY_SCHEME_MONORAIL,
+                4 => LIVERY_SCHEME_MAGLEV,
+                _ => LIVERY_SCHEME_STEAM,
+            }
+        }
+        crate::vehicle::VehicleKind::Bus => LIVERY_SCHEME_BUS,
+        crate::vehicle::VehicleKind::Truck => LIVERY_SCHEME_TRUCK,
+        crate::vehicle::VehicleKind::Tram => {
+            if cargo.is_town_cargo() {
+                LIVERY_SCHEME_PASSENGER_TRAM
+            } else {
+                LIVERY_SCHEME_FREIGHT_TRAM
+            }
+        }
+        crate::vehicle::VehicleKind::Ship => {
+            if cargo.is_town_cargo() {
+                LIVERY_SCHEME_PASSENGER_SHIP
+            } else {
+                LIVERY_SCHEME_FREIGHT_SHIP
+            }
+        }
+        crate::vehicle::VehicleKind::Aircraft => {
+            if crate::engine::aircraft_is_helicopter_def(engine) {
+                LIVERY_SCHEME_HELICOPTER
+            } else if engine.is_large_aircraft {
+                LIVERY_SCHEME_LARGE_PLANE
+            } else {
+                LIVERY_SCHEME_SMALL_PLANE
+            }
+        }
+    }
+}
+
 /// Id de compañía por nombre exacto.
 #[must_use]
 pub fn company_id_by_name(companies: &[Company], name: &str) -> Option<CompanyId> {
@@ -513,6 +629,62 @@ mod tests {
         assert_eq!(company.liveries[1].colour2, 3);
         assert_eq!(company.liveries[2].colour1, 6);
         assert_eq!(company.liveries[2].colour2, 12);
+    }
+
+    #[test]
+    fn livery_primary_uses_default_gate_and_custom_channel() {
+        let mut company = Company::player(CompanyEconomy::default(), 3);
+        company.liveries[LIVERY_SCHEME_STEAM] = CompanyLivery {
+            in_use: COMPANY_LIVERY_FLAG_PRIMARY,
+            colour1: 9,
+            colour2: 3,
+        };
+        assert_eq!(
+            company_livery_primary_colour(&company, LIVERY_SCHEME_STEAM),
+            3
+        );
+
+        company.liveries[LIVERY_SCHEME_DEFAULT].in_use = COMPANY_LIVERY_FLAG_PRIMARY;
+        assert_eq!(
+            company_livery_primary_colour(&company, LIVERY_SCHEME_STEAM),
+            9
+        );
+        assert_eq!(
+            company_livery_primary_colour(&company, LIVERY_SCHEME_DIESEL),
+            3
+        );
+    }
+
+    #[test]
+    #[allow(clippy::unwrap_used)]
+    fn vehicle_livery_scheme_matches_train_class_and_cargo() {
+        let mut engine = crate::Vehicle::new(
+            1,
+            crate::vehicle::VehicleKind::Train,
+            TileCoord::new(1, 1),
+            TileCoord::new(2, 1),
+        );
+        engine.cargo_type = Some(crate::cargo::CargoType::Passengers);
+        let steam = crate::engine::engine_by_id(crate::engine::ENGINE_TRAIN_KIRBY).unwrap();
+        assert_eq!(
+            vehicle_livery_scheme(&engine, steam, None),
+            LIVERY_SCHEME_STEAM
+        );
+
+        let dmu = crate::engine::engine_by_id(crate::engine::ENGINE_TRAIN_MANLEY_MOREL).unwrap();
+        assert_eq!(vehicle_livery_scheme(&engine, dmu, None), LIVERY_SCHEME_DMU);
+
+        engine.prev_unit = Some(7);
+        let wagon = crate::engine::engine_by_id(crate::engine::ENGINE_WAGON_PASSENGER).unwrap();
+        assert_eq!(
+            vehicle_livery_scheme(&engine, wagon, Some(dmu)),
+            LIVERY_SCHEME_DMU
+        );
+        engine.cargo_type = Some(crate::cargo::CargoType::Coal);
+        assert_eq!(
+            vehicle_livery_scheme(&engine, wagon, Some(dmu)),
+            LIVERY_SCHEME_FREIGHT_WAGON
+        );
     }
 
     #[test]

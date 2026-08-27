@@ -1593,6 +1593,25 @@ mod tests {
     }
 
     #[test]
+    fn parse_train_traction_and_colour_flags() {
+        let payload = [
+            0x00,
+            ACTION0_FEATURE_TRAINS,
+            0x02,
+            0x01,
+            0x00,
+            0x19,
+            0x2A, // electric traction
+            0x27,
+            0x06, // Uses2CC + RailIsMU
+        ];
+        let meta = parse_action0_train_meta(&payload).unwrap();
+        assert_eq!(meta.rail_engine_class, 2);
+        assert!(meta.rail_is_mu);
+        assert!(meta.uses_2cc);
+    }
+
+    #[test]
     fn action5_foundations_and_bridge_decks_merge_respect_ranges() {
         let mut indices = vec![0u8; 8 * 8];
         for y in 2..6 {

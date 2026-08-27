@@ -67,13 +67,7 @@ fn vehicle_is_hidden_from_view(
 }
 
 fn vehicle_owner_colour(sim: &SimWorld, v: &Vehicle) -> crate::sprites::CompanyColour {
-    crate::sprites::CompanyColour::from_u8(
-        sim.state
-            .companies
-            .get(v.owner.index())
-            .map(|c| c.colour)
-            .unwrap_or(sim.state.company_colour),
-    )
+    super::vehicle_livery_colour(sim, v)
 }
 
 pub(super) fn vehicle_tint(v: &Vehicle) -> Color {
@@ -195,6 +189,7 @@ pub(crate) fn update_vehicles(
             &mut images,
         );
     }
+    super::ensure_vehicle_livery_palettes(&sim, &mut company, &mut images);
     for (vs, mut transform, mut sprite, mut visibility, mut parent) in &mut q {
         let Some(i) = vehicle_index.core.slot(vs.0) else {
             continue;

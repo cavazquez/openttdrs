@@ -26,13 +26,7 @@ fn vehicle_is_hidden_from_view(
 }
 
 fn vehicle_owner_colour(sim: &SimWorld, v: &Vehicle) -> crate::sprites::CompanyColour {
-    crate::sprites::CompanyColour::from_u8(
-        sim.state
-            .companies
-            .get(v.owner.index())
-            .map(|c| c.colour)
-            .unwrap_or(sim.state.company_colour),
-    )
+    super::vehicle_livery_colour(sim, v)
 }
 
 fn vehicle_cargo_label_pos(vehicle_pos: Vec3) -> Vec3 {
@@ -147,6 +141,7 @@ pub(crate) fn spawn_initial_vehicles(
     for c in &sim.state.companies {
         company.ensure_palette(crate::sprites::CompanyColour::from_u8(c.colour), images);
     }
+    super::ensure_vehicle_livery_palettes(sim, company, images);
     for vehicle in &sim.state.vehicles {
         if vehicle.is_wagon_unit() || vehicle.is_articulated_unit() {
             continue;

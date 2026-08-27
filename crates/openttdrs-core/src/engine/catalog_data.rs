@@ -58,6 +58,31 @@ pub(crate) const RELIABILITY_STEAM: u8 = 75;
 pub(crate) const RELIABILITY_DIESEL: u8 = 85;
 pub(crate) const RELIABILITY_ELECTRIC: u8 = 90;
 pub(crate) const RELIABILITY_ROAD: u8 = 85;
+
+/// Clase `EngineClass` de los motores ferroviarios vanilla de `OpenTTD`.
+pub(crate) const fn vanilla_train_engine_class(id: u16) -> u8 {
+    match id {
+        ENGINE_TRAIN_MANLEY_MOREL
+        | ENGINE_TRAIN_DASH
+        | ENGINE_TRAIN_SH_HENDRY_25
+        | ENGINE_TRAIN_UU_37
+        | ENGINE_TRAIN_FLOSS_47
+        | ENGINE_TRAIN_SH_125 => 1,
+        ENGINE_TRAIN_SH_30 | ENGINE_TRAIN_SH_40 | ENGINE_TRAIN_TIM | ENGINE_TRAIN_ASIASTAR => 2,
+        ENGINE_TRAIN_X2001 => 3,
+        ENGINE_TRAIN_LEV1 => 4,
+        _ => 0,
+    }
+}
+
+/// Motores vanilla con `EngineMiscFlag::RailIsMU`.
+pub(crate) const fn vanilla_train_engine_is_mu(id: u16) -> bool {
+    matches!(
+        id,
+        ENGINE_TRAIN_MANLEY_MOREL | ENGINE_TRAIN_DASH | ENGINE_TRAIN_TIM | ENGINE_TRAIN_ASIASTAR
+    )
+}
+
 macro_rules! road {
     ($id:expr, $kind:expr, $name:expr, $speed:expr, $cf:expr, $rc:expr, $cap:expr, $cargo:expr, $hp:expr, $wt:expr, $year:expr) => {
         road!(
@@ -113,6 +138,9 @@ macro_rules! road {
             load_amount: 0,
             train_image_index: 0,
             dual_headed: false,
+            rail_engine_class: 0,
+            rail_is_mu: false,
+            uses_2cc: false,
             rail_tilts: false,
             curve_speed_mod: 0,
             pow_wag_power: 0,
@@ -180,6 +208,9 @@ macro_rules! train {
             load_amount: 0,
             train_image_index: $img,
             dual_headed: $dual,
+            rail_engine_class: vanilla_train_engine_class($id),
+            rail_is_mu: vanilla_train_engine_is_mu($id),
+            uses_2cc: false,
             rail_tilts: false,
             curve_speed_mod: 0,
             pow_wag_power: 0,

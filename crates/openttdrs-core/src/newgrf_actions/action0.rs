@@ -201,6 +201,7 @@ pub struct ParsedStationMeta {
 
 /// Metadatos `Trains` Action0 (antes de asignar ID ≥1000).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct ParsedTrainMeta {
     /// Primer id local definido por el bloque Action0.
     pub local_id: u16,
@@ -215,6 +216,12 @@ pub struct ParsedTrainMeta {
     pub load_amount: u8,
     pub train_image_index: u8,
     pub dual_headed: bool,
+    /// Action0 train `0x19`: clase de tracción (`EngineClass`).
+    pub rail_engine_class: u8,
+    /// Action0 misc flags bit 2: unidad múltiple DMU/EMU.
+    pub rail_is_mu: bool,
+    /// Action0 misc flags bit 1: usa la segunda rampa de compañía (2CC).
+    pub uses_2cc: bool,
     pub capacity: u32,
     pub cargo: Option<crate::cargo::CargoType>,
     pub weight_t: u16,
@@ -3003,6 +3010,9 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
     let mut load_amount = 0u8;
     let mut train_image_index = 2u8;
     let mut dual_headed = false;
+    let mut rail_engine_class = 0u8;
+    let mut rail_is_mu = false;
+    let mut uses_2cc = false;
     let mut capacity = 0u32;
     let mut cargo = None;
     let mut weight_t = 80u16;
@@ -3071,6 +3081,17 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
             0x13 => {
                 dual_headed = read_u8(payload, &mut i)? != 0;
             }
+            0x19 => {
+                let traction = read_u8(payload, &mut i)?;
+                rail_engine_class = match traction {
+                    0x00..=0x07 => 0,
+                    0x08..=0x27 => 1,
+                    0x28..=0x31 => 2,
+                    0x32..=0x37 => 3,
+                    0x38..=0x41 => 4,
+                    _ => rail_engine_class,
+                };
+            }
             0x14 => {
                 capacity = u32::from(read_u8(payload, &mut i)?);
             }
@@ -3126,16 +3147,19 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
                 }
             }
             0x27 => {
-                // `EngineMiscFlag::RailTilts` = bit 0 and SpriteStack = bit 7.
+                // `EngineMiscFlag`: RailTilts = bit 0, Uses2CC = bit 1,
+                // RailIsMU = bit 2 y SpriteStack = bit 7.
                 let flags = read_u8(payload, &mut i)?;
                 rail_tilts = flags & 0x01 != 0;
+                uses_2cc = flags & 0x02 != 0;
+                rail_is_mu = flags & 0x04 != 0;
                 sprite_stack = flags & 0x80 != 0;
             }
             0x2E => {
                 curve_speed_mod = i16::from_le_bytes(read_u16(payload, &mut i)?.to_le_bytes());
             }
             // Anchos fijos restantes consumidos sin semántica runtime.
-            0x08 | 0x0A | 0x0C | 0x0F | 0x10 | 0x11 | 0x18 | 0x19 | 0x1C | 0x25 | 0x26 => {
+            0x08 | 0x0A | 0x0C | 0x0F | 0x10 | 0x11 | 0x18 | 0x1C | 0x25 | 0x26 => {
                 skip_bytes(payload, &mut i, 1)?;
             }
             0x1E => {
@@ -3203,6 +3227,9 @@ pub fn parse_action0_train_meta(payload: &[u8]) -> Option<ParsedTrainMeta> {
         load_amount,
         train_image_index,
         dual_headed,
+        rail_engine_class,
+        rail_is_mu,
+        uses_2cc,
         capacity,
         cargo,
         weight_t,

@@ -187,9 +187,17 @@ pub use command::{
 pub use company::{
     COMPANY_COLOUR_SLOTS, COMPANY_LIVERY_FLAG_PRIMARY, COMPANY_LIVERY_FLAG_SECONDARY,
     COMPANY_LIVERY_SCHEME_COUNT, Company, CompanyId, CompanyLivery, FEEDER_SHARE_DEN,
-    FEEDER_SHARE_NUM, RIVAL_NAME_ROADHAUL, RIVAL_NAME_TRANSCARGO, company_colour_taken_by_other,
-    company_id_by_name, default_company_liveries, feeder_share_of, first_free_company_colour,
-    tile_owner_colour, tile_with_owner,
+    FEEDER_SHARE_NUM, LIVERY_SCHEME_BUS, LIVERY_SCHEME_DEFAULT, LIVERY_SCHEME_DIESEL,
+    LIVERY_SCHEME_DMU, LIVERY_SCHEME_ELECTRIC, LIVERY_SCHEME_EMU, LIVERY_SCHEME_FREIGHT_SHIP,
+    LIVERY_SCHEME_FREIGHT_TRAM, LIVERY_SCHEME_FREIGHT_WAGON, LIVERY_SCHEME_HELICOPTER,
+    LIVERY_SCHEME_LARGE_PLANE, LIVERY_SCHEME_MAGLEV, LIVERY_SCHEME_MONORAIL,
+    LIVERY_SCHEME_PASSENGER_SHIP, LIVERY_SCHEME_PASSENGER_TRAM,
+    LIVERY_SCHEME_PASSENGER_WAGON_DIESEL, LIVERY_SCHEME_PASSENGER_WAGON_ELECTRIC,
+    LIVERY_SCHEME_PASSENGER_WAGON_MAGLEV, LIVERY_SCHEME_PASSENGER_WAGON_MONORAIL,
+    LIVERY_SCHEME_PASSENGER_WAGON_STEAM, LIVERY_SCHEME_SMALL_PLANE, LIVERY_SCHEME_STEAM,
+    LIVERY_SCHEME_TRUCK, RIVAL_NAME_ROADHAUL, RIVAL_NAME_TRANSCARGO, company_colour_taken_by_other,
+    company_id_by_name, company_livery_primary_colour, default_company_liveries, feeder_share_of,
+    first_free_company_colour, tile_owner_colour, tile_with_owner, vehicle_livery_scheme,
 };
 pub use construction_settings::{ConstructionSettings, RoadVehicleDrivingSide, TrainSignalSide};
 pub use depot::{

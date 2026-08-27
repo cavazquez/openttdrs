@@ -81,10 +81,11 @@ Fuente: `newgrf_act0_trains.cpp`.
 | `20` air drag BYTE | **runtime** (`air_drag` → `engine_air_drag` / consist) |
 | `21` shorten factor BYTE | **runtime** (almacenado en `EngineDef.shorten_factor`) |
 | `23` powered wagon weight | **runtime** |
-| `27` misc flags (bit0 `RailTilts`) | **runtime** (`rail_tilts`) |
+| `19` traction type BYTE | **runtime** (`rail_engine_class`: vapor/diésel/eléctrico/monorail/maglev) |
+| `27` misc flags (bit0 `RailTilts`, bit1 `Uses2CC`, bit2 `RailIsMU`, bit7 `SpriteStack`) | **runtime parcial** (`rail_tilts`, `uses_2cc`, `rail_is_mu`, `sprite_stack`; 2CC aún no materializa la segunda rampa) |
 | `2E` curve speed mod | **runtime** |
 | `1E` callback mask BYTE / `31` additional mask BYTE | **runtime** (`EngineDef.vehicle_callback_mask`; bit 7 habilita CB33) |
-| `0E`, `08`, `0A`, `0C`, `0F`–`11`, `18`–`1A`, `1C`, `22`, `25`–`26`, `28`–`2D`, `2F`–`30` | consumidas (ancho fijo / CTT) |
+| `0E`, `08`, `0A`, `0C`, `0F`–`11`, `18`, `1A`, `1C`, `22`, `25`–`26`, `28`–`2D`, `2F`–`30` | consumidas (ancho fijo / CTT) |
 
 ## Road vehicles (`01`)
 

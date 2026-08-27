@@ -5,6 +5,7 @@ mod pose;
 mod spawn;
 mod sync;
 
+use bevy::prelude::{Assets, Image};
 use openttdrs_core::EngineDef;
 
 use crate::state::SimWorld;
@@ -26,6 +27,86 @@ fn engine_in_sim(sim: &SimWorld, engine_id: u16) -> Option<&EngineDef> {
         .or_else(|| openttdrs_core::engine_by_id(engine_id))
 }
 
+/// Devuelve la cabeza de un consist sin confiar en que los enlaces cargados
+/// desde un SAV sean acíclicos. OpenTTD aplica la librea de la cabeza a todas
+/// sus unidades, incluidos vagones y partes articuladas.
+fn vehicle_head_id(sim: &SimWorld, vehicle: &openttdrs_core::Vehicle) -> u32 {
+    let mut current_id = vehicle.id;
+    let mut seen = std::collections::HashSet::new();
+    while seen.insert(current_id) {
+        let Some(current) = sim.state.vehicles.iter().find(|v| v.id == current_id) else {
+            break;
+        };
+        let Some(previous_id) = current.prev_unit else {
+            return current.id;
+        };
+        current_id = previous_id;
+    }
+    vehicle.id
+}
+
+/// Color primario que debe usar el renderer para una unidad.
+///
+/// La prioridad coincide con `GetEngineLivery`: librea explícita del grupo (o
+/// de uno de sus padres), esquema por tipo de vehículo si el default está
+/// habilitado y, por último, el color por defecto de la compañía.
+fn vehicle_livery_colour(
+    sim: &SimWorld,
+    vehicle: &openttdrs_core::Vehicle,
+) -> crate::sprites::CompanyColour {
+    let fallback = crate::sprites::CompanyColour::from_u8(sim.state.company_colour);
+    let Some(company) = sim.state.companies.get(vehicle.owner.index()) else {
+        return fallback;
+    };
+    let head_id = vehicle_head_id(sim, vehicle);
+    let head = sim
+        .state
+        .vehicles
+        .iter()
+        .find(|candidate| candidate.id == head_id)
+        .unwrap_or(vehicle);
+    let engine = vehicle
+        .engine_id
+        .and_then(|id| engine_in_sim(sim, id))
+        .unwrap_or_else(|| vehicle.effective_engine());
+    let parent_engine = (head.id != vehicle.id)
+        .then(|| head.engine_id.and_then(|id| engine_in_sim(sim, id)))
+        .flatten();
+    let scheme = openttdrs_core::vehicle_livery_scheme(vehicle, engine, parent_engine);
+    let mut colour = openttdrs_core::company_livery_primary_colour(company, scheme);
+
+    let mut group_id = head.group_id;
+    let mut seen = std::collections::HashSet::new();
+    while let Some(id) = group_id {
+        if !seen.insert(id) {
+            break;
+        }
+        let Some(group) = sim.state.vehicle_groups.iter().find(|group| group.id == id) else {
+            break;
+        };
+        if group.livery_in_use
+            & (openttdrs_core::COMPANY_LIVERY_FLAG_PRIMARY
+                | openttdrs_core::COMPANY_LIVERY_FLAG_SECONDARY)
+            != 0
+        {
+            colour = group.livery_colour1;
+            break;
+        }
+        group_id = group.parent;
+    }
+    crate::sprites::CompanyColour::from_u8(colour)
+}
+
+fn ensure_vehicle_livery_palettes(
+    sim: &SimWorld,
+    company: &mut crate::render::CompanyColoredSprites,
+    images: &mut Assets<Image>,
+) {
+    for vehicle in &sim.state.vehicles {
+        company.ensure_palette(vehicle_livery_colour(sim, vehicle), images);
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
@@ -35,6 +116,10 @@ mod tests {
     use bevy::ecs::system::RunSystemOnce;
     use bevy::prelude::*;
     use openttdrs_core::prelude::*;
+    use openttdrs_core::{
+        COMPANY_LIVERY_FLAG_PRIMARY, CargoType, CompanyLivery, LIVERY_SCHEME_BUS,
+        LIVERY_SCHEME_DEFAULT, VehicleGroup,
+    };
 
     use assets::vehicle_gfx::{
         AIRCRAFT_ROTOR_LAYERS, BUS_VEHICLE_LAYERS, TRAIN_VEHICLE_LAYERS, TRAIN_WAGON_COAL_LAYERS,
@@ -75,6 +160,46 @@ mod tests {
             aircraft_rotor: Default::default(),
             train_groups: Default::default(),
         }
+    }
+
+    #[test]
+    fn vehicle_livery_colour_follows_company_scheme_and_group_parent() {
+        let mut sim = SimWorld {
+            state: openttdrs_core::GameState::new(8, 8),
+            loaded_file: false,
+            ottdmap_extras: None,
+        };
+        let mut vehicle = Vehicle::new(
+            7,
+            VehicleKind::Bus,
+            TileCoord::new(1, 1),
+            TileCoord::new(2, 1),
+        );
+        vehicle.owner = CompanyId::PLAYER;
+        vehicle.cargo_type = Some(CargoType::Passengers);
+        vehicle.group_id = Some(9);
+        sim.state.vehicles.push(vehicle);
+        sim.state.companies[0].liveries[LIVERY_SCHEME_DEFAULT].in_use = COMPANY_LIVERY_FLAG_PRIMARY;
+        sim.state.companies[0].liveries[LIVERY_SCHEME_BUS] = CompanyLivery {
+            in_use: COMPANY_LIVERY_FLAG_PRIMARY,
+            colour1: 12,
+            colour2: 0,
+        };
+        assert_eq!(
+            vehicle_livery_colour(&sim, &sim.state.vehicles[0]).as_u8(),
+            12
+        );
+
+        let mut parent = VehicleGroup::new(4, "parent");
+        parent.livery_in_use = COMPANY_LIVERY_FLAG_PRIMARY;
+        parent.livery_colour1 = 5;
+        let mut child = VehicleGroup::new(9, "child");
+        child.parent = Some(parent.id);
+        sim.state.vehicle_groups.extend([parent, child]);
+        assert_eq!(
+            vehicle_livery_colour(&sim, &sim.state.vehicles[0]).as_u8(),
+            5
+        );
     }
 
     #[test]

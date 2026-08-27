@@ -897,6 +897,17 @@ pub(crate) fn spawn_industry_tile(
     } else {
         None
     };
+    // Resolver el layout antes de dibujar el suelo: un `TileLayout` completo
+    // puede declarar `DODRAW=0` y debe suprimir también el agua/rough vanilla.
+    // Si no hay caché disponible, se conserva todo el fallback atómico.
+    let industry_layout = newgrf_def.and_then(|def| {
+        ctx.tile
+            .and_then(|_| resolve_newgrf_industry_layout(def, stage, m3hi, newgrf_stack))
+    });
+    let custom_industry_layout = industry_layout
+        .as_ref()
+        .is_some_and(|(_, layout, _)| layout.complete)
+        && industry_sprites.is_some();
     // Tabla vanilla: NewGRF usa subst_id si no hay sprites / como fallback.
     let gfx = if translated >= openttdrs_core::NEW_INDUSTRY_TILE_OFFSET {
         openttdrs_core::industry_tile_spec_def(industry_catalog, translated)
@@ -925,7 +936,7 @@ pub(crate) fn spawn_industry_tile(
     let ground_sid = entry.map(|e| e.ground_sprite_id).unwrap_or(0);
     let use_water = industry_uses_water_ground(map, ctx.coord, gfx, ground_sid);
     let chunk = ctx.map_tile_chunk();
-    if use_water {
+    if !custom_industry_layout && use_water {
         commands.spawn((
             MapVisualLayer,
             chunk,
@@ -938,7 +949,9 @@ pub(crate) fn spawn_industry_tile(
                 FLAT_WATER_LAYER_FRAC,
             )),
         ));
-    } else if ground_sid == 0 || !assets.industries.contains_key(&ground_sid) {
+    } else if !custom_industry_layout
+        && (ground_sid == 0 || !assets.industries.contains_key(&ground_sid))
+    {
         // La tabla vanilla trae el suelo exacto (`s1`) y lo pinta más abajo.
         // Sólo conservar el terreno áspero como red de seguridad para una
         // fila realmente vacía o un asset que todavía no está disponible;
@@ -975,6 +988,24 @@ pub(crate) fn spawn_industry_tile(
         }
     };
     let overlay_z = foundation.surface_base_z;
+    if custom_industry_layout
+        && let Some((def, layout, runtime_fp)) = industry_layout.as_ref()
+        && let Some(cache) = industry_sprites.as_mut()
+    {
+        let _ = spawn_newgrf_industry_layout_ground(
+            commands,
+            ctx,
+            map_width,
+            foundation.surface_base_z,
+            foundation.child_parent,
+            def,
+            palette_colour,
+            *runtime_fp,
+            layout,
+            cache,
+            images,
+        );
+    }
     let overlay_at = |xrel, yrel, w, h, layer| {
         if leveled {
             foundation_surface_overlay_pos(
@@ -1005,6 +1036,29 @@ pub(crate) fn spawn_industry_tile(
     let overlay_ctx =
         crate::render::IndustryOverlayContext::from_tile_ctx(ctx, base_z, overlay_z, leveled);
     if industries_hidden {
+        return;
+    }
+    // Un layout completo reemplaza la secuencia vanilla completa, aunque no
+    // publique un suelo. Los parents se ordenan como bloque y los children
+    // conservan la relación relativa del formato `TileSeq`.
+    if custom_industry_layout
+        && let Some((def, layout, runtime_fp)) = industry_layout.as_ref()
+        && let Some(cache) = industry_sprites.as_mut()
+    {
+        if spawn_newgrf_industry_layout_sequence(
+            commands,
+            ctx,
+            map_width,
+            foundation.surface_base_z,
+            def,
+            palette_colour,
+            *runtime_fp,
+            layout,
+            cache,
+            images,
+        ) {
+            return;
+        }
         return;
     }
     if let Some(def) = newgrf_def
@@ -1225,6 +1279,236 @@ pub(crate) fn spawn_industry_tile(
         overlay_ctx,
         chunk,
     );
+}
+
+/// Resuelve el layout `TileSeq` de una tesela de industria con el mismo
+/// contexto Action2 que la vista plana (`stage`, random y parámetros GRF).
+#[allow(clippy::too_many_arguments)]
+fn resolve_newgrf_industry_layout<'a>(
+    def: &'a openttdrs_core::IndustryTileSpecDef,
+    stage: usize,
+    m3hi: u8,
+    newgrf_stack: &[openttdrs_core::NewGrfEntry],
+) -> Option<(
+    &'a openttdrs_core::IndustryTileSpecDef,
+    openttdrs_core::newgrf_sprites::ResolvedTileLayout,
+    u32,
+)> {
+    let mut action2 = openttdrs_core::Action2EvalCtx {
+        random_bits: u32::from(m3hi),
+        ..Default::default()
+    };
+    action2.vars.insert(0x5F, u32::from(m3hi) << 8);
+    action2.set_grf_params(openttdrs_core::stack_params_for_grfid(
+        newgrf_stack,
+        def.newgrf_grfid,
+    ));
+    let layout = def.newgrf_tile_layout_runtime(stage, &mut action2)?;
+    let runtime_fp = def
+        .newgrf_runtime
+        .as_ref()
+        .map_or(0, |_| runtime_fingerprint(&action2, vars::INDUSTRY, false));
+    Some((def, layout, runtime_fp))
+}
+
+/// Emite el suelo de un layout de industria. Un layout completo sin ground
+/// es `DODRAW=0` y por eso devuelve `true` sin crear sprite vanilla.
+#[allow(clippy::too_many_arguments)]
+fn spawn_newgrf_industry_layout_ground(
+    commands: &mut Commands,
+    ctx: &TileRenderContext,
+    map_width: u32,
+    surface_base_z: u8,
+    foundation_child_parent: Option<Entity>,
+    def: &openttdrs_core::IndustryTileSpecDef,
+    palette_colour: CompanyColour,
+    runtime_fp: u32,
+    layout: &openttdrs_core::newgrf_sprites::ResolvedTileLayout,
+    cache: &mut crate::render::NewGrfIndustrySpriteCache,
+    images: &mut Assets<Image>,
+) -> bool {
+    if !layout.complete {
+        return false;
+    }
+    let Some(ground) = layout.ground.as_ref() else {
+        return true;
+    };
+    let handle = cache.handle_for_layout(
+        def,
+        0,
+        Some(palette_colour),
+        runtime_fp,
+        &ground.sprite,
+        images,
+    );
+    let position = overlay_pos(
+        ctx.iso_pos,
+        f32::from(ground.sprite.x_offs),
+        f32::from(ground.sprite.y_offs),
+        f32::from(ground.sprite.width),
+        f32::from(ground.sprite.height),
+        surface_base_z,
+        0.45,
+        ctx.tx_i32(),
+        ctx.ty_i32(),
+    );
+    let sprite = Sprite {
+        image: handle,
+        color: crate::sprites::with_to_alpha(
+            Color::WHITE,
+            crate::sprites::TransparencyOption::Industries,
+        ),
+        ..default()
+    };
+    if let Some(parent) = foundation_child_parent {
+        spawn_foundation_child_sprite_at(commands, sprite, ctx, position, map_width, parent);
+    } else {
+        commands.spawn((
+            MapVisualLayer,
+            ctx.map_tile_chunk(),
+            sprite,
+            Transform::from_translation(position),
+        ));
+    }
+    true
+}
+
+/// Emite parents y children `BUILD` de un layout de industria NewGRF.
+#[allow(clippy::too_many_arguments)]
+fn spawn_newgrf_industry_layout_sequence(
+    commands: &mut Commands,
+    ctx: &TileRenderContext,
+    map_width: u32,
+    surface_base_z: u8,
+    def: &openttdrs_core::IndustryTileSpecDef,
+    palette_colour: CompanyColour,
+    runtime_fp: u32,
+    layout: &openttdrs_core::newgrf_sprites::ResolvedTileLayout,
+    cache: &mut crate::render::NewGrfIndustrySpriteCache,
+    images: &mut Assets<Image>,
+) -> bool {
+    if !layout.complete || layout.sequence.is_empty() {
+        return false;
+    }
+    let tint =
+        crate::sprites::with_to_alpha(Color::WHITE, crate::sprites::TransparencyOption::Industries);
+    let mut last_parent: Option<(Entity, Vec2)> = None;
+    for (index, layer) in layout.sequence.iter().enumerate() {
+        let slot = u16::try_from(index.saturating_add(1)).unwrap_or(u16::MAX);
+        let handle = cache.handle_for_layout(
+            def,
+            slot,
+            Some(palette_colour),
+            runtime_fp,
+            &layer.sprite,
+            images,
+        );
+        let width = f32::from(layer.sprite.width);
+        let height = f32::from(layer.sprite.height);
+        let seq = RoadStopSeqGfx {
+            dx: f32::from(layer.origin[0]),
+            dy: f32::from(layer.origin[1]),
+            dz: if layer.is_parent() {
+                f32::from(layer.origin[2])
+            } else {
+                0.0
+            },
+            x_offs: f32::from(layer.sprite.x_offs),
+            y_offs: f32::from(layer.sprite.y_offs),
+            remap_x_adj: 0.0,
+        };
+        let layer_z = 0.5 + index as f32 * 0.0003;
+        let sprite = Sprite {
+            image: handle,
+            color: tint,
+            ..default()
+        };
+        if layer.is_parent() {
+            let position = road_stop_build_sprite_center(
+                ctx.iso_pos,
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+                surface_base_z,
+                layer_z,
+                seq,
+                width,
+                height,
+            );
+            let source_depth = viewport_source_depth(position.z, ctx.tx, map_width);
+            let sprite_id = u32::MAX.saturating_sub(u32::try_from(index).unwrap_or(u32::MAX));
+            let bounds = object_tile_seq_bounds(
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+                surface_base_z,
+                layer.origin,
+                layer.extent,
+            );
+            let entity = commands
+                .spawn((
+                    MapVisualLayer,
+                    ctx.map_tile_chunk(),
+                    sprite,
+                    Transform::from_translation(Vec3::new(position.x, position.y, source_depth)),
+                    ViewportSortableParent {
+                        sprite_id,
+                        bounds,
+                        insertion_key: viewport_insertion_key(
+                            ctx.tx,
+                            ctx.ty,
+                            u8::try_from(index.saturating_add(2)).unwrap_or(u8::MAX),
+                        ),
+                        source_depth,
+                    },
+                ))
+                .id();
+            last_parent = Some((
+                entity,
+                Vec2::new(position.x - width / 2.0, position.y + height / 2.0),
+            ));
+        } else if let Some((parent, parent_top_left)) = last_parent {
+            let position = object_tile_seq_child_center(
+                parent_top_left,
+                layer.origin,
+                width,
+                height,
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+                surface_base_z,
+                layer_z,
+            );
+            let source_depth = viewport_source_depth(position.z, ctx.tx, map_width);
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                sprite,
+                Transform::from_translation(Vec3::new(position.x, position.y, source_depth)),
+                ViewportSortableChild {
+                    parent,
+                    source_depth,
+                },
+            ));
+        } else {
+            // Un child huérfano es inválido según el contrato, pero conservar
+            // el sprite en el ancla de la tesela evita perderlo por completo.
+            let position = road_stop_build_sprite_center(
+                ctx.iso_pos,
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+                surface_base_z,
+                layer_z,
+                seq,
+                width,
+                height,
+            );
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                sprite,
+                Transform::from_translation(position),
+            ));
+        }
+    }
+    true
 }
 
 /// Bounds inclusivos de una entrada parent `TileSeq` de objeto.

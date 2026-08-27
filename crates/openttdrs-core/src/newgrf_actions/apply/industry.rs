@@ -48,7 +48,7 @@ pub fn apply_newgrf_industry_tiles(state: &mut GameState, search_dirs: &[&Path])
                 .map(<[crate::newgrf_sprites::DecodedSprite]>::to_vec)
                 .unwrap_or_default();
             let preview = views.first().cloned();
-            let newgrf_runtime = if gfx.needs_runtime_resolve() {
+            let newgrf_runtime = if gfx.needs_runtime_resolve() || gfx.has_tile_layouts() {
                 Some(Box::new(gfx.clone()))
             } else {
                 None
@@ -184,7 +184,8 @@ pub fn apply_newgrf_industries(state: &mut GameState, search_dirs: &[&Path]) {
                 from_newgrf: true,
                 grfid: entry.grfid,
                 newgrf_local_id: meta.local_id,
-                newgrf_runtime: gfx.needs_runtime_resolve().then(|| Box::new(gfx.clone())),
+                newgrf_runtime: (gfx.needs_runtime_resolve() || gfx.has_tile_layouts())
+                    .then(|| Box::new(gfx.clone())),
             });
         }
     }

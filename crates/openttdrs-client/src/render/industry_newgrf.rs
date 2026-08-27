@@ -10,10 +10,11 @@ use crate::render::newgrf_cache::{
 };
 use crate::sprites::CompanyColour;
 
-/// `(gfx, view_idx, company_colour, runtime_fp)` → textura RGBA.
+/// `(gfx, slot, company_colour, runtime_fp)` → textura RGBA. El bit alto de
+/// `slot` separa piezas `TileSeq` de las vistas planas.
 #[derive(Resource, Default)]
 pub(crate) struct NewGrfIndustrySpriteCache {
-    handles: HashMap<(u16, u8, u8, u32), Handle<Image>>,
+    handles: HashMap<(u16, u16, u8, u32), Handle<Image>>,
 }
 
 impl NewGrfIndustrySpriteCache {
@@ -36,7 +37,7 @@ impl NewGrfIndustrySpriteCache {
         } else {
             def.newgrf_view(view_idx)?.clone()
         };
-        let idx = u8::try_from(view_idx % def.newgrf_views.len().max(1)).unwrap_or(0);
+        let idx = u16::try_from(view_idx % def.newgrf_views.len().max(1)).unwrap_or(0);
         let key = (def.gfx.as_u16(), idx, colour_key, fp);
         Some(
             self.handles
@@ -49,6 +50,34 @@ impl NewGrfIndustrySpriteCache {
                 })
                 .clone(),
         )
+    }
+
+    /// Materializa una pieza ya resuelta de un layout `TileSeq` de industria.
+    pub(crate) fn handle_for_layout(
+        &mut self,
+        def: &IndustryTileSpecDef,
+        slot: u16,
+        colour: Option<CompanyColour>,
+        runtime_fp: u32,
+        sprite: &openttdrs_core::DecodedSprite,
+        images: &mut Assets<Image>,
+    ) -> Handle<Image> {
+        let colour_key = colour.map(CompanyColour::as_u8).unwrap_or(0xFF);
+        let key = (
+            def.gfx.as_u16(),
+            0x8000 | (slot & 0x7FFF),
+            colour_key,
+            runtime_fp,
+        );
+        self.handles
+            .entry(key)
+            .or_insert_with(|| {
+                images.add(decoded_sprite_image(
+                    sprite,
+                    DecodedSpriteImagePolicy::MaskedAndRecolored { colour },
+                ))
+            })
+            .clone()
     }
 }
 

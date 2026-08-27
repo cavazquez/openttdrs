@@ -94,6 +94,25 @@ impl IndustryTileSpecDef {
         Some(views[idx % views.len()].clone())
     }
 
+    /// Layout `TileSeq` de Action2 para una tesela de industria.
+    ///
+    /// La etapa de construcción se resuelve en la vista plana; una vez que
+    /// Action2 selecciona el grupo de layout, cada referencia apunta al
+    /// primer sprite de su set Action1 y no debe volver a indexarse por
+    /// `idx`.
+    pub fn newgrf_tile_layout_runtime(
+        &self,
+        idx: usize,
+        ctx: &mut crate::newgrf_sprites::Action2EvalCtx,
+    ) -> Option<crate::newgrf_sprites::ResolvedTileLayout> {
+        let _ = idx;
+        self.newgrf_runtime.as_ref()?.tile_layout_for_local_id_ctx(
+            u16::from(self.newgrf_local_id),
+            0,
+            ctx,
+        )
+    }
+
     #[must_use]
     pub fn has_newgrf_sprites(&self) -> bool {
         !self.newgrf_views.is_empty()
@@ -160,6 +179,9 @@ pub fn resolve_industry_tile_draw_gfx(gfx: u16, catalog: &[IndustryTileSpecDef])
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use crate::newgrf_sprites::{
+        DecodedSprite, TileLayout, TileLayoutSpriteRef, TrainSpriteAssign, TrainSpriteGraphics,
+    };
 
     #[test]
     fn translate_applies_override() {
@@ -194,5 +216,66 @@ mod tests {
             newgrf_runtime: None,
         }];
         assert_eq!(next_free_industry_tile_gfx_id(&catalog), Some(176));
+    }
+
+    #[test]
+    fn runtime_tile_layout_resolves_ground_and_sequence() {
+        let sprite = DecodedSprite {
+            width: 2,
+            height: 2,
+            x_offs: -1,
+            y_offs: 3,
+            rgba: [64, 96, 128, 255].repeat(4),
+            mask: Vec::new(),
+        };
+        let mut runtime = TrainSpriteGraphics {
+            sets: vec![vec![sprite.clone()], vec![sprite.clone()]],
+            assigns: vec![TrainSpriteAssign {
+                local_id: 9,
+                set_id: 6,
+            }],
+            ..Default::default()
+        };
+        runtime.tile_layouts.insert(
+            6,
+            TileLayout {
+                ground: TileLayoutSpriteRef {
+                    action1_set: Some(0),
+                    ..Default::default()
+                },
+                sequence: vec![TileLayoutSpriteRef {
+                    action1_set: Some(1),
+                    origin: [3, 4, 5],
+                    extent: [8, 8, 16],
+                    ..Default::default()
+                }],
+            },
+        );
+        let def = IndustryTileSpecDef {
+            gfx: IndustryTileGfxId(175),
+            subst_id: 0,
+            from_newgrf: true,
+            accepts_cargo_indices: Vec::new(),
+            accepts_cargo_labels: Vec::new(),
+            acceptance: Vec::new(),
+            callback_mask: 0,
+            animation_frames: 0,
+            animation_status: 0,
+            animation_speed: 0,
+            animation_triggers: 0,
+            animation_special_flags: 0,
+            newgrf_local_id: 9,
+            newgrf_grfid: 0,
+            newgrf_preview: Some(sprite.clone()),
+            newgrf_views: vec![sprite],
+            newgrf_runtime: Some(Box::new(runtime)),
+        };
+        let mut ctx = crate::newgrf_sprites::Action2EvalCtx::default();
+        let Some(layout) = def.newgrf_tile_layout_runtime(3, &mut ctx) else {
+            panic!("industry TileSeq");
+        };
+        assert!(layout.complete);
+        assert!(layout.ground.is_some());
+        assert_eq!(layout.sequence[0].origin, [3, 4, 5]);
     }
 }

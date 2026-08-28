@@ -1,19 +1,35 @@
 //! Colocación de pueblos con calle y casas 1×1 (MVP de `GenerateTowns`).
 
 use crate::command::{Command, apply_command, command_would_fail};
-use crate::map::{TileCoord, TileKind, tile_slope_and_z};
+use crate::map::tree_tile_loop::clear_ground_type;
+use crate::map::{SLOPE_STEEP, TileCoord, TileKind, tile_slope_and_z};
 use crate::sav::house_spec_population;
-use crate::town::{Town, update_town_radius};
+use crate::town::{Town, TownLayout, update_town_radius};
 use crate::townname::generate_town_name;
+use crate::world_gen::CLEAR_GROUND_ROUGH;
 
 use super::{
-    PROCEDURAL_HOUSE_STYLE_SPREAD, PopCtx, in_preserve, min_distance_sq, procedural_house_choices,
+    PROCEDURAL_HOUSE_STYLE_SPREAD, PopCtx, in_preserve, procedural_house_choices,
     tile_is_flat_grass, tile_ok_for_house,
 };
 
 /// Bits de carretera recta (eje X / eje Y).
 const ROAD_BITS_AXIS_X: u8 = 0x0A;
 const ROAD_BITS_AXIS_Y: u8 = 0x05;
+
+/// `CreateRandomTown` prueba veinte ubicaciones antes de abandonar un nombre.
+const RANDOM_TOWN_ATTEMPTS: usize = 20;
+/// `TownCanBePlacedHere`: distancia mínima a un borde de mapa.
+const TOWN_EDGE_DISTANCE: i32 = 12;
+/// `IsCloseToTown(tile, 20)` usa distancia Manhattan estrictamente menor.
+const TOWN_MIN_DISTANCE: i32 = 20;
+/// Doce de las 25 teselas del cuadro 5×5 deben ser construibles.
+const TOWN_SURROUNDING_GOAL: usize = 12;
+/// El ajuste vanilla por defecto crea una ciudad grande por cada cuatro pueblos.
+const DEFAULT_LARGER_TOWNS_INTERVAL: u32 = 4;
+/// Último intento de `GenerateTowns` cuando no se pudo crear ninguno.
+const RANDOM_TOWN_FALLBACK_ATTEMPTS: usize = 10_000;
+const SPIRAL_DIRS: [(i32, i32); 4] = [(-1, 0), (0, 1), (1, 0), (0, -1)];
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum StreetAxis {
@@ -35,83 +51,419 @@ pub(super) fn place_towns(
     town_centers: &mut Vec<TileCoord>,
 ) -> usize {
     let before = town_centers.len();
-    let margin = 5_u32;
-    let span_w = ctx.mw.saturating_sub(margin * 2).max(1);
-    let span_h = ctx.mh.saturating_sub(margin * 2).max(1);
-    let min_town_dist_sq = 14_i32 * 14;
-    // OpenTTD reintenta con agresividad si el mapa no admite el total pedido.
-    let max_attempts = target.saturating_mul(200).max(4_000);
     let map_w = i32::try_from(ctx.mw).unwrap_or(i32::MAX);
     let map_h = i32::try_from(ctx.mh).unwrap_or(i32::MAX);
+    // `GenerateTowns` consume este sorteo aunque no se consiga fundar ningún
+    // pueblo. La construcción/growth posterior sigue siendo RMAP-024, pero
+    // la selección de la semilla de cada intento ya debe arrancar aquí.
+    let city_random_offset = ctx.rng.next() % DEFAULT_LARGER_TOWNS_INTERVAL;
 
-    for _attempt in 0..max_attempts {
-        if town_centers.len() >= target {
-            break;
-        }
-        let x = i32::try_from(margin + ctx.rng.random_range(span_w)).unwrap_or(5);
-        let y = i32::try_from(margin + ctx.rng.random_range(span_h)).unwrap_or(5);
-        let center = TileCoord::new(x, y);
-        if in_preserve(ctx.preserve, x, y) {
-            continue;
-        }
-        if !tile_is_flat_grass(&ctx.state.map, center) {
-            continue;
-        }
-        if town_centers
-            .iter()
-            .any(|&other| min_distance_sq(center, other) < min_town_dist_sq)
-        {
-            continue;
-        }
-
-        let axis = if ctx.rng.random_range(2) == 0 {
-            StreetAxis::EastWest
-        } else {
-            StreetAxis::NorthSouth
-        };
-        let half_len = i32::try_from(2 + ctx.rng.random_range(3)).unwrap_or(2);
-        let south_row = ctx.rng.random_range(3) != 0;
-        let Some(plan) = plan_street_town(center, axis, half_len, south_row, map_w, map_h) else {
-            continue;
-        };
-        if !plan_fits_terrain(ctx, &plan) {
-            continue;
-        }
-
-        let choices = procedural_house_choices();
-        if choices.is_empty() {
-            continue;
-        }
-        let town_house_base = ctx
-            .rng
-            .random_range(u32::try_from(choices.len()).unwrap_or(1));
-        let town_id = u32::try_from(ctx.state.towns.len().saturating_add(1)).unwrap_or(1);
-        let (placed_houses, population) = build_street_town(ctx, &plan, town_house_base, town_id);
-        if placed_houses < 3 {
-            continue;
-        }
-
+    for _ in 0..target {
+        let _is_city = (city_random_offset
+            .saturating_add(u32::try_from(town_centers.len().saturating_sub(before)).unwrap_or(0)))
+            % DEFAULT_LARGER_TOWNS_INTERVAL
+            == 0;
+        // En el set vanilla de nombres `GenerateTownName` obtiene su parte
+        // determinista de un único `Random()`. La comprobación de nombres
+        // únicos queda pendiente junto con el modelo de crecimiento.
         let name_seed = ctx.rng.next();
-        let name = generate_town_name(4, name_seed).unwrap_or_else(|| format!("Pueblo {x},{y}"));
-        let mut town = Town {
-            id: town_id,
-            pos: plan.town_pos,
-            name,
-            population,
-            passengers_served: 0,
-            mail_served: 0,
-            growth_funded: 0,
-            num_houses: u16::try_from(placed_houses).unwrap_or(0),
-            ..Default::default()
-        };
-        town.initialize_layout(None);
-        town.init_growth_goals(ctx.state.climate);
-        town.init_grow_counter();
-        update_town_radius(&mut town);
-        ctx.state.towns.push(town);
-        town_centers.push(plan.town_pos);
+        let _ = try_build_random_town_with_mvp_plan(
+            ctx,
+            town_centers,
+            name_seed,
+            map_w,
+            map_h,
+            RANDOM_TOWN_ATTEMPTS,
+        );
+    }
+
+    // `GenerateTowns` hace un último intento agresivo si no consiguió crear
+    // ninguno. Es importante para mapas pequeños e islas: el total inicial es
+    // una sugerencia, no una garantía de que los 20 intentos alcancen tierra.
+    if town_centers.len() == before {
+        let name_seed = ctx.rng.next();
+        let _ = try_build_random_town_with_mvp_plan(
+            ctx,
+            town_centers,
+            name_seed,
+            map_w,
+            map_h,
+            RANDOM_TOWN_FALLBACK_ATTEMPTS,
+        );
     }
     town_centers.len().saturating_sub(before)
+}
+
+/// Recorre los intentos de `CreateRandomTown` y deja que el constructor MVP
+/// rechace una trama que todavía no sabe materializar. `DoCreateTown` nativo
+/// también vuelve a intentar cuando una fundación no llega a tener población.
+fn try_build_random_town_with_mvp_plan(
+    ctx: &mut PopCtx<'_>,
+    town_centers: &mut Vec<TileCoord>,
+    name_seed: u32,
+    map_w: i32,
+    map_h: i32,
+    attempts: usize,
+) -> bool {
+    for _ in 0..attempts {
+        let Some(center) = next_random_town_site(ctx, town_centers) else {
+            continue;
+        };
+        if build_selected_town_with_mvp_plan(ctx, town_centers, center, name_seed, map_w, map_h) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Materializa provisionalmente un sitio que ya superó `CreateRandomTown`.
+///
+/// La topología/crecimiento de `DoCreateTown` sigue pendiente, pero el plan
+/// local no consume sorteos antes de construir las casas y retiene el centro,
+/// ID y layout nativos de la fundación.
+fn build_selected_town_with_mvp_plan(
+    ctx: &mut PopCtx<'_>,
+    town_centers: &mut Vec<TileCoord>,
+    center: TileCoord,
+    name_seed: u32,
+    map_w: i32,
+    map_h: i32,
+) -> bool {
+    // El plan MVP todavía no es `DoCreateTown`; se deriva de la parte de
+    // nombre ya consumida y conserva el centro exacto seleccionado.
+    let axis = if name_seed & 1 == 0 {
+        StreetAxis::EastWest
+    } else {
+        StreetAxis::NorthSouth
+    };
+    let half_len = i32::try_from(2 + ((name_seed >> 1) % 3)).unwrap_or(2);
+    let south_row = (name_seed >> 3) % 3 != 0;
+    let plan = plan_street_town(center, axis, half_len, south_row, map_w, map_h)
+        .filter(|candidate| plan_fits_terrain(ctx, candidate))
+        .or_else(|| compact_town_plan(ctx, center));
+    let Some(plan) = plan else {
+        return false;
+    };
+
+    let choices = procedural_house_choices();
+    if choices.is_empty() {
+        return false;
+    }
+    let town_house_base = (name_seed >> 8) % u32::try_from(choices.len()).unwrap_or(1);
+    let town_id = u32::try_from(ctx.state.towns.len()).unwrap_or(u32::MAX);
+    let (placed_houses, population) = build_street_town(ctx, &plan, town_house_base, town_id);
+    if placed_houses < 3 {
+        return false;
+    }
+
+    let name = generate_town_name(4, name_seed)
+        .unwrap_or_else(|| format!("Pueblo {},{}", center.x, center.y));
+    let mut town = Town {
+        id: town_id,
+        pos: plan.town_pos,
+        name,
+        population,
+        passengers_served: 0,
+        mail_served: 0,
+        growth_funded: 0,
+        num_houses: u16::try_from(placed_houses).unwrap_or(0),
+        ..Default::default()
+    };
+    town.initialize_layout(Some(TownLayout::Original));
+    town.init_growth_goals(ctx.state.climate);
+    town.init_grow_counter();
+    update_town_radius(&mut town);
+    ctx.state.towns.push(town);
+    town_centers.push(plan.town_pos);
+    true
+}
+
+/// Fallback provisional para un sitio que `OpenTTD` aceptó pero cuya trama MVP
+/// recta no cabe en altura. El `DoCreateTown` real probará expansiones locales;
+/// mientras se porta, un tramo de una tesela mantiene el contrato de fundar al
+/// menos tres casas sin desplazar la coordenada validada.
+fn compact_town_plan(ctx: &PopCtx<'_>, center: TileCoord) -> Option<StreetTownPlan> {
+    // El sitio nativo sólo exige terreno construible en 5×5, no una recta
+    // totalmente plana. Mientras `DoCreateTown` sigue pendiente, buscamos un
+    // cruce plano cercano sin cambiar `Town::xy`, para no descartar la
+    // fundación ya validada por OpenTTD.
+    for radius in 0..=8_i32 {
+        for dy in -radius..=radius {
+            for dx in -radius..=radius {
+                if dx.abs().max(dy.abs()) != radius {
+                    continue;
+                }
+                let road = TileCoord::new(center.x + dx, center.y + dy);
+                if !tile_is_flat_grass(&ctx.state.map, road) {
+                    continue;
+                }
+                let mut houses = Vec::new();
+                for (hx, hy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
+                    let candidate = TileCoord::new(road.x + hx, road.y + hy);
+                    if tile_ok_for_house(ctx.state, candidate, ctx.preserve) {
+                        houses.push(candidate);
+                    }
+                }
+                if houses.len() >= 3 {
+                    return Some(StreetTownPlan {
+                        axis: StreetAxis::EastWest,
+                        roads: vec![road],
+                        houses,
+                        town_pos: center,
+                    });
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Selecciona una fundación como `CreateRandomTown`, sin construir todavía sus
+/// calles/casas. Así la regla de ubicación queda verificable aparte del
+/// crecimiento de `DoCreateTown`.
+#[cfg(test)]
+fn select_random_town_site(
+    ctx: &mut PopCtx<'_>,
+    town_centers: &[TileCoord],
+    attempts: usize,
+) -> Option<TileCoord> {
+    for _ in 0..attempts {
+        if let Some(site) = next_random_town_site(ctx, town_centers) {
+            return Some(site);
+        }
+    }
+    None
+}
+
+/// Un único `RandomTile` de `CreateRandomTown`, separado para que un
+/// constructor provisional pueda seguir al intento siguiente al fallar.
+fn next_random_town_site(ctx: &mut PopCtx<'_>, town_centers: &[TileCoord]) -> Option<TileCoord> {
+    let candidate = random_tile(ctx.rng.next(), ctx.mw, ctx.mh);
+    if ctx.state.map.get_kind(candidate) == Some(TileKind::Water) {
+        find_nearest_good_coastal_town_spot(ctx, candidate, town_centers)
+    } else if town_can_be_placed_here(ctx, candidate, town_centers) {
+        Some(candidate)
+    } else {
+        None
+    }
+}
+
+/// `TownCanBePlacedHere(tile, true)` para las teselas que existen en el mapa
+/// generado. Las teselas del borde ya se descartan antes del cuadro 5×5.
+fn town_can_be_placed_here(
+    ctx: &PopCtx<'_>,
+    center: TileCoord,
+    town_centers: &[TileCoord],
+) -> bool {
+    if in_preserve(ctx.preserve, center.x, center.y)
+        || distance_from_edge(ctx, center) < TOWN_EDGE_DISTANCE
+        || town_centers.iter().any(|&other| {
+            (other.x - center.x)
+                .abs()
+                .saturating_add((other.y - center.y).abs())
+                < TOWN_MIN_DISTANCE
+        })
+        || !is_flat_clear_or_tree(&ctx.state.map, center)
+    {
+        return false;
+    }
+
+    let Some((_, town_height)) = tile_slope_and_z(&ctx.state.map, center) else {
+        return false;
+    };
+    let mut valid = 0_usize;
+    for y in center.y - 2..=center.y + 2 {
+        for x in center.x - 2..=center.x + 2 {
+            let candidate = TileCoord::new(x, y);
+            if !is_clear_or_tree_not_rough(&ctx.state.map, candidate) {
+                continue;
+            }
+            let Some((_, z)) = tile_slope_and_z(&ctx.state.map, candidate) else {
+                continue;
+            };
+            let Some(max_z) = tile_max_z(&ctx.state.map, candidate) else {
+                continue;
+            };
+            if max_z <= town_height.saturating_add(1) && z.saturating_add(1) >= town_height {
+                valid += 1;
+                if valid == TOWN_SURROUNDING_GOAL {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// `FindNearestGoodCoastalTownSpot`: toma la primera isla/costa de clear que
+/// toca la espiral 40×40 y, dentro de ella, el punto válido más alejado del
+/// agua. Ninguna de estas búsquedas consume RNG.
+fn find_nearest_good_coastal_town_spot(
+    ctx: &PopCtx<'_>,
+    start: TileCoord,
+    town_centers: &[TileCoord],
+) -> Option<TileCoord> {
+    for coast in spiral_tiles(start, 40, ctx.mw, ctx.mh) {
+        if ctx.state.map.get_kind(coast) != Some(TileKind::Grass) {
+            continue;
+        }
+        let mut furthest = None;
+        let mut max_distance = 0_u32;
+        for test in spiral_tiles(coast, 10, ctx.mw, ctx.mh) {
+            if !is_flat_clear_or_tree(&ctx.state.map, test)
+                || ctx.state.map.get_kind(test) != Some(TileKind::Grass)
+                || !town_can_be_placed_here(ctx, test, town_centers)
+            {
+                continue;
+            }
+            let distance = closest_water_distance(&ctx.state.map, test);
+            if distance > max_distance {
+                furthest = Some(test);
+                max_distance = distance;
+            }
+        }
+        return furthest;
+    }
+    None
+}
+
+fn distance_from_edge(ctx: &PopCtx<'_>, tile: TileCoord) -> i32 {
+    let max_x = i32::try_from(ctx.mw).unwrap_or(i32::MAX).saturating_sub(1);
+    let max_y = i32::try_from(ctx.mh).unwrap_or(i32::MAX).saturating_sub(1);
+    tile.x
+        .min(tile.y)
+        .min(max_x.saturating_sub(tile.x))
+        .min(max_y.saturating_sub(tile.y))
+}
+
+fn is_flat_clear_or_tree(map: &crate::map::Map, tile: TileCoord) -> bool {
+    matches!(map.get_kind(tile), Some(TileKind::Grass | TileKind::Forest))
+        && tile_slope_and_z(map, tile).is_some_and(|(slope, _)| slope == 0)
+}
+
+fn is_clear_or_tree_not_rough(map: &crate::map::Map, tile: TileCoord) -> bool {
+    map.get(tile).is_some_and(|candidate| match candidate.kind {
+        TileKind::Grass => clear_ground_type(candidate.m5) != CLEAR_GROUND_ROUGH,
+        // Los árboles se crean después de pueblos en genworld. El subtipo de
+        // suelo de árbol aún no se necesita para las fixtures, pero permitir
+        // bosque aquí conserva la misma clase de terreno del chequeo nativo.
+        TileKind::Forest => true,
+        _ => false,
+    })
+}
+
+fn tile_max_z(map: &crate::map::Map, tile: TileCoord) -> Option<u8> {
+    tile_slope_and_z(map, tile).map(|(slope, z)| {
+        z.saturating_add(if slope == 0 {
+            0
+        } else if slope & SLOPE_STEEP != 0 {
+            2
+        } else {
+            1
+        })
+    })
+}
+
+/// `RandomTile()` con el mask de mapas de potencia de dos de `OpenTTD`.
+fn random_tile(random: u32, map_w: u32, map_h: u32) -> TileCoord {
+    let count = map_w.saturating_mul(map_h).max(1);
+    let index = if map_w.is_power_of_two() && map_h.is_power_of_two() {
+        random & count.saturating_sub(1)
+    } else {
+        random % count
+    };
+    TileCoord::new(
+        i32::try_from(index % map_w.max(1)).unwrap_or(0),
+        i32::try_from(index / map_w.max(1)).unwrap_or(0),
+    )
+}
+
+/// `SpiralTileSequence` para los diámetros pares de búsqueda costera. El
+/// orden afecta qué primera franja clear toma el algoritmo original.
+fn spiral_tiles(center: TileCoord, diameter: u32, map_w: u32, map_h: u32) -> Vec<TileCoord> {
+    if diameter == 0 || map_w == 0 || map_h == 0 {
+        return Vec::new();
+    }
+    if diameter % 2 == 1 {
+        let radius = i32::try_from(diameter / 2).unwrap_or(0);
+        let mut tiles =
+            Vec::with_capacity(usize::try_from(diameter.saturating_mul(diameter)).unwrap_or(0));
+        for y in center.y - radius..=center.y + radius {
+            for x in center.x - radius..=center.x + radius {
+                if x >= 0 && y >= 0 && x < map_w as i32 && y < map_h as i32 {
+                    tiles.push(TileCoord::new(x, y));
+                }
+            }
+        }
+        return tiles;
+    }
+
+    let max_radius = i32::try_from(diameter / 2).unwrap_or(0);
+    let mut radius = 0_i32;
+    let mut direction = 0_usize;
+    let mut position = 1_i32;
+    let mut x = center.x + 1;
+    let mut y = center.y;
+    let mut tiles =
+        Vec::with_capacity(usize::try_from(diameter.saturating_mul(diameter)).unwrap_or(0));
+
+    while radius < max_radius {
+        if x >= 0 && y >= 0 && x < map_w as i32 && y < map_h as i32 {
+            tiles.push(TileCoord::new(x, y));
+        }
+        let (dx, dy) = SPIRAL_DIRS[direction];
+        x += dx;
+        y += dy;
+        position -= 1;
+        if position > 0 {
+            continue;
+        }
+        direction += 1;
+        if direction == SPIRAL_DIRS.len() {
+            x += 1;
+            y -= 1;
+            radius += 1;
+            direction = 0;
+            if radius == max_radius {
+                break;
+            }
+        }
+        position = radius * 2 + 1;
+    }
+    tiles
+}
+
+/// `GetClosestWaterDistance(test, true)`: las costas no son agua a nivel de
+/// suelo, igual que `HasTileWaterGround` de `OpenTTD`.
+fn closest_water_distance(map: &crate::map::Map, center: TileCoord) -> u32 {
+    if is_water_ground(map, center) {
+        return 0;
+    }
+    let (map_w, map_h) = map.dimensions();
+    for distance in 1..0x7F_u32 {
+        let d = i32::try_from(distance).unwrap_or(i32::MAX);
+        for y in center.y - d..=center.y + d {
+            for x in center.x - d..=center.x + d {
+                if (x - center.x).abs().max((y - center.y).abs()) != d {
+                    continue;
+                }
+                if x >= 0
+                    && y >= 0
+                    && x < map_w as i32
+                    && y < map_h as i32
+                    && is_water_ground(map, TileCoord::new(x, y))
+                {
+                    return distance;
+                }
+            }
+        }
+    }
+    0x7F
+}
+
+fn is_water_ground(map: &crate::map::Map, tile: TileCoord) -> bool {
+    map.get(tile)
+        .is_some_and(|candidate| candidate.kind == TileKind::Water && (candidate.m5 >> 4) == 0)
 }
 
 fn plan_street_town(
@@ -129,7 +481,7 @@ fn plan_street_town(
     match axis {
         StreetAxis::EastWest => {
             let road_y = center.y;
-            town_pos = TileCoord::new(center.x, road_y.saturating_sub(1));
+            town_pos = center;
             for dx in -half_len..=half_len {
                 let x = center.x + dx;
                 if !coord_in_map(x, road_y, map_w, map_h) {
@@ -146,7 +498,7 @@ fn plan_street_town(
         }
         StreetAxis::NorthSouth => {
             let road_x = center.x;
-            town_pos = TileCoord::new(road_x.saturating_sub(1), center.y);
+            town_pos = center;
             for dy in -half_len..=half_len {
                 let y = center.y + dy;
                 if !coord_in_map(road_x, y, map_w, map_h) {
@@ -299,6 +651,140 @@ fn rollback_road_tiles(state: &mut crate::game_state::GameState, roads: &[TileCo
     for &c in roads {
         if state.map.get_kind(c) == Some(TileKind::Road) {
             let _ = state.map.set_kind(c, TileKind::Grass);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::{TownDensity, town_generation_target_count};
+    use super::*;
+    use crate::cargodist::parity::Randomizer;
+    use crate::game_state::GameState;
+    use crate::map::Map;
+    use crate::world_gen::{Climate, TerrainType, WorldGenConfig, apply_world_gen_with_rng};
+
+    fn clear_phase_state(seed: u64) -> GameState {
+        // La fixture debe coincidir con `world_raw_dumper` y el config
+        // headless de OpenTTD, no con el mapa-isla usado por tests genéricos.
+        let mut state = GameState::from_map(Map::new_flat(64, 64, 0));
+        state.climate = Climate::Temperate;
+        apply_world_gen_with_rng(
+            &mut state.map,
+            &WorldGenConfig {
+                climate: Climate::Temperate,
+                seed,
+                sea_level: 1,
+                island: false,
+                water_borders: Some(0x10),
+                amount_of_rivers: 2,
+                startup_rng_draws: 1,
+                ..WorldGenConfig::default().with_terrain_type(TerrainType::Flat)
+            },
+            &[],
+        )
+        .expect("64×64 landscape and clear");
+        state
+    }
+
+    #[test]
+    fn coastal_selector_replays_first_seed_foundation_and_rng_boundary() {
+        let mut state = clear_phase_state(1_330_935_378);
+        // Estado a la entrada de `CreateRandomTown`, después del sorteo de
+        // ciudad y de `GenerateTownName` en el oráculo C++.
+        let mut rng = Randomizer {
+            state: [2_177_730_081, 1_749_743_298],
+        };
+        let mut ctx = PopCtx {
+            state: &mut state,
+            preserve: &[],
+            rng: &mut rng,
+            mw: 64,
+            mh: 64,
+        };
+
+        assert_eq!(
+            select_random_town_site(&mut ctx, &[], RANDOM_TOWN_ATTEMPTS),
+            Some(TileCoord::new(47, 23))
+        );
+        assert_eq!(ctx.rng.state, [2_945_732_258, 1_049_486_831]);
+    }
+
+    #[test]
+    fn land_selector_replays_second_seed_foundation_and_rng_boundary() {
+        let mut state = clear_phase_state(1_330_935_379);
+        let mut rng = Randomizer {
+            state: [3_486_424_933, 3_307_154_652],
+        };
+        let mut ctx = PopCtx {
+            state: &mut state,
+            preserve: &[],
+            rng: &mut rng,
+            mw: 64,
+            mh: 64,
+        };
+
+        assert_eq!(
+            select_random_town_site(&mut ctx, &[], RANDOM_TOWN_ATTEMPTS),
+            Some(TileCoord::new(43, 15))
+        );
+        assert_eq!(ctx.rng.state, [394_065_499, 3_120_157_675]);
+    }
+
+    #[test]
+    fn selector_rejects_sites_at_manhattan_distance_twenty_minus_one() {
+        let mut state = GameState::new(64, 64);
+        let mut rng = Randomizer::new(1);
+        let ctx = PopCtx {
+            state: &mut state,
+            preserve: &[],
+            rng: &mut rng,
+            mw: 64,
+            mh: 64,
+        };
+        assert!(!town_can_be_placed_here(
+            &ctx,
+            TileCoord::new(32, 32),
+            &[TileCoord::new(51, 32)]
+        ));
+        assert!(town_can_be_placed_here(
+            &ctx,
+            TileCoord::new(32, 32),
+            &[TileCoord::new(52, 32)]
+        ));
+    }
+
+    #[test]
+    fn integrated_generation_keeps_the_reference_first_foundation() {
+        for (seed, begin, expected) in [
+            (
+                1_330_935_378,
+                [1_168_016_413, 2_955_223_551],
+                TileCoord::new(47, 23),
+            ),
+            (
+                1_330_935_379,
+                [1_179_957_886, 1_700_995_136],
+                TileCoord::new(43, 15),
+            ),
+        ] {
+            let mut state = clear_phase_state(seed);
+            let mut rng = Randomizer { state: begin };
+            let target = town_generation_target_count(TownDensity::Normal, &state.map, &mut rng);
+            let mut centers = Vec::new();
+            let mut ctx = PopCtx {
+                state: &mut state,
+                preserve: &[],
+                rng: &mut rng,
+                mw: 64,
+                mh: 64,
+            };
+
+            assert!(
+                place_towns(&mut ctx, target, &mut centers) > 0,
+                "seed {seed}"
+            );
+            assert_eq!(ctx.state.towns[0].pos, expected, "seed {seed}");
         }
     }
 }

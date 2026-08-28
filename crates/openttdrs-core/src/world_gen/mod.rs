@@ -48,12 +48,10 @@ pub use trees::{
 };
 
 use crate::cargodist::parity::Randomizer;
-use crate::company::{OWNER_NONE_M1, OWNER_WATER_M1};
-use crate::map::{
-    Map, MapError, TileCoord, TileKind, WaterClass, set_water_class_m1, tile_slope_and_z,
-};
+use crate::company::OWNER_NONE_M1;
+use crate::map::{Map, MapError, TileCoord, TileKind, tile_slope_and_z};
 
-use rivers::{carve_rivers, mark_water_coasts};
+use rivers::{carve_rivers, convert_ground_tiles_into_water_tiles};
 use tgp::{calculate_coverage_line, generate_tgp_heights};
 
 /// Stream de RNG que `OpenTTD` comparte entre terreno, suelo, población y
@@ -217,6 +215,8 @@ pub fn apply_landscape_with_rng(
 
     fix_slopes(map, &mut rng, preserve)?;
 
+    materialize_tgp_void_border(map, map_w, map_h, preserve)?;
+
     // `FixSlopes` puede cambiar alturas y marcar rocas; las coberturas se
     // calculan sobre el mapa ya corregido, igual que `GenerateLandscape`.
     let mut heights = Vec::with_capacity((map_w * map_h) as usize);
@@ -244,22 +244,22 @@ pub fn apply_landscape_with_rng(
         None
     };
 
-    // TGP normaliza el mar a altura 0 (`ConvertGroundTilesIntoWaterTiles`).
+    // `InitializeLandscape`/`MakeClear` materializa primero el suelo y
+    // `ConvertGroundTilesIntoWaterTiles` decide después qué pendientes de
+    // altura cero se convierten en mar o costa. No toda tesela con `z == 0`
+    // es agua.
     for y in 0..map_h {
         for x in 0..map_w {
             if preserve.iter().any(|r| r.contains(x, y)) {
                 continue;
             }
             let c = TileCoord::new(x, y);
+            if map.get_kind(c) == Some(TileKind::Void) {
+                continue;
+            }
             let Some((_, z)) = tile_slope_and_z(map, c) else {
                 continue;
             };
-            if z == 0 {
-                map.set_kind(c, TileKind::Water)?;
-                map.set_mapt_m5(c, 0x60, 0)?;
-                map.set_m1(c, set_water_class_m1(OWNER_WATER_M1, WaterClass::Sea))?;
-                continue;
-            }
             let ground =
                 if (map.get(c).map_or(0, |tile| (tile.m5 >> 2) & 0x07)) == CLEAR_GROUND_ROCKY {
                     CLEAR_GROUND_ROCKY
@@ -285,29 +285,13 @@ pub fn apply_landscape_with_rng(
         }
     }
 
-    mark_water_coasts(map, map_w, map_h, 0, preserve);
+    convert_ground_tiles_into_water_tiles(map, preserve)?;
     carve_rivers(map, config, map_w, map_h, preserve)?;
-
-    // OpenTTD materializa MP_VOID en los cuatro bordes cuando
-    // `freeform_edges` está habilitado (el valor predeterminado de una
-    // partida nueva). Antes de este paso el generador Rust dejaba agua/suelo
-    // válido en esos índices, haciendo divergir incluso los mapas planos.
-    let last_x = map_w.saturating_sub(1);
-    let last_y = map_h.saturating_sub(1);
-    for y in 0..map_h {
-        for x in 0..map_w {
-            if preserve.iter().any(|r| r.contains(x, y)) {
-                continue;
-            }
-            if x == 0 || y == 0 || x == last_x || y == last_y {
-                let c = TileCoord::new(x, y);
-                map.set_kind(c, TileKind::Void)?;
-                map.set_mapt_m5(c, 0x70, 0)?;
-                map.set_m1(c, 0)?;
-                map.set_m2(c, 0)?;
-            }
-        }
-    }
+    // `CreateRivers` llama de nuevo a `ConvertGroundTilesIntoWaterTiles`
+    // después de ensanchar ríos. Hoy nuestro port no modifica alturas al
+    // tallarlos, pero conservar la segunda frontera evita ocultar una futura
+    // divergencia cuando se complete ese ensanchamiento.
+    convert_ground_tiles_into_water_tiles(map, preserve)?;
 
     // `CreateRivers` termina con `TILE_UPDATE_FREQUENCY` pasadas de
     // `RunTileLoop`. Además de actualizar el suelo, esas visitas marcan el
@@ -318,6 +302,46 @@ pub fn apply_landscape_with_rng(
     }
 
     Ok(rng)
+}
+
+/// Materializa el marco `MP_VOID` inicial de `InitializeLandscape`.
+///
+/// El TGP del original puede volver a escribir la altura de un `MP_VOID`; por
+/// eso se limpian tipo y bytes auxiliares pero se conserva la altura ya
+/// calculada. Debe correr antes de convertir suelo a agua, pues las costas
+/// consultan el vecino void.
+fn materialize_tgp_void_border(
+    map: &mut Map,
+    map_w: i32,
+    map_h: i32,
+    preserve: &[PreserveRect],
+) -> Result<(), MapError> {
+    let last_x = map_w.saturating_sub(1);
+    let last_y = map_h.saturating_sub(1);
+    for y in 0..map_h {
+        for x in 0..map_w {
+            if preserve.iter().any(|r| r.contains(x, y))
+                || (x != 0 && y != 0 && x != last_x && y != last_y)
+            {
+                continue;
+            }
+            let c = TileCoord::new(x, y);
+            let mut tile = map.get(c).ok_or(MapError::OutOfBounds)?;
+            tile.kind = TileKind::Void;
+            tile.mapt = 0x70;
+            tile.m1 = 0;
+            tile.m2 = 0;
+            tile.m2_hi = 0;
+            tile.m3 = 0;
+            tile.m3hi = 0;
+            tile.m5 = 0;
+            tile.m6 = 0;
+            tile.m7 = 0;
+            tile.m8 = 0;
+            map.set_tile(c, tile)?;
+        }
+    }
+    Ok(())
 }
 
 /// Ejecuta exclusivamente `GenerateClearTile` sobre un paisaje ya generado.
@@ -351,7 +375,8 @@ pub fn apply_world_gen_with_rng(
 
 #[cfg(test)]
 mod tests {
-    use crate::company::OWNER_NONE_M1;
+    use crate::company::{OWNER_NONE_M1, OWNER_WATER_M1};
+    use crate::map::{WaterClass, set_water_class_m1};
 
     use super::*;
 

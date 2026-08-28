@@ -25,7 +25,7 @@ pub enum FloodingBehaviour {
 }
 
 /// Offsets `TileIndexDiffCByDir` (Direction N…NW).
-const DIR_OFFSETS: [(i32, i32); 8] = [
+pub(crate) const DIR_OFFSETS: [(i32, i32); 8] = [
     (-1, -1), // N
     (-1, 0),  // NE
     (-1, 1),  // E
@@ -37,7 +37,7 @@ const DIR_OFFSETS: [(i32, i32); 8] = [
 ];
 
 /// `_flood_from_dirs[slope & ~HALFTILE & ~STEEP]` — bitmask de `Direction`.
-const FLOOD_FROM_DIRS: [u8; 15] = [
+pub(crate) const FLOOD_FROM_DIRS: [u8; 15] = [
     (1 << 7) | (1 << 5) | (1 << 3) | (1 << 1), // FLAT: NW SW SE NE
     (1 << 1) | (1 << 3),                       // W
     (1 << 7) | (1 << 1),                       // S
@@ -61,7 +61,7 @@ const fn reverse_dir(dir: u8) -> u8 {
 }
 
 #[must_use]
-const fn is_slope_one_corner_raised(slope: u8) -> bool {
+pub(crate) const fn is_slope_one_corner_raised(slope: u8) -> bool {
     matches!(slope & 0x0F, 1 | 2 | 4 | 8)
 }
 
@@ -112,11 +112,13 @@ pub fn make_shore_tile(map: &mut Map, c: TileCoord) -> Result<(), super::MapErro
     tile.kind = TileKind::Water;
     tile.mapt = 0x60;
     tile.m5 = WATER_TYPE_COAST << 4;
-    tile.m1 = set_water_class_m1(tile.m1, WaterClass::Sea);
+    // `MakeShore` asigna OWNER_WATER, no el dueño anterior de la tesela.
+    tile.m1 = set_water_class_m1(crate::company::OWNER_WATER_M1, WaterClass::Sea);
     tile.m2 = 0;
+    tile.m2_hi = 0;
     tile.m3 = 0;
     tile.m3hi = 0;
-    tile.m6 = 0;
+    tile.m6 &= 0x03;
     tile.m7 = 0;
     tile.m8 = 0;
     map.set_tile(c, tile)
@@ -456,6 +458,36 @@ mod tests {
 
     fn sea_at(map: &mut Map, c: TileCoord) {
         make_water_tile(map, c, WaterClass::Sea).unwrap();
+    }
+
+    #[test]
+    fn make_shore_assigns_water_owner_and_clears_raw_state() {
+        let mut map = Map::new_flat(4, 4, 0);
+        let c = TileCoord::new(2, 2);
+        let mut old = map.get(c).expect("tile");
+        old.m1 = 0xFF;
+        old.m2 = 0xAA;
+        old.m2_hi = 0xBB;
+        old.m3 = 0xCC;
+        old.m3hi = 0xDD;
+        old.m6 = 0xF3;
+        old.m7 = 0x44;
+        old.m8 = 0x5566;
+        map.set_tile(c, old).expect("replace tile");
+
+        make_shore_tile(&mut map, c).expect("make shore");
+        let shore = map.get(c).expect("shore");
+        assert_eq!(shore.kind, TileKind::Water);
+        assert_eq!(shore.mapt, 0x60);
+        assert_eq!(shore.m1, crate::company::OWNER_WATER_M1);
+        assert_eq!(shore.m5, 0x10);
+        assert_eq!(shore.m2, 0);
+        assert_eq!(shore.m2_hi, 0);
+        assert_eq!(shore.m3, 0);
+        assert_eq!(shore.m3hi, 0);
+        assert_eq!(shore.m6, 0x03);
+        assert_eq!(shore.m7, 0);
+        assert_eq!(shore.m8, 0);
     }
 
     /// `GameState::new` usa altura 1; la inundación solo actúa a `GetTileZ == 0`.

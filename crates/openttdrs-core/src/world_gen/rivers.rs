@@ -1,8 +1,10 @@
 //! Generación de ríos y costas.
 
+use crate::map::slope::SLOPE_STEEP;
+use crate::map::water_flood::{DIR_OFFSETS, FLOOD_FROM_DIRS, is_slope_one_corner_raised};
 use crate::map::{
-    Map, MapError, TileCoord, TileKind, WaterClass, make_water_tile, set_water_class_m1,
-    tile_slope_and_z,
+    Map, MapError, TileCoord, TileKind, WaterClass, make_shore_tile, make_water_tile,
+    set_water_class_m1, tile_slope_and_z,
 };
 
 use super::config::{PreserveRect, WorldGenConfig};
@@ -139,6 +141,80 @@ fn hash2(a: u64, b: u64) -> u64 {
         .wrapping_mul(0xBF58_476D_1CE4_E5B9)
 }
 
+/// Port de `ConvertGroundTilesIntoWaterTiles` de `water_cmd.cpp`.
+///
+/// El generador original no transforma todo terreno a altura cero en agua:
+/// las pendientes complejas se conservan como `MP_CLEAR` salvo que alguna de
+/// sus direcciones de inundación llegue a una pendiente plana, de una esquina
+/// elevada o a `MP_VOID`. Esta distinción determina tanto el tipo de tesela
+/// como `MAP1`/`MAP5`, y por extensión el comportamiento posterior de
+/// `TileLoop_Water`.
+pub(super) fn convert_ground_tiles_into_water_tiles(
+    map: &mut Map,
+    preserve: &[PreserveRect],
+) -> Result<(), MapError> {
+    let (width, height) = map.dimensions();
+    let width = i32::try_from(width).expect("map width fits i32");
+    let height = i32::try_from(height).expect("map height fits i32");
+
+    for y in 0..height {
+        for x in 0..width {
+            if preserve.iter().any(|rect| rect.contains(x, y)) {
+                continue;
+            }
+            let c = TileCoord::new(x, y);
+            if map.get_kind(c) != Some(TileKind::Grass) {
+                continue;
+            }
+            let Some((slope, z)) = tile_slope_and_z(map, c) else {
+                continue;
+            };
+            if z != 0 {
+                continue;
+            }
+
+            match slope {
+                0 => make_water_tile(map, c, WaterClass::Sea)?,
+                1 | 2 | 4 | 8 => make_shore_tile(map, c)?,
+                _ => {
+                    let slope_index = usize::from((slope & !SLOPE_STEEP) & 0x0F);
+                    let mut directions = FLOOD_FROM_DIRS[slope_index];
+                    let mut make_shore = false;
+                    while directions != 0 {
+                        let direction = directions.trailing_zeros() as usize;
+                        directions &= directions - 1;
+                        let (dx, dy) = DIR_OFFSETS[direction];
+                        let dest = TileCoord::new(c.x + dx, c.y + dy);
+                        if map.get(dest).is_none() {
+                            continue;
+                        }
+                        let Some((dest_slope, _)) = tile_slope_and_z(map, dest) else {
+                            continue;
+                        };
+                        let dest_slope = dest_slope & !SLOPE_STEEP;
+                        if dest_slope == 0
+                            || is_slope_one_corner_raised(dest_slope)
+                            || map.get_kind(dest) == Some(TileKind::Void)
+                        {
+                            make_shore = true;
+                            break;
+                        }
+                    }
+                    if make_shore {
+                        make_shore_tile(map, c)?;
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Heurística heredada para heightmaps externos.
+///
+/// El pipeline procedural usa [`convert_ground_tiles_into_water_tiles`], que
+/// replica el contrato por pendiente del original. Los heightmaps ya llegan
+/// con el agua materializada y conservan esta pasada visual independiente.
 pub(super) fn mark_water_coasts(
     map: &mut Map,
     mw: i32,
@@ -170,5 +246,51 @@ pub(super) fn mark_water_coasts(
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::company::{OWNER_NONE_M1, OWNER_WATER_M1};
+
+    #[test]
+    fn converter_makes_flat_ground_sea_and_one_corner_slope_shore() {
+        let mut map = Map::new_flat(8, 8, 0);
+        let flat = TileCoord::new(2, 2);
+        let shore = TileCoord::new(5, 2);
+        // `hwest` de `shore`: slope W (una única esquina elevada).
+        map.set_height(TileCoord::new(shore.x + 1, shore.y), 1)
+            .expect("raise west corner");
+
+        convert_ground_tiles_into_water_tiles(&mut map, &[]).expect("convert ground");
+
+        let sea = map.get(flat).expect("flat sea");
+        assert_eq!(sea.kind, TileKind::Water);
+        assert_eq!(sea.m1, OWNER_WATER_M1);
+        assert_eq!(sea.m5, 0);
+
+        let coast = map.get(shore).expect("shore");
+        assert_eq!(coast.kind, TileKind::Water);
+        assert_eq!(coast.m1, OWNER_WATER_M1);
+        assert_eq!(coast.m5, 0x10);
+    }
+
+    #[test]
+    fn converter_keeps_slope_without_flood_directions_as_clear_ground() {
+        let mut map = Map::new_flat(8, 8, 0);
+        let c = TileCoord::new(3, 3);
+        // `SLOPE_EW` (bits 1|4) no tiene entradas en `_flood_from_dirs`.
+        map.set_height(TileCoord::new(c.x + 1, c.y), 1)
+            .expect("raise west corner");
+        map.set_height(TileCoord::new(c.x, c.y + 1), 1)
+            .expect("raise east corner");
+        map.set_m1(c, OWNER_NONE_M1).expect("clear owner");
+
+        convert_ground_tiles_into_water_tiles(&mut map, &[]).expect("convert ground");
+
+        let clear = map.get(c).expect("clear slope");
+        assert_eq!(clear.kind, TileKind::Grass);
+        assert_eq!(clear.m1, OWNER_NONE_M1);
     }
 }

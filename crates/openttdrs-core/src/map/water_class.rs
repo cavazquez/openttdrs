@@ -93,13 +93,25 @@ pub fn make_water_tile(map: &mut Map, c: TileCoord, wc: WaterClass) -> Result<()
     tile.kind = TileKind::Water;
     tile.mapt = 0x60;
     // `MakeWater`/`MakeRiver` de OpenTTD asigna OWNER_WATER (0x11) a
-    // mares y ríos. Los canales conservan el dueño de la compañía que los
-    // construyó y por eso no deben pasar por este helper procedural.
+    // mares y ríos. Los canales conservan el dueño que ya haya seleccionado
+    // el comando constructor.
     if matches!(wc, WaterClass::Sea | WaterClass::River) {
         tile.m1 = crate::company::OWNER_WATER_M1;
     }
     tile.m5 = 0; // WaterTileType::Clear
     tile.m1 = set_water_class_m1(tile.m1, wc);
+    // `MakeWater` reinicia el estado de la tesela anterior. Conservar `m3`
+    // o los planos altos de MAP2/MAP4 deja restos de suelo, estaciones o
+    // industrias que no existen en el mapa de OpenTTD.
+    tile.m2 = 0;
+    tile.m2_hi = 0;
+    tile.m3 = 0;
+    tile.m3hi = 0;
+    // `SB(m6, 2, 6, 0)`: los dos bits bajos no pertenecen a la parte que
+    // reinicializa `MakeWater`.
+    tile.m6 &= 0x03;
+    tile.m7 = 0;
+    tile.m8 = 0;
     map.set_tile(c, tile)
 }
 
@@ -119,5 +131,36 @@ mod tests {
             WaterClass::River
         );
         assert_eq!(set_water_class_m1(0x9F, WaterClass::Sea) & 0x1F, 0x1F);
+    }
+
+    #[test]
+    fn make_water_reinitializes_the_raw_water_contract() {
+        let mut map = Map::new_flat(3, 3, 0);
+        let c = TileCoord::new(1, 1);
+        let mut old = map.get(c).expect("tile");
+        old.m1 = 0xFF;
+        old.m2 = 0xAA;
+        old.m2_hi = 0xBB;
+        old.m3 = 0xCC;
+        old.m3hi = 0xDD;
+        old.m5 = 0xEE;
+        old.m6 = 0xF3;
+        old.m7 = 0x44;
+        old.m8 = 0x5566;
+        map.set_tile(c, old).expect("replace tile");
+
+        make_water_tile(&mut map, c, WaterClass::Sea).expect("make sea");
+        let water = map.get(c).expect("water");
+        assert_eq!(water.kind, TileKind::Water);
+        assert_eq!(water.mapt, 0x60);
+        assert_eq!(water.m1, crate::company::OWNER_WATER_M1);
+        assert_eq!(water.m2, 0);
+        assert_eq!(water.m2_hi, 0);
+        assert_eq!(water.m3, 0);
+        assert_eq!(water.m3hi, 0);
+        assert_eq!(water.m5, 0);
+        assert_eq!(water.m6, 0x03);
+        assert_eq!(water.m7, 0);
+        assert_eq!(water.m8, 0);
     }
 }

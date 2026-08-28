@@ -3,7 +3,9 @@
 #[cfg(test)]
 use crate::house_spec::{HouseSpec, climate_zone_mask, get_town_radius_group};
 use crate::map::tree_tile_loop::clear_ground_type;
-use crate::map::{SLOPE_STEEP, TileCoord, TileKind, tile_slope_and_z};
+use crate::map::{
+    SLOPE_STEEP, TOWN_HOUSE_COMPLETED, TileCoord, TileKind, TownHouseSpec, tile_slope_and_z,
+};
 use crate::sav::house_spec_population;
 use crate::town::{Town, TownLayout, update_town_radius};
 use crate::townname::generate_town_name;
@@ -74,6 +76,13 @@ struct StreetTownPlan {
 struct BootstrapRoad {
     pos: TileCoord,
     bits: u8,
+}
+
+/// Estado inicial que `BuildTownHouse` codifica en `MAP3`/`MAP5`.
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct TownHouseConstruction {
+    counter: u8,
+    stage: u8,
 }
 
 /// Resultado del primer sorteo de `TryBuildTownHouse` antes de validar su huella.
@@ -295,6 +304,41 @@ fn random_town_road_bits(rng: &mut crate::cargodist::parity::Randomizer) -> u8 {
         b ^= 2;
     }
     (ROAD_NW << a) | (ROAD_NW << b)
+}
+
+/// `BuildTownHouse` durante `GenerateWorld`: sortea el aspecto de obra y
+/// decide si nace terminada. Las casas vanilla no son históricas, por lo que
+/// `Chance16(1, 7)` siempre consume su segunda palabra RNG.
+fn generated_town_house_construction(
+    rng: &mut crate::cargodist::parity::Randomizer,
+) -> TownHouseConstruction {
+    let construction_random = rng.next();
+    let stage = if chance16(rng, 1, 7) {
+        u8::try_from(construction_random & 0x03).unwrap_or(0)
+    } else {
+        TOWN_HOUSE_COMPLETED
+    };
+    let counter = if stage == TOWN_HOUSE_COMPLETED {
+        0
+    } else {
+        u8::try_from((construction_random >> 2) & 0x03).unwrap_or(0)
+    };
+    TownHouseConstruction { counter, stage }
+}
+
+/// `Chance16I(a, b, Random())`, que usa los 16 bits bajos y redondeo al
+/// entero más cercano; `RandomRange(b) < a` no es equivalente.
+fn chance16(rng: &mut crate::cargodist::parity::Randomizer, a: u32, b: u32) -> bool {
+    if b == 0 {
+        return false;
+    }
+    let random_low = u64::from(rng.next() & 0xFFFF);
+    let divisor = u64::from(b);
+    ((random_low
+        .saturating_mul(divisor)
+        .saturating_add(divisor / 2))
+        >> 16)
+        < u64::from(a)
 }
 
 /// Primera extracción ponderada de `TryBuildTownHouse` durante la generación.
@@ -811,12 +855,29 @@ fn build_street_town(
         let idx =
             (town_house_base + ctx.rng.random_range(PROCEDURAL_HOUSE_STYLE_SPREAD)) % n_choices;
         let house_id = choices[usize::try_from(idx).unwrap_or(0)];
-        let age = u8::try_from(ctx.rng.next() % 200).unwrap_or(0);
-        if ctx.state.map.set_completed_house(c, house_id, age).is_ok()
-            && ctx.state.map.set_house_town_id(c, town_id).is_ok()
+        let random_bits = u8::try_from(ctx.rng.next() & 0xFF).unwrap_or(0);
+        let construction = generated_town_house_construction(ctx.rng);
+        if ctx
+            .state
+            .map
+            .make_town_house(
+                c,
+                TownHouseSpec {
+                    house_id,
+                    town_id,
+                    random_bits,
+                    construction_counter: construction.counter,
+                    construction_stage: construction.stage,
+                    is_protected: false,
+                    processing_time: 0,
+                },
+            )
+            .is_ok()
         {
             placed += 1;
-            population = population.saturating_add(u32::from(house_spec_population(house_id)));
+            if construction.stage == TOWN_HOUSE_COMPLETED {
+                population = population.saturating_add(u32::from(house_spec_population(house_id)));
+            }
         }
     }
     (placed, population)
@@ -1024,6 +1085,21 @@ mod tests {
         assert_eq!(house.candidate_count, 17);
         // RandomRange(probability_max) seguido de Random() para MAP5.
         assert_eq!(rng.state, [2_387_930_541, 1_281_562_269]);
+    }
+
+    #[test]
+    fn first_town_house_construction_replays_rng_and_completed_state() {
+        // Estado justo después de `random_bits` de la primera casa: 26 en
+        // (46,24). GDB tras `BuildTownHouse` da población 13 y esta frontera.
+        let mut rng = Randomizer {
+            state: [2_387_930_541, 1_281_562_269],
+        };
+        let construction = generated_town_house_construction(&mut rng);
+
+        assert_eq!(construction.stage, TOWN_HOUSE_COMPLETED);
+        assert_eq!(construction.counter, 0);
+        assert_eq!(house_spec_population(26), 13);
+        assert_eq!(rng.state, [3_931_740_615, 3_932_304_260]);
     }
 
     #[test]

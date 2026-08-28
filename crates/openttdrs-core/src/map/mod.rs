@@ -128,7 +128,10 @@ pub use tree_tile_loop::{
     plant_tree, step_tree_and_field_growth, tick_tree_tile_loop, tile_loop_clear_desert,
     tree_count, tree_or_field_stage, with_tree_count, with_tree_or_field_stage,
 };
-pub use types::{MapError, OTTD_TILETYPE_TUNNELBRIDGE, Tile, TileCoord, TileKind};
+pub use types::{
+    MapError, OTTD_TILETYPE_TUNNELBRIDGE, TOWN_HOUSE_COMPLETED, Tile, TileCoord, TileKind,
+    TownHouseSpec,
+};
 pub use water_class::{
     WaterClass, is_canal_tile, is_river_tile, make_water_tile, river_tile_is_ship_navigable,
     set_water_class_m1, tile_has_water_class, water_class, water_class_from_m1,
@@ -320,6 +323,14 @@ impl Map {
         self.set_tile(c, Tile::completed_house(house_id, age, height))
     }
 
+    /// Materializa `MakeHouseTile` para una casa creada por el crecimiento de
+    /// un pueblo. A diferencia de [`Self::set_completed_house`], conserva los
+    /// bits aleatorios, el estado de obra y el nibble bajo de `MAPT`.
+    pub fn make_town_house(&mut self, c: TileCoord, spec: TownHouseSpec) -> Result<(), MapError> {
+        let previous = self.get(c).ok_or(MapError::OutOfBounds)?;
+        self.set_tile(c, Tile::town_house(spec, previous.height, previous.mapt))
+    }
+
     /// Atribuye una casa al pueblo que la contiene (`MAP2`/`TownID`).
     pub fn set_house_town_id(&mut self, c: TileCoord, town_id: u32) -> Result<(), MapError> {
         let mut tile = self.get(c).ok_or(MapError::OutOfBounds)?;
@@ -472,6 +483,70 @@ mod ottdmap_binary_tests {
         map.set_house_town_id(c, 0x1234).unwrap();
         let tile = map.get(c).expect("house tile");
         assert_eq!(u16::from(tile.m2) | (u16::from(tile.m2_hi) << 8), 0x1234);
+    }
+
+    #[test]
+    fn make_town_house_replays_completed_native_house_bytes() {
+        let mut map = Map::new_flat(2, 2, 0);
+        let c = TileCoord::new(1, 1);
+        map.set_height(c, 3).unwrap();
+        map.make_town_house(
+            c,
+            TownHouseSpec {
+                house_id: 26,
+                town_id: 0,
+                random_bits: 157,
+                construction_counter: 0,
+                construction_stage: TOWN_HOUSE_COMPLETED,
+                is_protected: false,
+                processing_time: 0,
+            },
+        )
+        .unwrap();
+
+        let tile = map.get(c).expect("house tile");
+        assert_eq!(tile.height, 3);
+        assert_eq!(tile.kind, TileKind::House);
+        assert_eq!(tile.mapt, 0x30);
+        assert_eq!(tile.m1, 157);
+        assert_eq!(tile.m2, 0);
+        assert_eq!(tile.m2_hi, 0);
+        assert_eq!(tile.m3, 0x80);
+        assert_eq!(tile.m5, 0);
+        assert_eq!(tile.m6, 0);
+        assert_eq!(tile.m7, 0);
+        assert_eq!(tile.m8, 26);
+        assert_eq!(tile.m3hi, 0);
+    }
+
+    #[test]
+    fn make_town_house_encodes_construction_and_preserves_low_mapt_bits() {
+        let mut map = Map::new_flat(2, 2, 0);
+        let c = TileCoord::new(1, 1);
+        map.set_mapt_m5(c, 0x0B, 0).unwrap();
+        map.make_town_house(
+            c,
+            TownHouseSpec {
+                house_id: 0x1234,
+                town_id: 0x1234,
+                random_bits: 0xAB,
+                construction_counter: 5,
+                construction_stage: 2,
+                is_protected: true,
+                processing_time: 17,
+            },
+        )
+        .unwrap();
+
+        let tile = map.get(c).expect("house tile");
+        assert_eq!(tile.mapt, 0x3B);
+        assert_eq!(tile.m1, 0xAB);
+        assert_eq!(tile.m2, 0x34);
+        assert_eq!(tile.m2_hi, 0x12);
+        assert_eq!(tile.m3, 0x20);
+        assert_eq!(tile.m5, 0x15);
+        assert_eq!(tile.m6, 17 << 2);
+        assert_eq!(tile.m8, 0x234);
     }
 
     #[test]

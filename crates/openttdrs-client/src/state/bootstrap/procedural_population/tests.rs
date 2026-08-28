@@ -39,7 +39,7 @@ fn dense_population_places_more_towns_than_sparse() {
 }
 
 #[test]
-fn procedural_houses_are_completed_with_varied_ids() {
+fn procedural_houses_use_native_town_bytes_with_varied_ids() {
     let settings = NewGameSettings::procedural_island(Climate::Temperate, 555);
     let state = build_procedural_demo_world(&settings);
     let (mw, mh) = state.map.dimensions();
@@ -55,7 +55,14 @@ fn procedural_houses_are_completed_with_varied_ids() {
         }
     }
     assert!(house_tiles.len() >= 3);
-    assert!(house_tiles.iter().all(|t| t.m3 & 0x80 != 0));
+    assert!(
+        house_tiles.iter().all(|t| t.mapt & 0xF0 == 0x30),
+        "cada casa debe conservar el TileType MP_HOUSE"
+    );
+    assert!(
+        house_tiles.iter().all(|t| t.m3 & 0x80 == 0 || t.m5 == 0),
+        "una casa terminada debe reiniciar MAP5; las demás conservan su obra"
+    );
     let distinct_ids: std::collections::HashSet<u16> =
         house_tiles.iter().map(|t| t.m8 & 0x0FFF).collect();
     assert!(distinct_ids.len() > 1, "debe haber más de un HouseID");

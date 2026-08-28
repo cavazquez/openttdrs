@@ -92,6 +92,25 @@ pub struct Tile {
     pub m3hi: u8,
 }
 
+/// Parámetros crudos de `MakeHouseTile` para una casa creada por un pueblo.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TownHouseSpec {
+    /// Índice de la especificación (`HouseID`) que ocupa los 12 bits bajos de `MAP8`.
+    pub house_id: u16,
+    /// Índice de pueblo que ocupa `MAP2`; se satura a `u16` al serializar.
+    pub town_id: u32,
+    /// Bits aleatorios iniciales de la casa (`MAP1`).
+    pub random_bits: u8,
+    /// Contador de la etapa de obra (`MAP5` bits 0–2).
+    pub construction_counter: u8,
+    /// Etapa de construcción (`MAP5` bits 3–4), o [`TOWN_HOUSE_COMPLETED`].
+    pub construction_stage: u8,
+    /// Bit de protección frente a reemplazos automáticos (`MAP3` bit 5).
+    pub is_protected: bool,
+    /// Multiplicador de refresco periódico (`MAP6` bits 2–7).
+    pub processing_time: u8,
+}
+
 impl Tile {
     /// Nibble alto del tipo de tesela OpenTTD (`mapt >> 4`).
     #[must_use]
@@ -123,10 +142,46 @@ impl Tile {
             m3hi: 0,
         }
     }
+
+    /// Construye los bytes de `MakeHouseTile` para una casa de pueblo.
+    ///
+    /// Conserva el nibble bajo de `MAPT`, tal como `SetTileType(MP_HOUSE)`;
+    /// éste puede contener zona tropical o metadatos de puente en la tesela
+    /// que `CMD_LANDSCAPE_CLEAR` acaba de limpiar.
+    #[must_use]
+    pub fn town_house(spec: TownHouseSpec, height: u8, previous_mapt: u8) -> Self {
+        let town_id = u16::try_from(spec.town_id).unwrap_or(u16::MAX);
+        let [m2, m2_hi] = town_id.to_le_bytes();
+        let completed = spec.construction_stage == TOWN_HOUSE_COMPLETED;
+        let mut m3 = if completed { 0x80 } else { 0 };
+        if spec.is_protected {
+            m3 |= 0x20;
+        }
+        Self {
+            height,
+            kind: TileKind::House,
+            mapt: (previous_mapt & 0x0F) | OTTD_MAPT_HOUSE,
+            m5: if completed {
+                0
+            } else {
+                ((spec.construction_stage & 0x03) << 3) | (spec.construction_counter & 0x07)
+            },
+            m1: spec.random_bits,
+            m6: spec.processing_time.min(0x3F) << 2,
+            m8: spec.house_id & 0x0FFF,
+            m3,
+            m2,
+            m2_hi,
+            m7: 0,
+            m3hi: 0,
+        }
+    }
 }
 
 /// MAPT para `MP_HOUSE` (`TileType` 3).
 pub const OTTD_MAPT_HOUSE: u8 = 0x30;
+/// Etapa final de construcción de una casa (`TOWN_HOUSE_COMPLETED`).
+pub const TOWN_HOUSE_COMPLETED: u8 = 3;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MapError {

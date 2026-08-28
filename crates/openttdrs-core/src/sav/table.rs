@@ -183,6 +183,92 @@ fn read_record_fields(
     Ok(record)
 }
 
+/// Lee la cabecera de una tabla y devuelve el rango de bytes de sus campos.
+///
+/// El escritor usa esta vista para fusionar columnas que todavía no tienen un
+/// modelo semántico: los bytes de esas columnas se conservan y sólo se
+/// reemplazan los campos conocidos. `header_end` apunta al primer byte de la
+/// primera fila (el rango de cabecera excluye el gamma de longitud).
+pub(crate) fn parse_table_layout(body: &[u8]) -> Result<(usize, usize, Vec<TableField>), SavError> {
+    let mut off = 0usize;
+    let header_len = gamma(body, &mut off)? as usize;
+    if header_len == 0 {
+        return Err(SavError::BadFormat("tabla sin header".into()));
+    }
+    let header_start = off;
+    let header_end = header_start
+        .checked_add(header_len.saturating_sub(1))
+        .ok_or_else(|| SavError::BadFormat("header de tabla overflow".into()))?;
+    if header_end > body.len() {
+        return Err(SavError::BadFormat("header de tabla truncado".into()));
+    }
+    let mut header_off = 0usize;
+    let fields = parse_field_list(&body[header_start..header_end], &mut header_off)?;
+    Ok((header_start, header_end, fields))
+}
+
+fn skip_field(field: &TableField, data: &[u8], off: &mut usize) -> Result<(), SavError> {
+    if field.base == SLE_FILE_STRUCT {
+        let count = gamma(data, off)?;
+        for _ in 0..count {
+            skip_record_fields(&field.sub, data, off)?;
+        }
+        return Ok(());
+    }
+    if field.base == SLE_FILE_STRING {
+        let len = gamma(data, off)? as usize;
+        *off = off
+            .checked_add(len)
+            .ok_or_else(|| SavError::BadFormat("string de tabla overflow".into()))?;
+        if *off > data.len() {
+            return Err(SavError::BadFormat("string de tabla truncada".into()));
+        }
+        return Ok(());
+    }
+    let count = if field.has_length {
+        gamma(data, off)? as usize
+    } else {
+        1
+    };
+    let size = scalar_size(field.base)?;
+    let bytes = size
+        .checked_mul(count)
+        .ok_or_else(|| SavError::BadFormat("campo de tabla overflow".into()))?;
+    *off = off
+        .checked_add(bytes)
+        .ok_or_else(|| SavError::BadFormat("campo de tabla overflow".into()))?;
+    if *off > data.len() {
+        return Err(SavError::BadFormat("campo de tabla truncado".into()));
+    }
+    Ok(())
+}
+
+fn skip_record_fields(fields: &[TableField], data: &[u8], off: &mut usize) -> Result<(), SavError> {
+    for field in fields {
+        skip_field(field, data, off)?;
+    }
+    Ok(())
+}
+
+/// Rangos `(nombre, inicio, fin)` de los campos raíz de un registro.
+///
+/// Los offsets son relativos al payload de la fila (sin el índice gamma de
+/// una tabla sparse). Los campos de longitud variable también se incluyen,
+/// aunque el escritor sólo parchea escalares de tamaño fijo.
+pub(crate) fn field_byte_ranges(
+    fields: &[TableField],
+    record: &[u8],
+) -> Result<Vec<(String, usize, usize)>, SavError> {
+    let mut off = 0usize;
+    let mut ranges = Vec::with_capacity(fields.len());
+    for field in fields {
+        let start = off;
+        skip_field(field, record, &mut off)?;
+        ranges.push((field.name.clone(), start, off));
+    }
+    Ok(ranges)
+}
+
 /// Decodifica el cuerpo gamma completo de un chunk tabla en `(índice, registro)`.
 ///
 /// `sparse` indica `CH_SPARSE_TABLE` (cada registro empieza con su índice gamma).
@@ -190,19 +276,8 @@ pub(crate) fn parse_table_chunk(
     body: &[u8],
     sparse: bool,
 ) -> Result<Vec<(u32, SlRecord)>, SavError> {
-    let mut off = 0usize;
-    let header_len = gamma(body, &mut off)? as usize;
-    if header_len == 0 {
-        return Err(SavError::BadFormat("tabla sin header".into()));
-    }
-    let header_end = off + header_len - 1;
-    if header_end > body.len() {
-        return Err(SavError::BadFormat("header de tabla truncado".into()));
-    }
-    let block = &body[off..header_end];
-    let mut hoff = 0usize;
-    let fields = parse_field_list(block, &mut hoff)?;
-    off = header_end;
+    let (_, header_end, fields) = parse_table_layout(body)?;
+    let mut off = header_end;
 
     let mut out = Vec::new();
     let mut auto_index = 0u32;

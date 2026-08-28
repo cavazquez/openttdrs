@@ -43,6 +43,12 @@ en el comparador.
   un `.sav` capturado justo antes de esa fase. El dumper exige los dos campos
   `DATE.random_state`; por eso es un diagnóstico de algoritmo y no una nueva
   partida generada desde una semilla aproximada.
+- `landscape`, `clear`, `towns`, `industries`, `objects` y `trees`: fronteras
+  de partida nueva emitidas por el fixture de generación. El candidato puede
+  detenerse en la misma frontera con `world_raw_dumper --generate-until`;
+  `landscape` queda inmediatamente después de `GenerateLandscape`, por lo que
+  incluye su conversión de agua, ríos y tile loops, pero precede a
+  `GenerateClearTile`.
 
 `climate` conserva el valor de `LandscapeType` de OpenTTD: 0 temperate,
 1 arctic, 2 tropic, 3 toyland. `region` es inclusiva y conserva coordenadas

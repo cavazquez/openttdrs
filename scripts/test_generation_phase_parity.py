@@ -12,8 +12,8 @@ import generation_phase_parity as phase  # noqa: E402
 
 
 def test_parse_phases_rejects_reordered_or_unknown_values() -> None:
-    assert phase.parse_phases("clear,towns,objects") == ("clear", "towns", "objects")
-    for value in ("towns,clear", "clear,clear", "clear,rivers"):
+    assert phase.parse_phases("landscape,clear,objects") == ("landscape", "clear", "objects")
+    for value in ("clear,landscape", "clear,clear", "clear,rivers"):
         try:
             phase.parse_phases(value)
         except phase.GenerationPhaseError:
@@ -25,6 +25,7 @@ def test_first_divergent_stage_uses_pipeline_order() -> None:
     comparisons = {
         "towns": {"exact_match": False},
         "objects": {"exact_match": False},
+        "landscape": {"exact_match": True},
         "clear": {"exact_match": True},
     }
     assert phase.first_divergent_stage(comparisons) == "towns"

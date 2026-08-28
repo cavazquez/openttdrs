@@ -11,8 +11,8 @@ use openttdrs_core::world_raw::{
 };
 use openttdrs_core::{
     Climate, GameState, Map, PopulationGenConfig, TerrainType, TreePlacement, WorldGenConfig,
-    apply_world_gen_with_rng, generate_industries_with_rng, generate_objects_with_rng,
-    generate_towns_with_rng, generate_trees_with_rng,
+    apply_clear_generation_with_rng, apply_landscape_with_rng, generate_industries_with_rng,
+    generate_objects_with_rng, generate_towns_with_rng, generate_trees_with_rng,
     generate_trees_with_rng_observer_with_map_settings, run_generation_tile_loop,
 };
 
@@ -49,6 +49,7 @@ impl Stage {
 /// después de la misma fase que captura el oráculo C++.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum GenerateUntil {
+    Landscape,
     Clear,
     Towns,
     Industries,
@@ -60,6 +61,7 @@ enum GenerateUntil {
 impl GenerateUntil {
     fn parse(value: &str) -> Result<Self, String> {
         match value {
+            "landscape" => Ok(Self::Landscape),
             "clear" => Ok(Self::Clear),
             "towns" => Ok(Self::Towns),
             "industries" => Ok(Self::Industries),
@@ -67,13 +69,14 @@ impl GenerateUntil {
             "trees" => Ok(Self::Trees),
             "startup" => Ok(Self::Startup),
             _ => Err(format!(
-                "--generate-until inválido: {value} (usar clear, towns, industries, objects, trees o startup)"
+                "--generate-until inválido: {value} (usar landscape, clear, towns, industries, objects, trees o startup)"
             )),
         }
     }
 
     const fn as_str(self) -> &'static str {
         match self {
+            Self::Landscape => "landscape",
             Self::Clear => "clear",
             Self::Towns => "towns",
             Self::Industries => "industries",
@@ -106,7 +109,7 @@ fn print_usage() {
          Opciones:\n\
            --generate WIDTHxHEIGHT          genera el mapa procedural openttdrs (sin guardar .sav)\n\
            --seed N                          semilla para --generate\n\
-           --generate-until FASE             detiene tras clear|towns|industries|objects|trees|startup\n\
+           --generate-until FASE             detiene tras landscape|clear|towns|industries|objects|trees|startup\n\
            --replay-trees                    reproduce GenerateTrees desde DATE.random_state\n\
            --tree-trace SALIDA.jsonl         traza cada PlaceTree de --replay-trees\n\
            --stage sav_map|game_state_map  etapa a exportar (default: sav_map)\n\
@@ -518,9 +521,12 @@ fn run(args: &Args) -> Result<(), String> {
             ..WorldGenConfig::default().with_terrain_type(TerrainType::Flat)
         };
         let mut generation_rng =
-            apply_world_gen_with_rng(&mut map, &config, &[]).map_err(|error| {
+            apply_landscape_with_rng(&mut map, &config, &[]).map_err(|error| {
                 format!("falló la generación {width}x{height}, seed={seed}: {error:?}")
             })?;
+        if !matches!(args.generate_until, GenerateUntil::Landscape) {
+            apply_clear_generation_with_rng(&mut map, &mut generation_rng, &[]);
+        }
         // Una partida nueva de OpenTTD continúa con pueblos e industrias
         // después del paisaje. Mantener esta etapa activada por defecto hace
         // que `--generate` represente un mapa jugable; `...=0` conserva el
@@ -544,7 +550,7 @@ fn run(args: &Args) -> Result<(), String> {
         let must_generate_population = match args.generate_until {
             // La opción explícita describe la frontera real de OpenTTD y no
             // hereda el atajo histórico `OPENTTDRS_GENERATE_POPULATION=0`.
-            GenerateUntil::Clear => false,
+            GenerateUntil::Landscape | GenerateUntil::Clear => false,
             GenerateUntil::Towns
             | GenerateUntil::Industries
             | GenerateUntil::Objects
@@ -758,7 +764,10 @@ mod tests {
 
     #[test]
     fn generate_until_accepts_generation_boundaries() {
-        assert_eq!(GenerateUntil::parse("clear"), Ok(GenerateUntil::Clear));
+        assert_eq!(
+            GenerateUntil::parse("landscape"),
+            Ok(GenerateUntil::Landscape)
+        );
         assert_eq!(GenerateUntil::parse("objects"), Ok(GenerateUntil::Objects));
         assert_eq!(GenerateUntil::parse("startup"), Ok(GenerateUntil::Startup));
         assert!(GenerateUntil::parse("rivers").is_err());

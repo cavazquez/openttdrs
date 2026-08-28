@@ -24,8 +24,7 @@ import random_map_parity as matrix
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PHASES = ("clear", "towns", "industries", "objects", "trees")
-REFERENCE_ONLY_PHASES = ("landscape",)
+PHASES = ("landscape", "clear", "towns", "industries", "objects", "trees")
 
 
 class GenerationPhaseError(RuntimeError):
@@ -153,10 +152,7 @@ def run_reference_generation(
         timeout,
         log,
     )
-    raw = {
-        phase: stage_dir / f"{phase}.reference.raw.jsonl"
-        for phase in (*REFERENCE_ONLY_PHASES, *PHASES)
-    }
+    raw = {phase: stage_dir / f"{phase}.reference.raw.jsonl" for phase in PHASES}
     for phase, path in raw.items():
         require_file(path, f"el world-raw de la fase {phase}")
     require_file(random_map_raw, "el world-raw de fin de arranque")
@@ -230,16 +226,6 @@ def main() -> int:
                 args.timeout,
                 out_dir / "generation.reference.log",
             )
-        reference_only: dict[str, dict[str, Any]] = {}
-        for phase in REFERENCE_ONLY_PHASES:
-            raw = reference_raw_by_phase[phase]
-            metadata, tiles = matrix.read_world_raw(raw)
-            reference_only[phase] = {
-                "raw": str(raw),
-                "metadata": metadata,
-                "map_stats": matrix.summarize_map(tiles),
-            }
-
         comparisons: dict[str, dict[str, Any]] = {}
         for phase in phases:
             reference_raw = reference_raw_by_phase[phase]
@@ -275,7 +261,6 @@ def main() -> int:
         first = first_divergent_stage(comparisons)
         report.update(
             {
-                "reference_only": reference_only,
                 "comparisons": comparisons,
                 "first_divergent_stage": first,
                 "exact_match": first is None,

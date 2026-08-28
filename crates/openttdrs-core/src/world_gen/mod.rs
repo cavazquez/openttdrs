@@ -175,10 +175,17 @@ pub fn apply_world_gen(
     apply_world_gen_with_rng(map, config, preserve).map(|_| ())
 }
 
-/// Genera el paisaje y devuelve el estado de RNG para continuar con
-/// `GenerateTowns`/`GenerateIndustries`/`GenerateTrees` sin reiniciar la
-/// secuencia global de `OpenTTD`.
-pub fn apply_world_gen_with_rng(
+/// Ejecuta `GenerateLandscape` hasta justo antes de `GenerateClearTile` y
+/// devuelve el RNG compartido para continuar la partida nueva.
+///
+/// Esta frontera conserva TGP, `FixSlopes`, conversión de agua, coberturas,
+/// ríos y bordes `MP_VOID`, pero no materializa rough/rocks de clear. Permite
+/// comparar el paisaje crudo con `OpenTTD` sin mezclar ambas fases.
+///
+/// # Errors
+///
+/// Fallos de `Map::set_height` / `set_kind` / `set_mapt_m5`.
+pub fn apply_landscape_with_rng(
     map: &mut Map,
     config: &WorldGenConfig,
     preserve: &[PreserveRect],
@@ -300,10 +307,34 @@ pub fn apply_world_gen_with_rng(
         }
     }
 
+    Ok(rng)
+}
+
+/// Ejecuta exclusivamente `GenerateClearTile` sobre un paisaje ya generado.
+///
+/// No consume un RNG propio: debe recibir el stream que devolvió
+/// [`apply_landscape_with_rng`].
+pub fn apply_clear_generation_with_rng(
+    map: &mut Map,
+    rng: &mut WorldGenRng,
+    preserve: &[PreserveRect],
+) {
+    generate_clear_tiles(map, rng, preserve);
+}
+
+/// Genera el paisaje y devuelve el estado de RNG para continuar con
+/// `GenerateTowns`/`GenerateIndustries`/`GenerateTrees` sin reiniciar la
+/// secuencia global de `OpenTTD`.
+pub fn apply_world_gen_with_rng(
+    map: &mut Map,
+    config: &WorldGenConfig,
+    preserve: &[PreserveRect],
+) -> Result<WorldGenRng, MapError> {
+    let mut rng = apply_landscape_with_rng(map, config, preserve)?;
     // `GenerateClearTile` runs after the landscape converter and before
     // towns/industries. Its rough/rocky bits are part of the raw map contract,
     // not a renderer-only decoration.
-    generate_clear_tiles(map, &mut rng, preserve);
+    apply_clear_generation_with_rng(map, &mut rng, preserve);
 
     Ok(rng)
 }
@@ -347,6 +378,30 @@ mod tests {
                     map_b.get(coord).map(|t| t.height),
                     "height at {tx},{ty}"
                 );
+            }
+        }
+    }
+
+    #[test]
+    fn split_landscape_and_clear_preserve_combined_map_and_rng() {
+        let config = WorldGenConfig {
+            seed: 1_330_935_378,
+            ..WorldGenConfig::default()
+        };
+        let mut combined = Map::new_flat(64, 64, 0);
+        let combined_rng =
+            apply_world_gen_with_rng(&mut combined, &config, &[]).expect("combined generation");
+
+        let mut split = Map::new_flat(64, 64, 0);
+        let mut split_rng =
+            apply_landscape_with_rng(&mut split, &config, &[]).expect("landscape generation");
+        apply_clear_generation_with_rng(&mut split, &mut split_rng, &[]);
+
+        assert_eq!(combined_rng.state, split_rng.state);
+        for y in 0..64 {
+            for x in 0..64 {
+                let c = TileCoord::new(x, y);
+                assert_eq!(combined.get(c), split.get(c), "tile {x},{y}");
             }
         }
     }

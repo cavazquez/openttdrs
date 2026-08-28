@@ -520,41 +520,110 @@ fn generated_town_road_allowed_here(
     false
 }
 
-/// Subconjunto ejecutable de `LevelTownLand` para la fundación de un pueblo.
-///
-/// La ruta nativa intenta primero elevar las esquinas bajas de la tesela para
-/// dejarla plana (`TerraformTownTile(..., true)`). En una tesela de terreno
-/// recién generado sin agua ni casas esto equivale a llevar sus cuatro
-/// vértices a la altura mayor. Mantener la mutación, y no sólo el sorteo que
-/// la decide, es importante: la comprobación vial posterior consulta la nueva
-/// pendiente de la misma tesela.
-fn level_generated_town_land(map: &mut crate::map::Map, tile: TileCoord) -> bool {
-    let corners = [
-        tile,
-        TileCoord::new(tile.x + 1, tile.y),
-        TileCoord::new(tile.x, tile.y + 1),
-        TileCoord::new(tile.x + 1, tile.y + 1),
-    ];
-    let mut highest = 0_u8;
-    for corner in corners {
-        let Some(current) = map.get(corner) else {
+const SLOPE_CORNER_W: u8 = 0x01;
+const SLOPE_CORNER_S: u8 = 0x02;
+const SLOPE_CORNER_E: u8 = 0x04;
+const SLOPE_CORNER_N: u8 = 0x08;
+const SLOPE_CORNER_MASK: u8 = SLOPE_CORNER_W | SLOPE_CORNER_S | SLOPE_CORNER_E | SLOPE_CORNER_N;
+
+/// `CmdTerraformLand` guarda cada vértice como la esquina norte de una
+/// tesela. Esta tabla es el mapeo de `SLOPE_W/S/E/N` a ese almacenamiento.
+const fn generated_town_terraform_corner(tile: TileCoord, corner: u8) -> Option<TileCoord> {
+    match corner {
+        SLOPE_CORNER_W => Some(TileCoord::new(tile.x + 1, tile.y)),
+        SLOPE_CORNER_S => Some(TileCoord::new(tile.x + 1, tile.y + 1)),
+        SLOPE_CORNER_E => Some(TileCoord::new(tile.x, tile.y + 1)),
+        SLOPE_CORNER_N => Some(tile),
+        _ => None,
+    }
+}
+
+/// El `TerraformerState` nativo vuelve a validar las cuatro teselas que
+/// comparten la esquina norte almacenada. Durante `GenerateTowns` sólo se
+/// admite el subconjunto clear/forest: una carretera, casa, agua o borde hace
+/// fallar el intento hacia arriba y habilita el intento hacia abajo de
+/// `LevelTownLand`.
+fn generated_town_terraform_vertex_is_mutable(map: &crate::map::Map, vertex: TileCoord) -> bool {
+    [(0, 0), (0, -1), (-1, 0), (-1, -1)]
+        .into_iter()
+        .all(|(dx, dy)| {
+            matches!(
+                map.get_kind(TileCoord::new(vertex.x + dx, vertex.y + dy)),
+                Some(TileKind::Grass | TileKind::Forest)
+            )
+        })
+}
+
+/// Intenta una sola alternativa de `TerraformTownTile`: cada esquina elegida
+/// cambia exactamente un nivel, y la mutación sólo sucede si todos los
+/// vértices fueron validados antes. La propagación de pendientes empinadas y
+/// la terraformación sobre infraestructuras quedan fuera de este subconjunto.
+fn try_level_generated_town_land(
+    map: &mut crate::map::Map,
+    tile: TileCoord,
+    corners: u8,
+    raise: bool,
+) -> bool {
+    let mut updates = Vec::new();
+    for corner in [
+        SLOPE_CORNER_W,
+        SLOPE_CORNER_S,
+        SLOPE_CORNER_E,
+        SLOPE_CORNER_N,
+    ] {
+        if corners & corner == 0 {
+            continue;
+        }
+        let Some(vertex) = generated_town_terraform_corner(tile, corner) else {
             return false;
         };
-        if matches!(
-            current.kind,
-            TileKind::House | TileKind::Water | TileKind::Void
-        ) {
+        if !generated_town_terraform_vertex_is_mutable(map, vertex) {
             return false;
         }
-        highest = highest.max(current.height);
+        let Some(current) = map.get(vertex) else {
+            return false;
+        };
+        let Some(height) = (if raise {
+            current.height.checked_add(1)
+        } else {
+            current.height.checked_sub(1)
+        }) else {
+            return false;
+        };
+        updates.push((vertex, height));
     }
-
-    for corner in corners {
-        if map.set_height(corner, highest).is_err() {
+    if updates.is_empty() {
+        return false;
+    }
+    for (vertex, height) in updates {
+        if map.set_height(vertex, height).is_err() {
             return false;
         }
     }
     true
+}
+
+/// Subconjunto ejecutable de `LevelTownLand` para la fundación de un pueblo.
+///
+/// `OpenTTD` intenta primero elevar las esquinas bajas y, si ese `CmdTerraformLand`
+/// no es viable, baja las altas. No basta con fijar los cuatro vértices al
+/// máximo: una carretera que comparte una esquina puede rechazar el primer
+/// intento y cambia la pendiente que verá la siguiente llamada a `GrowTown`.
+fn level_generated_town_land(map: &mut crate::map::Map, tile: TileCoord) -> bool {
+    if map.get_kind(tile) == Some(TileKind::House) {
+        return false;
+    }
+    let Some((slope, _)) = tile_slope_and_z(map, tile) else {
+        return false;
+    };
+    if slope == 0 || slope & SLOPE_STEEP != 0 {
+        return false;
+    }
+    let low_corners = (!slope) & SLOPE_CORNER_MASK;
+    if try_level_generated_town_land(map, tile, low_corners, true) {
+        return true;
+    }
+    try_level_generated_town_land(map, tile, slope & SLOPE_CORNER_MASK, false)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -2694,6 +2763,49 @@ mod tests {
     }
 
     #[test]
+    fn do_create_town_path_replays_second_seed_first_city_until_next_name() {
+        let mut state = clear_phase_state(1_330_935_379);
+        // Frontera tras `GenerateTownName` y `CreateRandomTown`: esta ciudad
+        // usa presupuesto temporal 36, por lo que `DoCreateTown` llama 144
+        // veces a `GrowTown` antes de retirar ese contador.
+        let mut rng = Randomizer {
+            state: [394_065_499, 3_120_157_675],
+        };
+        let mut centers = Vec::new();
+        let mut ctx = PopCtx {
+            state: &mut state,
+            preserve: &[],
+            rng: &mut rng,
+            mw: 64,
+            mh: 64,
+        };
+
+        assert!(build_selected_town_with_generated_growth(
+            &mut ctx,
+            &mut centers,
+            TileCoord::new(43, 15),
+            0,
+            true,
+        ));
+
+        assert_eq!(centers, [TileCoord::new(43, 15)]);
+        let town = ctx.state.towns.first().expect("first generated town");
+        assert_eq!(town.num_houses, 42);
+        assert_eq!(town.population, 1_862);
+        assert_eq!(town.layout, TownLayout::Original);
+        assert_eq!(ctx.rng.state, [3_848_068_084, 748_657_221]);
+
+        let house = ctx
+            .state
+            .map
+            .get(TileCoord::new(41, 10))
+            .expect("house n=134");
+        assert_eq!(house.kind, TileKind::House);
+        assert_eq!(house.m1, 71);
+        assert_eq!(house.m8 & 0x0FFF, 16);
+    }
+
+    #[test]
     fn first_town_house_lottery_replays_candidate_and_random_bits() {
         let state = clear_phase_state(1_330_935_378);
         let mut town = Town {
@@ -2815,6 +2927,32 @@ mod tests {
     }
 
     #[test]
+    fn level_town_land_falls_back_to_lowering_when_raise_touches_roads() {
+        let mut map = Map::new_flat(8, 8, 1);
+        let tile = TileCoord::new(3, 3);
+        // Pendiente NE: N/E altas. La alternativa ascendente intentaría
+        // cambiar W/S, que son calles; `TerraformTownTile(..., true)` falla
+        // y OpenTTD prueba la alternativa descendente sobre N/E.
+        map.set_height(tile, 2).expect("north high");
+        map.set_height(TileCoord::new(3, 4), 2).expect("east high");
+        map.set_kind(TileCoord::new(4, 3), TileKind::Road)
+            .expect("west road");
+        map.set_kind(TileCoord::new(4, 4), TileKind::Road)
+            .expect("south road");
+
+        assert_eq!(tile_slope_and_z(&map, tile), Some((SLOPE_NE, 1)));
+        assert!(level_generated_town_land(&mut map, tile));
+        assert_eq!(tile_slope_and_z(&map, tile), Some((0, 1)));
+        assert_eq!(map.get(tile).expect("north lowered").height, 1);
+        assert_eq!(
+            map.get(TileCoord::new(3, 4)).expect("east lowered").height,
+            1
+        );
+        assert_eq!(map.get_kind(TileCoord::new(4, 3)), Some(TileKind::Road));
+        assert_eq!(map.get_kind(TileCoord::new(4, 4)), Some(TileKind::Road));
+    }
+
+    #[test]
     fn second_seed_cleanup_matches_call_ninety_rng_boundary() {
         let (mut state, mut town, mut rng) = second_seed_first_city_after_bootstrap();
 
@@ -2837,15 +2975,18 @@ mod tests {
     }
 
     #[test]
-    fn second_seed_cleanup_preserves_post_growth_rng_boundary() {
+    fn second_seed_first_city_replays_post_growth_state() {
         let (mut state, mut town, mut rng) = second_seed_first_city_after_bootstrap();
         for _ in 2..=144 {
             let _ = grow_first_fixture_town(&mut state, &mut town, &mut rng);
         }
 
         // Tras la llamada 144, C++ entra al segundo `GenerateTownName` con
-        // este stream. La semántica de la casa 38 todavía se contrasta en el
-        // siguiente sub-issue; ésta fija sólo el contrato de limpieza vial.
+        // las 78 casas temporales y la población acumulada de la primera
+        // ciudad grande. Esta frontera cubre la alternativa descendente de
+        // `LevelTownLand` que preserva la casa 38 de la traza.
+        assert_eq!(town.num_houses, 78);
+        assert_eq!(town.population, 1_862);
         assert_eq!(rng.state, [3_848_068_084, 748_657_221]);
     }
 

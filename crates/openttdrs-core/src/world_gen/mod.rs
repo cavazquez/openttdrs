@@ -286,7 +286,7 @@ pub fn apply_landscape_with_rng(
     }
 
     convert_ground_tiles_into_water_tiles(map, preserve)?;
-    carve_rivers(map, config, map_w, map_h, preserve)?;
+    carve_rivers(map, config, map_w, map_h, preserve, &mut rng)?;
     // `CreateRivers` llama de nuevo a `ConvertGroundTilesIntoWaterTiles`
     // después de ensanchar ríos. Hoy nuestro port no modifica alturas al
     // tallarlos, pero conservar la segunda frontera evita ocultar una futura

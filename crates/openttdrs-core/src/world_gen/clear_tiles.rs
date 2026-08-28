@@ -34,16 +34,33 @@ pub(crate) fn generate_clear_tiles(map: &mut Map, rng: &mut Randomizer, preserve
 
     for _ in 0..rock_groups {
         let random = rng.next();
-        let mut tile = random_tile(random, map_w, map_h);
+        let tile = random_tile(random, map_w, map_h);
         if !can_clear(map, tile, preserve) {
             continue;
         }
-        let mut steps = ((random >> 16) & 0x0F) + 5;
+        place_rock_group(map, rng, preserve, tile, ((random >> 16) & 0x0F) + 5);
+    }
+}
+
+/// Porta el bucle interno de rocas de `GenerateClearTile`.
+///
+/// Un salto inválido no termina el grupo: `OpenTTD` consume otro `Random()` e
+/// intenta una dirección distinta, salvo que ya se agotó el largo del grupo.
+/// Terminar en el primer borde/agua desalineaba el stream sólo en mapas que
+/// encontraban ese caso (RMAP-021).
+fn place_rock_group(
+    map: &mut Map,
+    rng: &mut Randomizer,
+    preserve: &[PreserveRect],
+    mut tile: TileCoord,
+    mut steps: u32,
+) {
+    'group: loop {
+        set_ground(map, tile, CLEAR_GROUND_ROCKY);
         loop {
-            set_ground(map, tile, CLEAR_GROUND_ROCKY);
             steps = steps.saturating_sub(1);
             if steps == 0 {
-                break;
+                break 'group;
             }
             let direction = rng.next() & 0x03;
             let (dx, dy) = match direction {
@@ -53,10 +70,10 @@ pub(crate) fn generate_clear_tiles(map: &mut Map, rng: &mut Randomizer, preserve
                 _ => (0, -1),
             };
             let next = TileCoord::new(tile.x + dx, tile.y + dy);
-            if !can_clear(map, next, preserve) {
+            if can_clear(map, next, preserve) {
+                tile = next;
                 break;
             }
-            tile = next;
         }
     }
 }
@@ -92,9 +109,10 @@ fn set_ground(map: &mut Map, c: TileCoord, ground: u8) {
 
 #[cfg(test)]
 mod tests {
-    use super::generate_clear_tiles;
+    use super::{generate_clear_tiles, place_rock_group};
     use crate::cargodist::parity::Randomizer;
-    use crate::map::{Map, TileKind};
+    use crate::map::{Map, TileCoord, TileKind};
+    use crate::world_gen::{CLEAR_GROUND_ROCKY, clear_ground_m5};
 
     #[test]
     fn clear_generation_is_deterministic_and_keeps_map_kind() {
@@ -108,5 +126,30 @@ mod tests {
         assert!(a.tiles().iter().any(|tile| tile.m5 >> 2 == 1));
         assert!(a.tiles().iter().any(|tile| tile.m5 >> 2 == 2));
         assert!(a.tiles().iter().all(|tile| tile.kind == TileKind::Grass));
+    }
+
+    #[test]
+    fn rocky_group_retries_an_invalid_direction_without_ending_the_group() {
+        let mut map = Map::new_flat(3, 3, 0);
+        // Con seed 42, los dos primeros sorteos de dirección son oeste (0)
+        // y sur (1). El oeste no es clear; el segundo sí debe ser aceptado.
+        map.set_kind(TileCoord::new(0, 1), TileKind::Water)
+            .expect("water boundary");
+        let mut actual = Randomizer::new(42);
+
+        place_rock_group(&mut map, &mut actual, &[], TileCoord::new(1, 1), 3);
+
+        assert_eq!(
+            map.get(TileCoord::new(1, 1)).expect("center").m5,
+            clear_ground_m5(CLEAR_GROUND_ROCKY, 3)
+        );
+        assert_eq!(
+            map.get(TileCoord::new(1, 2)).expect("south").m5,
+            clear_ground_m5(CLEAR_GROUND_ROCKY, 3)
+        );
+        let mut expected = Randomizer::new(42);
+        let _ = expected.next();
+        let _ = expected.next();
+        assert_eq!(actual, expected);
     }
 }

@@ -1,10 +1,13 @@
 //! Generación de ríos y costas.
 
+use std::collections::HashSet;
+
+use crate::cargodist::parity::Randomizer;
 use crate::map::slope::SLOPE_STEEP;
 use crate::map::water_flood::{DIR_OFFSETS, FLOOD_FROM_DIRS, is_slope_one_corner_raised};
 use crate::map::{
     Map, MapError, TileCoord, TileKind, WaterClass, make_shore_tile, make_water_tile,
-    set_water_class_m1, tile_slope_and_z,
+    set_water_class_m1, tile_slope_and_z, water_class_from_m1,
 };
 
 use super::config::{PreserveRect, WorldGenConfig};
@@ -16,6 +19,7 @@ pub(super) fn carve_rivers(
     map_w: i32,
     map_h: i32,
     preserve: &[PreserveRect],
+    rng: &mut Randomizer,
 ) -> Result<(), MapError> {
     // `CreateRivers` calcula los pozos con `Map::ScaleBySize(4 << amount)`;
     // el conteo anterior dependía del área y producía cuatro veces más ríos
@@ -31,55 +35,280 @@ pub(super) fn carve_rivers(
     // (mínimo 16 × 4), no un río corto que pueda cruzar el mapa de cualquier
     // modo. Esta clasificación debe ocurrir antes de pintar una tesela.
     let long_wells = (wells / 10).max(1).min(wells);
-    for i in 0..wells as usize {
-        let Some(start) = pick_river_source(map, config, map_w, map_h, preserve, i as u64) else {
-            continue;
-        };
-        let min_river_length = u32::from(config.min_river_length)
-            .saturating_mul(if i < long_wells as usize { 4 } else { 1 });
-        let _ = flow_river(
-            map,
-            start,
-            config.seed ^ (i as u64).wrapping_mul(0x9E37),
-            preserve,
-            min_river_length,
-        )?;
+    for well in 0..wells as usize {
+        let is_long = well < long_wells as usize;
+        let min_river_length =
+            u32::from(config.min_river_length).saturating_mul(if is_long { 4 } else { 1 });
+        // Cada intento C++ empieza con `RandomTile()` y busca el primer
+        // manantial de su espiral 8×8. Esta fase debe usar el mapa y el
+        // stream global reales: de ella depende `GenerateClearTile`.
+        let tries = if is_long { 512 } else { 128 };
+        for _ in 0..tries {
+            let random = rng.next();
+            let center = random_tile(random, map_w as u32, map_h as u32);
+            let mut done = false;
+            for spring in spiral_tiles(center, 8, map) {
+                if !find_spring(map, spring, config, preserve) {
+                    continue;
+                }
+                let (can_build, _) =
+                    probe_flow_river(map, spring, spring, min_river_length, rng, preserve, 0);
+                if can_build {
+                    done = flow_river(map, spring, u64::from(random), preserve, min_river_length)?;
+                }
+                // C++ rompe la espiral tras el primer `FindSpring`, aun si
+                // ese flujo no termina construyéndose.
+                break;
+            }
+            if done {
+                break;
+            }
+        }
     }
     Ok(())
 }
 
-pub(super) fn pick_river_source(
+const RIVER_DIRS: [(i32, i32); 4] = [(-1, 0), (0, 1), (1, 0), (0, -1)];
+
+/// `RandomTileSeed`: en los tamaños válidos de `OpenTTD` el índice se envuelve
+/// con la máscara del mapa de potencia de dos.
+fn random_tile(random: u32, map_w: u32, map_h: u32) -> TileCoord {
+    let count = map_w.saturating_mul(map_h).max(1);
+    let index = if map_w.is_power_of_two() && map_h.is_power_of_two() {
+        random & count.saturating_sub(1)
+    } else {
+        random % count
+    };
+    TileCoord::new(
+        i32::try_from(index % map_w.max(1)).unwrap_or(0),
+        i32::try_from(index / map_w.max(1)).unwrap_or(0),
+    )
+}
+
+/// Orden exacto de `SpiralTileSequence(center, diameter)` en el constructor
+/// par usado por `CreateRivers`. El orden determina qué `FindSpring` gana.
+fn spiral_tiles(center: TileCoord, diameter: u32, map: &Map) -> Vec<TileCoord> {
+    let (width, height) = map.dimensions();
+    if diameter == 0 || width == 0 || height == 0 {
+        return Vec::new();
+    }
+    let max_radius = i32::try_from(diameter / 2).expect("river diameter fits i32");
+    let mut radius = 0i32;
+    let mut dir = 0usize;
+    let mut position = 1i32;
+    // `SpiralTileIterator`: esquina oeste del rectángulo central 2×2.
+    let mut x = center.x + 1;
+    let mut y = center.y;
+    let mut tiles = Vec::with_capacity((diameter * diameter) as usize);
+
+    while radius < max_radius {
+        if x >= 0 && y >= 0 && x < width as i32 && y < height as i32 {
+            tiles.push(TileCoord::new(x, y));
+        }
+        let (dx, dy) = RIVER_DIRS[dir];
+        x += dx;
+        y += dy;
+        position -= 1;
+        if position > 0 {
+            continue;
+        }
+        dir += 1;
+        if dir == RIVER_DIRS.len() {
+            // `TileIndexDiffCByDir(DIR_W)`.
+            x += 1;
+            y -= 1;
+            radius += 1;
+            dir = 0;
+            if radius == max_radius {
+                break;
+            }
+        }
+        position = radius * 2 + 1;
+    }
+    tiles
+}
+
+/// `FindSpring` de `landscape.cpp` para los climas cuyo sustrato no necesita
+/// consultar `TropicZone`.
+fn find_spring(
     map: &Map,
+    coord: TileCoord,
     config: &WorldGenConfig,
-    map_w: i32,
-    map_h: i32,
     preserve: &[PreserveRect],
-    idx: u64,
-) -> Option<TileCoord> {
-    // TGP deja el mar en altura 0; `sea_level` legado (heightmaps) suele ser 1.
-    let sea = config.sea_level.min(1);
-    let min_z = sea.saturating_add(2);
-    for attempt in 0..64u64 {
-        let hash = hash2(
-            config.seed ^ 0x5249_5645,
-            idx.wrapping_mul(17).wrapping_add(attempt),
-        );
-        let pos_x = 2 + (hash % (map_w.saturating_sub(4).max(1) as u64)) as i32;
-        let pos_y = 2 + ((hash >> 16) % (map_h.saturating_sub(4).max(1) as u64)) as i32;
-        if preserve.iter().any(|r| r.contains(pos_x, pos_y)) {
-            continue;
-        }
-        let coord = TileCoord::new(pos_x, pos_y);
-        let kind = map.get_kind(coord)?;
-        if !matches!(kind, TileKind::Grass | TileKind::Forest) {
-            continue;
-        }
-        let (_, height) = tile_slope_and_z(map, coord)?;
-        if height >= min_z {
-            return Some(coord);
+) -> bool {
+    if preserve.iter().any(|rect| rect.contains(coord.x, coord.y))
+        || map.get_kind(coord) == Some(TileKind::Water)
+    {
+        return false;
+    }
+    let Some((slope, reference_height)) = tile_slope_and_z(map, coord) else {
+        return false;
+    };
+    if slope != 0 || matches!(config.climate, super::config::Climate::SubTropical) {
+        return false;
+    }
+
+    let mut higher_nearby = 0u32;
+    for dx in -1..=1 {
+        for dy in -1..=1 {
+            let nearby = TileCoord::new(coord.x + dx, coord.y + dy);
+            if tile_max_z(map, nearby).is_some_and(|height| height > reference_height) {
+                higher_nearby += 1;
+            }
         }
     }
-    None
+    if higher_nearby < 4 {
+        return false;
+    }
+
+    for dx in -16..=16 {
+        for dy in -16..=16 {
+            let nearby = TileCoord::new(coord.x + dx, coord.y + dy);
+            if tile_max_z(map, nearby)
+                .is_some_and(|height| height > reference_height.saturating_add(2))
+            {
+                return false;
+            }
+        }
+    }
+    true
+}
+
+fn tile_max_z(map: &Map, coord: TileCoord) -> Option<u8> {
+    let (slope, z) = tile_slope_and_z(map, coord)?;
+    Some(z.saturating_add(if slope == 0 {
+        0
+    } else if slope & SLOPE_STEEP != 0 {
+        2
+    } else {
+        1
+    }))
+}
+
+fn is_inclined_slope(slope: u8) -> bool {
+    matches!(slope, 3 | 6 | 9 | 12)
+}
+
+fn river_flows_down(map: &Map, begin: TileCoord, end: TileCoord) -> bool {
+    let Some((end_slope, end_height)) = tile_slope_and_z(map, end) else {
+        return false;
+    };
+    if end_slope != 0 && !is_inclined_slope(end_slope) {
+        return false;
+    }
+    let Some((begin_slope, begin_height)) = tile_slope_and_z(map, begin) else {
+        return false;
+    };
+    if end_height > begin_height {
+        return false;
+    }
+    (end_slope == begin_slope && end_height < begin_height) || end_slope == 0 || begin_slope == 0
+}
+
+fn connected_sea_reaches_edge(map: &Map, start: TileCoord, limit: usize) -> bool {
+    let (width, height) = map.dimensions();
+    let mut seen = HashSet::new();
+    let mut stack = vec![start];
+    while let Some(coord) = stack.pop() {
+        let Some(tile) = map.get(coord) else {
+            continue;
+        };
+        if tile.kind != TileKind::Water
+            || water_class_from_m1(tile.m1) != WaterClass::Sea
+            || tile_slope_and_z(map, coord).is_none_or(|(slope, _)| slope != 0)
+        {
+            continue;
+        }
+        if coord.x <= 1
+            || coord.y <= 1
+            || coord.x >= width.saturating_sub(2) as i32
+            || coord.y >= height.saturating_sub(2) as i32
+        {
+            return true;
+        }
+        if !seen.insert(coord) {
+            continue;
+        }
+        if seen.len() > limit {
+            return false;
+        }
+        for (dx, dy) in RIVER_DIRS {
+            stack.push(TileCoord::new(coord.x + dx, coord.y + dy));
+        }
+    }
+    false
+}
+
+/// Explora `FlowRiver` hasta la frontera que consume RNG. El trazado YAPF,
+/// lagos/humedales y ensanchamiento siguen separados en RMAP-018.
+fn probe_flow_river(
+    map: &Map,
+    spring: TileCoord,
+    begin: TileCoord,
+    min_river_length: u32,
+    rng: &mut Randomizer,
+    preserve: &[PreserveRect],
+    depth: usize,
+) -> (bool, bool) {
+    if depth > map.tiles().len() {
+        return (false, false);
+    }
+    if map.get_kind(begin) == Some(TileKind::Water) {
+        return (
+            spring.x.abs_diff(begin.x) + spring.y.abs_diff(begin.y) > min_river_length,
+            tile_slope_and_z(map, begin).is_some_and(|(_, z)| z == 0),
+        );
+    }
+    let Some((_, height_begin)) = tile_slope_and_z(map, begin) else {
+        return (false, false);
+    };
+    let mut marks = HashSet::from([begin]);
+    let mut queue = vec![begin];
+    let mut found = None;
+    for index in 0..queue.len() {
+        let end = queue[index];
+        let Some((slope_end, height_end)) = tile_slope_and_z(map, end) else {
+            continue;
+        };
+        let is_water = map.get_kind(end) == Some(TileKind::Water);
+        if slope_end == 0 && (height_end < height_begin || (height_end == height_begin && is_water))
+        {
+            if is_water
+                && map
+                    .get(end)
+                    .is_some_and(|tile| water_class_from_m1(tile.m1) == WaterClass::Sea)
+            {
+                let (width, height) = map.dimensions();
+                let threshold =
+                    ((2.0 * f64::from(width.saturating_mul(height)).sqrt()) as usize).min(1024);
+                if connected_sea_reaches_edge(map, end, threshold) {
+                    found = Some(end);
+                    break;
+                }
+            } else {
+                found = Some(end);
+                break;
+            }
+        }
+        for (dx, dy) in RIVER_DIRS {
+            let next = TileCoord::new(end.x + dx, end.y + dy);
+            if preserve.iter().any(|rect| rect.contains(next.x, next.y)) || !marks.insert(next) {
+                continue;
+            }
+            if map.get(next).is_some() && river_flows_down(map, end, next) {
+                queue.push(next);
+            }
+        }
+    }
+    if let Some(end) = found {
+        return probe_flow_river(map, spring, end, min_river_length, rng, preserve, depth + 1);
+    }
+    if queue.len() > 32 {
+        // `RandomRange(queue.size())` para el posible lago. Su construcción
+        // aún está abierta, pero el sorteo pertenece al stream de la fase.
+        let _ = queue[rng.random_range(queue.len() as u32) as usize];
+    }
+    (false, false)
 }
 
 pub(super) fn flow_river(
@@ -163,12 +392,6 @@ pub(super) fn flow_river(
         make_water_tile(map, tile, WaterClass::River)?;
     }
     Ok(true)
-}
-
-fn hash2(a: u64, b: u64) -> u64 {
-    a.wrapping_mul(0x9E37_79B9_7F4A_7C15)
-        .wrapping_add(b)
-        .wrapping_mul(0xBF58_476D_1CE4_E5B9)
 }
 
 /// Port de `ConvertGroundTilesIntoWaterTiles` de `water_cmd.cpp`.
@@ -282,6 +505,7 @@ pub(super) fn mark_water_coasts(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cargodist::parity::Randomizer;
     use crate::company::{OWNER_NONE_M1, OWNER_WATER_M1};
     use crate::map::is_river_tile;
 
@@ -366,5 +590,22 @@ mod tests {
         let long_wells = (wells / 10).max(1).min(wells);
         assert_eq!(long_wells, 1);
         assert_eq!(u32::from(16u8).saturating_mul(4), 64);
+    }
+
+    #[test]
+    fn unbuilt_long_well_still_consumes_every_random_tile_attempt() {
+        let mut map = Map::new_flat(64, 64, 0);
+        let config = WorldGenConfig {
+            amount_of_rivers: 2,
+            ..WorldGenConfig::default()
+        };
+        let mut actual = Randomizer::new(0xC0FF_EE00);
+        carve_rivers(&mut map, &config, 64, 64, &[], &mut actual).expect("carve rivers");
+
+        let mut expected = Randomizer::new(0xC0FF_EE00);
+        for _ in 0..512 {
+            let _ = expected.next();
+        }
+        assert_eq!(actual, expected);
     }
 }

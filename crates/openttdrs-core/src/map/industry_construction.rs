@@ -103,6 +103,53 @@ pub fn step_industry_tiles_with_seed(
     dirty
 }
 
+/// Variante de [`step_industry_tiles_with_seed`] que ejecuta la
+/// randomización de teselas con los catálogos `NewGRF` de la partida.
+///
+/// La firma original se conserva para callers de compatibilidad que sólo
+/// tienen el mapa y los footprints; la simulación normal debe usar esta
+/// variante para que las teselas vanilla no alteren `m3` y los callbacks
+/// `Action2` consuman únicamente sus triggers declarados.
+#[allow(clippy::too_many_arguments)]
+pub fn step_industry_tiles_with_seed_and_catalog(
+    map: &mut Map,
+    tick: u64,
+    visits: &[(TileCoord, super::Tile)],
+    world_seed: u64,
+    industries: &[Industry],
+    towns: &[crate::town::Town],
+    tile_spec_catalog: &[crate::industry_tile::IndustryTileSpecDef],
+    industry_catalog: &[crate::industry_spec::IndustrySpecDef],
+    climate: crate::world_gen::Climate,
+) -> Vec<TileCoord> {
+    let mut dirty = advance_industry_construction_from_visits(map, visits, industries);
+    dirty.extend(
+        super::industry_tile_anim::advance_industry_tile_loop_events_from_visits(map, tick, visits),
+    );
+    let anim_coords = industry_animation_coords(industries);
+    dirty.extend(super::industry_tile_anim::advance_industry_animated_tiles(
+        map,
+        tick,
+        &anim_coords,
+    ));
+    dirty.extend(
+        super::industry_random::advance_industry_tile_randomisation_from_visits_with_catalog(
+            map,
+            tick,
+            world_seed,
+            visits,
+            industries,
+            towns,
+            tile_spec_catalog,
+            industry_catalog,
+            climate,
+        ),
+    );
+    dirty.sort_by_key(|c| (c.x, c.y));
+    dirty.dedup();
+    dirty
+}
+
 fn industry_animation_coords(industries: &[Industry]) -> Vec<TileCoord> {
     let mut coords = Vec::new();
     for ind in industries {

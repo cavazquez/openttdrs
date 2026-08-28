@@ -40,14 +40,15 @@ pub use industry_action2::action2_eval_ctx_for_industry_tile_with_world;
 pub use industry_construction::{
     INDUSTRY_CONSTRUCTION_COMPLETED, advance_industry_construction, industry_construction_counter,
     industry_construction_stage, is_industry_completed, make_industry_tile_bigger,
-    step_industry_tiles, step_industry_tiles_with_seed,
+    step_industry_tiles, step_industry_tiles_with_seed, step_industry_tiles_with_seed_and_catalog,
 };
 pub use industry_link::{
     IndustryTileLink, industry_instance_id, industry_tile_link, industry_tiles_mergeable,
 };
 pub use industry_random::{
     INDUSTRY_RANDOM_TRIGGERS_MASK, IndustryRandomTrigger, advance_industry_tile_randomisation,
-    industry_random_bits, industry_random_triggers, industry_tile_rng, init_industry_tile_random,
+    advance_industry_tile_randomisation_from_visits_with_catalog, industry_random_bits,
+    industry_random_triggers, industry_tile_rng, init_industry_tile_random,
     set_industry_random_bits, set_industry_random_triggers, trigger_industry_randomisation_at,
     trigger_industry_tile_randomisation,
 };

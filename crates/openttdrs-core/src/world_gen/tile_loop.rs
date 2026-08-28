@@ -54,12 +54,17 @@ pub fn run_generation_tile_loop(state: &mut GameState, tick: u64) -> usize {
                     crate::map::water_flood::tile_loop_water_at(state, *coord, tile);
                 }
                 let one = [(*coord, tile)];
-                let _ =
-                    crate::map::industry_random::advance_industry_tile_randomisation_from_visits(
+                let _ = crate::map::industry_random::
+                    advance_industry_tile_randomisation_from_visits_with_catalog(
                         &mut state.map,
                         tick,
                         state.world_seed,
                         &one,
+                        &state.industries,
+                        &state.towns,
+                        &state.industry_tile_spec_catalog,
+                        &state.industry_spec_catalog,
+                        state.climate,
                     );
                 let _ =
                     crate::map::industry_construction::advance_industry_construction_from_visits(

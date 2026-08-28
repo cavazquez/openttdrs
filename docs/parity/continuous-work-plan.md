@@ -36,11 +36,11 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 | 7 | Idiomas y settings (#331) | Abierto | Catálogo de idiomas, locale, settings y textos guardados se cargan y se comparan con OpenTTD sin colisiones ECS ni regresiones de UI. |
 
 > Actualización SAV: `OBJS` ya se modela en filas base y sólo se reconstruye
-> después de una mutación; `OBID` y las columnas desconocidas permanecen en
-> passthrough hasta implementar el merge estructural; `OBID` ya se decodifica
-> y puede reconstruirse desde el catálogo, pero todavía no se aplica al
-> cargador de overrides. El catálogo de objetos ahora consume ese mapping al
-> reasignar los `ObjectType` de cada `(GRFID, local ID)`.
+> después de una mutación. `OBID` fusiona los tres campos conocidos sobre la
+> cabecera y filas originales cuando el conjunto de IDs no cambia, por lo que
+> conserva columnas futuras y huecos; si cambia el conjunto se usa el writer
+> canónico. Las columnas desconocidas de las demás tablas reconstruidas y el
+> resto de pools nativos siguen pendientes.
 
 ## Cómo se decide el siguiente bloque
 
@@ -194,3 +194,15 @@ terminación SpriteStack por registro `0x100` (bit 31) ya está implementada;
 las paletas especiales de vehículos (2CC/crash) ya están materializadas;
 siguen abiertos scopes parent/relative avanzados y callbacks/layouts sin call
 site completo.
+
+### Avance NewGRF — 2026-08-27
+
+La ruta de tile loop de `IndustryTile` ahora recibe los catálogos y pools de
+la partida. Las teselas vanilla no consumen RNG ni alteran `m3`; un grupo
+NewGRF estático conserva el trigger pendiente y los grupos Action2 random
+consumen sólo los eventos alcanzables y la máscara de bits devuelta por
+`ResolveRerandomisation`. La simulación normal y las 0x500 pasadas de
+generación usan esta ruta; la API histórica sin catálogo queda como fallback
+explícito para herramientas antiguas. El runtime NewGRF de industria sigue
+abierto para callbacks de foundation/sonido y variables nativas que el modelo
+no conserva.

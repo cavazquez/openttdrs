@@ -100,8 +100,8 @@ AirportTile animation uses `trigger_newgrf_airport_tile_animation`,
 
 | Pieza | Estado |
 |---|---|
-| Industry tile `m3` random bits + `m6` triggers (reseed) | **Existe** (`industry_random.rs`, P7) |
-| `ResolveRerandomisation` / Action2 random sprite groups por trigger | **soportado MVP** (#266): `resolve_industry_tile_random_trigger` reseedea + elige set |
+| Industry tile `m3` random bits + `m6` triggers (reseed) | **Parcial runtime**: la ruta con catálogo conserva `m3`/triggers por tesela y deja vanilla en no-op; el fallback histórico sin catálogo sigue disponible para herramientas legacy |
+| `ResolveRerandomisation` / Action2 random sprite groups por trigger | **Parcial runtime** (#266): los grupos alcanzables consumen sólo sus triggers y reseedean la máscara declarada; layouts/variables no random y callbacks de foundation/sonido siguen pendientes |
 | Vehicle/station random Action2 (`0x80`/`0x83`/`0x84`) en resolve de sprites | **Parcial** (eval con `random_bits` de 16 bits; reseed gameplay vía `trigger_vehicle_randomisation_chain`; vehículos consumen `Callback32`, `NewCargo` y `Empty`, y conservan triggers pendientes) |
 | RoadStops Action0 `0x0D` + Action2 random | **parcial runtime**: CTT/versión, eventos `NewCargo`/`CargoTaken`/llegada/salida/carga vial, `any`/`all`, reseed de bits base/tesela, JSON y selección visual Action2 dinámica con el contexto persistente. El renderer y los CB140–142 resuelven vars de mundo `45`/`46`/`47`, vars de carga `60`–`65`/`69` y `66`/`67`/`68`/`6A`/`6B` por offset; la randomización del scheduler también usa esos scopes y recibe los pools del mundo en `sim_step`. Spec/frame/activo/random son independientes por tesela en stops compuestos creados, JSON o importados desde `.sav` (`roadstopspeclist` + `roadstoptiledata`). El cliente reproduce los samples `NewGRF` de la cola global y los callbacks de sonido de vehículo cubren salida, marcha, avería, túnel, efecto visual, pago carga/descarga y despegue/aterrizaje; quedan las APIs legacy sin catálogo y GRF ausentes.
 | `CBID_RANDOM_TRIGGER` genérico | **OOS** |

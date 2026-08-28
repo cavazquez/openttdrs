@@ -352,12 +352,16 @@ fn phase_tile_animation(state: &mut GameState, t: u64) {
         &mut state.random,
         &mut state.runtime.active_house_lifts,
     );
-    state.runtime.industry_tile_dirty = crate::map::step_industry_tiles_with_seed(
+    state.runtime.industry_tile_dirty = crate::map::step_industry_tiles_with_seed_and_catalog(
         &mut state.map,
         t,
         &visits,
         state.world_seed,
         &state.industries,
+        &state.towns,
+        &state.industry_tile_spec_catalog,
+        &state.industry_spec_catalog,
+        state.climate,
     );
     let animation_coords: Vec<_> = state
         .industries

@@ -1,9 +1,13 @@
 //! Colocación de pueblos con calle y casas 1×1 (MVP de `GenerateTowns`).
 
-use crate::house_spec::{HouseSpec, climate_zone_mask, get_town_radius_group};
+use crate::house_spec::{
+    BUILDING_FLAG_SIZE_1X2, BUILDING_FLAG_SIZE_2X1, BUILDING_FLAG_SIZE_2X2, HouseSpec,
+    climate_zone_mask, get_town_radius_group,
+};
 use crate::map::tree_tile_loop::clear_ground_type;
 use crate::map::{
-    SLOPE_STEEP, TOWN_HOUSE_COMPLETED, TileCoord, TileKind, TownHouseSpec, tile_slope_and_z,
+    SLOPE_NE, SLOPE_NW, SLOPE_STEEP, TOWN_HOUSE_COMPLETED, TileCoord, TileKind, TownHouseFootprint,
+    TownHouseSpec, complement_slope, tile_slope_and_z,
 };
 use crate::sav::house_spec_population;
 use crate::town::{Town, TownLayout, update_town_radius};
@@ -358,26 +362,83 @@ fn generated_can_follow_town_road(map: &crate::map::Map, tile: TileCoord, dir: u
     }
 }
 
+/// Núcleo de `IsRoadAllowedHere` necesario antes de decidir casa o carretera.
+///
+/// La comprobación de pendiente no es puramente geométrica: si el sentido no
+/// coincide, `OpenTTD` consume `Chance16(1, 8)` y, durante generación mundial,
+/// puede consumir otro `Chance16(1, 3)` antes de rechazar. Mantener esas
+/// palabras es indispensable incluso cuando finalmente se elige una casa.
+fn generated_town_road_allowed_here(
+    map: &crate::map::Map,
+    tile: TileCoord,
+    dir: u8,
+    rng: &mut crate::cargodist::parity::Randomizer,
+) -> bool {
+    let (width, height) = map.dimensions();
+    let max_x = i32::try_from(width).unwrap_or(i32::MAX).saturating_sub(1);
+    let max_y = i32::try_from(height).unwrap_or(i32::MAX).saturating_sub(1);
+    if tile.x <= 0 || tile.y <= 0 || tile.x >= max_x || tile.y >= max_y {
+        return false;
+    }
+    if !matches!(
+        map.get_kind(tile),
+        Some(TileKind::Grass | TileKind::Forest | TileKind::Road)
+    ) {
+        return false;
+    }
+
+    let slope = tile_slope_and_z(map, tile).map_or(SLOPE_STEEP, |(slope, _)| slope);
+    if slope == 0 {
+        return true;
+    }
+    let desired_slope = if matches!(dir & 3, 1 | 3) {
+        SLOPE_NW
+    } else {
+        SLOPE_NE
+    };
+    if slope == desired_slope || slope == complement_slope(desired_slope) {
+        return true;
+    }
+
+    // En `GenerateWorld`, la rama de terraformación interna no se ejecuta;
+    // sólo queda el segundo azar que permite considerar la pendiente.
+    if chance16(rng, 1, 8) && chance16(rng, 1, 3) {
+        return true;
+    }
+    false
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum GeneratedRoadGrowthResult {
     Road(TileCoord),
+    House(TileCoord),
     Continue,
     SearchStopped,
 }
 
+/// Datos de partida que `GrowTown` consulta al filtrar el catálogo de casas.
+/// Agruparlos conserva una frontera explícita entre el walker y el contexto de
+/// generación, sin convertir la fixture en un supuesto de clima o fecha.
+#[derive(Clone, Copy)]
+struct GeneratedTownGrowthContext {
+    climate: crate::world_gen::Climate,
+    calendar_year: u32,
+}
+
 /// Parte vial de `GrowTownInTile` usada por la fundación procedural.
 ///
-/// Esta primera pieza cubre el camino sin casa: una carretera ya existente se
-/// recorre con `RandomDiagDir`; al llegar a clear se aplican los dos `Chance16`
-/// y se construye el siguiente bloque con la máscara nativa. Cuando el camino
-/// pide una casa se detiene sin fingir un resultado, pues esa rama se conectará
-/// al pool mutable de RMAP-038 en el siguiente bloque.
+/// Esta pieza cubre carretera y la primera bifurcación de casa: una carretera
+/// ya existente se recorre con `RandomDiagDir`; al llegar a clear se aplican
+/// los dos `Chance16` y se construye el siguiente bloque con la máscara nativa.
+/// Para una casa usa el pool mutable de `TryBuildTownHouse`, sin sustituir sus
+/// sorteos por una heurística local.
 fn grow_generated_town_road_in_tile(
     map: &mut crate::map::Map,
-    town: &Town,
+    town: &mut Town,
     tile: TileCoord,
     cur_rb: u8,
     target_dir: Option<u8>,
+    context: GeneratedTownGrowthContext,
     rng: &mut crate::cargodist::parity::Randomizer,
 ) -> GeneratedRoadGrowthResult {
     if cur_rb == 0 {
@@ -439,12 +500,32 @@ fn grow_generated_town_road_in_tile(
     }
 
     // TL_ORIGINAL reserva la casa con probabilidad 6/10 cuando la carretera
-    // puede seguir. Si no toca casa, `rcmd` sólo añade el bit elegido a la
-    // carretera actual; éste es el tercer GrowTown de la fixture base.
-    if chance16(rng, 6, 10) {
-        // La selección/materialización de casa se conecta en la siguiente
-        // subetapa; no consumimos un RNG sustituto ni construimos una calle.
-        return GeneratedRoadGrowthResult::SearchStopped;
+    // puede seguir, o siempre si `IsRoadAllowedHere` la rechaza.
+    let house_tile = add_town_diag(tile, target_dir);
+    let road_allowed = generated_town_road_allowed_here(map, house_tile, target_dir, rng);
+    let allow_house = !road_allowed || chance16(rng, 6, 10);
+    if allow_house {
+        // La rama C++ no nivela ni llama `TryBuildTownHouse` sobre una casa
+        // ya presente. En ese caso vuelve al caminador para elegir otro arco.
+        if map.get_kind(house_tile) == Some(TileKind::House) {
+            return GeneratedRoadGrowthResult::Continue;
+        }
+
+        // `LevelTownLand` se decide antes del pool, incluso cuando la
+        // nivelación no llegue a cambiar este mapa de trabajo todavía.
+        let _ = chance16(rng, 1, 6);
+        if let Some(candidate) = choose_generated_town_house_candidate(
+            town,
+            map,
+            house_tile,
+            context.climate,
+            context.calendar_year,
+            rng,
+        ) && materialize_generated_town_house(map, town, candidate, rng)
+        {
+            return GeneratedRoadGrowthResult::House(candidate.base);
+        }
+        return GeneratedRoadGrowthResult::Continue;
     }
     if add_generated_town_road_bits_to_map(map, tile, target_bits, town.id) {
         GeneratedRoadGrowthResult::Road(tile)
@@ -453,19 +534,23 @@ fn grow_generated_town_road_in_tile(
     }
 }
 
-/// Recorre una sola llamada a `GrowTown` mientras la expansión resultante sea
-/// una carretera. Es el call-site global-RNG que luego recibirá la rama de
-/// casas; por ahora evita que el plan MVP se haga pasar por esa caminata.
+/// Recorre una sola llamada a `GrowTown` de la fundación procedural.
+///
+/// Devuelve la tesela de la carretera o casa que consiguió crear. Todavía es
+/// un walker aislado del constructor MVP: su integración completa queda en
+/// RMAP-030/RMAP-032, pero tanto las bifurcaciones viales como la primera casa
+/// comparten ya el stream global de `GenerateTowns`.
 #[allow(dead_code)]
 fn grow_generated_town_road_once(
     map: &mut crate::map::Map,
-    town: &Town,
+    town: &mut Town,
+    context: GeneratedTownGrowthContext,
     rng: &mut crate::cargodist::parity::Randomizer,
 ) -> Option<TileCoord> {
     let mut tile = town.pos;
     for &(dx, dy) in &TOWN_GROWTH_COORD_MOD {
         if generated_town_road_bits(map, tile) != 0 {
-            return grow_generated_town_at_road(map, town, tile, rng);
+            return grow_generated_town_at_road(map, town, tile, context, rng);
         }
         tile = TileCoord::new(tile.x + dx, tile.y + dy);
     }
@@ -474,8 +559,9 @@ fn grow_generated_town_road_once(
 
 fn grow_generated_town_at_road(
     map: &mut crate::map::Map,
-    town: &Town,
+    town: &mut Town,
     mut tile: TileCoord,
+    context: GeneratedTownGrowthContext,
     rng: &mut crate::cargodist::parity::Randomizer,
 ) -> Option<TileCoord> {
     let mut target_dir = None;
@@ -488,8 +574,10 @@ fn grow_generated_town_at_road(
 
     loop {
         let cur_rb = generated_town_road_bits(map, tile);
-        match grow_generated_town_road_in_tile(map, town, tile, cur_rb, target_dir, rng) {
-            GeneratedRoadGrowthResult::Road(pos) => return Some(pos),
+        match grow_generated_town_road_in_tile(map, town, tile, cur_rb, target_dir, context, rng) {
+            GeneratedRoadGrowthResult::Road(pos) | GeneratedRoadGrowthResult::House(pos) => {
+                return Some(pos);
+            }
             GeneratedRoadGrowthResult::SearchStopped => iterations = 0,
             GeneratedRoadGrowthResult::Continue => {}
         }
@@ -546,6 +634,73 @@ fn generated_town_house_construction(
         u8::try_from((construction_random >> 2) & 0x03).unwrap_or(0)
     };
     TownHouseConstruction { counter, stage }
+}
+
+/// Convierte los flags de `HouseSpec` a la geometría que `MakeTownHouse`
+/// escribe en los cuatro `MAP*` consecutivos. La prioridad coincide con las
+/// ramas de `TryBuildTownHouse` / `MakeTownHouse`.
+const fn generated_town_house_footprint(building_flags: u8) -> TownHouseFootprint {
+    if building_flags & BUILDING_FLAG_SIZE_2X2 != 0 {
+        TownHouseFootprint::TwoByTwo
+    } else if building_flags & BUILDING_FLAG_SIZE_2X1 != 0 {
+        TownHouseFootprint::TwoByOne
+    } else if building_flags & BUILDING_FLAG_SIZE_1X2 != 0 {
+        TownHouseFootprint::OneByTwo
+    } else {
+        TownHouseFootprint::OneByOne
+    }
+}
+
+/// Materializa el tramo final de `BuildTownHouse` después de que el pool de
+/// `TryBuildTownHouse` aceptó una entrada. `cache.num_houses` de `OpenTTD`
+/// cuenta edificios, no subteselas, por eso se incrementa una única vez aun
+/// cuando `MakeTownHouse` escriba una huella 2×2.
+fn materialize_generated_town_house(
+    map: &mut crate::map::Map,
+    town: &mut Town,
+    candidate: TownHouseCandidate,
+    rng: &mut crate::cargodist::parity::Randomizer,
+) -> bool {
+    let Some(house) = HouseSpec::get(candidate.id) else {
+        return false;
+    };
+    let construction = generated_town_house_construction(rng);
+    let spec = TownHouseSpec {
+        house_id: candidate.id,
+        town_id: town.id,
+        random_bits: candidate.random_bits,
+        construction_counter: construction.counter,
+        construction_stage: construction.stage,
+        // Los specs vanilla de esta ruta no exponen `extra_flags`; el primer
+        // fixture no es histórico ni protegido. NewGRF se conecta aparte.
+        is_protected: false,
+        processing_time: 0,
+    };
+    if map
+        .make_town_house_footprint(
+            candidate.base,
+            spec,
+            generated_town_house_footprint(house.building_flags),
+        )
+        .is_err()
+    {
+        return false;
+    }
+
+    town.num_houses = town.num_houses.saturating_add(1);
+    if construction.stage == TOWN_HOUSE_COMPLETED {
+        town.population = town
+            .population
+            .saturating_add(u32::from(house_spec_population(candidate.id)));
+    }
+    if house.is_church() {
+        town.has_church = true;
+    }
+    if house.is_stadium() {
+        town.has_stadium = true;
+    }
+    update_town_radius(town);
+    true
 }
 
 /// `Chance16I(a, b, Random())`, que usa los 16 bits bajos y redondeo al
@@ -1246,6 +1401,41 @@ mod tests {
         state
     }
 
+    /// La fixture GDB usa una partida Temperate de 1950; mantener esos dos
+    /// parámetros en un único sitio evita que los chequeos de la caminata
+    /// oculten una fecha o clima distintos del oráculo.
+    fn grow_first_fixture_town(
+        state: &mut GameState,
+        town: &mut Town,
+        rng: &mut Randomizer,
+    ) -> Option<TileCoord> {
+        grow_generated_town_road_once(
+            &mut state.map,
+            town,
+            GeneratedTownGrowthContext {
+                climate: Climate::Temperate,
+                calendar_year: 1950,
+            },
+            rng,
+        )
+    }
+
+    fn assert_first_generated_house(state: &GameState, town: &Town, rng: Randomizer) {
+        let house = state
+            .map
+            .get(TileCoord::new(46, 24))
+            .expect("first generated house");
+        assert_eq!(house.kind, TileKind::House);
+        assert_eq!(house.m1, 157);
+        assert_eq!([house.m2, house.m2_hi], 0_u16.to_le_bytes());
+        assert_eq!(house.m3, 0x80);
+        assert_eq!(house.m5, 0);
+        assert_eq!(house.m8 & 0x0FFF, 26);
+        assert_eq!(town.num_houses, 23);
+        assert_eq!(town.population, 13);
+        assert_eq!(rng.state, [3_931_740_615, 3_932_304_260]);
+    }
+
     #[test]
     fn coastal_selector_replays_first_seed_foundation_and_rng_boundary() {
         let mut state = clear_phase_state(1_330_935_378);
@@ -1361,19 +1551,23 @@ mod tests {
             bootstrap.bits,
             0,
         ));
-        let town = Town {
+        let mut town = Town {
             id: 0,
             pos: TileCoord::new(47, 23),
             num_houses: 22,
             layout: TownLayout::Original,
             ..Town::default()
         };
+        // El oráculo entra a `GrowTown` después de `BuildTownHouse`, que ya
+        // ejecutó `UpdateTownRadius`; la selección ponderada depende de esta
+        // zona aunque la caminata vial anterior no la necesite.
+        update_town_radius(&mut town);
 
         // Segunda llamada a GrowTown de la primera ciudad. La primera
         // `RandomDiagDir` cae en el bloque existente; la caminata toma NW,
         // ejecuta los dos Chance16 y vuelve a NW antes de construir la calle.
         assert_eq!(
-            grow_generated_town_road_once(&mut state.map, &town, &mut rng),
+            grow_first_fixture_town(&mut state, &mut town, &mut rng),
             Some(TileCoord::new(47, 22))
         );
         let road = state.map.get(TileCoord::new(47, 22)).expect("new road");
@@ -1386,12 +1580,12 @@ mod tests {
         // conexión parcial sobre el centro y otra calle nueva. GDB fija estas
         // fronteras antes de la primera petición de casa.
         assert_eq!(
-            grow_generated_town_road_once(&mut state.map, &town, &mut rng),
+            grow_first_fixture_town(&mut state, &mut town, &mut rng),
             Some(TileCoord::new(47, 24))
         );
         assert_eq!(rng.state, [4_152_555_872, 1_800_899_484]);
         assert_eq!(
-            grow_generated_town_road_once(&mut state.map, &town, &mut rng),
+            grow_first_fixture_town(&mut state, &mut town, &mut rng),
             Some(TileCoord::new(47, 23))
         );
         assert_eq!(
@@ -1404,10 +1598,52 @@ mod tests {
         );
         assert_eq!(rng.state, [1_720_666_415, 2_546_907_170]);
         assert_eq!(
-            grow_generated_town_road_once(&mut state.map, &town, &mut rng),
+            grow_first_fixture_town(&mut state, &mut town, &mut rng),
             Some(TileCoord::new(47, 25))
         );
         assert_eq!(rng.state, [2_141_609_185, 1_465_150_535]);
+
+        assert_eq!(
+            grow_first_fixture_town(&mut state, &mut town, &mut rng),
+            Some(TileCoord::new(47, 21))
+        );
+        assert_eq!(rng.state, [622_992_501, 4_241_598_493]);
+        assert_eq!(
+            grow_first_fixture_town(&mut state, &mut town, &mut rng),
+            Some(TileCoord::new(47, 23))
+        );
+        assert_eq!(
+            state
+                .map
+                .get(TileCoord::new(47, 23))
+                .expect("centre junction")
+                .m5,
+            0x0F
+        );
+        assert_eq!(rng.state, [3_496_806_558, 1_566_571_789]);
+        assert_eq!(
+            grow_first_fixture_town(&mut state, &mut town, &mut rng),
+            Some(TileCoord::new(48, 23))
+        );
+        assert_eq!(rng.state, [2_665_860_601, 314_355_655]);
+        assert_eq!(
+            grow_first_fixture_town(&mut state, &mut town, &mut rng),
+            Some(TileCoord::new(49, 23))
+        );
+        assert_eq!(rng.state, [499_559_121, 3_620_043_346]);
+        assert_eq!(
+            tile_slope_and_z(&state.map, TileCoord::new(46, 24)).map(|(slope, _)| slope),
+            Some(SLOPE_NW)
+        );
+
+        // Décima llamada: por primera vez el camino llega a la rama de casa.
+        // La misma caminata consume pool, bits aleatorios y obra, y deja los
+        // bytes de `MakeTownHouse` sin sustituir ningún sorteo por el MVP.
+        assert_eq!(
+            grow_first_fixture_town(&mut state, &mut town, &mut rng),
+            Some(TileCoord::new(46, 24))
+        );
+        assert_first_generated_house(&state, &town, rng);
     }
 
     #[test]

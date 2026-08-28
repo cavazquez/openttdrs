@@ -229,6 +229,52 @@ impl IndustrySpec {
         }
     }
 
+    /// Tipos vanilla que no pueden quedar a 14 teselas o menos de `self`.
+    ///
+    /// Es el campo `IndustrySpec::conflicting` de
+    /// `table/build_industry.h`. Sólo enumera tipos representables por este
+    /// catálogo Rust: `IT_OIL_RIG` sigue fuera del modelo de industria
+    /// procedural y, por tanto, no se puede expresar todavía como conflicto
+    /// del refinery.
+    #[must_use]
+    pub const fn conflicting_specs(self) -> &'static [IndustrySpec] {
+        match self {
+            Self::CoalMine => &[Self::PowerStation],
+            Self::PowerStation => &[Self::CoalMine],
+            Self::Sawmill => &[Self::Forest],
+            Self::Forest => &[Self::Sawmill, Self::PaperMill],
+            Self::OilRefinery => &[],
+            Self::Factory => &[Self::Farm, Self::SteelMill],
+            Self::PrintingWorks => &[Self::PaperMill],
+            Self::SteelMill => &[Self::IronOreMine, Self::Factory],
+            Self::Farm => &[Self::Factory, Self::FoodProcessingPlant],
+            Self::CopperOreMine | Self::RubberPlantation | Self::LumberMill => {
+                &[Self::FactoryTropic]
+            }
+            Self::OilWells => &[Self::OilRefinery],
+            Self::Bank => &[Self::Bank],
+            Self::FoodProcessingPlant => &[Self::FruitPlantation, Self::Farm, Self::FarmTropic],
+            Self::PaperMill => &[Self::Forest, Self::PrintingWorks],
+            Self::GoldMine | Self::DiamondMine => &[Self::BankArcticTropic],
+            Self::BankArcticTropic => &[Self::GoldMine, Self::DiamondMine],
+            Self::IronOreMine => &[Self::SteelMill],
+            Self::FruitPlantation | Self::FarmTropic => &[Self::FoodProcessingPlant],
+            Self::WaterSupply => &[Self::WaterTower],
+            Self::WaterTower => &[Self::WaterSupply],
+            Self::FactoryTropic => &[
+                Self::RubberPlantation,
+                Self::CopperOreMine,
+                Self::LumberMill,
+            ],
+            Self::CottonCandy | Self::ToffeeQuarry | Self::SugarMine => &[Self::CandyFactory],
+            Self::CandyFactory => &[Self::CottonCandy, Self::ToffeeQuarry, Self::SugarMine],
+            Self::BatteryFarm | Self::ToyShop | Self::PlasticFountain => &[Self::ToyFactory],
+            Self::ColaWells | Self::BubbleGenerator => &[Self::FizzyDrinkFactory],
+            Self::ToyFactory => &[Self::PlasticFountain, Self::BatteryFarm, Self::ToyShop],
+            Self::FizzyDrinkFactory => &[Self::ColaWells, Self::BubbleGenerator],
+        }
+    }
+
     /// Especies Temperate que `GenerateIndustries` fuerza una vez durante
     /// creación de mapa. Corresponde a `appear_creation > 0` para el clima y
     /// al bucle ascendente de `IndustryType`; los chequeos/intententos de

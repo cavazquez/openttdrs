@@ -1647,6 +1647,7 @@ mod tests {
             mw: 64,
             mh: 64,
             industry_platform: 1,
+            multiple_industry_per_town: false,
         };
 
         assert_eq!(
@@ -1669,6 +1670,7 @@ mod tests {
             mw: 64,
             mh: 64,
             industry_platform: 1,
+            multiple_industry_per_town: false,
         };
 
         assert_eq!(
@@ -1689,6 +1691,7 @@ mod tests {
             mw: 64,
             mh: 64,
             industry_platform: 1,
+            multiple_industry_per_town: false,
         };
         assert!(!town_can_be_placed_here(
             &ctx,
@@ -2754,6 +2757,7 @@ mod tests {
             mw: 64,
             mh: 64,
             industry_platform: 1,
+            multiple_industry_per_town: false,
         };
 
         assert!(build_selected_town_with_generated_growth(
@@ -2800,6 +2804,7 @@ mod tests {
             mw: 64,
             mh: 64,
             industry_platform: 1,
+            multiple_industry_per_town: false,
         };
 
         assert!(build_selected_town_with_generated_growth(
@@ -3037,6 +3042,7 @@ mod tests {
                 mw: 64,
                 mh: 64,
                 industry_platform: 1,
+                multiple_industry_per_town: false,
             };
 
             assert!(
@@ -3062,6 +3068,7 @@ mod tests {
             mw: 64,
             mh: 64,
             industry_platform: 1,
+            multiple_industry_per_town: false,
         };
 
         assert_eq!(target, 3);
@@ -3119,6 +3126,7 @@ mod tests {
                 mw: 64,
                 mh: 64,
                 industry_platform: 1,
+                multiple_industry_per_town: false,
             };
 
             assert_eq!(place_towns(&mut ctx, target, &mut centers), expected_towns);

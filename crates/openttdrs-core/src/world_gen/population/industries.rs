@@ -5,6 +5,7 @@ use crate::command::{
     industry_template_with_layout, simulate_generated_terraform_north_corner,
 };
 use crate::company::OWNER_NONE_M1;
+use crate::game_state::GameState;
 use crate::industry::IndustrySpec;
 use crate::map::tree_tile_loop::{clear_ground_type, with_clear_counter};
 use crate::map::{
@@ -87,6 +88,72 @@ fn map_creation_force_one_specs(climate: crate::Climate) -> &'static [IndustrySp
         crate::Climate::Temperate => IndustrySpec::temperate_map_creation_force_one(),
         crate::Climate::SubArctic | crate::Climate::SubTropical | crate::Climate::Toyland => &[],
     }
+}
+
+/// Distancia máxima de `CheckIfFarEnoughFromConflictingIndustry`.
+const INDUSTRY_CONFLICT_DISTANCE: u32 = 14;
+
+/// `CheckIfFarEnoughFromConflictingIndustry` de `industry_cmd.cpp`.
+///
+/// La distancia nativa es `DistanceMax`, no la distancia Manhattan usada para
+/// asociar el pueblo. Sólo se inspeccionan las especies enumeradas por el
+/// `IndustrySpec` nuevo; dos tipos que no son conflicto explícito pueden
+/// compartir ubicación cercana si sus huellas no se superponen.
+fn generated_industry_has_conflict(
+    state: &GameState,
+    origin: TileCoord,
+    spec: IndustrySpec,
+) -> bool {
+    state.industries.iter().any(|industry| {
+        industry
+            .spec
+            .is_some_and(|existing| spec.conflicting_specs().contains(&existing))
+            && origin
+                .x
+                .abs_diff(industry.pos.x)
+                .max(origin.y.abs_diff(industry.pos.y))
+                <= INDUSTRY_CONFLICT_DISTANCE
+    })
+}
+
+/// `CalcClosestTownFromTile` para una tesela clear durante `GenerateWorld`.
+///
+/// En esta fase la tesela candidata aún no es una casa ni una carretera, por
+/// lo que `ClosestTownFromTile` delega en `CalcClosestTownFromTile`. Éste usa
+/// distancia Manhattan; conservar el primer pueblo ante un empate mantiene el
+/// orden del pool que construyó `GenerateTowns`.
+fn generated_industry_closest_town_id(state: &GameState, origin: TileCoord) -> Option<u32> {
+    state
+        .towns
+        .iter()
+        .min_by_key(|town| crate::economy::manhattan_distance(origin, town.pos))
+        .map(|town| town.id)
+}
+
+/// `FindTownForIndustry` de `industry_cmd.cpp` para la creación procedural.
+///
+/// `OpenTTD` persiste el puntero al pueblo en la industria. El modelo Rust aún
+/// no conserva esa columna, pero durante `GenerateIndustries` los pueblos no
+/// cambian: volver a obtener el pueblo más cercano de cada industria existente
+/// es equivalente y preserva el ajuste `multiple_industry_per_town`.
+fn generated_industry_can_use_closest_town(
+    state: &GameState,
+    origin: TileCoord,
+    spec: IndustrySpec,
+    multiple_industry_per_town: bool,
+) -> bool {
+    let Some(town_id) = generated_industry_closest_town_id(state, origin) else {
+        // El original asume que `GenerateTowns` ya dejó al menos un pueblo.
+        // Rechazar mantiene esta API total para fixtures y mapas inválidos.
+        return false;
+    };
+    if multiple_industry_per_town {
+        return true;
+    }
+    !state.industries.iter().any(|industry| {
+        industry.spec == Some(spec)
+            && generated_industry_closest_town_id(state, industry.pos) == Some(town_id)
+    })
 }
 
 /// Área que `CheckIfCanLevelIndustryPlatform` recorre alrededor del layout.
@@ -334,13 +401,20 @@ fn try_place_industry(
         if in_preserve(ctx.preserve, origin.x, origin.y) {
             continue;
         }
-        // `CreateNewIndustryHelper` no tiene una distancia euclídea genérica
-        // a pueblos ni a cualquier industria. Asocia el pueblo más cercano y
-        // sólo rechaza restricciones declaradas por el spec (o conflictos
-        // explícitos por tipo). La antigua heurística 10²/8² descartaba la
-        // posición nativa `(21,41)` de la primera coal mine de RMAP-061.
-        // Los conflictos y behaviours por spec se portan en RMAP-062; no se
-        // sustituyen aquí por una distancia inventada que cambie el stream.
+        // `CreateNewIndustryHelper` ejecuta primero conflictos explícitos y
+        // `FindTownForIndustry`; no sustituirlos por una distancia genérica
+        // evita descartar la mina nativa `(21,41)` de RMAP-061 y, a la vez,
+        // rechaza la central demasiado cerca de ella en RMAP-062.
+        if generated_industry_has_conflict(ctx.state, origin, spec)
+            || !generated_industry_can_use_closest_town(
+                ctx.state,
+                origin,
+                spec,
+                ctx.multiple_industry_per_town,
+            )
+        {
+            continue;
+        }
         if check_place_industry_spec_layout(&ctx.state.map, origin, spec, attempt.layout_index)
             .is_err()
         {
@@ -562,7 +636,9 @@ mod tests {
     use super::*;
     use crate::cargodist::parity::Randomizer;
     use crate::game_state::GameState;
+    use crate::industry::{Industry, IndustryKind};
     use crate::map::{Map, tree_tile_loop::clear_density};
+    use crate::town::Town;
     use crate::world_gen::{
         Climate, PopulationGenConfig, TerrainType, WorldGenConfig, apply_world_gen_with_rng,
         generate_towns_with_rng,
@@ -618,6 +694,7 @@ mod tests {
             mw: 64,
             mh: 64,
             industry_platform: 1,
+            multiple_industry_per_town: false,
         };
         plant_farm_fields(&mut ctx, TileCoord::new(32, 32), 7);
 
@@ -713,5 +790,121 @@ mod tests {
             3,
             1,
         ));
+    }
+
+    #[test]
+    fn conflicting_industries_use_native_distance_max_boundary() {
+        let mut state = GameState::new(64, 64);
+        state.industries.push(Industry::with_tiles_spec(
+            TileCoord::new(20, 20),
+            IndustryKind::CoalMine,
+            IndustrySpec::CoalMine,
+            vec![TileCoord::new(20, 20)],
+            0,
+        ));
+
+        assert!(generated_industry_has_conflict(
+            &state,
+            TileCoord::new(34, 34),
+            IndustrySpec::PowerStation,
+        ));
+        assert!(!generated_industry_has_conflict(
+            &state,
+            TileCoord::new(35, 34),
+            IndustrySpec::PowerStation,
+        ));
+        assert!(!generated_industry_has_conflict(
+            &state,
+            TileCoord::new(20, 20),
+            IndustrySpec::Sawmill,
+        ));
+    }
+
+    #[test]
+    fn same_type_is_limited_to_the_closest_town_by_default() {
+        let mut state = GameState::new(64, 64);
+        state.towns.push(Town {
+            id: 7,
+            pos: TileCoord::new(10, 10),
+            ..Town::default()
+        });
+        state.industries.push(Industry::with_tiles_spec(
+            TileCoord::new(12, 10),
+            IndustryKind::CoalMine,
+            IndustrySpec::CoalMine,
+            vec![TileCoord::new(12, 10)],
+            0,
+        ));
+
+        assert!(!generated_industry_can_use_closest_town(
+            &state,
+            TileCoord::new(8, 10),
+            IndustrySpec::CoalMine,
+            false,
+        ));
+        assert!(generated_industry_can_use_closest_town(
+            &state,
+            TileCoord::new(8, 10),
+            IndustrySpec::CoalMine,
+            true,
+        ));
+        assert!(generated_industry_can_use_closest_town(
+            &state,
+            TileCoord::new(8, 10),
+            IndustrySpec::PowerStation,
+            false,
+        ));
+    }
+
+    #[test]
+    fn power_station_skips_the_conflicting_reference_site_after_coal() {
+        // La frontera de industrias para 1330935378 se toma después de towns.
+        // OpenTTD descarta seis intentos de PowerStation y el séptimo sitio
+        // relevante `(23,49)` por estar a DistMax=8 de la CoalMine creada en
+        // `(21,41)`; el siguiente sitio admitido es `(42,39)`.
+        let mut state = generated_towns_state_for_platform(1_330_935_378);
+        let town_centers: Vec<_> = state.towns.iter().map(|town| town.pos).collect();
+        let mut rng = Randomizer {
+            state: [11_204_508, 1_784_072_412],
+        };
+        let mut origins = Vec::new();
+        let mut ctx = PopCtx {
+            state: &mut state,
+            preserve: &[],
+            rng: &mut rng,
+            mw: 64,
+            mh: 64,
+            industry_platform: 1,
+            multiple_industry_per_town: false,
+        };
+
+        assert!(try_place_industry(
+            &mut ctx,
+            IndustrySpec::CoalMine,
+            FORCED_INDUSTRY_PLACEMENT_ATTEMPTS,
+            &town_centers,
+            &mut origins,
+        ));
+        assert_eq!(origins, [TileCoord::new(21, 41)]);
+
+        assert!(try_place_industry(
+            &mut ctx,
+            IndustrySpec::PowerStation,
+            FORCED_INDUSTRY_PLACEMENT_ATTEMPTS,
+            &town_centers,
+            &mut origins,
+        ));
+        assert_eq!(origins, [TileCoord::new(21, 41), TileCoord::new(42, 39)]);
+        assert_eq!(
+            ctx.state
+                .industries
+                .iter()
+                .map(|industry| (industry.spec, industry.pos))
+                .collect::<Vec<_>>(),
+            vec![
+                (Some(IndustrySpec::CoalMine), TileCoord::new(21, 41)),
+                (Some(IndustrySpec::PowerStation), TileCoord::new(42, 39)),
+            ],
+        );
     }
 }

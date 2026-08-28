@@ -72,6 +72,12 @@ pub struct PopulationGenConfig {
     /// explícita porque afecta qué intentos force-one se admiten y cómo queda
     /// el mapa después de terraformar la plataforma.
     pub industry_platform: u8,
+    /// Permite varias industrias del mismo tipo para el mismo pueblo más
+    /// cercano (`economy.multiple_industry_per_town`).
+    ///
+    /// `OpenTTD` la desactiva por defecto; durante la creación se consulta antes
+    /// de validar la huella, exactamente dentro de `FindTownForIndustry`.
+    pub multiple_industry_per_town: bool,
     pub seed: u64,
 }
 
@@ -81,6 +87,7 @@ impl Default for PopulationGenConfig {
             town_density: TownDensity::Normal,
             industry_density: IndustryDensity::Normal,
             industry_platform: 1,
+            multiple_industry_per_town: false,
             seed: 0,
         }
     }
@@ -203,6 +210,7 @@ pub fn generate_towns_with_rng(
         mw,
         mh,
         industry_platform: cfg.industry_platform,
+        multiple_industry_per_town: cfg.multiple_industry_per_town,
     };
     towns::place_towns(&mut ctx, target, &mut town_centers)
 }
@@ -240,6 +248,7 @@ pub fn generate_industries_with_rng(
         mw,
         mh,
         industry_platform: cfg.industry_platform,
+        multiple_industry_per_town: cfg.multiple_industry_per_town,
     };
     industries::place_industries(
         &mut ctx,
@@ -288,6 +297,7 @@ pub(crate) struct PopCtx<'a> {
     pub(crate) mw: u32,
     pub(crate) mh: u32,
     pub(crate) industry_platform: u8,
+    pub(crate) multiple_industry_per_town: bool,
 }
 
 /// ¿Todas las calles están en terreno plano? (tests / auditoría).

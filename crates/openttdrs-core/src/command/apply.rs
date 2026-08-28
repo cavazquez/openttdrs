@@ -739,6 +739,7 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
                     town_density: crate::world_gen::TownDensity::Normal,
                     industry_density: crate::world_gen::IndustryDensity::Normal,
                     seed,
+                    ..crate::world_gen::PopulationGenConfig::default()
                 },
                 &[],
                 &mut generation_rng,

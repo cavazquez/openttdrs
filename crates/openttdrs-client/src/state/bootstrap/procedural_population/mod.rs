@@ -31,6 +31,7 @@ pub(crate) fn populate_procedural_world(
         town_density: settings.town_density.to_town_density(),
         industry_density: settings.industry_density.to_industry_density(),
         seed,
+        ..PopulationGenConfig::default()
     };
     if let Some(rng) = generation_rng.as_mut() {
         apply_population_gen_with_rng(state, &config, preserve, rng);

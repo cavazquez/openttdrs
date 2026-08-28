@@ -189,6 +189,55 @@ struct TerraformResult {
     dirty_tiles: HashSet<TileCoord>,
 }
 
+/// Resultado interno de un `CmdTerraformLand(..., SLOPE_N, ...)` usado por
+/// la plataforma de una industria durante `GenerateIndustries`.
+///
+/// La generación primero prueba cada paso sin mutar el mapa y, sólo cuando la
+/// plataforma completa es admisible, reproduce los mismos pasos sobre el
+/// terreno. Exponer el modelo evita que el chequeo y la ejecución deriven en
+/// dos algoritmos de propagación distintos.
+#[derive(Debug, Clone)]
+pub(crate) struct GeneratedTerraformStep {
+    pub(crate) heights: Vec<(i32, i32, u8)>,
+    pub(crate) dirty_tiles: Vec<TileCoord>,
+}
+
+/// Simula una terraformación de una sola esquina norte como la que usa
+/// `CheckIfCanLevelIndustryPlatform`.
+///
+/// El caller limpia las teselas devueltas antes de aplicar las alturas, igual
+/// que el segundo pase de `CmdTerraformLand` con `ForceClearTile`. No cobra ni
+/// toca la economía: `OpenTTD` regala esta operación durante `GenerateWorld`.
+#[must_use]
+pub(crate) fn simulate_generated_terraform_north_corner(
+    map: &Map,
+    c: TileCoord,
+    raise: bool,
+) -> Option<GeneratedTerraformStep> {
+    let current = map.get(c)?.height;
+    let target = if raise {
+        current.checked_add(1)?
+    } else {
+        current.checked_sub(1)?
+    };
+    let mut model = TerraformModel::new(map, false, 0);
+    model.terraform_north_corner(c.x, c.y, target).ok()?;
+    model.validate_terraformable().ok()?;
+
+    let mut heights: Vec<_> = model
+        .heights
+        .iter()
+        .map(|(CornerKey(tx, ty), height)| (*tx, *ty, *height))
+        .collect();
+    heights.sort_unstable_by_key(|(x, y, _)| (*y, *x));
+    let mut dirty_tiles: Vec<_> = model.dirty_tiles.iter().copied().collect();
+    dirty_tiles.sort_unstable_by_key(|tile| (tile.y, tile.x));
+    Some(GeneratedTerraformStep {
+        heights,
+        dirty_tiles,
+    })
+}
+
 impl TerraformResult {
     fn empty() -> Self {
         Self {

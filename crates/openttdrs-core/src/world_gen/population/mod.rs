@@ -66,6 +66,12 @@ impl IndustryDensity {
 pub struct PopulationGenConfig {
     pub town_density: TownDensity,
     pub industry_density: IndustryDensity,
+    /// Margen de tierra nivelada alrededor de industrias (`construction.industry_platform`).
+    ///
+    /// `OpenTTD` usa `1` en partidas nuevas. El generador lo conserva de forma
+    /// explícita porque afecta qué intentos force-one se admiten y cómo queda
+    /// el mapa después de terraformar la plataforma.
+    pub industry_platform: u8,
     pub seed: u64,
 }
 
@@ -74,6 +80,7 @@ impl Default for PopulationGenConfig {
         Self {
             town_density: TownDensity::Normal,
             industry_density: IndustryDensity::Normal,
+            industry_platform: 1,
             seed: 0,
         }
     }
@@ -195,6 +202,7 @@ pub fn generate_towns_with_rng(
         rng,
         mw,
         mh,
+        industry_platform: cfg.industry_platform,
     };
     towns::place_towns(&mut ctx, target, &mut town_centers)
 }
@@ -231,6 +239,7 @@ pub fn generate_industries_with_rng(
         rng,
         mw,
         mh,
+        industry_platform: cfg.industry_platform,
     };
     industries::place_industries(
         &mut ctx,
@@ -272,18 +281,13 @@ pub(crate) fn in_preserve(preserve: &[PreserveRect], x: i32, y: i32) -> bool {
     preserve.iter().any(|r| r.contains(x, y))
 }
 
-pub(crate) fn min_distance_sq(a: TileCoord, b: TileCoord) -> i32 {
-    let dx = a.x - b.x;
-    let dy = a.y - b.y;
-    dx * dx + dy * dy
-}
-
 pub(crate) struct PopCtx<'a> {
     pub(crate) state: &'a mut GameState,
     pub(crate) preserve: &'a [PreserveRect],
     pub(crate) rng: &'a mut Randomizer,
     pub(crate) mw: u32,
     pub(crate) mh: u32,
+    pub(crate) industry_platform: u8,
 }
 
 /// ¿Todas las calles están en terreno plano? (tests / auditoría).
@@ -428,6 +432,7 @@ mod tests {
                 town_density: towns,
                 industry_density: industries,
                 seed,
+                ..PopulationGenConfig::default()
             },
             &[],
         );
@@ -447,11 +452,16 @@ mod tests {
     }
 
     #[test]
-    fn denser_settings_place_at_least_as_many() {
+    fn denser_town_settings_place_at_least_as_many_towns() {
         let sparse = gen_populated(99, TownDensity::VeryLow, IndustryDensity::VeryLow);
         let dense = gen_populated(99, TownDensity::High, IndustryDensity::High);
         assert!(dense.towns.len() >= sparse.towns.len());
-        assert!(dense.industries.len() >= sparse.industries.len());
+        // `GenerateIndustries` no garantiza que una densidad más alta termine
+        // con más industrias: primero prueba las especies `force_one`, y un
+        // mapa con más pueblos puede bloquear una plataforma o una huella que
+        // el mapa disperso aceptaba. La monotonía verificable es el objetivo
+        // de `industry_target_count`, cubierto por la tabla anterior; exigir
+        // una cantidad colocada alteraría el contrato nativo de reintentos.
     }
 
     #[test]

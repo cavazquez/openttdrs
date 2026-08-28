@@ -23,10 +23,12 @@ pub use apply::apply_command;
 pub use error::{CommandError, OrderMoveDirection};
 pub use industry::{
     check_place_industry_spec, check_place_industry_spec_def, check_place_industry_spec_layout,
-    industry_template, industry_template_layout_count, place_industry_spec_def_sandbox,
+    industry_template, industry_template_layout_count, industry_template_with_layout,
+    place_industry_spec_def_sandbox,
 };
 pub use metadata::command_effects;
 pub use preview::command_would_fail;
+pub(crate) use terraform::simulate_generated_terraform_north_corner;
 pub use transport::{
     MAX_STATION_NAME_CHARS, rail_bits_placement_target, rail_station_footprint,
     rail_station_layout, rail_trackbits_from_neighbors,

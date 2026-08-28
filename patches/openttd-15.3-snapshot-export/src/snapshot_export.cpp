@@ -472,6 +472,55 @@ int WorldRawMinCall()
 	return raw != nullptr && raw[0] != '\0' ? std::atoi(raw) : 2;
 }
 
+struct TreeGenerationTraceState {
+	std::ofstream out;
+	uint64_t ordinal = 0;
+	bool active = false;
+};
+
+TreeGenerationTraceState _openttdrs_tree_generation_trace;
+
+void StartTreeGenerationTrace()
+{
+	const char *out_path = std::getenv("OPENTTDRS_TREE_TRACE_OUT");
+	if (out_path == nullptr || out_path[0] == '\0') return;
+
+	_openttdrs_tree_generation_trace.out.open(out_path, std::ios::out | std::ios::trunc);
+	if (!_openttdrs_tree_generation_trace.out.is_open()) {
+		std::fprintf(stderr, "openttdrs tree trace cannot open %s\n", out_path);
+		return;
+	}
+	_openttdrs_tree_generation_trace.ordinal = 0;
+	_openttdrs_tree_generation_trace.active = true;
+
+	nlohmann::json metadata;
+	metadata["kind"] = "metadata";
+	metadata["schema_version"] = 1;
+	metadata["contract"] = "tree-generation-trace";
+	metadata["producer"] = "openttd";
+	metadata["trace"] = "tree_placements";
+	metadata["stage"] = "GenerateTrees";
+	metadata["width"] = Map::SizeX();
+	metadata["height"] = Map::SizeY();
+	metadata["climate"] = static_cast<uint8_t>(_settings_game.game_creation.landscape);
+	metadata["random_state"] = {_random.state[0], _random.state[1]};
+	_openttdrs_tree_generation_trace.out << metadata.dump() << '\n';
+	_openttdrs_tree_generation_trace.out.flush();
+	if (!_openttdrs_tree_generation_trace.out) {
+		std::fprintf(stderr, "openttdrs tree trace metadata write failed: %s\n", out_path);
+		_openttdrs_tree_generation_trace.out.close();
+		_openttdrs_tree_generation_trace.active = false;
+	}
+}
+
+void StopTreeGenerationTrace()
+{
+	if (!_openttdrs_tree_generation_trace.active) return;
+	_openttdrs_tree_generation_trace.out.flush();
+	_openttdrs_tree_generation_trace.out.close();
+	_openttdrs_tree_generation_trace.active = false;
+}
+
 } // namespace
 
 bool OpenttdrsMaybeExportSnapshot(const std::string &source_path)
@@ -633,6 +682,41 @@ bool OpenttdrsMaybeExportWorldRaw(const std::string &source_path)
 	/* Dedicated: exit after the dump instead of serving forever. */
 	_exit_game = true;
 	return true;
+}
+
+void OpenttdrsMaybeCaptureTreeGenerationStage(bool after)
+{
+	if (after) {
+		StopTreeGenerationTrace();
+	}
+
+	const char *save_out = std::getenv(after ? "OPENTTDRS_TREE_POST_SAVE_OUT" : "OPENTTDRS_TREE_PRE_SAVE_OUT");
+	if (save_out != nullptr && save_out[0] != '\0' &&
+			SaveOrLoad(save_out, SLO_SAVE, DFT_GAME_FILE, NO_DIRECTORY, false) != SL_OK) {
+		std::fprintf(stderr, "openttdrs tree fixture: failed to save %s tree stage to %s\n", after ? "post" : "pre", save_out);
+	}
+
+	if (!after) StartTreeGenerationTrace();
+}
+
+void OpenttdrsTraceTreePlacement(
+	const char *origin, uint32_t x, uint32_t y, uint32_t random,
+	uint32_t parent_x, uint32_t parent_y, bool has_parent)
+{
+	if (!_openttdrs_tree_generation_trace.active) return;
+	nlohmann::json row;
+	row["kind"] = "tree_placement";
+	row["ordinal"] = _openttdrs_tree_generation_trace.ordinal++;
+	row["origin"] = origin;
+	row["x"] = x;
+	row["y"] = y;
+	row["random"] = random;
+	row["parent"] = has_parent ? nlohmann::json{{"x", parent_x}, {"y", parent_y}} : nlohmann::json(nullptr);
+	_openttdrs_tree_generation_trace.out << row.dump() << '\n';
+	if (!_openttdrs_tree_generation_trace.out) {
+		std::fprintf(stderr, "openttdrs tree trace write failed\n");
+		StopTreeGenerationTrace();
+	}
 }
 
 void OpenttdrsMaybeStartPbsTrace(const std::string &source_path)

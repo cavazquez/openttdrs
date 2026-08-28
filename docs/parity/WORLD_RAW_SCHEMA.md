@@ -139,6 +139,21 @@ El resultado tiene `stage: "trees_replay"`. Compararlo contra el `.sav` que
 OpenTTD guarda inmediatamente después de `GenerateTrees` evita atribuir a los
 árboles diferencias que ya existían en clear, pueblos, industrias u objetos.
 
+El harness reproducible añade la traza separada `tree-generation-trace` (no es
+una captura raster ni un sustituto de `world-raw`):
+
+```bash
+python3 scripts/tree_phase_parity.py --size 64 --seed 1330935378 \
+  --out-dir /tmp/openttdrs-tree-phase
+```
+
+Además de los diez bytes por tesela y los bloques 4×4, compara en orden cada
+colocación efectiva (`group`, `random` o `same_height`), sus coordenadas, el
+valor RNG y su padre cuando corresponde. La metadata contiene dimensiones,
+clima y el estado RNG inicial; `producer` y las rutas se excluyen a propósito
+porque difieren entre el oráculo C++ y Rust. El hook de esta fase requiere el
+parche completo del checkout 15.3 fijado, no el modo `world_raw_only`.
+
 El comparador valida primero contrato, dimensiones, región, SHA de la partida
 si ambos lados la informan, cantidad de filas y luego cada campo crudo. Por
 default tolera que `producer` y `stage` sean distintos; `--strict-metadata`

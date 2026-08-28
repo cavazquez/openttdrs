@@ -6,6 +6,7 @@
 #ifndef OPENTTDRS_SNAPSHOT_EXPORT_H
 #define OPENTTDRS_SNAPSHOT_EXPORT_H
 
+#include <cstdint>
 #include <string>
 
 /**
@@ -24,6 +25,23 @@ bool OpenttdrsMaybeExportSnapshot(const std::string &source_path);
  * @return true on success or when the env var is unset; false on I/O error.
  */
 bool OpenttdrsMaybeExportWorldRaw(const std::string &source_path);
+
+/**
+ * Saves an otherwise normal generation snapshot immediately before or after
+ * `GenerateTrees()` when the matching `OPENTTDRS_TREE_*_SAVE_OUT` variable is
+ * set. It also brackets `OPENTTDRS_TREE_TRACE_OUT` when that trace is enabled.
+ * @param after Whether this is the snapshot after `GenerateTrees()`.
+ */
+void OpenttdrsMaybeCaptureTreeGenerationStage(bool after);
+
+/**
+ * Records an actual `PlaceTree` placement while the generation trace is armed.
+ * It is a no-op unless `OPENTTDRS_TREE_TRACE_OUT` was configured before
+ * `GenerateTrees()`.
+ */
+void OpenttdrsTraceTreePlacement(
+	const char *origin, uint32_t x, uint32_t y, uint32_t random,
+	uint32_t parent_x, uint32_t parent_y, bool has_parent);
 
 /**
  * Arms an optional PBS JSONL exporter once the requested save completed loading.

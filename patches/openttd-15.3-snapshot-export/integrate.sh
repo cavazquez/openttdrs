@@ -454,6 +454,85 @@ def integrate_headless_raster_blitter(dest: Path) -> None:
     else:
         print("blitter: oráculo headless ya listado")
 
+
+def integrate_tree_generation_trace(dest: Path) -> None:
+    """Conecta el fixture pre/post y la traza de PlaceTree al flujo real."""
+    genworld = dest / "src" / "genworld.cpp"
+    text = genworld.read_text(encoding="utf-8")
+    if '#include "snapshot_export.h"' not in text:
+        anchor = '#include "landscape.h"\n'
+        if anchor not in text:
+            raise SystemExit("no encuentro include landscape.h en genworld.cpp")
+        text = text.replace(anchor, anchor + '#include "snapshot_export.h"\n', 1)
+    tree_hook = (
+        "\t\t\t\tGenerateObjects();\n"
+        "\t\t\t\tOpenttdrsMaybeCaptureTreeGenerationStage(false);\n"
+        "\t\t\t\tGenerateTrees();\n"
+        "\t\t\t\tOpenttdrsMaybeCaptureTreeGenerationStage(true);\n"
+    )
+    if "OpenttdrsMaybeCaptureTreeGenerationStage" not in text:
+        marker = "\t\t\t\tGenerateObjects();\n\t\t\t\tGenerateTrees();\n"
+        if marker not in text:
+            raise SystemExit("no encuentro GenerateObjects/GenerateTrees en genworld.cpp")
+        text = text.replace(marker, tree_hook, 1)
+        print("genworld: fixture pre/post GenerateTrees")
+    else:
+        print("genworld: fixture pre/post GenerateTrees ya presente")
+    genworld.write_text(text, encoding="utf-8")
+
+    tree_cmd = dest / "src" / "tree_cmd.cpp"
+    text = tree_cmd.read_text(encoding="utf-8")
+    if '#include "snapshot_export.h"' not in text:
+        anchor = '#include "stdafx.h"\n'
+        if anchor not in text:
+            raise SystemExit("no encuentro include stdafx.h en tree_cmd.cpp")
+        text = text.replace(anchor, anchor + '#include "snapshot_export.h"\n', 1)
+    legacy_trace = "\t\tOpenttdrsTraceTreePlacement(static_cast<uint32_t>(TileX(tile)), static_cast<uint32_t>(TileY(tile)), r);\n"
+    text = text.replace(legacy_trace, "", 1)
+    if 'OpenttdrsTraceTreePlacement("group"' not in text:
+        group_marker = (
+            "\t\t\tif (!CanPlantTreesOnTile(cur_tile, true)) continue;\n"
+            "\t\t\tif (!IsPointInStarShapedPolygon(x, y, grove)) continue;\n"
+            "\n"
+            "\t\t\tPlaceTree(cur_tile, r);\n"
+        )
+        group_replacement = (
+            "\t\t\tif (!CanPlantTreesOnTile(cur_tile, true)) continue;\n"
+            "\t\t\tif (!IsPointInStarShapedPolygon(x, y, grove)) continue;\n"
+            "\n"
+            "\t\t\tOpenttdrsTraceTreePlacement(\"group\", static_cast<uint32_t>(TileX(cur_tile)), static_cast<uint32_t>(TileY(cur_tile)), r,\n"
+            "\t\t\t\tstatic_cast<uint32_t>(TileX(center_tile)), static_cast<uint32_t>(TileY(center_tile)), true);\n"
+            "\t\t\tPlaceTree(cur_tile, r);\n"
+        )
+        if group_marker not in text:
+            raise SystemExit("no encuentro colocación de grupo en tree_cmd.cpp")
+        text = text.replace(group_marker, group_replacement, 1)
+
+        same_height_marker = "\t\t/* Place one tree and quit */\n\t\tPlaceTree(cur_tile, r);\n"
+        same_height_replacement = (
+            "\t\t/* Place one tree and quit */\n"
+            "\t\tOpenttdrsTraceTreePlacement(\"same_height\", static_cast<uint32_t>(TileX(cur_tile)), static_cast<uint32_t>(TileY(cur_tile)), r,\n"
+            "\t\t\tstatic_cast<uint32_t>(TileX(tile)), static_cast<uint32_t>(TileY(tile)), true);\n"
+            "\t\tPlaceTree(cur_tile, r);\n"
+        )
+        if same_height_marker not in text:
+            raise SystemExit("no encuentro colocación misma altura en tree_cmd.cpp")
+        text = text.replace(same_height_marker, same_height_replacement, 1)
+
+        random_marker = "\t\tif (CanPlantTreesOnTile(tile, true)) {\n\t\t\tPlaceTree(tile, r);\n"
+        random_replacement = (
+            "\t\tif (CanPlantTreesOnTile(tile, true)) {\n"
+            "\t\t\tOpenttdrsTraceTreePlacement(\"random\", static_cast<uint32_t>(TileX(tile)), static_cast<uint32_t>(TileY(tile)), r, 0, 0, false);\n"
+            "\t\t\tPlaceTree(tile, r);\n"
+        )
+        if random_marker not in text:
+            raise SystemExit("no encuentro colocación aleatoria en tree_cmd.cpp")
+        text = text.replace(random_marker, random_replacement, 1)
+        print("tree_cmd: traza de colocaciones GenerateTrees")
+    else:
+        print("tree_cmd: traza de colocaciones ya presente")
+    tree_cmd.write_text(text, encoding="utf-8")
+
 if mode == "world_raw_only":
     cmake = dest / "src" / "CMakeLists.txt"
     text = cmake.read_text(encoding="utf-8")
@@ -591,6 +670,8 @@ else:
 text = add_cmake_source(cmake, text, "world_draw_export.cpp")
 text = add_cmake_source(cmake, text, "world_screenshot_export.cpp")
 cmake.write_text(text, encoding="utf-8")
+
+integrate_tree_generation_trace(dest)
 
 after = dest / "src" / "saveload" / "afterload.cpp"
 at = after.read_text(encoding="utf-8")

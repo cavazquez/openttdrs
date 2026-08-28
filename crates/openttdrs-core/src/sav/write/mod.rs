@@ -399,6 +399,7 @@ mod tests {
     fn ottn_roundtrip_preserves_construction_settings_in_pats() {
         let mut state = tiny_state();
         state.climate = crate::Climate::SubTropical;
+        state.construction.map_height_limit = 75;
         state.construction.road_vehicle_driving_side = crate::RoadVehicleDrivingSide::Right;
         state.construction.train_signal_side = crate::TrainSignalSide::Right;
         state.construction.freeform_edges = false;

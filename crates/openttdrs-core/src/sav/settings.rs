@@ -105,6 +105,13 @@ pub(crate) fn settings_from_chunks(chunks: &[RawChunk]) -> ParsedSettings {
         // no dejar que el fallback sobrescriba valores explícitos.
         let mut found = false;
         for (_, record) in rows {
+            if let Some(value) = record_get(&record, "construction.map_height_limit")
+                .and_then(SlValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok())
+            {
+                parsed.construction.map_height_limit = value;
+                found = true;
+            }
             if let Some(value) = record_get(&record, "vehicle.road_side")
                 .and_then(SlValue::as_u64)
                 .and_then(|value| u8::try_from(value).ok())
@@ -309,6 +316,20 @@ mod tests {
     fn reads_disabled_freeform_edges_from_save_table() {
         let settings = settings_from_chunks(&[pats([0, 0, 0])]).construction;
         assert!(!settings.freeform_edges);
+    }
+
+    #[test]
+    fn reads_map_height_limit_from_save_table() {
+        let body = build_table_body(&[(2, "construction.map_height_limit")], &[vec![75]]);
+        let chunk = RawChunk {
+            name: *b"PATS",
+            ch_type: CH_TABLE,
+            body,
+        };
+
+        let settings = settings_from_chunks(&[chunk]).construction;
+        assert_eq!(settings.map_height_limit, 75);
+        assert_eq!(settings.effective_map_height_limit(), 75);
     }
 
     #[test]

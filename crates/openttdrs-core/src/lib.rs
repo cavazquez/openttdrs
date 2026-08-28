@@ -740,13 +740,14 @@ pub use world_gen::{
     CLEAR_GROUND_DESERT, CLEAR_GROUND_GRASS, CLEAR_GROUND_ROCKY, CLEAR_GROUND_ROUGH,
     CLEAR_GROUND_SNOW, Climate, DEF_DESERT_COVERAGE, DEF_SNOW_COVERAGE, DEF_SNOW_LINE_HEIGHT,
     HeightmapData, IndustryDensity, NUM_INITIAL_INDUSTRIES, NUM_INITIAL_TOWNS, PopulationGenConfig,
-    PreserveRect, QuantitySeaLakes, TerrainType, TgenSmoothness, TownDensity, WorldGenConfig,
-    WorldGenRng, apply_heightmap, apply_population_gen, apply_population_gen_with_rng,
-    apply_world_gen, apply_world_gen_with_rng, ceil_div, clear_ground_m5, effective_clear_ground,
-    generate_industries, generate_objects_with_rng, generate_towns, generate_trees,
-    generate_trees_with_rng, house_beside_road, industry_target_count, initial_clear_ground,
-    parse_hmap, road_tiles_are_flat, run_generation_tile_loop, scale_by_size, serialize_heightmap,
-    town_target_count,
+    PreserveRect, QuantitySeaLakes, TerrainType, TgenSmoothness, TownDensity, TreePlacement,
+    TreePlacementOrigin, WorldGenConfig, WorldGenRng, apply_heightmap, apply_population_gen,
+    apply_population_gen_with_rng, apply_world_gen, apply_world_gen_with_rng, ceil_div,
+    clear_ground_m5, effective_clear_ground, generate_industries, generate_objects_with_rng,
+    generate_towns, generate_trees, generate_trees_with_rng, generate_trees_with_rng_observer,
+    generate_trees_with_rng_observer_with_height_limit, house_beside_road, industry_target_count,
+    initial_clear_ground, parse_hmap, road_tiles_are_flat, run_generation_tile_loop, scale_by_size,
+    serialize_heightmap, town_target_count,
 };
 
 #[cfg(test)]

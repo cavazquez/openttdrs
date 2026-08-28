@@ -39,7 +39,10 @@ pub use population::{
     town_target_count,
 };
 pub use tile_loop::run_generation_tile_loop;
-pub use trees::{generate_trees, generate_trees_with_rng};
+pub use trees::{
+    TreePlacement, TreePlacementOrigin, generate_trees, generate_trees_with_rng,
+    generate_trees_with_rng_observer, generate_trees_with_rng_observer_with_height_limit,
+};
 
 use crate::cargodist::parity::Randomizer;
 use crate::company::{OWNER_NONE_M1, OWNER_WATER_M1};

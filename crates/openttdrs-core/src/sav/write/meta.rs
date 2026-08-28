@@ -344,6 +344,7 @@ pub(super) fn pats_chunk(state: &GameState) -> Result<Vec<u8>, SavError> {
         *b"PATS",
         &[
             (2, "game_creation.landscape"),
+            (2, "construction.map_height_limit"),
             (2, "vehicle.road_side"),
             (2, "construction.train_signal_side"),
             (1, "construction.freeform_edges"),
@@ -369,6 +370,7 @@ pub(super) fn pats_chunk(state: &GameState) -> Result<Vec<u8>, SavError> {
         &[{
             let mut record = vec![
                 landscape,
+                state.construction.map_height_limit,
                 road_side,
                 signal_side,
                 u8::from(state.construction.freeform_edges),

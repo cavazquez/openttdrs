@@ -30,6 +30,10 @@ use super::config::{
 use super::population::scale_by_size;
 
 const DEFAULT_TREE_STEPS: u32 = 1_000;
+/// Límite de altura original usado para normalizar la densidad de árboles.
+const MAP_HEIGHT_LIMIT_ORIGINAL: u32 = 15;
+/// `MAP_HEIGHT_LIMIT_AUTO_MINIMUM`: resolución de `map_height_limit = 0`.
+const MAP_HEIGHT_LIMIT_AUTO_MINIMUM: u8 = 30;
 const GROVE_RADIUS: i32 = 16;
 const GROVE_SEGMENTS: usize = 16;
 /// `WaterTileType::Coast` en los bits altos de `m5`.
@@ -54,6 +58,40 @@ struct Point {
     y: i32,
 }
 
+/// Una colocación efectiva producida durante `GenerateTrees`.
+///
+/// El stream contiene sólo llamadas que llegaron a `PlaceTree`, no intentos
+/// descartados por borde, forma del grupo, sustrato o altura. Es el mismo
+/// límite que usa la traza del oráculo C++ para localizar la primera regla
+/// divergente sin tener que comparar una captura raster.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TreePlacement {
+    pub origin: TreePlacementOrigin,
+    pub x: i32,
+    pub y: i32,
+    pub random: u32,
+    pub parent: Option<TileCoord>,
+}
+
+/// Call-site de una colocación de árbol dentro de `GenerateTrees`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TreePlacementOrigin {
+    Group,
+    Random,
+    SameHeight,
+}
+
+impl TreePlacementOrigin {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Group => "group",
+            Self::Random => "random",
+            Self::SameHeight => "same_height",
+        }
+    }
+}
+
 /// Ejecuta la variante `TP_IMPROVED`, que es el valor predeterminado de
 /// `OpenTTD` (`game_creation.tree_placer = 2`).
 /// Genera árboles con el algoritmo mejorado predeterminado de `OpenTTD`.
@@ -73,6 +111,49 @@ pub fn generate_trees_with_rng(
     rng: &mut Randomizer,
     preserve: &[PreserveRect],
 ) {
+    let mut ignore = |_placement: TreePlacement| {};
+    generate_trees_with_rng_observer(map, climate, rng, preserve, &mut ignore);
+}
+
+/// Variante de [`generate_trees_with_rng`] que informa cada colocación efectiva.
+///
+/// La observación no toca el mapa ni el RNG; se usa por el oráculo diferencial
+/// para alinear el primer `PlaceTree` de Rust con `OpenTTD`.
+pub fn generate_trees_with_rng_observer<F>(
+    map: &mut Map,
+    climate: Climate,
+    rng: &mut Randomizer,
+    preserve: &[PreserveRect],
+    observer: &mut F,
+) where
+    F: FnMut(TreePlacement),
+{
+    generate_trees_with_rng_observer_with_height_limit(
+        map,
+        climate,
+        rng,
+        preserve,
+        MAP_HEIGHT_LIMIT_AUTO_MINIMUM,
+        observer,
+    );
+}
+
+/// Variante observada que respeta el límite efectivo de altura de `OpenTTD`.
+///
+/// `PlaceTreesRandomly` normaliza los refuerzos de igual altura por
+/// `MAP_HEIGHT_LIMIT_ORIGINAL / construction.map_height_limit`. El parámetro
+/// acepta `0` para el modo automático, que `OpenTTD` resuelve a 30 antes de
+/// generar el mundo.
+pub fn generate_trees_with_rng_observer_with_height_limit<F>(
+    map: &mut Map,
+    climate: Climate,
+    rng: &mut Randomizer,
+    preserve: &[PreserveRect],
+    map_height_limit: u8,
+    observer: &mut F,
+) where
+    F: FnMut(TreePlacement),
+{
     let (map_w, map_h) = map.dimensions();
     if map_w < 4 || map_h < 4 {
         return;
@@ -97,14 +178,21 @@ pub fn generate_trees_with_rng(
             if !is_plantable(map, tile, preserve, true) || !point_in_grove(x, y, &grove) {
                 continue;
             }
-            let _ = place_tree(map, tile, r, climate);
+            if place_tree(map, tile, r, climate) {
+                observer(TreePlacement {
+                    origin: TreePlacementOrigin::Group,
+                    x: tile.x,
+                    y: tile.y,
+                    random: r,
+                    parent: Some(center),
+                });
+            }
         }
     }
 
     // `GenerateTrees` runs two passes on temperate maps in improved mode and
-    // four on arctic maps. The extra height-dependent spreading from C++ is
-    // intentionally omitted until the heightmap and snowline generators share
-    // the same random stream; the base placement and tile contract are exact.
+    // four on arctic maps. Each successful substrate also drives the
+    // height-dependent same-level attempts from `PlaceTreesRandomly`.
     let passes = if matches!(climate, Climate::SubArctic) {
         4
     } else {
@@ -117,18 +205,44 @@ pub fn generate_trees_with_rng(
             if is_plantable(map, tile, preserve, true) {
                 let height = tile_slope_and_z(map, tile).map_or(0, |(_, z)| z);
                 if place_tree(map, tile, r, climate) {
-                    // `PlaceTreesRandomly` in improved mode reinforces a
-                    // successful placement with `GetTileZ(tile) * 2`
-                    // same-height attempts. This is the part that turns the
-                    // otherwise sparse random pass into visible groves on
-                    // hilly maps.
-                    for _ in 0..u32::from(height).saturating_mul(2) {
-                        place_tree_at_same_height(map, tile, height, rng, climate, preserve);
-                    }
+                    observer(TreePlacement {
+                        origin: TreePlacementOrigin::Random,
+                        x: tile.x,
+                        y: tile.y,
+                        random: r,
+                        parent: None,
+                    });
+                }
+                // `PlaceTreesRandomly` in improved mode reinforces every
+                // sustrato aceptado with `GetTileZ(tile) * 2` same-height
+                // attempts. In temperate maps `PlaceTree` is always valid;
+                // preserving the upstream order also keeps the tropical
+                // invalid-tree path from changing RNG consumption.
+                for _ in 0..same_height_attempt_count(height, map_height_limit) {
+                    place_tree_at_same_height(map, tile, height, rng, climate, preserve, observer);
                 }
             }
         }
     }
+}
+
+/// Cantidad de llamadas a `PlaceTreeAtSameHeight` de un árbol base.
+///
+/// Corresponde a `j = GetTileZ(tile) * 2` seguido del escalado de
+/// `tree_cmd.cpp`. La bonificación ártica por encima de la línea de nieve se
+/// resuelve por separado, porque requiere el setting de línea de nieve.
+#[must_use]
+const fn same_height_attempt_count(height: u8, map_height_limit: u8) -> u32 {
+    let mut attempts = (height as u32).saturating_mul(2);
+    let effective_limit = if map_height_limit == 0 {
+        MAP_HEIGHT_LIMIT_AUTO_MINIMUM as u32
+    } else {
+        map_height_limit as u32
+    };
+    if effective_limit > MAP_HEIGHT_LIMIT_ORIGINAL {
+        attempts = attempts.saturating_mul(MAP_HEIGHT_LIMIT_ORIGINAL) / effective_limit;
+    }
+    attempts
 }
 
 /// `Map::ScaleBySize(GB(Random(), 0, 5) + 25)`: el `+ 25` es suma, no OR
@@ -189,11 +303,12 @@ fn is_plantable(map: &Map, c: TileCoord, preserve: &[PreserveRect], allow_desert
     }
 }
 
-/// `IsSlopeWithOneCornerRaised` ignora el bit `SLOPE_STEEP`, igual que el
-/// predicado de `OpenTTD` para impedir árboles de orilla sobre un talud simple.
+/// `IsSlopeWithOneCornerRaised` compara el valor completo: un talud empinado
+/// con un único bit de esquina no cuenta como una sola esquina elevada en
+/// `OpenTTD` y por eso puede recibir un árbol de orilla.
 #[must_use]
 const fn is_slope_with_one_corner_raised(slope: u8) -> bool {
-    matches!(slope & 0x0F, 1 | 2 | 4 | 8)
+    matches!(slope, 1 | 2 | 4 | 8)
 }
 
 fn tree_range(climate: Climate) -> (u8, u8) {
@@ -296,14 +411,17 @@ fn clear_neighbour_non_flooding_states(map: &mut Map, c: TileCoord) {
     }
 }
 
-fn place_tree_at_same_height(
+fn place_tree_at_same_height<F>(
     map: &mut Map,
     center: TileCoord,
     height: u8,
     rng: &mut Randomizer,
     climate: Climate,
     preserve: &[PreserveRect],
-) {
+    observer: &mut F,
+) where
+    F: FnMut(TreePlacement),
+{
     for _ in 0..DEFAULT_TREE_STEPS {
         let r = rng.next();
         let x = ((r & 0x1F) as i32) - GROVE_RADIUS;
@@ -319,7 +437,15 @@ fn place_tree_at_same_height(
         {
             continue;
         }
-        let _ = place_tree(map, tile, r, climate);
+        if place_tree(map, tile, r, climate) {
+            observer(TreePlacement {
+                origin: TreePlacementOrigin::SameHeight,
+                x: tile.x,
+                y: tile.y,
+                random: r,
+                parent: Some(center),
+            });
+        }
         break;
     }
 }
@@ -373,9 +499,11 @@ fn point_in_triangle(x: i32, y: i32, v1: Point, v2: Point, v3: Point) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        GROVE_ANGLE_STEP, GROVE_PHASE_DIVISOR, generate_trees, is_plantable, place_tree,
-        random_tile, tree_group_count,
+        GROVE_ANGLE_STEP, GROVE_PHASE_DIVISOR, generate_trees, generate_trees_with_rng_observer,
+        is_plantable, is_slope_with_one_corner_raised, place_tree, random_tile,
+        same_height_attempt_count, tree_group_count,
     };
+    use crate::cargodist::parity::Randomizer;
     use crate::map::{
         Map, TileCoord, TileKind, WaterClass, set_water_class_m1, water_class_from_m1,
     };
@@ -400,6 +528,40 @@ mod tests {
         assert_eq!(tree_group_count(7, 64, 64), 2);
         assert_eq!(tree_group_count(31, 64, 64), 4);
         assert_eq!(tree_group_count(31, 256, 256), 56);
+    }
+
+    #[test]
+    fn steep_single_corner_is_not_a_single_corner_slope() {
+        assert!(is_slope_with_one_corner_raised(1));
+        assert!(!is_slope_with_one_corner_raised(0x11));
+    }
+
+    #[test]
+    fn same_height_reinforcement_scales_with_map_height_limit() {
+        assert_eq!(same_height_attempt_count(3, 15), 6);
+        assert_eq!(same_height_attempt_count(3, 30), 3);
+        assert_eq!(same_height_attempt_count(3, 0), 3);
+        assert_eq!(same_height_attempt_count(1, 30), 1);
+    }
+
+    #[test]
+    fn observer_reports_only_effective_tree_placements() {
+        let mut map = Map::new_flat(64, 64, 2);
+        let mut rng = Randomizer::new(0x1234_5678);
+        let mut placements = Vec::new();
+        generate_trees_with_rng_observer(
+            &mut map,
+            Climate::Temperate,
+            &mut rng,
+            &[],
+            &mut |placement| placements.push(placement),
+        );
+
+        assert!(!placements.is_empty());
+        assert!(placements.iter().all(|placement| {
+            map.get(TileCoord::new(placement.x, placement.y))
+                .is_some_and(|tile| tile.kind == TileKind::Forest)
+        }));
     }
 
     #[test]

@@ -91,6 +91,25 @@ La matriz completa y la comparación por tesela/bloques 4×4 se ejecutan con
 se activa en el primer tick de una partida nueva, no sólo después de cargar un
 `.sav` existente.
 
+## Frontera `GenerateTrees`
+
+El parche completo también puede guardar una partida justo antes y después de
+`GenerateTrees`, junto con cada colocación efectiva de árbol. El harness evita
+comparar una captura enorme: valida los bytes de tesela, bloques 4×4, stream
+RNG y la secuencia `PlaceTree`.
+
+```bash
+python3 scripts/tree_phase_parity.py --size 64 --seed 1330935378 \
+  --out-dir /tmp/openttdrs-tree-phase
+```
+
+Los artefactos del directorio elegido incluyen `trees.pre.sav`,
+`trees.post.sav`, ambas trazas JSONL y el informe. Para ejecutar sólo el hook
+manualmente se usan `OPENTTDRS_TREE_PRE_SAVE_OUT`,
+`OPENTTDRS_TREE_POST_SAVE_OUT` y `OPENTTDRS_TREE_TRACE_OUT`. Esta instrumentación
+se instala sólo sobre el checkout 15.3 completo; el modo no pinneado conserva
+únicamente `world-raw`.
+
 Para un checkout de OpenTTD que no sea el pin 15.3 se requiere declarar la
 decisión explícitamente:
 

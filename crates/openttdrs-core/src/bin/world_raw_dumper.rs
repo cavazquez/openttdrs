@@ -10,9 +10,10 @@ use openttdrs_core::world_raw::{
     WorldRawContext, WorldRawMetadata, WorldRawRegion, sha256_hex, write_world_raw_jsonl,
 };
 use openttdrs_core::{
-    Climate, GameState, Map, PopulationGenConfig, TerrainType, WorldGenConfig,
+    Climate, GameState, Map, PopulationGenConfig, TerrainType, TreePlacement, WorldGenConfig,
     apply_population_gen_with_rng, apply_world_gen_with_rng, generate_objects_with_rng,
-    generate_trees_with_rng, run_generation_tile_loop,
+    generate_trees_with_rng, generate_trees_with_rng_observer_with_height_limit,
+    run_generation_tile_loop,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -47,6 +48,7 @@ struct Args {
     out: PathBuf,
     generate: Option<(u32, u32)>,
     replay_trees: bool,
+    tree_trace: Option<PathBuf>,
     seed: Option<u64>,
     stage: Stage,
     region: Option<WorldRawRegion>,
@@ -63,6 +65,7 @@ fn print_usage() {
            --generate WIDTHxHEIGHT          genera el mapa procedural openttdrs (sin guardar .sav)\n\
            --seed N                          semilla para --generate\n\
            --replay-trees                    reproduce GenerateTrees desde DATE.random_state\n\
+           --tree-trace SALIDA.jsonl         traza cada PlaceTree de --replay-trees\n\
            --stage sav_map|game_state_map  etapa a exportar (default: sav_map)\n\
            --region x0,y0,x1,y1            rectángulo inclusivo de teselas\n\
            --tile x,y [--radius N]          tesela, opcionalmente con contexto\n\
@@ -157,6 +160,7 @@ fn parse_args() -> Result<Args, String> {
     let mut seed = None;
     let mut stage = None;
     let mut replay_trees = false;
+    let mut tree_trace = None;
     let mut region = None;
     let mut tile = None;
     let mut radius = None;
@@ -180,6 +184,12 @@ fn parse_args() -> Result<Args, String> {
                     return Err("--replay-trees fue indicado más de una vez".to_string());
                 }
                 replay_trees = true;
+            }
+            "--tree-trace" => {
+                if tree_trace.is_some() {
+                    return Err("--tree-trace fue indicado más de una vez".to_string());
+                }
+                tree_trace = Some(PathBuf::from(next_value(&mut args, "--tree-trace")?));
             }
             "--seed" => {
                 if seed.is_some() {
@@ -238,6 +248,9 @@ fn parse_args() -> Result<Args, String> {
     } else if seed.is_some() {
         return Err("--seed sólo se puede usar con --generate".to_string());
     }
+    if tree_trace.is_some() && !replay_trees {
+        return Err("--tree-trace requiere --replay-trees".to_string());
+    }
     let stage = if replay_trees {
         if stage.is_some() {
             return Err("--stage no se puede usar con --replay-trees".to_string());
@@ -269,6 +282,7 @@ fn parse_args() -> Result<Args, String> {
         out: positional.remove(0),
         generate,
         replay_trees,
+        tree_trace,
         seed,
         stage,
         region,
@@ -276,6 +290,98 @@ fn parse_args() -> Result<Args, String> {
             .or_else(|| std::env::var("OPENTTDRS_OPENTTD_COMMIT").ok())
             .unwrap_or_default(),
     })
+}
+
+#[derive(serde::Serialize)]
+struct TreeTraceMetadata<'a> {
+    #[serde(rename = "kind")]
+    record_kind: &'static str,
+    schema_version: u32,
+    contract: &'static str,
+    producer: &'static str,
+    trace: &'static str,
+    stage: &'static str,
+    source_path: &'a str,
+    climate: u8,
+    random_state: [u32; 2],
+    width: u32,
+    height: u32,
+}
+
+#[derive(serde::Serialize)]
+struct TreeTraceRow {
+    #[serde(rename = "kind")]
+    record_kind: &'static str,
+    ordinal: usize,
+    origin: &'static str,
+    x: i32,
+    y: i32,
+    random: u32,
+    parent: Option<TreeTraceParent>,
+}
+
+#[derive(serde::Serialize)]
+struct TreeTraceParent {
+    x: i32,
+    y: i32,
+}
+
+fn write_tree_trace(
+    path: &Path,
+    source_path: &str,
+    climate: u8,
+    random_state: [u32; 2],
+    map: &Map,
+    placements: &[TreePlacement],
+) -> Result<(), String> {
+    let file = File::create(path)
+        .map_err(|error| format!("no se pudo crear traza {}: {error}", path.display()))?;
+    let mut writer = BufWriter::new(file);
+    let (width, height) = map.dimensions();
+    serde_json::to_writer(
+        &mut writer,
+        &TreeTraceMetadata {
+            record_kind: "metadata",
+            schema_version: 1,
+            contract: "tree-generation-trace",
+            producer: "openttdrs",
+            trace: "tree_placements",
+            stage: "GenerateTrees",
+            source_path,
+            climate,
+            random_state,
+            width,
+            height,
+        },
+    )
+    .map_err(|error| format!("no se pudo serializar metadata de traza: {error}"))?;
+    writer
+        .write_all(b"\n")
+        .map_err(|error| format!("no se pudo escribir traza {}: {error}", path.display()))?;
+    for (ordinal, placement) in placements.iter().enumerate() {
+        serde_json::to_writer(
+            &mut writer,
+            &TreeTraceRow {
+                record_kind: "tree_placement",
+                ordinal,
+                origin: placement.origin.as_str(),
+                x: placement.x,
+                y: placement.y,
+                random: placement.random,
+                parent: placement.parent.map(|parent| TreeTraceParent {
+                    x: parent.x,
+                    y: parent.y,
+                }),
+            },
+        )
+        .map_err(|error| format!("no se pudo serializar traza de árbol: {error}"))?;
+        writer
+            .write_all(b"\n")
+            .map_err(|error| format!("no se pudo escribir traza {}: {error}", path.display()))?;
+    }
+    writer
+        .flush()
+        .map_err(|error| format!("no se pudo cerrar traza {}: {error}", path.display()))
 }
 
 fn canonical_source_path(path: &Path) -> PathBuf {
@@ -458,8 +564,26 @@ fn run(args: &Args) -> Result<(), String> {
         let mut rng = openttdrs_core::linkgraph_parity::Randomizer {
             state: random_state,
         };
-        generate_trees_with_rng(&mut map, sav.climate, &mut rng, &[]);
+        let mut placements = Vec::new();
+        generate_trees_with_rng_observer_with_height_limit(
+            &mut map,
+            sav.climate,
+            &mut rng,
+            &[],
+            sav.construction.effective_map_height_limit(),
+            &mut |placement| placements.push(placement),
+        );
         let source_path = format!("trees-replay:{source_path}");
+        if let Some(trace_path) = &args.tree_trace {
+            write_tree_trace(
+                trace_path,
+                &source_path,
+                climate,
+                random_state,
+                &map,
+                &placements,
+            )?;
+        }
         let emitted = dump_map(
             &map,
             args,
@@ -470,7 +594,7 @@ fn run(args: &Args) -> Result<(), String> {
             climate,
         )?;
         println!(
-            "world-raw {}: {} teselas ({}) → {} [rng {:08x},{:08x} → {:08x},{:08x}]",
+            "world-raw {}: {} teselas ({}) → {} [rng {:08x},{:08x} → {:08x},{:08x}; trees={}]",
             args.stage.as_str(),
             emitted,
             save.display(),
@@ -479,6 +603,7 @@ fn run(args: &Args) -> Result<(), String> {
             random_state[1],
             rng.state[0],
             rng.state[1],
+            placements.len(),
         );
         return Ok(());
     }

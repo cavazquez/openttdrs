@@ -1,4 +1,4 @@
-//! Colocación de pueblos con calle y casas 1×1 (MVP de `GenerateTowns`).
+//! Colocación y crecimiento inicial de pueblos (`GenerateTowns` / `DoCreateTown`).
 
 use crate::house_spec::{
     BUILDING_FLAG_SIZE_1X2, BUILDING_FLAG_SIZE_2X1, BUILDING_FLAG_SIZE_2X2, HouseSpec,
@@ -10,7 +10,9 @@ use crate::map::{
     TownHouseSpec, complement_slope, tile_slope_and_z,
 };
 use crate::sav::house_spec_population;
-use crate::town::{Town, TownLayout, update_town_radius};
+use crate::town::{
+    Town, TownLayout, town_ticks_to_game_ticks, update_town_growth_rate, update_town_radius,
+};
 use crate::town_expand::{
     can_build_house, resolve_town_house_footprint, town_house_tile_max_z,
     town_layout_allows_house_here,
@@ -18,13 +20,11 @@ use crate::town_expand::{
 use crate::townname::generate_town_name;
 use crate::world_gen::CLEAR_GROUND_ROUGH;
 
-use super::{
-    PROCEDURAL_HOUSE_STYLE_SPREAD, PopCtx, in_preserve, procedural_house_choices,
-    tile_is_flat_grass, tile_ok_for_house,
-};
+use super::{PopCtx, in_preserve};
 
 /// Bits de carretera recta (eje X / eje Y).
 const ROAD_BITS_AXIS_X: u8 = 0x0A;
+#[cfg(test)]
 const ROAD_BITS_AXIS_Y: u8 = 0x05;
 const ROAD_NW: u8 = 0x01;
 const ROAD_BITS_N: u8 = 0x09;
@@ -68,20 +68,6 @@ const TOWN_GROWTH_COORD_MOD: [(i32, i32); 13] = [
 /// Valor vanilla de `economy.initial_city_size` en una partida nueva.
 const DEFAULT_INITIAL_CITY_SIZE: u32 = 2;
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum StreetAxis {
-    EastWest,
-    NorthSouth,
-}
-
-struct StreetTownPlan {
-    axis: StreetAxis,
-    roads: Vec<TileCoord>,
-    houses: Vec<TileCoord>,
-    town_pos: TileCoord,
-    bootstrap_road: Option<BootstrapRoad>,
-}
-
 /// El primer bloque vial que `GrowTown` crea cuando el pueblo aún no tiene red.
 #[derive(Clone, Copy)]
 struct BootstrapRoad {
@@ -119,11 +105,9 @@ pub(super) fn place_towns(
     town_centers: &mut Vec<TileCoord>,
 ) -> usize {
     let before = town_centers.len();
-    let map_w = i32::try_from(ctx.mw).unwrap_or(i32::MAX);
-    let map_h = i32::try_from(ctx.mh).unwrap_or(i32::MAX);
     // `GenerateTowns` consume este sorteo aunque no se consiga fundar ningún
-    // pueblo. La construcción/growth posterior sigue siendo RMAP-024, pero
-    // la selección de la semilla de cada intento ya debe arrancar aquí.
+    // pueblo. El constructor que sigue conserva el mismo stream durante
+    // `DoCreateTown`, incluidos sus intentos de crecimiento inicial.
     let city_random_offset = ctx.rng.next() % DEFAULT_LARGER_TOWNS_INTERVAL;
 
     for _ in 0..target {
@@ -135,13 +119,11 @@ pub(super) fn place_towns(
         // determinista de un único `Random()`. La comprobación de nombres
         // únicos queda pendiente junto con el modelo de crecimiento.
         let name_seed = ctx.rng.next();
-        let _ = try_build_random_town_with_mvp_plan(
+        let _ = try_build_random_town_with_generated_growth(
             ctx,
             town_centers,
             name_seed,
             is_city,
-            map_w,
-            map_h,
             RANDOM_TOWN_ATTEMPTS,
         );
     }
@@ -151,125 +133,118 @@ pub(super) fn place_towns(
     // una sugerencia, no una garantía de que los 20 intentos alcancen tierra.
     if town_centers.len() == before {
         let name_seed = ctx.rng.next();
-        let _ = try_build_random_town_with_mvp_plan(
+        let _ = try_build_random_town_with_generated_growth(
             ctx,
             town_centers,
             name_seed,
             true,
-            map_w,
-            map_h,
             RANDOM_TOWN_FALLBACK_ATTEMPTS,
         );
     }
     town_centers.len().saturating_sub(before)
 }
 
-/// Recorre los intentos de `CreateRandomTown` y deja que el constructor MVP
-/// rechace una trama que todavía no sabe materializar. `DoCreateTown` nativo
-/// también vuelve a intentar cuando una fundación no llega a tener población.
-fn try_build_random_town_with_mvp_plan(
+/// Recorre los intentos de `CreateRandomTown`.
+///
+/// `DoCreateTown` puede dejar una fundación sin población tras sus iteraciones
+/// de `GrowTown`; en ese caso se restaura su mapa temporal y el intento siguiente
+/// conserva la frontera RNG ya consumida, igual que el borrado del pueblo nativo.
+fn try_build_random_town_with_generated_growth(
     ctx: &mut PopCtx<'_>,
     town_centers: &mut Vec<TileCoord>,
     name_seed: u32,
     is_city: bool,
-    map_w: i32,
-    map_h: i32,
     attempts: usize,
 ) -> bool {
     for _ in 0..attempts {
         let Some(center) = next_random_town_site(ctx, town_centers) else {
             continue;
         };
-        if build_selected_town_with_mvp_plan(
-            ctx,
-            town_centers,
-            center,
-            name_seed,
-            is_city,
-            map_w,
-            map_h,
-        ) {
+        if build_selected_town_with_generated_growth(ctx, town_centers, center, name_seed, is_city)
+        {
             return true;
         }
     }
     false
 }
 
-/// Materializa provisionalmente un sitio que ya superó `CreateRandomTown`.
+/// Materializa una fundación ya aceptada por `CreateRandomTown` mediante el
+/// bucle inicial de `DoCreateTown`.
 ///
-/// La topología/crecimiento de `DoCreateTown` sigue pendiente, pero el plan
-/// local no consume sorteos antes de construir las casas y retiene el centro,
-/// ID y layout nativos de la fundación.
-fn build_selected_town_with_mvp_plan(
+/// El contador de casas temporal existe sólo durante las `x * 4` llamadas a
+/// `GrowTown`: determina las zonas de construcción y se retira antes de
+/// publicar el pueblo, exactamente como `town_cmd.cpp`. La ciudad no entra en
+/// `GameState::towns` hasta que tiene población, pero recibe desde el comienzo
+/// el ID que le correspondería, por lo que las teselas municipales conservan el
+/// `TownID` nativo.
+fn build_selected_town_with_generated_growth(
     ctx: &mut PopCtx<'_>,
     town_centers: &mut Vec<TileCoord>,
     center: TileCoord,
     name_seed: u32,
     is_city: bool,
-    map_w: i32,
-    map_h: i32,
 ) -> bool {
-    // `DoCreateTown` toma este sorteo inmediatamente después de seleccionar
-    // la fundación, incluso si su crecimiento posterior no llega a poblarla.
-    // El contador temporal influye en su radio durante `GrowTown`; la trama
-    // MVP aún no modela ese radio, pero debe conservar la frontera RNG.
-    let _temporary_house_budget = initial_town_house_budget(ctx.rng, is_city);
-    // El plan MVP todavía no es `DoCreateTown`; se deriva de la parte de
-    // nombre ya consumida y conserva el centro exacto seleccionado.
-    let axis = if name_seed & 1 == 0 {
-        StreetAxis::EastWest
-    } else {
-        StreetAxis::NorthSouth
-    };
-    let half_len = i32::try_from(2 + ((name_seed >> 1) % 3)).unwrap_or(2);
-    let south_row = (name_seed >> 3) % 3 != 0;
-    let mut plan = plan_street_town(center, axis, half_len, south_row, map_w, map_h)
-        .filter(|candidate| plan_fits_terrain(ctx, candidate))
-        .or_else(|| compact_town_plan(ctx, center));
-    let Some(mut plan) = plan.take() else {
-        return false;
-    };
-
-    // Primera iteración de `GrowTown`: todavía no hay calles, por lo que C++
-    // busca `_town_coord_mod`, limpia la primera tesela plana y recién ahí
-    // toma `GenRandomRoadBits`. Se ejecuta sólo después de aceptar el plan
-    // MVP; si éste aún no puede materializar un pueblo, no fingimos haber
-    // alcanzado la frontera nativa.
-    plan.bootstrap_road = initial_town_growth_bootstrap(&ctx.state.map, center, ctx.rng);
-    if !plan_fits_terrain(ctx, &plan) {
-        return false;
-    }
-
-    let choices = procedural_house_choices();
-    if choices.is_empty() {
-        return false;
-    }
-    let town_house_base = (name_seed >> 8) % u32::try_from(choices.len()).unwrap_or(1);
-    let town_id = u32::try_from(ctx.state.towns.len()).unwrap_or(u32::MAX);
-    let (placed_houses, population) = build_street_town(ctx, &plan, town_house_base, town_id);
-    if placed_houses < 3 {
-        return false;
-    }
-
     let name = generate_town_name(4, name_seed)
         .unwrap_or_else(|| format!("Pueblo {},{}", center.x, center.y));
     let mut town = Town {
-        id: town_id,
-        pos: plan.town_pos,
+        id: u32::try_from(ctx.state.towns.len()).unwrap_or(u32::MAX),
+        pos: center,
         name,
-        population,
-        passengers_served: 0,
-        mail_served: 0,
-        growth_funded: 0,
-        num_houses: u16::try_from(placed_houses).unwrap_or(0),
         ..Default::default()
     };
     town.initialize_layout(Some(TownLayout::Original));
     town.init_growth_goals(ctx.state.climate);
     town.init_grow_counter();
+    town.growth_rate = town_ticks_to_game_ticks(250);
+
+    // `DoCreateTown` aumenta `num_houses` antes de actualizar los radios y
+    // recorrer `GrowTown` cuatro veces por casa temporal. Esa elevación es
+    // observable: cambia el pool ponderado de `TryBuildTownHouse`.
+    let temporary_house_budget = initial_town_house_budget(ctx.rng, is_city);
+    town.num_houses = u16::try_from(temporary_house_budget).unwrap_or(u16::MAX);
     update_town_radius(&mut town);
+
+    // `CMD_DELETE_TOWN` revierte una fundación sin población. El generador no
+    // publica el pueblo hasta el final, así que basta conservar una copia del
+    // mapa; deliberadamente no se revierte el RNG porque OpenTTD ya consumió
+    // el intento completo antes de borrarlo.
+    let map_before = ctx.state.map.clone();
+    let Some(bootstrap) = initial_town_growth_bootstrap(&ctx.state.map, center, ctx.rng) else {
+        return false;
+    };
+    if !write_generated_town_road(ctx.state, bootstrap.pos, bootstrap.bits, town.id) {
+        return false;
+    }
+
+    let growth_context = GeneratedTownGrowthContext {
+        climate: ctx.state.climate,
+        calendar_year: ctx.state.calendar.year,
+    };
+    let initial_growth_calls = temporary_house_budget.saturating_mul(4);
+    for _ in 1..initial_growth_calls {
+        let _ =
+            grow_generated_town_road_once(&mut ctx.state.map, &mut town, growth_context, ctx.rng);
+    }
+
+    if town.population == 0
+        || map_changes_preserved_tiles(&map_before, &ctx.state.map, ctx.preserve)
+    {
+        ctx.state.map = map_before;
+        return false;
+    }
+
+    town.num_houses = town
+        .num_houses
+        .saturating_sub(u16::try_from(temporary_house_budget).unwrap_or(u16::MAX));
+    update_town_radius(&mut town);
+    update_town_growth_rate(
+        &mut town,
+        &ctx.state.stations,
+        &ctx.state.map,
+        &ctx.state.industries,
+    );
     ctx.state.towns.push(town);
-    town_centers.push(plan.town_pos);
+    town_centers.push(center);
     true
 }
 
@@ -281,6 +256,24 @@ fn initial_town_house_budget(rng: &mut crate::cargodist::parity::Randomizer, cit
     } else {
         houses
     }
+}
+
+/// Comprueba que la fundación temporal no haya escrito ni nivelado dentro de
+/// una zona reservada. `GrowTown` puede modificar las cuatro esquinas de una
+/// tesela, de modo que validar únicamente su resultado no es suficiente.
+fn map_changes_preserved_tiles(
+    before: &crate::map::Map,
+    after: &crate::map::Map,
+    preserve: &[crate::world_gen::PreserveRect],
+) -> bool {
+    preserve.iter().any(|rect| {
+        (rect.y0..=rect.y1).any(|y| {
+            (rect.x0..=rect.x1).any(|x| {
+                let tile = TileCoord::new(x, y);
+                before.get(tile) != after.get(tile)
+            })
+        })
+    })
 }
 
 /// Primer camino de `GrowTown` cuando aún no hay una calle municipal.
@@ -682,11 +675,10 @@ fn grow_generated_town_road_in_tile(
 
 /// Recorre una sola llamada a `GrowTown` de la fundación procedural.
 ///
-/// Devuelve la tesela de la carretera o casa que consiguió crear. Todavía es
-/// un walker aislado del constructor MVP: su integración completa queda en
-/// RMAP-030/RMAP-032, pero tanto las bifurcaciones viales como la primera casa
-/// comparten ya el stream global de `GenerateTowns`.
-#[allow(dead_code)]
+/// Devuelve la tesela de la carretera o casa que consiguió crear. El
+/// constructor de `DoCreateTown` lo invoca dentro de la misma frontera RNG de
+/// `GenerateTowns`; las variantes fuera del subconjunto vanilla siguen
+/// documentadas en RMAP-030/RMAP-032.
 fn grow_generated_town_road_once(
     map: &mut crate::map::Map,
     town: &mut Town,
@@ -874,7 +866,6 @@ fn chance16(rng: &mut crate::cargodist::parity::Randomizer, a: u32, b: u32) -> b
 ///
 /// El catálogo `NewGRF` y CB 0x17 siguen fuera de este núcleo vanilla; se
 /// incorporarán al conectar la caminata completa de `GrowTown`.
-#[allow(dead_code)]
 fn choose_generated_town_house_candidate(
     town: &Town,
     map: &crate::map::Map,
@@ -955,47 +946,6 @@ fn choose_generated_town_house_candidate(
             candidate_count,
             attempts,
         });
-    }
-    None
-}
-
-/// Fallback provisional para un sitio que `OpenTTD` aceptó pero cuya trama MVP
-/// recta no cabe en altura. El `DoCreateTown` real probará expansiones locales;
-/// mientras se porta, un tramo de una tesela mantiene el contrato de fundar al
-/// menos tres casas sin desplazar la coordenada validada.
-fn compact_town_plan(ctx: &PopCtx<'_>, center: TileCoord) -> Option<StreetTownPlan> {
-    // El sitio nativo sólo exige terreno construible en 5×5, no una recta
-    // totalmente plana. Mientras `DoCreateTown` sigue pendiente, buscamos un
-    // cruce plano cercano sin cambiar `Town::xy`, para no descartar la
-    // fundación ya validada por OpenTTD.
-    for radius in 0..=8_i32 {
-        for dy in -radius..=radius {
-            for dx in -radius..=radius {
-                if dx.abs().max(dy.abs()) != radius {
-                    continue;
-                }
-                let road = TileCoord::new(center.x + dx, center.y + dy);
-                if !tile_is_flat_grass(&ctx.state.map, road) {
-                    continue;
-                }
-                let mut houses = Vec::new();
-                for (hx, hy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
-                    let candidate = TileCoord::new(road.x + hx, road.y + hy);
-                    if tile_ok_for_house(ctx.state, candidate, ctx.preserve) {
-                        houses.push(candidate);
-                    }
-                }
-                if houses.len() >= 3 {
-                    return Some(StreetTownPlan {
-                        axis: StreetAxis::EastWest,
-                        roads: vec![road],
-                        houses,
-                        town_pos: center,
-                        bootstrap_road: None,
-                    });
-                }
-            }
-        }
     }
     None
 }
@@ -1248,220 +1198,12 @@ fn is_water_ground(map: &crate::map::Map, tile: TileCoord) -> bool {
         .is_some_and(|candidate| candidate.kind == TileKind::Water && (candidate.m5 >> 4) == 0)
 }
 
-fn plan_street_town(
-    center: TileCoord,
-    axis: StreetAxis,
-    half_len: i32,
-    south_row: bool,
-    map_w: i32,
-    map_h: i32,
-) -> Option<StreetTownPlan> {
-    let mut roads = Vec::new();
-    let mut houses = Vec::new();
-    let town_pos;
-
-    match axis {
-        StreetAxis::EastWest => {
-            let road_y = center.y;
-            town_pos = center;
-            for dx in -half_len..=half_len {
-                let x = center.x + dx;
-                if !coord_in_map(x, road_y, map_w, map_h) {
-                    return None;
-                }
-                roads.push(TileCoord::new(x, road_y));
-                for row in house_rows_beside_road(south_row) {
-                    let hy = road_y + row;
-                    if coord_in_map(x, hy, map_w, map_h) {
-                        houses.push(TileCoord::new(x, hy));
-                    }
-                }
-            }
-        }
-        StreetAxis::NorthSouth => {
-            let road_x = center.x;
-            town_pos = center;
-            for dy in -half_len..=half_len {
-                let y = center.y + dy;
-                if !coord_in_map(road_x, y, map_w, map_h) {
-                    return None;
-                }
-                roads.push(TileCoord::new(road_x, y));
-                for col in house_cols_beside_road(south_row) {
-                    let hx = road_x + col;
-                    if coord_in_map(hx, y, map_w, map_h) {
-                        houses.push(TileCoord::new(hx, y));
-                    }
-                }
-            }
-        }
-    }
-
-    if roads.is_empty() || houses.len() < 3 {
-        return None;
-    }
-    Some(StreetTownPlan {
-        axis,
-        roads,
-        houses,
-        town_pos,
-        bootstrap_road: None,
-    })
-}
-
-fn house_rows_beside_road(second_side: bool) -> Vec<i32> {
-    let mut rows = vec![-1];
-    if second_side {
-        rows.push(1);
-    }
-    rows
-}
-
-fn house_cols_beside_road(east_side: bool) -> Vec<i32> {
-    let mut cols = vec![-1];
-    if east_side {
-        cols.push(1);
-    }
-    cols
-}
-
-fn coord_in_map(x: i32, y: i32, map_w: i32, map_h: i32) -> bool {
-    x >= 0 && y >= 0 && x < map_w && y < map_h
-}
-
-fn plan_fits_terrain(ctx: &PopCtx<'_>, plan: &StreetTownPlan) -> bool {
-    if plan
-        .roads
-        .iter()
-        .any(|&c| in_preserve(ctx.preserve, c.x, c.y))
-    {
-        return false;
-    }
-    if !street_roads_are_flat_and_level(ctx.state, &plan.roads) {
-        return false;
-    }
-    if let Some(bootstrap) = plan.bootstrap_road
-        && (in_preserve(ctx.preserve, bootstrap.pos.x, bootstrap.pos.y)
-            || !can_seed_initial_town_road(&ctx.state.map, bootstrap.pos))
-    {
-        return false;
-    }
-    plan.houses
-        .iter()
-        .filter(|&&c| tile_ok_for_house(ctx.state, c, ctx.preserve))
-        .count()
-        >= 3
-}
-
-fn street_roads_are_flat_and_level(
-    state: &crate::game_state::GameState,
-    roads: &[TileCoord],
-) -> bool {
-    let mut base_z = None;
-    for &c in roads {
-        if !tile_is_flat_grass(&state.map, c) {
-            return false;
-        }
-        let Some((tileh, z)) = tile_slope_and_z(&state.map, c) else {
-            return false;
-        };
-        if tileh != 0 {
-            return false;
-        }
-        match base_z {
-            None => base_z = Some(z),
-            Some(b) if b != z => return false,
-            Some(_) => {}
-        }
-    }
-    true
-}
-
-fn build_street_town(
-    ctx: &mut PopCtx<'_>,
-    plan: &StreetTownPlan,
-    town_house_base: u32,
-    town_id: u32,
-) -> (usize, u32) {
-    let road_bits = match plan.axis {
-        StreetAxis::EastWest => ROAD_BITS_AXIS_X,
-        StreetAxis::NorthSouth => ROAD_BITS_AXIS_Y,
-    };
-
-    if !plan_fits_terrain(ctx, plan) {
-        return (0, 0);
-    }
-
-    for &c in &plan.roads {
-        if !write_generated_town_road(ctx.state, c, road_bits, town_id) {
-            rollback_road_tiles(ctx.state, &plan.roads);
-            return (0, 0);
-        }
-    }
-    if let Some(bootstrap) = plan.bootstrap_road
-        && !write_generated_town_road(ctx.state, bootstrap.pos, bootstrap.bits, town_id)
-    {
-        rollback_road_tiles(ctx.state, &plan.roads);
-        return (0, 0);
-    }
-
-    let choices = procedural_house_choices();
-    let n_choices = u32::try_from(choices.len()).unwrap_or(0);
-    if n_choices == 0 {
-        return (0, 0);
-    }
-
-    let mut placed = 0_usize;
-    let mut population = 0_u32;
-    for &c in &plan.houses {
-        if !tile_ok_for_house(ctx.state, c, ctx.preserve) {
-            continue;
-        }
-        let idx =
-            (town_house_base + ctx.rng.random_range(PROCEDURAL_HOUSE_STYLE_SPREAD)) % n_choices;
-        let house_id = choices[usize::try_from(idx).unwrap_or(0)];
-        let random_bits = u8::try_from(ctx.rng.next() & 0xFF).unwrap_or(0);
-        let construction = generated_town_house_construction(ctx.rng);
-        if ctx
-            .state
-            .map
-            .make_town_house(
-                c,
-                TownHouseSpec {
-                    house_id,
-                    town_id,
-                    random_bits,
-                    construction_counter: construction.counter,
-                    construction_stage: construction.stage,
-                    is_protected: false,
-                    processing_time: 0,
-                },
-            )
-            .is_ok()
-        {
-            placed += 1;
-            if construction.stage == TOWN_HOUSE_COMPLETED {
-                population = population.saturating_add(u32::from(house_spec_population(house_id)));
-            }
-        }
-    }
-    (placed, population)
-}
-
-fn rollback_road_tiles(state: &mut crate::game_state::GameState, roads: &[TileCoord]) {
-    for &c in roads {
-        if state.map.get_kind(c) == Some(TileKind::Road) {
-            let _ = state.map.set_kind(c, TileKind::Grass);
-        }
-    }
-}
-
 /// Escribe `MakeRoadNormal` para una calle creada durante `GenerateTowns`.
 ///
 /// Las rutas de comando interactivas usan la compañía activa. Durante la
 /// generación C++ cambia a `OWNER_TOWN`, fija el índice del pueblo y conserva
-/// el sentinel de tram ausente; usar esos bytes evita que el constructor MVP
-/// introduzca una compañía humana o una capa de tranvía falsa.
+/// el sentinel de tram ausente; usar esos bytes evita introducir una compañía
+/// humana o una capa de tranvía falsa.
 fn write_generated_town_road(
     state: &mut crate::game_state::GameState,
     coord: TileCoord,
@@ -2802,6 +2544,50 @@ mod tests {
             &mut rng,
             [3_221_856_382, 229_218_699],
         );
+    }
+
+    #[test]
+    fn do_create_town_path_replays_first_city_until_next_name() {
+        let mut state = clear_phase_state(1_330_935_378);
+        // Frontera a la entrada de `DoCreateTown`: la selección costera ya
+        // consumió su `RandomTile` y `GenerateTownName` pertenece al caller.
+        let mut rng = Randomizer {
+            state: [2_945_732_258, 1_049_486_831],
+        };
+        let mut centers = Vec::new();
+        let mut ctx = PopCtx {
+            state: &mut state,
+            preserve: &[],
+            rng: &mut rng,
+            mw: 64,
+            mh: 64,
+        };
+
+        assert!(build_selected_town_with_generated_growth(
+            &mut ctx,
+            &mut centers,
+            TileCoord::new(47, 23),
+            0,
+            true,
+        ));
+
+        assert_eq!(centers, [TileCoord::new(47, 23)]);
+        let town = ctx.state.towns.first().expect("first generated town");
+        // `DoCreateTown` retira las 22 casas temporales después de las 88
+        // iteraciones: en el mapa quedan 29 edificios reales y la población
+        // de GDB antes de generar el siguiente nombre.
+        assert_eq!(town.num_houses, 29);
+        assert_eq!(town.population, 1_181);
+        assert_eq!(town.layout, TownLayout::Original);
+        assert_eq!(ctx.rng.state, [3_221_856_382, 229_218_699]);
+
+        let road = ctx
+            .state
+            .map
+            .get(TileCoord::new(50, 26))
+            .expect("final first-city junction");
+        assert_eq!(road.kind, TileKind::Road);
+        assert_eq!(road.m5 & 0x0F, 0x0F);
     }
 
     #[test]

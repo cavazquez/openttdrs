@@ -268,42 +268,8 @@ pub fn apply_population_gen_with_rng(
     super::trees::generate_trees_with_rng(&mut state.map, state.climate, rng, preserve);
 }
 
-/// Variación de estilo dentro de un mismo pueblo (índice en la tabla 1×1).
-pub(crate) const PROCEDURAL_HOUSE_STYLE_SPREAD: u32 = 16;
-
-/// IDs de casa 1×1 con población > 0 (evita piezas multi-tile y decoración vacía).
-pub(crate) fn procedural_house_choices() -> &'static [u16] {
-    use std::sync::OnceLock;
-    static CHOICES: OnceLock<Vec<u16>> = OnceLock::new();
-    CHOICES.get_or_init(|| {
-        (0u16..110)
-            .filter(|&id| {
-                crate::sav::house_spec_is_size_1x1(id) && crate::sav::house_spec_population(id) > 0
-            })
-            .collect()
-    })
-}
-
 pub(crate) fn in_preserve(preserve: &[PreserveRect], x: i32, y: i32) -> bool {
     preserve.iter().any(|r| r.contains(x, y))
-}
-
-pub(crate) fn tile_ok_for_house(
-    state: &GameState,
-    c: TileCoord,
-    preserve: &[PreserveRect],
-) -> bool {
-    if in_preserve(preserve, c.x, c.y) {
-        return false;
-    }
-    tile_is_flat_grass(&state.map, c)
-}
-
-pub(crate) fn tile_is_flat_grass(map: &Map, c: TileCoord) -> bool {
-    if map.get_kind(c) != Some(TileKind::Grass) {
-        return false;
-    }
-    tile_slope_and_z(map, c).is_some_and(|(tileh, _)| tileh == 0)
 }
 
 pub(crate) fn min_distance_sq(a: TileCoord, b: TileCoord) -> i32 {

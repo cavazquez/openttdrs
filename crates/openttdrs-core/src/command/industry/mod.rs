@@ -71,12 +71,8 @@ fn check_industry_template(
     for (tile, _) in template {
         super::transport::check_in_bounds(map, *tile)?;
         let existing_kind = map.get_kind(*tile).unwrap_or(TileKind::Grass);
-        // `CheckIfIndustryTilesAreFree` limpia cada tesela con el flag
-        // `Auto`. `ClearTile_Industry` rechaza expresamente ese camino, así
-        // que una industria nueva nunca puede reemplazar una huella existente
-        // durante `GenerateIndustries` ni desde el comando manual.
-        if existing_kind == TileKind::Industry {
-            return Err(CommandError::IndustryTileOccupied);
+        if let Some(error) = industry_auto_clear_error(existing_kind) {
+            return Err(error);
         }
         if !transport_tile_is_buildable(existing_kind) {
             return Err(build_error_for_kind(existing_kind));
@@ -91,6 +87,20 @@ fn check_industry_template(
         }
     }
     Ok(())
+}
+
+/// Errores no negociables de `CMD_LANDSCAPE_CLEAR` con `DoCommandFlag::Auto`
+/// dentro de `CheckIfIndustryTilesAreFree`.
+///
+/// La lista se amplía por clase de tesela según se trace el clear nativo. Una
+/// casa no se puede demoler en automático (`ClearTile_Town` lo rechaza), aunque
+/// sí sea una superficie que otros comandos de transporte puedan reemplazar.
+const fn industry_auto_clear_error(kind: TileKind) -> Option<CommandError> {
+    match kind {
+        TileKind::Industry => Some(CommandError::IndustryTileOccupied),
+        TileKind::House => Some(CommandError::IndustryTileCannotBeCleared),
+        _ => None,
+    }
 }
 
 /// Las teselas vanilla de las industrias force-one Temperate tienen
@@ -218,8 +228,8 @@ pub fn check_place_industry_spec_def(
     for (tile, _) in &footprint {
         super::transport::check_in_bounds(map, *tile)?;
         let existing_kind = map.get_kind(*tile).unwrap_or(TileKind::Grass);
-        if existing_kind == TileKind::Industry {
-            return Err(CommandError::IndustryTileOccupied);
+        if let Some(error) = industry_auto_clear_error(existing_kind) {
+            return Err(error);
         }
         if !transport_tile_is_buildable(existing_kind) {
             return Err(build_error_for_kind(existing_kind));
@@ -311,6 +321,33 @@ mod tests {
     use crate::command::{Command, apply_command};
     use crate::map::{Map, TileCoord, tile_slope_and_z};
 
+    fn test_newgrf_industry_spec() -> IndustrySpecDef {
+        IndustrySpecDef {
+            id: 37,
+            local_id: 0,
+            subst_id: 0,
+            override_id: None,
+            layouts: vec![vec![crate::industry_spec::IndustryLayoutTile {
+                x: 0,
+                y: 0,
+                gfx: 175,
+            }]],
+            produced_cargo_indices: Vec::new(),
+            produced_cargo_labels: Vec::new(),
+            accepted_cargo_indices: Vec::new(),
+            accepted_cargo_labels: Vec::new(),
+            production_rates: Vec::new(),
+            input_multipliers: Vec::new(),
+            callback_mask: 0,
+            cost_multiplier: 0,
+            name: String::new(),
+            from_newgrf: true,
+            grfid: 1,
+            newgrf_local_id: 0,
+            newgrf_runtime: None,
+        }
+    }
+
     #[test]
     fn selected_layout_is_used_by_the_industry_command() {
         let origin = TileCoord::new(4, 4);
@@ -356,38 +393,40 @@ mod tests {
     }
 
     #[test]
+    fn industry_layout_rejects_a_house_that_auto_clear_cannot_demolish() {
+        let origin = TileCoord::new(4, 4);
+        let mut map = Map::new_flat(16, 16, 0);
+        assert!(map.set_kind(origin, TileKind::House).is_ok());
+
+        assert_eq!(
+            check_place_industry_spec_layout(&map, origin, IndustrySpec::SteelMill, 0),
+            Err(CommandError::IndustryTileCannotBeCleared)
+        );
+    }
+
+    #[test]
     fn newgrf_industry_layout_never_overwrites_an_existing_industry_tile() {
         let origin = TileCoord::new(4, 4);
         let mut map = Map::new_flat(16, 16, 0);
         assert!(map.set_kind(origin, TileKind::Industry).is_ok());
-        let def = IndustrySpecDef {
-            id: 37,
-            local_id: 0,
-            subst_id: 0,
-            override_id: None,
-            layouts: vec![vec![crate::industry_spec::IndustryLayoutTile {
-                x: 0,
-                y: 0,
-                gfx: 175,
-            }]],
-            produced_cargo_indices: Vec::new(),
-            produced_cargo_labels: Vec::new(),
-            accepted_cargo_indices: Vec::new(),
-            accepted_cargo_labels: Vec::new(),
-            production_rates: Vec::new(),
-            input_multipliers: Vec::new(),
-            callback_mask: 0,
-            cost_multiplier: 0,
-            name: String::new(),
-            from_newgrf: true,
-            grfid: 1,
-            newgrf_local_id: 0,
-            newgrf_runtime: None,
-        };
+        let def = test_newgrf_industry_spec();
 
         assert_eq!(
             check_place_industry_spec_def(&map, origin, &def),
             Err(CommandError::IndustryTileOccupied)
+        );
+    }
+
+    #[test]
+    fn newgrf_industry_layout_rejects_a_house_that_auto_clear_cannot_demolish() {
+        let origin = TileCoord::new(4, 4);
+        let mut map = Map::new_flat(16, 16, 0);
+        assert!(map.set_kind(origin, TileKind::House).is_ok());
+        let def = test_newgrf_industry_spec();
+
+        assert_eq!(
+            check_place_industry_spec_def(&map, origin, &def),
+            Err(CommandError::IndustryTileCannotBeCleared)
         );
     }
 }

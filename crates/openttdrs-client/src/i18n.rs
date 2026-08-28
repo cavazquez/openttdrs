@@ -465,6 +465,9 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "No se puede construir una industria sobre otra industria existente." => {
             "An industry cannot be built on top of an existing industry."
         }
+        "Hay una construcción que debe demolerse antes de ubicar la industria." => {
+            "A building must be demolished before placing the industry."
+        }
         "El préstamo ya está al máximo permitido." => {
             "The loan is already at the allowed maximum."
         }

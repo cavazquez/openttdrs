@@ -113,6 +113,8 @@ pub enum CommandError {
     /// Una industria existente no se puede limpiar automáticamente para
     /// construir otra encima.
     IndustryTileOccupied,
+    /// El clear automático de una industria no puede demoler esta tesela.
+    IndustryTileCannotBeCleared,
     /// Préstamo ya al máximo permitido.
     LoanAtMaximum,
     /// No hay préstamo suficiente para devolver.

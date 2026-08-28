@@ -1,6 +1,5 @@
 //! Colocación de pueblos con calle y casas 1×1 (MVP de `GenerateTowns`).
 
-#[cfg(test)]
 use crate::house_spec::{HouseSpec, climate_zone_mask, get_town_radius_group};
 use crate::map::tree_tile_loop::clear_ground_type;
 use crate::map::{
@@ -8,6 +7,10 @@ use crate::map::{
 };
 use crate::sav::house_spec_population;
 use crate::town::{Town, TownLayout, update_town_radius};
+use crate::town_expand::{
+    can_build_house, resolve_town_house_footprint, town_house_tile_max_z,
+    town_layout_allows_house_here,
+};
 use crate::townname::generate_town_name;
 use crate::world_gen::CLEAR_GROUND_ROUGH;
 
@@ -85,14 +88,20 @@ struct TownHouseConstruction {
     stage: u8,
 }
 
-/// Resultado del primer sorteo de `TryBuildTownHouse` antes de validar su huella.
-#[cfg(test)]
-#[derive(Clone, Copy)]
+/// Resultado de una extracción aceptada de `TryBuildTownHouse` durante la
+/// generación inicial.
+///
+/// La selección conserva el estado que permite auditar reintentos: el pool
+/// original, cuántas entradas se probaron y cuál fue la tesela base después de
+/// validar una huella multitile.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct TownHouseCandidate {
     id: u16,
+    base: TileCoord,
     random_bits: u8,
     probability_max: u32,
     candidate_count: usize,
+    attempts: usize,
 }
 
 /// Intenta colocar hasta `target` pueblos; devuelve cuántos se crearon.
@@ -341,24 +350,35 @@ fn chance16(rng: &mut crate::cargodist::parity::Randomizer, a: u32, b: u32) -> b
         < u64::from(a)
 }
 
-/// Primera extracción ponderada de `TryBuildTownHouse` durante la generación.
+/// Selecciona una casa vanilla como `TryBuildTownHouse` durante la generación.
 ///
-/// `RandomRange(probability_max)` usa la multiplicación alta del RNG, no el
-/// resto. `OpenTTD` forma inicialmente el pool sólo con disponibilidad por zona;
-/// los años, casas únicas, pendiente y huella se descartan *después* de esta
-/// extracción y el pool se vuelve a sortear. Esta función llega exactamente
-/// hasta `random_bits`; ese bucle de reintentos y la construcción siguen en
-/// RMAP-032.
-#[cfg(test)]
+/// El pool se forma sólo por zona/clima, se extrae con `RandomRange` y se quita
+/// con el mismo `swap-with-last` de `OpenTTD`. Los filtros tardíos no devuelven la
+/// entrada al pool: año, edificios únicos, pendiente y huella consumen otro
+/// sorteo si rechazan el candidato. Esto es importante porque filtrar antes de
+/// `RandomRange` adelanta o atrasa todo el stream global de `GenerateTowns`.
+///
+/// El catálogo `NewGRF` y CB 0x17 siguen fuera de este núcleo vanilla; se
+/// incorporarán al conectar la caminata completa de `GrowTown`.
+#[allow(dead_code)]
 fn choose_generated_town_house_candidate(
     town: &Town,
+    map: &crate::map::Map,
     tile: TileCoord,
-    tile_height: u8,
     climate: crate::world_gen::Climate,
+    calendar_year: u32,
     rng: &mut crate::cargodist::parity::Randomizer,
 ) -> Option<TownHouseCandidate> {
+    // Estas dos salidas son previas al pool en C++; por tanto no pueden
+    // consumir una palabra RNG aunque no haya una casa posible.
+    if !town_layout_allows_house_here(town, tile) || !can_build_house(map, tile, false) {
+        return None;
+    }
+
+    let (slope, _) = tile_slope_and_z(map, tile)?;
+    let max_z = town_house_tile_max_z(map, tile)?;
     let zone = get_town_radius_group(town, tile);
-    let required_zones = (1_u16 << (zone as u8)) | climate_zone_mask(climate, tile_height);
+    let required_zones = (1_u16 << (zone as u8)) | climate_zone_mask(climate, max_z);
     let mut probability_max = 0_u32;
     let mut candidates = Vec::new();
 
@@ -377,19 +397,50 @@ fn choose_generated_town_house_candidate(
     if probability_max == 0 {
         return None;
     }
+    let initial_probability_max = probability_max;
     let candidate_count = candidates.len();
-    let mut roll = rng.random_range(probability_max);
-    for house in candidates {
-        let weight = u32::from(house.probability);
-        if weight > roll {
-            return Some(TownHouseCandidate {
-                id: house.id,
-                random_bits: u8::try_from(rng.next() & 0xFF).unwrap_or(0),
-                probability_max,
-                candidate_count,
-            });
+    let mut attempts = 0_usize;
+
+    while probability_max > 0 {
+        let mut roll = rng.random_range(probability_max);
+        let mut index = 0_usize;
+        while let Some(candidate) = candidates.get(index) {
+            let weight = u32::from(candidate.probability);
+            if weight > roll {
+                break;
+            }
+            roll = roll.saturating_sub(weight);
+            index += 1;
         }
-        roll = roll.saturating_sub(weight);
+
+        let house = candidates.get(index).copied()?;
+        probability_max = probability_max.saturating_sub(u32::from(house.probability));
+        // `probs[i] = probs.back(); probs.pop_back();` del original. El orden
+        // que queda para el siguiente `RandomRange` es parte del contrato.
+        let _ = candidates.swap_remove(index);
+        attempts = attempts.saturating_add(1);
+
+        if calendar_year < house.min_year || calendar_year > house.max_year {
+            continue;
+        }
+        if (house.is_church() && town.has_church) || (house.is_stadium() && town.has_stadium) {
+            continue;
+        }
+        if house.requires_flat() && slope != 0 {
+            continue;
+        }
+        let Some(base) = resolve_town_house_footprint(map, town, tile, house.building_flags) else {
+            continue;
+        };
+
+        return Some(TownHouseCandidate {
+            id: house.id,
+            base,
+            random_bits: u8::try_from(rng.next() & 0xFF).unwrap_or(0),
+            probability_max: initial_probability_max,
+            candidate_count,
+            attempts,
+        });
     }
     None
 }
@@ -1064,7 +1115,6 @@ mod tests {
         };
         update_town_radius(&mut town);
         let tile = TileCoord::new(46, 24);
-        let height = state.map.get(tile).expect("house tile").height;
         // Entrada al primer `TryBuildTownHouse` de C++; el primer candidato
         // es válido 1×1, por lo que no activa todavía el descarte de huellas.
         let mut rng = Randomizer {
@@ -1072,19 +1122,60 @@ mod tests {
         };
         let house = choose_generated_town_house_candidate(
             &town,
+            &state.map,
             tile,
-            height,
             Climate::Temperate,
+            1950,
             &mut rng,
         )
         .expect("candidate house");
 
         assert_eq!(house.id, 26);
+        assert_eq!(house.base, tile);
         assert_eq!(house.random_bits, 157);
         assert_eq!(house.probability_max, 272);
         assert_eq!(house.candidate_count, 17);
+        assert_eq!(house.attempts, 1);
         // RandomRange(probability_max) seguido de Random() para MAP5.
         assert_eq!(rng.state, [2_387_930_541, 1_281_562_269]);
+    }
+
+    #[test]
+    fn generated_town_house_lottery_removes_late_year_rejection_before_retrying() {
+        let state = clear_phase_state(1_330_935_378);
+        let mut town = Town {
+            pos: TileCoord::new(47, 23),
+            num_houses: 22,
+            ..Town::default()
+        };
+        update_town_radius(&mut town);
+
+        // Sexta tentativa de casa de la primera ciudad. El oráculo C++ extrae
+        // primero la 32 (aún no disponible en 1950), la elimina y recién
+        // después extrae la 6. Si la fecha se filtra al crear el pool, ambos
+        // `RandomRange` y toda la frontera posterior quedan mal.
+        let tile = TileCoord::new(46, 27);
+        let mut rng = Randomizer {
+            state: [3_417_675_983, 2_894_021_268],
+        };
+        let house = choose_generated_town_house_candidate(
+            &town,
+            &state.map,
+            tile,
+            Climate::Temperate,
+            1950,
+            &mut rng,
+        )
+        .expect("candidate after late-year rejection");
+
+        assert_eq!(house.id, 6);
+        assert_eq!(house.base, tile);
+        assert_eq!(house.probability_max, 112);
+        assert_eq!(house.candidate_count, 7);
+        assert_eq!(house.attempts, 2);
+        assert_eq!(house.random_bits, 151);
+        // Dos RandomRange (32 descartada, 6 aceptada) y Random() de MAP1.
+        assert_eq!(rng.state, [3_042_269_420, 2_388_727_447]);
     }
 
     #[test]

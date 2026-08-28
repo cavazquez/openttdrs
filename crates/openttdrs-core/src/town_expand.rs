@@ -483,7 +483,9 @@ fn try_extend_or_seed_road(map: &mut Map, town: &Town, seed: u32) -> Option<Tile
     seed_road_near_center(map, town.pos, seed)
 }
 
-fn town_layout_allows_house_here(town: &Town, tile: TileCoord) -> bool {
+/// Predicado compartido de `TownLayoutAllowsHouseHere` para los dos caminos de
+/// crecimiento: el runtime y la generación inicial.
+pub(crate) fn town_layout_allows_house_here(town: &Town, tile: TileCoord) -> bool {
     let gx = town.pos.x - tile.x;
     let gy = town.pos.y - tile.y;
     match town.layout {
@@ -507,7 +509,7 @@ fn town_layout_allows_2x2_house_here(town: &Town, tile: TileCoord) -> bool {
 
 /// `GetTileMaxZ`: una fundación sobre pendiente alcanza el máximo de la
 /// tesela; las pendientes empinadas suben dos niveles.
-fn town_house_tile_max_z(map: &Map, tile: TileCoord) -> Option<u8> {
+pub(crate) fn town_house_tile_max_z(map: &Map, tile: TileCoord) -> Option<u8> {
     tile_slope_and_z(map, tile).map(|(slope, z)| {
         z.saturating_add(if slope == 0 {
             0
@@ -544,7 +546,7 @@ fn check_free_2x2_house_area(map: &Map, base: TileCoord, max_z: u8, noslope: boo
 /// Para 1×2 / 2×1 prueba primero que la tesela inicial sea la base y luego la
 /// única orientación inversa que aún la contiene. Para 2×2 prueba las cuatro
 /// bases posibles en el orden exacto de `CheckTownBuild2x2House`.
-fn resolve_town_house_footprint(
+pub(crate) fn resolve_town_house_footprint(
     map: &Map,
     town: &Town,
     tile: TileCoord,
@@ -662,7 +664,12 @@ fn collect_road_tiles_near(map: &Map, center: TileCoord, radius: i32) -> Vec<Til
     out
 }
 
-fn can_build_house(map: &Map, pos: TileCoord, noslope: bool) -> bool {
+/// Equivalente acotado de `CanBuildHouseHere` para un mapa materializado.
+///
+/// No incluye puentes por encima ni comandos de limpieza con coste, que aún
+/// no existen en el mapa procedural; sí conserva los tipos de suelo y la
+/// restricción de pendiente que consumen `TryBuildTownHouse`.
+pub(crate) fn can_build_house(map: &Map, pos: TileCoord, noslope: bool) -> bool {
     if !matches!(map.get_kind(pos), Some(TileKind::Grass | TileKind::Forest)) {
         return false;
     }

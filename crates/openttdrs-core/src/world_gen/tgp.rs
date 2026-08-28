@@ -357,13 +357,14 @@ fn perlin_coast_noise_2d(x: f64, y: f64, p: f64, prime: i32, seed: u32) -> f64 {
     // `tgp.cpp` starts at frequency 1 and divides the coordinates by 64;
     // no se debe aplicar ambas escalas (la versión anterior hacía ruido
     // 64× demasiado suave en las costas).
-    let mut frequency = 1.0;
-    let mut amplitude = 1.0;
-    for _ in 0..OCTAVES {
+    for i in 0..OCTAVES {
+        let frequency = f64::from(1_u32 << i);
+        // OpenTTD evaluates `pow(p, (double)i)` independently for every
+        // octave.  Repeated multiplication is mathematically equivalent but
+        // can differ by one ULP and move a coastline's integer cut by a tile.
+        let amplitude = p.powf(f64::from(i));
         total += interpolated_noise((x * frequency) / 64.0, (y * frequency) / 64.0, prime, seed)
             * amplitude;
-        frequency *= 2.0;
-        amplitude *= p;
     }
     // OpenTTD intentionally returns the accumulated, unnormalised octave
     // sum. Normalising by the geometric-series weight changes the coastline
@@ -390,10 +391,13 @@ fn height_map_coast_lines(hm: &mut HeightMap, water_borders: BorderFlags, seed: 
             if smallest < 8 && max_x > 5.0 {
                 max_x /= 1.5;
             }
-            for x in 0..max_x as i32 {
-                if x <= hm.size_x {
-                    *hm.height_mut(x, y) = 0;
+            let mut x = 0;
+            while f64::from(x) < max_x {
+                if x > hm.size_x {
+                    break;
                 }
+                *hm.height_mut(x, y) = 0;
+                x += 1;
             }
         }
         if water_borders.test(BorderFlags::SOUTH_WEST) {
@@ -438,10 +442,13 @@ fn height_map_coast_lines(hm: &mut HeightMap, water_borders: BorderFlags, seed: 
             if smallest < 8 && max_y > 5.0 {
                 max_y /= 1.5;
             }
-            for y in 0..max_y as i32 {
-                if y <= hm.size_y {
-                    *hm.height_mut(x, y) = 0;
+            let mut y = 0;
+            while f64::from(y) < max_y {
+                if y > hm.size_y {
+                    break;
                 }
+                *hm.height_mut(x, y) = 0;
+                y += 1;
             }
         }
         if water_borders.test(BorderFlags::SOUTH_EAST) {
@@ -833,5 +840,16 @@ mod tests {
         };
         let water = |h: &[u8]| h.iter().filter(|&&z| z == 0).count();
         assert!(water(&heights(48, 48, &high)) >= water(&heights(48, 48, &low)));
+    }
+
+    #[test]
+    fn coast_cut_keeps_fractional_boundary_tile() {
+        let mut hm = HeightMap::new(64, 64);
+        hm.h.fill(i2h(10));
+        // For this seed/x pair OpenTTD computes a NW coast depth of 2.08:
+        // integer y=2 must be lowered, while y=3 must remain untouched.
+        height_map_coast_lines(&mut hm, BorderFlags(BorderFlags::NORTH_WEST), 1_330_935_378);
+        assert_eq!(hm.height(5, 2), 0);
+        assert_eq!(hm.height(5, 3), i2h(10));
     }
 }

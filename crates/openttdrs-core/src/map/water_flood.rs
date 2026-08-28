@@ -380,10 +380,45 @@ pub fn tile_loop_water_at(state: &mut GameState, c: TileCoord, tile: Tile) {
             }
         }
         FloodingBehaviour::DryOut => {
-            dry_up_tile(state, c);
+            // `TileLoop_Water` no seca una costa/árbol inundado sólo por su
+            // pendiente: primero comprueba sus direcciones de inundación y
+            // la conserva si alguna termina en agua activa. Omitir este paso
+            // convertía costas válidas de `GenerateLandscape` nuevamente en
+            // hierba durante las 256 pasadas de `CreateRivers`.
+            if !dry_out_has_active_neighbour(state, c) {
+                dry_up_tile(state, c);
+            }
         }
         FloodingBehaviour::None => {}
     }
+}
+
+/// Equivalente a la rama `FLOOD_DRYUP` de `TileLoop_Water`.
+///
+/// Las costas con más de una esquina elevada sólo se secan cuando ninguna de
+/// las direcciones admitidas por su pendiente conecta con una tesela de
+/// inundación activa. El original usa `GetFoundationSlope`; las teselas
+/// naturales de este recorrido no tienen fundación, por lo que la pendiente
+/// cruda de mapa es la misma consulta.
+fn dry_out_has_active_neighbour(state: &GameState, c: TileCoord) -> bool {
+    let Some((slope, _)) = tile_slope_and_z(&state.map, c) else {
+        return false;
+    };
+    let slope_index = usize::from(slope & !SLOPE_HALFTILE_MASK & !SLOPE_STEEP);
+    let mut directions = FLOOD_FROM_DIRS.get(slope_index).copied().unwrap_or(0);
+    while directions != 0 {
+        let direction = directions.trailing_zeros() as usize;
+        directions &= directions - 1;
+        let (dx, dy) = DIR_OFFSETS[direction];
+        let dest = TileCoord::new(c.x + dx, c.y + dy);
+        let Some(dest_tile) = state.map.get(dest) else {
+            continue;
+        };
+        if flooding_behaviour_at(&state.map, dest, dest_tile) == FloodingBehaviour::Active {
+            return true;
+        }
+    }
+    false
 }
 
 fn dry_up_tile(state: &mut GameState, c: TileCoord) {
@@ -488,6 +523,48 @@ mod tests {
         assert_eq!(shore.m6, 0x03);
         assert_eq!(shore.m7, 0);
         assert_eq!(shore.m8, 0);
+    }
+
+    #[test]
+    fn compound_coast_stays_when_its_flood_direction_reaches_active_sea() {
+        let mut map = Map::new_flat(8, 8, 0);
+        let coast = TileCoord::new(3, 3);
+        // SLOPE_SE (E+S): `_flood_from_dirs` consulta DIR_NW.
+        map.set_height(TileCoord::new(coast.x, coast.y + 1), 1)
+            .expect("raise east corner");
+        map.set_height(TileCoord::new(coast.x + 1, coast.y + 1), 1)
+            .expect("raise south corner");
+        make_shore_tile(&mut map, coast).expect("make coast");
+        let sea = TileCoord::new(coast.x, coast.y - 1);
+        make_water_tile(&mut map, sea, WaterClass::Sea).expect("make active sea");
+        let mut state = GameState::from_map(map);
+
+        let tile = state.map.get(coast).expect("coast");
+        tile_loop_water_at(&mut state, coast, tile);
+
+        let kept = state.map.get(coast).expect("kept coast");
+        assert_eq!(kept.kind, TileKind::Water);
+        assert_eq!(kept.m5, WATER_TYPE_COAST << 4);
+    }
+
+    #[test]
+    fn compound_coast_drains_without_an_active_flood_neighbour() {
+        let mut map = Map::new_flat(8, 8, 0);
+        let coast = TileCoord::new(3, 3);
+        // SLOPE_SE (E+S): no hay mar activo hacia DIR_NW.
+        map.set_height(TileCoord::new(coast.x, coast.y + 1), 1)
+            .expect("raise east corner");
+        map.set_height(TileCoord::new(coast.x + 1, coast.y + 1), 1)
+            .expect("raise south corner");
+        make_shore_tile(&mut map, coast).expect("make coast");
+        let mut state = GameState::from_map(map);
+
+        let tile = state.map.get(coast).expect("coast");
+        tile_loop_water_at(&mut state, coast, tile);
+
+        let drained = state.map.get(coast).expect("drained coast");
+        assert_eq!(drained.kind, TileKind::Grass);
+        assert_eq!(drained.m5, clear_ground_m5(CLEAR_GROUND_GRASS, 3));
     }
 
     /// `GameState::new` usa altura 1; la inundación solo actúa a `GetTileZ == 0`.

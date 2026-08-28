@@ -399,6 +399,7 @@ mod tests {
     fn ottn_roundtrip_preserves_construction_settings_in_pats() {
         let mut state = tiny_state();
         state.climate = crate::Climate::SubTropical;
+        state.snow_line_height = 2;
         state.construction.map_height_limit = 75;
         state.construction.road_vehicle_driving_side = crate::RoadVehicleDrivingSide::Right;
         state.construction.train_signal_side = crate::TrainSignalSide::Right;
@@ -441,6 +442,7 @@ mod tests {
         let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
         let sav_game = sav::load(&bytes).expect("load");
         assert_eq!(sav_game.climate, state.climate);
+        assert_eq!(sav_game.snow_line_height, state.snow_line_height);
         assert_eq!(sav_game.construction, state.construction);
         assert_eq!(sav_game.pathfinding, state.pathfinding);
         assert_eq!(

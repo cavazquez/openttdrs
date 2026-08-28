@@ -47,8 +47,22 @@ def test_write_ottdmap_preserves_dense_planes() -> None:
     assert len(raw) == 16 + 2 * 2 * 10 + 2 * 2 * 2
 
 
+def test_write_config_accepts_each_openttd_landscape() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "openttd.cfg"
+        matrix.write_config(path, 64, climate=1)
+        assert "landscape = 1\n" in path.read_text(encoding="utf-8")
+        try:
+            matrix.write_config(path, 64, climate=4)
+        except matrix.MatrixError:
+            pass
+        else:
+            raise AssertionError("un landscape fuera de 0..3 debe rechazarse")
+
+
 if __name__ == "__main__":
     test_parse_matrix_sorts_and_validates()
     test_compare_tiles_reports_4x4_blocks()
     test_write_ottdmap_preserves_dense_planes()
+    test_write_config_accepts_each_openttd_landscape()
     print("OK: random_map_parity tests")

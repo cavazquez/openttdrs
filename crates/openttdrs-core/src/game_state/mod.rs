@@ -494,6 +494,12 @@ pub struct GameState {
     /// Clima del paisaje (`LandscapeType` en `OpenTTD`).
     #[serde(default)]
     pub climate: Climate,
+    /// Línea de nieve efectiva del mundo ártico (`game_creation.snow_line_height`).
+    ///
+    /// Se persiste separada de la cobertura configurada: `OpenTTD` la recalcula
+    /// al crear el mapa y luego la usa para árboles y nieve estacional.
+    #[serde(default = "default_snow_line_height")]
+    pub snow_line_height: u8,
     /// Semilla de generación procedural (0 = sin terreno aleatorio explícito).
     #[serde(default)]
     pub world_seed: u64,
@@ -637,6 +643,10 @@ const fn default_true() -> bool {
     true
 }
 
+const fn default_snow_line_height() -> u8 {
+    crate::world_gen::DEF_SNOW_LINE_HEIGHT
+}
+
 const fn default_vehicle_breakdowns() -> u8 {
     2
 }
@@ -733,6 +743,7 @@ impl GameState {
             current_airport_spec: crate::airport_class::AirportSpecId::Small,
             current_airport_newgrf_id: None,
             climate: Climate::default(),
+            snow_line_height: default_snow_line_height(),
             world_seed: 0,
             jgr_tunnels_from_footer: Vec::new(),
             news: crate::news::NewsQueue::default(),
@@ -866,6 +877,7 @@ impl GameState {
             current_airport_spec: crate::airport_class::AirportSpecId::Small,
             current_airport_newgrf_id: None,
             climate: Climate::default(),
+            snow_line_height: default_snow_line_height(),
             world_seed: 0,
             jgr_tunnels_from_footer: Vec::new(),
             news: crate::news::NewsQueue::default(),

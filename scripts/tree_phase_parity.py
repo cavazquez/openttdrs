@@ -36,6 +36,12 @@ TRACE_METADATA_FIELDS = (
     "height",
 )
 TRACE_PLACEMENT_FIELDS = ("ordinal", "origin", "x", "y", "random", "parent")
+CLIMATES = {
+    "temperate": 0,
+    "arctic": 1,
+    "tropic": 2,
+    "toyland": 3,
+}
 
 
 class TreePhaseError(RuntimeError):
@@ -162,6 +168,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--size", type=int, default=64, help="lado del mapa (default: 64)")
     parser.add_argument("--seed", type=int, default=1_330_935_378, help="seed de OpenTTD")
+    parser.add_argument(
+        "--climate",
+        choices=tuple(CLIMATES),
+        default="temperate",
+        help="landscape de OpenTTD (default: temperate)",
+    )
     parser.add_argument("--timeout", type=int, default=120)
     parser.add_argument("--out-dir", type=Path, help="directorio para artefactos del fixture")
     parser.add_argument("--report", type=Path, help="ruta del informe JSON")
@@ -321,11 +333,12 @@ def main() -> int:
         "candidate": {"binary": str(candidate)},
         "size": args.size,
         "seed": args.seed,
+        "climate": args.climate,
     }
     try:
         with tempfile.TemporaryDirectory(prefix="openttdrs-tree-phase-config-") as config_dir:
             config = Path(config_dir) / "openttd.cfg"
-            matrix.write_config(config, args.size)
+            matrix.write_config(config, args.size, climate=CLIMATES[args.climate])
             pre_save, post_save, reference_trace = run_reference_generation(
                 reference, config, args.seed, commit, out_dir, args.timeout
             )
@@ -359,7 +372,7 @@ def main() -> int:
             }
         )
         print(
-            f"trees {args.size}x{args.size} seed={args.seed}: "
+            f"trees {args.size}x{args.size} climate={args.climate} seed={args.seed}: "
             f"{'OK' if report['exact_match'] else 'DIVERGE'} "
             f"tiles={map_comparison['tile_difference_count']} "
             f"blocks4={map_comparison['changed_block_count']}/{map_comparison['block_grid']['count']} "

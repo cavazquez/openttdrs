@@ -99,7 +99,7 @@ comparar una captura enorme: valida los bytes de tesela, bloques 4×4, stream
 RNG y la secuencia `PlaceTree`.
 
 ```bash
-python3 scripts/tree_phase_parity.py --size 64 --seed 1330935378 \
+python3 scripts/tree_phase_parity.py --size 64 --seed 1330935378 --climate arctic \
   --out-dir /tmp/openttdrs-tree-phase
 ```
 

@@ -63,7 +63,17 @@ def test_trace_reports_first_placement_field() -> None:
     assert comparison["first_difference"]["fields"] == ["random"]
 
 
+def test_climate_names_match_openttd_landscape_ids() -> None:
+    assert tree_phase.CLIMATES == {
+        "temperate": 0,
+        "arctic": 1,
+        "tropic": 2,
+        "toyland": 3,
+    }
+
+
 if __name__ == "__main__":
     test_exact_trace_compares_without_producer_path_noise()
     test_trace_reports_first_placement_field()
+    test_climate_names_match_openttd_landscape_ids()
     print("OK: tree_phase_parity tests")

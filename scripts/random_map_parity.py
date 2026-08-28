@@ -71,13 +71,16 @@ def load_manifest_commit() -> str:
         raise MatrixError(f"no se pudo leer el commit OpenTTD de {path}") from error
 
 
-def write_config(path: Path, size: int) -> None:
+def write_config(path: Path, size: int, climate: int = 0) -> None:
+    """Escribe la configuración headless de un mapa cuadrado de OpenTTD."""
     bits = int(math.log2(size))
+    if climate not in range(4):
+        raise MatrixError(f"clima inválido {climate}; usar 0..3")
     path.write_text(
         "[game_creation]\n"
         f"map_x = {bits}\n"
         f"map_y = {bits}\n"
-        "landscape = 0\n"
+        f"landscape = {climate}\n"
         "\n"
         "[misc]\n"
         "no_multithreading = true\n",

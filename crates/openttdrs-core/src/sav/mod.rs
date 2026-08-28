@@ -255,6 +255,11 @@ pub struct SavGame {
     pub link_graph: LinkGraphStats,
     /// Landscape del save (`game_creation.landscape`); default temperate.
     pub climate: crate::Climate,
+    /// Línea de nieve efectiva (`game_creation.snow_line_height`) de `PATS`.
+    ///
+    /// `OpenTTD` recalcula este valor al crear un mapa ártico y `GenerateTrees`
+    /// lo consulta para reforzar los árboles situados por encima de la nieve.
+    pub snow_line_height: u8,
     /// Lado de conducción y señales de `PATS` / `OPTS`.
     pub construction: crate::ConstructionSettings,
     /// Ajustes PBS/pathfinding persistidos en `PATS` / `OPTS`.
@@ -342,6 +347,8 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
     let money = entities::company_money_from_chunks(&chunk_list, version);
     let company_colour = entities::company_colour_from_chunks(&chunk_list, version);
     let climate = landscape::climate_from_chunks(&chunk_list).unwrap_or_default();
+    let snow_line_height = landscape::snow_line_height_from_chunks(&chunk_list)
+        .unwrap_or(crate::world_gen::DEF_SNOW_LINE_HEIGHT);
     let parsed_settings = settings::settings_from_chunks(&chunk_list);
     let mut global_economy = economy::global_economy_from_chunks(&chunk_list);
     global_economy.inflation_enabled = parsed_settings.inflation_enabled;
@@ -374,6 +381,7 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
         random_state,
         link_graph,
         climate,
+        snow_line_height,
         construction: parsed_settings.construction,
         pathfinding: parsed_settings.pathfinding,
         train_acceleration_model: parsed_settings.train_acceleration_model,
@@ -894,6 +902,7 @@ impl GameState {
             };
         }
         state.climate = sav.climate;
+        state.snow_line_height = sav.snow_line_height;
         state.global_economy = sav.global_economy;
         state.global_economy.inflation_enabled = sav.inflation_enabled;
         state.global_economy.recessions_enabled = sav.recessions_enabled;
@@ -1646,6 +1655,7 @@ mod tests {
             random_state: None,
             link_graph: LinkGraphStats::default(),
             climate: crate::Climate::Temperate,
+            snow_line_height: crate::world_gen::DEF_SNOW_LINE_HEIGHT,
             construction: crate::ConstructionSettings::default(),
             pathfinding: crate::PathfindingSettings::default(),
             train_acceleration_model: crate::engine::TrainAccelerationModel::Realistic,
@@ -1738,9 +1748,11 @@ mod tests {
         let mut sav = empty_sav(352, Map::new_flat(4, 4, 0));
         sav.construction.road_vehicle_driving_side = crate::RoadVehicleDrivingSide::Right;
         sav.construction.train_signal_side = crate::TrainSignalSide::RoadVehicleDrivingSide;
+        sav.snow_line_height = 2;
 
         let state = GameState::from_sav_game(sav);
         assert!(state.construction.signals_on_right());
+        assert_eq!(state.snow_line_height, 2);
     }
 
     #[test]
@@ -2504,6 +2516,7 @@ mod tests {
             game_time: None,
             random_state: None,
             climate: crate::Climate::Temperate,
+            snow_line_height: crate::world_gen::DEF_SNOW_LINE_HEIGHT,
             construction: crate::ConstructionSettings::default(),
             pathfinding: crate::PathfindingSettings::default(),
             train_acceleration_model: crate::engine::TrainAccelerationModel::Realistic,

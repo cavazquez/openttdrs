@@ -12,7 +12,7 @@ use openttdrs_core::world_raw::{
 use openttdrs_core::{
     Climate, GameState, Map, PopulationGenConfig, TerrainType, TreePlacement, WorldGenConfig,
     apply_population_gen_with_rng, apply_world_gen_with_rng, generate_objects_with_rng,
-    generate_trees_with_rng, generate_trees_with_rng_observer_with_height_limit,
+    generate_trees_with_rng, generate_trees_with_rng_observer_with_map_settings,
     run_generation_tile_loop,
 };
 
@@ -565,12 +565,13 @@ fn run(args: &Args) -> Result<(), String> {
             state: random_state,
         };
         let mut placements = Vec::new();
-        generate_trees_with_rng_observer_with_height_limit(
+        generate_trees_with_rng_observer_with_map_settings(
             &mut map,
             sav.climate,
             &mut rng,
             &[],
             sav.construction.effective_map_height_limit(),
+            sav.snow_line_height,
             &mut |placement| placements.push(placement),
         );
         let source_path = format!("trees-replay:{source_path}");

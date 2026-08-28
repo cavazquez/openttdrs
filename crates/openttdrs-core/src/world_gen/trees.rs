@@ -43,6 +43,14 @@ const TREE_GROUND_GRASS: u8 = 0;
 const TREE_GROUND_ROUGH: u8 = 1;
 const TREE_GROUND_SNOW_DESERT: u8 = 2;
 const TREE_GROUND_SHORE: u8 = 3;
+/// `TreeGround::RoughSnow`; usa el bit 8 de MAP2.
+const TREE_GROUND_ROUGH_SNOW: u8 = 4;
+/// `IsSnowTile` de `clear_map.h`: bit 4 de MAP3 en una tesela `MP_CLEAR`.
+const CLEAR_SNOW_M3_BIT: u8 = 1 << 4;
+/// `TileType::Clear`; algunos `MP_OBJECT` legacy se representan como
+/// `TileKind::Grass` hasta que se resuelve su pool, por lo que el tipo crudo
+/// sigue siendo autoritativo para `CanPlantTreesOnTile`.
+const OTTD_TILETYPE_CLEAR: u8 = 0;
 /// `static_cast<float>(INT32_MAX / M_PI * 2)` de `CreateRandomStarShapedPolygon`.
 ///
 /// El cálculo de C++ ocurre en doble precisión y sólo luego se reduce a
@@ -154,6 +162,35 @@ pub fn generate_trees_with_rng_observer_with_height_limit<F>(
 ) where
     F: FnMut(TreePlacement),
 {
+    generate_trees_with_rng_observer_with_map_settings(
+        map,
+        climate,
+        rng,
+        preserve,
+        map_height_limit,
+        super::DEF_SNOW_LINE_HEIGHT,
+        observer,
+    );
+}
+
+/// Variante observada que también usa la línea de nieve efectiva del save.
+///
+/// En ártico `PlaceTreesRandomly` triplica los refuerzos de igual altura
+/// cuando el árbol base está por encima de `GetSnowLine()`. Esa línea queda
+/// persistida en `PATS` como `game_creation.snow_line_height` al crear el
+/// mundo, por lo que una reproducción desde un `.sav` no puede sustituirla
+/// siempre por el default de una partida nueva.
+pub fn generate_trees_with_rng_observer_with_map_settings<F>(
+    map: &mut Map,
+    climate: Climate,
+    rng: &mut Randomizer,
+    preserve: &[PreserveRect],
+    map_height_limit: u8,
+    snow_line_height: u8,
+    observer: &mut F,
+) where
+    F: FnMut(TreePlacement),
+{
     let (map_w, map_h) = map.dimensions();
     if map_w < 4 || map_h < 4 {
         return;
@@ -218,7 +255,12 @@ pub fn generate_trees_with_rng_observer_with_height_limit<F>(
                 // attempts. In temperate maps `PlaceTree` is always valid;
                 // preserving the upstream order also keeps the tropical
                 // invalid-tree path from changing RNG consumption.
-                for _ in 0..same_height_attempt_count(height, map_height_limit) {
+                for _ in 0..same_height_attempt_count(
+                    height,
+                    climate,
+                    snow_line_height,
+                    map_height_limit,
+                ) {
                     place_tree_at_same_height(map, tile, height, rng, climate, preserve, observer);
                 }
             }
@@ -228,12 +270,20 @@ pub fn generate_trees_with_rng_observer_with_height_limit<F>(
 
 /// Cantidad de llamadas a `PlaceTreeAtSameHeight` de un árbol base.
 ///
-/// Corresponde a `j = GetTileZ(tile) * 2` seguido del escalado de
-/// `tree_cmd.cpp`. La bonificación ártica por encima de la línea de nieve se
-/// resuelve por separado, porque requiere el setting de línea de nieve.
+/// Corresponde a `j = GetTileZ(tile) * 2`, el multiplicador ártico por encima
+/// de `GetSnowLine()` y finalmente el escalado de `tree_cmd.cpp`, en ese
+/// orden.
 #[must_use]
-const fn same_height_attempt_count(height: u8, map_height_limit: u8) -> u32 {
+const fn same_height_attempt_count(
+    height: u8,
+    climate: Climate,
+    snow_line_height: u8,
+    map_height_limit: u8,
+) -> u32 {
     let mut attempts = (height as u32).saturating_mul(2);
+    if matches!(climate, Climate::SubArctic) && height > snow_line_height {
+        attempts = attempts.saturating_mul(3);
+    }
     let effective_limit = if map_height_limit == 0 {
         MAP_HEIGHT_LIMIT_AUTO_MINIMUM as u32
     } else {
@@ -289,12 +339,12 @@ fn is_plantable(map: &Map, c: TileCoord, preserve: &[PreserveRect], allow_desert
         return false;
     };
     match tile.kind {
-        TileKind::Water => {
+        TileKind::Water if tile.ottd_type_nibble() == 6 => {
             let is_coast = ((tile.m5 >> 4) & 0x0F) == WATER_TYPE_COAST;
             let slope = tile_slope_and_z(map, c).map_or(0, |(slope, _)| slope);
             is_coast && !is_slope_with_one_corner_raised(slope)
         }
-        TileKind::Grass => {
+        TileKind::Grass if tile.ottd_type_nibble() == OTTD_TILETYPE_CLEAR => {
             let ground = clear_ground_type(tile.m5);
             !matches!(ground, CLEAR_GROUND_FIELDS | CLEAR_GROUND_ROCKY)
                 && (allow_desert || ground != CLEAR_GROUND_DESERT)
@@ -345,15 +395,33 @@ fn place_tree(map: &mut Map, c: TileCoord, random: u32, climate: Climate) -> boo
             } else {
                 clear_density(previous.m5)
             };
-            let ground = match original_ground {
-                CLEAR_GROUND_ROUGH => TREE_GROUND_ROUGH,
-                // El mapa procedural representa la cobertura de nieve como
-                // `CLEAR_GROUND_SNOW`; ambas variantes conservan densidad en
-                // `PlaceTree` en lugar de rerandomizarla.
-                CLEAR_GROUND_SNOW | CLEAR_GROUND_DESERT => TREE_GROUND_SNOW_DESERT,
-                _ => TREE_GROUND_GRASS,
+            // OpenTTD no codifica `CLEAR_SNOW` en `m5`: `IsSnowTile` mira
+            // MAP3 bit 4. El generador Rust histórico también puede entregar
+            // `CLEAR_GROUND_SNOW`, así que ambos formatos conservan el suelo
+            // nevado al convertirlo en `MP_TREES`.
+            let is_snow =
+                previous.m3 & CLEAR_SNOW_M3_BIT != 0 || original_ground == CLEAR_GROUND_SNOW;
+            let ground = if is_snow {
+                if original_ground == CLEAR_GROUND_ROUGH {
+                    TREE_GROUND_ROUGH_SNOW
+                } else {
+                    TREE_GROUND_SNOW_DESERT
+                }
+            } else {
+                match original_ground {
+                    CLEAR_GROUND_ROUGH => TREE_GROUND_ROUGH,
+                    // El mapa procedural representa la cobertura de nieve como
+                    // `CLEAR_GROUND_SNOW`; ambas variantes conservan densidad en
+                    // `PlaceTree` en lugar de rerandomizarla.
+                    CLEAR_GROUND_SNOW | CLEAR_GROUND_DESERT => TREE_GROUND_SNOW_DESERT,
+                    _ => TREE_GROUND_GRASS,
+                }
             };
-            (ground, density, matches!(ground, TREE_GROUND_SNOW_DESERT))
+            (
+                ground,
+                density,
+                matches!(ground, TREE_GROUND_SNOW_DESERT | TREE_GROUND_ROUGH_SNOW),
+            )
         }
         _ => return false,
     };
@@ -370,6 +438,7 @@ fn place_tree(map: &mut Map, c: TileCoord, random: u32, climate: Climate) -> boo
         WaterClass::Invalid
     };
 
+    let tree_m2 = (u16::from(ground & 0x07) << 6) | (u16::from(density & 0x03) << 4);
     let mut tile = Tile {
         height: previous.height,
         kind: TileKind::Forest,
@@ -379,8 +448,8 @@ fn place_tree(map: &mut Map, c: TileCoord, random: u32, climate: Climate) -> boo
         m6: 0,
         m8: 0,
         m3: tree_type,
-        m2: (ground << 6) | (density << 4),
-        m2_hi: 0,
+        m2: tree_m2 as u8,
+        m2_hi: (tree_m2 >> 8) as u8,
         m7: 0,
         m3hi: 0,
     };
@@ -538,10 +607,19 @@ mod tests {
 
     #[test]
     fn same_height_reinforcement_scales_with_map_height_limit() {
-        assert_eq!(same_height_attempt_count(3, 15), 6);
-        assert_eq!(same_height_attempt_count(3, 30), 3);
-        assert_eq!(same_height_attempt_count(3, 0), 3);
-        assert_eq!(same_height_attempt_count(1, 30), 1);
+        assert_eq!(same_height_attempt_count(3, Climate::Temperate, 2, 15), 6);
+        assert_eq!(same_height_attempt_count(3, Climate::Temperate, 2, 30), 3);
+        assert_eq!(same_height_attempt_count(3, Climate::Temperate, 2, 0), 3);
+        assert_eq!(same_height_attempt_count(1, Climate::Temperate, 2, 30), 1);
+    }
+
+    #[test]
+    fn arctic_reinforcement_triples_only_above_saved_snow_line() {
+        // `tree_cmd.cpp`: j = z * 2; if (z > GetSnowLine()) j *= 3;
+        // y recién después se normaliza al límite de altura del mapa.
+        assert_eq!(same_height_attempt_count(3, Climate::SubArctic, 2, 30), 9);
+        assert_eq!(same_height_attempt_count(2, Climate::SubArctic, 2, 30), 2);
+        assert_eq!(same_height_attempt_count(3, Climate::Temperate, 2, 30), 3);
     }
 
     #[test]
@@ -587,6 +665,37 @@ mod tests {
     }
 
     #[test]
+    fn snowy_clear_tile_preserves_snow_ground_and_density() {
+        let mut map = Map::new_flat(8, 8, 2);
+        let snow = TileCoord::new(3, 3);
+        let mut tile = map.get(snow).expect("snow fixture tile");
+        tile.m3 = 0x10; // `IsSnowTile` / MAP3 bit 4.
+        tile.m5 = clear_ground_m5(0, 0);
+        map.set_tile(snow, tile).expect("snow fixture write");
+
+        assert!(place_tree(&mut map, snow, 0xF123_4567, Climate::SubArctic));
+        let tree = map.get(snow).expect("snow tree");
+        assert_eq!(tree.m2, 0x80); // SnowOrDesert, density 0.
+        assert_eq!(tree.m2_hi, 0);
+
+        let rough_snow = TileCoord::new(4, 3);
+        let mut rough = map.get(rough_snow).expect("rough snow fixture tile");
+        rough.m3 = 0x10;
+        rough.m5 = clear_ground_m5(1, 3);
+        map.set_tile(rough_snow, rough)
+            .expect("rough snow fixture write");
+        assert!(place_tree(
+            &mut map,
+            rough_snow,
+            0xF123_4567,
+            Climate::SubArctic
+        ));
+        let rough_tree = map.get(rough_snow).expect("rough snow tree");
+        assert_eq!(rough_tree.m2, 0x30); // low byte of RoughSnow + density 3.
+        assert_eq!(rough_tree.m2_hi, 1);
+    }
+
+    #[test]
     fn tree_planting_rejects_fields_and_honours_desert_policy() {
         let mut map = Map::new_flat(8, 8, 2);
         let field = TileCoord::new(3, 3);
@@ -599,6 +708,18 @@ mod tests {
             .expect("desert tile");
         assert!(is_plantable(&map, desert, &[], true));
         assert!(!is_plantable(&map, desert, &[], false));
+    }
+
+    #[test]
+    fn tree_planting_never_treats_raw_object_as_clear_grass() {
+        let mut map = Map::new_flat(8, 8, 2);
+        let object = TileCoord::new(3, 3);
+        // `MP_OBJECT` aún puede usar `TileKind::Grass` para el fallback
+        // visual; `CanPlantTreesOnTile` de OpenTTD mira MAPT y lo rechaza.
+        let mut tile = map.get(object).expect("object fixture tile");
+        tile.mapt = 0xA0;
+        map.set_tile(object, tile).expect("object fixture write");
+        assert!(!is_plantable(&map, object, &[], true));
     }
 
     #[test]

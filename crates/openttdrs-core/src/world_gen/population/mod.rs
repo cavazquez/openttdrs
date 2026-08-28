@@ -109,6 +109,40 @@ pub fn town_target_count(density: TownDensity, map_w: u32, map_h: u32) -> usize 
     usize::try_from(scaled).unwrap_or(1)
 }
 
+/// `Map::CountLandTiles` de `OpenTTD`, retenido al iniciar la partida.
+///
+/// Las costas (`WaterTileType::Coast`) cuentan como tierra: `IsWaterTile()`
+/// sólo reconoce agua plana. Este detalle alimenta
+/// `Map::ScaleByLandProportion` en `GenerateTowns`.
+fn initial_land_count(map: &Map) -> u32 {
+    let size = u32::try_from(map.tiles().len()).unwrap_or(u32::MAX);
+    let land = map
+        .tiles()
+        .iter()
+        .filter(|tile| !(tile.kind == TileKind::Water && (tile.m5 >> 4) == 0))
+        .count();
+    let land = u32::try_from(land).unwrap_or(size);
+    land.saturating_add(land / 12).min(size)
+}
+
+/// Cantidad sugerida de `GenerateTowns` para una partida nueva.
+///
+/// Primero escala la dificultad a tamaño de mapa, suma los tres bits bajos de
+/// un `Random()` y sólo entonces ajusta por el terreno inicial. El valor no es
+/// un mínimo garantizado: `CreateRandomTown` puede fallar sus 20 intentos.
+fn town_generation_target_count(density: TownDensity, map: &Map, rng: &mut Randomizer) -> usize {
+    let (map_w, map_h) = map.dimensions();
+    let suggested = scale_by_size(density.base_count(), map_w, map_h)
+        .max(1)
+        .saturating_add(rng.next() & 7);
+    let size = u32::try_from(map.tiles().len()).unwrap_or(1).max(1);
+    let scaled = u32::try_from(
+        u64::from(suggested).saturating_mul(u64::from(initial_land_count(map))) / u64::from(size),
+    )
+    .unwrap_or(u32::MAX);
+    usize::try_from(scaled.clamp(1, 64_000)).unwrap_or(64_000)
+}
+
 /// Objetivo de industrias según densidad y tamaño de mapa.
 #[must_use]
 pub fn industry_target_count(density: IndustryDensity, map_w: u32, map_h: u32) -> usize {
@@ -153,6 +187,7 @@ pub fn generate_towns_with_rng(
     rng: &mut Randomizer,
 ) -> usize {
     let (mw, mh) = state.map.dimensions();
+    let target = town_generation_target_count(cfg.town_density, &state.map, rng);
     let mut town_centers: Vec<TileCoord> = state.towns.iter().map(|town| town.pos).collect();
     let mut ctx = PopCtx {
         state,
@@ -161,11 +196,7 @@ pub fn generate_towns_with_rng(
         mw,
         mh,
     };
-    towns::place_towns(
-        &mut ctx,
-        town_target_count(cfg.town_density, mw, mh),
-        &mut town_centers,
-    )
+    towns::place_towns(&mut ctx, target, &mut town_centers)
 }
 
 /// `GenerateIndustries`: coloca industrias según densidad y `ScaleBySize`.
@@ -313,6 +344,9 @@ pub fn house_beside_road(map: &Map, house: TileCoord) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cargodist::parity::Randomizer;
+    use crate::map::water_flood::make_shore_tile;
+    use crate::map::{TileCoord, WaterClass, make_water_tile};
     use crate::world_gen::{Climate, WorldGenConfig, apply_world_gen};
 
     #[test]
@@ -352,6 +386,43 @@ mod tests {
             town_target_count(TownDensity::High, 64, 64)
                 > town_target_count(TownDensity::VeryLow, 64, 64)
         );
+    }
+
+    #[test]
+    fn initial_land_count_keeps_coasts_but_excludes_plain_water() {
+        let mut map = Map::new_flat(64, 64, 0);
+        for index in 0..1_000 {
+            let c = TileCoord::new(index % 64, index / 64);
+            make_water_tile(&mut map, c, WaterClass::Sea).expect("plain water");
+        }
+        make_shore_tile(&mut map, TileCoord::new(1, 0)).expect("shore");
+
+        // 4096 - 999 water tiles, más la compensación de 1/12 de OpenTTD.
+        assert_eq!(initial_land_count(&map), 3_097 + 3_097 / 12);
+    }
+
+    #[test]
+    fn town_generation_target_replays_land_proportion_and_random_low_bits() {
+        let mut map = Map::new_flat(64, 64, 0);
+        // Fixture de la frontera `clear` de la seed 1330935378: 1121
+        // teselas de agua plana y 278 costas, que `CountLandTiles` conserva.
+        for index in 0..1_121 {
+            let c = TileCoord::new(index % 64, index / 64);
+            make_water_tile(&mut map, c, WaterClass::Sea).expect("plain water");
+        }
+        for index in 1_121..1_399 {
+            let c = TileCoord::new(index % 64, index / 64);
+            make_shore_tile(&mut map, c).expect("shore");
+        }
+        let mut rng = Randomizer {
+            state: [1_168_016_413, 2_955_223_551],
+        };
+
+        assert_eq!(
+            town_generation_target_count(TownDensity::Normal, &map, &mut rng),
+            3
+        );
+        assert_eq!(rng.state, [1_189_259_021, 2_830_356_610]);
     }
 
     #[test]

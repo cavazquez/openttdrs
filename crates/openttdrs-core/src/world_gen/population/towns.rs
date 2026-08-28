@@ -2549,6 +2549,112 @@ mod tests {
             &mut rng,
             [1_638_330_032, 3_483_907_467],
         );
+
+        // GDB: llamadas 61–72. El tramo vuelve a recorrer la frontera que
+        // acaba de nivelar RMAP-046 y confirma que las calles siguientes no
+        // desplazan ni los retornos ni las casas con población cero.
+        grow_and_assert_no_construction(
+            &mut state,
+            &mut town,
+            &mut rng,
+            [735_079_868, 1_125_417_823],
+        );
+        grow_and_assert_generated_road(
+            &mut state,
+            &mut town,
+            &mut rng,
+            ExpectedGeneratedRoad {
+                pos: TileCoord::new(46, 20),
+                bits: ROAD_BITS_AXIS_X,
+                rng_state: [216_521_646, 2_107_826_408],
+            },
+        );
+        grow_and_assert_no_construction(
+            &mut state,
+            &mut town,
+            &mut rng,
+            [3_022_712_418, 3_115_729_456],
+        );
+        grow_and_assert_generated_house(
+            &mut state,
+            &mut town,
+            &mut rng,
+            ExpectedGeneratedHouse {
+                pos: TileCoord::new(49, 27),
+                house_id: 11,
+                random_bits: 171,
+                num_houses: 46,
+                population: 1_009,
+                rng_state: [3_940_414_989, 2_405_020_400],
+            },
+        );
+        grow_and_assert_generated_road(
+            &mut state,
+            &mut town,
+            &mut rng,
+            ExpectedGeneratedRoad {
+                pos: TileCoord::new(45, 20),
+                bits: ROAD_BITS_AXIS_X,
+                rng_state: [3_723_900_061, 2_979_391_363],
+            },
+        );
+        grow_and_assert_no_construction(
+            &mut state,
+            &mut town,
+            &mut rng,
+            [4_071_879_203, 4_265_401_531],
+        );
+        grow_and_assert_no_construction(
+            &mut state,
+            &mut town,
+            &mut rng,
+            [1_511_774_654, 2_533_439_832],
+        );
+        grow_and_assert_no_construction(
+            &mut state,
+            &mut town,
+            &mut rng,
+            [3_054_545_718, 2_413_590_698],
+        );
+        grow_and_assert_no_construction(
+            &mut state,
+            &mut town,
+            &mut rng,
+            [1_541_626_736, 1_471_201_578],
+        );
+        grow_and_assert_generated_house(
+            &mut state,
+            &mut town,
+            &mut rng,
+            ExpectedGeneratedHouse {
+                pos: TileCoord::new(45, 19),
+                house_id: 39,
+                random_bits: 108,
+                num_houses: 47,
+                population: 1_044,
+                rng_state: [1_152_231_306, 2_805_052_611],
+            },
+        );
+        grow_and_assert_generated_road(
+            &mut state,
+            &mut town,
+            &mut rng,
+            ExpectedGeneratedRoad {
+                pos: TileCoord::new(45, 23),
+                bits: ROAD_BITS_AXIS_X,
+                rng_state: [663_350_535, 3_962_587_022],
+            },
+        );
+        grow_and_assert_generated_road(
+            &mut state,
+            &mut town,
+            &mut rng,
+            ExpectedGeneratedRoad {
+                pos: TileCoord::new(50, 26),
+                bits: ROAD_BITS_AXIS_X,
+                rng_state: [4_159_791_342, 1_546_280_518],
+            },
+        );
     }
 
     #[test]

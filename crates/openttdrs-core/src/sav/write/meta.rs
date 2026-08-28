@@ -18,9 +18,11 @@ pub(super) fn date_record(state: &GameState) -> Vec<u8> {
     // OpenTTD usa calendario gregoriano real — ver docs/PLANIFICACION.md § Export SAV.
     let calendar_date = i32::try_from(u64::from(year) * 365 + (doy.saturating_sub(1)))
         .unwrap_or(i32::try_from(u64::from(CALENDAR_BASE_YEAR) * 365).unwrap_or(0));
-    let mut rec = Vec::with_capacity(12);
+    let mut rec = Vec::with_capacity(20);
     rec.extend_from_slice(&calendar_date.to_be_bytes());
     rec.extend_from_slice(&state.tick.get().to_be_bytes());
+    rec.extend_from_slice(&state.random.state[0].to_be_bytes());
+    rec.extend_from_slice(&state.random.state[1].to_be_bytes());
     rec
 }
 

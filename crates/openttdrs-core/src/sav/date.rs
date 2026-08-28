@@ -1,4 +1,4 @@
-//! Reloj de simulación desde el chunk global `DATE`.
+//! Reloj y estado RNG global desde el chunk `DATE`.
 
 use crate::tick::GameTick;
 
@@ -43,6 +43,29 @@ pub(crate) fn game_time_from_chunks(chunks: &[RawChunk], save_version: u16) -> O
         calendar_date,
         tick,
     })
+}
+
+/// Lee el estado de `_random` que `OpenTTD` persiste en `DATE`.
+///
+/// No se infiere a partir de la semilla de creación: al cargar una partida el
+/// stream ya puede haber sido consumido por generación, economía o callbacks.
+/// Los `CH_RIFF` antiguos no tienen nombres de columnas auto-descriptivos, por
+/// eso se conservan como `None` hasta que exista un decoder específico.
+#[must_use]
+pub(crate) fn random_state_from_chunks(chunks: &[RawChunk]) -> Option<[u32; 2]> {
+    let date = find_chunk(chunks, "DATE")?;
+    if date.ch_type != CH_TABLE {
+        return None;
+    }
+    let rows = parse_table_chunk(&date.body, false).ok()?;
+    let record = &rows.first()?.1;
+    let state_0 = record_get(record, "random_state[0]")
+        .and_then(SlValue::as_u64)
+        .and_then(|value| u32::try_from(value).ok())?;
+    let state_1 = record_get(record, "random_state[1]")
+        .and_then(SlValue::as_u64)
+        .and_then(|value| u32::try_from(value).ok())?;
+    Some([state_0, state_1])
 }
 
 fn tick_counter_from_record(record: &super::table::SlRecord, save_version: u16) -> u64 {
@@ -105,12 +128,18 @@ mod tests {
         let mut rec = Vec::new();
         rec.extend_from_slice(&12_345i32.to_be_bytes());
         rec.extend_from_slice(&99_000u64.to_be_bytes());
+        rec.extend_from_slice(&0x1020_3040u32.to_be_bytes());
+        rec.extend_from_slice(&0x5060_7080u32.to_be_bytes());
 
         let mut header = Vec::new();
         header.push(5);
         write_str("date", &mut header);
         header.push(8);
         write_str("tick_counter", &mut header);
+        header.push(6);
+        write_str("random_state[0]", &mut header);
+        header.push(6);
+        write_str("random_state[1]", &mut header);
         header.push(0);
 
         let mut body = Vec::new();
@@ -125,10 +154,39 @@ mod tests {
             ch_type: CH_TABLE,
             body,
         };
-        let time = game_time_from_chunks(&[chunk], 310).expect("DATE");
+        let time = game_time_from_chunks(std::slice::from_ref(&chunk), 310).expect("DATE");
         assert_eq!(time.calendar_date, 12_345);
         assert_eq!(time.tick, 99_000);
         assert_eq!(game_tick_from_sav_time(time).get(), 99_000);
+        assert_eq!(
+            random_state_from_chunks(std::slice::from_ref(&chunk)),
+            Some([0x1020_3040, 0x5060_7080])
+        );
+    }
+
+    #[test]
+    fn random_state_requires_both_date_columns() {
+        let mut rec = Vec::new();
+        rec.extend_from_slice(&0x1020_3040u32.to_be_bytes());
+
+        let mut header = Vec::new();
+        header.push(6);
+        write_str("random_state[0]", &mut header);
+        header.push(0);
+
+        let mut body = Vec::new();
+        super::super::table::tests::write_gamma(header.len() as u32 + 1, &mut body);
+        body.extend_from_slice(&header);
+        super::super::table::tests::write_gamma(rec.len() as u32 + 1, &mut body);
+        body.extend_from_slice(&rec);
+        super::super::table::tests::write_gamma(0, &mut body);
+
+        let chunk = RawChunk {
+            name: *b"DATE",
+            ch_type: CH_TABLE,
+            body,
+        };
+        assert_eq!(random_state_from_chunks(&[chunk]), None);
     }
 
     #[test]

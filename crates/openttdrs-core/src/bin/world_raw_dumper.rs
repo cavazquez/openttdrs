@@ -19,6 +19,7 @@ use openttdrs_core::{
 enum Stage {
     SavMap,
     GameStateMap,
+    TreesReplay,
 }
 
 impl Stage {
@@ -36,6 +37,7 @@ impl Stage {
         match self {
             Self::SavMap => "sav_map",
             Self::GameStateMap => "game_state_map",
+            Self::TreesReplay => "trees_replay",
         }
     }
 }
@@ -44,6 +46,7 @@ struct Args {
     save: Option<PathBuf>,
     out: PathBuf,
     generate: Option<(u32, u32)>,
+    replay_trees: bool,
     seed: Option<u64>,
     stage: Stage,
     region: Option<WorldRawRegion>,
@@ -54,10 +57,12 @@ fn print_usage() {
     eprintln!(
         "uso: world_raw_dumper <partida.sav> <salida.jsonl> [opciones]\n\
          o:   world_raw_dumper --generate WIDTHxHEIGHT --seed N <salida.jsonl> [opciones]\n\
+         o:   world_raw_dumper --replay-trees <pre-arboles.sav> <salida.jsonl> [opciones]\n\
          \n\
          Opciones:\n\
            --generate WIDTHxHEIGHT          genera el mapa procedural openttdrs (sin guardar .sav)\n\
            --seed N                          semilla para --generate\n\
+           --replay-trees                    reproduce GenerateTrees desde DATE.random_state\n\
            --stage sav_map|game_state_map  etapa a exportar (default: sav_map)\n\
            --region x0,y0,x1,y1            rectángulo inclusivo de teselas\n\
            --tile x,y [--radius N]          tesela, opcionalmente con contexto\n\
@@ -150,7 +155,8 @@ fn parse_args() -> Result<Args, String> {
     let mut positional = Vec::new();
     let mut generate = None;
     let mut seed = None;
-    let mut stage = Stage::SavMap;
+    let mut stage = None;
+    let mut replay_trees = false;
     let mut region = None;
     let mut tile = None;
     let mut radius = None;
@@ -169,6 +175,12 @@ fn parse_args() -> Result<Args, String> {
                 }
                 generate = Some(parse_dimensions(&next_value(&mut args, "--generate")?)?);
             }
+            "--replay-trees" => {
+                if replay_trees {
+                    return Err("--replay-trees fue indicado más de una vez".to_string());
+                }
+                replay_trees = true;
+            }
             "--seed" => {
                 if seed.is_some() {
                     return Err("--seed fue indicado más de una vez".to_string());
@@ -179,7 +191,12 @@ fn parse_args() -> Result<Args, String> {
                         .map_err(|error| format!("--seed inválido: {error}"))?,
                 );
             }
-            "--stage" => stage = Stage::parse(&next_value(&mut args, "--stage")?)?,
+            "--stage" => {
+                if stage.is_some() {
+                    return Err("--stage fue indicado más de una vez".to_string());
+                }
+                stage = Some(Stage::parse(&next_value(&mut args, "--stage")?)?);
+            }
             "--region" => {
                 if region.is_some() {
                     return Err("--region fue indicado más de una vez".to_string());
@@ -207,6 +224,9 @@ fn parse_args() -> Result<Args, String> {
     }
 
     if generate.is_some() {
+        if replay_trees {
+            return Err("--generate y --replay-trees no pueden usarse juntos".to_string());
+        }
         if positional.len() != 1 {
             return Err("--generate requiere sólo <salida.jsonl>".to_string());
         }
@@ -218,6 +238,14 @@ fn parse_args() -> Result<Args, String> {
     } else if seed.is_some() {
         return Err("--seed sólo se puede usar con --generate".to_string());
     }
+    let stage = if replay_trees {
+        if stage.is_some() {
+            return Err("--stage no se puede usar con --replay-trees".to_string());
+        }
+        Stage::TreesReplay
+    } else {
+        stage.unwrap_or(Stage::SavMap)
+    };
     if region.is_some() && tile.is_some() {
         return Err("--region y --tile no pueden usarse juntos".to_string());
     }
@@ -240,6 +268,7 @@ fn parse_args() -> Result<Args, String> {
         save: (generate.is_none()).then(|| positional.remove(0)),
         out: positional.remove(0),
         generate,
+        replay_trees,
         seed,
         stage,
         region,
@@ -418,6 +447,41 @@ fn run(args: &Args) -> Result<(), String> {
     let save_version = sav.version;
     let tick = sav.game_time.map(|time| time.tick);
     let climate = climate_code(sav.climate);
+    if args.replay_trees {
+        let random_state = sav.random_state.ok_or_else(|| {
+            format!(
+                "{} no contiene DATE.random_state[0..1]; no se puede reproducir GenerateTrees",
+                save.display()
+            )
+        })?;
+        let mut map = sav.map;
+        let mut rng = openttdrs_core::linkgraph_parity::Randomizer {
+            state: random_state,
+        };
+        generate_trees_with_rng(&mut map, sav.climate, &mut rng, &[]);
+        let source_path = format!("trees-replay:{source_path}");
+        let emitted = dump_map(
+            &map,
+            args,
+            source_path,
+            save_sha256,
+            save_version,
+            tick,
+            climate,
+        )?;
+        println!(
+            "world-raw {}: {} teselas ({}) → {} [rng {:08x},{:08x} → {:08x},{:08x}]",
+            args.stage.as_str(),
+            emitted,
+            save.display(),
+            args.out.display(),
+            random_state[0],
+            random_state[1],
+            rng.state[0],
+            rng.state[1],
+        );
+        return Ok(());
+    }
     let emitted = match args.stage {
         Stage::SavMap => dump_map(
             &sav.map,
@@ -440,6 +504,7 @@ fn run(args: &Args) -> Result<(), String> {
                 climate,
             )?
         }
+        Stage::TreesReplay => unreachable!("--replay-trees se maneja antes"),
     };
     println!(
         "world-raw {}: {} teselas ({}) → {}",

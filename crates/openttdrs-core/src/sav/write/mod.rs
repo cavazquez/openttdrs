@@ -299,7 +299,12 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
 
     data.extend_from_slice(&chunks::table_chunk(
         *b"DATE",
-        &[(5, "date"), (8, "tick_counter")],
+        &[
+            (5, "date"),
+            (8, "tick_counter"),
+            (6, "random_state[0]"),
+            (6, "random_state[1]"),
+        ],
         &[meta::date_record(state)],
     )?);
     data.extend_from_slice(&meta::plyr_chunk(state, &autoreplace_export)?);
@@ -824,7 +829,8 @@ mod tests {
 
     #[test]
     fn ottn_roundtrip_preserves_map_money_tick_colour() {
-        let state = tiny_state();
+        let mut state = tiny_state();
+        state.random.state = [0x1020_3040, 0x5060_7080];
         let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
         assert!(bytes.starts_with(b"OTTN"));
         let sav_game = sav::load(&bytes).expect("load");
@@ -832,6 +838,7 @@ mod tests {
         assert_eq!(sav_game.money, Some(777_000));
         assert_eq!(sav_game.company_colour, Some(3));
         assert_eq!(sav_game.game_time.map(|t| t.tick), Some(12_345));
+        assert_eq!(sav_game.random_state, Some([0x1020_3040, 0x5060_7080]));
         let tile = sav_game.map.get(TileCoord::new(10, 20)).expect("tile");
         assert_eq!(tile.kind, TileKind::Rail);
         assert_eq!(tile.mapt, 0x10);
@@ -842,6 +849,8 @@ mod tests {
         assert_eq!(tile.m3, 0x11);
         assert_eq!(tile.m3hi, 0x22);
         assert_eq!(tile.m8, 0x1234);
+        let loaded = GameState::from_sav_game(sav_game);
+        assert_eq!(loaded.random.state, [0x1020_3040, 0x5060_7080]);
     }
 
     #[test]

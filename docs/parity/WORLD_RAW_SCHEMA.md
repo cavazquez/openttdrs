@@ -39,6 +39,10 @@ en el comparador.
   normalizaciones del estado jugable.
 - `game_state_map`: mapa tras `GameState::from_sav_game`; sirve para detectar
   una normalización local que modifica un byte o retaguea una tesela.
+- `trees_replay`: mapa resultante de reanudar únicamente `GenerateTrees` desde
+  un `.sav` capturado justo antes de esa fase. El dumper exige los dos campos
+  `DATE.random_state`; por eso es un diagnóstico de algoritmo y no una nueva
+  partida generada desde una semilla aproximada.
 
 `climate` conserva el valor de `LandscapeType` de OpenTTD: 0 temperate,
 1 arctic, 2 tropic, 3 toyland. `region` es inclusiva y conserva coordenadas
@@ -123,6 +127,17 @@ Para aislar una zona grande:
 cargo run -p openttdrs-core --bin world_raw_dumper -- \
   partida.sav /tmp/openttdrs.jsonl --tile 96,134 --radius 2
 ```
+
+Para investigar una frontera de generación que conserve el RNG de OpenTTD:
+
+```bash
+cargo run -p openttdrs-core --bin world_raw_dumper -- \
+  --replay-trees /tmp/pre-generate-trees.sav /tmp/trees-replay.jsonl
+```
+
+El resultado tiene `stage: "trees_replay"`. Compararlo contra el `.sav` que
+OpenTTD guarda inmediatamente después de `GenerateTrees` evita atribuir a los
+árboles diferencias que ya existían en clear, pueblos, industrias u objetos.
 
 El comparador valida primero contrato, dimensiones, región, SHA de la partida
 si ambos lados la informan, cantidad de filas y luego cada campo crudo. Por

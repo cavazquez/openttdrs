@@ -245,6 +245,12 @@ pub struct SavGame {
     pub road_stop_station_data: std::collections::HashMap<u32, entities::SavRoadStopStationData>,
     /// Reloj de simulación del chunk `DATE`, si está presente.
     pub game_time: Option<date::SavGameTime>,
+    /// Estado del RNG global `_random` persistido por `DATE`.
+    ///
+    /// Se mantiene separado del reloj para que las herramientas de paridad
+    /// puedan reanudar una fase de generación sin reconstruir el stream desde
+    /// la semilla de la partida.
+    pub random_state: Option<[u32; 2]>,
     /// Grafo de enlaces observado (`LGRP`); vacío si el chunk falta o es legacy.
     pub link_graph: LinkGraphStats,
     /// Landscape del save (`game_creation.landscape`); default temperate.
@@ -332,6 +338,7 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
     let vehicles = entities::vehicles_from_chunks(&chunk_list, map_w, &order_import, version);
     let companies = entities::companies_from_chunks(&chunk_list, version);
     let game_time = date::game_time_from_chunks(&chunk_list, version);
+    let random_state = date::random_state_from_chunks(&chunk_list);
     let money = entities::company_money_from_chunks(&chunk_list, version);
     let company_colour = entities::company_colour_from_chunks(&chunk_list, version);
     let climate = landscape::climate_from_chunks(&chunk_list).unwrap_or_default();
@@ -364,6 +371,7 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
         station_index,
         road_stop_station_data,
         game_time,
+        random_state,
         link_graph,
         climate,
         construction: parsed_settings.construction,
@@ -870,6 +878,7 @@ impl GameState {
     #[allow(clippy::too_many_lines)]
     pub fn from_sav_game(sav: SavGame) -> Self {
         let clear_legacy_depot_reservations = sav.version < SLV_DEPOT_RESERVATION_PERSISTED;
+        let random_state = sav.random_state;
         let mut map = sav.map;
         normalize_rail_trackbits_from_neighbors(&mut map);
         // `AfterLoadGame()` de OpenTTD sólo reconstruye estas reservas para
@@ -879,6 +888,11 @@ impl GameState {
             crate::depot::clear_all_depot_reservations(&mut map);
         }
         let mut state = Self::from_map(map);
+        if let Some(random_state) = random_state {
+            state.random = crate::linkgraph_parity::Randomizer {
+                state: random_state,
+            };
+        }
         state.climate = sav.climate;
         state.global_economy = sav.global_economy;
         state.global_economy.inflation_enabled = sav.inflation_enabled;
@@ -1629,6 +1643,7 @@ mod tests {
             station_index: HashMap::new(),
             road_stop_station_data: HashMap::new(),
             game_time: None,
+            random_state: None,
             link_graph: LinkGraphStats::default(),
             climate: crate::Climate::Temperate,
             construction: crate::ConstructionSettings::default(),
@@ -2487,6 +2502,7 @@ mod tests {
             station_index: std::collections::HashMap::new(),
             road_stop_station_data: std::collections::HashMap::new(),
             game_time: None,
+            random_state: None,
             climate: crate::Climate::Temperate,
             construction: crate::ConstructionSettings::default(),
             pathfinding: crate::PathfindingSettings::default(),

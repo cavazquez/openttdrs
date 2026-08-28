@@ -259,6 +259,19 @@ pub struct WorldGenConfig {
     pub desert_coverage: u8,
     /// Cantidad de ríos (`game_creation.amount_of_rivers`, 0..=3).
     pub amount_of_rivers: u8,
+    /// Longitud mínima de los ríos cortos (`game_creation.min_river_length`).
+    ///
+    /// Los pozos largos multiplican este valor por cuatro, igual que
+    /// `CreateRivers`. No se debe sustituir por la cantidad de teselas ya
+    /// pintadas: el contrato mide la distancia Manhattan entre manantial y
+    /// terminación.
+    pub min_river_length: u8,
+    /// Aleatoriedad del coste de ruta de río (`game_creation.river_route_random`).
+    ///
+    /// Se conserva en la configuración aunque el port de YAPF de ríos todavía
+    /// está en RMAP-018; así los valores por defecto y los save/settings no
+    /// quedan implícitos en el generador.
+    pub river_route_random: u8,
     /// Cantidad de sorteos consumidos antes de TGP, como una partida nueva de
     /// `OpenTTD` (`StartupEconomy` consume uno). Se deja en cero por defecto
     /// para conservar la API histórica del generador embebido.
@@ -281,6 +294,8 @@ impl Default for WorldGenConfig {
             snow_coverage: DEF_SNOW_COVERAGE,
             desert_coverage: DEF_DESERT_COVERAGE,
             amount_of_rivers: 2,
+            min_river_length: 16,
+            river_route_random: 5,
             startup_rng_draws: 0,
         }
     }

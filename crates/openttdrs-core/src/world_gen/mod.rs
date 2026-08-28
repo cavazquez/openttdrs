@@ -547,7 +547,7 @@ mod tests {
     }
 
     #[test]
-    fn world_gen_carves_some_rivers() {
+    fn world_gen_does_not_force_a_river_when_the_long_route_is_too_short() {
         use crate::map::{WaterClass, is_river_tile, water_class_from_m1};
 
         let mut map = Map::new_flat(48, 48, 2);
@@ -566,7 +566,10 @@ mod tests {
             .flat_map(|y| (0..48).map(move |x| TileCoord::new(x, y)))
             .filter(|&c| map.get(c).is_some_and(is_river_tile))
             .count();
-        assert!(rivers >= 4, "expected carved rivers, got {rivers}");
+        assert_eq!(
+            rivers, 0,
+            "a failed long well must not leave a partial river"
+        );
         let sea = (0..48i32)
             .flat_map(|y| (0..48).map(move |x| TileCoord::new(x, y)))
             .filter(|&c| {
@@ -575,7 +578,7 @@ mod tests {
                 })
             })
             .count();
-        assert!(sea > rivers, "sea should dominate rivers");
+        assert!(sea > 0, "the terrain still has generated sea");
     }
 
     #[test]

@@ -22,17 +22,27 @@ pub(super) fn carve_rivers(
     // que OpenTTD en 64×64. Mantener la misma escala evita que el río altere
     // alturas que ya coinciden con TGP.
     let amount = u32::from(config.amount_of_rivers.min(3));
+    if amount == 0 {
+        return Ok(());
+    }
     let wells = super::population::scale_by_size(4u32 << amount, map_w as u32, map_h as u32);
-    let river_count = if amount == 0 { 0 } else { wells.max(1) } as usize;
-    for i in 0..river_count {
+    // C++ prueba primero `max(1, wells / 10)` ríos largos; el resto son
+    // cortos. En 64² y cantidad predeterminada hay exactamente un pozo largo
+    // (mínimo 16 × 4), no un río corto que pueda cruzar el mapa de cualquier
+    // modo. Esta clasificación debe ocurrir antes de pintar una tesela.
+    let long_wells = (wells / 10).max(1).min(wells);
+    for i in 0..wells as usize {
         let Some(start) = pick_river_source(map, config, map_w, map_h, preserve, i as u64) else {
             continue;
         };
-        flow_river(
+        let min_river_length = u32::from(config.min_river_length)
+            .saturating_mul(if i < long_wells as usize { 4 } else { 1 });
+        let _ = flow_river(
             map,
             start,
             config.seed ^ (i as u64).wrapping_mul(0x9E37),
             preserve,
+            min_river_length,
         )?;
     }
     Ok(())
@@ -77,10 +87,13 @@ pub(super) fn flow_river(
     start: TileCoord,
     seed: u64,
     preserve: &[PreserveRect],
-) -> Result<(), MapError> {
+    min_river_length: u32,
+) -> Result<bool, MapError> {
     let mut cur = start;
     let mut steps = 0u32;
     let mut rng = seed;
+    let mut path = Vec::new();
+    let mut reached_water = false;
     while steps < 200 {
         steps += 1;
         if preserve.iter().any(|r| r.contains(cur.x, cur.y)) {
@@ -88,7 +101,15 @@ pub(super) fn flow_river(
         }
         match map.get_kind(cur) {
             Some(TileKind::Grass | TileKind::Forest | TileKind::CoalField) => {
-                make_water_tile(map, cur, WaterClass::River)?;
+                // `FlowRiver`/YAPF primero prueba que el flujo alcanza una
+                // terminación válida; no materializa un río parcial mientras
+                // explora. Guardar el trayecto evita que un pozo largo fallido
+                // deje agua sintética en mapas pequeños.
+                path.push(cur);
+            }
+            Some(TileKind::Water) => {
+                reached_water = true;
+                break;
             }
             _ => break,
         }
@@ -132,7 +153,16 @@ pub(super) fn flow_river(
         }
         cur = next;
     }
-    Ok(())
+
+    let distance = start.x.abs_diff(cur.x) + start.y.abs_diff(cur.y);
+    if !reached_water || distance <= min_river_length {
+        return Ok(false);
+    }
+
+    for tile in path {
+        make_water_tile(map, tile, WaterClass::River)?;
+    }
+    Ok(true)
 }
 
 fn hash2(a: u64, b: u64) -> u64 {
@@ -253,6 +283,7 @@ pub(super) fn mark_water_coasts(
 mod tests {
     use super::*;
     use crate::company::{OWNER_NONE_M1, OWNER_WATER_M1};
+    use crate::map::is_river_tile;
 
     #[test]
     fn converter_makes_flat_ground_sea_and_one_corner_slope_shore() {
@@ -292,5 +323,48 @@ mod tests {
         let clear = map.get(c).expect("clear slope");
         assert_eq!(clear.kind, TileKind::Grass);
         assert_eq!(clear.m1, OWNER_NONE_M1);
+    }
+
+    fn descending_river_test_map(width: i32, sea_x: i32) -> Map {
+        let mut map = Map::new_flat(width as u32, 8, 0);
+        for x in 0..width {
+            for y in 0..8 {
+                map.set_height(TileCoord::new(x, y), (96 - x).try_into().expect("height"))
+                    .expect("set height");
+            }
+        }
+        make_water_tile(&mut map, TileCoord::new(sea_x, 3), WaterClass::Sea)
+            .expect("make terminal sea");
+        map
+    }
+
+    #[test]
+    fn long_river_rejects_a_route_shorter_than_its_manhattan_minimum() {
+        let mut map = descending_river_test_map(16, 9);
+        let start = TileCoord::new(1, 3);
+
+        let built = flow_river(&mut map, start, 7, &[], 16).expect("flow river");
+
+        assert!(!built);
+        assert!(map.tiles().iter().all(|tile| !is_river_tile(*tile)));
+    }
+
+    #[test]
+    fn accepted_route_is_painted_only_after_reaching_water_and_minimum_length() {
+        let mut map = descending_river_test_map(40, 25);
+        let start = TileCoord::new(1, 3);
+
+        let built = flow_river(&mut map, start, 7, &[], 16).expect("flow river");
+
+        assert!(built);
+        assert!(map.tiles().iter().any(|tile| is_river_tile(*tile)));
+    }
+
+    #[test]
+    fn one_well_is_a_long_attempt_like_create_rivers() {
+        let wells = 1u32;
+        let long_wells = (wells / 10).max(1).min(wells);
+        assert_eq!(long_wells, 1);
+        assert_eq!(u32::from(16u8).saturating_mul(4), 64);
     }
 }

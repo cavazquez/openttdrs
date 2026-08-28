@@ -508,10 +508,12 @@ mod tests {
                     }
                     TileKind::Forest => {
                         clear += 1;
-                        assert_eq!(
-                            tile.m1,
-                            set_water_class_m1(OWNER_NONE_M1, WaterClass::Invalid)
-                        );
+                        let water_class = if ((tile.m2 >> 6) & 0x07) == 3 {
+                            WaterClass::Sea
+                        } else {
+                            WaterClass::Invalid
+                        };
+                        assert_eq!(tile.m1, set_water_class_m1(OWNER_NONE_M1, water_class));
                     }
                     TileKind::Water => {
                         water += 1;
@@ -548,7 +550,7 @@ mod tests {
     }
 
     #[test]
-    fn generated_tree_tiles_preserve_invalid_water_class() {
+    fn generated_tree_tiles_preserve_shore_water_class() {
         let mut map = Map::new_flat(64, 64, 0);
         apply_world_gen(
             &mut map,
@@ -567,11 +569,15 @@ mod tests {
             .filter(|tile| tile.kind == TileKind::Forest)
             .collect::<Vec<_>>();
         assert!(!trees.is_empty());
-        assert!(
-            trees
-                .iter()
-                .all(|tile| { tile.m1 == set_water_class_m1(OWNER_NONE_M1, WaterClass::Invalid) })
-        );
+        assert!(trees.iter().all(|tile| {
+            let water_class = if ((tile.m2 >> 6) & 0x07) == 3 {
+                WaterClass::Sea
+            } else {
+                WaterClass::Invalid
+            };
+            tile.m1 == set_water_class_m1(OWNER_NONE_M1, water_class)
+        }));
+        assert!(trees.iter().any(|tile| ((tile.m2 >> 6) & 0x07) == 3));
     }
 
     #[test]

@@ -19,16 +19,28 @@ use std::f32::consts::TAU;
 use crate::cargodist::parity::Randomizer;
 use crate::company::OWNER_NONE_M1;
 use crate::map::tree_tile_loop::{clear_density, clear_ground_type};
-use crate::map::{Map, Tile, TileCoord, TileKind, WaterClass, set_water_class_m1};
+use crate::map::{
+    Map, Tile, TileCoord, TileKind, WaterClass, set_water_class_m1, tile_slope_and_z,
+};
 
 use super::Climate;
 use super::PreserveRect;
-use super::config::{CLEAR_GROUND_DESERT, CLEAR_GROUND_ROCKY, CLEAR_GROUND_ROUGH};
+use super::config::{
+    CLEAR_GROUND_DESERT, CLEAR_GROUND_FIELDS, CLEAR_GROUND_ROCKY, CLEAR_GROUND_ROUGH,
+    CLEAR_GROUND_SNOW,
+};
 use super::population::scale_by_size;
 
 const DEFAULT_TREE_STEPS: u32 = 1_000;
 const GROVE_RADIUS: i32 = 16;
 const GROVE_SEGMENTS: usize = 16;
+/// `WaterTileType::Coast` en los bits altos de `m5`.
+const WATER_TYPE_COAST: u8 = 1;
+/// `TreeGround` de `tree_map.h`.
+const TREE_GROUND_GRASS: u8 = 0;
+const TREE_GROUND_ROUGH: u8 = 1;
+const TREE_GROUND_SNOW_DESERT: u8 = 2;
+const TREE_GROUND_SHORE: u8 = 3;
 
 #[derive(Clone, Copy, Debug, Default)]
 struct Point {
@@ -76,7 +88,7 @@ pub fn generate_trees_with_rng(
             let Some(tile) = tile_add_wrap(center, x, y, map_w, map_h) else {
                 continue;
             };
-            if !is_plantable(map, tile, preserve) || !point_in_grove(x, y, &grove) {
+            if !is_plantable(map, tile, preserve, true) || !point_in_grove(x, y, &grove) {
                 continue;
             }
             let _ = place_tree(map, tile, r, climate);
@@ -96,8 +108,8 @@ pub fn generate_trees_with_rng(
         for _ in 0..attempts {
             let r = rng.next();
             let tile = random_tile(r, map_w, map_h);
-            if is_plantable(map, tile, preserve) {
-                let height = map.get(tile).map_or(0, |candidate| candidate.height);
+            if is_plantable(map, tile, preserve, true) {
+                let height = tile_slope_and_z(map, tile).map_or(0, |(_, z)| z);
                 if place_tree(map, tile, r, climate) {
                     // `PlaceTreesRandomly` in improved mode reinforces a
                     // successful placement with `GetTileZ(tile) * 2`
@@ -140,18 +152,36 @@ fn tile_add_wrap(center: TileCoord, dx: i32, dy: i32, map_w: u32, map_h: u32) ->
     }
 }
 
-fn is_plantable(map: &Map, c: TileCoord, preserve: &[PreserveRect]) -> bool {
+/// Equivalente a `CanPlantTreesOnTile`. Las teselas de costa se pueden
+/// convertir en árboles de orilla, mientras que campos y rocas nunca son
+/// sustrato válido. `allow_desert` sólo es falso en el pase tropical extra.
+fn is_plantable(map: &Map, c: TileCoord, preserve: &[PreserveRect], allow_desert: bool) -> bool {
     if preserve.iter().any(|rect| rect.contains(c.x, c.y)) {
         return false;
     }
     let Some(tile) = map.get(c) else {
         return false;
     };
-    tile.kind == TileKind::Grass
-        && !matches!(
-            clear_ground_type(tile.m5),
-            CLEAR_GROUND_ROCKY | CLEAR_GROUND_DESERT
-        )
+    match tile.kind {
+        TileKind::Water => {
+            let is_coast = ((tile.m5 >> 4) & 0x0F) == WATER_TYPE_COAST;
+            let slope = tile_slope_and_z(map, c).map_or(0, |(slope, _)| slope);
+            is_coast && !is_slope_with_one_corner_raised(slope)
+        }
+        TileKind::Grass => {
+            let ground = clear_ground_type(tile.m5);
+            !matches!(ground, CLEAR_GROUND_FIELDS | CLEAR_GROUND_ROCKY)
+                && (allow_desert || ground != CLEAR_GROUND_DESERT)
+        }
+        _ => false,
+    }
+}
+
+/// `IsSlopeWithOneCornerRaised` ignora el bit `SLOPE_STEEP`, igual que el
+/// predicado de `OpenTTD` para impedir árboles de orilla sobre un talud simple.
+#[must_use]
+const fn is_slope_with_one_corner_raised(slope: u8) -> bool {
+    matches!(slope & 0x0F, 1 | 2 | 4 | 8)
 }
 
 fn tree_range(climate: Climate) -> (u8, u8) {
@@ -174,30 +204,51 @@ fn place_tree(map: &mut Map, c: TileCoord, random: u32, climate: Climate) -> boo
     let count_minus_one = ((random >> 22) & 0x03) as u8;
     let growth = (((random >> 16) & 0x07) as u8).min(6);
 
-    let original_ground = clear_ground_type(previous.m5);
-    let mut ground = match original_ground {
-        CLEAR_GROUND_ROUGH => 1,
-        _ => 0,
+    let (mut ground, mut density, preserve_ground) = match previous.kind {
+        TileKind::Water => {
+            // `PlantTreesOnTile` transforma sólo costas válidas en orilla y
+            // borra el estado non-flooding de sus ocho vecinas.
+            clear_neighbour_non_flooding_states(map, c);
+            (TREE_GROUND_SHORE, 3, true)
+        }
+        TileKind::Grass => {
+            let original_ground = clear_ground_type(previous.m5);
+            let density = if original_ground == CLEAR_GROUND_ROUGH {
+                3
+            } else {
+                clear_density(previous.m5)
+            };
+            let ground = match original_ground {
+                CLEAR_GROUND_ROUGH => TREE_GROUND_ROUGH,
+                // El mapa procedural representa la cobertura de nieve como
+                // `CLEAR_GROUND_SNOW`; ambas variantes conservan densidad en
+                // `PlaceTree` en lugar de rerandomizarla.
+                CLEAR_GROUND_SNOW | CLEAR_GROUND_DESERT => TREE_GROUND_SNOW_DESERT,
+                _ => TREE_GROUND_GRASS,
+            };
+            (ground, density, matches!(ground, TREE_GROUND_SNOW_DESERT))
+        }
+        _ => return false,
     };
-    let mut density = if original_ground == CLEAR_GROUND_ROUGH {
-        3
-    } else {
-        clear_density(previous.m5)
-    };
-    // `PlaceTree` rerandomizes normal ground after planting. Snow/desert and
-    // shore retain their ground; those variants are not plantable in this
-    // generator yet, so the branch documents the C++ rule for future climates.
-    if original_ground != 4 && original_ground != 5 {
+    // `PlaceTree(..., false)` rerandomiza suelo normal, pero conserva nieve,
+    // desierto y orilla. Esta ruta de generación nunca solicita keep_density.
+    if !preserve_ground {
         ground = ((random >> 28) & 1) as u8;
         density = 3;
     }
+
+    let water_class = if ground == TREE_GROUND_SHORE {
+        WaterClass::Sea
+    } else {
+        WaterClass::Invalid
+    };
 
     let mut tile = Tile {
         height: previous.height,
         kind: TileKind::Forest,
         mapt: 0x40,
         m5: (count_minus_one << 6) | growth,
-        m1: set_water_class_m1(OWNER_NONE_M1, WaterClass::Invalid),
+        m1: set_water_class_m1(OWNER_NONE_M1, water_class),
         m6: 0,
         m8: 0,
         m3: tree_type,
@@ -208,8 +259,29 @@ fn place_tree(map: &mut Map, c: TileCoord, random: u32, climate: Climate) -> boo
     };
     // Keep the assignment explicit: this is the byte-for-byte `MakeTree`
     // contract, including zeroed auxiliary bytes.
-    tile.m1 = set_water_class_m1(OWNER_NONE_M1, WaterClass::Invalid);
+    tile.m1 = set_water_class_m1(OWNER_NONE_M1, water_class);
     map.set_tile(c, tile).is_ok()
+}
+
+/// `ClearNeighbourNonFloodingStates` de `water_cmd.cpp`: una costa convertida
+/// a árbol deja de actuar como soporte de estados non-flooding en las ocho
+/// teselas de agua adyacentes.
+fn clear_neighbour_non_flooding_states(map: &mut Map, c: TileCoord) {
+    for dy in -1..=1 {
+        for dx in -1..=1 {
+            if dx == 0 && dy == 0 {
+                continue;
+            }
+            let neighbour = TileCoord::new(c.x.saturating_add(dx), c.y.saturating_add(dy));
+            let Some(mut tile) = map.get(neighbour) else {
+                continue;
+            };
+            if tile.kind == TileKind::Water {
+                tile.m3 &= !1;
+                let _ = map.set_tile(neighbour, tile);
+            }
+        }
+    }
 }
 
 fn place_tree_at_same_height(
@@ -230,10 +302,8 @@ fn place_tree_at_same_height(
         let Some(tile) = tile_add_wrap(center, x, y, map.dimensions().0, map.dimensions().1) else {
             continue;
         };
-        if !is_plantable(map, tile, preserve)
-            || map
-                .get(tile)
-                .is_none_or(|candidate| u8::abs_diff(candidate.height, height) > 2)
+        if !is_plantable(map, tile, preserve, true)
+            || tile_slope_and_z(map, tile).is_none_or(|(_, z)| u8::abs_diff(z, height) > 2)
         {
             continue;
         }
@@ -284,9 +354,11 @@ fn point_in_triangle(x: i32, y: i32, v1: Point, v2: Point, v3: Point) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{generate_trees, place_tree, random_tile};
-    use crate::map::{Map, TileCoord, TileKind, WaterClass, water_class_from_m1};
-    use crate::world_gen::Climate;
+    use super::{generate_trees, is_plantable, place_tree, random_tile};
+    use crate::map::{
+        Map, TileCoord, TileKind, WaterClass, set_water_class_m1, water_class_from_m1,
+    };
+    use crate::world_gen::{CLEAR_GROUND_DESERT, CLEAR_GROUND_FIELDS, Climate, clear_ground_m5};
 
     #[test]
     fn random_tile_matches_power_of_two_tile_index_layout() {
@@ -315,6 +387,46 @@ mod tests {
             tile.m6 | tile.m7 | tile.m8 as u8 | tile.m2_hi | tile.m3hi,
             0
         );
+    }
+
+    #[test]
+    fn tree_planting_rejects_fields_and_honours_desert_policy() {
+        let mut map = Map::new_flat(8, 8, 2);
+        let field = TileCoord::new(3, 3);
+        map.set_mapt_m5(field, 0, clear_ground_m5(CLEAR_GROUND_FIELDS, 3))
+            .expect("field tile");
+        assert!(!is_plantable(&map, field, &[], true));
+
+        let desert = TileCoord::new(4, 3);
+        map.set_mapt_m5(desert, 0, clear_ground_m5(CLEAR_GROUND_DESERT, 2))
+            .expect("desert tile");
+        assert!(is_plantable(&map, desert, &[], true));
+        assert!(!is_plantable(&map, desert, &[], false));
+    }
+
+    #[test]
+    fn coast_tree_keeps_shore_contract_and_clears_neighbour_flood_state() {
+        let mut map = Map::new_flat(8, 8, 2);
+        let coast = TileCoord::new(3, 3);
+        let neighbour = TileCoord::new(4, 3);
+        for c in [coast, neighbour] {
+            let mut tile = map.get(c).expect("water fixture tile");
+            tile.kind = TileKind::Water;
+            tile.mapt = 0x60;
+            tile.m5 = 0x10;
+            tile.m1 = set_water_class_m1(tile.m1, WaterClass::Sea);
+            tile.m3 = 1;
+            map.set_tile(c, tile).expect("water fixture write");
+        }
+
+        assert!(is_plantable(&map, coast, &[], true));
+        assert!(place_tree(&mut map, coast, 0xF123_4567, Climate::Temperate));
+
+        let tree = map.get(coast).expect("shore tree");
+        assert_eq!(tree.kind, TileKind::Forest);
+        assert_eq!(tree.m2, 0xF0);
+        assert_eq!(water_class_from_m1(tree.m1), WaterClass::Sea);
+        assert_eq!(map.get(neighbour).expect("water neighbour").m3 & 1, 0);
     }
 
     #[test]

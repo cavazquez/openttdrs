@@ -221,9 +221,10 @@ pub fn apply_population_gen_with_rng(
         &town_centers,
     );
     // OpenTTD's new-game order is terrain → towns → industries → objects →
-    // trees. Objects are not yet part of this procedural backend, but trees
-    // must still run after industry footprints so fields/industry tiles can
-    // win their tile before `GenerateTrees` samples the map.
+    // trees. Objects must run before `GenerateTrees`, because the object
+    // footprint replaces the clear tile and consumes the shared RNG stream.
+    let climate = ctx.state.climate;
+    super::objects::generate_objects_with_rng(ctx.state, climate, ctx.rng, preserve);
     super::trees::generate_trees_with_rng(&mut ctx.state.map, ctx.state.climate, ctx.rng, preserve);
 }
 

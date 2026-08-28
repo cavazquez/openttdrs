@@ -11,7 +11,8 @@ use openttdrs_core::world_raw::{
 };
 use openttdrs_core::{
     Climate, GameState, Map, PopulationGenConfig, TerrainType, WorldGenConfig,
-    apply_population_gen_with_rng, apply_world_gen_with_rng, generate_trees_with_rng,
+    apply_population_gen_with_rng, apply_world_gen_with_rng, generate_objects_with_rng,
+    generate_trees_with_rng,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -63,7 +64,8 @@ fn print_usage() {
            --openttd-commit SHA             manifiesto del oráculo para metadata\n\
          \n\
          `--generate` incluye pueblos e industrias por defecto; usar\n\
-         `OPENTTDRS_GENERATE_POPULATION=0` para comparar sólo terreno.\n\
+         `OPENTTDRS_GENERATE_POPULATION=0` para omitir población y conservar\n\
+         objetos/árboles del flujo de generación.\n\
          `OPENTTDRS_GENERATE_STARTUP_TICKS=N` reproduce N ciclos de\n\
          `RunTileLoop` posteriores a la generación (OpenTTD usa 1280).\n\
          Sin filtro exporta el mapa completo en orden y * width + x."
@@ -361,6 +363,8 @@ fn run(args: &Args) -> Result<(), String> {
             // ejecuta `GenerateTrees` antes de entregar el mundo nuevo. La
             // separación conserva la posibilidad de aislar pueblos/industrias
             // sin convertir el raw en un mapa artificialmente pelado.
+            let climate = state.climate;
+            generate_objects_with_rng(&mut state, climate, &mut generation_rng, &[]);
             generate_trees_with_rng(&mut state.map, state.climate, &mut generation_rng, &[]);
         }
         for _ in 0..startup_ticks {

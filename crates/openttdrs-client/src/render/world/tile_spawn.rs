@@ -145,7 +145,24 @@ pub(crate) fn spawn_map_tiles_in_bounds(
     let mut rail_layers: Vec<u32> = Vec::with_capacity(8);
     let mut defer_overlay_tiles: Vec<(u32, u32)> = Vec::new();
     for (tx, ty) in spawn_bounds.iter_coords() {
-        let ctx = TileRenderContext::new(map, &render_grid, tx, ty);
+        let mut ctx = TileRenderContext::new(map, &render_grid, tx, ty);
+        // Los mapas generados conservan el mismo layout nativo que un save
+        // (`m2/m5` = ObjectID), pero todavía no tienen un footer `OBTY` en el
+        // `Map`. Resolver el tipo desde el pool vivo evita que un faro recién
+        // generado caiga al fallback histórico que interpreta `m5` como
+        // `ObjectType`.
+        if ctx.tile.is_some_and(|tile| (tile.mapt >> 4) & 0x0F == 10)
+            && let Some(object_id) = ctx
+                .tile
+                .and_then(|tile| openttdrs_core::object_id_from_tile(&tile))
+            && let Some(object) = sim
+                .state
+                .objects
+                .iter()
+                .find(|object| object.object_id == object_id)
+        {
+            ctx.object_type = Some(object.object_type);
+        }
         let kind = ctx.kind;
         let tileh = ctx.info.tileh;
 

@@ -15,6 +15,7 @@ mod height;
 mod heightmap;
 mod landcover;
 pub(crate) use landcover::desert_patch;
+mod objects;
 mod population;
 mod rivers;
 mod tgp;
@@ -29,6 +30,7 @@ pub use config::{
     initial_clear_ground_with_lines,
 };
 pub use heightmap::{HeightmapData, apply_heightmap, parse_hmap, serialize_heightmap};
+pub use objects::generate_objects_with_rng;
 pub use population::{
     IndustryDensity, NUM_INITIAL_INDUSTRIES, NUM_INITIAL_TOWNS, PopulationGenConfig, TownDensity,
     apply_population_gen, apply_population_gen_with_rng, ceil_div, generate_industries,

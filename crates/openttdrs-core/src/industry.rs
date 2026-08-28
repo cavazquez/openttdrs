@@ -125,42 +125,42 @@ impl IndustrySpec {
             Climate::Temperate => &[
                 Self::CoalMine,
                 Self::PowerStation,
-                Self::Forest,
                 Self::Sawmill,
-                Self::Factory,
-                Self::Farm,
-                Self::IronOreMine,
-                Self::SteelMill,
-                Self::Bank,
-                Self::OilWells,
+                Self::Forest,
                 Self::OilRefinery,
+                Self::Factory,
+                Self::SteelMill,
+                Self::Farm,
+                Self::OilWells,
+                Self::Bank,
+                Self::IronOreMine,
             ],
             Climate::SubArctic => &[
                 Self::CoalMine,
                 Self::PowerStation,
                 Self::Forest,
-                Self::PaperMill,
+                Self::OilRefinery,
                 Self::PrintingWorks,
                 Self::Farm,
+                Self::OilWells,
                 Self::FoodProcessingPlant,
+                Self::PaperMill,
                 Self::GoldMine,
                 Self::BankArcticTropic,
-                Self::OilWells,
-                Self::OilRefinery,
             ],
             Climate::SubTropical => &[
-                Self::OilWells,
                 Self::OilRefinery,
                 Self::CopperOreMine,
-                Self::FarmTropic,
+                Self::OilWells,
+                Self::FoodProcessingPlant,
+                Self::BankArcticTropic,
+                Self::DiamondMine,
                 Self::FruitPlantation,
                 Self::RubberPlantation,
-                Self::FactoryTropic,
-                Self::FoodProcessingPlant,
                 Self::WaterSupply,
                 Self::WaterTower,
-                Self::DiamondMine,
-                Self::BankArcticTropic,
+                Self::FactoryTropic,
+                Self::FarmTropic,
                 Self::LumberMill,
             ],
             Climate::Toyland => &[
@@ -182,6 +182,71 @@ impl IndustrySpec {
     #[must_use]
     pub fn available_in(self, climate: Climate) -> bool {
         Self::specs_for_climate(climate).contains(&self)
+    }
+
+    /// ID base de `IndustryType` en `OpenTTD`, previo a cualquier sustitución
+    /// `NewGRF`. La generación de mapa itera estos IDs en orden ascendente al
+    /// decidir las industrias forzadas, no en el orden del catálogo Rust.
+    #[must_use]
+    pub const fn native_type(self) -> u8 {
+        match self {
+            Self::CoalMine => 0,
+            Self::PowerStation => 1,
+            Self::Sawmill => 2,
+            Self::Forest => 3,
+            Self::OilRefinery => 4,
+            Self::Factory => 6,
+            Self::PrintingWorks => 7,
+            Self::SteelMill => 8,
+            Self::Farm => 9,
+            Self::CopperOreMine => 10,
+            Self::OilWells => 11,
+            Self::Bank => 12,
+            Self::FoodProcessingPlant => 13,
+            Self::PaperMill => 14,
+            Self::GoldMine => 15,
+            Self::BankArcticTropic => 16,
+            Self::DiamondMine => 17,
+            Self::IronOreMine => 18,
+            Self::FruitPlantation => 19,
+            Self::RubberPlantation => 20,
+            Self::WaterSupply => 21,
+            Self::WaterTower => 22,
+            Self::FactoryTropic => 23,
+            Self::FarmTropic => 24,
+            Self::LumberMill => 25,
+            Self::CottonCandy => 26,
+            Self::CandyFactory => 27,
+            Self::BatteryFarm => 28,
+            Self::ColaWells => 29,
+            Self::ToyShop => 30,
+            Self::ToyFactory => 31,
+            Self::PlasticFountain => 32,
+            Self::FizzyDrinkFactory => 33,
+            Self::BubbleGenerator => 34,
+            Self::ToffeeQuarry => 35,
+            Self::SugarMine => 36,
+        }
+    }
+
+    /// Especies Temperate que `GenerateIndustries` fuerza una vez durante
+    /// creación de mapa. Corresponde a `appear_creation > 0` para el clima y
+    /// al bucle ascendente de `IndustryType`; los chequeos/intententos de
+    /// ubicación se portan por separado.
+    #[must_use]
+    pub const fn temperate_map_creation_force_one() -> &'static [IndustrySpec] {
+        &[
+            Self::CoalMine,
+            Self::PowerStation,
+            Self::Sawmill,
+            Self::Forest,
+            Self::OilRefinery,
+            Self::Factory,
+            Self::SteelMill,
+            Self::Farm,
+            Self::OilWells,
+            Self::IronOreMine,
+        ]
     }
 
     #[must_use]
@@ -1701,6 +1766,24 @@ mod tests {
         assert!(IndustrySpec::FizzyDrinkFactory.available_in(Climate::Toyland));
         assert!(!IndustrySpec::FizzyDrinkFactory.available_in(Climate::Temperate));
         assert!(IndustrySpec::CoalMine.available_in(Climate::Temperate));
+    }
+
+    #[test]
+    fn temperate_map_creation_force_one_matches_native_industry_order() {
+        let specs = IndustrySpec::temperate_map_creation_force_one();
+        assert_eq!(
+            specs
+                .iter()
+                .map(|spec| spec.native_type())
+                .collect::<Vec<_>>(),
+            vec![0, 1, 2, 3, 4, 6, 8, 9, 11, 18]
+        );
+        assert!(
+            specs
+                .windows(2)
+                .all(|pair| pair[0].native_type() < pair[1].native_type())
+        );
+        assert_eq!(IndustrySpec::Bank.native_type(), 12);
     }
 
     /// Cada industria lleva su propia fase (`i->counter`), así que dos minas

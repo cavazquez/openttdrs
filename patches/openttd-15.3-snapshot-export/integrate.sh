@@ -531,6 +531,24 @@ def integrate_tree_generation_trace(dest: Path) -> None:
         print("tree_cmd: traza de colocaciones GenerateTrees")
     else:
         print("tree_cmd: traza de colocaciones ya presente")
+    if 'OpenttdrsTraceTreePlacement("rainforest"' not in text:
+        rainforest_marker = (
+            "\t\t\tif (GetTropicZone(tile) == TROPICZONE_RAINFOREST && CanPlantTreesOnTile(tile, false)) {\n"
+            "\t\t\t\tPlaceTree(tile, r);\n"
+            "\t\t\t}\n"
+        )
+        rainforest_replacement = (
+            "\t\t\tif (GetTropicZone(tile) == TROPICZONE_RAINFOREST && CanPlantTreesOnTile(tile, false)) {\n"
+            "\t\t\t\tOpenttdrsTraceTreePlacement(\"rainforest\", static_cast<uint32_t>(TileX(tile)), static_cast<uint32_t>(TileY(tile)), r, 0, 0, false);\n"
+            "\t\t\t\tPlaceTree(tile, r);\n"
+            "\t\t\t}\n"
+        )
+        if rainforest_marker not in text:
+            raise SystemExit("no encuentro colocación rainforest en tree_cmd.cpp")
+        text = text.replace(rainforest_marker, rainforest_replacement, 1)
+        print("tree_cmd: traza de pase rainforest")
+    else:
+        print("tree_cmd: traza de pase rainforest ya presente")
     tree_cmd.write_text(text, encoding="utf-8")
 
 if mode == "world_raw_only":

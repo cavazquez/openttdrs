@@ -148,8 +148,8 @@ python3 scripts/tree_phase_parity.py --size 64 --seed 1330935378 --climate arcti
 ```
 
 Además de los diez bytes por tesela y los bloques 4×4, compara en orden cada
-llamada de colocación admitida por sustrato (`group`, `random` o
-`same_height`), sus coordenadas, el valor RNG y su padre cuando corresponde.
+llamada de colocación admitida por sustrato (`group`, `random`,
+`same_height` o `rainforest`), sus coordenadas, el valor RNG y su padre cuando corresponde.
 En tropical una llamada puede ser un no-op si el tipo elegido es inválido en
 desierto; la traza lo conserva para localizar el primer cambio de stream. La metadata contiene dimensiones,
 clima y el estado RNG inicial; `producer` y las rutas se excluyen a propósito

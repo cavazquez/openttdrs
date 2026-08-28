@@ -30,6 +30,8 @@ use super::config::{
 use super::population::scale_by_size;
 
 const DEFAULT_TREE_STEPS: u32 = 1_000;
+/// Intentos adicionales por pase en la zona de selva tropical.
+const DEFAULT_RAINFOREST_TREE_STEPS: u32 = 15_000;
 /// Límite de altura original usado para normalizar la densidad de árboles.
 const MAP_HEIGHT_LIMIT_ORIGINAL: u32 = 15;
 /// `MAP_HEIGHT_LIMIT_AUTO_MINIMUM`: resolución de `map_height_limit = 0`.
@@ -51,6 +53,14 @@ const CLEAR_SNOW_M3_BIT: u8 = 1 << 4;
 /// `TileKind::Grass` hasta que se resuelve su pool, por lo que el tipo crudo
 /// sigue siendo autoritativo para `CanPlantTreesOnTile`.
 const OTTD_TILETYPE_CLEAR: u8 = 0;
+/// Bits bajos de `MAPT` que `OpenTTD` reserva para `TropicZone`.
+const TROPIC_ZONE_MASK: u8 = 0x03;
+const TROPIC_ZONE_NORMAL: u8 = 0;
+const TROPIC_ZONE_DESERT: u8 = 1;
+const TROPIC_ZONE_RAINFOREST: u8 = 2;
+const TREE_RAINFOREST: u8 = 20;
+const TREE_CACTUS: u8 = 27;
+const TREE_SUB_TROPICAL: u8 = 28;
 /// `static_cast<float>(INT32_MAX / M_PI * 2)` de `CreateRandomStarShapedPolygon`.
 ///
 /// El cálculo de C++ ocurre en doble precisión y sólo luego se reduce a
@@ -66,12 +76,14 @@ struct Point {
     y: i32,
 }
 
-/// Una colocación efectiva producida durante `GenerateTrees`.
+/// Una llamada a `PlaceTree` admitida por el filtro de sustrato de
+/// `GenerateTrees`.
 ///
-/// El stream contiene sólo llamadas que llegaron a `PlaceTree`, no intentos
-/// descartados por borde, forma del grupo, sustrato o altura. Es el mismo
-/// límite que usa la traza del oráculo C++ para localizar la primera regla
-/// divergente sin tener que comparar una captura raster.
+/// El stream no incluye intentos descartados por borde, forma del grupo,
+/// sustrato o altura. En clima tropical una llamada puede ser un no-op si el
+/// tipo elegido es inválido para una tesela desértica; se conserva de todos
+/// modos, igual que la traza del oráculo C++, para localizar cambios de stream
+/// sin tener que comparar una captura raster.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TreePlacement {
     pub origin: TreePlacementOrigin,
@@ -87,6 +99,7 @@ pub enum TreePlacementOrigin {
     Group,
     Random,
     SameHeight,
+    Rainforest,
 }
 
 impl TreePlacementOrigin {
@@ -96,6 +109,7 @@ impl TreePlacementOrigin {
             Self::Group => "group",
             Self::Random => "random",
             Self::SameHeight => "same_height",
+            Self::Rainforest => "rainforest",
         }
     }
 }
@@ -123,7 +137,8 @@ pub fn generate_trees_with_rng(
     generate_trees_with_rng_observer(map, climate, rng, preserve, &mut ignore);
 }
 
-/// Variante de [`generate_trees_with_rng`] que informa cada colocación efectiva.
+/// Variante de [`generate_trees_with_rng`] que informa cada llamada admitida por
+/// sustrato a `PlaceTree`.
 ///
 /// La observación no toca el mapa ni el RNG; se usa por el oráculo diferencial
 /// para alinear el primer `PlaceTree` de Rust con `OpenTTD`.
@@ -215,15 +230,14 @@ pub fn generate_trees_with_rng_observer_with_map_settings<F>(
             if !is_plantable(map, tile, preserve, true) || !point_in_grove(x, y, &grove) {
                 continue;
             }
-            if place_tree(map, tile, r, climate) {
-                observer(TreePlacement {
-                    origin: TreePlacementOrigin::Group,
-                    x: tile.x,
-                    y: tile.y,
-                    random: r,
-                    parent: Some(center),
-                });
-            }
+            observer(TreePlacement {
+                origin: TreePlacementOrigin::Group,
+                x: tile.x,
+                y: tile.y,
+                random: r,
+                parent: Some(center),
+            });
+            let _ = place_tree(map, tile, r, climate);
         }
     }
 
@@ -241,15 +255,14 @@ pub fn generate_trees_with_rng_observer_with_map_settings<F>(
             let tile = random_tile(r, map_w, map_h);
             if is_plantable(map, tile, preserve, true) {
                 let height = tile_slope_and_z(map, tile).map_or(0, |(_, z)| z);
-                if place_tree(map, tile, r, climate) {
-                    observer(TreePlacement {
-                        origin: TreePlacementOrigin::Random,
-                        x: tile.x,
-                        y: tile.y,
-                        random: r,
-                        parent: None,
-                    });
-                }
+                observer(TreePlacement {
+                    origin: TreePlacementOrigin::Random,
+                    x: tile.x,
+                    y: tile.y,
+                    random: r,
+                    parent: None,
+                });
+                let _ = place_tree(map, tile, r, climate);
                 // `PlaceTreesRandomly` in improved mode reinforces every
                 // sustrato aceptado with `GetTileZ(tile) * 2` same-height
                 // attempts. In temperate maps `PlaceTree` is always valid;
@@ -264,6 +277,9 @@ pub fn generate_trees_with_rng_observer_with_map_settings<F>(
                     place_tree_at_same_height(map, tile, height, rng, climate, preserve, observer);
                 }
             }
+        }
+        if matches!(climate, Climate::SubTropical) {
+            place_rainforest_trees(map, rng, preserve, observer);
         }
     }
 }
@@ -361,23 +377,34 @@ const fn is_slope_with_one_corner_raised(slope: u8) -> bool {
     matches!(slope, 1 | 2 | 4 | 8)
 }
 
-fn tree_range(climate: Climate) -> (u8, u8) {
+fn random_tree_type(tile: Tile, random: u32, climate: Climate) -> Option<u8> {
+    let seed = random >> 24;
     match climate {
-        Climate::Temperate => (0, 12),
-        Climate::SubArctic => (12, 8),
-        // Tropic zones are not represented in the procedural map yet. Use
-        // the normal subtropical range until the zone generator is ported.
-        Climate::SubTropical => (28, 4),
-        Climate::Toyland => (32, 9),
+        Climate::Temperate => Some((seed * 12 / 256) as u8),
+        Climate::SubArctic => Some((seed * 8 / 256 + 12) as u8),
+        Climate::SubTropical => match tropic_zone(tile) {
+            TROPIC_ZONE_NORMAL => Some((seed * 4 / 256 + u32::from(TREE_SUB_TROPICAL)) as u8),
+            TROPIC_ZONE_DESERT => (seed <= 12).then_some(TREE_CACTUS),
+            // `GetRandomTreeType` trata todo valor restante como rainforest;
+            // los saves válidos usan exactamente `TROPICZONE_RAINFOREST`.
+            _ => Some((seed * 7 / 256 + u32::from(TREE_RAINFOREST)) as u8),
+        },
+        Climate::Toyland => Some((seed * 9 / 256 + 32) as u8),
     }
+}
+
+#[must_use]
+const fn tropic_zone(tile: Tile) -> u8 {
+    tile.mapt & TROPIC_ZONE_MASK
 }
 
 fn place_tree(map: &mut Map, c: TileCoord, random: u32, climate: Climate) -> bool {
     let Some(previous) = map.get(c) else {
         return false;
     };
-    let (base, count) = tree_range(climate);
-    let tree_type = base.saturating_add((((random >> 24) & 0xFF) * u32::from(count) / 256) as u8);
+    let Some(tree_type) = random_tree_type(previous, random, climate) else {
+        return false;
+    };
     let count_minus_one = ((random >> 22) & 0x03) as u8;
     let growth = (((random >> 16) & 0x07) as u8).min(6);
 
@@ -442,7 +469,9 @@ fn place_tree(map: &mut Map, c: TileCoord, random: u32, climate: Climate) -> boo
     let mut tile = Tile {
         height: previous.height,
         kind: TileKind::Forest,
-        mapt: 0x40,
+        // `SetTileType(MP_TREES)` sólo cambia el nibble alto; la zona
+        // tropical baja debe sobrevivir para futuros árboles/tile loops.
+        mapt: 0x40 | (previous.mapt & 0x0F),
         m5: (count_minus_one << 6) | growth,
         m1: set_water_class_m1(OWNER_NONE_M1, water_class),
         m6: 0,
@@ -506,16 +535,50 @@ fn place_tree_at_same_height<F>(
         {
             continue;
         }
-        if place_tree(map, tile, r, climate) {
+        observer(TreePlacement {
+            origin: TreePlacementOrigin::SameHeight,
+            x: tile.x,
+            y: tile.y,
+            random: r,
+            parent: Some(center),
+        });
+        let _ = place_tree(map, tile, r, climate);
+        break;
+    }
+}
+
+/// Pase extra de `PlaceTreesRandomly` para la selva tropical.
+///
+/// Se ejecuta después de cada pase normal, consume su propia llamada a
+/// `Random()` por intento y no admite `CLEAR_DESERT`, igual que
+/// `DEFAULT_RAINFOREST_TREE_STEPS` en `tree_cmd.cpp`.
+fn place_rainforest_trees<F>(
+    map: &mut Map,
+    rng: &mut Randomizer,
+    preserve: &[PreserveRect],
+    observer: &mut F,
+) where
+    F: FnMut(TreePlacement),
+{
+    let (map_w, map_h) = map.dimensions();
+    let attempts = scale_by_size(DEFAULT_RAINFOREST_TREE_STEPS, map_w, map_h);
+    for _ in 0..attempts {
+        let r = rng.next();
+        let tile = random_tile(r, map_w, map_h);
+        if map
+            .get(tile)
+            .is_some_and(|candidate| tropic_zone(candidate) == TROPIC_ZONE_RAINFOREST)
+            && is_plantable(map, tile, preserve, false)
+        {
             observer(TreePlacement {
-                origin: TreePlacementOrigin::SameHeight,
+                origin: TreePlacementOrigin::Rainforest,
                 x: tile.x,
                 y: tile.y,
                 random: r,
-                parent: Some(center),
+                parent: None,
             });
+            let _ = place_tree(map, tile, r, Climate::SubTropical);
         }
-        break;
     }
 }
 
@@ -568,9 +631,10 @@ fn point_in_triangle(x: i32, y: i32, v1: Point, v2: Point, v3: Point) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        GROVE_ANGLE_STEP, GROVE_PHASE_DIVISOR, generate_trees, generate_trees_with_rng_observer,
-        is_plantable, is_slope_with_one_corner_raised, place_tree, random_tile,
-        same_height_attempt_count, tree_group_count,
+        GROVE_ANGLE_STEP, GROVE_PHASE_DIVISOR, TROPIC_ZONE_DESERT, TROPIC_ZONE_RAINFOREST,
+        generate_trees, generate_trees_with_rng_observer, is_plantable,
+        is_slope_with_one_corner_raised, place_rainforest_trees, place_tree, random_tile,
+        random_tree_type, same_height_attempt_count, tree_group_count,
     };
     use crate::cargodist::parity::Randomizer;
     use crate::map::{
@@ -623,7 +687,7 @@ mod tests {
     }
 
     #[test]
-    fn observer_reports_only_effective_tree_placements() {
+    fn observer_reports_substrate_admitted_temperate_calls() {
         let mut map = Map::new_flat(64, 64, 2);
         let mut rng = Randomizer::new(0x1234_5678);
         let mut placements = Vec::new();
@@ -639,6 +703,97 @@ mod tests {
         assert!(placements.iter().all(|placement| {
             map.get(TileCoord::new(placement.x, placement.y))
                 .is_some_and(|tile| tile.kind == TileKind::Forest)
+        }));
+    }
+
+    #[test]
+    fn tropical_tree_type_uses_saved_tropic_zone_bits() {
+        let map = Map::new_flat(4, 4, 2);
+        let c = TileCoord::new(2, 2);
+        let mut tile = map.get(c).expect("normal fixture tile");
+        assert_eq!(
+            random_tree_type(tile, 0xFF00_0000, Climate::SubTropical),
+            Some(31)
+        );
+
+        tile.mapt = TROPIC_ZONE_DESERT;
+        assert_eq!(
+            random_tree_type(tile, 0x0C00_0000, Climate::SubTropical),
+            Some(27)
+        );
+        assert_eq!(
+            random_tree_type(tile, 0x0D00_0000, Climate::SubTropical),
+            None
+        );
+
+        tile.mapt = TROPIC_ZONE_RAINFOREST;
+        assert_eq!(
+            random_tree_type(tile, 0x0000_0000, Climate::SubTropical),
+            Some(20)
+        );
+        assert_eq!(
+            random_tree_type(tile, 0xFF00_0000, Climate::SubTropical),
+            Some(26)
+        );
+    }
+
+    #[test]
+    fn tropical_place_tree_preserves_zone_and_skips_invalid_desert_type() {
+        let mut map = Map::new_flat(8, 8, 2);
+        let rainforest = TileCoord::new(3, 3);
+        let mut rainforest_tile = map.get(rainforest).expect("rainforest tile");
+        rainforest_tile.mapt = TROPIC_ZONE_RAINFOREST;
+        map.set_tile(rainforest, rainforest_tile)
+            .expect("rainforest fixture write");
+        assert!(place_tree(
+            &mut map,
+            rainforest,
+            0x0000_0000,
+            Climate::SubTropical
+        ));
+        let tree = map.get(rainforest).expect("rainforest tree");
+        assert_eq!(tree.mapt, 0x42);
+        assert_eq!(tree.m3, 20);
+
+        let desert = TileCoord::new(4, 3);
+        let mut desert_tile = map.get(desert).expect("desert tile");
+        desert_tile.mapt = TROPIC_ZONE_DESERT;
+        map.set_tile(desert, desert_tile)
+            .expect("desert fixture write");
+        assert!(!place_tree(
+            &mut map,
+            desert,
+            0x0D00_0000,
+            Climate::SubTropical
+        ));
+        assert_eq!(
+            map.get(desert).expect("desert unchanged").kind,
+            TileKind::Grass
+        );
+    }
+
+    #[test]
+    fn rainforest_pass_records_and_places_rainforest_calls() {
+        let mut map = Map::new_flat(8, 8, 2);
+        for y in 0..8 {
+            for x in 0..8 {
+                let c = TileCoord::new(x, y);
+                let mut tile = map.get(c).expect("rainforest map tile");
+                tile.mapt = TROPIC_ZONE_RAINFOREST;
+                map.set_tile(c, tile).expect("rainforest map write");
+            }
+        }
+        let mut rng = Randomizer::new(0x1234_5678);
+        let mut placements = Vec::new();
+        place_rainforest_trees(&mut map, &mut rng, &[], &mut |placement| {
+            placements.push(placement);
+        });
+        assert!(!placements.is_empty());
+        assert!(placements.iter().all(|placement| {
+            placement.origin == super::TreePlacementOrigin::Rainforest
+                && map
+                    .get(TileCoord::new(placement.x, placement.y))
+                    .is_some_and(|tile| tile.kind == TileKind::Forest && tile.mapt == 0x42)
         }));
     }
 

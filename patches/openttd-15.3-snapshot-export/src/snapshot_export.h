@@ -35,9 +35,11 @@ bool OpenttdrsMaybeExportWorldRaw(const std::string &source_path);
 void OpenttdrsMaybeCaptureTreeGenerationStage(bool after);
 
 /**
- * Records an actual `PlaceTree` placement while the generation trace is armed.
- * It is a no-op unless `OPENTTDRS_TREE_TRACE_OUT` was configured before
- * `GenerateTrees()`.
+ * Records a `PlaceTree` invocation admitted by the substrate filter while the
+ * generation trace is armed. In tropical desert the selected type may still
+ * be invalid and leave the tile unchanged; retaining that call is necessary
+ * to align the deterministic RNG trace. It is a no-op unless
+ * `OPENTTDRS_TREE_TRACE_OUT` was configured before `GenerateTrees()`.
  */
 void OpenttdrsTraceTreePlacement(
 	const char *origin, uint32_t x, uint32_t y, uint32_t random,

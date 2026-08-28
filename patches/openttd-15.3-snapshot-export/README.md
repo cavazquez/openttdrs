@@ -94,7 +94,7 @@ se activa en el primer tick de una partida nueva, no sólo después de cargar un
 ## Frontera `GenerateTrees`
 
 El parche completo también puede guardar una partida justo antes y después de
-`GenerateTrees`, junto con cada colocación efectiva de árbol. El harness evita
+`GenerateTrees`, junto con cada llamada admitida a `PlaceTree`. El harness evita
 comparar una captura enorme: valida los bytes de tesela, bloques 4×4, stream
 RNG y la secuencia `PlaceTree`.
 

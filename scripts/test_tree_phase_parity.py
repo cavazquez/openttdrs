@@ -72,8 +72,33 @@ def test_climate_names_match_openttd_landscape_ids() -> None:
     }
 
 
+def test_trace_accepts_tropical_rainforest_origin() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "rainforest.jsonl"
+        path.write_text(
+            trace(
+                {"climate": 2},
+                [
+                    {
+                        "kind": "tree_placement",
+                        "ordinal": 0,
+                        "origin": "rainforest",
+                        "x": 7,
+                        "y": 8,
+                        "random": 9,
+                        "parent": None,
+                    }
+                ],
+            ),
+            encoding="utf-8",
+        )
+        _, placements = tree_phase.read_tree_trace(path)
+    assert placements[0]["origin"] == "rainforest"
+
+
 if __name__ == "__main__":
     test_exact_trace_compares_without_producer_path_noise()
     test_trace_reports_first_placement_field()
     test_climate_names_match_openttd_landscape_ids()
+    test_trace_accepts_tropical_rainforest_origin()
     print("OK: tree_phase_parity tests")

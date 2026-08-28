@@ -4,7 +4,8 @@
 El oráculo guarda un `.sav` inmediatamente antes y después de
 ``GenerateTrees`` dentro de OpenTTD. El candidato retoma el estado RNG de
 ``DATE`` del primero, reproduce sólo árboles y compara los diez bytes de cada
-tesela con el segundo. También compara cada llamada efectiva a ``PlaceTree``
+tesela con el segundo. También compara cada llamada admitida por sustrato a
+``PlaceTree``
 para señalar la primera regla que desfasó el RNG, sin requerir una captura
 raster del mapa completo.
 """
@@ -90,7 +91,7 @@ def read_tree_trace(path: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
                 f"{path}:{line_number}: ordinal {value.get('ordinal')!r}; "
                 f"se esperaba {expected_ordinal}"
             )
-        if value.get("origin") not in {"group", "random", "same_height"}:
+        if value.get("origin") not in {"group", "random", "same_height", "rainforest"}:
             raise TreePhaseError(f"{path}:{line_number}: origen de árbol inválido")
         if not all(isinstance(value.get(field), int) for field in ("x", "y", "random")):
             raise TreePhaseError(f"{path}:{line_number}: faltan coordenadas/RNG enteros")

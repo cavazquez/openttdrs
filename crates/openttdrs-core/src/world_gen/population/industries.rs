@@ -12,6 +12,11 @@ use crate::world_gen::{
 
 use super::{PopCtx, in_preserve, min_distance_sq};
 
+/// `PlaceIndustry` prueba hasta este número de teselas para una especie ya
+/// seleccionada. La selección ponderada ocurre fuera de este bucle; no se
+/// vuelve a sortear el tipo al rechazar una ubicación.
+const INDUSTRY_PLACEMENT_ATTEMPTS: usize = 2_000;
+
 /// Intenta colocar hasta `target` industrias; devuelve cuántas se crearon.
 pub(super) fn place_industries(
     ctx: &mut PopCtx<'_>,
@@ -25,63 +30,94 @@ pub(super) fn place_industries(
     if specs.is_empty() {
         return 0;
     }
-    let margin = 3_u32;
-    let span_w = ctx.mw.saturating_sub(margin * 2).max(1);
-    let span_h = ctx.mh.saturating_sub(margin * 2).max(1);
     let min_town_dist_sq = 10_i32 * 10;
     let min_industry_dist_sq = 8_i32 * 8;
-    let max_attempts = target.saturating_mul(200).max(4_000);
     let mut industry_origins: Vec<TileCoord> = Vec::with_capacity(target);
 
-    for _ in 0..max_attempts {
-        if industry_origins.len() >= target {
-            break;
-        }
-        let x = i32::try_from(margin + ctx.rng.random_range(span_w)).unwrap_or(5);
-        let y = i32::try_from(margin + ctx.rng.random_range(span_h)).unwrap_or(5);
-        let origin = TileCoord::new(x, y);
-        if in_preserve(ctx.preserve, x, y) {
-            continue;
-        }
-        if town_centers
-            .iter()
-            .any(|&t| min_distance_sq(origin, t) < min_town_dist_sq)
-        {
-            continue;
-        }
-        if industry_origins
-            .iter()
-            .any(|&o| min_distance_sq(origin, o) < min_industry_dist_sq)
-        {
-            continue;
-        }
-
+    for _ in 0..target {
+        // `GenerateIndustries` elige una especie y `PlaceIndustry` conserva
+        // esa elección mientras explora hasta 2000 `RandomTile()`. El peso
+        // native y las especies force-one se integran en RMAP-056; conservar
+        // ya esta frontera evita volver a sortear tras cada fallo de sitio.
         let spec = specs[usize::try_from(
             ctx.rng
                 .random_range(u32::try_from(specs.len()).unwrap_or(1)),
         )
         .unwrap_or(0)];
-        if check_place_industry_spec(&ctx.state.map, origin, spec).is_err() {
-            continue;
+
+        for _ in 0..INDUSTRY_PLACEMENT_ATTEMPTS {
+            let origin = generated_industry_attempt_origin(ctx.rng, ctx.mw, ctx.mh);
+            if in_preserve(ctx.preserve, origin.x, origin.y) {
+                continue;
+            }
+            if town_centers
+                .iter()
+                .any(|&t| min_distance_sq(origin, t) < min_town_dist_sq)
+            {
+                continue;
+            }
+            if industry_origins
+                .iter()
+                .any(|&o| min_distance_sq(origin, o) < min_industry_dist_sq)
+            {
+                continue;
+            }
+            if check_place_industry_spec(&ctx.state.map, origin, spec).is_err() {
+                continue;
+            }
+            if apply_command(ctx.state, &Command::PlaceIndustrySpec(origin, spec)).is_err() {
+                continue;
+            }
+            // `DoCreateNewIndustry` planta 50 campos alrededor de una granja con
+            // `PlantRandomFarmField`. El mapa generado debe conservar el contrato
+            // MP_CLEAR/CLEAR_FIELDS (no un TileKind inventado): el renderer y el
+            // save de OpenTTD leen m5=0x0f, m2=IndustryID y m3=estado.
+            if matches!(spec, IndustrySpec::Farm | IndustrySpec::FarmTropic) {
+                let industry_id = ctx
+                    .state
+                    .industries
+                    .last()
+                    .map_or(0, |industry| industry.instance_id);
+                plant_farm_fields(ctx, origin, industry_id);
+            }
+            industry_origins.push(origin);
+            break;
         }
-        if apply_command(ctx.state, &Command::PlaceIndustrySpec(origin, spec)).is_err() {
-            continue;
-        }
-        // `DoCreateNewIndustry` planta 50 campos alrededor de una granja con
-        // `PlantRandomFarmField`. El mapa generado debe conservar el contrato
-        // MP_CLEAR/CLEAR_FIELDS (no un TileKind inventado): el renderer y el
-        // save de OpenTTD leen m5=0x0f, m2=IndustryID y m3=estado.
-        if matches!(spec, IndustrySpec::Farm | IndustrySpec::FarmTropic) {
-            let industry_id = ctx
-                .state
-                .industries
-                .last()
-                .map_or(0, |industry| industry.instance_id);
-            plant_farm_fields(ctx, origin, industry_id);
-        }
-        industry_origins.push(origin);
     }
     industry_origins.len()
+}
+
+/// Consume el prefijo RNG de un intento de `CreateNewIndustry`.
+///
+/// `PlaceIndustry` obtiene primero `RandomTile()`. Cada intento consume luego
+/// tres `Random()` adicionales —seed de callback, bits iniciales y selección
+/// de layout— incluso si el chequeo de sitio falla. El escritor MVP aún no
+/// acepta esos tres valores, pero debe consumirlos ahora para no desplazar las
+/// fases posteriores.
+fn generated_industry_attempt_origin(
+    rng: &mut crate::cargodist::parity::Randomizer,
+    map_w: u32,
+    map_h: u32,
+) -> TileCoord {
+    let origin = random_tile(rng.next(), map_w, map_h);
+    let _random_var8f = rng.next();
+    let _initial_random_bits = rng.next();
+    let _layout_index = rng.random_range(1);
+    origin
+}
+
+/// `RandomTileSeed` sobre mapas de potencia de dos.
+fn random_tile(random: u32, map_w: u32, map_h: u32) -> TileCoord {
+    let count = map_w.saturating_mul(map_h).max(1);
+    let index = if map_w.is_power_of_two() && map_h.is_power_of_two() {
+        random & count.saturating_sub(1)
+    } else {
+        random % count
+    };
+    TileCoord::new(
+        i32::try_from(index % map_w.max(1)).unwrap_or(0),
+        i32::try_from(index / map_w.max(1)).unwrap_or(0),
+    )
 }
 
 const FARM_FIELD_ATTEMPTS: usize = 50;
@@ -173,6 +209,7 @@ fn plant_farm_fields(ctx: &mut PopCtx<'_>, origin: TileCoord, industry_id: u8) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cargodist::parity::Randomizer;
     use crate::game_state::GameState;
     use crate::map::tree_tile_loop::clear_density;
 
@@ -219,5 +256,20 @@ mod tests {
                 && (tile.m3 & 0x0F) <= 8
                 && tile.m1 == set_water_class_m1(OWNER_NONE_M1, WaterClass::Invalid)
         }));
+    }
+
+    #[test]
+    fn industry_attempt_consumes_random_tile_and_three_constructor_draws() {
+        // Primera llamada de `CreateNewIndustry` de la coal mine force-one
+        // para la seed 1330935378, tomada justo después de RMAP-055.
+        let mut rng = Randomizer {
+            state: [11_204_508, 1_784_072_412],
+        };
+
+        assert_eq!(
+            generated_industry_attempt_origin(&mut rng, 64, 64),
+            TileCoord::new(50, 59)
+        );
+        assert_eq!(rng.state, [1_957_844_100, 95_334_821]);
     }
 }

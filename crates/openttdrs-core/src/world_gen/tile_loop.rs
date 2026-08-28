@@ -8,7 +8,14 @@
 //! producción antes de tiempo.
 
 use crate::GameState;
-use crate::map::{TileKind, collect_tile_loop_visits};
+use crate::map::{Map, TileKind, collect_tile_loop_visits};
+
+/// Cantidad de pasadas que `CreateRivers` ejecuta tras ensanchar ríos.
+///
+/// Es `TILE_UPDATE_FREQUENCY` en `landscape.cpp`; en ese intervalo cada
+/// tesela recibe una visita LFSR y el agua estable queda marcada como
+/// `non-flooding` en `MAP3` bit 0.
+pub const LANDSCAPE_RIVER_TILE_LOOP_PASSES: u64 = 256;
 
 /// Ejecuta una pasada de `RunTileLoop` para la generación de un mundo nuevo.
 ///
@@ -107,11 +114,41 @@ pub fn run_generation_tile_loop(state: &mut GameState, tick: u64) -> usize {
     visit_count
 }
 
+/// Reproduce las pasadas `RunTileLoop` finales de `CreateRivers`.
+///
+/// `GenerateLandscape` las corre antes de `GenerateClearTile`. El estado
+/// temporal contiene sólo paisaje, por lo que no adelanta calendario,
+/// vehículos, economía ni entidades de la partida; se conserva únicamente el
+/// mapa y el cursor LFSR que afectan a los bytes de la frontera de generación.
+pub fn run_landscape_river_tile_loops(
+    map: &mut Map,
+    climate: crate::world_gen::Climate,
+    seed: u64,
+) {
+    // Mover en vez de clonar evita duplicar un mapa de hasta 4096² teselas
+    // durante su creación. El placeholder no se observa: se reemplaza por el
+    // mapa generado antes de devolver.
+    let landscape = std::mem::replace(map, Map::new_flat(0, 0, 0));
+    let mut state = GameState::from_map(landscape);
+    state.climate = climate;
+    state.world_seed = seed;
+    for _ in 0..LANDSCAPE_RIVER_TILE_LOOP_PASSES {
+        // `CreateRivers` no incrementa `TimerGameTick::counter` dentro de
+        // este bucle. Usar siempre cero conserva tanto el callback manual de
+        // tile 0 como cualquier regla dependiente del tick.
+        run_generation_tile_loop(&mut state, 0);
+    }
+    *map = state.map;
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use crate::map::{Map, TileCoord, TileKind, TileLoopState, collect_tile_loop_visits};
+    use crate::map::{
+        Map, TileCoord, TileKind, TileLoopState, WaterClass, collect_tile_loop_visits,
+        set_water_class_m1,
+    };
 
     #[test]
     fn generation_loop_uses_lfsr_without_advancing_calendar() {
@@ -146,5 +183,31 @@ mod tests {
         assert_eq!(state.vehicles.len(), before_vehicles);
         assert_eq!(state.industries.len(), before_industries);
         assert_ne!(state.map.get(c).unwrap().m5, 0x00);
+    }
+
+    #[test]
+    fn landscape_river_loops_mark_stable_water() {
+        let mut map = Map::new_flat(64, 64, 0);
+        for y in 0..64 {
+            for x in 0..64 {
+                let c = TileCoord::new(x, y);
+                map.set_kind(c, TileKind::Water).unwrap();
+                map.set_mapt_m5(c, 0x60, 0).unwrap();
+                map.set_m1(c, set_water_class_m1(0x11, WaterClass::Sea))
+                    .unwrap();
+            }
+        }
+
+        run_landscape_river_tile_loops(&mut map, crate::world_gen::Climate::Temperate, 42);
+
+        let stable = map
+            .tiles()
+            .iter()
+            .filter(|tile| tile.kind == TileKind::Water && (tile.m3 & 1) != 0)
+            .count();
+        // Con el contador de tick fijo en cero, tile 0 ocupa una de las 16
+        // visitas de cada pasada. OpenTTD por ello alcanza 1 + 15×256
+        // posiciones LFSR, no un barrido completo de 4096 teselas.
+        assert_eq!(stable, 1 + 15 * 256);
     }
 }

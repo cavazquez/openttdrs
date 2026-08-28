@@ -38,7 +38,9 @@ pub use population::{
     generate_industries_with_rng, generate_towns, generate_towns_with_rng, house_beside_road,
     industry_target_count, road_tiles_are_flat, scale_by_size, town_target_count,
 };
-pub use tile_loop::run_generation_tile_loop;
+pub use tile_loop::{
+    LANDSCAPE_RIVER_TILE_LOOP_PASSES, run_generation_tile_loop, run_landscape_river_tile_loops,
+};
 pub use trees::{
     TreePlacement, TreePlacementOrigin, generate_trees, generate_trees_with_rng,
     generate_trees_with_rng_observer, generate_trees_with_rng_observer_with_height_limit,
@@ -305,6 +307,14 @@ pub fn apply_landscape_with_rng(
                 map.set_m2(c, 0)?;
             }
         }
+    }
+
+    // `CreateRivers` termina con `TILE_UPDATE_FREQUENCY` pasadas de
+    // `RunTileLoop`. Además de actualizar el suelo, esas visitas marcan el
+    // agua que ya no puede seguir inundando (`MAP3` bit 0). Debe ocurrir antes
+    // de `GenerateClearTile`, igual que en `GenerateLandscape` de OpenTTD.
+    if config.amount_of_rivers != 0 {
+        run_landscape_river_tile_loops(map, config.climate, config.seed);
     }
 
     Ok(rng)

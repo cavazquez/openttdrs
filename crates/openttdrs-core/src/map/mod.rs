@@ -130,7 +130,7 @@ pub use tree_tile_loop::{
 };
 pub use types::{
     MapError, OTTD_TILETYPE_TUNNELBRIDGE, TOWN_HOUSE_COMPLETED, Tile, TileCoord, TileKind,
-    TownHouseSpec,
+    TownHouseFootprint, TownHouseSpec,
 };
 pub use water_class::{
     WaterClass, is_canal_tile, is_river_tile, make_water_tile, river_tile_is_ship_navigable,
@@ -327,8 +327,37 @@ impl Map {
     /// un pueblo. A diferencia de [`Self::set_completed_house`], conserva los
     /// bits aleatorios, el estado de obra y el nibble bajo de `MAPT`.
     pub fn make_town_house(&mut self, c: TileCoord, spec: TownHouseSpec) -> Result<(), MapError> {
-        let previous = self.get(c).ok_or(MapError::OutOfBounds)?;
-        self.set_tile(c, Tile::town_house(spec, previous.height, previous.mapt))
+        self.make_town_house_footprint(c, spec, TownHouseFootprint::OneByOne)
+    }
+
+    /// Materializa la secuencia completa de `MakeTownHouse` para una huella
+    /// vanilla. Valida todos los límites antes de escribir, de modo que una
+    /// huella que sobresale del mapa no deja una construcción parcial.
+    ///
+    /// Cada subtesela conserva sus propios `MAPH` y nibble bajo de `MAPT`.
+    /// El `HouseID` se incrementa en el mismo orden de OpenTTD: base, `+Y`,
+    /// `+X`, `+X+Y`.
+    pub fn make_town_house_footprint(
+        &mut self,
+        base: TileCoord,
+        spec: TownHouseSpec,
+        footprint: TownHouseFootprint,
+    ) -> Result<(), MapError> {
+        let (parts, len) = footprint.parts(base);
+        let mut indices = [0_usize; 4];
+        for (index, part) in indices.iter_mut().zip(parts.iter()).take(len) {
+            *index = self.index(*part).ok_or(MapError::OutOfBounds)?;
+        }
+
+        for (offset, index) in indices.iter().copied().take(len).enumerate() {
+            let previous = self.tiles[index];
+            let sub_spec = TownHouseSpec {
+                house_id: spec.house_id.wrapping_add([0, 1, 2, 3][offset]),
+                ..spec
+            };
+            self.tiles[index] = Tile::town_house(sub_spec, previous.height, previous.mapt);
+        }
+        Ok(())
     }
 
     /// Atribuye una casa al pueblo que la contiene (`MAP2`/`TownID`).
@@ -547,6 +576,157 @@ mod ottdmap_binary_tests {
         assert_eq!(tile.m5, 0x15);
         assert_eq!(tile.m6, 17 << 2);
         assert_eq!(tile.m8, 0x234);
+    }
+
+    fn fixture_house_spec(
+        house_id: u16,
+        town_id: u32,
+        random_bits: u8,
+        construction_counter: u8,
+        construction_stage: u8,
+    ) -> TownHouseSpec {
+        TownHouseSpec {
+            house_id,
+            town_id,
+            random_bits,
+            construction_counter,
+            construction_stage,
+            is_protected: false,
+            processing_time: 0,
+        }
+    }
+
+    fn assert_native_town_house(
+        map: &Map,
+        coord: TileCoord,
+        height: u8,
+        town_id: u8,
+        random_bits: u8,
+        construction: u8,
+        house_id: u16,
+    ) {
+        assert_eq!(
+            map.get(coord),
+            Some(Tile {
+                height,
+                kind: TileKind::House,
+                mapt: 0x30,
+                m5: construction,
+                m1: random_bits,
+                m6: 0,
+                m8: house_id,
+                m3: if construction == 0 { 0x80 } else { 0 },
+                m2: town_id,
+                m2_hi: 0,
+                m7: 0,
+                m3hi: 0,
+            })
+        );
+    }
+
+    #[test]
+    fn make_town_house_footprint_replays_openttd_1x2_fixture() {
+        // OpenTTD 128², ártico, 1975, seed 1330935378, fase towns:
+        // base (84,52) HouseID 66; su segundo tile +Y es HouseID 67.
+        let mut map = Map::new_flat(128, 128, 0);
+        let base = TileCoord::new(84, 52);
+        map.set_height(base, 5).unwrap();
+        map.set_height(TileCoord::new(84, 53), 5).unwrap();
+        map.make_town_house_footprint(
+            base,
+            fixture_house_spec(66, 1, 183, 0, TOWN_HOUSE_COMPLETED),
+            TownHouseFootprint::OneByTwo,
+        )
+        .unwrap();
+
+        assert_native_town_house(&map, base, 5, 1, 183, 0, 66);
+        assert_native_town_house(&map, TileCoord::new(84, 53), 5, 1, 183, 0, 67);
+    }
+
+    #[test]
+    fn make_town_house_footprint_replays_openttd_2x1_fixture() {
+        // OpenTTD 128², ártico, 1975, seed 1330935378, fase towns:
+        // base (105,62) HouseID 74; su segundo tile +X es HouseID 75.
+        let mut map = Map::new_flat(128, 128, 0);
+        let base = TileCoord::new(105, 62);
+        map.set_height(base, 1).unwrap();
+        map.set_height(TileCoord::new(106, 62), 1).unwrap();
+        map.make_town_house_footprint(
+            base,
+            fixture_house_spec(74, 5, 215, 0, TOWN_HOUSE_COMPLETED),
+            TownHouseFootprint::TwoByOne,
+        )
+        .unwrap();
+
+        assert_native_town_house(&map, base, 1, 5, 215, 0, 74);
+        assert_native_town_house(&map, TileCoord::new(106, 62), 1, 5, 215, 0, 75);
+    }
+
+    #[test]
+    fn make_town_house_footprint_replays_openttd_2x2_fixture() {
+        // OpenTTD 128², ártico, 1975, seed 1330935378, fase towns:
+        // la obra de base (24,87) usa 32,33,34,35 en orden base,+Y,+X,+X+Y.
+        let mut map = Map::new_flat(128, 128, 0);
+        let base = TileCoord::new(24, 87);
+        for coord in [
+            base,
+            TileCoord::new(24, 88),
+            TileCoord::new(25, 87),
+            TileCoord::new(25, 88),
+        ] {
+            map.set_height(coord, 1).unwrap();
+        }
+        map.make_town_house_footprint(
+            base,
+            fixture_house_spec(32, 4, 221, 3, 2),
+            TownHouseFootprint::TwoByTwo,
+        )
+        .unwrap();
+
+        assert_native_town_house(&map, base, 1, 4, 221, 19, 32);
+        assert_native_town_house(&map, TileCoord::new(24, 88), 1, 4, 221, 19, 33);
+        assert_native_town_house(&map, TileCoord::new(25, 87), 1, 4, 221, 19, 34);
+        assert_native_town_house(&map, TileCoord::new(25, 88), 1, 4, 221, 19, 35);
+    }
+
+    #[test]
+    fn make_town_house_footprint_is_atomic_when_a_subtile_is_out_of_bounds() {
+        let mut map = Map::new_flat(2, 2, 0);
+        map.set_mapt_m5(TileCoord::new(1, 1), 0x0D, 7).unwrap();
+        let before = map.clone();
+
+        assert_eq!(
+            map.make_town_house_footprint(
+                TileCoord::new(1, 1),
+                fixture_house_spec(32, 0, 1, 0, TOWN_HOUSE_COMPLETED),
+                TownHouseFootprint::TwoByTwo,
+            ),
+            Err(MapError::OutOfBounds)
+        );
+        assert_eq!(map.tiles(), before.tiles());
+    }
+
+    #[test]
+    fn make_town_house_footprint_preserves_each_subtile_height_and_mapt_low_bits() {
+        let mut map = Map::new_flat(2, 2, 0);
+        let base = TileCoord::new(0, 0);
+        let second = TileCoord::new(0, 1);
+        map.set_height(base, 3).unwrap();
+        map.set_height(second, 7).unwrap();
+        map.set_mapt_m5(base, 0x03, 0).unwrap();
+        map.set_mapt_m5(second, 0x0E, 0).unwrap();
+
+        map.make_town_house_footprint(
+            base,
+            fixture_house_spec(66, 0, 1, 0, TOWN_HOUSE_COMPLETED),
+            TownHouseFootprint::OneByTwo,
+        )
+        .unwrap();
+
+        let first = map.get(base).unwrap();
+        let last = map.get(second).unwrap();
+        assert_eq!((first.height, first.mapt, first.m8), (3, 0x33, 66));
+        assert_eq!((last.height, last.mapt, last.m8), (7, 0x3E, 67));
     }
 
     #[test]

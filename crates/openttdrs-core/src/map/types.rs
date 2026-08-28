@@ -111,6 +111,40 @@ pub struct TownHouseSpec {
     pub processing_time: u8,
 }
 
+/// Geometría de una casa urbana que `MakeTownHouse` escribe de una vez.
+///
+/// Los nombres usan los ejes de [`TileCoord`]. La secuencia no es meramente
+/// geométrica: OpenTTD incrementa el `HouseID` en el orden base, `+Y`, `+X`,
+/// `+X+Y`; por eso una huella 2×2 termina como `base`, `base+1`,
+/// `base+2`, `base+3` en esas posiciones respectivamente.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TownHouseFootprint {
+    /// Una única tesela.
+    OneByOne,
+    /// Dos teselas sobre el eje Y (`BUILDING_2_TILES_Y`).
+    OneByTwo,
+    /// Dos teselas sobre el eje X (`BUILDING_2_TILES_X`).
+    TwoByOne,
+    /// Cuatro teselas (`BUILDING_HAS_4_TILES`).
+    TwoByTwo,
+}
+
+impl TownHouseFootprint {
+    /// Devuelve las subteselas en el orden de `MakeTownHouse` y cuántas son.
+    #[must_use]
+    pub(crate) const fn parts(self, base: TileCoord) -> ([TileCoord; 4], usize) {
+        let next_row = TileCoord::new(base.x, base.y + 1);
+        let next_column = TileCoord::new(base.x + 1, base.y);
+        let diagonal = TileCoord::new(base.x + 1, base.y + 1);
+        match self {
+            Self::OneByOne => ([base, base, base, base], 1),
+            Self::OneByTwo => ([base, next_row, base, base], 2),
+            Self::TwoByOne => ([base, next_column, base, base], 2),
+            Self::TwoByTwo => ([base, next_row, next_column, diagonal], 4),
+        }
+    }
+}
+
 impl Tile {
     /// Nibble alto del tipo de tesela OpenTTD (`mapt >> 4`).
     #[must_use]

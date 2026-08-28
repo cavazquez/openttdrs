@@ -502,6 +502,13 @@ fn grow_generated_town_road_in_tile(
         // aquí la tesela clear conserva ya la decisión y el stream de la rama
         // que OpenTTD logra transformar antes de `CMD_BUILD_ROAD`.
         let _ = chance16(rng, 1, 6);
+        // OpenTTD valida primero la tesela de entrada. Si no admite la vía,
+        // no sortea ni curva ni continuación: ese retorno temprano es una
+        // frontera RNG observable aun cuando no se escribe ninguna tesela.
+        if !generated_town_road_allowed_here(map, town, tile, target_dir, rng) {
+            return GeneratedRoadGrowthResult::SearchStopped;
+        }
+
         let source_dir = reverse_town_diag_dir(target_dir);
         if chance16(rng, 1, 4) {
             loop {
@@ -512,13 +519,9 @@ fn grow_generated_town_road_in_tile(
             }
         }
 
-        // `GrowTownInTile` consulta la legalidad tanto de la tesela que va a
-        // escribir como de la siguiente. Ambas llamadas pueden consumir el
-        // azar de pendiente de `IsRoadAllowedHere` y la segunda permite un
-        // tramo recto junto a una casa aunque no pueda continuar más lejos.
-        if !generated_town_road_allowed_here(map, town, tile, target_dir, rng) {
-            return GeneratedRoadGrowthResult::SearchStopped;
-        }
+        // La segunda consulta es sobre la continuación; puede consumir el
+        // azar de pendiente y permite un tramo recto junto a una casa aunque
+        // no pueda continuar más lejos.
         let rcmd = town_diag_dir_to_road_bits(target_dir) | town_diag_dir_to_road_bits(source_dir);
         let continuation = add_town_diag(tile, target_dir);
         if !generated_town_road_allowed_here(map, town, continuation, target_dir, rng) {
@@ -1792,6 +1795,14 @@ mod tests {
             ROAD_BITS_AXIS_Y
         );
         assert_eq!(rng.state, [3_624_132_389, 4_014_754_631]);
+
+        // La llamada 15 termina la búsqueda sin construir, pero su frontera
+        // RNG sigue siendo observable y debe quedar antes de la casa n=16.
+        assert_eq!(
+            grow_first_fixture_town(&mut state, &mut town, &mut rng),
+            None
+        );
+        assert_eq!(rng.state, [15_256_948, 1_831_888_115]);
     }
 
     #[test]

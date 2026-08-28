@@ -735,6 +735,10 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
                 &[],
                 &mut generation_rng,
             );
+            // La semilla de generación y el RNG de la partida son el mismo
+            // stream en OpenTTD; conservarlo evita un salto al primer tick
+            // después de regenerar el paisaje.
+            state.random = generation_rng;
             Ok(())
         }
     }

@@ -363,6 +363,13 @@ pub(crate) fn build_procedural_demo_world(settings: &NewGameSettings) -> GameSta
     if should_populate_procedurally(&settings) {
         populate_procedural_world(&mut state, &settings, &preserve, generation_rng.as_mut());
     }
+    // `OpenTTD` mantiene un único `_random` durante la creación del mundo:
+    // después de `GenerateTrees` el mismo estado alimenta los primeros ticks
+    // de la partida. No volver a la semilla por defecto evita que los
+    // callbacks/averías iniciales dependan de si el mapa fue procedural.
+    if let Some(rng) = generation_rng {
+        state.random = rng;
+    }
     if settings.preserve_demo {
         place_clean_demo_transport(&mut state);
         place_demo_economy_loop(&mut state);

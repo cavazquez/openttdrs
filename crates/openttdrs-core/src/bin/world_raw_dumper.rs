@@ -12,7 +12,7 @@ use openttdrs_core::world_raw::{
 use openttdrs_core::{
     Climate, GameState, Map, PopulationGenConfig, TerrainType, WorldGenConfig,
     apply_population_gen_with_rng, apply_world_gen_with_rng, generate_objects_with_rng,
-    generate_trees_with_rng,
+    generate_trees_with_rng, run_generation_tile_loop,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -367,8 +367,12 @@ fn run(args: &Args) -> Result<(), String> {
             generate_objects_with_rng(&mut state, climate, &mut generation_rng, &[]);
             generate_trees_with_rng(&mut state.map, state.climate, &mut generation_rng, &[]);
         }
-        for _ in 0..startup_ticks {
-            state.step();
+        // El RNG global que usa `RunTileLoop` es el mismo stream que dejó
+        // `GenerateTrees`; reiniciar el estado a la semilla 1 aquí desfasaba
+        // industria/árboles y cualquier callback que consuma Random().
+        state.random = generation_rng;
+        for tick in 0..u64::from(startup_ticks) {
+            run_generation_tile_loop(&mut state, tick);
         }
         map = state.map;
         let source = format!("generated:{width}x{height}:seed={seed}");

@@ -19,6 +19,7 @@ mod objects;
 mod population;
 mod rivers;
 mod tgp;
+mod tile_loop;
 mod trees;
 
 pub(crate) use clear_tiles::generate_clear_tiles;
@@ -37,6 +38,7 @@ pub use population::{
     generate_towns, house_beside_road, industry_target_count, road_tiles_are_flat, scale_by_size,
     town_target_count,
 };
+pub use tile_loop::run_generation_tile_loop;
 pub use trees::{generate_trees, generate_trees_with_rng};
 
 use crate::cargodist::parity::Randomizer;

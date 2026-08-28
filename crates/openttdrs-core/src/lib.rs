@@ -742,7 +742,8 @@ pub use world_gen::{
     apply_world_gen, apply_world_gen_with_rng, ceil_div, clear_ground_m5, effective_clear_ground,
     generate_industries, generate_objects_with_rng, generate_towns, generate_trees,
     generate_trees_with_rng, house_beside_road, industry_target_count, initial_clear_ground,
-    parse_hmap, road_tiles_are_flat, scale_by_size, serialize_heightmap, town_target_count,
+    parse_hmap, road_tiles_are_flat, run_generation_tile_loop, scale_by_size, serialize_heightmap,
+    town_target_count,
 };
 
 #[cfg(test)]

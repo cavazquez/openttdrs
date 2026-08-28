@@ -14,8 +14,6 @@
     clippy::many_single_char_names
 )]
 
-use std::f32::consts::TAU;
-
 use crate::cargodist::parity::Randomizer;
 use crate::company::OWNER_NONE_M1;
 use crate::map::tree_tile_loop::{clear_density, clear_ground_type};
@@ -41,6 +39,14 @@ const TREE_GROUND_GRASS: u8 = 0;
 const TREE_GROUND_ROUGH: u8 = 1;
 const TREE_GROUND_SNOW_DESERT: u8 = 2;
 const TREE_GROUND_SHORE: u8 = 3;
+/// `static_cast<float>(INT32_MAX / M_PI * 2)` de `CreateRandomStarShapedPolygon`.
+///
+/// El cálculo de C++ ocurre en doble precisión y sólo luego se reduce a
+/// `float`; usar `TAU` directamente cambia la precedencia y deforma todos los
+/// grupos de árboles para un mismo stream RNG.
+const GROVE_PHASE_DIVISOR: f32 = ((i32::MAX as f64 / std::f64::consts::PI) * 2.0) as f32;
+/// `(M_PI * 2) / GROVE_SEGMENTS`, redondeado una vez a `float` en C++.
+const GROVE_ANGLE_STEP: f32 = ((std::f64::consts::PI * 2.0) / GROVE_SEGMENTS as f64) as f32;
 
 #[derive(Clone, Copy, Debug, Default)]
 struct Point {
@@ -75,7 +81,7 @@ pub fn generate_trees_with_rng(
     let groups = if matches!(climate, Climate::Toyland) {
         0
     } else {
-        scale_by_size(rng.next() & 0x1F | 0x19, map_w, map_h)
+        tree_group_count(rng.next(), map_w, map_h)
     };
 
     for _ in 0..groups {
@@ -123,6 +129,12 @@ pub fn generate_trees_with_rng(
             }
         }
     }
+}
+
+/// `Map::ScaleBySize(GB(Random(), 0, 5) + 25)`: el `+ 25` es suma, no OR
+/// bit a bit. En un mapa de 64×64 decide entre dos y cuatro grupos.
+fn tree_group_count(random: u32, map_w: u32, map_h: u32) -> u32 {
+    scale_by_size((random & 0x1F) + 0x19, map_w, map_h)
 }
 
 fn random_tile(seed: u32, map_w: u32, map_h: u32) -> TileCoord {
@@ -313,16 +325,19 @@ fn place_tree_at_same_height(
 }
 
 fn random_grove(rng: &mut Randomizer) -> [Point; GROVE_SEGMENTS] {
-    const PHASE_DIVISOR: f32 = (i32::MAX as f32) / TAU;
     let harmonics = [
-        (GROVE_RADIUS / 2, rng.next() as f32 / PHASE_DIVISOR, 1),
-        (GROVE_RADIUS / 4, rng.next() as f32 / PHASE_DIVISOR, 2),
-        (GROVE_RADIUS / 8, rng.next() as f32 / PHASE_DIVISOR, 3),
-        (GROVE_RADIUS / 16, rng.next() as f32 / PHASE_DIVISOR, 4),
+        (GROVE_RADIUS / 2, rng.next() as f32 / GROVE_PHASE_DIVISOR, 1),
+        (GROVE_RADIUS / 4, rng.next() as f32 / GROVE_PHASE_DIVISOR, 2),
+        (GROVE_RADIUS / 8, rng.next() as f32 / GROVE_PHASE_DIVISOR, 3),
+        (
+            GROVE_RADIUS / 16,
+            rng.next() as f32 / GROVE_PHASE_DIVISOR,
+            4,
+        ),
     ];
     let mut grove = [Point::default(); GROVE_SEGMENTS];
-    for (index, point) in grove.iter_mut().enumerate() {
-        let theta = TAU * index as f32 / GROVE_SEGMENTS as f32;
+    let mut theta = 0.0;
+    for point in &mut grove {
         let deviation = harmonics
             .iter()
             .fold(0.0, |sum, (amplitude, phase, frequency)| {
@@ -331,6 +346,9 @@ fn random_grove(rng: &mut Randomizer) -> [Point; GROVE_SEGMENTS] {
         let radius = GROVE_RADIUS as f32 / 2.0 + deviation / 2.0;
         point.x = (theta.cos() * radius) as i32;
         point.y = (theta.sin() * radius) as i32;
+        // `CreateStarShapedPolygon` incrementa el `float` ya redondeado en
+        // cada segmento; calcular `TAU * index` no conserva esos redondeos.
+        theta += GROVE_ANGLE_STEP;
     }
     grove
 }
@@ -354,7 +372,10 @@ fn point_in_triangle(x: i32, y: i32, v1: Point, v2: Point, v3: Point) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{generate_trees, is_plantable, place_tree, random_tile};
+    use super::{
+        GROVE_ANGLE_STEP, GROVE_PHASE_DIVISOR, generate_trees, is_plantable, place_tree,
+        random_tile, tree_group_count,
+    };
     use crate::map::{
         Map, TileCoord, TileKind, WaterClass, set_water_class_m1, water_class_from_m1,
     };
@@ -365,6 +386,20 @@ mod tests {
         assert_eq!(random_tile(0, 64, 64), TileCoord::new(0, 0));
         assert_eq!(random_tile(65, 64, 64), TileCoord::new(1, 1));
         assert_eq!(random_tile(u32::MAX, 64, 64), TileCoord::new(63, 63));
+    }
+
+    #[test]
+    fn random_grove_phase_divisor_matches_upstream_double_then_float_contract() {
+        assert_eq!(GROVE_PHASE_DIVISOR.to_bits(), 0x4EA2_F983);
+        assert_eq!(GROVE_ANGLE_STEP.to_bits(), 0x3EC9_0FDB);
+    }
+
+    #[test]
+    fn tree_group_count_uses_addition_after_the_low_five_bits() {
+        assert_eq!(tree_group_count(0, 64, 64), 2);
+        assert_eq!(tree_group_count(7, 64, 64), 2);
+        assert_eq!(tree_group_count(31, 64, 64), 4);
+        assert_eq!(tree_group_count(31, 256, 256), 56);
     }
 
     #[test]

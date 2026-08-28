@@ -360,6 +360,58 @@ fn generated_town_road_bits(map: &crate::map::Map, tile: TileCoord) -> u8 {
         .map_or(0, |candidate| candidate.m5 & 0x0F)
 }
 
+/// `CleanUpRoadBits` elimina una salida vial que apunta a una tesela con la
+/// que no se puede conectar. `GrowTownInTile` compone primero sus dos bits y
+/// recién aquí ve si una rama termina contra una casa, agua real o borde.
+///
+/// Durante `GenerateTowns` aún no existen estaciones ni cruces útiles; las
+/// variantes de puente/túnel/estación se conservan explícitamente fuera del
+/// subconjunto de RMAP-030. Las carreteras municipales ya son normales, por
+/// lo que resultan conectivas como en `road.cpp`.
+fn clean_up_generated_town_road_bits(
+    map: &crate::map::Map,
+    tile: TileCoord,
+    mut road_bits: u8,
+) -> u8 {
+    for dir in 0..4 {
+        let bit = town_diag_dir_to_road_bits(dir);
+        if road_bits & bit == 0 {
+            continue;
+        }
+        let neighbour = add_town_diag(tile, dir);
+        let connective = match map.get_kind(neighbour) {
+            Some(
+                TileKind::Grass
+                | TileKind::Forest
+                | TileKind::Road
+                | TileKind::RoadBridge
+                | TileKind::RoadTunnel,
+            ) => true,
+            Some(TileKind::Water) => !is_water_ground(map, neighbour),
+            Some(
+                TileKind::Rail
+                | TileKind::RailBridge
+                | TileKind::RailTunnel
+                | TileKind::RoadDepot
+                | TileKind::RailDepot
+                | TileKind::ShipDepot
+                | TileKind::Airport
+                | TileKind::House
+                | TileKind::Station
+                | TileKind::Industry
+                | TileKind::CoalField
+                | TileKind::Void
+                | TileKind::Unknown(_),
+            )
+            | None => false,
+        };
+        if !connective {
+            road_bits ^= bit;
+        }
+    }
+    road_bits
+}
+
 /// Subconjunto seguro de `CanFollowRoad` para el mapa recién generado.
 ///
 /// Estaciones, puentes, túneles y vías todavía no existen durante la primera
@@ -529,6 +581,10 @@ struct GeneratedTownGrowthContext {
 /// los dos `Chance16` y se construye el siguiente bloque con la máscara nativa.
 /// Para una casa usa el pool mutable de `TryBuildTownHouse`, sin sustituir sus
 /// sorteos por una heurística local.
+///
+/// Mantener las ramas juntas protege el orden de consumo RNG de `GrowTownInTile`;
+/// partirlas por caso hace demasiado fácil introducir una frontera accidental.
+#[allow(clippy::too_many_lines)]
 fn grow_generated_town_road_in_tile(
     map: &mut crate::map::Map,
     town: &mut Town,
@@ -587,6 +643,10 @@ fn grow_generated_town_road_in_tile(
                 return GeneratedRoadGrowthResult::SearchStopped;
             }
         }
+        let rcmd = clean_up_generated_town_road_bits(map, tile, rcmd);
+        if rcmd == 0 {
+            return GeneratedRoadGrowthResult::SearchStopped;
+        }
         if write_generated_town_road_to_map(map, tile, rcmd, town.id) {
             return GeneratedRoadGrowthResult::Road(tile);
         }
@@ -599,7 +659,14 @@ fn grow_generated_town_road_in_tile(
     if let Some(dir) = target_dir
         && cur_rb & town_diag_dir_to_road_bits(reverse_town_diag_dir(dir)) == 0
     {
-        let rcmd = town_diag_dir_to_road_bits(reverse_town_diag_dir(dir));
+        let rcmd = clean_up_generated_town_road_bits(
+            map,
+            tile,
+            town_diag_dir_to_road_bits(reverse_town_diag_dir(dir)),
+        );
+        if rcmd == 0 {
+            return GeneratedRoadGrowthResult::SearchStopped;
+        }
         if add_generated_town_road_bits_to_map(map, tile, rcmd, town.id) {
             return GeneratedRoadGrowthResult::Road(tile);
         }
@@ -666,7 +733,11 @@ fn grow_generated_town_road_in_tile(
     if road_target_dir.is_none() {
         return GeneratedRoadGrowthResult::Continue;
     }
-    if add_generated_town_road_bits_to_map(map, tile, target_bits, town.id) {
+    let rcmd = clean_up_generated_town_road_bits(map, tile, target_bits);
+    if rcmd == 0 {
+        return GeneratedRoadGrowthResult::SearchStopped;
+    }
+    if add_generated_town_road_bits_to_map(map, tile, rcmd, town.id) {
         GeneratedRoadGrowthResult::Road(tile)
     } else {
         GeneratedRoadGrowthResult::SearchStopped
@@ -1306,6 +1377,38 @@ mod tests {
             },
             rng,
         )
+    }
+
+    /// Estado justo después del bootstrap de la primera ciudad de la segunda
+    /// seed. Se comparte entre fronteras para que el test de `CleanUpRoadBits`
+    /// no esconda un consumo previo de `TSZ_RANDOM` o de `GenRandomRoadBits`.
+    fn second_seed_first_city_after_bootstrap() -> (GameState, Town, Randomizer) {
+        let mut state = clear_phase_state(1_330_935_379);
+        let mut rng = Randomizer {
+            state: [394_065_499, 3_120_157_675],
+        };
+        let budget = initial_town_house_budget(&mut rng, true);
+        let bootstrap = initial_town_growth_bootstrap(&state.map, TileCoord::new(43, 15), &mut rng)
+            .expect("bootstrap second seed");
+        assert!(write_generated_town_road(
+            &mut state,
+            bootstrap.pos,
+            bootstrap.bits,
+            0,
+        ));
+        let mut town = Town {
+            id: 0,
+            pos: TileCoord::new(43, 15),
+            num_houses: u16::try_from(budget).unwrap_or(u16::MAX),
+            layout: TownLayout::Original,
+            ..Town::default()
+        };
+        update_town_radius(&mut town);
+        assert_eq!(budget, 36);
+        assert_eq!(bootstrap.pos, TileCoord::new(43, 15));
+        assert_eq!(bootstrap.bits, 0x0C);
+        assert_eq!(rng.state, [2_880_850_169, 3_894_055_467]);
+        (state, town, rng)
     }
 
     fn assert_first_generated_house(state: &GameState, town: &Town, rng: Randomizer) {
@@ -2697,6 +2800,53 @@ mod tests {
         assert_eq!(road.m3hi, 0);
         assert_eq!(road.m5, ROAD_BITS_AXIS_Y);
         assert_eq!(road.m8, TOWN_ROAD_INVALID_TRAM_TYPE);
+    }
+
+    #[test]
+    fn cleanup_road_bits_removes_house_facing_branch() {
+        let mut map = Map::new_flat(8, 8, 1);
+        let road = TileCoord::new(4, 4);
+        // `DiagDirection::NE` (0) apunta a -X y usa el bit 0x08. Una casa
+        // allí no es conectiva; el bit opuesto 0x02 sí puede quedar hacia
+        // clear. Es la misma forma que aparece en la llamada 84 de RMAP-050.
+        map.set_kind(TileCoord::new(3, 4), TileKind::House)
+            .expect("house neighbour");
+        assert_eq!(clean_up_generated_town_road_bits(&map, road, 0x0A), 0x02);
+    }
+
+    #[test]
+    fn second_seed_cleanup_matches_call_ninety_rng_boundary() {
+        let (mut state, mut town, mut rng) = second_seed_first_city_after_bootstrap();
+
+        let mut last = None;
+        for call in 2..=90 {
+            let result = grow_first_fixture_town(&mut state, &mut town, &mut rng);
+            if call == 84 {
+                assert_eq!(result, Some(TileCoord::new(44, 13)));
+                assert_eq!(
+                    state.map.get(TileCoord::new(44, 13)).expect("road n=84").m5,
+                    0x02,
+                );
+            }
+            last = result;
+        }
+        assert_eq!(last, None);
+        assert_eq!(town.num_houses, 69);
+        assert_eq!(town.population, 1_237);
+        assert_eq!(rng.state, [3_904_639_598, 2_282_438_850]);
+    }
+
+    #[test]
+    fn second_seed_cleanup_preserves_post_growth_rng_boundary() {
+        let (mut state, mut town, mut rng) = second_seed_first_city_after_bootstrap();
+        for _ in 2..=144 {
+            let _ = grow_first_fixture_town(&mut state, &mut town, &mut rng);
+        }
+
+        // Tras la llamada 144, C++ entra al segundo `GenerateTownName` con
+        // este stream. La semántica de la casa 38 todavía se contrasta en el
+        // siguiente sub-issue; ésta fija sólo el contrato de limpieza vial.
+        assert_eq!(rng.state, [3_848_068_084, 748_657_221]);
     }
 
     #[test]

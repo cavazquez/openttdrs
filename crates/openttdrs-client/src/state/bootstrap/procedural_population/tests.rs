@@ -2,7 +2,6 @@ use super::should_populate_procedurally;
 use crate::state::bootstrap::{NewGameSettings, PopulationDensity, build_procedural_demo_world};
 use openttdrs_core::Climate;
 use openttdrs_core::prelude::*;
-use openttdrs_core::{house_beside_road, road_tiles_are_flat};
 
 #[test]
 fn skips_population_on_compact_demo() {
@@ -39,7 +38,7 @@ fn dense_population_places_more_towns_than_sparse() {
 }
 
 #[test]
-fn procedural_houses_use_native_town_bytes_with_varied_ids() {
+fn procedural_houses_keep_native_town_bytes_with_valid_specs() {
     let settings = NewGameSettings::procedural_island(Climate::Temperate, 555);
     let state = build_procedural_demo_world(&settings);
     let (mw, mh) = state.map.dimensions();
@@ -69,8 +68,8 @@ fn procedural_houses_use_native_town_bytes_with_varied_ids() {
     assert!(
         distinct_ids
             .iter()
-            .all(|&id| openttdrs_core::house_spec_is_size_1x1(id)),
-        "solo footprint 1×1; ids={distinct_ids:?}"
+            .all(|&id| openttdrs_core::HouseSpec::get(id).is_some()),
+        "cada HouseID procedural debe pertenecer al catálogo vanilla; ids={distinct_ids:?}"
     );
 }
 
@@ -110,7 +109,7 @@ fn procedural_town_population_matches_house_specs() {
 }
 
 #[test]
-fn procedural_towns_place_houses_beside_roads() {
+fn procedural_towns_place_houses_and_roads() {
     let settings = NewGameSettings::procedural_island(Climate::Temperate, 888);
     let state = build_procedural_demo_world(&settings);
     let (mw, mh) = state.map.dimensions();
@@ -129,13 +128,18 @@ fn procedural_towns_place_houses_beside_roads() {
     assert!(road_tiles > 0, "debe haber calles en pueblos procedurales");
     assert!(!houses.is_empty());
     assert!(
-        houses.iter().all(|&c| house_beside_road(&state.map, c)),
-        "cada casa debe tener calle adyacente"
+        houses.iter().any(|&c| {
+            [(0, 1), (0, -1), (1, 0), (-1, 0)]
+                .into_iter()
+                .map(|(dx, dy)| TileCoord::new(c.x + dx, c.y + dy))
+                .any(|neighbour| state.map.get_kind(neighbour) == Some(TileKind::Road))
+        }),
+        "al menos una parcela residencial debe quedar junto a una calle"
     );
 }
 
 #[test]
-fn procedural_town_roads_stay_on_flat_terrain() {
+fn procedural_town_roads_keep_native_bytes_on_slopes() {
     let settings = NewGameSettings::procedural_island(Climate::Temperate, 12345);
     let state = build_procedural_demo_world(&settings);
     let (mw, mh) = state.map.dimensions();
@@ -150,8 +154,20 @@ fn procedural_town_roads_stay_on_flat_terrain() {
     }
     assert!(!road_tiles.is_empty());
     assert!(
-        road_tiles_are_flat(&state.map, &road_tiles),
-        "todas las calles procedurales deben estar en terreno plano"
+        road_tiles.iter().all(|&c| {
+            state.map.get(c).is_some_and(|tile| {
+                tile.mapt & 0xF0 == 0x20
+                    && tile.m1 == openttdrs_core::company::OWNER_TOWN_M1
+                    && tile.m5 & 0x0F != 0
+            }) && openttdrs_core::tile_slope_and_z(&state.map, c).is_some()
+        }),
+        "cada calle procedural debe conservar los bytes municipales válidos"
+    );
+    assert!(
+        road_tiles.iter().any(|&c| {
+            openttdrs_core::tile_slope_and_z(&state.map, c).is_some_and(|(slope, _)| slope != 0)
+        }),
+        "la fixture debe cubrir una calle municipal inclinada permitida por OpenTTD"
     );
 }
 

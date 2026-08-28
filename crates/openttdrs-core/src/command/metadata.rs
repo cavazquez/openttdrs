@@ -131,6 +131,7 @@ pub fn command_effects(cmd: &Command) -> CommandEffects {
         | Command::PlaceIndustry(c)
         | Command::PlaceIndustryKind(c, _)
         | Command::PlaceIndustrySpec(c, _)
+        | Command::PlaceIndustrySpecLayout(c, _, _)
         | Command::PlaceHouse(c)
         | Command::PlaceForest(c)
         | Command::FoundTown(c) => CommandEffects::construction(Other, *c),

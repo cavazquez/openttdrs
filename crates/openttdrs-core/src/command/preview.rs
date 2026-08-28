@@ -6,7 +6,7 @@ use crate::{GameState, IndustrySpec, StopKind};
 use super::build_object::check_build_object_placement;
 use super::buy_land::check_buy_land;
 use super::error::CommandError;
-use super::industry::check_place_industry_spec;
+use super::industry::{check_place_industry_spec, check_place_industry_spec_layout};
 use super::terraform::{check_level_land, check_lower_land, check_raise_land};
 use super::town;
 use super::transport::{
@@ -60,6 +60,9 @@ fn preview_industry_cmd(map: &crate::map::Map, cmd: &Command) -> Option<CommandE
             preview_industry_error(map, *c, spec)
         }
         Command::PlaceIndustrySpec(c, spec) => preview_industry_error(map, *c, *spec),
+        Command::PlaceIndustrySpecLayout(c, spec, layout_index) => {
+            check_place_industry_spec_layout(map, *c, *spec, usize::from(*layout_index)).err()
+        }
         _ => None,
     }
 }
@@ -280,6 +283,7 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
         Command::PlaceIndustry(_)
         | Command::PlaceIndustryKind(_, _)
         | Command::PlaceIndustrySpec(_, _)
+        | Command::PlaceIndustrySpecLayout(_, _, _)
         | Command::RaiseLand(_)
         | Command::LowerLand(_)
         | Command::LevelLand { .. }

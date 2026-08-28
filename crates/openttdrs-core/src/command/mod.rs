@@ -22,8 +22,8 @@ pub(crate) mod vehicles;
 pub use apply::apply_command;
 pub use error::{CommandError, OrderMoveDirection};
 pub use industry::{
-    check_place_industry_spec, check_place_industry_spec_def, industry_template,
-    place_industry_spec_def_sandbox,
+    check_place_industry_spec, check_place_industry_spec_def, check_place_industry_spec_layout,
+    industry_template, industry_template_layout_count, place_industry_spec_def_sandbox,
 };
 pub use metadata::command_effects;
 pub use preview::command_would_fail;

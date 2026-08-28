@@ -44,9 +44,37 @@ pub(super) const COAL_MINE_LAYOUTS: [&[(i32, i32, u8)]; 4] = [
     ],
 ];
 
-/// `OpenTTD` `_tile_table_power_station_0` (gfx vanilla 7..=10).
-pub(super) const POWER_STATION_LAYOUTS: [&[(i32, i32, u8)]; 1] =
-    [&[(0, 0, 7), (1, 0, 8), (0, 1, 9), (1, 1, 10)]];
+/// `OpenTTD` `_tile_table_power_station_0..=2` (gfx vanilla 7..=10).
+pub(super) const POWER_STATION_LAYOUTS: [&[(i32, i32, u8)]; 3] = [
+    &[
+        (0, 0, 7),
+        (0, 1, 9),
+        (1, 0, 7),
+        (1, 1, 8),
+        (2, 0, 7),
+        (2, 1, 8),
+        (3, 0, 10),
+        (3, 1, 10),
+    ],
+    &[
+        (0, 1, 7),
+        (0, 2, 7),
+        (1, 0, 8),
+        (1, 1, 8),
+        (1, 2, 7),
+        (2, 0, 9),
+        (2, 1, 10),
+        (2, 2, 9),
+    ],
+    &[
+        (0, 0, 7),
+        (0, 1, 7),
+        (1, 0, 9),
+        (1, 1, 8),
+        (2, 0, 10),
+        (2, 1, 9),
+    ],
+];
 
 pub(super) const METAL_MINE_LAYOUTS: [&[(i32, i32, u8)]; 2] = [
     // OpenTTD _tile_table_copper_mine_0.
@@ -261,6 +289,41 @@ pub(super) const FACTORY_LAYOUTS: [&[(i32, i32, u8)]; 2] = [
         (1, 3, 40),
         (2, 2, 41),
         (2, 3, 42),
+    ],
+];
+
+pub(super) const STEEL_MILL_LAYOUTS: [&[(i32, i32, u8)]; 2] = [
+    // OpenTTD _tile_table_steel_mill_0.
+    &[
+        (2, 1, 52),
+        (2, 2, 53),
+        (3, 1, 54),
+        (3, 2, 55),
+        (0, 0, 56),
+        (1, 0, 57),
+        (0, 1, 56),
+        (1, 1, 57),
+        (0, 2, 56),
+        (1, 2, 57),
+        (2, 0, 56),
+        (3, 0, 57),
+    ],
+    // OpenTTD _tile_table_steel_mill_1.
+    &[
+        (0, 0, 52),
+        (0, 1, 53),
+        (1, 0, 54),
+        (1, 1, 55),
+        (2, 0, 52),
+        (2, 1, 53),
+        (3, 0, 54),
+        (3, 1, 55),
+        (0, 2, 56),
+        (1, 2, 57),
+        (2, 2, 56),
+        (3, 2, 57),
+        (1, 3, 56),
+        (2, 3, 57),
     ],
 ];
 pub(super) const SAWMILL_LAYOUTS: [&[(i32, i32, u8)]; 2] = [

@@ -1,6 +1,8 @@
 //! Colocación de industrias (MVP de `GenerateIndustries`).
 
-use crate::command::{Command, apply_command, check_place_industry_spec};
+use crate::command::{
+    Command, apply_command, check_place_industry_spec_layout, industry_template_layout_count,
+};
 use crate::company::OWNER_NONE_M1;
 use crate::industry::IndustrySpec;
 use crate::map::tree_tile_loop::{clear_ground_type, with_clear_counter};
@@ -17,6 +19,10 @@ use super::{PopCtx, in_preserve, min_distance_sq};
 /// vuelve a sortear el tipo al rechazar una ubicación.
 const INDUSTRY_PLACEMENT_ATTEMPTS: usize = 2_000;
 
+/// Límite `try_hard` de `PlaceIndustry` al satisfacer `force_one` durante la
+/// creación de un mapa nuevo.
+const FORCED_INDUSTRY_PLACEMENT_ATTEMPTS: usize = 10_000;
+
 /// Intenta colocar hasta `target` industrias; devuelve cuántas se crearon.
 pub(super) fn place_industries(
     ctx: &mut PopCtx<'_>,
@@ -30,61 +36,125 @@ pub(super) fn place_industries(
     if specs.is_empty() {
         return 0;
     }
-    let min_town_dist_sq = 10_i32 * 10;
-    let min_industry_dist_sq = 8_i32 * 8;
     let mut industry_origins: Vec<TileCoord> = Vec::with_capacity(target);
 
-    for _ in 0..target {
+    // `GenerateIndustries` atiende primero `force_one`, en orden ascendente
+    // de `IndustryType`, con `PlaceIndustry(..., true)`. No consume un sorteo
+    // de especie antes de esos intentos. Temperate tiene las diez especies
+    // vanilla; los demás climas continúan temporalmente por la ruta MVP hasta
+    // que RMAP-056 porte sus probabilidades y listas force-one.
+    let forced_specs = map_creation_force_one_specs(ctx.state.climate);
+    for &spec in forced_specs {
+        let _ = try_place_industry(
+            ctx,
+            spec,
+            FORCED_INDUSTRY_PLACEMENT_ATTEMPTS,
+            town_centers,
+            &mut industry_origins,
+        );
+    }
+
+    // En OpenTTD, `total_amount` se reduce por cada especie force-one aunque
+    // su búsqueda falle. A falta del reparto tierra/agua de RMAP-056, `target`
+    // conserva el equivalente base y evita volver a agregar colocaciones en
+    // mapas donde las forzadas ya cubren el total (por ejemplo 64² normal).
+    for _ in 0..target.saturating_sub(forced_specs.len()) {
         // `GenerateIndustries` elige una especie y `PlaceIndustry` conserva
         // esa elección mientras explora hasta 2000 `RandomTile()`. El peso
-        // native y las especies force-one se integran en RMAP-056; conservar
-        // ya esta frontera evita volver a sortear tras cada fallo de sitio.
+        // native se integra en RMAP-056; conservar ya esta frontera evita
+        // volver a sortear tras cada fallo de sitio.
         let spec = specs[usize::try_from(
             ctx.rng
                 .random_range(u32::try_from(specs.len()).unwrap_or(1)),
         )
         .unwrap_or(0)];
-
-        for _ in 0..INDUSTRY_PLACEMENT_ATTEMPTS {
-            let origin = generated_industry_attempt_origin(ctx.rng, ctx.mw, ctx.mh);
-            if in_preserve(ctx.preserve, origin.x, origin.y) {
-                continue;
-            }
-            if town_centers
-                .iter()
-                .any(|&t| min_distance_sq(origin, t) < min_town_dist_sq)
-            {
-                continue;
-            }
-            if industry_origins
-                .iter()
-                .any(|&o| min_distance_sq(origin, o) < min_industry_dist_sq)
-            {
-                continue;
-            }
-            if check_place_industry_spec(&ctx.state.map, origin, spec).is_err() {
-                continue;
-            }
-            if apply_command(ctx.state, &Command::PlaceIndustrySpec(origin, spec)).is_err() {
-                continue;
-            }
-            // `DoCreateNewIndustry` planta 50 campos alrededor de una granja con
-            // `PlantRandomFarmField`. El mapa generado debe conservar el contrato
-            // MP_CLEAR/CLEAR_FIELDS (no un TileKind inventado): el renderer y el
-            // save de OpenTTD leen m5=0x0f, m2=IndustryID y m3=estado.
-            if matches!(spec, IndustrySpec::Farm | IndustrySpec::FarmTropic) {
-                let industry_id = ctx
-                    .state
-                    .industries
-                    .last()
-                    .map_or(0, |industry| industry.instance_id);
-                plant_farm_fields(ctx, origin, industry_id);
-            }
-            industry_origins.push(origin);
-            break;
-        }
+        let _ = try_place_industry(
+            ctx,
+            spec,
+            INDUSTRY_PLACEMENT_ATTEMPTS,
+            town_centers,
+            &mut industry_origins,
+        );
     }
     industry_origins.len()
+}
+
+fn map_creation_force_one_specs(climate: crate::Climate) -> &'static [IndustrySpec] {
+    match climate {
+        crate::Climate::Temperate => IndustrySpec::temperate_map_creation_force_one(),
+        crate::Climate::SubArctic | crate::Climate::SubTropical | crate::Climate::Toyland => &[],
+    }
+}
+
+/// Ejecuta una llamada completa a `PlaceIndustry` para una especie fija.
+///
+/// El límite pertenece a la llamada, no a una selección global. Incluso los
+/// rechazos consumen el prefijo de `CreateNewIndustry`, tal como RMAP-058.
+fn try_place_industry(
+    ctx: &mut PopCtx<'_>,
+    spec: IndustrySpec,
+    attempts: usize,
+    town_centers: &[TileCoord],
+    industry_origins: &mut Vec<TileCoord>,
+) -> bool {
+    let min_town_dist_sq = 10_i32 * 10;
+    let min_industry_dist_sq = 8_i32 * 8;
+
+    for _ in 0..attempts {
+        let attempt = generated_industry_attempt(
+            ctx.rng,
+            ctx.mw,
+            ctx.mh,
+            industry_template_layout_count(spec),
+        );
+        let origin = attempt.origin;
+        if in_preserve(ctx.preserve, origin.x, origin.y) {
+            continue;
+        }
+        if town_centers
+            .iter()
+            .any(|&t| min_distance_sq(origin, t) < min_town_dist_sq)
+        {
+            continue;
+        }
+        if industry_origins
+            .iter()
+            .any(|&o| min_distance_sq(origin, o) < min_industry_dist_sq)
+        {
+            continue;
+        }
+        if check_place_industry_spec_layout(&ctx.state.map, origin, spec, attempt.layout_index)
+            .is_err()
+        {
+            continue;
+        }
+        let Ok(layout_index) = u8::try_from(attempt.layout_index) else {
+            continue;
+        };
+        if apply_command(
+            ctx.state,
+            &Command::PlaceIndustrySpecLayout(origin, spec, layout_index),
+        )
+        .is_err()
+        {
+            continue;
+        }
+        // `DoCreateNewIndustry` planta 50 campos alrededor de una granja con
+        // `PlantRandomFarmField`. El mapa generado debe conservar el contrato
+        // MP_CLEAR/CLEAR_FIELDS (no un TileKind inventado): el renderer y el
+        // save de OpenTTD leen m5=0x0f, m2=IndustryID y m3=estado.
+        if matches!(spec, IndustrySpec::Farm | IndustrySpec::FarmTropic) {
+            let industry_id = ctx
+                .state
+                .industries
+                .last()
+                .map_or(0, |industry| industry.instance_id);
+            plant_farm_fields(ctx, origin, industry_id);
+        }
+        industry_origins.push(origin);
+        return true;
+    }
+    false
 }
 
 /// Consume el prefijo RNG de un intento de `CreateNewIndustry`.
@@ -94,16 +164,27 @@ pub(super) fn place_industries(
 /// de layout— incluso si el chequeo de sitio falla. El escritor MVP aún no
 /// acepta esos tres valores, pero debe consumirlos ahora para no desplazar las
 /// fases posteriores.
-fn generated_industry_attempt_origin(
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct GeneratedIndustryAttempt {
+    origin: TileCoord,
+    layout_index: usize,
+}
+
+fn generated_industry_attempt(
     rng: &mut crate::cargodist::parity::Randomizer,
     map_w: u32,
     map_h: u32,
-) -> TileCoord {
+    layout_count: usize,
+) -> GeneratedIndustryAttempt {
     let origin = random_tile(rng.next(), map_w, map_h);
     let _random_var8f = rng.next();
     let _initial_random_bits = rng.next();
-    let _layout_index = rng.random_range(1);
-    origin
+    let layout_limit = u32::try_from(layout_count.max(1)).unwrap_or(1);
+    let layout_index = usize::try_from(rng.random_range(layout_limit)).unwrap_or(0);
+    GeneratedIndustryAttempt {
+        origin,
+        layout_index,
+    }
 }
 
 /// `RandomTileSeed` sobre mapas de potencia de dos.
@@ -267,8 +348,11 @@ mod tests {
         };
 
         assert_eq!(
-            generated_industry_attempt_origin(&mut rng, 64, 64),
-            TileCoord::new(50, 59)
+            generated_industry_attempt(&mut rng, 64, 64, 4),
+            GeneratedIndustryAttempt {
+                origin: TileCoord::new(50, 59),
+                layout_index: 0,
+            }
         );
         assert_eq!(rng.state, [1_957_844_100, 95_334_821]);
     }

@@ -97,6 +97,8 @@ pub enum Command {
     PlaceIndustry(TileCoord),
     PlaceIndustryKind(TileCoord, IndustryKind),
     PlaceIndustrySpec(TileCoord, IndustrySpec),
+    /// Variante interna para generador: conserva el layout ya sorteado.
+    PlaceIndustrySpecLayout(TileCoord, IndustrySpec, u8),
     PlaceForest(TileCoord),
     /// Añade una estación y marca la tesela como `TileKind::Station`.
     PlaceStation(TileCoord),

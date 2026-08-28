@@ -1,5 +1,5 @@
 use crate::industry_spec::{IndustrySpecDef, industry_spec_def};
-use crate::map::{TileCoord, TileKind};
+use crate::map::{SLOPE_STEEP, TileCoord, TileKind, tile_slope_and_z};
 use crate::{GameState, Industry, IndustryKind, IndustrySpec};
 
 use super::CommandError;
@@ -8,7 +8,9 @@ use super::transport::{build_error_for_kind, transport_tile_is_buildable};
 mod industry_template;
 mod layout_tables;
 mod toyland_layout_tables;
-pub use industry_template::industry_template;
+pub use industry_template::{
+    industry_template, industry_template_layout_count, industry_template_with_layout,
+};
 
 pub(super) fn place_industry_sandbox(
     state: &mut GameState,
@@ -45,14 +47,62 @@ pub fn check_place_industry_spec(
     spec: IndustrySpec,
 ) -> Result<(), CommandError> {
     let template = industry_template(c, spec);
-    for (tile, _) in &template {
+    check_industry_template(map, spec, &template)
+}
+
+/// Variante interna de `CreateNewIndustry` que conserva el layout ya elegido
+/// por `RandomRange(indspec->layouts.size())`.
+pub fn check_place_industry_spec_layout(
+    map: &crate::map::Map,
+    c: TileCoord,
+    spec: IndustrySpec,
+    layout_index: usize,
+) -> Result<(), CommandError> {
+    let template =
+        industry_template_with_layout(c, spec, layout_index).ok_or(CommandError::OutOfBounds)?;
+    check_industry_template(map, spec, &template)
+}
+
+fn check_industry_template(
+    map: &crate::map::Map,
+    spec: IndustrySpec,
+    template: &[(TileCoord, u8)],
+) -> Result<(), CommandError> {
+    for (tile, _) in template {
         super::transport::check_in_bounds(map, *tile)?;
         let existing_kind = map.get_kind(*tile).unwrap_or(TileKind::Grass);
         if !transport_tile_is_buildable(existing_kind) {
             return Err(build_error_for_kind(existing_kind));
         }
+        // Todas las teselas vanilla que forman las diez industrias force-one
+        // Temperate usan `SLOPE_STEEP` como máscara rechazada. OpenTTD acepta
+        // una pendiente simple y rechaza cualquiera de las cuatro empinadas.
+        if force_one_temperate_rejects_steep_slope(spec)
+            && tile_slope_and_z(map, *tile).is_some_and(|(slope, _)| slope & SLOPE_STEEP != 0)
+        {
+            return Err(CommandError::InvalidTerrainSlope);
+        }
     }
     Ok(())
+}
+
+/// Las teselas vanilla de las industrias force-one Temperate tienen
+/// `SLOPE_STEEP` como su máscara `slopes_refused`. Las reglas particulares de
+/// las demás especies (por ejemplo bancos) se portan junto con sus specs.
+const fn force_one_temperate_rejects_steep_slope(spec: IndustrySpec) -> bool {
+    matches!(
+        spec,
+        IndustrySpec::CoalMine
+            | IndustrySpec::PowerStation
+            | IndustrySpec::Sawmill
+            | IndustrySpec::Forest
+            | IndustrySpec::OilRefinery
+            | IndustrySpec::Factory
+            | IndustrySpec::SteelMill
+            | IndustrySpec::Farm
+            | IndustrySpec::OilWells
+            | IndustrySpec::IronOreMine
+    )
 }
 
 pub(super) fn place_industry_spec_sandbox(
@@ -65,10 +115,34 @@ pub(super) fn place_industry_spec_sandbox(
     }
     check_place_industry_spec(&state.map, c, spec)?;
     let template = industry_template(c, spec);
+    place_industry_spec_template_sandbox(state, c, spec, &template)
+}
+
+pub(super) fn place_industry_spec_layout_sandbox(
+    state: &mut GameState,
+    c: TileCoord,
+    spec: IndustrySpec,
+    layout_index: usize,
+) -> Result<(), CommandError> {
+    if !spec.available_in(state.climate) {
+        return Err(CommandError::IndustryNotAvailableInClimate);
+    }
+    check_place_industry_spec_layout(&state.map, c, spec, layout_index)?;
+    let template =
+        industry_template_with_layout(c, spec, layout_index).ok_or(CommandError::OutOfBounds)?;
+    place_industry_spec_template_sandbox(state, c, spec, &template)
+}
+
+fn place_industry_spec_template_sandbox(
+    state: &mut GameState,
+    c: TileCoord,
+    spec: IndustrySpec,
+    template: &[(TileCoord, u8)],
+) -> Result<(), CommandError> {
     let footprint: Vec<TileCoord> = template.iter().map(|(tile, _)| *tile).collect();
     let industry_id = u8::try_from(state.industries.len().saturating_add(1)).unwrap_or(255);
     let random_colour = industry_id.wrapping_mul(5) % 16;
-    for (tile, m5) in &template {
+    for (tile, m5) in template {
         state
             .map
             .set_kind(*tile, TileKind::Industry)
@@ -219,4 +293,43 @@ pub fn place_industry_spec_def_sandbox(
     state.industries.push(industry);
     state.economy.money -= 250;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::command::{Command, apply_command};
+    use crate::map::{Map, TileCoord, tile_slope_and_z};
+
+    #[test]
+    fn selected_layout_is_used_by_the_industry_command() {
+        let origin = TileCoord::new(4, 4);
+        let mut state = GameState::new(16, 16);
+
+        assert!(
+            apply_command(
+                &mut state,
+                &Command::PlaceIndustrySpecLayout(origin, IndustrySpec::PowerStation, 2),
+            )
+            .is_ok()
+        );
+        assert_eq!(state.industries.len(), 1);
+        assert_eq!(state.industries[0].tiles.len(), 6);
+        assert_eq!(
+            state.map.get_kind(TileCoord::new(6, 4)),
+            Some(TileKind::Industry)
+        );
+    }
+
+    #[test]
+    fn force_one_layout_rejects_a_steep_tile() {
+        let origin = TileCoord::new(4, 4);
+        let mut map = Map::new_flat(16, 16, 0);
+        assert!(map.set_height(origin, 2).is_ok());
+        assert!(tile_slope_and_z(&map, origin).is_some_and(|(slope, _)| slope & SLOPE_STEEP != 0));
+        assert_eq!(
+            check_place_industry_spec_layout(&map, origin, IndustrySpec::CoalMine, 0),
+            Err(CommandError::InvalidTerrainSlope)
+        );
+    }
 }

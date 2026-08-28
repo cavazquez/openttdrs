@@ -388,6 +388,14 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
         Command::PlaceIndustrySpec(c, spec) => {
             industry::place_industry_spec_sandbox(state, *c, *spec)
         }
+        Command::PlaceIndustrySpecLayout(c, spec, layout_index) => {
+            industry::place_industry_spec_layout_sandbox(
+                state,
+                *c,
+                *spec,
+                usize::from(*layout_index),
+            )
+        }
         Command::PlaceForest(c) => {
             transport::place_single_transport_tile(state, *c, TileKind::Forest, 0x40, 0x00, 30)
         }

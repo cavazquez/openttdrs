@@ -1,12 +1,13 @@
 //! Expansión física de pueblos (`GrowTown` / `GrowTownAtRoad` / `TryBuildTownHouse`).
 
 use crate::house_spec::{
-    HouseSpec, HouseSpecDef, get_town_radius_group, grow_town_at_road_iterations,
-    house_footprint_offsets, house_spec_def, pick_town_house_id_with_catalog,
-    vanilla_or_newgrf_house,
+    BUILDING_FLAG_NOT_SLOPED, BUILDING_FLAG_SIZE_1X2, BUILDING_FLAG_SIZE_2X1,
+    BUILDING_FLAG_SIZE_2X2, HouseSpec, HouseSpecDef, get_town_radius_group,
+    grow_town_at_road_iterations, house_footprint_offsets, house_spec_def,
+    pick_town_house_id_with_catalog, vanilla_or_newgrf_house,
 };
 use crate::map::{
-    Map, TileCoord, TileKind, diag_dir_offset, effective_road_bits, tile_slope_and_z,
+    Map, SLOPE_STEEP, TileCoord, TileKind, diag_dir_offset, effective_road_bits, tile_slope_and_z,
 };
 use crate::newgrf_callback::apply_house_construction_callback;
 use crate::town::{Town, TownLayout, update_town_radius};
@@ -287,11 +288,9 @@ fn grow_town_in_tile(
         }
     };
 
-    if allow_house
-        && can_build_house(map, house_tile)
-        && try_build_town_house(map, town, house_tile, *rng, ctx)
+    if allow_house && let Some(house_base) = try_build_town_house(map, town, house_tile, *rng, ctx)
     {
-        dirty.push(house_tile);
+        dirty.push(house_base);
         return GrowthResult::Succeed;
     }
 
@@ -317,16 +316,18 @@ fn try_build_town_house(
     pos: TileCoord,
     seed: u32,
     ctx: TownExpandContext<'_>,
-) -> bool {
+) -> Option<TileCoord> {
     if !town_layout_allows_house_here(town, pos) {
-        return false;
+        return None;
     }
-    if !can_build_house(map, pos) {
-        return false;
+    // `TryBuildTownHouse` prueba la tesela inicial sin prohibir pendientes.
+    // El flag `NotSloped` se aplica sólo después de extraer el spec elegido.
+    if !can_build_house(map, pos, false) {
+        return None;
     }
     let height = map.get(pos).map_or(0, |t| t.height);
     let zone = get_town_radius_group(town, pos);
-    let Some(house_id) = pick_town_house_id_with_catalog(
+    let house_id = pick_town_house_id_with_catalog(
         town,
         zone,
         ctx.climate,
@@ -335,23 +336,25 @@ fn try_build_town_house(
         seed,
         ctx.house_catalog,
         ctx.house_overrides,
-    ) else {
-        return false;
-    };
+    )?;
+    let flags = house_spec_def(ctx.house_catalog, house_id)
+        .map(|d| d.building_flags)
+        .or_else(|| HouseSpec::get(house_id).map(|hs| hs.building_flags))
+        .unwrap_or(crate::house_spec::BUILDING_FLAG_SIZE_1X1);
+    // El candidato puede ser una subtesela de una casa grande. Antes de
+    // obtener los bits aleatorios/callback, OpenTTD resuelve cuál de las
+    // bases que la contienen cumple relieve y layout.
+    let base = resolve_town_house_footprint(map, town, pos, flags)?;
     // `OpenTTD` evalúa CB 0x17 después de elegir el spec y antes de reservar
     // el footprint. Es un booleano de ocho bits: `CALLBACK_FAILED` o byte bajo
     // no nulo permite; cero rechaza sin dejar teselas parcialmente colocadas.
     if let Some(def) = house_spec_def(ctx.house_catalog, house_id)
         && !apply_house_construction_callback(def)
     {
-        return false;
+        return None;
     }
-    let flags = house_spec_def(ctx.house_catalog, house_id)
-        .map(|d| d.building_flags)
-        .or_else(|| HouseSpec::get(house_id).map(|hs| hs.building_flags))
-        .unwrap_or(crate::house_spec::BUILDING_FLAG_SIZE_1X1);
-    if !place_house_footprint_for_town(map, pos, house_id, flags, Some(town.id)) {
-        return false;
+    if !place_house_footprint_for_town(map, base, house_id, flags, Some(town.id)) {
+        return None;
     }
     let tiles = u16::try_from(house_footprint_offsets(flags).len()).unwrap_or(1);
     if let Some(lookup) = vanilla_or_newgrf_house(ctx.house_catalog, house_id) {
@@ -369,7 +372,7 @@ fn try_build_town_house(
     }
     town.num_houses = town.num_houses.saturating_add(tiles);
     update_town_radius(town);
-    true
+    Some(base)
 }
 
 /// Coloca el footprint de una casa (1×1 / 2×1 / 1×2 / 2×2) con ids consecutivos.
@@ -390,9 +393,10 @@ fn place_house_footprint_for_town(
     town_id: Option<u32>,
 ) -> bool {
     let offsets = house_footprint_offsets(building_flags);
+    let noslope = building_flags & BUILDING_FLAG_NOT_SLOPED != 0;
     for &(dx, dy) in &offsets {
         let pos = TileCoord::new(north.x + dx, north.y + dy);
-        if !can_build_house(map, pos) {
+        if !can_build_house(map, pos, noslope) {
             return false;
         }
     }
@@ -430,14 +434,14 @@ fn try_place_house_near_road(
         for d in 0..dirs.len() {
             let (dx, dy) = dirs[(dir_rot + d) % dirs.len()];
             let pos = TileCoord::new(road.x + dx, road.y + dy);
-            if try_build_town_house(
+            if let Some(base) = try_build_town_house(
                 map,
                 town,
                 pos,
                 seed.wrapping_add(u32::try_from(offset).unwrap_or(0)),
                 ctx,
             ) {
-                return Some(pos);
+                return Some(base);
             }
         }
     }
@@ -487,6 +491,119 @@ fn town_layout_allows_house_here(town: &Town, tile: TileCoord) -> bool {
         TownLayout::Grid3x3 => gx.rem_euclid(4) != 0 && gy.rem_euclid(4) != 0,
         _ => true,
     }
+}
+
+/// `TownLayoutAllows2x2HouseHere`: una casa 2×2 no puede ocupar una línea de
+/// cuadrícula y, a diferencia de una 1×1, debe caber entera entre calles.
+fn town_layout_allows_2x2_house_here(town: &Town, tile: TileCoord) -> bool {
+    let gx = town.pos.x - tile.x;
+    let gy = town.pos.y - tile.y;
+    match town.layout {
+        TownLayout::Grid2x2 => gx.rem_euclid(3) == 2 && gy.rem_euclid(3) == 2,
+        TownLayout::Grid3x3 => (gx & 3) >= 2 && (gy & 3) >= 2,
+        _ => true,
+    }
+}
+
+/// `GetTileMaxZ`: una fundación sobre pendiente alcanza el máximo de la
+/// tesela; las pendientes empinadas suben dos niveles.
+fn town_house_tile_max_z(map: &Map, tile: TileCoord) -> Option<u8> {
+    tile_slope_and_z(map, tile).map(|(slope, z)| {
+        z.saturating_add(if slope == 0 {
+            0
+        } else if slope & SLOPE_STEEP != 0 {
+            2
+        } else {
+            1
+        })
+    })
+}
+
+/// `CheckBuildHouseSameZ`: toda subtesela de una casa grande debe poder
+/// limpiarse y terminar a la misma altura máxima que la tesela elegida.
+fn check_build_house_same_z(map: &Map, tile: TileCoord, max_z: u8, noslope: bool) -> bool {
+    can_build_house(map, tile, noslope) && town_house_tile_max_z(map, tile) == Some(max_z)
+}
+
+/// `CheckFree2x2Area`, en el recorrido C++ base, `+Y`, `+X+Y`, `+X`.
+fn check_free_2x2_house_area(map: &Map, base: TileCoord, max_z: u8, noslope: bool) -> bool {
+    [(0, 0), (0, 1), (1, 1), (1, 0)]
+        .into_iter()
+        .all(|(dx, dy)| {
+            check_build_house_same_z(
+                map,
+                TileCoord::new(base.x + dx, base.y + dy),
+                max_z,
+                noslope,
+            )
+        })
+}
+
+/// Resuelve la tesela norte/base para una casa elegida por `TryBuildTownHouse`.
+///
+/// Para 1×2 / 2×1 prueba primero que la tesela inicial sea la base y luego la
+/// única orientación inversa que aún la contiene. Para 2×2 prueba las cuatro
+/// bases posibles en el orden exacto de `CheckTownBuild2x2House`.
+fn resolve_town_house_footprint(
+    map: &Map,
+    town: &Town,
+    tile: TileCoord,
+    building_flags: u8,
+) -> Option<TileCoord> {
+    if !town_layout_allows_house_here(town, tile) || !can_build_house(map, tile, false) {
+        return None;
+    }
+    let max_z = town_house_tile_max_z(map, tile)?;
+    let noslope = building_flags & BUILDING_FLAG_NOT_SLOPED != 0;
+    if noslope && !is_flat_tile(map, tile) {
+        return None;
+    }
+
+    if building_flags & BUILDING_FLAG_SIZE_2X2 != 0 {
+        let mut base = tile;
+        // `DIAGDIR_SE`, `SW`, `NW`; después de cada fallo se avanza en su
+        // dirección opuesta: base, +NW, +NW+NE, +NW+NE+SE.
+        for step in [Some(1_u8), Some(2_u8), Some(3_u8), None] {
+            if town_layout_allows_2x2_house_here(town, base)
+                && check_free_2x2_house_area(map, base, max_z, noslope)
+            {
+                return Some(base);
+            }
+            let Some(dir) = step else {
+                break;
+            };
+            base = tile_add_diag(base, reverse_diag(dir));
+        }
+        return None;
+    }
+
+    let second = if building_flags & BUILDING_FLAG_SIZE_2X1 != 0 {
+        // `DIAGDIR_SW` = +X.
+        Some(2_u8)
+    } else if building_flags & BUILDING_FLAG_SIZE_1X2 != 0 {
+        // `DIAGDIR_SE` = +Y.
+        Some(1_u8)
+    } else {
+        None
+    };
+    let Some(second) = second else {
+        return Some(tile);
+    };
+
+    let forward = tile_add_diag(tile, second);
+    if town_layout_allows_house_here(town, forward)
+        && check_build_house_same_z(map, forward, max_z, noslope)
+    {
+        return Some(tile);
+    }
+
+    let base = tile_add_diag(tile, reverse_diag(second));
+    if town_layout_allows_house_here(town, base)
+        && check_build_house_same_z(map, base, max_z, noslope)
+    {
+        return Some(base);
+    }
+    None
 }
 
 fn road_allowed_here(town: &Town, tile: TileCoord, _dir: u8) -> bool {
@@ -545,11 +662,12 @@ fn collect_road_tiles_near(map: &Map, center: TileCoord, radius: i32) -> Vec<Til
     out
 }
 
-fn can_build_house(map: &Map, pos: TileCoord) -> bool {
-    if map.get_kind(pos) != Some(TileKind::Grass) {
+fn can_build_house(map: &Map, pos: TileCoord, noslope: bool) -> bool {
+    if !matches!(map.get_kind(pos), Some(TileKind::Grass | TileKind::Forest)) {
         return false;
     }
-    is_flat_tile(map, pos)
+    tile_slope_and_z(map, pos)
+        .is_some_and(|(slope, _)| slope & SLOPE_STEEP == 0 && (!noslope || slope == 0))
 }
 
 fn can_build_town_road(map: &Map, pos: TileCoord) -> bool {
@@ -660,11 +778,7 @@ pub fn place_house_with_spec(
     ctx: TownExpandContext<'_>,
     seed: u32,
 ) -> Option<TileCoord> {
-    if try_build_town_house(map, town, pos, seed, ctx) {
-        Some(pos)
-    } else {
-        None
-    }
+    try_build_town_house(map, town, pos, seed, ctx)
 }
 
 #[cfg(test)]
@@ -771,7 +885,7 @@ mod tests {
             house_catalog: &[],
             house_overrides: &[],
         };
-        assert!(try_build_town_house(&mut map, &mut town, pos, 99, ctx));
+        assert!(try_build_town_house(&mut map, &mut town, pos, 99, ctx).is_some());
         let tile = map.get(pos).unwrap();
         assert_eq!(u32::from(tile.m2) | (u32::from(tile.m2_hi) << 8), town.id);
         let house_id = tile.m8 & 0x0FFF;
@@ -809,5 +923,197 @@ mod tests {
         assert_eq!(map.get(TileCoord::new(3, 4)).unwrap().m8 & 0x0FFF, 81);
         assert_eq!(map.get(TileCoord::new(4, 3)).unwrap().m8 & 0x0FFF, 82);
         assert_eq!(map.get(TileCoord::new(4, 4)).unwrap().m8 & 0x0FFF, 83);
+    }
+
+    #[test]
+    fn two_tile_footprints_reposition_to_keep_the_selected_tile() {
+        let town = Town {
+            pos: TileCoord::new(6, 6),
+            ..Default::default()
+        };
+
+        let mut across_x = Map::new_flat(12, 12, 1);
+        across_x
+            .set_kind(TileCoord::new(7, 6), TileKind::Water)
+            .unwrap();
+        assert_eq!(
+            resolve_town_house_footprint(
+                &across_x,
+                &town,
+                TileCoord::new(6, 6),
+                crate::house_spec::BUILDING_FLAG_SIZE_2X1,
+            ),
+            Some(TileCoord::new(5, 6)),
+        );
+
+        let mut across_y = Map::new_flat(12, 12, 1);
+        across_y
+            .set_kind(TileCoord::new(6, 7), TileKind::Water)
+            .unwrap();
+        assert_eq!(
+            resolve_town_house_footprint(
+                &across_y,
+                &town,
+                TileCoord::new(6, 6),
+                crate::house_spec::BUILDING_FLAG_SIZE_1X2,
+            ),
+            Some(TileCoord::new(6, 5)),
+        );
+    }
+
+    #[test]
+    fn two_by_two_footprint_checks_the_four_native_base_positions() {
+        let town = Town {
+            pos: TileCoord::new(4, 4),
+            ..Default::default()
+        };
+        let mut map = Map::new_flat(12, 12, 1);
+        // Rechazar, en este orden, base, +NW y +NW+NE. La cuarta posición
+        // (base +NW+NE+SE) sigue libre y contiene la tesela original.
+        for blocked in [
+            TileCoord::new(5, 5),
+            TileCoord::new(5, 3),
+            TileCoord::new(3, 3),
+        ] {
+            map.set_kind(blocked, TileKind::Water).unwrap();
+        }
+
+        assert_eq!(
+            resolve_town_house_footprint(
+                &map,
+                &town,
+                TileCoord::new(4, 4),
+                crate::house_spec::BUILDING_FLAG_SIZE_2X2,
+            ),
+            Some(TileCoord::new(3, 4)),
+        );
+    }
+
+    #[test]
+    fn multitile_footprints_require_same_max_z_and_honour_not_sloped() {
+        let town = Town {
+            pos: TileCoord::new(3, 3),
+            ..Default::default()
+        };
+        let mut unequal_z = Map::new_flat(10, 10, 1);
+        unequal_z
+            .set_kind(TileCoord::new(2, 3), TileKind::Water)
+            .unwrap();
+        // Sólo la segunda tesela del intento +X termina en `max Z = 2`.
+        unequal_z.set_height(TileCoord::new(5, 3), 2).unwrap();
+        assert_eq!(
+            resolve_town_house_footprint(
+                &unequal_z,
+                &town,
+                TileCoord::new(3, 3),
+                crate::house_spec::BUILDING_FLAG_SIZE_2X1,
+            ),
+            None,
+        );
+
+        let mut sloped = Map::new_flat(10, 10, 1);
+        sloped.set_height(TileCoord::new(4, 3), 2).unwrap();
+        assert_eq!(
+            resolve_town_house_footprint(
+                &sloped,
+                &town,
+                TileCoord::new(3, 3),
+                crate::house_spec::BUILDING_FLAG_SIZE_1X1,
+            ),
+            Some(TileCoord::new(3, 3)),
+        );
+        assert_eq!(
+            resolve_town_house_footprint(
+                &sloped,
+                &town,
+                TileCoord::new(3, 3),
+                crate::house_spec::BUILDING_FLAG_SIZE_1X1
+                    | crate::house_spec::BUILDING_FLAG_NOT_SLOPED,
+            ),
+            None,
+        );
+    }
+
+    #[test]
+    fn two_by_two_layout_requires_a_complete_grid_cell() {
+        let grid_2 = Town {
+            pos: TileCoord::new(10, 10),
+            layout: TownLayout::Grid2x2,
+            ..Default::default()
+        };
+        assert!(town_layout_allows_2x2_house_here(
+            &grid_2,
+            TileCoord::new(8, 8)
+        ));
+        assert!(!town_layout_allows_2x2_house_here(
+            &grid_2,
+            TileCoord::new(9, 8)
+        ));
+
+        let grid_3 = Town {
+            layout: TownLayout::Grid3x3,
+            ..grid_2
+        };
+        assert!(town_layout_allows_2x2_house_here(
+            &grid_3,
+            TileCoord::new(8, 8)
+        ));
+        assert!(!town_layout_allows_2x2_house_here(
+            &grid_3,
+            TileCoord::new(9, 8)
+        ));
+    }
+
+    fn test_multitile_house(flags: u8) -> HouseSpecDef {
+        HouseSpecDef {
+            id: crate::house_spec::NEW_HOUSE_OFFSET,
+            local_id: 0,
+            subst_id: 0,
+            building_flags: flags,
+            min_year: 0,
+            max_year: crate::house_spec::HOUSE_YEAR_MAX,
+            population: 12,
+            mail_generation: 0,
+            availability: crate::house_spec::DEFAULT_HOUSE_AVAILABILITY,
+            probability: 1,
+            override_id: None,
+            callback_mask: 0,
+            name: "multitile-test".into(),
+            from_newgrf: true,
+            grfid: 0x4D54_4553,
+            newgrf_views: Vec::new(),
+            newgrf_local_id: 0,
+            newgrf_runtime: None,
+        }
+    }
+
+    #[test]
+    fn runtime_town_build_repositions_and_materializes_multitile_house() {
+        let catalog = [test_multitile_house(
+            crate::house_spec::BUILDING_FLAG_SIZE_2X1,
+        )];
+        // Suprime el pool vanilla para que la prueba llegue al spec multitile.
+        let overrides = [0_u16; crate::house_spec::NUM_HOUSES_VANILLA];
+        let mut map = Map::new_flat(12, 12, 1);
+        map.set_kind(TileCoord::new(5, 4), TileKind::Water).unwrap();
+        let mut town = Town {
+            id: 7,
+            pos: TileCoord::new(4, 4),
+            ..Default::default()
+        };
+        let ctx = TownExpandContext {
+            climate: Climate::Temperate,
+            calendar_year: 1980,
+            house_catalog: &catalog,
+            house_overrides: &overrides,
+        };
+
+        assert_eq!(
+            place_house_with_spec(&mut map, &mut town, TileCoord::new(4, 4), ctx, 0),
+            Some(TileCoord::new(3, 4)),
+        );
+        assert_eq!(map.get(TileCoord::new(3, 4)).unwrap().m8 & 0x0FFF, 110);
+        assert_eq!(map.get(TileCoord::new(4, 4)).unwrap().m8 & 0x0FFF, 111);
+        assert_eq!(town.num_houses, 2);
     }
 }

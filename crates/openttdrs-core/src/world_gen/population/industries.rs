@@ -8,11 +8,9 @@ use crate::company::OWNER_NONE_M1;
 use crate::game_state::GameState;
 use crate::industry::IndustrySpec;
 use crate::map::tree_tile_loop::{clear_ground_type, with_clear_counter};
-use crate::map::{
-    Map, TileCoord, TileKind, WaterClass, clear_neighbour_non_flooding_states, set_water_class_m1,
-};
+use crate::map::{Map, Tile, TileCoord, TileKind, clear_neighbour_non_flooding_states};
 use crate::world_gen::{
-    CLEAR_GROUND_DESERT, CLEAR_GROUND_FIELDS, CLEAR_GROUND_ROCKY, CLEAR_GROUND_SNOW,
+    CLEAR_GROUND_DESERT, CLEAR_GROUND_FIELDS, CLEAR_GROUND_ROUGH, CLEAR_GROUND_SNOW,
     clear_ground_m5,
 };
 
@@ -465,7 +463,7 @@ fn try_place_industry(
                 .industries
                 .last()
                 .map_or(0, |industry| industry.instance_id);
-            plant_farm_fields(ctx, origin, industry_id);
+            plant_farm_fields(ctx, origin, spec, attempt.layout_index, industry_id);
         }
         industry_origins.push(origin);
         return true;
@@ -546,88 +544,331 @@ fn random_tile(random: u32, map_w: u32, map_h: u32) -> TileCoord {
 }
 
 const FARM_FIELD_ATTEMPTS: usize = 50;
+const TREE_GROUND_ROUGH: u8 = 1;
+const TREE_GROUND_SHORE: u8 = 3;
+const FARM_FIELD_FENCE_TYPES: [u8; 16] = [1, 1, 1, 1, 1, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6];
+
+/// Lados diagonales de una tesela, con la codificación de `GetFence` / `SetFence`.
+///
+/// La estructura cruda de `MP_CLEAR` reparte las cuatro cercas entre `m3`,
+/// `m4` (nuestro `m3hi`) y `m6`. Mantener la asociación acá evita compensar
+/// el RNG sin reproducir la geometría que decide los `Chance16(1, 7)`.
+#[derive(Debug, Clone, Copy)]
+enum FarmFenceSide {
+    Ne,
+    Se,
+    Sw,
+    Nw,
+}
+
+impl FarmFenceSide {
+    const fn reverse(self) -> Self {
+        match self {
+            Self::Ne => Self::Sw,
+            Self::Se => Self::Nw,
+            Self::Sw => Self::Ne,
+            Self::Nw => Self::Se,
+        }
+    }
+
+    const fn neighbour_delta(self) -> (i32, i32) {
+        match self {
+            Self::Ne => (-1, 0),
+            Self::Se => (0, 1),
+            Self::Sw => (1, 0),
+            Self::Nw => (0, -1),
+        }
+    }
+
+    /// `TileOffsByAxis(OtherAxis(DiagDirToAxis(side)))`.
+    const fn sweep_delta(self) -> (i32, i32) {
+        match self {
+            Self::Ne | Self::Sw => (0, 1),
+            Self::Se | Self::Nw => (1, 0),
+        }
+    }
+
+    const fn fence(self, tile: Tile) -> u8 {
+        match self {
+            Self::Se => (tile.m3hi >> 2) & 0x07,
+            Self::Sw => (tile.m3hi >> 5) & 0x07,
+            Self::Ne => (tile.m3 >> 5) & 0x07,
+            Self::Nw => (tile.m6 >> 2) & 0x07,
+        }
+    }
+
+    fn set_fence(self, tile: &mut Tile, value: u8) {
+        let value = value & 0x07;
+        match self {
+            Self::Se => tile.m3hi = (tile.m3hi & !(0x07 << 2)) | (value << 2),
+            Self::Sw => tile.m3hi = (tile.m3hi & !(0x07 << 5)) | (value << 5),
+            Self::Ne => tile.m3 = (tile.m3 & !(0x07 << 5)) | (value << 5),
+            Self::Nw => tile.m6 = (tile.m6 & !(0x07 << 2)) | (value << 2),
+        }
+    }
+}
+
+fn is_farm_field(tile: Tile) -> bool {
+    tile.kind == TileKind::Grass && clear_ground_type(tile.m5) == CLEAR_GROUND_FIELDS
+}
 
 fn farm_field_suitable(tile: crate::map::Tile, allow_fields: bool, allow_rough: bool) -> bool {
     match tile.kind {
-        TileKind::Grass => match clear_ground_type(tile.m5) {
-            CLEAR_GROUND_SNOW | CLEAR_GROUND_DESERT => false,
-            CLEAR_GROUND_ROCKY => allow_rough,
-            CLEAR_GROUND_FIELDS => allow_fields,
-            _ => true,
-        },
+        TileKind::Grass => {
+            // `IsSnowTile` usa MAP3 bit 4. `CLEAR_GROUND_SNOW` se conserva
+            // también porque la representación procedural heredada lo usa.
+            if tile.m3 & 0x10 != 0 {
+                return false;
+            }
+            match clear_ground_type(tile.m5) {
+                CLEAR_GROUND_SNOW | CLEAR_GROUND_DESERT => false,
+                CLEAR_GROUND_ROUGH => allow_rough,
+                CLEAR_GROUND_FIELDS => allow_fields,
+                _ => true,
+            }
+        }
         // OpenTTD permits ordinary trees as a field substrate, but not shore
         // trees. `tree_ground` is stored in m2 bits 6..8 for MP_TREES.
-        TileKind::Forest => ((tile.m2 >> 6) & 0x07) != 3 && allow_rough,
+        TileKind::Forest => {
+            let ground = (tile.m2 >> 6) & 0x07;
+            ground != TREE_GROUND_SHORE && (allow_rough || ground != TREE_GROUND_ROUGH)
+        }
         _ => false,
     }
 }
 
-fn plant_farm_fields(ctx: &mut PopCtx<'_>, origin: TileCoord, industry_id: u8) {
+/// `TileAddWrap` de los campos de granja con `freeform_edges` habilitado.
+///
+/// El generador procedural siempre materializa el borde void. Por eso las
+/// coordenadas 0 y `size - 1` no son centros válidos, aunque el área posterior
+/// sí puede tocarlas y simplemente las descarta por no ser `MP_CLEAR`.
+fn farm_field_tile_add_wrap(
+    origin: TileCoord,
+    dx: i32,
+    dy: i32,
+    map_w: i32,
+    map_h: i32,
+) -> Option<TileCoord> {
+    let x = origin.x.saturating_add(dx);
+    let y = origin.y.saturating_add(dy);
+    let max_x = map_w.saturating_sub(1);
+    let max_y = map_h.saturating_sub(1);
+    if x <= 0 || y <= 0 || x >= max_x || y >= max_y {
+        None
+    } else {
+        Some(TileCoord::new(x, y))
+    }
+}
+
+fn farm_industry_location_size(
+    origin: TileCoord,
+    spec: IndustrySpec,
+    layout_index: usize,
+) -> (i32, i32) {
+    let Some(layout) = industry_template_with_layout(origin, spec, layout_index) else {
+        return (1, 1);
+    };
+    let width = layout
+        .iter()
+        .map(|(tile, _)| tile.x.saturating_sub(origin.x))
+        .max()
+        .unwrap_or(0)
+        .saturating_add(1);
+    let height = layout
+        .iter()
+        .map(|(tile, _)| tile.y.saturating_sub(origin.y))
+        .max()
+        .unwrap_or(0)
+        .saturating_add(1);
+    (width, height)
+}
+
+fn make_farm_field(mut field: Tile, field_type: u8, counter: u8, industry_id: u8) -> Tile {
+    // `MakeField`: `SetTileType` conserva el nibble bajo de MAPT, mientras
+    // que los bytes de clear se reinicializan exactamente como la rutina C++.
+    field.kind = TileKind::Grass;
+    field.mapt &= 0x0F;
+    field.m1 = OWNER_NONE_M1;
+    field.m2 = industry_id;
+    field.m2_hi = 0;
+    field.m3 = field_type;
+    field.m3hi = 0;
+    field.m5 = with_clear_counter(clear_ground_m5(CLEAR_GROUND_FIELDS, 3), counter);
+    field.m6 &= 0x03;
+    field.m7 = 0;
+    field.m8 = 0;
+    field
+}
+
+/// `Chance16(1, 7)`: toma la palabra RNG sólo cuando se puede instalar cerca.
+fn farm_fence_becomes_type_two(rng: &mut crate::cargodist::parity::Randomizer) -> bool {
+    let low = u32::from(rng.next() as u16);
+    ((low * 7 + 3) >> 16) < 1
+}
+
+/// `SetupFarmFieldFence` de `industry_cmd.cpp`.
+fn setup_farm_field_fence(
+    ctx: &mut PopCtx<'_>,
+    start: TileCoord,
+    span: i32,
+    fence_type: u8,
+    side: FarmFenceSide,
+) {
+    let mut current = start;
+    let (sweep_x, sweep_y) = side.sweep_delta();
+    let (neighbour_x, neighbour_y) = side.neighbour_delta();
+    for _ in 0..span.max(0) {
+        let Some(tile) = ctx.state.map.get(current) else {
+            current = TileCoord::new(
+                current.x.saturating_add(sweep_x),
+                current.y.saturating_add(sweep_y),
+            );
+            continue;
+        };
+        if is_farm_field(tile) {
+            let neighbour = TileCoord::new(
+                current.x.saturating_add(neighbour_x),
+                current.y.saturating_add(neighbour_y),
+            );
+            let neighbour_has_matching_fence = ctx
+                .state
+                .map
+                .get(neighbour)
+                .is_some_and(|tile| is_farm_field(tile) && side.reverse().fence(tile) != 0);
+            if !neighbour_has_matching_fence {
+                let actual_type = if fence_type == 1 && farm_fence_becomes_type_two(ctx.rng) {
+                    2
+                } else {
+                    fence_type
+                };
+                let mut field = tile;
+                side.set_fence(&mut field, actual_type);
+                let _ = ctx.state.map.set_tile(current, field);
+            }
+        }
+        current = TileCoord::new(
+            current.x.saturating_add(sweep_x),
+            current.y.saturating_add(sweep_y),
+        );
+    }
+}
+
+/// `PlantFarmField`: una vez elegido un centro válido, el tamaño se consume
+/// antes de saber si el rectángulo tiene suficientes teselas aptas.
+fn plant_farm_field(ctx: &mut PopCtx<'_>, center: TileCoord, industry_id: u8) {
     let map_w = i32::try_from(ctx.mw).unwrap_or(i32::MAX);
     let map_h = i32::try_from(ctx.mh).unwrap_or(i32::MAX);
     if map_w == 0 || map_h == 0 {
         return;
     }
+    let mut size_random = (ctx.rng.next() & 0x303).wrapping_add(0x404);
+    if matches!(ctx.state.climate, crate::Climate::SubArctic) {
+        size_random = size_random.wrapping_add(0x404);
+    }
+    let size_x = i32::try_from(size_random & 0xFF).unwrap_or(4).max(1);
+    let size_y = i32::try_from((size_random >> 8) & 0xFF).unwrap_or(4).max(1);
+    let min_x = center.x.saturating_sub(center.x.min(size_x / 2));
+    let min_y = center.y.saturating_sub(center.y.min(size_y / 2));
+    let max_x = min_x.saturating_add(size_x).min(map_w);
+    let max_y = min_y.saturating_add(size_y).min(map_h);
+    if max_x <= min_x || max_y <= min_y {
+        return;
+    }
+
+    let mut suitable = 0usize;
+    let mut total = 0usize;
+    for y in min_y..max_y {
+        for x in min_x..max_x {
+            total += 1;
+            if ctx
+                .state
+                .map
+                .get(TileCoord::new(x, y))
+                .is_some_and(|tile| farm_field_suitable(tile, false, false))
+            {
+                suitable += 1;
+            }
+        }
+    }
+    if suitable * 2 < total {
+        return;
+    }
+
+    let field_random = ctx.rng.next();
+    let counter = u8::try_from((field_random >> 5) & 7).unwrap_or(0);
+    let field_type = u8::try_from((((field_random >> 8) & 0xFF) * 9) >> 8).unwrap_or(0);
+    for y in min_y..max_y {
+        for x in min_x..max_x {
+            let c = TileCoord::new(x, y);
+            let Some(tile) = ctx.state.map.get(c) else {
+                continue;
+            };
+            if !farm_field_suitable(tile, true, true) || in_preserve(ctx.preserve, x, y) {
+                continue;
+            }
+            let _ = ctx
+                .state
+                .map
+                .set_tile(c, make_farm_field(tile, field_type, counter, industry_id));
+        }
+    }
+
+    let fence_type = if matches!(
+        ctx.state.climate,
+        crate::Climate::SubArctic | crate::Climate::SubTropical
+    ) {
+        3
+    } else {
+        FARM_FIELD_FENCE_TYPES[usize::try_from(ctx.rng.next() & 0x0F).unwrap_or(0)]
+    };
+    setup_farm_field_fence(
+        ctx,
+        TileCoord::new(min_x, min_y),
+        max_y.saturating_sub(min_y),
+        fence_type,
+        FarmFenceSide::Ne,
+    );
+    setup_farm_field_fence(
+        ctx,
+        TileCoord::new(min_x, min_y),
+        max_x.saturating_sub(min_x),
+        fence_type,
+        FarmFenceSide::Nw,
+    );
+    setup_farm_field_fence(
+        ctx,
+        TileCoord::new(max_x.saturating_sub(1), min_y),
+        max_y.saturating_sub(min_y),
+        fence_type,
+        FarmFenceSide::Sw,
+    );
+    setup_farm_field_fence(
+        ctx,
+        TileCoord::new(min_x, max_y.saturating_sub(1)),
+        max_x.saturating_sub(min_x),
+        fence_type,
+        FarmFenceSide::Se,
+    );
+}
+
+/// `PlantRandomFarmField`: las coordenadas se sortean antes del tamaño.
+fn plant_farm_fields(
+    ctx: &mut PopCtx<'_>,
+    origin: TileCoord,
+    spec: IndustrySpec,
+    layout_index: usize,
+    industry_id: u8,
+) {
+    let map_w = i32::try_from(ctx.mw).unwrap_or(i32::MAX);
+    let map_h = i32::try_from(ctx.mh).unwrap_or(i32::MAX);
+    let (location_w, location_h) = farm_industry_location_size(origin, spec, layout_index);
     for _ in 0..FARM_FIELD_ATTEMPTS {
-        // `PlantFarmField`: width/height are 4..7 in temperate and are
-        // derived from the same 0x303 random mask as upstream.
-        let size_random = (ctx.rng.next() & 0x303).wrapping_add(0x404);
-        let size_x = i32::try_from(size_random & 0xFF).unwrap_or(4).max(1);
-        let size_y = i32::try_from((size_random >> 8) & 0xFF).unwrap_or(4).max(1);
-        let center_x = origin.x + i32::try_from(ctx.rng.random_range(31)).unwrap_or(0) - 16;
-        let center_y = origin.y + i32::try_from(ctx.rng.random_range(31)).unwrap_or(0) - 16;
-        let min_x = (center_x - size_x / 2).clamp(0, map_w.saturating_sub(1));
-        let min_y = (center_y - size_y / 2).clamp(0, map_h.saturating_sub(1));
-        let max_x = (min_x + size_x).min(map_w);
-        let max_y = (min_y + size_y).min(map_h);
-        if max_x <= min_x || max_y <= min_y {
+        let dx = location_w / 2 + i32::try_from(ctx.rng.next() % 31).unwrap_or(0) - 16;
+        let dy = location_h / 2 + i32::try_from(ctx.rng.next() % 31).unwrap_or(0) - 16;
+        let Some(center) = farm_field_tile_add_wrap(origin, dx, dy, map_w, map_h) else {
             continue;
-        }
-
-        let mut suitable = 0usize;
-        let mut total = 0usize;
-        for y in min_y..max_y {
-            for x in min_x..max_x {
-                total += 1;
-                if ctx
-                    .state
-                    .map
-                    .get(TileCoord::new(x, y))
-                    .is_some_and(|tile| farm_field_suitable(tile, false, false))
-                {
-                    suitable += 1;
-                }
-            }
-        }
-        if suitable * 2 < total {
-            continue;
-        }
-
-        let field_random = ctx.rng.next();
-        let counter = u8::try_from((field_random >> 5) & 7).unwrap_or(0);
-        let field_type = u8::try_from((((field_random >> 8) & 0xFF) * 9) >> 8).unwrap_or(0);
-        for y in min_y..max_y {
-            for x in min_x..max_x {
-                let c = TileCoord::new(x, y);
-                let Some(tile) = ctx.state.map.get(c) else {
-                    continue;
-                };
-                if !farm_field_suitable(tile, true, true) || in_preserve(ctx.preserve, x, y) {
-                    continue;
-                }
-                let mut field = tile;
-                field.kind = TileKind::Grass;
-                field.mapt = 0;
-                field.m1 = set_water_class_m1(OWNER_NONE_M1, WaterClass::Invalid);
-                field.m2 = industry_id;
-                field.m3 = field_type;
-                field.m5 = with_clear_counter(clear_ground_m5(CLEAR_GROUND_FIELDS, 3), counter);
-                field.m6 = 0;
-                field.m7 = 0;
-                field.m3hi = 0;
-                let _ = ctx.state.map.set_tile(c, field);
-            }
-        }
+        };
+        plant_farm_field(ctx, center, industry_id);
     }
 }
 
@@ -644,7 +885,7 @@ mod tests {
         generate_towns_with_rng,
     };
 
-    fn generated_towns_state_for_platform(seed: u64) -> GameState {
+    fn generated_towns_state_and_rng(seed: u64) -> (GameState, Randomizer) {
         let mut map = Map::new_flat(64, 64, 0);
         let mut rng = apply_world_gen_with_rng(
             &mut map,
@@ -669,7 +910,11 @@ mod tests {
             ..PopulationGenConfig::default()
         };
         let _ = generate_towns_with_rng(&mut state, &population, &[], &mut rng);
-        state
+        (state, rng)
+    }
+
+    fn generated_towns_state_for_platform(seed: u64) -> GameState {
+        generated_towns_state_and_rng(seed).0
     }
 
     #[test]
@@ -696,7 +941,7 @@ mod tests {
             industry_platform: 1,
             multiple_industry_per_town: false,
         };
-        plant_farm_fields(&mut ctx, TileCoord::new(32, 32), 7);
+        plant_farm_fields(&mut ctx, TileCoord::new(32, 32), IndustrySpec::Farm, 0, 7);
 
         let fields: Vec<_> = ctx
             .state
@@ -713,10 +958,122 @@ mod tests {
             tile.kind == TileKind::Grass
                 && tile.mapt == 0
                 && tile.m2 == 7
+                && tile.m2_hi == 0
                 && clear_density(tile.m5) == 3
                 && (tile.m3 & 0x0F) <= 8
-                && tile.m1 == set_water_class_m1(OWNER_NONE_M1, WaterClass::Invalid)
+                && tile.m1 == OWNER_NONE_M1
         }));
+    }
+
+    #[test]
+    fn farm_field_suitability_matches_clear_and_tree_rules() {
+        let mut tile = GameState::new(2, 2)
+            .map
+            .get(TileCoord::new(0, 0))
+            .expect("flat tile");
+        tile.m5 = clear_ground_m5(CLEAR_GROUND_ROUGH, 3);
+        assert!(!farm_field_suitable(tile, false, false));
+        assert!(farm_field_suitable(tile, false, true));
+
+        tile.m5 = clear_ground_m5(crate::world_gen::CLEAR_GROUND_ROCKY, 3);
+        assert!(farm_field_suitable(tile, false, false));
+
+        tile.kind = TileKind::Forest;
+        tile.m2 = 0;
+        assert!(farm_field_suitable(tile, false, false));
+        tile.m2 = TREE_GROUND_ROUGH << 6;
+        assert!(!farm_field_suitable(tile, false, false));
+        assert!(farm_field_suitable(tile, false, true));
+        tile.m2 = TREE_GROUND_SHORE << 6;
+        assert!(!farm_field_suitable(tile, true, true));
+    }
+
+    #[test]
+    fn farm_fence_bytes_follow_the_four_native_slots() {
+        let mut tile = GameState::new(2, 2)
+            .map
+            .get(TileCoord::new(0, 0))
+            .expect("flat tile");
+        tile.m5 = clear_ground_m5(CLEAR_GROUND_FIELDS, 3);
+        FarmFenceSide::Ne.set_fence(&mut tile, 1);
+        FarmFenceSide::Se.set_fence(&mut tile, 2);
+        FarmFenceSide::Sw.set_fence(&mut tile, 3);
+        FarmFenceSide::Nw.set_fence(&mut tile, 4);
+        assert_eq!(FarmFenceSide::Ne.fence(tile), 1);
+        assert_eq!(FarmFenceSide::Se.fence(tile), 2);
+        assert_eq!(FarmFenceSide::Sw.fence(tile), 3);
+        assert_eq!(FarmFenceSide::Nw.fence(tile), 4);
+    }
+
+    fn assert_force_one_origins_match_reference(seed: u64, expected: &[TileCoord]) {
+        let (mut state, mut rng) = generated_towns_state_and_rng(seed);
+        let town_centers: Vec<_> = state.towns.iter().map(|town| town.pos).collect();
+        let mut ctx = PopCtx {
+            state: &mut state,
+            preserve: &[],
+            rng: &mut rng,
+            mw: 64,
+            mh: 64,
+            industry_platform: 1,
+            multiple_industry_per_town: false,
+        };
+        let mut origins = Vec::new();
+        let specs = IndustrySpec::temperate_map_creation_force_one();
+        assert_eq!(specs.len(), expected.len());
+
+        for (&spec, &expected_origin) in specs.iter().zip(expected) {
+            assert!(try_place_industry(
+                &mut ctx,
+                spec,
+                FORCED_INDUSTRY_PLACEMENT_ATTEMPTS,
+                &town_centers,
+                &mut origins,
+            ));
+            assert_eq!(origins.last(), Some(&expected_origin), "{spec:?}");
+        }
+    }
+
+    #[test]
+    fn farm_rng_keeps_force_one_origins_for_seed_1330935378() {
+        // Traza GDB de `DoCreateNewIndustry`: tras los 50
+        // `PlantRandomFarmField`, OilWells vuelve a aceptar `(40,38)`, y la
+        // mina de hierro posterior queda en `(17,18)`.
+        assert_force_one_origins_match_reference(
+            1_330_935_378,
+            &[
+                TileCoord::new(21, 41),
+                TileCoord::new(42, 39),
+                TileCoord::new(32, 16),
+                TileCoord::new(38, 54),
+                TileCoord::new(27, 19),
+                TileCoord::new(48, 47),
+                TileCoord::new(30, 56),
+                TileCoord::new(14, 14),
+                TileCoord::new(40, 38),
+                TileCoord::new(17, 18),
+            ],
+        );
+    }
+
+    #[test]
+    fn farm_rng_keeps_force_one_origins_for_seed_1330935379() {
+        // Misma traza independiente: no sólo se conserva la cuenta de RNG,
+        // sino las ramas condicionales de cerca sobre un segundo relieve.
+        assert_force_one_origins_match_reference(
+            1_330_935_379,
+            &[
+                TileCoord::new(22, 20),
+                TileCoord::new(39, 26),
+                TileCoord::new(9, 54),
+                TileCoord::new(6, 31),
+                TileCoord::new(5, 36),
+                TileCoord::new(37, 48),
+                TileCoord::new(47, 11),
+                TileCoord::new(21, 12),
+                TileCoord::new(27, 4),
+                TileCoord::new(23, 36),
+            ],
+        );
     }
 
     #[test]

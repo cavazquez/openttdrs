@@ -315,6 +315,219 @@ fn random_town_road_bits(rng: &mut crate::cargodist::parity::Randomizer) -> u8 {
     (ROAD_NW << a) | (ROAD_NW << b)
 }
 
+/// `RandomDiagDir`: a diferencia de [`random_town_road_bits`], el resultado
+/// se interpreta como un `DiagDirection` (`NE=0`, `SE=1`, `SW=2`, `NW=3`).
+/// Por eso no puede usarse directamente como desplazamiento de `ROAD_NW`.
+fn random_town_diag_dir(rng: &mut crate::cargodist::parity::Randomizer) -> u8 {
+    u8::try_from(rng.random_range(4)).unwrap_or(0)
+}
+
+const fn reverse_town_diag_dir(dir: u8) -> u8 {
+    dir.wrapping_add(2) & 3
+}
+
+/// `DiagDirToRoadBits` con el orden de `DiagDirection`, inverso al orden de
+/// los bits `NW,SW,SE,NE` guardados en una carretera.
+const fn town_diag_dir_to_road_bits(dir: u8) -> u8 {
+    ROAD_NW << ((3_u8.wrapping_sub(dir & 3)) & 3)
+}
+
+fn add_town_diag(tile: TileCoord, dir: u8) -> TileCoord {
+    let (dx, dy) = crate::map::diag_dir_offset(dir);
+    TileCoord::new(tile.x + dx, tile.y + dy)
+}
+
+fn generated_town_road_bits(map: &crate::map::Map, tile: TileCoord) -> u8 {
+    map.get(tile)
+        .filter(|candidate| candidate.kind == TileKind::Road)
+        .map_or(0, |candidate| candidate.m5 & 0x0F)
+}
+
+/// Subconjunto seguro de `CanFollowRoad` para el mapa recién generado.
+///
+/// Estaciones, puentes, túneles y vías todavía no existen durante la primera
+/// fundación de la fixture. Se dejan explícitamente para la conexión completa
+/// de RMAP-030, pero esta rama sí conserva el orden de selección/reintento de
+/// las carreteras municipales sobre terreno y carreteras existentes.
+fn generated_can_follow_town_road(map: &crate::map::Map, tile: TileCoord, dir: u8) -> bool {
+    let target = add_town_diag(tile, dir);
+    match map.get_kind(target) {
+        Some(TileKind::Road) => generated_town_road_bits(map, target) != 0,
+        Some(TileKind::Grass | TileKind::Forest) => true,
+        _ => false,
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum GeneratedRoadGrowthResult {
+    Road(TileCoord),
+    Continue,
+    SearchStopped,
+}
+
+/// Parte vial de `GrowTownInTile` usada por la fundación procedural.
+///
+/// Esta primera pieza cubre el camino sin casa: una carretera ya existente se
+/// recorre con `RandomDiagDir`; al llegar a clear se aplican los dos `Chance16`
+/// y se construye el siguiente bloque con la máscara nativa. Cuando el camino
+/// pide una casa se detiene sin fingir un resultado, pues esa rama se conectará
+/// al pool mutable de RMAP-038 en el siguiente bloque.
+fn grow_generated_town_road_in_tile(
+    map: &mut crate::map::Map,
+    town: &Town,
+    tile: TileCoord,
+    cur_rb: u8,
+    target_dir: Option<u8>,
+    rng: &mut crate::cargodist::parity::Randomizer,
+) -> GeneratedRoadGrowthResult {
+    if cur_rb == 0 {
+        let Some(mut target_dir) = target_dir else {
+            return GeneratedRoadGrowthResult::SearchStopped;
+        };
+        if !matches!(map.get_kind(tile), Some(TileKind::Grass | TileKind::Forest)) {
+            return GeneratedRoadGrowthResult::SearchStopped;
+        }
+
+        // A diferencia del bootstrap, `GrowTownInTile` puede nivelar una
+        // pendiente antes de poner carretera. El nivelado físico completo se
+        // conecta con la ruta de terraformación al ampliar RMAP-030; aceptar
+        // aquí la tesela clear conserva ya la decisión y el stream de la rama
+        // que OpenTTD logra transformar antes de `CMD_BUILD_ROAD`.
+        let _ = chance16(rng, 1, 6);
+        let source_dir = reverse_town_diag_dir(target_dir);
+        if chance16(rng, 1, 4) {
+            loop {
+                target_dir = random_town_diag_dir(rng);
+                if target_dir != source_dir {
+                    break;
+                }
+            }
+        }
+
+        // Para TL_ORIGINAL `IsRoadAllowedHere` acepta el terreno de esta
+        // fundación. Si una futura regla lo bloquea, no se construye una curva
+        // ficticia: se corta la búsqueda como la rama C++.
+        if !generated_can_follow_town_road(map, tile, target_dir) {
+            return GeneratedRoadGrowthResult::SearchStopped;
+        }
+        let rcmd = town_diag_dir_to_road_bits(target_dir) | town_diag_dir_to_road_bits(source_dir);
+        if write_generated_town_road_to_map(map, tile, rcmd, town.id) {
+            return GeneratedRoadGrowthResult::Road(tile);
+        }
+        return GeneratedRoadGrowthResult::SearchStopped;
+    }
+
+    // `GrowTownInTile` puede llegar por una arista que la carretera destino
+    // aún no tiene. Para TL_ORIGINAL añade sólo el bit inverso a esa tesela;
+    // es una extensión parcial, no un bloque vial nuevo y no toma otro RNG.
+    if let Some(dir) = target_dir
+        && cur_rb & town_diag_dir_to_road_bits(reverse_town_diag_dir(dir)) == 0
+    {
+        let rcmd = town_diag_dir_to_road_bits(reverse_town_diag_dir(dir));
+        if add_generated_town_road_bits_to_map(map, tile, rcmd, town.id) {
+            return GeneratedRoadGrowthResult::Road(tile);
+        }
+        return GeneratedRoadGrowthResult::SearchStopped;
+    }
+
+    // La primera rama de `GrowTownInTile` sobre una carretera: el objetivo
+    // elegido ya forma parte del bloque, por lo que sólo se sigue caminando.
+    let target_dir = random_town_diag_dir(rng);
+    let target_bits = town_diag_dir_to_road_bits(target_dir);
+    if cur_rb & target_bits != 0 {
+        return GeneratedRoadGrowthResult::Continue;
+    }
+
+    // TL_ORIGINAL reserva la casa con probabilidad 6/10 cuando la carretera
+    // puede seguir. Si no toca casa, `rcmd` sólo añade el bit elegido a la
+    // carretera actual; éste es el tercer GrowTown de la fixture base.
+    if chance16(rng, 6, 10) {
+        // La selección/materialización de casa se conecta en la siguiente
+        // subetapa; no consumimos un RNG sustituto ni construimos una calle.
+        return GeneratedRoadGrowthResult::SearchStopped;
+    }
+    if add_generated_town_road_bits_to_map(map, tile, target_bits, town.id) {
+        GeneratedRoadGrowthResult::Road(tile)
+    } else {
+        GeneratedRoadGrowthResult::SearchStopped
+    }
+}
+
+/// Recorre una sola llamada a `GrowTown` mientras la expansión resultante sea
+/// una carretera. Es el call-site global-RNG que luego recibirá la rama de
+/// casas; por ahora evita que el plan MVP se haga pasar por esa caminata.
+#[allow(dead_code)]
+fn grow_generated_town_road_once(
+    map: &mut crate::map::Map,
+    town: &Town,
+    rng: &mut crate::cargodist::parity::Randomizer,
+) -> Option<TileCoord> {
+    let mut tile = town.pos;
+    for &(dx, dy) in &TOWN_GROWTH_COORD_MOD {
+        if generated_town_road_bits(map, tile) != 0 {
+            return grow_generated_town_at_road(map, town, tile, rng);
+        }
+        tile = TileCoord::new(tile.x + dx, tile.y + dy);
+    }
+    None
+}
+
+fn grow_generated_town_at_road(
+    map: &mut crate::map::Map,
+    town: &Town,
+    mut tile: TileCoord,
+    rng: &mut crate::cargodist::parity::Randomizer,
+) -> Option<TileCoord> {
+    let mut target_dir = None;
+    let houses = i32::from(town.num_houses);
+    let mut iterations = match town.layout {
+        TownLayout::BetterRoads => 10 + houses * 2 / 9,
+        TownLayout::Grid2x2 | TownLayout::Grid3x3 => 10 + houses / 9,
+        TownLayout::Original | TownLayout::Random => 10 + houses * 4 / 9,
+    };
+
+    loop {
+        let cur_rb = generated_town_road_bits(map, tile);
+        match grow_generated_town_road_in_tile(map, town, tile, cur_rb, target_dir, rng) {
+            GeneratedRoadGrowthResult::Road(pos) => return Some(pos),
+            GeneratedRoadGrowthResult::SearchStopped => iterations = 0,
+            GeneratedRoadGrowthResult::Continue => {}
+        }
+
+        let mut candidate_bits = cur_rb;
+        if let Some(dir) = target_dir {
+            candidate_bits &= !town_diag_dir_to_road_bits(reverse_town_diag_dir(dir));
+        }
+        if candidate_bits == 0 {
+            return None;
+        }
+
+        loop {
+            if candidate_bits == 0 {
+                return None;
+            }
+            let dir = loop {
+                let dir = random_town_diag_dir(rng);
+                if candidate_bits & town_diag_dir_to_road_bits(dir) != 0 {
+                    break dir;
+                }
+            };
+            candidate_bits &= !town_diag_dir_to_road_bits(dir);
+            if generated_can_follow_town_road(map, tile, dir) {
+                target_dir = Some(dir);
+                break;
+            }
+        }
+
+        let dir = target_dir?;
+        tile = add_town_diag(tile, dir);
+        iterations -= 1;
+        if iterations < 0 {
+            return None;
+        }
+    }
+}
+
 /// `BuildTownHouse` durante `GenerateWorld`: sortea el aspecto de obra y
 /// decide si nace terminada. Las casas vanilla no son históricas, por lo que
 /// `Chance16(1, 7)` siempre consume su segunda palabra RNG.
@@ -954,7 +1167,18 @@ fn write_generated_town_road(
     road_bits: u8,
     town_id: u32,
 ) -> bool {
-    let Some(mut tile) = state.map.get(coord) else {
+    write_generated_town_road_to_map(&mut state.map, coord, road_bits, town_id)
+}
+
+/// Variante que usa el caminador de `GrowTown` sin requerir el `GameState`
+/// entero. Ambos caminos comparten los bytes de `MakeRoadNormal`.
+fn write_generated_town_road_to_map(
+    map: &mut crate::map::Map,
+    coord: TileCoord,
+    road_bits: u8,
+    town_id: u32,
+) -> bool {
+    let Some(mut tile) = map.get(coord) else {
         return false;
     };
     let town = u16::try_from(town_id).unwrap_or(u16::MAX).to_le_bytes();
@@ -969,7 +1193,25 @@ fn write_generated_town_road(
     tile.m6 = 0;
     tile.m7 = 0;
     tile.m8 = TOWN_ROAD_INVALID_TRAM_TYPE;
-    state.map.set_tile(coord, tile).is_ok()
+    map.set_tile(coord, tile).is_ok()
+}
+
+/// `CMD_BUILD_ROAD` sobre una carretera municipal existente añade sus bits sin
+/// reiniciar los campos que ya dejó `MakeRoadNormal`.
+fn add_generated_town_road_bits_to_map(
+    map: &mut crate::map::Map,
+    coord: TileCoord,
+    road_bits: u8,
+    town_id: u32,
+) -> bool {
+    let Some(mut tile) = map.get(coord) else {
+        return false;
+    };
+    if tile.kind != TileKind::Road {
+        return write_generated_town_road_to_map(map, coord, road_bits, town_id);
+    }
+    tile.m5 |= road_bits & 0x0F;
+    map.set_tile(coord, tile).is_ok()
 }
 
 #[cfg(test)]
@@ -1103,6 +1345,69 @@ mod tests {
         assert_eq!(road.pos, TileCoord::new(47, 23));
         assert_eq!(road.bits, ROAD_BITS_AXIS_Y);
         assert_eq!(rng.state, [679_301_066, 1_509_800_000]);
+    }
+
+    #[test]
+    fn second_growtown_replays_global_random_road_walk() {
+        let mut state = clear_phase_state(1_330_935_378);
+        let mut rng = Randomizer {
+            state: [3_488_465_418, 1_441_958_355],
+        };
+        let bootstrap = initial_town_growth_bootstrap(&state.map, TileCoord::new(47, 23), &mut rng)
+            .expect("bootstrap road");
+        assert!(write_generated_town_road(
+            &mut state,
+            bootstrap.pos,
+            bootstrap.bits,
+            0,
+        ));
+        let town = Town {
+            id: 0,
+            pos: TileCoord::new(47, 23),
+            num_houses: 22,
+            layout: TownLayout::Original,
+            ..Town::default()
+        };
+
+        // Segunda llamada a GrowTown de la primera ciudad. La primera
+        // `RandomDiagDir` cae en el bloque existente; la caminata toma NW,
+        // ejecuta los dos Chance16 y vuelve a NW antes de construir la calle.
+        assert_eq!(
+            grow_generated_town_road_once(&mut state.map, &town, &mut rng),
+            Some(TileCoord::new(47, 22))
+        );
+        let road = state.map.get(TileCoord::new(47, 22)).expect("new road");
+        assert_eq!(road.kind, TileKind::Road);
+        assert_eq!(road.m5, ROAD_BITS_AXIS_Y);
+        assert_eq!(road.m1, crate::company::OWNER_TOWN_M1);
+        assert_eq!(rng.state, [2_624_695_974, 4_247_471_157]);
+
+        // Las tres llamadas siguientes alternan una calle nueva, una
+        // conexión parcial sobre el centro y otra calle nueva. GDB fija estas
+        // fronteras antes de la primera petición de casa.
+        assert_eq!(
+            grow_generated_town_road_once(&mut state.map, &town, &mut rng),
+            Some(TileCoord::new(47, 24))
+        );
+        assert_eq!(rng.state, [4_152_555_872, 1_800_899_484]);
+        assert_eq!(
+            grow_generated_town_road_once(&mut state.map, &town, &mut rng),
+            Some(TileCoord::new(47, 23))
+        );
+        assert_eq!(
+            state
+                .map
+                .get(TileCoord::new(47, 23))
+                .expect("centre road")
+                .m5,
+            0x0D
+        );
+        assert_eq!(rng.state, [1_720_666_415, 2_546_907_170]);
+        assert_eq!(
+            grow_generated_town_road_once(&mut state.map, &town, &mut rng),
+            Some(TileCoord::new(47, 25))
+        );
+        assert_eq!(rng.state, [2_141_609_185, 1_465_150_535]);
     }
 
     #[test]

@@ -649,13 +649,15 @@ pub fn next_free_house_id(catalog: &[HouseSpecDef]) -> Option<u16> {
     (NEW_HOUSE_OFFSET..NUM_HOUSES).find(|&id| !catalog.iter().any(|d| d.id == id))
 }
 
-/// Offsets del footprint multitile (norte = `(0,0)`).
+/// Offsets del footprint multitile a partir de la tesela base.
 ///
-/// Orden OTTD: 2×2 → N, E `(1,0)`, W `(0,1)`, S `(1,1)`.
+/// El orden no es sólo geométrico: `MakeTownHouse` incrementa el `HouseID`
+/// como base, `+Y`, `+X`, `+X+Y`. Mantenerlo aquí hace que la ruta runtime
+/// de casas terminadas coincida con el escritor nativo de generación.
 #[must_use]
 pub fn house_footprint_offsets(building_flags: u8) -> Vec<(i32, i32)> {
     if building_flags & BUILDING_FLAG_SIZE_2X2 != 0 {
-        return vec![(0, 0), (1, 0), (0, 1), (1, 1)];
+        return vec![(0, 0), (0, 1), (1, 0), (1, 1)];
     }
     if building_flags & BUILDING_FLAG_SIZE_2X1 != 0 {
         return vec![(0, 0), (1, 0)];
@@ -958,7 +960,7 @@ mod tests {
     #[test]
     fn multitile_footprint_2x2_four_offsets() {
         let offs = house_footprint_offsets(BUILDING_FLAG_SIZE_2X2);
-        assert_eq!(offs, vec![(0, 0), (1, 0), (0, 1), (1, 1)]);
+        assert_eq!(offs, vec![(0, 0), (0, 1), (1, 0), (1, 1)]);
         assert_eq!(house_footprint_offsets(BUILDING_FLAG_SIZE_2X1).len(), 2);
         assert_eq!(house_footprint_offsets(BUILDING_FLAG_SIZE_1X1).len(), 1);
     }

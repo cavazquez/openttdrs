@@ -5,7 +5,9 @@ use crate::house_spec::{
     house_footprint_offsets, house_spec_def, pick_town_house_id_with_catalog,
     vanilla_or_newgrf_house,
 };
-use crate::map::{Map, TileCoord, TileKind, effective_road_bits, tile_slope_and_z};
+use crate::map::{
+    Map, TileCoord, TileKind, diag_dir_offset, effective_road_bits, tile_slope_and_z,
+};
 use crate::newgrf_callback::apply_house_construction_callback;
 use crate::town::{Town, TownLayout, update_town_radius};
 use crate::world_gen::Climate;
@@ -629,23 +631,16 @@ const fn reverse_diag(dir: u8) -> u8 {
 }
 
 fn tile_add_diag(tile: TileCoord, dir: u8) -> TileCoord {
-    match dir & 3 {
-        0 => TileCoord::new(tile.x + 1, tile.y), // NE → +x
-        1 => TileCoord::new(tile.x, tile.y + 1), // SE → +y
-        2 => TileCoord::new(tile.x - 1, tile.y), // SW → -x
-        _ => TileCoord::new(tile.x, tile.y - 1), // NW → -y
-    }
+    let (dx, dy) = diag_dir_offset(dir);
+    TileCoord::new(tile.x + dx, tile.y + dy)
 }
 
 fn diag_from_delta(dx: i32, dy: i32) -> u8 {
-    if dx > 0 {
-        0
-    } else if dy > 0 {
-        1
-    } else if dx < 0 {
-        2
-    } else {
-        3
+    match (dx.signum(), dy.signum()) {
+        (-1, 0) => 0, // NE
+        (0, 1) => 1,  // SE
+        (1, 0) => 2,  // SW
+        _ => 3,       // NW
     }
 }
 
@@ -783,5 +778,36 @@ mod tests {
         let hs = HouseSpec::get(house_id).unwrap();
         assert!(hs.is_size_1x1());
         assert!(hs.min_year <= 1980);
+    }
+
+    #[test]
+    fn town_growth_uses_canonical_diagonal_tile_offsets() {
+        let origin = TileCoord::new(10, 10);
+        assert_eq!(tile_add_diag(origin, 0), TileCoord::new(9, 10)); // NE
+        assert_eq!(tile_add_diag(origin, 1), TileCoord::new(10, 11)); // SE
+        assert_eq!(tile_add_diag(origin, 2), TileCoord::new(11, 10)); // SW
+        assert_eq!(tile_add_diag(origin, 3), TileCoord::new(10, 9)); // NW
+
+        assert_eq!(diag_from_delta(-1, 0), 0);
+        assert_eq!(diag_from_delta(0, 1), 1);
+        assert_eq!(diag_from_delta(1, 0), 2);
+        assert_eq!(diag_from_delta(0, -1), 3);
+    }
+
+    #[test]
+    fn completed_multitile_house_uses_make_town_house_id_order() {
+        let mut map = Map::new_flat(8, 8, 1);
+        let base = TileCoord::new(3, 3);
+        assert!(place_house_footprint(
+            &mut map,
+            base,
+            80,
+            crate::house_spec::BUILDING_FLAG_SIZE_2X2,
+        ));
+
+        assert_eq!(map.get(base).unwrap().m8 & 0x0FFF, 80);
+        assert_eq!(map.get(TileCoord::new(3, 4)).unwrap().m8 & 0x0FFF, 81);
+        assert_eq!(map.get(TileCoord::new(4, 3)).unwrap().m8 & 0x0FFF, 82);
+        assert_eq!(map.get(TileCoord::new(4, 4)).unwrap().m8 & 0x0FFF, 83);
     }
 }

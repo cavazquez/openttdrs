@@ -1567,6 +1567,53 @@ mod tests {
         assert_eq!(rng.state, expected.rng_state);
     }
 
+    #[derive(Clone, Copy)]
+    struct ExpectedGeneratedRoad {
+        pos: TileCoord,
+        bits: u8,
+        rng_state: [u32; 2],
+    }
+
+    fn grow_and_assert_generated_house(
+        state: &mut GameState,
+        town: &mut Town,
+        rng: &mut Randomizer,
+        expected: ExpectedGeneratedHouse,
+    ) {
+        assert_eq!(
+            grow_first_fixture_town(state, town, rng),
+            Some(expected.pos)
+        );
+        assert_generated_house_at(state, town, *rng, expected);
+    }
+
+    fn grow_and_assert_generated_road(
+        state: &mut GameState,
+        town: &mut Town,
+        rng: &mut Randomizer,
+        expected: ExpectedGeneratedRoad,
+    ) {
+        assert_eq!(
+            grow_first_fixture_town(state, town, rng),
+            Some(expected.pos)
+        );
+        assert_eq!(
+            state.map.get(expected.pos).expect("generated road").m5,
+            expected.bits
+        );
+        assert_eq!(rng.state, expected.rng_state);
+    }
+
+    fn grow_and_assert_no_construction(
+        state: &mut GameState,
+        town: &mut Town,
+        rng: &mut Randomizer,
+        rng_state: [u32; 2],
+    ) {
+        assert_eq!(grow_first_fixture_town(state, town, rng), None);
+        assert_eq!(rng.state, rng_state);
+    }
+
     #[test]
     fn coastal_selector_replays_first_seed_foundation_and_rng_boundary() {
         let mut state = clear_phase_state(1_330_935_378);
@@ -2101,6 +2148,161 @@ mod tests {
             0x09
         );
         assert_eq!(rng.state, [2_375_691_898, 265_796_979]);
+
+        // GDB: llamadas 30–44. Después del corner house, alternan ramas que
+        // no escriben, conexiones parciales y la misma lotería de casas.
+        grow_and_assert_no_construction(
+            &mut state,
+            &mut town,
+            &mut rng,
+            [605_125_561, 1_729_065_499],
+        );
+        grow_and_assert_generated_road(
+            &mut state,
+            &mut town,
+            &mut rng,
+            ExpectedGeneratedRoad {
+                pos: TileCoord::new(47, 26),
+                bits: 0x07,
+                rng_state: [3_636_450_204, 1_400_287_687],
+            },
+        );
+        grow_and_assert_no_construction(
+            &mut state,
+            &mut town,
+            &mut rng,
+            [1_650_280_168, 798_358_475],
+        );
+        grow_and_assert_generated_house(
+            &mut state,
+            &mut town,
+            &mut rng,
+            ExpectedGeneratedHouse {
+                pos: TileCoord::new(50, 22),
+                house_id: 39,
+                random_bits: 53,
+                num_houses: 34,
+                population: 505,
+                rng_state: [1_066_572_928, 1_328_983_146],
+            },
+        );
+        grow_and_assert_generated_house(
+            &mut state,
+            &mut town,
+            &mut rng,
+            ExpectedGeneratedHouse {
+                pos: TileCoord::new(49, 24),
+                house_id: 16,
+                random_bits: 235,
+                num_houses: 35,
+                population: 600,
+                rng_state: [3_089_153_253, 800_452_775],
+            },
+        );
+        grow_and_assert_generated_road(
+            &mut state,
+            &mut town,
+            &mut rng,
+            ExpectedGeneratedRoad {
+                pos: TileCoord::new(48, 26),
+                bits: ROAD_BITS_AXIS_X,
+                rng_state: [1_001_774_706, 2_782_416_329],
+            },
+        );
+        grow_and_assert_no_construction(
+            &mut state,
+            &mut town,
+            &mut rng,
+            [29_783_464, 2_538_923_709],
+        );
+        grow_and_assert_generated_road(
+            &mut state,
+            &mut town,
+            &mut rng,
+            ExpectedGeneratedRoad {
+                pos: TileCoord::new(46, 28),
+                bits: ROAD_BITS_AXIS_X,
+                rng_state: [3_611_264_031, 3_222_008_102],
+            },
+        );
+        grow_and_assert_generated_road(
+            &mut state,
+            &mut town,
+            &mut rng,
+            ExpectedGeneratedRoad {
+                pos: TileCoord::new(47, 19),
+                bits: ROAD_BITS_AXIS_Y,
+                rng_state: [3_302_331_109, 3_363_916_080],
+            },
+        );
+        grow_and_assert_generated_road(
+            &mut state,
+            &mut town,
+            &mut rng,
+            ExpectedGeneratedRoad {
+                pos: TileCoord::new(50, 24),
+                bits: ROAD_BITS_AXIS_Y,
+                rng_state: [4_048_198_352, 2_791_402_603],
+            },
+        );
+        grow_and_assert_generated_house(
+            &mut state,
+            &mut town,
+            &mut rng,
+            ExpectedGeneratedHouse {
+                pos: TileCoord::new(51, 23),
+                house_id: 24,
+                random_bits: 131,
+                num_houses: 36,
+                population: 615,
+                rng_state: [2_845_500_094, 274_890_803],
+            },
+        );
+        grow_and_assert_no_construction(
+            &mut state,
+            &mut town,
+            &mut rng,
+            [4_168_349_962, 3_434_340_341],
+        );
+        grow_and_assert_generated_house(
+            &mut state,
+            &mut town,
+            &mut rng,
+            ExpectedGeneratedHouse {
+                pos: TileCoord::new(46, 22),
+                house_id: 29,
+                random_bits: 12,
+                num_houses: 37,
+                population: 715,
+                rng_state: [3_908_574_912, 3_120_255_309],
+            },
+        );
+        grow_and_assert_generated_house(
+            &mut state,
+            &mut town,
+            &mut rng,
+            ExpectedGeneratedHouse {
+                pos: TileCoord::new(46, 21),
+                house_id: 15,
+                random_bits: 174,
+                num_houses: 38,
+                population: 810,
+                rng_state: [182_380_726, 4_028_724_846],
+            },
+        );
+        grow_and_assert_generated_house(
+            &mut state,
+            &mut town,
+            &mut rng,
+            ExpectedGeneratedHouse {
+                pos: TileCoord::new(48, 19),
+                house_id: 20,
+                random_bits: 111,
+                num_houses: 39,
+                population: 875,
+                rng_state: [2_310_750_700, 2_493_436_935],
+            },
+        );
     }
 
     #[test]

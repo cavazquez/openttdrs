@@ -102,13 +102,13 @@ fn set_vehicle_orders_assigns_circular_route() {
 
 #[test]
 fn sandbox_commands_place_visible_tile_kinds() {
-    let mut s = GameState::new(8, 8);
+    let mut s = GameState::new(16, 16);
     apply_command(&mut s, &Command::PlaceHouse(TileCoord::new(1, 1))).unwrap();
     apply_command(&mut s, &Command::PlaceIndustry(TileCoord::new(2, 1))).unwrap();
-    apply_command(&mut s, &Command::PlaceForest(TileCoord::new(3, 1))).unwrap();
+    apply_command(&mut s, &Command::PlaceForest(TileCoord::new(8, 1))).unwrap();
     apply_command(
         &mut s,
-        &Command::PlaceIndustryKind(TileCoord::new(4, 1), IndustryKind::CoalMine),
+        &Command::PlaceIndustryKind(TileCoord::new(12, 1), IndustryKind::CoalMine),
     )
     .unwrap();
     assert_eq!(s.map.get_kind(TileCoord::new(1, 1)), Some(TileKind::House));
@@ -116,26 +116,26 @@ fn sandbox_commands_place_visible_tile_kinds() {
         s.map.get_kind(TileCoord::new(2, 1)),
         Some(TileKind::Industry)
     );
-    assert_eq!(s.map.get_kind(TileCoord::new(3, 1)), Some(TileKind::Forest));
+    assert_eq!(s.map.get_kind(TileCoord::new(8, 1)), Some(TileKind::Forest));
     assert_eq!(
-        s.map.get_kind(TileCoord::new(4, 1)),
+        s.map.get_kind(TileCoord::new(12, 1)),
         Some(TileKind::Industry)
     );
     // CoalMine ahora ocupa múltiples tiles (2x2).
     assert_eq!(
-        s.map.get_kind(TileCoord::new(5, 1)),
+        s.map.get_kind(TileCoord::new(13, 1)),
         Some(TileKind::Industry)
     );
     assert_eq!(
-        s.map.get_kind(TileCoord::new(4, 2)),
+        s.map.get_kind(TileCoord::new(12, 2)),
         Some(TileKind::Industry)
     );
     assert_eq!(
-        s.map.get_kind(TileCoord::new(5, 2)),
+        s.map.get_kind(TileCoord::new(13, 2)),
         Some(TileKind::Industry)
     );
     assert!(s.industries.iter().any(|industry| {
-        industry.pos == TileCoord::new(4, 1) && industry.kind == IndustryKind::CoalMine
+        industry.pos == TileCoord::new(12, 1) && industry.kind == IndustryKind::CoalMine
     }));
 }
 

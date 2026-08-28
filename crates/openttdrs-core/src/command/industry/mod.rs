@@ -71,6 +71,13 @@ fn check_industry_template(
     for (tile, _) in template {
         super::transport::check_in_bounds(map, *tile)?;
         let existing_kind = map.get_kind(*tile).unwrap_or(TileKind::Grass);
+        // `CheckIfIndustryTilesAreFree` limpia cada tesela con el flag
+        // `Auto`. `ClearTile_Industry` rechaza expresamente ese camino, así
+        // que una industria nueva nunca puede reemplazar una huella existente
+        // durante `GenerateIndustries` ni desde el comando manual.
+        if existing_kind == TileKind::Industry {
+            return Err(CommandError::IndustryTileOccupied);
+        }
         if !transport_tile_is_buildable(existing_kind) {
             return Err(build_error_for_kind(existing_kind));
         }
@@ -211,6 +218,9 @@ pub fn check_place_industry_spec_def(
     for (tile, _) in &footprint {
         super::transport::check_in_bounds(map, *tile)?;
         let existing_kind = map.get_kind(*tile).unwrap_or(TileKind::Grass);
+        if existing_kind == TileKind::Industry {
+            return Err(CommandError::IndustryTileOccupied);
+        }
         if !transport_tile_is_buildable(existing_kind) {
             return Err(build_error_for_kind(existing_kind));
         }
@@ -330,6 +340,54 @@ mod tests {
         assert_eq!(
             check_place_industry_spec_layout(&map, origin, IndustrySpec::CoalMine, 0),
             Err(CommandError::InvalidTerrainSlope)
+        );
+    }
+
+    #[test]
+    fn industry_layout_never_overwrites_an_existing_industry_tile() {
+        let origin = TileCoord::new(4, 4);
+        let mut map = Map::new_flat(16, 16, 0);
+        assert!(map.set_kind(origin, TileKind::Industry).is_ok());
+
+        assert_eq!(
+            check_place_industry_spec_layout(&map, origin, IndustrySpec::CoalMine, 0),
+            Err(CommandError::IndustryTileOccupied)
+        );
+    }
+
+    #[test]
+    fn newgrf_industry_layout_never_overwrites_an_existing_industry_tile() {
+        let origin = TileCoord::new(4, 4);
+        let mut map = Map::new_flat(16, 16, 0);
+        assert!(map.set_kind(origin, TileKind::Industry).is_ok());
+        let def = IndustrySpecDef {
+            id: 37,
+            local_id: 0,
+            subst_id: 0,
+            override_id: None,
+            layouts: vec![vec![crate::industry_spec::IndustryLayoutTile {
+                x: 0,
+                y: 0,
+                gfx: 175,
+            }]],
+            produced_cargo_indices: Vec::new(),
+            produced_cargo_labels: Vec::new(),
+            accepted_cargo_indices: Vec::new(),
+            accepted_cargo_labels: Vec::new(),
+            production_rates: Vec::new(),
+            input_multipliers: Vec::new(),
+            callback_mask: 0,
+            cost_multiplier: 0,
+            name: String::new(),
+            from_newgrf: true,
+            grfid: 1,
+            newgrf_local_id: 0,
+            newgrf_runtime: None,
+        };
+
+        assert_eq!(
+            check_place_industry_spec_def(&map, origin, &def),
+            Err(CommandError::IndustryTileOccupied)
         );
     }
 }

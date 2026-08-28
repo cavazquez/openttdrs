@@ -462,6 +462,9 @@ pub(crate) fn text(locale: Locale, source: &str) -> &str {
         "Esta industria no está disponible en el clima de este mapa." => {
             "This industry is unavailable in this map's climate."
         }
+        "No se puede construir una industria sobre otra industria existente." => {
+            "An industry cannot be built on top of an existing industry."
+        }
         "El préstamo ya está al máximo permitido." => {
             "The loan is already at the allowed maximum."
         }

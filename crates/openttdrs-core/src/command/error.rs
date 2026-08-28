@@ -110,6 +110,9 @@ pub enum CommandError {
     ObjectLimitReached,
     /// Esta industria no está disponible en el clima actual del mapa.
     IndustryNotAvailableInClimate,
+    /// Una industria existente no se puede limpiar automáticamente para
+    /// construir otra encima.
+    IndustryTileOccupied,
     /// Préstamo ya al máximo permitido.
     LoanAtMaximum,
     /// No hay préstamo suficiente para devolver.

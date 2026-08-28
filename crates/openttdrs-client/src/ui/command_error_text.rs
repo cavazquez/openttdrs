@@ -106,6 +106,9 @@ pub const fn command_error_message(err: CommandError) -> &'static str {
         CommandError::IndustryNotAvailableInClimate => {
             "Esta industria no está disponible en el clima de este mapa."
         }
+        CommandError::IndustryTileOccupied => {
+            "No se puede construir una industria sobre otra industria existente."
+        }
         CommandError::LoanAtMaximum => "El préstamo ya está al máximo permitido.",
         CommandError::NoLoanToRepay => "No hay préstamo suficiente para devolver.",
         CommandError::TownNotFound => "Ciudad no encontrada.",
@@ -221,6 +224,7 @@ mod tests {
             CommandError::CannotBuildObjectHere,
             CommandError::ObjectLimitReached,
             CommandError::IndustryNotAvailableInClimate,
+            CommandError::IndustryTileOccupied,
             CommandError::LoanAtMaximum,
             CommandError::NoLoanToRepay,
             CommandError::TownNotFound,

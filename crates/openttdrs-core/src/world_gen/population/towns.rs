@@ -3083,6 +3083,42 @@ mod tests {
     }
 
     #[test]
+    fn generated_towns_preserve_industry_rng_boundary_for_control_seeds() {
+        // GDB en `GenerateIndustries` fija ambas fronteras C++: ninguna
+        // selección o construcción de industria puede compensar un stream
+        // que ya llegue desfasado desde `GenerateTowns`.
+        for (seed, begin, expected_towns, expected_rng) in [
+            (
+                1_330_935_378,
+                [1_168_016_413, 2_955_223_551],
+                3,
+                [11_204_508, 1_784_072_412],
+            ),
+            (
+                1_330_935_379,
+                [1_179_957_886, 1_700_995_136],
+                5,
+                [2_992_974_009, 1_778_840_233],
+            ),
+        ] {
+            let mut state = clear_phase_state(seed);
+            let mut rng = Randomizer { state: begin };
+            let target = town_generation_target_count(TownDensity::Normal, &state.map, &mut rng);
+            let mut centers = Vec::new();
+            let mut ctx = PopCtx {
+                state: &mut state,
+                preserve: &[],
+                rng: &mut rng,
+                mw: 64,
+                mh: 64,
+            };
+
+            assert_eq!(place_towns(&mut ctx, target, &mut centers), expected_towns);
+            assert_eq!(ctx.rng.state, expected_rng, "seed {seed}");
+        }
+    }
+
+    #[test]
     fn generated_town_roads_treat_a_coast_as_clearable_ground() {
         let mut map = crate::map::Map::new_flat(7, 7, 0);
         let coast = TileCoord::new(3, 3);

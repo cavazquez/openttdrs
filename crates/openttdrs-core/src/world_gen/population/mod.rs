@@ -138,13 +138,26 @@ pub fn generate_towns(
     cfg: &PopulationGenConfig,
     preserve: &[PreserveRect],
 ) -> usize {
-    let (mw, mh) = state.map.dimensions();
     let mut rng = Randomizer::new(resolve_population_seed(state, cfg.seed) as u32);
-    let mut town_centers = Vec::new();
+    generate_towns_with_rng(state, cfg, preserve, &mut rng)
+}
+
+/// `GenerateTowns` continuando el stream global de generación.
+///
+/// Esta frontera pública permite que el oráculo de mapas aleatorios exporte
+/// exactamente el estado posterior a pueblos, sin volver a sembrar el RNG.
+pub fn generate_towns_with_rng(
+    state: &mut GameState,
+    cfg: &PopulationGenConfig,
+    preserve: &[PreserveRect],
+    rng: &mut Randomizer,
+) -> usize {
+    let (mw, mh) = state.map.dimensions();
+    let mut town_centers: Vec<TileCoord> = state.towns.iter().map(|town| town.pos).collect();
     let mut ctx = PopCtx {
         state,
         preserve,
-        rng: &mut rng,
+        rng,
         mw,
         mh,
     };
@@ -163,15 +176,28 @@ pub fn generate_industries(
     cfg: &PopulationGenConfig,
     preserve: &[PreserveRect],
 ) -> usize {
-    let (mw, mh) = state.map.dimensions();
     // Desplazamos el RNG respecto a towns para no repetir la misma secuencia.
     let seed = resolve_population_seed(state, cfg.seed).wrapping_add(0x494E_4453_5452);
     let mut rng = Randomizer::new(seed as u32);
+    generate_industries_with_rng(state, cfg, preserve, &mut rng)
+}
+
+/// `GenerateIndustries` continuando el stream global de generación.
+///
+/// Usa los pueblos que ya viven en `state`; no deriva un RNG independiente,
+/// porque `OpenTTD` comparte el stream desde la creación del terreno.
+pub fn generate_industries_with_rng(
+    state: &mut GameState,
+    cfg: &PopulationGenConfig,
+    preserve: &[PreserveRect],
+    rng: &mut Randomizer,
+) -> usize {
+    let (mw, mh) = state.map.dimensions();
     let town_centers: Vec<TileCoord> = state.towns.iter().map(|t| t.pos).collect();
     let mut ctx = PopCtx {
         state,
         preserve,
-        rng: &mut rng,
+        rng,
         mw,
         mh,
     };
@@ -201,31 +227,14 @@ pub fn apply_population_gen_with_rng(
     preserve: &[PreserveRect],
     rng: &mut Randomizer,
 ) {
-    let (mw, mh) = state.map.dimensions();
-    let mut town_centers = Vec::new();
-    let mut ctx = PopCtx {
-        state,
-        preserve,
-        rng,
-        mw,
-        mh,
-    };
-    let _ = towns::place_towns(
-        &mut ctx,
-        town_target_count(cfg.town_density, mw, mh),
-        &mut town_centers,
-    );
-    let _ = industries::place_industries(
-        &mut ctx,
-        industry_target_count(cfg.industry_density, mw, mh),
-        &town_centers,
-    );
+    let _ = generate_towns_with_rng(state, cfg, preserve, rng);
+    let _ = generate_industries_with_rng(state, cfg, preserve, rng);
     // OpenTTD's new-game order is terrain → towns → industries → objects →
     // trees. Objects must run before `GenerateTrees`, because the object
     // footprint replaces the clear tile and consumes the shared RNG stream.
-    let climate = ctx.state.climate;
-    super::objects::generate_objects_with_rng(ctx.state, climate, ctx.rng, preserve);
-    super::trees::generate_trees_with_rng(&mut ctx.state.map, ctx.state.climate, ctx.rng, preserve);
+    let climate = state.climate;
+    super::objects::generate_objects_with_rng(state, climate, rng, preserve);
+    super::trees::generate_trees_with_rng(&mut state.map, state.climate, rng, preserve);
 }
 
 /// Variación de estilo dentro de un mismo pueblo (índice en la tabla 1×1).

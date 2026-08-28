@@ -91,6 +91,22 @@ La matriz completa y la comparación por tesela/bloques 4×4 se ejecutan con
 se activa en el primer tick de una partida nueva, no sólo después de cargar un
 `.sav` existente.
 
+## Fronteras de generación
+
+Para aislar la primera fase procedural que diverge, el parche completo escribe
+`landscape.reference.raw.jsonl`, `clear.reference.raw.jsonl`, pueblos,
+industrias, objetos y árboles directamente durante `genworld`; no intenta
+recargar saves incompletos.
+
+```bash
+python3 scripts/generation_phase_parity.py --size 64 --seed 1330935378 \
+  --out-dir /tmp/openttdrs-generation-phase
+```
+
+El candidato usa `world_raw_dumper --generate-until` con la misma frontera y
+compara los diez bytes de tesela por bloques 4×4. Esta instrumentación requiere
+el checkout completo pinneado, como las trazas de árboles.
+
 ## Frontera `GenerateTrees`
 
 El parche completo también puede guardar una partida justo antes y después de

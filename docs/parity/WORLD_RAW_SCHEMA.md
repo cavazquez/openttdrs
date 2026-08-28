@@ -156,6 +156,20 @@ clima y el estado RNG inicial; `producer` y las rutas se excluyen a propósito
 porque difieren entre el oráculo C++ y Rust. El hook de esta fase requiere el
 parche completo del checkout 15.3 fijado, no el modo `world_raw_only`.
 
+Para localizar la primera fase que diverge en un mapa procedural, el harness
+por etapas exporta `world-raw` directamente mientras OpenTTD genera el mundo:
+
+```bash
+python3 scripts/generation_phase_parity.py --size 64 --seed 1330935378 \
+  --out-dir /tmp/openttdrs-generation-phase
+```
+
+Compara `clear`, pueblos, industrias, objetos y árboles por bytes y bloques
+4×4; `landscape.reference.raw.jsonl` queda como la frontera C++ previa a
+`GenerateClearTile`. El candidato se detiene con
+`world_raw_dumper --generate-until FASE`, así el informe declara la primera
+fase divergente sin intentar cargar un `.sav` que aún no tiene pueblos.
+
 El comparador valida primero contrato, dimensiones, región, SHA de la partida
 si ambos lados la informan, cantidad de filas y luego cada campo crudo. Por
 default tolera que `producer` y `stage` sean distintos; `--strict-metadata`

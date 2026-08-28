@@ -11,9 +11,9 @@ use openttdrs_core::world_raw::{
 };
 use openttdrs_core::{
     Climate, GameState, Map, PopulationGenConfig, TerrainType, TreePlacement, WorldGenConfig,
-    apply_population_gen_with_rng, apply_world_gen_with_rng, generate_objects_with_rng,
-    generate_trees_with_rng, generate_trees_with_rng_observer_with_map_settings,
-    run_generation_tile_loop,
+    apply_world_gen_with_rng, generate_industries_with_rng, generate_objects_with_rng,
+    generate_towns_with_rng, generate_trees_with_rng,
+    generate_trees_with_rng_observer_with_map_settings, run_generation_tile_loop,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -43,10 +43,52 @@ impl Stage {
     }
 }
 
+/// Frontera del pipeline de una partida nueva para `--generate`.
+///
+/// El valor no cambia el formato de exportación: sólo detiene la ejecución
+/// después de la misma fase que captura el oráculo C++.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum GenerateUntil {
+    Clear,
+    Towns,
+    Industries,
+    Objects,
+    Trees,
+    Startup,
+}
+
+impl GenerateUntil {
+    fn parse(value: &str) -> Result<Self, String> {
+        match value {
+            "clear" => Ok(Self::Clear),
+            "towns" => Ok(Self::Towns),
+            "industries" => Ok(Self::Industries),
+            "objects" => Ok(Self::Objects),
+            "trees" => Ok(Self::Trees),
+            "startup" => Ok(Self::Startup),
+            _ => Err(format!(
+                "--generate-until inválido: {value} (usar clear, towns, industries, objects, trees o startup)"
+            )),
+        }
+    }
+
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::Clear => "clear",
+            Self::Towns => "towns",
+            Self::Industries => "industries",
+            Self::Objects => "objects",
+            Self::Trees => "trees",
+            Self::Startup => "startup",
+        }
+    }
+}
+
 struct Args {
     save: Option<PathBuf>,
     out: PathBuf,
     generate: Option<(u32, u32)>,
+    generate_until: GenerateUntil,
     replay_trees: bool,
     tree_trace: Option<PathBuf>,
     seed: Option<u64>,
@@ -64,6 +106,7 @@ fn print_usage() {
          Opciones:\n\
            --generate WIDTHxHEIGHT          genera el mapa procedural openttdrs (sin guardar .sav)\n\
            --seed N                          semilla para --generate\n\
+           --generate-until FASE             detiene tras clear|towns|industries|objects|trees|startup\n\
            --replay-trees                    reproduce GenerateTrees desde DATE.random_state\n\
            --tree-trace SALIDA.jsonl         traza cada PlaceTree de --replay-trees\n\
            --stage sav_map|game_state_map  etapa a exportar (default: sav_map)\n\
@@ -71,7 +114,7 @@ fn print_usage() {
            --tile x,y [--radius N]          tesela, opcionalmente con contexto\n\
            --openttd-commit SHA             manifiesto del oráculo para metadata\n\
          \n\
-         `--generate` incluye pueblos e industrias por defecto; usar\n\
+         `--generate` sin --generate-until incluye pueblos e industrias por defecto; usar\n\
          `OPENTTDRS_GENERATE_POPULATION=0` para omitir población y conservar\n\
          objetos/árboles del flujo de generación.\n\
          `OPENTTDRS_GENERATE_STARTUP_TICKS=N` reproduce N ciclos de\n\
@@ -157,6 +200,7 @@ fn parse_region(value: &str) -> Result<WorldRawRegion, String> {
 fn parse_args() -> Result<Args, String> {
     let mut positional = Vec::new();
     let mut generate = None;
+    let mut generate_until = None;
     let mut seed = None;
     let mut stage = None;
     let mut replay_trees = false;
@@ -178,6 +222,15 @@ fn parse_args() -> Result<Args, String> {
                     return Err("--generate fue indicado más de una vez".to_string());
                 }
                 generate = Some(parse_dimensions(&next_value(&mut args, "--generate")?)?);
+            }
+            "--generate-until" => {
+                if generate_until.is_some() {
+                    return Err("--generate-until fue indicado más de una vez".to_string());
+                }
+                generate_until = Some(GenerateUntil::parse(&next_value(
+                    &mut args,
+                    "--generate-until",
+                )?)?);
             }
             "--replay-trees" => {
                 if replay_trees {
@@ -248,6 +301,9 @@ fn parse_args() -> Result<Args, String> {
     } else if seed.is_some() {
         return Err("--seed sólo se puede usar con --generate".to_string());
     }
+    if generate.is_none() && generate_until.is_some() {
+        return Err("--generate-until requiere --generate".to_string());
+    }
     if tree_trace.is_some() && !replay_trees {
         return Err("--tree-trace requiere --replay-trees".to_string());
     }
@@ -281,6 +337,7 @@ fn parse_args() -> Result<Args, String> {
         save: (generate.is_none()).then(|| positional.remove(0)),
         out: positional.remove(0),
         generate,
+        generate_until: generate_until.unwrap_or(GenerateUntil::Startup),
         replay_trees,
         tree_trace,
         seed,
@@ -480,44 +537,71 @@ fn run(args: &Args) -> Result<(), String> {
         let mut state = GameState::from_map(map);
         state.world_seed = seed;
         state.climate = Climate::Temperate;
-        if generate_population {
-            // OpenTTD ejecuta GenerateTowns/GenerateIndustries antes del
-            // primer ciclo de RunTileLoop. Mantenerlo opcional permite
-            // aislar el relieve en la matriz de diagnóstico.
-            apply_population_gen_with_rng(
+        let population_config = PopulationGenConfig {
+            seed,
+            ..PopulationGenConfig::default()
+        };
+        let must_generate_population = match args.generate_until {
+            // La opción explícita describe la frontera real de OpenTTD y no
+            // hereda el atajo histórico `OPENTTDRS_GENERATE_POPULATION=0`.
+            GenerateUntil::Clear => false,
+            GenerateUntil::Towns
+            | GenerateUntil::Industries
+            | GenerateUntil::Objects
+            | GenerateUntil::Trees => true,
+            GenerateUntil::Startup => generate_population,
+        };
+        if must_generate_population {
+            let _ =
+                generate_towns_with_rng(&mut state, &population_config, &[], &mut generation_rng);
+        }
+        if matches!(
+            args.generate_until,
+            GenerateUntil::Industries | GenerateUntil::Objects | GenerateUntil::Trees
+        ) || (matches!(args.generate_until, GenerateUntil::Startup) && generate_population)
+        {
+            let _ = generate_industries_with_rng(
                 &mut state,
-                &PopulationGenConfig {
-                    seed,
-                    ..PopulationGenConfig::default()
-                },
+                &population_config,
                 &[],
                 &mut generation_rng,
             );
-        } else {
-            // Incluso en el modo de diagnóstico "sólo terreno", OpenTTD
-            // ejecuta `GenerateTrees` antes de entregar el mundo nuevo. La
-            // separación conserva la posibilidad de aislar pueblos/industrias
-            // sin convertir el raw en un mapa artificialmente pelado.
+        }
+        if matches!(
+            args.generate_until,
+            GenerateUntil::Objects | GenerateUntil::Trees | GenerateUntil::Startup
+        ) {
             let climate = state.climate;
             generate_objects_with_rng(&mut state, climate, &mut generation_rng, &[]);
+        }
+        if matches!(
+            args.generate_until,
+            GenerateUntil::Trees | GenerateUntil::Startup
+        ) {
             generate_trees_with_rng(&mut state.map, state.climate, &mut generation_rng, &[]);
         }
         // El RNG global que usa `RunTileLoop` es el mismo stream que dejó
         // `GenerateTrees`; reiniciar el estado a la semilla 1 aquí desfasaba
         // industria/árboles y cualquier callback que consuma Random().
         state.random = generation_rng;
-        for tick in 0..u64::from(startup_ticks) {
-            run_generation_tile_loop(&mut state, tick);
+        if matches!(args.generate_until, GenerateUntil::Startup) {
+            for tick in 0..u64::from(startup_ticks) {
+                run_generation_tile_loop(&mut state, tick);
+            }
         }
         map = state.map;
-        let source = format!("generated:{width}x{height}:seed={seed}");
+        let source = format!(
+            "generated:{width}x{height}:seed={seed}:until={}",
+            args.generate_until.as_str()
+        );
         let emitted = dump_map(
             &map,
             args,
             source.clone(),
             sha256_hex(source.as_bytes()),
             0,
-            (startup_ticks != 0).then_some(u64::from(startup_ticks) + 1),
+            (matches!(args.generate_until, GenerateUntil::Startup) && startup_ticks != 0)
+                .then_some(u64::from(startup_ticks) + 1),
             0,
         )?;
         println!(
@@ -662,7 +746,7 @@ fn main() -> ExitCode {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_dimensions;
+    use super::{GenerateUntil, parse_dimensions};
 
     #[test]
     fn generated_dimensions_accept_openttd_sizes() {
@@ -670,5 +754,13 @@ mod tests {
         assert!(parse_dimensions("32x64").is_err());
         assert!(parse_dimensions("96x64").is_err());
         assert!(parse_dimensions("64x64x64").is_err());
+    }
+
+    #[test]
+    fn generate_until_accepts_generation_boundaries() {
+        assert_eq!(GenerateUntil::parse("clear"), Ok(GenerateUntil::Clear));
+        assert_eq!(GenerateUntil::parse("objects"), Ok(GenerateUntil::Objects));
+        assert_eq!(GenerateUntil::parse("startup"), Ok(GenerateUntil::Startup));
+        assert!(GenerateUntil::parse("rivers").is_err());
     }
 }

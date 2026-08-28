@@ -456,7 +456,7 @@ def integrate_headless_raster_blitter(dest: Path) -> None:
 
 
 def integrate_tree_generation_trace(dest: Path) -> None:
-    """Conecta el fixture pre/post y la traza de PlaceTree al flujo real."""
+    """Conecta snapshots por fase y la traza de PlaceTree al flujo real."""
     genworld = dest / "src" / "genworld.cpp"
     text = genworld.read_text(encoding="utf-8")
     if '#include "snapshot_export.h"' not in text:
@@ -478,6 +478,97 @@ def integrate_tree_generation_trace(dest: Path) -> None:
         print("genworld: fixture pre/post GenerateTrees")
     else:
         print("genworld: fixture pre/post GenerateTrees ya presente")
+
+    if 'OpenttdrsMaybeCaptureGenerationStage("landscape")' not in text:
+        landscape_marker = "\t\tif (!landscape_generated) {\n"
+        if landscape_marker not in text:
+            raise SystemExit("no encuentro frontera posterior a GenerateLandscape")
+        text = text.replace(
+            landscape_marker,
+            "\t\tif (landscape_generated) OpenttdrsMaybeCaptureGenerationStage(\"landscape\");\n\n"
+            + landscape_marker,
+            1,
+        )
+        print("genworld: snapshot posterior a GenerateLandscape")
+    else:
+        print("genworld: snapshot GenerateLandscape ya presente")
+
+    if 'OpenttdrsMaybeCaptureGenerationStage("clear")' not in text:
+        clear_marker = "\t\t\tGenerateClearTile();\n\t\t\tMap::CountLandTiles();\n"
+        if clear_marker not in text:
+            raise SystemExit("no encuentro frontera GenerateClearTile")
+        text = text.replace(
+            clear_marker,
+            clear_marker + "\t\t\tOpenttdrsMaybeCaptureGenerationStage(\"clear\");\n",
+            1,
+        )
+        print("genworld: snapshot posterior a GenerateClearTile")
+    else:
+        print("genworld: snapshot GenerateClearTile ya presente")
+
+    if 'OpenttdrsMaybeCaptureGenerationStage("towns")' not in text:
+        towns_marker = "\t\t\t\tGenerateIndustries();\n"
+        if towns_marker not in text:
+            raise SystemExit("no encuentro frontera posterior a GenerateTowns")
+        text = text.replace(
+            towns_marker,
+            "\t\t\t\tOpenttdrsMaybeCaptureGenerationStage(\"towns\");\n" + towns_marker,
+            1,
+        )
+        print("genworld: snapshot posterior a GenerateTowns")
+    else:
+        print("genworld: snapshot GenerateTowns ya presente")
+
+    if 'OpenttdrsMaybeCaptureGenerationStage("industries")' not in text:
+        industries_marker = "\t\t\t\tGenerateIndustries();\n\t\t\t\tGenerateObjects();\n"
+        if industries_marker not in text:
+            raise SystemExit("no encuentro frontera posterior a GenerateIndustries")
+        text = text.replace(
+            industries_marker,
+            "\t\t\t\tGenerateIndustries();\n"
+            "\t\t\t\tOpenttdrsMaybeCaptureGenerationStage(\"industries\");\n"
+            "\t\t\t\tGenerateObjects();\n",
+            1,
+        )
+        print("genworld: snapshot posterior a GenerateIndustries")
+    else:
+        print("genworld: snapshot GenerateIndustries ya presente")
+
+    if 'OpenttdrsMaybeCaptureGenerationStage("objects")' not in text:
+        objects_marker = (
+            "\t\t\t\tGenerateObjects();\n"
+            "\t\t\t\tOpenttdrsMaybeCaptureTreeGenerationStage(false);\n"
+        )
+        if objects_marker not in text:
+            raise SystemExit("no encuentro frontera posterior a GenerateObjects")
+        text = text.replace(
+            objects_marker,
+            "\t\t\t\tGenerateObjects();\n"
+            "\t\t\t\tOpenttdrsMaybeCaptureGenerationStage(\"objects\");\n"
+            "\t\t\t\tOpenttdrsMaybeCaptureTreeGenerationStage(false);\n",
+            1,
+        )
+        print("genworld: snapshot posterior a GenerateObjects")
+    else:
+        print("genworld: snapshot GenerateObjects ya presente")
+
+    if 'OpenttdrsMaybeCaptureGenerationStage("trees")' not in text:
+        trees_marker = (
+            "\t\t\t\tGenerateTrees();\n"
+            "\t\t\t\tOpenttdrsMaybeCaptureTreeGenerationStage(true);\n"
+        )
+        if trees_marker not in text:
+            raise SystemExit("no encuentro frontera posterior a GenerateTrees")
+        text = text.replace(
+            trees_marker,
+            "\t\t\t\tGenerateTrees();\n"
+            "\t\t\t\tOpenttdrsMaybeCaptureGenerationStage(\"trees\");\n"
+            "\t\t\t\tOpenttdrsMaybeCaptureTreeGenerationStage(true);\n",
+            1,
+        )
+        print("genworld: snapshot posterior a GenerateTrees")
+    else:
+        print("genworld: snapshot GenerateTrees ya presente")
     genworld.write_text(text, encoding="utf-8")
 
     tree_cmd = dest / "src" / "tree_cmd.cpp"

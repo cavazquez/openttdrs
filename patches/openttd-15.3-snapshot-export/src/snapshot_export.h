@@ -27,6 +27,16 @@ bool OpenttdrsMaybeExportSnapshot(const std::string &source_path);
 bool OpenttdrsMaybeExportWorldRaw(const std::string &source_path);
 
 /**
+ * Writes a `world-raw` JSONL snapshot after a named new-game generation boundary when
+ * `OPENTTDRS_GENERATION_STAGE_DIR` names an existing output directory.
+ *
+ * The resulting file is `<directory>/<stage>.reference.raw.jsonl`. The helper is deliberately
+ * inert unless the environment variable is set, so it does not perturb the
+ * ordinary random-map oracle.
+ */
+void OpenttdrsMaybeCaptureGenerationStage(const char *stage);
+
+/**
  * Saves an otherwise normal generation snapshot immediately before or after
  * `GenerateTrees()` when the matching `OPENTTDRS_TREE_*_SAVE_OUT` variable is
  * set. It also brackets `OPENTTDRS_TREE_TRACE_OUT` when that trace is enabled.

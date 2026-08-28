@@ -699,6 +699,73 @@ void OpenttdrsMaybeCaptureTreeGenerationStage(bool after)
 	if (!after) StartTreeGenerationTrace();
 }
 
+void OpenttdrsMaybeCaptureGenerationStage(const char *stage)
+{
+	const char *out_dir = std::getenv("OPENTTDRS_GENERATION_STAGE_DIR");
+	if (out_dir == nullptr || out_dir[0] == '\0' || stage == nullptr || stage[0] == '\0') return;
+
+	std::string raw_out(out_dir);
+	if (raw_out.back() != '/') raw_out += '/';
+	raw_out += stage;
+	raw_out += ".reference.raw.jsonl";
+	const uint width = Map::SizeX();
+	const uint height = Map::SizeY();
+	WorldRawBounds bounds;
+	bounds.end_x = width;
+	bounds.end_y = height;
+	std::ofstream out(raw_out, std::ios::out | std::ios::trunc);
+	if (!out) {
+		std::fprintf(stderr, "openttdrs generation fixture: cannot write %s\n", raw_out.c_str());
+		return;
+	}
+
+	extern SaveLoadVersion _sl_version;
+	const char *commit = std::getenv("OPENTTDRS_OPENTTD_COMMIT");
+	nlohmann::json metadata;
+	metadata["kind"] = "metadata";
+	metadata["schema_version"] = 2;
+	metadata["contract"] = "world-raw";
+	metadata["producer"] = "openttd";
+	metadata["stage"] = stage;
+	metadata["tick"] = static_cast<uint64_t>(TimerGameTick::counter);
+	metadata["climate"] = static_cast<uint8_t>(_settings_game.game_creation.landscape);
+	metadata["openttd_commit"] = commit != nullptr ? commit : "";
+	metadata["source_path"] = std::string("generation:") + stage;
+	metadata["save_sha256"] = "";
+	metadata["save_version"] = static_cast<uint16_t>(_sl_version);
+	metadata["width"] = width;
+	metadata["height"] = height;
+	metadata["tile_count"] = static_cast<uint64_t>(width) * height;
+	metadata["emitted_tile_count"] = WorldRawTileCount(bounds);
+	metadata["region"] = nullptr;
+	out << metadata.dump() << '\n';
+	for (uint y = 0; y < height; y++) {
+		for (uint x = 0; x < width; x++) {
+			Tile tile(TileXY(x, y));
+			nlohmann::json row;
+			row["kind"] = "tile_raw";
+			row["index"] = static_cast<uint64_t>(y) * width + x;
+			row["x"] = x;
+			row["y"] = y;
+			row["height"] = static_cast<uint8_t>(TileHeight(tile));
+			row["type"] = tile.type();
+			row["m1"] = tile.m1();
+			row["m2"] = tile.m2();
+			row["m3"] = tile.m3();
+			row["m4"] = tile.m4();
+			row["m5"] = tile.m5();
+			row["m6"] = tile.m6();
+			row["m7"] = tile.m7();
+			row["m8"] = tile.m8();
+			out << row.dump() << '\n';
+		}
+	}
+	out.flush();
+	if (!out) {
+		std::fprintf(stderr, "openttdrs generation fixture: failed to write %s\n", raw_out.c_str());
+	}
+}
+
 void OpenttdrsTraceTreePlacement(
 	const char *origin, uint32_t x, uint32_t y, uint32_t random,
 	uint32_t parent_x, uint32_t parent_y, bool has_parent)

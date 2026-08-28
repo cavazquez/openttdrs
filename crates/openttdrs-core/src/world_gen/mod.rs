@@ -35,8 +35,8 @@ pub use objects::generate_objects_with_rng;
 pub use population::{
     IndustryDensity, NUM_INITIAL_INDUSTRIES, NUM_INITIAL_TOWNS, PopulationGenConfig, TownDensity,
     apply_population_gen, apply_population_gen_with_rng, ceil_div, generate_industries,
-    generate_towns, house_beside_road, industry_target_count, road_tiles_are_flat, scale_by_size,
-    town_target_count,
+    generate_industries_with_rng, generate_towns, generate_towns_with_rng, house_beside_road,
+    industry_target_count, road_tiles_are_flat, scale_by_size, town_target_count,
 };
 pub use tile_loop::run_generation_tile_loop;
 pub use trees::{

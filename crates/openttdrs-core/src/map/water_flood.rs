@@ -95,6 +95,18 @@ fn set_non_flooding_water(map: &mut Map, c: TileCoord, non_flooding: bool) {
     let _ = map.set_tile(c, tile);
 }
 
+/// `ClearNeighbourNonFloodingStates` de `water_cmd.cpp`.
+///
+/// `DoClearSquare` lo invoca antes de que `ClearMakeHouseTile` materialice
+/// una casa. Debe visitar las ocho direcciones, no sólo las ortogonales: una
+/// construcción junto a una costa reactiva el tile loop de agua circundante.
+pub fn clear_neighbour_non_flooding_states(map: &mut Map, center: TileCoord) {
+    for (dx, dy) in DIR_OFFSETS {
+        let neighbour = TileCoord::new(center.x + dx, center.y + dy);
+        set_non_flooding_water(map, neighbour, false);
+    }
+}
+
 /// `TreeGround::Shore` en bits 6–8 de `m2`.
 #[must_use]
 const fn tree_ground(m2: u8) -> u8 {
@@ -523,6 +535,23 @@ mod tests {
         assert_eq!(shore.m6, 0x03);
         assert_eq!(shore.m7, 0);
         assert_eq!(shore.m8, 0);
+    }
+
+    #[test]
+    fn clearing_neighbours_reactivates_only_water_tiles() {
+        let mut map = Map::new_flat(3, 3, 0);
+        let center = TileCoord::new(1, 1);
+        let coast = TileCoord::new(1, 0);
+        let clear = TileCoord::new(0, 1);
+        assert!(make_shore_tile(&mut map, coast).is_ok());
+        let mut coast_tile = map.get(coast).expect("coast");
+        coast_tile.m3 = 0xA1;
+        assert!(map.set_tile(coast, coast_tile).is_ok());
+
+        clear_neighbour_non_flooding_states(&mut map, center);
+
+        assert_eq!(map.get(coast).expect("coast").m3, 0xA0);
+        assert_eq!(map.get(clear).expect("clear").m3, 0);
     }
 
     #[test]

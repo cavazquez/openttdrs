@@ -133,12 +133,14 @@ pub use types::{
     TownHouseFootprint, TownHouseSpec,
 };
 pub use water_class::{
-    WaterClass, is_canal_tile, is_river_tile, make_water_tile, river_tile_is_ship_navigable,
-    set_water_class_m1, tile_has_water_class, water_class, water_class_from_m1,
+    WaterClass, has_tile_water_ground, is_canal_tile, is_coast_tile, is_river_tile,
+    make_water_tile, river_tile_is_ship_navigable, set_water_class_m1, tile_has_water_class,
+    water_class, water_class_from_m1,
 };
 pub use water_flood::{
-    FloodingBehaviour, do_flood_tile, flood_vehicles, get_flooding_behaviour, make_shore_tile,
-    process_water_flood_from_visits, tick_water_flood, tile_loop_water_at,
+    FloodingBehaviour, clear_neighbour_non_flooding_states, do_flood_tile, flood_vehicles,
+    get_flooding_behaviour, make_shore_tile, process_water_flood_from_visits, tick_water_flood,
+    tile_loop_water_at,
 };
 
 /// Mapa rectangular denso en memoria.
@@ -350,6 +352,11 @@ impl Map {
         }
 
         for (offset, index) in indices.iter().copied().take(len).enumerate() {
+            // `ClearMakeHouseTile` ejecuta primero `DoClearSquare`, que
+            // reactiva las costas/agua vecinas antes de escribir `MP_HOUSE`.
+            // Repetirlo por subtesela conserva el orden de una huella
+            // multitile y sus efectos laterales observables de MAP3.
+            crate::map::water_flood::clear_neighbour_non_flooding_states(self, parts[offset]);
             let previous = self.tiles[index];
             let sub_spec = TownHouseSpec {
                 house_id: spec.house_id.wrapping_add([0, 1, 2, 3][offset]),
@@ -546,6 +553,35 @@ mod ottdmap_binary_tests {
         assert_eq!(tile.m7, 0);
         assert_eq!(tile.m8, 26);
         assert_eq!(tile.m3hi, 0);
+    }
+
+    #[test]
+    fn make_town_house_clears_neighbour_non_flooding_water_state() {
+        let mut map = Map::new_flat(3, 3, 0);
+        let house = TileCoord::new(1, 1);
+        let coast = TileCoord::new(1, 0);
+        assert!(crate::map::make_shore_tile(&mut map, coast).is_ok());
+        let mut coast_tile = map.get(coast).expect("coast");
+        coast_tile.m3 = 1;
+        assert!(map.set_tile(coast, coast_tile).is_ok());
+
+        assert!(
+            map.make_town_house(
+                house,
+                TownHouseSpec {
+                    house_id: 26,
+                    town_id: 0,
+                    random_bits: 157,
+                    construction_counter: 0,
+                    construction_stage: TOWN_HOUSE_COMPLETED,
+                    is_protected: false,
+                    processing_time: 0,
+                },
+            )
+            .is_ok()
+        );
+
+        assert_eq!(map.get(coast).expect("coast").m3 & 1, 0);
     }
 
     #[test]

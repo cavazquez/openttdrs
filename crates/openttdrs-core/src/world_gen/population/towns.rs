@@ -7,7 +7,7 @@ use crate::house_spec::{
 use crate::map::tree_tile_loop::clear_ground_type;
 use crate::map::{
     SLOPE_NE, SLOPE_NW, SLOPE_STEEP, TOWN_HOUSE_COMPLETED, TileCoord, TileKind, TownHouseFootprint,
-    TownHouseSpec, complement_slope, tile_slope_and_z,
+    TownHouseSpec, complement_slope, has_tile_water_ground, tile_slope_and_z,
 };
 use crate::sav::house_spec_population;
 use crate::town::{
@@ -420,9 +420,18 @@ fn clean_up_generated_town_road_bits(
 /// las carreteras municipales sobre terreno y carreteras existentes.
 fn generated_can_follow_town_road(map: &crate::map::Map, tile: TileCoord, dir: u8) -> bool {
     let target = add_town_diag(tile, dir);
-    match map.get_kind(target) {
-        Some(TileKind::Road) => generated_town_road_bits(map, target) != 0,
-        Some(TileKind::Grass | TileKind::Forest) => true,
+    let Some(target_tile) = map.get(target) else {
+        return false;
+    };
+    if has_tile_water_ground(target_tile) {
+        return false;
+    }
+    match target_tile.kind {
+        TileKind::Road => generated_town_road_bits(map, target) != 0,
+        // `CanFollowRoad` sólo rechaza agua de suelo antes de llegar a su
+        // `default`. Una costa queda por tanto disponible para seguir o
+        // construir la calle igual que clear/trees.
+        TileKind::Grass | TileKind::Forest | TileKind::Water => true,
         _ => false,
     }
 }
@@ -484,10 +493,13 @@ fn generated_town_road_allowed_here(
     if tile.x <= 0 || tile.y <= 0 || tile.x >= max_x || tile.y >= max_y {
         return false;
     }
-    if !matches!(
-        map.get_kind(tile),
-        Some(TileKind::Grass | TileKind::Forest | TileKind::Road)
-    ) {
+    let clearable = map.get(tile).is_some_and(|candidate| {
+        matches!(
+            candidate.kind,
+            TileKind::Grass | TileKind::Forest | TileKind::Road
+        ) || (candidate.kind == TileKind::Water && !has_tile_water_ground(candidate))
+    });
+    if !clearable {
         return false;
     }
 
@@ -667,7 +679,13 @@ fn grow_generated_town_road_in_tile(
         let Some(mut target_dir) = target_dir else {
             return GeneratedRoadGrowthResult::SearchStopped;
         };
-        if !matches!(map.get_kind(tile), Some(TileKind::Grass | TileKind::Forest)) {
+        let clearable = map.get(tile).is_some_and(|candidate| {
+            matches!(candidate.kind, TileKind::Grass | TileKind::Forest)
+                // La construcción de una calle nueva recurre a
+                // `CMD_LANDSCAPE_CLEAR(NoWater)`, que puede despejar coast.
+                || (candidate.kind == TileKind::Water && !has_tile_water_ground(candidate))
+        });
+        if !clearable {
             return GeneratedRoadGrowthResult::SearchStopped;
         }
 
@@ -762,7 +780,7 @@ fn grow_generated_town_road_in_tile(
     // `HasTileWaterGround` e `IsValidTile` preceden a la lotería de la casa.
     // En particular, una esquina que cae en agua no consume el `Chance16`
     // de `LevelTownLand`.
-    if map.get(house_tile).is_none() || map.get_kind(house_tile) == Some(TileKind::Water) {
+    if map.get(house_tile).is_none() || is_water_ground(map, house_tile) {
         return GeneratedRoadGrowthResult::Continue;
     }
 
@@ -1334,8 +1352,7 @@ fn closest_water_distance(map: &crate::map::Map, center: TileCoord) -> u32 {
 }
 
 fn is_water_ground(map: &crate::map::Map, tile: TileCoord) -> bool {
-    map.get(tile)
-        .is_some_and(|candidate| candidate.kind == TileKind::Water && (candidate.m5 >> 4) == 0)
+    map.get(tile).is_some_and(has_tile_water_ground)
 }
 
 /// Escribe `MakeRoadNormal` para una calle creada durante `GenerateTowns`.
@@ -3022,5 +3039,78 @@ mod tests {
             );
             assert_eq!(ctx.state.towns[0].pos, expected, "seed {seed}");
         }
+    }
+
+    #[test]
+    fn integrated_generation_replays_all_seed_1330935378_towns() {
+        let mut state = clear_phase_state(1_330_935_378);
+        let mut rng = Randomizer {
+            state: [1_168_016_413, 2_955_223_551],
+        };
+        let target = town_generation_target_count(TownDensity::Normal, &state.map, &mut rng);
+        let mut centers = Vec::new();
+        let mut ctx = PopCtx {
+            state: &mut state,
+            preserve: &[],
+            rng: &mut rng,
+            mw: 64,
+            mh: 64,
+        };
+
+        assert_eq!(target, 3);
+        assert_eq!(place_towns(&mut ctx, target, &mut centers), 3);
+        assert_eq!(
+            centers,
+            vec![
+                TileCoord::new(47, 23),
+                TileCoord::new(16, 51),
+                TileCoord::new(28, 36),
+            ]
+        );
+        assert_eq!(
+            ctx.state
+                .towns
+                .iter()
+                .map(|town| (town.pos, town.num_houses, town.population))
+                .collect::<Vec<_>>(),
+            vec![
+                (TileCoord::new(47, 23), 29, 1_181),
+                (TileCoord::new(16, 51), 20, 815),
+                (TileCoord::new(28, 36), 16, 327),
+            ]
+        );
+        assert_eq!(ctx.rng.state, [11_204_508, 1_784_072_412]);
+    }
+
+    #[test]
+    fn generated_town_roads_treat_a_coast_as_clearable_ground() {
+        let mut map = crate::map::Map::new_flat(7, 7, 0);
+        let coast = TileCoord::new(3, 3);
+        let water = TileCoord::new(4, 3);
+        assert!(crate::map::make_shore_tile(&mut map, coast).is_ok());
+        assert!(crate::map::make_water_tile(&mut map, water, crate::map::WaterClass::Sea).is_ok());
+        let town = Town {
+            pos: TileCoord::new(2, 3),
+            layout: TownLayout::Original,
+            ..Default::default()
+        };
+        let mut coast_rng = Randomizer::default();
+        let mut water_rng = Randomizer::default();
+
+        assert!(generated_town_road_allowed_here(
+            &map,
+            &town,
+            coast,
+            2,
+            &mut coast_rng,
+        ));
+        assert!(!generated_town_road_allowed_here(
+            &map,
+            &town,
+            water,
+            2,
+            &mut water_rng,
+        ));
+        assert!(generated_can_follow_town_road(&map, town.pos, 2));
     }
 }

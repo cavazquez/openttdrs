@@ -58,6 +58,32 @@ pub fn water_class(tile: Tile) -> Option<WaterClass> {
     Some(water_class_from_m1(tile.m1))
 }
 
+/// `IsCoastTile` para las representaciones de agua que conserva el mapa.
+///
+/// Una costa sigue siendo `MP_WATER` en los bytes crudos, pero no es suelo de
+/// agua a efectos de construcción y crecimiento de pueblos. Los árboles con
+/// una clase de agua válida también representan una costa inundable en el
+/// contrato de OpenTTD.
+#[must_use]
+pub fn is_coast_tile(tile: Tile) -> bool {
+    (tile.kind == TileKind::Water && (tile.m5 >> 4) == 1)
+        || (tile.kind == TileKind::Forest
+            && water_class(tile).is_some_and(|class| class != WaterClass::Invalid))
+}
+
+/// `HasTileWaterGround` para el modelo de teselas conservado por el mapa.
+///
+/// A diferencia de comprobar sólo [`TileKind::Water`], excluye las costas:
+/// `CMD_BUILD_ROAD` y `CMD_LANDSCAPE_CLEAR` pueden tratar una costa como
+/// suelo. Las estaciones, industrias y objetos con una clase de agua válida
+/// conservan el significado de agua bajo la tesela.
+#[must_use]
+pub fn has_tile_water_ground(tile: Tile) -> bool {
+    tile_has_water_class(tile.kind)
+        && water_class(tile).is_some_and(|class| class != WaterClass::Invalid)
+        && !is_coast_tile(tile)
+}
+
 #[must_use]
 pub fn is_river_tile(tile: Tile) -> bool {
     tile.kind == TileKind::Water
@@ -131,6 +157,31 @@ mod tests {
             WaterClass::River
         );
         assert_eq!(set_water_class_m1(0x9F, WaterClass::Sea) & 0x1F, 0x1F);
+    }
+
+    #[test]
+    fn coast_is_not_water_ground_but_plain_water_is() {
+        let mut map = Map::new_flat(2, 1, 0);
+        let coast_coord = TileCoord::new(0, 0);
+        let water_coord = TileCoord::new(1, 0);
+
+        let mut coast = map.get(coast_coord).expect("coast tile");
+        coast.kind = TileKind::Water;
+        coast.mapt = 0x60;
+        coast.m1 = set_water_class_m1(coast.m1, WaterClass::Sea);
+        coast.m5 = 0x10;
+        assert!(map.set_tile(coast_coord, coast).is_ok());
+
+        let mut water = map.get(water_coord).expect("water tile");
+        water.kind = TileKind::Water;
+        water.mapt = 0x60;
+        water.m1 = set_water_class_m1(water.m1, WaterClass::Sea);
+        water.m5 = 0;
+        assert!(map.set_tile(water_coord, water).is_ok());
+
+        assert!(is_coast_tile(map.get(coast_coord).expect("coast")));
+        assert!(!has_tile_water_ground(map.get(coast_coord).expect("coast")));
+        assert!(has_tile_water_ground(map.get(water_coord).expect("water")));
     }
 
     #[test]

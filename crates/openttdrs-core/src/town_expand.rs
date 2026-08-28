@@ -7,7 +7,8 @@ use crate::house_spec::{
     pick_town_house_id_with_catalog, vanilla_or_newgrf_house,
 };
 use crate::map::{
-    Map, SLOPE_STEEP, TileCoord, TileKind, diag_dir_offset, effective_road_bits, tile_slope_and_z,
+    Map, SLOPE_STEEP, TileCoord, TileKind, diag_dir_offset, effective_road_bits,
+    has_tile_water_ground, tile_slope_and_z,
 };
 use crate::newgrf_callback::apply_house_construction_callback;
 use crate::town::{Town, TownLayout, update_town_radius};
@@ -670,7 +671,13 @@ fn collect_road_tiles_near(map: &Map, center: TileCoord, radius: i32) -> Vec<Til
 /// no existen en el mapa procedural; sí conserva los tipos de suelo y la
 /// restricción de pendiente que consumen `TryBuildTownHouse`.
 pub(crate) fn can_build_house(map: &Map, pos: TileCoord, noslope: bool) -> bool {
-    if !matches!(map.get_kind(pos), Some(TileKind::Grass | TileKind::Forest)) {
+    let clearable = map.get(pos).is_some_and(|tile| {
+        matches!(tile.kind, TileKind::Grass | TileKind::Forest)
+            // `CMD_LANDSCAPE_CLEAR(NoWater)` despeja una costa: aunque sus
+            // bytes sean MP_WATER, `HasTileWaterGround` la excluye.
+            || (tile.kind == TileKind::Water && !has_tile_water_ground(tile))
+    });
+    if !clearable {
         return false;
     }
     tile_slope_and_z(map, pos)
@@ -817,6 +824,18 @@ mod tests {
         let mut dirty = Vec::new();
         assert!(grow_town(&mut map, &mut town, 1, ctx, &mut dirty));
         assert!(!dirty.is_empty());
+    }
+
+    #[test]
+    fn coast_is_clearable_for_a_town_house_but_plain_water_is_not() {
+        let mut map = Map::new_flat(3, 3, 0);
+        let coast = TileCoord::new(1, 1);
+        let water = TileCoord::new(2, 1);
+        assert!(crate::map::make_shore_tile(&mut map, coast).is_ok());
+        assert!(crate::map::make_water_tile(&mut map, water, crate::map::WaterClass::Sea).is_ok());
+
+        assert!(can_build_house(&map, coast, false));
+        assert!(!can_build_house(&map, water, false));
     }
 
     #[test]

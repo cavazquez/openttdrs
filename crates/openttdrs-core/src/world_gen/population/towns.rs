@@ -1,6 +1,5 @@
 //! Colocación de pueblos con calle y casas 1×1 (MVP de `GenerateTowns`).
 
-use crate::command::{Command, apply_command, command_would_fail};
 use crate::map::tree_tile_loop::clear_ground_type;
 use crate::map::{SLOPE_STEEP, TileCoord, TileKind, tile_slope_and_z};
 use crate::sav::house_spec_population;
@@ -16,6 +15,11 @@ use super::{
 /// Bits de carretera recta (eje X / eje Y).
 const ROAD_BITS_AXIS_X: u8 = 0x0A;
 const ROAD_BITS_AXIS_Y: u8 = 0x05;
+const ROAD_NW: u8 = 0x01;
+/// `m3` de una calle sin tranvía: owner de tram = `OWNER_TOWN` (none).
+const TOWN_ROAD_NO_TRAM_OWNER: u8 = 0xF0;
+/// `m8` conserva `INVALID_ROADTYPE` (63) para la capa tram ausente.
+const TOWN_ROAD_INVALID_TRAM_TYPE: u16 = 0x0FC0;
 
 /// `CreateRandomTown` prueba veinte ubicaciones antes de abandonar un nombre.
 const RANDOM_TOWN_ATTEMPTS: usize = 20;
@@ -30,6 +34,22 @@ const DEFAULT_LARGER_TOWNS_INTERVAL: u32 = 4;
 /// Último intento de `GenerateTowns` cuando no se pudo crear ninguno.
 const RANDOM_TOWN_FALLBACK_ATTEMPTS: usize = 10_000;
 const SPIRAL_DIRS: [(i32, i32); 4] = [(-1, 0), (0, 1), (1, 0), (0, -1)];
+/// Secuencia acumulativa de `_town_coord_mod` usada por `GrowTown`.
+const TOWN_GROWTH_COORD_MOD: [(i32, i32); 13] = [
+    (-1, 0),
+    (1, 1),
+    (1, -1),
+    (-1, -1),
+    (-1, 0),
+    (0, 2),
+    (2, 0),
+    (0, -2),
+    (-1, -1),
+    (-2, 2),
+    (2, 2),
+    (2, -2),
+    (0, 0),
+];
 /// Valor vanilla de `economy.initial_city_size` en una partida nueva.
 const DEFAULT_INITIAL_CITY_SIZE: u32 = 2;
 
@@ -44,6 +64,14 @@ struct StreetTownPlan {
     roads: Vec<TileCoord>,
     houses: Vec<TileCoord>,
     town_pos: TileCoord,
+    bootstrap_road: Option<BootstrapRoad>,
+}
+
+/// El primer bloque vial que `GrowTown` crea cuando el pueblo aún no tiene red.
+#[derive(Clone, Copy)]
+struct BootstrapRoad {
+    pos: TileCoord,
+    bits: u8,
 }
 
 /// Intenta colocar hasta `target` pueblos; devuelve cuántos se crearon.
@@ -157,12 +185,22 @@ fn build_selected_town_with_mvp_plan(
     };
     let half_len = i32::try_from(2 + ((name_seed >> 1) % 3)).unwrap_or(2);
     let south_row = (name_seed >> 3) % 3 != 0;
-    let plan = plan_street_town(center, axis, half_len, south_row, map_w, map_h)
+    let mut plan = plan_street_town(center, axis, half_len, south_row, map_w, map_h)
         .filter(|candidate| plan_fits_terrain(ctx, candidate))
         .or_else(|| compact_town_plan(ctx, center));
-    let Some(plan) = plan else {
+    let Some(mut plan) = plan.take() else {
         return false;
     };
+
+    // Primera iteración de `GrowTown`: todavía no hay calles, por lo que C++
+    // busca `_town_coord_mod`, limpia la primera tesela plana y recién ahí
+    // toma `GenRandomRoadBits`. Se ejecuta sólo después de aceptar el plan
+    // MVP; si éste aún no puede materializar un pueblo, no fingimos haber
+    // alcanzado la frontera nativa.
+    plan.bootstrap_road = initial_town_growth_bootstrap(&ctx.state.map, center, ctx.rng);
+    if !plan_fits_terrain(ctx, &plan) {
+        return false;
+    }
 
     let choices = procedural_house_choices();
     if choices.is_empty() {
@@ -207,6 +245,46 @@ fn initial_town_house_budget(rng: &mut crate::cargodist::parity::Randomizer, cit
     }
 }
 
+/// Primer camino de `GrowTown` cuando aún no hay una calle municipal.
+///
+/// La suma de offsets es intencional: `_town_coord_mod` se aplica después de
+/// cada comprobación, por lo que no es una lista de posiciones absolutas.
+fn initial_town_growth_bootstrap(
+    map: &crate::map::Map,
+    center: TileCoord,
+    rng: &mut crate::cargodist::parity::Randomizer,
+) -> Option<BootstrapRoad> {
+    let mut tile = center;
+    for &(dx, dy) in &TOWN_GROWTH_COORD_MOD {
+        if can_seed_initial_town_road(map, tile) {
+            return Some(BootstrapRoad {
+                pos: tile,
+                bits: random_town_road_bits(rng),
+            });
+        }
+        tile = TileCoord::new(tile.x + dx, tile.y + dy);
+    }
+    None
+}
+
+/// Predicado de la generación nueva: `CMD_LANDSCAPE_CLEAR` puede despejar
+/// clear/trees planos; agua y casas no llegan a `CMD_BUILD_ROAD`.
+fn can_seed_initial_town_road(map: &crate::map::Map, tile: TileCoord) -> bool {
+    matches!(map.get_kind(tile), Some(TileKind::Grass | TileKind::Forest))
+        && tile_slope_and_z(map, tile).is_some_and(|(slope, _)| slope == 0)
+}
+
+/// `GenRandomRoadBits`: dos direcciones distintas de la misma palabra RNG.
+fn random_town_road_bits(rng: &mut crate::cargodist::parity::Randomizer) -> u8 {
+    let random = rng.next();
+    let a = u8::try_from(random & 3).unwrap_or(0);
+    let mut b = u8::try_from((random >> 8) & 3).unwrap_or(0);
+    if a == b {
+        b ^= 2;
+    }
+    (ROAD_NW << a) | (ROAD_NW << b)
+}
+
 /// Fallback provisional para un sitio que `OpenTTD` aceptó pero cuya trama MVP
 /// recta no cabe en altura. El `DoCreateTown` real probará expansiones locales;
 /// mientras se porta, un tramo de una tesela mantiene el contrato de fundar al
@@ -239,6 +317,7 @@ fn compact_town_plan(ctx: &PopCtx<'_>, center: TileCoord) -> Option<StreetTownPl
                         roads: vec![road],
                         houses,
                         town_pos: center,
+                        bootstrap_road: None,
                     });
                 }
             }
@@ -552,6 +631,7 @@ fn plan_street_town(
         roads,
         houses,
         town_pos,
+        bootstrap_road: None,
     })
 }
 
@@ -586,14 +666,9 @@ fn plan_fits_terrain(ctx: &PopCtx<'_>, plan: &StreetTownPlan) -> bool {
     if !street_roads_are_flat_and_level(ctx.state, &plan.roads) {
         return false;
     }
-    let road_bits = match plan.axis {
-        StreetAxis::EastWest => ROAD_BITS_AXIS_X,
-        StreetAxis::NorthSouth => ROAD_BITS_AXIS_Y,
-    };
-    if plan
-        .roads
-        .iter()
-        .any(|&c| command_would_fail(ctx.state, &Command::SetRoadBits(c, road_bits)).is_some())
+    if let Some(bootstrap) = plan.bootstrap_road
+        && (in_preserve(ctx.preserve, bootstrap.pos.x, bootstrap.pos.y)
+            || !can_seed_initial_town_road(&ctx.state.map, bootstrap.pos))
     {
         return false;
     }
@@ -644,10 +719,16 @@ fn build_street_town(
     }
 
     for &c in &plan.roads {
-        if apply_command(ctx.state, &Command::SetRoadBits(c, road_bits)).is_err() {
+        if !write_generated_town_road(ctx.state, c, road_bits, town_id) {
             rollback_road_tiles(ctx.state, &plan.roads);
             return (0, 0);
         }
+    }
+    if let Some(bootstrap) = plan.bootstrap_road
+        && !write_generated_town_road(ctx.state, bootstrap.pos, bootstrap.bits, town_id)
+    {
+        rollback_road_tiles(ctx.state, &plan.roads);
+        return (0, 0);
     }
 
     let choices = procedural_house_choices();
@@ -682,6 +763,36 @@ fn rollback_road_tiles(state: &mut crate::game_state::GameState, roads: &[TileCo
             let _ = state.map.set_kind(c, TileKind::Grass);
         }
     }
+}
+
+/// Escribe `MakeRoadNormal` para una calle creada durante `GenerateTowns`.
+///
+/// Las rutas de comando interactivas usan la compañía activa. Durante la
+/// generación C++ cambia a `OWNER_TOWN`, fija el índice del pueblo y conserva
+/// el sentinel de tram ausente; usar esos bytes evita que el constructor MVP
+/// introduzca una compañía humana o una capa de tranvía falsa.
+fn write_generated_town_road(
+    state: &mut crate::game_state::GameState,
+    coord: TileCoord,
+    road_bits: u8,
+    town_id: u32,
+) -> bool {
+    let Some(mut tile) = state.map.get(coord) else {
+        return false;
+    };
+    let town = u16::try_from(town_id).unwrap_or(u16::MAX).to_le_bytes();
+    tile.kind = TileKind::Road;
+    tile.mapt = 0x20;
+    tile.m1 = crate::company::OWNER_TOWN_M1;
+    tile.m2 = town[0];
+    tile.m2_hi = town[1];
+    tile.m3 = TOWN_ROAD_NO_TRAM_OWNER;
+    tile.m3hi = 0;
+    tile.m5 = road_bits & 0x0F;
+    tile.m6 = 0;
+    tile.m7 = 0;
+    tile.m8 = TOWN_ROAD_INVALID_TRAM_TYPE;
+    state.map.set_tile(coord, tile).is_ok()
 }
 
 #[cfg(test)]
@@ -798,6 +909,44 @@ mod tests {
         };
         assert_eq!(initial_town_house_budget(&mut town_rng, false), 19);
         assert_eq!(town_rng.state, [2_271_986_047, 1_903_929_563]);
+    }
+
+    #[test]
+    fn first_growtown_bootstrap_replays_road_bits_and_rng_boundary() {
+        let state = clear_phase_state(1_330_935_378);
+        // Estado C++ al entrar al primer `GrowTown`, justo después de
+        // `TSZ_RANDOM` y el multiplicador de ciudad.
+        let mut rng = Randomizer {
+            state: [3_488_465_418, 1_441_958_355],
+        };
+        let road = initial_town_growth_bootstrap(&state.map, TileCoord::new(47, 23), &mut rng)
+            .expect("primer bloque vial");
+
+        // GDB en `GenRandomRoadBits`: Random() = 1509800000, a=b=0 y b^=2.
+        assert_eq!(road.pos, TileCoord::new(47, 23));
+        assert_eq!(road.bits, ROAD_BITS_AXIS_Y);
+        assert_eq!(rng.state, [679_301_066, 1_509_800_000]);
+    }
+
+    #[test]
+    fn generated_town_road_keeps_native_owner_and_absent_tram_bytes() {
+        let mut state = GameState::new(8, 8);
+        let coord = TileCoord::new(3, 4);
+        assert!(write_generated_town_road(
+            &mut state,
+            coord,
+            ROAD_BITS_AXIS_Y,
+            0x1234
+        ));
+        let road = state.map.get(coord).expect("road tile");
+        assert_eq!(road.kind, TileKind::Road);
+        assert_eq!(road.mapt, 0x20);
+        assert_eq!(road.m1, crate::company::OWNER_TOWN_M1);
+        assert_eq!([road.m2, road.m2_hi], 0x1234_u16.to_le_bytes());
+        assert_eq!(road.m3, TOWN_ROAD_NO_TRAM_OWNER);
+        assert_eq!(road.m3hi, 0);
+        assert_eq!(road.m5, ROAD_BITS_AXIS_Y);
+        assert_eq!(road.m8, TOWN_ROAD_INVALID_TRAM_TYPE);
     }
 
     #[test]

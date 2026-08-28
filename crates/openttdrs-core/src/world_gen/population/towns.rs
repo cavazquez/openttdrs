@@ -27,6 +27,10 @@ use super::{
 const ROAD_BITS_AXIS_X: u8 = 0x0A;
 const ROAD_BITS_AXIS_Y: u8 = 0x05;
 const ROAD_NW: u8 = 0x01;
+const ROAD_BITS_N: u8 = 0x09;
+const ROAD_BITS_E: u8 = 0x0C;
+const ROAD_BITS_S: u8 = 0x06;
+const ROAD_BITS_W: u8 = 0x03;
 /// `m3` de una calle sin tranvía: owner de tram = `OWNER_TOWN` (none).
 const TOWN_ROAD_NO_TRAM_OWNER: u8 = 0xF0;
 /// `m8` conserva `INVALID_ROADTYPE` (63) para la capa tram ausente.
@@ -341,6 +345,22 @@ fn add_town_diag(tile: TileCoord, dir: u8) -> TileCoord {
     TileCoord::new(tile.x + dx, tile.y + dy)
 }
 
+/// `GrowTownInTile` puede colocar una casa en la esquina interior de una
+/// curva. Los desplazamientos son `TileAddByDir`, no `DiagDirection`: una
+/// esquina usa ambos ejes del mapa isométrico.
+fn generated_town_corner_house_tile(tile: TileCoord, road_bits: u8) -> Option<TileCoord> {
+    let (dx, dy) = match road_bits {
+        // ROAD_N -> DIR_S, ROAD_S -> DIR_N.
+        ROAD_BITS_N => (1, 1),
+        ROAD_BITS_S => (-1, -1),
+        // ROAD_E -> DIR_W, ROAD_W -> DIR_E.
+        ROAD_BITS_E => (1, -1),
+        ROAD_BITS_W => (-1, 1),
+        _ => return None,
+    };
+    Some(TileCoord::new(tile.x + dx, tile.y + dy))
+}
+
 fn generated_town_road_bits(map: &crate::map::Map, tile: TileCoord) -> u8 {
     map.get(tile)
         .filter(|candidate| candidate.kind == TileKind::Road)
@@ -555,19 +575,37 @@ fn grow_generated_town_road_in_tile(
         return GeneratedRoadGrowthResult::SearchStopped;
     }
 
-    // La primera rama de `GrowTownInTile` sobre una carretera: el objetivo
-    // elegido ya forma parte del bloque, por lo que sólo se sigue caminando.
     let target_dir = random_town_diag_dir(rng);
     let target_bits = town_diag_dir_to_road_bits(target_dir);
-    if cur_rb & target_bits != 0 {
+    let (house_tile, road_target_dir) = if cur_rb & target_bits != 0 {
+        // En una curva, sólo el bit de `ROAD_X` que apunta a la esquina
+        // habilita la casa interior. Cualquier recta, cruce u otro lado de
+        // la curva conserva el `Continue` nativo sin sortear más RNG.
+        if cur_rb & ROAD_BITS_AXIS_X != target_bits {
+            return GeneratedRoadGrowthResult::Continue;
+        }
+        let Some(house_tile) = generated_town_corner_house_tile(tile, cur_rb) else {
+            return GeneratedRoadGrowthResult::Continue;
+        };
+        (house_tile, None)
+    } else {
+        (add_town_diag(tile, target_dir), Some(target_dir))
+    };
+
+    // `HasTileWaterGround` e `IsValidTile` preceden a la lotería de la casa.
+    // En particular, una esquina que cae en agua no consume el `Chance16`
+    // de `LevelTownLand`.
+    if map.get(house_tile).is_none() || map.get_kind(house_tile) == Some(TileKind::Water) {
         return GeneratedRoadGrowthResult::Continue;
     }
 
     // TL_ORIGINAL reserva la casa con probabilidad 6/10 cuando la carretera
-    // puede seguir, o siempre si `IsRoadAllowedHere` la rechaza.
-    let house_tile = add_town_diag(tile, target_dir);
-    let road_allowed = generated_town_road_allowed_here(map, town, house_tile, target_dir, rng);
-    let allow_house = !road_allowed || chance16(rng, 6, 10);
+    // puede seguir, o siempre si `IsRoadAllowedHere` la rechaza. La esquina
+    // de una curva no tiene target vial y mantiene `allow_house = true`.
+    let allow_house = road_target_dir.is_none_or(|road_target_dir| {
+        !generated_town_road_allowed_here(map, town, house_tile, road_target_dir, rng)
+            || chance16(rng, 6, 10)
+    });
     if allow_house {
         // La rama C++ no nivela ni llama `TryBuildTownHouse` sobre una casa
         // ya presente. En ese caso vuelve al caminador para elegir otro arco.
@@ -589,6 +627,9 @@ fn grow_generated_town_road_in_tile(
         {
             return GeneratedRoadGrowthResult::House(candidate.base);
         }
+        return GeneratedRoadGrowthResult::Continue;
+    }
+    if road_target_dir.is_none() {
         return GeneratedRoadGrowthResult::Continue;
     }
     if add_generated_town_road_bits_to_map(map, tile, target_bits, town.id) {
@@ -1500,6 +1541,32 @@ mod tests {
         assert_eq!(rng.state, [3_931_740_615, 3_932_304_260]);
     }
 
+    #[derive(Clone, Copy)]
+    struct ExpectedGeneratedHouse {
+        pos: TileCoord,
+        house_id: u16,
+        random_bits: u8,
+        num_houses: u16,
+        population: u32,
+        rng_state: [u32; 2],
+    }
+
+    fn assert_generated_house_at(
+        state: &GameState,
+        town: &Town,
+        rng: Randomizer,
+        expected: ExpectedGeneratedHouse,
+    ) {
+        let house = state.map.get(expected.pos).expect("generated house");
+        assert_eq!(house.kind, TileKind::House);
+        assert_eq!(house.m1, expected.random_bits);
+        assert_eq!(house.m3, 0x80);
+        assert_eq!(house.m8 & 0x0FFF, expected.house_id);
+        assert_eq!(town.num_houses, expected.num_houses);
+        assert_eq!(town.population, expected.population);
+        assert_eq!(rng.state, expected.rng_state);
+    }
+
     #[test]
     fn coastal_selector_replays_first_seed_foundation_and_rng_boundary() {
         let mut state = clear_phase_state(1_330_935_378);
@@ -1599,6 +1666,31 @@ mod tests {
         assert_eq!(road.pos, TileCoord::new(47, 23));
         assert_eq!(road.bits, ROAD_BITS_AXIS_Y);
         assert_eq!(rng.state, [679_301_066, 1_509_800_000]);
+    }
+
+    #[test]
+    fn corner_house_offsets_follow_native_cardinal_directions() {
+        let tile = TileCoord::new(10, 10);
+        assert_eq!(
+            generated_town_corner_house_tile(tile, ROAD_BITS_N),
+            Some(TileCoord::new(11, 11))
+        );
+        assert_eq!(
+            generated_town_corner_house_tile(tile, ROAD_BITS_E),
+            Some(TileCoord::new(11, 9))
+        );
+        assert_eq!(
+            generated_town_corner_house_tile(tile, ROAD_BITS_S),
+            Some(TileCoord::new(9, 9))
+        );
+        assert_eq!(
+            generated_town_corner_house_tile(tile, ROAD_BITS_W),
+            Some(TileCoord::new(9, 11))
+        );
+        assert_eq!(
+            generated_town_corner_house_tile(tile, ROAD_BITS_AXIS_X),
+            None
+        );
     }
 
     #[test]
@@ -1710,6 +1802,9 @@ mod tests {
         assert_first_generated_house(&state, &town, rng);
     }
 
+    // El oráculo es una secuencia única: dividirla ocultaría una frontera RNG
+    // equivocada entre llamadas consecutivas de `GrowTown`.
+    #[allow(clippy::too_many_lines)]
     #[test]
     fn global_walk_replays_first_post_house_branches() {
         let mut state = clear_phase_state(1_330_935_378);
@@ -1818,6 +1913,194 @@ mod tests {
         assert_eq!(town.num_houses, 25);
         assert_eq!(town.population, 123);
         assert_eq!(rng.state, [315_420_011, 1_693_018_963]);
+
+        // GDB: llamadas 17–29. Este tramo alterna casas, dos retornos sin
+        // escritura y extensiones viales; conserva el stream tras RMAP-042.
+        assert_eq!(
+            grow_first_fixture_town(&mut state, &mut town, &mut rng),
+            Some(TileCoord::new(48, 21))
+        );
+        assert_generated_house_at(
+            &state,
+            &town,
+            rng,
+            ExpectedGeneratedHouse {
+                pos: TileCoord::new(48, 21),
+                house_id: 39,
+                random_bits: 178,
+                num_houses: 26,
+                population: 158,
+                rng_state: [1_927_507_994, 3_926_082_081],
+            },
+        );
+
+        assert_eq!(
+            grow_first_fixture_town(&mut state, &mut town, &mut rng),
+            Some(TileCoord::new(48, 24))
+        );
+        assert_generated_house_at(
+            &state,
+            &town,
+            rng,
+            ExpectedGeneratedHouse {
+                pos: TileCoord::new(48, 24),
+                house_id: 39,
+                random_bits: 153,
+                num_houses: 27,
+                population: 193,
+                rng_state: [2_792_462_561, 650_015_413],
+            },
+        );
+
+        assert_eq!(
+            grow_first_fixture_town(&mut state, &mut town, &mut rng),
+            Some(TileCoord::new(46, 27))
+        );
+        assert_generated_house_at(
+            &state,
+            &town,
+            rng,
+            ExpectedGeneratedHouse {
+                pos: TileCoord::new(46, 27),
+                house_id: 6,
+                random_bits: 151,
+                num_houses: 28,
+                population: 223,
+                rng_state: [1_301_758_313, 3_503_407_212],
+            },
+        );
+
+        assert_eq!(
+            grow_first_fixture_town(&mut state, &mut town, &mut rng),
+            Some(TileCoord::new(47, 20))
+        );
+        assert_eq!(
+            state.map.get(TileCoord::new(47, 20)).expect("road n=20").m5,
+            ROAD_BITS_AXIS_Y
+        );
+        assert_eq!(rng.state, [473_131_335, 1_291_890_479]);
+
+        assert_eq!(
+            grow_first_fixture_town(&mut state, &mut town, &mut rng),
+            Some(TileCoord::new(48, 25))
+        );
+        assert_generated_house_at(
+            &state,
+            &town,
+            rng,
+            ExpectedGeneratedHouse {
+                pos: TileCoord::new(48, 25),
+                house_id: 27,
+                random_bits: 77,
+                num_houses: 29,
+                population: 323,
+                rng_state: [3_685_405_240, 1_435_929_572],
+            },
+        );
+
+        assert_eq!(
+            grow_first_fixture_town(&mut state, &mut town, &mut rng),
+            Some(TileCoord::new(49, 22))
+        );
+        assert_generated_house_at(
+            &state,
+            &town,
+            rng,
+            ExpectedGeneratedHouse {
+                pos: TileCoord::new(49, 22),
+                house_id: 29,
+                random_bits: 22,
+                num_houses: 30,
+                population: 423,
+                rng_state: [2_826_272_915, 420_711_512],
+            },
+        );
+
+        assert_eq!(
+            grow_first_fixture_town(&mut state, &mut town, &mut rng),
+            None
+        );
+        assert_eq!(rng.state, [1_638_729_553, 2_609_795_962]);
+
+        assert_eq!(
+            grow_first_fixture_town(&mut state, &mut town, &mut rng),
+            Some(TileCoord::new(50, 23))
+        );
+        assert_eq!(
+            state.map.get(TileCoord::new(50, 23)).expect("road n=24").m5,
+            0x0C
+        );
+        assert_eq!(rng.state, [1_041_915_711, 1_649_600_337]);
+
+        assert_eq!(
+            grow_first_fixture_town(&mut state, &mut town, &mut rng),
+            Some(TileCoord::new(48, 27))
+        );
+        assert_generated_house_at(
+            &state,
+            &town,
+            rng,
+            ExpectedGeneratedHouse {
+                pos: TileCoord::new(48, 27),
+                house_id: 3,
+                random_bits: 55,
+                num_houses: 31,
+                population: 428,
+                rng_state: [3_882_883_480, 2_419_258_248],
+            },
+        );
+
+        assert_eq!(
+            grow_first_fixture_town(&mut state, &mut town, &mut rng),
+            Some(TileCoord::new(51, 22))
+        );
+        assert_generated_house_at(
+            &state,
+            &town,
+            rng,
+            ExpectedGeneratedHouse {
+                pos: TileCoord::new(51, 22),
+                house_id: 25,
+                random_bits: 201,
+                num_houses: 32,
+                population: 440,
+                rng_state: [1_839_330_471, 4_174_771_340],
+            },
+        );
+
+        assert_eq!(
+            grow_first_fixture_town(&mut state, &mut town, &mut rng),
+            None
+        );
+        assert_eq!(rng.state, [4_265_538_174, 2_120_585_280]);
+
+        assert_eq!(
+            grow_first_fixture_town(&mut state, &mut town, &mut rng),
+            Some(TileCoord::new(46, 25))
+        );
+        assert_generated_house_at(
+            &state,
+            &town,
+            rng,
+            ExpectedGeneratedHouse {
+                pos: TileCoord::new(46, 25),
+                house_id: 6,
+                random_bits: 167,
+                num_houses: 33,
+                population: 470,
+                rng_state: [459_825_490, 3_339_473_443],
+            },
+        );
+
+        assert_eq!(
+            grow_first_fixture_town(&mut state, &mut town, &mut rng),
+            Some(TileCoord::new(47, 28))
+        );
+        assert_eq!(
+            state.map.get(TileCoord::new(47, 28)).expect("road n=29").m5,
+            0x09
+        );
+        assert_eq!(rng.state, [2_375_691_898, 265_796_979]);
     }
 
     #[test]

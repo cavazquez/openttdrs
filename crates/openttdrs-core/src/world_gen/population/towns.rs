@@ -30,6 +30,8 @@ const DEFAULT_LARGER_TOWNS_INTERVAL: u32 = 4;
 /// Último intento de `GenerateTowns` cuando no se pudo crear ninguno.
 const RANDOM_TOWN_FALLBACK_ATTEMPTS: usize = 10_000;
 const SPIRAL_DIRS: [(i32, i32); 4] = [(-1, 0), (0, 1), (1, 0), (0, -1)];
+/// Valor vanilla de `economy.initial_city_size` en una partida nueva.
+const DEFAULT_INITIAL_CITY_SIZE: u32 = 2;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum StreetAxis {
@@ -59,7 +61,7 @@ pub(super) fn place_towns(
     let city_random_offset = ctx.rng.next() % DEFAULT_LARGER_TOWNS_INTERVAL;
 
     for _ in 0..target {
-        let _is_city = (city_random_offset
+        let is_city = (city_random_offset
             .saturating_add(u32::try_from(town_centers.len().saturating_sub(before)).unwrap_or(0)))
             % DEFAULT_LARGER_TOWNS_INTERVAL
             == 0;
@@ -71,6 +73,7 @@ pub(super) fn place_towns(
             ctx,
             town_centers,
             name_seed,
+            is_city,
             map_w,
             map_h,
             RANDOM_TOWN_ATTEMPTS,
@@ -86,6 +89,7 @@ pub(super) fn place_towns(
             ctx,
             town_centers,
             name_seed,
+            true,
             map_w,
             map_h,
             RANDOM_TOWN_FALLBACK_ATTEMPTS,
@@ -101,6 +105,7 @@ fn try_build_random_town_with_mvp_plan(
     ctx: &mut PopCtx<'_>,
     town_centers: &mut Vec<TileCoord>,
     name_seed: u32,
+    is_city: bool,
     map_w: i32,
     map_h: i32,
     attempts: usize,
@@ -109,7 +114,15 @@ fn try_build_random_town_with_mvp_plan(
         let Some(center) = next_random_town_site(ctx, town_centers) else {
             continue;
         };
-        if build_selected_town_with_mvp_plan(ctx, town_centers, center, name_seed, map_w, map_h) {
+        if build_selected_town_with_mvp_plan(
+            ctx,
+            town_centers,
+            center,
+            name_seed,
+            is_city,
+            map_w,
+            map_h,
+        ) {
             return true;
         }
     }
@@ -126,9 +139,15 @@ fn build_selected_town_with_mvp_plan(
     town_centers: &mut Vec<TileCoord>,
     center: TileCoord,
     name_seed: u32,
+    is_city: bool,
     map_w: i32,
     map_h: i32,
 ) -> bool {
+    // `DoCreateTown` toma este sorteo inmediatamente después de seleccionar
+    // la fundación, incluso si su crecimiento posterior no llega a poblarla.
+    // El contador temporal influye en su radio durante `GrowTown`; la trama
+    // MVP aún no modela ese radio, pero debe conservar la frontera RNG.
+    let _temporary_house_budget = initial_town_house_budget(ctx.rng, is_city);
     // El plan MVP todavía no es `DoCreateTown`; se deriva de la parte de
     // nombre ya consumida y conserva el centro exacto seleccionado.
     let axis = if name_seed & 1 == 0 {
@@ -176,6 +195,16 @@ fn build_selected_town_with_mvp_plan(
     ctx.state.towns.push(town);
     town_centers.push(plan.town_pos);
     true
+}
+
+/// `TSZ_RANDOM` de `DoCreateTown`, incluido el multiplicador de ciudad.
+fn initial_town_house_budget(rng: &mut crate::cargodist::parity::Randomizer, city: bool) -> u32 {
+    let houses = (rng.next() & 0x0F).saturating_add(8);
+    if city {
+        houses.saturating_mul(DEFAULT_INITIAL_CITY_SIZE)
+    } else {
+        houses
+    }
 }
 
 /// Fallback provisional para un sitio que `OpenTTD` aceptó pero cuya trama MVP
@@ -752,6 +781,23 @@ mod tests {
             TileCoord::new(32, 32),
             &[TileCoord::new(52, 32)]
         ));
+    }
+
+    #[test]
+    fn random_town_size_replays_city_multiplier_and_rng_boundary() {
+        // Primera entrada a `DoCreateTown` de la seed 1330935378: C++ toma
+        // 11 y, al ser ciudad, aplica `initial_city_size = 2`.
+        let mut city_rng = Randomizer {
+            state: [2_945_732_258, 1_049_486_831],
+        };
+        assert_eq!(initial_town_house_budget(&mut city_rng, true), 22);
+        assert_eq!(city_rng.state, [3_488_465_418, 1_441_958_355]);
+
+        let mut town_rng = Randomizer {
+            state: [2_346_534_627, 3_574_143_874],
+        };
+        assert_eq!(initial_town_house_budget(&mut town_rng, false), 19);
+        assert_eq!(town_rng.state, [2_271_986_047, 1_903_929_563]);
     }
 
     #[test]

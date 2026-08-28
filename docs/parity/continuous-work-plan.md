@@ -35,10 +35,11 @@ y se conserva la evidencia headless, sin convertirla en una afirmación visual.
 | 6 | Movimiento y economía diferencial (#330) | Abierto | Oráculos externos para carretera (tráfico/colisiones/dirección), rail (PBS/YAPF/presignals/consist) y aire/mar, incluyendo casos límite. El perfilador de `Kale_TitleGame.sav` ya no aborta cuando un callback devuelve un pago negativo: los contadores `u64` de estación/empresa/estadística saturan ese ajuste a cero y el crédito firmado conserva la penalización; quedan pendientes los oráculos diferenciales y sus casos límite. |
 | 7 | Idiomas y settings (#331) | Abierto | Catálogo de idiomas, locale, settings y textos guardados se cargan y se comparan con OpenTTD sin colisiones ECS ni regresiones de UI. |
 
-Última etapa RMAP-042 (cerrada): la llamada 15 de `GrowTown` valida la tesela
-de entrada antes de sortear una curva; su retorno sin construcción deja el RNG
-en `[15256948,1831888115]`. Es progreso del walker aislado, no una mejora de
-la métrica global mientras RMAP-030 no sustituya el constructor MVP.
+Última etapa RMAP-043 (cerrada): tras el retorno de RMAP-042, la llamada 16
+de `GrowTown` vuelve a recorrer la red y materializa HouseID 24 en `(46,26)`;
+la frontera queda `[315420011,1693018963]`. Es progreso del walker aislado,
+no una mejora de la métrica global mientras RMAP-030 no sustituya el
+constructor MVP.
 
 > Actualización SAV: `OBJS` ya se modela en filas base y sólo se reconstruye
 > después de una mutación. `OBID` fusiona los tres campos conocidos sobre la

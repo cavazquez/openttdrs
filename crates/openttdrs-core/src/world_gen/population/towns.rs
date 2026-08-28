@@ -1803,6 +1803,21 @@ mod tests {
             None
         );
         assert_eq!(rng.state, [15_256_948, 1_831_888_115]);
+
+        // GDB: llamada 16. Tras el retorno sin escritura vuelve a recorrer
+        // la rama vial y materializa otra casa vanilla 1×1.
+        assert_eq!(
+            grow_first_fixture_town(&mut state, &mut town, &mut rng),
+            Some(TileCoord::new(46, 26))
+        );
+        let house = state.map.get(TileCoord::new(46, 26)).expect("house n=16");
+        assert_eq!(house.kind, TileKind::House);
+        assert_eq!(house.m1, 56);
+        assert_eq!(house.m3, 0x80);
+        assert_eq!(house.m8 & 0x0FFF, 24);
+        assert_eq!(town.num_houses, 25);
+        assert_eq!(town.population, 123);
+        assert_eq!(rng.state, [315_420_011, 1_693_018_963]);
     }
 
     #[test]

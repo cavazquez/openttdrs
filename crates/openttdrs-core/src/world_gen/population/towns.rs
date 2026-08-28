@@ -475,6 +475,43 @@ fn generated_town_road_allowed_here(
     false
 }
 
+/// Subconjunto ejecutable de `LevelTownLand` para la fundación de un pueblo.
+///
+/// La ruta nativa intenta primero elevar las esquinas bajas de la tesela para
+/// dejarla plana (`TerraformTownTile(..., true)`). En una tesela de terreno
+/// recién generado sin agua ni casas esto equivale a llevar sus cuatro
+/// vértices a la altura mayor. Mantener la mutación, y no sólo el sorteo que
+/// la decide, es importante: la comprobación vial posterior consulta la nueva
+/// pendiente de la misma tesela.
+fn level_generated_town_land(map: &mut crate::map::Map, tile: TileCoord) -> bool {
+    let corners = [
+        tile,
+        TileCoord::new(tile.x + 1, tile.y),
+        TileCoord::new(tile.x, tile.y + 1),
+        TileCoord::new(tile.x + 1, tile.y + 1),
+    ];
+    let mut highest = 0_u8;
+    for corner in corners {
+        let Some(current) = map.get(corner) else {
+            return false;
+        };
+        if matches!(
+            current.kind,
+            TileKind::House | TileKind::Water | TileKind::Void
+        ) {
+            return false;
+        }
+        highest = highest.max(current.height);
+    }
+
+    for corner in corners {
+        if map.set_height(corner, highest).is_err() {
+            return false;
+        }
+    }
+    true
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum GeneratedRoadGrowthResult {
     Road(TileCoord),
@@ -517,11 +554,12 @@ fn grow_generated_town_road_in_tile(
         }
 
         // A diferencia del bootstrap, `GrowTownInTile` puede nivelar una
-        // pendiente antes de poner carretera. El nivelado físico completo se
-        // conecta con la ruta de terraformación al ampliar RMAP-030; aceptar
-        // aquí la tesela clear conserva ya la decisión y el stream de la rama
-        // que OpenTTD logra transformar antes de `CMD_BUILD_ROAD`.
-        let _ = chance16(rng, 1, 6);
+        // pendiente antes de poner carretera. En tierra recién generada la
+        // primera alternativa nativa (elevar las esquinas bajas) es
+        // suficiente y deja la misma pendiente que verá `IsRoadAllowedHere`.
+        if chance16(rng, 1, 6) {
+            let _ = level_generated_town_land(map, tile);
+        }
         // OpenTTD valida primero la tesela de entrada. Si no admite la vía,
         // no sortea ni curva ni continuación: ese retorno temprano es una
         // frontera RNG observable aun cuando no se escribe ninguna tesela.
@@ -613,9 +651,12 @@ fn grow_generated_town_road_in_tile(
             return GeneratedRoadGrowthResult::Continue;
         }
 
-        // `LevelTownLand` se decide antes del pool, incluso cuando la
-        // nivelación no llegue a cambiar este mapa de trabajo todavía.
-        let _ = chance16(rng, 1, 6);
+        // `LevelTownLand` se decide antes del pool. La mutación debe ocurrir
+        // antes de filtrar la casa porque puede cambiar tanto su pendiente
+        // como la de los vecinos que recorran las llamadas siguientes.
+        if chance16(rng, 1, 6) {
+            let _ = level_generated_town_land(map, house_tile);
+        }
         if let Some(candidate) = choose_generated_town_house_candidate(
             town,
             map,
@@ -1551,6 +1592,21 @@ mod tests {
         rng_state: [u32; 2],
     }
 
+    /// Variante de la aserción de casa que conserva los cinco bits de obra
+    /// (`MAP5`) y el bit de terminado (`MAP3`). La generación vanilla puede
+    /// dejar edificios inconclusos aun cuando se esté creando el mundo.
+    #[derive(Clone, Copy)]
+    struct ExpectedGeneratedHouseUnderConstruction {
+        pos: TileCoord,
+        house_id: u16,
+        random_bits: u8,
+        construction_counter: u8,
+        construction_stage: u8,
+        num_houses: u16,
+        population: u32,
+        rng_state: [u32; 2],
+    }
+
     fn assert_generated_house_at(
         state: &GameState,
         town: &Town,
@@ -1561,6 +1617,24 @@ mod tests {
         assert_eq!(house.kind, TileKind::House);
         assert_eq!(house.m1, expected.random_bits);
         assert_eq!(house.m3, 0x80);
+        assert_eq!(house.m8 & 0x0FFF, expected.house_id);
+        assert_eq!(town.num_houses, expected.num_houses);
+        assert_eq!(town.population, expected.population);
+        assert_eq!(rng.state, expected.rng_state);
+    }
+
+    fn assert_generated_house_under_construction_at(
+        state: &GameState,
+        town: &Town,
+        rng: Randomizer,
+        expected: ExpectedGeneratedHouseUnderConstruction,
+    ) {
+        let house = state.map.get(expected.pos).expect("generated house");
+        assert_eq!(house.kind, TileKind::House);
+        assert_eq!(house.m1, expected.random_bits);
+        assert_eq!(house.m3 & 0x80, 0);
+        assert_eq!(house.m5 & 0x07, expected.construction_counter);
+        assert_eq!((house.m5 >> 3) & 0x03, expected.construction_stage);
         assert_eq!(house.m8 & 0x0FFF, expected.house_id);
         assert_eq!(town.num_houses, expected.num_houses);
         assert_eq!(town.population, expected.population);
@@ -1585,6 +1659,19 @@ mod tests {
             Some(expected.pos)
         );
         assert_generated_house_at(state, town, *rng, expected);
+    }
+
+    fn grow_and_assert_generated_house_under_construction(
+        state: &mut GameState,
+        town: &mut Town,
+        rng: &mut Randomizer,
+        expected: ExpectedGeneratedHouseUnderConstruction,
+    ) {
+        assert_eq!(
+            grow_first_fixture_town(state, town, rng),
+            Some(expected.pos)
+        );
+        assert_generated_house_under_construction_at(state, town, *rng, expected);
     }
 
     fn grow_and_assert_generated_road(
@@ -2302,6 +2389,165 @@ mod tests {
                 population: 875,
                 rng_state: [2_310_750_700, 2_493_436_935],
             },
+        );
+
+        // GDB: llamadas 45–60. Este tramo incluye tanto calles que se
+        // superponen a una vía existente como las dos obras no terminadas que
+        // `BuildTownHouse` sortea durante GenerateWorld. Mantenerlas en la
+        // misma secuencia protege cada frontera RNG entre caminos y casas.
+        grow_and_assert_no_construction(
+            &mut state,
+            &mut town,
+            &mut rng,
+            [826_450_367, 3_724_833_213],
+        );
+        grow_and_assert_generated_road(
+            &mut state,
+            &mut town,
+            &mut rng,
+            ExpectedGeneratedRoad {
+                pos: TileCoord::new(47, 18),
+                bits: ROAD_BITS_AXIS_Y,
+                rng_state: [2_261_710_564, 3_092_690_480],
+            },
+        );
+        grow_and_assert_no_construction(
+            &mut state,
+            &mut town,
+            &mut rng,
+            [965_030_029, 3_111_770_699],
+        );
+        grow_and_assert_generated_house(
+            &mut state,
+            &mut town,
+            &mut rng,
+            ExpectedGeneratedHouse {
+                pos: TileCoord::new(46, 18),
+                house_id: 25,
+                random_bits: 77,
+                num_houses: 40,
+                population: 887,
+                rng_state: [4_073_696_506, 3_390_972_652],
+            },
+        );
+        grow_and_assert_no_construction(
+            &mut state,
+            &mut town,
+            &mut rng,
+            [1_863_027_217, 1_439_928_571],
+        );
+        grow_and_assert_generated_house_under_construction(
+            &mut state,
+            &mut town,
+            &mut rng,
+            ExpectedGeneratedHouseUnderConstruction {
+                pos: TileCoord::new(48, 18),
+                house_id: 25,
+                random_bits: 212,
+                construction_counter: 2,
+                construction_stage: 0,
+                num_houses: 41,
+                population: 887,
+                rng_state: [823_602_116, 1_211_042_935],
+            },
+        );
+        grow_and_assert_no_construction(
+            &mut state,
+            &mut town,
+            &mut rng,
+            [1_350_853_069, 2_167_207_462],
+        );
+        grow_and_assert_generated_road(
+            &mut state,
+            &mut town,
+            &mut rng,
+            ExpectedGeneratedRoad {
+                pos: TileCoord::new(47, 20),
+                bits: 0x0D,
+                rng_state: [200_532_372, 477_415_756],
+            },
+        );
+        grow_and_assert_generated_house(
+            &mut state,
+            &mut town,
+            &mut rng,
+            ExpectedGeneratedHouse {
+                pos: TileCoord::new(48, 29),
+                house_id: 24,
+                random_bits: 42,
+                num_houses: 42,
+                population: 902,
+                rng_state: [3_324_607_089, 3_545_840_365],
+            },
+        );
+        grow_and_assert_no_construction(
+            &mut state,
+            &mut town,
+            &mut rng,
+            [1_270_905_269, 1_060_294_968],
+        );
+        grow_and_assert_generated_house(
+            &mut state,
+            &mut town,
+            &mut rng,
+            ExpectedGeneratedHouse {
+                pos: TileCoord::new(51, 24),
+                house_id: 25,
+                random_bits: 174,
+                num_houses: 43,
+                population: 914,
+                rng_state: [3_800_550_565, 4_003_912_885],
+            },
+        );
+        grow_and_assert_generated_road(
+            &mut state,
+            &mut town,
+            &mut rng,
+            ExpectedGeneratedRoad {
+                pos: TileCoord::new(49, 26),
+                bits: 0x0A,
+                rng_state: [2_039_029_954, 3_340_657_089],
+            },
+        );
+        grow_and_assert_generated_house_under_construction(
+            &mut state,
+            &mut town,
+            &mut rng,
+            ExpectedGeneratedHouseUnderConstruction {
+                pos: TileCoord::new(47, 29),
+                house_id: 6,
+                random_bits: 248,
+                construction_counter: 2,
+                construction_stage: 2,
+                num_houses: 44,
+                population: 914,
+                rng_state: [1_430_491_786, 1_296_178_683],
+            },
+        );
+        grow_and_assert_generated_house(
+            &mut state,
+            &mut town,
+            &mut rng,
+            ExpectedGeneratedHouse {
+                pos: TileCoord::new(49, 25),
+                house_id: 16,
+                random_bits: 111,
+                num_houses: 45,
+                population: 1_009,
+                rng_state: [1_495_887_549, 2_084_743_055],
+            },
+        );
+        grow_and_assert_no_construction(
+            &mut state,
+            &mut town,
+            &mut rng,
+            [1_814_238_036, 2_373_812_800],
+        );
+        grow_and_assert_no_construction(
+            &mut state,
+            &mut town,
+            &mut rng,
+            [1_638_330_032, 3_483_907_467],
         );
     }
 

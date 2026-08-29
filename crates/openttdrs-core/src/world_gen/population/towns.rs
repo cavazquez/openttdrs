@@ -888,10 +888,10 @@ fn generated_town_bridge_line(
 
 /// Parte sin RNG de `CMD_BUILD_BRIDGE` que necesita el generador de pueblos.
 ///
-/// El subcaso se limita deliberadamente a rampas planas sobre un tramo de
-/// río/canal. Es el camino que usa `GrowTownWithBridge` en la cohorte vanilla
-/// de mapas aleatorios; las rampas inclinadas, vías y calles unidireccionales
-/// se mantienen en RMAP-030 para no inventar resultados de `CheckBridgeSlope`.
+/// El subcaso se limita deliberadamente a una rampa inicial plana sobre un
+/// tramo de río/canal. `CMD_BUILD_BRIDGE` permite que la rampa de llegada sea
+/// inclinada; vías, calles unidireccionales y otras geometrías siguen en
+/// RMAP-030 para no inventar resultados de `CheckBridgeSlope`.
 /// Si esta comprobación falla después de que `GrowTownWithBridge` ya pasó sus
 /// gates, el caller conserva los 23 sorteos de tipo que hace el comando C++.
 fn generated_town_flat_bridge_command_supported(map: &crate::map::Map, line: &[TileCoord]) -> bool {
@@ -913,12 +913,14 @@ fn generated_town_flat_bridge_command_supported(map: &crate::map::Map, line: &[T
     {
         return false;
     }
-    let (Some((start_slope, start_z)), Some((end_slope, end_z))) =
-        (tile_slope_and_z(map, start), tile_slope_and_z(map, end))
-    else {
+    let Some((start_slope, start_z)) = tile_slope_and_z(map, start) else {
         return false;
     };
-    if start_slope != 0 || end_slope != 0 || start_z != end_z {
+    // `CMD_BUILD_BRIDGE` acepta la rampa de llegada en una pendiente. El
+    // extremo de partida de esta rama de `GrowTownWithBridge` sí debe ser
+    // plano; exigir el mismo nivel/plano también en la otra orilla descartaba
+    // puentes municipales válidos sobre un río de una tesela.
+    if start_slope != 0 {
         return false;
     }
 
@@ -3566,6 +3568,59 @@ mod tests {
             ROAD_BITS_AXIS_Y
         );
         assert!(generated_can_follow_town_road(&state.map, source, 3));
+    }
+
+    #[test]
+    fn flat_town_bridge_accepts_a_sloped_landing_ramp() {
+        // RMAP-082, seed 1330935380: `GrowTownWithBridge` llega desde el
+        // este, cruza un único río y construye la rampa opuesta sobre una
+        // pendiente N. El preflight anterior exigía ambos extremos planos,
+        // rechazaba el comando válido y agotaba los 23 sorteos de puente.
+        let mut state = GameState::new(10, 10);
+        let source = TileCoord::new(6, 4);
+        let start = TileCoord::new(5, 4);
+        let middle = TileCoord::new(4, 4);
+        let end = TileCoord::new(3, 4);
+        assert!(write_generated_town_road(
+            &mut state,
+            source,
+            town_diag_dir_to_road_bits(0),
+            0,
+        ));
+        crate::map::make_water_tile(&mut state.map, middle, crate::map::WaterClass::River)
+            .expect("river span");
+        state
+            .map
+            .set_height(end, 2)
+            .expect("sloped landing north corner");
+        assert_eq!(tile_slope_and_z(&state.map, start), Some((0, 1)));
+        assert_eq!(tile_slope_and_z(&state.map, end), Some((SLOPE_CORNER_N, 1)));
+
+        let line = [start, middle, end];
+        assert!(generated_town_flat_bridge_command_supported(
+            &state.map, &line
+        ));
+
+        let context = GeneratedTownGrowthContext {
+            climate: Climate::Temperate,
+            calendar_year: 1950,
+            bridge_spec_catalog: state.bridge_spec_catalog.clone(),
+        };
+        let mut rng = Randomizer {
+            state: [653_263_232, 3_923_936_600],
+        };
+        assert!(try_grow_generated_town_flat_bridge(
+            &mut state.map,
+            start,
+            Some(0),
+            &context,
+            &mut rng,
+        ));
+        // El primer tipo sorteado es madera, igual que en el comando nativo.
+        assert_eq!(rng.state, [1_994_895_143, 81_657_903]);
+        assert_eq!(state.map.get(start).expect("start ramp").m5, 0x84);
+        assert_eq!(state.map.get(end).expect("sloped end ramp").m5, 0x86);
+        assert_eq!(tile_slope_and_z(&state.map, end), Some((SLOPE_CORNER_N, 1)));
     }
 
     #[test]

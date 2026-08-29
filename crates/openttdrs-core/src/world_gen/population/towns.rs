@@ -24,9 +24,11 @@ use super::{PopCtx, in_preserve};
 
 /// Bits de carretera recta (eje X / eje Y).
 const ROAD_BITS_AXIS_X: u8 = 0x0A;
-#[cfg(test)]
 const ROAD_BITS_AXIS_Y: u8 = 0x05;
 const ROAD_NW: u8 = 0x01;
+const ROAD_SW: u8 = 0x02;
+const ROAD_SE: u8 = 0x04;
+const ROAD_NE: u8 = 0x08;
 const ROAD_BITS_N: u8 = 0x09;
 const ROAD_BITS_E: u8 = 0x0C;
 const ROAD_BITS_S: u8 = 0x06;
@@ -35,6 +37,47 @@ const ROAD_BITS_W: u8 = 0x03;
 const TOWN_ROAD_NO_TRAM_OWNER: u8 = 0xF0;
 /// `m8` conserva `INVALID_ROADTYPE` (63) para la capa tram ausente.
 const TOWN_ROAD_INVALID_TRAM_TYPE: u16 = 0x0FC0;
+
+/// `CheckRoadSlope` usa estas máscaras antes de materializar una carretera.
+/// El primer grupo expresa qué bits no se pueden mezclar en una fundación
+/// nivelada; el segundo deja únicamente los ejes rectos que caben al completar
+/// una semicarretera cuesta arriba. Se mantienen como bytes porque `RoadBits`
+/// también se guarda así en `m5`.
+const GENERATED_INVALID_ROAD_BITS_ON_LEVELLED_SLOPE: [u8; 15] = [
+    0,
+    ROAD_NE | ROAD_SE,
+    ROAD_NE | ROAD_NW,
+    ROAD_NE,
+    ROAD_NW | ROAD_SW,
+    0,
+    ROAD_NW,
+    0,
+    ROAD_SE | ROAD_SW,
+    ROAD_SE,
+    0,
+    0,
+    ROAD_SW,
+    0,
+    0,
+];
+
+const GENERATED_INVALID_ROAD_BITS_ON_STRAIGHT_SLOPE: [u8; 15] = [
+    0,
+    0,
+    0,
+    ROAD_BITS_AXIS_Y,
+    0,
+    0x0F,
+    ROAD_BITS_AXIS_X,
+    0x0F,
+    0,
+    ROAD_BITS_AXIS_X,
+    0x0F,
+    0x0F,
+    ROAD_BITS_AXIS_Y,
+    0x0F,
+    0x0F,
+];
 
 /// `CreateRandomTown` prueba veinte ubicaciones antes de abandonar un nombre.
 const RANDOM_TOWN_ATTEMPTS: usize = 20;
@@ -1364,6 +1407,76 @@ fn is_water_ground(map: &crate::map::Map, tile: TileCoord) -> bool {
     map.get(tile).is_some_and(has_tile_water_ground)
 }
 
+/// Espejo de `MirrorRoadBits`: una semicarretera cuesta arriba se completa
+/// sobre el eje opuesto antes de que `CMD_BUILD_ROAD` la escriba.
+const fn mirror_generated_town_road_bits(bits: u8) -> u8 {
+    ((bits & 0x03) << 2) | ((bits & 0x0C) >> 2)
+}
+
+const fn generated_town_road_bits_are_straight(bits: u8) -> bool {
+    matches!(bits, ROAD_BITS_AXIS_X | ROAD_BITS_AXIS_Y)
+}
+
+/// Pendiente que consulta `CheckRoadSlope` para un comando de carretera.
+///
+/// Una pendiente empinada se reduce a su esquina más alta antes de indexar
+/// las tablas nativas. `tile_slope_and_z` conserva el bit `SLOPE_STEEP`, pero
+/// las alturas de las cuatro esquinas permiten recuperar sin ambigüedad la
+/// esquina usada por `SlopeWithOneCornerRaised(GetHighestSlopeCorner(...))`.
+fn generated_town_road_command_slope(map: &crate::map::Map, tile: TileCoord) -> Option<u8> {
+    let (slope, _) = tile_slope_and_z(map, tile)?;
+    if slope & SLOPE_STEEP == 0 {
+        return Some(slope);
+    }
+
+    let corners = [
+        (SLOPE_CORNER_N, tile),
+        (SLOPE_CORNER_W, TileCoord::new(tile.x + 1, tile.y)),
+        (SLOPE_CORNER_E, TileCoord::new(tile.x, tile.y + 1)),
+        (SLOPE_CORNER_S, TileCoord::new(tile.x + 1, tile.y + 1)),
+    ];
+    corners
+        .into_iter()
+        .filter_map(|(corner, coord)| map.get(coord).map(|candidate| (corner, candidate.height)))
+        .max_by_key(|&(_, height)| height)
+        .map(|(corner, _)| corner)
+}
+
+/// Parte sin costes de `CheckRoadSlope` para `CMD_BUILD_ROAD` durante
+/// `GenerateTowns`.
+///
+/// Las calles municipales no llevan tranvía ni un segundo tipo de carretera,
+/// por lo que `other == ROAD_NONE`. El valor devuelto son los bits nuevos (no
+/// la unión con `existing`), exactamente como el parámetro mutable `pieces`
+/// de `OpenTTD`. Esto evita publicar una media carretera imposible en una
+/// pendiente: el comando nativo la completa a un eje recto o la rechaza.
+fn normalize_generated_town_road_command_bits(
+    map: &crate::map::Map,
+    tile: TileCoord,
+    requested: u8,
+    existing: u8,
+) -> Option<u8> {
+    let mut pieces = requested & !existing;
+    if pieces == 0 {
+        return None;
+    }
+    let slope = usize::from(generated_town_road_command_slope(map, tile)?);
+    if slope == 0 {
+        return Some(pieces);
+    }
+
+    let mut combined = existing | pieces;
+    if GENERATED_INVALID_ROAD_BITS_ON_LEVELLED_SLOPE.get(slope)? & combined == 0 {
+        return Some(pieces);
+    }
+
+    pieces |= mirror_generated_town_road_bits(pieces);
+    combined = existing | pieces;
+    (generated_town_road_bits_are_straight(combined)
+        && GENERATED_INVALID_ROAD_BITS_ON_STRAIGHT_SLOPE.get(slope)? & combined == 0)
+        .then_some(pieces)
+}
+
 /// Escribe `MakeRoadNormal` para una calle creada durante `GenerateTowns`.
 ///
 /// Las rutas de comando interactivas usan la compañía activa. Durante la
@@ -1390,6 +1503,15 @@ fn write_generated_town_road_to_map(
     let Some(mut tile) = map.get(coord) else {
         return false;
     };
+    let existing = if tile.kind == TileKind::Road {
+        tile.m5 & 0x0F
+    } else {
+        0
+    };
+    let Some(pieces) = normalize_generated_town_road_command_bits(map, coord, road_bits, existing)
+    else {
+        return false;
+    };
     let town = u16::try_from(town_id).unwrap_or(u16::MAX).to_le_bytes();
     tile.kind = TileKind::Road;
     tile.mapt = 0x20;
@@ -1398,7 +1520,7 @@ fn write_generated_town_road_to_map(
     tile.m2_hi = town[1];
     tile.m3 = TOWN_ROAD_NO_TRAM_OWNER;
     tile.m3hi = 0;
-    tile.m5 = road_bits & 0x0F;
+    tile.m5 = existing | pieces;
     tile.m6 = 0;
     tile.m7 = 0;
     tile.m8 = TOWN_ROAD_INVALID_TRAM_TYPE;
@@ -1419,7 +1541,12 @@ fn add_generated_town_road_bits_to_map(
     if tile.kind != TileKind::Road {
         return write_generated_town_road_to_map(map, coord, road_bits, town_id);
     }
-    tile.m5 |= road_bits & 0x0F;
+    let Some(pieces) =
+        normalize_generated_town_road_command_bits(map, coord, road_bits, tile.m5 & 0x0F)
+    else {
+        return false;
+    };
+    tile.m5 |= pieces;
     map.set_tile(coord, tile).is_ok()
 }
 
@@ -1758,6 +1885,26 @@ mod tests {
         assert_eq!(road.pos, TileCoord::new(47, 23));
         assert_eq!(road.bits, ROAD_BITS_AXIS_Y);
         assert_eq!(rng.state, [679_301_066, 1_509_800_000]);
+    }
+
+    #[test]
+    fn town_road_command_completes_uphill_half_road_before_writing() {
+        // `CheckRoadSlope` transforma ROAD_SE en ROAD_Y sobre SLOPE_NW.
+        // Sin esa normalización la tesela parece válida hasta que el walker
+        // vuelve por ella varias llamadas después y entonces cambia el RNG.
+        let mut map = Map::new_flat(8, 8, 0);
+        let tile = TileCoord::new(3, 3);
+        map.set_height(tile, 1).expect("north high corner");
+        map.set_height(TileCoord::new(4, 3), 1)
+            .expect("west high corner");
+        assert_eq!(tile_slope_and_z(&map, tile), Some((SLOPE_NW, 0)));
+
+        assert_eq!(
+            normalize_generated_town_road_command_bits(&map, tile, ROAD_SE, 0),
+            Some(ROAD_BITS_AXIS_Y)
+        );
+        assert!(write_generated_town_road_to_map(&mut map, tile, ROAD_SE, 0));
+        assert_eq!(map.get(tile).expect("road").m5, ROAD_BITS_AXIS_Y);
     }
 
     #[test]

@@ -14,7 +14,7 @@ use crate::world_gen::{
     clear_ground_m5,
 };
 
-use super::{PopCtx, in_preserve};
+use super::{PopCtx, in_preserve, scale_by_land_proportion, scale_by_size};
 
 /// `PlaceIndustry` prueba hasta este número de teselas para una especie ya
 /// seleccionada. La selección ponderada ocurre fuera de este bucle; no se
@@ -30,23 +30,40 @@ pub(super) fn place_industries(
     ctx: &mut PopCtx<'_>,
     target: usize,
     town_centers: &[TileCoord],
+    density: super::IndustryDensity,
 ) -> usize {
-    if target == 0 {
+    if density == super::IndustryDensity::FundedOnly {
         return 0;
     }
     let specs = IndustrySpec::specs_for_climate(ctx.state.climate);
     if specs.is_empty() {
         return 0;
     }
+    let (map_w, map_h) = ctx.state.map.dimensions();
+    let probabilities = generation_probabilities(ctx.state.climate, map_w, map_h, specs);
+    if probabilities.is_empty() {
+        return 0;
+    }
     let mut industry_origins: Vec<TileCoord> = Vec::with_capacity(target);
 
-    // `GenerateIndustries` atiende primero `force_one`, en orden ascendente
-    // de `IndustryType`, con `PlaceIndustry(..., true)`. No consume un sorteo
-    // de especie antes de esos intentos. Temperate tiene las diez especies
-    // vanilla; los demás climas continúan temporalmente por la ruta MVP hasta
-    // que RMAP-056 porte sus probabilidades y listas force-one.
-    let forced_specs = map_creation_force_one_specs(ctx.state.climate);
-    for &spec in forced_specs {
+    // OpenTTD calcula la cantidad de cada pasada a partir de la suma de
+    // probabilidades, escala la pasada terrestre por la proporción inicial de
+    // tierra y después consume primero las especies force-one.
+    let total_probability: u64 = probabilities
+        .iter()
+        .map(|(_, probability)| u64::from(*probability))
+        .sum();
+    let scaled_target = u32::try_from(target).unwrap_or(u32::MAX);
+    let mut total_amount = u32::try_from(
+        u64::from(scaled_target).saturating_mul(total_probability) / total_probability.max(1),
+    )
+    .unwrap_or(u32::MAX);
+    total_amount = scale_by_land_proportion(total_amount, &ctx.state.map);
+    let forced_specs: Vec<IndustrySpec> = probabilities.iter().map(|(spec, _)| **spec).collect();
+    if total_amount < u32::try_from(forced_specs.len()).unwrap_or(u32::MAX) {
+        total_amount = u32::try_from(forced_specs.len()).unwrap_or(u32::MAX);
+    }
+    for spec in forced_specs {
         let _ = try_place_industry(
             ctx,
             spec,
@@ -54,22 +71,11 @@ pub(super) fn place_industries(
             town_centers,
             &mut industry_origins,
         );
+        total_amount = total_amount.saturating_sub(1);
     }
 
-    // En OpenTTD, `total_amount` se reduce por cada especie force-one aunque
-    // su búsqueda falle. A falta del reparto tierra/agua de RMAP-056, `target`
-    // conserva el equivalente base y evita volver a agregar colocaciones en
-    // mapas donde las forzadas ya cubren el total (por ejemplo 64² normal).
-    for _ in 0..target.saturating_sub(forced_specs.len()) {
-        // `GenerateIndustries` elige una especie y `PlaceIndustry` conserva
-        // esa elección mientras explora hasta 2000 `RandomTile()`. El peso
-        // native se integra en RMAP-056; conservar ya esta frontera evita
-        // volver a sortear tras cada fallo de sitio.
-        let spec = specs[usize::try_from(
-            ctx.rng
-                .random_range(u32::try_from(specs.len()).unwrap_or(1)),
-        )
-        .unwrap_or(0)];
+    for _ in 0..total_amount {
+        let spec = weighted_spec(ctx.rng, &probabilities, total_probability);
         let _ = try_place_industry(
             ctx,
             spec,
@@ -81,11 +87,56 @@ pub(super) fn place_industries(
     industry_origins.len()
 }
 
-fn map_creation_force_one_specs(climate: crate::Climate) -> &'static [IndustrySpec] {
-    match climate {
-        crate::Climate::Temperate => IndustrySpec::temperate_map_creation_force_one(),
-        crate::Climate::SubArctic | crate::Climate::SubTropical | crate::Climate::Toyland => &[],
+/// Probabilidades escaladas por tamaño de mapa (`GetScaledProbabilities`).
+fn generation_probabilities(
+    climate: crate::Climate,
+    map_w: u32,
+    map_h: u32,
+    specs: &[IndustrySpec],
+) -> Vec<(&IndustrySpec, u32)> {
+    specs
+        .iter()
+        .filter_map(|spec| {
+            let base = u32::from(spec.map_creation_probability(climate));
+            if base == 0 {
+                return None;
+            }
+            let scaled_base = base.saturating_mul(16);
+            let scaled = if matches!(spec, IndustrySpec::OilRefinery) {
+                scale_by_size_1d(scaled_base, map_w, map_h)
+            } else {
+                scale_by_size(scaled_base, map_w, map_h)
+            };
+            (scaled > 0).then_some((spec, scaled))
+        })
+        .collect()
+}
+
+fn weighted_spec(
+    rng: &mut crate::cargodist::parity::Randomizer,
+    probabilities: &[(&IndustrySpec, u32)],
+    total: u64,
+) -> IndustrySpec {
+    let total = u32::try_from(total).unwrap_or(u32::MAX).max(1);
+    let mut roll = rng.random_range(total);
+    for (spec, probability) in probabilities {
+        if roll < *probability {
+            return **spec;
+        }
+        roll = roll.saturating_sub(*probability);
     }
+    probabilities
+        .last()
+        .map_or(IndustrySpec::CoalMine, |(spec, _)| **spec)
+}
+
+fn scale_by_size_1d(value: u32, map_w: u32, map_h: u32) -> u32 {
+    if value == 0 {
+        return 0;
+    }
+    let log_x = map_w.max(1).ilog2();
+    let log_y = map_h.max(1).ilog2();
+    super::ceil_div((value << log_x).saturating_add(value << log_y), 1 << 9)
 }
 
 /// Distancia máxima de `CheckIfFarEnoughFromConflictingIndustry`.
@@ -976,6 +1027,65 @@ mod tests {
 
     fn generated_towns_state_for_platform(seed: u64) -> GameState {
         generated_towns_state_and_rng(seed).0
+    }
+
+    #[test]
+    fn generation_probabilities_scale_like_openttd() {
+        let specs = IndustrySpec::specs_for_climate(Climate::Temperate);
+        let small = generation_probabilities(Climate::Temperate, 64, 64, specs);
+        assert_eq!(
+            small,
+            vec![
+                (&IndustrySpec::CoalMine, 8),
+                (&IndustrySpec::PowerStation, 5),
+                (&IndustrySpec::Sawmill, 5),
+                (&IndustrySpec::Forest, 5),
+                (&IndustrySpec::OilRefinery, 16),
+                (&IndustrySpec::Factory, 5),
+                (&IndustrySpec::SteelMill, 5),
+                (&IndustrySpec::Farm, 9),
+                (&IndustrySpec::OilWells, 4),
+                (&IndustrySpec::IronOreMine, 5),
+            ]
+        );
+
+        let native_size = generation_probabilities(Climate::Temperate, 256, 256, specs);
+        assert_eq!(
+            native_size,
+            vec![
+                (&IndustrySpec::CoalMine, 128),
+                (&IndustrySpec::PowerStation, 80),
+                (&IndustrySpec::Sawmill, 80),
+                (&IndustrySpec::Forest, 80),
+                (&IndustrySpec::OilRefinery, 64),
+                (&IndustrySpec::Factory, 80),
+                (&IndustrySpec::SteelMill, 80),
+                (&IndustrySpec::Farm, 144),
+                (&IndustrySpec::OilWells, 64),
+                (&IndustrySpec::IronOreMine, 80),
+            ]
+        );
+    }
+
+    #[test]
+    fn weighted_industry_selection_uses_relative_probability() {
+        let probabilities = vec![
+            (&IndustrySpec::CoalMine, 8),
+            (&IndustrySpec::PowerStation, 2),
+        ];
+        let mut rng = Randomizer { state: [1, 1] };
+        assert_eq!(
+            weighted_spec(&mut rng, &probabilities, 10),
+            IndustrySpec::CoalMine
+        );
+
+        let mut rng = Randomizer {
+            state: [u32::MAX, u32::MAX],
+        };
+        assert_eq!(
+            weighted_spec(&mut rng, &probabilities, 10),
+            IndustrySpec::PowerStation
+        );
     }
 
     #[test]

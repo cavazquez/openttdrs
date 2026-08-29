@@ -43,7 +43,7 @@ fn industry_counter_seed(state: &GameState, c: TileCoord, industry_id: u8) -> u1
 
 /// Primer slot libre de `IndustryPool` representable por el modelo actual.
 ///
-/// `IndustryID(0)` es una instancia válida en OpenTTD, no un centinela. Usar
+/// `IndustryID(0)` es una instancia válida en `OpenTTD`, no un centinela. Usar
 /// `industries.len() + 1` desplazaba todas las filas generadas y también el
 /// `m2` de los campos que pertenecen a Farm. El pool real reutiliza huecos,
 /// por lo que buscar el menor ID ausente es además estable tras demoliciones o

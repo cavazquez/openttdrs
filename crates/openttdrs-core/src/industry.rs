@@ -295,6 +295,70 @@ impl IndustrySpec {
         ]
     }
 
+    /// Probabilidad base `appear_creation` de `build_industry.h` para la
+    /// generación de mapas (`GetScaledIndustryGenerationProbability`).
+    ///
+    /// El valor es el byte de la tabla vanilla antes de multiplicar por 16 y
+    /// escalar por el tamaño del mapa. Un cero significa que la especie no se
+    /// sortea ni se fuerza en ese clima. Mantener esta tabla junto al catálogo
+    /// evita que el generador procedural vuelva a elegir especies de forma
+    /// uniforme, lo que desplaza el stream RNG en mapas medianos/grandes.
+    #[must_use]
+    pub const fn map_creation_probability(self, climate: Climate) -> u8 {
+        match climate {
+            Climate::Temperate => match self {
+                Self::CoalMine => 8,
+                Self::PowerStation
+                | Self::Sawmill
+                | Self::Forest
+                | Self::Factory
+                | Self::SteelMill
+                | Self::IronOreMine => 5,
+                Self::OilRefinery | Self::OilWells => 4,
+                Self::Farm => 9,
+                _ => 0,
+            },
+            Climate::SubArctic => match self {
+                Self::CoalMine => 8,
+                Self::Forest
+                | Self::PowerStation
+                | Self::OilWells
+                | Self::PrintingWorks
+                | Self::PaperMill => 5,
+                Self::Farm => 9,
+                Self::OilRefinery | Self::GoldMine => 4,
+                Self::FoodProcessingPlant => 3,
+                Self::BankArcticTropic => 6,
+                _ => 0,
+            },
+            Climate::SubTropical => match self {
+                Self::OilRefinery
+                | Self::CopperOreMine
+                | Self::FoodProcessingPlant
+                | Self::DiamondMine
+                | Self::FruitPlantation
+                | Self::RubberPlantation
+                | Self::WaterSupply
+                | Self::FactoryTropic => 4,
+                Self::BankArcticTropic | Self::OilWells => 5,
+                Self::WaterTower => 8,
+                Self::FarmTropic => 2,
+                _ => 0,
+            },
+            Climate::Toyland => match self {
+                Self::CottonCandy
+                | Self::CandyFactory
+                | Self::ColaWells
+                | Self::ToyFactory
+                | Self::PlasticFountain
+                | Self::BubbleGenerator
+                | Self::ToffeeQuarry => 5,
+                Self::BatteryFarm | Self::ToyShop | Self::FizzyDrinkFactory | Self::SugarMine => 4,
+                _ => 0,
+            },
+        }
+    }
+
     #[must_use]
     pub const fn kind(self) -> IndustryKind {
         match self {
@@ -1830,6 +1894,88 @@ mod tests {
                 .all(|pair| pair[0].native_type() < pair[1].native_type())
         );
         assert_eq!(IndustrySpec::Bank.native_type(), 12);
+    }
+
+    #[test]
+    fn map_creation_probabilities_match_vanilla_tables() {
+        use crate::Climate;
+
+        let cases: &[(Climate, &[(IndustrySpec, u8)])] = &[
+            (
+                Climate::Temperate,
+                &[
+                    (IndustrySpec::CoalMine, 8),
+                    (IndustrySpec::PowerStation, 5),
+                    (IndustrySpec::Sawmill, 5),
+                    (IndustrySpec::Forest, 5),
+                    (IndustrySpec::OilRefinery, 4),
+                    (IndustrySpec::Factory, 5),
+                    (IndustrySpec::SteelMill, 5),
+                    (IndustrySpec::Farm, 9),
+                    (IndustrySpec::OilWells, 4),
+                    (IndustrySpec::Bank, 0),
+                    (IndustrySpec::IronOreMine, 5),
+                ],
+            ),
+            (
+                Climate::SubArctic,
+                &[
+                    (IndustrySpec::CoalMine, 8),
+                    (IndustrySpec::PowerStation, 5),
+                    (IndustrySpec::Forest, 5),
+                    (IndustrySpec::OilRefinery, 4),
+                    (IndustrySpec::PrintingWorks, 5),
+                    (IndustrySpec::Farm, 9),
+                    (IndustrySpec::OilWells, 5),
+                    (IndustrySpec::FoodProcessingPlant, 3),
+                    (IndustrySpec::PaperMill, 5),
+                    (IndustrySpec::GoldMine, 4),
+                    (IndustrySpec::BankArcticTropic, 6),
+                ],
+            ),
+            (
+                Climate::SubTropical,
+                &[
+                    (IndustrySpec::OilRefinery, 4),
+                    (IndustrySpec::CopperOreMine, 4),
+                    (IndustrySpec::OilWells, 5),
+                    (IndustrySpec::FoodProcessingPlant, 4),
+                    (IndustrySpec::BankArcticTropic, 5),
+                    (IndustrySpec::DiamondMine, 4),
+                    (IndustrySpec::FruitPlantation, 4),
+                    (IndustrySpec::RubberPlantation, 4),
+                    (IndustrySpec::WaterSupply, 4),
+                    (IndustrySpec::WaterTower, 8),
+                    (IndustrySpec::FactoryTropic, 4),
+                    (IndustrySpec::FarmTropic, 2),
+                    (IndustrySpec::LumberMill, 0),
+                ],
+            ),
+            (
+                Climate::Toyland,
+                &[
+                    (IndustrySpec::CottonCandy, 5),
+                    (IndustrySpec::CandyFactory, 5),
+                    (IndustrySpec::BatteryFarm, 4),
+                    (IndustrySpec::ColaWells, 5),
+                    (IndustrySpec::ToyShop, 4),
+                    (IndustrySpec::ToyFactory, 5),
+                    (IndustrySpec::PlasticFountain, 5),
+                    (IndustrySpec::FizzyDrinkFactory, 4),
+                    (IndustrySpec::BubbleGenerator, 5),
+                    (IndustrySpec::ToffeeQuarry, 5),
+                    (IndustrySpec::SugarMine, 4),
+                ],
+            ),
+        ];
+
+        for (climate, expected) in cases {
+            let actual = IndustrySpec::specs_for_climate(*climate)
+                .iter()
+                .map(|spec| (*spec, spec.map_creation_probability(*climate)))
+                .collect::<Vec<_>>();
+            assert_eq!(&actual, expected);
+        }
     }
 
     /// Cada industria lleva su propia fase (`i->counter`), así que dos minas

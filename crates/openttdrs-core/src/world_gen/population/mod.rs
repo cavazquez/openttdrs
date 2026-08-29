@@ -128,7 +128,7 @@ pub fn town_target_count(density: TownDensity, map_w: u32, map_h: u32) -> usize 
 /// Las costas (`WaterTileType::Coast`) cuentan como tierra: `IsWaterTile()`
 /// sólo reconoce agua plana. Este detalle alimenta
 /// `Map::ScaleByLandProportion` en `GenerateTowns`.
-fn initial_land_count(map: &Map) -> u32 {
+pub(super) fn initial_land_count(map: &Map) -> u32 {
     let size = u32::try_from(map.tiles().len()).unwrap_or(u32::MAX);
     let land = map
         .tiles()
@@ -137,6 +137,15 @@ fn initial_land_count(map: &Map) -> u32 {
         .count();
     let land = u32::try_from(land).unwrap_or(size);
     land.saturating_add(land / 12).min(size)
+}
+
+/// `Map::ScaleByLandProportion` de `GenerateIndustries`.
+#[must_use]
+pub(super) fn scale_by_land_proportion(n: u32, map: &Map) -> u32 {
+    let size = u32::try_from(map.tiles().len()).unwrap_or(1).max(1);
+    let land = initial_land_count(map);
+    u32::try_from(u64::from(n).saturating_mul(u64::from(land)) / u64::from(size))
+        .unwrap_or(u32::MAX)
 }
 
 /// Cantidad sugerida de `GenerateTowns` para una partida nueva.
@@ -254,6 +263,7 @@ pub fn generate_industries_with_rng(
         &mut ctx,
         industry_target_count(cfg.industry_density, mw, mh),
         &town_centers,
+        cfg.industry_density,
     )
 }
 

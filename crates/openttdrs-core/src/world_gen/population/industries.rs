@@ -678,6 +678,9 @@ fn apply_generated_industry_bytes(
         // Preserve bits 5..6 (`WaterClass`) while writing stage 2 and counter
         // 3, yielding 0x6E for a land industry (`MakeIndustry` + generation).
         tile.m1 = (tile.m1 & !0x0F) | 0x0E;
+        // `MakeIndustry` resets m4 (MAP4, represented by `m3hi`) even when
+        // the platform clear left a fence/animation byte on the source tile.
+        tile.m3hi = 0;
         tile.m3 = tile_random;
         let _ = state.map.set_tile(*coord, tile);
     }
@@ -1408,6 +1411,30 @@ mod tests {
         // The ten ConstructionStageChanged callbacks are consumed after the
         // tile writes, preserving the next force-one RandomTile boundary.
         assert_eq!(ctx.rng.state, [2_354_350_958, 520_419_394]);
+    }
+
+    #[test]
+    fn generated_constructor_resets_map4_before_make_industry() {
+        let mut state = GameState::new(64, 64);
+        let origin = TileCoord::new(20, 20);
+        let layout = industry_template_with_layout(origin, IndustrySpec::CoalMine, 0)
+            .expect("native coal layout");
+        for (coord, _) in &layout {
+            let mut tile = state.map.get(*coord).expect("layout tile");
+            tile.m3hi = 0xFF;
+            state.map.set_tile(*coord, tile).expect("seed map4");
+        }
+        let random = IndustryConstructorRandom {
+            random_colour: 0,
+            counter: 0,
+            tile_random: vec![0x2A; layout.len()],
+        };
+
+        apply_generated_industry_bytes(&mut state, origin, IndustrySpec::CoalMine, 0, &random);
+
+        for (coord, _) in layout {
+            assert_eq!(state.map.get(coord).expect("industry tile").m3hi, 0);
+        }
     }
 
     #[test]

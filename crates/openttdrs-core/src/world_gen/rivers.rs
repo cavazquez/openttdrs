@@ -4,14 +4,17 @@ use std::collections::HashSet;
 
 use crate::cargodist::parity::Randomizer;
 use crate::company::OWNER_NONE_M1;
-use crate::map::slope::{SLOPE_STEEP, complement_slope};
+use crate::map::slope::{SLOPE_STEEP, complement_slope, inclined_slope_direction};
 use crate::map::water_flood::{DIR_OFFSETS, FLOOD_FROM_DIRS, is_slope_one_corner_raised};
 use crate::map::{
-    Map, MapError, TileCoord, TileKind, WaterClass, make_shore_tile, make_water_tile,
-    set_water_class_m1, tile_slope_and_z, water_class_from_m1,
+    Map, MapError, Tile, TileCoord, TileKind, WaterClass, is_river_tile, make_shore_tile,
+    make_water_tile, set_water_class_m1, tile_slope_and_z, water_class_from_m1,
 };
 
-use super::config::{CLEAR_GROUND_GRASS, PreserveRect, WorldGenConfig, clear_ground_m5};
+use super::config::{
+    CLEAR_GROUND_GRASS, CLEAR_GROUND_ROUGH, PreserveRect, WorldGenConfig, clear_ground_m5,
+};
+use super::trees::place_tree;
 
 /// Flujos de río desde tierra alta hacia el mar / lagos (`WaterClass::River`).
 pub(super) fn carve_rivers(
@@ -27,6 +30,7 @@ pub(super) fn carve_rivers(
     // que OpenTTD en 64×64. Mantener la misma escala evita que el río altere
     // alturas que ya coinciden con TGP.
     let amount = u32::from(config.amount_of_rivers.min(3));
+    let long_river_length = u32::from(config.min_river_length).saturating_mul(4);
     if amount == 0 {
         return Ok(());
     }
@@ -52,11 +56,20 @@ pub(super) fn carve_rivers(
                 if !find_spring(map, spring, config, preserve) {
                     continue;
                 }
-                let (can_build, _) =
-                    probe_flow_river(map, spring, spring, min_river_length, rng, preserve, 0);
-                if can_build {
-                    done = flow_river(map, spring, u64::from(random), preserve, min_river_length)?;
-                }
+                let (can_build, _) = flow_river(
+                    map,
+                    spring,
+                    spring,
+                    min_river_length,
+                    long_river_length,
+                    config.river_route_random,
+                    config.climate,
+                    config.seed,
+                    rng,
+                    preserve,
+                    0,
+                )?;
+                done = can_build;
                 // C++ rompe la espiral tras el primer `FindSpring`, aun si
                 // ese flujo no termina construyéndose.
                 break;
@@ -150,7 +163,7 @@ fn find_spring(
     preserve: &[PreserveRect],
 ) -> bool {
     if preserve.iter().any(|rect| rect.contains(coord.x, coord.y))
-        || map.get_kind(coord) == Some(TileKind::Water)
+        || map.get(coord).is_some_and(is_plain_water_tile)
     {
         return false;
     }
@@ -164,8 +177,10 @@ fn find_spring(
     let mut higher_nearby = 0u32;
     for dx in -1..=1 {
         for dy in -1..=1 {
-            let nearby = TileCoord::new(coord.x + dx, coord.y + dy);
-            if tile_max_z(map, nearby).is_some_and(|height| height > reference_height) {
+            if tile_add_wrap(map, coord, dx, dy)
+                .and_then(|nearby| tile_max_z(map, nearby))
+                .is_some_and(|height| height > reference_height)
+            {
                 higher_nearby += 1;
             }
         }
@@ -176,8 +191,8 @@ fn find_spring(
 
     for dx in -16..=16 {
         for dy in -16..=16 {
-            let nearby = TileCoord::new(coord.x + dx, coord.y + dy);
-            if tile_max_z(map, nearby)
+            if tile_add_wrap(map, coord, dx, dy)
+                .and_then(|nearby| tile_max_z(map, nearby))
                 .is_some_and(|height| height > reference_height.saturating_add(2))
             {
                 return false;
@@ -200,6 +215,30 @@ fn tile_max_z(map: &Map, coord: TileCoord) -> Option<u8> {
 
 fn is_inclined_slope(slope: u8) -> bool {
     matches!(slope, 3 | 6 | 9 | 12)
+}
+
+/// `IsWaterTile` de `OpenTTD` significa agua despejada (`WaterTileType::Clear`),
+/// no cualquier tesela `MP_WATER`: una costa tiene el mismo tipo de mapa pero
+/// debe poder convertirse en río durante `YapfBuildRiver`.
+fn is_plain_water_tile(tile: Tile) -> bool {
+    tile.kind == TileKind::Water && (tile.m5 >> 4) == 0
+}
+
+/// Traduce `TileAddWrap(tile, dx, dy)` para un mapa con `freeform_edges`
+/// activo. `OpenTTD` no envuelve coordenadas: descarta el marco norte/oeste y
+/// las teselas `MP_VOID` del borde sur/este. `FindSpring` usa esta variante
+/// para no considerar alturas fuera del área interior.
+fn tile_add_wrap(map: &Map, origin: TileCoord, dx: i32, dy: i32) -> Option<TileCoord> {
+    let (width, height) = map.dimensions();
+    let x = origin.x.saturating_add(dx);
+    let y = origin.y.saturating_add(dy);
+    let max_x = i32::try_from(width).ok()?.saturating_sub(1);
+    let max_y = i32::try_from(height).ok()?.saturating_sub(1);
+    if x <= 0 || y <= 0 || x >= max_x || y >= max_y {
+        None
+    } else {
+        Some(TileCoord::new(x, y))
+    }
 }
 
 fn river_flows_down(map: &Map, begin: TileCoord, end: TileCoord) -> bool {
@@ -234,7 +273,7 @@ fn collect_connected_sea_tiles(
         let Some(tile) = map.get(coord) else {
             continue;
         };
-        if tile.kind != TileKind::Water
+        if !is_plain_water_tile(tile)
             || water_class_from_m1(tile.m1) != WaterClass::Sea
             || tile_slope_and_z(map, coord).is_none_or(|(slope, _)| slope != 0)
         {
@@ -264,95 +303,225 @@ fn collect_connected_sea_tiles(
     (false, sea)
 }
 
+/// `Chance16(a, b)` consume un único `Random()` y compara sus 16 bits bajos
+/// con la fracción redondeada de `OpenTTD`. No es equivalente a
+/// `RandomRange(b) < a`: ambas formas divergen en los bordes de la tabla.
+fn chance16(rng: &mut Randomizer, numerator: u32, denominator: u32) -> bool {
+    if denominator == 0 {
+        return false;
+    }
+    let random_low = u64::from(rng.next() & 0xFFFF);
+    let denominator = u64::from(denominator);
+    ((random_low
+        .saturating_mul(denominator)
+        .saturating_add(denominator / 2))
+        >> 16)
+        < u64::from(numerator)
+}
+
+fn valid_river_terminus_tile(
+    map: &Map,
+    tile: TileCoord,
+    height: u8,
+    climate: super::config::Climate,
+    world_seed: u64,
+) -> bool {
+    let Some(entry) = map.get(tile) else {
+        return false;
+    };
+    if entry.kind == TileKind::Void || entry.height != height {
+        return false;
+    }
+    // `IsValidRiverTerminusTile` rejects tropical desert. The current
+    // generator stores that zone in the low MAPT nibble; the shared helper
+    // keeps the check identical to the tree/landcover code.
+    if climate.uses_desert_patches() && super::desert_patch(tile.x, tile.y, world_seed) {
+        return false;
+    }
+    tile_slope_and_z(map, tile).is_some_and(|(slope, _)| slope == 0)
+}
+
+/// Port de `MakeLake`: el centro y cada expansión usan `MakeRiver`, por lo
+/// que cada tesela nueva consume el byte aleatorio correspondiente.
+fn make_lake(
+    map: &mut Map,
+    centre: TileCoord,
+    height: u8,
+    rng: &mut Randomizer,
+    climate: super::config::Climate,
+    world_seed: u64,
+    preserve: &[PreserveRect],
+) -> Result<(), MapError> {
+    if preserve
+        .iter()
+        .any(|rect| rect.contains(centre.x, centre.y))
+    {
+        return Ok(());
+    }
+    make_river_tile(map, centre, rng)?;
+    let diameter = rng.random_range(8) + 3;
+    for _ in 0..2 {
+        for tile in spiral_tiles(centre, diameter, map) {
+            if !valid_river_terminus_tile(map, tile, height, climate, world_seed) {
+                continue;
+            }
+            let adjacent_water = RIVER_DIRS.iter().any(|&(dx, dy)| {
+                map.get(TileCoord::new(tile.x + dx, tile.y + dy))
+                    .is_some_and(is_plain_water_tile)
+            });
+            if adjacent_water {
+                make_river_tile(map, tile, rng)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Port de `MakeWetlands`. En temperate conserva la misma escritura de suelo
+/// rough y llama al constructor de árbol existente cuando el ajuste vanilla
+/// `tree_placer=TP_IMPROVED` está activo en una partida nueva.
+#[allow(clippy::too_many_arguments)]
+fn make_wetlands(
+    map: &mut Map,
+    centre: TileCoord,
+    height: u8,
+    river_length: u32,
+    rng: &mut Randomizer,
+    climate: super::config::Climate,
+    world_seed: u64,
+    preserve: &[PreserveRect],
+) -> Result<(), MapError> {
+    if preserve
+        .iter()
+        .any(|rect| rect.contains(centre.x, centre.y))
+    {
+        return Ok(());
+    }
+    make_river_tile(map, centre, rng)?;
+    let diameter = river_length.max(16);
+    let has_trees = chance16(rng, 1, 2);
+    let radius = diameter / 2;
+    let radius_squared = radius.saturating_mul(radius);
+    for tile in spiral_tiles(centre, diameter, map) {
+        if !valid_river_terminus_tile(map, tile, height, climate, world_seed) {
+            continue;
+        }
+        let dx = tile.x.abs_diff(centre.x);
+        let dy = tile.y.abs_diff(centre.y);
+        if dx.saturating_mul(dx).saturating_add(dy.saturating_mul(dy)) > radius_squared
+            && chance16(rng, 3, 4)
+        {
+            continue;
+        }
+        if chance16(rng, 1, 3) {
+            make_river_tile(map, tile, rng)?;
+        } else if map.get_kind(tile) == Some(TileKind::Grass) {
+            if let Some(mut entry) = map.get(tile) {
+                entry.m5 = clear_ground_m5(CLEAR_GROUND_ROUGH, 3);
+                map.set_tile(tile, entry)?;
+            }
+            if has_trees {
+                let random = rng.next();
+                let _ = place_tree(map, tile, random, climate);
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Selecciona y materializa un terminus no marino desde la cola BFS.
+fn try_make_river_terminus(
+    map: &mut Map,
+    tile: TileCoord,
+    begin: TileCoord,
+    rng: &mut Randomizer,
+    climate: super::config::Climate,
+    world_seed: u64,
+    preserve: &[PreserveRect],
+) -> Result<bool, MapError> {
+    let Some(height) = map.get(begin).map(|entry| entry.height) else {
+        return Ok(false);
+    };
+    let valid = tile != begin && valid_river_terminus_tile(map, tile, height, climate, world_seed);
+    if !valid {
+        return Ok(false);
+    }
+    let lake = chance16(rng, 1, 3);
+    if lake {
+        make_lake(map, tile, height, rng, climate, world_seed, preserve)?;
+    } else {
+        let river_length = begin.x.abs_diff(tile.x) + begin.y.abs_diff(tile.y);
+        make_wetlands(
+            map,
+            tile,
+            height,
+            river_length,
+            rng,
+            climate,
+            world_seed,
+            preserve,
+        )?;
+    }
+    Ok(true)
+}
+
 /// Aplica la parte observable de los dos `CmdTerraformLand` que usa
 /// `FlowRiver` para drenar un lago pequeño. Durante la generación mundial las
 /// teselas de esos lagos están a cota cero, por lo que la orden de bajar falla
 /// sin cambios y la orden complementaria eleva sus cuatro esquinas una unidad;
 /// después `TerraformTile_Water` ejecuta `DoClearSquare`.
 fn flatten_small_sea_tile(map: &mut Map, tile_coord: TileCoord) {
-    const CORNERS: [(u8, i32, i32); 4] = [
-        (1, 1, 0), // SLOPE_W: tile + TileDiffXY(1, 0)
-        (2, 1, 1), // SLOPE_S
-        (4, 0, 1), // SLOPE_E
-        (8, 0, 0), // SLOPE_N
-    ];
-    let Some((slope, _)) = tile_slope_and_z(map, tile_coord) else {
+    if tile_slope_and_z(map, tile_coord).is_none() {
         return;
-    };
+    }
 
     // `FlowRiver` first tries `SLOPE_ELEVATED` down. On a cota-zero lake the
     // command fails atomically, but once an earlier tile has raised the shared
     // corners, a flat cota-one tile can be lowered and raised again. Keeping
     // this transaction (rather than only raising) avoids creating cota two
     // plateaus and matches `CmdTerraformLand`'s command model.
-    let can_lower = CORNERS.iter().all(|&(_, dx, dy)| {
-        map.get(TileCoord::new(tile_coord.x + dx, tile_coord.y + dy))
-            .is_some_and(|tile| tile.height > 0)
-    });
-    if can_lower {
-        for &(_, dx, dy) in &CORNERS {
-            let corner = TileCoord::new(tile_coord.x + dx, tile_coord.y + dy);
-            if let Some(height) = map.get(corner).map(|tile| tile.height) {
-                let _ = map.set_height(corner, height - 1);
-            }
-        }
-    }
+    // Cada comando también visita todas las teselas que comparten una esquina
+    // modificada. En particular, una costa vecina debe pasar por
+    // `TerraformTile_Water`/`DoClearSquare`, no conservarse suspendida a una
+    // nueva altura. `terraform_river_corners` conserva esa parte observable.
+    let _ = terraform_river_corners(map, tile_coord, 0x0F, false);
 
-    let slope_after_lowering = tile_slope_and_z(map, tile_coord)
-        .map_or(slope, |(slope_after_lowering, _)| slope_after_lowering);
-    let raise_slope = complement_slope(slope_after_lowering);
-    for (bit, dx, dy) in CORNERS {
-        if raise_slope & bit == 0 {
-            continue;
-        }
-        let corner = TileCoord::new(tile_coord.x + dx, tile_coord.y + dy);
-        let Some(height) = map.get(corner).map(|tile| tile.height) else {
-            continue;
-        };
-        let _ = map.set_height(corner, height.saturating_add(1));
-    }
-
-    // `DoClearSquare`/`MakeClear(tile, CLEAR_GRASS, 3)` resets every map
-    // plane owned by the former water tile, not only its semantic kind.
-    let Some(mut cleared) = map.get(tile_coord) else {
+    let Some((slope_after_lowering, _)) = tile_slope_and_z(map, tile_coord) else {
         return;
     };
-    cleared.kind = TileKind::Grass;
-    cleared.mapt = 0;
-    cleared.m5 = clear_ground_m5(CLEAR_GROUND_GRASS, 3);
-    cleared.m1 = OWNER_NONE_M1;
-    cleared.m2 = 0;
-    cleared.m2_hi = 0;
-    cleared.m3 = 0;
-    cleared.m3hi = 0;
-    cleared.m6 = 0;
-    cleared.m7 = 0;
-    cleared.m8 = 0;
-    let _ = map.set_tile(tile_coord, cleared);
+    let raise_slope = complement_slope(slope_after_lowering);
+    let _ = terraform_river_corners(map, tile_coord, raise_slope, true);
 }
 
-/// Explora `FlowRiver` hasta la frontera que consume RNG. El trazado YAPF,
-/// lagos/humedales y ensanchamiento siguen separados en RMAP-018.
-fn probe_flow_river(
+/// Explora y materializa `FlowRiver`, incluida la frontera de RNG, los
+/// terminus y el trazado `YAPF`; RMAP-018 conserva la ampliación de matriz y
+/// climas fuera de la cohorte validada.
+#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
+fn flow_river(
     map: &mut Map,
     spring: TileCoord,
     begin: TileCoord,
     min_river_length: u32,
+    long_river_length: u32,
+    route_random: u8,
+    climate: super::config::Climate,
+    world_seed: u64,
     rng: &mut Randomizer,
     preserve: &[PreserveRect],
     depth: usize,
-) -> (bool, bool) {
+) -> Result<(bool, bool), MapError> {
     if depth > map.tiles().len() {
-        return (false, false);
+        return Ok((false, false));
     }
-    if map.get_kind(begin) == Some(TileKind::Water) {
-        return (
+    if map.get(begin).is_some_and(is_plain_water_tile) {
+        let result = (
             spring.x.abs_diff(begin.x) + spring.y.abs_diff(begin.y) > min_river_length,
             tile_slope_and_z(map, begin).is_some_and(|(_, z)| z == 0),
         );
+        return Ok(result);
     }
     let Some((_, height_begin)) = tile_slope_and_z(map, begin) else {
-        return (false, false);
+        return Ok((false, false));
     };
     let mut marks = HashSet::from([begin]);
     let mut queue = vec![begin];
@@ -368,13 +537,13 @@ fn probe_flow_river(
         let Some((slope_end, height_end)) = tile_slope_and_z(map, end) else {
             continue;
         };
-        let is_water = map.get_kind(end) == Some(TileKind::Water);
+        let is_water = map.get(end).is_some_and(is_plain_water_tile);
         if slope_end == 0 && (height_end < height_begin || (height_end == height_begin && is_water))
         {
             if is_water
-                && map
-                    .get(end)
-                    .is_some_and(|tile| water_class_from_m1(tile.m1) == WaterClass::Sea)
+                && map.get(end).is_some_and(|tile| {
+                    is_plain_water_tile(tile) && water_class_from_m1(tile.m1) == WaterClass::Sea
+                })
             {
                 let (width, height) = map.dimensions();
                 let threshold =
@@ -398,106 +567,522 @@ fn probe_flow_river(
         }
         for (dx, dy) in RIVER_DIRS {
             let next = TileCoord::new(end.x + dx, end.y + dy);
-            if preserve.iter().any(|rect| rect.contains(next.x, next.y)) || !marks.insert(next) {
+            if preserve.iter().any(|rect| rect.contains(next.x, next.y)) || marks.contains(&next) {
                 continue;
             }
-            if map.get(next).is_some() && river_flows_down(map, end, next) {
+            if map
+                .get_kind(next)
+                .is_some_and(|kind| kind != TileKind::Void)
+                && river_flows_down(map, end, next)
+            {
+                marks.insert(next);
                 queue.push(next);
             }
         }
     }
     if let Some(end) = found {
-        return probe_flow_river(map, spring, end, min_river_length, rng, preserve, depth + 1);
+        let (found, main_river) = flow_river(
+            map,
+            spring,
+            end,
+            min_river_length,
+            long_river_length,
+            route_random,
+            climate,
+            world_seed,
+            rng,
+            preserve,
+            depth + 1,
+        )?;
+        if found {
+            // OpenTTD builds the downstream segment first while unwinding
+            // FlowRiver recursion. The route finder consumes the global
+            // Randomizer once per candidate edge, so it must run before the
+            // caller proceeds to the next river attempt.
+            build_river_path(
+                map,
+                begin,
+                end,
+                spring,
+                main_river,
+                long_river_length,
+                route_random,
+                rng,
+                preserve,
+            )?;
+        }
+        return Ok((found, main_river));
     }
     if queue.len() > 32 {
-        // `RandomRange(queue.size())` para el posible lago. Su construcción
-        // aún está abierta, pero el sorteo pertenece al stream de la fase.
-        let _ = queue[rng.random_range(queue.len() as u32) as usize];
+        // `FlowRiver` intenta terminar en el N-ésimo tile considerado. La
+        // selección y el `Chance16` se hacen aun cuando la candidata resulte
+        // inválida, porque ambos sorteos pertenecen al stream compartido.
+        let queue_index = rng.random_range(queue.len() as u32) as usize;
+        let lake_centre = queue[queue_index];
+        if spring.x.abs_diff(lake_centre.x) + spring.y.abs_diff(lake_centre.y) > min_river_length {
+            let terminus = try_make_river_terminus(
+                map,
+                lake_centre,
+                begin,
+                rng,
+                climate,
+                world_seed,
+                preserve,
+            )?;
+            if terminus {
+                build_river_path(
+                    map,
+                    begin,
+                    lake_centre,
+                    spring,
+                    false,
+                    long_river_length,
+                    route_random,
+                    rng,
+                    preserve,
+                )?;
+                return Ok((true, false));
+            }
+        }
     }
-    (false, false)
+    Ok((false, false))
 }
 
-pub(super) fn flow_river(
+/// Port mínimo de `YapfBuildRiver` para el generador original.
+///
+/// El YAPF nativo usa A* con coste Manhattan más `RandomRange` por cada
+/// arista candidata. Se conserva el orden de vecinos NE, SE, SW, NW y la
+/// semántica de empate del heap binario para que la selección de ruta y el
+/// stream RNG no dependan de `BinaryHeap` de la biblioteca estándar.
+#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
+fn build_river_path(
     map: &mut Map,
     start: TileCoord,
-    seed: u64,
+    end: TileCoord,
+    spring: TileCoord,
+    main_river: bool,
+    long_river_length: u32,
+    route_random: u8,
+    rng: &mut Randomizer,
     preserve: &[PreserveRect],
-    min_river_length: u32,
 ) -> Result<bool, MapError> {
-    let mut cur = start;
-    let mut steps = 0u32;
-    let mut rng = seed;
-    let mut path = Vec::new();
-    let mut reached_water = false;
-    while steps < 200 {
-        steps += 1;
-        if preserve.iter().any(|r| r.contains(cur.x, cur.y)) {
-            break;
-        }
-        match map.get_kind(cur) {
-            Some(TileKind::Grass | TileKind::Forest | TileKind::CoalField) => {
-                // `FlowRiver`/YAPF primero prueba que el flujo alcanza una
-                // terminación válida; no materializa un río parcial mientras
-                // explora. Guardar el trayecto evita que un pozo largo fallido
-                // deje agua sintética en mapas pequeños.
-                path.push(cur);
-            }
-            Some(TileKind::Water) => {
-                reached_water = true;
+    #[derive(Clone, Copy)]
+    struct Node {
+        coord: TileCoord,
+        parent: Option<usize>,
+        cost: u32,
+        estimate: u32,
+    }
+
+    fn less(nodes: &[Node], left: usize, right: usize) -> bool {
+        nodes[left].estimate < nodes[right].estimate
+    }
+
+    fn heapify_up(heap: &mut [usize], nodes: &[Node], mut gap: usize) {
+        let item = heap[gap];
+        while gap > 1 {
+            let parent = gap / 2;
+            if !less(nodes, item, heap[parent]) {
                 break;
             }
-            _ => break,
+            heap[gap] = heap[parent];
+            gap = parent;
         }
-        let Some((_, cz)) = tile_slope_and_z(map, cur) else {
+        heap[gap] = item;
+    }
+
+    fn heap_position(heap: &[usize], item: usize) -> Option<usize> {
+        heap.iter()
+            .enumerate()
+            .skip(1)
+            .find_map(|(position, &index)| (index == item).then_some(position))
+    }
+
+    fn heap_remove(heap: &mut Vec<usize>, nodes: &[Node], position: usize) {
+        let items = heap.len().saturating_sub(1);
+        debug_assert!(position > 0 && position <= items);
+        if position == items {
+            heap.pop();
+            return;
+        }
+        let last = heap.pop().expect("heap has an item");
+        let mut gap = position;
+        while gap > 1 {
+            let parent = gap / 2;
+            if !less(nodes, last, heap[parent]) {
+                break;
+            }
+            heap[gap] = heap[parent];
+            gap = parent;
+        }
+        let mut child = gap * 2;
+        let remaining = heap.len().saturating_sub(1);
+        while child <= remaining {
+            if child < remaining && less(nodes, heap[child + 1], heap[child]) {
+                child += 1;
+            }
+            if !less(nodes, heap[child], last) {
+                break;
+            }
+            heap[gap] = heap[child];
+            gap = child;
+            child = gap * 2;
+        }
+        heap[gap] = last;
+    }
+
+    let mut nodes = vec![Node {
+        coord: start,
+        parent: None,
+        cost: 0,
+        estimate: 0,
+    }];
+    let mut heap = vec![0usize];
+    heap.push(0);
+    let mut open = std::collections::HashMap::from([(start, 0usize)]);
+    let mut closed = HashSet::new();
+    let mut destination = None;
+
+    while !heap.is_empty() {
+        // OpenTTD keeps the best node in the heap while PfFollowNode adds its
+        // children, and only then moves it to the closed set. This detail is
+        // observable because a back-edge is still looked up in the open set
+        // and because insertion/removal changes the binary-heap tie order.
+        let current_idx = heap[1];
+        let current = nodes[current_idx];
+        if current.coord == end {
+            destination = Some(current_idx);
             break;
-        };
-        let mut best: Option<(TileCoord, u8)> = None;
-        let mut candidates = [(0i32, 0i32); 4];
-        let dirs = [(1, 0), (-1, 0), (0, 1), (0, -1)];
-        for (i, &(dx, dy)) in dirs.iter().enumerate() {
-            candidates[i] = (dx, dy);
         }
-        // Mezcla ligera según seed.
-        if rng & 1 != 0 {
-            candidates.swap(0, 2);
-        }
-        rng = rng.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
-        for &(dx, dy) in &candidates {
-            let n = TileCoord::new(cur.x + dx, cur.y + dy);
-            if preserve.iter().any(|r| r.contains(n.x, n.y)) {
+
+        for (dx, dy) in RIVER_DIRS {
+            let next = TileCoord::new(current.coord.x + dx, current.coord.y + dy);
+            if preserve.iter().any(|rect| rect.contains(next.x, next.y))
+                || map.get_kind(next).is_none_or(|kind| kind == TileKind::Void)
+                || !river_flows_down(map, current.coord, next)
+            {
                 continue;
             }
-            let Some((_, nz)) = tile_slope_and_z(map, n) else {
+
+            // `PfCalcCost` calls RandomRange even when the edge later turns
+            // out to be a duplicate in the open/closed list.
+            let edge_cost = rng.random_range(u32::from(route_random));
+            let cost = current.cost.saturating_add(1).saturating_add(edge_cost);
+            let estimate = cost.saturating_add(
+                end.x
+                    .abs_diff(next.x)
+                    .saturating_add(end.y.abs_diff(next.y)),
+            );
+            let candidate = Node {
+                coord: next,
+                parent: Some(current_idx),
+                cost,
+                estimate,
+            };
+
+            if let Some(&open_idx) = open.get(&next) {
+                if estimate < nodes[open_idx].estimate {
+                    let position =
+                        heap_position(&heap, open_idx).expect("open node is present in heap");
+                    heap_remove(&mut heap, &nodes, position);
+                    nodes[open_idx] = candidate;
+                    heap.push(open_idx);
+                    let position = heap.len() - 1;
+                    heapify_up(&mut heap, &nodes, position);
+                }
+                continue;
+            }
+            if closed.contains(&next) {
+                continue;
+            }
+            let node_idx = nodes.len();
+            nodes.push(candidate);
+            open.insert(next, node_idx);
+            heap.push(node_idx);
+            let position = heap.len() - 1;
+            heapify_up(&mut heap, &nodes, position);
+        }
+
+        let position = heap_position(&heap, current_idx).expect("expanded node is present in heap");
+        heap_remove(&mut heap, &nodes, position);
+        open.remove(&current.coord);
+        closed.insert(current.coord);
+    }
+
+    let Some(destination) = destination else {
+        return Ok(false);
+    };
+
+    let mut path = Vec::new();
+    let mut cursor = Some(destination);
+    while let Some(index) = cursor {
+        let node = nodes[index];
+        path.push(node.coord);
+        cursor = node.parent;
+    }
+    path.reverse();
+    // `YapfRiverBuilder` walks from the destination node back through its
+    // parents, and `MakeRiver` consumes Random() in that order. Keep the
+    // reverse traversal so MAP4 (`m4`) and the global stream stay native.
+    for &tile in path.iter().rev() {
+        if !map.get(tile).is_some_and(is_plain_water_tile) {
+            make_river_tile(map, tile, rng)?;
+        }
+    }
+
+    if main_river {
+        widen_river_path(map, &path, spring, long_river_length, rng, preserve)?;
+    }
+
+    Ok(true)
+}
+
+/// `MakeRiverAndModifyDesertZoneAround`: `MakeWater` receives the low byte of
+/// a fresh global `Random()` draw for every newly materialized river tile.
+fn make_river_tile(map: &mut Map, coord: TileCoord, rng: &mut Randomizer) -> Result<(), MapError> {
+    make_water_tile(map, coord, WaterClass::River)?;
+    let mut tile = map.get(coord).ok_or(MapError::OutOfBounds)?;
+    tile.m3hi = rng.next() as u8;
+    map.set_tile(coord, tile)
+}
+
+fn is_slope_with_one_corner_raised(slope: u8) -> bool {
+    slope & SLOPE_STEEP == 0 && matches!(slope & 0x0F, 1 | 2 | 4 | 8)
+}
+
+fn is_slope_with_three_corners_raised(slope: u8) -> bool {
+    slope & SLOPE_STEEP == 0 && is_slope_with_one_corner_raised(complement_slope(slope))
+}
+
+/// Cambia las esquinas indicadas por una orden `CmdTerraformLand`. Las
+/// validaciones se hacen antes de escribir para conservar la atomicidad que
+/// necesita `RiverMakeWider` cuando una orilla está en cota cero.
+fn terraform_river_corners(map: &mut Map, tile: TileCoord, corners: u8, raise: bool) -> bool {
+    const OFFSETS: [(u8, i32, i32); 4] = [(1, 1, 0), (2, 1, 1), (4, 0, 1), (8, 0, 0)];
+    let mut updates = Vec::new();
+    let mut dirty_tiles = HashSet::new();
+    for (bit, dx, dy) in OFFSETS {
+        if corners & bit == 0 {
+            continue;
+        }
+        let coord = TileCoord::new(tile.x + dx, tile.y + dy);
+        let Some(height) = map.get(coord).map(|entry| entry.height) else {
+            return false;
+        };
+        if !raise && height == 0 {
+            return false;
+        }
+        updates.push((
+            coord,
+            if raise {
+                height.saturating_add(1)
+            } else {
+                height - 1
+            },
+        ));
+
+        // `TerraformAddDirtyTileAround` visits every map tile incident to a
+        // changed corner. During the execute pass each incident water tile is
+        // sent through `TerraformTile_Water`, whose landscape-clear callback
+        // removes rivers/coasts before the new corner heights are committed.
+        for (dx, dy) in [(0, 0), (-1, 0), (0, -1), (-1, -1)] {
+            let dirty = TileCoord::new(coord.x + dx, coord.y + dy);
+            if map.get(dirty).is_some() {
+                dirty_tiles.insert(dirty);
+            }
+        }
+    }
+
+    for dirty in dirty_tiles {
+        if map
+            .get(dirty)
+            .is_some_and(|entry| entry.kind == TileKind::Water)
+        {
+            clear_terraform_water_tile(map, dirty);
+        }
+    }
+    for (coord, height) in updates {
+        if map.set_height(coord, height).is_err() {
+            return false;
+        }
+    }
+    true
+}
+
+/// `DoClearSquare` aplicado por `TerraformTile_Water` durante la ampliación
+/// de un río. La densidad de hierba inicial es tres y el resto de planos se
+/// reinicia exactamente como `MakeClear(tile, CLEAR_GRASS, 3)`.
+fn clear_terraform_water_tile(map: &mut Map, coord: TileCoord) {
+    let Some(mut tile) = map.get(coord) else {
+        return;
+    };
+    tile.kind = TileKind::Grass;
+    tile.mapt = 0;
+    tile.m5 = clear_ground_m5(CLEAR_GROUND_GRASS, 3);
+    tile.m1 = OWNER_NONE_M1;
+    tile.m2 = 0;
+    tile.m2_hi = 0;
+    tile.m3 = 0;
+    tile.m3hi = 0;
+    tile.m6 = 0;
+    tile.m7 = 0;
+    tile.m8 = 0;
+    let _ = map.set_tile(coord, tile);
+}
+
+/// Subconjunto ejecutable de `RiverMakeWider`. El caso plano (el dominante en
+/// TGP) conserva exactamente la expansión espiral y los sorteos de `MakeRiver`;
+/// las ramas de pendiente aplican las mismas salvaguardas de dirección y
+/// terraformación antes de materializar agua.
+#[allow(clippy::similar_names, clippy::too_many_lines)]
+fn river_make_wider(
+    map: &mut Map,
+    tile: TileCoord,
+    origin_tile: TileCoord,
+    rng: &mut Randomizer,
+    preserve: &[PreserveRect],
+) -> Result<(), MapError> {
+    if preserve.iter().any(|rect| rect.contains(tile.x, tile.y))
+        || map.get(tile).is_some_and(is_plain_water_tile)
+    {
+        return Ok(());
+    }
+    let Some((mut cur_slope, _)) = tile_slope_and_z(map, tile) else {
+        return Ok(());
+    };
+    let Some((origin_slope, _)) = tile_slope_and_z(map, origin_tile) else {
+        return Ok(());
+    };
+    let Some(tile_max) = tile_max_z(map, tile) else {
+        return Ok(());
+    };
+    let Some(origin_max) = tile_max_z(map, origin_tile) else {
+        return Ok(());
+    };
+    if tile_max == 0 || tile_max > origin_max {
+        return Ok(());
+    }
+
+    let mut desired_slope = origin_slope;
+    if cur_slope != 0 && !is_inclined_slope(cur_slope) {
+        if cur_slope & SLOPE_STEEP != 0 {
+            return Ok(());
+        }
+        let mut flat_river_found = false;
+        let mut sloped_river_found = false;
+        for direction in 0..4u8 {
+            let (dx, dy) = crate::map::diag_dir_offset(direction);
+            let other = TileCoord::new(tile.x + dx, tile.y + dy);
+            let Some(other_tile) = map.get(other) else {
                 continue;
             };
-            if nz > cz {
+            if !is_river_tile(other_tile) {
                 continue;
             }
-            match best {
-                None => best = Some((n, nz)),
-                Some((_, bz)) if nz < bz => best = Some((n, nz)),
-                Some((_, bz)) if nz == bz && rng.trailing_zeros() >= 3 => best = Some((n, nz)),
-                _ => {}
+            let Some((other_slope, _)) = tile_slope_and_z(map, other) else {
+                continue;
+            };
+            if is_inclined_slope(other_slope)
+                && tile_max_z(map, tile) == tile_max_z(map, other)
+                && inclined_slope_direction(other_slope).is_some_and(|other_direction| {
+                    other_direction == (direction + 1) % 4 || other_direction == (direction + 3) % 4
+                })
+            {
+                desired_slope = other_slope;
+                sloped_river_found = true;
+                break;
+            }
+            if other_slope == 0 {
+                flat_river_found = true;
             }
         }
-        let Some((next, _)) = best else {
-            break;
-        };
-        if next == cur {
-            break;
+        if !sloped_river_found && !flat_river_found {
+            return Ok(());
         }
-        cur = next;
+        if !sloped_river_found {
+            desired_slope = 0;
+        }
+
+        if desired_slope == 0 && is_slope_with_three_corners_raised(cur_slope) {
+            let _ = terraform_river_corners(map, tile, complement_slope(cur_slope), true);
+        } else if is_inclined_slope(desired_slope) {
+            let river_direction =
+                inclined_slope_direction(desired_slope).map_or(0, |direction| (direction + 2) % 4);
+            for diff in [1u8, 3u8] {
+                let direction = (river_direction + diff) % 4;
+                let (dx, dy) = crate::map::diag_dir_offset(direction);
+                let other = TileCoord::new(tile.x + dx, tile.y + dy);
+                if map.get(other).is_some_and(is_plain_water_tile)
+                    && map.get(other).is_some_and(is_river_tile)
+                    && tile_slope_and_z(map, other).is_some_and(|(slope, _)| slope == 0)
+                {
+                    return Ok(());
+                }
+            }
+            let mut to_change = cur_slope ^ desired_slope;
+            if !is_slope_with_one_corner_raised(cur_slope) {
+                to_change &= complement_slope(desired_slope);
+                let _ = terraform_river_corners(map, tile, to_change, false);
+            }
+            cur_slope = tile_slope_and_z(map, tile).map_or(cur_slope, |(slope, _)| slope);
+            if cur_slope != desired_slope && is_slope_with_one_corner_raised(cur_slope) {
+                let _ = terraform_river_corners(map, tile, cur_slope ^ desired_slope, true);
+            }
+        }
+        cur_slope = tile_slope_and_z(map, tile).map_or(cur_slope, |(slope, _)| slope);
     }
 
-    let distance = start.x.abs_diff(cur.x) + start.y.abs_diff(cur.y);
-    if !reached_water || distance <= min_river_length {
-        return Ok(false);
+    if is_inclined_slope(cur_slope) {
+        let direction = inclined_slope_direction(cur_slope).unwrap_or(0);
+        let (upstream_dx, upstream_dy) = crate::map::diag_dir_offset(direction);
+        let (downstream_dx, downstream_dy) = crate::map::diag_dir_offset((direction + 2) % 4);
+        let upstream = TileCoord::new(tile.x + upstream_dx, tile.y + upstream_dy);
+        let downstream = TileCoord::new(tile.x + downstream_dx, tile.y + downstream_dy);
+        if map.get(upstream).is_none() || map.get(downstream).is_none() {
+            return Ok(());
+        }
+        let downstream_is_ocean = tile_slope_and_z(map, downstream).is_some_and(|(slope, z)| {
+            z == 0 && (slope == 0 || is_slope_with_one_corner_raised(slope))
+        });
+        if !map.get(downstream).is_some_and(is_plain_water_tile) && !downstream_is_ocean {
+            if tile_slope_and_z(map, downstream).is_none_or(|(slope, _)| slope != 0) {
+                return Ok(());
+            }
+            make_river_tile(map, downstream, rng)?;
+        }
+        if !map.get(upstream).is_some_and(is_plain_water_tile) {
+            if tile_slope_and_z(map, upstream).is_none_or(|(slope, _)| slope != 0) {
+                return Ok(());
+            }
+            make_river_tile(map, upstream, rng)?;
+        }
     }
+    if cur_slope == desired_slope && !map.get(tile).is_some_and(is_plain_water_tile) {
+        make_river_tile(map, tile, rng)?;
+    }
+    Ok(())
+}
 
-    for tile in path {
-        make_water_tile(map, tile, WaterClass::River)?;
+fn widen_river_path(
+    map: &mut Map,
+    path: &[TileCoord],
+    spring: TileCoord,
+    long_river_length: u32,
+    rng: &mut Randomizer,
+    preserve: &[PreserveRect],
+) -> Result<(), MapError> {
+    let divisor = (long_river_length / 3).max(1);
+    for &center in path.iter().rev() {
+        let distance = spring.x.abs_diff(center.x) + spring.y.abs_diff(center.y);
+        let diameter = 3u32.min(distance / divisor + 1);
+        if diameter <= 1 {
+            continue;
+        }
+        for tile in spiral_tiles(center, diameter, map) {
+            river_make_wider(map, tile, center, rng, preserve)?;
+        }
     }
-    Ok(true)
+    Ok(())
 }
 
 /// Port de `ConvertGroundTilesIntoWaterTiles` de `water_cmd.cpp`.
@@ -614,6 +1199,7 @@ mod tests {
     use crate::cargodist::parity::Randomizer;
     use crate::company::{OWNER_NONE_M1, OWNER_WATER_M1};
     use crate::map::is_river_tile;
+    use crate::world_gen::Climate;
 
     #[test]
     fn converter_makes_flat_ground_sea_and_one_corner_slope_shore() {
@@ -686,6 +1272,24 @@ mod tests {
         );
     }
 
+    #[test]
+    fn small_sea_flattening_clears_coasts_sharing_raised_corners() {
+        let mut map = Map::new_flat(8, 8, 0);
+        let lake = TileCoord::new(3, 3);
+        let adjacent_coast = TileCoord::new(2, 3);
+        make_water_tile(&mut map, lake, WaterClass::Sea).expect("make inland sea tile");
+        make_shore_tile(&mut map, adjacent_coast).expect("make neighbouring coast");
+
+        flatten_small_sea_tile(&mut map, lake);
+
+        for tile in [lake, adjacent_coast] {
+            let clear = map.get(tile).expect("terraform callback clears water");
+            assert_eq!(clear.kind, TileKind::Grass, "tile {tile:?}");
+            assert_eq!(clear.m1, OWNER_NONE_M1, "tile {tile:?}");
+            assert_eq!(clear.m5, clear_ground_m5(CLEAR_GROUND_GRASS, 3));
+        }
+    }
+
     fn descending_river_test_map(width: i32, sea_x: i32) -> Map {
         let mut map = Map::new_flat(width as u32, 8, 0);
         for x in 0..width {
@@ -693,6 +1297,18 @@ mod tests {
                 map.set_height(TileCoord::new(x, y), (96 - x).try_into().expect("height"))
                     .expect("set height");
             }
+        }
+        // `FlowRiver` accepts only a flat water terminus. Flatten all four
+        // corners of the synthetic sea tile after creating the descending
+        // test slope; this mirrors a real sea tile without relying on the
+        // old heuristic route builder.
+        for corner in [
+            TileCoord::new(sea_x, 3),
+            TileCoord::new(sea_x + 1, 3),
+            TileCoord::new(sea_x, 4),
+            TileCoord::new(sea_x + 1, 4),
+        ] {
+            map.set_height(corner, 1).expect("flatten sea corner");
         }
         make_water_tile(&mut map, TileCoord::new(sea_x, 3), WaterClass::Sea)
             .expect("make terminal sea");
@@ -703,8 +1319,23 @@ mod tests {
     fn long_river_rejects_a_route_shorter_than_its_manhattan_minimum() {
         let mut map = descending_river_test_map(16, 9);
         let start = TileCoord::new(1, 3);
+        let mut rng = Randomizer::new(7);
 
-        let built = flow_river(&mut map, start, 7, &[], 16).expect("flow river");
+        let built = flow_river(
+            &mut map,
+            start,
+            start,
+            16,
+            64,
+            5,
+            Climate::Temperate,
+            0,
+            &mut rng,
+            &[],
+            0,
+        )
+        .expect("flow river")
+        .0;
 
         assert!(!built);
         assert!(map.tiles().iter().all(|tile| !is_river_tile(*tile)));
@@ -712,10 +1343,14 @@ mod tests {
 
     #[test]
     fn accepted_route_is_painted_only_after_reaching_water_and_minimum_length() {
-        let mut map = descending_river_test_map(40, 25);
-        let start = TileCoord::new(1, 3);
+        let mut map = Map::new_flat(8, 8, 0);
+        let start = TileCoord::new(3, 3);
+        let end = TileCoord::new(4, 3);
+        make_water_tile(&mut map, end, WaterClass::Sea).expect("make terminal sea");
+        let mut rng = Randomizer::new(7);
 
-        let built = flow_river(&mut map, start, 7, &[], 16).expect("flow river");
+        let built = build_river_path(&mut map, start, end, start, false, 64, 5, &mut rng, &[])
+            .expect("build river path");
 
         assert!(built);
         assert!(map.tiles().iter().any(|tile| is_river_tile(*tile)));

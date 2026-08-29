@@ -398,7 +398,7 @@ const fn tropic_zone(tile: Tile) -> u8 {
     tile.mapt & TROPIC_ZONE_MASK
 }
 
-fn place_tree(map: &mut Map, c: TileCoord, random: u32, climate: Climate) -> bool {
+pub(super) fn place_tree(map: &mut Map, c: TileCoord, random: u32, climate: Climate) -> bool {
     let Some(previous) = map.get(c) else {
         return false;
     };

@@ -40,49 +40,74 @@ pub(super) fn place_industries(
         return 0;
     }
     let (map_w, map_h) = ctx.state.map.dimensions();
-    let probabilities = generation_probabilities(ctx.state.climate, map_w, map_h, specs);
-    if probabilities.is_empty() {
+    // `GenerateIndustries` mantiene dos distribuciones independientes: una
+    // para industrias en tierra y otra para `IndustryBehaviour::BuiltOnWater`.
+    // El catálogo vanilla representado hoy sólo contiene especies terrestres,
+    // pero conservar la pasada vacía es importante: el total y el stream RNG
+    // deben quedar listos para añadir `IT_OIL_RIG` sin reescribir esta fase.
+    let land_probabilities =
+        generation_probabilities(ctx.state.climate, map_w, map_h, specs, false);
+    let water_probabilities =
+        generation_probabilities(ctx.state.climate, map_w, map_h, specs, true);
+    let total_probability = land_probabilities
+        .iter()
+        .chain(water_probabilities.iter())
+        .map(|(_, probability)| u64::from(*probability))
+        .sum::<u64>();
+    if total_probability == 0 {
         return 0;
     }
     let mut industry_origins: Vec<TileCoord> = Vec::with_capacity(target);
 
-    // OpenTTD calcula la cantidad de cada pasada a partir de la suma de
-    // probabilidades, escala la pasada terrestre por la proporción inicial de
-    // tierra y después consume primero las especies force-one.
-    let total_probability: u64 = probabilities
-        .iter()
-        .map(|(_, probability)| u64::from(*probability))
-        .sum();
+    // OpenTTD calcula la cantidad de cada pasada a partir de la suma global
+    // de probabilidades. La pasada terrestre se reduce por `CountLandTiles`;
+    // la acuática no se reduce y puede usar sus propios force-one.
     let scaled_target = u32::try_from(target).unwrap_or(u32::MAX);
-    let mut total_amount = u32::try_from(
-        u64::from(scaled_target).saturating_mul(total_probability) / total_probability.max(1),
-    )
-    .unwrap_or(u32::MAX);
-    total_amount = scale_by_land_proportion(total_amount, &ctx.state.map);
-    let forced_specs: Vec<IndustrySpec> = probabilities.iter().map(|(spec, _)| **spec).collect();
-    if total_amount < u32::try_from(forced_specs.len()).unwrap_or(u32::MAX) {
-        total_amount = u32::try_from(forced_specs.len()).unwrap_or(u32::MAX);
-    }
-    for spec in forced_specs {
-        let _ = try_place_industry(
-            ctx,
-            spec,
-            FORCED_INDUSTRY_PLACEMENT_ATTEMPTS,
-            town_centers,
-            &mut industry_origins,
-        );
-        total_amount = total_amount.saturating_sub(1);
-    }
+    for (water, probabilities) in [
+        (false, land_probabilities.as_slice()),
+        (true, water_probabilities.as_slice()),
+    ] {
+        let pass_probability: u64 = probabilities
+            .iter()
+            .map(|(_, probability)| u64::from(*probability))
+            .sum();
+        if pass_probability == 0 {
+            continue;
+        }
+        let mut total_amount = u32::try_from(
+            u64::from(scaled_target).saturating_mul(pass_probability) / total_probability,
+        )
+        .unwrap_or(u32::MAX);
+        if !water {
+            total_amount = scale_by_land_proportion(total_amount, &ctx.state.map);
+        }
+        let forced_specs: Vec<IndustrySpec> =
+            probabilities.iter().map(|(spec, _)| **spec).collect();
+        let forced_count = u32::try_from(forced_specs.len()).unwrap_or(u32::MAX);
+        if total_amount < forced_count {
+            total_amount = forced_count;
+        }
+        for spec in forced_specs {
+            let _ = try_place_industry(
+                ctx,
+                spec,
+                FORCED_INDUSTRY_PLACEMENT_ATTEMPTS,
+                town_centers,
+                &mut industry_origins,
+            );
+            total_amount = total_amount.saturating_sub(1);
+        }
 
-    for _ in 0..total_amount {
-        let spec = weighted_spec(ctx.rng, &probabilities, total_probability);
-        let _ = try_place_industry(
-            ctx,
-            spec,
-            INDUSTRY_PLACEMENT_ATTEMPTS,
-            town_centers,
-            &mut industry_origins,
-        );
+        for _ in 0..total_amount {
+            let spec = weighted_spec(ctx.rng, probabilities, pass_probability);
+            let _ = try_place_industry(
+                ctx,
+                spec,
+                INDUSTRY_PLACEMENT_ATTEMPTS,
+                town_centers,
+                &mut industry_origins,
+            );
+        }
     }
     industry_origins.len()
 }
@@ -93,10 +118,18 @@ fn generation_probabilities(
     map_w: u32,
     map_h: u32,
     specs: &[IndustrySpec],
+    water: bool,
 ) -> Vec<(&IndustrySpec, u32)> {
     specs
         .iter()
         .filter_map(|spec| {
+            // Ningún `IndustrySpec` vanilla del catálogo es `BuiltOnWater`.
+            // La condición queda en la función común para que el día que se
+            // modele `IT_OIL_RIG` la distribución acuática no contamine la
+            // terrestre ni cambie el orden de consumo de RNG.
+            if water {
+                return None;
+            }
             let base = u32::from(spec.map_creation_probability(climate));
             if base == 0 {
                 return None;
@@ -1050,7 +1083,7 @@ mod tests {
     #[test]
     fn generation_probabilities_scale_like_openttd() {
         let specs = IndustrySpec::specs_for_climate(Climate::Temperate);
-        let small = generation_probabilities(Climate::Temperate, 64, 64, specs);
+        let small = generation_probabilities(Climate::Temperate, 64, 64, specs, false);
         assert_eq!(
             small,
             vec![
@@ -1067,7 +1100,7 @@ mod tests {
             ]
         );
 
-        let native_size = generation_probabilities(Climate::Temperate, 256, 256, specs);
+        let native_size = generation_probabilities(Climate::Temperate, 256, 256, specs, false);
         assert_eq!(
             native_size,
             vec![
@@ -1083,6 +1116,10 @@ mod tests {
                 (&IndustrySpec::IronOreMine, 80),
             ]
         );
+
+        // El roster vanilla actual no tiene una industria `BuiltOnWater`; la
+        // pasada acuática debe quedar vacía y no consumir RNG por accidente.
+        assert!(generation_probabilities(Climate::Temperate, 64, 64, specs, true).is_empty());
     }
 
     #[test]

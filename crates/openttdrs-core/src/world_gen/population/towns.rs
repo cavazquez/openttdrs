@@ -1,8 +1,6 @@
 //! Colocación y crecimiento inicial de pueblos (`GenerateTowns` / `DoCreateTown`).
 
-use crate::bridge_spec::{
-    BridgeSpecDef, BridgeType, bridge_available_in, set_bridge_middle_mapt, set_bridge_type_m6,
-};
+use crate::bridge_spec::{BridgeSpecDef, BridgeType, bridge_available_in, set_bridge_middle_mapt};
 use crate::house_spec::{
     BUILDING_FLAG_SIZE_1X2, BUILDING_FLAG_SIZE_2X1, BUILDING_FLAG_SIZE_2X2, HouseSpec,
     climate_zone_mask, get_town_radius_group,
@@ -640,33 +638,115 @@ const fn generated_town_terraform_corner(tile: TileCoord, corner: u8) -> Option<
     }
 }
 
-/// El `TerraformerState` nativo vuelve a validar las cuatro teselas que
-/// comparten la esquina norte almacenada. Durante `GenerateTowns` sólo se
-/// admite el subconjunto clear/forest: una carretera, casa, agua o borde hace
-/// fallar el intento hacia arriba y habilita el intento hacia abajo de
-/// `LevelTownLand`.
-fn generated_town_terraform_vertex_is_mutable(map: &crate::map::Map, vertex: TileCoord) -> bool {
-    [(0, 0), (0, -1), (-1, 0), (-1, -1)]
-        .into_iter()
-        .all(|(dx, dy)| {
-            matches!(
-                map.get_kind(TileCoord::new(vertex.x + dx, vertex.y + dy)),
-                Some(TileKind::Grass | TileKind::Forest)
-            )
-        })
+/// Modelo local de `TerraformerState` para `LevelTownLand`.
+///
+/// La altura se almacena en la esquina norte de una tesela. Al modificar una
+/// esquina, `CmdTerraformLand` puede tener que ajustar recursivamente las
+/// cuatro esquinas ortogonales vecinas para que ninguna diferencia supere un
+/// nivel. Mantener esos cambios fuera del mapa hasta el final es esencial:
+/// una carretera o una costa alcanzada por la cascada rechaza todo el comando,
+/// igual que la prueba sin `Execute` de `OpenTTD`.
+#[derive(Default)]
+struct GeneratedTownTerraformState {
+    heights: Vec<(TileCoord, u8)>,
+    dirty_tiles: Vec<TileCoord>,
 }
 
-/// Intenta una sola alternativa de `TerraformTownTile`: cada esquina elegida
-/// cambia exactamente un nivel, y la mutación sólo sucede si todos los
-/// vértices fueron validados antes. La propagación de pendientes empinadas y
-/// la terraformación sobre infraestructuras quedan fuera de este subconjunto.
+impl GeneratedTownTerraformState {
+    fn height_at(&self, map: &crate::map::Map, vertex: TileCoord) -> Option<u8> {
+        self.heights
+            .iter()
+            .rev()
+            .find_map(|(candidate, height)| (*candidate == vertex).then_some(*height))
+            .or_else(|| map.get(vertex).map(|tile| tile.height))
+    }
+
+    fn set_height(&mut self, vertex: TileCoord, height: u8) {
+        if let Some((_, current)) = self
+            .heights
+            .iter_mut()
+            .find(|(candidate, _)| *candidate == vertex)
+        {
+            *current = height;
+        } else {
+            self.heights.push((vertex, height));
+        }
+    }
+
+    fn add_dirty_tile(&mut self, map: &crate::map::Map, tile: TileCoord) {
+        if map.get(tile).is_some() && !self.dirty_tiles.contains(&tile) {
+            self.dirty_tiles.push(tile);
+        }
+    }
+
+    fn add_dirty_tiles_around(&mut self, map: &crate::map::Map, vertex: TileCoord) {
+        // Mismo orden y geometría que `TerraformAddDirtyTileAround`: las cuatro
+        // teselas que comparten la esquina norte almacenada.
+        self.add_dirty_tile(map, TileCoord::new(vertex.x, vertex.y - 1));
+        self.add_dirty_tile(map, TileCoord::new(vertex.x - 1, vertex.y - 1));
+        self.add_dirty_tile(map, TileCoord::new(vertex.x - 1, vertex.y));
+        self.add_dirty_tile(map, vertex);
+    }
+}
+
+/// Replica la recursión de `TerraformTileHeight` para el subconjunto de
+/// terreno que puede tocar `GenerateTowns`. El orden de vecinos es
+/// NE, SE, SW, NW (`-X, +Y, +X, -Y`), el mismo del enum nativo.
+fn generated_town_terraform_height(
+    map: &crate::map::Map,
+    state: &mut GeneratedTownTerraformState,
+    vertex: TileCoord,
+    height: u8,
+) -> bool {
+    let Some(current) = state.height_at(map, vertex) else {
+        return false;
+    };
+    // `TerraformTileHeight` falla si una segunda esquina del mismo comando ya
+    // dejó este vértice en la altura pedida.
+    if height == current {
+        return false;
+    }
+
+    state.add_dirty_tiles_around(map, vertex);
+    state.set_height(vertex, height);
+
+    for (dx, dy) in [(-1, 0), (0, 1), (1, 0), (0, -1)] {
+        let neighbour = TileCoord::new(vertex.x + dx, vertex.y + dy);
+        let Some(neighbour_height) = state.height_at(map, neighbour) else {
+            continue;
+        };
+        let height_diff = i16::from(height) - i16::from(neighbour_height);
+        if height_diff.unsigned_abs() <= 1 {
+            continue;
+        }
+
+        // OpenTTD acerca el vecino exactamente a un nivel de la nueva altura.
+        let adjusted_height = if height_diff < 0 {
+            neighbour_height.checked_sub(1)
+        } else {
+            neighbour_height.checked_add(1)
+        };
+        let Some(adjusted_height) = adjusted_height else {
+            return false;
+        };
+        if !generated_town_terraform_height(map, state, neighbour, adjusted_height) {
+            return false;
+        }
+    }
+    true
+}
+
+/// Intenta una alternativa de `TerraformTownTile` en un modelo atómico antes
+/// de materializarla. La validación deliberadamente se limita a clear/forest:
+/// es el subconjunto alcanzado por la fundación de pueblos antes de la fase de
+/// árboles; infraestructura, agua y bordes siguen rechazando el comando.
 fn try_level_generated_town_land(
     map: &mut crate::map::Map,
     tile: TileCoord,
     corners: u8,
     raise: bool,
 ) -> bool {
-    let mut updates = Vec::new();
+    let mut state = GeneratedTownTerraformState::default();
     for corner in [
         SLOPE_CORNER_W,
         SLOPE_CORNER_S,
@@ -679,9 +759,6 @@ fn try_level_generated_town_land(
         let Some(vertex) = generated_town_terraform_corner(tile, corner) else {
             return false;
         };
-        if !generated_town_terraform_vertex_is_mutable(map, vertex) {
-            return false;
-        }
         let Some(current) = map.get(vertex) else {
             return false;
         };
@@ -692,12 +769,21 @@ fn try_level_generated_town_land(
         }) else {
             return false;
         };
-        updates.push((vertex, height));
+        if !generated_town_terraform_height(map, &mut state, vertex, height) {
+            return false;
+        }
     }
-    if updates.is_empty() {
+    if state.heights.is_empty()
+        || state.dirty_tiles.iter().any(|dirty| {
+            !matches!(
+                map.get_kind(*dirty),
+                Some(TileKind::Grass | TileKind::Forest)
+            )
+        })
+    {
         return false;
     }
-    for (vertex, height) in updates {
+    for (vertex, height) in state.heights {
         if map.set_height(vertex, height).is_err() {
             return false;
         }
@@ -718,7 +804,7 @@ fn level_generated_town_land(map: &mut crate::map::Map, tile: TileCoord) -> bool
     let Some((slope, _)) = tile_slope_and_z(map, tile) else {
         return false;
     };
-    if slope == 0 || slope & SLOPE_STEEP != 0 {
+    if slope == 0 {
         return false;
     }
     let low_corners = (!slope) & SLOPE_CORNER_MASK;
@@ -884,7 +970,9 @@ fn materialize_generated_town_flat_road_bridge(
             tile.m8 = TOWN_ROAD_INVALID_TRAM_TYPE;
         } else {
             tile.mapt = set_bridge_middle_mapt(tile.mapt, axis_y);
-            tile.m6 = set_bridge_type_m6(tile.m6, bridge_type);
+            // `SetBridgeMiddle` sólo marca el eje en MAPT. El tipo de puente
+            // pertenece a las rampas (`MP_TUNNELBRIDGE`); copiarlo al agua o
+            // a la vía bajo el vano modifica bytes que OpenTTD conserva.
         }
         if map.set_tile(coord, tile).is_err() {
             return false;
@@ -1033,7 +1121,6 @@ fn grow_generated_town_road_in_tile(
                 }
             }
         }
-
         // La segunda consulta es sobre la continuación; puede consumir el
         // azar de pendiente y permite un tramo recto junto a una casa aunque
         // no pueda continuar más lejos.
@@ -3469,7 +3556,7 @@ mod tests {
         assert_eq!(river_under_bridge.kind, TileKind::Water);
         assert_eq!(river_under_bridge.mapt, 0x68);
         assert_eq!(river_under_bridge.m1, 0x51);
-        assert_eq!(river_under_bridge.m6, BridgeType::Wooden.as_u8() << 2);
+        assert_eq!(river_under_bridge.m6, 0);
 
         let end_ramp = state.map.get(end).expect("end ramp");
         assert_eq!(end_ramp.kind, TileKind::RoadBridge);
@@ -3479,6 +3566,30 @@ mod tests {
             ROAD_BITS_AXIS_Y
         );
         assert!(generated_can_follow_town_road(&state.map, source, 3));
+    }
+
+    #[test]
+    fn flat_town_bridge_keeps_nonwood_type_on_ramps_only() {
+        let mut map = Map::new_flat(8, 8, 1);
+        let line = [
+            TileCoord::new(3, 5),
+            TileCoord::new(3, 4),
+            TileCoord::new(3, 3),
+        ];
+        crate::map::make_water_tile(&mut map, line[1], crate::map::WaterClass::River)
+            .expect("river span");
+
+        assert!(materialize_generated_town_flat_road_bridge(
+            &mut map,
+            &line,
+            3,
+            BridgeType::CantileverSteel,
+        ));
+
+        let bridge_type = BridgeType::CantileverSteel.as_u8() << 2;
+        assert_eq!(map.get(line[0]).expect("start ramp").m6, bridge_type);
+        assert_eq!(map.get(line[2]).expect("end ramp").m6, bridge_type);
+        assert_eq!(map.get(line[1]).expect("river under span").m6, 0);
     }
 
     #[test]
@@ -3553,6 +3664,37 @@ mod tests {
         );
         assert_eq!(map.get_kind(TileCoord::new(4, 3)), Some(TileKind::Road));
         assert_eq!(map.get_kind(TileCoord::new(4, 4)), Some(TileKind::Road));
+    }
+
+    #[test]
+    fn level_town_land_propagates_lowering_to_keep_neighbour_slope_valid() {
+        // Reproducción reducida de la primera divergencia 256²:
+        //
+        //   7 7      La calle al sur impide elevar las dos esquinas bajas.
+        //   6 6      Al bajar las altas de la tesela actual, el Terraformer
+        //   5 5      nativo también baja 7→6 para que la vecina norte siga
+        //              en SLOPE_NW, en vez de convertirse en steep NW (25).
+        let mut map = Map::new_flat(8, 8, 5);
+        let tile = TileCoord::new(3, 3);
+        let north = TileCoord::new(3, 2);
+        for vertex in [TileCoord::new(3, 2), TileCoord::new(4, 2)] {
+            map.set_height(vertex, 7).expect("north high corner");
+        }
+        for vertex in [TileCoord::new(3, 3), TileCoord::new(4, 3)] {
+            map.set_height(vertex, 6).expect("current high corner");
+        }
+        map.set_kind(TileCoord::new(3, 4), TileKind::Road)
+            .expect("road blocks raising the low corners");
+
+        assert_eq!(tile_slope_and_z(&map, tile), Some((SLOPE_NW, 5)));
+        assert_eq!(tile_slope_and_z(&map, north), Some((SLOPE_NW, 6)));
+
+        assert!(level_generated_town_land(&mut map, tile));
+
+        assert_eq!(tile_slope_and_z(&map, tile), Some((0, 5)));
+        assert_eq!(tile_slope_and_z(&map, north), Some((SLOPE_NW, 5)));
+        assert_eq!(map.get(TileCoord::new(3, 2)).expect("north N").height, 6);
+        assert_eq!(map.get(TileCoord::new(4, 2)).expect("north W").height, 6);
     }
 
     #[test]

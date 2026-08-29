@@ -49,6 +49,8 @@ const DEFAULT_LARGER_TOWNS_INTERVAL: u32 = 4;
 /// Último intento de `GenerateTowns` cuando no se pudo crear ninguno.
 const RANDOM_TOWN_FALLBACK_ATTEMPTS: usize = 10_000;
 const SPIRAL_DIRS: [(i32, i32); 4] = [(-1, 0), (0, 1), (1, 0), (0, -1)];
+/// Direcciones de `GetClosestWaterDistance`, que recorre rombos Manhattan.
+const WATER_DISTANCE_DIAMOND_DIRS: [(i32, i32); 4] = [(-1, 1), (1, 1), (1, -1), (-1, -1)];
 /// Secuencia acumulativa de `_town_coord_mod` usada por `GrowTown`.
 const TOWN_GROWTH_COORD_MOD: [(i32, i32); 13] = [
     (-1, 0),
@@ -1330,21 +1332,28 @@ fn closest_water_distance(map: &crate::map::Map, center: TileCoord) -> u32 {
         return 0;
     }
     let (map_w, map_h) = map.dimensions();
+    // `GetClosestWaterDistance` recorre un rombo de distancia Manhattan, no
+    // el perímetro cuadrado (Chebyshev). El detalle cambia el punto elegido
+    // por `FindNearestGoodCoastalTownSpot` cuando varios interiores son
+    // válidos, aunque ninguna de estas búsquedas consume RNG.
+    let max_x = i32::try_from(map_w).unwrap_or(i32::MAX).saturating_sub(1);
+    let max_y = i32::try_from(map_h).unwrap_or(i32::MAX).saturating_sub(1);
     for distance in 1..0x7F_u32 {
         let d = i32::try_from(distance).unwrap_or(i32::MAX);
-        for y in center.y - d..=center.y + d {
-            for x in center.x - d..=center.x + d {
-                if (x - center.x).abs().max((y - center.y).abs()) != d {
-                    continue;
-                }
+        let mut x = center.x;
+        let mut y = center.y.saturating_sub(d);
+        for (dx, dy) in WATER_DISTANCE_DIAMOND_DIRS {
+            for _ in 0..distance {
                 if x >= 0
                     && y >= 0
-                    && x < map_w as i32
-                    && y < map_h as i32
+                    && x < max_x
+                    && y < max_y
                     && is_water_ground(map, TileCoord::new(x, y))
                 {
                     return distance;
                 }
+                x = x.saturating_add(dx);
+                y = y.saturating_add(dy);
             }
         }
     }
@@ -1655,6 +1664,18 @@ mod tests {
             Some(TileCoord::new(47, 23))
         );
         assert_eq!(ctx.rng.state, [2_945_732_258, 1_049_486_831]);
+    }
+
+    #[test]
+    fn closest_water_distance_uses_manhattan_diamond_not_square_ring() {
+        let mut map = Map::new_flat(16, 16, 0);
+        let water = TileCoord::new(7, 7);
+        crate::map::make_water_tile(&mut map, water, crate::map::WaterClass::Sea)
+            .expect("water tile");
+
+        // El agua está a dos pasos Chebyshev, pero cuatro Manhattan. El
+        // recorrido de `GetClosestWaterDistance` de OpenTTD devuelve cuatro.
+        assert_eq!(closest_water_distance(&map, TileCoord::new(5, 5)), 4);
     }
 
     #[test]

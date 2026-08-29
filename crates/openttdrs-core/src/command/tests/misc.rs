@@ -176,7 +176,10 @@ fn place_industry_spec_starts_construction_in_progress() {
             !crate::industry_uses_water_ground(&s.map, coord, u16::from(tile.m5), 0),
             "obra en tierra no debe usar WaterTile en {coord:?}"
         );
-        assert_eq!(tile.m2, 1);
+        // OpenTTD entrega el primer slot del IndustryPool como IndustryID(0).
+        // Cero no es un centinela: la pertenencia se resuelve por la huella
+        // de la entidad (y se conserva en MAP2/m2).
+        assert_eq!(tile.m2, 0);
         // P7: MakeIndustry siembra m3 y deja triggers (m6 bits 3–5) a 0.
         assert_eq!(
             crate::industry_random_triggers(&tile),

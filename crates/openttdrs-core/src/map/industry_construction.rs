@@ -176,8 +176,12 @@ pub fn advance_industry_construction_from_visits(
         if tile.kind != TileKind::Industry || is_industry_completed(tile.m1) {
             continue;
         }
-        if tile.m2 != 0
-            && let Some(ind) = industries.iter().find(|i| i.instance_id == tile.m2)
+        // `IndustryID(0)` es válido en el pool nativo. La pertenencia se
+        // confirma además contra la huella: sólo una tesela sin entidad sigue
+        // por el fallback huérfano individual.
+        if let Some(ind) = industries
+            .iter()
+            .find(|industry| industry.instance_id == tile.m2 && industry.contains_tile(coord))
         {
             if coord == ind.pos {
                 triggered_ids.insert(tile.m2);
@@ -426,6 +430,35 @@ mod tests {
             }
         }
         panic!("obra no terminó en 20k ticks LFSR");
+    }
+
+    #[test]
+    fn construction_id_zero_stays_attached_to_its_footprint() {
+        let origin = TileCoord::new(2, 2);
+        let second = TileCoord::new(3, 2);
+        let mut map = Map::new_flat(8, 8, 0);
+        for coord in [origin, second] {
+            let mut tile = map.get(coord).expect("fixture tile");
+            tile.kind = TileKind::Industry;
+            tile.m1 = 0;
+            tile.m2 = 0;
+            tile.m5 = 0;
+            map.set_tile(coord, tile).expect("set industry tile");
+        }
+        let industry = Industry::with_tiles(origin, IndustryKind::Factory, vec![origin, second])
+            .with_instance_id(0);
+        let visits = vec![
+            (origin, map.get(origin).expect("origin")),
+            (second, map.get(second).expect("second")),
+        ];
+
+        let dirty = advance_industry_construction_from_visits(&mut map, &visits, &[industry]);
+
+        assert_eq!(dirty.len(), 2);
+        assert_eq!(
+            industry_construction_stage(map.get(origin).expect("origin after").m1),
+            industry_construction_stage(map.get(second).expect("second after").m1)
+        );
     }
 
     #[test]

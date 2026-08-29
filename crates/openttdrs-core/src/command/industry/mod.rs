@@ -41,6 +41,27 @@ fn industry_counter_seed(state: &GameState, c: TileCoord, industry_id: u8) -> u1
     ((u16::from(hi) << 8) | u16::from(lo)) & crate::industry::INDUSTRY_COUNTER_MASK
 }
 
+/// Primer slot libre de `IndustryPool` representable por el modelo actual.
+///
+/// `IndustryID(0)` es una instancia válida en OpenTTD, no un centinela. Usar
+/// `industries.len() + 1` desplazaba todas las filas generadas y también el
+/// `m2` de los campos que pertenecen a Farm. El pool real reutiliza huecos,
+/// por lo que buscar el menor ID ausente es además estable tras demoliciones o
+/// imports con IDs no densos.
+fn next_industry_instance_id(state: &GameState) -> u8 {
+    (0..=u8::MAX)
+        .find(|candidate| {
+            !state
+                .industries
+                .iter()
+                .any(|industry| industry.instance_id == *candidate)
+        })
+        // El mapa crudo del modelo actual conserva un byte para el ID. Si se
+        // agotaran los 256 slots, mantenemos el fallback histórico hasta que
+        // RMAP-064 amplíe el campo a la representación completa del pool.
+        .unwrap_or(u8::MAX)
+}
+
 pub fn check_place_industry_spec(
     map: &crate::map::Map,
     c: TileCoord,
@@ -157,7 +178,7 @@ fn place_industry_spec_template_sandbox(
     template: &[(TileCoord, u8)],
 ) -> Result<(), CommandError> {
     let footprint: Vec<TileCoord> = template.iter().map(|(tile, _)| *tile).collect();
-    let industry_id = u8::try_from(state.industries.len().saturating_add(1)).unwrap_or(255);
+    let industry_id = next_industry_instance_id(state);
     let random_colour = industry_id.wrapping_mul(5) % 16;
     for (tile, m5) in template {
         state
@@ -254,7 +275,7 @@ pub fn place_industry_spec_def_sandbox(
     check_place_industry_spec_def(&state.map, c, &def)?;
     let footprint = def.footprint_at(c, 0);
     let tiles: Vec<TileCoord> = footprint.iter().map(|(t, _)| *t).collect();
-    let industry_id = u8::try_from(state.industries.len().saturating_add(1)).unwrap_or(255);
+    let industry_id = next_industry_instance_id(state);
     let random_colour = industry_id.wrapping_mul(5) % 16;
     for (tile, gfx) in &footprint {
         state

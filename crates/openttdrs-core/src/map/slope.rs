@@ -95,12 +95,11 @@ pub const fn inclined_slope_direction(tileh: u8) -> Option<u8> {
 /// Pendiente complementaria (`ComplementSlope` en OpenTTD).
 #[must_use]
 pub const fn complement_slope(tileh: u8) -> u8 {
-    if tileh == 0 {
-        0
-    } else {
-        let c = tileh ^ 0x0F;
-        if c > 14 { 14 } else { c }
-    }
+    // `ComplementSlope` is a four-bit XOR in OpenTTD. In particular, the
+    // complement of a flat tile is `SLOPE_ELEVATED` (0x0F), which is used by
+    // river generation when raising a small lake out of the sea. Clamping
+    // 0x0F to 0x0E silently turned that operation into a no-op.
+    tileh ^ 0x0F
 }
 
 const TILE_SIZE_SUB: i32 = 16;
@@ -343,6 +342,12 @@ mod tests {
     #[test]
     fn complement_ne_is_sw() {
         assert_eq!(complement_slope(SLOPE_NE), SLOPE_SW);
+    }
+
+    #[test]
+    fn complement_flat_is_elevated() {
+        assert_eq!(complement_slope(0), 0x0F);
+        assert_eq!(complement_slope(0x0F), 0);
     }
 
     #[test]

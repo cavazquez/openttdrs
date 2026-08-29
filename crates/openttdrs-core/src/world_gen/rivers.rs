@@ -3,14 +3,15 @@
 use std::collections::HashSet;
 
 use crate::cargodist::parity::Randomizer;
-use crate::map::slope::SLOPE_STEEP;
+use crate::company::OWNER_NONE_M1;
+use crate::map::slope::{SLOPE_STEEP, complement_slope};
 use crate::map::water_flood::{DIR_OFFSETS, FLOOD_FROM_DIRS, is_slope_one_corner_raised};
 use crate::map::{
     Map, MapError, TileCoord, TileKind, WaterClass, make_shore_tile, make_water_tile,
     set_water_class_m1, tile_slope_and_z, water_class_from_m1,
 };
 
-use super::config::{PreserveRect, WorldGenConfig};
+use super::config::{CLEAR_GROUND_GRASS, PreserveRect, WorldGenConfig, clear_ground_m5};
 
 /// Flujos de río desde tierra alta hacia el mar / lagos (`WaterClass::River`).
 pub(super) fn carve_rivers(
@@ -93,18 +94,31 @@ fn spiral_tiles(center: TileCoord, diameter: u32, map: &Map) -> Vec<TileCoord> {
         return Vec::new();
     }
     let max_radius = i32::try_from(diameter / 2).expect("river diameter fits i32");
+    let odd_diameter = diameter % 2 == 1;
     let mut radius = 0i32;
-    let mut dir = 0usize;
-    let mut position = 1i32;
-    // `SpiralTileIterator`: esquina oeste del rectángulo central 2×2.
-    let mut x = center.x + 1;
+    // `INVALID_DIAGDIR` es el estado especial que emite el centro de un
+    // diámetro impar y, al avanzar, salta a la primera corona con
+    // `TileIndexDiffCByDir(DIR_W) == (1, -1)`.
+    let mut dir = if odd_diameter { usize::MAX } else { 0 };
+    let mut position = i32::from(!odd_diameter);
+    let mut x = if odd_diameter { center.x } else { center.x + 1 };
     let mut y = center.y;
     let mut tiles = Vec::with_capacity((diameter * diameter) as usize);
 
-    while radius < max_radius {
+    while radius < max_radius || dir == usize::MAX {
         if x >= 0 && y >= 0 && x < width as i32 && y < height as i32 {
             tiles.push(TileCoord::new(x, y));
         }
+
+        // `SpiralTileIterator::Increment`, incluido el caso central impar.
+        if dir == usize::MAX {
+            x += 1;
+            y -= 1;
+            dir = 0;
+            position = 1 + radius * 2 + 1;
+            continue;
+        }
+
         let (dx, dy) = RIVER_DIRS[dir];
         x += dx;
         y += dy;
@@ -112,18 +126,17 @@ fn spiral_tiles(center: TileCoord, diameter: u32, map: &Map) -> Vec<TileCoord> {
         if position > 0 {
             continue;
         }
+
         dir += 1;
         if dir == RIVER_DIRS.len() {
-            // `TileIndexDiffCByDir(DIR_W)`.
+            // `TileIndexDiffCByDir(DIR_W)` avanza la corona siguiente.
             x += 1;
             y -= 1;
             radius += 1;
             dir = 0;
-            if radius == max_radius {
-                break;
-            }
         }
-        position = radius * 2 + 1;
+        // `extent[dir]` vale 0 para el centro par y 1 para el hueco impar.
+        position = i32::from(odd_diameter) + radius * 2 + 1;
     }
     tiles
 }
@@ -205,10 +218,18 @@ fn river_flows_down(map: &Map, begin: TileCoord, end: TileCoord) -> bool {
     (end_slope == begin_slope && end_height < begin_height) || end_slope == 0 || begin_slope == 0
 }
 
-fn connected_sea_reaches_edge(map: &Map, start: TileCoord, limit: usize) -> bool {
+/// Cuenta el parche de mar plano conectado a `start`, igual que
+/// `CountConnectedSeaTiles`. Se conserva la lista porque `FlowRiver` aplana
+/// cada tesela cuando el parche es un lago pequeño.
+fn collect_connected_sea_tiles(
+    map: &Map,
+    start: TileCoord,
+    limit: usize,
+) -> (bool, Vec<TileCoord>) {
     let (width, height) = map.dimensions();
     let mut seen = HashSet::new();
     let mut stack = vec![start];
+    let mut sea = Vec::new();
     while let Some(coord) = stack.pop() {
         let Some(tile) = map.get(coord) else {
             continue;
@@ -224,25 +245,96 @@ fn connected_sea_reaches_edge(map: &Map, start: TileCoord, limit: usize) -> bool
             || coord.x >= width.saturating_sub(2) as i32
             || coord.y >= height.saturating_sub(2) as i32
         {
-            return true;
+            return (true, sea);
         }
         if !seen.insert(coord) {
             continue;
         }
-        if seen.len() > limit {
-            return false;
+        sea.push(coord);
+        // The native routine deliberately stops after counting limit + 1
+        // tiles; the caller then accepts this as an ocean without retaining
+        // or flattening the rest of the component.
+        if sea.len() > limit {
+            return (false, sea);
         }
         for (dx, dy) in RIVER_DIRS {
             stack.push(TileCoord::new(coord.x + dx, coord.y + dy));
         }
     }
-    false
+    (false, sea)
+}
+
+/// Aplica la parte observable de los dos `CmdTerraformLand` que usa
+/// `FlowRiver` para drenar un lago pequeño. Durante la generación mundial las
+/// teselas de esos lagos están a cota cero, por lo que la orden de bajar falla
+/// sin cambios y la orden complementaria eleva sus cuatro esquinas una unidad;
+/// después `TerraformTile_Water` ejecuta `DoClearSquare`.
+fn flatten_small_sea_tile(map: &mut Map, tile_coord: TileCoord) {
+    const CORNERS: [(u8, i32, i32); 4] = [
+        (1, 1, 0), // SLOPE_W: tile + TileDiffXY(1, 0)
+        (2, 1, 1), // SLOPE_S
+        (4, 0, 1), // SLOPE_E
+        (8, 0, 0), // SLOPE_N
+    ];
+    let Some((slope, _)) = tile_slope_and_z(map, tile_coord) else {
+        return;
+    };
+
+    // `FlowRiver` first tries `SLOPE_ELEVATED` down. On a cota-zero lake the
+    // command fails atomically, but once an earlier tile has raised the shared
+    // corners, a flat cota-one tile can be lowered and raised again. Keeping
+    // this transaction (rather than only raising) avoids creating cota two
+    // plateaus and matches `CmdTerraformLand`'s command model.
+    let can_lower = CORNERS.iter().all(|&(_, dx, dy)| {
+        map.get(TileCoord::new(tile_coord.x + dx, tile_coord.y + dy))
+            .is_some_and(|tile| tile.height > 0)
+    });
+    if can_lower {
+        for &(_, dx, dy) in &CORNERS {
+            let corner = TileCoord::new(tile_coord.x + dx, tile_coord.y + dy);
+            if let Some(height) = map.get(corner).map(|tile| tile.height) {
+                let _ = map.set_height(corner, height - 1);
+            }
+        }
+    }
+
+    let slope_after_lowering = tile_slope_and_z(map, tile_coord)
+        .map_or(slope, |(slope_after_lowering, _)| slope_after_lowering);
+    let raise_slope = complement_slope(slope_after_lowering);
+    for (bit, dx, dy) in CORNERS {
+        if raise_slope & bit == 0 {
+            continue;
+        }
+        let corner = TileCoord::new(tile_coord.x + dx, tile_coord.y + dy);
+        let Some(height) = map.get(corner).map(|tile| tile.height) else {
+            continue;
+        };
+        let _ = map.set_height(corner, height.saturating_add(1));
+    }
+
+    // `DoClearSquare`/`MakeClear(tile, CLEAR_GRASS, 3)` resets every map
+    // plane owned by the former water tile, not only its semantic kind.
+    let Some(mut cleared) = map.get(tile_coord) else {
+        return;
+    };
+    cleared.kind = TileKind::Grass;
+    cleared.mapt = 0;
+    cleared.m5 = clear_ground_m5(CLEAR_GROUND_GRASS, 3);
+    cleared.m1 = OWNER_NONE_M1;
+    cleared.m2 = 0;
+    cleared.m2_hi = 0;
+    cleared.m3 = 0;
+    cleared.m3hi = 0;
+    cleared.m6 = 0;
+    cleared.m7 = 0;
+    cleared.m8 = 0;
+    let _ = map.set_tile(tile_coord, cleared);
 }
 
 /// Explora `FlowRiver` hasta la frontera que consume RNG. El trazado YAPF,
 /// lagos/humedales y ensanchamiento siguen separados en RMAP-018.
 fn probe_flow_river(
-    map: &Map,
+    map: &mut Map,
     spring: TileCoord,
     begin: TileCoord,
     min_river_length: u32,
@@ -265,8 +357,14 @@ fn probe_flow_river(
     let mut marks = HashSet::from([begin]);
     let mut queue = vec![begin];
     let mut found = None;
-    for index in 0..queue.len() {
+    // El `for (size_t i = 0; i != queue.size(); i++)` nativo reevalúa
+    // `queue.size()` después de cada expansión. Un rango Rust captura el
+    // extremo al crearse y truncaba el BFS a sus primeros cuatro vecinos,
+    // evitando alcanzar las cotas inferiores y desfasando el RNG.
+    let mut index = 0;
+    while index < queue.len() {
         let end = queue[index];
+        index += 1;
         let Some((slope_end, height_end)) = tile_slope_and_z(map, end) else {
             continue;
         };
@@ -281,9 +379,17 @@ fn probe_flow_river(
                 let (width, height) = map.dimensions();
                 let threshold =
                     ((2.0 * f64::from(width.saturating_mul(height)).sqrt()) as usize).min(1024);
-                if connected_sea_reaches_edge(map, end, threshold) {
+                let (found_edge, sea_tiles) = collect_connected_sea_tiles(map, end, threshold);
+                if found_edge || sea_tiles.len() > threshold {
                     found = Some(end);
                     break;
+                }
+                // A small inland sea is not a valid river terminus. The
+                // native generator raises/clears it and keeps expanding
+                // the same BFS, which is also important for the RNG and
+                // for the eventual clear/town phases.
+                for sea_tile in sea_tiles {
+                    flatten_small_sea_tile(map, sea_tile);
                 }
             } else {
                 found = Some(end);
@@ -549,6 +655,37 @@ mod tests {
         assert_eq!(clear.m1, OWNER_NONE_M1);
     }
 
+    #[test]
+    fn small_sea_flattening_raises_and_clears_the_connected_patch() {
+        let mut map = Map::new_flat(8, 8, 0);
+        let patch = [TileCoord::new(3, 3), TileCoord::new(4, 3)];
+        for tile in patch {
+            make_water_tile(&mut map, tile, WaterClass::Sea).expect("make lake tile");
+        }
+
+        for tile in patch {
+            flatten_small_sea_tile(&mut map, tile);
+        }
+
+        for tile in patch {
+            let clear = map.get(tile).expect("cleared lake tile");
+            assert_eq!(clear.kind, TileKind::Grass);
+            assert_eq!(clear.height, 1);
+            assert_eq!(clear.m1, OWNER_NONE_M1);
+            assert_eq!(clear.m5, clear_ground_m5(CLEAR_GROUND_GRASS, 3));
+        }
+        // Both tiles share the two raised corners. The second command must
+        // lower/re-raise a flat cota-one tile instead of creating cota two.
+        assert_eq!(
+            map.get(TileCoord::new(4, 3)).expect("shared corner").height,
+            1
+        );
+        assert_eq!(
+            map.get(TileCoord::new(4, 4)).expect("shared corner").height,
+            1
+        );
+    }
+
     fn descending_river_test_map(width: i32, sea_x: i32) -> Map {
         let mut map = Map::new_flat(width as u32, 8, 0);
         for x in 0..width {
@@ -606,6 +743,73 @@ mod tests {
         for _ in 0..512 {
             let _ = expected.next();
         }
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn spiral_sequence_matches_openttd_odd_diameter() {
+        let map = Map::new_flat(64, 64, 0);
+        let actual = spiral_tiles(TileCoord::new(1, 1), 5, &map);
+        let expected = [
+            (1, 1),
+            (2, 0),
+            (1, 0),
+            (0, 0),
+            (0, 1),
+            (0, 2),
+            (1, 2),
+            (2, 2),
+            (2, 1),
+            (0, 3),
+            (1, 3),
+            (2, 3),
+            (3, 3),
+            (3, 2),
+            (3, 1),
+            (3, 0),
+        ];
+        let expected = expected
+            .into_iter()
+            .map(|(x, y)| TileCoord::new(x, y))
+            .collect::<Vec<_>>();
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn spiral_sequence_matches_openttd_even_diameter() {
+        let map = Map::new_flat(64, 64, 0);
+        let actual = spiral_tiles(TileCoord::new(1, 1), 6, &map);
+        let expected = [
+            (2, 1),
+            (1, 1),
+            (1, 2),
+            (2, 2),
+            (3, 0),
+            (2, 0),
+            (1, 0),
+            (0, 0),
+            (0, 1),
+            (0, 2),
+            (0, 3),
+            (1, 3),
+            (2, 3),
+            (3, 3),
+            (3, 2),
+            (3, 1),
+            (0, 4),
+            (1, 4),
+            (2, 4),
+            (3, 4),
+            (4, 4),
+            (4, 3),
+            (4, 2),
+            (4, 1),
+            (4, 0),
+        ];
+        let expected = expected
+            .into_iter()
+            .map(|(x, y)| TileCoord::new(x, y))
+            .collect::<Vec<_>>();
         assert_eq!(actual, expected);
     }
 }

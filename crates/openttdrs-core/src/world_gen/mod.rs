@@ -442,6 +442,27 @@ mod tests {
     }
 
     #[test]
+    fn river_bfs_keeps_dynamic_queue_rng_in_sync() {
+        let config = WorldGenConfig {
+            seed: 1_330_935_380,
+            sea_level: 1,
+            island: false,
+            water_borders: Some(0x10),
+            amount_of_rivers: 2,
+            startup_rng_draws: 1,
+            ..WorldGenConfig::default().with_terrain_type(TerrainType::Flat)
+        };
+        let mut map = Map::new_flat(64, 64, 0);
+
+        let rng = apply_landscape_with_rng(&mut map, &config, &[]).expect("landscape generation");
+
+        // Estado capturado al entrar a `GenerateClearTile` en el oráculo
+        // OpenTTD. El caso fuerza que el BFS recorra los vecinos añadidos
+        // durante la iteración y consuma los `RandomRange` de lagos.
+        assert_eq!(rng.state, [1_950_240_853, 4_288_165_560]);
+    }
+
+    #[test]
     fn fix_slopes_caps_orthogonal_height_jumps() {
         let mut map = Map::new_flat(4, 4, 0);
         map.set_height(TileCoord::new(2, 2), 8)

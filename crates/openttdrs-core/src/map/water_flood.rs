@@ -1,6 +1,7 @@
 //! Inundación desde agua (`water_cmd.cpp`: `TileLoop_Water`, `DoFloodTile`, `FloodVehicles`).
 
 use crate::GameState;
+use crate::company::OWNER_NONE_M1;
 use crate::map::slope::{SLOPE_STEEP, tile_slope_and_z};
 use crate::map::water_class::{
     WaterClass, make_water_tile, set_water_class_m1, water_class_from_m1,
@@ -449,7 +450,7 @@ fn dry_up_tile(state: &mut GameState, c: TileCoord) {
             let _ = state
                 .map
                 .set_mapt_m5(c, 0x00, clear_ground_m5(CLEAR_GROUND_GRASS, 3));
-            let _ = state.map.set_m1(c, 0);
+            let _ = state.map.set_m1(c, OWNER_NONE_M1);
             let _ = state.map.set_m2(c, 0);
             let _ = state.map.set_m3(c, 0);
         }

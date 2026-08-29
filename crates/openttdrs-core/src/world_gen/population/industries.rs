@@ -451,8 +451,19 @@ fn try_place_industry(
         // color/counter, `MakeIndustry` y triggers de construcción. No
         // pertenece al intento RMAP-058: ocurre sólo después de que el sitio
         // fue aceptado y determina el primer `RandomTile` de la especie
-        // force-one siguiente.
-        consume_successful_industry_constructor_rng(ctx.rng, spec, attempt.layout_index);
+        // force-one siguiente. Los valores que escribe `MakeIndustry` se
+        // aplican después de la orden semántica, manteniendo la ruta de
+        // construcción manual separada de la que se ejecuta durante
+        // `GenerateIndustries`.
+        let constructor_random =
+            consume_successful_industry_constructor_rng(ctx.rng, spec, attempt.layout_index);
+        apply_generated_industry_bytes(
+            ctx.state,
+            origin,
+            spec,
+            attempt.layout_index,
+            &constructor_random,
+        );
         // `DoCreateNewIndustry` planta 50 campos alrededor de una granja con
         // `PlantRandomFarmField`. El mapa generado debe conservar el contrato
         // MP_CLEAR/CLEAR_FIELDS (no un TileKind inventado): el renderer y el
@@ -510,22 +521,72 @@ fn generated_industry_attempt(
 /// luego un random por tesela materializada y otro por cada trigger
 /// `ConstructionStageChanged`; este último se consume incluso si el tile
 /// vanilla no declara un callback de animación.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct IndustryConstructorRandom {
+    random_colour: u8,
+    counter: u16,
+    tile_random: Vec<u8>,
+}
+
 fn consume_successful_industry_constructor_rng(
     rng: &mut crate::cargodist::parity::Randomizer,
     spec: IndustrySpec,
     layout_index: usize,
-) {
+) -> IndustryConstructorRandom {
     for _ in spec.produced_cargos() {
         let _initial_smooth_economy_rate = rng.next();
     }
-    let _random_colour_and_counter = rng.next();
+    let random_colour_and_counter = rng.next();
+    let random_colour = u8::try_from(random_colour_and_counter & 0x0F).unwrap_or(0);
+    let counter = u16::try_from((random_colour_and_counter >> 4) & 0x0FFF).unwrap_or(0);
     let tile_count = industry_template_with_layout(TileCoord::new(0, 0), spec, layout_index)
         .map_or(0, |layout| layout.len());
-    for _ in 0..tile_count {
-        let _industry_tile_random = rng.next();
-    }
+    let tile_random = (0..tile_count)
+        .map(|_| u8::try_from(rng.next() & 0xFF).unwrap_or(0))
+        .collect();
     for _ in 0..tile_count {
         let _construction_stage_changed_random = rng.next();
+    }
+    IndustryConstructorRandom {
+        random_colour,
+        counter,
+        tile_random,
+    }
+}
+
+/// Completa la escritura cruda de `DoCreateNewIndustry` durante la generación.
+///
+/// `MakeIndustry` deja `m1=WaterClass` y, bajo `_generating_world`, el caller
+/// escribe inmediatamente `counter=3`/`stage=2`. Cada tesela recibe además el
+/// byte bajo de su propio `Random()`. La orden pública conserva sus bytes
+/// deterministas para no cambiar el comportamiento de fundación manual.
+fn apply_generated_industry_bytes(
+    state: &mut GameState,
+    origin: TileCoord,
+    spec: IndustrySpec,
+    layout_index: usize,
+    random: &IndustryConstructorRandom,
+) {
+    let Some(layout) = industry_template_with_layout(origin, spec, layout_index) else {
+        return;
+    };
+    for ((coord, _), tile_random) in layout.iter().zip(random.tile_random.iter().copied()) {
+        let Some(mut tile) = state.map.get(*coord) else {
+            continue;
+        };
+        // Preserve bits 5..6 (`WaterClass`) while writing stage 2 and counter
+        // 3, yielding 0x6E for a land industry (`MakeIndustry` + generation).
+        tile.m1 = (tile.m1 & !0x0F) | 0x0E;
+        tile.m3 = tile_random;
+        let _ = state.map.set_tile(*coord, tile);
+    }
+    if let Some(industry) = state
+        .industries
+        .iter_mut()
+        .find(|industry| industry.pos == origin && industry.spec == Some(spec))
+    {
+        industry.random_colour = random.random_colour;
+        industry.counter = random.counter;
     }
 }
 
@@ -1123,6 +1184,50 @@ mod tests {
             generated_industry_attempt(&mut rng, 64, 64, 3).origin,
             TileCoord::new(44, 5)
         );
+    }
+
+    #[test]
+    fn generated_constructor_writes_native_industry_tile_bytes() {
+        let (mut state, mut rng) = generated_towns_state_and_rng(1_330_935_378);
+        let town_centers: Vec<_> = state.towns.iter().map(|town| town.pos).collect();
+        let mut ctx = PopCtx {
+            state: &mut state,
+            preserve: &[],
+            rng: &mut rng,
+            mw: 64,
+            mh: 64,
+            industry_platform: 1,
+            multiple_industry_per_town: false,
+        };
+        let mut origins = Vec::new();
+        assert!(try_place_industry(
+            &mut ctx,
+            IndustrySpec::CoalMine,
+            FORCED_INDUSTRY_PLACEMENT_ATTEMPTS,
+            &town_centers,
+            &mut origins,
+        ));
+        assert_eq!(origins, [TileCoord::new(21, 41)]);
+
+        let industry = ctx.state.industries.last().expect("created industry");
+        assert_eq!(industry.instance_id, 0);
+        assert_eq!(industry.random_colour, 13);
+        assert_eq!(industry.counter, 1_347);
+        let expected_random = [0x61, 0xE1, 0xBD, 0x41, 0x1E, 0x2E, 0xDD, 0xD7, 0x09, 0x57];
+        let layout = industry_template_with_layout(industry.pos, IndustrySpec::CoalMine, 3)
+            .expect("native coal layout");
+        assert_eq!(layout.len(), expected_random.len());
+        for ((coord, _), expected) in layout.iter().zip(expected_random) {
+            let tile = ctx.state.map.get(*coord).expect("industry tile");
+            assert_eq!(tile.m1, 0x6E, "native stage/counter at {coord:?}");
+            assert_eq!(tile.m3, expected, "native MakeIndustry random at {coord:?}");
+            assert_eq!(tile.m3hi, 0);
+            assert_eq!(tile.m7, 0);
+            assert_eq!(tile.m8, 0);
+        }
+        // The ten ConstructionStageChanged callbacks are consumed after the
+        // tile writes, preserving the next force-one RandomTile boundary.
+        assert_eq!(ctx.rng.state, [2_354_350_958, 520_419_394]);
     }
 
     #[test]

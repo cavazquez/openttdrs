@@ -14,7 +14,7 @@ use crate::map::{
 use super::config::{
     CLEAR_GROUND_GRASS, CLEAR_GROUND_ROUGH, PreserveRect, WorldGenConfig, clear_ground_m5,
 };
-use super::trees::place_tree;
+use super::trees::place_tree_keep_density;
 
 /// Flujos de río desde tierra alta hacia el mar / lagos (`WaterClass::River`).
 pub(super) fn carve_rivers(
@@ -422,7 +422,7 @@ fn make_wetlands(
             }
             if has_trees {
                 let random = rng.next();
-                let _ = place_tree(map, tile, random, climate);
+                let _ = place_tree_keep_density(map, tile, random, climate);
             }
         }
     }

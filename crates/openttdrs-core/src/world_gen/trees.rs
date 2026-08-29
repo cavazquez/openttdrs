@@ -398,7 +398,33 @@ const fn tropic_zone(tile: Tile) -> u8 {
     tile.mapt & TROPIC_ZONE_MASK
 }
 
+/// `PlaceTree(..., keep_density = false)` usada por la plantación general.
 pub(super) fn place_tree(map: &mut Map, c: TileCoord, random: u32, climate: Climate) -> bool {
+    place_tree_with_density(map, c, random, climate, false)
+}
+
+/// Variante de `PlaceTree` para callers que ya prepararon el sustrato.
+///
+/// `MakeWetlands` primero deja la tesela clear en `CLEAR_ROUGH` y luego llama
+/// a `PlaceTree(..., true)`: el árbol debe retener ese suelo en vez de
+/// reemplazarlo por el bit 28 del sorteo. La colocación general conserva el
+/// comportamiento contrario mediante [`place_tree`].
+pub(super) fn place_tree_keep_density(
+    map: &mut Map,
+    c: TileCoord,
+    random: u32,
+    climate: Climate,
+) -> bool {
+    place_tree_with_density(map, c, random, climate, true)
+}
+
+fn place_tree_with_density(
+    map: &mut Map,
+    c: TileCoord,
+    random: u32,
+    climate: Climate,
+    keep_density: bool,
+) -> bool {
     let Some(previous) = map.get(c) else {
         return false;
     };
@@ -408,7 +434,7 @@ pub(super) fn place_tree(map: &mut Map, c: TileCoord, random: u32, climate: Clim
     let count_minus_one = ((random >> 22) & 0x03) as u8;
     let growth = (((random >> 16) & 0x07) as u8).min(6);
 
-    let (mut ground, mut density, preserve_ground) = match previous.kind {
+    let (mut ground, mut density, preserve_special_ground) = match previous.kind {
         TileKind::Water => {
             // `PlantTreesOnTile` transforma sólo costas válidas en orilla y
             // borra el estado non-flooding de sus ocho vecinas.
@@ -453,8 +479,9 @@ pub(super) fn place_tree(map: &mut Map, c: TileCoord, random: u32, climate: Clim
         _ => return false,
     };
     // `PlaceTree(..., false)` rerandomiza suelo normal, pero conserva nieve,
-    // desierto y orilla. Esta ruta de generación nunca solicita keep_density.
-    if !preserve_ground {
+    // desierto y orilla. `MakeWetlands` solicita además `keep_density` para
+    // retener el rough que acaba de materializar.
+    if !keep_density && !preserve_special_ground {
         ground = ((random >> 28) & 1) as u8;
         density = 3;
     }
@@ -633,14 +660,17 @@ mod tests {
     use super::{
         GROVE_ANGLE_STEP, GROVE_PHASE_DIVISOR, TROPIC_ZONE_DESERT, TROPIC_ZONE_RAINFOREST,
         generate_trees, generate_trees_with_rng_observer, is_plantable,
-        is_slope_with_one_corner_raised, place_rainforest_trees, place_tree, random_tile,
-        random_tree_type, same_height_attempt_count, tree_group_count,
+        is_slope_with_one_corner_raised, place_rainforest_trees, place_tree,
+        place_tree_keep_density, random_tile, random_tree_type, same_height_attempt_count,
+        tree_group_count,
     };
     use crate::cargodist::parity::Randomizer;
     use crate::map::{
         Map, TileCoord, TileKind, WaterClass, set_water_class_m1, water_class_from_m1,
     };
-    use crate::world_gen::{CLEAR_GROUND_DESERT, CLEAR_GROUND_FIELDS, Climate, clear_ground_m5};
+    use crate::world_gen::{
+        CLEAR_GROUND_DESERT, CLEAR_GROUND_FIELDS, CLEAR_GROUND_ROUGH, Climate, clear_ground_m5,
+    };
 
     #[test]
     fn random_tile_matches_power_of_two_tile_index_layout() {
@@ -817,6 +847,34 @@ mod tests {
             tile.m6 | tile.m7 | tile.m8 as u8 | tile.m2_hi | tile.m3hi,
             0
         );
+    }
+
+    #[test]
+    fn wetland_tree_keeps_the_prepared_rough_ground() {
+        let mut map = Map::new_flat(8, 8, 2);
+        let random = 0x0123_4567;
+        let rerandomized = TileCoord::new(3, 3);
+        let preserved = TileCoord::new(4, 3);
+        for coord in [rerandomized, preserved] {
+            map.set_mapt_m5(coord, 0, clear_ground_m5(CLEAR_GROUND_ROUGH, 3))
+                .expect("rough wetland substrate");
+        }
+
+        assert!(place_tree(
+            &mut map,
+            rerandomized,
+            random,
+            Climate::Temperate
+        ));
+        assert!(place_tree_keep_density(
+            &mut map,
+            preserved,
+            random,
+            Climate::Temperate,
+        ));
+
+        assert_eq!(map.get(rerandomized).expect("default tree").m2, 0x30);
+        assert_eq!(map.get(preserved).expect("wetland tree").m2, 0x70);
     }
 
     #[test]

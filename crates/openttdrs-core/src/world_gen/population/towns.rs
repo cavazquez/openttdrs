@@ -1,15 +1,16 @@
 //! Colocación y crecimiento inicial de pueblos (`GenerateTowns` / `DoCreateTown`).
 
 use crate::bridge_spec::{BridgeSpecDef, BridgeType, bridge_available_in, set_bridge_middle_mapt};
+use crate::company::OWNER_NONE_M1;
 use crate::house_spec::{
     BUILDING_FLAG_SIZE_1X2, BUILDING_FLAG_SIZE_2X1, BUILDING_FLAG_SIZE_2X2, HouseSpec,
     climate_zone_mask, get_town_radius_group,
 };
-use crate::map::tree_tile_loop::clear_ground_type;
+use crate::map::tree_tile_loop::{clear_density, clear_ground_type, tree_count};
 use crate::map::{
     SLOPE_NE, SLOPE_NW, SLOPE_STEEP, TOWN_HOUSE_COMPLETED, TileCoord, TileKind, TownHouseFootprint,
-    TownHouseSpec, WaterClass, complement_slope, has_tile_water_ground, tile_slope_and_z,
-    water_class_from_m1,
+    TownHouseSpec, WaterClass, clear_neighbour_non_flooding_states, complement_slope,
+    has_tile_water_ground, is_coast_tile, tile_slope_and_z, water_class_from_m1,
 };
 use crate::sav::house_spec_population;
 use crate::town::{
@@ -20,7 +21,10 @@ use crate::town_expand::{
     town_layout_allows_house_here,
 };
 use crate::townname::generate_town_name;
-use crate::world_gen::CLEAR_GROUND_ROUGH;
+use crate::world_gen::{
+    CLEAR_GROUND_DESERT, CLEAR_GROUND_FIELDS, CLEAR_GROUND_GRASS, CLEAR_GROUND_ROCKY,
+    CLEAR_GROUND_ROUGH, CLEAR_GROUND_SNOW, clear_ground_m5,
+};
 
 use super::{PopCtx, in_preserve};
 
@@ -112,6 +116,20 @@ const TOWN_GROWTH_COORD_MOD: [(i32, i32); 13] = [
     (2, -2),
     (0, 0),
 ];
+
+/// Precios vanilla que intervienen en el límite de `TerraformTownTile`.
+///
+/// La generación de mundo arranca con la tabla de precios por defecto. El
+/// comando nativo descarta la fundación cuando el coste alcanza
+/// `(_price[PR_TERRAFORM] + 2) * 8`; no es un presupuesto económico del
+/// pueblo, sino una frontera observable de la secuencia urbana.
+const GENERATED_TOWN_TERRAFORM_PRICE: u32 = 250;
+const GENERATED_TOWN_CLEAR_GRASS_PRICE: u32 = 20;
+const GENERATED_TOWN_CLEAR_ROUGH_PRICE: u32 = 40;
+const GENERATED_TOWN_CLEAR_ROCKS_PRICE: u32 = 200;
+const GENERATED_TOWN_CLEAR_FIELDS_PRICE: u32 = 500;
+const GENERATED_TOWN_CLEAR_WATER_PRICE: u32 = 10_000;
+const GENERATED_TOWN_TERRAFORM_COST_LIMIT: u32 = (GENERATED_TOWN_TERRAFORM_PRICE + 2) * 8;
 /// Valor vanilla de `economy.initial_city_size` en una partida nueva.
 const DEFAULT_INITIAL_CITY_SIZE: u32 = 2;
 
@@ -650,6 +668,7 @@ const fn generated_town_terraform_corner(tile: TileCoord, corner: u8) -> Option<
 struct GeneratedTownTerraformState {
     heights: Vec<(TileCoord, u8)>,
     dirty_tiles: Vec<TileCoord>,
+    terraform_cost: u32,
 }
 
 impl GeneratedTownTerraformState {
@@ -709,6 +728,7 @@ fn generated_town_terraform_height(
 
     state.add_dirty_tiles_around(map, vertex);
     state.set_height(vertex, height);
+    state.terraform_cost += GENERATED_TOWN_TERRAFORM_PRICE;
 
     for (dx, dy) in [(-1, 0), (0, 1), (1, 0), (0, -1)] {
         let neighbour = TileCoord::new(vertex.x + dx, vertex.y + dy);
@@ -736,10 +756,114 @@ fn generated_town_terraform_height(
     true
 }
 
+/// Coste de `CMD_LANDSCAPE_CLEAR` que invoca `TerraformTile_*` para un tile
+/// sucio de `CmdTerraformLand`.
+///
+/// El pase de prueba nativo usa `NoWater`: agua real rechaza la fundación,
+/// pero una costa se puede convertir a clear. Las ramas de ciudad que llegan
+/// a costa son precisamente las que hacen visible este detalle en los bytes
+/// `m5` y `m3` de las teselas vecinas.
+fn generated_town_terraform_clear_cost(map: &crate::map::Map, tile: TileCoord) -> Option<u32> {
+    let entry = map.get(tile)?;
+    match entry.kind {
+        // `CmdTerraformLand` no invoca el procedimiento del tile para
+        // `MP_VOID`; la altura puede propagarse hasta el borde sin clear ni
+        // coste adicional.
+        TileKind::Void => Some(0),
+        TileKind::Grass => {
+            let ground = clear_ground_type(entry.m5);
+            let clear_price = match ground {
+                CLEAR_GROUND_GRASS => GENERATED_TOWN_CLEAR_GRASS_PRICE,
+                CLEAR_GROUND_ROUGH | CLEAR_GROUND_SNOW | CLEAR_GROUND_DESERT => {
+                    GENERATED_TOWN_CLEAR_ROUGH_PRICE
+                }
+                CLEAR_GROUND_ROCKY => GENERATED_TOWN_CLEAR_ROCKS_PRICE,
+                CLEAR_GROUND_FIELDS => GENERATED_TOWN_CLEAR_FIELDS_PRICE,
+                _ => return None,
+            };
+            if entry.m3 & 0x10 != 0 {
+                // `IsSnowTile`: precio del suelo bajo la nieve y la diferencia
+                // absoluta entre rough y grass.
+                Some(
+                    clear_price + GENERATED_TOWN_CLEAR_ROUGH_PRICE
+                        - GENERATED_TOWN_CLEAR_GRASS_PRICE,
+                )
+            } else if ground != CLEAR_GROUND_GRASS || clear_density(entry.m5) != 0 {
+                Some(clear_price)
+            } else {
+                Some(0)
+            }
+        }
+        TileKind::Forest => {
+            // `ClearTile_Trees` cobra por árbol; los tipos rainforest/cactus
+            // ocupan el intervalo 20..=27 y multiplican por cuatro.
+            let multiplier = u32::from((20..=27).contains(&entry.m3)) * 3 + 1;
+            Some(u32::from(tree_count(entry.m5)) * GENERATED_TOWN_CLEAR_GRASS_PRICE * multiplier)
+        }
+        TileKind::Water if is_coast_tile(entry) => {
+            // `ClearTile_Water` consulta la pendiente previa a aplicar las
+            // alturas nuevas. Una costa con una única esquina elevada vale
+            // `PR_CLEAR_WATER`; de otro modo vale rough.
+            let (slope, _) = tile_slope_and_z(map, tile)?;
+            Some(if matches!(slope, 1 | 2 | 4 | 8) {
+                GENERATED_TOWN_CLEAR_WATER_PRICE
+            } else {
+                GENERATED_TOWN_CLEAR_ROUGH_PRICE
+            })
+        }
+        // Infraestructura, agua no-costera, casas y tipos desconocidos hacen
+        // fallar el comando de prueba, como `TerraformTile_*` con NoWater.
+        _ => None,
+    }
+}
+
+/// Coste total que inspecciona `TerraformTownTile` antes del pase `Execute`.
+fn generated_town_terraform_cost(
+    map: &crate::map::Map,
+    state: &GeneratedTownTerraformState,
+) -> Option<u32> {
+    let clear_cost = state.dirty_tiles.iter().try_fold(0_u32, |total, dirty| {
+        generated_town_terraform_clear_cost(map, *dirty).and_then(|cost| total.checked_add(cost))
+    })?;
+    state.terraform_cost.checked_add(clear_cost)
+}
+
+/// Materializa el `DoClearSquare` de una tesela ya aprobada por el pase de
+/// prueba. Todos los cambios se hacen después de evaluar coste y validez de la
+/// operación completa, preservando la atomicidad de `CmdTerraformLand`.
+fn clear_generated_town_terraform_tile(map: &mut crate::map::Map, tile: TileCoord) -> bool {
+    let Some(mut entry) = map.get(tile) else {
+        return false;
+    };
+    if entry.kind == TileKind::Void {
+        return true;
+    }
+    if !(matches!(entry.kind, TileKind::Grass | TileKind::Forest)
+        || entry.kind == TileKind::Water && is_coast_tile(entry))
+    {
+        return false;
+    }
+
+    clear_neighbour_non_flooding_states(map, tile);
+    entry.kind = TileKind::Grass;
+    entry.mapt &= 0x0F;
+    entry.m1 = OWNER_NONE_M1;
+    entry.m2 = 0;
+    entry.m2_hi = 0;
+    entry.m3 = 0;
+    entry.m3hi = 0;
+    entry.m5 = clear_ground_m5(CLEAR_GROUND_GRASS, 3);
+    entry.m6 = 0;
+    entry.m7 = 0;
+    entry.m8 = 0;
+    map.set_tile(tile, entry).is_ok()
+}
+
 /// Intenta una alternativa de `TerraformTownTile` en un modelo atómico antes
-/// de materializarla. La validación deliberadamente se limita a clear/forest:
-/// es el subconjunto alcanzado por la fundación de pueblos antes de la fase de
-/// árboles; infraestructura, agua y bordes siguen rechazando el comando.
+/// de materializarla. Además de propagar las alturas, reproduce el límite de
+/// coste y el `DoClearSquare` de `CmdTerraformLand`: sin ambos, una fundación
+/// urbana puede aceptarse de más o dejar residuos de clear/costa que cambian
+/// los bytes del mapa y la secuencia posterior.
 fn try_level_generated_town_land(
     map: &mut crate::map::Map,
     tile: TileCoord,
@@ -773,13 +897,20 @@ fn try_level_generated_town_land(
             return false;
         }
     }
-    if state.heights.is_empty()
-        || state.dirty_tiles.iter().any(|dirty| {
-            !matches!(
-                map.get_kind(*dirty),
-                Some(TileKind::Grass | TileKind::Forest)
-            )
-        })
+    if state.heights.is_empty() {
+        return false;
+    }
+    let Some(total_cost) = generated_town_terraform_cost(map, &state) else {
+        return false;
+    };
+    if total_cost >= GENERATED_TOWN_TERRAFORM_COST_LIMIT {
+        return false;
+    }
+    if !state
+        .dirty_tiles
+        .iter()
+        .copied()
+        .all(|dirty| clear_generated_town_terraform_tile(map, dirty))
     {
         return false;
     }
@@ -3750,6 +3881,120 @@ mod tests {
         assert_eq!(tile_slope_and_z(&map, north), Some((SLOPE_NW, 5)));
         assert_eq!(map.get(TileCoord::new(3, 2)).expect("north N").height, 6);
         assert_eq!(map.get(TileCoord::new(4, 2)).expect("north W").height, 6);
+    }
+
+    #[test]
+    fn town_terraform_execute_pass_clears_the_approved_dirty_tile() {
+        let mut map = Map::new_flat(8, 8, 1);
+        let tile = TileCoord::new(3, 3);
+        // La fundación asciende las dos esquinas bajas de una pendiente NE.
+        // La tesela es un campo con bytes no nulos para comprobar el contrato
+        // completo de `DoClearSquare`, no sólo la altura nivelada.
+        let mut field = map.get(tile).expect("field tile");
+        field.mapt = 0x0B;
+        field.m1 = 0xFE;
+        field.m2 = 0xAA;
+        field.m2_hi = 0xBB;
+        field.m3 = 0x0E;
+        field.m3hi = 0xCC;
+        field.m5 = clear_ground_m5(CLEAR_GROUND_FIELDS, 3);
+        field.m6 = 0xDD;
+        field.m7 = 0xEE;
+        field.m8 = 0xFFFF;
+        map.set_tile(tile, field).expect("install field bytes");
+        map.set_height(tile, 2).expect("north high");
+        map.set_height(TileCoord::new(3, 4), 2).expect("east high");
+
+        assert_eq!(tile_slope_and_z(&map, tile), Some((SLOPE_NE, 1)));
+        assert!(level_generated_town_land(&mut map, tile));
+
+        let cleared = map.get(tile).expect("cleared field");
+        assert_eq!(tile_slope_and_z(&map, tile), Some((0, 2)));
+        assert_eq!(cleared.kind, TileKind::Grass);
+        assert_eq!(cleared.mapt, 0x0B);
+        assert_eq!(cleared.m1, OWNER_NONE_M1);
+        assert_eq!(cleared.m2, 0);
+        assert_eq!(cleared.m2_hi, 0);
+        assert_eq!(cleared.m3, 0);
+        assert_eq!(cleared.m3hi, 0);
+        assert_eq!(cleared.m5, clear_ground_m5(CLEAR_GROUND_GRASS, 3));
+        assert_eq!(cleared.m6, 0);
+        assert_eq!(cleared.m7, 0);
+        assert_eq!(cleared.m8, 0);
+    }
+
+    #[test]
+    fn town_terraform_accepts_a_flat_coast_and_clears_non_flooding_neighbours() {
+        let mut map = Map::new_flat(8, 8, 1);
+        let coast = TileCoord::new(3, 3);
+        let water_neighbour = TileCoord::new(3, 2);
+        let mut coast_tile = map.get(coast).expect("coast tile");
+        coast_tile.kind = TileKind::Water;
+        coast_tile.mapt = 0x6D;
+        coast_tile.m1 = 0x91;
+        coast_tile.m2 = 0xAA;
+        coast_tile.m2_hi = 0xBB;
+        coast_tile.m3 = 0xCE;
+        coast_tile.m3hi = 0xCC;
+        coast_tile.m5 = 0x10; // WaterTileType::Coast.
+        coast_tile.m6 = 0xDD;
+        coast_tile.m7 = 0xEE;
+        coast_tile.m8 = 0xFFFF;
+        map.set_tile(coast, coast_tile).expect("install coast");
+        let mut water = map.get(water_neighbour).expect("water neighbour");
+        water.kind = TileKind::Water;
+        water.mapt = 0x60;
+        water.m3 = 1;
+        map.set_tile(water_neighbour, water)
+            .expect("install non-flooding water");
+
+        assert_eq!(generated_town_terraform_clear_cost(&map, coast), Some(40));
+        assert!(clear_generated_town_terraform_tile(&mut map, coast));
+
+        let cleared = map.get(coast).expect("cleared coast");
+        assert_eq!(cleared.kind, TileKind::Grass);
+        assert_eq!(cleared.mapt, 0x0D);
+        assert_eq!(cleared.m1, OWNER_NONE_M1);
+        assert_eq!(cleared.m2, 0);
+        assert_eq!(cleared.m2_hi, 0);
+        assert_eq!(cleared.m3, 0);
+        assert_eq!(cleared.m3hi, 0);
+        assert_eq!(cleared.m5, clear_ground_m5(CLEAR_GROUND_GRASS, 3));
+        assert_eq!(cleared.m6, 0);
+        assert_eq!(cleared.m7, 0);
+        assert_eq!(cleared.m8, 0);
+        assert_eq!(
+            map.get(water_neighbour).expect("reactivated water").m3 & 1,
+            0
+        );
+    }
+
+    #[test]
+    fn town_terraform_rejects_cost_at_the_native_limit() {
+        let mut map = Map::new_flat(8, 8, 1);
+        let dirty = TileCoord::new(3, 3);
+        map.set_mapt_m5(dirty, 0, clear_ground_m5(CLEAR_GROUND_GRASS, 3))
+            .expect("full grass");
+        let mut state = GeneratedTownTerraformState {
+            heights: vec![(dirty, 2)],
+            dirty_tiles: vec![dirty],
+            terraform_cost: GENERATED_TOWN_TERRAFORM_COST_LIMIT - GENERATED_TOWN_CLEAR_GRASS_PRICE,
+        };
+
+        assert_eq!(
+            generated_town_terraform_cost(&map, &state),
+            Some(GENERATED_TOWN_TERRAFORM_COST_LIMIT)
+        );
+        assert!(
+            generated_town_terraform_cost(&map, &state)
+                .is_some_and(|cost| cost >= GENERATED_TOWN_TERRAFORM_COST_LIMIT)
+        );
+
+        state.terraform_cost -= 1;
+        assert_eq!(
+            generated_town_terraform_cost(&map, &state),
+            Some(GENERATED_TOWN_TERRAFORM_COST_LIMIT - 1)
+        );
     }
 
     #[test]

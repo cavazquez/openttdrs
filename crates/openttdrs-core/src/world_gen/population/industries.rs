@@ -205,6 +205,12 @@ fn generated_industry_can_use_closest_town(
     })
 }
 
+fn generated_industry_has_vehicle(state: &GameState, layout: &[(TileCoord, u8)]) -> bool {
+    layout
+        .iter()
+        .any(|(tile, _)| state.vehicles.iter().any(|vehicle| vehicle.pos == *tile))
+}
+
 /// Área que `CheckIfCanLevelIndustryPlatform` recorre alrededor del layout.
 ///
 /// `TileHeight` es la esquina norte guardada de cada tesela. El ancho/alto de
@@ -372,60 +378,55 @@ fn clear_generated_industry_platform_tile(map: &mut Map, c: TileCoord) -> bool {
 /// Si el mapa cambió entre ambos pases se aborta sin intentar colocar la
 /// industria; el flujo normal siempre lo llama inmediatamente tras validar.
 fn level_generated_industry_platform(
-    map: &mut Map,
+    map: &Map,
     origin: TileCoord,
     spec: IndustrySpec,
     layout_index: usize,
     platform: u8,
-) -> bool {
+) -> Option<Map> {
     if !generated_industry_platform_is_valid(map, origin, spec, layout_index, platform) {
-        return false;
+        return None;
     }
-    let Some((start_x, start_y, end_x, end_y)) =
-        generated_industry_platform_area(map, origin, spec, layout_index, platform)
-    else {
-        return false;
-    };
-    let Some(target_height) = map.get(origin).map(|tile| tile.height) else {
-        return false;
-    };
+    // `CheckIfCanLevelIndustryPlatform` has a test pass and an execute pass.
+    // Keep the execute pass isolated until every terraform/clear operation has
+    // succeeded; a failed command must not leave a half-levelled map behind.
+    let mut candidate = map.clone();
+    let (start_x, start_y, end_x, end_y) =
+        generated_industry_platform_area(&candidate, origin, spec, layout_index, platform)?;
+    let target_height = candidate.get(origin).map(|tile| tile.height)?;
     for y in start_y..end_y {
         for x in start_x..end_x {
             let c = TileCoord::new(x, y);
             loop {
-                let Some(current_height) = map.get(c).map(|tile| tile.height) else {
-                    return false;
-                };
+                let current_height = candidate.get(c).map(|tile| tile.height)?;
                 if current_height == target_height {
                     break;
                 }
-                let Some(step) = simulate_generated_terraform_north_corner(
-                    map,
+                let step = simulate_generated_terraform_north_corner(
+                    &candidate,
                     c,
                     current_height <= target_height,
-                ) else {
-                    return false;
-                };
+                )?;
                 if !step
                     .dirty_tiles
                     .iter()
                     .copied()
-                    .all(|dirty| clear_generated_industry_platform_tile(map, dirty))
+                    .all(|dirty| clear_generated_industry_platform_tile(&mut candidate, dirty))
                 {
-                    return false;
+                    return None;
                 }
                 for (height_x, height_y, height) in step.heights {
-                    if map
+                    if candidate
                         .set_height(TileCoord::new(height_x, height_y), height)
                         .is_err()
                     {
-                        return false;
+                        return None;
                     }
                 }
             }
         }
     }
-    true
+    Some(candidate)
 }
 
 /// Ejecuta una llamada completa a `PlaceIndustry` para una especie fija.
@@ -464,6 +465,17 @@ fn try_place_industry(
         {
             continue;
         }
+        // `EnsureNoVehicleOnGround` runs before the clear pass in
+        // `CreateNewIndustryHelper`. The procedural model stores one tile
+        // position per vehicle, which is sufficient to reject a footprint
+        // occupied by a moving or stopped vehicle without consuming another
+        // random draw.
+        let Some(layout) = industry_template_with_layout(origin, spec, attempt.layout_index) else {
+            continue;
+        };
+        if generated_industry_has_vehicle(ctx.state, &layout) {
+            continue;
+        }
         if check_place_industry_spec_layout(&ctx.state.map, origin, spec, attempt.layout_index)
             .is_err()
         {
@@ -481,21 +493,26 @@ fn try_place_industry(
         let Ok(layout_index) = u8::try_from(attempt.layout_index) else {
             continue;
         };
-        if !level_generated_industry_platform(
-            &mut ctx.state.map,
+        let Some(leveled_map) = level_generated_industry_platform(
+            &ctx.state.map,
             origin,
             spec,
             attempt.layout_index,
             ctx.industry_platform,
-        ) {
+        ) else {
             continue;
-        }
+        };
+        let original_map = std::mem::replace(&mut ctx.state.map, leveled_map);
         if apply_command(
             ctx.state,
             &Command::PlaceIndustrySpecLayout(origin, spec, layout_index),
         )
         .is_err()
         {
+            // The command layer is intentionally allowed to reject a stale
+            // candidate (for example when a pool limit is reached). Restore
+            // the pre-platform map just like OpenTTD's command transaction.
+            ctx.state.map = original_map;
             continue;
         }
         // La cola de `DoCreateNewIndustry` consume producción smooth,
@@ -992,6 +1009,7 @@ mod tests {
     use crate::industry::{Industry, IndustryKind};
     use crate::map::{Map, tree_tile_loop::clear_density};
     use crate::town::Town;
+    use crate::vehicle::{Vehicle, VehicleKind};
     use crate::world_gen::{
         Climate, PopulationGenConfig, TerrainType, WorldGenConfig, apply_world_gen_with_rng,
         generate_towns_with_rng,
@@ -1086,6 +1104,21 @@ mod tests {
             weighted_spec(&mut rng, &probabilities, 10),
             IndustrySpec::PowerStation
         );
+    }
+
+    #[test]
+    fn industry_admission_rejects_a_vehicle_on_the_footprint() {
+        let origin = TileCoord::new(4, 4);
+        let mut state = GameState::new(16, 16);
+        let layout = industry_template_with_layout(origin, IndustrySpec::CoalMine, 0)
+            .expect("native layout");
+        state
+            .vehicles
+            .push(Vehicle::new(1, VehicleKind::Train, layout[0].0, origin));
+        assert!(generated_industry_has_vehicle(&state, &layout));
+
+        state.vehicles[0].pos = TileCoord::new(15, 15);
+        assert!(!generated_industry_has_vehicle(&state, &layout));
     }
 
     #[test]
@@ -1362,6 +1395,26 @@ mod tests {
             3,
             1,
         ));
+    }
+
+    #[test]
+    fn industry_platform_execute_is_transactional() {
+        let state = generated_towns_state_for_platform(1_330_935_378);
+        let before = state.map.tiles().to_vec();
+        let candidate = level_generated_industry_platform(
+            &state.map,
+            TileCoord::new(21, 41),
+            IndustrySpec::CoalMine,
+            3,
+            1,
+        )
+        .expect("accepted platform");
+
+        // The test pass accepts an immutable map; execute writes only to the
+        // returned candidate, so a later command failure can restore the
+        // original without leaving partial terraform behind.
+        assert_eq!(state.map.tiles(), before.as_slice());
+        assert_eq!(candidate.dimensions(), state.map.dimensions());
     }
 
     #[test]

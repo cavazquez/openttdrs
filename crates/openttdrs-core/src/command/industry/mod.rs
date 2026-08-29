@@ -1,5 +1,8 @@
 use crate::industry_spec::{IndustrySpecDef, industry_spec_def};
-use crate::map::{SLOPE_STEEP, TileCoord, TileKind, tile_slope_and_z};
+use crate::map::{
+    SLOPE_STEEP, Tile, TileCoord, TileKind, tile_has_water_class, tile_slope_and_z,
+    water_class_from_m1,
+};
 use crate::{GameState, Industry, IndustryKind, IndustrySpec};
 
 use super::CommandError;
@@ -94,6 +97,22 @@ fn check_industry_template(
         let existing_kind = map.get_kind(*tile).unwrap_or(TileKind::Grass);
         if let Some(error) = industry_auto_clear_error(existing_kind) {
             return Err(error);
+        }
+        // `CheckIfIndustryTilesAreFree` rejects a land industry on any tile
+        // carrying a valid water class, including a coastal tree. Water-built
+        // industries are not in the vanilla procedural catalog yet; keeping
+        // this gate explicit prevents a later clear from silently drying a
+        // coast while that model is added.
+        if tile_has_water_class(existing_kind)
+            && water_class_from_m1(map.get(*tile).map_or(0, |current| current.m1))
+                != crate::map::WaterClass::Invalid
+        {
+            return Err(CommandError::CannotPlaceRoadOnWater);
+        }
+        if map.get(*tile).is_some_and(Tile::is_tunnel_bridge_tile) {
+            // A bridge/tunnel tile is not a clear substrate for a generated
+            // industry (`IsBridgeAbove`/`ClearTile_TunnelBridge` in C++).
+            return Err(CommandError::IndustryTileCannotBeCleared);
         }
         if !transport_tile_is_buildable(existing_kind) {
             return Err(build_error_for_kind(existing_kind));
@@ -251,6 +270,15 @@ pub fn check_place_industry_spec_def(
         let existing_kind = map.get_kind(*tile).unwrap_or(TileKind::Grass);
         if let Some(error) = industry_auto_clear_error(existing_kind) {
             return Err(error);
+        }
+        if tile_has_water_class(existing_kind)
+            && water_class_from_m1(map.get(*tile).map_or(0, |current| current.m1))
+                != crate::map::WaterClass::Invalid
+        {
+            return Err(CommandError::CannotPlaceRoadOnWater);
+        }
+        if map.get(*tile).is_some_and(Tile::is_tunnel_bridge_tile) {
+            return Err(CommandError::IndustryTileCannotBeCleared);
         }
         if !transport_tile_is_buildable(existing_kind) {
             return Err(build_error_for_kind(existing_kind));
@@ -421,6 +449,40 @@ mod tests {
 
         assert_eq!(
             check_place_industry_spec_layout(&map, origin, IndustrySpec::SteelMill, 0),
+            Err(CommandError::IndustryTileCannotBeCleared)
+        );
+    }
+
+    #[test]
+    fn industry_layout_rejects_a_coastal_tree_with_water_class() {
+        let origin = TileCoord::new(4, 4);
+        let mut map = Map::new_flat(16, 16, 0);
+        let Some(mut tree) = map.get(origin) else {
+            panic!("flat tile missing");
+        };
+        tree.kind = TileKind::Forest;
+        tree.m1 = crate::map::set_water_class_m1(0, crate::map::WaterClass::Sea);
+        assert!(map.set_tile(origin, tree).is_ok());
+
+        assert_eq!(
+            check_place_industry_spec_layout(&map, origin, IndustrySpec::CoalMine, 0),
+            Err(CommandError::CannotPlaceRoadOnWater)
+        );
+    }
+
+    #[test]
+    fn industry_layout_rejects_a_bridge_tile_before_clearing() {
+        let origin = TileCoord::new(4, 4);
+        let mut map = Map::new_flat(16, 16, 0);
+        let Some(mut bridge) = map.get(origin) else {
+            panic!("flat tile missing");
+        };
+        bridge.mapt = crate::map::OTTD_TILETYPE_TUNNELBRIDGE << 4;
+        bridge.kind = TileKind::RoadBridge;
+        assert!(map.set_tile(origin, bridge).is_ok());
+
+        assert_eq!(
+            check_place_industry_spec_layout(&map, origin, IndustrySpec::CoalMine, 0),
             Err(CommandError::IndustryTileCannotBeCleared)
         );
     }

@@ -942,8 +942,16 @@ fn river_make_wider(
     rng: &mut Randomizer,
     preserve: &[PreserveRect],
 ) -> Result<(), MapError> {
+    let Some(entry) = map.get(tile) else {
+        return Ok(());
+    };
+    // `RiverMakeWider` empieza con `IsValidTile`: el borde libre de OpenTTD
+    // está representado en el port como `MP_VOID`, no como una coordenada
+    // ausente. Nunca se puede convertir ese marco en río ni consumir su byte
+    // aleatorio; hacerlo desalineaba todos los pozos posteriores.
     if preserve.iter().any(|rect| rect.contains(tile.x, tile.y))
-        || map.get(tile).is_some_and(is_plain_water_tile)
+        || entry.kind == TileKind::Void
+        || is_plain_water_tile(entry)
     {
         return Ok(());
     }
@@ -1354,6 +1362,28 @@ mod tests {
 
         assert!(built);
         assert!(map.tiles().iter().any(|tile| is_river_tile(*tile)));
+    }
+
+    #[test]
+    fn river_widening_never_materializes_the_freeform_void_border() {
+        let mut map = Map::new_flat(8, 8, 1);
+        let border = TileCoord::new(0, 3);
+        let origin = TileCoord::new(1, 3);
+        let mut entry = map.get(border).expect("freeform border tile");
+        entry.kind = TileKind::Void;
+        map.set_tile(border, entry)
+            .expect("mark freeform border void");
+        let mut rng = Randomizer::new(0x1234_5678);
+        let before = rng;
+
+        river_make_wider(&mut map, border, origin, &mut rng, &[])
+            .expect("skip freeform void border");
+
+        assert_eq!(
+            map.get(border).expect("border remains").kind,
+            TileKind::Void
+        );
+        assert_eq!(rng, before, "void border must not consume Random()");
     }
 
     #[test]

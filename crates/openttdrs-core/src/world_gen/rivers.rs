@@ -1,6 +1,6 @@
 //! Generación de ríos y costas.
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use crate::cargodist::parity::Randomizer;
 use crate::company::OWNER_NONE_M1;
@@ -265,42 +265,173 @@ fn collect_connected_sea_tiles(
     start: TileCoord,
     limit: usize,
 ) -> (bool, Vec<TileCoord>) {
-    let (width, height) = map.dimensions();
-    let mut seen = HashSet::new();
-    let mut stack = vec![start];
-    let mut sea = Vec::new();
-    while let Some(coord) = stack.pop() {
+    fn visit(
+        map: &Map,
+        coord: TileCoord,
+        width: u32,
+        height: u32,
+        limit: usize,
+        seen: &mut HashSet<TileCoord>,
+        sea: &mut Vec<TileCoord>,
+    ) -> bool {
         let Some(tile) = map.get(coord) else {
-            continue;
+            return false;
         };
         if !is_plain_water_tile(tile)
             || water_class_from_m1(tile.m1) != WaterClass::Sea
             || tile_slope_and_z(map, coord).is_none_or(|(slope, _)| slope != 0)
         {
-            continue;
+            return false;
         }
         if coord.x <= 1
             || coord.y <= 1
             || coord.x >= width.saturating_sub(2) as i32
             || coord.y >= height.saturating_sub(2) as i32
         {
-            return (true, sea);
+            return true;
         }
         if !seen.insert(coord) {
-            continue;
+            return false;
         }
         sea.push(coord);
         // The native routine deliberately stops after counting limit + 1
         // tiles; the caller then accepts this as an ocean without retaining
         // or flattening the rest of the component.
         if sea.len() > limit {
-            return (false, sea);
+            return false;
         }
         for (dx, dy) in RIVER_DIRS {
-            stack.push(TileCoord::new(coord.x + dx, coord.y + dy));
+            let next = TileCoord::new(coord.x + dx, coord.y + dy);
+            if map.get(next).is_some()
+                && !seen.contains(&next)
+                && visit(map, next, width, height, limit, seen, sea)
+            {
+                return true;
+            }
+        }
+        false
+    }
+
+    let (width, height) = map.dimensions();
+    let mut seen = HashSet::new();
+    let mut sea = Vec::new();
+    let found_edge = visit(map, start, width, height, limit, &mut seen, &mut sea);
+    if found_edge {
+        return (true, sea);
+    }
+    (false, native_unordered_iteration(sea, width))
+}
+
+/// Orden de iteración de `std::unordered_set<TileIndex>` en la libstdc++ que
+/// usa el oráculo `OpenTTD`. `CountConnectedSeaTiles` inserta por DFS y luego
+/// `FlowRiver` recorre el contenedor; la lista enlazada global y los rehashes
+/// de la política de primos son observables porque cada terraformación toca
+/// esquinas compartidas. El modelo mantiene esos enlaces, incluido el nodo
+/// centinela `before_begin`, para que el orden sea independiente de Rust.
+fn native_unordered_iteration(coords: Vec<TileCoord>, map_width: u32) -> Vec<TileCoord> {
+    const BEFORE_BEGIN: usize = usize::MAX;
+    // Bucket counts observed from libstdc++'s `_Prime_rehash_policy` (load
+    // factor 1.0), through every size reachable by a small-sea limit.
+    const BUCKET_COUNTS: [usize; 10] = [1, 13, 29, 59, 127, 257, 541, 1109, 2357, 5087];
+
+    #[derive(Clone, Copy)]
+    struct Node {
+        key: usize,
+        next: Option<usize>,
+    }
+
+    fn next_bucket_count(minimum: usize) -> usize {
+        BUCKET_COUNTS
+            .iter()
+            .copied()
+            .find(|&count| count >= minimum)
+            .unwrap_or_else(|| panic!("sea unordered_set exceeds native bucket model: {minimum}"))
+    }
+
+    let mut nodes: Vec<Node> = Vec::with_capacity(coords.len());
+    let mut buckets: Vec<Option<usize>> = vec![None];
+    let mut head: Option<usize> = None;
+    let mut next_resize = 0usize;
+
+    for coord in coords {
+        let key = usize::try_from(coord.y)
+            .expect("sea coordinate y is non-negative")
+            .saturating_mul(map_width as usize)
+            .saturating_add(usize::try_from(coord.x).expect("sea coordinate x is non-negative"));
+        let element_count = nodes.len();
+        if element_count + 1 > next_resize {
+            let minimum_buckets =
+                std::cmp::max(element_count + 1, if next_resize == 0 { 11 } else { 0 });
+            if minimum_buckets >= buckets.len() {
+                let desired = std::cmp::max(minimum_buckets + 1, buckets.len() * 2);
+                let new_count = next_bucket_count(desired);
+                let mut new_buckets = vec![None; new_count];
+                let mut new_head = None;
+                let mut current = head;
+                while let Some(index) = current {
+                    let old_next = nodes[index].next;
+                    let bucket = nodes[index].key % new_count;
+                    if new_buckets[bucket].is_none() {
+                        nodes[index].next = new_head;
+                        new_head = Some(index);
+                        new_buckets[bucket] = Some(BEFORE_BEGIN);
+                        if let Some(after) = nodes[index].next {
+                            new_buckets[nodes[after].key % new_count] = Some(index);
+                        }
+                    } else {
+                        let previous = new_buckets[bucket].expect("non-empty bucket has a link");
+                        if previous == BEFORE_BEGIN {
+                            nodes[index].next = new_head;
+                            new_head = Some(index);
+                        } else {
+                            nodes[index].next = nodes[previous].next;
+                            nodes[previous].next = Some(index);
+                        }
+                    }
+                    current = old_next;
+                }
+                buckets = new_buckets;
+                head = new_head;
+                next_resize = new_count;
+            } else {
+                next_resize = buckets.len();
+            }
+        }
+
+        let index = nodes.len();
+        nodes.push(Node { key, next: head });
+        let bucket = key % buckets.len();
+        match buckets[bucket] {
+            Some(BEFORE_BEGIN) => {
+                head = Some(index);
+            }
+            Some(previous) => {
+                nodes[index].next = nodes[previous].next;
+                nodes[previous].next = Some(index);
+            }
+            None => {
+                if let Some(old_head) = head {
+                    let old_head_bucket = nodes[old_head].key % buckets.len();
+                    buckets[old_head_bucket] = Some(index);
+                }
+                buckets[bucket] = Some(BEFORE_BEGIN);
+                head = Some(index);
+            }
         }
     }
-    (false, sea)
+
+    let mut ordered = Vec::with_capacity(nodes.len());
+    let mut current = head;
+    while let Some(index) = current {
+        let x = nodes[index].key % map_width as usize;
+        let y = nodes[index].key / map_width as usize;
+        ordered.push(TileCoord::new(
+            i32::try_from(x).expect("sea coordinate x fits i32"),
+            i32::try_from(y).expect("sea coordinate y fits i32"),
+        ));
+        current = nodes[index].next;
+    }
+    ordered
 }
 
 /// `Chance16(a, b)` consume un único `Random()` y compara sus 16 bits bajos
@@ -666,6 +797,12 @@ fn build_river_path(
     rng: &mut Randomizer,
     preserve: &[PreserveRect],
 ) -> Result<bool, MapError> {
+    // `CYapfBaseT` stops after the expert setting
+    // `pf.yapf.max_search_nodes` (10000 by default).  The limit is part of
+    // generation parity: without it a difficult downhill route can keep
+    // consuming the global RNG and eventually paint a path that OpenTTD
+    // abandons.
+    const MAX_SEARCH_NODES: usize = 10_000;
     #[derive(Clone, Copy)]
     struct Node {
         coord: TileCoord,
@@ -803,6 +940,14 @@ fn build_river_path(
             heapify_up(&mut heap, &nodes, position);
         }
 
+        // OpenTTD checks the closed-node count immediately after following a
+        // node and before moving that node from open to closed.  Preserve the
+        // same off-by-one observable (the 10001st node may be expanded, but
+        // is not closed) so both route failure and RNG consumption match.
+        if closed.len() >= MAX_SEARCH_NODES {
+            break;
+        }
+
         let position = heap_position(&heap, current_idx).expect("expanded node is present in heap");
         heap_remove(&mut heap, &nodes, position);
         open.remove(&current.coord);
@@ -858,33 +1003,14 @@ fn is_slope_with_three_corners_raised(slope: u8) -> bool {
 /// validaciones se hacen antes de escribir para conservar la atomicidad que
 /// necesita `RiverMakeWider` cuando una orilla está en cota cero.
 fn terraform_river_corners(map: &mut Map, tile: TileCoord, corners: u8, raise: bool) -> bool {
-    const OFFSETS: [(u8, i32, i32); 4] = [(1, 1, 0), (2, 1, 1), (4, 0, 1), (8, 0, 0)];
-    let mut updates = Vec::new();
-    let mut dirty_tiles = HashSet::new();
-    for (bit, dx, dy) in OFFSETS {
-        if corners & bit == 0 {
-            continue;
-        }
-        let coord = TileCoord::new(tile.x + dx, tile.y + dy);
-        let Some(height) = map.get(coord).map(|entry| entry.height) else {
-            return false;
-        };
-        if !raise && height == 0 {
-            return false;
-        }
-        updates.push((
-            coord,
-            if raise {
-                height.saturating_add(1)
-            } else {
-                height - 1
-            },
-        ));
+    fn height_of(map: &Map, updates: &BTreeMap<TileCoord, i32>, coord: TileCoord) -> Option<i32> {
+        updates
+            .get(&coord)
+            .copied()
+            .or_else(|| map.get(coord).map(|tile| i32::from(tile.height)))
+    }
 
-        // `TerraformAddDirtyTileAround` visits every map tile incident to a
-        // changed corner. During the execute pass each incident water tile is
-        // sent through `TerraformTile_Water`, whose landscape-clear callback
-        // removes rivers/coasts before the new corner heights are committed.
+    fn mark_dirty(map: &Map, dirty_tiles: &mut BTreeSet<TileCoord>, coord: TileCoord) {
         for (dx, dy) in [(0, 0), (-1, 0), (0, -1), (-1, -1)] {
             let dirty = TileCoord::new(coord.x + dx, coord.y + dy);
             if map.get(dirty).is_some() {
@@ -893,6 +1019,78 @@ fn terraform_river_corners(map: &mut Map, tile: TileCoord, corners: u8, raise: b
         }
     }
 
+    fn terraform_tile_height(
+        map: &Map,
+        updates: &mut BTreeMap<TileCoord, i32>,
+        dirty_tiles: &mut BTreeSet<TileCoord>,
+        coord: TileCoord,
+        height: i32,
+    ) -> bool {
+        let Some(current) = height_of(map, updates, coord) else {
+            return false;
+        };
+        // `TerraformTileHeight` rejects no-op and below-sea-level writes
+        // before recording any part of the command.
+        if height == current || !(0..=255).contains(&height) {
+            return false;
+        }
+        mark_dirty(map, dirty_tiles, coord);
+        updates.insert(coord, height);
+
+        // OpenTTD recursively adjusts neighbouring corners until every
+        // shared edge differs by at most one level. The adjustment is staged
+        // and therefore remains atomic if any recursive write is invalid.
+        for (dx, dy) in RIVER_DIRS {
+            let neighbour = TileCoord::new(coord.x + dx, coord.y + dy);
+            let Some(neighbour_height) = height_of(map, updates, neighbour) else {
+                continue;
+            };
+            let difference = height - neighbour_height;
+            if difference.abs() > 1 {
+                let correction = difference + if difference < 0 { 1 } else { -1 };
+                if !terraform_tile_height(
+                    map,
+                    updates,
+                    dirty_tiles,
+                    neighbour,
+                    neighbour_height + correction,
+                ) {
+                    return false;
+                }
+            }
+        }
+        true
+    }
+
+    const OFFSETS: [(u8, i32, i32); 4] = [(1, 1, 0), (2, 1, 1), (4, 0, 1), (8, 0, 0)];
+    let direction = if raise { 1_i32 } else { -1_i32 };
+    let mut updates = BTreeMap::<TileCoord, i32>::new();
+    let mut dirty_tiles = BTreeSet::new();
+    for (bit, dx, dy) in OFFSETS {
+        if corners & bit == 0 {
+            continue;
+        }
+        let coord = TileCoord::new(tile.x + dx, tile.y + dy);
+        let Some(height) = height_of(map, &updates, coord) else {
+            // The native command skips slope bits whose corner is outside
+            // the map edge (the corresponding `tile + offset < Map::Size()`
+            // guard), which is also what freeform river widening observes.
+            continue;
+        };
+        if !terraform_tile_height(
+            map,
+            &mut updates,
+            &mut dirty_tiles,
+            coord,
+            height + direction,
+        ) {
+            return false;
+        }
+    }
+
+    // `TerraformTile_Water`/`DoClearSquare` run during the command's model
+    // pass, before staged heights are committed. Iterate the ordered set used
+    // by OpenTTD's `std::set<TileIndex>` rather than a hash set.
     for dirty in dirty_tiles {
         if map
             .get(dirty)
@@ -902,7 +1100,10 @@ fn terraform_river_corners(map: &mut Map, tile: TileCoord, corners: u8, raise: b
         }
     }
     for (coord, height) in updates {
-        if map.set_height(coord, height).is_err() {
+        if map
+            .set_height(coord, u8::try_from(height).unwrap_or(0))
+            .is_err()
+        {
             return false;
         }
     }
@@ -1362,6 +1563,37 @@ mod tests {
 
         assert!(built);
         assert!(map.tiles().iter().any(|tile| is_river_tile(*tile)));
+    }
+
+    #[test]
+    fn inland_sea_iteration_matches_libstdcxx_rehash_order() {
+        let coords = (0..30).map(|x| TileCoord::new(x, 0)).collect::<Vec<_>>();
+        let actual = native_unordered_iteration(coords, 1024);
+        let mut expected = vec![TileCoord::new(29, 0)];
+        expected.extend((0..=12).rev().map(|x| TileCoord::new(x, 0)));
+        expected.extend((13..=28).map(|x| TileCoord::new(x, 0)));
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn terraform_propagates_corner_height_differences_recursively() {
+        let mut map = Map::new_flat(8, 8, 0);
+        let tile = TileCoord::new(3, 3);
+        map.set_height(TileCoord::new(5, 3), 4)
+            .expect("raise neighbouring corner");
+
+        assert!(terraform_river_corners(&mut map, tile, 0x01, true));
+        assert_eq!(
+            map.get(TileCoord::new(4, 3)).expect("raised corner").height,
+            1
+        );
+        assert_eq!(
+            map.get(TileCoord::new(5, 3))
+                .expect("recursively adjusted corner")
+                .height,
+            2
+        );
+        assert!(map.tiles().iter().all(|entry| entry.height <= 4));
     }
 
     #[test]

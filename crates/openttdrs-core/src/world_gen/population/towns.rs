@@ -2403,7 +2403,10 @@ fn write_generated_town_road_to_map(
     }
     let town = u16::try_from(town_id).unwrap_or(u16::MAX).to_le_bytes();
     tile.kind = TileKind::Road;
-    tile.mapt = 0x20;
+    // `SetTileType(MP_ROAD)` sólo reemplaza el nibble alto de `MAPT`. En
+    // clima tropical el nibble bajo contiene `TropicZone` y debe sobrevivir
+    // al despeje de la tesela y a `MakeRoadNormal`.
+    tile.mapt = (tile.mapt & 0x0F) | 0x20;
     tile.m1 = crate::company::OWNER_TOWN_M1;
     tile.m2 = town[0];
     tile.m2_hi = town[1];
@@ -3993,6 +3996,25 @@ mod tests {
         assert_eq!(road.m3hi, 0);
         assert_eq!(road.m5, ROAD_BITS_AXIS_Y);
         assert_eq!(road.m8, TOWN_ROAD_INVALID_TRAM_TYPE);
+    }
+
+    #[test]
+    fn generated_town_road_preserves_tropic_zone_nibble() {
+        let mut state = GameState::new(8, 8);
+        let coord = TileCoord::new(3, 4);
+        // `TROPICZONE_DESERT` en una tesela clear antes de que `MakeRoadNormal`
+        // cambie el nibble alto de MAPT.
+        state
+            .map
+            .set_mapt_m5(coord, 0x21, 0)
+            .expect("tropical zone fixture");
+        assert!(write_generated_town_road(
+            &mut state,
+            coord,
+            ROAD_BITS_AXIS_Y,
+            0
+        ));
+        assert_eq!(state.map.get(coord).expect("road tile").mapt, 0x21);
     }
 
     #[test]

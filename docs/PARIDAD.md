@@ -14,7 +14,11 @@ Cuando esa evidencia ya coincide pero el resultado compuesto difiere, usar el
 La paridad de mapas aleatorios se audita por estado lógico, no por capturas
 gigantes: [`parity/random-map-matrix.md`](parity/random-map-matrix.md) separa
 la apertura de `.sav` (15/15 exactos en la última matriz) de la generación con
-el mismo seed (brecha de producto aún abierta).
+el mismo seed (brecha de producto aún abierta). La última comparación Toyland
+512² (seed `1330935378`) ya coincide en `landscape` y `clear` después de
+alinear el RNG global de `TileLoop_Trees`; la primera divergencia medible queda
+en `towns`, por lo que este resultado no se extiende a la paridad completa del
+mapa.
 
 ## Estado canónico actual
 

@@ -165,8 +165,10 @@ fn dispatch_generation_tile_loop_tile(
         // hierba/campos y la actualización de árboles. El helper ya vuelve a
         // leer la tesela viva después de una transición desértica.
         TileKind::Forest
-            if state.climate == crate::world_gen::Climate::Temperate
-                && generation_rng.is_some() =>
+            if matches!(
+                state.climate,
+                crate::world_gen::Climate::Temperate | crate::world_gen::Climate::Toyland
+            ) && generation_rng.is_some() =>
         {
             // `TileLoop_Trees` delega primero una orilla a `TileLoop_Water`.
             // El callback puede cambiar la tesela, por lo que el procesador

@@ -456,7 +456,11 @@ fn clear_dead_tree_tile(map: &mut Map, c: TileCoord, m2: u8) {
 }
 
 /// Ejecuta el subconjunto de `TileLoop_Trees` que corre durante
-/// `CreateRivers` en una partida temperate nueva.
+/// `CreateRivers` en una partida nueva. Temperate y Toyland comparten el
+/// camino vanilla sin transiciones climáticas previas, y ambos consumen el
+/// RNG global al alcanzar una actualización de crecimiento; Arctic/Tropic
+/// mantienen por ahora sus rutas específicas hasta contar con fixtures de
+/// paridad independientes.
 ///
 /// La configuración inicial de OpenTTD usa `extra_tree_placement =
 /// ETP_SPREAD_ALL`; por eso las ramas de crecimiento pueden propagarse y,
@@ -470,7 +474,7 @@ pub(crate) fn process_generation_tree_growth_at(
     rng: &mut Randomizer,
     c: TileCoord,
 ) {
-    debug_assert_eq!(climate, Climate::Temperate);
+    debug_assert!(matches!(climate, Climate::Temperate | Climate::Toyland));
     let Some(tile) = map.get(c) else {
         return;
     };
@@ -1165,6 +1169,24 @@ mod tests {
             TREE_GROWTH_GROWN + 1
         );
         assert_eq!(rng, expected_rng, "debe avanzar el RNG compartido una vez");
+    }
+
+    #[test]
+    fn generation_tree_loop_uses_shared_rng_for_toyland_too() {
+        let mut map = Map::new_flat(32, 32, 0);
+        let c = TileCoord::new(13, 16);
+        force_forest(&mut map, c, with_tree_or_field_stage(0, TREE_GROWTH_GROWN));
+        let mut rng = Randomizer { state: [8, 1] };
+        let mut expected_rng = rng;
+        assert_eq!(expected_rng.next() & 7, 0);
+
+        process_generation_tree_growth_at(&mut map, Climate::Toyland, 0, &mut rng, c);
+
+        assert_eq!(
+            tree_or_field_stage(map.get(c).unwrap().m5),
+            TREE_GROWTH_GROWN + 1
+        );
+        assert_eq!(rng, expected_rng, "Toyland debe compartir el RNG vanilla");
     }
 
     #[test]

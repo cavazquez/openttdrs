@@ -9,7 +9,8 @@
 
 use crate::GameState;
 use crate::cargodist::parity::Randomizer;
-use crate::map::{Map, TileKind, TileLoopState, collect_tile_loop_visits};
+use crate::house_spec::get_town_radius_group;
+use crate::map::{Map, Tile, TileCoord, TileKind, TileLoopState, collect_tile_loop_visits};
 
 /// Cantidad de pasadas que `CreateRivers` ejecuta tras ensanchar ríos.
 ///
@@ -166,13 +167,13 @@ fn run_generation_tile_loop_impl(
                         &one,
                     );
             }
+            TileKind::Road => tile_loop_road(state, *coord, tile),
             // Casas, carreteras, vías, estaciones, objetos y depósitos tienen
             // callbacks de tile loop propios en OpenTTD. Para un mundo nuevo
             // sus rutas de estado todavía no tienen una mutación equivalente;
             // dejar explícito el no-op evita ejecutar lógica de economía del
             // tick normal y mantiene el contrato de la pasada.
             TileKind::House
-            | TileKind::Road
             | TileKind::Rail
             | TileKind::RoadDepot
             | TileKind::RailDepot
@@ -192,6 +193,56 @@ fn run_generation_tile_loop_impl(
     // igual que después de `phase_tile_loop` en la simulación normal.
     state.runtime.tile_loop_visited = visits;
     visit_count
+}
+
+/// Ejecuta la parte de `TileLoop_Road` que es observable durante la creación
+/// de un mundo nuevo.
+///
+/// En ese momento todavía no hay vehículos ni obras viales, pero las calles
+/// municipales sí pasan por el ajuste de decoración según la zona del pueblo.
+/// `SetRoadside` sólo modifica `MAP6[3..=5]`; conservar los bits inferiores es
+/// importante para los tipos de carretera/tranvía importados desde un save.
+fn tile_loop_road(state: &mut GameState, coord: TileCoord, tile: Tile) {
+    // Los depósitos tienen su propio callback en OpenTTD y nunca llegan aquí:
+    // el decodificador los clasifica como `TileKind::RoadDepot`.
+    if (tile.m5 >> 6) & 0x03 == 2 {
+        return;
+    }
+
+    let Some(town) = state
+        .towns
+        .iter()
+        .min_by_key(|town| (crate::economy::manhattan_distance(town.pos, coord), town.id))
+    else {
+        return;
+    };
+
+    // `_town_road_types` y `_town_road_types_2` de road_cmd.cpp. El primer
+    // valor es el estado estable y el segundo el estado de transición que se
+    // instala cuando la calle aún está en terreno desnudo.
+    let zone = usize::from(get_town_radius_group(town, coord) as u8).min(4);
+    let [desired, pre] = if state.climate == crate::world_gen::Climate::Toyland {
+        // Toyland usa StreetLights en las zonas exteriores y no árboles.
+        [[1_u8, 1], [2, 2], [3, 2], [3, 2], [3, 2]][zone]
+    } else {
+        [[1_u8, 1], [2, 2], [2, 2], [5, 5], [3, 2]][zone]
+    };
+    let current = (tile.m6 >> 3) & 0x07;
+    let next = if current == desired {
+        return;
+    } else if current == pre {
+        desired
+    } else if current == 0 {
+        pre
+    } else {
+        0
+    };
+    if next == current {
+        return;
+    }
+    let mut updated = tile;
+    updated.m6 = (updated.m6 & !0x38) | (next << 3);
+    let _ = state.map.set_tile(coord, updated);
 }
 
 /// Reproduce las pasadas `RunTileLoop` finales de `CreateRivers`.
@@ -325,6 +376,40 @@ mod tests {
         assert_eq!(state.tick.get(), before_tick);
         assert_eq!(state.cur_tileloop_tile, expected_cursor);
         assert_eq!(state.runtime.tile_loop_visited.len(), 16);
+    }
+
+    #[test]
+    fn road_tile_loop_applies_town_roadside_transition_and_preserves_low_bits() {
+        let mut map = Map::new_flat(16, 16, 0);
+        let road = TileCoord::new(8, 8);
+        let mut tile = map.get(road).unwrap();
+        tile.kind = TileKind::Road;
+        tile.mapt = crate::map::OTTD_MP_ROAD << 4;
+        tile.m5 = 0x05;
+        tile.m6 = 0x03;
+        map.set_tile(road, tile).unwrap();
+
+        let mut town = crate::town::Town {
+            id: 0,
+            pos: road,
+            num_houses: 40,
+            squared_town_zone_radius: [100, 64, 36, 16, 4],
+            ..Default::default()
+        };
+        crate::town::update_town_radius(&mut town);
+        let mut state = GameState::from_map(map);
+        state.towns.push(town);
+
+        // TownCentre uses Paved as the transition and StreetLights as the
+        // stable value (`_town_road_types[4]`).
+        let current = state.map.get(road).unwrap();
+        tile_loop_road(&mut state, road, current);
+        assert_eq!((state.map.get(road).unwrap().m6 >> 3) & 0x07, 2);
+        assert_eq!(state.map.get(road).unwrap().m6 & 0x07, 3);
+        let current = state.map.get(road).unwrap();
+        tile_loop_road(&mut state, road, current);
+        assert_eq!((state.map.get(road).unwrap().m6 >> 3) & 0x07, 3);
+        assert_eq!(state.map.get(road).unwrap().m6 & 0x07, 3);
     }
 
     #[test]

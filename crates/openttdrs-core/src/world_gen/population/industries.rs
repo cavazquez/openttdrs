@@ -509,18 +509,23 @@ fn generated_industry_check_proc_allows(
     let Some(tile) = state.map.get(origin) else {
         return false;
     };
+    // `GetTileZ` in OpenTTD is the minimum of the four corners, not the
+    // north-corner value stored in `Tile::height`. Industry check procs run
+    // before the platform is levelled, so using the north corner here can
+    // reject/admit a sloped candidate differently and shift the RNG stream.
+    let tile_z = tile_slope_and_z(&state.map, origin).map_or(tile.height, |(_, z)| z);
     match spec {
         // `CHECK_FOREST`: una plantación ártica requiere estar al menos dos
         // niveles por encima de la línea de nieve.
         IndustrySpec::Forest => {
             state.climate != crate::Climate::SubArctic
-                || tile.height >= state.snow_line_height.saturating_add(2)
+                || tile_z >= state.snow_line_height.saturating_add(2)
         }
         // `CHECK_FARM`: las granjas árticas deben quedar por debajo de la
         // línea de nieve (la comparación nativa es z + 2 < snowline).
         IndustrySpec::Farm => {
             state.climate != crate::Climate::SubArctic
-                || tile.height.saturating_add(2) < state.snow_line_height
+                || tile_z.saturating_add(2) < state.snow_line_height
         }
         // `CHECK_REFINERY`: el límite vanilla por defecto es 32 teselas a
         // cualquiera de los cuatro bordes. `TileAddXY(tile, 1, 1)` forma
@@ -1306,6 +1311,38 @@ mod tests {
             &toyland,
             low,
             IndustrySpec::BubbleGenerator
+        ));
+    }
+
+    #[test]
+    fn arctic_industry_checks_use_bottom_tile_z_on_slopes() {
+        let origin = TileCoord::new(20, 20);
+        let mut arctic = GameState::new(64, 64);
+        arctic.climate = Climate::SubArctic;
+        arctic.snow_line_height = 10;
+
+        // OpenTTD's GetTileZ takes the minimum of the four corners. Keep the
+        // north corner high and the other corners at sea level so that the
+        // stored north-corner height alone would produce the opposite gate.
+        arctic
+            .map
+            .set_height(origin, 10)
+            .expect("north corner fixture");
+        assert_eq!(tile_slope_and_z(&arctic.map, origin), Some((8, 1)));
+        assert!(generated_industry_check_proc_allows(
+            &arctic,
+            origin,
+            IndustrySpec::Farm
+        ));
+
+        arctic
+            .map
+            .set_height(origin, 20)
+            .expect("north corner fixture");
+        assert!(!generated_industry_check_proc_allows(
+            &arctic,
+            origin,
+            IndustrySpec::Forest
         ));
     }
 

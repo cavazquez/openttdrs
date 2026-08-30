@@ -462,6 +462,72 @@ fn level_generated_industry_platform(
     Some(candidate)
 }
 
+/// Gates de `CheckNewIndustry_*` que se ejecutan antes de comprobar la
+/// huella de `CreateNewIndustryHelper`.
+///
+/// Estos predicados no son una restricción visual: una especie rechazada
+/// sigue consumiendo todos los intentos de `PlaceIndustry`, por lo que omitir
+/// uno desplaza el stream RNG de cada industria posterior. El mapa recién
+/// generado conserva `TropicZone` en los bits bajos de `MAPT` y la línea de
+/// nieve efectiva en `GameState`, las mismas fuentes que usa `OpenTTD`.
+fn generated_industry_check_proc_allows(
+    state: &GameState,
+    origin: TileCoord,
+    spec: IndustrySpec,
+) -> bool {
+    let Some(tile) = state.map.get(origin) else {
+        return false;
+    };
+    match spec {
+        // `CHECK_FOREST`: una plantación ártica requiere estar al menos dos
+        // niveles por encima de la línea de nieve.
+        IndustrySpec::Forest => {
+            state.climate != crate::Climate::SubArctic
+                || tile.height >= state.snow_line_height.saturating_add(2)
+        }
+        // `CHECK_FARM`: las granjas árticas deben quedar por debajo de la
+        // línea de nieve (la comparación nativa es z + 2 < snowline).
+        IndustrySpec::Farm => {
+            state.climate != crate::Climate::SubArctic
+                || tile.height.saturating_add(2) < state.snow_line_height
+        }
+        // `CHECK_REFINERY`: el límite vanilla por defecto es 32 teselas a
+        // cualquiera de los cuatro bordes. `TileAddXY(tile, 1, 1)` forma
+        // parte del contrato nativo y evita admitir la última fila/columna.
+        IndustrySpec::OilRefinery => generated_industry_is_near_edge(state, origin),
+        // `CHECK_PLANTATION` (incluye factory/farm tropic): nunca en desierto.
+        IndustrySpec::FruitPlantation
+        | IndustrySpec::RubberPlantation
+        | IndustrySpec::FactoryTropic
+        | IndustrySpec::FarmTropic => tile.mapt & 0x03 != 1,
+        // `CHECK_WATER`: los dos edificios sólo aparecen en una zona de
+        // desierto; no confundirlo con una tesela de agua.
+        IndustrySpec::WaterSupply | IndustrySpec::WaterTower => tile.mapt & 0x03 == 1,
+        // `CHECK_LUMBERMILL`: el aserradero tropical exige rainforest.
+        IndustrySpec::LumberMill => tile.mapt & 0x03 == 2,
+        // `CHECK_BUBBLEGEN`: Toyland limita el generador a tierras bajas.
+        IndustrySpec::BubbleGenerator => tile.height <= 4,
+        _ => true,
+    }
+}
+
+/// `CheckScaledDistanceFromEdge(TileAddXY(tile, 1, 1), 32)` con bordes
+/// `freeform_edges`, que es la topología usada por los mapas generados.
+fn generated_industry_is_near_edge(state: &GameState, origin: TileCoord) -> bool {
+    let (map_w, map_h) = state.map.dimensions();
+    let x = origin.x.saturating_add(1);
+    let y = origin.y.saturating_add(1);
+    let max_x = i32::try_from(map_w).unwrap_or(i32::MAX).saturating_sub(1);
+    let max_y = i32::try_from(map_h).unwrap_or(i32::MAX).saturating_sub(1);
+    let distances = [
+        x.saturating_sub(1),
+        y.saturating_sub(1),
+        max_x.saturating_sub(x).saturating_sub(1),
+        max_y.saturating_sub(y).saturating_sub(1),
+    ];
+    distances.into_iter().any(|distance| distance < 32)
+}
+
 /// Ejecuta una llamada completa a `PlaceIndustry` para una especie fija.
 ///
 /// El límite pertenece a la llamada, no a una selección global. Incluso los
@@ -482,6 +548,9 @@ fn try_place_industry(
         );
         let origin = attempt.origin;
         if in_preserve(ctx.preserve, origin.x, origin.y) {
+            continue;
+        }
+        if !generated_industry_check_proc_allows(ctx.state, origin, spec) {
             continue;
         }
         // `CreateNewIndustryHelper` ejecuta primero conflictos explícitos y
@@ -1123,6 +1192,59 @@ mod tests {
         // El roster vanilla actual no tiene una industria `BuiltOnWater`; la
         // pasada acuática debe quedar vacía y no consumir RNG por accidente.
         assert!(generation_probabilities(Climate::Temperate, 64, 64, specs, true).is_empty());
+    }
+
+    #[test]
+    fn climate_specific_industry_check_procs_match_vanilla_gates() {
+        let mut arctic = GameState::new(64, 64);
+        arctic.climate = Climate::SubArctic;
+        arctic.snow_line_height = 10;
+        let low = TileCoord::new(20, 20);
+        assert!(!generated_industry_check_proc_allows(
+            &arctic,
+            low,
+            IndustrySpec::Forest
+        ));
+        assert!(generated_industry_check_proc_allows(
+            &arctic,
+            low,
+            IndustrySpec::Farm
+        ));
+
+        let mut tropic = GameState::new(64, 64);
+        tropic.climate = Climate::SubTropical;
+        tropic
+            .map
+            .set_mapt_m5(low, 0x21, 0)
+            .expect("desert fixture");
+        assert!(!generated_industry_check_proc_allows(
+            &tropic,
+            low,
+            IndustrySpec::FruitPlantation
+        ));
+        assert!(generated_industry_check_proc_allows(
+            &tropic,
+            low,
+            IndustrySpec::WaterSupply
+        ));
+        tropic
+            .map
+            .set_mapt_m5(low, 0x22, 0)
+            .expect("rainforest fixture");
+        assert!(generated_industry_check_proc_allows(
+            &tropic,
+            low,
+            IndustrySpec::LumberMill
+        ));
+
+        let mut toyland = GameState::new(64, 64);
+        toyland.climate = Climate::Toyland;
+        toyland.map.set_height(low, 5).expect("high fixture");
+        assert!(!generated_industry_check_proc_allows(
+            &toyland,
+            low,
+            IndustrySpec::BubbleGenerator
+        ));
     }
 
     #[test]

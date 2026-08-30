@@ -226,11 +226,31 @@ fn generated_industry_can_use_closest_town(
     spec: IndustrySpec,
     multiple_industry_per_town: bool,
 ) -> bool {
-    let Some(town_id) = generated_industry_closest_town_id(state, origin) else {
+    let Some(town) = state
+        .towns
+        .iter()
+        .min_by_key(|town| crate::economy::manhattan_distance(origin, town.pos))
+    else {
         // El original asume que `GenerateTowns` ya dejó al menos un pueblo.
         // Rechazar mantiene esta API total para fixtures y mapas inválidos.
         return false;
     };
+    // `CheckIfIndustryIsAllowed` runs after `FindTownForIndustry`. A Toy Shop
+    // has `IndustryBehaviour::OnlyNearTown`, so the origin (not the whole
+    // footprint) must be within `DistanceMax <= 9` of the selected town. This
+    // gate is deliberately before the same-type check: a rejected attempt
+    // still consumes the normal `CreateNewIndustry` prefix but cannot alter
+    // the set of industries associated with the town.
+    if spec == IndustrySpec::ToyShop
+        && origin
+            .x
+            .abs_diff(town.pos.x)
+            .max(origin.y.abs_diff(town.pos.y))
+            > 9
+    {
+        return false;
+    }
+    let town_id = town.id;
     if multiple_industry_per_town {
         return true;
     }
@@ -1767,6 +1787,29 @@ mod tests {
             &state,
             TileCoord::new(8, 10),
             IndustrySpec::PowerStation,
+            false,
+        ));
+    }
+
+    #[test]
+    fn toy_shop_must_be_within_nine_tiles_of_its_closest_town() {
+        let mut state = GameState::new(64, 64);
+        state.towns.push(Town {
+            id: 7,
+            pos: TileCoord::new(10, 10),
+            ..Town::default()
+        });
+
+        assert!(!generated_industry_can_use_closest_town(
+            &state,
+            TileCoord::new(20, 10),
+            IndustrySpec::ToyShop,
+            false,
+        ));
+        assert!(generated_industry_can_use_closest_town(
+            &state,
+            TileCoord::new(19, 19),
+            IndustrySpec::ToyShop,
             false,
         ));
     }

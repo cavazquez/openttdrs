@@ -101,11 +101,14 @@ fn check_industry_template(
         // what rejects the Arctic/Tropic bank attempt at (26,40) in the
         // native 64x64 seed while admitting the later house-backed attempt.
         let requires_house = industry_requires_house_tiles(spec);
+        let allows_house = industry_allows_house_tiles(spec);
         if requires_house {
             if existing_kind != TileKind::House {
                 return Err(CommandError::IndustryMustBeBuiltInTown);
             }
-        } else if let Some(error) = map.get(*tile).and_then(industry_auto_clear_error_for_tile) {
+        } else if !(allows_house && existing_kind == TileKind::House)
+            && let Some(error) = map.get(*tile).and_then(industry_auto_clear_error_for_tile)
+        {
             return Err(error);
         }
         // `CheckIfIndustryTilesAreFree` rejects a land industry on any tile
@@ -148,6 +151,13 @@ const fn industry_requires_house_tiles(spec: IndustrySpec) -> bool {
         spec,
         IndustrySpec::BankArcticTropic | IndustrySpec::WaterTower
     )
+}
+
+/// `OnlyNearTown` differs from `OnlyInTown`: the Toy Shop may replace an
+/// existing house, while ordinary clear tiles still use the automatic clear
+/// contract. `OpenTTD` performs the house branch as `OWNER_TOWN`.
+const fn industry_allows_house_tiles(spec: IndustrySpec) -> bool {
+    matches!(spec, IndustrySpec::ToyShop)
 }
 
 /// Errores no negociables de `CMD_LANDSCAPE_CLEAR` con `DoCommandFlag::Auto`
@@ -625,6 +635,18 @@ mod tests {
             check_place_industry_spec_layout(&map, origin, IndustrySpec::PowerStation, 2),
             Err(CommandError::IndustryTileCannotBeCleared)
         );
+    }
+
+    #[test]
+    fn toy_shop_layout_allows_a_town_house_tile() {
+        let origin = TileCoord::new(4, 4);
+        let mut map = Map::new_flat(16, 16, 0);
+        assert!(map.set_kind(origin, TileKind::House).is_ok());
+        assert!(map.set_kind(TileCoord::new(5, 4), TileKind::House).is_ok());
+        assert!(map.set_kind(TileCoord::new(4, 5), TileKind::House).is_ok());
+        assert!(map.set_kind(TileCoord::new(5, 5), TileKind::House).is_ok());
+
+        assert!(check_place_industry_spec_layout(&map, origin, IndustrySpec::ToyShop, 0).is_ok());
     }
 
     #[test]

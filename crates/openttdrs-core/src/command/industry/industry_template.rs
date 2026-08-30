@@ -12,7 +12,7 @@ use super::layout_tables::{
 use super::toyland_layout_tables::{
     BATTERY_FARM_LAYOUTS, BUBBLE_GENERATOR_LAYOUTS, CANDY_FACTORY_LAYOUTS, COLA_WELLS_LAYOUTS,
     COTTON_CANDY_LAYOUTS, FIZZY_DRINK_FACTORY_LAYOUTS, PLASTIC_FOUNTAIN_LAYOUTS,
-    SUGAR_MINE_LAYOUTS, TOFFEE_QUARRY_LAYOUTS, TOY_FACTORY_LAYOUTS,
+    SUGAR_MINE_LAYOUTS, TOFFEE_QUARRY_LAYOUTS, TOY_FACTORY_LAYOUTS, TOY_SHOP_LAYOUTS,
 };
 
 #[must_use]
@@ -71,7 +71,7 @@ fn layouts_for_spec(spec: IndustrySpec) -> &'static [IndustryLayout] {
         IndustrySpec::OilWells => &OIL_LAYOUTS,
         IndustrySpec::WaterSupply => &WATER_SUPPLY_LAYOUTS,
         IndustrySpec::OilRefinery => &REFINERY_LAYOUTS,
-        IndustrySpec::Factory | IndustrySpec::ToyShop => &FACTORY_LAYOUTS,
+        IndustrySpec::Factory => &FACTORY_LAYOUTS,
         IndustrySpec::FactoryTropic => &FACTORY_TROPIC_LAYOUTS,
         IndustrySpec::Bank => &BANK_LAYOUTS,
         IndustrySpec::BankArcticTropic => &BANK2_LAYOUTS,
@@ -87,6 +87,7 @@ fn layouts_for_spec(spec: IndustrySpec) -> &'static [IndustryLayout] {
         IndustrySpec::BatteryFarm => &BATTERY_FARM_LAYOUTS,
         IndustrySpec::ColaWells => &COLA_WELLS_LAYOUTS,
         IndustrySpec::ToyFactory => &TOY_FACTORY_LAYOUTS,
+        IndustrySpec::ToyShop => &TOY_SHOP_LAYOUTS,
         IndustrySpec::PlasticFountain => &PLASTIC_FOUNTAIN_LAYOUTS,
         IndustrySpec::FizzyDrinkFactory => &FIZZY_DRINK_FACTORY_LAYOUTS,
         IndustrySpec::BubbleGenerator => &BUBBLE_GENERATOR_LAYOUTS,
@@ -132,6 +133,17 @@ mod tests {
         assert_eq!(industry_template_layout_count(IndustrySpec::DiamondMine), 1);
         assert_eq!(
             industry_template_layout_count(IndustrySpec::FactoryTropic),
+            2
+        );
+        assert_eq!(industry_template_layout_count(IndustrySpec::CottonCandy), 2);
+        assert_eq!(
+            industry_template_layout_count(IndustrySpec::CandyFactory),
+            2
+        );
+        assert_eq!(industry_template_layout_count(IndustrySpec::ColaWells), 2);
+        assert_eq!(industry_template_layout_count(IndustrySpec::ToyShop), 1);
+        assert_eq!(
+            industry_template_layout_count(IndustrySpec::PlasticFountain),
             2
         );
 
@@ -182,5 +194,23 @@ mod tests {
             .unwrap_or_default();
         assert_eq!(factory_tropic.len(), 8);
         assert_eq!(factory_tropic[7], (TileCoord::new(21, 33), 124));
+
+        let toy_shop =
+            industry_template_with_layout(origin, IndustrySpec::ToyShop, 0).unwrap_or_default();
+        assert_eq!(
+            toy_shop,
+            vec![
+                (origin, 138),
+                (TileCoord::new(20, 31), 139),
+                (TileCoord::new(21, 30), 140),
+                (TileCoord::new(21, 31), 141)
+            ]
+        );
+
+        let plastic_horizontal =
+            industry_template_with_layout(origin, IndustrySpec::PlasticFountain, 1)
+                .unwrap_or_default();
+        assert_eq!(plastic_horizontal.len(), 3);
+        assert_eq!(plastic_horizontal[2], (TileCoord::new(22, 30), 154));
     }
 }
